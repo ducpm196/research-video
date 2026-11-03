@@ -1,0 +1,290 @@
+id: L10
+course: IRS
+series: "IRS · Truy hồi thông tin và hệ gợi ý"
+title: "Bài 10 — Thiên lệch vị trí: đánh giá ngoại tuyến bằng trọng số nghịch đảo xu hướng"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/irs.yaml L10; audit/irs/verify_irs.py (verify_parts/L10.py); audit/irs/sources_L10.md (câu trích nguyên văn, đọc 2026-11-03); T. Joachims, A. Swaminathan, T. Schnabel, Unbiased Learning-to-Rank with Biased Feedback, WSDM 2017 (arXiv 1608.04468) — mô hình theo vị trí, hoán đổi ngẫu nhiên 7 ngày, p nhỏ nhất ≈ 0,12, cắt xu hướng [JO17]; Z. Zhao và cộng sự, RecSys 2019 — tháp nông khử thiên lệch vị trí, kết quả trực tuyến [ZH19]; P. Covington và cộng sự, RecSys 2016 — đo ngoại tuyến không luôn khớp trực tuyến [CO16]; DSC bài 7 (biến gây nhiễu), DSC bài 8 (thử nghiệm hai nhóm)"
+assumes: [arith]
+# Quy ước (theo symbols.IRS.yaml):
+#   - r = vị trí trong danh sách (đếm từ 1); p_r = xác suất người dùng NHÌN THẤY kết quả ở vị trí r (“xu hướng”, propensity), p_1 = 1.
+#   - Mô hình theo vị trí [JO17]: bấm khi và chỉ khi (nhìn thấy) và (liên quan) → xác suất bấm = p_r · mức liên quan.
+#   - “trọng số nghịch đảo xu hướng” = IPS (tên gốc chỉ trên màn hình): mỗi lượt bấm ở vị trí r đếm thành 1/p_r lượt; cắt ở c: min(1/p_r, c).
+#   - tỉ lệ bấm = bấm chia hiện. Các xác suất nhìn thấy 1,0; 0,6; 0,4; 0,3; 0,2 là SỐ MINH HOẠ (ghi rõ trên màn hình).
+#   - Ví dụ chạy suốt bài: sản phẩm A ở vị trí 1: 30 bấm / 1000 hiện; sản phẩm B ở vị trí 5: 10 bấm / 1000 hiện (số minh hoạ).
+objectives:
+  - "Điều chỉnh lượt bấm theo xác suất được nhìn thấy để so mức liên quan giữa các vị trí"
+  - "Ước lượng xác suất nhìn thấy bằng hoán đổi ngẫu nhiên, và cắt trọng số khi xác suất quá nhỏ"
+  - "Giải thích vì sao thử nghiệm hai nhóm trực tuyến vẫn là thước đo cuối"
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Sản phẩm A được bấm gấp 3 lần B — vì nó tốt hơn, hay vì nó đứng đầu?"
+    checks:
+      - "30 / 1000 == 0.03 and 10 / 1000 == 0.01 and round(0.03 / 0.01) == 3"
+    steps:
+      - show: |
+          <p>Nhật ký một tuần của trang gợi ý (số minh hoạ):</p>
+          <table class="t"><tr><th>sản phẩm</th><th>vị trí hệ cũ đặt</th><th>số lần hiện</th><th>số lượt bấm</th><th>tỉ lệ bấm</th></tr>
+          <tr><td>A</td><td>1</td><td>1000</td><td>30</td><td>0,03</td></tr>
+          <tr><td>B</td><td>5</td><td>1000</td><td>10</td><td>0,01</td></tr></table>
+          <p>Đồng nghiệp kết luận: “A tốt gấp 3 lần B, giữ nguyên thứ tự”.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Chào bạn, đây là nhật ký một tuần của trang gợi ý, các con số là số minh hoạ. Sản phẩm A được hệ cũ đặt ở vị trí 1, hiện 1000 lần và được bấm 30 lần, tỉ lệ bấm 0 phẩy 03. Sản phẩm B bị đặt ở vị trí 5, cũng hiện 1000 lần nhưng chỉ được bấm 10 lần, tỉ lệ 0 phẩy 01. Đồng nghiệp kết luận A tốt gấp 3 lần B, và đề nghị giữ nguyên thứ tự."
+      - show: |
+          <div class="box key">Hôm nay ta trả lời: người dùng có <b>nhìn thấy</b> vị trí 5 không? Làm sao tách “được nhìn thấy” khỏi “được thích”? Và vì sao dù điều chỉnh khéo tới đâu, cuối cùng vẫn phải thử nghiệm trên người dùng thật?</div>
+        say: "Hôm nay ta trả lời ba câu hỏi, người dùng có nhìn thấy vị trí 5 không, làm sao tách được nhìn thấy khỏi được thích. Và vì sao dù điều chỉnh khéo tới đâu, cuối cùng vẫn phải thử nghiệm trên người dùng thật."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại ba điều sẽ dùng"
+    checks:
+      - "round(0.2 * 0.05, 4) == 0.01 and round(0.01 / 0.2, 4) == 0.05"
+      - "round(1000 * 0.2 * 0.05) == 10"
+    steps:
+      - show: |
+          <p><b>① Hai điều kiện cùng phải xảy ra thì nhân xác suất.</b> Người dùng bấm khi họ <b>nhìn thấy</b> (xác suất 0,2) và thấy nó <b>liên quan</b> (xác suất 0,05): $0{,}2 \cdot 0{,}05 = 0{,}01$.</p>
+          <p><b>② Chia ngược để tìm thừa số còn thiếu.</b> Nếu $0{,}2 \cdot x = 0{,}01$ thì chia hai vế cho 0,2: $x = \frac{0{,}01}{0{,}2} = 0{,}05$.</p>
+        introduces: [cdot, frac]
+        focus: [1, 1, 2]
+        say: "Điều thứ nhất, hai điều kiện cùng phải xảy ra thì ta nhân xác suất, dấu chấm giữa dòng là phép nhân. Người dùng bấm khi họ nhìn thấy, xác suất 0 phẩy 2, và thấy nó liên quan, xác suất 0 phẩy 05, nên xác suất bấm bằng 0 phẩy 2 nhân 0 phẩy 05, bằng 0 phẩy 01. Điều thứ hai, nếu 0 phẩy 2 nhân x bằng 0 phẩy 01, thì chia hai vế cho 0 phẩy 2, ta được x bằng 0 phẩy 05."
+      - show: |
+          <p><b>③ Ở khoá Khoa học dữ liệu</b>, <b>biến gây nhiễu</b> là biến ảnh hưởng tới cả “cách chọn” lẫn “kết quả”: cỡ sỏi làm bác sĩ chọn cách chữa khác, và cũng làm khả năng khỏi khác.</p>
+          <table class="t"><tr><th>ở đây</th><th>ảnh hưởng tới</th></tr>
+          <tr><td>vị trí hệ cũ đặt</td><td>người dùng có nhìn thấy không → số lượt bấm</td></tr>
+          <tr><td>vị trí hệ cũ đặt</td><td>chính hệ cũ chọn sản phẩm nào lên đầu</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Điều thứ ba, ở khoá Khoa học dữ liệu, biến gây nhiễu ảnh hưởng tới cả cách chọn lẫn kết quả, như cỡ sỏi làm bác sĩ chọn cách chữa khác, và làm khả năng khỏi khác. Ở đây vị trí đóng vai đó, nó quyết định người dùng có nhìn thấy không, nên ảnh hưởng thẳng tới số lượt bấm. Vị trí cũng do chính hệ cũ chọn, nên so lượt bấm thô là so lẫn cả quyết định của hệ cũ."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: vị trí r, xác suất nhìn thấy p, trọng số 1 chia p và ngưỡng cắt c"
+    checks:
+      - "1 / 0.2 == 5 and min(1 / 0.02, 10) == 10"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ký hiệu</th><th>đọc là</th><th>nghĩa</th><th>ví dụ</th></tr>
+          <tr><td>$r$</td><td>vị trí r</td><td>chỗ đứng trong danh sách, đếm từ 1</td><td>B ở $r = 5$</td></tr>
+          <tr><td>$p_r$</td><td>p r</td><td>xác suất người dùng <b>nhìn thấy</b> vị trí $r$ (xu hướng)</td><td>$p_1 = 1$, $p_5 = 0{,}2$ (minh hoạ)</td></tr>
+          <tr><td>$\frac{1}{p_r}$</td><td>một chia p r</td><td>trọng số: một lượt bấm ở $r$ đếm thành mấy lượt</td><td>$\frac{1}{0{,}2} = 5$</td></tr>
+          <tr><td>$\min(\frac{1}{p_r}, c)$</td><td>cắt ở c</td><td>trọng số không vượt ngưỡng $c$</td><td>$\min(50, 10) = 10$</td></tr></table>
+        introduces: [sub, min_fn]
+        focus: ["1.2", "1.3", "1.3", "1.4", "1.5"]
+        say: "Bảng giải mã từng ký hiệu, chữ r là vị trí trong danh sách, đếm từ 1, sản phẩm B ở vị trí 5. Ký hiệu p r, với r nhỏ dưới chân, là xác suất người dùng nhìn thấy kết quả ở vị trí r, gọi là xu hướng. Vị trí đầu luôn được nhìn nên p 1 bằng 1, còn ví dụ của bài lấy p 5 bằng 0 phẩy 2, một số minh hoạ. Một chia p r là trọng số, cho biết một lượt bấm ở vị trí r được đếm thành mấy lượt, như 1 chia 0 phẩy 2 bằng 5. Hàng cuối là cắt trọng số ở ngưỡng c, chữ min lấy số nhỏ hơn, như min của 50 và 10 bằng 10."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Mắt người dùng lướt xuống, rồi dừng"
+    steps:
+      - show: |
+          <div><svg width="1500" height="420" viewBox="0 0 1500 420">
+          <g font-size="23" text-anchor="middle" fill="#1f2937">
+          <text x="240" y="50">vị trí 1</text><text x="480" y="50">vị trí 2</text><text x="720" y="50">vị trí 3</text><text x="960" y="50">vị trí 4</text><text x="1200" y="50">vị trí 5</text>
+          <rect x="170" y="80" width="140" height="200" fill="#2a78d6"/>
+          <rect x="410" y="160" width="140" height="120" fill="#2a78d6" opacity="0.8"/>
+          <rect x="650" y="200" width="140" height="80" fill="#2a78d6" opacity="0.7"/>
+          <rect x="890" y="220" width="140" height="60" fill="#2a78d6" opacity="0.6"/>
+          <rect x="1130" y="240" width="140" height="40" fill="#2a78d6" opacity="0.5"/>
+          <text x="240" y="310">nhìn thấy 1,0</text><text x="480" y="310">0,6</text><text x="720" y="310">0,4</text><text x="960" y="310">0,3</text><text x="1200" y="310">0,2</text>
+          </g>
+          <line x1="120" y1="280" x2="1340" y2="280" stroke="#1f2937" stroke-width="2"/>
+          <text x="750" y="365" font-size="24" fill="#eb6834" text-anchor="middle" font-weight="bold">xác suất bấm = xác suất nhìn thấy nhân mức liên quan</text>
+          <text x="750" y="405" font-size="22" fill="#6b7280" text-anchor="middle">B ở vị trí 5: 0,2 nhân 0,05 = 0,01 — ít bấm vì ít được nhìn, không phải vì kém (số minh hoạ)</text>
+          </svg></div>
+        say: "Hình cho thấy cơ chế, mỗi cột xanh là xác suất người dùng nhìn thấy một vị trí, đây là các số minh hoạ. Mắt người dùng lướt từ trên xuống rồi dừng, nên vị trí 1 luôn được nhìn, vị trí 2 còn 0 phẩy 6, và vị trí 5 chỉ còn 0 phẩy 2. Muốn được bấm, kết quả phải vừa được nhìn thấy, vừa liên quan, nên xác suất bấm bằng tích của hai thứ. Sản phẩm B có mức liên quan 0 phẩy 05 nhưng đứng ở vị trí 5, nên chỉ được bấm với xác suất 0 phẩy 01, ít bấm vì ít được nhìn, không phải vì kém."
+
+  # ───────────────────────── 5. SUY RA ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Từ “bấm = nhìn nhân liên quan” tới trọng số 1 chia p"
+    checks:
+      - "round(0.01 / 0.2, 4) == 0.05 and round(10 / 1000 / 0.2, 4) == 0.05"
+      - "alg.irs_ips(10, 0.2) == 50 and round(1000 * 0.2 * 0.05) * (1 / 0.2) == 1000 * 0.05"
+      - "alg.irs_propensity_swap(0.05, 0.25) == 0.2"
+    steps:
+      - show: |
+          <p><b>Bước 1 — mô hình.</b> Theo mô hình theo vị trí (Joachims và cộng sự 2017), người dùng bấm khi và chỉ khi nhìn thấy và thấy liên quan, nên:</p>
+          $$\text{tỉ lệ bấm ở vị trí } r = p_r \cdot \text{mức liên quan}$$
+          <p class="note">Làm thử với B: $0{,}2 \cdot 0{,}05 = 0{,}01$, đúng tỉ lệ 10 chia 1000.</p>
+        focus: [1, 2, 3]
+        say: "Bước một là mô hình, theo một bài báo năm 2017, người dùng bấm khi và chỉ khi họ nhìn thấy và thấy kết quả liên quan. Vì vậy tỉ lệ bấm ở vị trí r bằng p r nhân mức liên quan. Làm thử với sản phẩm B, 0 phẩy 2 nhân 0 phẩy 05 bằng 0 phẩy 01, đúng tỉ lệ 10 chia 1000 trong nhật ký."
+      - show: |
+          <p><b>Bước 2 — chia ngược.</b> Chia hai vế cho $p_r$ để lấy ra phần ta cần:</p>
+          $$\text{mức liên quan} = \frac{\text{tỉ lệ bấm}}{p_r} \qquad \text{B: } \frac{0{,}01}{0{,}2} = \hlg{0{,}05}$$
+        focus: [1, 2]
+        say: "Bước hai là chia ngược, theo phép chia hai vế ở phần ôn, ta chia cho p r để lấy ra đúng phần cần biết, mức liên quan. Mức liên quan bằng tỉ lệ bấm chia p r, với sản phẩm B là 0 phẩy 01 chia 0 phẩy 2, bằng 0 phẩy 05."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — đếm có trọng số.</b> Chia cho $p_r$ cũng là cho mỗi lượt bấm một trọng số $\frac{1}{p_r}$:</p>
+          $$10 \text{ lượt bấm ở vị trí 5} \cdot \frac{1}{0{,}2} = \hlb{50} \text{ lượt bấm sau điều chỉnh}$$
+          <p class="note">Vì sao đúng: trung bình có $1000 \cdot 0{,}2 \cdot 0{,}05 = 10$ lượt bấm, nhân 5 thành 50, đúng bằng $1000 \cdot 0{,}05$ — như thể cả 1000 lần hiện đều được nhìn thấy.</p>
+        focus: [1, 2, 3, 3]
+        say: "Bước ba là đếm có trọng số, chia cho p r cũng chính là cho mỗi lượt bấm một trọng số 1 chia p r. Vậy 10 lượt bấm ở vị trí 5, nhân 1 chia 0 phẩy 2, thành 50 lượt bấm sau điều chỉnh. Lý do nó đúng là trung bình có 1000 nhân 0 phẩy 2 nhân 0 phẩy 05, bằng 10 lượt bấm. Nhân 5 thành 50, đúng bằng số lượt bấm nếu cả 1000 lần hiện đều được nhìn thấy."
+      - show: |
+          <p><b>Bước 4 — đo $p_r$ bằng hoán đổi ngẫu nhiên.</b> Joachims và cộng sự (2017) lấy kết quả đứng đầu, <b>đổi chỗ</b> với kết quả ở một vị trí $j$ chọn ngẫu nhiên từ 1 tới 21, suốt 7 ngày. Cùng một kết quả, chỉ khác chỗ đứng, nên tỉ số tỉ lệ bấm chính là $\frac{p_j}{p_1}$:</p>
+          $$p_5 = \frac{\text{tỉ lệ bấm ở vị trí 5}}{\text{tỉ lệ bấm ở vị trí 1}} = \frac{0{,}05}{0{,}25} = 0{,}2 \quad \text{(số minh hoạ)}$$
+        focus: [1, 1, 2]
+        say: "Bước bốn là đo p r bằng hoán đổi ngẫu nhiên, nhóm tác giả năm 2017 đổi chỗ kết quả đứng đầu với kết quả ở một vị trí ngẫu nhiên từ 1 tới 21, suốt 7 ngày. Cùng một kết quả, chỉ khác chỗ đứng, nên mức liên quan triệt tiêu, và tỉ số tỉ lệ bấm chính là p j chia p 1. Ví dụ minh hoạ, một kết quả được bấm 0 phẩy 25 ở vị trí 1 và 0 phẩy 05 khi bị đổi xuống vị trí 5, nên p 5 bằng 0 phẩy 2."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Sửa lại kết luận về A và B, rồi chấm thử một thứ tự mới"
+    checks:
+      - "round(alg.irs_ips(30, 1.0) / 1000, 4) == 0.03 and round(alg.irs_ips(10, 0.2) / 1000, 4) == 0.05"
+      - "alg.irs_ips(30, 1.0) == 30 and alg.irs_ips(10, 0.2) == 50 and alg.irs_ips(10, 0.2) > alg.irs_ips(30, 1.0)"
+      - "round(1000 * (0.03 * 1.0 + 0.05 * 0.2)) == 40 and round(1000 * (0.05 * 1.0 + 0.03 * 0.6)) == 68"
+      - "round(alg.irs_ips(1, 0.02) / 1000, 4) == 0.05 and round(alg.irs_ips(1, 0.02, cap=10) / 1000, 4) == 0.01"
+    steps:
+      - show: |
+          <p><b>Bước 1.</b> Chia tỉ lệ bấm cho xác suất nhìn thấy của chỗ mỗi sản phẩm đứng:</p>
+          <table class="t"><tr><th>sản phẩm</th><th>tỉ lệ bấm</th><th>$p_r$</th><th>mức liên quan ước lượng</th></tr>
+          <tr><td>A (vị trí 1)</td><td>0,03</td><td>1,0</td><td>$\frac{0{,}03}{1} = 0{,}03$</td></tr>
+          <tr><td>B (vị trí 5)</td><td>0,01</td><td>0,2</td><td>$\frac{0{,}01}{0{,}2} = \hlg{0{,}05}$</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước một, ta chia tỉ lệ bấm của mỗi sản phẩm cho xác suất nhìn thấy ở chỗ nó đứng. Sản phẩm A ở vị trí 1, chia cho 1, vẫn là 0 phẩy 03. Sản phẩm B ở vị trí 5, 0 phẩy 01 chia 0 phẩy 2 thành 0 phẩy 05, cao hơn A."
+      - show: |
+          <p><b>Bước 2.</b> Cùng phép tính, viết bằng lượt bấm có trọng số: A được $30 \cdot 1 = 30$, B được $10 \cdot 5 = \hlg{50}$. Kết luận đảo ngược: <b>B liên quan hơn A</b>, chỉ là bị đặt ở chỗ ít người nhìn.</p>
+        focus: [1, 1]
+        say: "Bước hai là cùng phép tính, viết bằng lượt bấm có trọng số, A được 30 nhân 1 bằng 30, còn B được 10 nhân 5 bằng 50. Kết luận đảo ngược hẳn, B liên quan hơn A, chỉ là bị đặt ở chỗ ít người nhìn."
+      - clear: true
+        show: |
+          <p><b>Bước 3.</b> Chấm <b>ngoại tuyến</b> một thứ tự mới: B lên vị trí 1, A xuống vị trí 2 ($p_2 = 0{,}6$, minh hoạ). Số lượt bấm dự đoán trên 1000 lần hiện:</p>
+          <table class="t"><tr><th>thứ tự</th><th>phép tính</th><th>lượt bấm</th></tr>
+          <tr><td>cũ: A, …, B ở 5</td><td>$1000 \cdot (0{,}03 \cdot 1 + 0{,}05 \cdot 0{,}2)$</td><td>40</td></tr>
+          <tr><td>mới: B ở 1, A ở 2</td><td>$1000 \cdot (0{,}05 \cdot 1 + 0{,}03 \cdot 0{,}6)$</td><td>$\hlg{68}$</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước ba, ta chấm ngoại tuyến một thứ tự mới, đưa B lên vị trí 1 và A xuống vị trí 2, với p 2 bằng 0 phẩy 6, một số minh hoạ. Thứ tự cũ cho 1000 nhân, 0 phẩy 03 nhân 1 cộng 0 phẩy 05 nhân 0 phẩy 2, bằng 40 lượt bấm, khớp 30 cộng 10 trong nhật ký. Thứ tự mới cho 1000 nhân, 0 phẩy 05 cộng 0 phẩy 03 nhân 0 phẩy 6, bằng 68 lượt bấm, mà chưa cần cho người dùng thật xem."
+      - show: |
+          <p><b>Bước 4.</b> Một sản phẩm ở vị trí rất sâu, $p = 0{,}02$ (minh hoạ), hiện 1000 lần, được <b>1 lượt bấm may mắn</b>:</p>
+          $$\frac{1 \cdot \frac{1}{0{,}02}}{1000} = \hl{0{,}05} \qquad \text{cắt ở } c = 10\text{:} \quad \frac{1 \cdot \min(50, 10)}{1000} = 0{,}01$$
+          <p class="note">Một lượt bấm đã đủ đưa nó ngang hàng B. Cắt trọng số làm ước lượng bớt nhảy, đổi lại bị kéo thấp xuống.</p>
+        focus: [1, 2, 3]
+        say: "Bước bốn, một sản phẩm ở vị trí rất sâu có p bằng 0 phẩy 02, hiện 1000 lần và được đúng 1 lượt bấm may mắn. Không cắt thì trọng số là 50, ước lượng thành 50 chia 1000, bằng 0 phẩy 05, cắt ở c bằng 10 thì chỉ còn 0 phẩy 01. Một lượt bấm đã đủ đưa nó ngang hàng B, nên ta cắt trọng số để ước lượng bớt nhảy, đổi lại nó bị kéo thấp xuống."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: sinh nhật ký giả rồi đo lại"
+    checks:
+      - "abs(float(np.random.default_rng(0).binomial(100000, 0.2 * 0.05)) / 100000 / 0.2 - 0.05) < 0.002"
+      - "abs(float((np.random.default_rng(1).binomial(1000, 0.02 * 0.05, 20000) / 1000 / 0.02).std()) - alg.irs_ips_spread(1000, 0.02, 0.05)[1]) < 0.002"
+      - "[round(x, 2) for x in alg.irs_ips_spread(1000, 0.02, 0.05)] == [0.05, 0.05] and [round(x, 2) for x in alg.irs_ips_spread(1000, 0.02, 0.05, cap=10)] == [0.01, 0.01]"
+    steps:
+      - show: |
+          <p>Đường khác: cho máy <b>tự sinh</b> lượt bấm với mức liên quan thật đã biết là 0,05, rồi xem cách nào đo lại đúng.</p>
+          <table class="t"><tr><th>thử</th><th>tỉ lệ bấm thô</th><th>chia cho $p$</th></tr>
+          <tr><td>100&nbsp;000 lần hiện ở vị trí 5, $p = 0{,}2$</td><td class="red">≈ 0,0104, sai 5 lần</td><td>≈ 0,052 ✓ gần 0,05</td></tr></table>
+        focus: [1, "2.2", "2.2"]
+        say: "Kiểm tra bằng đường khác, ta cho máy tự sinh lượt bấm với mức liên quan thật đã biết trước là 0 phẩy 05, rồi xem cách nào đo lại đúng. Với 100 nghìn lần hiện ở vị trí 5, tỉ lệ bấm thô chỉ khoảng 0 phẩy 0104, sai tới 5 lần. Chia cho p thì được khoảng 0 phẩy 052, nghĩa là đo lại gần đúng 0 phẩy 05."
+      - show: |
+          <p>Lặp 20&nbsp;000 lần một nhật ký nhỏ: 1000 lần hiện ở chỗ $p = 0{,}02$, mức liên quan thật 0,05.</p>
+          <table class="t"><tr><th>cách đo</th><th>trung bình các lần đo</th><th>độ lệch chuẩn</th></tr>
+          <tr><td>chia cho $p$, không cắt</td><td>≈ 0,05 (đúng)</td><td class="red">≈ 0,05 — nhảy bằng chính giá trị</td></tr>
+          <tr><td>cắt ở $c = 10$</td><td class="red">≈ 0,01 (thấp 5 lần)</td><td>≈ 0,01</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.3"]
+        say: "Tiếp theo, ta lặp 20 nghìn lần một nhật ký nhỏ, 1000 lần hiện ở chỗ p bằng 0 phẩy 02 với mức liên quan thật 0 phẩy 05. Chia cho p mà không cắt thì trung bình đúng 0 phẩy 05, nhưng độ lệch chuẩn cũng khoảng 0 phẩy 05, tức mỗi lần đo nhảy lớn bằng chính giá trị. Cắt ở 10 thì độ lệch chuẩn chỉ 0 phẩy 01, đổi lại trung bình bị kéo xuống 0 phẩy 01, thấp 5 lần. Bài báo năm 2017 gọi đây là đổi thiên lệch lấy độ ổn định."
+
+  - id: online
+    kind: concept
+    title: "Vì sao cuối cùng vẫn phải thử nghiệm hai nhóm"
+    checks:
+      - "0.24 > 0.01 > -0.07"
+    steps:
+      - show: |
+          <table class="t"><tr><th>nguồn</th><th>điều đã ghi</th></tr>
+          <tr><td>Covington và cộng sự 2016</td><td>kết quả thử nghiệm trực tuyến “không phải lúc nào cũng tương quan” với thử nghiệm ngoại tuyến</td></tr>
+          <tr><td>Zhao và cộng sự 2019</td><td>ngoài vị trí còn nhiều thiên lệch khác, có cái chưa biết; thường thấy chỉ số ngoại tuyến và trực tuyến lệch nhau</td></tr>
+          <tr><td>Zhao và cộng sự 2019, thử trực tuyến</td><td>thêm vị trí làm đặc trưng: −0,07%; tháp nông học riêng thiên lệch vị trí: +0,24%</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", "1.4"]
+        say: "Vì sao cuối cùng vẫn phải thử nghiệm hai nhóm trên người dùng thật? Một bài báo năm 2016 của đội gợi ý video ghi rằng kết quả thử nghiệm trực tuyến không phải lúc nào cũng khớp với thử nghiệm ngoại tuyến. Một bài báo năm 2019 ghi thêm, ngoài vị trí còn nhiều thiên lệch khác, có cái chưa biết, nên chỉ số hai bên thường lệch nhau. Khi thử trực tuyến, chỉ thêm vị trí làm đặc trưng thì chỉ số giảm 0 phẩy 07 phần trăm. Còn học riêng thiên lệch bằng một tháp nông thì chỉ số tăng 0 phẩy 24 phần trăm."
+
+  # ───────────────────────── 8. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi của người đã đi làm"
+    checks:
+      - "round(0.03 / 0.01) == 3"
+      - "round(0.01 / 0.03, 3) == 0.333 and round(0.01 / (0.01 / 0.03), 2) == 0.03 and round(0.01 / 0.2, 2) == 0.05"
+      - "alg.irs_ips(1, 0.02) == 50 and alg.irs_ips(10, 0.2) == 50"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> So tỉ lệ bấm thô giữa các vị trí <b class="red">(“A gấp 3 lần B” trong khi B liên quan hơn)</b>
+          <br><span class="note">Phép thử: hỏi “hai sản phẩm có được nhìn thấy như nhau không?” trước khi so.</span></div>
+        say: "Lỗi thứ nhất là chuyện mở bài, so tỉ lệ bấm thô giữa các vị trí, nên kết luận A gấp 3 lần B trong khi B mới là sản phẩm liên quan hơn. Phép thử là hỏi hai sản phẩm có được nhìn thấy như nhau không, trước khi đem so."
+      - show: |
+          <div class="box warn"><b>Lỗi 2 (người đã đi làm).</b> Lấy $p_5$ bằng tỉ lệ bấm trung bình ở vị trí 5 chia ở vị trí 1 trong nhật ký <b class="red">(0,01 chia 0,03 ≈ 0,333 thay vì 0,2)</b>
+          <br><span class="note">Tỉ lệ bấm ở vị trí đầu cao một phần vì hệ cũ đặt sản phẩm tốt lên đầu (Zhao và cộng sự 2019). Dùng 0,333 thì B chỉ còn 0,03, ngang A — đáp án sai. Phải đo bằng hoán đổi ngẫu nhiên: cùng một sản phẩm, chỉ khác chỗ.</span></div>
+        say: "Lỗi thứ hai của người đã đi làm, là lấy p 5 bằng tỉ lệ bấm trong nhật ký ở vị trí 5 chia vị trí 1, được 0 phẩy 333 chứ không phải 0 phẩy 2. Bài báo năm 2019 ghi rằng tỉ lệ bấm ở vị trí đầu cao một phần vì hệ đã đặt sản phẩm tốt lên đầu, nên tỉ số này trộn lẫn mức liên quan. Dùng 0 phẩy 333 thì B chỉ còn 0 phẩy 03, ngang A, một đáp án sai. Phải đo bằng hoán đổi ngẫu nhiên, cùng một sản phẩm, chỉ khác chỗ đứng."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Không cắt trọng số <b class="red">(1 lượt bấm ở $p = 0{,}02$ nặng bằng 10 lượt bấm ở $p = 0{,}2$)</b></div>
+          $$1 \cdot \frac{1}{0{,}02} = 50 = 10 \cdot \frac{1}{0{,}2}$$
+          <p class="note">Phép thử: liệt kê trọng số lớn nhất trong dữ liệu; nếu một vài lượt bấm quyết định kết quả, hãy cắt ở $c$ và báo cả hai con số.</p>
+        focus: [1, 2, 3]
+        say: "Lỗi thứ ba là không cắt trọng số, nên 1 lượt bấm ở chỗ p bằng 0 phẩy 02 nặng ngang 10 lượt bấm ở chỗ p bằng 0 phẩy 2. Một nhân 1 chia 0 phẩy 02 bằng 50, đúng bằng 10 nhân 1 chia 0 phẩy 2. Phép thử là liệt kê các trọng số lớn nhất trong dữ liệu, nếu vài lượt bấm quyết định kết quả thì hãy cắt ở c và báo cả hai con số."
+      - show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Thấy ước lượng ngoại tuyến tăng từ 40 lên 68 lượt bấm rồi triển khai thẳng, bỏ qua thử nghiệm hai nhóm <b class="red">(mô hình chỉ biết thiên lệch vị trí)</b>
+          <br><span class="note">Ước lượng có trọng số chỉ đúng khi mô hình “bấm = nhìn nhân liên quan” đúng và mọi $p_r$ lớn hơn 0. Dùng nó để <b>lọc</b> ý tưởng, còn quyết định cuối thuộc về thử nghiệm trên người dùng thật.</span></div>
+        say: "Lỗi thứ tư cũng của người đã đi làm, thấy ước lượng ngoại tuyến tăng từ 40 lên 68 lượt bấm rồi triển khai thẳng, bỏ qua thử nghiệm hai nhóm. Ước lượng có trọng số chỉ đúng khi mô hình bấm bằng nhìn nhân liên quan là đúng, và mọi xác suất nhìn thấy đều lớn hơn 0. Hãy dùng nó để lọc ý tưởng, còn quyết định cuối thuộc về thử nghiệm trên người dùng thật."
+
+  # ───────────────────────── 9. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: C ở vị trí 3 hay D ở vị trí 1?"
+    checks:
+      - "round(15 / 1000 / 0.25, 3) == 0.06 and round(alg.irs_ips(15, 0.25) / 1000, 3) == 0.06 and alg.irs_ips(40, 1.0) / 1000 == 0.04"
+      - "alg.irs_ips(15, 0.25) == 60 and alg.irs_ips(40, 1.0) == 40"
+      - "round(alg.irs_ips(1, 0.05) / 100, 2) == 0.2 and round(alg.irs_ips(1, 0.05, cap=10) / 100, 2) == 0.1 and round(alg.irs_ips(1, 0.05, cap=4) / 100, 2) == 0.04"
+    steps:
+      - show: |
+          <p>Xác suất nhìn thấy (minh hoạ): $p_1 = 1$, $p_3 = 0{,}25$. Nhật ký: D ở vị trí 1, 40 bấm / 1000 hiện; C ở vị trí 3, 15 bấm / 1000 hiện.</p>
+          <table class="t"><tr><th>câu</th><th>việc cần làm</th></tr>
+          <tr><td>1</td><td>Ước lượng mức liên quan của C và D.</td></tr>
+          <tr><td>2</td><td>Viết bằng lượt bấm có trọng số. Nên đặt sản phẩm nào lên đầu?</td></tr>
+          <tr><td>3</td><td>Sản phẩm E ở chỗ $p = 0{,}05$: 1 bấm / 100 hiện. Cắt ở $c = 10$ hay $c = 4$, và bạn làm gì tiếp?</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", 0]
+        say: "Bây giờ đến lượt bạn, với xác suất nhìn thấy minh hoạ p 1 bằng 1 và p 3 bằng 0 phẩy 25. Nhật ký ghi sản phẩm D ở vị trí 1 có 40 bấm trên 1000 lần hiện, còn sản phẩm C ở vị trí 3 có 15 bấm trên 1000 lần hiện. Câu một, ước lượng mức liên quan của C và D, câu hai, viết bằng lượt bấm có trọng số và chọn sản phẩm lên đầu. Câu ba, sản phẩm E ở chỗ p bằng 0 phẩy 05 có 1 bấm trên 100 lần hiện, bạn cắt ở 10 hay ở 4, và làm gì tiếp. Dừng video lại và làm ra giấy nhé."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu</th><th>từng bước</th><th>đáp số</th></tr>
+          <tr><td>1. D</td><td>$\frac{40}{1000} : 1$</td><td>0,04</td></tr>
+          <tr><td>1. C</td><td>$\frac{15}{1000} : 0{,}25$</td><td>$\hlg{0{,}06}$</td></tr>
+          <tr><td>2</td><td>D: $40 \cdot 1 = 40$; C: $15 \cdot 4 = 60$</td><td>đặt C lên đầu</td></tr></table>
+        focus: ["1.2", "1.3", "1.4"]
+        say: "Đáp án câu một, D có 40 chia 1000 bằng 0 phẩy 04, chia cho 1 vẫn là 0 phẩy 04. Sản phẩm C có 15 chia 1000 bằng 0 phẩy 015, chia cho 0 phẩy 25 thành 0 phẩy 06, cao hơn D. Câu hai, D được 40 nhân 1 bằng 40 lượt có trọng số, C được 15 nhân 4 bằng 60, nên đặt C lên đầu."
+      - show: |
+          <table class="t"><tr><th>câu 3: E, 1 bấm / 100 hiện</th><th>ước lượng</th><th>được</th><th>mất</th></tr>
+          <tr><td>không cắt (trọng số 20)</td><td>0,2</td><td>không thiên lệch</td><td>một lượt bấm đưa E lên đầu</td></tr>
+          <tr><td>cắt ở 10</td><td>0,1</td><td>bớt nhảy</td><td>vẫn trên C, dù chỉ dựa 1 lượt bấm</td></tr>
+          <tr><td>cắt ở 4</td><td>0,04</td><td>ổn định</td><td>có thể đánh giá thấp E</td></tr></table>
+          <p class="note">Quyết định: cắt chặt (ví dụ 4) để không xếp lại cả trang theo 1 lượt bấm, đồng thời cho E vài lần hiện ở vị trí cao trong nhóm thử nghiệm để có thêm dữ liệu thật.</p>
+        focus: [0, "1.2", "1.3", "1.4", 2]
+        say: "Câu ba là một quyết định có đánh đổi. Không cắt thì trọng số là 20 và ước lượng là 0 phẩy 2, không thiên lệch, nhưng chỉ một lượt bấm đã đưa E lên đầu. Cắt ở 10 được 0 phẩy 1, bớt nhảy hơn nhưng E vẫn đứng trên C dù chỉ dựa vào 1 lượt bấm. Cắt ở 4 được 0 phẩy 04, ổn định, đổi lại có thể đánh giá thấp E. Hợp lý nhất là cắt chặt để không xếp lại cả trang theo một lượt bấm, đồng thời cho E vài lần hiện ở vị trí cao trong nhóm thử nghiệm để có thêm dữ liệu thật."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">bấm = nhìn thấy nhân liên quan</span><span class="a">→</span>
+          <span class="n">đo p bằng hoán đổi ngẫu nhiên</span><span class="a">→</span>
+          <span class="n">mỗi lượt bấm nặng 1 chia p</span><span class="a">→</span>
+          <span class="n">cắt trọng số ở c</span><span class="a">→</span>
+          <span class="n">lọc ngoại tuyến, quyết định bằng thử nghiệm hai nhóm</span></div>
+        say: "Tổng kết lại, lượt bấm bằng được nhìn thấy nhân với liên quan, nên ta đo xác suất nhìn thấy bằng hoán đổi ngẫu nhiên. Mỗi lượt bấm được tính nặng 1 chia p, trọng số quá lớn thì cắt ở c. Ước lượng ngoại tuyến dùng để lọc ý tưởng, còn quyết định cuối cùng là thử nghiệm hai nhóm trên người dùng thật."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> trước khi so hai con số, hỏi <b>“hai bên có cùng cơ hội được nhìn thấy không?”</b> Nhật ký chỉ ghi điều hệ cũ đã cho người dùng xem.</div>
+        say: "Điều cần mang theo, trước khi so hai con số, hãy hỏi hai bên có cùng cơ hội được nhìn thấy không. Nhật ký chỉ ghi lại những gì hệ cũ đã cho người dùng xem."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 11): <b>đa dạng, công bằng và vòng phản hồi</b> — chọn danh sách không trùng lặp, và vì sao huấn luyện lại trên lượt bấm do chính hệ tạo ra làm thứ phổ biến càng phổ biến.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 11, ta học đa dạng, công bằng và vòng phản hồi, cách chọn danh sách không trùng lặp. Ta cũng thấy vì sao huấn luyện lại trên lượt bấm do chính hệ tạo ra làm thứ phổ biến càng phổ biến. Hẹn gặp bạn ở bài tiếp theo."

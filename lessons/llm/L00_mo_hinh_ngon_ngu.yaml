@@ -1,0 +1,196 @@
+id: L00
+course: LLM
+series: "LLM · Mô hình ngôn ngữ lớn"
+title: "Bài 0 — Mô hình ngôn ngữ: xác suất của một chuỗi và quy tắc chuỗi"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/llm.yaml L00; audit/llm/verify_llm.py L00; D. Jurafsky, J. H. Martin, Speech and Language Processing (bản 3, nháp 2024), chương 3; C. Shannon, A Mathematical Theory of Communication (1948) — mô hình n-gram của tiếng Anh; CS115 bài 13 (xác suất có điều kiện)"
+assumes: [arith, prob, given, frac, sub]
+# Quy ước: kho 3 câu “tôi thích mèo / tôi thích chó / bạn thích mèo”, mỗi câu thêm dấu đầu <s> và dấu cuối </s> (lời đọc: “dấu bắt đầu câu”,
+#   “dấu kết thúc câu”). alg.bigram_prob(câu) trả Fraction theo bigram không làm trơn: P(b | a) = số lần “a b” / số lần a làm ngữ cảnh.
+objectives:
+  - "Viết xác suất một chuỗi bằng quy tắc chuỗi"
+  - "Ước lượng xác suất bigram bằng đếm"
+  - "Hiểu mô hình ngôn ngữ dự đoán từ tố kế tiếp"
+asr_reviewed:
+  - {sentence: "Ở bài sau, bài 1, ta học mô hình n-gram, cách làm trơn, và độ hỗn loạn.", reason: "ASR chép “Ở bài sau, bài một, ta học mô hình engram, cách làm chân và độ hỗn loạn.” (0.857): n-gram đọc “en-gram” theo lexicon LLM, ASR viết “engram/N-RAM”; lệch âm/thanh thuần Việt: trơn/chân — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Bàn phím điện thoại đoán chữ tiếp theo"
+    checks:
+      - "alg.bigram_prob('<s> tôi thích mèo </s>') == __import__('fractions').Fraction(4, 9)"
+    steps:
+      - show: |
+          <p>Gõ “tôi thích”, bàn phím gợi ý “mèo”. Mô hình ngôn ngữ lớn trả lời cả đoạn văn cũng làm đúng một việc như vậy, lặp lại: <b>đoán từ tố tiếp theo</b> từ những gì đã có. Gốc của việc đoán là một con số — <b>xác suất của một chuỗi</b>.</p>
+          <div class="box key">Hôm nay: mô hình ngôn ngữ gán xác suất cho chuỗi bằng <b>quy tắc chuỗi</b>, và cách ước lượng xác suất đó bằng <b>đếm</b>.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, khi bạn gõ hai chữ tôi thích, bàn phím điện thoại gợi ý ngay chữ mèo. Mô hình ngôn ngữ lớn trả lời cả đoạn văn cũng làm đúng một việc như vậy, lặp lại nhiều lần, đoán từ tố tiếp theo từ những gì đã có. Gốc của việc đoán là một con số, xác suất của một chuỗi. Hôm nay ta học cách mô hình ngôn ngữ gán xác suất cho chuỗi bằng quy tắc chuỗi, và cách ước lượng xác suất đó bằng đếm."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: xác suất có điều kiện bằng đếm, và nhân phân số"
+    checks:
+      - "__import__('fractions').Fraction(6, 10) == __import__('fractions').Fraction(3, 5) and __import__('fractions').Fraction(2, 3) * __import__('fractions').Fraction(2, 3) == __import__('fractions').Fraction(4, 9)"
+    steps:
+      - show: |
+          <p><b>Xác suất có điều kiện bằng đếm:</b> lớp có 10 bạn nuôi thú, 6 bạn nuôi mèo → P(nuôi mèo | nuôi thú) $= \frac{6}{10} = \frac{3}{5}$.</p>
+        say: "Từ khoá toán, ta nhớ xác suất có điều kiện tính được bằng đếm. Trong lớp có 10 bạn nuôi thú, 6 bạn nuôi mèo, nên xác suất nuôi mèo khi biết có nuôi thú là 6 phần 10, tức 3 phần 5."
+      - show: |
+          <p><b>Nhân phân số:</b> tử nhân tử, mẫu nhân mẫu.</p>
+          $$\frac{2}{3} \cdot \frac{2}{3} = \frac{2 \cdot 2}{3 \cdot 3} = \frac{4}{9}$$
+        introduces: [cdot]
+        focus: [2]
+        say: "Ta cũng cần nhân phân số, tử nhân tử, mẫu nhân mẫu, nên 2 phần 3 nhân 2 phần 3 bằng 4 phần 9."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: từ tố, quy tắc chuỗi, giả định bigram"
+    steps:
+      - show: |
+          <p><b>Từ tố</b>: đơn vị văn bản mô hình xử lý (một từ, một phần từ, hay một dấu). Chuỗi viết $w_1, w_2, \dots, w_n$.</p>
+          <p><b>Quy tắc chuỗi</b> (đúng với mọi phân phối): $P(w_1, \dots, w_n) = P(w_1) \cdot P(w_2 \mid w_1) \cdot P(w_3 \mid w_1, w_2) \cdots P(w_n \mid w_1, \dots, w_{n-1})$.</p>
+          <p><b>Giả định bigram</b> (gần đúng): từ tố tiếp theo chỉ phụ thuộc từ tố ngay trước: $P(w_t \mid w_1, \dots, w_{t-1}) \approx P(w_t \mid w_{t-1})$. Ước lượng bằng đếm: $P(b \mid a) = \frac{\text{số lần } a\, b}{\text{số lần } a}$.</p>
+        introduces: [dots, approx]
+        focus: [1, 1, 2, 3, 3]
+        say: "Từ tố là đơn vị văn bản mà mô hình xử lý, có thể là một từ, một phần của từ, hay một dấu. Một chuỗi viết w 1, w 2, cho tới w n. Quy tắc chuỗi đúng với mọi phân phối, xác suất cả chuỗi bằng xác suất từ đầu, nhân xác suất từ thứ hai khi biết từ đầu, và cứ thế, mỗi từ khi biết mọi từ trước nó. Giả định cặp từ là một xấp xỉ, từ tố tiếp theo chỉ phụ thuộc từ tố ngay trước. Khi đó ước lượng bằng đếm, xác suất b sau a bằng số lần a b đi liền nhau chia số lần a xuất hiện làm ngữ cảnh."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Đoán từng bước: một cây các khả năng"
+    steps:
+      - show: |
+          <div><svg width="1500" height="330" viewBox="0 0 1500 330"><defs><marker id="arL0" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#6b7280"/></marker></defs>
+          <g stroke="#6b7280" stroke-width="3"><line x1="160" y1="165" x2="345" y2="100" marker-end="url(#arL0)"/><line x1="160" y1="165" x2="345" y2="245" marker-end="url(#arL0)"/>
+          <line x1="455" y1="95" x2="660" y2="95" marker-end="url(#arL0)"/><line x1="455" y1="250" x2="660" y2="250" marker-end="url(#arL0)"/>
+          <line x1="790" y1="90" x2="985" y2="55" marker-end="url(#arL0)"/><line x1="790" y1="105" x2="985" y2="140" marker-end="url(#arL0)"/>
+          <line x1="1115" y1="55" x2="1300" y2="55" marker-end="url(#arL0)"/></g>
+          <g font-size="26" text-anchor="middle" fill="#1f2937">
+          <rect x="60" y="135" width="100" height="60" rx="8" fill="#f3f4f6" stroke="#1f2937" stroke-width="2"/><text x="110" y="173">đầu</text>
+          <rect x="350" y="65" width="105" height="60" rx="8" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="402" y="103">tôi</text>
+          <rect x="350" y="220" width="105" height="60" rx="8" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="402" y="258">bạn</text>
+          <rect x="665" y="65" width="125" height="60" rx="8" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="727" y="103">thích</text>
+          <rect x="665" y="220" width="125" height="60" rx="8" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="727" y="258">thích</text>
+          <rect x="990" y="25" width="125" height="60" rx="8" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="1052" y="63">mèo</text>
+          <rect x="990" y="115" width="125" height="60" rx="8" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="1052" y="153">chó</text>
+          <rect x="1305" y="25" width="120" height="60" rx="8" fill="#d1fae5" stroke="#059669" stroke-width="3"/><text x="1365" y="63">hết</text></g>
+          <g font-size="24" font-weight="bold" fill="#b45309" text-anchor="middle"><text x="240" y="110">2/3</text><text x="240" y="240">1/3</text><text x="557" y="82">1</text>
+          <text x="890" y="55">2/3</text><text x="890" y="150">1/3</text><text x="1207" y="42">1</text></g>
+          </svg></div>
+        focus: [1, 1, 1]
+        say: "Hình là cây các khả năng khi mô hình đoán từng bước. Từ đầu câu, đi tới tôi với xác suất 2 phần 3, tới bạn với xác suất 1 phần 3, rồi sau tôi luôn là thích. Sau thích là mèo với 2 phần 3, chó với 1 phần 3, và xác suất cả câu là tích các số trên con đường đã đi."
+
+  - id: example
+    kind: example
+    title: "Ba câu, một xác suất"
+    checks:
+      - "(lambda u, b: (u['<s>'], b[('<s>', 'tôi')], u['thích'], b[('thích', 'mèo')]))(*alg.bigram_counts()) == (3, 2, 3, 2)"
+      - "alg.bigram_prob('<s> tôi thích mèo </s>') == __import__('fractions').Fraction(4, 9)"
+    steps:
+      - show: |
+          <p>Kho: “&lt;s&gt; tôi thích mèo &lt;/s&gt;”, “&lt;s&gt; tôi thích chó &lt;/s&gt;”, “&lt;s&gt; bạn thích mèo &lt;/s&gt;” (dấu bắt đầu và kết thúc câu).</p>
+          <table class="t"><tr><th>bước dự đoán</th><th>đếm</th><th>xác suất</th></tr>
+          <tr><td>tôi sau &lt;s&gt;</td><td>2 trong 3 câu</td><td>$\frac{2}{3}$</td></tr>
+          <tr><td>thích sau tôi</td><td>2 trong 2</td><td>1</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Kho gồm ba câu, mỗi câu có thêm dấu bắt đầu và dấu kết thúc. Từ tôi đứng sau dấu bắt đầu ở 2 trong 3 câu, nên xác suất 2 phần 3. Từ thích đứng sau tôi ở cả 2 lần, xác suất 1."
+      - show: |
+          <table class="t"><tr><th>bước dự đoán</th><th>đếm</th><th>xác suất</th></tr>
+          <tr><td>mèo sau thích</td><td>2 trong 3</td><td>$\frac{2}{3}$</td></tr>
+          <tr><td>&lt;/s&gt; sau mèo</td><td>2 trong 2</td><td>1</td></tr></table>
+        focus: ["1.2", "1.3"]
+        say: "Từ mèo đứng sau thích ở 2 trong 3 lần, xác suất 2 phần 3. Dấu kết thúc đứng sau mèo ở cả 2 lần, xác suất 1."
+      - show: |
+          <p>Theo quy tắc chuỗi, nhân bốn bước:</p>
+          $$P(\text{tôi thích mèo}) = \frac{2}{3} \cdot 1 \cdot \frac{2}{3} \cdot 1 = \hl{\frac{4}{9}}$$
+        focus: [1, 2]
+        say: "Theo quy tắc chuỗi, ta nhân bốn bước lại. Xác suất của câu tôi thích mèo bằng 2 phần 3 nhân 1 nhân 2 phần 3 nhân 1, bằng 4 phần 9."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: mọi câu có thể cộng lại bằng 1"
+    checks:
+      - "sum(alg.bigram_prob(s) for s in ('<s> tôi thích mèo </s>', '<s> tôi thích chó </s>', '<s> bạn thích mèo </s>', '<s> bạn thích chó </s>')) == 1"
+      - "alg.bigram_prob('<s> bạn thích chó </s>') == __import__('fractions').Fraction(1, 9)"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu mô hình sinh được</th><th>xác suất</th></tr>
+          <tr><td>tôi thích mèo</td><td>4/9</td></tr>
+          <tr><td>tôi thích chó</td><td>2/9</td></tr>
+          <tr><td>bạn thích mèo</td><td>2/9</td></tr>
+          <tr><td>bạn thích chó (chưa có trong kho)</td><td>1/9</td></tr>
+          <tr><td><b>cộng</b></td><td><b>9/9 = 1</b> ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.5", "1.6"]
+        say: "Kiểm bằng đường khác, vì một mô hình xác suất đúng nghĩa thì mọi câu nó sinh được phải có xác suất cộng lại bằng 1. Theo cây ở trên, câu tôi thích mèo được 4 phần 9. Hai câu tôi thích chó và bạn thích mèo mỗi câu 2 phần 9. Câu bạn thích chó, dù chưa có trong kho, được 1 phần 9. Cộng lại được 9 phần 9, đúng bằng 1."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi cả người đã đi làm"
+    checks:
+      - "alg.bigram_prob('<s> chó thích mèo </s>') == 0"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Coi xác suất cao là “đúng sự thật” <b class="red">(lẫn hai khái niệm)</b>
+          <br><span class="note">Mô hình đo chuỗi có <b>giống</b> dữ liệu đã thấy không. Câu sai sự thật nhưng hay gặp vẫn được xác suất cao.</span></div>
+        say: "Lỗi thứ nhất, coi xác suất cao là đúng sự thật, tức lẫn hai khái niệm. Mô hình đo chuỗi có giống dữ liệu đã thấy không. Câu sai sự thật nhưng hay gặp vẫn được xác suất cao."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Tin đếm thô cho cặp chưa gặp <b class="red">(xác suất 0)</b>
+          <br><span class="note">“chó thích mèo” hoàn toàn hợp lý, nhưng kho chưa có cặp (&lt;s&gt;, chó) → xác suất cả câu bằng <b>0</b>. Cách sửa: <b>làm trơn</b> — chia bớt xác suất cho các cặp chưa gặp.</span></div>
+        say: "Lỗi thứ hai, tin đếm thô cho cặp chưa gặp, nên ra xác suất 0. Câu chó thích mèo hoàn toàn hợp lý, nhưng kho chưa có câu nào bắt đầu bằng chó, nên xác suất cả câu bằng 0. Cách sửa là làm trơn, tức chia bớt xác suất cho những cặp chưa gặp."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> So xác suất của câu dài với câu ngắn <b class="red">(không công bằng)</b>
+          <br><span class="note">Mỗi bước nhân thêm một số ≤ 1, nên câu dài luôn có xác suất nhỏ hơn. Muốn so mô hình, chuẩn hoá theo số bước dự đoán.</span></div>
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm cũng mắc).</b> Đo mô hình trên chính kho đã dùng để đếm <b class="red">(điểm đẹp giả)</b>
+          <br><span class="note">Câu trong kho luôn có xác suất cao vì chính nó tạo ra con số đếm. Phải giữ riêng một phần văn bản chưa đếm để đo.</span></div>
+        focus: [1, 1, 1, 2, 2, 2]
+        say: "Lỗi thứ ba, so xác suất của câu dài với câu ngắn, như vậy không công bằng. Mỗi bước nhân thêm một số không quá 1, nên câu dài luôn có xác suất nhỏ hơn. Muốn so mô hình thì phải chuẩn hoá theo số bước dự đoán. Lỗi thứ tư, người đã đi làm cũng hay mắc, là đo mô hình trên chính kho đã dùng để đếm, nên điểm đẹp giả. Câu trong kho luôn có xác suất cao vì chính nó tạo ra con số đếm. Phải giữ riêng một phần văn bản chưa đếm để đo."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "[alg.bigram_prob(s) for s in ('<s> bạn thích mèo </s>', '<s> tôi thích chó </s>')] == [__import__('fractions').Fraction(2, 9)] * 2"
+    steps:
+      - show: |
+          <p>Cùng kho ba câu.</p>
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Tính $P(\text{bạn thích mèo})$.</td></tr>
+          <tr><td>2</td><td>Tính $P(\text{tôi thích chó})$. Hai câu này có xác suất bằng nhau không?</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm, vẫn với kho ba câu. Câu một, tính xác suất của câu bạn thích mèo. Câu hai, tính xác suất của câu tôi thích chó. Hai câu này có xác suất bằng nhau không? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <table class="t"><tr><th>câu</th><th>bốn bước</th><th>xác suất</th></tr>
+          <tr><td>① bạn thích mèo</td><td>$\frac{1}{3} \cdot 1 \cdot \frac{2}{3} \cdot 1$</td><td>$\hl{\frac{2}{9}}$</td></tr>
+          <tr><td>② tôi thích chó</td><td>$\frac{2}{3} \cdot 1 \cdot \frac{1}{3} \cdot 1$</td><td>$\hl{\frac{2}{9}}$</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Đáp án, nhân bốn bước của mỗi câu. Câu một, bạn chỉ đứng đầu 1 trong 3 câu, nên 1 phần 3 nhân 1 nhân 2 phần 3 nhân 1, bằng 2 phần 9. Câu hai, chó chỉ đứng sau thích 1 trong 3 lần, nên 2 phần 3 nhân 1 nhân 1 phần 3 nhân 1, cũng bằng 2 phần 9."
+      - show: |
+          <p>Bằng nhau, nhưng vì <b>hai lý do khác nhau</b>: câu ① hiếm ở đầu câu, câu ② hiếm ở cuối câu.</p>
+        say: "Hai câu có xác suất bằng nhau, nhưng vì hai lý do khác nhau, câu một hiếm ở đầu câu, còn câu hai hiếm ở cuối câu."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">chuỗi từ tố</span><span class="a">→</span>
+          <span class="n">quy tắc chuỗi: tích các xác suất có điều kiện</span><span class="a">→</span>
+          <span class="n">bigram: chỉ nhìn từ ngay trước</span><span class="a">→</span>
+          <span class="n">ước lượng bằng đếm</span></div>
+        say: "Tổng kết lại, một chuỗi từ tố có xác suất bằng tích các xác suất có điều kiện theo quy tắc chuỗi. Giả định cặp từ chỉ nhìn từ ngay trước, và ta ước lượng xác suất bằng đếm."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> mô hình ngôn ngữ không “biết” câu đúng hay sai — nó biết câu đó <b>giống</b> dữ liệu đến mức nào.</div>
+        say: "Điều cần mang theo, mô hình ngôn ngữ không biết câu đúng hay sai, nó biết câu đó giống dữ liệu đến mức nào."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 1): <b>mô hình n-gram</b>, làm trơn và độ hỗn loạn.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 1, ta học mô hình n-gram, cách làm trơn, và độ hỗn loạn. Hẹn gặp bạn ở bài tiếp theo."

@@ -1,0 +1,211 @@
+id: L09
+course: SAR
+series: "SAR · Kiến trúc hệ thống"
+title: "Bài 9 — Tính đúng khi có thử lại: lũy đẳng và xử lý trùng lặp"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/sar.yaml L09; audit/sar/verify_sar.py L09; P. Helland, Idempotence Is Not a Medical Condition, CACM 55(5), 2012; Stripe API docs, Idempotent requests (đọc 2026-10-28); CLD bài 4 (khoá lũy đẳng), SAR bài 8"
+assumes: [arith]
+# Quy ước: alg.idempotent_ledger(danh sách (khoá, số tiền)) bỏ qua khoá đã thấy; trả (sổ cái lũy đẳng, sổ cái nếu không lũy đẳng).
+#   alg.idem_crash(same_tx) chạy trên sqlite3 thật: máy chết sau khi trừ tiền, trước khi ghi khoá; so hai cách ghi (cùng giao dịch / tách rời).
+objectives:
+  - "Thiết kế giao diện lập trình lũy đẳng bằng khoá yêu cầu"
+  - "Loại thông điệp trùng"
+  - "Ghi khoá cùng giao dịch với kết quả"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Khách bấm “thanh toán” một lần, bị trừ hai lần"
+    checks:
+      - "alg.idempotent_ledger([('k1', 100), ('k1', 100), ('k2', 50)]) == (150, 250)"
+    steps:
+      - show: |
+          <p>Mạng chập chờn: yêu cầu trả 100 nghìn đã tới máy chủ và được xử lý, nhưng phản hồi bị mất. Ứng dụng tự gửi lại. Thêm một đơn 50 nghìn. Sổ cái ghi $\hl{250}$ thay vì 150 — khách bị trừ hai lần.</p>
+          <div class="box key">Hôm nay: <b>lũy đẳng</b> — làm sao để “gửi lại” an toàn, vì trong hệ phân tán, gửi lại là chuyện chắc chắn xảy ra.</div>
+        focus: [1, 1, 1, 1, 2]
+        say: "Chào bạn, mạng chập chờn, yêu cầu trả 100 nghìn đã tới máy chủ và được xử lý, nhưng phản hồi bị mất. Ứng dụng tự gửi lại. Thêm một đơn 50 nghìn nữa. Sổ cái ghi 250 thay vì 150, khách bị trừ hai lần. Hôm nay ta học lũy đẳng, làm sao để gửi lại một cách an toàn, vì trong hệ phân tán, gửi lại là chuyện chắc chắn xảy ra."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: vì sao phải gửi lại, và giao dịch “tất cả hoặc không”"
+    checks:
+      - "[100 * (1 + r) for r in (0, 1, 1)] == [100, 200, 200]"
+      - "1000 - 100 + 500 + 100 == 1500 and 1000 + 500 == 1500"
+    steps:
+      - show: |
+          <p>Gửi yêu cầu trả 100 mà <b>không nhận được phản hồi</b>. Người gửi không phân biệt được ba khả năng, nên chỉ còn cách gửi lại:</p>
+          <table class="t"><tr><th>chuyện thật sự xảy ra</th><th>máy chủ đã trừ?</th><th>gửi lại, không có gì bảo vệ</th></tr>
+          <tr><td>yêu cầu mất trên đường đi</td><td>chưa</td><td>trừ 100 — đúng</td></tr>
+          <tr><td>đã xử lý, phản hồi mất trên đường về</td><td>rồi</td><td class="red">trừ 200</td></tr>
+          <tr><td>máy chủ chậm, vẫn đang xử lý</td><td>sắp</td><td class="red">trừ 200</td></tr></table>
+        focus: [1, 1, 2, "2.2", "2.3", "2.4"]
+        say: "Trước hết, vì sao phải gửi lại. Bạn gửi yêu cầu trả 100 mà không nhận được phản hồi. Bảng liệt kê ba khả năng mà người gửi không phân biệt được. Nếu yêu cầu mất trên đường đi thì máy chủ chưa trừ, gửi lại là đúng. Nếu máy chủ đã xử lý mà phản hồi mất trên đường về, gửi lại sẽ trừ tổng 200. Nếu máy chủ chỉ chậm và vẫn đang xử lý, gửi lại cũng thành 200."
+      - show: |
+          <p><b>Giao dịch</b> (ở khoá Cơ sở dữ liệu): gói nhiều lệnh ghi thành một khối, <b>hoặc tất cả được xác nhận, hoặc không lệnh nào</b>. Chuyển 100 từ A (1000) sang B (500): trừ A và cộng B trong một giao dịch. Máy chết giữa chừng → A vẫn 1000, B vẫn 500; xong trọn → A 900, B 600. Tổng luôn là $\hl{1500}$.</p>
+        say: "Thứ hai, ở khoá Cơ sở dữ liệu ta đã học giao dịch, gói nhiều lệnh ghi thành một khối, hoặc tất cả được xác nhận, hoặc không lệnh nào. Ví dụ chuyển 100 từ tài khoản A có 1000 sang tài khoản B có 500, trừ A và cộng B trong một giao dịch. Nếu máy chết giữa chừng thì A vẫn 1000, B vẫn 500, còn nếu xong trọn thì A còn 900, B có 600. Trường hợp nào tổng cũng là 1500, không có trạng thái nửa vời."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: lũy đẳng, khoá yêu cầu"
+    steps:
+      - show: |
+          <p><b>Lũy đẳng</b>: làm một lần hay nhiều lần cho cùng kết quả. “Đặt số dư bằng 900” lũy đẳng; “trừ 100” thì không.</p>
+          <p><b>Khoá yêu cầu</b>: người gửi tạo một mã duy nhất cho mỗi <b>ý định</b> (một lần bấm thanh toán) và gửi kèm mọi lần thử lại. Máy chủ lưu (khoá → kết quả); gặp lại khoá thì trả kết quả cũ, không làm lại.</p>
+          <div class="box key">Khoá và kết quả phải được ghi trong <b>cùng một giao dịch</b>: hoặc cả hai, hoặc không gì cả.</div>
+        focus: [1, 1, 2, 2, 3]
+        say: "Lũy đẳng nghĩa là làm một lần hay nhiều lần đều cho cùng kết quả. Đặt số dư bằng 900 là lũy đẳng, còn trừ 100 thì không. Khoá yêu cầu là một mã duy nhất mà người gửi tạo cho mỗi ý định, như một lần bấm thanh toán, và gửi kèm trong mọi lần thử lại. Máy chủ lưu khoá cùng kết quả, gặp lại khoá thì trả kết quả cũ chứ không làm lại. Khoá và kết quả phải được ghi trong cùng một giao dịch, hoặc cả hai, hoặc không gì cả."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Khoá yêu cầu chặn lần trừ thứ hai"
+    steps:
+      - show: |
+          <div><svg width="1500" height="330" viewBox="0 0 1500 330"><g font-size="21" fill="#1f2937"><text x="10" y="88" font-weight="bold">ứng dụng</text><text x="10" y="238" font-weight="bold">máy chủ</text><rect x="130" y="40" width="250" height="84" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="255" y="76" text-anchor="middle">1. gửi: trả 100</text><text x="255" y="106" text-anchor="middle">khoá k1</text><rect x="400" y="190" width="250" height="84" rx="10" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="525" y="226" text-anchor="middle">2. trừ 100 và lưu k1</text><text x="525" y="256" text-anchor="middle">cùng một giao dịch</text><rect x="670" y="40" width="250" height="84" rx="10" fill="#fee2e2" stroke="#b91c1c" stroke-width="3"/><text x="795" y="76" text-anchor="middle">3. phản hồi bị mất</text><text x="795" y="106" text-anchor="middle">hết giờ chờ</text><rect x="940" y="190" width="250" height="84" rx="10" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="1065" y="226" text-anchor="middle">4. gửi lại k1:</text><text x="1065" y="256" text-anchor="middle">khoá k1 đã có</text><rect x="1210" y="40" width="250" height="84" rx="10" fill="#d1fae5" stroke="#059669" stroke-width="3"/><text x="1335" y="76" text-anchor="middle">5. nhận kết quả cũ</text><text x="1335" y="106" text-anchor="middle">không trừ thêm</text><line x1="255" y1="124" x2="525" y2="190" stroke="#1f2937" stroke-width="3" /><circle cx="525" cy="190" r="6" fill="#1f2937"/><line x1="525" y1="190" x2="795" y2="124" stroke="#b91c1c" stroke-width="3" stroke-dasharray="10 8"/><circle cx="795" cy="124" r="6" fill="#b91c1c"/><line x1="795" y1="124" x2="1065" y2="190" stroke="#1f2937" stroke-width="3" /><circle cx="1065" cy="190" r="6" fill="#1f2937"/><line x1="1065" y1="190" x2="1335" y2="124" stroke="#059669" stroke-width="3" /><circle cx="1335" cy="124" r="6" fill="#059669"/><text x="750" y="310" text-anchor="middle" fill="#059669" font-weight="bold">gửi hai lần, tiền chỉ bị trừ đúng một lần: 100</text></g></svg></div>
+        focus: [1, 1, 1]
+        say: "Hình đi theo thời gian từ trái sang phải, hàng trên là ứng dụng, hàng dưới là máy chủ. Ứng dụng gửi lệnh trả 100 kèm khoá k1, máy chủ trừ tiền và lưu khoá trong cùng một giao dịch, nhưng phản hồi bị mất nên ứng dụng hết giờ chờ. Ứng dụng gửi lại với đúng khoá k1, máy chủ thấy khoá đã có nên chỉ trả lại kết quả cũ, và tiền chỉ bị trừ đúng một lần."
+
+  - id: example
+    kind: example
+    title: "Khe hở khi ghi khoá tách rời"
+    checks:
+      - "alg.idempotent_ledger([('k1', 100), ('k1', 100), ('k2', 50)]) == (150, 250)"
+      - "alg.idem_crash(True) == 100 and alg.idem_crash(False) == 200"
+      - "[alg.idempotent_ledger([('k1', 100), ('k1', 100), ('k2', 50)][:n]) for n in (1, 2, 3)] == [(100, 100), (100, 200), (150, 250)]"
+    steps:
+      - show: |
+          <p><b>Bước 1 — lần gửi đầu “k1” 100:</b> khoá chưa thấy bao giờ → trừ 100, lưu khoá k1. Sổ cái: 100.</p>
+        say: "Bước một, lần gửi đầu tiên mang khoá k1 với số tiền 100. Máy chủ chưa thấy khoá này bao giờ, nên trừ 100 và lưu khoá k1, sổ cái ghi 100."
+      - show: |
+          <table class="t"><tr><th>yêu cầu</th><th>khoá đã thấy?</th><th>sổ cái có khoá</th><th>sổ cái không khoá</th></tr>
+          <tr><td>“k1” 100</td><td>chưa</td><td>100</td><td>100</td></tr>
+          <tr><td>“k1” 100 (gửi lại)</td><td><b>rồi</b> → bỏ qua</td><td>100</td><td>200</td></tr>
+          <tr><td>“k2” 50</td><td>chưa</td><td>$\hl{150}$</td><td class="red">250</td></tr></table>
+        focus: [1, "1.3", "1.3", "1.4"]
+        say: "Bước hai, đi tiếp từng yêu cầu. Lần gửi lại mang khoá k1 đã thấy, nên bị bỏ qua, sổ cái vẫn 100, trong khi không có khoá thì thành 200. Vì khoá đã thấy, máy chủ chỉ trả lại kết quả cũ chứ không trừ lại. Yêu cầu k2 50 là khoá mới, nên sổ cái có khoá là 150, đúng, còn sổ cái không khoá là 250."
+      - show: |
+          <p><b>Bước 3 — khe hở:</b> máy chủ trừ tiền và ghi khoá bằng <b>hai giao dịch riêng</b>, rồi <b>chết đúng lúc</b> sau khi trừ tiền, trước khi kịp ghi khoá. Người gửi thử lại: khoá “k1” chưa có → trừ lần nữa, tổng <span class="red">200</span>.</p>
+        say: "Bước ba, tìm khe hở. Giả sử máy chủ trừ tiền và ghi khoá bằng hai giao dịch riêng, rồi chết đúng lúc sau khi trừ tiền, trước khi kịp ghi khoá. Người gửi thử lại, máy chủ không thấy khoá k1 nên trừ lần nữa, tổng 200."
+      - clear: true
+        show: |
+          <p><b>Bước 4 — so hai cách ghi:</b></p>
+          <table class="t"><tr><th>cách ghi</th><th>sau khi chết và thử lại</th><th>đã trừ</th></tr>
+          <tr><td>trừ tiền, rồi ghi khoá (hai giao dịch)</td><td>khoá chưa có → trừ lần nữa</td><td class="red">200</td></tr>
+          <tr><td>trừ tiền và ghi khoá cùng một giao dịch</td><td>chết giữa chừng → cả hai cùng mất → trừ một lần</td><td>$\hl{100}$</td></tr></table>
+          <p class="note">Chạy thật trên cơ sở dữ liệu nhỏ: cách tách rời trừ 200, cách cùng giao dịch trừ đúng 100.</p>
+        focus: [1, 2, "2.2", "2.3", 3]
+        say: "Bước bốn, bảng so hai cách ghi. Nếu trừ tiền rồi mới ghi khoá trong hai giao dịch riêng, khoá chưa có nên lần thử lại trừ thêm lần nữa, tổng 200. Nếu trừ tiền và ghi khoá trong cùng một giao dịch, chết giữa chừng thì cả hai cùng mất, nên lần thử lại chỉ trừ một lần, đúng 100. Đó là nhờ giao dịch, hoặc tất cả, hoặc không gì cả. Chạy thật trên một cơ sở dữ liệu nhỏ cho đúng hai kết quả đó."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: thử mọi điểm máy có thể chết"
+    checks:
+      - "[100 * ((c in 'bc') + (c != 'c')) for c in 'abc'] == [100, 200, 100]"
+      - "[100 * ((c == 'c') + (c != 'c')) for c in 'abc'] == [100, 100, 100]"
+      - "sum(dict([('k1', 100), ('k1', 100), ('k2', 50)]).values()) == 150"
+      - "sum(100 * ((c in 'bc') + (c != 'c')) == 200 for c in 'abc') == 1"
+    steps:
+      - show: |
+          <table class="t"><tr><th>máy chết lúc</th><th>hai giao dịch riêng</th><th>cùng một giao dịch</th></tr>
+          <tr><td>a — trước khi trừ</td><td>thử lại trừ 1 lần: 100</td><td>100</td></tr>
+          <tr><td>b — sau khi trừ, trước khi ghi khoá</td><td class="red">200</td><td>giao dịch bị huỷ, thử lại: 100</td></tr>
+          <tr><td>c — sau khi ghi khoá (chỉ mất phản hồi)</td><td>khoá có, bỏ qua: 100</td><td>100</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Kiểm bằng đường khác, thử lần lượt mọi điểm máy có thể chết. Chết trước khi trừ thì cả hai cách đều trừ đúng 100, vì lần thử lại là lần trừ duy nhất. Chết sau khi trừ mà trước khi ghi khoá, cách hai giao dịch trừ 200, còn cách cùng giao dịch bị huỷ cả khối nên chỉ trừ 100. Chết sau khi đã ghi khoá thì cả hai cách đều thấy khoá và bỏ qua, vẫn 100."
+      - show: |
+          <table class="t"><tr><th>kiểm</th><th>cách</th><th>kết quả</th></tr>
+          <tr><td>số điểm chết làm hỏng cách tách rời</td><td>đếm ô đỏ ở bảng trên</td><td><b>1</b> trên 3 (điểm b) — hiếm, kiểm thử dễ bỏ sót</td></tr>
+          <tr><td>sổ cái 150</td><td>cộng số tiền của các khoá <b>khác nhau</b>: k1 100 + k2 50</td><td>$\hl{150}$ ✓</td></tr></table>
+        focus: ["1.2", "1.3"]
+        say: "Chỉ đúng một điểm chết làm hỏng cách tách rời, nên lỗi này hiếm và kiểm thử thông thường dễ bỏ sót. Kiểm sổ cái bằng cách khác, chỉ cộng số tiền của các khoá khác nhau, k1 100 cộng k2 50, bằng 150, khớp với kết quả ở trên."
+
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc, 1 lỗi người đã đi làm"
+    checks:
+      - "sum(1 for q in __import__('itertools').permutations(['c1', 'w1', 'c2', 'w2']) if q.index('c1') < q.index('w1') and q.index('c2') < q.index('w2')) == 6"
+      - "sum(1 for q in __import__('itertools').permutations(['c1', 'w1', 'c2', 'w2']) if q.index('c1') < q.index('w1') and q.index('c2') < q.index('w2') and max(q.index('c1'), q.index('c2')) < min(q.index('w1'), q.index('w2'))) == 4"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Máy chủ tự sinh khoá cho mỗi yêu cầu nhận được <b class="red">(vô dụng)</b>
+          <br><span class="note">Lần gửi lại là một yêu cầu mới → khoá mới → trừ lần nữa. Khoá phải do <b>người gửi</b> tạo một lần cho mỗi ý định và giữ nguyên qua các lần thử lại.</span></div>
+        say: "Lỗi thứ nhất, để máy chủ tự sinh khoá cho mỗi yêu cầu nhận được. Lần gửi lại là một yêu cầu mới, nên có khoá mới và bị trừ lần nữa. Khoá phải do người gửi tạo một lần cho mỗi ý định, và giữ nguyên qua các lần thử lại."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Cùng khoá nhưng khác nội dung <b class="red">(lạm dụng khoá)</b>
+          <br><span class="note">Gửi lại khoá “k1” với số tiền 500 thay vì 100: máy chủ nên báo lỗi xung đột, không lặng lẽ trả kết quả cũ hay làm theo nội dung mới.</span></div>
+        say: "Lỗi thứ hai, gửi cùng khoá nhưng khác nội dung. Gửi lại khoá k1 với số tiền 500 thay vì 100 thì máy chủ nên báo lỗi xung đột, không lặng lẽ trả kết quả cũ hay làm theo nội dung mới."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Xoá khoá quá sớm <b class="red">(trùng muộn)</b>
+          <br><span class="note">Giữ khoá 1 phút nhưng thông điệp trùng có thể tới sau 10 phút (hàng đợi, thử lại có lùi). Giữ khoá lâu hơn khoảng thử lại dài nhất có thể.</span></div>
+        say: "Lỗi thứ ba, xoá khoá quá sớm. Giữ khoá 1 phút nhưng thông điệp trùng có thể tới sau 10 phút, do hàng đợi hay thử lại có lùi, nên hãy giữ khoá lâu hơn khoảng thử lại dài nhất có thể."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> “Đọc xem khoá có chưa, chưa thì làm” bằng hai lệnh riêng, cột khoá <b>không có ràng buộc duy nhất</b> <b class="red">(hai máy cùng trừ)</b></div>
+          <table class="t"><tr><th>thời điểm</th><th>máy chủ 1 (lần gửi đầu)</th><th>máy chủ 2 (lần gửi lại)</th></tr>
+          <tr><td>1</td><td>đọc k1: chưa có</td><td>đọc k1: chưa có</td></tr>
+          <tr><td>2</td><td>trừ 100, ghi k1</td><td>trừ 100, ghi k1</td></tr></table>
+          <p class="note">Hai máy, mỗi máy “đọc rồi ghi”: có 6 cách xen kẽ, $\hl{4}$ cách cả hai cùng đọc trước khi ai kịp ghi → trừ 200. Người làm nghề đặt <b>ràng buộc duy nhất</b> lên cột khoá: lệnh ghi khoá thứ hai thất bại, giao dịch của nó bị huỷ cùng lệnh trừ tiền.</p>
+        focus: [1, 2, "2.2", "2.3", 3, 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, là đọc xem khoá có chưa, chưa thì làm, bằng hai lệnh riêng, trong khi cột khoá không có ràng buộc duy nhất. Lần gửi đầu và lần gửi lại có thể tới hai máy chủ khác nhau gần như cùng lúc. Ở thời điểm 1, cả hai máy đều đọc thấy k1 chưa có. Ở thời điểm 2, cả hai cùng trừ 100 và ghi k1, tổng 200. Với hai máy, mỗi máy đọc rồi ghi, có 6 cách xen kẽ, và 4 trong số đó để cả hai cùng đọc trước khi ai kịp ghi. Người làm nghề đặt ràng buộc duy nhất lên cột khoá, để lệnh ghi khoá thứ hai thất bại và giao dịch của nó bị huỷ cùng lệnh trừ tiền."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.idempotent_ledger([('a', 30), ('b', 20), ('a', 30), ('a', 30)]) == (50, 110)"
+      - "[alg.idempotent_ledger([('a', 30), ('b', 20), ('a', 30), ('a', 30)][:n]) for n in (1, 2, 3, 4)] == [(30, 30), (50, 50), (50, 80), (50, 110)]"
+      - "sum([1, 2, 4, 8, 16]) == 31 and 31 > 1"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Chuỗi yêu cầu: (“a”, 30), (“b”, 20), (“a”, 30), (“a”, 30). Sổ cái có lũy đẳng và không lũy đẳng?</td></tr>
+          <tr><td>2</td><td>Thao tác nào lũy đẳng tự nhiên: “đặt địa chỉ giao hàng = X”, “cộng 1 vào số lượt thích”, “xoá đơn số 7”?</td></tr>
+          <tr><td>3</td><td>Ứng dụng thử lại sau 1, 2, 4, 8, 16 phút (mỗi lần chờ gấp đôi). Máy chủ nên giữ khoá ít nhất bao lâu?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.4", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, chuỗi yêu cầu gồm a 30, b 20, a 30, a 30. Sổ cái khi có lũy đẳng và khi không lũy đẳng là bao nhiêu? Câu hai, trong ba thao tác đặt địa chỉ giao hàng bằng X, cộng 1 vào số lượt thích, và xoá đơn số 7, thao tác nào lũy đẳng tự nhiên? Câu ba, ứng dụng thử lại sau 1, 2, 4, 8, 16 phút, mỗi lần chờ gấp đôi, máy chủ nên giữ khoá ít nhất bao lâu? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>yêu cầu</th><th>khoá đã thấy?</th><th>có lũy đẳng</th><th>không lũy đẳng</th></tr>
+          <tr><td>“a” 30</td><td>chưa</td><td>30</td><td>30</td></tr>
+          <tr><td>“b” 20</td><td>chưa</td><td>50</td><td>50</td></tr>
+          <tr><td>“a” 30</td><td>rồi</td><td>50</td><td>80</td></tr>
+          <tr><td>“a” 30</td><td>rồi</td><td>$\hl{50}$</td><td>$\hl{110}$</td></tr></table>
+        focus: [1, "1.2", "1.4", "1.5"]
+        say: "Đáp án câu một, đi từng yêu cầu. Hai yêu cầu đầu đều là khoá mới, nên cả hai sổ cái lên 50. Hai lần a sau là khoá đã thấy, sổ cái có lũy đẳng đứng yên ở 50, còn sổ cái không lũy đẳng cộng thêm hai lần 30. Vậy có lũy đẳng thì 30 cộng 20 bằng 50, không lũy đẳng thì 110."
+      - show: |
+          <table class="t"><tr><th>thao tác</th><th>làm lần hai thì</th><th>lũy đẳng?</th></tr>
+          <tr><td>đặt địa chỉ = X</td><td>địa chỉ vẫn là X</td><td>có</td></tr>
+          <tr><td>cộng 1 vào số lượt thích</td><td>lượt thích tăng thêm 1</td><td><b>không</b> — cần khoá yêu cầu</td></tr>
+          <tr><td>xoá đơn số 7</td><td>đơn 7 vẫn đã xoá</td><td>có</td></tr></table>
+          <p>③ Lần thử cuối tới sau $1 + 2 + 4 + 8 + 16 = \hl{31}$ phút → giữ khoá <b>lâu hơn 31 phút</b> (ví dụ 1 giờ); giữ 1 phút là để lọt lần gửi lại.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2, 2]
+        say: "Câu hai, thử làm mỗi thao tác lần hai. Đặt địa chỉ bằng X lần nữa thì địa chỉ vẫn là X, nên lũy đẳng. Cộng 1 vào lượt thích lần nữa thì lượt thích tăng thêm 1, nên không lũy đẳng và cần khoá yêu cầu. Xoá đơn số 7 lần nữa thì đơn vẫn đã bị xoá, nên lũy đẳng. Câu ba là một quyết định, lần thử cuối tới sau 1 cộng 2 cộng 4 cộng 8 cộng 16, bằng 31 phút. Vậy phải giữ khoá lâu hơn 31 phút, ví dụ 1 giờ, còn giữ 1 phút là để lọt lần gửi lại."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">gửi lại là chắc chắn xảy ra</span><span class="a">→</span>
+          <span class="n">người gửi tạo khoá cho mỗi ý định</span><span class="a">→</span>
+          <span class="n">khoá và kết quả cùng một giao dịch</span><span class="a">→</span>
+          <span class="n">giữ khoá đủ lâu, báo xung đột</span></div>
+        say: "Tổng kết lại, gửi lại là chuyện chắc chắn xảy ra, nên người gửi tạo một khoá cho mỗi ý định. Khoá và kết quả phải ghi trong cùng một giao dịch, giữ khoá đủ lâu, và báo xung đột khi cùng khoá khác nội dung."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> trong hệ phân tán, “chính xác một lần” thường là “ít nhất một lần” cộng với “bỏ qua trùng lặp”.</div>
+        say: "Điều cần mang theo, trong hệ phân tán, chính xác một lần thường là ít nhất một lần, cộng với bỏ qua trùng lặp."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 10): <b>nhất quán và vị trí địa lý</b> — một vùng, nhiều vùng.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 10, ta học nhất quán và vị trí địa lý, khi hệ chạy ở một vùng hay nhiều vùng. Hẹn gặp bạn ở bài tiếp theo."

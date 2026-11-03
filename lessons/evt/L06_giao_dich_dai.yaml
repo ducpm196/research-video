@@ -1,0 +1,194 @@
+id: L06
+course: EVT
+series: "EVT · Kiến trúc hướng sự kiện"
+title: "Bài 6 — Giao dịch dài qua nhiều dịch vụ: điều phối, biên đạo và bù trừ"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/evt.yaml L06; audit/evt/verify_evt.py L06; H. Garcia-Molina, K. Salem, Sagas (SIGMOD 1987); C. Richardson, Microservices Patterns (2018), chương 4; bài 2"
+assumes: [arith]
+# Quy ước: giao dịch dài = chuỗi bước cục bộ, mỗi bước có một bước bù trừ; bước thứ k lỗi → chạy bù trừ của các bước ĐÃ LÀM theo thứ tự NGƯỢC (alg.saga_run).
+#   Điều phối = một bộ điều phối gửi lệnh từng bước; biên đạo = mỗi dịch vụ nghe sự kiện của bước trước rồi tự làm bước mình. Các bước đặt hàng là VÍ DỤ MINH HOẠ.
+objectives:
+  - "Thiết kế bước bù trừ cho mỗi bước"
+  - "Chạy bù trừ đúng thứ tự khi một bước lỗi"
+  - "So sánh điều phối tập trung với biên đạo theo sự kiện"
+asr_reviewed:
+  - {sentence: "Mười bước có nhánh thì logic rải khắp nơi, khó biết đơn đang kẹt ở đâu, nên hãy dùng điều phối và lưu trạng thái từng giao dịch dài.", reason: "ASR chép “Mười bước có nhánh thì lô ghét rãi khắp nơi, khó biết đơn đang kẹt ở đâu, nên hãy dùng điều phối và lưu trạng thái từng giao dịch dài.” (0.933): lệch âm/thanh thuần Việt: gíc rải/ghét rãi — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Tiền đã trừ, hàng không giao"
+    checks:
+      - "alg.saga_run([('giữ hàng', 'nhả hàng'), ('trừ tiền', 'hoàn tiền'), ('giao', None)], 2)[0] == ['giữ hàng', 'trừ tiền']"
+    steps:
+      - show: |
+          <p>Đặt hàng đi qua ba dịch vụ: kho giữ hàng, thanh toán trừ tiền, vận chuyển nhận giao. Vận chuyển báo “không giao được tới vùng này”. Kho vẫn giữ hàng, khách đã mất tiền. Không có một giao dịch cơ sở dữ liệu nào bao trọn ba dịch vụ để huỷ ngược tất cả.</p>
+          <div class="box key">Hôm nay: <b>giao dịch dài</b> — mỗi bước có một <b>bước bù trừ</b>, lỗi thì bù trừ theo thứ tự ngược.</div>
+        focus: [1, 1, 1, 1, 2]
+        say: "Chào bạn, đặt hàng đi qua ba dịch vụ, kho giữ hàng, thanh toán trừ tiền, và vận chuyển nhận giao. Vận chuyển báo không giao được tới vùng này. Kho vẫn giữ hàng, còn khách đã mất tiền. Không có một giao dịch cơ sở dữ liệu nào bao trọn ba dịch vụ để huỷ ngược tất cả. Hôm nay ta học giao dịch dài, nơi mỗi bước có một bước bù trừ, và khi lỗi thì bù trừ theo thứ tự ngược."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: chồng đĩa và việc làm hai lần"
+    checks:
+      - "list(reversed(['đĩa 1', 'đĩa 2', 'đĩa 3'])) == ['đĩa 3', 'đĩa 2', 'đĩa 1'] and 50 + 50 == 100 and sum(v for _, v in {('hoàn đơn 42', 50), ('hoàn đơn 42', 50)}) == 50"
+    steps:
+      - show: |
+          <table class="t"><tr><th>chồng đĩa</th><th>thứ tự</th></tr>
+          <tr><td>xếp lên</td><td>đĩa 1, đĩa 2, đĩa 3</td></tr>
+          <tr><td>lấy ra</td><td>đĩa 3, đĩa 2, đĩa 1 — <b>ngược</b> lại</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Trước hết, hình ảnh một chồng đĩa. Ta xếp lên lần lượt đĩa 1, đĩa 2, đĩa 3. Muốn lấy ra thì phải lấy đĩa 3 trước, rồi đĩa 2, rồi đĩa 1, tức là theo thứ tự ngược lại."
+      - show: |
+          <table class="t"><tr><th>lệnh “hoàn 50 cho đơn 42” tới hai lần</th><th>khách nhận</th></tr>
+          <tr><td>làm cả hai lần</td><td>$50 + 50 = 100$ thừa 50</td></tr>
+          <tr><td>nhớ mã “hoàn đơn 42”, lần hai bỏ qua</td><td>50 ✓</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Thứ hai, nhắc lại ý ở bài 2, người nhận lũy đẳng là xử lý cùng một thông điệp hai lần cũng cho kết quả như một lần. Nếu lệnh hoàn 50 cho đơn 42 tới hai lần mà làm cả hai, khách nhận 50 cộng 50 bằng 100, thừa 50. Nếu nhớ mã hoàn đơn 42 và bỏ qua lần hai, khách nhận đúng 50."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: bước, bù trừ, điều phối, biên đạo"
+    steps:
+      - show: |
+          <table class="t"><tr><th>khái niệm</th><th>nghĩa</th></tr>
+          <tr><td><b>bước cục bộ</b></td><td>một giao dịch trong <b>một</b> dịch vụ, cam kết ngay</td></tr>
+          <tr><td><b>bước bù trừ</b></td><td>việc làm ngược nghĩa của một bước đã cam kết: nhả hàng, hoàn tiền</td></tr>
+          <tr><td><b>điều phối</b></td><td>một bộ điều phối giữ trạng thái, gửi lệnh từng bước, quyết định bù trừ</td></tr>
+          <tr><td><b>biên đạo</b></td><td>không có trung tâm: mỗi dịch vụ nghe sự kiện của bước trước rồi tự làm bước mình</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bảng có bốn khái niệm. Bước cục bộ là một giao dịch trong một dịch vụ, và cam kết ngay. Bước bù trừ là việc làm ngược nghĩa của một bước đã cam kết, như nhả hàng, hay hoàn tiền. Điều phối là có một bộ điều phối giữ trạng thái, gửi lệnh từng bước, và quyết định khi nào bù trừ. Biên đạo là không có trung tâm, mỗi dịch vụ nghe sự kiện của bước trước rồi tự làm bước của mình."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Đi tới từng bước, lùi lại từng nấc"
+    checks:
+      - "alg.saga_run([('giữ hàng', 'nhả hàng'), ('trừ tiền', 'hoàn tiền'), ('giao', None)], 2) == (['giữ hàng', 'trừ tiền'], ['hoàn tiền', 'nhả hàng'])"
+    steps:
+      - show: |
+          <div><svg width="1500" height="400" viewBox="0 0 1500 400"><defs><marker id="arE6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#2a78d6"/></marker><marker id="arE6r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#b91c1c"/></marker></defs><rect x="120" y="60" width="300" height="80" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="270" y="110" font-size="26" text-anchor="middle" fill="#1f2937">1. giữ hàng: xong</text><rect x="600" y="60" width="300" height="80" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="750" y="110" font-size="26" text-anchor="middle" fill="#1f2937">2. trừ tiền: xong</text><rect x="1080" y="60" width="300" height="80" rx="10" fill="#fee2e2" stroke="#b91c1c" stroke-width="3"/><text x="1230" y="110" font-size="26" text-anchor="middle" fill="#1f2937">3. giao: lỗi</text><g stroke="#2a78d6" stroke-width="4"><line x1="425" y1="100" x2="592" y2="100" marker-end="url(#arE6)"/><line x1="905" y1="100" x2="1072" y2="100" marker-end="url(#arE6)"/></g><text x="750" y="30" font-size="22" text-anchor="middle" fill="#2a78d6">đi tới</text><rect x="120" y="260" width="300" height="80" rx="10" fill="#fde7d9" stroke="#eb6834" stroke-width="3"/><text x="270" y="310" font-size="26" text-anchor="middle" fill="#1f2937">nhả hàng</text><rect x="600" y="260" width="300" height="80" rx="10" fill="#fde7d9" stroke="#eb6834" stroke-width="3"/><text x="750" y="310" font-size="26" text-anchor="middle" fill="#1f2937">hoàn tiền</text><g stroke="#b91c1c" stroke-width="4" stroke-dasharray="12 8" fill="none"><path d="M1230,145 C1230,300 1000,300 908,300" marker-end="url(#arE6r)"/><line x1="595" y1="300" x2="428" y2="300" marker-end="url(#arE6r)"/></g><g font-size="21" fill="#b91c1c" text-anchor="middle"><text x="1180" y="370">lùi lại: bù trừ theo thứ tự ngược</text><text x="512" y="240">rồi</text><text x="1000" y="240">trước</text></g><g stroke="#6b7280" stroke-width="2" stroke-dasharray="4 6"><line x1="270" y1="145" x2="270" y2="255"/><line x1="750" y1="145" x2="750" y2="255"/></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hàng trên là đường đi tới, mỗi hộp là một bước cục bộ đã cam kết trong một dịch vụ, giữ hàng xong, trừ tiền xong, rồi tới bước giao thì lỗi. Dưới mỗi bước đã xong có một bước bù trừ đứng chờ, nhả hàng dưới giữ hàng, hoàn tiền dưới trừ tiền. Khi bước giao lỗi, đường đỏ đứt nét đi lùi, chạy hoàn tiền trước, rồi mới nhả hàng. Không có giao dịch nào bao trọn ba dịch vụ, nên đường lùi này là cách duy nhất để đưa mọi thứ về chỗ cũ."
+
+  - id: example
+    kind: example
+    title: "Ba bước, bước giao lỗi"
+    checks:
+      - "alg.saga_run([('giữ hàng', 'nhả hàng'), ('trừ tiền', 'hoàn tiền'), ('giao', None)], 2) == (['giữ hàng', 'trừ tiền'], ['hoàn tiền', 'nhả hàng'])"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bước</th><th>kết quả</th><th>bù trừ cần chờ</th></tr>
+          <tr><td>1. giữ hàng</td><td>xong</td><td>nhả hàng</td></tr></table>
+        focus: [1, "1.2"]
+        say: "Bước một, giữ hàng xong và cam kết ngay trong dịch vụ kho. Ta ghi lại bù trừ của nó, nhả hàng, vào danh sách bù trừ đang chờ."
+      - show: |
+          <table class="t"><tr><th>bước</th><th>kết quả</th><th>danh sách bù trừ đang chờ</th></tr>
+          <tr><td>2. trừ tiền</td><td>xong</td><td>nhả hàng, hoàn tiền</td></tr></table>
+        focus: [1, "1.2"]
+        say: "Bước hai, trừ tiền xong và cam kết ngay trong dịch vụ thanh toán. Bù trừ của nó, hoàn tiền, được xếp lên cuối danh sách, sau nhả hàng."
+      - show: |
+          <table class="t"><tr><th>bước</th><th>kết quả</th><th>bù trừ</th></tr>
+          <tr><td>3. giao</td><td><b class="red">lỗi</b></td><td>— (chưa làm gì, không cần bù)</td></tr></table>
+        focus: [1, "1.2"]
+        say: "Bước ba, giao hàng bị lỗi. Vì bước này chưa làm thay đổi gì, nên nó không cần bù trừ."
+      - clear: true
+        show: |
+          <p><b>Bước 4 — lùi lại.</b> Lấy từ <b>cuối</b> danh sách, như lấy đĩa trên cùng: $\hl{\text{hoàn tiền, rồi nhả hàng}}$.</p>
+          <p>Ngược để trạng thái lùi đúng từng nấc: bước làm sau cùng được gỡ trước tiên.</p>
+        focus: [1, 2]
+        say: "Bước bốn, lùi lại bằng cách lấy từ cuối danh sách, như lấy đĩa trên cùng, nên chạy hoàn tiền, rồi nhả hàng. Thứ tự ngược giúp trạng thái lùi đúng từng nấc, bước làm sau cùng được gỡ trước tiên, như khi tháo một chồng việc."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: thử lỗi ở mọi bước"
+    checks:
+      - "[alg.saga_run([('giữ hàng', 'nhả hàng'), ('trừ tiền', 'hoàn tiền'), ('giao', None)], k)[1] for k in range(4)] == [[], ['nhả hàng'], ['hoàn tiền', 'nhả hàng'], ['hoàn tiền', 'nhả hàng']] and all(len(alg.saga_run([('giữ hàng', 'nhả hàng'), ('trừ tiền', 'hoàn tiền'), ('giao', None)], k)[1]) == len([c for _, c in [('giữ hàng', 'nhả hàng'), ('trừ tiền', 'hoàn tiền'), ('giao', None)][:k] if c]) for k in range(4))"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bước lỗi</th><th>đã làm</th><th>bù trừ chạy</th></tr>
+          <tr><td>1. giữ hàng</td><td>không có</td><td>không có</td></tr>
+          <tr><td>2. trừ tiền</td><td>giữ hàng</td><td>nhả hàng</td></tr>
+          <tr><td>3. giao</td><td>giữ hàng, trừ tiền</td><td>$\hl{	ext{hoàn tiền, nhả hàng}}$ ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Kiểm bằng đường khác, cho lỗi xảy ra lần lượt ở từng bước, vì luật bù trừ phải đúng ở mọi chỗ chứ không chỉ ở bước giao. Lỗi ngay ở giữ hàng thì chưa làm gì, nên không có gì để bù. Lỗi ở trừ tiền thì chỉ giữ hàng đã xong, nên chỉ nhả hàng. Lỗi ở giao thì hoàn tiền, rồi nhả hàng, khớp với ví dụ, và số bù trừ luôn bằng số bước đã xong có bù trừ."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Coi bù trừ là huỷ ngược hoàn hảo <b class="red">(có việc không rút lại được)</b>
+          <br><span class="note">Thư xác nhận đã gửi thì chỉ gửi được thư xin lỗi; hàng đã đóng thùng thì tốn công dỡ. Đặt bước khó bù trừ ở <b>cuối</b>, sau các bước dễ lỗi.</span></div>
+        say: "Lỗi thứ nhất, coi bù trừ là huỷ ngược hoàn hảo, trong khi có việc không rút lại được. Thư xác nhận đã gửi thì chỉ gửi được thư xin lỗi, hàng đã đóng thùng thì tốn công dỡ. Hãy đặt bước khó bù trừ ở cuối, sau các bước dễ lỗi."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Bù trừ không lũy đẳng <b class="red">(hoàn tiền hai lần)</b>
+          <br><span class="note">Bù trừ cũng đi qua mạng và có thể bị thử lại. Gắn mã giao dịch dài vào mọi lệnh hoàn tiền để lần hai bị bỏ qua.</span></div>
+        say: "Lỗi thứ hai, bù trừ không lũy đẳng, nên hoàn tiền hai lần. Bù trừ cũng đi qua mạng và có thể bị thử lại. Hãy gắn mã giao dịch dài vào mọi lệnh hoàn tiền, để lần thứ hai bị bỏ qua."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Biên đạo cho luồng dài nhiều nhánh <b class="red">(không ai thấy toàn cảnh)</b>
+          <br><span class="note">Ba bước thì biên đạo gọn. Mười bước có nhánh thì logic rải khắp nơi, khó biết đơn đang kẹt ở đâu — dùng điều phối, lưu trạng thái từng giao dịch dài.</span></div>
+        say: "Lỗi thứ ba, dùng biên đạo cho luồng dài nhiều nhánh, nên không ai thấy toàn cảnh. Ba bước thì biên đạo gọn. Mười bước có nhánh thì logic rải khắp nơi, khó biết đơn đang kẹt ở đâu, nên hãy dùng điều phối và lưu trạng thái từng giao dịch dài."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Coi “hết thời gian chờ” là “chưa làm” <b class="red">(tiền đã trừ mà không ai hoàn)</b></div>
+          <table class="t"><tr><th>giả sử 50 lần trừ tiền hết thời gian chờ, 20 lần thật ra đã trừ</th><th>khách mất tiền</th></tr>
+          <tr><td>coi là chưa làm, không bù trừ bước trừ tiền</td><td>20</td></tr>
+          <tr><td>gửi hoàn tiền lũy đẳng cho cả 50 lần (theo mã giao dịch dài)</td><td>0 — 30 lệnh hoàn bị bỏ qua vì chưa trừ</td></tr></table>
+        focus: [1, 1, "2.1", "2.2", "2.3", "2.3"]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, coi hết thời gian chờ là bước đó chưa làm. Hết thời gian chờ chỉ có nghĩa là không biết kết quả, có thể tiền đã bị trừ mà câu trả lời bị mất trên đường về. Giả sử có 50 lần trừ tiền hết thời gian chờ, trong đó 20 lần thật ra đã trừ. Nếu coi cả 50 là chưa làm và không bù trừ bước trừ tiền, thì 20 khách mất tiền. Người làm nghề coi bước không rõ kết quả là đã làm, và gửi hoàn tiền lũy đẳng theo mã giao dịch dài cho cả 50 lần. Khi đó 20 lần được hoàn thật, còn 30 lệnh hoàn bị bỏ qua vì chưa trừ, nên không khách nào mất tiền."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.saga_run([('đặt phòng', 'huỷ phòng'), ('đặt vé', 'huỷ vé'), ('trừ tiền', 'hoàn tiền'), ('gửi thư', None)], 2) == (['đặt phòng', 'đặt vé'], ['huỷ vé', 'huỷ phòng'])"
+      - "4 - 1 == 3 and 4 - 4 == 0 and 50 - 20 == 30"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Chuyến đi 4 bước: đặt phòng, đặt vé, trừ tiền, gửi thư. Bước <b>trừ tiền</b> lỗi. Chạy những bù trừ nào, theo thứ tự nào?</td></tr>
+          <tr><td>2</td><td>Vì sao “gửi thư” nên đặt cuối cùng?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, chuyến đi có 4 bước, đặt phòng, đặt vé, trừ tiền, và gửi thư. Bước trừ tiền bị lỗi, vậy chạy những bù trừ nào, theo thứ tự nào? Câu hai, vì sao bước gửi thư nên đặt cuối cùng? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>① bước</th><th>kết quả</th><th>danh sách bù trừ đang chờ</th></tr>
+          <tr><td>đặt phòng</td><td>xong</td><td>huỷ phòng</td></tr>
+          <tr><td>đặt vé</td><td>xong</td><td>huỷ phòng, huỷ vé</td></tr>
+          <tr><td>trừ tiền</td><td><b class="red">lỗi</b></td><td>không cần hoàn</td></tr></table>
+          <p>Lấy từ cuối danh sách: $\hl{\text{huỷ vé, rồi huỷ phòng}}$.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Đáp án câu một, đi lại từng bước. Đặt phòng xong, danh sách bù trừ có huỷ phòng. Đặt vé xong, thêm huỷ vé vào cuối. Trừ tiền bị lỗi, chưa trừ gì nên không cần hoàn. Lấy từ cuối danh sách, ta chạy huỷ vé, rồi huỷ phòng."
+      - show: |
+          <table class="t"><tr><th>② vị trí của “gửi thư” trong 4 bước</th><th>số bước sau nó có thể lỗi</th></tr>
+          <tr><td>đầu tiên</td><td>$4 - 1 = 3$: thư xác nhận đã đi mà đơn có thể bị huỷ</td></tr>
+          <tr><td>cuối cùng</td><td>$4 - 4 = 0$ ✓</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Câu hai, thư đã gửi thì không rút lại được, bước gửi thư không có bù trừ. Nếu đặt nó đầu tiên, còn 4 trừ 1 bằng 3 bước phía sau có thể lỗi, và khách đã nhận thư xác nhận cho một chuyến đi bị huỷ. Đặt nó cuối cùng thì không còn bước nào phía sau có thể lỗi, nên đặt sau mọi bước có thể lỗi."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">chuỗi bước cục bộ, mỗi bước một bù trừ</span><span class="a">→</span>
+          <span class="n">lỗi: bù trừ các bước đã làm, thứ tự ngược</span><span class="a">→</span>
+          <span class="n">bù trừ lũy đẳng; bước khó bù đặt cuối</span><span class="a">→</span>
+          <span class="n">ngắn: biên đạo; dài: điều phối</span></div>
+        say: "Tổng kết lại, giao dịch dài là chuỗi bước cục bộ, mỗi bước có một bù trừ. Khi lỗi, ta bù trừ các bước đã làm theo thứ tự ngược. Bù trừ phải lũy đẳng, bước khó bù đặt cuối. Luồng ngắn dùng biên đạo, luồng dài dùng điều phối."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> khi không khoá được cả thế giới, hãy thiết kế cách <b>sửa sai</b> cho từng bước ngay từ đầu.</div>
+        say: "Điều cần mang theo, khi không khoá được cả thế giới, hãy thiết kế cách sửa sai cho từng bước ngay từ đầu."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 7): <b>nối luồng</b> với bảng và với luồng khác.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 7, ta học nối một luồng sự kiện với một bảng, và với một luồng khác. Hẹn gặp bạn ở bài tiếp theo."

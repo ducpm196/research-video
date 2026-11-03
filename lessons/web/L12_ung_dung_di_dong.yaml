@@ -1,0 +1,205 @@
+id: L12
+course: WEB
+series: "WEB · Ứng dụng web và di động"
+title: "Bài 12 — Ứng dụng di động: vòng đời, luồng giao diện, ngân sách khung hình"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/web.yaml L12; audit/web/verify_web.py L12; tài liệu Android — Activity lifecycle, “Slow rendering” (bản hiện hành); tài liệu Apple — Managing your app's life cycle (bản hiện hành); tên nền tảng chỉ trên màn hình; bài 3 (một luồng, hàng đợi)"
+assumes: [arith, frac, approx]
+# Quy ước: ngân sách mỗi khung = 1000 / tần số làm tươi (ms) (alg.frame_budget_ms). Một việc dài t ms trên luồng giao diện chiếm chỗ của khoảng
+#   t / ngân sách khung — các khung trong khoảng đó không được vẽ (mô hình đơn giản, bỏ qua luồng vẽ riêng). Số đo là SỐ MINH HOẠ.
+objectives:
+  - "Mô tả vòng đời ứng dụng khi bị đưa xuống nền"
+  - "Tính ngân sách khung hình"
+  - "Giữ công việc nặng ngoài luồng giao diện"
+asr_reviewed:
+  - {sentence: "Bảng lấy 10 khung đo được, 9 khung mỗi khung 8 mi li giây và 1 khung 48 mi li giây.", reason: "ASR chép “Bản lấy 10 khung đo được 9 khung mổi, khung 8 mili giây và 1 khung 48 mili giây.” (0.773): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh; lệch âm/thanh thuần Việt: bảng/bản, mỗi/mổi — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Câu một, mỗi khung, luồng giao diện mất 12 mi li giây.", reason: "ASR chép “Câu 1, mỗi khung luôn giao diện mất 12ml.” (0.75): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh; lệch âm/thanh thuần Việt: luồng/luôn — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Đọc một tệp mất 50 mi li giây ngay trên luồng giao diện ở 60 héc chiếm chỗ của khoảng 3 khung, nên danh sách đang cuộn khựng lại.", reason: "ASR chép “Đọc một tờ mất 50 mili dây ngay trên luồn giao diện ở 60 hét chiếm chỗ của khoảng 3 khung, nền danh sách đang cuộn khựng lại.” (0.787): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh; lệch âm/thanh thuần Việt: tệp/tờ, luồng/luồn, héc/hét, nên/nền — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Đang điền đơn, nghe điện thoại, mất hết"
+    steps:
+      - show: |
+          <p>Khách điền đơn đăng ký dài năm phút, có cuộc gọi đến, họ nghe máy, mở ứng dụng bản đồ để chỉ đường cho người gọi. Mười phút sau quay lại: ứng dụng mở lại từ màn hình đầu, đơn trống trơn. Hệ điều hành đã <b>dừng hẳn</b> ứng dụng ở nền để lấy bộ nhớ — đó là hành vi bình thường.</p>
+          <div class="box key">Hôm nay: <b>ứng dụng di động</b> — vòng đời, luồng giao diện, và ngân sách cho mỗi khung hình.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, khách điền một đơn đăng ký dài năm phút thì có cuộc gọi đến, họ nghe máy, rồi mở ứng dụng bản đồ để chỉ đường cho người gọi. Mười phút sau quay lại, ứng dụng mở lại từ màn hình đầu, và đơn trống trơn. Hệ điều hành đã dừng hẳn ứng dụng ở nền để lấy bộ nhớ, và đó là hành vi bình thường. Hôm nay ta học ứng dụng di động, với vòng đời, luồng giao diện, và ngân sách cho mỗi khung hình."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: tần số thành khoảng thời gian, một luồng thì phải xếp hàng"
+    checks:
+      - "1000 / 4 == 250 and round(1000 / 60, 1) == 16.7"
+      - "50 + 1 == 51"
+    steps:
+      - show: |
+          <p><b>Tần số</b> là số lần mỗi giây; 1 giây $= 1000$ ms. Đèn nháy 4 lần mỗi giây (4 Hz) thì mỗi lần cách nhau $\frac{1000}{4} = 250$ ms.</p>
+          <p>Màn hình 60 Hz vẽ lại 60 lần mỗi giây → mỗi lần cách nhau $\frac{1000}{60} \approx 16{,}7$ ms.</p>
+        focus: [1, 1, 2]
+        say: "Trước hết, ôn cách đổi tần số thành khoảng thời gian. Tần số là số lần mỗi giây, và một giây bằng 1000 mi li giây, nên đèn nháy 4 lần mỗi giây, tức 4 héc, thì mỗi lần cách nhau 1000 chia 4, bằng 250 mi li giây. Màn hình 60 héc vẽ lại 60 lần mỗi giây, nên mỗi lần cách nhau 1000 chia 60, khoảng 16 phẩy 7 mi li giây."
+      - show: |
+          <p>Ở bài 3 ta đã thấy: <b>một luồng</b> làm từng việc một theo hàng đợi, việc sau phải chờ việc trước xong.</p>
+          <table class="t"><tr><th>hàng đợi của luồng giao diện</th><th>bắt đầu</th><th>xong</th></tr>
+          <tr><td>đọc tệp 50 ms</td><td>0 ms</td><td>50 ms</td></tr>
+          <tr><td>xử lý một lần chạm 1 ms</td><td>50 ms</td><td>$\hl{51}$ ms</td></tr></table>
+        focus: [1, 2, "2.2", "2.3"]
+        say: "Ở bài 3 ta đã thấy vòng lặp sự kiện, một luồng làm từng việc một theo hàng đợi, việc sau phải chờ việc trước xong. Bảng xếp hai việc trên luồng giao diện. Đọc tệp mất 50 mi li giây, chạy từ mốc 0 tới mốc 50. Lần chạm của người dùng chỉ cần 1 mi li giây, nhưng phải chờ tới mốc 50 mới được xử lý, xong ở mốc 51."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: vòng đời và luồng giao diện"
+    steps:
+      - show: |
+          <table class="t"><tr><th>trạng thái</th><th>ứng dụng nên làm gì</th></tr>
+          <tr><td><b>đang dùng</b> (tiền cảnh)</td><td>vẽ giao diện, nhận thao tác</td></tr>
+          <tr><td><b>bị đưa xuống nền</b></td><td>lưu ngay trạng thái người dùng (đơn đang điền, vị trí cuộn), dừng việc tốn pin</td></tr>
+          <tr><td><b>bị dừng hẳn</b> (không báo trước)</td><td>không làm được gì — nên phải lưu từ bước trước</td></tr>
+          <tr><td><b>mở lại</b></td><td>khôi phục trạng thái đã lưu, như chưa từng bị dừng</td></tr></table>
+          <p><b>Luồng giao diện</b>: một luồng duy nhất vẽ màn hình và nhận chạm (như vòng lặp sự kiện ở bài 3). Đọc mạng, đọc đĩa, giải mã ảnh lớn phải chạy ở <b>luồng nền</b>.</p>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", 2, 2]
+        say: "Bảng có bốn trạng thái. Khi đang dùng, ứng dụng vẽ giao diện và nhận thao tác. Khi bị đưa xuống nền, ứng dụng phải lưu ngay trạng thái người dùng, như đơn đang điền hay vị trí cuộn, và dừng việc tốn pin. Khi bị dừng hẳn thì không báo trước, ứng dụng không làm được gì, nên phải lưu từ bước trước. Khi mở lại, ứng dụng khôi phục trạng thái đã lưu, như chưa từng bị dừng. Luồng giao diện là một luồng duy nhất vẽ màn hình và nhận chạm, giống vòng lặp sự kiện. Đọc mạng, đọc đĩa, và giải mã ảnh lớn phải chạy ở luồng nền."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Mỗi khung là một ô thời gian, việc dài lấn sang ô khác"
+    checks:
+      - "round(3 * 1000 / 60) == 50 and 10 < 1000 / 60"
+    steps:
+      - show: |
+          <div><svg width="1500" height="330" viewBox="0 0 1500 330"><defs></defs><line x1="150" y1="80" x2="150" y2="220" stroke="#1f2937" stroke-width="2" stroke-dasharray="6 6"/><text x="150" y="65" font-size="20" text-anchor="middle" fill="#1f2937">0 ms</text><line x1="350" y1="80" x2="350" y2="220" stroke="#1f2937" stroke-width="2" stroke-dasharray="6 6"/><text x="350" y="65" font-size="20" text-anchor="middle" fill="#1f2937">16,7 ms</text><line x1="550" y1="80" x2="550" y2="220" stroke="#1f2937" stroke-width="2" stroke-dasharray="6 6"/><text x="550" y="65" font-size="20" text-anchor="middle" fill="#1f2937">33,3 ms</text><line x1="750" y1="80" x2="750" y2="220" stroke="#1f2937" stroke-width="2" stroke-dasharray="6 6"/><text x="750" y="65" font-size="20" text-anchor="middle" fill="#1f2937">50 ms</text><line x1="950" y1="80" x2="950" y2="220" stroke="#1f2937" stroke-width="2" stroke-dasharray="6 6"/><text x="950" y="65" font-size="20" text-anchor="middle" fill="#1f2937">66,7 ms</text><line x1="1150" y1="80" x2="1150" y2="220" stroke="#1f2937" stroke-width="2" stroke-dasharray="6 6"/><text x="1150" y="65" font-size="20" text-anchor="middle" fill="#1f2937">83,3 ms</text><line x1="1350" y1="80" x2="1350" y2="220" stroke="#1f2937" stroke-width="2" stroke-dasharray="6 6"/><text x="1350" y="65" font-size="20" text-anchor="middle" fill="#1f2937">100 ms</text><rect x="150" y="150" width="120" height="60" fill="#2a78d6" opacity="0.85"/><text x="210" y="188" font-size="20" text-anchor="middle" fill="#ffffff">vẽ 10 ms</text><rect x="350" y="150" width="120" height="60" fill="#2a78d6" opacity="0.85"/><text x="410" y="188" font-size="20" text-anchor="middle" fill="#ffffff">vẽ 10 ms</text><rect x="550" y="150" width="600" height="60" fill="#b91c1c" opacity="0.85"/><text x="850" y="188" font-size="20" text-anchor="middle" fill="#ffffff">đọc tệp 50 ms</text><rect x="1150" y="150" width="120" height="60" fill="#2a78d6" opacity="0.85"/><text x="1210" y="188" font-size="20" text-anchor="middle" fill="#ffffff">vẽ 10 ms</text><text x="650" y="260" font-size="22" font-weight="bold" text-anchor="middle" fill="#b91c1c">lỡ khung</text><text x="850" y="260" font-size="22" font-weight="bold" text-anchor="middle" fill="#b91c1c">lỡ khung</text><text x="1050" y="260" font-size="22" font-weight="bold" text-anchor="middle" fill="#b91c1c">lỡ khung</text><text x="150" y="260" font-size="22" text-anchor="start" fill="#059669">khung kịp</text><text x="350" y="260" font-size="22" text-anchor="start" fill="#059669">khung kịp</text><text x="850" y="310" font-size="24" text-anchor="middle" fill="#b91c1c">3 khung liền không được vẽ: danh sách đứng hình</text><text x="130" y="188" font-size="20" text-anchor="end" fill="#1f2937">luồng</text></svg></div>
+        focus: [1, 1, 1]
+        say: "Hình chia thời gian thành các ô 16 phẩy 7 mi li giây, mỗi vạch đứt là một lần màn hình 60 héc cần một khung mới. Việc vẽ mỗi khung mất 10 mi li giây nằm gọn trong ô của nó, nên khung kịp lên màn hình. Việc đọc tệp 50 mi li giây màu đỏ lấn qua ba ô liền, ba khung đó không được vẽ, và người dùng thấy danh sách đứng hình."
+
+  - id: example
+    kind: example
+    title: "Ngân sách 16,7 ms và 8,3 ms"
+    checks:
+      - "round(alg.frame_budget_ms(60), 1) == 16.7 and round(alg.frame_budget_ms(120), 1) == 8.3 and round(50 / alg.frame_budget_ms(60)) == 3"
+      - "round(50 / alg.frame_budget_ms(120)) == 6 and 10 < alg.frame_budget_ms(60)"
+    steps:
+      - show: |
+          <p><b>Bước một — màn hình 60 Hz</b>: ngân sách mỗi khung.</p>
+          <table class="t"><tr><th>màn hình</th><th>ngân sách mỗi khung</th></tr>
+          <tr><td>60 Hz</td><td>$\frac{1000}{60} \approx \hl{16{,}7}$ ms</td></tr></table>
+        focus: [1, "2.2"]
+        say: "Bước một, tính ngân sách mỗi khung cho màn hình 60 héc. Màn hình 60 héc cho mỗi khung 1000 chia 60, khoảng 16 phẩy 7 mi li giây."
+      - show: |
+          <p><b>Bước 2 — màn hình 120 Hz</b>: tần số gấp đôi thì ngân sách còn một nửa.</p>
+          <table class="t"><tr><th>màn hình</th><th>ngân sách mỗi khung</th></tr>
+          <tr><td>120 Hz</td><td>$\frac{1000}{120} \approx 8{,}3$ ms</td></tr></table>
+          <p>Mọi việc trên luồng giao diện của một khung — xử lý chạm, tính bố cục, vẽ — phải xong trong ngân sách đó.</p>
+        focus: [1, "2.2", 3]
+        say: "Bước hai, màn hình 120 héc có tần số gấp đôi, nên ngân sách mỗi khung chỉ còn một nửa. Màn hình 120 héc chỉ cho khoảng 8 phẩy 3 mi li giây. Mọi việc trên luồng giao diện của một khung, gồm xử lý chạm, tính bố cục, và vẽ, phải xong trong ngân sách đó."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — một việc dài trên luồng giao diện</b> ở 60 Hz:</p>
+          <p>Đọc một tệp 50 ms chiếm chỗ của khoảng $\frac{50}{16{,}7} \approx \hl{3}$ khung: danh sách đang cuộn khựng lại.</p>
+        focus: [1, 2]
+        say: "Bước ba, đặt một việc dài lên luồng giao diện của màn hình 60 héc. Đọc một tệp mất 50 mi li giây ngay trên luồng giao diện ở 60 héc chiếm chỗ của khoảng 3 khung, nên danh sách đang cuộn khựng lại."
+      - show: |
+          <p><b>Bước 4 — quyết định</b>: cùng việc đó trên máy 120 Hz, và khi chuyển sang luồng nền.</p>
+          <table class="t"><tr><th>cách chạy đọc tệp 50 ms</th><th>số khung bị lỡ</th></tr>
+          <tr><td>trên luồng giao diện, 60 Hz</td><td>$\frac{50}{16{,}7} \approx 3$</td></tr>
+          <tr><td>trên luồng giao diện, 120 Hz</td><td>$\frac{50}{8{,}3} \approx 6$</td></tr>
+          <tr><td>ở luồng nền, mỗi khung luồng giao diện chỉ vẽ 10 ms</td><td>$\hl{0}$</td></tr></table>
+        focus: [1, "2.3", "2.4"]
+        say: "Bước bốn là một quyết định, so cùng việc đọc tệp ở ba cách chạy. Trên máy 120 héc, việc đó chiếm khoảng 50 chia 8 phẩy 3, tức 6 khung, còn tệ hơn máy 60 héc. Chuyển việc đọc tệp sang luồng nền thì luồng giao diện mỗi khung chỉ vẽ 10 mi li giây, không lỡ khung nào, nên ta chọn luồng nền."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: nhân thay vì chia"
+    checks:
+      - "math.isclose(0.05 * 60, 3) and math.isclose(0.05 * 120, 6) and round(16.7 * 60) == 1002"
+    steps:
+      - show: |
+          <table class="t"><tr><th>cách khác: đổi 50 ms ra giây rồi nhân với số khung mỗi giây</th><th>kết quả</th></tr>
+          <tr><td>60 Hz: $0{,}05$ giây nhân 60 khung mỗi giây</td><td>$\hl{3}$ khung ✓</td></tr>
+          <tr><td>120 Hz: $0{,}05$ giây nhân 120 khung mỗi giây</td><td>6 khung ✓</td></tr>
+          <tr><td>thử ngược: 16,7 ms nhân 60 khung</td><td>khoảng 1002 ms, gần đúng 1 giây ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Kiểm bằng đường khác, ta không chia cho ngân sách khung mà đổi 50 mi li giây ra giây, rồi nhân với số khung mỗi giây. Ở 60 héc, 0 phẩy 05 giây nhân 60 khung mỗi giây được 3 khung, khớp kết quả chia. Ở 120 héc, 0 phẩy 05 nhân 120 được 6 khung, cũng khớp. Thử ngược lại, 16 phẩy 7 nhân 60 được khoảng 1002 mi li giây, gần đúng một giây, nên ngân sách đã tính là hợp lý."
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi thường gặp"
+    checks:
+      - "9 * 8 == 72 and (72 + 48) / 10 == 12 and round(48 / (1000 / 60)) == 3"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Chỉ lưu khi người dùng bấm “Lưu” <b class="red">(bị dừng hẳn là mất)</b>
+          <br><span class="note">Ứng dụng ở nền có thể bị dừng bất cứ lúc nào, không có thông báo cuối. Lưu bản nháp khi bị đưa xuống nền, và định kỳ khi đang gõ.</span></div>
+        say: "Lỗi thứ nhất, chỉ lưu khi người dùng bấm nút lưu, nên bị dừng hẳn là mất. Ứng dụng ở nền có thể bị dừng bất cứ lúc nào, không có thông báo cuối. Hãy lưu bản nháp khi bị đưa xuống nền, và định kỳ trong lúc đang gõ."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Gọi mạng trên luồng giao diện <b class="red">(đơ, hệ điều hành báo “không phản hồi”)</b>
+          <br><span class="note">Mạng di động có thể mất cả giây. Luồng giao diện bị chặn quá lâu thì hệ điều hành đề nghị người dùng đóng ứng dụng. Luôn gọi mạng ở luồng nền, hiện trạng thái đang tải.</span></div>
+        say: "Lỗi thứ hai, gọi mạng trên luồng giao diện, nên ứng dụng đơ, và hệ điều hành báo không phản hồi. Mạng di động có thể mất cả giây. Luồng giao diện bị chặn quá lâu thì hệ điều hành đề nghị người dùng đóng ứng dụng. Hãy luôn gọi mạng ở luồng nền, và hiện trạng thái đang tải."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Cập nhật giao diện từ luồng nền <b class="red">(hỏng ngẫu nhiên)</b>
+          <br><span class="note">Các thành phần giao diện chỉ an toàn khi dùng từ luồng giao diện. Luồng nền làm xong thì <b>gửi kết quả về</b> luồng giao diện để cập nhật.</span></div>
+        say: "Lỗi thứ ba, cập nhật giao diện từ luồng nền, nên giao diện hỏng một cách ngẫu nhiên. Các thành phần giao diện chỉ an toàn khi dùng từ luồng giao diện. Luồng nền làm xong thì gửi kết quả về luồng giao diện để cập nhật."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4.</b> Chỉ nhìn thời gian <b>trung bình</b> mỗi khung <b class="red">(người đã đi làm hay mắc)</b>
+          <br><span class="note">Báo cáo ghi “trung bình 12 ms, dưới 16,7 ms” nên tưởng mượt. Nhưng người dùng cảm nhận từng khung lỡ, không cảm nhận số trung bình. Hãy đếm số khung vượt ngân sách.</span></div>
+          <table class="t"><tr><th>10 khung đo được (60 Hz)</th><th>kết quả</th></tr>
+          <tr><td>9 khung 8 ms, 1 khung 48 ms</td><td>trung bình $\frac{72 + 48}{10} = 12$ ms</td></tr>
+          <tr><td>khung 48 ms chiếm khoảng $\frac{48}{16{,}7}$</td><td>$\hl{3}$ khung — vẫn giật</td></tr></table>
+        focus: [1, 1, 1, 2, "2.2", "2.3"]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, chỉ nhìn thời gian trung bình mỗi khung. Báo cáo ghi trung bình 12 mi li giây, dưới 16 phẩy 7, nên cả nhóm tưởng là mượt. Nhưng người dùng cảm nhận từng khung bị lỡ, không cảm nhận số trung bình. Bảng lấy 10 khung đo được, 9 khung mỗi khung 8 mi li giây và 1 khung 48 mi li giây. Trung bình là 72 cộng 48, chia 10, bằng 12 mi li giây, trông rất ổn. Nhưng khung 48 mi li giây chiếm chỗ khoảng 3 khung, nên màn hình vẫn giật, và cách đo đúng là đếm số khung vượt ngân sách."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "12 > alg.frame_budget_ms(120) and 12 < alg.frame_budget_ms(60) and round(alg.frame_budget_ms(90), 1) == 11.1"
+      - "round(30 / 16.7, 1) == 1.8 and round(30 / alg.frame_budget_ms(60)) == 2"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Mỗi khung, luồng giao diện mất 12 ms. Màn hình 60 Hz có mượt không? Màn hình 120 Hz?</td></tr>
+          <tr><td>2</td><td>Màn hình 90 Hz: ngân sách mỗi khung bao nhiêu?</td></tr>
+          <tr><td>3</td><td>Quyết định: giải mã một ảnh lớn mất 30 ms. Đặt trên luồng giao diện ở 60 Hz thì lỡ khoảng mấy khung? Nên đặt ở đâu?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.2", "1.3", "1.4", "1.4", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, mỗi khung, luồng giao diện mất 12 mi li giây. Màn hình 60 héc có mượt không? Màn hình 120 héc thì sao, có còn mượt như vậy không? Câu hai, màn hình 90 héc có ngân sách mỗi khung bao nhiêu? Câu ba là một quyết định, giải mã một ảnh lớn mất 30 mi li giây, nếu đặt trên luồng giao diện ở 60 héc thì lỡ khoảng mấy khung? Và việc giải mã đó nên đặt ở luồng nào? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>màn hình</th><th>ngân sách</th><th>so với 12 ms</th></tr>
+          <tr><td>60 Hz</td><td>16,7 ms</td><td>12 &lt; 16,7 → mượt</td></tr>
+          <tr><td>120 Hz</td><td>8,3 ms</td><td>12 &gt; 8,3 → <b>khựng</b></td></tr></table>
+        focus: [1, "1.2", "1.3", 1]
+        say: "Đáp án câu một, so 12 mi li giây với ngân sách của từng màn hình. Ở 60 héc, 12 nhỏ hơn 16 phẩy 7 nên mượt. Ở 120 héc, 12 lớn hơn 8 phẩy 3 nên bị khựng, cùng một mã mà máy có màn hình nhanh hơn lại thấy giật. Vì vậy phải thử trên máy có màn hình nhanh nhất mà người dùng có thể dùng."
+      - show: |
+          <p>② $\frac{1000}{90} \approx \hl{11{,}1}$ ms — vẫn chưa đủ cho 12 ms.</p>
+          <p>③ $\frac{30}{16{,}7} \approx 1{,}8$, tức khoảng $\hl{2}$ khung bị lỡ → đặt việc giải mã ở <b>luồng nền</b>, xong thì gửi ảnh về luồng giao diện.</p>
+        focus: [1, 2, 2]
+        say: "Câu hai, 1000 chia 90, khoảng 11 phẩy 1 mi li giây, vẫn chưa đủ cho 12 mi li giây. Câu ba, 30 chia 16 phẩy 7 được khoảng 1 phẩy 8, tức khoảng 2 khung bị lỡ. Vậy nên đặt việc giải mã ở luồng nền, xong thì gửi ảnh về luồng giao diện để hiện ra."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">xuống nền: lưu trạng thái ngay</span><span class="a">→</span>
+          <span class="n">có thể bị dừng hẳn, không báo</span><span class="a">→</span>
+          <span class="n">ngân sách khung = 1000 / tần số</span><span class="a">→</span>
+          <span class="n">việc chậm ở luồng nền, kết quả gửi về luồng giao diện</span></div>
+        say: "Tổng kết lại, khi xuống nền phải lưu trạng thái ngay, vì ứng dụng có thể bị dừng hẳn mà không báo. Ngân sách mỗi khung bằng 1000 chia tần số, nên việc chậm chạy ở luồng nền, và kết quả gửi về luồng giao diện."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> trên di động, ứng dụng <b>không làm chủ</b> thiết bị — hệ điều hành và người dùng có thể cắt ngang bất cứ lúc nào.</div>
+        say: "Điều cần mang theo, trên di động ứng dụng không làm chủ thiết bị, vì hệ điều hành và người dùng có thể cắt ngang bất cứ lúc nào."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 13): <b>ngoại tuyến trước và đồng bộ</b> — hàng đợi thao tác, xung đột, hợp nhất.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 13, ta học ngoại tuyến trước và đồng bộ, với hàng đợi thao tác, xung đột, và hợp nhất. Hẹn gặp bạn ở bài tiếp theo."

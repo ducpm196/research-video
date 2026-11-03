@@ -1,0 +1,254 @@
+id: L41
+series: "CS115 · Toán cho Khoa học Máy tính"
+title: "Bài 41 (mở rộng) — Cơ chế attention & Transformer"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "0 kết quả trong nguồn môn học; CITED: Vaswani et al., “Attention Is All You Need”, arXiv:1706.03762 (2017) (truy cập 2026-10-24, no revision given)"
+assumes: [cdot, sub, sub2, vec, mat, transpose, sqrt, sum, exp, approx, var, dim, power]
+# Quy ước ký hiệu: Q (truy vấn), K (khoá), V (giá trị) là ma trận, mỗi HÀNG ứng một từ; d = số chiều của q, k; trọng số chú ý A (n × n).
+#   Chữ K ở đây là ma trận khoá — khác K số cụm (bài 29), K láng giềng (bài 27); V khác V(s) của bài 39 (nói ở notation_note).
+# Lời đọc: “attention” nói “cơ chế chú ý”; “Transformer” chỉ hiện trên màn hình — nói “kiến trúc biến đổi”; softmax nói “hàm chuẩn hoá mũ” (B44).
+# Nối bài trước (nói lại khi dùng, luật 17): bài 2 (nhân ma trận), bài 13 (phương sai của tổng các biến độc lập = tổng phương sai),
+#   bài 20 (hàm chuẩn hoá mũ: e mũ chia tổng), bài 35 (mạng hồi tiếp đọc tuần tự, khó nhớ xa).
+objectives:
+  - "Hiểu ý tưởng: mỗi từ “hỏi” các từ khác và lấy trung bình có trọng số"
+  - "Tính attention bằng tay: điểm số QKᵀ/√d, hàm chuẩn hoá mũ theo hàng, nhân V"
+  - "Giải thích vì sao chia √d (bằng phương sai)"
+  - "Thấy attention không biết thứ tự nếu không có mã hoá vị trí; chi phí bình phương độ dài"
+asr_reviewed:
+  - {sentence: "Được 2 phẩy 028, 1 và 2 phẩy 028, cộng lại bằng 5 phẩy 056.", reason: "ASR chép “được 2,028, 1 và 2,028 cộng lại bằng 5,056.” (0.75): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải” — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "“Con mèo không ăn vì nó no” — “nó” là ai?"
+    steps:
+      - show: |
+          <p class="big">“Con mèo không ăn cá vì <b>nó</b> đã no.” Để hiểu “nó”, phải nhìn ngay vào “con mèo” — có thể ở rất xa phía trước.</p>
+          <p>Bài 35: mạng hồi tiếp đọc tuần tự, thông tin xa bị mờ dần.</p>
+          <div class="box key">Cơ chế chú ý (attention): mỗi từ <b>nhìn trực tiếp</b> mọi từ khác, tự quyết định nhìn từ nào nhiều hơn.</div>
+        focus: [1, 2, 3]
+        say: "Chào bạn, trong câu con mèo không ăn cá vì nó đã no, muốn hiểu chữ nó, ta phải nhìn ngay vào con mèo. Mạng hồi tiếp ở bài 35 đọc tuần tự nên thông tin xa bị mờ dần. Cơ chế chú ý cho mỗi từ nhìn trực tiếp mọi từ khác, và tự quyết định nhìn từ nào nhiều hơn."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn nền: hàm chuẩn hoá mũ và phương sai của tổng"
+    checks:
+      - "(lambda e: (round(e, 3), round(1 + e, 3), round(1/(1 + e), 3), round(e/(1 + e), 3)) == (2.718, 3.718, 0.269, 0.731))(math.e)"
+      - "(lambda rng: (lambda x: round(float(x.sum(1).var()), 1) == 2.0 and round(float((x.sum(1)/math.sqrt(2)).var()), 1) == 1.0)(rng.normal(size=(200000, 2))))(np.random.default_rng(0)) and abs(2*(1/math.sqrt(2))**2 - 1) < 1e-12"
+    steps:
+      - show: |
+          <p>Bài 20: hàm chuẩn hoá mũ (softmax) — lấy $e$ mũ mỗi điểm rồi chia tổng → các số dương cộng lại bằng 1.</p>
+          <p>Bài 13: phương sai của tổng các biến <b>độc lập</b> = tổng các phương sai.</p>
+        focus: [1, 2]
+        say: "Nhắc lại bài 20, hàm chuẩn hoá mũ lấy e mũ mỗi điểm rồi chia cho tổng, được các số dương cộng lại bằng 1. Và bài 13, phương sai của tổng các biến độc lập bằng tổng các phương sai."
+      - show: |
+          <table class="t"><tr><th>làm thử</th><th>tính</th><th>kết quả</th></tr>
+          <tr><td>chuẩn hoá mũ của điểm số (0; 1)</td><td>$e^0 = 1$, $e^1 \approx 2{,}718$, tổng $3{,}718$</td><td>$(0{,}269;\ 0{,}731)$</td></tr>
+          <tr><td>$X_1 + X_2$ độc lập, mỗi biến phương sai 1</td><td>$1 + 1$</td><td>phương sai 2</td></tr>
+          <tr><td>nhân tổng đó với $a$</td><td>phương sai nhân $a^2$</td><td>$a = \frac{1}{\sqrt{2}}$: $\ 2\cdot\frac{1}{2} = 1$</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Làm thử ba điều này bằng số. Hai điểm số 0 và 1 cho e mũ bằng 1 và 2 phẩy 718, tổng 3 phẩy 718, chia ra được 0 phẩy 269 và 0 phẩy 731. Tổng hai biến độc lập, mỗi biến có phương sai 1, thì có phương sai 2. Nhân tổng đó với một số a thì phương sai nhân với a bình phương, nên chọn a bằng 1 chia căn 2 sẽ đưa phương sai về đúng 1."
+
+  # ───────────────────────── 3. ATTENTION ─────────────────────────
+  - id: sym_attn
+    kind: symbol
+    title: "Giải mã: Attention(Q, K, V) = softmax(QKᵀ/√d)·V"
+    steps:
+      - show: |
+          <div class="box key">$$\operatorname{Attention}(\mathbf{Q}, \mathbf{K}, \mathbf{V}) = \operatorname{softmax}\!\left(\dfrac{\mathbf{Q}\mathbf{K}^T}{\sqrt{d}}\right)\mathbf{V}$$</div>
+          <p>Mỗi từ có ba vector: <b>truy vấn</b> $\mathbf{q}$ (“tôi đang tìm gì”), <b>khoá</b> $\mathbf{k}$ (“tôi có gì”), <b>giá trị</b> $\mathbf{v}$ (“tôi đóng góp gì”) — xếp thành hàng của $\mathbf{Q}$, $\mathbf{K}$, $\mathbf{V}$.</p>
+          <p>① điểm số = tích vô hướng $\mathbf{q}\cdot\mathbf{k}$ (bài 1), chia $\sqrt{d}$; ② hàm chuẩn hoá mũ <b>theo hàng</b> → trọng số; ③ trung bình có trọng số các hàng của $\mathbf{V}$.</p>
+          <p class="note">Chữ $\mathbf{K}$ ở đây là ma trận khoá, $\mathbf{V}$ là ma trận giá trị — khác K của bài 27, 29 và V của bài 39.</p>
+        notation_note: true
+        focus: [2, ["3.1", "3.2"], 3]
+        say: "Mỗi từ có ba vector, truy vấn là điều nó đang tìm, khoá là điều nó có, và giá trị là điều nó đóng góp. Điểm số giữa hai từ là tích vô hướng của truy vấn và khoá, chia căn d. Hàm chuẩn hoá mũ theo hàng biến điểm số thành trọng số, rồi lấy trung bình có trọng số các giá trị."
+
+  - id: attn_pic
+    kind: intuition
+    title: "Nhìn thấy dữ liệu đi qua cơ chế chú ý"
+    checks:
+      - "round(0.401 + 0.198 + 0.401, 3) == 1.0"
+    steps:
+      - show: |
+          <div><svg width="1500" height="430" viewBox="0 0 1500 430"><defs><marker id="arA41" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs><g font-size="22" font-weight="bold" text-anchor="middle" fill="#374151"><text x="110" y="35">truy vấn</text><text x="440" y="35">khoá → điểm số</text><text x="780" y="35">trọng số</text><text x="1080" y="35">giá trị</text><text x="1370" y="35">đầu ra</text></g><rect x="20" y="175" width="180" height="75" rx="12" fill="#fde68a" stroke="#1f2937" stroke-width="2.5"/><text x="110.0" y="205" font-size="21" text-anchor="middle" fill="#1f2937">truy vấn 1</text><text x="110.0" y="233" font-size="21" text-anchor="middle" fill="#1f2937">(1; 0)</text><line x1="202" y1="212" x2="318" y2="107" stroke="#1f2937" stroke-width="2.5" marker-end="url(#arA41)"/><rect x="320" y="70" width="240" height="75" rx="12" fill="#dbeafe" stroke="#1f2937" stroke-width="2.5"/><text x="440.0" y="100" font-size="21" text-anchor="middle" fill="#1f2937">khoá 1 (1; 0)</text><text x="440.0" y="128" font-size="21" text-anchor="middle" fill="#1f2937">điểm số 0,707</text><rect x="640" y="90" width="200" height="34" fill="#15803d"/><text x="850" y="115" font-size="22" fill="#15803d">0,401</text><rect x="960" y="70" width="240" height="75" rx="12" fill="#e0e7ff" stroke="#1f2937" stroke-width="2.5"/><text x="1080.0" y="100" font-size="21" text-anchor="middle" fill="#1f2937">giá trị 1 (1; 0)</text><text x="1080.0" y="128" font-size="21" text-anchor="middle" fill="#1f2937"></text><line x1="1202" y1="107" x2="1288" y2="212" stroke="#15803d" stroke-width="8.0" marker-end="url(#arA41)"/><line x1="202" y1="212" x2="318" y2="222" stroke="#1f2937" stroke-width="2.5" marker-end="url(#arA41)"/><rect x="320" y="185" width="240" height="75" rx="12" fill="#dbeafe" stroke="#1f2937" stroke-width="2.5"/><text x="440.0" y="215" font-size="21" text-anchor="middle" fill="#1f2937">khoá 2 (0; 1)</text><text x="440.0" y="243" font-size="21" text-anchor="middle" fill="#1f2937">điểm số 0</text><rect x="640" y="205" width="99" height="34" fill="#15803d"/><text x="749" y="230" font-size="22" fill="#15803d">0,198</text><rect x="960" y="185" width="240" height="75" rx="12" fill="#e0e7ff" stroke="#1f2937" stroke-width="2.5"/><text x="1080.0" y="215" font-size="21" text-anchor="middle" fill="#1f2937">giá trị 2 (0; 2)</text><text x="1080.0" y="243" font-size="21" text-anchor="middle" fill="#1f2937"></text><line x1="1202" y1="222" x2="1288" y2="212" stroke="#15803d" stroke-width="4.0" marker-end="url(#arA41)"/><line x1="202" y1="212" x2="318" y2="337" stroke="#1f2937" stroke-width="2.5" marker-end="url(#arA41)"/><rect x="320" y="300" width="240" height="75" rx="12" fill="#dbeafe" stroke="#1f2937" stroke-width="2.5"/><text x="440.0" y="330" font-size="21" text-anchor="middle" fill="#1f2937">khoá 3 (1; 1)</text><text x="440.0" y="358" font-size="21" text-anchor="middle" fill="#1f2937">điểm số 0,707</text><rect x="640" y="320" width="200" height="34" fill="#15803d"/><text x="850" y="345" font-size="22" fill="#15803d">0,401</text><rect x="960" y="300" width="240" height="75" rx="12" fill="#e0e7ff" stroke="#1f2937" stroke-width="2.5"/><text x="1080.0" y="330" font-size="21" text-anchor="middle" fill="#1f2937">giá trị 3 (3; 3)</text><text x="1080.0" y="358" font-size="21" text-anchor="middle" fill="#1f2937"></text><line x1="1202" y1="337" x2="1288" y2="212" stroke="#15803d" stroke-width="8.0" marker-end="url(#arA41)"/><rect x="1290" y="175" width="190" height="75" rx="12" fill="#bbf7d0" stroke="#1f2937" stroke-width="2.5"/><text x="1385.0" y="205" font-size="21" text-anchor="middle" fill="#1f2937">(1,604;</text><text x="1385.0" y="233" font-size="21" text-anchor="middle" fill="#1f2937">1,599)</text><text x="750" y="415" font-size="21" text-anchor="middle" fill="#374151">vạch xanh càng dài, giá trị của từ đó góp vào đầu ra càng nhiều; ba trọng số cộng lại bằng 1</text></svg></div>
+        focus: [0, 0, 0, 0]
+        say: "Hình vẽ đường đi của truy vấn thứ nhất trong ví dụ sắp làm. Truy vấn so với từng khoá bằng tích vô hướng, cho ba điểm số. Hàm chuẩn hoá mũ biến điểm số thành ba trọng số, vẽ bằng ba vạch xanh, khoá một và khoá ba được nhiều, khoá hai được ít. Đầu ra là trung bình có trọng số của ba giá trị, nên giá trị ba, với số 3 lớn, kéo đầu ra lên khoảng 1 phẩy 6."
+
+  # ───────────────────────── 4. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Ví dụ: 2 truy vấn, 3 từ"
+    checks:
+      - "(lambda a: (round(1/math.sqrt(2), 3), round(a, 3), round(2*a + 1, 3), round(a/(2*a + 1), 3), round(1/(2*a + 1), 3)) == (0.707, 2.028, 5.056, 0.401, 0.198))(math.exp(1/math.sqrt(2)))"
+      - "round(0.401*1 + 0.198*0 + 0.401*3, 3) == 1.604 and round(0.401*0 + 0.198*2 + 0.401*3, 3) == 1.599 and round(0.401*3, 3) == 1.203 and round(0.198*2, 3) == 0.396"
+      - "(lambda Q, K, V: (lambda S: (lambda A: (np.round(S, 3).tolist(), np.round(A, 3).tolist(), np.allclose(A.sum(1), 1), np.round(A @ V, 3).tolist()))(np.exp(S)/np.exp(S).sum(1, keepdims=True)))(Q @ K.T/math.sqrt(2)))(np.array([[1, 0.], [0, 1]]), np.array([[1, 0.], [0, 1], [1, 1]]), np.array([[1, 0.], [0, 2], [3, 3]])) == ([[0.707, 0.0, 0.707], [0.0, 0.707, 0.707]], [[0.401, 0.198, 0.401], [0.198, 0.401, 0.401]], True, [[1.604, 1.599], [1.401, 2.006]])"
+    steps:
+      - show: |
+          <p>$\mathbf{Q} = \begin{bmatrix} 1 & 0 \\ 0 & 1 \end{bmatrix}$, &nbsp; $\mathbf{K} = \begin{bmatrix} 1 & 0 \\ 0 & 1 \\ 1 & 1 \end{bmatrix}$, &nbsp; $\mathbf{V} = \begin{bmatrix} 1 & 0 \\ 0 & 2 \\ 3 & 3 \end{bmatrix}$, &nbsp; $d = 2$</p>
+          <p>① $\frac{\mathbf{Q}\mathbf{K}^T}{\sqrt{2}} \approx \begin{bmatrix} 0{,}707 & 0 & 0{,}707 \\ 0 & 0{,}707 & 0{,}707 \end{bmatrix}$ &nbsp; ② theo hàng: $\begin{bmatrix} 0{,}401 & 0{,}198 & 0{,}401 \\ 0{,}198 & 0{,}401 & 0{,}401 \end{bmatrix}$ (mỗi hàng cộng = 1)</p>
+          <p>③ nhân $\mathbf{V}$: $\ \begin{bmatrix} \hlg{1{,}604} & 1{,}599 \\ 1{,}401 & \hlg{2{,}006} \end{bmatrix}$</p>
+        focus: [1, "2.1", "2.2", 3]
+        say: "Ví dụ hai truy vấn và ba từ. Bước một tính điểm số rồi chia căn 2. Bước hai, hàm chuẩn hoá mũ theo hàng, truy vấn thứ nhất chú ý từ một và từ ba nhiều hơn, mỗi hàng cộng lại bằng 1. Bước ba, lấy trung bình có trọng số các giá trị, được kết quả trên màn hình."
+      - clear: true
+        show: |
+          <p>Làm tay <b>hàng thứ nhất</b>, truy vấn $\mathbf{q}_1 = (1;\ 0)$, khoá $(1;\ 0)$, $(0;\ 1)$, $(1;\ 1)$.</p>
+          <p><b>Bước 1 — tích vô hướng rồi chia $\sqrt{2}$</b>:</p>
+          $$1\cdot 1 + 0\cdot 0 = 1,\quad 1\cdot 0 + 0\cdot 1 = 0,\quad 1\cdot 1 + 0\cdot 1 = 1\ \ \Rightarrow\ \ \frac{1}{\sqrt{2}} \approx 0{,}707;\ \ 0;\ \ 0{,}707$$
+        introduces: [implies]
+        focus: [1, 2, 3]
+        say: "Bây giờ làm tay hàng thứ nhất, với truy vấn một bằng 1 và 0. Bước một, nhân truy vấn với từng khoá, vì điểm số là tích vô hướng. Được 1, 0 và 1, chia cho căn 2 thì được 0 phẩy 707, 0 và 0 phẩy 707."
+      - show: |
+          <p><b>Bước 2 — lấy $e$ mũ rồi cộng</b>:</p>
+          $$e^{0{,}707} \approx 2{,}028,\qquad e^{0} = 1,\qquad 2{,}028 + 1 + 2{,}028 = 5{,}056$$
+        focus: [1, 2]
+        say: "Bước hai, lấy e mũ từng điểm số. Được 2 phẩy 028, 1 và 2 phẩy 028, cộng lại bằng 5 phẩy 056."
+      - show: |
+          <p><b>Bước 3 — chia cho tổng</b> → trọng số:</p>
+          $$\frac{2{,}028}{5{,}056} \approx \hlg{0{,}401},\qquad \frac{1}{5{,}056} \approx 0{,}198,\qquad \frac{2{,}028}{5{,}056} \approx 0{,}401$$
+        focus: [1, 2]
+        say: "Bước ba, chia từng số cho tổng 5 phẩy 056 để được trọng số. Được 0 phẩy 401, 0 phẩy 198 và 0 phẩy 401, đúng hàng thứ nhất của ma trận trọng số."
+      - clear: true
+        show: |
+          <p><b>Bước 4 — trung bình có trọng số các giá trị</b> $(1;\ 0)$, $(0;\ 2)$, $(3;\ 3)$:</p>
+          <table class="t"><tr><th>thành phần</th><th>tính</th><th>kết quả</th></tr>
+          <tr><td>thứ nhất</td><td>$0{,}401\cdot 1 + 0{,}198\cdot 0 + 0{,}401\cdot 3 = 0{,}401 + 1{,}203$</td><td>$\hlg{1{,}604}$</td></tr>
+          <tr><td>thứ hai</td><td>$0{,}401\cdot 0 + 0{,}198\cdot 2 + 0{,}401\cdot 3 = 0{,}396 + 1{,}203$</td><td>$\hlg{1{,}599}$</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước bốn, lấy trung bình có trọng số ba giá trị. Thành phần thứ nhất bằng 0 phẩy 401 cộng 1 phẩy 203, bằng 1 phẩy 604. Thành phần thứ hai bằng 0 phẩy 396 cộng 1 phẩy 203, bằng 1 phẩy 599, khớp hàng thứ nhất của kết quả nhân ma trận."
+
+  # ───────────────────────── 5. VÌ SAO CHIA √d ─────────────────────────
+  - id: sqrt_d
+    kind: formula
+    title: "Vì sao chia √d"
+    checks:
+      - "(lambda rng: (lambda q, k: (round(float(((q*k).sum(1)).var()), 2), round(float(((q*k).sum(1)/4).var()), 3)) == (15.98, 0.998))(rng.normal(size=(100000, 16)), rng.normal(size=(100000, 16))))(np.random.default_rng(0))"
+    steps:
+      - show: |
+          <p>Nếu các thành phần của $\mathbf{q}$, $\mathbf{k}$ độc lập, trung bình 0, phương sai 1, thì $\mathbf{q}\cdot\mathbf{k} = \sum_{j = 1}^{d} q_j k_j$ là tổng $d$ số độc lập, mỗi số phương sai 1 → $\operatorname{Var}(\mathbf{q}\cdot\mathbf{k}) = d$ (bài 13).</p>
+          <div class="box key">Chia $\sqrt{d}$ đưa phương sai về 1 (vì $\operatorname{Var}(aX) = a^2\operatorname{Var}(X)$, bài 13). Mô phỏng $d = 16$: $\ 15{,}98 \to \hlg{0{,}998}$</div>
+          <p class="note">Không chia, điểm số rất lớn → hàm chuẩn hoá mũ gần như dồn hết vào một từ, gradient gần 0 (bão hoà, bài 23).</p>
+        focus: [0, 1, 2, "2.4", 3]
+        say: "Vì sao phải chia điểm số cho căn bậc hai của d? Nếu các thành phần độc lập với phương sai 1, tích vô hướng là tổng d số độc lập, nên theo bài 13 phương sai bằng d. Chia cho căn bậc hai của d thì phương sai của điểm số trở về bằng 1. Mô phỏng với d bằng 16, phương sai 15 phẩy 98 về 0 phẩy 998. Không chia, hàm chuẩn hoá mũ bị bão hoà."
+
+  # ───────────────────────── 6. THỨ TỰ & CHI PHÍ ─────────────────────────
+  - id: order
+    kind: concept
+    title: "Không biết thứ tự; chi phí bình phương"
+    checks:
+      - "(lambda rng: (lambda X, W: (lambda sa: np.allclose(sa(X[[2, 0, 3, 1]]), sa(X)[[2, 0, 3, 1]]))(lambda Z: (lambda S: (np.exp(S - S.max(1, keepdims=True))/np.exp(S - S.max(1, keepdims=True)).sum(1, keepdims=True)) @ (Z @ W[2]))((Z @ W[0]) @ (Z @ W[1]).T/math.sqrt(3))))(rng.normal(size=(4, 3)), rng.normal(size=(3, 3, 3))))(np.random.default_rng(0))"
+      - "1000**2 == 1000000 and 2000**2 == 4*1000**2"
+      - "4000**2 == 16000000 and 4000**2 == 16*1000**2"
+    steps:
+      - show: |
+          <p>Tự chú ý (Q, K, V cùng tính từ một câu): <b>xáo thứ tự</b> các từ đầu vào → đầu ra xáo y hệt, giá trị không đổi (máy kiểm với 4 từ). Vậy “mèo cắn chó” và “chó cắn mèo” như nhau!</p>
+          <div class="box key">Phải cộng thêm <b>mã hoá vị trí</b> vào mỗi từ. Ma trận điểm số $\sz{n}{n}$: câu dài gấp đôi → chi phí gấp bốn.</div>
+        focus: [0, 1, 2, "2.2"]
+        say: "Có hai điểm cần biết. Nếu xáo thứ tự các từ đầu vào, đầu ra cũng chỉ xáo y hệt, nên câu mèo cắn chó và chó cắn mèo như nhau. Vì vậy phải cộng thêm mã hoá vị trí cho mỗi từ. Và ma trận điểm số có n hàng n cột, nên câu dài gấp đôi thì tốn gấp bốn."
+      - show: |
+          <table class="t"><tr><th>số từ $n$</th><th>số ô điểm số $n^2$</th><th>so với 1000 từ</th></tr>
+          <tr><td>1000</td><td>1 000 000</td><td>1 lần</td></tr>
+          <tr><td>2000</td><td>4 000 000</td><td>4 lần</td></tr>
+          <tr><td>4000</td><td>16 000 000</td><td>16 lần</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Bảng cho thấy chi phí bình phương bằng số. Câu 1000 từ cần một triệu ô điểm số. Câu 2000 từ cần bốn triệu ô, tức gấp bốn lần. Câu 4000 từ cần mười sáu triệu ô, gấp mười sáu lần, nên văn bản dài là chỗ cơ chế này tốn kém nhất."
+
+  # ───────────────────────── 7. TRANSFORMER ─────────────────────────
+  - id: transformer
+    kind: concept
+    title: "Kiến trúc Transformer (Vaswani và cộng sự, 2017)"
+    steps:
+      - show: |
+          <p>Một khối = [tự chú ý nhiều “đầu” → cộng tắt + chuẩn hoá] → [mạng nhiều lớp nhỏ cho từng từ (bài 23) → cộng tắt + chuẩn hoá]. Chồng nhiều khối.</p>
+          <p class="note">Nhiều đầu: chạy vài cơ chế chú ý song song với $\mathbf{Q}$, $\mathbf{K}$, $\mathbf{V}$ khác nhau, mỗi đầu để ý một kiểu quan hệ. Học bằng lan truyền ngược (bài 22) như mọi mạng khác.</p>
+        focus: [1, 1, 2]
+        say: "Kiến trúc biến đổi chồng nhiều khối. Mỗi khối gồm tự chú ý nhiều đầu, rồi một mạng nhiều lớp nhỏ cho từng từ như bài 23, kèm đường cộng tắt và chuẩn hoá. Nhiều đầu nghĩa là chạy vài cơ chế chú ý song song, mỗi đầu để ý một kiểu quan hệ."
+
+  # ───────────────────────── 8. KIỂM BẰNG MÁY ─────────────────────────
+  - id: verify
+    kind: check
+    title: "Phép thử: mỗi hàng trọng số là một phân phối"
+    checks:
+      - "(lambda a: round((1*1 + 3*a)/(2*a + 1), 3) == 1.401 and round((2*a + 3*a)/(2*a + 1), 3) == 2.006)(math.exp(1/math.sqrt(2)))"
+      - "(lambda rng: (lambda S: (lambda A: bool((A > 0).all() and np.allclose(A.sum(1), 1)))(np.exp(S - S.max(1, keepdims=True))/np.exp(S - S.max(1, keepdims=True)).sum(1, keepdims=True)))(rng.normal(size=(5, 8)) @ rng.normal(size=(7, 8)).T/math.sqrt(8)))(np.random.default_rng(1))"
+    steps:
+      - show: |
+          <p>5 truy vấn, 7 khoá ngẫu nhiên, $d = 8$: mọi trọng số dương, mỗi hàng cộng lại đúng bằng 1 $\checkmark$ — đầu ra là <b>trung bình có trọng số</b> thật sự của các giá trị.</p>
+        say: "Phép thử, với 5 truy vấn và 7 khoá ngẫu nhiên, mọi trọng số đều dương và mỗi hàng cộng lại đúng bằng 1. Nghĩa là đầu ra đúng là trung bình có trọng số của các giá trị."
+      - show: |
+          <p>Kiểm hàng thứ hai của ví dụ bằng đường khác: truy vấn 2 $= (0;\ 1)$ là truy vấn 1 đổi chỗ hai toạ độ, nên điểm số của khoá 1 và khoá 2 đổi chỗ → trọng số $(0{,}198;\ 0{,}401;\ 0{,}401)$, không cần tính lại $e$ mũ.</p>
+          <table class="t"><tr><th>thành phần</th><th>tính tay</th><th>nhân ma trận</th></tr>
+          <tr><td>thứ nhất</td><td>$0{,}198\cdot 1 + 0{,}401\cdot 0 + 0{,}401\cdot 3 \approx 1{,}401$</td><td>1,401 ✓</td></tr>
+          <tr><td>thứ hai</td><td>$0{,}198\cdot 0 + 0{,}401\cdot 2 + 0{,}401\cdot 3 \approx 2{,}006$</td><td>2,006 ✓</td></tr></table>
+        focus: [1, 1, 1, "2.2", "2.3"]
+        say: "Kiểm hàng thứ hai của ví dụ bằng đường khác. Truy vấn hai bằng 0 và 1, chính là truy vấn một đổi chỗ hai toạ độ, nên điểm số của khoá một và khoá hai cũng đổi chỗ. Vì thế trọng số thành 0 phẩy 198, 0 phẩy 401 và 0 phẩy 401, không cần tính lại e mũ. Thành phần thứ nhất tính tay được 1 phẩy 401. Thành phần thứ hai được 2 phẩy 006, khớp cả hai số của phép nhân ma trận."
+
+  # ───────────────────────── 9. LỖI THƯỜNG GẶP ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Hàm chuẩn hoá mũ theo <b>cột</b> thay vì theo hàng <b class="red">(sai)</b>
+          <br><span class="note">Mỗi truy vấn (một hàng) phải có trọng số cộng lại bằng 1.</span></div>
+        say: "Lỗi thứ nhất, áp hàm chuẩn hoá mũ theo cột thay vì theo hàng. Mỗi truy vấn, tức mỗi hàng, phải có trọng số cộng lại bằng 1."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Quên chia $\sqrt{d}$ <b class="red">(bão hoà)</b>
+          <br><span class="note">Điểm số phương sai $d$ quá lớn → trọng số gần 0 hoặc 1, học chậm.</span></div>
+        say: "Lỗi thứ hai, quên chia căn d. Điểm số quá lớn làm trọng số gần 0 hoặc 1, và mạng học rất chậm."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Quên mã hoá vị trí <b class="red">(mất thứ tự)</b>
+          <br><span class="note">Tự chú ý không phân biệt “mèo cắn chó” với “chó cắn mèo”.</span></div>
+        say: "Lỗi thứ ba, quên mã hoá vị trí. Tự chú ý khi đó không phân biệt được mèo cắn chó với chó cắn mèo."
+
+  # ───────────────────────── 10. TỰ KIỂM TRA ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "math.sqrt(64) == 8 and 64/math.sqrt(64) == 8"
+      - "64/8**2 == 1 and 512*512 == 512**2 == 262144 and all(abs(math.exp(s)/(2*math.exp(s)) - 0.5) < 1e-12 for s in (-3, 0, 2.5))"
+      - "(lambda s: [round(v, 3) for v in (np.exp(s)/np.exp(s).sum()).tolist()])(np.array([0., 0.])) == [0.5, 0.5]"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>$d = 64$: chia điểm số cho bao nhiêu? Phương sai điểm số trước khi chia?</td></tr>
+          <tr><td>2</td><td>Hai khoá cùng điểm số với một truy vấn: trọng số mỗi khoá?</td></tr>
+          <tr><td>3</td><td>Câu 512 từ: ma trận điểm số có bao nhiêu ô?</td></tr></table>
+        say: "Bây giờ đến lượt bạn, với ba câu trên màn hình. Hãy dừng video và làm ra giấy."
+        pause: 8
+      - clear: true
+        show: |
+          <p>① Tích vô hướng là tổng 64 số độc lập, mỗi số phương sai 1, nên phương sai $= \hlg{64}$. Chia cho $\sqrt{64} = \hlg{8}$:</p>
+          $$\text{phương sai sau khi chia} = \frac{64}{8^2} = \frac{64}{64} = 1$$
+        focus: [1, 2]
+        say: "Câu một, tích vô hướng là tổng 64 số độc lập, mỗi số có phương sai 1, nên phương sai trước khi chia bằng 64. Ta chia cho căn 64, bằng 8, và phương sai bị chia cho 8 bình phương, trở về đúng 1."
+      - show: |
+          <p>② Hai điểm số bằng nhau, cùng là $s$: $\ \frac{e^s}{e^s + e^s} = \frac{1}{2} = \hlg{0{,}5}$ mỗi khoá.</p>
+          <p>③ Mỗi từ có một điểm số với mỗi từ: $512\cdot 512 = 512^2 = \hlg{262\,144}$ ô.</p>
+        focus: [1, 2]
+        say: "Câu hai, hai điểm số bằng nhau thì e mũ của chúng cũng bằng nhau, chia cho tổng hai số bằng nhau luôn được một nửa, dù điểm số là bao nhiêu. Câu ba, mỗi từ có một điểm số với mỗi từ, nên có 512 nhân 512, bằng 262 nghìn 144 ô."
+
+  # ───────────────────────── 11. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">truy vấn nhân khoá = điểm số</span><span class="a">→</span>
+          <span class="n">chia $\sqrt{d}$: phương sai về 1</span><span class="a">→</span>
+          <span class="n">chuẩn hoá mũ theo hàng</span><span class="a">→</span>
+          <span class="n">trung bình có trọng số của giá trị</span><span class="a">→</span>
+          <span class="n">thêm vị trí; chi phí $n^2$</span></div>
+        say: "Tổng kết chuỗi logic. Truy vấn nhân khoá cho điểm số, chia căn d để phương sai về 1, chuẩn hoá mũ theo hàng thành trọng số, rồi lấy trung bình có trọng số của giá trị. Nhớ thêm mã hoá vị trí, và chi phí tăng theo bình phương độ dài."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> thay vì nhớ tuần tự, hãy cho mỗi phần tử tự hỏi “ai liên quan đến tôi?” — và học cách trả lời.</div>
+        say: "Điều cần mang theo, thay vì nhớ tuần tự, hãy cho mỗi phần tử tự hỏi ai liên quan đến mình, và học cách trả lời câu hỏi đó."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 42): <b>mô hình sinh</b> (1) — Variational Autoencoder và GAN.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 42, ta học mô hình sinh, những mô hình tạo ra dữ liệu mới như ảnh. Hẹn gặp bạn ở bài tiếp theo."

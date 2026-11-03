@@ -1,0 +1,248 @@
+id: L11
+course: DBS
+series: "DBS · Cơ sở dữ liệu"
+title: "Bài 11 — Giao dịch và tính chất ACID"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/dbs.yaml L11; audit/dbs/verify_dbs.py L11 (sqlite3); J. Gray (1981), T. Härder, A. Reuter (1983); A. Silberschatz, H. F. Korth, S. Sudarshan, Database System Concepts (2019), chương 17"
+assumes: [arith, geq, ltgt]
+# Quy ước: bảng TaiKhoan(ten, so_du) có ràng buộc so_du ≥ 0; A = 100, B = 50. Một giao dịch mở bằng BEGIN, kết thúc bằng COMMIT
+#   (ghi nhận) hoặc ROLLBACK (huỷ). Kết quả chuyển tiền chạy thật trên sqlite3 (alg.sql_txn); mất cập nhật mô phỏng bằng
+#   alg.lost_update. “Nhất quán” trong ACID KHÁC “nhất quán” trong định lý CAP (nói rõ ở lỗi 3).
+objectives:
+  - "Giải thích từng chữ của ACID"
+  - "Thấy tính nguyên tử trên một phép chuyển tiền thất bại"
+  - "Nhận ra lỗi mất cập nhật khi hai giao dịch chen nhau"
+asr_reviewed:
+  - {sentence: "Nếu có lỗi giữa chừng, hệ quản trị tự huỷ cả giao dịch.", reason: "ASR chép “giữa chân, hề quản trị từ hủy cả giao dịch”: chừng/chân (vần), hệ/hề, tự/từ (thanh); “quản trị … huỷ cả giao dịch” đúng — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Rồi trừ tài khoản A.", reason: "tên chữ cái đọc kiểu Việt, ASR chép nhầm chữ (q→quy, x→ích, k→ca) — nhóm đã biết (SKILL Bước 5); chữ hiện trên màn hình"}
+  - {sentence: "Bốn chữ ACID là bốn tính chất của giao dịch.", reason: "tên chữ cái đọc kiểu Việt, ASR chép nhầm chữ (q→quy, x→ích, k→ca) — nhóm đã biết (SKILL Bước 5); chữ hiện trên màn hình"}
+  - {sentence: "Lỗi thứ ba, lẫn chữ nhất quán của ACID với chữ nhất quán trong định lý CAP của hệ phân tán.", reason: "tên chữ cái đọc kiểu Việt, ASR chép nhầm chữ (q→quy, x→ích, k→ca) — nhóm đã biết (SKILL Bước 5); chữ hiện trên màn hình"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Tiền tự sinh ra"
+    steps:
+      - show: |
+          <p>Chuyển 150 từ tài khoản A (100) sang B (50): cộng B trước, rồi trừ A. Trừ A thất bại vì số dư không được âm.</p>
+          <p>Nếu mỗi câu lệnh tự ghi nhận riêng: B đã thành <b>200</b>, A vẫn 100 — <b>150 đồng tự sinh ra</b>.</p>
+          <div class="box key">Hôm nay: <b>giao dịch</b> — nhóm thao tác “hoặc tất cả, hoặc không gì cả” — và bốn tính chất ACID.</div>
+        focus: [1, 1, 2, 3]
+        say: "Chào bạn, ta chuyển 150 đồng từ tài khoản A có 100 sang tài khoản B có 50, bằng cách cộng B trước rồi trừ A. Lệnh trừ A thất bại, vì số dư không được âm. Nếu mỗi câu lệnh tự ghi nhận riêng, B đã thành 200 trong khi A vẫn 100, tức 150 đồng tự sinh ra. Hôm nay ta học giao dịch, một nhóm thao tác hoặc thành công tất cả, hoặc không có gì xảy ra, và bốn tính chất ACID."
+
+  # ───────────────────────── 1b. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: ràng buộc, tổng bảo toàn, cộng một là hai bước"
+    checks:
+      - "alg.sql_error(\"INSERT INTO TaiKhoan VALUES ('C', -30)\", \"CREATE TABLE TaiKhoan (ten TEXT PRIMARY KEY, so_du INTEGER CHECK (so_du >= 0)); INSERT INTO TaiKhoan VALUES ('A', 100), ('B', 50);\") == 'CHECK constraint failed: so_du >= 0'"
+      - "alg.sql_error(\"INSERT INTO TaiKhoan VALUES ('C', 0)\", \"CREATE TABLE TaiKhoan (ten TEXT PRIMARY KEY, so_du INTEGER CHECK (so_du >= 0)); INSERT INTO TaiKhoan VALUES ('A', 100), ('B', 50);\") is None"
+      - "100 + 50 == 150 and (100 - 30) + (50 + 30) == 70 + 80 == 150"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bảng TaiKhoan, ràng buộc $\text{so\_du} \geq 0$</th><th>kết quả</th></tr>
+          <tr><td>thêm (C, 0)</td><td>nhận</td></tr>
+          <tr><td>thêm (C, −30)</td><td><b class="red">từ chối</b>: vi phạm ràng buộc</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Trước hết, nhắc lại ràng buộc miền ở bài 0, hệ quản trị từ chối mọi giá trị trái luật ngay lúc ghi. Ở đây bảng tài khoản có luật số dư phải lớn hơn hoặc bằng 0, nên thêm tài khoản C với số dư 0 được nhận. Còn thêm C với số dư âm 30 thì bị từ chối."
+      - show: |
+          <table class="t"><tr><th></th><th>A</th><th>B</th><th>tổng</th></tr>
+          <tr><td>ban đầu</td><td>100</td><td>50</td><td>150</td></tr>
+          <tr><td>sau khi chuyển 30 từ A sang B</td><td>70</td><td>80</td><td>150</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Thứ hai, chuyển tiền không làm thay đổi tổng. Ban đầu A có 100, B có 50, tổng là 150. Chuyển 30 từ A sang B thì A còn 70, B thành 80, tổng vẫn là 150."
+      - show: |
+          <table class="t"><tr><th>câu “cộng 10 vào x”</th><th>máy làm thật</th></tr>
+          <tr><td>bước đọc</td><td>đọc x = 100 vào bộ nhớ riêng</td></tr>
+          <tr><td>bước ghi</td><td>ghi 100 + 10 = 110 trở lại</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Thứ ba, như ở khoá Hệ điều hành, phép cộng 10 vào một biến dùng chung thật ra gồm hai bước tách rời. Bước đọc lấy x bằng 100 vào bộ nhớ riêng. Bước ghi đưa 100 cộng 10 bằng 110 trở lại, và nếu ai đó chen vào giữa hai bước thì kết quả có thể sai."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: BEGIN, COMMIT, ROLLBACK"
+    steps:
+      - show: |
+          <div class="code"><div><span class="kw">BEGIN</span>;</div><div><span class="kw">UPDATE</span> TaiKhoan <span class="kw">SET</span> so_du = so_du + 150 <span class="kw">WHERE</span> ten = 'B';</div><div><span class="kw">UPDATE</span> TaiKhoan <span class="kw">SET</span> so_du = so_du - 150 <span class="kw">WHERE</span> ten = 'A';</div><div><span class="kw">COMMIT</span>;   <span class="cm">-- hoặc ROLLBACK để huỷ cả nhóm</span></div></div>
+          <p><b>Giao dịch</b>: mở đầu bằng <code>BEGIN</code>, kết thúc bằng <code>COMMIT</code> (ghi nhận mọi thay đổi) hoặc <code>ROLLBACK</code> (huỷ mọi thay đổi). Lỗi giữa chừng thì hệ quản trị tự huỷ.</p>
+        focus: ["1.1", "1.2", "1.3", "1.4", 2, 2]
+        say: "Một giao dịch mở đầu bằng lệnh bắt đầu. Bên trong là hai lệnh cập nhật, cộng tài khoản B. Rồi trừ tài khoản A. Cuối cùng là lệnh ghi nhận, hoặc lệnh huỷ để bỏ cả nhóm. Lệnh ghi nhận lưu mọi thay đổi trong nhóm, lệnh huỷ xoá bỏ mọi thay đổi trong nhóm. Nếu có lỗi giữa chừng, hệ quản trị tự huỷ cả giao dịch."
+
+  # ───────────────────────── 3. ACID ─────────────────────────
+  - id: acid
+    kind: concept
+    title: "Bốn chữ ACID"
+    checks:
+      - "alg.sql_txn(\"CREATE TABLE TaiKhoan (ten TEXT PRIMARY KEY, so_du INTEGER CHECK (so_du >= 0)); INSERT INTO TaiKhoan VALUES ('A', 100), ('B', 50);\", [\"UPDATE TaiKhoan SET so_du = so_du - 30 WHERE ten = 'A'\", \"UPDATE TaiKhoan SET so_du = so_du + 30 WHERE ten = 'B'\"], 'SELECT SUM(so_du) FROM TaiKhoan') == (None, [(150,)])"
+    steps:
+      - show: |
+          <table class="t"><tr><th>chữ</th><th>tên</th><th>nghĩa</th></tr>
+          <tr><td>A</td><td>nguyên tử</td><td>hoặc tất cả thao tác có hiệu lực, hoặc không thao tác nào</td></tr>
+          <tr><td>C</td><td>nhất quán</td><td>giao dịch đưa dữ liệu từ trạng thái thoả mọi ràng buộc sang trạng thái thoả mọi ràng buộc</td></tr>
+          <tr><td>I</td><td>cô lập</td><td>chạy đồng thời mà kết quả như chạy lần lượt từng giao dịch</td></tr>
+          <tr><td>D</td><td>bền vững</td><td>đã ghi nhận thì còn, kể cả mất điện ngay sau đó</td></tr></table>
+          <p class="note">Ví dụ nhất quán: chuyển 30 từ A sang B thành công, tổng A + B vẫn là 150.</p>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", 2]
+        say: "Bốn chữ ACID là bốn tính chất của giao dịch. Chữ A là nguyên tử, hoặc tất cả thao tác có hiệu lực, hoặc không thao tác nào. Chữ C là nhất quán, giao dịch đưa dữ liệu từ một trạng thái thoả mọi ràng buộc sang một trạng thái cũng thoả mọi ràng buộc. Chữ I là cô lập, nhiều giao dịch chạy đồng thời mà kết quả như thể chạy lần lượt. Chữ D là bền vững, đã ghi nhận thì còn, kể cả khi mất điện ngay sau đó. Ví dụ nhất quán, chuyển 30 từ A sang B thành công thì tổng hai tài khoản vẫn là 150."
+
+  # ───────────────────────── 3b. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Giao dịch là một hộp: ra hết, hoặc quay về"
+    checks:
+      - "50 + 150 == 200 and 100 - 150 == -50"
+    steps:
+      - show: |
+          <div><svg width="1500" height="400" viewBox="0 0 1500 400"><defs><marker id="arDBk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs><defs><marker id="arDBr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#b91c1c"/></marker></defs><rect x="40" y="30" width="1420" height="230" fill="none" stroke="#2a78d6" stroke-width="3" stroke-dasharray="14 10"/><text x="60" y="65" font-size="24" fill="#2a78d6" font-weight="bold">một giao dịch</text><rect x="80" y="100" width="320" height="120" fill="#d1fae5" stroke="#059669" stroke-width="3"/><rect x="590" y="100" width="320" height="120" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><rect x="1100" y="100" width="320" height="120" fill="#fee2e2" stroke="#b91c1c" stroke-width="3"/><g font-size="28" text-anchor="middle" fill="#1f2937" font-weight="bold"><text x="240" y="155">A 100, B 50</text><text x="750" y="155">A 100, B 200</text><text x="1260" y="155">A = −50</text></g><g font-size="22" text-anchor="middle" fill="#1f2937"><text x="240" y="195">trạng thái đầu</text><text x="750" y="195">tạm, chưa ghi nhận</text><text x="1260" y="195" fill="#b91c1c">vi phạm số dư ≥ 0</text><text x="495" y="140">cộng B 150</text><text x="1005" y="140">trừ A 150</text></g><g stroke="#1f2937" stroke-width="3"><line x1="405" y1="160" x2="582" y2="160" marker-end="url(#arDBk)"/><line x1="915" y1="160" x2="1092" y2="160" marker-end="url(#arDBk)"/></g><path d="M1260,225 C1200,370 300,370 245,232" fill="none" stroke="#b91c1c" stroke-width="3" stroke-dasharray="12 10" marker-end="url(#arDBr)"/><text x="750" y="330" font-size="24" text-anchor="middle" fill="#b91c1c" font-weight="bold">lỗi → huỷ cả nhóm → quay về đúng trạng thái đầu, tổng vẫn 150</text></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình dung giao dịch như một hộp bao quanh mọi thao tác của nó. Bắt đầu từ A 100, B 50, lệnh cộng B đưa B lên 200, nhưng đó mới là trạng thái tạm, chưa ghi nhận. Lệnh trừ A sẽ đưa A xuống âm 50, vi phạm ràng buộc. Vì vậy hệ quản trị huỷ cả hộp, đi theo mũi tên đỏ quay về đúng trạng thái đầu, tổng vẫn là 150."
+
+  # ───────────────────────── 4. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Nguyên tử và cô lập, chạy thật"
+    checks:
+      - "alg.sql_txn(\"CREATE TABLE TaiKhoan (ten TEXT PRIMARY KEY, so_du INTEGER CHECK (so_du >= 0)); INSERT INTO TaiKhoan VALUES ('A', 100), ('B', 50);\", [\"UPDATE TaiKhoan SET so_du = so_du + 150 WHERE ten = 'B'\", \"UPDATE TaiKhoan SET so_du = so_du - 150 WHERE ten = 'A'\"], 'SELECT * FROM TaiKhoan') == ('CHECK constraint failed: so_du >= 0', [('A', 100), ('B', 50)])"
+      - "alg.sql_txn(\"CREATE TABLE TaiKhoan (ten TEXT PRIMARY KEY, so_du INTEGER CHECK (so_du >= 0)); INSERT INTO TaiKhoan VALUES ('A', 100), ('B', 50);\", [\"UPDATE TaiKhoan SET so_du = so_du + 150 WHERE ten = 'B'\", \"UPDATE TaiKhoan SET so_du = so_du - 150 WHERE ten = 'A'\"], 'SELECT * FROM TaiKhoan', transaction=False) == ('CHECK constraint failed: so_du >= 0', [('A', 100), ('B', 200)])"
+      - "alg.lost_update(100, [10, 10]) == (110, 120)"
+    steps:
+      - show: |
+          <p><b>Bước 1</b> — trong một giao dịch, cộng B trước:</p>
+          <table class="t"><tr><th></th><th>A</th><th>B</th><th>tổng</th></tr>
+          <tr><td>ban đầu</td><td>100</td><td>50</td><td>150</td></tr>
+          <tr><td>sau khi cộng B 150 (tạm)</td><td>100</td><td>$50 + 150 = 200$</td><td>300</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước một, chạy phép chuyển 150 trong một giao dịch, cộng B trước. Ban đầu A 100, B 50. Sau lệnh cộng, B tạm thành 50 cộng 150 bằng 200, tổng tạm thời là 300, nhưng chưa có gì được ghi nhận."
+      - show: |
+          <p><b>Bước 2</b> — trừ A: $100 - 150 = -50 \lt 0$ → vi phạm ràng buộc $\text{so\_du} \geq 0$ → lệnh lỗi.</p>
+          <p>Lỗi giữa giao dịch → hệ quản trị <b>huỷ cả nhóm</b>, kể cả lệnh cộng B đã chạy.</p>
+        focus: [1, 1, 2]
+        say: "Bước hai, trừ A 150. Số dư sẽ là 100 trừ 150 bằng âm 50, nhỏ hơn 0, nên lệnh lỗi vì vi phạm ràng buộc. Lỗi xảy ra giữa giao dịch, nên hệ quản trị huỷ cả nhóm, kể cả lệnh cộng B đã chạy."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>chuyển 150 từ A sang B</th><th>A</th><th>B</th><th>tổng</th></tr>
+          <tr><td>Bước 3 — trong một giao dịch: lỗi → tự huỷ</td><td>100</td><td>50</td><td>150</td></tr>
+          <tr><td>Bước 4 — mỗi câu tự ghi nhận</td><td>100</td><td><b>200</b></td><td><b class="red">300</b></td></tr></table>
+          <p class="note">Chạy thật trên SQLite. Tính <b>nguyên tử</b> giữ đúng tổng 150; tự ghi nhận từng câu làm $300 - 150 = 150$ đồng tự sinh ra.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Bước ba và bước bốn, so hai cách khi chạy thật trên một hệ quản trị. Trong một giao dịch, lệnh trừ A lỗi nên cả nhóm tự huỷ, A vẫn 100, B vẫn 50. Khi mỗi câu tự ghi nhận, lệnh cộng B đã được lưu, B thành 200, tổng thành 300. Tính nguyên tử giữ đúng tổng 150, còn cách kia làm 300 trừ 150 bằng 150 đồng tự sinh ra."
+      - clear: true
+        show: |
+          <p><b>Bước 5 — mất cập nhật</b>: hai giao dịch cùng cộng 10 vào số dư 100.</p>
+          <table class="t"><tr><th>thời điểm</th><th>T1</th><th>T2</th></tr>
+          <tr><td>1</td><td>đọc 100</td><td></td></tr><tr><td>2</td><td></td><td>đọc 100</td></tr>
+          <tr><td>3</td><td>ghi 110</td><td></td></tr><tr><td>4</td><td></td><td>ghi 110</td></tr></table>
+          <p>Kết quả $\hl{110}$ thay vì 120: lần cộng của T1 mất. Thiếu tính <b>cô lập</b> — chạy lần lượt sẽ ra 120.</p>
+        focus: [1, 2, "2.2", "2.3", "2.4", "2.5", 3]
+        say: "Bước năm, xem tính cô lập, với hai giao dịch cùng cộng 10 vào số dư 100. Thời điểm 1, T1 đọc được 100. Thời điểm 2, T2 cũng đọc được 100. Thời điểm 3, T1 ghi 110. Thời điểm 4, T2 cũng ghi 110, đè lên. Kết quả là 110 thay vì 120, lần cộng của T1 bị mất. Đây là lỗi mất cập nhật, do thiếu tính cô lập, vì chạy lần lượt sẽ ra 120."
+      - show: |
+          <p><b>Bước 6</b> — chạy lần lượt: T1 đọc 100, ghi 110; rồi T2 đọc <b>110</b>, ghi $110 + 10 = \hl{120}$.</p>
+        say: "Bước sáu, để so sánh, chạy lần lượt. T1 đọc 100 và ghi 110, rồi T2 mới đọc, được 110, và ghi 110 cộng 10 bằng 120, đúng kết quả mong đợi."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: thử hết mọi cách chen nhau"
+    checks:
+      - "len(list(alg._interleavings([('T1', 'R'), ('T1', 'W')], [('T2', 'R'), ('T2', 'W')]))) == 6"
+      - "[(lambda s: __import__('functools').reduce(lambda st, op: {**st, op[0]: st['x']} if op[1] == 'R' else {**st, 'x': st[op[0]] + 10}, s, {'x': 100})['x'])(s) for s in alg._interleavings([('T1', 'R'), ('T1', 'W')], [('T2', 'R'), ('T2', 'W')])] == [120, 110, 110, 110, 110, 120]"
+      - "alg.sql_txn(\"CREATE TABLE TaiKhoan (ten TEXT PRIMARY KEY, so_du INTEGER CHECK (so_du >= 0)); INSERT INTO TaiKhoan VALUES ('A', 100), ('B', 50);\", [\"UPDATE TaiKhoan SET so_du = so_du + 150 WHERE ten = 'B'\", \"UPDATE TaiKhoan SET so_du = so_du - 150 WHERE ten = 'A'\"], 'SELECT SUM(so_du) FROM TaiKhoan') == ('CHECK constraint failed: so_du >= 0', [(150,)])"
+      - "alg.sql_txn(\"CREATE TABLE TaiKhoan (ten TEXT PRIMARY KEY, so_du INTEGER CHECK (so_du >= 0)); INSERT INTO TaiKhoan VALUES ('A', 100), ('B', 50);\", [\"UPDATE TaiKhoan SET so_du = so_du + 150 WHERE ten = 'B'\", \"UPDATE TaiKhoan SET so_du = so_du - 150 WHERE ten = 'A'\"], 'SELECT SUM(so_du) FROM TaiKhoan', transaction=False) == ('CHECK constraint failed: so_du >= 0', [(300,)])"
+    steps:
+      - show: |
+          <p>Mỗi giao dịch: đọc (R) rồi ghi (W). Giữ thứ tự riêng của mỗi bên, có đúng 6 cách xếp chen:</p>
+          <table class="t"><tr><th>thứ tự</th><th>số dư cuối</th></tr>
+          <tr><td>R1 W1 R2 W2 (T1 xong rồi T2)</td><td>120</td></tr>
+          <tr><td>R1 R2 W1 W2</td><td>110</td></tr><tr><td>R1 R2 W2 W1</td><td>110</td></tr>
+          <tr><td>R2 R1 W1 W2</td><td>110</td></tr><tr><td>R2 R1 W2 W1</td><td>110</td></tr>
+          <tr><td>R2 W2 R1 W1 (T2 xong rồi T1)</td><td>120</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.5", "2.7"]
+        say: "Kiểm bằng đường khác, ta cho máy thử hết mọi cách chen nhau của hai giao dịch, mỗi bên đọc rồi ghi. Giữ thứ tự riêng của mỗi bên thì có đúng 6 cách xếp. Hai cách chạy lần lượt ra 120, vì bên sau đọc được giá trị bên trước đã ghi. Cả 4 cách chen giữa đọc và ghi đều ra 110. Vậy mất cập nhật không phải xui, nó xảy ra ở mọi cách xen mà một bên đọc trước khi bên kia kịp ghi."
+      - show: |
+          <table class="t"><tr><th>đếm tổng bằng câu truy vấn sau khi chạy</th><th>tổng A + B</th></tr>
+          <tr><td>trong một giao dịch</td><td>150</td></tr>
+          <tr><td>mỗi câu tự ghi nhận</td><td>300</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Với phép chuyển tiền, ta không đọc từng ô mà hỏi thẳng tổng số dư sau khi chạy. Trong một giao dịch, tổng vẫn là 150, vì lệnh lỗi kéo theo huỷ cả nhóm. Khi mỗi câu tự ghi nhận, tổng là 300, đúng 150 đồng tự sinh ra."
+
+  # ───────────────────────── 5. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi người mới hay mắc"
+    checks:
+      - "alg.lost_update(100, [10, 10])[0] == 110"
+      - "alg.sql_txn(\"CREATE TABLE TaiKhoan (ten TEXT PRIMARY KEY, so_du INTEGER CHECK (so_du >= 0)); INSERT INTO TaiKhoan VALUES ('A', 100), ('B', 50);\", [\"UPDATE TaiKhoan SET so_du = so_du + 10 WHERE ten = 'A'\"] * 2, \"SELECT so_du FROM TaiKhoan WHERE ten = 'A'\") == (None, [(120,)])"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Để mỗi câu tự ghi nhận khi các câu phải đi cùng nhau <b class="red">(sai)</b>
+          <br><span class="note">Nhiều thư viện mặc định tự ghi nhận từng câu. Phép chuyển tiền phải nằm trong một giao dịch.</span></div>
+        say: "Lỗi thứ nhất, để mỗi câu tự ghi nhận khi các câu phải đi cùng nhau. Nhiều thư viện lập trình mặc định tự ghi nhận từng câu, nên phép chuyển tiền phải được gói trong một giao dịch."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Đọc lên ứng dụng, tính, rồi ghi lại, không khoá <b class="red">(sai)</b>
+          <br><span class="note">Đúng mẫu mất cập nhật. Viết <code>SET so_du = so_du + 10</code> để hệ quản trị cộng tại chỗ, hoặc khoá dòng trước khi đọc.</span></div>
+          <table class="t"><tr><th>hai yêu cầu cùng cộng 10 vào 100</th><th>kết quả</th></tr>
+          <tr><td>ứng dụng đọc 100, tính 110, ghi 110 (cả hai chen nhau)</td><td><b class="red">110</b></td></tr>
+          <tr><td>mỗi yêu cầu chạy <code>so_du = so_du + 10</code> trong hệ quản trị</td><td>120</td></tr></table>
+        focus: [1, 1, 1, "2.2", "2.3"]
+        say: "Lỗi thứ hai, đọc giá trị lên ứng dụng, tính, rồi ghi lại mà không khoá. Đó đúng là mẫu mất cập nhật. Hãy để hệ quản trị cộng tại chỗ trong câu cập nhật, hoặc khoá dòng trước khi đọc. Người đã đi làm hay viết kiểu đọc rồi ghi này trong mã ứng dụng, chạy thử một mình thì đúng, nhưng hai yêu cầu chen nhau thì ra 110. Để hệ quản trị cộng tại chỗ, hai yêu cầu lần lượt cho đúng 120."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Lẫn “nhất quán” của ACID với “nhất quán” của định lý CAP <b class="red">(sai)</b>
+          <br><span class="note">ACID: giữ ràng buộc của ứng dụng. CAP (hệ phân tán): mọi bản sao trả cùng một giá trị mới nhất. Hai khái niệm khác nhau, chỉ trùng tên.</span></div>
+        say: "Lỗi thứ ba, lẫn chữ nhất quán của ACID với chữ nhất quán trong định lý CAP của hệ phân tán. Trong ACID, nhất quán là giữ ràng buộc của ứng dụng. Trong CAP, nhất quán là mọi bản sao trả về cùng một giá trị mới nhất. Hai khái niệm khác nhau, chỉ trùng tên."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Giữ giao dịch mở lâu, chờ người dùng bấm nút <b class="red">(sai)</b>
+          <br><span class="note">Giao dịch mở giữ khoá, chặn người khác. Thu thập đủ dữ liệu trước, rồi mới mở giao dịch ngắn.</span></div>
+        say: "Lỗi thứ tư, giữ một giao dịch mở thật lâu, chờ người dùng bấm nút. Giao dịch đang mở giữ khoá và chặn người khác. Hãy thu thập đủ dữ liệu trước, rồi mới mở một giao dịch thật ngắn."
+
+  # ───────────────────────── 6. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.sql_txn(\"CREATE TABLE TaiKhoan (ten TEXT PRIMARY KEY, so_du INTEGER CHECK (so_du >= 0)); INSERT INTO TaiKhoan VALUES ('A', 100), ('B', 50);\", [\"UPDATE TaiKhoan SET so_du = so_du + 80 WHERE ten = 'A'\", \"UPDATE TaiKhoan SET so_du = so_du - 80 WHERE ten = 'B'\"], 'SELECT * FROM TaiKhoan') == ('CHECK constraint failed: so_du >= 0', [('A', 100), ('B', 50)])"
+      - "alg.lost_update(100, [10, 10, 10]) == (110, 130) and 130 - 110 == 20 and 100 + 80 == 180 and 50 - 80 == -30"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Chuyển 80 từ B (50) sang A (100) trong một giao dịch: kết quả A, B?</td></tr>
+          <tr><td>2</td><td>Ba giao dịch cùng đọc số dư 100 trước khi ai ghi, mỗi bên cộng 10 rồi ghi. Số dư cuối? Đúng ra phải là bao nhiêu?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, chuyển 80 từ B có 50 sang A có 100 trong một giao dịch, kết quả A và B là bao nhiêu? Câu hai, ba giao dịch cùng đọc số dư 100 trước khi ai ghi, mỗi bên cộng 10 rồi ghi, số dư cuối là bao nhiêu? Đúng ra phải là bao nhiêu? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <table class="t"><tr><th>câu 1</th><th>A</th><th>B</th></tr>
+          <tr><td>cộng A 80 (tạm)</td><td>$100 + 80 = 180$</td><td>50</td></tr>
+          <tr><td>trừ B 80</td><td>180</td><td>$50 - 80 = -30$ → vi phạm</td></tr>
+          <tr><td>huỷ cả giao dịch</td><td>$\hl{100}$</td><td>$\hl{50}$</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Đáp án câu một, đi từng lệnh. Cộng A 80 thì A tạm thành 180. Trừ B 80 thì B sẽ là 50 trừ 80 bằng âm 30, vi phạm ràng buộc. Vì vậy cả giao dịch bị huỷ, A trở về 100 và B vẫn 50."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 2</th><th>đọc</th><th>ghi</th></tr>
+          <tr><td>T1</td><td>100</td><td>110</td></tr><tr><td>T2</td><td>100</td><td>110</td></tr><tr><td>T3</td><td>100</td><td>110</td></tr></table>
+          <p>Cuối cùng $\hl{110}$. Chạy lần lượt: 100 → 110 → 120 → 130, nên đúng ra <b>130</b>, mất $130 - 110 = 20$, tức hai lần cộng.</p>
+        focus: [1, "1.2", 2, 2]
+        say: "Câu hai, cả ba giao dịch đều đọc 100 trước khi ai ghi, nên bên nào cũng tính rồi ghi 110. Lần ghi sau đè lần ghi trước, cuối cùng số dư là 110. Nếu chạy lần lượt, số dư đi từ 100 lên 110, 120, rồi 130. Vậy mất 130 trừ 110 bằng 20, tức hai lần cộng."
+
+  # ───────────────────────── 7. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">A: tất cả hoặc không</span><span class="a">→</span>
+          <span class="n">C: giữ ràng buộc</span><span class="a">→</span>
+          <span class="n">I: như chạy lần lượt</span><span class="a">→</span>
+          <span class="n">D: ghi nhận là còn</span></div>
+        say: "Tổng kết lại, nguyên tử là tất cả hoặc không gì cả, nhất quán là giữ mọi ràng buộc. Cô lập là chạy đồng thời mà như chạy lần lượt, và bền vững là đã ghi nhận thì còn."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> mỗi khi hai thao tác “phải cùng thành công”, hãy hỏi: nếu mất điện giữa hai thao tác thì sao? Nếu người khác chen vào giữa thì sao?</div>
+        say: "Điều cần mang theo, mỗi khi hai thao tác phải cùng thành công, hãy hỏi, nếu mất điện giữa hai thao tác thì sao, và nếu có người khác chen vào giữa thì sao."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 12): <b>lịch thực thi</b> và tuần tự hoá xung đột — kiểm một cách chen nhau có an toàn không bằng đồ thị.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 12, ta học lịch thực thi và tuần tự hoá xung đột, cách kiểm một kiểu chen nhau có an toàn không bằng đồ thị. Hẹn gặp bạn ở bài tiếp theo."

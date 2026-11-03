@@ -1,0 +1,255 @@
+id: L08
+course: DBS
+series: "DBS · Cơ sở dữ liệu"
+title: "Bài 8 — Chỉ mục cây B+"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/dbs.yaml L08; audit/dbs/verify_dbs.py L08; R. Bayer, E. McCreight (1972), D. Comer (1979); R. Ramakrishnan, J. Gehrke, Database Management Systems (2003), chương 10"
+assumes: [arith, cdot, sub, frac, approx, power, ltgt, geq, log]
+# Quy ước: mỗi nút của cây là một trang. Nút trong giữ khoá phân cách và con trỏ con; lá giữ khoá và con trỏ tới dòng, các lá nối
+#   thành chuỗi từ trái sang phải. Cây mẫu bậc 3 (alg.BPT_*): đi xuống con thứ (số khoá phân cách ≤ k). Độ cao (số tầng) với bậc
+#   rẽ nhánh f và n khoá: số h nhỏ nhất có f^h ≥ n (alg.bplus_height). Số lần đọc trang do alg.bpt_search / alg.bpt_range tính.
+objectives:
+  - "Giải thích vì sao cây B+ thấp"
+  - "Ước lượng số lần đọc trang khi tra một khoá và khi tra một khoảng"
+  - "Biết cái giá của chỉ mục khi ghi"
+asr_reviewed:
+  - {sentence: "Một trang 8 ki-lô-byte chứa được hàng trăm cặp khoá và con trỏ, mỗi cặp khoảng 16 byte nên tới 512 cặp.", reason: "“byte” đọc thô /bai/ — probe audit/csa/probes/p1_thuat_ngu.md: ASR chép “bay” 8/8 (cùng âm), đối chứng 0/8; lexicon foreign_ok; “bit” ASR chép “bích/biết” (probe p1 CSA: không cách viết nào phân định âm cuối t/ch) — NOT_VERIFIED bằng tai người; “byte” → “bay” cùng âm"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Từ 10 000 lần đọc xuống 3"
+    steps:
+      - show: |
+          <p>Bài 7: tìm một sinh viên trong bảng 1 triệu dòng phải quét tới 10 000 trang.</p>
+          <p>Từ điển giấy không bắt bạn đọc từng trang: nhìn chữ cái ở mép, mở thẳng tới gần đúng chỗ.</p>
+          <div class="box key">Hôm nay: <b>chỉ mục cây B+</b> — tìm một dòng trong một triệu chỉ với khoảng 3 lần đọc trang.</div>
+        focus: [1, 2, 3]
+        say: "Chào bạn, ở bài 7, tìm một sinh viên trong bảng một triệu dòng phải quét tới mười nghìn trang. Nhưng từ điển giấy đâu bắt bạn đọc từng trang, bạn nhìn chữ cái ở mép rồi mở thẳng tới gần đúng chỗ. Hôm nay ta học chỉ mục cây B cộng, tìm một dòng trong một triệu dòng chỉ với khoảng 3 lần đọc trang."
+
+  # ───────────────────────── 1b. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: cây tìm kiếm, lũy thừa và lô-ga-rít"
+    checks:
+      - "(lambda path: path == [40, 60, 50])((lambda f: f(f, (40, (20, (10,), (30,)), (60, (50,), (70,))), 50, []))(lambda f, n, k, p: p + [n[0]] if n[0] == k else f(f, n[1] if k < n[0] else n[2], k, p + [n[0]])))"
+      - "100 ** 1 == 100 and 100 ** 2 == 10 ** 4 and 100 ** 3 == 10 ** 6 and round(math.log(10 ** 6, 100)) == 3"
+      - "2 ** 19 == 524288 and 2 ** 19 < 10 ** 6 <= 2 ** 20 == 1048576"
+      - "math.ceil(10 ** 6 / 100) == 10000"
+    steps:
+      - show: |
+          <p>Ở khoá Phân tích và thiết kế thuật toán: <b>cây tìm kiếm nhị phân</b> — nhỏ hơn đi trái, lớn hơn đi phải. Tìm 50 trong cây 10, 20, …, 70:</p>
+          <table class="t"><tr><th>tầng</th><th>đang ở</th><th>so 50</th><th>đi</th></tr>
+          <tr><td>1</td><td>40</td><td>$50 \gt 40$</td><td>phải</td></tr>
+          <tr><td>2</td><td>60</td><td>$50 \lt 60$</td><td>trái</td></tr>
+          <tr><td>3</td><td>50</td><td>bằng</td><td>gặp</td></tr></table>
+        introduces: [dots]
+        focus: [1, "2.2", "2.3", "2.4", 2]
+        say: "Trước hết, ôn lại cây tìm kiếm nhị phân ở khoá Phân tích và thiết kế thuật toán, khoá nhỏ hơn thì đi trái, lớn hơn thì đi phải. Tìm 50 trong cây bảy khoá từ 10 tới 70, ở gốc 40, vì 50 lớn hơn 40 nên đi phải. Tới 60, vì 50 nhỏ hơn 60 nên đi trái. Tới 50, bằng nhau, gặp. Mỗi tầng tốn một lần so sánh, nên số tầng quyết định chi phí."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>$h$</th><th>$100^h$</th><th>$2^h$</th></tr>
+          <tr><td>1</td><td>100</td><td>2</td></tr>
+          <tr><td>2</td><td>$10^4$</td><td>4</td></tr>
+          <tr><td>3</td><td>$\hl{10^6}$</td><td>8</td></tr>
+          <tr><td>19, 20</td><td></td><td>$524\,288 \lt 10^6 \le \hl{1\,048\,576}$</td></tr></table>
+          <p>$\log_{100} 10^6 = 3$: số lần nhân 100 để đạt một triệu.</p>
+        focus: [1, "1.4", "1.5", 2]
+        say: "Thứ hai, ta ôn lại phép lũy thừa và phép lô-ga-rít. Nhân 100 ba lần, 100 mũ 3, đã được một triệu. Còn nhân 2 thì tới 2 mũ 20, khoảng một triệu không trăm bốn mươi tám nghìn, mới vượt một triệu. Lô-ga-rít cơ số 100 của một triệu bằng 3, nghĩa là số lần nhân 100 để đạt một triệu."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bài 7 nhắc lại</th><th>số</th></tr>
+          <tr><td>$10^6$ dòng, 100 dòng mỗi trang</td><td>10 000 trang</td></tr>
+          <tr><td>tìm khi chưa có chỉ mục</td><td>tới 10 000 lần đọc trang</td></tr>
+          <tr><td>chi phí tính bằng</td><td>số lần đọc trang</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Thứ ba, nhắc lại bài 7, chi phí truy vấn được đo bằng số lần đọc trang. Một triệu dòng, 100 dòng mỗi trang, là mười nghìn trang. Khi chưa có chỉ mục, tìm một dòng có thể phải đọc tới mười nghìn trang. Hôm nay ta muốn đưa con số đó xuống chỉ còn vài trang."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: nút trong, lá, liên kết lá"
+    checks:
+      - "all(len(k) == 2 for k in [alg.BPT_ROOT] + alg.BPT_INNER + alg.BPT_LEAVES) and len(alg.BPT_LEAVES) == 9"
+      - "sorted(x for l in alg.BPT_LEAVES for x in l) == [x for l in alg.BPT_LEAVES for x in l]"
+    steps:
+      - show: |
+          <div>{{BPLUS}}</div>
+          <p>Mỗi nút là một <b>trang</b>. <b>Nút trong</b> giữ khoá phân cách, chỉ đường xuống con. <b>Lá</b> giữ các khoá theo thứ tự, kèm con trỏ tới dòng trong bảng.</p>
+          <p class="note">Mọi lá ở cùng độ sâu (cây cân bằng). Các lá nối với nhau, nên quét một khoảng chỉ cần đi ngang.</p>
+        focus: [1, 2, 2, 2, 3, 3]
+        say: "Đây là một cây B cộng nhỏ, mỗi nút giữ tối đa hai khoá. Mỗi nút là một trang trên đĩa. Nút trong giữ các khoá phân cách, chỉ đường đi xuống con nào. Lá giữ các khoá theo thứ tự, kèm con trỏ tới dòng tương ứng trong bảng. Mọi lá nằm ở cùng một độ sâu, tức cây cân bằng. Các lá còn được nối với nhau bằng mũi tên xanh, nên quét một khoảng chỉ cần đi ngang."
+
+  # ───────────────────────── 2b. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Mỗi tầng nhân 100: cái quạt rất rộng và rất thấp"
+    checks:
+      - "1 * 100 == 100 and 100 * 100 == 10000 and 10000 * 100 == 10 ** 6 and alg.bplus_height(10 ** 6, 100) == 3"
+    steps:
+      - show: |
+          <div><svg width="1500" height="470" viewBox="0 0 1500 470"><defs><marker id="arD8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#eb6834"/></marker></defs><rect x="560" y="30" width="180" height="60" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="650" y="70" font-size="24" text-anchor="middle" fill="#1f2937">gốc</text><line x1="650" y1="90" x2="150" y2="180" stroke="#9ca3af" stroke-width="2"/><line x1="650" y1="90" x2="370" y2="180" stroke="#9ca3af" stroke-width="2"/><line x1="650" y1="90" x2="590" y2="180" stroke="#9ca3af" stroke-width="2"/><line x1="650" y1="90" x2="810" y2="180" stroke="#9ca3af" stroke-width="2"/><line x1="650" y1="90" x2="1030" y2="180" stroke="#9ca3af" stroke-width="2"/><rect x="80" y="180" width="140" height="56" fill="#eff6ff" stroke="#2a78d6" stroke-width="3"/><rect x="300" y="180" width="140" height="56" fill="#eff6ff" stroke="#2a78d6" stroke-width="3"/><rect x="520" y="180" width="140" height="56" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><rect x="960" y="180" width="140" height="56" fill="#eff6ff" stroke="#2a78d6" stroke-width="3"/><text x="810" y="215" font-size="30" fill="#1f2937">…</text><line x1="590" y1="236" x2="410" y2="330" stroke="#9ca3af" stroke-width="2"/><line x1="590" y1="236" x2="500" y2="330" stroke="#9ca3af" stroke-width="2"/><line x1="590" y1="236" x2="590" y2="330" stroke="#9ca3af" stroke-width="2"/><line x1="590" y1="236" x2="680" y2="330" stroke="#9ca3af" stroke-width="2"/><line x1="590" y1="236" x2="770" y2="330" stroke="#9ca3af" stroke-width="2"/><rect x="380" y="330" width="60" height="50" fill="#f0fdf4" stroke="#059669" stroke-width="3"/><rect x="470" y="330" width="60" height="50" fill="#f0fdf4" stroke="#059669" stroke-width="3"/><rect x="560" y="330" width="60" height="50" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><rect x="740" y="330" width="60" height="50" fill="#f0fdf4" stroke="#059669" stroke-width="3"/><text x="660" y="362" font-size="30" fill="#1f2937">…</text><path d="M650,90 L590,180 L590,236 L590,330" fill="none" stroke="#eb6834" stroke-width="5" stroke-dasharray="14 8" marker-end="url(#arD8)"/><g font-size="24" fill="#1f2937"><text x="1130" y="68">tầng 1: 1 trang, 100 con</text><text x="1130" y="215">tầng 2: 100 trang</text><text x="1130" y="362">tầng 3 (lá): 10 000 trang</text><text x="1130" y="395">chứa 1 000 000 khoá</text></g><text x="80" y="440" font-size="24" font-weight="bold" fill="#eb6834">tra một khoá: đi đúng một trang mỗi tầng → 3 lần đọc thay vì 10 000</text></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình cho thấy vì sao cây B cộng rất thấp. Gốc là một trang có 100 con, tầng hai có 100 trang, mỗi trang lại có 100 con, nên tầng lá có mười nghìn trang. Mười nghìn trang lá, mỗi trang 100 khoá, chứa đủ một triệu khoá. Tra một khoá chỉ đi theo đường cam, đúng một trang mỗi tầng, tức 3 lần đọc thay vì mười nghìn."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Tra khoá 45, tra khoảng 35 đến 65"
+    checks:
+      - "alg.bpt_search(45) == (1, 4, 3) and alg.BPT_LEAVES[4] == [40, 45]"
+      - "alg.bpt_range(35, 65) == ([3, 4, 5, 6], 6)"
+    steps:
+      - show: |
+          <div>{{BPLUS45}}</div>
+          <p><b>Bước 1</b> — tra 45, ở gốc [30 | 60]: $30 \le 45 \lt 60$ → xuống con <b>giữa</b>.</p>
+        focus: [1, 2, 2]
+        say: "Bước một, tra khoá 45, bắt đầu ở gốc có hai khoá phân cách 30 và 60. Vì 45 lớn hơn hoặc bằng 30 nhưng nhỏ hơn 60. Nên ta đi xuống con ở giữa."
+      - show: |
+          <p><b>Bước 2</b> — ở nút [40 | 50]: $40 \le 45 \lt 50$ → xuống lá giữa [40, 45]. Gặp 45.</p>
+        say: "Bước hai, ở nút trong có hai khoá 40 và 50, vì 45 nằm giữa 40 và 50 nên đi xuống lá giữa. Lá đó chứa 40 và 45, và ta gặp 45."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>trang đọc</th><th>gốc</th><th>nút [40 | 50]</th><th>lá [40, 45]</th><th>dòng trong bảng</th></tr>
+          <tr><td>đếm</td><td>1</td><td>1</td><td>1</td><td>+ 1</td></tr></table>
+          <p><b>Bước 3</b> — chỉ mục: $\hl{3}$ trang, cộng 1 trang để lấy dòng.</p>
+        focus: [2, "1.2", 2]
+        say: "Bước ba, đếm số trang đã đọc. Gốc một trang, nút trong một trang, lá một trang. Tổng cộng 3 trang chỉ mục, cộng thêm 1 trang nữa để lấy dòng trong bảng."
+      - clear: true
+        show: |
+          <div>{{BPLUS_RNG}}</div>
+          <p><b>Bước 4</b> — khoảng 35 đến 65: tra 35 như trên, đọc gốc và nút [40 | 50]… → <b>2</b> trang tới lá [30, 35].</p>
+        focus: [1, 2, 2]
+        say: "Bước bốn, tra khoảng từ 35 đến 65. Trước hết làm như tra một khoá, tìm lá chứa 35. Ta đọc gốc và một nút trong, tức 2 trang, rồi tới lá chứa 30 và 35."
+      - show: |
+          <table class="t"><tr><th>đi ngang theo liên kết</th><th>[30, 35]</th><th>[40, 45]</th><th>[50, 55]</th><th>[60, 65]</th></tr>
+          <tr><td>lá thứ</td><td>1</td><td>2</td><td>3</td><td>4</td></tr></table>
+          <p><b>Bước 5</b> — tổng $2 + 4 = \hl{6}$ trang chỉ mục.</p>
+        focus: [1, "1.2", 2]
+        say: "Bước năm, từ lá đó đi ngang theo liên kết lá, qua bốn lá, từ lá chứa 30, 35 tới lá chứa 60, 65. Lá thứ tư đã chứa 65, là đầu mút của khoảng, nên dừng. Tổng cộng 2 cộng 4, bằng 6 trang chỉ mục."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: tra mọi khoá, đếm khoá trong khoảng"
+    checks:
+      - "(lambda ks: len(ks) == 18 and all(k in alg.BPT_LEAVES[alg.bpt_search(k)[1]] and alg.bpt_search(k)[2] == 3 for k in ks))([x for l in alg.BPT_LEAVES for x in l])"
+      - "(lambda ks: ks == [35, 40, 45, 50, 55, 60, 65] and len({i for i, l in enumerate(alg.BPT_LEAVES) for x in l if x in ks}) == 4)([x for l in alg.BPT_LEAVES for x in l if 35 <= x <= 65])"
+      - "10000 / 3 > 3000"
+    steps:
+      - show: |
+          <table class="t"><tr><th>đường khác</th><th>kết quả</th></tr>
+          <tr><td>cho máy tra cả 18 khoá của cây mẫu</td><td>18 trên 18 khoá tới đúng lá chứa nó, mỗi lần 3 trang</td></tr>
+          <tr><td>liệt kê thẳng các khoá từ 35 tới 65</td><td>35, 40, 45, 50, 55, 60, 65: 7 khoá nằm ở 4 lá</td></tr>
+          <tr><td>so với quét bài 7</td><td>$10\,000 / 3 \gt 3000$ lần ít hơn</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Kiểm bằng đường khác, ta cho máy tra lần lượt cả 18 khoá của cây mẫu, vì một khoá 45 chưa đủ để tin cả cây. Cả 18 khoá đều tới đúng lá chứa nó, và lần nào cũng đọc đúng 3 trang. Liệt kê thẳng các khoá từ 35 tới 65 được 7 khoá, nằm gọn trong 4 lá, khớp với 4 lá đi ngang ở bước năm. Còn so với quét mười nghìn trang ở bài 7, 3 trang ít hơn hơn ba nghìn lần."
+
+  # ───────────────────────── 4. ĐỘ CAO ─────────────────────────
+  - id: height
+    kind: concept
+    title: "Vì sao cây B+ thấp"
+    checks:
+      - "alg.bplus_height(10 ** 6, 100) == 3 and 100 ** 2 < 10 ** 6 <= 100 ** 3"
+      - "alg.bplus_height(10 ** 6, 2) == 20"
+      - "8192 // 16 == 512"
+    steps:
+      - show: |
+          <p>Một trang 8 KB chứa hàng trăm cặp (khoá, con trỏ): mỗi cặp khoảng 16 byte → tới 512. Lấy tròn <b>bậc rẽ nhánh 100</b> (nút không luôn đầy).</p>
+          <table class="t"><tr><th>tầng</th><th>1 (gốc)</th><th>2</th><th>3 (lá)</th></tr>
+          <tr><td>số khoá với tới</td><td>100</td><td>10 000</td><td>1 000 000</td></tr></table>
+          <div class="box key">$10^6$ khoá chỉ cần $\hl{3}$ tầng: số tầng $h$ nhỏ nhất có $100^h \ge 10^6$, tức $h = \log_{100} 10^6 = 3$. So với quét 10 000 trang: ít hơn hơn ba nghìn lần.</div>
+          <p class="note">Cây nhị phân (bậc 2) cần 20 tầng cho cùng số khoá — đó là lý do cơ sở dữ liệu không dùng cây nhị phân trên đĩa.</p>
+        focus: [1, 1, 2, "2.2", 3, 3, 4]
+        say: "Vì sao cây B cộng thấp? Một trang 8 ki-lô-byte chứa được hàng trăm cặp khoá và con trỏ, mỗi cặp khoảng 16 byte nên tới 512 cặp. Lấy tròn bậc rẽ nhánh là 100, vì nút không phải lúc nào cũng đầy. Gốc trỏ tới 100 nút, tầng hai trỏ tới mười nghìn, và tầng ba, tầng lá, đã chứa được một triệu khoá. Vậy một triệu khoá chỉ cần 3 tầng, tức lô-ga-rít cơ số 100 của một triệu, bằng 3. So với quét mười nghìn trang, số lần đọc ít hơn hơn ba nghìn lần. Một cây nhị phân cần tới 20 tầng cho cùng số khoá, nên cơ sở dữ liệu không dùng cây nhị phân trên đĩa."
+
+  # ───────────────────────── 5. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi người mới hay mắc"
+    checks:
+      - "alg.bplus_height(10 ** 6, 100) + 1 == 4"
+      - "1 + 1 * alg.bplus_height(10 ** 6, 100) == 4 and 1 + 5 * alg.bplus_height(10 ** 6, 100) == 16 and 5 * 3 == 15"
+      - "round(0.3 * 10 ** 6) == 300000 and round(300000 * 8e-3) == 2400 and round(10000 * 0.05e-3, 2) == 0.5"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Đánh chỉ mục mọi cột <b class="red">(sai)</b>
+          <br><span class="note">Mỗi lần thêm, sửa, xoá dòng, mọi chỉ mục đều phải cập nhật, có khi phải tách nút. Chỉ mục tăng tốc đọc nhưng làm chậm ghi và tốn chỗ.</span></div>
+          <table class="t"><tr><th>ước lượng: thêm 1 dòng</th><th>trang bảng</th><th>mỗi chỉ mục (3 tầng)</th><th>tổng trang chạm tới</th></tr>
+          <tr><td>không chỉ mục</td><td>1</td><td>0</td><td>1</td></tr>
+          <tr><td>1 chỉ mục</td><td>1</td><td>3</td><td>$1 + 3 = 4$</td></tr>
+          <tr><td>5 chỉ mục</td><td>1</td><td>$5 \cdot 3$</td><td>$1 + 15 = \hl{16}$</td></tr></table>
+        introduces: [cdot]
+        focus: [1, 1, 1, 2, "2.4"]
+        say: "Lỗi thứ nhất, đánh chỉ mục cho mọi cột. Mỗi lần thêm, sửa hay xoá một dòng, mọi chỉ mục đều phải cập nhật, có khi phải tách nút. Chỉ mục tăng tốc đọc nhưng làm chậm ghi và tốn chỗ. Người đã đi làm hay thêm chỉ mục cho từng truy vấn chậm mà quên phía ghi, như bảng ước lượng chỉ ra. Không có chỉ mục, thêm một dòng chạm 1 trang, có 5 chỉ mục ba tầng thì chạm tới 1 cộng 15 bằng 16 trang."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 2.</b> Quên chi phí lấy dòng <b class="red">(thiếu)</b>
+          <br><span class="note">Chỉ mục cho vị trí; mỗi dòng khớp còn 1 lần đọc ngẫu nhiên vào bảng. Khoảng trả về 30% bảng thì quét tuần tự cả bảng có thể nhanh hơn (bài 7).</span></div>
+          <table class="t"><tr><th>lấy 30% của $10^6$ dòng</th><th>số lần đọc</th><th>thời gian (giả định bài 7)</th></tr>
+          <tr><td>qua chỉ mục, mỗi dòng một lần đọc ngẫu nhiên</td><td>300 000</td><td>$300\,000 \cdot 8$ ms = 2400 giây</td></tr>
+          <tr><td>quét tuần tự cả bảng</td><td>10 000</td><td>$10\,000 \cdot 0{,}05$ ms = 0,5 giây</td></tr></table>
+        focus: [1, 1, 2, "2.2", "2.3"]
+        say: "Lỗi thứ hai, quên chi phí lấy dòng. Chỉ mục chỉ cho vị trí, mỗi dòng khớp còn tốn một lần đọc ngẫu nhiên vào bảng. Khi một khoảng trả về khoảng 30 phần trăm bảng, quét tuần tự cả bảng như bài 7 có thể còn nhanh hơn. Lấy 30 phần trăm của một triệu dòng qua chỉ mục là ba trăm nghìn lần đọc ngẫu nhiên, theo giả định 8 mi li giây mỗi lần thì mất 2400 giây. Quét tuần tự mười nghìn trang chỉ mất nửa giây."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Nghĩ cây B+ là cây nhị phân <b class="red">(sai)</b>
+          <br><span class="note">Mỗi nút có hàng trăm con, nên cây chỉ cao 3–4 tầng.</span></div>
+        say: "Lỗi thứ ba, nghĩ cây B cộng là cây nhị phân. Mỗi nút có hàng trăm con, nên cây chỉ cao 3 hay 4 tầng."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Đánh chỉ mục cột ít giá trị khác nhau <b class="red">(ít lợi)</b>
+          <br><span class="note">Cột giới tính chỉ 2 giá trị: mỗi giá trị khớp nửa bảng, chỉ mục gần như vô dụng.</span></div>
+        say: "Lỗi thứ tư, đánh chỉ mục cho cột có ít giá trị khác nhau. Cột giới tính chỉ có hai giá trị, mỗi giá trị khớp khoảng nửa bảng, nên chỉ mục gần như vô dụng."
+
+  # ───────────────────────── 6. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.bplus_height(10 ** 6, 200) == 3 and alg.bplus_height(10 ** 8, 100) == 4"
+      - "alg.bpt_range(15, 42) == ([1, 2, 3, 4], 6)"
+      - "200 ** 2 == 40000 < 10 ** 6 <= 200 ** 3 == 8 * 10 ** 6 and 100 ** 3 < 10 ** 8 <= 100 ** 4 and alg.bpt_search(15)[:2] == (0, 1) and alg.BPT_LEAVES[5][0] == 50"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Bậc rẽ nhánh 200, $10^6$ khoá: cây cao mấy tầng? Còn bậc 100 với $10^8$ khoá?</td></tr>
+          <tr><td>2</td><td>Trên cây mẫu, tra khoảng 15 đến 42 đọc bao nhiêu trang chỉ mục?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, bậc rẽ nhánh 200 với một triệu khoá thì cây cao mấy tầng? Còn bậc 100 với một trăm triệu khoá thì sao? Câu hai, trên cây mẫu, tra khoảng từ 15 đến 42 đọc bao nhiêu trang chỉ mục? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <table class="t"><tr><th>$h$</th><th>$200^h$</th><th>đủ $10^6$?</th><th>$100^h$</th><th>đủ $10^8$?</th></tr>
+          <tr><td>2</td><td>40 000</td><td>chưa</td><td>$10^4$</td><td>chưa</td></tr>
+          <tr><td>3</td><td>8 000 000</td><td>đủ → $\hl{3}$ tầng</td><td>$10^6$</td><td>chưa</td></tr>
+          <tr><td>4</td><td></td><td></td><td>$10^8$</td><td>vừa đủ → $\hl{4}$ tầng</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Đáp án câu một, lập bảng lũy thừa rồi tìm số tầng nhỏ nhất đủ chứa. 200 bình phương là bốn mươi nghìn, chưa tới một triệu. 200 lập phương là tám triệu, đã vượt, nên cây cao 3 tầng. Với bậc 100 và một trăm triệu khoá, 100 mũ 3 mới một triệu, còn 100 mũ 4 vừa đủ, nên cây cao 4 tầng."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>trang đọc</th></tr>
+          <tr><td>gốc: $15 \lt 30$ → con trái; nút [10 | 20]: $10 \le 15 \lt 20$ → lá [10, 15]</td><td>2</td></tr>
+          <tr><td>đi ngang [10, 15], [20, 25], [30, 35], [40, 45]; lá sau bắt đầu bằng 50, quá 42</td><td>4</td></tr>
+          <tr><td>tổng</td><td>$2 + 4 = \hl{6}$</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Câu hai, trước hết tìm lá chứa 15. Ở gốc, 15 nhỏ hơn 30 nên đi con trái, ở nút 10 và 20, 15 nằm giữa nên xuống lá chứa 10 và 15, mất 2 trang. Rồi đi ngang qua 4 lá tới lá chứa 40 và 45, vì lá kế tiếp bắt đầu bằng 50, đã quá 42. Tổng cộng 2 cộng 4 bằng 6 trang."
+
+  # ───────────────────────── 7. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">nút = trang, hàng trăm con</span><span class="a">→</span>
+          <span class="n">cây rất thấp: $\log_{100} n$</span><span class="a">→</span>
+          <span class="n">tra khoá: 3–4 lần đọc</span><span class="a">→</span>
+          <span class="n">lá nối nhau: quét khoảng</span></div>
+        say: "Tổng kết lại, mỗi nút của cây B cộng là một trang với hàng trăm con, nên cây rất thấp. Tra một khoá chỉ tốn 3 hay 4 lần đọc, và các lá nối nhau giúp quét một khoảng."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> cấu trúc dữ liệu tốt phụ thuộc vào nơi dữ liệu nằm. Trên đĩa, mỗi lần đọc đắt, nên nhét càng nhiều thông tin vào một lần đọc càng tốt.</div>
+        say: "Điều cần mang theo, cấu trúc dữ liệu tốt phụ thuộc vào nơi dữ liệu nằm. Trên đĩa, mỗi lần đọc rất đắt, nên hãy nhét càng nhiều thông tin vào một lần đọc càng tốt."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 9): <b>chỉ mục băm</b> và cách chọn chỉ mục theo mẫu truy vấn.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 9, ta học chỉ mục băm, và cách chọn chỉ mục theo mẫu truy vấn. Hẹn gặp bạn ở bài tiếp theo."

@@ -1,0 +1,209 @@
+id: L04
+course: WEB
+series: "WEB · Ứng dụng web và di động"
+title: "Bài 4 — Lập trình bất đồng bộ: chờ tuần tự hay chạy đồng thời"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/web.yaml L04; audit/web/verify_web.py L04; ECMAScript 2024 — async function, Promise.all, Promise.allSettled; đo thật bằng Node v25; bài 3 (vòng lặp sự kiện)"
+assumes: [arith, cdot]
+# Quy ước: “yêu cầu” giả lập bằng lời hứa xong sau t mi li giây (hẹn giờ). Thời gian đo bằng Node thật nên dao động vài chục mi li giây khi máy bận;
+#   checks dùng khoảng chấp nhận. “Chờ tuần tự” = await từng cái; “đồng thời” = khởi động cả ba rồi Promise.all. Giới hạn đồng thời k = bể k người
+#   chạy lần lượt: thời gian ≈ ⌈n / k⌉ · t khi mọi yêu cầu dài t.
+objectives:
+  - "Viết hàm bất đồng bộ"
+  - "Chạy đồng thời các yêu cầu độc lập và xử lý lỗi từng phần"
+  - "Giới hạn số yêu cầu đồng thời"
+asr_reviewed:
+  - {sentence: "Phần phụ thuộc thì chờ tuần tự, phần độc lập thì chạy đồng thời, lỗi từng phần thì dùng chờ tất cả đã ngã ngũ, và luôn giới hạn số yêu cầu cùng lúc.", reason: "ASR chép “Phân phụ thuộc thi chờ tuần tự, phân độc lập thi chạy đồng thơi, lỗi từng phân thi dùng chờ tất cả đã ngã ngủ, và luôn giới hạn số yêu cầu cùng lúc.” (0.765): lệch âm/thanh thuần Việt: phần/phân, thì/thi, phần/phân, thì/thi, thời/thơi, phần thì/phân thi, ngũ/ngủ — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Ba yêu cầu: 600 mi li giây hay 300?"
+    checks:
+      - "(lambda o: o is not None and int(o[0]) >= 590 and 295 <= int(o[1]) < int(o[0]))(alg.node_output('const w=ms=>new Promise(r=>setTimeout(r,ms));(async()=>{let t=Date.now();await w(100);await w(200);await w(300);const a=Date.now()-t;t=Date.now();await Promise.all([w(100),w(200),w(300)]);console.log(a,Date.now()-t)})()'))"
+    steps:
+      - show: |
+          <p>Trang hồ sơ cần ba thứ: thông tin người dùng (100 ms), đơn hàng (200 ms), gợi ý (300 ms). Ba thứ không phụ thuộc nhau. Viết “chờ cái này xong rồi gọi cái kia” mất khoảng <b>600 ms</b>; gọi cả ba cùng lúc rồi chờ tất cả chỉ khoảng <b>300 ms</b> — đo thật bằng Node.</p>
+          <div class="box key">Hôm nay: <b>bất đồng bộ</b> — khi nào chờ tuần tự, khi nào chạy đồng thời, và xử lý lỗi từng phần.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, trang hồ sơ cần ba thứ, thông tin người dùng mất 100 mi li giây, đơn hàng 200, và gợi ý 300 mi li giây. Ba thứ này không phụ thuộc nhau. Viết theo kiểu chờ cái này xong rồi mới gọi cái kia thì mất khoảng 600 mi li giây, còn gọi cả ba cùng lúc rồi chờ tất cả thì chỉ khoảng 300, đo thật bằng máy. Hôm nay ta học bất đồng bộ, khi nào chờ tuần tự, khi nào chạy đồng thời, và cách xử lý lỗi từng phần."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: chờ không phải là làm; tổng hay lớn nhất"
+    checks:
+      - "5 + 10 == 15 and max(5, 10) == 10"
+      - "math.ceil(5 / 2) == 3 and 2 + 2 + 1 == 5"
+    steps:
+      - show: |
+          <p>Nhắc lại bài 3: luồng chính chỉ <b>chạy mã</b>; một hẹn giờ hay một yêu cầu mạng đang chờ thì nằm ngoài luồng, không chiếm luồng. Giống trong bếp:</p>
+          <table class="t"><tr><th>đun nước 5 phút, nướng bánh 10 phút</th><th>xong sau</th></tr>
+          <tr><td>làm lần lượt</td><td>$5 + 10 = 15$ phút (tổng)</td></tr>
+          <tr><td>bật cả hai rồi chờ</td><td>$\max(5, 10) = \hl{10}$ phút (lớn nhất)</td></tr></table>
+        introduces: [max_fn]
+        focus: [1, 2, "2.2", "2.3"]
+        say: "Trước hết, nhắc lại điều đã học ở bài 3, luồng chính chỉ dùng để chạy mã, còn một hẹn giờ hay một yêu cầu mạng đang chờ thì nằm ngoài luồng, không chiếm luồng. Giống như trong bếp, đun nước mất 5 phút và nướng bánh mất 10 phút. Làm lần lượt thì xong sau 5 cộng 10, bằng 15 phút, tức là tổng. Bật cả hai rồi đứng chờ thì xong sau 10 phút, bằng thời gian của việc lâu nhất, vì lúc chờ ta không phải làm gì."
+      - show: |
+          <p>Khi chỉ làm được <b>k</b> việc cùng lúc: 5 người qua cầu, mỗi lượt tối đa 2 người → số lượt là $\lceil 5/2 \rceil = 3$ (2 + 2 + 1). Dấu $\lceil\ \rceil$ nghĩa là <b>làm tròn lên</b>: lượt cuối dù chỉ 1 người vẫn là một lượt.</p>
+        introduces: [ceil]
+        say: "Điều thứ hai, khi chỉ làm được một số việc cùng lúc. Có 5 người qua cầu, mỗi lượt tối đa 2 người, thì cần 3 lượt, là 2, 2 rồi 1. Ta viết là 5 chia 2, làm tròn lên, vì lượt cuối dù chỉ có 1 người vẫn tính là một lượt."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: lời hứa, hàm bất đồng bộ, chờ"
+    steps:
+      - show: |
+          <table class="t"><tr><th>khái niệm</th><th>nghĩa</th></tr>
+          <tr><td><b>lời hứa</b> (Promise)</td><td>giá trị sẽ có sau: đang chờ → xong, hoặc → lỗi</td></tr>
+          <tr><td><b>hàm bất đồng bộ</b> (<code>async</code>)</td><td>hàm trả về lời hứa; bên trong được dùng <code>await</code></td></tr>
+          <tr><td><code>await p</code></td><td>tạm dừng <b>hàm này</b> tới khi p xong; luồng chính vẫn chạy việc khác (bài 3)</td></tr>
+          <tr><td><code>Promise.all([…])</code></td><td>chờ <b>tất cả</b>; một cái lỗi là cả nhóm lỗi</td></tr>
+          <tr><td><code>Promise.allSettled([…])</code></td><td>chờ tất cả, trả kết quả <b>từng cái</b>: xong hay lỗi</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", "1.6"]
+        say: "Bảng có năm khái niệm. Lời hứa là một giá trị sẽ có sau, đi từ đang chờ sang xong, hoặc sang lỗi. Hàm bất đồng bộ là hàm trả về một lời hứa, và bên trong được dùng từ khoá chờ. Chờ một lời hứa là tạm dừng riêng hàm này tới khi lời hứa xong, còn luồng chính vẫn chạy việc khác như vòng lặp sự kiện ở bài 3. Chờ tất cả là chờ cả nhóm, và một cái lỗi là cả nhóm lỗi. Chờ tất cả đã ngã ngũ cũng chờ cả nhóm, nhưng trả kết quả của từng cái, xong hay lỗi."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Xếp nối đuôi hay xếp chồng lên nhau"
+    checks:
+      - "100 + 200 + 300 == 600 and max(100, 200, 300) == 300"
+    steps:
+      - show: |
+          <div><svg width="1500" height="530" viewBox="0 0 1500 530"><text x="40" y="45" font-size="26" font-weight="bold" fill="#1f2937">tuần tự</text><text x="40" y="275" font-size="26" font-weight="bold" fill="#1f2937">đồng thời</text><rect x="300" y="65" width="160" height="38" rx="6" fill="#2a78d6"/><text x="285" y="92" font-size="22" text-anchor="end" fill="#1f2937">người dùng</text><rect x="460" y="115" width="320" height="38" rx="6" fill="#d97706"/><text x="285" y="142" font-size="22" text-anchor="end" fill="#1f2937">đơn hàng</text><rect x="780" y="165" width="480" height="38" rx="6" fill="#059669"/><text x="285" y="192" font-size="22" text-anchor="end" fill="#1f2937">gợi ý</text><line x1="1260" y1="60" x2="1260" y2="215" stroke="#b91c1c" stroke-width="3" stroke-dasharray="8 6"/><text x="1272" y="150" font-size="24" font-weight="bold" fill="#b91c1c">xong ở 600 ms</text><rect x="300" y="295" width="160" height="38" rx="6" fill="#2a78d6"/><text x="285" y="322" font-size="22" text-anchor="end" fill="#1f2937">người dùng</text><rect x="300" y="345" width="320" height="38" rx="6" fill="#d97706"/><text x="285" y="372" font-size="22" text-anchor="end" fill="#1f2937">đơn hàng</text><rect x="300" y="395" width="480" height="38" rx="6" fill="#059669"/><text x="285" y="422" font-size="22" text-anchor="end" fill="#1f2937">gợi ý</text><line x1="780" y1="290" x2="780" y2="445" stroke="#b91c1c" stroke-width="3" stroke-dasharray="8 6"/><text x="792" y="380" font-size="24" font-weight="bold" fill="#b91c1c">xong ở 300 ms</text><line x1="300" y1="475" x2="1260" y2="475" stroke="#1f2937" stroke-width="2"/><line x1="300" y1="467" x2="300" y2="483" stroke="#1f2937" stroke-width="2"/><text x="300" y="509" font-size="20" text-anchor="middle" fill="#1f2937">0</text><line x1="460" y1="467" x2="460" y2="483" stroke="#1f2937" stroke-width="2"/><text x="460" y="509" font-size="20" text-anchor="middle" fill="#1f2937">100</text><line x1="620" y1="467" x2="620" y2="483" stroke="#1f2937" stroke-width="2"/><text x="620" y="509" font-size="20" text-anchor="middle" fill="#1f2937">200</text><line x1="780" y1="467" x2="780" y2="483" stroke="#1f2937" stroke-width="2"/><text x="780" y="509" font-size="20" text-anchor="middle" fill="#1f2937">300</text><line x1="940" y1="467" x2="940" y2="483" stroke="#1f2937" stroke-width="2"/><text x="940" y="509" font-size="20" text-anchor="middle" fill="#1f2937">400</text><line x1="1100" y1="467" x2="1100" y2="483" stroke="#1f2937" stroke-width="2"/><text x="1100" y="509" font-size="20" text-anchor="middle" fill="#1f2937">500</text><line x1="1260" y1="467" x2="1260" y2="483" stroke="#1f2937" stroke-width="2"/><text x="1260" y="509" font-size="20" text-anchor="middle" fill="#1f2937">600</text><text x="285" y="509" font-size="20" text-anchor="end" fill="#1f2937">ms</text></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ ba yêu cầu thành ba thanh trên trục thời gian, thanh dài 100, 200 và 300 mi li giây. Ở nửa trên, chờ tuần tự làm các thanh nối đuôi nhau, nên thanh cuối kết thúc ở mốc 600. Ở nửa dưới, chạy đồng thời làm cả ba thanh cùng bắt đầu ở mốc 0 và nằm chồng lên nhau. Nhóm xong khi thanh dài nhất xong, ở mốc 300, và hai thanh ngắn nằm gọn trong khoảng thời gian đó."
+
+  - id: example
+    kind: example
+    title: "Hai cách viết, đo bằng đồng hồ"
+    checks:
+      - "(lambda o: o is not None and int(o[0]) >= 590 and 295 <= int(o[1]) < int(o[0]))(alg.node_output('const w=ms=>new Promise(r=>setTimeout(r,ms));(async()=>{let t=Date.now();await w(100);await w(200);await w(300);const a=Date.now()-t;t=Date.now();await Promise.all([w(100),w(200),w(300)]);console.log(a,Date.now()-t)})()'))"
+      - "100 + 200 + 300 == 600 and max(100, 200, 300) == 300"
+    steps:
+      - show: |
+          <div class="code"><div>// tuần tự: ≈ 100 + 200 + 300 = 600 ms</div><div>const u = await layNguoiDung(); const d = await layDon(); const g = await layGoiY();</div><div>// đồng thời: ≈ max(100, 200, 300) = 300 ms</div><div>const [u, d, g] = await Promise.all([layNguoiDung(), layDon(), layGoiY()]);</div></div>
+          <p><b>Bước một</b> — cách tuần tự: lấy người dùng, xong ở mốc $0 + 100 = 100$ ms.</p>
+        focus: [1, 2]
+        say: "Đoạn mã viết hai cách lấy ba thứ cho trang hồ sơ, ta lần theo từng mốc thời gian. Bước một, cách tuần tự bắt đầu lấy người dùng ở mốc 0, và xong ở mốc 100 mi li giây."
+      - show: |
+          <table class="t"><tr><th>tuần tự</th><th>bắt đầu</th><th>xong</th></tr>
+          <tr><td>đơn hàng (200 ms)</td><td>100</td><td>300</td></tr>
+          <tr><td>gợi ý (300 ms)</td><td>300</td><td>$\hl{600}$</td></tr></table>
+        focus: ["1.2", "1.3", 1]
+        say: "Bước hai, đơn hàng phải chờ người dùng xong, nên bắt đầu ở mốc 100 và xong ở mốc 300. Gợi ý lại chờ đơn hàng, bắt đầu ở mốc 300 và xong ở mốc 600. Cách tuần tự chờ từng lời gọi, tổng khoảng 100 cộng 200 cộng 300, bằng 600 mi li giây."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>đồng thời</th><th>bắt đầu</th><th>xong</th></tr>
+          <tr><td>người dùng</td><td>0</td><td>100</td></tr>
+          <tr><td>đơn hàng</td><td>0</td><td>200</td></tr>
+          <tr><td>gợi ý</td><td>0</td><td>300</td></tr></table>
+          <p><b>Bước 3</b> — chờ tất cả = chờ cái xong muộn nhất: $\max(100, 200, 300) = \hl{300}$ ms.</p>
+        focus: [1, 2]
+        say: "Bước ba, cách đồng thời khởi động cả ba ở mốc 0, nên chúng xong ở mốc 100, 200 và 300. Cách đồng thời khởi động cả ba rồi chờ tất cả, tổng khoảng bằng cái lâu nhất, 300 mi li giây."
+      - show: |
+          <p><b>Bước 4</b> — đo thật bằng Node (giả lập ba yêu cầu): tuần tự ≈ 600 ms, đồng thời ≈ 300 ms (sai lệch vài chục ms khi máy bận). Chỉ chờ tuần tự khi bước sau <b>cần kết quả</b> bước trước — ví dụ cần mã người dùng mới lấy được đơn của họ.</p>
+        focus: [1, 1]
+        say: "Bước bốn, đo thật với ba yêu cầu giả lập, tuần tự khoảng 600 và đồng thời khoảng 300 mi li giây, sai lệch vài chục khi máy bận. Chỉ chờ tuần tự khi bước sau cần kết quả của bước trước, ví dụ cần mã người dùng mới lấy được đơn của họ."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: phần tiết kiệm, và đo lại bằng ngôn ngữ khác"
+    checks:
+      - "600 - 300 == 300 == 100 + 200"
+      - "0.29 < (lambda cf, tm: (lambda t0: (list(cf.ThreadPoolExecutor(3).map(tm.sleep, [0.1, 0.2, 0.3])), tm.perf_counter() - t0)[1])(tm.perf_counter()))(__import__('concurrent.futures').futures, __import__('time')) < 0.59 and 0.1 + 0.2 + 0.3 > 0.59"
+    steps:
+      - show: |
+          <table class="t"><tr><th>cách khác</th><th>kết quả</th></tr>
+          <tr><td>phần tiết kiệm = hai thanh ngắn nằm gọn trong thanh dài</td><td>$100 + 200 = 300$, và $600 - 300 = 300$ ✓</td></tr>
+          <tr><td>đo lại bằng Python: ba lần ngủ 100, 200, 300 ms chạy đồng thời</td><td>≈ $\hl{300}$ ms ✓</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.3"]
+        say: "Kiểm bằng đường khác, vì cộng sai một mốc là lệch cả kết quả. Cách thứ nhất, phần tiết kiệm được chính là hai thanh ngắn nằm gọn trong thanh dài, tức 100 cộng 200, bằng 300. Và đúng là 600 trừ 300 cũng bằng 300, khớp. Cách thứ hai, đo lại bằng một ngôn ngữ lập trình khác, ba lần ngủ 100, 200 và 300 mi li giây chạy đồng thời, cũng xong sau khoảng 300 mi li giây."
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi thường gặp"
+    checks:
+      - "20 * 100 == 2000 and math.ceil(20 / 6) * 100 == 400 and math.ceil(20 / 6) == 4"
+      - "(lambda o: o is not None and int(o[0]) >= 1990 and 395 <= int(o[1]) < int(o[0]) / 2)(alg.node_output('const w=ms=>new Promise(r=>setTimeout(r,ms));async function pool(jobs,k){let i=0;const run=async()=>{while(i<jobs.length){const j=i++;await jobs[j]();}};await Promise.all(Array.from({length:k},run));}(async()=>{let t=Date.now();for(let i=0;i<20;i++)await w(100);const a=Date.now()-t;t=Date.now();await pool(Array.from({length:20},()=>()=>w(100)),6);console.log(a,Date.now()-t)})()'))"
+      - "alg.node_output(\"Promise.allSettled([Promise.resolve(1),Promise.reject(new Error('x')),Promise.resolve(3)]).then(r=>console.log(r.map(x=>x.status).join(',')))\") == ['fulfilled,rejected,fulfilled']"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Một phần lỗi làm hỏng cả trang <b class="red">(dùng chờ tất cả cho việc không bắt buộc)</b>
+          <br><span class="note">Gợi ý lỗi thì <code>Promise.all</code> lỗi cả nhóm, trang trắng. Dùng <code>allSettled</code>: kết quả là <code>fulfilled, rejected, fulfilled</code> — hiện hai phần đúng, phần lỗi thay bằng thông báo.</span></div>
+        say: "Lỗi thứ nhất, một phần lỗi làm hỏng cả trang, vì dùng chờ tất cả cho cả việc không bắt buộc. Phần gợi ý lỗi thì cả nhóm lỗi, và trang trắng. Hãy dùng cách chờ tất cả đã ngã ngũ, kết quả cho biết cái thứ nhất xong, cái thứ hai lỗi, cái thứ ba xong. Vậy ta hiện hai phần đúng, và thay phần lỗi bằng một thông báo."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Gọi đồng thời không giới hạn <b class="red">(tự tấn công máy chủ)</b>
+          <br><span class="note">Tải 10 000 ảnh bằng 10 000 yêu cầu cùng lúc: máy chủ đích từ chối, trình duyệt cạn kết nối. Dùng bể giới hạn, ví dụ 6 yêu cầu cùng lúc.</span></div>
+        say: "Lỗi thứ hai, gọi đồng thời không giới hạn, tức tự tấn công máy chủ. Tải 10 nghìn ảnh bằng 10 nghìn yêu cầu cùng lúc thì máy chủ đích từ chối, và trình duyệt cạn kết nối. Hãy dùng một bể giới hạn, ví dụ 6 yêu cầu cùng lúc."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Quên <code>await</code> hoặc quên bắt lỗi <b class="red">(lỗi biến mất lặng lẽ)</b>
+          <br><span class="note">Gọi hàm bất đồng bộ mà không chờ, lỗi của nó không rơi vào khối bắt lỗi xung quanh. Luôn chờ, hoặc gắn xử lý lỗi cho mọi lời hứa.</span></div>
+        say: "Lỗi thứ ba, quên từ khoá chờ hoặc quên bắt lỗi, nên lỗi biến mất lặng lẽ. Gọi hàm bất đồng bộ mà không chờ thì lỗi của nó không rơi vào khối bắt lỗi xung quanh. Hãy luôn chờ, hoặc gắn xử lý lỗi cho mọi lời hứa."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4.</b> Chờ từng phần tử trong vòng lặp cho một danh sách độc lập <b class="red">(người đã đi làm hay mắc)</b>
+          <br><span class="note">Mã trông gọn, chạy đúng, qua được kiểm thử với 2 phần tử, nhưng thời gian tăng theo <b>tổng</b>. Dùng bể giới hạn để vừa nhanh vừa không quá tải.</span></div>
+          <table class="t"><tr><th>20 yêu cầu độc lập, mỗi cái 100 ms</th><th>tính</th><th>đo bằng Node</th></tr>
+          <tr><td>chờ từng cái trong vòng lặp</td><td>$20 \cdot 100 = 2000$ ms</td><td>≈ 2000 ms</td></tr>
+          <tr><td>bể giới hạn 6 cùng lúc</td><td>$\lceil 20/6 \rceil \cdot 100 = \hl{400}$ ms</td><td>≈ 400 – 450 ms</td></tr></table>
+        focus: [1, 1, 2, "2.2", "2.3", "2.3"]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, chờ từng phần tử bên trong một vòng lặp, cho một danh sách mà các phần tử không phụ thuộc nhau. Mã trông gọn, chạy đúng, qua được kiểm thử với 2 phần tử, nhưng thời gian tăng theo tổng. Bảng so hai cách với 20 yêu cầu độc lập, mỗi cái 100 mi li giây. Chờ từng cái trong vòng lặp mất 20 nhân 100, bằng 2000 mi li giây, đo thật cũng khoảng 2000. Dùng bể giới hạn 6 cùng lúc thì cần 20 chia 6, làm tròn lên, là 4 đợt, tức 400 mi li giây. Đo thật được khoảng 400 tới 450, vì mỗi hẹn giờ thường trễ thêm vài mi li giây."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "(lambda o: o is not None and 295 <= int(o[0]) < 500)(alg.node_output('const w=ms=>new Promise(r=>setTimeout(r,ms));async function pool(jobs,k){let i=0;const run=async()=>{while(i<jobs.length){const j=i++;await jobs[j]();}};await Promise.all(Array.from({length:k},run));}(async()=>{const t=Date.now();await pool(Array.from({length:5},()=>()=>w(100)),2);console.log(Date.now()-t)})()')) and math.ceil(5 / 2) * 100 == 300"
+      - "100 + 200 == 300 and max(100 + 200, 300) == 300"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>5 yêu cầu độc lập, mỗi cái 100 ms, bể giới hạn 2 cùng lúc. Tổng thời gian khoảng bao nhiêu?</td></tr>
+          <tr><td>2</td><td>Lấy đơn cần mã người dùng; gợi ý không cần gì. Viết thứ tự chờ tốt nhất cho người dùng (100 ms), đơn (200 ms), gợi ý (300 ms).</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, có 5 yêu cầu độc lập, mỗi cái 100 mi li giây, với bể giới hạn 2 cùng lúc, tổng thời gian khoảng bao nhiêu? Câu hai, lấy đơn cần mã người dùng, còn gợi ý không cần gì, hãy sắp thứ tự chờ tốt nhất cho người dùng 100, đơn 200, và gợi ý 300 mi li giây. Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>đợt</th><th>yêu cầu chạy</th><th>xong ở</th></tr>
+          <tr><td>1</td><td>số 1, số 2</td><td>100 ms</td></tr>
+          <tr><td>2</td><td>số 3, số 4</td><td>200 ms</td></tr>
+          <tr><td>3</td><td>số 5</td><td>300 ms</td></tr></table>
+          <p>① 3 đợt (2 + 2 + 1): $\lceil 5/2 \rceil \cdot 100 = \hl{300}$ ms — Node đo ≈ 300 ms.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Đáp án câu một, xếp yêu cầu vào từng đợt, mỗi đợt tối đa 2 cái. Đợt một chạy yêu cầu số 1 và số 2, xong ở mốc 100, đợt hai chạy số 3 và số 4, xong ở mốc 200. Đợt ba chỉ còn yêu cầu số 5, xong ở mốc 300. Vậy có 3 đợt là 2, 2 và 1, nên tổng khoảng 3 nhân 100, bằng 300 mi li giây, và đo thật cũng khoảng 300."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>nhánh</th><th>các bước</th><th>xong ở</th></tr>
+          <tr><td>A: phụ thuộc</td><td>người dùng 100 → rồi đơn 200</td><td>$100 + 200 = 300$ ms</td></tr>
+          <tr><td>B: độc lập</td><td>gợi ý 300, khởi động ngay</td><td>300 ms</td></tr></table>
+          <p>② Hai nhánh chạy đồng thời: $\max(300, 300) = \hl{300}$ ms thay vì 600.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Câu hai, ta chia việc thành hai nhánh theo quan hệ phụ thuộc. Nhánh A phải chờ người dùng rồi mới lấy đơn, mất 100 cộng 200, bằng 300. Nhánh B là gợi ý, không cần gì nên khởi động ngay, mất 300. Cả hai nhánh xong sau khoảng 300 mi li giây thay vì 600."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">vẽ đồ thị phụ thuộc giữa các yêu cầu</span><span class="a">→</span>
+          <span class="n">phụ thuộc: chờ tuần tự; độc lập: chạy đồng thời</span><span class="a">→</span>
+          <span class="n">lỗi từng phần: chờ tất cả đã ngã ngũ</span><span class="a">→</span>
+          <span class="n">giới hạn số yêu cầu cùng lúc</span></div>
+        say: "Tổng kết lại, hãy vẽ đồ thị phụ thuộc giữa các yêu cầu. Phần phụ thuộc thì chờ tuần tự, phần độc lập thì chạy đồng thời, lỗi từng phần thì dùng chờ tất cả đã ngã ngũ, và luôn giới hạn số yêu cầu cùng lúc."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> thời gian của cả nhóm bằng <b>đường dài nhất</b> trong đồ thị phụ thuộc — rút ngắn đường đó, đừng tối ưu chỗ khác.</div>
+        say: "Điều cần mang theo, thời gian của cả nhóm bằng đường dài nhất trong đồ thị phụ thuộc, nên hãy rút ngắn đường đó, đừng tối ưu chỗ khác."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 5): <b>giao diện theo trạng thái</b> — thành phần, dữ liệu một chiều, so khớp danh sách.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 5, ta học giao diện theo trạng thái, với thành phần, dữ liệu một chiều, và so khớp danh sách. Hẹn gặp bạn ở bài tiếp theo."

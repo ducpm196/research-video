@@ -1,0 +1,266 @@
+id: L11
+course: PAR
+series: "PAR · Tính toán song song và GPU"
+title: "Bài 11 — Huấn luyện phân tán: song song dữ liệu, chồng tính toán với truyền thông"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/par.yaml L11; audit/par/verify_par.py L11; audit/par/sources_L11.md (câu trích nguyên văn, đọc 2026-11-02); P. Goyal và cộng sự, Accurate, Large Minibatch SGD: Training ImageNet in 1 Hour, arXiv 1706.02677 (2017) [GO17] — quy tắc nhân tốc độ học, khởi động dần, gộp gradient song song với lan truyền ngược, chuẩn hoá mất mát theo lô toàn cục; CS115 bài 9 (SGD); PAR bài 1 (Gustafson), bài 10 (gộp toàn phần theo vòng)"
+assumes: [arith, frac, approx, power]
+# Quy ước: n = số thẻ; lô mỗi thẻ b (giữ cố định, như mở rộng yếu của bài 1), lô toàn cục n · b. Mỗi bước: C = thời gian tính (lan truyền
+#   xuôi + ngược) trên một thẻ, G = thời gian gộp gradient bằng vòng (bài 10), O = phần G chạy chồng lên lúc đang tính.
+#   Hiệu suất mở rộng E = C / (C + G − O); tốc độ tăng so với một thẻ = n · E (đếm theo số ví dụ mỗi giây).
+#   η (đọc “ê-ta”) = tốc độ học; quy tắc nhân của [GO17]: lô nhân k thì η nhân k. Mốc của [GO17]: 8 thẻ × 32 = lô 256, η = 0,1.
+#   Thời gian 100 ms, 30 ms, 20 ms, mô hình 150 triệu tham số, đường 35 GB/s là SỐ MINH HOẠ. GB = 10⁹ byte, số thực 32 bit = 4 byte.
+objectives:
+  - "Tính hiệu suất mở rộng C chia (C + G − O) khi truyền thông chồng hay không chồng với tính toán"
+  - "Tính thời gian gộp gradient của một bước từ số tham số, số thẻ và băng thông"
+  - "Giải thích vì sao lô toàn cục lớn cần nhân tốc độ học và khởi động dần"
+  - "Quyết định thêm thẻ, tăng lô hay nâng mạng từ số đo một bước"
+asr_reviewed:
+  - {sentence: "Hàng dưới gửi gradient tầng cuối ngay khi có, nên 20 mi li giây gộp chạy chồng lên lúc tính, chỉ còn 10 mi li giây lộ ra.", reason: "ASR chép “Hàng dưới gửi gradient tần cuối ngay khi có, nền 20 mili dây gột chạy trồng lên lúc tính, chỉ còn 10 mili dây lộ ra.” (0.7): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh; lệch âm/thanh thuần Việt: tầng/tần, nên/nền, gộp (trong “mi li giây gộp” → “mili dây gột”), chồng/trồng — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Hình vẽ một bước theo đúng tỉ lệ, 100 mi li giây tính rồi tới phần gộp.", reason: "ASR chép “Hình với một bước theo đúng tỷ lệ, 100 mili giây tính rồi tới phần gục.” (0.743): “tỉ” ASR viết chính tả “tỷ” (cùng âm); tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh; lệch âm/thanh thuần Việt: vẽ/với, gộp/gục — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Đổi hết sang byte và giây, 1 phẩy 05 tỉ byte chia 35 tỉ byte mỗi giây bằng 0 phẩy 03 giây, đúng 30 mi li giây.", reason: "ASR chép “Đổi hết sang bay và dây, 1,05 tỷ bay chia 35 tỷ bay mỗi dây bằng 0,03 dây, đúng 30 mili dây.” (0.746): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); “tỉ” ASR viết chính tả “tỷ” (cùng âm); tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Chào bạn, một thẻ tính xong một bước huấn luyện trong 100 mi li giây.", reason: "ASR chép “Chào bạn, một thể tính sau một bước huấn luyện trong 100 mê ly giây.” (0.75): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh; lệch âm/thanh thuần Việt: thẻ/thể, xong/sau — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Hàng trên chờ tính xong hết rồi mới gộp 30 mi li giây.", reason: "ASR chép “Hàng trên chờ tính xong hết rồi mới gột 30 mê ly giây.” (0.786): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh; lệch âm/thanh thuần Việt: gộp/gột — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bước một, mô hình 150 triệu tham số, mỗi tham số một gradient 4 byte, nên D bằng 0 phẩy 6 GB.", reason: "ASR chép “Bước 1, mô hình 150 triệu tham số, mỗi tham số 1 gradient 4 vai, nên dê bằng 0,6 gigabyte.” (0.893): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); GB đọc “ghi-ga-byte” theo lexicon của khoá, ASR viết “GB/gigabyte” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Còn D, 150 triệu nhân 4 bằng 600 triệu byte, tức 0 phẩy 6 GB.", reason: "ASR chép “Còn dê 150 triệu nhân bốn bằng 600 triệu byte, tức 0,6 gigabyte.” (0.947): GB đọc “ghi-ga-byte” theo lexicon của khoá, ASR viết “GB/gigabyte” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Câu hai, nếu mạng chỉ 10 GB mỗi giây thì E khi chồng là bao nhiêu, có nên nâng mạng?", reason: "ASR chép “Câu 2, nếu mạng chỉ 10GB mỗi giây thì e khi chồng là bao nhiêu, có nên nâng mẳn?” (0.95): lệch âm/thanh thuần Việt: mạng/mẳn — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Quyết định là ở 10 GB mỗi giây, nâng mạng hay gom gói đáng hơn thêm thẻ, còn ở 35 GB mỗi giây thì mạng đã đủ.", reason: "ASR chép “Quyết định là ở 10GB mỗi giây, nâng mạng hay gom gói đáng hơn thêm thẻ, còn ở 35GB mỗi giây thì mạng đã đủ.” (1.0): GB đọc “ghi-ga-byte” theo lexicon của khoá, ASR viết “GB/gigabyte” — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "8 thẻ, mỗi bước 130 mi li giây thay vì 100"
+    checks:
+      - "round(alg.par_step_efficiency(100, 30) * 100, 1) == 76.9 and round(8 * alg.par_step_efficiency(100, 30), 2) == 6.15"
+    steps:
+      - show: |
+          <p>Một thẻ tính xong một bước huấn luyện trong <b>100 ms</b>. Lên 8 thẻ, mỗi thẻ vẫn tính 100 ms, nhưng sau đó phải chờ <b>30 ms</b> để cộng gradient với 7 thẻ kia (số minh hoạ).</p>
+          <p>Kết quả: 8 thẻ chỉ xử lý nhanh gấp khoảng <b>6,15</b>, không phải 8. Thêm nữa, mô hình học khác đi: <b>lô toàn cục</b> giờ lớn gấp 8.</p>
+          <div class="box key">Hôm nay ta trả lời: 30 ms kia từ đâu ra và giấu nó đi được bao nhiêu? Hiệu suất tính thế nào? Và lô lớn gấp 8 thì phải chỉnh gì?</div>
+        focus: [1, 1, 2, 2, 3]
+        say: "Chào bạn, một thẻ tính xong một bước huấn luyện trong 100 mi li giây. Lên 8 thẻ, mỗi thẻ vẫn tính 100 mi li giây, nhưng sau đó phải chờ 30 mi li giây để cộng gradient với 7 thẻ kia, đây là số minh hoạ. Kết quả là 8 thẻ chỉ xử lý nhanh gấp khoảng 6 phẩy 15, không phải 8. Thêm nữa, mô hình học khác đi, vì lô toàn cục giờ lớn gấp 8. Hôm nay ta trả lời 30 mi li giây kia từ đâu ra và giấu được bao nhiêu, hiệu suất tính thế nào, và lô lớn gấp 8 thì phải chỉnh gì."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại ba điều sẽ dùng"
+    checks:
+      - "1 - 0.1 * 2 == 0.8"
+      - "round(14.5 / 16 * 100, 1) == 90.6"
+      - "2 * alg.Fraction(7, 8) == alg.Fraction(7, 4)"
+    steps:
+      - show: |
+          <p><b>① Khoá toán cho khoa học máy tính, bài 9, giảm theo gradient ngẫu nhiên.</b> Mỗi bước lấy một <b>lô</b> ví dụ, tính gradient $g$ trên lô đó, rồi sửa trọng số ngược hướng gradient, bước dài bằng tốc độ học $\eta$:</p>
+          $$w \leftarrow w - \eta \cdot g \qquad \text{làm thử: } 1 - 0{,}1 \cdot 2 = 0{,}8$$
+        introduces: [eta, cdot, assign]
+        focus: [1, 1, 2]
+        say: "Điều thứ nhất, ở khoá toán cho khoa học máy tính, bài 9, ta học giảm theo gradient ngẫu nhiên. Mỗi bước lấy một lô ví dụ, tính gradient g trên lô đó, rồi sửa trọng số ngược hướng gradient, bước dài bằng tốc độ học, chữ Hy Lạp eta. Mũi tên trái nghĩa là gán giá trị mới, dấu chấm là phép nhân, làm thử với w bằng 1, eta bằng 0 phẩy 1 và g bằng 2, ta được 0 phẩy 8."
+      - show: |
+          <table class="t"><tr><th>đã học</th><th>nhắc lại</th></tr>
+          <tr><td>bài 1, mở rộng yếu</td><td>giữ phần việc của mỗi lõi, cho bài toán lớn theo số lõi; hiệu suất = tốc độ tăng chia số lõi, ví dụ $\frac{14{,}5}{16} \approx 90{,}6\%$</td></tr>
+          <tr><td>bài 10, gộp toàn phần theo vòng</td><td>mỗi máy gửi $2 \cdot \frac{n - 1}{n} \cdot D$; 8 máy: $1{,}75 \cdot D$</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3"]
+        say: "Hai điều nữa từ các bài trước. Ở bài 1, mở rộng yếu là giữ phần việc của mỗi lõi và cho bài toán lớn theo số lõi. Hiệu suất bằng tốc độ tăng chia số lõi, ví dụ 14 phẩy 5 chia 16 khoảng 90 phẩy 6 phần trăm. Ở bài 10, khi gộp toàn phần theo vòng, mỗi máy gửi 2 nhân n trừ 1 chia n nhân D, với 8 máy là 1 phẩy 75 lần D."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: C, G, O và hiệu suất E"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ký hiệu</th><th>nghĩa</th><th>ví dụ (minh hoạ)</th></tr>
+          <tr><td>$C$</td><td>thời gian <b>tính</b> một bước trên một thẻ (xuôi + ngược)</td><td>100 ms</td></tr>
+          <tr><td>$G$</td><td>thời gian <b>gộp</b> gradient của bước đó</td><td>30 ms</td></tr>
+          <tr><td>$O$</td><td>phần của $G$ chạy <b>chồng</b> lên lúc đang tính</td><td>0 hoặc 20 ms</td></tr>
+          <tr><td>$E$</td><td><b>hiệu suất mở rộng</b>: tốc độ tăng chia số thẻ</td><td>tính ở dưới</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bài dùng bốn chữ cái. C là thời gian tính một bước trên một thẻ, gồm lan truyền xuôi và ngược, ví dụ 100 mi li giây. G là thời gian gộp gradient của bước đó, ví dụ 30 mi li giây. O là phần của G chạy chồng lên lúc đang tính, ví dụ 0 hoặc 20 mi li giây. E là hiệu suất mở rộng, bằng tốc độ tăng chia số thẻ."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Gửi gradient của tầng cuối ngay khi có, đừng chờ hết bước"
+    steps:
+      - show: |
+          <div><svg width="1600" height="330" viewBox="0 0 1600 330">
+          <g font-size="22" fill="#1f2937"><text x="20" y="70">không chồng</text><text x="20" y="200">chồng 20 ms</text></g>
+          <rect x="200" y="40" width="300" height="50" fill="#93c5fd" stroke="#1f2937" stroke-width="2"/><rect x="500" y="40" width="600" height="50" fill="#bfdbfe" stroke="#1f2937" stroke-width="2"/><rect x="1100" y="40" width="270" height="50" fill="#fca5a5" stroke="#1f2937" stroke-width="2"/>
+          <rect x="200" y="170" width="300" height="50" fill="#93c5fd" stroke="#1f2937" stroke-width="2"/><rect x="500" y="170" width="600" height="50" fill="#bfdbfe" stroke="#1f2937" stroke-width="2"/><rect x="1100" y="170" width="90" height="50" fill="#fca5a5" stroke="#1f2937" stroke-width="2"/>
+          <rect x="920" y="228" width="180" height="34" fill="#fde68a" stroke="#b45309" stroke-width="2"/>
+          <g font-size="21" text-anchor="middle" fill="#1f2937"><text x="350" y="72">xuôi</text><text x="800" y="72">ngược: tầng cuối → tầng đầu</text><text x="1235" y="72">gộp 30 ms</text>
+          <text x="350" y="202">xuôi</text><text x="800" y="202">ngược</text><text x="1145" y="202">10</text></g>
+          <text x="1010" y="292" font-size="20" fill="#b45309" text-anchor="middle">gộp sớm 20 ms</text>
+          <text x="1215" y="202" font-size="20" fill="#1f2937">tính 100 ms, chờ 10</text>
+          <text x="800" y="320" font-size="21" fill="#6b7280" text-anchor="middle">gradient của tầng cuối có trước — gửi ngay trong lúc còn tính các tầng đầu</text>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ một bước theo đúng tỉ lệ, 100 mi li giây tính rồi tới phần gộp. Lan truyền ngược đi từ tầng cuối lên tầng đầu, nên gradient của các tầng cuối có trước. Hàng trên chờ tính xong hết rồi mới gộp 30 mi li giây. Hàng dưới gửi gradient tầng cuối ngay khi có, nên 20 mi li giây gộp chạy chồng lên lúc tính, chỉ còn 10 mi li giây lộ ra."
+      - show: |
+          <p>Nhóm tác giả năm 2017 làm đúng như vậy: “ngay khi gradient của một tầng được tính, nó được gộp giữa các máy, trong lúc gradient của tầng kế tiếp vẫn đang được tính” — làm được vì gradient của các tầng <b>không phụ thuộc nhau</b>.</p>
+        say: "Nhóm tác giả năm 2017 đạt một giờ trên 256 thẻ đã làm đúng như vậy. Họ viết rằng ngay khi gradient của một tầng được tính, nó được gộp giữa các máy, trong lúc gradient của tầng kế tiếp vẫn đang được tính. Làm được vì gradient của các tầng không phụ thuộc nhau."
+
+  # ───────────────────────── 5. SUY RA ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra hiệu suất mở rộng E"
+    checks:
+      - "100 + 30 - 0 == 130 and 100 + 30 - 20 == 110"
+      - "round(alg.par_step_efficiency(100, 30, 20) * 100, 1) == 90.9 and round(8 * 100 / 110, 2) == 7.27"
+    steps:
+      - show: |
+          <p><b>Bước 1 — một bước trên $n$ thẻ.</b> Mỗi thẻ tính lô của nó trong $C$, rồi chờ phần gộp chưa được giấu, nên:</p>
+          $$\text{thời gian một bước} = C + G - O$$
+          <p class="note">Làm thử: không chồng, $100 + 30 - 0 = 130$ ms; chồng 20 ms, $100 + 30 - 20 = 110$ ms.</p>
+        focus: [1, 2, 3]
+        say: "Bước một, xét một bước trên n thẻ. Mỗi thẻ tính lô của nó trong C, rồi chờ phần gộp chưa được giấu, nên thời gian một bước bằng C cộng G trừ O. Làm thử, không chồng thì 100 cộng 30 bằng 130 mi li giây, chồng 20 thì còn 110 mi li giây."
+      - show: |
+          <p><b>Bước 2 — so với lý tưởng.</b> Lý tưởng là $n$ thẻ xử lý $n$ lô trong đúng $C$. Thật ra mất $C + G - O$, nên chỉ đạt một phần:</p>
+          $$E = \frac{C}{C + G - O}, \qquad \text{tốc độ tăng} = n \cdot E$$
+          <p class="note">Làm thử: $E = \frac{100}{110} \approx 90{,}9\%$; 8 thẻ nhanh gấp $8 \cdot 0{,}909 \approx 7{,}27$.</p>
+        focus: [1, 1, 2, 3]
+        say: "Bước hai, so với lý tưởng. Lý tưởng là n thẻ xử lý n lô trong đúng C. Thật ra mất C cộng G trừ O, nên hiệu suất E bằng C chia cho C cộng G trừ O, và tốc độ tăng bằng n nhân E. Làm thử với chồng 20, E bằng 100 chia 110, khoảng 90 phẩy 9 phần trăm, nên 8 thẻ nhanh gấp khoảng 7 phẩy 27."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — vì sao lô lớn cần tốc độ học lớn.</b> $k$ bước nhỏ, mỗi bước tốc độ học $\eta$, gần bằng <b>một</b> bước lớn trên lô gấp $k$ với tốc độ học $k \cdot \eta$ — khi các gradient gần giống nhau:</p>
+          <table class="t"><tr><th>làm thử: $w = 1$, mỗi gradient $g = 2$, $k = 4$</th><th>kết quả</th></tr>
+          <tr><td>4 bước nhỏ, $\eta = 0{,}1$: $1 - 4 \cdot 0{,}1 \cdot 2$</td><td>0,2</td></tr>
+          <tr><td>1 bước lớn, $\eta = 0{,}4$: $1 - 0{,}4 \cdot 2$</td><td>0,2 ✓</td></tr></table>
+          <div class="box key"><b>Quy tắc nhân</b> (Goyal và cộng sự, 2017): lô nhân $k$ thì tốc độ học nhân $k$.</div>
+        focus: [1, 1, "2.2", "2.3", 3]
+        say: "Bước ba giải thích vì sao lô lớn cần tốc độ học lớn. Khi các gradient gần giống nhau, k bước nhỏ với tốc độ học eta gần bằng một bước lớn trên lô gấp k với tốc độ học k nhân eta. Làm thử với w bằng 1, mỗi gradient bằng 2, k bằng 4, bốn bước nhỏ với eta 0 phẩy 1 đưa w về 0 phẩy 2. Một bước lớn với eta 0 phẩy 4 cũng cho 0 phẩy 2, khớp. Đó là quy tắc nhân mà nhóm tác giả năm 2017 dùng, lô nhân k thì tốc độ học nhân k."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Mô hình 150 triệu tham số trên 8 thẻ, từng phép tính"
+    checks:
+      - "150e6 * 4 == 0.6e9 and round(2 * 7 / 8 * 0.6, 2) == 1.05"
+      - "round(2 * 7 / 8 * 0.6 / 35 * 1e3, 6) == 30.0"
+      - "round(alg.par_step_efficiency(100, 30) * 100, 1) == 76.9 and round(8 * alg.par_step_efficiency(100, 30), 2) == 6.15"
+      - "round(alg.par_step_efficiency(100, 30, 20) * 100, 1) == 90.9 and round(8 * alg.par_step_efficiency(100, 30, 20), 2) == 7.27"
+      - "8 * 32 == 256 and 32 * 32 == 1024 and round(0.1 * 1024 / 256, 6) == 0.4"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. dung lượng gradient</td><td>150 triệu tham số nhân 4 byte</td><td>$D = 0{,}6$ GB</td></tr>
+          <tr><td>Bước 2. mỗi thẻ gửi (bài 10)</td><td>$2 \cdot \frac{7}{8} \cdot 0{,}6$</td><td>1,05 GB</td></tr>
+          <tr><td>Bước 3. thời gian gộp, đường 35 GB/s</td><td>$\frac{1{,}05}{35}$ giây</td><td>$G = \hlb{30}$ ms</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Vậy con số 30 mi li giây ở trên được tính ra từ đâu? Bước một, mô hình 150 triệu tham số, mỗi tham số một gradient 4 byte, nên D bằng 0 phẩy 6 GB. Bước hai, theo bài 10, mỗi thẻ gửi 2 nhân 7 phần 8 nhân 0 phẩy 6, bằng 1 phẩy 05 GB. Bước ba, với đường 35 GB mỗi giây, mất 1 phẩy 05 chia 35, đúng 30 mi li giây."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>cách</th><th>$E$</th><th>8 thẻ nhanh gấp</th></tr>
+          <tr><td>Bước 4</td><td>không chồng: $\frac{100}{100 + 30}$</td><td>$\hl{76{,}9\%}$</td><td>6,15</td></tr>
+          <tr><td>Bước 5</td><td>chồng 20 ms: $\frac{100}{100 + 30 - 20}$</td><td>$\hlg{90{,}9\%}$</td><td>7,27</td></tr>
+          <tr><td>Bước 6</td><td>lô 32 mỗi thẻ: 8 thẻ → lô 256 với $\eta = 0{,}1$; lên 32 thẻ → lô 1024</td><td colspan="2">$\eta = 0{,}1 \cdot \frac{1024}{256} = \hlo{0{,}4}$</td></tr></table>
+        focus: ["1.2", "1.3", "1.4", "1.4"]
+        say: "Bước bốn, không chồng thì E bằng 100 chia 130, khoảng 76 phẩy 9 phần trăm, và 8 thẻ nhanh gấp 6 phẩy 15. Bước năm, chồng được 20 mi li giây thì E bằng 100 chia 110, khoảng 90 phẩy 9 phần trăm, và 8 thẻ nhanh gấp 7 phẩy 27. Bước sáu, nhóm tác giả năm 2017 dùng lô 32 mỗi thẻ, 8 thẻ thành lô 256 với tốc độ học 0 phẩy 1. Theo quy tắc nhân, lên 32 thẻ thì lô 1024 cần tốc độ học 0 phẩy 1 nhân 4, bằng 0 phẩy 4."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: đếm ví dụ mỗi giây, và đổi đơn vị"
+    checks:
+      - "round(32 / 0.1) == 320 and round(8 * 32 / 0.13) == 1969 and round(1969 / 320, 2) == 6.15"
+      - "round(8 * 32 / 0.11) == 2327 and round(2327 / 320, 2) == 7.27"
+      - "round(1.05e9 / 35e9 * 1e3, 6) == 30.0 and 150 * 4 == 600"
+    steps:
+      - show: |
+          <table class="t"><tr><th>đường khác: đếm ví dụ mỗi giây</th><th>phép tính</th><th>ví dụ mỗi giây</th><th>so với 1 thẻ</th></tr>
+          <tr><td>1 thẻ, lô 32, 100 ms</td><td>32 chia 0,1</td><td>320</td><td>1</td></tr>
+          <tr><td>8 thẻ, không chồng, 130 ms</td><td>256 chia 0,13</td><td>≈ 1969</td><td>≈ 6,15 ✓</td></tr>
+          <tr><td>8 thẻ, chồng 20 ms, 110 ms</td><td>256 chia 0,11</td><td>≈ 2327</td><td>≈ 7,27 ✓</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Kiểm tra thứ nhất đi đường khác, đếm số ví dụ mỗi giây, vì tốc độ tăng chính là tỉ số giữa hai số đó. Một thẻ xử lý lô 32 trong 0 phẩy 1 giây, tức 320 ví dụ mỗi giây. Tám thẻ không chồng xử lý 256 ví dụ trong 0 phẩy 13 giây, khoảng 1969 ví dụ mỗi giây, gấp khoảng 6 phẩy 15, khớp. Chồng 20 mi li giây thì khoảng 2327 ví dụ mỗi giây, gấp khoảng 7 phẩy 27, khớp."
+      - show: |
+          <p><b>Kiểm đơn vị của G:</b> đổi hết sang byte và giây, $\frac{1{,}05 \cdot 10^9 \text{ byte}}{35 \cdot 10^9 \text{ byte mỗi giây}} = 0{,}03$ giây = 30 ms ✓. Kiểm D: 150 triệu nhân 4 = 600 triệu byte = 0,6 GB ✓.</p>
+        say: "Kiểm tra thứ hai là kiểm đơn vị, vì nhầm đơn vị là lỗi hay gặp nhất. Đổi hết sang byte và giây, 1 phẩy 05 tỉ byte chia 35 tỉ byte mỗi giây bằng 0 phẩy 03 giây, đúng 30 mi li giây. Còn D, 150 triệu nhân 4 bằng 600 triệu byte, tức 0 phẩy 6 GB."
+
+  # ───────────────────────── 8. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi của người đã đi làm"
+    checks:
+      - "8 * 32 == 256 and 8 * 32 // 32 == 8"
+      - "round(24.84 - 23.60, 2) == 1.24 and round(23.74 - 23.60, 2) == 0.14"
+      - "round(100 / (100 + 30) * 8 / 1.1, 2) == 5.59"
+      - "alg.Fraction(256, 32) / alg.Fraction(256, 256) == 8 and 256 // 32 == 8"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> “8 thẻ chỉ là chạy nhanh hơn, mô hình y hệt” <b class="red">(lô toàn cục gấp 8)</b>
+          <br><span class="note">Lô mỗi thẻ 32 giữ nguyên thì lô toàn cục 256. Mỗi bước giờ là một bước của lô 256: kết quả hội tụ có thể đổi nếu không chỉnh tốc độ học.</span></div>
+          <div class="box warn"><b>Lỗi 2.</b> Nhân tốc độ học ngay từ bước đầu <b class="red">(lô 8192 mất chính xác)</b>
+          <br><span class="note">Bài báo năm 2017, lô 8192, tốc độ học 3,2: không khởi động dần, sai số kiểm định 24,84% so với 23,60% của lô 256; tăng dần trong 5 lượt dữ liệu đầu: 23,74%, chỉ lệch 0,14.</span></div>
+        focus: [1, 1, 2, 2, 2, 2]
+        say: "Lỗi thứ nhất là nghĩ 8 thẻ chỉ là chạy nhanh hơn, còn mô hình y hệt. Giữ lô 32 mỗi thẻ thì lô toàn cục là 256, nên kết quả hội tụ có thể đổi nếu không chỉnh tốc độ học. Lỗi thứ hai là nhân tốc độ học ngay từ bước đầu. Bài báo năm 2017 thử lô 8192 với tốc độ học 3 phẩy 2. Họ ghi rằng nếu không khởi động dần thì sai số kiểm định là 24 phẩy 84 phần trăm, so với 23 phẩy 60 của lô 256. Tăng dần tốc độ học trong 5 lượt dữ liệu đầu thì còn 23 phẩy 74, chỉ lệch 0 phẩy 14."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Báo cáo “nhanh gấp 6,15” theo số ví dụ mỗi giây <b class="red">(quên số bước để đạt độ chính xác)</b></div>
+          <table class="t"><tr><th>8 thẻ, không chồng</th><th>tốc độ xử lý</th><th>số lượt dữ liệu cần (minh hoạ)</th><th>nhanh gấp thật</th></tr>
+          <tr><td>nếu lô lớn học ngang lô nhỏ</td><td>6,15 lần</td><td>như cũ</td><td>6,15</td></tr>
+          <tr><td>nếu lô lớn cần thêm 10% lượt</td><td>6,15 lần</td><td>gấp 1,1</td><td>$\frac{6{,}15}{1{,}1} \approx \hl{5{,}59}$</td></tr></table>
+          <p class="note">Đo <b>thời gian tới cùng độ chính xác</b>, không chỉ số ví dụ mỗi giây.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Lỗi thứ ba hay gặp ở người đã đi làm, là báo cáo nhanh gấp 6 phẩy 15 chỉ theo số ví dụ mỗi giây, mà quên số bước để đạt độ chính xác. Nếu lô lớn học ngang lô nhỏ thì đúng là 6 phẩy 15. Nhưng nếu lô lớn cần thêm 10 phần trăm lượt dữ liệu, một số minh hoạ, thì thật ra chỉ nhanh gấp khoảng 5 phẩy 59. Hãy đo thời gian tới cùng độ chính xác."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Mỗi thẻ chia mất mát cho lô của mình, rồi gộp bằng <b>tổng</b> <b class="red">(gradient lớn gấp 8)</b>
+          <br><span class="note">Bài báo năm 2017 nhắc: chuẩn hoá mất mát của mỗi thẻ theo <b>lô toàn cục</b>, không theo lô mỗi thẻ. 8 thẻ, mỗi thẻ chia cho 32 rồi cộng: được tổng 256 ví dụ chia 32, gấp $\frac{256}{32} = 8$ lần trung bình đúng (chia 256) — như lỡ nhân tốc độ học thêm 8.</span></div>
+        say: "Lỗi thứ tư là mỗi thẻ chia mất mát cho lô của mình, rồi gộp bằng tổng. Khi đó gradient lớn gấp 8 lần trung bình đúng, như thể lỡ nhân tốc độ học thêm 8. Bài báo năm 2017 nhắc rõ, hãy chuẩn hoá mất mát của mỗi thẻ theo lô toàn cục, không theo lô mỗi thẻ."
+
+  # ───────────────────────── 9. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: 16 thẻ, nâng mạng hay không?"
+    checks:
+      - "round(2 * 15 / 16 * 0.6 / 35 * 1e3, 1) == 32.1 and round(120 / (120 + 2 * 15 / 16 * 0.6 / 35 * 1e3) * 100, 1) == 78.9"
+      - "alg.par_step_efficiency(120, 2 * 15 / 16 * 0.6 / 35 * 1e3, 40) == 1"
+      - "round(2 * 15 / 16 * 0.6 / 10 * 1e3, 1) == 112.5 and round(alg.par_step_efficiency(120, 112.5, 40) * 100, 1) == 62.3"
+      - "16 * 32 == 512 and round(0.1 * 512 / 256, 6) == 0.2"
+    steps:
+      - show: |
+          <p>Cùng mô hình 0,6 GB gradient, nay 16 thẻ, mỗi bước tính $C = 120$ ms, lan truyền ngược cho phép chồng tối đa $O = 40$ ms, lô 32 mỗi thẻ (số minh hoạ).</p>
+          <table class="t"><tr><th>câu</th><th>hỏi</th></tr>
+          <tr><td>1</td><td>Đường 35 GB/s: $G$ bằng bao nhiêu? $E$ khi không chồng và khi chồng?</td></tr>
+          <tr><td>2</td><td>Mạng chỉ 10 GB/s: $E$ khi chồng? Có nên nâng mạng?</td></tr>
+          <tr><td>3</td><td>Tốc độ học cho lô toàn cục, theo mốc lô 256 với $\eta = 0{,}1$?</td></tr></table>
+        focus: [0, 1, 1, "2.2", "2.3", "2.4", 0]
+        say: "Bây giờ đến lượt bạn. Vẫn mô hình 0 phẩy 6 GB gradient, nay chạy trên 16 thẻ, mỗi bước tính 120 mi li giây. Lan truyền ngược cho phép chồng tối đa 40 mi li giây, lô 32 mỗi thẻ, đều là số minh hoạ. Câu một, với đường 35 GB mỗi giây, G bằng bao nhiêu, và E khi không chồng và khi chồng? Câu hai, nếu mạng chỉ 10 GB mỗi giây thì E khi chồng là bao nhiêu, có nên nâng mạng? Câu ba, tốc độ học cho lô toàn cục là bao nhiêu, theo mốc lô 256 với eta bằng 0 phẩy 1? Dừng video và làm ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 1: 35 GB/s</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>$G$</td><td>$2 \cdot \frac{15}{16} \cdot 0{,}6 = 1{,}125$ GB, chia 35</td><td>≈ 32,1 ms</td></tr>
+          <tr><td>không chồng</td><td>$\frac{120}{120 + 32{,}1}$</td><td>≈ 78,9%</td></tr>
+          <tr><td>chồng 40 ms</td><td>40 ≥ 32,1: giấu hết</td><td>$\hlg{100\%}$</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Đáp án câu một. Mỗi thẻ gửi 2 nhân 15 phần 16 nhân 0 phẩy 6, bằng 1 phẩy 125 GB, chia 35 được khoảng 32 phẩy 1 mi li giây. Không chồng thì E bằng 120 chia 152 phẩy 1, khoảng 78 phẩy 9 phần trăm. Chồng được 40 mi li giây, lớn hơn 32 phẩy 1, nên giấu hết phần gộp, và E đạt 100 phần trăm."
+      - show: |
+          <table class="t"><tr><th>câu 2–3</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>10 GB/s: $G$</td><td>1,125 chia 10</td><td>112,5 ms</td></tr>
+          <tr><td>10 GB/s: $E$ khi chồng</td><td>$\frac{120}{120 + 112{,}5 - 40}$</td><td>$\hl{62{,}3\%}$</td></tr>
+          <tr><td>tốc độ học</td><td>lô $16 \cdot 32 = 512$: $0{,}1 \cdot \frac{512}{256}$</td><td>$\hlo{0{,}2}$, tăng dần ở đầu</td></tr></table>
+          <p class="note">Quyết định: ở 10 GB/s, nâng mạng (hay gom gói, nén gradient) đáng hơn thêm thẻ. Ở 35 GB/s, mạng đã đủ — thêm thẻ mới có lợi. Điều kiện đổi: $G$ lớn hơn phần chồng được.</p>
+        focus: ["1.2", "1.4", 2, 2]
+        say: "Câu hai, với mạng 10 GB mỗi giây, G là 112 phẩy 5 mi li giây, chồng 40 vẫn còn 72 phẩy 5 lộ ra, nên E chỉ khoảng 62 phẩy 3 phần trăm. Câu ba, lô toàn cục là 16 nhân 32 bằng 512, gấp đôi mốc 256, nên tốc độ học là 0 phẩy 2, và tăng dần ở các bước đầu. Quyết định là ở 10 GB mỗi giây, nâng mạng hay gom gói đáng hơn thêm thẻ, còn ở 35 GB mỗi giây thì mạng đã đủ. Điều kiện đổi lựa chọn là G có lớn hơn phần chồng được hay không."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">G từ bài 10: $2 \cdot \frac{n - 1}{n} \cdot D$ chia băng thông</span><span class="a">→</span>
+          <span class="n">một bước: C + G − O</span><span class="a">→</span>
+          <span class="n">$E = \frac{C}{C + G - O}$</span><span class="a">→</span>
+          <span class="n">lô toàn cục $n \cdot b$: nhân tốc độ học, khởi động dần</span></div>
+        say: "Tổng kết lại, thời gian gộp G tính từ bài 10 rồi chia cho băng thông. Một bước trên nhiều thẻ mất C cộng G trừ O, nên hiệu suất là C chia cho tổng đó. Và vì lô toàn cục lớn theo số thẻ, ta nhân tốc độ học và khởi động dần."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> trước khi thêm thẻ, đo ba con số của một bước: $C$, $G$, và phần chồng được $O$. Rồi đo <b>thời gian tới cùng độ chính xác</b>, không chỉ tốc độ xử lý.</div>
+        say: "Điều cần mang theo, trước khi thêm thẻ, hãy đo ba con số của một bước, thời gian tính, thời gian gộp, và phần chồng được. Rồi đo thời gian tới cùng độ chính xác, không chỉ tốc độ xử lý."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 12): tình huống chuyên gia — 8 thẻ mà chỉ nhanh gấp 3; lập ngân sách thời gian một bước để tìm phần tuần tự.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 12, ta gặp một tình huống chuyên gia, 8 thẻ mà chỉ nhanh gấp 3, và lập ngân sách thời gian một bước để tìm phần tuần tự. Hẹn gặp bạn ở bài tiếp theo."

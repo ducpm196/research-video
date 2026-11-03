@@ -1,0 +1,345 @@
+id: L11
+series: "CS115 · Toán cho Khoa học Máy tính"
+title: "Bài 11 — Tối ưu lồi & phương pháp Newton, ba cách thay thế khi Hessian quá đắt"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "DC23 Chương 3 (giới thiệu tối ưu lồi; phương pháp Newton); NN#Advanced-algorithms (Newton H⁻¹g, quasi-Newton, conjugate gradient, Levenberg-Marquardt H ≈ JᵀJ); tex#L138 (A5); CITED: Hestenes & Stiefel, J. Res. NBS 49 (1952) 409–436 (gradient liên hợp); Broyden, Fletcher, Goldfarb, Shanno (1970) (BFGS); Levenberg, Q. Appl. Math. 2 (1944) 164–168; Marquardt, J. SIAM 11 (1963) 431–441"
+assumes: [vec, sub, cdot, implies, nabla, partial, prime, sqrt, zero_vec, dots, transpose, eta, mat, identity, inverse, hessian, jacobian, star]
+# Quy ước ký hiệu (giữ đúng bài 7–10): bước lặp w_k; Hessian H_f in đậm (bài 7); hướng Newton d_k in đậm (vector);
+#   hệ số giảm chấn của LM viết c (KHÔNG dùng μ — đã là “trung bình” ở bài 15 — cũng không dùng λ — đã là trị riêng ở bài 5);
+#   phần dư r in đậm; t (0 ≤ t ≤ 1) là tỉ lệ trộn hai điểm trong định nghĩa hàm lồi; nhân hai số: ·.
+# Lời đọc: “Newton” → lexicon “Niu-tơn” (B34 PARTIAL); tên Levenberg-Marquardt, BFGS, Gauss-Newton KHÔNG đọc (probe thất bại /
+#   chưa probe) — chỉ hiện trên màn hình; lời đọc dùng tên mô tả “bình phương tối thiểu có giảm chấn” (damped least squares, CITED).
+# Nối bài trước (nói lại khi dùng, luật 17): bài 3 (giải hệ bằng phép khử), bài 5 (trị riêng), bài 7 (Hessian, xấp xỉ bậc 2),
+#   bài 8 (trị riêng dương → đáy; hàm x² + y² − xy + x − y đáy (−1/3, 1/3)), bài 9 (Gradient Descent), bài 10 (thung lũng x² + 25y²).
+# Sửa nguồn: A5 (tex dòng 138: Cross-Entropy “đảm bảo địa hình lồi” chỉ đúng với mô hình tuyến tính theo w); A4 (đáy của ví dụ bài 8 là toàn cục).
+objectives:
+  - "Kiểm một hàm có lồi không bằng dây cung và bằng đạo hàm cấp 2 (hay trị riêng Hessian)"
+  - "Giải thích vì sao với hàm lồi, đáy địa phương cũng là đáy toàn cục"
+  - "Suy ra bước Newton từ phép xấp xỉ bậc 2 và tính tay 1–2 bước"
+  - "Giải bước Newton nhiều chiều bằng hệ phương trình, không tính nghịch đảo"
+  - "Nêu ba rủi ro của Newton và ý tưởng của quasi-Newton, gradient liên hợp, Levenberg-Marquardt"
+asr_reviewed:   # ASR-checked, CHƯA nghe bằng tai — cần người nghe (REVIEW_L11.md §3)
+  - {sentence: "Theo công thức Newton, w một bằng 2 trừ 12 phần 14, bằng tám phần bảy.", reason: "ASR chép “Theo công thức Newton, V kết 1 bằng 2 triệu 12 phần 14 bằng 8 phần 7.” (0.9): chữ w đọc “vê kép” (luật chung), ASR viết tách chữ; lệch âm/thanh thuần Việt: trừ/triệu — NOT_VERIFIED bằng tai người"}
+  - sentence: "Ôn lại bài 7, nơi ta xấp xỉ hàm số bằng một parabol."
+    reason: "cả hai mô hình chép “para bôn” (tách 2 chữ, đúng âm Việt pa-ra-bôn) và “sắp” thay “xấp” (cặp x/s giọng Bắc, khác vần â/ă) — INFERRED ASR chép theo âm"
+  - sentence: "Lý do là hàm này đúng là một parabol, nên phép xấp xỉ không sai chút nào."
+    reason: "giống câu trên: “para bôn”, “sắp xỉ” — INFERRED ASR chép theo âm"
+  - sentence: "Với w trừ 3 bình phương, giữa 0 và 6, đồ thị ở độ cao 0, còn dây cung ở độ cao 9, đồ thị thấp hơn, đúng là lồi."
+    reason: "“vê kép” → “v kết” (tên chữ w); mọi chữ khác khớp, độ khớp 0,968 — INFERRED ASR nghe nhầm tên chữ cái"
+  - sentence: "Hệ số c nhỏ thì nó gần Newton, c lớn thì nó bước nhỏ theo đúng hướng Gradient Descent."
+    reason: "“Descent” (lexicon “đi-xen”) → “đi xem”: cặp n/m cuối; cùng cách đọc đã dùng ở L09–L10 — INFERRED ASR nghe nhầm"
+  - sentence: "Lỗi thứ ba, nghĩ rằng hàm lồi thì Gradient Descent luôn tới đáy với eta nào cũng được."
+    reason: "“đi-xen” → “đi xem”, “đáy” → “đấy”, “ê-ta” → “E ta” — cặp âm dễ lẫn, không có từ sai nghĩa nào khác — INFERRED, cần người nghe"
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Một bước tới thẳng đáy?"
+    steps:
+      - show: |
+          <p class="big">Bài 10: thung lũng $x^2 + 25y^2$ — chia gradient cho <b>đúng độ cong</b> mỗi hướng thì một bước tới đáy.</p>
+        say: "Chào bạn, cuối bài 10 có một hứa hẹn. Ở thung lũng x bình phương cộng 25 y bình phương, nếu chia gradient cho đúng độ cong của từng hướng, ta tới đáy chỉ trong một bước. Hôm nay ta xem cách làm điều đó."
+      - show: |
+          <table class="t"><tr><th>câu hỏi</th><th>trả lời</th></tr>
+          <tr><td>Khi nào chắc chắn chỉ có <b>một đáy</b>?</td><td>hàm <b>lồi</b></td></tr>
+          <tr><td>Dùng độ cong để bước thông minh hơn</td><td>phương pháp <b>Newton</b></td></tr>
+          <tr><td>Khi Hessian quá đắt</td><td>ba ý tưởng thay thế</td></tr></table>
+          <p class="note">Với AI: vẫn là bước ④ <b>tự sửa</b> của bài 0.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Hôm nay có ba câu hỏi. Một, khi nào chắc chắn chỉ có một đáy, đó là khi hàm lồi. Hai, dùng độ cong để bước thông minh hơn, đó là phương pháp Newton. Ba, khi tính độ cong quá đắt thì làm gì. Tất cả vẫn là bước tự sửa của bài 0."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn bài 7, 8: độ cong và Hessian"
+    checks:
+      - "(lambda w: sp.diff((w - 3)**2, w, 2))(sp.Symbol('w')) == 2"
+      - "sorted(Matrix([[2,-1],[-1,2]]).eigenvals().keys()) == [1, 3]"
+    steps:
+      - show: |
+          <p>Bài 7: xấp xỉ bậc 2 quanh $w$: $\ f(w + h) \approx f(w) + f'(w)\, h + \frac{1}{2} f''(w)\, h^2$</p>
+          <p class="note">$f''$ (đạo hàm cấp 2) đo <b>độ cong</b>; nhiều biến thì thành ma trận Hessian $\mathbf{H}_f$.</p>
+        focus: [0, "1.2", 2]
+        say: "Ôn lại bài 7, nơi ta xấp xỉ hàm số bằng một parabol. F của w cộng h xấp xỉ f của w, cộng đạo hàm nhân h, cộng một nửa đạo hàm cấp 2 nhân h bình phương. Đạo hàm cấp 2 đo độ cong, và với nhiều biến nó thành ma trận Hessian."
+      - show: |
+          <p>Bài 8: Hessian có mọi trị riêng <b>dương</b> tại điểm dừng → đó là <b>đáy</b>. Ví dụ $\ \mathbf{H}_f = \begin{bmatrix} 2 & -1 \\ -1 & 2 \end{bmatrix}$, trị riêng $1$ và $3$.</p>
+        say: "Còn ở bài 8, ta học rằng nếu mọi trị riêng của Hessian tại điểm dừng đều dương, thì đó là một đáy. Ví dụ ma trận 2, âm 1, âm 1, 2 có trị riêng là 1 và 3, đều dương."
+
+  # ───────────────────────── 3. HÀM LỒI ─────────────────────────
+  - id: convex
+    kind: concept
+    title: "Hàm lồi: dây cung luôn nằm trên đồ thị"
+    checks:
+      - "(lambda f: f(3) == 0 and (f(0) + f(6))/2 == 9)(lambda w: (w - 3)**2)"
+      - "(lambda f: f(0) == 0 and (f(-1) + f(1))/2 == -1)(lambda w: w**4 - 2*w**2)"
+    steps:
+      - show: |
+          <div class="row"><div class="col"><svg width="420" height="260" viewBox="0 0 420 260">
+            <line x1="20" y1="230" x2="400" y2="230" stroke="#9ca3af" stroke-width="2"/>
+            <path d="M 30 20 Q 210 440 390 20" fill="none" stroke="#2563eb" stroke-width="5"/>
+            <line x1="60" y1="84" x2="360" y2="84" stroke="#059669" stroke-width="4" stroke-dasharray="12 8"/>
+            <text x="150" y="50" font-size="24" fill="#059669">dây cung ở trên</text>
+          </svg><p class="note"><b>Lồi</b>: $(w - 3)^2$</p></div>
+          <div class="col"><svg width="420" height="290" viewBox="0 0 420 290">
+            <path d="M 30 30 C 80 330, 150 260, 210 120 C 270 260, 340 330, 390 30" fill="none" stroke="#d97706" stroke-width="5"/>
+            <line x1="118" y1="240" x2="302" y2="240" stroke="#e11d48" stroke-width="4" stroke-dasharray="12 8"/>
+            <text x="60" y="280" font-size="24" fill="#e11d48">dây cung ở dưới chỗ nhô giữa</text>
+          </svg><p class="note"><b>Không lồi</b>: $w^4 - 2w^2$ (hai đáy)</p></div></div>
+        say: "Hàm lồi là hàm có đồ thị cong lên ở mọi chỗ, giống như một cái bát. Nối hai điểm bất kỳ trên đồ thị bằng một đoạn thẳng, gọi là dây cung, thì dây cung luôn nằm trên hoặc chạm đồ thị. Hàm có hai đáy như hình bên phải thì không lồi, vì dây cung nối hai đáy lại nằm dưới chỗ nhô lên ở giữa."
+      - show: |
+          <p>Làm thử ở điểm giữa:</p>
+          <ul><li>$(w - 3)^2$ giữa $w = 0$ và $w = 6$: giữa đồ thị $f(3) = 0$ $\le$ giữa dây cung $\frac{9 + 9}{2} = 9$ ✓ lồi</li>
+          <li>$w^4 - 2w^2$ giữa $w = -1$ và $w = 1$: $f(0) = 0$ $>$ $\frac{-1 + (-1)}{2} = -1$ → <b class="red">không lồi</b></li></ul>
+        focus: [1, "2.1", "2.2"]
+        say: "Làm thử bằng số ở điểm giữa. Với w trừ 3 bình phương, giữa 0 và 6, đồ thị ở độ cao 0, còn dây cung ở độ cao 9, đồ thị thấp hơn, đúng là lồi. Với w mũ 4 trừ 2 w bình phương, giữa âm 1 và 1, đồ thị ở 0, cao hơn dây cung ở âm 1, nên không lồi."
+
+  # ───────────────────────── 4. KÝ HIỆU ─────────────────────────
+  - id: sym_convex
+    kind: symbol
+    title: "Giải mã: định nghĩa hàm lồi và phép thử bằng đạo hàm cấp 2"
+    checks:
+      - "(lambda w: sp.expand(sp.diff(w**4 - 2*w**2, w, 2) - (12*w**2 - 4)))(sp.Symbol('w')) == 0"
+      - "12*0**2 - 4 == -4"
+      - "all(e > 0 for e in Matrix([[2,-1],[-1,2]]).eigenvals())"
+    steps:
+      - show: |
+          <div class="box key">Với mọi $a, b$ và mọi $t$ với $0 \le t \le 1$:
+          $$f\big(t\,a + (1 - t)\,b\big) \;\le\; t\, f(a) + (1 - t)\, f(b)$$
+          <span class="note">$t\,a + (1 - t)\,b$: một điểm nằm giữa $a$ và $b$ ($t = \frac{1}{2}$ là điểm giữa). Vế phải: độ cao của dây cung tại đó.</span></div>
+        say: "Viết bằng ký hiệu, chữ t là một số từ 0 đến 1, cho biết ta đứng ở đâu giữa a và b, với t bằng một nửa là điểm giữa. Vế trái là độ cao của đồ thị tại đó, vế phải là độ cao của dây cung. Hàm lồi khi vế trái không bao giờ lớn hơn vế phải."
+      - show: |
+          <div class="box key"><b>Phép thử nhanh</b> (hàm có đạo hàm cấp 2): &nbsp; lồi $\iff f''(w) \ge 0$ với <b>mọi</b> $w$. &nbsp; Nhiều biến: mọi trị riêng của $\mathbf{H}_f$ không âm, <b>ở mọi điểm</b>.</div>
+          <p>$(w - 3)^2$: $f'' = 2 \ge 0$ ✓. &nbsp; $w^4 - 2w^2$: $f'' = 12w^2 - 4$, tại $w = 0$ bằng $\hl{-4}$ → không lồi. &nbsp; Bài 8: Hessian không đổi, trị riêng $1, 3$ → lồi.</p>
+        introduces: [iff]
+        focus: [0, "1.2", ["2.4", "2.6"], "2.7"]
+        say: "Có một phép thử nhanh hơn. Hàm lồi khi và chỉ khi, viết bằng mũi tên hai chiều, đạo hàm cấp 2 không âm ở mọi điểm, hay với nhiều biến, mọi trị riêng của Hessian không âm ở mọi điểm. Với hàm có hai đáy, đạo hàm cấp 2 tại 0 bằng âm 4, nên không lồi. Còn hàm của bài 8 có Hessian không đổi, trị riêng dương, nên lồi."
+
+  # ───────────────────────── 5. LỒI → ĐÁY TOÀN CỤC ─────────────────────────
+  - id: convex_global
+    kind: concept
+    title: "Vì sao hàm lồi chỉ có một mức đáy"
+    checks:
+      - "(lambda w: [round(float(r), 2) for r in sorted(sp.Poly(4*w**3 - 4*w + 1, w).nroots()) if abs(sp.im(r)) < 1e-12])(sp.Symbol('w')) == [-1.11, 0.27, 0.84]"
+      - "(lambda f: round(float(f(-1.1072)), 2) == -2.06 and round(float(f(0.8376)), 2) == -0.07)(lambda w: w**4 - 2*w**2 + w)"
+      - "(lambda w0: (lambda xs: abs(xs[-1] - 0.8376) < 0.001)(((w := w0),) and [(w := w - 0.05*(4*w**3 - 4*w + 1)) for _ in range(200)]))(1.0)"
+    steps:
+      - show: |
+          <div class="box key">Hàm lồi: <b>mọi đáy địa phương đều là đáy toàn cục</b> (thấp nhất trên cả miền).</div>
+          <p class="note">Lý do: giả sử có một điểm khác thấp hơn. Dây cung nối đáy tới điểm đó đi xuống, và đồ thị nằm dưới dây cung — nên ngay cạnh đáy đã có chỗ thấp hơn, trái với “đáy địa phương”.</p>
+        focus: [1, 2, 2, 2]
+        say: "Tính chất quan trọng nhất của hàm lồi là mọi đáy địa phương đều là đáy toàn cục. Lý do như sau. Nếu có một điểm khác thấp hơn, dây cung từ đáy tới điểm đó đi xuống, và đồ thị nằm dưới dây cung, nên ngay cạnh đáy đã có chỗ thấp hơn. Điều đó trái với việc nó là đáy."
+      - show: |
+          <p><b>Không lồi thì có thể mắc kẹt</b>: $\ f(w) = w^4 - 2w^2 + w$</p>
+          <table class="t"><tr><th>đáy</th><th>$w$</th><th>$f$</th></tr>
+          <tr><td>địa phương</td><td>$\approx 0{,}84$</td><td>$\approx -0{,}07$</td></tr>
+          <tr><td>toàn cục</td><td>$\approx -1{,}11$</td><td>$\approx \hlg{-2{,}06}$</td></tr></table>
+          <p class="note">Gradient Descent ($\eta = 0{,}05$, 200 bước) xuất phát từ $w = 1$ dừng ở $\hl{0{,}84}$ — không bao giờ thấy đáy sâu hơn bên trái.</p>
+        focus: [[1, 2], 3]
+        say: "Còn với hàm không lồi, như w mũ 4 trừ 2 w bình phương cộng w, có một đáy nông ở khoảng 0 phẩy 84, và một đáy sâu hơn nhiều ở khoảng âm 1 phẩy 11. Chạy Gradient Descent từ w bằng 1, máy tính dừng ở đáy nông, không bao giờ thấy đáy sâu bên trái."
+      - show: |
+          <p class="note">Bài 8: hàm $x^2 + y^2 - xy + x - y$ lồi → đáy $\left(-\frac{1}{3}, \frac{1}{3}\right)$, $f = -\frac{1}{3}$ là đáy <b>toàn cục</b>, không chỉ địa phương.</p>
+        say: "Quay lại hàm x bình phương cộng y bình phương trừ x y cộng x trừ y, mà bài 8 tìm đáy nhờ Hessian có trị riêng dương. Vì nó lồi, đáy âm một phần ba, một phần ba mà ta tìm được không chỉ là đáy địa phương, mà là đáy toàn cục."
+
+  # ───────────────────────── 6. NEWTON MỘT CHIỀU ─────────────────────────
+  - id: newton_1d
+    kind: formula
+    title: "Phương pháp Newton: nhảy tới đáy của parabol xấp xỉ"
+    checks:
+      - "(lambda w, h, a, b: sp.solve(sp.diff(a*h + b*h**2/2, h), h))(*sp.symbols('w h'), *sp.symbols('a b', positive=True)) == [-sp.Symbol('a', positive=True)/sp.Symbol('b', positive=True)]"
+      - "0 - (2*(0 - 3))/2 == 3"
+      - "1 - Rational(3, 5) == Rational(2, 5) and Rational(2,5) - (Rational(4,5) + Rational(8,125))/(2 + Rational(12,25)) == Rational(8, 155)"
+      - "(lambda xs: abs(xs[0] - 0.4) < 1e-12 and abs(xs[1] - 0.0516129) < 1e-6 and abs(xs[2] - 0.000136944) < 1e-8 and abs(xs[3] - 2.6e-12) < 1e-13)(((w := 1.0),) and [(w := w - (2*w + w**3)/(2 + 3*w**2)) for _ in range(4)])"
+      - "(lambda xs: [len(f'{v:.20f}'.split('.')[1]) - len(f'{v:.20f}'.split('.')[1].lstrip('0')) for v in xs[1:]] == [1, 3, 11])(((w := 1.0),) and [(w := w - (2*w + w**3)/(2 + 3*w**2)) for _ in range(4)])"
+      - "(lambda xs: [round(x, 3) for x in xs[:3]] == [0.25, 0.121, 0.06])(((w := 1.0),) and [(w := w - 0.25*(2*w + w**3)) for _ in range(4)])"
+    steps:
+      - show: |
+          <p><b>Bước 1.</b> Thay $f$ bằng parabol xấp xỉ của bài 7: $\ q(h) = f(w) + f'(w)\, h + \frac{1}{2} f''(w)\, h^2$</p>
+          <p><b>Bước 2.</b> Đáy của parabol: cho đạo hàm theo $h$ bằng 0: $\ f'(w) + f''(w)\, h = 0 \implies h = -\dfrac{f'(w)}{f''(w)}$</p>
+          <div class="box key"><b>Newton</b>: $\quad w_{k+1} = w_k - \dfrac{f'(w_k)}{f''(w_k)}$ &nbsp; (cần $f''(w_k) > 0$)</div>
+        focus: ["1.3", 2]
+        say: "Ý tưởng của Newton là thay hàm bằng parabol xấp xỉ của bài 7, rồi nhảy thẳng tới đáy của parabol đó. Vì ở đáy đạo hàm bằng 0, nên ta đạo hàm theo h và cho bằng 0, rồi chuyển vế được h bằng âm đạo hàm chia cho đạo hàm cấp 2."
+      - show: |
+          <p><b>Làm thử</b> $f = (w - 3)^2$ từ $w_0 = 0$: $\ w_1 = 0 - \dfrac{2\cdot(0 - 3)}{2} = \hlg{3}$ — <b>một bước</b> tới đáy (hàm đúng là parabol).</p>
+          <p class="note">So với bài 9: Gradient Descent cần nhiều bước, mỗi bước giảm một nửa khoảng cách.</p>
+        focus: [1, "1.4", 2]
+        say: "Làm thử với hàm w trừ 3 bình phương từ w bằng 0. Đạo hàm bằng âm 6, đạo hàm cấp 2 bằng 2, nên w một bằng 0 cộng 3, bằng 3, tới đáy chỉ trong một bước. Lý do là hàm này đúng là một parabol, nên phép xấp xỉ không sai chút nào."
+      - clear: true
+        show: |
+          <p>Hàm không phải parabol: $\ f = w^2 + \frac{1}{4}w^4$, $\ f' = 2w + w^3$, $\ f'' = 2 + 3w^2$, đáy tại $0$, từ $w_0 = 1$:</p>
+          <table class="t"><tr><th>bước</th><th>1</th><th>2</th><th>3</th><th>4</th></tr>
+          <tr><td>Newton</td><td>0,4</td><td>0,052</td><td>0,00014</td><td>$\hlg{0{,}0000000000026}$</td></tr>
+          <tr><td>Gradient Descent ($\eta = 0{,}25$)</td><td>0,25</td><td>0,121</td><td>0,060</td><td>0,030</td></tr></table>
+          <p class="note">Số chữ số 0 sau dấu phẩy của Newton: 1 → 3 → 11, <b>tăng vọt</b>; Gradient Descent mỗi bước chỉ giảm một nửa.</p>
+        focus: [1, "2.2", [3, "2.3"]]
+        say: "Với một hàm không phải parabol, Newton cần vài bước, vì parabol chỉ xấp xỉ hàm, nhưng rất nhanh. Từ 1, nó đi tới 0 phẩy 4, rồi 0 phẩy 052, rồi 0 phẩy 00014. Số chữ số 0 sau dấu phẩy tăng vọt, từ 1 lên 3, rồi lên 11, trong khi Gradient Descent mỗi bước chỉ giảm một nửa khoảng cách."
+
+  # ───────────────────────── 7. NEWTON NHIỀU CHIỀU ─────────────────────────
+  - id: newton_nd
+    kind: example
+    title: "Newton nhiều chiều: giải một hệ phương trình"
+    checks:
+      - "Matrix([[2,0],[0,50]]).LUsolve(-Matrix([2,50])) == Matrix([-1,-1])"
+      - "Matrix([[2,-1],[-1,2]]).LUsolve(-Matrix([1,-1])) == Matrix([Rational(-1,3), Rational(1,3)])"
+      - "(lambda x, y: (x**2 + y**2 - x*y + x - y).subs({x: Rational(-1,3), y: Rational(1,3)}))(*sp.symbols('x y')) == Rational(-1,3)"
+      - "2*Rational(-1,3) - Rational(1,3) == -1 and -Rational(-1,3) + 2*Rational(1,3) == 1"
+    steps:
+      - show: |
+          <div class="box key">Chia cho $f''$ thành <b>giải hệ</b>: $\quad \mathbf{H}_f\,\mathbf{d}_k = -\nabla f(\mathbf{w}_k), \qquad \mathbf{w}_{k+1} = \mathbf{w}_k + \mathbf{d}_k$</div>
+          <p class="note">$\mathbf{d}_k$: hướng Newton. Giải bằng phép khử của bài 3, không cần tính $\mathbf{H}_f^{-1}$.</p>
+        focus: [1, "1.3", 2]
+        say: "Với nhiều biến, phép chia cho đạo hàm cấp 2 trở thành giải một hệ phương trình. Hessian nhân với hướng Newton d bằng gradient đổi dấu. Ta giải hệ đó bằng phép khử của bài 3, khử dần từng ẩn, không cần tính ma trận nghịch đảo."
+      - show: |
+          <p><b>Thung lũng bài 10</b>, từ $(1, 1)$: $\ \mathbf{H}_f = \begin{bmatrix} 2 & 0 \\ 0 & 50 \end{bmatrix}$, $\ \nabla f = (2, 50)^T$ → $\ \mathbf{d} = (-1, -1)^T$ → tới $\hlg{(0, 0)}$ trong một bước.</p>
+        say: "Với thung lũng dẹt của bài 10, từ điểm 1, 1, Hessian có 2 và 50 trên đường chéo, gradient là 2 và 50. Giải hệ được hướng âm 1, âm 1, và ta tới thẳng đáy 0, 0 trong một bước."
+      - show: |
+          <p><b>Hàm bài 8</b>, từ $(0, 0)$: $\ \nabla f = (1, -1)^T$. Giải $\ \begin{cases} 2d_1 - d_2 = -1 \\ -d_1 + 2d_2 = 1 \end{cases}$ → $\ \mathbf{d} = \left(-\frac{1}{3}, \frac{1}{3}\right)^T$</p>
+          <p>→ tới $\hlg{\left(-\frac{1}{3}, \frac{1}{3}\right)}$, đúng đáy, <b>một bước</b> (bài 9: Gradient Descent cần nhiều bước nhảy qua lại).</p>
+        focus: ["1.3", ["1.4", "1.5"], 2]
+        say: "Với hàm của bài 8 từ gốc, gradient là 1, âm 1. Giải hệ hai phương trình bằng phép khử, ta được hướng âm một phần ba, một phần ba. Một bước là tới đúng đáy, trong khi ở bài 9, Gradient Descent cần nhiều bước nhảy qua lại."
+
+  # ───────────────────────── 8. KIỂM TRA ─────────────────────────
+  - id: verify
+    kind: check
+    title: "Phép thử: gradient tại điểm mới phải bằng 0"
+    checks:
+      - "(lambda x, y: (2*x - y + 1, 2*y - x - 1))(Rational(-1,3), Rational(1,3)) == (0, 0)"
+    steps:
+      - show: |
+          $$\nabla f\left(-\frac{1}{3}, \frac{1}{3}\right) = \left(2\cdot\left(-\frac{1}{3}\right) - \frac{1}{3} + 1,\ \ 2\cdot\frac{1}{3} + \frac{1}{3} - 1\right)^T = (0, 0)^T\ \checkmark$$
+        say: "Phép thử, thay điểm mới vào gradient. Thành phần đầu bằng âm hai phần ba trừ một phần ba cộng 1, bằng 0. Thành phần sau bằng hai phần ba cộng một phần ba trừ 1, cũng bằng 0. Vậy đúng là điểm dừng, và vì hàm lồi nên đó là đáy toàn cục."
+
+  # ───────────────────────── 9. RỦI RO ─────────────────────────
+  - id: risks
+    kind: concept
+    title: "Newton không phải lúc nào cũng an toàn"
+    checks:
+      - "Matrix([[2,0],[0,-2]]).LUsolve(-Matrix([2,-2])) == Matrix([-1,-1])"
+      - "(lambda x, y: ((x**2 - y**2).subs({x: 1, y: 1}), (x**2 - y**2).subs({x: 0, y: 0})))(*sp.symbols('x y')) == (0, 0)"
+      - "1 - (-2*1)/(-2) == 0"
+      - "(10**6)**2 == 10**12 and (10**6)**2 * 8 / 10**12 == 8"
+    steps:
+      - show: |
+          <div class="box warn"><b>Rủi ro 1</b>: Hessian <b>không</b> xác định dương → Newton có thể đi tới yên ngựa hay đỉnh.
+          <br><span class="note">$x^2 - y^2$ từ $(1, 1)$: $\ \mathbf{H}_f = \begin{bmatrix} 2 & 0 \\ 0 & -2 \end{bmatrix}$, $\ \mathbf{d} = (-1, -1)^T$ → nhảy thẳng vào <b>yên ngựa</b> $(0, 0)$. &nbsp; $-w^2$ từ $w = 1$: tới $w = 0$ là <b>đỉnh</b>.</span></div>
+        say: "Phương pháp Newton có ba điểm yếu cần biết. Thứ nhất, nếu Hessian không xác định dương, Newton có thể đi tới yên ngựa hay đỉnh. Với hàm x bình phương trừ y bình phương từ điểm 1, 1, nó nhảy thẳng vào yên ngựa ở gốc. Vì nó chỉ tìm chỗ bằng phẳng của parabol, không phân biệt đáy hay đỉnh."
+      - show: |
+          <div class="box warn"><b>Rủi ro 2</b>: Hessian <b>suy biến</b> (hạng thiếu, bài 3) → hệ không có đúng một nghiệm. Hessian của mạng nơ-ron có thể rơi vào trường hợp này.</div>
+          <div class="box warn"><b>Rủi ro 3</b>: quá đắt. $10^6$ trọng số → Hessian có $10^{12}$ ô; 8 byte mỗi ô → khoảng 8 TB bộ nhớ.</div>
+        focus: [1, 2]
+        say: "Thứ hai, nếu Hessian suy biến, tức hạng bị thiếu như bài 3, hệ không có đúng một nghiệm. Thứ ba là chi phí tính toán quá lớn, vì một triệu trọng số cho Hessian một nghìn tỉ ô, lớn hơn bộ nhớ của máy tính thông thường hàng trăm lần."
+
+  # ───────────────────────── 10. BA Ý TƯỞNG THAY THẾ ─────────────────────────
+  - id: alternatives
+    kind: concept
+    title: "Khi Hessian quá đắt: quasi-Newton, gradient liên hợp, Levenberg-Marquardt"
+    checks:
+      - "(lambda A: (lambda x1: x1 == Matrix([Rational(7500,7813), Rational(-12,7813)]))(Matrix([1,1]) + ((Matrix([-2,-50]).T*Matrix([-2,-50]))[0]/(Matrix([-2,-50]).T*A*Matrix([-2,-50]))[0])*Matrix([-2,-50])))(Matrix([[2,0],[0,50]]))"
+      - "(lambda a, c: sp.simplify(sp.hessian(sum((a*xi + c - yi)**2 for xi, yi in ((0,1),(1,3),(2,7)))/2, (a, c)) - (Matrix([[0,1],[1,1],[2,1]]).T*Matrix([[0,1],[1,1],[2,1]]))) == sp.zeros(2, 2))(*sp.symbols('a c'))"
+      - "(lambda J, r: (lambda d: abs(d[0]*10**4 - 3.5) < 0.01 and abs(d[1]*10**4 - 0.5) < 0.01)(np.linalg.solve(J.T@J + 1e4*np.eye(2), -J.T@r)))(np.array([[0.,1],[1,1],[2,1]]), np.array([1.,0.5,-2.]))"
+    steps:
+      - show: |
+          <table class="t"><tr><th>Ý tưởng</th><th>Thay Hessian bằng gì</th></tr>
+          <tr><td><b>Quasi-Newton</b> (vd. BFGS)</td><td>một <b>ước lượng</b> dựng dần từ độ thay đổi của gradient — chỉ cần gradient</td></tr>
+          <tr><td><b>Gradient liên hợp</b></td><td>đi lần lượt theo các hướng “không phá” nhau; với hàm bậc 2 có $n$ biến tới đáy sau tối đa $n$ bước</td></tr>
+          <tr><td><b>Levenberg-Marquardt</b></td><td>hàm sai số dạng tổng bình phương: $\ \mathbf{H}_f \approx \mathbf{J}^T\mathbf{J}$ (Jacobian của phần dư)</td></tr></table>
+        say: "Khi Hessian quá đắt, có ba ý tưởng thay thế. Nhóm tựa Newton dựng dần một ước lượng của Hessian từ độ thay đổi của gradient. Gradient liên hợp đi lần lượt theo các hướng không phá nhau. Và phương pháp bình phương tối thiểu có giảm chấn thay Hessian bằng J chuyển vị nhân J."
+      - show: |
+          <p><b>Gradient liên hợp</b> trên thung lũng bài 10 từ $(1, 1)$: bước 1 tới $\left(\frac{7500}{7813}, -\frac{12}{7813}\right) \approx (0{,}96;\ -0{,}0015)$, bước 2 tới đúng $\hlg{(0, 0)}$ — 2 biến, 2 bước.</p>
+        say: "Làm thử gradient liên hợp trên thung lũng dẹt. Bước một đã đưa hướng y về gần 0, còn bước hai tới đúng đáy. Hai biến, hai bước, đúng như tính chất của nó với hàm bậc hai."
+      - clear: true
+        show: |
+          <div class="box key"><b>Levenberg-Marquardt</b> (còn gọi là <b>bình phương tối thiểu có giảm chấn</b>): $\ (\mathbf{J}^T\mathbf{J} + c\,\mathbf{I})\,\mathbf{d} = -\mathbf{J}^T\mathbf{r}$, &nbsp; $c > 0$
+          <br><span class="note">$\mathbf{r}$: phần dư (dự đoán − thật). $c$ nhỏ → gần Newton cho tổng bình phương; $c$ lớn → bước nhỏ theo hướng $-\mathbf{J}^T\mathbf{r}$ (chính là hướng Gradient Descent).</span></div>
+          <p class="note">$\mathbf{H}_f = \mathbf{J}^T\mathbf{J}$ <b>đúng hẳn</b> khi phần dư tuyến tính theo tham số (kiểm bằng sympy); phi tuyến thì chỉ xấp xỉ.</p>
+        focus: ["1.3", "1.5", 2]
+        say: "Phương pháp bình phương tối thiểu có giảm chấn giải một hệ, J chuyển vị J cộng c nhân I, nhân d bằng âm J chuyển vị nhân phần dư. Hệ số c nhỏ thì nó gần Newton, c lớn thì nó bước nhỏ theo đúng hướng Gradient Descent. Phép xấp xỉ Hessian đúng hẳn khi phần dư tuyến tính theo tham số."
+
+  # ───────────────────────── 11. TRONG AI ─────────────────────────
+  - id: in_ai
+    kind: concept
+    title: "Lồi và không lồi trong học máy"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài</th><th>lồi hay không</th></tr>
+          <tr><td><b>Bài 18</b> (hồi quy tuyến tính)</td><td>sai số bình phương là hàm <b>lồi</b> theo trọng số; một bước Newton cho đúng nghiệm “phương trình chuẩn”</td></tr>
+          <tr><td><b>Bài 20</b>, <b>bài 23</b></td><td>logistic với Cross-Entropy lồi khi mô hình <b>tuyến tính</b> theo trọng số; mạng nơ-ron nhiều lớp thì <b>không lồi</b></td></tr></table>
+        forward_ref: true
+        focus: ["1.2", "1.3"]
+        say: "Ở bài 18, cách dự đoán giá nhà bằng mô hình tuyến tính có sai số bình phương là hàm lồi, và một bước Newton cho đúng nghiệm. Ở bài 20 và bài 23, ta sẽ thấy hàm sai số kiểu mới là lồi khi mô hình tuyến tính, nhưng mạng nơ-ron nhiều lớp thì không lồi."
+
+  # ───────────────────────── 12. LỖI THƯỜNG GẶP ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi người mới hay mắc"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Nghĩ Newton luôn đi xuống <b class="red">(sai)</b>
+          <br><span class="note">Nó đi tới chỗ phẳng của parabol xấp xỉ: Hessian không xác định dương thì có thể là yên ngựa hay đỉnh.</span></div>
+        say: "Lỗi thứ nhất, nghĩ rằng Newton luôn đi xuống. Nó chỉ đi tới chỗ phẳng của parabol xấp xỉ, nên khi Hessian không xác định dương, đó có thể là yên ngựa hay đỉnh."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Tính $\mathbf{H}_f^{-1}$ rồi nhân <b class="red">(không nên)</b>
+          <br><span class="note">Giải hệ bằng phép khử (bài 3): rẻ hơn, và vẫn chạy được khi cần xử lý trường hợp đặc biệt.</span>
+          $$\mathbf{H}_f\,\mathbf{d} = -\nabla f$$</div>
+        say: "Lỗi thứ hai, tính ma trận nghịch đảo của Hessian rồi nhân. Hãy giải hệ phương trình bằng phép khử của bài 3, vì cách đó rẻ hơn."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> “Hàm lồi thì Gradient Descent luôn tới đáy, $\eta$ nào cũng được” <b class="red">(sai)</b>
+          <br><span class="note">Bài 9: với $(w - 3)^2$, $\eta = 1{,}1$ vẫn phân kỳ. Lồi chỉ đảm bảo không có đáy giả, không đảm bảo bước đúng.</span></div>
+        say: "Lỗi thứ ba, nghĩ rằng hàm lồi thì Gradient Descent luôn tới đáy với eta nào cũng được. Ở bài 9, hàm w trừ 3 bình phương là lồi, nhưng eta bằng 1 phẩy 1 vẫn phân kỳ. Lồi chỉ đảm bảo không có đáy giả."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Câu hay gặp: Cross-Entropy “đảm bảo địa hình lồi” <b class="red">(thiếu điều kiện)</b>
+          <br><span class="note">Chỉ đúng khi mô hình tuyến tính theo trọng số (logistic). Mạng nhiều lớp dùng Cross-Entropy vẫn không lồi.</span></div>
+        say: "Lỗi thứ tư, tin câu hay gặp rằng một loại hàm sai số đảm bảo địa hình lồi. Điều đó chỉ đúng khi mô hình tuyến tính theo trọng số. Mạng nơ-ron nhiều lớp dùng hàm sai số đó vẫn không lồi."
+
+  # ───────────────────────── 13. TỰ KIỂM TRA ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "2 - Rational(2*2 + 2**3, 2 + 3*2**2) == Rational(8, 7) and 2*2 + 2**3 == 12 and 2 + 3*2**2 == 14"
+      - "(lambda w: sp.diff(w**4 - 2*w**2, w, 2).subs(w, 0))(sp.Symbol('w')) == -4"
+      - "(lambda w: sp.diff(w**4 - 2*w**2, w) == 4*w**3 - 4*w and sp.diff(w**2 + w**4/4, w) == 2*w + w**3 and sp.diff(w**2 + w**4/4, w, 2) == 2 + 3*w**2)(sp.Symbol('w')) and 2 - Rational(12, 14) == 2 - Rational(6, 7) == Rational(8, 7)"
+      - "(lambda g: g(0) == 0 and (g(-1) + g(1))/2 == -1 and g(0) > (g(-1) + g(1))/2)(lambda w: w**4 - 2*w**2)"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>$f = w^2 + \frac{1}{4}w^4$: làm một bước Newton từ $w_0 = 2$.</td></tr>
+          <tr><td>2</td><td>$g(w) = w^4 - 2w^2$ có lồi không? Dùng phép thử đạo hàm cấp 2.</td></tr></table>
+        say: "Bây giờ đến lượt bạn, với hai câu. Câu một, với hàm w bình phương cộng một phần tư w mũ 4, làm một bước Newton từ w bằng 2. Câu hai, hàm w mũ 4 trừ 2 w bình phương có lồi không? Hãy dừng video và làm ra giấy."
+        pause: 8
+      - show: |
+          <p>① $f' = 2w + w^3$, $\ f'' = 2 + 3w^2$. Tại $w_0 = 2$:</p>
+          $$f'(2) = 4 + 8 = 12, \qquad f''(2) = 2 + 12 = 14$$
+          <p>$w_1 = 2 - \frac{12}{14} = 2 - \frac{6}{7} = \hlg{\frac{8}{7}} \approx 1{,}14$</p>
+        focus: [1, 2, 3]
+        say: "Câu một, đạo hàm là 2 w cộng w mũ 3, đạo hàm cấp 2 là 2 cộng 3 w bình phương. Tại 2, đạo hàm bằng 4 cộng 8, bằng 12, còn đạo hàm cấp 2 bằng 2 cộng 12, bằng 14. Theo công thức Newton, w một bằng 2 trừ 12 phần 14, bằng tám phần bảy."
+      - clear: true
+        show: |
+          <p>② $g' = 4w^3 - 4w$, $\ g'' = 12w^2 - 4$:</p>
+          $$g''(0) = 12\cdot 0 - 4 = -4 < 0$$
+          <p>→ có chỗ cong xuống → <b>không lồi</b> (nó có hai đáy). Kiểm bằng dây cung: $\ g(0) = 0 > \dfrac{g(-1) + g(1)}{2} = -1\ \checkmark$</p>
+        focus: [1, 2, 3]
+        say: "Câu hai, lấy đạo hàm hai lần, được 12 w bình phương trừ 4. Tại 0, nó bằng âm 4, âm, nên hàm cong xuống ở đó và không lồi, đúng như hình nó có hai đáy. Kiểm bằng dây cung, giữa âm 1 và 1, đồ thị ở 0, cao hơn dây cung ở âm 1, khớp kết luận."
+
+  # ───────────────────────── 14. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">lồi: dây cung ở trên, $f'' \ge 0$</span><span class="a">→</span>
+          <span class="n">đáy địa phương = đáy toàn cục</span><span class="a">→</span>
+          <span class="n">Newton: nhảy tới đáy parabol, giải $\mathbf{H}_f\mathbf{d} = -\nabla f$</span><span class="a">→</span>
+          <span class="n">rủi ro: yên ngựa, suy biến, quá đắt</span><span class="a">→</span>
+          <span class="n">thay thế: tựa Newton, gradient liên hợp, giảm chấn</span></div>
+        say: "Tổng kết chuỗi logic. Hàm lồi có dây cung nằm trên đồ thị, và mọi đáy địa phương là đáy toàn cục. Newton nhảy tới đáy của parabol xấp xỉ bằng cách giải một hệ phương trình. Nó có ba rủi ro, nên khi Hessian quá đắt, ta dùng một trong ba ý tưởng thay thế."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> trước khi chọn bộ tối ưu, hãy hỏi “hàm có lồi không?”. Lồi thì không sợ đáy giả; không lồi thì kết quả phụ thuộc điểm xuất phát.</div>
+        say: "Điều cần mang theo, trước khi chọn cách tối ưu, hãy hỏi hàm có lồi không. Nếu lồi thì không sợ đáy giả. Nếu không lồi thì kết quả phụ thuộc vào điểm xuất phát."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 12): <b>hàm mũ eˣ và lôgarit</b> — hai hàm sẽ dùng khắp phần xác suất và các hàm sai số.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 12, ta học hàm mũ e mũ x và hàm ngược của nó, hai hàm sẽ xuất hiện khắp phần xác suất và các hàm sai số. Hẹn gặp bạn ở bài tiếp theo."

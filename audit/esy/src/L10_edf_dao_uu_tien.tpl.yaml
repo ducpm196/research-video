@@ -1,0 +1,258 @@
+id: L10
+course: ESY
+series: "ESY · Hệ thống nhúng và thời gian thực"
+title: "Bài 10 — Lập lịch theo hạn sớm nhất và đảo ngược ưu tiên"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/esy.yaml L10; audit/esy/verify_esy.py L10; C. L. Liu, J. W. Layland, JACM 20(1), 1973 (EDF tối ưu khi U ≤ 1); L. Sha, R. Rajkumar, J. P. Lehoczky, Priority Inheritance Protocols, IEEE Trans. Computers 39(9), 1990; G. Reeves, What really happened on Mars? (1997)"
+assumes: [arith, frac, ltgt, sub, sum]
+# Quy ước: như bài 9 (hạn = chu kỳ, thả cùng lúc ở 0, ưu tiên chiếm, một bộ xử lý). Mô phỏng alg.schedule_sim bỏ việc trễ hạn
+#   ngay tại hạn (không chạy tiếp) — nói rõ trong lời. Ví dụ đảo ngược ưu tiên tính tay theo từng đơn vị (bảng), kiểm bằng phép cộng.
+objectives:
+  - "Lập lịch theo hạn sớm nhất và điều kiện U ≤ 1"
+  - "Biết hành vi khi quá tải"
+  - "Nhận ra đảo ngược ưu tiên và cách kế thừa ưu tiên sửa nó"
+asr_reviewed:
+  - {sentence: "Kiểm bằng đường khác, vì đọc bảng quyết định có thể sót một dòng.", reason: "ASR chép “Kiểm bằng đường khác vì độc bản quyết định có thể sóc một dòng.” (0.786): lệch âm/thanh thuần Việt: đọc bảng/độc bản, sót/sóc — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Bận 100% mà vẫn kịp?"
+    steps:
+      - show: |
+          <p>Hai tác vụ (2, 4) và (3, 6): $U = \frac{2}{4} + \frac{3}{6} = 1$. Với ưu tiên cố định như bài 9, tác vụ thứ hai trễ hạn.</p>
+          <p>Năm 1997, tàu Mars Pathfinder liên tục khởi động lại trên sao Hoả — vì tác vụ ưu tiên <b>cao</b> chờ khoá do tác vụ <b>thấp</b> giữ, trong khi các tác vụ <b>trung bình</b> chiếm CPU.</p>
+          <div class="box key">Hôm nay: <b>lập lịch theo hạn sớm nhất</b>, và lỗi <b>đảo ngược ưu tiên</b>.</div>
+        focus: [1, 1, 2, 2, 3]
+        say: "Chào bạn, hai tác vụ chạy 2 mỗi 4 và chạy 3 mỗi 6 có độ sử dụng đúng bằng 1. Với ưu tiên cố định như bài trước, tác vụ thứ hai trễ hạn. Năm 1997, tàu thăm dò sao Hoả liên tục tự khởi động lại. Tác vụ ưu tiên cao chờ khoá do tác vụ thấp giữ, trong khi các tác vụ ưu tiên trung bình chiếm bộ xử lý. Hôm nay ta học lập lịch theo hạn sớm nhất, và lỗi đảo ngược ưu tiên."
+
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: hạn bằng chu kỳ, độ sử dụng, khoá loại trừ"
+    checks:
+      - "[(t, t + 4) for t in (0, 4, 8)] == [(0, 4), (4, 8), (8, 12)] and 2 / 4 + 3 / 6 == 1"
+      - "(12 // 4) * 2 == 6 and (12 // 6) * 3 == 6 and 6 + 6 == 12"
+    steps:
+      - show: |
+          <table class="t"><tr><th>tác vụ (2, 4)</th><th>thả lúc</th><th>hạn</th></tr>
+          <tr><td>việc thứ nhất</td><td>0</td><td>4</td></tr>
+          <tr><td>việc thứ hai</td><td>4</td><td>8</td></tr>
+          <tr><td>việc thứ ba</td><td>8</td><td>12</td></tr></table>
+          <p>Hạn = chu kỳ: mỗi việc phải xong trước khi việc kế tiếp của cùng tác vụ được thả.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Trước hết, nhắc lại quy ước hạn bằng chu kỳ, mỗi việc phải xong trước khi việc kế tiếp của cùng tác vụ được thả. Với tác vụ chạy 2 mỗi 4, việc thứ nhất thả lúc 0 và có hạn 4. Việc thứ hai thả lúc 4, hạn 8. Việc thứ ba thả lúc 8, hạn 12. Như vậy hạn của một việc luôn là thời điểm thả cộng thêm một chu kỳ."
+      - show: |
+          <p>Độ sử dụng $U = \sum \frac{C}{T}$ là phần thời gian bộ xử lý phải bận. Với (2, 4) và (3, 6): $U = \frac{2}{4} + \frac{3}{6} = 1$.</p>
+          <table class="t"><tr><th>trong 12 đơn vị</th><th>số việc</th><th>tổng thời gian chạy</th></tr>
+          <tr><td>tác vụ (2, 4)</td><td>3</td><td>$3 \cdot 2 = 6$</td></tr>
+          <tr><td>tác vụ (3, 6)</td><td>2</td><td>$2 \cdot 3 = 6$</td></tr></table>
+        introduces: [cdot]
+        focus: [1, 1, 2, "2.2", "2.3"]
+        say: "Tiếp theo là độ sử dụng U, tổng các tỉ số thời gian chạy chia chu kỳ, cho biết phần thời gian bộ xử lý phải bận. Với hai tác vụ chạy 2 mỗi 4 và chạy 3 mỗi 6, U bằng một nửa cộng một nửa, đúng bằng 1. Đếm thử trong 12 đơn vị thời gian để thấy rõ hơn. Tác vụ đầu có 3 việc, mỗi việc 2 đơn vị, tổng 6. Tác vụ sau có 2 việc, mỗi việc 3 đơn vị, cũng 6, cộng lại 12 trên 12, bộ xử lý bận kín không nghỉ."
+      - clear: true
+        show: |
+          <p><b>Khoá loại trừ lẫn nhau</b>: mỗi lúc chỉ một tác vụ giữ khoá; tác vụ khác xin khoá thì <b>bị chặn</b> tới khi khoá được nhả.</p>
+          <table class="t"><tr><th>thời điểm</th><th>0–3</th><th>3</th><th>3–4</th></tr>
+          <tr><td>tác vụ X</td><td>giữ khoá</td><td>nhả khoá</td><td></td></tr>
+          <tr><td>tác vụ Y (xin khoá lúc 1)</td><td>bị chặn từ 1</td><td>nhận khoá</td><td>dùng khoá</td></tr></table>
+        focus: [1, 2, "2.2", "2.3"]
+        say: "Cuối cùng là khoá loại trừ lẫn nhau, đã gặp ở khoá Hệ điều hành, mỗi lúc chỉ một tác vụ được giữ khoá. Ví dụ tác vụ X giữ khoá từ 0 tới 3. Tác vụ Y xin khoá lúc 1 nên bị chặn, phải chờ. Tới thời điểm 3, X nhả khoá, Y mới nhận được khoá và chạy tiếp."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: hạn sớm nhất"
+    steps:
+      - show: |
+          <p><b>Hạn sớm nhất</b> (EDF): ở mỗi thời điểm, chạy việc nào có <b>hạn gần nhất</b>. Ưu tiên thay đổi theo thời gian, không gắn cố định cho tác vụ.</p>
+          <div class="box key">Liu và Layland (1973): với hạn = chu kỳ, EDF kịp hạn cho mọi tác vụ <b>khi và chỉ khi</b> $U \le 1$.</div>
+        focus: [1, 1, 2]
+        say: "Lập lịch theo hạn sớm nhất nghĩa là ở mỗi thời điểm, chạy việc nào có hạn gần nhất. Ưu tiên thay đổi theo thời gian, không gắn cố định cho từng tác vụ. Kết quả kinh điển năm 1973 nói rằng, khi hạn bằng chu kỳ, cách này kịp hạn cho mọi tác vụ khi và chỉ khi U không vượt 1."
+
+  - id: intuition
+    kind: intuition
+    title: "Thời điểm 4: ai được chạy?"
+    checks:
+      - "alg.schedule_sim([(2, 4), (3, 6)], 12, 'RM')[0][4:6] == [0, 0] and alg.schedule_sim([(2, 4), (3, 6)], 12, 'EDF')[0][4:7] == [1, 0, 0]"
+    steps:
+      - show: |
+          <div><svg width="1500" height="350" viewBox="0 0 1500 350"><g fill="#1f2937"><rect x="330" y="60" width="480" height="40" fill="#fff7ed" stroke="#eb6834" stroke-width="2"/><rect x="490" y="60" width="160" height="40" fill="#fed7aa"/><rect x="650" y="60" width="80" height="40" fill="#eb6834"/><rect x="650" y="140" width="320" height="40" fill="#eff6ff" stroke="#2a78d6" stroke-width="2"/><rect x="650" y="140" width="160" height="40" fill="#2a78d6"/><line x1="650" y1="30" x2="650" y2="220" stroke="#059669" stroke-width="4"/><line x1="810" y1="50" x2="810" y2="110" stroke="#b91c1c" stroke-width="4"/><line x1="970" y1="130" x2="970" y2="190" stroke="#b91c1c" stroke-width="4"/><line x1="330" y1="220" x2="1310" y2="220" stroke="#6b7280" stroke-width="2"/><line x1="330" y1="220" x2="330" y2="228" stroke="#6b7280" stroke-width="2"/><text x="330" y="250" text-anchor="middle" font-size="19">0</text><line x1="410" y1="220" x2="410" y2="228" stroke="#6b7280" stroke-width="2"/><text x="410" y="250" text-anchor="middle" font-size="19">1</text><line x1="490" y1="220" x2="490" y2="228" stroke="#6b7280" stroke-width="2"/><text x="490" y="250" text-anchor="middle" font-size="19">2</text><line x1="570" y1="220" x2="570" y2="228" stroke="#6b7280" stroke-width="2"/><text x="570" y="250" text-anchor="middle" font-size="19">3</text><line x1="650" y1="220" x2="650" y2="228" stroke="#6b7280" stroke-width="2"/><text x="650" y="250" text-anchor="middle" font-size="19">4</text><line x1="730" y1="220" x2="730" y2="228" stroke="#6b7280" stroke-width="2"/><text x="730" y="250" text-anchor="middle" font-size="19">5</text><line x1="810" y1="220" x2="810" y2="228" stroke="#6b7280" stroke-width="2"/><text x="810" y="250" text-anchor="middle" font-size="19">6</text><line x1="890" y1="220" x2="890" y2="228" stroke="#6b7280" stroke-width="2"/><text x="890" y="250" text-anchor="middle" font-size="19">7</text><line x1="970" y1="220" x2="970" y2="228" stroke="#6b7280" stroke-width="2"/><text x="970" y="250" text-anchor="middle" font-size="19">8</text><line x1="1050" y1="220" x2="1050" y2="228" stroke="#6b7280" stroke-width="2"/><text x="1050" y="250" text-anchor="middle" font-size="19">9</text><line x1="1130" y1="220" x2="1130" y2="228" stroke="#6b7280" stroke-width="2"/><text x="1130" y="250" text-anchor="middle" font-size="19">10</text><line x1="1210" y1="220" x2="1210" y2="228" stroke="#6b7280" stroke-width="2"/><text x="1210" y="250" text-anchor="middle" font-size="19">11</text><line x1="1290" y1="220" x2="1290" y2="228" stroke="#6b7280" stroke-width="2"/><text x="1290" y="250" text-anchor="middle" font-size="19">12</text><g font-size="22"><text x="20" y="88" fill="#eb6834">B: còn 1 đơn vị</text><text x="20" y="168" fill="#2a78d6">A: việc mới, cần 2</text><text x="660" y="30" fill="#059669">bây giờ: thời điểm 4</text><text x="820" y="92" fill="#b91c1c">hạn 6</text><text x="980" y="172" fill="#b91c1c">hạn 8</text><text x="20" y="250" font-size="19">thời gian</text><text x="20" y="295">ưu tiên cố định: A chạy 4 tới 6, B còn dở 1 đơn vị lúc hạn 6, trễ hạn</text><text x="20" y="335" fill="#059669">hạn sớm nhất: hạn 6 gần hơn hạn 8, B chạy 4 tới 5, A chạy 5 tới 7, cả hai kịp</text></g></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình dừng lại đúng ở thời điểm 4, vạch xanh lá, để xem bộ lập lịch phải chọn ai. Hàng cam là việc của B, đã chạy 2 đơn vị, còn dở 1 đơn vị, và hạn của nó là 6. Hàng xanh dương là việc mới của A, cần 2 đơn vị, hạn 8. Ưu tiên cố định luôn chọn A, nên B còn dở lúc hạn 6, còn hạn sớm nhất so hai hạn, thấy 6 gần hơn 8, cho B chạy trước, và cả hai đều kịp."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Cùng hai tác vụ, hai cách lập lịch"
+    checks:
+      - "alg.schedule_sim([(2, 4), (3, 6)], 12, 'RM') == ([0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, None], [(1, 6)])"
+      - "alg.schedule_sim([(2, 4), (3, 6)], 12, 'EDF') == ([0, 0, 1, 1, 1, 0, 0, 1, 0, 0, 1, 1], [])"
+      - "2 / 4 == 0.5 and 3 / 6 == 0.5"
+
+    steps:
+      - show: |
+          <p><b>Bước 1 — độ sử dụng:</b> $U = \frac{2}{4} + \frac{3}{6} = 0{,}5 + 0{,}5 = \hl{1}$: bộ xử lý phải bận kín, không còn một đơn vị dư.</p>
+        say: "Bước một, tính độ sử dụng của hai tác vụ, 2 chia 4 là 0 phẩy 5, 3 chia 6 cũng là 0 phẩy 5, cộng lại đúng bằng 1. Nghĩa là bộ xử lý phải bận kín, không còn một đơn vị thời gian nào dư."
+      - clear: true
+        show: |
+          <p><b>Bước 2 — ưu tiên cố định</b> (A luôn hơn B):</p>
+          <div>{{RM}}</div>
+          <p>Ở thời điểm 4, A được thả lại và cắt ngang B; tới hạn 6, B mới chạy được 2 trong 3 đơn vị → trễ hạn.</p>
+        focus: [1, 1, 2, 2]
+        say: "Bước hai, xem ưu tiên cố định, A luôn ưu tiên hơn B. Ở thời điểm 4, A được thả lại và cắt ngang B. Tới hạn 6, B mới chạy được 2 trong 3 đơn vị, nên trễ hạn, đánh dấu chữ đỏ. Bộ mô phỏng bỏ luôn việc trễ hạn đó."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — hạn sớm nhất, từ 0 tới 6:</b> mỗi lần có việc xong hay việc mới, so hạn các việc đang chờ.</p>
+          <table class="t"><tr><th>lúc</th><th>việc đang chờ (hạn)</th><th>chọn</th></tr>
+          <tr><td>0</td><td>A hạn 4, B hạn 6</td><td>A, chạy 0–2</td></tr>
+          <tr><td>2</td><td>B hạn 6</td><td>B, chạy 2–4</td></tr>
+          <tr><td>4</td><td>A mới hạn 8, B hạn 6 còn 1</td><td>$\hl{\text{B}}$, chạy 4–5</td></tr>
+          <tr><td>5</td><td>A hạn 8</td><td>A, chạy 5–6</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", "2.5"]
+        say: "Bước ba, chạy tay lập lịch theo hạn sớm nhất, mỗi lần có việc xong hay việc mới thì so hạn các việc đang chờ. Lúc 0, A có hạn 4, gần hơn hạn 6 của B, nên A chạy từ 0 tới 2. Lúc 2, chỉ còn B, nên B chạy từ 2 tới 4. Lúc 4, việc mới của A có hạn 8, còn B hạn 6 và còn 1 đơn vị, nên B chạy tiếp từ 4 tới 5. Lúc 5, B đã xong, nên A được chạy từ 5 tới 6."
+      - clear: true
+        show: |
+          <p><b>Bước 4 — từ 6 tới 12:</b></p>
+          <table class="t"><tr><th>lúc</th><th>việc đang chờ (hạn)</th><th>chọn</th></tr>
+          <tr><td>6</td><td>A hạn 8 còn 1, B mới hạn 12</td><td>A, chạy 6–7</td></tr>
+          <tr><td>7</td><td>B hạn 12</td><td>B, chạy 7–8</td></tr>
+          <tr><td>8</td><td>A mới hạn 12, B hạn 12 còn 2</td><td>hạn bằng nhau, quy ước chọn A, chạy 8–10</td></tr>
+          <tr><td>10</td><td>B hạn 12</td><td>B, chạy 10–12, xong đúng hạn</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", "2.5"]
+        say: "Bước bốn, làm tiếp từ 6 tới 12. Lúc 6, A còn 1 đơn vị với hạn 8, gần hơn hạn 12 của việc mới bên B, nên A chạy từ 6 tới 7. Lúc 7 chỉ còn B, B chạy từ 7 tới 8. Lúc 8, việc mới của A và việc dở của B cùng hạn 12, hạn bằng nhau thì bộ mô phỏng quy ước chọn A, nên A chạy từ 8 tới 10. Lúc 10, B chạy nốt 2 đơn vị và xong đúng hạn 12."
+      - clear: true
+        show: |
+          <p><b>Bước 5 — biểu đồ hạn sớm nhất</b>:</p>
+          <div>{{EDF}}</div>
+          <p>Ở thời điểm 4, việc mới của A có hạn 8, còn B có hạn 6 — gần hơn, nên B chạy tiếp và xong đúng lúc 5. Cả hai luôn kịp, bộ xử lý bận 100%.</p>
+        focus: [1, 1, 2, 2]
+        say: "Bước năm, đối chiếu với biểu đồ do máy mô phỏng theo hạn sớm nhất. Ở thời điểm 4, việc mới của A có hạn 8, còn B có hạn 6, gần hơn. Vì thế B chạy tiếp và xong ở thời điểm 5. Cả hai luôn kịp hạn, dù bộ xử lý bận 100 phần trăm."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: đếm lại từng cửa sổ của mỗi việc"
+    checks:
+      - "(lambda tl: [tl[a:b].count(0) for a, b in ((0, 4), (4, 8), (8, 12))] == [2, 2, 2] and [tl[a:b].count(1) for a, b in ((0, 6), (6, 12))] == [3, 3] and tl.count(None) == 0)(alg.schedule_sim([(2, 4), (3, 6)], 12, 'EDF')[0])"
+    steps:
+      - show: |
+          <p>Đường khác: không xem ai chạy lúc nào, chỉ <b>đếm</b> mỗi việc được chạy bao nhiêu đơn vị trong khoảng từ lúc thả tới hạn của nó.</p>
+          <table class="t"><tr><th>việc</th><th>khoảng thả → hạn</th><th>được chạy</th><th>cần</th></tr>
+          <tr><td>A thứ nhất, thứ hai, thứ ba</td><td>0–4, 4–8, 8–12</td><td>2, 2, 2</td><td>2 ✓</td></tr>
+          <tr><td>B thứ nhất, thứ hai</td><td>0–6, 6–12</td><td>3, 3</td><td>3 ✓</td></tr>
+          <tr><td>đơn vị bỏ trống</td><td>0–12</td><td>0</td><td>bận kín, khớp $U = 1$ ✓</td></tr></table>
+        focus: [1, 2, "2.2", "2.3", "2.4"]
+        say: "Kiểm bằng đường khác, vì đọc bảng quyết định có thể sót một dòng. Ta không xem ai chạy lúc nào, chỉ đếm mỗi việc được chạy bao nhiêu đơn vị trong khoảng từ lúc thả tới hạn. Cả ba việc của A, trong các khoảng 0 tới 4, 4 tới 8, 8 tới 12, đều được chạy đủ 2 đơn vị. Hai việc của B, trong 0 tới 6 và 6 tới 12, đều được đủ 3 đơn vị. Và không có đơn vị nào bỏ trống, đúng với U bằng 1, bộ xử lý bận kín."
+
+  # ───────────────────────── 4. QUÁ TẢI ─────────────────────────
+  - id: overload
+    kind: concept
+    title: "Khi quá tải: ai chịu trễ?"
+    checks:
+      - "(lambda m: sorted(set(i for i, _ in m)))(alg.schedule_sim([(2, 4), (3, 6), (1, 5)], 60, 'RM')[1]) == [1]"
+      - "(lambda m: sorted(set(i for i, _ in m)))(alg.schedule_sim([(2, 4), (3, 6), (1, 5)], 60, 'EDF')[1]) == [0, 1, 2]"
+      - "abs(2 / 4 + 3 / 6 + 1 / 5 - 1.2) < 1e-12"
+    steps:
+      - show: |
+          <p>Thêm tác vụ (1, 5): $U = 1{,}2 \gt 1$, chắc chắn có trễ hạn. Mô phỏng 60 đơn vị:</p>
+          <table class="t"><tr><th>cách lập lịch</th><th>tác vụ bị trễ</th></tr>
+          <tr><td>ưu tiên cố định</td><td>chỉ tác vụ chu kỳ dài nhất (3, 6)</td></tr>
+          <tr><td>hạn sớm nhất</td><td>$\hl{\text{cả ba}}$, kể cả tác vụ quan trọng (2, 4)</td></tr></table>
+          <div class="box key">Hạn sớm nhất tối ưu khi không quá tải, nhưng khi quá tải, trễ hạn lan sang cả những tác vụ quan trọng. Ưu tiên cố định dễ đoán hơn.</div>
+        focus: [1, 2, "2.2", "2.3", 3, 3]
+        say: "Thêm một tác vụ chạy 1 mỗi 5, độ sử dụng thành 1 phẩy 2, lớn hơn 1, nên chắc chắn có trễ hạn. Ta mô phỏng 60 đơn vị thời gian. Với ưu tiên cố định, chỉ tác vụ có chu kỳ dài nhất bị trễ. Với hạn sớm nhất, cả ba tác vụ đều bị trễ, kể cả tác vụ quan trọng nhất. Vậy hạn sớm nhất tối ưu khi không quá tải, nhưng khi quá tải thì trễ hạn lan sang cả những tác vụ quan trọng. Ưu tiên cố định dễ đoán hơn."
+
+  # ───────────────────────── 5. ĐẢO NGƯỢC ƯU TIÊN ─────────────────────────
+  - id: inversion
+    kind: concept
+    title: "Đảo ngược ưu tiên và kế thừa ưu tiên"
+    checks:
+      - "(1 + 1) + 4 + 1 + 1 == 8 and 8 - 1 == 7"
+      - "1 + 2 + 1 == 4 and 4 - 1 == 3"
+    steps:
+      - show: |
+          <p>Ba tác vụ ưu tiên Cao, Trung bình, Thấp. Thấp giữ khoá một tài nguyên chung, cần thêm 3 đơn vị mới nhả. Cao tới ở 1 và cần khoá đó; Trung bình tới ở 2, chạy 4 đơn vị, không cần khoá.</p>
+          <table class="t"><tr><th>thời điểm</th><th>0–1</th><th>1–2</th><th>2–6</th><th>6–7</th><th>7–8</th></tr>
+          <tr><td>không kế thừa</td><td>Thấp</td><td>Thấp (Cao bị chặn)</td><td><b>Trung bình</b></td><td>Thấp nhả khoá</td><td>Cao</td></tr></table>
+          <p>Cao chờ từ 1 tới 7, xong ở 8: đáp ứng $\hl{7}$ đơn vị — bị một tác vụ <b>không liên quan</b> chặn 4 đơn vị.</p>
+        focus: [1, 1, 1, 2, 3, 3]
+        say: "Xét ba tác vụ ưu tiên cao, trung bình và thấp. Tác vụ thấp đang giữ khoá một tài nguyên chung, cần thêm 3 đơn vị nữa mới nhả. Tác vụ cao tới ở thời điểm 1 và cần khoá đó, còn tác vụ trung bình tới ở thời điểm 2, chạy 4 đơn vị mà không cần khoá. Không có biện pháp gì, tác vụ trung bình chen vào chạy từ 2 tới 6, chặn luôn tác vụ thấp đang giữ khoá. Tác vụ cao chờ từ 1 tới 7, xong ở 8, thời gian đáp ứng là 7 đơn vị. Nó bị một tác vụ không liên quan chặn mất 4 đơn vị."
+      - show: |
+          <p><b>Kế thừa ưu tiên</b>: khi Cao chờ khoá của Thấp, Thấp tạm mang ưu tiên của Cao. Trung bình không chen vào được.</p>
+          <table class="t"><tr><th>thời điểm</th><th>0–1</th><th>1–3</th><th>3–4</th><th>4–8</th></tr>
+          <tr><td>có kế thừa</td><td>Thấp</td><td>Thấp (mang ưu tiên Cao)</td><td>Cao</td><td>Trung bình</td></tr></table>
+          <p>Cao xong ở 4: đáp ứng $\hl{3}$ đơn vị. Pathfinder được sửa từ Trái Đất bằng cách bật đúng tuỳ chọn này.</p>
+        focus: [1, 1, 2, 3, 3]
+        say: "Cách sửa là kế thừa ưu tiên, khi tác vụ cao chờ khoá của tác vụ thấp, tác vụ thấp tạm mang ưu tiên của tác vụ cao. Nhờ vậy tác vụ trung bình không chen vào được. Tác vụ thấp chạy từ 1 tới 3, nhả khoá, tác vụ cao chạy từ 3 tới 4. Thời gian đáp ứng của tác vụ cao chỉ còn 3 đơn vị. Tàu thăm dò năm đó được sửa từ Trái Đất bằng cách bật đúng tuỳ chọn này."
+
+  # ───────────────────────── 6. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Chọn hạn sớm nhất cho hệ có thể quá tải <b class="red">(rủi ro)</b>
+          <br><span class="note">Quá tải ngắn (ví dụ một ngắt dồn dập) có thể làm trễ dây chuyền nhiều tác vụ. Cần cơ chế kiểm soát quá tải.</span></div>
+        say: "Lỗi thứ nhất, chọn lập lịch theo hạn sớm nhất cho một hệ có thể bị quá tải. Chỉ một đợt quá tải ngắn, như ngắt dồn dập, cũng có thể làm trễ dây chuyền nhiều tác vụ, nên cần thêm cơ chế kiểm soát quá tải."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Dùng khoá thường thay vì khoá có kế thừa ưu tiên <b class="red">(sai)</b>
+          <br><span class="note">Hệ điều hành thời gian thực thường có tuỳ chọn này cho khoá loại trừ lẫn nhau — nhưng có thể mặc định tắt, như trên Pathfinder.</span></div>
+        say: "Lỗi thứ hai, dùng khoá thường thay vì khoá có kế thừa ưu tiên. Hệ điều hành thời gian thực thường có tuỳ chọn này cho khoá loại trừ lẫn nhau, nhưng nó có thể mặc định bị tắt, như trên tàu thăm dò năm đó."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Giữ khoá lâu <b class="red">(sai)</b>
+          <br><span class="note">Kế thừa ưu tiên rút ngắn chờ, nhưng Cao vẫn phải chờ hết đoạn giữ khoá. Đoạn giữ khoá phải ngắn và được tính vào thời gian bị chặn (bài 9).</span></div>
+        say: "Lỗi thứ ba, giữ khoá lâu. Kế thừa ưu tiên rút ngắn thời gian chờ, nhưng tác vụ cao vẫn phải chờ hết đoạn giữ khoá. Đoạn đó phải ngắn, và phải được cộng vào thời gian bị chặn khi phân tích thời gian đáp ứng như bài trước."
+
+  # ───────────────────────── 7. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "abs(1 / 3 + 2 / 5 + 1 / 4 - 59 / 60) < 1e-12 and alg.schedule_sim([(1, 3), (2, 5), (1, 4)], 120, 'EDF')[1] == []"
+      - "1 + 1 + 5 + 1 + 1 == 9 and 9 - 1 == 8"
+      - "(20, 24, 15) == (60 // 3, 60 * 2 // 5, 60 // 4) and 20 + 24 + 15 == 59"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Ba tác vụ (1, 3), (2, 5), (1, 4). Hạn sớm nhất có kịp hạn tất cả không?</td></tr>
+          <tr><td>2</td><td>Ví dụ đảo ngược ưu tiên, nhưng Trung bình chạy 5 đơn vị. Không kế thừa: Cao xong ở thời điểm nào?</td></tr>
+          <tr><td>3</td><td>Hệ có bộ phanh (2, 4) và đôi khi bị quá tải ngắn. Chọn hạn sớm nhất hay ưu tiên cố định?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, ba tác vụ chạy 1 mỗi 3, chạy 2 mỗi 5, và chạy 1 mỗi 4, lập lịch theo hạn sớm nhất có kịp hạn tất cả không? Câu hai, trong ví dụ đảo ngược ưu tiên, nếu tác vụ trung bình chạy 5 đơn vị và không có kế thừa ưu tiên, tác vụ cao xong ở thời điểm nào? Câu ba, một hệ có bộ phanh chạy 2 mỗi 4 và đôi khi bị quá tải ngắn, nên chọn hạn sớm nhất hay ưu tiên cố định? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <p>① Mẫu chung 60: $U = \frac{20}{60} + \frac{24}{60} + \frac{15}{60} = \frac{59}{60} \le 1$ → $\hl{\text{kịp}}$ (với hạn sớm nhất, $U \le 1$ là đủ).</p>
+        say: "Đáp án câu một, quy về mẫu chung 60, một phần ba là 20 phần 60, hai phần năm là 24 phần 60, một phần tư là 15 phần 60. Cộng lại được 59 phần 60, không vượt 1, mà với hạn sớm nhất thì điều đó là đủ, nên mọi tác vụ đều kịp hạn."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>thời điểm</th><th>0–1</th><th>1–2</th><th>2–7</th><th>7–8</th><th>8–9</th></tr>
+          <tr><td>chạy</td><td>Thấp</td><td>Thấp (Cao bị chặn)</td><td>Trung bình, 5 đơn vị</td><td>Thấp nhả khoá</td><td>Cao</td></tr></table>
+          <p>② Cao xong ở $\hl{9}$, đáp ứng $9 - 1 = 8$ đơn vị.</p>
+        focus: [1, 1, 2]
+        say: "Câu hai, ta lập bảng theo thời gian, tác vụ thấp chạy từ 0 tới 2, vì tác vụ cao tới lúc 1 bị chặn ở khoá. Tác vụ trung bình chen vào chạy 5 đơn vị, từ 2 tới 7, rồi tác vụ thấp chạy nốt từ 7 tới 8 và nhả khoá. Tác vụ cao chạy từ 8 tới 9, xong ở thời điểm 9, thời gian đáp ứng là 9 trừ 1, bằng 8 đơn vị."
+      - show: |
+          <p>③ Theo phần quá tải: hạn sớm nhất làm trễ <b>cả ba</b> tác vụ, kể cả (2, 4); ưu tiên cố định chỉ làm trễ tác vụ chu kỳ dài nhất. Chọn $\hl{\text{ưu tiên cố định}}$, bộ phanh có chu kỳ ngắn nhất nên ưu tiên cao nhất.</p>
+        say: "Câu ba là một quyết định, ở phần quá tải ta đã thấy hạn sớm nhất làm trễ cả ba tác vụ, kể cả tác vụ chạy 2 mỗi 4. Ngược lại, ưu tiên cố định chỉ làm trễ tác vụ có chu kỳ dài nhất. Vì vậy ta chọn ưu tiên cố định, và bộ phanh có chu kỳ ngắn nhất nên được ưu tiên cao nhất, quá tải do các tác vụ ưu tiên thấp hơn gây ra không chạm tới nó."
+
+  # ───────────────────────── 8. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">hạn sớm nhất: kịp ⇔ $U \le 1$</span><span class="a">→</span>
+          <span class="n">quá tải: trễ lan rộng</span><span class="a">→</span>
+          <span class="n">khoá chung: đảo ngược ưu tiên</span><span class="a">→</span>
+          <span class="n">kế thừa ưu tiên</span></div>
+        introduces: [iff]
+        say: "Tổng kết lại, lập lịch theo hạn sớm nhất kịp hạn khi và chỉ khi U không vượt 1, nhưng khi quá tải thì trễ hạn lan rộng. Dùng khoá chung có thể gây đảo ngược ưu tiên, và cách sửa là kế thừa ưu tiên."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> một tài nguyên dùng chung nối các tác vụ lại với nhau. Ưu tiên của một tác vụ chỉ có nghĩa khi tính cả những gì nó phải chờ.</div>
+        say: "Điều cần mang theo, một tài nguyên dùng chung nối các tác vụ lại với nhau, và ưu tiên của một tác vụ chỉ có nghĩa khi tính cả những gì nó phải chờ."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 11): <b>hệ điều hành thời gian thực</b> — tác vụ, hàng đợi, đồng bộ.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 11, ta học hệ điều hành thời gian thực, với tác vụ, hàng đợi và đồng bộ. Hẹn gặp bạn ở bài tiếp theo."

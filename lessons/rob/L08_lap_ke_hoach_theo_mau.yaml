@@ -1,0 +1,210 @@
+id: L08
+course: ROB
+series: "ROB · Robot tự hành"
+title: "Bài 8 — Lập kế hoạch đường đi theo mẫu: bản đồ ngẫu nhiên và cây mở rộng nhanh"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/rob.yaml L08; audit/rob/verify_rob.py L08; L. Kavraki và cộng sự, Probabilistic Roadmaps for Path Planning in High-Dimensional Configuration Spaces (1996); S. LaValle, Rapidly-Exploring Random Trees (1998), Planning Algorithms (2006); AIF bài 2 (A*); RBM bài 15 (A* trên lưới)"
+assumes: [arith, power, approx, log]
+# Quy ước: không gian cấu hình = mọi tổ hợp góc khớp (hoặc vị trí); lưới đều chia mỗi chiều 100 mức: 100^d ô (alg.grid_cells). Lối hẹp chiếm 1% thể tích
+#   không gian trống (SỐ MINH HOẠ); n mẫu ngẫu nhiên đều, độc lập: P(ít nhất một mẫu trong lối hẹp) = 1 − 0,99^n. Tên PRM, RRT chỉ trên màn hình.
+objectives:
+  - "Giải thích vì sao lưới đều không dùng được ở nhiều chiều"
+  - "Mô tả bản đồ ngẫu nhiên và cây mở rộng nhanh"
+  - "Ước lượng số mẫu cần cho lối hẹp"
+asr_reviewed:
+  - {sentence: "Chỉ lưu một byte mỗi ô đã cần một nghìn tỉ byte.", reason: "ASR chép “Chỉ lưu một bay mỗi ô đã cần 1 nghìn tỷ bay.” (0.75): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); “tỉ” ASR viết chính tả “tỷ” (cùng âm) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Đường từ các mẫu ngẫu nhiên thường ngoằn ngoèo.", reason: "ASR chép “đường từ các mẫu ngẫu nhiên thường hoang ngoeo.” (0.778): lệch âm/thanh thuần Việt: ngoằn ngoèo/hoang ngoeo — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Tay máy 6 khớp: một nghìn tỉ ô"
+    checks:
+      - "alg.grid_cells(100, 6) == 10 ** 12 and alg.grid_cells(100, 2) == 10 ** 4"
+    steps:
+      - show: |
+          <p>Robot sàn đi trên mặt phẳng: chia mỗi chiều 100 mức được $10^4$ ô — A* chạy trong tích tắc. Tay máy 6 khớp: mỗi khớp 100 mức là $100^6 = 10^{12}$ ô. Chỉ lưu một byte mỗi ô đã cần <b>một nghìn tỉ byte</b>. Cần cách khác.</p>
+          <div class="box key">Hôm nay: <b>lập kế hoạch theo mẫu</b> — rải điểm ngẫu nhiên trong không gian cấu hình thay vì chia lưới.</div>
+        focus: [1, 1, 1, 1, 2]
+        say: "Chào bạn, robot sàn đi trên mặt phẳng, chia mỗi chiều 100 mức thì được 10 mũ 4 ô, và A sao chạy trong tích tắc. Tay máy 6 khớp, mỗi khớp 100 mức, là 100 mũ 6, tức 10 mũ 12 ô. Chỉ lưu một byte mỗi ô đã cần một nghìn tỉ byte. Ta cần một cách khác. Hôm nay ta học lập kế hoạch theo mẫu, rải điểm ngẫu nhiên trong không gian cấu hình thay vì chia lưới."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: luỹ thừa và xác suất “ít nhất một lần”"
+    checks:
+      - "100 ** 2 == 10 ** 4 and 100 ** 3 == 10 ** 6 and 10 ** 4 * 100 == 10 ** 6"
+      - "round(0.99 * 0.99, 4) == 0.9801 and round(1 - 0.99 * 0.99, 4) == 0.0199 and 1 - 0.01 == 0.99"
+    steps:
+      - show: |
+          <table class="t"><tr><th>số chiều</th><th>số ô, mỗi chiều 100 mức</th></tr>
+          <tr><td>1</td><td>100</td></tr>
+          <tr><td>2</td><td>$100 \cdot 100 = 100^2 = 10^4$</td></tr>
+          <tr><td>3</td><td>$10^4 \cdot 100 = 10^6$</td></tr></table>
+        introduces: [cdot]
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Trước hết, ôn cách đếm ô của một lưới, mỗi chiều chia 100 mức thì số ô nhân thêm 100 cho mỗi chiều. Một chiều có 100 ô. Hai chiều có 100 nhân 100, tức 100 mũ 2, bằng 10 mũ 4 ô. Thêm chiều thứ ba thì lại nhân 100, thành 10 mũ 6 ô."
+      - show: |
+          <table class="t"><tr><th>một mẫu rơi vào vùng chiếm 1%</th><th>xác suất</th></tr>
+          <tr><td>một mẫu <b>trượt</b></td><td>$1 - 0{,}01 = 0{,}99$</td></tr>
+          <tr><td>hai mẫu độc lập <b>cùng trượt</b></td><td>$0{,}99 \cdot 0{,}99 = 0{,}9801$</td></tr>
+          <tr><td><b>ít nhất một</b> mẫu trúng</td><td>$1 - 0{,}9801 = \hl{0{,}0199}$</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Điều thứ hai là xác suất có ít nhất một lần trúng, tính qua phần bù cho dễ. Nếu một vùng chiếm 1 phần trăm, một mẫu ngẫu nhiên trượt nó với xác suất 0 phẩy 99. Hai mẫu độc lập cùng trượt với xác suất 0 phẩy 99 nhân 0 phẩy 99, bằng 0 phẩy 9801. Vậy xác suất có ít nhất một mẫu trúng là 1 trừ 0 phẩy 9801, bằng 0 phẩy 0199."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: không gian cấu hình và hai thuật toán"
+    steps:
+      - show: |
+          <p><b>Không gian cấu hình</b>: mỗi điểm là một cách đặt robot (vị trí, hay bộ góc khớp). Vùng va chạm là các điểm làm robot chạm vật cản; kiểm một điểm bằng phép thử va chạm hình học.</p>
+          <table class="t"><tr><th>thuật toán</th><th>cách làm</th><th>hợp với</th></tr>
+          <tr><td><b>bản đồ ngẫu nhiên</b> (PRM)</td><td>rải $n$ điểm không va chạm, nối các cặp gần nhau nếu đoạn nối không va chạm, rồi tìm đường trên đồ thị</td><td>hỏi nhiều lần trong cùng môi trường</td></tr>
+          <tr><td><b>cây mở rộng nhanh</b> (RRT)</td><td>từ điểm đầu, mỗi bước lấy một điểm ngẫu nhiên, kéo nút gần nhất của cây về phía nó một đoạn ngắn</td><td>hỏi một lần, môi trường thay đổi</td></tr></table>
+        focus: [1, 1, 2, "2.2", "2.3"]
+        say: "Không gian cấu hình có mỗi điểm là một cách đặt robot, như một vị trí, hay một bộ góc khớp. Vùng va chạm là các điểm làm robot chạm vật cản, và ta kiểm một điểm bằng phép thử va chạm hình học. Bảng so hai thuật toán. Bản đồ ngẫu nhiên rải n điểm không va chạm, nối các cặp gần nhau nếu đoạn nối không va chạm, rồi tìm đường trên đồ thị, hợp khi hỏi nhiều lần trong cùng môi trường. Cây mở rộng nhanh đi từ điểm đầu, mỗi bước lấy một điểm ngẫu nhiên và kéo nút gần nhất của cây về phía nó một đoạn ngắn, hợp khi hỏi một lần và môi trường thay đổi."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Càng rải nhiều điểm, càng dễ gặp lối hẹp — nhưng chậm dần"
+    checks:
+      - "[round(1 - 0.99 ** n, 3) for n in (100, 300)] == [0.634, 0.951] and all(1 - 0.99 ** n < 1 for n in range(0, 501, 5))"
+    steps:
+      - show: |
+          <div><svg width="1500" height="440" viewBox="0 0 1500 440"><g font-size="22" fill="#1f2937"><line x1="170.0" y1="380" x2="1370.0" y2="380" stroke="#6b7280" stroke-width="2"/><line x1="170.0" y1="380" x2="170.0" y2="50" stroke="#6b7280" stroke-width="2"/><line x1="170.0" y1="60" x2="1370.0" y2="60" stroke="#9ca3af" stroke-width="1" stroke-dasharray="6 6"/><polyline points="170.0,380.0 182.0,364.3 194.0,349.4 206.0,335.2 218.0,321.7 230.0,308.9 242.0,296.7 254.0,285.1 266.0,274.1 278.0,263.6 290.0,253.6 302.0,244.1 314.0,235.1 326.0,226.5 338.0,218.3 350.0,210.6 362.0,203.2 374.0,196.2 386.0,189.5 398.0,183.2 410.0,177.1 422.0,171.4 434.0,165.9 446.0,160.7 458.0,155.8 470.0,151.1 482.0,146.6 494.0,142.4 506.0,138.4 518.0,134.5 530.0,130.9 542.0,127.4 554.0,124.1 566.0,120.9 578.0,118.0 590.0,115.1 602.0,112.4 614.0,109.8 626.0,107.4 638.0,105.1 650.0,102.9 662.0,100.8 674.0,98.8 686.0,96.9 698.0,95.1 710.0,93.3 722.0,91.7 734.0,90.2 746.0,88.7 758.0,87.3 770.0,85.9 782.0,84.7 794.0,83.5 806.0,82.3 818.0,81.2 830.0,80.2 842.0,79.2 854.0,78.2 866.0,77.4 878.0,76.5 890.0,75.7 902.0,74.9 914.0,74.2 926.0,73.5 938.0,72.8 950.0,72.2 962.0,71.6 974.0,71.0 986.0,70.5 998.0,70.0 1010.0,69.5 1022.0,69.0 1034.0,68.6 1046.0,68.2 1058.0,67.8 1070.0,67.4 1082.0,67.0 1094.0,66.7 1106.0,66.4 1118.0,66.0 1130.0,65.7 1142.0,65.5 1154.0,65.2 1166.0,64.9 1178.0,64.7 1190.0,64.5 1202.0,64.2 1214.0,64.0 1226.0,63.8 1238.0,63.7 1250.0,63.5 1262.0,63.3 1274.0,63.1 1286.0,63.0 1298.0,62.8 1310.0,62.7 1322.0,62.6 1334.0,62.4 1346.0,62.3 1358.0,62.2 1370.0,62.1" fill="none" stroke="#2a78d6" stroke-width="4"/><line x1="410.0" y1="380" x2="410.0" y2="177" stroke="#eb6834" stroke-width="2" stroke-dasharray="8 6"/><line x1="890.0" y1="380" x2="890.0" y2="76" stroke="#059669" stroke-width="2" stroke-dasharray="8 6"/><circle cx="410.0" cy="177" r="9" fill="#eb6834"/><circle cx="890.0" cy="76" r="9" fill="#059669"/><text x="428.0" y="207" fill="#eb6834">100 mẫu: 0,634</text><text x="908.0" y="110" fill="#059669">300 mẫu: 0,951</text><text x="158.0" y="387" text-anchor="end">0</text><text x="158.0" y="67" text-anchor="end">1</text><text x="410.0" y="410" text-anchor="middle">100</text><text x="890.0" y="410" text-anchor="middle">300</text><text x="1370.0" y="410" text-anchor="middle">500</text><text x="1385.0" y="387">số mẫu</text><text x="185.0" y="40">xác suất có ít nhất một mẫu trong lối hẹp chiếm 1%</text><text x="962.0" y="236" fill="#b91c1c">thêm mẫu: lợi ích giảm dần, không bao giờ chắc chắn 1</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ xác suất có ít nhất một mẫu rơi vào một lối hẹp chiếm 1 phần trăm không gian trống, theo số mẫu rải ra. Đường xanh lên nhanh lúc đầu, ở 100 mẫu đã được khoảng 0 phẩy 634. Nhưng từ đó trở đi đường cong thoải dần, phải tới 300 mẫu mới được khoảng 0 phẩy 951. Đường không bao giờ chạm 1, nên rải thêm mẫu chỉ làm tăng độ tin, không bao giờ cho chắc chắn."
+
+  - id: example
+    kind: example
+    title: "Lưới bùng nổ, mẫu thì không — trừ lối hẹp"
+    checks:
+      - "[alg.grid_cells(100, d) for d in (2, 3, 6)] == [10 ** 4, 10 ** 6, 10 ** 12]"
+      - "[round(1 - 0.99 ** n, 3) for n in (100, 300)] == [0.634, 0.951]"
+      - "[round(0.99 ** n, 3) for n in (100, 300)] == [0.366, 0.049]"
+    steps:
+      - show: |
+          <table class="t"><tr><th>Bước 1 — số chiều</th><th>lưới 100 mức mỗi chiều</th></tr>
+          <tr><td>2 (xe trên sàn)</td><td>$10^4$</td></tr>
+          <tr><td>3 (xe có hướng)</td><td>$10^6$</td></tr>
+          <tr><td>6 (tay máy)</td><td>$\hl{10^{12}}$</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Bước một, bảng đếm số ô của lưới 100 mức mỗi chiều. Với 2 chiều cho xe trên sàn là 10 mũ 4 ô. Với 3 chiều khi tính cả hướng xe là 10 mũ 6 ô. Với 6 chiều của tay máy là 10 mũ 12 ô."
+      - show: |
+          <p><b>Bước 2 — công thức lối hẹp</b> (lối hẹp chiếm 1% không gian trống, số minh hoạ): $n$ mẫu độc lập cùng trượt với xác suất $0{,}99^n$, nên</p>
+          $$\text{xác suất có ít nhất một mẫu trong lối hẹp} = 1 - 0{,}99^n$$
+        focus: [1, 1, 2]
+        say: "Bước hai, lấy mẫu không bùng nổ theo số chiều như vậy, nhưng gặp khó ở lối hẹp. Giả sử lối hẹp chiếm 1 phần trăm không gian trống, một số minh hoạ, thì n mẫu độc lập cùng trượt với xác suất 0 phẩy 99 mũ n. Như phần chuẩn bị, xác suất có ít nhất một mẫu rơi vào là 1 trừ 0 phẩy 99 mũ n."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — 100 mẫu:</b></p>
+          $$0{,}99^{100} \approx 0{,}366 \quad\text{nên}\quad 1 - 0{,}366 = \hl{0{,}634}$$
+        focus: [1, 2]
+        say: "Bước ba, thay n bằng 100 mẫu thì xác suất cùng trượt là khoảng 0 phẩy 366. Vậy 100 mẫu chỉ có xác suất khoảng 0 phẩy 634 có một mẫu rơi vào, tức cứ ba lần chạy thì khoảng một lần bỏ sót lối hẹp."
+      - show: |
+          <p><b>Bước 4 — 300 mẫu:</b></p>
+          $$0{,}99^{300} \approx 0{,}049 \quad\text{nên}\quad 1 - 0{,}049 = \hl{0{,}951}$$
+        focus: [1, 2]
+        say: "Bước bốn, gấp ba số mẫu lên 300 thì xác suất cùng trượt chỉ còn khoảng 0 phẩy 049. Còn 300 mẫu là khoảng 0 phẩy 951, tốn gấp ba công mà vẫn chưa chắc chắn."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: cho máy rải mẫu thật nhiều lần"
+    checks:
+      - "(lambda r: abs(sum(any(r.random() < 0.01 for _ in range(100)) for _ in range(20000)) / 20000 - 0.634) < 0.01)(__import__('random').Random(1))"
+      - "round(100 * 0.01, 6) == 1 and round(0.99 ** 100, 3) == 0.366"
+    steps:
+      - show: |
+          <table class="t"><tr><th>cách khác</th><th>kết quả</th></tr>
+          <tr><td>máy thử 20 000 lần, mỗi lần rải 100 mẫu ngẫu nhiên</td><td>tỉ lệ lần có mẫu trong lối hẹp $\approx 0{,}63$ ✓</td></tr>
+          <tr><td>số mẫu trung bình rơi vào: $100 \cdot 0{,}01$</td><td>1 mẫu — nhưng khoảng 36,6% số lần không có mẫu nào</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.3"]
+        say: "Kiểm bằng đường khác, không dùng công thức mà cho máy rải mẫu thật. Máy thử 20 nghìn lần, mỗi lần rải 100 mẫu ngẫu nhiên, và tỉ lệ số lần có mẫu trong lối hẹp ra khoảng 0 phẩy 63, khớp công thức. Bảng còn chỉ ra một bẫy, trung bình mỗi lần có 100 nhân 0 phẩy 01, bằng 1 mẫu rơi vào. Nhưng trung bình 1 không có nghĩa là lần nào cũng có, khoảng 36 phẩy 6 phần trăm số lần không có mẫu nào."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay mắc, từ người mới tới người đã đi làm"
+    checks:
+      - "round(2 * math.pi / 180 * 1.0 * 100, 1) == 3.5 and round(1 * math.pi / 180 * 1.0 * 100, 2) == 1.75 and 1.75 < 2 < 3.5"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Không tìm thấy đường thì kết luận “không có đường” <b class="red">(chỉ đầy đủ theo xác suất)</b>
+          <br><span class="note">Phương pháp theo mẫu tìm được đường với xác suất tiến tới 1 khi số mẫu tăng, nhưng với số mẫu hữu hạn thì có thể bỏ sót lối hẹp. “Chưa tìm thấy” khác “không tồn tại”.</span></div>
+        say: "Lỗi thứ nhất, không tìm thấy đường thì kết luận không có đường, trong khi phương pháp chỉ đầy đủ theo xác suất. Phương pháp theo mẫu tìm được đường với xác suất tiến tới 1 khi số mẫu tăng, nhưng với số mẫu hữu hạn thì có thể bỏ sót lối hẹp. Chưa tìm thấy khác với không tồn tại."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Chỉ kiểm va chạm ở các điểm mẫu <b class="red">(đường xuyên tường)</b>
+          <br><span class="note">Hai điểm đều không va chạm nhưng đoạn nối có thể cắt qua vật mỏng. Kiểm cả đoạn nối, với bước kiểm nhỏ hơn bề dày vật cản mỏng nhất.</span></div>
+        say: "Lỗi thứ hai, chỉ kiểm va chạm ở các điểm mẫu, nên đường có thể xuyên tường. Hai điểm đều không va chạm nhưng đoạn nối có thể cắt qua một vật mỏng. Hãy kiểm cả đoạn nối, với bước kiểm nhỏ hơn bề dày của vật cản mỏng nhất."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Dùng thẳng đường gấp khúc vừa tìm được <b class="red">(giật, xa, không tối ưu)</b>
+          <br><span class="note">Đường từ mẫu ngẫu nhiên thường ngoằn ngoèo. Rút gọn (bỏ nút khi đoạn nối tắt không va chạm), làm trơn, rồi kiểm lại va chạm.</span></div>
+        say: "Lỗi thứ ba, dùng thẳng đường gấp khúc vừa tìm được, nên robot đi giật, xa, và không tối ưu. Đường từ các mẫu ngẫu nhiên thường ngoằn ngoèo. Hãy rút gọn bằng cách bỏ nút khi đoạn nối tắt không va chạm, làm trơn, rồi kiểm lại va chạm."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4.</b> Đặt bước kiểm va chạm theo <b>góc khớp</b> mà quên đổi ra độ dời thật <b class="red">(xuyên tấm mỏng)</b>
+          <br><span class="note">Khớp vai quay một góc nhỏ thì đầu tay cách vai 1 m đi một cung bằng bán kính nhân góc ra-đi-an. Người làm nghề chọn bước kiểm sao cho điểm xa nhất của tay dời <b>ít hơn</b> bề dày vật mỏng nhất, ở đây tấm chắn dày 2 cm.</span></div>
+          <table class="t"><tr><th>bước kiểm ở khớp</th><th>đầu tay dời</th><th>so với tấm 2 cm</th></tr>
+          <tr><td>2 độ</td><td>$\frac{2\pi}{180} \cdot 1 \approx 3{,}5$ cm</td><td>có thể nhảy qua</td></tr>
+          <tr><td>1 độ</td><td>$\frac{\pi}{180} \cdot 1 \approx \hl{1{,}75}$ cm</td><td>không lọt</td></tr></table>
+        focus: [1, 1, 1, "2.2", "2.3"]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, đặt bước kiểm va chạm theo góc khớp mà quên đổi ra độ dời thật. Khớp vai quay một góc nhỏ thì đầu tay cách vai 1 mét đi một cung bằng bán kính nhân góc tính bằng ra-đi-an. Người làm nghề chọn bước kiểm sao cho điểm xa nhất của tay dời ít hơn bề dày vật mỏng nhất, ở đây là tấm chắn dày 2 xen-ti-mét. Bước 2 độ làm đầu tay dời khoảng 3 phẩy 5 xen-ti-mét, nên có thể nhảy qua tấm chắn mà không phép thử nào chạm. Bước 1 độ chỉ dời khoảng 1 phẩy 75 xen-ti-mét, nhỏ hơn bề dày tấm, nên không lọt."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.grid_cells(50, 7) == 781250000000 and math.ceil(math.log(0.1) / math.log(0.995)) == 460"
+      - "5 ** 7 == 78125 and 78125 * 10 ** 7 == 50 ** 7 and round(50 ** 7 / 1e11, 1) == 7.8"
+      - "round(math.log(0.1), 3) == -2.303 and round(math.log(0.995), 6) == -0.005013 and round(math.log(0.1) / math.log(0.995), 1) == 459.4 and round(1 - 0.005, 3) == 0.995"
+      - "round(0.995 ** 459, 4) == 0.1002 and round(0.995 ** 460, 4) == 0.0997"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Tay máy 7 khớp, mỗi khớp chia 50 mức: lưới có bao nhiêu ô?</td></tr>
+          <tr><td>2</td><td>Lối hẹp chiếm 0,5% không gian trống. Cần ít nhất bao nhiêu mẫu để xác suất có mẫu rơi vào đạt 90%?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, tay máy 7 khớp, mỗi khớp chia 50 mức, lưới có bao nhiêu ô? Câu hai, lối hẹp chiếm 0 phẩy 5 phần trăm không gian trống. Cần ít nhất bao nhiêu mẫu để xác suất có mẫu rơi vào đạt 90 phần trăm? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① Tách $50 = 5 \cdot 10$:</p>
+          $$50^7 = 5^7 \cdot 10^7 = 78125 \cdot 10^7 \approx \hl{7{,}8 \cdot 10^{11}} \text{ ô}$$
+        focus: [1, 2, 2]
+        say: "Đáp án câu một, tách 50 thành 5 nhân 10 cho dễ tính, rồi nâng từng phần lên mũ 7. Năm mũ 7 bằng 78125, nhân với 10 mũ 7. Đáp án câu một, 50 mũ 7, khoảng 7 phẩy 8 nhân 10 mũ 11 ô."
+      - show: |
+          <p>② Một mẫu trượt: $1 - 0{,}005 = 0{,}995$. Cần</p>
+          $$1 - 0{,}995^n \geq 0{,}9 \Rightarrow n \geq \frac{\ln 0{,}1}{\ln 0{,}995} \approx \frac{-2{,}303}{-0{,}005013} \approx 459{,}4$$
+        introduces: [geq, implies]
+        focus: [1, 2, 2, 2]
+        say: "Câu hai, một mẫu trượt lối hẹp với xác suất 1 trừ 0 phẩy 005, bằng 0 phẩy 995. Câu hai, cần 1 trừ 0 phẩy 995 mũ n không nhỏ hơn 0 phẩy 9. Lấy lôgarit hai vế, cả tử và mẫu đều âm nên thương dương, khoảng âm 2 phẩy 303 chia âm 0 phẩy 005013. Suy ra n không nhỏ hơn lôgarit của 0 phẩy 1 chia lôgarit của 0 phẩy 995, khoảng 459 phẩy 4, nên cần 460 mẫu."
+      - show: |
+          <table class="t"><tr><th>thử lại</th><th>xác suất cùng trượt</th><th>đạt 90%?</th></tr>
+          <tr><td>459 mẫu</td><td>$0{,}995^{459} \approx 0{,}1002$</td><td>chưa — còn hơn 0,1</td></tr>
+          <tr><td>460 mẫu</td><td>$0{,}995^{460} \approx 0{,}0997$</td><td>$\hl{\text{đạt}}$</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Thử lại bằng cách tính thẳng hai số nguyên kề nhau, vì phải làm tròn lên chứ không làm tròn xuống. Với 459 mẫu, xác suất cùng trượt khoảng 0 phẩy 1002, vẫn hơn 0 phẩy 1 nên chưa đạt. Với 460 mẫu, xác suất cùng trượt khoảng 0 phẩy 0997, nên đạt 90 phần trăm."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">lưới đều: bùng nổ theo số chiều</span><span class="a">→</span>
+          <span class="n">lấy mẫu: bản đồ ngẫu nhiên, cây mở rộng nhanh</span><span class="a">→</span>
+          <span class="n">kiểm cả đoạn nối, rút gọn đường</span><span class="a">→</span>
+          <span class="n">đầy đủ theo xác suất, khó ở lối hẹp</span></div>
+        say: "Tổng kết lại, lưới đều bùng nổ theo số chiều, nên ta lấy mẫu bằng bản đồ ngẫu nhiên hay cây mở rộng nhanh. Kiểm cả đoạn nối và rút gọn đường, và nhớ phương pháp chỉ đầy đủ theo xác suất, gặp khó ở lối hẹp."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> khi không thể nhìn hết không gian, hãy <b>thăm dò ngẫu nhiên</b> — và tính trước cần bao nhiêu lần thăm dò để đủ tin.</div>
+        say: "Điều cần mang theo, khi không thể nhìn hết không gian, hãy thăm dò ngẫu nhiên, và tính trước cần bao nhiêu lần thăm dò để đủ tin."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 9): <b>tránh vật cản cục bộ</b> bằng cửa sổ động.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 9, ta học tránh vật cản cục bộ bằng cửa sổ động. Hẹn gặp bạn ở bài tiếp theo."

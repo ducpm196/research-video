@@ -1,0 +1,245 @@
+# ═══ BÀI TÌNH HUỐNG — sự cố Cloudflare ngày 2/7/2019 (tường lửa ứng dụng, biểu thức chính quy quay lui); case-lessons.md §1–§4 ═══
+id: L07
+course: CAS
+series: "CAS · Tình huống chuyên gia"
+title: "Bài 7 — Cloudflare (2019): một biểu thức chính quy quay lui làm cạn CPU toàn cầu"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/cas.yaml L07; audit/cas/sources_L07.md (câu trích nguyên văn, đọc 2026-11-02); audit/cas/verify_cas.py L07 (audit/cas/ver/L07.py); audit/verify_plan_curricula.py CAS:L07; Cloudflare, Details of the Cloudflare outage on July 2, 2019, blog.cloudflare.com, 12/7/2019 [CF19]; TOC bài 3 (biểu thức chính quy), bài 14 (cùng sự cố, góc hành trình bộ máy khớp — số liệu đã đối chiếu); DVO bài 7 (phát hành tiệm tiến); CAS bài 0 (nguyên nhân góp phần, lớp phòng vệ)"
+assumes: [arith, power]
+# Quy ước: giờ là giờ quốc tế (UTC) như bài hậu kiểm. “tường lửa ứng dụng” = WAF; “quy tắc” = một luật của WAF Managed Rules;
+#   “quay lui” CHỈ dùng cho cách khớp biểu thức (backtracking); việc lùi một thay đổi gọi là “hoàn tác” (rollback) để khỏi lẫn.
+#   “bộ đếm của bài” = tổng alg.bt_match (số lần thử đặt một ký hiệu của mẫu vào một vị trí) qua MỌI vị trí bắt đầu — đơn vị KHÁC “bước”
+#   của công cụ gỡ lỗi Perl mà bài hậu kiểm dùng (23, 33, 45, 555, 4067, 5353 là CITED, không tính lại). Khớp với TOC bài 14.
+#   Lời đọc không nói Cloudflare (probe p1 chưa đạt), Perl, PCRE, Lua, CPU: nói “công ty”, “mạng phân phối nội dung”, “bộ xử lý”.
+#   1% lưu lượng ở bậc đầu, 50 thay đổi/tuần, 4 bậc × 15 phút: SỐ MINH HOẠ.
+objectives:
+  - "Dựng dòng thời gian của sự cố và tính thời gian phát hiện, chẩn đoán, tắt, bật lại"
+  - "Đếm số lần thử của bộ khớp quay lui với mẫu .*.*=.* trên chuỗi dài, thấy bậc n mũ 3 khi tìm ở mọi vị trí"
+  - "Giải thích vì sao quy trình đẩy quy tắc toàn cầu trong vài giây biến một lỗi hiệu năng thành sự cố toàn mạng"
+  - "Quyết định khi nào triển khai từng bậc, khi nào giữ lối khẩn cấp"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Một thay đổi nhỏ, 27 phút, 80% lưu lượng"
+    checks:
+      - "(14 * 60 + 9) - (13 * 60 + 42) == 27"
+    steps:
+      - show: |
+          <p>Ngày 2/7/2019, theo bài hậu kiểm của <b>Cloudflare</b> (12/7/2019):</p>
+          <table class="t"><tr><th>giờ quốc tế</th><th>điều đã xảy ra</th></tr>
+          <tr><td>13:42</td><td>một thay đổi nhỏ của quy tắc tường lửa ứng dụng được triển khai <b>tự động</b>; mọi lõi bộ xử lý phục vụ lưu lượng trang mạng trên toàn thế giới bị vắt kiệt</td></tr>
+          <tr><td>ngay sau đó</td><td>khách thấy trang lỗi 502; công ty mất <b>80%</b> lưu lượng</td></tr>
+          <tr><td>14:09</td><td>lưu lượng và bộ xử lý trở lại bình thường: <b>27 phút</b></td></tr></table>
+          <div class="box key">Bài hậu kiểm ghi: mọi bước trước khi triển khai đều làm “đúng” — có duyệt, có kiểm thử, có kế hoạch hoàn tác.</div>
+        focus: [1, "2.2", "2.2", "2.3", "2.4", 3]
+        say: "Chào bạn, ngày 2 tháng 7 năm 2019, một công ty mạng phân phối nội dung lớn gặp sự cố, theo bài hậu kiểm họ công bố mười ngày sau. Lúc 13 giờ 42 giờ quốc tế, một thay đổi nhỏ của quy tắc tường lửa ứng dụng được triển khai tự động. Mọi lõi bộ xử lý phục vụ lưu lượng trang mạng trên toàn thế giới bị vắt kiệt. Khách hàng thấy trang lỗi 502, và công ty mất 80 phần trăm lưu lượng. Tới 14 giờ 9, mọi thứ mới trở lại bình thường, sau 27 phút. Điều đáng học là bài hậu kiểm ghi, mọi bước trước khi triển khai đều làm đúng, có duyệt, có kiểm thử, có kế hoạch hoàn tác."
+      - clear: true
+        show: |
+          <p>Hôm nay: dòng thời gian từng phút; vì sao bộ xử lý cạn (tính lại bằng bộ đếm); và vì sao một quy tắc đi ra <b>cả thế giới</b> trong vài giây.</p>
+        say: "Hôm nay ta dựng dòng thời gian từng phút, và tính lại vì sao bộ xử lý cạn bằng một bộ đếm. Ta cũng tìm hiểu vì sao một quy tắc lại đi ra cả thế giới chỉ trong vài giây."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại ba điều sẽ dùng"
+    checks:
+      - "alg.regex_lang('.*=.*', 'x=', 2) == {'=', 'x=', '=x', '=='}"
+      - "2 ** 2 == 4 and 2 ** 3 == 8 and 10 ** 3 == 1000 and 20 ** 3 == 8000"
+      - "round(100 * 0.01) == 1"
+    steps:
+      - show: |
+          <table class="t"><tr><th>điều cần nhớ</th><th>ví dụ số</th></tr>
+          <tr><td>ở khoá Lý thuyết tính toán: dấu chấm là <b>một ký tự bất kỳ</b>; chấm sao là <b>bao nhiêu ký tự bất kỳ cũng được</b>, kể cả không có</td><td><code>.*=.*</code> khớp =, x=, =x, == trong các chuỗi dài tới 2 ký tự x và =</td></tr>
+          <tr><td>ở khoá tích hợp và triển khai liên tục: <b>phát hành tiệm tiến</b> đưa bản mới tới một phần nhỏ trước, có lỗi thì dừng</td><td>đưa tới 1% trước: lỗi chỉ chạm 1 trong 100 người dùng</td></tr>
+          <tr><td>bậc tăng: gấp đôi n thì n bình phương gấp 4, n mũ 3 gấp 8</td><td>n = 10: n mũ 3 là 1000; n = 20: 8000, gấp 8</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.3", "1.3", "1.4"]
+        say: "Trước hết, ôn ba điều sẽ dùng. Ở khoá Lý thuyết tính toán, dấu chấm là một ký tự bất kỳ, còn chấm sao là bao nhiêu ký tự bất kỳ cũng được, kể cả không có ký tự nào. Vì vậy mẫu chấm sao, dấu bằng, chấm sao khớp các chuỗi dấu bằng, x bằng, bằng x, và hai dấu bằng. Ở khoá tích hợp và triển khai liên tục, phát hành tiệm tiến đưa bản mới tới một phần nhỏ trước, có lỗi thì dừng. Đưa tới 1 phần trăm trước thì lỗi chỉ chạm 1 trong 100 người dùng. Cuối cùng, gấp đôi n thì n bình phương gấp 4, còn n mũ 3 gấp 8, như 10 mũ 3 là 1000 và 20 mũ 3 là 8000."
+
+  # ───────────────────────── 3. NGÔN NGỮ ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Ngôn ngữ của bài hậu kiểm"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thuật ngữ</th><th>nghĩa</th></tr>
+          <tr><td><b>tường lửa ứng dụng</b></td><td>lớp chặn các yêu cầu trang mạng độc hại, bằng rất nhiều <b>quy tắc</b> chứa biểu thức chính quy</td></tr>
+          <tr><td><b>chế độ mô phỏng</b></td><td>quy tắc chỉ ghi lại mà không chặn — nhưng biểu thức <b>vẫn được chạy</b></td></tr>
+          <tr><td><b>quy trình chuẩn</b></td><td>các bước được viết sẵn cho một loại thay đổi; với quy tắc, nó <b>cho phép</b> đẩy ra toàn cầu</td></tr>
+          <tr><td><b>quay lui</b></td><td>cách khớp: thử một lựa chọn, hỏng thì quay lại thử lựa chọn khác</td></tr>
+          <tr><td><b>hoàn tác</b></td><td>lùi một thay đổi về bản trước; kế hoạch hoàn tác có ghi sẵn trong phiếu thay đổi</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", "1.6"]
+        say: "Bài dùng năm thuật ngữ. Tường lửa ứng dụng là lớp chặn các yêu cầu trang mạng độc hại, bằng rất nhiều quy tắc chứa biểu thức chính quy. Ở chế độ mô phỏng, quy tắc chỉ ghi lại mà không chặn, nhưng biểu thức vẫn được chạy. Quy trình chuẩn là các bước được viết sẵn cho một loại thay đổi, và với quy tắc, nó cho phép đẩy thẳng ra toàn cầu. Quay lui là cách khớp, thử một lựa chọn, hỏng thì quay lại thử lựa chọn khác. Còn hoàn tác là lùi một thay đổi về bản trước, và kế hoạch hoàn tác có ghi sẵn trong phiếu thay đổi."
+
+  # ───────────────────────── 4. HÌNH CƠ CHẾ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hai đường ra thế giới: phần mềm đi từng bậc, quy tắc đi thẳng"
+    checks:
+      - "round(476 / 60, 1) == 7.9 and round(60 * 24 / 476, 1) == 3.0"
+    steps:
+      - show: |
+          <div><svg width="1680" height="400" viewBox="0 0 1680 400">
+          <defs><marker id="a7" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="16" refX="14" refY="8" orient="auto"><path d="M0,0 L16,8 L0,16 z" fill="#2a78d6"/></marker>
+          <marker id="r7" markerUnits="userSpaceOnUse" markerWidth="18" markerHeight="18" refX="16" refY="9" orient="auto"><path d="M0,0 L18,9 L0,18 z" fill="#e11d48"/></marker></defs>
+          <g font-size="23" fill="#1f2937" text-anchor="middle">
+          <text x="20" y="45" text-anchor="start" font-weight="bold" fill="#2a78d6">phần mềm (quy trình chuẩn)</text>
+          <rect x="20" y="70" width="280" height="80" rx="10" fill="#e0ecfb" stroke="#2a78d6" stroke-width="2"/><text x="160" y="105">điểm nội bộ</text><text x="160" y="135" font-size="20" fill="#6b7280">chỉ nhân viên đi qua</text>
+          <rect x="430" y="70" width="280" height="80" rx="10" fill="#e0ecfb" stroke="#2a78d6" stroke-width="2"/><text x="570" y="105">ít khách hàng</text><text x="570" y="135" font-size="20" fill="#6b7280">một nơi cô lập</text>
+          <rect x="840" y="70" width="280" height="80" rx="10" fill="#e0ecfb" stroke="#2a78d6" stroke-width="2"/><text x="980" y="120">nhiều khách hàng</text>
+          <rect x="1250" y="70" width="280" height="80" rx="10" fill="#dcfce7" stroke="#059669" stroke-width="2"/><text x="1390" y="120">cả thế giới</text>
+          <line x1="300" y1="110" x2="422" y2="110" stroke="#2a78d6" stroke-width="3" marker-end="url(#a7)"/>
+          <line x1="710" y1="110" x2="832" y2="110" stroke="#2a78d6" stroke-width="3" marker-end="url(#a7)"/>
+          <line x1="1120" y1="110" x2="1242" y2="110" stroke="#2a78d6" stroke-width="3" marker-end="url(#a7)"/>
+          <text x="20" y="235" text-anchor="start" font-weight="bold" fill="#e11d48">quy tắc tường lửa (quy trình chuẩn cho phép)</text>
+          <rect x="20" y="260" width="280" height="80" rx="10" fill="#fde2e2" stroke="#e11d48" stroke-width="2"/><text x="160" y="308">kiểm thử qua</text>
+          <rect x="1250" y="260" width="280" height="80" rx="10" fill="#fde2e2" stroke="#e11d48" stroke-width="3"/><text x="1390" y="308">cả thế giới</text>
+          <line x1="300" y1="300" x2="1240" y2="300" stroke="#e11d48" stroke-width="5" marker-end="url(#r7)"/>
+          <text x="775" y="285" fill="#e11d48">vài giây: 99% thay đổi tới mọi máy trong 2,29 giây</text>
+          <text x="775" y="380" font-size="21" fill="#6b7280">476 thay đổi quy tắc trong 60 ngày: trung bình 3 giờ một lần</text>
+          </g></svg></div>
+        focus: [1, 1, 1, 1, 1]
+        say: "Hình vẽ hai đường ra thế giới. Phần mềm của công ty đi từng bậc, trước tiên tới một điểm nội bộ chỉ nhân viên đi qua, rồi tới ít khách hàng ở một nơi cô lập. Sau đó mới tới nhiều khách hàng, và cuối cùng là cả thế giới. Quy tắc tường lửa thì khác, quy trình chuẩn cho phép đi thẳng ra toàn cầu, và 99 phần trăm thay đổi tới mọi máy chỉ trong 2 phẩy 29 giây. Lý do là quy tắc phải nhanh để chặn tấn công mới, và đội đã xử lý 476 thay đổi trong 60 ngày, trung bình 3 giờ một lần."
+
+  # ───────────────────────── 5. VÍ DỤ: DÒNG THỜI GIAN ─────────────────────────
+  - id: example
+    kind: example
+    title: "Dòng thời gian từng phút, tính lại từng khoảng"
+    checks:
+      - "(14 * 60 + 9) - (13 * 60 + 42) == 27 and (13 * 60 + 45) - (13 * 60 + 42) == 3"
+      - "(14 * 60) - (13 * 60 + 42) == 18 and (14 * 60 + 7) - (14 * 60 + 2) == 5"
+      - "(14 * 60 + 52) - (14 * 60 + 9) == 43 and (13 * 60 + 42) - (13 * 60 + 31) == 11"
+      - "(lambda f: [f(10), f(20), f(100), f(200)])(lambda n: sum(alg.bt_match('.*.*=.*', 'x' * (n - k))[1] for k in range(n + 1))) == [638, 3773, 358853, 2767703]"
+      - "round(2767703 / 358853, 1) == 7.7 and not alg.bt_match('.*.*=.*', 'x' * 20)[0]"
+    steps:
+      - show: |
+          <table class="t"><tr><th>giờ</th><th>bài hậu kiểm ghi</th></tr>
+          <tr><td>13:31 → 13:37</td><td>thay đổi được duyệt và gộp; hệ thống dựng chạy kiểm thử: <b>qua</b></td></tr>
+          <tr><td>13:42</td><td>triển khai tự động ra toàn cầu</td></tr>
+          <tr><td>13:45</td><td>cảnh báo đầu tiên: phép thử từ bên ngoài báo tường lửa hỏng</td></tr>
+          <tr><td>14:00</td><td>xác định thủ phạm là tường lửa ứng dụng, loại khả năng bị tấn công</td></tr>
+          <tr><td>14:02 → 14:07</td><td>đề xuất tắt tường lửa trên toàn cầu; mất 5 phút mới làm được vì <b>không vào được hệ thống nội bộ</b></td></tr>
+          <tr><td>14:09 → 14:52</td><td>trở lại bình thường; thử lại ở <b>một thành phố</b>, rồi bật lại toàn cầu</td></tr></table>
+        focus: ["1.2", "1.3", "1.4", "1.5", "1.6", "1.6", "1.7"]
+        say: "Đây là dòng thời gian theo bài hậu kiểm. Từ 13 giờ 31 tới 13 giờ 37, thay đổi được duyệt, được gộp, và hệ thống dựng chạy kiểm thử, kết quả là qua. Lúc 13 giờ 42, thay đổi tự động đi ra toàn cầu. Ba phút sau, cảnh báo đầu tiên kêu, từ một phép thử bên ngoài. Lúc 14 giờ, đội xác định thủ phạm là tường lửa ứng dụng, và loại khả năng bị tấn công. Lúc 14 giờ 2, họ đề xuất tắt tường lửa trên toàn cầu, nhưng mất 5 phút mới làm được, vì không vào được hệ thống nội bộ của chính mình. Mọi thứ trở lại bình thường lúc 14 giờ 9, rồi họ thử lại ở một thành phố trước khi bật lại toàn cầu lúc 14 giờ 52."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. tổng thời gian sự cố</td><td>13:42 → 14:09</td><td>$\hlg{27}$ phút</td></tr>
+          <tr><td>Bước 2. tới cảnh báo đầu tiên</td><td>13:42 → 13:45</td><td>$\hl{3}$ phút</td></tr>
+          <tr><td>Bước 3. tới khi biết thủ phạm</td><td>13:42 → 14:00</td><td>$\hl{18}$ phút</td></tr>
+          <tr><td>Bước 4. từ đề xuất tới khi tắt được</td><td>14:02 → 14:07</td><td>$\hl{5}$ phút — mất vì lối vào nội bộ</td></tr>
+          <tr><td>Bước 5. thử kỹ trước khi bật lại</td><td>14:09 → 14:52</td><td>$\hl{43}$ phút</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", "1.6"]
+        say: "Ta tính lại từng khoảng. Bước một, từ 13 giờ 42 tới 14 giờ 9 là 27 phút, đúng con số của bài hậu kiểm. Bước hai, cảnh báo đầu tiên tới sau 3 phút. Bước ba, phải 18 phút mới biết thủ phạm. Bước bốn, từ lúc đề xuất tới lúc tắt được là 5 phút, và 5 phút đó mất vì lối vào nội bộ. Bước năm, đội dành 43 phút thử kỹ ở một thành phố trước khi bật lại."
+      - clear: true
+        show: |
+          <p>Lõi của biểu thức gây sự cố, theo phụ lục của bài hậu kiểm: <code>.*.*=.*</code>. Tường lửa <b>tìm</b> mẫu ở <b>mọi vị trí</b> của chuỗi. Bộ đếm của bài đếm số lần thử trên chuỗi n chữ x <b>không có</b> dấu bằng:</p>
+          <table class="t"><tr><th>bước</th><th>vì sao</th><th>số lần thử</th></tr>
+          <tr><td>Bước 6. n = 10</td><td>mỗi vị trí bắt đầu, chấm sao thứ nhất thử mọi độ dài, với mỗi độ dài đó chấm sao thứ hai lại thử mọi độ dài</td><td>638</td></tr>
+          <tr><td>Bước 7. n = 100</td><td>cùng cách đếm</td><td>$\hl{358\,853}$</td></tr>
+          <tr><td>Bước 8. n = 200</td><td>gấp đôi n: 2&nbsp;767&nbsp;703 chia 358&nbsp;853</td><td>gấp ≈ $\hl{7{,}7}$ — gần 8: bậc <b>n mũ 3</b></td></tr></table>
+        focus: [1, 1, "2.2", "2.2", "2.3", "2.4"]
+        say: "Bây giờ đến cơ chế làm cạn bộ xử lý. Phụ lục của bài hậu kiểm rút lõi biểu thức về chấm sao, chấm sao, dấu bằng, chấm sao, và tường lửa tìm mẫu này ở mọi vị trí của chuỗi. Bước sáu, với chuỗi 10 chữ x không có dấu bằng, bộ đếm của bài cần 638 lần thử. Lý do là ở mỗi vị trí bắt đầu, chấm sao thứ nhất thử mọi độ dài, và với mỗi độ dài đó, chấm sao thứ hai lại thử mọi độ dài. Bước bảy, với 100 chữ x đã là 358 nghìn 853 lần. Bước tám, gấp đôi lên 200 chữ x thì gấp khoảng 7 phẩy 7 lần, gần 8, tức bậc n mũ 3."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>con số</th><th>nguồn</th><th>đơn vị</th></tr>
+          <tr><td>4067 bước cho 20 chữ x, không có dấu bằng</td><td>bài hậu kiểm, đo bằng công cụ gỡ lỗi của một ngôn ngữ lập trình</td><td>“bước” của công cụ đó</td></tr>
+          <tr><td>3773 lần thử cho 20 chữ x</td><td>bộ đếm của bài</td><td>lần đặt một ký hiệu của mẫu vào một vị trí</td></tr></table>
+          <p class="note">Hai đơn vị khác nhau nên không so từng con số; điều giống nhau là tốc độ tăng. Mỗi yêu cầu đi qua tường lửa đều chạy biểu thức này; trên lưu lượng của cả mạng, mọi lõi bị vắt kiệt — đúng điều bài hậu kiểm ghi.</p>
+        focus: ["1.2", "1.3", 2, 2]
+        say: "Bài hậu kiểm đo được 4067 bước cho 20 chữ x không có dấu bằng, bằng công cụ gỡ lỗi của một ngôn ngữ lập trình. Bộ đếm của bài cho 3773 lần thử với cùng chuỗi, nhưng đó là một đơn vị khác. Vì hai đơn vị khác nhau, ta không so từng con số, mà chỉ so tốc độ tăng. Mỗi yêu cầu đi qua tường lửa đều chạy biểu thức này, nên trên lưu lượng của cả mạng, mọi lõi bị vắt kiệt, đúng điều bài hậu kiểm ghi."
+
+  # ───────────────────────── 6. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Kiểm bằng đường khác: đếm tay chuỗi ngắn, đếm phút theo giờ tròn"
+    checks:
+      - "[alg.bt_match('.*.*=.*', 'x' * m)[1] for m in range(3)] == [3, 8, 15] and 3 + 8 + 15 == 26"
+      - "sum(alg.bt_match('.*.*=.*', 'x' * (2 - k))[1] for k in range(3)) == 26"
+      - "(60 - 42) + 9 == 27"
+    steps:
+      - show: |
+          <table class="t"><tr><th>con số</th><th>đường khác để kiểm</th></tr>
+          <tr><td>cách đếm “mọi vị trí”</td><td>chuỗi xx: bắt đầu ở vị trí 0 còn xx (15 lần thử), vị trí 1 còn x (8), vị trí 2 còn chuỗi rỗng (3): 15 + 8 + 3 = <b>26</b> = đúng tổng của bộ đếm ✓</td></tr>
+          <tr><td>bậc n mũ 3</td><td>(200 chia 100) mũ 3 = 8; số đo 7,7 tiến dần về 8 khi n lớn ✓</td></tr>
+          <tr><td>27 phút</td><td>13:42 → 14:00 là 18 phút, thêm 9 phút tới 14:09: 18 + 9 = 27 ✓</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.3", "1.4"]
+        say: "Ta kiểm lại bằng đường khác. Với chuỗi chỉ có hai chữ x, bắt đầu ở vị trí 0 tốn 15 lần thử, ở vị trí 1 còn một chữ x tốn 8, ở vị trí 2 còn chuỗi rỗng tốn 3. Cộng lại 15 cộng 8 cộng 3 là 26, đúng tổng mà bộ đếm cho, nên cách đếm mọi vị trí là đúng. Về bậc tăng, 200 chia 100 rồi mũ 3 là 8, và số đo 7 phẩy 7 tiến dần về 8 khi n lớn. Cuối cùng, 13 giờ 42 tới 14 giờ là 18 phút, thêm 9 phút tới 14 giờ 9, đúng 27 phút."
+
+  # ───────────────────────── 7. BÀI HỌC SAI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "Những bài học sai hay gặp"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">1.</b> “Lỗi của người viết biểu thức”</td><td>bài hậu kiểm ghi <b>11</b> nguyên nhân góp phần, trong đó lớp bảo vệ chống biểu thức ăn quá nhiều bộ xử lý đã bị gỡ <b>nhầm</b> vài tuần trước</td><td>sửa hệ thống: đưa lớp bảo vệ trở lại, rà tay cả 3868 quy tắc</td></tr>
+          <tr><td><b class="red">2.</b> “Chế độ mô phỏng thì vô hại”</td><td>mô phỏng chỉ bỏ việc chặn; biểu thức <b>vẫn chạy</b> trên mọi yêu cầu</td><td>coi mọi thay đổi có chạy mã là thay đổi thật</td></tr>
+          <tr><td><b class="red">3.</b> “Kiểm thử qua là an toàn”</td><td>bộ kiểm thử chỉ xét chặn đúng, chặn nhầm; <b>không đo</b> bộ xử lý</td><td>đo hiệu năng của mọi quy tắc trong bộ kiểm thử</td></tr></table>
+        focus: ["1.2", "1.2", "1.2", "1.3", "1.3", "1.4", "1.4"]
+        say: "Bài học sai thứ nhất là kết luận đây là lỗi của người viết biểu thức. Bài hậu kiểm ghi 11 nguyên nhân góp phần, trong đó có một lớp bảo vệ chống biểu thức ăn quá nhiều bộ xử lý, đã bị gỡ nhầm khi viết lại mã vài tuần trước. Vì thế việc sửa ở mức hệ thống là đưa lớp bảo vệ trở lại, và rà tay cả 3868 quy tắc. Bài học sai thứ hai là nghĩ chế độ mô phỏng thì vô hại, trong khi nó chỉ bỏ việc chặn, còn biểu thức vẫn chạy trên mọi yêu cầu. Hãy coi mọi thay đổi có chạy mã là thay đổi thật. Bài học sai thứ ba là nghĩ kiểm thử qua là an toàn. Bộ kiểm thử chỉ xét chặn đúng hay chặn nhầm mà không đo bộ xử lý, nên phải thêm phép đo hiệu năng cho mọi quy tắc."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">4.</b> “Đã ghi kế hoạch hoàn tác là đủ” (người đã đi làm)</td><td>kế hoạch hoàn tác phải chạy trọn bản dựng tường lửa <b>hai lần</b>, quá lâu; lối vào dự phòng ít được tập; một số người mất quyền vì thông tin đăng nhập hết hạn</td><td>tập cả lối khẩn cấp: tắt toàn cầu, lối vào dự phòng, tài khoản trực</td></tr>
+          <tr><td><b class="red">5.</b> “Đẩy toàn cầu trong vài giây là ưu điểm thuần”</td><td>nhanh cả khi <b>sai</b>: 27 phút, cả mạng</td><td>quy tắc thường đi từng bậc như phần mềm; <b>giữ</b> lối đẩy toàn cầu cho tấn công đang diễn ra</td></tr></table>
+        focus: ["1.2", "1.2", "1.2", "1.3", "1.3"]
+        say: "Bài học sai thứ tư hay gặp ở người đã đi làm, nghĩ rằng đã ghi kế hoạch hoàn tác là đủ. Kế hoạch đó phải chạy trọn bản dựng tường lửa hai lần, quá lâu, lối vào dự phòng ít được tập, và một số người mất quyền vì thông tin đăng nhập đã hết hạn. Vậy phải tập cả lối khẩn cấp, như lệnh tắt toàn cầu, lối vào dự phòng, và tài khoản của người trực. Bài học sai thứ năm là coi đẩy toàn cầu trong vài giây là ưu điểm thuần, trong khi nó nhanh cả khi sai. Việc cần làm công ty ghi sau sự cố là cho quy tắc thường đi từng bậc như phần mềm, nhưng vẫn giữ lối đẩy toàn cầu cho tấn công đang diễn ra."
+
+  # ───────────────────────── 8. BẠN SẼ LÀM GÌ ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Bạn sẽ làm gì?"
+    checks:
+      - "4 * 15 == 60 and 4 * 15 // 60 == 1"
+      - "round(0.8 * 27, 1) == 21.6 and round(0.01 * (3 + 5), 2) == 0.08"
+      - "round(21.6 / 0.08) == 270"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>tình huống (số minh hoạ)</th></tr>
+          <tr><td>1</td><td>Hệ của bạn đẩy cấu hình chặn tấn công ra toàn cầu trong 3 giây. Có đề xuất bắt <b>mọi</b> thay đổi qua 4 bậc, mỗi bậc 15 phút. Nhận hay không?</td></tr>
+          <tr><td>2</td><td>Nếu bậc đầu chỉ có <b>1%</b> lưu lượng, và lỗi được phát hiện, tắt trong 3 + 5 phút như sự cố này, thì thiệt hại so với cả mạng mất 80% trong 27 phút nhỏ đi bao nhiêu lần? Đo thiệt hại bằng phần lưu lượng nhân số phút.</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn ra quyết định, với số minh hoạ. Câu một, hệ của bạn đẩy cấu hình chặn tấn công ra toàn cầu trong 3 giây, và có đề xuất bắt mọi thay đổi qua 4 bậc, mỗi bậc 15 phút, bạn nhận hay không? Câu hai, giả sử bậc đầu chỉ có 1 phần trăm lưu lượng, và lỗi được phát hiện rồi tắt trong 3 cộng 5 phút như sự cố này. So với cả mạng mất 80 phần trăm trong 27 phút, thiệt hại nhỏ đi bao nhiêu lần? Hãy đo thiệt hại bằng phần lưu lượng nhân số phút. Dừng video và viết ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 1: lựa chọn</th><th>được</th><th>mất</th></tr>
+          <tr><td>mọi thay đổi qua 4 bậc</td><td>lỗi như sự cố này chỉ chạm bậc đầu</td><td>4 nhân 15 = <b>60 phút</b> mới tới toàn cầu — quá chậm khi đang bị tấn công</td></tr>
+          <tr><td><b>từng bậc cho thay đổi thường</b>, lối khẩn cấp cho tấn công đang diễn ra</td><td>giữ cả an toàn lẫn tốc độ khi thật cần</td><td>phải định nghĩa rõ “khẩn cấp”, và tập lối đó định kỳ</td></tr></table>
+          <p class="note">Đây cũng đúng là việc công ty ghi sẽ làm sau sự cố. Điều kiện đổi: nếu gần như mọi thay đổi đều “khẩn cấp”, lối khẩn cấp đã thành lối thường — phải xem lại.</p>
+        focus: [1, "1.2", "1.3", "1.3", 2]
+        say: "Đáp án câu một là một đánh đổi. Bắt mọi thay đổi qua 4 bậc thì một lỗi như sự cố này chỉ chạm bậc đầu, nhưng 4 nhân 15 là 60 phút mới tới toàn cầu, quá chậm khi đang bị tấn công. Chọn từng bậc cho thay đổi thường, và giữ lối khẩn cấp cho tấn công đang diễn ra, thì giữ được cả hai. Đổi lại phải định nghĩa rõ thế nào là khẩn cấp và tập lối đó định kỳ. Đây cũng đúng là việc công ty ghi sẽ làm sau sự cố, và nếu gần như mọi thay đổi đều khẩn cấp thì phải xem lại quy trình."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 2: bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. cả mạng</td><td>80% nhân 27 phút = 0,8 nhân 27</td><td>$\hl{21{,}6}$ đơn vị</td></tr>
+          <tr><td>Bước 2. chỉ bậc đầu</td><td>1% nhân (3 + 5) phút = 0,01 nhân 8</td><td>$\hl{0{,}08}$ đơn vị</td></tr>
+          <tr><td>Bước 3. so sánh</td><td>21,6 chia 0,08</td><td>nhỏ đi $\hlg{270}$ lần</td></tr></table>
+          <p class="note">Điều kiện: bậc đầu phải đủ lớn để lỗi lộ ra, và cảnh báo phải nhìn riêng từng bậc.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Đáp án câu hai, tính từng bước. Bước một, cả mạng mất 80 phần trăm trong 27 phút, 0 phẩy 8 nhân 27 là 21 phẩy 6 đơn vị. Bước hai, chỉ bậc đầu 1 phần trăm trong 8 phút, 0 phẩy 01 nhân 8 là 0 phẩy 08 đơn vị. Bước ba, 21 phẩy 6 chia 0 phẩy 08, thiệt hại nhỏ đi 270 lần. Điều kiện là bậc đầu phải đủ lớn để lỗi lộ ra, và cảnh báo phải nhìn riêng từng bậc."
+
+  # ───────────────────────── 9. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Thay đổi hệ thống & tư duy chuyên gia"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">mẫu quay lui: bậc n mũ 3</span><span class="a">→</span>
+          <span class="n">lớp bảo vệ bị gỡ nhầm, kiểm thử không đo bộ xử lý</span><span class="a">→</span>
+          <span class="n">đẩy toàn cầu trong vài giây: 27 phút, 80%</span><span class="a">→</span>
+          <span class="n">từng bậc + lối khẩn cấp đã tập + bộ máy có bảo đảm</span></div>
+        say: "Tổng kết lại, một mẫu quay lui có số lần thử tăng theo bậc n mũ 3. Lớp bảo vệ đã bị gỡ nhầm, kiểm thử không đo bộ xử lý, và quy trình đẩy quy tắc ra toàn cầu trong vài giây. Thế là một lỗi hiệu năng thành 27 phút mất 80 phần trăm lưu lượng. Thay đổi hệ thống là triển khai từng bậc, tập lối khẩn cấp, và đổi sang bộ máy khớp có bảo đảm thời gian chạy."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> tốc độ triển khai là con dao hai lưỡi — nó nhân <b>cả</b> sai lầm. Hai lỗi nhỏ cùng lúc (một mẫu chậm, một quy trình không có bậc) mới thành sự cố lớn; sửa cả hai.</div>
+        say: "Điều cần mang theo, tốc độ triển khai là con dao hai lưỡi, vì nó nhân cả sai lầm. Phải có hai lỗi nhỏ cùng lúc, một mẫu chậm và một quy trình không có bậc, mới thành sự cố lớn, nên hãy sửa cả hai."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 8): GitLab, 2017 — một lệnh xoá chạy nhầm máy, và vì sao bản sao lưu “có” lại không khôi phục được.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 8, ta đọc bài hậu kiểm năm 2017 của một nền tảng lưu mã nguồn, nơi một lệnh xoá chạy nhầm máy. Các bản sao lưu tưởng là có lại không khôi phục được. Hẹn gặp bạn ở bài tiếp theo."

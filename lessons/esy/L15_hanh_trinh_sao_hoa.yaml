@@ -1,0 +1,405 @@
+id: L15
+course: ESY
+series: "ESY · Hệ thống nhúng và thời gian thực"
+title: "Bài 15 — Tình huống chuyên gia theo dòng thời gian: phần mềm trên robot thăm dò sao Hoả"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+case: journey
+source: "curriculum/esy.yaml L15; audit/esy/sources_L15.md (câu trích nguyên văn, đọc 2026-11-02); audit/esy/verify_esy.py L15a–L15f; audit/verify_plan_curricula.py ESY:L15; G. Reeves, What really happened on Mars? — Authoritative Account, thư 15/12/1997, bản chép tại cs.unc.edu [GR97]; M. Jones, What Happened on Mars?, thư 5/12/1997, cs.cmu.edu [MJ97]; G. Reeves, T. Neilson, The Mars Rover Spirit FLASH Anomaly, IEEE Aerospace Conference 2005 (NTRS 20060044140), bản tác giả tại cs.princeton.edu [RN05]; NASA/JPL news 29/8/2014 Memory Reformat Planned for Opportunity Mars Rover [JPL14a]; NASA/JPL news 11/12/2014 Opportunity Working in No-Flash Mode for Now [JPL14b]; NASA/JPL news 27/3/2015 Rover Amnesia Event Follows Latest Memory Reformatting [JPL15]; NASA/JPL F´ (F Prime), README GitHub nasa/fprime và fprime.jpl.nasa.gov/overview, /overview/projects [FP]; ESY bài 10 (đảo ngược ưu tiên), bài 11 (hệ điều hành thời gian thực), bài 12 (bộ giám sát, cấp phát động), bài 14 (hai phân vùng, đường lui)"
+assumes: [arith, cdot, frac, approx, power, ltgt]
+# Quy ước: “tác vụ cao / trung bình / thấp” như bài 10; “khoá” = khoá loại trừ lẫn nhau (mutex); “kế thừa ưu tiên” như bài 10;
+#   “bộ giám sát” như bài 12; “ngày sao Hoả” = sol, dài 24 giờ 37 phút [RN05]. Bộ nhớ tạm = RAM (mất khi tắt điện);
+#   bộ nhớ flash = bộ nhớ lưu lâu (giữ khi tắt điện, ô nhớ mòn dần). 1 MB = 1024 KB (cách tính trong bài).
+#   Mọi sự kiện và con số có nguồn ghi trong audit/esy/sources_L15.md. Con số khác là phép tính lại (checks) hoặc ghi “(số minh hoạ)”:
+#   mốc 40 ms, 110 ms, 15 ms, 2 ms, tải trung bình 30/60 ms ở chặng 1; 3000/2000/1000 tệp, 100 tệp ở chặng 2; 300 sản phẩm dữ liệu mỗi
+#   ngày ở chặng 3; trạm đo 600 KB, 20 KB mỗi ngày ở câu đố — đều là SỐ MINH HOẠ.
+#   “Gần 50 lần (49,2) đặt lại mỗi ngày sao Hoả” là phép tính trên mẫu 15–15–60 phút (cận trên nếu lặp suốt ngày), KHÔNG phải số đo.
+#   Tránh trùng CAS L04 (khoá CAS sẽ phân tích sự cố Pathfinder): bài này rút thực hành theo quy mô nhiệm vụ, không kể chi tiết điều tra.
+#   Lời đọc không nói “VxWorks”, “select()”, “JPL”, “F Prime”, “CubeSat”, “Linux”, “RAM”: nói “hệ điều hành thời gian thực thương mại”,
+#   “hàm chờ nhiều nguồn”, “Phòng thí nghiệm Sức đẩy Phản lực”, “khung phần mềm bay”, “vệ tinh siêu nhỏ”, “hệ điều hành mã nguồn mở”,
+#   “bộ nhớ tạm”. Tên NASA, Pathfinder, Spirit, Opportunity, flash: lexicon_vi.ESY.yaml (probe p2).
+objectives:
+  - "Kể lại hành trình phần mềm bay trên robot thăm dò sao Hoả qua năm chặng từ 1997 tới nay, mỗi chặng một điểm nghẽn và một cách xử lý"
+  - "Tính lại hạn chót của chu kỳ 8 Hz khi đảo ngược ưu tiên, số lần cấp thêm bộ nhớ trước khi cạn, nhịp đặt lại trễ và tuổi thọ vượt thiết kế"
+  - "Chọn giữa khởi động lại định kỳ, giới hạn vùng nhớ cố định và giám sát ngưỡng cho thiết bị của mình, kèm điều kiện đổi lựa chọn"
+asr_reviewed:
+  - {sentence: "Tác vụ khí tượng còn giữ khoá 2 mi li giây.", reason: "ASR chép “Tắt vụ khí tượng còn giữ khóa 2 mili giây.” (0.762): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh; lệch âm/thanh thuần Việt: tác/tắt — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Câu một, thư viện ghi thẻ nhớ mua về làm bộ nhớ trống giảm 20 ki-lô-byte mỗi ngày, hiện còn 600.", reason: "ASR chép “Câu một, Thứ viện ghi thể nhớ mua về làm bộ nhớ trống giảm 20 kilobytes mỗi ngày, hiện còn 600.” (0.833): KB đọc “ki-lô-byte” theo lexicon của khoá, ASR viết “kilobyte/kg”; lệch âm/thanh thuần Việt: thư/thứ, thẻ/thể — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bước ba, cấu hình cho phép vùng nhớ riêng xin thêm từng 256 ki-lô-byte mà không giới hạn, lấy bộ nhớ trống khoảng 4096 ki-lô-byte thì chừng 16 lần xin là cạn.", reason: "ASR chép “Bước 3, cấu hình cho phép vùng nhớ riêng sinh thêm từng 256 kilobyte mà không giới hạn, lấy bộ nhớ trống khoảng 4.096 kilobyte thì chừng 16 lần sinh là cạn.” (0.867): KB đọc “ki-lô-byte” theo lexicon của khoá, ASR viết “kilobyte/kg”; lệch âm/thanh thuần Việt: xin/sinh, xin/sinh — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Từ 2014, nhiệm vụ 3 tháng đã thành hơn 10 năm và flash mòn.", reason: "ASR chép “Từ 2014, nhiệm vụ 3 tháng đã thành hơn 10 năm và for last month.” (0.872): “flash” đọc thô (foreign_ok, probe p2 6/8 — PARTIAL), ASR chép theo âm “for last/phơ lát/folas”; mòn lệch âm — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Ở chặng ba, đội điều tra gửi lệnh chế độ hạn chế, phần cứng bật vài bit trong một thanh ghi để phần mềm không dùng flash.", reason: "ASR chép “Ở chặn 3, đội điều tra gửi lệnh chế độ hạn chế, phần cứng bật vài biết trong một thanh ghi để phần mềm không dùng pha last.” (0.873): lệch âm/thanh thuần Việt: chặng/chặn, bit/biết; “flash” đọc thô (foreign_ok, probe p2 6/8 — PARTIAL), ASR chép theo âm “for last/phơ lát/folas” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Khi bộ nhớ trống còn 800 ki-lô-byte trở xuống, xe dừng mọi hoạt động.", reason: "ASR chép “Khi bộ nhớ trống còn 800kg trở xuống, xe dừng mọi hoạt động.” (0.875): KB đọc “ki-lô-byte” theo lexicon của khoá, ASR viết “kilobyte/kg” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bước một, ngưỡng 800 ki-lô-byte chia 256 được 3 phẩy 125, tức còn đủ 3 lần xin thêm trước khi cạn, nên dừng kịp.", reason: "ASR chép “Bước 1, ngưỡng 800 kilobyte chi 256 được 3,125, tức còn đủ 3 lần xin thêm trước khi cạn nên dừng kịp.” (0.882): KB đọc “ki-lô-byte” theo lexicon của khoá, ASR viết “kilobyte/kg”; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: chia (trong “ki lô byte chia” → “kilobyte chi”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Phần mềm bay dùng hệ điều hành thương mại cùng thư viện tệp đi kèm, với bộ nhớ flash 224 mê-ga-byte.", reason: "ASR chép “Phần mềm bay dùng hệ điều hành thương mại cùng thư viện tạp đi kèm với bộ nhớ Flash 224 Megabyte.” (0.885): MB đọc “mê-ga-byte” theo lexicon của khoá, ASR viết “MB/megabyte”; lệch âm/thanh thuần Việt: tệp/tạp — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Nhân ngược, 16 nhân 256 là 4096 ki-lô-byte.", reason: "ASR chép “Nhân ngược, 16 nhân 256 là 4.096 kilobytes.” (0.9): KB đọc “ki-lô-byte” theo lexicon của khoá, ASR viết “kilobyte/kg” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bạn khởi động lại mỗi đêm, giới hạn cỡ cố định cho thư viện, hay giám sát ngưỡng 100 ki-lô-byte?", reason: "ASR chép “Bạn khởi động lại mỗi đêm, giới hạn cỡ cố định cho thư viện, hay giám sát ngưỡng 100 kilobytes.” (0.909): KB đọc “ki-lô-byte” theo lexicon của khoá, ASR viết “kilobyte/kg” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Họ định dạng lại flash để tìm ô hỏng và đánh dấu tránh, ít rủi ro vì phần mềm bay nằm ở một bộ nhớ lưu lâu khác.", reason: "ASR chép “Họ định dạng lại phơ lách để tìm ô hỏng và đánh dấu tránh, ít trủi ro vì phần mềm bay nằm ở một bộ nhớ lưu lâu khác.” (0.912): lệch âm/thanh thuần Việt: rủi/trủi; “flash” đọc thô (foreign_ok, probe p2 6/8 — PARTIAL), ASR chép theo âm “for last/phơ lát/folas” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Khởi động lại thì lại gắn ổ flash, lại cạn bộ nhớ, và mỗi lần đặt lại được hoãn 15, 15, rồi 60 phút để mặt đất kịp can thiệp.", reason: "ASR chép “Khởi động lại thì lại gắn ổ phơ lát, lại cạn bộ nhớ và mỗi lần đặt lại được khoảng 15, 15, rồi 60 phút để mặt đất kịp can thiệp.” (0.925): lệch âm/thanh thuần Việt: hoãn/khoảng; “flash” đọc thô (foreign_ok, probe p2 6/8 — PARTIAL), ASR chép theo âm “for last/phơ lát/folas” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Đáp án câu một bắt đầu bằng phép tính, 600 trừ 100 chia 20 là 25 ngày thì chạm ngưỡng, còn 90 ngày cần 1800 ki-lô-byte.", reason: "ASR chép “Đáp án câu 1 bắt đầu bằng phép tính 600 trừ 120 là 25 ngày thì chạm ngưỡng, còn 90 ngày cần 1.800 kilobyte.” (0.93): KB đọc “ki-lô-byte” theo lexicon của khoá, ASR viết “kilobyte/kg”; lệch âm/thanh thuần Việt: chia/∅ — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Ở bài 14, ta luôn giữ một đường lui, hai phân vùng 400 cộng bộ nạp 32 là 832 ki-lô-byte.", reason: "ASR chép “Ở bài 14, ta luôn giữ một đường lui 2 phân vùng 400 cộng bộ nạp 32 là 832 kilobyte.” (0.931): KB đọc “ki-lô-byte” theo lexicon của khoá, ASR viết “kilobyte/kg” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Trong lúc chờ, xe chạy không dùng flash, dữ liệu giữ ở bộ nhớ tạm và phải gửi về trước khi ngủ.", reason: "ASR chép “Trong lúc chờ, xe chạy không dùng phó lát, dữ liệu giữ ở bộ nhớ tạm và phải gửi về trước khi ngủ.” (0.933): “flash” đọc thô (foreign_ok, probe p2 6/8 — PARTIAL), ASR chép theo âm “for last/phơ lát/folas” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Họ sửa phần mềm để tránh hẳn dãy thứ 7 trong 7 dãy flash, và từ ngày 20 tháng 3 năm 2015 xe dùng lại 6 dãy kia.", reason: "ASR chép “Họ sửa phần mềm để tránh hãng dãy thứ bảy trong bảy dãy Folas và từ ngày 20 tháng 3 năm 2015 xe dùng lại 6 dãy kia.” (0.941): lệch âm/thanh thuần Việt: hẳn/hãng; “flash” đọc thô (foreign_ok, probe p2 6/8 — PARTIAL), ASR chép theo âm “for last/phơ lát/folas” — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Tự khởi động lại trên một hành tinh khác"
+    checks:
+      - "1 / 8 == 0.125"
+      - "33 - 18 == 15"
+    steps:
+      - show: |
+          <p>Năm <b>1997</b>, tàu Pathfinder trên sao Hoả tự khởi động lại máy tính: một tác vụ không xong việc trong chu kỳ <b>0,125 giây</b>.</p>
+          <p>Năm <b>2004</b>, xe tự hành Spirit đặt lại liên tục: từ ngày sao Hoả thứ <b>18</b> tới thứ <b>33</b> mới làm khoa học bình thường lại.</p>
+          <p>Năm <b>2014</b>, xe Opportunity, thiết kế cho <b>3 tháng</b>, đã chạy hơn <b>10 năm</b> và bộ nhớ flash bắt đầu mòn.</p>
+          <div class="box key">Hôm nay: năm chặng — mỗi quy mô nhiệm vụ làm lộ ra điểm nghẽn nào của phần mềm nhúng, và đội kỹ sư đã sửa ra sao từ rất xa Trái Đất.</div>
+        focus: [1, 2, 2, 3, 4]
+        say: "Chào bạn, năm 1997, tàu Pathfinder trên sao Hoả tự khởi động lại máy tính, vì một tác vụ không xong việc trong chu kỳ 0 phẩy 125 giây. Năm 2004, xe tự hành Spirit đặt lại liên tục. Từ ngày sao Hoả thứ 18 tới ngày thứ 33, xe mới làm khoa học bình thường lại. Năm 2014, xe Opportunity, thiết kế cho 3 tháng, đã chạy hơn 10 năm và bộ nhớ flash bắt đầu mòn. Hôm nay ta đi qua năm chặng, xem mỗi quy mô nhiệm vụ làm lộ ra điểm nghẽn nào, và đội kỹ sư đã sửa ra sao."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại bốn điều từ các bài trước"
+    checks:
+      - "1 + 4 + 3 == 8 and 1 + 2 + 1 == 4"
+      - "100 - 60 == 40"
+      - "2 * 400 + 32 == 832 and 832 <= 1024"
+      - "1000 / 8 == 125"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài</th><th>điều đã học</th><th>ví dụ số</th></tr>
+          <tr><td>bài 10</td><td><b>đảo ngược ưu tiên</b>: tác vụ cao chờ khoá của tác vụ thấp, tác vụ trung bình chen vào; sửa bằng <b>kế thừa ưu tiên</b></td><td>không kế thừa: tác vụ cao xong ở mốc 8; có kế thừa: xong ở mốc 4</td></tr>
+          <tr><td>bài 12</td><td><b>bộ giám sát</b>: không được cho ăn trước hạn thì chip tự khởi động lại; tránh cấp phát động khi đang chạy</td><td>hạn 100 ms, vòng chính 60 ms → dư 40 ms</td></tr>
+          <tr><td>bài 14</td><td>luôn còn <b>một đường lui</b>: hai phân vùng, hỏng thì quay về bản cũ</td><td>2 × 400 + 32 = 832 KB, vừa bộ nhớ 1024 KB</td></tr>
+          <tr><td>bài 3</td><td>chu kỳ = 1 chia tần số</td><td>8 lần mỗi giây → mỗi chu kỳ 125 ms</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bảng nhắc lại bốn điều từ các bài trước. Ở bài 10, tác vụ cao chờ khoá của tác vụ thấp, tác vụ trung bình chen vào, nên tác vụ cao xong ở mốc 8, có kế thừa ưu tiên thì xong ở mốc 4. Ở bài 12, bộ giám sát không được cho ăn trước hạn 100 mi li giây thì chip tự khởi động lại. Ở bài 14, ta luôn giữ một đường lui, hai phân vùng 400 cộng bộ nạp 32 là 832 ki-lô-byte. Ở bài 3, chu kỳ bằng 1 chia tần số, 8 lần mỗi giây thì mỗi chu kỳ 125 mi li giây."
+
+  # ───────────────────────── 3. NGÔN NGỮ ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Ngôn ngữ của hành trình"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thuật ngữ</th><th>nghĩa</th></tr>
+          <tr><td><b>phần mềm bay</b></td><td>chương trình chạy trên máy tính của tàu, sửa được từ Trái Đất</td></tr>
+          <tr><td><b>ngày sao Hoả</b> (sol)</td><td>một ngày trên sao Hoả, dài 24 giờ 37 phút</td></tr>
+          <tr><td><b>bộ nhớ tạm</b> (RAM)</td><td>nhanh, mất hết dữ liệu khi tắt điện</td></tr>
+          <tr><td><b>bộ nhớ flash</b></td><td>giữ dữ liệu khi tắt điện; ô nhớ mòn dần sau nhiều lần ghi</td></tr>
+          <tr><td><b>phần mềm thương mại có sẵn</b> (COTS)</td><td>mua về dùng, đội bay không tự viết</td></tr>
+          <tr><td><b>chế độ hạn chế</b> (crippled mode)</td><td>chạy thiếu một phần (ví dụ không dùng flash) để còn liên lạc được</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", "1.6", "1.7"]
+        say: "Bài dùng sáu thuật ngữ. Phần mềm bay là chương trình chạy trên máy tính của tàu, và sửa được từ Trái Đất. Một ngày sao Hoả dài 24 giờ 37 phút. Bộ nhớ tạm chạy nhanh nhưng mất hết dữ liệu khi tắt điện. Bộ nhớ flash giữ dữ liệu khi tắt điện, nhưng ô nhớ mòn dần sau nhiều lần ghi. Phần mềm thương mại có sẵn là phần mua về dùng. Chế độ hạn chế là chạy thiếu một phần để máy vẫn còn liên lạc được."
+
+  # ───────────────────────── 4. DÒNG THỜI GIAN ─────────────────────────
+  - id: timeline
+    kind: intuition
+    title: "Năm chặng trên một trục thời gian"
+    steps:
+      - show: |
+          <div><svg width="1700" height="320" viewBox="0 0 1700 320">
+          <line x1="30" y1="150" x2="1670" y2="150" stroke="#1f2937" stroke-width="3"/>
+          <g font-size="24" text-anchor="middle" fill="#1f2937">
+          <circle cx="160" cy="150" r="15" fill="#9ca3af"/><text x="160" y="108" font-weight="bold">1997</text><text x="160" y="200">một tàu, một CPU</text><text x="160" y="232">đảo ngược ưu tiên</text>
+          <circle cx="500" cy="150" r="15" fill="#2a78d6"/><text x="500" y="108" font-weight="bold">1/2004</text><text x="500" y="200">hai xe, làm trong 3 năm</text><text x="500" y="232">bộ nhớ cạn, đặt lại lặp</text>
+          <circle cx="850" cy="150" r="15" fill="#7c3aed"/><text x="850" y="108" font-weight="bold">4/2004</text><text x="850" y="200">bản phần mềm mới</text><text x="850" y="232">giám sát ngưỡng, nén thư mục</text>
+          <circle cx="1200" cy="150" r="15" fill="#eb6834"/><text x="1200" y="108" font-weight="bold">2014 → 2015</text><text x="1200" y="200">3 tháng thành hơn 10 năm</text><text x="1200" y="232">flash mòn, tránh vùng hỏng</text>
+          <circle cx="1540" cy="150" r="15" fill="#059669"/><text x="1540" y="108" font-weight="bold">2017 → nay</text><text x="1540" y="200">nhiều nhiệm vụ nhỏ</text><text x="1540" y="232">một khung dùng lại</text>
+          </g>
+          <text x="850" y="300" font-size="23" fill="#6b7280" text-anchor="middle">khai sinh → nhân đôi, gấp rút → ổn định → kéo dài vượt thiết kế → tiếp tục phát triển</text>
+          </svg></div>
+        focus: [1, 1, 1, 1, 1]
+        say: "Hình là trục thời gian với năm chặng. Năm 1997, một tàu với một bộ xử lý gặp lỗi đảo ngược ưu tiên. Năm 2004, hai xe tự hành cạn bộ nhớ và đặt lại liên tục, rồi tháng 4 có bản phần mềm mới. Từ 2014, nhiệm vụ 3 tháng đã thành hơn 10 năm và flash mòn. Từ 2017 tới nay, nhiều nhiệm vụ nhỏ dùng lại một khung phần mềm chung."
+
+  # ───────────────────────── 5. CƠ CHẾ ─────────────────────────
+  - id: mech
+    kind: concept
+    title: "Cơ chế chung: lỗi → khâu giám sát → khởi động lại → còn đường lui không?"
+    steps:
+      - show: |
+          <div><svg width="1600" height="350" viewBox="0 0 1600 350">
+          <defs><marker id="ah" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="12" refX="14" refY="6" orient="auto"><path d="M0,0 L16,6 L0,12 z" fill="#1f2937"/></marker></defs>
+          <g font-size="24" text-anchor="middle" fill="#1f2937">
+          <rect x="30" y="120" width="300" height="100" rx="10" fill="#fde8e8" stroke="#e11d48" stroke-width="3"/><text x="180" y="160">tác vụ kẹt</text><text x="180" y="194">trễ hạn hoặc bị treo</text>
+          <rect x="430" y="120" width="300" height="100" rx="10" fill="#e0ecfb" stroke="#2a78d6" stroke-width="3"/><text x="580" y="160">khâu giám sát hạn</text><text x="580" y="194">phát hiện, ra lệnh đặt lại</text>
+          <rect x="830" y="120" width="300" height="100" rx="10" fill="#fff7e6" stroke="#eb6834" stroke-width="3"/><text x="980" y="160">khởi động lại</text><text x="980" y="194">việc còn lại dời sang mai</text>
+          <rect x="1230" y="20" width="340" height="100" rx="10" fill="#dcfce7" stroke="#059669" stroke-width="3"/><text x="1400" y="60">nguyên nhân hết</text><text x="1400" y="94">chạy tiếp bình thường</text>
+          <rect x="1230" y="220" width="340" height="100" rx="10" fill="#fde8e8" stroke="#e11d48" stroke-width="3"/><text x="1400" y="260">nguyên nhân còn</text><text x="1400" y="294">đặt lại mãi, cần đường lui</text>
+          </g>
+          <line x1="330" y1="170" x2="425" y2="170" stroke="#1f2937" stroke-width="3" marker-end="url(#ah)"/>
+          <line x1="730" y1="170" x2="825" y2="170" stroke="#1f2937" stroke-width="3" marker-end="url(#ah)"/>
+          <line x1="1130" y1="150" x2="1225" y2="80" stroke="#1f2937" stroke-width="3" marker-end="url(#ah)"/>
+          <line x1="1130" y1="190" x2="1225" y2="260" stroke="#1f2937" stroke-width="3" marker-end="url(#ah)"/>
+          <text x="180" y="300" font-size="22" fill="#6b7280" text-anchor="middle">1997: lỗi lúc tải nặng</text>
+          <text x="900" y="300" font-size="22" fill="#6b7280" text-anchor="middle">2004: lỗi ngay lúc khởi động</text>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình này là cơ chế xuyên suốt cả bài. Một tác vụ trễ hạn hoặc bị treo thì khâu giám sát, năm 1997 là chính tác vụ lập lịch, phát hiện và ra lệnh khởi động lại. Nếu nguyên nhân biến mất sau khi khởi động lại, như năm 1997, máy chạy tiếp bình thường. Nếu nguyên nhân nằm ngay trong bước khởi động, như năm 2004, máy đặt lại mãi, chỉ đường lui thiết kế sẵn mới cứu được."
+
+  # ───────────────────────── 6. CHẶNG 1 ─────────────────────────
+  - id: stage1
+    kind: example
+    title: "Chặng 1, năm 1997 — khai sinh: một tàu, một bộ xử lý, chu kỳ 8 Hz"
+    stage: {year: "1997", scale: "một CPU điều khiển cả tàu; bus 1553 thừa kế từ Cassini, lập lịch ở 8 Hz (chu kỳ 0,125 s); tác vụ lập lịch bus ưu tiên cao nhất, tác vụ phân phát dữ liệu thứ ba, tác vụ khí tượng thấp hơn; hệ điều hành thời gian thực thương mại", source: "[GR97] [MJ97]", practice: "để sẵn công cụ ghi vết trong phần mềm bay (“test what you fly and fly what you test”); hiểu rõ phần mềm thương mại mình dùng; bật kế thừa ưu tiên cho khoá dùng chung — đúng khi mỗi khoá chỉ có một tác vụ chờ, và đã thử lại toàn hệ thống"}
+    checks:
+      - "1 / 8 == 0.125"
+      - "40 + 60 + 2 + 15 == 117 and 117 > 110"
+      - "40 + 30 + 2 + 15 == 87 and 87 <= 110 and 110 - 40 - 2 - 15 == 53"
+      - "40 + 2 + 15 == 57 and 57 <= 110"
+      - "18 * 3600 * 8 == 518400"
+    steps:
+      - show: |
+          <p><b>Quy mô:</b> “một CPU điều khiển cả tàu”. Phần cứng nối thiết bị thừa kế từ tàu Cassini, buộc phần mềm lập lịch ở <b>8 Hz</b>: mỗi chu kỳ <b>0,125 giây</b>.</p>
+          <table class="t"><tr><th>tác vụ (theo đội phần mềm, 1997)</th><th>ưu tiên</th><th>việc</th></tr>
+          <tr><td>lập lịch đường truyền</td><td>cao nhất</td><td>chuẩn bị giao dịch cho chu kỳ sau, kiểm tác vụ kia đã xong chưa</td></tr>
+          <tr><td>phân phát dữ liệu</td><td>thứ ba</td><td>gom kết quả của chu kỳ, phải xong <b>trước</b> lượt lập lịch kế tiếp</td></tr>
+          <tr><td>khí tượng (ASI/MET)</td><td>thấp</td><td>nhận dữ liệu qua ống truyền tin, dùng chung một khoá</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", "2.4"]
+        say: "Ở chặng một, năm 1997, một bộ xử lý điều khiển cả tàu. Phần cứng nối thiết bị thừa kế từ một tàu trước đó, buộc phần mềm lập lịch 8 lần mỗi giây, mỗi chu kỳ 0 phẩy 125 giây. Tác vụ lập lịch đường truyền có ưu tiên cao nhất, chuẩn bị chu kỳ sau và kiểm xem tác vụ kia đã xong chưa. Tác vụ phân phát dữ liệu đứng thứ ba, và phải xong trước lượt lập lịch kế tiếp, một hạn chót cứng. Tác vụ khí tượng có ưu tiên thấp và dùng chung một khoá."
+      - clear: true
+        show: |
+          <p>Tác vụ phân phát thức dậy ở mốc 40 ms, cần 15 ms; lượt lập lịch kế tiếp ở mốc 110 ms; tác vụ khí tượng còn giữ khoá 2 ms (số minh hoạ).</p>
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>phân phát xong ở</th></tr>
+          <tr><td>Bước 1. tải trung bình nhẹ, 30 ms, không kế thừa</td><td>40 + 30 + 2 + 15</td><td>$\hlg{87}$ ms, kịp hạn</td></tr>
+          <tr><td>Bước 2. tải trung bình nặng, 60 ms, không kế thừa</td><td>40 + 60 + 2 + 15</td><td>$\hl{117}$ ms $\gt$ 110: <b>đặt lại</b></td></tr>
+          <tr><td>Bước 3. ngưỡng tải gây lỗi</td><td>110 − 40 − 2 − 15</td><td>trên 53 ms là trễ hạn</td></tr>
+          <tr><td>Bước 4. có kế thừa ưu tiên, tải nào cũng vậy</td><td>40 + 2 + 15</td><td>$\hlb{57}$ ms, kịp hạn</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", "2.4", "2.5", 0]
+        say: "Làm thử bằng số minh hoạ, tác vụ phân phát thức dậy ở mốc 40 mi li giây và cần 15, lượt lập lịch kế tiếp ở mốc 110. Tác vụ khí tượng còn giữ khoá 2 mi li giây. Bước một, nếu các tác vụ trung bình chỉ chạy 30, phân phát xong ở mốc 87, vẫn kịp. Bước hai, nếu chúng chạy 60, phân phát xong ở mốc 117, quá 110, và tàu tự khởi động lại. Bước ba, trừ ngược ra, tải trung bình trên 53 là trễ hạn. Bước bốn, có kế thừa ưu tiên thì phân phát xong ở mốc 57 dù tải nặng thế nào. Vì vậy lỗi chỉ lộ ra khi tải nặng."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>đội phần mềm kể lại (1997)</th><th>thực hành rút ra</th></tr>
+          <tr><td>thử nghiệm trước khi phóng chỉ ở trường hợp “tốt nhất”; trên sao Hoả dữ liệu nhiều hơn dự kiến</td><td>thử cả tải <b>vượt</b> dự kiến</td></tr>
+          <tr><td>công cụ ghi vết vào bộ đệm vòng để lại trong phần mềm bay <b>có chủ đích</b>; tái hiện lỗi trong <b>chưa tới 18 giờ</b></td><td>“thử cái mình bay, bay cái mình thử”</td></tr>
+          <tr><td>sửa: bật cờ kế thừa ưu tiên — một biến toàn cục, đổi <b>mọi</b> khoá loại này; phân tích và thử kỹ rồi mới gửi phần sai khác lên tàu</td><td>sửa nhỏ vẫn phải thử lại cả hệ thống</td></tr></table>
+          <p class="note">18 giờ ở 8 chu kỳ mỗi giây: 18 × 3600 × 8 = $\hl{518\,400}$ chu kỳ chạy thử mới gặp một lần lỗi.</p>
+        focus: ["1.2", "1.3", "1.4", "1.4", 2]
+        say: "Đội phần mềm năm 1997 kể rằng trước khi phóng họ chỉ thử trường hợp tốt nhất, còn trên sao Hoả dữ liệu nhiều hơn dự kiến. Công cụ ghi vết được để lại trong phần mềm bay có chủ đích, nhờ vậy họ tái hiện được lỗi trong chưa tới 18 giờ. Cách sửa là bật cờ kế thừa ưu tiên, nhưng cờ đó là biến toàn cục, đổi mọi khoá cùng loại. Họ phân tích, thử kỹ, rồi mới gửi phần sai khác lên tàu. Tính ra, 18 giờ ở 8 chu kỳ mỗi giây là 518 nghìn 400 chu kỳ mới gặp một lần lỗi."
+
+  # ───────────────────────── 7. CHẶNG 2 ─────────────────────────
+  - id: stage2
+    kind: example
+    title: "Chặng 2, tháng 1/2004 — nhân đôi, gấp rút: hai xe tự hành và bộ nhớ cạn dần"
+    stage: {year: "2004", scale: "hai xe tự hành Spirit và Opportunity hạ cánh 4/1 và 25/1/2004; làm trong 3 năm từ ý tưởng tới phóng; hệ điều hành thương mại kèm thư viện tệp kiểu DOS; flash 224 MB cho dữ liệu khoa học; tối đa 8192 sản phẩm dữ liệu; vùng nhớ riêng 256 KB, nới thêm từng 256 KB không giới hạn từ hơn 4 MB bộ nhớ trống", source: "[RN05]", practice: "áp quy tắc thiết kế (không cấp phát sau khởi động) cả cho phần mềm mua về; đo và gửi về đất số bộ nhớ trống; quản lý chính thức danh sách việc còn dở"}
+    checks:
+      - "3000 + 2000 + 1000 == 6000 and 6000 / 100 == 60"
+      - "4096 // 256 == 16"
+      - "15 + 15 + 60 == 90 and 24 * 60 + 37 == 1477 and round(1477 / 90 * 3, 1) == 49.2"
+      - "33 - 18 == 15 and round(15 * 1477 / 1440, 1) == 15.4"
+      - "2 ** 13 == 8192"
+    steps:
+      - show: |
+          <p><b>Quy mô:</b> hai xe tự hành hạ cánh tháng 1/2004; làm trong <b>3 năm</b> từ ý tưởng tới lúc phóng. Phần mềm bay dùng hệ điều hành thương mại cùng <b>thư viện tệp kiểu DOS</b> đi kèm; bộ nhớ flash <b>224 MB</b> chứa dữ liệu khoa học.</p>
+          <table class="t"><tr><th>thư viện tệp làm gì khi…</th><th>trên flash</th><th>trong bộ nhớ tạm</th></tr>
+          <tr><td>tạo tệp</td><td>ghi tệp</td><td>thêm một mục vào bảng mô tả thư mục</td></tr>
+          <tr><td>xoá tệp</td><td>chỉ đổi chữ đầu tên thành mã E5, giải phóng chỗ</td><td><b>giữ nguyên</b> mục đó, không bao giờ trả lại</td></tr>
+          <tr><td>khởi động, gắn ổ flash</td><td>—</td><td>dựng lại bảng cho <b>mọi</b> mục từng có, kể cả đã xoá</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", "2.4"]
+        say: "Ở chặng hai, hai xe tự hành hạ cánh tháng 1 năm 2004, sau chỉ 3 năm từ ý tưởng tới lúc phóng. Phần mềm bay dùng hệ điều hành thương mại cùng thư viện tệp đi kèm, với bộ nhớ flash 224 mê-ga-byte. Khi tạo tệp, thư viện ghi lên flash và thêm một mục vào bảng thư mục trong bộ nhớ tạm. Khi xoá tệp, nó giải phóng chỗ trên flash, nhưng giữ nguyên mục trong bộ nhớ tạm. Mỗi lần khởi động, nó dựng lại bảng cho mọi mục từng có, kể cả tệp đã xoá."
+      - clear: true
+        show: |
+          <p>Bộ nhớ cần <b>không</b> theo số tệp hiện có, mà theo <b>tổng số tệp nhiều nhất từng có</b> ở mỗi thư mục con.</p>
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. ba thư mục từng có nhiều nhất 3000, 2000, 1000 tệp; nay còn 100 tệp (số minh hoạ)</td><td>3000 + 2000 + 1000</td><td>bảng cho $\hl{6000}$ mục</td></tr>
+          <tr><td>Bước 2. so với số tệp hiện có</td><td>6000 chia 100</td><td>tốn gấp $\hl{60}$ lần</td></tr>
+          <tr><td>Bước 3. vùng nhớ riêng hết thì xin thêm từng 256 KB, <b>không giới hạn</b>; bộ nhớ trống thường hơn 4 MB, lấy 4096 KB</td><td>4096 chia 256</td><td>khoảng $\hlb{16}$ lần xin là cạn</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Vì vậy bộ nhớ cần không theo số tệp hiện có, mà theo tổng số tệp nhiều nhất từng có ở mỗi thư mục con. Bước một, lấy số minh hoạ, ba thư mục từng có nhiều nhất 3000, 2000 và 1000 tệp, nay chỉ còn 100 tệp, mà bảng vẫn cần 6000 mục. Bước hai, 6000 chia 100, tức tốn gấp 60 lần so với số tệp hiện có. Bước ba, cấu hình cho phép vùng nhớ riêng xin thêm từng 256 ki-lô-byte mà không giới hạn, lấy bộ nhớ trống khoảng 4096 ki-lô-byte thì chừng 16 lần xin là cạn."
+      - clear: true
+        show: |
+          <p>Hết bộ nhớ, tác vụ ghi tệp bị <b>treo im lặng</b> (cấu hình sai thứ hai); chức năng kiểm sức khoẻ thấy tác vụ treo thì ra lệnh đặt lại. Khởi động lại lại gắn ổ flash, lại cạn: <b>vòng lặp</b>. Đặt lại được hoãn để mặt đất kịp can thiệp: <b>15, 15, rồi 60 phút</b>, lặp lại.</p>
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 4. một vòng của mẫu hoãn</td><td>15 + 15 + 60 = 90 phút</td><td>3 lần đặt lại mỗi 90 phút</td></tr>
+          <tr><td>Bước 5. nếu lặp suốt một ngày sao Hoả, 1477 phút (cận trên tính trên mẫu)</td><td>1477 chia 90, nhân 3</td><td>$\approx \hl{49{,}2}$, tức <b>gần 50</b> lần đặt lại</td></tr>
+          <tr><td>Bước 6. từ ngày thứ 18 tới khi làm khoa học lại ở ngày thứ 33</td><td>15 ngày × 1477 chia 1440</td><td>$\approx \hlb{15{,}4}$ ngày Trái Đất</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", "2.4"]
+        say: "Khi hết bộ nhớ, tác vụ ghi tệp bị treo im lặng do một cấu hình sai thứ hai, và chức năng kiểm sức khoẻ ra lệnh đặt lại. Khởi động lại thì lại gắn ổ flash, lại cạn bộ nhớ, và mỗi lần đặt lại được hoãn 15, 15, rồi 60 phút để mặt đất kịp can thiệp. Bước bốn, một vòng của mẫu hoãn là 90 phút, có 3 lần đặt lại. Bước năm, nếu lặp suốt một ngày sao Hoả 1477 phút, ta được 49 phẩy 2, tức gần 50 lần, một cận trên chứ không phải số đo. Bước sáu, từ ngày thứ 18 tới ngày thứ 33 là 15 ngày sao Hoả, khoảng 15 phẩy 4 ngày Trái Đất."
+
+  # ───────────────────────── 8. CHẶNG 3 ─────────────────────────
+  - id: stage3
+    kind: example
+    title: "Chặng 3, năm 2004 — ổn định lại: chế độ hạn chế, bản sửa tháng 4"
+    stage: {year: "2004", scale: "chế độ hạn chế (ý tưởng từ Pathfinder) đưa xe về điều khiển được ở ngày thứ 21; xoá flash từng mảnh nhỏ, kiểm cả hai bản phần mềm sau mỗi mảnh; bản phần mềm tháng 4/2004 cho cả hai xe; quy tắc: dừng mọi hoạt động khi bộ nhớ trống ≤ 800 KB, xoá sản phẩm đã nhận sau 24 thay vì 48 giờ", source: "[RN05]", practice: "thiết kế sẵn đường lui cho cả “điều chưa biết” (chế độ hạn chế, tự vào khi đặt lại nhiều lần); bộ giám sát thứ hai cho việc tắt máy; giám sát ngưỡng tài nguyên; cân nhắc rủi ro của một sửa đổi “đúng” nhưng chưa thử được hết"}
+    checks:
+      - "round(800 / 256, 3) == 3.125 and 800 // 256 == 3"
+      - "300 * 48 / 24 == 600 and 300 * 24 / 24 == 300"
+      - "round(600 / 8192 * 100, 1) == 7.3 and round(300 / 8192 * 100, 1) == 3.7"
+    steps:
+      - show: |
+          <table class="t"><tr><th>đội điều tra làm gì (2004)</th><th>vì sao được</th></tr>
+          <tr><td>gửi lệnh <b>chế độ hạn chế</b>: phần cứng bật vài bit trong thanh ghi, phần mềm đọc lúc khởi động và <b>không dùng flash</b></td><td>tệp tạm trong bộ nhớ tạm trống trơn, cần ít bộ nhớ → khởi động xong</td></tr>
+          <tr><td>bit đó mất khi tắt điện → mỗi sáng gửi lại</td><td>đúng như thanh ghi ngoại vi ở bài 1</td></tr>
+          <tr><td>chép phần mềm bay sang bộ nhớ tạm, xoá flash <b>từng mảnh nhỏ</b>, kiểm cả hai bản sau mỗi mảnh</td><td>hỏng giữa chừng vẫn còn một bản tốt, như hai phân vùng ở bài 14</td></tr></table>
+        focus: ["1.2", "1.2", "1.3", "1.4", "1.4"]
+        say: "Ở chặng ba, đội điều tra gửi lệnh chế độ hạn chế, phần cứng bật vài bit trong một thanh ghi để phần mềm không dùng flash. Hệ tệp thay thế trong bộ nhớ tạm trống trơn, nên khởi động xong. Bit đó mất khi tắt điện, nên mỗi sáng phải gửi lại, như thanh ghi ngoại vi ở bài 1. Họ chép phần mềm bay sang bộ nhớ tạm, xoá flash từng mảnh nhỏ, và kiểm cả hai bản phần mềm sau mỗi mảnh. Hỏng giữa chừng vẫn còn một bản tốt, giống hai phân vùng ở bài 14."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bản phần mềm tháng 4/2004 và quy tắc mới</th><th>sửa điều gì</th></tr>
+          <tr><td>lúc khởi động, <b>nén</b> bảng thư mục, bỏ mục của tệp đã xoá</td><td>hết hiệu ứng “nhiều nhất từng có”</td></tr>
+          <tr><td>đặt lại nhiều lần thì <b>tự</b> vào chế độ hạn chế</td><td>không cần chờ lệnh từ Trái Đất</td></tr>
+          <tr><td>dùng đồng hồ báo thức phần cứng làm <b>bộ giám sát thứ hai</b> cho việc tắt máy</td><td>tắt máy kẹt thì phần cứng tự ngắt điện</td></tr>
+          <tr><td>bộ nhớ trống còn <b>800 KB</b> trở xuống thì dừng mọi hoạt động</td><td>dừng trước khi cạn</td></tr>
+          <tr><td>xoá sản phẩm dữ liệu đã nhận sau <b>24</b> giờ thay vì 48</td><td>ít tệp sống cùng lúc hơn</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", "1.6"]
+        say: "Bản phần mềm tháng 4 năm 2004 và quy tắc mới sửa năm điều. Lúc khởi động, phần mềm nén bảng thư mục, bỏ mục của tệp đã xoá. Khi đặt lại nhiều lần, xe tự vào chế độ hạn chế. Đồng hồ báo thức phần cứng làm bộ giám sát thứ hai, nếu tắt máy bị kẹt thì phần cứng tự ngắt điện. Khi bộ nhớ trống còn 800 ki-lô-byte trở xuống, xe dừng mọi hoạt động. Sản phẩm dữ liệu đã nhận được xoá sau 24 giờ thay vì 48."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. ngưỡng 800 KB còn chứa mấy lần xin thêm 256 KB</td><td>800 chia 256 = 3,125</td><td>còn $\hlb{3}$ lần xin trước khi cạn</td></tr>
+          <tr><td>Bước 2. 300 sản phẩm mỗi ngày (số minh hoạ), giữ 48 giờ</td><td>300 × 48 chia 24</td><td>600 tệp sống, $\approx 7{,}3\%$ của 8192</td></tr>
+          <tr><td>Bước 3. giữ 24 giờ</td><td>300 × 24 chia 24</td><td>$\hlg{300}$ tệp, $\approx 3{,}7\%$</td></tr></table>
+          <p class="note">Sửa “đúng” nhất là giới hạn vùng nhớ riêng ở một cỡ cố định, nhưng đội <b>không</b> đưa vào bản tháng 4: nó có thể làm lộ hành vi chưa thử, mà xe có tuổi thọ giới hạn, không chờ được một đợt thử dài.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Bước một, ngưỡng 800 ki-lô-byte chia 256 được 3 phẩy 125, tức còn đủ 3 lần xin thêm trước khi cạn, nên dừng kịp. Bước hai, lấy số minh hoạ 300 sản phẩm mỗi ngày, giữ 48 giờ thì có 600 tệp sống, khoảng 7 phẩy 3 phần trăm giới hạn 8192. Bước ba, giữ 24 giờ thì chỉ còn 300 tệp, khoảng 3 phẩy 7 phần trăm. Sửa đúng nhất là giới hạn vùng nhớ riêng ở một cỡ cố định. Nhưng đội không đưa nó vào bản tháng 4, vì nó có thể làm lộ hành vi chưa thử, mà xe có tuổi thọ giới hạn."
+
+  # ───────────────────────── 9. CHẶNG 4 ─────────────────────────
+  - id: stage4
+    kind: example
+    title: "Chặng 4, năm 2014 tới 2015 — kéo dài vượt thiết kế: flash mòn sau hơn 10 năm"
+    stage: {year: "2014 → 2015", scale: "nhiệm vụ thiết kế 3 tháng; Spirit chạy 6 năm; Opportunity vẫn chạy năm 2014 (hạ cánh 25/1/2004); một tá lần đặt lại trong tháng 8/2014; flash có 7 dãy, lỗi tập trung ở dãy 7; định dạng lại 9/2014 và 20/3/2015", source: "[JPL14a] [JPL14b] [JPL15] [RN05]", practice: "giữ phần mềm bay và chuỗi lệnh quan trọng ở bộ nhớ lưu lâu riêng; có chế độ chạy không cần flash (gửi dữ liệu về trước khi ngủ); khoanh vùng hỏng và tránh nó thay vì bỏ cả thiết bị; nhiệm vụ dài phải thiết kế cho mòn"}
+    checks:
+      - "round((__import__('datetime').date(2014, 8, 29) - __import__('datetime').date(2004, 1, 25)).days / 365.25, 1) == 10.6"
+      - "round(10.6 / 0.25) == 42"
+      - "round(6 / 7 * 100, 1) == 85.7"
+    steps:
+      - show: |
+          <p><b>Quy mô:</b> hai xe làm cho nhiệm vụ “chỉ <b>3 tháng</b>”; Spirit chạy <b>6 năm</b>; tháng 8/2014 Opportunity vẫn chạy, và tự đặt lại <b>một tá lần</b> trong tháng. Nghi phạm hàng đầu: <b>ô nhớ flash đã mòn</b>.</p>
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. từ hạ cánh 25/1/2004 tới 29/8/2014</td><td>đếm ngày, chia 365,25</td><td>$\approx \hl{10{,}6}$ năm</td></tr>
+          <tr><td>Bước 2. so với thiết kế 3 tháng = 0,25 năm</td><td>10,6 chia 0,25</td><td>$\approx \hl{42}$ lần</td></tr></table>
+          <p class="note">Năm 2004 đội đã ghi: không dọn mục của tệp đã xoá là “lỗi nền tảng cho nhiệm vụ dài ngày”. Mười năm sau, điểm nghẽn là chính phần cứng lưu trữ.</p>
+        focus: [1, 1, "2.2", "2.3", 3]
+        say: "Ở chặng bốn, hai xe được làm cho nhiệm vụ chỉ 3 tháng, Spirit chạy 6 năm, còn tháng 8 năm 2014 Opportunity vẫn chạy và tự đặt lại một tá lần trong tháng. Nghi phạm hàng đầu là ô nhớ flash đã mòn. Bước một, từ lúc hạ cánh 25 tháng 1 năm 2004 tới 29 tháng 8 năm 2014 là khoảng 10 phẩy 6 năm. Bước hai, so với thiết kế 0 phẩy 25 năm, xe đã chạy khoảng 42 lần tuổi thọ dự kiến. Năm 2004 điểm nghẽn của nhiệm vụ dài ngày là cách quản lý tệp, mười năm sau là chính phần cứng lưu trữ."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>đội vận hành làm gì (2014–2015)</th><th>vì sao được</th></tr>
+          <tr><td>định dạng lại flash: xoá, tìm ô hỏng, <b>đánh dấu để tránh</b></td><td>phần mềm bay và chuỗi lệnh quan trọng nằm ở <b>bộ nhớ lưu lâu khác</b></td></tr>
+          <tr><td>tạm chạy <b>không dùng flash</b>: dữ liệu mỗi ngày giữ ở bộ nhớ tạm, gửi về Trái Đất <b>trước khi ngủ</b></td><td>bộ nhớ tạm mất hết khi tắt điện</td></tr>
+          <tr><td>sửa phần mềm để <b>tránh hẳn dãy 7</b> trong 7 dãy flash; sau lần định dạng 20/3/2015 dùng lại 6 dãy kia</td><td>khoanh vùng hỏng, giữ phần còn tốt</td></tr></table>
+          <p>Bước 3. phần flash còn dùng: 6 chia 7 ≈ $\hlg{85{,}7\%}$. Người quản lý dự án: “chỉ thời gian mới trả lời được” việc đã khắc phục xong chưa.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2, 2]
+        say: "Đội vận hành làm ba việc. Họ định dạng lại flash để tìm ô hỏng và đánh dấu tránh, ít rủi ro vì phần mềm bay nằm ở một bộ nhớ lưu lâu khác. Trong lúc chờ, xe chạy không dùng flash, dữ liệu giữ ở bộ nhớ tạm và phải gửi về trước khi ngủ. Họ sửa phần mềm để tránh hẳn dãy thứ 7 trong 7 dãy flash, và từ ngày 20 tháng 3 năm 2015 xe dùng lại 6 dãy kia. Bước ba, 6 chia 7 là khoảng 85 phẩy 7 phần trăm dung lượng còn dùng được. Người quản lý dự án nói chỉ thời gian mới trả lời được việc đã khắc phục xong chưa."
+
+  # ───────────────────────── 10. CHẶNG 5 ─────────────────────────
+  - id: stage5
+    kind: example
+    title: "Chặng 5, năm 2017 tới nay — nhiều nhiệm vụ nhỏ, một khung dùng lại"
+    stage: {year: "2017 → nay", scale: "khung F´ của JPL, mã nguồn mở, cho vệ tinh siêu nhỏ, thiết bị đo; 8 dự án liệt kê: RapidScat (2014–2018), ASTERIA (2017), trực thăng Ingenuity trên sao Hoả (phóng 2020), Lunar Flashlight và NEA Scout (2022), CADRE (2025), OWLS, COLDArm; hệ điều hành: Linux 3, VxWorks 2, không ghi 3; chạy được cả khi không có hệ điều hành", source: "[FP]", practice: "chia phần mềm bay thành thành phần có giao diện rõ, nối qua cổng; dùng lại thư viện thành phần không sửa; có sẵn công cụ thử đơn vị và thử tích hợp; đúng khi nhiều nhiệm vụ cùng chịu ngân sách chặt và lịch ngắn"}
+    checks:
+      - "len(['RapidScat', 'ASTERIA', 'Ingenuity', 'LunarFlashlight', 'NEAScout', 'OWLS', 'CADRE', 'COLDArm']) == 8"
+      - "[o for o in ['-', 'Linux', 'Linux', 'VxWorks', 'VxWorks', '-', 'Linux', '-']].count('Linux') == 3 and ['-', 'Linux', 'Linux', 'VxWorks', 'VxWorks', '-', 'Linux', '-'].count('VxWorks') == 2 and ['-', 'Linux', 'Linux', 'VxWorks', 'VxWorks', '-', 'Linux', '-'].count('-') == 3"
+      - "round((__import__('datetime').date(2018, 11, 18) - __import__('datetime').date(2014, 9, 21)).days / 365.25, 1) == 4.2"
+    steps:
+      - show: |
+          <p><b>Bối cảnh mới</b> (Phòng thí nghiệm Sức đẩy Phản lực viết): phải hỗ trợ “nhiều nhiệm vụ bay hơn bao giờ hết”, nhiều loại bộ xử lý và hệ điều hành, ngân sách chặt hơn, lịch ngắn hơn. Lời đáp: khung phần mềm bay <b>F´</b>, mã nguồn mở.</p>
+          <table class="t"><tr><th>khung cung cấp</th><th>nối với bài nào của khoá</th></tr>
+          <tr><td>thành phần có giao diện rõ, nối với nhau qua <b>cổng</b></td><td>tác vụ và hàng đợi ở bài 11</td></tr>
+          <tr><td>hàng đợi tin nhắn, luồng; chạy được cả khi <b>không có</b> hệ điều hành, trên vi điều khiển yếu</td><td>vi điều khiển ở bài 0</td></tr>
+          <tr><td>thư viện thành phần dùng lại <b>không cần sửa</b>; công cụ thử đơn vị và thử tích hợp</td><td>“thử cái mình bay” của chặng 1</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", "2.4"]
+        say: "Ở chặng năm, Phòng thí nghiệm Sức đẩy Phản lực viết rằng họ phải hỗ trợ nhiều nhiệm vụ bay hơn bao giờ hết, trên nhiều loại bộ xử lý và hệ điều hành. Ngân sách chặt hơn, lịch ngắn hơn, và lời đáp là một khung phần mềm bay mã nguồn mở. Khung chia phần mềm thành thành phần có giao diện rõ, nối qua cổng, giống tác vụ và hàng đợi ở bài 11. Nó chạy được cả khi không có hệ điều hành, trên vi điều khiển yếu như ở bài 0. Thư viện thành phần dùng lại không cần sửa, kèm công cụ thử đơn vị và thử tích hợp."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>dự án dùng khung (trang chính thức)</th><th>hệ điều hành</th><th>mốc</th></tr>
+          <tr><td>RapidScat (đo gió, trên trạm vũ trụ)</td><td>không ghi</td><td>9/2014 → 11/2018</td></tr>
+          <tr><td>ASTERIA (vệ tinh siêu nhỏ)</td><td>Linux</td><td>8/2017</td></tr>
+          <tr><td>trực thăng Ingenuity trên sao Hoả</td><td>Linux, chip điện thoại</td><td>7/2020</td></tr>
+          <tr><td>Lunar Flashlight, NEA Scout</td><td>VxWorks</td><td>2022</td></tr>
+          <tr><td>CADRE (xe tự hành nhỏ); OWLS, COLDArm</td><td>Linux; không ghi</td><td>2025; —</td></tr></table>
+          <p>Bước 1. đếm: <b>8</b> dự án — Linux 3, VxWorks 2, không ghi 3. Bước 2. RapidScat chạy từ 21/9/2014 tới 18/11/2018 ≈ $\hl{4{,}2}$ năm.</p>
+        focus: ["1.2", "1.3", "1.4", "1.5", 2, 2]
+        say: "Bảng liệt kê các dự án trên trang chính thức của khung, từ một máy đo gió trên trạm vũ trụ năm 2014. Có vệ tinh siêu nhỏ năm 2017 và năm 2022. Trực thăng trên sao Hoả phóng năm 2020 chạy hệ điều hành mã nguồn mở trên một chip điện thoại. Có cả hai vệ tinh dùng hệ điều hành thời gian thực thương mại. Bước một, đếm được 8 dự án, ba dùng hệ điều hành mã nguồn mở, hai dùng hệ điều hành thương mại, ba không ghi. Bước hai, máy đo gió chạy khoảng 4 phẩy 2 năm."
+
+  # ───────────────────────── 11. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm bốn con số của hành trình bằng đường khác"
+    checks:
+      - "sorted([t for t in range(0, 200) if t >= 40 + 2 + 60 and t < 40 + 2 + 60 + 15])[-1] + 1 == 117"
+      - "len([m for m in range(1477) if m % 90 in (15, 30, 0) and m > 0]) == 50 and round(1477 / 90 * 3, 1) == 49.2"
+      - "256 * 16 == 4096"
+      - "0.25 * 42 == 10.5 and 10.5 <= 10.6"
+    steps:
+      - show: |
+          <table class="t"><tr><th>con số</th><th>đường khác để kiểm</th></tr>
+          <tr><td>117 ms</td><td>xếp lịch từng đoạn: tới 40 chờ; 40–100 tác vụ trung bình; 100–102 tác vụ khí tượng nhả khoá; 102–117 phân phát ✓</td></tr>
+          <tr><td>gần 50 lần</td><td>liệt kê các phút đặt lại 15, 30, 90, 105, 120, 180, … dưới 1477: đếm được 50 ✓ (lần đầu ở phút 15)</td></tr>
+          <tr><td>16 lần xin</td><td>nhân ngược: 16 × 256 = 4096 KB ✓</td></tr>
+          <tr><td>42 lần thiết kế</td><td>nhân ngược: 42 × 0,25 = 10,5 năm, khớp với 10,6 sau khi làm tròn ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Ta kiểm lại bốn con số theo đường khác. Xếp lịch từng đoạn, từ 40 tới 100 tác vụ trung bình chạy, từ 100 tới 102 tác vụ khí tượng nhả khoá, rồi từ 102 tới 117 phân phát chạy xong. Liệt kê các phút đặt lại 15, 30, 90, 105, 120, 180 và tiếp tục dưới 1477, ta đếm được 50 lần, khớp với gần 50. Nhân ngược, 16 nhân 256 là 4096 ki-lô-byte. Nhân ngược, 42 nhân 0 phẩy 25 là 10 phẩy 5 năm, khớp với 10 phẩy 6 sau khi làm tròn."
+
+  # ───────────────────────── 12. BÀI HỌC SAI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "Những bài học sai khi đọc hành trình này"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">1.</b> “Một kỹ sư quên bật cờ, lần sau cẩn thận hơn là xong”</td><td>đội 1997 viết: không ai quyết định tắt, “chúng tôi chỉ bỏ sót”; năm 2004 việc dở được biết nhưng không ai được giao theo tới cùng</td><td>danh sách việc dở có người chịu trách nhiệm; rà phần mềm mua về</td></tr>
+          <tr><td><b class="red">2.</b> “Bản kể lại nổi tiếng là đủ tin”</td><td>bản tóm tắt bài nói năm 1997 được chuyển cho khoảng 400 người, nhưng trưởng nhóm phần mềm đã sửa hai chi tiết: công cụ gỡ lỗi để lại có chủ đích, và không vá bằng dòng lệnh</td><td>đọc báo cáo của chính đội làm hệ thống</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.2", "1.3", "1.3"]
+        say: "Bảng có hai bài học sai đầu tiên. Bài học sai thứ nhất là nghĩ một kỹ sư quên bật cờ, lần sau cẩn thận hơn là xong. Đội năm 1997 viết rằng không ai quyết định tắt nó, họ chỉ bỏ sót. Năm 2004 việc dở được biết nhưng không ai được giao theo tới cùng, nên cần người chịu trách nhiệm cho từng việc dở. Bài học sai thứ hai là tin ngay một bản kể lại nổi tiếng. Bản tóm tắt năm 1997 được chuyển cho khoảng 400 người, nhưng trưởng nhóm phần mềm đã sửa hai chi tiết của nó."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">3.</b> “Có bộ giám sát, tự khởi động lại là an toàn” (mức hệ thống)</td><td>năm 2004 nguyên nhân nằm ngay lúc khởi động: đặt lại gần 50 lần mỗi ngày mà không khỏi</td><td>đường lui chạy thiếu (chế độ hạn chế), bộ giám sát thứ hai, ghi lý do đặt lại</td></tr>
+          <tr><td><b class="red">4.</b> “Chạy thử giống bay mà không lỗi là đủ” (lỗi của người đã đi làm)</td><td>dữ liệu một đợt thử năm 2004 <b>đã</b> cho thấy bộ nhớ trống giảm dần, nhưng không ai phân tích; thử dài hơn 11 ngày không kịp lịch</td><td>gửi về số đo tài nguyên, có công cụ tự phân tích xu hướng</td></tr>
+          <tr><td><b class="red">5.</b> “Chép nguyên quy trình của cơ quan vũ trụ cho mọi thiết bị”</td><td>đội bay cũng phải chọn: không đưa sửa đổi “đúng nhất” vào bản tháng 4/2004 vì chưa thử kịp</td><td>chọn theo tuổi thọ, khả năng sửa từ xa, cái giá khi hỏng</td></tr></table>
+        focus: ["1.2", "1.2", "1.3", "1.3", "1.4"]
+        say: "Bài học sai thứ ba ở mức hệ thống, là nghĩ có bộ giám sát tự khởi động lại là an toàn. Năm 2004 nguyên nhân nằm ngay lúc khởi động, nên xe có thể đặt lại gần 50 lần mỗi ngày mà không khỏi. Bài học sai thứ tư hay gặp ở người đã đi làm, là nghĩ chạy thử giống bay mà không lỗi là đủ. Dữ liệu một đợt thử năm 2004 đã cho thấy bộ nhớ trống giảm dần, nhưng không ai phân tích. Bài học sai thứ năm là chép nguyên quy trình của cơ quan vũ trụ cho mọi thiết bị, trong khi chính đội bay cũng phải chọn theo tuổi thọ và cái giá khi hỏng."
+
+  # ───────────────────────── 13. QUYẾT ĐỊNH ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Bạn sẽ làm gì ở quy mô của mình?"
+    checks:
+      - "(600 - 100) / 20 == 25"
+      - "(600 - 100) / 20 < 90 and 90 * 20 == 1800"
+      - "round(1 - 800 / 1024, 2) == 0.22"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>tình huống: trạm đo thời tiết trên núi, vi điều khiển có hệ điều hành thời gian thực, đặt dự kiến 3 tháng nhưng có thể ở lại 3 năm (số minh hoạ)</th></tr>
+          <tr><td>1</td><td>thư viện ghi thẻ nhớ mua về làm bộ nhớ trống giảm 20 KB mỗi ngày, hiện còn 600 KB. Khởi động lại mỗi đêm, giới hạn cỡ cố định cho thư viện, hay giám sát ngưỡng 100 KB?</td></tr>
+          <tr><td>2</td><td>bật kế thừa ưu tiên bằng cờ toàn cục cho mọi khoá ngay trước khi đặt máy, hay để yên?</td></tr></table>
+        focus: [1, 1, "1.2", "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn ra quyết định với một trạm đo thời tiết trên núi, dùng vi điều khiển có hệ điều hành thời gian thực. Trạm đặt dự kiến 3 tháng nhưng có thể ở lại 3 năm, đều là số minh hoạ. Câu một, thư viện ghi thẻ nhớ mua về làm bộ nhớ trống giảm 20 ki-lô-byte mỗi ngày, hiện còn 600. Bạn khởi động lại mỗi đêm, giới hạn cỡ cố định cho thư viện, hay giám sát ngưỡng 100 ki-lô-byte? Câu hai, bạn bật kế thừa ưu tiên bằng cờ toàn cục cho mọi khoá ngay trước khi đặt máy, hay để yên? Dừng video và viết ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <p>Câu 1: (600 − 100) chia 20 = $\hl{25}$ ngày là chạm ngưỡng; 3 tháng ≈ 90 ngày cần 90 × 20 = 1800 KB, gấp ba số đang có.</p>
+          <table class="t"><tr><th>lựa chọn</th><th>được</th><th>mất</th></tr>
+          <tr><td>khởi động lại mỗi đêm</td><td>dễ làm ngay</td><td>chỉ đúng nếu bộ nhớ trở lại đầy sau khởi động; nếu bảng dựng lại từ thẻ nhớ như năm 2004 thì cạn ngay lúc khởi động</td></tr>
+          <tr><td>giới hạn cỡ cố định</td><td>không bao giờ ăn sang phần khác — cách “đúng nhất” của năm 2004</td><td>phải thử lại lúc thư viện chạm giới hạn: nó báo lỗi hay treo?</td></tr>
+          <tr><td>giám sát ngưỡng 100 KB, dừng ghi, báo về</td><td>dừng trước khi cạn, có số đo xu hướng</td><td>mất dữ liệu sau ngưỡng nếu không ai tới</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Đáp án câu một bắt đầu bằng phép tính, 600 trừ 100 chia 20 là 25 ngày thì chạm ngưỡng, còn 90 ngày cần 1800 ki-lô-byte. Khởi động lại mỗi đêm dễ làm, nhưng nếu bảng dựng lại từ thẻ nhớ như năm 2004 thì cạn ngay lúc khởi động. Giới hạn cỡ cố định không bao giờ ăn sang phần khác, nhưng phải thử xem thư viện chạm giới hạn thì báo lỗi hay treo. Giám sát ngưỡng thì dừng trước khi cạn và có số đo xu hướng, đổi lại mất dữ liệu sau ngưỡng nếu không ai tới."
+      - clear: true
+        show: |
+          <p class="note">Nên làm: giới hạn cỡ cố định <b>và</b> giám sát ngưỡng, thử cả lúc chạm giới hạn. Điều kiện đổi: trạm chỉ ở 3 tuần, có người ghé mỗi tuần → khởi động lại mỗi đêm có thể đủ, vì 25 ngày chưa tới.</p>
+          <table class="t"><tr><th>câu 2: lựa chọn</th><th>được</th><th>mất</th></tr>
+          <tr><td>bật cờ toàn cục ngay trước khi đặt máy</td><td>chặn đảo ngược ưu tiên ở mọi khoá</td><td>đổi hành vi của <b>mọi</b> khoá khi không còn thời gian thử lại — đội năm 1997 đã phân tích và thử kỹ trước khi gửi lên</td></tr>
+          <tr><td>bật ngay từ đầu, thử cả hệ thống với cờ đó</td><td>an toàn và đã thử</td><td>tốn chút thời gian mỗi lần lấy khoá; nhà cung cấp năm 1997 đánh giá là nhỏ</td></tr></table>
+        focus: [1, 1, "2.2", "2.3"]
+        say: "Vậy nên làm cả hai, giới hạn cỡ cố định và giám sát ngưỡng, rồi thử cả lúc chạm giới hạn. Nếu trạm chỉ ở 3 tuần và có người ghé mỗi tuần, khởi động lại mỗi đêm có thể đủ, vì chưa tới 25 ngày. Câu hai, bật cờ toàn cục ngay trước khi đặt máy chặn được đảo ngược ưu tiên, nhưng đổi hành vi của mọi khoá khi không còn thời gian thử lại. Tốt hơn là bật từ đầu và thử cả hệ thống với cờ đó, cái giá nhỏ mà nhà cung cấp năm 1997 đã đánh giá."
+
+  # ───────────────────────── 14. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi hành trình & tư duy chuyên gia"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">1997: đảo ngược ưu tiên, ghi vết có sẵn</span><span class="a">→</span>
+          <span class="n">1/2004: thư viện mua về cạn bộ nhớ</span><span class="a">→</span>
+          <span class="n">4/2004: chế độ hạn chế, giám sát ngưỡng</span><span class="a">→</span>
+          <span class="n">2014–2015: flash mòn, tránh vùng hỏng</span><span class="a">→</span>
+          <span class="n">2017 → nay: một khung dùng lại</span></div>
+        say: "Tổng kết lại hành trình. Năm 1997, đảo ngược ưu tiên được tìm ra nhờ công cụ ghi vết để sẵn. Tháng 1 năm 2004, một thư viện mua về làm cạn bộ nhớ, và tháng 4 năm đó đội thêm chế độ hạn chế tự động và giám sát ngưỡng. Từ 2014 tới 2015, flash mòn sau hơn 10 năm và đội tránh vùng hỏng, còn từ 2017 tới nay, nhiều nhiệm vụ nhỏ dùng lại một khung phần mềm chung."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> thứ cứu được nhiệm vụ là thứ đã được <b>thiết kế sẵn</b> trước khi hỏng — công cụ ghi vết, đường lui, số đo tài nguyên. Hãy hỏi: nếu thiết bị của mình kẹt ở xa, mình còn nhìn thấy gì và còn làm được gì?</div>
+        say: "Điều cần mang theo, thứ cứu được nhiệm vụ luôn là thứ đã được thiết kế sẵn trước khi hỏng, như công cụ ghi vết, đường lui và số đo tài nguyên. Hãy tự hỏi, nếu thiết bị của mình kẹt ở xa, mình còn nhìn thấy gì và còn làm được gì?"
+      - clear: true
+        show: |
+          <p class="note">Đây là bài cuối của khoá ESY. Từ thanh ghi, ngắt, định thời, cảm biến, giao tiếp, lập lịch và hệ điều hành thời gian thực, tới độ tin cậy, năng lượng và cập nhật an toàn, bạn đã thấy chúng cùng làm việc trên những robot ở rất xa Trái Đất.</p>
+        say: "Đây là bài cuối của khoá hệ thống nhúng và thời gian thực. Bạn đã đi từ thanh ghi, ngắt, định thời và giao tiếp, qua lập lịch, tới độ tin cậy, năng lượng và cập nhật an toàn. Giờ bạn thấy chúng cùng làm việc trên những robot ở rất xa Trái Đất. Cảm ơn bạn đã theo học."

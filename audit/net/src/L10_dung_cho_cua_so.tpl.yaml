@@ -1,0 +1,238 @@
+id: L10
+course: NET
+series: "NET · Mạng máy tính"
+title: "Bài 10 — Truyền tin cậy: dừng–chờ và cửa sổ trượt"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/net.yaml L10; audit/net/verify_net.py L10; J. Kurose, K. Ross, mục 3.4 (rdt, Go-Back-N, lặp chọn lọc)"
+assumes: [arith, frac, power, approx, sub, min_fn, dots]
+# Quy ước: L = độ dài gói (bit), R = tốc độ liên kết, t = L/R = thời gian phát một gói, RTT = thời gian đi về (lời đọc: “một lượt đi về”).
+#   Hiệu suất U = phần thời gian bên gửi thật sự đang phát. Bỏ qua thời gian phát gói xác nhận. Mọi hiệu suất do alg.stop_wait_util /
+#   alg.window_util tính. Hình dừng–chờ vẽ với t phóng to (không đúng tỉ lệ) để thấy được dải gói — ghi rõ trên màn hình.
+objectives:
+  - "Tính hiệu suất của dừng–chờ"
+  - "Chọn kích thước cửa sổ đủ lấp đường truyền"
+  - "Biết hai cách gửi lại khi mất gói"
+asr_reviewed:
+  - {sentence: "Nhân với 1000 để đổi ra mi li giây, được 0 phẩy 0 0 8 mi li giây.", reason: "ASR chép “Nhân với 1 nghìn để đổi ra mili giây được 0.008 mili giây.” (0.688): cờ THIẾU là giả — ASR gộp “0 phẩy 0 0 8” thành số “0.008” (đúng giá trị) và viết gộp “mili”; mọi từ đều có mặt, không có âm thanh cụt — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Còn 10 gói phát trong 12 mi li giây, đủ lấp cả chu kỳ.", reason: "ASR chép “Còn 10 gói phát trong 12ml đủ lấp cả cho kỳ.” (0.786): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh; lệch âm/thanh thuần Việt: chu/cho — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Với dừng chờ, hiệu suất bằng 0 phẩy 0 0 8 chia cho 30 phẩy 0 0 8, xấp xỉ 0 phẩy 0 0 0 2 7.", reason: "ASR chép “0.008 chia cho 30.008, sắp xỉ 0.00027”: ba số thập phân đúng từng chữ số; xấp/sắp nhầm x/s"}
+  - {sentence: "Ba, kiểm ngược, 3751 nhân 0 phẩy 0 0 8 xấp xỉ 30 phẩy 0 0 8 mi li giây.", reason: "ASR chép “3751 nhân 0.008 xếp xỉ 30.008 mili giây”: mọi số đúng; xấp/xếp lệch vần"}
+  - {sentence: "Gói dài 8 nghìn bit, đường 1 tỉ bit mỗi giây, nên thời gian phát là 0 phẩy 0 0 8 mi li giây, còn một lượt đi về là 30 mi li giây.", reason: "ASR chép “8.000 bit … 1 tỷ bit … 0,008 ms … 30 ms”: mọi số đúng, “mi li giây” viết tắt ms, tỉ/tỷ cùng từ, nên/nền khác thanh"}
+  - {sentence: "Với cửa sổ W gói, bên gửi phát liền W gói rồi mới chờ, nên hiệu suất nhân lên W lần, nhưng không quá 1.", reason: "tên chữ cái đọc kiểu Việt, ASR chép nhầm chữ (q→quy, x→ích, k→ca) — nhóm đã biết (SKILL Bước 5); chữ hiện trên màn hình"}
+  - {sentence: "Lùi về N gửi lại cả đoạn sau gói mất, còn lặp chọn lọc chỉ gửi lại gói mất, nhưng bên nhận phải có bộ đệm.", reason: "tên chữ cái đọc kiểu Việt, ASR chép nhầm chữ (q→quy, x→ích, k→ca) — nhóm đã biết (SKILL Bước 5); chữ hiện trên màn hình"}
+  - {sentence: "Cửa sổ W gói nhân hiệu suất lên W lần, và khi mất gói thì gửi lại theo cách lùi về N hoặc lặp chọn lọc.", reason: "tên chữ cái đọc kiểu Việt, ASR chép nhầm chữ (q→quy, x→ích, k→ca) — nhóm đã biết (SKILL Bước 5); chữ hiện trên màn hình"}
+  - {sentence: "Chào bạn, gửi từng gói 1000 byte qua đường 1 tỉ bit mỗi giây, mỗi lượt đi về mất 30 mi li giây, và chờ xác nhận rồi mới gửi gói sau.", reason: "“byte” đọc thô /bai/ — probe audit/csa/probes/p1_thuat_ngu.md: ASR chép “bay” 8/8 (cùng âm), đối chứng 0/8; lexicon foreign_ok; “bit” ASR chép “bích/biết” (probe p1 CSA: không cách viết nào phân định âm cuối t/ch) — NOT_VERIFIED bằng tai người; “byte” → “bay” cùng âm"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Đường 1 Gbps chạy như 267 kbps"
+    checks:
+      - "round(8000 / 0.030008 / 1e3) == 267"
+    steps:
+      - show: |
+          <p>Gửi từng gói 1000 byte qua đường 1 Gbps, mỗi lượt đi về 30 ms, và <b>chờ xác nhận</b> rồi mới gửi gói sau. Thông lượng thật: khoảng <b>267 kbps</b> — gần bốn nghìn lần chậm hơn đường truyền.</p>
+          <div class="box key">Hôm nay: truyền tin cậy — dừng–chờ, vì sao nó lãng phí, và cửa sổ trượt cho nhiều gói cùng bay.</div>
+        focus: [1, 1, 2]
+        say: "Chào bạn, gửi từng gói 1000 byte qua đường 1 tỉ bit mỗi giây, mỗi lượt đi về mất 30 mi li giây, và chờ xác nhận rồi mới gửi gói sau. Thông lượng thật chỉ khoảng 267 nghìn bit mỗi giây, chậm hơn đường truyền gần bốn nghìn lần. Hôm nay ta học truyền tin cậy, dừng chờ và vì sao nó lãng phí, rồi cửa sổ trượt cho nhiều gói cùng bay."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: đổi đơn vị và làm tròn lên"
+    checks:
+      - "1000 * 8 == 8000 and 10 ** 9 == 1000000000"
+      - "abs(8000 / 10 ** 9 - 0.000008) < 1e-15 and round(0.000008 * 1000, 6) == 0.008"
+      - "round(28 / 3, 2) == 9.33 and 9 * 3 == 27 and 10 * 3 == 30"
+    steps:
+      - show: |
+          <table class="t"><tr><th>đổi</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>1000 byte ra bit</td><td>$1000 \times 8$</td><td>8000 bit</td></tr>
+          <tr><td>1 Gbps</td><td>$10^9$ bit mỗi giây</td><td>1 000 000 000 bit mỗi giây</td></tr>
+          <tr><td>phát 8000 bit</td><td>$\frac{8000}{10^9}$ giây</td><td>0,000008 giây</td></tr>
+          <tr><td>giây ra mi li giây</td><td>$0{,}000008 \times 1000$</td><td>0,008 ms</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", "1.5"]
+        say: "Trước khi vào bài, ta ôn hai việc sẽ dùng liên tục. Việc thứ nhất là đổi đơn vị, một byte có 8 bit, nên 1000 byte là 8 nghìn bit. Một tỉ bit mỗi giây nghĩa là mỗi giây đẩy ra 10 mũ 9 bit. Phát 8 nghìn bit thì mất 8 nghìn chia 10 mũ 9 giây, bằng 0 phẩy 0 0 0 0 0 8 giây. Nhân với 1000 để đổi ra mi li giây, được 0 phẩy 0 0 8 mi li giây."
+      - show: |
+          <p>Làm tròn <b>lên</b> khi cần “đủ”: chở 28 người bằng xe 3 chỗ, $\frac{28}{3} \approx 9{,}33$ xe.</p>
+          <table class="t"><tr><th>số xe</th><th>chở được</th><th>đủ 28 người?</th></tr>
+          <tr><td>9</td><td>$9 \times 3 = 27$</td><td>không</td></tr>
+          <tr><td>10</td><td>$10 \times 3 = 30$</td><td>có</td></tr></table>
+        focus: [1, "2.2", "2.3", 0]
+        say: "Việc thứ hai là làm tròn lên, khi câu hỏi là cần bao nhiêu thì mới đủ. Chở 28 người bằng xe 3 chỗ, 28 chia 3 được khoảng 9 phẩy 3 3 xe. Nhưng 9 xe chỉ chở được 27 người, thiếu một người. Phải lấy 10 xe, chở được 30, nên ta làm tròn lên chứ không làm tròn thông thường."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: hiệu suất bên gửi"
+    steps:
+      - show: |
+          <p>$t = \frac{L}{R}$: thời gian <b>phát</b> một gói. $\text{RTT}$: một lượt đi về.</p>
+          <div class="box key">Dừng–chờ: mỗi chu kỳ dài $\text{RTT} + t$ nhưng chỉ phát trong $t$, nên hiệu suất $U = \frac{t}{\text{RTT} + t}$.</div>
+          <p>Cửa sổ $W$ gói: phát liền $W$ gói rồi mới chờ, $U = \min\!\Big(1, \frac{W \times t}{\text{RTT} + t}\Big)$.</p>
+        focus: [1, 1, 2, 3]
+        say: "Gọi t là thời gian phát một gói, bằng độ dài gói chia tốc độ liên kết. Ký hiệu thứ hai trên màn hình là thời gian một lượt đi về. Với dừng chờ, mỗi chu kỳ dài thời gian đi về cộng t, nhưng bên gửi chỉ phát trong t, nên hiệu suất bằng t chia thời gian đi về cộng t. Với cửa sổ W gói, bên gửi phát liền W gói rồi mới chờ, nên hiệu suất nhân lên W lần, nhưng không quá 1."
+
+  # ───────────────────────── 3. HÌNH ─────────────────────────
+  - id: picture
+    kind: concept
+    title: "Dừng–chờ trên sơ đồ thời gian"
+    steps:
+      - show: |
+          <div>{{STOPWAIT}}</div>
+          <p class="note">Hình phóng to thời gian phát để nhìn thấy dải gói; ở ví dụ thật, dải mỏng hơn đường kẻ.</p>
+        focus: [1, 1, 2]
+        say: "Bên gửi phát một gói, rồi ngồi chờ suốt một lượt đi về cho tới khi gói xác nhận quay về. Chỉ khi đó gói kế tiếp mới được đi. Hình này phóng to thời gian phát để nhìn thấy dải gói, ở ví dụ thật dải còn mỏng hơn đường kẻ."
+
+  # ───────────────────────── 4. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Tính hiệu suất và cửa sổ cần thiết"
+    checks:
+      - "abs(8000 / 1e9 - 8e-6) < 1e-18 and round(alg.stop_wait_util(8000, 1e9, 0.030), 5) == 0.00027"
+      - "__import__('math').ceil((0.030 + 8e-6) / 8e-6) == 3751"
+      - "round(alg.window_util(100, 8000, 1e9, 0.030), 3) == 0.027 and alg.window_util(3751, 8000, 1e9, 0.030) == 1.0"
+      - "round(100 * 0.008, 3) == 0.8 and round(0.8 / 30.008, 3) == 0.027 and round(30 + 0.008, 3) == 30.008"
+    steps:
+      - show: |
+          <p><b>Bước 1 — thời gian phát:</b> $L = 8000$ bit, $R = 1$ Gbps, $\text{RTT} = 30$ ms.</p>
+          $$t = \frac{8000}{10^9} \text{ giây} = 0{,}008 \text{ ms}$$
+        focus: [1, 2]
+        say: "Bước một, ta đọc các con số của đề bài rồi tính thời gian phát. Gói dài 8 nghìn bit, đường 1 tỉ bit mỗi giây, nên thời gian phát là 0 phẩy 0 0 8 mi li giây, còn một lượt đi về là 30 mi li giây."
+      - show: |
+          <p><b>Bước 2 — dừng–chờ:</b> thay hai số vừa có vào công thức hiệu suất.</p>
+          $$U = \frac{0{,}008}{30 + 0{,}008} \approx \hl{0{,}00027}$$
+          <p>Bên gửi bận chưa tới 3 phần vạn thời gian.</p>
+        focus: [1, 2, 3]
+        say: "Bước hai, ta thay hai con số vừa có vào công thức hiệu suất. Với dừng chờ, hiệu suất bằng 0 phẩy 0 0 8 chia cho 30 phẩy 0 0 8, xấp xỉ 0 phẩy 0 0 0 2 7. Bên gửi chỉ bận chưa tới 3 phần vạn thời gian."
+      - show: |
+          <p><b>Bước 3 — cửa sổ 100 gói:</b> mỗi chu kỳ phát liền $100 \times 0{,}008 = 0{,}8$ ms.</p>
+          $$U = \frac{0{,}8}{30{,}008} \approx \hl{0{,}027}$$
+        focus: [1, 2, 2]
+        say: "Bước ba, thử cửa sổ 100 gói. Trong một chu kỳ, bên gửi phát liền 100 gói, tức 100 nhân 0 phẩy 0 0 8, bằng 0 phẩy 8 mi li giây. Với cửa sổ 100 gói, hiệu suất xấp xỉ 0 phẩy 0 2 7, tốt hơn 100 lần nhưng vẫn mới 2 phẩy 7 phần trăm."
+      - clear: true
+        show: |
+          <p><b>Bước 4 — cửa sổ để đầy đường:</b></p>
+          $$W = \Big\lceil \frac{30 + 0{,}008}{0{,}008} \Big\rceil = \hl{3751}$$
+          <p>3751 gói đang bay cùng lúc — đúng tinh thần tích băng thông–trễ của bài 2.</p>
+        introduces: [ceil]
+        focus: [2, 3, 3]
+        say: "Muốn đầy đường thì cửa sổ phải bằng 30 phẩy 0 0 8 chia 0 phẩy 0 0 8, làm tròn lên, được 3751 gói. Ngần ấy gói phải đang bay cùng lúc. Đó đúng là ý của tích băng thông nhân trễ ở bài 2, đường càng rộng và càng dài thì càng phải gửi trước nhiều dữ liệu."
+
+  # ───────────────────────── 5. MẤT GÓI ─────────────────────────
+  - id: loss
+    kind: concept
+    title: "Khi một gói trong cửa sổ bị mất"
+    steps:
+      - show: |
+          <table class="t"><tr><th>cách</th><th>bên nhận</th><th>bên gửi khi hết giờ chờ</th></tr>
+          <tr><td><b>lùi về N</b></td><td>chỉ nhận đúng thứ tự, vứt gói đến sớm</td><td>gửi lại gói mất <b>và mọi gói sau nó</b></td></tr>
+          <tr><td><b>lặp chọn lọc</b></td><td>giữ gói đến sớm trong bộ đệm</td><td>chỉ gửi lại <b>đúng</b> gói mất</td></tr></table>
+          <p class="note">TCP gần với cách thứ hai: bên nhận giữ gói đến sớm, bên gửi thường chỉ gửi lại phần thiếu.</p>
+        focus: [0, "1.2", "1.3", 2]
+        say: "Khi một gói trong cửa sổ bị mất, có hai cách xử lý. Cách lùi về N, bên nhận chỉ nhận đúng thứ tự và vứt các gói đến sớm, nên bên gửi phải gửi lại gói mất và mọi gói sau nó. Cách lặp chọn lọc, bên nhận giữ gói đến sớm trong bộ đệm, nên bên gửi chỉ gửi lại đúng gói bị mất. TCP gần với cách thứ hai."
+
+  # ───────────────────────── 6. TỰ KIỂM ─────────────────────────
+  - id: verify
+    kind: check
+    title: "Tự kiểm"
+    checks:
+      - "abs(3750 * 0.008 - 30.0) < 1e-9 and abs(3751 * 0.008 - 30.008) < 1e-9 and round(30.008 - 30.0, 3) == 0.008"
+      - "alg.window_util(3750, 8000, 1e9, 0.030) < 1 and alg.window_util(3751, 8000, 1e9, 0.030) == 1.0"
+    steps:
+      - show: |
+          <ol><li><b>Đơn vị:</b> $t$ và $\text{RTT}$ cùng đổi về mi li giây trước khi chia.</li>
+          <li><b>Giới hạn:</b> $U$ không bao giờ vượt 1; cửa sổ lớn hơn mức đầy đường không làm nhanh thêm.</li>
+          <li><b>Kiểm ngược:</b> $3751 \times 0{,}008 \approx 30{,}008$ ms — vừa đủ để gói xác nhận đầu tiên quay về khi gói cuối của cửa sổ vừa phát xong.</li></ol>
+        focus: [0, "1.1", "1.2", "1.3", "1.3"]
+        say: "Tự kiểm bằng ba cách. Một, đổi t và thời gian đi về sang cùng đơn vị mi li giây trước khi chia. Hai, hiệu suất không bao giờ vượt 1, cửa sổ lớn hơn mức đầy đường không làm nhanh thêm. Ba, kiểm ngược, 3751 nhân 0 phẩy 0 0 8 xấp xỉ 30 phẩy 0 0 8 mi li giây. Đó vừa đủ để gói xác nhận đầu tiên quay về khi gói cuối của cửa sổ vừa phát xong."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>cửa sổ</th><th>thời gian phát cả cửa sổ</th><th>so với chu kỳ 30,008 ms</th><th>hiệu suất</th></tr>
+          <tr><td>3750</td><td>$3750 \times 0{,}008 = 30{,}000$ ms</td><td>ngắn hơn: còn ngồi chờ 0,008 ms</td><td>dưới 1</td></tr>
+          <tr><td>3751</td><td>$3751 \times 0{,}008 = 30{,}008$ ms</td><td>vừa bằng: không phải chờ</td><td>đúng 1 ✓</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Kiểm thêm bằng một đường khác, không dùng công thức làm tròn lên mà thử hai cửa sổ cạnh nhau. Cửa sổ 3750 gói phát hết trong 3750 nhân 0 phẩy 0 0 8, bằng 30 mi li giây, ngắn hơn chu kỳ 30 phẩy 0 0 8, nên bên gửi vẫn phải ngồi chờ một chút. Cửa sổ 3751 gói phát hết trong đúng 30 phẩy 0 0 8 mi li giây, bên gửi không phải chờ, hiệu suất đạt 1. Vậy 3751 là cửa sổ nhỏ nhất làm đầy đường, khớp với bước bốn."
+
+  # ───────────────────────── 7. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi người mới hay mắc"
+    checks:
+      - "round(alg.stop_wait_util(8000, 1e9, 0.015), 5) == 0.00053 and round(0.008 / 15.008, 5) == 0.00053"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Nghĩ đường nhanh thì giao thức nào cũng nhanh <b class="red">(sai)</b>
+          <br><span class="note">Cửa sổ quá nhỏ làm đường 1 Gbps chạy như vài trăm kbps. Giới hạn nằm ở giao thức, không ở dây.</span></div>
+        say: "Lỗi thứ nhất, nghĩ đường nhanh thì giao thức nào cũng nhanh. Cửa sổ quá nhỏ làm đường 1 tỉ bit mỗi giây chạy như vài trăm nghìn bit mỗi giây, vì giới hạn nằm ở giao thức chứ không ở dây."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Dùng trễ một chiều thay cho lượt đi về <b class="red">(sai một nửa)</b>
+          <br><span class="note">Bên gửi phải chờ gói tới nơi <b>và</b> xác nhận quay về: dùng $\text{RTT}$.</span></div>
+          <table class="t"><tr><th>dùng</th><th>hiệu suất tính ra</th></tr>
+          <tr><td class="red">trễ một chiều 15 ms</td><td>$\frac{0{,}008}{15{,}008} \approx 0{,}00053$ — gấp đôi, sai</td></tr>
+          <tr><td>một lượt đi về 30 ms</td><td>$\frac{0{,}008}{30{,}008} \approx 0{,}00027$ ✓</td></tr></table>
+        focus: [1, 2, 0]
+        say: "Lỗi thứ hai, dùng trễ một chiều thay cho một lượt đi về, sai một nửa. Bên gửi phải chờ gói tới nơi và xác nhận quay về, nên phải dùng thời gian đi về. Với ví dụ của bài, lấy nhầm 15 mi li giây sẽ cho hiệu suất khoảng gấp đôi con số đúng."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Nghĩ cửa sổ càng lớn càng tốt <b class="red">(không hẳn)</b>
+          <br><span class="note">Quá mức đầy đường thì gói chỉ dồn vào hàng đợi của bộ định tuyến — trễ tăng, dễ mất gói. Cửa sổ phải tự điều chỉnh theo mạng.</span></div>
+        say: "Lỗi thứ ba, nghĩ cửa sổ càng lớn càng tốt. Quá mức đầy đường thì gói chỉ dồn vào hàng đợi của bộ định tuyến, trễ tăng và dễ mất gói, nên cửa sổ phải tự điều chỉnh theo mạng."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Lẫn hai cách gửi lại <b class="red">(sai)</b>
+          <br><span class="note">Lùi về N gửi lại cả đoạn sau gói mất; lặp chọn lọc chỉ gửi lại gói mất nhưng bên nhận phải có bộ đệm.</span></div>
+        say: "Lỗi thứ tư, lẫn hai cách gửi lại. Lùi về N gửi lại cả đoạn sau gói mất, còn lặp chọn lọc chỉ gửi lại gói mất, nhưng bên nhận phải có bộ đệm."
+
+  # ───────────────────────── 8. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "round(alg.stop_wait_util(12000, 10e6, 0.010), 3) == 0.107"
+      - "__import__('math').ceil(11.2 / 1.2) == 10 and alg.window_util(10, 12000, 10e6, 0.010) == 1.0"
+      - "abs(12000 / 10 ** 7 - 0.0012) < 1e-15 and round(10 + 1.2, 1) == 11.2 and round(9 * 1.2, 1) == 10.8 and round(10 * 1.2, 1) == 12.0 and alg.window_util(9, 12000, 10e6, 0.010) < 1"
+    steps:
+      - show: |
+          <p>Gói 12 000 bit, đường 10 Mbps, $\text{RTT} = 10$ ms.</p>
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Hiệu suất dừng–chờ là bao nhiêu?</td></tr>
+          <tr><td>2</td><td>Cửa sổ ít nhất bao nhiêu gói để đầy đường?</td></tr></table>
+        focus: [0, 1, "2.2", "2.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Gói dài 12 nghìn bit, đường 10 triệu bit mỗi giây, một lượt đi về mất 10 mi li giây. Câu một, hiệu suất dừng chờ là bao nhiêu? Câu hai, cửa sổ ít nhất bao nhiêu gói để đầy đường? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <p>① Thời gian phát trước, rồi mới tới hiệu suất:</p>
+          $$t = \frac{12\,000}{10^7} \text{ giây} = 1{,}2 \text{ ms}$$
+          $$U = \frac{1{,}2}{10 + 1{,}2} = \frac{1{,}2}{11{,}2} \approx \hl{0{,}107}$$
+        focus: [2, 3]
+        say: "Đáp án câu một, thời gian phát là 12 nghìn chia 10 triệu, bằng 0 phẩy 0 0 1 2 giây, tức 1 phẩy 2 mi li giây. Hiệu suất bằng 1 phẩy 2 chia cho 10 cộng 1 phẩy 2, tức chia 11 phẩy 2, xấp xỉ 0 phẩy 1 0 7."
+      - clear: true
+        show: |
+          <p>② Chu kỳ $10 + 1{,}2 = 11{,}2$ ms, mỗi gói phát $1{,}2$ ms:</p>
+          $$W = \Big\lceil \frac{11{,}2}{1{,}2} \Big\rceil = \lceil 9{,}33 \rceil = \hl{10} \text{ gói}$$
+          <table class="t"><tr><th>cửa sổ</th><th>thời gian phát cả cửa sổ</th><th>so với chu kỳ 11,2 ms</th></tr>
+          <tr><td>9</td><td>$9 \times 1{,}2 = 10{,}8$ ms</td><td>ngắn hơn: còn chờ</td></tr>
+          <tr><td>10</td><td>$10 \times 1{,}2 = 12$ ms</td><td>đủ lấp cả chu kỳ ✓</td></tr></table>
+        focus: [2, "3.2", "3.3"]
+        say: "Câu hai, cửa sổ bằng 11 phẩy 2 chia 1 phẩy 2, xấp xỉ 9 phẩy 3 3, làm tròn lên được 10 gói. Thử lại, 9 gói chỉ phát trong 9 nhân 1 phẩy 2, bằng 10 phẩy 8 mi li giây, ngắn hơn chu kỳ 11 phẩy 2, nên bên gửi vẫn phải ngồi chờ. Còn 10 gói phát trong 12 mi li giây, đủ lấp cả chu kỳ."
+
+  # ───────────────────────── 9. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">dừng–chờ: U = t / (RTT + t)</span><span class="a">→</span>
+          <span class="n">đường dài, rộng: U rất nhỏ</span><span class="a">→</span>
+          <span class="n">cửa sổ W: U nhân W lần</span><span class="a">→</span>
+          <span class="n">mất gói: lùi về N hay lặp chọn lọc</span></div>
+        say: "Tổng kết lại, dừng chờ có hiệu suất t chia thời gian đi về cộng t, rất nhỏ trên đường dài và rộng. Cửa sổ W gói nhân hiệu suất lên W lần, và khi mất gói thì gửi lại theo cách lùi về N hoặc lặp chọn lọc."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> khi phải chờ một vòng đi về, đừng làm từng việc một — hãy cho nhiều việc cùng “đang bay”.</div>
+        say: "Điều cần mang theo, khi mỗi việc phải chờ một vòng đi về, đừng làm từng việc một, hãy cho nhiều việc cùng đang bay."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 11): cửa sổ nên lớn bao nhiêu khi không biết mạng đang nghẽn ra sao? <b>Điều khiển tắc nghẽn TCP</b>: khởi động chậm và tăng cộng – giảm nhân.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 11, ta hỏi cửa sổ nên lớn bao nhiêu khi không biết mạng đang nghẽn ra sao, qua điều khiển tắc nghẽn TCP, với khởi động chậm và tăng cộng, giảm nhân. Hẹn gặp bạn ở bài tiếp theo."

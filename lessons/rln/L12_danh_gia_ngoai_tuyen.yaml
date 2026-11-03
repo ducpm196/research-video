@@ -1,0 +1,247 @@
+id: L12
+course: RLN
+series: "RLN · Học tăng cường"
+title: "Bài 12 — Tình huống chuyên gia: đánh giá chính sách mới từ nhật ký cũ — trọng số quan trọng và phương sai bùng nổ"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/rln.yaml L12; audit/rln/verify_rln.py L12; audit/rln/sources_L12.md; L. Bottou và cộng sự, Counterfactual Reasoning and Learning Systems: The Example of Computational Advertising, Journal of Machine Learning Research 14 (2013) 3207–3260 — thử nghiệm có kiểm soát mất khoảng hai tháng, cần chủ động ngẫu nhiên hoá, trọng số lớn hiếm làm phương sai rất lớn, cắt trọng số ở giá trị lớn thứ năm, 22 triệu trang trong năm tuần, xác nhận bằng một nhóm lưu lượng giảm mức giá sàn khoảng 18%; R. S. Sutton, A. G. Barto, Reinforcement Learning: An Introduction, bản 2 (2018), mục 5.5 (trọng số quan trọng thường và có trọng số, Ví dụ 5.5 phương sai vô hạn); RLN bài 4 (trung bình lợi nhuận), bài 9 (tỉ số chính sách mới / cũ); DSC bài 8 (thử nghiệm A/B — khoá Khoa học dữ liệu)"
+assumes: [arith, approx, frac, cdot, sub, power, policy, given, sum, geq]
+# Quy ước: π_cũ = chính sách đã chạy và ghi nhật ký; π_mới = chính sách muốn đánh giá. Trọng số một bước w = π_mới(a | s) / π_cũ(a | s)
+#   (cùng tỉ số rô của bài 9, ở đây viết w như sách); nhiều bước thì nhân các trọng số. Ước lượng thường = Σ w·G / n; ước lượng có trọng số
+#   = Σ w·G / Σ w; số mẫu hiệu dụng = (Σ w)² / Σ w² (alg.rln_is_estimates, alg.rln_ess). Nhật ký 10 lượt, xác suất 0,9 / 0,1 và lợi nhuận
+#   1 / 2 là SỐ MINH HOẠ; mọi sự kiện về hệ thống quảng cáo là CITED từ Bottou và cộng sự (2013) — tên công ty và tác giả chỉ trên màn hình.
+objectives:
+  - "Tính trọng số w = π_mới / π_cũ, ước lượng thường và ước lượng có trọng số từ một nhật ký nhỏ"
+  - "Tính số mẫu hiệu dụng (Σw)² / Σw² và nhận ra khi vài lượt chơi quyết định cả ước lượng"
+  - "Giải thích bằng số vì sao trọng số nhân qua nhiều bước làm phương sai bùng nổ"
+  - "Quyết định khi nào nhật ký đủ để kết luận và khi nào phải chạy thử nghiệm trực tuyến có kiểm soát"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Hai tháng cho một thử nghiệm, hay một buổi chiều với nhật ký?"
+    checks:
+      - "22 * 10 ** 6 // (5 * 7) == 628571"
+    steps:
+      - show: |
+          <p>Một nhóm kỹ sư hệ thống đặt quảng cáo trên trang tìm kiếm muốn biết: <b>đổi mức giá sàn thì doanh thu và lượt nhấp đổi ra sao?</b> Cách chắc chắn là chia người dùng thành nhóm thử và nhóm đối chứng — nhưng theo bài báo năm 2013 của chính nhóm này, mỗi thử nghiệm như vậy “thường mất vài tháng”.</p>
+          <p>Họ đã có nhật ký rất lớn: một đợt thu <b>22 triệu trang kết quả trong năm tuần</b>. Có thể trả lời câu hỏi “nếu như” từ nhật ký cũ không?</p>
+          <div class="box key">Hôm nay: cân lại dữ liệu cũ bằng trọng số; đo xem bao nhiêu mẫu thật sự có ích; và quyết định lúc nào phải thử thật.</div>
+        focus: [1, 1, 2, 2, 3]
+        say: "Chào bạn, một nhóm kỹ sư hệ thống đặt quảng cáo trên trang tìm kiếm muốn biết đổi mức giá sàn thì doanh thu và lượt nhấp đổi ra sao. Cách chắc chắn là chia người dùng thành nhóm thử và nhóm đối chứng, nhưng theo bài báo năm 2013 của chính nhóm này, mỗi thử nghiệm như vậy thường mất vài tháng. Họ đã có nhật ký rất lớn, một đợt thu 22 triệu trang kết quả trong năm tuần. Câu hỏi là có thể trả lời câu hỏi nếu như từ nhật ký cũ không. Hôm nay ta học cách cân lại dữ liệu cũ bằng trọng số, đo xem bao nhiêu mẫu thật sự có ích, và quyết định lúc nào phải thử thật."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại ba điều sẽ dùng"
+    checks:
+      - "sum([4, 6, 8]) / 3 == 6"
+      - "round(0.6 / 0.4, 10) == 1.5 and round(0.5 * (0.6 / 0.5) * 2 + 0.5 * (0.4 / 0.5) * (-2), 10) == 0.4"
+      - "round(0.1 * 1 + 0.9 * 2, 10) == 1.9"
+    steps:
+      - show: |
+          <p><b>① Ước lượng bằng trung bình lượt chơi</b> (bài 4): ba lượt chơi cho lợi nhuận 4, 6, 8 → ước lượng $\frac{4 + 6 + 8}{3} = 6$.</p>
+          <p><b>② Tỉ số mới chia cũ</b> (bài 9): dữ liệu do chính sách cũ thu; nhân mỗi mẫu với $\frac{\pi_{\text{mới}}}{\pi_{\text{cũ}}}$ thì trung bình trở thành trung bình <b>dưới chính sách mới</b>. Ví dụ 0,5 / 0,5 → 0,6 / 0,4 cho đúng 0,4.</p>
+        focus: [1, 2, 2]
+        say: "Điều thứ nhất, ở bài 4, ta ước lượng giá trị bằng trung bình lợi nhuận của các lượt chơi, ba lượt cho 4, 6, 8 thì ước lượng là 6. Điều thứ hai, ở bài 9, dữ liệu do chính sách cũ thu, và nhân mỗi mẫu với tỉ số mới chia cũ thì trung bình trở thành trung bình dưới chính sách mới. Ví dụ hai hành động 0 phẩy 5 và 0 phẩy 5 chuyển thành 0 phẩy 6 và 0 phẩy 4 cho đúng 0 phẩy 4."
+      - show: |
+          <p><b>③ Kỳ vọng</b> (khoá Toán cho khoa học máy tính): trung bình có trọng số theo xác suất.</p>
+          <table class="t"><tr><th>hành động</th><th>xác suất</th><th>lợi nhuận</th><th>góp vào kỳ vọng</th></tr>
+          <tr><td>a₁</td><td>0,1</td><td>1</td><td>0,1</td></tr>
+          <tr><td>a₂</td><td>0,9</td><td>2</td><td>1,8</td></tr>
+          <tr><td colspan="3">kỳ vọng</td><td>1,9</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Điều thứ ba là kỳ vọng, đã học ở khoá Toán cho khoa học máy tính, tức trung bình có trọng số theo xác suất. Hành động a một có xác suất 0 phẩy 1 và lợi nhuận 1, góp 0 phẩy 1. Hành động a hai có xác suất 0 phẩy 9 và lợi nhuận 2, góp 1 phẩy 8. Cộng lại, kỳ vọng là 1 phẩy 9."
+
+  # ───────────────────────── 3. NGÔN NGỮ ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Ngôn ngữ của người đánh giá ngoại tuyến"
+    checks:
+      - "round(0.9 / 0.1, 10) == 9 and round(0.1 / 0.9, 3) == 0.111"
+      - "alg.rln_ess([1, 1, 1, 1]) == 4 and round(alg.rln_ess([9, 0.1, 0.1, 0.1]), 2) == 1.07"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ký hiệu, thuật ngữ</th><th>nghĩa</th></tr>
+          <tr><td>$\pi_{\text{cũ}}$, $\pi_{\text{mới}}$</td><td>chính sách đã chạy và ghi nhật ký; chính sách muốn đánh giá</td></tr>
+          <tr><td>trọng số $w = \dfrac{\pi_{\text{mới}}(a \mid s)}{\pi_{\text{cũ}}(a \mid s)}$</td><td>hành động này hợp với chính sách mới gấp mấy lần chính sách cũ</td></tr>
+          <tr><td>ước lượng thường $\dfrac{\sum w \cdot G}{n}$</td><td>trung bình của trọng số nhân lợi nhuận trên $n$ lượt chơi</td></tr>
+          <tr><td>ước lượng có trọng số $\dfrac{\sum w \cdot G}{\sum w}$</td><td>chia cho tổng trọng số thay vì cho $n$</td></tr></table>
+        introduces: [sum]
+        focus: [0, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bảng là ngôn ngữ của người đánh giá ngoại tuyến. Pi cũ là chính sách đã chạy và ghi nhật ký, pi mới là chính sách muốn đánh giá. Trọng số w là tỉ số xác suất chọn hành động đó của chính sách mới chia của chính sách cũ. Ước lượng thường là tổng của w nhân lợi nhuận G, chia cho số lượt chơi n. Ước lượng có trọng số chia cho tổng các trọng số thay vì chia cho n."
+      - show: |
+          <p><b>Số mẫu hiệu dụng</b>: $\dfrac{(\sum w)^2}{\sum w^2}$ — bao nhiêu lượt chơi “thật sự có tiếng nói”.</p>
+          <p class="note">Làm thử: bốn trọng số bằng 1 → $\frac{16}{4} = 4$, đủ cả bốn. Bốn trọng số 9; 0,1; 0,1; 0,1 → khoảng $1{,}07$: gần như chỉ một lượt quyết định. Trọng số $\frac{0{,}9}{0{,}1} = 9$ khi chính sách cũ hiếm khi chọn điều chính sách mới thích.</p>
+        focus: [1, 2, 2, 2]
+        say: "Số mẫu hiệu dụng là bình phương tổng trọng số chia cho tổng bình phương trọng số, cho biết bao nhiêu lượt chơi thật sự có tiếng nói. Làm thử với bốn trọng số đều bằng 1, ta được 16 chia 4, bằng 4, đủ cả bốn. Với bốn trọng số 9, 0 phẩy 1, 0 phẩy 1, 0 phẩy 1, chỉ còn khoảng 1 phẩy 07, gần như chỉ một lượt quyết định. Trọng số 9 xuất hiện khi chính sách mới chọn một hành động với 0 phẩy 9 mà chính sách cũ chỉ chọn với 0 phẩy 1."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Mười lượt chơi trong nhật ký, một lượt nặng gấp 81"
+    checks:
+      - "round(9 / (0.1 / 0.9)) == 81"
+    steps:
+      - show: |
+          <div><svg width="1000" height="330" viewBox="0 0 1000 330"><g font-size="21" text-anchor="middle" fill="#1f2937">
+          <line x1="60" y1="270" x2="960" y2="270" stroke="#1f2937" stroke-width="2"/>
+          <rect x="80" y="262" width="56" height="8" fill="#2a78d6"/><rect x="160" y="262" width="56" height="8" fill="#2a78d6"/><rect x="240" y="262" width="56" height="8" fill="#2a78d6"/>
+          <rect x="320" y="262" width="56" height="8" fill="#2a78d6"/><rect x="400" y="262" width="56" height="8" fill="#2a78d6"/><rect x="480" y="262" width="56" height="8" fill="#2a78d6"/>
+          <rect x="560" y="262" width="56" height="8" fill="#2a78d6"/><rect x="640" y="262" width="56" height="8" fill="#2a78d6"/><rect x="720" y="262" width="56" height="8" fill="#2a78d6"/>
+          <rect x="840" y="54" width="56" height="216" fill="#eb6834"/>
+          <text x="868" y="40" fill="#b91c1c" font-weight="bold">w = 9</text>
+          <text x="428" y="236">9 lượt chọn a₁: mỗi lượt w = 1/9</text>
+          <text x="428" y="300">a₁ (chính sách cũ chọn 0,9; mới chỉ 0,1)</text>
+          <text x="868" y="300">a₂ (cũ 0,1; mới 0,9)</text>
+          </g></svg></div>
+          <p class="note">Tổng trọng số: $9 \cdot \frac{1}{9} + 9 = 10$; riêng lượt chọn $a_2$ chiếm 9 phần 10.</p>
+        focus: [1, 1, 1, 2]
+        say: "Hình là mười lượt chơi trong nhật ký của chính sách cũ. Chín lượt chọn a một, vì chính sách cũ chọn a một với xác suất 0 phẩy 9, nhưng chính sách mới chỉ chọn nó với 0 phẩy 1, nên mỗi lượt chỉ nặng một phần chín. Một lượt chọn a hai, chính sách cũ hiếm khi chọn mà chính sách mới rất thích, nên nặng 9, gấp 81 lần mỗi lượt kia. Tổng trọng số là 10, và riêng lượt đó chiếm 9 phần 10."
+
+  # ───────────────────────── 5. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Tái hiện cơ chế: một nhật ký 10 lượt chơi, từng phép tính"
+    checks:
+      - "[round(x, 3) for x in alg.rln_is_estimates([(0.1 / 0.9, 1)] * 9 + [(9, 2)])] == [1.9, 1.9, 1.233]"
+      - "[round(x, 3) for x in alg.rln_is_estimates([(0.1 / 0.9, 1)] * 10)[:2]] == [0.111, 1.0]"
+      - "2 ** 10 == 1024 and 0.5 ** 10 == 1 / 1024 and round(0.9 ** 10, 2) == 0.35"
+      - "alg.rln_ess([0.1 / 0.9] * 10) == 10 or abs(alg.rln_ess([0.1 / 0.9] * 10) - 10) < 1e-9"
+      - "round(1 - (1 - 1 / 1024) ** 1000, 3) == 0.624 and round(1000 / 1024, 3) == 0.977"
+    steps:
+      - show: |
+          <p>Nhật ký: 9 lượt chọn $a_1$ (lợi nhuận 1), 1 lượt chọn $a_2$ (lợi nhuận 2). Giá trị thật của chính sách mới là 1,9 (phần ôn).</p>
+          <p><b>Bước 1 — ước lượng thường.</b> $\dfrac{9 \cdot \frac{1}{9} \cdot 1 + 9 \cdot 2}{10} = \dfrac{1 + 18}{10} = \hlg{1{,}9}$. Ước lượng có trọng số $\dfrac{19}{10} = 1{,}9$ cũng vậy. Số mẫu hiệu dụng chỉ $\approx \hl{1{,}23}$ trên 10.</p>
+        focus: [1, 2]
+        say: "Nhật ký có 9 lượt chọn a một với lợi nhuận 1, và 1 lượt chọn a hai với lợi nhuận 2, còn giá trị thật của chính sách mới là 1 phẩy 9 như phần ôn. Bước một, ước lượng thường bằng 1 cộng 18 chia 10, đúng 1 phẩy 9, và ước lượng có trọng số cũng vậy, nhưng số mẫu hiệu dụng chỉ khoảng 1 phẩy 23 trên 10."
+      - show: |
+          <p><b>Bước 2 — thiếu đúng lượt hiếm.</b> Một nhật ký 10 lượt khác, cả 10 đều chọn $a_1$ (chuyện xảy ra với xác suất $0{,}9^{10} \approx 0{,}35$):</p>
+          <table class="t"><tr><th>ước lượng</th><th>có lượt $a_2$</th><th>không có lượt $a_2$</th></tr>
+          <tr><td>thường</td><td>1,9</td><td class="red">0,111</td></tr>
+          <tr><td>có trọng số</td><td>1,9</td><td class="red">1,0</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước hai, xét một nhật ký 10 lượt khác mà cả 10 đều chọn a một, chuyện này xảy ra với xác suất 0 phẩy 9 mũ 10, khoảng 0 phẩy 35. Ước lượng thường tụt từ 1 phẩy 9 xuống 0 phẩy 111. Ước lượng có trọng số thành 1, tức chỉ là giá trị của a một, vì nó không thấy a hai bao giờ."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — nhiều bước, trọng số nhân lên.</b> Mỗi bước, chính sách cũ chọn đúng hành động của chính sách mới với xác suất 0,5, chính sách mới chọn chắc chắn: trọng số mỗi bước là 2. Lượt chơi 10 bước:</p>
+          $$w = 2^{10} = \hl{1024} \quad \text{(10 thừa số 2 nhân với nhau)}$$
+          <p class="note">Chỉ một trong 1024 lượt chơi cũ trùng hẳn với chính sách mới; các lượt khác có trọng số 0.</p>
+        focus: [1, 1, 2, 3]
+        say: "Bước ba, xét lượt chơi nhiều bước. Mỗi bước, chính sách cũ chọn đúng hành động của chính sách mới với xác suất 0 phẩy 5, còn chính sách mới chọn chắc chắn, nên trọng số mỗi bước là 2. Với 10 bước, các trọng số nhân lại thành 2 mũ 10, bằng 1024. Nghĩa là chỉ một trong 1024 lượt chơi cũ trùng hẳn với chính sách mới, các lượt khác có trọng số 0."
+      - show: |
+          <p><b>Bước 4 — nhật ký 1000 lượt chơi.</b> Trung bình chỉ có $\frac{1000}{1024} \approx 0{,}98$ lượt trùng. Xác suất có ít nhất một lượt trùng:</p>
+          $$1 - \left(1 - \frac{1}{1024}\right)^{1000} \approx 0{,}62$$
+          <p class="note">Gần 4 lần trong 10, nhật ký không có <b>một</b> lượt nào để nói về chính sách mới. Lần nào có, cả ước lượng dựa vào một hai lượt.</p>
+        focus: [1, 2, 3, 3]
+        say: "Bước bốn, với nhật ký 1000 lượt chơi, trung bình chỉ có khoảng 0 phẩy 98 lượt trùng. Xác suất có ít nhất một lượt trùng là 1 trừ 1 trừ một phần 1024, mũ 1000, xấp xỉ 0 phẩy 62. Vậy gần 4 lần trong 10, nhật ký không có một lượt nào để nói về chính sách mới. Lần nào có thì cả ước lượng dựa vào một hai lượt."
+
+  # ───────────────────────── 6. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: kỳ vọng của ước lượng thường, và số mẫu hiệu dụng khi trọng số đều"
+    checks:
+      - "round(0.9 * (0.1 / 0.9) * 1 + 0.1 * (0.9 / 0.1) * 2, 10) == 1.9"
+      - "abs(alg.rln_ess([2.5] * 8) - 8) < 1e-12"
+    steps:
+      - show: |
+          <p><b>Đường khác 1 — tính kỳ vọng</b> thay vì dựa vào một nhật ký: lấy mẫu theo chính sách cũ, giá trị trung bình của $w \cdot G$ là</p>
+          $$0{,}9 \cdot \frac{0{,}1}{0{,}9} \cdot 1 + 0{,}1 \cdot \frac{0{,}9}{0{,}1} \cdot 2 = 0{,}1 + 1{,}8 = 1{,}9 \checkmark$$
+          <p class="note">Ước lượng thường <b>đúng trung bình</b>; cái hỏng là nó dao động quá mạnh giữa các nhật ký.</p>
+        focus: [1, 2, 2, 3]
+        say: "Kiểm tra thứ nhất, ta tính kỳ vọng thay vì dựa vào một nhật ký. Lấy mẫu theo chính sách cũ, trung bình của w nhân G bằng 0 phẩy 9 nhân một phần chín nhân 1, cộng 0 phẩy 1 nhân 9 nhân 2. Tức là 0 phẩy 1 cộng 1 phẩy 8, bằng 1 phẩy 9. Vậy ước lượng thường đúng trung bình, cái hỏng là nó dao động quá mạnh giữa các nhật ký."
+      - show: |
+          <p><b>Đường khác 2 — công thức số mẫu hiệu dụng phải trả về đúng $n$ khi mọi trọng số bằng nhau:</b> tám trọng số 2,5 → $\dfrac{(8 \cdot 2{,}5)^2}{8 \cdot 2{,}5^2} = \dfrac{400}{50} = 8$ ✓.</p>
+          <table class="t"><tr><th>nhật ký</th><th>số lượt</th><th>số mẫu hiệu dụng</th></tr>
+          <tr><td>trọng số đều</td><td>8</td><td>8</td></tr>
+          <tr><td>ví dụ ở trên</td><td>10</td><td>1,23</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Kiểm tra thứ hai, công thức số mẫu hiệu dụng phải trả về đúng số lượt khi mọi trọng số bằng nhau, vì khi đó mọi lượt có tiếng nói như nhau. Thay tám trọng số 2 phẩy 5, ta được 400 chia 50, đúng bằng 8. Còn nhật ký ở trên có 10 lượt mà chỉ 1 phẩy 23 mẫu hiệu dụng."
+
+  # ───────────────────────── 7. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "Những bài học sai khi đọc tình huống này"
+    checks:
+      - "0.52 < 1 < 1.74"
+      - "[round(x, 2) for x in alg.rln_is_estimates([(0.1 / 0.9, 1)] * 10)[1:]] == [1.0, 10.0] and [round(x, 2) for x in alg.rln_is_estimates([(0.1 / 0.9, 1)] * 9 + [(9, 2)])[1:]] == [1.9, 1.23]"
+    steps:
+      - show: |
+          <div class="box warn"><b>Sai 1.</b> “Nhật ký càng lớn càng đủ” <b class="red">(phải có ngẫu nhiên hoá)</b>
+          <br><span class="note">Nếu chính sách cũ <b>không bao giờ</b> chọn điều chính sách mới chọn, $\pi_{\text{cũ}} = 0$ ở mẫu số và không có trọng số nào cứu được. Nhóm năm 2013 ghi rằng dữ liệu “phải được thu bằng một thí nghiệm có chủ động ngẫu nhiên hoá”: họ nhân mức giá sàn với một số ngẫu nhiên, 95% số lần nằm trong khoảng 0,52 tới 1,74.</span></div>
+        say: "Bài học sai thứ nhất, nhật ký càng lớn càng đủ, trong khi phải có ngẫu nhiên hoá. Nếu chính sách cũ không bao giờ chọn điều chính sách mới chọn, xác suất cũ bằng 0 ở mẫu số và không trọng số nào cứu được. Nhóm năm 2013 ghi rằng dữ liệu phải được thu bằng một thí nghiệm có chủ động ngẫu nhiên hoá. Họ nhân mức giá sàn với một số ngẫu nhiên, 95 phần trăm số lần nằm trong khoảng 0 phẩy 52 tới 1 phẩy 74."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Sai 2.</b> Báo một con số ước lượng mà không báo số mẫu hiệu dụng <b class="red">(tin vài lượt chơi)</b>
+          <br><span class="note">Theo nhóm năm 2013, khi chính sách cũ ít khi đi vào nơi chính sách mới hay đi, vài mẫu ở đó nhận trọng số rất lớn và “lấn át” cả ước lượng. Phép thử: luôn in số mẫu hiệu dụng cạnh ước lượng — và nhớ nó không thấy được nơi nhật ký chưa từng ghé.</span></div>
+          <table class="t"><tr><th>nhật ký 10 lượt</th><th>có trọng số</th><th>số mẫu hiệu dụng</th><th>đọc thế nào</th></tr>
+          <tr><td>có một lượt $a_2$</td><td>1,9</td><td>1,23</td><td>đúng nhờ may</td></tr>
+          <tr><td>toàn $a_1$</td><td>1,0</td><td>10</td><td class="red">“chắc chắn” mà sai</td></tr></table>
+        focus: [1, "2.2", 1, 1, "2.3"]
+        say: "Bài học sai thứ hai, báo một con số ước lượng mà không báo số mẫu hiệu dụng. Ví dụ ở trên cho đúng 1 phẩy 9, nhưng chỉ nhờ may có một lượt hiếm. Nhóm năm 2013 viết rằng khi chính sách cũ ít khi đi vào nơi chính sách mới hay đi, vài mẫu ở đó nhận trọng số rất lớn và lấn át cả ước lượng. Phép thử là luôn in số mẫu hiệu dụng cạnh ước lượng. Nhưng nhật ký toàn a một cho 10 mẫu hiệu dụng mà vẫn sai, vì chỉ số này không thấy được nơi nhật ký chưa từng ghé."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Sai 3 (người đã đi làm).</b> Cắt trọng số tuỳ tiện cho “đẹp số” <b class="red">(giảm dao động nhưng thêm lệch)</b>
+          <br><span class="note">Cắt là thực hành của chuyên gia, nhưng có điều kiện: nhóm năm 2013 chặn trọng số ở một trần, chọn bằng <b>giá trị lớn thứ năm</b> quan sát được, và giới hạn được phần lệch nhờ biết miền giá trị của đại lượng đo. Ước lượng có trọng số cũng lệch: không có lượt $a_2$ thì nó trả 1,0 thay vì 1,9.</span></div>
+        say: "Bài học sai thứ ba hay gặp ở người đã đi làm, cắt trọng số tuỳ tiện cho đẹp số, vì cắt làm giảm dao động nhưng thêm lệch. Cắt là thực hành của chuyên gia nhưng có điều kiện, nhóm năm 2013 chặn trọng số ở một trần chọn bằng giá trị lớn thứ năm quan sát được. Họ giới hạn được phần lệch nhờ biết miền giá trị của đại lượng đo. Ước lượng có trọng số cũng lệch, không có lượt a hai thì nó trả về 1 thay vì 1 phẩy 9."
+      - show: |
+          <div class="box warn"><b>Sai 4.</b> “Có ước lượng ngoại tuyến rồi thì bỏ hẳn thử nghiệm thật” <b class="red">(không ai kiểm chính ước lượng)</b>
+          <br><span class="note">Nhóm năm 2013 chạy thêm một nhóm lưu lượng có mức giá sàn giảm khoảng 18% và đo trực tiếp: số đo thật khớp ước lượng với độ chính xác cao. Ước lượng ngoại tuyến để <b>chọn ứng viên nhanh</b>; thử nghiệm có kiểm soát để <b>xác nhận</b>.</span></div>
+        say: "Bài học sai thứ tư, có ước lượng ngoại tuyến rồi thì bỏ hẳn thử nghiệm thật, khi đó không ai kiểm chính ước lượng. Nhóm năm 2013 chạy thêm một nhóm lưu lượng có mức giá sàn giảm khoảng 18 phần trăm và đo trực tiếp, số đo thật khớp ước lượng với độ chính xác cao. Ước lượng ngoại tuyến dùng để chọn ứng viên nhanh, còn thử nghiệm có kiểm soát dùng để xác nhận."
+
+  # ───────────────────────── 8. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Bạn sẽ làm gì với nhật ký này?"
+    checks:
+      - "round(alg.rln_ess([4, 4, 0.5, 0.5, 0.5, 0.5]), 2) == 3.03 and sum([4, 4, 0.5, 0.5, 0.5, 0.5]) == 10 and sum(x * x for x in [4, 4, 0.5, 0.5, 0.5, 0.5]) == 33"
+      - "1.5 ** 6 < 12 and round(1.5 ** 6, 2) == 11.39 and 2 ** 6 == 64"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Sáu lượt chơi trong nhật ký có trọng số 4; 4; 0,5; 0,5; 0,5; 0,5. Tính số mẫu hiệu dụng.</td></tr>
+          <tr><td>2</td><td>Chính sách mới khác chính sách cũ ở mỗi bước một chút, trọng số mỗi bước khoảng 1,5. Lượt chơi dài 6 bước thì một lượt trùng có trọng số bao nhiêu? Nếu mỗi bước là 2 thì sao?</td></tr>
+          <tr><td>3</td><td>Bạn có nhật ký 10&nbsp;000 lượt; số mẫu hiệu dụng cho chính sách mới là 3. Sếp muốn triển khai ngay vì “ước lượng tăng 20%”. Bạn đề xuất gì?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.3", "1.4", "1.4", 0]
+        say: "Bây giờ đến lượt bạn. Câu một, sáu lượt chơi trong nhật ký có trọng số 4, 4, và bốn lượt 0 phẩy 5, hãy tính số mẫu hiệu dụng. Câu hai, chính sách mới khác chính sách cũ ở mỗi bước một chút, trọng số mỗi bước khoảng 1 phẩy 5. Lượt chơi dài 6 bước thì một lượt trùng có trọng số bao nhiêu, và nếu mỗi bước là 2 thì sao? Câu ba, bạn có nhật ký 10 nghìn lượt, số mẫu hiệu dụng cho chính sách mới là 3, người quản lý muốn triển khai ngay vì ước lượng tăng 20 phần trăm. Bạn đề xuất gì? Dừng video và làm ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu</th><th>tính</th><th>kết quả</th></tr>
+          <tr><td>1</td><td>$\sum w = 4 + 4 + 4 \cdot 0{,}5 = 10$; $\sum w^2 = 16 + 16 + 4 \cdot 0{,}25 = 33$</td><td>$\frac{100}{33} \approx \hlg{3{,}03}$ trên 6</td></tr>
+          <tr><td>2</td><td>$1{,}5^6$ và $2^6$</td><td>khoảng 11,4; và 64</td></tr></table>
+          <p class="note">Câu 2: chênh lệch nhỏ ở mỗi bước vẫn thành trọng số lớn khi lượt chơi dài — nhân lên theo hàm mũ.</p>
+        focus: ["1.2", "1.3", 2]
+        say: "Đáp án câu một, tổng trọng số là 10, tổng bình phương là 33, nên số mẫu hiệu dụng là 100 chia 33, khoảng 3 phẩy 03 trên 6 lượt. Câu hai, 1 phẩy 5 mũ 6 khoảng 11 phẩy 4, còn 2 mũ 6 bằng 64. Chênh lệch nhỏ ở mỗi bước vẫn thành trọng số lớn khi lượt chơi dài, vì trọng số nhân lên theo hàm mũ."
+      - clear: true
+        show: |
+          <p><b>Câu 3 — quyết định.</b> 3 mẫu hiệu dụng trên 10&nbsp;000: con số “tăng 20%” do vài lượt chơi quyết định.</p>
+          <table class="t"><tr><th>lựa chọn</th><th>được</th><th>mất</th></tr>
+          <tr><td>triển khai ngay cho mọi người</td><td>nhanh</td><td class="red">dựa trên 3 mẫu hiệu dụng</td></tr>
+          <tr><td>thử nghiệm có kiểm soát nhỏ (vài phần trăm lưu lượng), có ngưỡng dừng</td><td>số đo thật, rủi ro nhỏ</td><td>mất vài tuần</td></tr>
+          <tr><td>chạy chính sách cũ có thêm ngẫu nhiên hoá quanh hướng mới, rồi đánh giá lại</td><td>nhật ký tốt hơn cho lần sau</td><td>tốn một ít hiệu quả lúc thu</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", "2.4"]
+        say: "Câu ba là một quyết định. Ba mẫu hiệu dụng trên 10 nghìn lượt nghĩa là con số tăng 20 phần trăm do vài lượt chơi quyết định. Triển khai ngay thì nhanh nhưng dựa trên 3 mẫu hiệu dụng. Nên chạy một thử nghiệm có kiểm soát nhỏ, vài phần trăm lưu lượng, có ngưỡng dừng, đổi lại mất vài tuần. Song song, cho chính sách cũ thêm ngẫu nhiên hoá quanh hướng mới để lần sau nhật ký đủ tốt, chấp nhận tốn một ít hiệu quả lúc thu."
+
+  # ───────────────────────── 9. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Thay đổi hệ thống & tư duy chuyên gia"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">nhật ký của chính sách cũ</span><span class="a">→</span>
+          <span class="n">cân lại bằng trọng số mới chia cũ</span><span class="a">→</span>
+          <span class="n">trọng số nhân qua các bước: vài lượt quyết định</span><span class="a">→</span>
+          <span class="n">đo số mẫu hiệu dụng; thấp thì thử nghiệm có kiểm soát</span></div>
+        say: "Tổng kết lại, từ nhật ký của chính sách cũ, ta cân lại từng lượt chơi bằng trọng số mới chia cũ. Trọng số nhân qua các bước, nên vài lượt chơi có thể quyết định cả ước lượng. Hãy đo số mẫu hiệu dụng, và khi nó thấp thì phải thử nghiệm có kiểm soát."
+      - show: |
+          <div class="box key"><b>Thay đổi hệ thống:</b> thiết kế việc ghi nhật ký từ đầu — luôn có một chút ngẫu nhiên hoá, ghi lại <b>xác suất</b> của hành động đã chọn. <b>Tư duy:</b> nhật ký trả lời được câu hỏi “nếu như” chỉ ở những nơi chính sách cũ đã từng ghé.</div>
+        focus: [1, 1]
+        say: "Thay đổi ở mức hệ thống là thiết kế việc ghi nhật ký ngay từ đầu, luôn có một chút ngẫu nhiên hoá, và ghi lại xác suất của hành động đã chọn. Điều cần mang theo, nhật ký chỉ trả lời được câu hỏi nếu như ở những nơi chính sách cũ đã từng ghé."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 13): <b>hành trình trên trò chơi điện tử, 2013 tới 2020</b> — từ 7 trò chơi tới cả 57 trò, và cách cả cộng đồng học cách đo cho đúng.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 13, ta đi theo hành trình học chơi trò chơi điện tử từ năm 2013 tới 2020, từ 7 trò chơi tới cả 57 trò. Ta cũng xem cả cộng đồng học cách đo cho đúng. Hẹn gặp bạn ở bài tiếp theo."

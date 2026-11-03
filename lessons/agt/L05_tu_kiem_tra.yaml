@@ -1,0 +1,212 @@
+id: L05
+course: AGT
+series: "AGT · AI agent"
+title: "Bài 5 — Tự kiểm tra: bộ kiểm chứng, phản tư và tạo nhiều lần"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/agt.yaml L05; audit/agt/verify_agt.py L05; K. Cobbe và cộng sự, Training Verifiers to Solve Math Word Problems (2021); N. Shinn và cộng sự, Reflexion (2023); J. Huang và cộng sự, Large Language Models Cannot Self-Correct Reasoning Yet (2024); DSC bài 11 (tỉ lệ nền, Bayes)"
+assumes: [arith, frac, approx, power, cdot]
+# Quy ước: bộ sinh đúng với xác suất p; bộ kiểm chứng NHẬN câu đúng với xác suất tpr, nhận nhầm câu sai với xác suất fpr. Trong các câu được nhận,
+#   tỉ lệ đúng = p·tpr / (p·tpr + (1 − p)·fpr) (alg.verifier_precision). Sinh tối đa n lần, trả câu đầu tiên được nhận (alg.best_of_n_verified),
+#   giả định các lần ĐỘC LẬP. Số 0,6 / 0,9 / 0,2 là SỐ MINH HOẠ.
+objectives:
+  - "Tính độ tin cậy của câu trả lời qua bộ kiểm chứng"
+  - "Phân biệt kiểm chứng bằng chương trình và bằng mô hình"
+  - "Biết khi nào tự phản tư làm hại"
+asr_reviewed:
+  - {sentence: "Đây đúng là công thức tỉ lệ nền theo định lý Bayes.", reason: "ASR chép “Đây đúng là công thức tỷ lệ nên theo định lý bay S.” (0.769): “tỉ” ASR viết chính tả “tỷ” (cùng âm); Bayes đọc “Bay-ét” theo lexicon chung (probe 3/8, NOT_VERIFIED), ASR viết “bay X/S”; lệch âm/thanh thuần Việt: nền/nên — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Hỏi “bạn chắc chưa?”, câu đúng thành câu sai"
+    steps:
+      - show: |
+          <p>Tác tử giải đúng một bài toán. Người dùng hỏi lại “bạn chắc chưa?” — tác tử xin lỗi và đổi sang đáp án sai. Tự kiểm tra bằng chính mô hình không phải lúc nào cũng làm tốt hơn: nó có thể chiều theo câu hỏi thay vì kiểm sự thật.</p>
+          <div class="box key">Hôm nay: <b>bộ kiểm chứng</b> — tính xem kiểm tra giúp được bao nhiêu, và vì sao kiểm bằng <b>chương trình</b> đáng tin hơn kiểm bằng <b>lời</b>.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, tác tử giải đúng một bài toán. Người dùng hỏi lại bạn chắc chưa, và tác tử xin lỗi rồi đổi sang đáp án sai. Tự kiểm tra bằng chính mô hình không phải lúc nào cũng làm tốt hơn, vì nó có thể chiều theo câu hỏi thay vì kiểm sự thật. Hôm nay ta học bộ kiểm chứng, tính xem kiểm tra giúp được bao nhiêu, và vì sao kiểm bằng chương trình đáng tin hơn kiểm bằng lời."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: phần trăm của một nhóm, và phần trong tổng"
+    checks:
+      - "round(0.9 * 60) == 54 and round(0.2 * 40) == 8 and 54 + 8 == 62 and round(54 / 62, 3) == 0.871"
+      - "round(12 / 30, 1) == 0.4 and round(1 - 0.62, 2) == 0.38"
+    steps:
+      - show: |
+          <p>Lớp có 30 bạn, 12 bạn đeo kính. Phần đeo kính trong cả lớp: $\frac{12}{30} = \hl{0{,}4}$ — lấy <b>phần</b> chia cho <b>tổng</b>.</p>
+          <table class="t"><tr><th>nhóm</th><th>lấy bao nhiêu phần trăm</th><th>được</th></tr>
+          <tr><td>60 câu trả lời đúng</td><td>90%</td><td>$0{,}9 \cdot 60 = 54$</td></tr>
+          <tr><td>40 câu trả lời sai</td><td>20%</td><td>$0{,}2 \cdot 40 = 8$</td></tr></table>
+        focus: [1, 2, "2.2", "2.3"]
+        say: "Trước hết, ôn hai phép tính quen thuộc. Lớp có 30 bạn, 12 bạn đeo kính, thì phần đeo kính trong cả lớp là 12 chia 30, bằng 0 phẩy 4, tức là lấy phần chia cho tổng. Lấy 90 phần trăm của 60 câu trả lời đúng, ta nhân 0 phẩy 9 với 60, được 54 câu. Lấy 20 phần trăm của 40 câu trả lời sai, ta nhân 0 phẩy 2 với 40, được 8 câu."
+      - show: |
+          <p>Gộp hai nhóm vừa lấy: $54 + 8 = 62$ câu. Trong 62 câu đó, phần đến từ nhóm đúng là $\frac{54}{62} \approx 0{,}871$. Phần <b>không</b> được lấy của cả 100 câu: $1 - 0{,}62 = 0{,}38$.</p>
+        say: "Gộp hai nhóm vừa lấy, ta có 54 cộng 8, bằng 62 câu. Trong 62 câu đó, phần đến từ nhóm đúng là 54 chia 62, xấp xỉ 0 phẩy 871, cũng theo cách lấy phần chia cho tổng. Phần không được lấy trong cả 100 câu là 1 trừ 0 phẩy 62, bằng 0 phẩy 38, và ta sẽ dùng lại cả ba con số này."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: bộ sinh, bộ kiểm chứng, độ tin cậy sau kiểm"
+    steps:
+      - show: |
+          <table class="t"><tr><th>đại lượng</th><th>nghĩa</th></tr>
+          <tr><td>$p$</td><td>xác suất bộ sinh trả lời đúng</td></tr>
+          <tr><td>tỉ lệ nhận đúng</td><td>bộ kiểm chứng nhận một câu đúng</td></tr>
+          <tr><td>tỉ lệ nhận nhầm</td><td>bộ kiểm chứng nhận một câu sai</td></tr></table>
+          <p>Trong các câu được nhận, tỉ lệ đúng $= \frac{p \cdot \text{nhận đúng}}{p \cdot \text{nhận đúng} + (1 - p) \cdot \text{nhận nhầm}}$ — đúng công thức tỉ lệ nền (định lý Bayes).</p>
+          <p>Bộ kiểm chứng <b>bằng chương trình</b> (chạy bộ kiểm thử, so đáp số, kiểm cú pháp) thường có tỉ lệ nhận nhầm gần 0.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2, 2, 3]
+        say: "Bảng giới thiệu ba đại lượng. p là xác suất bộ sinh trả lời đúng. Tỉ lệ nhận đúng là khả năng bộ kiểm chứng nhận một câu đúng. Tỉ lệ nhận nhầm là khả năng nó nhận một câu sai. Trong các câu được nhận, tỉ lệ đúng bằng p nhân tỉ lệ nhận đúng, chia cho chính số đó cộng 1 trừ p nhân tỉ lệ nhận nhầm. Đây đúng là công thức tỉ lệ nền theo định lý Bayes. Bộ kiểm chứng bằng chương trình, như chạy bộ kiểm thử, so đáp số hay kiểm cú pháp, thường có tỉ lệ nhận nhầm gần bằng 0."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "100 câu trả lời đi qua cửa kiểm"
+    checks:
+      - "round(0.9 * 60) == 54 and round(0.2 * 40) == 8 and 54 + 8 == 62 and 60 - 54 == 6 and 40 - 8 == 32"
+    steps:
+      - show: |
+          <div><svg width="1500" height="360" viewBox="0 0 1500 360"><rect x="60" y="60" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="60" y="108" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="60" y="156" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="60" y="204" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="60" y="252" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="108" y="60" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="108" y="108" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="108" y="156" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="108" y="204" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="108" y="252" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="156" y="60" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="156" y="108" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="156" y="156" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="156" y="204" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="156" y="252" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="204" y="60" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="204" y="108" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="204" y="156" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="204" y="204" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="204" y="252" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="252" y="60" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="252" y="108" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="252" y="156" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="252" y="204" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="252" y="252" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="300" y="60" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="300" y="108" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="300" y="156" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="300" y="204" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="300" y="252" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="348" y="60" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="348" y="108" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="348" y="156" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="348" y="204" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="348" y="252" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="396" y="60" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="396" y="108" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="396" y="156" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="396" y="204" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="396" y="252" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="444" y="60" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="444" y="108" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="444" y="156" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="444" y="204" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="444" y="252" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="492" y="60" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="492" y="108" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="492" y="156" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="492" y="204" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="492" y="252" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="540" y="60" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="540" y="108" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="540" y="156" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="540" y="204" width="40" height="40" rx="5" fill="#2a78d6" stroke="#1f2937" stroke-width="1"/><rect x="540" y="252" width="40" height="40" rx="5" fill="#dbeafe" stroke="#1f2937" stroke-width="1"/><rect x="588" y="60" width="40" height="40" rx="5" fill="#dbeafe" stroke="#1f2937" stroke-width="1"/><rect x="588" y="108" width="40" height="40" rx="5" fill="#dbeafe" stroke="#1f2937" stroke-width="1"/><rect x="588" y="156" width="40" height="40" rx="5" fill="#dbeafe" stroke="#1f2937" stroke-width="1"/><rect x="588" y="204" width="40" height="40" rx="5" fill="#dbeafe" stroke="#1f2937" stroke-width="1"/><rect x="588" y="252" width="40" height="40" rx="5" fill="#dbeafe" stroke="#1f2937" stroke-width="1"/><rect x="636" y="60" width="40" height="40" rx="5" fill="#b91c1c" stroke="#1f2937" stroke-width="1"/><rect x="636" y="108" width="40" height="40" rx="5" fill="#b91c1c" stroke="#1f2937" stroke-width="1"/><rect x="636" y="156" width="40" height="40" rx="5" fill="#b91c1c" stroke="#1f2937" stroke-width="1"/><rect x="636" y="204" width="40" height="40" rx="5" fill="#b91c1c" stroke="#1f2937" stroke-width="1"/><rect x="636" y="252" width="40" height="40" rx="5" fill="#b91c1c" stroke="#1f2937" stroke-width="1"/><rect x="684" y="60" width="40" height="40" rx="5" fill="#b91c1c" stroke="#1f2937" stroke-width="1"/><rect x="684" y="108" width="40" height="40" rx="5" fill="#b91c1c" stroke="#1f2937" stroke-width="1"/><rect x="684" y="156" width="40" height="40" rx="5" fill="#b91c1c" stroke="#1f2937" stroke-width="1"/><rect x="684" y="204" width="40" height="40" rx="5" fill="#fee2e2" stroke="#1f2937" stroke-width="1"/><rect x="684" y="252" width="40" height="40" rx="5" fill="#fee2e2" stroke="#1f2937" stroke-width="1"/><rect x="732" y="60" width="40" height="40" rx="5" fill="#fee2e2" stroke="#1f2937" stroke-width="1"/><rect x="732" y="108" width="40" height="40" rx="5" fill="#fee2e2" stroke="#1f2937" stroke-width="1"/><rect x="732" y="156" width="40" height="40" rx="5" fill="#fee2e2" stroke="#1f2937" stroke-width="1"/><rect x="732" y="204" width="40" height="40" rx="5" fill="#fee2e2" stroke="#1f2937" stroke-width="1"/><rect x="732" y="252" width="40" height="40" rx="5" fill="#fee2e2" stroke="#1f2937" stroke-width="1"/><rect x="780" y="60" width="40" height="40" rx="5" fill="#fee2e2" stroke="#1f2937" stroke-width="1"/><rect x="780" y="108" width="40" height="40" rx="5" fill="#fee2e2" stroke="#1f2937" stroke-width="1"/><rect x="780" y="156" width="40" height="40" rx="5" fill="#fee2e2" stroke="#1f2937" stroke-width="1"/><rect x="780" y="204" width="40" height="40" rx="5" fill="#fee2e2" stroke="#1f2937" stroke-width="1"/><rect x="780" y="252" width="40" height="40" rx="5" fill="#fee2e2" stroke="#1f2937" stroke-width="1"/><rect x="828" y="60" width="40" height="40" rx="5" fill="#fee2e2" stroke="#1f2937" stroke-width="1"/><rect x="828" y="108" width="40" height="40" rx="5" fill="#fee2e2" stroke="#1f2937" stroke-width="1"/><rect x="828" y="156" width="40" height="40" rx="5" fill="#fee2e2" stroke="#1f2937" stroke-width="1"/><rect x="828" y="204" width="40" height="40" rx="5" fill="#fee2e2" stroke="#1f2937" stroke-width="1"/><rect x="828" y="252" width="40" height="40" rx="5" fill="#fee2e2" stroke="#1f2937" stroke-width="1"/><rect x="876" y="60" width="40" height="40" rx="5" fill="#fee2e2" stroke="#1f2937" stroke-width="1"/><rect x="876" y="108" width="40" height="40" rx="5" fill="#fee2e2" stroke="#1f2937" stroke-width="1"/><rect x="876" y="156" width="40" height="40" rx="5" fill="#fee2e2" stroke="#1f2937" stroke-width="1"/><rect x="876" y="204" width="40" height="40" rx="5" fill="#fee2e2" stroke="#1f2937" stroke-width="1"/><rect x="876" y="252" width="40" height="40" rx="5" fill="#fee2e2" stroke="#1f2937" stroke-width="1"/><rect x="924" y="60" width="40" height="40" rx="5" fill="#fee2e2" stroke="#1f2937" stroke-width="1"/><rect x="924" y="108" width="40" height="40" rx="5" fill="#fee2e2" stroke="#1f2937" stroke-width="1"/><rect x="924" y="156" width="40" height="40" rx="5" fill="#fee2e2" stroke="#1f2937" stroke-width="1"/><rect x="924" y="204" width="40" height="40" rx="5" fill="#fee2e2" stroke="#1f2937" stroke-width="1"/><rect x="924" y="252" width="40" height="40" rx="5" fill="#fee2e2" stroke="#1f2937" stroke-width="1"/><rect x="972" y="60" width="40" height="40" rx="5" fill="#fee2e2" stroke="#1f2937" stroke-width="1"/><rect x="972" y="108" width="40" height="40" rx="5" fill="#fee2e2" stroke="#1f2937" stroke-width="1"/><rect x="972" y="156" width="40" height="40" rx="5" fill="#fee2e2" stroke="#1f2937" stroke-width="1"/><rect x="972" y="204" width="40" height="40" rx="5" fill="#fee2e2" stroke="#1f2937" stroke-width="1"/><rect x="972" y="252" width="40" height="40" rx="5" fill="#fee2e2" stroke="#1f2937" stroke-width="1"/><g font-size="22" fill="#1f2937"><text x="60" y="40">60 câu đúng (xanh)</text><text x="636" y="40" fill="#b91c1c">40 câu sai (đỏ)</text><text x="60" y="340">ô đậm = bộ kiểm chứng NHẬN, ô nhạt = bị loại</text><text x="1050" y="90" fill="#2a78d6">đúng được nhận: 54</text><text x="1050" y="140" fill="#b91c1c">sai lọt qua: 8</text><text x="1050" y="190">được nhận: 54 + 8 = 62</text><text x="1050" y="240" fill="#059669">đúng trong số nhận: 54/62</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ 100 câu trả lời của bộ sinh, 60 ô xanh là câu đúng, 40 ô đỏ là câu sai. Bộ kiểm chứng là một cửa kiểm, ô đậm là câu được nhận, ô nhạt là câu bị loại. Nó nhận 54 trong 60 câu đúng, và để lọt 8 trong 40 câu sai. Vậy trong 62 câu được nhận, có 54 câu đúng, và chính 8 ô đỏ đậm là những câu sai đến tay người dùng."
+
+  - id: example
+    kind: example
+    title: "Từ 60% lên 87,1%"
+    checks:
+      - "round(alg.verifier_precision(0.6, 0.9, 0.2), 3) == 0.871 and round(0.6 * 0.9 + 0.4 * 0.2, 2) == 0.62"
+      - "[round(x, 3) for x in alg.best_of_n_verified(0.6, 0.9, 0.2, 3)] == [0.945, 0.871]"
+    steps:
+      - show: |
+          <p>Số minh hoạ: bộ sinh đúng 60%; bộ kiểm chứng nhận đúng 90% câu đúng, nhận nhầm 20% câu sai.</p>
+          <p><b>Bước 1 — câu đúng được nhận:</b> $0{,}6 \cdot 0{,}9 = \hl{0{,}54}$.</p>
+        focus: [1, 2]
+        say: "Số minh hoạ như sau, bộ sinh đúng 60 phần trăm, bộ kiểm chứng nhận đúng 90 phần trăm câu đúng và nhận nhầm 20 phần trăm câu sai. Bước một, phần câu vừa đúng vừa được nhận là 0 phẩy 6 nhân 0 phẩy 9, bằng 0 phẩy 54."
+      - show: |
+          <p><b>Bước 2 — câu sai lọt qua:</b> câu sai chiếm $1 - 0{,}6 = 0{,}4$; lọt qua $0{,}4 \cdot 0{,}2 = \hl{0{,}08}$.</p>
+        say: "Bước hai, câu sai chiếm 1 trừ 0 phẩy 6, bằng 0 phẩy 4 tổng số câu. Bộ kiểm chứng nhận nhầm 20 phần trăm số đó, nên phần câu sai lọt qua là 0 phẩy 4 nhân 0 phẩy 2, bằng 0 phẩy 08."
+      - show: |
+          <p><b>Bước 3 — đúng trong các câu được nhận:</b> được nhận $0{,}54 + 0{,}08 = 0{,}62$; tỉ lệ đúng $\frac{0{,}54}{0{,}62} \approx \hl{0{,}871}$.</p>
+        say: "Bước ba, tổng phần được nhận là 0 phẩy 54 cộng 0 phẩy 08, bằng 0 phẩy 62. Trong các câu được nhận, tỉ lệ đúng là 0 phẩy 54 chia 0 phẩy 62, xấp xỉ 0 phẩy 871, vì ta lấy phần đúng chia cho tổng được nhận."
+      - clear: true
+        show: |
+          <p><b>Bước 4 — sinh tối đa 3 lần</b>, trả câu đầu tiên được nhận:</p>
+          <table class="t"><tr><th>đại lượng</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>một lần bị loại</td><td>$1 - 0{,}62$</td><td>0,38</td></tr>
+          <tr><td>cả 3 lần đều bị loại</td><td>$0{,}38^3$</td><td>≈ 0,055</td></tr>
+          <tr><td>có câu được nhận</td><td>$1 - 0{,}38^3$</td><td>$\hl{0{,}945}$</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Bước bốn, cho bộ sinh thử tối đa 3 lần, và trả câu đầu tiên được nhận. Một lần bị loại có xác suất 1 trừ 0 phẩy 62, bằng 0 phẩy 38. Ba lần độc lập đều bị loại là 0 phẩy 38 mũ 3, khoảng 0 phẩy 055. Vậy khả năng có câu được nhận là 1 trừ số đó, khoảng 0 phẩy 945."
+      - show: |
+          <div class="box key">Kiểm chứng nâng độ đúng từ 60% lên 87,1%, và cho phép <b>từ chối trả lời</b> khi cả 3 lần đều không được nhận (khoảng 5,5%).</div>
+        say: "Bước năm, rút ra kết luận. Kiểm chứng nâng độ đúng từ 60 lên 87 phẩy 1 phần trăm. Nó còn cho phép tác tử từ chối trả lời khi cả 3 lần đều không được nhận, khoảng 5 phẩy 5 phần trăm số câu hỏi."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: đếm trên 1000 câu hỏi"
+    checks:
+      - "round(1000 * 0.6) == 600 and round(600 * 0.9) == 540 and round(400 * 0.2) == 80 and 540 + 80 == 620 and round(540 / 620, 3) == round(alg.verifier_precision(0.6, 0.9, 0.2), 3) == 0.871"
+      - "round(0.62 + 0.38 * 0.62 + 0.38 ** 2 * 0.62, 3) == 0.945 == round(alg.best_of_n_verified(0.6, 0.9, 0.2, 3)[0], 3) and round(0.38 * 0.62, 4) == 0.2356 and round(0.38 ** 2 * 0.62, 4) == 0.0895"
+    steps:
+      - show: |
+          <p><b>Cách 1 — đếm thẳng</b> trên 1000 câu hỏi, không dùng công thức:</p>
+          <table class="t"><tr><th>nhóm</th><th>số câu</th><th>được nhận</th></tr>
+          <tr><td>đúng</td><td>600</td><td>$0{,}9 \cdot 600 = 540$</td></tr>
+          <tr><td>sai</td><td>400</td><td>$0{,}2 \cdot 400 = 80$</td></tr>
+          <tr><td>cộng</td><td>1000</td><td>620 → đúng $\frac{540}{620} \approx 0{,}871$ ✓</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Kiểm bằng đường khác, cách thứ nhất là đếm thẳng trên 1000 câu hỏi, không dùng công thức. Có 600 câu đúng, bộ kiểm chứng nhận 90 phần trăm nên được 540 câu. Có 400 câu sai, nó nhận nhầm 80 câu. Cộng lại 620 câu được nhận, trong đó 540 chia 620 xấp xỉ 0 phẩy 871 là đúng, khớp với công thức."
+      - clear: true
+        show: |
+          <p><b>Cách 2 — cộng từng lần thử</b> thay vì lấy phần bù:</p>
+          <table class="t"><tr><th>được nhận ở</th><th>xác suất</th></tr>
+          <tr><td>lần 1</td><td>0,62</td></tr>
+          <tr><td>lần 2 (lần 1 bị loại)</td><td>$0{,}38 \cdot 0{,}62 \approx 0{,}2356$</td></tr>
+          <tr><td>lần 3 (hai lần đầu bị loại)</td><td>$0{,}38^2 \cdot 0{,}62 \approx 0{,}0895$</td></tr></table>
+          <p>Cộng: $\approx 0{,}945$ ✓ khớp $1 - 0{,}38^3$.</p>
+        focus: [1, "2.2", "2.3", "2.4", 3]
+        say: "Cách thứ hai cộng xác suất được nhận ở từng lần thử, thay vì lấy phần bù. Được nhận ngay lần đầu là 0 phẩy 62. Được nhận ở lần hai thì lần đầu phải bị loại, nên là 0 phẩy 38 nhân 0 phẩy 62, khoảng 0 phẩy 2356. Được nhận ở lần ba thì hai lần đầu bị loại, khoảng 0 phẩy 0895. Cộng ba số lại được khoảng 0 phẩy 945, khớp với 1 trừ 0 phẩy 38 mũ 3."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay mắc, kể cả khi đã đi làm"
+    checks:
+      - "round(alg.verifier_precision(0.3, 0.9, 0.2), 3) == 0.659"
+      - "[round(alg.best_of_n_verified(0.6, 0.9, 0.2, n)[0], 3) for n in (1, 3, 10)] == [0.62, 0.945, 1.0] and len({round(alg.best_of_n_verified(0.6, 0.9, 0.2, n)[1], 3) for n in (1, 3, 10)}) == 1"
+      - "[round(sum(0.38 ** i for i in range(n)), 2) for n in (1, 3, 10)] == [1.0, 1.52, 1.61]"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Dùng cùng mô hình để kiểm chính nó <b class="red">(chung điểm mù)</b>
+          <br><span class="note">Lỗi mà bộ sinh mắc vì hiểu sai đề thì bộ kiểm cùng mô hình thường cũng hiểu sai y hệt — tỉ lệ nhận nhầm thật cao hơn nhiều so với đo trên lỗi ngẫu nhiên. Ưu tiên kiểm bằng chương trình hoặc nguồn bên ngoài.</span></div>
+        say: "Lỗi thứ nhất, dùng cùng mô hình để kiểm chính nó, nên chung điểm mù. Lỗi mà bộ sinh mắc vì hiểu sai đề thì bộ kiểm cùng mô hình thường cũng hiểu sai y hệt, nên tỉ lệ nhận nhầm thật cao hơn nhiều so với đo trên lỗi ngẫu nhiên. Hãy ưu tiên kiểm bằng chương trình hoặc nguồn bên ngoài."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Quên tỉ lệ nền khi bài khó <b class="red">(kiểm chứng kém đi)</b>
+          <br><span class="note">Cùng bộ kiểm chứng, nếu bộ sinh chỉ đúng 30% thì trong các câu được nhận chỉ ≈ 65,9% là đúng. Bài càng khó, bộ kiểm chứng càng phải chặt.</span></div>
+        say: "Lỗi thứ hai, quên tỉ lệ nền khi bài khó, nên kiểm chứng kém đi. Cùng bộ kiểm chứng đó, nếu bộ sinh chỉ đúng 30 phần trăm, thì trong các câu được nhận chỉ khoảng 65 phẩy 9 phần trăm là đúng. Bài càng khó, bộ kiểm chứng càng phải chặt."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Phản tư không có thông tin mới <b class="red">(đổi câu đúng thành sai)</b>
+          <br><span class="note">“Hãy xem lại” mà không kèm kết quả chạy thử, thông báo lỗi hay nguồn mới thì mô hình dễ chiều theo nghi ngờ. Phản tư có ích khi có <b>tín hiệu bên ngoài</b>.</span></div>
+        say: "Lỗi thứ ba, phản tư mà không có thông tin mới, nên đổi câu đúng thành sai. Yêu cầu hãy xem lại mà không kèm kết quả chạy thử, thông báo lỗi hay nguồn mới thì mô hình dễ chiều theo nghi ngờ. Phản tư chỉ có ích khi có tín hiệu bên ngoài."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4.</b> Tăng số lần sinh để câu trả lời “đúng hơn” <b class="red">(chỉ tốn thêm tiền)</b>
+          <br><span class="note">Người đã đi làm hay tăng từ 3 lên 10 lần sinh khi thấy câu sai. Nhưng câu trả ra luôn là câu đầu tiên được nhận, nên tỉ lệ đúng vẫn là 0,871. Muốn đúng hơn phải <b>giảm tỉ lệ nhận nhầm</b>.</span></div>
+          <table class="t"><tr><th>số lần sinh tối đa</th><th>có câu trả ra</th><th>đúng trong số trả ra</th><th>số lần sinh trung bình</th></tr>
+          <tr><td>1</td><td>0,620</td><td>0,871</td><td>1</td></tr>
+          <tr><td>3</td><td>0,945</td><td>0,871</td><td>≈ 1,52</td></tr>
+          <tr><td>10</td><td>≈ 1,000</td><td>0,871</td><td>≈ 1,61</td></tr></table>
+        focus: [1, 1, 1, 2, "2.2", "2.4"]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, tăng số lần sinh với hy vọng câu trả lời đúng hơn. Thấy câu sai lọt ra, họ tăng từ 3 lên 10 lần sinh. Nhưng câu trả ra luôn là câu đầu tiên được nhận, nên tỉ lệ đúng trong số câu trả ra vẫn là 0 phẩy 871, muốn đúng hơn phải giảm tỉ lệ nhận nhầm. Bảng cho thấy cột đúng trong số trả ra đứng yên ở 0 phẩy 871. Chỉ một lần sinh thì trả lời được 62 phần trăm câu hỏi. Mười lần sinh thì gần như câu nào cũng có trả lời, với trung bình khoảng 1 phẩy 61 lần sinh mỗi câu, nhưng độ đúng không đổi."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "round(alg.verifier_precision(0.6, 0.95, 0.05), 3) == 0.966"
+      - "round(0.6 * 0.95, 2) == 0.57 and round(0.4 * 0.05, 2) == 0.02 and round(0.57 + 0.02, 2) == 0.59 and round(400 * 0.2) == 80 and round(400 * 0.05) == 20 and 80 // 20 == 4"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Bộ sinh đúng 60%. Một bộ kiểm thử tự động nhận đúng 95% câu đúng, nhận nhầm 5% câu sai. Trong các câu được nhận, bao nhiêu phần trăm đúng?</td></tr>
+          <tr><td>2</td><td>Vì sao bộ kiểm thử tự động này tốt hơn bộ kiểm chứng ở ví dụ dù tỉ lệ nhận đúng gần bằng nhau? Nên chọn bộ nào?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, bộ sinh đúng 60 phần trăm. Một bộ kiểm thử tự động nhận đúng 95 phần trăm câu đúng và nhận nhầm 5 phần trăm câu sai. Trong các câu được nhận, bao nhiêu phần trăm là đúng? Câu hai, vì sao bộ kiểm thử tự động này tốt hơn bộ kiểm chứng ở ví dụ, dù tỉ lệ nhận đúng gần bằng nhau? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① Câu đúng được nhận: $0{,}6 \cdot 0{,}95 = 0{,}57$. Câu sai lọt qua: $0{,}4 \cdot 0{,}05 = 0{,}02$.</p>
+          <p>Đúng trong số được nhận: $\frac{0{,}57}{0{,}57 + 0{,}02} = \frac{0{,}57}{0{,}59} \approx \hl{96{,}6\%}$.</p>
+        focus: [1, 1, 2]
+        say: "Đáp án câu một, làm theo đúng các bước của ví dụ. Câu đúng được nhận là 0 phẩy 6 nhân 0 phẩy 95, bằng 0 phẩy 57, câu sai lọt qua là 0 phẩy 4 nhân 0 phẩy 05, bằng 0 phẩy 02. Vậy tỉ lệ đúng là 0 phẩy 57 chia 0 phẩy 59, khoảng 96 phẩy 6 phần trăm."
+      - show: |
+          <table class="t"><tr><th>trên 400 câu sai</th><th>nhận nhầm</th><th>câu sai lọt qua</th></tr>
+          <tr><td>bộ kiểm chứng ở ví dụ</td><td>20%</td><td>80</td></tr>
+          <tr><td>bộ kiểm thử tự động</td><td>5%</td><td>$\hl{20}$</td></tr></table>
+          <p>② Tỉ lệ nhận đúng gần nhau (90% và 95%), nhưng số câu sai lọt qua giảm 4 lần → <b>chọn bộ kiểm thử tự động</b>.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Câu hai, đếm trên 400 câu sai của 1000 câu hỏi. Bộ kiểm chứng ở ví dụ nhận nhầm 20 phần trăm, nên để lọt 80 câu sai. Bộ kiểm thử tự động chỉ nhận nhầm 5 phần trăm, nên chỉ lọt 20 câu sai. Tỉ lệ nhận đúng hai bên gần nhau, nhưng số câu sai lọt qua giảm 4 lần, nên ta chọn bộ kiểm thử tự động."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">bộ sinh + bộ kiểm chứng</span><span class="a">→</span>
+          <span class="n">độ đúng sau kiểm theo tỉ lệ nền</span><span class="a">→</span>
+          <span class="n">tỉ lệ nhận nhầm quyết định</span><span class="a">→</span>
+          <span class="n">kiểm bằng chương trình, phản tư có tín hiệu ngoài</span></div>
+        say: "Tổng kết lại, ghép bộ sinh với bộ kiểm chứng thì độ đúng sau kiểm tính theo tỉ lệ nền, và tỉ lệ nhận nhầm là yếu tố quyết định. Hãy kiểm bằng chương trình, và chỉ phản tư khi có tín hiệu bên ngoài."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> đừng hỏi tác tử “bạn có chắc không” — hãy cho nó một <b>phép thử</b> có thể thất bại.</div>
+        say: "Điều cần mang theo, đừng hỏi tác tử bạn có chắc không, hãy cho nó một phép thử có thể thất bại."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 6): <b>nhiều tác tử</b> — phân vai, điều phối và chi phí giao tiếp.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 6, ta học hệ nhiều tác tử, với phân vai, điều phối, và chi phí giao tiếp. Hẹn gặp bạn ở bài tiếp theo."

@@ -1,0 +1,283 @@
+id: L09
+course: RBM
+series: "RBM · Toán cho robot và hệ động lực"
+title: "Bài 9 — Hệ tuyến tính, trị riêng và ổn định"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/rbm.yaml L09; audit/rbm/verify_rbm.py L09; K. J. Åström, R. M. Murray, Feedback Systems (2008), mục 5.2–5.3"
+assumes: [arith, cdot, vec, mat, sub, transpose, identity, det, lambda, cos, sin, iff, prime, exp, frac, approx, power, pm, implies]
+# Quy ước: trạng thái x = (x_1, x_2)^T (vị trí, vận tốc); x' = A x; trị riêng λ, vector riêng v như CS115 bài 5.
+#   Số phức chỉ dùng ở mức: i^2 = −1, λ = a ± b i, phần thực Re λ = a; e^{(a + bi)t} = e^{at}(cos bt + i sin bt) nêu như sự kiện.
+#   Mọi trị riêng do numpy.linalg.eigvals tính; nghiệm dạng đóng so với alg.rk4_ode (bước 0,01).
+objectives:
+  - "Viết hệ bậc hai thành x′ = Ax"
+  - "Xét ổn định bằng phần thực của trị riêng"
+  - "Phân biệt điều kiện ổn định của hệ liên tục và hệ rời rạc"
+asr_reviewed:
+  - {sentence: "Hai đường đứt là hai hướng riêng của A, hướng xanh 1, âm 1 và hướng cam 1, âm 2.", reason: "ASR chép “Hai đường đức là hai hướng riêng của á, hướng xanh một, âm một và hướng ca một, âm hai.” (0.85): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: đứt/đức, cam/ca — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bước một, trừ lambda ở hai ô đường chéo của A, rồi tính định thức theo a nhân d trừ b nhân c.", reason: "ASR chép “Bước 1, trừ lambda ở 2 ô đường chéo qua, rồi tính định thức theo a nhân dê trừ b nhân c.” (0.936): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: của (trong “của a” → “qua”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Nên nghiệm là 2 e mũ âm t nhân vector thứ nhất, trừ e mũ âm 2 t nhân vector thứ hai.", reason: "tên chữ cái đọc kiểu Việt, ASR chép nhầm chữ (q→quy, x→ích, k→ca) — nhóm đã biết (SKILL Bước 5); chữ hiện trên màn hình"}
+  - {sentence: "Với trị riêng a cộng trừ b i, e mũ lambda t bằng e mũ a t nhân một tổ hợp của cos và sin của b t.", reason: "sin đọc thô “sin” (foreign_ok trong lexicon_vi.RBM.yaml); ASR chép “sinh” — cùng âm, chỉ khác âm cuối n/nh mà tiếng Việt không phân biệt ở âm tiết này; hàm sin hiện trên màn hình"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Khớp có lò xo và giảm chấn: có dừng yên không?"
+    steps:
+      - show: |
+          <p>Một khớp tay máy gắn lò xo kéo về giữa và giảm chấn hãm tốc độ. Đẩy lệch rồi thả ra.</p>
+          <p>Nó sẽ về yên? Dao động mãi? Hay văng ra xa? Không cần giải hết, chỉ cần vài con số.</p>
+          <div class="box key">Hôm nay: hệ tuyến tính $\mathbf{x}' = \mathbf{A}\mathbf{x}$, và <b>trị riêng</b> của $\mathbf{A}$ quyết định ổn định.</div>
+        focus: [1, 1, 2, 2, 3]
+        say: "Chào bạn, một khớp tay máy gắn lò xo kéo nó về giữa, và một bộ giảm chấn hãm tốc độ. Ta đẩy lệch rồi thả ra. Nó sẽ về yên, dao động mãi, hay văng ra xa? Câu trả lời không cần giải hết phương trình, chỉ cần vài con số. Hôm nay ta học hệ tuyến tính x phẩy bằng A nhân x, và thấy trị riêng của A quyết định hệ có ổn định hay không."
+
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: vector riêng, hàm mũ e và phân tích bậc hai"
+    checks:
+      - "np.allclose(np.array([[2, 1], [1, 2]]) @ [1, 1], [3, 3]) and np.allclose(np.array([[2, 1], [1, 2]]) @ [1, -1], [1, -1])"
+      - "round(math.exp(-1), 3) == 0.368 and round(math.exp(-2), 3) == 0.135 and round(math.exp(1), 3) == 2.718 and round(math.exp(2), 3) == 7.389"
+      - "all(l * l + 3 * l + 2 == (l + 1) * (l + 2) for l in range(-5, 6)) and (-1) ** 2 + 3 * (-1) + 2 == 0 and (-2) ** 2 + 3 * (-2) + 2 == 0"
+    steps:
+      - show: |
+          <p><b>Vector riêng</b> (khoá Toán cho khoa học máy tính): $\mathbf{M}\mathbf{v} = \lambda\mathbf{v}$ — nhân với $\mathbf{M}$ chỉ kéo dãn $\mathbf{v}$, không đổi hướng.</p>
+          <table class="t"><tr><th>$\mathbf{M} = \begin{bmatrix} 2 & 1 \\ 1 & 2 \end{bmatrix}$ nhân với</th><th>kết quả</th><th>trị riêng $\lambda$</th></tr>
+          <tr><td>$(1, 1)^T$</td><td>$(3, 3)^T = 3 \cdot (1, 1)^T$</td><td>3</td></tr>
+          <tr><td>$(1, -1)^T$</td><td>$(1, -1)^T = 1 \cdot (1, -1)^T$</td><td>1</td></tr></table>
+        focus: [1, 1, "2.2", "2.3"]
+        say: "Trước khi vào bài, ta ôn ba điều sẽ dùng, trước hết là vector riêng, đã học ở khoá Toán cho khoa học máy tính. Vector v là vector riêng của M nếu nhân với M chỉ kéo dãn v mà không đổi hướng, M v bằng lambda v. Ví dụ ma trận 2, 1, 1, 2 nhân với 1, 1 được 3, 3, tức gấp 3 lần, nên trị riêng là 3. Nhân với 1, âm 1 thì được đúng 1, âm 1, trị riêng là 1."
+      - show: |
+          <p><b>Hàm mũ</b> $e^{\lambda t}$ với $e \approx 2{,}718$: dấu của $\lambda$ quyết định co hay giãn.</p>
+          <table class="t"><tr><th></th><th>$t = 1$</th><th>$t = 2$</th><th>xu hướng</th></tr>
+          <tr><td>$\lambda = -1$: $e^{-t}$</td><td>0,368</td><td>0,135</td><td>co về 0</td></tr>
+          <tr><td>$\lambda = 1$: $e^{t}$</td><td>2,718</td><td>7,389</td><td>lớn mãi</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Điều thứ hai, hàm mũ e mũ lambda t, với e xấp xỉ 2 phẩy 718. Khi lambda bằng âm 1, giá trị là 0 phẩy 368 tại t bằng 1 và 0 phẩy 135 tại t bằng 2, co dần về 0. Khi lambda bằng 1, giá trị là 2 phẩy 718 rồi 7 phẩy 389, lớn mãi không dừng."
+      - clear: true
+        show: |
+          <p><b>Phân tích bậc hai:</b> nhân phá ngoặc để kiểm.</p>
+          $$(\lambda + 1)(\lambda + 2) = \lambda^2 + 2\lambda + \lambda + 2 = \lambda^2 + 3\lambda + 2$$
+          <p class="note">Nên $\lambda^2 + 3\lambda + 2 = 0$ khi $\lambda = -1$ hoặc $\lambda = -2$. Thử: $1 - 3 + 2 = 0$ và $4 - 6 + 2 = 0$.</p>
+        focus: [1, 2, 3, 3]
+        say: "Điều thứ ba, phân tích một biểu thức bậc hai thành tích, và kiểm bằng cách nhân phá ngoặc. Lambda cộng 1 nhân lambda cộng 2 bằng lambda bình phương cộng 2 lambda cộng lambda cộng 2, tức lambda bình phương cộng 3 lambda cộng 2. Vì một tích bằng 0 khi một thừa số bằng 0, biểu thức này bằng 0 khi lambda bằng âm 1 hoặc âm 2. Thử lại, 1 trừ 3 cộng 2 bằng 0, và 4 trừ 6 cộng 2 cũng bằng 0."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: trạng thái hai chiều và ma trận A"
+    checks:
+      - "np.allclose(np.array([[0, 1], [-2, -3]]) @ [0.5, 0.2], [0.2, -2 * 0.5 - 3 * 0.2])"
+    steps:
+      - show: |
+          <p>Trạng thái gồm vị trí $p$ và vận tốc $v$: $\mathbf{x} = (p, v)^T$.</p>
+          <p>Vị trí đổi theo vận tốc: $p' = v$. Vận tốc đổi do lò xo ($-2p$) và giảm chấn ($-3v$): $v' = -2p - 3v$.</p>
+          <p>$\mathbf{x}' = \mathbf{A}\mathbf{x}$, $\quad \mathbf{A} = \begin{bmatrix} 0 & 1 \\ -2 & -3 \end{bmatrix}$</p>
+          <div class="box key">Mỗi hàng của $\mathbf{A}$ là quy tắc thay đổi của một thành phần. Phương trình bậc hai thành hệ hai phương trình bậc nhất.</div>
+        focus: [1, 2, 2, 3, 4, 4]
+        say: "Trạng thái của khớp gồm hai con số, vị trí p và vận tốc v. Vị trí thay đổi theo vận tốc, nên p phẩy bằng v. Vận tốc thay đổi do lò xo kéo về, âm 2 p, và giảm chấn hãm lại, âm 3 v. Gom lại, x phẩy bằng A nhân x, với A có hàng trên 0, 1 và hàng dưới âm 2, âm 3. Mỗi hàng của A là quy tắc thay đổi của một thành phần. Nhờ thêm vận tốc vào trạng thái, một phương trình bậc hai thành hệ hai phương trình bậc nhất."
+
+  # ───────────────────────── 3. CÔNG THỨC ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Vì sao trị riêng quyết định"
+    checks:
+      - "np.allclose(np.array([[0, 1], [-2, -3]]) @ [1, -1], -1 * np.array([1, -1])) and np.allclose(np.array([[0, 1], [-2, -3]]) @ [1, -2], -2 * np.array([1, -2]))"
+    steps:
+      - show: |
+          <p>Nếu $\mathbf{A}\mathbf{v} = \lambda\mathbf{v}$ (CS115: vector riêng), thử $\mathbf{x}(t) = e^{\lambda t}\mathbf{v}$:</p>
+          <p>$\mathbf{x}' = \lambda e^{\lambda t}\mathbf{v}$, còn $\mathbf{A}\mathbf{x} = e^{\lambda t}\mathbf{A}\mathbf{v} = \lambda e^{\lambda t}\mathbf{v}$ — bằng nhau, nên đó là một nghiệm.</p>
+          <p>Theo hướng $\mathbf{v}$, hệ chỉ co giãn theo $e^{\lambda t}$: $\lambda < 0$ thì tắt về 0, $\lambda > 0$ thì lớn vô hạn.</p>
+          <div class="box key">Nghiệm tổng quát là tổ hợp các nghiệm đó. Hệ ổn định khi <b>mọi</b> trị riêng có phần thực âm.</div>
+        focus: [1, 2, 3, 3, 4, 4]
+        say: "Nếu v là vector riêng của A với trị riêng lambda, như đã học, ta thử x của t bằng e mũ lambda t nhân v. Đạo hàm của nó là lambda e mũ lambda t nhân v, còn A nhân x cũng bằng đúng thứ đó, vì A nhân v bằng lambda v. Vậy đó là một nghiệm. Theo hướng v, hệ chỉ co giãn theo e mũ lambda t. Lambda âm thì tắt về 0, còn lambda dương thì lớn vô hạn. Nghiệm tổng quát là tổ hợp các nghiệm như thế, nên hệ ổn định khi mọi trị riêng đều có phần thực âm."
+
+  - id: intuition
+    kind: intuition
+    title: "Hình dung: mỗi hướng riêng co theo nhịp riêng"
+    checks:
+      - "np.allclose(np.round(2 * math.exp(-1) * np.array([1, -1]) - math.exp(-2) * np.array([1, -2]), 4), [0.6004, -0.4651])"
+    steps:
+      - show: |
+          <div><svg width="1300" height="470" viewBox="0 0 1300 470"><defs><marker id="lk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#6b7280"/></marker><marker id="lg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#15803d"/></marker></defs><line x1="69.0" y1="110.0" x2="804.0" y2="110.0" stroke="#6b7280" stroke-width="2" marker-end="url(#lk)"/><line x1="300.0" y1="467.0" x2="300.0" y2="5.0" stroke="#6b7280" stroke-width="2" marker-end="url(#lk)"/><text x="818" y="118" font-size="22" text-anchor="start" fill="#6b7280">p (vị trí)</text><text x="316" y="28" font-size="22" text-anchor="start" fill="#6b7280">v (vận tốc)</text><line x1="207.6" y1="17.6" x2="644.4" y2="454.4" stroke="#2a78d6" stroke-width="4" stroke-dasharray="10 7"/><line x1="253.8" y1="17.6" x2="476.4" y2="462.8" stroke="#eb6834" stroke-width="4" stroke-dasharray="10 7"/><polyline points="720.0,110.0 719.8,126.3 719.4,141.6 718.6,156.1 717.5,169.6 716.2,182.3 714.6,194.2 712.8,205.4 710.8,215.8 708.6,225.6 706.2,234.7 703.6,243.1 700.9,251.0 698.0,258.3 695.0,265.0 691.8,271.3 688.5,277.0 685.1,282.3 681.6,287.2 678.0,291.6 674.4,295.6 670.6,299.3 666.8,302.6 662.9,305.5 659.0,308.1 655.0,310.5 650.9,312.5 646.9,314.2 642.8,315.7 638.7,317.0 634.5,318.0 630.3,318.8 626.1,319.4 622.0,319.8 617.8,320.0 613.6,320.0 609.4,319.9 605.2,319.6 601.0,319.1 596.8,318.5 592.6,317.8 588.5,317.0 584.4,316.1 580.2,315.0 576.2,313.9 572.1,312.7 568.1,311.3 564.0,310.0 560.1,308.5 556.1,306.9 552.2,305.3 548.3,303.7 544.4,302.0 540.6,300.2 536.8,298.4 533.1,296.5 529.4,294.6 525.7,292.7 522.1,290.8 518.5,288.8 514.9,286.8 511.4,284.8 507.9,282.7 504.5,280.7 501.1,278.6 497.7,276.5 494.4,274.5 491.2,272.4 487.9,270.3 484.7,268.2 481.6,266.1 478.5,264.0 475.4,261.9 472.4,259.8 469.5,257.7 466.5,255.6 463.6,253.5 460.8,251.5 458.0,249.4 455.2,247.4 452.5,245.4 449.8,243.3 447.1,241.3 444.5,239.3 442.0,237.4 439.4,235.4 436.9,233.5 434.5,231.6 432.1,229.7 429.7,227.8 427.4,225.9 425.1,224.0 422.8,222.2 420.6,220.4 418.4,218.6 416.2,216.8 414.1,215.1 412.0,213.4 410.0,211.7 408.0,210.0 406.0,208.3 404.0,206.6 402.1,205.0 400.2,203.4 398.4,201.8 396.6,200.3 394.8,198.7 393.0,197.2 391.3,195.7 389.6,194.2 387.9,192.8 386.3,191.3 384.7,189.9 383.1,188.5 381.5,187.1 380.0,185.8 378.5,184.4 377.0,183.1 375.6,181.8 374.1,180.5 372.7,179.3 371.4,178.1 370.0,176.8 368.7,175.6 367.4,174.5 366.1,173.3 364.9,172.1 363.6,171.0 362.4,169.9 361.2,168.8 360.1,167.8 358.9,166.7 357.8,165.7 356.7,164.6 355.6,163.6 354.6,162.7 353.5,161.7 352.5,160.7 351.5,159.8 350.5,158.9 349.5,158.0 348.6,157.1 347.6,156.2 346.7,155.4 345.8,154.5 344.9,153.7 344.1,152.9 343.2,152.1 342.4,151.3 341.6,150.5 340.8,149.7 340.0,149.0 339.2,148.3 338.5,147.5 337.7,146.8 337.0,146.1 336.3,145.5 335.6,144.8 334.9,144.1 334.2,143.5 333.5,142.8 332.9,142.2 332.3,141.6 331.6,141.0 331.0,140.4 330.4,139.8 329.8,139.3 329.2,138.7 328.7,138.2 328.1,137.6 327.6,137.1 327.0,136.6 326.5,136.1 326.0,135.6 325.5,135.1 325.0,134.6 324.5,134.1 324.0,133.7 323.5,133.2 323.1,132.8 322.6,132.3 322.2,131.9 321.8,131.5 321.3,131.1 320.9,130.7 320.5,130.3 320.1,129.9 319.7,129.5 319.3,129.1 319.0,128.7 318.6,128.4 318.2,128.0 317.9,127.7 317.5,127.3 317.2,127.0 316.8,126.7 316.5,126.3 316.2,126.0 315.9,125.7 315.5,125.4 315.2,125.1 314.9,124.8 314.7,124.5 314.4,124.2 314.1,124.0 313.8,123.7 313.5,123.4 313.3,123.2 313.0,122.9 312.8,122.7 312.5,122.4 312.3,122.2 312.0,121.9 311.8,121.7 311.5,121.5 311.3,121.2 311.1,121.0 310.9,120.8 310.7,120.6 310.5,120.4 310.2,120.2 310.0,120.0 309.9,119.8 309.7,119.6 309.5,119.4 309.3,119.2 309.1,119.0 308.9,118.9 308.7,118.7 308.6,118.5 308.4,118.4 308.2,118.2 308.1,118.0 307.9,117.9 307.8,117.7 307.6,117.6 307.5,117.4 307.3,117.3 307.2,117.1 307.0,117.0 306.9,116.9 306.7,116.7 306.6,116.6 306.5,116.5 306.4,116.3 306.2,116.2 306.1,116.1 306.0,116.0 305.9,115.8 305.8,115.7 305.6,115.6" fill="none" stroke="#15803d" stroke-width="5"/><line x1="360.1" y1="167.8" x2="349.5" y2="158.0" stroke="#15803d" stroke-width="5" marker-end="url(#lg)"/><circle cx="720.0" cy="110.0" r="8" fill="#15803d"/><text x="720" y="94" font-size="22" text-anchor="middle" fill="#15803d" font-weight="bold">t = 0: (1; 0)</text><circle cx="552.2" cy="305.3" r="8" fill="#15803d"/><text x="596" y="351" font-size="22" text-anchor="start" fill="#15803d" font-weight="bold">t = 1: (0,6004; −0,4651)</text><circle cx="406.0" cy="208.3" r="8" fill="#15803d"/><text x="420" y="196" font-size="22" text-anchor="start" fill="#15803d" font-weight="bold">t = 2</text><text x="610" y="450" font-size="22" text-anchor="end" fill="#2a78d6" font-weight="bold">hướng (1, −1)</text><text x="444" y="450" font-size="22" text-anchor="end" fill="#eb6834" font-weight="bold">hướng (1, −2)</text><text x="940" y="50" font-size="23" text-anchor="start" fill="#2a78d6" font-weight="bold">Phần theo hướng (1, −1):</text><text x="940" y="92" font-size="23" text-anchor="start" fill="#2a78d6">nhân e mũ −t, co CHẬM</text><text x="940" y="148" font-size="23" text-anchor="start" fill="#eb6834" font-weight="bold">Phần theo hướng (1, −2):</text><text x="940" y="190" font-size="23" text-anchor="start" fill="#eb6834">nhân e mũ −2t, co NHANH</text><text x="940" y="246" font-size="23" text-anchor="start" fill="#15803d" font-weight="bold">Đường xanh lá: trạng thái</text><text x="940" y="288" font-size="23" text-anchor="start" fill="#15803d">thật, cộng hai phần lại.</text><text x="940" y="344" font-size="23" text-anchor="start" fill="#1f2937">Phần nhanh tắt trước, nên</text><text x="940" y="386" font-size="23" text-anchor="start" fill="#1f2937">cuối cùng trạng thái trượt</text><text x="940" y="428" font-size="23" text-anchor="start" fill="#1f2937">dọc hướng chậm về gốc.</text></svg></div>
+        focus: [1, 1, 1, 1, 1]
+        say: "Hình này vẽ trạng thái của khớp trên một mặt phẳng, trục ngang là vị trí p, trục đứng là vận tốc v. Hai đường đứt là hai hướng riêng của A, hướng xanh 1, âm 1 và hướng cam 1, âm 2. Phần trạng thái nằm theo hướng xanh bị nhân với e mũ âm t, co chậm, còn phần theo hướng cam bị nhân với e mũ âm 2 t, co nhanh gấp đôi. Đường xanh lá là trạng thái thật khi thả từ 1, 0, đi qua 0 phẩy 6004, âm 0 phẩy 4651 tại t bằng 1. Vì phần nhanh tắt trước, về cuối trạng thái trượt dọc hướng chậm vào gốc, tức khớp về yên."
+
+  # ───────────────────────── 4. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "A = [[0, 1], [−2, −3]]"
+    checks:
+      - "sorted(np.linalg.eigvals(np.array([[0, 1], [-2, -3]])).real.round(9)) == [-2.0, -1.0]"
+      - "all(abs(l * l + 3 * l + 2) < 1e-12 for l in (-1, -2))"
+      - "np.allclose(2 * np.array([1, -1]) - np.array([1, -2]), [1, 0])"
+      - "np.allclose(alg.rk4_ode(lambda t, x: np.array([[0, 1], [-2, -3]]) @ x, np.array([1.0, 0.0]), 0.01, 100)[-1], 2 * math.exp(-1) * np.array([1, -1]) - math.exp(-2) * np.array([1, -2]), atol=1e-8)"
+      - "[round(v, 4) for v in 2 * math.exp(-1) * np.array([1, -1]) - math.exp(-2) * np.array([1, -2])] == [0.6004, -0.4651]"
+      - "round(2 * math.exp(-1), 4) == 0.7358 and round(math.exp(-2), 4) == 0.1353 and round(2 * math.exp(-2), 4) == 0.2707"
+      - "np.allclose(np.array([[0, 1], [-2, -3]]) @ [1, -1], [-1, 1]) and np.allclose(np.array([[0, 1], [-2, -3]]) @ [1, -2], [-2, 4])"
+    steps:
+      - show: |
+          <p><b>Bước 1 —</b> định thức của $\mathbf{A} - \lambda\mathbf{I}_2 = \begin{bmatrix} -\lambda & 1 \\ -2 & -3 - \lambda \end{bmatrix}$:</p>
+          $$\det(\mathbf{A} - \lambda\mathbf{I}_2) = (-\lambda)(-3 - \lambda) + 2 = \lambda^2 + 3\lambda + 2$$
+        focus: [1, 2]
+        say: "Bước một, trừ lambda ở hai ô đường chéo của A, rồi tính định thức theo a nhân d trừ b nhân c. Tính định thức của A trừ lambda nhân ma trận đơn vị, ta được lambda bình phương cộng 3 lambda cộng 2."
+      - show: |
+          <p><b>Bước 2 —</b> phân tích như phần ôn: $\lambda^2 + 3\lambda + 2 = (\lambda + 1)(\lambda + 2)$. Trị riêng $\hl{-1}$ và $\hl{-2}$, đều âm: <b>ổn định</b>.</p>
+        say: "Bước hai, như phần ôn đầu bài, biểu thức này phân tích thành lambda cộng 1 nhân lambda cộng 2. Vậy trị riêng là âm 1 và âm 2, đều âm, nên hệ ổn định."
+      - show: |
+          <p><b>Bước 3 —</b> vector riêng, kiểm bằng phép nhân:</p>
+          <table class="t"><tr><th>$\mathbf{A}$ nhân với</th><th>kết quả</th><th>bằng</th></tr>
+          <tr><td>$(1, -1)^T$</td><td>$(0 - 1;\ -2 + 3)^T = (-1, 1)^T$</td><td>$-1 \cdot (1, -1)^T$ ✓</td></tr>
+          <tr><td>$(1, -2)^T$</td><td>$(0 - 2;\ -2 + 6)^T = (-2, 4)^T$</td><td>$-2 \cdot (1, -2)^T$ ✓</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước ba, hai vector riêng tương ứng là 1, âm 1 và 1, âm 2. Kiểm bằng phép nhân, A nhân 1, âm 1 được âm 1, 1, đúng bằng âm 1 lần vector đó. A nhân 1, âm 2 được âm 2, 4, đúng bằng âm 2 lần vector đó."
+      - clear: true
+        show: |
+          <p><b>Bước 4 —</b> tách điểm thả: $(1, 0)^T = 2(1, -1)^T - (1, -2)^T = (2 - 1;\ -2 + 2)^T$ ✓</p>
+          $$\mathbf{x}(t) = 2e^{-t}(1, -1)^T - e^{-2t}(1, -2)^T$$
+        focus: [1, 1, 2]
+        say: "Bước bốn, thả từ trạng thái 1, 0, mà 1, 0 bằng 2 lần vector thứ nhất trừ vector thứ hai. Cộng từng toạ độ, 2 trừ 1 bằng 1, âm 2 cộng 2 bằng 0, đúng điểm thả. Nên nghiệm là 2 e mũ âm t nhân vector thứ nhất, trừ e mũ âm 2 t nhân vector thứ hai."
+      - show: |
+          <p><b>Bước 5 —</b> tại $t = 1$: $2 \cdot 0{,}3679 = 0{,}7358$ và $e^{-2} \approx 0{,}1353$, nên $\mathbf{x}(1) = (0{,}7358 - 0{,}1353;\ -0{,}7358 + 0{,}2707) = \hl{(0{,}6004;\ -0{,}4651)}$. Mô phỏng RK4 của bài 8 cho cùng số.</p>
+        say: "Bước năm, thử ngay tại t bằng 1, 2 nhân e mũ âm 1 là 0 phẩy 7358, còn e mũ âm 2 xấp xỉ 0 phẩy 1353. Vị trí là 0 phẩy 7358 trừ 0 phẩy 1353, bằng 0 phẩy 6004, vận tốc là âm 0 phẩy 7358 cộng 0 phẩy 2707, bằng âm 0 phẩy 4651. Công thức và mô phỏng RK4 của bài 8 cho cùng con số."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: thế ngược vào phương trình, và tổng – tích trị riêng"
+    checks:
+      - "np.allclose(2 * np.array([1, -1]) - np.array([1, -2]), [1, 0]) and np.allclose(-2 * np.array([1, -1]) + 2 * np.array([1, -2]), [0, -2]) and np.allclose(np.array([[0, 1], [-2, -3]]) @ [1, 0], [0, -2])"
+      - "-1 + -2 == 0 + -3 and (-1) * (-2) == 0 * (-3) - 1 * (-2)"
+    steps:
+      - show: |
+          <p>Đường thứ nhất: <b>thế công thức vào phương trình</b> tại $t = 0$. Đạo hàm của $e^{-t}$ là $-e^{-t}$, của $e^{-2t}$ là $-2e^{-2t}$.</p>
+          <table class="t"><tr><th>điều phải đúng</th><th>vế trái</th><th>vế phải</th></tr>
+          <tr><td>$\mathbf{x}(0)$ = điểm thả</td><td>$2(1, -1)^T - (1, -2)^T = (1, 0)^T$</td><td>$(1, 0)^T$ ✓</td></tr>
+          <tr><td>$\mathbf{x}'(0) = \mathbf{A}\mathbf{x}(0)$</td><td>$-2(1, -1)^T + 2(1, -2)^T = (0, -2)^T$</td><td>$\mathbf{A}(1, 0)^T = (0, -2)^T$ ✓</td></tr></table>
+        focus: [1, 1, 1, "2.2", "2.3", "2.3"]
+        say: "Làm sao biết nghiệm vừa tìm là đúng? Đường thứ nhất, thế ngược công thức vào phương trình tại t bằng 0. Ta dùng đạo hàm của e mũ âm t là âm e mũ âm t, của e mũ âm 2 t là âm 2 e mũ âm 2 t. Tại t bằng 0, công thức cho 1, 0, đúng điểm thả. Đạo hàm của công thức tại 0 là 0, âm 2. Còn A nhân 1, 0 là cột thứ nhất của A, vì nhân với 1, 0 là lấy cột đầu, cũng là 0, âm 2, nên hai vế khớp nhau."
+      - show: |
+          <p>Đường thứ hai: không giải lại phương trình bậc hai, dùng hai quy tắc của ma trận 2 × 2.</p>
+          <table class="t"><tr><th>quy tắc</th><th>từ trị riêng</th><th>từ $\mathbf{A}$</th></tr>
+          <tr><td>tổng trị riêng = tổng đường chéo</td><td>$-1 + (-2) = -3$</td><td>$0 + (-3) = -3$ ✓</td></tr>
+          <tr><td>tích trị riêng = định thức</td><td>$(-1) \cdot (-2) = 2$</td><td>$0 \cdot (-3) - 1 \cdot (-2) = 2$ ✓</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Đường thứ hai kiểm trị riêng mà không giải lại phương trình, nhờ hai quy tắc của ma trận hai nhân hai. Tổng hai trị riêng, âm 1 cộng âm 2, bằng âm 3, đúng bằng tổng đường chéo của A, 0 cộng âm 3. Tích hai trị riêng bằng 2, đúng bằng định thức của A, 0 nhân âm 3 trừ 1 nhân âm 2."
+
+  # ───────────────────────── 5. TRỊ RIÊNG PHỨC ─────────────────────────
+  - id: complex
+    kind: concept
+    title: "Trị riêng phức: dao động"
+    checks:
+      - "np.allclose(sorted(np.linalg.eigvals(np.array([[0, 1], [-5, -2]])), key=lambda z: z.imag), [-1 - 2j, -1 + 2j])"
+      - "sorted(np.linalg.eigvals(np.array([[0, 1], [2, -1]])).real.round(9)) == [-2.0, 1.0]"
+      - "abs(alg.rk4_ode(lambda t, x: np.array([[0, 1], [2, -1]]) @ x, np.array([1.0, 0.0]), 0.01, 500)[-1][0]) > 50"
+    steps:
+      - show: |
+          <p>Lò xo mạnh hơn, giảm chấn yếu hơn: $\mathbf{A} = \begin{bmatrix} 0 & 1 \\ -5 & -2 \end{bmatrix}$, trị riêng $\lambda = -1 \pm 2i$, với $i^2 = -1$.</p>
+          <p>Với $\lambda = a \pm bi$: $e^{\lambda t} = e^{at}(\cos bt \pm i\sin bt)$. Phần ảo $b$ cho <b>dao động</b>; phần thực $a$ cho biên độ co hay giãn.</p>
+          <div>{{RESP}}</div>
+        introduces: [re_part]
+        focus: [1, 2, 2, 3, 3]
+        say: "Bây giờ cho lò xo mạnh hơn và giảm chấn yếu hơn, A có hàng dưới âm 5, âm 2. Trị riêng thành số phức, âm 1 cộng trừ 2 i, với i bình phương bằng âm 1. Với trị riêng a cộng trừ b i, e mũ lambda t bằng e mũ a t nhân một tổ hợp của cos và sin của b t. Phần ảo b cho dao động, còn phần thực a cho biết biên độ co lại hay giãn ra. Trên hình, đường cam dao động quanh 0 và tắt dần, vì phần thực bằng âm 1."
+      - clear: true
+        show: |
+          <div class="box key">Hệ liên tục $\mathbf{x}' = \mathbf{A}\mathbf{x}$ ổn định $\iff$ mọi trị riêng có $\operatorname{Re}\lambda < 0$.</div>
+          <p>Phản ví dụ: $\mathbf{A} = \begin{bmatrix} 0 & 1 \\ 2 & -1 \end{bmatrix}$ có trị riêng $1$ và $-2$. Chỉ một trị riêng dương là đủ làm hệ văng ra: mô phỏng tới $t = 5$, vị trí đã vượt 50.</p>
+        focus: [1, 2, 2]
+        say: "Tóm lại, hệ liên tục ổn định khi và chỉ khi mọi trị riêng có phần thực âm. Phản ví dụ, nếu hàng dưới là 2, âm 1, thì trị riêng là 1 và âm 2. Chỉ một trị riêng dương là đủ làm hệ văng ra, mô phỏng tới t bằng 5 thì vị trí đã vượt quá 50."
+
+  # ───────────────────────── 6. RỜI RẠC ─────────────────────────
+  - id: discrete
+    kind: concept
+    title: "Hệ rời rạc: điều kiện khác"
+    checks:
+      - "all(abs(v) < 1e-9 for v in np.linalg.matrix_power(np.array([[0.5, 0], [0, 0.9]]), 300) @ [1, 1])"
+      - "abs(math.exp(0.5 * 10)) > 100"
+      - "np.allclose(np.linalg.matrix_power(np.array([[-1.5]]), 3), [[-3.375]])"
+      - "[round((-1.5) ** k, 3) for k in range(4)] == [1.0, -1.5, 2.25, -3.375]"
+    steps:
+      - show: |
+          <p>Hệ <b>rời rạc</b> $\mathbf{x}_{k+1} = \mathbf{M}\mathbf{x}_k$ (như mỗi bước Euler): theo hướng vector riêng, mỗi bước nhân với $\lambda$.</p>
+          <div class="box key">Hệ rời rạc ổn định $\iff$ mọi trị riêng có $\lvert\lambda\rvert < 1$.</div>
+          <table class="t"><tr><th>trị riêng</th><th>hệ liên tục: $e^{\lambda t}$</th><th>hệ rời rạc: $\lambda^k$</th></tr>
+          <tr><td>$0{,}5$</td><td>bùng nổ ($e^{0{,}5t}$)</td><td>tắt dần ($0{,}5^k \to 0$)</td></tr>
+          <tr><td>$-1{,}5$</td><td>tắt dần</td><td>dao động, lớn dần: $1;\ -1{,}5;\ 2{,}25;\ -3{,}375$</td></tr></table>
+        introduces: [absval]
+        focus: [1, 1, 2, 3, "3.2", "3.3"]
+        say: "Còn hệ rời rạc, x k cộng 1 bằng M nhân x k, như mỗi bước của phương pháp Euler. Theo hướng vector riêng, mỗi bước nhân với lambda. Vì vậy hệ rời rạc ổn định khi mọi trị riêng có trị tuyệt đối nhỏ hơn 1. Hai điều kiện rất khác nhau. Cùng trị riêng 0 phẩy 5, hệ rời rạc tắt dần, còn hệ liên tục thì bùng nổ. Ngược lại, với trị riêng âm 1 phẩy 5, hệ liên tục tắt dần, còn hệ rời rạc dao động và lớn dần."
+
+  # ───────────────────────── 7. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi người mới hay mắc"
+    checks:
+      - "all(abs(z.real) < 1e-12 for z in np.linalg.eigvals(np.array([[0, 1], [-4, 0]])))"
+      - "max(np.linalg.eigvals(np.array([[0, 1], [2, -1]])).real) > 0"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Dùng $\lvert\lambda\rvert < 1$ cho hệ liên tục <b class="red">(sai)</b>
+          <br><span class="note">Hệ liên tục xét dấu phần thực; hệ rời rạc mới xét độ lớn so với 1.</span></div>
+          <table class="t"><tr><th>hệ</th><th>ổn định khi mọi trị riêng</th></tr><tr><td>liên tục $\mathbf{x}' = \mathbf{A}\mathbf{x}$</td><td>có phần thực âm</td></tr><tr><td>rời rạc $\mathbf{x}_{k+1} = \mathbf{M}\mathbf{x}_k$</td><td>có trị tuyệt đối nhỏ hơn 1</td></tr></table>
+        focus: [1, 2]
+        say: "Lỗi thứ nhất, dùng điều kiện trị tuyệt đối nhỏ hơn 1 cho hệ liên tục. Hệ liên tục xét dấu phần thực, chỉ hệ rời rạc mới so độ lớn với 1."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Chỉ xét một trị riêng <b class="red">(thiếu)</b>
+          <br><span class="note">Trị riêng $-2$ không cứu được trị riêng $1$: cần <b>mọi</b> trị riêng thoả.</span></div>
+        say: "Lỗi thứ hai, chỉ xét một trị riêng. Trị riêng âm 2 không cứu được trị riêng 1, cần mọi trị riêng cùng thoả điều kiện."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Thấy trị riêng phức thì kết luận “không ổn định” <b class="red">(sai)</b>
+          <br><span class="note">Phần ảo chỉ cho dao động. $-1 \pm 2i$ vẫn tắt dần vì phần thực âm.</span></div>
+        say: "Lỗi thứ ba, thấy trị riêng phức thì kết luận hệ không ổn định. Phần ảo chỉ cho dao động, còn âm 1 cộng trừ 2 i vẫn tắt dần vì phần thực âm."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Coi phần thực bằng 0 là ổn định <b class="red">(thiếu)</b>
+          <br><span class="note">$\pm 2i$: dao động mãi, không tắt. Không văng ra, nhưng cũng không về yên.</span></div>
+        say: "Lỗi thứ tư, coi phần thực bằng 0 là ổn định. Với trị riêng cộng trừ 2 i, hệ dao động mãi, không văng ra, nhưng cũng không bao giờ về yên."
+
+  # ───────────────────────── 8. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "sorted(np.linalg.eigvals(np.array([[-1, 2], [0, -3]])).real.round(9)) == [-3.0, -1.0]"
+      - "np.allclose(sorted(np.linalg.eigvals(np.array([[0, 1], [-4, 0]])), key=lambda z: z.imag), [-2j, 2j])"
+      - "-1 + -3 == -4 and round(np.linalg.det(np.array([[-1, 2], [0, -3]])), 9) == 3 and (2j) ** 2 == -4"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>$\mathbf{A} = \begin{bmatrix} -1 & 2 \\ 0 & -3 \end{bmatrix}$ ổn định không?</td></tr>
+          <tr><td>2</td><td>$\mathbf{A} = \begin{bmatrix} 0 & 1 \\ -4 & 0 \end{bmatrix}$ (lò xo, không giảm chấn): hệ làm gì?</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, ma trận có hàng trên âm 1, 2 và hàng dưới 0, âm 3, hệ có ổn định không? Câu hai, ma trận có hàng trên 0, 1 và hàng dưới âm 4, 0, tức chỉ có lò xo mà không có giảm chấn, hệ sẽ làm gì? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① $\det(\mathbf{A} - \lambda\mathbf{I}_2) = (-1 - \lambda)(-3 - \lambda) - 2 \cdot 0 = (\lambda + 1)(\lambda + 3)$</p>
+          <p>Ma trận tam giác: trị riêng là đường chéo, $-1$ và $-3$, đều âm — <b>ổn định</b>. Kiểm: tổng $-4 = -1 + (-3)$, tích $3 = \det \mathbf{A}$ ✓</p>
+        focus: [1, 2, 2]
+        say: "Đáp án câu một, ô dưới bên trái bằng 0, nên định thức của A trừ lambda I chỉ còn tích hai ô đường chéo, âm 1 trừ lambda nhân âm 3 trừ lambda. Ma trận tam giác có trị riêng nằm trên đường chéo, âm 1 và âm 3, nên hệ ổn định. Kiểm nhanh, tổng hai trị riêng là âm 4, bằng tổng đường chéo, và tích bằng 3, đúng bằng định thức."
+      - show: |
+          <p>② $\det(\mathbf{A} - \lambda\mathbf{I}_2) = (-\lambda)(-\lambda) - 1 \cdot (-4) = \lambda^2 + 4$</p>
+          <p>$\lambda^2 + 4 = 0 \Rightarrow \lambda = \pm 2i$ (vì $(2i)^2 = -4$): phần thực 0 — <b>dao động mãi</b> với tần số góc 2, không tắt.</p>
+        focus: [1, 2, 2]
+        say: "Câu hai, định thức là âm lambda nhân âm lambda trừ 1 nhân âm 4, tức lambda bình phương cộng 4. Đặt biểu thức đó bằng 0, ta được trị riêng cộng trừ 2 i, phần thực bằng 0, nên khớp dao động mãi mà không tắt. Đúng như lỗi thứ tư vừa nói, không có giảm chấn thì khớp không văng ra nhưng cũng không bao giờ về yên."
+
+  # ───────────────────────── 9. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">$\mathbf{x}' = \mathbf{A}\mathbf{x}$</span><span class="a">→</span>
+          <span class="n">nghiệm $e^{\lambda t}\mathbf{v}$</span><span class="a">→</span>
+          <span class="n">liên tục: $\operatorname{Re}\lambda < 0$</span><span class="a">→</span>
+          <span class="n">rời rạc: $\lvert\lambda\rvert < 1$</span></div>
+        say: "Tổng kết lại, hệ tuyến tính x phẩy bằng A x có nghiệm dạng e mũ lambda t nhân vector riêng. Hệ liên tục ổn định khi mọi trị riêng có phần thực âm. Hệ rời rạc ổn định khi mọi trị riêng có trị tuyệt đối nhỏ hơn 1."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> trước khi mô phỏng, tính trị riêng. Vài con số cho biết hệ sẽ về yên, dao động hay văng ra.</div>
+        say: "Điều cần mang theo, trước khi mô phỏng, hãy tính trị riêng. Chỉ vài con số đã cho biết hệ sẽ về yên, dao động hay văng ra."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 10): <b>điều khiển phản hồi</b> và bộ điều khiển PID — chủ động đặt trị riêng để hệ về đúng đích.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 10, ta học điều khiển phản hồi và bộ điều khiển PID, cách chủ động thay đổi hệ để nó về đúng đích mong muốn. Hẹn gặp bạn ở bài tiếp theo."

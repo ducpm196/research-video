@@ -1,0 +1,182 @@
+id: L09
+course: EVT
+series: "EVT · Kiến trúc hướng sự kiện"
+title: "Bài 9 — Tái xử lý: hai đường lô và luồng, một đường phát lại, và thời gian giữ nhật ký"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/evt.yaml L09; audit/evt/verify_evt.py L09; N. Marz, J. Warren, Big Data (2015) — kiến trúc Lambda (tên chỉ trên màn hình); J. Kreps, Questioning the Lambda Architecture (2014) — kiến trúc Kappa (tên chỉ trên màn hình); bài 4, bài 8"
+assumes: [arith, cdot]
+# Quy ước: tái xử lý = chạy lại phép tính đã sửa trên dữ liệu cũ. Phát lại nhanh gấp k lần tốc độ đến; dữ liệu mới vẫn đến tốc độ 1 → đuổi kịp hiện tại sau
+#   tồn / (k − 1) (cùng công thức xả ở bài 8, alg.drain_seconds). 30 ngày, gấp 5 lần, giữ 7 ngày là SỐ MINH HOẠ.
+objectives:
+  - "So sánh hai đường xử lý lô và luồng với một đường luồng phát lại"
+  - "Tính thời gian đuổi kịp khi phát lại trong lúc dữ liệu mới vẫn đến"
+  - "Chọn thời gian giữ nhật ký theo khoảng cần tái xử lý"
+asr_reviewed:
+  - {sentence: "K càng gần 1 thì hai cách tính càng lệch xa.", reason: "ASR chép “Cá càng gần một thì hai cách tính càng lệch xa.” (0.909): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Phép tính sai suốt 30 ngày"
+    checks:
+      - "alg.drain_seconds(30, 1, 5) == 7.5"
+    steps:
+      - show: |
+          <p>Nhóm dữ liệu phát hiện phép tính doanh thu theo vùng đã sai từ 30 ngày trước. Sửa mã thì dễ. Khó là: làm sao tính lại 30 ngày đã qua, trong khi dữ liệu hôm nay vẫn đổ vào và bảng điều khiển vẫn phải chạy?</p>
+          <div class="box key">Hôm nay: <b>tái xử lý</b> — hai cách tổ chức, tính thời gian đuổi kịp, và cần giữ nhật ký bao lâu.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, nhóm dữ liệu phát hiện phép tính doanh thu theo vùng đã sai từ 30 ngày trước. Sửa mã thì dễ. Khó là làm sao tính lại 30 ngày đã qua, trong khi dữ liệu hôm nay vẫn đổ vào, và bảng điều khiển vẫn phải chạy. Hôm nay ta học tái xử lý, hai cách tổ chức, cách tính thời gian đuổi kịp, và cần giữ nhật ký bao lâu."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: lượng bằng tốc độ nhân thời gian, và công thức xả"
+    checks:
+      - "5 * 1 == 5 and 5 * 6 == 30 and 6 - 2 == 4 and alg.drain_seconds(100, 2, 6) == 25 and 25 * 6 == 150 == 100 + 25 * 2"
+    steps:
+      - show: |
+          <table class="t"><tr><th>phát lại nhanh gấp 5 lần</th><th>thời gian đồng hồ</th><th>lượng dữ liệu xử lý được</th></tr>
+          <tr><td>chạy 1 ngày</td><td>1 ngày</td><td>$5 \cdot 1 = 5$ ngày dữ liệu</td></tr>
+          <tr><td>chạy 6 ngày</td><td>6 ngày</td><td>$5 \cdot 6 = 30$ ngày dữ liệu</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Trước hết, ôn một phép tính quen thuộc, lượng bằng tốc độ nhân thời gian. Phát lại nhanh gấp 5 lần nghĩa là chạy 1 ngày thì xử lý được 5 nhân 1, bằng 5 ngày dữ liệu. Chạy 6 ngày thì xử lý được 5 nhân 6, bằng 30 ngày dữ liệu."
+      - show: |
+          <p>Bài 8 tính thời gian <b>xả</b> hàng tồn khi dữ liệu vẫn đến: mỗi giây tồn giảm (tốc độ xử lý − tốc độ đến).</p>
+          $$\text{tồn } 100, \text{ đến } 2/\text{s}, \text{ xử lý } 6/\text{s}: \quad \frac{100}{6 - 2} = \frac{100}{4} = 25 \text{ s}$$
+        focus: [1, 1, 2, 2]
+        say: "Bài 8 đã tính thời gian xả hàng tồn khi dữ liệu vẫn đến. Mỗi giây, tồn giảm đúng bằng tốc độ xử lý trừ tốc độ đến. Ví dụ tồn 100 sự kiện, đến 2 mỗi giây, xử lý 6 mỗi giây, thì mỗi giây tồn giảm 4, nên xả hết sau 100 chia 4, bằng 25 giây. Kiểm lại, trong 25 giây đã xử lý 150 sự kiện, đúng bằng 100 sự kiện tồn cộng 50 sự kiện mới đến."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: hai cách tổ chức tái xử lý"
+    steps:
+      - show: |
+          <table class="t"><tr><th>cách</th><th>làm gì</th><th>cái giá</th></tr>
+          <tr><td><b>hai đường</b> (thường gọi kiến trúc Lambda)</td><td>đường lô tính lại toàn bộ định kỳ; đường luồng cho kết quả nhanh, tạm thời</td><td>một phép tính viết <b>hai lần</b>, hai bản dễ lệch nhau</td></tr>
+          <tr><td><b>một đường phát lại</b> (thường gọi kiến trúc Kappa)</td><td>chỉ có xử lý luồng; sửa thì chạy bản mới từ đầu nhật ký, song song bản cũ, đuổi kịp rồi đổi</td><td>nhật ký phải giữ đủ lâu; phát lại tốn tài nguyên</td></tr></table>
+          <p>Gọi $k$ là số lần phát lại nhanh hơn tốc độ dữ liệu đến.</p>
+        focus: [1, "1.2", "1.3", "1.3", 2]
+        say: "Bảng so hai cách tổ chức tái xử lý. Cách hai đường có đường lô tính lại toàn bộ định kỳ, và đường luồng cho kết quả nhanh nhưng tạm thời, cái giá là một phép tính viết hai lần, và hai bản dễ lệch nhau. Cách một đường phát lại chỉ có xử lý luồng, sửa thì chạy bản mới từ đầu nhật ký, song song với bản cũ, đuổi kịp rồi mới đổi. Cái giá của cách này là nhật ký phải giữ đủ lâu, và phát lại tốn tài nguyên. Gọi k là số lần phát lại nhanh hơn tốc độ dữ liệu đến."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Con trỏ phát lại đuổi theo hiện tại"
+    checks:
+      - "30 + 7.5 == 37.5 == 5 * 7.5 and alg.drain_seconds(30, 1, 5) == 7.5"
+    steps:
+      - show: |
+          <div><svg width="1500" height="420" viewBox="0 0 1500 420"><defs><marker id="arE9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs><rect x="850" y="285" width="210" height="30" fill="#fecaca" stroke="#b91c1c" stroke-width="2"/><line x1="160" y1="300" x2="1360" y2="300" stroke="#6b7280" stroke-width="3"/><line x1="160" y1="300" x2="160" y2="315" stroke="#6b7280" stroke-width="2"/><text x="160" y="342" font-size="19" text-anchor="middle" fill="#1f2937">-30</text><line x1="460" y1="300" x2="460" y2="315" stroke="#6b7280" stroke-width="2"/><text x="460" y="342" font-size="19" text-anchor="middle" fill="#1f2937">-20</text><line x1="760" y1="300" x2="760" y2="315" stroke="#6b7280" stroke-width="2"/><text x="760" y="342" font-size="19" text-anchor="middle" fill="#1f2937">-10</text><line x1="1060" y1="300" x2="1060" y2="315" stroke="#6b7280" stroke-width="2"/><text x="1060" y="342" font-size="19" text-anchor="middle" fill="#1f2937">0</text><line x1="1360" y1="300" x2="1360" y2="315" stroke="#6b7280" stroke-width="2"/><text x="1360" y="342" font-size="19" text-anchor="middle" fill="#1f2937">10</text><line x1="160" y1="110" x2="1281" y2="110" stroke="#2a78d6" stroke-width="8" marker-end="url(#arE9)"/><line x1="1060" y1="200" x2="1281" y2="200" stroke="#eb6834" stroke-width="8" marker-end="url(#arE9)"/><line x1="1285" y1="60" x2="1285" y2="290" stroke="#059669" stroke-width="3" stroke-dasharray="10 8"/><g font-size="22" fill="#1f2937"><text x="160" y="90" fill="#2a78d6">con trỏ phát lại: mỗi ngày đọc 5 ngày dữ liệu, tổng 37,5</text><text x="160" y="208" fill="#eb6834">hiện tại: mỗi ngày tiến 1 ngày</text><text x="1299" y="160" fill="#059669">gặp nhau</text><text x="1299" y="188" fill="#059669">sau 7,5 ngày</text><text x="160" y="385" fill="#b91c1c">ô đỏ: nhật ký chỉ giữ 7 ngày thì mọi thứ bên trái ô đỏ đã bị xoá</text><text x="1372" y="306" font-size="19">ngày</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ trục thời gian của dữ liệu, mốc 0 là lúc bắt đầu sửa. Mũi tên xanh là con trỏ phát lại, xuất phát từ dữ liệu 30 ngày trước, mỗi ngày đọc được 5 ngày dữ liệu. Mũi tên cam là hiện tại, vẫn tiến đều mỗi ngày 1 ngày, nên con trỏ phải đuổi theo một đích đang chạy, và hai mũi tên gặp nhau sau 7 phẩy 5 ngày. Ô đỏ nhắc rằng nếu nhật ký chỉ giữ 7 ngày, phần bên trái ô đỏ đã bị xoá, và con trỏ không có chỗ để xuất phát."
+
+  - id: example
+    kind: example
+    title: "Tính lại 30 ngày, phát lại nhanh gấp 5 lần"
+    checks:
+      - "30 / 5 == 6 and alg.drain_seconds(30, 1, 5) == 7.5 and 7.5 * 5 == 37.5 == 30 + 7.5"
+    steps:
+      - show: |
+          <p><b>Bước 1 — riêng phần tồn.</b> Nếu dữ liệu mới dừng, chỉ xử lý 30 ngày cũ: $30 / 5 = 6$ ngày.</p>
+        say: "Bước một, tính riêng phần tồn. Nếu dữ liệu mới dừng hẳn, chỉ cần xử lý 30 ngày cũ, mất 30 chia 5, bằng 6 ngày."
+      - show: |
+          <p><b>Bước 2 — tốc độ thu hẹp.</b> Mỗi ngày con trỏ tiến 5 ngày dữ liệu, hiện tại tiến 1 → khoảng cách giảm $5 - 1 = 4$ ngày dữ liệu mỗi ngày.</p>
+        say: "Bước hai, tính tốc độ thu hẹp khoảng cách. Mỗi ngày con trỏ tiến 5 ngày dữ liệu, nhưng hiện tại cũng tiến 1 ngày, nên khoảng cách chỉ giảm 5 trừ 1, bằng 4 ngày dữ liệu mỗi ngày."
+      - show: |
+          <p><b>Bước 3 — đuổi kịp hiện tại.</b> $30 / (5 - 1) = 30 / 4 = \hl{7{,}5}$ ngày. Giống công thức xả ở bài 8: tồn 30 ngày, xử lý 5, đến 1.</p>
+        say: "Bước ba, khoảng cách ban đầu là 30 ngày, mỗi ngày giảm 4, nên đuổi kịp hiện tại mất 30 chia cho 5 trừ 1, bằng 7 phẩy 5 ngày. Đây giống công thức xả ở bài 8, với tồn 30 ngày, tốc độ xử lý 5, tốc độ đến 1."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>Bước 4 — kiểm lượng đã xử lý</th><th>tính</th></tr>
+          <tr><td>con trỏ đọc trong 7,5 ngày</td><td>$7{,}5 \cdot 5 = 37{,}5$ ngày dữ liệu</td></tr>
+          <tr><td>cần đọc: 30 ngày cũ + phần mới đến</td><td>$30 + 7{,}5 = 37{,}5$ ngày dữ liệu ✓</td></tr></table>
+          <p>Trong 7,5 ngày đó, bản cũ vẫn chạy để bảng điều khiển không tắt; đuổi kịp rồi mới đổi sang bản mới.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Bước bốn, kiểm lượng đã xử lý. Trong 7 phẩy 5 ngày, con trỏ đọc được 7 phẩy 5 nhân 5, bằng 37 phẩy 5 ngày dữ liệu. Lượng cần đọc là 30 ngày cũ cộng 7 phẩy 5 ngày mới đến, cũng bằng 37 phẩy 5, khớp nhau. Trong 7 phẩy 5 ngày đó, bản cũ vẫn chạy để bảng điều khiển không tắt, và đuổi kịp rồi mới đổi sang bản mới."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: theo dõi khoảng cách từng ngày"
+    checks:
+      - "[30 - 4 * d for d in range(8)] == [30, 26, 22, 18, 14, 10, 6, 2] and 30 - 4 * 7.5 == 0 and min(d / 2 for d in range(40) if (30 + d / 2) - 5 * (d / 2) <= 0) == 7.5"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ngày thứ</th><th>0</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>7,5</th></tr>
+          <tr><td>khoảng cách (ngày dữ liệu)</td><td>30</td><td>26</td><td>22</td><td>18</td><td>14</td><td>10</td><td>6</td><td>2</td><td>$\hl{0}$</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.2"]
+        say: "Kiểm bằng đường khác, không dùng công thức, mà theo dõi khoảng cách giữa con trỏ và hiện tại sau từng ngày. Bắt đầu là 30, sau 1 ngày còn 26, rồi 22, 18, cứ mỗi ngày bớt 4. Tới ngày thứ 7 còn 2, và sau thêm nửa ngày thì về 0. Vậy đuổi kịp sau 7 phẩy 5 ngày, khớp kết quả, chứ không phải 6 ngày."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Nhật ký chỉ giữ 7 ngày <b class="red">(không phát lại được 30 ngày)</b>
+          <br><span class="note">Thời gian giữ quyết định khả năng <b>sửa sai</b>. Giữ nhật ký ít nhất bằng khoảng lâu nhất cần tính lại, hoặc chép nhật ký sang kho lưu trữ rẻ để phát lại từ đó.</span></div>
+        say: "Lỗi thứ nhất, nhật ký chỉ giữ 7 ngày, nên không phát lại được 30 ngày. Thời gian giữ quyết định khả năng sửa sai. Hãy giữ nhật ký ít nhất bằng khoảng lâu nhất cần tính lại, hoặc chép nhật ký sang kho lưu trữ rẻ để phát lại từ đó."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Tính thời gian đuổi kịp bằng tồn / $k$ <b class="red">(quên dữ liệu mới vẫn đến)</b>
+          <br><span class="note">Với $k = 2$: tồn / 2 hứa “15 ngày” nhưng thực tế $30 / (2 - 1) = 30$ ngày. $k$ càng gần 1 thì hai cách tính càng lệch xa.</span></div>
+        say: "Lỗi thứ hai, tính thời gian đuổi kịp bằng tồn chia k, mà quên rằng dữ liệu mới vẫn đến. Với k bằng 2, phép chia tồn cho 2 hứa 15 ngày, nhưng thực tế là 30 chia cho 2 trừ 1, bằng 30 ngày. K càng gần 1 thì hai cách tính càng lệch xa."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Phát lại kích hoạt tác dụng phụ <b class="red">(gửi lại thư của 30 ngày)</b>
+          <br><span class="note">Bản phát lại chỉ ghi vào <b>bảng mới</b>; mọi việc ra bên ngoài như gửi thư hay gọi đối tác phải tắt khi phát lại.</span></div>
+        say: "Lỗi thứ ba, phát lại kích hoạt tác dụng phụ, nên gửi lại thư của 30 ngày. Bản phát lại chỉ ghi vào bảng mới, và mọi việc ra bên ngoài như gửi thư hay gọi đối tác phải tắt khi phát lại."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Hẹn giờ đổi sang bản mới theo “phần tồn xong sau 6 ngày” <b class="red">(bảng điều khiển lùi về quá khứ)</b></div>
+          <table class="t"><tr><th>đổi sang bản mới sau</th><th>khoảng cách còn lại</th><th>bảng điều khiển hiện</th></tr>
+          <tr><td>6 ngày (theo lịch hẹn)</td><td>$30 - 4 \cdot 6 = 6$ ngày dữ liệu</td><td>số liệu cũ 6 ngày</td></tr>
+          <tr><td>7,5 ngày</td><td>$30 - 4 \cdot 7{,}5 = 0$</td><td>số liệu hiện tại</td></tr></table>
+        focus: [1, "2.2", "2.2", "2.3"]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, hẹn giờ đổi sang bản mới theo lịch, tính bằng phần tồn xong sau 6 ngày. Sau 6 ngày, khoảng cách còn lại là 30 trừ 4 nhân 6, bằng 6 ngày dữ liệu, nên ngay sau khi đổi, bảng điều khiển hiện số liệu cũ 6 ngày, như lùi về quá khứ. Phải chờ tới 7 phẩy 5 ngày, khoảng cách mới về 0. Người làm nghề không đổi theo lịch hẹn, mà đo độ trễ thật của bản mới và chỉ đổi khi nó đã sát hiện tại."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.drain_seconds(14, 1, 3) == 7 and 14 / 3 < 7 and 3 - 1 == 2 and round(14 / 3, 1) == 4.7"
+      - "all(3 * d >= d for d in range(8)) and [3 * d for d in (0, 1, 7)] == [0, 3, 21] and 3 * 7 == 14 + 7"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Cần tính lại 14 ngày, phát lại nhanh gấp 3 lần. Bao lâu đuổi kịp hiện tại?</td></tr>
+          <tr><td>2</td><td>Nhật ký phải giữ tối thiểu bao lâu để làm được việc này?</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, cần tính lại 14 ngày, phát lại nhanh gấp 3 lần, thì bao lâu đuổi kịp hiện tại? Câu hai, nhật ký phải giữ tối thiểu bao lâu để làm được việc này? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① Mỗi ngày khoảng cách giảm $3 - 1 = 2$ ngày dữ liệu → $14 / (3 - 1) = 14 / 2 = \hl{7}$ ngày (không phải $14 / 3 \approx 4{,}7$).</p>
+        say: "Đáp án câu một, mỗi ngày con trỏ tiến 3 ngày dữ liệu, hiện tại tiến 1, nên khoảng cách giảm 3 trừ 1, bằng 2 ngày dữ liệu mỗi ngày. Khoảng cách 14 ngày, nên đuổi kịp sau 14 chia 2, bằng 7 ngày, chứ không phải 14 chia 3, khoảng 4 phẩy 7."
+      - show: |
+          <p>② Lúc bắt đầu, con trỏ phải đọc được dữ liệu 14 ngày trước → giữ ít nhất <b>14 ngày</b>. Sau đó mốc xoá chỉ tiến 1 ngày mỗi ngày, con trỏ tiến 3, nên không bị đuổi kịp:</p>
+          <table class="t"><tr><th>ngày thứ</th><th>con trỏ đã đọc thêm</th><th>mốc xoá đã tiến</th></tr>
+          <tr><td>0</td><td>0</td><td>0</td></tr><tr><td>1</td><td>3 ngày dữ liệu</td><td>1 ngày</td></tr><tr><td>7</td><td>21 = 14 + 7 (đuổi kịp)</td><td>7 ngày</td></tr></table>
+          <p>Cộng thêm một khoảng dự phòng cho lần chạy hỏng phải làm lại.</p>
+        focus: [1, 1, "2.2", "2.4", 3]
+        say: "Câu hai, lúc bắt đầu, con trỏ phải đọc được dữ liệu của 14 ngày trước, nên nhật ký phải giữ ít nhất 14 ngày. Sau đó, mốc xoá của nhật ký chỉ tiến 1 ngày mỗi ngày, còn con trỏ tiến 3, nên mốc xoá không bao giờ bắt kịp con trỏ. Bảng cho thấy sau 1 ngày, con trỏ đã đọc thêm 3 ngày dữ liệu, mốc xoá mới tiến 1 ngày. Sau 7 ngày, con trỏ đã đọc 21 ngày dữ liệu, đúng bằng 14 cộng 7, tức là đuổi kịp hiện tại. Nên cộng thêm một khoảng dự phòng, phòng khi lần chạy hỏng và phải làm lại."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">hai đường: viết hai lần; một đường: phát lại</span><span class="a">→</span>
+          <span class="n">đuổi kịp = tồn / (k − 1)</span><span class="a">→</span>
+          <span class="n">giữ nhật ký ≥ khoảng cần tính lại</span><span class="a">→</span>
+          <span class="n">phát lại vào bảng mới, tắt tác dụng phụ</span></div>
+        say: "Tổng kết lại, cách hai đường phải viết phép tính hai lần, còn cách một đường thì phát lại. Thời gian đuổi kịp bằng tồn chia cho k trừ 1. Giữ nhật ký ít nhất bằng khoảng cần tính lại, phát lại vào bảng mới, và tắt mọi tác dụng phụ."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> một hệ tốt không phải hệ không bao giờ sai, mà là hệ <b>tính lại được</b> khi đã sai.</div>
+        say: "Điều cần mang theo, một hệ tốt không phải hệ không bao giờ sai, mà là hệ tính lại được khi đã sai."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 10): <b>quan sát</b> hệ hướng sự kiện — mã tương quan và độ trễ đầu–cuối.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 10, ta học cách quan sát hệ hướng sự kiện, với mã tương quan và độ trễ đầu cuối. Hẹn gặp bạn ở bài tiếp theo."

@@ -1,0 +1,14 @@
+# Dò phát âm `clc_p1_hanh_trinh` (giọng vi-VN-NamMinhNeural, tốc độ -5%; small + medium; ngưỡng 7/8)
+
+checked_at: 2026-11-02T03:06:52Z
+
+| từ | cách viết | điểm | đối chứng âm? | bản chép (small / medium) |
+|---|---|---|---|---|
+| amazon | «Amazon» | 8/8 |  | Theo Amazon, ta xét hệ thống này. / Theo Amazon, ta xét hệ thống này. ; phần Amazon được giải thích ở bước tiếp theo. / Phần Amazon được giải thích ở bước tiếp theo. ; Hãy nhớ Amazon khi đọc bài này. / Hãy nhớ Amazon khi đọc bài này. ; Đây là ví dụ về Amazon trong thực tế. / Đây là ví dụ về Amazon trong thực tế. |
+| amazon | «A-ma-dôn» | 8/8 |  | Theo Amazon, ta xét hệ thống này. / Theo Amazon, ta xét hệ thống này. ; phần Amazon được giải thích ở bước tiếp theo. / Phần Amazon được giải thích ở bước tiếp theo. ; Hãy nhớ Amazon khi đọc bài này. / Hãy nhớ Amazon khi đọc bài này. ; Đây là ví dụ về Amazon trong thực tế. / Đây là ví dụ về Amazon trong thực tế. |
+| amazon | «Am-ma-giôn» | 8/8 |  | Theo Amazon, ta xét hệ thống này. / Theo Amazon, ta xét hệ thống này. ; phần Amazon được giải thích ở bước tiếp theo. / Phần Amazon được giải thích ở bước tiếp theo. ; Hãy nhớ Amazon khi đọc bài này. / Hãy nhớ Amazon khi đọc bài này. ; Đây là ví dụ về Amazon trong thực tế. / Đây là ví dụ về Amazon trong thực tế. |
+| amazon | «A-ma-tôn» | 5/8 | ĐỐI CHỨNG | Theo Amazon, ta xét hệ thống này. / Theo Amazon, ta xét hệ thống này. ; phần amaton được giải thích ở bước tiếp theo. / Phần Amazon được giải thích ở bước tiếp theo. ; Hãy nhớ Amaton khi đọc bài này. / Hãy nhớ Amazon khi đọc bài này. ; Đây là ví dụ về amaton trong thực tế. / Đây là ví dụ về Amazon trong thực tế. |
+| s3 | «S3» | 5/8 |  | Theo x3, ta xét hệ thống này. / Theo S3, ta xét hệ thống này. ; phần S3 được giải thích ở bước tiếp theo. / Phần S3 được giải thích ở bước tiếp theo. ; Hãy nhớ X3 khi đọc bài này. / Hãy nhớ F3 khi đọc bài này. ; Đây là ví dụ VS3 trong thực tế. / Đây là ví dụ về S3 trong thực tế. |
+| s3 | «ét ba» | 7/8 |  | Theo S3, ta xét hệ thống này. / Theo S3, ta xét hệ thống này. ; phần S3 được giải thích ở bước tiếp theo. / Phần S3 được giải thích ở bước tiếp theo. ; Hãy nhớ S3 khi đọc bài này. / Hãy nhớ F3 khi đọc bài này. ; Đây là ví dụ về S3 trong thực tế. / Đây là ví dụ về S3 trong thực tế. |
+| s3 | «ét-xơ ba» | 8/8 |  | Theo S3, ta xét hệ thống này. / Theo S3, ta xét hệ thống này. ; phần S3 được giải thích ở bước tiếp theo. / Phần S3 được giải thích ở bước tiếp theo. ; Hãy nhớ sơ 3 khi đọc bài này. / Hãy nhớ S3 khi đọc bài này. ; Đây là ví dụ về S3 trong thực tế. / Đây là ví dụ về S3 trong thực tế. |
+| s3 | «ét bốn» | 8/8 | ĐỐI CHỨNG | Theo S4, ta xét hệ thống này. / Theo S4, ta xét hệ thống này. ; phần S4 được giải thích ở bước tiếp theo. / Phần S4 được giải thích ở bước tiếp theo. ; Hãy nhớ S4 khi đọc bài này. / Hãy nhớ S4 khi đọc bài này. ; Đây là ví dụ về S4 trong thực tế. / Đây là ví dụ về S4 trong thực tế. |

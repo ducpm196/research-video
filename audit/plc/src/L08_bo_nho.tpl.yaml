@@ -1,0 +1,226 @@
+id: L08
+course: PLC
+series: "PLC · Ngôn ngữ lập trình và trình biên dịch"
+title: "Bài 8 — Quản lý bộ nhớ: ngăn xếp, đống, đếm tham chiếu, thu gom rác"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/plc.yaml L08; audit/plc/verify_plc.py L08; R. Jones, A. Hosking, E. Moss, The Garbage Collection Handbook (2012), chương 2 và 5; J. McCarthy (1960) (đánh dấu–quét); G. E. Collins (1960) (đếm tham chiếu); CS112 bài 4 và 7 (ngăn xếp, duyệt đồ thị)"
+assumes: [arith]
+# Quy ước: đống vẽ thành đồ thị có hướng, cạnh = tham chiếu; “gốc” = biến trên ngăn xếp và biến toàn cục. Đánh dấu–quét = duyệt đồ thị
+#   từ gốc (CS112). Đếm tham chiếu có thu hồi dây chuyền. Mọi tập do alg.mark_sweep / alg.ref_counts / alg.refcount_free; hình từ figs.py.
+objectives:
+  - "Phân biệt dữ liệu trên ngăn xếp và trên đống"
+  - "Hiểu đếm tham chiếu và đánh dấu–quét"
+  - "Biết vì sao có thu gom rác vẫn rò bộ nhớ"
+asr_reviewed:
+  - {sentence: "Khung của f đã bị gỡ, nên mũi tên từ biến của f tới S biến mất, và số đếm của S tụt từ 1 về 0.", reason: "ASR chép “Khung của ép đã bị gỡ nên mũi tên từ biến của ép tới ép biến mất và số đếm của ép tục từ 1 về 0.” (0.889): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: tụt (trong “s tụt” → “ép tục”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Với câu hai, đếm trước số tham chiếu, R có 1 từ gốc, X có 2 từ R và Y, Y có 1, Z có 0, W có 1 từ Z.", reason: "ASR chép “Với câu 2, đểm trước số tham chiếu, R có một từ gốc, Y có hai từ R và Y, Y có một, Z có không, Về đút có một từ Z.” (0.889): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: đếm/đểm — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Câu hai, Z có 0 tham chiếu nên bị thu hồi, W giảm về 0 nên bị thu hồi theo, cũng là Z và W.", reason: "tên chữ cái đọc kiểu Việt, ASR chép nhầm chữ (q→quy, x→ích, k→ca) — nhóm đã biết (SKILL Bước 5); chữ hiện trên màn hình"}
+  - {sentence: "Đáp án câu một, R, X, Y đi tới được từ gốc, nên đánh dấu quét thu hồi Z và W.", reason: "tên chữ cái đọc kiểu Việt, ASR chép nhầm chữ (q→quy, x→ích, k→ca) — nhóm đã biết (SKILL Bước 5); chữ hiện trên màn hình"}
+  - {sentence: "Gốc trỏ tới R, R trỏ tới X, X và Y trỏ vòng vào nhau, còn Z trỏ tới W và không ai trỏ tới Z.", reason: "tên chữ cái đọc kiểu Việt, ASR chép nhầm chữ (q→quy, x→ích, k→ca) — nhóm đã biết (SKILL Bước 5); chữ hiện trên màn hình"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Ai dọn bộ nhớ?"
+    steps:
+      - show: |
+          <p>Ở bài 7, môi trường của bao đóng còn sống sau khi hàm trả về. Vậy khi nào nó được dọn? Trong C, người viết tự gọi <code>free</code> — quên là rò, gọi hai lần là hỏng. Nhiều ngôn ngữ khác tự dọn.</p>
+          <div class="box key">Hôm nay: <b>ngăn xếp</b> và <b>đống</b>, rồi hai cách tự dọn: <b>đếm tham chiếu</b> và <b>đánh dấu–quét</b>.</div>
+        focus: [1, 1, 1, 1, 2]
+        say: "Chào bạn, ở bài 7, môi trường của bao đóng còn sống sau khi hàm trả về. Vậy khi nào nó được dọn? Trong ngôn ngữ C, người viết tự giải phóng. Quên thì rò bộ nhớ, giải phóng hai lần thì hỏng chương trình, còn nhiều ngôn ngữ khác tự dọn. Hôm nay ta học ngăn xếp và đống, rồi hai cách tự dọn là đếm tham chiếu và đánh dấu quét."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: ngăn xếp lời gọi và đi theo mũi tên trong đồ thị"
+    checks:
+      - "(lambda d: exec('import inspect\\ndef g():\\n    return [fr.function for fr in inspect.stack()[:3]]\\ndef f():\\n    return g()\\nr = f()\\n', d) or d['r'] == ['g', 'f', '<module>'])({})"
+      - "alg.mark_sweep({'1': ['2'], '2': ['3'], '3': [], '4': ['5'], '5': []}, ['1']) == ({'1', '2', '3'}, {'4', '5'})"
+    steps:
+      - show: |
+          <table class="t"><tr><th>lúc đang chạy</th><th>các khung trên ngăn xếp (trái là đáy)</th></tr>
+          <tr><td>mã chính gọi f</td><td>chính → f</td></tr>
+          <tr><td>f gọi g</td><td>chính → f → $\hl{\text{g}}$</td></tr>
+          <tr><td>g trả về</td><td>chính → f (khung g bị gỡ)</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Trước hết, ôn lại ngăn xếp lời gọi, mỗi lời gọi hàm đặt thêm một khung lên đỉnh và mỗi lần trả về gỡ khung đó ra. Mã chính gọi f, ngăn xếp có khung của mã chính và khung của f. Khi f gọi g, khung của g được đặt lên trên cùng. Khi g trả về, khung g bị gỡ, cùng mọi biến cục bộ nằm trong đó."
+      - show: |
+          <p>Đồ thị có hướng: 1 → 2, 2 → 3, 4 → 5. Bắt đầu ở đỉnh 1, đi theo mũi tên:</p>
+          <p>1 → 2 → 3, hết đường. Tới được $\hl{1, 2, 3}$; đỉnh 4 và 5 <b>không</b> tới được từ 1.</p>
+        focus: [1, 2, 2]
+        say: "Điều thứ hai là duyệt đồ thị, đã học ở khoá Phân tích và thiết kế thuật toán, với đồ thị có mũi tên từ 1 sang 2, từ 2 sang 3, và từ 4 sang 5. Bắt đầu ở đỉnh 1 và đi theo mũi tên, ta qua 2 rồi tới 3 thì hết đường. Vậy từ 1 tới được ba đỉnh 1, 2, 3, còn đỉnh 4 và 5 thì không tới được, dù chúng có mũi tên của riêng mình."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: ngăn xếp, đống, gốc"
+    steps:
+      - show: |
+          <table class="t"><tr><th></th><th>ngăn xếp</th><th>đống</th></tr>
+          <tr><td>chứa</td><td>khung của mỗi lời gọi: biến cục bộ, địa chỉ trả về</td><td>đối tượng sống lâu hơn lời gọi tạo ra nó</td></tr>
+          <tr><td>thu hồi</td><td>tự động, ngay khi hàm trả về</td><td>khi không còn ai dùng — phải xác định</td></tr></table>
+          <p><b>Gốc</b>: các tham chiếu trên ngăn xếp và biến toàn cục. Đối tượng <b>sống</b> nếu đi được tới nó từ gốc theo các tham chiếu.</p>
+        focus: [1, "1.2", "1.3", 2, 2]
+        say: "So sánh hai vùng nhớ. Ngăn xếp chứa khung của mỗi lời gọi hàm, gồm biến cục bộ và địa chỉ trả về, còn đống chứa đối tượng sống lâu hơn lời gọi đã tạo ra nó. Ngăn xếp được thu hồi tự động ngay khi hàm trả về, còn đống chỉ thu hồi khi không còn ai dùng, và phải có cách xác định điều đó. Gốc là các tham chiếu trên ngăn xếp và các biến toàn cục. Một đối tượng còn sống nếu đi được tới nó từ gốc theo các tham chiếu."
+
+  # ───────────────────────── 3. HAI CÁCH ─────────────────────────
+  - id: methods
+    kind: concept
+    title: "Đếm tham chiếu và đánh dấu–quét"
+    steps:
+      - show: |
+          <p><b>Đếm tham chiếu</b>: mỗi đối tượng giữ một số đếm có bao nhiêu tham chiếu trỏ tới nó. Về 0 → thu hồi ngay, và giảm số đếm của những gì nó trỏ tới (thu hồi dây chuyền).</p>
+          <p><b>Đánh dấu–quét</b>: thỉnh thoảng dừng lại, duyệt đồ thị từ gốc (như ở khoá Phân tích và thiết kế thuật toán), đánh dấu mọi đối tượng đi tới được; quét cả đống, thu hồi những gì <b>không</b> được đánh dấu.</p>
+        focus: [1, 1, 2, 2]
+        say: "Cách thứ nhất là đếm tham chiếu, mỗi đối tượng giữ một số đếm cho biết có bao nhiêu tham chiếu trỏ tới nó. Khi số đếm về 0, đối tượng bị thu hồi ngay, và số đếm của những gì nó trỏ tới cũng giảm theo, gọi là thu hồi dây chuyền. Cách thứ hai là đánh dấu quét, thỉnh thoảng dừng chương trình lại, duyệt đồ thị từ gốc như ở khoá Phân tích và thiết kế thuật toán, và đánh dấu mọi đối tượng đi tới được. Sau đó quét cả đống, thu hồi những gì không được đánh dấu."
+
+  # ───────────────────────── 4. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hình dung: khung bị gỡ thì mũi tên của nó biến mất"
+    checks:
+      - "alg.ref_counts({'P': ['Q'], 'Q': [], 'S': []}, ['P', 'S']) == {'P': 1, 'Q': 1, 'S': 1}"
+      - "alg.refcount_free({'P': ['Q'], 'Q': [], 'S': []}, ['P']) == {'S'} and alg.mark_sweep({'P': ['Q'], 'Q': [], 'S': []}, ['P'])[1] == {'S'}"
+    steps:
+      - show: |
+          <div><svg width="1500" height="430" viewBox="0 0 1500 430"><defs><marker id="arP8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs><g font-size="28" font-weight="bold" text-anchor="middle" fill="#1f2937"><text x="260" y="40">ngăn xếp: gốc</text><text x="1060" y="40">đống</text></g><line x1="560" y1="20" x2="560" y2="370" stroke="#9ca3af" stroke-width="3" stroke-dasharray="10 8"/><rect x="60" y="80" width="400" height="105" rx="14" fill="#dbeafe" stroke="#1f2937" stroke-width="3"/><text x="260" y="120" font-size="26" font-weight="bold" text-anchor="middle" fill="#1f2937">khung mã chính</text><text x="260" y="160" font-size="24" text-anchor="middle" fill="#1f2937">biến a</text><rect x="60" y="250" width="400" height="105" rx="14" fill="#f3f4f6" stroke="#b91c1c" stroke-width="3" stroke-dasharray="12 8"/><text x="260" y="290" font-size="26" font-weight="bold" text-anchor="middle" fill="#1f2937">khung f</text><text x="260" y="330" font-size="24" text-anchor="middle" fill="#b91c1c">đã trả về, bị gỡ</text><rect x="700" y="80" width="280" height="105" rx="14" fill="#bbf7d0" stroke="#1f2937" stroke-width="3"/><text x="840" y="120" font-size="26" font-weight="bold" text-anchor="middle" fill="#1f2937">P</text><text x="840" y="160" font-size="24" text-anchor="middle" fill="#059669">đếm 1, sống</text><rect x="1120" y="80" width="280" height="105" rx="14" fill="#bbf7d0" stroke="#1f2937" stroke-width="3"/><text x="1260" y="120" font-size="26" font-weight="bold" text-anchor="middle" fill="#1f2937">Q</text><text x="1260" y="160" font-size="24" text-anchor="middle" fill="#059669">đếm 1, sống</text><rect x="700" y="250" width="280" height="105" rx="14" fill="#e5e7eb" stroke="#1f2937" stroke-width="3"/><text x="840" y="290" font-size="26" font-weight="bold" text-anchor="middle" fill="#1f2937">S</text><text x="840" y="330" font-size="24" text-anchor="middle" fill="#b91c1c">đếm 1 → 0</text><line x1="460" y1="132" x2="694" y2="132" stroke="#1f2937" stroke-width="3" marker-end="url(#arP8)"/><line x1="980" y1="132" x2="1114" y2="132" stroke="#1f2937" stroke-width="3" marker-end="url(#arP8)"/><line x1="460" y1="302" x2="694" y2="302" stroke="#9ca3af" stroke-width="3" stroke-dasharray="10 8"/><text x="1200" y="300" font-size="24" text-anchor="middle" fill="#b91c1c" font-weight="bold">S: thu hồi</text><text x="1050" y="405" font-size="22" text-anchor="middle" fill="#1f2937">tới được từ gốc: P, Q — không tới được: S</text></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ lúc hàm f vừa trả về. Bên trái là ngăn xếp, khung của mã chính còn đó với biến a trỏ tới P, còn P trỏ tới Q. Khung của f đã bị gỡ, nên mũi tên từ biến của f tới S biến mất, và số đếm của S tụt từ 1 về 0. Cả hai cách tự dọn đều đồng ý ở đây, S không còn tới được từ gốc nên bị thu hồi, còn P và Q vẫn sống."
+
+  - id: example
+    kind: example
+    title: "Một vòng tham chiếu"
+    checks:
+      - "alg.mark_sweep({'A': ['B'], 'B': ['C'], 'C': [], 'D': ['E'], 'E': ['D']}, ['A']) == ({'A', 'B', 'C'}, {'D', 'E'})"
+      - "alg.ref_counts({'A': ['B'], 'B': ['C'], 'C': [], 'D': ['E'], 'E': ['D']}, ['A']) == {'A': 1, 'B': 1, 'C': 1, 'D': 1, 'E': 1}"
+      - "alg.refcount_free({'A': ['B'], 'B': ['C'], 'C': [], 'D': ['E'], 'E': ['D']}, ['A']) == set()"
+    steps:
+      - show: |
+          <div>{{HEAP}}</div>
+          <p><b>Bước một:</b> đọc hình — gốc → A → B → C; D ⇄ E trỏ vòng vào nhau, không ai từ gốc trỏ tới.</p>
+        focus: [1, 1, 2]
+        say: "Bước một, đọc hình đống, có một gốc trỏ tới A, A trỏ tới B, B trỏ tới C. Còn D và E trỏ vòng vào nhau, không ai từ gốc trỏ tới. Ta sẽ cho hai cách tự dọn chạy trên cùng hình này."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>Bước 2 — đánh dấu từ gốc</th><th>đã đánh dấu</th></tr>
+          <tr><td>gốc → A</td><td>A</td></tr>
+          <tr><td>A → B</td><td>A, B</td></tr>
+          <tr><td>B → C, C không trỏ đi đâu</td><td>A, B, C</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Bước hai, đánh dấu quét bắt đầu đánh dấu từ gốc theo các mũi tên. Gốc trỏ tới A, nên A được đánh dấu. A trỏ tới B, nên đánh dấu thêm B. B trỏ tới C, đánh dấu C, và C không trỏ đi đâu nên dừng."
+      - show: |
+          <p><b>Bước 3 — quét:</b> đi qua cả đống A, B, C, D, E; ai <b>chưa</b> đánh dấu thì thu hồi → $\hl{\text{thu hồi D, E}}$.</p>
+        say: "Bước ba là pha quét, đi qua cả năm đối tượng của đống, ai chưa được đánh dấu thì thu hồi. A, B, C đã đánh dấu nên được giữ, còn D và E chưa được đánh dấu nên bị thu hồi, dù chúng vẫn trỏ vào nhau."
+      - show: |
+          <table class="t"><tr><th>Bước 4 — đếm tham chiếu</th><th>A</th><th>B</th><th>C</th><th>D</th><th>E</th></tr>
+          <tr><td>số tham chiếu trỏ tới</td><td>1</td><td>1</td><td>1</td><td>1 (từ E)</td><td>1 (từ D)</td></tr></table>
+          <p>Không ai về 0 → $\hl{\text{không thu hồi được}}$ D, E: rò bộ nhớ.</p>
+        focus: [1, "1.2", 2]
+        say: "Bước bốn, đếm tham chiếu thì đếm xem có bao nhiêu mũi tên trỏ tới mỗi đối tượng. A, B, C mỗi đối tượng có 1, D có 1 tham chiếu từ E, E có 1 tham chiếu từ D. Không ai về 0, vì thế đếm tham chiếu không thu hồi được vòng này, và bộ nhớ bị rò."
+      - clear: true
+        show: |
+          <table class="t"><tr><th></th><th>đếm tham chiếu</th><th>đánh dấu–quét</th></tr>
+          <tr><td>khi nào thu hồi</td><td>ngay khi về 0, rải đều</td><td>theo đợt, có lúc dừng chương trình</td></tr>
+          <tr><td>vòng tham chiếu</td><td><b>không</b> tự thu hồi</td><td>thu hồi được</td></tr>
+          <tr><td>chi phí thêm</td><td>cập nhật số đếm mỗi lần gán</td><td>duyệt mọi đối tượng sống mỗi đợt</td></tr></table>
+          <p class="note">Nhiều hệ thực tế dùng đếm tham chiếu cho phần lớn, cộng thêm một bộ dò vòng định kỳ.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Bây giờ ta so sánh hai cách thu hồi bộ nhớ này. Đếm tham chiếu thu hồi ngay khi về 0, rải đều theo thời gian, còn đánh dấu quét thu hồi theo đợt, có lúc phải dừng chương trình. Với vòng tham chiếu, đếm tham chiếu không tự thu hồi được, còn đánh dấu quét thì được. Về chi phí, đếm tham chiếu phải cập nhật số đếm mỗi lần gán, còn đánh dấu quét phải duyệt mọi đối tượng sống mỗi đợt. Nhiều hệ thống thực tế dùng đếm tham chiếu cho phần lớn công việc, cộng thêm một bộ dò vòng chạy định kỳ."
+
+  # ───────────────────────── 5. LỖI ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: phá vòng, và chạy một trình thông dịch thật"
+    checks:
+      - "alg.refcount_free({'A': ['B'], 'B': ['C'], 'C': [], 'D': ['E'], 'E': []}, ['A']) == {'D', 'E'} == alg.mark_sweep({'A': ['B'], 'B': ['C'], 'C': [], 'D': ['E'], 'E': ['D']}, ['A'])[1]"
+      - "(lambda d: exec('import gc, weakref\\ngc.disable()\\nclass N: pass\\na = N(); b = N(); a.p = b; b.p = a\\nr = weakref.ref(a)\\ndel a, b\\ns1 = r() is not None\\ngc.collect()\\ns2 = r() is None\\ngc.enable()\\n', d) or (d['s1'], d['s2']) == (True, True))({})"
+    steps:
+      - show: |
+          <table class="t"><tr><th>cách khác</th><th>kết quả</th></tr>
+          <tr><td>cắt mũi tên E → D, đếm tham chiếu lại</td><td>D về 0 → thu hồi D, rồi E về 0 → thu hồi E</td></tr>
+          <tr><td>trình thông dịch thật: tạo vòng 2 đối tượng, xoá hai biến</td><td>vòng <b>vẫn sống</b></td></tr>
+          <tr><td>gọi bộ dò vòng của trình thông dịch đó</td><td>vòng bị thu hồi ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Kiểm bằng đường khác, ta đổi đề và đổi công cụ. Nếu cắt mũi tên từ E về D, vòng không còn, D về 0 nên bị thu hồi, rồi E cũng về 0 nên bị thu hồi theo, khớp kết quả của đánh dấu quét. Sau đó ta chạy một trình thông dịch thật dùng đếm tham chiếu, tạo hai đối tượng trỏ vào nhau rồi xoá hai biến, thì vòng vẫn sống. Chỉ khi gọi bộ dò vòng của nó, vòng mới bị thu hồi, đúng như bảng so sánh vừa nói."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay mắc"
+    checks:
+      - "(lambda d: exec('import gc, weakref\\nclass V:\\n    def cap_nhat(self): pass\\nnghe = []; refs = []\\nfor i in range(1000):\\n    v = V(); nghe.append(v.cap_nhat); refs.append(weakref.ref(v))\\ndel v\\ngc.collect()\\na = sum(r() is not None for r in refs)\\nnghe2 = []; refs2 = []\\nfor i in range(1000):\\n    v = V(); nghe2.append(v.cap_nhat); refs2.append(weakref.ref(v)); nghe2.remove(v.cap_nhat)\\ndel v\\ngc.collect()\\nb = sum(r() is not None for r in refs2)\\n', d) or (d['a'], d['b']) == (1000, 0))({})"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Nghĩ có thu gom rác thì không thể rò bộ nhớ <b class="red">(sai)</b>
+          <br><span class="note">Bộ thu gom chỉ dọn thứ <b>không đi tới được</b>. Một danh sách đệm toàn cục cứ thêm mà không xoá vẫn giữ mọi thứ sống mãi.</span></div>
+        say: "Lỗi thứ nhất, nghĩ có thu gom rác thì không thể rò bộ nhớ. Bộ thu gom chỉ dọn những thứ không đi tới được, nên một danh sách đệm toàn cục cứ thêm mà không xoá vẫn giữ mọi thứ sống mãi."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Trả về địa chỉ của biến cục bộ (C) <b class="red">(sai)</b>
+          <br><span class="note">Biến nằm trên ngăn xếp, bị thu hồi khi hàm trả về: con trỏ trỏ vào vùng sắp bị ghi đè.</span></div>
+        say: "Lỗi thứ hai, trong ngôn ngữ C, trả về địa chỉ của một biến cục bộ. Biến đó nằm trên ngăn xếp và bị thu hồi khi hàm trả về, nên con trỏ đang trỏ vào một vùng sắp bị ghi đè."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Dựa vào thời điểm thu hồi để đóng tệp, nhả khoá <b class="red">(rủi ro)</b>
+          <br><span class="note">Với đánh dấu–quét, không biết lúc nào đối tượng bị dọn. Tài nguyên ngoài bộ nhớ phải đóng tường minh (khối <code>with</code>, <code>try … finally</code>).</span></div>
+        say: "Lỗi thứ ba, dựa vào thời điểm thu hồi để đóng tệp hay nhả khoá. Với đánh dấu quét, ta không biết lúc nào đối tượng bị dọn, nên tài nguyên ngoài bộ nhớ phải được đóng một cách tường minh."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Đăng ký hàm lắng nghe sự kiện vào một danh sách toàn cục, đóng màn hình mà <b>không gỡ</b>.</div>
+          <table class="t"><tr><th>mở rồi đóng một màn hình 1000 lần</th><th>đối tượng màn hình còn sống sau khi thu gom</th></tr>
+          <tr><td>không gỡ đăng ký</td><td>$\hl{1000}$</td></tr>
+          <tr><td>gỡ đăng ký khi đóng</td><td>0</td></tr></table>
+          <p class="note">Danh sách toàn cục là gốc; nó giữ hàm lắng nghe, hàm giữ đối tượng → mọi màn hình cũ vẫn tới được. Đo số đối tượng sống theo thời gian, không đoán.</p>
+        focus: [1, 2, "2.2", "2.3", 3, 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, mỗi màn hình đăng ký một hàm lắng nghe sự kiện vào một danh sách toàn cục, rồi đóng màn hình mà không gỡ đăng ký. Ta cho máy mở rồi đóng một màn hình 1000 lần, sau đó chạy thu gom và đếm số đối tượng màn hình còn sống. Không gỡ đăng ký thì còn đủ 1000 đối tượng. Gỡ đăng ký khi đóng thì còn 0. Lý do là danh sách toàn cục là một gốc, nó giữ hàm lắng nghe, và hàm đó giữ đối tượng, nên mọi màn hình cũ vẫn tới được từ gốc. Người có kinh nghiệm đo số đối tượng sống theo thời gian, thấy nó chỉ tăng mà không giảm là biết có rò, chứ không đoán."
+
+  # ───────────────────────── 6. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.ref_counts({'R': ['X'], 'X': ['Y'], 'Y': ['X'], 'Z': ['W'], 'W': []}, ['R']) == {'R': 1, 'X': 2, 'Y': 1, 'Z': 0, 'W': 1}"
+      - "alg.mark_sweep({'R': ['X'], 'X': ['Y'], 'Y': ['X'], 'Z': ['W'], 'W': []}, ['R'])[1] == {'Z', 'W'}"
+      - "alg.refcount_free({'R': ['X'], 'X': ['Y'], 'Y': ['X'], 'Z': ['W'], 'W': []}, ['R']) == {'Z', 'W'}"
+    steps:
+      - show: |
+          <p>Gốc trỏ tới R. R → X, X → Y, Y → X. Z → W; không ai trỏ tới Z.</p>
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Đánh dấu–quét thu hồi những gì?</td></tr>
+          <tr><td>2</td><td>Đếm tham chiếu thu hồi những gì?</td></tr></table>
+        focus: [0, 1, "2.2", "2.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Gốc trỏ tới R, R trỏ tới X, X và Y trỏ vòng vào nhau, còn Z trỏ tới W và không ai trỏ tới Z. Câu một, đánh dấu quét thu hồi những gì? Câu hai, đếm tham chiếu thu hồi những gì? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 1 — đánh dấu</th><th>đã đánh dấu</th></tr>
+          <tr><td>gốc → R, R → X, X → Y</td><td>R, X, Y</td></tr>
+          <tr><td>Y → X: X đã đánh dấu, dừng</td><td>R, X, Y</td></tr>
+          <tr><td>quét: chưa đánh dấu</td><td>$\hl{\text{Z, W}}$ → thu hồi</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Ta giải câu một từng bước. Từ gốc đi tới R, rồi X, rồi Y, đánh dấu cả ba. Y trỏ về X, mà X đã được đánh dấu nên dừng, không đi vòng mãi. Đáp án câu một, R, X, Y đi tới được từ gốc, nên đánh dấu quét thu hồi Z và W."
+      - show: |
+          <table class="t"><tr><th>câu 2 — đếm</th><th>R</th><th>X</th><th>Y</th><th>Z</th><th>W</th></tr>
+          <tr><td>số tham chiếu</td><td>1</td><td>2</td><td>1</td><td>$\hl{0}$</td><td>1</td></tr></table>
+          <p>Z về 0 → thu hồi Z; W mất tham chiếu từ Z → về 0 → thu hồi W: cũng $\hl{\text{Z, W}}$. Vòng X ↔ Y vẫn đi tới được nên không phải rác.</p>
+        focus: [1, 2, 2]
+        say: "Với câu hai, đếm trước số tham chiếu, R có 1 từ gốc, X có 2 từ R và Y, Y có 1, Z có 0, W có 1 từ Z. Câu hai, Z có 0 tham chiếu nên bị thu hồi, W giảm về 0 nên bị thu hồi theo, cũng là Z và W. Lần này vòng X và Y vẫn đi tới được từ gốc, nên không phải là rác."
+
+  # ───────────────────────── 7. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">ngăn xếp: tự thu hồi khi trả về</span><span class="a">→</span>
+          <span class="n">đống: sống khi đi tới được từ gốc</span><span class="a">→</span>
+          <span class="n">đếm tham chiếu: nhanh, hở vòng</span><span class="a">→</span>
+          <span class="n">đánh dấu–quét: bắt được vòng</span></div>
+        say: "Tổng kết lại, ngăn xếp tự thu hồi khi hàm trả về. Đối tượng trên đống còn sống khi đi tới được từ gốc. Đếm tham chiếu thu hồi nhanh nhưng hở với vòng, còn đánh dấu quét bắt được vòng."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> “còn dùng” khó định nghĩa; “còn đi tới được” thì kiểm được bằng máy. Chọn định nghĩa kiểm được, và biết rõ chỗ nó khác ý định ban đầu.</div>
+        say: "Điều cần mang theo, còn dùng thì khó định nghĩa, còn đi tới được thì máy kiểm được. Hãy chọn định nghĩa kiểm được, và biết rõ chỗ nó khác với ý định ban đầu."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 9): <b>truyền tham số</b> — theo giá trị, theo tham chiếu, chia sẻ đối tượng.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 9, ta học các cách truyền tham số, theo giá trị, theo tham chiếu, và chia sẻ đối tượng. Hẹn gặp bạn ở bài tiếp theo."

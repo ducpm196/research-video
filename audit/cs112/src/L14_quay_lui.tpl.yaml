@@ -1,0 +1,231 @@
+id: L14
+course: CS112
+series: "CS112 · Phân tích & Thiết kế Thuật toán"
+title: "Bài 14 — Quay lui: cây trạng thái và bước trả lại đánh dấu"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "audit/cs112/CS112_ban_thao_goc.yaml#L14 (bản thảo); audit/cs112/verify_cs112.py C20; hình cây sinh bằng audit/cs112/graphsvg.py"
+assumes: [cdot, sub, dots, factorial, bigOmega]
+# Quy ước: nghiệm là dãy x₁, x₂, …, xₙ chọn lần lượt; used[j] = true nghĩa là phần tử j đã nằm trong dãy đang xây;
+#   “đánh dấu” = gán used[j] = true, “trả lại đánh dấu” = gán used[j] = false sau khi lời gọi đệ quy quay về.
+# Sửa bản thảo (AUDIT_CS112 §2, C20): quên trả lại đánh dấu → liệt kê hoán vị chỉ ra 1 nghiệm (đúng cho bài hoán vị);
+#   nói tổng quát là BỎ SÓT nghiệm. Thêm lỗi trả dấu sai chỗ (máy đếm: 27 dãy có lặp thay vì 6).
+# Nối bài trước (luật 17): bài 7 — duyệt theo chiều sâu đi tới ngõ cụt rồi quay lui; bài 4 — đệ quy chạy trên ngăn xếp lời gọi;
+#   bài 2 — n! = 1·2·…·n tăng nhanh hơn mọi hàm mũ.
+objectives:
+  - "Vẽ cây trạng thái của bài liệt kê hoán vị và đếm số nút, số lá"
+  - "Viết khung quay lui đánh dấu, gọi đệ quy, rồi trả lại đánh dấu"
+  - "Giải thích hậu quả khi quên hoặc trả lại đánh dấu sai chỗ, kiểm bằng số nghiệm"
+  - "Dùng điều kiện hợp lệ để cắt tỉa nhánh vô ích"
+asr_reviewed:
+  - {sentence: "Quay về, bước ba trả dấu số 3, ô thứ ba trống lại.", reason: "ASR chép “Quay về Bước 3 trả giấu số 3, ồ thứ 3 trống lại.” (0.923): “ô” (ô lưới) ASR viết chữ “O” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bước một, gán x i bằng j và đánh dấu j đã dùng.", reason: "tên chữ cái đọc kiểu Việt, ASR chép nhầm chữ (d→dây/G, f→S, j→gi/di, i→y, x→ích, g→v/dê) — nhóm đã biết (SKILL Bước 5); chữ hiện trên màn hình"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Liệt kê mọi cách — và không bỏ sót cách nào"
+    checks:
+      - "math.factorial(3) == 6 and math.factorial(10) == 3628800"
+    steps:
+      - show: |
+          <p class="big">Xếp 3 bạn An, Bình, Chi vào 3 ghế: có bao nhiêu cách? Liệt kê <b>đủ</b> từng cách thế nào?</p>
+          <p>Đáp số là $3! = 6$ (bài 2). Với 10 bạn: $10! = 3\,628\,800$ cách — phải có <b>phương pháp</b> để không sót, không trùng.</p>
+        focus: [1, 2, 2]
+        say: "Chào bạn, xếp ba bạn An, Bình, Chi vào ba ghế thì có bao nhiêu cách, và liệt kê đủ từng cách thế nào? Đáp số là 3 giai thừa, bằng 6, như bài 2. Với mười bạn đã có hơn ba triệu cách, nên cần một phương pháp để không sót và không trùng."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn bài 7: đi sâu tới ngõ cụt rồi quay lui"
+    steps:
+      - show: |
+          <p>Bài 7: duyệt theo chiều sâu đi tới khi <b>hết đường</b>, rồi <b>quay lui</b> về chỗ rẽ gần nhất để thử nhánh khác.</p>
+          <p>Bài 4: “quay lui” chính là một khung nhớ được lấy ra khỏi ngăn xếp lời gọi khi hàm đệ quy trả về.</p>
+        focus: [1, 2]
+        say: "Ôn lại bài 7, duyệt theo chiều sâu đi mãi tới khi hết đường, rồi quay lui về chỗ rẽ gần nhất để thử nhánh khác. Theo bài 4, mỗi lần quay lui chính là một khung nhớ được lấy ra khỏi ngăn xếp lời gọi khi hàm đệ quy trả về."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: dãy nghiệm, cây trạng thái, mảng đánh dấu"
+    steps:
+      - show: |
+          <p>Nghiệm $= (x_1, x_2, \dots, x_n)$: chọn <b>lần lượt</b> $x_1$, rồi $x_2$, … — mỗi lần chọn là một bước xuống cây.</p>
+          <p><b>Cây trạng thái</b>: mỗi nút là một dãy đang xây dở; lá là một nghiệm đầy đủ.</p>
+          <p><code>used[j]</code>: phần tử $j$ đã có trong dãy chưa (để không chọn lại).</p>
+        focus: [1, 2, 3]
+        say: "Một nghiệm là dãy x một, x hai, đến x n, được chọn lần lượt từng phần tử, mỗi lần chọn là một bước xuống cây. Cây trạng thái có mỗi nút là một dãy đang xây dở, và mỗi lá là một nghiệm đầy đủ. Mảng đánh dấu cho biết phần tử j đã có trong dãy chưa, để không chọn lại."
+
+  # ───────────────────────── 4. KHUNG MÃ ─────────────────────────
+  - id: frame
+    kind: concept
+    title: "Khung quay lui: đánh dấu, đi sâu, trả lại đánh dấu"
+    checks:
+      - "(lambda log, used: (lambda f: (f(f, 1, ()), log)[1])(lambda f, i, x: [(used.__setitem__(j, True), log.append((x + (j,), tuple(used[1:]))), (f(f, i + 1, x + (j,)) if i < 3 else None), used.__setitem__(j, False), log.append((x, tuple(used[1:])))) for j in (1, 2, 3) if not used[j]]))([], [None, False, False, False])[:7] == [((1,), (True, False, False)), ((1, 2), (True, True, False)), ((1, 2, 3), (True, True, True)), ((1, 2), (True, True, False)), ((1,), (True, False, False)), ((1, 3), (True, False, True)), ((1, 3, 2), (True, True, True))]"
+    steps:
+      - show: |
+          <div class="code"><div>Backtrack(i):                       <span class="cm">// chọn x[i]</span></div><div>    <span class="kw">for</span> j = 1..n:</div><div>        <span class="kw">if</span> (!used[j]) {</div><div>            x[i] = j;  used[j] = <span class="kw">true</span>;     <span class="cm">// ① đánh dấu</span></div><div>            <span class="kw">if</span> (i == n) In(x); <span class="kw">else</span> Backtrack(i + 1);   <span class="cm">// ② đi sâu</span></div><div>            used[j] = <span class="kw">false</span>;              <span class="cm">// ③ trả lại đánh dấu</span></div><div>        }</div></div>
+        focus: [0, "1.3", "1.4", "1.5", "1.6"]
+        say: "Đây là khung quay lui cho bài liệt kê hoán vị. Hàm chọn phần tử thứ i, thử lần lượt mọi j chưa dùng. Bước một, gán x i bằng j và đánh dấu j đã dùng. Bước hai, nếu đã đủ n phần tử thì in nghiệm, ngược lại gọi đệ quy để chọn phần tử tiếp theo. Bước ba, khi lời gọi quay về, trả lại đánh dấu để j được dùng ở các nhánh khác."
+      - show: |
+          <div class="box key">Bước ③ là mấu chốt: quay lui về chỗ rẽ thì phải <b>xoá dấu</b> đã đánh, giống người đi mê cung lùi lại phải xoá vết phấn ở ngõ vừa thử, để nhánh khác còn đi qua được.</div>
+        say: "Bước ba là mấu chốt. Quay lui về chỗ rẽ thì phải xoá dấu đã đánh, giống người đi mê cung lùi lại phải xoá vết phấn ở ngõ vừa thử, để nhánh khác còn đi qua được."
+      - clear: true
+        show: |
+          <p>Dấu vết mảng <code>used</code> khi chạy $n = 3$ (Đ = đã dùng, ô để trống = chưa dùng):</p>
+          <table class="t"><tr><th>sự kiện</th><th>dãy đang xây</th><th>used[1]</th><th>used[2]</th><th>used[3]</th></tr>
+          <tr><td>① đánh dấu 1</td><td>1</td><td>Đ</td><td></td><td></td></tr>
+          <tr><td>① đánh dấu 2</td><td>1, 2</td><td>Đ</td><td>Đ</td><td></td></tr>
+          <tr><td>① đánh dấu 3, in 1 2 3</td><td>1, 2, 3</td><td>Đ</td><td>Đ</td><td>Đ</td></tr>
+          <tr><td>③ trả dấu 3</td><td>1, 2</td><td>Đ</td><td>Đ</td><td></td></tr>
+          <tr><td>③ trả dấu 2</td><td>1</td><td>Đ</td><td></td><td></td></tr>
+          <tr><td>① đánh dấu 3, rồi 2, in 1 3 2</td><td>1, 3, 2</td><td>Đ</td><td>Đ</td><td>Đ</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", "2.5", "2.6", "2.7"]
+        say: "Bảng này ghi lại mảng đánh dấu sau từng sự kiện khi chạy với n bằng 3. Đầu tiên đánh dấu 1, dãy đang xây chỉ có số 1. Tiếp theo đánh dấu 2, dãy là 1, 2. Rồi đánh dấu 3 và in nghiệm 1 2 3, lúc này cả ba ô đều đã dùng. Quay về, bước ba trả dấu số 3, ô thứ ba trống lại. Quay về thêm một tầng, trả dấu số 2, nên số 2 được phép dùng lại ở vị trí thứ ba. Nhờ vậy nhánh kế tiếp đặt 3 rồi 2 và in được nghiệm 1 3 2."
+
+  # ───────────────────────── 5. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Chạy tay với n bằng 3"
+    checks:
+      - "list(__import__('itertools').permutations((1, 2, 3))) == [(1, 2, 3), (1, 3, 2), (2, 1, 3), (2, 3, 1), (3, 1, 2), (3, 2, 1)]"
+      - "1 + 3 + 3*2 + 3*2*1 == 16 and sum(math.factorial(3) // math.factorial(3 - k) for k in range(4)) == 16"
+    steps:
+      - show: |
+          {{TREE}}
+          <p>Thứ tự in (đọc lá từ trái sang): &nbsp; 123, 132, 213, 231, 312, 321 → <b>6 = 3!</b> nghiệm ✓</p>
+        focus: [1, 1, 2, 2]
+        say: "Chạy tay với n bằng 3. Từ gốc, chọn 1 rồi đi sâu, chọn 2, rồi 3, in ra 1 2 3. Quay lui, trả lại số 3 và số 2, thử 3 rồi 2, in 1 3 2. Cứ thế, đọc các lá từ trái sang ta được đủ sáu hoán vị, đúng 3 giai thừa."
+      - show: |
+          <p>Số nút: tầng $k$ có $3 \cdot 2 \cdots (3 - k + 1)$ nút → $\ 1 + 3 + 6 + 6 = 16$. &nbsp; Tổng quát số lá là $n!$, nên thời gian liệt kê là $\Omega(n!)$ — không tránh được vì phải in đủ $n!$ nghiệm.</p>
+        say: "Đếm số nút, tầng 1 có 3 nút, tầng 2 có 6, tầng 3 có 6, cộng gốc là 16 nút. Tổng quát, số lá là n giai thừa, nên thời gian liệt kê là Omega lớn của n giai thừa, không tránh được, vì phải in đủ n giai thừa nghiệm."
+
+  # ───────────────────────── 6. CẮT TỈA ─────────────────────────
+  - id: prune
+    kind: concept
+    title: "Cắt tỉa: kiểm hợp lệ trước khi đi sâu"
+    checks:
+      - "(lambda q: q(q, 0, ()) == (2, 16))(lambda f, r, cols: (1, 0) if r == 4 else (lambda subs: (sum(s[0] for s in subs), len(subs) + sum(s[1] for s in subs)))([f(f, r + 1, cols + (c,)) for c in range(4) if all(c != cc and abs(c - cc) != r - rr for rr, cc in enumerate(cols))]))"
+      - "4**4 == 256"
+    steps:
+      - show: |
+          <p>Bài 4 quân hậu trên bàn $4 \cdot 4$: mỗi hàng một quân, không hai quân nào cùng cột hay cùng đường chéo.</p>
+          <p>Thử mọi cách đặt: $4^4 = 256$ bộ. Quay lui có <b>kiểm hợp lệ</b> trước khi đặt: chỉ đặt $\hlg{16}$ lần, tìm được đúng 2 nghiệm.</p>
+          <div class="box key">Điều kiện hợp lệ càng sớm loại nhánh hỏng, cây càng nhỏ — nhưng tệ nhất vẫn có thể rất lớn.</div>
+        focus: [0, 1, 2, 3]
+        say: "Quay lui còn mạnh ở chỗ cắt tỉa. Bài bốn quân hậu yêu cầu đặt mỗi hàng một quân sao cho không hai quân nào cùng cột hay cùng đường chéo. Nếu thử mọi cách đặt thì có 256 bộ, còn quay lui kiểm hợp lệ trước khi đặt chỉ phải đặt 16 lần, và tìm được đúng 2 nghiệm. Điều kiện càng sớm loại nhánh hỏng thì cây càng nhỏ, dù trường hợp tệ nhất vẫn có thể rất lớn."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: verify
+    kind: check
+    title: "Tự kiểm: đếm nghiệm, đếm dấu, kiểm tay một nghiệm"
+    checks:
+      - "(lambda log: len(log) == 30 and sum(1 for k in range(0, 30)) == 30 and log[-1] == ((), (False, False, False)))((lambda log, used: (lambda f: (f(f, 1, ()), log)[1])(lambda f, i, x: [(used.__setitem__(j, True), log.append((x + (j,), tuple(used[1:]))), (f(f, i + 1, x + (j,)) if i < 3 else None), used.__setitem__(j, False), log.append((x, tuple(used[1:])))) for j in (1, 2, 3) if not used[j]]))([], [None, False, False, False]))"
+      - "3 + 6 + 6 == 15 and 2 * 15 == 30"
+      - "(lambda c: len(set(c)) == 4 and all(abs(c[i] - c[j]) != j - i for i in range(4) for j in range(i + 1, 4)) and [j - i for i in range(4) for j in range(i + 1, 4)] == [1, 2, 3, 1, 2, 1] and [abs(c[i] - c[j]) for i in range(4) for j in range(i + 1, 4)] == [2, 1, 1, 3, 1, 2])([2, 4, 1, 3])"
+      - "(lambda sols: sols == [(2, 4, 1, 3), (3, 1, 4, 2)])([p for p in __import__('itertools').permutations(range(1, 5)) if all(abs(p[i] - p[j]) != j - i for i in range(4) for j in range(i + 1, 4))])"
+      - "len(list(__import__('itertools').permutations(range(4)))) == 24 == math.factorial(4)"
+    steps:
+      - show: |
+          <p><b>Phép thử 1</b>: chạy với $n$ nhỏ rồi <b>đếm</b> số nghiệm in ra, không dãy nào được có phần tử lặp.</p>
+          <table class="t"><tr><th>$n$</th><th>phải in đúng $n!$</th></tr><tr><td>3</td><td>6</td></tr><tr><td>4</td><td>24</td></tr></table>
+        focus: [1, 2]
+        say: "Phép thử đơn giản là chạy với n nhỏ rồi đếm số nghiệm in ra, vì số nghiệm đúng thì đã biết trước. Với hoán vị, số nghiệm phải đúng n giai thừa, n bằng 3 là 6, n bằng 4 là 24, và không dãy nào có phần tử lặp."
+      - clear: true
+        show: |
+          <p><b>Phép thử 2</b> — đếm số lần đánh dấu và trả dấu, $n = 3$:</p>
+          <table class="t"><tr><th>đại lượng</th><th>cách tính</th><th>giá trị</th></tr>
+          <tr><td>số lần đánh dấu</td><td>số nút trừ gốc: $3 + 6 + 6$</td><td>15</td></tr>
+          <tr><td>số lần trả dấu</td><td>mỗi lần đánh dấu được hoàn tác một lần</td><td>15</td></tr>
+          <tr><td>mảng <code>used</code> lúc kết thúc</td><td>đánh dấu trừ trả dấu cho mỗi ô</td><td>toàn trống</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Phép thử thứ hai kiểm chính bước trả dấu, bằng cách đếm thay vì đọc mã. Mỗi nút trừ gốc sinh ra đúng một lần đánh dấu, nên có 3 cộng 6 cộng 6, bằng 15 lần. Chạy bằng máy cũng đếm được đúng 15 lần trả dấu, mỗi lần đánh dấu được hoàn tác đúng một lần. Vì vậy lúc chương trình kết thúc, mảng đánh dấu phải trống hoàn toàn, và nếu còn ô nào đã dùng thì chắc chắn có chỗ quên trả dấu."
+      - clear: true
+        show: |
+          <p><b>Phép thử 3</b> — kiểm tay nghiệm 4 quân hậu (hàng 1→4 đặt ở cột 2, 4, 1, 3): hai quân cùng chéo khi hiệu cột bằng hiệu hàng.</p>
+          <table class="t"><tr><th>cặp hàng</th><th>(1,2)</th><th>(1,3)</th><th>(1,4)</th><th>(2,3)</th><th>(2,4)</th><th>(3,4)</th></tr>
+          <tr><td>hiệu hàng</td><td>1</td><td>2</td><td>3</td><td>1</td><td>2</td><td>1</td></tr>
+          <tr><td>hiệu cột</td><td>2</td><td>1</td><td>1</td><td>3</td><td>1</td><td>2</td></tr></table>
+          <p>Bốn cột khác nhau, không cặp nào có hiệu bằng nhau → hợp lệ ✓. Nghiệm thứ hai là ảnh gương: cột 3, 1, 4, 2.</p>
+        focus: [1, 1, "2.2", "2.3", 3]
+        say: "Phép thử thứ ba kiểm tay một nghiệm của bài bốn quân hậu, hàng một tới hàng bốn đặt ở cột 2, 4, 1 và 3. Hai quân nằm cùng đường chéo khi hiệu số cột bằng hiệu số hàng, nên ta xét đủ sáu cặp hàng. Hàng hiệu số hàng là 1, 2, 3, 1, 2, 1. Hàng hiệu số cột là 2, 1, 1, 3, 1, 2, không ô nào bằng ô ngay phía trên. Bốn cột lại khác nhau, nên nghiệm hợp lệ, và nghiệm thứ hai là ảnh gương của nó, cột 3, 1, 4, 2."
+
+  # ───────────────────────── 8. LỖI THƯỜNG GẶP ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay mắc"
+    checks:
+      - "(lambda run: run(False) == [(1, 2, 3)])(lambda unmark: (lambda used, out: (lambda f: f(f, 1, ()) or out)(lambda f, i, x: [(used.__setitem__(j, True), out.append(x + (j,)) if i == 3 else f(f, i + 1, x + (j,)), used.__setitem__(j, False) if unmark else None) for j in (1, 2, 3) if not used[j]] and None))({1: False, 2: False, 3: False}, []))"
+      - "len(list(__import__('itertools').product((1, 2, 3), repeat=3))) == 27 == 3**3 and math.factorial(3) == 6"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Quên bước ③ trả lại đánh dấu <b class="red">(sai)</b>
+          <br><span class="note">Sau nghiệm đầu 1, 2, 3, mọi số đều đã bị đánh dấu → không nhánh nào đi tiếp được: chỉ in <b>1</b> nghiệm thay vì 6. Tổng quát: <b>bỏ sót nghiệm</b>.</span></div>
+        say: "Lỗi thứ nhất, quên bước ba, không trả lại đánh dấu. Sau nghiệm đầu tiên 1, 2, 3, cả ba số đều bị đánh dấu mãi, nên không nhánh nào đi tiếp được, chương trình chỉ in một nghiệm thay vì sáu. Tổng quát, quên trả dấu sẽ làm bỏ sót nghiệm."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Trả lại đánh dấu <b>trước</b> lời gọi đệ quy <b class="red">(sai)</b>
+          <br><span class="note">Khi đi sâu, $j$ đã “sạch dấu” nên bị chọn lại: in ra các dãy lặp như 1, 1, 1. Phép thử đếm nghiệm bắt được:</span>
+          $$3^3 = 27 \ne 3! = 6$$</div>
+        say: "Lỗi thứ hai, trả lại đánh dấu trước lời gọi đệ quy. Khi đi sâu, số j đã sạch dấu nên bị chọn lại, chương trình in cả các dãy lặp như 1, 1, 1, tổng cộng 27 dãy. Phép thử đếm nghiệm bắt được ngay, vì 27 khác 6."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Kiểm điều kiện hợp lệ <b>sau</b> khi đã đi sâu <b class="red">(sai)</b>
+          <br><span class="note">Vẫn ra đúng nghiệm nhưng mất hết lợi ích cắt tỉa: bài 4 quân hậu quay về duyệt cả 256 bộ.</span></div>
+        say: "Lỗi thứ ba, kiểm điều kiện hợp lệ sau khi đã đi sâu tới lá. Kết quả vẫn đúng, nhưng mất hết lợi ích cắt tỉa, bài bốn quân hậu quay về duyệt cả 256 bộ."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Tin rằng quay lui “luôn nhanh” <b class="red">(sai)</b>
+          <br><span class="note">Cắt tỉa chỉ bớt nút; với bài liệt kê hoán vị vẫn có $n!$ lá. Chi phí phải đánh giá theo số nút của cây.</span></div>
+        say: "Lỗi thứ tư, tin rằng quay lui luôn nhanh. Cắt tỉa chỉ bớt nút, bài liệt kê hoán vị vẫn có n giai thừa lá. Chi phí phải đánh giá theo số nút của cây trạng thái."
+
+  # ───────────────────────── 9. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "(lambda b: b(b, 0, ()) == ['000', '001', '010', '100', '101'])(lambda f, i, x: [''.join(map(str, x))] if i == 3 else [s for v in (0, 1) if not (v == 1 and x and x[-1] == 1) for s in f(f, i + 1, x + (v,))])"
+      - "[''.join(p) for p in __import__('itertools').product('01', repeat=3) if '11' in ''.join(p)] == ['011', '110', '111'] and 2**3 - 3 == 5"
+    steps:
+      - show: |
+          <table class="t"><tr><th>đề</th><td>dùng quay lui liệt kê mọi dãy nhị phân độ dài 3 <b>không có hai số 1 liền nhau</b></td></tr>
+          <tr><th>hỏi 1</th><td>điều kiện hợp lệ là gì?</td></tr><tr><th>hỏi 2</th><td>có bao nhiêu dãy?</td></tr></table>
+        focus: ["1.1", ["1.2", "1.3"], 0]
+        say: "Đến lượt bạn, dùng quay lui liệt kê mọi dãy nhị phân độ dài 3 không có hai số 1 đứng liền nhau. Điều kiện hợp lệ là gì, và có bao nhiêu dãy? Dừng video và làm ra giấy."
+        pause: 8
+      - show: |
+          <p><b>Hỏi 1</b> — hợp lệ: chỉ đặt $x_i = 1$ khi $x_{i-1} \ne 1$. Chạy tay, thử 0 trước 1:</p>
+          <table class="t"><tr><th>$x_1$</th><th>$x_2$ được chọn</th><th>$x_3$ được chọn</th><th>in ra</th></tr>
+          <tr><td>0</td><td>0</td><td>0 hoặc 1</td><td>000, 001</td></tr>
+          <tr><td>0</td><td>1</td><td>chỉ 0 (tỉa 1)</td><td>010</td></tr>
+          <tr><td>1</td><td>chỉ 0 (tỉa 1)</td><td>0 hoặc 1</td><td>100, 101</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Đáp án hỏi một, điều kiện hợp lệ là chỉ đặt số 1 khi số đứng trước không phải 1, và ta chạy tay, thử 0 trước rồi 1. Với x một bằng 0 và x hai bằng 0, vị trí thứ ba đặt được cả 0 lẫn 1, in ra 000 và 001. Với x hai bằng 1, vị trí thứ ba chỉ còn 0, in ra 010. Với x một bằng 1, vị trí thứ hai bị tỉa mất số 1, chỉ còn 0, rồi in ra 100 và 101."
+      - clear: true
+        show: |
+          <p><b>Hỏi 2</b> — đếm bằng đường khác: lấy 8 dãy trừ các dãy có “11”:</p>
+          <p>Các dãy có “11”: 011, 110, 111 — đúng 3 dãy.</p>
+          $$2^3 - 3 = 8 - 3 = \hlg{5}$$
+        focus: [1, [2, 3]]
+        say: "Hỏi hai, quay lui in ra đúng 5 dãy, và ta kiểm con số này bằng một đường khác. Có tất cả 2 mũ 3 bằng 8 dãy, trong đó đúng ba dãy chứa hai số 1 liền nhau là 011, 110 và 111, nên còn 8 trừ 3, bằng 5 dãy, khớp."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">nghiệm = dãy chọn lần lượt</span><span class="a">→</span>
+          <span class="n">cây trạng thái</span><span class="a">→</span>
+          <span class="n">đánh dấu, đi sâu, trả lại dấu</span><span class="a">→</span>
+          <span class="n">cắt tỉa bằng điều kiện hợp lệ</span><span class="a">→</span>
+          <span class="n">kiểm bằng đếm số nghiệm</span></div>
+        say: "Tổng kết chuỗi logic. Nghiệm là một dãy chọn lần lượt, tạo thành cây trạng thái. Mỗi lựa chọn gồm đánh dấu, đi sâu, rồi trả lại dấu. Điều kiện hợp lệ giúp cắt tỉa nhánh hỏng, và phép thử là đếm số nghiệm với n nhỏ."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> mọi thứ thay đổi khi đi xuống phải được <b>hoàn tác</b> khi đi lên — đúng thứ tự, đúng chỗ.</div>
+        say: "Điều cần mang theo, mọi thứ thay đổi khi đi xuống cây phải được hoàn tác khi đi lên, đúng thứ tự và đúng chỗ."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 15): <b>nhánh cận</b> — quay lui cho bài tối ưu: ước lượng chi phí tối thiểu của mỗi nhánh, nhánh nào chắc chắn tệ hơn phương án đang có thì tỉa ngay.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 15, ta học nhánh cận, quay lui cho bài toán tối ưu. Mỗi nhánh được ước lượng chi phí tối thiểu, nhánh nào chắc chắn tệ hơn phương án đang có thì tỉa ngay. Hẹn gặp bạn ở bài tiếp theo."

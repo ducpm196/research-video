@@ -1,0 +1,255 @@
+id: L12
+course: IRS
+series: "IRS · Truy hồi thông tin và hệ gợi ý"
+title: "Bài 12 — Tình huống chuyên gia: thiết kế hệ gợi ý hai tầng trong ngân sách 100 ms"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/irs.yaml L12; audit/irs/verify_irs.py (verify_parts/L12.py); audit/irs/sources_L12.md; tình huống QUYẾT ĐỊNH NGHỀ NGHIỆP dựng từ cơ chế đã học (case-lessons.md mục 1) — mọi số đo thời gian, độ phủ là SỐ MINH HOẠ; khung hai tầng: P. Covington, J. Adams, E. Sargin, Deep Neural Networks for YouTube Recommendations, RecSys 2016 — hàng triệu → hàng trăm → hàng chục, độ trễ hàng chục mi li giây, cỡ mạng theo ngân sách máy chủ [CO16]; Z. Zhao và cộng sự, RecSys 2019 — vài trăm ứng viên, mô hình quá phức tạp làm tăng độ trễ [ZH19]; IRS bài 3 (láng giềng gần đúng), bài 5 (học xếp hạng), bài 10 (thiên lệch vị trí), bài 11 (xếp lại cho đa dạng); SAR bài 2 (ước lượng nhanh)"
+assumes: [arith]
+# Quy ước: ms = mi li giây (1 giây = 1000 ms); “ứng viên” = sản phẩm được tầng trước chuyển cho tầng sau.
+#   Tầng sinh ứng viên = tìm láng giềng gần đúng (bài 3); tầng xếp hạng = mô hình học xếp hạng (bài 5); xếp lại = cân đa dạng (bài 11).
+#   Phân vị 99 (p99) = mức thời gian mà 99% yêu cầu nhanh hơn. Độ phủ của tầng sinh ứng viên = phần sản phẩm “đáng gợi ý” lọt vào danh sách ứng viên.
+#   MỌI số thời gian (10 ms, 0,05 ms mỗi ứng viên, 20 ms mạng…) và bảng độ phủ theo số ứng viên là SỐ MINH HOẠ, ghi rõ trên màn hình.
+objectives:
+  - "Lập ngân sách độ trễ cho sinh ứng viên, xếp hạng, xếp lại và mạng"
+  - "Chọn số ứng viên theo chi phí xếp hạng mỗi ứng viên và phần ngân sách còn lại"
+  - "Kiểm ngân sách bằng phân vị 99 của từng tầng, và nhận ra cái giá của việc chia nhiều mảnh song song"
+  - "Ra quyết định giữa mô hình nặng hơn, ít ứng viên hơn và thêm một tầng sơ bộ, kèm điều kiện đổi lựa chọn"
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Mô hình xếp hạng tốt hơn, nhưng trang mất nửa giây mới hiện"
+    checks:
+      - "round(10000 * 0.05) == 500 and 500 > 100"
+    steps:
+      - show: |
+          <p>Đội bạn có một mô hình xếp hạng mới, chấm <b>mỗi sản phẩm 0,05 ms</b>. Trang chủ phải trả gợi ý trong <b>100 ms</b> (số minh hoạ).</p>
+          <table class="t"><tr><th>cách làm đầu tiên</th><th>phép tính</th><th>thời gian</th></tr>
+          <tr><td>chấm thẳng cả danh mục 10&nbsp;000 sản phẩm</td><td>$10\,000 \cdot 0{,}05$ ms</td><td class="red">500 ms — gấp 5 lần ngân sách</td></tr></table>
+        introduces: [cdot]
+        focus: [1, 1, "2.2", "2.2"]
+        say: "Chào bạn, đội bạn có một mô hình xếp hạng mới, chấm mỗi sản phẩm mất 0 phẩy 05 mi li giây. Trang chủ phải trả gợi ý trong 100 mi li giây, đây là số minh hoạ. Cách làm đầu tiên là chấm thẳng cả danh mục 10 nghìn sản phẩm, dấu chấm giữa dòng là phép nhân, 10 nghìn nhân 0 phẩy 05 bằng 500 mi li giây. Con số đó gấp 5 lần ngân sách, người dùng phải chờ nửa giây mới thấy trang."
+      - show: |
+          <div class="box key">Hôm nay ta ra quyết định như người làm nghề: chia việc thành mấy tầng? Mỗi tầng được bao nhiêu mi li giây? Lấy bao nhiêu ứng viên? Và kiểm ngân sách bằng con số nào — trung bình hay phân vị 99?</div>
+        say: "Hôm nay ta ra quyết định như người làm nghề, chia việc thành mấy tầng, mỗi tầng được bao nhiêu mi li giây, và lấy bao nhiêu ứng viên. Câu cuối là kiểm ngân sách bằng con số nào, trung bình hay phân vị 99."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại bốn công cụ của khoá"
+    checks:
+      - "round(10000 * 0.05) == 500 and 1000 * 1 == 1000"
+      - "1000 + 10 * (10 ** 6 // 1000) == 11000"
+      - "sorted(list(range(1, 100)) + [250])[98] == 99"
+    steps:
+      - show: |
+          <p><b>① Ước lượng nhanh</b> (ở khoá Kiến trúc hệ thống): thời gian = số việc nhân thời gian mỗi việc. $10\,000 \cdot 0{,}05 \text{ ms} = 500 \text{ ms}$; 1 giây = 1000 ms.</p>
+          <p><b>② Bài 3:</b> tìm láng giềng gần đúng bằng chia cụm — 1 triệu vector, 1000 cụm, xét 10 cụm chỉ cần $1000 + 10 \cdot 1000 = 11\,000$ phép so thay vì 1 triệu.</p>
+        focus: [1, 2, 2]
+        say: "Công cụ thứ nhất là ước lượng nhanh ở khoá Kiến trúc hệ thống, thời gian bằng số việc nhân thời gian mỗi việc, và 1 giây bằng 1000 mi li giây. Công cụ thứ hai từ bài 3, tìm láng giềng gần đúng bằng cách chia cụm. Với 1 triệu vector chia 1000 cụm và chỉ xét 10 cụm gần nhất, ta cần 1000 cộng 10 nhân 1000, tức 11 nghìn phép so thay vì 1 triệu."
+      - show: |
+          <p><b>③ Bài 5:</b> mô hình học xếp hạng chấm điểm <b>từng</b> ứng viên rồi sắp theo điểm — chi phí tăng theo số ứng viên. <b>④ Bài 11:</b> xếp lại bằng cách cân liên quan với khác biệt, chọn từng ô một.</p>
+          <p><b>⑤ Phân vị 99.</b> Xếp 100 lần đo từ nhanh tới chậm; lần thứ 99 là phân vị 99. Đo được 1, 2, …, 99 ms và một lần 250 ms: trung bình ≈ 52 ms, phân vị 99 = 99 ms, chỉ 1% yêu cầu chậm hơn.</p>
+        focus: [1, 1, 2, 2]
+        say: "Công cụ thứ ba từ bài 5, mô hình học xếp hạng chấm điểm từng ứng viên rồi sắp theo điểm, nên chi phí tăng theo số ứng viên. Công cụ thứ tư từ bài 11, xếp lại bằng cách cân liên quan với khác biệt, chọn từng ô một. Công cụ cuối là phân vị 99, xếp 100 lần đo từ nhanh tới chậm thì lần thứ 99 là phân vị 99. Ví dụ đo được 1, 2 cho tới 99 mi li giây và một lần 250, trung bình khoảng 52 nhưng phân vị 99 là 99, chỉ 1 phần trăm yêu cầu chậm hơn."
+
+  # ───────────────────────── 3. NGÔN NGỮ NGHỀ ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Ngôn ngữ của người thiết kế hệ gợi ý"
+    checks:
+      - "round(sum(range(1, 100)) / 100 + 250 / 100, 1) == 52.0"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thuật ngữ</th><th>nghĩa</th></tr>
+          <tr><td><b>ngân sách độ trễ</b></td><td>tổng thời gian cho phép một yêu cầu, chia cho từng tầng</td></tr>
+          <tr><td><b>tầng sinh ứng viên</b></td><td>lọc nhanh từ rất nhiều sản phẩm xuống vài trăm, vài nghìn; rẻ nhưng thô</td></tr>
+          <tr><td><b>tầng xếp hạng</b></td><td>mô hình nặng, nhiều đặc trưng, chấm từng ứng viên</td></tr>
+          <tr><td><b>độ phủ của tầng sinh ứng viên</b></td><td>phần sản phẩm đáng gợi ý lọt vào danh sách ứng viên — tầng sau không cứu được thứ đã bị bỏ</td></tr>
+          <tr><td><b>phân vị 99 (p99)</b></td><td>mức mà 99% yêu cầu nhanh hơn</td></tr></table>
+        focus: ["1.2", "1.3", "1.4", "1.5", "1.6"]
+        say: "Bảng có năm thuật ngữ của nghề, ngân sách độ trễ là tổng thời gian cho phép một yêu cầu, rồi chia ra cho từng tầng. Tầng sinh ứng viên lọc nhanh từ rất nhiều sản phẩm xuống vài trăm hay vài nghìn, rẻ nhưng thô. Tầng xếp hạng là mô hình nặng, nhiều đặc trưng, chấm từng ứng viên. Độ phủ của tầng sinh ứng viên là phần sản phẩm đáng gợi ý lọt vào danh sách ứng viên, vì tầng sau không cứu được thứ đã bị bỏ. Phân vị 99 là mức mà 99 phần trăm yêu cầu nhanh hơn."
+      - show: |
+          <p>Đây là khung đội gợi ý video mô tả năm 2016 (Covington và cộng sự): kho <b>hàng triệu</b> video → tầng sinh ứng viên còn <b>hàng trăm</b> → tầng xếp hạng chọn <b>hàng chục</b>; chấm hàng triệu mục phải xong trong <b>hàng chục mi li giây</b>.</p>
+          <p class="note">Mọi con số thời gian của bài là số minh hoạ để luyện cách tính, không phải số đo của công ty nào.</p>
+        focus: [1, 1, 2]
+        say: "Đây là khung mà đội gợi ý video mô tả trong một bài báo năm 2016, kho hàng triệu video được tầng sinh ứng viên lọc còn hàng trăm, rồi tầng xếp hạng chọn ra hàng chục. Bài báo ghi rằng chấm hàng triệu mục phải xong trong hàng chục mi li giây. Mọi con số thời gian của bài hôm nay là số minh hoạ để luyện cách tính, không phải số đo của công ty nào."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Cái phễu và thanh ngân sách 100 ms"
+    steps:
+      - show: |
+          <div><svg width="1500" height="440" viewBox="0 0 1500 440">
+          <polygon points="80,40 620,40 470,160 230,160" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/>
+          <polygon points="230,170 470,170 400,270 300,270" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/>
+          <polygon points="300,280 400,280 370,350 330,350" fill="#d1fae5" stroke="#059669" stroke-width="3"/>
+          <g font-size="22" fill="#1f2937" text-anchor="middle">
+          <text x="350" y="95">kho: 10 triệu sản phẩm</text>
+          <text x="350" y="125" font-size="20" fill="#2a78d6">tìm láng giềng gần đúng</text>
+          <text x="350" y="215">1000 ứng viên</text>
+          <text x="490" y="250" font-size="20" fill="#eb6834" text-anchor="start">→ mô hình xếp hạng</text>
+          <text x="350" y="390">10 ô trên trang (xếp lại cho đa dạng)</text>
+          </g>
+          <g font-size="21" fill="#1f2937">
+          <rect x="720" y="120" width="100" height="70" fill="#2a78d6"/><text x="770" y="235" text-anchor="middle">sinh 10</text>
+          <rect x="820" y="120" width="500" height="70" fill="#eb6834"/><text x="1070" y="235" text-anchor="middle">xếp hạng 1000 nhân 0,05 = 50</text>
+          <rect x="1320" y="120" width="100" height="70" fill="#9ca3af"/><text x="1370" y="235" text-anchor="middle">mạng 20</text>
+          <line x1="720" y1="100" x2="1720" y2="100" stroke="#b91c1c" stroke-width="0"/>
+          <text x="720" y="95">ngân sách 100 ms (minh hoạ), mỗi 10 ms dài 100 điểm ảnh</text>
+          <text x="720" y="290" fill="#059669" font-weight="bold">tổng 80 ms: còn 20 ms dự phòng cho xếp lại và lúc chậm</text>
+          </g></svg></div>
+        say: "Hình bên trái là cái phễu, kho 10 triệu sản phẩm đi qua tìm láng giềng gần đúng để còn 1000 ứng viên. Mô hình xếp hạng chấm 1000 ứng viên đó, rồi chọn 10 ô trên trang và xếp lại cho đa dạng. Thanh bên phải là ngân sách 100 mi li giây, các số là minh hoạ. Sinh ứng viên mất 10, xếp hạng 1000 nhân 0 phẩy 05 bằng 50, mạng và đọc đặc trưng 20. Tổng 80 mi li giây, còn 20 mi li giây dự phòng cho xếp lại và cho những lúc chậm."
+
+  # ───────────────────────── 5. TÁI HIỆN BẰNG SỐ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Lập ngân sách từng bước, rồi kiểm bằng phân vị 99"
+    checks:
+      - "alg.irs_latency([10, 1000 * 0.05, 20]) == 80 < 100 and round(10000 * 0.05) == 500"
+      - "alg.irs_max_candidates(100, 10 + 20 + 5 + 5, 0.05) == 1200 and alg.irs_max_candidates(100, 10 + 20, 0.05) == 1400"
+      - "alg.irs_latency([8, 45, 15]) == 68 and alg.irs_latency([15, 70, 30]) == 115 > 100"
+      - "round(70 / 1000, 2) == 0.07 and round(600 * 0.07) == 42 and alg.irs_latency([15, 600 * 0.07, 30]) == 87"
+    steps:
+      - show: |
+          <p><b>Bước 1 — chia hai tầng.</b> Sinh 1000 ứng viên bằng tìm láng giềng gần đúng (10 ms), chỉ xếp hạng 1000 ứng viên đó:</p>
+          $$10 + 1000 \cdot 0{,}05 + 20 = 10 + 50 + 20 = \hlg{80} \text{ ms} \lt 100 \text{ ms}$$
+        introduces: [ltgt]
+        focus: [1, 2]
+        say: "Bước một là chia hai tầng, sinh 1000 ứng viên bằng tìm láng giềng gần đúng trong 10 mi li giây, rồi chỉ xếp hạng 1000 ứng viên đó. Tổng là 10 cộng 1000 nhân 0 phẩy 05 cộng 20, tức 10 cộng 50 cộng 20, bằng 80 mi li giây, nhỏ hơn ngân sách 100."
+      - show: |
+          <p><b>Bước 2 — lấy tối đa bao nhiêu ứng viên?</b> Trừ phần cố định: sinh 10, mạng 20, xếp lại 5, dự phòng 5 (minh hoạ), phần còn lại chia cho chi phí mỗi ứng viên:</p>
+          $$\frac{100 - (10 + 20 + 5 + 5)}{0{,}05} = \frac{60}{0{,}05} = \hlb{1200} \text{ ứng viên}$$
+        introduces: [frac]
+        focus: [1, 1, 2]
+        say: "Bước hai hỏi lấy tối đa bao nhiêu ứng viên. Ta trừ phần cố định gồm sinh 10, mạng 20, xếp lại 5 và dự phòng 5 mi li giây. Vì mỗi ứng viên tốn 0 phẩy 05, nên chia phần còn lại 60 cho 0 phẩy 05, được 1200 ứng viên."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — kiểm bằng phân vị 99, không chỉ trung bình</b> (số đo minh hoạ của 1000 ứng viên):</p>
+          <table class="t"><tr><th>tầng</th><th>trung bình</th><th>phân vị 99</th></tr>
+          <tr><td>sinh ứng viên</td><td>8 ms</td><td>15 ms</td></tr>
+          <tr><td>xếp hạng 1000 ứng viên</td><td>45 ms</td><td>70 ms</td></tr>
+          <tr><td>mạng và đọc đặc trưng</td><td>15 ms</td><td>30 ms</td></tr>
+          <tr><td><b>cộng</b></td><td class="green">68 ms</td><td class="red">115 ms &gt; 100</td></tr></table>
+          <p class="note">Cộng phân vị 99 của các tầng là cách tính an toàn (lúc cả ba cùng chậm), thường lớn hơn phân vị 99 thật của tổng.</p>
+        focus: [1, "2.2", "2.3", "2.4", "2.5", 3]
+        say: "Bước ba là kiểm bằng phân vị 99, không chỉ trung bình, với số đo minh hoạ khi xếp hạng 1000 ứng viên. Sinh ứng viên trung bình 8 mi li giây, phân vị 99 là 15. Xếp hạng trung bình 45, phân vị 99 là 70. Mạng và đọc đặc trưng trung bình 15, phân vị 99 là 30. Cộng trung bình được 68, rất an toàn, nhưng cộng phân vị 99 được 115, vượt ngân sách. Cộng phân vị 99 của các tầng là cách tính an toàn cho lúc cả ba cùng chậm, thường lớn hơn phân vị 99 thật của tổng."
+      - show: |
+          <p><b>Bước 4 — sửa bằng số ứng viên.</b> Ở phân vị 99, xếp hạng tốn $\frac{70}{1000} = 0{,}07$ ms mỗi ứng viên. Giảm còn 600 ứng viên:</p>
+          $$15 + 600 \cdot 0{,}07 + 30 = 15 + 42 + 30 = \hlg{87} \text{ ms} \le 100$$
+        introduces: [geq]
+        focus: [1, 2]
+        say: "Bước bốn là sửa bằng số ứng viên, ở phân vị 99 xếp hạng tốn 70 chia 1000, tức 0 phẩy 07 mi li giây mỗi ứng viên. Giảm còn 600 ứng viên thì được 15 cộng 600 nhân 0 phẩy 07 cộng 30, tức 15 cộng 42 cộng 30, bằng 87 mi li giây, nằm trong ngân sách kể cả lúc chậm."
+
+  # ───────────────────────── 6. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: đếm ngược ngân sách, và mô phỏng mười mảnh song song"
+    checks:
+      - "100 - 20 - 10 == 70 and alg.irs_max_candidates(100, 30, 0.05) == 1400 and 1400 - round(10 / 0.05) == 1200"
+      - "round(alg.irs_tail_any(0.01, 10), 3) == 0.096 and abs(float((np.random.default_rng(0).random((200000, 10)) < 0.01).any(axis=1).mean()) - alg.irs_tail_any(0.01, 10)) < 0.003"
+      - "round(alg.irs_tail_any(0.01, 1), 3) == 0.01 and round(alg.irs_tail_any(0.01, 100), 3) == 0.634"
+    steps:
+      - show: |
+          <p>Đường khác cho bước 2: đếm ngược từ 100 ms.</p>
+          <table class="t"><tr><th>còn lại</th><th>phép tính</th><th>ứng viên</th></tr>
+          <tr><td>sau sinh và mạng</td><td>$100 - 20 - 10 = 70$ ms, chia 0,05</td><td>1400</td></tr>
+          <tr><td>chừa 10 ms cho xếp lại và dự phòng</td><td>$1400 - \frac{10}{0{,}05} = 1400 - 200$</td><td>1200 ✓</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Kiểm tra thứ nhất đi đường khác cho bước hai, ta đếm ngược từ 100 mi li giây. Sau sinh ứng viên và mạng còn 70 mi li giây, nên chia cho 0 phẩy 05 thì đủ cho 1400 ứng viên. Chừa 10 mi li giây cho xếp lại và dự phòng là bớt 10 chia 0 phẩy 05, tức 200 ứng viên, còn đúng 1200, khớp với bước hai."
+      - show: |
+          <p>Muốn nhanh hơn, ta chia 1000 ứng viên cho <b>10 mảnh</b> chấm song song, mỗi mảnh chỉ 100 ứng viên. Nhưng yêu cầu phải chờ mảnh <b>chậm nhất</b>. Nếu mỗi mảnh có 1% khả năng bị chậm (minh hoạ):</p>
+          $$1 - 0{,}99^{10} \approx \hl{0{,}096}$$
+          <p>Tức gần 10% yêu cầu gặp ít nhất một mảnh chậm.</p>
+          <p class="note">Máy mô phỏng 200&nbsp;000 yêu cầu, mỗi yêu cầu 10 mảnh, đếm thẳng: ≈ 0,095 ✓. Với 100 mảnh: $1 - 0{,}99^{100} \approx 0{,}634$.</p>
+        introduces: [power]
+        focus: [1, 1, 2, 4]
+        say: "Kiểm tra thứ hai là một bẫy, muốn nhanh hơn ta chia 1000 ứng viên cho 10 mảnh chấm song song, mỗi mảnh chỉ 100 ứng viên. Nhưng yêu cầu phải chờ mảnh chậm nhất. Mỗi mảnh độc lập chậm với xác suất 1 phần trăm, nên khả năng gặp một mảnh chậm là 1 trừ 0 phẩy 99 mũ 10, khoảng 0 phẩy 096, gần 10 phần trăm yêu cầu. Máy mô phỏng 200 nghìn yêu cầu và đếm thẳng ra khoảng 0 phẩy 095, khớp, còn với 100 mảnh con số lên tới 0 phẩy 634."
+
+  # ───────────────────────── 7. BÀI HỌC SAI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "Những bài học sai khi thiết kế theo ngân sách"
+    checks:
+      - "round(10 ** 7 * 0.05 / 1000) == 500 and round(10 ** 7 * 0.05 / 1000 / 100) == 5"
+      - "alg.irs_latency([8, 45, 15]) == 68 and alg.irs_latency([15, 70, 30]) == 115"
+      - "round(alg.irs_tail_any(0.01, 10), 3) == 0.096"
+      - "round(1 - 0.88, 2) == 0.12"
+    steps:
+      - show: |
+          <div class="box warn"><b>Bài học sai 1.</b> “Mua máy nhanh hơn rồi chấm cả kho” <b class="red">(nhanh gấp 100 lần vẫn 5 giây)</b></div>
+          $$10^{7} \cdot 0{,}05 \text{ ms} = 500\,000 \text{ ms} = 500 \text{ giây} \qquad \frac{500}{100} = 5 \text{ giây}$$
+          <p class="note">Phần cứng chỉ chia nhỏ hằng số; số ứng viên mới là thứ phải giảm theo cấp độ lớn.</p>
+        focus: [1, 2, 3]
+        say: "Bài học sai thứ nhất là mua máy nhanh hơn rồi chấm cả kho. Mười triệu sản phẩm nhân 0 phẩy 05 mi li giây bằng 500 giây, máy nhanh gấp 100 lần vẫn mất 5 giây. Phần cứng chỉ chia nhỏ một hằng số, còn số ứng viên mới là thứ phải giảm theo cấp độ lớn."
+      - show: |
+          <div class="box warn"><b>Bài học sai 2.</b> Thiết kế theo trung bình: “68 ms, còn dư 32” <b class="red">(phân vị 99 cộng lại là 115 ms)</b>
+          <br><span class="note">Người dùng nhớ lần trang chậm. Đặt ngân sách cho phân vị 99 của từng tầng và đo nó liên tục.</span></div>
+        say: "Bài học sai thứ hai là thiết kế theo trung bình, thấy 68 mi li giây nên nghĩ còn dư 32, trong khi phân vị 99 cộng lại là 115. Người dùng nhớ những lần trang chậm, nên hãy đặt ngân sách cho phân vị 99 của từng tầng và đo nó liên tục."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Bài học sai 3 (người đã đi làm).</b> Chia xếp hạng ra thật nhiều mảnh song song cho nhanh <b class="red">(10 mảnh, mỗi mảnh chậm 1% → gần 10% yêu cầu bị chậm)</b>
+          <br><span class="note">Càng nhiều mảnh, đuôi chậm càng dày. Chỉ chia khi đã đo phân vị 99 của từng mảnh, và có cách xử lý mảnh trễ (bỏ qua, hay gửi lại).</span></div>
+        say: "Bài học sai thứ ba hay gặp ở người đã đi làm, là chia xếp hạng ra thật nhiều mảnh song song cho nhanh. Với 10 mảnh, mỗi mảnh chậm 1 phần trăm, gần 10 phần trăm yêu cầu bị chậm, và càng nhiều mảnh thì đuôi chậm càng dày. Chỉ chia khi đã đo phân vị 99 của từng mảnh, và có sẵn cách xử lý mảnh trễ."
+      - show: |
+          <div class="box warn"><b>Bài học sai 4 (người đã đi làm).</b> Dồn hết công sức cho tầng xếp hạng, không đo độ phủ của tầng sinh ứng viên <b class="red">(phủ 0,88 thì 12% sản phẩm đáng gợi ý đã mất trước khi được chấm)</b>
+          <br><span class="note">Mô hình xếp hạng hoàn hảo cũng không cứu được thứ nó không thấy. Đo độ phủ ở từng tầng, như bài 3 dặn khi báo cáo tìm gần đúng.</span></div>
+        say: "Bài học sai thứ tư cũng của người đã đi làm, là dồn hết công sức cho tầng xếp hạng mà không đo độ phủ của tầng sinh ứng viên. Nếu độ phủ chỉ 0 phẩy 88, thì 12 phần trăm sản phẩm đáng gợi ý đã mất trước khi được chấm. Mô hình xếp hạng hoàn hảo cũng không cứu được thứ nó không thấy, nên hãy đo độ phủ ở từng tầng, như bài 3 đã dặn khi báo cáo tìm gần đúng."
+
+  # ───────────────────────── 8. BẠN SẼ LÀM GÌ ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Bạn sẽ làm gì: mô hình mới chính xác hơn nhưng chậm gấp đôi"
+    checks:
+      - "alg.irs_max_candidates(100, 40, 0.1) == 600 and alg.irs_max_candidates(100, 40, 0.05) == 1200"
+      - "alg.irs_latency([10, 2000 * 0.005, 400 * 0.1, 20, 5, 5]) == 90 and round(2000 * 0.005) == 10 and round(400 * 0.1) == 40"
+      - "0.80 < 0.83 < 0.88 < 0.90 < 0.93"
+    steps:
+      - show: |
+          <p>Mô hình xếp hạng mới tốt hơn nhưng tốn <b>0,1 ms</b> mỗi ứng viên (gấp đôi). Phần cố định vẫn 40 ms. Độ phủ của tầng sinh ứng viên theo số ứng viên (minh hoạ):</p>
+          <table class="t"><tr><th>số ứng viên</th><th>500</th><th>600</th><th>1000</th><th>1200</th><th>2000</th></tr>
+          <tr><td>độ phủ</td><td>0,80</td><td>0,83</td><td>0,88</td><td>0,90</td><td>0,93</td></tr></table>
+          <p>Ba phương án: (A) giữ mô hình cũ, 1200 ứng viên; (B) mô hình mới, bớt ứng viên; (C) thêm một <b>tầng sơ bộ</b> rẻ 0,005 ms mỗi ứng viên chấm 2000, giữ 400 cho mô hình mới. Bạn chọn gì?</p>
+        focus: [1, "2.2", 3, 3, 0]
+        say: "Bây giờ bạn ra quyết định, mô hình xếp hạng mới tốt hơn nhưng tốn 0 phẩy 1 mi li giây mỗi ứng viên, gấp đôi, còn phần cố định vẫn 40 mi li giây. Bảng cho độ phủ minh hoạ của tầng sinh ứng viên, 500 ứng viên phủ 0 phẩy 80, 1000 phủ 0 phẩy 88, 2000 phủ 0 phẩy 93. Có ba phương án, giữ mô hình cũ với 1200 ứng viên, hoặc dùng mô hình mới và bớt ứng viên. Phương án thứ ba là thêm một tầng sơ bộ rẻ 0 phẩy 005 mi li giây mỗi ứng viên, chấm 2000 rồi giữ 400 cho mô hình mới. Dừng video lại, tính thời gian và chọn phương án nhé."
+        pause: 25
+      - clear: true
+        show: |
+          <table class="t"><tr><th>phương án</th><th>tính thời gian</th><th>độ phủ tầng 1</th></tr>
+          <tr><td>A: mô hình cũ</td><td>$\frac{60}{0{,}05} = 1200$ ứng viên, vừa 100 ms</td><td>0,90</td></tr>
+          <tr><td>B: mô hình mới</td><td>$\frac{60}{0{,}1} = 600$ ứng viên</td><td>0,83</td></tr>
+          <tr><td>C: thêm tầng sơ bộ</td><td>$10 + 2000 \cdot 0{,}005 + 400 \cdot 0{,}1 + 20 + 5 + 5 = 90$ ms</td><td>$\hlg{0{,}93}$</td></tr></table>
+        focus: ["1.2", "1.3", "1.4", "1.4"]
+        say: "Đáp án, phương án A giữ mô hình cũ, 60 chia 0 phẩy 05 bằng 1200 ứng viên, độ phủ 0 phẩy 90. Phương án B dùng mô hình mới, 60 chia 0 phẩy 1 chỉ còn 600 ứng viên, độ phủ tụt xuống 0 phẩy 83. Phương án C cộng 10, cộng 2000 nhân 0 phẩy 005 bằng 10, cộng 400 nhân 0 phẩy 1 bằng 40, cộng 20, 5 và 5, tổng 90 mi li giây. Phương án C vừa ngân sách mà độ phủ của tầng đầu lên 0 phẩy 93."
+      - show: |
+          <table class="t"><tr><th>phương án</th><th>được</th><th>mất</th></tr>
+          <tr><td>A</td><td>đơn giản, đã chạy ổn</td><td>không dùng được mô hình tốt hơn</td></tr>
+          <tr><td>B</td><td>mô hình tốt hơn ở đầu danh sách</td><td>mất 7 điểm độ phủ ở tầng 1</td></tr>
+          <tr><td>C</td><td>vừa phủ rộng, vừa chấm kỹ</td><td>thêm một mô hình phải huấn luyện, theo dõi, đo phân vị 99</td></tr></table>
+          <p class="note">Chọn C khi đội đủ người vận hành thêm một tầng và đã đo phân vị 99 của nó; nếu không, chọn A và để thử nghiệm hai nhóm quyết định mô hình mới có đáng đổi 7 điểm độ phủ hay không.</p>
+        focus: [0, "1.2", "1.3", "1.4", 2]
+        say: "Mỗi phương án có được và mất riêng. A đơn giản và đã chạy ổn, nhưng không dùng được mô hình tốt hơn. B có mô hình tốt hơn ở đầu danh sách, đổi lại mất 7 điểm độ phủ ở tầng đầu. C vừa phủ rộng vừa chấm kỹ, nhưng thêm một mô hình phải huấn luyện, theo dõi và đo phân vị 99. Chọn C khi đội đủ người vận hành thêm một tầng, nếu không thì chọn A và để thử nghiệm hai nhóm quyết định mô hình mới có đáng đổi hay không."
+
+  # ───────────────────────── 9. THAY ĐỔI HỆ THỐNG ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Thay đổi hệ thống & tư duy chuyên gia"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">ngân sách 100 ms chia theo tầng</span><span class="a">→</span>
+          <span class="n">tầng rẻ lọc từ triệu xuống nghìn</span><span class="a">→</span>
+          <span class="n">số ứng viên = phần còn lại chia chi phí mỗi cái</span><span class="a">→</span>
+          <span class="n">kiểm bằng phân vị 99, cẩn thận khi chia mảnh</span><span class="a">→</span>
+          <span class="n">đo độ phủ từng tầng</span></div>
+        say: "Tổng kết lại, ngân sách 100 mi li giây được chia cho từng tầng, và tầng rẻ lọc từ hàng triệu xuống hàng nghìn. Số ứng viên bằng phần thời gian còn lại chia chi phí mỗi ứng viên. Ta kiểm bằng phân vị 99 chứ không bằng trung bình, cẩn thận khi chia nhiều mảnh, và đo độ phủ ở từng tầng."
+      - show: |
+          <div class="box key"><b>Tư duy chuyên gia:</b> viết ngân sách ra giấy <b>trước</b> khi chọn mô hình. Mỗi mi li giây được tiêu cho tầng nào phải là một quyết định có số đo, không phải điều xảy ra sau khi triển khai.</div>
+        say: "Tư duy của chuyên gia là viết ngân sách ra giấy trước khi chọn mô hình. Mỗi mi li giây được tiêu cho tầng nào phải là một quyết định có số đo, không phải điều xảy ra sau khi đã triển khai."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 13): <b>hành trình gợi ý video từ đồ thị cùng xem tới hệ thống hai tầng</b> — một hệ thống có thật đã đi từ vài triệu người dùng tới hơn một tỉ, và mỗi quy mô làm lộ ra điểm nghẽn nào.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 13, ta đi lại hành trình gợi ý video từ đồ thị cùng xem tới hệ thống hai tầng của một hệ thống có thật. Ta sẽ xem mỗi quy mô đã làm lộ ra điểm nghẽn nào, và đội kỹ sư đã xử lý ra sao. Hẹn gặp bạn ở bài tiếp theo."

@@ -1,0 +1,202 @@
+id: L14
+course: DSY
+series: "DSY · Hệ phân tán và dữ liệu lớn"
+title: "Bài 14 — Hàng đợi thông điệp và ngữ nghĩa giao nhận"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/dsy.yaml L14; audit/dsy/verify_dsy.py L14; M. Kleppmann, Designing Data-Intensive Applications (2017), chương 11; P. Helland, Idempotence Is Not a Medical Condition, ACM Queue 10(4), 2012"
+assumes: [arith]
+# Quy ước: mỗi thông điệp có mã duy nhất (#42) và số tiền. Giao “ít nhất một lần” có thể lặp; người nhận lũy đẳng khi nhớ mã đã xử lý
+#   CÙNG giao dịch với kết quả (alg.deliver với dedupe=True). Tổng tiền cộng vào tài khoản tính bằng alg.deliver trong checks.
+objectives:
+  - "Phân biệt nhiều nhất một lần, ít nhất một lần"
+  - "Đạt hiệu quả đúng một lần bằng xử lý lũy đẳng"
+  - "Biết vì sao ghi nhớ mã phải cùng giao dịch với kết quả"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Khách bị trừ tiền hai lần"
+    checks:
+      - "alg.deliver([(42, 100), (43, 50), (42, 100)], dedupe=False) == 250"
+    steps:
+      - show: |
+          <p>Dịch vụ thanh toán nhận thông điệp “cộng 100 nghìn, mã #42”, xử lý xong, gửi xác nhận — xác nhận bị mất trên mạng. Hàng đợi tưởng chưa xử lý, gửi lại #42. Tài khoản được cộng <b>hai lần</b>: tổng $\hl{250}$ thay vì 150.</p>
+          <div class="box key">Hôm nay: <b>hàng đợi thông điệp</b>, ba kiểu bảo đảm giao nhận, và cách đạt hiệu quả “đúng một lần”.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, dịch vụ thanh toán nhận thông điệp cộng 100 nghìn, mã 42, xử lý xong và gửi xác nhận, nhưng xác nhận bị mất trên mạng. Hàng đợi tưởng chưa xử lý nên gửi lại thông điệp 42. Tài khoản được cộng hai lần, tổng 250 thay vì 150. Hôm nay ta học hàng đợi thông điệp, ba kiểu bảo đảm giao nhận, và cách đạt hiệu quả đúng một lần."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: giao dịch nguyên tử, và tập các mã đã thấy"
+    checks:
+      - "(lambda ids: [set(ids[:i + 1]) for i in range(len(ids))])([42, 43, 42]) == [{42}, {42, 43}, {42, 43}]"
+      - "[42 in set([42, 43][:i]) for i in range(3)] == [False, True, True] and 500 + 100 == 600"
+    steps:
+      - show: |
+          <p><b>Giao dịch nguyên tử</b> (khoá Cơ sở dữ liệu): các thay đổi trong một giao dịch cùng xảy ra, hoặc cùng không xảy ra.</p>
+          <table class="t"><tr><th>giao dịch gồm hai việc</th><th>tài khoản (đang 500)</th><th>bảng mã đã xử lý</th></tr>
+          <tr><td>cam kết được</td><td>600</td><td>có #42</td></tr>
+          <tr><td>máy hỏng giữa chừng</td><td>vẫn 500</td><td>vẫn chưa có #42</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Ở khoá Cơ sở dữ liệu, ta đã học giao dịch nguyên tử, các thay đổi trong một giao dịch cùng xảy ra hoặc cùng không xảy ra. Ví dụ một giao dịch gồm hai việc, cộng 100 vào tài khoản đang có 500, và ghi mã 42 vào bảng các mã đã xử lý. Cam kết được thì tài khoản thành 600 và bảng có mã 42, còn máy hỏng giữa chừng thì tài khoản vẫn 500 và bảng vẫn chưa có mã 42, không bao giờ chỉ có một trong hai."
+      - show: |
+          <p><b>Tập các mã đã thấy</b>: mỗi thông điệp đến, hỏi “mã này đã có trong tập chưa?”, rồi thêm vào.</p>
+          <table class="t"><tr><th>đến</th><th>đã có trong tập?</th><th>tập sau đó</th></tr>
+          <tr><td>#42</td><td>chưa</td><td>{42}</td></tr><tr><td>#43</td><td>chưa</td><td>{42, 43}</td></tr>
+          <tr><td>#42</td><td><b>rồi</b></td><td>{42, 43}: không đổi</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Điều thứ hai là tập các mã đã thấy. Mỗi khi một thông điệp đến, ta hỏi mã này đã có trong tập chưa, rồi thêm nó vào. Mã 42 đến lần đầu thì chưa có, tập thành 42, rồi mã 43 cũng chưa có, tập thành 42 và 43. Mã 42 đến lần nữa thì đã có rồi, và tập không đổi."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: ba kiểu giao nhận"
+    steps:
+      - show: |
+          <table class="t"><tr><th>kiểu</th><th>cách làm</th><th>rủi ro</th></tr>
+          <tr><td>nhiều nhất một lần</td><td>gửi một lần, không gửi lại</td><td>mất thông điệp</td></tr>
+          <tr><td>ít nhất một lần</td><td>gửi lại tới khi có xác nhận</td><td>trùng thông điệp (như mở đầu)</td></tr>
+          <tr><td>hiệu quả đúng một lần</td><td>ít nhất một lần + người nhận <b>lũy đẳng</b></td><td>phải thiết kế cẩn thận</td></tr></table>
+          <div class="box key"><b>Lũy đẳng</b>: xử lý một thông điệp nhiều lần cho cùng kết quả như xử lý một lần.</div>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Có ba kiểu giao nhận. Nhiều nhất một lần là gửi một lần và không gửi lại, rủi ro là mất thông điệp. Ít nhất một lần là gửi lại tới khi có xác nhận, rủi ro là trùng thông điệp như ví dụ mở đầu. Hiệu quả đúng một lần là ít nhất một lần cộng với người nhận lũy đẳng, đòi hỏi thiết kế cẩn thận. Lũy đẳng nghĩa là xử lý một thông điệp nhiều lần cho cùng kết quả như xử lý một lần."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Vì sao trùng là không tránh được"
+    steps:
+      - show: |
+          <div><svg width="1500" height="470" viewBox="0 0 1500 470"><defs><marker id="arD14" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs><g font-size="22" fill="#1f2937"><text x="20" y="118">hàng đợi</text><line x1="200" y1="110" x2="1470" y2="110" stroke="#9ca3af" stroke-width="2"/><text x="20" y="298">người nhận</text><line x1="200" y1="290" x2="1470" y2="290" stroke="#9ca3af" stroke-width="2"/><line x1="240" y1="110" x2="330" y2="290" stroke="#2a78d6" stroke-width="3" marker-end="url(#arD14)"/><text x="215" y="90" fill="#2a78d6">gửi #42</text><rect x="340" y="315" width="200" height="44" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="440" y="345" text-anchor="middle">cộng 100</text><line x1="560" y1="290" x2="620" y2="180" stroke="#b91c1c" stroke-width="3" stroke-dasharray="8 6"/><line x1="603" y1="150" x2="637" y2="190" stroke="#b91c1c" stroke-width="5"/><line x1="637" y1="150" x2="603" y2="190" stroke="#b91c1c" stroke-width="5"/><text x="655" y="178" fill="#b91c1c">xác nhận mất</text><rect x="660" y="55" width="250" height="40" rx="6" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="785" y="83" text-anchor="middle">hết giờ chờ</text><line x1="940" y1="110" x2="1030" y2="290" stroke="#eb6834" stroke-width="3" marker-end="url(#arD14)"/><text x="930" y="90" fill="#eb6834">gửi lại #42</text><text x="1050" y="345" fill="#b91c1c">không lọc: cộng 100 lần nữa</text><text x="1050" y="385" fill="#059669">có nhớ mã: #42 đã có, bỏ qua</text><text x="20" y="455" font-weight="bold">hàng đợi không phân biệt được “thông điệp mất” với “xác nhận mất”, nên phải gửi lại</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ trục thời gian giữa hàng đợi ở trên và người nhận ở dưới. Hàng đợi gửi mã 42, người nhận cộng 100, rồi gửi xác nhận, nhưng xác nhận mất trên đường. Hàng đợi chỉ thấy hết giờ chờ, nó không phân biệt được thông điệp mất hay xác nhận mất, nên phải gửi lại mã 42. Nếu người nhận không lọc thì cộng 100 lần nữa, còn nếu nhớ mã đã xử lý thì thấy 42 đã có và bỏ qua."
+
+  - id: example
+    kind: example
+    title: "Nhớ mã đã xử lý, trong cùng giao dịch"
+    checks:
+      - "alg.deliver([(42, 100), (43, 50), (42, 100)], dedupe=True) == 150"
+    steps:
+      - show: |
+          <div class="code"><div>bắt đầu giao dịch</div><div>    nếu #42 đã có trong bảng da_xu_ly: bỏ qua</div><div>    cộng 100 vào tài khoản</div><div>    thêm #42 vào bảng da_xu_ly</div><div>cam kết giao dịch; gửi xác nhận</div></div>
+        focus: [1, 1, 1]
+        say: "Bước một, người nhận làm như sau trong một giao dịch. Nếu mã 42 đã có trong bảng các mã đã xử lý thì bỏ qua. Nếu chưa thì cộng 100 vào tài khoản, thêm mã 42 vào bảng, rồi cam kết giao dịch và gửi xác nhận."
+      - show: |
+          <p><b>Bước 2</b> — dãy nhận #42, #43, #42 (lặp). Hai thông điệp đầu:</p>
+          <table class="t"><tr><th>đến</th><th>đã có?</th><th>làm</th><th>bảng da_xu_ly</th><th>tổng đã cộng</th></tr>
+          <tr><td>#42 (+100)</td><td>chưa</td><td>cộng 100</td><td>{42}</td><td>100</td></tr>
+          <tr><td>#43 (+50)</td><td>chưa</td><td>cộng 50</td><td>{42, 43}</td><td>150</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước hai, cho dãy nhận 42, 43, rồi 42 lặp lại. Mã 42 chưa có trong bảng, nên cộng 100, tổng là 100. Mã 43 cũng chưa có, nên cộng 50, tổng là 150."
+      - clear: true
+        show: |
+          <p><b>Bước 3</b> — thông điệp thứ ba là #42 gửi lại:</p>
+          <table class="t"><tr><th>đến</th><th>đã có?</th><th>làm</th><th>bảng da_xu_ly</th><th>tổng đã cộng</th></tr>
+          <tr><td>#42 (+100)</td><td><b>rồi</b></td><td>bỏ qua</td><td>{42, 43}</td><td>$\hl{150}$, đúng</td></tr></table>
+        focus: [1, 2]
+        say: "Bước ba, thông điệp thứ ba là mã 42 được gửi lại. Mã 42 đã có trong bảng, nên ta bỏ qua lần lặp, tổng vẫn là 150, đúng."
+      - show: |
+          <div class="box key"><b>Bước 4</b> — ghi “đã xử lý #42” và cộng tiền phải <b>cùng một giao dịch</b>: hỏng giữa chừng thì cả hai cùng không xảy ra (khoá Cơ sở dữ liệu), gửi lại sẽ xử lý đúng một lần.</div>
+          <table class="t"><tr><th>máy hỏng lúc</th><th>sau khi khởi động lại</th><th>#42 gửi lại thì</th></tr>
+          <tr><td>trước khi cam kết</td><td>chưa cộng, bảng chưa có #42</td><td>cộng 100 lần đầu</td></tr>
+          <tr><td>sau khi cam kết, trước khi gửi xác nhận</td><td>đã cộng, bảng có #42</td><td>bỏ qua</td></tr></table>
+        focus: [1, 1, "2.2", "2.3"]
+        say: "Bước bốn, điều quan trọng là ghi đã xử lý và cộng tiền phải cùng một giao dịch, hỏng giữa chừng thì cả hai cùng không xảy ra, như khoá Cơ sở dữ liệu. Khi gửi lại, thông điệp sẽ được xử lý đúng một lần. Nếu máy hỏng trước khi cam kết, sau khi khởi động lại thì chưa cộng và bảng chưa có mã 42, nên lần gửi lại cộng 100 như lần đầu. Nếu máy hỏng sau khi cam kết mà trước khi gửi xác nhận, thì đã cộng và bảng đã có mã 42, nên lần gửi lại bị bỏ qua."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác: thử mọi số lần lặp, mọi thứ tự"
+    checks:
+      - "sum(len(set(__import__('itertools').permutations([42] * a + [43] * b))) for a in (1, 2, 3) for b in (1, 2, 3)) == 62"
+      - "all(alg.deliver([(m, {42: 100, 43: 50}[m]) for m in p], True) == 150 for a in (1, 2, 3) for b in (1, 2, 3) for p in set(__import__('itertools').permutations([42] * a + [43] * b)))"
+      - "100 + 50 == 150 and alg.deliver([(42, 100)] * 3 + [(43, 50)] * 3, False) == 450"
+    steps:
+      - show: |
+          <table class="t"><tr><th>kiểm</th><th>cách khác</th><th>kết quả</th></tr>
+          <tr><td>cộng thẳng theo mã khác nhau</td><td>mỗi mã chỉ tính một lần: $100 + 50$</td><td>150 ✓</td></tr>
+          <tr><td>máy thử mọi trường hợp</td><td>#42 và #43 mỗi mã đến 1, 2 hoặc 3 lần, theo mọi thứ tự: 62 dãy nhận khác nhau</td><td>có nhớ mã: dãy nào cũng 150 ✓</td></tr>
+          <tr><td>đối chứng: không lọc trùng</td><td>mỗi mã đến 3 lần</td><td>450, sai gấp ba</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.3", "1.4"]
+        say: "Kiểm bằng đường khác. Cộng thẳng theo các mã khác nhau, mỗi mã chỉ tính một lần, được 100 cộng 50 bằng 150. Máy còn thử mọi trường hợp, mã 42 và mã 43 mỗi mã đến 1, 2 hoặc 3 lần, theo mọi thứ tự, tất cả là 62 dãy nhận khác nhau. Có nhớ mã thì dãy nào cũng cho 150. Đối chứng, nếu không lọc trùng mà mỗi mã đến 3 lần thì tổng là 450, sai gấp ba."
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc, 1 lỗi người đã đi làm"
+    checks:
+      - "(lambda run: (run(2), run(3)))(lambda k: __import__('functools').reduce(lambda s, m: s if m[0] in s[1] else (s[0] + m[1], (s[1] + [m[0]])[-k:]), [(42, 100), (43, 50), (44, 20), (42, 100)], (0, []))[0]) == (270, 170)"
+      - "100 + 50 + 20 == 170 and 170 + 100 == 270"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Tin hàng đợi “bảo đảm đúng một lần” giữa hai hệ thống <b class="red">(sai)</b>
+          <br><span class="note">Xác nhận có thể mất ở bất kỳ đâu. Đúng một lần chỉ đạt được ở <b>hiệu quả</b>: ít nhất một lần cộng xử lý lũy đẳng ở phía nhận.</span></div>
+        say: "Lỗi thứ nhất, tin rằng hàng đợi bảo đảm đúng một lần giữa hai hệ thống. Xác nhận có thể mất ở bất kỳ đâu, nên đúng một lần chỉ đạt được ở hiệu quả, bằng ít nhất một lần cộng xử lý lũy đẳng ở phía nhận."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Ghi bảng “đã xử lý” trong giao dịch riêng <b class="red">(hở)</b>
+          <br><span class="note">Cộng tiền xong, hỏng trước khi ghi mã → gửi lại cộng lần nữa. Ghi mã trước, hỏng trước khi cộng → mất tiền. Phải cùng một giao dịch.</span></div>
+        say: "Lỗi thứ hai, ghi bảng đã xử lý trong một giao dịch riêng. Cộng tiền xong mà hỏng trước khi ghi mã thì gửi lại sẽ cộng lần nữa. Ghi mã trước mà hỏng trước khi cộng thì mất tiền, nên phải cùng một giao dịch."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Thiết kế thông điệp “cộng thêm” khi có thể dùng “đặt thành” <b class="red">(khó lũy đẳng)</b>
+          <br><span class="note">“Đặt trạng thái đơn hàng = đã giao” tự lũy đẳng; “cộng 100” thì không. Ưu tiên thông điệp mang trạng thái đích, hoặc luôn kèm mã duy nhất.</span></div>
+        say: "Lỗi thứ ba, thiết kế thông điệp kiểu cộng thêm khi có thể dùng kiểu đặt thành. Đặt trạng thái đơn hàng thành đã giao thì tự lũy đẳng, còn cộng 100 thì không. Hãy ưu tiên thông điệp mang trạng thái đích, hoặc luôn kèm một mã duy nhất."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Xoá bớt bảng mã đã xử lý cho nhẹ, giữ ngắn hơn khoảng thời gian hàng đợi còn có thể gửi lại <b class="red">(trùng quay lại)</b></div>
+          <table class="t"><tr><th>dãy nhận: #42 (+100), #43 (+50), #44 (+20), #42 (lặp)</th><th>tổng đã cộng</th></tr>
+          <tr><td>chỉ nhớ 2 mã gần nhất: lúc #42 lặp tới, bảng chỉ còn {43, 44}</td><td><b class="red">270</b>: cộng #42 hai lần</td></tr>
+          <tr><td>nhớ 3 mã gần nhất: bảng còn {42, 43, 44}</td><td>$\hl{170}$, đúng</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", 0]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, xoá bớt bảng mã đã xử lý cho nhẹ, nhưng giữ ngắn hơn khoảng thời gian hàng đợi còn có thể gửi lại. Xét dãy nhận mã 42 cộng 100, mã 43 cộng 50, mã 44 cộng 20, rồi mã 42 lặp lại. Nếu chỉ nhớ 2 mã gần nhất, lúc mã 42 lặp tới thì bảng chỉ còn 43 và 44, nên 42 bị cộng lần nữa, tổng 270. Nếu nhớ 3 mã thì 42 vẫn còn trong bảng, tổng đúng là 170. Người có kinh nghiệm đặt thời gian giữ mã dài hơn thời gian lâu nhất mà một thông điệp còn có thể được gửi lại."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.deliver([(7, 10), (8, 5), (7, 10), (9, -3), (8, 5)], dedupe=False) == 27 and alg.deliver([(7, 10), (8, 5), (7, 10), (9, -3), (8, 5)], dedupe=True) == 12"
+      - "list(__import__('itertools').accumulate([10, 5, 10, -3, 5])) == [10, 15, 25, 22, 27] and list(__import__('itertools').accumulate([10, 5, 0, -3, 0])) == [10, 15, 15, 12, 12]"
+    steps:
+      - show: |
+          <p>Dãy nhận (mã, số tiền): (7, +10), (8, +5), (7, +10), (9, −3), (8, +5).</p>
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Tổng cộng vào tài khoản nếu không lọc trùng?</td></tr>
+          <tr><td>2</td><td>Nếu lọc trùng theo mã?</td></tr></table>
+        focus: [1, "2.2", "2.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm với dãy nhận gồm mã 7 cộng 10, mã 8 cộng 5, mã 7 cộng 10, mã 9 trừ 3, và mã 8 cộng 5. Câu một, nếu không lọc trùng thì tổng cộng vào tài khoản là bao nhiêu? Câu hai, nếu lọc trùng theo mã thì sao? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 1: đến</th><th>#7 +10</th><th>#8 +5</th><th>#7 +10</th><th>#9 −3</th><th>#8 +5</th></tr>
+          <tr><td>tổng sau đó</td><td>10</td><td>15</td><td>25</td><td>22</td><td>$\hl{27}$</td></tr></table>
+        focus: [1, 1, "1.2"]
+        say: "Đáp án câu một, làm từng bước. Không lọc trùng thì cộng hết theo thứ tự đến, tổng lần lượt là 10, 15, 25, 22, rồi 27. Vậy cộng hết được 27."
+      - show: |
+          <table class="t"><tr><th>câu 2: đến</th><th>#7 +10</th><th>#8 +5</th><th>#7 +10</th><th>#9 −3</th><th>#8 +5</th></tr>
+          <tr><td>đã có?</td><td>chưa</td><td>chưa</td><td><b>rồi</b>: bỏ qua</td><td>chưa</td><td><b>rồi</b>: bỏ qua</td></tr>
+          <tr><td>tổng sau đó</td><td>10</td><td>15</td><td>15</td><td>12</td><td>$\hl{12}$</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.3"]
+        say: "Câu hai, lọc trùng theo mã. Mã 7 và mã 8 lần đầu thì chưa có, còn lần thứ hai của chúng thì đã có và bị bỏ qua. Tổng lần lượt là 10, 15, giữ 15, rồi 12, và giữ 12. Bỏ hai lần lặp của mã 7 và mã 8, còn 10 cộng 5 trừ 3, bằng 12."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">nhiều nhất một lần: có thể mất</span><span class="a">→</span>
+          <span class="n">ít nhất một lần: có thể trùng</span><span class="a">→</span>
+          <span class="n">lũy đẳng: nhớ mã cùng giao dịch</span><span class="a">→</span>
+          <span class="n">hiệu quả đúng một lần</span></div>
+        say: "Tổng kết lại, nhiều nhất một lần thì có thể mất, ít nhất một lần thì có thể trùng. Xử lý lũy đẳng, nhớ mã cùng giao dịch với kết quả, cho hiệu quả đúng một lần."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> trên mạng, mọi việc có thể xảy ra 0, 1, hay nhiều lần. Thiết kế để “nhiều lần” vô hại, rồi gửi lại thoải mái.</div>
+        say: "Điều cần mang theo, trên mạng mọi việc có thể xảy ra 0 lần, 1 lần hay nhiều lần. Hãy thiết kế để nhiều lần là vô hại, rồi gửi lại thoải mái."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 15): <b>tình huống chuyên gia theo dòng thời gian</b> — từ Bigtable tới Spanner, hơn mười năm lưu trữ dữ liệu ở quy mô lớn của Google.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 15, ta đi lại hành trình từ hệ bảng lớn tới Spanner, hai hệ lưu trữ dữ liệu rất lớn của Google. Qua từng chặng, bạn sẽ thấy đồng hồ, đa số phiếu và cam kết hai pha được dùng thật ra sao. Hẹn gặp bạn ở bài tiếp theo."

@@ -1,0 +1,205 @@
+id: L04
+course: SEC
+series: "SEC · An toàn thông tin"
+title: "Bài 4 — Phân quyền: danh sách quyền, vai trò, quyền tối thiểu"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/sec.yaml L04; audit/sec/verify_sec.py L04; D. F. Ferraiolo, D. R. Kuhn, Role-Based Access Controls, NIST-NCSC (1992); R. S. Sandhu và cộng sự, Role-Based Access Control Models, IEEE Computer 29(2), 1996; OWASP Top 10 (2021), A01 Broken Access Control; OSY bài 14"
+assumes: [arith]
+# Quy ước: alg.RBAC = {vai trò: tập (tài nguyên, hành động)}; alg.rbac_allowed(vai trò của người, tài nguyên, hành động). alg.sod_violation(nhật ký)
+#   tìm hoá đơn mà cùng một người vừa tạo vừa duyệt (vi phạm tách bạch nhiệm vụ). Tên vai trò trong mã viết không dấu.
+objectives:
+  - "Phân biệt xác thực và phân quyền"
+  - "So sánh danh sách quyền truy cập và phân quyền theo vai trò"
+  - "Áp dụng quyền tối thiểu và tách bạch nhiệm vụ"
+asr_reviewed:
+  - {sentence: "Kế toán tạo hoá đơn, ô ghi có, nên cho.", reason: "ASR chép “Kế toán tạo hóa đơn, ồ ghi có, nên cho.” (0.9): “ô” (ô ghi có trong bảng) ASR chép thán từ “ồ”, phần còn lại đúng — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Đổi số trên đường dẫn, xem được hoá đơn người khác"
+    steps:
+      - show: |
+          <p>Khách đăng nhập, mở <code>/hoa-don/1001</code> — hoá đơn của mình. Thử đổi thành <code>/hoa-don/1002</code>: hiện hoá đơn của người khác. Hệ thống kiểm “bạn đã đăng nhập chưa”, nhưng quên kiểm “hoá đơn này có phải của bạn không”.</p>
+          <div class="box key">Hôm nay: <b>phân quyền</b> — sau khi biết bạn là ai, hệ thống phải quyết bạn <b>được làm gì</b>, trên <b>từng</b> đối tượng.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, một khách đăng nhập và mở hoá đơn số 1001 của mình. Thử đổi số trên đường dẫn thành 1002, và hiện ra hoá đơn của người khác. Hệ thống kiểm bạn đã đăng nhập chưa, nhưng quên kiểm hoá đơn này có phải của bạn không. Hôm nay ta học phân quyền, sau khi biết bạn là ai, hệ thống phải quyết bạn được làm gì, trên từng đối tượng."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: quyền trên tệp, gộp quyền của nhiều vai trò"
+    checks:
+      - "3 * 3 == 9 and len({'đọc', 'tạo'} | {'đọc', 'duyệt'}) == 3"
+    steps:
+      - show: |
+          <p>Ở khoá Hệ điều hành: mỗi tệp ghi quyền <b>đọc, ghi, chạy</b> cho 3 nhóm người: chủ tệp, nhóm, người khác → $3 \times 3 = 9$ ô có hoặc không.</p>
+          <table class="t"><tr><th></th><th>đọc</th><th>ghi</th><th>chạy</th></tr>
+          <tr><td>chủ tệp</td><td>có</td><td>có</td><td>—</td></tr>
+          <tr><td>nhóm</td><td>có</td><td>—</td><td>—</td></tr>
+          <tr><td>người khác</td><td>—</td><td>—</td><td>—</td></tr></table>
+        focus: [1, 2, "2.2", "2.3", "2.4"]
+        say: "Trước hết, ôn điều đã học ở khoá Hệ điều hành. Mỗi tệp ghi quyền đọc, ghi, chạy cho 3 nhóm người là chủ tệp, nhóm, và người khác, nên có 3 nhân 3 bằng 9 ô có hoặc không. Trong ví dụ, chủ tệp được đọc và ghi. Nhóm chỉ được đọc. Người khác không được gì."
+      - show: |
+          <p>Người có nhiều vai trò thì được <b>gộp</b> quyền của các vai trò: kế toán (đọc, tạo) gộp trưởng phòng (đọc, duyệt) → đọc, tạo, duyệt: $\hl{3}$ việc khác nhau.</p>
+        say: "Điều thứ hai, người có nhiều vai trò thì được gộp quyền của mọi vai trò mình có. Kế toán được đọc và tạo, trưởng phòng được đọc và duyệt, gộp lại là đọc, tạo, duyệt, tức 3 việc khác nhau, vì việc đọc trùng chỉ tính một lần."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: xác thực, phân quyền, vai trò"
+    steps:
+      - show: |
+          <table class="t"><tr><th>khái niệm</th><th>trả lời</th></tr>
+          <tr><td><b>xác thực</b></td><td>bạn là ai?</td></tr>
+          <tr><td><b>phân quyền</b></td><td>bạn được làm gì, trên đối tượng nào?</td></tr>
+          <tr><td><b>danh sách quyền</b> (theo đối tượng)</td><td>mỗi tệp, mỗi hoá đơn ghi ai được đọc, ai được sửa</td></tr>
+          <tr><td><b>phân quyền theo vai trò</b></td><td>gán quyền cho vai trò (kế toán, kiểm toán), gán người vào vai trò</td></tr>
+          <tr><td><b>tách bạch nhiệm vụ</b></td><td>việc nhạy cảm cần hai người: người tạo không được tự duyệt</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", "1.6"]
+        say: "Bảng giới thiệu các khái niệm. Xác thực trả lời câu bạn là ai. Phân quyền trả lời câu bạn được làm gì, trên đối tượng nào. Danh sách quyền theo đối tượng ghi cho mỗi tệp, mỗi hoá đơn ai được đọc, ai được sửa. Phân quyền theo vai trò gán quyền cho các vai trò như kế toán, kiểm toán, rồi gán người vào vai trò. Tách bạch nhiệm vụ là việc nhạy cảm cần hai người, người tạo không được tự duyệt."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Người → vai trò → quyền: có đường thì được"
+    steps:
+      - show: |
+          <div><svg width="1500" height="480" viewBox="0 0 1500 480"><g fill="#1f2937"><text x="150" y="45" text-anchor="middle" font-size="26" font-weight="bold">người</text><text x="750" y="45" text-anchor="middle" font-size="26" font-weight="bold">vai trò</text><text x="1330" y="45" text-anchor="middle" font-size="26" font-weight="bold">quyền trên hoá đơn</text><rect x="50" y="80" width="200" height="70" rx="10" fill="#fee2e2" stroke="#b91c1c" stroke-width="3"/><text x="150" y="123" text-anchor="middle" font-size="26">Lan</text><rect x="50" y="200" width="200" height="70" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="150" y="243" text-anchor="middle" font-size="26">Minh</text><rect x="50" y="320" width="200" height="70" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="150" y="363" text-anchor="middle" font-size="26">Hà</text><rect x="620" y="80" width="260" height="70" rx="10" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="750" y="123" text-anchor="middle" font-size="26">kế toán</text><rect x="620" y="200" width="260" height="70" rx="10" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="750" y="243" text-anchor="middle" font-size="26">trưởng phòng</text><rect x="620" y="320" width="260" height="70" rx="10" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="750" y="363" text-anchor="middle" font-size="26">kiểm toán</text><rect x="1230" y="80" width="200" height="70" rx="10" fill="#d1fae5" stroke="#059669" stroke-width="3"/><text x="1330" y="123" text-anchor="middle" font-size="26">đọc</text><rect x="1230" y="200" width="200" height="70" rx="10" fill="#d1fae5" stroke="#059669" stroke-width="3"/><text x="1330" y="243" text-anchor="middle" font-size="26">tạo</text><rect x="1230" y="320" width="200" height="70" rx="10" fill="#d1fae5" stroke="#059669" stroke-width="3"/><text x="1330" y="363" text-anchor="middle" font-size="26">duyệt</text><line x1="250" y1="115" x2="618" y2="115" stroke="#b91c1c" stroke-width="3"/><polygon points="618,115 603,121 603,109" fill="#b91c1c"/><line x1="250" y1="125" x2="618" y2="225" stroke="#b91c1c" stroke-width="3"/><polygon points="618,225 602,227 605,215" fill="#b91c1c"/><line x1="250" y1="235" x2="618" y2="235" stroke="#1f2937" stroke-width="3"/><polygon points="618,235 603,241 603,229" fill="#1f2937"/><line x1="250" y1="355" x2="618" y2="355" stroke="#1f2937" stroke-width="3"/><polygon points="618,355 603,361 603,349" fill="#1f2937"/><line x1="880" y1="105" x2="1228" y2="105" stroke="#1f2937" stroke-width="3"/><polygon points="1228,105 1213,111 1213,99" fill="#1f2937"/><line x1="880" y1="125" x2="1228" y2="225" stroke="#1f2937" stroke-width="3"/><polygon points="1228,225 1212,227 1216,215" fill="#1f2937"/><line x1="880" y1="225" x2="1228" y2="120" stroke="#1f2937" stroke-width="3"/><polygon points="1228,120 1216,130 1212,118" fill="#1f2937"/><line x1="880" y1="245" x2="1228" y2="345" stroke="#1f2937" stroke-width="3"/><polygon points="1228,345 1212,347 1216,335" fill="#1f2937"/><line x1="880" y1="355" x2="1228" y2="135" stroke="#1f2937" stroke-width="3"/><polygon points="1228,135 1219,148 1212,138" fill="#1f2937"/><text x="750" y="450" text-anchor="middle" font-size="22" fill="#b91c1c">Lan có đường tới cả “tạo” lẫn “duyệt”: từng việc được phép, nên cần thêm luật tách bạch nhiệm vụ</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ ba cột, người bên trái, vai trò ở giữa, quyền trên hoá đơn bên phải. Một yêu cầu được phép khi có đường mũi tên đi từ người, qua một vai trò, tới đúng quyền cần dùng. Hà là kiểm toán nên chỉ có đường tới đọc, còn Minh là trưởng phòng nên tới được đọc và duyệt. Lan có hai vai trò, nên có đường tới cả tạo lẫn duyệt, và đó là chỗ cần thêm luật tách bạch nhiệm vụ."
+
+  - id: example
+    kind: example
+    title: "Ba vai trò và một nhật ký"
+    checks:
+      - "alg.rbac_allowed(['ke_toan'], 'hoa_don', 'tạo') and not alg.rbac_allowed(['kiem_toan'], 'hoa_don', 'tạo') and not alg.rbac_allowed(['ke_toan'], 'hoa_don', 'duyệt')"
+      - "alg.sod_violation([('lan', 'tạo', 'HD1'), ('minh', 'duyệt', 'HD1'), ('lan', 'tạo', 'HD2'), ('lan', 'duyệt', 'HD2')]) == ['HD2']"
+    steps:
+      - show: |
+          <p><b>Bước 1 — bảng quyền của vai trò:</b></p>
+          <table class="t"><tr><th>vai trò</th><th>đọc hoá đơn</th><th>tạo</th><th>duyệt</th></tr>
+          <tr><td>kế toán</td><td>có</td><td>có</td><td>—</td></tr>
+          <tr><td>kiểm toán</td><td>có</td><td>—</td><td>—</td></tr>
+          <tr><td>trưởng phòng</td><td>có</td><td>—</td><td>có</td></tr></table>
+        focus: [1, 2, "2.2", "2.3", "2.4"]
+        say: "Bước một, lập bảng quyền của vai trò. Bảng gán quyền cho ba vai trò. Kế toán được đọc và tạo hoá đơn. Kiểm toán chỉ được đọc. Trưởng phòng được đọc và duyệt."
+      - show: |
+          <p><b>Bước 2 — tra từng yêu cầu</b> trong bảng (mặc định: không):</p>
+          <table class="t"><tr><th>yêu cầu</th><th>ô trong bảng</th><th>kết quả</th></tr>
+          <tr><td>kế toán tạo hoá đơn</td><td>có</td><td>cho</td></tr>
+          <tr><td>kiểm toán tạo hoá đơn</td><td>—</td><td class="red">từ chối</td></tr>
+          <tr><td>kế toán duyệt hoá đơn</td><td>—</td><td class="red">từ chối</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Bước hai, tra từng yêu cầu trong bảng, ô trống thì mặc định là không. Kế toán tạo hoá đơn, ô ghi có, nên cho. Kiểm toán tạo hoá đơn, ô trống, nên từ chối. Kế toán duyệt hoá đơn, ô cũng trống, nên từ chối."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — người có hai vai trò:</b> Lan là kế toán và trưởng phòng.</p>
+          <table class="t"><tr><th>việc</th><th>nhờ vai trò</th><th>được phép?</th></tr>
+          <tr><td>tạo</td><td>kế toán</td><td>có</td></tr>
+          <tr><td>duyệt</td><td>trưởng phòng</td><td>có</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước ba, xét Lan, người có cả hai vai trò kế toán và trưởng phòng. Lan được tạo nhờ vai trò kế toán. Lan được duyệt nhờ vai trò trưởng phòng, nên từng việc riêng lẻ đều được phép."
+      - show: |
+          <p><b>Bước 4 — đọc nhật ký</b> theo từng hoá đơn:</p>
+          <table class="t"><tr><th>hoá đơn</th><th>người tạo</th><th>người duyệt</th><th>cùng người?</th></tr>
+          <tr><td>HD1</td><td>Lan</td><td>Minh</td><td>không</td></tr>
+          <tr><td>HD2</td><td>Lan</td><td>Lan</td><td class="red">có → vi phạm</td></tr></table>
+          <div class="box warn">Hệ thống cho phép từng việc, nhưng kiểm tra tách bạch nhiệm vụ bắt được: $\hl{\text{HD2}}$ do một người vừa tạo vừa duyệt.</div>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Bước bốn, đọc nhật ký theo từng hoá đơn. Hoá đơn 1 do Lan tạo, Minh duyệt, hai người khác nhau. Hoá đơn 2 do Lan tạo, và chính Lan duyệt. Hệ thống cho phép từng việc, nhưng kiểm tra tách bạch nhiệm vụ bắt được, hoá đơn 2 do một người vừa tạo vừa duyệt."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác: đếm ô và dò từng hoá đơn"
+    checks:
+      - "sum(alg.rbac_allowed([r], 'hoa_don', a) for r in ('ke_toan', 'kiem_toan', 'truong_phong') for a in ('đọc', 'tạo', 'duyệt')) == 5 and len(alg.RBAC) * 3 == 9"
+      - "[inv for inv in ('HD1', 'HD2') if {u for u, a, i in [('lan', 'tạo', 'HD1'), ('minh', 'duyệt', 'HD1'), ('lan', 'tạo', 'HD2'), ('lan', 'duyệt', 'HD2')] if i == inv and a == 'tạo'} & {u for u, a, i in [('lan', 'tạo', 'HD1'), ('minh', 'duyệt', 'HD1'), ('lan', 'tạo', 'HD2'), ('lan', 'duyệt', 'HD2')] if i == inv and a == 'duyệt'}] == ['HD2']"
+    steps:
+      - show: |
+          <table class="t"><tr><th>cách kiểm</th><th>kết quả</th></tr>
+          <tr><td>máy hỏi hàm phân quyền đủ 3 vai trò nhân 3 việc = 9 ô, đếm ô “có”</td><td>$\hl{5}$ ô: kế toán 2, kiểm toán 1, trưởng phòng 2 ✓ khớp bảng</td></tr>
+          <tr><td>lấy tập người tạo và tập người duyệt của từng hoá đơn, tìm người chung</td><td>HD1: không ai chung; HD2: Lan ✓</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Kiểm bằng đường khác, vì máy không đọc bảng mà hỏi thẳng hàm phân quyền. Cho máy hỏi hàm phân quyền đủ 3 vai trò nhân 3 việc, tức 9 ô, rồi đếm ô có, được 5 ô, gồm kế toán 2, kiểm toán 1, trưởng phòng 2, khớp với bảng. Với nhật ký, lấy tập người tạo và tập người duyệt của từng hoá đơn rồi tìm người chung, hoá đơn 1 không có ai, hoá đơn 2 có Lan, khớp kết luận ở bước bốn."
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, từ người mới tới người đã đi làm"
+    checks:
+      - "4 * 5 == 20 and 20 - 1 == 19"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Chỉ kiểm “đã đăng nhập” <b class="red">(lỗi phổ biến nhất)</b>
+          <br><span class="note">Mỗi yêu cầu tới một đối tượng phải kiểm quyền <b>trên chính đối tượng đó</b>, ở máy chủ: hoá đơn 1002 có thuộc người đang hỏi không. Đây là lỗi đứng đầu danh sách lỗ hổng web phổ biến (2021).</span></div>
+        say: "Lỗi thứ nhất, chỉ kiểm đã đăng nhập. Mỗi yêu cầu tới một đối tượng phải kiểm quyền trên chính đối tượng đó, ở máy chủ, chẳng hạn hoá đơn 1002 có thuộc người đang hỏi không. Đây là lỗi đứng đầu danh sách lỗ hổng web phổ biến năm 2021."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Ẩn nút bấm thay vì chặn ở máy chủ <b class="red">(chỉ che mắt)</b>
+          <br><span class="note">Giao diện không hiện nút “duyệt” cho kế toán, nhưng máy chủ vẫn nhận yêu cầu duyệt gửi thẳng tới. Quyết định quyền luôn ở máy chủ.</span></div>
+        say: "Lỗi thứ hai, ẩn nút bấm thay vì chặn ở máy chủ. Giao diện không hiện nút duyệt cho kế toán, nhưng máy chủ vẫn nhận yêu cầu duyệt gửi thẳng tới, nên quyết định quyền phải luôn ở máy chủ."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Quyền tích lũy khi đổi vị trí <b class="red">(quyền thừa)</b>
+          <br><span class="note">Nhân viên chuyển từ kế toán sang kinh doanh vẫn giữ quyền kế toán. Rà soát quyền định kỳ; gỡ vai trò cũ khi đổi vị trí.</span></div>
+        say: "Lỗi thứ ba, để quyền tích lũy khi đổi vị trí. Nhân viên chuyển từ kế toán sang kinh doanh mà vẫn giữ quyền kế toán, nên hãy rà soát quyền định kỳ, và gỡ vai trò cũ khi đổi vị trí."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4.</b> Cấp quyền quản trị cho tài khoản dịch vụ “cho nhanh” <b class="red">(vi phạm quyền tối thiểu)</b>
+          <br><span class="note">Mô hình: dịch vụ xuất báo cáo chỉ cần đọc hoá đơn. Cấp vai trò quản trị thì nó có mọi việc trên mọi bảng; bị chiếm là kẻ xấu có hết. Người làm nghề tạo vai trò riêng chỉ đọc, và đối chiếu nhật ký xem quyền nào thật sự được dùng.</span></div>
+          <table class="t"><tr><th>cách cấp</th><th>số quyền</th><th>quyền thừa nếu bị chiếm</th></tr>
+          <tr><td>vai trò riêng: đọc hoá đơn</td><td>1</td><td>0</td></tr>
+          <tr><td>quản trị: 4 việc trên 5 bảng</td><td>$4 \times 5 = 20$</td><td class="red">$20 - 1 = \hl{19}$</td></tr></table>
+        focus: [1, 1, 1, 2, "2.2", "2.3"]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, là cấp quyền quản trị cho tài khoản dịch vụ cho nhanh. Trong mô hình này, dịch vụ xuất báo cáo chỉ cần đọc hoá đơn. Cấp vai trò quản trị thì nó có mọi việc trên mọi bảng, và khi bị chiếm thì kẻ xấu có hết. Bảng đếm số quyền. Vai trò riêng chỉ có 1 quyền, không thừa quyền nào. Quản trị có 4 việc trên 5 bảng, tức 20 quyền, thừa 19 quyền, nên người làm nghề tạo vai trò riêng chỉ đọc và đối chiếu nhật ký xem quyền nào thật sự được dùng."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.rbac_allowed(['kiem_toan', 'ke_toan'], 'hoa_don', 'tạo') and not alg.rbac_allowed(['kiem_toan'], 'hoa_don', 'duyệt')"
+      - "alg.sod_violation([('an', 'tạo', 'HD7'), ('an', 'duyệt', 'HD8'), ('binh', 'tạo', 'HD8'), ('binh', 'duyệt', 'HD7')]) == []"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Người có hai vai trò kiểm toán và kế toán có được tạo hoá đơn không? Kiểm toán một mình có được duyệt không?</td></tr>
+          <tr><td>2</td><td>Nhật ký: An tạo HD7, An duyệt HD8, Bình tạo HD8, Bình duyệt HD7. Có vi phạm tách bạch nhiệm vụ không?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, người có hai vai trò kiểm toán và kế toán có được tạo hoá đơn không? Kiểm toán một mình có được duyệt không? Câu hai, nhật ký ghi An tạo hoá đơn 7, An duyệt hoá đơn 8, Bình tạo hoá đơn 8, Bình duyệt hoá đơn 7. Có vi phạm tách bạch nhiệm vụ không? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 1</th><th>gộp quyền các vai trò</th><th>kết quả</th></tr>
+          <tr><td>kiểm toán + kế toán, tạo</td><td>đọc (kiểm toán) gộp đọc, tạo (kế toán)</td><td>$\hl{\text{có}}$, nhờ kế toán</td></tr>
+          <tr><td>kiểm toán một mình, duyệt</td><td>chỉ có đọc</td><td>$\hl{\text{không}}$</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Đáp án câu một, gộp quyền các vai trò. Kiểm toán cho đọc, kế toán cho đọc và tạo, nên người đó được tạo, nhờ vai trò kế toán. Kiểm toán một mình chỉ có quyền đọc, nên không được duyệt."
+      - show: |
+          <table class="t"><tr><th>câu 2: hoá đơn</th><th>người tạo</th><th>người duyệt</th><th>cùng người?</th></tr>
+          <tr><td>HD7</td><td>An</td><td>Bình</td><td>không</td></tr>
+          <tr><td>HD8</td><td>Bình</td><td>An</td><td>không</td></tr></table>
+          <p><b>Không</b> vi phạm theo luật này — nhưng hai người “duyệt chéo” cho nhau vẫn đáng xem xét.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Câu hai, dò từng hoá đơn. Hoá đơn 7 do An tạo, Bình duyệt. Hoá đơn 8 do Bình tạo, An duyệt. Vậy không vi phạm theo luật này, nhưng hai người duyệt chéo cho nhau vẫn đáng được xem xét."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">xác thực: là ai; phân quyền: được làm gì</span><span class="a">→</span>
+          <span class="n">kiểm trên từng đối tượng, ở máy chủ</span><span class="a">→</span>
+          <span class="n">vai trò, quyền tối thiểu</span><span class="a">→</span>
+          <span class="n">tách bạch nhiệm vụ, rà soát định kỳ</span></div>
+        say: "Tổng kết lại, xác thực là bạn là ai, phân quyền là bạn được làm gì. Hãy kiểm trên từng đối tượng, ở máy chủ, dùng vai trò với quyền tối thiểu, tách bạch nhiệm vụ, và rà soát định kỳ."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> mỗi yêu cầu là một câu hỏi “người này có được làm việc này với thứ này không?” — và câu trả lời mặc định là <b>không</b>.</div>
+        say: "Điều cần mang theo, mỗi yêu cầu là một câu hỏi người này có được làm việc này với thứ này không, và câu trả lời mặc định là không."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 5): <b>phiên đăng nhập</b>, cookie và giả mạo yêu cầu chéo trang.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 5, ta học phiên đăng nhập, cookie, và giả mạo yêu cầu chéo trang. Hẹn gặp bạn ở bài tiếp theo."

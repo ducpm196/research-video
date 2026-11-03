@@ -1,0 +1,215 @@
+id: L02
+course: DSY
+series: "DSY · Hệ phân tán và dữ liệu lớn"
+title: "Bài 2 — Đồng hồ vector và quan hệ xảy ra trước"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/dsy.yaml L02; audit/dsy/verify_dsy.py L02; C. J. Fidge (1988); F. Mattern, Virtual Time and Global States of Distributed Systems (1989); G. DeCandia và cộng sự, Dynamo, SOSP 2007; DMS bài 8 (quan hệ thứ tự bộ phận)"
+assumes: [arith, ltgt, assign, max_fn]
+# Quy ước: vector (a, b, c) ứng với (P1, P2, P3). Luật: sự kiện của Pi tăng thành phần i; gửi kèm cả vector; nhận thì lấy max TỪNG thành phần
+#   rồi tăng thành phần của mình. So sánh u ≤ v từng thành phần (thứ tự bộ phận, DMS bài 8). Vector trên hình do alg.vector_run; so sánh do
+#   alg.vc_compare; nhãn Lamport đối chiếu do alg.lamport_run (cùng chuỗi sự kiện audit/dsy/figs.py VECTOR_EV).
+objectives:
+  - "Gán đồng hồ vector"
+  - "Quyết định hai sự kiện có liên hệ nhân quả hay đồng thời"
+  - "Dùng đồng hồ vector để phát hiện ghi xung đột"
+asr_reviewed:
+  - {sentence: "Nếu mỗi số chiếm 8 byte, ba máy sao chép nhận ghi chỉ cần 3 thành phần, tức 24 byte kèm mỗi bản ghi.", reason: "ASR chép “Nếu mỗi số chiếm 8 bay, bà máy sao chép nhận ghi chỉ cần 3 thành phần, tức 24 bay kèm mỗi bảng ghi.” (0.846): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: ba (trong “byte ba” → “bay bà”), bản/bảng — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Sự kiện cục bộ hay gửi thì C tăng 1, ví dụ từ 2 lên 3.", reason: "ASR chép “Sự kiện cục bộ hay gửi thì sẽ tăng mục, ví dụ từ 2 lên 3.” (0.875): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: một/mục — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bước ba, P2 nhận thông điệp từ P1.", reason: "ASR chép “Bước 3, T2 nhận thông điệp từ P1.” (0.9): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Rồi việc nhận cũng là một sự kiện của P2, nên ô của P2 tăng lên, được 1, 2, 0, tức P2 biết một việc của P1 và hai việc của mình.", reason: "ASR chép “Rồi việc nhận cũng là một sự kiện của P2, nền O của P2 tăng lên, được 1, 2, 0, tức P2 biết một việc của P1 và hai việc của mình.” (0.944): “ô” (ô lưới) ASR viết chữ “O”; lệch âm/thanh thuần Việt: nên (trong “nên ô” → “nền o”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Một triệu máy khách thì cần một triệu thành phần, tức 8 triệu byte kèm mỗi bản ghi.", reason: "ASR chép “1 triệu máy khách thì cần 1 triệu thành phần, tức 8 triệu bay kèm mỗi bản ghi” (0.944): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Nhãn Lamport của hai sự kiện cuối đều là 2, không phân biệt được gì, còn đồng hồ vector cho biết chắc chúng đồng thời.", reason: "ASR chép “Nhãn lam por của hai sự kiện cuối đều là hai, không phân biệt được gì, còn đồng hồ vét tơ cho biết chắc chúng đồng thời.” (0.963): lệch âm/thanh thuần Việt: po/por — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Nhãn Lamport ở bài 1 luôn xếp được một bản là sau, nhưng có thể cả hai được ghi độc lập, không bên nào thấy bên kia.", reason: "ASR chép “Nhãng lampo ở bài 1”: Lamport đọc “Lam-po” theo lexicon và ASR chép “lampo” đúng như probe DSY p1; nhãn/nhãng lệch âm cuối — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Sự kiện 0, 1, 0 có nhãn Lamport 1, nhỏ hơn nhãn 2 của sự kiện 2, 0, 1, nhưng hai vector không so được với nhau, nên hai sự kiện đồng thời.", reason: "ASR chép “Sự kiện 0, 1, không có nhãn lamppor 1”: Lamport (“Lam-po”) viết “lamppor”, số 0 cuối bộ ba viết thành chữ “không”; các vector hiện trên màn hình — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Hai bản ghi cùng khoá — bản nào mới hơn?"
+    steps:
+      - show: |
+          <p>Hai máy sao chép cùng nhận ghi giỏ hàng của một người, mỗi máy một bản khác nhau. Nhãn Lamport (bài 1) luôn xếp được một bản “sau” — nhưng có thể cả hai được ghi <b>độc lập</b>, không ai thấy ai. Xoá một bản là mất hàng của khách.</p>
+          <div class="box key">Hôm nay: <b>đồng hồ vector</b> — biết chắc hai sự kiện là “trước–sau” hay <b>đồng thời</b>.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, hai máy sao chép cùng nhận ghi giỏ hàng của một người, mỗi máy một bản khác nhau. Nhãn Lamport ở bài 1 luôn xếp được một bản là sau, nhưng có thể cả hai được ghi độc lập, không bên nào thấy bên kia. Xoá một bản là khách mất hàng. Hôm nay ta học đồng hồ vector, biết chắc hai sự kiện là trước sau hay đồng thời."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: đồng hồ Lamport và so sánh từng thành phần"
+    checks:
+      - "2 + 1 == 3 and max(1, 2) + 1 == 3"
+      - "alg.lamport_run([('P1', 'local', None), ('P1', 'send', 'm'), ('P2', 'local', None), ('P2', 'recv', 'm')]) == [1, 2, 1, 3] and alg.vector_run([('P1', 'local', None), ('P1', 'send', 'm'), ('P2', 'local', None), ('P2', 'recv', 'm')], ['P1', 'P2'])[2] == (0, 1)"
+      - "alg.vc_compare((1, 2), (2, 2)) == 'trước' and alg.vc_compare((2, 0), (0, 2)) == 'đồng thời'"
+    steps:
+      - show: |
+          <table class="t"><tr><th>đồng hồ Lamport (bài 1)</th><th>ví dụ</th></tr>
+          <tr><td>sự kiện cục bộ hoặc gửi: $C \leftarrow C + 1$</td><td>$C$ từ 2 lên 3</td></tr>
+          <tr><td>nhận thông điệp mang nhãn $t$: $C \leftarrow \max(C, t) + 1$</td><td>$\max(1, 2) + 1 = 3$</td></tr>
+          <tr><td>bảo đảm <b>một chiều</b>: a xảy ra trước b thì nhãn a nhỏ hơn nhãn b</td><td>chiều ngược sai: nhãn 1 &lt; 2 mà hai sự kiện vẫn có thể không liên quan</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.4"]
+        say: "Ở bài 1, đồng hồ Lamport cho mỗi tiến trình một số đếm C. Sự kiện cục bộ hay gửi thì C tăng 1, ví dụ từ 2 lên 3. Khi nhận thông điệp mang nhãn t, C thành số lớn hơn giữa C và t, cộng 1, ví dụ số lớn hơn giữa 1 và 2 là 2, cộng 1 được 3. Bảo đảm của nó chỉ đi một chiều, nếu a xảy ra trước b thì nhãn của a nhỏ hơn nhãn của b. Chiều ngược lại không đúng, nhãn 1 nhỏ hơn nhãn 2 mà hai sự kiện vẫn có thể không liên quan gì đến nhau."
+      - show: |
+          <p><b>So từng thành phần</b> (thứ tự bộ phận, khoá Toán rời rạc): $u \le v$ khi <b>mỗi</b> thành phần của u không vượt thành phần cùng vị trí của v.</p>
+          <table class="t"><tr><th>cặp</th><th>so từng vị trí</th><th>kết luận</th></tr>
+          <tr><td>(1, 2) và (2, 2)</td><td>1 ≤ 2, 2 ≤ 2</td><td>(1, 2) nhỏ hơn</td></tr>
+          <tr><td>(2, 0) và (0, 2)</td><td>2 &gt; 0 nhưng 0 &lt; 2</td><td><b>không so được</b></td></tr></table>
+        introduces: [geq]
+        focus: [1, 1, "2.2", "2.3", "2.3"]
+        say: "Bài này còn cần cách so hai bộ số. Ở khoá Toán rời rạc, ta gặp thứ tự bộ phận, trong đó u nhỏ hơn hoặc bằng v khi mỗi thành phần của u không vượt thành phần cùng vị trí của v. Cặp 1, 2 và 2, 2 thỏa cả hai vị trí, nên 1, 2 nhỏ hơn. Cặp 2, 0 và 0, 2 thì vị trí đầu 2 lớn hơn 0, vị trí sau 0 lại nhỏ hơn 2. Không bên nào nhỏ hơn hoặc bằng bên kia, nên hai bộ số này không so được, và đó chính là điều đồng hồ vector sẽ dùng."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: vector và cách so"
+    checks:
+      - "alg.vc_compare((1, 0, 0), (2, 0, 1)) == 'trước' and alg.vc_compare((2, 0, 1), (1, 2, 0)) == 'đồng thời'"
+    steps:
+      - show: |
+          <p>Mỗi tiến trình giữ một vector, mỗi thành phần đếm số sự kiện <b>đã biết</b> của một tiến trình.</p>
+          <ol><li>Sự kiện của Pi: tăng thành phần thứ i. Gửi thì kèm cả vector.</li><li>Nhận: lấy số lớn hơn ở <b>từng</b> thành phần, rồi tăng thành phần của mình.</li></ol>
+          <p><b>So sánh</b>: u xảy ra trước v khi mọi thành phần của u ≤ của v và u ≠ v. Không bên nào ≤ bên kia → <b>đồng thời</b>.</p>
+        focus: [1, "2.1", "2.2", 3, 3]
+        say: "Mỗi tiến trình giữ một vector, mỗi thành phần đếm số sự kiện đã biết của một tiến trình. Với sự kiện của Pi, tăng thành phần thứ i, khi gửi thì kèm cả vector. Khi nhận, lấy số lớn hơn ở từng thành phần, rồi tăng thành phần của mình. Để so sánh, u xảy ra trước v khi mọi thành phần của u không vượt của v và hai vector khác nhau. Nếu không bên nào nhỏ hơn hoặc bằng bên kia thì hai sự kiện đồng thời."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Nhận thông điệp: gộp hai sổ đếm theo từng cột"
+    checks:
+      - "alg.vector_run([('P1', 'send', 'm'), ('P2', 'local', None), ('P2', 'recv', 'm')], ['P1', 'P2', 'P3']) == [(1, 0, 0), (0, 1, 0), (1, 2, 0)]"
+      - "tuple(max(a, b) for a, b in zip((0, 1, 0), (1, 0, 0))) == (1, 1, 0)"
+    steps:
+      - show: |
+          <div><svg width="1500" height="500" viewBox="0 0 1500 500"><defs><marker id="ah2" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#1f2937"/></marker></defs><g font-size="23" fill="#1f2937"><text x="550" y="45" text-anchor="middle" font-weight="bold">ô P1</text><text x="670" y="45" text-anchor="middle" font-weight="bold">ô P2</text><text x="790" y="45" text-anchor="middle" font-weight="bold">ô P3</text><text x="40" y="103">P2 đang giữ</text><rect x="500" y="60" width="100" height="64" rx="8" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="550" y="103" text-anchor="middle" font-size="30">0</text><rect x="620" y="60" width="100" height="64" rx="8" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="670" y="103" text-anchor="middle" font-size="30">1</text><rect x="740" y="60" width="100" height="64" rx="8" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="790" y="103" text-anchor="middle" font-size="30">0</text><text x="40" y="193">thông điệp từ P1 mang</text><rect x="500" y="150" width="100" height="64" rx="8" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="550" y="193" text-anchor="middle" font-size="30">1</text><rect x="620" y="150" width="100" height="64" rx="8" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="670" y="193" text-anchor="middle" font-size="30">0</text><rect x="740" y="150" width="100" height="64" rx="8" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="790" y="193" text-anchor="middle" font-size="30">0</text><line x1="490" y1="235" x2="850" y2="235" stroke="#1f2937" stroke-width="3"/><text x="40" y="303">số lớn hơn ở từng cột</text><rect x="500" y="260" width="100" height="64" rx="8" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="550" y="303" text-anchor="middle" font-size="30">1</text><rect x="620" y="260" width="100" height="64" rx="8" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="670" y="303" text-anchor="middle" font-size="30">1</text><rect x="740" y="260" width="100" height="64" rx="8" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="790" y="303" text-anchor="middle" font-size="30">0</text><line x1="670" y1="330" x2="670" y2="372" stroke="#1f2937" stroke-width="3" marker-end="url(#ah2)"/><text x="40" y="423">tăng ô của P2</text><rect x="500" y="380" width="100" height="64" rx="8" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="550" y="423" text-anchor="middle" font-size="30">1</text><rect x="620" y="380" width="100" height="64" rx="8" fill="#d1fae5" stroke="#eb6834" stroke-width="5"/><text x="670" y="423" text-anchor="middle" font-size="30">2</text><rect x="740" y="380" width="100" height="64" rx="8" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="790" y="423" text-anchor="middle" font-size="30">0</text><text x="930" y="193">thông điệp mang cả vector</text><text x="930" y="303">mỗi cột lấy số lớn hơn</text><text x="930" y="423" fill="#059669">P2 biết: 1 việc của P1, 2 việc của mình</text></g></svg></div>
+        focus: [1, 1, 1, 1, 1]
+        say: "Hãy coi vector là một sổ đếm có ba ô, mỗi ô ghi số việc đã biết của một tiến trình. P2 đang giữ 0, 1, 0, nghĩa là nó mới biết một việc của chính nó. Thông điệp từ P1 mang theo cả sổ đếm của P1 là 1, 0, 0. Khi nhận, P2 gộp hai sổ theo từng cột, mỗi cột lấy số lớn hơn, được 1, 1, 0. Rồi việc nhận cũng là một sự kiện của P2, nên ô của P2 tăng lên, được 1, 2, 0, tức P2 biết một việc của P1 và hai việc của mình."
+
+  - id: example
+    kind: example
+    title: "Hai thông điệp bắt chéo"
+    checks:
+      - "alg.vector_run([('P1', 'send', 'm2'), ('P3', 'send', 'm'), ('P2', 'local', None), ('P2', 'recv', 'm2'), ('P1', 'recv', 'm')], ['P1', 'P2', 'P3']) == [(1, 0, 0), (0, 0, 1), (0, 1, 0), (1, 2, 0), (2, 0, 1)]"
+      - "alg.lamport_run([('P1', 'send', 'm2'), ('P3', 'send', 'm'), ('P2', 'local', None), ('P2', 'recv', 'm2'), ('P1', 'recv', 'm')]) == [1, 1, 1, 2, 2]"
+    steps:
+      - show: |
+          <div><svg width="980" height="340" viewBox="0 0 980 340"><defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#eb6834"/></marker></defs><line x1="90" y1="50" x2="960" y2="50" stroke="#1f2937" stroke-width="2.5"/><text x="76" y="57" font-size="22" fill="#1f2937" text-anchor="end" font-weight="bold" stroke="#fffbeb" stroke-width="5" paint-order="stroke">P1</text><line x1="90" y1="170" x2="960" y2="170" stroke="#1f2937" stroke-width="2.5"/><text x="76" y="177" font-size="22" fill="#1f2937" text-anchor="end" font-weight="bold" stroke="#fffbeb" stroke-width="5" paint-order="stroke">P2</text><line x1="90" y1="290" x2="960" y2="290" stroke="#1f2937" stroke-width="2.5"/><text x="76" y="297" font-size="22" fill="#1f2937" text-anchor="end" font-weight="bold" stroke="#fffbeb" stroke-width="5" paint-order="stroke">P3</text><line x1="140" y1="64" x2="930" y2="156" stroke="#eb6834" stroke-width="2.5" stroke-dasharray="8 6" marker-end="url(#ar)"/><line x1="140" y1="276" x2="930" y2="64" stroke="#eb6834" stroke-width="2.5" stroke-dasharray="8 6" marker-end="url(#ar)"/><circle cx="140" cy="50" r="11" fill="#2a78d6"/><text x="140" y="28" font-size="20" fill="#1f2937" text-anchor="middle" font-weight="bold" stroke="#fffbeb" stroke-width="5" paint-order="stroke">(1,0,0)</text><circle cx="140" cy="290" r="11" fill="#2a78d6"/><text x="140" y="268" font-size="20" fill="#1f2937" text-anchor="middle" font-weight="bold" stroke="#fffbeb" stroke-width="5" paint-order="stroke">(0,0,1)</text><circle cx="140" cy="170" r="11" fill="#2a78d6"/><text x="140" y="148" font-size="20" fill="#1f2937" text-anchor="middle" font-weight="bold" stroke="#fffbeb" stroke-width="5" paint-order="stroke">(0,1,0)</text><circle cx="930" cy="170" r="11" fill="#2a78d6"/><text x="930" y="148" font-size="20" fill="#1f2937" text-anchor="middle" font-weight="bold" stroke="#fffbeb" stroke-width="5" paint-order="stroke">(1,2,0)</text><circle cx="930" cy="50" r="11" fill="#2a78d6"/><text x="930" y="28" font-size="20" fill="#1f2937" text-anchor="middle" font-weight="bold" stroke="#fffbeb" stroke-width="5" paint-order="stroke">(2,0,1)</text></svg></div>
+          <p><b>Bước 1</b> — ba sự kiện đầu, mỗi tiến trình tăng ô của mình: P1 gửi (1,0,0); P3 gửi (0,0,1); P2 cục bộ (0,1,0).</p>
+        focus: [1, 2, 2]
+        say: "Trên hình, mũi tên cam là thông điệp, vector trên mỗi chấm là đồng hồ của sự kiện đó. Bước một, ba sự kiện đầu chưa nhận gì, mỗi tiến trình chỉ tăng ô của mình. P1 gửi ở 1, 0, 0, P3 gửi ở 0, 0, 1, và P2 có sự kiện cục bộ ở 0, 1, 0."
+      - show: |
+          <p><b>Bước 2</b> — P1 nhận từ P3: $\max$ từng thành phần của (1,0,0) và (0,0,1) là (1,0,1), tăng thành phần P1 → (2,0,1).</p>
+        say: "Bước hai, P1 nhận thông điệp từ P3. Lấy số lớn hơn ở từng thành phần của 1, 0, 0 và 0, 0, 1 được 1, 0, 1, rồi tăng thành phần của P1 thành 2, 0, 1."
+      - show: |
+          <p><b>Bước 3</b> — P2 nhận từ P1: $\max$ từng thành phần của (0,1,0) và (1,0,0) là (1,1,0), tăng thành phần P2 → (1,2,0).</p>
+        say: "Bước ba, P2 nhận thông điệp từ P1. Số lớn hơn ở từng thành phần của 0, 1, 0 và 1, 0, 0 là 1, 1, 0, rồi tăng thành phần của P2 được 1, 2, 0."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>Bước 4 — so</th><th>ô P1</th><th>ô P2</th><th>ô P3</th><th>kết luận</th></tr>
+          <tr><td>(2,0,1) và (1,2,0)</td><td>2 &gt; 1</td><td>0 &lt; 2</td><td>1 &gt; 0</td><td>$\hl{\text{đồng thời}}$</td></tr>
+          <tr><td>(1,0,0) và (2,0,1)</td><td>1 ≤ 2</td><td>0 ≤ 0</td><td>0 ≤ 1</td><td>(1,0,0) xảy ra <b>trước</b></td></tr></table>
+        focus: [1, "1.2", "1.2", "1.3"]
+        say: "Bước bốn, so từng ô. So 2, 0, 1 với 1, 2, 0, thành phần đầu 2 lớn hơn 1 nhưng thành phần hai 0 nhỏ hơn 2, nên hai sự kiện đồng thời. Không bên nào biết về việc của bên kia. Còn 1, 0, 0 nhỏ hơn hoặc bằng 2, 0, 1 ở mọi thành phần, nên xảy ra trước."
+      - show: |
+          <p><b>Bước 5</b> — nhãn Lamport của hai sự kiện cuối, (1,2,0) và (2,0,1), đều là $\hl{2}$: chỉ nhìn nhãn thì không phân biệt được gì.</p>
+        say: "Bước năm, đối chiếu với đồng hồ Lamport của bài 1, nơi mỗi tiến trình chỉ có một số đếm. Nhãn Lamport của hai sự kiện cuối đều là 2, không phân biệt được gì, còn đồng hồ vector cho biết chắc chúng đồng thời."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác: dò đường đi giữa các sự kiện"
+    checks:
+      - "(lambda V: {(i, j) for i, j in __import__('itertools').combinations(range(5), 2) if alg.vc_compare(V[i], V[j]) != 'đồng thời'})([(1, 0, 0), (0, 0, 1), (0, 1, 0), (1, 2, 0), (2, 0, 1)]) == {(0, 3), (0, 4), (1, 4), (2, 3)} and math.comb(5, 2) == 10"
+      - "(lambda V, L: sum(1 for i, j in __import__('itertools').combinations(range(5), 2) if alg.vc_compare(V[i], V[j]) == 'đồng thời' and L[i] != L[j]))([(1, 0, 0), (0, 0, 1), (0, 1, 0), (1, 2, 0), (2, 0, 1)], [1, 1, 1, 2, 2]) == 2"
+    steps:
+      - show: |
+          <p>5 sự kiện → $C(5, 2) = 10$ cặp. Dò lại năm sự kiện của ví dụ: cặp nào nối được bằng thông điệp và trục tiến trình?</p>
+          <table class="t"><tr><th>cặp có đường đi</th><th>đi theo</th><th>vector</th></tr>
+          <tr><td>P1 gửi → P2 nhận</td><td>thông điệp m2</td><td>(1,0,0) trước (1,2,0) ✓</td></tr>
+          <tr><td>P1 gửi → P1 nhận</td><td>trục P1</td><td>(1,0,0) trước (2,0,1) ✓</td></tr>
+          <tr><td>P3 gửi → P1 nhận</td><td>thông điệp m</td><td>(0,0,1) trước (2,0,1) ✓</td></tr>
+          <tr><td>P2 cục bộ → P2 nhận</td><td>trục P2</td><td>(0,1,0) trước (1,2,0) ✓</td></tr></table>
+          <p class="note">6 cặp còn lại không có đường → vector báo đồng thời ở đúng 6 cặp đó. Trong 6 cặp này, có 2 cặp nhãn Lamport là 1 và 2: nhìn nhãn sẽ đoán sai.</p>
+        focus: [1, 1, "2.2", "2.3", "2.4", "2.5", 3, 3]
+        say: "Kiểm bằng một đường khác, không so vector mà dò lại năm sự kiện của ví dụ. Năm sự kiện cho tổ hợp chập 2 của 5, bằng 10 cặp, ta tìm cặp nào nối được bằng thông điệp và trục của tiến trình. P1 gửi nối tới P2 nhận qua thông điệp m2, và vector cũng báo xảy ra trước. P1 gửi nối tới P1 nhận dọc trục P1, khớp. P3 gửi nối tới P1 nhận qua thông điệp m, khớp. P2 cục bộ nối tới P2 nhận dọc trục P2, cũng khớp. Sáu cặp còn lại không có đường đi, và vector báo đồng thời ở đúng sáu cặp đó. Trong sáu cặp này có hai cặp mang nhãn Lamport 1 và 2, nên ai chỉ nhìn nhãn sẽ đoán sai."
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc, 1 lỗi người đã đi làm"
+    checks:
+      - "3 * 8 == 24 and 10 ** 6 * 8 == 8_000_000"
+      - "alg.lamport_run([('P1', 'send', 'm2'), ('P3', 'send', 'm'), ('P2', 'local', None), ('P2', 'recv', 'm2'), ('P1', 'recv', 'm')])[2] < alg.lamport_run([('P1', 'send', 'm2'), ('P3', 'send', 'm'), ('P2', 'local', None), ('P2', 'recv', 'm2'), ('P1', 'recv', 'm')])[4] and alg.vc_compare((0, 1, 0), (2, 0, 1)) == 'đồng thời'"
+      - "sum((2, 0, 1)) == sum((1, 2, 0)) == 3 and alg.vc_compare((2, 0, 1), (1, 2, 0)) == 'đồng thời'"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Suy ra nhân quả từ nhãn Lamport nhỏ hơn <b class="red">(sai)</b>
+          <br><span class="note">Sự kiện (0,1,0) có nhãn Lamport 1 &lt; 2 của (2,0,1), nhưng hai vector không so được → đồng thời.</span></div>
+        say: "Lỗi thứ nhất, suy ra nhân quả từ nhãn Lamport nhỏ hơn. Sự kiện 0, 1, 0 có nhãn Lamport 1, nhỏ hơn nhãn 2 của sự kiện 2, 0, 1, nhưng hai vector không so được với nhau, nên hai sự kiện đồng thời."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> So vector bằng tổng các thành phần <b class="red">(sai)</b>
+          <br><span class="note">(2,0,1) và (1,2,0) có tổng 3 bằng nhau mà vẫn đồng thời; tổng không nói gì về nhân quả. Phải so <b>từng</b> thành phần.</span></div>
+        say: "Lỗi thứ hai, so vector bằng tổng các thành phần. Hai vector 2, 0, 1 và 1, 2, 0 có tổng đều bằng 3 mà vẫn đồng thời, tổng không nói gì về nhân quả. Phải so từng thành phần."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Gặp hai bản đồng thời thì lặng lẽ giữ bản “mới hơn” theo giờ máy <b class="red">(mất dữ liệu)</b>
+          <br><span class="note">Đồng thời nghĩa là không ai sai: giữ cả hai để hợp nhất (ví dụ hợp hai giỏ hàng), hoặc hỏi người dùng.</span></div>
+        say: "Lỗi thứ ba, gặp hai bản đồng thời thì lặng lẽ giữ bản mới hơn theo giờ máy. Đồng thời nghĩa là không bản nào sai, nên hãy giữ cả hai để hợp nhất, như gộp hai giỏ hàng, hoặc hỏi người dùng."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Cho <b>mỗi máy khách</b> một thành phần trong vector <b class="red">(vector phình theo số khách)</b></div>
+          <table class="t"><tr><th>mỗi thành phần ứng với</th><th>số thành phần</th><th>cỡ vector kèm mỗi bản ghi (8 byte một số)</th></tr>
+          <tr><td>3 máy sao chép nhận ghi</td><td>3</td><td>$3 \cdot 8 = 24$ byte</td></tr>
+          <tr><td>1 000 000 máy khách</td><td>1 000 000</td><td>$\hl{8\,000\,000}$ byte</td></tr></table>
+          <p class="note">Người có kinh nghiệm cho mỗi máy sao chép nhận ghi một thành phần: số máy này nhỏ và ít đổi.</p>
+        introduces: [cdot]
+        focus: [1, 1, "2.2", "2.3", 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, cho mỗi máy khách một thành phần trong vector. Nghe có vẻ chính xác hơn, nhưng vector sẽ phình theo số khách. Nếu mỗi số chiếm 8 byte, ba máy sao chép nhận ghi chỉ cần 3 thành phần, tức 24 byte kèm mỗi bản ghi. Một triệu máy khách thì cần một triệu thành phần, tức 8 triệu byte kèm mỗi bản ghi. Người có kinh nghiệm cho mỗi máy sao chép nhận ghi một thành phần, vì số máy này nhỏ và ít thay đổi."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.vc_compare((3, 1, 0), (2, 1, 0)) == 'sau' and alg.vc_compare((1, 2, 3), (3, 2, 1)) == 'đồng thời' and alg.vc_compare((1, 1, 0), (1, 2, 2)) == 'trước'"
+      - "3 > 2 and 1 < 3 and 3 > 1 and 1 < 2 and 0 < 2"
+    steps:
+      - show: |
+          <table class="t"><tr><th>cặp</th><th>so: trước, sau, hay đồng thời?</th></tr>
+          <tr><td>1</td><td>(3,1,0) với (2,1,0)</td></tr><tr><td>2</td><td>(1,2,3) với (3,2,1)</td></tr><tr><td>3</td><td>(1,1,0) với (1,2,2)</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", 0]
+        say: "Bây giờ đến lượt bạn tự làm, so từng cặp vector và cho biết trước, sau, hay đồng thời. Cặp một, 3, 1, 0 với 2, 1, 0. Cặp hai, 1, 2, 3 với 3, 2, 1. Cặp ba, 1, 1, 0 với 1, 2, 2. Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>cặp</th><th>ô P1</th><th>ô P2</th><th>ô P3</th><th>kết luận</th></tr>
+          <tr><td>(3,1,0) với (2,1,0)</td><td>3 &gt; 2</td><td>1 = 1</td><td>0 = 0</td><td><b>sau</b></td></tr>
+          <tr><td>(1,2,3) với (3,2,1)</td><td>1 &lt; 3</td><td>2 = 2</td><td>3 &gt; 1</td><td>$\hl{\text{đồng thời}}$</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.3", "1.3"]
+        say: "Đáp án, so từng ô một. Cặp một, ô đầu 3 lớn hơn 2, hai ô còn lại bằng nhau. Vậy mọi thành phần lớn hơn hoặc bằng và có một thành phần lớn hơn, nên xảy ra sau. Cặp hai, ô đầu 1 nhỏ hơn 3, nhưng ô cuối 3 lớn hơn 1. Mỗi bên lớn hơn ở một chỗ, nên đồng thời."
+      - show: |
+          <table class="t"><tr><th>cặp</th><th>ô P1</th><th>ô P2</th><th>ô P3</th><th>kết luận</th></tr>
+          <tr><td>(1,1,0) với (1,2,2)</td><td>1 = 1</td><td>1 &lt; 2</td><td>0 &lt; 2</td><td><b>trước</b></td></tr></table>
+          <div class="box key">Quyết định: nếu hai bản giỏ hàng mang (1,2,3) và (3,2,1), không bản nào thắng — giữ cả hai để hợp nhất.</div>
+        focus: ["1.2", "1.2", 2]
+        say: "Cặp ba, ô đầu bằng nhau, hai ô sau của 1, 1, 0 đều nhỏ hơn. Không ô nào lớn hơn, nên xảy ra trước. Còn nếu hai bản giỏ hàng mang 1, 2, 3 và 3, 2, 1 như cặp hai, không bản nào thắng, ta giữ cả hai để hợp nhất."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">mỗi tiến trình một thành phần</span><span class="a">→</span>
+          <span class="n">nhận: max từng thành phần, rồi +1</span><span class="a">→</span>
+          <span class="n">so từng thành phần</span><span class="a">→</span>
+          <span class="n">không so được: đồng thời, giữ cả hai</span></div>
+        say: "Tổng kết lại, đồng hồ vector có mỗi tiến trình một thành phần. Khi nhận thì lấy số lớn hơn ở từng thành phần rồi cộng 1. So từng thành phần, và nếu không so được thì hai sự kiện đồng thời, hãy giữ cả hai."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> không phải mọi thứ đều xếp được thành một hàng. Biết khi nào hai việc <b>không</b> có thứ tự cũng quan trọng như biết thứ tự.</div>
+        say: "Điều cần mang theo, không phải mọi thứ đều xếp được thành một hàng. Biết khi nào hai việc không có thứ tự cũng quan trọng như biết thứ tự."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 3): <b>sao chép dữ liệu</b> và đại biểu đọc–ghi.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 3, ta học sao chép dữ liệu, và cách chọn số bản đọc và ghi. Hẹn gặp bạn ở bài tiếp theo."

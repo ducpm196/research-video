@@ -1,0 +1,360 @@
+id: L14
+course: AIF
+series: "AIF · Nền tảng trí tuệ nhân tạo"
+title: "Bài 14 — Tình huống chuyên gia theo dòng thời gian: máy chơi cờ từ Deep Blue tới AlphaZero"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+case: journey
+source: "curriculum/aif.yaml L14; audit/aif/sources_L14.md (câu trích nguyên văn, đọc 2026-11-02); audit/aif/verify_aif.py L14; M. Campbell, A. J. Hoane Jr., F.-h. Hsu, Deep Blue, Artificial Intelligence 134 (2002) 57–83 [DB02]; D. Silver và cộng sự, Mastering the game of Go with deep neural networks and tree search, Nature 529 (2016) [AG16]; D. Silver và cộng sự, Mastering the game of Go without human knowledge, Nature (2017), bản tác giả ở kho UCL [AGZ17]; D. Silver và cộng sự, Mastering Chess and Shogi by Self-Play with a General Reinforcement Learning Algorithm, arXiv:1712.01815 (2017) [AZ17]; D. Silver và cộng sự, A general reinforcement learning algorithm that masters chess, shogi, and Go through self-play, Science (2018), bản truy cập mở và blog DeepMind 6/12/2018 [AZ18]; AIF bài 3 (hàm đánh giá), bài 6 (cực đại–cực tiểu, alpha–beta), bài 7 (cây mô phỏng ngẫu nhiên), bài 13 (35 mũ 80); CS115 L19 (quá khớp), L34 (mạng tích chập), L39 (học tăng cường)"
+assumes: [arith, power, approx, log]
+# Quy ước: “thế cờ” = vị trí quân trên bàn (position); “hàm đánh giá” = ước lượng điểm của thế cờ chưa kết thúc (bài 3, bài 6);
+#   “mạng chính sách” = mạng nơ-ron gợi ý nước nên xét; “mạng giá trị” = mạng nơ-ron đoán bên nào thắng từ một thế cờ;
+#   “tự chơi” = chương trình đánh với chính nó để tạo dữ liệu (self-play); “hiệu suất song song” = tốc độ đo được chia tốc độ lý thuyết.
+#   Mọi sự kiện và con số có nguồn ghi trong audit/aif/sources_L14.md. Con số khác là phép tính lại (checks) hoặc ghi “(số minh hoạ)”:
+#   trò chơi có 30 nước mỗi lượt, máy 1 triệu thế mỗi giây, 10 giây mỗi nước, 10 giây mỗi ván tự chơi đều là SỐ MINH HOẠ.
+#   839 ván hoà (2018) là phép tính 1000 − 155 − 6, nguồn không ghi trực tiếp.
+#   Lời đọc không nói tên người, không nói “TPU”, “GPU”, “Stockfish”, “Elmo”, “Monte Carlo” (lexicon_vi.AIF.yaml): nói “bộ tăng tốc”,
+#   “chương trình cờ vua vô địch giải máy năm 2016”, “cây mô phỏng ngẫu nhiên”. Tên hệ thống (Deep Blue, AlphaGo, AlphaZero, DeepMind)
+#   KHÔNG đọc — probe p3 đều < 7/8 (lexicon_vi.AIF.yaml); lời đọc nói “máy chơi cờ của IBM” (IBM thô 8/8), “một chương trình mới”.
+objectives:
+  - "Kể lại hành trình máy chơi cờ qua năm chặng từ 1988 tới 2018, mỗi chặng một điểm nghẽn và một cách xử lý"
+  - "Tính lại tốc độ lý thuyết, hiệu suất song song, cỡ cây cờ vây, số mô phỏng mỗi giây và số ván hoà của trận 1000 ván"
+  - "Chọn giữa tìm kiếm có hàm đánh giá viết tay và tự học bằng tự chơi cho trò chơi của chính mình, kèm điều kiện đổi lựa chọn"
+asr_reviewed:
+  - {sentence: "Dùng lôgarit cơ số 10, con số đó xấp xỉ 10 mũ 123 nút.", reason: "ASR chép “Dùng Logatricker số 10, còn số đó sắp xỉ 10 mũ 123 nút.” (0.8): lệch âm/thanh thuần Việt: lôgarit cơ/logatricker, con/còn, xấp/sắp — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Câu một, dùng cực đại cực tiểu với hàm đánh giá viết tay thì nhìn trước được mấy lượt, có và không có alpha beta?", reason: "ASR chép “Câu 1, dùng cực đại cực tiểu với hàm đánh giá viết tay thì nhìn trước được mấy lượt, có và không có an pha beta.” (0.906): beta đọc “bê-ta”, ASR viết “bê/beta”; alpha đọc thô (probe AIF p1: 7/8, bản chép “an pha / ANFA / α”) — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "126 triệu thế mỗi giây, rồi chỉ 60 nghìn"
+    checks:
+      - "126_000_000 // 60_000 == 2100"
+    steps:
+      - show: |
+          <p>Năm 1997, Deep Blue của IBM thắng nhà vô địch cờ vua thế giới. Trong trận đấu, nó xét trung bình <b>126 triệu thế cờ mỗi giây</b>.</p>
+          <p>Năm 2018, AlphaZero thắng chương trình vô địch giải máy cờ vua năm 2016 mà chỉ xét <b>60 nghìn thế cờ mỗi giây</b> — ít hơn khoảng 2100 lần.</p>
+          <div class="box key">Hôm nay: năm chặng từ 1988 tới 2018 — mỗi chặng, điểm nghẽn là gì, đội làm máy xử lý thế nào, và thực hành nào đúng trong điều kiện nào.</div>
+        focus: [1, 1, 2, 2, 3]
+        say: "Chào bạn, năm 1997, máy chơi cờ của IBM thắng nhà vô địch cờ vua thế giới. Trong trận đấu đó, nó xét trung bình 126 triệu thế cờ mỗi giây. Năm 2018, một chương trình mới thắng chương trình vô địch giải máy cờ vua năm 2016, mà chỉ xét 60 nghìn thế cờ mỗi giây. Như vậy là ít hơn khoảng 2100 lần, vậy sức mạnh nằm ở đâu? Hôm nay ta đi qua năm chặng từ 1988 tới 2018, xem mỗi chặng vướng ở đâu, được xử lý thế nào, và đúng trong điều kiện nào."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại bốn điều từ các bài trước"
+    checks:
+      - "35 ** 2 + 35 ** 2 - 1 == 2449 and 35 ** 4 == 1500625"
+      - "int(80 * math.log10(35)) == 123"
+      - "round(7 / 10, 1) == 0.7"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài</th><th>điều đã học</th><th>ví dụ số</th></tr>
+          <tr><td>bài 3</td><td><b>hàm đánh giá</b>: ước lượng nhanh một trạng thái, thay cho việc đi tới tận cùng</td><td>trò 8 ô số: tổng khoảng cách 18, chi phí thật 26</td></tr>
+          <tr><td>bài 6</td><td><b>alpha–beta</b>: bỏ nhánh chắc chắn không được chọn; thứ tự tốt thì số lá còn khoảng $b^{d/2}$</td><td>35 nước, sâu 4: 2449 lá thay vì 1&nbsp;500&nbsp;625</td></tr>
+          <tr><td>bài 7</td><td><b>cây mô phỏng ngẫu nhiên</b>: chọn, mở rộng, chơi thử tới hết ván, cộng kết quả ngược lên</td><td>nước A thắng 7 trên 10 lần chơi thử: tỉ lệ 0,7</td></tr>
+          <tr><td>bài 13</td><td><b>cỡ cây cờ vua</b>: lôgarit cơ số 10 biến mũ thành nhân</td><td>$35^{80} \approx 10^{123}$ nút</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", "1.5"]
+        say: "Bảng nhắc lại bốn điều từ các bài trước. Ở bài 3, hàm đánh giá ước lượng nhanh một trạng thái, như trò 8 ô số có tổng khoảng cách 18 trong khi chi phí thật là 26. Ở bài 6, cắt tỉa alpha beta bỏ nhánh chắc chắn không được chọn, với 35 nước và độ sâu 4 chỉ còn 2449 lá. Ở bài 7, cây mô phỏng ngẫu nhiên chơi thử tới hết ván, nước thắng 7 trên 10 lần có tỉ lệ 0 phẩy 7. Ở bài 13, cây cờ vua có cỡ 35 mũ 80. Dùng lôgarit cơ số 10, con số đó xấp xỉ 10 mũ 123 nút."
+
+  # ───────────────────────── 3. NGÔN NGỮ ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Ngôn ngữ của hành trình"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thuật ngữ</th><th>nghĩa</th></tr>
+          <tr><td><b>thế cờ</b></td><td>vị trí mọi quân trên bàn ở một thời điểm</td></tr>
+          <tr><td><b>hiệu suất song song</b></td><td>tốc độ đo được chia tốc độ lý thuyết của mọi bộ xử lý cộng lại</td></tr>
+          <tr><td><b>mạng chính sách</b></td><td>mạng nơ-ron gợi ý nước nào đáng xét — thu hẹp <b>chiều rộng</b> cây</td></tr>
+          <tr><td><b>mạng giá trị</b></td><td>mạng nơ-ron đoán bên nào thắng từ một thế cờ — rút ngắn <b>chiều sâu</b> cây</td></tr>
+          <tr><td><b>tự chơi</b></td><td>chương trình đánh với chính nó để tạo dữ liệu học</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", "1.6"]
+        say: "Bài dùng năm thuật ngữ. Thế cờ là vị trí mọi quân trên bàn ở một thời điểm. Hiệu suất song song là tốc độ đo được chia cho tốc độ lý thuyết của mọi bộ xử lý cộng lại. Mạng chính sách là mạng nơ-ron gợi ý nước nào đáng xét, nên thu hẹp chiều rộng của cây. Mạng giá trị là mạng nơ-ron đoán bên nào thắng từ một thế cờ, nên rút ngắn chiều sâu của cây. Tự chơi là chương trình đánh với chính nó để tạo dữ liệu học."
+
+  # ───────────────────────── 4. DÒNG THỜI GIAN ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Năm chặng trên một trục thời gian"
+    steps:
+      - show: |
+          <div><svg width="1700" height="320" viewBox="0 0 1700 320">
+          <line x1="30" y1="150" x2="1670" y2="150" stroke="#1f2937" stroke-width="3"/>
+          <g font-size="24" text-anchor="middle" fill="#1f2937">
+          <circle cx="160" cy="150" r="15" fill="#9ca3af"/><text x="160" y="108" font-weight="bold">1988 → 1996</text><text x="160" y="200">chip cờ riêng</text><text x="160" y="232">tăng tốc, vẫn thua</text>
+          <circle cx="500" cy="150" r="15" fill="#2a78d6"/><text x="500" y="108" font-weight="bold">1997</text><text x="500" y="200">480 chip, 8000 đặc trưng</text><text x="500" y="232">sửa hàm đánh giá</text>
+          <circle cx="850" cy="150" r="15" fill="#7c3aed"/><text x="850" y="108" font-weight="bold">2015 → 2016</text><text x="850" y="200">cờ vây: hai mạng nơ-ron</text><text x="850" y="232">học từ ván của người</text>
+          <circle cx="1200" cy="150" r="15" fill="#eb6834"/><text x="1200" y="108" font-weight="bold">2017</text><text x="1200" y="200">chỉ tự chơi</text><text x="1200" y="232">ít máy hơn 12 lần</text>
+          <circle cx="1540" cy="150" r="15" fill="#059669"/><text x="1540" y="108" font-weight="bold">2017 → 2018</text><text x="1540" y="200">một thuật toán, ba trò</text><text x="1540" y="232">trận 1000 ván</text>
+          </g>
+          <text x="850" y="300" font-size="23" fill="#6b7280" text-anchor="middle">khai sinh → tăng trưởng → quy mô rất lớn → ổn định → tiếp tục phát triển</text>
+          </svg></div>
+        focus: [1, 1, 1, 1, 1]
+        say: "Hình là trục thời gian với năm chặng. Từ 1988 tới 1996, máy có chip cờ riêng, nhanh dần lên mà vẫn thua. Năm 1997, máy có 480 chip và hàm đánh giá hơn 8000 đặc trưng, sửa từ chính các ván thua. Từ 2015 tới 2016, cờ vây được giải bằng hai mạng nơ-ron học từ ván của người, rồi năm 2017 máy chỉ tự chơi mà dùng ít máy hơn 12 lần. Cuối cùng, năm 2018, một thuật toán chơi cả ba trò và được kiểm bằng trận 1000 ván."
+
+  # ───────────────────────── 5. CƠ CHẾ CHUNG ─────────────────────────
+  - id: tree
+    kind: concept
+    title: "Hai cách làm cây nhỏ lại: cắt sâu và cắt rộng"
+    steps:
+      - show: |
+          <div><svg width="1600" height="360" viewBox="0 0 1600 360">
+          <g stroke="#9ca3af" stroke-width="2">
+          <line x1="380" y1="60" x2="160" y2="160"/><line x1="380" y1="60" x2="270" y2="160"/><line x1="380" y1="60" x2="380" y2="160"/><line x1="380" y1="60" x2="490" y2="160"/><line x1="380" y1="60" x2="600" y2="160"/>
+          <line x1="160" y1="160" x2="130" y2="250"/><line x1="160" y1="160" x2="190" y2="250"/><line x1="270" y1="160" x2="240" y2="250"/><line x1="270" y1="160" x2="300" y2="250"/><line x1="380" y1="160" x2="350" y2="250"/><line x1="380" y1="160" x2="410" y2="250"/><line x1="490" y1="160" x2="460" y2="250"/><line x1="490" y1="160" x2="520" y2="250"/><line x1="600" y1="160" x2="570" y2="250"/><line x1="600" y1="160" x2="630" y2="250"/>
+          <line x1="1180" y1="60" x2="960" y2="160"/><line x1="1180" y1="60" x2="1070" y2="160"/><line x1="1180" y1="60" x2="1290" y2="160"/><line x1="1180" y1="60" x2="1400" y2="160"/>
+          </g>
+          <g stroke="#7c3aed" stroke-width="5"><line x1="1180" y1="60" x2="1180" y2="160"/><line x1="1180" y1="160" x2="1150" y2="250"/><line x1="1180" y1="160" x2="1210" y2="250"/></g>
+          <g fill="#2a78d6"><circle cx="380" cy="60" r="12"/><circle cx="1180" cy="60" r="12"/></g>
+          <g fill="#9ca3af"><circle cx="160" cy="160" r="9"/><circle cx="270" cy="160" r="9"/><circle cx="380" cy="160" r="9"/><circle cx="490" cy="160" r="9"/><circle cx="600" cy="160" r="9"/><circle cx="960" cy="160" r="9"/><circle cx="1070" cy="160" r="9"/><circle cx="1290" cy="160" r="9"/><circle cx="1400" cy="160" r="9"/></g>
+          <g fill="#eb6834"><circle cx="130" cy="250" r="9"/><circle cx="190" cy="250" r="9"/><circle cx="240" cy="250" r="9"/><circle cx="300" cy="250" r="9"/><circle cx="350" cy="250" r="9"/><circle cx="410" cy="250" r="9"/><circle cx="460" cy="250" r="9"/><circle cx="520" cy="250" r="9"/><circle cx="570" cy="250" r="9"/><circle cx="630" cy="250" r="9"/></g>
+          <g fill="#059669"><circle cx="1180" cy="160" r="11"/><circle cx="1150" cy="250" r="11"/><circle cx="1210" cy="250" r="11"/></g>
+          <g font-size="24" text-anchor="middle" fill="#1f2937">
+          <text x="380" y="310" font-weight="bold">cờ vua 1997: xét hết mọi nước tới độ sâu cố định</text>
+          <text x="380" y="342" fill="#eb6834">lá: hàm đánh giá viết tay</text>
+          <text x="1180" y="310" font-weight="bold">cờ vây 2016: mạng chính sách chọn vài nước</text>
+          <text x="1180" y="342" fill="#059669">lá: mạng giá trị đoán bên thắng</text>
+          </g>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình so sánh hai cách làm cây nhỏ lại. Bên trái, máy cờ vua năm 1997 xét hết mọi nước tới một độ sâu cố định, rồi ở lá dùng hàm đánh giá viết tay. Bên phải, máy cờ vây năm 2016 để mạng chính sách chọn vài nước đáng xét, tức là cắt chiều rộng. Ở lá, mạng giá trị đoán bên nào thắng, nên không phải đi tới tận cuối ván, tức là cắt chiều sâu."
+
+  # ───────────────────────── 6. CHẶNG 1 ─────────────────────────
+  - id: stage1
+    kind: example
+    title: "Chặng 1, 1988 tới 1996 — khai sinh: chip cờ riêng, nhanh mà vẫn thua"
+    stage: {year: "1988 → 1996", scale: "chip sinh nước đi: 500 nghìn tới 700 nghìn thế mỗi giây; năm 1996 có 36 nút, 216 chip, 50 tới 100 triệu thế mỗi giây", source: "[DB02]", practice: "đo tốc độ thật so với lý thuyết; hiểu giới hạn của phần cứng cố định (không thêm được đặc trưng); thua thì tìm điểm yếu trong chính các ván thua"}
+    checks:
+      - "216 // 36 == 6 and 216 * 2_000_000 == 432_000_000"
+      - "round(100_000_000 / 432_000_000 * 100) == 23"
+      - "int(50_000_000 / 700_000) == 71 and int(100_000_000 / 700_000) == 142"
+    steps:
+      - show: |
+          <p><b>Khai sinh:</b> năm 1988, Deep Thought là máy cờ đầu tiên thắng một đại kiện tướng ở giải đấu. Một chip riêng sinh nước đi cho tốc độ khoảng <b>500&nbsp;000</b> tới <b>700&nbsp;000</b> thế mỗi giây.</p>
+          <p><b>Điểm nghẽn:</b> hàm đánh giá nằm trong phần cứng nên <b>không thêm được đặc trưng</b>; vá bằng phần mềm thì máy chậm đi và sinh lỗi ở chỗ nối phần cứng với phần mềm.</p>
+          <p><b>Tháng 2/1996:</b> Deep Blue đời đầu có 36 nút, <b>216 chip</b>, mỗi chip 1,6 tới 2 triệu thế mỗi giây — và <b>thua 2–4</b> trong trận 6 ván.</p>
+        focus: [1, 1, 2, 2, 3]
+        say: "Ở chặng một, năm 1988, một máy đời trước của cùng nhóm là máy cờ đầu tiên thắng một đại kiện tướng ở giải đấu. Một chip riêng sinh nước đi cho tốc độ khoảng 500 nghìn tới 700 nghìn thế mỗi giây. Điểm nghẽn là hàm đánh giá nằm trong phần cứng, nên không thêm được đặc trưng mới. Vá bằng phần mềm thì máy chậm đi, và sinh lỗi ở chỗ nối phần cứng với phần mềm. Tháng 2 năm 1996, máy của IBM đời đầu có 36 nút, 216 chip, mà vẫn thua, chỉ được 2 điểm trong 6 ván."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. chip mỗi nút</td><td>216 chia 36</td><td>trung bình $\hlb{6}$ chip</td></tr>
+          <tr><td>Bước 2. tốc độ lý thuyết</td><td>216 chip nhân 2 triệu thế mỗi giây</td><td>$\hl{432}$ triệu thế mỗi giây</td></tr>
+          <tr><td>Bước 3. hiệu suất song song</td><td>đo được nhiều nhất 100 triệu, chia 432 triệu</td><td>≈ $\hlg{23}$%</td></tr></table>
+          <p class="note">Thực hành: đo tốc độ thật, so với lý thuyết. Nhanh gấp khoảng 70 tới 140 lần so với 700&nbsp;000 thế mỗi giây vẫn chưa đủ thắng — điểm yếu nằm ở chỗ khác. Điều kiện: phải có ván thua thật để tìm ra điểm yếu đó.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2, 2]
+        say: "Làm thử với máy năm 1996. Bước một, 216 chip chia cho 36 nút là trung bình 6 chip mỗi nút. Bước hai, 216 chip nhân 2 triệu thế mỗi giây cho tốc độ lý thuyết 432 triệu. Bước ba, tốc độ đo được nhiều nhất 100 triệu, chia 432 triệu là khoảng 23 phần trăm. Thực hành rút ra là đo tốc độ thật và so với lý thuyết. Nhanh gấp khoảng 70 tới 140 lần so với 700 nghìn thế mỗi giây mà vẫn thua, nên điểm yếu nằm ở chỗ khác, và phải đọc các ván thua thật để tìm ra."
+
+  # ───────────────────────── 7. CHẶNG 2 ─────────────────────────
+  - id: stage2
+    kind: example
+    title: "Chặng 2, năm 1997 — tăng trưởng: 480 chip và hàm đánh giá 8000 đặc trưng"
+    stage: {year: "1997", scale: "30 nút, 480 chip, mỗi chip 2 tới 2,5 triệu thế mỗi giây; trung bình 126 triệu thế mỗi giây trong trận; hàm đánh giá từ khoảng 6400 lên hơn 8000 đặc trưng", source: "[DB02]", practice: "dồn công vào chỗ thua (hàm đánh giá) thay vì chỗ dễ đo (tốc độ); thêm đặc trưng theo lỗi thấy trong ván thật; dùng công cụ tự động để soát trọng số chỉnh tay"}
+    checks:
+      - "30 * 16 == 480 and 480 * 2_500_000 == 1_200_000_000"
+      - "round(126_000_000 / 1_200_000_000 * 100, 1) == 10.5 and 8 < 10.5 < 12"
+      - "8000 - 6400 == 1600 and 1600 * 100 // 6400 == 25"
+    steps:
+      - show: |
+          <p><b>Quy mô, tháng 5/1997:</b> 30 nút, mỗi nút <b>16 chip</b>; chip mới mỗi cái 2 tới 2,5 triệu thế mỗi giây. Trong trận, tốc độ trung bình đo được là <b>126 triệu</b> thế mỗi giây. Máy thắng <b>3,5–2,5</b>.</p>
+          <table class="t"><tr><th>đội làm máy đã làm gì giữa hai trận</th><th>vì sao</th></tr>
+          <tr><td>thiết kế lại hàm đánh giá: từ khoảng <b>6400</b> lên hơn <b>8000</b> đặc trưng, nhiều đặc trưng thêm theo lỗi thấy trong các ván năm 1996</td><td>điểm yếu nằm ở đánh giá, không ở tốc độ</td></tr>
+          <tr><td>mã tìm kiếm song song <b>gần như giữ nguyên</b> — quyết định có chủ ý</td><td>dành thời gian cho chỗ quan trọng hơn</td></tr>
+          <tr><td>công cụ tự động soát trọng số: trọng số chỉnh tay cho phần che chắn vua <b>đều thấp quá</b></td><td>8000 đặc trưng thì chỉnh tay không xuể</td></tr></table>
+        focus: [1, 1, 1, "2.2", "2.3", "2.4"]
+        say: "Ở chặng hai, tháng 5 năm 1997, máy có 30 nút, mỗi nút 16 chip, mỗi chip mới đạt 2 tới 2 phẩy 5 triệu thế mỗi giây. Trong trận, tốc độ trung bình đo được là 126 triệu thế mỗi giây. Lần này máy thắng 3 phẩy 5 trên 2 phẩy 5. Giữa hai trận, đội làm máy thiết kế lại hàm đánh giá, từ khoảng 6400 lên hơn 8000 đặc trưng, nhiều cái thêm theo lỗi thấy trong các ván năm 1996. Mã tìm kiếm song song gần như giữ nguyên, đó là quyết định có chủ ý. Một công cụ tự động còn cho thấy trọng số chỉnh tay cho phần che chắn vua đều thấp quá."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. số chip</td><td>30 nút nhân 16 chip</td><td>$\hlb{480}$ chip</td></tr>
+          <tr><td>Bước 2. tốc độ lý thuyết</td><td>480 nhân 2,5 triệu</td><td>$\hl{1{,}2}$ tỉ thế mỗi giây</td></tr>
+          <tr><td>Bước 3. hiệu suất song song</td><td>126 triệu chia 1,2 tỉ</td><td>≈ $\hlg{10{,}5}$%, khớp mức 8 tới 12% đội làm máy ước lượng</td></tr>
+          <tr><td>Bước 4. đặc trưng thêm</td><td>8000 trừ 6400</td><td>1600, tức thêm 25%</td></tr></table>
+          <p class="note">Thực hành: dồn công vào chỗ làm mình thua, không vào chỗ dễ đo. Điều kiện: trò chơi có hàm đánh giá viết tay đủ tốt, như cờ vua.</p>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", 2]
+        say: "Làm thử với máy năm 1997. Bước một, 30 nút nhân 16 chip là 480 chip. Bước hai, 480 nhân 2 phẩy 5 triệu là 1 phẩy 2 tỉ thế mỗi giây theo lý thuyết. Bước ba, 126 triệu chia 1 phẩy 2 tỉ là khoảng 10 phẩy 5 phần trăm, khớp mức 8 tới 12 phần trăm mà đội làm máy ước lượng. Bước bốn, 8000 trừ 6400 là 1600 đặc trưng thêm, tức tăng 25 phần trăm. Thực hành rút ra là dồn công vào chỗ làm mình thua, với điều kiện trò chơi có hàm đánh giá viết tay đủ tốt, như cờ vua."
+
+  # ───────────────────────── 8. CHẶNG 3 ─────────────────────────
+  - id: stage3
+    kind: example
+    title: "Chặng 3, 2015 tới 2016 — quy mô rất lớn: cờ vây và hai mạng nơ-ron"
+    stage: {year: "2015 → 2016", scale: "cờ vây khoảng 250 nước mỗi lượt, ván khoảng 150 nước; 30 triệu thế cờ của người; bản phân tán 1202 bộ xử lý thường và 176 bộ xử lý đồ hoạ; thắng 494 trên 495 ván với chương trình khác, 5–0 với nhà vô địch châu Âu", source: "[AG16]", practice: "cắt rộng bằng mạng chính sách, cắt sâu bằng mạng giá trị; dữ liệu học lấy mỗi ván một thế cờ để tránh quá khớp; so sai số trên tập huấn luyện và tập kiểm tra"}
+    checks:
+      - "int(150 * math.log10(250)) == 359 and int(80 * math.log10(35)) == 123"
+      - "round(494 / 495 * 100, 1) == 99.8"
+      - "round(0.37 - 0.19, 2) == 0.18 and round(0.234 - 0.226, 3) == 0.008"
+    steps:
+      - show: |
+          <p><b>Quy mô:</b> cờ vua khoảng 35 nước mỗi lượt, ván khoảng 80 nước; cờ vây khoảng <b>250</b> nước mỗi lượt, ván khoảng <b>150</b> nước.</p>
+          <table class="t"><tr><th>bước</th><th>phép tính (lôgarit cơ số 10, như bài 13)</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. cờ vua</td><td>80 nhân 1,544</td><td>$35^{80} \approx 10^{123}$</td></tr>
+          <tr><td>Bước 2. cờ vây</td><td>150 nhân 2,398</td><td>$250^{150} \approx \hl{10^{359}}$</td></tr></table>
+          <p><b>Điểm nghẽn:</b> cây quá lớn, và cờ vây không có hàm đánh giá viết tay đủ tốt. <b>Cách xử lý:</b> mạng chính sách học từ <b>30 triệu</b> thế cờ của người, đoán đúng 57% nước của kỳ thủ; mạng giá trị đoán bên thắng; kết hợp với cây mô phỏng ngẫu nhiên.</p>
+        focus: [1, "2.2", "2.3", 3, 3]
+        say: "Ở chặng ba, cờ vua có khoảng 35 nước mỗi lượt và ván khoảng 80 nước, còn cờ vây có khoảng 250 nước mỗi lượt và ván khoảng 150 nước. Bước một, như bài 13, 80 nhân 1 phẩy 544 cho cây cờ vua cỡ 10 mũ 123. Bước hai, 150 nhân 2 phẩy 398 cho cây cờ vây cỡ 10 mũ 359. Điểm nghẽn là cây quá lớn, và cờ vây không có hàm đánh giá viết tay đủ tốt. Cách xử lý là mạng chính sách học từ 30 triệu thế cờ của người, mạng giá trị đoán bên thắng, cùng chạy với cây mô phỏng ngẫu nhiên."
+      - clear: true
+        show: |
+          <p>Một điểm nghẽn bên trong: học mạng giá trị từ <b>mọi</b> thế cờ của mỗi ván thì mạng <b>học thuộc</b> kết quả ván, vì các thế liền nhau chỉ khác một quân mà chung một kết quả.</p>
+          <table class="t"><tr><th>dữ liệu học</th><th>sai số tập huấn luyện</th><th>sai số tập kiểm tra</th><th>chênh lệch</th></tr>
+          <tr><td>mọi thế cờ của mỗi ván</td><td>0,19</td><td>0,37</td><td>$\hl{0{,}18}$</td></tr>
+          <tr><td>30 triệu thế, <b>mỗi ván lấy một thế</b>, ván do máy tự chơi</td><td>0,226</td><td>0,234</td><td>$\hlg{0{,}008}$</td></tr></table>
+          <p class="note">Thực hành: chênh lệch lớn giữa hai tập là dấu hiệu quá khớp (khoá học máy CS115). Điều kiện: phải có tập kiểm tra tách riêng thật sự.</p>
+        focus: [1, 1, "2.2", "2.3", 3]
+        say: "Bên trong còn một điểm nghẽn. Học mạng giá trị từ mọi thế cờ của mỗi ván thì mạng học thuộc kết quả ván, vì các thế liền nhau chỉ khác một quân mà chung một kết quả. Khi đó sai số trên tập huấn luyện là 0 phẩy 19, trên tập kiểm tra là 0 phẩy 37, chênh nhau 0 phẩy 18. Đội làm máy cho máy tự chơi, mỗi ván chỉ lấy một thế, đủ 30 triệu thế, và chênh lệch còn 0 phẩy 008. Như ở khoá học máy, chênh lệch lớn giữa hai tập là dấu hiệu quá khớp."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>kết quả, tháng 10/2015 (công bố 1/2016)</th><th>phép tính</th></tr>
+          <tr><td>với các chương trình cờ vây khác: thắng 494 trên 495 ván</td><td>494 chia 495 ≈ $\hlg{99{,}8}$%</td></tr>
+          <tr><td>với nhà vô địch châu Âu: trận 5 ván</td><td>thắng 5–0</td></tr>
+          <tr><td>bản phân tán</td><td>1202 bộ xử lý thường, 176 bộ xử lý đồ hoạ</td></tr></table>
+          <p class="note">Theo nhóm tác giả, máy xét số thế cờ <b>ít hơn hàng nghìn lần</b> so với máy cờ vua năm 1997, bù lại bằng cách chọn thế khôn hơn và đánh giá chính xác hơn.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Kết quả công bố tháng 1 năm 2016. Với các chương trình cờ vây khác, máy thắng 494 trên 495 ván, tức khoảng 99 phẩy 8 phần trăm. Tháng 10 năm 2015, nó thắng nhà vô địch châu Âu 5 trên 0, trên bản phân tán với 1202 bộ xử lý thường và 176 bộ xử lý đồ hoạ. Theo nhóm tác giả, máy xét ít thế cờ hơn hàng nghìn lần so với máy cờ vua năm 1997, bù lại bằng cách chọn thế khôn hơn và đánh giá chính xác hơn."
+
+  # ───────────────────────── 9. CHẶNG 4 ─────────────────────────
+  - id: stage4
+    kind: example
+    title: "Chặng 4, năm 2017 — ổn định: bỏ dữ liệu của người, chỉ tự chơi"
+    stage: {year: "2017", scale: "3 ngày tự chơi, 4,9 triệu ván, 1600 lần mô phỏng mỗi nước (khoảng 0,4 giây); một máy 4 bộ tăng tốc so với 48; thắng bản năm 2016 100–0", source: "[AGZ17]", practice: "khi luật chơi biết chính xác, dữ liệu tự chơi thay được dữ liệu của người; một mạng cho cả gợi ý nước và đoán bên thắng; đo bằng trận đấu với bản cũ"}
+    checks:
+      - "1600 / 0.4 == 4000"
+      - "round(4_900_000 / 72) == 68056 and round(4_900_000 / (72 * 3600), 1) == 18.9"
+      - "48 // 4 == 12"
+    steps:
+      - show: |
+          <p><b>Điểm nghẽn:</b> dữ liệu của chuyên gia đắt, có khi không có, và có thể là <b>trần</b> giới hạn máy học được.</p>
+          <p><b>Cách xử lý:</b> bắt đầu từ nước đi ngẫu nhiên, <b>chỉ tự chơi</b>, không dùng dữ liệu hay kiến thức của người ngoài luật chơi. Một mạng nơ-ron học đoán chính nước mà cây tìm kiếm chọn và đoán bên thắng.</p>
+          <p><b>Quy mô:</b> khoảng 3 ngày, <b>4,9 triệu</b> ván tự chơi, mỗi nước 1600 lần mô phỏng, khoảng 0,4 giây. Sau 36 giờ đã vượt bản thắng kỳ thủ hàng đầu năm 2016 — bản đó học trong nhiều tháng.</p>
+        focus: [1, 2, 2, 3, 3]
+        say: "Ở chặng bốn, năm 2017, điểm nghẽn là dữ liệu của chuyên gia đắt, có khi không có, và có thể là cái trần giới hạn những gì máy học được. Cách xử lý là bắt đầu từ nước đi ngẫu nhiên và chỉ tự chơi, không dùng kiến thức của người ngoài luật chơi. Một mạng nơ-ron học đoán chính nước mà cây tìm kiếm chọn, và đoán bên thắng. Trong khoảng 3 ngày, máy tự chơi 4 phẩy 9 triệu ván, mỗi nước 1600 lần mô phỏng, mất khoảng 0 phẩy 4 giây. Sau 36 giờ nó đã vượt bản thắng kỳ thủ hàng đầu năm 2016, bản vốn học trong nhiều tháng."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. mô phỏng mỗi giây</td><td>1600 chia 0,4 giây</td><td>$\hlb{4000}$ lần mỗi giây</td></tr>
+          <tr><td>Bước 2. ván tự chơi mỗi giờ</td><td>4&nbsp;900&nbsp;000 ván chia 72 giờ</td><td>≈ 68&nbsp;056 ván mỗi giờ</td></tr>
+          <tr><td>Bước 3. ván mỗi giây</td><td>68&nbsp;056 chia 3600</td><td>≈ $\hl{18{,}9}$ ván mỗi giây</td></tr>
+          <tr><td>Bước 4. phần cứng khi thi đấu</td><td>48 bộ tăng tốc của bản 2016, chia 4 của bản mới</td><td>ít hơn $\hlg{12}$ lần; thắng bản 2016 với tỉ số 100–0</td></tr></table>
+          <p class="note">Thực hành: ổn định nghĩa là bớt phụ thuộc — bớt dữ liệu người, bớt máy. Điều kiện: luật chơi biết chính xác và mô phỏng một ván rất rẻ; thiếu hai điều đó, tự chơi không thay được dữ liệu thật.</p>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", 2]
+        say: "Làm thử bốn bước. Bước một, 1600 lần mô phỏng chia 0 phẩy 4 giây là 4000 lần mô phỏng mỗi giây. Bước hai, 4 phẩy 9 triệu ván chia 72 giờ là khoảng 68 nghìn ván mỗi giờ. Bước ba, chia tiếp cho 3600 giây là khoảng 18 phẩy 9 ván mỗi giây. Bước bốn, khi thi đấu bản mới chỉ dùng 4 bộ tăng tốc, so với 48 của bản năm 2016, ít hơn 12 lần, mà thắng 100 trên 0. Điều kiện để tự chơi thay được dữ liệu người là luật chơi biết chính xác, và mô phỏng một ván rất rẻ."
+
+  # ───────────────────────── 10. CHẶNG 5 ─────────────────────────
+  - id: stage5
+    kind: example
+    title: "Chặng 5, 2017 tới 2018 — tiếp tục phát triển: một thuật toán, ba trò, trận 1000 ván"
+    stage: {year: "2017 → 2018", scale: "bản thảo 12/2017: trận 100 ván cờ vua; bài đầy đủ 2018: trận 1000 ván, 155 thắng, 6 thua; 60 nghìn thế mỗi giây so với 60 triệu; học 9 giờ cờ vua, 12 giờ cờ Nhật, 13 ngày cờ vây", source: "[AZ17] [AZ18]", practice: "cùng thuật toán, cùng kiến trúc mạng cho mọi trò; công bố kết quả sơ bộ rồi đánh giá lại với mẫu lớn hơn; chạy nhiều lần độc lập; thử từ nhiều khai cuộc; báo cả số ván thua"}
+    checks:
+      - "25 + 3 == 28 and 25 + 47 == 72 and 28 + 72 + 0 == 100"
+      - "1000 - 155 - 6 == 839"
+      - "60_000_000 // 60_000 == 1000 and 13 * 24 == 312"
+    steps:
+      - show: |
+          <p><b>Cách xử lý:</b> tổng quát hoá — <b>cùng thuật toán, cùng kiến trúc mạng</b> cho cờ vua, cờ tướng Nhật và cờ vây, chỉ đổi luật chơi.</p>
+          <table class="t"><tr><th>đợt đánh giá</th><th>cờ vua: thắng</th><th>hoà</th><th>thua</th></tr>
+          <tr><td>bản thảo 12/2017, 100 ván, 1 phút mỗi nước</td><td>25 + 3 = $\hlb{28}$</td><td>25 + 47 = 72</td><td>0</td></tr>
+          <tr><td>bài đầy đủ 2018, <b>1000 ván</b>, 3 giờ mỗi ván cộng 15 giây mỗi nước</td><td>$\hlb{155}$</td><td>1000 − 155 − 6 = $\hlg{839}$ (tính ra)</td><td>$\hl{6}$</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Ở chặng năm, thuật toán được tổng quát hoá, cùng thuật toán và cùng kiến trúc mạng cho cờ vua, cờ tướng Nhật và cờ vây, chỉ đổi luật chơi. Bản thảo tháng 12 năm 2017 báo trận 100 ván cờ vua, máy thắng 25 cộng 3 là 28 ván, hoà 25 cộng 47 là 72 ván, và không thua. Bài đầy đủ năm 2018 báo trận 1000 ván với thời gian dài hơn, máy thắng 155 và thua 6, nên số ván hoà tính ra là 839."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. thế cờ xét mỗi giây</td><td>60 triệu của chương trình cũ chia 60 nghìn</td><td>ít hơn $\hlb{1000}$ lần</td></tr>
+          <tr><td>Bước 2. thời gian học cờ vây</td><td>13 ngày nhân 24 giờ</td><td>$\hl{312}$ giờ, so với 9 giờ cờ vua</td></tr></table>
+          <table class="t"><tr><th>vì sao gọi là ổn định và tiếp tục phát triển</th></tr>
+          <tr><td>đánh giá lại với mẫu lớn gấp 10, ghi cả 6 ván thua</td></tr>
+          <tr><td>nhiều lần học độc lập cho kết quả tương tự: thuật toán lặp lại được</td></tr>
+          <tr><td>thắng cả khi bắt đầu từ các khai cuộc phổ biến của người</td></tr></table>
+        focus: [1, "1.2", "1.3", 2, "2.2", "2.3", "2.4"]
+        say: "Làm thử hai bước. Bước một, chương trình cờ vua cũ xét 60 triệu thế mỗi giây, chia cho 60 nghìn là ít hơn 1000 lần. Bước hai, cờ vây cần 13 ngày học, nhân 24 là 312 giờ, so với 9 giờ cho cờ vua. Vì sao gọi chặng này là ổn định và tiếp tục phát triển? Kết quả sơ bộ được đánh giá lại với mẫu lớn gấp 10, và ghi cả 6 ván thua. Nhiều lần học độc lập cho kết quả tương tự, nên thuật toán lặp lại được. Máy vẫn thắng khi bắt đầu từ các khai cuộc phổ biến của người."
+
+  # ───────────────────────── 11. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm bốn con số của hành trình"
+    checks:
+      - "sum([16] * 30) == 480"
+      - "abs(1_200_000_000 * 0.105 - 126_000_000) < 1"
+      - "155 + 839 + 6 == 1000"
+      - "4000 * 0.4 == 1600 and len(str(250 ** 150)) == 360"
+    steps:
+      - show: |
+          <table class="t"><tr><th>con số</th><th>đường khác để kiểm</th></tr>
+          <tr><td>480 chip</td><td>cộng dồn: 16 + 16 + … ba mươi lần = 480 ✓</td></tr>
+          <tr><td>10,5%</td><td>nhân ngược: 1,2 tỉ nhân 0,105 = 126 triệu ✓</td></tr>
+          <tr><td>839 ván hoà</td><td>cộng lại: 155 + 839 + 6 = 1000 ✓</td></tr>
+          <tr><td>$10^{359}$ và 4000 mô phỏng mỗi giây</td><td>máy tính thẳng $250^{150}$ rồi đếm: 360 chữ số; 4000 nhân 0,4 = 1600 ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Ta kiểm lại bốn con số theo đường khác. Cộng dồn 16 chip ba mươi lần, ta được đúng 480 chip. Nhân ngược, 1 phẩy 2 tỉ nhân 0 phẩy 105 bằng 126 triệu, đúng tốc độ đo trong trận. Cộng lại, 155 thắng, 839 hoà và 6 thua đủ 1000 ván. Cuối cùng, máy tính thẳng 250 mũ 150 có 360 chữ số, tức cỡ 10 mũ 359, và 4000 nhân 0 phẩy 4 giây đúng bằng 1600 lần mô phỏng."
+
+  # ───────────────────────── 12. BÀI HỌC SAI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "Những bài học sai khi đọc hành trình này"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">1.</b> “Máy thắng vì tính nhanh hơn”</td><td>năm 1996 đã nhanh gấp 70 tới 140 lần máy năm 1988 mà vẫn thua; năm 1997 đội làm máy dành phần lớn thời gian cho hàm đánh giá; năm 2018 xét ít hơn 1000 lần mà vẫn thắng</td><td>tìm chỗ làm mình thua trước khi mua thêm phần cứng</td></tr>
+          <tr><td><b class="red">2.</b> “Kiến thức chuyên gia là thừa, cứ để máy tự học”</td><td>năm 1997, sổ khai cuộc 4000 thế do đại kiện tướng soạn và cơ sở dữ liệu tàn cuộc là một phần của chiến thắng; tự chơi chỉ thay được khi luật chơi biết chính xác</td><td>hỏi: có bộ mô phỏng đúng và rẻ không?</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.2", "1.3", "1.3", "1.3"]
+        say: "Bảng có hai bài học sai đầu tiên. Bài học sai thứ nhất là nghĩ máy thắng vì tính nhanh hơn. Năm 1996, máy đã nhanh gấp 70 tới 140 lần máy năm 1988 mà vẫn thua, và năm 1997 đội làm máy dành phần lớn thời gian cho hàm đánh giá. Năm 2018, máy xét ít hơn 1000 lần mà vẫn thắng. Bài học sai thứ hai là nghĩ kiến thức chuyên gia là thừa. Năm 1997, sổ khai cuộc do đại kiện tướng soạn và cơ sở dữ liệu tàn cuộc là một phần của chiến thắng. Tự chơi chỉ thay được dữ liệu người khi luật chơi biết chính xác và mô phỏng rẻ."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">3.</b> “Càng nhiều dữ liệu càng tốt: lấy mọi thế cờ của mỗi ván”</td><td>các thế liền nhau gần như trùng nhau; mạng học thuộc, chênh lệch sai số 0,18 so với 0,008</td><td>mỗi ván lấy một thế; luôn so tập huấn luyện với tập kiểm tra</td></tr>
+          <tr><td><b class="red">4.</b> “Thắng một trận nhỏ là đã chứng minh xong”</td><td>trận 5 ván hay 100 ván là mẫu nhỏ; năm 2018 đánh giá lại bằng 1000 ván, nhiều lần học độc lập, nhiều khai cuộc</td><td>tăng cỡ mẫu, chạy lại từ đầu, báo cả ván thua</td></tr></table>
+        focus: ["1.2", "1.2", "1.3", "1.3", "1.3"]
+        say: "Bài học sai thứ ba là nghĩ càng nhiều dữ liệu càng tốt, cứ lấy mọi thế cờ của mỗi ván. Các thế liền nhau gần như trùng nhau, nên mạng học thuộc, và chênh lệch sai số là 0 phẩy 18 thay vì 0 phẩy 008. Bài học sai thứ tư là nghĩ thắng một trận nhỏ là đã chứng minh xong. Trận 5 ván hay 100 ván là mẫu nhỏ, nên năm 2018 nhóm tác giả đánh giá lại bằng 1000 ván, nhiều lần học độc lập, và nhiều khai cuộc. Hãy tăng cỡ mẫu, chạy lại từ đầu, và báo cả ván thua."
+
+  # ───────────────────────── 13. QUYẾT ĐỊNH ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Bạn sẽ làm gì ở quy mô của mình?"
+    checks:
+      - "30 ** 4 <= 10 ** 7 < 30 ** 5"
+      - "30 ** 4 + 30 ** 4 - 1 <= 10 ** 7 < 30 ** 5 + 30 ** 4 - 1"
+      - "4_900_000 * 10 == 49_000_000 and round(4_900_000 * 10 / 86400) == 567"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>tình huống (số minh hoạ): trò chơi bàn cờ trong ứng dụng của bạn, khoảng 30 nước mỗi lượt, một máy tính xét 1 triệu thế mỗi giây, 10 giây mỗi nước</th></tr>
+          <tr><td>1</td><td>dùng cực đại–cực tiểu với hàm đánh giá viết tay: nhìn trước được mấy lượt, có và không có alpha–beta?</td></tr>
+          <tr><td>2</td><td>hay cho máy tự chơi như năm 2017: nếu mỗi ván tự chơi mất 10 giây, 4,9 triệu ván mất bao lâu? Bạn chọn đường nào?</td></tr></table>
+        focus: [1, 1, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn ra quyết định, với một số minh hoạ. Trò chơi bàn cờ trong ứng dụng của bạn có khoảng 30 nước mỗi lượt, một máy tính xét 1 triệu thế mỗi giây, và có 10 giây mỗi nước. Câu một, dùng cực đại cực tiểu với hàm đánh giá viết tay thì nhìn trước được mấy lượt, có và không có alpha beta? Câu hai, nếu cho máy tự chơi, mỗi ván mất 10 giây, thì 4 phẩy 9 triệu ván mất bao lâu, và bạn chọn đường nào? Dừng video và viết ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 1: bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>ngân sách mỗi nước</td><td>1 triệu thế nhân 10 giây</td><td>10 triệu thế</td></tr>
+          <tr><td>không cắt tỉa</td><td>$30^4 = 810\,000$ vừa đủ; $30^5 = 24\,300\,000$ vượt</td><td>nhìn trước $\hlb{4}$ lượt</td></tr>
+          <tr><td>alpha–beta, thứ tự tốt (bài 6)</td><td>sâu 8: $30^4 + 30^4 - 1 = 1\,619\,999$ vừa đủ; sâu 9 cần hơn 25 triệu</td><td>nhìn trước $\hlg{8}$ lượt</td></tr></table>
+          <p class="note">Xếp thứ tự nước tốt là gấp đôi độ sâu mà không mua thêm máy.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Đáp án câu một, làm từng bước. Ngân sách mỗi nước là 1 triệu thế nhân 10 giây, bằng 10 triệu thế. Không cắt tỉa, 30 mũ 4 là 810 nghìn thì vừa đủ, còn 30 mũ 5 là 24 triệu 300 nghìn thì vượt, nên nhìn trước được 4 lượt. Với alpha beta và thứ tự tốt như bài 6, độ sâu 8 cần khoảng 1 triệu 620 nghìn lá, vừa đủ, còn độ sâu 9 cần hơn 25 triệu. Vậy xếp thứ tự nước tốt là gấp đôi độ sâu mà không phải mua thêm máy."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 2: lựa chọn</th><th>được</th><th>mất</th></tr>
+          <tr><td>tìm kiếm + hàm đánh giá viết tay</td><td>chạy ngay trên một máy; giải thích được vì sao máy đi nước đó</td><td>phải tự viết, tự chỉnh đặc trưng; trò không có hàm đánh giá tốt thì chơi kém</td></tr>
+          <tr><td>tự chơi để học</td><td>không cần chuyên gia; có thể tìm ra lối chơi mới</td><td>4&nbsp;900&nbsp;000 nhân 10 giây = 49 triệu giây ≈ 567 ngày trên một máy</td></tr></table>
+          <p class="note">Chọn tìm kiếm có hàm đánh giá trước. Điều kiện đổi: trò chơi không có hàm đánh giá viết tay tốt (như cờ vây), mô phỏng rẻ và có nhiều máy chạy song song — khi đó mới chuyển sang tự chơi, đừng chép quy mô 5000 bộ tăng tốc.</p>
+        focus: [1, "1.2", "1.3", 2, 2]
+        say: "Đáp án câu hai là một đánh đổi. Tìm kiếm cùng hàm đánh giá viết tay chạy ngay trên một máy và giải thích được nước đi, đổi lại bạn phải tự viết và chỉnh đặc trưng. Tự chơi không cần chuyên gia, nhưng 4 phẩy 9 triệu ván nhân 10 giây là 49 triệu giây, khoảng 567 ngày trên một máy. Nên chọn tìm kiếm có hàm đánh giá trước. Chỉ khi trò không có hàm đánh giá tốt, mô phỏng rẻ, và có nhiều máy chạy song song, mới chuyển sang tự chơi."
+
+  # ───────────────────────── 14. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi hành trình & tư duy chuyên gia"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">chip cờ riêng: nhanh mà vẫn thua</span><span class="a">→</span>
+          <span class="n">480 chip, sửa hàm đánh giá từ ván thua</span><span class="a">→</span>
+          <span class="n">cờ vây: mạng chính sách và mạng giá trị</span><span class="a">→</span>
+          <span class="n">chỉ tự chơi, ít máy hơn 12 lần</span><span class="a">→</span>
+          <span class="n">một thuật toán, ba trò, 1000 ván</span></div>
+        say: "Tổng kết lại hành trình. Chip cờ riêng làm máy nhanh dần, mà vẫn thua. Năm 1997, đội làm máy sửa hàm đánh giá từ chính các ván thua, và thắng. Với cờ vây, mạng chính sách cắt chiều rộng, mạng giá trị cắt chiều sâu. Rồi máy chỉ tự chơi mà dùng ít máy hơn 12 lần, và cuối cùng một thuật toán chơi cả ba trò, được kiểm bằng 1000 ván."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> tìm kiếm và học không đối đầu — mỗi chặng chỉ đổi phần đang là điểm nghẽn. Trước khi chọn công cụ, tính thử: cây của mình lớn cỡ nào, có hàm đánh giá tốt không, mô phỏng một ván tốn bao lâu?</div>
+        say: "Điều cần mang theo, tìm kiếm và học không đối đầu nhau, mỗi chặng chỉ đổi phần đang là điểm nghẽn. Trước khi chọn công cụ, hãy tính thử cây của mình lớn cỡ nào, có hàm đánh giá tốt không, và mô phỏng một ván tốn bao lâu."
+      - clear: true
+        show: |
+          <p class="note">Đây là bài cuối của khoá <b>Nền tảng trí tuệ nhân tạo</b>. Từ tác tử, tìm kiếm, ràng buộc, trò chơi, lôgic, lập kế hoạch và xác suất, bạn đã đi tới cách các đội làm máy chơi cờ kết hợp tìm kiếm với học, từ năm 1988 tới 2018.</p>
+        say: "Đây là bài cuối của khoá nền tảng trí tuệ nhân tạo. Từ tác tử, tìm kiếm, ràng buộc, trò chơi, logic, lập kế hoạch và xác suất, bạn đã đi tới cách các đội làm máy chơi cờ kết hợp tìm kiếm với học, từ năm 1988 tới 2018. Cảm ơn bạn đã theo học."

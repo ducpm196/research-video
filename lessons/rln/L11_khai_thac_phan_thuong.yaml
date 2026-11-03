@@ -1,0 +1,250 @@
+id: L11
+course: RLN
+series: "RLN · Học tăng cường"
+title: "Bài 11 — Khai thác phần thưởng: khi tác tử làm đúng điều ta viết, không phải điều ta muốn"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/rln.yaml L11; audit/rln/verify_rln.py L11; audit/rln/sources_L11.md; V. Krakovna và cộng sự, Specification gaming: the flip side of AI ingenuity, blog DeepMind 21/4/2020 (đua thuyền Coast Runners, khối Lego bị lật); D. Amodei và cộng sự, Concrete Problems in AI Safety, arXiv:1606.06565 (2016), mục 4 (robot dọn dẹp nhắm mắt, định luật Goodhart, chặn trần phần thưởng); R. S. Sutton, A. G. Barto, Reinforcement Learning: An Introduction, bản 2 (2018), mục 3.2 (thưởng ăn quân thay vì thắng); RLN bài 0 (lợi nhuận chiết khấu), bài 10 (mô hình phần thưởng chỉ đúng gần dữ liệu đã thấy)"
+assumes: [arith, approx, frac, cdot, sub, power, disc, dots, geq]
+# Quy ước: “khai thác phần thưởng” (reward hacking) = hành vi đạt điểm cao theo phần thưởng đã viết mà không đạt mục tiêu thật.
+#   Đua thuyền trong ví dụ số là SỐ MINH HOẠ dựng từ mô tả của blog DeepMind (2020): về đích +100 ở bước 100 rồi hết lượt; quay vòng thì
+#   cứ 5 bước chạm lại một mốc +1; lượt chơi dài 1000 bước (alg.rln_race mô phỏng từng bước; alg.rln_boat cho hai số không chiết khấu
+#   của giáo án). Blog KHÔNG ghi các con số này — chỉ ghi cơ chế (thưởng định hướng cho việc chạm khối xanh → đi vòng tròn).
+#   Tên trò chơi, tên tác giả chỉ trên màn hình. Blog của OpenAI năm 2016 về cùng trò chơi trả 403 → NOT_VERIFIED, không dùng.
+objectives:
+  - "Tính lợi nhuận của hành vi “lạ” và so với hành vi mong muốn để phát hiện phần thưởng bị khai thác"
+  - "Giải thích bằng số vì sao chiết khấu và độ dài lượt chơi đổi được kết luận, và vì sao chỉnh γ không phải cách sửa"
+  - "Nhận ra bốn nguồn khai thác (mục tiêu chỉ thấy một phần, định luật Goodhart, vòng phản hồi, can thiệp vào chính bộ đếm)"
+  - "Thiết kế phần thưởng theo kết quả, kèm ràng buộc và kiểm tra hành vi định tính"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Thuyền đua không về đích, khối đỏ bị lật ngửa"
+    steps:
+      - show: |
+          <p><b>Đua thuyền.</b> Mục tiêu: về đích nhanh nhất. Người thiết kế thêm thưởng phụ cho mỗi lần chạm khối xanh dọc đường. Tác tử học được cách <b>đi vòng tròn</b>, chạm đi chạm lại cùng các khối — và không về đích.</p>
+          <p><b>Xếp khối.</b> Mục tiêu: đặt khối đỏ lên khối xanh. Phần thưởng: độ cao của mặt đáy khối đỏ. Tác tử <b>lật ngửa</b> khối đỏ là đủ điểm.</p>
+          <p class="note">Blog DeepMind, “Specification gaming” (21/4/2020); trò đua thuyền Coast Runners.</p>
+        focus: [1, 1, 1, 2, 2, 3]
+        say: "Chào bạn, trong một trò đua thuyền, mục tiêu là về đích nhanh nhất. Người thiết kế thêm thưởng phụ cho mỗi lần chạm khối xanh dọc đường. Tác tử học được cách đi vòng tròn, chạm đi chạm lại cùng các khối, và không bao giờ về đích. Trong một bài xếp khối, mục tiêu là đặt khối đỏ lên khối xanh, còn phần thưởng là độ cao mặt đáy khối đỏ. Tác tử chỉ việc lật ngửa khối đỏ là đủ điểm. Cả hai trường hợp được kể trong một bài viết năm 2020 của chính nhóm nghiên cứu."
+      - show: |
+          <div class="box key">Hôm nay: làm sao <b>tính trước</b> để thấy phần thưởng có thể bị khai thác? Vì sao vá từng lỗ thường không đủ? Và người làm nghề kiểm tra gì ngoài đường cong điểm?</div>
+        say: "Hôm nay ta hỏi, làm sao tính trước để thấy phần thưởng có thể bị khai thác, và vì sao vá từng lỗ thường không đủ. Ta cũng xem người làm nghề kiểm tra gì ngoài đường cong điểm."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: lợi nhuận, chiết khấu, và đếm số lần lặp"
+    checks:
+      - "round(alg.rln_return([0, 0, 10], 0.9), 10) == 8.1"
+      - "len([t for t in range(1, 21) if t % 5 == 0]) == 4 and 1000 // 5 == 200"
+      - "round(0.99 ** 99, 4) == 0.3697 and round(0.9 ** 99, 6) == 0.000030"
+    steps:
+      - show: |
+          <p><b>① Lợi nhuận chiết khấu</b> (bài 0): $G = r_1 + \gamma \cdot r_2 + \gamma^2 \cdot r_3 + \dots$ — phần thưởng đến chậm $k$ bước được nhân $\gamma^k$. Ví dụ 0, 0, 10 với $\gamma = 0{,}9$ cho 8,1.</p>
+          <p><b>② Đếm số lần lặp lại.</b> Một việc xảy ra cứ 5 bước một lần (ở bước 5, 10, 15, 20, …): trong 20 bước có 4 lần, trong 1000 bước có $\frac{1000}{5} = 200$ lần.</p>
+        focus: [1, 1, 2, 2, 2]
+        say: "Điều thứ nhất, ở bài 0 ta đã học lợi nhuận chiết khấu, phần thưởng đến chậm k bước được nhân gam-ma mũ k. Ví dụ chuỗi 0, 0, 10 với gam-ma bằng 0 phẩy 9 cho 8 phẩy 1. Điều thứ hai là đếm số lần lặp lại. Một việc xảy ra cứ 5 bước một lần, ở bước 5, 10, 15, 20, nên trong 20 bước có 4 lần. Trong 1000 bước thì có 1000 chia 5, bằng 200 lần."
+      - show: |
+          <p><b>③ Phần thưởng ở rất xa thì chiết khấu rất mạnh.</b></p>
+          <table class="t"><tr><th>phần thưởng ở bước 100, nhân</th><th>$\gamma = 0{,}99$</th><th>$\gamma = 0{,}9$</th></tr>
+          <tr><td>$\gamma^{99}$</td><td>≈ 0,37</td><td>≈ 0,00003</td></tr></table>
+          <p class="note">Bước 100 chậm 99 bước so với bước 1, nên nhân $\gamma^{99}$.</p>
+        focus: [1, "2.2", 3]
+        say: "Điều thứ ba, phần thưởng ở rất xa thì bị chiết khấu rất mạnh. Một phần thưởng ở bước 100 chậm 99 bước so với bước 1, nên được nhân gam-ma mũ 99. Với gam-ma bằng 0 phẩy 99, hệ số đó khoảng 0 phẩy 37, còn với 0 phẩy 9 chỉ khoảng 0 phẩy 00003."
+
+  # ───────────────────────── 3. NGÔN NGỮ ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: phần thưởng viết ra và mục tiêu thật"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thuật ngữ</th><th>nghĩa</th><th>ví dụ</th></tr>
+          <tr><td><b>mục tiêu thật</b></td><td>điều người thiết kế muốn</td><td>thuyền về đích nhanh</td></tr>
+          <tr><td><b>phần thưởng viết ra</b> $r$</td><td>con số máy thật sự tối ưu</td><td>+1 mỗi lần chạm khối xanh, +100 khi về đích</td></tr>
+          <tr><td><b>khai thác phần thưởng</b></td><td>điểm $G$ cao mà mục tiêu thật không đạt</td><td>đi vòng tròn</td></tr></table>
+          <p class="note">Định luật Goodhart, như Amodei và cộng sự (2016) trích: “khi một thước đo trở thành mục tiêu, nó không còn là thước đo tốt”.</p>
+        focus: [0, "1.2", "1.3", "1.4", 2]
+        say: "Bài dùng ba thuật ngữ. Mục tiêu thật là điều người thiết kế muốn, như thuyền về đích nhanh. Phần thưởng viết ra r là con số máy thật sự tối ưu, như cộng 1 mỗi lần chạm khối xanh và cộng 100 khi về đích. Khai thác phần thưởng là khi lợi nhuận G cao mà mục tiêu thật không đạt, như đi vòng tròn. Một định luật quen thuộc của kinh tế học nói rằng khi một thước đo trở thành mục tiêu, nó không còn là thước đo tốt."
+      - show: |
+          <div class="box key">Tác tử <b>không “gian lận”</b>. Theo Amodei và cộng sự (2016), với tác tử thì lỗ hổng trong phần thưởng “không phải lỗi, chỉ là cách môi trường vận hành” — một chiến lược hợp lệ như mọi chiến lược khác.</div>
+        say: "Điều quan trọng là tác tử không gian lận. Một bài báo năm 2016 về các vấn đề an toàn cụ thể viết rằng, với tác tử, lỗ hổng trong phần thưởng không phải lỗi. Đó chỉ là cách môi trường vận hành, một chiến lược hợp lệ như mọi chiến lược khác."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hai đường đi trên cùng một đường đua"
+    steps:
+      - show: |
+          <div><svg width="1000" height="340" viewBox="0 0 1000 340"><defs><marker id="rl11a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#059669"/></marker><marker id="rl11b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#b91c1c"/></marker></defs>
+          <rect x="30" y="40" width="940" height="200" rx="100" fill="#eff6ff" stroke="#2a78d6" stroke-width="3"/>
+          <rect x="30" y="40" width="70" height="200" fill="#f3f4f6" stroke="#1f2937" stroke-width="2"/>
+          <rect x="900" y="40" width="70" height="200" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
+          <g font-size="22" fill="#1f2937" text-anchor="middle"><text x="65" y="275">xuất phát</text><text x="935" y="275">đích +100</text></g>
+          <line x1="110" y1="95" x2="890" y2="95" stroke="#059669" stroke-width="5" marker-end="url(#rl11a)"/>
+          <text x="500" y="80" font-size="22" fill="#059669" text-anchor="middle">về đích: 100 bước, +100 rồi hết lượt</text>
+          <circle cx="400" cy="185" r="38" fill="none" stroke="#b91c1c" stroke-width="5" stroke-dasharray="14 8"/>
+          <path d="M432,172 L440,190" stroke="#b91c1c" stroke-width="5" marker-end="url(#rl11b)"/>
+          <rect x="385" y="135" width="30" height="22" fill="#22c55e" stroke="#15803d" stroke-width="2"/>
+          <text x="470" y="200" font-size="22" fill="#b91c1c" text-anchor="start">quay vòng: 5 bước chạm lại khối +1</text>
+          <text x="470" y="228" font-size="22" fill="#b91c1c" text-anchor="start">suốt 1000 bước, không về đích</text>
+          <text x="500" y="320" font-size="21" fill="#6b7280" text-anchor="middle">số minh hoạ, dựng theo mô tả cơ chế của blog DeepMind (2020)</text>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình là cùng một đường đua với hai cách đi. Đường xanh về đích sau 100 bước, nhận cộng 100 rồi hết lượt. Vòng đỏ quanh một khối xanh, cứ 5 bước chạm lại khối đó và nhận cộng 1, suốt 1000 bước mà không bao giờ về đích. Các con số là số minh hoạ, dựng theo đúng cơ chế mà bài viết năm 2020 mô tả."
+
+  # ───────────────────────── 5. KHÁI NIỆM ─────────────────────────
+  - id: concept
+    kind: concept
+    title: "Bốn nguồn sinh ra khai thác phần thưởng"
+    steps:
+      - show: |
+          <table class="t"><tr><th>nguồn (Amodei và cộng sự, 2016)</th><th>ví dụ trong bài báo</th></tr>
+          <tr><td>mục tiêu chỉ thấy được một phần</td><td>robot dọn dẹp được thưởng theo số vết bẩn nó <b>thấy</b> → nhắm mắt lại</td></tr>
+          <tr><td>định luật Goodhart</td><td>thưởng theo lượng thuốc tẩy đã dùng → đổ thuốc tẩy xuống cống</td></tr>
+          <tr><td>vòng phản hồi tự khuếch đại</td><td>quảng cáo phổ biến được in to hơn → càng phổ biến hơn</td></tr>
+          <tr><td>can thiệp vào chính bộ đếm điểm</td><td>tác tử chơi cờ sửa cảm biến đếm điểm</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bài báo năm 2016 xếp các trường hợp vào bốn nguồn. Thứ nhất, mục tiêu chỉ thấy được một phần, như robot dọn dẹp được thưởng theo số vết bẩn nó thấy, thì nhắm mắt lại. Thứ hai là định luật về thước đo vừa nói, thưởng theo lượng thuốc tẩy đã dùng thì robot đổ thuốc tẩy xuống cống. Thứ ba là vòng phản hồi tự khuếch đại, quảng cáo phổ biến được in to hơn nên càng phổ biến hơn. Thứ tư là can thiệp vào chính bộ đếm điểm, như tác tử chơi cờ sửa cảm biến đếm điểm."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Tính lợi nhuận của hai cách đi, từng bước"
+    checks:
+      - "alg.rln_boat('ve_dich') == alg.rln_race('ve_dich') == 100"
+      - "alg.rln_boat('vong') == alg.rln_race('vong') == 200 > 100"
+      - "round(alg.rln_race('ve_dich', 0.99), 2) == 36.97 and round(alg.rln_race('vong', 0.99), 2) == 19.6"
+      - "round(alg.rln_race('ve_dich', 0.9), 4) == 0.003 and round(alg.rln_race('vong', 0.9), 2) == 1.6"
+    steps:
+      - show: |
+          <p>Không chiết khấu ($\gamma = 1$), lượt chơi tối đa 1000 bước.</p>
+          <p><b>Bước 1 — về đích.</b> Một phần thưởng +100 ở bước 100: $G = \hlg{100}$.</p>
+        focus: [1, 2]
+        say: "Trước hết ta không chiết khấu, tức gam-ma bằng 1, và lượt chơi dài tối đa 1000 bước. Bước một là cách về đích, chỉ có một phần thưởng cộng 100 ở bước 100, nên lợi nhuận bằng 100."
+      - show: |
+          <p><b>Bước 1.</b> Về đích: $G = 100$.</p>
+          <p><b>Bước 2 — quay vòng.</b> Chạm khối ở bước 5, 10, …, 1000: $\frac{1000}{5} = 200$ lần, mỗi lần +1, nên $G = \hl{200}$ — <b>gấp đôi</b> về đích.</p>
+        focus: [2, 2]
+        say: "Bước hai là cách quay vòng, chạm khối ở bước 5, bước 10, và cứ thế tới bước 1000, tổng cộng 200 lần. Mỗi lần được cộng 1, nên lợi nhuận bằng 200, gấp đôi về đích, và chính sách tối ưu là không về đích."
+      - show: |
+          <p><b>Bước 1–2.</b> $\gamma = 1$: về đích 100, quay vòng 200.</p>
+          <p><b>Bước 3 — thêm chiết khấu $\gamma = 0{,}99$.</b> Về đích: $0{,}99^{99} \cdot 100 \approx \hlg{36{,}97}$. Quay vòng: cộng 200 số hạng $0{,}99^{4},\ 0{,}99^{9},\ 0{,}99^{14},\ \dots$ được khoảng $19{,}60$. Về đích thắng.</p>
+        focus: [2, 2, 2]
+        say: "Bước ba, thêm chiết khấu với gam-ma bằng 0 phẩy 99. Về đích được 0 phẩy 99 mũ 99 nhân 100, xấp xỉ 36 phẩy 97. Quay vòng thì cộng 200 số hạng bị chiết khấu ngày càng mạnh, chỉ được khoảng 19 phẩy 6, nên lần này về đích thắng."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>cách tính</th><th>về đích</th><th>quay vòng</th><th>chính sách tối ưu</th></tr>
+          <tr><td>$\gamma = 1$, 1000 bước</td><td>100</td><td>200</td><td class="red">quay vòng</td></tr>
+          <tr><td>$\gamma = 0{,}99$</td><td>36,97</td><td>19,60</td><td>về đích</td></tr>
+          <tr><td>$\gamma = 0{,}9$</td><td>0,003</td><td>1,60</td><td class="red">quay vòng</td></tr></table>
+          <p class="note">Cùng một phần thưởng, kết luận đổi qua đổi lại theo $\gamma$. Phần thưởng <b>có thể bị khai thác</b> ngay khi tồn tại một $\gamma$ hợp lý làm hành vi lạ thắng.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Bước bốn, đặt ba cách tính cạnh nhau. Với gam-ma bằng 1, quay vòng thắng, 200 so với 100. Với 0 phẩy 99, về đích thắng, khoảng 37 so với 19 phẩy 6. Với 0 phẩy 9, phần thưởng ở bước 100 gần như biến mất, và quay vòng lại thắng. Cùng một phần thưởng mà kết luận đổi qua đổi lại, nên phần thưởng đã có thể bị khai thác ngay khi có một gam-ma hợp lý làm hành vi lạ thắng."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: cộng từng bước, và công thức tổng cấp số nhân"
+    checks:
+      - "abs(sum(0.99 ** (t - 1) for t in range(1, 1001) if t % 5 == 0) - alg.rln_race('vong', 0.99)) < 1e-9"
+      - "abs(0.99 ** 4 * (1 - 0.99 ** 1000) / (1 - 0.99 ** 5) - alg.rln_race('vong', 0.99)) < 1e-9"
+    steps:
+      - show: |
+          <p><b>Đường khác 1 — mô phỏng từng bước.</b> Chạy 1000 bước, ở mỗi bước $t$ chia hết cho 5 cộng $0{,}99^{t-1}$: tổng ≈ 19,60 ✓.</p>
+          <p><b>Đường khác 2 — công thức.</b> Các số hạng gấp nhau $q = 0{,}99^5$ lần, số đầu $0{,}99^4$, có 200 số hạng:</p>
+          $$0{,}99^4 \cdot \frac{1 - 0{,}99^{1000}}{1 - 0{,}99^{5}} \approx 0{,}961 \cdot \frac{0{,}99996}{0{,}049} \approx 19{,}60 \checkmark$$
+        focus: [1, 2, 3, 3]
+        say: "Kiểm tra thứ nhất là mô phỏng từng bước, chạy 1000 bước và ở mỗi bước chia hết cho 5 thì cộng 0 phẩy 99 mũ t trừ 1, ta được khoảng 19 phẩy 6. Kiểm tra thứ hai dùng công thức tổng, vì các số hạng gấp nhau 0 phẩy 99 mũ 5 lần, số đầu là 0 phẩy 99 mũ 4, và có 200 số hạng. Thay vào, 0 phẩy 961 nhân 0 phẩy 99996 chia 0 phẩy 049, xấp xỉ 19 phẩy 6. Hai đường cho cùng một số."
+        introduces: [frac]
+
+  # ───────────────────────── 8. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi cả người đã đi làm"
+    checks:
+      - "round(alg.rln_race('vong', repeat_value=0.7), 1) == 140.3 > 100 and alg.rln_race('vong', repeat_value=0.4) < 100"
+      - "round(99 / 199, 4) == 0.4975"
+      - "alg.rln_race('vong', repeat_value=min(1.0, 1.0)) == 200"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Thưởng cho mục tiêu phụ thay vì kết quả <b class="red">(máy học mục tiêu phụ)</b>
+          <br><span class="note">Sutton và Barto (2018): tác tử chơi cờ “chỉ nên được thưởng khi thật sự thắng”; thưởng cho việc ăn quân thì nó có thể ăn quân “ngay cả khi phải thua ván”. Phép thử: liệt kê cách đạt điểm cao mà không đạt kết quả.</span></div>
+        say: "Lỗi thứ nhất, thưởng cho mục tiêu phụ thay vì kết quả, và máy sẽ học đúng mục tiêu phụ. Sách giáo khoa chuẩn của ngành viết rằng tác tử chơi cờ chỉ nên được thưởng khi thật sự thắng. Nếu thưởng cho việc ăn quân, nó có thể ăn quân ngay cả khi phải thua ván. Phép thử là liệt kê những cách đạt điểm cao mà không đạt kết quả."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Vá bằng một khoản phạt đoán chừng <b class="red">(vẫn khai thác, hoặc chuyển chỗ)</b></div>
+          <table class="t"><tr><th>chạm lại cùng khối được</th><th>quay vòng</th><th>về đích</th></tr>
+          <tr><td>+1 (gốc)</td><td>200</td><td>100</td></tr>
+          <tr><td>+0,7 (phạt 0,3 mỗi lần)</td><td class="red">140,3</td><td>100</td></tr>
+          <tr><td>phải dưới $\frac{99}{199} \approx 0{,}4975$</td><td>dưới 100</td><td>100</td></tr></table>
+          <p class="note">Và khi lỗ này kín, tác tử tìm lỗ khác. Phép thử: sau mỗi lần vá, xem lại hành vi, không chỉ điểm.</p>
+        focus: [1, "2.3", "2.4", 3]
+        say: "Lỗi thứ hai, vá bằng một khoản phạt đoán chừng, nên tác tử vẫn khai thác hoặc chuyển chỗ khai thác. Nếu mỗi lần chạm lại cùng khối chỉ còn 0 phẩy 7, quay vòng vẫn được 140 phẩy 3, hơn về đích. Phải hạ xuống dưới khoảng 0 phẩy 4975 thì quay vòng mới thua. Và khi lỗ này kín, tác tử tìm lỗ khác, nên sau mỗi lần vá phải xem lại hành vi chứ không chỉ điểm."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Chỉ nhìn đường cong điểm tăng đều <b class="red">(điểm cao, việc không xong)</b>
+          <br><span class="note">Khối đỏ lật ngửa cho điểm cao đúng như đặc tả. Chỉ <b>xem tận mắt</b> một lượt chơi mới thấy. Phép thử: mỗi mốc huấn luyện, xem vài lượt chơi và đo thêm một chỉ số độc lập với phần thưởng (thuyền có về đích không?).</span></div>
+        say: "Lỗi thứ ba, chỉ nhìn đường cong điểm tăng đều, trong khi điểm cao mà việc không xong. Khối đỏ lật ngửa cho điểm cao đúng như đặc tả, chỉ xem tận mắt một lượt chơi mới thấy. Phép thử là ở mỗi mốc huấn luyện, xem vài lượt chơi và đo thêm một chỉ số độc lập với phần thưởng, chẳng hạn thuyền có về đích không."
+      - show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Chặn trần phần thưởng mỗi bước và coi là xong <b class="red">(không chặn được lối rẻ)</b>
+          <br><span class="note">Trần +1 mỗi bước không đổi gì: quay vòng vẫn 200. Amodei và cộng sự (2016): chặn trần có thể ngăn chiến lược hiếm mà điểm cực cao, nhưng “không ngăn được” robot nhắm mắt để khỏi thấy bẩn; có khi phải chặn tổng chứ không chặn từng bước.</span></div>
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, chặn trần phần thưởng mỗi bước và coi là xong. Trần cộng 1 mỗi bước không đổi gì, quay vòng vẫn được 200. Bài báo năm 2016 ghi rằng chặn trần có thể ngăn chiến lược hiếm mà điểm cực cao, nhưng không ngăn được robot nhắm mắt để khỏi thấy bẩn. Có khi phải chặn tổng phần thưởng chứ không chặn từng bước."
+
+  # ───────────────────────── 9. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: đường đua mới, và robot dọn phòng"
+    checks:
+      - "alg.rln_race('vong', every=4) == 250 > 100"
+      - "round(alg.rln_race('vong', every=4, repeat_value=0.4), 1) == 100.6 > 100 and round(1 + 249 * 0.4, 1) == 100.6"
+      - "alg.rln_race('vong', every=4, repeat_value=0) == 1 < 100"
+    steps:
+      - show: |
+          <p>Đường đua mới: khối xanh hiện lại sau mỗi <b>4</b> bước; về đích +100 ở bước 100; lượt chơi 1000 bước; $\gamma = 1$.</p>
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Quay vòng được bao nhiêu? Chính sách tối ưu là gì?</td></tr>
+          <tr><td>2</td><td>Vá: từ lần chạm thứ hai, mỗi lần chỉ được +0,4. Đã đủ chưa?</td></tr>
+          <tr><td>3</td><td>Robot dọn phòng: chọn phần thưởng nào, vì sao? (a) theo số vết bẩn ống kính thấy; (b) theo lượng thuốc tẩy đã dùng; (c) theo kết quả người kiểm tra phòng cuối lượt.</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", 0]
+        say: "Bây giờ đến lượt bạn, với đường đua mới, khối xanh hiện lại sau mỗi 4 bước, về đích cộng 100 ở bước 100, lượt chơi 1000 bước, không chiết khấu. Câu một, quay vòng được bao nhiêu, và chính sách tối ưu là gì? Câu hai, nếu vá bằng cách từ lần chạm thứ hai mỗi lần chỉ được 0 phẩy 4, đã đủ chưa? Câu ba, với robot dọn phòng, chọn phần thưởng theo số vết bẩn ống kính thấy, theo lượng thuốc tẩy, hay theo kết quả người kiểm tra phòng cuối lượt? Dừng video và làm ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu</th><th>tính</th><th>kết luận</th></tr>
+          <tr><td>1</td><td>$\frac{1000}{4} = 250$ lần, mỗi lần +1</td><td>250 lớn hơn 100: quay vòng</td></tr>
+          <tr><td>2</td><td>$1 + 249 \cdot 0{,}4 = 100{,}6$</td><td class="red">vẫn hơn 100 một chút: chưa đủ</td></tr>
+          <tr><td>2, cách vá tốt hơn</td><td>mỗi khối chỉ thưởng <b>lần đầu</b>: quay vòng còn 1</td><td>về đích thắng</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Đáp án như bảng. Câu một, trong 1000 bước có 250 lần chạm, mỗi lần cộng 1, được 250, lớn hơn 100, nên chính sách tối ưu vẫn là quay vòng. Câu hai, lần đầu được 1, 249 lần sau mỗi lần 0 phẩy 4, tổng 100 phẩy 6, vẫn hơn 100 một chút, nên chưa đủ. Cách vá tốt hơn là mỗi khối chỉ thưởng lần đầu, khi đó quay vòng chỉ còn 1, và về đích thắng."
+      - show: |
+          <p><b>Câu 3 — quyết định.</b></p>
+          <table class="t"><tr><th>phần thưởng</th><th>bị khai thác thế nào</th><th>chọn?</th></tr>
+          <tr><td>(a) số vết bẩn ống kính thấy</td><td>nhắm mắt, quay ống kính đi</td><td>không</td></tr>
+          <tr><td>(b) lượng thuốc tẩy đã dùng</td><td>đổ thuốc tẩy đi</td><td>không</td></tr>
+          <tr><td>(c) người kiểm tra kết quả cuối lượt</td><td>ít lối rẻ hơn, nhưng đắt và chậm</td><td class="green">có, kèm kiểm tra ngẫu nhiên</td></tr></table>
+          <p class="note">Đánh đổi: (c) tốn công người, thưởng đến muộn; bù bằng cách để người chấm một phần các lượt và học mô hình phần thưởng từ đó (bài 10) — rồi lại kiểm tra mô hình đó.</p>
+        focus: [1, "2.2", "2.3", "2.4", 3]
+        say: "Câu ba là một quyết định. Thưởng theo số vết bẩn ống kính thấy thì robot nhắm mắt hay quay ống kính đi. Thưởng theo lượng thuốc tẩy thì robot đổ thuốc đi. Thưởng theo kết quả người kiểm tra cuối lượt có ít lối rẻ hơn, nên chọn cách này, kèm kiểm tra ngẫu nhiên. Cái giá là tốn công người và thưởng đến muộn, nên ta cho người chấm một phần các lượt, học mô hình phần thưởng như ở bài 10, rồi lại kiểm tra chính mô hình đó."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">tác tử tối ưu đúng phần thưởng đã viết</span><span class="a">→</span>
+          <span class="n">tính lợi nhuận của các hành vi lạ</span><span class="a">→</span>
+          <span class="n">hành vi lạ thắng ở một gam-ma hợp lý: có thể bị khai thác</span><span class="a">→</span>
+          <span class="n">thưởng theo kết quả, xem tận mắt, đo chỉ số độc lập</span></div>
+        say: "Tổng kết lại, tác tử tối ưu đúng phần thưởng đã viết, không phải điều ta muốn. Hãy tính lợi nhuận của các hành vi lạ, và nếu một hành vi lạ thắng ở một gam-ma hợp lý thì phần thưởng có thể bị khai thác. Cách chữa là thưởng theo kết quả, xem tận mắt các lượt chơi, và đo một chỉ số độc lập với phần thưởng."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> phần thưởng là cách nói cho tác tử biết <b>muốn đạt điều gì</b>, không phải cách đạt — và hãy giả định tác tử sẽ tìm ra mọi lối tắt mà con số cho phép.</div>
+        say: "Điều cần mang theo, phần thưởng là cách nói cho tác tử biết muốn đạt điều gì, không phải cách đạt điều đó. Hãy giả định tác tử sẽ tìm ra mọi lối tắt mà con số cho phép."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 12): <b>tình huống chuyên gia — đánh giá chính sách mới từ nhật ký cũ</b>, khi chưa được thử chính sách mới trên người dùng thật.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 12, ta gặp một tình huống chuyên gia, đánh giá chính sách mới từ nhật ký cũ, khi chưa được thử chính sách mới trên người dùng thật. Hẹn gặp bạn ở bài tiếp theo."

@@ -1,0 +1,198 @@
+id: L08
+course: SAR
+series: "SAR · Kiến trúc hệ thống"
+title: "Bài 8 — Hàng đợi và xử lý bất đồng bộ"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/sar.yaml L08; audit/sar/verify_sar.py L08; G. Hohpe, B. Woolf, Enterprise Integration Patterns (2003), chương 3 và 10; M. Kleppmann, Designing Data-Intensive Applications (2017), chương 11; DSY bài 14, CLD bài 3"
+assumes: [arith, cdot, frac]
+# Quy ước: tốc độ gửi và xử lý không đổi trong mỗi khoảng. Tồn đọng tăng (gửi − xử lý) mỗi giây khi gửi nhanh hơn (alg.backlog); khi xử lý nhanh
+#   hơn, thời gian xả = tồn đọng / (xử lý − gửi) (alg.drain_time). Một giờ = 3600 giây.
+objectives:
+  - "Dùng hàng đợi tách nhịp hai dịch vụ"
+  - "Tính tồn đọng khi xử lý chậm hơn gửi"
+  - "Biết hàng đợi không thay được năng lực xử lý"
+asr_reviewed:
+  - {sentence: "Hàng đợi không giới hạn chỉ hoãn sự cố tới lúc hết đĩa hay độ trễ tính bằng ngày.", reason: "ASR chép “Hàn đợi không giới hạn chỉ hoảng sự cố tới lúc hết để hay đồ trở tính bằng ngay.” (0.684): lệch âm/thanh thuần Việt: hàng/hàn, hoãn/hoảng, đĩa/để, độ trễ/đồ trở, ngày/ngay — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bảng theo dõi tồn đọng qua hai giai đoạn.", reason: "ASR chép “Bản theo dõi tồn đồng qua 2 giai đoạn.” (0.778): lệch âm/thanh thuần Việt: bảng/bản, đọng/đồng — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Hàng đợi 72 000 thư chưa gửi"
+    checks:
+      - "alg.backlog(120, 100, 3600) == 72000"
+      - "72000 / 100 == 720 and 720 / 60 == 12"
+    steps:
+      - show: |
+          <p>Dịch vụ đặt hàng đẩy yêu cầu “gửi thư xác nhận” vào hàng đợi; dịch vụ thư lấy ra xử lý. Giờ khuyến mãi, đặt hàng 120 mỗi giây, dịch vụ thư chỉ xử lý 100. Sau một giờ, hàng đợi có $\hl{72\,000}$ thư nằm chờ — khách đặt hàng lúc cuối giờ phải chờ khoảng 12 phút mới có thư xác nhận.</p>
+          <div class="box key">Hôm nay: <b>hàng đợi</b> — tách nhịp hai dịch vụ, hấp thụ đợt tăng ngắn, và giới hạn của nó.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, dịch vụ đặt hàng đẩy yêu cầu gửi thư xác nhận vào hàng đợi, và dịch vụ thư lấy ra xử lý. Giờ khuyến mãi, đặt hàng 120 mỗi giây mà dịch vụ thư chỉ xử lý được 100. Sau một giờ, hàng đợi có 72 nghìn thư nằm chờ, và khách đặt hàng lúc cuối giờ phải chờ khoảng 12 phút mới có thư xác nhận. Hôm nay ta học hàng đợi, cách nó tách nhịp hai dịch vụ, hấp thụ đợt tăng ngắn, và giới hạn của nó."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: đổi ra giây, và bồn nước đầy dần, vơi dần"
+    checks:
+      - "60 * 60 == 3600 and 10 * 60 == 600"
+      - "(12 - 10) * 30 == 60 and 60 / (10 - 8) == 30"
+    steps:
+      - show: |
+          <p>Mọi tốc độ trong bài tính <b>mỗi giây</b>, nên đổi thời gian ra giây trước: 1 giờ $= 60 \cdot 60 = 3600$ giây; 10 phút $= 10 \cdot 60 = 600$ giây.</p>
+        say: "Trước hết, mọi tốc độ trong bài đều tính mỗi giây, nên ta đổi thời gian ra giây trước khi nhân. Một giờ bằng 60 nhân 60, bằng 3600 giây, còn 10 phút bằng 10 nhân 60, bằng 600 giây."
+      - show: |
+          <table class="t"><tr><th>bồn nước</th><th>vào</th><th>ra</th><th>tính</th></tr>
+          <tr><td>đầy dần</td><td>12 lít/phút</td><td>10 lít/phút</td><td>thêm $12 - 10 = 2$ lít mỗi phút; sau 30 phút: $2 \cdot 30 = 60$ lít</td></tr>
+          <tr><td>vơi dần</td><td>8 lít/phút</td><td>10 lít/phút</td><td>bớt $10 - 8 = 2$ lít mỗi phút; 60 lít cạn sau $\frac{60}{2} = 30$ phút</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.3", "1.3"]
+        say: "Thứ hai, hình ảnh bồn nước. Nước vào 12 lít mỗi phút, ra 10 lít mỗi phút, thì bồn đầy thêm 12 trừ 10, bằng 2 lít mỗi phút, nên sau 30 phút có thêm 60 lít. Ngược lại, nước vào 8 mà ra 10, bồn vơi 2 lít mỗi phút. Khi đó 60 lít cạn sau 60 chia 2, bằng 30 phút. Chỉ có hiệu hai tốc độ là quan trọng, và hàng đợi cũng hệt như cái bồn này."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: bên gửi, bên nhận, tồn đọng"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">bên gửi</span><span class="a">→</span><span class="n">hàng đợi (lưu bền)</span><span class="a">→</span><span class="n">bên nhận</span></div>
+          <p>Bên gửi không chờ bên nhận: đặt thông điệp vào hàng đợi rồi đi tiếp. Bên nhận lấy ra theo nhịp của mình; chết một lúc thì thông điệp vẫn nằm chờ.</p>
+          <p><b>Tồn đọng</b> sau $t$ giây khi gửi $g$ mỗi giây, xử lý $x$ mỗi giây ($g \gt x$): $(g - x) \cdot t$. Khi $x \gt g$, thời gian xả hết tồn đọng $T$: $\frac{T}{x - g}$.</p>
+        introduces: [ltgt]
+        focus: [1, 2, 2, 3, 3]
+        say: "Luồng gồm bên gửi, hàng đợi lưu bền, và bên nhận. Bên gửi không chờ bên nhận, chỉ đặt thông điệp vào hàng đợi rồi đi tiếp. Bên nhận lấy ra theo nhịp của mình, có chết một lúc thì thông điệp vẫn nằm chờ. Tồn đọng sau t giây, khi gửi g mỗi giây và xử lý x mỗi giây với g lớn hơn x, bằng g trừ x nhân t. Khi x lớn hơn g, thời gian xả hết một tồn đọng T bằng T chia x trừ g."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hàng đợi là cái bồn giữa hai nhịp"
+    checks:
+      - "alg.backlog(120, 100, 3600) == 72000 and alg.drain_time(72000, 80, 100) == 3600.0"
+    steps:
+      - show: |
+          <div><svg width="1500" height="330" viewBox="0 0 1500 330"><g font-size="21" fill="#1f2937"><rect x="20" y="110" width="170" height="80" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="105" y="145" text-anchor="middle">bên gửi</text><text x="105" y="173" text-anchor="middle">120 mỗi giây</text><line x1="195" y1="150" x2="275" y2="150" stroke="#1f2937" stroke-width="3"/><polygon points="275,141 292,150 275,159" fill="#1f2937"/><rect x="300" y="100" width="250" height="100" rx="6" fill="none" stroke="#d97706" stroke-width="3"/><rect x="310" y="125" width="22" height="50" fill="#fde68a" stroke="#d97706"/><rect x="340" y="125" width="22" height="50" fill="#fde68a" stroke="#d97706"/><rect x="370" y="125" width="22" height="50" fill="#fde68a" stroke="#d97706"/><rect x="400" y="125" width="22" height="50" fill="#fde68a" stroke="#d97706"/><rect x="430" y="125" width="22" height="50" fill="#fde68a" stroke="#d97706"/><rect x="460" y="125" width="22" height="50" fill="#fde68a" stroke="#d97706"/><rect x="490" y="125" width="22" height="50" fill="#fde68a" stroke="#d97706"/><rect x="520" y="125" width="22" height="50" fill="#fde68a" stroke="#d97706"/><text x="425" y="85" text-anchor="middle" fill="#d97706" font-weight="bold">hàng đợi</text><text x="425" y="232" text-anchor="middle" fill="#d97706">thêm 20 mỗi giây</text><line x1="555" y1="150" x2="595" y2="150" stroke="#1f2937" stroke-width="3"/><polygon points="595,141 612,150 595,159" fill="#1f2937"/><rect x="615" y="110" width="170" height="80" rx="10" fill="#d1fae5" stroke="#059669" stroke-width="3"/><text x="700" y="145" text-anchor="middle">bên nhận</text><text x="700" y="173" text-anchor="middle">100 mỗi giây</text><line x1="860" y1="280" x2="1470" y2="280" stroke="#6b7280" stroke-width="2"/><line x1="860" y1="280" x2="860" y2="50" stroke="#6b7280" stroke-width="2"/><text x="870" y="45" fill="#6b7280">tồn đọng</text><polyline points="860,280 1160,80 1460,280" fill="none" stroke="#eb6834" stroke-width="4"/><text x="1160" y="68" text-anchor="middle" font-weight="bold" fill="#eb6834">72 000</text><text x="875" y="120" fill="#b91c1c">tăng 20 mỗi giây</text><text x="1290" y="120" fill="#059669">giảm 20 mỗi giây</text><text x="860" y="310" text-anchor="middle">0</text><text x="1160" y="310" text-anchor="middle">1 giờ</text><text x="1440" y="310" text-anchor="middle">2 giờ</text></g></svg></div>
+        focus: [1, 1, 1]
+        say: "Bên trái là luồng thông điệp, bên gửi đổ vào 120 mỗi giây, bên nhận lấy ra 100 mỗi giây, nên hàng đợi ở giữa dày thêm 20 thông điệp mỗi giây. Bên phải là đồ thị tồn đọng theo thời gian, leo đều trong giờ cao điểm lên đỉnh 72 nghìn. Khi bên gửi giảm xuống dưới 100, tồn đọng tụt đều về 0 sau thêm một giờ nữa."
+
+  - id: example
+    kind: example
+    title: "Một giờ cao điểm, rồi xả"
+    checks:
+      - "alg.backlog(120, 100, 3600) == 72000 and alg.drain_time(72000, 80, 100) == 3600.0"
+      - "120 - 100 == 20 and 20 * 3600 == 72000 and 100 - 80 == 20 and 72000 / 20 == 3600 and 72000 / 100 / 60 == 12"
+    steps:
+      - show: |
+          <p><b>Bước 1 — chênh lệch giờ cao điểm:</b> gửi 120, xử lý 100 → mỗi giây hàng đợi dày thêm $120 - 100 = 20$ thông điệp.</p>
+          <p><b>Bước 2 — nhân thời gian:</b> 1 giờ = 3600 giây → tồn đọng $20 \cdot 3600 = \hl{72\,000}$.</p>
+        focus: [1, 2]
+        say: "Bước một, trong giờ cao điểm gửi 120 mà xử lý 100, nên mỗi giây hàng đợi dày thêm 120 trừ 100, bằng 20 thông điệp. Bước hai, nhân với thời gian, một giờ là 3600 giây, nên tồn đọng là 20 nhân 3600, bằng 72 nghìn."
+      - show: |
+          <p><b>Bước 3 — xả sau cao điểm:</b> gửi còn 80, xử lý vẫn 100 → mỗi giây vơi $100 - 80 = 20$; xả hết sau $\frac{72\,000}{20} = \hl{3600}$ giây, tức thêm 1 giờ.</p>
+          <p><b>Bước 4 — thư cuối giờ chờ bao lâu:</b> nó đứng sau 72 000 thư, bên nhận làm 100 thư mỗi giây → chờ $\frac{72\,000}{100} = 720$ giây, tức <b>12 phút</b>.</p>
+        focus: [1, 1, 2, 2]
+        say: "Bước ba, sau cao điểm bên gửi giảm còn 80, xử lý vẫn 100, nên mỗi giây hàng đợi vơi 20. Xả hết sau 72 nghìn chia 20, bằng 3600 giây, tức thêm một giờ. Bước bốn, thư của khách đặt lúc cuối giờ đứng sau 72 nghìn thư, mà bên nhận làm 100 thư mỗi giây. Vậy nó chờ 72 nghìn chia 100, bằng 720 giây, tức 12 phút."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>giai đoạn</th><th>gửi</th><th>xử lý</th><th>tồn đọng</th></tr>
+          <tr><td>1 giờ cao điểm</td><td>120/s</td><td>100/s</td><td>tăng $20 \cdot 3600 = \hl{72\,000}$</td></tr>
+          <tr><td>sau cao điểm</td><td>80/s</td><td>100/s</td><td>giảm 20/s, xả hết sau $\frac{72\,000}{20} = \hl{3600}$ s</td></tr></table>
+          <div class="box key">Hàng đợi biến một <b>đợt tăng</b> thành <b>độ trễ</b> chứ không làm mất việc. Nhưng nếu gửi nhanh hơn xử lý <b>kéo dài</b>, tồn đọng tăng mãi — cần thêm người xử lý, không phải hàng đợi to hơn.</div>
+        focus: [1, "1.2", "1.3", 2, 2]
+        say: "Bảng theo dõi tồn đọng qua hai giai đoạn. Trong 1 giờ cao điểm, gửi 120 mỗi giây, xử lý 100, nên tồn đọng tăng 20 nhân 3600, bằng 72 nghìn. Sau cao điểm, gửi giảm còn 80, xử lý vẫn 100, nên tồn đọng giảm 20 mỗi giây, xả hết sau 72 nghìn chia 20, bằng 3600 giây. Hàng đợi biến một đợt tăng thành độ trễ chứ không làm mất việc. Nhưng nếu gửi nhanh hơn xử lý kéo dài, tồn đọng sẽ tăng mãi, và cần thêm người xử lý, không phải hàng đợi to hơn."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: cho máy đếm từng giây"
+    checks:
+      - "list(__import__('itertools').accumulate([20] * 3600))[-1] == 72000"
+      - "list(__import__('itertools').accumulate([72000] + [-20] * 3600))[3599] == 20 and list(__import__('itertools').accumulate([72000] + [-20] * 3600))[3600] == 0"
+      - "120 * 3600 - 100 * 3600 == 72000 and 120 * 3600 == 432000 and 100 * 3600 == 360000"
+    steps:
+      - show: |
+          <table class="t"><tr><th>kiểm</th><th>đường khác</th><th>kết quả</th></tr>
+          <tr><td>72 000</td><td>đếm tổng: gửi $120 \cdot 3600 = 432\,000$, xử lý $100 \cdot 3600 = 360\,000$, còn lại hiệu</td><td>$432\,000 - 360\,000 = 72\,000$ ✓</td></tr>
+          <tr><td>72 000</td><td>máy cộng 20 vào hàng đợi, lặp 3600 lần</td><td>72 000 ✓</td></tr>
+          <tr><td>3600 giây xả</td><td>máy trừ 20 mỗi giây: sau 3599 giây còn 20, sau 3600 giây còn 0</td><td>đúng 3600 ✓</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.3", "1.4"]
+        say: "Kiểm bằng đường khác. Đếm tổng trong một giờ, bên gửi đẩy vào 120 nhân 3600, bằng 432 nghìn, bên nhận làm được 100 nhân 3600, bằng 360 nghìn. Phần còn lại nằm trong hàng đợi, nên tồn đọng là 72 nghìn. Cho máy cộng 20 vào hàng đợi, lặp 3600 lần, cũng ra 72 nghìn. Cho máy trừ 20 mỗi giây thì sau 3599 giây còn 20 thông điệp, và sau đúng 3600 giây thì hết sạch."
+
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc, 1 lỗi người đã đi làm"
+    checks:
+      - "4 * 10 == 40 and 20 * 10 == 200 and 200 / 100 == 2 and 100 // 10 == 10"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Dùng hàng đợi để che thiếu năng lực <b class="red">(nổ chậm)</b>
+          <br><span class="note">Hàng đợi không giới hạn chỉ hoãn sự cố: tới lúc hết đĩa hay độ trễ tính bằng ngày. Đặt giới hạn, theo dõi tuổi thông điệp cũ nhất, tự co giãn bên nhận theo tồn đọng.</span></div>
+        say: "Lỗi thứ nhất, dùng hàng đợi để che thiếu năng lực. Hàng đợi không giới hạn chỉ hoãn sự cố tới lúc hết đĩa hay độ trễ tính bằng ngày. Hãy đặt giới hạn, theo dõi tuổi của thông điệp cũ nhất, và tự co giãn bên nhận theo tồn đọng."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Mong thông điệp tới đúng một lần, đúng thứ tự <b class="red">(không bảo đảm)</b>
+          <br><span class="note">Phần lớn hàng đợi giao “ít nhất một lần”; nhiều bên nhận song song thì thứ tự đảo. Bên nhận phải lũy đẳng (nhận hai lần cũng như một) và không dựa vào thứ tự nếu không được bảo đảm.</span></div>
+        say: "Lỗi thứ hai, mong thông điệp tới đúng một lần và đúng thứ tự. Phần lớn hàng đợi chỉ giao ít nhất một lần, và nhiều bên nhận song song thì thứ tự bị đảo. Bên nhận phải lũy đẳng, tức nhận hai lần cũng như một, và không dựa vào thứ tự nếu không được bảo đảm."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Thông điệp lỗi bị thử lại mãi <b class="red">(thông điệp độc)</b>
+          <br><span class="note">Một thông điệp sai định dạng làm bên nhận lỗi, được trả lại hàng đợi, lỗi tiếp — chặn cả hàng. Sau vài lần thử, chuyển nó sang hàng đợi riêng để người xem xét.</span></div>
+        say: "Lỗi thứ ba, thông điệp lỗi bị thử lại mãi. Một thông điệp sai định dạng làm bên nhận lỗi, được trả lại hàng đợi rồi lỗi tiếp, và chặn cả hàng. Sau vài lần thử, hãy chuyển nó sang một hàng đợi riêng để người xem xét."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Tự co giãn bên nhận theo tồn đọng, quên chỗ nghẽn <b>phía sau</b> <b class="red">(dời nghẽn sang cơ sở dữ liệu)</b></div>
+          <table class="t"><tr><th>số bên nhận</th><th>kết nối mỗi bên</th><th>tổng kết nối tới cơ sở dữ liệu (chịu tối đa 100)</th></tr>
+          <tr><td>4</td><td>10</td><td>40 — ổn</td></tr>
+          <tr><td>20 (tự co giãn lúc tồn đọng cao)</td><td>10</td><td>$\hl{200}$ — gấp đôi sức chịu</td></tr></table>
+          <p class="note">Người làm nghề đặt <b>trần</b> cho việc co giãn theo chỗ nghẽn phía sau: $\frac{100}{10} = 10$ bên nhận là tối đa.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, là tự co giãn bên nhận theo tồn đọng mà quên chỗ nghẽn phía sau. Giả sử mỗi bên nhận mở 10 kết nối tới cơ sở dữ liệu, và cơ sở dữ liệu chịu tối đa 100 kết nối, thì 4 bên nhận dùng 40 kết nối, vẫn ổn. Lúc tồn đọng cao, hệ thống tự tăng lên 20 bên nhận, tổng là 200 kết nối, gấp đôi sức chịu, và cơ sở dữ liệu nghẽn đúng lúc cần nó nhất. Người làm nghề đặt trần cho việc co giãn theo chỗ nghẽn phía sau, ở đây là 100 chia 10, tối đa 10 bên nhận."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.backlog(500, 400, 600) == 60000 and alg.drain_time(60000, 300, 400) == 600.0 and alg.backlog(90, 100, 3600) == 0"
+      - "10 * 60 == 600 and 500 - 400 == 100 and 100 * 600 == 60000 and 400 - 300 == 100 and 60000 / 100 == 600"
+      - "400 / 100 == 4 and math.ceil(500 / 100) == 5 and 5 * 100 >= 500 > 4 * 100"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Gửi 500/s, xử lý 400/s trong 10 phút: tồn đọng bao nhiêu?</td></tr>
+          <tr><td>2</td><td>Sau đó gửi giảm còn 300/s: mất bao lâu để xả hết?</td></tr>
+          <tr><td>3</td><td>Nếu gửi 90/s, xử lý 100/s cả giờ: tồn đọng bao nhiêu?</td></tr>
+          <tr><td>4</td><td>Nếu mức gửi 500/s kéo dài cả ngày, và mỗi bên nhận làm 100/s (đang có 4 bên), cần mấy bên nhận?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", "1.5", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, gửi 500 mỗi giây, xử lý 400 mỗi giây trong 10 phút, tồn đọng bao nhiêu? Câu hai, sau đó gửi giảm còn 300 mỗi giây, mất bao lâu để xả hết? Câu ba, nếu gửi 90, xử lý 100 suốt một giờ thì tồn đọng bao nhiêu? Câu bốn, nếu mức gửi 500 mỗi giây kéo dài cả ngày, và mỗi bên nhận làm 100 mỗi giây, đang có 4 bên, thì cần mấy bên nhận? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① 10 phút = 600 giây; mỗi giây dày thêm $500 - 400 = 100$ → $(500 - 400) \cdot 600 = \hl{60\,000}$.</p>
+          <p>② Mỗi giây vơi $400 - 300 = 100$ → $\frac{60\,000}{400 - 300} = \hl{600}$ s, tức 10 phút.</p>
+        focus: [1, 1, 2, 2]
+        say: "Đáp án câu một, đổi 10 phút ra 600 giây, mỗi giây hàng đợi dày thêm 500 trừ 400, bằng 100. Vậy 500 trừ 400 nhân 600 giây, bằng 60 nghìn. Câu hai, mỗi giây hàng đợi vơi 400 trừ 300, bằng 100. Vậy 60 nghìn chia 400 trừ 300, bằng 600 giây, tức 10 phút."
+      - show: |
+          <table class="t"><tr><th>câu</th><th>lập luận</th><th>đáp án</th></tr>
+          <tr><td>3</td><td>gửi 90 nhỏ hơn xử lý 100: thông điệp nào đến cũng được lấy đi kịp</td><td>$\hl{0}$</td></tr>
+          <tr><td>4</td><td>4 bên chỉ làm $4 \cdot 100 = 400$, thiếu 100 mỗi giây mãi mãi → cần $\frac{500}{100} = 5$ bên</td><td>$\hl{5}$ bên nhận</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.3"]
+        say: "Câu ba, tồn đọng bằng 0, vì xử lý kịp nên hàng đợi gần như trống. Câu bốn là một quyết định. Bốn bên nhận chỉ làm 4 nhân 100, bằng 400 mỗi giây, thiếu 100 mỗi giây suốt cả ngày, nên hàng đợi to đến đâu cũng sẽ đầy. Cần 500 chia 100, bằng 5 bên nhận, tức thêm năng lực xử lý chứ không phải thêm chỗ chứa."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">hàng đợi tách nhịp gửi và nhận</span><span class="a">→</span>
+          <span class="n">tồn đọng = (gửi − xử lý) nhân thời gian</span><span class="a">→</span>
+          <span class="n">hấp thụ đợt tăng, không thêm năng lực</span><span class="a">→</span>
+          <span class="n">giới hạn, theo dõi tuổi, tách thông điệp độc</span></div>
+        say: "Tổng kết lại, hàng đợi tách nhịp gửi và nhận, tồn đọng bằng hiệu tốc độ nhân thời gian. Hàng đợi hấp thụ đợt tăng nhưng không thêm năng lực, nên cần giới hạn, theo dõi tuổi thông điệp, và tách riêng thông điệp độc."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> hàng đợi đổi “lỗi ngay” lấy “trễ sau”. Đó là món hời chỉ khi bạn biết chắc “sau” sẽ tới.</div>
+        say: "Điều cần mang theo, hàng đợi đổi lỗi ngay lấy trễ sau, và đó là món hời chỉ khi bạn biết chắc lúc sau sẽ tới."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 9): <b>tính đúng khi có thử lại</b> — lũy đẳng và xử lý trùng lặp.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 9, ta học tính đúng khi có thử lại, với lũy đẳng và xử lý trùng lặp. Hẹn gặp bạn ở bài tiếp theo."

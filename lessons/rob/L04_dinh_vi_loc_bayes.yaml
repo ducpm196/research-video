@@ -1,0 +1,232 @@
+id: L04
+course: ROB
+series: "ROB · Robot tự hành"
+title: "Bài 4 — Định vị bằng bộ lọc Bayes rời rạc và bộ lọc hạt"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/rob.yaml L04; audit/rob/verify_rob.py L04; S. Thrun, W. Burgard, D. Fox, Probabilistic Robotics (2005), chương 4 (bộ lọc Bayes rời rạc), chương 8 (định vị Monte Carlo); D. Fox và cộng sự, Monte Carlo Localization (AAAI 1999); CS115 bài 13 (Bayes)"
+assumes: [arith, frac, prob, given, sum, sub, approx]
+# Quy ước: hành lang vòng 10 ô, cửa ở ô 1, 4, 7 (đếm từ 0). Cảm biến “thấy cửa”: đúng 0,8 khi trước cửa, nhầm 0,1 khi trước tường; “không thấy cửa”:
+#   0,2 trước cửa, 0,9 trước tường. Chuyển động “đi 3 ô”: đúng 3 ô (p_exact = 1) ở ví dụ chính. alg.hist_filter(niềm tin, khả năng đo, move, p_exact).
+#   Kích thước mẫu hiệu dụng của bộ lọc hạt: 1 / Σ w² (alg.ess). Tên Monte Carlo chỉ trên màn hình (probe AIF p1).
+objectives:
+  - "Cập nhật niềm tin theo phép đo và chuyển động"
+  - "Thấy niềm tin nhiều đỉnh và cách nó hội tụ"
+  - "Giải thích lấy mẫu lại và kích thước mẫu hiệu dụng"
+asr_reviewed:
+  - {sentence: "Thấy cửa thì ba cột trước ba cánh cửa vọt lên, mỗi cột 0 phẩy 258.", reason: "ASR chép “Thấy cửa thì ba cục trước ba cánh cửa vọc lên mỗi cục 0,258.” (0.789): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: cột/cục, vọt/vọc, cột không (trong “cột không phẩy” → “cục”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Ô 4 và ô 7 vừa là đỉnh vừa là cửa, nên được khoảng 0 phẩy 206.", reason: "ASR chép “O4 và O7 vừa là đỉnh vừa là cửa nên được khoảng không phải 206.” (0.85): “ô” (ô lưới) ASR viết chữ “O”; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Ô 4 và ô 7 đi từ cửa tới cửa, được 0 phẩy 8 nhân 0 phẩy 8 bằng 0 phẩy 64, chia tổng 1 phẩy 5 ra 0 phẩy 427.", reason: "ASR chép “O4 và O7 đi từ cửa tới cửa, được 0,8 nhân, 0,8 bằng, 0,64, chia tổng 1,5 ra, 0,427.” (0.917): “ô” (ô lưới) ASR viết chữ “O”; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: không (trong “không phẩy” → “”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Thấy cửa lần nữa, ô 4 và ô 7 mỗi ô 0 phẩy 427, còn ô 0 và ô 1 chỉ 0 phẩy 053.", reason: "ASR chép “Thấy cửa lần nữa, O4 và O7 mỗi ô không phải 427, còn O0 và O1 chỉ không phải 053.” (0.8): “ô” (ô lưới) ASR viết chữ “O”; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Trung bình của hai đỉnh ở ô 4 và ô 7 là ô 5 phẩy 5, chỗ mà robot gần như chắc chắn không ở.", reason: "ASR chép “Trung bình của hai đỉnh ở O4 và O7 là O5.5, chỗ mà robot gần như chắc chắn không ở.” (0.857): “ô” (ô lưới) ASR viết chữ “O”; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải” — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Ba cánh cửa giống hệt nhau"
+    checks:
+      - "[round(x, 3) for x in alg.hist_filter([0.1] * 10, [0.8 if i in (1, 4, 7) else 0.1 for i in range(10)])][1] == 0.258"
+    steps:
+      - show: |
+          <p>Robot được bật lên ở một chỗ bất kỳ trong hành lang có 3 cánh cửa giống hệt nhau. Nó nhìn thấy một cánh cửa. Nó đang ở cửa nào? Một phép đo chưa đủ — nhưng đi thêm một đoạn rồi nhìn lại, câu trả lời <b>hiện ra</b>.</p>
+          <div class="box key">Hôm nay: <b>định vị</b> bằng cách giữ một <b>phân phối niềm tin</b> trên mọi vị trí, cập nhật bằng phép đo và chuyển động.</div>
+        focus: [1, 1, 1, 1, 2]
+        say: "Chào bạn, robot được bật lên ở một chỗ bất kỳ trong hành lang có 3 cánh cửa giống hệt nhau. Nó nhìn thấy một cánh cửa. Nó đang ở cửa nào? Một phép đo chưa đủ, nhưng đi thêm một đoạn rồi nhìn lại, câu trả lời hiện ra. Hôm nay ta học định vị, bằng cách giữ một phân phối niềm tin trên mọi vị trí, và cập nhật nó bằng phép đo và chuyển động."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: chuẩn hoá và công thức Bayes"
+    checks:
+      - "2 + 1 + 1 == 4 and 2 / 4 == 0.5 and 1 / 4 == 0.25"
+      - "abs(0.3 * 0.8 - 0.24) < 1e-9 and abs(0.7 * 0.1 - 0.07) < 1e-9 and round(0.24 / (0.24 + 0.07), 3) == 0.774 and abs(0.24 + 0.07 - 0.31) < 1e-9"
+    steps:
+      - show: |
+          <table class="t"><tr><th>điểm thô</th><th>2</th><th>1</th><th>1</th><th>tổng</th></tr>
+          <tr><td>chia cho tổng 4</td><td>0,5</td><td>0,25</td><td>0,25</td><td>1</td></tr></table>
+        focus: [0, "1.1", "1.2"]
+        say: "Trước hết, ta ôn phép chuẩn hoá, biến các điểm thô thành xác suất có tổng bằng 1. Ba khả năng có điểm thô 2, 1 và 1, tổng là 4. Chia mỗi điểm cho tổng 4 thì được 0 phẩy 5, 0 phẩy 25 và 0 phẩy 25, cộng lại đúng bằng 1."
+      - show: |
+          <p>Ở khoá Toán cho khoa học máy tính, <b>công thức Bayes</b>: tin sau = tin trước nhân khả năng, rồi chuẩn hoá.</p>
+          <table class="t"><tr><th>vị trí</th><th>tin trước</th><th>khả năng “thấy cửa”</th><th>tích</th></tr>
+          <tr><td>trước cửa</td><td>0,3</td><td>0,8</td><td>$0{,}3 \cdot 0{,}8 = 0{,}24$</td></tr>
+          <tr><td>trước tường</td><td>0,7</td><td>0,1</td><td>$0{,}7 \cdot 0{,}1 = 0{,}07$</td></tr></table>
+          <p>Tin sau “đang trước cửa” $= \frac{0{,}24}{0{,}24 + 0{,}07} = \frac{0{,}24}{0{,}31} \approx \hl{0{,}774}$.</p>
+        introduces: [cdot]
+        focus: [1, "2.2", "2.3", 3]
+        say: "Điều thứ hai, ở khoá Toán cho khoa học máy tính ta đã gặp công thức Bayes, tin sau bằng tin trước nhân khả năng, rồi chuẩn hoá. Trước cửa có tin trước 0 phẩy 3, khả năng thấy cửa 0 phẩy 8, tích là 0 phẩy 24. Trước tường có tin trước 0 phẩy 7, khả năng thấy cửa nhầm là 0 phẩy 1, tích là 0 phẩy 07. Chuẩn hoá, tin rằng đang trước cửa bằng 0 phẩy 24 chia 0 phẩy 31, khoảng 0 phẩy 774."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: hai bước của bộ lọc Bayes"
+    steps:
+      - show: |
+          <p><b>Niềm tin</b> $b(i)$: xác suất robot đang ở ô $i$; tổng mọi ô bằng 1.</p>
+          <table class="t"><tr><th>bước</th><th>công thức</th><th>tác dụng</th></tr>
+          <tr><td><b>đo</b></td><td>$b(i) \leftarrow \frac{p(z \mid i) \, b(i)}{\sum_j p(z \mid j) \, b(j)}$</td><td>ô khớp phép đo được tăng — làm <b>nhọn</b></td></tr>
+          <tr><td><b>chuyển động</b></td><td>dời niềm tin theo lệnh đi (có nhiễu thì trải ra ô bên cạnh)</td><td>làm <b>phẳng</b>, vì chuyển động không chắc chắn</td></tr></table>
+          <p><b>Bộ lọc hạt</b>: thay vì lưu mọi ô, giữ $N$ “hạt” (giả thuyết vị trí) có trọng số; đo thì nhân trọng số với $p(z \mid \text{hạt})$; định kỳ <b>lấy mẫu lại</b> theo trọng số.</p>
+        introduces: [assign]
+        focus: [1, 2, "2.2", "2.3", 3, 3]
+        say: "Niềm tin b của i là xác suất robot đang ở ô i, và tổng mọi ô bằng 1. Bảng cho hai bước. Bước đo nhân niềm tin với khả năng của phép đo ở từng ô rồi chuẩn hoá, nên ô khớp phép đo được tăng và niềm tin trở nên nhọn. Bước chuyển động dời niềm tin theo lệnh đi, có nhiễu thì trải ra ô bên cạnh, nên niềm tin phẳng hơn vì chuyển động không chắc chắn. Bộ lọc hạt thay vì lưu mọi ô thì giữ N hạt, mỗi hạt là một giả thuyết vị trí có trọng số. Khi đo thì nhân trọng số với khả năng phép đo, và định kỳ lấy mẫu lại theo trọng số."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Niềm tin là một dãy cột: đo làm nhọn, đi làm dời"
+    checks:
+      - "[round(x, 3) for x in alg.hist_filter([0.1] * 10, [0.8 if i in (1, 4, 7) else 0.1 for i in range(10)])][1] == 0.258"
+      - "(lambda D: [round(x, 3) for x in alg.hist_filter(alg.hist_filter([0.1] * 10, D), D, move=3)][4])([0.8 if i in (1, 4, 7) else 0.1 for i in range(10)]) == 0.427"
+    steps:
+      - show: |
+          <div><svg width="1500" height="530" viewBox="0 0 1500 530"><text x="20" y="142" font-size="22" fill="#1f2937">ban đầu</text><line x1="250" y1="152" x2="1440" y2="152" stroke="#9ca3af" stroke-width="2"/><rect x="280" y="133.0" width="78" height="19.0" fill="#6b7280"/><rect x="398" y="133.0" width="78" height="19.0" fill="#6b7280"/><rect x="516" y="133.0" width="78" height="19.0" fill="#6b7280"/><rect x="634" y="133.0" width="78" height="19.0" fill="#6b7280"/><rect x="752" y="133.0" width="78" height="19.0" fill="#6b7280"/><rect x="870" y="133.0" width="78" height="19.0" fill="#6b7280"/><rect x="988" y="133.0" width="78" height="19.0" fill="#6b7280"/><rect x="1106" y="133.0" width="78" height="19.0" fill="#6b7280"/><rect x="1224" y="133.0" width="78" height="19.0" fill="#6b7280"/><rect x="1342" y="133.0" width="78" height="19.0" fill="#6b7280"/><text x="20" y="254" font-size="22" fill="#1f2937">thấy cửa</text><line x1="250" y1="264" x2="1440" y2="264" stroke="#9ca3af" stroke-width="2"/><rect x="280" y="257.9" width="78" height="6.1" fill="#2a78d6"/><rect x="398" y="215.0" width="78" height="49.0" fill="#2a78d6"/><text x="437" y="209" font-size="20" text-anchor="middle" fill="#2a78d6" font-weight="bold">0,258</text><rect x="516" y="257.9" width="78" height="6.1" fill="#2a78d6"/><rect x="634" y="257.9" width="78" height="6.1" fill="#2a78d6"/><rect x="752" y="215.0" width="78" height="49.0" fill="#2a78d6"/><text x="791" y="209" font-size="20" text-anchor="middle" fill="#2a78d6" font-weight="bold">0,258</text><rect x="870" y="257.9" width="78" height="6.1" fill="#2a78d6"/><rect x="988" y="257.9" width="78" height="6.1" fill="#2a78d6"/><rect x="1106" y="215.0" width="78" height="49.0" fill="#2a78d6"/><text x="1145" y="209" font-size="20" text-anchor="middle" fill="#2a78d6" font-weight="bold">0,258</text><rect x="1224" y="257.9" width="78" height="6.1" fill="#2a78d6"/><rect x="1342" y="257.9" width="78" height="6.1" fill="#2a78d6"/><text x="20" y="366" font-size="22" fill="#1f2937">đi 3 ô</text><line x1="250" y1="376" x2="1440" y2="376" stroke="#9ca3af" stroke-width="2"/><rect x="280" y="327.0" width="78" height="49.0" fill="#d97706"/><text x="319" y="321" font-size="20" text-anchor="middle" fill="#d97706" font-weight="bold">0,258</text><rect x="398" y="369.9" width="78" height="6.1" fill="#d97706"/><rect x="516" y="369.9" width="78" height="6.1" fill="#d97706"/><rect x="634" y="369.9" width="78" height="6.1" fill="#d97706"/><rect x="752" y="327.0" width="78" height="49.0" fill="#d97706"/><text x="791" y="321" font-size="20" text-anchor="middle" fill="#d97706" font-weight="bold">0,258</text><rect x="870" y="369.9" width="78" height="6.1" fill="#d97706"/><rect x="988" y="369.9" width="78" height="6.1" fill="#d97706"/><rect x="1106" y="327.0" width="78" height="49.0" fill="#d97706"/><text x="1145" y="321" font-size="20" text-anchor="middle" fill="#d97706" font-weight="bold">0,258</text><rect x="1224" y="369.9" width="78" height="6.1" fill="#d97706"/><rect x="1342" y="369.9" width="78" height="6.1" fill="#d97706"/><text x="20" y="478" font-size="22" fill="#1f2937">thấy cửa lần 2</text><line x1="250" y1="488" x2="1440" y2="488" stroke="#9ca3af" stroke-width="2"/><rect x="280" y="477.9" width="78" height="10.1" fill="#059669"/><rect x="398" y="477.9" width="78" height="10.1" fill="#059669"/><rect x="516" y="486.7" width="78" height="1.3" fill="#059669"/><rect x="634" y="486.7" width="78" height="1.3" fill="#059669"/><rect x="752" y="406.9" width="78" height="81.1" fill="#059669"/><text x="791" y="401" font-size="20" text-anchor="middle" fill="#059669" font-weight="bold">0,427</text><rect x="870" y="486.7" width="78" height="1.3" fill="#059669"/><rect x="988" y="486.7" width="78" height="1.3" fill="#059669"/><rect x="1106" y="406.9" width="78" height="81.1" fill="#059669"/><text x="1145" y="401" font-size="20" text-anchor="middle" fill="#059669" font-weight="bold">0,427</text><rect x="1224" y="486.7" width="78" height="1.3" fill="#059669"/><rect x="1342" y="486.7" width="78" height="1.3" fill="#059669"/><text x="319" y="522" font-size="20" text-anchor="middle" fill="#1f2937">ô 0</text><text x="437" y="522" font-size="20" text-anchor="middle" fill="#b45309">ô 1 cửa</text><text x="555" y="522" font-size="20" text-anchor="middle" fill="#1f2937">ô 2</text><text x="673" y="522" font-size="20" text-anchor="middle" fill="#1f2937">ô 3</text><text x="791" y="522" font-size="20" text-anchor="middle" fill="#b45309">ô 4 cửa</text><text x="909" y="522" font-size="20" text-anchor="middle" fill="#1f2937">ô 5</text><text x="1027" y="522" font-size="20" text-anchor="middle" fill="#1f2937">ô 6</text><text x="1145" y="522" font-size="20" text-anchor="middle" fill="#b45309">ô 7 cửa</text><text x="1263" y="522" font-size="20" text-anchor="middle" fill="#1f2937">ô 8</text><text x="1381" y="522" font-size="20" text-anchor="middle" fill="#1f2937">ô 9</text></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ niềm tin thành một dãy cột, mỗi cột là một ô của hành lang, cột càng cao thì robot càng tin mình đang ở đó. Hàng trên cùng, chưa biết gì, mười cột cao bằng nhau. Thấy cửa thì ba cột trước ba cánh cửa vọt lên, mỗi cột 0 phẩy 258. Đi 3 ô thì cả dãy cột dời sang phải 3 ô, và thấy cửa lần nữa chỉ còn hai cột cao 0 phẩy 427 ở ô 4 và ô 7."
+
+  - id: example
+    kind: example
+    title: "Thấy cửa, đi 3 ô, thấy cửa"
+    checks:
+      - "[round(x, 3) for x in alg.hist_filter([0.1] * 10, [0.8 if i in (1, 4, 7) else 0.1 for i in range(10)])] == [0.032, 0.258, 0.032, 0.032, 0.258, 0.032, 0.032, 0.258, 0.032, 0.032]"
+      - "(lambda D: [round(x, 3) for x in alg.hist_filter(alg.hist_filter([0.1] * 10, D), D, move=3)])([0.8 if i in (1, 4, 7) else 0.1 for i in range(10)]) == [0.053, 0.053, 0.007, 0.007, 0.427, 0.007, 0.007, 0.427, 0.007, 0.007]"
+      - "abs(0.1 * 0.8 - 0.08) < 1e-9 and abs(0.1 * 0.1 - 0.01) < 1e-9 and abs(3 * 0.08 + 7 * 0.01 - 0.31) < 1e-9 and round(0.08 / 0.31, 3) == 0.258 and round(0.01 / 0.31, 3) == 0.032"
+      - "(lambda a, w: round(a * 0.8, 3) == 0.206 and round(a * 0.1, 3) == 0.026 and round(w * 0.8, 3) == 0.026 and round(w * 0.1, 3) == 0.003 and round(2 * a * 0.8 + a * 0.1 + w * 0.8 + 6 * w * 0.1, 3) == 0.484)(0.08 / 0.31, 0.01 / 0.31)"
+    steps:
+      - show: |
+          <p><b>Bước 1 — thấy cửa, nhân khả năng</b> (cửa ở ô 1, 4, 7; mọi ô bắt đầu 0,1):</p>
+          $$\text{ô cửa: } 0{,}1 \cdot 0{,}8 = 0{,}08 \qquad \text{ô tường: } 0{,}1 \cdot 0{,}1 = 0{,}01$$
+        focus: [1, 2]
+        say: "Bước một, robot thấy cửa, ta nhân niềm tin của từng ô với khả năng của phép đo đó. Ô cửa được 0 phẩy 1 nhân 0 phẩy 8, bằng 0 phẩy 08, còn ô tường được 0 phẩy 1 nhân 0 phẩy 1, bằng 0 phẩy 01."
+      - show: |
+          <p><b>Bước 2 — chuẩn hoá:</b> tổng $= 3 \cdot 0{,}08 + 7 \cdot 0{,}01 = 0{,}31$.</p>
+          $$\text{ô cửa: } \frac{0{,}08}{0{,}31} \approx \hl{0{,}258} \qquad \text{ô tường: } \frac{0{,}01}{0{,}31} \approx 0{,}032$$
+        focus: [1, 2]
+        say: "Bước hai, chuẩn hoá cho tổng bằng 1, ba ô cửa và bảy ô tường cộng lại được 0 phẩy 31. Chia cho 0 phẩy 31, mỗi ô cửa được khoảng 0 phẩy 258, mỗi ô tường khoảng 0 phẩy 032, tức có ba đỉnh."
+      - show: |
+          <table class="t"><tr><th>Bước 3 — đi đúng 3 ô</th><th>ô 1 → ô 4</th><th>ô 4 → ô 7</th><th>ô 7 → ô 0 (hành lang vòng)</th></tr>
+          <tr><td>niềm tin mang theo</td><td>0,258</td><td>0,258</td><td>0,258</td></tr></table>
+        focus: [0, 1, 1]
+        say: "Bước ba, robot đi đúng 3 ô nên cả dãy niềm tin dời sang 3 ô, không cần chuẩn hoá lại. Đỉnh ở ô 1 dời tới ô 4, đỉnh ở ô 4 dời tới ô 7. Hành lang là một vòng 10 ô, nên đỉnh ở ô 7 đi tiếp 3 ô thì vòng về ô 0."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>Bước 4 — thấy cửa lần 2</th><th>tin trước</th><th>nhân khả năng</th></tr>
+          <tr><td>ô 4, ô 7 (đỉnh, là cửa)</td><td>0,258</td><td>$0{,}258 \cdot 0{,}8 \approx 0{,}206$</td></tr>
+          <tr><td>ô 0 (đỉnh, là tường)</td><td>0,258</td><td>$0{,}258 \cdot 0{,}1 \approx 0{,}026$</td></tr>
+          <tr><td>ô 1 (cửa, tin thấp)</td><td>0,032</td><td>$0{,}032 \cdot 0{,}8 \approx 0{,}026$</td></tr>
+          <tr><td>6 ô còn lại (tường)</td><td>0,032</td><td>$0{,}032 \cdot 0{,}1 \approx 0{,}003$</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bước bốn, robot thấy cửa lần nữa, ta lại nhân với khả năng đo của từng ô. Ô 4 và ô 7 vừa là đỉnh vừa là cửa, nên được khoảng 0 phẩy 206. Ô 0 là đỉnh nhưng là tường, chỉ còn khoảng 0 phẩy 026. Ô 1 là cửa nhưng tin thấp, cũng chỉ khoảng 0 phẩy 026. Sáu ô còn lại là tường, mỗi ô chỉ khoảng 0 phẩy 003."
+      - show: |
+          <p><b>Bước 5 — chuẩn hoá</b>: tổng các tích $\approx 0{,}484$.</p>
+          $$\text{ô 4, ô 7: } \frac{0{,}206}{0{,}484} \approx \hl{0{,}427} \qquad \text{ô 0, ô 1: } \approx 0{,}053$$
+        focus: [1, 2]
+        say: "Bước năm, chuẩn hoá lại, tổng tất cả các tích khoảng 0 phẩy 484. Thấy cửa lần nữa, ô 4 và ô 7 mỗi ô 0 phẩy 427, còn ô 0 và ô 1 chỉ 0 phẩy 053."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>Bước 6 — tóm tắt</th><th>niềm tin (ô 0 … 9; cửa ở 1, 4, 7)</th></tr>
+          <tr><td>ban đầu</td><td>0,1 ở mọi ô</td></tr>
+          <tr><td>thấy cửa</td><td>mỗi ô cửa 0,258; mỗi ô tường 0,032 — <b>ba đỉnh</b></td></tr>
+          <tr><td>đi đúng 3 ô</td><td>ba đỉnh dời tới ô 4, 7, 0</td></tr>
+          <tr><td>thấy cửa lần nữa</td><td>ô 4: $\hl{0{,}427}$; ô 7: $\hl{0{,}427}$; ô 0, 1: 0,053</td></tr></table>
+          <p>Đỉnh ở ô 0 bị hạ vì ô 0 là tường. Robot giờ biết mình ở cửa thứ hai hoặc thứ ba; thêm một bước đi nữa sẽ phân định.</p>
+        focus: [1, 2, 2]
+        say: "Bước sáu, nhìn lại cả chặng trong một bảng. Đỉnh ở ô 0 bị hạ vì ô 0 là tường. Robot giờ biết mình ở cửa thứ hai hoặc thứ ba, và thêm một bước đi nữa sẽ phân định."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: đếm thẳng theo từng đường đi"
+    checks:
+      - "abs(0.8 * 0.8 - 0.64) < 1e-9 and abs(0.8 * 0.1 - 0.08) < 1e-9 and abs(0.1 * 0.8 - 0.08) < 1e-9 and abs(0.1 * 0.1 - 0.01) < 1e-9 and abs(2 * 0.64 + 2 * 0.08 + 6 * 0.01 - 1.5) < 1e-9"
+      - "round(0.64 / 1.5, 3) == 0.427 and round(0.08 / 1.5, 3) == 0.053 and round(0.01 / 1.5, 3) == 0.007"
+    steps:
+      - show: |
+          <table class="t"><tr><th>đang ở (xuất phát từ)</th><th>lần đo 1 × lần đo 2</th><th>chia tổng 1,5</th></tr>
+          <tr><td>ô 4 (từ ô 1), ô 7 (từ ô 4): cửa rồi cửa</td><td>$0{,}8 \cdot 0{,}8 = 0{,}64$</td><td>$\approx 0{,}427$ ✓</td></tr>
+          <tr><td>ô 0 (từ ô 7): cửa rồi tường</td><td>$0{,}8 \cdot 0{,}1 = 0{,}08$</td><td>$\approx 0{,}053$ ✓</td></tr>
+          <tr><td>ô 1 (từ ô 8): tường rồi cửa</td><td>$0{,}1 \cdot 0{,}8 = 0{,}08$</td><td>$\approx 0{,}053$ ✓</td></tr>
+          <tr><td>6 ô khác: tường rồi tường</td><td>$0{,}1 \cdot 0{,}1 = 0{,}01$</td><td>$\approx 0{,}007$ ✓</td></tr></table>
+        focus: [1, 1, "1.2", "1.3", "1.5"]
+        say: "Kiểm bằng đường khác, không chuẩn hoá từng lần mà đếm thẳng theo từng đường đi, vì mọi ô bắt đầu bằng nhau. Mỗi ô hiện tại ứng với một ô xuất phát cách nó 3 ô, ta nhân khả năng của hai lần đo dọc đường đó. Ô 4 và ô 7 đi từ cửa tới cửa, được 0 phẩy 8 nhân 0 phẩy 8 bằng 0 phẩy 64, chia tổng 1 phẩy 5 ra 0 phẩy 427. Ô 0 đi từ cửa tới tường, ô 1 đi từ tường tới cửa, cùng được 0 phẩy 08, chia ra 0 phẩy 053. Sáu ô khác được 0 phẩy 01, chia ra 0 phẩy 007, khớp hết với kết quả chuẩn hoá từng bước."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay mắc, từ người mới tới người đã đi làm"
+    checks:
+      - "round(alg.ess([0.2] * 5), 2) == 5.0 and round(alg.ess([0.96, 0.01, 0.01, 0.01, 0.01]), 3) == 1.085"
+      - "(lambda b: [round(x, 3) for x in b][:3] == [0.0, 0.333, 0.0] and alg.hist_filter(b, [0.1 if i in (1, 4, 7) else 0.9 for i in range(10)])[0] == 0)(alg.hist_filter([0.1] * 10, [0.8 if i in (1, 4, 7) else 0.0 for i in range(10)]))"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Tóm niềm tin nhiều đỉnh bằng trung bình <b class="red">(ra chỗ không có cửa)</b>
+          <br><span class="note">Trung bình của hai đỉnh ở ô 4 và ô 7 là ô 5,5 — chỗ robot gần như chắc chắn <b>không</b> ở. Báo các đỉnh, hoặc chờ niềm tin hội tụ.</span></div>
+        say: "Lỗi thứ nhất, tóm niềm tin nhiều đỉnh bằng trung bình, nên ra một chỗ không có cửa. Trung bình của hai đỉnh ở ô 4 và ô 7 là ô 5 phẩy 5, chỗ mà robot gần như chắc chắn không ở. Hãy báo các đỉnh, hoặc chờ niềm tin hội tụ."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Không lấy mẫu lại <b class="red">(một hạt gánh hết)</b>
+          <br><span class="note">Sau vài lần đo, trọng số dồn vào một hạt: 5 hạt với trọng số (0,96; 0,01; …) có kích thước mẫu hiệu dụng $\frac{1}{\sum w^2} \approx 1{,}085$ — gần như chỉ còn 1 hạt. Lấy mẫu lại khi giá trị này dưới một nửa số hạt.</span></div>
+        say: "Lỗi thứ hai, không lấy mẫu lại, nên một hạt gánh hết. Sau vài lần đo, trọng số dồn vào một hạt. Với 5 hạt có trọng số 0 phẩy 96 và bốn lần 0 phẩy 01, kích thước mẫu hiệu dụng bằng 1 chia tổng bình phương trọng số, khoảng 1 phẩy 085, gần như chỉ còn 1 hạt. Hãy lấy mẫu lại khi giá trị này xuống dưới một nửa số hạt."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Lấy mẫu lại quá thường xuyên <b class="red">(mất đa dạng)</b>
+          <br><span class="note">Lấy mẫu lại sau mỗi phép đo làm các hạt sao chép nhau, giả thuyết đúng có thể biến mất. Lấy mẫu lại chỉ khi cần, và thêm một ít hạt ngẫu nhiên để phục hồi khi robot bị “bắt cóc”.</span></div>
+        say: "Lỗi thứ ba, lấy mẫu lại quá thường xuyên, nên mất đa dạng. Lấy mẫu lại sau mỗi phép đo làm các hạt sao chép nhau, và giả thuyết đúng có thể biến mất. Hãy chỉ lấy mẫu lại khi cần, và thêm một ít hạt ngẫu nhiên để phục hồi khi robot bị nhấc đi chỗ khác."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4.</b> Tin cảm biến tuyệt đối: đặt khả năng nhầm bằng 0 <b class="red">(không bao giờ hồi phục)</b>
+          <br><span class="note">Người làm nghề luôn để một mức nhầm nhỏ: phép nhân với 0 không đảo ngược được, một lần báo nhầm là xoá vĩnh viễn ô đúng.</span></div>
+          <table class="t"><tr><th>khả năng “thấy cửa” trước tường</th><th>sau 1 lần thấy cửa: ô tường</th><th>nếu robot thật ở tường</th></tr>
+          <tr><td>0,1 (bài này)</td><td>0,032</td><td>còn hồi phục được</td></tr>
+          <tr><td>0 (“cảm biến hoàn hảo”)</td><td>0 — ô cửa mỗi ô 0,333</td><td>mất hẳn, mọi phép nhân sau vẫn ra 0</td></tr></table>
+        focus: [1, 1, "2.2", "2.3"]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, tin cảm biến tuyệt đối nên đặt khả năng báo nhầm bằng 0. Người làm nghề luôn để một mức nhầm nhỏ, vì phép nhân với 0 không đảo ngược được. Với mức nhầm 0 phẩy 1 như bài này, sau một lần thấy cửa ô tường vẫn còn 0 phẩy 032, nên nếu robot thật ở tường thì vẫn hồi phục được. Với mức nhầm bằng 0, mọi ô tường về đúng 0, mỗi ô cửa 0 phẩy 333, và một lần báo nhầm là xoá vĩnh viễn ô đúng."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "[round(x, 3) for x in alg.hist_filter([0.1] * 10, [0.2 if i in (1, 4, 7) else 0.9 for i in range(10)])][:2] == [0.13, 0.029]"
+      - "round(alg.ess([0.4, 0.3, 0.1, 0.1, 0.1]), 3) == 3.571"
+      - "round(3 * 0.029 + 7 * 0.130, 2) == 1.0 and abs(3 * 0.2 + 7 * 0.9 - 6.9) < 1e-9 and abs(0.4 ** 2 + 0.3 ** 2 + 3 * 0.1 ** 2 - 0.28) < 1e-9 and 5 / 2 == 2.5"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Từ niềm tin đều 0,1, robot đo “<b>không</b> thấy cửa” (0,2 trước cửa, 0,9 trước tường). Niềm tin mỗi ô cửa, mỗi ô tường?</td></tr>
+          <tr><td>2</td><td>5 hạt có trọng số 0,4; 0,3; 0,1; 0,1; 0,1. Kích thước mẫu hiệu dụng? Có cần lấy mẫu lại không (ngưỡng một nửa số hạt)?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, từ niềm tin đều 0 phẩy 1, robot đo không thấy cửa, với khả năng 0 phẩy 2 trước cửa và 0 phẩy 9 trước tường. Niềm tin mỗi ô cửa và mỗi ô tường là bao nhiêu? Câu hai, 5 hạt có trọng số 0 phẩy 4, 0 phẩy 3 và ba lần 0 phẩy 1. Kích thước mẫu hiệu dụng là bao nhiêu, và có cần lấy mẫu lại không với ngưỡng một nửa số hạt? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>① ô</th><th>tích</th><th>chia tổng</th></tr>
+          <tr><td>ô cửa</td><td>$0{,}1 \cdot 0{,}2 = 0{,}02$</td><td>$\frac{0{,}2}{6{,}9} \approx \hl{0{,}029}$</td></tr>
+          <tr><td>ô tường</td><td>$0{,}1 \cdot 0{,}9 = 0{,}09$</td><td>$\frac{0{,}9}{6{,}9} \approx \hl{0{,}130}$</td></tr></table>
+          <p>Mẫu số (bỏ thừa số chung 0,1): $3 \cdot 0{,}2 + 7 \cdot 0{,}9 = 6{,}9$; thử lại $3 \cdot 0{,}029 + 7 \cdot 0{,}130 \approx 1$ ✓</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Đáp án câu một, làm như bước một và bước hai của ví dụ. Mỗi ô cửa có tích 0 phẩy 1 nhân 0 phẩy 2, mỗi ô tường có tích 0 phẩy 1 nhân 0 phẩy 9. Thừa số chung 0 phẩy 1 triệt tiêu khi chuẩn hoá, nên chỉ cần chia 0 phẩy 2 và 0 phẩy 9 cho cùng một mẫu số. Đáp án câu một, mẫu số bằng 3 nhân 0 phẩy 2 cộng 7 nhân 0 phẩy 9, bằng 6 phẩy 9, nên mỗi ô cửa còn khoảng 0 phẩy 029, mỗi ô tường khoảng 0 phẩy 13."
+      - show: |
+          <p>② Bình phương từng trọng số: $0{,}16$; $0{,}09$; $0{,}01$; $0{,}01$; $0{,}01$ — tổng $0{,}28$.</p>
+          $$\frac{1}{0{,}28} \approx \hl{3{,}571} \gt 2{,}5 = \frac{5}{2}$$
+          <p>Mẫu hiệu dụng còn trên một nửa số hạt → <b>chưa cần</b> lấy mẫu lại.</p>
+        introduces: [ltgt]
+        focus: [1, 2, 3]
+        say: "Câu hai, trước hết bình phương từng trọng số, được 0 phẩy 16, 0 phẩy 09 và ba lần 0 phẩy 01. Câu hai, 1 chia cho 0 phẩy 16 cộng 0 phẩy 09 cộng 3 nhân 0 phẩy 01, tức 1 chia 0 phẩy 28, khoảng 3 phẩy 571. Số này lớn hơn 2 phẩy 5, nên chưa cần lấy mẫu lại."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">niềm tin trên mọi vị trí</span><span class="a">→</span>
+          <span class="n">đo: nhân khả năng, chuẩn hoá → nhọn</span><span class="a">→</span>
+          <span class="n">đi: dời và trải → phẳng</span><span class="a">→</span>
+          <span class="n">bộ lọc hạt: lấy mẫu lại khi mẫu hiệu dụng thấp</span></div>
+        say: "Tổng kết lại, giữ niềm tin trên mọi vị trí. Phép đo nhân khả năng rồi chuẩn hoá làm niềm tin nhọn, chuyển động dời và trải làm nó phẳng, và bộ lọc hạt lấy mẫu lại khi kích thước mẫu hiệu dụng thấp."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> khi chưa chắc, đừng chọn một đáp án — <b>giữ mọi khả năng</b> với mức tin tương ứng, và để dữ liệu loại dần.</div>
+        say: "Điều cần mang theo, khi chưa chắc thì đừng chọn một đáp án, hãy giữ mọi khả năng với mức tin tương ứng, và để dữ liệu loại dần."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 5): <b>lọc Kalman mở rộng</b> cho robot.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 5, ta học lọc Kalman mở rộng cho robot. Hẹn gặp bạn ở bài tiếp theo."

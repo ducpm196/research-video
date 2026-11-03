@@ -1,0 +1,246 @@
+id: L11
+course: CVI
+series: "CVI · Thị giác máy tính"
+title: "Bài 11 — Tình huống chuyên gia: mô hình học lối tắt — đúng vì nền ảnh, không vì vật"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/cvi.yaml L11; audit/cvi/verify_cvi.py L11; audit/cvi/sources_L11.md; [B18] S. Beery, G. Van Horn, P. Perona, Recognition in Terra Incognita, ECCV 2018, arXiv:1807.04975, hình 1 (bò trên đồng cỏ được nhận ra, bò trên bãi biển thì không); [G20] R. Geirhos và cộng sự, Shortcut Learning in Deep Neural Networks, Nature Machine Intelligence 2020, arXiv:2004.07780 (bò và cỏ, ảnh X-quang và dấu kim loại của bệnh viện, phép thử khác phân bố, “Morgan's Canon cho học máy”); CVI bài 10 (lát, tập thử theo điều kiện triển khai)"
+assumes: [arith, cdot, frac, approx, geq, sub, sum]
+# Quy ước: “tập thử cùng phân bố” = ảnh thử lấy cùng nguồn, cùng cách với ảnh huấn luyện (i.i.d. của [G20]); “tập thử khác phân bố” = ảnh
+#   khác hẳn có chủ đích (o.o.d.). “Lối tắt” = quy tắc đúng trên tập cùng phân bố nhưng sai khi đổi điều kiện ([G20]).
+#   Phép thử phản chứng = giữ vật, đổi nền (hoặc giữ nền, bỏ vật) rồi xem câu trả lời đổi không.
+#   Ví dụ số: 1000 ảnh, 500 có bò; 95% ảnh bò có cỏ, 95% ảnh không bò không có cỏ (alg.cvi_shortcut_sim); “bộ nhận bò thật” đúng 90% bất
+#   kể nền; hai mô hình đếm xe ở bãi đỗ — đều là SỐ MINH HOẠ. Sự kiện thật chỉ theo [B18], [G20] (sources_L11.md); không nêu tên dịch vụ,
+#   bệnh viện, cá nhân. Lời đọc không đọc tên tác giả.
+objectives:
+  - "Tính độ chính xác của một quy tắc lối tắt trên tập cùng phân bố và trên tập đổi nền"
+  - "Thiết kế phép thử phản chứng: giữ vật, đổi nền, và đọc kết quả"
+  - "Giải thích vì sao chọn mô hình theo điểm trên tập cùng phân bố có thể chọn nhầm mô hình lối tắt"
+  - "Đọc bản đồ chú ý như gợi ý để đặt phép thử, không như bằng chứng"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Con bò trên bãi biển không được nhận ra"
+    steps:
+      - show: |
+          <p>Năm 2018, một nhóm nghiên cứu đưa ảnh cho một dịch vụ nhận dạng ảnh thương mại. Bò trên <b>đồng cỏ</b>: dịch vụ trả về “bò 0,99, đồng cỏ 0,99, cỏ 0,99”. Bò trên <b>bãi biển</b>: chỉ còn “nước 0,98, bãi biển 0,97” — <b>không có chữ bò</b>.</p>
+          <p>Năm 2020, một bài tổng kết khác kể: một mô hình đọc ảnh X-quang phổi chạy tốt ở các bệnh viện đã thấy, nhưng kém hẳn ở bệnh viện mới — nó đã học nhận ra <b>bệnh viện</b>, ví dụ qua một dấu kim loại riêng trên phim.</p>
+          <div class="box key">Hôm nay: mô hình có thể đúng vì lý do sai không? Con số nào lừa ta, và phép thử nào lật tẩy được?</div>
+        focus: [1, 1, 1, 2, 2, 3]
+        say: "Chào bạn, năm 2018, một nhóm nghiên cứu đưa ảnh cho một dịch vụ nhận dạng ảnh thương mại. Với con bò trên đồng cỏ, dịch vụ trả về bò, đồng cỏ và cỏ, đều với độ tin 0 phẩy 99. Với con bò trên bãi biển, nó chỉ trả về nước và bãi biển, không có chữ bò nào. Năm 2020, một bài tổng kết khác kể về một mô hình đọc ảnh X-quang phổi chạy tốt ở các bệnh viện đã thấy, nhưng kém hẳn ở bệnh viện mới. Nó đã học nhận ra bệnh viện, ví dụ qua một dấu kim loại riêng trên phim. Hôm nay ta hỏi, mô hình có thể đúng vì lý do sai không, con số nào lừa ta, và phép thử nào lật tẩy được."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại hai điều từ các bài trước"
+    checks:
+      - "round(alg.cvi_mix_acc([(900, 0.95), (100, 0.5)]), 3) == 0.905"
+      - "Fraction(475, 500) == Fraction(95, 100) and Fraction(475 + 475, 1000) == Fraction(95, 100)"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài</th><th>điều đã học</th><th>ví dụ số</th></tr>
+          <tr><td>bài 10</td><td>con số chung $= \sum_s w_s \cdot a_s$ che mất lát yếu; phải thử trên điều kiện sẽ triển khai</td><td>900 ảnh ngày đúng 95%, 100 ảnh đêm đúng 50% → 90,5%</td></tr>
+          <tr><td>bài 10</td><td>chia tập theo điểm đặt camera, theo ngày; điểm đặt mới làm lỗi gần gấp đôi</td><td>20,83% → 41,08%</td></tr>
+          <tr><td>đếm theo bảng</td><td>tỉ lệ trong một nhóm = số đếm của ô chia tổng của nhóm</td><td>475 ảnh có cỏ trong 500 ảnh bò → 95%</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.4"]
+        say: "Bảng nhắc lại hai điều. Ở bài 10, con số chung là tổng tỉ trọng nhân tỉ lệ đúng từng lát. Vì vậy 900 ảnh ngày đúng 95 phần trăm và 100 ảnh đêm đúng 50 phần trăm cho 90 phẩy 5, che mất ban đêm. Cũng ở bài 10, với bẫy ảnh động vật, chuyển sang điểm đặt camera mới làm lỗi từ 20 phẩy 83 lên 41 phẩy 08 phần trăm. Cuối cùng là đếm theo bảng, tỉ lệ trong một nhóm bằng số đếm của ô chia tổng của nhóm, như 475 trong 500 là 95 phần trăm."
+
+  # ───────────────────────── 3. NGÔN NGỮ CỦA NGHỀ ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Ngôn ngữ của người điều tra mô hình"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thuật ngữ</th><th>nghĩa</th></tr>
+          <tr><td><b>tập thử cùng phân bố</b></td><td>ảnh thử lấy cùng nguồn, cùng cách với ảnh huấn luyện</td></tr>
+          <tr><td><b>tập thử khác phân bố</b></td><td>ảnh khác hẳn có chủ đích: nền lạ, bệnh viện mới, máy ảnh mới</td></tr>
+          <tr><td><b>lối tắt</b></td><td>quy tắc đúng trên tập cùng phân bố nhưng sai khi điều kiện đổi một chút</td></tr>
+          <tr><td><b>phép thử phản chứng</b></td><td>giữ vật, đổi nền (hoặc giữ nền, bỏ vật) — xem câu trả lời có đổi theo không</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", "1.5"]
+        say: "Người điều tra mô hình dùng bốn thuật ngữ. Tập thử cùng phân bố là ảnh thử lấy cùng nguồn, cùng cách với ảnh huấn luyện. Tập thử khác phân bố là ảnh khác hẳn có chủ đích, như nền lạ, bệnh viện mới hay máy ảnh mới. Lối tắt là một quy tắc đúng trên tập cùng phân bố nhưng sai khi điều kiện đổi một chút. Phép thử phản chứng là giữ vật mà đổi nền, hoặc giữ nền mà bỏ vật, rồi xem câu trả lời có đổi theo không."
+      - clear: true
+        show: |
+          <div class="box key">“Đừng gán cho mô hình một năng lực cao, khi điều đó có thể giải thích đủ bằng một lối tắt.”
+          <br><span class="note">Nguyên tắc bài tổng kết năm 2020 đề nghị cho học máy, phỏng theo một nguyên tắc thận trọng của tâm lý học so sánh (Morgan, 1903).</span></div>
+        focus: [1, 1]
+        say: "Bài tổng kết năm 2020 đề nghị một nguyên tắc cho học máy, đừng gán cho mô hình một năng lực cao, khi điều đó có thể giải thích đủ bằng một lối tắt. Nguyên tắc này phỏng theo một quy tắc thận trọng của tâm lý học so sánh từ năm 1903, khi người ta nghiên cứu hành vi của động vật."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Bảng bốn ô: cỏ đi cùng bò 95% thời gian"
+    checks:
+      - "475 + 25 == 500 and 25 + 475 == 500 and 475 + 475 == 950"
+    steps:
+      - show: |
+          <div><svg width="1400" height="420" viewBox="0 0 1400 420">
+          <g font-size="23" fill="#1f2937" text-anchor="middle"><text x="400" y="50">ảnh có cỏ</text><text x="680" y="50">ảnh không có cỏ</text></g>
+          <g font-size="23" fill="#1f2937" text-anchor="end"><text x="250" y="150">có bò (500 ảnh)</text><text x="250" y="300">không bò (500 ảnh)</text></g>
+          <rect x="270" y="75" width="260" height="140" fill="#86efac" stroke="#1f2937" stroke-width="2"/><rect x="550" y="75" width="260" height="140" fill="#fecaca" stroke="#1f2937" stroke-width="2"/>
+          <rect x="270" y="230" width="260" height="140" fill="#fecaca" stroke="#1f2937" stroke-width="2"/><rect x="550" y="230" width="260" height="140" fill="#86efac" stroke="#1f2937" stroke-width="2"/>
+          <g font-size="34" fill="#1f2937" text-anchor="middle" font-weight="bold"><text x="400" y="158">475</text><text x="680" y="158">25</text><text x="400" y="313">25</text><text x="680" y="313">475</text></g>
+          <g font-size="23" fill="#1f2937"><text x="860" y="120">quy tắc lối tắt: “có cỏ thì là bò”</text>
+          <text x="860" y="170" fill="#059669">ô lục: quy tắc đúng, 475 + 475 = 950</text>
+          <text x="860" y="220" fill="#dc2626">ô hồng: quy tắc sai, 25 + 25 = 50</text>
+          <text x="860" y="290">đúng 950 trên 1000 ảnh: 95%</text>
+          <text x="860" y="340">mà không hề nhìn con bò</text></g>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình là bảng bốn ô của 1000 ảnh huấn luyện, số minh hoạ. Trong 500 ảnh có bò, 475 ảnh có cỏ, còn trong 500 ảnh không bò, 475 ảnh không có cỏ. Quy tắc lối tắt có cỏ thì là bò đúng ở hai ô lục, 475 cộng 475 bằng 950 ảnh, và sai ở hai ô hồng, chỉ 50 ảnh. Vậy nó đúng 95 phần trăm mà không hề nhìn con bò."
+
+  # ───────────────────────── 5. TÁI HIỆN CƠ CHẾ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Hai mô hình, hai tập thử: chọn theo con số nào?"
+    checks:
+      - "Fraction(475 + 475, 1000) == Fraction(95, 100)"
+      - "round(0.9 * 1000) == 900 and 0.95 > 0.9"
+      - "(lambda cow, grass: sum((g == c) for c, g in zip(cow, grass)))([True] * 500 + [False] * 500, [False] * 500 + [True] * 500) == 0"
+      - "round(0.9 * 1000) / 1000 == 0.9 and 0.9 - 0 == 0.9"
+    steps:
+      - show: |
+          <p><b>Bước 1 — mô hình A học lối tắt.</b> Theo bảng bốn ô, trên tập thử cùng phân bố, A đúng $\frac{475 + 475}{1000} = \hlo{95\%}$.</p>
+          <p><b>Bước 2 — mô hình B nhìn con bò thật</b>, đúng 90% bất kể nền (số minh hoạ): trên cùng tập thử, B đúng $0{,}9 \cdot 1000 = 900$ ảnh, tức 90%. <b>A trông giỏi hơn B.</b></p>
+        focus: [1, 2, 2]
+        say: "Bước một, mô hình A học lối tắt. Theo bảng bốn ô, trên tập thử cùng phân bố, A đúng 950 trên 1000 ảnh, tức 95 phần trăm. Bước hai, mô hình B nhìn con bò thật và đúng 90 phần trăm bất kể nền, nên trên cùng tập thử, B đúng 900 ảnh, và A trông giỏi hơn B."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — tập thử đổi nền</b> (khác phân bố): 500 ảnh bò trên cát, nước; 500 ảnh không bò nhưng có cỏ.</p>
+          <table class="t"><tr><th>mô hình</th><th>bò trên cát (500)</th><th>đồng cỏ không bò (500)</th><th>tổng</th></tr>
+          <tr><td>A: “có cỏ thì là bò”</td><td>đoán “không bò”: sai cả 500</td><td>đoán “bò”: sai cả 500</td><td class="red">0%</td></tr>
+          <tr><td>B: nhìn con bò</td><td>đúng 450</td><td>đúng 450</td><td class="green">90%</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước ba, ta dựng một tập thử đổi nền, khác phân bố, gồm 500 ảnh bò trên cát và nước, và 500 ảnh đồng cỏ không có bò. Mô hình A thấy không có cỏ thì đoán không bò, thấy cỏ thì đoán bò, nên sai cả 1000 ảnh, tức 0 phần trăm. Mô hình B vẫn nhìn con bò, nên đúng 450 ảnh mỗi nhóm, giữ 90 phần trăm."
+      - show: |
+          <p><b>Bước 4 — đọc kết quả.</b> Trên tập cùng phân bố, A hơn B 5 điểm; trên tập đổi nền, B hơn A 90 điểm. Chỉ chọn theo tập cùng phân bố là chọn nhầm.</p>
+          <p class="note">Bài tổng kết năm 2020: chỉ đo trên tập cùng phân bố thì “không đủ để phân biệt” lời giải dự định với lời giải lối tắt; phép thử khác phân bố “phải thành quy tắc, không phải ngoại lệ”.</p>
+        focus: [1, 1, 2, 2]
+        say: "Bước bốn là đọc kết quả. Trên tập cùng phân bố, A hơn B 5 điểm phần trăm, nhưng trên tập đổi nền, B hơn A tới 90 điểm, nên chỉ chọn theo tập cùng phân bố là chọn nhầm. Bài tổng kết năm 2020 viết rằng chỉ đo trên tập cùng phân bố thì không đủ để phân biệt hai loại lời giải. Phép thử khác phân bố phải thành quy tắc, không phải ngoại lệ."
+
+  # ───────────────────────── 6. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: mô phỏng 100 nghìn ảnh, và đếm lại bằng tỉ lệ có điều kiện"
+    checks:
+      - "abs(alg.cvi_shortcut_sim(100000)[0] - 0.95) < 0.005 and alg.cvi_shortcut_sim(100000)[1] == 0.0"
+      - "0.5 * 0.95 + 0.5 * 0.95 == 0.95"
+    steps:
+      - show: |
+          <p><b>Đường khác 1 — mô phỏng.</b> Máy tung 100&nbsp;000 ảnh: nửa có bò; ảnh bò có cỏ với xác suất 0,95; ảnh không bò có cỏ với xác suất 0,05. Quy tắc “có cỏ thì là bò” đúng $\approx 0{,}95$ ✓; trên 100 ảnh bò không có cỏ, đúng 0 ✓.</p>
+        focus: [1, 1, 1]
+        say: "Kiểm tra thứ nhất là mô phỏng. Máy tung 100 nghìn ảnh, nửa có bò, ảnh bò có cỏ với xác suất 0 phẩy 95, ảnh không bò có cỏ với xác suất 0 phẩy 05. Quy tắc lối tắt đúng xấp xỉ 0 phẩy 95, còn trên 100 ảnh bò không có cỏ thì đúng 0 ảnh, khớp phép đếm."
+      - show: |
+          <p><b>Đường khác 2 — trung bình theo lát</b> như bài 10: lát “có bò” tỉ trọng 0,5, quy tắc đúng 0,95; lát “không bò” tỉ trọng 0,5, đúng 0,95:</p>
+          $$0{,}5 \cdot 0{,}95 + 0{,}5 \cdot 0{,}95 = 0{,}95 \checkmark$$
+        focus: [1, 2]
+        say: "Kiểm tra thứ hai dùng trung bình theo lát như bài 10, lát có bò và lát không bò mỗi lát nặng 0 phẩy 5, và quy tắc đúng 0 phẩy 95 ở mỗi lát. Vì vậy tổng có trọng số cũng bằng 0 phẩy 95, khớp."
+
+  # ───────────────────────── 7. BẢN ĐỒ CHÚ Ý VÀ PHÉP THỬ ─────────────────────────
+  - id: counterfactual
+    kind: concept
+    title: "Bản đồ chú ý chỉ là gợi ý; phép thử đổi nền mới là bằng chứng"
+    checks:
+      - "(lambda a_same, a_swap: round(a_same - a_swap, 2))(0.95, 0.0) == 0.95 and round(0.9 - 0.9, 2) == 0"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bước của phép thử phản chứng</th><th>việc làm</th></tr>
+          <tr><td>1. giữ vật, đổi nền</td><td>cùng 100 con bò, chụp hoặc ghép trên cát, nước, đường phố</td></tr>
+          <tr><td>2. giữ nền, bỏ vật</td><td>100 ảnh đồng cỏ trống</td></tr>
+          <tr><td>3. đo độ tụt</td><td>A: 95% → 0%; B: 90% → 90%</td></tr>
+          <tr><td>4. đổi theo trục khác</td><td>máy ảnh khác, địa điểm khác, giờ khác — như chia tập theo điểm đặt ở bài 10</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", "1.5"]
+        say: "Phép thử phản chứng có bốn bước. Bước một, giữ vật mà đổi nền, cùng 100 con bò nhưng chụp hoặc ghép trên cát, nước, đường phố. Bước hai, giữ nền mà bỏ vật, ví dụ 100 ảnh đồng cỏ trống. Bước ba là đo độ tụt, A tụt từ 95 về 0, còn B giữ 90. Bước bốn là đổi theo trục khác, như máy ảnh, địa điểm hay giờ chụp, giống cách chia tập theo điểm đặt ở bài 10."
+      - show: |
+          <p><b>Bản đồ chú ý</b> tô màu vùng ảnh làm điểm số thay đổi nhiều. Nó giúp <b>đặt câu hỏi</b>, không trả lời câu hỏi:</p>
+          <table class="t"><tr><th>bản đồ chú ý sáng ở</th><th>nghĩa là</th><th>việc phải làm</th></tr>
+          <tr><td>vùng cỏ</td><td>nghi lối tắt</td><td>làm ngay phép thử đổi nền</td></tr>
+          <tr><td>con bò</td><td>chưa chứng minh mô hình dùng hình con bò</td><td>vẫn làm phép thử đổi nền</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bản đồ chú ý tô màu vùng ảnh làm điểm số thay đổi nhiều, và nó giúp ta đặt câu hỏi. Nếu nó sáng ở vùng cỏ, hãy làm ngay phép thử đổi nền. Nhưng nó sáng ở con bò cũng chưa chứng minh mô hình dùng hình con bò, chỉ phép thử đổi nền mới trả lời được câu đó."
+
+  # ───────────────────────── 8. BÀI HỌC SAI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "Bốn bài học sai khi gặp chuyện lối tắt"
+    checks:
+      - "Fraction(475 * 10 + 475 * 10, 10000) == Fraction(95, 100)"
+      - "0.95 > 0.9 and 0.0 < 0.9"
+    steps:
+      - show: |
+          <div class="box warn"><b>Bài học sai 1.</b> “Thêm nhiều ảnh nữa là hết” <b class="red">(cùng nguồn thì cỏ vẫn đi cùng bò)</b>
+          <br><span class="note">Thu gấp 10 lần ảnh theo cách cũ: 4750 + 4750 trên 10&nbsp;000 — quy tắc lối tắt vẫn đúng 95%. Thêm ảnh chỉ giúp khi ảnh mới <b>phá</b> mối liên hệ: bò trên nền lạ, cỏ không có bò.</span></div>
+        focus: [1, 1, 1]
+        say: "Bài học sai thứ nhất là nghĩ thêm nhiều ảnh nữa là hết, trong khi ảnh cùng nguồn thì cỏ vẫn đi cùng bò. Thu gấp 10 lần ảnh theo cách cũ, quy tắc lối tắt vẫn đúng 9500 trên 10 nghìn, tức 95 phần trăm. Thêm ảnh chỉ giúp khi ảnh mới phá mối liên hệ đó, như bò trên nền lạ và đồng cỏ không có bò."
+      - show: |
+          <div class="box warn"><b>Bài học sai 2.</b> “Bản đồ chú ý sáng đúng chỗ là yên tâm” <b class="red">(gợi ý không phải bằng chứng)</b>
+          <br><span class="note">Kết luận chỉ đến từ phép thử đổi nền, đo bằng con số.</span></div>
+        focus: [1, 1]
+        say: "Bài học sai thứ hai là nghĩ bản đồ chú ý sáng đúng chỗ là yên tâm, nhưng gợi ý không phải bằng chứng. Kết luận chỉ đến từ phép thử đổi nền, đo bằng con số."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Bài học sai 3.</b> “Lỗi của người gán nhãn” hay “đội làm ẩu” <b class="red">(đổ lỗi con người)</b>
+          <br><span class="note">Nhãn ở ví dụ đều đúng: bò là bò. Mối liên hệ cỏ và bò có sẵn trong cách thu ảnh. Sửa ở hệ thống: quy định tập thử khác phân bố trước khi ra mắt.</span></div>
+        focus: [1, 1, 1]
+        say: "Bài học sai thứ ba là đổ lỗi cho người gán nhãn hay cho đội làm ẩu. Nhãn trong ví dụ đều đúng, bò là bò, còn mối liên hệ cỏ và bò có sẵn trong cách thu ảnh. Cách sửa nằm ở hệ thống, quy định phải có tập thử khác phân bố trước khi ra mắt."
+      - show: |
+          <div class="box warn"><b>Bài học sai 4 (mức hệ thống).</b> Bảng xếp hạng chỉ có một cột điểm cùng phân bố <b class="red">(luôn thưởng cho lối tắt)</b></div>
+          <table class="t"><tr><th>mô hình</th><th>cùng phân bố</th><th>đổi nền</th><th>chọn nếu chỉ nhìn cột 1</th></tr>
+          <tr><td>A (lối tắt)</td><td>95%</td><td class="red">0%</td><td>✓</td></tr>
+          <tr><td>B (nhìn vật)</td><td>90%</td><td>90%</td><td></td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bài học sai thứ tư ở mức hệ thống, bảng xếp hạng nội bộ chỉ có một cột điểm cùng phân bố, nên luôn thưởng cho lối tắt. Mô hình A được 95 và 0, nhưng chỉ nhìn cột đầu thì A thắng. Mô hình B được 90 ở cả hai cột, và chỉ lộ ra khi bảng có thêm cột đổi nền."
+
+  # ───────────────────────── 9. BẠN SẼ LÀM GÌ ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Bạn sẽ làm gì: camera đếm chỗ trống ở bãi đỗ xe"
+    checks:
+      - "round(0.5 * 0.97 + 0.5 * 0.70, 3) == 0.835 and round(0.5 * 0.93 + 0.5 * 0.90, 3) == 0.915"
+      - "round(0.97 - 0.70, 2) == 0.27 and round(0.93 - 0.90, 2) == 0.03"
+    steps:
+      - show: |
+          <p>Ảnh huấn luyện chụp ở 3 bãi đỗ. Hai mô hình (số minh hoạ):</p>
+          <table class="t"><tr><th>mô hình</th><th>thử trên 3 bãi cũ</th><th>thử trên 1 bãi chưa thấy</th></tr>
+          <tr><td>A</td><td>97%</td><td>70%</td></tr>
+          <tr><td>B</td><td>93%</td><td>90%</td></tr></table>
+          <p>Sắp triển khai cho 3 bãi cũ và 3 bãi mới (mỗi loại một nửa số ảnh). Chọn mô hình nào? Bạn còn muốn làm thêm phép thử gì?</p>
+        focus: [1, "2.2", "2.3", 3, 3, 3]
+        say: "Bây giờ bạn quyết định. Ảnh huấn luyện chụp ở 3 bãi đỗ xe. Mô hình A đúng 97 phần trăm trên 3 bãi cũ, nhưng chỉ 70 phần trăm trên một bãi chưa thấy. Mô hình B đúng 93 và 90 phần trăm. Sắp triển khai cho 3 bãi cũ và 3 bãi mới, mỗi loại một nửa số ảnh, bạn chọn mô hình nào, và còn muốn làm thêm phép thử gì? Dừng video và làm ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <p><b>Kỳ vọng khi triển khai</b> (theo bài 10): A $= 0{,}5 \cdot 0{,}97 + 0{,}5 \cdot 0{,}70 = \hl{0{,}835}$; B $= 0{,}5 \cdot 0{,}93 + 0{,}5 \cdot 0{,}90 = \hlg{0{,}915}$.</p>
+          <p class="note">A tụt 27 điểm khi sang bãi mới — dấu hiệu lối tắt (có thể nó nhớ vạch sơn, bóng cây, góc camera của 3 bãi cũ). B chỉ tụt 3 điểm.</p>
+        focus: [1, 1, 2, 2]
+        say: "Theo cách tính ở bài 10, kỳ vọng của A là 0 phẩy 5 nhân 0 phẩy 97 cộng 0 phẩy 5 nhân 0 phẩy 7, bằng 0 phẩy 835. Kỳ vọng của B là 0 phẩy 915, cao hơn. Mô hình A tụt 27 điểm khi sang bãi mới, một dấu hiệu lối tắt, có thể nó nhớ vạch sơn, bóng cây hay góc camera của 3 bãi cũ. Còn B chỉ tụt 3 điểm."
+      - show: |
+          <table class="t"><tr><th>lựa chọn</th><th>được</th><th>mất</th><th>đổi lựa chọn khi</th></tr>
+          <tr><td>chọn B</td><td>kỳ vọng 91,5%, ổn định ở bãi mới</td><td>kém A 4 điểm ở bãi cũ</td><td>chỉ triển khai ở đúng 3 bãi cũ</td></tr>
+          <tr><td>thêm phép thử</td><td>đo 2–3 bãi chưa thấy nữa, đổi giờ chụp, mùa</td><td>tốn thời gian thu ảnh</td><td>—</td></tr></table>
+          <p class="note">Một bãi chưa thấy chỉ là một lát nhỏ: kiểm sai số chuẩn trước khi tin con số 70% hay 90%.</p>
+        focus: [0, "1.2", "1.3", 2]
+        say: "Chọn B được kỳ vọng 91 phẩy 5 phần trăm và ổn định ở bãi mới, chỉ kém A 4 điểm ở bãi cũ. Chỉ khi triển khai ở đúng 3 bãi cũ thì A mới đáng chọn. Nên làm thêm phép thử ở hai, ba bãi chưa thấy nữa, đổi giờ chụp và mùa, dù tốn thời gian thu ảnh. Và vì một bãi chưa thấy chỉ là một lát nhỏ, hãy kiểm sai số chuẩn trước khi tin con số 70 hay 90 phần trăm."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Thay đổi ở hệ thống & tư duy chuyên gia"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">dữ liệu có mối liên hệ phụ: cỏ đi cùng bò</span><span class="a">→</span>
+          <span class="n">lối tắt đúng 95% trên tập cùng phân bố</span><span class="a">→</span>
+          <span class="n">đổi nền: lối tắt 0%, mô hình thật 90%</span><span class="a">→</span>
+          <span class="n">phép thử phản chứng là bằng chứng; bản đồ chú ý là gợi ý</span><span class="a">→</span>
+          <span class="n">bảng xếp hạng có cột khác phân bố</span></div>
+        say: "Tổng kết lại, dữ liệu thường có mối liên hệ phụ như cỏ đi cùng bò, nên một lối tắt đúng 95 phần trăm trên tập cùng phân bố. Đổi nền thì lối tắt còn 0, còn mô hình nhìn vật thật vẫn 90. Phép thử phản chứng là bằng chứng, bản đồ chú ý chỉ là gợi ý. Thay đổi ở hệ thống là bảng xếp hạng phải có cột khác phân bố."
+      - show: |
+          <div class="box key"><b>Tư duy chuyên gia:</b> luôn hỏi “mô hình có thể đúng vì lý do sai không?”, rồi kiểm bằng dữ liệu đổi nền, đổi máy ảnh, đổi địa điểm — trước khi người dùng làm việc đó thay bạn.</div>
+        say: "Tư duy của chuyên gia là luôn hỏi, mô hình có thể đúng vì lý do sai không. Rồi kiểm bằng dữ liệu đổi nền, đổi máy ảnh, đổi địa điểm, trước khi người dùng làm việc đó thay bạn."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 12, bài cuối): <b>hành trình</b> của cuộc thi nhận dạng một triệu ảnh, từ 28% lỗi năm 2010 tới sau năm 2017 — mỗi chặng một điểm nghẽn, một cách xử lý, và vì sao đo cho đúng luôn là việc khó nhất.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 12, cũng là bài cuối, ta đi theo hành trình của cuộc thi nhận dạng một triệu ảnh, từ 28 phần trăm lỗi năm 2010 tới sau năm 2017. Mỗi chặng có một điểm nghẽn, một cách xử lý, và ta sẽ thấy vì sao đo cho đúng luôn là việc khó nhất. Hẹn gặp bạn ở bài tiếp theo."

@@ -1,0 +1,369 @@
+id: L29
+course: CS112
+series: "CS112 · Phân tích & Thiết kế Thuật toán"
+title: "Bài 29 — Tình huống chuyên gia theo dòng thời gian: Timsort và lỗi tìm ra bằng kiểm chứng hình thức"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+case: journey
+source: "curriculum/cs112.yaml L29; audit/cs112/sources_L29.md (câu trích nguyên văn, đọc 2026-11-02); audit/cs112/verify_cs112.py T29a–T29f; T. Peters, Objects/listsort.txt, CPython, commit 1/8/2002 (và bản 2.3.7) [LS02]; OpenJDK jdk7, java/util/TimSort.java (bản quyền 2009) và trang JDK 7 của OpenJDK (GA 28/7/2011), Oracle, Java SE 7 and JDK 7 Compatibility [J11]; S. de Gouw, J. Rot, F. S. de Boer, R. Bubel, R. Hähnle, OpenJDK's java.utils.Collection.sort() is broken: The good, the bad and the worst case, CAV 2015 (bản tác giả, ir.cwi.nl/pub/23709) [CAV15]; CPython commit b808d590a2, 25/2/2015 (closes #23515), bản 3.4.4 [PY15]; JDK-8072909, bugs.openjdk.org (tạo 6/2/2015, đóng 12/2/2015, bản sửa 9) và TimSort.java hiện hành [JDK15]; CPython bpo-34561, commit 5cb4c672d8 ngày 6/9/2021, changelog 3.11.0a1 (5/10/2021), listsort.txt hiện hành [PS21]; CPython gh-135551, commit 27/6/2025, listsort.txt hiện hành [MR25]; CS112 bài 4 (ngăn xếp), bài 12 (sắp xếp trộn), bài 13 (sắp xếp chèn, tìm kiếm nhị phân), bài 18 (Fibonacci), bài 23 (log₂ n! phép so sánh)"
+assumes: [arith, cdot, log, dots]
+# Quy ước: “đoạn chạy” = một khúc liền đã có thứ tự sẵn (run); “minrun” = độ dài tối thiểu của một đoạn chạy (đoạn ngắn hơn được
+#   kéo dài bằng sắp xếp chèn nhị phân); “ngăn xếp đoạn chờ” = ngăn xếp độ dài các đoạn chưa trộn (A, B, C tính từ dưới lên, C ở đỉnh);
+#   “bất biến” = điều kiện luôn phải đúng sau mỗi lượt gộp; “kiểm chứng hình thức” = chứng minh đúng bằng máy theo đặc tả.
+#   Mọi sự kiện, con số có nguồn ghi trong audit/cs112/sources_L29.md. Con số khác là phép tính lại (checks) hoặc “(số minh hoạ)”.
+#   Lời đọc không nói Python, Powersort, KeY, OpenJDK: nói “một ngôn ngữ kịch bản phổ biến”, “cách trộn theo lũy thừa của 2”,
+#   “công cụ chứng minh”, “bản Java mã nguồn mở”. Timsort, Java: probe p6 (audit/cs112/probes/p6_hanh_trinh.md).
+objectives:
+  - "Kể lại hành trình của Timsort qua năm chặng từ 2002 tới 2025, mỗi chặng một điểm nghẽn và một cách xử lý"
+  - "Tính lại minrun, số đoạn chạy, ngăn xếp các đoạn chờ trộn và ví dụ phá bất biến 120, 80, 25, 20, 30"
+  - "Chọn giữa kiểm thử và chứng minh theo cỡ đầu vào và giá của lỗi, kèm điều kiện đổi lựa chọn"
+asr_reviewed:
+  - {sentence: "Khi đó hàm cần 41 ô ngăn xếp nhưng mã chỉ cấp 40, nên chương trình dừng vì vượt chỉ số mảng.", reason: "ASR chép “Khi đó hàm cần 41 ôn ngăn xếp, nhưng mã chỉ cấp 40, nên chương trình dừng vì vượt chỉ số mãn.” (0.92): “ô” (ô lưới) ASR viết chữ “O”; lệch âm/thanh thuần Việt: mảng/mãn — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Ở bài 23, mọi cách sắp xếp bằng so sánh cần ít nhất lôgarit cơ số 2 của n giai thừa phép so sánh.", reason: "ASR chép “Ở bài 23, mọi cách sắp xếp bằng so sánh cận ít nhất Logatrix cơ số 2 của N giai thừa phép so sánh.” (0.923): lệch âm/thanh thuần Việt: cần/cận, lôgarit/logatrix — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Một lỗi chỉ hiện ra với mảng 67 triệu phần tử"
+    checks:
+      - "2 ** 26 == 67108864"
+      - "41 > 40"
+    steps:
+      - show: |
+          <p>Năm 2015, một nhóm nghiên cứu thử <b>chứng minh bằng máy</b> rằng hàm sắp xếp chuẩn của Java là đúng. Phép chứng minh không khép lại được — và chỉ ra một lỗi.</p>
+          <p>Mảng nhỏ nhất làm lỗi hiện ra có <b>hơn 67 triệu</b> phần tử: 2 mũ 26 = 67 108 864. Hàm cần <b>41</b> ô ngăn xếp, mã chỉ cấp <b>40</b>, nên chương trình dừng vì vượt chỉ số mảng.</p>
+          <p>Nhóm viết: kiểm thử rộng rãi đã không lộ ra lỗi này — và lỗi có mặt cả ở ngôn ngữ gốc từ khi thuật toán ra đời.</p>
+          <div class="box key">Hôm nay: năm chặng của Timsort, 2002 → 2025 — một thuật toán thật lớn lên, được dùng khắp nơi, bị chứng minh là sai, rồi được sửa và tiếp tục tốt lên.</div>
+        focus: [1, 1, 2, 2, 3, 4]
+        say: "Chào bạn, năm 2015, một nhóm nghiên cứu thử chứng minh bằng máy rằng hàm sắp xếp chuẩn của Java là đúng. Phép chứng minh không khép lại được, và chỉ ra một lỗi. Mảng nhỏ nhất làm lỗi hiện ra có hơn 67 triệu phần tử, đúng 2 mũ 26. Khi đó hàm cần 41 ô ngăn xếp nhưng mã chỉ cấp 40, nên chương trình dừng vì vượt chỉ số mảng. Nhóm viết rằng kiểm thử rộng rãi đã không lộ ra lỗi này, và lỗi có mặt cả ở ngôn ngữ gốc từ khi thuật toán ra đời. Hôm nay ta đi qua năm chặng của thuật toán ấy, từ 2002 tới 2025."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại bốn điều từ các bài trước"
+    checks:
+      - "4 + 4 - 1 == 7"
+      - "math.ceil(math.log2(31 + 1)) == 5"
+      - "math.factorial(3) == 6 and math.ceil(math.log2(6)) == 3"
+      - "[30, 10, 20][-1] == 20"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài</th><th>điều đã học</th><th>ví dụ số</th></tr>
+          <tr><td>bài 4</td><td><b>ngăn xếp</b>: vào sau thì ra trước; chỉ nhìn được phần tử ở đỉnh</td><td>đẩy 30, 10, 20 → đỉnh là 20</td></tr>
+          <tr><td>bài 12</td><td><b>sắp xếp trộn</b>: chia đôi, xếp từng nửa, rồi <b>trộn</b> hai dãy đã có thứ tự</td><td>trộn hai dãy 4 phần tử: nhiều nhất 4 + 4 − 1 = 7 phép so sánh</td></tr>
+          <tr><td>bài 13</td><td><b>sắp xếp chèn</b>; <b>tìm kiếm nhị phân</b> chia đôi khoảng tìm mỗi bước</td><td>tìm chỗ chèn trong dãy 31 phần tử: nhiều nhất 5 phép so sánh</td></tr>
+          <tr><td>bài 23</td><td>mọi cách sắp xếp bằng so sánh cần ít nhất <b>log₂ n!</b> phép so sánh ở trường hợp tệ nhất</td><td>3 phần tử: 3! = 6 thứ tự, log₂ 6 ≈ 2,58, nên cần ít nhất 3</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", "1.5"]
+        say: "Bảng nhắc lại bốn điều từ các bài trước. Ở bài 4, ngăn xếp là vào sau thì ra trước, đẩy 30, 10, rồi 20 thì đỉnh là 20. Ở bài 12, sắp xếp trộn chia đôi, xếp từng nửa, rồi trộn hai dãy đã có thứ tự, và trộn hai dãy 4 phần tử cần nhiều nhất 7 phép so sánh. Ở bài 13, sắp xếp chèn đặt từng phần tử vào chỗ đúng, còn tìm kiếm nhị phân tìm chỗ ấy trong dãy 31 phần tử với nhiều nhất 5 phép so sánh. Ở bài 23, mọi cách sắp xếp bằng so sánh cần ít nhất lôgarit cơ số 2 của n giai thừa phép so sánh. Với 3 phần tử có 6 thứ tự, lôgarit cơ số 2 của 6 khoảng 2 phẩy 58, nên cần ít nhất 3."
+
+  # ───────────────────────── 3. NGÔN NGỮ ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Ngôn ngữ của hành trình"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thuật ngữ</th><th>nghĩa</th><th>ví dụ</th></tr>
+          <tr><td><b>đoạn chạy</b></td><td>một khúc liền đã có thứ tự sẵn trong dữ liệu</td><td>3 5 8 | 2 9 → hai đoạn: 3 5 8 và 2 9</td></tr>
+          <tr><td><b>minrun</b></td><td>độ dài tối thiểu của một đoạn; đoạn ngắn hơn được kéo dài bằng sắp xếp chèn nhị phân</td><td>minrun 32: đoạn 5 phần tử được chèn thêm tới 32</td></tr>
+          <tr><td><b>ngăn xếp đoạn chờ</b></td><td>độ dài các đoạn chưa trộn; A, B, C là ba đoạn trên cùng, C ở đỉnh</td><td>A = 30, B = 20, C = 10</td></tr>
+          <tr><td><b>bất biến</b></td><td>điều kiện phải đúng sau mỗi lượt gộp: A lớn hơn B + C, và B lớn hơn C</td><td>30 lớn hơn 20 + 10? Không, nên phải gộp</td></tr>
+          <tr><td><b>ổn định</b></td><td>hai phần tử bằng nhau giữ nguyên thứ tự ban đầu</td><td>chỉ được trộn hai đoạn <b>liền kề</b></td></tr>
+          <tr><td><b>kiểm chứng hình thức</b></td><td>viết đặc tả, rồi để máy chứng minh mã đúng với đặc tả</td><td>chứng minh không khép lại thì chỉ ra chỗ sai</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", "1.5", "1.6", "1.7"]
+        say: "Bài dùng sáu thuật ngữ. Đoạn chạy là một khúc liền đã có thứ tự sẵn trong dữ liệu, như 3, 5, 8 rồi 2, 9 là hai đoạn. Dòng hai là độ dài tối thiểu của một đoạn, đoạn ngắn hơn được kéo dài bằng sắp xếp chèn nhị phân. Ngăn xếp đoạn chờ giữ độ dài các đoạn chưa trộn, ba đoạn trên cùng gọi là A, B, C, với C ở đỉnh. Bất biến là điều kiện phải đúng sau mỗi lượt gộp, A lớn hơn B cộng C, và B lớn hơn C. Với 30, 20, 10, ta có 30 không lớn hơn 30, nên phải gộp. Ổn định nghĩa là hai phần tử bằng nhau giữ nguyên thứ tự ban đầu, nên chỉ được trộn hai đoạn liền kề. Kiểm chứng hình thức là viết đặc tả, rồi để máy chứng minh mã đúng với đặc tả."
+
+  # ───────────────────────── 4. DÒNG THỜI GIAN ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Năm chặng trên một trục thời gian"
+    steps:
+      - show: |
+          <div><svg width="1700" height="320" viewBox="0 0 1700 320">
+          <line x1="30" y1="150" x2="1670" y2="150" stroke="#1f2937" stroke-width="3"/>
+          <g font-size="24" text-anchor="middle" fill="#1f2937">
+          <circle cx="160" cy="150" r="15" fill="#9ca3af"/><text x="160" y="108" font-weight="bold">2002</text><text x="160" y="200">trộn đoạn có sẵn</text><text x="160" y="232">hai bất biến</text>
+          <circle cx="500" cy="150" r="15" fill="#2a78d6"/><text x="500" y="108" font-weight="bold">2011</text><text x="500" y="200">Java 7 dùng theo</text><text x="500" y="232">ngăn xếp 5 / 10 / 19 / 40</text>
+          <circle cx="850" cy="150" r="15" fill="#7c3aed"/><text x="850" y="108" font-weight="bold">2015</text><text x="850" y="200">chứng minh bằng máy</text><text x="850" y="232">bất biến bị phá</text>
+          <circle cx="1200" cy="150" r="15" fill="#eb6834"/><text x="1200" y="108" font-weight="bold">2021</text><text x="1200" y="200">trộn theo lũy thừa của 2</text><text x="1200" y="232">gần tối ưu, chứng minh được</text>
+          <circle cx="1540" cy="150" r="15" fill="#059669"/><text x="1540" y="108" font-weight="bold">2025</text><text x="1540" y="200">minrun đổi từng đoạn</text><text x="1540" y="232">mọi lượt trộn cân bằng</text>
+          </g>
+          <text x="850" y="300" font-size="23" fill="#6b7280" text-anchor="middle">khai sinh → lan rộng → quy mô hàng tỉ lượt chạy → ổn định → tiếp tục phát triển</text>
+          </svg></div>
+        focus: [1, 1, 1, 1, 1]
+        say: "Hình là trục thời gian với năm chặng. Năm 2002, thuật toán trộn các đoạn có sẵn và giữ hai bất biến trên ngăn xếp. Năm 2011, Java 7 dùng theo, với cỡ ngăn xếp cấp sẵn 5, 10, 19 hoặc 40. Năm 2015, một phép chứng minh bằng máy cho thấy bất biến bị phá, rồi năm 2021 ngôn ngữ gốc đổi sang cách trộn theo lũy thừa của 2, gần tối ưu và chứng minh được. Năm 2025, độ dài tối thiểu được đổi nhẹ theo từng đoạn để mọi lượt trộn đều cân bằng."
+
+  # ───────────────────────── 5. CƠ CHẾ ─────────────────────────
+  - id: mechanism
+    kind: concept
+    title: "Cơ chế: tìm đoạn, đẩy vào ngăn xếp, gộp khi bất biến hỏng"
+    checks:
+      - "30 <= 20 + 10 and 30 + 0 == 30"
+    steps:
+      - show: |
+          <div><svg width="1600" height="330" viewBox="0 0 1600 330">
+          <defs><marker id="ah" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="12" refX="14" refY="6" orient="auto"><path d="M0,0 L16,6 L0,12 z" fill="#1f2937"/></marker></defs>
+          <g font-size="23" fill="#1f2937" text-anchor="middle">
+          <text x="300" y="36" font-weight="bold">mảng: quét một lần từ trái sang phải</text>
+          <rect x="40" y="60" width="180" height="56" fill="#e0ecfb" stroke="#2a78d6" stroke-width="2"/><text x="130" y="96">đoạn 1</text>
+          <rect x="220" y="60" width="120" height="56" fill="#e0ecfb" stroke="#2a78d6" stroke-width="2"/><text x="280" y="96">đoạn 2</text>
+          <rect x="340" y="60" width="80" height="56" fill="#fde2e2" stroke="#e11d48" stroke-width="2"/><text x="380" y="96">đoạn 3</text>
+          <rect x="420" y="60" width="140" height="56" fill="#f3f4f6" stroke="#9ca3af" stroke-width="2"/><text x="490" y="96">chưa đọc</text>
+          <text x="300" y="160">đoạn ngắn hơn minrun: kéo dài bằng chèn nhị phân</text>
+          <text x="1180" y="36" font-weight="bold">ngăn xếp đoạn chờ (đỉnh ở trên)</text>
+          <rect x="1080" y="60" width="200" height="56" fill="#fde2e2" stroke="#e11d48" stroke-width="2"/><text x="1180" y="96">C = 10</text>
+          <rect x="1080" y="116" width="200" height="56" fill="#e0ecfb" stroke="#2a78d6" stroke-width="2"/><text x="1180" y="152">B = 20</text>
+          <rect x="1080" y="172" width="200" height="56" fill="#e0ecfb" stroke="#2a78d6" stroke-width="2"/><text x="1180" y="208">A = 30</text>
+          <text x="1180" y="270">A lớn hơn B + C? 30 so với 30: không</text>
+          <text x="1180" y="304" fill="#e11d48">→ gộp B với đoạn ngắn hơn trong A, C</text>
+          </g>
+          <line x1="580" y1="88" x2="1060" y2="88" stroke="#1f2937" stroke-width="3" marker-end="url(#ah)"/>
+          <text x="820" y="74" font-size="22" text-anchor="middle" fill="#1f2937">đẩy độ dài đoạn mới</text>
+          </svg></div>
+        focus: [1, 1, 1, 1, 1]
+        say: "Hình là cơ chế chung của thuật toán. Nó quét mảng một lần từ trái sang phải, mỗi lần tách ra một đoạn chạy, và đoạn nào ngắn hơn độ dài tối thiểu thì được kéo dài bằng chèn nhị phân. Độ dài của đoạn mới được đẩy lên đỉnh ngăn xếp đoạn chờ. Sau mỗi lần đẩy, thuật toán xét ba đoạn trên cùng, ở đây 30, 20, 10, và 30 không lớn hơn 20 cộng 10, nên bất biến hỏng. Khi đó nó trộn B với đoạn ngắn hơn trong hai đoạn A và C, rồi xét lại tới khi bất biến đúng."
+
+  # ───────────────────────── 6. CHẶNG 1 ─────────────────────────
+  - id: stage1
+    kind: example
+    title: "Chặng 1, năm 2002 — khai sinh: trộn những đoạn có sẵn"
+    stage: {year: "2002", scale: "thư viện chuẩn của một ngôn ngữ kịch bản phổ biến; đo trên mảng tới 1 048 576 phần tử", source: "[LS02]", practice: "tận dụng thứ tự có sẵn của dữ liệu thật; chọn minrun để số đoạn là lũy thừa của 2 hoặc vừa dưới; giữ bất biến để ngăn xếp nhỏ"}
+    checks:
+      - "round(sum(math.log2(i) for i in range(1, 2 ** 20 + 1))) == 19458756"
+      - "round((19606028 - 19458756) / 19458756 * 100, 2) == 0.76"
+      - "divmod(2112, 32) == (66, 0) and divmod(2112, 33) == (64, 0) and 64 * 32 == 2048"
+      - "(lambda n: (n >> 6) + (1 if n & 63 else 0))(2112) == 33 and (lambda n: (n >> 3) + (1 if n & 7 else 0))(315) == 40"
+    steps:
+      - show: |
+          <p><b>Bối cảnh</b> (tệp mô tả của thuật toán, 1/8/2002): một cách sắp xếp trộn <b>thích nghi, ổn định, tự nhiên</b>. Dữ liệu thật thường có sẵn nhiều khúc đã xếp, nên tách từng đoạn chạy, rồi trộn “thông minh”.</p>
+          <table class="t"><tr><th>số đo trên 1 048 576 phần tử</th><th>số phép so sánh</th></tr>
+          <tr><td>dãy đã xếp ngược</td><td>1 048 575 = n − 1</td></tr>
+          <tr><td>dãy ngẫu nhiên: giới hạn log₂ n! của bài 23</td><td>19 458 756</td></tr>
+          <tr><td>dãy ngẫu nhiên: thuật toán mới</td><td>19 606 028 — chỉ hơn ≈ 0,76%</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", "2.4"]
+        say: "Ở chặng một, tệp mô tả thuật toán ngày 1 tháng 8 năm 2002 gọi nó là một cách sắp xếp trộn thích nghi, ổn định, và tự nhiên. Dữ liệu thật thường có sẵn nhiều khúc đã xếp, nên thuật toán tách từng đoạn chạy rồi trộn một cách thông minh. Trên hơn một triệu phần tử đã xếp ngược, nó chỉ cần n trừ 1 phép so sánh. Với dãy ngẫu nhiên, giới hạn lôgarit của n giai thừa ở bài 23 là 19 triệu 458 nghìn 756. Thuật toán mới dùng 19 triệu 606 nghìn 28, chỉ hơn giới hạn khoảng 0 phẩy 76 phần trăm."
+      - clear: true
+        show: |
+          <p><b>Điểm nghẽn:</b> minrun cố định 32 nghe hợp lý, nhưng tệp mô tả kể: mất một thời gian dài mới nhận ra 32 <b>không tốt</b> với mọi n.</p>
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. n = 2112, minrun 32</td><td>2112 chia 32</td><td>66 đoạn: 64 đoạn trộn đẹp thành 2048, còn lại 64</td></tr>
+          <tr><td>Bước 2. lượt trộn cuối</td><td>2048 với 64</td><td>$\hl{lệch}$: chép O(n) phần tử chỉ để đặt 64 phần tử</td></tr>
+          <tr><td>Bước 3. minrun 33</td><td>2112 chia 33</td><td>$\hlg{64}$ đoạn = 2 mũ 6: mọi lượt trộn cân bằng</td></tr>
+          <tr><td>Bước 4. quy tắc chọn</td><td>lấy 6 bit đầu của n, cộng 1 nếu các bit còn lại khác 0</td><td>2112 → 33; 315 → 40</td></tr></table>
+          <p class="note">Thực hành: tận dụng thứ tự sẵn có của dữ liệu thật; chọn minrun sao cho số đoạn bằng hoặc vừa dưới một lũy thừa của 2. Điều kiện: dữ liệu ngẫu nhiên thì không có lợi thế, chỉ hoà vốn với giới hạn của bài 23.</p>
+        focus: [1, 1, "2.2", "2.3", "2.4", "2.5", 3, 3]
+        say: "Điểm nghẽn đến từ một chi tiết nhỏ. Độ dài tối thiểu cố định 32 nghe hợp lý, nhưng tệp mô tả kể rằng mất một thời gian dài mới nhận ra 32 không tốt với mọi n. Bước một, n bằng 2112 chia 32 được 66 đoạn, 64 đoạn đầu trộn đẹp thành 2048 phần tử, còn thừa 64. Bước hai, lượt trộn cuối ghép 2048 với 64, rất lệch, phải chép cỡ n phần tử chỉ để đặt 64 phần tử vào chỗ. Bước ba, nếu độ dài tối thiểu bằng 33 thì có đúng 64 đoạn, bằng 2 mũ 6, và mọi lượt trộn đều cân bằng. Bước bốn, quy tắc chọn là lấy 6 bit đầu của n, rồi cộng 1 nếu các bit còn lại khác 0. Thực hành rút ra là tận dụng thứ tự sẵn có, và chọn độ dài tối thiểu sao cho số đoạn bằng hoặc vừa dưới một lũy thừa của 2. Điều kiện là với dữ liệu ngẫu nhiên thì không có lợi thế, chỉ hoà vốn với giới hạn của bài 23."
+
+  # ───────────────────────── 7. CHẶNG 2 ─────────────────────────
+  - id: stage2
+    kind: example
+    title: "Chặng 2, năm 2011 — lan rộng: Java 7 dùng theo"
+    stage: {year: "2011", scale: "JDK 7 phát hành 28/7/2011; Arrays.sort và Collections.sort cho đối tượng dùng TimSort chép gần nguyên từ ngôn ngữ gốc", source: "[J11] [CAV15]", practice: "chép thuật toán sang nền khác thì đo lại hằng số; cấp ngăn xếp theo chứng minh cỡ tối đa; ghi rõ thay đổi hành vi trong ghi chú tương thích"}
+    checks:
+      - "(b := [0, 16]) and all(b.append(b[-1] + b[-2] + 1) is None for _ in range(50)) and b[:6] == [0, 16, 17, 34, 52, 87]"
+      - "(b := [0, 16]) and all(b.append(b[-1] + b[-2] + 1) is None for _ in range(50)) and [next(B for B in range(60) if 1 + sum(b[:B + 1]) > L) for L in (119, 1541, 119150, 2 ** 31 - 1)] == [4, 9, 18, 39]"
+      - "[4 + 1, 9 + 1, 18 + 1, 39 + 1] == [5, 10, 19, 40]"
+    steps:
+      - show: |
+          <p><b>Quy mô:</b> JDK 7 phát hành ngày 28/7/2011. Mã TimSort của Java ghi: “chuyển thể từ hàm sắp xếp danh sách” của ngôn ngữ gốc; hàm sắp xếp mặc định cho mảng đối tượng là nó.</p>
+          <table class="t"><tr><th>điều chỉnh khi chép sang Java</th><th>vì sao</th></tr>
+          <tr><td>ngưỡng đoạn nhỏ <b>32</b> thay vì 64</td><td>mã ghi: đo thấy 32 chạy tốt hơn trong bản Java</td></tr>
+          <tr><td>ngăn xếp cấp theo cỡ mảng: <b>5, 10, 19, 40</b> ô, với ngưỡng 120, 1542, 119 151</td><td>bản viết bằng C của ngôn ngữ gốc luôn cấp 85 ô — đo thấy quá tốn với mảng cỡ vừa</td></tr>
+          <tr><td>ghi chú tương thích: có thể ném <b>IllegalArgumentException</b> nếu phép so sánh vi phạm hợp đồng</td><td>bản cũ lặng lẽ bỏ qua; có cờ hệ thống để quay về cách cũ</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", "2.4"]
+        say: "Ở chặng hai, bộ phát triển Java bản 7 phát hành ngày 28 tháng 7 năm 2011. Mã sắp xếp của Java ghi rằng nó được chuyển thể từ hàm sắp xếp danh sách của ngôn ngữ gốc, và đó là hàm sắp xếp mặc định cho mảng đối tượng. Khi chép sang, ngưỡng đoạn nhỏ giảm từ 64 xuống 32, vì đo thấy chạy tốt hơn trong Java. Ngăn xếp được cấp theo cỡ mảng, 5, 10, 19 hoặc 40 ô, vì bản đầu tiên luôn cấp 85 ô, quá tốn với mảng cỡ vừa. Ghi chú tương thích cũng báo hàm mới có thể ném lỗi nếu phép so sánh vi phạm hợp đồng, điều mà bản cũ lặng lẽ bỏ qua."
+      - clear: true
+        show: |
+          <p>Cỡ ngăn xếp tính từ bất biến: nếu bất biến luôn đúng, độ dài các đoạn từ đỉnh xuống tăng <b>ít nhất nhanh như dãy Fibonacci</b> của bài 18. Bài báo năm 2015 dựng dãy chặn dưới: b₀ = 0, b₁ = 16, mỗi số sau = tổng hai số trước + 1.</p>
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. vài số đầu</td><td>0, 16, 16 + 0 + 1, 17 + 16 + 1, …</td><td>0, 16, 17, 34, 52, 87, …</td></tr>
+          <tr><td>Bước 2. số ô đủ dùng: nhỏ nhất sao cho 1 + tổng các số tới đó vượt cỡ mảng</td><td>với cỡ mảng dưới 120, 1542, 119 151 và tới 2 mũ 31 − 1</td><td>$\hlg{4, 9, 18, 39}$ ô</td></tr>
+          <tr><td>Bước 3. so với mã Java</td><td>5, 10, 19, 40</td><td>mỗi mức dư 1 ô — an toàn, <b>nếu</b> bất biến luôn đúng</td></tr></table>
+          <p class="note">Thực hành: chép thuật toán sang nền khác thì đo lại hằng số, và cấp tài nguyên theo một chứng minh cỡ tối đa. Điều kiện: chứng minh ấy chỉ đúng khi giả thiết của nó — ở đây là bất biến — thật sự được giữ.</p>
+        focus: [1, 1, "2.2", "2.3", "2.4", 3, 3]
+        say: "Cỡ ngăn xếp ấy được tính từ bất biến. Nếu bất biến luôn đúng, độ dài các đoạn từ đỉnh xuống tăng ít nhất nhanh như dãy Fibonacci của bài 18. Bước một, bài báo năm 2015 dựng dãy chặn dưới bắt đầu bằng 0 và 16, mỗi số sau bằng tổng hai số trước cộng 1, được 0, 16, 17, 34, 52, 87. Bước hai, số ô đủ dùng là chỉ số nhỏ nhất sao cho 1 cộng tổng các số tới đó vượt cỡ mảng, ra 4, 9, 18 và 39 ô. Bước ba, mã Java cấp 5, 10, 19, 40, mỗi mức dư một ô, an toàn nếu bất biến luôn đúng. Thực hành rút ra là chép thuật toán sang nền khác thì đo lại hằng số, và cấp tài nguyên theo một chứng minh cỡ tối đa. Điều kiện là chứng minh ấy chỉ đúng khi giả thiết của nó thật sự được giữ."
+
+  # ───────────────────────── 8. CHẶNG 3 ─────────────────────────
+  - id: stage3
+    kind: example
+    title: "Chặng 3, năm 2015 — quy mô hàng tỉ lượt chạy: bất biến bị phá"
+    stage: {year: "2015", scale: "hàm sắp xếp của Java chạy hàng tỉ lượt mỗi ngày (theo bài báo); lỗi cần mảng từ 2 mũ 26 = 67 108 864 phần tử", source: "[CAV15] [PY15] [JDK15]", practice: "chứng minh bằng máy cho mã lõi dùng rộng; sửa gốc (kiểm 4 đoạn trên cùng) thay vì chỉ nới cỡ ngăn xếp; báo cho mọi bản chép của thuật toán"}
+    checks:
+      - "(lambda st: (st.__setitem__(slice(2, 4), [st[2] + st[3]]), st)[1])([120, 80, 25, 20, 30]) == [120, 80, 45, 30]"
+      - "80 > 45 + 30 and 45 > 30 and not 120 > 80 + 45 and 80 + 45 == 125"
+      - "2 ** 26 == 67108864 and 2 ** 16 == 65536 and 41 > 40 and 21 > 19"
+      - "460 + 928 == 1388 and round(460 / 928, 2) == 0.5"
+    steps:
+      - show: |
+          <p><b>Quy mô:</b> bài báo hội nghị CAV 2015 ghi hàm sắp xếp của Java chạy <b>hàng tỉ lượt mỗi ngày</b>. Nhóm định chứng minh nó đúng bằng một công cụ chứng minh cho Java. Mã có chú thích: các bất biến “được bảo đảm” sau mỗi lần gộp.</p>
+          <table class="t"><tr><th>bước</th><th>ngăn xếp (đỉnh bên phải)</th><th>xét</th></tr>
+          <tr><td>Bước 1. vừa đẩy 30</td><td>120, 80, 25, 20, 30</td><td>25 không lớn hơn 20 + 30, và 25 nhỏ hơn 30 → gộp 25 với 20</td></tr>
+          <tr><td>Bước 2. sau khi gộp</td><td>120, 80, 45, 30</td><td>80 lớn hơn 45 + 30 = 75 ✓; 45 lớn hơn 30 ✓ → <b>dừng</b></td></tr>
+          <tr><td>Bước 3. nhìn sâu thêm một tầng</td><td>120 so với 80 + 45</td><td>120 không lớn hơn $\hl{125}$: bất biến <b>hỏng</b>, mà mã không xét tới</td></tr></table>
+        focus: [1, 1, 1, "2.2", "2.3", "2.4"]
+        say: "Ở chặng ba, bài báo hội nghị năm 2015 ghi rằng hàm sắp xếp của Java chạy hàng tỉ lượt mỗi ngày. Nhóm tác giả định chứng minh nó đúng bằng một công cụ chứng minh cho Java. Mã có chú thích rằng các bất biến được bảo đảm sau mỗi lần gộp. Bước một, ngăn xếp là 120, 80, 25, 20 và vừa đẩy 30, vì 25 không lớn hơn 20 cộng 30 và nhỏ hơn 30, nên gộp 25 với 20. Bước hai, ngăn xếp còn 120, 80, 45, 30, ba đoạn trên cùng thoả bất biến, nên mã dừng. Bước ba, nhìn sâu thêm một tầng, 120 không lớn hơn 80 cộng 45 bằng 125, bất biến đã hỏng mà mã không hề xét tới."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>cỡ mảng (trường hợp tệ nhất dựng được)</th><th>số ô cần</th><th>mã Java cấp</th></tr>
+          <tr><td>65 536 = 2 mũ 16</td><td>21</td><td>19 → một báo cáo lỗi trước đó đã nâng lên 24</td></tr>
+          <tr><td>67 108 864 = 2 mũ 26</td><td>$\hl{41}$</td><td>40 → lỗi vượt chỉ số mảng</td></tr></table>
+          <p>Bài báo: kiểm thử rộng rãi không lộ ra lỗi, vì phản ví dụ nhỏ nhất là mảng hơn 67 triệu phần tử có cấu trúc rất phức tạp. Còn đặc tả hình thức cho thấy bất biến không được giữ <b>chỉ trong một buổi chiều</b>; cả bài chứng minh có hơn 2,2 triệu bước, 460 dòng đặc tả cho 928 dòng mã.</p>
+        focus: [1, "1.2", "1.3", 2, 2]
+        say: "Tệ hơn, bất biến hỏng làm ngăn xếp cao hơn dự tính. Với mảng 65 nghìn 536 phần tử, trường hợp tệ nhất cần 21 ô, trong khi mã cấp 19, và một báo cáo lỗi trước đó đã nâng lên 24. Với mảng 2 mũ 26 phần tử cần 41 ô, mã cấp 40, và chương trình dừng vì vượt chỉ số mảng. Bài báo viết rằng kiểm thử rộng rãi không lộ ra lỗi, vì phản ví dụ nhỏ nhất là mảng hơn 67 triệu phần tử có cấu trúc rất phức tạp. Còn đặc tả hình thức cho thấy bất biến không được giữ chỉ trong một buổi chiều, dù cả bài chứng minh có hơn 2 phẩy 2 triệu bước, với 460 dòng đặc tả cho 928 dòng mã."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>cách xử lý</th><th>ai, khi nào</th></tr>
+          <tr><td><b>sửa gốc</b>: xét bất biến trên <b>4</b> đoạn trên cùng thay vì 3; chứng minh bằng máy rằng bản sửa giữ bất biến</td><td>nhóm tác giả, bài báo năm 2015</td></tr>
+          <tr><td>ngôn ngữ gốc cũng có lỗi (khó xảy ra hơn vì dùng số nguyên 64 bit, ngăn xếp lớn); sửa cùng cách</td><td>commit ngày 25/2/2015, phát hành trong bản 3.4.4</td></tr>
+          <tr><td>Java: báo cáo lỗi tạo 6/2/2015, đóng 12/2/2015; mã hiện hành cấp 24 và 49 ô, <b>và</b> có phép xét 4 đoạn</td><td>bản sửa ghi cho JDK 9</td></tr></table>
+          <p class="note">Thực hành: mã lõi được hàng tỉ lượt dùng đáng được chứng minh, không chỉ kiểm thử; sửa nguyên nhân thay vì chỉ nới tài nguyên. Điều kiện: chứng minh tốn công — nhóm vẫn không chứng minh xong hai hàm trộn dài hơn 100 dòng.</p>
+        focus: ["1.2", "1.3", "1.4", 2, 2]
+        say: "Cách xử lý của nhóm tác giả là sửa gốc, xét bất biến trên 4 đoạn trên cùng thay vì 3, và chứng minh bằng máy rằng bản sửa giữ được bất biến. Ngôn ngữ gốc cũng có lỗi này, dù khó xảy ra hơn, và được sửa cùng cách trong một bản sửa mã ngày 25 tháng 2 năm 2015. Bên Java, báo cáo lỗi được tạo ngày 6 tháng 2 và đóng ngày 12 tháng 2 năm 2015, mã hiện hành vừa nới ngăn xếp vừa có phép xét 4 đoạn. Thực hành rút ra là mã lõi được hàng tỉ lượt dùng đáng được chứng minh, không chỉ kiểm thử, và nên sửa nguyên nhân thay vì chỉ nới tài nguyên. Điều kiện là chứng minh tốn công, chính nhóm vẫn không chứng minh xong hai hàm trộn dài hơn 100 dòng."
+
+  # ───────────────────────── 9. CHẶNG 4 ─────────────────────────
+  - id: stage4
+    kind: example
+    title: "Chặng 4, năm 2021 — ổn định: trộn theo lũy thừa của 2"
+    stage: {year: "2021", scale: "ngôn ngữ gốc đổi chiến lược trộn (bpo-34561, commit 6/9/2021; bản thử 3.11.0a1 ngày 5/10/2021)", source: "[PS21]", practice: "thay quy tắc khó lập luận bằng quy tắc có chứng minh gần tối ưu; giữ ngăn xếp với bất biến đơn giản: “sức” giảm dần từ đỉnh xuống"}
+    checks:
+      - "(pw := lambda s1, n1, n2, n: next(L for L in range(1, 64) if math.floor(Fraction(2 * (s1 + n1) + n2, 2 * n) * 2 ** L) > math.floor(Fraction(2 * s1 + n1, 2 * n) * 2 ** L))) and pw(0, 4, 4, 8) == 1"
+      - "(pw := lambda s1, n1, n2, n: next(L for L in range(1, 64) if math.floor(Fraction(2 * (s1 + n1) + n2, 2 * n) * 2 ** L) > math.floor(Fraction(2 * s1 + n1, 2 * n) * 2 ** L))) and [pw(0, 2, 2, 8), pw(2, 2, 4, 8)] == [2, 1]"
+      - "Fraction(1, 8) < Fraction(1, 4) <= Fraction(3, 8) and Fraction(3, 8) < Fraction(1, 2) <= Fraction(6, 8)"
+    steps:
+      - show: |
+          <p><b>Tệp mô tả hiện hành</b> kể lại: bản đầu tiên dùng “điều đầu tiên nghĩ ra mà không quá tệ”, dựa lỏng trên dãy Fibonacci; nó khó lập luận, và tinh vi tới mức bất biến không thật sự được giữ — các nhà nghiên cứu phát hiện ra khi cố hoàn thành một chứng minh bằng máy.</p>
+          <p>Phát hiện ấy khơi ra hơn một chục cách mới. Năm 2021, ngôn ngữ gốc chọn cách trộn theo <b>lũy thừa của 2</b> của hai tác giả Munro và Wild: <b>chứng minh được</b> là gần tối ưu theo độ đo entropy của độ dài các đoạn.</p>
+          <p>Ghi chú phát hành: phần lớn chương trình sẽ không thấy khác biệt thời gian đáng kể, nhưng có thể nhanh hơn rõ ở những ca mà cách cũ đặc biệt tệ.</p>
+        focus: [1, 1, 2, 2, 3]
+        say: "Ở chặng bốn, tệp mô tả hiện hành của ngôn ngữ gốc kể lại rằng bản đầu dùng điều đầu tiên nghĩ ra mà không quá tệ, dựa lỏng trên dãy Fibonacci. Nó khó lập luận, và tinh vi tới mức bất biến không thật sự được giữ, điều các nhà nghiên cứu phát hiện khi cố hoàn thành một chứng minh bằng máy. Phát hiện ấy khơi ra hơn một chục cách mới, và năm 2021, ngôn ngữ gốc chọn cách trộn theo lũy thừa của 2. Cách này chứng minh được là gần tối ưu theo độ đo entropy của độ dài các đoạn. Ghi chú phát hành nói phần lớn chương trình sẽ không thấy khác biệt đáng kể, nhưng có thể nhanh hơn rõ ở những ca mà cách cũ đặc biệt tệ."
+      - clear: true
+        show: |
+          <p><b>Sức</b> của chỗ nối giữa hai đoạn liền kề = độ sâu của chỗ nối ấy trong cây trộn lý tưởng (gốc có sức 1). Lấy điểm giữa mỗi đoạn, chia cho n: sức là số L nhỏ nhất để giữa hai điểm có một phân số dạng J chia 2 mũ L.</p>
+          <table class="t"><tr><th>bước: mảng n = 8</th><th>điểm giữa chia n</th><th>sức</th></tr>
+          <tr><td>Bước 1. hai đoạn 4 và 4</td><td>2/8 và 6/8; giữa chúng có 1/2</td><td>$\hlg{1}$: gốc của cây</td></tr>
+          <tr><td>Bước 2. ba đoạn 2, 2, 4: chỗ nối đầu</td><td>1/8 và 3/8; giữa chúng có 1/4 = 2/8</td><td>$\hl{2}$</td></tr>
+          <tr><td>Bước 3. chỗ nối thứ hai</td><td>3/8 và 6/8; giữa chúng có 1/2</td><td>1</td></tr></table>
+          <p class="note">Ngăn xếp chỉ giữ một bất biến: sức giảm dần tính từ đỉnh. Chỗ nối sức 2 nằm sâu hơn nên được trộn trước, rồi mới tới gốc. Điều kiện: chưa phải tối ưu tuyệt đối — tối ưu thật cần biết trước mọi đoạn, tốn thời gian bình phương theo số đoạn.</p>
+        focus: [1, 1, "2.2", "2.3", "2.4", 3, 3]
+        say: "Ý chính của cách mới là sức của chỗ nối giữa hai đoạn liền kề, tức độ sâu của chỗ nối ấy trong cây trộn lý tưởng, với gốc có sức 1. Lấy điểm giữa mỗi đoạn chia cho n, sức là số L nhỏ nhất để giữa hai điểm có một phân số dạng J chia 2 mũ L. Bước một, mảng 8 phần tử gồm hai đoạn 4 và 4 có điểm giữa 2 phần 8 và 6 phần 8, giữa chúng có một phần hai, nên sức bằng 1, gốc của cây. Bước hai, với ba đoạn 2, 2, 4, chỗ nối đầu có điểm giữa 1 phần 8 và 3 phần 8, giữa chúng có một phần tư, nên sức bằng 2. Bước ba, chỗ nối thứ hai có 3 phần 8 và 6 phần 8, chứa một phần hai, sức bằng 1. Ngăn xếp chỉ giữ một bất biến, sức giảm dần tính từ đỉnh, nên chỗ nối sức 2 nằm sâu hơn được trộn trước, rồi mới tới gốc. Điều kiện là cách này chưa tối ưu tuyệt đối, vì tối ưu thật cần biết trước mọi đoạn."
+
+  # ───────────────────────── 10. CHẶNG 5 ─────────────────────────
+  - id: stage5
+    kind: example
+    title: "Chặng 5, năm 2025 — tiếp tục phát triển: minrun đổi theo từng đoạn"
+    stage: {year: "2025", scale: "gh-135551, commit 27/6/2025 trong mã nguồn ngôn ngữ gốc; kiểm vét cạn mọi độ dài danh sách tới 2 triệu", source: "[MR25]", practice: "phân phối phần dư đều giữa các đoạn để mọi lượt trộn cân bằng; kiểm bằng vét cạn trên mọi cỡ tới một ngưỡng lớn trước khi đổi mã lõi"}
+    checks:
+      - "[((i + 1) * 315 >> 3) - (i * 315 >> 3) for i in range(8)] == [39, 39, 40, 39, 39, 40, 39, 40]"
+      - "[39 + 39, 40 + 39, 39 + 40, 39 + 40] == [78, 79, 79, 79] and [78 + 79, 79 + 79] == [157, 158] and 157 + 158 == 315"
+      - "7 * 40 + 35 == 315 and 32769 // 33 == 993 and 32769 % 33 == 0 and 1023 * 32 + 33 == 32769 and 2 ** 10 == 1024"
+      - "(lambda n, e: [((i + 1) * n >> e) - (i * n >> e) for i in range(2 ** e)])(32769, 10).count(33) == 1"
+    steps:
+      - show: |
+          <p><b>Điểm nghẽn còn lại:</b> quy tắc chọn minrun cũ tránh được ca tệ nhất, nhưng các ca “khá tệ” vẫn còn. Ví dụ 315 phần tử: minrun cố định 40 cho 7 đoạn 40 và một đoạn 35.</p>
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. lý tưởng</td><td>315 chia 8 đoạn</td><td>39,375 — không chia được</td></tr>
+          <tr><td>Bước 2. cộng dồn phần lẻ</td><td>39 (dư 0,375), 39 (dư 0,75), 40 (dư 0,125), …</td><td>$\hlg{39\ 39\ 40\ 39\ 39\ 40\ 39\ 40}$</td></tr>
+          <tr><td>Bước 3. trộn từng tầng</td><td>78, 79, 79, 79 → 157, 158 → 315</td><td>hai đoạn được trộn lệch nhau <b>không quá 1</b></td></tr></table>
+        focus: [1, 1, "2.2", "2.3", "2.3", "2.4"]
+        say: "Ở chặng năm, điểm nghẽn còn lại là quy tắc chọn độ dài tối thiểu cũ tránh được ca tệ nhất, nhưng các ca khá tệ vẫn còn. Ví dụ với 315 phần tử, độ dài tối thiểu cố định 40 cho 7 đoạn 40 và một đoạn 35. Bước một, chia đều lý tưởng cho 8 đoạn là 39 phẩy 375, không chia được. Bước hai, cách mới cộng dồn phần lẻ, đoạn đầu 39 và nhớ 0 phẩy 375, đoạn hai 39 và nhớ 0 phẩy 75, đoạn ba được 40. Cứ thế ta được 39, 39, 40, 39, 39, 40, 39, 40. Bước ba, trộn từng tầng ra 78, 79, 79, 79, rồi 157 và 158, rồi 315, và hai đoạn được trộn không bao giờ lệch nhau quá 1."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>32 769 phần tử (2 mũ 15 + 1)</th><th>số đoạn</th><th>có phải lũy thừa của 2?</th></tr>
+          <tr><td>cách cũ: minrun 33</td><td>32 769 chia 33 = 993</td><td>không</td></tr>
+          <tr><td>cách mới năm 2025</td><td>$\hlg{1024}$ đoạn: 1023 đoạn 32 và một đoạn 33</td><td>có, 2 mũ 10</td></tr></table>
+          <p class="note">Thay đổi được kiểm bằng <b>vét cạn</b> mọi độ dài danh sách tới 2 triệu trước khi nhận vào mã. Ổn định không có nghĩa là hết việc: hơn 20 năm sau, thuật toán vẫn được làm tốt thêm — mỗi lần có lập luận và có phép thử.</p>
+        focus: ["1.2", "1.3", 2, 2]
+        say: "Với 32 nghìn 769 phần tử, tức 2 mũ 15 cộng 1, cách cũ dùng độ dài tối thiểu 33 và tạo 993 đoạn, không phải lũy thừa của 2. Cách mới tạo 1024 đoạn, gồm 1023 đoạn 32 và một đoạn 33, đúng 2 mũ 10. Thay đổi được kiểm bằng vét cạn mọi độ dài danh sách tới 2 triệu trước khi nhận vào mã. Ổn định không có nghĩa là hết việc, hơn 20 năm sau thuật toán vẫn được làm tốt thêm, và mỗi lần đều có lập luận, có phép thử."
+
+  # ───────────────────────── 11. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm bốn con số của hành trình"
+    checks:
+      - "33 * 64 == 2112 and 2 ** 6 == 64"
+      - "2 ** 10 * 2 ** 10 * 2 ** 6 == 67108864 and 1024 * 1024 * 64 == 67108864"
+      - "[120, 80, 45, 30][0] - ([120, 80, 45, 30][1] + [120, 80, 45, 30][2]) == -5"
+      - "39 * 5 + 40 * 3 == 315"
+    steps:
+      - show: |
+          <table class="t"><tr><th>con số</th><th>đường khác để kiểm</th></tr>
+          <tr><td>64 đoạn với minrun 33</td><td>nhân ngược: 33 nhân 64 = 2112 ✓; 64 = 2 mũ 6 ✓</td></tr>
+          <tr><td>67 108 864</td><td>2 mũ 10 = 1024; 1024 nhân 1024 nhân 64 = 67 108 864 ✓</td></tr>
+          <tr><td>bất biến hỏng</td><td>tính hiệu: 120 − (80 + 45) = −5, không dương, nên A không lớn hơn B + C ✓</td></tr>
+          <tr><td>315 phần tử</td><td>đếm lại: 5 đoạn 39 và 3 đoạn 40: 195 + 120 = 315 ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Ta kiểm lại bốn con số theo đường khác. Nhân ngược, 33 nhân 64 bằng 2112, và 64 đúng là 2 mũ 6. Với 2 mũ 26, ta tách thành 1024 nhân 1024 nhân 64, ra đúng 67 triệu 108 nghìn 864. Tính hiệu, 120 trừ 80 cộng 45 được âm 5, không dương, nên A không lớn hơn B cộng C. Đếm lại 315 phần tử, có 5 đoạn 39 và 3 đoạn 40, tổng 195 cộng 120 bằng 315."
+
+  # ───────────────────────── 12. BÀI HỌC SAI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "Những bài học sai khi đọc hành trình này"
+    checks:
+      - "2 ** 26 * 4 == 268435456"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">1.</b> “Người viết thư viện đã cẩu thả”</td><td>bất biến tinh vi tới mức chính người viết và những người chép sang Java đều không thấy suốt nhiều năm; kiểm thử rộng rãi cũng bỏ sót</td><td>đặt lớp phòng vệ ở mức hệ thống: đặc tả rõ, chứng minh cho mã lõi</td></tr>
+          <tr><td><b class="red">2.</b> “Chạy qua hết bộ kiểm thử là đúng”</td><td>phản ví dụ nhỏ nhất có 2 mũ 26 phần tử, cấu trúc rất phức tạp — bộ kiểm thử ngẫu nhiên gần như không thể gặp</td><td>với điều kiện “luôn luôn” trên mọi đầu vào, cần lập luận, không chỉ phép thử</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.2", "1.3", "1.3"]
+        say: "Bảng có hai bài học sai đầu tiên. Bài học sai thứ nhất là nghĩ người viết thư viện đã cẩu thả. Bất biến tinh vi tới mức chính người viết và những người chép sang Java đều không thấy suốt nhiều năm, và kiểm thử rộng rãi cũng bỏ sót. Hãy đặt lớp phòng vệ ở mức hệ thống, gồm đặc tả rõ và chứng minh cho mã lõi. Bài học sai thứ hai là nghĩ chạy qua hết bộ kiểm thử là đúng, trong khi phản ví dụ nhỏ nhất có 2 mũ 26 phần tử với cấu trúc rất phức tạp. Với điều kiện luôn luôn đúng trên mọi đầu vào, cần lập luận, không chỉ phép thử."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">3.</b> “Nới ngăn xếp từ 19 lên 24 là xong”</td><td>Java từng làm vậy sau một báo cáo lỗi; mảng 2 mũ 26 phần tử vẫn vượt 40 ô</td><td>sửa nguyên nhân: giữ đúng bất biến, rồi mới tính cỡ</td></tr>
+          <tr><td><b class="red">4.</b> “Phải chứng minh mọi dòng mã mới dám dùng”</td><td>nhóm tác giả cũng không chứng minh xong hai hàm trộn; chứng minh tốn hơn 2,2 triệu bước</td><td>chứng minh nơi lỗi đắt và khó thử; còn lại dùng kiểm thử và phép thử số nhỏ</td></tr>
+          <tr><td><b class="red">5.</b> “Thuật toán cũ đã dùng 20 năm, đừng đụng vào”</td><td>chính nó đổi cách trộn năm 2021, đổi minrun năm 2025</td><td>thay đổi được, nếu có chứng minh hoặc kiểm vét cạn đi kèm</td></tr></table>
+        focus: ["1.2", "1.2", "1.3", "1.3", "1.4", "1.4"]
+        say: "Bài học sai thứ ba là nghĩ nới ngăn xếp từ 19 lên 24 là xong, trong khi Java từng làm vậy mà mảng 2 mũ 26 phần tử vẫn vượt 40 ô. Hãy sửa nguyên nhân, giữ đúng bất biến, rồi mới tính cỡ. Bài học sai thứ tư, của người đã đi làm, là đòi chứng minh mọi dòng mã mới dám dùng. Chính nhóm tác giả cũng không chứng minh xong hai hàm trộn, nên hãy chứng minh nơi lỗi đắt và khó thử. Bài học sai thứ năm là nghĩ thuật toán đã dùng 20 năm thì đừng đụng vào. Chính nó đã đổi cách trộn năm 2021 và đổi độ dài tối thiểu năm 2025, mỗi lần đều có chứng minh hoặc kiểm vét cạn đi kèm."
+
+  # ───────────────────────── 13. QUYẾT ĐỊNH ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Bạn sẽ làm gì ở quy mô của mình?"
+    checks:
+      - "math.factorial(10) == 3628800 and math.factorial(10) / 10 ** 6 < 4"
+      - "2 ** 26 * 8 / 10 ** 6 > 500"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>tình huống (số minh hoạ)</th></tr>
+          <tr><td>1</td><td>bạn viết hàm gộp hai danh sách đã xếp cho một ứng dụng nhỏ; danh sách có tối đa 10 phần tử. Chứng minh hay kiểm thử?</td></tr>
+          <tr><td>2</td><td>đội bạn viết lại hàm sắp xếp lõi của một thư viện dùng chung cho hàng trăm dịch vụ, mảng có thể tới hàng trăm triệu phần tử. Làm gì trước khi phát hành?</td></tr></table>
+        focus: [1, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn ra quyết định, với các số minh hoạ. Câu một, bạn viết hàm gộp hai danh sách đã xếp cho một ứng dụng nhỏ, mỗi danh sách tối đa 10 phần tử, vậy chứng minh hay kiểm thử? Câu hai, đội bạn viết lại hàm sắp xếp lõi của một thư viện dùng chung cho hàng trăm dịch vụ, mảng có thể tới hàng trăm triệu phần tử, vậy làm gì trước khi phát hành? Dừng video và viết ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 1: lựa chọn</th><th>được</th><th>mất</th></tr>
+          <tr><td>kiểm thử vét cạn</td><td>10 phần tử có 10! = 3 628 800 thứ tự, chạy hết trong vài giây; bao trọn mọi đầu vào cỡ ấy</td><td>không nói gì về cỡ lớn hơn 10</td></tr>
+          <tr><td>chứng minh bằng máy</td><td>đúng cho mọi cỡ</td><td>tốn công gấp nhiều lần hàm cần viết</td></tr></table>
+          <p class="note">Chọn kiểm thử vét cạn. Điều kiện đổi: khi cỡ đầu vào không còn bị chặn nhỏ, hoặc hàm thành mã dùng chung.</p>
+        focus: [1, "1.2", "1.2", "1.3", 2]
+        say: "Đáp án câu một là một đánh đổi. Kiểm thử vét cạn với 10 phần tử có 10 giai thừa, tức 3 triệu 628 nghìn 800 thứ tự, chạy hết trong vài giây. Nó bao trọn mọi đầu vào cỡ ấy, nhưng không nói gì về cỡ lớn hơn. Chứng minh bằng máy đúng cho mọi cỡ, nhưng tốn công gấp nhiều lần hàm cần viết. Vậy chọn kiểm thử vét cạn, và chỉ đổi khi cỡ đầu vào không còn bị chặn nhỏ, hoặc hàm thành mã dùng chung."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 2: lựa chọn</th><th>được</th><th>mất</th></tr>
+          <tr><td>viết đặc tả bất biến, chứng minh phần quản lý ngăn xếp; kiểm thử phần còn lại</td><td>bắt được lỗi kiểu năm 2015 mà không cần mảng 67 triệu phần tử</td><td>vài tuần công; cần người biết công cụ chứng minh</td></tr>
+          <tr><td>chỉ kiểm thử với mảng thật lớn</td><td>dễ làm</td><td>mảng 2 mũ 26 phần tử, 8 byte mỗi phần tử đã hơn 500 triệu byte — mà vẫn chỉ là một đầu vào</td></tr></table>
+          <p class="note">Chọn đặc tả cộng chứng minh cho lõi. Điều kiện đổi: nếu dùng nguyên thư viện đã được chứng minh và vá, thì không viết lại — chỉ cần kiểm phiên bản.</p>
+        focus: [1, "1.2", "1.2", "1.3", 2]
+        say: "Đáp án câu hai cũng là một đánh đổi. Cách thứ nhất là viết đặc tả bất biến, chứng minh phần quản lý ngăn xếp, rồi kiểm thử phần còn lại. Cách này bắt được lỗi kiểu năm 2015 mà không cần mảng 67 triệu phần tử, đổi lại tốn vài tuần công và cần người biết công cụ. Chỉ kiểm thử với mảng thật lớn thì dễ làm, nhưng 2 mũ 26 phần tử, mỗi phần tử 8 ô nhớ, đã hơn 500 triệu ô nhớ, mà vẫn chỉ là một đầu vào. Vậy chọn đặc tả cộng chứng minh cho lõi, và nếu dùng nguyên thư viện đã được chứng minh và vá thì đừng viết lại."
+
+  # ───────────────────────── 14. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi hành trình & tư duy chuyên gia"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">2002: trộn đoạn có sẵn, hai bất biến</span><span class="a">→</span>
+          <span class="n">2011: Java dùng theo, ngăn xếp tính sẵn</span><span class="a">→</span>
+          <span class="n">2015: chứng minh bằng máy, bất biến bị phá</span><span class="a">→</span>
+          <span class="n">2021: trộn theo lũy thừa của 2</span><span class="a">→</span>
+          <span class="n">2025: mọi lượt trộn cân bằng</span></div>
+        say: "Tổng kết lại hành trình. Năm 2002, thuật toán trộn các đoạn có sẵn và giữ hai bất biến. Năm 2011, Java dùng theo, với cỡ ngăn xếp tính sẵn từ bất biến. Năm 2015, một phép chứng minh bằng máy cho thấy bất biến bị phá. Năm 2021, ngôn ngữ gốc đổi sang trộn theo lũy thừa của 2, và năm 2025 thì mọi lượt trộn đều cân bằng."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> như bài tổng ôn đã nói, mỗi kết luận cần <b>một lập luận và một phép thử</b>. Hành trình này cho thấy vì sao: phép thử bỏ sót mảng 67 triệu phần tử, còn lập luận thì bắt được trong một buổi chiều.</div>
+        say: "Điều cần mang theo, như bài tổng ôn đã nói, mỗi kết luận cần một lập luận và một phép thử. Hành trình này cho thấy vì sao, phép thử bỏ sót mảng 67 triệu phần tử, còn lập luận thì bắt được lỗi trong một buổi chiều."
+      - clear: true
+        show: |
+          <p class="note">Đây là bài cuối của khoá CS112. Từ đếm số bước, ký hiệu tiệm cận và hệ thức truy hồi, qua các chiến lược thiết kế, tới sắp xếp, đồ thị và độ khó, bạn đã thấy một thuật toán thật sống qua hơn 20 năm như thế nào.</p>
+        say: "Đây là bài cuối của khoá Phân tích và thiết kế thuật toán. Bạn đã đi từ đếm số bước, ký hiệu tiệm cận và hệ thức truy hồi, qua các chiến lược thiết kế, tới sắp xếp, đồ thị và độ khó. Và bạn đã thấy một thuật toán thật sống qua hơn 20 năm như thế nào. Cảm ơn bạn đã theo học."

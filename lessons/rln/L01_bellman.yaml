@@ -1,0 +1,291 @@
+id: L01
+course: RLN
+series: "RLN · Học tăng cường"
+title: "Bài 1 — Hàm giá trị và phương trình Bellman kỳ vọng"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/rln.yaml L01; audit/rln/verify_rln.py L01; audit/rln/sources_L01.md; R. S. Sutton, A. G. Barto, Reinforcement Learning: An Introduction, bản 2 (2018), mục 3.5 (chính sách và hàm giá trị, công thức 3.12–3.14: phương trình Bellman cho v_π), 4.1 (đánh giá chính sách lặp); CS115 bài 3 (hệ phương trình tuyến tính), bài 13 (kỳ vọng)"
+assumes: [arith, power, approx, frac, geq, cdot, disc, sub, dots]
+# Quy ước (symbols.RLN.yaml): chính sách π(a | s) = xác suất chọn a khi ở s; V(s) = giá trị của s THEO chính sách đang xét (sách viết v_π);
+#   Q(s, a) = giá trị của việc chọn a ở s rồi theo chính sách; s′ viết s' là trạng thái kế tiếp. Chuyển trạng thái trong ví dụ là TẤT ĐỊNH
+#   (mỗi hành động dẫn tới đúng một s′), nên phương trình chỉ cần trung bình theo π; dạng có xác suất chuyển nói ở step notation_note.
+# Ví dụ (SỐ MINH HOẠ): hai trạng thái A, B; ở A: “sang B” thưởng 1, “ở lại” thưởng 0; ở B: “về A” thưởng 0; γ = 0,9.
+#   Chính sách 1: ở A luôn sang B → V(A) = 100/19 ≈ 5,263, V(B) = 90/19 ≈ 4,737. Chính sách 2: ở A tung đồng xu 50–50 → V(A) = 100/29 ≈ 3,448,
+#   V(B) = 90/29 ≈ 3,103. “Bellman” chỉ hiện trên màn hình; lời đọc nói “phương trình tự nhất quán” (như CS115 bài 39).
+objectives:
+  - "Định nghĩa giá trị V(s) và Q(s, a) của một chính sách cố định là kỳ vọng của lợi nhuận"
+  - "Suy ra phương trình tự nhất quán V(s) = Σ π(a | s) · (r + γ · V(s′)) từ công thức đệ quy của lợi nhuận"
+  - "Giải hệ phương trình hai ẩn để được giá trị chính xác, rồi kiểm bằng cộng thẳng lợi nhuận và bằng lặp"
+  - "Dùng Q(s, a) để quyết định có nên đổi hành động ở một trạng thái"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Ô A đáng giá 5,263 hay 3,448?"
+    checks:
+      - "round(alg.rln_eval({'A': {'o': [(1, 0, 'A')], 'sang': [(1, 1, 'B')]}, 'B': {'ve': [(1, 0, 'A')]}}, {'A': 'sang', 'B': 've'}, 0.9)['A'], 3) == 5.263"
+      - "round(alg.rln_eval({'A': {'o': [(1, 0, 'A')], 'sang': [(1, 1, 'B')]}, 'B': {'ve': [(1, 0, 'A')]}}, {'A': {'o': 0.5, 'sang': 0.5}, 'B': 've'}, 0.9)['A'], 3) == 3.448"
+    steps:
+      - show: |
+          <p>Một trò chơi chỉ có hai ô, A và B. Đứng ở A mà luôn bước sang B thì ô A “đáng giá” <b>5,263</b>. Cũng ô A đó, nếu mỗi lần tung đồng xu để chọn đi hay ở thì nó chỉ đáng giá <b>3,448</b>.</p>
+          <div class="box key">Hôm nay: “giá trị của một trạng thái” nghĩa là gì? Vì sao nó phụ thuộc cách chơi? Và tính chính xác con số 5,263 bằng cách nào — không cần chơi thử nghìn lần?</div>
+        focus: [1, 1, 1, 2, 2]
+        say: "Chào bạn, một trò chơi chỉ có hai ô, A và B. Đứng ở A mà luôn bước sang B thì ô A đáng giá 5 phẩy 263. Còn nếu mỗi lần tung đồng xu để chọn đi hay ở, thì cũng ô A đó chỉ đáng giá 3 phẩy 448. Hôm nay ta trả lời ba câu hỏi, giá trị của một trạng thái nghĩa là gì, và vì sao nó phụ thuộc cách chơi. Câu thứ ba, làm sao tính chính xác con số 5 phẩy 263 mà không cần chơi thử nghìn lần?"
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại ba điều sẽ dùng"
+    checks:
+      - "0.5 * 4 + 0.5 * 2 == 3"
+      - "(lambda x: x == 3 + 0.5 * (0.5 * x))(4) and 0.5 * 4 == 2"
+      - "alg.rln_returns_backward([-1, -1, 10], 0.9)[0] == -1 + 0.9 * alg.rln_returns_backward([-1, -1, 10], 0.9)[1]"
+    steps:
+      - show: |
+          <p><b>① Kỳ vọng</b> là trung bình có trọng số theo xác suất. Tung đồng xu: mặt ngửa được 4, mặt sấp được 2:</p>
+          $$0{,}5 \cdot 4 + 0{,}5 \cdot 2 = 3$$
+        focus: [1, 2]
+        say: "Điều thứ nhất, ở khoá Toán cho khoa học máy tính ta đã học kỳ vọng là trung bình có trọng số theo xác suất. Tung đồng xu, mặt ngửa được 4, mặt sấp được 2, thì kỳ vọng là 0 phẩy 5 nhân 4 cộng 0 phẩy 5 nhân 2, bằng 3."
+      - show: |
+          <p><b>② Giải hệ hai ẩn bằng phép thế.</b> $x = 3 + 0{,}5 \cdot y$ và $y = 0{,}5 \cdot x$. Thay $y$ vào phương trình đầu: $x = 3 + 0{,}25 \cdot x$.</p>
+          <p>Chuyển vế: $0{,}75 \cdot x = 3$, nên $x = 4$ và $y = 2$.</p>
+        focus: [1, 1, 2]
+        say: "Điều thứ hai là giải hệ hai ẩn bằng phép thế, như khoá Toán đã dạy. Với x bằng 3 cộng 0 phẩy 5 nhân y, và y bằng 0 phẩy 5 nhân x, ta thay y vào phương trình đầu, được x bằng 3 cộng 0 phẩy 25 nhân x. Chuyển vế, 0 phẩy 75 nhân x bằng 3, nên x bằng 4 và y bằng 2."
+      - show: |
+          <p><b>③ Từ bài 0:</b> lợi nhuận tính từ bước $t$ bằng phần thưởng ngay cộng $\gamma$ nhân lợi nhuận từ bước sau:</p>
+          $$G_t = r_{t+1} + \gamma \cdot G_{t+1}$$
+          <p class="note">Chuỗi −1, −1, 10 với $\gamma = 0{,}9$: $G_0 = -1 + 0{,}9 \cdot 8 = 6{,}2$.</p>
+        focus: [1, 2, 3]
+        say: "Điều thứ ba, ở bài 0 ta đã có công thức đệ quy của lợi nhuận. Lợi nhuận tính từ bước t bằng phần thưởng ngay, cộng gam-ma nhân lợi nhuận tính từ bước sau. Với chuỗi âm 1, âm 1, 10 và gam-ma bằng 0 phẩy 9, ta đã tính G không bằng âm 1 cộng 0 phẩy 9 nhân 8, bằng 6 phẩy 2."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: chính sách π, giá trị V và Q"
+    steps:
+      - show: |
+          <p>Chữ Hy Lạp $\pi$, đọc là <b>pi</b>, ở khoá này là <b>chính sách</b> — cách tác tử chọn hành động, không phải số 3,14.</p>
+          $$\pi(a \mid s) = \text{xác suất chọn hành động } a \text{ khi đang ở } s$$
+          <p class="note">Ví dụ tung đồng xu ở A: $\pi(\text{sang B} \mid A) = 0{,}5$ và $\pi(\text{ở lại} \mid A) = 0{,}5$. Vạch đứng đọc là “khi biết”.</p>
+        introduces: [policy, given]
+        focus: [1, 2, 3, 3]
+        say: "Chữ Hy Lạp này đọc là pi, và ở khoá này nó là chính sách, tức cách tác tử chọn hành động, không phải số 3 phẩy 14. Pi của a khi biết s là xác suất chọn hành động a khi đang ở trạng thái s. Ví dụ tung đồng xu ở A thì pi của sang B khi biết A bằng 0 phẩy 5, và pi của ở lại khi biết A cũng bằng 0 phẩy 5. Vạch đứng ở giữa đọc là khi biết."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>ký hiệu</th><th>đọc</th><th>nghĩa</th></tr>
+          <tr><td>$V(s)$</td><td>V của s</td><td><b>giá trị trạng thái</b>: lợi nhuận kỳ vọng nếu bắt đầu ở $s$ rồi chơi theo chính sách đang xét</td></tr>
+          <tr><td>$Q(s, a)$</td><td>Q của s, a</td><td><b>giá trị hành động</b>: lợi nhuận kỳ vọng nếu ở $s$ chọn $a$ trước, rồi mới chơi theo chính sách</td></tr>
+          <tr><td>$s'$</td><td>s phẩy</td><td>trạng thái kế tiếp, nơi hành động dẫn tới</td></tr></table>
+        introduces: [prime]
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Bảng giới thiệu ba ký hiệu nữa. V của s là giá trị trạng thái, tức lợi nhuận kỳ vọng nếu bắt đầu ở s rồi chơi theo chính sách đang xét. Q của s, a là giá trị hành động, tức lợi nhuận kỳ vọng nếu ở s ta chọn a trước, rồi mới chơi theo chính sách. Còn s phẩy là trạng thái kế tiếp, nơi hành động dẫn tới."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hai ô, ba mũi tên"
+    steps:
+      - show: |
+          <div><svg width="1000" height="330" viewBox="0 0 1000 330"><defs><marker id="rl1a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs>
+          <g font-size="30" text-anchor="middle" font-weight="bold">
+          <circle cx="300" cy="185" r="70" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="300" y="196" fill="#1f2937">A</text>
+          <circle cx="720" cy="185" r="70" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="720" y="196" fill="#1f2937">B</text></g>
+          <path d="M365,155 C450,95 570,95 655,155" fill="none" stroke="#059669" stroke-width="3" marker-end="url(#rl1a)"/>
+          <path d="M655,215 C570,275 450,275 365,215" fill="none" stroke="#1f2937" stroke-width="3" marker-end="url(#rl1a)"/>
+          <path d="M250,135 C190,40 120,110 232,165" fill="none" stroke="#b91c1c" stroke-width="3" stroke-dasharray="7 5" marker-end="url(#rl1a)"/>
+          <g font-size="24" text-anchor="middle">
+          <text x="510" y="78" fill="#059669">sang B: thưởng 1</text>
+          <text x="510" y="312" fill="#1f2937">về A: thưởng 0</text>
+          <text x="120" y="60" fill="#b91c1c">ở lại: thưởng 0</text></g>
+          </svg></div>
+          <p class="note">Chính sách 1: ở A luôn “sang B”. Chính sách 2: ở A tung đồng xu giữa “sang B” và “ở lại”. Ở B chỉ có “về A”.</p>
+        focus: [1, 1, 2, 2]
+        say: "Hình vẽ trò chơi hai ô. Từ A có hai mũi tên, sang B được thưởng 1, hoặc ở lại A được thưởng 0. Từ B chỉ có một mũi tên về A, thưởng 0. Chính sách 1 ở A luôn sang B, còn chính sách 2 ở A tung đồng xu giữa sang B và ở lại."
+      - clear: true
+        show: |
+          <div><svg width="1000" height="250" viewBox="0 0 1000 250"><defs><marker id="rl1b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#eb6834"/></marker></defs>
+          <g font-size="24" text-anchor="middle">
+          <rect x="40" y="70" width="260" height="110" rx="12" fill="#ffedd5" stroke="#eb6834" stroke-width="2.5"/><text x="170" y="118" fill="#1f2937" font-weight="bold">giá trị ở đây</text><text x="170" y="152" fill="#1f2937">V(s)</text>
+          <rect x="370" y="70" width="230" height="110" rx="12" fill="#d1fae5" stroke="#059669" stroke-width="2.5"/><text x="485" y="118" fill="#1f2937" font-weight="bold">thưởng ngay</text><text x="485" y="152" fill="#1f2937">r</text>
+          <rect x="690" y="70" width="270" height="110" rx="12" fill="#dbeafe" stroke="#2a78d6" stroke-width="2.5"/><text x="825" y="118" fill="#1f2937" font-weight="bold">giá trị nơi tới</text><text x="825" y="152" fill="#1f2937">nhân 0,9</text>
+          <text x="335" y="134" fill="#1f2937" font-weight="bold">=</text><text x="645" y="134" fill="#1f2937" font-weight="bold">+</text></g>
+          <path d="M825,190 C825,240 170,240 170,190" fill="none" stroke="#eb6834" stroke-width="2.5" stroke-dasharray="7 5" marker-end="url(#rl1b)"/>
+          </svg></div>
+          <p class="note">Giá trị “chảy ngược”: giá trị nơi tới, giảm bởi $\gamma$, cộng thưởng ngay, thành giá trị ở đây.</p>
+        focus: [1, 1, 2]
+        say: "Hình thứ hai là ý chính của bài. Giá trị ở một ô bằng thưởng ngay khi rời ô, cộng giá trị của nơi tới nhân 0 phẩy 9. Mũi tên đứt nét cho thấy giá trị chảy ngược từ nơi tới về nơi đứng, mỗi bước bị nhân gam-ma."
+
+  # ───────────────────────── 5. SUY RA CÔNG THỨC ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra phương trình tự nhất quán từ công thức đệ quy"
+    checks:
+      - "round(1 + 0.9 * 90 / 19, 10) == round(100 / 19, 10) and round(0.9 * 100 / 19, 10) == round(90 / 19, 10)"
+    steps:
+      - show: |
+          <p><b>Bước 1.</b> Theo định nghĩa, $V(s)$ là kỳ vọng của $G_t$ khi bắt đầu ở $s$. Thay công thức đệ quy của bài 0 vào:</p>
+          $$V(s) = \text{kỳ vọng của } \big(r_{t+1} + \gamma \cdot G_{t+1}\big)$$
+        focus: [1, 2]
+        say: "Bước một, theo định nghĩa, V của s là kỳ vọng của lợi nhuận G t khi bắt đầu ở s. Thay công thức đệ quy của bài 0 vào, ta được V của s bằng kỳ vọng của phần thưởng ngay cộng gam-ma nhân lợi nhuận từ bước sau."
+      - show: |
+          <p><b>Bước 2.</b> Sau khi tới $s'$, phần còn lại của trò chơi chỉ phụ thuộc $s'$ (không cần nhớ đã đi đường nào), nên kỳ vọng của $G_{t+1}$ chính là $V(s')$.</p>
+          <p class="note">Đây là tính chất “chỉ cần trạng thái hiện tại” đã gặp ở khoá Toán cho khoa học máy tính.</p>
+        focus: [1, 1, 2]
+        say: "Bước hai, sau khi tới s phẩy, phần còn lại của trò chơi chỉ phụ thuộc s phẩy, không cần nhớ đã đi đường nào. Vì vậy kỳ vọng của G t cộng 1 chính là V của s phẩy. Đây là tính chất chỉ cần trạng thái hiện tại, đã gặp ở khoá Toán cho khoa học máy tính."
+      - clear: true
+        show: |
+          <p><b>Bước 3.</b> Hành động $a$ được chọn với xác suất $\pi(a \mid s)$, nên lấy trung bình có trọng số theo các hành động. Dấu Sigma $\sum_a$ là cộng qua mọi hành động $a$:</p>
+          $$\hlg{V(s) = \sum_a \pi(a \mid s) \cdot \big(r + \gamma \cdot V(s')\big)}$$
+        introduces: [sum]
+        focus: [1, 1, 2]
+        say: "Bước ba, hành động a được chọn với xác suất pi của a khi biết s, nên ta lấy trung bình có trọng số theo các hành động. Dấu Sigma hoa nghĩa là cộng qua mọi hành động a. Vậy V của s bằng tổng theo a của pi nhân ngoặc thưởng r cộng gam-ma nhân V của s phẩy, và đó là phương trình tự nhất quán."
+      - show: |
+          <p><b>Bước 4 — làm thử ngay</b> với chính sách 1 (ở A luôn sang B, nên chỉ có một số hạng):</p>
+          $$V(A) = 1 + 0{,}9 \cdot V(B), \qquad V(B) = 0 + 0{,}9 \cdot V(A)$$
+          <p class="note">Thay hai số của phần mở đầu: $1 + 0{,}9 \cdot 4{,}737 \approx 5{,}263$ ✓ và $0{,}9 \cdot 5{,}263 \approx 4{,}737$ ✓.</p>
+        focus: [1, 2, 3]
+        say: "Bước bốn, làm thử ngay với chính sách 1, ở A luôn sang B nên tổng chỉ có một số hạng. Ta được V của A bằng 1 cộng 0 phẩy 9 nhân V của B, và V của B bằng 0 cộng 0 phẩy 9 nhân V của A. Thay hai con số của phần mở đầu, 1 cộng 0 phẩy 9 nhân 4 phẩy 737 xấp xỉ 5 phẩy 263, và 0 phẩy 9 nhân 5 phẩy 263 xấp xỉ 4 phẩy 737, khớp cả hai."
+      - show: |
+          <p class="note">Ghi chú cách viết: khi một hành động có thể dẫn tới nhiều $s'$ với xác suất $P(s' \mid s, a)$ (như robot trượt bánh ở khoá Nền tảng trí tuệ nhân tạo), ta lấy thêm trung bình theo $s'$. Sách viết giá trị theo chính sách là $v_\pi$; khoá này viết $V$ và luôn nói rõ chính sách nào.</p>
+        notation_note: true
+        introduces: [prob]
+        say: "Ghi chú về cách viết, một hành động có thể dẫn tới nhiều nơi với xác suất khác nhau, như robot trượt bánh ở khoá Nền tảng trí tuệ nhân tạo. Khi đó ta lấy thêm trung bình theo nơi tới. Nhiều sách viết giá trị theo chính sách là v với chỉ số pi, còn khoá này viết V và luôn nói rõ chính sách nào."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Giải chính xác: chính sách 1, rồi chính sách 2"
+    checks:
+      - "abs(0.9 * 0.9 - 0.81) < 1e-12 and round(1 - 0.81, 10) == 0.19"
+      - "round(1 / 0.19, 3) == 5.263 and round(0.9 / 0.19, 3) == 4.737"
+      - "round(0.5 * 1 + 0.5 * 0.9 * 0.9 + 0.5 * 0.9, 10) == round(0.5 + 0.855, 10) and round(1 - 0.855, 10) == 0.145"
+      - "round(0.5 / 0.145, 3) == 3.448 and round(0.9 * 0.5 / 0.145, 3) == 3.103"
+    steps:
+      - show: |
+          <p><b>Bước 1 — thế.</b> Chính sách 1: thay $V(B) = 0{,}9 \cdot V(A)$ vào phương trình của A:</p>
+          $$V(A) = 1 + 0{,}9 \cdot 0{,}9 \cdot V(A) = 1 + 0{,}81 \cdot V(A)$$
+        focus: [1, 2]
+        say: "Bước một là phép thế. Với chính sách 1, thay V của B bằng 0 phẩy 9 nhân V của A vào phương trình của A, ta được V của A bằng 1 cộng 0 phẩy 81 nhân V của A."
+      - show: |
+          <p><b>Bước 2 — chuyển vế.</b> $0{,}19 \cdot V(A) = 1$, nên $V(A) = \frac{1}{0{,}19} \approx \hlg{5{,}263}$.</p>
+          <p>Rồi $V(B) = 0{,}9 \cdot 5{,}263 \approx \hlg{4{,}737}$.</p>
+        focus: [1, 2]
+        say: "Bước hai, chuyển vế được 0 phẩy 19 nhân V của A bằng 1, nên V của A bằng 1 chia 0 phẩy 19, xấp xỉ 5 phẩy 263. Rồi V của B bằng 0 phẩy 9 nhân 5 phẩy 263, xấp xỉ 4 phẩy 737."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — chính sách 2.</b> Ở A, nửa số lần sang B (thưởng 1), nửa số lần ở lại (thưởng 0, vẫn ở A):</p>
+          $$V(A) = 0{,}5 \cdot \big(1 + 0{,}9 \cdot V(B)\big) + 0{,}5 \cdot \big(0 + 0{,}9 \cdot V(A)\big)$$
+          <p class="note">Thay $V(B) = 0{,}9 \cdot V(A)$: $\;V(A) = 0{,}5 + 0{,}405 \cdot V(A) + 0{,}45 \cdot V(A) = 0{,}5 + 0{,}855 \cdot V(A)$.</p>
+        focus: [1, 1, 2, 3]
+        say: "Bước ba là chính sách 2. Ở A, nửa số lần sang B được thưởng 1, nửa số lần ở lại được thưởng 0 và vẫn ở A. Vì vậy V của A bằng 0 phẩy 5 nhân ngoặc 1 cộng 0 phẩy 9 nhân V của B, cộng 0 phẩy 5 nhân 0 phẩy 9 nhân V của A. Thay V của B bằng 0 phẩy 9 nhân V của A, ta được V của A bằng 0 phẩy 5 cộng 0 phẩy 855 nhân V của A."
+      - show: |
+          <p><b>Bước 4 — chuyển vế.</b> $0{,}145 \cdot V(A) = 0{,}5$, nên $V(A) = \frac{0{,}5}{0{,}145} \approx \hlo{3{,}448}$ và $V(B) \approx \hlo{3{,}103}$.</p>
+          <table class="t"><tr><th>chính sách</th><th>$V(A)$</th><th>$V(B)$</th></tr>
+          <tr><td>1: luôn sang B</td><td>5,263</td><td>4,737</td></tr>
+          <tr><td>2: tung đồng xu ở A</td><td>3,448</td><td>3,103</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước bốn, chuyển vế được 0 phẩy 145 nhân V của A bằng 0 phẩy 5, nên V của A xấp xỉ 3 phẩy 448, và V của B xấp xỉ 3 phẩy 103. Đặt cạnh nhau, chính sách 1 cho 5 phẩy 263 và 4 phẩy 737. Chính sách 2 cho 3 phẩy 448 và 3 phẩy 103, nên cùng một ô mà giá trị khác hẳn, vì cách chơi khác."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: cộng thẳng lợi nhuận, và lặp tới khi đứng yên"
+    checks:
+      - "round(alg.rln_return([1, 0] * 500, 0.9), 3) == 5.263 and round(1 / (1 - 0.81), 3) == 5.263"
+      - "[round(alg.rln_eval_sweeps({'A': {'sang': [(1, 1, 'B')]}, 'B': {'ve': [(1, 0, 'A')]}}, {'A': 'sang', 'B': 've'}, 0.9, k)[k]['A'], 3) for k in (1, 3, 10, 50, 100)] == [1.0, 1.81, 3.428, 5.236, 5.263]"
+    steps:
+      - show: |
+          <p><b>Đường khác 1 — cộng thẳng.</b> Chính sách 1 cho chuỗi phần thưởng 1, 0, 1, 0, … Vì mỗi hai bước nhân $0{,}9^2 = 0{,}81$:</p>
+          $$G = 1 + 0{,}81 + 0{,}81^2 + \dots = \frac{1}{1 - 0{,}81} = \frac{1}{0{,}19} \approx 5{,}263 \checkmark$$
+        focus: [1, 1, 2]
+        say: "Kiểm tra thứ nhất là cộng thẳng, không dùng phương trình. Chính sách 1 cho chuỗi phần thưởng 1, 0, 1, 0, và cứ thế, vì mỗi hai bước nhân 0 phẩy 81. Theo tổng của bài 0, G bằng 1 chia cho 1 trừ 0 phẩy 81, tức 1 chia 0 phẩy 19, xấp xỉ 5 phẩy 263, khớp lời giải hệ."
+      - show: |
+          <p><b>Đường khác 2 — lặp.</b> Bắt đầu $V = 0$, mỗi vòng thay vế phải vào vế trái cho cả hai ô:</p>
+          <table class="t"><tr><th>vòng</th><th>1</th><th>3</th><th>10</th><th>50</th><th>100</th></tr>
+          <tr><td>$V(A)$</td><td>1</td><td>1,81</td><td>3,428</td><td>5,236</td><td>$\hl{5{,}263}$</td></tr></table>
+          <p class="note">Lặp cũng tới đúng 5,263, nhưng mất khoảng 100 vòng: mỗi hai vòng sai số chỉ còn 0,81 lần.</p>
+        focus: [1, 2, 3]
+        say: "Kiểm tra thứ hai là lặp, bắt đầu với mọi giá trị bằng 0, mỗi vòng thay vế phải vào vế trái cho cả hai ô. V của A đi từ 1 ở vòng 1, lên 3 phẩy 428 ở vòng 10, và tới 5 phẩy 263 ở vòng 100. Lặp cũng tới đúng con số đó, nhưng mất khoảng 100 vòng, vì mỗi hai vòng sai số chỉ còn 0 phẩy 81 lần."
+
+  # ───────────────────────── 8. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi cả người đã đi làm"
+    checks:
+      - "round(100 / 19, 3) != round(100 / 29, 3) and round(100 / 29, 3) == 3.448"
+      - "max(0 + 0.9 * 100 / 19, 1 + 0.9 * 90 / 19) > 100 / 29"
+      - "10000 ** 2 * 8 == 800_000_000 and round(10000 ** 3 / 3 / 1e11, 1) == 3.3"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Nói “giá trị của ô A” mà không nói chính sách nào <b class="red">(5,263 hay 3,448?)</b>
+          <br><span class="note">Cùng ô A, hai chính sách cho hai giá trị. Phép thử: hỏi lại “theo cách chơi nào?” trước khi so hai con số.</span></div>
+        say: "Lỗi thứ nhất, nói giá trị của ô A mà không nói chính sách nào. Cùng ô A, hai chính sách cho 5 phẩy 263 và 3 phẩy 448. Phép thử là luôn hỏi lại theo cách chơi nào trước khi so hai con số."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Quên $\gamma$ trước $V(s')$ trong vòng lặp không kết thúc <b class="red">(hệ vô nghiệm)</b>
+          <br><span class="note">$V(A) = 1 + V(B)$ và $V(B) = V(A)$ cho $V(A) = 1 + V(A)$, tức $0 = 1$: vô lý. Phép thử: thế thử — nếu ra đẳng thức sai thì đã quên $\gamma$.</span></div>
+        say: "Lỗi thứ hai, quên gam-ma trước giá trị nơi tới trong một vòng lặp không kết thúc. Khi đó V của A bằng 1 cộng V của B, và V của B bằng V của A, nên V của A bằng 1 cộng chính nó, tức 0 bằng 1, vô lý. Phép thử là thế thử, nếu ra một đẳng thức sai thì ta đã quên gam-ma."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Lấy hành động <b>tốt nhất</b> thay vì <b>trung bình theo chính sách</b> <b class="red">(tính nhầm sang giá trị tối ưu)</b>
+          <br><span class="note">Với chính sách 2, nếu ở A chỉ lấy hành động lớn hơn thì ra 5,263 chứ không phải 3,448. Phép thử: tổng các trọng số $\pi(a \mid s)$ phải bằng 1 và mỗi hành động có trọng số của nó.</span></div>
+        say: "Lỗi thứ ba, lấy hành động tốt nhất thay vì trung bình theo chính sách, tức tính nhầm sang giá trị tối ưu. Với chính sách 2, nếu ở A chỉ lấy hành động lớn hơn thì ra 5 phẩy 263 chứ không phải 3 phẩy 448. Phép thử là các trọng số pi phải cộng lại bằng 1, và mỗi hành động có đúng trọng số của nó."
+      - show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Giải thẳng hệ phương trình cho bài toán thật <b class="red">(quá lớn)</b></div>
+          <table class="t"><tr><th>10&nbsp;000 trạng thái</th><th>cần</th></tr>
+          <tr><td>ma trận hệ số, 8 byte mỗi số</td><td>$10\,000^2 \cdot 8 = 800$ triệu byte</td></tr>
+          <tr><td>phép khử, $n$ trạng thái: khoảng $n^3 / 3$ phép tính</td><td>khoảng $3{,}3 \cdot 10^{11}$</td></tr></table>
+          <p class="note">Giải thẳng chỉ hợp với vài trăm trạng thái; lớn hơn thì lặp từng vòng hoặc học từ mẫu.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, giải thẳng hệ phương trình cho bài toán thật. Với 10 nghìn trạng thái, riêng ma trận hệ số đã cần 800 triệu byte. Phép khử cần khoảng 3 phẩy 3 nhân 10 mũ 11 phép tính. Giải thẳng chỉ hợp với vài trăm trạng thái, còn lớn hơn thì phải lặp từng vòng, hoặc học từ mẫu."
+
+  # ───────────────────────── 9. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: giải một hệ, rồi quyết định có đổi hành động"
+    checks:
+      - "abs(2 / 0.75 - 8 / 3) < 1e-12 and round(8 / 3, 3) == 2.667 and round(0.5 * 8 / 3, 3) == 1.333"
+      - "round(0 + 0.9 * 100 / 19, 3) == 4.737 and round(1 + 0.9 * 90 / 19, 3) == 5.263 and 0.9 * 100 / 19 < 1 + 0.9 * 90 / 19"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Trò hai ô mới: A sang B thưởng 2, B về A thưởng 0, $\gamma = 0{,}5$, chính sách luôn đi. Tính $V(A)$ và $V(B)$.</td></tr>
+          <tr><td>2</td><td>Trò cũ, chính sách 1 ($V(A) \approx 5{,}263$, $V(B) \approx 4{,}737$). Tính $Q(A, \text{ở lại})$ và $Q(A, \text{sang B})$. Có nên đổi sang “ở lại” không?</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn. Câu một, trò hai ô mới, A sang B được thưởng 2, B về A được thưởng 0, gam-ma bằng 0 phẩy 5, và chính sách luôn đi, hãy tính V của A và V của B. Câu hai, với trò cũ và chính sách 1, tính Q của A khi ở lại và Q của A khi sang B, rồi quyết định có nên đổi sang ở lại không. Dừng video và làm ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <p><b>Câu 1.</b> $V(A) = 2 + 0{,}5 \cdot V(B)$ và $V(B) = 0{,}5 \cdot V(A)$. Thế vào: $V(A) = 2 + 0{,}25 \cdot V(A)$.</p>
+          <p>Chuyển vế: $0{,}75 \cdot V(A) = 2$, nên $V(A) = \frac{8}{3} \approx \hlg{2{,}667}$ và $V(B) \approx \hlg{1{,}333}$.</p>
+        focus: [1, 1, 2]
+        say: "Đáp án câu một, V của A bằng 2 cộng 0 phẩy 5 nhân V của B, và V của B bằng 0 phẩy 5 nhân V của A. Thế vào, V của A bằng 2 cộng 0 phẩy 25 nhân V của A. Chuyển vế, 0 phẩy 75 nhân V của A bằng 2, nên V của A bằng 8 phần 3, xấp xỉ 2 phẩy 667, và V của B xấp xỉ 1 phẩy 333."
+      - show: |
+          <table class="t"><tr><th>câu 2</th><th>thưởng ngay</th><th>nơi tới</th><th>$Q$</th></tr>
+          <tr><td>ở lại</td><td>0</td><td>A: $0{,}9 \cdot 5{,}263$</td><td>4,737</td></tr>
+          <tr><td>sang B</td><td>1</td><td>B: $0{,}9 \cdot 4{,}737$</td><td>$\hlg{5{,}263}$</td></tr></table>
+          <p class="note">4,737 nhỏ hơn 5,263 → <b>không đổi</b>. Quy tắc: thấy một hành động có $Q$ lớn hơn $V$ hiện tại thì đổi sang nó — đó chính là cách cải thiện chính sách.</p>
+        focus: [0, "1.2", "1.3", 2, 2]
+        say: "Câu hai, Q của một hành động bằng thưởng ngay cộng 0 phẩy 9 nhân giá trị nơi tới. Ở lại được 0 cộng 0 phẩy 9 nhân 5 phẩy 263, bằng 4 phẩy 737. Sang B được 1 cộng 0 phẩy 9 nhân 4 phẩy 737, bằng 5 phẩy 263. Vì 4 phẩy 737 nhỏ hơn, ta không đổi. Quy tắc chung là thấy hành động nào có Q lớn hơn giá trị hiện tại thì đổi sang nó, và đó chính là cách cải thiện chính sách."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">V(s): lợi nhuận kỳ vọng theo MỘT chính sách</span><span class="a">→</span>
+          <span class="n">đệ quy của G + chỉ cần trạng thái hiện tại</span><span class="a">→</span>
+          <span class="n">V(s) = trung bình theo π của (r + γ nhân V(s'))</span><span class="a">→</span>
+          <span class="n">hệ tuyến tính: giải thẳng, cộng thẳng hoặc lặp</span><span class="a">→</span>
+          <span class="n">Q(s, a) cho biết có nên đổi hành động</span></div>
+        say: "Tổng kết lại, V của s là lợi nhuận kỳ vọng theo một chính sách cụ thể. Từ công thức đệ quy của lợi nhuận, cộng với tính chất chỉ cần trạng thái hiện tại, ta có phương trình tự nhất quán. Đó là một hệ tuyến tính, giải thẳng, cộng thẳng hoặc lặp đều ra cùng số. Còn Q của s, a cho biết có nên đổi hành động."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> trước khi tin một con số “giá trị”, hỏi <b>theo chính sách nào</b>, và kiểm nó bằng cách thay ngược vào phương trình tự nhất quán.</div>
+        say: "Điều cần mang theo, trước khi tin một con số giá trị, hãy hỏi theo chính sách nào, rồi kiểm nó bằng cách thay ngược vào phương trình tự nhất quán."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 2): <b>lặp chính sách và tốc độ hội tụ của lặp giá trị</b> — đổi dần sang hành động có Q lớn hơn cho tới tối ưu, và đếm trước cần bao nhiêu vòng lặp.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 2, ta học lặp chính sách và tốc độ hội tụ của lặp giá trị. Đó là đổi dần sang hành động có Q lớn hơn cho tới tối ưu, và đếm trước cần bao nhiêu vòng lặp. Hẹn gặp bạn ở bài tiếp theo."

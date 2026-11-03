@@ -1,0 +1,280 @@
+id: L07
+course: CVI
+series: "CVI · Thị giác máy tính"
+title: "Bài 7 — Phân loại ảnh bằng mạng tích chập và học chuyển giao"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/cvi.yaml L07; audit/cvi/verify_cvi.py L07; audit/cvi/sources_L07.md; [H15] K. He, X. Zhang, S. Ren, J. Sun, Deep Residual Learning for Image Recognition, arXiv:1512.03385 (2015) — bảng 1 (mạng 18 lớp: tầng đầu 7 × 7 bước 2, gộp 3 × 3 bước 2, khối cuối 3 × 3 với 512 kênh trên lưới 7 × 7, lấy trung bình rồi lớp đầy đủ), mục 3.4 (cắt 224 × 224, lật ngang, trừ trung bình từng điểm ảnh); [Y14] J. Yosinski, J. Clune, Y. Bengio, H. Lipson, How transferable are features in deep neural networks?, arXiv:1411.1792 (2014) — mục 1 (đặc trưng lớp đầu chung, lớp cuối riêng; đóng băng khi dữ liệu đích nhỏ); CS115 bài 34 (trượt bộ lọc, kích thước đầu ra, đếm tham số), bài 19 (quá khớp) — đã học"
+assumes: [arith, cdot, frac, approx, power, sub, geq, ltgt, implies]
+# Quy ước: trường tiếp nhận r = số điểm ảnh (theo một chiều) mà một ô ở lớp sâu “nhìn thấy”; lớp (k, s) = bộ lọc cạnh k, bước nhảy s;
+#   r ← r + (k − 1)·j, j = tích các bước nhảy của các lớp trước (alg.cvi_receptive_field). Đặc trưng = vector 512 số ở cuối phần thân
+#   của mạng 18 lớp trong [H15]; lớp cuối (đầu phân loại) có 512·C + C tham số với C lớp. Chữ số bảy đoạn: alg.cvi_seg7_transform.
+#   Xưởng 300 ảnh, 500 ảnh, tỉ lệ 100% / 60%, chuẩn hoá (x − 120)/60 là SỐ MINH HOẠ. Tên ResNet chỉ trên màn hình (probe ≤ 4/8);
+#   lời đọc nói “mạng có lối tắt”. ImageNet đọc theo luật “I-mịt-nét” (lexicon_vi.CVI.yaml), chỉ một hai câu.
+objectives:
+  - "Tính trường tiếp nhận của một chồng lớp tích chập, có và không có bước nhảy"
+  - "Đếm tham số khi chỉ huấn luyện lại lớp cuối, so với một lớp tích chập của phần thân"
+  - "Chọn phép tăng cường dữ liệu không phá nhãn"
+  - "Nhận ra lỗi chuẩn hoá đầu vào khác lúc mạng được học sẵn"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "300 ảnh, đúng 100% lúc học, 60% lúc dùng"
+    checks:
+      - "512 * 10 + 10 == 5130 and 3 * 3 * 512 * 512 + 512 == 2_359_808"
+    steps:
+      - show: |
+          <p>Một xưởng có <b>300 ảnh</b> sản phẩm, gán nhãn 10 loại lỗi. Họ huấn luyện từ đầu một mạng tích chập hàng triệu tham số: đúng <b>100%</b> trên ảnh đã học, chỉ <b>60%</b> trên ảnh mới (số minh hoạ).</p>
+          <p>Cách khác: mượn một mạng đã học sẵn trên hơn một triệu ảnh, giữ nguyên phần thân, chỉ học lại lớp cuối — <b>5130 tham số</b>.</p>
+          <div class="box key">Hôm nay: một ô ở lớp sâu “nhìn” được bao nhiêu điểm ảnh? Vì sao phần thân học từ ảnh khác vẫn dùng được? Và tăng cường dữ liệu thế nào mà không dạy mô hình điều sai?</div>
+        focus: [1, 1, 2, 3, 3]
+        say: "Chào bạn, một xưởng có 300 ảnh sản phẩm, gán nhãn 10 loại lỗi. Họ huấn luyện từ đầu một mạng tích chập hàng triệu tham số, và nó đúng 100 phần trăm trên ảnh đã học nhưng chỉ 60 phần trăm trên ảnh mới. Cách khác là mượn một mạng đã học sẵn trên hơn một triệu ảnh, giữ nguyên phần thân, chỉ học lại lớp cuối có 5130 tham số. Hôm nay ta hỏi, một ô ở lớp sâu nhìn được bao nhiêu điểm ảnh. Vì sao phần thân học từ ảnh khác vẫn dùng được, và tăng cường dữ liệu thế nào mà không dạy mô hình điều sai?"
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại ba điều từ khoá Toán cho khoa học máy tính"
+    checks:
+      - "4 * 2 + 2 == 10"
+      - "alg.cvi_out_size(224, 7, 3, 2) == 112 and (224 + 2 * 3 - 7) // 2 + 1 == 112 and alg.cvi_out_size(112, 3, 1, 2) == 56"
+      - "3 * 3 * 3 * 64 + 64 == 1792"
+    steps:
+      - show: |
+          <p><b>① Lớp đầy đủ</b>: $n$ số vào, $m$ số ra cần $n \cdot m$ trọng số và $m$ hệ số tự do. Ví dụ 4 vào, 2 ra: $4 \cdot 2 + 2 = 10$ tham số.</p>
+          <p><b>② Kích thước đầu ra</b> của tích chập, cạnh $N$, bộ lọc $k$, đệm $P$, bước nhảy $S$:</p>
+          $$\Big\lfloor \frac{N + 2P - k}{S} \Big\rfloor + 1, \qquad \Big\lfloor \frac{224 + 6 - 7}{2} \Big\rfloor + 1 = \lfloor 111{,}5 \rfloor + 1 = 112$$
+        introduces: [floor]
+        focus: [1, 1, 2, 3]
+        say: "Ở khoá Toán cho khoa học máy tính, phần mạng tích chập, ta đã học hai điều. Thứ nhất, lớp đầy đủ với n số vào và m số ra cần n nhân m trọng số cộng m hệ số tự do, ví dụ 4 vào 2 ra là 10 tham số. Thứ hai là kích thước đầu ra của tích chập, dấu ngoặc vuông gãy dưới là làm tròn xuống. Ảnh 224 với bộ lọc 7, đệm 3, bước nhảy 2 cho 111 phẩy 5, làm tròn xuống 111, cộng 1 bằng 112."
+      - show: |
+          <p><b>③ Một lớp tích chập</b> $k \times k$, $C_{\text{vào}}$ kênh vào, $C_{\text{ra}}$ bộ lọc: $k \cdot k \cdot C_{\text{vào}} \cdot C_{\text{ra}} + C_{\text{ra}}$ tham số. Lớp đầu trên ảnh màu, 64 bộ lọc 3 × 3: $3 \cdot 3 \cdot 3 \cdot 64 + 64 = 1792$. Nhiều tham số mà ít ảnh thì mạng học thuộc — đó là quá khớp.</p>
+        focus: [1, 1, 1]
+        say: "Thứ ba, một lớp tích chập k nhân k, có C vào kênh vào và C ra bộ lọc, cần k nhân k nhân C vào nhân C ra, cộng C ra tham số. Ví dụ lớp đầu trên ảnh màu với 64 bộ lọc 3 nhân 3 có 1792 tham số. Và nhớ rằng nhiều tham số mà ít ảnh thì mạng học thuộc, đó là quá khớp."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: trường tiếp nhận, phần thân, đặc trưng, đầu phân loại"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thuật ngữ</th><th>nghĩa</th></tr>
+          <tr><td><b>trường tiếp nhận</b> $r$</td><td>số điểm ảnh (theo một chiều) mà một ô ở lớp sâu chịu ảnh hưởng</td></tr>
+          <tr><td><b>phần thân</b></td><td>các lớp tích chập đầu; học trên một bộ ảnh lớn rồi <b>đóng băng</b> (không đổi trọng số)</td></tr>
+          <tr><td><b>đặc trưng</b></td><td>vector số ở cuối phần thân; mạng có lối tắt 18 lớp cho 512 số</td></tr>
+          <tr><td><b>đầu phân loại</b></td><td>lớp đầy đủ cuối cùng: 512 số vào, một điểm cho mỗi lớp; đây là phần học lại</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bảng giới thiệu bốn thuật ngữ. Trường tiếp nhận, chữ r, là số điểm ảnh theo một chiều mà một ô ở lớp sâu chịu ảnh hưởng. Phần thân là các lớp tích chập đầu, học trên một bộ ảnh lớn rồi đóng băng, tức không đổi trọng số nữa. Đặc trưng là vector số ở cuối phần thân, mạng có lối tắt 18 lớp cho 512 số. Đầu phân loại là lớp đầy đủ cuối cùng, nhận 512 số và cho một điểm mỗi lớp, và đây là phần ta học lại."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Mỗi lớp 3 × 3 nhìn rộng thêm 2 điểm ảnh"
+    checks:
+      - "[alg.cvi_receptive_field([(3, 1)] * n) for n in (1, 2, 3)] == [3, 5, 7]"
+      - "(lambda f: sum(1 for i in range(15) if f(np.eye(15)[i])[4] != 0))(lambda x: np.convolve(np.convolve(np.convolve(x, np.ones(3), 'valid'), np.ones(3), 'valid'), np.ones(3), 'valid')) == 7"
+    steps:
+      - show: |
+          <div><svg width="1500" height="380" viewBox="0 0 1500 380">
+          <g stroke="#94a3b8" stroke-width="2" fill="none"><line x1="675" y1="90" x2="625" y2="130"/><line x1="725" y1="90" x2="775" y2="130"/><line x1="625" y1="180" x2="575" y2="220"/><line x1="775" y1="180" x2="825" y2="220"/><line x1="575" y1="270" x2="525" y2="310"/><line x1="825" y1="270" x2="875" y2="310"/></g>
+          <g stroke="#1f2937" stroke-width="2">
+          <rect x="675" y="40" width="50" height="50" fill="#059669"/>
+          <rect x="625" y="130" width="50" height="50" fill="#a7f3d0"/><rect x="675" y="130" width="50" height="50" fill="#a7f3d0"/><rect x="725" y="130" width="50" height="50" fill="#a7f3d0"/>
+          <rect x="575" y="220" width="50" height="50" fill="#dbeafe"/><rect x="625" y="220" width="50" height="50" fill="#dbeafe"/><rect x="675" y="220" width="50" height="50" fill="#dbeafe"/><rect x="725" y="220" width="50" height="50" fill="#dbeafe"/><rect x="775" y="220" width="50" height="50" fill="#dbeafe"/>
+          <rect x="525" y="310" width="50" height="50" fill="#fde68a"/><rect x="575" y="310" width="50" height="50" fill="#fde68a"/><rect x="625" y="310" width="50" height="50" fill="#fde68a"/><rect x="675" y="310" width="50" height="50" fill="#fde68a"/><rect x="725" y="310" width="50" height="50" fill="#fde68a"/><rect x="775" y="310" width="50" height="50" fill="#fde68a"/><rect x="825" y="310" width="50" height="50" fill="#fde68a"/>
+          </g>
+          <g font-size="22" fill="#1f2937" text-anchor="end"><text x="560" y="73">lớp 3: một ô</text><text x="510" y="163">lớp 2: 3 ô</text><text x="460" y="253">lớp 1: 5 ô</text><text x="410" y="343">ảnh: 7 điểm ảnh</text></g>
+          <g font-size="22" fill="#6b7280"><text x="920" y="163">mỗi ô nhìn 3 ô bên dưới</text><text x="920" y="253">hai ô kề nhau lệch 1 → thêm 2</text><text x="920" y="343">ba lớp 3 × 3: r = 1 + 2 + 2 + 2 = 7</text></g>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình đi từ trên xuống, một ô ở lớp 3 nhìn 3 ô của lớp 2 bên dưới nó. Ba ô đó, mỗi ô lại nhìn 3 ô của lớp 1, nhưng chúng kề nhau nên chỉ thêm 1 ô mỗi bên, tổng cộng 5 ô. Năm ô đó nhìn 7 điểm ảnh của ảnh gốc. Vậy ba lớp 3 nhân 3 cho trường tiếp nhận bằng 1 cộng 3 nhân 2, bằng 7 điểm ảnh, vẫn rất nhỏ so với ảnh 224."
+      - clear: true
+        show: |
+          <div><svg width="1500" height="300" viewBox="0 0 1500 300">
+          <defs><marker id="cv7a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs>
+          <g stroke="#1f2937" stroke-width="2">
+          <rect x="40" y="90" width="170" height="120" rx="10" fill="#fef3c7"/>
+          <rect x="300" y="70" width="400" height="160" rx="14" fill="#e5e7eb" stroke-dasharray="10 6"/>
+          <rect x="790" y="90" width="170" height="120" rx="10" fill="#dbeafe"/>
+          <rect x="1050" y="90" width="230" height="120" rx="10" fill="#d1fae5" stroke="#059669" stroke-width="3"/>
+          <rect x="1350" y="90" width="120" height="120" rx="10" fill="#ffffff"/></g>
+          <g stroke="#1f2937" stroke-width="3"><line x1="215" y1="150" x2="292" y2="150" marker-end="url(#cv7a)"/><line x1="705" y1="150" x2="782" y2="150" marker-end="url(#cv7a)"/><line x1="965" y1="150" x2="1042" y2="150" marker-end="url(#cv7a)"/><line x1="1285" y1="150" x2="1342" y2="150" marker-end="url(#cv7a)"/></g>
+          <g font-size="22" fill="#1f2937" text-anchor="middle">
+          <text x="125" y="145">ảnh</text><text x="125" y="178">224 × 224</text>
+          <text x="500" y="130" font-weight="bold">phần thân: đóng băng</text><text x="500" y="165">học sẵn trên hơn một triệu ảnh</text><text x="500" y="198">7 × 7 × 512, lấy trung bình</text>
+          <text x="875" y="145">đặc trưng</text><text x="875" y="178">512 số</text>
+          <text x="1165" y="135" font-weight="bold">đầu phân loại</text><text x="1165" y="168">5130 tham số</text><text x="1165" y="198" fill="#059669">chỉ phần này học</text>
+          <text x="1410" y="145">10</text><text x="1410" y="178">điểm</text></g>
+          <text x="750" y="275" font-size="21" fill="#6b7280" text-anchor="middle">lớp đầu học đặc trưng chung (nét, vệt màu); lớp cuối riêng cho bài toán — nên thay đúng lớp cuối</text>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình thứ hai là học chuyển giao. Ảnh 224 nhân 224 đi qua phần thân màu xám, đã học sẵn trên hơn một triệu ảnh và được đóng băng. Phần thân cho ra lưới 7 nhân 7 với 512 kênh, lấy trung bình thành 512 số đặc trưng. Chỉ đầu phân loại màu lục với 5130 tham số được học, cho ra 10 điểm, mỗi loại lỗi một điểm."
+
+  # ───────────────────────── 5. SUY RA ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra trường tiếp nhận khi có bước nhảy"
+    checks:
+      - "alg.cvi_receptive_field([(3, 1)]) == 3 and alg.cvi_receptive_field([(3, 1), (3, 1)]) == 3 + 2 * 1"
+      - "alg.cvi_receptive_field([(7, 2)]) == 7 and alg.cvi_receptive_field([(7, 2), (3, 2)]) == 7 + 2 * 2 == 11 and alg.cvi_receptive_field([(7, 2), (3, 2), (3, 1)]) == 11 + 2 * 4 == 19"
+    steps:
+      - show: |
+          <p><b>Bước 1 — thêm một lớp.</b> Lớp mới cạnh $k$ nhìn $k$ ô liền nhau của lớp dưới; các ô này lệch nhau $j$ điểm ảnh, với $j$ là tích các bước nhảy phía trước. Nên mỗi lớp thêm $(k - 1) \cdot j$:</p>
+          $$r \leftarrow r + (k - 1) \cdot j$$
+          <p class="note">Làm thử hai lớp 3 × 3 bước 1: $r = 3 + 2 \cdot 1 = 5$, đúng như hình.</p>
+        introduces: [assign]
+        focus: [1, 1, 1, 2, 3]
+        say: "Bước một, thêm một lớp. Lớp mới cạnh k nhìn k ô liền nhau của lớp dưới, các ô này lệch nhau j điểm ảnh, với j là tích các bước nhảy phía trước. Vì vậy mỗi lớp thêm k trừ 1 nhân j. Mũi tên trái nghĩa là thay r bằng giá trị mới. Làm thử hai lớp 3 nhân 3 bước 1, r bằng 3 cộng 2 nhân 1, bằng 5, đúng như hình."
+      - show: |
+          <p><b>Bước 2 — bước nhảy làm $j$ gấp đôi.</b> Tầng đầu của mạng có lối tắt (bảng 1, He và cộng sự 2015): tích chập 7 × 7 bước 2, rồi gộp 3 × 3 bước 2, rồi tích chập 3 × 3.</p>
+          <table class="t"><tr><th>lớp</th><th>$k$, bước</th><th>$j$ trước lớp</th><th>$r$ sau lớp</th></tr>
+          <tr><td>tích chập đầu</td><td>7, bước 2</td><td>1</td><td>7</td></tr>
+          <tr><td>gộp</td><td>3, bước 2</td><td>2</td><td>$7 + 2 \cdot 2 = 11$</td></tr>
+          <tr><td>tích chập 3 × 3</td><td>3, bước 1</td><td>4</td><td>$11 + 2 \cdot 4 = \hlg{19}$</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Bước hai, bước nhảy làm j gấp đôi. Tầng đầu của mạng có lối tắt, theo bảng 1 của bài báo năm 2015, là tích chập 7 nhân 7 bước 2, cho r bằng 7. Tiếp theo là lớp gộp 3 nhân 3 bước 2, lúc này j bằng 2, nên r bằng 7 cộng 2 nhân 2, bằng 11. Rồi một lớp 3 nhân 3, j đã là 4, nên r bằng 11 cộng 2 nhân 4, bằng 19."
+      - clear: true
+        show: |
+          <p class="note">So sánh: ba lớp 3 × 3 không bước nhảy chỉ cho 7; ba lớp có hai bước nhảy cho 19. Bước nhảy và gộp làm trường tiếp nhận tăng theo cấp số nhân, nhờ đó lớp sâu “thấy” được cả vật lớn.</p>
+        say: "So sánh lại, ba lớp 3 nhân 3 không bước nhảy chỉ cho 7, còn ba lớp có hai bước nhảy cho 19. Vì bước nhảy làm j gấp đôi mỗi lần, nên trường tiếp nhận tăng rất nhanh, nhờ đó lớp sâu thấy được cả vật lớn."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Đếm tham số, tính điểm, và chọn phép tăng cường"
+    checks:
+      - "512 * 10 + 10 == 5130"
+      - "3 * 3 * 512 * 512 + 512 == 2_359_808 and round(2_359_808 / 5130) == 460"
+      - "(lambda W, b, x: [round(sum(wi * xi for wi, xi in zip(w, x)) + bb, 3) for w, bb in zip(W, b)])([[0.5, -1, 1, 0], [1, 1, -0.5, 0.5]], [0.1, 0], [1, 0, 2, 1]) == [2.6, 0.5]"
+      - "alg.cvi_seg7_transform(6, 'rot180') == 9 and alg.cvi_seg7_transform(2, 'flip') == 5 and alg.cvi_seg7_transform(6, 'flip') is None and alg.cvi_seg7_transform(8, 'flip') == 8"
+    steps:
+      - show: |
+          <p><b>Bước 1 — tham số của đầu phân loại.</b> 512 đặc trưng vào, 10 loại lỗi ra:</p>
+          $$512 \cdot 10 + 10 = \hlg{5130}$$
+          <p><b>Bước 2 — so với một lớp của phần thân.</b> Khối cuối có lớp 3 × 3, 512 kênh vào, 512 bộ lọc: $3 \cdot 3 \cdot 512 \cdot 512 + 512 = 2\,359\,808$ — gấp khoảng <b>460</b> lần cả đầu phân loại.</p>
+        focus: [1, 2, 3]
+        say: "Bước một, đầu phân loại nhận 512 đặc trưng và cho 10 loại lỗi, nên theo công thức lớp đầy đủ có 512 nhân 10 cộng 10, bằng 5130 tham số. Bước hai, so với chỉ một lớp của phần thân, lớp 3 nhân 3 với 512 kênh vào và 512 bộ lọc có 2 triệu 359 nghìn 808 tham số. Con số đó gấp khoảng 460 lần cả đầu phân loại, nên với 300 ảnh, học lại lớp cuối an toàn hơn nhiều."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — đầu phân loại tính điểm</b> (thu nhỏ: 4 đặc trưng $x = (1, 0, 2, 1)$, 2 lớp):</p>
+          <table class="t"><tr><th>lớp</th><th>trọng số</th><th>tự do</th><th>điểm</th></tr>
+          <tr><td>trầy xước</td><td>0,5; −1; 1; 0</td><td>0,1</td><td>$0{,}5 + 0 + 2 + 0 + 0{,}1 = \hlg{2{,}6}$</td></tr>
+          <tr><td>móp</td><td>1; 1; −0,5; 0,5</td><td>0</td><td>$1 + 0 - 1 + 0{,}5 = 0{,}5$</td></tr></table>
+          <p class="note">Chọn lớp điểm cao nhất: trầy xước. Học lại đầu phân loại là chỉnh 10 số này ($4 \cdot 2 + 2$).</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Bước ba, xem đầu phân loại tính điểm trên một bản thu nhỏ với 4 đặc trưng và 2 lớp. Lớp trầy xước nhân từng đặc trưng với trọng số rồi cộng hệ số tự do, được 2 phẩy 6. Lớp móp được 0 phẩy 5. Máy chọn lớp điểm cao nhất là trầy xước, và học lại đầu phân loại chính là chỉnh 10 con số này."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>Bước 4 — tăng cường trên chữ số bảy đoạn</th><th>kết quả</th><th>giữ nhãn?</th></tr>
+          <tr><td>xoay 180° chữ 6</td><td>thành 9</td><td class="red">không — dạy mô hình “6 là 9”</td></tr>
+          <tr><td>lật ngang chữ 2</td><td>thành 5</td><td class="red">không</td></tr>
+          <tr><td>lật ngang chữ 6</td><td>không còn là chữ số nào</td><td class="red">không</td></tr>
+          <tr><td>dịch 2 điểm ảnh, đổi sáng tối nhẹ</td><td>vẫn là chữ cũ</td><td>có</td></tr></table>
+          <p class="note">Ảnh tự nhiên (con mèo, cái cốc) thì lật ngang vẫn giữ nhãn — chính bài báo năm 2015 dùng lật ngang khi học trên một triệu ảnh. Chữ số, chữ viết, biển báo trái phải thì không.</p>
+        focus: [0, "1.2", "1.3", "1.4", "1.5", 2]
+        say: "Bước bốn là chọn phép tăng cường, thử trên chữ số bảy đoạn. Xoay 180 độ chữ 6 thì thành 9, nên nếu vẫn gán nhãn 6 là dạy mô hình điều sai. Lật ngang chữ 2 thì thành 5. Lật ngang chữ 6 thì không còn là chữ số nào. Dịch vài điểm ảnh hay đổi sáng tối nhẹ thì vẫn là chữ cũ, nên đó là phép tăng cường an toàn. Với ảnh tự nhiên như con mèo hay cái cốc thì lật ngang vẫn giữ nhãn, nhưng chữ số và biển báo trái phải thì không."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: đếm trường tiếp nhận bằng cách chọc từng điểm ảnh"
+    checks:
+      - "(lambda f: [i for i in range(15) if f(np.eye(15)[i])[4] != 0])(lambda x: np.convolve(np.convolve(np.convolve(x, np.ones(3), 'valid'), np.ones(3), 'valid'), np.ones(3), 'valid')) == [4, 5, 6, 7, 8, 9, 10]"
+      - "len(np.convolve(np.convolve(np.convolve(np.zeros(15), np.ones(3), 'valid'), np.ones(3), 'valid'), np.ones(3), 'valid')) == 9"
+    steps:
+      - show: |
+          <p><b>Đường khác:</b> không dùng công thức. Cho một hàng 15 điểm ảnh toàn 0, bật <b>một</b> điểm thành 1, chạy qua ba lớp 3 × 3 (mọi trọng số bằng 1), rồi xem ô ra số 4 có khác 0 không. Lặp lại cho từng vị trí:</p>
+          <table class="t"><tr><th>điểm ảnh bật</th><th>0 … 3</th><th>4 … 10</th><th>11 … 14</th></tr>
+          <tr><td>ô ra số 4 khác 0?</td><td>không</td><td>$\hlg{có — 7 vị trí}$</td><td>không</td></tr></table>
+        introduces: [dots]
+        focus: [1, 1, 2, 2]
+        say: "Kiểm bằng đường khác, không dùng công thức. Ta cho một hàng 15 điểm ảnh toàn 0, bật một điểm thành 1, chạy qua ba lớp 3 nhân 3 với mọi trọng số bằng 1, rồi xem ô ra số 4 có khác 0 không. Lặp lại cho từng vị trí, chỉ các điểm từ 4 tới 10 làm ô đó thay đổi, dấu ba chấm nghĩa là các số ở giữa. Đúng 7 vị trí, khớp với công thức 1 cộng 3 nhân 2."
+
+  # ───────────────────────── 8. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi của người đã đi làm"
+    checks:
+      - "3 * 3 * 512 * 512 + 512 > 300 * 1000"
+      - "alg.cvi_seg7_transform(2, 'flip') == 5 and alg.cvi_seg7_transform(6, 'rot180') == 9"
+      - "alg.cvi_receptive_field([(3, 1)] * 3) == 7 and 7 < 100"
+      - "(180 - 120) / 60 == 1.0 and round(180 / 255, 3) == 0.706 and (60 - 120) / 60 == -1.0 and round(60 / 255, 3) == 0.235"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Học lại cả mạng với vài trăm ảnh <b class="red">(học thuộc, như phần mở đầu)</b>
+          <br><span class="note">Một lớp của phần thân đã có hơn 2 triệu tham số, mà chỉ có 300 ảnh. Bài báo năm 2014 về khả năng chuyển giao ghi: dữ liệu đích nhỏ và nhiều tham số thì tinh chỉnh dễ quá khớp, nên đặc trưng thường được đóng băng.</span></div>
+        focus: [1, 1, 1]
+        say: "Lỗi thứ nhất là học lại cả mạng với vài trăm ảnh, nên mạng học thuộc như ở phần mở đầu. Một lớp của phần thân đã có hơn 2 triệu tham số, mà chỉ có 300 ảnh. Bài báo năm 2014 về khả năng chuyển giao ghi rằng khi dữ liệu đích nhỏ và nhiều tham số thì tinh chỉnh dễ quá khớp, nên đặc trưng thường được đóng băng."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Tăng cường làm đổi nhãn <b class="red">(xoay chữ số, lật biển báo)</b>
+          <br><span class="note">Lật ngang chữ 2 thành 5; lật biển “rẽ trái” thành “rẽ phải”. Phép thử: in vài ảnh sau tăng cường kèm nhãn, nhìn bằng mắt trước khi huấn luyện.</span></div>
+        focus: [1, 1]
+        say: "Lỗi thứ hai là tăng cường làm đổi nhãn, ví dụ xoay chữ số hay lật biển báo, lật ngang chữ 2 thành 5 và lật biển rẽ trái thành rẽ phải. Phép thử là in vài ảnh sau tăng cường kèm nhãn, rồi nhìn bằng mắt trước khi huấn luyện."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Dùng mạng nông cho vật lớn <b class="red">(trường tiếp nhận 7 điểm ảnh, vật rộng 100)</b>
+          <br><span class="note">Ba lớp 3 × 3 không bước nhảy chỉ nhìn 7 điểm ảnh: mỗi ô ra chỉ thấy một mảnh vân của vật rộng 100 điểm ảnh. Phép thử: tính $r$ của lớp cuối và so với cỡ vật trong ảnh.</span></div>
+        focus: [1, 1]
+        say: "Lỗi thứ ba là dùng mạng nông cho vật lớn, khi trường tiếp nhận chỉ 7 điểm ảnh mà vật rộng 100. Mỗi ô ra chỉ thấy một mảnh vân của vật, nên phép thử là tính trường tiếp nhận của lớp cuối và so với cỡ vật trong ảnh."
+      - show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Chuẩn hoá đầu vào khác lúc mạng được học sẵn <b class="red">(điểm tối thành điểm sáng)</b></div>
+          <table class="t"><tr><th>điểm ảnh</th><th>lúc học sẵn: $\frac{x - 120}{60}$</th><th>lúc dùng, quên trừ: $\frac{x}{255}$</th></tr>
+          <tr><td>sáng, 180</td><td>1,0</td><td>0,706</td></tr>
+          <tr><td>tối, 60</td><td>−1,0</td><td class="red">0,235 — đổi dấu</td></tr></table>
+          <p class="note">Bài báo năm 2015 trừ trung bình từng điểm ảnh khi học. Mạng chạy vẫn ra kết quả, chỉ âm thầm kém đi. Lưu phép chuẩn hoá cùng trọng số, và thử một ảnh mẫu: đặc trưng phải khớp với lúc học.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, chuẩn hoá đầu vào khác lúc mạng được học sẵn, làm điểm tối thành điểm sáng. Giả sử lúc học sẵn, điểm ảnh được trừ 120 rồi chia 60, nên điểm sáng 180 thành 1. Lúc dùng lại quên trừ, chỉ chia 255, nên điểm tối 60 thành 0 phẩy 235 thay vì âm 1, đổi cả dấu. Mạng vẫn chạy và vẫn ra kết quả, chỉ âm thầm kém đi, nên hãy lưu phép chuẩn hoá cùng trọng số và thử một ảnh mẫu xem đặc trưng có khớp lúc học không."
+
+  # ───────────────────────── 9. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: trường tiếp nhận, số tham số, và chọn cách học"
+    checks:
+      - "alg.cvi_receptive_field([(3, 1)] * 5) == 11"
+      - "512 * 3 + 3 == 1539"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Năm lớp 3 × 3, bước 1. Trường tiếp nhận của lớp cuối?</td></tr>
+          <tr><td>2</td><td>Đặc trưng 512 số, phân loại 3 loại quả. Đầu phân loại có bao nhiêu tham số?</td></tr>
+          <tr><td>3</td><td>Bạn có 2000 ảnh của 3 loại quả. Đóng băng phần thân, tinh chỉnh khối cuối, hay học lại cả mạng?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", 0]
+        say: "Bây giờ đến lượt bạn. Câu một, năm lớp 3 nhân 3 bước 1, trường tiếp nhận của lớp cuối là bao nhiêu? Câu hai, đặc trưng 512 số, phân loại 3 loại quả, đầu phân loại có bao nhiêu tham số? Câu ba, bạn có 2000 ảnh của 3 loại quả, nên đóng băng phần thân, tinh chỉnh khối cuối, hay học lại cả mạng? Dừng video và làm ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <p><b>Câu 1.</b> Mỗi lớp thêm $(3 - 1) \cdot 1 = 2$: $r = 1 + 5 \cdot 2 = \hlg{11}$.</p>
+          <p><b>Câu 2.</b> $512 \cdot 3 + 3 = \hlg{1539}$ tham số.</p>
+        focus: [1, 2]
+        say: "Câu một, mỗi lớp thêm 3 trừ 1 nhân 1, bằng 2, nên r bằng 1 cộng 5 nhân 2, bằng 11. Câu hai, theo công thức lớp đầy đủ, 512 nhân 3 cộng 3, bằng 1539 tham số."
+      - show: |
+          <table class="t"><tr><th>câu 3</th><th>được</th><th>mất</th></tr>
+          <tr><td>đóng băng, chỉ học lớp cuối</td><td>nhanh, khó quá khớp</td><td>đặc trưng có thể chưa hợp quả của bạn</td></tr>
+          <tr><td>tinh chỉnh khối cuối, tốc độ học nhỏ</td><td>đặc trưng riêng hơn, thường chính xác hơn</td><td>cần tập kiểm định để dừng đúng lúc</td></tr>
+          <tr><td>học lại cả mạng</td><td>tự do nhất</td><td class="red">hàng triệu tham số với 2000 ảnh: dễ học thuộc</td></tr></table>
+          <p class="note">Làm theo thứ tự: đóng băng trước làm mốc, rồi mới thử tinh chỉnh; chỉ giữ cách mới nếu nó hơn trên tập kiểm định.</p>
+        focus: [0, "1.2", "1.3", "1.4", 2]
+        say: "Câu ba là một đánh đổi. Đóng băng và chỉ học lớp cuối thì nhanh và khó quá khớp, nhưng đặc trưng có thể chưa hợp với quả của bạn. Tinh chỉnh khối cuối với tốc độ học nhỏ cho đặc trưng riêng hơn, thường chính xác hơn, nhưng cần tập kiểm định để dừng đúng lúc. Học lại cả mạng thì tự do nhất, nhưng hàng triệu tham số với 2000 ảnh rất dễ học thuộc. Hãy đóng băng trước để làm mốc, rồi mới thử tinh chỉnh, và chỉ giữ cách mới nếu nó hơn trên tập kiểm định."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">mỗi lớp nhìn rộng thêm (k − 1) nhân j</span><span class="a">→</span>
+          <span class="n">bước nhảy làm trường tiếp nhận tăng nhanh</span><span class="a">→</span>
+          <span class="n">lớp đầu chung, lớp cuối riêng</span><span class="a">→</span>
+          <span class="n">đóng băng thân, học 512 nhân 10 cộng 10 = 5130 tham số</span><span class="a">→</span>
+          <span class="n">tăng cường giữ nhãn, chuẩn hoá giống lúc học</span></div>
+        say: "Tổng kết lại, mỗi lớp nhìn rộng thêm k trừ 1 nhân j điểm ảnh, và bước nhảy làm trường tiếp nhận tăng nhanh. Lớp đầu học đặc trưng chung, lớp cuối riêng cho bài toán, nên ta đóng băng phần thân và chỉ học 5130 tham số của đầu phân loại. Tăng cường phải giữ nhãn, và chuẩn hoá đầu vào phải giống lúc học."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> khi ít dữ liệu, đừng hỏi “mạng nào mạnh nhất?”, hãy hỏi “phải học bao nhiêu tham số, từ bao nhiêu ảnh?” — và mọi thứ đưa vào mạng phải giống hệt lúc nó được học.</div>
+        say: "Điều cần mang theo, khi ít dữ liệu, đừng hỏi mạng nào mạnh nhất, hãy hỏi phải học bao nhiêu tham số từ bao nhiêu ảnh. Và mọi thứ đưa vào mạng phải giống hệt lúc nó được học."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 8): <b>phát hiện đối tượng</b> — không chỉ nói ảnh có gì mà khoanh hộp quanh từng vật, đo hộp đoán khớp hộp thật bao nhiêu, và bỏ các hộp trùng nhau.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 8, ta học phát hiện đối tượng, không chỉ nói ảnh có gì mà khoanh hộp quanh từng vật. Ta sẽ đo hộp đoán khớp hộp thật bao nhiêu, và bỏ các hộp trùng nhau. Hẹn gặp bạn ở bài tiếp theo."

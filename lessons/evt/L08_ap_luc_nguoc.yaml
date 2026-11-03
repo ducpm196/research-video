@@ -1,0 +1,203 @@
+id: L08
+course: EVT
+series: "EVT · Kiến trúc hướng sự kiện"
+title: "Bài 8 — Áp lực ngược và độ trễ tiêu thụ"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/evt.yaml L08; audit/evt/verify_evt.py L08; Reactive Streams 1.0 (2015) — áp lực ngược; M. Kleppmann (2017), chương 11 — người tiêu thụ chậm; bài 2"
+assumes: [arith, cdot, frac]
+# Quy ước: tồn đọng (số sự kiện chưa xử lý) tăng (đến − xử lý) mỗi giây (alg.consumer_lag); xả hết sau tồn / (xử lý − đến) giây nếu xử lý nhanh hơn đến (alg.drain_seconds).
+#   Thời gian trễ (sự kiện cũ nhất đã chờ) khi đến đều = tồn / tốc độ đến. 1200, 1000, 1500 sự kiện mỗi giây là SỐ MINH HOẠ.
+objectives:
+  - "Tính tốc độ tăng độ trễ tiêu thụ"
+  - "Tính thời gian xả hết tồn đọng sau khi tăng công suất"
+  - "Cảnh báo theo thời gian trễ, không chỉ theo số sự kiện tồn"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Giờ cao điểm, thông báo đến chậm 10 phút"
+    checks:
+      - "alg.consumer_lag(1200, 1000, 3600) == 720000"
+    steps:
+      - show: |
+          <p>Giờ khuyến mãi, sự kiện đổ vào 1200 mỗi giây, dịch vụ thông báo chỉ xử lý được 1000. Không có gì “lỗi”, không có cảnh báo đỏ nào — nhưng sau một giờ, khách nhận thông báo “đơn đã xác nhận” chậm 10 phút.</p>
+          <div class="box key">Hôm nay: <b>độ trễ tiêu thụ</b> — tính tồn đọng, tính thời gian xả, và cảnh báo đúng chỉ số.</div>
+        focus: [1, 1, 2]
+        say: "Chào bạn, giờ khuyến mãi, sự kiện đổ vào 1200 mỗi giây, còn dịch vụ thông báo chỉ xử lý được 1000. Không có gì lỗi, không có cảnh báo đỏ nào, nhưng sau một giờ, khách nhận thông báo đơn đã xác nhận chậm 10 phút. Hôm nay ta học độ trễ tiêu thụ, tính tồn đọng, tính thời gian xả, và cảnh báo đúng chỉ số."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: bể nước có vòi vào và vòi ra"
+    checks:
+      - "(5 - 3) * 10 == 20 and 20 / (7 - 5) == 10 and round(20 / 7, 1) == 2.9"
+      - "30 / 3 == 10"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bể nước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>vào 5 lít, ra 3 lít mỗi phút, trong 10 phút</td><td>$(5 - 3) \cdot 10$</td><td>đọng 20 lít</td></tr>
+          <tr><td>mở vòi ra lên 7 lít, vòi vào vẫn 5</td><td>$\frac{20}{7 - 5}$</td><td>cạn sau 10 phút</td></tr>
+          <tr><td>quên vòi vào vẫn chảy</td><td>$\frac{20}{7}$</td><td>≈ 2,9 phút: sai</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Trước hết, ôn bài toán bể nước có vòi vào và vòi ra. Vòi vào 5 lít, vòi ra 3 lít mỗi phút, mỗi phút đọng lại 5 trừ 3 bằng 2 lít, nên sau 10 phút đọng 20 lít. Mở vòi ra lên 7 lít trong khi vòi vào vẫn chảy 5, mỗi phút bể chỉ vơi 7 trừ 5 bằng 2 lít, nên 20 lít cạn sau 10 phút. Nếu quên rằng vòi vào vẫn chảy mà lấy 20 chia 7, ta được khoảng 2 phẩy 9 phút, một con số sai."
+      - show: |
+          <p>Một hàng người, mỗi phút có 3 người tới. Đang có 30 người đứng chờ, tới đều, thì người đứng đầu hàng đã tới từ $\frac{30}{3} = 10$ phút trước.</p>
+        say: "Thêm một ý nữa, một hàng người, mỗi phút có 3 người tới. Đang có 30 người đứng chờ, và họ tới đều, thì người đứng đầu hàng đã tới từ 30 chia 3, bằng 10 phút trước. Số người chờ chia tốc độ tới cho biết người cũ nhất đã chờ bao lâu."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: tồn đọng, thời gian xả, áp lực ngược"
+    steps:
+      - show: |
+          <table class="t"><tr><th>đại lượng</th><th>công thức</th></tr>
+          <tr><td><b>tồn đọng</b> sau $T$ giây</td><td>(đến − xử lý) $\cdot\, T$, nếu đến nhanh hơn</td></tr>
+          <tr><td><b>thời gian xả</b></td><td>tồn đọng / (xử lý − đến), chỉ khi xử lý nhanh hơn đến</td></tr>
+          <tr><td><b>thời gian trễ</b></td><td>sự kiện cũ nhất đã chờ bao lâu ≈ tồn đọng / tốc độ đến</td></tr></table>
+          <p><b>Áp lực ngược</b>: bên nhận báo cho bên gửi “chậm lại”, hoặc hàng đợi có giới hạn rồi từ chối — thay vì nhận mãi rồi sập.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        introduces: [cdot]
+        say: "Bảng có ba đại lượng. Tồn đọng sau T giây bằng tốc độ đến trừ tốc độ xử lý, nhân T, nếu đến nhanh hơn. Thời gian xả bằng tồn đọng chia cho tốc độ xử lý trừ tốc độ đến, và chỉ có nghĩa khi xử lý nhanh hơn đến. Thời gian trễ là sự kiện cũ nhất đã chờ bao lâu, xấp xỉ tồn đọng chia tốc độ đến. Áp lực ngược là bên nhận báo cho bên gửi hãy chậm lại, hoặc hàng đợi có giới hạn rồi từ chối, thay vì nhận mãi rồi sập."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hàng đợi đầy dần, rồi vơi dần"
+    checks:
+      - "200 * 3600 == 720000 and 1500 - 1200 == 300 and 720000 / 300 == 2400 and 2400 / 60 == 40 and 60 + 40 == 100"
+    steps:
+      - show: |
+          <div><svg width="1500" height="490" viewBox="0 0 1500 490"><defs><marker id="arE8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs><rect x="60" y="65" width="200" height="70" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="160" y="108" font-size="24" text-anchor="middle" fill="#1f2937">bên gửi</text><rect x="1130" y="65" width="240" height="70" rx="10" fill="#d1fae5" stroke="#059669" stroke-width="3"/><text x="1250" y="108" font-size="24" text-anchor="middle" fill="#1f2937">người tiêu thụ</text><rect x="500" y="70" width="44" height="60" fill="#fde7d9" stroke="#eb6834" stroke-width="2"/><rect x="550" y="70" width="44" height="60" fill="#fde7d9" stroke="#eb6834" stroke-width="2"/><rect x="600" y="70" width="44" height="60" fill="#fde7d9" stroke="#eb6834" stroke-width="2"/><rect x="650" y="70" width="44" height="60" fill="#fde7d9" stroke="#eb6834" stroke-width="2"/><rect x="700" y="70" width="44" height="60" fill="#fde7d9" stroke="#eb6834" stroke-width="2"/><rect x="750" y="70" width="44" height="60" fill="#fde7d9" stroke="#eb6834" stroke-width="2"/><rect x="800" y="70" width="44" height="60" fill="#fde7d9" stroke="#eb6834" stroke-width="2"/><rect x="850" y="70" width="44" height="60" fill="#fde7d9" stroke="#eb6834" stroke-width="2"/><g stroke="#1f2937" stroke-width="3"><line x1="265" y1="100" x2="490" y2="100" marker-end="url(#arE8)"/><line x1="900" y1="100" x2="1122" y2="100" marker-end="url(#arE8)"/></g><g font-size="21" text-anchor="middle" fill="#1f2937"><text x="378" y="85">đến 1200 mỗi giây</text><text x="1012" y="85">xử lý 1000 mỗi giây</text><text x="696" y="165" fill="#eb6834" font-weight="bold">hàng đợi: mỗi giây đọng thêm 200</text></g><line x1="150" y1="430" x2="1294" y2="430" stroke="#1f2937" stroke-width="2"/><line x1="150" y1="424" x2="150" y2="436" stroke="#1f2937" stroke-width="2"/><text x="150" y="462" font-size="20" text-anchor="middle" fill="#1f2937">0</text><line x1="370" y1="424" x2="370" y2="436" stroke="#1f2937" stroke-width="2"/><text x="370" y="462" font-size="20" text-anchor="middle" fill="#1f2937">20</text><line x1="590" y1="424" x2="590" y2="436" stroke="#1f2937" stroke-width="2"/><text x="590" y="462" font-size="20" text-anchor="middle" fill="#1f2937">40</text><line x1="810" y1="424" x2="810" y2="436" stroke="#1f2937" stroke-width="2"/><text x="810" y="462" font-size="20" text-anchor="middle" fill="#1f2937">60</text><line x1="1030" y1="424" x2="1030" y2="436" stroke="#1f2937" stroke-width="2"/><text x="1030" y="462" font-size="20" text-anchor="middle" fill="#1f2937">80</text><line x1="1250" y1="424" x2="1250" y2="436" stroke="#1f2937" stroke-width="2"/><text x="1250" y="462" font-size="20" text-anchor="middle" fill="#1f2937">100</text><text x="1304" y="462" font-size="20" fill="#1f2937">phút</text><polyline points="150,430.0 810,260.0" fill="none" stroke="#eb6834" stroke-width="5"/><polyline points="810,260.0 1250,430.0" fill="none" stroke="#059669" stroke-width="5"/><line x1="810" y1="260.0" x2="810" y2="430" stroke="#6b7280" stroke-width="2" stroke-dasharray="8 8"/><g font-size="21"><text x="798" y="250" text-anchor="end" fill="#eb6834" font-weight="bold">720 000 sự kiện tồn</text><text x="822" y="250" fill="#059669" font-weight="bold">nâng lên 1500 mỗi giây</text><text x="200" y="320" fill="#eb6834">tăng 200 mỗi giây</text><text x="1085" y="315" fill="#059669">giảm 300 mỗi giây</text><text x="1258" y="415" fill="#059669">xả xong</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Phía trên là đường đi của sự kiện, bên gửi đẩy vào 1200 mỗi giây, người tiêu thụ chỉ lấy ra 1000 mỗi giây, nên mỗi giây hàng đợi đọng thêm 200. Phía dưới là số sự kiện tồn theo phút, đường cam đi lên đều trong 60 phút đầu, tới 720 nghìn sự kiện. Lúc đó ta nâng người tiêu thụ lên 1500 mỗi giây, nhưng bên gửi vẫn đẩy 1200, nên hàng đợi chỉ vơi 300 mỗi giây, theo đường xanh. Phải tới phút thứ 100 hàng đợi mới cạn, tức là 40 phút sau khi nâng."
+
+  - id: example
+    kind: example
+    title: "Đến 1200, xử lý 1000, trong một giờ"
+    checks:
+      - "alg.consumer_lag(1200, 1000, 3600) == 720000 and alg.drain_seconds(720000, 1200, 1500) == 2400 and 720000 / 1200 == 600"
+    steps:
+      - show: |
+          <p><b>Bước 1 — tồn đọng.</b> Mỗi giây dư $1200 - 1000 = 200$ sự kiện; một giờ là 3600 giây:</p>
+          $$(1200 - 1000) \cdot 3600 = \hl{720\,000} \text{ sự kiện}$$
+        focus: [1, 2]
+        say: "Bước một, tính tồn đọng. Mỗi giây có 1200 trừ 1000, bằng 200 sự kiện chưa được xử lý, và một giờ có 3600 giây, nên tồn đọng sau 1 giờ là 200 nhân 3600, bằng 720 nghìn sự kiện."
+      - show: |
+          <p><b>Bước 2 — thời gian trễ.</b> 720 000 sự kiện tồn là phần đến trong khoảng thời gian gần nhất, đến đều 1200 mỗi giây:</p>
+          $$\frac{720\,000}{1200} = 600 \text{ giây} = 10 \text{ phút}$$
+        focus: [1, 1, 2]
+        say: "Bước hai, tính thời gian trễ. 720 nghìn sự kiện đang tồn là phần đã đến gần đây nhất, và chúng đến đều 1200 mỗi giây. Vì vậy sự kiện cũ nhất đã chờ 720 nghìn chia 1200, bằng 600 giây, tức 10 phút, đúng như khách thấy."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — thời gian xả</b> khi tăng xử lý lên 1500 mỗi giây. Mỗi giây chỉ vơi $1500 - 1200 = 300$:</p>
+          $$\frac{720\,000}{1500 - 1200} = \frac{720\,000}{300} = \hl{2400} \text{ giây} = 40 \text{ phút}$$
+        focus: [1, 2]
+        say: "Bước ba, tính thời gian xả khi tăng xử lý lên 1500 mỗi giây. Vì sự kiện mới vẫn đến 1200 mỗi giây, tồn đọng chỉ vơi 1500 trừ 1200, bằng 300 mỗi giây, nên xả hết sau 720 nghìn chia 300, bằng 2400 giây, tức 40 phút."
+      - show: |
+          <table class="t"><tr><th>Bước 4 — so hai cách tính</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>quên sự kiện mới vẫn đến</td><td>$720\,000 / 1500$</td><td>480 giây = 8 phút: sai</td></tr>
+          <tr><td>tính phần vơi mỗi giây</td><td>$720\,000 / 300$</td><td>2400 giây = 40 phút</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Bước bốn, so hai cách tính. Nếu quên rằng sự kiện mới vẫn đến, ta lấy 720 nghìn chia 1500, bằng 480 giây, tức 8 phút, và hứa sai với khách gấp 5 lần. Cách đúng chia cho phần vơi mỗi giây là 300, được 2400 giây, tức 40 phút."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: cho máy chạy từng giây"
+    checks:
+      - "list(__import__('itertools').accumulate(range(9), lambda b, s: max(0, b + 3 - (2 if s < 6 else 5)), initial=0))[1:] == [1, 2, 3, 4, 5, 6, 4, 2, 0] and (3 - 2) * 6 == 6 and 6 / (5 - 3) == 3 and 6 / 5 == 1.2"
+      - "list(__import__('itertools').accumulate(range(3600), lambda b, s: b + 1200 - 1000, initial=0))[-1] == 720000 and list(__import__('itertools').accumulate(range(3000), lambda b, s: max(0, b + 1200 - 1500), initial=720000)).index(0) == 2400"
+      - "720000 / 1500 == 480 and 480 / 60 == 8 and 2400 / 480 == 5"
+    steps:
+      - show: |
+          <p>Ca nhỏ: đến 3 mỗi giây; 6 giây đầu xử lý 2, từ giây 7 xử lý 5. Đếm tồn đọng cuối mỗi giây:</p>
+          <table class="t"><tr><th>giây</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>8</th><th>9</th></tr>
+          <tr><td>tồn</td><td>1</td><td>2</td><td>3</td><td>4</td><td>5</td><td>6</td><td>4</td><td>2</td><td>0</td></tr></table>
+        focus: [1, 2, 2]
+        say: "Kiểm bằng đường khác, cho máy chạy từng giây với một ca nhỏ, vì đếm tay từng giây không cần công thức nào. Sự kiện đến 3 mỗi giây, 6 giây đầu xử lý 2, từ giây thứ 7 xử lý 5. Mỗi giây, tồn đọng cộng thêm phần đến rồi trừ phần xử lý, nên đếm cuối mỗi giây ta được 1, 2, 3, tới 6, rồi 4, 2, và về 0 ở giây thứ 9."
+      - show: |
+          <table class="t"><tr><th>cách</th><th>tồn sau 6 giây</th><th>thời gian xả</th></tr>
+          <tr><td>đếm từng giây</td><td>6</td><td>3 giây (giây 7, 8, 9)</td></tr>
+          <tr><td>công thức</td><td>$(3 - 2) \cdot 6 = 6$</td><td>$\frac{6}{5 - 3} = 3$ ✓, không phải $\frac{6}{5} = 1{,}2$</td></tr>
+          <tr><td>máy chạy từng giây với số thật</td><td>720 000</td><td>về 0 đúng ở giây 2400 ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Đối chiếu với công thức, vì hai đường độc lập mà ra cùng số thì ta tin được. Đếm từng giây cho tồn 6 và xả mất 3 giây. Công thức cho 3 trừ 2, nhân 6, bằng 6, và 6 chia cho 5 trừ 3, bằng 3 giây, khớp, chứ không phải 6 chia 5. Cho máy chạy từng giây với số thật, tồn đọng lên 720 nghìn, rồi về 0 đúng ở giây thứ 2400."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay mắc"
+    checks:
+      - "alg.drain_seconds(720000, 1200, 1200) == math.inf and alg.drain_seconds(720000, 1200, 1300) == 7200 and alg.drain_seconds(720000, 1200, 1500) == 2400 and alg.drain_seconds(720000, 1200, 2400) == 600"
+      - "7200 / 3600 == 2 and 2400 / 60 == 40 and 600 / 60 == 10 and 2400 - 1200 == 1200 and 2400 / 1200 == 2"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Cảnh báo theo số sự kiện tồn <b class="red">(một con số không nói lên trải nghiệm)</b>
+          <br><span class="note">720 000 sự kiện là nhiều hay ít tuỳ tốc độ đến. Cảnh báo theo <b>thời gian trễ</b>: “sự kiện cũ nhất đã chờ quá 2 phút” — gắn thẳng với cam kết cho người dùng.</span></div>
+        say: "Lỗi thứ nhất, cảnh báo theo số sự kiện tồn, trong khi một con số không nói lên trải nghiệm. 720 nghìn sự kiện là nhiều hay ít tuỳ tốc độ đến. Hãy cảnh báo theo thời gian trễ, như sự kiện cũ nhất đã chờ quá 2 phút, vì nó gắn thẳng với cam kết cho người dùng."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Thêm người tiêu thụ quá số phân vùng <b class="red">(người thêm vào ngồi không)</b>
+          <br><span class="note">Mỗi phân vùng chỉ một người tiêu thụ trong nhóm đọc. 6 phân vùng thì người thứ 7 không có việc — phải tăng phân vùng trước (nhớ lỗi đổi đường của khoá).</span></div>
+        say: "Lỗi thứ hai, thêm người tiêu thụ quá số phân vùng, nên người thêm vào ngồi không. Mỗi phân vùng chỉ có một người tiêu thụ trong một nhóm đọc. Có 6 phân vùng thì người thứ 7 không có việc, nên phải tăng phân vùng trước, và nhớ rằng khi đó khoá có thể đổi đường."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Hàng đợi trong bộ nhớ không giới hạn <b class="red">(hết bộ nhớ, mất cả hàng đợi)</b>
+          <br><span class="note">Đặt giới hạn và chọn rõ khi đầy: chặn bên gửi, từ chối có mã lỗi, hay bỏ bớt loại sự kiện kém quan trọng — đừng để hệ điều hành chọn hộ.</span></div>
+        say: "Lỗi thứ ba, hàng đợi trong bộ nhớ không giới hạn, nên hết bộ nhớ và mất cả hàng đợi. Hãy đặt giới hạn, và chọn rõ khi đầy thì làm gì, chặn bên gửi, từ chối có mã lỗi, hay bỏ bớt loại sự kiện kém quan trọng. Đừng để hệ điều hành chọn hộ."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Nâng công suất <b>vừa bằng</b> tải đỉnh rồi tưởng là xong <b class="red">(tồn đọng đứng yên, trễ 10 phút mãi)</b></div>
+          <table class="t"><tr><th>tồn 720 000, đến 1200 mỗi giây; xử lý</th><th>vơi mỗi giây</th><th>thời gian xả</th></tr>
+          <tr><td>1200</td><td>0</td><td>không bao giờ</td></tr>
+          <tr><td>1300</td><td>100</td><td>7200 giây = 2 giờ</td></tr>
+          <tr><td>1500</td><td>300</td><td>2400 giây = 40 phút</td></tr>
+          <tr><td>2400</td><td>1200</td><td>600 giây = 10 phút</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", "2.5", 0]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, nâng công suất vừa bằng tải đỉnh rồi tưởng là xong. Nâng lên đúng 1200 mỗi giây thì tồn đọng không tăng nữa, nhưng cũng không vơi, nên khách vẫn chịu trễ 10 phút mãi. Nâng lên 1300 thì mỗi giây vơi 100, phải mất 7200 giây, tức 2 giờ. Nâng lên 1500 thì vơi 300 mỗi giây, mất 40 phút như ta đã tính. Muốn xả trong 10 phút thì phải vơi 1200 mỗi giây, tức xử lý tới 2400, gấp đôi tải. Người làm nghề luôn chừa dư công suất để xả tồn đọng, chứ không chỉ để theo kịp tải."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.consumer_lag(500, 400, 1800) == 180000 and alg.drain_seconds(180000, 500, 600) == 1800 and 180000 / 500 == 360"
+      - "30 * 60 == 1800 and 500 - 400 == 100 and 360 / 60 == 6 and 600 - 500 == 100 and 1800 / 60 == 30 and 180000 / 600 == 300"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Đến 500, xử lý 400 mỗi giây trong 30 phút. Tồn đọng và thời gian trễ?</td></tr>
+          <tr><td>2</td><td>Tăng xử lý lên 600 mỗi giây. Bao lâu thì xả hết?</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, đến 500, xử lý 400 mỗi giây trong 30 phút, thì tồn đọng và thời gian trễ là bao nhiêu? Câu hai, tăng xử lý lên 600 mỗi giây, thì bao lâu xả hết? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① 30 phút $= 30 \cdot 60 = 1800$ giây; mỗi giây dư $500 - 400 = 100$:</p>
+          $$100 \cdot 1800 = \hl{180\,000} \text{ sự kiện}, \qquad \text{trễ} = \frac{180\,000}{500} = 360 \text{ giây} = 6 \text{ phút}$$
+        focus: [1, 2, 2]
+        say: "Đáp án câu một, 30 phút bằng 30 nhân 60, bằng 1800 giây, và mỗi giây dư 500 trừ 400, bằng 100 sự kiện. Tồn đọng là 100 nhân 1800, bằng 180 nghìn sự kiện. Thời gian trễ là 180 nghìn chia tốc độ đến 500, bằng 360 giây, tức 6 phút."
+      - show: |
+          <p>② Mỗi giây chỉ vơi $600 - 500 = 100$ (sự kiện mới vẫn đến 500):</p>
+          $$\frac{180\,000}{100} = \hl{1800} \text{ giây} = 30 \text{ phút}, \quad \text{không phải } \frac{180\,000}{600} = 300 \text{ giây}$$
+        focus: [1, 2]
+        say: "Câu hai, sự kiện mới vẫn đến 500 mỗi giây, nên mỗi giây chỉ vơi 600 trừ 500, bằng 100. Xả hết sau 180 nghìn chia 100, bằng 1800 giây, tức 30 phút, chứ không phải 180 nghìn chia 600, bằng 300 giây."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">tồn đọng tăng (đến − xử lý) mỗi giây</span><span class="a">→</span>
+          <span class="n">xả = tồn / (xử lý − đến)</span><span class="a">→</span>
+          <span class="n">cảnh báo theo thời gian trễ</span><span class="a">→</span>
+          <span class="n">hàng đợi có giới hạn, áp lực ngược rõ ràng</span></div>
+        say: "Tổng kết lại, tồn đọng tăng bằng tốc độ đến trừ tốc độ xử lý mỗi giây, và thời gian xả bằng tồn đọng chia cho tốc độ xử lý trừ tốc độ đến. Cảnh báo theo thời gian trễ, và giữ hàng đợi có giới hạn với áp lực ngược rõ ràng."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> một hệ chậm hơn tải <b>không bao giờ tự hết</b> trễ — chỉ có tăng công suất hoặc giảm tải mới cứu được.</div>
+        say: "Điều cần mang theo, một hệ chậm hơn tải không bao giờ tự hết trễ, chỉ có tăng công suất hoặc giảm tải mới cứu được."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 9): <b>tái xử lý</b> dữ liệu cũ và thời gian giữ nhật ký.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 9, ta học tái xử lý dữ liệu cũ, và thời gian giữ nhật ký. Hẹn gặp bạn ở bài tiếp theo."

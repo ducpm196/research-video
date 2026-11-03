@@ -1,0 +1,368 @@
+id: L13
+course: SAR
+series: "SAR · Kiến trúc hệ thống"
+title: "Bài 13 — Tình huống chuyên gia theo dòng thời gian: Twitter, từ nguyên khối tới dịch vụ"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+case: journey
+source: "curriculum/sar.yaml L13; audit/sar/sources_L13.md (câu trích nguyên văn, đọc 2026-11-02); audit/sar/verify_sar.py L13; C. Aniszczyk (Head of Open Source, Twitter), Scaling Twitter with Open Source, bài trình bày, 2014 (năm suy từ nội dung) [AN14]; B. Degenhardt (Twitter), Lessons Learned in Scaling Twitter, QCon London 2014 [BD14]; M. Eriksen (Twitter), Your Server as a Function, bản tiền ấn phẩm 27/9/2013, PLOS 2013 [ME13]; bài blog Twitter 2013 “New Tweets per second record, and how!” KHÔNG đọc được (403/429) — chỉ dùng con số mà AN14 dẫn; SAR bài 2 (ước lượng), bài 3 (ranh giới), bài 5 (làm tròn lên), bài 6 (sẵn sàng), bài 7 (áp lực ngược); khoá CLD bài 15 (Borg → Kubernetes)"
+assumes: [arith]
+# Quy ước: “nguyên khối” = monolith (một ứng dụng làm mọi việc, Twitter gọi là monorail); “dịch vụ” = service (một chương trình riêng,
+#   gọi nhau qua mạng); “máy ảo Java” = JVM; “tweet mỗi giây” = TPS; “thư viện gọi dịch vụ chung” = Finagle; “độ trễ đuôi” = phân vị cao
+#   (p99) của thời gian trả lời. Mọi sự kiện và con số có nguồn ghi trong audit/sar/sources_L13.md. Con số khác là phép tính lại (checks)
+#   hoặc ghi “(số minh hoạ)”: 30 000 yêu cầu mỗi giây, 10 ms mỗi lần gọi, 1% chậm, ba cụm 100 máy, quiz 400 yêu cầu/s, 250 yêu cầu mỗi máy.
+#   Lời đọc không nói “Rails”, “MySQL”, “Finagle”, “Mesos”, “Scala”, “QCon”: nói “ứng dụng Ruby”, “cơ sở dữ liệu quan hệ”, “thư viện gọi
+#   dịch vụ chung”, “hệ chia máy cho cả trung tâm dữ liệu”, “một ngôn ngữ chạy trên máy ảo Java”, “một hội nghị ở Luân Đôn”.
+#   Tên Twitter, Ruby, Java, tweet: lexicon_vi.SAR.yaml (probe p2, p3).
+objectives:
+  - "Kể lại hành trình của Twitter qua năm chặng từ 2006 tới 2014, mỗi chặng một điểm nghẽn và một cách xử lý"
+  - "Tính lại con số then chốt của từng chặng: dung lượng mỗi ngày, số máy, độ trễ tuần tự và song song, hệ số cao điểm, số lỗi mỗi giây"
+  - "Chọn giữa thêm máy và tách dịch vụ ở quy mô của chính mình, kèm điều kiện đổi lựa chọn"
+asr_reviewed:
+  - {sentence: "Hãy theo dõi tỉ lệ lỗi và độ trễ đuôi, báo động khi tỉ lệ đổi.", reason: "ASR chép “Hãy theo dõi tỷ lệ lỗi và độ trễ đuôi, báo đồng khi tỷ lệ đuỗi.” (0.75): “tỉ” ASR viết chính tả “tỷ” (cùng âm); lệch âm/thanh thuần Việt: động/đồng, đổi/đuỗi — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Gom 5 bài đăng thì được 1000 byte, tức 1 KB, nên 500 triệu bài đăng là 100 triệu KB, đúng 100 GB.", reason: "ASR chép “Gom 5 bài đăng thì được 1.000 bài, tức 1 kilobyte, nên 500 triệu bài đăng là 100 triệu kilobyte, đúng 100 gigabyte.” (0.852): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); KB đọc “ki-lô-byte” theo lexicon của khoá, ASR viết “kilobyte/kg”; GB đọc “ghi-ga-byte” theo lexicon của khoá, ASR viết “GB/gigabyte” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bước một, 500 triệu nhân 200 byte được 100 GB mỗi ngày.", reason: "ASR chép “Bước 1, 500 triệu nhân 200 byte được 100 gigabyte mỗi ngày.” (0.933): GB đọc “ghi-ga-byte” theo lexicon của khoá, ASR viết “GB/gigabyte” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Về sau, Twitter nhận hơn 500 triệu bài đăng mỗi ngày, và một bài đăng 140 ký tự cỡ khoảng 200 byte.", reason: "ASR chép “Về sau, Twitter nhận hơn 500 triệu bài đăng mỗi ngày và một bài đăng 140 ký tự cỡ khoảng 200 bài.” (0.963): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Từ sự cố năm 2010 tới 143 199 tweet mỗi giây"
+    checks:
+      - "round(143199 / 6000) == 24"
+    steps:
+      - show: |
+          <p>Năm 2010, trong mùa World Cup, Twitter gặp liên tiếp sự cố — kỹ sư Twitter gọi đó là “World Cup Woes”.</p>
+          <p>Năm 2013, Twitter nhận một đỉnh <b>143&nbsp;199 tweet trong một giây</b>, trong khi lúc bình thường là <b>hơn 6000 tweet mỗi giây</b> — gấp khoảng <b>24 lần</b>.</p>
+          <div class="box key">Hôm nay: năm chặng từ 2006 tới 2014 — điều gì đã đổi để cùng một trang mạng chịu được đỉnh gấp 24 lần?</div>
+        focus: [1, 2, 2, 3]
+        say: "Chào bạn, năm 2010, trong mùa giải bóng đá thế giới, mạng xã hội Twitter gặp liên tiếp sự cố. Năm 2013, nó nhận một đỉnh 143 nghìn 199 bài đăng trong một giây. Lúc bình thường chỉ hơn 6000 bài đăng mỗi giây, nên đỉnh đó gấp khoảng 24 lần. Hôm nay ta đi qua năm chặng từ 2006 tới 2014, xem điều gì đã đổi để cùng một trang chịu được đỉnh như vậy."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại bốn điều từ các bài trước"
+    checks:
+      - "round(10**7 * 20 / 86400) == 2315 and round(10**7 * 20 / 86400 * 3) == 6944"
+      - "round(0.99 * 0.99, 4) == 0.9801 and round(1 - 0.9999, 4) == 0.0001"
+      - "(1000 - 100) * 5 == 4500"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài</th><th>điều đã học</th><th>ví dụ số</th></tr>
+          <tr><td>bài 2</td><td><b>ước lượng</b>: chia cho 86&nbsp;400 giây mỗi ngày, rồi nhân hệ số cao điểm</td><td>10 triệu người, 20 yêu cầu mỗi người → ≈ 2315 yêu cầu/s; cao điểm gấp 3 → ≈ 6944</td></tr>
+          <tr><td>bài 3</td><td><b>ranh giới</b>: một phần chỉ biết phần kia qua một giao diện hẹp; phụ thuộc đi một chiều</td><td>giao diện gọi nghiệp vụ, nghiệp vụ gọi dữ liệu, không có chiều ngược lại</td></tr>
+          <tr><td>bài 6</td><td><b>nối tiếp</b>: cần mọi phần cùng chạy, nên nhân xác suất</td><td>hai phần 99% → 99% nhân 99% = 98,01%; phần bù của 99,99% là 0,01%</td></tr>
+          <tr><td>bài 7</td><td><b>áp lực ngược</b>: bên nhận báo bên gửi chậm lại, thay vì nhận vô hạn</td><td>đến 1000/s, làm 100/s → mỗi giây thêm 900 việc chờ; sau 5 giây là 4500</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.3", "1.4", "1.4", "1.5", "1.5"]
+        say: "Bảng nhắc lại bốn điều từ các bài trước. Ở bài 2, ta ước lượng bằng cách chia cho 86 nghìn 400 giây mỗi ngày, rồi nhân hệ số cao điểm. Ví dụ 10 triệu người, mỗi người 20 yêu cầu, được khoảng 2315 yêu cầu mỗi giây, cao điểm gấp 3 là khoảng 6944. Ở bài 3, ranh giới là chỗ một phần chỉ biết phần kia qua một giao diện hẹp, và phụ thuộc chỉ đi một chiều. Ở bài 6, các phần mắc nối tiếp thì nhân xác suất, hai phần 99% cho 98 phẩy 01%. Phần bù của 99 phẩy 99% là 0 phẩy 01%. Ở bài 7, áp lực ngược là bên nhận báo bên gửi chậm lại. Nếu không, đến 1000 việc mà làm 100 việc mỗi giây, sau 5 giây có 4500 việc chờ."
+
+  # ───────────────────────── 3. NGÔN NGỮ ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Ngôn ngữ của hành trình"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thuật ngữ</th><th>nghĩa</th></tr>
+          <tr><td><b>nguyên khối</b> (monolith)</td><td>một ứng dụng làm mọi việc: nhận yêu cầu, hiển thị, nghiệp vụ, đọc ghi cơ sở dữ liệu</td></tr>
+          <tr><td><b>dịch vụ</b> (service)</td><td>một chương trình riêng lo một việc, các dịch vụ gọi nhau qua mạng</td></tr>
+          <tr><td><b>máy ảo Java</b> (JVM)</td><td>nền chạy chung cho chương trình viết bằng Java và các ngôn ngữ cùng họ</td></tr>
+          <tr><td><b>tweet mỗi giây</b> (TPS)</td><td>số dòng trạng thái được đăng trong một giây</td></tr>
+          <tr><td><b>độ trễ đuôi</b> (p99)</td><td>thời gian trả lời mà 99% yêu cầu nhanh hơn nó — phần chậm nhất của phân bố</td></tr>
+          <tr><td><b>thư viện gọi dịch vụ chung</b></td><td>một thư viện mọi đội dùng để gọi nhau: tìm máy, chia tải, thử lại, đo đếm</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", "1.6", "1.7"]
+        say: "Bài dùng sáu thuật ngữ. Nguyên khối là một ứng dụng làm mọi việc, từ nhận yêu cầu, hiển thị, nghiệp vụ, tới đọc ghi cơ sở dữ liệu. Dịch vụ là một chương trình riêng lo một việc, và các dịch vụ gọi nhau qua mạng. Máy ảo Java là nền chạy chung cho chương trình viết bằng Java và các ngôn ngữ cùng họ. Bài đăng mỗi giây, trên màn hình ghi bằng tên tiếng Anh, là số dòng trạng thái được đăng trong một giây. Độ trễ đuôi là thời gian trả lời mà 99% yêu cầu nhanh hơn nó, tức phần chậm nhất. Thư viện gọi dịch vụ chung là thư viện mọi đội cùng dùng để tìm máy, chia tải, thử lại và đo đếm."
+
+  # ───────────────────────── 4. DÒNG THỜI GIAN ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Năm chặng trên một trục thời gian"
+    steps:
+      - show: |
+          <div><svg width="1700" height="320" viewBox="0 0 1700 320">
+          <line x1="30" y1="150" x2="1670" y2="150" stroke="#1f2937" stroke-width="3"/>
+          <g font-size="24" text-anchor="middle" fill="#1f2937">
+          <circle cx="160" cy="150" r="15" fill="#9ca3af"/><text x="160" y="108" font-weight="bold">2006 → 2008</text><text x="160" y="200">một ứng dụng Ruby</text><text x="160" y="232">một cơ sở dữ liệu</text>
+          <circle cx="500" cy="150" r="15" fill="#2a78d6"/><text x="500" y="108" font-weight="bold">2010</text><text x="500" y="200">World Cup: sự cố</text><text x="500" y="232">200–300 yêu cầu mỗi máy</text>
+          <circle cx="850" cy="150" r="15" fill="#7c3aed"/><text x="850" y="108" font-weight="bold">từ 2010</text><text x="850" y="200">tách dịch vụ theo danh từ</text><text x="850" y="232">máy ảo Java, thư viện chung</text>
+          <circle cx="1200" cy="150" r="15" fill="#eb6834"/><text x="1200" y="108" font-weight="bold">2013</text><text x="1200" y="200">đỉnh 143 199 tweet/s</text><text x="1200" y="232">gấp 24 lần lúc thường</text>
+          <circle cx="1540" cy="150" r="15" fill="#059669"/><text x="1540" y="108" font-weight="bold">2014</text><text x="1540" y="200">đo tỉ lệ lỗi, độ trễ đuôi</text><text x="1540" y="232">chia máy cho cả trung tâm</text>
+          </g>
+          <text x="850" y="300" font-size="23" fill="#6b7280" text-anchor="middle">khai sinh → tăng trưởng → quy mô rất lớn → đỉnh tải kỷ lục → ổn định và tiếp tục phát triển</text>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình là trục thời gian với năm chặng. Từ 2006 tới 2008, cả trang là một ứng dụng Ruby với một cơ sở dữ liệu, rồi năm 2010 mùa giải bóng đá thế giới làm lộ giới hạn của nó. Từ 2010, Twitter tách dần thành các dịch vụ chạy trên máy ảo Java, với một thư viện gọi dịch vụ chung. Năm 2013 là đỉnh tải kỷ lục, và năm 2014 là lúc họ đo tỉ lệ lỗi, độ trễ đuôi, và chia máy cho cả trung tâm dữ liệu."
+
+  # ───────────────────────── 5. CƠ CHẾ CHUNG ─────────────────────────
+  - id: split
+    kind: concept
+    title: "Cơ chế chung: từ một khối sang các dịch vụ theo danh từ"
+    steps:
+      - show: |
+          <div><svg width="1560" height="360" viewBox="0 0 1560 360">
+          <defs><marker id="ah" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="12" refX="14" refY="6" orient="auto"><path d="M0,0 L16,6 L0,12 z" fill="#1f2937"/></marker></defs>
+          <g font-size="24" text-anchor="middle" fill="#1f2937">
+          <text x="250" y="36" font-weight="bold">trước: nguyên khối</text>
+          <rect x="60" y="60" width="380" height="170" rx="10" fill="#fde2e2" stroke="#e11d48" stroke-width="3"/>
+          <text x="250" y="100">một ứng dụng Ruby</text><text x="250" y="136">định tuyến, hiển thị,</text><text x="250" y="168">nghiệp vụ, kết nối dữ liệu</text><text x="250" y="204">đổi một chỗ: triển khai lại hết</text>
+          <rect x="140" y="275" width="220" height="60" rx="10" fill="#f3f4f6" stroke="#1f2937" stroke-width="3"/><text x="250" y="313">cơ sở dữ liệu</text>
+          <text x="1060" y="36" font-weight="bold">sau: dịch vụ theo danh từ cốt lõi</text>
+          <rect x="600" y="140" width="200" height="80" rx="10" fill="#e0ecfb" stroke="#2a78d6" stroke-width="3"/><text x="700" y="174">cổng vào</text><text x="700" y="204">web, API</text>
+          <rect x="980" y="60" width="200" height="56" rx="10" fill="#dcfce7" stroke="#059669" stroke-width="3"/><text x="1080" y="97">tweet</text>
+          <rect x="1250" y="60" width="200" height="56" rx="10" fill="#dcfce7" stroke="#059669" stroke-width="3"/><text x="1350" y="97">người dùng</text>
+          <rect x="980" y="150" width="200" height="56" rx="10" fill="#dcfce7" stroke="#059669" stroke-width="3"/><text x="1080" y="187">dòng thời gian</text>
+          <rect x="1250" y="150" width="200" height="56" rx="10" fill="#dcfce7" stroke="#059669" stroke-width="3"/><text x="1350" y="187">tin nhắn riêng</text>
+          <rect x="1110" y="240" width="210" height="56" rx="10" fill="#dcfce7" stroke="#059669" stroke-width="3"/><text x="1215" y="277">đồ thị theo dõi</text>
+          </g>
+          <line x1="800" y1="170" x2="975" y2="92" stroke="#1f2937" stroke-width="3" marker-end="url(#ah)"/>
+          <line x1="800" y1="180" x2="975" y2="178" stroke="#1f2937" stroke-width="3" marker-end="url(#ah)"/>
+          <line x1="800" y1="192" x2="1105" y2="262" stroke="#1f2937" stroke-width="3" marker-end="url(#ah)"/>
+          <text x="890" y="320" font-size="22" fill="#6b7280" text-anchor="middle">mỗi hộp xanh lục: một dịch vụ, kho dữ liệu riêng</text>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình bên trái là nguyên khối, một ứng dụng Ruby lo cả định tuyến, hiển thị, nghiệp vụ lẫn kết nối dữ liệu, nên đổi một chỗ là triển khai lại hết. Hình bên phải là cách Twitter tách, theo các danh từ cốt lõi như bài đăng, người dùng, dòng thời gian, tin nhắn riêng, đồ thị theo dõi. Mỗi dịch vụ có kho dữ liệu riêng và một ranh giới hẹp, đúng ý của bài 3. Cổng vào chỉ còn nhận yêu cầu rồi gọi các dịch vụ qua mạng."
+
+  # ───────────────────────── 6. CHẶNG 1 ─────────────────────────
+  - id: stage1
+    kind: example
+    title: "Chặng 1, 2006 tới 2008 — khai sinh: một ứng dụng Ruby, một cơ sở dữ liệu"
+    stage: {year: "2006 → 2008", scale: "2006 một ứng dụng Ruby on Rails và MySQL; 2008 tách kho tweet, đồ thị, bộ nhớ đệm; về sau 500 triệu tweet mỗi ngày, mỗi tweet ≈ 200 byte", source: "[AN14] [BD14]", practice: "bắt đầu đơn giản; khi đau thì tách phần lưu trữ trước, giữ một ứng dụng; ước lượng dung lượng từ số tweet và cỡ mỗi tweet"}
+    checks:
+      - "500 * 10**6 * 200 == 10**11 and 10**11 // 10**9 == 100"
+      - "round(500 * 10**6 / 86400) == 5787"
+    steps:
+      - show: |
+          <p><b>2006, “một ý tưởng đơn giản”:</b> cả trang là <b>một ứng dụng Ruby on Rails</b> — Twitter gọi là <b>monorail</b> — trên một cơ sở dữ liệu MySQL.</p>
+          <p><b>2008, “đau vì lớn”:</b> vẫn một ứng dụng, nhưng phần lưu trữ tách ra: kho tweet, kho đồ thị theo dõi, bộ nhớ đệm.</p>
+          <table class="t"><tr><th>điểm nghẽn của nguyên khối (kỹ sư Twitter, 2014)</th></tr>
+          <tr><td>mô hình lưu trữ khó mở rộng; <b>đổi bất kỳ chỗ nào cũng triển khai lên mọi máy</b></td></tr>
+          <tr><td>chạy song song kém, chạy chậm; ranh giới rò rỉ, các phần dính chặt vào nhau</td></tr></table>
+        focus: [1, 1, 2, "3.2", "3.3"]
+        say: "Ở chặng một, năm 2006, cả trang là một ứng dụng Ruby trên một cơ sở dữ liệu quan hệ, và kỹ sư Twitter gọi nó là đường ray đơn. Năm 2008, vẫn là một ứng dụng, nhưng phần lưu trữ đã tách ra thành kho bài đăng, kho đồ thị theo dõi và bộ nhớ đệm. Năm 2014, một kỹ sư Twitter kể lại các điểm nghẽn. Mô hình lưu trữ khó mở rộng, và đổi bất kỳ chỗ nào cũng phải triển khai lên mọi máy. Ứng dụng chạy song song kém, và các phần dính chặt vào nhau."
+      - clear: true
+        show: |
+          <p>Về sau, Twitter nhận <b>hơn 500 triệu tweet mỗi ngày</b>; một tweet 140 ký tự cỡ khoảng <b>200 byte</b>. Ước lượng như bài 2:</p>
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. dung lượng mỗi ngày</td><td>500 triệu nhân 200 byte</td><td>$\hlg{100}$ GB mỗi ngày</td></tr>
+          <tr><td>Bước 2. tweet mỗi giây trung bình</td><td>500 triệu chia 86&nbsp;400</td><td>≈ $\hlb{5787}$ — gần con số “hơn 6000 lúc bình thường”</td></tr></table>
+          <p class="note">Thực hành: bắt đầu đơn giản là đúng. Khi đau, tách phần lưu trữ trước. Điều kiện: một đội, một ứng dụng, tải còn vừa vài chục máy.</p>
+        focus: [1, "2.2", "2.3", 3, 3]
+        say: "Về sau, Twitter nhận hơn 500 triệu bài đăng mỗi ngày, và một bài đăng 140 ký tự cỡ khoảng 200 byte. Bước một, 500 triệu nhân 200 byte được 100 GB mỗi ngày. Bước hai, 500 triệu chia 86 nghìn 400 được khoảng 5787 bài đăng mỗi giây, gần con số hơn 6000 lúc bình thường. Thực hành rút ra là bắt đầu đơn giản, và khi đau thì tách phần lưu trữ trước. Điều kiện là còn một đội, một ứng dụng, với tải vừa vài chục máy."
+
+  # ───────────────────────── 7. CHẶNG 2 ─────────────────────────
+  - id: stage2
+    kind: example
+    title: "Chặng 2, năm 2010 — tăng trưởng: World Cup và giới hạn của máy Ruby"
+    stage: {year: "2010", scale: "người dùng tăng vọt từ 2009; máy Rails cạn CPU và RAM ở 200–300 yêu cầu mỗi máy, mạng còn dư", source: "[AN14]", practice: "điều tra sự cố lớn tới tận gốc; đo tầng máy chủ theo CPU, RAM, mạng trước khi chọn; đặt mục tiêu bằng số (ít hơn 10 lần máy); không ném thêm máy thay cho kỹ thuật"}
+    checks:
+      - "30000 / 300 == 100 and 30000 / 200 == 150 and 30000 / 250 == 120"
+      - "120 * 10 == 1200 and 1200 // 10 == 120"
+    steps:
+      - show: |
+          <p><b>2010, “World Cup Woes”:</b> người dùng tăng vọt từ 2009, và mùa World Cup làm lộ ra giới hạn. Kỹ sư Twitter tổ chức các chuyến <b>“săn cá voi”</b> để hiểu tận gốc những lần sập lớn.</p>
+          <table class="t"><tr><th>điều đã sai (Twitter tự ghi)</th></tr>
+          <tr><td>mã nguyên khối mong manh: một khối lo từ kết nối cơ sở dữ liệu, bộ nhớ đệm tới hiển thị trang và API công khai</td></tr>
+          <tr><td><b>ném thêm máy</b> vào vấn đề, thay vì làm giải pháp kỹ thuật</td></tr>
+          <tr><td>kẹt trong góc tối ưu: đổi sự dễ đọc, dễ sửa lấy hiệu năng</td></tr>
+          <tr><td>đo tầng máy chủ phía trước theo CPU, RAM, mạng: máy Rails <b>cạn CPU và RAM, mạng còn dư</b>, chỉ <b>200–300 yêu cầu mỗi máy</b></td></tr></table>
+        focus: [1, 1, "2.2", "2.3", "2.4", "2.5"]
+        say: "Ở chặng hai, người dùng tăng vọt từ 2009, và mùa giải bóng đá thế giới năm 2010 làm lộ ra giới hạn. Kỹ sư Twitter gọi những cuộc điều tra tận gốc các lần sập lớn là chuyến săn cá voi. Điều sai thứ nhất là mã nguyên khối mong manh, một khối lo từ kết nối dữ liệu tới hiển thị trang. Điều sai thứ hai là ném thêm máy vào vấn đề, thay vì làm giải pháp kỹ thuật. Điều sai thứ ba là đổi sự dễ đọc, dễ sửa lấy hiệu năng, rồi kẹt trong góc tối ưu. Khi đo, máy chạy ứng dụng Ruby cạn bộ xử lý và bộ nhớ, mạng còn dư, chỉ 200 tới 300 yêu cầu mỗi máy."
+      - clear: true
+        show: |
+          <p>Làm thử với 30&nbsp;000 yêu cầu mỗi giây ở cao điểm (số minh hoạ):</p>
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. máy tốt, 300 yêu cầu mỗi máy</td><td>30&nbsp;000 chia 300</td><td>$\hlb{100}$ máy</td></tr>
+          <tr><td>Bước 2. máy kém, 200 yêu cầu mỗi máy</td><td>30&nbsp;000 chia 200</td><td>$\hl{150}$ máy</td></tr>
+          <tr><td>Bước 3. tải gấp 10, lấy giữa 250 mỗi máy</td><td>30&nbsp;000 chia 250 = 120; nhân 10</td><td>$\hl{1200}$ máy</td></tr>
+          <tr><td>Bước 4. mục tiêu Twitter đặt ra: ít hơn 10 lần máy</td><td>1200 chia 10</td><td>$\hlg{120}$ máy</td></tr></table>
+          <p class="note">Thực hành: đo trước khi chọn, đặt mục tiêu bằng số. Điều kiện: tải còn tăng, và số máy tăng theo tải — thêm máy chỉ mua thời gian.</p>
+        focus: [1, "2.2", "2.3", "2.4", "2.5", 3, 3]
+        say: "Làm thử với 30 nghìn yêu cầu mỗi giây ở cao điểm, một số minh hoạ. Bước một, nếu mỗi máy chịu 300 yêu cầu thì cần 100 máy. Bước hai, nếu mỗi máy chỉ chịu 200 thì cần 150 máy. Bước ba, lấy giữa là 250 mỗi máy, được 120 máy, và khi tải gấp 10 thì thành 1200 máy. Bước bốn, Twitter đặt mục tiêu chạy cả trang với ít hơn 10 lần số máy, tức về lại khoảng 120. Thực hành rút ra là đo trước khi chọn, và đặt mục tiêu bằng số. Điều kiện là tải còn tăng, vì khi đó thêm máy chỉ mua thêm thời gian."
+
+  # ───────────────────────── 8. CHẶNG 3 ─────────────────────────
+  - id: stage3
+    kind: example
+    title: "Chặng 3, từ 2010 — quy mô rất lớn: tách dịch vụ, máy ảo Java, thư viện chung"
+    stage: {year: "2010 → 2013", scale: "tìm kiếm viết lại bằng Java, đồ thị theo dõi viết bằng Scala (2010); thư viện Finagle 11/2010; dịch vụ theo danh từ cốt lõi; về sau dùng khắp Twitter", source: "[AN14] [BD14] [ME13]", practice: "tách dần theo danh từ cốt lõi; chọn nền chạy đã có kinh nghiệm; một thư viện chung cho tìm máy, chia tải, thử lại, đo đếm, truy vết; gọi song song những gì không phụ thuộc nhau"}
+    checks:
+      - "10 + 10 + 3 * 10 == 50 and 10 + 10 + max(10, 10, 10) == 30 and 50 - 30 == 20"
+    steps:
+      - show: |
+          <p><b>Thử máy ảo Java trước:</b> năm 2010, tìm kiếm được viết lại bằng Java, kho đồ thị theo dõi viết bằng Scala — “và chúng tôi thích nó”. Lý do chọn: <b>đã tin nó qua kinh nghiệm</b>, nền chạy trưởng thành, nhiều thư viện, chạy được nhiều ngôn ngữ.</p>
+          <p><b>Tách nguyên khối</b> theo danh từ cốt lõi: dịch vụ tweet, người dùng, dòng thời gian, tin nhắn riêng, đồ thị theo dõi. Mục tiêu: <b>cô lập lỗi</b>, ranh giới gọn, logic liên quan nằm một chỗ.</p>
+          <p><b>Điểm nghẽn mới:</b> “chạy song song thật khó” — mỗi đội làm một kiểu, lỗi mỗi nơi một nghĩa, <b>không có cơ chế áp lực ngược thống nhất</b>.</p>
+        focus: [1, 1, 2, 2, 3]
+        say: "Ở chặng ba, Twitter thử máy ảo Java trên những phần nhỏ trước. Năm 2010, tìm kiếm được viết lại bằng Java, kho đồ thị theo dõi viết bằng một ngôn ngữ khác chạy trên máy ảo Java, và họ thích kết quả. Rồi họ tách nguyên khối theo danh từ cốt lõi, như bài đăng, người dùng, dòng thời gian, tin nhắn riêng. Mục tiêu là cô lập lỗi, để một phần hỏng không kéo cả trang. Nhưng điểm nghẽn mới xuất hiện, mỗi đội xử lý chạy song song một kiểu, và không có cơ chế áp lực ngược thống nhất như ở bài 7."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>thư viện gọi dịch vụ chung (Finagle, từ 11/2010)</th><th>lo thay cho từng đội</th></tr>
+          <tr><td>tìm máy, chia tải, giữ kết nối</td><td>gọi tới bản nào còn sống, không dồn vào một máy</td></tr>
+          <tr><td>thử lại, thời hạn chờ</td><td>một chỗ cấu hình, mọi dịch vụ cùng một nghĩa của “lỗi”</td></tr>
+          <tr><td>đo đếm, truy vết phân tán</td><td>thấy được một yêu cầu đi qua những dịch vụ nào</td></tr>
+          <tr><td>“lời hứa kết quả” (future) ghép được với nhau</td><td>tả <b>cái gì</b> cần tính; thư viện lo <b>chạy thế nào</b>, kể cả song song</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Cách xử lý là một thư viện gọi dịch vụ chung, có từ tháng 11 năm 2010, về sau dùng khắp Twitter. Nó lo tìm máy, chia tải và giữ kết nối, để không dồn vào một máy. Nó lo thử lại và thời hạn chờ ở một chỗ, nên mọi dịch vụ hiểu lỗi theo cùng một nghĩa. Nó đo đếm và truy vết, để thấy một yêu cầu đi qua những dịch vụ nào. Người viết chỉ tả cái gì cần tính bằng các lời hứa kết quả, còn thư viện lo chạy thế nào, kể cả chạy song song."
+      - clear: true
+        show: |
+          <p>Hiện dòng thời gian: lấy mã người dùng, lấy danh sách tweet, rồi lấy <b>3 tweet</b>. Mỗi lần gọi 10 ms (số minh hoạ).</p>
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. gọi lần lượt từng cái</td><td>10 + 10 + 3 nhân 10</td><td>$\hl{50}$ ms</td></tr>
+          <tr><td>Bước 2. 3 tweet không phụ thuộc nhau: gọi cùng lúc</td><td>10 + 10 + 10 (lần gọi lâu nhất)</td><td>$\hlg{30}$ ms</td></tr>
+          <tr><td>Bước 3. tiết kiệm</td><td>50 trừ 30</td><td>$\hlb{20}$ ms mỗi lần hiện trang</td></tr></table>
+          <p class="note">Thực hành: tách theo danh từ, có thư viện chung trước khi có nhiều dịch vụ. Điều kiện: nhiều đội, nhiều phần tải khác nhau — một đội nhỏ thì nguyên khối có ranh giới tốt vẫn đủ.</p>
+        focus: [1, "2.2", "2.3", "2.4", 3, 3]
+        say: "Làm thử với việc hiện dòng thời gian, gồm lấy mã người dùng, lấy danh sách bài đăng, rồi lấy 3 bài đăng, mỗi lần gọi 10 mi li giây, một số minh hoạ. Bước một, gọi lần lượt thì mất 10 cộng 10 cộng 3 nhân 10, bằng 50 mi li giây. Bước hai, ba bài đăng không phụ thuộc nhau nên gọi cùng lúc, chỉ chờ lần lâu nhất, còn 30 mi li giây. Bước ba, mỗi lần hiện trang tiết kiệm 20 mi li giây. Thực hành rút ra là tách theo danh từ, và có thư viện chung trước khi có nhiều dịch vụ. Điều kiện là có nhiều đội và nhiều phần tải khác nhau, còn một đội nhỏ thì nguyên khối có ranh giới tốt vẫn đủ."
+
+  # ───────────────────────── 9. CHẶNG 4 ─────────────────────────
+  - id: stage4
+    kind: example
+    title: "Chặng 4, năm 2013 — đỉnh tải kỷ lục: 143 199 tweet trong một giây"
+    stage: {year: "2013", scale: "hơn 500 triệu tweet mỗi ngày, hơn 6000 tweet mỗi giây lúc bình thường; đỉnh 25 088 tweet/s (2011) rồi 143 199 tweet/s (2013)", source: "[AN14]", practice: "thiết kế theo đỉnh, không theo trung bình; đo hệ số đỉnh của chính mình thay vì đoán; cô lập lỗi để một phần quá tải không kéo cả trang"}
+    checks:
+      - "round(143199 / 25088, 1) == 5.7 and round(143199 / 6000) == 24"
+      - "143199 * 200 == 28639800 and round(143199 * 200 / 10**6, 1) == 28.6"
+    steps:
+      - show: |
+          <p><b>Quy mô:</b> hơn <b>500 triệu tweet mỗi ngày</b>, hơn <b>6000 tweet mỗi giây</b> lúc bình thường. Nhưng có đỉnh: mỗi lần một bộ phim hoạt hình Nhật được chiếu trên truyền hình, người xem đăng cùng lúc.</p>
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>đỉnh năm 2011</td><td>—</td><td>25&nbsp;088 tweet/s</td></tr>
+          <tr><td>Bước 1. đỉnh năm 2013 so với 2011</td><td>143&nbsp;199 chia 25&nbsp;088</td><td>≈ $\hl{5{,}7}$ lần</td></tr>
+          <tr><td>Bước 2. đỉnh 2013 so với lúc thường</td><td>143&nbsp;199 chia 6000</td><td>≈ $\hl{24}$ lần</td></tr>
+          <tr><td>Bước 3. dữ liệu tweet trong giây đỉnh</td><td>143&nbsp;199 nhân 200 byte</td><td>≈ $\hlg{28{,}6}$ MB</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", "2.4", "2.5"]
+        say: "Ở chặng bốn, Twitter nhận hơn 500 triệu bài đăng mỗi ngày, và hơn 6000 bài đăng mỗi giây lúc bình thường. Nhưng mỗi lần một bộ phim hoạt hình Nhật được chiếu trên truyền hình, người xem đăng cùng lúc. Năm 2011, đỉnh như vậy là 25 nghìn 88 bài đăng mỗi giây. Bước một, đỉnh năm 2013 là 143 nghìn 199, chia cho đỉnh năm 2011 được khoảng 5 phẩy 7 lần. Bước hai, chia cho 6000 lúc bình thường được khoảng 24 lần. Bước ba, nhân 200 byte mỗi bài đăng, giây đỉnh mang khoảng 28 phẩy 6 MB dữ liệu bài đăng."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>so với bài 2</th><th>hệ số cao điểm</th></tr>
+          <tr><td>giả định quen dùng khi ước lượng</td><td>gấp 3 trung bình</td></tr>
+          <tr><td>đỉnh thật của Twitter năm 2013</td><td>gấp khoảng $\hl{24}$ lúc thường</td></tr></table>
+          <div class="box key">Thực hành: thiết kế theo đỉnh của <b>chính mình</b>, đo nó thay vì đoán; cô lập lỗi để một phần quá tải không kéo cả trang. Điều kiện: đỉnh do sự kiện đoán được hay không — đoán được thì chuẩn bị trước, không đoán được thì phải có giảm tải và áp lực ngược của bài 7.</div>
+        focus: ["1.2", "1.3", 2, 2]
+        say: "Bảng so với bài 2, nơi ta quen giả định cao điểm gấp 3 trung bình. Đỉnh thật của Twitter năm 2013 gấp khoảng 24 lần lúc thường. Thực hành rút ra là thiết kế theo đỉnh của chính mình, đo nó thay vì đoán, và cô lập lỗi để một phần quá tải không kéo cả trang. Điều kiện là xem đỉnh có đoán được không, nếu không thì phải có giảm tải và áp lực ngược như bài 7."
+
+  # ───────────────────────── 10. CHẶNG 5 ─────────────────────────
+  - id: stage5
+    kind: example
+    title: "Chặng 5, năm 2014 — ổn định và tiếp tục phát triển: đo tỉ lệ, đo đuôi, chia máy"
+    stage: {year: "2014", scale: "300 000 yêu cầu/s, thành công 99,99%; hơn 240 triệu người dùng; dòng thời gian 300 nghìn truy vấn/s, 1 ms trung vị, 4 ms phân vị 99", source: "[BD14] [ME13] [AN14]", practice: "theo dõi tỉ lệ lỗi thay vì từng lỗi; đo đuôi vì đuôi cộng dồn qua nhiều hệ; gộp máy thành một cụm chung; thay đổi nhỏ, từng bước"}
+    checks:
+      - "round(300000 * (1 - 0.9999)) == 30 and round(300000 * (1 - 0.9999)) * 86400 == 2592000"
+      - "round(1 - 0.99**100, 3) == 0.634 and round(1 - 0.99**5, 3) == 0.049"
+      - "round(3 * 100 * 0.33) == 99 and round(99 / 0.75) == 132"
+    steps:
+      - show: |
+          <p><b>Quy mô (2014):</b> hơn 240 triệu người dùng; dòng thời gian trả lời 300 nghìn truy vấn mỗi giây, trung vị 1 ms, phân vị 99 là 4 ms.</p>
+          <p>Kỹ sư Twitter viết: “lỗi là chuyện bình thường” — <b>300&nbsp;000 yêu cầu/s</b>, thành công <b>99,99%</b>, tức <b>30 lỗi mỗi giây</b>. Tỉ lệ lỗi nói nhiều hơn từng lỗi riêng lẻ.</p>
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. lỗi mỗi giây</td><td>300&nbsp;000 nhân 0,01%</td><td>$\hl{30}$</td></tr>
+          <tr><td>Bước 2. lỗi mỗi ngày</td><td>30 nhân 86&nbsp;400</td><td>$\hl{2\,592\,000}$ — không ai đọc hết từng lỗi</td></tr></table>
+        focus: [1, 2, 2, "3.2", "3.3"]
+        say: "Ở chặng năm, năm 2014, Twitter có hơn 240 triệu người dùng, và dòng thời gian trả lời 300 nghìn truy vấn mỗi giây, trung vị 1 mi li giây. Một kỹ sư Twitter viết rằng lỗi là chuyện bình thường, với 300 nghìn yêu cầu mỗi giây và thành công 99 phẩy 99%. Theo kỹ sư đó, tỉ lệ lỗi nói nhiều hơn từng lỗi riêng lẻ. Bước một, 300 nghìn nhân phần bù 0 phẩy 01% là 30 lỗi mỗi giây. Bước hai, nhân 86 nghìn 400 giây, mỗi ngày có hơn 2 triệu rưỡi lỗi, không ai đọc hết được."
+      - clear: true
+        show: |
+          <p><b>Đuôi cộng dồn:</b> bài báo năm 2013 của Twitter ghi rằng độ trễ của cả yêu cầu do <b>phần chậm nhất</b> quyết định, và một yêu cầu thường chạm tới <b>hàng trăm hệ</b>. Giả sử mỗi hệ chậm 1% số lần (số minh hoạ), như các phần nối tiếp của bài 6:</p>
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. chạm 5 hệ</td><td>1 trừ 0,99 mũ 5</td><td>≈ $\hl{4{,}9\%}$ yêu cầu gặp ít nhất một hệ chậm</td></tr>
+          <tr><td>Bước 2. chạm 100 hệ</td><td>1 trừ 0,99 mũ 100</td><td>≈ $\hl{63{,}4\%}$ yêu cầu gặp ít nhất một hệ chậm</td></tr></table>
+          <p class="note">Thực hành: đo phân vị 99 của từng hệ, gọi song song, đặt thời hạn chờ. Điều kiện: yêu cầu toả ra nhiều hệ — một hệ đơn lẻ thì trung vị đã nói gần đủ.</p>
+        focus: [1, 1, 1, "2.2", "2.3", 3]
+        say: "Tiếp theo, ta xét chuyện độ trễ đuôi cộng dồn qua nhiều hệ. Bài báo năm 2013 của Twitter ghi rằng độ trễ của cả yêu cầu do phần chậm nhất quyết định, và một yêu cầu thường chạm tới hàng trăm hệ. Giả sử mỗi hệ chậm 1% số lần, một số minh hoạ, rồi nhân xác suất như các phần nối tiếp ở bài 6. Bước một, chạm 5 hệ thì 1 trừ 0 phẩy 99 mũ 5, khoảng 4 phẩy 9% yêu cầu gặp ít nhất một hệ chậm. Bước hai, chạm 100 hệ thì con số đó là khoảng 63 phẩy 4%. Thực hành rút ra là đo phân vị 99 của từng hệ, gọi song song và đặt thời hạn chờ, khi yêu cầu toả ra nhiều hệ."
+      - clear: true
+        show: |
+          <p><b>Tiếp tục phát triển:</b> mỗi loại việc giữ máy riêng thì mỗi cụm chỉ dùng khoảng <b>33%</b>. Twitter chuyển sang <b>một cụm chung</b> cho cả trung tâm dữ liệu, chia theo CPU, RAM.</p>
+          <table class="t"><tr><th>bước</th><th>phép tính (ba cụm 100 máy, số minh hoạ)</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. việc thật sự cần</td><td>3 nhân 100 máy nhân 33%</td><td>$\hlb{99}$ máy</td></tr>
+          <tr><td>Bước 2. chung một cụm, dùng 75%</td><td>99 chia 0,75</td><td>$\hlg{132}$ máy thay vì 300</td></tr></table>
+          <div class="box key">Bài học Twitter tự ghi: <b>thay đổi nhỏ, từng bước luôn thắng</b> — mỗi bước nhỏ, rủi ro nhỏ, cộng dồn lại thành lớn.</div>
+        focus: [1, 1, "2.2", "2.3", 3]
+        say: "Chặng này vẫn tiếp tục phát triển. Khi mỗi loại việc giữ máy riêng, mỗi cụm chỉ dùng khoảng 33%, nên Twitter chuyển sang một cụm chung cho cả trung tâm dữ liệu, chia theo bộ xử lý và bộ nhớ. Bước một, ba cụm 100 máy, một số minh hoạ, dùng 33% thì việc thật sự cần là 99 máy. Bước hai, gộp chung và dùng 75% thì chỉ cần 132 máy thay vì 300. Bài học chính Twitter tự ghi là thay đổi nhỏ, từng bước luôn thắng, vì mỗi bước rủi ro nhỏ mà cộng lại thành lớn."
+
+  # ───────────────────────── 11. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm bốn con số của hành trình"
+    checks:
+      - "1000 // 200 == 5 and 500 * 10**6 // 5 == 100 * 10**6"
+      - "120 * 250 == 30000"
+      - "300000 // 10000 == 30"
+      - "0.99**100 < math.exp(-1) and round(1 - math.exp(-1), 3) == 0.632"
+    steps:
+      - show: |
+          <table class="t"><tr><th>con số</th><th>đường khác để kiểm</th></tr>
+          <tr><td>100 GB mỗi ngày</td><td>5 tweet 200 byte là 1000 byte = 1 KB; 500 triệu tweet chia 5 = 100 triệu KB = 100 GB ✓</td></tr>
+          <tr><td>120 máy</td><td>nhân ngược: 120 máy nhân 250 yêu cầu = 30&nbsp;000 ✓</td></tr>
+          <tr><td>30 lỗi mỗi giây</td><td>99,99% nghĩa là 1 lỗi trong 10&nbsp;000 yêu cầu; 300&nbsp;000 chia 10&nbsp;000 = 30 ✓</td></tr>
+          <tr><td>63,4%</td><td>0,99 mũ 100 nhỏ hơn 1 chia e ≈ 0,368, nên phần bù lớn hơn 63,2% ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Ta kiểm lại bốn con số theo đường khác. Gom 5 bài đăng thì được 1000 byte, tức 1 KB, nên 500 triệu bài đăng là 100 triệu KB, đúng 100 GB. Nhân ngược, 120 máy nhân 250 yêu cầu đúng bằng 30 nghìn. Thành công 99 phẩy 99% nghĩa là 1 lỗi trong 10 nghìn yêu cầu, và 300 nghìn chia 10 nghìn đúng bằng 30. Cuối cùng, 0 phẩy 99 mũ 100 nhỏ hơn 1 chia cho số e, khoảng 0 phẩy 368, nên phần bù lớn hơn 63 phẩy 2%, khớp với 63 phẩy 4%."
+
+  # ───────────────────────── 12. BÀI HỌC SAI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "Những bài học sai khi đọc hành trình này"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">1.</b> “Ruby chậm, viết lại bằng Java là xong”</td><td>Twitter ghi ba nguyên nhân: mã nguyên khối mong manh, ném thêm máy, kẹt vì tối ưu. Họ tách <b>dần</b> và làm thư viện chung, không viết lại một lần</td><td>tìm nguyên nhân bằng điều tra và số đo, không đổ cho một ngôn ngữ</td></tr>
+          <tr><td><b class="red">2.</b> “Tách thành dịch vụ là tự khắc ổn”</td><td>sau khi tách, mỗi đội xử lý song song một kiểu, không có áp lực ngược chung; đuôi cộng dồn: 100 hệ, mỗi hệ chậm 1% (số minh hoạ) → 63,4% yêu cầu gặp chậm</td><td>thư viện gọi chung, thời hạn chờ, đo phân vị 99</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.2", "1.3", "1.3"]
+        say: "Bảng có hai bài học sai đầu tiên. Bài học sai thứ nhất là nghĩ Ruby chậm, viết lại bằng Java là xong. Twitter tự ghi ba nguyên nhân, là mã nguyên khối mong manh, ném thêm máy, và kẹt vì tối ưu, rồi họ tách dần chứ không viết lại một lần. Hãy tìm nguyên nhân bằng điều tra và số đo, đừng đổ cho một ngôn ngữ. Bài học sai thứ hai là nghĩ tách thành dịch vụ là tự khắc ổn, trong khi đuôi cộng dồn qua 100 hệ làm 63% yêu cầu gặp chậm. Hãy có thư viện gọi chung, thời hạn chờ, và đo phân vị 99."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">3.</b> “Twitter dùng hàng trăm dịch vụ, mình cũng nên vậy”</td><td>Twitter tách khi máy đã cạn ở 200–300 yêu cầu, tải tăng gấp nhiều lần và có rất nhiều đội; hệ 50 yêu cầu/s một đội thì chỉ thêm gánh vận hành</td><td>tách khi có điểm nghẽn đo được; trước đó giữ nguyên khối có ranh giới tốt như bài 3</td></tr>
+          <tr><td><b class="red">4.</b> “99,99% thành công là coi như không lỗi”</td><td>ở 300&nbsp;000 yêu cầu/s vẫn là 30 lỗi mỗi giây; đọc từng lỗi không xuể, mà bỏ qua thì không thấy lúc tỉ lệ tăng</td><td>theo dõi tỉ lệ lỗi và độ trễ đuôi, báo động khi tỉ lệ đổi</td></tr></table>
+        focus: ["1.2", "1.2", "1.2", "1.3", "1.3"]
+        say: "Bài học sai thứ ba là nghĩ Twitter dùng hàng trăm dịch vụ thì mình cũng nên vậy. Twitter tách khi máy đã cạn ở 200 tới 300 yêu cầu, tải tăng gấp nhiều lần và có rất nhiều đội, còn hệ 50 yêu cầu mỗi giây của một đội thì chỉ thêm gánh vận hành. Hãy tách khi có điểm nghẽn đo được, và trước đó giữ nguyên khối có ranh giới tốt như bài 3. Bài học sai thứ tư là coi 99 phẩy 99% thành công là không lỗi, trong khi ở 300 nghìn yêu cầu mỗi giây vẫn là 30 lỗi mỗi giây. Hãy theo dõi tỉ lệ lỗi và độ trễ đuôi, báo động khi tỉ lệ đổi."
+
+  # ───────────────────────── 13. QUYẾT ĐỊNH ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Bạn sẽ làm gì ở quy mô của mình?"
+    checks:
+      - "math.ceil(400 / 250) == 2 and math.ceil(800 / 250) == 4 and 4 + 1 == 5"
+      - "round(1 - 0.99**5, 3) == 0.049 and round(1 - 0.99**50, 3) == 0.395"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>tình huống: một ứng dụng nguyên khối, cao điểm 400 yêu cầu/s, mỗi máy chịu 250 (số minh hoạ), một đội 6 người</th></tr>
+          <tr><td>1</td><td>năm sau tải dự kiến gấp đôi. Thêm máy hay tách thành dịch vụ? Cần mấy máy?</td></tr>
+          <tr><td>2</td><td>một yêu cầu gọi lần lượt 5 phần khác nhau, mỗi phần chậm 1% số lần. Bao nhiêu yêu cầu gặp chậm, và làm gì?</td></tr></table>
+        focus: [1, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn, với một ứng dụng nguyên khối, cao điểm 400 yêu cầu mỗi giây, mỗi máy chịu 250, và một đội 6 người, đều là số minh hoạ. Câu một, năm sau tải dự kiến gấp đôi, vậy thêm máy hay tách thành dịch vụ, và cần mấy máy? Câu hai, một yêu cầu gọi lần lượt 5 phần, mỗi phần chậm 1% số lần, vậy bao nhiêu yêu cầu gặp chậm, và bạn làm gì? Dừng video và viết ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 1: lựa chọn</th><th>được</th><th>mất</th></tr>
+          <tr><td>thêm máy</td><td>800 chia 250 = 3,2, làm tròn lên <b>4 máy</b>, thêm 1 dự phòng là 5; không đổi mã</td><td>tiền máy; mỗi thay đổi vẫn triển khai lên mọi máy</td></tr>
+          <tr><td>tách dịch vụ</td><td>ranh giới cứng, cô lập lỗi</td><td>nhiều tháng; cần thư viện gọi chung, đo đuôi; 6 người gánh nhiều hệ</td></tr></table>
+          <p class="note">Chọn thêm máy, và đo CPU, RAM, mạng như Twitter năm 2010. Điều kiện đổi: một phần đo được chiếm gần hết tài nguyên, hay nhiều đội cùng sửa một mã — khi đó tách <b>đúng phần đó</b> trước.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Đáp án câu một là một đánh đổi. Thêm máy thì 800 chia 250 là 3 phẩy 2, làm tròn lên 4 máy, thêm 1 dự phòng là 5, và không phải đổi mã, đổi lại mỗi thay đổi vẫn triển khai lên mọi máy. Tách dịch vụ cho ranh giới cứng và cô lập lỗi, nhưng mất nhiều tháng, cần thư viện gọi chung, và 6 người phải gánh nhiều hệ. Nên chọn thêm máy và đo bộ xử lý, bộ nhớ, mạng, chỉ tách đúng phần chiếm gần hết tài nguyên khi đo thấy."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 2: bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. 5 phần nối tiếp</td><td>1 trừ 0,99 mũ 5</td><td>≈ $\hl{4{,}9\%}$ yêu cầu gặp chậm</td></tr>
+          <tr><td>Bước 2. nếu sau này thành 50 phần</td><td>1 trừ 0,99 mũ 50</td><td>≈ $\hl{39{,}5\%}$</td></tr></table>
+          <p class="note">Làm gì: gọi song song những phần không phụ thuộc nhau, đặt thời hạn chờ, đo phân vị 99 của từng phần. Điều kiện đổi: ở 5 phần, 4,9% có thể chấp nhận được nếu yêu cầu chậm vẫn dưới mục tiêu độ trễ — khi đó chỉ cần đo, chưa cần sửa.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Đáp án câu hai dùng cách nhân xác suất của các phần nối tiếp ở bài 6. Bước một, 5 phần nối tiếp cho 1 trừ 0 phẩy 99 mũ 5, khoảng 4 phẩy 9% yêu cầu gặp chậm. Bước hai, nếu sau này thành 50 phần, con số tăng lên khoảng 39 phẩy 5%. Hãy gọi song song những phần không phụ thuộc nhau, đặt thời hạn chờ, và đo phân vị 99 của từng phần, còn nếu yêu cầu chậm vẫn dưới mục tiêu thì lúc này chỉ cần đo."
+
+  # ───────────────────────── 14. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi hành trình & tư duy chuyên gia"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">một ứng dụng, một cơ sở dữ liệu</span><span class="a">→</span>
+          <span class="n">đo: máy cạn CPU, RAM</span><span class="a">→</span>
+          <span class="n">tách dần theo danh từ, thư viện chung</span><span class="a">→</span>
+          <span class="n">chịu đỉnh gấp 24 lần</span><span class="a">→</span>
+          <span class="n">đo tỉ lệ lỗi, đuôi; chia máy</span></div>
+        say: "Tổng kết lại hành trình. Twitter bắt đầu bằng một ứng dụng và một cơ sở dữ liệu. Khi tải tăng, họ đo và thấy máy cạn bộ xử lý và bộ nhớ. Họ tách dần theo danh từ cốt lõi, với một thư viện gọi dịch vụ chung, và chịu được đỉnh gấp 24 lần lúc thường. Rồi họ ổn định bằng cách đo tỉ lệ lỗi, độ trễ đuôi, và chia máy cho cả trung tâm dữ liệu."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> kiến trúc đổi theo <b>điểm nghẽn đo được</b>, từng bước nhỏ. Trước khi tách hay viết lại, hỏi: điểm nghẽn của mình là gì, đo bằng số nào, và bước nhỏ nhất để gỡ nó là gì?</div>
+        say: "Điều cần mang theo, kiến trúc đổi theo điểm nghẽn đo được, từng bước nhỏ. Trước khi tách hay viết lại, hãy hỏi điểm nghẽn của mình là gì, đo bằng số nào, và bước nhỏ nhất để gỡ nó là gì."
+      - clear: true
+        show: |
+          <p class="note">Đây là bài cuối của khoá SAR. Từ thuộc tính chất lượng và ước lượng, qua ranh giới, bộ nhớ đệm, phân mảnh, sẵn sàng, quá tải và nhất quán, bạn đã đi tới cách một hệ thật đổi kiến trúc khi người dùng tăng gấp nhiều lần.</p>
+        say: "Đây là bài cuối của khoá Kiến trúc hệ thống. Bạn đã đi từ thuộc tính chất lượng và ước lượng, qua ranh giới, bộ nhớ đệm, phân mảnh, sẵn sàng, quá tải và nhất quán. Cuối cùng, bạn đã thấy cách một hệ thật đổi kiến trúc khi người dùng tăng gấp nhiều lần. Cảm ơn bạn đã theo học."

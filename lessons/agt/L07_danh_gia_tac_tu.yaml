@@ -1,0 +1,204 @@
+id: L07
+course: AGT
+series: "AGT · AI agent"
+title: "Bài 7 — Đánh giá tác tử: thành công nhiệm vụ, pass@k và pass^k"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/agt.yaml L07; audit/agt/verify_agt.py L07; M. Chen và cộng sự, Evaluating Large Language Models Trained on Code (2021) — pass@k và ước lượng không chệch; S. Yao và cộng sự, τ-bench (2024) — pass^k; LLM bài 10 (khoảng tin cậy, so theo cặp)"
+assumes: [arith, power, approx, frac]
+# Quy ước: mỗi lần chạy thành công với xác suất p ĐỘC LẬP. pass@k = 1 − (1 − p)^k (ít nhất một lần trong k); pass^k = p^k (cả k lần).
+#   Ước lượng không chệch pass@k từ n lần chạy có c lần đúng: 1 − C(n − c, k) / C(n, k) (alg.pass_at_k_unbiased). Tên pass@k, pass^k chỉ trên màn hình;
+#   lời đọc “thành công ít nhất một lần trong k lần”, “thành công cả k lần”.
+objectives:
+  - "Phân biệt thành công ít nhất một lần và thành công mọi lần"
+  - "Ước lượng từ dữ liệu chạy thật"
+  - "Thiết kế nhiệm vụ đánh giá có trạng thái cuối kiểm được"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "97% trên bảng điểm, 34% với khách hàng"
+    checks:
+      - "round(alg.pass_at_k(0.7, 3), 3) == 0.973 and round(alg.pass_hat_k(0.7, 3), 3) == 0.343"
+    steps:
+      - show: |
+          <p>Báo cáo ghi: tác tử giải được <b>97,3%</b> nhiệm vụ “trong 3 lần thử”. Nhưng mỗi khách hàng gặp tác tử nhiều lần, và muốn nó làm đúng <b>mọi</b> lần. Với cùng tác tử đó, đúng cả 3 lần chỉ <b>34,3%</b>.</p>
+          <div class="box key">Hôm nay: <b>đánh giá tác tử</b> — đo theo nhiệm vụ, phân biệt “ít nhất một lần” với “mọi lần”, và đo từ dữ liệu chạy thật.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, báo cáo ghi tác tử giải được 97 phẩy 3 phần trăm nhiệm vụ trong 3 lần thử. Nhưng mỗi khách hàng gặp tác tử nhiều lần, và muốn nó làm đúng mọi lần. Với cùng tác tử đó, đúng cả 3 lần chỉ 34 phẩy 3 phần trăm. Hôm nay ta học đánh giá tác tử, đo theo nhiệm vụ, phân biệt ít nhất một lần với mọi lần, và đo từ dữ liệu chạy thật."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: “ít nhất một” qua phần bù, và đếm cách chọn"
+    checks:
+      - "0.5 ** 2 == 0.25 and 1 - 0.25 == 0.75 and sum(1 for o in __import__('itertools').product('NS', repeat=2) if 'N' in o) == 3"
+      - "len(list(__import__('itertools').combinations(range(4), 2))) == 6 == math.comb(4, 2)"
+    steps:
+      - show: |
+          <p>Tung đồng xu 2 lần. “<b>Ít nhất một</b> lần ngửa” có 3 kết cục (NN, NS, SN), khó đếm khi số lần tăng. Dễ hơn: lấy 1 trừ trường hợp <b>không lần nào</b> ngửa.</p>
+          <table class="t"><tr><th>cách tính</th><th>kết quả</th></tr>
+          <tr><td>không lần nào ngửa: $0{,}5^2$</td><td>0,25</td></tr>
+          <tr><td>ít nhất một lần ngửa: $1 - 0{,}25$</td><td>$\hl{0{,}75}$</td></tr></table>
+        focus: [1, 1, "2.2", "2.3"]
+        say: "Trước hết, ôn cách tính ít nhất một lần. Tung đồng xu 2 lần, ít nhất một lần ngửa có 3 kết cục, nhưng đếm như vậy rất khó khi số lần tăng lên. Không lần nào ngửa thì cả hai lần đều sấp, xác suất 0 phẩy 5 bình phương, bằng 0 phẩy 25. Vậy ít nhất một lần ngửa là phần bù, 1 trừ 0 phẩy 25, bằng 0 phẩy 75."
+      - show: |
+          <p>Đếm cách chọn: có 4 lần chạy 1, 2, 3, 4; chọn 2 lần (không kể thứ tự): 1-2, 1-3, 1-4, 2-3, 2-4, 3-4 → <b>6 cách</b>.</p>
+        say: "Điều thứ hai là đếm cách chọn mà không kể thứ tự. Có 4 lần chạy đánh số 1 đến 4, và ta chọn ra 2 lần. Liệt kê ra được 1 với 2, 1 với 3, 1 với 4, 2 với 3, 2 với 4, và 3 với 4, tổng cộng 6 cách chọn."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: ít nhất một lần, mọi lần, và ước lượng không chệch"
+    steps:
+      - show: |
+          <table class="t"><tr><th>chỉ số</th><th>nghĩa</th><th>công thức (độc lập)</th></tr>
+          <tr><td><b>pass@k</b></td><td>thành công <b>ít nhất một lần</b> trong k lần</td><td>$1 - (1 - p)^k$</td></tr>
+          <tr><td><b>pass^k</b></td><td>thành công <b>cả k lần</b></td><td>$p^k$</td></tr></table>
+          <p><b>Ước lượng từ dữ liệu</b>: chạy mỗi nhiệm vụ $n$ lần, $c$ lần đúng. pass@k $\approx 1 - \frac{\binom{n - c}{k}}{\binom{n}{k}}$ — xác suất chọn ngẫu nhiên k trong n lần mà ít nhất một lần đúng.</p>
+          <p><b>Nhiệm vụ đánh giá tốt</b>: có trạng thái cuối <b>kiểm được bằng chương trình</b> (đơn đã tạo đúng, tệp đúng nội dung), không chỉ “câu trả lời nghe hợp lý”.</p>
+        introduces: [binom]
+        focus: [1, "1.2", "1.3", 2, 2, 2, 3]
+        say: "Bảng giới thiệu hai chỉ số. Chỉ số thứ nhất là thành công ít nhất một lần trong k lần, bằng 1 trừ 1 trừ p mũ k. Chỉ số thứ hai là thành công cả k lần, bằng p mũ k. Để ước lượng từ dữ liệu, chạy mỗi nhiệm vụ n lần, có c lần đúng. Chỉ số thứ nhất xấp xỉ 1 trừ tổ hợp chập k của n trừ c, chia tổ hợp chập k của n. Đó là xác suất chọn ngẫu nhiên k trong n lần mà có ít nhất một lần đúng. Một nhiệm vụ đánh giá tốt có trạng thái cuối kiểm được bằng chương trình, như đơn đã tạo đúng hay tệp đúng nội dung, không chỉ là câu trả lời nghe hợp lý."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hai chiếc kéo mở dần"
+    checks:
+      - "[round(1 - 0.3 ** k, 3) for k in range(1, 6)] == [0.7, 0.91, 0.973, 0.992, 0.998] and [round(0.7 ** k, 3) for k in range(1, 6)] == [0.7, 0.49, 0.343, 0.24, 0.168]"
+    steps:
+      - show: |
+          <div><svg width="1500" height="360" viewBox="0 0 1500 360"><line x1="200" y1="310" x2="1320" y2="310" stroke="#6b7280" stroke-width="2"/><rect x="230" y="135.0" width="70" height="175.0" fill="#2a78d6"/><text x="265" y="125.0" font-size="20" text-anchor="middle" fill="#2a78d6">0,700</text><rect x="310" y="135.0" width="70" height="175.0" fill="#eb6834"/><text x="345" y="125.0" font-size="20" text-anchor="middle" fill="#eb6834">0,700</text><text x="305" y="340" font-size="22" text-anchor="middle" fill="#1f2937">k = 1</text><rect x="450" y="82.5" width="70" height="227.5" fill="#2a78d6"/><text x="485" y="72.5" font-size="20" text-anchor="middle" fill="#2a78d6">0,910</text><rect x="530" y="187.5" width="70" height="122.5" fill="#eb6834"/><text x="565" y="177.5" font-size="20" text-anchor="middle" fill="#eb6834">0,490</text><text x="525" y="340" font-size="22" text-anchor="middle" fill="#1f2937">k = 2</text><rect x="670" y="66.8" width="70" height="243.2" fill="#2a78d6"/><text x="705" y="56.8" font-size="20" text-anchor="middle" fill="#2a78d6">0,973</text><rect x="750" y="224.2" width="70" height="85.7" fill="#eb6834"/><text x="785" y="214.2" font-size="20" text-anchor="middle" fill="#eb6834">0,343</text><text x="745" y="340" font-size="22" text-anchor="middle" fill="#1f2937">k = 3</text><rect x="890" y="62.0" width="70" height="248.0" fill="#2a78d6"/><text x="925" y="52.0" font-size="20" text-anchor="middle" fill="#2a78d6">0,992</text><rect x="970" y="250.0" width="70" height="60.0" fill="#eb6834"/><text x="1005" y="240.0" font-size="20" text-anchor="middle" fill="#eb6834">0,240</text><text x="965" y="340" font-size="22" text-anchor="middle" fill="#1f2937">k = 4</text><rect x="1110" y="60.6" width="70" height="249.4" fill="#2a78d6"/><text x="1145" y="50.6" font-size="20" text-anchor="middle" fill="#2a78d6">0,998</text><rect x="1190" y="268.0" width="70" height="42.0" fill="#eb6834"/><text x="1225" y="258.0" font-size="20" text-anchor="middle" fill="#eb6834">0,168</text><text x="1185" y="340" font-size="22" text-anchor="middle" fill="#1f2937">k = 5</text><g font-size="22"><rect x="1240" y="40" width="26" height="26" fill="#2a78d6"/><text x="1276" y="62" fill="#2a78d6">ít nhất một lần</text><rect x="1240" y="84" width="26" height="26" fill="#eb6834"/><text x="1276" y="106" fill="#eb6834">cả k lần</text></g></svg></div>
+        focus: [1, 1, 1]
+        say: "Hình vẽ hai chỉ số cho cùng một tác tử, mỗi lần chạy thành công 70 phần trăm, khi số lần k tăng từ 1 đến 5. Cột xanh là thành công ít nhất một lần, đi lên rất nhanh, tới 0 phẩy 998 ở k bằng 5. Cột cam là thành công cả k lần, rơi xuống còn 0 phẩy 168, nên hai chỉ số mở ra như hai lưỡi kéo, dù cùng một tác tử."
+
+  - id: example
+    kind: example
+    title: "Cùng tác tử, hai con số rất khác"
+    checks:
+      - "[round(alg.pass_at_k(0.7, k), 3) for k in (1, 3)] == [0.7, 0.973] and [round(alg.pass_hat_k(0.7, k), 3) for k in (1, 3)] == [0.7, 0.343]"
+      - "round(alg.pass_at_k_unbiased(10, 7, 3), 3) == 0.992 and math.comb(10, 3) == 120 and math.comb(3, 3) == 1"
+    steps:
+      - show: |
+          <p><b>Bước 1 — ít nhất một lần trong 3, mỗi lần 70%:</b> một lần thất bại $1 - 0{,}7 = 0{,}3$; cả 3 lần thất bại $0{,}3^3 = 0{,}027$; vậy $1 - 0{,}027 = \hl{0{,}973}$.</p>
+        say: "Bước một, tính thành công ít nhất một lần trong 3 lần, mỗi lần 70 phần trăm, theo cách phần bù. Một lần thất bại có xác suất 0 phẩy 3, cả 3 lần đều thất bại là 0 phẩy 3 mũ 3, bằng 0 phẩy 027. Vậy ít nhất một lần thành công là 1 trừ 0 phẩy 027, bằng 0 phẩy 973."
+      - show: |
+          <p><b>Bước 2 — cả 3 lần:</b> $0{,}7 \times 0{,}7 = 0{,}49$, rồi $0{,}49 \times 0{,}7 = \hl{0{,}343}$. Cùng tác tử, 97,3% hay 34,3% tuỳ câu hỏi ta đặt.</p>
+        say: "Bước hai, thành công cả 3 lần thì nhân dần, 0 phẩy 7 nhân 0 phẩy 7 bằng 0 phẩy 49, rồi nhân tiếp 0 phẩy 7, được 0 phẩy 343. Cùng một tác tử, con số là 97 phẩy 3 hay 34 phẩy 3 phần trăm tuỳ vào câu hỏi ta đặt."
+      - show: |
+          <p><b>Bước 3 — từ dữ liệu</b> chạy thật của một nhiệm vụ:</p>
+          <table class="t"><tr><th>đại lượng</th><th>giá trị</th></tr>
+          <tr><td>số lần chạy</td><td>10 (đúng 7, sai 3)</td></tr>
+          <tr><td>số cách chọn 3 lần trong 10</td><td>$\binom{10}{3} = 120$</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước ba, chuyển sang dữ liệu chạy thật. Một nhiệm vụ chạy 10 lần, đúng 7 lần và sai 3 lần. Số cách chọn ra 3 lần trong 10 lần là tổ hợp chập 3 của 10, bằng 120 cách."
+      - show: |
+          <p><b>Bước 4 — cách chọn mà cả 3 đều sai:</b> chỉ có 3 lần sai, nên đúng $\binom{3}{3} = 1$ cách. Ít nhất một lần đúng: $1 - \frac{1}{120} \approx \hl{0{,}992}$.</p>
+        say: "Bước bốn, đếm cách chọn mà cả 3 lần đều sai. Vì chỉ có đúng 3 lần sai, nên chỉ có 1 cách. Vậy khả năng có ít nhất một lần đúng là 1 trừ 1 phần 120, khoảng 0 phẩy 992, cũng theo cách lấy phần bù."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: chia ca theo số lần thành công, và đếm 120 theo thứ tự"
+    checks:
+      - "[round(math.comb(3, s) * 0.7 ** s * 0.3 ** (3 - s), 3) for s in (3, 2, 1, 0)] == [0.343, 0.441, 0.189, 0.027] and round(0.343 + 0.441 + 0.189, 3) == 0.973 and round(0.343 + 0.441 + 0.189 + 0.027, 3) == 1"
+      - "10 * 9 * 8 == 720 and 3 * 2 * 1 == 6 and 720 // 6 == 120 == len(list(__import__('itertools').combinations(range(10), 3))) and round(alg.pass_at_k_unbiased(10, 7, 3), 3) == 0.992"
+    steps:
+      - show: |
+          <p><b>Cách 1 — chia 3 lần chạy theo số lần thành công</b> (mỗi lần 0,7):</p>
+          <table class="t"><tr><th>số lần thành công</th><th>xác suất</th></tr>
+          <tr><td>3</td><td>0,343</td></tr>
+          <tr><td>2 (3 vị trí cho lần hỏng)</td><td>$3 \times 0{,}49 \times 0{,}3 = 0{,}441$</td></tr>
+          <tr><td>1</td><td>$3 \times 0{,}7 \times 0{,}09 = 0{,}189$</td></tr>
+          <tr><td>0</td><td>0,027</td></tr></table>
+          <p>Ít nhất một lần: $0{,}343 + 0{,}441 + 0{,}189 = 0{,}973$ ✓; bốn ca cộng lại đúng bằng 1.</p>
+        focus: [1, "2.2", "2.3", "2.4", 3]
+        say: "Kiểm bằng đường khác, cách thứ nhất là chia 3 lần chạy theo số lần thành công. Thành công cả 3 lần là 0 phẩy 343. Thành công 2 lần thì lần hỏng có 3 vị trí, nên là 3 nhân 0 phẩy 49 nhân 0 phẩy 3, bằng 0 phẩy 441. Thành công 1 lần là 0 phẩy 189, và không lần nào là 0 phẩy 027. Cộng ba ca đầu được 0 phẩy 973, khớp với cách phần bù, và cả bốn ca cộng lại đúng bằng 1."
+      - clear: true
+        show: |
+          <p><b>Cách 2 — đếm lại 120 theo thứ tự:</b></p>
+          <table class="t"><tr><th>đếm gì</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>chọn có thứ tự: lần 1, lần 2, lần 3</td><td>$10 \times 9 \times 8$</td><td>720</td></tr>
+          <tr><td>số thứ tự của cùng một bộ 3 lần</td><td>$3 \times 2 \times 1$</td><td>6</td></tr>
+          <tr><td>số cách chọn không kể thứ tự</td><td>$\frac{720}{6}$</td><td>120 ✓</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Cách thứ hai đếm lại con số 120 theo thứ tự. Chọn lần thứ nhất có 10 cách, lần thứ hai còn 9, lần thứ ba còn 8, được 720 cách có thứ tự. Nhưng mỗi bộ 3 lần bị đếm 6 lần, vì 3 lần đó xếp được 6 thứ tự khác nhau, nên số cách chọn là 720 chia 6, bằng 120, khớp."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay mắc, kể cả khi đã đi làm"
+    checks:
+      - "round(alg.pass_hat_k(0.9, 5), 2) == 0.59 and round(alg.pass_at_k(0.9, 5), 3) == 1.0"
+      - "(lambda ps: round(sum(ps) / 10, 1) == 0.9 and round(sum(alg.pass_hat_k(q, 5) for q in ps) / 10, 3) == 0.9 and round(sum(alg.pass_at_k(q, 5) for q in ps) / 10, 3) == 0.9)([1.0] * 9 + [0.0])"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Báo “ít nhất một lần” cho sản phẩm dùng thật <b class="red">(chọn sai chỉ số)</b>
+          <br><span class="note">Chỉ số “ít nhất một lần” hợp khi có người chọn kết quả tốt nhất (sinh nhiều phương án rồi kiểm). Tác tử phục vụ trực tiếp cần chỉ số “mọi lần”.</span></div>
+        say: "Lỗi thứ nhất, báo chỉ số ít nhất một lần cho sản phẩm dùng thật, tức chọn sai chỉ số. Chỉ số ít nhất một lần hợp khi có người chọn kết quả tốt nhất, như sinh nhiều phương án rồi kiểm. Tác tử phục vụ trực tiếp cần chỉ số mọi lần."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Chấm bằng cảm nhận “nghe hợp lý” <b class="red">(không lặp lại được)</b>
+          <br><span class="note">Đánh giá phải kiểm <b>trạng thái cuối</b>: cơ sở dữ liệu có đơn đúng không, tệp có đúng nội dung không. Chấm bằng mô hình chỉ là bổ sung, và phải đo độ khớp với người chấm.</span></div>
+        say: "Lỗi thứ hai, chấm bằng cảm nhận nghe hợp lý, nên không lặp lại được. Đánh giá phải kiểm trạng thái cuối, cơ sở dữ liệu có đơn đúng không, tệp có đúng nội dung không. Chấm bằng mô hình chỉ là bổ sung, và phải đo độ khớp với người chấm."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Chạy mỗi nhiệm vụ một lần <b class="red">(không thấy độ dao động)</b>
+          <br><span class="note">Tác tử là ngẫu nhiên: một lần chạy không cho biết $p$. Chạy nhiều lần mỗi nhiệm vụ, báo cả khoảng tin cậy.</span></div>
+        say: "Lỗi thứ ba, chạy mỗi nhiệm vụ một lần, nên không thấy độ dao động. Tác tử là ngẫu nhiên, một lần chạy không cho biết xác suất thành công. Hãy chạy nhiều lần mỗi nhiệm vụ, và báo cả khoảng tin cậy."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4.</b> Lấy tỉ lệ trung bình chung rồi mới tính “mọi lần” <b class="red">(sai cả hai chiều)</b>
+          <br><span class="note">Người đã đi làm hay lấy 90% của cả bộ rồi tính $0{,}9^5$. Nhưng 90% có thể là mọi nhiệm vụ 90%, hoặc 9 nhiệm vụ luôn đúng và 1 nhiệm vụ luôn hỏng. Chuyên gia tính chỉ số <b>cho từng nhiệm vụ</b> rồi mới lấy trung bình.</span></div>
+          <table class="t"><tr><th>bộ 10 nhiệm vụ, trung bình 90%</th><th>cả 5 lần</th><th>ít nhất một trong 5 lần</th></tr>
+          <tr><td>mọi nhiệm vụ đều 90%</td><td>0,59</td><td>≈ 1,000</td></tr>
+          <tr><td>9 nhiệm vụ 100%, 1 nhiệm vụ 0%</td><td>$\hl{0{,}9}$</td><td>$\hl{0{,}9}$</td></tr></table>
+        focus: [1, 1, 1, 1, 2, "2.2", "2.3"]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, lấy tỉ lệ trung bình chung của cả bộ, rồi mới tính chỉ số mọi lần. Họ thấy cả bộ đúng 90 phần trăm và tính ngay 0 phẩy 9 mũ 5. Nhưng 90 phần trăm có thể là mọi nhiệm vụ đều 90, hoặc là 9 nhiệm vụ luôn đúng cộng 1 nhiệm vụ luôn hỏng. Vì vậy chuyên gia tính chỉ số cho từng nhiệm vụ rồi mới lấy trung bình. Bảng so hai bộ cùng trung bình 90 phần trăm. Nếu mọi nhiệm vụ đều 90 phần trăm, cả 5 lần đúng là 0 phẩy 59, còn ít nhất một lần gần bằng 1. Nếu 9 nhiệm vụ luôn đúng và 1 nhiệm vụ luôn hỏng, cả hai chỉ số đều là 0 phẩy 9, vì nhiệm vụ hỏng thì thử bao nhiêu lần cũng hỏng."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "round(alg.pass_hat_k(0.9, 5), 3) == 0.59 and round(alg.pass_hat_k(0.99, 5), 3) == 0.951"
+      - "[round(0.9 ** k, 3) for k in range(1, 6)] == [0.9, 0.81, 0.729, 0.656, 0.59] and round(1 - 0.9 ** 5, 2) == 0.41 and round(0.98 ** 5, 3) == 0.904 < 0.95 <= 0.99 ** 5"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Mỗi lần thành công 90%. Một khách hàng dùng tác tử 5 lần: xác suất cả 5 lần đều ổn?</td></tr>
+          <tr><td>2</td><td>Muốn ít nhất 95% khách dùng 5 lần đều ổn: mỗi lần 98% có đủ không, hay cần 99%?</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, mỗi lần thành công 90 phần trăm, một khách hàng dùng tác tử 5 lần, xác suất cả 5 lần đều ổn là bao nhiêu? Câu hai, muốn ít nhất 95 phần trăm khách dùng 5 lần đều ổn, thì mỗi lần 98 phần trăm có đủ không, hay cần tới 99 phần trăm? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>số lần dùng</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th></tr>
+          <tr><td>cả các lần đều ổn</td><td>0,9</td><td>0,81</td><td>0,729</td><td>0,656</td><td>$\hl{0{,}59}$</td></tr></table>
+          <p>① Mỗi lần nhân thêm 0,9: còn ≈ 0,59 — khoảng 41% khách gặp ít nhất một lần hỏng.</p>
+        focus: [1, 2]
+        say: "Đáp án câu một, nhân dần mỗi lần thêm 0 phẩy 9, được 0 phẩy 81, 0 phẩy 729, 0 phẩy 656, rồi khoảng 0 phẩy 59 ở lần thứ năm. Vậy khoảng 41 phần trăm khách gặp ít nhất một lần hỏng."
+      - show: |
+          <p>② Mỗi lần 98%: $0{,}98^5 \approx 0{,}904$ &lt; 0,95 → chưa đủ.</p>
+          <p>Mỗi lần 99%: $0{,}99^5 \approx \hl{0{,}951}$ ≥ 0,95 → <b>cần khoảng 99%</b> mỗi lần.</p>
+        focus: [1, 2]
+        say: "Câu hai, mỗi lần 98 phần trăm thì 0 phẩy 98 mũ 5 xấp xỉ 0 phẩy 904, còn thấp hơn 0 phẩy 95, nên chưa đủ. Mỗi lần 99 phần trăm thì 0 phẩy 99 mũ 5 xấp xỉ 0 phẩy 951, đạt mục tiêu, vậy quyết định là phải nâng độ ổn định mỗi lần lên khoảng 99 phần trăm."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">đo theo nhiệm vụ, trạng thái cuối kiểm được</span><span class="a">→</span>
+          <span class="n">ít nhất một lần: 1 − (1 − p)^k</span><span class="a">→</span>
+          <span class="n">mọi lần: p^k</span><span class="a">→</span>
+          <span class="n">chạy nhiều lần, báo khoảng tin cậy</span></div>
+        say: "Tổng kết lại, đo theo nhiệm vụ với trạng thái cuối kiểm được. Thành công ít nhất một lần bằng 1 trừ 1 trừ p mũ k, thành công mọi lần bằng p mũ k, và hãy chạy nhiều lần rồi báo khoảng tin cậy."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> người dùng trải nghiệm <b>độ ổn định</b>, không trải nghiệm điểm số tốt nhất trong vài lần thử.</div>
+        say: "Điều cần mang theo, người dùng trải nghiệm độ ổn định, không trải nghiệm điểm số tốt nhất trong vài lần thử."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 8): <b>chi phí và độ trễ</b> — ngân sách từ tố và bộ nhớ đệm lời nhắc.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 8, ta học chi phí và độ trễ, với ngân sách từ tố và bộ nhớ đệm lời nhắc. Hẹn gặp bạn ở bài tiếp theo."

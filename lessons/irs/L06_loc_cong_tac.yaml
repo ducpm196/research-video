@@ -1,0 +1,281 @@
+id: L06
+course: IRS
+series: "IRS · Truy hồi thông tin và hệ gợi ý"
+title: "Bài 6 — Lọc cộng tác theo láng giềng"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/irs.yaml L06; audit/irs/verify_irs.py (verify_parts/L06.py); audit/irs/sources_L06.md (câu trích nguyên văn, đọc 2026-11-03); S. Baluja và cộng sự, Video Suggestion and Discovery for YouTube, WWW 2008 [BA08]; Y. Hu, Y. Koren, C. Volinsky, ICDM 2008 [HU08]; IRS bài 2 (cosin); LLM bài 3 (cosin của vector nhúng)"
+assumes: [arith]
+# Quy ước (theo khoá IRS):
+#   - ma trận đánh giá: hàng = người dùng, cột = sản phẩm; điểm 1–5; số 0 trong ô nghĩa là CHƯA CHẤM (không phải điểm 0).
+#   - r_{U,3} = điểm người U chấm sản phẩm 3; \hat{r}_{U,3} = điểm dự đoán; \mathbf{u}, \mathbf{v} = hàng của U, V (vector);
+#     cos(\mathbf{u}, \mathbf{v}) như bài 2 và LLM bài 3.
+#   - Ví dụ chạy suốt bài (SỐ MINH HOẠ): sản phẩm 1 tai nghe, 2 sạc dự phòng, 3 ốp lưng; U = (5, 3, 0), V = (4, 0, 4), W = (1, 2, 5).
+#   - Ví dụ cùng xem (L, M, N, O, P, Q) lấy nguyên từ [BA08]; số 1 triệu người dùng là số minh hoạ.
+objectives:
+  - "Tính độ tương tự cosin giữa hai người dùng"
+  - "Dự đoán điểm bằng trung bình có trọng số của láng giềng"
+  - "Nhận ra khi số 0 (chưa chấm), số món chung quá ít hay thang chấm khác nhau làm sai độ tương tự"
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Không có câu hỏi nào, vẫn phải đoán bạn thích gì"
+    steps:
+      - show: |
+          <p>Cửa hàng không có ô tìm kiếm nào được gõ. Chỉ có bảng chấm điểm 1–5 (số minh hoạ; <b>0 = chưa chấm</b>):</p>
+          <table class="t"><tr><th>người dùng</th><th>tai nghe</th><th>sạc dự phòng</th><th>ốp lưng</th></tr>
+          <tr><td>U</td><td>5</td><td>3</td><td class="red">? (0)</td></tr>
+          <tr><td>V</td><td>4</td><td>0</td><td>4</td></tr>
+          <tr><td>W</td><td>1</td><td>2</td><td>5</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Chào bạn, lần này không có câu hỏi nào được gõ vào, cửa hàng chỉ có bảng chấm điểm từ 1 tới 5, một số minh hoạ, với số 0 nghĩa là chưa chấm. Người U chấm tai nghe 5 điểm, sạc dự phòng 3 điểm, và chưa chấm ốp lưng. Người V chấm tai nghe 4, chưa chấm sạc, và chấm ốp lưng 4. Người W chấm 1, 2 và 5."
+      - show: |
+          <div class="box key">Hôm nay ta trả lời: đo hai người “giống nhau” bằng gì? Đoán điểm U cho ốp lưng thế nào? Và vì sao số 0 trong bảng là cái bẫy?</div>
+        say: "Hôm nay ta trả lời ba câu hỏi, đo hai người giống nhau bằng gì, đoán điểm U sẽ chấm cho ốp lưng thế nào, và vì sao số 0 trong bảng là một cái bẫy. Cách làm này gọi là lọc cộng tác, vì những người dùng khác cùng nhau giúp đoán sở thích của bạn."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: tích vô hướng, độ dài, cosin, trung bình có trọng số"
+    checks:
+      - "1 * 3 + 2 * 4 == 11 and math.sqrt(3 ** 2 + 4 ** 2) == 5"
+      - "round(alg.cosine([1, 2], [3, 4]), 3) == 0.984"
+      - "(2 * 4 + 1 * 1) / (2 + 1) == 3"
+    steps:
+      - show: |
+          <table class="t"><tr><th>điều cần nhớ</th><th>ví dụ số</th></tr>
+          <tr><td>① tích vô hướng: nhân từng cặp thành phần rồi cộng</td><td>$(1, 2) \cdot (3, 4) = 1 \cdot 3 + 2 \cdot 4 = 11$</td></tr>
+          <tr><td>② độ dài: căn của tổng bình phương</td><td>$\|(3, 4)\| = \sqrt{9 + 16} = 5$</td></tr>
+          <tr><td>③ cosin: tích vô hướng chia tích hai độ dài</td><td>$\frac{11}{\sqrt{5} \cdot 5} \approx 0{,}984$</td></tr></table>
+        introduces: [cdot, norm, sqrt, frac, approx, power]
+        focus: ["1.2", "1.3", "1.4", "1.4"]
+        say: "Ba điều đầu đã gặp ở bài 2 và ở khoá mô hình ngôn ngữ, tích vô hướng nhân từng cặp thành phần rồi cộng, ví dụ 1 nhân 3 cộng 2 nhân 4 bằng 11. Độ dài, viết giữa hai vạch đứng kép, là căn của tổng bình phương, vector 3, 4 có độ dài căn 25 bằng 5. Cosin là tích vô hướng chia tích hai độ dài, ở đây 11 chia căn 5 nhân 5, khoảng 0 phẩy 984. Bài 2 đã dùng chính số này để xếp văn bản theo câu hỏi, cosin càng gần 1 thì hai vector càng cùng hướng."
+      - show: |
+          <p><b>④ Trung bình có trọng số.</b> Số nào nặng ký hơn thì góp nhiều hơn: với trọng số 2 và 1 cho hai điểm 4 và 1,</p>
+          $$\frac{2 \cdot 4 + 1 \cdot 1}{2 + 1} = \frac{9}{3} = 3$$
+        focus: [1, 2]
+        say: "Điều thứ tư là trung bình có trọng số, số nào nặng ký hơn thì góp nhiều hơn vào kết quả. Với trọng số 2 cho điểm 4 và trọng số 1 cho điểm 1, ta có 2 nhân 4 cộng 1 nhân 1 bằng 9, chia tổng trọng số 3, được 3, gần điểm 4 hơn điểm 1."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: hàng người dùng, điểm r và điểm dự đoán có dấu mũ"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ký hiệu</th><th>đọc là</th><th>nghĩa</th><th>ví dụ</th></tr>
+          <tr><td>$\mathbf{u}$, $\mathbf{v}$, $\mathbf{w}$</td><td>vector u, v, w</td><td>hàng điểm của người U, V, W</td><td>$\mathbf{u} = (5, 3, 0)$</td></tr>
+          <tr><td>$r_{V,3}$</td><td>r của V, món 3</td><td>điểm V chấm sản phẩm 3</td><td>4</td></tr>
+          <tr><td>$\hat{r}_{U,3}$</td><td>r mũ của U, món 3</td><td>điểm <b>dự đoán</b> U sẽ chấm sản phẩm 3</td><td>cần tìm</td></tr>
+          <tr><td>$\cos(\mathbf{u}, \mathbf{v})$</td><td>cosin của u và v</td><td>độ tương tự giữa U và V</td><td>từ 0 tới 1 khi điểm không âm</td></tr></table>
+        introduces: [vec, sub, hat, cos]
+        focus: ["1.2", "1.3", "1.4", "1.5"]
+        say: "Bảng giải mã ký hiệu, chữ u in đậm là vector hàng điểm của người U, bằng 5, 3, 0, tương tự với v và w. Chữ r với hai chỉ số nhỏ dưới chân, V và 3, là điểm người V chấm sản phẩm 3, ở đây bằng 4. Dấu mũ nhỏ trên chữ r nghĩa là điểm dự đoán, r mũ của U và món 3 là điểm ta đoán U sẽ chấm cho ốp lưng. Còn cosin của u và v là độ tương tự giữa hai người, nằm từ 0 tới 1 khi mọi điểm không âm."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hỏi những người giống mình, nghe người giống nhất nhiều nhất"
+    steps:
+      - show: |
+          <div><svg width="1500" height="400" viewBox="0 0 1500 400"><defs><marker id="ar6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#eb6834"/></marker></defs>
+          <g font-size="24" text-anchor="middle" fill="#1f2937">
+          <circle cx="250" cy="200" r="70" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="250" y="195" font-weight="bold">U</text><text x="250" y="228">ốp lưng: ?</text>
+          <circle cx="750" cy="90" r="62" fill="#d1fae5" stroke="#059669" stroke-width="3"/><text x="750" y="85" font-weight="bold">V</text><text x="750" y="116">ốp lưng 4</text>
+          <circle cx="750" cy="310" r="62" fill="#f3f4f6" stroke="#9ca3af" stroke-width="3"/><text x="750" y="305" font-weight="bold">W</text><text x="750" y="336">ốp lưng 5</text>
+          <rect x="1080" y="150" width="380" height="110" rx="12" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/>
+          <text x="1270" y="195" font-weight="bold">dự đoán cho U</text><text x="1270" y="232">gần 4 hơn gần 5</text>
+          </g>
+          <line x1="318" y1="175" x2="688" y2="100" stroke="#059669" stroke-width="10"/><text x="470" y="115" font-size="23" fill="#059669" text-anchor="middle">giống nhiều: 0,606</text>
+          <line x1="318" y1="225" x2="688" y2="300" stroke="#9ca3af" stroke-width="4"/><text x="470" y="305" font-size="23" fill="#6b7280" text-anchor="middle">giống ít: 0,344</text>
+          <line x1="815" y1="100" x2="1075" y2="185" stroke="#eb6834" stroke-width="4" marker-end="url(#ar6)"/>
+          <line x1="815" y1="300" x2="1075" y2="230" stroke="#eb6834" stroke-width="4" marker-end="url(#ar6)"/>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình cho thấy cơ chế, U ở bên trái chưa chấm ốp lưng, còn hai láng giềng V và W đã chấm. Đường nối dày màu lục nghĩa là U giống V nhiều, độ tương tự 0 phẩy 606, đường mảnh màu xám nghĩa là U giống W ít, chỉ 0 phẩy 344. Điểm của mỗi láng giềng chảy về ô dự đoán, nhưng mỗi dòng chảy được nhân với độ giống. Vì V nặng ký hơn, dự đoán sẽ gần 4 của V hơn là gần 5 của W."
+
+  # ───────────────────────── 5. SUY RA ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra công thức dự đoán từ một ý: nghe người giống mình hơn"
+    checks:
+      - "round(alg.cosine([5, 3, 0], [4, 0, 4]), 3) == 0.606"
+      - "alg.irs_knn_predict([2, 1], [4, 1]) == 3 and alg.irs_knn_predict([1, 1], [4, 5]) == 4.5"
+    steps:
+      - show: |
+          <p><b>Bước 1 — đo độ giống.</b> Theo bài 2, hai hàng điểm là hai vector, nên độ giống của hai người là cosin của chúng:</p>
+          $$\cos(\mathbf{u}, \mathbf{v}) = \frac{\mathbf{u} \cdot \mathbf{v}}{\|\mathbf{u}\| \cdot \|\mathbf{v}\|}$$
+        focus: [1, 2]
+        say: "Bước một là đo độ giống, theo bài 2, hai hàng điểm là hai vector, nên độ giống của hai người là cosin của hai vector đó. Công thức là tích vô hướng của u và v chia cho tích hai độ dài, chỉ phụ thuộc hướng, không phụ thuộc một người chấm nhiều hay ít món."
+      - show: |
+          <p><b>Bước 2 — chọn láng giềng.</b> Lấy $k$ người giống U nhất <b>đã chấm</b> món cần đoán, vì người chưa chấm không cho được thông tin nào về món đó.</p>
+          <p class="note">Ví dụ: cả V và W đều đã chấm ốp lưng, nên với $k = 2$ ta lấy cả hai.</p>
+        focus: [1, 2]
+        say: "Bước hai là chọn láng giềng, ta lấy k người giống U nhất trong số những người đã chấm món cần đoán, vì người chưa chấm không cho được thông tin nào về món đó. Ở đây cả V và W đều đã chấm ốp lưng, nên với k bằng 2 ta lấy cả hai."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — gộp điểm.</b> Theo ý “người giống hơn được nghe nhiều hơn”, ta lấy trung bình có trọng số, trọng số là độ giống:</p>
+          $$\hat{r}_{U,3} = \frac{\cos(\mathbf{u}, \mathbf{v}) \cdot r_{V,3} + \cos(\mathbf{u}, \mathbf{w}) \cdot r_{W,3}}{\cos(\mathbf{u}, \mathbf{v}) + \cos(\mathbf{u}, \mathbf{w})}$$
+          <p class="note">Làm thử với hai độ giống bằng nhau, 1 và 1: $\frac{4 + 5}{2} = 4{,}5$ — đúng trung bình cộng. Độ giống 2 và 1 với hai điểm 4 và 1 thì ra 3, như phần ôn.</p>
+        focus: [1, 2, 3, 3]
+        say: "Bước ba là gộp điểm, theo đúng ý người giống hơn được nghe nhiều hơn, ta lấy trung bình có trọng số với trọng số là độ giống. Điểm dự đoán bằng tổng các tích độ giống nhân điểm láng giềng, chia cho tổng các độ giống. Làm thử, nếu hai độ giống bằng nhau, cùng bằng 1, ta được 4 cộng 5 chia 2 bằng 4 phẩy 5, đúng là trung bình cộng thường. Còn độ giống 2 và 1 với hai điểm 4 và 1 thì ra 3, như phần ôn."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Đoán điểm của U cho ốp lưng, từng phép tính"
+    checks:
+      - "5 * 4 + 3 * 0 + 0 * 4 == 20 and round(math.sqrt(34), 3) == 5.831 and round(math.sqrt(32), 3) == 5.657"
+      - "round(alg.cosine([5, 3, 0], [4, 0, 4]), 3) == 0.606 and round(math.sqrt(34) * math.sqrt(32), 3) == 32.985"
+      - "5 * 1 + 3 * 2 + 0 * 5 == 11 and round(math.sqrt(30), 3) == 5.477 and round(alg.cosine([5, 3, 0], [1, 2, 5]), 3) == 0.344"
+      - "round(alg.irs_knn_predict([alg.cosine([5, 3, 0], [4, 0, 4]), alg.cosine([5, 3, 0], [1, 2, 5])], [4, 5]), 2) == 4.36"
+      - "round(0.606 * 4, 3) == 2.424 and round(alg.cosine([5, 3, 0], [4, 0, 4]) * 4, 3) == 2.425 and round(alg.cosine([5, 3, 0], [1, 2, 5]) * 5, 3) == 1.722 and round(0.606 + 0.344, 3) == 0.95 and round(2.425 + 1.722, 3) == 4.147"
+    steps:
+      - show: |
+          <p><b>Bước 1.</b> Tích vô hướng của U và V, và hai độ dài:</p>
+          $$\mathbf{u} \cdot \mathbf{v} = 5 \cdot 4 + 3 \cdot 0 + 0 \cdot 4 = 20 \qquad \|\mathbf{u}\| = \sqrt{34} \approx 5{,}831 \qquad \|\mathbf{v}\| = \sqrt{32} \approx 5{,}657$$
+        focus: [1, 2, 2]
+        say: "Bước một, ta tính tích vô hướng của U và V cùng hai độ dài. Tích vô hướng là 5 nhân 4 cộng 3 nhân 0 cộng 0 nhân 4, bằng 20. Độ dài của u là căn 34, khoảng 5 phẩy 831, còn độ dài của v là căn 32, khoảng 5 phẩy 657."
+      - show: |
+          <p><b>Bước 2.</b> Chia cho tích hai độ dài:</p>
+          $$\cos(\mathbf{u}, \mathbf{v}) = \frac{20}{5{,}831 \cdot 5{,}657} = \frac{20}{32{,}985} \approx \hlg{0{,}606}$$
+        focus: [1, 2]
+        say: "Bước hai, ta chia 20 cho tích hai độ dài, 5 phẩy 831 nhân 5 phẩy 657 bằng khoảng 32 phẩy 985. Vậy độ giống của U và V xấp xỉ 0 phẩy 606, khá gần nhau."
+      - clear: true
+        show: |
+          <p><b>Bước 3.</b> Làm lại với W:</p>
+          $$\mathbf{u} \cdot \mathbf{w} = 5 \cdot 1 + 3 \cdot 2 + 0 \cdot 5 = 11 \qquad \|\mathbf{w}\| = \sqrt{30} \approx 5{,}477 \qquad \cos(\mathbf{u}, \mathbf{w}) = \frac{11}{5{,}831 \cdot 5{,}477} \approx \hlb{0{,}344}$$
+        focus: [1, 2, 2]
+        say: "Bước ba, ta làm lại y hệt với W. Tích vô hướng là 5 nhân 1 cộng 3 nhân 2 cộng 0 nhân 5, bằng 11, và độ dài của w là căn 30, khoảng 5 phẩy 477. Chia ra, độ giống của U và W chỉ khoảng 0 phẩy 344, vì W thích ốp lưng mà chê tai nghe, ngược với U."
+      - show: |
+          <p><b>Bước 4.</b> Trung bình có trọng số của hai điểm ốp lưng:</p>
+          $$\hat{r}_{U,3} = \frac{0{,}606 \cdot 4 + 0{,}344 \cdot 5}{0{,}606 + 0{,}344} \approx \frac{2{,}425 + 1{,}722}{0{,}950} \approx \hlo{4{,}36}$$
+          <p class="note">Chỉ nghe người giống nhất ($k = 1$): dự đoán là 4, điểm của V.</p>
+        focus: [1, 2, 2, 3]
+        say: "Bước bốn, ta lấy trung bình có trọng số của hai điểm ốp lưng. Tử số là 0 phẩy 606 nhân 4 cộng 0 phẩy 344 nhân 5, khoảng 4 phẩy 147, mẫu số là tổng hai độ giống, 0 phẩy 950. Dự đoán cho U khoảng 4 phẩy 36, nên ốp lưng đáng được gợi ý. Nếu chỉ nghe người giống nhất, k bằng 1, dự đoán đúng bằng 4 của V."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: chuẩn hoá độ dài trước, và kẹp giữa hai điểm"
+    checks:
+      - "[round(x / math.sqrt(34), 3) for x in [5, 3, 0]] == [0.857, 0.514, 0.0] and round(1 / math.sqrt(2), 3) == 0.707"
+      - "round(0.857 * 0.707 + 0.514 * 0 + 0 * 0.707, 3) == 0.606"
+      - "4 <= alg.irs_knn_predict([alg.cosine([5, 3, 0], [4, 0, 4]), alg.cosine([5, 3, 0], [1, 2, 5])], [4, 5]) <= 5 and round(alg.cosine([5, 3, 0], [4, 0, 4]) / (alg.cosine([5, 3, 0], [4, 0, 4]) + alg.cosine([5, 3, 0], [1, 2, 5])), 2) == 0.64"
+    steps:
+      - show: |
+          <p>Đường khác: chia mỗi vector cho độ dài của nó trước, rồi chỉ cần nhân từng cặp và cộng.</p>
+          $$\frac{\mathbf{u}}{\|\mathbf{u}\|} \approx (0{,}857;\ 0{,}514;\ 0) \qquad \frac{\mathbf{v}}{\|\mathbf{v}\|} \approx (0{,}707;\ 0;\ 0{,}707)$$
+          $$0{,}857 \cdot 0{,}707 + 0{,}514 \cdot 0 + 0 \cdot 0{,}707 \approx 0{,}606 \;\checkmark$$
+        focus: [1, 2, 3]
+        say: "Kiểm tra thứ nhất đi đường khác, ta chia mỗi vector cho độ dài của nó trước, để cả hai đều dài đúng 1. Vector u thành 0 phẩy 857, 0 phẩy 514, 0, còn vector v thành 0 phẩy 707, 0, 0 phẩy 707. Nhân từng cặp rồi cộng, ta được khoảng 0 phẩy 606, đúng con số ở bước hai."
+      - show: |
+          <table class="t"><tr><th>phép thử kẹp</th><th>kết quả</th></tr>
+          <tr><td>trung bình có trọng số phải nằm giữa điểm nhỏ nhất và lớn nhất</td><td>$4 \le 4{,}36 \le 5$ ✓</td></tr>
+          <tr><td>phần nặng ký của V</td><td>$\frac{0{,}606}{0{,}950} \approx 0{,}64$ → gần 4 hơn ✓</td></tr></table>
+        introduces: [geq]
+        focus: ["1.2", "1.2", "1.3"]
+        say: "Kiểm tra thứ hai là phép thử kẹp, vì trọng số đều dương nên trung bình có trọng số phải nằm giữa điểm nhỏ nhất và lớn nhất. Quả thật 4 phẩy 36 nằm giữa 4 và 5. Phần nặng ký của V là 0 phẩy 606 chia 0 phẩy 950, khoảng 0 phẩy 64, nên kết quả nghiêng về 4, cũng khớp."
+
+  - id: item_based
+    kind: concept
+    title: "Lật lại: láng giềng giữa các sản phẩm, như đồ thị cùng xem năm 2008"
+    checks:
+      - "sorted(set('LMN') | set('NOPQ')) == list('LMNOPQ') and (['L', 'M', 'N'] + ['N', 'O', 'P', 'Q']).count('N') == 2"
+      - "10 ** 6 * (10 ** 6 - 1) // 2 == 499999500000"
+    steps:
+      - show: |
+          <p>Một bài báo năm 2008 về gợi ý video (Baluja và cộng sự) mô tả cách làm theo <b>sản phẩm</b>: đếm số người đã xem cả hai video.</p>
+          <table class="t"><tr><th>U đã xem</th><th>người xem video đó cũng hay xem</th></tr>
+          <tr><td>J</td><td>L, M, N</td></tr>
+          <tr><td>K</td><td>N, O, P, Q</td></tr>
+          <tr><td>gợi ý cho U</td><td>hợp lại: L, M, N, O, P, Q — <b class="green">N được nhắc 2 lần</b></td></tr></table>
+          <p class="note">So mọi cặp của 1 triệu người dùng (số minh hoạ) là $\frac{10^6 \cdot (10^6 - 1)}{2} \approx 5 \cdot 10^{11}$ cặp — quá nhiều để so lại cho mỗi lượt gợi ý; bảng cùng xem thì đếm sẵn một lần.</p>
+        focus: [1, "2.2", "2.3", "2.4", 3]
+        say: "Ta cũng có thể lật lại, tìm láng giềng giữa các sản phẩm, như một bài báo năm 2008 về gợi ý video đã mô tả, đếm xem bao nhiêu người đã xem cả hai video. Người U đã xem video J, và người xem J cũng hay xem L, M, N. U còn xem video K, và người xem K cũng hay xem N, O, P, Q. Gợi ý cho U là hợp của hai nhóm, L, M, N, O, P, Q, trong đó N được nhắc hai lần nên đáng đứng đầu. Lý do thực tế là so mọi cặp của 1 triệu người dùng cần khoảng 5 nhân 10 mũ 11 cặp, quá nhiều để làm lại mỗi lượt, còn bảng cùng xem thì đếm sẵn một lần."
+
+  # ───────────────────────── 8. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi của người đã đi làm"
+    checks:
+      - "round(sum([5, 3, 0]) / 3, 2) == 2.67 and alg.irs_mean_rated([5, 3, 0]) == 4"
+      - "alg.irs_cos_common([5, 3, 0], [4, 0, 4]) == 1 and alg.irs_cos_common([5, 3, 0], [0, 4, 2]) == 1"
+      - "round(5 - alg.irs_mean_rated([1, 2, 5]), 3) == 2.333 and alg.irs_mean_rated([4, 0, 4]) == 4"
+      - "round(alg.irs_mean_rated([1, 2, 5]), 3) == 2.667 and round(alg.irs_mean_rated([5, 3, 0]) + alg.cosine([5, 3, 0], [1, 2, 5]) * (5 - alg.irs_mean_rated([1, 2, 5])) / (alg.cosine([5, 3, 0], [4, 0, 4]) + alg.cosine([5, 3, 0], [1, 2, 5])), 2) == 4.85"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Coi số 0 là điểm thật <b class="red">(trung bình của U thành 2,67 thay vì 4)</b>
+          <br><span class="note">U chỉ chấm hai món, 5 và 3, nên trung bình là 4. Số 0 nghĩa là “chưa chấm”, không phải “ghét”. Phép thử: đếm riêng số ô đã chấm trước khi lấy trung bình.</span></div>
+        say: "Lỗi thứ nhất là coi số 0 là điểm thật, khi đó trung bình của U thành 5 cộng 3 cộng 0 chia 3, khoảng 2 phẩy 67. Thật ra U chỉ chấm hai món, 5 và 3, nên trung bình là 4. Số 0 nghĩa là chưa chấm, không phải ghét, nên hãy đếm riêng số ô đã chấm trước khi lấy trung bình."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Tin láng giềng chỉ có <b>một</b> món chấm chung <b class="red">(cosin trên món chung luôn bằng 1)</b>
+          <br><span class="note">U và V chỉ cùng chấm tai nghe: tính cosin trên đúng món đó ra $\frac{5 \cdot 4}{5 \cdot 4} = 1$, “giống hệt”. Phép thử: đòi tối thiểu vài món chung trước khi tin độ giống.</span></div>
+        say: "Lỗi thứ hai là tin một láng giềng chỉ có một món chấm chung. U và V chỉ cùng chấm tai nghe, nếu tính cosin trên đúng món chung đó thì ra 5 nhân 4 chia 5 nhân 4, bằng 1, tức giống hệt nhau. Với một món chung thì cosin luôn bằng 1, nên hãy đòi tối thiểu vài món chung trước khi tin độ giống."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Quên rằng mỗi người có <b>thang chấm</b> riêng <b class="red">(điểm 5 của W, người hay chấm thấp, nói nhiều hơn)</b></div>
+          <table class="t"><tr><th>người</th><th>trung bình đã chấm</th><th>ốp lưng</th><th>lệch so với trung bình của chính họ</th></tr>
+          <tr><td>V</td><td>4</td><td>4</td><td>0</td></tr>
+          <tr><td>W</td><td>$\frac{1 + 2 + 5}{3} \approx 2{,}667$</td><td>5</td><td>+2,333</td></tr></table>
+          $$\hat{r}_{U,3} = 4 + \frac{0{,}606 \cdot 0 + 0{,}344 \cdot 2{,}333}{0{,}950} \approx 4{,}85$$
+        focus: [1, "2.2", "2.3", 3]
+        say: "Lỗi thứ ba hay gặp ở người đã đi làm, là quên rằng mỗi người có thang chấm riêng. V chấm trung bình 4 và chấm ốp lưng đúng 4, tức không lệch gì. W chấm trung bình chỉ khoảng 2 phẩy 667 mà chấm ốp lưng 5, cao hơn hẳn thói quen, lệch cộng 2 phẩy 333. Gộp phần lệch thay cho điểm thô rồi cộng vào trung bình 4 của U, dự đoán thành khoảng 4 phẩy 85 chứ không phải 4 phẩy 36."
+      - show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Để sản phẩm cực phổ biến làm “cầu nối” giữa mọi người <b class="red">(hai người chẳng chung sở thích vẫn thành láng giềng)</b>
+          <br><span class="note">Bài báo năm 2008 ghi: nếu hai người cùng xem một video phổ biến, dù không chung sở thích, ta vẫn sẽ gợi ý cho người này những gì người kia xem. Phép thử: xem lại láng giềng có bị chi phối bởi vài món ai cũng xem không.</span></div>
+        say: "Lỗi thứ tư cũng của người đã đi làm, là để một sản phẩm cực phổ biến làm cầu nối giữa mọi người. Bài báo năm 2008 về gợi ý video ghi rằng, nếu hai người cùng xem một video phổ biến, dù không chung sở thích, ta vẫn sẽ gợi ý cho người này những gì người kia đã xem. Phép thử là xem lại các láng giềng có bị chi phối bởi vài món ai cũng xem hay không."
+
+  # ───────────────────────── 9. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: thêm người X, và có nên tin láng giềng không?"
+    checks:
+      - "0 * 5 + 4 * 3 + 2 * 0 == 12 and round(math.sqrt(20), 3) == 4.472 and round(alg.cosine([5, 3, 0], [0, 4, 2]), 3) == 0.46"
+      - "round(alg.irs_knn_predict([alg.cosine([5, 3, 0], [4, 0, 4]), alg.cosine([5, 3, 0], [0, 4, 2])], [4, 2]), 2) == 3.14"
+      - "sum(1 for a, b in zip([5, 3, 0], [4, 0, 4]) if a and b) == 1 and sum(1 for a, b in zip([5, 3, 0], [0, 4, 2]) if a and b) == 1 and round((4 + 5 + 2) / 3, 3) == 3.667"
+    steps:
+      - show: |
+          <p>Thay W bằng người X = (0, 4, 2): chưa chấm tai nghe, chấm sạc 4, ốp lưng 2.</p>
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Tính $\cos(\mathbf{u}, \mathbf{x})$ với $\mathbf{u} = (5, 3, 0)$.</td></tr>
+          <tr><td>2</td><td>Đoán điểm U cho ốp lưng từ V (độ giống 0,606, điểm 4) và X.</td></tr>
+          <tr><td>3</td><td>Đội đặt luật “láng giềng phải có ít nhất 2 món chấm chung”. Còn ai dùng được? Nên gợi ý cho U thế nào?</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", 0]
+        say: "Bây giờ đến lượt bạn, ta thay W bằng người X, chưa chấm tai nghe, chấm sạc 4 và chấm ốp lưng 2. Câu một, tính cosin của u và x, với u bằng 5, 3, 0. Câu hai, đoán điểm U cho ốp lưng từ V và X. Câu ba, đội của bạn đặt luật láng giềng phải có ít nhất 2 món chấm chung, khi đó còn ai dùng được, và nên gợi ý cho U thế nào. Dừng video lại và làm ra giấy nhé."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu</th><th>từng bước</th><th>đáp số</th></tr>
+          <tr><td>1</td><td>$5 \cdot 0 + 3 \cdot 4 + 0 \cdot 2 = 12$; $\|\mathbf{x}\| = \sqrt{20} \approx 4{,}472$; $\frac{12}{5{,}831 \cdot 4{,}472}$</td><td>≈ 0,460</td></tr>
+          <tr><td>2</td><td>$\frac{0{,}606 \cdot 4 + 0{,}460 \cdot 2}{0{,}606 + 0{,}460}$</td><td>≈ $\hlo{3{,}14}$</td></tr></table>
+        focus: ["1.2", "1.2", "1.3"]
+        say: "Đáp án câu một, tích vô hướng là 5 nhân 0 cộng 3 nhân 4 cộng 0 nhân 2, bằng 12, độ dài của x là căn 20, khoảng 4 phẩy 472. Chia 12 cho 5 phẩy 831 nhân 4 phẩy 472 được độ giống khoảng 0 phẩy 460. Câu hai, trung bình có trọng số của 4 và 2 với trọng số 0 phẩy 606 và 0 phẩy 460 là khoảng 3 phẩy 14, thấp hơn hẳn trước, vì X chấm ốp lưng chỉ 2."
+      - show: |
+          <table class="t"><tr><th>câu 3</th><th>số món chấm chung với U</th><th>dùng được?</th></tr>
+          <tr><td>V</td><td>1 (tai nghe)</td><td class="red">không</td></tr>
+          <tr><td>X</td><td>1 (sạc)</td><td class="red">không</td></tr></table>
+          <p class="note">U chưa có láng giềng đáng tin: dùng điểm trung bình của chính món ốp lưng, $\frac{4 + 5 + 2}{3} \approx 3{,}667$, hoặc gợi ý theo sản phẩm (cùng xem). Được: tránh tin nhầm “giống hệt”. Mất: ít cá nhân hoá. Khi U chấm thêm món và có đủ món chung, quay lại dùng láng giềng.</p>
+        focus: [0, "1.2", "1.3", 2, 2]
+        say: "Câu ba, U và V chỉ chung một món là tai nghe, U và X cũng chỉ chung một món là sạc. Theo luật ít nhất 2 món chung, không ai dùng được. Khi đó ta dùng điểm trung bình của chính món ốp lưng, 4 cộng 5 cộng 2 chia 3, khoảng 3 phẩy 667, hoặc gợi ý theo sản phẩm như đồ thị cùng xem. Cái được là không tin nhầm một người giống hệt chỉ nhờ một món, cái mất là gợi ý ít mang dấu ấn riêng. Khi U chấm thêm món và có đủ món chung, ta quay lại dùng láng giềng."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">hàng điểm = vector</span><span class="a">→</span>
+          <span class="n">độ giống = cosin</span><span class="a">→</span>
+          <span class="n">k láng giềng đã chấm món đó</span><span class="a">→</span>
+          <span class="n">trung bình có trọng số (trừ thang chấm riêng)</span></div>
+        say: "Tổng kết lại, mỗi hàng điểm là một vector, độ giống của hai người là cosin của hai vector. Ta chọn k láng giềng giống nhất đã chấm món cần đoán, rồi lấy trung bình có trọng số, tốt hơn nữa là gộp phần lệch so với thang chấm riêng của từng người."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> mỗi con số trong bảng phải có <b>nghĩa</b> trước khi đưa vào công thức — 0 là “chưa biết”, một món chung là “chưa đủ bằng chứng”.</div>
+        say: "Điều cần mang theo, mỗi con số trong bảng phải có nghĩa trước khi đưa vào công thức, số 0 là chưa biết, còn một món chung là chưa đủ bằng chứng."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 7): phân rã ma trận — thay vì so từng cặp người, ta gán cho mỗi người và mỗi sản phẩm một vector ngắn, rồi dự đoán điểm bằng tích vô hướng.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 7, ta học phân rã ma trận cho gợi ý. Thay vì so từng cặp người, ta gán cho mỗi người và mỗi sản phẩm một vector ngắn, rồi dự đoán điểm bằng tích vô hướng của hai vector. Hẹn gặp bạn ở bài tiếp theo."

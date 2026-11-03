@@ -1,0 +1,199 @@
+id: L06
+course: DAN
+series: "DAN · Phân tích dữ liệu"
+title: "Bài 6 — Chuỗi thời gian: xu hướng, mùa vụ, trung bình trượt"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/dan.yaml L06; audit/dan/verify_dan.py L06; R. Hyndman, G. Athanasopoulos, Forecasting: Principles and Practice (bản 3, 2021), chương 2–3; bài 3 (hàm cửa sổ)"
+assumes: [arith, frac, cdot]
+# Quy ước: chuỗi minh hoạ y(d) = 100 + 2d + 30 (nếu d là thứ Bảy hoặc Chủ nhật), d = 0 là thứ Hai: xu hướng +2 mỗi ngày, mùa vụ tuần +30 cuối tuần
+#   (SỐ MINH HOẠ). Trung bình trượt k ngày = trung bình của k ngày gần nhất, tính tới ngày đang xét (alg.moving_average).
+objectives:
+  - "Tách xu hướng khỏi mùa vụ theo tuần"
+  - "Chọn cửa sổ trung bình trượt bằng chu kỳ mùa vụ"
+  - "So cùng kỳ thay cho so liền kề"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Thứ Bảy tăng 32 — có gì đáng mừng?"
+    checks:
+      - "(lambda y: y[5] - y[4] == 32 and y[12] - y[5] == 14)([100 + (30 if d % 7 in (5, 6) else 0) + 2 * d for d in range(28)])"
+    steps:
+      - show: |
+          <p>Thứ Bảy, báo cáo ghi “doanh thu tăng 32 so với hôm qua” và nhóm tiếp thị khen chiến dịch mới. Nhưng thứ Bảy <b>tuần nào</b> cũng cao hơn thứ Sáu — khách đi mua sắm cuối tuần. So với thứ Bảy tuần trước, mức tăng chỉ là 14, đúng bằng đà tăng bình thường.</p>
+          <div class="box key">Hôm nay: <b>chuỗi thời gian</b> — tách xu hướng, mùa vụ, và đo bằng trung bình trượt đúng chu kỳ.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, thứ Bảy, báo cáo ghi doanh thu tăng 32 so với hôm qua, và nhóm tiếp thị khen chiến dịch mới. Nhưng thứ Bảy tuần nào cũng cao hơn thứ Sáu, vì khách đi mua sắm cuối tuần. So với thứ Bảy tuần trước, mức tăng chỉ là 14, đúng bằng đà tăng bình thường. Hôm nay ta học chuỗi thời gian, cách tách xu hướng và mùa vụ, và đo bằng trung bình trượt đúng chu kỳ."
+
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: trung bình của vài số, và chia lấy dư để biết thứ"
+    checks:
+      - "(100 + 102 + 104) / 3 == 102"
+      - "12 % 7 == 5 and 12 // 7 == 1 and 5 % 7 == 5"
+    steps:
+      - show: |
+          <p><b>Trung bình của 3 số</b>: $\frac{100 + 102 + 104}{3} = \frac{306}{3} = 102$ — đúng bằng số ở giữa, vì các số cách đều nhau.</p>
+        say: "Trước hết, ôn lại trung bình của vài số. Trung bình của 100, 102 và 104 bằng 306 chia 3, bằng 102. Kết quả đúng bằng số ở giữa, vì ba số cách đều nhau, và ý này sẽ dùng lại ở phần tự kiểm."
+      - show: |
+          <table class="t"><tr><th>ngày thứ $d$ (ngày 0 là thứ Hai)</th><th>$d$ chia 7, lấy dư</th><th>thứ</th></tr>
+          <tr><td>5</td><td>5</td><td>thứ Bảy</td></tr>
+          <tr><td>12</td><td>$12 = 7 + 5$, dư 5</td><td>thứ Bảy</td></tr></table>
+        focus: [0, "1.2", "1.3"]
+        say: "Thứ hai, phép chia lấy dư cho biết một ngày rơi vào thứ mấy. Đánh số ngày 0 là thứ Hai, thì ngày 5 chia 7 dư 5, là thứ Bảy. Ngày 12 bằng 7 cộng 5, cũng dư 5, nên cũng là thứ Bảy, cách đúng một tuần."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: ba thành phần của một chuỗi"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thành phần</th><th>nghĩa</th><th>trong ví dụ</th></tr>
+          <tr><td><b>xu hướng</b></td><td>hướng đi dài hạn</td><td>+2 mỗi ngày</td></tr>
+          <tr><td><b>mùa vụ</b></td><td>mẫu lặp lại theo chu kỳ cố định</td><td>+30 vào thứ Bảy, Chủ nhật; chu kỳ 7 ngày</td></tr>
+          <tr><td><b>phần dư</b></td><td>phần còn lại: nhiễu và bất thường</td><td>0 (chuỗi minh hoạ không nhiễu)</td></tr></table>
+          <p><b>Trung bình trượt</b> với cửa sổ <b>bằng đúng chu kỳ</b> (7 ngày): mỗi cửa sổ chứa đủ một lượt mỗi thứ, nên mùa vụ bị san phẳng, chỉ còn xu hướng.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Bảng có ba thành phần. Xu hướng là hướng đi dài hạn, trong ví dụ là cộng 2 mỗi ngày. Mùa vụ là mẫu lặp lại theo chu kỳ cố định, trong ví dụ là cộng 30 vào thứ Bảy và Chủ nhật, với chu kỳ 7 ngày. Phần dư là phần còn lại gồm nhiễu và bất thường, ở chuỗi minh hoạ này bằng 0. Trung bình trượt với cửa sổ bằng đúng chu kỳ, 7 ngày, có mỗi cửa sổ chứa đủ một lượt mỗi thứ, nên mùa vụ bị san phẳng và chỉ còn xu hướng."
+
+  - id: intuition
+    kind: intuition
+    title: "Răng cưa cuối tuần, đường thẳng bên dưới"
+    checks:
+      - "(lambda y: all(round(b - a, 9) == 2 for a, b in zip(alg.moving_average(y, 7), alg.moving_average(y, 7)[1:])))([100 + (30 if d % 7 in (5, 6) else 0) + 2 * d for d in range(40)])"
+    steps:
+      - show: |
+          <div><svg width="1500" height="350" viewBox="0 0 1500 350"><g fill="#1f2937" font-size="22"><line x1="110" y1="310" x2="1200" y2="310" stroke="#6b7280" stroke-width="2"/><polyline points="130,271 182,265 234,259 286,254 338,248 390,155 442,149 494,230 546,225 598,219 650,213 702,207 754,114 806,109 858,190 910,184 962,178 1014,172 1066,167 1118,74 1170,68" fill="none" stroke="#2a78d6" stroke-width="3"/><circle cx="130" cy="271" r="5" fill="#2a78d6"/><circle cx="182" cy="265" r="5" fill="#2a78d6"/><circle cx="234" cy="259" r="5" fill="#2a78d6"/><circle cx="286" cy="254" r="5" fill="#2a78d6"/><circle cx="338" cy="248" r="5" fill="#2a78d6"/><circle cx="390" cy="155" r="5" fill="#2a78d6"/><circle cx="442" cy="149" r="5" fill="#2a78d6"/><circle cx="494" cy="230" r="5" fill="#2a78d6"/><circle cx="546" cy="225" r="5" fill="#2a78d6"/><circle cx="598" cy="219" r="5" fill="#2a78d6"/><circle cx="650" cy="213" r="5" fill="#2a78d6"/><circle cx="702" cy="207" r="5" fill="#2a78d6"/><circle cx="754" cy="114" r="5" fill="#2a78d6"/><circle cx="806" cy="109" r="5" fill="#2a78d6"/><circle cx="858" cy="190" r="5" fill="#2a78d6"/><circle cx="910" cy="184" r="5" fill="#2a78d6"/><circle cx="962" cy="178" r="5" fill="#2a78d6"/><circle cx="1014" cy="172" r="5" fill="#2a78d6"/><circle cx="1066" cy="167" r="5" fill="#2a78d6"/><circle cx="1118" cy="74" r="5" fill="#2a78d6"/><circle cx="1170" cy="68" r="5" fill="#2a78d6"/><polyline points="442,229 494,223 546,217 598,211 650,206 702,200 754,194 806,188 858,182 910,177 962,171 1014,165 1066,159 1118,153 1170,148" fill="none" stroke="#eb6834" stroke-width="5"/><text x="416" y="338" text-anchor="middle" font-size="19">cuối tuần 1</text><text x="780" y="338" text-anchor="middle" font-size="19">cuối tuần 2</text><text x="1144" y="338" text-anchor="middle" font-size="19">cuối tuần 3</text><line x1="1240" y1="80" x2="1290" y2="80" stroke="#2a78d6" stroke-width="3"/><text x="1300" y="88">doanh thu</text><line x1="1240" y1="130" x2="1290" y2="130" stroke="#eb6834" stroke-width="5"/><text x="1300" y="138">trung bình</text><text x="1300" y="168">trượt 7 ngày</text><text x="1240" y="220" fill="#059669">thẳng: +2 mỗi ngày</text></g></svg></div>
+        focus: [1, 1, 1]
+        say: "Hình vẽ ba tuần doanh thu bằng đường xanh, cứ mỗi cuối tuần lại nhô lên một cái răng cưa. Đường cam là trung bình trượt 7 ngày, mỗi điểm là trung bình của 7 ngày gần nhất, nên luôn chứa đúng hai ngày cuối tuần và năm ngày thường. Vì phần cuối tuần trong mọi cửa sổ là như nhau, nó không còn tạo ra răng cưa, và đường cam chỉ còn là đường thẳng tăng 2 mỗi ngày."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Hai tuần doanh thu và trung bình trượt"
+    checks:
+      - "(lambda y: y[:8] == [100, 102, 104, 106, 108, 140, 142, 114] and [round(x, 2) for x in alg.moving_average(y, 7)[:4]] == [114.57, 116.57, 118.57, 120.57])([100 + (30 if d % 7 in (5, 6) else 0) + 2 * d for d in range(28)])"
+      - "(lambda y: [round(x, 2) for x in alg.moving_average(y, 5)[:4]] == [104.0, 112.0, 120.0, 122.0])([100 + (30 if d % 7 in (5, 6) else 0) + 2 * d for d in range(28)])"
+      - "(lambda y: sum(y[:7]) == 802 and y[7] - y[0] == 14 and [sum(y[i:i + 5]) for i in range(4)] == [520, 560, 600, 610])([100 + (30 if d % 7 in (5, 6) else 0) + 2 * d for d in range(28)])"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ngày</th><th>T2</th><th>T3</th><th>T4</th><th>T5</th><th>T6</th><th>T7</th><th>CN</th><th>T2</th></tr>
+          <tr><td>doanh thu</td><td>100</td><td>102</td><td>104</td><td>106</td><td>108</td><td>140</td><td>142</td><td>114</td></tr></table>
+          <p><b>Bước 1</b> — dữ liệu: $100 + 2d$, cộng thêm 30 vào thứ Bảy, Chủ nhật.</p>
+        focus: [1, 2]
+        say: "Bước một, bảng là tám ngày doanh thu, từ thứ Hai 100, tăng dần tới thứ Sáu 108, nhảy lên 140 và 142 vào cuối tuần, rồi thứ Hai sau là 114. Mỗi ngày bằng 100 cộng 2 lần số thứ tự ngày, cộng thêm 30 vào thứ Bảy và Chủ nhật."
+      - show: |
+          <p><b>Bước 2</b> — cửa sổ 7 ngày đầu (thứ Hai tới Chủ nhật): $\frac{100 + 102 + 104 + 106 + 108 + 140 + 142}{7} = \frac{802}{7} \approx 114{,}57$.</p>
+        say: "Bước hai, trung bình trượt 7 ngày tại Chủ nhật đầu tiên. Cộng bảy ngày từ thứ Hai tới Chủ nhật được 802, chia 7, khoảng 114 phẩy 57."
+      - show: |
+          <p><b>Bước 3</b> — trượt sang thứ Hai sau: bỏ 100, thêm 114, nên tổng tăng 14 và trung bình tăng $\frac{14}{7} = \hl{2}$ → 116,57. Cứ thế: 114,57; 116,57; 118,57; 120,57.</p>
+        say: "Bước ba, trượt cửa sổ sang thứ Hai tuần sau. Cửa sổ bỏ ngày 100 và thêm ngày 114, nên tổng tăng 14 và trung bình tăng 14 chia 7, bằng 2, thành 116 phẩy 57. Cứ thế ta được 114 phẩy 57, 116 phẩy 57, 118 phẩy 57, 120 phẩy 57, tăng đều 2 mỗi ngày, mùa vụ biến mất."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>cửa sổ 5 ngày</th><th>tổng</th><th>trung bình</th></tr>
+          <tr><td>T2 – T6</td><td>520</td><td>104</td></tr>
+          <tr><td>T3 – T7</td><td>560</td><td>112</td></tr>
+          <tr><td>T4 – CN</td><td>600</td><td>120</td></tr>
+          <tr><td>T5 – T2</td><td>610</td><td>122</td></tr></table>
+          <p><b>Bước 4</b> — cửa sổ 5 ngày không khớp chu kỳ: vẫn nhảy theo cuối tuần.</p>
+        focus: [2, "1.2", "1.3", "1.4", "1.5", 2]
+        say: "Bước bốn, thử cửa sổ 5 ngày, không khớp chu kỳ 7. Từ thứ Hai tới thứ Sáu, trung bình 104. Thêm thứ Bảy, lên 112. Thêm Chủ nhật, lên 120. Rồi chỉ lên 122. Các bước nhảy 8, 8, 2 cho thấy cửa sổ 5 ngày vẫn nhảy theo cuối tuần."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: xu hướng ở tâm cửa sổ cộng mùa vụ trung bình"
+    checks:
+      - "100 + 2 * 3 == 106 and round(60 / 7, 2) == 8.57 and round(106 + 60 / 7, 2) == round(802 / 7, 2) == 114.57"
+    steps:
+      - show: |
+          <table class="t"><tr><th>phần</th><th>tính</th><th>giá trị</th></tr>
+          <tr><td>xu hướng tại tâm cửa sổ (ngày 3, thứ Năm)</td><td>$100 + 2 \cdot 3$</td><td>106</td></tr>
+          <tr><td>mùa vụ trung bình trong 7 ngày</td><td>$\frac{30 + 30}{7}$</td><td>≈ 8,57</td></tr>
+          <tr><td>cộng lại</td><td>$106 + 8{,}57$</td><td>114,57 ✓</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Kiểm bằng đường khác, ta không cộng bảy con số mà tách thành phần. Vì xu hướng tăng đều, trung bình của phần xu hướng bằng giá trị ở tâm cửa sổ, là ngày 3, thứ Năm, 100 cộng 2 nhân 3 bằng 106. Mùa vụ trong mọi cửa sổ 7 ngày là hai lần 30, chia 7, khoảng 8 phẩy 57. Cộng lại được 114 phẩy 57, khớp với kết quả, và cũng giải thích vì sao đường cam cao hơn ngày thường khoảng 8 phẩy 57."
+
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, cả người mới lẫn người đã đi làm"
+    checks:
+      - "(lambda y: y[5] - y[4] == 32 and y[12] - y[5] == 14 == 7 * 2)([100 + (30 if d % 7 in (5, 6) else 0) + 2 * d for d in range(40)])"
+      - "(lambda y: 33 % 7 == 5 and 3 % 7 == 3 and y[33] == 196 and y[5] == 140 and y[3] == 106 and y[33] - y[5] == 56 == 28 * 2 and y[33] - y[3] == 90 and 30 * 2 == 60)([100 + (30 if d % 7 in (5, 6) else 0) + 2 * d for d in range(40)])"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> So với hôm qua khi có mùa vụ tuần <b class="red">(báo động giả mỗi thứ Bảy)</b>
+          <br><span class="note">So thứ Bảy với thứ Sáu ra +32; so với thứ Bảy tuần trước ra +14, tức 7 ngày nhân 2. So <b>cùng kỳ</b> chu kỳ trước, hoặc so trung bình trượt.</span></div>
+        say: "Lỗi thứ nhất, so với hôm qua khi có mùa vụ tuần, nên báo động giả mỗi thứ Bảy. So thứ Bảy với thứ Sáu ra cộng 32, còn so với thứ Bảy tuần trước chỉ ra cộng 14, tức 7 ngày nhân 2. Hãy so cùng kỳ của chu kỳ trước, hoặc so trung bình trượt."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Quên trung bình trượt bị trễ <b class="red">(thấy thay đổi muộn)</b>
+          <br><span class="note">Trung bình 7 ngày tính tới hôm nay phản ánh tâm của cửa sổ, tức khoảng 3 ngày trước. Một cú sụt hôm nay chỉ kéo đường đó xuống một phần bảy.</span></div>
+        say: "Lỗi thứ hai, quên rằng trung bình trượt bị trễ, nên thấy thay đổi muộn. Trung bình 7 ngày tính tới hôm nay phản ánh tâm của cửa sổ, tức khoảng 3 ngày trước. Một cú sụt hôm nay chỉ kéo đường đó xuống một phần bảy."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Bỏ qua ngày lễ và lịch thay đổi <b class="red">(mùa vụ không cố định)</b>
+          <br><span class="note">Tết rơi vào tháng 1 hoặc tháng 2 tuỳ năm; tháng có 4 hay 5 cuối tuần. So tháng này với tháng này năm trước có thể so sai lịch — ghi chú ngày đặc biệt.</span></div>
+        say: "Lỗi thứ ba, bỏ qua ngày lễ và lịch thay đổi, vì mùa vụ không phải lúc nào cũng cố định. Tết rơi vào tháng 1 hoặc tháng 2 tuỳ năm, và một tháng có thể có 4 hay 5 cuối tuần. So tháng này với cùng tháng năm trước có thể so sai lịch, nên hãy ghi chú các ngày đặc biệt."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4.</b> So “cùng ngày tháng trước” theo <b>ngày lịch</b> <b class="red">(lỗi của người đã đi làm)</b>
+          <br><span class="note">Ngày 33 là thứ Bảy, doanh thu 196. Lùi 30 ngày rơi vào thứ Năm; lùi 28 ngày (4 tuần) vẫn là thứ Bảy.</span></div>
+          <table class="t"><tr><th>so với</th><th>chênh</th><th>xu hướng trong khoảng đó</th><th>phần thừa</th></tr>
+          <tr><td>30 ngày trước (thứ Năm, 106)</td><td>$196 - 106 = 90$</td><td>$30 \cdot 2 = 60$</td><td class="red">30: là mùa vụ, không phải tăng trưởng</td></tr>
+          <tr><td>28 ngày trước (thứ Bảy, 140)</td><td>$196 - 140 = 56$</td><td>$28 \cdot 2 = 56$</td><td>0 ✓</td></tr></table>
+        focus: [1, 1, 2, "2.2", "2.3", 0]
+        say: "Lỗi thứ tư là lỗi của người đã đi làm, so cùng ngày tháng trước theo ngày lịch. Ngày 33 là thứ Bảy, doanh thu 196, lùi 30 ngày thì rơi vào thứ Năm, còn lùi 28 ngày, tức đúng 4 tuần, thì vẫn là thứ Bảy. Bảng so hai cách. So với 30 ngày trước, chênh 90, trong khi xu hướng chỉ giải thích 60, nên 30 thừa ra chỉ là mùa vụ cuối tuần. So với 28 ngày trước, chênh 56, đúng bằng 28 nhân 2. Vì vậy người làm nghề so theo số tuần trọn vẹn, cùng thứ, chứ không theo cùng ngày trên lịch."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.moving_average([5, 10, 6, 8, 13, 9], 3) == [7.0, 8.0, 9.0, 10.0]"
+      - "[sum([5, 10, 6, 8, 13, 9][i:i + 3]) for i in range(4)] == [21, 24, 27, 30]"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Chuỗi 5, 10, 6, 8, 13, 9 có mùa vụ chu kỳ 3. Tính trung bình trượt 3 kỳ. Xu hướng là bao nhiêu mỗi kỳ?</td></tr>
+          <tr><td>2</td><td>Dữ liệu bán theo tháng có mùa vụ theo năm. Cửa sổ trung bình trượt nên dài bao nhiêu?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, chuỗi 5, 10, 6, 8, 13, 9 có mùa vụ chu kỳ 3. Hãy tính trung bình trượt 3 kỳ. Xu hướng là bao nhiêu mỗi kỳ? Câu hai, dữ liệu bán theo tháng có mùa vụ theo năm. Cửa sổ trung bình trượt nên dài bao nhiêu? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>cửa sổ 3 kỳ</th><th>tổng</th><th>trung bình</th></tr>
+          <tr><td>5, 10, 6</td><td>21</td><td>7</td></tr>
+          <tr><td>10, 6, 8</td><td>24</td><td>8</td></tr>
+          <tr><td>6, 8, 13</td><td>27</td><td>9</td></tr>
+          <tr><td>8, 13, 9</td><td>30</td><td>10</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", "1.5"]
+        say: "Đáp án câu một, tính từng cửa sổ 3 kỳ. 5, 10, 6 có tổng 21, trung bình 7. 10, 6, 8 có tổng 24, trung bình 8. 6, 8, 13 có tổng 27, trung bình 9. 8, 13, 9 có tổng 30, trung bình 10."
+      - show: |
+          <p>① 7, 8, 9, 10 → xu hướng $\hl{+1}$ mỗi kỳ; mùa vụ chu kỳ 3 đã bị san phẳng.</p>
+          <p>② <b>12 tháng</b> — đúng một chu kỳ, mỗi tháng trong năm có mặt một lần.</p>
+        focus: [1, 2]
+        say: "Các trung bình tăng đều 1, nên xu hướng là cộng 1 mỗi kỳ, và mùa vụ chu kỳ 3 đã bị san phẳng. Câu hai, cửa sổ 12 tháng, đúng một chu kỳ, mỗi tháng trong năm có mặt một lần."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">chuỗi = xu hướng + mùa vụ + phần dư</span><span class="a">→</span>
+          <span class="n">trung bình trượt dài đúng một chu kỳ</span><span class="a">→</span>
+          <span class="n">so cùng kỳ, không so liền kề</span><span class="a">→</span>
+          <span class="n">nhớ độ trễ và lịch đặc biệt</span></div>
+        say: "Tổng kết lại, một chuỗi gồm xu hướng, mùa vụ và phần dư. Dùng trung bình trượt dài đúng một chu kỳ, so cùng kỳ thay vì so liền kề, và nhớ độ trễ cùng các ngày đặc biệt."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> trước khi giải thích một thay đổi, hỏi “bình thường thì <b>vào lúc này</b> con số sẽ là bao nhiêu?”.</div>
+        say: "Điều cần mang theo, trước khi giải thích một thay đổi, hãy hỏi bình thường thì vào lúc này con số sẽ là bao nhiêu."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 7): <b>dự báo đường cơ sở</b> và đo sai số dự báo.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 7, ta học dự báo đường cơ sở và cách đo sai số dự báo. Hẹn gặp bạn ở bài tiếp theo."

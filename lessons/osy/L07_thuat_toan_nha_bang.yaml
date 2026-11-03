@@ -1,0 +1,271 @@
+id: L07
+course: OSY
+series: "OSY · Hệ điều hành"
+title: "Bài 7 — Tránh bế tắc: thuật toán nhà băng"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/osy.yaml L07; audit/verify_plan_curricula.py OSY:L07; E. Dijkstra (1965); Silberschatz, Galvin, Gagne, Operating System Concepts, chương 8"
+assumes: [arith, sub, dots]
+# Quy ước: 3 loại tài nguyên A, B, C; vector (a, b, c) = số thể hiện của từng loại. Đang giữ (Allocation), Tối đa (Max), Cần thêm (Need) —
+#   tên tiếng Anh chỉ trên màn hình. So sánh hai vector “≤” nghĩa là ≤ ở TỪNG thành phần. Mọi kết quả an toàn / không an toàn do alg.banker tính.
+objectives:
+  - "Tính ma trận cần thêm"
+  - "Tìm một thứ tự an toàn"
+  - "Quyết định cấp hay hoãn một yêu cầu"
+asr_reviewed:
+  - {sentence: "Cấp nốt 2 cho tiến trình a, nó chạy xong và trả lại cả 6 thể hiện, nên còn rảnh thành 3 trừ 2 cộng 6, bằng 7.", reason: "ASR chép “Cấp nút 2 cho tiến trình nha, nó chạy xong và trả lại cả 6 thể hiện, nên còn rảnh thành 3 trừ 2,6 bằng 7.” (0.893): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: nốt/nút, cộng/phẩy — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Mấu chốt là ở đây, phần trả lại làm kho đầy lên, và tiến trình b giờ cần thêm 5, không vượt 7, nên cũng chạy xong.", reason: "ASR chép “Mấu chốt là ở đây, phần trả lại làm kho đầy lên và tiến trình bây giờ cần thêm 5, không vượt 7, nền cũng chạy xong.” (0.926): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: nên/nền — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Hệ điều hành làm y hệt với tài nguyên.", reason: "hệ/hãy, hệt/hợp: nhầm thanh của ASR; “hệ điều hành” chép đúng ở mọi câu khác của L07 — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Ngân hàng cho vay mà không bao giờ cạn tiền"
+    steps:
+      - show: |
+          <p>Ngân hàng có 10 tỉ, năm khách mỗi người báo trước <b>hạn mức tối đa</b> sẽ vay. Ngân hàng chỉ cho vay thêm khi chắc chắn rằng, dù ai cũng vay đến hạn mức, vẫn còn cách cho <b>mọi</b> người lần lượt vay đủ rồi trả lại.</p>
+          <div class="box key">Hệ điều hành làm y hệt với tài nguyên. Hôm nay: thuật toán nhà băng của Dijkstra — cách <b>tránh</b> bế tắc trước khi nó xảy ra.</div>
+        focus: [1, 1, 2, 2]
+        say: "Chào bạn, một ngân hàng có 10 tỉ, năm khách mỗi người báo trước hạn mức tối đa sẽ vay. Ngân hàng chỉ cho vay thêm khi chắc chắn rằng, dù ai cũng vay đến hạn mức, vẫn có cách cho mọi người lần lượt vay đủ rồi trả lại. Hệ điều hành làm y hệt với tài nguyên. Hôm nay ta học thuật toán nhà băng, cách tránh bế tắc trước khi nó xảy ra."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: cộng, trừ và so sánh từng thành phần"
+    checks:
+      - "[a - b for a, b in zip([7, 5, 3], [0, 1, 0])] == [7, 4, 3] and [a + b for a, b in zip([3, 3, 2], [2, 0, 0])] == [5, 3, 2]"
+      - "all(a <= b for a, b in zip([1, 2, 2], [3, 3, 2])) and not all(a <= b for a, b in zip([6, 0, 0], [5, 3, 2])) and sum([6, 0, 0]) == 6 and sum([5, 3, 2]) == 10"
+    steps:
+      - show: |
+          <table class="t"><tr><th>phép tính</th><th>loại A</th><th>loại B</th><th>loại C</th><th>kết quả</th></tr>
+          <tr><td>(7, 5, 3) − (0, 1, 0)</td><td>7 − 0 = 7</td><td>5 − 1 = 4</td><td>3 − 0 = 3</td><td>(7, 4, 3)</td></tr>
+          <tr><td>(3, 3, 2) + (2, 0, 0)</td><td>3 + 2 = 5</td><td>3 + 0 = 3</td><td>2 + 0 = 2</td><td>(5, 3, 2)</td></tr></table>
+        focus: [0, "1.2", "1.3"]
+        say: "Bài hôm nay chỉ cần ba phép tính trên bộ ba số, mỗi số đếm một loại tài nguyên A, B, C. Phép trừ làm từng cột riêng, 7 trừ 0 bằng 7, 5 trừ 1 bằng 4, 3 trừ 0 bằng 3, được bộ 7, 4, 3. Phép cộng cũng làm từng cột riêng, 3 cộng 2 bằng 5, rồi 3 và 2 giữ nguyên, được bộ 5, 3, 2."
+      - show: |
+          <table class="t"><tr><th>so sánh</th><th>A</th><th>B</th><th>C</th><th>nhỏ hơn hoặc bằng?</th></tr>
+          <tr><td>(1, 2, 2) với (3, 3, 2)</td><td>1 ≤ 3</td><td>2 ≤ 3</td><td>2 ≤ 2</td><td>có, cả ba cột</td></tr>
+          <tr><td>(6, 0, 0) với (5, 3, 2)</td><td><b class="red">6 &gt; 5</b></td><td>0 ≤ 3</td><td>0 ≤ 2</td><td><b class="red">không</b>, dù tổng 6 &lt; 10</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.3"]
+        say: "Phép thứ ba là so sánh, và phải so từng cột một. Bộ 1, 2, 2 nhỏ hơn hoặc bằng bộ 3, 3, 2, vì cả ba cột đều không lớn hơn. Bộ 6, 0, 0 thì không nhỏ hơn hoặc bằng bộ 5, 3, 2, vì ở cột A, 6 lớn hơn 5. Dù tổng 6 nhỏ hơn tổng 10, chỉ cần một cột thiếu là không đủ."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: đang giữ, tối đa, cần thêm, còn rảnh"
+    checks:
+      - "[m - a for m, a in zip([7, 5, 3], [0, 1, 0])] == [7, 4, 3]"
+    steps:
+      - show: |
+          <p>Ba loại tài nguyên A, B, C. Mỗi tiến trình có ba vector:</p>
+          <ul><li><b>đang giữ</b>: số thể hiện đang được cấp; &nbsp; <b>tối đa</b>: số cần nhiều nhất trong suốt quá trình chạy;</li>
+          <li><b>cần thêm</b> = tối đa − đang giữ. Ví dụ P0: (7, 5, 3) − (0, 1, 0) = (7, 4, 3).</li></ul>
+          <p><b>Còn rảnh</b>: số thể hiện chưa cấp cho ai. Vector $u \le v$ nghĩa là <b>từng</b> thành phần của $u$ không lớn hơn của $v$.</p>
+        focus: [1, "2.1", "2.2", 3, 3]
+        say: "Có ba loại tài nguyên A, B, C, và mỗi tiến trình có ba vector. Đang giữ là số thể hiện đã được cấp, còn tối đa là số cần nhiều nhất trong suốt quá trình chạy. Cần thêm bằng tối đa trừ đang giữ, ví dụ tiến trình 0 cần thêm 7, 4, 3. Còn rảnh là số thể hiện chưa cấp cho ai. Khi viết vector u nhỏ hơn hoặc bằng v, nghĩa là từng thành phần của u không lớn hơn thành phần tương ứng của v."
+
+  # ───────────────────────── 3. AN TOÀN ─────────────────────────
+  - id: safe
+    kind: concept
+    title: "Trạng thái an toàn"
+    steps:
+      - show: |
+          <p>Trạng thái <b>an toàn</b>: có một thứ tự P<sub>i₁</sub>, P<sub>i₂</sub>, … sao cho mỗi tiến trình, khi đến lượt, đòi đủ “cần thêm” vẫn được đáp ứng bằng còn rảnh <b>cộng</b> phần mà các tiến trình trước nó đã trả lại.</p>
+          <div class="code"><div>làm việc = còn rảnh</div><div>lặp: tìm Pi chưa xong mà cần thêm(Pi) ≤ làm việc</div><div>     làm việc = làm việc + đang giữ(Pi); đánh dấu Pi xong</div><div>hết Pi tìm được: tất cả xong → an toàn, ngược lại → không an toàn</div></div>
+        focus: [1, 1, "2.1", "2.2", "2.3", "2.4"]
+        say: "Trạng thái được gọi là an toàn nếu có một thứ tự chạy mà mỗi tiến trình, khi đến lượt, đòi đủ phần cần thêm vẫn được đáp ứng. Phần đáp ứng đó lấy từ còn rảnh, cộng phần các tiến trình trước nó đã trả lại. Thuật toán bắt đầu với vector làm việc bằng còn rảnh. Lặp lại, tìm một tiến trình chưa xong có cần thêm nhỏ hơn hoặc bằng làm việc. Cho nó chạy xong, trả lại phần đang giữ, nên làm việc tăng thêm đúng phần đó. Khi không tìm được nữa, nếu tất cả đã xong thì an toàn, ngược lại thì không an toàn."
+
+  # ───────────────────────── 4. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hình dung: người trả xong làm đầy lại kho"
+    checks:
+      - "4 + 3 + 3 == 10 and 2 <= 3 and 5 > 3"
+      - "3 - 2 + (4 + 2) == 7 and 3 + 4 == 7 and 5 <= 7"
+    steps:
+      - show: |
+          <div><svg width="1400" height="400" viewBox="0 0 1400 400"><defs><marker id="arB7a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs><text x="310" y="82" font-size="28" text-anchor="end" fill="#1f2937">Pa</text><rect x="330" y="40" width="280" height="60" fill="#bfdbfe" stroke="#2563eb" stroke-width="3"/><text x="470.0" y="80" font-size="24" text-anchor="middle" fill="#1f2937">giữ 4</text><rect x="610" y="40" width="140" height="60" fill="#ffffff" stroke="#d97706" stroke-width="3" stroke-dasharray="10 7"/><text x="680.0" y="80" font-size="24" text-anchor="middle" fill="#b45309">cần thêm 2</text><text x="310" y="182" font-size="28" text-anchor="end" fill="#1f2937">Pb</text><rect x="330" y="140" width="210" height="60" fill="#bfdbfe" stroke="#2563eb" stroke-width="3"/><text x="435.0" y="180" font-size="24" text-anchor="middle" fill="#1f2937">giữ 3</text><rect x="540" y="140" width="350" height="60" fill="#ffffff" stroke="#d97706" stroke-width="3" stroke-dasharray="10 7"/><text x="715.0" y="180" font-size="24" text-anchor="middle" fill="#b45309">cần thêm 5</text><text x="310" y="282" font-size="28" text-anchor="end" fill="#1f2937">còn rảnh</text><rect x="330" y="240" width="210" height="60" fill="#dcfce7" stroke="#16a34a" stroke-width="3"/><text x="435.0" y="280" font-size="24" text-anchor="middle" fill="#1f2937">3</text><text x="330" y="360" font-size="26" fill="#1f2937">Pa cần thêm 2 ≤ rảnh 3: cấp được. Pb cần thêm 5 &gt; 3: chưa.</text></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Để thấy cơ chế, tạm xét một loại tài nguyên, tổng 10 thể hiện, và hai tiến trình. Phần xanh là số đang giữ, phần cam nét đứt là số còn có thể xin thêm cho tới hạn mức. Tiến trình a giữ 4, cần thêm 2, tiến trình b giữ 3, cần thêm 5, nên còn rảnh 10 trừ 7 bằng 3. Chỉ tiến trình a là chắc chắn được đáp ứng, vì 2 không vượt 3, còn 5 thì vượt 3."
+      - clear: true
+        show: |
+          <div><svg width="1400" height="400" viewBox="0 0 1400 400"><defs><marker id="arB7b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs><text x="310" y="82" font-size="28" text-anchor="end" fill="#1f2937">Pa</text><rect x="330" y="40" width="420" height="60" fill="#e5e7eb" stroke="#9ca3af" stroke-width="3"/><text x="540.0" y="80" font-size="24" text-anchor="middle" fill="#6b7280">đã chạy xong, trả hết 6</text><text x="310" y="182" font-size="28" text-anchor="end" fill="#1f2937">Pb</text><rect x="330" y="140" width="210" height="60" fill="#bfdbfe" stroke="#2563eb" stroke-width="3"/><text x="435.0" y="180" font-size="24" text-anchor="middle" fill="#1f2937">giữ 3</text><rect x="540" y="140" width="350" height="60" fill="#ffffff" stroke="#d97706" stroke-width="3" stroke-dasharray="10 7"/><text x="715.0" y="180" font-size="24" text-anchor="middle" fill="#b45309">cần thêm 5</text><text x="310" y="282" font-size="28" text-anchor="end" fill="#1f2937">còn rảnh</text><rect x="330" y="240" width="490" height="60" fill="#dcfce7" stroke="#16a34a" stroke-width="3"/><text x="575.0" y="280" font-size="24" text-anchor="middle" fill="#1f2937">7</text><text x="330" y="360" font-size="26" fill="#1f2937">rảnh = 3 − 2 + 6 = 7. Giờ Pb cần thêm 5 ≤ 7: cấp được.</text></svg></div>
+        focus: [1, 1, 1]
+        say: "Cấp nốt 2 cho tiến trình a, nó chạy xong và trả lại cả 6 thể hiện, nên còn rảnh thành 3 trừ 2 cộng 6, bằng 7. Mấu chốt là ở đây, phần trả lại làm kho đầy lên, và tiến trình b giờ cần thêm 5, không vượt 7, nên cũng chạy xong. Thuật toán nhà băng chỉ là làm đúng việc này, với ba loại tài nguyên cùng lúc."
+
+  - id: example
+    kind: example
+    title: "Năm tiến trình, tài nguyên (10, 5, 7)"
+    checks:
+      - "alg.banker([[0, 1, 0], [2, 0, 0], [3, 0, 2], [2, 1, 1], [0, 0, 2]], [[7, 5, 3], [3, 2, 2], [9, 0, 2], [2, 2, 2], [4, 3, 3]], [3, 3, 2]) == [1, 3, 0, 2, 4]"
+      - "[sum(c) + v for c, v in zip(zip(*[[0, 1, 0], [2, 0, 0], [3, 0, 2], [2, 1, 1], [0, 0, 2]]), [3, 3, 2])] == [10, 5, 7]"
+      - "[a + b for a, b in zip([3, 3, 2], [2, 0, 0])] == [5, 3, 2] and not all(x <= w for x, w in zip([7, 4, 3], [3, 3, 2]))"
+      - "[a + b for a, b in zip([5, 3, 2], [2, 1, 1])] == [7, 4, 3] and not all(x <= w for x, w in zip([6, 0, 0], [5, 3, 2]))"
+      - "[a + b for a, b in zip([7, 4, 3], [0, 1, 0])] == [7, 5, 3]"
+      - "[a + b for a, b in zip([7, 5, 3], [3, 0, 2])] == [10, 5, 5] and all(x <= w for x, w in zip([6, 0, 0], [7, 5, 3]))"
+      - "[a + b for a, b in zip([10, 5, 5], [0, 0, 2])] == [10, 5, 7] and all(x <= w for x, w in zip([4, 3, 1], [10, 5, 5]))"
+    steps:
+      - show: |
+          <table class="t"><tr><th></th><th>đang giữ</th><th>tối đa</th><th>cần thêm</th></tr>
+          <tr><td>P0</td><td>0 1 0</td><td>7 5 3</td><td>7 4 3</td></tr>
+          <tr><td>P1</td><td>2 0 0</td><td>3 2 2</td><td>1 2 2</td></tr>
+          <tr><td>P2</td><td>3 0 2</td><td>9 0 2</td><td>6 0 0</td></tr>
+          <tr><td>P3</td><td>2 1 1</td><td>2 2 2</td><td>0 1 1</td></tr>
+          <tr><td>P4</td><td>0 0 2</td><td>4 3 3</td><td>4 3 1</td></tr></table>
+          <p>Còn rảnh (3, 3, 2). Kiểm tổng: đang giữ cộng còn rảnh = (10, 5, 7) đúng bằng tổng tài nguyên.</p>
+        focus: [0, 1, 2]
+        say: "Bảng cho năm tiến trình với đang giữ, tối đa, và cần thêm tính bằng hiệu của hai cột đầu. Còn rảnh là 3, 3, 2. Kiểm nhanh, tổng cột đang giữ cộng còn rảnh bằng 10, 5, 7, đúng bằng tổng tài nguyên."
+      - clear: true
+        show: |
+          <p class="note">Cần thêm: P0 (7, 4, 3); P1 (1, 2, 2); P2 (6, 0, 0); P3 (0, 1, 1); P4 (4, 3, 1). Còn rảnh (3, 3, 2).</p>
+          <p><b>Bước 1</b> — làm việc = (3, 3, 2). P0 cần (7, 4, 3): thiếu. P1 cần (1, 2, 2) ≤ (3, 3, 2) → P1 xong, trả đang giữ (2, 0, 0):</p>
+          $$(3, 3, 2) + (2, 0, 0) = \hl{(5, 3, 2)}$$
+        focus: [1, 2, 2, 3]
+        say: "Giờ chạy thuật toán từng bước, dòng trên nhắc lại phần cần thêm của cả năm tiến trình. Bước một, làm việc bằng còn rảnh, 3, 3, 2. Tiến trình 0 cần 7, 4, 3, thiếu, nên bỏ qua, còn tiến trình 1 cần 1, 2, 2, không vượt 3, 3, 2, nên cho nó chạy xong. Nó trả lại phần đang giữ 2, 0, 0, nên làm việc thành 5, 3, 2."
+      - show: |
+          <p><b>Bước 2</b> — P2 cần (6, 0, 0): thiếu A. P3 cần (0, 1, 1) ≤ (5, 3, 2) → P3 xong, trả (2, 1, 1):</p>
+          $$(5, 3, 2) + (2, 1, 1) = \hl{(7, 4, 3)}$$
+        focus: [1, 1, 2]
+        say: "Bước hai, tiến trình 2 cần 6 thể hiện loại A mà làm việc chỉ có 5, nên chưa được. Tiến trình 3 cần 0, 1, 1, không vượt 5, 3, 2, nên chạy xong. Nó trả lại 2, 1, 1, nên làm việc thành 7, 4, 3."
+      - clear: true
+        show: |
+          <p><b>Bước 3</b> — P0 cần (7, 4, 3) ≤ (7, 4, 3), vừa khít → P0 xong, trả (0, 1, 0):</p>
+          $$(7, 4, 3) + (0, 1, 0) = \hl{(7, 5, 3)}$$
+        focus: [1, 2]
+        say: "Bước ba, quay lại tiến trình 0, nó cần 7, 4, 3, vừa khít với làm việc, nên chạy xong. Nó trả lại 0, 1, 0, nên làm việc thành 7, 5, 3."
+      - show: |
+          <p><b>Bước 4</b> — P2 cần (6, 0, 0) ≤ (7, 5, 3) → P2 xong, trả (3, 0, 2):</p>
+          $$(7, 5, 3) + (3, 0, 2) = \hl{(10, 5, 5)}$$
+        focus: [1, 2]
+        say: "Bước bốn, tiến trình 2 cần 6, 0, 0, giờ đã không vượt 7, 5, 3, nên chạy xong. Nó trả lại 3, 0, 2, nên làm việc thành 10, 5, 5."
+      - clear: true
+        show: |
+          <p><b>Bước 5</b> — P4 cần (4, 3, 1) ≤ (10, 5, 5) → P4 xong, trả (0, 0, 2):</p>
+          $$(10, 5, 5) + (0, 0, 2) = \hl{(10, 5, 7)}$$
+          <div class="box key">Thứ tự an toàn: $\hl{\text{P1, P3, P0, P2, P4}}$ → trạng thái an toàn.</div>
+        focus: [1, 2, 3]
+        say: "Bước năm, tiến trình 4 cần 4, 3, 1, không vượt 10, 5, 5, nên chạy xong và trả lại 0, 0, 2. Làm việc thành 10, 5, 7. Vậy thứ tự 1, 3, 0, 2, 4 là an toàn, và trạng thái này an toàn."
+
+  # ───────────────────────── 5. CẤP YÊU CẦU ─────────────────────────
+  - id: request
+    kind: concept
+    title: "Có cấp một yêu cầu không?"
+    checks:
+      - "alg.banker([[0, 1, 0], [3, 0, 2], [3, 0, 2], [2, 1, 1], [0, 0, 2]], [[7, 5, 3], [3, 2, 2], [9, 0, 2], [2, 2, 2], [4, 3, 3]], [2, 3, 0]) is not None"
+    steps:
+      - show: |
+          <ol><li>Yêu cầu ≤ cần thêm? (không thì tiến trình đòi quá hạn mức — lỗi.)</li>
+          <li>Yêu cầu ≤ còn rảnh? (không thì phải chờ.)</li>
+          <li><b>Giả vờ cấp</b>, rồi chạy kiểm an toàn: an toàn thì cấp thật; không an toàn thì huỷ và bắt chờ.</li></ol>
+          <p>P1 xin (1, 0, 2): còn rảnh thành (2, 3, 0); kiểm lại vẫn có thứ tự an toàn → <b>cấp</b>.</p>
+        focus: [0, "1.1", "1.2", "1.3", 2]
+        say: "Khi một tiến trình xin thêm, hệ điều hành làm ba bước. Một, yêu cầu có vượt phần cần thêm không, nếu vượt thì tiến trình đòi quá hạn mức và đó là lỗi. Hai, yêu cầu có vượt phần còn rảnh không, nếu vượt thì phải chờ. Ba, giả vờ cấp rồi chạy kiểm an toàn, an toàn thì cấp thật, không an toàn thì huỷ và bắt chờ. Ví dụ tiến trình 1 xin 1, 0, 2, còn rảnh thành 2, 3, 0, kiểm lại vẫn có thứ tự an toàn nên được cấp."
+
+  # ───────────────────────── 6. TỰ KIỂM ─────────────────────────
+  - id: verify
+    kind: check
+    title: "Tự kiểm"
+    checks:
+      - "[sum(c) for c in zip([0, 1, 0], [2, 0, 0], [3, 0, 2], [2, 1, 1], [0, 0, 2])] == [7, 2, 5] and [a + b for a, b in zip([3, 3, 2], [7, 2, 5])] == [10, 5, 7]"
+      - "(lambda al, ne, order: (lambda f: f(f, [3, 3, 2], order))(lambda f, w, o: w if not o else (None if not all(x <= y for x, y in zip(ne[o[0]], w)) else f(f, [a + b for a, b in zip(w, al[o[0]])], o[1:]))))([[0, 1, 0], [2, 0, 0], [3, 0, 2], [2, 1, 1], [0, 0, 2]], [[7, 4, 3], [1, 2, 2], [6, 0, 0], [0, 1, 1], [4, 3, 1]], [3, 1, 0, 2, 4]) == [10, 5, 7]"
+      - "all([a + n for a, n in zip(al, ne)] == m for al, ne, m in zip([[0, 1, 0], [2, 0, 0], [3, 0, 2], [2, 1, 1], [0, 0, 2]], [[7, 4, 3], [1, 2, 2], [6, 0, 0], [0, 1, 1], [4, 3, 1]], [[7, 5, 3], [3, 2, 2], [9, 0, 2], [2, 2, 2], [4, 3, 3]]))"
+    steps:
+      - show: |
+          <ol><li>Đang giữ + cần thêm = tối đa, từng dòng.</li>
+          <li>Tổng đang giữ + còn rảnh = tổng tài nguyên, và không đổi khi cấp hay trả.</li>
+          <li>Cuối thuật toán, làm việc = tổng tài nguyên (mọi tiến trình đã trả hết).</li></ol>
+        focus: [0, "1.1", "1.2", "1.3"]
+        say: "Tự kiểm bằng ba cách. Một, đang giữ cộng cần thêm phải bằng tối đa ở từng dòng. Hai, tổng đang giữ cộng còn rảnh luôn bằng tổng tài nguyên, và không đổi khi cấp hay trả. Ba, khi thuật toán xong, làm việc phải bằng tổng tài nguyên, vì mọi tiến trình đã trả hết."
+      - show: |
+          <table class="t"><tr><th>kiểm bằng đường khác</th><th>phép tính</th><th>khớp?</th></tr>
+          <tr><td>cộng thẳng cột đang giữ của cả năm tiến trình</td><td>(7, 2, 5)</td><td></td></tr>
+          <tr><td>còn rảnh + tổng đang giữ</td><td>(3, 3, 2) + (7, 2, 5) = (10, 5, 7)</td><td>✓ bằng làm việc cuối</td></tr>
+          <tr><td>thử thứ tự khác: P3, P1, P0, P2, P4</td><td>mỗi lượt đều vừa, cuối cùng (10, 5, 7)</td><td>✓ vẫn an toàn</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", "1.4"]
+        say: "Giờ kiểm kết quả các bước bằng đường khác, không cộng lại từng bước. Cộng thẳng cột đang giữ của cả năm tiến trình, ta được 7, 2, 5. Lấy còn rảnh 3, 3, 2 cộng 7, 2, 5 được 10, 5, 7, đúng bằng làm việc ở bước năm. Thử thêm một thứ tự khác, tiến trình 3 trước rồi tới 1, 0, 2 và 4. Máy dò thấy mỗi lượt đều vừa và cuối cùng cũng được 10, 5, 7, nên kết luận an toàn không đổi."
+
+  # ───────────────────────── 7. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    checks:
+      - "alg.banker([[0, 3, 0], [3, 0, 2], [3, 0, 2], [2, 1, 1], [0, 0, 2]], [[7, 5, 3], [3, 2, 2], [9, 0, 2], [2, 2, 2], [4, 3, 3]], [2, 1, 0]) is None"
+      - "[a - b for a, b in zip([2, 3, 0], [0, 2, 0])] == [2, 1, 0] and [a - b for a, b in zip([7, 4, 3], [0, 2, 0])] == [7, 2, 3]"
+      - "[[c for c, x, w in zip('ABC', n, [2, 1, 0]) if x > w] for n in [[7, 2, 3], [0, 2, 0], [6, 0, 0], [0, 1, 1], [4, 3, 1]]] == [['A', 'B', 'C'], ['B'], ['A'], ['C'], ['A', 'B', 'C']]"
+    title: "4 lỗi người mới hay mắc"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Nghĩ không an toàn nghĩa là đã bế tắc <b class="red">(sai)</b>
+          <br><span class="note">Không an toàn chỉ là <b>không bảo đảm</b> tránh được; có thể các tiến trình không đòi đến hạn mức và vẫn chạy xong.</span></div>
+        say: "Lỗi thứ nhất, nghĩ không an toàn nghĩa là đã bế tắc. Không an toàn chỉ có nghĩa là không bảo đảm tránh được, có thể các tiến trình không đòi tới hạn mức và vẫn chạy xong."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Cấp vì “còn đủ tài nguyên” <b class="red">(sai)</b>
+          <br><span class="note">Sau khi cấp cho P1, P0 xin (0, 2, 0): còn rảnh (2, 3, 0) đủ, nhưng giả vờ cấp thì không còn thứ tự an toàn → phải bắt chờ.</span></div>
+        say: "Lỗi thứ hai, cấp chỉ vì còn đủ tài nguyên. Sau khi cấp cho tiến trình 1, tiến trình 0 xin 0, 2, 0, còn rảnh vẫn đủ, nhưng giả vờ cấp thì không còn thứ tự an toàn nào, nên phải bắt chờ."
+      - show: |
+          <table class="t"><tr><th>giả vờ cấp cho P0, còn rảnh (2, 1, 0)</th><th>P0</th><th>P1</th><th>P2</th><th>P3</th><th>P4</th></tr>
+          <tr><td>cần thêm</td><td>(7, 2, 3)</td><td>(0, 2, 0)</td><td>(6, 0, 0)</td><td>(0, 1, 1)</td><td>(4, 3, 1)</td></tr>
+          <tr><td>vượt còn rảnh ở cột</td><td>A, B, C</td><td>B</td><td>A</td><td>C</td><td>A, B, C</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Bảng cho thấy vì sao. Giả vờ cấp thì còn rảnh chỉ còn 2, 1, 0, và phần cần thêm của tiến trình 0 giảm còn 7, 2, 3. Tiến trình nào cũng vượt còn rảnh ở ít nhất một cột, nên không ai chắc chắn chạy xong được."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> So sánh vector bằng tổng <b class="red">(sai)</b>
+          <br><span class="note">(6, 0, 0) không ≤ (5, 3, 2) dù 6 &lt; 10: thiếu một thể hiện loại A là không chạy được.</span></div>
+        say: "Lỗi thứ ba, so sánh hai vector bằng tổng. Vector 6, 0, 0 không nhỏ hơn hoặc bằng 5, 3, 2, dù tổng 6 nhỏ hơn 10, vì thiếu một thể hiện loại A là không chạy được."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Nghĩ thuật toán này dùng được ở mọi nơi <b class="red">(chưa đúng)</b>
+          <br><span class="note">Cần biết trước hạn mức tối đa và số tiến trình cố định — hiếm khi có ở máy đa dụng; hay dùng ở hệ nhúng, hệ thời gian thực.</span></div>
+        say: "Lỗi thứ tư, nghĩ thuật toán này dùng được ở mọi nơi. Nó cần biết trước hạn mức tối đa và số tiến trình cố định, điều hiếm có ở máy đa dụng, nên hay dùng ở hệ nhúng và hệ thời gian thực."
+
+  # ───────────────────────── 8. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.banker([[0, 1, 0], [2, 0, 0], [3, 0, 2], [2, 1, 1], [0, 0, 2]], [[7, 5, 3], [3, 2, 2], [9, 0, 2], [2, 2, 2], [4, 3, 3]], [3, 3, 2]) is not None"
+      - "all(r <= v for r, v in zip([3, 3, 0], [3, 3, 2])) and alg.banker([[0, 1, 0], [2, 0, 0], [3, 0, 2], [2, 1, 1], [3, 3, 2]], [[7, 5, 3], [3, 2, 2], [9, 0, 2], [2, 2, 2], [4, 3, 3]], [0, 0, 2]) is None"
+      - "all(r <= n for r, n in zip([3, 3, 0], [4, 3, 1]))"
+      - "[a - b for a, b in zip([3, 3, 2], [3, 3, 0])] == [0, 0, 2] and [a - b for a, b in zip([4, 3, 1], [3, 3, 0])] == [1, 0, 1]"
+      - "not any(all(x <= w for x, w in zip(n, [0, 0, 2])) for n in [[7, 4, 3], [1, 2, 2], [6, 0, 0], [0, 1, 1], [1, 0, 1]])"
+    steps:
+      - show: |
+          <p>Trạng thái ban đầu của ví dụ (còn rảnh 3, 3, 2). P4 xin (3, 3, 0).</p>
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Yêu cầu có vượt cần thêm hay còn rảnh không?</td></tr>
+          <tr><td>2</td><td>Giả vờ cấp rồi kiểm an toàn: cấp hay bắt chờ?</td></tr></table>
+        focus: [0, 1, "2.2", "2.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Lấy lại trạng thái ban đầu của ví dụ, còn rảnh 3, 3, 2, và tiến trình 4 xin 3, 3, 0. Câu một, yêu cầu có vượt phần cần thêm hay phần còn rảnh không? Câu hai, giả vờ cấp rồi kiểm an toàn, nên cấp hay bắt chờ? Dừng video và làm ra giấy."
+        pause: 12
+      - clear: true
+        show: |
+          <p>① So từng cột: (3, 3, 0) ≤ cần thêm (4, 3, 1), vì 3 ≤ 4, 3 ≤ 3, 0 ≤ 1; và (3, 3, 0) ≤ còn rảnh (3, 3, 2), vì 3 ≤ 3, 3 ≤ 3, 0 ≤ 2 → qua hai bước đầu.</p>
+          $$(3, 3, 2) - (3, 3, 0) = (0, 0, 2)$$
+        focus: [1, 1, 2]
+        say: "Đáp án câu một, so từng cột. 3, 3, 0 không vượt phần cần thêm 4, 3, 1, và cũng không vượt phần còn rảnh 3, 3, 2, nên qua hai bước đầu. Giả vờ cấp thì còn rảnh chỉ còn 3, 3, 2 trừ 3, 3, 0, bằng 0, 0, 2."
+      - show: |
+          <table class="t"><tr><th>sau khi giả vờ cấp</th><th>P0</th><th>P1</th><th>P2</th><th>P3</th><th>P4</th></tr>
+          <tr><td>cần thêm</td><td>(7, 4, 3)</td><td>(1, 2, 2)</td><td>(6, 0, 0)</td><td>(0, 1, 1)</td><td>(1, 0, 1)</td></tr>
+          <tr><td>≤ (0, 0, 2)?</td><td>không</td><td>không</td><td>không</td><td>không, B</td><td>không, A</td></tr></table>
+          <p>② Không ai chạy xong được → <b>không an toàn</b>, $\hl{\text{bắt chờ}}$.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Câu hai, kiểm an toàn với còn rảnh 0, 0, 2. Phần cần thêm của tiến trình 4 giảm còn 4, 3, 1 trừ 3, 3, 0, bằng 1, 0, 1. Đi qua từng tiến trình, không ai có cần thêm nhỏ hơn hoặc bằng 0, 0, 2, kể cả tiến trình 3 thiếu ở cột B và tiến trình 4 thiếu ở cột A. Vậy trạng thái không an toàn, và tiến trình 4 phải chờ."
+
+  # ───────────────────────── 9. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">cần thêm = tối đa − đang giữ</span><span class="a">→</span>
+          <span class="n">tìm thứ tự: cần thêm ≤ làm việc, rồi trả lại</span><span class="a">→</span>
+          <span class="n">có thứ tự → an toàn</span><span class="a">→</span>
+          <span class="n">chỉ cấp khi vẫn an toàn</span></div>
+        say: "Tổng kết lại, cần thêm bằng tối đa trừ đang giữ. Tìm một thứ tự mà mỗi tiến trình có cần thêm nhỏ hơn hoặc bằng làm việc, rồi trả lại phần đang giữ. Có thứ tự như vậy thì trạng thái an toàn. Hệ điều hành chỉ cấp yêu cầu khi trạng thái sau đó vẫn an toàn."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> trước khi làm một bước không lùi lại được, hãy giả lập bước đó và kiểm xem còn đường thoát không.</div>
+        say: "Điều cần mang theo, trước khi làm một bước không thể lùi lại, hãy giả lập bước đó và kiểm xem có còn đường thoát hay không."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 8): chuyển sang bộ nhớ — <b>cấp phát liên tục</b> và phân mảnh.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 8, ta chuyển sang bộ nhớ, với cách cấp phát liên tục và hiện tượng phân mảnh. Hẹn gặp bạn ở bài tiếp theo."

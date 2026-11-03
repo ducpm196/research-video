@@ -1,0 +1,201 @@
+id: L04
+course: DAN
+series: "DAN · Phân tích dữ liệu"
+title: "Bài 4 — Phân tích nhóm người dùng theo kỳ: giữ chân người dùng"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/dan.yaml L04; audit/dan/verify_dan.py L04; A. Croll, B. Yoskovitz, Lean Analytics (2013), chương về phân tích nhóm; bài 0 (định nghĩa chỉ số), bài 1 (gộp nhóm)"
+assumes: [arith, frac, cdot]
+# Quy ước: “nhóm” = người dùng đăng ký cùng tháng; tỉ lệ giữ chân tháng k = số người của nhóm còn hoạt động ở tháng thứ k sau đăng ký / cỡ nhóm (alg.cohort_retention).
+#   “Hoạt động” theo định nghĩa ở bài 0. Số liệu là SỐ MINH HOẠ.
+objectives:
+  - "Dựng bảng giữ chân theo nhóm tháng đăng ký"
+  - "Đọc bảng theo hàng, cột, đường chéo"
+  - "Không để tăng trưởng che lấp giữ chân kém"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Người dùng tăng đều — nhưng ai ở lại?"
+    checks:
+      - "30 + 120 == 150 and 18 + 45 + 150 == 213"
+    steps:
+      - show: |
+          <p>Biểu đồ người dùng hoạt động mỗi tháng đi lên đều: 100, 150, rồi 213. Ai cũng vui. Nhưng nếu phần lớn con số đó là <b>người mới</b> đổ vào, còn người cũ rời đi gần hết, thì sản phẩm đang rò như cái thùng thủng — chỉ là nước đổ vào nhanh hơn nước chảy ra.</p>
+          <div class="box key">Hôm nay: <b>phân tích nhóm theo kỳ</b> — tách người dùng theo tháng đăng ký để thấy ai thật sự ở lại.</div>
+        focus: [1, 1, 1, 1, 2]
+        say: "Chào bạn, biểu đồ người dùng hoạt động mỗi tháng đi lên đều, 100, 150, rồi 213. Ai cũng vui. Nhưng nếu phần lớn con số đó là người mới đổ vào, còn người cũ rời đi gần hết, thì sản phẩm đang rò như cái thùng thủng. Chỉ là nước đổ vào nhanh hơn nước chảy ra. Hôm nay ta học phân tích nhóm theo kỳ, tách người dùng theo tháng đăng ký để thấy ai thật sự ở lại."
+
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: tỉ lệ phần trăm, và tuổi của một nhóm"
+    checks:
+      - "30 / 100 == 0.3 and 45 / 120 == 0.375"
+      - "3 - 2 == 1 and 3 - 1 == 2"
+    steps:
+      - show: |
+          <p><b>Tỉ lệ phần trăm</b> $= \frac{\text{phần}}{\text{toàn bộ}} \cdot 100\%$: $\frac{30}{100} = 30\%$; $\frac{45}{120} = 0{,}375 = 37{,}5\%$.</p>
+          <p>Hai nhóm khác cỡ chỉ so được bằng tỉ lệ, không bằng số người.</p>
+        focus: [1, 1, 2]
+        say: "Trước hết, ôn lại tỉ lệ phần trăm, bằng phần chia toàn bộ rồi nhân 100. 30 người trên 100 là 30 phần trăm, còn 45 trên 120 là 0 phẩy 375, tức 37 phẩy 5 phần trăm. Hai nhóm khác cỡ chỉ so được bằng tỉ lệ, không so bằng số người."
+      - show: |
+          <table class="t"><tr><th>nhóm (tháng đăng ký)</th><th>tháng lịch đang xét</th><th>tuổi $k$ = tháng lịch $-$ tháng đăng ký</th></tr>
+          <tr><td>tháng 2</td><td>tháng 3</td><td>$3 - 2 = 1$</td></tr>
+          <tr><td>tháng 1</td><td>tháng 3</td><td>$3 - 1 = 2$</td></tr></table>
+        focus: [0, "1.2", "1.3"]
+        say: "Thứ hai, tuổi của một nhóm, tức đã bao nhiêu tháng kể từ tháng đăng ký. Nhóm đăng ký tháng 2, xét ở tháng lịch 3, có tuổi 3 trừ 2 bằng 1. Nhóm tháng 1, cũng ở tháng lịch 3, có tuổi 3 trừ 1 bằng 2, nên cùng một tháng lịch, mỗi nhóm có một tuổi khác nhau."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: bảng nhóm theo kỳ"
+    steps:
+      - show: |
+          <table class="t"><tr><th>đọc theo</th><th>trả lời câu hỏi</th></tr>
+          <tr><td><b>hàng</b> (một nhóm)</td><td>nhóm đăng ký tháng 1 còn lại bao nhiêu sau 1, 2, 3 tháng?</td></tr>
+          <tr><td><b>cột</b> (cùng tuổi)</td><td>sau đúng 1 tháng, nhóm mới có giữ chân tốt hơn nhóm cũ không?</td></tr>
+          <tr><td><b>đường chéo</b> (cùng tháng lịch)</td><td>một sự kiện (lỗi, chiến dịch) ở một tháng có ảnh hưởng mọi nhóm không?</td></tr></table>
+          <p>Tỉ lệ giữ chân tháng k $= \frac{\text{số người của nhóm còn hoạt động ở tháng thứ } k}{\text{cỡ nhóm}}$ — mẫu số là <b>cỡ nhóm ban đầu</b>, không đổi.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Bảng cho ba cách đọc. Đọc theo hàng, tức một nhóm, trả lời nhóm đăng ký tháng 1 còn lại bao nhiêu sau 1, 2, 3 tháng. Đọc theo cột, tức cùng tuổi, trả lời sau đúng 1 tháng, nhóm mới có giữ chân tốt hơn nhóm cũ không. Đọc theo đường chéo, tức cùng tháng lịch, trả lời một sự kiện như lỗi hay chiến dịch ở một tháng có ảnh hưởng mọi nhóm không. Tỉ lệ giữ chân tháng k bằng số người của nhóm còn hoạt động ở tháng thứ k, chia cỡ nhóm, và mẫu số là cỡ nhóm ban đầu, không đổi."
+
+  - id: intuition
+    kind: intuition
+    title: "Bảng tam giác: hàng, cột và đường chéo"
+    checks:
+      - "alg.cohort_retention({'T1': [100, 30, 18], 'T2': [120, 45]}) == {'T1': [30.0, 18.0], 'T2': [37.5]} and 18 + 45 + 150 == 213"
+    steps:
+      - show: |
+          <div><svg width="1500" height="370" viewBox="0 0 1500 370"><g fill="#1f2937" font-size="22"><text x="445" y="75" text-anchor="middle" font-weight="bold">tuổi 0</text><text x="675" y="75" text-anchor="middle" font-weight="bold">tuổi 1</text><text x="905" y="75" text-anchor="middle" font-weight="bold">tuổi 2</text><text x="310" y="139" text-anchor="end">nhóm tháng 1</text><rect x="330" y="95" width="230" height="70" fill="#2a78d6" fill-opacity="1.00" stroke="#ffffff" stroke-width="3"/><text x="445" y="139" text-anchor="middle" fill="#ffffff">100 (100%)</text><rect x="560" y="95" width="230" height="70" fill="#2a78d6" fill-opacity="0.41" stroke="#ffffff" stroke-width="3"/><text x="675" y="139" text-anchor="middle" fill="#1f2937">30 (30%)</text><rect x="790" y="95" width="230" height="70" fill="#2a78d6" fill-opacity="0.30" stroke="#ffffff" stroke-width="3"/><text x="905" y="139" text-anchor="middle" fill="#1f2937">18 (18%)</text><text x="310" y="209" text-anchor="end">nhóm tháng 2</text><rect x="330" y="165" width="230" height="70" fill="#2a78d6" fill-opacity="1.00" stroke="#ffffff" stroke-width="3"/><text x="445" y="209" text-anchor="middle" fill="#ffffff">120 (100%)</text><rect x="560" y="165" width="230" height="70" fill="#2a78d6" fill-opacity="0.47" stroke="#ffffff" stroke-width="3"/><text x="675" y="209" text-anchor="middle" fill="#1f2937">45 (37,5%)</text><text x="310" y="279" text-anchor="end">nhóm tháng 3</text><rect x="330" y="235" width="230" height="70" fill="#2a78d6" fill-opacity="1.00" stroke="#ffffff" stroke-width="3"/><text x="445" y="279" text-anchor="middle" fill="#ffffff">150 (100%)</text><rect x="793" y="98" width="224" height="64" fill="none" stroke="#eb6834" stroke-width="5"/><rect x="563" y="168" width="224" height="64" fill="none" stroke="#eb6834" stroke-width="5"/><rect x="333" y="238" width="224" height="64" fill="none" stroke="#eb6834" stroke-width="5"/><text x="1050" y="135" fill="#eb6834" font-weight="bold">đường chéo = tháng lịch 3</text><text x="1050" y="175" fill="#eb6834">18 + 45 + 150 = 213</text><text x="1050" y="215" fill="#059669">hàng = một nhóm theo thời gian</text><text x="1050" y="255" fill="#2a78d6">cột = các nhóm cùng tuổi</text><text x="330" y="335" font-size="20">ô trống: nhóm chưa đủ tuổi; màu càng đậm, tỉ lệ còn lại càng cao</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình là bảng nhóm theo kỳ vẽ thành ô màu, màu càng đậm thì tỉ lệ còn lại càng cao. Mỗi hàng là một nhóm đăng ký, đi sang phải là nhóm đó già thêm một tháng, nên bảng có dạng tam giác, vì nhóm mới chưa đủ tuổi. Các ô viền cam nằm trên một đường chéo, đều thuộc tháng lịch 3, cộng lại 18, 45 và 150 được 213, đúng con số người dùng hoạt động của tháng 3. Vậy con số tổng chỉ là một đường chéo, trong đó 150 là người vừa đăng ký."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Ba nhóm tháng đăng ký"
+    checks:
+      - "alg.cohort_retention({'T1': [100, 30, 18], 'T2': [120, 45]}) == {'T1': [30.0, 18.0], 'T2': [37.5]}"
+    steps:
+      - show: |
+          <table class="t"><tr><th>nhóm</th><th>cỡ nhóm</th><th>sau 1 tháng</th><th>sau 2 tháng</th></tr>
+          <tr><td>tháng 1</td><td>100</td><td>$\frac{30}{100} = 30\%$</td><td>$\frac{18}{100} = 18\%$</td></tr></table>
+          <p><b>Bước 1</b> — nhóm tháng 1: mẫu số luôn là cỡ nhóm 100.</p>
+        focus: [1, "1.2", 2]
+        say: "Bước một, nhóm tháng 1 có 100 người. Sau 1 tháng còn 30, tức 30 phần trăm, sau 2 tháng còn 18, tức 18 phần trăm. Mẫu số luôn là cỡ nhóm ban đầu 100, không phải số người còn lại tháng trước."
+      - show: |
+          <table class="t"><tr><th>nhóm</th><th>cỡ nhóm</th><th>sau 1 tháng</th><th>sau 2 tháng</th></tr>
+          <tr><td>tháng 2</td><td>120</td><td>$\frac{45}{120} = \hl{37{,}5\%}$</td><td>chưa đủ thời gian</td></tr>
+          <tr><td>tháng 3</td><td>150</td><td>chưa đủ thời gian</td><td>—</td></tr></table>
+          <p><b>Bước 2</b> — nhóm tháng 2 và tháng 3: chỉ điền ô đã đủ tuổi.</p>
+        focus: ["1.2", "1.3", 2]
+        say: "Bước hai, nhóm tháng 2 có 120 người, sau 1 tháng còn 45, tức 37 phẩy 5 phần trăm. Nhóm tháng 3 có 150 người và chưa đủ thời gian để đo. Ta chỉ điền ô đã đủ tuổi, các ô còn lại để trống."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>nhóm</th><th>cỡ nhóm</th><th>sau 1 tháng</th><th>sau 2 tháng</th></tr>
+          <tr><td>tháng 1</td><td>100</td><td>30 (30%)</td><td>18 (18%)</td></tr>
+          <tr><td>tháng 2</td><td>120</td><td>45 ($\hl{37{,}5\%}$)</td><td>chưa đủ thời gian</td></tr>
+          <tr><td>tháng 3</td><td>150</td><td>chưa đủ thời gian</td><td>—</td></tr></table>
+          <p><b>Bước 3</b> — đọc cột “sau 1 tháng”: 30% → 37,5% — giữ chân <b>cải thiện</b>.</p>
+        focus: [1, 2]
+        say: "Bước ba, ghép ba nhóm thành một bảng rồi đọc theo cột. Cột sau 1 tháng đi từ 30 lên 37 phẩy 5 phần trăm, nên giữ chân đã cải thiện."
+      - show: |
+          <p><b>Bước 4</b> — đọc đường chéo tháng lịch 3: $18 + 45 + 150 = 213$ người hoạt động, nhưng 150 trong số đó là người mới.</p>
+        say: "Bước bốn, đọc đường chéo của tháng lịch 3. Tháng 3 có 18 cộng 45 cộng 150, bằng 213 người hoạt động, nhưng 150 trong số đó là người mới."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: dựng lại các con số của biểu đồ tổng"
+    checks:
+      - "alg.cohort_retention({'T1': [100]}) == {'T1': []} and 30 + 120 == 150 and 18 + 45 + 150 == 213"
+      - "0.375 * 120 == 45 and round(0.3 * 100) == 30 and round(0.18 * 100) == 18"
+    steps:
+      - show: |
+          <table class="t"><tr><th>tháng lịch</th><th>cộng một đường chéo</th><th>so với biểu đồ tổng</th></tr>
+          <tr><td>1</td><td>100 (nhóm tháng 1, tuổi 0)</td><td>100 ✓</td></tr>
+          <tr><td>2</td><td>$30 + 120 = 150$</td><td>150 ✓</td></tr>
+          <tr><td>3</td><td>$18 + 45 + 150 = 213$</td><td>213 ✓</td></tr></table>
+          <p>Ngược lại: $37{,}5\% \cdot 120 = 45$ người — tỉ lệ nhân cỡ nhóm trả lại đúng số người ✓.</p>
+        focus: [0, "1.2", "1.3", "1.4", 2]
+        say: "Kiểm bằng đường khác, ta cộng từng đường chéo của bảng và so với biểu đồ tổng ở đầu bài. Tháng lịch 1 chỉ có nhóm tháng 1 ở tuổi 0, là 100 người. Tháng lịch 2 có 30 cộng 120 bằng 150. Tháng lịch 3 có 18 cộng 45 cộng 150 bằng 213, khớp cả ba. Đi ngược lại, 37 phẩy 5 phần trăm nhân cỡ nhóm 120 trả lại đúng 45 người, nên tỉ lệ đã dùng đúng mẫu số."
+
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, cả người mới lẫn người đã đi làm"
+    checks:
+      - "1 - 30 / 100 > 0.6 and 1 - 45 / 120 > 0.6"
+      - "18 / 30 == 0.6 and 18 / 100 == 0.18 and round(30 / 100 * (18 / 30), 9) == 0.18"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Gộp mọi người dùng vào một con số <b class="red">(tăng trưởng che lấp rò rỉ)</b>
+          <br><span class="note">Tổng hoạt động tăng 100 → 213 trong khi mỗi nhóm mất hơn 60% sau một tháng. Luôn xem theo nhóm.</span></div>
+        say: "Lỗi thứ nhất, gộp mọi người dùng vào một con số, nên tăng trưởng che lấp rò rỉ. Tổng hoạt động tăng từ 100 lên 213, trong khi mỗi nhóm mất hơn 60 phần trăm sau một tháng. Hãy luôn xem theo nhóm."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Tính tỉ lệ cho nhóm chưa đủ thời gian <b class="red">(nhóm mới trông tệ)</b>
+          <br><span class="note">Nhóm đăng ký giữa tháng 3, đo “sau 1 tháng” vào cuối tháng 3: mới được nửa tháng. Chỉ điền ô khi nhóm đã đủ tuổi.</span></div>
+        say: "Lỗi thứ hai, tính tỉ lệ cho nhóm chưa đủ thời gian, nên nhóm mới trông tệ. Nhóm đăng ký giữa tháng 3 mà đo sau 1 tháng vào cuối tháng 3 thì mới được nửa tháng. Chỉ điền ô khi nhóm đã đủ tuổi."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Lẫn “còn hoạt động trong tháng k” với “từng quay lại” <b class="red">(hai đường cong khác hẳn)</b>
+          <br><span class="note">“Từng quay lại ít nhất một lần tới tháng k” chỉ tăng; “hoạt động đúng trong tháng k” có thể giảm. Ghi rõ định nghĩa (bài 0).</span></div>
+        say: "Lỗi thứ ba, lẫn còn hoạt động trong tháng k với từng quay lại, nên ra hai đường cong khác hẳn. Từng quay lại ít nhất một lần tới tháng k thì chỉ tăng, còn hoạt động đúng trong tháng k thì có thể giảm. Hãy ghi rõ định nghĩa, gồm sự kiện nào được tính và trong khoảng thời gian nào, như cách viết định nghĩa chỉ số ở bài 0."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4.</b> Lặng lẽ đổi mẫu số sang “số người còn lại tháng trước” <b class="red">(lỗi của người đã đi làm)</b></div>
+          <table class="t"><tr><th>nhóm tháng 1, sau 2 tháng</th><th>mẫu số</th><th>tỉ lệ</th></tr>
+          <tr><td>giữ chân theo cỡ nhóm</td><td>100 người ban đầu</td><td>$\frac{18}{100} = 18\%$</td></tr>
+          <tr><td>giữ chân so với tháng trước</td><td>30 người còn ở tháng thứ nhất</td><td class="red">$\frac{18}{30} = 60\%$</td></tr></table>
+          <p class="note">Cả hai đều có ích, nhưng là <b>hai chỉ số khác nhau</b>: $30\% \cdot 60\% = 18\%$. Báo “giữ chân 60%” mà không ghi mẫu số thì người nghe hiểu nhầm là 60 trên 100 người.</p>
+        focus: [1, 2, "2.2", "2.3", 3, 3]
+        say: "Lỗi thứ tư là lỗi của người đã đi làm, lặng lẽ đổi mẫu số sang số người còn lại tháng trước. Bảng lấy nhóm tháng 1 sau 2 tháng. Theo cỡ nhóm, 18 chia 100 bằng 18 phần trăm. So với tháng trước, 18 chia 30 người còn ở tháng thứ nhất bằng 60 phần trăm, nghe đẹp hơn hẳn. Cả hai đều có ích nhưng là hai chỉ số khác nhau, vì 30 phần trăm nhân 60 phần trăm mới bằng 18 phần trăm. Báo giữ chân 60 phần trăm mà không ghi mẫu số thì người nghe sẽ hiểu nhầm là 60 trên 100 người."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.cohort_retention({'T4': [200, 60, 30]}) == {'T4': [30.0, 15.0]}"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Nhóm tháng 4 có 200 người, sau 1 tháng còn 60, sau 2 tháng còn 30. Tỉ lệ giữ chân hai tháng?</td></tr>
+          <tr><td>2</td><td>So với nhóm tháng 1 (30%, 18%): nhóm tháng 4 tốt hơn hay kém hơn ở tháng thứ hai?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, nhóm tháng 4 có 200 người, sau 1 tháng còn 60, sau 2 tháng còn 30. Tỉ lệ giữ chân hai tháng là bao nhiêu? Câu hai, so với nhóm tháng 1 có 30 và 18 phần trăm, nhóm tháng 4 tốt hơn hay kém hơn ở tháng thứ hai? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① Mẫu số luôn là cỡ nhóm 200. Sau 1 tháng: $\frac{60}{200} = 30\%$.</p>
+          <p>Sau 2 tháng: $\frac{30}{200} = \hl{15\%}$.</p>
+        focus: [1, 2]
+        say: "Đáp án câu một, mẫu số luôn là cỡ nhóm 200, nên sau 1 tháng là 60 chia 200, bằng 30 phần trăm. Sau 2 tháng là 30 chia 200, bằng 15 phần trăm."
+      - show: |
+          <table class="t"><tr><th>sau 2 tháng</th><th>nhóm tháng 1</th><th>nhóm tháng 4</th></tr>
+          <tr><td>số người còn lại</td><td>18</td><td>30</td></tr>
+          <tr><td>tỉ lệ giữ chân</td><td>18%</td><td>15% — <b>kém hơn</b></td></tr></table>
+        focus: [0, "1.2", "1.3"]
+        say: "Câu hai, so cùng tuổi 2 tháng. Số người còn lại tuyệt đối của nhóm tháng 4 nhiều hơn, 30 so với 18. Nhưng tỉ lệ thì kém hơn, 15 so với 18 phần trăm, nên nhóm tháng 4 giữ chân kém hơn."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">tách theo tháng đăng ký</span><span class="a">→</span>
+          <span class="n">mẫu số: cỡ nhóm ban đầu</span><span class="a">→</span>
+          <span class="n">hàng, cột, đường chéo: ba câu hỏi</span><span class="a">→</span>
+          <span class="n">chỉ điền ô đã đủ tuổi; định nghĩa rõ “còn lại”</span></div>
+        say: "Tổng kết lại, hãy tách người dùng theo tháng đăng ký, dùng mẫu số là cỡ nhóm ban đầu, và đọc theo hàng, cột, đường chéo cho ba câu hỏi khác nhau. Chỉ điền ô đã đủ tuổi, và định nghĩa rõ thế nào là còn lại."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> một tổng đang tăng có thể giấu một <b>tỉ lệ</b> đang giảm — hãy hỏi tổng đó được <b>làm từ</b> những ai.</div>
+        say: "Điều cần mang theo, một tổng đang tăng có thể giấu một tỉ lệ đang giảm, nên hãy hỏi tổng đó được làm từ những ai."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 5): <b>phễu chuyển đổi</b> — từng bước và toàn phễu.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 5, ta học phễu chuyển đổi, theo từng bước và toàn phễu. Hẹn gặp bạn ở bài tiếp theo."

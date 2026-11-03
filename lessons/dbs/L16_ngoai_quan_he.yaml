@@ -1,0 +1,237 @@
+id: L16
+course: DBS
+series: "DBS · Cơ sở dữ liệu"
+title: "Bài 16 — Ngoài mô hình quan hệ: khoá–giá trị, văn bản, cột rộng, đồ thị"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/dbs.yaml L16; audit/dbs/verify_dbs.py L16 (sqlite3 + duyệt đồ thị); M. Kleppmann, Designing Data-Intensive Applications (2017), chương 2"
+assumes: [arith, set]
+# Quy ước: tên sản phẩm (Redis, MongoDB, Cassandra, Neo4j) chỉ hiện trên màn hình làm ví dụ, lời đọc dùng tên loại.
+#   Ví dụ bạn của bạn: 6 cạnh vô hướng (lưu hai chiều trong bảng Ban), kết quả {Dũng, Em} tính hai cách độc lập — SQL tự nối trên
+#   sqlite3 và duyệt danh sách kề bằng Python — và phải trùng nhau.
+objectives:
+  - "Nêu bốn mô hình dữ liệu ngoài quan hệ và mẫu truy cập hợp với mỗi mô hình"
+  - "So sánh truy vấn bạn của bạn trên bảng và trên đồ thị"
+  - "Biết khi nào nên giữ cơ sở dữ liệu quan hệ"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Không phải mọi dữ liệu đều là bảng"
+    steps:
+      - show: |
+          <p>Giỏ hàng của một phiên truy cập, hồ sơ có nhiều tầng lồng nhau, nhật ký cảm biến hàng tỉ dòng, mạng bạn bè — ép tất cả vào bảng có khi vụng về và chậm.</p>
+          <div class="box key">Hôm nay: bốn mô hình dữ liệu khác — <b>khoá–giá trị, văn bản, cột rộng, đồ thị</b> — mỗi mô hình hợp với một kiểu truy cập, và khi nào nên giữ mô hình quan hệ.</div>
+        focus: [1, 2]
+        say: "Chào bạn, giỏ hàng của một phiên truy cập, hồ sơ có nhiều tầng lồng nhau, nhật ký cảm biến hàng tỉ dòng, hay mạng bạn bè, ép tất cả vào bảng đôi khi vụng về và chậm. Hôm nay ta học bốn mô hình dữ liệu khác, khoá giá trị, văn bản, cột rộng và đồ thị, mỗi mô hình hợp với một kiểu truy cập, và khi nào nên giữ mô hình quan hệ."
+
+  # ───────────────────────── 1b. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: tự nối, bảng băm, danh sách kề"
+    checks:
+      - "alg.sql('SELECT COUNT(*) FROM Ban', \"CREATE TABLE Ban (a TEXT, b TEXT); INSERT INTO Ban VALUES ('An','Bình'),('Bình','An'),('An','Chi'),('Chi','An'),('Bình','Dũng'),('Dũng','Bình'),('Chi','Dũng'),('Dũng','Chi'),('Chi','Em'),('Em','Chi'),('Dũng','Giang'),('Giang','Dũng');\") == [(12,)] and 6 * 2 == 12"
+      - "alg.sql(\"SELECT f1.b, f2.b FROM Ban f1 JOIN Ban f2 ON f1.b = f2.a WHERE f1.a = 'An' ORDER BY f1.b, f2.b\", \"CREATE TABLE Ban (a TEXT, b TEXT); INSERT INTO Ban VALUES ('An','Bình'),('Bình','An'),('An','Chi'),('Chi','An'),('Bình','Dũng'),('Dũng','Bình'),('Chi','Dũng'),('Dũng','Chi'),('Chi','Em'),('Em','Chi'),('Dũng','Giang'),('Giang','Dũng');\") == [('Bình', 'An'), ('Bình', 'Dũng'), ('Chi', 'An'), ('Chi', 'Dũng'), ('Chi', 'Em')]"
+      - "(lambda d: d['p2'] == ['bút'] and len(d) == 3)({'p1': ['sách', 'vở'], 'p2': ['bút'], 'p3': []})"
+      - "(lambda E: (lambda adj: adj['An'] == ['Bình', 'Chi'] and adj['Chi'] == ['An', 'Dũng', 'Em'] and sum(len(v) for v in adj.values()) == 12)({n: sorted({y for x, y in E + [(b, a) for a, b in E] if x == n}) for n in sorted({v for e in E for v in e})}))([('An', 'Bình'), ('An', 'Chi'), ('Bình', 'Dũng'), ('Chi', 'Dũng'), ('Chi', 'Em'), ('Dũng', 'Giang')])"
+    steps:
+      - show: |
+          <p>Bài 1–2: <b>nối</b> ghép dòng hai bảng khớp điều kiện. <b>Tự nối</b>: nối một bảng với chính nó, đặt hai tên f1, f2.</p>
+          <table class="t"><tr><th>Ban(a, b)</th><th>số dòng</th></tr>
+          <tr><td>6 tình bạn, mỗi tình bạn lưu hai chiều</td><td>$6 \times 2 = 12$</td></tr>
+          <tr><td>f1: bạn của An</td><td>2 (Bình, Chi)</td></tr>
+          <tr><td>f1 nối f2 theo f1.b = f2.a</td><td>$2 + 3 = 5$</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", "2.4"]
+        say: "Trước hết, nhắc lại bài 1 và bài 2, phép nối ghép các dòng của hai bảng khớp một điều kiện. Tự nối là nối một bảng với chính nó, đặt cho nó hai tên khác nhau là f1 và f2. Bảng bạn bè có 6 tình bạn, mỗi tình bạn lưu theo cả hai chiều, nên có 6 nhân 2 bằng 12 dòng. Chọn các dòng của An trong f1, ta được 2 dòng, Bình và Chi. Nối tiếp với f2, Bình có 2 bạn, Chi có 3 bạn, nên được 2 cộng 3 bằng 5 dòng."
+      - show: |
+          <table class="t"><tr><th>khoá (mã phiên)</th><th>giá trị (giỏ hàng)</th></tr>
+          <tr><td>p1</td><td>sách, vở</td></tr><tr><td>p2</td><td>bút</td></tr><tr><td>p3</td><td>(trống)</td></tr></table>
+          <p>Ở khoá Phân tích và thiết kế thuật toán: <b>bảng băm</b> đưa khoá p2 → nhận ngay “bút”, không phải dò từng dòng. Nhưng hỏi “giỏ nào có bút?” thì phải xem hết 3 giỏ.</p>
+        focus: [1, "1.2", 2, 2]
+        say: "Thứ hai, ở khoá Phân tích và thiết kế thuật toán, bảng băm lưu từng cặp khoá và giá trị. Ở đây có ba phiên, mỗi phiên một giỏ hàng. Đưa khoá p2, bảng băm trả ngay giỏ có một cây bút, không phải dò từng dòng. Nhưng hỏi ngược lại, giỏ nào có bút, thì phải xem hết cả 3 giỏ."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>đỉnh</th><th>danh sách kề</th><th>số cạnh</th></tr>
+          <tr><td>An</td><td>Bình, Chi</td><td>2</td></tr><tr><td>Bình</td><td>An, Dũng</td><td>2</td></tr>
+          <tr><td>Chi</td><td>An, Dũng, Em</td><td>3</td></tr><tr><td>Dũng</td><td>Bình, Chi, Giang</td><td>3</td></tr>
+          <tr><td>Em</td><td>Chi</td><td>1</td></tr><tr><td>Giang</td><td>Dũng</td><td>1</td></tr></table>
+          <p>Tổng $2 + 2 + 3 + 3 + 1 + 1 = 12$ — đúng bằng số dòng bảng Ban.</p>
+        focus: [1, "1.2", "1.4", 2]
+        say: "Thứ ba, cũng ở khoá đó, một đồ thị có thể lưu bằng danh sách kề, mỗi đỉnh giữ sẵn danh sách hàng xóm của mình. Danh sách của An gồm hai bạn kề là Bình và Chi. Chi kề An, Dũng và Em. Cộng số cạnh của mọi đỉnh được 12, đúng bằng số dòng của bảng bạn bè, vì mỗi tình bạn được đếm hai lần."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: bốn mô hình"
+    steps:
+      - show: |
+          <table class="t"><tr><th>mô hình</th><th>đơn vị lưu</th><th>truy cập giỏi</th><th>ví dụ</th></tr>
+          <tr><td>khoá–giá trị</td><td>cặp (khoá, giá trị)</td><td>lấy, ghi theo đúng một khoá</td><td>Redis</td></tr>
+          <tr><td>văn bản</td><td>một hồ sơ JSON lồng nhau</td><td>đọc, ghi cả hồ sơ một lần</td><td>MongoDB</td></tr>
+          <tr><td>cột rộng</td><td>dòng có khoá phân vùng, rất nhiều cột thưa</td><td>ghi rất nhiều, đọc theo khoá phân vùng</td><td>Cassandra</td></tr>
+          <tr><td>đồ thị</td><td>đỉnh và cạnh</td><td>đi theo quan hệ nhiều bước</td><td>Neo4j</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bảng này tóm tắt bốn mô hình. Khoá giá trị lưu từng cặp khoá và giá trị, giỏi lấy và ghi theo đúng một khoá, như giỏ hàng theo mã phiên. Mô hình văn bản lưu cả một hồ sơ lồng nhau nhiều tầng, giỏi đọc và ghi cả hồ sơ trong một lần. Cột rộng lưu các dòng có khoá phân vùng và rất nhiều cột thưa, giỏi ghi khối lượng rất lớn và đọc theo khoá phân vùng. Đồ thị lưu đỉnh và cạnh, giỏi đi theo quan hệ qua nhiều bước."
+
+  # ───────────────────────── 2b. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Bốn cách đặt dữ liệu lên đĩa"
+    steps:
+      - show: |
+          <div><svg width="1500" height="470" viewBox="0 0 1500 470"><rect x="20" y="20" width="350" height="380" fill="#f9fafb" stroke="#9ca3af" stroke-width="2"/><text x="195" y="55" font-size="24" font-weight="bold" text-anchor="middle" fill="#1f2937">khoá–giá trị</text><rect x="390" y="20" width="350" height="380" fill="#f9fafb" stroke="#9ca3af" stroke-width="2"/><text x="565" y="55" font-size="24" font-weight="bold" text-anchor="middle" fill="#1f2937">văn bản</text><rect x="760" y="20" width="350" height="380" fill="#f9fafb" stroke="#9ca3af" stroke-width="2"/><text x="935" y="55" font-size="24" font-weight="bold" text-anchor="middle" fill="#1f2937">cột rộng</text><rect x="1130" y="20" width="350" height="380" fill="#f9fafb" stroke="#9ca3af" stroke-width="2"/><text x="1305" y="55" font-size="24" font-weight="bold" text-anchor="middle" fill="#1f2937">đồ thị</text><g font-size="22" fill="#1f2937"><rect x="45" y="100" width="110" height="50" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="100" y="133" text-anchor="middle">p1</text><rect x="195" y="100" width="150" height="50" fill="#ffffff" stroke="#1f2937" stroke-width="2"/><text x="270" y="133" text-anchor="middle">sách, vở</text><rect x="45" y="180" width="110" height="50" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="100" y="213" text-anchor="middle">p2</text><rect x="195" y="180" width="150" height="50" fill="#ffffff" stroke="#1f2937" stroke-width="2"/><text x="270" y="213" text-anchor="middle">bút</text><line x1="155" y1="125" x2="195" y2="125" stroke="#2a78d6" stroke-width="3"/><line x1="155" y1="205" x2="195" y2="205" stroke="#2a78d6" stroke-width="3"/></g><g font-size="22" fill="#1f2937"><rect x="415" y="90" width="300" height="250" fill="#ffffff" stroke="#eb6834" stroke-width="3"/><text x="435" y="125" font-weight="bold">hồ sơ An</text><text x="435" y="165">lop: K1</text><text x="435" y="205">diem: 8, 9</text><rect x="435" y="225" width="260" height="95" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="450" y="260">dia_chi</text><text x="450" y="297">tinh, xa</text></g><g font-size="22" fill="#1f2937"><text x="785" y="110" font-weight="bold">cảm biến 17</text><rect x="785" y="125" width="95" height="50" fill="#dcfce7" stroke="#059669" stroke-width="2"/><text x="832" y="158" text-anchor="middle">t1: 21</text><rect x="885" y="125" width="95" height="50" fill="#dcfce7" stroke="#059669" stroke-width="2"/><text x="932" y="158" text-anchor="middle">t2: 22</text><rect x="985" y="125" width="95" height="50" fill="#dcfce7" stroke="#059669" stroke-width="2"/><text x="1032" y="158" text-anchor="middle">t3: 22</text><text x="785" y="230" font-weight="bold">cảm biến 18</text><rect x="785" y="245" width="95" height="50" fill="#dcfce7" stroke="#059669" stroke-width="2"/><text x="832" y="278" text-anchor="middle">t1: 19</text></g><g stroke="#1f2937" stroke-width="3"><line x1="1200" y1="200" x2="1380" y2="120"/><line x1="1200" y1="200" x2="1380" y2="290"/><line x1="1380" y1="120" x2="1380" y2="290"/></g><g fill="#fef3c7" stroke="#1f2937" stroke-width="3"><circle cx="1200" cy="200" r="42"/><circle cx="1380" cy="120" r="42"/><circle cx="1380" cy="290" r="42"/></g><g font-size="22" font-weight="bold" text-anchor="middle" fill="#1f2937"><text x="1200" y="208">An</text><text x="1380" y="128">Bình</text><text x="1380" y="298">Dũng</text></g><g font-size="22" text-anchor="middle" fill="#2a78d6" font-weight="bold"><text x="195" y="380">đưa 1 khoá, nhận 1 giá trị</text><text x="565" y="380">cả hồ sơ trong 1 lần đọc</text><text x="935" y="380">ghi nối theo khoá phân vùng</text><text x="1305" y="380">đi thẳng theo cạnh</text></g><text x="750" y="450" font-size="24" text-anchor="middle" fill="#b91c1c" font-weight="bold">mỗi cách lưu làm rẻ một kiểu đọc, và làm đắt các kiểu khác</text></svg></div>
+        focus: [1, 1, 1, 1, 1]
+        say: "Hình cho thấy mỗi mô hình đặt dữ liệu ra sao. Khoá giá trị như một bảng băm, đưa một mã phiên, nhận về đúng một giỏ hàng. Văn bản gói cả hồ sơ của An, kể cả phần địa chỉ lồng bên trong, nên một lần đọc là đủ. Cột rộng xếp các số đo của từng cảm biến nối đuôi nhau theo khoá phân vùng, nên ghi rất nhiều mà vẫn nhanh. Đồ thị giữ sẵn cạnh giữa các đỉnh, nên đi từ An sang bạn của An không cần tra bảng nào."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Bạn của bạn: bảng và đồ thị"
+    checks:
+      - "alg.sql(\"SELECT DISTINCT f2.b FROM Ban f1 JOIN Ban f2 ON f1.b = f2.a WHERE f1.a = 'An' AND f2.b <> 'An' AND f2.b NOT IN (SELECT b FROM Ban WHERE a = 'An') ORDER BY f2.b\", \"CREATE TABLE Ban (a TEXT, b TEXT); INSERT INTO Ban VALUES ('An','Bình'),('Bình','An'),('An','Chi'),('Chi','An'),('Bình','Dũng'),('Dũng','Bình'),('Chi','Dũng'),('Dũng','Chi'),('Chi','Em'),('Em','Chi'),('Dũng','Giang'),('Giang','Dũng');\") == [('Dũng',), ('Em',)]"
+      - "(lambda E: (lambda adj: sorted({z for y in adj['An'] for z in adj[y]} - adj['An'] - {'An'}))({n: {y for x, y in E + [(b, a) for a, b in E] if x == n} for n in {v for e in E for v in e}}))([('An', 'Bình'), ('An', 'Chi'), ('Bình', 'Dũng'), ('Chi', 'Dũng'), ('Chi', 'Em'), ('Dũng', 'Giang')]) == ['Dũng', 'Em']"
+      - "(lambda r: len(r) == 5 and sum(1 for _, z in r if z == 'An') == 2 and sum(1 for _, z in r if z in ('Bình', 'Chi')) == 0 and sorted({z for _, z in r} - {'An'}) == ['Dũng', 'Em'])(alg.sql(\"SELECT f1.b, f2.b FROM Ban f1 JOIN Ban f2 ON f1.b = f2.a WHERE f1.a = 'An'\", \"CREATE TABLE Ban (a TEXT, b TEXT); INSERT INTO Ban VALUES ('An','Bình'),('Bình','An'),('An','Chi'),('Chi','An'),('Bình','Dũng'),('Dũng','Bình'),('Chi','Dũng'),('Dũng','Chi'),('Chi','Em'),('Em','Chi'),('Dũng','Giang'),('Giang','Dũng');\"))"
+    steps:
+      - show: |
+          <div><svg width="900" height="400" viewBox="0 0 900 400"><line x1="110" y1="190" x2="330" y2="90" stroke="#6b7280" stroke-width="3"/><line x1="110" y1="190" x2="330" y2="290" stroke="#6b7280" stroke-width="3"/><line x1="330" y1="90" x2="560" y2="150" stroke="#6b7280" stroke-width="3"/><line x1="330" y1="290" x2="560" y2="150" stroke="#6b7280" stroke-width="3"/><line x1="330" y1="290" x2="560" y2="320" stroke="#6b7280" stroke-width="3"/><line x1="560" y1="150" x2="790" y2="150" stroke="#6b7280" stroke-width="3"/><circle cx="110" cy="190" r="46" fill="#1f2937" stroke="#1f2937" stroke-width="3.5"/><text x="110" y="198" font-size="22" fill="#ffffff" text-anchor="middle" font-weight="bold">An</text><circle cx="330" cy="90" r="46" fill="#dbeafe" stroke="#2a78d6" stroke-width="3.5"/><text x="330" y="98" font-size="22" fill="#1f2937" text-anchor="middle" font-weight="bold" stroke="#fffbeb" stroke-width="6" paint-order="stroke">Bình</text><circle cx="330" cy="290" r="46" fill="#dbeafe" stroke="#2a78d6" stroke-width="3.5"/><text x="330" y="298" font-size="22" fill="#1f2937" text-anchor="middle" font-weight="bold" stroke="#fffbeb" stroke-width="6" paint-order="stroke">Chi</text><circle cx="560" cy="150" r="46" fill="#ffedd5" stroke="#eb6834" stroke-width="3.5"/><text x="560" y="158" font-size="22" fill="#1f2937" text-anchor="middle" font-weight="bold" stroke="#fffbeb" stroke-width="6" paint-order="stroke">Dũng</text><circle cx="560" cy="320" r="46" fill="#ffedd5" stroke="#eb6834" stroke-width="3.5"/><text x="560" y="328" font-size="22" fill="#1f2937" text-anchor="middle" font-weight="bold" stroke="#fffbeb" stroke-width="6" paint-order="stroke">Em</text><circle cx="790" cy="150" r="46" fill="#ffffff" stroke="#6b7280" stroke-width="3.5"/><text x="790" y="158" font-size="22" fill="#1f2937" text-anchor="middle" font-weight="bold" stroke="#fffbeb" stroke-width="6" paint-order="stroke">Giang</text><text x="20" y="385" font-size="19" fill="#6b7280" text-anchor="start" font-weight="normal" stroke="#fffbeb" stroke-width="6" paint-order="stroke">xanh: bạn trực tiếp của An;  cam: bạn của bạn (chưa là bạn)</text></svg></div>
+          <p>Bạn của bạn của An (chưa là bạn An): $\hl{\{\text{Dũng}, \text{Em}\}}$.</p>
+        focus: [1, 1, 2]
+        say: "Bước một, đặt câu hỏi trên một mạng bạn bè nhỏ, An ở bên trái, hai bạn trực tiếp là Bình và Chi. Câu hỏi là bạn của bạn của An, mà chưa là bạn An, gồm những ai? Đáp án ta sẽ tìm ra là Dũng và Em, tô màu cam."
+      - clear: true
+        show: |
+          <p><b>Bước 2</b> — trên bảng: f1 nối f2 theo f1.b = f2.a, chỉ giữ f1.a = An.</p>
+          <table class="t"><tr><th>f1.b (bạn An)</th><th>f2.b (bạn của bạn)</th></tr>
+          <tr><td>Bình</td><td>An</td></tr><tr><td>Bình</td><td>Dũng</td></tr>
+          <tr><td>Chi</td><td>An</td></tr><tr><td>Chi</td><td>Dũng</td></tr><tr><td>Chi</td><td>Em</td></tr></table>
+        focus: [1, "2.2", "2.4"]
+        say: "Bước hai, trên bảng, ta tự nối như phần chuẩn bị và được 5 dòng. Bình dẫn tới An và Dũng. Chi dẫn tới An, Dũng và Em."
+      - show: |
+          <p><b>Bước 3</b> — lọc: bỏ An (2 dòng), bỏ bạn trực tiếp Bình, Chi (0 dòng), bỏ trùng: Dũng, Dũng, Em → $\hl{\{\text{Dũng}, \text{Em}\}}$.</p>
+        say: "Bước ba, lọc kết quả, bỏ 2 dòng là chính An, bỏ các bạn trực tiếp là Bình và Chi, ở đây không có dòng nào. Còn lại Dũng, Dũng và Em, bỏ trùng thì được Dũng và Em."
+      - clear: true
+        show: |
+          <p><b>Bước 4</b> — trên đồ thị: đứng ở An, đọc danh sách kề.</p>
+          <table class="t"><tr><th>đi</th><th>đọc danh sách kề của</th><th>thấy</th></tr>
+          <tr><td>bước thứ nhất</td><td>An</td><td>Bình, Chi</td></tr>
+          <tr><td>bước thứ hai</td><td>Bình; Chi</td><td>An, Dũng; An, Dũng, Em</td></tr></table>
+          <p>Bỏ An và bạn trực tiếp → cũng ra Dũng, Em.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Bước bốn, trên đồ thị, ta đứng ở An và đọc danh sách kề. Bước thứ nhất thấy Bình và Chi. Bước thứ hai đọc danh sách kề của Bình và của Chi, thấy An, Dũng, rồi An, Dũng, Em. Bỏ An và các bạn trực tiếp đi, ta cũng ra Dũng và Em."
+      - clear: true
+        show: |
+          <div class="code"><div><span class="kw">SELECT DISTINCT</span> f2.b <span class="kw">FROM</span> Ban f1 <span class="kw">JOIN</span> Ban f2 <span class="kw">ON</span> f1.b = f2.a</div><div><span class="kw">WHERE</span> f1.a = 'An' <span class="kw">AND</span> f2.b &lt;&gt; 'An'</div><div>  <span class="kw">AND</span> f2.b <span class="kw">NOT IN</span> (<span class="kw">SELECT</span> b <span class="kw">FROM</span> Ban <span class="kw">WHERE</span> a = 'An');</div></div>
+          <p>Bảng: <b>tự nối</b> bảng Ban với chính nó, mỗi bước thêm một lần nối. Đồ thị: đứng ở An, đi theo cạnh hai bước. Cả hai đều ra Dũng, Em.</p>
+          <div class="box key">Ba, bốn bước quan hệ trở lên, câu SQL dài ra và mỗi bước một lần nối; cơ sở dữ liệu đồ thị đi thẳng theo cạnh.</div>
+        focus: [2, 1, 2, 3]
+        say: "Tóm lại, trên bảng, ta phải tự nối bảng bạn bè với chính nó, mỗi bước quan hệ thêm một lần nối, rồi loại An và các bạn trực tiếp. Câu SQL này chạy thật ra đúng Dũng và Em. Trên đồ thị, ta đứng ở An và đi theo cạnh hai bước, cũng ra Dũng và Em. Với ba, bốn bước quan hệ trở lên, câu SQL dài ra và mỗi bước lại thêm một lần nối, còn cơ sở dữ liệu đồ thị cứ đi thẳng theo cạnh."
+
+  # ───────────────────────── 3b. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: đo khoảng cách bằng cách loang"
+    checks:
+      - "(lambda E: (lambda adj: (lambda d: [d.update({z: d[y] + 1}) for _ in range(6) for y in list(d) for z in adj[y] if z not in d] and d)({'An': 0}))({n: {y for x, y in E + [(b, a) for a, b in E] if x == n} for n in {v for e in E for v in e}}))([('An', 'Bình'), ('An', 'Chi'), ('Bình', 'Dũng'), ('Chi', 'Dũng'), ('Chi', 'Em'), ('Dũng', 'Giang')]) == {'An': 0, 'Bình': 1, 'Chi': 1, 'Dũng': 2, 'Em': 2, 'Giang': 3}"
+      - "sorted({r[0] for r in alg.sql(\"SELECT DISTINCT f3.b FROM Ban f1 JOIN Ban f2 ON f1.b = f2.a JOIN Ban f3 ON f2.b = f3.a WHERE f1.a = 'An'\", \"CREATE TABLE Ban (a TEXT, b TEXT); INSERT INTO Ban VALUES ('An','Bình'),('Bình','An'),('An','Chi'),('Chi','An'),('Bình','Dũng'),('Dũng','Bình'),('Chi','Dũng'),('Dũng','Chi'),('Chi','Em'),('Em','Chi'),('Dũng','Giang'),('Giang','Dũng');\")} - {'An', 'Bình', 'Chi', 'Dũng', 'Em'}) == ['Giang']"
+    steps:
+      - show: |
+          <table class="t"><tr><th>khoảng cách từ An (loang theo danh sách kề)</th><th>đỉnh</th><th>câu SQL cần</th></tr>
+          <tr><td>1</td><td>Bình, Chi</td><td>1 bảng, 0 lần nối</td></tr>
+          <tr><td>2</td><td>$\hl{\text{Dũng, Em}}$</td><td>2 bảng, 1 lần nối</td></tr>
+          <tr><td>3</td><td>Giang</td><td>3 bảng, 2 lần nối</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Kiểm bằng đường khác, ta không lọc bạn của bạn nữa, mà loang từ An và ghi khoảng cách của từng người, vì cách này không dùng phép nối nào. Khoảng cách 1 là Bình và Chi, trên bảng chỉ cần chọn dòng, không phải nối. Khoảng cách 2 đúng là Dũng và Em, khớp với hai cách vừa làm, và câu SQL cần một lần nối. Khoảng cách 3 là Giang, máy chạy câu SQL ba bảng, hai lần nối, rồi bỏ những người đã gặp, cũng chỉ còn Giang."
+      - show: |
+          <table class="t"><tr><th>số bước quan hệ</th><th>1</th><th>2</th><th>3</th><th>$k$</th></tr>
+          <tr><td>lần nối trên bảng</td><td>0</td><td>1</td><td>2</td><td>$k - 1$</td></tr>
+          <tr><td>trên đồ thị</td><td colspan="4">mỗi bước đọc thêm một lượt danh sách kề</td></tr></table>
+        focus: ["1.2", "1.3"]
+        say: "Từ bảng ta thấy một quy luật, k bước quan hệ cần k trừ 1 lần nối trên bảng, nên câu truy vấn dài ra theo số bước. Trên đồ thị, mỗi bước thêm chỉ là đọc thêm một danh sách kề."
+
+  # ───────────────────────── 4. KHI NÀO GIỮ QUAN HỆ ─────────────────────────
+  - id: when
+    kind: concept
+    title: "Khi nào nên giữ cơ sở dữ liệu quan hệ"
+    steps:
+      - show: |
+          <ul><li>Dữ liệu có nhiều liên kết chéo, cần <b>nối</b> theo nhiều kiểu không đoán trước.</li>
+          <li>Cần <b>ràng buộc</b> toàn vẹn (bài 0) do hệ quản trị giữ.</li>
+          <li>Cần <b>giao dịch</b> qua nhiều thực thể (bài 11): chuyển tiền, đặt hàng trừ kho.</li></ul>
+          <div class="box key">Mặc định hợp lý: bắt đầu bằng mô hình quan hệ; chỉ đổi khi một mẫu truy cập cụ thể chứng minh được là nó không đáp ứng.</div>
+        focus: ["1.1", "1.2", "1.3", 2]
+        say: "Nên giữ cơ sở dữ liệu quan hệ khi dữ liệu có nhiều liên kết chéo, cần nối theo nhiều kiểu không đoán trước được. Khi cần ràng buộc toàn vẹn do hệ quản trị giữ, như bài 0. Và khi cần giao dịch qua nhiều thực thể như bài 11, chẳng hạn chuyển tiền, hay đặt hàng rồi trừ kho. Một mặc định hợp lý là bắt đầu bằng mô hình quan hệ, chỉ đổi khi một mẫu truy cập cụ thể chứng minh được là nó không đáp ứng nổi."
+
+  # ───────────────────────── 5. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi người mới hay mắc"
+    checks:
+      - "sum(v.count('An') for v in {'CSDL': ['An', 'Bình'], 'Mạng': ['An', 'Chi'], 'Toán': ['An', 'Dũng']}.values()) == 3"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Nghĩ “không quan hệ” nghĩa là không có lược đồ <b class="red">(sai)</b>
+          <br><span class="note">Lược đồ chuyển từ hệ quản trị vào <b>mã ứng dụng</b>: mọi đoạn mã đọc dữ liệu đều ngầm giả định hồ sơ có những trường nào.</span></div>
+        say: "Lỗi thứ nhất, nghĩ cơ sở dữ liệu không quan hệ là không có lược đồ. Lược đồ chỉ chuyển từ hệ quản trị vào mã ứng dụng, vì mọi đoạn mã đọc dữ liệu đều ngầm giả định hồ sơ có những trường nào."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Chọn theo xu hướng, không theo mẫu truy cập <b class="red">(sai)</b>
+          <br><span class="note">Liệt kê các truy vấn chính trước, rồi mới chọn mô hình hợp với chúng.</span></div>
+        say: "Lỗi thứ hai, chọn mô hình theo xu hướng, không theo mẫu truy cập. Hãy liệt kê các truy vấn chính trước, rồi mới chọn mô hình hợp với chúng."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Lồng mọi thứ vào một hồ sơ văn bản <b class="red">(sai)</b>
+          <br><span class="note">Hồ sơ lớp chứa danh sách sinh viên, mà sinh viên học nhiều lớp: dữ liệu bị lặp, sửa một chỗ phải sửa nhiều nơi — đúng dị thường của bài 5.</span></div>
+          <table class="t"><tr><th>hồ sơ lớp</th><th>sinh viên lồng bên trong</th></tr>
+          <tr><td>CSDL</td><td><b>An</b>, Bình</td></tr><tr><td>Mạng</td><td><b>An</b>, Chi</td></tr><tr><td>Toán</td><td><b>An</b>, Dũng</td></tr></table>
+          <p class="note">An đổi tên: phải sửa 3 hồ sơ; quên 1 là có 2 cái tên cho cùng một người.</p>
+        focus: [1, 1, 2, 3]
+        say: "Lỗi thứ ba, lồng mọi thứ vào một hồ sơ văn bản, lỗi hay gặp khi một nhóm chuyển từ bảng sang văn bản cho nhanh. Nếu hồ sơ lớp chứa danh sách sinh viên, mà một sinh viên học nhiều lớp, dữ liệu sẽ bị lặp, sửa một chỗ phải sửa nhiều nơi, đúng dị thường của bài 5. Trong bảng, An nằm trong cả 3 hồ sơ lớp. Khi An đổi tên, phải sửa cả 3 hồ sơ, quên một là có hai cái tên cho cùng một người."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Quên rằng nhiều hệ không quan hệ chỉ có giao dịch trong một khoá <b class="red">(thiếu)</b>
+          <br><span class="note">Chuyển tiền giữa hai hồ sơ có thể không còn tất cả hoặc không gì cả. Đọc kỹ hệ đó bảo đảm những gì.</span></div>
+        say: "Lỗi thứ tư, quên rằng nhiều hệ không quan hệ chỉ bảo đảm giao dịch trong phạm vi một khoá. Chuyển tiền giữa hai hồ sơ có thể không còn tất cả hoặc không gì cả, nên phải đọc kỹ hệ đó bảo đảm những gì."
+
+  # ───────────────────────── 6. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    steps:
+      - show: |
+          <p>Chọn mô hình hợp nhất cho từng nhu cầu:</p>
+          <table class="t"><tr><th>câu</th><th>nhu cầu</th></tr>
+          <tr><td>1</td><td>Lưu phiên đăng nhập theo mã phiên, đọc ghi cực nhanh.</td></tr>
+          <tr><td>2</td><td>Gợi ý “người bạn có thể quen” qua 3 bước quan hệ.</td></tr>
+          <tr><td>3</td><td>Hệ thống kế toán: chuyển tiền giữa các tài khoản.</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", 0]
+        say: "Bây giờ đến lượt bạn tự làm, chọn mô hình hợp nhất cho từng nhu cầu. Câu một, lưu phiên đăng nhập theo mã phiên, đọc ghi cực nhanh. Câu hai, gợi ý người bạn có thể quen qua 3 bước quan hệ. Câu ba, hệ thống kế toán chuyển tiền giữa các tài khoản. Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <p>① Mẫu truy cập: luôn đưa đúng một mã phiên, không bao giờ nối với bảng khác → <b>khoá–giá trị</b>, như bảng băm ở phần chuẩn bị.</p>
+        say: "Đáp án câu một, trước hết xét mẫu truy cập. Ta luôn đưa đúng một mã phiên và lấy về một phiên, không bao giờ nối với bảng khác, nên chọn khoá giá trị, giống bảng băm ở phần chuẩn bị."
+      - show: |
+          <p>② 3 bước quan hệ: trên bảng cần $3 - 1 = 2$ lần nối (như hàng Giang ở phần tự kiểm); trên đồ thị chỉ đọc 3 lượt danh sách kề → <b>đồ thị</b>.</p>
+        say: "Câu hai, đi 3 bước quan hệ thì trên bảng cần 3 trừ 1 bằng 2 lần nối, như hàng của Giang ở phần tự kiểm. Trên đồ thị chỉ cần đọc thêm danh sách kề ở mỗi bước, nên chọn đồ thị."
+      - clear: true
+        show: |
+          <p>③ Chuyển tiền đụng <b>hai</b> tài khoản cùng lúc, cần “tất cả hoặc không gì cả” (bài 11) và ràng buộc miền “số dư không âm” (kiểu ràng buộc của bài 0) → <b>quan hệ</b>.</p>
+        say: "Câu ba, một lệnh chuyển tiền đụng tới hai tài khoản cùng lúc, cần giao dịch tất cả hoặc không gì cả như bài 11. Nó còn cần một ràng buộc miền là số dư không âm, đúng kiểu ràng buộc ở bài 0. Vậy chọn mô hình quan hệ."
+
+  # ───────────────────────── 7. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">khoá–giá trị: một khoá</span><span class="a">→</span>
+          <span class="n">văn bản: cả hồ sơ</span><span class="a">→</span>
+          <span class="n">cột rộng: ghi rất nhiều</span><span class="a">→</span>
+          <span class="n">đồ thị: nhiều bước quan hệ</span></div>
+        say: "Tổng kết lại, khoá giá trị cho truy cập theo một khoá, văn bản cho đọc ghi cả hồ sơ, cột rộng cho ghi khối lượng rất lớn, và đồ thị cho đi qua nhiều bước quan hệ."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> chọn cách lưu theo cách bạn <b>đọc</b>. Mỗi mô hình làm một số truy vấn rẻ bằng cách làm truy vấn khác đắt hơn.</div>
+        say: "Điều cần mang theo, hãy chọn cách lưu theo cách bạn đọc dữ liệu. Mỗi mô hình làm một số truy vấn trở nên rẻ, bằng cách làm những truy vấn khác đắt hơn."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 17): <b>tình huống chuyên gia theo dòng thời gian</b> — thêm cột khi bảng có hàng triệu dòng, từ chép dần sang một bản sao của bảng (2009) tới thêm cột tức thì (2022).</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 17, ta đi lại hơn mười năm kinh nghiệm thêm cột khi bảng có hàng triệu dòng. Ta đi từ cách chép dần sang một bản sao của bảng, tới cách hệ quản trị tự thêm cột tức thì. Hẹn gặp bạn ở bài tiếp theo."

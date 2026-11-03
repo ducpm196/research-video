@@ -1,0 +1,181 @@
+id: L12
+course: LLM
+series: "LLM · Mô hình ngôn ngữ lớn"
+title: "Bài 12 — Sinh có truy xuất (RAG): chỉ mục, tìm kiếm, ghép ngữ cảnh"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/llm.yaml L12; audit/llm/verify_llm.py L12; P. Lewis và cộng sự, Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks (2020); V. Karpukhin và cộng sự, Dense Passage Retrieval (2020); N. Liu và cộng sự, Lost in the Middle (2023); bài 3 (cosin); DBS bài 9 (chỉ mục)"
+assumes: [arith, frac, approx]
+# Quy ước: ba đoạn A, B, C có vector nhúng đồ chơi A (2, 3, 1), B (−2, 1, 0), C (1, 1, 1); câu hỏi (1, 2, 0); xếp hạng theo cosin (alg.cosine).
+#   Độ phủ@k = tỉ lệ câu hỏi có ít nhất một đoạn đúng trong k đoạn đầu (alg.recall_at_k). Bộ 3 câu hỏi ở ví dụ là SỐ MINH HOẠ dựng tay.
+#   Tên RAG chỉ trên màn hình; lời đọc “sinh có truy xuất”.
+objectives:
+  - "Mô tả đường ống chia đoạn, nhúng, tìm, ghép lời nhắc"
+  - "Đo độ phủ@k của bước truy xuất"
+  - "Biết các lỗi thường gặp của truy xuất"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Mô hình không biết chính sách công ty bạn"
+    steps:
+      - show: |
+          <p>Nhân viên hỏi: “Nghỉ phép năm được mấy ngày?”. Mô hình chưa từng đọc sổ tay công ty, nên hoặc từ chối, hoặc đoán. Thay vì tinh chỉnh, ta <b>tìm</b> đoạn sổ tay liên quan rồi <b>dán vào lời nhắc</b>: mô hình trả lời dựa trên đoạn đó, kèm trích dẫn.</p>
+          <div class="box key">Hôm nay: <b>sinh có truy xuất</b> — chia văn bản, nhúng, tìm đoạn gần nhất, ghép vào lời nhắc; và cách đo riêng bước tìm.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, nhân viên hỏi nghỉ phép năm được mấy ngày. Mô hình chưa từng đọc sổ tay công ty, nên hoặc từ chối, hoặc đoán. Thay vì tinh chỉnh, ta tìm đoạn sổ tay liên quan rồi dán vào lời nhắc, và mô hình trả lời dựa trên đoạn đó, kèm trích dẫn. Hôm nay ta học sinh có truy xuất, chia văn bản, nhúng, tìm đoạn gần nhất, ghép vào lời nhắc, và cách đo riêng bước tìm."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: cô-sin giữa hai vector nhúng"
+    checks:
+      - "round(alg.cosine([1, 0], [1, 1]), 3) == 0.707 and alg.cosine([1, 0], [0, 1]) == 0"
+    steps:
+      - show: |
+          <p><b>Ở bài 3</b>: cô-sin giữa hai vector = tích vô hướng chia tích hai độ dài; càng gần 1 càng cùng nghĩa.</p>
+          $$\text{cô-sin} = \frac{\text{tích vô hướng } a \cdot b}{\text{độ dài } a \cdot \text{độ dài } b}$$
+        introduces: [cdot]
+        focus: [1, 2]
+        say: "Ở bài 3, cô-sin giữa hai vector bằng tích vô hướng chia cho tích hai độ dài. Cô-sin càng gần 1 thì hai vector càng cùng hướng, tức càng cùng nghĩa."
+      - show: |
+          <table class="t"><tr><th>cặp</th><th>tích vô hướng</th><th>cô-sin</th></tr>
+          <tr><td>(1, 0) và (1, 1)</td><td>1</td><td>$\frac{1}{\sqrt{2}} \approx 0{,}707$</td></tr>
+          <tr><td>(1, 0) và (0, 1)</td><td>0</td><td>0 — vuông góc</td></tr></table>
+        introduces: [sqrt]
+        focus: [1, "1.2", "1.3"]
+        say: "Làm thử bằng số. Vector 1, 0 và vector 1, 1 có tích vô hướng 1, độ dài 1 và căn 2, nên cô-sin xấp xỉ 0 phẩy 707. Vector 1, 0 và vector 0, 1 có tích vô hướng 0, nên cô-sin bằng 0, hai vector vuông góc."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: bốn bước và độ phủ@k"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">chia đoạn</span><span class="a">→</span><span class="n">nhúng mỗi đoạn, lưu chỉ mục</span><span class="a">→</span><span class="n">nhúng câu hỏi, lấy k đoạn gần nhất</span><span class="a">→</span><span class="n">ghép vào lời nhắc, sinh câu trả lời có trích dẫn</span></div>
+          <p><b>Độ phủ@k</b>: trong các câu hỏi thử, tỉ lệ câu có <b>ít nhất một</b> đoạn chứa đáp án nằm trong $k$ đoạn được lấy. Đo trên bộ câu hỏi có ghi sẵn đoạn đúng.</p>
+          <p>Tìm theo vector nhúng (bài 3) bắt được câu cùng nghĩa khác chữ; tìm theo từ khoá bắt được mã, tên riêng chính xác — hệ thật thường kết hợp cả hai.</p>
+        focus: [1, 2, 2, 3]
+        say: "Đường ống có bốn bước, chia đoạn, nhúng mỗi đoạn và lưu chỉ mục, nhúng câu hỏi và lấy k đoạn gần nhất, rồi ghép vào lời nhắc để sinh câu trả lời có trích dẫn. Độ phủ ở k là tỉ lệ câu hỏi thử có ít nhất một đoạn chứa đáp án nằm trong k đoạn được lấy. Ta đo nó trên một bộ câu hỏi có ghi sẵn đoạn đúng. Tìm theo vector nhúng bắt được câu cùng nghĩa nhưng khác chữ, còn tìm theo từ khoá bắt được mã và tên riêng chính xác, nên hệ thật thường kết hợp cả hai."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Đi tra sách trước khi trả lời"
+    steps:
+      - show: |
+          <div><svg width="1500" height="330" viewBox="0 0 1500 330"><defs><marker id="arL12" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#eb6834"/></marker></defs><g stroke="#eb6834" stroke-width="3"><line x1="290" y1="160" x2="420" y2="160" marker-end="url(#arL12)"/><line x1="790" y1="160" x2="930" y2="160" marker-end="url(#arL12)"/></g><g font-size="24" text-anchor="middle" fill="#1f2937"><rect x="40" y="110" width="250" height="100" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="165" y="168">câu hỏi</text><rect x="440" y="60" width="100" height="90" rx="8" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="490" y="113">đoạn A</text><rect x="555" y="60" width="100" height="90" rx="8" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="605" y="113">đoạn B</text><rect x="670" y="60" width="100" height="90" rx="8" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="720" y="113">đoạn C</text><rect x="440" y="170" width="100" height="90" rx="8" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="490" y="223">đoạn D</text><rect x="555" y="170" width="100" height="90" rx="8" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="605" y="223">đoạn E</text><rect x="670" y="170" width="100" height="90" rx="8" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="720" y="223">đoạn F</text><text x="612" y="305" font-size="22">kho đoạn: lấy k đoạn gần nhất</text><rect x="935" y="90" width="330" height="140" rx="10" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="1100" y="140">mô hình đọc</text><text x="1100" y="175">câu hỏi + đoạn A, C</text><text x="1100" y="275" font-size="22">trả lời, ghi “theo đoạn A”</text></g></svg></div>
+        focus: [1, 1, 1]
+        say: "Hình vẽ đường đi của một câu hỏi. Hệ thống tìm trong kho các đoạn gần câu hỏi nhất, ở đây là đoạn A và C tô cam. Mô hình đọc câu hỏi cùng hai đoạn đó rồi trả lời, kèm ghi rõ dựa vào đoạn nào, như người đi tra sách trước khi trả lời."
+
+  - id: example
+    kind: example
+    title: "Xếp hạng ba đoạn và đo độ phủ"
+    checks:
+      - "[k for _, k in sorted(((alg.cosine([1, 2, 0], v), k) for k, v in {'A': [2, 3, 1], 'B': [-2, 1, 0], 'C': [1, 1, 1]}.items()), reverse=True)] == ['A', 'C', 'B'] and round(alg.cosine([1, 2, 0], [1, 1, 1]), 3) == 0.775"
+      - "[round(alg.recall_at_k([['A', 'C', 'B'], ['B', 'A', 'D'], ['D', 'C', 'A']], [{'A'}, {'A'}, {'B'}], k), 3) for k in (1, 2, 3)] == [0.333, 0.667, 0.667]"
+    steps:
+      - show: |
+          <p><b>Bước 1</b> — câu hỏi $q = (1, 2, 0)$, đoạn A $= (2, 3, 1)$:</p>
+          $$\text{cô-sin} = \frac{1 \cdot 2 + 2 \cdot 3 + 0 \cdot 1}{\sqrt{5} \cdot \sqrt{14}} = \frac{8}{\sqrt{70}} \approx 0{,}956$$
+        focus: [1, 2, 2]
+        say: "Bước một, câu hỏi là vector 1, 2, 0 và đoạn A là vector 2, 3, 1. Tích vô hướng bằng 2 cộng 6 cộng 0, bằng 8, độ dài là căn 5 và căn 14. Cô-sin bằng 8 chia căn 70, xấp xỉ 0 phẩy 956."
+      - show: |
+          <table class="t"><tr><th>đoạn</th><th>cos với câu hỏi (1, 2, 0)</th><th>hạng</th></tr>
+          <tr><td>A (2, 3, 1)</td><td>0,956</td><td>1</td></tr>
+          <tr><td>C (1, 1, 1)</td><td>$\frac{3}{\sqrt{15}} \approx 0{,}775$</td><td>2</td></tr>
+          <tr><td>B (−2, 1, 0)</td><td>0 (tích vô hướng −2 + 2 = 0)</td><td>3</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Bước hai, làm tương tự rồi xếp hạng. Đoạn A có cô-sin 0 phẩy 956, đứng thứ nhất. Đoạn C có 3 chia căn 15, khoảng 0 phẩy 775, đứng thứ hai. Đoạn B có tích vô hướng âm 2 cộng 2 bằng 0, nên đứng cuối."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>3 câu hỏi thử (số minh hoạ)</th><th>đoạn được lấy theo thứ tự</th><th>đoạn đúng</th><th>hạng của đoạn đúng</th></tr>
+          <tr><td>câu 1</td><td>A, C, B</td><td>A</td><td>1</td></tr>
+          <tr><td>câu 2</td><td>B, A, D</td><td>A</td><td>2</td></tr>
+          <tr><td>câu 3</td><td>D, C, A</td><td class="red">B</td><td>không có</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Bước ba, đo độ phủ trên ba câu hỏi thử, một số minh hoạ. Câu 1 có đoạn đúng A đứng hạng 1. Câu 2 có đoạn đúng A đứng hạng 2. Câu 3 có đoạn đúng B, nhưng B không nằm trong ba đoạn được lấy."
+      - show: |
+          <p><b>Bước 4</b> — độ phủ@1 = 1/3; @2 = $\hl{2/3}$; @3 = 2/3. Câu 3 không bao giờ tìm thấy đoạn đúng, dù tăng $k$: mô hình sẽ trả lời <b>không có căn cứ</b>.</p>
+        say: "Bước bốn, độ phủ ở 1 là 1 phần 3, ở 2 là 2 phần 3, và ở 3 vẫn 2 phần 3. Câu 3 không bao giờ tìm thấy đoạn đúng, nên mô hình sẽ trả lời không có căn cứ."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác"
+    checks:
+      - "round(8 / math.sqrt(70), 3) == round(alg.cosine([1, 2, 0], [2, 3, 1]), 3) == 0.956"
+      - "[sum(1 for r in (1, 2, None) if r is not None and r <= k) for k in (1, 2, 3)] == [1, 2, 2]"
+    steps:
+      - show: |
+          <table class="t"><tr><th>kiểm</th><th>cách khác</th><th>kết quả</th></tr>
+          <tr><td>0,956</td><td>$\sqrt{70} \approx 8{,}367$; $8 : 8{,}367$</td><td>0,956 ✓</td></tr>
+          <tr><td>độ phủ</td><td>đếm câu có hạng đoạn đúng ≤ k: hạng (1, 2, không có) → 1, 2, 2 câu</td><td>1/3, 2/3, 2/3 ✓</td></tr></table>
+        introduces: [geq]
+        focus: [1, "1.2", "1.3"]
+        say: "Kiểm bằng đường khác. Căn 70 xấp xỉ 8 phẩy 367, và 8 chia 8 phẩy 367 đúng bằng 0 phẩy 956. Đếm thẳng theo cột hạng, các hạng là 1, 2 và không có, nên số câu có hạng không quá k lần lượt là 1, 2, 2, khớp độ phủ."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Chỉ chấm câu trả lời cuối <b class="red">(không biết hỏng ở đâu)</b>
+          <br><span class="note">Câu trả lời sai có thể do tìm sai đoạn hoặc do mô hình đọc sai đoạn đúng. Đo độ phủ@k riêng; nếu độ phủ thấp, sửa bước tìm trước khi sửa lời nhắc.</span></div>
+        say: "Lỗi thứ nhất, chỉ chấm câu trả lời cuối, nên không biết hỏng ở đâu. Câu trả lời sai có thể do tìm sai đoạn, hoặc do mô hình đọc sai đoạn đúng. Hãy đo độ phủ riêng, và nếu độ phủ thấp thì sửa bước tìm trước khi sửa lời nhắc."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Chia đoạn cắt ngang câu trả lời <b class="red">(mất ngữ cảnh)</b>
+          <br><span class="note">“Nhân viên chính thức được nghỉ 12 ngày” bị cắt thành hai đoạn: đoạn chứa “12 ngày” không còn chữ “chính thức”. Chia theo tiêu đề, đoạn văn, và cho các đoạn gối lên nhau.</span></div>
+        say: "Lỗi thứ hai, chia đoạn cắt ngang câu trả lời, nên mất ngữ cảnh. Một câu như nhân viên chính thức được nghỉ 12 ngày bị cắt thành hai đoạn, và đoạn chứa 12 ngày không còn chữ chính thức. Hãy chia theo tiêu đề, theo đoạn văn, và cho các đoạn gối lên nhau."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Chỉ mục cũ, quyền truy cập lỏng <b class="red">(sai và rò rỉ)</b>
+          <br><span class="note">Sổ tay đổi mà chỉ mục chưa cập nhật thì mô hình trích bản cũ. Và truy xuất phải lọc theo quyền của người hỏi — không đưa đoạn người đó không được đọc vào lời nhắc.</span></div>
+        say: "Lỗi thứ ba, chỉ mục cũ và quyền truy cập lỏng, nên vừa sai vừa rò rỉ. Sổ tay đổi mà chỉ mục chưa cập nhật thì mô hình trích bản cũ. Và truy xuất phải lọc theo quyền của người hỏi, không đưa đoạn mà người đó không được đọc vào lời nhắc."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "[round(alg.recall_at_k([['C', 'A'], ['A', 'B'], ['B', 'D'], ['D', 'A']], [{'A'}, {'B'}, {'B'}, {'C'}], k), 2) for k in (1, 2)] == [0.25, 0.75]"
+    steps:
+      - show: |
+          <p>4 câu hỏi; đoạn được lấy và đoạn đúng: (C, A | A), (A, B | B), (B, D | B), (D, A | C).</p>
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Tính độ phủ@1 và độ phủ@2.</td></tr>
+          <tr><td>2</td><td>Câu thứ tư sai vì sao? Tăng $k$ có chắc sửa được không?</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Có 4 câu hỏi, với đoạn được lấy và đoạn đúng như trên màn hình. Câu một, tính độ phủ ở 1 và ở 2. Câu hai, câu hỏi thứ tư sai vì sao, và tăng k có chắc sửa được không? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu hỏi</th><th>hạng của đoạn đúng</th></tr>
+          <tr><td>1 (C, A | A)</td><td>2</td></tr><tr><td>2 (A, B | B)</td><td>2</td></tr>
+          <tr><td>3 (B, D | B)</td><td>1</td></tr><tr><td>4 (D, A | C)</td><td class="red">không có</td></tr></table>
+          <p>① @1 $= \hl{1/4}$; @2 $= \hl{3/4}$.</p>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", 2]
+        say: "Đáp án câu một, ghi hạng của đoạn đúng cho từng câu hỏi. Câu hỏi một có đoạn đúng đứng ở hạng thứ hai. Câu hỏi hai cũng có đoạn đúng ở hạng thứ hai. Câu hỏi ba có đoạn đúng đứng ngay hạng đầu. Câu hỏi bốn không lấy được đoạn đúng nào. Vậy độ phủ ở 1 là 1 phần 4, và ở 2 là 3 phần 4."
+      - show: |
+          <p>② Đoạn C không nằm trong 2 đoạn được lấy. Tăng $k$ <b>có thể</b> lấy được C, nhưng nếu vector của C xa câu hỏi thì phải sửa cách nhúng, cách chia đoạn, hoặc thêm tìm theo từ khoá.</p>
+        say: "Câu hai, đoạn C không nằm trong 2 đoạn được lấy, và tăng k có thể lấy được. Nhưng nếu vector của C xa câu hỏi thì phải sửa cách nhúng, cách chia đoạn, hoặc thêm tìm theo từ khoá."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">chia đoạn, nhúng, lưu chỉ mục</span><span class="a">→</span>
+          <span class="n">lấy k đoạn gần nhất, lọc theo quyền</span><span class="a">→</span>
+          <span class="n">ghép vào lời nhắc, trích dẫn</span><span class="a">→</span>
+          <span class="n">đo riêng độ phủ của bước tìm</span></div>
+        say: "Tổng kết lại, chia đoạn, nhúng và lưu chỉ mục, rồi lấy k đoạn gần nhất có lọc theo quyền, ghép vào lời nhắc và trích dẫn. Luôn đo riêng độ phủ của bước tìm."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> mô hình chỉ trả lời tốt bằng những gì nó <b>được đưa cho đọc</b> — chất lượng câu trả lời bị chặn trên bởi chất lượng bước tìm.</div>
+        say: "Điều cần mang theo, mô hình chỉ trả lời tốt bằng những gì nó được đưa cho đọc, nên chất lượng câu trả lời bị chặn trên bởi chất lượng bước tìm."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 13): <b>ngữ cảnh dài</b> và suy luận hiệu quả.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 13, ta học ngữ cảnh dài và cách suy luận hiệu quả. Hẹn gặp bạn ở bài tiếp theo."

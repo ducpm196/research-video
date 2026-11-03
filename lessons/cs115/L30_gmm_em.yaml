@@ -1,0 +1,272 @@
+id: L30
+series: "CS115 · Toán cho Khoa học Máy tính"
+title: "Bài 30 — Mô hình hỗn hợp Gauss (GMM) & thuật toán EM"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "DC23#Ch5 (GMM, EM)"
+assumes: [cdot, sub, sub2, sum, prod, mu, sigma, normal, exp, log, pi, sqrt, approx, implies, prob, given, power, geq]
+# Quy ước ký hiệu: một chiều cho dễ nhìn; K cụm, cụm k có trọng số trộn wₖ (KHÔNG dùng πₖ như nhiều sách — π đã là 3,14 trong công
+#   thức mật độ; KHÔNG in đậm — khác vector trọng số của bài 18–25; nói ở notation_note), trung bình μₖ, phương sai σₖ²; mật độ chuẩn
+#   của cụm k viết fₖ(x) (như f(x) của bài 14); độ “thuộc về” rᵢₖ (responsibility) — xác suất điểm i thuộc cụm k khi đã thấy xᵢ.
+# Dữ liệu: x = 1, 2, 3, 8, 9, 10; khởi tạo μ = (2; 6), σ² = (4; 4), w = (0,5; 0,5). Mọi số được tính lại trong `checks`.
+# Lời đọc: “Gauss” KHÔNG đọc (chưa probe) — nói “hỗn hợp nhiều phân phối chuẩn”; EM đọc “thuật toán kỳ vọng – cực đại hoá”.
+# Nối bài trước (nói lại khi dùng, luật 17): bài 13 (định lý Bayes), bài 14 (mật độ chuẩn một chiều), bài 15 (elip nhiều chiều),
+#   bài 17 (MLE: cực đại tổng ln khả năng; MLE của μ là trung bình), bài 24 (Lagrange cho tổng bằng 1), bài 29 (K-Means).
+# Sửa nguồn (curriculum fix): EM không làm giảm log-likelihood nhưng chỉ tới cực trị địa phương; khả năng có thể tăng vô hạn khi một
+#   thành phần co về một điểm — cần chặn dưới phương sai.
+objectives:
+  - "Hiểu mô hình hỗn hợp: chọn cụm theo trọng số rồi sinh điểm từ phân phối chuẩn của cụm"
+  - "Tính độ thuộc về bằng định lý Bayes (bước E)"
+  - "Cập nhật trọng số, trung bình, phương sai bằng trung bình có trọng số (bước M)"
+  - "Thấy log-likelihood không giảm qua các vòng, và nối với K-Means"
+  - "Biết bẫy phương sai co về 0"
+asr_reviewed:
+  - sentence: "Bài 13, định lý Bayes đảo chiều điều kiện."
+    reason: "Bayes đọc “Bay-ét” (nút thắt B41 PARTIAL, probe 3/8), ASR chép “bay S”; chiều→chiêu lẫn thanh"
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Một điểm nằm giữa hai cụm thuộc về cụm nào?"
+    steps:
+      - show: |
+          <p class="big">K-Means (bài 29) bắt mỗi điểm thuộc <b>đúng một</b> cụm. Nhưng điểm nằm giữa hai cụm thì sao?</p>
+          <div class="box key">Mô hình hỗn hợp phân phối chuẩn (GMM): mỗi điểm thuộc mỗi cụm với một <b>xác suất</b>; mỗi cụm là một hình chuông (elip) có độ rộng riêng. Học bằng thuật toán EM.</div>
+        focus: [1, 1, 2]
+        say: "Chào bạn, K trung bình ở bài 29 bắt mỗi điểm thuộc đúng một cụm. Nhưng một điểm nằm giữa hai cụm thì sao? Mô hình hỗn hợp nhiều phân phối chuẩn cho mỗi điểm thuộc mỗi cụm với một xác suất, và học bằng thuật toán kỳ vọng, cực đại hoá."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn nền: mật độ chuẩn, Bayes, MLE"
+    steps:
+      - show: |
+          <p>Bài 14: mật độ chuẩn $\ f(x) = \dfrac{1}{\sqrt{2\pi\sigma^2}}\cdot e^{-\frac{(x - \mu)^2}{2\sigma^2}}$.</p>
+          <p>Bài 13: Bayes $\ P(A \mid B) = \dfrac{P(B \mid A)\cdot P(A)}{P(B)}$. &nbsp; Bài 17: MLE cực đại tổng $\ln$ khả năng; MLE của $\mu$ là trung bình cộng.</p>
+        focus: [1, "2.1", 2]
+        say: "Nhắc lại bài 14, công thức mật độ chuẩn với tâm muy và độ rộng xích ma. Bài 13, định lý Bayes đảo chiều điều kiện. Và bài 17, ước lượng hợp lý cực đại làm lớn tổng lôgarit khả năng, và với phân phối chuẩn thì cho trung bình cộng."
+
+  # ───────────────────────── 3. MÔ HÌNH ─────────────────────────
+  - id: model
+    kind: symbol
+    title: "Giải mã: mật độ hỗn hợp — tổng có trọng số các hình chuông"
+    checks:
+      - "(lambda X: (lambda f: Rational(1, 2) + Rational(1, 2) == 1 and sp.integrate(f(X, 2, 4), (X, -sp.oo, sp.oo)) == 1 and sp.integrate(f(X, 6, 4), (X, -sp.oo, sp.oo)) == 1)(lambda x, m, v: sp.exp(-(x - m)**2/(2*v))/sp.sqrt(2*sp.pi*v)))(sp.Symbol('x', real=True))"
+    steps:
+      - show: |
+          <div class="box key">$g(x) = \sum_{k = 1}^{K} w_k\cdot f_k(x)$, &nbsp; $f_k$: mật độ chuẩn tâm $\mu_k$, phương sai $\sigma_k^2$; &nbsp; $w_k \ge 0$, $\sum_k w_k = 1$</div>
+          <p>Cách sinh dữ liệu: ① chọn cụm $k$ với xác suất $w_k$ (phân phối phân loại, bài 13); ② sinh $x$ từ hình chuông của cụm đó.</p>
+          <p class="note">$w_k$ ở đây là <b>trọng số trộn</b> (một con số), không phải vector trọng số của các bài 18–25. Nhiều sách viết $\pi_k$; bài này tránh vì $\pi$ đã có trong công thức mật độ.</p>
+        notation_note: true
+        focus: [1, 2]
+        say: "Mật độ hỗn hợp là tổng có trọng số của K hình chuông, mỗi hình chuông có tâm và độ rộng riêng, và các trọng số không âm, cộng lại bằng 1. Hiểu theo cách sinh dữ liệu, ta chọn một cụm theo trọng số, rồi sinh điểm từ hình chuông của cụm đó."
+
+  - id: mix_pic
+    kind: intuition
+    title: "Nhìn thấy bước E: hai hình chuông tranh nhau từng điểm"
+    checks:
+      - "(lambda N: round(N(3, 2, 4), 3) == 0.176 and round(N(3, 6, 4), 3) == 0.065 and round(N(3, 2, 4)/(N(3, 2, 4) + N(3, 6, 4)), 3) == 0.731)(lambda x, m, v: math.exp(-(x - m)**2/(2*v))/math.sqrt(2*math.pi*v))"
+    steps:
+      - show: |
+          <svg width="1400" height="440" viewBox="0 0 1400 440"><line x1="42" y1="300" x2="1274" y2="300" stroke="#6b7280" stroke-width="3"/><polyline points="42.0,235.2 50.8,230.3 59.6,225.1 68.4,219.8 77.2,214.3 86.0,208.7 94.8,202.9 103.6,197.0 112.4,191.1 121.2,185.1 130.0,179.0 138.8,173.0 147.6,167.0 156.4,161.0 165.2,155.2 174.0,149.4 182.8,143.9 191.6,138.5 200.4,133.4 209.2,128.5 218.0,124.0 226.8,119.7 235.6,115.9 244.4,112.4 253.2,109.3 262.0,106.7 270.8,104.5 279.6,102.8 288.4,101.5 297.2,100.8 306.0,100.5 314.8,100.8 323.6,101.5 332.4,102.8 341.2,104.5 350.0,106.7 358.8,109.3 367.6,112.4 376.4,115.9 385.2,119.7 394.0,124.0 402.8,128.5 411.6,133.4 420.4,138.5 429.2,143.9 438.0,149.4 446.8,155.2 455.6,161.0 464.4,167.0 473.2,173.0 482.0,179.0 490.8,185.1 499.6,191.1 508.4,197.0 517.2,202.9 526.0,208.7 534.8,214.3 543.6,219.8 552.4,225.1 561.2,230.3 570.0,235.2 578.8,240.0 587.6,244.5 596.4,248.9 605.2,253.0 614.0,256.9 622.8,260.5 631.6,264.0 640.4,267.2 649.2,270.2 658.0,273.0 666.8,275.6 675.6,278.0 684.4,280.2 693.2,282.3 702.0,284.1 710.8,285.8 719.6,287.4 728.4,288.8 737.2,290.1 746.0,291.2 754.8,292.3 763.6,293.2 772.4,294.0 781.2,294.8 790.0,295.5 798.8,296.0 807.6,296.6 816.4,297.0 825.2,297.4 834.0,297.8 842.8,298.1 851.6,298.4 860.4,298.6 869.2,298.8 878.0,299.0 886.8,299.1 895.6,299.3 904.4,299.4 913.2,299.5 922.0,299.6 930.8,299.6 939.6,299.7 948.4,299.7 957.2,299.8 966.0,299.8 974.8,299.9 983.6,299.9 992.4,299.9 1001.2,299.9 1010.0,299.9 1018.8,299.9 1027.6,300.0 1036.4,300.0 1045.2,300.0 1054.0,300.0 1062.8,300.0 1071.6,300.0 1080.4,300.0 1089.2,300.0 1098.0,300.0 1106.8,300.0 1115.6,300.0 1124.4,300.0 1133.2,300.0 1142.0,300.0 1150.8,300.0 1159.6,300.0 1168.4,300.0 1177.2,300.0 1186.0,300.0 1194.8,300.0 1203.6,300.0 1212.4,300.0 1221.2,300.0 1230.0,300.0 1238.8,300.0 1247.6,300.0 1256.4,300.0 1265.2,300.0 1274.0,300.0" fill="none" stroke="#ea580c" stroke-width="4"/><polyline points="42.0,299.6 50.8,299.5 59.6,299.4 68.4,299.3 77.2,299.1 86.0,299.0 94.8,298.8 103.6,298.6 112.4,298.4 121.2,298.1 130.0,297.8 138.8,297.4 147.6,297.0 156.4,296.6 165.2,296.0 174.0,295.5 182.8,294.8 191.6,294.0 200.4,293.2 209.2,292.3 218.0,291.2 226.8,290.1 235.6,288.8 244.4,287.4 253.2,285.8 262.0,284.1 270.8,282.3 279.6,280.2 288.4,278.0 297.2,275.6 306.0,273.0 314.8,270.2 323.6,267.2 332.4,264.0 341.2,260.5 350.0,256.9 358.8,253.0 367.6,248.9 376.4,244.5 385.2,240.0 394.0,235.2 402.8,230.3 411.6,225.1 420.4,219.8 429.2,214.3 438.0,208.7 446.8,202.9 455.6,197.0 464.4,191.1 473.2,185.1 482.0,179.0 490.8,173.0 499.6,167.0 508.4,161.0 517.2,155.2 526.0,149.4 534.8,143.9 543.6,138.5 552.4,133.4 561.2,128.5 570.0,124.0 578.8,119.7 587.6,115.9 596.4,112.4 605.2,109.3 614.0,106.7 622.8,104.5 631.6,102.8 640.4,101.5 649.2,100.8 658.0,100.5 666.8,100.8 675.6,101.5 684.4,102.8 693.2,104.5 702.0,106.7 710.8,109.3 719.6,112.4 728.4,115.9 737.2,119.7 746.0,124.0 754.8,128.5 763.6,133.4 772.4,138.5 781.2,143.9 790.0,149.4 798.8,155.2 807.6,161.0 816.4,167.0 825.2,173.0 834.0,179.0 842.8,185.1 851.6,191.1 860.4,197.0 869.2,202.9 878.0,208.7 886.8,214.3 895.6,219.8 904.4,225.1 913.2,230.3 922.0,235.2 930.8,240.0 939.6,244.5 948.4,248.9 957.2,253.0 966.0,256.9 974.8,260.5 983.6,264.0 992.4,267.2 1001.2,270.2 1010.0,273.0 1018.8,275.6 1027.6,278.0 1036.4,280.2 1045.2,282.3 1054.0,284.1 1062.8,285.8 1071.6,287.4 1080.4,288.8 1089.2,290.1 1098.0,291.2 1106.8,292.3 1115.6,293.2 1124.4,294.0 1133.2,294.8 1142.0,295.5 1150.8,296.0 1159.6,296.6 1168.4,297.0 1177.2,297.4 1186.0,297.8 1194.8,298.1 1203.6,298.4 1212.4,298.6 1221.2,298.8 1230.0,299.0 1238.8,299.1 1247.6,299.3 1256.4,299.4 1265.2,299.5 1274.0,299.6" fill="none" stroke="#2563eb" stroke-width="4"/><text x="306" y="89" font-size="21" text-anchor="middle" fill="#ea580c">cụm 1: tâm 2</text><text x="658" y="89" font-size="21" text-anchor="middle" fill="#2563eb">cụm 2: tâm 6</text><line x1="394" y1="300" x2="394" y2="124" stroke="#1f2937" stroke-width="2" stroke-dasharray="7 5"/><circle cx="394" cy="124.0" r="7" fill="#ea580c"/><circle cx="394" cy="235.2" r="7" fill="#2563eb"/><g font-size="20" fill="#1f2937"><text x="799" y="40">tại điểm 3: chuông cam cao 0,176, chuông xanh cao 0,065</text><text x="799" y="70">độ thuộc về cụm 1 = 0,176 / (0,176 + 0,065) ≈ 0,731</text></g><circle cx="218" cy="300" r="15" fill="#f9fafb" stroke="#1f2937" stroke-width="2"/><text x="218" y="306" font-size="16" text-anchor="middle" fill="#1f2937">1</text><rect x="198" y="330" width="40" height="2.4" fill="#93c5fd" stroke="#1f2937" stroke-width="1"/><rect x="198" y="332.4" width="40" height="47.6" fill="#fdba74" stroke="#1f2937" stroke-width="1"/><text x="218" y="402" font-size="16" text-anchor="middle" fill="#1f2937">0,953</text><circle cx="306" cy="300" r="15" fill="#f9fafb" stroke="#1f2937" stroke-width="2"/><text x="306" y="306" font-size="16" text-anchor="middle" fill="#1f2937">2</text><rect x="286" y="330" width="40" height="6.0" fill="#93c5fd" stroke="#1f2937" stroke-width="1"/><rect x="286" y="335.9" width="40" height="44.0" fill="#fdba74" stroke="#1f2937" stroke-width="1"/><text x="306" y="402" font-size="16" text-anchor="middle" fill="#1f2937">0,881</text><circle cx="394" cy="300" r="15" fill="#f9fafb" stroke="#1f2937" stroke-width="2"/><text x="394" y="306" font-size="16" text-anchor="middle" fill="#1f2937">3</text><rect x="374" y="330" width="40" height="13.5" fill="#93c5fd" stroke="#1f2937" stroke-width="1"/><rect x="374" y="343.4" width="40" height="36.5" fill="#fdba74" stroke="#1f2937" stroke-width="1"/><text x="394" y="402" font-size="16" text-anchor="middle" fill="#1f2937">0,731</text><circle cx="834" cy="300" r="15" fill="#f9fafb" stroke="#1f2937" stroke-width="2"/><text x="834" y="306" font-size="16" text-anchor="middle" fill="#1f2937">8</text><rect x="814" y="330" width="40" height="49.1" fill="#93c5fd" stroke="#1f2937" stroke-width="1"/><rect x="814" y="379.1" width="40" height="0.9" fill="#fdba74" stroke="#1f2937" stroke-width="1"/><text x="834" y="402" font-size="16" text-anchor="middle" fill="#1f2937">0,018</text><circle cx="922" cy="300" r="15" fill="#f9fafb" stroke="#1f2937" stroke-width="2"/><text x="922" y="306" font-size="16" text-anchor="middle" fill="#1f2937">9</text><rect x="902" y="330" width="40" height="49.6" fill="#93c5fd" stroke="#1f2937" stroke-width="1"/><rect x="902" y="379.6" width="40" height="0.4" fill="#fdba74" stroke="#1f2937" stroke-width="1"/><text x="922" y="402" font-size="16" text-anchor="middle" fill="#1f2937">0,007</text><circle cx="1010" cy="300" r="15" fill="#f9fafb" stroke="#1f2937" stroke-width="2"/><text x="1010" y="306" font-size="16" text-anchor="middle" fill="#1f2937">10</text><rect x="990" y="330" width="40" height="49.9" fill="#93c5fd" stroke="#1f2937" stroke-width="1"/><rect x="990" y="379.9" width="40" height="0.1" fill="#fdba74" stroke="#1f2937" stroke-width="1"/><text x="1010" y="402" font-size="16" text-anchor="middle" fill="#1f2937">0,002</text><text x="42" y="432" font-size="19" fill="#374151">cột dưới mỗi điểm: phần cam = độ thuộc về cụm 1, phần xanh = cụm 2 (cộng lại bằng 1)</text></svg>
+        focus: [0, 0, 0, 0]
+        say: "Hình vẽ hai hình chuông của lần khởi tạo, chuông cam tâm 2 và chuông xanh tâm 6, cùng độ rộng. Tại điểm 3, đường đứt nét chạm chuông cam ở độ cao 0 phẩy 176 và chạm chuông xanh ở độ cao 0 phẩy 065. Điểm 3 được chia cho hai cụm theo tỉ lệ hai độ cao đó, nên cụm 1 nhận khoảng 73 phần trăm. Các cột phía dưới cho thấy điểm càng xa tâm 6 thì phần cam càng lớn, còn ba điểm bên phải gần như toàn màu xanh."
+
+  # ───────────────────────── 4. BƯỚC E ─────────────────────────
+  - id: e_step
+    kind: formula
+    title: "Bước E: độ thuộc về bằng định lý Bayes"
+    checks:
+      - "(lambda x, N: [round(float(v), 3) for v in (lambda p: (p/p.sum(1, keepdims=True))[:, 0])(np.array([0.5, 0.5])*N(x[:, None], np.array([2, 6.]), np.array([4, 4.])))] == [0.953, 0.881, 0.731, 0.018, 0.007, 0.002])(np.array([1, 2, 3, 8, 9, 10.]), lambda x, m, v: np.exp(-(x - m)**2/(2*v))/np.sqrt(2*np.pi*v))"
+    steps:
+      - show: |
+          <div class="box key">$r_{ik} = P(\text{cụm } k \mid x_i) = \dfrac{w_k\cdot f_k(x_i)}{\sum_{j} w_j\cdot f_j(x_i)}$ &nbsp; — Bayes (bài 13): tiên nghiệm $w_k$, khả năng $f_k(x_i)$</div>
+          <p>Khởi tạo $\mu = (2;\ 6)$, $\sigma^2 = (4;\ 4)$, $w = (0{,}5;\ 0{,}5)$. Độ thuộc về cụm 1:</p>
+          <table class="t"><tr><th>$x_i$</th><th>1</th><th>2</th><th>3</th><th>8</th><th>9</th><th>10</th></tr>
+          <tr><td>$r_{i1}$</td><td>0,953</td><td>0,881</td><td>$\hlo{0{,}731}$</td><td>0,018</td><td>0,007</td><td>0,002</td></tr></table>
+        focus: [1, [2, 3]]
+        say: "Bước E tính độ thuộc về của điểm i với cụm k, chính là định lý Bayes của bài 13, với tiên nghiệm là trọng số và khả năng là mật độ của cụm. Với khởi tạo trên màn hình, điểm 1 thuộc cụm một 95 phần trăm, còn điểm 3 chỉ 73 phần trăm, vì tâm cụm hai đang ở 6, khá gần."
+
+  # ───────────────────────── 5. BƯỚC M ─────────────────────────
+  - id: m_step
+    kind: formula
+    title: "Bước M: cập nhật bằng trung bình có trọng số"
+    checks:
+      - "(lambda x, N: (lambda r: (lambda Nk: ([round(float(v), 3) for v in Nk], [round(float(v), 3) for v in Nk/6], [round(float(v), 3) for v in (r*x[:, None]).sum(0)/Nk]) == ([2.592, 3.408], [0.432, 0.568], [1.982, 8.175]))(r.sum(0)))((lambda p: p/p.sum(1, keepdims=True))(np.array([0.5, 0.5])*N(x[:, None], np.array([2, 6.]), np.array([4, 4.])))))(np.array([1, 2, 3, 8, 9, 10.]), lambda x, m, v: np.exp(-(x - m)**2/(2*v))/np.sqrt(2*np.pi*v))"
+    steps:
+      - show: |
+          <p>Coi $r_{ik}$ là “phần” của điểm $i$ giao cho cụm $k$. Đặt $N_k = \sum_i r_{ik}$ (số điểm “mềm” của cụm). MLE có trọng số (bài 17; tổng $w_k = 1$ giải bằng Lagrange, bài 24):</p>
+          <div class="box key">$w_k = \dfrac{N_k}{N}$, &nbsp;&nbsp; $\mu_k = \dfrac{1}{N_k}\sum_i r_{ik}\,x_i$, &nbsp;&nbsp; $\sigma_k^2 = \dfrac{1}{N_k}\sum_i r_{ik}\,(x_i - \mu_k)^2$</div>
+          <p>Vòng 1: $N = (2{,}592;\ 3{,}408)$, &nbsp; $w = (0{,}432;\ 0{,}568)$, &nbsp; $\mu = (\hlg{1{,}982};\ \hlg{8{,}175})$</p>
+        focus: [1, 2, 3]
+        say: "Bước M coi độ thuộc về là phần của mỗi điểm giao cho mỗi cụm, nghĩa là mỗi điểm được chia nhỏ cho các cụm. Ước lượng hợp lý cực đại như bài 17, với ràng buộc tổng trọng số bằng 1 giải bằng nhân tử như bài 24, cho ba công thức trung bình có trọng số. Sau vòng một, tâm cụm hai dời từ 6 lên 8 phẩy 175."
+
+  - id: em_hand
+    kind: example
+    title: "Làm tay từng bước: một vòng E–M"
+    checks:
+      - "(3 - 2)**2 == 1 and (3 - 6)**2 == 9 and Rational(1, 2*4) == Rational(1, 8) and Rational(9, 2*4) == Rational(9, 8)"
+      - "round(math.exp(-1/8), 3) == 0.882 and round(math.exp(-9/8), 3) == 0.325"
+      - "round(math.exp(-1/8)/(math.exp(-1/8) + math.exp(-9/8)), 3) == 0.731 and round(0.882/(0.882 + 0.325), 3) == 0.731"
+      - "round(0.953 + 0.881 + 0.731 + 0.018 + 0.007 + 0.002, 3) == 2.592 and round(2.592/6, 3) == 0.432"
+      - "abs(0.953*1 + 0.881*2 + 0.731*3 + 0.018*8 + 0.007*9 + 0.002*10 - 5.136) < 0.002 and round(5.136/2.592, 2) == 1.98 and (lambda x, N: (lambda r: round(float((r*x).sum()), 3) == 5.136 and round(float((r*x).sum()/r.sum()), 3) == 1.982)((lambda p: (p/p.sum(1, keepdims=True))[:, 0])(np.array([0.5, 0.5])*N(x[:, None], np.array([2, 6.]), np.array([4, 4.])))))(np.array([1, 2, 3, 8, 9, 10.]), lambda x, m, v: np.exp(-(x - m)**2/(2*v))/np.sqrt(2*np.pi*v))"
+    steps:
+      - show: |
+          <p><b>Bước 1 — điểm 3 cách hai tâm bao xa:</b> hai cụm cùng $\sigma^2 = 4$ nên số mũ là $-\frac{(x - \mu)^2}{8}$.</p>
+          $$(3 - 2)^2 = 1 \;\Rightarrow\; -\frac{1}{8} \qquad\qquad (3 - 6)^2 = 9 \;\Rightarrow\; -\frac{9}{8}$$
+        focus: [1, 1, 2]
+        say: "Bước một, đo xem điểm 3 cách hai tâm bao xa. Hai cụm cùng phương sai 4, nên số mũ của mật độ là âm bình phương khoảng cách chia 8. Điểm 3 cách tâm 2 một đơn vị, cho âm một phần tám, và cách tâm 6 ba đơn vị, cho âm chín phần tám."
+      - show: |
+          <p><b>Bước 2 — lấy e mũ:</b> hệ số $\frac{1}{\sqrt{2\pi\sigma^2}}$ và trọng số $0{,}5$ giống nhau ở hai cụm nên sẽ <b>triệt tiêu</b> khi chia.</p>
+          $$e^{-\frac{1}{8}} \approx 0{,}882 \qquad\qquad e^{-\frac{9}{8}} \approx 0{,}325$$
+        focus: [1, 2]
+        say: "Bước hai, lấy e mũ hai số đó, được khoảng 0 phẩy 882 và 0 phẩy 325. Hệ số đứng trước và trọng số 0 phẩy 5 giống nhau ở cả hai cụm, nên khi chia chúng triệt tiêu, ta không cần tính."
+      - show: |
+          <p><b>Bước 3 — bước E cho điểm 3</b> (Bayes: phần của cụm 1 chia tổng):</p>
+          $$r_{31} = \frac{0{,}882}{0{,}882 + 0{,}325} = \frac{0{,}882}{1{,}207} \approx \hlo{0{,}731}$$
+        focus: [1, 2]
+        say: "Bước ba, độ thuộc về của điểm 3 với cụm 1 bằng phần của cụm 1 chia cho tổng hai phần. Đó là 0 phẩy 882 chia 1 phẩy 207, xấp xỉ 0 phẩy 731, đúng ô cam của bảng bước E."
+      - clear: true
+        show: |
+          <p>Cột độ thuộc về cụm 1 của sáu điểm 1, 2, 3, 8, 9, 10: &nbsp; 0,953; 0,881; 0,731; 0,018; 0,007; 0,002.</p>
+          <p><b>Bước 4 — số điểm “mềm” và trọng số mới của cụm 1:</b></p>
+          $$N_1 = 0{,}953 + 0{,}881 + 0{,}731 + 0{,}018 + 0{,}007 + 0{,}002 = 2{,}592 \qquad w_1 = \frac{2{,}592}{6} \approx 0{,}432$$
+        focus: [1, 2, 3]
+        say: "Bước bốn chuyển sang bước M, nhắc lại cột độ thuộc về cụm 1 của cả sáu điểm. Cộng cột đó lại được 2 phẩy 592, coi như cụm 1 có khoảng 2 phẩy 6 điểm. Chia cho 6 điểm, trọng số mới của cụm 1 là 0 phẩy 432."
+      - show: |
+          <p><b>Bước 5 — tâm mới của cụm 1</b> = trung bình có trọng số:</p>
+          $$\mu_1 = \frac{0{,}953\cdot 1 + 0{,}881\cdot 2 + 0{,}731\cdot 3 + 0{,}018\cdot 8 + 0{,}007\cdot 9 + 0{,}002\cdot 10}{2{,}592} \approx \frac{5{,}136}{2{,}592} \approx \hlg{1{,}98}$$
+        focus: [1, 2, 2]
+        say: "Bước năm, tâm mới của cụm 1 là trung bình có trọng số, mỗi điểm nhân với độ thuộc về của nó. Tử số xấp xỉ 5 phẩy 136, chia cho 2 phẩy 592 được khoảng 1 phẩy 98, khớp với số 1 phẩy 982 của bảng bước M. Ba điểm bên phải gần như không kéo tâm cụm 1, vì độ thuộc về của chúng rất nhỏ."
+
+  # ───────────────────────── 6. LẶP ─────────────────────────
+  - id: iterate
+    kind: example
+    title: "Ví dụ: lặp E–M, log-likelihood tăng dần rồi dừng"
+    checks:
+      - "(lambda x, N: (lambda run: run == [-17.19, -13.567, -12.07, -11.456, -11.456])((lambda st: [round(st[0], 3) if i else round(st[0], 2) for i, st in enumerate(st)])(__import__('functools').reduce(lambda acc, _: acc + [(lambda mu, v, w: (lambda p: (lambda r: (lambda Nk: (lambda w2, mu2: (lambda v2: (float(np.log((w2*N(x[:, None], mu2, v2)).sum(1)).sum()), mu2, v2, w2))(((r*(x[:, None] - mu2)**2).sum(0))/Nk))(Nk/len(x), (r*x[:, None]).sum(0)/Nk))(r.sum(0)))(p/p.sum(1, keepdims=True)))(w*N(x[:, None], mu, v)))(*acc[-1][1:])], range(4), [(float(np.log((np.array([0.5, 0.5])*N(x[:, None], np.array([2, 6.]), np.array([4, 4.]))).sum(1)).sum()), np.array([2, 6.]), np.array([4, 4.]), np.array([0.5, 0.5]))]))))(np.array([1, 2, 3, 8, 9, 10.]), lambda x, m, v: np.exp(-(x - m)**2/(2*v))/np.sqrt(2*np.pi*v))"
+    steps:
+      - show: |
+          <table class="t"><tr><th>vòng</th><th>0 (khởi tạo)</th><th>1</th><th>2</th><th>3</th><th>4</th></tr>
+          <tr><td>$\mu_1$; $\mu_2$</td><td>2; 6</td><td>1,98; 8,18</td><td>1,98; 8,80</td><td>2; 9</td><td>2; 9</td></tr>
+          <tr><td>log-likelihood $\sum_i\ln g(x_i)$</td><td>−17,19</td><td>−13,567</td><td>−12,070</td><td>−11,456</td><td>$\hlg{-11{,}456}$</td></tr></table>
+          <p>Kết quả: $w = (0{,}5;\ 0{,}5)$, $\mu = (2;\ 9)$, $\sigma^2 \approx (0{,}667;\ 0{,}667)$ — đúng hai nhóm 1, 2, 3 và 8, 9, 10.</p>
+        focus: [1, ["1.2", "1.3"], 2]
+        say: "Ta lặp lại hai bước E và M qua nhiều vòng. Tâm hai cụm dời dần về 2 và 9, và tổng lôgarit khả năng tăng từ âm 17 phẩy 19 lên âm 11 phẩy 456, rồi đứng yên. Kết quả đúng hai nhóm, mỗi nhóm trọng số một nửa, phương sai khoảng 0 phẩy 667."
+      - show: |
+          <div class="box key">Mỗi vòng EM <b>không bao giờ làm giảm</b> log-likelihood — nhưng, như K-Means, chỉ tới <b>cực trị địa phương</b>: chạy nhiều khởi tạo, giữ kết quả tốt nhất.</div>
+          <p class="note">Nối với bài 29: nếu mọi cụm có cùng phương sai rất nhỏ, $r_{ik}$ thành 0 hoặc 1 (gán cứng), và EM trở thành K-Means.</p>
+        focus: [1, 2]
+        say: "Mỗi vòng không bao giờ làm giảm tổng lôgarit khả năng, nhưng giống K trung bình, nó chỉ tới cực trị địa phương. Nếu mọi cụm có cùng phương sai rất nhỏ, độ thuộc về thành 0 hoặc 1, và thuật toán trở thành đúng K trung bình của bài 29."
+
+  # ───────────────────────── 7. BẪY PHƯƠNG SAI ─────────────────────────
+  - id: singular
+    kind: concept
+    title: "Bẫy: một cụm co về một điểm"
+    checks:
+      - "[round(1/(math.sqrt(2*math.pi)*s), 2) for s in (1, 0.1, 0.01)] == [0.4, 3.99, 39.89]"
+    steps:
+      - show: |
+          <p>Nếu một cụm đặt tâm <b>đúng</b> tại một điểm $x_i$ và $\sigma \to 0$: $\ f(x_i) = \dfrac{1}{\sqrt{2\pi}\,\sigma}$ tăng mãi:</p>
+          <table class="t"><tr><th>$\sigma$</th><th>1</th><th>0,1</th><th>0,01</th></tr><tr><td>$f(x_i)$</td><td>0,40</td><td>3,99</td><td>$\hlo{39{,}89}$</td></tr></table>
+          <div class="box key">Khả năng tăng <b>vô hạn</b> — “nghiệm” vô nghĩa. Cách chữa: chặn dưới phương sai (cộng một số nhỏ), hoặc dùng tiên nghiệm như MAP (bài 17).</div>
+        focus: [0, [1, 2], 3, 3]
+        say: "Thuật toán này có một cái bẫy cần tránh. Nếu một cụm đặt tâm đúng tại một điểm và độ rộng co về 0, mật độ tại điểm đó tăng mãi, từ 0 phẩy 4 lên gần 40. Khả năng tăng vô hạn, cho một nghiệm vô nghĩa. Cách chữa là chặn dưới phương sai, hoặc thêm tiên nghiệm như bài 17."
+
+  # ───────────────────────── 8. KIỂM BẰNG MÁY ─────────────────────────
+  - id: verify
+    kind: check
+    title: "Phép thử: so với MLE từng nhóm"
+    checks:
+      - "(lambda g1, g2: (float(np.mean(g1)), float(np.mean(g2)), round(float(np.var(g1)), 3), round(float(np.var(g2)), 3)) == (2.0, 9.0, 0.667, 0.667))(np.array([1, 2, 3.]), np.array([8, 9, 10.]))"
+      - "-Rational(1, 8) + Rational(9, 8) == 1 and round(math.exp(-1/8)/math.exp(-9/8), 3) == 2.718 and round(math.e/(math.e + 1), 3) == 0.731 and round(2.718/3.718, 3) == 0.731"
+    steps:
+      - show: |
+          <p>Khi đã tách hẳn (mọi $r_{ik}$ bằng 0 hoặc 1), bước M chính là MLE của bài 17 cho từng nhóm: trung bình $(1 + 2 + 3)/3 = 2$ và $(8 + 9 + 10)/3 = 9$; phương sai $\frac{1 + 0 + 1}{3} \approx 0{,}667$ ✓ — khớp kết quả EM.</p>
+        say: "Phép thử, khi hai nhóm đã tách hẳn, bước M chính là ước lượng hợp lý cực đại của bài 17 cho từng nhóm, nên tâm phải là 2 và 9, phương sai là 2 phần 3. Kết quả của thuật toán khớp đúng như vậy."
+      - show: |
+          <p>Kiểm số 0,731 bằng đường khác: chia hai khả năng cho nhau, hiệu hai số mũ là $-\frac{1}{8} + \frac{9}{8} = 1$.</p>
+          $$\frac{r_{31}}{r_{32}} = \frac{e^{-\frac{1}{8}}}{e^{-\frac{9}{8}}} = e^{1} \approx 2{,}718 \;\Rightarrow\; r_{31} = \frac{2{,}718}{2{,}718 + 1} \approx 0{,}731 \ \checkmark$$
+        focus: [1, 2, 2]
+        say: "Kiểm số 0 phẩy 731 bằng đường khác, không cần tính từng mật độ. Chia hai khả năng cho nhau thì các hệ số triệt tiêu, vì chúng giống nhau ở hai cụm, nên chỉ còn e mũ hiệu hai số mũ, tức e mũ 1, xấp xỉ 2 phẩy 718. Vậy cụm 1 nặng gấp 2 phẩy 718 lần cụm 2, và độ thuộc về bằng 2 phẩy 718 chia 3 phẩy 718, đúng 0 phẩy 731."
+
+  # ───────────────────────── 9. TRONG AI ─────────────────────────
+  - id: in_ai
+    kind: concept
+    title: "Hỗn hợp phân phối chuẩn và EM trong học máy"
+    steps:
+      - show: |
+          <table class="t"><tr><th>dùng ở đâu</th><th>vì sao</th></tr>
+          <tr><td>phân cụm mềm; phát hiện điểm bất thường; mô hình hoá phân phối phức tạp</td><td>điểm bất thường có mật độ hỗn hợp rất thấp</td></tr>
+          <tr><td>nhiều chiều</td><td>mỗi cụm có ma trận hiệp phương sai riêng (bài 15) → cụm hình elip nghiêng, K-Means không làm được</td></tr>
+          <tr><td>mọi mô hình có “biến ẩn”</td><td>EM đoán mềm biến ẩn (ở đây: cụm của mỗi điểm) rồi học lại</td></tr></table>
+        focus: ["1.2", "1.3"]
+        say: "Mô hình hỗn hợp được dùng để phân cụm mềm, phát hiện điểm bất thường có mật độ rất thấp, và mô tả các phân phối phức tạp. Trong nhiều chiều, mỗi cụm có ma trận hiệp phương sai riêng như bài 15, nên cụm có thể là elip nghiêng."
+
+  # ───────────────────────── 10. LỖI THƯỜNG GẶP ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Quên chia cho tổng ở bước E <b class="red">(sai)</b>
+          <br><span class="note">$r_{ik}$ phải cộng lại bằng 1 theo $k$ — chia cho $\sum_j w_j f_j(x_i)$ như mẫu số của Bayes.</span></div>
+        say: "Lỗi thứ nhất, quên chia cho tổng ở bước E. Độ thuộc về của một điểm phải cộng lại bằng 1 theo các cụm, nên phải chia cho mẫu số như định lý Bayes."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Để phương sai co về 0 <b class="red">(khả năng vô hạn)</b>
+          <br><span class="note">Chặn dưới phương sai hoặc thêm tiên nghiệm.</span></div>
+        say: "Lỗi thứ hai, để phương sai co về 0, làm khả năng tăng vô hạn. Hãy chặn dưới phương sai hoặc thêm tiên nghiệm."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Tin kết quả của một lần khởi tạo <b class="red">(dễ sai)</b>
+          <br><span class="note">EM chỉ tới cực trị địa phương; thường khởi tạo bằng K-Means, chạy nhiều lần, giữ log-likelihood lớn nhất.</span></div>
+        say: "Lỗi thứ ba, tin kết quả của một lần khởi tạo. Thuật toán chỉ tới cực trị địa phương, nên thường khởi tạo bằng K trung bình, chạy nhiều lần, và giữ kết quả có khả năng lớn nhất."
+
+  # ───────────────────────── 11. TỰ KIỂM TRA ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "Rational(1, 2)*Rational(4, 10) / (Rational(1, 2)*Rational(4, 10) + Rational(1, 2)*Rational(1, 10)) == Rational(4, 5)"
+      - "(lambda r, x: (sum(r), sum(a*b for a, b in zip(r, x))/sum(r)) == (2.0, 3.0))([1, 0.5, 0.5], [2, 3, 5])"
+      - "Rational(1, 2)*Rational(4, 10) == Rational(1, 5) and Rational(1, 2)*Rational(1, 10) == Rational(1, 20) and 1*2 + Rational(1, 2)*3 + Rational(1, 2)*5 == 6"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>$w = (0{,}5;\ 0{,}5)$; tại điểm $x$: $f_1(x) = 0{,}4$, $f_2(x) = 0{,}1$. Tính $r_{x1}$.</td></tr>
+          <tr><td>2</td><td>Cụm 1 có độ thuộc về 1; 0,5; 0,5 với các điểm 2, 3, 5. Tính $N_1$ và $\mu_1$.</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn, với hai câu trên màn hình. Câu một làm bước E cho một điểm. Câu hai làm bước M cho một cụm. Hãy dừng video và làm ra giấy."
+        pause: 8
+      - show: |
+          <p>① Tử số là phần của cụm 1: $0{,}5\cdot 0{,}4 = 0{,}2$; phần của cụm 2: $0{,}5\cdot 0{,}1 = 0{,}05$.</p>
+          $$r_{x1} = \frac{0{,}2}{0{,}2 + 0{,}05} = \frac{0{,}2}{0{,}25} = \hlg{0{,}8}$$
+        focus: [1, 2]
+        say: "Đáp án câu một, phần của cụm 1 là 0 phẩy 5 nhân 0 phẩy 4, bằng 0 phẩy 2, còn phần của cụm 2 là 0 phẩy 05. Độ thuộc về cụm 1 bằng 0 phẩy 2 chia tổng 0 phẩy 25, bằng 0 phẩy 8."
+      - show: |
+          <p>② $N_1 = 1 + 0{,}5 + 0{,}5 = \hlg{2}$ &nbsp; (cụm 1 có “2 điểm mềm”)</p>
+          $$\mu_1 = \frac{1\cdot 2 + 0{,}5\cdot 3 + 0{,}5\cdot 5}{2} = \frac{2 + 1{,}5 + 2{,}5}{2} = \frac{6}{2} = \hlg{3}$$
+        focus: [1, 2]
+        say: "Câu hai, tổng độ thuộc về bằng 1 cộng 0 phẩy 5 cộng 0 phẩy 5, bằng 2, nên cụm 1 có hai điểm mềm. Tâm mới bằng 2 cộng 1 phẩy 5 cộng 2 phẩy 5, tổng là 6, chia 2, bằng 3."
+
+  # ───────────────────────── 12. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">hỗn hợp: $\sum_k w_k f_k(x)$</span><span class="a">→</span>
+          <span class="n">E: độ thuộc về bằng Bayes</span><span class="a">→</span>
+          <span class="n">M: trung bình có trọng số</span><span class="a">→</span>
+          <span class="n">log-likelihood không giảm, cực trị địa phương</span><span class="a">→</span>
+          <span class="n">chặn phương sai</span></div>
+        say: "Tổng kết chuỗi logic. Mật độ hỗn hợp là tổng có trọng số các hình chuông. Bước E tính độ thuộc về bằng định lý Bayes. Bước M cập nhật bằng trung bình có trọng số. Tổng lôgarit khả năng không giảm nhưng chỉ tới cực trị địa phương, và phải chặn phương sai."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> khi thiếu thông tin (không biết điểm thuộc cụm nào), hãy đoán mềm, rồi dùng chính dự đoán đó để học lại — lặp cho tới khi ổn định.</div>
+        say: "Điều cần mang theo, khi thiếu thông tin, hãy đoán mềm, rồi dùng chính dự đoán đó để học lại, và lặp cho tới khi ổn định."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 31): <b>phân rã ma trận không âm</b> (NMF) — học “các phần” của dữ liệu.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 31, ta học phân rã ma trận không âm, tách dữ liệu thành các phần cộng lại với nhau. Hẹn gặp bạn ở bài tiếp theo."

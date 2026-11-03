@@ -1,0 +1,251 @@
+id: L14
+course: DBS
+series: "DBS · Cơ sở dữ liệu"
+title: "Bài 14 — Ghi nhật ký trước và khôi phục sau sự cố"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/dbs.yaml L14; audit/dbs/verify_dbs.py L14; C. Mohan et al., ARIES (1992); A. Silberschatz, H. F. Korth, S. Sudarshan, Database System Concepts (2019), chương 19"
+assumes: [arith]
+# Quy ước: mô hình tối giản, không có điểm kiểm tra. Bản ghi nhật ký cập nhật ghi (giao dịch, mục, giá trị cũ, giá trị mới); bản ghi
+#   commit ghi (giao dịch, commit). Trang dữ liệu có thể xuống đĩa trước commit (kể cả của giao dịch chưa xong) và có thể chưa xuống
+#   đĩa sau commit — hệ quản trị thật làm vậy để chạy nhanh. Khôi phục: làm lại theo thứ tự, rồi huỷ ngược giao dịch chưa commit.
+#   Mọi trạng thái do alg.wal_recover tính.
+objectives:
+  - "Giải thích quy tắc ghi nhật ký trước"
+  - "Phân biệt làm lại và huỷ khi khôi phục"
+  - "Hiểu commit nghĩa là bản ghi nhật ký đã xuống đĩa bền"
+asr_reviewed:
+  - {sentence: "Bản ghi thứ tư trả C về 1, rồi bản ghi thứ nhất trả A về 10.", reason: "ASR chép “Bản ghi thứ 4 trả CV1, rồi bản ghi thứ nhất trả AV10.” (0.812): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: về (trong “c về” → “cv”), về (trong “a về” → “av”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "T1 đã ghi nhận nên còn đủ, đó là chữ D.", reason: "ASR chép “T1 đã ghi nhận nên còn đủ, đó là chữ V.” (0.917): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Chữ A của ACID đòi chỉ có trước hoặc sau, không có nửa chừng.", reason: "ASR chép “Chữ A của ACI đây đòi chỉ có trước hoặc sau, không có nửa chừng.” (0.941): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Chữ D của ACID hứa là đã chuyển.", reason: "tên chữ cái đọc kiểu Việt, ASR chép nhầm chữ (q→quy, x→ích, k→ca) — nhóm đã biết (SKILL Bước 5); chữ hiện trên màn hình"}
+  - {sentence: "Mỗi thay đổi có một bản ghi, ví dụ T1 đổi A từ 100 thành 70.", reason: "tên chữ cái đọc kiểu Việt, ASR chép nhầm chữ (q→quy, x→ích, k→ca) — nhóm đã biết (SKILL Bước 5); chữ hiện trên màn hình"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Mất điện ngay sau khi báo thành công"
+    steps:
+      - show: |
+          <p>Ngân hàng báo “chuyển tiền thành công”. Một giây sau, mất điện. Trang dữ liệu mới vẫn còn trong bộ nhớ, chưa kịp ghi xuống đĩa.</p>
+          <p>Khởi động lại: tiền đã chuyển hay chưa? Chữ D của ACID hứa là <b>đã chuyển</b>.</p>
+          <div class="box key">Hôm nay: <b>nhật ký ghi trước</b> — cách hệ quản trị giữ lời hứa đó mà không phải ghi mọi trang xuống đĩa mỗi lần commit.</div>
+        focus: [1, 1, 2, 2, 3]
+        say: "Chào bạn, ngân hàng vừa báo chuyển tiền thành công. Một giây sau thì mất điện, trong khi trang dữ liệu mới vẫn còn trong bộ nhớ, chưa kịp ghi xuống đĩa. Khởi động lại, tiền đã chuyển hay chưa? Chữ D của ACID hứa là đã chuyển. Hôm nay ta học nhật ký ghi trước, cách hệ quản trị giữ lời hứa đó mà không phải ghi mọi trang xuống đĩa mỗi lần ghi nhận."
+
+  # ───────────────────────── 1b. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: bộ nhớ, đĩa, và lời hứa của giao dịch"
+    checks:
+      - "math.isclose(100 * 0.05, 5) and 100 * 8 == 800 and 800 / 5 == 160"
+      - "100 + 50 == 150 == 70 + 80 and 70 + 50 == 120"
+    steps:
+      - show: |
+          <table class="t"><tr><th>nơi giữ dữ liệu</th><th>tốc độ</th><th>mất điện thì</th></tr>
+          <tr><td>bộ nhớ (vùng đệm của hệ quản trị, bộ đệm của hệ điều hành)</td><td>rất nhanh</td><td><b class="red">mất hết</b></td></tr>
+          <tr><td>đĩa (sau lệnh đồng bộ <code>fsync</code>)</td><td>chậm</td><td>còn nguyên</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Trước hết, nhắc lại điều đã gặp ở khoá Hệ điều hành. Bộ nhớ rất nhanh nhưng mất điện là mất hết, kể cả phần bộ đệm mà hệ điều hành đang giữ hộ. Đĩa chậm hơn nhiều nhưng còn nguyên sau mất điện, với điều kiện dữ liệu đã thật sự được đẩy xuống bằng lệnh đồng bộ đĩa."
+      - show: |
+          <p>Bài 7 (giả định đĩa quay): trang liền nhau ≈ 0,05 ms mỗi trang; trang rải rác ≈ 8 ms mỗi trang.</p>
+          <table class="t"><tr><th>100 trang</th><th>thời gian</th></tr>
+          <tr><td>tuần tự (nối vào cuối một tệp)</td><td>$100 \times 0{,}05 = 5$ ms</td></tr>
+          <tr><td>ngẫu nhiên (rải khắp bảng)</td><td>$100 \times 8 = 800$ ms — gấp 160 lần</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Thứ hai, bài 7 đã giả định một đĩa quay, trang nằm liền nhau mất khoảng 0 phẩy 05 mi li giây mỗi trang, còn trang nằm rải rác mất khoảng 8 mi li giây. Với 100 trang, ghi tuần tự nối vào cuối một tệp mất 100 nhân 0 phẩy 05 bằng 5 mi li giây. Ghi ngẫu nhiên rải khắp bảng mất 100 nhân 8 bằng 800 mi li giây, gấp 160 lần."
+      - clear: true
+        show: |
+          <p>Bài 11: chuyển 30 từ A = 100 sang B = 50.</p>
+          <table class="t"><tr><th>trạng thái</th><th>A</th><th>B</th><th>tổng</th></tr>
+          <tr><td>trước</td><td>100</td><td>50</td><td>150</td></tr>
+          <tr><td>nửa chừng (cấm để lại)</td><td>70</td><td>50</td><td><b class="red">120</b></td></tr>
+          <tr><td>sau</td><td>70</td><td>80</td><td>150</td></tr></table>
+          <p><b>A</b> (nguyên tử): hoặc trước, hoặc sau. <b>D</b> (bền): đã báo thành công thì sau sự cố vẫn là “sau”.</p>
+        focus: [1, "2.2", "2.3", "2.4", 3, 3]
+        say: "Thứ ba, nhắc lại bài 11 với phép chuyển 30 đồng từ A có 100 sang B có 50. Trước khi chuyển, tổng là 150. Nếu dừng nửa chừng, A còn 70 mà B vẫn 50, tổng chỉ 120, trạng thái này không được phép để lại. Chuyển xong, A là 70, B là 80, tổng lại là 150. Chữ A của ACID đòi chỉ có trước hoặc sau, không có nửa chừng. Chữ D đòi đã báo thành công thì sau sự cố vẫn phải là trạng thái sau."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: bản ghi nhật ký"
+    steps:
+      - show: |
+          <p><b>Nhật ký</b>: tệp chỉ ghi nối thêm, tuần tự (nhanh, bài 7). Mỗi thay đổi một bản ghi:</p>
+          <div class="code"><div>(T1, A, cũ = 100, mới = 70)</div><div>(T1, B, cũ = 50, mới = 80)</div><div>(T1, commit)   <span class="cm">-- commit = ghi nhận</span></div></div>
+          <p>Giá trị <b>mới</b> để làm lại; giá trị <b>cũ</b> để huỷ.</p>
+        focus: [1, "2.1", "2.2", "2.3", 3]
+        say: "Nhật ký là một tệp chỉ ghi nối thêm vào cuối, tuần tự, nên rất nhanh như đã thấy ở bài 7. Mỗi thay đổi có một bản ghi, ví dụ T1 đổi A từ 100 thành 70. Rồi T1 đổi B từ 50 thành 80. Cuối cùng là bản ghi T1 ghi nhận. Giá trị mới dùng để làm lại thay đổi, giá trị cũ dùng để huỷ thay đổi."
+
+  # ───────────────────────── 3. QUY TẮC ─────────────────────────
+  - id: rules
+    kind: concept
+    title: "Hai quy tắc"
+    steps:
+      - show: |
+          <ol><li><b>Ghi trước</b>: bản ghi nhật ký của một thay đổi phải xuống đĩa <b>trước</b> trang dữ liệu chứa thay đổi đó.</li>
+          <li><b>Commit</b>: giao dịch chỉ được báo thành công khi bản ghi commit của nó đã xuống đĩa.</li></ol>
+          <div class="box key">Nhờ đó trang dữ liệu được ghi xuống đĩa <b>lúc nào cũng được</b> — trước hay sau commit. Nhật ký luôn đủ thông tin để sửa lại.</div>
+        focus: [1, "1.1", "1.2", 2]
+        say: "Có hai quy tắc. Một, ghi trước, bản ghi nhật ký của một thay đổi phải xuống đĩa trước trang dữ liệu chứa thay đổi đó. Hai, một giao dịch chỉ được báo thành công khi bản ghi ghi nhận của nó đã xuống đĩa. Nhờ hai quy tắc này, trang dữ liệu được ghi xuống đĩa lúc nào cũng được, trước hay sau khi ghi nhận, vì nhật ký luôn đủ thông tin để sửa lại."
+
+  # ───────────────────────── 3b. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Dữ liệu đi đâu, theo thứ tự nào"
+    steps:
+      - show: |
+          <div><svg width="1500" height="430" viewBox="0 0 1500 430"><defs><marker id="arD14b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#2a78d6"/></marker></defs><defs><marker id="arD14o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#eb6834"/></marker></defs><rect x="50" y="60" width="440" height="290" fill="#fef3c7" stroke="#1f2937" stroke-width="3"/><g font-size="24" fill="#1f2937"><text x="270" y="45" text-anchor="middle" font-weight="bold">bộ nhớ (vùng đệm)</text><text x="1040" y="45" text-anchor="middle" font-weight="bold">nhật ký trên đĩa: chỉ nối vào cuối</text><text x="1040" y="245" text-anchor="middle" font-weight="bold">trang dữ liệu trên đĩa</text></g><g fill="#ffffff" stroke="#1f2937" stroke-width="2"><rect x="90" y="110" width="360" height="70"/><rect x="90" y="220" width="360" height="70"/></g><g font-size="26" fill="#1f2937"><text x="120" y="155">trang A: 100 → 70</text><text x="120" y="265">trang B: 50 → 80</text></g><g fill="#eff6ff" stroke="#2a78d6" stroke-width="2"><rect x="640" y="70" width="250" height="70"/><rect x="890" y="70" width="250" height="70"/><rect x="1140" y="70" width="200" height="70"/></g><g font-size="24" fill="#1f2937"><text x="660" y="113">T1, A, 100 → 70</text><text x="910" y="113">T1, B, 50 → 80</text><text x="1160" y="113" font-weight="bold">T1, commit</text></g><text x="1360" y="113" font-size="30" fill="#2a78d6">…</text><g fill="#f3f4f6" stroke="#6b7280" stroke-width="2"><rect x="740" y="270" width="250" height="70"/><rect x="1090" y="270" width="250" height="70"/></g><g font-size="26" fill="#6b7280"><text x="770" y="315">A: 100 (cũ)</text><text x="1120" y="315">B: 50 (cũ)</text></g><line x1="490" y1="120" x2="632" y2="105" stroke="#2a78d6" stroke-width="4" marker-end="url(#arD14b)"/><line x1="490" y1="260" x2="732" y2="300" stroke="#eb6834" stroke-width="4" stroke-dasharray="12 9" marker-end="url(#arD14o)"/><g font-size="22"><text x="500" y="95" fill="#2a78d6" font-weight="bold">1. ghi TRƯỚC</text><text x="1040" y="175" text-anchor="middle" fill="#059669" font-weight="bold">2. commit xuống đĩa → báo thành công</text><text x="500" y="345" fill="#eb6834" font-weight="bold">3. ghi SAU, lúc nào tiện</text><text x="750" y="410" text-anchor="middle" fill="#b91c1c" font-weight="bold">mất điện: khối vàng mất, mọi thứ bên phải còn nguyên</text></g></svg></div>
+        focus: [1, 1, 1, 1, 1]
+        say: "Hình cho thấy dữ liệu đi đâu khi T1 chuyển tiền. T1 sửa trang A và trang B ngay trong bộ nhớ, nhanh nhưng dễ mất. Việc đầu tiên là nối bản ghi nhật ký vào cuối tệp nhật ký trên đĩa, một thao tác tuần tự và rẻ. Khi bản ghi ghi nhận đã xuống đĩa, hệ quản trị mới báo thành công. Trang dữ liệu thật thì ghi sau, lúc nào tiện, nên trên đĩa A và B có thể vẫn là giá trị cũ."
+
+  # ───────────────────────── 4. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Khôi phục sau sự cố"
+    checks:
+      - "alg.wal_recover([('T1', 'U', 'A', 100, 70), ('T1', 'U', 'B', 50, 80), ('T1', 'C'), ('T2', 'U', 'A', 70, 60)], {'A': 60, 'B': 50}) == ({'A': 70, 'B': 80}, {'A': 60, 'B': 80}, {'T2'})"
+      - "70 + 80 == 150"
+    steps:
+      - show: |
+          <p><b>Bước 1</b> — đọc những gì còn trên đĩa sau mất điện.</p>
+          <table class="t"><tr><th>nhật ký</th><th>bản ghi</th></tr>
+          <tr><td>thứ nhất</td><td>(T1, A, 100 → 70)</td></tr><tr><td>thứ hai</td><td>(T1, B, 50 → 80)</td></tr>
+          <tr><td>thứ ba</td><td>(T1, commit)</td></tr><tr><td>thứ tư</td><td>(T2, A, 70 → 60)</td></tr></table>
+          <p>Đĩa: A = <b>60</b> (trang của T2 chưa commit đã lỡ xuống), B = <b>50</b> (trang của T1 đã commit chưa kịp xuống).</p>
+        focus: [1, "2.2", "2.3", "2.4", "2.5", 3, 3]
+        say: "Bước một, đọc những gì còn trên đĩa sau khi mất điện. Bản ghi thứ nhất, T1 đổi A từ 100 thành 70. Bản ghi thứ hai, T1 đổi B từ 50 thành 80. Bản ghi thứ ba, T1 ghi nhận. Bản ghi thứ tư, T2 đổi A từ 70 thành 60, rồi mất điện. Trên đĩa, A là 60, vì trang mà T2 chưa ghi nhận đã lỡ xuống đĩa. Còn B vẫn là 50, vì trang của T1 dù đã ghi nhận vẫn chưa kịp xuống."
+      - clear: true
+        show: |
+          <p><b>Bước 2</b> — tìm bản ghi commit của từng giao dịch.</p>
+          <table class="t"><tr><th>giao dịch</th><th>có bản ghi commit?</th><th>phải</th></tr>
+          <tr><td>T1</td><td>có (thứ ba)</td><td>giữ: làm lại cho đủ</td></tr>
+          <tr><td>T2</td><td>không</td><td><b class="red">huỷ</b></td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước hai, dò tìm bản ghi ghi nhận của từng giao dịch. T1 có, ở bản ghi thứ ba, nên phải giữ, và làm lại cho đủ. T2 không có, nên phải huỷ."
+      - show: |
+          <p><b>Bước 3</b> — pha làm lại: áp <b>mọi</b> bản ghi theo thứ tự, lấy giá trị <b>mới</b>.</p>
+          <table class="t"><tr><th>sau bản ghi</th><th>A</th><th>B</th></tr>
+          <tr><td>(đĩa lúc đầu)</td><td>60</td><td>50</td></tr><tr><td>thứ nhất</td><td>70</td><td>50</td></tr>
+          <tr><td>thứ hai</td><td>70</td><td>80</td></tr><tr><td>thứ tư</td><td>$\hl{60}$</td><td>$\hl{80}$</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", "2.5"]
+        say: "Bước ba, pha làm lại áp mọi bản ghi theo đúng thứ tự, lấy giá trị mới, kể cả của T2. Bắt đầu từ đĩa, A là 60, B là 50. Bản ghi thứ nhất cho A bằng 70. Bản ghi thứ hai cho B bằng 80. Bản ghi thứ tư cho A bằng 60, nên sau pha làm lại, A là 60 và B là 80."
+      - clear: true
+        show: |
+          <p><b>Bước 4</b> — pha huỷ: đi <b>ngược</b> từ cuối, chỉ bản ghi của T2, lấy giá trị <b>cũ</b>: bản ghi thứ tư → A về $\hl{70}$. Kết quả A = 70, B = 80.</p>
+        say: "Bước bốn, pha huỷ đi ngược từ cuối nhật ký, chỉ xét bản ghi của T2, và lấy giá trị cũ. Bản ghi thứ tư trả A về 70, nên kết quả cuối là A bằng 70, B bằng 80."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>giao dịch</th><th>sau khôi phục</th><th>chữ</th></tr>
+          <tr><td>T1 (đã commit)</td><td>còn đủ: A = 70, B = 80</td><td>D</td></tr>
+          <tr><td>T2 (chưa commit)</td><td>biến mất hoàn toàn</td><td>A</td></tr></table>
+          <p class="note">Tổng $70 + 80 = 150$, đúng như trước khi chuyển.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Tóm lại kết quả khôi phục. T1 đã ghi nhận nên còn đủ, đó là chữ D. T2 chưa ghi nhận nên biến mất hoàn toàn, đó là chữ A. Tổng 70 cộng 80 vẫn là 150, đúng như trước khi chuyển."
+
+  # ───────────────────────── 4b. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: đáp án đúng không phụ thuộc đĩa đang ra sao"
+    checks:
+      - "(lambda s: [s.update({'A': 70, 'B': 80}), s][1])({'A': 100, 'B': 50}) == alg.wal_recover([('T1', 'U', 'A', 100, 70), ('T1', 'U', 'B', 50, 80), ('T1', 'C'), ('T2', 'U', 'A', 70, 60)], {'A': 60, 'B': 50})[0]"
+      - "all(alg.wal_recover([('T1', 'U', 'A', 100, 70), ('T1', 'U', 'B', 50, 80), ('T1', 'C'), ('T2', 'U', 'A', 70, 60)], {'A': a, 'B': b})[0] == {'A': 70, 'B': 80} for a in (100, 70, 60) for b in (50, 80)) and 3 * 2 == 6"
+    steps:
+      - show: |
+          <table class="t"><tr><th>đường khác: chỉ chạy giao dịch đã commit, từ đầu</th><th>A</th><th>B</th></tr>
+          <tr><td>trước mọi giao dịch</td><td>100</td><td>50</td></tr>
+          <tr><td>chạy T1 (đã commit), bỏ T2</td><td>70</td><td>80</td></tr>
+          <tr><td>khôi phục bằng nhật ký (bước 4)</td><td>70</td><td>80 ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Kiểm bằng đường khác, ta bỏ nhật ký sang một bên và hỏi, nếu chỉ chạy những giao dịch đã ghi nhận thì kết quả phải là gì. Trước mọi giao dịch, A là 100, B là 50. Chỉ chạy T1, bỏ T2 vì T2 chưa ghi nhận, ta được A bằng 70, B bằng 80. Kết quả khôi phục bằng nhật ký ở bước bốn cũng đúng là 70 và 80."
+      - show: |
+          <table class="t"><tr><th>A trên đĩa lúc mất điện</th><th>B trên đĩa</th><th>số trạng thái</th><th>khôi phục ra</th></tr>
+          <tr><td>100, 70 hoặc 60</td><td>50 hoặc 80</td><td>$3 	imes 2 = 6$</td><td>cả 6: A = 70, B = 80</td></tr></table>
+          <p class="note">Đó là lý do trang dữ liệu được ghi xuống “lúc nào cũng được”.</p>
+        focus: [0, 1, "1.2", 2]
+        say: "Thử thêm bằng máy, vì trang dữ liệu có thể xuống đĩa bất cứ lúc nào. Khi mất điện, A trên đĩa có thể là 100, 70 hay 60, còn B có thể là 50 hay 80, tổng cộng 3 nhân 2 bằng 6 trạng thái. Cả 6 trạng thái đều khôi phục ra cùng một kết quả, A bằng 70, B bằng 80. Đó chính là lý do trang dữ liệu được phép ghi xuống lúc nào cũng được."
+
+  # ───────────────────────── 5. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi người mới hay mắc"
+    checks:
+      - "alg.wal_recover([('T1', 'U', 'A', 100, 70), ('T1', 'U', 'B', 50, 80), ('T1', 'C')], {'A': 100, 'B': 50})[0] == {'A': 70, 'B': 80}"
+      - "alg.wal_recover([('T1', 'U', 'A', 100, 70), ('T1', 'U', 'B', 50, 80)], {'A': 100, 'B': 50}) == ({'A': 100, 'B': 50}, {'A': 70, 'B': 80}, {'T1'})"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Nghĩ commit là trang dữ liệu đã xuống đĩa <b class="red">(sai)</b>
+          <br><span class="note">Commit chỉ cần bản ghi nhật ký xuống đĩa. Trang dữ liệu ghi sau, khi tiện.</span></div>
+        say: "Lỗi thứ nhất, nghĩ ghi nhận nghĩa là trang dữ liệu đã xuống đĩa. Ghi nhận chỉ cần bản ghi nhật ký xuống đĩa, còn trang dữ liệu được ghi sau, khi tiện."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Ghi trang dữ liệu trước nhật ký <b class="red">(sai)</b>
+          <br><span class="note">Mất điện ngay sau đó: đĩa có A = 60 của T2 mà nhật ký không có giá trị cũ 70 — không huỷ được.</span></div>
+        say: "Lỗi thứ hai, ghi trang dữ liệu trước nhật ký. Nếu mất điện ngay sau đó, đĩa có A bằng 60 của T2 mà nhật ký không có giá trị cũ 70, nên không thể huỷ."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Tắt tính năng đồng bộ đĩa của nhật ký cho nhanh <b class="red">(nguy hiểm)</b>
+          <br><span class="note">Hệ điều hành có thể giữ nhật ký trong bộ đệm; báo commit trước khi nó thật sự xuống đĩa là phá chữ D.</span></div>
+          <table class="t"><tr><th>đồng bộ nhật ký</th><th>trên đĩa khi mất điện</th><th>khôi phục ra</th></tr>
+          <tr><td>bật</td><td>đủ 3 bản ghi của T1, có commit</td><td>A = 70, B = 80</td></tr>
+          <tr><td>tắt (bản ghi commit còn trong bộ đệm)</td><td>2 bản ghi cập nhật, không có commit</td><td><b class="red">huỷ T1: A = 100, B = 50</b>, dù đã báo thành công</td></tr></table>
+        focus: [1, 1, 2, "2.2", "2.3"]
+        say: "Lỗi thứ ba, tắt tính năng đồng bộ đĩa của nhật ký cho nhanh, một lựa chọn cấu hình mà người vận hành hay bị cám dỗ khi hệ thống chậm. Hệ điều hành có thể giữ nhật ký trong bộ nhớ đệm, và báo ghi nhận trước khi nó thật sự xuống đĩa là phá vỡ chữ D. Khi đồng bộ bật, đĩa có đủ ba bản ghi của T1, khôi phục ra A bằng 70, B bằng 80. Khi đồng bộ tắt, bản ghi ghi nhận có thể chưa kịp xuống, nên khôi phục sẽ huỷ T1. Khách hàng đã nghe báo thành công, nhưng tiền quay về A bằng 100, B bằng 50."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Chỉ làm lại giao dịch đã commit, bỏ qua phần còn lại <b class="red">(thiếu)</b>
+          <br><span class="note">Thay đổi chưa commit có thể đã nằm trên đĩa (A = 60). Phải có pha huỷ.</span></div>
+        say: "Lỗi thứ tư, chỉ làm lại giao dịch đã ghi nhận mà bỏ qua phần còn lại. Thay đổi chưa ghi nhận có thể đã nằm trên đĩa, như A bằng 60, nên bắt buộc phải có pha huỷ."
+
+  # ───────────────────────── 6. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.wal_recover([('T1', 'U', 'A', 10, 20), ('T2', 'U', 'B', 5, 7), ('T2', 'C'), ('T1', 'U', 'C', 1, 2)], {'A': 20, 'B': 5, 'C': 1}) == ({'A': 10, 'B': 7, 'C': 1}, {'A': 20, 'B': 7, 'C': 2}, {'T1'})"
+    steps:
+      - show: |
+          <p>Nhật ký: (T1, A, 10→20), (T2, B, 5→7), (T2, commit), (T1, C, 1→2). Mất điện. Đĩa: A = 20, B = 5, C = 1.</p>
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Giao dịch nào phải huỷ?</td></tr>
+          <tr><td>2</td><td>Sau pha làm lại và pha huỷ, A, B, C bằng bao nhiêu?</td></tr></table>
+        focus: [1, 1, 1, "2.2", "2.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Nhật ký có T1 đổi A từ 10 thành 20, T2 đổi B từ 5 thành 7, T2 ghi nhận, rồi T1 đổi C từ 1 thành 2, và mất điện. Lúc đó đĩa có A bằng 20, B bằng 5, C bằng 1. Câu một, giao dịch nào phải huỷ? Câu hai, sau pha làm lại và pha huỷ, A, B, C bằng bao nhiêu? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <p>① dò bản ghi commit:</p>
+          <table class="t"><tr><th>giao dịch</th><th>có commit?</th><th>phải</th></tr>
+          <tr><td>T1</td><td>không</td><td><b class="red">huỷ</b></td></tr><tr><td>T2</td><td>có</td><td>giữ</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Đáp án câu một, dò bản ghi ghi nhận của từng giao dịch. T1 không có, nên phải huỷ. T2 có, nên được giữ."
+      - clear: true
+        show: |
+          <p>② pha làm lại, theo thứ tự, lấy giá trị mới:</p>
+          <table class="t"><tr><th>sau bản ghi</th><th>A</th><th>B</th><th>C</th></tr>
+          <tr><td>(đĩa lúc đầu)</td><td>20</td><td>5</td><td>1</td></tr><tr><td>thứ nhất</td><td>20</td><td>5</td><td>1</td></tr>
+          <tr><td>thứ hai</td><td>20</td><td>7</td><td>1</td></tr><tr><td>thứ tư</td><td>20</td><td>7</td><td>2</td></tr></table>
+        focus: [1, "2.2", "2.4", "2.5"]
+        say: "Câu hai, trước hết là pha làm lại, áp mọi bản ghi theo thứ tự. Đĩa lúc đầu có A bằng 20, B bằng 5, C bằng 1, bản ghi thứ nhất giữ A bằng 20. Bản ghi thứ hai cho B bằng 7. Bản ghi thứ tư cho C bằng 2."
+      - clear: true
+        show: |
+          <p>Pha huỷ T1, đi ngược, lấy giá trị cũ: bản ghi thứ tư → C về 1; bản ghi thứ nhất → A về 10. Cuối cùng $\hl{A = 10,\ B = 7,\ C = 1}$.</p>
+        say: "Rồi tới pha huỷ T1, đi ngược từ cuối và lấy giá trị cũ. Bản ghi thứ tư trả C về 1, rồi bản ghi thứ nhất trả A về 10. Cuối cùng A bằng 10, B bằng 7, C bằng 1."
+
+  # ───────────────────────── 7. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">nhật ký xuống đĩa trước trang dữ liệu</span><span class="a">→</span>
+          <span class="n">commit = bản ghi commit đã bền</span><span class="a">→</span>
+          <span class="n">sự cố: làm lại tất cả</span><span class="a">→</span>
+          <span class="n">huỷ ngược phần chưa commit</span></div>
+        say: "Tổng kết lại, nhật ký xuống đĩa trước trang dữ liệu, và ghi nhận nghĩa là bản ghi ghi nhận đã nằm bền trên đĩa. Sau sự cố, hệ quản trị làm lại tất cả theo thứ tự, rồi huỷ ngược phần chưa ghi nhận."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> muốn nhanh mà vẫn an toàn, hãy ghi lại <b>ý định</b> một cách tuần tự và rẻ, rồi mới làm việc tốn kém. Ý tưởng này có ở hệ tệp, hàng đợi tin nhắn, và cả dữ liệu lớn.</div>
+        say: "Điều cần mang theo, muốn nhanh mà vẫn an toàn, hãy ghi lại ý định một cách tuần tự và rẻ, rồi mới làm việc tốn kém. Ý tưởng này có ở hệ tệp, ở hàng đợi tin nhắn, và cả ở hệ dữ liệu lớn."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 15): <b>mức cô lập</b> và các dị thường đọc — đánh đổi giữa đúng và nhanh.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 15, ta học các mức cô lập và những dị thường đọc, sự đánh đổi giữa đúng và nhanh. Hẹn gặp bạn ở bài tiếp theo."

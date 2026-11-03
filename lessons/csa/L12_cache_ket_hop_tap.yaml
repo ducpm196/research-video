@@ -1,0 +1,247 @@
+id: L12
+course: CSA
+series: "CSA · Hệ thống máy tính"
+title: "Bài 12 — Bộ nhớ đệm kết hợp theo tập và chính sách thay thế LRU"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/csa.yaml L12; audit/verify_plan_curricula.py CSA:L12; mô phỏng tools/checklib.cache_hits; R. Bryant, D. O'Hallaron, CS:APP mục 6.4.3–6.4.4"
+assumes: [arith, power, sub, dots]
+domain_terms: [dòng]   # “dòng N” = dòng của bộ nhớ đệm (thuật ngữ)
+# Quy ước: làm việc trên SỐ KHỐI (địa chỉ chia cỡ dòng). k đường = mỗi tập có k dòng. LRU = thay khối lâu nhất chưa dùng
+#   (tên viết tắt chỉ trên màn hình; lời đọc nói “khối lâu nhất chưa dùng”).
+objectives:
+  - "Mô phỏng bộ nhớ đệm k đường với thay thế LRU"
+  - "So sánh ánh xạ trực tiếp, kết hợp theo tập, kết hợp hoàn toàn"
+  - "Phân loại trượt bắt buộc, trượt do dung lượng, trượt do xung đột"
+asr_reviewed:
+  - {sentence: "Nhắc lại, số khối là địa chỉ chia cho kích thước dòng, ví dụ địa chỉ 320 với dòng 64 byte là khối 5.", reason: "ASR chép “Nhắc lại, số khối là địa chỉ chia cho kích thước dòng, ví dụ địa chỉ 320 với dòng 64b là khối 5.” (0.966): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Còn chỗ trống mà vẫn trượt"
+    checks:
+      - "alg.cache_hits([0, 4, 0, 4, 8, 0, 4], 4, 1) == 0"
+    steps:
+      - show: |
+          <p>Bộ nhớ đệm ánh xạ trực tiếp 4 dòng, dãy khối $0, 4, 0, 4, 8, 0, 4$. Khối nào cũng rơi vào dòng 0 (vì chia 4 dư 0).</p>
+          <p>Kết quả: <b>0 lần trúng</b> trong 7 lần truy cập — trong khi 3 dòng kia bỏ trống.</p>
+        focus: [1, 1, 2]
+        say: "Chào bạn, một bộ nhớ đệm ánh xạ trực tiếp có 4 dòng, và chương trình truy cập dãy khối 0, 4, 0, 4, 8, 0, 4. Khối nào chia 4 cũng dư 0, nên tất cả tranh nhau dòng 0. Kết quả là 0 lần trúng trong 7 lần truy cập, trong khi ba dòng kia bỏ trống."
+      - show: |
+          <div class="box key">Cách chữa: cho mỗi khối được chọn <b>vài</b> chỗ. Hôm nay: bộ nhớ đệm kết hợp theo tập và cách chọn khối để thay.</div>
+        say: "Cách chữa là cho mỗi khối được chọn vài chỗ thay vì một. Hôm nay ta học bộ nhớ đệm kết hợp theo tập, và cách chọn khối nào để thay ra."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: chia lấy dư, và khối rơi vào dòng nào"
+    checks:
+      - "divmod(8, 4) == (2, 0) and divmod(5, 2) == (2, 1) and divmod(6, 4) == (1, 2)"
+      - "[b % 4 for b in (0, 4, 8)] == [0, 0, 0] and 320 // 64 == 5"
+    steps:
+      - show: |
+          <table class="t"><tr><th>phép chia</th><th>thương</th><th>dư</th></tr>
+          <tr><td>8 chia 4</td><td>2</td><td>0</td></tr>
+          <tr><td>5 chia 2</td><td>2</td><td>1</td></tr>
+          <tr><td>6 chia 4</td><td>1</td><td>2</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Trước hết, ôn phép chia lấy dư, phép tính dùng suốt bài này. Tám chia 4 được 2, dư 0. Năm chia 2 được 2, dư 1. Sáu chia 4 được 1, dư 2."
+      - show: |
+          <table class="t"><tr><th>khối</th><th>0</th><th>4</th><th>8</th></tr>
+          <tr><td>dư khi chia 4 = dòng</td><td>0</td><td>0</td><td>0</td></tr></table>
+          <p>Khối = địa chỉ chia cỡ dòng, ví dụ địa chỉ 320 với dòng 64 byte là khối $\frac{320}{64} = 5$.</p>
+        focus: [1, 1, 2]
+        say: "Ở bài 11, bộ nhớ đệm ánh xạ trực tiếp đặt mỗi khối vào đúng một dòng, theo phần chỉ số của địa chỉ. Với 4 dòng, điều đó đúng bằng số dư khi chia số khối cho 4, nên các khối 0, 4 và 8 đều rơi vào dòng 0. Nhắc lại, số khối là địa chỉ chia cho kích thước dòng, ví dụ địa chỉ 320 với dòng 64 byte là khối 5."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: tập, đường, LRU"
+    checks:
+      - "4 // 2 == 2"
+    steps:
+      - show: |
+          <p><b>Kết hợp $k$ đường</b>: các dòng gom thành <b>tập</b>, mỗi tập $k$ dòng. Khối $b$ vào tập số $b \bmod (\text{số tập})$, ở <b>bất kỳ</b> dòng nào trong tập.</p>
+          <p>4 dòng có thể xếp: 4 tập × 1 đường (ánh xạ trực tiếp), 2 tập × 2 đường, hoặc 1 tập × 4 đường (kết hợp hoàn toàn).</p>
+          <p><b>LRU</b>: khi tập đầy, đẩy ra khối <b>lâu nhất chưa được dùng</b>.</p>
+        introduces: [mod]
+        focus: [1, 1, 2, 3]
+        say: "Với kết hợp k đường, các dòng được gom thành các tập, mỗi tập có k dòng. Khối b vào tập có số bằng b chia lấy dư cho số tập, và được ở bất kỳ dòng nào trong tập đó. Bốn dòng có thể xếp thành 4 tập 1 đường, tức ánh xạ trực tiếp, hoặc 2 tập 2 đường, hoặc 1 tập 4 đường, gọi là kết hợp hoàn toàn. Khi tập đầy, chính sách thay thế khối lâu nhất chưa dùng sẽ đẩy ra khối đã lâu nhất không được truy cập."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Một chỗ hay hai chỗ cho mỗi tập"
+    checks:
+      - "alg.cache_hits([0, 4, 0], 2, 2) == 1 and alg.cache_hits([0, 4, 0], 4, 1) == 0 and alg.cache_hits([0, 4, 0, 8, 0], 2, 2) == 2"
+    steps:
+      - show: |
+          <div><svg width="1500" height="370" viewBox="0 0 1500 370"><defs><marker id="arE12" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#b91c1c"/></marker></defs><text x="300" y="40" font-size="24" text-anchor="middle" fill="#1f2937">4 tập × 1 đường</text><text x="200" y="100" font-size="22" text-anchor="end" fill="#1f2937">tập 0</text><rect x="220" y="67" width="160" height="50" fill="#fecaca" stroke="#1f2937" stroke-width="2"/><text x="300" y="100" font-size="24" text-anchor="middle" fill="#b91c1c">?</text><text x="200" y="160" font-size="22" text-anchor="end" fill="#1f2937">tập 1</text><rect x="220" y="127" width="160" height="50" fill="#ffffff" stroke="#1f2937" stroke-width="2"/><text x="300" y="160" font-size="24" text-anchor="middle" fill="#6b7280">trống</text><text x="200" y="220" font-size="22" text-anchor="end" fill="#1f2937">tập 2</text><rect x="220" y="187" width="160" height="50" fill="#ffffff" stroke="#1f2937" stroke-width="2"/><text x="300" y="220" font-size="24" text-anchor="middle" fill="#6b7280">trống</text><text x="200" y="280" font-size="22" text-anchor="end" fill="#1f2937">tập 3</text><rect x="220" y="247" width="160" height="50" fill="#ffffff" stroke="#1f2937" stroke-width="2"/><text x="300" y="280" font-size="24" text-anchor="middle" fill="#6b7280">trống</text><text x="400" y="100" font-size="22" fill="#b91c1c">0, 4, 8 tranh 1 chỗ</text><line x1="760" y1="20" x2="760" y2="350" stroke="#9ca3af" stroke-width="2" stroke-dasharray="8 8"/><text x="1100" y="40" font-size="24" text-anchor="middle" fill="#1f2937">2 tập × 2 đường</text><text x="920" y="130" font-size="22" text-anchor="end" fill="#1f2937">tập 0</text><rect x="940" y="97" width="160" height="50" fill="#bbf7d0" stroke="#1f2937" stroke-width="2"/><text x="1020" y="130" font-size="24" text-anchor="middle" fill="#1f2937">4 (cũ)</text><rect x="1100" y="97" width="160" height="50" fill="#bbf7d0" stroke="#1f2937" stroke-width="2"/><text x="1180" y="130" font-size="24" text-anchor="middle" fill="#1f2937">0 (mới)</text><text x="920" y="200" font-size="22" text-anchor="end" fill="#1f2937">tập 1</text><rect x="940" y="167" width="160" height="50" fill="#ffffff" stroke="#1f2937" stroke-width="2"/><text x="1020" y="200" font-size="24" text-anchor="middle" fill="#6b7280">trống</text><rect x="1100" y="167" width="160" height="50" fill="#ffffff" stroke="#1f2937" stroke-width="2"/><text x="1180" y="200" font-size="24" text-anchor="middle" fill="#6b7280">trống</text><path d="M1380,275 L1380,75 L1020,75 L1020,92" fill="none" stroke="#b91c1c" stroke-width="3" marker-end="url(#arE12)"/><text x="1440" y="300" font-size="22" text-anchor="end" fill="#b91c1c">khối 8 tới: đẩy khối cũ hơn, là 4</text><text x="940" y="340" font-size="22" fill="#15803d">0 và 4 ở chung được: lần gặp lại thì trúng</text></svg></div>
+        focus: [1, 1, 1, 1, 1]
+        say: "Hình đặt cùng 4 dòng theo hai cách xếp. Bên trái là ánh xạ trực tiếp, 4 tập mỗi tập một chỗ, nên các khối 0, 4 và 8 tranh nhau đúng một chỗ ở tập 0, còn ba tập kia bỏ trống. Bên phải là 2 tập, mỗi tập 2 chỗ, nên khối 0 và khối 4 ở chung được trong tập 0, gặp lại thì trúng. Hai khối trong tập được xếp theo thứ tự cũ tới mới, ở đây 0 vừa được dùng nên là mới nhất. Khi khối 8 tới và tập đã đầy, ta đẩy ra khối lâu nhất chưa dùng, là khối 4."
+
+  - id: example
+    kind: example
+    title: "Mô phỏng 2 tập × 2 đường, LRU"
+    checks:
+      - "alg.cache_hits([0, 4, 0, 4, 8, 0, 4], 2, 2) == 2"
+    steps:
+      - show: |
+          <p><b>Bước 1.</b> 2 tập: tập $= b \bmod 2$. Khối 0, 4, 8 đều chẵn → đều vào <b>tập 0</b>, mỗi tập có 2 chỗ.</p>
+          $$0 \bmod 2 = 4 \bmod 2 = 8 \bmod 2 = 0$$
+        focus: [1, 2]
+        say: "Mô phỏng với 2 tập, mỗi tập 2 đường. Bước một, vì số tập là 2, tập của khối là số dư khi chia cho 2, mà 0, 4, 8 đều chẵn, nên mọi khối đều vào tập 0."
+      - show: |
+          <table class="t"><tr><th>khối</th><th>kết quả</th><th>tập 0 sau đó (cũ → mới)</th></tr>
+          <tr><td>0</td><td>trượt</td><td>0</td></tr>
+          <tr><td>4</td><td>trượt</td><td>0, 4</td></tr></table>
+        focus: [0, "1.2", "1.3"]
+        say: "Bước hai, hai lần đầu trượt vì lần đầu gặp. Khối 0 vào chỗ thứ nhất. Khối 4 vào chỗ thứ hai, lúc này tập 0 đã đầy."
+      - show: |
+          <table class="t"><tr><th>khối</th><th>kết quả</th><th>tập 0 sau đó (cũ → mới)</th></tr>
+          <tr><td>0</td><td>$\hl{\text{trúng}}$</td><td>4, 0</td></tr>
+          <tr><td>4</td><td>$\hl{\text{trúng}}$</td><td>0, 4</td></tr></table>
+        focus: [0, "1.2", "1.3"]
+        say: "Bước ba, giờ 0 và 4 cùng ở lại được, nên hai lần sau đều trúng. Khối 0 trúng thì được chuyển về cuối, thành mới nhất. Rồi khối 4 trúng, lại thành mới nhất."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>khối</th><th>kết quả</th><th>tập 0 sau đó (cũ → mới)</th></tr>
+          <tr><td>8</td><td>trượt, đẩy 0</td><td>4, 8</td></tr>
+          <tr><td>0</td><td>trượt, đẩy 4</td><td>8, 0</td></tr>
+          <tr><td>4</td><td>trượt, đẩy 8</td><td>0, 4</td></tr></table>
+          <p>Tổng: $\hl{2}$ lần trúng, so với 0 của ánh xạ trực tiếp.</p>
+        focus: [0, "1.2", ["1.3", "1.4"], 2]
+        say: "Bước bốn, khối 8 tới, tập đầy, nên đẩy khối lâu nhất chưa dùng. Khối lâu nhất chưa dùng lúc đó là 0, vì 4 vừa được dùng. Sau đó 0 và 4 lại lần lượt bị đẩy nhau ra, mỗi lần đều đẩy đúng khối sắp cần. Vậy tổng cộng 2 lần trúng, so với 0 lần của ánh xạ trực tiếp."
+
+  - id: misses
+    kind: concept
+    title: "Ba loại trượt"
+    checks:
+      - "alg.cache_hits([0, 4, 0, 4, 8, 0, 4], 1, 4) == 4"
+    steps:
+      - show: |
+          <table class="t"><tr><th>loại</th><th>nguyên nhân</th><th>giảm bằng</th></tr>
+          <tr><td>bắt buộc</td><td>lần đầu gặp khối</td><td>dòng lớn hơn, nạp trước</td></tr>
+          <tr><td>dung lượng</td><td>dữ liệu dùng nhiều hơn sức chứa</td><td>bộ nhớ đệm lớn hơn</td></tr>
+          <tr><td>xung đột</td><td>nhiều khối tranh một tập dù còn chỗ</td><td>thêm đường</td></tr></table>
+          <p class="note">Cùng dãy trên, kết hợp hoàn toàn 4 dòng: 4 lần trúng — chỉ còn 3 trượt bắt buộc (khối 0, 4, 8 lần đầu).</p>
+        focus: [0, "1.2", "1.3", "1.4", 2]
+        say: "Có ba loại trượt khi tìm trong bộ nhớ đệm. Trượt bắt buộc xảy ra lần đầu gặp một khối, giảm được bằng dòng lớn hơn hoặc nạp trước. Trượt do dung lượng xảy ra khi dữ liệu đang dùng nhiều hơn sức chứa, chỉ giảm được bằng bộ nhớ đệm lớn hơn. Trượt do xung đột xảy ra khi nhiều khối tranh một tập dù còn chỗ, giảm được bằng cách thêm đường. Với cùng dãy truy cập, bộ nhớ đệm kết hợp hoàn toàn 4 dòng trúng 4 lần, chỉ còn 3 lần trượt bắt buộc."
+
+  # ───────────────────────── 5. ĐÁNH ĐỔI ─────────────────────────
+  - id: tradeoff
+    kind: concept
+    title: "Vì sao không luôn kết hợp hoàn toàn?"
+    steps:
+      - show: |
+          <p>Kết hợp $k$ đường phải so thẻ ở <b>$k$ dòng cùng lúc</b>: nhiều bộ so sánh hơn, tốn điện hơn, chậm hơn một chút.</p>
+          <p>Bộ nhớ đệm thật thường dùng 4 đến 16 đường — đủ giảm phần lớn trượt do xung đột với chi phí vừa phải.</p>
+        focus: [1, 1, 2]
+        say: "Vì sao không luôn dùng kết hợp hoàn toàn? Vì bộ nhớ đệm k đường phải so thẻ ở k dòng cùng một lúc, cần nhiều bộ so sánh hơn, tốn điện hơn và chậm hơn một chút. Bộ nhớ đệm thật thường dùng từ 4 đến 16 đường, đủ giảm phần lớn trượt do xung đột với chi phí vừa phải."
+
+  # ───────────────────────── 6. TỰ KIỂM ─────────────────────────
+  - id: verify
+    kind: check
+    title: "Tự kiểm: đếm theo loại trượt, và cho máy chạy"
+    checks:
+      - "alg.cache_hits([0, 4, 0, 4, 8, 0, 4], 2, 2) <= alg.cache_hits([0, 4, 0, 4, 8, 0, 4], 1, 4)"
+      - "len(set([0, 4, 0, 4, 8, 0, 4])) == 3 and 3 + 2 == 5 and 7 - 5 == 2"
+      - "[alg.cache_hits([0, 4, 0, 4, 8, 0, 4], s, w) for s, w in ((4, 1), (2, 2), (1, 4))] == [0, 2, 4]"
+    steps:
+      - show: |
+          <table class="t"><tr><th>đếm trượt ở 2 tập × 2 đường</th><th>số lần</th></tr>
+          <tr><td>bắt buộc: số khối khác nhau là 0, 4, 8</td><td>3</td></tr>
+          <tr><td>do xung đột: 3 lần cuối, khối từng có rồi bị đẩy</td><td>2</td></tr>
+          <tr><td>tổng trượt; trúng $= 7 - 5$</td><td>5; $\hl{2}$ ✓</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Kiểm bằng đường khác, ta không lần lại bảng mà đếm theo loại trượt. Trượt bắt buộc bằng số khối khác nhau trong dãy, là 0, 4 và 8, tức 3 lần. Trong ba lần trượt cuối, khối 8 là lần đầu gặp nên đã nằm trong 3 lần kia, còn khối 0 và 4 từng có rồi bị đẩy, đó là 2 lần trượt do xung đột. Tổng 5 lần trượt, nên trúng là 7 trừ 5, bằng 2, khớp mô phỏng."
+      - show: |
+          <table class="t"><tr><th>cho máy mô phỏng cùng dãy</th><th>4 tập × 1 đường</th><th>2 tập × 2 đường</th><th>1 tập × 4 đường</th></tr>
+          <tr><td>số lần trúng</td><td>0</td><td>2 ✓</td><td>4</td></tr></table>
+        focus: [1, 1]
+        say: "Cho máy mô phỏng chạy cùng dãy với cả ba cách xếp 4 dòng, ta được 0, 2 và 4 lần trúng. Số ở giữa khớp kết quả tính tay, và càng nhiều đường thì càng ít trượt do xung đột."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>phép thử nhanh</th></tr>
+          <tr><td>Ghi trạng thái từng tập theo thứ tự cũ → mới sau mỗi truy cập; trúng thì chuyển khối về cuối.</td></tr>
+          <tr><td>Số lần trượt bắt buộc = số khối <b>khác nhau</b> trong dãy.</td></tr>
+          <tr><td>Thêm đường không làm giảm trượt bắt buộc.</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Tự kiểm bằng ba cách. Một, ghi trạng thái từng tập theo thứ tự cũ tới mới sau mỗi lần truy cập, và khi trúng thì chuyển khối đó về cuối. Hai, số lần trượt bắt buộc bằng số khối khác nhau trong dãy, ở đây là 3. Ba, thêm đường không làm giảm trượt bắt buộc, vì lần đầu gặp thì khối chưa có trong bộ nhớ đệm."
+
+  # ───────────────────────── 7. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi người mới hay mắc"
+    checks:
+      - "320 // 64 == 5 and 5 % 2 == 1 and 320 % 2 == 0"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Quên cập nhật thứ tự khi <b>trúng</b> <b class="red">(sai)</b>
+          <br><span class="note">LRU tính theo lần <b>dùng</b> gần nhất, không phải lần nạp — khối vừa trúng trở thành mới nhất.</span></div>
+        say: "Lỗi thứ nhất, quên cập nhật thứ tự khi trúng. Chính sách này tính theo lần dùng gần nhất, không phải lần nạp vào, nên khối vừa trúng trở thành mới nhất."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Tính tập bằng số địa chỉ thay vì số khối <b class="red">(sai)</b>
+          <br><span class="note">Phải chia địa chỉ cho cỡ dòng trước, rồi mới chia lấy dư cho số tập, ví dụ dòng 64 byte, 2 tập:</span>
+          $$\frac{320}{64} = 5, \quad 5 \bmod 2 = 1$$</div>
+        say: "Lỗi thứ hai, tính tập bằng số địa chỉ thay vì số khối. Phải chia địa chỉ cho kích thước dòng trước, rồi mới chia lấy dư cho số tập."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Nghĩ thêm đường luôn tăng tỉ lệ trúng rõ rệt <b class="red">(chưa chắc)</b>
+          <br><span class="note">Khi trượt chủ yếu do dung lượng, thêm đường gần như không giúp — phải tăng dung lượng hoặc đổi mẫu truy cập.</span></div>
+        say: "Lỗi thứ ba, nghĩ thêm đường luôn tăng tỉ lệ trúng rõ rệt. Khi trượt chủ yếu do dung lượng, thêm đường gần như không giúp, phải tăng dung lượng hoặc đổi cách truy cập dữ liệu."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Nghĩ LRU luôn tối ưu <b class="red">(sai)</b>
+          <br><span class="note">Duyệt vòng một mảng lớn hơn bộ nhớ đệm một chút: LRU luôn đẩy ra đúng khối sắp cần — trượt mọi lần.</span></div>
+        say: "Lỗi thứ tư, nghĩ chính sách này luôn tối ưu. Khi duyệt vòng một mảng lớn hơn bộ nhớ đệm một chút, nó luôn đẩy ra đúng khối sắp cần đến, nên trượt mọi lần."
+
+  # ───────────────────────── 8. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.cache_hits([0, 2, 4, 0, 2, 4], 2, 2) == 0 and alg.cache_hits([0, 2, 4, 0, 2, 4], 1, 3) == 3"
+      - "[b % 2 for b in (0, 2, 4)] == [0, 0, 0] and len(set([0, 2, 4, 0, 2, 4])) == 3 and 6 - 3 == 3"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Bộ nhớ đệm 2 tập × 2 đường, LRU, dãy khối $0, 2, 4, 0, 2, 4$: bao nhiêu lần trúng?</td></tr>
+          <tr><td>2</td><td>Nếu là kết hợp hoàn toàn 3 dòng thì sao?</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, bộ nhớ đệm 2 tập 2 đường, thay khối lâu nhất chưa dùng, với dãy khối 0, 2, 4, 0, 2, 4, có bao nhiêu lần trúng? Câu hai, nếu là kết hợp hoàn toàn 3 dòng thì sao? Dừng video và làm ra giấy."
+        pause: 10
+      - show: |
+          <table class="t"><tr><th>khối</th><th>0</th><th>2</th><th>4</th><th>0</th><th>2</th><th>4</th></tr>
+          <tr><td>kết quả</td><td>trượt</td><td>trượt</td><td>trượt, đẩy 0</td><td>trượt, đẩy 2</td><td>trượt, đẩy 4</td><td>trượt, đẩy 0</td></tr>
+          <tr><td>tập 0 (cũ → mới)</td><td>0</td><td>0, 2</td><td>2, 4</td><td>4, 0</td><td>0, 2</td><td>2, 4</td></tr></table>
+          <p>① $\hl{0}$ lần trúng.</p>
+        focus: [0, 1, 1, 2]
+        say: "Đáp án câu một, cả ba khối đều chẵn nên vào cùng tập 0, mà tập chỉ có 2 chỗ. Lần theo bảng, khối 4 tới thì đẩy 0, khối 0 quay lại thì đẩy 2, cứ thế mãi. Mỗi lần đều đẩy ra đúng khối sắp cần, nên 0 lần trúng. Đây chính là kiểu duyệt vòng làm chính sách này thua, như lỗi thứ tư."
+      - show: |
+          <table class="t"><tr><th>kết hợp hoàn toàn 3 dòng</th><th>số lần</th></tr>
+          <tr><td>trượt bắt buộc: 0, 2, 4 lần đầu</td><td>3</td></tr>
+          <tr><td>3 lần sau: cả ba khối vẫn còn</td><td>$\hl{3}$ trúng</td></tr></table>
+        focus: ["1.2", "1.3"]
+        say: "Câu hai, ba lần đầu là trượt bắt buộc, không cách xếp nào tránh được. Sau đó 3 dòng giữ được cả ba khối, nên 3 lần truy cập sau đều trúng."
+
+  # ───────────────────────── 9. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">tập: khối được chọn $k$ chỗ</span><span class="a">→</span>
+          <span class="n">LRU: đẩy khối lâu nhất chưa dùng</span><span class="a">→</span>
+          <span class="n">bắt buộc, dung lượng, xung đột</span><span class="a">→</span>
+          <span class="n">thêm đường chỉ chữa xung đột</span></div>
+        say: "Tổng kết lại, bộ nhớ đệm kết hợp theo tập cho mỗi khối được chọn k chỗ trong tập của nó. Khi đầy, đẩy ra khối lâu nhất chưa dùng. Có ba loại trượt, bắt buộc, dung lượng và xung đột, và thêm đường chỉ chữa được trượt do xung đột."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> cùng một ý “chọn cái gì để bỏ khi đầy” quay lại ở thay trang của hệ điều hành và bộ nhớ đệm của trình duyệt, cơ sở dữ liệu.</div>
+        focus: [1, 1]
+        say: "Điều cần mang theo, câu hỏi chọn cái gì để bỏ khi đầy sẽ quay lại nhiều lần. Ta gặp nó ở việc thay trang của hệ điều hành, và ở bộ nhớ đệm của trình duyệt hay cơ sở dữ liệu."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 13): <b>định luật Amdahl</b> — giới hạn của việc chạy song song.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 13, ta học giới hạn của việc chạy song song trên nhiều lõi. Hẹn gặp bạn ở bài tiếp theo."

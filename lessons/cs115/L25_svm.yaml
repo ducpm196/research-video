@@ -1,0 +1,292 @@
+id: L25
+series: "CS115 · Toán cho Khoa học Máy tính"
+title: "Bài 25 — Support Vector Machine: lề lớn nhất, hinge loss & kernel"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "DC23#Ch5; tex#L406 (SVM: hinge loss + phạt L2, tối đa hoá lề); AUDIT T19 (lề = 2/‖w‖)"
+assumes: [cdot, sub, vec, transpose, implies, norm, sum, alpha, lambda, phi, exp, geq, neq, approx, mat, sqrt, power, log, sub2]
+# Quy ước ký hiệu: nhãn yᵢ ∈ {−1; +1} viết “y bằng âm 1 hoặc 1” (KHÁC bài 20 dùng 0/1 — nói ở notation_note); điểm số f(x) = wᵀx + b;
+#   lề (margin) = 2/‖w‖; nhân tử αᵢ ≥ 0 như bài 24; hàm nhân (kernel) k(x, z); phạt L2 viết λ‖w‖² như bài 19.
+# Lời đọc: nói tên Việt “máy vector hỗ trợ”, “hàm mất mát bản lề”, “hàm nhân”; tên tiếng Anh chỉ hiện trên màn hình.
+# Nối bài trước (nói lại khi dùng, luật 17): bài 1 (khoảng cách, tích vô hướng, độ dài), bài 19 (phạt L2), bài 20 (logistic, ranh giới
+#   là đường thẳng), bài 24 (KKT: α ≥ 0, điều kiện bù α·h = 0), bài 15 (ma trận đối xứng xác định dương ⇔ trị riêng dương).
+# Sửa nguồn (curriculum fix): lề = 2/‖w‖ sau khi chuẩn hoá y(wᵀx + b) ≥ 1; lề mềm = hinge + L2 (tex dòng 406); kernel phải cho ma trận
+#   Gram nửa xác định dương.
+objectives:
+  - "Hiểu ý tưởng lề lớn nhất và tính được lề = 2/‖w‖"
+  - "Đọc bài toán tối ưu của SVM và vai trò của các vector hỗ trợ (qua KKT)"
+  - "Dùng hàm mất mát bản lề cho dữ liệu không tách được; so với logistic"
+  - "Hiểu mẹo hàm nhân: tách được dữ liệu cong mà không tính φ(x)"
+  - "Biết điều kiện để một hàm là hàm nhân hợp lệ"
+asr_reviewed:
+  - sentence: "Hai đường điểm số bằng 1 và âm 1 cách ranh giới một chia độ dài w, nên lề bằng 2 chia độ dài w."
+    reason: "w đọc tên chữ cái, ASR chép “vk”; ranh→tranh, chia→chi lẫn phụ âm (lặp lại ở nhiều câu tham khảo) — cần người nghe"
+  - sentence: "Lớn nhất bằng đúng 2 tại hướng 1, 0, khớp với lề và hướng của w."
+    reason: "w đọc “vê kép” chép “V két”; lề→lệ lẫn thanh"
+  - sentence: "Câu một, độ dài w bằng 5, nên lề bằng 2 chia 5, bằng 0 phẩy 4."
+    reason: "w đọc “vê kép” chép “v kết”; nên→nền lẫn thanh"
+  - sentence: "Vì w là tổng các điểm hỗ trợ, điểm số chỉ cần các tích vô hướng, nên ta thay tất cả bằng hàm nhân."
+    reason: "w đọc tên chữ cái, ASR chép “VCAP”"
+  - sentence: "Lỗi thứ ba, tự chế hàm nhân mà không kiểm ma trận Gram."
+    reason: "Gram (tên riêng, ma trận Gram) ASR chép “gam”; lỗi→lội lẫn thanh"
+  - sentence: "Hàm nhân hợp lệ khi ma trận Gram nửa xác định dương."
+    reason: "Gram (tên riêng) ASR chép “ram”"
+  - sentence: "Câu một tính độ rộng của lề."
+    reason: "tính→tín, lề→Lê lẫn thanh; câu đã viết dài hơn một lần — cần người nghe"
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Nhiều đường thẳng tách được — đường nào an toàn nhất?"
+    steps:
+      - show: |
+          <div class="row"><div class="col"><svg width="500" height="400" viewBox="0 0 480 400">
+            <line x1="40" y1="200" x2="460" y2="200" stroke="#e5e7eb" stroke-width="2"/>
+            <line x1="180" y1="20" x2="180" y2="380" stroke="#9ca3af" stroke-width="2" stroke-dasharray="6 6"/>
+            <line x1="300" y1="20" x2="300" y2="380" stroke="#9ca3af" stroke-width="2" stroke-dasharray="6 6"/>
+            <line x1="240" y1="20" x2="240" y2="380" stroke="#059669" stroke-width="5"/>
+            <line x1="170" y1="380" x2="250" y2="20" stroke="#dc2626" stroke-width="3"/>
+            <circle cx="300" cy="200" r="11" fill="#d97706"/><circle cx="360" cy="140" r="11" fill="#d97706"/><circle cx="360" cy="260" r="11" fill="#d97706"/>
+            <circle cx="180" cy="200" r="11" fill="#2563eb"/><circle cx="120" cy="140" r="11" fill="#2563eb"/><circle cx="120" cy="260" r="11" fill="#2563eb"/>
+            <g font-size="20"><text x="246" y="40" fill="#059669">lề lớn nhất</text><text x="130" y="375" fill="#dc2626">sát điểm</text></g>
+          </svg></div>
+          <div class="col"><p><span style="color:#d97706">●</span> lớp +1 &nbsp; <span style="color:#2563eb">●</span> lớp −1</p>
+          <p>Đường <span style="color:#dc2626">đỏ</span> và đường <span style="color:#059669">xanh lá</span> đều tách đúng. Nhưng đường đỏ đi sát một điểm: dữ liệu mới hơi lệch là sai.</p>
+          <p>Đường xanh lá cách đều hai lớp, <b>dải trống</b> (lề) giữa hai đường nét đứt rộng nhất.</p></div></div>
+        say: "Chào bạn, hai lớp điểm này tách được bằng nhiều đường thẳng. Đường đỏ tách đúng nhưng đi sát một điểm, dữ liệu mới hơi lệch là sai. Đường xanh lá cách đều hai lớp, và dải trống giữa hai đường nét đứt rộng nhất."
+      - show: |
+          <div class="box key">Hôm nay: máy vector hỗ trợ (Support Vector Machine, SVM) — chọn đường có <b>lề lớn nhất</b>; hàm mất mát bản lề (hinge loss); và mẹo hàm nhân (kernel) cho dữ liệu cong.</div>
+        say: "Hôm nay ta học máy vector hỗ trợ, mô hình chọn đường có lề lớn nhất, cùng hàm mất mát bản lề cho dữ liệu lẫn lộn, và mẹo hàm nhân cho dữ liệu cong."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn nền: ranh giới tuyến tính và KKT"
+    steps:
+      - show: |
+          <p>Bài 20: ranh giới $\mathbf{w}^T\mathbf{x} + b = 0$ là một đường thẳng; $\mathbf{w}$ vuông góc với nó. Khoảng cách từ điểm $\mathbf{x}$ tới đường (bài 1: chia cho độ dài):</p>
+          $$\text{khoảng cách} = \frac{|\mathbf{w}^T\mathbf{x} + b|}{\lVert\mathbf{w}\rVert}$$
+          <p>Bài 24: ràng buộc $h \le 0$ có nhân tử $\alpha \ge 0$ và điều kiện bù $\alpha\cdot h = 0$.</p>
+        focus: ["1.1", 2, 3]
+        say: "Nhắc lại bài 20, ranh giới w chuyển vị x cộng b bằng 0 là một đường thẳng, và w vuông góc với nó. Khoảng cách từ một điểm tới đường bằng giá trị tuyệt đối của điểm số chia độ dài của w. Nhắc lại bài 24, mỗi ràng buộc có nhân tử an-pha không âm và điều kiện bù."
+
+  # ───────────────────────── 3. LỀ ─────────────────────────
+  - id: sym_margin
+    kind: symbol
+    title: "Giải mã: nhãn ±1, ràng buộc y(wᵀx + b) ≥ 1 và lề 2/‖w‖"
+    checks:
+      - "(lambda X, y, w, b: (y*(X @ w + b)).tolist() == [1, 2, 2, 1, 2, 2])(np.array([[2, 0], [3, 1], [3, -1], [0, 0], [-1, 1], [-1, -1.]]), np.array([1, 1, 1, -1, -1, -1.]), np.array([1, 0.]), -1)"
+      - "2/np.linalg.norm([1, 0.]) == 2.0"
+    steps:
+      - show: |
+          <p>SVM dùng nhãn $y_i = +1$ hoặc $-1$. Đúng phía và đủ xa nghĩa là:</p>
+          $$y_i\,(\mathbf{w}^T\mathbf{x}_i + b) \ge 1\ \ \text{với mọi}\ i \quad\implies\quad \text{lề} = \frac{2}{\lVert\mathbf{w}\rVert}$$
+          <p class="note">Lý do: mỗi đường $\pm 1$ cách ranh giới $\dfrac{1}{\lVert\mathbf{w}\rVert}$ (công thức khoảng cách ở trên). Bài 20 dùng nhãn 0 và 1; SVM dùng −1 và +1 để viết gọn một ràng buộc cho cả hai lớp.</p>
+        notation_note: true
+        focus: [1, 2, 3]
+        say: "Máy vector hỗ trợ dùng nhãn 1 và âm 1. Ràng buộc nhãn nhân điểm số lớn hơn hoặc bằng 1 nghĩa là mọi điểm nằm đúng phía và đủ xa. Hai đường điểm số bằng 1 và âm 1 cách ranh giới một chia độ dài w, nên lề bằng 2 chia độ dài w."
+      - show: |
+          <p>Ví dụ: $\mathbf{w} = (1;\ 0)$, $b = -1$ (ranh giới $x_1 = 1$): $\ y_i(\mathbf{w}^T\mathbf{x}_i + b) = 1, 2, 2, 1, 2, 2$ — đều $\ge 1$ ✓, &nbsp; lề $= \frac{2}{1} = \hlg{2}$</p>
+        say: "Ví dụ với w bằng 1, 0 và b bằng âm 1, ranh giới là đường dọc x một bằng 1. Nhãn nhân điểm số của sáu điểm là 1, 2, 2, 1, 2, 2, đều lớn hơn hoặc bằng 1, và lề bằng 2."
+
+  - id: margin_pic
+    kind: intuition
+    title: "Nhìn lề: một dải trống, hai mép chạm đúng hai điểm"
+    checks:
+      - "(lambda w, b: [float(w @ np.array(x) + b) for x in ((0, 0), (1, 5), (2, 0))] == [-1.0, 0.0, 1.0])(np.array([1, 0.]), -1)"
+      - "(lambda X, w, b: sorted(set((np.abs(X @ w + b)/np.linalg.norm(w)).tolist())) == [1.0, 2.0])(np.array([[2, 0], [3, 1], [3, -1], [0, 0], [-1, 1], [-1, -1.]]), np.array([1, 0.]), -1)"
+    steps:
+      - show: |
+          <svg width="900" height="440" viewBox="0 0 900 440"><defs><marker id="ar25" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs><rect x="330" y="70" width="240" height="300" fill="#ecfdf5"/><line x1="120" y1="230" x2="820" y2="230" stroke="#e5e7eb" stroke-width="2"/><line x1="330" y1="70" x2="330" y2="370" stroke="#6b7280" stroke-width="3" stroke-dasharray="10 8"/><line x1="570" y1="70" x2="570" y2="370" stroke="#6b7280" stroke-width="3" stroke-dasharray="10 8"/><line x1="450" y1="70" x2="450" y2="370" stroke="#059669" stroke-width="5"/><circle cx="570" cy="230" r="13" fill="#d97706"/><circle cx="690" cy="130" r="13" fill="#d97706"/><circle cx="690" cy="330" r="13" fill="#d97706"/><circle cx="330" cy="230" r="13" fill="#2563eb"/><circle cx="210" cy="130" r="13" fill="#2563eb"/><circle cx="210" cy="330" r="13" fill="#2563eb"/><circle cx="570" cy="230" r="24" fill="none" stroke="#059669" stroke-width="3"/><circle cx="330" cy="230" r="24" fill="none" stroke="#059669" stroke-width="3"/><line x1="334" y1="405" x2="566" y2="405" stroke="#1f2937" stroke-width="3" marker-start="url(#ar25)" marker-end="url(#ar25)"/><g font-size="22" text-anchor="middle" fill="#1f2937"><text x="330" y="55">điểm số = −1</text><text x="450" y="30" fill="#059669">điểm số = 0</text><text x="570" y="55">điểm số = +1</text><text x="450" y="432">lề = 2 / 1 = 2</text><text x="390" y="200" fill="#2563eb">(0; 0)</text><text x="632" y="200" fill="#d97706">(2; 0)</text></g><g font-size="20" fill="#059669"><text x="740" y="190">vòng lục:</text><text x="740" y="216">vector hỗ trợ</text></g></svg>
+        say: "Hình vẽ lại sáu điểm của ví dụ với ranh giới màu lục, đường dọc x một bằng 1, nơi điểm số bằng 0. Hai đường nét đứt là nơi điểm số bằng âm 1 và cộng 1, tức x một bằng 0 và x một bằng 2. Dải trống màu nhạt giữa chúng chính là lề, rộng 2 chia độ dài w, bằng 2. Mép trái chạm đúng điểm xanh 0, 0, mép phải chạm đúng điểm cam 2, 0, và hai điểm có vòng lục này là vector hỗ trợ. Bốn điểm còn lại nằm xa hơn, nên dời chúng một chút thì dải trống không đổi."
+
+  # ───────────────────────── 4. BÀI TOÁN TỐI ƯU ─────────────────────────
+  - id: optimization
+    kind: formula
+    title: "Lề lớn nhất ⟺ ‖w‖ nhỏ nhất; vector hỗ trợ"
+    checks:
+      - "(lambda X, y, a: ((a*y) @ X).tolist() == [1.0, 0.0] and float((a*y).sum()) == 0.0)(np.array([[2, 0], [3, 1], [3, -1], [0, 0], [-1, 1], [-1, -1.]]), np.array([1, 1, 1, -1, -1, -1.]), np.array([0.5, 0, 0, 0.5, 0, 0]))"
+    steps:
+      - show: |
+          <p>Lề $\dfrac{2}{\lVert\mathbf{w}\rVert}$ lớn nhất ⟺ $\lVert\mathbf{w}\rVert$ nhỏ nhất. Viết thành bài toán lồi (bài 11, 24):</p>
+          $$\text{cực tiểu}\ \ \frac{1}{2}\lVert\mathbf{w}\rVert^2 \quad \text{với}\ \ 1 - y_i(\mathbf{w}^T\mathbf{x}_i + b) \le 0,\ \ \text{nhân tử}\ \alpha_i \ge 0$$
+          <p>Điều kiện dừng (bài 24) cho: $\ \mathbf{w} = \sum_{i}\alpha_i y_i\mathbf{x}_i$, &nbsp; $\sum_{i}\alpha_i y_i = 0$.</p>
+        focus: [1, 2, "3.1"]
+        say: "Lề lớn nhất cũng là độ dài w nhỏ nhất. Vì vậy ta viết thành bài toán lồi, cực tiểu một nửa độ dài w bình phương, với mỗi điểm một ràng buộc. Điều kiện dừng của bài 24 cho w bằng tổng an-pha i nhân nhãn nhân điểm."
+      - show: |
+          <p>Điều kiện bù $\alpha_i\cdot\big(1 - y_i(\mathbf{w}^T\mathbf{x}_i + b)\big) = 0$: điểm nằm <b>xa hơn lề</b> có $\alpha_i = 0$.</p>
+          <p>Ví dụ: chỉ $(2;\ 0)$ và $(0;\ 0)$ nằm đúng trên lề: $\ \alpha = 0{,}5$ cho hai điểm đó, 0 cho bốn điểm còn lại. Kiểm: $\ 0{,}5\cdot(2;\ 0) - 0{,}5\cdot(0;\ 0) = (1;\ 0) = \mathbf{w}$ ✓</p>
+          <div class="box key">Chỉ các điểm nằm trên lề — <b>vector hỗ trợ</b> — quyết định đường ranh giới. Bỏ các điểm khác đi, kết quả không đổi.</div>
+        focus: [1, 2, 3]
+        say: "Theo điều kiện bù, điểm nằm xa hơn lề có an-pha bằng 0. Trong ví dụ, chỉ hai điểm nằm đúng trên lề, mỗi điểm có an-pha 0 phẩy 5, và tổng của chúng cho đúng w. Các điểm trên lề gọi là vector hỗ trợ, và chỉ chúng quyết định ranh giới."
+
+  # ───────────────────────── 5. HINGE LOSS ─────────────────────────
+  - id: hinge
+    kind: concept
+    title: "Lề mềm: hàm mất mát bản lề khi dữ liệu lẫn lộn"
+    checks:
+      - "[max(0, 1 - t) for t in (2, 1, 0.5, -1)] == [0, 0, 0.5, 2] and [round(math.log(1 + math.exp(-t)), 3) for t in (2, 1, 0.5, -1)] == [0.127, 0.313, 0.474, 1.313]"
+    steps:
+      - show: |
+          <p>Dữ liệu thật thường lẫn lộn, không tách được hoàn toàn. Cho phép vi phạm nhưng phạt (hinge loss + phạt L2):</p>
+          <div class="box key">cực tiểu $\ \lambda\lVert\mathbf{w}\rVert^2 + \dfrac{1}{N}\sum_{i}\max\big(0,\ 1 - y_i f(\mathbf{x}_i)\big)$, &nbsp; $f(\mathbf{x}) = \mathbf{w}^T\mathbf{x} + b$</div>
+          <p class="note">$\max(a, b)$: số lớn hơn trong hai số — nên $\max(0, 1 - yf)$ bằng 0 khi $yf \ge 1$, bằng $1 - yf$ khi ngược lại.</p>
+          <table class="t"><tr><th>$y\cdot f$</th><th>2</th><th>1</th><th>0,5</th><th>−1</th></tr>
+          <tr><td>bản lề $\max(0, 1 - yf)$</td><td>$\hlg{0}$</td><td>$\hlg{0}$</td><td>0,5</td><td>2</td></tr>
+          <tr><td>logistic $\ln(1 + e^{-yf})$</td><td>0,127</td><td>0,313</td><td>0,474</td><td>1,313</td></tr></table>
+        introduces: [max_fn]
+        focus: [[1, 2], "4.2", "4.2", "4.3"]
+        say: "Dữ liệu thật thường lẫn lộn, nên ta cho phép vi phạm nhưng phạt, bằng hàm mất mát bản lề cộng phạt L2. Điểm đúng phía và ngoài lề bị phạt đúng 0. Điểm trong lề hoặc sai phía bị phạt tăng dần. Còn hàm logistic thì không bao giờ bằng 0."
+      - show: |
+          <p class="note">Bản lề bằng đúng 0 với điểm ngoài lề → các điểm đó không ảnh hưởng nghiệm, nên SVM chỉ phụ thuộc vài vector hỗ trợ. $\lambda$ lớn: lề rộng, chấp nhận nhiều vi phạm; $\lambda$ nhỏ: lề hẹp — chọn bằng kiểm định (bài 19).</p>
+        say: "Vì bản lề bằng đúng 0 ở các điểm ngoài lề, chúng không ảnh hưởng nghiệm. Lam-đa lớn cho lề rộng và chấp nhận nhiều vi phạm, lam-đa nhỏ cho lề hẹp, và lam-đa được chọn bằng kiểm định như bài 19."
+
+  # ───────────────────────── 6. KERNEL ─────────────────────────
+  - id: kernel
+    kind: example
+    title: "Ví dụ: mẹo hàm nhân cho dữ liệu cong"
+    checks:
+      - "(lambda x: (x**2 >= 2.5).tolist() == [True, False, False, True])(np.array([-2, -1, 1, 2.]))"
+      - "(2*3 + 1)**2 == 49 and abs(np.dot([1, math.sqrt(2)*2, 4], [1, math.sqrt(2)*3, 9]) - 49) < 1e-12"
+    steps:
+      - show: |
+          <table class="t"><tr><th>$x$</th><td>−2</td><td>−1</td><td>1</td><td>2</td><th>tách được?</th></tr>
+          <tr><th>nhãn</th><td>+1</td><td>−1</td><td>−1</td><td>+1</td><td>một chiều: không điểm cắt nào</td></tr>
+          <tr><th>$x^2$</th><td>4</td><td>1</td><td>1</td><td>4</td><td>$\phi(x) = (x;\ x^2)$: đường ngang $x^2 = 2{,}5$ ✓</td></tr></table>
+          <div class="box key">Hàm nhân $k(\mathbf{x}, \mathbf{z}) = \phi(\mathbf{x})^T\phi(\mathbf{z})$: tính tích vô hướng sau khi biến đổi <b>mà không cần tính</b> $\phi$. Ví dụ $k(x, z) = (xz + 1)^2$ ứng với $\phi(x) = (1;\ \sqrt{2}x;\ x^2)$.</div>
+        focus: ["1.2", "1.3", "2.1"]
+        say: "Ví dụ dữ liệu một chiều với nhãn cộng, trừ, trừ, cộng, không điểm cắt nào tách được. Thêm đặc trưng x bình phương, các điểm nằm trên hai độ cao 4 và 1, và một đường ngang tách được. Hàm nhân tính tích vô hướng sau khi biến đổi mà không cần tính phép biến đổi."
+      - show: |
+          <p><b>Làm thử ngay</b> với $x = 2$, $z = 3$:</p>
+          $$(2\cdot 3 + 1)^2 = 49, \qquad \phi(2)^T\phi(3) = 1 + 2\cdot 6 + 4\cdot 9 = \hlg{49}\ \checkmark$$
+          <p class="note">Vì $\mathbf{w} = \sum\alpha_i y_i\mathbf{x}_i$, điểm số chỉ cần tích vô hướng: $\ f(\mathbf{x}) = \sum_i\alpha_i y_i\,k(\mathbf{x}_i, \mathbf{x}) + b$. Hàm nhân Gauss $\ k = e^{-\lVert\mathbf{x} - \mathbf{z}\rVert^2/(2s^2)}$ ứng với vô số đặc trưng.</p>
+        focus: [1, 2, 3]
+        say: "Làm thử ngay với x bằng 2, z bằng 3. Hàm nhân cho 7 bình phương, bằng 49, và tích vô hướng sau biến đổi cũng bằng 49. Vì w là tổng các điểm hỗ trợ, điểm số chỉ cần các tích vô hướng, nên ta thay tất cả bằng hàm nhân."
+
+  # ───────────────────────── 7. ĐIỀU KIỆN HÀM NHÂN ─────────────────────────
+  - id: valid_kernel
+    kind: concept
+    title: "Hàm nào được làm hàm nhân?"
+    checks:
+      - "sorted(np.linalg.eigvalsh(np.array([[0, -1], [-1, 0.]])).tolist()) == [-1.0, 1.0]"
+      - "(lambda K: bool(np.all(np.linalg.eigvalsh(K) >= -1e-12)))(np.array([[(a*b + 1)**2 for b in (-2, -1, 1, 2)] for a in (-2, -1, 1, 2.)]))"
+    steps:
+      - show: |
+          <p>Ma trận Gram: $K_{ij} = k(\mathbf{x}_i, \mathbf{x}_j)$ — đối xứng. Để $k$ là tích vô hướng thật, $K$ phải <b>nửa xác định dương</b>: mọi trị riêng $\ge 0$ (như ma trận hiệp phương sai bài 15).</p>
+          <p>Phản ví dụ: $k(x, z) = -(x - z)^2$ với hai điểm 0 và 1:</p>
+          $$K = \begin{bmatrix} 0 & -1 \\ -1 & 0 \end{bmatrix}, \quad \text{trị riêng}\ \hlo{-1}\ \text{và}\ 1 \ \implies\ \text{không hợp lệ}$$
+          <p class="note">$(xz + 1)^2$ trên 4 điểm ví dụ: mọi trị riêng của $K$ đều $\ge 0$ ✓</p>
+        focus: [0, 1, [2, 3]]
+        say: "Không phải hàm nào cũng được. Ma trận Gram gom hàm nhân của mọi cặp điểm, và để hàm nhân là tích vô hướng thật, ma trận này phải có mọi trị riêng không âm, giống ma trận hiệp phương sai ở bài 15. Hàm âm bình phương khoảng cách cho trị riêng âm 1, nên không hợp lệ."
+
+  # ───────────────────────── 8. KIỂM BẰNG MÁY ─────────────────────────
+  - id: verify
+    kind: check
+    title: "Phép thử: dò mọi hướng, lề lớn nhất đúng bằng 2"
+    checks:
+      - "(lambda X, w, b: (np.abs(X @ w + b)/np.linalg.norm(w)).tolist() == [1.0, 2.0, 2.0, 1.0, 2.0, 2.0])(np.array([[2, 0], [3, 1], [3, -1], [0, 0], [-1, 1], [-1, -1.]]), np.array([1, 0.]), -1)"
+      - "(lambda P, N: round(max(float((P @ u).min() - (N @ u).max()) for u in [np.array([math.cos(t), math.sin(t)]) for t in np.linspace(0, 2*math.pi, 3601)]), 4) == 2.0)(np.array([[2, 0], [3, 1], [3, -1.]]), np.array([[0, 0], [-1, 1], [-1, -1.]]))"
+    steps:
+      - show: |
+          <p>Máy thử 3601 hướng $\mathbf{u}$ (độ dài 1), đo khoảng trống giữa bóng hai lớp trên $\mathbf{u}$ (bài 1):</p>
+          <table class="t"><tr><th>khoảng trống lớn nhất</th><th>tại hướng</th><th>so với SVM</th></tr>
+          <tr><td>$\hlg{2{,}0000}$</td><td>$\mathbf{u} = (1;\ 0)$</td><td>đúng lề $\frac{2}{\lVert\mathbf{w}\rVert}$ và hướng $\mathbf{w}$ ✓</td></tr></table>
+        focus: [1, "2.2"]
+        say: "Phép thử, vì muốn chắc không có đường nào tốt hơn, máy thử 3601 hướng, chiếu hai lớp lên mỗi hướng như bài 1, và đo khoảng trống. Lớn nhất bằng đúng 2 tại hướng 1, 0, khớp với lề và hướng của w."
+      - show: |
+          <p>Đường thứ hai: tính thẳng khoảng cách của từng điểm tới ranh giới $x_1 = 1$ bằng công thức $\frac{|\mathbf{w}^T\mathbf{x} + b|}{\lVert\mathbf{w}\rVert}$, với $\lVert\mathbf{w}\rVert = 1$:</p>
+          <table class="t"><tr><th>điểm</th><th>(2; 0)</th><th>(3; 1)</th><th>(3; −1)</th><th>(0; 0)</th><th>(−1; 1)</th><th>(−1; −1)</th></tr>
+          <tr><td>khoảng cách</td><td>$\hlg{1}$</td><td>2</td><td>2</td><td>$\hlg{1}$</td><td>2</td><td>2</td></tr></table>
+          <p class="note">Gần nhất mỗi phía cách 1 → lề $= 1 + 1 = 2$, và hai điểm gần nhất chính là hai vector hỗ trợ ✓</p>
+        focus: [1, "2.2", "2.2", 3]
+        say: "Kiểm thêm bằng đường thứ hai, tính thẳng khoảng cách từ từng điểm tới ranh giới, theo công thức của bài 1, với độ dài w bằng 1. Điểm 2, 0 và điểm 0, 0 cách ranh giới đúng 1. Bốn điểm còn lại đều cách 2. Vậy mỗi phía có điểm gần nhất cách 1, lề bằng 1 cộng 1 bằng 2, và hai điểm gần nhất chính là hai vector hỗ trợ có an-pha bằng 0 phẩy 5."
+
+  # ───────────────────────── 9. TRONG AI ─────────────────────────
+  - id: in_ai
+    kind: concept
+    title: "SVM trong học máy"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ý</th><th>nội dung</th></tr>
+          <tr><td>mạnh ở đâu</td><td>dữ liệu ít mẫu, nhiều đặc trưng (văn bản, sinh học)</td></tr>
+          <tr><td>so với logistic (bài 20)</td><td>cùng ranh giới tuyến tính, khác hàm mất mát — bản lề bỏ qua điểm đã đủ xa</td></tr>
+          <tr><td><b>Bài 26</b></td><td>một cách chiếu khác để tách hai lớp, dựa trên trung bình và độ trải của mỗi lớp</td></tr></table>
+        forward_ref: true
+        say: "Máy vector hỗ trợ mạnh với dữ liệu ít mẫu mà nhiều đặc trưng. So với logistic của bài 20, ranh giới cũng tuyến tính, chỉ khác hàm mất mát. Ở bài 26, ta học một cách chiếu khác để tách hai lớp, dựa trên trung bình và độ trải của mỗi lớp."
+
+  # ───────────────────────── 10. LỖI THƯỜNG GẶP ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Dùng nhãn 0 và 1 trong công thức SVM <b class="red">(sai)</b>
+          <br><span class="note">Ràng buộc $y(\mathbf{w}^T\mathbf{x} + b) \ge 1$ cần $y = \pm 1$; với $y = 0$ ràng buộc thành $0 \ge 1$, vô nghĩa.</span></div>
+        say: "Lỗi thứ nhất, dùng nhãn 0 và 1 trong công thức. Ràng buộc cần nhãn âm 1 và 1, vì với nhãn 0, ràng buộc thành 0 lớn hơn hoặc bằng 1, vô nghĩa."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Không chuẩn hoá đặc trưng <b class="red">(dễ sai)</b>
+          <br><span class="note">Lề đo bằng khoảng cách: đặc trưng có số to chiếm hết khoảng cách (như bài 16, 19).</span></div>
+        say: "Lỗi thứ hai, không chuẩn hoá đặc trưng. Lề được đo bằng khoảng cách, nên đặc trưng có con số to sẽ chiếm hết khoảng cách, như đã nói ở bài 16 và bài 19."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Tự chế hàm nhân mà không kiểm ma trận Gram <b class="red">(sai)</b>
+          <br><span class="note">Ma trận Gram có trị riêng âm → bài toán không còn lồi, nghiệm vô nghĩa.</span></div>
+        say: "Lỗi thứ ba, tự chế hàm nhân mà không kiểm ma trận Gram. Nếu có trị riêng âm, bài toán không còn lồi và nghiệm vô nghĩa."
+
+  # ───────────────────────── 11. TỰ KIỂM TRA ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "2/np.linalg.norm([3, 4.]) == 0.4"
+      - "[max(0, 1 - t) for t in (3, 0.2, -0.5)] == [0, 0.8, 1.5]"
+      - "(1*2 + 1)**2 == 9 and abs(np.dot([1, math.sqrt(2)*1, 1], [1, math.sqrt(2)*2, 4]) - 9) < 1e-12"
+      - "math.sqrt(3**2 + 4**2) == 5 and [1 - t for t in (3, 0.2, -0.5)] == [-2, 0.8, 1.5]"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>$\mathbf{w} = (3;\ 4)$. Lề bằng bao nhiêu?</td></tr>
+          <tr><td>2</td><td>Tính hàm mất mát bản lề khi $y\cdot f = 3$; $0{,}2$; $-0{,}5$.</td></tr>
+          <tr><td>3</td><td>Với $k(x, z) = (xz + 1)^2$, tính $k(1, 2)$.</td></tr></table>
+        say: "Bây giờ đến lượt bạn, với ba câu trên màn hình. Câu một tính độ rộng của lề. Câu hai tính hàm mất mát bản lề. Câu ba tính một hàm nhân. Hãy dừng video và làm ra giấy."
+        pause: 8
+      - show: |
+          <p>① Độ dài theo bài 1, rồi lề $= \frac{2}{\lVert\mathbf{w}\rVert}$:</p>
+          $$\lVert\mathbf{w}\rVert = \sqrt{3^2 + 4^2} = \sqrt{25} = 5, \qquad \text{lề} = \frac{2}{5} = \hlg{0{,}4}$$
+        focus: [2, 2]
+        say: "Độ dài w là căn của 3 bình phương cộng 4 bình phương, tức căn 25. Câu một, độ dài w bằng 5, nên lề bằng 2 chia 5, bằng 0 phẩy 4."
+      - clear: true
+        show: |
+          <p>② Tính $1 - yf$ trước, rồi lấy số lớn hơn giữa 0 và nó:</p>
+          <table class="t"><tr><th>$y\cdot f$</th><th>3</th><th>0,2</th><th>−0,5</th></tr>
+          <tr><td>$1 - yf$</td><td>−2</td><td>0,8</td><td>1,5</td></tr>
+          <tr><td>$\max(0,\ 1 - yf)$</td><td>$\hlg{0}$</td><td>$\hlg{0{,}8}$</td><td>$\hlg{1{,}5}$</td></tr></table>
+        focus: [1, "2.3", "2.3", "2.3"]
+        say: "Câu hai, ta tính 1 trừ nhãn nhân điểm số trước, rồi lấy số lớn hơn giữa 0 và kết quả. Với 3, ta có 1 trừ 3 bằng âm 2, nên mất mát bằng 0, vì điểm đã đúng phía và ngoài lề. Với 0 phẩy 2, mất mát là 0 phẩy 8, vì điểm đúng phía nhưng nằm trong lề. Với âm 0 phẩy 5, mất mát là 1 phẩy 5, vì điểm nằm sai phía."
+      - clear: true
+        show: |
+          <p>③ Thay thẳng vào hàm nhân, rồi kiểm bằng đặc trưng $\phi(x) = (1;\ \sqrt{2}x;\ x^2)$:</p>
+          $$k(1, 2) = (1\cdot 2 + 1)^2 = 3^2 = \hlg{9}, \qquad \phi(1)^T\phi(2) = 1 + 2\cdot 2 + 1\cdot 4 = 9\ \checkmark$$
+        focus: [1, 2, 2]
+        say: "Câu ba, thay thẳng vào hàm nhân, 1 nhân 2 cộng 1 bằng 3, và 3 bình phương bằng 9. Kiểm bằng đường khác, đặc trưng của 1 là 1, căn 2, 1, còn đặc trưng của 2 là 1, 2 căn 2, 4. Tích vô hướng là 1 cộng 4 cộng 4, cũng bằng 9."
+
+  # ───────────────────────── 12. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">lề $= \dfrac{2}{\lVert\mathbf{w}\rVert}$: lớn nhất ⟺ $\lVert\mathbf{w}\rVert$ nhỏ nhất</span><span class="a">→</span>
+          <span class="n">KKT: chỉ vector hỗ trợ có $\alpha_i > 0$</span><span class="a">→</span>
+          <span class="n">lề mềm: bản lề + phạt L2</span><span class="a">→</span>
+          <span class="n">hàm nhân: Gram nửa xác định dương</span></div>
+        say: "Tổng kết chuỗi logic. Lề bằng 2 chia độ dài w, nên lề lớn nhất là w ngắn nhất. Điều kiện KKT cho thấy chỉ các vector hỗ trợ có an-pha dương. Lề mềm dùng hàm mất mát bản lề cộng phạt L2. Hàm nhân hợp lệ khi ma trận Gram nửa xác định dương."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> ranh giới tốt là ranh giới để lại <b>khoảng an toàn</b> lớn nhất, và chỉ vài điểm sát biên mới thật sự quan trọng.</div>
+        say: "Điều cần mang theo, ranh giới tốt là ranh giới để lại khoảng an toàn lớn nhất, và chỉ vài điểm sát biên mới thật sự quan trọng."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 26): <b>phân tích phân biệt tuyến tính</b> (LDA) — tiêu chí Fisher.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 26, ta học phân tích phân biệt tuyến tính, tìm hướng chiếu làm hai lớp tách xa nhau so với độ trải của mỗi lớp. Hẹn gặp bạn ở bài tiếp theo."

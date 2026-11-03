@@ -1,0 +1,202 @@
+id: L04
+course: DEN
+series: "DEN · Kỹ thuật dữ liệu"
+title: "Bài 4 — Kho khoá–giá trị và thiết kế khoá phân vùng"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/den.yaml L04; audit/den/verify_den.py L04; M. Kleppmann, Designing Data-Intensive Applications (2017), chương 6 (phân vùng); G. DeCandia và cộng sự, Dynamo: Amazon's Highly Available Key-value Store (SOSP 2007)"
+assumes: [arith, frac, cdot]
+# Quy ước: phân vùng theo băm = băm(khoá) mod số phân vùng (alg.stable_hash là FNV-1a 32 bit, ổn định giữa các lần chạy);
+#   phân vùng theo khoảng = mỗi phân vùng giữ một đoạn khoá liên tiếp. Tải = tỉ lệ lượt ghi vào mỗi phân vùng (alg.partition_loads).
+#   Thêm hậu tố 0–9 vào khoá ngày để chia tải; con số 100 000 lượt ghi là SỐ MINH HOẠ.
+objectives:
+  - "Chọn khoá phân vùng để tải đều"
+  - "Nhận ra và chữa phân vùng nóng"
+  - "Cân nhắc băm và khoảng theo truy vấn chính"
+asr_reviewed:
+  - {sentence: "Ở bài sau, bài 5, ta học kho cột rộng, với cách thiết kế bảng theo truy vấn.", reason: "ASR chép “Ở bài sau, bài 5, ta học khó cột động, với các thiết kế bản theo truy vấn.” (0.778): lệch âm/thanh thuần Việt: kho/khó, rộng/động, cách/các, bảng/bản — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Mười máy, một máy làm hết việc"
+    checks:
+      - "alg.partition_loads(['2026-10-29'] * 100000, 10, lambda x: alg.stable_hash(x) % 10).count(1.0) == 1"
+    steps:
+      - show: |
+          <p>Nhóm bạn chia bảng sự kiện ra 10 máy, khoá phân vùng là <b>ngày</b>. Hôm nay mọi sự kiện đều mang ngày hôm nay — nên <b>mọi lượt ghi</b> rơi vào đúng một máy. Chín máy kia ngồi chơi, máy kia quá tải.</p>
+          <div class="box key">Hôm nay: <b>kho khoá–giá trị</b> và cách chọn <b>khoá phân vùng</b> để tải chia đều mà vẫn trả lời được câu hỏi chính.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, nhóm bạn chia bảng sự kiện ra 10 máy, và khoá phân vùng là ngày. Hôm nay mọi sự kiện đều mang ngày hôm nay, nên mọi lượt ghi rơi vào đúng một máy. Chín máy kia ngồi chơi, còn một máy quá tải. Hôm nay ta học kho khoá giá trị, và cách chọn khoá phân vùng để tải chia đều mà vẫn trả lời được câu hỏi chính."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: chia lấy dư, hàm băm và phần trăm"
+    checks:
+      - "17 % 10 == 7 and 23 % 4 == 3 and 1234567 % 10 == 7"
+      - "len({alg.stable_hash('2026-10-29') for _ in range(3)}) == 1"
+      - "100000 * 30 // 100 == 30000 and 70 / 8 == 8.75"
+    steps:
+      - show: |
+          <table class="t"><tr><th>phép</th><th>ví dụ</th><th>nghĩa</th></tr>
+          <tr><td><b>chia lấy dư</b> (mod)</td><td>17 mod 10 = 7; 23 mod 4 = 3</td><td>số dư luôn từ 0 tới số chia trừ 1</td></tr>
+          <tr><td><b>hàm băm</b></td><td>băm(“2026-10-29”) luôn ra <b>cùng một số</b>, ví dụ 1 234 567</td><td>cùng khoá → cùng số, mọi lần chạy</td></tr>
+          <tr><td>băm rồi chia lấy dư</td><td>1 234 567 mod 10 = 7 → phân vùng 7</td><td>khoá nào cũng rơi vào một phân vùng từ 0 tới 9</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Ta ôn lại ba phép sẽ dùng. Phép chia lấy dư cho ta số dư, ví dụ 17 chia lấy dư cho 10 được 7, 23 chia lấy dư cho 4 được 3, và số dư luôn từ 0 tới số chia trừ 1. Hàm băm biến một khoá thành một con số, và cùng một khoá thì luôn ra cùng một số ở mọi lần chạy. Băm rồi chia lấy dư cho 10, ví dụ 1 triệu 234 nghìn 567 chia lấy dư cho 10 được 7, nên khoá đó rơi vào phân vùng 7."
+      - show: |
+          <p><b>Phần trăm</b>: 30% của 100 000 lượt ghi $= 30\,000$ lượt. Chia đều 70% cho 8 phân vùng → mỗi phân vùng $\frac{70\%}{8} = 8{,}75\%$.</p>
+          <div class="box key">Ở khoá Hệ phân tán và dữ liệu lớn, ta đã học <b>phân vùng</b>: chia dữ liệu ra nhiều máy, mỗi máy giữ và phục vụ một phần.</div>
+        focus: [1, 1, 2]
+        say: "Về phần trăm, 30 phần trăm của 100 nghìn lượt ghi là 30 nghìn lượt. Chia đều 70 phần trăm cho 8 phân vùng thì mỗi phân vùng nhận 70 chia 8, bằng 8 phẩy 75 phần trăm. Ở khoá Hệ phân tán và dữ liệu lớn, ta đã học phân vùng, tức chia dữ liệu ra nhiều máy, mỗi máy giữ và phục vụ một phần."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: băm hay khoảng"
+    steps:
+      - show: |
+          <p><b>Kho khoá–giá trị</b>: chỉ hai thao tác chính — đặt giá trị cho khoá, lấy giá trị theo khoá. Dữ liệu chia ra nhiều <b>phân vùng</b> theo khoá.</p>
+          <table class="t"><tr><th>cách chia</th><th>tải</th><th>truy vấn theo khoảng</th></tr>
+          <tr><td><b>theo băm</b>: băm(khoá) mod số phân vùng</td><td>đều, nếu khoá đa dạng</td><td>mất: khoá gần nhau nằm rải rác</td></tr>
+          <tr><td><b>theo khoảng</b>: mỗi phân vùng một đoạn khoá</td><td>dễ lệch (khoá mới dồn một đầu)</td><td>giữ: quét một đoạn liên tục</td></tr></table>
+          <p><b>Phân vùng nóng</b>: một phân vùng nhận phần lớn tải — do khoá đơn điệu (ngày, số tăng dần) hoặc một khoá rất được ưa chuộng.</p>
+        focus: [1, 1, 2, "2.2", "2.2", "2.3", "2.3", 3]
+        say: "Kho khoá giá trị chỉ có hai thao tác chính, đặt giá trị cho một khoá, và lấy giá trị theo khoá. Dữ liệu được chia ra nhiều phân vùng theo khoá. Bảng so hai cách chia. Chia theo băm lấy giá trị băm của khoá chia lấy dư cho số phân vùng. Cách này cho tải đều nếu khoá đa dạng, nhưng mất truy vấn theo khoảng vì khoá gần nhau nằm rải rác. Chia theo khoảng cho mỗi phân vùng một đoạn khoá. Cách này dễ lệch tải vì khoá mới dồn về một đầu, nhưng giữ được truy vấn theo khoảng, quét một đoạn liên tục. Phân vùng nóng là phân vùng nhận phần lớn tải, do khoá đơn điệu như ngày hay số tăng dần, hoặc do một khoá rất được ưa chuộng."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Một cột cao hay mười cột thấp"
+    checks:
+      - "alg.partition_loads(['2026-10-29'] * 1000, 10, lambda x: 7).count(1.0) == 1 and sum([0.1] * 10) > 0.999"
+    steps:
+      - show: |
+          <div><svg width="1500" height="360" viewBox="0 0 1500 360"><g fill="#1f2937"><text x="395" y="40" text-anchor="middle" font-size="24" font-weight="bold">khoá = ngày</text><line x1="75" y1="270" x2="715" y2="270" stroke="#6b7280" stroke-width="2"/><rect x="80" y="270" width="48" height="0" fill="#b91c1c"/><text x="104" y="298" text-anchor="middle" font-size="20">0</text><rect x="144" y="270" width="48" height="0" fill="#b91c1c"/><text x="168" y="298" text-anchor="middle" font-size="20">1</text><rect x="208" y="270" width="48" height="0" fill="#b91c1c"/><text x="232" y="298" text-anchor="middle" font-size="20">2</text><rect x="272" y="270" width="48" height="0" fill="#b91c1c"/><text x="296" y="298" text-anchor="middle" font-size="20">3</text><rect x="336" y="270" width="48" height="0" fill="#b91c1c"/><text x="360" y="298" text-anchor="middle" font-size="20">4</text><rect x="400" y="270" width="48" height="0" fill="#b91c1c"/><text x="424" y="298" text-anchor="middle" font-size="20">5</text><rect x="464" y="270" width="48" height="0" fill="#b91c1c"/><text x="488" y="298" text-anchor="middle" font-size="20">6</text><rect x="528" y="70" width="48" height="200" fill="#b91c1c"/><text x="552" y="298" text-anchor="middle" font-size="20">7</text><rect x="592" y="270" width="48" height="0" fill="#b91c1c"/><text x="616" y="298" text-anchor="middle" font-size="20">8</text><rect x="656" y="270" width="48" height="0" fill="#b91c1c"/><text x="680" y="298" text-anchor="middle" font-size="20">9</text><text x="1115" y="40" text-anchor="middle" font-size="24" font-weight="bold">khoá = ngày + hậu tố 0 tới 9</text><line x1="795" y1="270" x2="1435" y2="270" stroke="#6b7280" stroke-width="2"/><rect x="800" y="250" width="48" height="20" fill="#059669"/><text x="824" y="298" text-anchor="middle" font-size="20">0</text><rect x="864" y="250" width="48" height="20" fill="#059669"/><text x="888" y="298" text-anchor="middle" font-size="20">1</text><rect x="928" y="250" width="48" height="20" fill="#059669"/><text x="952" y="298" text-anchor="middle" font-size="20">2</text><rect x="992" y="250" width="48" height="20" fill="#059669"/><text x="1016" y="298" text-anchor="middle" font-size="20">3</text><rect x="1056" y="250" width="48" height="20" fill="#059669"/><text x="1080" y="298" text-anchor="middle" font-size="20">4</text><rect x="1120" y="250" width="48" height="20" fill="#059669"/><text x="1144" y="298" text-anchor="middle" font-size="20">5</text><rect x="1184" y="250" width="48" height="20" fill="#059669"/><text x="1208" y="298" text-anchor="middle" font-size="20">6</text><rect x="1248" y="250" width="48" height="20" fill="#059669"/><text x="1272" y="298" text-anchor="middle" font-size="20">7</text><rect x="1312" y="250" width="48" height="20" fill="#059669"/><text x="1336" y="298" text-anchor="middle" font-size="20">8</text><rect x="1376" y="250" width="48" height="20" fill="#059669"/><text x="1400" y="298" text-anchor="middle" font-size="20">9</text><text x="590" y="95" font-size="22" fill="#b91c1c">100%</text><text x="100" y="250" font-size="20">9 máy còn lại: 0%</text><text x="1440" y="240" text-anchor="end" font-size="22" fill="#059669">mỗi máy 10%</text><text x="400" y="340" text-anchor="middle" font-size="20">phân vùng (máy)</text><text x="1120" y="340" text-anchor="middle" font-size="20">phân vùng (máy)</text></g></svg></div>
+        focus: [1, 1, 1]
+        say: "Hình vẽ tải của 10 máy trong một ngày. Bên trái, khoá là ngày, mọi lượt ghi mang cùng khoá nên băm ra cùng một số, và cả 100 phần trăm dồn vào một cột cao màu đỏ, chín máy kia trống. Bên phải, mỗi lượt ghi được gắn thêm một hậu tố từ 0 tới 9, nên khoá khác nhau rơi vào mười phân vùng khác nhau, mỗi máy nhận 10 phần trăm."
+
+  - id: example
+    kind: example
+    title: "Thêm hậu tố để chia tải"
+    checks:
+      - "alg.partition_loads([f'2026-10-29#{i % 10}' for i in range(100000)], 10, lambda x: int(x[-1])) == [0.1] * 10"
+      - "round(max(alg.partition_loads([f'u{i}' for i in range(100000)], 8, lambda x: alg.stable_hash(x) % 8)), 3) == 0.125"
+    steps:
+      - show: |
+          <p>Đề: <b>100 000 lượt ghi</b> trong một ngày, cần chọn khoá phân vùng.</p>
+          <table class="t"><tr><th>khoá phân vùng</th><th>tải phân vùng nặng nhất</th><th>đọc cả ngày</th></tr>
+          <tr><td><b>Bước 1</b> — ngày: <code>2026-10-29</code></td><td>100%</td><td>1 phân vùng</td></tr></table>
+        focus: [1, 2, "2.2"]
+        say: "Bước một, ta có 100 nghìn lượt ghi trong một ngày, cần chọn khoá phân vùng. Thử khoá là ngày. Mọi lượt ghi mang cùng một khoá nên rơi vào cùng một phân vùng, phân vùng nặng nhất nhận 100 phần trăm, nhưng đọc cả ngày chỉ cần 1 phân vùng."
+      - show: |
+          <table class="t"><tr><th>khoá phân vùng</th><th>tải phân vùng nặng nhất</th><th>đọc cả ngày</th></tr>
+          <tr><td><b>Bước 2</b> — ngày + hậu tố 0–9: <code>2026-10-29#7</code></td><td>$\frac{100\,000}{10} = 10\,000$ lượt $= \hl{10\%}$ mỗi phân vùng</td><td>phải hỏi 10 phân vùng rồi gộp</td></tr></table>
+        focus: [1, "1.2", "1.2"]
+        say: "Bước hai, thêm hậu tố từ 0 tới 9 vào ngày. Lượt ghi được chia đều cho 10 hậu tố, nên mỗi phân vùng nhận 100 nghìn chia 10, bằng 10 nghìn lượt, tức 10 phần trăm. Đổi lại, đọc cả ngày phải hỏi 10 phân vùng rồi gộp."
+      - show: |
+          <table class="t"><tr><th>khoá phân vùng</th><th>tải phân vùng nặng nhất</th><th>đọc cả ngày</th></tr>
+          <tr><td><b>Bước 3</b> — băm mã người dùng, 8 phân vùng</td><td>$\frac{100\%}{8} = 12{,}5\%$</td><td>phải hỏi cả 8 (ngày nằm rải rác)</td></tr></table>
+        focus: [1, "1.2", "1.2"]
+        say: "Bước ba, băm mã người dùng vào 8 phân vùng. Có rất nhiều người dùng khác nhau, nên mỗi phân vùng nhận 100 chia 8, bằng 12 phẩy 5 phần trăm. Nhưng đọc theo ngày phải hỏi cả 8, vì sự kiện của một ngày nằm rải rác."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>Bước 4 — truy vấn chính là</th><th>chọn khoá</th><th>vì</th></tr>
+          <tr><td>“mọi sự kiện của một ngày”</td><td>ngày + hậu tố</td><td>tải 10% mỗi phân vùng, đọc hỏi 10 phân vùng</td></tr>
+          <tr><td>“mọi sự kiện của một người dùng”</td><td>băm mã người dùng</td><td>đọc chỉ chạm 1 phân vùng, tải 12,5%</td></tr></table>
+          <p>Không có lời giải miễn phí: chia tải ghi luôn trả giá ở đường đọc. Chọn theo <b>truy vấn chính</b>.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Bước bốn, quyết định theo truy vấn chính. Nếu câu hỏi chính là mọi sự kiện của một ngày, chọn ngày cộng hậu tố, tải mỗi phân vùng 10 phần trăm và mỗi lần đọc hỏi 10 phân vùng. Nếu câu hỏi chính là mọi sự kiện của một người dùng, chọn băm mã người dùng, vì một người dùng nằm trọn trong 1 phân vùng. Không có lời giải miễn phí, chia tải ghi luôn trả giá ở đường đọc, nên hãy chọn theo truy vấn chính."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: đếm thẳng từng lượt ghi"
+    checks:
+      - "[sum(1 for i in range(100000) if i % 10 == s) for s in range(10)] == [10000] * 10"
+      - "10 * 10 == 100 and 8 * 12.5 == 100"
+    steps:
+      - show: |
+          <table class="t"><tr><th>đường khác</th><th>đếm</th><th>kết quả</th></tr>
+          <tr><td>gắn hậu tố = số thứ tự lượt ghi mod 10</td><td>lượt 0, 10, 20, … có hậu tố 0: đếm được 10 000 lượt; mỗi hậu tố khác cũng 10 000</td><td>10% ✓</td></tr>
+          <tr><td>cộng tải mọi phân vùng phải ra 100%</td><td>$10 \cdot 10\% = 100\%$; $8 \cdot 12{,}5\% = 100\%$</td><td>✓</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.3"]
+        say: "Kiểm bằng đường khác, đếm thẳng từng lượt ghi. Gắn hậu tố bằng số thứ tự lượt ghi chia lấy dư cho 10. Khi đó các lượt 0, 10, 20, và cứ thế, có hậu tố 0, nên đếm được đúng 10 nghìn lượt, và hậu tố nào cũng vậy, khớp 10 phần trăm. Cộng tải mọi phân vùng phải ra 100 phần trăm, và quả thật 10 nhân 10 phần trăm, hay 8 nhân 12 phẩy 5 phần trăm, đều bằng 100 phần trăm."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp"
+    checks:
+      - "round(max(alg.partition_loads(['sao'] * 30000 + [f'u{i}' for i in range(70000)], 8, lambda x: alg.stable_hash(x) % 8)), 4) == 0.3875 and round(0.3 + 0.7 / 8, 4) == 0.3875"
+      - "round(1.0 / 0.1) == 10 and round(0.1 / 0.1) == 1 and round(0.3875 / 0.125, 1) == 3.1"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Tin băm luôn làm tải đều <b class="red">(một khoá nổi tiếng)</b>
+          <br><span class="note">Một tài khoản ngôi sao chiếm 30% lượt ghi: băm không chia nhỏ được một khoá, nên phân vùng của nó nhận $30\% + 70\% / 8 = \hl{38{,}75\%}$. Chia riêng khoá nóng (thêm hậu tố chỉ cho khoá đó).</span></div>
+        say: "Lỗi thứ nhất, tin băm luôn làm tải đều, quên trường hợp một khoá nổi tiếng. Một tài khoản ngôi sao chiếm 30 phần trăm lượt ghi, và băm không chia nhỏ được một khoá, nên phân vùng của nó nhận 30 phần trăm cộng 70 chia 8, bằng 38 phẩy 75 phần trăm. Hãy chia riêng khoá nóng, thêm hậu tố chỉ cho khoá đó."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Dùng băm mod N rồi thêm máy <b class="red">(gần như mọi khoá phải chuyển)</b>
+          <br><span class="note">Đổi N từ 10 lên 11 thì phần lớn khoá đổi phân vùng. Dùng số phân vùng cố định lớn (ví dụ 1000) gán cho máy, hoặc băm nhất quán.</span></div>
+        say: "Lỗi thứ hai, dùng băm chia lấy dư cho N rồi thêm máy, nên gần như mọi khoá phải chuyển đi. Đổi N từ 10 lên 11 thì phần lớn khoá đổi phân vùng. Hãy dùng một số phân vùng cố định lớn, ví dụ 1000, rồi gán phân vùng cho máy, hoặc dùng băm nhất quán."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Chọn khoá trước, nghĩ truy vấn sau <b class="red">(câu hỏi chính phải quét hết)</b>
+          <br><span class="note">Kho khoá–giá trị chỉ nhanh khi biết khoá. Liệt kê truy vấn chính trước, rồi chọn khoá sao cho mỗi truy vấn chạm ít phân vùng nhất.</span></div>
+        say: "Lỗi thứ ba, chọn khoá trước rồi mới nghĩ tới truy vấn, nên câu hỏi chính phải quét hết. Kho khoá giá trị chỉ nhanh khi biết khoá. Hãy liệt kê truy vấn chính trước, rồi chọn khoá sao cho mỗi truy vấn chạm ít phân vùng nhất."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Nhìn tải <b>trung bình</b> của cả cụm, thấy còn dư, nên không thấy máy nóng <b class="red">(máy nặng nhất mới quyết định)</b></div>
+          <table class="t"><tr><th>cách chia</th><th>trung bình mỗi phân vùng</th><th>phân vùng nặng nhất</th><th>nặng nhất chia trung bình</th></tr>
+          <tr><td>ngày, 10 phân vùng</td><td>10%</td><td>100%</td><td>10 lần</td></tr>
+          <tr><td>ngày + hậu tố, 10 phân vùng</td><td>10%</td><td>10%</td><td>1 lần</td></tr>
+          <tr><td>băm, 8 phân vùng, có tài khoản ngôi sao 30%</td><td>12,5%</td><td>38,75%</td><td>3,1 lần</td></tr></table>
+          <p class="note">Người có kinh nghiệm luôn đo thêm <b>phân vùng nặng nhất chia trung bình</b>: bằng 1 là đều, càng lớn càng lệch.</p>
+        focus: [1, "2.2", "2.3", "2.4", 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, nhìn tải trung bình của cả cụm, thấy còn dư sức, nên không thấy một máy đang nóng. Với khoá là ngày, trung bình mỗi phân vùng 10 phần trăm, nhưng phân vùng nặng nhất nhận 100 phần trăm, gấp 10 lần trung bình. Thêm hậu tố thì nặng nhất bằng trung bình, đúng 1 lần. Băm vào 8 phân vùng mà có tài khoản ngôi sao chiếm 30 phần trăm, phân vùng nặng nhất nhận 38 phẩy 75 phần trăm, gấp khoảng 3 phẩy 1 lần trung bình 12 phẩy 5. Vì vậy, người có kinh nghiệm luôn đo thêm tỉ số phân vùng nặng nhất chia trung bình, bằng 1 là đều, càng lớn càng lệch."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "0.5 + 0.5 / 4 == 0.625 and 0.5 / 4 + 0.5 / 4 == 0.25"
+      - "0.5 / 4 == 0.125 and 4 * 0.25 == 1.0"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>4 phân vùng theo băm; một khoá chiếm 50% lượt ghi, phần còn lại đều. Phân vùng nặng nhất nhận bao nhiêu?</td></tr>
+          <tr><td>2</td><td>Chia riêng khoá đó thành 4 khoá con (hậu tố 0–3), mỗi khoá con băm về một phân vùng khác nhau. Phân vùng nặng nhất còn bao nhiêu?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, có 4 phân vùng theo băm, một khoá chiếm 50 phần trăm lượt ghi, phần còn lại chia đều. Phân vùng nặng nhất nhận bao nhiêu? Câu hai, chia riêng khoá đó thành 4 khoá con với hậu tố từ 0 tới 3, mỗi khoá con băm về một phân vùng khác nhau. Phân vùng nặng nhất còn bao nhiêu? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① Phần còn lại: $\frac{50\%}{4} = 12{,}5\%$ mỗi phân vùng.</p>
+          <p>Phân vùng chứa khoá nóng: $50\% + 12{,}5\% = \hl{62{,}5\%}$.</p>
+        focus: [1, 2]
+        say: "Đáp án câu một, trước hết phần còn lại 50 phần trăm chia đều cho 4 phân vùng, mỗi phân vùng 12 phẩy 5 phần trăm. Phân vùng chứa khoá nóng nhận thêm cả 50 phần trăm của khoá đó, nên 50 phần trăm cộng 50 chia 4, bằng 62 phẩy 5 phần trăm."
+      - show: |
+          <p>② Mỗi khoá con: $\frac{50\%}{4} = 12{,}5\%$, mỗi phân vùng nhận đúng một khoá con.</p>
+          <p>Mỗi phân vùng: $12{,}5\%$ từ khoá nóng $+ 12{,}5\%$ phần còn lại $= \hl{25\%}$ — đều tuyệt đối.</p>
+        focus: [1, 2]
+        say: "Câu hai, khoá nóng chia thành 4 khoá con, mỗi khoá con nhận 50 chia 4, bằng 12 phẩy 5 phần trăm, và mỗi phân vùng nhận đúng một khoá con. Vậy mỗi phân vùng nhận 12 phẩy 5 phần trăm từ khoá nóng cộng 12 phẩy 5 phần trăm phần còn lại, bằng 25 phần trăm, đều tuyệt đối."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">liệt kê truy vấn chính</span><span class="a">→</span>
+          <span class="n">băm: tải đều, mất khoảng; khoảng: giữ khoảng, dễ lệch</span><span class="a">→</span>
+          <span class="n">khoá đơn điệu hay khoá nổi tiếng: phân vùng nóng</span><span class="a">→</span>
+          <span class="n">hậu tố, số phân vùng cố định lớn</span></div>
+        say: "Tổng kết lại, hãy liệt kê truy vấn chính trước. Băm cho tải đều nhưng mất truy vấn khoảng, còn chia theo khoảng giữ được khoảng nhưng dễ lệch. Khoá đơn điệu hay khoá nổi tiếng tạo phân vùng nóng, và ta chữa bằng hậu tố cùng số phân vùng cố định lớn."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> hệ phân tán chỉ nhanh bằng <b>máy chậm nhất</b> — thiết kế để không máy nào phải gánh phần của người khác.</div>
+        say: "Điều cần mang theo, hệ phân tán chỉ nhanh bằng máy chậm nhất, nên hãy thiết kế để không máy nào phải gánh phần của máy khác."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 5): <b>kho cột rộng</b> — thiết kế bảng theo truy vấn.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 5, ta học kho cột rộng, với cách thiết kế bảng theo truy vấn. Hẹn gặp bạn ở bài tiếp theo."

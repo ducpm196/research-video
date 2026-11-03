@@ -1,0 +1,242 @@
+id: L12
+course: RBM
+series: "RBM · Toán cho robot và hệ động lực"
+title: "Bài 12 — Lọc Kalman một chiều"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/rbm.yaml L12; audit/rbm/verify_rbm.py L12; R. E. Kalman (1960); S. Thrun, W. Burgard, D. Fox, Probabilistic Robotics (2005), mục 3.2"
+assumes: [arith, cdot, sub, hat, var, normal, mu, sigma, frac, approx, power, implies]
+# Quy ước: ước lượng \hat{x} với phương sai P (độ bất định); phép đo z với phương sai R; chuyển động u với nhiễu phương sai Q;
+#   hệ số Kalman K = P/(P + R) là trọng số của PHÉP ĐO. Dấu “⁻” (dự đoán) viết bằng chữ “trước khi đo” để tránh ký hiệu mới.
+#   Nhiễu dự đoán và nhiễu đo độc lập, phân phối chuẩn (CS115 bài 14). Mọi số do alg.kalman1d_update tính;
+#   công thức trọng số rút ra bằng sympy (cực tiểu phương sai), kiểm Monte Carlo trong audit/rbm/verify_rbm.py.
+objectives:
+  - "Kết hợp dự đoán và phép đo theo phương sai"
+  - "Giải thích hệ số Kalman như trọng số tối ưu"
+  - "Chạy vòng dự đoán – cập nhật một chiều"
+asr_reviewed:
+  - {sentence: "Hệ số Kalman K bằng P chia P cộng R là trọng số tối ưu cho phép đo, và phương sai mới nhỏ hơn cả hai.", reason: "chữ cái “p” đọc thô — probe audit/dms/probes/p2_chu_p.md: thô 7/8, đối chứng “tê” 0/8; ASR lẫn p/t, không phải TTS đọc sai; chữ hiện trên màn hình; tên chữ cái đọc kiểu Việt, ASR chép nhầm chữ (q→quy, x→ích, k→ca) — nhóm đã biết (SKILL Bước 5); chữ hiện trên màn hình"}
+  - {sentence: "Bước dự đoán làm P tăng, bước đo làm P giảm.", reason: "chữ cái “p” đọc thô — probe audit/dms/probes/p2_chu_p.md: thô 7/8, đối chứng “tê” 0/8; ASR lẫn p/t, không phải TTS đọc sai; chữ hiện trên màn hình"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Hai nguồn tin, đều không chắc"
+    steps:
+      - show: |
+          <p>Robot đi trên hành lang. Đếm vòng bánh xe cho dự đoán vị trí nhưng sai số cộng dồn. Cảm biến khoảng cách cho phép đo nhưng mỗi lần nhiễu một ít.</p>
+          <p>Tin hẳn bên nào cũng dở. Trung bình cộng thì bỏ qua việc bên nào đáng tin hơn.</p>
+          <div class="box key">Hôm nay: <b>lọc Kalman</b> — trộn hai nguồn với trọng số theo độ tin cậy, được ước lượng tốt hơn cả hai.</div>
+        focus: [1, 1, 2, 2, 3]
+        say: "Chào bạn, một robot đi trên hành lang. Đếm vòng bánh xe cho ta dự đoán vị trí, nhưng sai số cộng dồn theo thời gian. Cảm biến khoảng cách cho một phép đo, nhưng mỗi lần lại nhiễu một ít. Tin hẳn một bên thì dở, còn lấy trung bình cộng thì bỏ qua việc bên nào đáng tin hơn. Hôm nay ta học lọc Kalman, trộn hai nguồn với trọng số theo độ tin cậy, để được ước lượng tốt hơn cả hai."
+
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: trung bình có trọng số, phương sai khi nhân và cộng"
+    checks:
+      - "round(0.8 * 10 + 0.2 * 20, 6) == 12 and round(0.5 * 10 + 0.5 * 20, 6) == 15"
+      - "round(0.5 ** 2 * 1, 6) == 0.25 and round(0.25 + 0.25, 6) == 0.5 and round(2 ** 2 * 1, 6) == 4"
+      - "abs(np.var(0.5 * np.random.default_rng(2).normal(0, 1, 200000)) - 0.25) < 0.01"
+    steps:
+      - show: |
+          <p>Trung bình có trọng số của hai số: trọng số cộng lại bằng 1, kết quả nằm giữa, gần số có trọng số lớn hơn.</p>
+          <table class="t"><tr><th>trọng số</th><th>trộn 10 và 20</th><th>kết quả</th></tr>
+          <tr><td>0,5 và 0,5</td><td>$0{,}5 \cdot 10 + 0{,}5 \cdot 20$</td><td>15, đúng giữa</td></tr>
+          <tr><td>0,8 và 0,2</td><td>$0{,}8 \cdot 10 + 0{,}2 \cdot 20$</td><td>12, gần 10</td></tr></table>
+        focus: [1, 1, "2.2", "2.3"]
+        say: "Trước khi vào bài, ta ôn hai điều về trộn số. Điều thứ nhất là trung bình có trọng số, hai trọng số cộng lại bằng 1, và kết quả luôn nằm giữa hai số, gần số có trọng số lớn hơn. Trộn 10 và 20 với trọng số 0 phẩy 5 và 0 phẩy 5 thì được 15, đúng chính giữa. Với trọng số 0 phẩy 8 và 0 phẩy 2 thì được 8 cộng 4, bằng 12, gần 10 hơn."
+      - show: |
+          <p>Phương sai (khoá Toán cho khoa học máy tính) đo độ phân tán. Hai luật sẽ dùng:</p>
+          <table class="t"><tr><th>luật</th><th>ví dụ: $X$, $Y$ độc lập, mỗi cái phương sai 1</th></tr>
+          <tr><td>nhân với số $c$ thì phương sai nhân $c^2$</td><td>$0{,}5X$ có phương sai $0{,}5^2 \cdot 1 = 0{,}25$; $\ 2X$ có phương sai $4$</td></tr>
+          <tr><td>cộng hai nguồn độc lập thì cộng phương sai</td><td>$0{,}5X + 0{,}5Y$ có phương sai $0{,}25 + 0{,}25 = 0{,}5$</td></tr></table>
+        focus: [1, "2.2", "2.2", "2.3", "2.3"]
+        say: "Điều thứ hai là phương sai, đã học ở khoá Toán cho khoa học máy tính, đo độ phân tán của một đại lượng ngẫu nhiên. Luật thứ nhất, nhân đại lượng với một số c thì phương sai nhân với c bình phương. Ví dụ X có phương sai 1 thì nửa X có phương sai 0 phẩy 25, còn 2 X có phương sai 4. Luật thứ hai, cộng hai nguồn độc lập thì phương sai cộng lại. Vậy nửa X cộng nửa Y có phương sai 0 phẩy 25 cộng 0 phẩy 25, bằng 0 phẩy 5, nhỏ hơn phương sai của từng nguồn."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: x̂, P, z, R"
+    steps:
+      - show: |
+          <p>$\hat{x}$: ước lượng vị trí hiện tại; $P$: phương sai của nó — càng lớn càng không chắc.</p>
+          <p>$z$: phép đo mới; $R$: phương sai nhiễu đo.</p>
+          <p>Coi mỗi nguồn là một phân phối chuẩn (CS115): $\mathcal{N}(\hat{x}, P)$ và $\mathcal{N}(z, R)$.</p>
+          <div class="box key">Phương sai là thước đo <b>độ không chắc</b>. Bên nào phương sai nhỏ hơn thì đáng tin hơn.</div>
+        focus: [1, 2, 3, 4]
+        say: "Ta gọi x mũ là ước lượng vị trí hiện tại, và P là phương sai của nó, P càng lớn thì càng không chắc. Z là phép đo mới, còn R là phương sai của nhiễu đo. Coi mỗi nguồn là một phân phối chuẩn, một cái tâm ở x mũ với phương sai P, một cái tâm ở z với phương sai R. Phương sai là thước đo độ không chắc chắn, bên nào phương sai nhỏ hơn thì đáng tin hơn."
+
+  # ───────────────────────── 3. CÔNG THỨC ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Trọng số tối ưu = hệ số Kalman"
+    checks:
+      - "all(abs(min(w * w * P + (1 - w) ** 2 * R for w in [k / 10000 for k in range(10001)]) - P * R / (P + R)) < 1e-6 for P, R in ((1, 1), (1, 4), (2, 0.5)))"
+      - "all(abs((1 - P / (P + R)) * P - P * R / (P + R)) < 1e-12 for P, R in ((1, 1), (1, 4), (2, 0.5)))"
+    steps:
+      - show: |
+          <p>Trộn: $\hat{x}_{\text{mới}} = (1 - K)\,\hat{x} + K z$. Vì hai nhiễu độc lập, phương sai của tổng có trọng số là:</p>
+          <p>$(1 - K)^2 P + K^2 R$</p>
+          <p>Đạo hàm theo $K$ bằng 0 (CS115: cực tiểu): $-2(1 - K)P + 2KR = 0$, nên</p>
+          <p>$K = \dfrac{P}{P + R}$, $\quad P_{\text{mới}} = (1 - K)\,P = \dfrac{PR}{P + R}$</p>
+          <div class="box key">Viết lại: $\hat{x}_{\text{mới}} = \hat{x} + K(z - \hat{x})$ — dịch ước lượng về phía phép đo một phần $K$ của độ lệch.</div>
+        focus: [1, 2, 3, 4, 4, 5]
+        say: "Ta trộn hai nguồn, lấy 1 trừ K phần ước lượng cộng K phần phép đo. Vì hai nhiễu độc lập, phương sai của tổng có trọng số bằng 1 trừ K bình phương nhân P, cộng K bình phương nhân R. Muốn phương sai nhỏ nhất, ta cho đạo hàm theo K bằng 0, rồi chuyển vế, được K bằng P chia P cộng R. Thay ngược lại, phương sai mới bằng 1 trừ K nhân P, tức P R chia P cộng R. Con số này luôn nhỏ hơn cả P lẫn R. Viết gọn lại, ước lượng mới bằng ước lượng cũ cộng K nhân độ lệch z trừ x mũ, tức dịch về phía phép đo một phần K."
+
+  - id: intuition
+    kind: intuition
+    title: "Hình dung: phép đo kéo ước lượng một phần K"
+    checks:
+      - "[round(1 / (1 + R), 6) for R in (1, 4)] == [0.5, 0.2] and [round(R / (1 + R), 6) for R in (1, 4)] == [0.5, 0.8]"
+      - "round(math.sqrt(0.5), 3) == 0.707 and round(math.sqrt(0.8), 3) == 0.894"
+    steps:
+      - show: |
+          <div><svg width="1140" height="440" viewBox="0 0 1140 440"><text x="30" y="40" font-size="24" text-anchor="start" fill="#1f2937" font-weight="bold">R = 1: K = 0,5, kết quả ở 0,5 (nửa đường), phương sai 0,5</text><line x1="200.0" y1="80" x2="640.0" y2="80" stroke="#2a78d6" stroke-width="10" stroke-linecap="round" opacity="0.45"/><circle cx="420.0" cy="80" r="9" fill="#2a78d6"/><text x="30" y="88" font-size="22" text-anchor="start" fill="#2a78d6" font-weight="bold">dự đoán</text><line x1="420.0" y1="118" x2="860.0" y2="118" stroke="#eb6834" stroke-width="10" stroke-linecap="round" opacity="0.45"/><circle cx="640.0" cy="118" r="9" fill="#eb6834"/><text x="30" y="126" font-size="22" text-anchor="start" fill="#eb6834" font-weight="bold">phép đo</text><line x1="374.4" y1="156" x2="685.6" y2="156" stroke="#15803d" stroke-width="10" stroke-linecap="round" opacity="0.45"/><circle cx="530.0" cy="156" r="9" fill="#15803d"/><text x="30" y="164" font-size="22" text-anchor="start" fill="#15803d" font-weight="bold">kết quả</text><line x1="420" y1="62" x2="420" y2="180" stroke="#6b7280" stroke-width="1.5" stroke-dasharray="5 5"/><line x1="640" y1="62" x2="640" y2="180" stroke="#6b7280" stroke-width="1.5" stroke-dasharray="5 5"/><text x="30" y="250" font-size="24" text-anchor="start" fill="#1f2937" font-weight="bold">R = 4: K = 0,2, kết quả ở 0,2 (một phần năm đường), phương sai 0,8</text><line x1="200.0" y1="290" x2="640.0" y2="290" stroke="#2a78d6" stroke-width="10" stroke-linecap="round" opacity="0.45"/><circle cx="420.0" cy="290" r="9" fill="#2a78d6"/><text x="30" y="298" font-size="22" text-anchor="start" fill="#2a78d6" font-weight="bold">dự đoán</text><line x1="200.0" y1="328" x2="1080.0" y2="328" stroke="#eb6834" stroke-width="10" stroke-linecap="round" opacity="0.45"/><circle cx="640.0" cy="328" r="9" fill="#eb6834"/><text x="30" y="336" font-size="22" text-anchor="start" fill="#eb6834" font-weight="bold">phép đo</text><line x1="267.2" y1="366" x2="660.8" y2="366" stroke="#15803d" stroke-width="10" stroke-linecap="round" opacity="0.45"/><circle cx="464.0" cy="366" r="9" fill="#15803d"/><text x="30" y="374" font-size="22" text-anchor="start" fill="#15803d" font-weight="bold">kết quả</text><line x1="420" y1="272" x2="420" y2="390" stroke="#6b7280" stroke-width="1.5" stroke-dasharray="5 5"/><line x1="640" y1="272" x2="640" y2="390" stroke="#6b7280" stroke-width="1.5" stroke-dasharray="5 5"/><text x="420" y="420" font-size="22" text-anchor="middle" fill="#6b7280">0</text><text x="640" y="420" font-size="22" text-anchor="middle" fill="#6b7280">1</text><text x="1110" y="420" font-size="20" text-anchor="end" fill="#6b7280">thanh mờ: độ không chắc</text></svg></div>
+        focus: [1, 1, 1, 1, 1]
+        say: "Hình này cho thấy bước cập nhật làm gì. Chấm xanh là dự đoán ở 0, chấm cam là phép đo ở 1, mỗi thanh mờ dài theo độ không chắc của nguồn đó. Hàng trên, hai nguồn tin như nhau, nên K bằng 0 phẩy 5 và kết quả màu xanh lá nằm đúng nửa đường. Hàng dưới, phép đo kém hơn với R bằng 4, nên K chỉ bằng 0 phẩy 2 và kết quả chỉ nhích một phần năm đường. Ở cả hai hàng, thanh của kết quả ngắn hơn thanh dự đoán, tức độ không chắc giảm đi."
+
+  # ───────────────────────── 4. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Dự đoán 0, đo 1"
+    checks:
+      - "alg.kalman1d_update(0, 1, 1, 1) == (0.5, 0.5, 0.5)"
+      - "tuple(round(v, 6) for v in alg.kalman1d_update(0, 1, 1, 4)) == (0.2, 0.2, 0.8)"
+      - "abs(np.var(0.5 * np.random.default_rng(0).normal(0, 1, 200000) + 0.5 * np.random.default_rng(1).normal(0, 1, 200000)) - 0.5) < 0.01"
+    steps:
+      - show: |
+          <p>$\hat{x} = 0$, $P = 1$; $z = 1$, $R = 1$ — hai nguồn tin như nhau.</p>
+          <p>$K = \dfrac{1}{1 + 1} = 0{,}5$; $\quad \hat{x}_{\text{mới}} = 0 + 0{,}5 \cdot (1 - 0) = \hl{0{,}5}$; $\quad P_{\text{mới}} = 0{,}5 \cdot 1 = \hl{0{,}5}$.</p>
+          <div>{{FUSE}}</div>
+        focus: [1, 2, 2, 3, 3]
+        say: "Làm thử với dự đoán 0, phương sai 1, và phép đo 1, cũng phương sai 1, tức hai nguồn tin như nhau. K bằng 1 chia 2, tức 0 phẩy 5. Ước lượng mới bằng 0 cộng 0 phẩy 5 nhân 1, bằng 0 phẩy 5, và phương sai mới bằng 0 phẩy 5. Trên hình, đường đen là kết quả, nằm giữa hai đường kia và hẹp hơn cả hai. Máy cũng thử bằng hai trăm nghìn mẫu ngẫu nhiên, và phương sai của trung bình ra đúng 0 phẩy 5."
+      - clear: true
+        show: |
+          <p>Cảm biến kém hơn, $R = 4$. <b>Bước 1 —</b> $K = \dfrac{P}{P + R} = \dfrac{1}{1 + 4} = \hl{0{,}2}$.</p>
+        say: "Bây giờ cảm biến kém hơn, R bằng 4, ta làm lại từng bước. Bước một, K bằng P chia P cộng R, tức 1 chia 5, bằng 0 phẩy 2."
+      - show: |
+          <p><b>Bước 2 —</b> $\hat{x}_{\text{mới}} = \hat{x} + K(z - \hat{x}) = 0 + 0{,}2 \cdot (1 - 0) = \hl{0{,}2}$.</p>
+        say: "Bước hai, độ lệch giữa phép đo và dự đoán là 1 trừ 0, bằng 1, nên ước lượng mới bằng 0 cộng 0 phẩy 2 nhân 1, tức 0 phẩy 2."
+      - show: |
+          <p><b>Bước 3 —</b> $P_{\text{mới}} = (1 - K)\,P = 0{,}8 \cdot 1 = \hl{0{,}8}$.</p>
+          <p class="note">Phép đo kém thì chỉ kéo ước lượng đi một chút, và độ không chắc giảm ít.</p>
+        focus: [1, 2]
+        say: "Bước ba, phương sai mới bằng 1 trừ 0 phẩy 2, nhân với 1, tức 0 phẩy 8. Phép đo kém thì chỉ kéo ước lượng đi một chút, và độ không chắc chắn giảm ít."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: công thức khác, rồi thử từng trọng số"
+    checks:
+      - "round(1 * 4 / (1 + 4), 6) == 0.8 and round((1 - 0.2) * 0 + 0.2 * 1, 6) == 0.2"
+      - "[round((1 - w) ** 2 * 1 + w ** 2 * 4, 6) for w in (0.1, 0.2, 0.3)] == [0.85, 0.8, 0.85]"
+      - "min(range(0, 101), key=lambda k: (1 - k / 100) ** 2 + (k / 100) ** 2 * 4) == 20"
+    steps:
+      - show: |
+          <p>Đường thứ nhất: hai dạng khác của cùng công thức, với $P = 1$, $R = 4$, $K = 0{,}2$.</p>
+          <table class="t"><tr><th>đại lượng</th><th>dạng khác</th><th>kết quả</th></tr>
+          <tr><td>$P_{\text{mới}}$</td><td>$\dfrac{PR}{P + R} = \dfrac{1 \cdot 4}{5}$</td><td>$0{,}8$ ✓</td></tr>
+          <tr><td>$\hat{x}_{\text{mới}}$</td><td>$(1 - K)\hat{x} + Kz = 0{,}8 \cdot 0 + 0{,}2 \cdot 1$</td><td>$0{,}2$ ✓</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Làm sao biết 0 phẩy 2 và 0 phẩy 8 là đúng? Đường thứ nhất, thay số vào dạng khác của công thức, phương sai mới bằng P nhân R chia P cộng R, tức 4 chia 5, bằng 0 phẩy 8. Ước lượng mới viết dạng trung bình có trọng số, 0 phẩy 8 nhân 0 cộng 0 phẩy 2 nhân 1, cũng bằng 0 phẩy 2."
+      - show: |
+          <p>Đường thứ hai: không dùng đạo hàm, thử thẳng vài trọng số $w$ cho phép đo trong phương sai $(1 - w)^2 \cdot 1 + w^2 \cdot 4$.</p>
+          <table class="t"><tr><th>$w$</th><th>phương sai</th></tr>
+          <tr><td>0,1</td><td>$0{,}81 + 0{,}04 = 0{,}85$</td></tr>
+          <tr><td>0,2</td><td>$0{,}64 + 0{,}16 = \hl{0{,}80}$ nhỏ nhất</td></tr>
+          <tr><td>0,3</td><td>$0{,}49 + 0{,}36 = 0{,}85$</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", 2]
+        say: "Đường thứ hai, bỏ đạo hàm đi, ta thử thẳng vài trọng số trong công thức phương sai của tổng có trọng số. Với trọng số 0 phẩy 1, phương sai là 0 phẩy 81 cộng 0 phẩy 04, bằng 0 phẩy 85. Với 0 phẩy 2, được 0 phẩy 64 cộng 0 phẩy 16, bằng 0 phẩy 8. Với 0 phẩy 3, lại lên 0 phẩy 85. Vì phương sai nhỏ nhất ở 0 phẩy 2, trọng số tốt nhất đúng là 0 phẩy 2, và máy thử hết 101 trọng số từ 0 đến 1 cũng cho kết quả này."
+
+  # ───────────────────────── 5. VÒNG LẶP ─────────────────────────
+  - id: cycle
+    kind: concept
+    title: "Vòng dự đoán – cập nhật"
+    checks:
+      - "(0 + 1, 1 + 1) == (1, 2)"
+      - "alg.kalman1d_update(1, 2, 1.5, 2) == (0.5, 1.25, 1.0)"
+    steps:
+      - show: |
+          <p><b>Dự đoán</b>: robot đi thêm $u$, nhiễu chuyển động phương sai $Q$: $\quad \hat{x} \leftarrow \hat{x} + u$, $\quad P \leftarrow P + Q$ — độ không chắc <b>tăng</b>.</p>
+          <p><b>Cập nhật</b>: có phép đo $z$, dùng $K$ như trên — độ không chắc <b>giảm</b>.</p>
+          <table class="t"><tr><th>thử</th><th>$\hat{x}$</th><th>$P$</th></tr><tr><td>bắt đầu</td><td>0</td><td>1</td></tr><tr><td>dự đoán: đi $u = 1$, $Q = 1$</td><td>1</td><td>2</td></tr><tr><td>đo $z = 1{,}5$, $R = 2$, $K = 0{,}5$</td><td>$\hl{1{,}25}$</td><td>$\hl{1}$</td></tr></table>
+        introduces: [assign]
+        focus: [1, 1, 1, 2, 3, 3]
+        say: "Lọc Kalman chạy thành vòng hai bước. Bước dự đoán, robot đi thêm u, với nhiễu chuyển động phương sai Q, nên ước lượng được thay bằng giá trị cũ cộng u, và P tăng thêm Q. Mũi tên trên bảng nghĩa là thay bằng giá trị mới, và ở bước này độ không chắc tăng lên. Bước cập nhật, khi có phép đo z, ta dùng K như trên, và độ không chắc giảm xuống. Thử ngay, bắt đầu từ 0 với phương sai 1, đi thêm 1 với Q bằng 1, ta được dự đoán 1 với phương sai 2. Đo được 1 phẩy 5 với R bằng 2, K bằng 0 phẩy 5, nên ước lượng mới là 1 phẩy 25 với phương sai 1."
+
+  # ───────────────────────── 6. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi người mới hay mắc"
+    checks:
+      - "abs(1 / (1 + 2) - 0.333) < 0.001 and abs(1 / (1 + 4) - 0.2) < 1e-12"
+      - "round(alg.kalman1d_update(0, 1, 1, 2)[1], 2) == 0.33 and round(alg.kalman1d_update(0, 1, 1, 4)[1], 6) == 0.2"
+      - "alg.kalman1d_update(0, 1, 1, 0)[1] == 1 and alg.kalman1d_update(0, 1, 1, 0)[2] == 0"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Dùng độ lệch chuẩn thay cho phương sai <b class="red">(sai)</b>
+          <br><span class="note">$P = 1$, độ lệch chuẩn đo $2$: $K$ đúng là $\frac{1}{1 + 4} = 0{,}2$, không phải $\frac{1}{1 + 2} \approx 0{,}33$.</span></div>
+          <table class="t"><tr><th>đưa vào $R$</th><th>$K$</th><th>ước lượng mới (dự đoán 0, đo 1)</th></tr><tr><td>2 (sai)</td><td>$\approx 0{,}33$</td><td>$\approx 0{,}33$</td></tr><tr><td>$2^2 = 4$ (đúng)</td><td>$0{,}2$</td><td>$0{,}2$</td></tr></table>
+        focus: [1, 2, 2]
+        say: "Lỗi thứ nhất, dùng độ lệch chuẩn thay cho phương sai. Nếu P bằng 1 và độ lệch chuẩn của phép đo bằng 2, thì R là 4, K đúng là 0 phẩy 2, không phải 1 chia 3. Bảng cho thấy cách sai làm ước lượng nhảy tới khoảng 0 phẩy 33, tin cảm biến nhiều hơn mức nó đáng được tin."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Quên tăng $P$ ở bước dự đoán <b class="red">(sai)</b>
+          <br><span class="note">Không cộng $Q$ thì $P$ chỉ giảm mãi, bộ lọc tin dự đoán tuyệt đối và bỏ qua phép đo mới.</span></div>
+        say: "Lỗi thứ hai, quên tăng P ở bước dự đoán. Không cộng Q thì P chỉ giảm mãi, bộ lọc trở nên tin dự đoán tuyệt đối và bỏ qua mọi phép đo mới."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Nghĩ $R = 0$ là an toàn <b class="red">(sai)</b>
+          <br><span class="note">$R = 0$ cho $K = 1$, $P_{\text{mới}} = 0$: tin phép đo tuyệt đối, kể cả khi cảm biến hỏng.</span></div>
+        say: "Lỗi thứ ba, nghĩ đặt R bằng 0 là an toàn. R bằng 0 cho K bằng 1 và phương sai mới bằng 0, tức tin phép đo tuyệt đối, kể cả khi cảm biến hỏng."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Dùng nguyên công thức cho hệ phi tuyến <b class="red">(sai)</b>
+          <br><span class="note">Kalman tối ưu khi chuyển động và phép đo tuyến tính, nhiễu chuẩn. Hệ phi tuyến cần bản mở rộng, tuyến tính hoá quanh ước lượng bằng Jacobian.</span></div>
+        say: "Lỗi thứ tư, dùng nguyên công thức cho hệ phi tuyến. Lọc Kalman chỉ tối ưu khi chuyển động và phép đo tuyến tính, nhiễu phân phối chuẩn. Hệ phi tuyến cần bản mở rộng, tuyến tính hoá quanh ước lượng bằng Jacobian."
+
+  # ───────────────────────── 7. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.kalman1d_update(10, 4, 12, 4) == (0.5, 11.0, 2.0)"
+      - "tuple(round(v, 6) for v in alg.kalman1d_update(10, 4, 12, 1)) == (0.8, 11.6, 0.8)"
+      - "12 - 10 == 2 and round((1 - 0.5) * 4, 6) == 2 and round(4 * 1 / (4 + 1), 6) == 0.8 and round(0.2 * 4, 6) == 0.8"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>$\hat{x} = 10$, $P = 4$; đo $z = 12$, $R = 4$. Tính $K$, $\hat{x}_{\text{mới}}$, $P_{\text{mới}}$.</td></tr>
+          <tr><td>2</td><td>Cảm biến tốt hơn, $R = 1$: làm lại.</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, ước lượng 10 với phương sai 4, đo được 12 với R bằng 4, tính K, ước lượng mới và phương sai mới. Câu hai, cảm biến tốt hơn với R bằng 1, làm lại. Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① $K = \dfrac{4}{4 + 4} = 0{,}5$; độ lệch $z - \hat{x} = 12 - 10 = 2$.</p>
+          <p>$\hat{x} = 10 + 0{,}5 \cdot 2 = \hl{11}$; $P = (1 - 0{,}5) \cdot 4 = \hl{2}$.</p>
+        focus: [1, 1, 2]
+        say: "Đáp án câu một, K bằng 4 chia 4 cộng 4, tức 0 phẩy 5. Độ lệch giữa phép đo và ước lượng là 12 trừ 10, bằng 2. Vậy ước lượng mới bằng 10 cộng nửa của 2, tức 11, và phương sai bằng nửa của 4, tức 2."
+      - show: |
+          <p>② $K = \dfrac{4}{4 + 1} = 0{,}8$; $\hat{x} = 10 + 0{,}8 \cdot 2 = \hl{11{,}6}$; $P = 0{,}2 \cdot 4 = \hl{0{,}8}$.</p>
+          <p class="note">Kiểm: $\dfrac{PR}{P + R} = \dfrac{4 \cdot 1}{5} = 0{,}8$ ✓ — nhỏ hơn cả $P = 4$ lẫn $R = 1$.</p>
+        focus: [1, 1, 2]
+        say: "Câu hai, K bằng 4 chia 5, tức 0 phẩy 8, nên ước lượng mới bằng 10 cộng 0 phẩy 8 nhân 2, bằng 11 phẩy 6, gần phép đo hơn. Phương sai còn 0 phẩy 2 nhân 4, bằng 0 phẩy 8. Kiểm bằng dạng P nhân R chia P cộng R, 4 chia 5 cũng bằng 0 phẩy 8, nhỏ hơn cả hai nguồn."
+
+  # ───────────────────────── 8. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">hai nguồn, hai phương sai</span><span class="a">→</span>
+          <span class="n">$K = \frac{P}{P + R}$: trọng số tối ưu</span><span class="a">→</span>
+          <span class="n">$P_{\text{mới}} = (1 - K)P$ nhỏ hơn cả hai</span><span class="a">→</span>
+          <span class="n">dự đoán tăng $P$, đo giảm $P$</span></div>
+        say: "Tổng kết lại, ta có hai nguồn tin với hai phương sai. Hệ số Kalman K bằng P chia P cộng R là trọng số tối ưu cho phép đo, và phương sai mới nhỏ hơn cả hai. Bước dự đoán làm P tăng, bước đo làm P giảm."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> mỗi con số đo được nên đi kèm độ không chắc của nó. Khi trộn thông tin, cân theo độ không chắc.</div>
+        say: "Điều cần mang theo, mỗi con số đo được nên đi kèm độ không chắc chắn của nó. Khi trộn thông tin, hãy cân theo độ không chắc chắn đó."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 13): <b>lọc Kalman nhiều chiều</b> — ước lượng cả vị trí và vận tốc khi chỉ đo được vị trí.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 13, ta học lọc Kalman nhiều chiều, ước lượng cả vị trí và vận tốc khi chỉ đo được vị trí. Hẹn gặp bạn ở bài tiếp theo."

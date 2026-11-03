@@ -1,0 +1,216 @@
+id: L13
+course: CLD
+series: "CLD · Hệ thống hướng dịch vụ"
+title: "Bài 13 — Cấu hình, bí mật và an toàn chuỗi cung ứng"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/cld.yaml L13; audit/cld/verify_cld.py L13; A. Wiggins, The Twelve-Factor App, mục III “Config” (12factor.net, 2011); Open Container Initiative, Image Format Specification v1.1 (2024), mục “Whiteouts”; RFC 4648 (Base64); SLSA v1.0 (slsa.dev); SWF bài 12 (bảo mật phần mềm)"
+assumes: [arith]
+# Quy ước: alg.layered_secret dựng ba lớp tar thật: lớp 2 chép app/.env chứa mật khẩu, lớp 3 thêm dấu xoá “.wh..env”. Hệ tệp ghép không còn tệp,
+#   nhưng giải nén lớp 2 vẫn đọc được. Mật khẩu ví dụ “hunter2” là giả. Mã hoá cơ số 64 (base64) chỉ trên màn hình; lời đọc “mã cơ số 64”.
+objectives:
+  - "Tách cấu hình khỏi ảnh"
+  - "Quản lý bí mật và quyền tối thiểu"
+  - "Hiểu vì sao xoá ở lớp sau không xoá được bí mật"
+asr_reviewed:
+  - {sentence: "Bước ba, hệ tệp ghép lúc chạy đi từ dưới lên.", reason: "ASR chép “Bước ba, hãy tạp ghép lúc chạy đi từ dưới lân.” (0.727): lệch âm/thanh thuần Việt: hệ tệp/hãy tạp, lên/lân — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Chương trình chạy trong container không mở được tệp mật khẩu nữa.", reason: "ASR chép “Chương trình chạy trong cân tay nơ không mở được tạp mật khẩu nữa.” (0.769): container đọc thô (probe CLD p1: 5/8, small viết “cần tên nơi”); lệch âm/thanh thuần Việt: tệp/tạp — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Ba byte cho 4 chữ.", reason: "ASR chép “3 bài cho 4 chữ.” (0.8): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Tám chữ là hai nhóm, ứng với 6 byte, trừ một byte đệm còn 5 byte.", reason: "ASR chép “Tám chữ là 2 nhóm, ứng với 6 bai, trừ 1 bai đệm còn 5 bai.” (0.812): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Liệt kê thẳng tệp nén của lớp hai, không ghép lớp nào, ta thấy một tệp 16 byte có chứa mật khẩu.", reason: "ASR chép “Liệt kê thẳng tập nén của lớp 2, không ghép lớp nào, ta thấy 1 tập 16 bai có chứa mật khẩu.” (0.87): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: tệp/tập, tệp/tập — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Điều thứ hai, mã cơ số 64 là cách viết byte bằng chữ cái.", reason: "ASR chép “Điều thứ 2, mạ cơ số 64 là cách viết bay bằng chữ Cái.” (0.875): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: mã/mạ — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bảy byte cần 3 nhóm, nên ra 12 chữ.", reason: "ASR chép “7 bai cần 3 nhóm nên ra 12 chữ.” (0.9): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Năm byte cần 2 nhóm, làm tròn lên, nên ra 8 chữ, dấu bằng ở cuối chỉ để đệm cho đủ nhóm.", reason: "ASR chép “Năm bay cần hai nhóm, làm tròn linh, nên ra tám chữ, giấu bằng ở cuối chỉ để đệm cho đủ nhóm.” (0.909): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: lên/linh — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Đó chỉ là cách viết byte bằng chữ cái, ai cũng giải ngược được, chuỗi mã trên màn hình giải ra đúng mật khẩu.", reason: "ASR chép “Đó chỉ là cách viết bay bằng chữ cái, ai cũng giải ngược được. Chủi mã trên màn hình giải ra đúng mật khẩu.” (0.917): byte đọc thô, ASR viết “bay” (probe CSA p1 8/8); lệch âm/thanh thuần Việt: chuỗi/chủi — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Đã xoá tệp mật khẩu rồi mà"
+    checks:
+      - "alg.layered_secret() == (False, b'MAT_KHAU=hunter2')"
+    steps:
+      - show: |
+          <p>Lỡ chép tệp chứa mật khẩu cơ sở dữ liệu vào ảnh, bạn thêm một bước “xoá tệp” ở cuối rồi đẩy ảnh lên kho công khai. Chạy container: không còn tệp. Nhưng ai tải ảnh về, giải nén từng lớp, vẫn đọc được $\hl{\text{MAT\_KHAU=hunter2}}$.</p>
+          <div class="box key">Hôm nay: <b>cấu hình</b>, <b>bí mật</b>, và an toàn của những gì ta đưa vào ảnh.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, bạn lỡ chép tệp chứa mật khẩu cơ sở dữ liệu vào ảnh, rồi thêm một bước xoá tệp ở cuối và đẩy ảnh lên kho công khai. Chạy container thì không còn thấy tệp. Nhưng ai tải ảnh về và giải nén từng lớp vẫn đọc được mật khẩu. Hôm nay ta học quản lý cấu hình, bí mật, và an toàn của những gì ta đưa vào ảnh."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: ảnh là chồng lớp, và byte viết thành chữ"
+    checks:
+      - "len(__import__('base64').b64encode(b'adm')) == 4 and __import__('base64').b64encode(b'adm') == b'YWRt' and 3 * 8 == 24 == 4 * 6"
+      - "[len(__import__('base64').b64encode(s)) for s in (b'admin', b'hunter2')] == [4 * math.ceil(5 / 3), 4 * math.ceil(7 / 3)] == [8, 12]"
+    steps:
+      - show: |
+          <p><b>Ảnh là chồng lớp</b> (bài 2): mỗi bước dựng tạo một lớp, lớp chỉ ghi <b>những tệp bước đó thay đổi</b>. Lúc chạy, các lớp được đặt chồng lên nhau, lớp trên che lớp dưới.</p>
+          <table class="t"><tr><th>lớp</th><th>ghi gì</th><th>nhìn từ trên xuống thấy</th></tr>
+          <tr><td>1</td><td><code>a.txt</code> = “1”</td><td>“1”</td></tr>
+          <tr><td>2</td><td><code>a.txt</code> = “2”</td><td>“2” — nhưng lớp 1 <b>vẫn giữ</b> “1”</td></tr></table>
+        focus: [1, 1, "2.2", "2.3"]
+        say: "Ở bài 2, ta đã học ảnh là một chồng lớp, mỗi bước dựng tạo một lớp, và lớp chỉ ghi những tệp mà bước đó thay đổi. Lúc chạy, các lớp được đặt chồng lên nhau, lớp trên che lớp dưới. Ví dụ, lớp 1 ghi tệp a với nội dung 1, nên nhìn từ trên xuống thấy 1. Lớp 2 ghi lại tệp a với nội dung 2, nên giờ ta thấy 2, nhưng lớp 1 vẫn giữ nguyên bản cũ có nội dung 1."
+      - show: |
+          <p><b>Viết byte bằng chữ cái</b> (mã cơ số 64): 3 byte = 24 bit, cắt thành 4 nhóm 6 bit, mỗi nhóm thành một chữ. Không có khoá nào cả.</p>
+          <table class="t"><tr><th>dữ liệu</th><th>số byte</th><th>số nhóm 3 byte (làm tròn lên)</th><th>kết quả</th></tr>
+          <tr><td><code>adm</code></td><td>3</td><td>1</td><td><code>YWRt</code> (4 chữ)</td></tr>
+          <tr><td><code>admin</code></td><td>5</td><td>2</td><td><code>YWRtaW4=</code> (8 chữ, dấu = để đệm)</td></tr>
+          <tr><td><code>hunter2</code></td><td>7</td><td>3</td><td><code>aHVudGVyMg==</code> (12 chữ)</td></tr></table>
+        focus: [1, 1, 1, "2.2", "2.3", "2.4"]
+        say: "Điều thứ hai, mã cơ số 64 là cách viết byte bằng chữ cái. Ba byte là 24 bit, cắt thành 4 nhóm 6 bit, mỗi nhóm đổi thành một chữ. Không có khoá nào cả, nên ai biết quy tắc cũng đổi ngược được. Ba byte cho 4 chữ. Năm byte cần 2 nhóm, làm tròn lên, nên ra 8 chữ, dấu bằng ở cuối chỉ để đệm cho đủ nhóm. Bảy byte cần 3 nhóm, nên ra 12 chữ."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: cấu hình, bí mật, chuỗi cung ứng"
+    steps:
+      - show: |
+          <table class="t"><tr><th>khái niệm</th><th>nghĩa</th><th>để ở đâu</th></tr>
+          <tr><td><b>cấu hình</b></td><td>thứ khác nhau giữa các môi trường (địa chỉ cơ sở dữ liệu, mức ghi nhật ký)</td><td>biến môi trường, tệp gắn vào lúc chạy — <b>không</b> trong ảnh</td></tr>
+          <tr><td><b>bí mật</b></td><td>cấu hình mà lộ ra là nguy hiểm (mật khẩu, khoá)</td><td>kho bí mật, mã hoá khi lưu, cấp đúng dịch vụ cần</td></tr>
+          <tr><td><b>chuỗi cung ứng</b></td><td>mọi thứ đi vào ảnh: ảnh nền, thư viện, công cụ dựng</td><td>ghim phiên bản, kiểm mã băm, quét lỗ hổng</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.3", "1.4"]
+        say: "Bảng giới thiệu ba khái niệm. Cấu hình là thứ khác nhau giữa các môi trường, như địa chỉ cơ sở dữ liệu hay mức ghi nhật ký. Nó nên để ở biến môi trường hoặc tệp gắn vào lúc chạy, không nằm trong ảnh. Bí mật là cấu hình mà lộ ra thì nguy hiểm, như mật khẩu hay khoá, và nên để trong kho bí mật, mã hoá khi lưu, chỉ cấp cho đúng dịch vụ cần. Chuỗi cung ứng là mọi thứ đi vào ảnh, như ảnh nền, thư viện, công cụ dựng, cần ghim phiên bản, kiểm mã băm, và quét lỗ hổng."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Dấu xoá chỉ che, không cắt bỏ"
+    steps:
+      - show: |
+          <div><svg width="1500" height="400" viewBox="0 0 1500 400"><g font-size="24" fill="#1f2937"><text x="360" y="34" text-anchor="middle" font-weight="bold">ảnh = chồng ba lớp</text><rect x="80" y="60" width="560" height="62" rx="8" fill="#fee2e2" stroke="#b91c1c" stroke-width="3"/><text x="110" y="100" font-weight="bold">lớp 3</text><text x="330" y="100">dấu xoá cho .env</text><rect x="80" y="140" width="560" height="62" rx="8" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="110" y="180" font-weight="bold">lớp 2</text><text x="330" y="180">.env (mật khẩu)</text><rect x="80" y="220" width="560" height="62" rx="8" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="110" y="260" font-weight="bold">lớp 1</text><text x="330" y="260">main.py</text><line x1="660" y1="150" x2="900" y2="120" stroke="#1f2937" stroke-width="3"/><line x1="660" y1="90" x2="900" y2="90" stroke="#1f2937" stroke-width="3"/><rect x="900" y="50" width="560" height="80" rx="10" fill="#ecfdf5" stroke="#059669" stroke-width="3"/><text x="1180" y="85" text-anchor="middle" fill="#059669" font-weight="bold">hệ tệp ghép lúc chạy</text><text x="1180" y="118" text-anchor="middle">chỉ thấy main.py, không thấy .env</text><line x1="660" y1="171" x2="900" y2="250" stroke="#b91c1c" stroke-width="3" stroke-dasharray="8 6"/><rect x="900" y="210" width="560" height="80" rx="10" fill="#fee2e2" stroke="#b91c1c" stroke-width="3"/><text x="1180" y="245" text-anchor="middle" fill="#b91c1c" font-weight="bold">giải nén riêng lớp 2</text><text x="1180" y="278" text-anchor="middle">đọc được MAT_KHAU=hunter2</text><text x="750" y="350" text-anchor="middle">tải ảnh về là tải cả ba lớp: dấu xoá chỉ che, không cắt bỏ lớp 2</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình bên trái là ảnh gồm ba lớp, lớp 1 có tệp mã chính, lớp 2 có tệp chứa mật khẩu, lớp 3 chỉ ghi một dấu xoá cho tệp đó. Khi chạy, hệ tệp ghép nhìn từ trên xuống, gặp dấu xoá nên không thấy tệp mật khẩu. Nhưng theo đường đứt nét màu đỏ, ai giải nén riêng lớp 2 vẫn đọc được mật khẩu. Tải ảnh về là tải cả ba lớp, vì dấu xoá chỉ che, không cắt bỏ lớp 2."
+
+  - id: example
+    kind: example
+    title: "Xoá ở lớp sau không xoá lớp trước"
+    checks:
+      - "alg.layered_secret()[0] is False and alg.layered_secret()[1].startswith(b'MAT_KHAU=')"
+    steps:
+      - show: |
+          <table class="t"><tr><th>lớp</th><th>nội dung</th></tr>
+          <tr><td>1</td><td>chép <code>app/main.py</code></td></tr>
+          <tr><td>2</td><td>chép <code>app/.env</code> (chứa mật khẩu)</td></tr></table>
+          <p><b>Bước 1</b> — hai lớp đầu: mỗi lớp là một tệp nén riêng, chứa đúng tệp bước đó thêm vào.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Bước một, xem hai lớp đầu của ảnh. Lớp một chép tệp mã chính. Lớp hai chép tệp chứa mật khẩu. Mỗi lớp là một tệp nén riêng, chứa đúng tệp mà bước đó thêm vào."
+      - show: |
+          <table class="t"><tr><th>lớp</th><th>nội dung</th></tr>
+          <tr><td>3</td><td>xoá <code>app/.env</code> — thực chất ghi một <b>dấu xoá</b> tên <code>app/.wh..env</code></td></tr></table>
+          <p><b>Bước 2</b> — lớp không sửa được lớp dưới, nên “xoá” chỉ là <b>thêm</b> một tệp đánh dấu ở lớp trên.</p>
+        focus: [1, 2]
+        say: "Bước hai, lớp ba xoá tệp mật khẩu, mà thực chất chỉ ghi một dấu xoá, là một tệp rỗng có tên đặc biệt. Vì lớp đã dựng không sửa được, xoá chỉ là thêm một tệp đánh dấu ở lớp trên."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>ghép từ dưới lên</th><th>tập tệp nhìn thấy</th></tr>
+          <tr><td>sau lớp 1</td><td>{main.py}</td></tr>
+          <tr><td>sau lớp 2</td><td>{main.py, .env}</td></tr>
+          <tr><td>sau lớp 3 (dấu xoá che .env)</td><td>$\hl{\{\text{main.py}\}}$ — không thấy tệp</td></tr></table>
+          <p><b>Bước 3</b> — hệ tệp ghép lúc chạy: chương trình trong container không mở được <code>.env</code>.</p>
+        introduces: [set]
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Bước ba, hệ tệp ghép lúc chạy đi từ dưới lên. Sau lớp một, ta thấy tệp mã chính. Sau lớp hai, thấy thêm tệp mật khẩu. Sau lớp ba, dấu xoá che tệp mật khẩu, nên chỉ còn tệp mã chính. Chương trình chạy trong container không mở được tệp mật khẩu nữa."
+      - show: |
+          <table class="t"><tr><th>người tải ảnh làm gì</th><th>đọc được</th></tr>
+          <tr><td>chạy container</td><td>không thấy <code>.env</code></td></tr>
+          <tr><td>giải nén riêng lớp 2</td><td>$\hl{\text{MAT\_KHAU=hunter2}}$</td></tr></table>
+          <div class="box key"><b>Bước 4</b> — bí mật đã từng vào một lớp thì coi như <b>đã lộ</b>: đổi mật khẩu, và dựng lại sao cho nó không bao giờ vào ảnh.</div>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Bước bốn, đặt mình vào chỗ người tải ảnh. Khi chạy container, chương trình không còn thấy tệp mật khẩu nữa. Nhưng ảnh vẫn chứa nguyên lớp hai, giải nén lớp đó là đọc được mật khẩu. Bí mật đã từng vào một lớp thì coi như đã lộ, hãy đổi mật khẩu và dựng lại sao cho nó không bao giờ vào ảnh."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác"
+    checks:
+      - "({'app/main.py'} | {'app/.env'}) - {'app/.env'} == {'app/main.py'} and alg.layered_secret()[0] is False"
+      - "len(b'MAT_KHAU=hunter2') == 16 and alg.layered_secret()[1] == b'MAT_KHAU=hunter2'"
+    steps:
+      - show: |
+          <table class="t"><tr><th>kiểm</th><th>cách khác</th><th>kết quả</th></tr>
+          <tr><td>hệ tệp ghép</td><td>làm bằng tập hợp: hợp hai lớp đầu, rồi bỏ tệp có dấu xoá</td><td>chỉ còn main.py ✓ — khớp máy dựng ba lớp thật</td></tr>
+          <tr><td>lớp 2 còn gì?</td><td>liệt kê thẳng tệp nén của lớp 2, không ghép lớp</td><td>một tệp 16 byte, nội dung có mật khẩu ✓</td></tr></table>
+        focus: [0, "1.2", "1.3"]
+        say: "Kiểm bằng đường khác, vì máy dựng ba lớp thật mà kết quả tay vẫn khớp thì lập luận đúng. Làm bằng tập hợp, lấy hợp của hai lớp đầu rồi bỏ tệp có dấu xoá, chỉ còn tệp mã chính, khớp với hệ tệp ghép. Liệt kê thẳng tệp nén của lớp hai, không ghép lớp nào, ta thấy một tệp 16 byte có chứa mật khẩu."
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc, 1 lỗi người đã đi làm"
+    checks:
+      - "__import__('base64').b64decode('aHVudGVyMg==') == b'hunter2'"
+      - "14 * 24 == 336 == min(14 * 24, 90 * 24) and min(14 * 24, 1) == 1 and 90 * 24 == 2160"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Tưởng base64 là mã hoá bảo mật <b class="red">(không phải)</b>
+          <br><span class="note">Base64 chỉ là cách <b>viết</b> byte bằng chữ cái, ai cũng giải ngược được: <code>aHVudGVyMg==</code> → <code>hunter2</code>. Bí mật lưu dạng này phải được bảo vệ bằng quyền truy cập và mã hoá thật khi lưu.</span></div>
+        say: "Lỗi thứ nhất, tưởng mã cơ số 64 là mã hoá bảo mật. Đó chỉ là cách viết byte bằng chữ cái, ai cũng giải ngược được, chuỗi mã trên màn hình giải ra đúng mật khẩu. Bí mật lưu dạng này phải được bảo vệ bằng quyền truy cập và mã hoá thật khi lưu."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Đóng cấu hình vào ảnh <b class="red">(mỗi môi trường một ảnh)</b>
+          <br><span class="note">Ảnh cho thử nghiệm và ảnh cho thật khác nhau thì thứ đã kiểm thử không phải thứ chạy thật. Dùng <b>một</b> ảnh, cấu hình đưa vào lúc chạy.</span></div>
+        say: "Lỗi thứ hai, đóng cấu hình vào ảnh. Ảnh cho thử nghiệm và ảnh cho môi trường thật khác nhau, thì thứ đã kiểm thử không phải thứ chạy thật. Hãy dùng một ảnh duy nhất, và đưa cấu hình vào lúc chạy."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Một khoá dùng chung cho mọi dịch vụ <b class="red">(quyền quá rộng)</b>
+          <br><span class="note">Một dịch vụ bị chiếm là kẻ tấn công có khoá vào mọi thứ. Mỗi dịch vụ một danh tính, chỉ được quyền nó cần (quyền tối thiểu), và khoá có hạn dùng ngắn.</span></div>
+        say: "Lỗi thứ ba, dùng một khoá chung cho mọi dịch vụ. Một dịch vụ bị chiếm là kẻ tấn công có khoá vào mọi thứ. Mỗi dịch vụ nên có danh tính riêng, chỉ được quyền nó cần, và khoá có hạn dùng ngắn."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Dùng khoá dài hạn, tin rằng “lộ thì sẽ biết ngay” <b class="red">(cửa sổ bị lợi dụng dài)</b></div>
+          <table class="t"><tr><th>khoá lộ, 14 ngày sau mới phát hiện</th><th>kẻ tấn công dùng được tối đa</th></tr>
+          <tr><td>khoá hạn 90 ngày (2160 giờ)</td><td>$14 \cdot 24 = 336$ giờ — tới lúc phát hiện</td></tr>
+          <tr><td>khoá hạn 1 giờ, tự cấp lại</td><td>1 giờ — khoá hết hạn trước khi ai kịp biết</td></tr></table>
+        introduces: [cdot]
+        focus: [1, 2, "2.2", "2.3", 0]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, dùng khoá dài hạn và tin rằng lộ thì sẽ biết ngay. Nhưng lộ khoá có thể được phát hiện rất muộn, giả sử 14 ngày sau. Với khoá hạn 90 ngày, kẻ tấn công dùng được tới lúc phát hiện, tức 14 nhân 24, bằng 336 giờ. Với khoá hạn 1 giờ được tự cấp lại, khoá lộ chỉ dùng được tối đa 1 giờ. Người làm nghề không trông vào việc phát hiện nhanh, mà rút ngắn hạn dùng để giới hạn thiệt hại."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "__import__('base64').b64encode(b'admin') == b'YWRtaW4='"
+      - "len('YWRtaW4=') == 8 and 8 // 4 * 3 - 1 == 5 == len(__import__('base64').b64decode('YWRtaW4='))"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Chuỗi <code>YWRtaW4=</code> trong tệp cấu hình “đã mã hoá”. Nó có an toàn không? Giải ra được gì?</td></tr>
+          <tr><td>2</td><td>Ảnh đã đẩy lên kho chứa một lớp có khoá truy cập, lớp sau đã xoá. Cần làm hai việc gì?</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, một chuỗi trong tệp cấu hình được gọi là đã mã hoá, nó có an toàn không, và giải ra được gì? Câu hai, ảnh đã đẩy lên kho chứa một lớp có khoá truy cập, lớp sau đã xoá, cần làm hai việc gì? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 1</th><th>lập luận</th></tr>
+          <tr><td>nhận dạng</td><td>chỉ có chữ, số và dấu = đệm ở cuối → dấu hiệu của mã cơ số 64</td></tr>
+          <tr><td>độ dài</td><td>8 chữ = 2 nhóm → 6 byte, trừ 1 byte đệm = 5 byte</td></tr>
+          <tr><td>giải ngược, không cần khoá</td><td><code>admin</code> → <b>không</b> an toàn</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Đáp án câu một, ta lập luận từng bước. Chuỗi chỉ có chữ, số và một dấu bằng đệm ở cuối, đó là dấu hiệu của mã cơ số 64. Tám chữ là hai nhóm, ứng với 6 byte, trừ một byte đệm còn 5 byte. Giải ngược không cần khoá nào, ra ngay tên tài khoản quản trị, nên không an toàn."
+      - show: |
+          <table class="t"><tr><th>câu 2: việc</th><th>vì sao</th></tr>
+          <tr><td>1. thu hồi và cấp lại khoá <b>ngay</b></td><td>ai đã tải ảnh đều có lớp chứa khoá: coi như đã lộ</td></tr>
+          <tr><td>2. dựng lại ảnh không chứa khoá ở bất kỳ lớp nào, xoá ảnh cũ khỏi kho</td><td>để bản sao mới không mang khoá nữa</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Câu hai, có hai việc theo đúng thứ tự. Việc thứ nhất, thu hồi và cấp lại khoá ngay, vì ai đã tải ảnh đều có lớp chứa khoá, nên coi như đã lộ. Việc thứ hai, dựng lại ảnh không chứa khoá ở bất kỳ lớp nào, và xoá ảnh cũ khỏi kho, để những bản tải về sau không mang khoá nữa."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">một ảnh, cấu hình lúc chạy</span><span class="a">→</span>
+          <span class="n">bí mật trong kho bí mật, quyền tối thiểu</span><span class="a">→</span>
+          <span class="n">lớp ảnh không xoá được</span><span class="a">→</span>
+          <span class="n">ghim, kiểm mã băm, quét</span></div>
+        say: "Tổng kết lại, dùng một ảnh và đưa cấu hình vào lúc chạy. Bí mật để trong kho bí mật với quyền tối thiểu. Lớp ảnh không xoá được, và mọi thứ đi vào ảnh cần ghim phiên bản, kiểm mã băm, quét lỗ hổng."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> một bí mật an toàn là bí mật chưa bao giờ nằm ở chỗ nhiều người đọc được — không phải bí mật đã bị “xoá” sau đó.</div>
+        say: "Điều cần mang theo, một bí mật an toàn là bí mật chưa bao giờ nằm ở chỗ nhiều người đọc được, chứ không phải bí mật đã bị xoá sau đó."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 14): <b>kiến trúc hướng sự kiện</b>, saga và nhất quán cuối cùng.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 14, ta học kiến trúc hướng sự kiện, saga, và nhất quán cuối cùng. Hẹn gặp bạn ở bài tiếp theo."

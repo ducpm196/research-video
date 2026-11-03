@@ -1,0 +1,252 @@
+id: L02
+course: OSY
+series: "OSY · Hệ điều hành"
+title: "Bài 2 — Lập lịch CPU: FCFS và SJF"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/osy.yaml L02; audit/verify_plan_curricula.py OSY:L02; Silberschatz, Galvin, Gagne, Operating System Concepts, chương 5"
+assumes: [arith, frac, sub, dots]
+# Quy ước: mọi tiến trình đến lúc 0, theo thứ tự P1, P2, P3; “thời gian chạy” = độ dài đợt dùng CPU (đơn vị ms).
+#   Thời gian chờ = lúc bắt đầu chạy − lúc đến. FCFS (đến trước phục vụ trước), SJF (việc ngắn nhất trước): tên viết tắt chỉ trên màn hình.
+#   Hình Gantt sinh bằng audit/osy/gantt_svg.py từ chính mô phỏng; số trong checks tính bằng alg.sched_waits.
+objectives:
+  - "Vẽ biểu đồ thời gian của một lịch chạy"
+  - "Tính thời gian chờ trung bình"
+  - "Giải thích vì sao việc ngắn nhất trước cho chờ trung bình nhỏ nhất"
+asr_reviewed:
+  - {sentence: "Lỗi thứ tư, chỉ nhìn con số trung bình.", reason: "ASR chép “Lội thứ 4, triển nhìn con số trung bình.” (0.778): lệch âm/thanh thuần Việt: lỗi/lội, chỉ/triển — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Xếp hàng ở siêu thị"
+    steps:
+      - show: |
+          <p>Bạn mua một chai nước, đứng sau một người mang xe đẩy đầy hàng. Bạn chờ 10 phút cho 10 giây tính tiền.</p>
+          <p>Nếu cho người ít hàng tính trước, <b>tổng</b> thời gian chờ của cả hàng giảm mạnh — mà người xe đẩy chỉ chờ thêm chút ít.</p>
+          <div class="box key">Hôm nay: hệ điều hành chọn tiến trình nào chạy tiếp, và cách đo một lịch tốt hay xấu.</div>
+        focus: [1, 2, 3]
+        say: "Chào bạn, bạn mua một chai nước, đứng sau một người mang xe đẩy đầy hàng, và phải chờ 10 phút cho 10 giây tính tiền. Nếu cho người ít hàng tính trước, tổng thời gian chờ của cả hàng giảm mạnh, mà người xe đẩy chỉ chờ thêm chút ít. Hôm nay ta học cách hệ điều hành chọn tiến trình nào chạy tiếp, và cách đo một lịch chạy tốt hay xấu."
+
+  # ───────────────────────── 1b. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: cộng dồn và trung bình cộng"
+    checks:
+      - "[0, 0 + 5, 0 + 5 + 3] == [0, 5, 8]"
+      - "(2 + 4 + 6) / 3 == 4"
+    steps:
+      - show: |
+          <p><b>Cộng dồn:</b> ba việc dài 5, 3, 2 phút làm nối tiếp nhau. Mỗi việc bắt đầu khi việc trước xong.</p>
+          <table class="t"><tr><th>việc</th><th>dài</th><th>bắt đầu lúc</th></tr>
+          <tr><td>A</td><td>5</td><td>0</td></tr>
+          <tr><td>B</td><td>3</td><td>$0 + 5 = 5$</td></tr>
+          <tr><td>C</td><td>2</td><td>$5 + 3 = 8$</td></tr></table>
+        focus: [0, 1, "2.2", "2.3", "2.4"]
+        say: "Trước hết, ta ôn hai phép tính sẽ dùng. Thứ nhất là cộng dồn, ba việc dài 5, 3 và 2 phút làm nối tiếp nhau, mỗi việc bắt đầu khi việc trước xong. Việc A bắt đầu lúc 0. Việc B bắt đầu lúc 0 cộng 5, bằng 5. Việc C bắt đầu lúc 5 cộng 3, bằng 8."
+      - show: |
+          <p><b>Trung bình cộng</b> = tổng chia cho số lượng:</p>
+          $$\frac{2 + 4 + 6}{3} = \frac{12}{3} = 4$$
+        focus: [1, 2]
+        say: "Thứ hai là trung bình cộng, bằng tổng chia cho số lượng. Ví dụ ba số 2, 4 và 6 có tổng 12, chia 3 được trung bình là 4."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: thời gian chạy, thời gian chờ, biểu đồ thời gian"
+    steps:
+      - show: |
+          <p><b>Thời gian chạy</b> của tiến trình: nó cần dùng bộ xử lý bao lâu (ms).</p>
+          <p><b>Thời gian chờ</b> = lúc bắt đầu chạy − lúc đến hàng đợi. Hôm nay mọi tiến trình đến lúc 0, nên chờ = lúc bắt đầu.</p>
+          <p><b>Biểu đồ thời gian</b> (Gantt): mỗi khối là một đoạn tiến trình chạy, số bên dưới là mốc thời gian.</p>
+        focus: [0, 1, 2, 3]
+        say: "Ba khái niệm cần nắm. Thời gian chạy của một tiến trình là nó cần dùng bộ xử lý bao lâu, tính bằng mi li giây. Thời gian chờ bằng lúc bắt đầu chạy trừ lúc đến hàng đợi, và hôm nay mọi tiến trình đều đến lúc 0, nên thời gian chờ chính là lúc bắt đầu. Biểu đồ thời gian vẽ mỗi đoạn chạy thành một khối, số bên dưới là các mốc thời gian."
+
+  # ───────────────────────── 3. VÍ DỤ FCFS ─────────────────────────
+  - id: example
+    kind: example
+    title: "Đến trước phục vụ trước (FCFS): 24, 3, 3"
+    checks:
+      - "alg.sched_waits([24, 3, 3]) == [0, 24, 27] and sum(alg.sched_waits([24, 3, 3])) / 3 == 17"
+      - "0 + 24 == 24 and 24 + 3 == 27 and 0 + 24 + 27 == 51 and 51 / 3 == 17"
+    steps:
+      - show: |
+          <p>P1 = 24, P2 = 3, P3 = 3 ms, đến theo thứ tự đó. Chạy đúng thứ tự đến:</p>
+          <div>{{FCFS}}</div>
+        focus: [1, 2]
+        say: "Ba tiến trình cần 24, 3 và 3 mi li giây, đến theo đúng thứ tự đó. Theo cách đến trước phục vụ trước, tiến trình 1 chạy từ 0 đến 24, rồi tiến trình 2 đến 27, rồi tiến trình 3 đến 30."
+      - clear: true
+        show: |
+          <p><b>Bước 1.</b> P1 chạy đầu tiên, bắt đầu lúc 0:</p>
+          $$\text{chờ của P1} = \hl{0}$$
+        focus: [1, 2]
+        say: "Bây giờ tính thời gian chờ từng bước. Bước 1, tiến trình 1 chạy đầu tiên, bắt đầu ngay lúc 0, nên chờ 0."
+      - show: |
+          <p><b>Bước 2.</b> P2 bắt đầu khi P1 xong:</p>
+          $$\text{chờ của P2} = 0 + 24 = \hl{24}$$
+        focus: [1, 2]
+        say: "Bước 2, vì mỗi tiến trình bắt đầu khi tiến trình trước xong, tiến trình 2 phải đợi tiến trình 1 chạy hết 24 mi li giây. Chờ của nó bằng 0 cộng 24, bằng 24."
+      - clear: true
+        show: |
+          <p><b>Bước 3.</b> P3 bắt đầu khi P2 xong:</p>
+          $$\text{chờ của P3} = 24 + 3 = \hl{27}$$
+        focus: [1, 2]
+        say: "Bước 3, tiến trình 3 đợi thêm tiến trình 2 chạy 3 mi li giây. Chờ của nó bằng 24 cộng 3, bằng 27."
+      - show: |
+          <p><b>Bước 4.</b> Trung bình của ba thời gian chờ:</p>
+          $$\frac{0 + 24 + 27}{3} = \frac{51}{3} = \hl{17} \text{ ms}$$
+        focus: [1, 2]
+        say: "Bước 4, lấy trung bình. Tổng chờ là 0 cộng 24 cộng 27, bằng 51, chia 3 được 17 mi li giây."
+
+  # ───────────────────────── 4. VÍ DỤ SJF ─────────────────────────
+  - id: sjf
+    kind: example
+    title: "Việc ngắn nhất trước (SJF): cùng ba tiến trình"
+    checks:
+      - "alg.sched_waits(sorted([24, 3, 3])) == [0, 3, 6] and sum(alg.sched_waits(sorted([24, 3, 3]))) / 3 == 3"
+    steps:
+      - show: |
+          <p>Chọn tiến trình ngắn nhất trước: P2, P3, rồi P1.</p>
+          <div>{{SJF}}</div>
+          <p>Chờ: P2 = 0, P3 = 3, P1 = 6. Trung bình $\frac{0 + 3 + 6}{3} = \hl{3}$ ms — nhỏ hơn 17 gần 6 lần.</p>
+        focus: [1, 2, 3]
+        say: "Bây giờ chọn tiến trình ngắn nhất chạy trước, tức tiến trình 2, rồi tiến trình 3, rồi mới tới tiến trình 1. Tiến trình 2 chạy từ 0 đến 3, tiến trình 3 từ 3 đến 6, tiến trình 1 từ 6 đến 30. Thời gian chờ là 0, 3 và 6, nên trung bình chỉ còn 3 mi li giây, nhỏ hơn 17 gần sáu lần."
+
+  # ───────────────────────── 4b. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hình dung: thời gian chờ là phần xám"
+    checks:
+      - "alg.sched_waits([24, 3, 3]) == [0, 24, 27] and sum([0, 24, 27]) == 51"
+      - "alg.sched_waits([3, 3, 24]) == [0, 3, 6] and sum([0, 3, 6]) == 9"
+    steps:
+      - show: |
+          <div><svg width="1500" height="420" viewBox="0 0 1500 420"><text x="390" y="40" font-size="26" font-weight="bold" text-anchor="middle" fill="#1f2937">đến trước phục vụ trước</text><text x="76" y="102" font-size="24" font-weight="bold" text-anchor="end" fill="#1f2937">P1</text><rect x="90" y="70" width="480" height="46" fill="#dbeafe" stroke="#2563eb" stroke-width="3"/><text x="76" y="177" font-size="24" font-weight="bold" text-anchor="end" fill="#1f2937">P2</text><rect x="90" y="145" width="480" height="46" fill="#e5e7eb" stroke="#6b7280" stroke-width="2" stroke-dasharray="8 6"/><text x="330.0" y="177" font-size="22" text-anchor="middle" fill="#374151">chờ 24</text><rect x="570" y="145" width="60" height="46" fill="#dcfce7" stroke="#16a34a" stroke-width="3"/><text x="76" y="252" font-size="24" font-weight="bold" text-anchor="end" fill="#1f2937">P3</text><rect x="90" y="220" width="540" height="46" fill="#e5e7eb" stroke="#6b7280" stroke-width="2" stroke-dasharray="8 6"/><text x="360.0" y="252" font-size="22" text-anchor="middle" fill="#374151">chờ 27</text><rect x="630" y="220" width="60" height="46" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text x="390" y="330" font-size="24" text-anchor="middle" fill="#b91c1c">tổng phần xám = 0 + 24 + 27 = 51</text><text x="1150" y="40" font-size="26" font-weight="bold" text-anchor="middle" fill="#1f2937">ngắn nhất trước</text><text x="836" y="102" font-size="24" font-weight="bold" text-anchor="end" fill="#1f2937">P2</text><rect x="850" y="70" width="60" height="46" fill="#dcfce7" stroke="#16a34a" stroke-width="3"/><text x="836" y="177" font-size="24" font-weight="bold" text-anchor="end" fill="#1f2937">P3</text><rect x="850" y="145" width="60" height="46" fill="#e5e7eb" stroke="#6b7280" stroke-width="2" stroke-dasharray="8 6"/><text x="880.0" y="177" font-size="19" text-anchor="middle" fill="#374151">chờ 3</text><rect x="910" y="145" width="60" height="46" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text x="836" y="252" font-size="24" font-weight="bold" text-anchor="end" fill="#1f2937">P1</text><rect x="850" y="220" width="120" height="46" fill="#e5e7eb" stroke="#6b7280" stroke-width="2" stroke-dasharray="8 6"/><text x="910.0" y="252" font-size="22" text-anchor="middle" fill="#374151">chờ 6</text><rect x="970" y="220" width="480" height="46" fill="#dbeafe" stroke="#2563eb" stroke-width="3"/><text x="1150" y="330" font-size="24" text-anchor="middle" fill="#b91c1c">tổng phần xám = 0 + 3 + 6 = 9</text><rect x="430" y="370" width="40" height="30" fill="#e5e7eb" stroke="#6b7280" stroke-width="2" stroke-dasharray="8 6"/><text x="480" y="394" font-size="22" fill="#1f2937">đứng chờ</text><rect x="700" y="370" width="40" height="30" fill="#dbeafe" stroke="#2563eb" stroke-width="3"/><text x="750" y="394" font-size="22" fill="#1f2937">đang dùng bộ xử lý</text></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình này vẽ mỗi tiến trình trên một hàng, phần xám là lúc nó đứng chờ, phần màu là lúc nó dùng bộ xử lý. Bên trái, khối dài 24 của tiến trình 1 chạy trước, nên cả hai tiến trình đứng sau phải chờ ít nhất 24, tổng phần xám là 51. Bên phải, hai khối ngắn chạy trước, mỗi khối chỉ bắt người sau chờ 3, tổng phần xám chỉ còn 9. Khối dài đặt ở cuối thì không bắt ai phải chờ nó cả."
+
+  # ───────────────────────── 5. VÌ SAO ─────────────────────────
+  - id: why
+    kind: concept
+    title: "Vì sao ngắn nhất trước cho chờ trung bình nhỏ nhất"
+    checks:
+      - "len(set(__import__('itertools').permutations([24, 3, 3]))) == 3 and min(sum(alg.sched_waits(p)) for p in set(__import__('itertools').permutations([24, 3, 3]))) == sum(alg.sched_waits(sorted([24, 3, 3])))"
+    steps:
+      - show: |
+          <p>Một tiến trình chạy trước bắt mọi tiến trình đứng sau nó chờ thêm đúng bằng thời gian chạy của nó.</p>
+          <p>Đổi chỗ hai tiến trình kề nhau sao cho cái ngắn lên trước: một tiến trình chờ ít đi bằng cái dài, một tiến trình chờ thêm bằng cái ngắn → tổng chờ <b>giảm</b>.</p>
+          <div class="box key">Lặp lại đến khi không còn cặp sai thứ tự: được đúng thứ tự tăng dần. Máy thử cả 3 thứ tự khác nhau của 24, 3, 3: tổng chờ nhỏ nhất là 9 = 0 + 3 + 6.</div>
+        focus: [0, 1, 2, 3]
+        say: "Vì sao cách này tốt nhất? Một tiến trình đứng trước bắt mọi tiến trình đứng sau chờ thêm đúng bằng thời gian chạy của nó. Nếu đổi chỗ hai tiến trình kề nhau cho cái ngắn lên trước, một bên chờ ít đi bằng cái dài, một bên chờ thêm bằng cái ngắn, nên tổng thời gian chờ giảm. Lặp lại đến khi hết cặp sai thứ tự, ta được thứ tự tăng dần, và máy đã thử đủ ba thứ tự khác nhau để xác nhận tổng chờ nhỏ nhất là 9."
+
+  # ───────────────────────── 6. TỰ KIỂM ─────────────────────────
+  - id: verify
+    kind: check
+    title: "Tự kiểm"
+    checks:
+      - "alg.sched_waits([24, 3, 3])[-1] + 3 == sum([24, 3, 3])"
+      - "24 * 2 + 3 * 1 + 3 * 0 == 51 == sum(alg.sched_waits([24, 3, 3])) and 51 / 3 == 17"
+      - "3 * 2 + 3 * 1 + 24 * 0 == 9 == sum(alg.sched_waits([3, 3, 24])) and 9 / 3 == 3"
+    steps:
+      - show: |
+          <p><b>Kiểm bằng đường khác:</b> mỗi tiến trình bắt <b>mọi</b> tiến trình đứng sau chờ thêm đúng bằng thời gian chạy của nó.</p>
+          <table class="t"><tr><th>thứ tự</th><th>tổng chờ = chạy × số người đứng sau</th><th>trung bình</th></tr>
+          <tr><td>24, 3, 3</td><td>$24 \times 2 + 3 \times 1 + 3 \times 0 = 51$</td><td>$\frac{51}{3} = 17$ ✓</td></tr>
+          <tr><td>3, 3, 24</td><td>$3 \times 2 + 3 \times 1 + 24 \times 0 = 9$</td><td>$\frac{9}{3} = 3$ ✓</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Kiểm lại bằng đường khác, không cộng dồn từng mốc mà nhìn từ phía người gây chờ. Theo thứ tự 24, 3, 3, khối 24 bắt 2 người chờ, khối 3 đầu bắt 1 người chờ, khối cuối không bắt ai, tổng 51, chia 3 được 17, khớp. Theo thứ tự 3, 3, 24, tổng là 3 nhân 2 cộng 3 nhân 1, bằng 9, chia 3 được 3, cũng khớp."
+      - show: |
+          <ol><li>Mốc cuối của biểu đồ = tổng thời gian chạy (ở đây 30).</li>
+          <li>Tiến trình chạy đầu tiên luôn chờ 0.</li>
+          <li>Chờ của tiến trình sau = chờ của tiến trình trước + thời gian chạy của tiến trình trước.</li></ol>
+        focus: [0, "1.1", "1.2", "1.3"]
+        say: "Tự kiểm bằng ba cách. Một, mốc cuối của biểu đồ phải bằng tổng thời gian chạy, ở đây là 30, vì bộ xử lý không nghỉ lúc nào. Hai, tiến trình chạy đầu tiên luôn chờ 0. Ba, thời gian chờ của tiến trình sau bằng thời gian chờ của tiến trình trước cộng thời gian chạy của tiến trình trước."
+
+  # ───────────────────────── 7. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "5 lỗi hay gặp, kể cả của người đã đi làm"
+    checks:
+      - "sorted([(2, 'P1'), (3, 'P2'), (3, 'P3')])[0][1] == 'P1' and sum(alg.sched_waits([24, 3, 3])) / 3 == 17"
+      - "sum(alg.sched_waits([3, 3, 24])) / 3 == 3"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Lấy lúc kết thúc làm thời gian chờ <b class="red">(sai)</b>
+          <br><span class="note">Chờ = lúc bắt đầu − lúc đến. Lúc kết thúc − lúc đến là thời gian <b>hoàn thành</b>, một đại lượng khác.</span></div>
+        say: "Lỗi thứ nhất, lấy lúc kết thúc làm thời gian chờ. Thời gian chờ bằng lúc bắt đầu trừ lúc đến, còn lúc kết thúc trừ lúc đến là thời gian hoàn thành, một đại lượng khác."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Nghĩ SJF dùng được ngay trong thực tế <b class="red">(chưa đúng)</b>
+          <br><span class="note">Hệ điều hành không biết trước tiến trình sẽ chạy bao lâu — phải <b>ước lượng</b> từ các đợt chạy trước.</span></div>
+        say: "Lỗi thứ hai, nghĩ cách việc ngắn nhất trước dùng được ngay trong thực tế. Hệ điều hành không biết trước một tiến trình sẽ chạy bao lâu, nên phải ước lượng từ các đợt chạy trước của nó."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3 — của người đã đi làm.</b> Bật SJF mà không đo xem ước lượng đúng tới đâu <b class="red">(phí công)</b></div>
+          <table class="t"><tr><th>ước lượng của P1</th><th>thứ tự chạy</th><th>chờ trung bình</th></tr>
+          <tr><td>đúng: 24</td><td>P2, P3, P1</td><td>3 ms</td></tr>
+          <tr><td>sai: 2 (đợt trước của nó ngắn)</td><td>P1, P2, P3</td><td>$\hl{17}$ ms, như FCFS</td></tr></table>
+        focus: [1, 2, "2.2", "2.3"]
+        say: "Lỗi thứ ba hay gặp ở người đã đi làm, là bật cách việc ngắn nhất trước mà không đo xem ước lượng đúng tới đâu. Với ba tiến trình 24, 3 và 3, nếu ước lượng đúng thì chờ trung bình là 3 mi li giây. Nếu các đợt trước của tiến trình 1 đều ngắn, hệ điều hành ước nó chỉ chạy 2, nên cho nó chạy trước. Khi đó thứ tự lại thành 1, 2, 3, chờ trung bình quay về 17, chẳng hơn gì đến trước phục vụ trước."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4.</b> Chỉ nhìn trung bình <b class="red">(thiếu)</b>
+          <br><span class="note">SJF làm tiến trình dài chờ lâu; nếu việc ngắn đến liên tục, việc dài có thể chờ mãi (gọi là nạn đói).</span></div>
+        say: "Lỗi thứ tư, chỉ nhìn con số trung bình. Cách này làm tiến trình dài chờ lâu hơn, và nếu việc ngắn đến liên tục thì việc dài có thể chờ mãi, gọi là nạn đói."
+      - show: |
+          <div class="box warn"><b>Lỗi 5.</b> Quên thứ tự đến khi hai tiến trình dài bằng nhau <b class="red">(lộn xộn)</b>
+          <br><span class="note">Bằng nhau thì giữ thứ tự đến (P2 trước P3) — kết quả trung bình không đổi, nhưng biểu đồ phải nhất quán.</span></div>
+        say: "Lỗi thứ năm, quên quy tắc khi hai tiến trình dài bằng nhau. Khi bằng nhau thì giữ thứ tự đến, tiến trình 2 trước tiến trình 3, trung bình không đổi nhưng biểu đồ phải nhất quán."
+
+  # ───────────────────────── 8. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "sum(alg.sched_waits([6, 8, 7, 3])) / 4 == 10.25"
+      - "sum(alg.sched_waits(sorted([6, 8, 7, 3]))) / 4 == 7"
+      - "alg.sched_waits([6, 8, 7, 3]) == [0, 6, 14, 21] and alg.sched_waits([3, 6, 7, 8]) == [0, 3, 9, 16]"
+    steps:
+      - show: |
+          <p>Bốn tiến trình đến lúc 0 theo thứ tự P1 = 6, P2 = 8, P3 = 7, P4 = 3 ms.</p>
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Chờ trung bình theo FCFS?</td></tr>
+          <tr><td>2</td><td>Chờ trung bình theo SJF?</td></tr></table>
+        focus: [0, 1, "2.2", "2.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Bốn tiến trình đến lúc 0 theo thứ tự, cần 6, 8, 7 và 3 mi li giây. Câu một, chờ trung bình theo đến trước phục vụ trước là bao nhiêu? Câu hai, theo việc ngắn nhất trước là bao nhiêu? Dừng video và làm ra giấy."
+        pause: 10
+      - clear: true
+        show: |
+          <p>① Theo thứ tự đến, cộng dồn thời gian chạy:</p>
+          <table class="t"><tr><th>tiến trình</th><th>P1 = 6</th><th>P2 = 8</th><th>P3 = 7</th><th>P4 = 3</th></tr>
+          <tr><td>chờ</td><td>0</td><td>$0 + 6 = 6$</td><td>$6 + 8 = 14$</td><td>$14 + 7 = 21$</td></tr></table>
+          $$\frac{0 + 6 + 14 + 21}{4} = \frac{41}{4} = \hl{10{,}25} \text{ ms}$$
+        focus: [1, 2, 3]
+        say: "Đáp án câu một, chạy theo thứ tự đến và cộng dồn thời gian chạy. Thời gian chờ là 0, 6, 14 và 21. Tổng 41, chia 4 được 10 phẩy 25 mi li giây."
+      - clear: true
+        show: |
+          <p>② Xếp ngắn trước: P4, P1, P3, P2 (3, 6, 7, 8):</p>
+          <table class="t"><tr><th>tiến trình</th><th>P4 = 3</th><th>P1 = 6</th><th>P3 = 7</th><th>P2 = 8</th></tr>
+          <tr><td>chờ</td><td>0</td><td>$0 + 3 = 3$</td><td>$3 + 6 = 9$</td><td>$9 + 7 = 16$</td></tr></table>
+          $$\frac{0 + 3 + 9 + 16}{4} = \frac{28}{4} = \hl{7} \text{ ms}$$
+        focus: [1, 2, 3]
+        say: "Câu hai, xếp theo thứ tự 3, 6, 7, 8, tức tiến trình 4, 1, 3, rồi 2. Thời gian chờ là 0, 3, 9 và 16. Tổng 28, chia 4 được 7 mi li giây."
+
+  # ───────────────────────── 9. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">chờ = bắt đầu − đến</span><span class="a">→</span>
+          <span class="n">FCFS: theo thứ tự đến</span><span class="a">→</span>
+          <span class="n">SJF: ngắn trước, chờ TB nhỏ nhất</span><span class="a">→</span>
+          <span class="n">nhưng phải ước lượng và có thể gây đói</span></div>
+        say: "Tổng kết lại, thời gian chờ bằng lúc bắt đầu trừ lúc đến. Đến trước phục vụ trước chạy theo thứ tự đến. Việc ngắn nhất trước cho chờ trung bình nhỏ nhất, nhưng phải ước lượng thời gian chạy và có thể làm việc dài bị đói."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> một lịch “tối ưu” chỉ tối ưu cho một thước đo — luôn hỏi tối ưu cái gì, và ai phải trả giá.</div>
+        say: "Điều cần mang theo, một lịch tối ưu chỉ tối ưu cho một thước đo, nên luôn hỏi đang tối ưu cái gì, và ai phải trả giá cho điều đó."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 3): <b>xoay vòng</b> theo lượng tử, độ ưu tiên, và cách chống nạn đói.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 3, ta học cách chia lượt xoay vòng cho từng tiến trình, độ ưu tiên, và cách chống nạn đói. Hẹn gặp bạn ở bài tiếp theo."

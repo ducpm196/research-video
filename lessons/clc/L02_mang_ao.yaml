@@ -1,0 +1,175 @@
+id: L02
+course: CLC
+series: "CLC · Điện toán đám mây"
+title: "Bài 2 — Mạng ảo: dải địa chỉ, mạng con, bảng định tuyến, cổng ra Internet"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/clc.yaml L02; audit/clc/verify_clc.py L02; RFC 1918 (dải địa chỉ riêng), RFC 4632 (ký pháp gạch chéo); tài liệu mạng ảo riêng của các nhà cung cấp lớn — 5 địa chỉ dự trữ mỗi mạng con (bản hiện hành, tên chỉ trên màn hình); bài 0"
+assumes: [arith, power]
+# Quy ước: “/n” = n bit đầu cố định, mạng có 2^(32 − n) địa chỉ. Chia bằng ipaddress của thư viện chuẩn (alg.subnet_plan). Nhà cung cấp giữ 5 địa chỉ
+#   mỗi mạng con (địa chỉ mạng, bộ định tuyến, phân giải tên, dự phòng, quảng bá) — con số của một nhà cung cấp lớn, đọc lại tài liệu khi dùng nơi khác.
+#   Tên VPC, CIDR, NAT chỉ trên màn hình; lời đọc “mạng ảo riêng”, “dải địa chỉ”, “cổng dịch địa chỉ”.
+objectives:
+  - "Chia dải địa chỉ thành mạng con"
+  - "Phân biệt mạng con công khai và riêng"
+  - "Lập kế hoạch dải để không trùng"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Không nối được với văn phòng"
+    checks:
+      - "__import__('ipaddress').ip_network('10.0.0.0/16').overlaps(__import__('ipaddress').ip_network('10.0.5.0/24'))"
+    steps:
+      - show: |
+          <p>Một năm sau khi lên đám mây, công ty muốn nối mạng ảo với văn phòng. Không được: mạng ảo dùng <code>10.0.0.0/16</code>, văn phòng dùng <code>10.0.5.0/24</code> — hai dải <b>trùng nhau</b>, bộ định tuyến không biết gói nào đi đâu. Đổi dải lúc này nghĩa là dựng lại gần như mọi thứ.</p>
+          <div class="box key">Hôm nay: <b>mạng ảo riêng</b> — dải địa chỉ, mạng con, bảng định tuyến, và cổng ra Internet.</div>
+        focus: [1, 1, 1, 1, 2]
+        say: "Chào bạn, một năm sau khi lên đám mây, công ty muốn nối mạng ảo với văn phòng. Không được, vì mạng ảo dùng dải 10 chấm 0 chấm 0 chấm 0 gạch chéo 16, còn văn phòng dùng 10 chấm 0 chấm 5 chấm 0 gạch chéo 24. Hai dải trùng nhau, và bộ định tuyến không biết gói nào đi đâu. Đổi dải lúc này nghĩa là dựng lại gần như mọi thứ. Hôm nay ta học mạng ảo riêng, với dải địa chỉ, mạng con, bảng định tuyến, và cổng ra Internet."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: địa chỉ 32 bit, và đếm bằng lũy thừa của 2"
+    checks:
+      - "2 ** 8 == 256 and 4 * 8 == 32 and 2 ** (32 - 24) == 256 and 2 ** (32 - 30) == 4"
+    steps:
+      - show: |
+          <p>Địa chỉ như <code>10.0.1.7</code> gồm <b>4 số</b>, mỗi số từ 0 tới 255, tức 8 bit (vì $2^8 = 256$ giá trị) → cả địa chỉ $4 \cdot 8 = 32$ bit (khoá Mạng máy tính).</p>
+        introduces: [cdot]
+        say: "Ở khoá Mạng máy tính, ta đã học địa chỉ như 10 chấm 0 chấm 1 chấm 7 gồm 4 số, mỗi số từ 0 tới 255. Mỗi số là 8 bit, vì 2 mũ 8 bằng 256 giá trị, nên cả địa chỉ dài 4 nhân 8, bằng 32 bit."
+      - show: |
+          <table class="t"><tr><th>viết</th><th>bit cố định</th><th>bit tự do</th><th>số địa chỉ</th></tr>
+          <tr><td><code>/24</code></td><td>24</td><td>8</td><td>$2^8 = 256$</td></tr>
+          <tr><td><code>/30</code></td><td>30</td><td>2</td><td>$2^2 = 4$</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Dấu gạch chéo n nói n bit đầu cố định, còn 32 trừ n bit tự do, nên có 2 mũ 32 trừ n địa chỉ. Gạch chéo 24 còn 8 bit tự do, tức 256 địa chỉ. Gạch chéo 30 còn 2 bit tự do, chỉ 4 địa chỉ."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: dải, mạng con, định tuyến"
+    steps:
+      - show: |
+          <table class="t"><tr><th>khái niệm</th><th>nghĩa</th></tr>
+          <tr><td><code>10.0.0.0/16</code></td><td>16 bit đầu cố định: $2^{32 - 16} = 65\,536$ địa chỉ</td></tr>
+          <tr><td><b>mạng con</b></td><td>một phần của dải, nằm trong <b>một</b> vùng sẵn sàng</td></tr>
+          <tr><td><b>mạng con công khai</b></td><td>bảng định tuyến có đường <code>0.0.0.0/0</code> → cổng Internet: máy có địa chỉ công khai thì ra vào được</td></tr>
+          <tr><td><b>mạng con riêng</b></td><td>không có đường vào từ Internet; muốn ra ngoài (tải bản vá) thì qua cổng dịch địa chỉ (chỉ chiều đi)</td></tr></table>
+          <p>Thiết kế thường gặp: bộ cân bằng tải ở mạng con công khai; máy chủ ứng dụng và cơ sở dữ liệu ở mạng con riêng.</p>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", 2]
+        say: "Bảng có bốn khái niệm. Dải gạch chéo 16 nghĩa là 16 bit đầu cố định, nên có 2 mũ 16, bằng 65536 địa chỉ. Mạng con là một phần của dải, nằm trong một vùng sẵn sàng. Mạng con công khai có bảng định tuyến với đường mặc định trỏ tới cổng Internet, nên máy có địa chỉ công khai thì ra vào được. Mạng con riêng không có đường vào từ Internet, và muốn ra ngoài để tải bản vá thì đi qua cổng dịch địa chỉ, chỉ theo chiều đi. Thiết kế thường gặp là đặt bộ cân bằng tải ở mạng con công khai, còn máy chủ ứng dụng và cơ sở dữ liệu ở mạng con riêng."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Một mạng ảo, hai vùng sẵn sàng, bốn mạng con"
+    steps:
+      - show: |
+          <div><svg width="1500" height="340" viewBox="0 0 1500 340"><g font-size="22" fill="#1f2937"><rect x="20" y="20" width="1080" height="300" rx="14" fill="none" stroke="#6b7280" stroke-width="3" stroke-dasharray="12 8"/><text x="40" y="52" font-weight="bold">mạng ảo riêng 10.0.0.0/16</text><rect x="40" y="70" width="510" height="235" rx="10" fill="none" stroke="#2a78d6" stroke-width="2"/><text x="60" y="98">vùng sẵn sàng 1</text><rect x="570" y="70" width="510" height="235" rx="10" fill="none" stroke="#2a78d6" stroke-width="2"/><text x="590" y="98">vùng sẵn sàng 2</text><rect x="60" y="115" width="230" height="85" rx="8" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="175" y="150" text-anchor="middle">công khai</text><text x="175" y="180" text-anchor="middle" font-size="19">10.0.0.0/24</text><rect x="300" y="115" width="230" height="85" rx="8" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="415" y="150" text-anchor="middle">riêng</text><text x="415" y="180" text-anchor="middle" font-size="19">10.0.1.0/24</text><rect x="590" y="115" width="230" height="85" rx="8" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="705" y="150" text-anchor="middle">công khai</text><text x="705" y="180" text-anchor="middle" font-size="19">10.0.2.0/24</text><rect x="830" y="115" width="230" height="85" rx="8" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="945" y="150" text-anchor="middle">riêng</text><text x="945" y="180" text-anchor="middle" font-size="19">10.0.3.0/24</text><text x="60" y="245" font-size="19">bộ cân bằng tải, cổng dịch địa chỉ</text><text x="300" y="280" font-size="19">máy ứng dụng, cơ sở dữ liệu</text><rect x="1150" y="115" width="320" height="85" rx="10" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="1310" y="152" text-anchor="middle">Internet</text><text x="1310" y="182" text-anchor="middle" font-size="19">chỉ nối với phần xanh</text><line x1="1100" y1="157" x2="1148" y2="157" stroke="#059669" stroke-width="4"/></g></svg></div>
+        focus: [1, 1, 1]
+        say: "Hình vẽ một mạng ảo riêng chia thành bốn mạng con, mỗi vùng sẵn sàng một mạng con công khai màu xanh và một mạng con riêng màu cam. Chỉ phần xanh có đường tới Internet, nơi đặt bộ cân bằng tải và cổng dịch địa chỉ. Máy ứng dụng và cơ sở dữ liệu nằm ở phần cam, Internet không gọi thẳng vào được."
+
+  - id: example
+    kind: example
+    title: "Chia /16 thành các mạng con /24"
+    checks:
+      - "alg.subnet_plan('10.0.0.0/16', 24) == (256, 256, 251) and 2 ** (24 - 16) == 256 and 2 ** (32 - 24) == 256"
+    steps:
+      - show: |
+          <p><b>Bước 1 — số mạng con:</b> từ <code>/16</code> lên <code>/24</code> cố định thêm $24 - 16 = 8$ bit → $2^8 = \hl{256}$ mạng con: <code>10.0.0.0/24</code>, <code>10.0.1.0/24</code>, …, <code>10.0.255.0/24</code>.</p>
+        say: "Bước một, đếm số mạng con. Từ gạch chéo 16 lên gạch chéo 24 là cố định thêm 24 trừ 16, bằng 8 bit, nên có 2 mũ 8, bằng 256 mạng con. Chúng đi từ 10 chấm 0 chấm 0 chấm 0 tới 10 chấm 0 chấm 255 chấm 0."
+      - show: |
+          <p><b>Bước 2 — địa chỉ mỗi mạng con:</b> còn $32 - 24 = 8$ bit tự do → $2^8 = 256$ địa chỉ, ví dụ <code>10.0.1.0</code> tới <code>10.0.1.255</code>.</p>
+        say: "Bước hai, mỗi mạng con còn 32 trừ 24, bằng 8 bit tự do, nên có 2 mũ 8, bằng 256 địa chỉ. Ví dụ mạng con thứ hai đi từ 10 chấm 0 chấm 1 chấm 0 tới 10 chấm 0 chấm 1 chấm 255."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>địa chỉ nhà cung cấp giữ trong <code>10.0.1.0/24</code></th><th>dùng làm</th></tr>
+          <tr><td><code>.0</code></td><td>địa chỉ mạng</td></tr><tr><td><code>.1</code></td><td>bộ định tuyến</td></tr>
+          <tr><td><code>.2</code></td><td>phân giải tên</td></tr><tr><td><code>.3</code></td><td>dự phòng</td></tr><tr><td><code>.255</code></td><td>quảng bá</td></tr></table>
+          <p><b>Bước 3</b> — $256 - 5 = \hl{251}$ địa chỉ dùng được.</p>
+        focus: [1, "1.2", "1.5", 2]
+        say: "Bước ba, một nhà cung cấp lớn giữ 5 địa chỉ trong mỗi mạng con. Đó là địa chỉ mạng ở đuôi 0, bộ định tuyến ở đuôi 1, phân giải tên ở đuôi 2. Đuôi 3 để dự phòng, đuôi 255 để quảng bá. Vậy còn 256 trừ 5, bằng 251 địa chỉ dùng được."
+      - show: |
+          <p><b>Bước 4 — kế hoạch:</b> 2 vùng sẵn sàng × 2 loại = 4 mạng con dùng ngay, còn 252 trong 256 mạng con chừa trống cho sau này.</p>
+        say: "Bước bốn, lập kế hoạch. Hai vùng sẵn sàng, mỗi vùng hai loại mạng con, tức 4 mạng con dùng ngay, còn 252 trong 256 mạng con chừa trống cho sau này."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác"
+    checks:
+      - "len(list(__import__('ipaddress').ip_network('10.0.0.0/16').subnets(new_prefix=24))) == 256 and __import__('ipaddress').ip_network('10.0.1.0/24').num_addresses == 256"
+      - "256 * 256 == __import__('ipaddress').ip_network('10.0.0.0/16').num_addresses == 65536"
+    steps:
+      - show: |
+          <table class="t"><tr><th>kiểm</th><th>cách khác</th><th>kết quả</th></tr>
+          <tr><td>256 mạng con</td><td>thư viện địa chỉ liệt kê từng mạng con</td><td>256 ✓</td></tr>
+          <tr><td>không thừa, không thiếu</td><td>256 mạng con nhân 256 địa chỉ</td><td>65 536 = cả dải <code>/16</code> ✓</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Kiểm bằng đường khác. Cho thư viện địa chỉ liệt kê từng mạng con, đếm được đúng 256. Nhân 256 mạng con với 256 địa chỉ mỗi mạng được 65536, đúng bằng cả dải gạch chéo 16, nên cách chia không thừa, không thiếu, vì các mạng con nối liền nhau."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc"
+    checks:
+      - "not __import__('ipaddress').ip_network('10.0.0.0/16').overlaps(__import__('ipaddress').ip_network('10.20.0.0/16'))"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Chọn dải mặc định cho mọi môi trường <b class="red">(trùng, không nối được)</b>
+          <br><span class="note">Môi trường thử, môi trường thật, văn phòng đều dùng <code>10.0.0.0/16</code>. Lập bảng phân dải từ đầu: thử <code>10.10.0.0/16</code>, thật <code>10.20.0.0/16</code> — không trùng nhau, không trùng văn phòng.</span></div>
+        say: "Lỗi thứ nhất, chọn dải mặc định cho mọi môi trường, nên trùng nhau và không nối được. Môi trường thử, môi trường thật và văn phòng đều dùng cùng một dải. Hãy lập bảng phân dải ngay từ đầu, mỗi môi trường một dải không trùng nhau, và không trùng văn phòng."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Đặt cơ sở dữ liệu ở mạng con công khai <b class="red">(phơi ra Internet)</b>
+          <br><span class="note">Chỉ một quy tắc tường lửa sai là lộ. Cơ sở dữ liệu ở mạng con riêng, chỉ nhận kết nối từ nhóm máy chủ ứng dụng.</span></div>
+        say: "Lỗi thứ hai, đặt cơ sở dữ liệu ở mạng con công khai, tức phơi ra Internet. Chỉ một quy tắc tường lửa sai là lộ. Hãy đặt cơ sở dữ liệu ở mạng con riêng, và chỉ nhận kết nối từ nhóm máy chủ ứng dụng."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Mạng con quá nhỏ <b class="red">(hết địa chỉ khi co giãn)</b>
+          <br><span class="note">Mạng con <code>/28</code> chỉ có 16 − 5 = 11 địa chỉ. Khi co giãn, mỗi máy, mỗi bộ chứa ứng dụng, mỗi hàm gắn mạng đều cần địa chỉ. Chọn mạng con rộng rãi cho phần co giãn.</span></div>
+        say: "Lỗi thứ ba, mạng con quá nhỏ, nên hết địa chỉ khi co giãn. Mạng con gạch chéo 28 chỉ có 16 trừ 5, bằng 11 địa chỉ. Khi co giãn, mỗi máy, mỗi bộ chứa ứng dụng, mỗi hàm gắn mạng đều cần địa chỉ, nên hãy chọn mạng con rộng rãi cho phần co giãn."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.subnet_plan('10.1.0.0/22', 26) == (16, 64, 59) and alg.subnet_plan('10.0.0.0/16', 28)[2] == 11"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Dải <code>10.1.0.0/22</code> chia thành mạng con <code>/26</code>: bao nhiêu mạng con, mỗi mạng bao nhiêu địa chỉ dùng được (trừ 5)?</td></tr>
+          <tr><td>2</td><td>Máy chủ ứng dụng ở mạng con riêng cần tải bản vá từ Internet. Cần thêm gì, và Internet có gọi vào được máy đó không?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, dải 10 chấm 1 chấm 0 chấm 0 gạch chéo 22 chia thành mạng con gạch chéo 26, có bao nhiêu mạng con, và mỗi mạng bao nhiêu địa chỉ dùng được sau khi trừ 5? Câu hai, máy chủ ứng dụng ở mạng con riêng cần tải bản vá từ Internet. Cần thêm gì, và Internet có gọi vào được máy đó không? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <table class="t"><tr><th>đại lượng</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>số mạng con</td><td>$2^{26 - 22} = 2^4$</td><td>$\hl{16}$</td></tr>
+          <tr><td>địa chỉ mỗi mạng</td><td>$2^{32 - 26} = 2^6$</td><td>64</td></tr>
+          <tr><td>dùng được</td><td>$64 - 5$</td><td>$\hl{59}$</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Đáp án câu một, tính ba đại lượng. Số mạng con là 2 mũ 26 trừ 22, tức 2 mũ 4, bằng 16. Mỗi mạng có 2 mũ 6, bằng 64 địa chỉ. Trừ 5 địa chỉ nhà cung cấp giữ, còn 59 địa chỉ dùng được."
+      - show: |
+          <p>② Cổng dịch địa chỉ ở mạng con công khai, và đường <code>0.0.0.0/0</code> của mạng con riêng trỏ tới nó. Internet <b>không</b> gọi vào được: cổng chỉ cho kết nối bắt đầu từ bên trong.</p>
+        say: "Câu hai, cần một cổng dịch địa chỉ ở mạng con công khai, và đường mặc định của mạng con riêng trỏ tới nó. Internet không gọi vào được, vì cổng chỉ cho kết nối bắt đầu từ bên trong."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">dải /n: $2^{32 - n}$ địa chỉ</span><span class="a">→</span>
+          <span class="n">mạng con trong một vùng sẵn sàng, trừ 5 địa chỉ</span><span class="a">→</span>
+          <span class="n">công khai: đường tới cổng Internet; riêng: qua cổng dịch địa chỉ</span><span class="a">→</span>
+          <span class="n">lập bảng phân dải không trùng từ đầu</span></div>
+        say: "Tổng kết lại, dải gạch chéo n có 2 mũ 32 trừ n địa chỉ. Mỗi mạng con nằm trong một vùng sẵn sàng và bị trừ 5 địa chỉ. Mạng con công khai có đường tới cổng Internet, mạng con riêng ra ngoài qua cổng dịch địa chỉ, và hãy lập bảng phân dải không trùng ngay từ đầu."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> địa chỉ mạng là quyết định <b>khó đổi nhất</b> — dành nửa giờ lập kế hoạch tiết kiệm nhiều tháng sửa sau này.</div>
+        say: "Điều cần mang theo, địa chỉ mạng là quyết định khó đổi nhất, và nửa giờ lập kế hoạch tiết kiệm nhiều tháng sửa chữa sau này."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 3): <b>định danh và quyền truy cập</b> — chính sách, vai trò, từ chối tường minh.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 3, ta học định danh và quyền truy cập, với chính sách, vai trò, và từ chối tường minh. Hẹn gặp bạn ở bài tiếp theo."

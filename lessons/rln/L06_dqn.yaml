@@ -1,0 +1,260 @@
+id: L06
+course: RLN
+series: "RLN · Học tăng cường"
+title: "Bài 6 — Xấp xỉ hàm và mạng Q sâu: bộ nhớ phát lại, mạng mục tiêu"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/rln.yaml L06; audit/rln/verify_rln.py L06; audit/rln/sources_L06.md; V. Mnih và cộng sự, Playing Atari with Deep Reinforcement Learning, arXiv:1312.5602 (2013) [D13]; V. Mnih và cộng sự, Human-level control through deep reinforcement learning, Nature 518 (2015), bản PDF storage.googleapis.com/deepmind-media/dqn/DQNNaturePaper.pdf [D15]; Sutton & Barto bản 2 (2018), mục 11.3 bộ ba nguy hiểm; M. Hessel và cộng sự, Rainbow, arXiv:1710.02298 (2017) — câu về đánh giá quá cao; RLN bài 5 (học Q lấy số lớn nhất); CS115 (gradient, lan truyền ngược)"
+assumes: [arith, power, approx, frac, cdot, sub, disc, dots, policy, lr, assign, prime, max_fn, eps]
+# Quy ước: Q(s, a; θ) = mạng nơ-ron tham số θ (tê-ta) đoán giá trị; θ_cũ = bản chép tham số dùng làm mạng mục tiêu; y = mục tiêu hồi quy.
+#   Đơn vị “khung hình” theo [D13]/[D15]. Số 1 triệu khung, lô 32, epsilon 1 → 0,1 trong 1 triệu khung đầu, 7 trò / 49 trò, 29 trò > 75%,
+#   50 triệu khung ≈ 38 ngày là CITED (sources_L06.md). Tần suất chép mạng mục tiêu: bài viết “mỗi C lần cập nhật” — con số C nằm trong
+#   bảng siêu tham số dạng ảnh, không trích được → KHÔNG nêu giá trị C. Mô hình một tham số Q = θ·x, ảnh 10 × 10 điểm đen trắng, bộ nhớ
+#   50 000 bước là SỐ MINH HOẠ. Tên “DQN”, “Atari” chỉ trên màn hình; lời đọc nói “mạng Q sâu”, “trò điện tử”.
+objectives:
+  - "Tính mục tiêu hồi quy y = r + γ · max Q của mạng mục tiêu, kể cả ở bước kết thúc"
+  - "Tính số cặp bước liền nhau kỳ vọng trong một lô lấy từ bộ nhớ phát lại"
+  - "Giải thích bằng số vì sao không có mạng mục tiêu thì hồi quy đuổi theo đích di động"
+  - "Nhận ra bộ ba nguy hiểm và sự đánh giá quá cao do lấy số lớn nhất của ước lượng có nhiễu"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Bảng Q không còn chỗ: mỗi khung hình là một trạng thái"
+    checks:
+      - "2 ** 100 > 10 ** 30"
+    steps:
+      - show: |
+          <p>Ở bài 5, robot vách đá có 48 ô — bảng Q có $48 \cdot 4 = 192$ ô số. Một trò điện tử thì khác: chỉ riêng ảnh đen trắng 10 × 10 điểm đã có $2^{100}$ — hơn $10^{30}$ — trạng thái có thể (số minh hoạ).</p>
+          <p>Năm 2013, một nhóm tác giả cho một mạng nơ-ron học thẳng từ điểm ảnh của <b>7 trò</b> điện tử: hơn mọi cách cũ ở 6 trò, hơn một chuyên gia người ở 3 trò.</p>
+          <div class="box key">Hôm nay: thay bảng bằng mạng nơ-ron — và hai mẹo giúp nó khỏi phân kỳ: bộ nhớ phát lại và mạng mục tiêu.</div>
+        focus: [1, 1, 2, 3]
+        say: "Chào bạn, ở bài 5, robot vách đá có 48 ô, nên bảng giá trị hành động chỉ có 192 ô số. Một trò điện tử thì khác, chỉ riêng ảnh đen trắng 10 nhân 10 điểm đã có 2 mũ 100, tức hơn 10 mũ 30 trạng thái có thể. Năm 2013, một nhóm tác giả cho một mạng nơ-ron học thẳng từ điểm ảnh của 7 trò điện tử, hơn mọi cách cũ ở 6 trò và hơn một chuyên gia người ở 3 trò. Hôm nay ta thay bảng bằng mạng nơ-ron, cùng hai mẹo giúp nó khỏi phân kỳ, bộ nhớ phát lại và mạng mục tiêu."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: đích của học Q và một bước giảm sai số"
+    checks:
+      - "round(2 + 0.1 * (-1 + 5 - 2), 10) == 2.2"
+      - "round(1 - 0.1 * (1 * 2 - 4) * 2, 10) == 1.4 and round(1.4 * 2, 10) == 2.8"
+    steps:
+      - show: |
+          <p><b>① Bài 5 — học Q lấy số lớn nhất:</b> đích $= r + \gamma \cdot \max_{a'} Q(s', a')$; giá trị dịch về đích một phần $\alpha$.</p>
+          <p class="note">$Q = 2$, $r = -1$, $\gamma = 1$, số lớn nhất ở $s'$ là 5, $\alpha = 0{,}1$ → $2 + 0{,}1 \cdot (4 - 2) = 2{,}2$.</p>
+        focus: [1, 2]
+        say: "Điều thứ nhất, ở bài 5 ta học Q bằng cách lấy số lớn nhất, đích bằng r cộng gam-ma nhân giá trị lớn nhất ở trạng thái sau, rồi giá trị dịch về đích một phần an-pha. Ví dụ Q bằng 2, đích bằng 4, an-pha 0 phẩy 1 thì giá trị mới là 2 phẩy 2."
+      - show: |
+          <p><b>② Khoá Toán cho khoa học máy tính — một bước giảm sai số bình phương.</b> Mô hình đoán $\theta \cdot x$; muốn đoán gần đích $y$ thì sửa tham số ngược chiều đạo hàm:</p>
+          $$\theta \leftarrow \theta - \alpha \cdot (\theta \cdot x - y) \cdot x$$
+          <p class="note">Làm thử $x = 2$, $\theta = 1$, $y = 4$, $\alpha = 0{,}1$: $1 - 0{,}1 \cdot (2 - 4) \cdot 2 = 1{,}4$; dự đoán mới $2{,}8$, gần 4 hơn 2.</p>
+        introduces: [param]
+        focus: [1, 1, 2, 3]
+        say: "Điều thứ hai, ở khoá Toán cho khoa học máy tính, ta đã học một bước giảm sai số bình phương. Mô hình đoán theta nhân x, và muốn đoán gần đích y thì sửa tham số theta ngược chiều đạo hàm, theta thay bằng theta trừ an-pha nhân sai số nhân x. Làm thử với x bằng 2, theta bằng 1, y bằng 4, an-pha 0 phẩy 1, ta được 1 trừ 0 phẩy 1 nhân âm 2 nhân 2, bằng 1 phẩy 4. Dự đoán mới là 2 phẩy 8, gần 4 hơn con số 2 lúc đầu."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: Q có tham số, mạng mục tiêu, mục tiêu y"
+    checks:
+      - "round(1 + 0.99 * 10, 10) == 10.9"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ký hiệu</th><th>đọc</th><th>nghĩa</th></tr>
+          <tr><td>$Q(s, a; \theta)$</td><td>Q của s, a với tham số theta</td><td>mạng nơ-ron nhận trạng thái, đoán giá trị từng hành động</td></tr>
+          <tr><td>$\theta_{\text{cũ}}$</td><td>theta cũ</td><td>bản chép tham số, giữ nguyên một thời gian: <b>mạng mục tiêu</b></td></tr>
+          <tr><td>$y = r + \gamma \cdot \max_{a'} Q(s', a'; \theta_{\text{cũ}})$</td><td>mục tiêu y</td><td>con số mạng phải học đoán; ví dụ $1 + 0{,}99 \cdot 10 = 10{,}9$</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.4"]
+        say: "Bài dùng ba ký hiệu. Q của s và a với tham số theta là mạng nơ-ron nhận trạng thái và đoán giá trị của từng hành động. Theta cũ là một bản chép tham số được giữ nguyên một thời gian, gọi là mạng mục tiêu. Mục tiêu y bằng r cộng gam-ma nhân số lớn nhất mà mạng mục tiêu đoán ở trạng thái sau. Ví dụ r bằng 1, gam-ma 0 phẩy 99, số lớn nhất bằng 10, thì y bằng 10 phẩy 9."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Dữ liệu đi đâu: bộ nhớ phát lại, lô ngẫu nhiên, hai mạng"
+    steps:
+      - show: |
+          <div><svg width="1000" height="380" viewBox="0 0 1000 380"><defs><marker id="rl6a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker><marker id="rl6o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#eb6834"/></marker></defs>
+          <g font-size="22" text-anchor="middle">
+          <rect x="20" y="60" width="180" height="90" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="110" y="100" fill="#1f2937" font-weight="bold">trò chơi</text><text x="110" y="130" fill="#1f2937" font-size="19">mỗi bước: s, a, r, s'</text>
+          <rect x="270" y="40" width="250" height="130" rx="10" fill="#f3f4f6" stroke="#1f2937" stroke-width="2"/><text x="395" y="80" fill="#1f2937" font-weight="bold">bộ nhớ phát lại</text><text x="395" y="112" fill="#1f2937">1 triệu bước gần nhất</text><text x="395" y="142" fill="#6b7280">cũ nhất bị đẩy ra</text>
+          <rect x="600" y="60" width="160" height="90" rx="10" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="680" y="100" fill="#1f2937" font-weight="bold">lô 32 bước</text><text x="680" y="130" fill="#1f2937">lấy ngẫu nhiên</text>
+          <rect x="560" y="250" width="200" height="90" rx="10" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="660" y="290" fill="#1f2937" font-weight="bold">mạng Q đang học</text><text x="660" y="320" fill="#1f2937">tham số theta</text>
+          <rect x="800" y="60" width="180" height="90" rx="10" fill="#fef9c3" stroke="#ca8a04" stroke-width="2"/><text x="890" y="100" fill="#1f2937" font-weight="bold">mạng mục tiêu</text><text x="890" y="130" fill="#1f2937">theta cũ → y</text>
+          </g>
+          <line x1="205" y1="105" x2="262" y2="105" stroke="#1f2937" stroke-width="2.5" marker-end="url(#rl6a)"/>
+          <line x1="525" y1="105" x2="593" y2="105" stroke="#1f2937" stroke-width="2.5" marker-end="url(#rl6a)"/>
+          <line x1="765" y1="105" x2="793" y2="105" stroke="#1f2937" stroke-width="2.5" marker-end="url(#rl6a)"/>
+          <line x1="890" y1="155" x2="770" y2="280" stroke="#1f2937" stroke-width="2.5" marker-end="url(#rl6a)"/>
+          <path d="M760,330 C900,360 960,250 935,158" fill="none" stroke="#eb6834" stroke-width="2.5" stroke-dasharray="8 6" marker-end="url(#rl6o)"/>
+          <text x="790" y="200" font-size="21" fill="#1f2937" text-anchor="end">mạng đang học đoán gần y</text>
+          <text x="990" y="372" font-size="20" fill="#eb6834" text-anchor="end">chép sang sau mỗi C lần cập nhật</text>
+          </svg></div>
+        focus: [1, 1, 1, 1, 1]
+        say: "Hình cho thấy dữ liệu đi đâu. Mỗi bước chơi tạo ra một bộ trạng thái, hành động, thưởng và trạng thái sau, được cất vào bộ nhớ phát lại chứa 1 triệu bước gần nhất. Mỗi lần học, ta lấy ngẫu nhiên một lô 32 bước, không lấy theo thứ tự vừa chơi. Mục tiêu y tính bằng mạng mục tiêu với tham số cũ, rồi mạng đang học sửa tham số để đoán gần y. Cứ sau C lần cập nhật, tham số mới được chép sang mạng mục tiêu."
+
+  # ───────────────────────── 5. SUY RA CÔNG THỨC ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Từ bảng sang mạng: cập nhật thành hồi quy"
+    checks:
+      - "round((10.9 - 9) ** 2, 10) == 3.61"
+      - "round(1 + 0.99 * 5, 10) == 5.95 and round(1 + 0.99 * 6, 10) == 6.94"
+    steps:
+      - show: |
+          <p><b>Bước 1.</b> Với bảng, cập nhật của bài 5 là “dịch ô số về phía đích”. Với mạng, không có ô riêng để dịch — nên ta coi đích là <b>nhãn</b> và giảm sai số bình phương:</p>
+          $$\text{sai số} = \big(y - Q(s, a; \theta)\big)^2$$
+          <p class="note">Làm thử: $y = 10{,}9$, mạng đang đoán 9: sai số $1{,}9^2 = 3{,}61$.</p>
+        focus: [1, 2, 3]
+        say: "Bước một, với bảng, cập nhật của bài 5 là dịch ô số về phía đích. Với mạng thì không có ô riêng để dịch, nên ta coi đích là nhãn và giảm sai số bình phương, bằng y trừ Q, tất cả bình phương. Làm thử với y bằng 10 phẩy 9 trong khi mạng đang đoán 9, sai số là 1 phẩy 9 bình phương, bằng 3 phẩy 61."
+      - show: |
+          <p><b>Bước 2.</b> Theo phép ② ở phần ôn, sửa $\theta$ ngược chiều đạo hàm của sai số đó — đây là bài toán <b>hồi quy</b>, giống học có nhãn, chỉ khác nhãn $y$ do chính tác tử tạo ra.</p>
+        focus: [1, 1]
+        say: "Bước hai, theo phép tính thứ hai ở phần ôn, ta sửa theta ngược chiều đạo hàm của sai số đó. Đây là bài toán hồi quy giống học có nhãn, chỉ khác là nhãn y do chính tác tử tạo ra từ ước lượng của nó."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — vì sao cần tham số cũ.</b> Giả sử $y$ dùng chính mạng đang học. Các trạng thái giống nhau có giá trị đi cùng nhau, nên một bước sửa đẩy $Q(s, a)$ từ 5 lên 6 cũng đẩy $Q(s', a')$ từ 5 lên 6:</p>
+          <table class="t"><tr><th></th><th>trước bước sửa</th><th>sau bước sửa</th></tr>
+          <tr><td>$Q(s, a)$</td><td>5</td><td>6</td></tr>
+          <tr><td>đích $1 + 0{,}99 \cdot Q(s', a')$</td><td>5,95</td><td>$\hl{6{,}94}$</td></tr></table>
+          <p class="note">Đích chạy theo: hồi quy đuổi theo đích di động, có thể dao động hoặc phân kỳ.</p>
+        focus: [1, 1, 1, "2.2", "2.3", 3]
+        say: "Bước ba giải thích vì sao cần tham số cũ. Giả sử đích y dùng chính mạng đang học. Vì các trạng thái giống nhau có giá trị đi cùng nhau, một bước sửa đẩy Q của s và a từ 5 lên 6 cũng đẩy Q của s phẩy từ 5 lên 6. Giá trị đang học tăng từ 5 lên 6. Nhưng đích cũng tăng, từ 5 phẩy 95 lên 6 phẩy 94, nên vẫn cao hơn. Hồi quy đuổi theo một đích di động, và có thể dao động hoặc phân kỳ."
+      - show: |
+          <p><b>Bước 4.</b> Tính $y$ bằng <b>tham số cũ</b> $\theta_{\text{cũ}}$, giữ nguyên trong C lần cập nhật rồi mới chép lại. Trong khoảng đó đích đứng yên, nên mỗi bước sửa thật sự lại gần đích.</p>
+          $$y = r + \gamma \cdot \max_{a'} Q(s', a'; \hlo{\theta_{\text{cũ}}})$$
+        focus: [1, 1, 2]
+        say: "Bước bốn, ta tính y bằng tham số cũ, giữ nguyên trong C lần cập nhật rồi mới chép lại. Trong khoảng đó đích đứng yên, nên mỗi bước sửa thật sự lại gần đích hơn. Công thức là y bằng r cộng gam-ma nhân số lớn nhất của Q tính bằng theta cũ."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Một lô nhỏ, từng phép tính"
+    checks:
+      - "round(1 + 0.99 * max([10, 7]), 10) == 10.9"
+      - "round(-1 + 0, 10) == -1"
+      - "round(((10.9 - 9) ** 2 + (-1 - 0.5) ** 2) / 2, 10) == 2.93"
+      - "round(alg.rln_adjacent_pairs(10 ** 6, 32), 6) == 0.000992 and 32 - 1 == 31"
+    steps:
+      - show: |
+          <p>Lô có hai bước. Bước A: $r = 1$, chưa kết thúc, mạng mục tiêu đoán ở $s'$ hai hành động 10 và 7; $\gamma = 0{,}99$; mạng đang học đoán $Q(s, a) = 9$.</p>
+          <p><b>Bước 1.</b> $y_A = 1 + 0{,}99 \cdot \max(10, 7) = 1 + 9{,}9 = \hlb{10{,}9}$.</p>
+        focus: [1, 1, 2]
+        say: "Lô có hai bước. Bước A có r bằng 1, chưa kết thúc, mạng mục tiêu đoán ở trạng thái sau hai hành động 10 và 7, gam-ma bằng 0 phẩy 99, và mạng đang học đoán 9. Phép tính một, y của A bằng 1 cộng 0 phẩy 99 nhân số lớn nhất là 10, tức 1 cộng 9 phẩy 9, bằng 10 phẩy 9."
+      - show: |
+          <p>Bước B: $r = -1$ và trò chơi <b>kết thúc</b>; mạng đang học đoán 0,5.</p>
+          <p><b>Bước 2.</b> Không còn tương lai nên không cộng gì: $y_B = r = \hlb{-1}$.</p>
+        focus: [1, 2]
+        say: "Bước B có r bằng âm 1 và trò chơi kết thúc, mạng đang học đoán 0 phẩy 5. Phép tính hai, vì không còn tương lai nên không cộng gì thêm, y của B bằng r, bằng âm 1."
+      - show: |
+          <p><b>Bước 3.</b> Sai số trung bình của lô:</p>
+          $$\frac{(10{,}9 - 9)^2 + (-1 - 0{,}5)^2}{2} = \frac{3{,}61 + 2{,}25}{2} = \hlg{2{,}93}$$
+        focus: [1, 2]
+        say: "Phép tính ba là sai số trung bình của lô. Ta cộng 1 phẩy 9 bình phương, bằng 3 phẩy 61, với âm 1 phẩy 5 bình phương, bằng 2 phẩy 25, rồi chia 2, được 2 phẩy 93."
+      - clear: true
+        show: |
+          <p><b>Bước 4 — lô ngẫu nhiên phá chuỗi liền nhau.</b> Lấy 32 bước <b>liên tiếp</b> vừa chơi thì có 31 cặp bước liền nhau, rất giống nhau. Lấy ngẫu nhiên 32 bước từ 1 triệu:</p>
+          $$\text{số cặp liền nhau kỳ vọng} = \frac{32 \cdot 31}{2} \cdot \frac{2}{10^6} \approx \hlg{0{,}001}$$
+          <p class="note">Tức khoảng 1 nghìn lô mới gặp một cặp liền nhau: các mẫu trong lô gần như độc lập.</p>
+        focus: [1, 1, 2, 3]
+        say: "Phép tính bốn cho thấy lô ngẫu nhiên phá chuỗi liền nhau. Nếu lấy 32 bước liên tiếp vừa chơi thì có 31 cặp bước liền nhau, rất giống nhau. Lấy ngẫu nhiên 32 bước từ 1 triệu thì có 496 cặp, mỗi cặp liền nhau với xác suất khoảng 2 phần triệu, nên số cặp liền nhau kỳ vọng khoảng 0 phẩy 001. Tức khoảng 1 nghìn lô mới gặp một cặp liền nhau, các mẫu trong lô gần như độc lập."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: rút thăm thật nhiều lô, và đếm lại cặp"
+    checks:
+      - "32 * 31 // 2 == 496"
+      - "(lambda rng: abs(sum((lambda b: sum(1 for i in range(32) for j in range(i + 1, 32) if abs(b[i] - b[j]) == 1))([rng.randrange(10 ** 6) for _ in range(32)]) for _ in range(20000)) / 20000 - 0.000992) < 0.0006)(__import__('random').Random(6))"
+    steps:
+      - show: |
+          <p><b>Đường khác 1 — đếm cặp.</b> 32 mẫu có $\frac{32 \cdot 31}{2} = 496$ cặp. Với một mẫu cho trước, chỉ 2 trong 1 triệu vị trí là liền kề nó, nên mỗi cặp liền nhau với xác suất khoảng $\frac{2}{10^6}$; nhân 496 ra khoảng 0,001 ✓.</p>
+        focus: [1, 1]
+        say: "Kiểm tra thứ nhất là đếm cặp, vì 32 mẫu có 32 nhân 31 chia 2, bằng 496 cặp. Với một mẫu cho trước, chỉ 2 trong 1 triệu vị trí là liền kề nó, nên nhân lên ra khoảng 0 phẩy 001."
+      - show: |
+          <p><b>Đường khác 2 — rút thăm thật</b>, không dùng công thức:</p>
+          <table class="t"><tr><th>cách tính</th><th>cặp liền nhau mỗi lô</th></tr>
+          <tr><td>phép đếm: $496 \cdot \frac{2}{10^6}$</td><td>khoảng 0,001</td></tr>
+          <tr><td>máy rút 20&nbsp;000 lô, mỗi lô 32 số trong 1 triệu</td><td>khoảng 0,001</td></tr></table>
+        focus: [1, "2.3", "2.2"]
+        say: "Kiểm tra thứ hai là rút thăm thật, nghĩa là không dùng công thức, máy rút 20 nghìn lô, mỗi lô 32 số ngẫu nhiên trong 1 triệu, rồi đếm cặp liền nhau. Kết quả trung bình khoảng 0 phẩy 001 mỗi lô. Vì hai đường độc lập, một bằng phép đếm, một bằng thử thật, cho cùng bậc độ lớn, ta tin được con số này."
+
+  # ───────────────────────── 8. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi cả người đã đi làm"
+    checks:
+      - "round(1 + 0.99 * 6, 10) == 6.94 > 6"
+      - "round(-1 + 0.99 * 3, 10) == 1.97 != -1"
+      - "alg.rln_max_bias(3, 1.0) == 0.75 and alg.rln_max_bias(1, 1.0) == 0"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Tính đích bằng chính mạng đang học <b class="red">(đuổi đích di động)</b>
+          <br><span class="note">Như bước 3: sửa Q từ 5 lên 6 thì đích cũng lên 6,94. Phép thử: vẽ giá trị đoán trung bình theo thời gian — dao động lớn hoặc tăng mãi là dấu hiệu.</span></div>
+        say: "Lỗi thứ nhất, tính đích bằng chính mạng đang học, nên phải đuổi đích di động. Như bước ba của phần suy ra, sửa Q từ 5 lên 6 thì đích cũng lên 6 phẩy 94. Phép thử là vẽ giá trị đoán trung bình theo thời gian, dao động lớn hoặc tăng mãi là dấu hiệu."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Quên cờ kết thúc khi lưu vào bộ nhớ <b class="red">(cộng tương lai không có)</b>
+          <br><span class="note">Bước B: đúng là $y = -1$; quên cờ thì $y = -1 + 0{,}99 \cdot 3 = 1{,}97$ nếu mạng tình cờ đoán 3. Phép thử: lô nào có bước kết thúc thì y phải bằng đúng r.</span></div>
+        say: "Lỗi thứ hai, quên cờ kết thúc khi lưu vào bộ nhớ, nên cộng một tương lai không có. Ở bước B, đúng là y bằng âm 1, nhưng quên cờ thì y thành 1 phẩy 97 nếu mạng tình cờ đoán 3. Phép thử là lô nào có bước kết thúc thì y phải bằng đúng r."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Tin số lớn nhất của các ước lượng có nhiễu <b class="red">(đánh giá quá cao)</b>
+          <br><span class="note">3 hành động đều có giá trị thật 0, mỗi ước lượng lệch +1 hoặc −1 như tung đồng xu. Liệt kê 8 khả năng: số lớn nhất là +1 ở 7 khả năng, −1 ở 1 khả năng → kỳ vọng $\frac{7 - 1}{8} = 0{,}75$, không phải 0. Cách “tách chọn và chấm” (Double DQN) giảm lệch này.</span></div>
+        say: "Lỗi thứ ba, tin số lớn nhất của các ước lượng có nhiễu, nên đánh giá quá cao. Giả sử 3 hành động đều có giá trị thật bằng 0, mỗi ước lượng lệch cộng 1 hoặc trừ 1 như tung đồng xu. Liệt kê 8 khả năng, số lớn nhất là cộng 1 ở 7 khả năng và trừ 1 ở 1 khả năng, nên kỳ vọng là 0 phẩy 75 chứ không phải 0. Cách dùng một mạng để chọn và mạng kia để chấm giúp giảm độ lệch này."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Nghĩ “thêm dữ liệu, thêm lớp mạng là hết phân kỳ” <b class="red">(bộ ba nguy hiểm)</b></div>
+          <table class="t"><tr><th>yếu tố (sách giáo khoa chuẩn, mục 11.3)</th><th>trong mạng Q sâu</th></tr>
+          <tr><td>xấp xỉ hàm</td><td>mạng nơ-ron thay bảng</td></tr>
+          <tr><td>tự khởi động</td><td>đích $y$ dùng ước lượng $\max Q$</td></tr>
+          <tr><td>học ngoài chính sách</td><td>học từ bước cũ trong bộ nhớ, đích lấy số lớn nhất</td></tr></table>
+          <p class="note">Sách ghi: đủ cả ba thì có nguy cơ mất ổn định và phân kỳ; chỉ hai thì tránh được. Mạng Q sâu có đủ ba — nên cần mạng mục tiêu, và phải theo dõi giá trị đoán.</p>
+        focus: [1, "2.2", "2.3", "2.4", 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, nghĩ cứ thêm dữ liệu, thêm lớp mạng là hết phân kỳ, trong khi gốc rễ là bộ ba nguy hiểm. Yếu tố thứ nhất là xấp xỉ hàm, dùng mạng nơ-ron thay bảng. Yếu tố thứ hai là tự khởi động, đích y dùng chính ước lượng số lớn nhất. Yếu tố thứ ba là học ngoài chính sách, học từ bước cũ trong bộ nhớ với đích lấy số lớn nhất. Sách giáo khoa chuẩn ghi rằng có đủ cả ba thì có nguy cơ mất ổn định và phân kỳ, nên mạng Q sâu cần mạng mục tiêu và phải được theo dõi giá trị đoán."
+
+  # ───────────────────────── 9. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: mục tiêu của lô và cỡ bộ nhớ"
+    checks:
+      - "round(2 + 0.99 * max([4, 6]), 10) == 7.94 and round(0 + 0, 10) == 0"
+      - "round(alg.rln_adjacent_pairs(50000, 32), 4) == 0.0198 and round(1 / alg.rln_adjacent_pairs(50000, 32)) == 50"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>$\gamma = 0{,}99$. Bước C: $r = 2$, chưa kết thúc, mạng mục tiêu đoán 4 và 6 ở $s'$. Bước D: $r = 0$, kết thúc. Tính $y_C$, $y_D$.</td></tr>
+          <tr><td>2</td><td>Máy chỉ đủ chỗ cho bộ nhớ <b>50&nbsp;000 bước</b>, lô vẫn 32. Số cặp liền nhau kỳ vọng mỗi lô? Bạn có chấp nhận không?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn, với gam-ma bằng 0 phẩy 99. Câu một, bước C có r bằng 2, chưa kết thúc, mạng mục tiêu đoán 4 và 6 ở trạng thái sau. Bước D có r bằng 0 và kết thúc, hãy tính y của C và y của D. Câu hai, máy chỉ đủ chỗ cho bộ nhớ 50 nghìn bước, lô vẫn là 32, vậy số cặp liền nhau kỳ vọng mỗi lô là bao nhiêu? Bạn có chấp nhận không? Dừng video và làm ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <p><b>Câu 1.</b> $y_C = 2 + 0{,}99 \cdot \max(4, 6) = 2 + 5{,}94 = \hlg{7{,}94}$; $\;y_D = r = \hlg{0}$ vì đã kết thúc.</p>
+        focus: [1, 1]
+        say: "Đáp án câu một, y của C bằng 2 cộng 0 phẩy 99 nhân số lớn nhất là 6, tức 2 cộng 5 phẩy 94, bằng 7 phẩy 94. Còn y của D bằng r, bằng 0, vì trò chơi đã kết thúc."
+      - show: |
+          <p><b>Câu 2.</b> $496 \cdot \frac{2}{50\,000} \approx \hlg{0{,}02}$ — khoảng 1 lô trong 50 có một cặp liền nhau. Vẫn gần như độc lập, nên chấp nhận được.</p>
+          <p class="note">Cái giá thật của bộ nhớ nhỏ: chỉ giữ những bước rất gần đây, nên dữ liệu đổi nhanh theo cách chơi hiện tại. Tăng bộ nhớ khi giá trị đoán dao động mạnh hoặc tác tử quên kỹ năng cũ.</p>
+        focus: [1, 1, 2, 2]
+        say: "Câu hai, 496 nhân 2 chia 50 nghìn, khoảng 0 phẩy 02, tức khoảng 1 lô trong 50 có một cặp liền nhau. Các mẫu vẫn gần như độc lập, nên chấp nhận được. Cái giá thật của bộ nhớ nhỏ là chỉ giữ những bước rất gần đây, nên dữ liệu đổi nhanh theo cách chơi hiện tại. Hãy tăng bộ nhớ khi giá trị đoán dao động mạnh, hoặc khi tác tử quên kỹ năng cũ."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">quá nhiều trạng thái: mạng nơ-ron thay bảng</span><span class="a">→</span>
+          <span class="n">cập nhật thành hồi quy về mục tiêu y</span><span class="a">→</span>
+          <span class="n">bộ nhớ phát lại + lô ngẫu nhiên: mẫu gần độc lập</span><span class="a">→</span>
+          <span class="n">mạng mục tiêu: đích đứng yên trong C lần cập nhật</span></div>
+        say: "Tổng kết lại, khi có quá nhiều trạng thái, mạng nơ-ron thay cho bảng, và cập nhật trở thành hồi quy về mục tiêu y. Bộ nhớ phát lại với lô ngẫu nhiên làm các mẫu gần như độc lập, còn mạng mục tiêu giữ đích đứng yên trong C lần cập nhật."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> khi nhãn do chính mô hình tạo ra, hãy giữ nhãn <b>đứng yên</b> đủ lâu và theo dõi giá trị đoán trung bình — nó tăng mãi là báo động, không phải tin vui.</div>
+        say: "Điều cần mang theo, khi nhãn do chính mô hình tạo ra, hãy giữ nhãn đứng yên đủ lâu và theo dõi giá trị đoán trung bình. Nó tăng mãi là báo động, không phải tin vui."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 7): <b>gradient chính sách REINFORCE và đường cơ sở giảm phương sai</b> — học thẳng xác suất chọn hành động, không qua bảng giá trị.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 7, ta học gradient chính sách và đường cơ sở giảm phương sai, tức là học thẳng xác suất chọn hành động mà không qua bảng giá trị. Hẹn gặp bạn ở bài tiếp theo."

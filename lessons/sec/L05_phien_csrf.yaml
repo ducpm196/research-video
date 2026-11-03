@@ -1,0 +1,207 @@
+id: L05
+course: SEC
+series: "SEC · An toàn thông tin"
+title: "Bài 5 — Phiên đăng nhập, cookie và giả mạo yêu cầu chéo trang"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/sec.yaml L05; audit/sec/verify_sec.py L05; RFC 6265 (HTTP State Management: cookie, cờ Secure, HttpOnly); RFC 6265bis (cờ SameSite); OWASP Cross-Site Request Forgery Prevention Cheat Sheet; NET bài 12 (HTTP)"
+assumes: [arith]
+# Quy ước: alg.csrf_check(trang gửi, trang đích, phương thức, SameSite, mã chống giả mạo đúng?) là MÔ HÌNH ĐƠN GIẢN HOÁ của trình duyệt và máy chủ:
+#   trả (trình duyệt có kèm cookie phiên không, máy chủ có thực hiện không). Tên cờ (Secure, HttpOnly, SameSite) chỉ trên màn hình.
+objectives:
+  - "Giải thích cookie phiên và các cờ bảo vệ"
+  - "Giải thích giả mạo yêu cầu chéo trang và cách chặn"
+  - "Biết kiểm tra ở trình duyệt không bảo vệ máy chủ"
+asr_reviewed:
+  - {sentence: "Câu một, trang lạ có một liên kết, người dùng bấm vào là mở đường dẫn xoá đơn số 7 của ngân hàng bằng phương thức lấy, cookie đặt mức nới lỏng.", reason: "ASR chép “Câu 1. Trang lạ có một liên kết. Người dùng bấm vào là mở đường dẫn xóa đơn số 7 của ngân hàng bằng phương thức lấy. Cúc kỳ đặt mức nới lỏng.” (0.954): lệch âm/thanh thuần Việt: cookie/cúc kỳ — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Câu hai, đổi thành mức chặt thì sao?", reason: "ASR chép “Câu 2. Đổi thành mức chặt thị xáo.” (0.75): lệch âm/thanh thuần Việt: thì sao/thị xáo — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Mở một trang lạ, tiền tự chuyển đi"
+    checks:
+      - "alg.csrf_check('la.vn', 'nganhang.vn', 'POST', 'None', True) == (True, True)"
+    steps:
+      - show: |
+          <p>Bạn đang đăng nhập ngân hàng ở một thẻ trình duyệt. Ở thẻ khác, bạn mở một trang lạ. Trang đó lặng lẽ gửi một biểu mẫu “chuyển tiền” tới ngân hàng — và trình duyệt <b>tự kèm cookie đăng nhập</b> của bạn. Ngân hàng tưởng chính bạn bấm.</p>
+          <div class="box key">Hôm nay: <b>phiên đăng nhập</b> và <b>giả mạo yêu cầu chéo trang</b> — vì sao nó xảy ra, và hai cách chặn.</div>
+        focus: [1, 1, 1, 1, 2]
+        say: "Chào bạn, bạn đang đăng nhập ngân hàng ở một thẻ trình duyệt. Ở thẻ khác, bạn mở một trang lạ. Trang đó lặng lẽ gửi một biểu mẫu chuyển tiền tới ngân hàng, và trình duyệt tự kèm cookie đăng nhập của bạn. Ngân hàng tưởng chính bạn bấm. Hôm nay ta học phiên đăng nhập và giả mạo yêu cầu chéo trang, vì sao nó xảy ra, và hai cách chặn."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: yêu cầu HTTP, phương thức lấy và gửi, thế nào là cùng trang"
+    checks:
+      - "2 * 2 * 3 == 12 and alg.csrf_check('nganhang.vn', 'nganhang.vn', 'POST', 'Strict', True) == (True, True)"
+    steps:
+      - show: |
+          <p>Ở khoá Mạng máy tính: mỗi yêu cầu HTTP đứng riêng, máy chủ không tự nhớ bạn là ai. Trình duyệt gửi kèm dòng <code>Cookie</code> để máy chủ nhận ra.</p>
+          <table class="t"><tr><th>phương thức</th><th>dùng cho</th><th>ví dụ</th></tr>
+          <tr><td><code>GET</code> (lấy)</td><td>xem, không đổi dữ liệu</td><td><code>GET /so-du</code></td></tr>
+          <tr><td><code>POST</code> (gửi)</td><td>thay đổi dữ liệu</td><td><code>POST /chuyen-tien</code> kèm <code>Cookie: phien=7f3a…</code></td></tr></table>
+        focus: [1, 1, 2, "2.2", "2.3"]
+        say: "Trước hết, ôn điều đã học ở khoá Mạng máy tính. Mỗi yêu cầu đứng riêng, máy chủ không tự nhớ bạn là ai. Trình duyệt gửi kèm một dòng cookie để máy chủ nhận ra bạn. Phương thức lấy dùng để xem, không đổi dữ liệu, như xem số dư. Phương thức gửi dùng để thay đổi dữ liệu, như chuyển tiền, và yêu cầu đó cũng kèm cookie."
+      - show: |
+          <table class="t"><tr><th>trang gửi yêu cầu</th><th>trang đích</th><th>quan hệ</th></tr>
+          <tr><td><code>nganhang.vn</code></td><td><code>nganhang.vn</code></td><td>cùng trang</td></tr>
+          <tr><td><code>la.vn</code></td><td><code>nganhang.vn</code></td><td class="red">chéo trang</td></tr></table>
+          <p>Đếm tình huống trình duyệt sẽ gặp: 2 kiểu nguồn, 2 phương thức, 3 mức cờ → $2 \times 2 \times 3 = \hl{12}$.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Điều thứ hai là thế nào là cùng trang. Yêu cầu từ trang ngân hàng tới chính trang ngân hàng là cùng trang. Yêu cầu từ một trang lạ tới trang ngân hàng là chéo trang. Đếm lại, có 2 kiểu nguồn, 2 phương thức, 3 mức cờ, nên trình duyệt gặp 2 nhân 2 nhân 3 bằng 12 tình huống."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: cookie phiên và ba cờ"
+    steps:
+      - show: |
+          <p><b>Cookie phiên</b>: sau khi đăng nhập, máy chủ gửi một mã ngẫu nhiên dài; trình duyệt tự gửi kèm mã đó trong mọi yêu cầu tới cùng trang. Ai có mã này là “đang đăng nhập”.</p>
+          <table class="t"><tr><th>cờ</th><th>tác dụng</th></tr>
+          <tr><td><code>Secure</code></td><td>chỉ gửi qua kết nối mã hoá</td></tr>
+          <tr><td><code>HttpOnly</code></td><td>mã kịch bản trên trang không đọc được cookie</td></tr>
+          <tr><td><code>SameSite</code> (cờ cùng trang)</td><td>không gửi kèm khi yêu cầu đến từ trang khác (mức <code>Lax</code>: vẫn gửi cho liên kết mở bằng GET)</td></tr></table>
+        focus: [1, 1, 2, "2.2", "2.3", "2.4"]
+        say: "Cookie phiên là một mã ngẫu nhiên dài mà máy chủ gửi sau khi đăng nhập. Trình duyệt tự gửi kèm mã đó trong mọi yêu cầu tới cùng trang, và ai có mã này là đang đăng nhập. Bảng giới thiệu ba cờ bảo vệ. Cờ thứ nhất chỉ cho gửi cookie qua kết nối mã hoá. Cờ thứ hai cấm mã kịch bản trên trang đọc cookie. Cờ cùng trang không gửi kèm cookie khi yêu cầu đến từ trang khác, ở mức nới lỏng thì vẫn gửi cho liên kết mở bằng phương thức lấy."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Trình duyệt kèm cookie, hai lớp chặn ở hai chỗ"
+    steps:
+      - show: |
+          <div><svg width="1500" height="380" viewBox="0 0 1500 380"><g fill="#1f2937"><rect x="40" y="60" width="330" height="110" rx="10" fill="#fee2e2" stroke="#b91c1c" stroke-width="3"/><text x="205" y="109" text-anchor="middle" font-size="26">trang lạ la.vn</text><text x="205" y="141" text-anchor="middle" font-size="22" fill="#4b5563">biểu mẫu “chuyển tiền” ẩn</text><rect x="560" y="60" width="380" height="110" rx="10" fill="#f3f4f6" stroke="#6b7280" stroke-width="3"/><text x="750" y="109" text-anchor="middle" font-size="26">trình duyệt</text><text x="750" y="141" text-anchor="middle" font-size="22" fill="#4b5563">giữ cookie của nganhang.vn</text><rect x="1130" y="60" width="330" height="110" rx="10" fill="#d1fae5" stroke="#059669" stroke-width="3"/><text x="1295" y="123" text-anchor="middle" font-size="26">máy chủ ngân hàng</text><line x1="370" y1="115" x2="558" y2="115" stroke="#b91c1c" stroke-width="3"/><polygon points="558,115 543,121 543,109" fill="#b91c1c"/><text x="465" y="95" text-anchor="middle" font-size="22" fill="#b91c1c">gửi</text><line x1="940" y1="115" x2="1128" y2="115" stroke="#b91c1c" stroke-width="3"/><polygon points="1128,115 1113,121 1113,109" fill="#b91c1c"/><text x="1035" y="95" text-anchor="middle" font-size="22" fill="#b91c1c">+ cookie</text><rect x="560" y="240" width="380" height="100" rx="10" fill="#ecfdf5" stroke="#059669" stroke-width="3"/><text x="750" y="284" text-anchor="middle" font-size="24">lớp chặn 1: cờ cùng trang</text><text x="750" y="316" text-anchor="middle" font-size="22" fill="#4b5563">trình duyệt không kèm cookie</text><rect x="1080" y="240" width="400" height="100" rx="10" fill="#ecfdf5" stroke="#059669" stroke-width="3"/><text x="1280" y="284" text-anchor="middle" font-size="24">lớp chặn 2: mã chống giả mạo</text><text x="1280" y="316" text-anchor="middle" font-size="22" fill="#4b5563">máy chủ thấy mã sai, từ chối</text><line x1="750" y1="238" x2="750" y2="175" stroke="#059669" stroke-width="3"/><polygon points="750,175 756,190 744,190" fill="#059669"/><line x1="1295" y1="238" x2="1295" y2="175" stroke="#059669" stroke-width="3"/><polygon points="1295,175 1301,190 1289,190" fill="#059669"/><text x="205" y="300" text-anchor="middle" font-size="22" fill="#4b5563">trang lạ không đọc được</text><text x="205" y="328" text-anchor="middle" font-size="22" fill="#4b5563">mã nằm trong trang thật</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ trang lạ bên trái gửi một biểu mẫu chuyển tiền ẩn qua trình duyệt. Trình duyệt đang giữ cookie của ngân hàng, nên tự kèm nó vào yêu cầu gửi tới máy chủ ngân hàng, mũi tên đỏ. Lớp chặn thứ nhất nằm ở trình duyệt, cờ cùng trang làm trình duyệt không kèm cookie. Lớp chặn thứ hai nằm ở máy chủ, mã chống giả mạo nằm trong trang thật mà trang lạ không đọc được, nên mã gửi lên sai và máy chủ từ chối."
+
+  - id: example
+    kind: example
+    title: "Bốn tình huống, hai lớp chặn"
+    checks:
+      - "[alg.csrf_check('la.vn', 'nganhang.vn', 'POST', ss, tk) for ss, tk in (('None', True), ('None', False), ('Lax', True))] == [(True, True), (True, False), (False, False)]"
+      - "alg.csrf_check('nganhang.vn', 'nganhang.vn', 'POST', 'Lax', True) == (True, True)"
+    steps:
+      - show: |
+          <p><b>Bước 1 — không có lớp chặn nào:</b> yêu cầu POST “chuyển tiền” từ trang lạ, cookie không đặt cờ cùng trang.</p>
+          <table class="t"><tr><th>cờ cùng trang</th><th>mã chống giả mạo</th><th>cookie gửi?</th><th>kết quả</th></tr>
+          <tr><td>không đặt</td><td>(kẻ xấu đoán được)</td><td>có</td><td class="red">thực hiện</td></tr></table>
+        focus: [1, 2]
+        say: "Bước một, xét yêu cầu chuyển tiền bằng phương thức gửi từ trang lạ, khi không có lớp chặn nào. Cookie không đặt cờ cùng trang nên vẫn được gửi, và nếu kẻ xấu đoán được mã thì yêu cầu được thực hiện."
+      - show: |
+          <p><b>Bước 2 — lớp chặn ở máy chủ:</b> máy chủ chèn một mã ngẫu nhiên vào biểu mẫu thật; trang lạ không đọc được mã đó nên không gửi đúng.</p>
+          <table class="t"><tr><th>cờ cùng trang</th><th>mã chống giả mạo</th><th>cookie gửi?</th><th>kết quả</th></tr>
+          <tr><td>không đặt</td><td>sai</td><td>có</td><td class="green">từ chối</td></tr></table>
+        focus: [1, 1, 2]
+        say: "Bước hai, thêm lớp chặn ở máy chủ. Mã chống giả mạo là một mã ngẫu nhiên máy chủ chèn vào biểu mẫu thật, trang lạ không đọc được nên không gửi đúng. Cookie vẫn được gửi, nhưng mã sai nên máy chủ từ chối."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — lớp chặn ở trình duyệt:</b> cookie đặt cờ cùng trang mức <code>Lax</code>.</p>
+          <table class="t"><tr><th>cờ cùng trang</th><th>phương thức</th><th>cookie gửi?</th><th>kết quả</th></tr>
+          <tr><td><code>Lax</code></td><td>POST từ trang lạ</td><td class="green">không</td><td class="green">máy chủ thấy khách chưa đăng nhập</td></tr></table>
+        focus: [1, 2]
+        say: "Bước ba, thêm lớp chặn ở trình duyệt bằng cờ cùng trang mức nới lỏng. Yêu cầu kiểu gửi từ trang lạ thì cookie không được gửi kèm, nên máy chủ chỉ thấy một khách chưa đăng nhập."
+      - show: |
+          <p><b>Bước 4 — người dùng thật</b> bấm chuyển tiền ngay trên trang ngân hàng:</p>
+          <table class="t"><tr><th>nguồn</th><th>cờ cùng trang</th><th>mã chống giả mạo</th><th>kết quả</th></tr>
+          <tr><td>chính ngân hàng</td><td><code>Lax</code></td><td>đúng</td><td>$\hl{\text{thực hiện}}$ (đúng ý người dùng)</td></tr></table>
+        focus: [1, 2]
+        say: "Bước bốn, người dùng thật bấm chuyển tiền ngay trên trang ngân hàng. Yêu cầu cùng trang nên cookie được gửi, mã đúng, và yêu cầu được thực hiện, đúng ý người dùng."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác: lập đủ bảng 12 tình huống"
+    checks:
+      - "[[alg.csrf_check('la.vn', 'nganhang.vn', m, s, True)[0] for m in ('GET', 'POST')] for s in ('None', 'Lax', 'Strict')] == [[True, True], [True, False], [False, False]]"
+      - "all(alg.csrf_check('nganhang.vn', 'nganhang.vn', m, s, True)[0] for m in ('GET', 'POST') for s in ('None', 'Lax', 'Strict'))"
+      - "sum(alg.csrf_check(src, 'nganhang.vn', m, s, True)[0] for src in ('la.vn', 'nganhang.vn') for m in ('GET', 'POST') for s in ('None', 'Lax', 'Strict')) == 9"
+    steps:
+      - show: |
+          <table class="t"><tr><th>mức cờ</th><th>GET từ trang lạ</th><th>POST từ trang lạ</th><th>cùng trang (GET, POST)</th></tr>
+          <tr><td>không đặt</td><td class="red">gửi</td><td class="red">gửi</td><td>gửi, gửi</td></tr>
+          <tr><td><code>Lax</code></td><td class="red">gửi (khi mở liên kết)</td><td class="green">không</td><td>gửi, gửi</td></tr>
+          <tr><td><code>Strict</code></td><td class="green">không</td><td class="green">không</td><td>gửi, gửi</td></tr></table>
+          <p>Đếm: 12 tình huống, cookie được gửi trong $\hl{9}$; bước 3 là ô POST từ trang lạ ở mức <code>Lax</code> ✓.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Kiểm bằng đường khác, ta lập đủ bảng 12 tình huống thay vì chỉ xét bốn ca. Khi không đặt cờ, cookie được gửi trong mọi ô. Ở mức nới lỏng, trang lạ chỉ còn kèm được cookie khi người dùng mở liên kết bằng phương thức lấy. Ở mức chặt, trang lạ không bao giờ kèm được cookie, còn yêu cầu cùng trang luôn được gửi. Đếm lại, cookie được gửi trong 9 trên 12 tình huống, và ô ở bước ba đúng là ô không gửi."
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, từ người mới tới người đã đi làm"
+    checks:
+      - "[sum(alg.csrf_check('la.vn', 'nganhang.vn', m, s, True)[1] for m in ('GET', 'POST')) for s in ('Strict', 'Lax', 'None')] == [0, 1, 2]"
+      - "[sum(alg.csrf_check('la.vn', 'nganhang.vn', m, s, False)[1] for m in ('GET', 'POST')) for s in ('Strict', 'Lax', 'None')] == [0, 0, 0]"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Kiểm tra đầu vào ở trình duyệt rồi tin máy chủ an toàn <b class="red">(bỏ qua được)</b>
+          <br><span class="note">Mã kiểm tra trên trang chỉ giúp người dùng thật. Kẻ xấu gửi yêu cầu thẳng tới máy chủ, bỏ qua trang. Mọi kiểm tra an toàn phải làm lại ở máy chủ.</span></div>
+        say: "Lỗi thứ nhất, kiểm tra đầu vào ở trình duyệt rồi tin máy chủ đã an toàn. Mã kiểm tra trên trang chỉ giúp người dùng thật, còn kẻ xấu gửi yêu cầu thẳng tới máy chủ mà bỏ qua trang, nên mọi kiểm tra an toàn phải làm lại ở máy chủ."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Dùng phương thức lấy cho thao tác thay đổi dữ liệu <b class="red">(mở cửa)</b>
+          <br><span class="note">“Xoá đơn” bằng một đường dẫn GET thì chỉ cần dụ người dùng bấm một liên kết tới đường dẫn đó (hoặc nhúng một ảnh, nếu cookie không đặt cờ cùng trang); mức <code>Lax</code> vẫn gửi cookie khi mở liên kết bằng GET. Thao tác thay đổi dữ liệu dùng POST, PUT, DELETE.</span></div>
+        say: "Lỗi thứ hai, dùng phương thức lấy cho thao tác thay đổi dữ liệu. Xoá đơn bằng một đường dẫn kiểu lấy thì chỉ cần dụ người dùng bấm một liên kết tới đường dẫn đó, và mức nới lỏng vẫn gửi cookie khi mở liên kết kiểu lấy. Nếu cookie không đặt cờ cùng trang, chỉ một ảnh nhúng trỏ tới đường dẫn đó cũng đủ. Thao tác thay đổi dữ liệu phải dùng các phương thức gửi, sửa, xoá."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Phiên không bao giờ hết hạn <b class="red">(mã bị đánh cắp dùng mãi)</b>
+          <br><span class="note">Đặt thời hạn phiên, cấp mã mới sau khi đăng nhập và khi đổi quyền, và huỷ mã khi đăng xuất hay đổi mật khẩu.</span></div>
+        say: "Lỗi thứ ba, để phiên không bao giờ hết hạn, nên mã bị đánh cắp dùng được mãi. Hãy đặt thời hạn phiên, cấp mã mới sau khi đăng nhập và khi đổi quyền, và huỷ mã khi đăng xuất hay đổi mật khẩu."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4.</b> Chỉ dựa vào một lớp chặn <b class="red">(một thay đổi cấu hình là hở)</b>
+          <br><span class="note">Đội vận hành nới cờ về “không đặt” để tích hợp một trang đối tác, trong khi mã chống giả mạo đã bị bỏ vì “có cờ rồi”. Người làm nghề giữ <b>cả hai</b> lớp: lớp này hở thì lớp kia vẫn chặn.</span></div>
+          <table class="t"><tr><th>mức cờ</th><th>cách gửi từ trang lạ còn kèm cookie</th><th>bị thực hiện nếu bỏ mã</th><th>bị thực hiện nếu giữ mã</th></tr>
+          <tr><td><code>Strict</code></td><td>0 trên 2</td><td>0</td><td>0</td></tr>
+          <tr><td><code>Lax</code></td><td>1 trên 2 (GET)</td><td>1</td><td>0</td></tr>
+          <tr><td>không đặt</td><td>2 trên 2</td><td class="red">$\hl{2}$</td><td class="green">0</td></tr></table>
+        focus: [1, 1, 1, 2, "2.2", "2.3", "2.4"]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, là chỉ dựa vào một lớp chặn. Đội vận hành nới cờ về không đặt để tích hợp một trang đối tác, trong khi mã chống giả mạo đã bị bỏ vì nghĩ có cờ rồi. Người làm nghề giữ cả hai lớp, lớp này hở thì lớp kia vẫn chặn. Bảng đếm theo hai phương thức từ trang lạ. Ở mức chặt, không cách nào kèm được cookie. Ở mức nới lỏng còn 1 cách, và nếu bỏ mã thì 1 cách đó bị thực hiện. Khi không đặt cờ, cả 2 cách đều kèm cookie, bỏ mã thì cả 2 bị thực hiện, còn giữ mã thì vẫn là 0."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.csrf_check('la.vn', 'nganhang.vn', 'GET', 'Lax', True) == (True, True) and alg.csrf_check('la.vn', 'nganhang.vn', 'GET', 'Strict', True) == (False, False)"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Trang lạ có một liên kết; người dùng bấm vào là mở <code>GET /xoa-don?id=7</code> của ngân hàng. Cookie đặt <code>Lax</code>: cookie có được gửi không? Đơn có bị xoá không?</td></tr>
+          <tr><td>2</td><td>Đổi thành mức <code>Strict</code> thì sao? Cách sửa gốc là gì?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, trang lạ có một liên kết, người dùng bấm vào là mở đường dẫn xoá đơn số 7 của ngân hàng bằng phương thức lấy, cookie đặt mức nới lỏng. Cookie có được gửi không, và đơn có bị xoá không? Câu hai, đổi thành mức chặt thì sao? Cách sửa gốc là gì? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 1: hỏi lần lượt</th><th>trả lời</th></tr>
+          <tr><td>cùng trang hay chéo trang?</td><td>chéo trang (từ <code>la.vn</code>)</td></tr>
+          <tr><td>mức <code>Lax</code> có gửi cho việc mở liên kết bằng GET?</td><td>có</td></tr>
+          <tr><td>máy chủ có kiểm gì thêm cho GET?</td><td>không → đơn $\hl{\text{bị xoá}}$</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Đáp án câu một, hỏi lần lượt. Yêu cầu đến từ trang lạ, nên là chéo trang. Mức nới lỏng vẫn gửi cookie khi người dùng mở liên kết bằng phương thức lấy, nên cookie được gửi. Máy chủ không kiểm gì thêm cho kiểu lấy, nên đơn bị xoá."
+      - show: |
+          <table class="t"><tr><th>câu 2</th><th>trả lời</th></tr>
+          <tr><td>mức <code>Strict</code></td><td>cookie không gửi cho mọi yêu cầu từ trang khác → chặn được</td></tr>
+          <tr><td>sửa gốc</td><td>xoá đơn phải dùng phương thức thay đổi dữ liệu (POST/DELETE), kèm mã chống giả mạo</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Câu hai, xét từng ý. Ở mức chặt, cookie không được gửi cho mọi yêu cầu đến từ trang khác, nên chặn được. Nhưng cách sửa gốc là thao tác xoá đơn phải dùng phương thức thay đổi dữ liệu, kèm mã chống giả mạo."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">trình duyệt tự kèm cookie</span><span class="a">→</span>
+          <span class="n">cờ cùng trang + mã chống giả mạo</span><span class="a">→</span>
+          <span class="n">thay đổi dữ liệu không dùng GET</span><span class="a">→</span>
+          <span class="n">kiểm ở máy chủ, phiên có hạn</span></div>
+        say: "Tổng kết lại, trình duyệt tự kèm cookie trong mọi yêu cầu, nên cần cờ cùng trang và mã chống giả mạo. Thao tác thay đổi dữ liệu không dùng phương thức lấy, mọi kiểm tra làm ở máy chủ, và phiên phải có hạn."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> trình duyệt làm việc thay người dùng một cách trung thành — kể cả khi yêu cầu đến từ một trang người dùng không hề tin.</div>
+        say: "Điều cần mang theo, trình duyệt làm việc thay người dùng một cách trung thành, kể cả khi yêu cầu đến từ một trang mà người dùng không hề tin."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 6): <b>lỗ hổng chèn</b> — truy vấn, lệnh, mã kịch bản trên trang.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 6, ta học các lỗ hổng chèn, vào truy vấn, vào lệnh, và mã kịch bản trên trang. Hẹn gặp bạn ở bài tiếp theo."

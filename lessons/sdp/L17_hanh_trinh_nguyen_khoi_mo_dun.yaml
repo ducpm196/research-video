@@ -1,0 +1,360 @@
+id: L17
+course: SDP
+series: "SDP · Kỹ thuật lập trình và mẫu thiết kế"
+title: "Bài 17 — Tình huống chuyên gia theo dòng thời gian: Shopify, từ nguyên khối tới nguyên khối mô-đun hoá"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+case: journey
+source: "curriculum/sdp.yaml L17; audit/sdp/sources_L17.md (câu trích nguyên văn, đọc 2026-11-02); audit/sdp/verify_sdp.py L17; K. Westeinde, Deconstructing the Monolith: Designing Software that Maximizes Developer Productivity, Shopify Engineering, 2019-02-21 [DM19]; P. Müller, Under Deconstruction: The State of Shopify's Monolith, Shopify Engineering, 2020-09-16 [UD20]; M. Ong, Enforcing Modularity in Rails Apps with Packwerk, Shopify Engineering, 2020-09 [PW20]; C. Salzberg và cộng sự, A Packwerk Retrospective, Rails at Scale 2024-01-26, đăng lại Shopify Engineering 2024-02-07 [PR24]; SDP bài 7 (đảo phụ thuộc), bài 10 (người quan sát), bài 13 (tái cấu trúc giữ hành vi), bài 14 (tương thích API), bài 15 (độ bất ổn)"
+assumes: [arith, frac, approx]
+# Quy ước: “nguyên khối” = mọi chức năng trong một mã nguồn, triển khai một chỗ (monolith); “thành phần” = component, một thư mục theo
+#   một miền nghiệp vụ; “nguyên khối mô-đun hoá” = modular monolith; “vi dịch vụ” = microservices; “vi phạm” = lời gọi / tham chiếu vượt
+#   ranh giới ngoài giao diện công khai hoặc ngoài phụ thuộc đã khai; “danh sách việc cần làm” = deprecated references / package_todo.yml.
+#   Độ bất ổn I = Ce / (Ca + Ce) như bài 15 (alg.instability); lời đọc nói “số thành phần dựa vào nó”, “số thành phần nó dựa vào”.
+#   Mọi sự kiện và con số có nguồn ghi trong audit/sdp/sources_L17.md. Con số khác là phép tính lại (checks) hoặc ghi “(số minh hoạ)”:
+#   10 miền, 1 phút mỗi lớp, 5 phút mỗi lần quét, ngày 8 giờ, Ca = 36 của lớp cửa hàng, ứng dụng 6 người / 8 miền / 15 phút kiểm thử
+#   đều là SỐ MINH HOẠ. 703 là CẬN DƯỚI tính từ 37 (UD20) và “hơn nửa” (UD20), không phải số đếm của Shopify.
+#   Lời đọc không nói “Rails”, “Wedge”, “Packwerk”, “CI”, “commit”: nói “khung lập trình web viết bằng Ruby”, “công cụ ghi đồ thị lời
+#   gọi”, “công cụ phân tích tĩnh”, “máy kiểm thử tự động”, “lần ghi nhận”. Phát âm: lexicon_vi.SDP.yaml (probe p2).
+objectives:
+  - "Kể lại hành trình của nguyên khối Shopify qua bốn chặng từ 2006 tới 2024, mỗi chặng một điểm nghẽn và một cách xử lý"
+  - "Tính lại số chiều gọi có thể có, công dán nhãn 6000 lớp, cận dưới số mũi tên của đồ thị dày, số lần kiểm mỗi ngày và độ bất ổn để chọn chiều phụ thuộc"
+  - "Chọn giữa nguyên khối mô-đun hoá và tách dịch vụ ở quy mô của chính mình, kèm điều kiện đổi lựa chọn"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "2,8 triệu dòng mã trong một khối"
+    checks:
+      - "2.8e6 > 2_000_000 and 500_000 > 100_000"
+    steps:
+      - show: |
+          <p>Năm 2020, mã nguồn lõi của Shopify có <b>hơn 2,8 triệu dòng</b> Ruby và <b>500&nbsp;000 lần ghi nhận</b>; hàng trăm lập trình viên thêm tính năng mỗi ngày.</p>
+          <p>Vậy mà họ <b>không</b> chặt nó thành vi dịch vụ. Họ giữ <b>một khối</b>, nhưng dựng <b>tường</b> giữa các phần.</p>
+          <div class="box key">Hôm nay: bốn chặng từ 2006 tới 2024 — mỗi quy mô làm lộ ra điểm nghẽn nào, và đội Shopify đã xử lý ra sao.</div>
+        focus: [1, 1, 2, 2, 3]
+        say: "Chào bạn, năm 2020, mã nguồn lõi của Shopify có hơn 2 phẩy 8 triệu dòng Ruby và 500 nghìn lần ghi nhận. Hàng trăm lập trình viên vẫn thêm tính năng vào đó mỗi ngày. Vậy mà họ không chặt nó thành nhiều dịch vụ nhỏ. Họ giữ một khối, nhưng dựng tường giữa các phần. Hôm nay ta đi qua bốn chặng từ 2006 tới 2024, xem mỗi quy mô làm lộ ra điểm nghẽn nào và đội này đã xử lý ra sao."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại bốn điều từ các bài trước"
+    checks:
+      - "alg.instability(3, 1) == 0.25"
+      - "3 * 4 == 12"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài</th><th>điều đã học</th><th>ví dụ số</th></tr>
+          <tr><td>bài 7</td><td><b>đảo phụ thuộc</b>: mã cấp cao không gọi thẳng thứ cụ thể, mà nhận nó từ ngoài vào</td><td>tiêm đồng hồ giả ngày 1/1 → lời chào luôn là “Chúc mừng năm mới”</td></tr>
+          <tr><td>bài 10</td><td><b>người quan sát</b>: bên phát sự kiện không cần biết ai đang nghe</td><td>3 người nghe, 4 sự kiện → 12 lần gọi</td></tr>
+          <tr><td>bài 13</td><td><b>tái cấu trúc</b> chỉ an toàn khi kiểm thử chứng minh hành vi không đổi</td><td>bản cũ và bản mới cùng kết quả trên 10&nbsp;000 đầu vào</td></tr>
+          <tr><td>bài 15</td><td><b>độ bất ổn</b> I = số nó dựa vào chia tổng số mũi tên chạm vào nó; mũi tên nên đi về phía I nhỏ</td><td>3 dựa vào nó, nó dựa vào 1 → I = 1 / (3 + 1) = 0,25</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", "1.5"]
+        say: "Bảng nhắc lại bốn điều từ các bài trước. Ở bài 7, đảo phụ thuộc là mã cấp cao không gọi thẳng thứ cụ thể, mà nhận nó từ ngoài vào, như tiêm một đồng hồ giả ngày 1 tháng 1. Ở bài 10, mẫu người quan sát cho bên phát sự kiện không cần biết ai đang nghe, 3 người nghe với 4 sự kiện là 12 lần gọi. Ở bài 13, tái cấu trúc chỉ an toàn khi kiểm thử chứng minh hành vi không đổi, ví dụ trên 10 nghìn đầu vào. Ở bài 15, độ bất ổn bằng số mô-đun nó dựa vào, chia tổng số mũi tên chạm vào nó. Ba mô-đun dựa vào nó, nó dựa vào một, thì độ bất ổn là 0 phẩy 25, và mũi tên nên đi về phía độ bất ổn nhỏ."
+
+  # ───────────────────────── 3. NGÔN NGỮ ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Ngôn ngữ của hành trình"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thuật ngữ</th><th>nghĩa</th></tr>
+          <tr><td><b>nguyên khối</b></td><td>mọi chức năng nằm trong một mã nguồn, triển khai ở một chỗ</td></tr>
+          <tr><td><b>thành phần</b></td><td>một thư mục gom mã của một miền nghiệp vụ, như đơn hàng, giao hàng, thuế</td></tr>
+          <tr><td><b>giao diện công khai</b></td><td>phần duy nhất thành phần khác được phép gọi</td></tr>
+          <tr><td><b>nguyên khối mô-đun hoá</b></td><td>vẫn một mã nguồn, một lần triển khai, nhưng ranh giới giữa các thành phần được <b>kiểm bằng máy</b></td></tr>
+          <tr><td><b>vi dịch vụ</b></td><td>nhiều chương trình nhỏ triển khai riêng, gọi nhau qua mạng</td></tr>
+          <tr><td><b>vi phạm</b></td><td>một chỗ dùng mã của thành phần khác ngoài giao diện công khai, hoặc ngoài các phụ thuộc đã khai</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", "1.6", "1.7"]
+        say: "Bài dùng sáu thuật ngữ. Nguyên khối là mọi chức năng nằm trong một mã nguồn, triển khai ở một chỗ. Thành phần là một thư mục gom mã của một miền nghiệp vụ, như đơn hàng, giao hàng, hay thuế. Giao diện công khai là phần duy nhất mà thành phần khác được phép gọi. Nguyên khối mô-đun hoá vẫn là một mã nguồn và một lần triển khai, nhưng ranh giới được kiểm bằng máy. Vi dịch vụ là nhiều chương trình nhỏ triển khai riêng, gọi nhau qua mạng. Vi phạm là một chỗ dùng mã của thành phần khác ngoài giao diện công khai, hoặc ngoài các phụ thuộc đã khai."
+
+  # ───────────────────────── 4. DÒNG THỜI GIAN ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Bốn chặng trên một trục thời gian"
+    steps:
+      - show: |
+          <div><svg width="1700" height="320" viewBox="0 0 1700 320">
+          <line x1="30" y1="150" x2="1670" y2="150" stroke="#1f2937" stroke-width="3"/>
+          <g font-size="24" text-anchor="middle" fill="#1f2937">
+          <circle cx="210" cy="150" r="15" fill="#9ca3af"/><text x="210" y="108" font-weight="bold">2006 → 2016</text><text x="210" y="200">một khối, không ranh giới</text><text x="210" y="232">lớn tới mức chậm lại</text>
+          <circle cx="640" cy="150" r="15" fill="#2a78d6"/><text x="640" y="108" font-weight="bold">2017 → 2019</text><text x="640" y="200">xếp 6000 lớp theo nghiệp vụ</text><text x="640" y="232">đo vi phạm khi chạy kiểm thử</text>
+          <circle cx="1070" cy="150" r="15" fill="#eb6834"/><text x="1070" y="108" font-weight="bold">2020</text><text x="1070" y="200">37 thành phần, đồ thị dày</text><text x="1070" y="232">phân tích tĩnh chặn vi phạm mới</text>
+          <circle cx="1490" cy="150" r="15" fill="#059669"/><text x="1490" y="108" font-weight="bold">2024</text><text x="1490" y="200">0 vi phạm chưa đủ</text><text x="1490" y="232">chạy được riêng mới là tách</text>
+          </g>
+          <text x="850" y="300" font-size="23" fill="#6b7280" text-anchor="middle">khai sinh, tăng trưởng → mô-đun hoá → quy mô rất lớn → ổn định và tiếp tục phát triển</text>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình là trục thời gian với bốn chặng. Từ 2006 tới 2016, mã nguồn là một khối không ranh giới, lớn tới mức mọi việc chậm lại. Từ 2017 tới 2019, đội xếp khoảng 6000 lớp theo nghiệp vụ, rồi đo vi phạm khi chạy kiểm thử. Năm 2020 có 37 thành phần với đồ thị phụ thuộc dày, và một công cụ phân tích tĩnh chặn vi phạm mới, còn năm 2024, đội rút ra rằng không còn vi phạm vẫn chưa đủ."
+
+  # ───────────────────────── 5. BA KIẾN TRÚC ─────────────────────────
+  - id: arch
+    kind: concept
+    title: "Ba cách tổ chức: một khối, một khối có tường, nhiều dịch vụ"
+    steps:
+      - show: |
+          <div><svg width="1640" height="360" viewBox="0 0 1640 360">
+          <g font-size="24" text-anchor="middle" fill="#1f2937">
+          <rect x="30" y="60" width="460" height="230" rx="14" fill="#f3f4f6" stroke="#1f2937" stroke-width="3"/>
+          <text x="260" y="40" font-weight="bold">nguyên khối</text>
+          <text x="130" y="130">giao hàng</text><text x="380" y="130">thuế</text><text x="130" y="240">đơn hàng</text><text x="380" y="240">thanh toán</text>
+          <rect x="590" y="60" width="460" height="230" rx="14" fill="#e0ecfb" stroke="#2a78d6" stroke-width="3"/>
+          <text x="820" y="40" font-weight="bold">nguyên khối mô-đun hoá</text>
+          <rect x="610" y="80" width="200" height="90" rx="8" fill="#ffffff" stroke="#2a78d6" stroke-width="3"/><text x="710" y="132">giao hàng</text>
+          <rect x="830" y="80" width="200" height="90" rx="8" fill="#ffffff" stroke="#2a78d6" stroke-width="3"/><text x="930" y="132">thuế</text>
+          <rect x="610" y="185" width="200" height="90" rx="8" fill="#ffffff" stroke="#2a78d6" stroke-width="3"/><text x="710" y="237">đơn hàng</text>
+          <rect x="830" y="185" width="200" height="90" rx="8" fill="#ffffff" stroke="#2a78d6" stroke-width="3"/><text x="930" y="237">thanh toán</text>
+          <text x="1390" y="40" font-weight="bold">vi dịch vụ</text>
+          <rect x="1160" y="70" width="200" height="90" rx="8" fill="#dcfce7" stroke="#059669" stroke-width="3"/><text x="1260" y="122">giao hàng</text>
+          <rect x="1420" y="70" width="200" height="90" rx="8" fill="#dcfce7" stroke="#059669" stroke-width="3"/><text x="1520" y="122">thuế</text>
+          <rect x="1160" y="200" width="200" height="90" rx="8" fill="#dcfce7" stroke="#059669" stroke-width="3"/><text x="1260" y="252">đơn hàng</text>
+          <rect x="1420" y="200" width="200" height="90" rx="8" fill="#dcfce7" stroke="#059669" stroke-width="3"/><text x="1520" y="252">thanh toán</text>
+          </g>
+          <g stroke="#e11d48" stroke-width="3"><line x1="150" y1="152" x2="360" y2="210"/><line x1="360" y1="152" x2="150" y2="210"/><line x1="195" y1="122" x2="340" y2="122"/><line x1="192" y1="232" x2="308" y2="232"/></g>
+          <line x1="1360" y1="115" x2="1420" y2="115" stroke="#059669" stroke-width="3" stroke-dasharray="8 6"/>
+          <line x1="1260" y1="160" x2="1260" y2="200" stroke="#059669" stroke-width="3" stroke-dasharray="8 6"/>
+          <g font-size="22" text-anchor="middle">
+          <text x="260" y="330" fill="#e11d48">ai cũng gọi được ai</text>
+          <text x="820" y="330" fill="#2a78d6">một lần triển khai; tường kiểm bằng máy</text>
+          <text x="1390" y="330" fill="#059669">mỗi lời gọi đi qua mạng</text>
+          </g>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình so ba cách tổ chức cùng bốn miền nghiệp vụ. Ở nguyên khối bên trái, không có tường, nên ai cũng gọi được ai, như các đường đỏ chéo nhau. Ở giữa, nguyên khối mô-đun hoá vẫn triển khai một lần, nhưng mỗi miền có tường, và máy kiểm xem có ai vượt tường không. Bên phải, mỗi vi dịch vụ chạy riêng, nên mỗi lời gọi giữa chúng phải đi qua mạng."
+
+  # ───────────────────────── 6. CHẶNG 1 ─────────────────────────
+  - id: stage1
+    kind: example
+    title: "Chặng 1, 2006 → 2016 — khai sinh và tăng trưởng: một khối"
+    stage: {year: "2006 → 2016", scale: "phát triển liên tục từ ít nhất 2006; hơn mười năm, hơn một nghìn lập trình viên; năm 2016 lớn quá kiến trúc nguyên khối", source: "[DM19] [UD20]", practice: "lúc đầu một khối là đúng: một kho mã, một đường ống kiểm thử và triển khai, gọi thẳng không cần quản phiên bản API; đầu tư thiết kế khi tốc độ thêm tính năng bắt đầu chậm"}
+    checks:
+      - "2016 - 2006 == 10"
+      - "10 * 9 == 90 and len([(a, b) for a in range(10) for b in range(10) if a != b]) == 90"
+    steps:
+      - show: |
+          <p><b>Lúc đầu, một khối là lựa chọn đúng:</b> một kho mã, một đường ống kiểm thử và triển khai; các phần gọi thẳng nhau, không phải lo phiên bản API và tương thích ngược như ở bài 14.</p>
+          <p><b>Quy mô:</b> phát triển liên tục từ ít nhất <b>2006</b>; tới 2019 đã qua <b>hơn mười năm</b>, với <b>hơn một nghìn</b> lập trình viên.</p>
+          <p><b>Điểm nghẽn năm 2016:</b> mã tính phí giao hàng gọi vào mã tính thuế, nên sửa cách tính thuế làm phí giao hàng đổi mà không rõ vì sao. Một thay đổi nhỏ kéo theo cả loạt kiểm thử không liên quan bị hỏng; kiểm thử khó viết và chạy rất chậm.</p>
+        focus: [1, 1, 2, 3, 3]
+        say: "Ở chặng một, theo đội Shopify, lúc đầu một khối là lựa chọn đúng, vì chỉ có một kho mã và một đường ống kiểm thử, triển khai. Các phần gọi thẳng nhau, không phải lo phiên bản API và tương thích ngược như ở bài 14. Mã nguồn được phát triển liên tục từ ít nhất năm 2006, và tới 2019 đã có hơn một nghìn lập trình viên làm việc trên đó. Năm 2016, mã tính phí giao hàng gọi vào mã tính thuế, nên sửa cách tính thuế làm phí giao hàng đổi mà không rõ vì sao. Một thay đổi nhỏ kéo theo cả loạt kiểm thử không liên quan bị hỏng, và kiểm thử chạy rất chậm."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. tuổi của khối năm 2016</td><td>2016 trừ 2006</td><td>$\hlb{10}$ năm</td></tr>
+          <tr><td>Bước 2. 10 miền, không tường (số minh hoạ): mỗi miền gọi được 9 miền kia</td><td>10 nhân 9</td><td>$\hl{90}$ chiều gọi có thể</td></tr>
+          <tr><td>Bước 3. người mới vào đội giao hàng phải hiểu</td><td>giao hàng, cộng mọi miền nó có thể gọi tới</td><td>có thể cả $\hl{10}$ miền</td></tr></table>
+          <p class="note">Năm 2019, đội Shopify ghi: người mới của đội giao hàng phải hiểu cả cách tạo đơn, cách xử lý thanh toán, vì mọi thứ đan vào nhau. Thực hành: lúc đầu đừng dựng kiến trúc phức tạp; khi tốc độ thêm tính năng bắt đầu chậm, đó là lúc đầu tư thiết kế.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Làm thử bằng số. Bước một, năm 2016 trừ 2006 là 10 năm phát triển liên tục. Bước hai, giả sử có 10 miền, một số minh hoạ, và không có tường, thì mỗi miền gọi được 9 miền kia, 10 nhân 9 là 90 chiều gọi có thể. Bước ba, người mới vào đội giao hàng có thể phải hiểu cả 10 miền, và đội này ghi đúng như vậy về cách tạo đơn và thanh toán. Thực hành rút ra là lúc đầu đừng dựng kiến trúc phức tạp, nhưng khi tốc độ thêm tính năng bắt đầu chậm, đó là lúc đầu tư thiết kế."
+
+  # ───────────────────────── 7. CHẶNG 2 ─────────────────────────
+  - id: stage2
+    kind: example
+    title: "Chặng 2, 2017 → 2019 — mô-đun hoá: xếp lại theo nghiệp vụ"
+    stage: {year: "2017 → 2019", scale: "khoảng 6000 lớp Ruby dán nhãn bằng tay vào thành phần; một lần chuyển tệp lớn bằng script", source: "[DM19]", practice: "khảo sát lập trình viên trước khi chọn giải pháp; xếp mã theo khái niệm nghiệp vụ; một thay đổi chỉ chuyển tệp, kiểm bằng cả bộ kiểm thử; mỗi thành phần một giao diện công khai, sở hữu dữ liệu của mình; đo vi phạm theo từng thành phần"}
+    checks:
+      - "6000 * 1 == 6000 and 6000 // 60 == 100 and 100 / 8 == 12.5"
+    steps:
+      - show: |
+          <p><b>Trước khi chọn giải pháp:</b> gửi khảo sát cho mọi lập trình viên của hệ lõi để tìm nỗi đau chính — giải đúng vấn đề có số liệu, không phải vấn đề nghe kể.</p>
+          <p><b>Đầu năm 2017:</b> một đội nhỏ bắt đầu dự án <b>chia thành phần</b>. Việc đầu tiên: mã đang xếp theo <b>loại kỹ thuật</b> (mô hình, giao diện, bộ điều khiển) được xếp lại theo <b>khái niệm nghiệp vụ</b> (đơn hàng, giao hàng, kho, hoá đơn).</p>
+          <p><b>Cách làm:</b> liệt kê mọi lớp Ruby, <b>khoảng 6000</b>, vào một bảng tính, dán nhãn bằng tay; rồi chuyển tệp trong <b>một lần lớn</b> bằng script. Không dòng mã nào đổi; cả bộ kiểm thử chạy qua là bằng chứng không sót.</p>
+        focus: [1, 2, 2, 3, 3]
+        say: "Ở chặng hai, trước khi chọn giải pháp, đội Shopify gửi khảo sát cho mọi lập trình viên của hệ lõi, để giải đúng vấn đề có số liệu. Đầu năm 2017, một đội nhỏ bắt đầu dự án chia thành phần. Việc đầu tiên là xếp lại mã, từ xếp theo loại kỹ thuật như mô hình, giao diện, bộ điều khiển, sang xếp theo khái niệm nghiệp vụ như đơn hàng, giao hàng, kho. Họ liệt kê khoảng 6000 lớp vào một bảng tính, dán nhãn bằng tay, rồi chuyển tệp trong một lần lớn bằng một tập lệnh tự động. Không dòng mã nào đổi, và cả bộ kiểm thử chạy qua là bằng chứng không sót, đúng tinh thần bài 13."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. 1 phút dán nhãn mỗi lớp (số minh hoạ)</td><td>6000 nhân 1 phút</td><td>6000 phút</td></tr>
+          <tr><td>Bước 2. đổi ra giờ</td><td>6000 chia 60</td><td>$\hlb{100}$ giờ</td></tr>
+          <tr><td>Bước 3. ngày công 8 giờ</td><td>100 chia 8</td><td>$\hlg{12{,}5}$ ngày công</td></tr></table>
+          <p class="note">Cái giá đã ghi: lịch sử nhiều tệp bị mất trên giao diện web của kho mã, vì chuyển tệp bị hiểu là xoá rồi tạo mới. Điều kiện để làm một lần lớn: mã được kiểm thử tốt, và thay đổi chỉ là chuyển tệp.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2, 2]
+        say: "Tính thử công dán nhãn. Bước một, giả sử mỗi lớp mất 1 phút, một số minh hoạ, thì 6000 lớp mất 6000 phút. Bước hai, 6000 chia 60 được 100 giờ. Bước ba, 100 giờ chia ngày công 8 giờ là 12 phẩy 5 ngày công, cho một việc không đổi dòng mã nào. Cái giá được ghi lại là lịch sử nhiều tệp bị mất trên trang của kho mã, vì chuyển tệp bị hiểu là xoá rồi tạo mới. Điều kiện để dám làm một lần lớn là mã được kiểm thử tốt, và thay đổi chỉ là chuyển tệp."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước tiếp theo (2017 → 2019)</th><th>vì sao</th></tr>
+          <tr><td>mỗi thành phần một <b>giao diện công khai</b> và sở hữu <b>riêng</b> dữ liệu của mình</td><td>giống bài 7: dựa vào điều đã hứa, không vào chi tiết bên trong</td></tr>
+          <tr><td>một công cụ ghi <b>mọi lời gọi</b> lúc chạy kiểm thử, lọc lời gọi vượt ranh giới, chấm điểm từng thành phần</td><td>biết mình đang ở đâu bằng số đo</td></tr>
+          <tr><td>luật: liên kết dữ liệu giữa hai thành phần <b>luôn</b> là vi phạm; lời gọi chỉ hợp lệ khi vào phần đã công khai</td><td>tường phải có định nghĩa rõ</td></tr>
+          <tr><td>kết quả: thay được cả <b>bộ máy tính thuế</b> cũ bằng hệ mới — việc trước đó “gần như không thể”</td><td>ranh giới làm thay thế trở nên rẻ</td></tr></table>
+        focus: ["1.2", "1.3", "1.4", "1.5", "1.5"]
+        say: "Bước tiếp theo, mỗi thành phần có một giao diện công khai và sở hữu riêng dữ liệu của mình, giống bài 7, dựa vào điều đã hứa chứ không vào chi tiết bên trong. Họ viết một công cụ ghi mọi lời gọi lúc chạy kiểm thử, lọc ra lời gọi vượt ranh giới, rồi chấm điểm từng thành phần. Luật rất rõ, liên kết dữ liệu giữa hai thành phần luôn là vi phạm, còn lời gọi chỉ hợp lệ khi đi vào phần đã công khai. Kết quả là họ thay được cả bộ máy tính thuế cũ bằng một hệ mới. Trước đó, việc này được ghi là gần như không thể."
+
+  # ───────────────────────── 8. CHẶNG 3 ─────────────────────────
+  - id: stage3
+    kind: example
+    title: "Chặng 3, năm 2020 — quy mô rất lớn: đồ thị dày và tường tĩnh"
+    stage: {year: "2020", scale: "hơn 2,8 triệu dòng Ruby, 500 000 lần ghi nhận, hàng trăm lập trình viên; 37 thành phần, mỗi thành phần dựa vào hơn nửa số còn lại", source: "[UD20] [PW20]", practice: "phụ thuộc theo chiều ổn định; đảo chiều bằng phát và nghe sự kiện; dọn phụ thuộc giữa các lớp trước; phân tích tĩnh đủ nhanh để chạy ở mỗi yêu cầu gộp mã; ghi vi phạm cũ thành danh sách việc cần làm, chặn vi phạm mới"}
+    checks:
+      - "36 // 2 + 1 == 19 and 19 > 36 / 2 and 37 * 19 == 703 and 37 * 36 == 1332 and round(703 / 1332, 2) == 0.53"
+      - "alg.instability(36, 0) == 0.0"
+      - "8 * 60 // 60 == 8 and 8 * 60 // 5 == 96 and round(37 / 3) == 12"
+    steps:
+      - show: |
+          <p><b>Quy mô năm 2020:</b> hơn 2,8 triệu dòng Ruby, hàng trăm lập trình viên, <b>37 thành phần</b>. Đội ghi lại: đồ thị phụ thuộc giữa các thành phần <b>rất dày</b> — mỗi thành phần dựa vào <b>hơn nửa</b> số thành phần còn lại, và có nhiều <b>vòng</b>.</p>
+          <table class="t"><tr><th>bước (phép tính minh hoạ với con số 37)</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. hơn nửa của 36 thành phần kia</td><td>36 chia 2 là 18, hơn 18</td><td>ít nhất $\hl{19}$</td></tr>
+          <tr><td>Bước 2. số mũi tên tối thiểu</td><td>37 nhân 19</td><td>ít nhất $\hl{703}$</td></tr>
+          <tr><td>Bước 3. so với tối đa</td><td>37 nhân 36 = 1332; 703 chia 1332</td><td>≈ $\hl{0{,}53}$ số mũi tên có thể</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", "2.4"]
+        say: "Ở chặng ba, năm 2020, mã nguồn có hơn 2 phẩy 8 triệu dòng, hàng trăm lập trình viên, và 37 thành phần. Đội ghi rằng đồ thị phụ thuộc rất dày, mỗi thành phần dựa vào hơn nửa số thành phần còn lại, và có nhiều vòng. Bước một, hơn nửa của 36 thành phần kia là hơn 18, tức ít nhất 19. Bước hai, 37 nhân 19 là ít nhất 703 mũi tên. Bước ba, tối đa là 37 nhân 36 bằng 1332, nên đồ thị đã có ít nhất khoảng 53 phần trăm số mũi tên có thể."
+      - clear: true
+        show: |
+          <p><b>Điểm nghẽn:</b> sửa một thành phần nằm trong vòng có thể làm hỏng mọi thành phần khác trong vòng. Gần như mọi thứ dựa vào lớp <b>cửa hàng</b>, nên muốn tránh vòng thì lớp cửa hàng phải <b>gần như không dựa vào gì</b>.</p>
+          <table class="t"><tr><th>lớp cửa hàng (số minh hoạ: 36 dựa vào nó)</th><th>phép tính, như bài 15</th><th>kết luận</th></tr>
+          <tr><td>dựa vào nó 36, nó dựa vào 0</td><td>0 / (36 + 0)</td><td>I = $\hlg{0}$: rất ổn định, mọi mũi tên phải đi <b>vào</b> nó</td></tr></table>
+          <table class="t"><tr><th>cách xử lý đã ghi năm 2020</th></tr>
+          <tr><td>“phụ thuộc theo chiều ổn định”: chuyển trách nhiệm sang thành phần cần nó, hoặc <b>đảo chiều</b> bằng phát và nghe sự kiện, như mẫu người quan sát ở bài 10</td></tr>
+          <tr><td>chia thành phần thành <b>lớp</b> nền, hỗ trợ, giao diện; dọn mũi tên vượt lớp trước</td></tr></table>
+        focus: [1, 1, "2.2", "3.2", "3.3"]
+        say: "Điểm nghẽn là sửa một thành phần nằm trong vòng có thể làm hỏng mọi thành phần khác trong vòng. Gần như mọi thứ dựa vào lớp cửa hàng, nên muốn tránh vòng thì lớp cửa hàng phải gần như không dựa vào gì. Theo cách tính của bài 15, nếu 36 thành phần dựa vào nó, một số minh hoạ, và nó không dựa vào ai, độ bất ổn bằng 0, nên mọi mũi tên phải đi vào nó. Cách xử lý là phụ thuộc theo chiều ổn định, chuyển trách nhiệm sang thành phần cần nó, hoặc đảo chiều bằng phát và nghe sự kiện như mẫu người quan sát ở bài 10. Họ còn chia thành phần thành các lớp nền, hỗ trợ, giao diện, và dọn mũi tên vượt lớp trước."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>công cụ đo vi phạm</th><th>cách làm</th><th>thời gian một lần</th></tr>
+          <tr><td>2017: ghi đồ thị lời gọi</td><td>ghi mọi lời gọi khi chạy cả bộ kiểm thử; nhiều nhiễu, có khi không rõ lời gọi từ thành phần nào</td><td><b>hơn 1 giờ</b></td></tr>
+          <tr><td>2020: phân tích tĩnh</td><td>chỉ đọc tên lớp được nhắc tới trong mã; kiểm phụ thuộc đã khai và phần công khai</td><td><b>vài phút</b></td></tr></table>
+          <table class="t"><tr><th>bước, ngày làm việc 8 giờ (số minh hoạ)</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. lần quét hơn 1 giờ</td><td>480 phút chia hơn 60</td><td>nhiều nhất $\hl{8}$ lần</td></tr>
+          <tr><td>Bước 2. lần quét 5 phút (số minh hoạ cho “vài phút”)</td><td>480 chia 5</td><td>$\hlg{96}$ lần: đủ chạy ở <b>mỗi</b> yêu cầu gộp mã</td></tr></table>
+        focus: ["1.2", "1.2", "1.3", "2.2", "2.3"]
+        say: "Cũng ở chặng này, họ đổi công cụ đo vi phạm. Năm 2017, công cụ ghi mọi lời gọi khi chạy cả bộ kiểm thử, rất nhiều nhiễu, và mất hơn một giờ một lần. Năm 2020, công cụ mới phân tích tĩnh, chỉ đọc tên lớp được nhắc tới trong mã, và quét cả mã nguồn lớn nhất trong vài phút. Với ngày làm việc 8 giờ, một số minh hoạ, lần quét hơn một giờ chỉ chạy được nhiều nhất 8 lần. Nếu mỗi lần 5 phút thì 480 chia 5 là 96 lần, đủ chạy ở mỗi yêu cầu gộp mã."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>thực hành rút ra năm 2020</th><th>điều kiện</th></tr>
+          <tr><td>chặn vi phạm <b>mới</b> ngay trên máy kiểm thử tự động; vi phạm <b>cũ</b> ghi thành <b>danh sách việc cần làm</b> để giảm dần — “cầm máu trước”</td><td>công cụ đủ nhanh để chạy mỗi lần gộp mã</td></tr>
+          <tr><td>không ép dùng: khoảng <b>một phần ba</b> trong 37 thành phần, cỡ 12, tự nguyện áp tường</td><td>có người muốn sửa, và biết vì sao</td></tr>
+          <tr><td>một đội trung tâm ép mọi nơi theo một bộ mẫu giao diện: đội tự ghi là <b>không</b> tăng được khả năng hay động lực; nhóm thảo luận kiến trúc mở thì có khoảng 400 thành viên</td><td>thay đổi kiến trúc phần lớn là bài toán con người</td></tr></table>
+        focus: ["1.2", "1.2", "1.3", "1.4", "1.4"]
+        say: "Thực hành thứ nhất là chặn vi phạm mới ngay trên máy kiểm thử tự động, còn vi phạm cũ thì ghi thành danh sách việc cần làm để giảm dần, tức là cầm máu trước. Điều kiện là công cụ đủ nhanh để chạy mỗi lần gộp mã. Thực hành thứ hai là không ép dùng, khoảng một phần ba trong 37 thành phần, cỡ 12, tự nguyện áp tường. Khi một đội trung tâm ép mọi nơi theo một bộ mẫu giao diện, chính đội ấy ghi rằng cách đó không tăng được khả năng hay động lực của lập trình viên. Ngược lại, một nhóm thảo luận kiến trúc mở cho mọi người đã có khoảng 400 thành viên."
+
+  # ───────────────────────── 9. CHẶNG 4 ─────────────────────────
+  - id: stage4
+    kind: example
+    title: "Chặng 4, năm 2024 — ổn định và tiếp tục phát triển"
+    stage: {year: "2024", scale: "công cụ phát hành 9/2020; bản 3.0 bỏ kiểm phần công khai; tệp việc cần làm lớn dần theo mỗi tính năng; gói nền đầu tiên đạt 0 vi phạm, 0 phụ thuộc sau nhiều tháng", source: "[PR24] [PW20]", practice: "đo tiến bộ bằng mã chạy được riêng, không bằng một con số; ba cửa kiểm: 0 vi phạm, khởi động riêng, kiểm thử riêng trên máy tự động; chia gói theo cách mã thật sự chạy, không theo tên; thành phần để con người sở hữu, gói để máy kiểm"}
+    checks:
+      - "(2024 - 2020) * 12 + (1 - 9) == 40 and len([(y, m) for y in range(2020, 2025) for m in range(1, 13) if (2020, 9) <= (y, m) < (2024, 1)]) == 40"
+      - "len(['0 vi phạm', 'khởi động riêng', 'kiểm thử riêng']) == 3"
+    steps:
+      - show: |
+          <p><b>Tháng 9/2020</b>, công cụ phân tích tĩnh được phát hành mã nguồn mở. Đầu năm 2024, chính đội làm ra nó viết bài nhìn lại:</p>
+          <table class="t"><tr><th>điều đã thấy</th><th>vì sao là vấn đề</th></tr>
+          <tr><td>kiểm “phần công khai” biến công cụ thành công cụ <b>thiết kế API</b>; sinh ra rất nhiều mã công khai không ai định công khai</td><td>người ta lo đặt cửa, quên chiều mũi tên — bản <b>3.0</b> đã bỏ kiểm này</td></tr>
+          <tr><td>tệp việc cần làm của mỗi thành phần <b>lớn dần</b> theo mỗi tính năng mới</td><td>công cụ chỉ ra lỗi nhanh hơn nhiều so với sức sửa của con người</td></tr>
+          <tr><td>chia gói theo <b>tên</b>: mô hình “cài đặt hoá đơn của cửa hàng” nằm ở gói hoá đơn, dù mọi yêu cầu đều cần nó để phát hiện cửa hàng gian lận</td><td>phải chuyển nó xuống <b>đáy</b> đồ thị</td></tr></table>
+        focus: [1, "2.2", "2.2", "2.3", "2.4", "2.4"]
+        say: "Ở chặng bốn, công cụ phân tích tĩnh được phát hành mã nguồn mở vào tháng 9 năm 2020, và đầu năm 2024, chính đội làm ra nó viết bài nhìn lại. Việc kiểm phần công khai đã biến nó thành công cụ thiết kế API, sinh ra rất nhiều mã công khai không ai định công khai. Người ta lo đặt cửa mà quên chiều mũi tên, nên bản 3 chấm 0 đã bỏ kiểm này. Tệp việc cần làm của mỗi thành phần lớn dần theo mỗi tính năng mới. Một mô hình cài đặt hoá đơn bị xếp vào gói hoá đơn vì tên của nó, dù mọi yêu cầu đều cần nó để phát hiện gian lận. Cuối cùng họ phải chuyển nó xuống đáy đồ thị."
+      - clear: true
+        show: |
+          <p><b>Thử thật:</b> tách gói nền “thiết yếu của nền tảng” cho tới <b>0 vi phạm, 0 phụ thuộc</b>. Rồi qua từng cửa:</p>
+          <table class="t"><tr><th>cửa kiểm</th><th>kết quả</th></tr>
+          <tr><td>1. công cụ báo 0 vi phạm</td><td>đạt — nhưng nhờ đảo phụ thuộc rất nhiều, mã khó đọc hơn</td></tr>
+          <tr><td>2. khởi động hệ chỉ với gói đó</td><td><b>hỏng</b>: còn tệp khởi tạo, mã nạp theo cách công cụ không thấy</td></tr>
+          <tr><td>3. chạy riêng kiểm thử của gói trên máy tự động</td><td>lộ thêm lỗi; sửa xong mới tin là tách thật — sau <b>nhiều tháng</b></td></tr></table>
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>từ khi phát hành tới bài nhìn lại</td><td>tháng 9/2020 → tháng 1/2024: 4 năm nhân 12, trừ 8 tháng</td><td>$\hlg{40}$ tháng</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", "3.2"]
+        say: "Rồi họ thử thật, tách gói nền gọi là thiết yếu của nền tảng, cho tới khi có 0 vi phạm và 0 phụ thuộc. Cửa thứ nhất, công cụ báo 0 vi phạm, nhưng nhờ đảo phụ thuộc rất nhiều nên mã khó đọc hơn. Cửa thứ hai, khởi động hệ chỉ với gói đó thì hỏng, vì còn tệp khởi tạo và mã nạp theo cách công cụ không thấy. Cửa thứ ba, chạy riêng kiểm thử của gói lại lộ thêm lỗi, và sau nhiều tháng mới tin là tách thật. Từ tháng 9 năm 2020 tới tháng 1 năm 2024 là 4 năm nhân 12 trừ 8, tức 40 tháng, mà họ được ghi là có lẽ là người đầu tiên làm hết một tệp việc cần làm."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>thực hành của giai đoạn ổn định</th><th>điều kiện</th></tr>
+          <tr><td>đo tiến bộ bằng <b>mã chạy được riêng</b>, không bằng một con số đếm vi phạm</td><td>có bước khởi động riêng và kiểm thử riêng trên máy tự động</td></tr>
+          <tr><td>thêm bước kiểm trên máy tự động để tiến bộ <b>không bao giờ bị lùi</b></td><td>bước kiểm đủ nhanh, ai cũng chạy</td></tr>
+          <tr><td><b>thành phần</b> để đội sở hữu một miền; <b>gói</b> bên trong mới là đơn vị máy kiểm</td><td>người cần mô hình dễ hiểu, máy cần ranh giới theo cách mã chạy</td></tr>
+          <tr><td>giữ công cụ ở chỗ nó có ích: chặn phụ thuộc mới vào lớp nền</td><td>hỏi mỗi vi phạm: lỗi của người viết, hay đồ thị vẽ sai?</td></tr></table>
+        focus: ["1.2", "1.3", "1.4", "1.4", "1.5"]
+        say: "Từ đó, thực hành của giai đoạn ổn định là đo tiến bộ bằng mã chạy được riêng, không bằng một con số đếm vi phạm. Họ thêm bước kiểm trên máy tự động để tiến bộ không bao giờ bị lùi. Thành phần dùng để đội sở hữu một miền, còn gói bên trong mới là đơn vị máy kiểm, vì người cần mô hình dễ hiểu, còn máy cần ranh giới theo cách mã chạy. Công cụ vẫn được giữ ở chỗ nó có ích, là chặn phụ thuộc mới vào lớp nền. Với mỗi vi phạm, hãy hỏi đó là lỗi của người viết, hay đồ thị đã vẽ sai."
+
+  # ───────────────────────── 10. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm bốn con số của hành trình"
+    checks:
+      - "sum(1 for a in range(10) for b in range(10) if a != b) == 90"
+      - "100 * 60 == 6000"
+      - "sum(19 for _ in range(37)) == 703 and 18 < 19"
+      - "len(range(9, 13)) + 12 * 3 == 40"
+    steps:
+      - show: |
+          <table class="t"><tr><th>con số</th><th>đường khác để kiểm</th></tr>
+          <tr><td>90 chiều gọi</td><td>đếm từng miền: miền 1 gọi 9 miền, …, miền 10 gọi 9 miền; cộng 10 lần số 9 = 90 ✓</td></tr>
+          <tr><td>100 giờ</td><td>nhân ngược: 100 giờ nhân 60 phút = 6000 phút, đúng 6000 lớp, mỗi lớp 1 phút ✓</td></tr>
+          <tr><td>703 mũi tên</td><td>cộng 37 lần số 19 = 703; và 19 lớn hơn 18, đúng là “hơn nửa” của 36 ✓</td></tr>
+          <tr><td>40 tháng</td><td>đếm tháng: năm 2020 còn tháng 9, 10, 11, 12 là 4 tháng; ba năm 2021–2023 thêm 36; cộng 40 ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Ta kiểm lại bốn con số theo đường khác. Đếm từng miền, mỗi miền gọi được 9 miền kia, cộng 10 lần số 9 là 90. Nhân ngược, 100 giờ nhân 60 phút là 6000 phút, đúng 6000 lớp với mỗi lớp 1 phút. Cộng 37 lần số 19 được 703, và 19 lớn hơn 18 nên đúng là hơn nửa của 36. Đếm tháng, năm 2020 còn 4 tháng, ba năm sau thêm 36 tháng, cộng lại là 40."
+
+  # ───────────────────────── 11. BÀI HỌC SAI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "Những bài học sai khi đọc hành trình này"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">1.</b> “Nguyên khối là lỗi, cứ tách thành vi dịch vụ là xong”</td><td>đội Shopify ghi: rải mã ra nhiều máy là đổi <b>vị trí</b>, không đổi <b>kiến trúc</b>; API thiết kế tệ vẫn tệ, nay thêm mạng</td><td>dựng tường trong một khối trước; chỉ tách dịch vụ khi có lý do, như phần hiển thị cửa hàng chỉ đọc, lưu lượng rất cao, hay kho thẻ tín dụng</td></tr>
+          <tr><td><b class="red">2.</b> “Một đội trung tâm ban hành mẫu, bắt mọi người theo”</td><td>chính đội ấy ghi: không tăng khả năng, động lực; có nơi bẻ vấn đề cho vừa giải pháp, làm khối tệ hơn</td><td>ngồi cùng các đội, mở diễn đàn, tìm chỗ người ta muốn sửa mà thấy khó</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.2", "1.3", "1.3"]
+        say: "Bảng có hai bài học sai đầu tiên. Bài học sai thứ nhất là nghĩ nguyên khối là lỗi, cứ tách thành vi dịch vụ là xong. Đội Shopify ghi rằng rải mã ra nhiều máy chỉ đổi vị trí chứ không đổi kiến trúc, và API thiết kế tệ vẫn tệ, nay thêm cả mạng. Hãy dựng tường trong một khối trước, và chỉ tách dịch vụ khi có lý do, như phần chỉ đọc có lưu lượng rất cao, hay kho thẻ tín dụng. Bài học sai thứ hai là để một đội trung tâm ban hành mẫu rồi bắt mọi người theo, trong khi chính đội ấy ghi rằng cách này có nơi làm khối tệ hơn. Hãy ngồi cùng các đội, mở diễn đàn, và tìm chỗ người ta muốn sửa mà thấy khó."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">3.</b> “Công cụ báo 0 vi phạm là đã tách xong”</td><td>gói nền 0 vi phạm vẫn không khởi động riêng được; kiểm thử riêng còn lộ thêm lỗi</td><td>lấy <b>mã chạy được riêng</b> làm thước đo: khởi động riêng, kiểm thử riêng</td></tr>
+          <tr><td><b class="red">4.</b> “Chỉ cần cắt đứt liên kết giữa các thành phần”</td><td>năm 2020 đội ghi: chỉ lo tách rời, phần mã cùng thay đổi vẫn nằm vắt qua nhiều thành phần; sửa nhỏ vẫn phải hiểu nhiều nơi</td><td>giữ <b>gắn kết</b>: mã cùng thay đổi thì ở cùng chỗ; đếm số thành phần mỗi lần sửa chạm tới, mong nó giảm dần</td></tr></table>
+        focus: ["1.2", "1.2", "1.3", "1.3", "1.3"]
+        say: "Bài học sai thứ ba là tin rằng công cụ báo 0 vi phạm là đã tách xong. Gói nền 0 vi phạm vẫn không khởi động riêng được, và chạy kiểm thử riêng còn lộ thêm lỗi. Hãy lấy mã chạy được riêng làm thước đo, với bước khởi động riêng và kiểm thử riêng. Bài học sai thứ tư hay gặp ở người đã đi làm, nghĩ chỉ cần cắt đứt liên kết giữa các thành phần, trong khi phần mã cùng thay đổi vẫn nằm vắt qua nhiều nơi. Hãy giữ gắn kết như bài 15, mã cùng thay đổi thì ở cùng chỗ, và đếm số thành phần mỗi lần sửa chạm tới, mong nó giảm dần."
+
+  # ───────────────────────── 12. QUYẾT ĐỊNH ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Bạn sẽ làm gì ở quy mô của mình?"
+    checks:
+      - "8 * 1 == 8 and 8 * 7 == 56"
+      - "alg.instability(7, 0) == 0.0 and alg.instability(0, 2) == 1.0"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>tình huống (số minh hoạ): ứng dụng bán hàng, 6 lập trình viên, 8 miền nghiệp vụ, kiểm thử chạy 15 phút</th></tr>
+          <tr><td>1</td><td>sửa thuế làm hỏng kiểm thử giao hàng. Tách thành 8 vi dịch vụ, hay giữ một khối và dựng tường?</td></tr>
+          <tr><td>2</td><td>thành phần “cửa hàng” (7 thành phần dựa vào nó, nó dựa vào 0) cần gửi thư khi có đơn mới; thành phần “thông báo” dựa vào 2, không ai dựa vào nó. Cửa hàng gọi thẳng thông báo được không?</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn, với một ứng dụng bán hàng có 6 lập trình viên, 8 miền nghiệp vụ, kiểm thử chạy 15 phút, đều là số minh hoạ. Câu một, sửa thuế làm hỏng kiểm thử giao hàng, vậy bạn tách thành 8 vi dịch vụ, hay giữ một khối và dựng tường? Câu hai, thành phần cửa hàng có 7 thành phần dựa vào nó, nó không dựa vào ai, và cần gửi thư khi có đơn mới. Thành phần thông báo dựa vào 2 thành phần, không ai dựa vào nó, vậy cửa hàng có nên gọi thẳng thông báo không? Dừng video và viết ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 1: lựa chọn</th><th>được</th><th>mất</th></tr>
+          <tr><td>8 vi dịch vụ</td><td>mỗi miền triển khai riêng</td><td>8 đường ống thay vì 1; 8 nhân 7 = 56 chiều gọi có thể đi qua mạng, mỗi chiều phải giữ tương thích API như bài 14</td></tr>
+          <tr><td>một khối, dựng tường</td><td>1 đường ống; gọi thẳng; máy chặn vi phạm mới</td><td>vẫn chung một lần triển khai</td></tr></table>
+          <p class="note">Chọn một khối có tường. Điều kiện đổi: một phần chỉ đọc mà lưu lượng rất cao, hoặc giữ dữ liệu nhạy cảm như thẻ tín dụng — tách <b>riêng phần đó</b>, không tách cả 8.</p>
+        focus: [1, "1.2", "1.2", "1.3", 2]
+        say: "Đáp án câu một là một đánh đổi. Tách 8 vi dịch vụ thì mỗi miền triển khai riêng, nhưng cần 8 đường ống thay vì 1. Thêm nữa, 8 nhân 7 là 56 chiều gọi có thể đi qua mạng, chiều nào cũng phải giữ tương thích như bài 14. Giữ một khối có tường thì chỉ một đường ống, gọi thẳng, và máy chặn vi phạm mới. Nên chọn một khối có tường, và chỉ tách riêng một phần nếu nó chỉ đọc mà lưu lượng rất cao, hoặc giữ dữ liệu nhạy cảm như thẻ tín dụng."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 2: bước</th><th>phép tính, như bài 15</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. độ bất ổn của cửa hàng</td><td>0 / (7 + 0)</td><td>$\hlb{0}$</td></tr>
+          <tr><td>Bước 2. độ bất ổn của thông báo</td><td>2 / (0 + 2)</td><td>$\hl{1}$</td></tr>
+          <tr><td>Bước 3. gọi thẳng</td><td>mũi tên từ 0 đi lên 1</td><td>sai chiều ổn định</td></tr></table>
+          <table class="t"><tr><th>lựa chọn</th><th>được</th><th>mất</th></tr>
+          <tr><td>cửa hàng <b>phát</b> sự kiện “đơn mới”, thông báo <b>nghe</b> (bài 10)</td><td>mũi tên đổi chiều: thông báo dựa vào cửa hàng</td><td>thêm một lớp gián tiếp, khó lần theo luồng</td></tr>
+          <tr><td>chuyển việc gửi thư sang thành phần cần nó</td><td>đơn giản, không cần sự kiện</td><td>chỉ hợp khi một nơi duy nhất cần</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "2.2", "2.3"]
+        say: "Đáp án câu hai, làm từng bước như bài 15. Bước một, cửa hàng có độ bất ổn 0 chia 7 cộng 0, bằng 0. Bước hai, thông báo có độ bất ổn 2 chia 0 cộng 2, bằng 1. Bước ba, gọi thẳng là mũi tên đi từ 0 lên 1, sai chiều ổn định. Lựa chọn thứ nhất là cửa hàng phát sự kiện đơn mới và thông báo đăng ký nghe, như bài 10, đổi lại thêm một lớp gián tiếp khó lần theo. Lựa chọn thứ hai là chuyển việc gửi thư sang thành phần cần nó, đơn giản hơn, nhưng chỉ hợp khi chỉ một nơi cần."
+
+  # ───────────────────────── 13. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi hành trình & tư duy chuyên gia"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">một khối: nhanh lúc đầu</span><span class="a">→</span>
+          <span class="n">xếp theo nghiệp vụ, đo vi phạm</span><span class="a">→</span>
+          <span class="n">chiều ổn định, chặn vi phạm mới</span><span class="a">→</span>
+          <span class="n">chạy được riêng mới là tách</span></div>
+        say: "Tổng kết lại hành trình. Một khối giúp đi nhanh lúc đầu, cho tới khi quy mô làm mọi thay đổi chậm lại. Rồi mã được xếp theo nghiệp vụ và vi phạm được đo. Sau đó mũi tên được kéo theo chiều ổn định, và máy chặn vi phạm mới. Cuối cùng, chỉ mã chạy được riêng mới chứng minh là đã tách thật."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> kiến trúc đúng tuỳ <b>quy mô</b> lúc này. Đổi kiến trúc khi nỗi đau đã đo được, từng bước nhỏ có máy kiểm, và đo tiến bộ bằng <b>mã chạy được</b>, không bằng một con số đẹp.</div>
+        say: "Điều cần mang theo, kiến trúc đúng tuỳ vào quy mô lúc này. Hãy đổi kiến trúc khi nỗi đau đã đo được, đi từng bước nhỏ có máy kiểm, và đo tiến bộ bằng mã chạy được, không bằng một con số đẹp."
+      - clear: true
+        show: |
+          <p class="note">Đây là bài cuối của khoá SDP. Từ hàm nhỏ, đóng gói, hợp thành, qua nguyên lý thiết kế, mẫu thiết kế, tái cấu trúc và đo chất lượng thiết kế, bạn đã thấy chúng được dùng thế nào trên một mã nguồn hàng triệu dòng.</p>
+        say: "Đây là bài cuối của khoá Kỹ thuật lập trình và mẫu thiết kế. Từ hàm nhỏ, đóng gói, hợp thành, qua nguyên lý thiết kế, mẫu thiết kế, tái cấu trúc và đo chất lượng, bạn đã thấy chúng được dùng trên một mã nguồn hàng triệu dòng. Cảm ơn bạn đã theo học tới bài cuối cùng của khoá này."

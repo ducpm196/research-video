@@ -1,0 +1,202 @@
+id: L07
+course: WEB
+series: "WEB · Ứng dụng web và di động"
+title: "Bài 7 — Phân trang và truy vấn hiệu quả: độ lệch hay con trỏ"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/web.yaml L07; audit/web/verify_web.py L07; tài liệu SQLite — LIMIT/OFFSET, chỉ mục khoá chính (bản hiện hành); M. Winand, Use The Index, Luke — “Paging Through Results” (bản hiện hành); bài 6"
+assumes: [arith, cdot]
+# Quy ước: bảng có khoá chính id tăng dần, có chỉ mục. Phân trang theo độ lệch: LIMIT k OFFSET (trang − 1)·k — cơ sở dữ liệu phải đi qua rồi bỏ
+#   (trang − 1)·k dòng. Theo con trỏ: WHERE id > (id cuối trang trước) LIMIT k — chỉ mục đi thẳng tới chỗ đó. Chạy thật trên sqlite3
+#   (alg.offset_page, alg.offset_insert_anomaly). Câu truy vấn trong <code>.
+objectives:
+  - "Ước lượng chi phí phân trang theo độ lệch"
+  - "Dùng con trỏ theo khoá sắp xếp"
+  - "Tránh trùng và sót khi dữ liệu thay đổi"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Trang 1 nhanh, trang 1000 chậm"
+    checks:
+      - "alg.offset_page(1000, 20)[1] == 19980"
+    steps:
+      - show: |
+          <p>Trang danh sách đơn hàng: trang 1 hiện tức thì. Người dùng (hay một công cụ quét) bấm tới trang 1000 — trang chậm dần, máy chủ cơ sở dữ liệu nóng lên. Cùng một câu truy vấn, chỉ đổi số trang. Lý do: để đưa ra 20 dòng ở trang 1000, cơ sở dữ liệu phải đi qua rồi <b>bỏ đi 19 980 dòng</b>.</p>
+          <div class="box key">Hôm nay: <b>phân trang</b> — theo độ lệch và theo con trỏ, chi phí của mỗi cách, và chuyện gì xảy ra khi dữ liệu đổi giữa hai trang.</div>
+        focus: [1, 1, 1, 1, 2]
+        say: "Chào bạn, trang danh sách đơn hàng ở trang 1 hiện tức thì. Người dùng, hay một công cụ quét, bấm tới trang 1000, thì trang chậm dần, và máy chủ cơ sở dữ liệu nóng lên. Cùng một câu truy vấn, chỉ đổi số trang. Lý do là để đưa ra 20 dòng ở trang 1000, cơ sở dữ liệu phải đi qua rồi bỏ đi 19980 dòng. Hôm nay ta học phân trang theo độ lệch và theo con trỏ, chi phí của mỗi cách, và chuyện gì xảy ra khi dữ liệu đổi giữa hai trang."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: chỉ mục và câu “bỏ qua rồi lấy”"
+    checks:
+      - "math.ceil(math.log2(30000)) == 15 and 2 ** 15 == 32768"
+      - "alg.offset_page(3, 10) == (list(range(21, 31)), 20) and (3 - 1) * 10 == 20"
+    steps:
+      - show: |
+          <p>Ở khoá Cơ sở dữ liệu: cột <b>id</b> là khoá chính nên có <b>chỉ mục</b> — giống mục lục sắp sẵn theo thứ tự. Tìm một id trong 30 000 dòng bằng cách chia đôi liên tục chỉ cần khoảng 15 lần so, vì $2^{15} = 32\,768 \ge 30\,000$.</p>
+          <table class="t"><tr><th>tìm id 19 981</th><th>số dòng phải xem</th></tr>
+          <tr><td>quét từ đầu</td><td>19 981</td></tr>
+          <tr><td>theo chỉ mục</td><td>khoảng $\hl{15}$</td></tr></table>
+        introduces: [power, geq]
+        focus: [1, 1, 2, "2.2", "2.3"]
+        say: "Trước hết, ôn lại điều đã học ở khoá Cơ sở dữ liệu, cột mã là khoá chính nên có chỉ mục, giống một mục lục sắp sẵn theo thứ tự. Tìm một mã trong 30 nghìn dòng bằng cách chia đôi liên tục chỉ cần khoảng 15 lần so, vì 2 mũ 15 bằng 32768, lớn hơn 30 nghìn. Bảng so hai cách tìm mã 19981. Quét từ đầu thì phải xem 19981 dòng. Đi theo chỉ mục thì chỉ cần xem khoảng 15 dòng."
+      - show: |
+          <p><b>Bỏ qua rồi lấy</b>: trang $p$, mỗi trang $k$ dòng → bỏ qua $(p - 1) \cdot k$ dòng, lấy $k$ dòng tiếp theo.</p>
+          <table class="t"><tr><th>trang 3, mỗi trang 10</th><th>giá trị</th></tr>
+          <tr><td>bỏ qua</td><td>$(3 - 1) \cdot 10 = 20$ dòng</td></tr>
+          <tr><td>lấy</td><td>id 21 … $\hl{30}$</td></tr></table>
+        focus: [1, 2, "2.2", "2.3"]
+        say: "Điều thứ hai là câu truy vấn bỏ qua rồi lấy. Muốn trang p với mỗi trang k dòng, ta bỏ qua p trừ 1 nhân k dòng, rồi lấy k dòng tiếp theo. Ví dụ trang 3, mỗi trang 10 dòng, thì bỏ qua 3 trừ 1 nhân 10, bằng 20 dòng. Sau đó lấy 10 dòng tiếp theo, là mã 21 tới mã 30."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: độ lệch và con trỏ"
+    steps:
+      - show: |
+          <table class="t"><tr><th>cách</th><th>câu truy vấn trang tiếp</th><th>chi phí</th></tr>
+          <tr><td><b>độ lệch</b></td><td><code>ORDER BY id LIMIT 20 OFFSET 19980</code></td><td>đi qua 19 980 + 20 dòng — tăng theo số trang</td></tr>
+          <tr><td><b>con trỏ</b></td><td><code>WHERE id &gt; 19980 ORDER BY id LIMIT 20</code></td><td>chỉ mục nhảy thẳng tới id 19 981, đọc 20 dòng — như nhau ở mọi trang</td></tr></table>
+          <p><b>Con trỏ</b> là giá trị khoá sắp xếp của dòng cuối trang trước; API trả nó cho ứng dụng dưới dạng một chuỗi mờ, ví dụ <code>"next": "aWQ9MTk5ODA="</code>.</p>
+        focus: [1, "1.2", "1.2", "1.3", "1.3", 2]
+        say: "Bảng so hai cách lấy trang tiếp. Theo độ lệch, câu truy vấn sắp theo mã rồi bỏ qua 19980 dòng và lấy 20. Chi phí là đi qua 19980 cộng 20 dòng, tăng theo số trang. Theo con trỏ, câu truy vấn lấy các mã lớn hơn 19980, sắp theo mã, và lấy 20. Chỉ mục nhảy thẳng tới mã 19981 rồi đọc 20 dòng, chi phí như nhau ở mọi trang. Con trỏ là giá trị khoá sắp xếp của dòng cuối trang trước, và API trả nó cho ứng dụng dưới dạng một chuỗi mờ."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Độ lệch đi bộ từ đầu, con trỏ nhảy thẳng tới"
+    checks:
+      - "[p * 20 for p in (1, 250, 500, 750, 1000)] == [20, 5000, 10000, 15000, 20000] and all((p - 1) * 20 + 20 == p * 20 for p in range(1, 1001))"
+    steps:
+      - show: |
+          <div><svg width="1500" height="470" viewBox="0 0 1500 470"><line x1="230" y1="380" x2="1320" y2="380" stroke="#1f2937" stroke-width="2"/><line x1="230" y1="380" x2="230" y2="40" stroke="#1f2937" stroke-width="2"/><text x="216" y="387" font-size="20" text-anchor="end" fill="#1f2937">0</text><text x="216" y="227" font-size="20" text-anchor="end" fill="#1f2937">10 000</text><text x="216" y="67" font-size="20" text-anchor="end" fill="#1f2937">20 000</text><text x="230" y="412" font-size="20" text-anchor="middle" fill="#1f2937">1</text><text x="497" y="412" font-size="20" text-anchor="middle" fill="#1f2937">250</text><text x="764" y="412" font-size="20" text-anchor="middle" fill="#1f2937">500</text><text x="1032" y="412" font-size="20" text-anchor="middle" fill="#1f2937">750</text><text x="1300" y="412" font-size="20" text-anchor="middle" fill="#1f2937">1000</text><text x="765" y="446" font-size="22" text-anchor="middle" fill="#1f2937">số trang (mỗi trang 20 dòng)</text><text x="230" y="28" font-size="22" fill="#1f2937">số dòng phải đi qua</text><polyline points="230,380 497,300 764,220 1032,140 1300,60" fill="none" stroke="#eb6834" stroke-width="5"/><polyline points="230,380 497,380 764,380 1032,380 1300,380" fill="none" stroke="#2a78d6" stroke-width="5"/><circle cx="230" cy="380" r="7" fill="#eb6834"/><circle cx="497" cy="300" r="7" fill="#eb6834"/><circle cx="764" cy="220" r="7" fill="#eb6834"/><circle cx="1032" cy="140" r="7" fill="#eb6834"/><circle cx="1300" cy="60" r="7" fill="#eb6834"/><text x="1280" y="46" font-size="22" font-weight="bold" text-anchor="end" fill="#eb6834">độ lệch: 20 000 dòng ở trang 1000</text><text x="1300" y="364" font-size="22" font-weight="bold" text-anchor="end" fill="#2a78d6">con trỏ: luôn 20 dòng</text></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ số dòng cơ sở dữ liệu phải đi qua khi lấy từng trang, mỗi trang 20 dòng. Đường cam là phân trang theo độ lệch, trang p phải đi qua p trừ 1 nhân 20 dòng để bỏ, cộng 20 dòng để lấy, nên đường thẳng đi lên. Ở trang 1000, con số lên tới 20 nghìn dòng. Đường xanh là con trỏ, chỉ mục nhảy thẳng tới chỗ cần, nên trang nào cũng chỉ đọc 20 dòng."
+
+  - id: example
+    kind: example
+    title: "Trang 1000 trên sqlite3"
+    checks:
+      - "(lambda a, b: a[0] == b[0] and a[0][0] == 19981 and a[0][-1] == 20000 and a[1] == 19980 and b[1] == 0)(alg.offset_page(1000, 20), alg.offset_page(1000, 20, cursor=True))"
+    steps:
+      - show: |
+          <p><b>Bước một — độ lệch của trang 1000</b> (bảng 30 000 dòng, mỗi trang 20):</p>
+          <p>$(1000 - 1) \cdot 20 = 19\,980$ dòng phải bỏ qua → <code>ORDER BY id LIMIT 20 OFFSET 19980</code>.</p>
+        focus: [1, 2]
+        say: "Bước một, ta xét một bảng 30 nghìn dòng, lấy trang 1000, mỗi trang 20 dòng. Độ lệch là 1000 trừ 1, nhân 20, bằng 19980 dòng phải bỏ qua, đúng con số trong câu truy vấn theo độ lệch."
+      - show: |
+          <p><b>Bước 2 — chạy theo độ lệch</b>: cơ sở dữ liệu đi theo thứ tự id, đếm và bỏ 19 980 dòng, rồi trả 20 dòng: id 19 981 … 20 000.</p>
+          <p>Tổng số dòng đi qua: $19\,980 + 20 = \hl{20\,000}$.</p>
+        focus: [1, 2]
+        say: "Bước hai, chạy theo độ lệch, cơ sở dữ liệu đi theo thứ tự mã, đếm và bỏ từng dòng một cho đủ 19980 dòng, rồi mới trả 20 dòng, từ mã 19981 tới mã 20000. Tổng số dòng phải đi qua là 19980 cộng 20, bằng 20 nghìn dòng."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — chạy theo con trỏ</b>: trang 999 kết thúc ở id $999 \cdot 20 = 19\,980$, nên con trỏ là 19 980 → <code>WHERE id &gt; 19980 ORDER BY id LIMIT 20</code>.</p>
+          <p>Chỉ mục nhảy thẳng tới id 19 981, đọc 20 dòng: id 19 981 … 20 000 — <b>cùng kết quả</b>.</p>
+        focus: [1, 2]
+        say: "Bước ba, chạy theo con trỏ, trang 999 kết thúc ở mã 999 nhân 20, bằng 19980, nên con trỏ là 19980, và câu truy vấn lấy các mã lớn hơn 19980. Chỉ mục nhảy thẳng tới mã 19981 rồi đọc 20 dòng, từ mã 19981 tới 20000, cùng kết quả với cách độ lệch."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bảng 30 000 dòng, trang 1000, mỗi trang 20</th><th>kết quả</th><th>dòng phải đi qua rồi bỏ</th></tr>
+          <tr><td>độ lệch: <code>OFFSET 19980</code></td><td>id 19 981 … 20 000</td><td>$(1000 - 1) \cdot 20 = \hl{19\,980}$</td></tr>
+          <tr><td>con trỏ: <code>id &gt; 19980</code></td><td>id 19 981 … 20 000</td><td>0</td></tr></table>
+          <p><b>Bước 4</b>: dòng đi qua $20\,000$ so với $20$ → độ lệch tốn gấp $\frac{20\,000}{20} = 1000$ lần ở trang này, và càng về sau càng tệ.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Bước bốn, so hai cách trên cùng một bảng kết quả, chạy thật trên một cơ sở dữ liệu nhỏ. Theo độ lệch, kết quả là mã 19981 tới 20000, và phải đi qua rồi bỏ 999 nhân 20, bằng 19980 dòng. Theo con trỏ, kết quả giống hệt, và không phải bỏ dòng nào. Số dòng đi qua là 20 nghìn so với 20, nên ở trang này độ lệch tốn gấp 1000 lần, và càng về sau càng tệ hơn."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: hỏi chính cơ sở dữ liệu nó định làm gì"
+    checks:
+      - "(lambda cw: (cw.execute('CREATE TABLE t(id INTEGER PRIMARY KEY, v)'), cw.executemany('INSERT INTO t VALUES (?, ?)', ((i, i) for i in range(1, 30001))), ' '.join(r[-1] for r in cw.execute('EXPLAIN QUERY PLAN SELECT id FROM t WHERE id > 19980 ORDER BY id LIMIT 20')).startswith('SEARCH'), ' '.join(r[-1] for r in cw.execute('EXPLAIN QUERY PLAN SELECT id FROM t ORDER BY id LIMIT 20 OFFSET 19980')).startswith('SCAN'))[2:] == (True, True))(__import__('sqlite3').connect(':memory:'))"
+      - "alg.offset_page(999, 20)[0][-1] == 19980 and alg.offset_page(1000, 20)[0] == list(range(19981, 20001))"
+    steps:
+      - show: |
+          <table class="t"><tr><th>cách khác</th><th>kết quả</th></tr>
+          <tr><td>lấy thật trang 999, đọc id cuối</td><td>19 980 ✓ — đúng con trỏ đã dùng</td></tr>
+          <tr><td>kế hoạch truy vấn của sqlite3, cách con trỏ</td><td><code>SEARCH</code> theo khoá chính — dùng chỉ mục ✓</td></tr>
+          <tr><td>kế hoạch truy vấn, cách độ lệch</td><td><code>SCAN</code> — đi lần lượt từ đầu ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Kiểm bằng đường khác, ta không tính tay nữa mà hỏi chính cơ sở dữ liệu. Lấy thật trang 999 và đọc mã cuối, được 19980, đúng con trỏ đã dùng. Khi ta yêu cầu cơ sở dữ liệu in kế hoạch truy vấn, cách con trỏ được báo là tìm theo khoá chính, tức là dùng chỉ mục. Cách độ lệch được báo là quét, tức đi lần lượt từ đầu bảng, khớp với hình đường cam đi lên."
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi thường gặp"
+    checks:
+      - "alg.offset_insert_anomaly() == [41] and alg.offset_insert_anomaly(cursor=True) == []"
+      - "30000 // 20 == 1500 and 20 * sum(range(1, 1501)) == 22515000 and round(22515000 / 30000) == 750"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Độ lệch khi dữ liệu thay đổi <b class="red">(trùng hoặc sót dòng)</b>
+          <br><span class="note">Danh sách mới nhất trước, 50 dòng, mỗi trang 10. Đọc trang 1 (50 … 41), có đơn mới 51, đọc trang 2 theo độ lệch: bắt đầu từ <b>41</b> — bản ghi 41 hiện hai lần. Con trỏ “id &lt; 41”: không trùng (sqlite3).</span></div>
+        say: "Lỗi thứ nhất, dùng độ lệch khi dữ liệu thay đổi, nên trùng hoặc sót dòng. Danh sách mới nhất trước có 50 dòng, mỗi trang 10. Đọc trang 1 được 50 tới 41, rồi có đơn mới 51, rồi đọc trang 2 theo độ lệch thì bắt đầu từ 41, nên bản ghi 41 hiện hai lần. Dùng con trỏ lấy các mã nhỏ hơn 41 thì không trùng."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Sắp theo cột không duy nhất <b class="red">(con trỏ nhảy cóc)</b>
+          <br><span class="note">Sắp theo ngày tạo, hai đơn cùng ngày giờ: “sau ngày X” có thể bỏ sót đơn thứ hai. Sắp theo (ngày tạo, id) và dùng cả hai làm con trỏ.</span></div>
+        say: "Lỗi thứ hai, sắp theo một cột không duy nhất, nên con trỏ nhảy cóc. Sắp theo ngày tạo mà hai đơn cùng ngày giờ thì điều kiện sau ngày X có thể bỏ sót đơn thứ hai. Hãy sắp theo cặp ngày tạo và mã, và dùng cả hai làm con trỏ."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Đếm tổng số trang mỗi lần <b class="red">(một câu quét cả bảng)</b>
+          <br><span class="note">“Trang 3 / 1 250” cần đếm mọi dòng khớp điều kiện — mỗi lần tải trang. Thường chỉ cần “còn trang sau không”: lấy 21 dòng, hiện 20.</span></div>
+        say: "Lỗi thứ ba, đếm tổng số trang mỗi lần tải, tức thêm một câu quét cả bảng. Hiện trang 3 trên 1250 cần đếm mọi dòng khớp điều kiện, mỗi lần tải trang. Thường chỉ cần biết còn trang sau không, nên lấy 21 dòng và hiện 20."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4.</b> Xuất toàn bộ dữ liệu bằng vòng lặp trang theo độ lệch <b class="red">(người đã đi làm hay mắc)</b>
+          <br><span class="note">Đồng bộ sang hệ khác, sao lưu, báo cáo đêm: lặp trang 1, 2, 3… tới hết. Trang $p$ đi qua $20p$ dòng, nên tổng tăng theo <b>bình phương</b> số trang.</span></div>
+          <table class="t"><tr><th>xuất 30 000 dòng = 1500 trang × 20</th><th>tổng dòng phải đi qua</th></tr>
+          <tr><td>độ lệch: $20 \cdot (1 + 2 + \dots + 1500)$</td><td>$\hl{22\,515\,000}$</td></tr>
+          <tr><td>con trỏ: mỗi dòng đọc một lần</td><td>30 000 — ít hơn khoảng 750 lần</td></tr></table>
+        introduces: [dots]
+        focus: [1, 1, 1, 2, "2.2", "2.3"]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, xuất toàn bộ dữ liệu bằng một vòng lặp trang theo độ lệch. Việc đồng bộ sang hệ khác, sao lưu, hay báo cáo đêm thường lặp trang 1, 2, 3, cho tới hết. Trang p đi qua 20 nhân p dòng, nên tổng số dòng tăng theo bình phương số trang. Bảng xét việc xuất 30 nghìn dòng, tức 1500 trang, mỗi trang 20 dòng. Theo độ lệch, tổng là 20 nhân tổng từ 1 tới 1500, bằng 22 triệu 515 nghìn dòng. Theo con trỏ, mỗi dòng chỉ đọc một lần, tổng 30 nghìn dòng, ít hơn khoảng 750 lần."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "(lambda r: r[1] == 24950 and r[0][0] == 24951)(alg.offset_page(500, 50, 100000))"
+      - "(200 - 1) * 50 + 50 == 10000 and alg.offset_page(200, 50)[1] + 50 == 10000 and len(alg.offset_page(200, 50, cursor=True)[0]) == 50"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Mỗi trang 50 dòng, người dùng xem trang 500 theo độ lệch. Cơ sở dữ liệu phải bỏ qua bao nhiêu dòng? Dòng đầu tiên trả về có id nào (id từ 1, tăng dần)?</td></tr>
+          <tr><td>2</td><td>Viết điều kiện con trỏ để lấy đúng trang đó.</td></tr>
+          <tr><td>3</td><td>Quyết định: ứng dụng cuộn vô tận, đơn mới thêm liên tục, người dùng cuộn tới trang 200 (mỗi trang 50). Mỗi cách đi qua bao nhiêu dòng cho trang đó? Chọn cách nào?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.2", "1.3", "1.4", "1.4", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, mỗi trang 50 dòng, người dùng xem trang 500 theo độ lệch. Cơ sở dữ liệu phải bỏ qua bao nhiêu dòng? Dòng đầu tiên trả về có mã nào, biết mã bắt đầu từ 1 và tăng dần? Câu hai, viết điều kiện con trỏ để lấy đúng trang đó. Câu ba là một quyết định, ứng dụng cuộn vô tận, đơn mới được thêm liên tục, và người dùng cuộn tới trang 200, mỗi trang 50 dòng. Mỗi cách phải đi qua bao nhiêu dòng cho trang đó, và bạn chọn cách nào? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① Bỏ qua $(500 - 1) \cdot 50 = \hl{24\,950}$ dòng; dòng đầu là dòng thứ $24\,950 + 1$, id 24 951.</p>
+          <p>② <code>WHERE id &gt; 24950 ORDER BY id LIMIT 50</code> — 24 950 là id cuối của trang 499.</p>
+        focus: [1, 1, 2]
+        say: "Đáp án câu một, 499 nhân 50, bằng 24950 dòng, và dòng đầu tiên có mã 24951. Đó là dòng ngay sau 24950 dòng bị bỏ qua, vì mã bắt đầu từ 1 và tăng dần. Câu hai, lấy các mã lớn hơn 24950, sắp theo mã, lấy 50 dòng, vì 24950 là mã cuối của trang 499."
+      - show: |
+          <p>③ Độ lệch: $(200 - 1) \cdot 50 + 50 = \hl{10\,000}$ dòng; con trỏ: 50 dòng. Lại thêm đơn mới làm độ lệch trùng dòng (lỗi 1) → <b>chọn con trỏ</b>.</p>
+        say: "Câu ba, theo độ lệch, trang 200 phải đi qua 199 nhân 50 cộng 50, bằng 10 nghìn dòng, còn con trỏ chỉ đọc 50 dòng. Thêm nữa, đơn mới được thêm liên tục sẽ làm cách độ lệch hiện trùng dòng như lỗi thứ nhất, nên ta chọn con trỏ."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">độ lệch: bỏ (trang − 1) nhân k dòng</span><span class="a">→</span>
+          <span class="n">con trỏ: chỉ mục nhảy thẳng tới</span><span class="a">→</span>
+          <span class="n">khoá sắp xếp duy nhất</span><span class="a">→</span>
+          <span class="n">không đếm tổng nếu không cần</span></div>
+        say: "Tổng kết lại, phân trang theo độ lệch phải bỏ số trang trừ 1 nhân k dòng, còn con trỏ dùng chỉ mục nhảy thẳng tới. Khoá sắp xếp phải duy nhất, và đừng đếm tổng nếu không cần."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> hỏi “từ <b>đâu</b> đi tiếp” rẻ hơn nhiều so với hỏi “bỏ qua <b>bao nhiêu</b>” — hãy mang theo vị trí, đừng đếm lại từ đầu.</div>
+        say: "Điều cần mang theo, hỏi đi tiếp từ đâu rẻ hơn nhiều so với hỏi bỏ qua bao nhiêu, nên hãy mang theo vị trí, đừng đếm lại từ đầu."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 8): <b>bộ nhớ đệm HTTP</b> — độ tươi, thẻ phiên bản, xác thực lại.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 8, ta học bộ nhớ đệm HTTP, với độ tươi, thẻ phiên bản, và xác thực lại. Hẹn gặp bạn ở bài tiếp theo."

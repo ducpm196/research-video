@@ -1,0 +1,214 @@
+id: L08
+course: DSY
+series: "DSY · Hệ phân tán và dữ liệu lớn"
+title: "Bài 8 — Lệch dữ liệu và tác vụ chậm"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/dsy.yaml L08; audit/dsy/verify_dsy.py L08; J. Dean, S. Ghemawat, OSDI 2004, mục 3.6 (tác vụ dự phòng); J. Dean, L. A. Barroso, The Tail at Scale, CACM 56(2), 2013"
+assumes: [arith, frac, approx]
+# Quy ước: công việc song song xong khi tác vụ CHẬM NHẤT xong (thời gian = max, không phải trung bình). Ví dụ khoá nóng: 1 000 000 cặp, khoá “the”
+#   chiếm 20% (200 000 cặp), phần còn lại chia đều cho 99 máy rút gọn khác; “rắc muối” chia khoá nóng thành 10 khoá con. Mọi số do Python.
+objectives:
+  - "Biết thời gian công việc do tác vụ chậm nhất quyết định"
+  - "Nhận ra khoá nóng làm lệch tải"
+  - "Xử lý bằng chia khoá nóng và tác vụ dự phòng"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "99% xong sau 10 giây, công việc xong sau 5 phút"
+    checks:
+      - "max([10] * 99 + [300]) == 300 and sum([10] * 99 + [300]) / 100 == 12.9"
+    steps:
+      - show: |
+          <p>100 tác vụ chạy song song: 99 tác vụ mất 10 giây, 1 tác vụ mất 300 giây. Trung bình chỉ $\hl{12{,}9}$ giây, nhưng công việc xong sau $\hl{300}$ giây.</p>
+          <div class="box key">Hôm nay: <b>lệch dữ liệu</b> và <b>tác vụ chậm</b> — vì sao thêm máy không giúp, và phải làm gì.</div>
+        focus: [1, 1, 2]
+        say: "Chào bạn, 100 tác vụ chạy song song, 99 tác vụ mất 10 giây, 1 tác vụ mất 300 giây. Trung bình chỉ 12 phẩy 9 giây, nhưng cả công việc xong sau 300 giây. Hôm nay ta học lệch dữ liệu và tác vụ chậm, vì sao thêm máy không giúp, và phải làm gì."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: trung bình và lớn nhất, phần trăm, bước xáo trộn"
+    checks:
+      - "(10 + 10 + 40) / 3 == 20 and max([10, 10, 40]) == 40"
+      - "1000000 * 20 // 100 == 200000 and 1000000 - 200000 == 800000"
+    steps:
+      - show: |
+          <p><b>Trung bình và lớn nhất</b>: ba người cùng dọn ba phòng, mất 10, 10 và 40 phút. Việc chỉ xong khi người <b>cuối cùng</b> xong.</p>
+          <table class="t"><tr><th>đại lượng</th><th>tính</th><th>kết quả</th></tr>
+          <tr><td>trung bình</td><td>$(10 + 10 + 40) / 3$</td><td>20 phút</td></tr>
+          <tr><td>lớn nhất = lúc xong việc</td><td>lớn nhất của 10, 10, 40</td><td>$\hl{40}$ phút</td></tr></table>
+        focus: [1, 1, "2.2", "2.3"]
+        say: "Trước hết, phân biệt trung bình và lớn nhất. Ba người cùng dọn ba phòng, mất 10, 10 và 40 phút. Trung bình là 10 cộng 10 cộng 40, chia 3, bằng 20 phút. Nhưng việc chỉ xong khi người cuối cùng xong, tức sau 40 phút, là số lớn nhất."
+      - show: |
+          <p><b>Phần trăm của một số</b>:</p>
+          $$20\% \text{ của } 1\,000\,000 = \frac{1\,000\,000 \cdot 20}{100} = 200\,000$$
+          <p>Phần còn lại: $1\,000\,000 - 200\,000 = 800\,000$.</p>
+        introduces: [cdot]
+        focus: [1, 2, 3]
+        say: "Thứ hai là phần trăm của một số. 20 phần trăm của một triệu bằng một triệu nhân 20, chia 100, được hai trăm nghìn. Phần còn lại là một triệu trừ hai trăm nghìn, bằng tám trăm nghìn."
+      - clear: true
+        show: |
+          <p><b>Bước xáo trộn</b>: mọi cặp cùng khoá về <b>cùng một</b> máy rút gọn.</p>
+          <table class="t"><tr><th>khoá</th><th>số cặp</th><th>số máy cộng khoá đó</th></tr>
+          <tr><td>a</td><td>3</td><td>1</td></tr>
+          <tr><td>một từ xuất hiện 200 000 lần</td><td>200 000</td><td>vẫn chỉ 1</td></tr></table>
+        focus: [1, 1, "2.2", "2.3"]
+        say: "Thứ ba, nhớ lại bài 7 về ánh xạ, xáo trộn, rút gọn. Ở bước xáo trộn, mọi cặp cùng khoá được gom về cùng một máy rút gọn, chọn bằng giá trị băm của khoá. Khoá a có 3 cặp thì 3 cặp đó về một máy. Một từ xuất hiện hai trăm nghìn lần thì hai trăm nghìn cặp cũng về một máy, không chia ra được."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: hai nguồn chậm"
+    steps:
+      - show: |
+          <p>Thời gian của công việc song song = thời gian của tác vụ <b>chậm nhất</b>, không phải trung bình.</p>
+          <table class="t"><tr><th>nguồn</th><th>vì sao</th><th>cách chữa</th></tr>
+          <tr><td><b>lệch dữ liệu</b></td><td>một khoá chiếm phần lớn dữ liệu, mọi giá trị của nó về một máy rút gọn</td><td>chia khoá nóng thành nhiều khoá con</td></tr>
+          <tr><td><b>máy chậm</b></td><td>máy cũ, ổ đĩa lỗi, bị việc khác chiếm</td><td>chạy thêm một bản <b>dự phòng</b> ở máy khác, lấy bản xong trước</td></tr></table>
+        focus: [1, 2, "2.2", "2.3"]
+        say: "Thời gian của một công việc song song bằng thời gian của tác vụ chậm nhất, không phải trung bình. Có hai nguồn chậm. Lệch dữ liệu là khi một khoá chiếm phần lớn dữ liệu, mọi giá trị của nó dồn về một máy rút gọn, cách chữa là chia khoá nóng thành nhiều khoá con. Máy chậm là khi máy cũ, ổ đĩa lỗi, hay bị việc khác chiếm, cách chữa là chạy thêm một bản dự phòng ở máy khác và lấy bản nào xong trước."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Một máy gánh khoá nóng, 99 máy ngồi chờ"
+    steps:
+      - show: |
+          <div><svg width="1500" height="430" viewBox="0 0 1500 430"><g font-size="22" fill="#1f2937"><text x="20" y="34" font-weight="bold">trước: 100 máy rút gọn</text><text x="20" y="80">99 máy thường</text><rect x="330" y="55" width="40" height="36" fill="#dbeafe" stroke="#1f2937" stroke-width="1"/><text x="390" y="80">8 081 cặp</text><text x="20" y="130">máy giữ “the”</text><rect x="330" y="105" width="1000" height="36" fill="#fee2e2" stroke="#1f2937" stroke-width="1"/><text x="1345" y="130" fill="#b91c1c">200 000</text><text x="20" y="204" font-weight="bold">sau rắc muối: the#0 … the#9 rải ra 10 máy</text><text x="20" y="250">89 máy thường</text><rect x="330" y="225" width="40" height="36" fill="#dbeafe" stroke="#1f2937" stroke-width="1"/><text x="390" y="250">8 081 cặp</text><text x="20" y="300">10 máy có khoá con</text><rect x="330" y="275" width="40" height="36" fill="#dbeafe" stroke="#1f2937" stroke-width="1"/><rect x="370" y="275" width="100" height="36" fill="#ffedd5" stroke="#1f2937" stroke-width="1"/><text x="490" y="300">8 081 + 20 000 = 28 081 cặp</text><line x1="1330" y1="45" x2="1330" y2="150" stroke="#b91c1c" stroke-width="3" stroke-dasharray="8 6"/><line x1="470" y1="266" x2="470" y2="322" stroke="#059669" stroke-width="3" stroke-dasharray="8 6"/><text x="750" y="380" text-anchor="middle" fill="#b91c1c">vạch đứt: lúc công việc xong = lúc máy nặng nhất xong</text><text x="750" y="414" text-anchor="middle" fill="#059669">200 000 cặp xuống 28 081 cặp</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ tải của các máy rút gọn, thanh càng dài thì càng nhiều cặp. Ở trên, 99 máy thường mỗi máy chỉ khoảng 8 nghìn cặp, còn máy giữ từ the nhận hai trăm nghìn cặp, nên 99 máy xong sớm rồi ngồi chờ. Ở dưới, sau khi chia từ the thành 10 khoá con, mỗi khoá con 20 nghìn cặp rơi vào một máy đã có phần thường của nó. Vạch đứt là lúc công việc xong, nó dời từ hai trăm nghìn về khoảng 28 nghìn cặp."
+
+  - id: example
+    kind: example
+    title: "Chia khoá nóng bằng “rắc muối”"
+    checks:
+      - "round(800000 / 99) == 8081 and 200000 / 10 == 20000 and 200000 / 20000 == 10"
+      - "1000000 * 20 // 100 == 200000 and round(200000 / (800000 / 99)) == 25 and 8081 + 20000 == 28081 and round(200000 / 28081, 1) == 7.1"
+    steps:
+      - show: |
+          <p>Đếm từ, 1 000 000 cặp, 100 máy rút gọn. Từ “the” chiếm 20%:</p>
+          $$1\,000\,000 \cdot 20\% = \hl{200\,000} \text{ cặp, dồn vào một máy}$$
+          <p><b>Bước 1</b> — một khoá, một máy: bước xáo trộn không chia được khoá nóng.</p>
+        focus: [1, 2, 3]
+        say: "Bước một, xét bài đếm từ với một triệu cặp và 100 máy rút gọn. Từ the chiếm 20 phần trăm, tức hai trăm nghìn cặp, và cả hai trăm nghìn cặp dồn vào một máy. Đó là vì bước xáo trộn đưa mọi cặp cùng khoá về cùng một máy."
+      - show: |
+          $$\frac{800\,000}{99} \approx 8081 \text{ cặp mỗi máy còn lại}$$
+          <table class="t"><tr><th>máy</th><th>số cặp</th></tr>
+          <tr><td>máy giữ “the”</td><td>200 000</td></tr>
+          <tr><td>mỗi máy trong 99 máy kia</td><td>≈ 8 081 — ít hơn khoảng $\hl{25}$ lần</td></tr></table>
+          <p><b>Bước 2</b> — so tải.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Bước hai, tám trăm nghìn cặp còn lại chia đều cho 99 máy kia, mỗi máy khoảng 8 nghìn 81 cặp. Máy giữ từ the có hai trăm nghìn cặp. Mỗi máy kia ít hơn khoảng 25 lần, nên chúng xong rất sớm rồi ngồi chờ. Thời gian của cả bước rút gọn là thời gian của máy hai trăm nghìn cặp."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — rắc muối</b>: ghép thêm số ngẫu nhiên 0–9 vào khoá nóng: <code>the#0</code>, …, <code>the#9</code>.</p>
+          $$\frac{200\,000}{10} = 20\,000 \text{ cặp mỗi khoá con}$$
+          <p>10 khoá con băm ra 10 máy. Một bước gộp nhỏ sau đó cộng 10 kết quả con.</p>
+        focus: [1, 2, 3, 3]
+        say: "Bước ba, cách rắc muối là ghép thêm một số ngẫu nhiên từ 0 tới 9 vào khoá nóng, thành 10 khoá con. Mỗi khoá con khoảng hai trăm nghìn chia 10, bằng 20 nghìn cặp. Vì tên khoá con khác nhau nên giá trị băm khác nhau, và chúng rải ra 10 máy. Một bước gộp nhỏ sau đó cộng 10 kết quả con lại."
+      - show: |
+          $$8081 + 20\,000 = 28\,081 \quad\Rightarrow\quad \frac{200\,000}{28\,081} \approx \hl{7{,}1} \text{ lần}$$
+          <div class="box key"><b>Bước 4</b> — tải của khoá nóng trên một máy giảm 10 lần, nhưng máy nhận khoá con vẫn giữ phần thường ≈ 8 081 cặp. Máy nặng nhất còn ≈ 28 081 cặp: bước rút gọn nhanh khoảng <b>7 lần</b>, không phải 10.</div>
+        introduces: [implies]
+        focus: [1, 2, 2]
+        say: "Bước bốn, tính tải của máy nặng nhất. Máy nhận một khoá con vẫn giữ phần thường khoảng 8 nghìn 81 cặp, cộng 20 nghìn thành khoảng 28 nghìn 81 cặp, nên hai trăm nghìn chia 28 nghìn 81 được khoảng 7 phẩy 1. Tải của khoá nóng giảm 10 lần, còn bước rút gọn nhanh khoảng 7 lần, không phải 10, vì phần thường vẫn còn đó."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác"
+    checks:
+      - "(lambda m: (len(set(m)), 80 in m))([alg.stable_hash(f'the#{i}') % 100 for i in range(10)]) == (10, False) and alg.stable_hash('the') % 100 == 80"
+      - "__import__('fractions').Fraction(800000, 99) * 99 + 200000 == 1000000 and round(800000 / 99 + 20000) == 28081 and round(200000 / 8081) == 25"
+    steps:
+      - show: |
+          <table class="t"><tr><th>kiểm</th><th>cách khác</th><th>kết quả</th></tr>
+          <tr><td>10 khoá con ra 10 máy khác nhau?</td><td>băm thật <code>the#0</code> … <code>the#9</code> bằng một hàm băm cố định, chia lấy dư cho 100</td><td>10 máy khác nhau, không trùng máy cũ của “the” ✓</td></tr>
+          <tr><td>không mất cặp nào</td><td>cộng lại: $99 \cdot \frac{800\,000}{99} + 200\,000$</td><td>1 000 000 ✓</td></tr>
+          <tr><td>máy nặng nhất</td><td>lấy lớn nhất của mọi máy sau khi rải</td><td>≈ 28 081 ✓</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.4"]
+        say: "Kiểm bằng đường khác, bằng cách chạy thử thay vì giả định. Băm thật 10 tên khoá con bằng một hàm băm cố định, rồi chia lấy dư cho 100. Kết quả là 10 máy khác nhau, không máy nào trùng máy cũ của từ the, nên đúng là 10 máy, mỗi máy một khoá con. Cộng lại mọi cặp, 99 nhân tám trăm nghìn chia 99, cộng hai trăm nghìn, vẫn bằng một triệu, không mất cặp nào. Lấy số lớn nhất trong mọi máy sau khi rải, được khoảng 28 nghìn 81, khớp bước bốn."
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc, 1 lỗi người đã đi làm"
+    checks:
+      - "20 + 10 == 30 and min(300, 20 + 300) == 300"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Thêm máy khi một khoá chiếm phần lớn dữ liệu <b class="red">(vô ích)</b>
+          <br><span class="note">Một khoá vẫn về một máy. 1000 máy hay 100 máy, máy giữ “the” vẫn nhận 200 000 cặp.</span></div>
+        say: "Lỗi thứ nhất, thêm máy khi một khoá chiếm phần lớn dữ liệu. Một khoá vẫn về một máy, dù có một nghìn máy hay 100 máy, máy giữ từ the vẫn nhận hai trăm nghìn cặp."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Báo cáo thời gian trung bình <b class="red">(che vấn đề)</b>
+          <br><span class="note">Trung bình 12,9 giây trông ổn; người dùng chờ 300 giây. Theo dõi cả tác vụ chậm nhất và phân vị 99.</span></div>
+        say: "Lỗi thứ hai, chỉ báo cáo thời gian trung bình. Trung bình 12 phẩy 9 giây trông ổn, trong khi người dùng chờ 300 giây, nên hãy theo dõi cả tác vụ chậm nhất và phân vị 99 phần trăm."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Chạy bản dự phòng cho mọi tác vụ <b class="red">(lãng phí)</b>
+          <br><span class="note">Chỉ chạy dự phòng cho vài tác vụ cuối còn chạy khi công việc gần xong; nếu không, tốn gấp đôi tài nguyên.</span></div>
+        say: "Lỗi thứ ba, chạy bản dự phòng cho mọi tác vụ. Chỉ nên chạy dự phòng cho vài tác vụ cuối còn chạy khi công việc gần xong, nếu không sẽ tốn gấp đôi tài nguyên."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Bật bản dự phòng để chữa tác vụ chậm vì khoá nóng <b class="red">(không nhanh hơn)</b></div>
+          <table class="t"><tr><th>tác vụ chậm vì</th><th>bản dự phòng chạy từ giây 20</th><th>công việc xong lúc</th></tr>
+          <tr><td>máy chậm: việc thật chỉ cần 10 giây</td><td>máy khoẻ chạy 10 giây</td><td>$20 + 10 = 30$ giây thay vì 300</td></tr>
+          <tr><td>khoá nóng: 300 giây ở máy nào cũng vậy</td><td>cũng cần 300 giây, xong lúc 320</td><td>bản chạy đầu vẫn xong trước: $\hl{300}$ giây, tốn thêm một máy</td></tr></table>
+          <p class="note">Trước khi chữa, xem tác vụ chậm nhận bao nhiêu cặp: nhiều gấp chục lần máy khác là khoá nóng, phải chia khoá.</p>
+        focus: [1, "2.2", "2.3", "2.3", 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, bật bản dự phòng để chữa một tác vụ chậm vì khoá nóng. Nếu tác vụ chậm vì máy chậm, việc thật chỉ cần 10 giây, thì bản dự phòng chạy từ giây 20 trên máy khoẻ xong ở giây 30, thay vì 300. Nhưng nếu tác vụ chậm vì khoá nóng, nó cần 300 giây ở máy nào cũng vậy, nên bản dự phòng xong ở giây 320. Bản chạy đầu vẫn xong trước ở giây 300, và ta chỉ tốn thêm một máy. Vì vậy trước khi chữa, hãy xem tác vụ chậm nhận bao nhiêu cặp, nếu nhiều gấp chục lần máy khác thì đó là khoá nóng, phải chia khoá."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "(49 * 20 + 200) / 50 == 23.6 and max([20] * 49 + [200]) == 200 and 200 / 10 == 20"
+      - "49 * 20 == 980 and 980 + 200 == 1180 and 1180 / 50 == 23.6 and max([20] * 49 + [200 / 10] * 10) == 20 and 200 / (20 + 20) == 5"
+    steps:
+      - show: |
+          <p>50 tác vụ: 49 tác vụ 20 giây, 1 tác vụ 200 giây (do khoá nóng).</p>
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Trung bình? Công việc xong sau bao lâu?</td></tr>
+          <tr><td>2</td><td>Chia khoá nóng thành 10 khoá con đều nhau, mỗi khoá con một tác vụ riêng: tác vụ lâu nhất còn bao lâu?</td></tr></table>
+        focus: [1, "2.2", "2.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm, với 50 tác vụ, 49 tác vụ mất 20 giây và 1 tác vụ mất 200 giây do khoá nóng. Câu một, thời gian trung bình là bao nhiêu, và công việc xong sau bao lâu? Câu hai, nếu chia khoá nóng thành 10 khoá con đều nhau, mỗi khoá con một tác vụ riêng, tác vụ lâu nhất còn bao lâu? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 1</th><th>tính</th><th>kết quả</th></tr>
+          <tr><td>tổng thời gian</td><td>$49 \cdot 20 + 200 = 980 + 200$</td><td>1180 giây</td></tr>
+          <tr><td>trung bình</td><td>$\dfrac{1180}{50}$</td><td>23,6 giây</td></tr>
+          <tr><td>công việc xong</td><td>lớn nhất của các tác vụ</td><td>$\hl{200}$ giây</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Đáp án câu một, làm từng bước. Tổng thời gian là 49 nhân 20, bằng 980, cộng 200, được 1180 giây. Chia cho 50 tác vụ, trung bình 23 phẩy 6 giây. Nhưng công việc xong khi tác vụ lâu nhất xong, tức sau 200 giây."
+      - show: |
+          <table class="t"><tr><th>câu 2</th><th>tính</th><th>kết quả</th></tr>
+          <tr><td>mỗi khoá con</td><td>$200 / 10$</td><td>20 giây</td></tr>
+          <tr><td>tác vụ lâu nhất</td><td>lớn nhất của 20 (49 tác vụ cũ) và 20 (10 khoá con)</td><td>$\hl{20}$ giây, cộng một bước gộp nhỏ</td></tr></table>
+          <p class="note">Nếu khoá con bị ghép vào một tác vụ đã có 20 giây việc, tác vụ đó thành 40 giây: vẫn nhanh gấp $200 / 40 = 5$ lần — như bước bốn, phần thường vẫn còn.</p>
+        focus: ["1.2", "1.3", 2]
+        say: "Câu hai, mỗi khoá con mất 200 chia 10, bằng 20 giây. Mỗi khoá con chạy thành một tác vụ riêng, nên tác vụ lâu nhất là lớn nhất của các số 20, tức 20 giây, cộng thêm một bước gộp nhỏ. Nhưng nếu khoá con bị ghép vào một tác vụ đã có 20 giây việc, tác vụ đó thành 40 giây, vẫn nhanh gấp 5 lần, giống bước bốn khi phần thường vẫn còn."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">xong khi chậm nhất xong</span><span class="a">→</span>
+          <span class="n">khoá nóng: chia thành khoá con</span><span class="a">→</span>
+          <span class="n">máy chậm: bản dự phòng cho vài tác vụ cuối</span><span class="a">→</span>
+          <span class="n">đo cả chậm nhất, không chỉ trung bình</span></div>
+        say: "Tổng kết lại, công việc xong khi tác vụ chậm nhất xong. Khoá nóng thì chia thành khoá con, máy chậm thì chạy bản dự phòng cho vài tác vụ cuối, và luôn đo cả tác vụ chậm nhất chứ không chỉ trung bình."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> trong hệ song song, cái đuôi quyết định. Tìm phần chậm nhất và sửa nó, đừng tối ưu phần đã nhanh.</div>
+        say: "Điều cần mang theo, trong hệ song song, cái đuôi quyết định tất cả. Hãy tìm phần chậm nhất và sửa nó, đừng tối ưu phần đã nhanh."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 9): dữ liệu không dừng — <b>xử lý luồng</b>, cửa sổ thời gian và dữ liệu đến muộn.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 9, ta học xử lý luồng dữ liệu không dừng, với cửa sổ thời gian và dữ liệu đến muộn. Hẹn gặp bạn ở bài tiếp theo."

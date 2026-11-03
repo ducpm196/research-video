@@ -1,0 +1,185 @@
+id: L05
+course: EVT
+series: "EVT · Kiến trúc hướng sự kiện"
+title: "Bài 5 — Tách mô hình ghi và mô hình đọc: bộ chiếu và độ trễ chiếu"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/evt.yaml L05; audit/evt/verify_evt.py L05; G. Young, CQRS Documents (2010); M. Fowler, CQRS (2011); M. Kleppmann (2017), chương 5 — đọc điều vừa ghi; bài 4"
+assumes: [arith, cdot]
+# Quy ước: mô hình ghi nhận lệnh, kiểm luật, ghi sự kiện; bộ chiếu đọc dòng sự kiện và cập nhật mô hình đọc (bảng tối ưu cho truy vấn). Độ trễ chiếu (số sự kiện chưa chiếu)
+#   tăng (tốc độ ghi − tốc độ chiếu) mỗi giây (alg.consumer_lag). 500 và 400 sự kiện mỗi giây là SỐ MINH HOẠ.
+objectives:
+  - "Dựng mô hình đọc từ dòng sự kiện"
+  - "Tính độ trễ chiếu khi bộ chiếu chậm hơn tốc độ ghi"
+  - "Xử lý yêu cầu đọc ngay điều vừa ghi"
+asr_reviewed:
+  - {sentence: "Mô hình đọc trễ vài giây có thể cho rút hai lần.", reason: "ASR chép “Mua hình độc trễ và dây có thể cho rút hai lần.” (0.75): lệch âm/thanh thuần Việt: mô/mua, đọc/độc, vài/và — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Tổng kết lại, mô hình ghi kiểm luật, còn mô hình đọc là bảng làm sẵn.", reason: "ASR chép “Tổng kết lại, mô hình di kiểm lực, còn mô hình độc là bản làm sẵn.” (0.75): lệch âm/thanh thuần Việt: ghi/di, luật/lực, đọc/độc, bảng/bản — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Vừa lưu xong, mở lại không thấy"
+    checks:
+      - "alg.consumer_lag(500, 400, 600) == 60000"
+    steps:
+      - show: |
+          <p>Người bán sửa giá sản phẩm, bấm lưu, thấy “thành công”, mở lại trang — giá vẫn cũ. Họ sửa lần nữa, lại thấy cũ, gọi tổng đài báo lỗi. Thực ra lệnh đã ghi đúng; chỉ có <b>bảng để đọc</b> chưa kịp cập nhật.</p>
+          <div class="box key">Hôm nay: <b>tách mô hình ghi và mô hình đọc</b> — được gì, mất gì, và xử lý độ trễ ra sao.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, người bán sửa giá sản phẩm, bấm lưu, thấy báo thành công, rồi mở lại trang, nhưng giá vẫn cũ. Họ sửa lần nữa, lại thấy cũ, và gọi tổng đài báo lỗi. Thực ra lệnh đã ghi đúng, chỉ có bảng để đọc là chưa kịp cập nhật. Hôm nay ta học cách tách mô hình ghi và mô hình đọc, được gì, mất gì, và xử lý độ trễ ra sao."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: bể nước có vòi vào và vòi ra"
+    checks:
+      - "(6 - 4) * 10 == 20 and 20 / 4 == 5 and alg.consumer_lag(6, 4, 10) == 20 and alg.fold_events([100, -30]) == 70"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bể nước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>vào 6 lít, ra 4 lít mỗi phút</td><td>$6 - 4$</td><td>tăng 2 lít mỗi phút</td></tr>
+          <tr><td>sau 10 phút</td><td>$2 \cdot 10$</td><td>20 lít</td></tr>
+          <tr><td>khoá vòi vào, chỉ còn vòi ra</td><td>$\frac{20}{4}$</td><td>5 phút thì cạn</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Trước hết, một bài toán quen thuộc, bể nước có vòi vào và vòi ra. Vòi vào 6 lít, vòi ra 4 lít mỗi phút, nên nước trong bể tăng 6 trừ 4, bằng 2 lít mỗi phút. Sau 10 phút, bể có 2 nhân 10, bằng 20 lít. Khoá vòi vào, chỉ còn vòi ra 4 lít mỗi phút, thì 20 chia 4, sau 5 phút bể cạn."
+      - show: |
+          <p>Ở bài 4, trạng thái là kết quả <b>gấp</b> các sự kiện: nạp 100, rút 30 → số dư 70. Bộ chiếu hôm nay chính là một hàm gấp chạy <b>liên tục</b>, ghi kết quả vào một bảng để đọc.</p>
+        say: "Ở bài 4, trạng thái là kết quả gấp các sự kiện, ví dụ nạp 100 rồi rút 30 thì số dư là 70. Bộ chiếu hôm nay chính là một hàm gấp chạy liên tục, và ghi kết quả vào một bảng để đọc."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: mô hình ghi, bộ chiếu, mô hình đọc"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">lệnh</span><span class="a">→</span><span class="n">mô hình ghi: kiểm luật, ghi sự kiện</span><span class="a">→</span>
+          <span class="n">dòng sự kiện</span><span class="a">→</span><span class="n">bộ chiếu</span><span class="a">→</span><span class="n">mô hình đọc: bảng cho từng kiểu truy vấn</span></div>
+          <p><b>Độ trễ chiếu</b>: số sự kiện đã ghi mà bộ chiếu chưa áp vào mô hình đọc. Một mô hình ghi có thể nuôi <b>nhiều</b> mô hình đọc: trang sản phẩm, ô tìm kiếm, báo cáo.</p>
+        focus: [1, 1, 2, 2]
+        say: "Sơ đồ đi từ lệnh vào mô hình ghi, nơi kiểm luật và ghi sự kiện, rồi qua dòng sự kiện tới bộ chiếu. Bộ chiếu cập nhật mô hình đọc, là các bảng làm sẵn cho từng kiểu truy vấn. Độ trễ chiếu là số sự kiện đã ghi mà bộ chiếu chưa áp vào mô hình đọc. Một mô hình ghi có thể nuôi nhiều mô hình đọc, như trang sản phẩm, ô tìm kiếm, và báo cáo."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hai con trỏ trên cùng một dòng sự kiện"
+    checks:
+      - "500 // 50 == 10 and 400 // 50 == 8 and 500 - 400 == 100"
+    steps:
+      - show: |
+          <div><svg width="1500" height="400" viewBox="0 0 1500 400"><defs><marker id="arE5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs><rect x="20" y="140" width="170" height="80" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="105" y="175" font-size="22" text-anchor="middle" fill="#1f2937">mô hình ghi</text><text x="105" y="205" font-size="19" text-anchor="middle" fill="#2a78d6">ghi 500 mỗi giây</text><line x1="190" y1="180" x2="225" y2="180" stroke="#1f2937" stroke-width="3" marker-end="url(#arE5)"/><rect x="230" y="150" width="85" height="60" fill="#bbf7d0" stroke="#1f2937" stroke-width="2"/><rect x="325" y="150" width="85" height="60" fill="#bbf7d0" stroke="#1f2937" stroke-width="2"/><rect x="420" y="150" width="85" height="60" fill="#bbf7d0" stroke="#1f2937" stroke-width="2"/><rect x="515" y="150" width="85" height="60" fill="#bbf7d0" stroke="#1f2937" stroke-width="2"/><rect x="610" y="150" width="85" height="60" fill="#bbf7d0" stroke="#1f2937" stroke-width="2"/><rect x="705" y="150" width="85" height="60" fill="#bbf7d0" stroke="#1f2937" stroke-width="2"/><rect x="800" y="150" width="85" height="60" fill="#bbf7d0" stroke="#1f2937" stroke-width="2"/><rect x="895" y="150" width="85" height="60" fill="#bbf7d0" stroke="#1f2937" stroke-width="2"/><rect x="990" y="150" width="85" height="60" fill="#fde7d9" stroke="#1f2937" stroke-width="2"/><rect x="1085" y="150" width="85" height="60" fill="#fde7d9" stroke="#1f2937" stroke-width="2"/><text x="705" y="135" font-size="22" text-anchor="middle" fill="#1f2937">dòng sự kiện (mỗi ô 50 sự kiện)</text><line x1="1180" y1="230" x2="1180" y2="300" stroke="#2a78d6" stroke-width="4"/><text x="1180" y="330" font-size="21" text-anchor="middle" fill="#2a78d6">đầu ghi: 500</text><line x1="990" y1="230" x2="990" y2="300" stroke="#059669" stroke-width="4"/><text x="990" y="330" font-size="21" text-anchor="middle" fill="#059669">bộ chiếu: 400</text><text x="1085" y="380" font-size="22" text-anchor="middle" fill="#eb6834" font-weight="bold">độ trễ chiếu: 100</text><path d="M990,150 C990,60 1300,60 1320,130" fill="none" stroke="#059669" stroke-width="3" marker-end="url(#arE5)"/><rect x="1250" y="140" width="230" height="80" rx="10" fill="#d1fae5" stroke="#059669" stroke-width="3"/><text x="1365" y="175" font-size="22" text-anchor="middle" fill="#1f2937">mô hình đọc</text><text x="1365" y="205" font-size="19" text-anchor="middle" fill="#059669">chiếu 400 mỗi giây</text></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ dòng sự kiện sau giây đầu tiên, mỗi ô là 50 sự kiện. Mô hình ghi bên trái đã ghi 500 sự kiện, nên đầu ghi màu xanh dương nằm ở cuối ô thứ mười. Bộ chiếu mới áp được 400 sự kiện vào mô hình đọc bên phải, nên nó đứng ở cuối ô thứ tám. Hai ô cam ở giữa là 100 sự kiện đã ghi mà chưa chiếu, đó chính là độ trễ chiếu, và ai đọc lúc này sẽ thấy dữ liệu cũ."
+
+  - id: example
+    kind: example
+    title: "Ghi 500, chiếu 400 mỗi giây"
+    checks:
+      - "alg.consumer_lag(500, 400, 1) == 100 and alg.consumer_lag(500, 400, 600) == 60000 and alg.consumer_lag(500, 600, 600) == 0"
+      - "60000 / 400 == 150"
+    steps:
+      - show: |
+          <p><b>Bước 1 — mỗi giây.</b> Ghi 500, chiếu 400: độ trễ chiếu tăng $500 - 400 = 100$ sự kiện mỗi giây.</p>
+        say: "Bước một, xét một giây. Ghi 500 mà chỉ chiếu 400, nên độ trễ chiếu tăng 500 trừ 400, bằng 100 sự kiện mỗi giây."
+      - show: |
+          <p><b>Bước 2 — sau 10 phút.</b> 10 phút $= 600$ giây → độ trễ $100 \cdot 600 = \hl{60\,000}$ sự kiện.</p>
+        say: "Bước hai, sau 10 phút. Đổi 10 phút ra 600 giây, nên độ trễ là 100 nhân 600, bằng 60 nghìn sự kiện."
+      - show: |
+          <p><b>Bước 3 — nếu dòng sự kiện dừng hẳn.</b> Bộ chiếu chỉ còn việc xả tồn: $\frac{60\,000}{400} = 150$ giây mới đuổi kịp.</p>
+        say: "Bước ba, nếu dòng sự kiện dừng hẳn lúc đó, bộ chiếu chỉ còn việc xả phần tồn. Nó cần 60 nghìn chia 400, bằng 150 giây mới đuổi kịp."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước 4 — vẫn đang ghi 500 mỗi giây</th><th>chiếu mỗi giây</th><th>độ trễ 60 000 sẽ</th></tr>
+          <tr><td>một bộ chiếu</td><td>400</td><td>tăng mãi, 100 mỗi giây</td></tr>
+          <tr><td>hai bộ chiếu song song theo phân vùng</td><td>$2 \cdot 400 = 800$</td><td>giảm $800 - 500 = 300$ mỗi giây → $\frac{60\,000}{300} = 200$ giây</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.3"]
+        say: "Bước bốn, quyết định khi vẫn đang ghi 500 sự kiện mỗi giây. Một bộ chiếu thì độ trễ tăng mãi, mỗi giây thêm 100. Thêm bộ chiếu thứ hai chạy song song theo phân vùng, tổng tốc độ chiếu là 2 nhân 400, bằng 800. Khi đó độ trễ giảm 800 trừ 500, bằng 300 mỗi giây, nên 60 nghìn chia 300, sau 200 giây là đuổi kịp."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: mô phỏng từng giây"
+    checks:
+      - "(lambda sim: sim(500, 400, 600, 0) == 60000 and [sim(500, 400, s, 0) for s in (1, 2, 3)] == [100, 200, 300])(lambda i, o, s, b: __import__('functools').reduce(lambda x, _: max(0, x + i - o), range(s), b))"
+      - "len(list(__import__('itertools').takewhile(lambda b: b > 0, __import__('itertools').accumulate([60000] + [-400] * 200)))) == 150 and len(list(__import__('itertools').takewhile(lambda b: b > 0, __import__('itertools').accumulate([60000] + [-300] * 300)))) == 200 == alg.drain_seconds(60000, 500, 800)"
+    steps:
+      - show: |
+          <table class="t"><tr><th>giây thứ</th><th>1</th><th>2</th><th>3</th><th>…</th><th>600</th></tr>
+          <tr><td>độ trễ chiếu</td><td>100</td><td>200</td><td>300</td><td>…</td><td>$\hl{60\,000}$ ✓</td></tr></table>
+        focus: [1, "1.2", "1.2"]
+        say: "Kiểm bằng đường khác, cho máy mô phỏng từng giây thay vì nhân, vì mỗi giây chỉ cần cộng 500 rồi trừ 400. Độ trễ đi 100, 200, 300, và tới giây thứ 600 thì đúng 60 nghìn. Kết quả khớp với phép nhân ở bước hai."
+      - show: |
+          <table class="t"><tr><th>xả tồn từng giây</th><th>mỗi giây bớt</th><th>số giây tới khi về 0</th></tr>
+          <tr><td>dừng ghi, một bộ chiếu</td><td>400</td><td>150 ✓</td></tr>
+          <tr><td>vẫn ghi, hai bộ chiếu</td><td>300</td><td>200 ✓</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Mô phỏng tiếp phần xả tồn, vì mỗi giây độ trễ chỉ bớt đi một lượng cố định, nên trừ dần từng giây và đếm số giây tới khi độ trễ về 0. Dừng ghi với một bộ chiếu, mỗi giây bớt 400, đếm được 150 giây. Vẫn ghi với hai bộ chiếu, mỗi giây bớt 300, đếm được 200 giây, khớp cả hai."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Không xử lý đọc ngay điều vừa ghi <b class="red">(người dùng tưởng mất dữ liệu)</b>
+          <br><span class="note">Lệnh trả về <b>phiên bản đã ghi</b>; trang đọc chờ mô hình đọc theo kịp phiên bản đó (có giới hạn thời gian), hoặc đọc riêng người vừa sửa từ mô hình ghi.</span></div>
+        say: "Lỗi thứ nhất, không xử lý việc đọc ngay điều vừa ghi, nên người dùng tưởng mất dữ liệu. Hãy để lệnh trả về phiên bản đã ghi, và trang đọc chờ mô hình đọc theo kịp phiên bản đó, có giới hạn thời gian. Hoặc đọc riêng cho người vừa sửa từ mô hình ghi."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Kiểm luật bằng mô hình đọc <b class="red">(quyết định trên dữ liệu cũ)</b>
+          <br><span class="note">“Còn đủ tiền để rút không?” phải kiểm trên mô hình ghi. Mô hình đọc trễ vài giây có thể cho rút hai lần.</span></div>
+        say: "Lỗi thứ hai, kiểm luật bằng mô hình đọc, nên quyết định trên dữ liệu cũ. Câu hỏi còn đủ tiền để rút không phải kiểm trên mô hình ghi. Mô hình đọc trễ vài giây có thể cho rút hai lần."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Bộ chiếu không lũy đẳng <b class="red">(chiếu lại là cộng đôi)</b>
+          <br><span class="note">Bộ chiếu sẽ chạy lại sau lỗi, hoặc dựng lại từ đầu. Lưu vị trí sự kiện đã chiếu cùng giao dịch với bảng đọc, hoặc dùng phiên bản theo khoá.</span></div>
+        say: "Lỗi thứ ba, bộ chiếu không lũy đẳng, nên chiếu lại là cộng đôi. Bộ chiếu sẽ chạy lại sau lỗi, hoặc dựng lại từ đầu. Hãy lưu vị trí sự kiện đã chiếu trong cùng giao dịch với bảng đọc, hoặc dùng phiên bản theo khoá."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Dựng lại mô hình đọc mới mà quên rằng dòng sự kiện <b>vẫn chảy</b> <b class="red">(hẹn 30 phút, thật ra lâu hơn)</b></div>
+          <table class="t"><tr><th>9 000 000 sự kiện lịch sử, chiếu lại 5000 mỗi giây</th><th>phép tính</th><th>thời gian</th></tr>
+          <tr><td>ước lượng quên dòng mới</td><td>$\frac{9\,000\,000}{5000}$</td><td>1800 giây = 30 phút</td></tr>
+          <tr><td>thật: vẫn ghi 500 mỗi giây</td><td>$\frac{9\,000\,000}{5000 - 500}$</td><td>2000 giây ≈ 33,3 phút</td></tr>
+          <tr><td>chỉ chiếu lại 400 mỗi giây</td><td>400 nhỏ hơn 500</td><td>không bao giờ đuổi kịp</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", 0]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, dựng lại một mô hình đọc mới từ toàn bộ lịch sử mà quên rằng dòng sự kiện vẫn đang chảy. Có 9 triệu sự kiện lịch sử, chiếu lại 5000 mỗi giây, nên ước lượng nhanh là 9 triệu chia 5000, bằng 1800 giây, tức 30 phút. Nhưng trong lúc đó vẫn ghi thêm 500 mỗi giây, nên thật ra chỉ rút ngắn được 4500 mỗi giây, mất 2000 giây, khoảng 33 phẩy 3 phút. Nếu chiếu lại chỉ được 400 mỗi giây, nhỏ hơn 500, thì không bao giờ đuổi kịp. Người làm nghề dựng bảng mới song song, để bảng cũ vẫn phục vụ, và chỉ chuyển sang bảng mới khi độ trễ của nó gần bằng 0."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.consumer_lag(800, 600, 300) == 60000 and 60000 / 600 == 100"
+      - "800 - 600 == 200 and 5 * 60 == 300 and 200 * 300 == 60000 and alg.drain_seconds(9e6, 500, 5000) == 2000 and 5000 - 500 == 4500 and 9e6 / 5000 == 1800 and round(2000 / 60, 1) == 33.3 and alg.drain_seconds(9e6, 500, 400) == __import__('math').inf"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Ghi 800, chiếu 600 sự kiện mỗi giây trong 5 phút. Độ trễ chiếu?</td></tr>
+          <tr><td>2</td><td>Sau đó dòng sự kiện dừng hẳn. Bao lâu bộ chiếu đuổi kịp?</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, ghi 800, chiếu 600 sự kiện mỗi giây trong 5 phút, thì độ trễ chiếu là bao nhiêu? Câu hai, sau đó dòng sự kiện dừng hẳn, thì bao lâu bộ chiếu đuổi kịp? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① Mỗi giây độ trễ tăng $800 - 600 = 200$; 5 phút $= 300$ giây → $200 \cdot 300 = \hl{60\,000}$ sự kiện.</p>
+        say: "Đáp án câu một, mỗi giây độ trễ tăng 800 trừ 600, bằng 200 sự kiện. Đổi 5 phút ra 300 giây, nên độ trễ là 200 nhân 300, bằng 60 nghìn sự kiện."
+      - show: |
+          <p>② Dừng ghi: bộ chiếu xả 600 mỗi giây → $\frac{60\,000}{600} = \hl{100}$ giây.</p>
+        say: "Câu hai, khi dòng sự kiện dừng hẳn, bộ chiếu chỉ còn xả phần tồn, 600 sự kiện mỗi giây. Vậy 60 nghìn chia 600, bằng 100 giây là đuổi kịp."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">ghi: kiểm luật; đọc: bảng làm sẵn</span><span class="a">→</span>
+          <span class="n">bộ chiếu nối hai bên, có độ trễ</span><span class="a">→</span>
+          <span class="n">độ trễ tăng (ghi − chiếu) mỗi giây</span><span class="a">→</span>
+          <span class="n">trả phiên bản đã ghi; luật kiểm ở bên ghi</span></div>
+        say: "Tổng kết lại, mô hình ghi kiểm luật, còn mô hình đọc là bảng làm sẵn. Bộ chiếu nối hai bên và luôn có độ trễ, tăng bằng tốc độ ghi trừ tốc độ chiếu mỗi giây. Hãy trả về phiên bản đã ghi, và kiểm luật ở bên ghi."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> tách ghi và đọc là <b>đổi</b> tính nhất quán tức thì lấy tốc độ và sự linh hoạt — hãy nói rõ cái giá đó với người dùng.</div>
+        say: "Điều cần mang theo, tách ghi và đọc là đổi tính nhất quán tức thì lấy tốc độ và sự linh hoạt, nên hãy nói rõ cái giá đó với người dùng."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 6): <b>giao dịch dài nhiều dịch vụ</b> và các bước bù trừ.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 6, ta học giao dịch dài qua nhiều dịch vụ, và các bước bù trừ. Hẹn gặp bạn ở bài tiếp theo."

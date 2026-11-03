@@ -1,0 +1,199 @@
+id: L09
+course: SEC
+series: "SEC · An toàn thông tin"
+title: "Bài 9 — Chứng chỉ, chuỗi tin cậy và TLS trong thực tế"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/sec.yaml L09; audit/sec/verify_sec.py L09; RFC 5280 (chứng chỉ X.509, kiểm đường dẫn chứng chỉ); RFC 8446 (TLS 1.3); M. Georgiev và cộng sự, The Most Dangerous Code in the World: Validating SSL Certificates in Non-Browser Software, ACM CCS (2012); NET bài 14"
+assumes: [arith]
+# Quy ước: alg.toy_cert_chain dựng chuỗi [chứng chỉ trang “nganhang.vn” do “trung_gian” ký, chứng chỉ “trung_gian” do “goc” ký] bằng khoá RSA ĐỒ CHƠI
+#   (alg.TOY_KEYS), kho gốc tin cậy chỉ có “goc”. alg.chain_verify kiểm từng chữ ký. TLS, X.509 chỉ trên màn hình; lời đọc “giao thức bảo mật của web”.
+objectives:
+  - "Kiểm một chuỗi chứng chỉ"
+  - "Hiểu vì sao trình duyệt tin một trang lạ"
+  - "Liệt kê lỗi cấu hình hay gặp"
+asr_reviewed:
+  - {sentence: "Kiểm chuỗi có qua không, và vì sao?", reason: "ASR chép “kiểm chuỗi có qua không và vi xáo.” (0.75): lệch âm/thanh thuần Việt: vì sao/vi xáo — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "“Tắt kiểm tra chứng chỉ cho chạy được”"
+    steps:
+      - show: |
+          <p>Ứng dụng di động báo lỗi kết nối tới máy chủ thử nghiệm. Một lập trình viên “sửa nhanh”: tắt kiểm tra chứng chỉ. Bản đó lên kho ứng dụng. Ở quán cà phê, kẻ đứng giữa đưa ra chứng chỉ giả — ứng dụng vui vẻ chấp nhận, và gửi mật khẩu cho hắn.</p>
+          <div class="box key">Hôm nay: <b>chứng chỉ</b> và <b>chuỗi tin cậy</b> — vì sao mã hoá mà không kiểm ai ở đầu bên kia thì vô nghĩa.</div>
+        focus: [1, 1, 1, 1, 2]
+        say: "Chào bạn, ứng dụng di động báo lỗi kết nối tới máy chủ thử nghiệm. Một lập trình viên sửa nhanh bằng cách tắt kiểm tra chứng chỉ. Bản đó lên kho ứng dụng. Ở quán cà phê, kẻ đứng giữa đưa ra một chứng chỉ giả, ứng dụng vui vẻ chấp nhận, và gửi mật khẩu cho hắn. Hôm nay ta học chứng chỉ và chuỗi tin cậy, vì sao mã hoá mà không kiểm ai ở đầu bên kia thì vô nghĩa."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: chữ ký số và khoá RSA đồ chơi"
+    checks:
+      - "61 * 53 == 3233 and alg.toy_key('goc') == (3233, 17, 2753) and (17 * 2753) % (60 * 52) == 1 and 60 * 52 == 3120"
+      - "pow(65, 2753, 3233) == 588 and pow(588, 17, 3233) == 65"
+    steps:
+      - show: |
+          <table class="t"><tr><th>điều sẽ dùng</th><th>ví dụ</th></tr>
+          <tr><td><b>chữ ký số</b>: khoá bí mật ký, khoá công khai kiểm</td><td>ai cũng kiểm được; chỉ người giữ khoá bí mật ký được</td></tr>
+          <tr><td>khoá RSA đồ chơi</td><td>$n = 61 \times 53 = 3233$; khoá công khai 17, khoá bí mật 2753, vì $17 \times 2753$ chia $60 \times 52 = 3120$ dư 1</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.3"]
+        say: "Trước hết, ôn hai điều bài này sẽ dùng. Như ở bài 8, chữ ký số dùng khoá bí mật để ký và khoá công khai để kiểm, nên ai cũng kiểm được, nhưng chỉ người giữ khoá bí mật ký được. Ở khoá Toán rời rạc, một khoá đồ chơi lấy n bằng 61 nhân 53, bằng 3233, khoá công khai 17 và khoá bí mật 2753. Hai số này đi đôi với nhau vì 17 nhân 2753 chia cho 60 nhân 52, tức 3120, thì dư 1."
+      - show: |
+          <table class="t"><tr><th>việc</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>ký số 65</td><td>$65^{2753}$, lấy dư khi chia 3233</td><td>588</td></tr>
+          <tr><td>kiểm chữ ký 588</td><td>$588^{17}$, lấy dư khi chia 3233</td><td>$\hl{65}$ = số ban đầu ✓</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Làm thử với số nhỏ. Để ký số 65, lấy 65 mũ 2753 rồi lấy dư khi chia 3233, được chữ ký 588. Để kiểm, lấy 588 mũ 17 rồi lấy dư khi chia 3233, ra đúng 65, nên chữ ký hợp lệ."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: chứng chỉ, tổ chức cấp, chuỗi tin cậy"
+    steps:
+      - show: |
+          <table class="t"><tr><th>khái niệm</th><th>nghĩa</th></tr>
+          <tr><td><b>chứng chỉ</b></td><td>tờ khai “khoá công khai này thuộc về tên miền này”, có <b>chữ ký</b> của một tổ chức cấp</td></tr>
+          <tr><td><b>tổ chức cấp</b></td><td>bên ký chứng chỉ; chứng chỉ của nó lại do bên khác ký</td></tr>
+          <tr><td><b>gốc tin cậy</b></td><td>danh sách chứng chỉ gốc có sẵn trong hệ điều hành, trình duyệt</td></tr></table>
+          <div class="chain"><span class="n">trang (nganhang.vn)</span><span class="a">được ký bởi →</span><span class="n">trung gian</span><span class="a">được ký bởi →</span><span class="n">gốc có sẵn trong máy</span></div>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Bảng giới thiệu ba khái niệm. Chứng chỉ là một tờ khai rằng khoá công khai này thuộc về tên miền này, có chữ ký của một tổ chức cấp. Tổ chức cấp là bên ký chứng chỉ, và chứng chỉ của nó lại do bên khác ký. Gốc tin cậy là một danh sách chứng chỉ gốc có sẵn trong hệ điều hành và trình duyệt. Chuỗi đi từ chứng chỉ của trang, được ký bởi một tổ chức trung gian, tổ chức này lại được ký bởi một gốc có sẵn trong máy."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Chuỗi chữ ký neo vào kho gốc trong máy"
+    checks:
+      - "[alg.toy_key(n)[:2] for n in ('trang', 'trung_gian', 'goc')] == [(8633, 5), (4757, 13), (3233, 17)]"
+    steps:
+      - show: |
+          <div><svg width="1500" height="370" viewBox="0 0 1500 370"><g fill="#1f2937"><rect x="40" y="90" width="340" height="120" rx="10" fill="#f3f4f6" stroke="#6b7280" stroke-width="3"/><text x="210" y="144" text-anchor="middle" font-size="26">nganhang.vn</text><text x="210" y="176" text-anchor="middle" font-size="22" fill="#4b5563">khoá (8633, 5)</text><text x="210" y="240" text-anchor="middle" font-size="21">ký bởi: trung gian</text><rect x="580" y="90" width="340" height="120" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="750" y="144" text-anchor="middle" font-size="26">trung gian</text><text x="750" y="176" text-anchor="middle" font-size="22" fill="#4b5563">khoá (4757, 13)</text><text x="750" y="240" text-anchor="middle" font-size="21">ký bởi: gốc</text><rect x="1095" y="50" width="390" height="215" rx="12" fill="none" stroke="#059669" stroke-width="3" stroke-dasharray="12 8"/><text x="1290" y="38" text-anchor="middle" font-size="22" fill="#059669" font-weight="bold">kho gốc tin cậy trong máy</text><rect x="1120" y="90" width="340" height="120" rx="10" fill="#d1fae5" stroke="#059669" stroke-width="3"/><text x="1290" y="144" text-anchor="middle" font-size="26">gốc</text><text x="1290" y="176" text-anchor="middle" font-size="22" fill="#4b5563">khoá (3233, 17)</text><line x1="578" y1="150" x2="382" y2="150" stroke="#1f2937" stroke-width="3"/><polygon points="382,150 397,144 397,156" fill="#1f2937"/><text x="480" y="115" text-anchor="middle" font-size="20">khoá trung gian</text><text x="480" y="138" text-anchor="middle" font-size="20">kiểm chữ ký</text><line x1="1118" y1="150" x2="922" y2="150" stroke="#1f2937" stroke-width="3"/><polygon points="922,150 937,144 937,156" fill="#1f2937"/><text x="1020" y="115" text-anchor="middle" font-size="20">khoá gốc</text><text x="1020" y="138" text-anchor="middle" font-size="20">kiểm chữ ký</text><text x="210" y="310" text-anchor="middle" font-size="21" fill="#b91c1c">sửa tên sau khi ký</text><text x="210" y="338" text-anchor="middle" font-size="21" fill="#b91c1c">→ chữ ký sai</text><text x="750" y="310" text-anchor="middle" font-size="21" fill="#b91c1c">máy chủ không gửi</text><text x="750" y="338" text-anchor="middle" font-size="21" fill="#b91c1c">→ đứt chuỗi</text><text x="1290" y="310" text-anchor="middle" font-size="21" fill="#b91c1c">gốc không có trong kho</text><text x="1290" y="338" text-anchor="middle" font-size="21" fill="#b91c1c">→ không neo được</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ chuỗi ba chứng chỉ, mỗi chứng chỉ mang một khoá công khai. Chữ ký trên chứng chỉ trang được kiểm bằng khoá của trung gian, chữ ký trên chứng chỉ trung gian được kiểm bằng khoá của gốc. Gốc nằm trong khung đứt nét, tức kho gốc tin cậy có sẵn trong máy, đó là chỗ neo của cả chuỗi. Chữ đỏ phía dưới là ba chỗ chuỗi có thể gãy, sửa tên, thiếu trung gian, và gốc không có trong kho."
+
+  - id: example
+    kind: example
+    title: "Kiểm từng mắt xích"
+    checks:
+      - "(lambda c, r: alg.chain_verify(c, r))(*alg.toy_cert_chain()) == (True, 'hợp lệ')"
+      - "(lambda c, r: alg.chain_verify(c, r))(*alg.toy_cert_chain(True)) == (False, 'chữ ký của “nganhang-gia.vn” sai') and alg.chain_verify(alg.toy_cert_chain()[0], {})[0] is False"
+    steps:
+      - show: |
+          <p><b>Bước 1 — mắt xích đầu</b> (chứng chỉ trang, khoá trung gian $n = 4757$, khoá công khai 13):</p>
+          <table class="t"><tr><th>việc</th><th>kết quả</th></tr>
+          <tr><td>băm (tên, khoá trang), lấy dư khi chia 4757</td><td>88</td></tr>
+          <tr><td>chữ ký 4113: $4113^{13}$, lấy dư khi chia 4757</td><td>88 — khớp ✓</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước một, kiểm mắt xích đầu, chứng chỉ trang, bằng khoá công khai của trung gian. Băm tên và khoá của trang rồi lấy dư khi chia 4757, được 88. Lấy chữ ký 4113 mũ 13 rồi lấy dư khi chia 4757, cũng ra 88, nên mắt xích này khớp."
+      - show: |
+          <p><b>Bước 2 — mắt xích thứ hai</b> (chứng chỉ trung gian, khoá gốc $n = 3233$, khoá công khai 17):</p>
+          <table class="t"><tr><th>việc</th><th>kết quả</th></tr>
+          <tr><td>băm (tên, khoá trung gian), lấy dư khi chia 3233</td><td>2813</td></tr>
+          <tr><td>chữ ký 1142: $1142^{17}$, lấy dư khi chia 3233</td><td>2813 — khớp ✓; gốc có trong kho → <b class="green">hợp lệ</b></td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước hai, kiểm mắt xích thứ hai, chứng chỉ trung gian, bằng khoá công khai của gốc. Băm tên và khoá của trung gian rồi lấy dư khi chia 3233, được 2813. Chữ ký 1142 mũ 17 lấy dư cũng ra 2813, và gốc có trong kho, nên cả chuỗi hợp lệ."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — hai chuỗi hỏng:</b></p>
+          <table class="t"><tr><th>tình huống (khoá đồ chơi)</th><th>kết quả kiểm</th></tr>
+          <tr><td>kẻ giả sửa tên thành <code>nganhang-gia.vn</code> sau khi ký</td><td class="red">băm mới lấy dư ra 548 ≠ 88: chữ ký của chứng chỉ trang sai</td></tr>
+          <tr><td>chuỗi đúng nhưng máy không có gốc “goc” trong kho</td><td class="red">không tìm thấy người ký</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước ba, thử hai chuỗi hỏng. Kẻ giả sửa tên thành một tên miền khác sau khi ký, băm mới lấy dư ra 548, khác 88, nên chữ ký của chứng chỉ trang sai. Chuỗi đúng nhưng máy không có gốc đó trong kho thì không tìm thấy người ký."
+      - show: |
+          <p><b>Bước 4 — ngoài chữ ký</b>, phải kiểm: <b>tên miền</b> khớp đúng trang đang mở, chứng chỉ <b>còn hạn</b>, chưa bị <b>thu hồi</b>.</p>
+        say: "Bước bốn, chữ ký đúng vẫn chưa đủ. Ngoài chữ ký, còn phải kiểm tên miền khớp đúng trang đang mở, chứng chỉ còn hạn, và chưa bị thu hồi."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác"
+    checks:
+      - "(lambda c: pow(c[0][3], 13, 4757) == int(__import__('hashlib').sha256(b'nganhang.vn|8633|5').hexdigest(), 16) % 4757 == 88 and pow(c[1][3], 17, 3233) == 2813 and c[0][3] == 4113 and c[1][3] == 1142)(alg.toy_cert_chain()[0])"
+      - "int(__import__('hashlib').sha256(b'nganhang-gia.vn|8633|5').hexdigest(), 16) % 4757 == 548 and 13 * 1777 == 23101 == 5 * 4620 + 1 and 66 * 70 == 4620 and alg.toy_key('trung_gian')[2] == 1777"
+      - "sum(pow(s, 13, 4757) == 548 for s in range(4757)) == 1"
+    steps:
+      - show: |
+          <table class="t"><tr><th>con số</th><th>cách khác</th><th>kết quả</th></tr>
+          <tr><td>88 và 548</td><td>tự băm chuỗi “tên, n, khoá” bằng thư viện băm, lấy dư khi chia 4757</td><td>88 và 548 ✓</td></tr>
+          <tr><td>khoá trung gian hợp lệ</td><td>$13 \times 1777 = 23101 = 5 \times 4620 + 1$, với $4620 = 66 \times 70$</td><td>dư 1 ✓</td></tr>
+          <tr><td>kẻ giả cần chữ ký cho 548</td><td>máy thử hết 4757 chữ ký có thể</td><td>đúng $\hl{1}$ chữ ký hợp, phải biết khoá bí mật ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.4"]
+        say: "Kiểm bằng đường khác. Tự băm chuỗi gồm tên, n và khoá bằng thư viện băm, rồi lấy dư khi chia 4757, ta được đúng 88 cho tên thật và 548 cho tên giả. Khoá trung gian hợp lệ vì 13 nhân 1777 bằng 23101, chia 4620 dư 1. Máy thử hết 4757 chữ ký có thể, chỉ đúng 1 chữ ký cho ra 548, và muốn tìm nó nhanh thì phải biết khoá bí mật. Với khoá thật dài hàng trăm chữ số, thử hết là không thể."
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, từ người mới tới người đã đi làm"
+    checks:
+      - "(lambda keys: (sum(k == keys[0] for k in keys), 1))(['K'] * 20) == (20, 1) and len(set(f'K{i}' for i in range(20))) == 20"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Tắt kiểm tra chứng chỉ “cho chạy được” <b class="red">(mở cửa cho kẻ đứng giữa)</b>
+          <br><span class="note">Mã hoá vẫn chạy, nhưng với <b>bất kỳ ai</b>. Môi trường thử nghiệm dùng chứng chỉ thử nghiệm với gốc thử nghiệm riêng, không tắt kiểm tra.</span></div>
+        say: "Lỗi thứ nhất, tắt kiểm tra chứng chỉ cho chạy được. Mã hoá vẫn chạy, nhưng là với bất kỳ ai, nên môi trường thử nghiệm phải dùng chứng chỉ thử nghiệm với gốc thử nghiệm riêng, không tắt kiểm tra."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Kiểm chữ ký mà quên kiểm tên miền <b class="red">(chứng chỉ thật của người khác)</b>
+          <br><span class="note">Kẻ xấu có chứng chỉ hợp lệ cho tên miền của chính hắn. Nếu không so tên miền, ứng dụng chấp nhận chứng chỉ đó cho trang ngân hàng.</span></div>
+        say: "Lỗi thứ hai, kiểm chữ ký mà quên kiểm tên miền. Kẻ xấu có chứng chỉ hợp lệ cho tên miền của chính hắn, nếu không so tên miền thì ứng dụng chấp nhận chứng chỉ đó cho trang ngân hàng."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Để chứng chỉ hết hạn <b class="red">(tự ngừng dịch vụ)</b>
+          <br><span class="note">Chứng chỉ hết hạn là điểm hỏng đơn ẩn (SAR): mọi khách bị chặn cùng lúc. Gia hạn tự động và cảnh báo trước nhiều tuần.</span></div>
+        say: "Lỗi thứ ba, để chứng chỉ hết hạn. Chứng chỉ hết hạn là một điểm hỏng đơn ẩn, mọi khách bị chặn cùng lúc, nên hãy gia hạn tự động và cảnh báo trước nhiều tuần."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4.</b> Dùng chung một chứng chỉ và một khoá bí mật cho mọi máy chủ <b class="red">(lộ một, hỏng tất cả)</b>
+          <br><span class="note">Chép cùng khoá bí mật lên nhiều máy cho tiện. Một máy bị chiếm là kẻ xấu giả được mọi máy, và phải thu hồi, thay khoá ở tất cả. Người làm nghề cấp mỗi dịch vụ một khoá riêng, chứng chỉ ngắn hạn, thay tự động.</span></div>
+          <table class="t"><tr><th>cách cấp khoá</th><th>số máy chủ</th><th>một máy bị chiếm → phải thay khoá ở</th></tr>
+          <tr><td>chung một khoá</td><td>20</td><td class="red">20 máy</td></tr>
+          <tr><td>mỗi máy một khoá</td><td>20</td><td class="green">$\hl{1}$ máy</td></tr></table>
+        focus: [1, 1, 1, 2, "2.2", "2.3"]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, là dùng chung một chứng chỉ và một khoá bí mật cho mọi máy chủ. Người ta chép cùng khoá bí mật lên nhiều máy cho tiện. Khi đó một máy bị chiếm là kẻ xấu giả được mọi máy, và phải thu hồi, thay khoá ở tất cả. Bảng xét 20 máy chủ. Dùng chung một khoá, một máy bị chiếm thì phải thay khoá ở cả 20 máy. Mỗi máy một khoá thì chỉ thay ở đúng 1 máy, nên người làm nghề cấp khoá riêng, chứng chỉ ngắn hạn, và thay tự động."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.chain_verify(alg.toy_cert_chain()[0][:1], alg.toy_cert_chain()[1])[0] is False"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Máy chủ chỉ gửi chứng chỉ của trang, quên gửi chứng chỉ trung gian. Kiểm chuỗi có qua không? Vì sao?</td></tr>
+          <tr><td>2</td><td>Một ứng dụng nội bộ báo “chứng chỉ không tin cậy”. Hai cách xử lý đúng là gì?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, máy chủ chỉ gửi chứng chỉ của trang, quên gửi chứng chỉ trung gian. Kiểm chuỗi có qua không, và vì sao? Câu hai, một ứng dụng nội bộ báo chứng chỉ không tin cậy. Hai cách xử lý đúng là gì? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <table class="t"><tr><th>mắt xích</th><th>cần khoá nào để kiểm</th><th>máy có không?</th></tr>
+          <tr><td>chứng chỉ trang</td><td>khoá trung gian (4757, 13), nằm <b>trong</b> chứng chỉ trung gian</td><td class="red">không — máy chủ không gửi</td></tr></table>
+          <p>① <b>Không qua</b>: đứt chuỗi ngay mắt xích đầu.</p>
+        focus: [1, "1.2", 2]
+        say: "Đáp án câu một, đi từng mắt xích. Chứng chỉ trang cần khoá của trung gian để kiểm, mà khoá đó nằm trong chứng chỉ trung gian, thứ máy chủ không gửi. Vì vậy chuỗi bị đứt ngay mắt xích đầu, và kiểm không qua."
+      - show: |
+          <p>Sửa: máy chủ phải gửi kèm cả chuỗi (trang + trung gian).</p>
+          <p>② Lấy chứng chỉ từ tổ chức cấp được tin; hoặc với hệ nội bộ, thêm gốc nội bộ của công ty vào kho tin cậy của các máy quản lý — không bao giờ tắt kiểm tra.</p>
+        focus: [1, 2, 2]
+        say: "Cách sửa là máy chủ phải gửi kèm cả chuỗi, gồm chứng chỉ trang và chứng chỉ trung gian. Câu hai, lấy chứng chỉ từ một tổ chức cấp được tin. Hoặc với hệ nội bộ, thêm gốc nội bộ của công ty vào kho tin cậy của các máy được quản lý, và không bao giờ tắt kiểm tra."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">chứng chỉ: khoá công khai thuộc tên miền</span><span class="a">→</span>
+          <span class="n">chuỗi chữ ký về một gốc tin cậy</span><span class="a">→</span>
+          <span class="n">kiểm tên miền, hạn, thu hồi</span><span class="a">→</span>
+          <span class="n">không bao giờ tắt kiểm tra</span></div>
+        say: "Tổng kết lại, chứng chỉ nói khoá công khai này thuộc tên miền này. Chuỗi chữ ký phải dẫn về một gốc tin cậy, phải kiểm cả tên miền, hạn dùng và thu hồi, và không bao giờ tắt kiểm tra."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> mã hoá trả lời “ai nghe lén được?”, chứng chỉ trả lời “mình đang nói chuyện với ai?”. Thiếu câu thứ hai thì câu thứ nhất vô nghĩa.</div>
+        say: "Điều cần mang theo, mã hoá trả lời câu ai nghe lén được, còn chứng chỉ trả lời câu mình đang nói chuyện với ai. Thiếu câu thứ hai thì câu thứ nhất vô nghĩa."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 10): <b>hàm băm mật mã</b> và tấn công ngày sinh.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 10, ta học hàm băm mật mã và tấn công ngày sinh. Hẹn gặp bạn ở bài tiếp theo."

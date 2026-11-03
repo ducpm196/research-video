@@ -1,0 +1,196 @@
+id: L01
+course: SEC
+series: "SEC · An toàn thông tin"
+title: "Bài 1 — Lưu mật khẩu: băm, muối, hàm băm chậm"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/sec.yaml L01; audit/sec/verify_sec.py L01; OWASP Password Storage Cheat Sheet (đọc 2026-10-28); NIST SP 800-63B (2017, cập nhật 2024), mục 5.1.1.2; RFC 8018 (PBKDF2); DMS bài 9 (tổ hợp)"
+assumes: [arith, power, frac, approx]
+# Quy ước: không gian 8 chữ thường = 26⁸; tốc độ đoán băm nhanh 10¹⁰ lần/s, hàm băm chậm 10⁴ lần/s (CỠ ĐỘ LỚN giả định cho ví dụ, phụ thuộc
+#   phần cứng). alg.hash_password = PBKDF2-HMAC-SHA256 thư viện chuẩn, hiện 16 ký tự hex đầu. PBKDF2 chỉ trên màn hình; lời đọc “hàm băm chậm”.
+objectives:
+  - "Giải thích vì sao không lưu mật khẩu dạng rõ hay băm nhanh"
+  - "Giải thích vai trò của muối"
+  - "Tính thời gian thử hết một không gian mật khẩu"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Cơ sở dữ liệu bị lộ: 21 giây cho mọi mật khẩu 8 chữ"
+    checks:
+      - "round(alg.search_time_s(26, 8, 1e10), 1) == 20.9"
+    steps:
+      - show: |
+          <p>Bảng người dùng bị lộ. Mật khẩu được lưu bằng một hàm băm <b>nhanh</b>. Máy đoán của kẻ xấu thử $10^{10}$ mật khẩu mỗi giây: mọi mật khẩu 8 chữ thường bị thử hết trong $\hl{20{,}9}$ giây.</p>
+          <div class="box key">Hôm nay: <b>lưu mật khẩu</b> đúng cách — băm chậm, có muối — để một lần lộ dữ liệu không thành thảm hoạ.</div>
+        focus: [1, 1, 2]
+        say: "Chào bạn, bảng người dùng bị lộ, và mật khẩu được lưu bằng một hàm băm nhanh. Máy đoán của kẻ xấu thử 10 mũ 10 mật khẩu mỗi giây, nên mọi mật khẩu 8 chữ thường bị thử hết trong 20 phẩy 9 giây. Hôm nay ta học cách lưu mật khẩu đúng, băm chậm và có muối, để một lần lộ dữ liệu không thành thảm hoạ."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: quy tắc nhân, chia cho tốc độ, đổi giây ra ngày"
+    checks:
+      - "26 * 26 == 676 and 676 / 100 == 6.76"
+      - "24 * 3600 == 86400 and 172800 / 86400 == 2"
+    steps:
+      - show: |
+          <table class="t"><tr><th>điều sẽ dùng</th><th>ví dụ</th></tr>
+          <tr><td>quy tắc nhân: mỗi vị trí chọn độc lập thì nhân số lựa chọn</td><td>2 chữ thường: $26 \cdot 26 = 676$ khả năng; 8 chữ: $26^8$</td></tr>
+          <tr><td>thời gian thử hết = số khả năng chia tốc độ</td><td>676 khả năng, 100 lần mỗi giây → $\frac{676}{100} = 6{,}76$ giây</td></tr></table>
+        introduces: [cdot]
+        focus: [1, "1.2", "1.3"]
+        say: "Trước hết, ôn hai điều bài này sẽ dùng. Ở khoá Toán rời rạc, quy tắc nhân nói mỗi vị trí chọn độc lập thì nhân số lựa chọn, 2 chữ thường cho 26 nhân 26 bằng 676 khả năng. Thời gian thử hết bằng số khả năng chia cho tốc độ, 676 khả năng với 100 lần mỗi giây thì mất 6 phẩy 76 giây."
+      - show: |
+          <p>Đổi giây ra ngày: một ngày có $24 \cdot 3600 = 86\,400$ giây. Ví dụ $172\,800$ giây $= \frac{172\,800}{86\,400} = \hl{2}$ ngày.</p>
+        say: "Điều thứ ba là đổi giây ra ngày. Một ngày có 24 nhân 3600, bằng 86 nghìn 400 giây, nên 172 nghìn 800 giây chia cho 86 nghìn 400 là đúng 2 ngày."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: băm, muối, hàm băm chậm"
+    steps:
+      - show: |
+          <table class="t"><tr><th>khái niệm</th><th>nghĩa</th></tr>
+          <tr><td><b>băm</b></td><td>hàm một chiều: từ mật khẩu tính ra chuỗi cố định, không tính ngược được; đăng nhập thì băm lại và so</td></tr>
+          <tr><td><b>muối</b></td><td>chuỗi ngẫu nhiên riêng cho <b>mỗi</b> người, ghép vào trước khi băm: hai người cùng mật khẩu → hai giá trị băm khác nhau</td></tr>
+          <tr><td><b>hàm băm chậm</b></td><td>cố ý tốn thời gian (lặp hàng trăm nghìn lần, hoặc tốn bộ nhớ): người dùng đợi vài phần trăm giây, kẻ đoán chậm đi hàng triệu lần</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Bảng giới thiệu ba khái niệm. Băm là hàm một chiều, từ mật khẩu tính ra một chuỗi cố định mà không tính ngược được, khi đăng nhập thì băm lại và so. Muối là một chuỗi ngẫu nhiên riêng cho mỗi người, ghép vào trước khi băm, để hai người cùng mật khẩu cho hai giá trị băm khác nhau. Hàm băm chậm cố ý tốn thời gian, lặp hàng trăm nghìn lần hoặc tốn bộ nhớ, nên người dùng chỉ đợi vài phần trăm giây mà kẻ đoán chậm đi hàng triệu lần."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Bảng lưu không chứa mật khẩu"
+    steps:
+      - show: |
+          <div><svg width="1500" height="400" viewBox="0 0 1500 400"><g fill="#1f2937"><rect x="40" y="70" width="240" height="90" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="160" y="123" text-anchor="middle" font-size="26">mật khẩu</text><rect x="40" y="230" width="240" height="90" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="160" y="269" text-anchor="middle" font-size="26">muối</text><text x="160" y="301" text-anchor="middle" font-size="22" fill="#4b5563">riêng từng người</text><rect x="420" y="140" width="320" height="120" rx="10" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="580" y="194" text-anchor="middle" font-size="26">hàm băm chậm</text><text x="580" y="226" text-anchor="middle" font-size="22" fill="#4b5563">lặp nhiều vòng</text><rect x="880" y="140" width="300" height="120" rx="10" fill="#d1fae5" stroke="#059669" stroke-width="3"/><text x="1030" y="194" text-anchor="middle" font-size="26">bảng lưu</text><text x="1030" y="226" text-anchor="middle" font-size="22" fill="#4b5563">muối + giá trị băm</text><rect x="1290" y="140" width="180" height="120" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="1380" y="194" text-anchor="middle" font-size="26">so khớp</text><text x="1380" y="226" text-anchor="middle" font-size="22" fill="#4b5563">khi đăng nhập</text><line x1="280" y1="115" x2="418" y2="180" stroke="#1f2937" stroke-width="3"/><polygon points="418,180 402,179 407,168" fill="#1f2937"/><line x1="280" y1="275" x2="418" y2="220" stroke="#1f2937" stroke-width="3"/><polygon points="418,220 407,231 402,220" fill="#1f2937"/><line x1="740" y1="200" x2="878" y2="200" stroke="#1f2937" stroke-width="3"/><polygon points="878,200 863,206 863,194" fill="#1f2937"/><line x1="1180" y1="200" x2="1288" y2="200" stroke="#1f2937" stroke-width="3"/><polygon points="1288,200 1273,206 1273,194" fill="#1f2937"/><text x="1470" y="110" text-anchor="end" font-size="22" fill="#2a78d6">đăng nhập: băm lại rồi so</text><text x="1030" y="330" text-anchor="middle" font-size="22" fill="#b91c1c">kẻ lấy được bảng: không thấy mật khẩu,</text><text x="1030" y="360" text-anchor="middle" font-size="22" fill="#b91c1c">mỗi lần đoán phải chạy lại hàm chậm</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ đường đi của mật khẩu khi đăng ký. Mật khẩu ghép với muối riêng của người đó, đi qua hàm băm chậm màu cam, và chỉ muối cùng giá trị băm được ghi vào bảng lưu. Khi đăng nhập, máy chủ băm lại mật khẩu vừa gõ với đúng muối đó rồi so với giá trị đã lưu. Kẻ lấy được bảng không thấy mật khẩu nào, mỗi lần đoán phải tự chạy lại hàm chậm."
+
+  - id: example
+    kind: example
+    title: "Nhanh hay chậm: 21 giây hay 242 ngày"
+    checks:
+      - "round(alg.search_time_s(26, 8, 1e10), 1) == 20.9 and round(alg.search_time_s(26, 8, 1e4) / 86400) == 242 and 26 ** 8 == 208827064576"
+      - "alg.hash_password('matkhau123', b'muoi-A', 1000) == 'da5a72b54dd74dba' and alg.hash_password('matkhau123', b'muoi-B', 1000) == '6967938f6d0f7237'"
+    steps:
+      - show: |
+          <p><b>Bước 1 — đếm khả năng:</b> 8 chữ thường, mỗi vị trí 26 lựa chọn:</p>
+          <p>$26^8 = 208\,827\,064\,576 \approx \hl{2{,}09 \cdot 10^{11}}$ khả năng.</p>
+        focus: [1, 2]
+        say: "Bước một, đếm số khả năng của mật khẩu 8 chữ thường, mỗi vị trí có 26 lựa chọn. Theo quy tắc nhân, 26 mũ 8 bằng khoảng 2 phẩy 09 nhân 10 mũ 11 khả năng."
+      - show: |
+          <p><b>Bước 2 — băm nhanh</b>, kẻ đoán thử $10^{10}$ lần mỗi giây:</p>
+          <table class="t"><tr><th>cách lưu</th><th>tốc độ đoán</th><th>thử hết</th></tr>
+          <tr><td>băm nhanh</td><td>$10^{10}$ lần/s</td><td>$\frac{2{,}09 \cdot 10^{11}}{10^{10}} = \hl{20{,}9}$ giây</td></tr></table>
+        focus: [1, "2.2"]
+        say: "Bước hai, với băm nhanh, kẻ đoán thử 10 mũ 10 lần mỗi giây. Lấy 2 phẩy 09 nhân 10 mũ 11 chia 10 mũ 10, ta được 20 phẩy 9 giây để thử hết."
+      - show: |
+          <p><b>Bước 3 — hàm băm chậm</b>, chỉ còn $10^4$ lần mỗi giây:</p>
+          <table class="t"><tr><th>cách lưu</th><th>tốc độ đoán</th><th>thử hết</th></tr>
+          <tr><td>hàm băm chậm</td><td>$10^4$ lần/s</td><td>$2{,}09 \cdot 10^{7}$ giây, chia $86\,400$ ≈ $\hl{242}$ ngày</td></tr></table>
+        focus: [1, "2.2", "2.2"]
+        say: "Bước ba, hàm băm chậm chỉ cho kẻ đoán 10 mũ 4 lần mỗi giây. Thời gian thử hết là 2 phẩy 09 nhân 10 mũ 7 giây. Chia cho 86 nghìn 400 giây mỗi ngày, ta được khoảng 242 ngày."
+      - clear: true
+        show: |
+          <p><b>Bước 4 — muối:</b> cùng mật khẩu <code>matkhau123</code>, hai người, hai muối:</p>
+          <table class="t"><tr><th>người</th><th>muối</th><th>16 ký tự đầu của giá trị băm</th></tr>
+          <tr><td>người A</td><td><code>muoi-A</code></td><td><code>da5a72b54dd74dba</code></td></tr>
+          <tr><td>người B</td><td><code>muoi-B</code></td><td><code>6967938f6d0f7237</code></td></tr></table>
+          <p>Kẻ xấu phải đoán <b>riêng từng người</b>, không dùng được một bảng tra sẵn cho tất cả.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Bước bốn, xét muối, hai người cùng dùng một mật khẩu nhưng có hai muối khác nhau. Bảng ghi 16 ký tự đầu của giá trị băm với muối A. Với muối B, giá trị băm khác hẳn ngay từ ký tự đầu. Vì vậy kẻ xấu phải đoán riêng từng người, không dùng được một bảng tra sẵn cho tất cả."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác"
+    checks:
+      - "round(20.9 * 10 ** 6 / 86400) == 242 and round(alg.search_time_s(26, 8, 1e10) * 1e6 / 86400) == 242"
+      - "round(2.09e11 / 1e10, 1) == 20.9 and 11 - 10 == 1"
+      - "alg.hash_password('matkhau123', b'muoi-A', 1000) == __import__('hashlib').pbkdf2_hmac('sha256', b'matkhau123', b'muoi-A', 1000).hex()[:16] == 'da5a72b54dd74dba'"
+    steps:
+      - show: |
+          <table class="t"><tr><th>con số</th><th>cách khác</th><th>kết quả</th></tr>
+          <tr><td>20,9 giây</td><td>trừ số mũ: $10^{11}$ chia $10^{10}$ còn $10^1$, nên $2{,}09 \cdot 10$</td><td>20,9 ✓</td></tr>
+          <tr><td>242 ngày</td><td>chậm hơn đúng $10^6$ lần: $20{,}9 \cdot 10^6$ giây, chia $86\,400$</td><td>242 ✓</td></tr>
+          <tr><td>muối A, băm lần nữa</td><td>máy chạy lại hàm băm chậm với cùng muối</td><td>vẫn <code>da5a72b5…</code> ✓: đăng nhập so được</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Kiểm bằng đường khác. Chia 10 mũ 11 cho 10 mũ 10 chỉ cần trừ số mũ, còn 10 mũ 1, nên 2 phẩy 09 nhân 10 bằng 20 phẩy 9 giây. Hàm chậm chậm hơn đúng 10 mũ 6 lần, 20 phẩy 9 nhân 10 mũ 6 giây chia cho 86 nghìn 400 cũng ra 242 ngày. Chạy lại hàm băm với cùng muối A vẫn ra đúng giá trị cũ, nên lần đăng nhập sau so được."
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, từ người mới tới người đã đi làm"
+    checks:
+      - "round(alg.search_time_s(26, 8, 1e10), 1) == 20.9 and round(alg.search_time_s(26, 8, 1e4) / 86400) == 242"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Mã hoá mật khẩu thay vì băm <b class="red">(giải ngược được)</b>
+          <br><span class="note">Mã hoá thì có khoá giải ngược: ai giữ khoá (hoặc lấy được khoá) đọc được mọi mật khẩu. Mật khẩu chỉ cần <b>so</b>, không bao giờ cần <b>đọc lại</b>.</span></div>
+        say: "Lỗi thứ nhất, mã hoá mật khẩu thay vì băm. Mã hoá thì có khoá để giải ngược, ai giữ hoặc lấy được khoá là đọc được mọi mật khẩu. Mật khẩu chỉ cần so, không bao giờ cần đọc lại."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Dùng một muối chung cho cả hệ thống <b class="red">(mất tác dụng)</b>
+          <br><span class="note">Muối chung thì những ai cùng mật khẩu vẫn cùng giá trị băm, và một bảng tra dựng một lần dùng cho mọi người. Muối phải ngẫu nhiên, riêng từng tài khoản (lưu cạnh giá trị băm).</span></div>
+        say: "Lỗi thứ hai, dùng một muối chung cho cả hệ thống. Muối chung thì những ai cùng mật khẩu vẫn cùng giá trị băm, và một bảng tra dựng một lần dùng được cho mọi người. Muối phải ngẫu nhiên và riêng cho từng tài khoản, lưu ngay cạnh giá trị băm."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Tự viết hàm băm mật khẩu <b class="red">(sai chi tiết)</b>
+          <br><span class="note">Dùng hàm đã được chuẩn hoá và kiểm định (các hàm băm chậm có trong thư viện chuẩn), đặt số vòng lặp theo khuyến nghị hiện hành, và tăng dần theo thời gian.</span></div>
+        say: "Lỗi thứ ba, tự viết hàm băm mật khẩu. Hãy dùng hàm đã được chuẩn hoá và kiểm định, có sẵn trong thư viện chuẩn, đặt số vòng lặp theo khuyến nghị hiện hành, và tăng dần theo thời gian."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4.</b> Đổi sang hàm băm chậm nhưng để nguyên tài khoản cũ <b class="red">(nhóm yếu nhất quyết định)</b>
+          <br><span class="note">Chỉ băm lại khi người dùng đăng nhập thì ai lâu không đăng nhập vẫn nằm ở băm nhanh. Người làm nghề <b>bọc ngay</b> giá trị băm cũ bằng hàm băm chậm cho mọi tài khoản, rồi dần thay hẳn khi người dùng đăng nhập.</span></div>
+          <table class="t"><tr><th>nhóm tài khoản (8 chữ thường)</th><th>đang lưu bằng</th><th>thử hết</th></tr>
+          <tr><td>đã đăng nhập lại sau khi nâng cấp</td><td>hàm băm chậm</td><td>≈ 242 ngày</td></tr>
+          <tr><td>chưa đăng nhập lại</td><td class="red">vẫn băm nhanh</td><td class="red">$\hl{20{,}9}$ giây</td></tr></table>
+        focus: [1, 1, 1, "2.2", "2.3"]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, là đổi sang hàm băm chậm nhưng để nguyên tài khoản cũ. Nếu chỉ băm lại khi người dùng đăng nhập, ai lâu không đăng nhập vẫn nằm ở băm nhanh. Người làm nghề bọc ngay giá trị băm cũ bằng hàm băm chậm cho mọi tài khoản, rồi dần thay hẳn khi người dùng đăng nhập. Bảng cho thấy nhóm đã đăng nhập lại cần khoảng 242 ngày để thử hết. Nhóm chưa đăng nhập lại vẫn chỉ cần 20 phẩy 9 giây, và bảng bị lộ thì nhóm yếu nhất này bị lộ trước."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "round(alg.search_time_s(62, 10, 1e10) / 86400 / 365) == 3 and round(alg.search_time_s(10, 6, 1e10) * 1e6) == 100"
+      - "round(62 ** 10 / 1e17, 2) == 8.39 and round(62 ** 10 / 1e10 / 1e7, 2) == 8.39 and 86400 * 365 == 31536000 and round(62 ** 10 / 1e10 / 31536000, 2) == 2.66"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Mã PIN 6 chữ số, băm nhanh $10^{10}$ lần/s: thử hết trong bao lâu?</td></tr>
+          <tr><td>2</td><td>10 ký tự từ 62 ký tự (chữ hoa, thường, số), cùng tốc độ: thử hết khoảng bao nhiêu năm?</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, mã PIN 6 chữ số được băm nhanh, kẻ xấu thử 10 mũ 10 lần mỗi giây, thử hết trong bao lâu? Câu hai, mật khẩu 10 ký tự lấy từ 62 ký tự gồm chữ hoa, chữ thường và số, cùng tốc độ đó, thử hết khoảng bao nhiêu năm? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <p>① Mỗi vị trí 10 chữ số → $10^6$ khả năng.</p>
+          <p>Chia tốc độ: $\frac{10^6}{10^{10}} = 10^{-4}$ giây — $\hl{0{,}1}$ mi li giây: PIN không bao giờ được bảo vệ chỉ bằng băm.</p>
+        focus: [1, 2, 2]
+        say: "Đáp án câu một, mỗi vị trí có 10 chữ số, nên có 10 mũ 6 khả năng. Chia cho tốc độ, 10 mũ 6 chia 10 mũ 10 bằng 10 mũ âm 4 giây, tức 0 phẩy 1 mi li giây. Vậy mã PIN không bao giờ được bảo vệ chỉ bằng băm."
+      - show: |
+          <p>② $62^{10} \approx 8{,}39 \cdot 10^{17}$ khả năng; chia $10^{10}$ → $8{,}39 \cdot 10^{7}$ giây.</p>
+          <p>Một năm $= 86\,400 \cdot 365 = 31\,536\,000$ giây → $\frac{8{,}39 \cdot 10^{7}}{31\,536\,000} \approx 2{,}66$, tức khoảng $\hl{3}$ năm với băm nhanh; dùng hàm băm chậm thì gấp thêm hàng triệu lần.</p>
+        focus: [1, 1, 2, 2]
+        say: "Câu hai, 62 mũ 10 bằng khoảng 8 phẩy 39 nhân 10 mũ 17 khả năng. Chia cho 10 mũ 10, ta được 8 phẩy 39 nhân 10 mũ 7 giây. Một năm có 86 nghìn 400 nhân 365, bằng 31 triệu 536 nghìn giây, nên thời gian là khoảng 2 phẩy 66, tức khoảng 3 năm với băm nhanh. Dùng hàm băm chậm thì con số đó còn gấp thêm hàng triệu lần."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">băm, không mã hoá</span><span class="a">→</span>
+          <span class="n">muối riêng từng người</span><span class="a">→</span>
+          <span class="n">hàm băm chậm làm kẻ đoán chậm hàng triệu lần</span><span class="a">→</span>
+          <span class="n">dùng hàm chuẩn, tăng số vòng theo thời gian</span></div>
+        say: "Tổng kết lại, mật khẩu phải được băm chứ không mã hoá, có muối riêng từng người, và dùng hàm băm chậm để kẻ đoán chậm đi hàng triệu lần. Hãy dùng hàm chuẩn, và tăng số vòng lặp theo thời gian."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> hãy thiết kế như thể cơ sở dữ liệu <b>sẽ</b> bị lộ. Câu hỏi là khi đó kẻ xấu mất bao lâu để dùng được nó.</div>
+        say: "Điều cần mang theo, hãy thiết kế như thể cơ sở dữ liệu sẽ bị lộ. Câu hỏi là khi đó kẻ xấu mất bao lâu để dùng được nó."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 2): <b>độ mạnh mật khẩu</b> và entropy.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 2, ta học về độ mạnh mật khẩu và entropy. Hẹn gặp bạn ở bài tiếp theo."

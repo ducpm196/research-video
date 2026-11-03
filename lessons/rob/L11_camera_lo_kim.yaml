@@ -1,0 +1,214 @@
+id: L11
+course: ROB
+series: "ROB · Robot tự hành"
+title: "Bài 11 — Thị giác cho robot: mô hình camera lỗ kim và hiệu chuẩn"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/rob.yaml L11; audit/rob/verify_rob.py L11; R. Hartley, A. Zisserman, Multiple View Geometry in Computer Vision (bản 2, 2004), chương 6 (camera lỗ kim); Z. Zhang, A Flexible New Technique for Camera Calibration (2000); RBM bài 3 (toạ độ thuần nhất), bài 16 (bình phương tối thiểu)"
+assumes: [arith, frac, cdot, sub]
+# Quy ước: hệ toạ độ camera, Z hướng ra trước, X sang phải, Y xuống dưới; tiêu cự f = 800 điểm ảnh, tâm ảnh (640, 360) cho ảnh 1280 × 720 — SỐ MINH HOẠ.
+#   u = f·X/Z + cx, v = f·Y/Z + cy (alg.pinhole). Hai camera song song cách nhau B = 0,12 m: Z = f·B / d (alg.stereo_depth). Không xét méo ống kính.
+objectives:
+  - "Chiếu điểm 3D lên ảnh"
+  - "Hiểu vì sao một camera không đo được độ sâu"
+  - "Tính độ sâu từ hai camera và sai số của nó"
+asr_reviewed:
+  - {sentence: "Hộp xa lệch 1 mét và cách 8 mét, tỉ số cũng là 0 phẩy 125.", reason: "ASR chép “Hộp xa lệch 1m và cách 8m, tỷ số cũng là 0,125.” (0.789): đơn vị mét, ASR viết ký hiệu “m”; “tỉ” ASR viết chính tả “tỷ” (cùng âm); “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: không (trong “không phẩy” → “”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Câu ba, chuyển vế công thức độ sâu, khoảng cách hai camera bằng Z nhân d chia f, tức 8 nhân 24 chia 800, bằng 0 phẩy 24 mét, gấp đôi khoảng cách cũ.", reason: "ASR chép “Câu 3, chuyển với công thức độ sâu, khoảng cách 2 camera bằng giác nhân dê chia s, tức 8 nhân 24 chia 800, bằng 0,24m, gấp đôi khoảng cách cũ.” (0.923): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; đơn vị mét, ASR viết ký hiệu “m”; lệch âm/thanh thuần Việt: vế/với — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Ống kính góc rộng làm điểm ở mép ảnh lệch hàng chục điểm ảnh, nên phải hiệu chuẩn hệ số méo và khử méo trước khi dùng phép chiếu lỗ kim.", reason: "ASR chép “Ông kính gốc động làm điểm ở mép ảnh là hàng chục điểm ảnh, nên phải hiệu chuẩn hệ số máu và khử máu trước khi dùng phép chiếu lộ kim.” (0.774): lệch âm/thanh thuần Việt: ống/ông, góc rộng/gốc động, lệch/là, méo/máu, méo/máu, lỗ/lộ — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Hộp nhỏ ở gần, hộp to ở xa: cùng một ảnh"
+    checks:
+      - "alg.pinhole(0.5, 0, 4, 800, 640, 360) == alg.pinhole(1, 0, 8, 800, 640, 360) == (740.0, 360.0)"
+    steps:
+      - show: |
+          <p>Camera của robot thấy một cái hộp ở cột điểm ảnh 740. Đó là hộp cách 4 m lệch phải 0,5 m — hay hộp cách 8 m lệch phải 1 m? Cả hai cho <b>đúng cùng một điểm ảnh</b>. Một camera ghi hướng, không ghi khoảng cách.</p>
+          <div class="box key">Hôm nay: <b>mô hình camera lỗ kim</b> — từ điểm 3D ra điểm ảnh, vì sao mất độ sâu, và cách lấy lại độ sâu bằng hai camera.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, camera của robot thấy một cái hộp ở cột điểm ảnh 740. Đó là hộp cách 4 mét lệch phải 0 phẩy 5 mét, hay hộp cách 8 mét lệch phải 1 mét? Cả hai cho đúng cùng một điểm ảnh, vì một camera ghi hướng, không ghi khoảng cách. Hôm nay ta học mô hình camera lỗ kim, từ điểm ba chiều ra điểm ảnh, vì sao mất độ sâu, và cách lấy lại độ sâu bằng hai camera."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: tam giác đồng dạng và toạ độ điểm ảnh"
+    checks:
+      - "0.5 / 4 == 1 / 8 == 0.125 and 1 / 8 == 0.125 and 800 * 0.125 == 100"
+      - "1280 / 2 == 640 and 720 / 2 == 360 and 640 + 100 == 740"
+    steps:
+      - show: |
+          <table class="t"><tr><th>vật</th><th>lệch ngang</th><th>cách xa</th><th>tỉ số lệch chia xa</th></tr>
+          <tr><td>hộp gần</td><td>0,5 m</td><td>4 m</td><td>$\frac{0{,}5}{4} = 0{,}125$</td></tr>
+          <tr><td>hộp xa</td><td>1 m</td><td>8 m</td><td>$\frac{1}{8} = 0{,}125$</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Trước hết, ta ôn tam giác đồng dạng, hai tam giác cùng hình dạng thì tỉ số các cạnh bằng nhau. Hộp gần lệch ngang 0 phẩy 5 mét và cách 4 mét, tỉ số là 0 phẩy 125. Hộp xa lệch 1 mét và cách 8 mét, tỉ số cũng là 0 phẩy 125. Cùng tỉ số nghĩa là hai hộp nằm trên cùng một hướng nhìn từ mắt ta."
+      - show: |
+          <table class="t"><tr><th>ảnh 1280 × 720 điểm ảnh</th><th>ví dụ số</th></tr>
+          <tr><td>cột $u$ đếm từ trái sang, hàng $v$ đếm từ trên xuống</td><td>góc trên trái là $(0, 0)$</td></tr>
+          <tr><td>tâm ảnh ở giữa mỗi chiều</td><td>$(\frac{1280}{2}, \frac{720}{2}) = (640, 360)$</td></tr>
+          <tr><td>lệch phải 100 điểm ảnh so với tâm</td><td>cột $640 + 100 = 740$</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Điều thứ hai là cách đánh số điểm ảnh, ảnh rộng 1280 và cao 720 điểm ảnh. Cột u đếm từ trái sang, hàng v đếm từ trên xuống, góc trên bên trái là 0, 0. Tâm ảnh nằm giữa mỗi chiều, tức cột 640 và hàng 360. Một điểm lệch phải 100 điểm ảnh so với tâm thì nằm ở cột 640 cộng 100, bằng 740."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: tham số trong, tham số ngoài, phép chiếu"
+    steps:
+      - show: |
+          <p><b>Phép chiếu lỗ kim</b>: điểm $(X, Y, Z)$ trong hệ của camera tới điểm ảnh $u = f \frac{X}{Z} + c_x$, $v = f \frac{Y}{Z} + c_y$ — chia cho $Z$ là chỗ độ sâu biến mất.</p>
+          <table class="t"><tr><th>nhóm tham số</th><th>gồm</th><th>tìm bằng</th></tr>
+          <tr><td><b>tham số trong</b></td><td>tiêu cự $f$ (điểm ảnh), tâm ảnh $(c_x, c_y)$, hệ số méo ống kính</td><td>hiệu chuẩn với bảng ô bàn cờ chụp nhiều góc</td></tr>
+          <tr><td><b>tham số ngoài</b></td><td>phép quay và tịnh tiến từ hệ của robot sang hệ của camera</td><td>đo lắp đặt hoặc hiệu chuẩn chung với robot</td></tr></table>
+          <p><b>Hai camera song song</b> cách nhau $B$: một điểm lệch $d$ điểm ảnh giữa hai ảnh → $Z = \frac{f B}{d}$.</p>
+        focus: [1, 1, 2, "2.2", "2.3", 3]
+        say: "Phép chiếu lỗ kim đưa điểm X, Y, Z trong hệ của camera tới điểm ảnh u bằng f nhân X chia Z cộng c x, và v bằng f nhân Y chia Z cộng c y. Phép chia cho Z chính là chỗ độ sâu biến mất. Bảng chia tham số thành hai nhóm. Tham số trong gồm tiêu cự tính bằng điểm ảnh, tâm ảnh, và hệ số méo ống kính, tìm bằng cách hiệu chuẩn với bảng ô bàn cờ chụp ở nhiều góc. Tham số ngoài là phép quay và tịnh tiến từ hệ của robot sang hệ của camera, tìm bằng đo lắp đặt hoặc hiệu chuẩn chung với robot. Với hai camera song song cách nhau B, một điểm lệch d điểm ảnh giữa hai ảnh thì có độ sâu Z bằng f nhân B chia d."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Một tia sáng qua lỗ kim chứa cả hộp gần lẫn hộp xa"
+    checks:
+      - "alg.pinhole(0.5, 0, 4, 800, 640, 360)[0] == alg.pinhole(1, 0, 8, 800, 640, 360)[0] == 740 and alg.pinhole(0.5, 0, 2, 800, 640, 360)[0] == 840"
+      - "800 * 0.5 / 4 + 640 == 740 and 800 * 0.12 / 4 == 24 and 800 * 0.12 / 24 == 4"
+    steps:
+      - show: |
+          <div><svg width="1500" height="470" viewBox="0 0 1500 470"><line x1="150" y1="200" x2="1440" y2="200" stroke="#d1d5db" stroke-width="2"/><line x1="300" y1="90" x2="300" y2="330" stroke="#1f2937" stroke-width="4"/><line x1="150" y1="200" x2="1350" y2="350" stroke="#eb6834" stroke-width="4"/><line x1="150" y1="200" x2="450" y2="275" stroke="#059669" stroke-width="3" stroke-dasharray="10 8"/><circle cx="150" cy="200" r="10" fill="#1f2937"/><rect x="732" y="257" width="36" height="36" fill="#2a78d6"/><rect x="1320" y="320" width="60" height="60" fill="#2a78d6"/><circle cx="450" cy="275" r="12" fill="#059669"/><circle cx="300" cy="219" r="9" fill="#eb6834"/><circle cx="300" cy="238" r="8" fill="#059669"/><g font-size="22" fill="#1f2937"><text x="150" y="176" text-anchor="middle">lỗ kim</text><text x="312" y="80">mặt ảnh</text><text x="1440" y="186" text-anchor="end" fill="#6b7280">trục nhìn thẳng (độ sâu Z)</text><text x="750" y="245" text-anchor="middle" fill="#2a78d6">hộp nhỏ: 4 m, lệch 0,5 m</text><text x="1310" y="408" text-anchor="end" fill="#2a78d6">hộp to: 8 m, lệch 1 m</text><text x="474" y="315" fill="#059669">điểm 2 m, lệch 0,5 m: tia khác, cột 840</text><text x="700" y="455" fill="#eb6834">hai hộp cùng một tia → cùng cột 740: ảnh không biết hộp nào</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ camera nhìn từ trên xuống, ánh sáng đi qua lỗ kim màu đen rồi rơi lên mặt ảnh. Hộp nhỏ cách 4 mét lệch 0 phẩy 5 mét và hộp to cách 8 mét lệch 1 mét nằm trên cùng một tia cam. Vì vậy cả hai rơi đúng cùng một chấm trên mặt ảnh, tức cùng cột 740, và ảnh không biết đó là hộp nào. Điểm xanh lục cách 2 mét lệch 0 phẩy 5 mét nằm trên tia khác, dốc hơn, nên rơi xa tâm hơn, ở cột 840."
+      - clear: true
+        show: |
+          <p>Tam giác đồng dạng: lệch trên ảnh chia tiêu cự = lệch ngoài đời chia độ sâu.</p>
+          $$\frac{u - c_x}{f} = \frac{X}{Z} \;\Rightarrow\; u = f \cdot \frac{X}{Z} + c_x$$
+          <p>Làm thử: $800 \cdot \frac{0{,}5}{4} + 640 = 100 + 640 = 740$. Hai camera cách $B$: điểm lệch giữa hai ảnh $d = \frac{f B}{Z}$, nên $Z = \frac{f B}{d}$; ở 4 m: $d = \frac{800 \cdot 0{,}12}{4} = 24$.</p>
+        introduces: [implies]
+        focus: [1, 2, 2, 3, 3]
+        say: "Công thức chiếu đến từ tam giác đồng dạng, độ lệch trên ảnh chia tiêu cự bằng độ lệch ngoài đời chia độ sâu. Mũi tên kép đọc là suy ra, nhân hai vế với f rồi cộng c x thì được u. Đó chính là công thức chiếu, và phép chia cho Z là chỗ độ sâu biến mất. Làm thử, 800 nhân 0 phẩy 5 chia 4 bằng 100, cộng 640 được 740. Với hai camera cách nhau B, một điểm ở 4 mét lệch giữa hai ảnh 800 nhân 0 phẩy 12 chia 4, bằng 24 điểm ảnh, đảo lại ta tính được Z."
+
+  - id: example
+    kind: example
+    title: "Chiếu một điểm và đo độ sâu bằng hai camera"
+    checks:
+      - "alg.pinhole(0.5, 0, 4, 800, 640, 360) == (740.0, 360.0) and alg.pinhole(0.5, -0.3, 2, 800, 640, 360) == (840.0, 240.0)"
+      - "alg.stereo_depth(800, 0.12, 24) == 4.0 and [round(alg.stereo_depth(800, 0.12, d), 2) for d in (23, 25)] == [4.17, 3.84]"
+    steps:
+      - show: |
+          <p><b>Bước 1 — chiếu điểm (0,5; 0; 4)</b> với $f = 800$, tâm (640, 360):</p>
+          $$u = 800 \cdot \frac{0{,}5}{4} + 640 = \hl{740}, \qquad v = 800 \cdot \frac{0}{4} + 360 = 360$$
+        focus: [1, 2]
+        say: "Bước một, chiếu điểm 0 phẩy 5, 0, 4 với tiêu cự 800 và tâm ảnh 640, 360. Điểm 0 phẩy 5, 0, 4 cho u bằng 800 nhân 0 phẩy 5 chia 4 cộng 640, bằng 740, và v bằng 360."
+      - show: |
+          <p><b>Bước 2 — chiếu điểm (0,5; −0,3; 2)</b>, ở gần gấp đôi:</p>
+          $$u = 800 \cdot \frac{0{,}5}{2} + 640 = 840, \qquad v = 800 \cdot \frac{-0{,}3}{2} + 360 = 240$$
+        focus: [1, 2]
+        say: "Bước hai, chiếu một điểm ở gần hơn, chỉ cách 2 mét. Điểm 0 phẩy 5, âm 0 phẩy 3, 2 ở gần gấp đôi, nên cho 840, 240, lệch tâm gấp đôi."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — độ sâu từ hai camera</b>, $B = 0{,}12$ m, điểm lệch $d = 24$ điểm ảnh:</p>
+          $$Z = \frac{f B}{d} = \frac{800 \cdot 0{,}12}{24} = \frac{96}{24} = \hl{4} \text{ m}$$
+        focus: [1, 2]
+        say: "Bước ba, dùng hai camera để lấy lại độ sâu. Với hai camera cách nhau 0 phẩy 12 mét và điểm lệch 24 điểm ảnh, độ sâu bằng 800 nhân 0 phẩy 12 chia 24, bằng 4 mét."
+      - show: |
+          <table class="t"><tr><th>Bước 4 — đo lệch sai 1 điểm ảnh</th><th>$Z = \frac{96}{d}$</th></tr>
+          <tr><td>$d = 23$</td><td>$\approx 4{,}17$ m</td></tr>
+          <tr><td>$d = 25$</td><td>$\approx 3{,}84$ m</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Bước bốn, xem độ sâu nhạy thế nào khi đo lệch sai chỉ 1 điểm ảnh. Nếu đo được 23 thì độ sâu thành khoảng 4 phẩy 17 mét. Nếu đo sai 1 điểm ảnh, độ sâu nằm trong khoảng 3 phẩy 84 tới 4 phẩy 17 mét."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: chiếu thẳng vào từng camera"
+    checks:
+      - "alg.pinhole(0.5, 0, 4, 800, 640, 360)[0] == 740 and round(alg.pinhole(0.5 - 0.12, 0, 4, 800, 640, 360)[0], 6) == 716 and 740 - 716 == 24"
+      - "alg.pinhole(1, 0, 8, 800, 640, 360)[0] == 740 and round(alg.pinhole(1 - 0.12, 0, 8, 800, 640, 360)[0], 6) == 728 and 740 - 728 == 12 and alg.stereo_depth(800, 0.12, 12) == 8.0"
+    steps:
+      - show: |
+          <table class="t"><tr><th>điểm</th><th>camera trái</th><th>camera phải (dời 0,12 m)</th><th>lệch $d$</th><th>$Z = \frac{96}{d}$</th></tr>
+          <tr><td>hộp nhỏ (0,5; 0; 4)</td><td>740</td><td>$800 \cdot \frac{0{,}38}{4} + 640 = 716$</td><td>24</td><td>4 m ✓</td></tr>
+          <tr><td>hộp to (1; 0; 8)</td><td>740</td><td>$800 \cdot \frac{0{,}88}{8} + 640 = 728$</td><td>12</td><td>8 m ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.3"]
+        say: "Kiểm bằng đường khác, không dùng công thức độ sâu mà chiếu điểm thẳng vào từng camera. Camera phải dời sang 0 phẩy 12 mét, nên hộp nhỏ chỉ còn lệch 0 phẩy 38 mét, rơi vào cột 716, lệch 24 so với 740, khớp với 4 mét. Hộp to rơi vào cột 728 ở camera phải, lệch 12, cho đúng 8 mét. Hai hộp cùng cột 740 trong một camera, nhưng camera thứ hai tách được chúng."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay mắc, từ người mới tới người đã đi làm"
+    checks:
+      - "[round(alg.stereo_depth(800, 0.12, d), 2) for d in (11, 12, 13)] == [8.73, 8.0, 7.38]"
+      - "800 / 2 == 400 and (640 / 2, 360 / 2) == (320, 180) and 24 / 2 == 12 and alg.stereo_depth(800, 0.12, 12) == 8.0 and alg.stereo_depth(400, 0.12, 12) == 4.0"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Tin độ sâu hai camera ở xa <b class="red">(sai số tăng theo bình phương)</b>
+          <br><span class="note">Ở 4 m, sai 1 điểm ảnh lệch khoảng ±0,17 m; ở 8 m ($d = 12$) lệch tới 7,38 … 8,73 m. Sai số độ sâu tăng gần theo $Z^2$ — xa thì cần khoảng cách hai camera lớn hơn hoặc cảm biến khác.</span></div>
+        say: "Lỗi thứ nhất, tin độ sâu hai camera ở xa, trong khi sai số tăng theo bình phương. Ở 4 mét, sai 1 điểm ảnh lệch khoảng 0 phẩy 17 mét, còn ở 8 mét thì độ sâu có thể từ 7 phẩy 38 tới 8 phẩy 73 mét. Sai số độ sâu tăng gần theo Z bình phương, nên ở xa cần khoảng cách hai camera lớn hơn, hoặc dùng cảm biến khác."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Bỏ qua méo ống kính <b class="red">(đường thẳng thành cong)</b>
+          <br><span class="note">Ống kính góc rộng làm điểm ở mép ảnh lệch hàng chục điểm ảnh. Hiệu chuẩn hệ số méo và khử méo trước khi dùng phép chiếu lỗ kim.</span></div>
+        say: "Lỗi thứ hai, bỏ qua méo ống kính, nên đường thẳng thành đường cong. Ống kính góc rộng làm điểm ở mép ảnh lệch hàng chục điểm ảnh, nên phải hiệu chuẩn hệ số méo và khử méo trước khi dùng phép chiếu lỗ kim."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Hiệu chuẩn một lần rồi thôi <b class="red">(camera bị va, tham số ngoài đổi)</b>
+          <br><span class="note">Một cú va làm camera xoay 1° là mọi vật ở 5 m lệch ≈ 9 cm. Kiểm định kỳ bằng một mốc cố định đã biết vị trí.</span></div>
+        say: "Lỗi thứ ba, hiệu chuẩn một lần rồi thôi, trong khi camera bị va làm tham số ngoài đổi. Một cú va làm camera xoay 1 độ là mọi vật ở 5 mét lệch khoảng 9 xen-ti-mét. Hãy kiểm định kỳ bằng một mốc cố định đã biết vị trí."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4.</b> Đổi độ phân giải ảnh mà giữ tham số trong cũ <b class="red">(độ sâu sai gấp đôi)</b>
+          <br><span class="note">Thu ảnh từ 1280 × 720 xuống 640 × 360 cho nhanh thì tiêu cự và tâm ảnh tính bằng điểm ảnh cũng giảm một nửa. Người làm nghề lưu tham số trong <b>kèm độ phân giải</b> đã hiệu chuẩn, và đổi tỉ lệ khi đổi ảnh.</span></div>
+          <table class="t"><tr><th>ảnh 640 × 360, điểm thật ở 4 m</th><th>$f$</th><th>tâm ảnh</th><th>$d$ đo được</th><th>$Z = \frac{f \cdot 0{,}12}{d}$</th></tr>
+          <tr><td>dùng tham số cũ (sai)</td><td>800</td><td>(640, 360)</td><td>12</td><td>8 m, sai gấp đôi</td></tr>
+          <tr><td>đổi tỉ lệ đúng</td><td>400</td><td>(320, 180)</td><td>12</td><td>4 m</td></tr></table>
+        focus: [1, 1, 1, "2.2", "2.3"]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, thu nhỏ ảnh cho chạy nhanh nhưng vẫn giữ tham số trong cũ. Thu ảnh từ 1280 nhân 720 xuống còn một nửa mỗi chiều thì tiêu cự và tâm ảnh tính bằng điểm ảnh cũng giảm một nửa. Người làm nghề lưu tham số trong kèm độ phân giải đã hiệu chuẩn, và đổi tỉ lệ khi đổi ảnh. Bảng cho thấy hậu quả, điểm thật ở 4 mét giờ chỉ lệch 12 điểm ảnh, mà dùng tiêu cự cũ 800 thì tính ra 8 mét, sai gấp đôi. Đổi tiêu cự thành 400 thì lại đúng 4 mét."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.pinhole(-1, 0, 5, 800, 640, 360) == (480.0, 360.0) and alg.stereo_depth(800, 0.12, 12) == 8.0 and round(5 * __import__('math').sin(__import__('math').radians(1)), 3) == 0.087"
+      - "-1 / 5 == -0.2 and 800 * -0.2 == -160 and 800 * 0.12 == 96 and round(8 * 24 / 800, 2) == 0.24 and round(800 * 0.24) == 192 and round(alg.stereo_depth(800, 0.24, 24), 6) == 8"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề (cùng $f = 800$, tâm (640, 360))</th></tr>
+          <tr><td>1</td><td>Điểm (−1; 0; 5) m chiếu tới điểm ảnh nào?</td></tr>
+          <tr><td>2</td><td>Hai camera như ví dụ thấy một điểm lệch 12 điểm ảnh. Nó cách bao xa?</td></tr>
+          <tr><td>3</td><td>Quyết định: muốn vật ở 8 m vẫn lệch 24 điểm ảnh như vật ở 4 m, đặt hai camera cách nhau bao nhiêu?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, điểm âm 1, 0, 5 mét chiếu tới điểm ảnh nào, với cùng tham số? Câu hai, hai camera như ví dụ thấy một điểm lệch 12 điểm ảnh, nó cách bao xa? Câu ba là một quyết định, muốn vật ở 8 mét vẫn lệch 24 điểm ảnh như vật ở 4 mét, thì đặt hai camera cách nhau bao nhiêu? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① Tỉ số $\frac{X}{Z} = \frac{-1}{5} = -0{,}2$; nhân tiêu cự: $800 \cdot (-0{,}2) = -160$; cộng tâm:</p>
+          $$u = -160 + 640 = \hl{480}, \qquad v = 0 + 360 = 360$$
+        focus: [1, 2]
+        say: "Câu một làm từng bước, tỉ số X chia Z bằng âm 1 chia 5, tức âm 0 phẩy 2, nhân tiêu cự 800 được âm 160. Đáp án câu một, u bằng 800 nhân âm 1 chia 5 cộng 640, bằng 480, và v bằng 360, tức bên trái tâm ảnh."
+      - show: |
+          $$Z = \frac{800 \cdot 0{,}12}{12} = \frac{96}{12} = \hl{8} \text{ m}$$
+        say: "Câu hai, tử số vẫn là 800 nhân 0 phẩy 12, bằng 96, chỉ có mẫu số đổi thành 12. Câu hai, Z bằng 800 nhân 0 phẩy 12 chia 12, bằng 8 mét, độ chênh giảm một nửa thì khoảng cách gấp đôi."
+      - clear: true
+        show: |
+          <p>③ Từ $Z = \frac{f B}{d}$ ta có $B = \frac{Z \cdot d}{f} = \frac{8 \cdot 24}{800} = \hl{0{,}24}$ m — gấp đôi khoảng cách cũ.</p>
+          $$\text{thử lại: } Z = \frac{800 \cdot 0{,}24}{24} = \frac{192}{24} = 8 \text{ m}$$
+        focus: [1, 2]
+        say: "Câu ba, chuyển vế công thức độ sâu, khoảng cách hai camera bằng Z nhân d chia f, tức 8 nhân 24 chia 800, bằng 0 phẩy 24 mét, gấp đôi khoảng cách cũ. Thử lại, 800 nhân 0 phẩy 24 chia 24 bằng 192 chia 24, đúng 8 mét."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">$u = f \frac{X}{Z} + c_x$</span><span class="a">→</span>
+          <span class="n">chia cho $Z$: mất độ sâu</span><span class="a">→</span>
+          <span class="n">hai camera: $Z = \frac{f B}{d}$</span><span class="a">→</span>
+          <span class="n">hiệu chuẩn trong, ngoài; khử méo; kiểm định kỳ</span></div>
+        say: "Tổng kết lại, điểm ảnh u bằng f nhân X chia Z cộng c x, và phép chia cho Z làm mất độ sâu. Hai camera lấy lại độ sâu bằng f nhân B chia d. Hãy hiệu chuẩn tham số trong và ngoài, khử méo, và kiểm định kỳ."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> ảnh là một <b>hình chiếu</b> — nó giữ lại hướng nhưng bỏ đi một chiều; muốn biết chiều đó phải có thêm thông tin.</div>
+        say: "Điều cần mang theo, ảnh là một hình chiếu, nó giữ lại hướng nhưng bỏ đi một chiều, và muốn biết chiều đó thì phải có thêm thông tin."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 12): <b>an toàn và kiểm thử robot</b> — quãng dừng, mô phỏng và thực tế.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 12, ta học an toàn và kiểm thử robot, với quãng dừng, mô phỏng và thực tế. Hẹn gặp bạn ở bài tiếp theo."

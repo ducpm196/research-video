@@ -1,0 +1,247 @@
+id: L07
+course: CSA
+series: "CSA · Hệ thống máy tính"
+title: "Bài 7 — Tập lệnh và hợp ngữ: thanh ghi, nạp, lưu, nhảy"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/csa.yaml L07; audit/verify_plan_curricula.py CSA:L07 (máy ảo tools/checklib.run_asm chạy thật chương trình); D. Patterson, J. Hennessy, Computer Organization and Design (RISC-V), chương 2"
+assumes: [arith, sub, dots]
+# Quy ước: tập lệnh tí hon kiểu RISC, 3 toán hạng, thanh ghi r1, r2, r3: li (nạp hằng), add, addi (cộng hằng), ble (so sánh rồi nhảy
+#   nếu nhỏ hơn hoặc bằng), j (nhảy). Không phải tập lệnh của một chip cụ thể — đủ để thấy nguyên lý, và chạy được trên máy ảo trong checks.
+objectives:
+  - "Đọc một đoạn hợp ngữ có vòng lặp"
+  - "Phân biệt thanh ghi và bộ nhớ, lệnh nạp và lưu"
+  - "Đếm số lệnh thực thi của một vòng lặp"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Bộ xử lý thật sự làm gì?"
+    checks:
+      - "sum(range(1, 11)) == 55"
+    steps:
+      - show: |
+          <div class="code"><div>s = 0</div><div>for i in range(1, 11):</div><div>    s = s + i</div></div>
+          <p>Bộ xử lý không hiểu <code>for</code> hay biến <code>s</code>. Nó chỉ chạy từng <b>lệnh máy</b> rất đơn giản, lấy từ bộ nhớ, lần lượt.</p>
+        focus: [1, 2, 2]
+        say: "Chào bạn, đoạn mã ba dòng này cộng các số từ 1 đến 10 được 55. Nhưng bộ xử lý không hiểu vòng lặp hay biến s. Nó chỉ chạy lần lượt từng lệnh máy rất đơn giản lấy từ bộ nhớ."
+      - show: |
+          <div class="box key">Hôm nay: thanh ghi, các loại lệnh, và đoạn hợp ngữ tương ứng với vòng lặp trên — chạy thật trên một máy ảo nhỏ.</div>
+        say: "Hôm nay ta học thanh ghi, các loại lệnh máy, và đoạn hợp ngữ tương ứng với vòng lặp trên, chạy thật trên một máy ảo nhỏ."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: phép gán chạy từng bước, và tổng 1 đến n"
+    checks:
+      - "(lambda s=0: [s := s + i for i in (1, 2, 3)])() == [1, 3, 6]"
+      - "4 * 5 // 2 == 10 == 1 + 2 + 3 + 4"
+    steps:
+      - show: |
+          <table class="t"><tr><th>lượt</th><th>$i$</th><th>$s$ cũ</th><th>$s = s + i$</th></tr>
+          <tr><td>1</td><td>1</td><td>0</td><td>1</td></tr>
+          <tr><td>2</td><td>2</td><td>1</td><td>3</td></tr>
+          <tr><td>3</td><td>3</td><td>3</td><td>6</td></tr></table>
+        focus: [0, 0, "1.2", "1.3", "1.4"]
+        say: "Trước hết, ôn cách một phép gán chạy. Câu s bằng s cộng i nghĩa là lấy giá trị cũ của s, cộng i, rồi ghi đè kết quả vào s. Lượt một, s cũ bằng 0, cộng 1 được 1. Lượt hai, cộng 2 được 3. Lượt ba, cộng 3 được 6."
+      - show: |
+          <p>Tổng $1 + 2 + \dots + n$: ghép số đầu với số cuối, mỗi cặp bằng $n + 1$, có $\frac{n}{2}$ cặp.</p>
+          $$1 + 2 + 3 + 4 = \frac{4 \times 5}{2} = 10$$
+        focus: [1, 1, 2]
+        say: "Để kiểm kết quả vòng lặp cộng dồn, ta dùng công thức tổng từ 1 đến n. Ghép số đầu với số cuối, mỗi cặp bằng n cộng 1, và có n chia 2 cặp. Ví dụ 1 cộng 2 cộng 3 cộng 4 bằng 4 nhân 5 chia 2, bằng 10."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: thanh ghi và bốn loại lệnh"
+    steps:
+      - show: |
+          <p><b>Thanh ghi</b> (r1, r2, …): vài chục ô nhớ cực nhanh <b>bên trong</b> bộ xử lý. Mọi phép tính làm trên thanh ghi.</p>
+          <table class="t"><tr><th>loại</th><th>ví dụ</th><th>nghĩa</th></tr>
+          <tr><td>tính toán</td><td><code>add r1, r1, r2</code></td><td>r1 ← r1 + r2</td></tr>
+          <tr><td>hằng số</td><td><code>li r3, 10</code></td><td>r3 ← 10</td></tr>
+          <tr><td>nạp / lưu</td><td><code>lw r1, 0(r4)</code> / <code>sw</code></td><td>chép giữa bộ nhớ và thanh ghi</td></tr>
+          <tr><td>nhảy</td><td><code>ble r2, r3, lap</code></td><td>nếu r2 ≤ r3 thì nhảy về nhãn “lap”</td></tr></table>
+        introduces: [assign]
+        focus: [1, 1, "2.2", "2.3", "2.4", "2.5"]
+        say: "Thanh ghi là vài chục ô nhớ cực nhanh nằm bên trong bộ xử lý, đặt tên r1, r2 và cứ thế. Mọi phép tính đều làm trên thanh ghi. Lệnh tính toán, ví dụ cộng r1 với r2 rồi ghi vào r1, mũi tên trái nghĩa là gán giá trị mới. Lệnh nạp hằng, đặt r3 bằng 10. Lệnh nạp và lưu chép dữ liệu giữa bộ nhớ và thanh ghi. Lệnh nhảy, ví dụ nếu r2 nhỏ hơn hoặc bằng r3 thì nhảy về nhãn lap."
+
+  # ───────────────────────── 3. VÍ DỤ: VÒNG LẶP ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Bộ đếm chương trình trỏ vào bộ nhớ lệnh"
+    checks:
+      - "len(alg.SUM_1_TO_10) == 6 and alg.SUM_1_TO_10[3][0] == 'lap'"
+    steps:
+      - show: |
+          <div><svg width="1500" height="400" viewBox="0 0 1500 400"><defs><marker id="arP7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker><marker id="arQ7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#b91c1c"/></marker></defs><text x="420" y="28" font-size="24" text-anchor="middle" fill="#1f2937">bộ nhớ: các lệnh, mỗi ô một địa chỉ</text><rect x="230" y="40" width="380" height="48" fill="#ffffff" stroke="#1f2937" stroke-width="2"/><text x="258" y="72" font-size="22" text-anchor="middle" fill="#6b7280">0</text><text x="290" y="72" font-size="24" font-family="monospace" fill="#1f2937">li r1, 0</text><rect x="230" y="92" width="380" height="48" fill="#ffffff" stroke="#1f2937" stroke-width="2"/><text x="258" y="124" font-size="22" text-anchor="middle" fill="#6b7280">1</text><text x="290" y="124" font-size="24" font-family="monospace" fill="#1f2937">li r2, 1</text><rect x="230" y="144" width="380" height="48" fill="#ffffff" stroke="#1f2937" stroke-width="2"/><text x="258" y="176" font-size="22" text-anchor="middle" fill="#6b7280">2</text><text x="290" y="176" font-size="24" font-family="monospace" fill="#1f2937">li r3, 10</text><rect x="230" y="196" width="380" height="48" fill="#fde68a" stroke="#1f2937" stroke-width="2"/><text x="258" y="228" font-size="22" text-anchor="middle" fill="#6b7280">3</text><text x="290" y="228" font-size="24" font-family="monospace" fill="#1f2937">lap: add r1, r1, r2</text><rect x="230" y="248" width="380" height="48" fill="#ffffff" stroke="#1f2937" stroke-width="2"/><text x="258" y="280" font-size="22" text-anchor="middle" fill="#6b7280">4</text><text x="290" y="280" font-size="24" font-family="monospace" fill="#1f2937">addi r2, r2, 1</text><rect x="230" y="300" width="380" height="48" fill="#ffffff" stroke="#1f2937" stroke-width="2"/><text x="258" y="332" font-size="22" text-anchor="middle" fill="#6b7280">5</text><text x="290" y="332" font-size="24" font-family="monospace" fill="#1f2937">ble r2, r3, lap</text><path d="M230,330 C120,330 120,222 225,222" fill="none" stroke="#b91c1c" stroke-width="3" marker-end="url(#arQ7)"/><text x="40" y="380" font-size="22" fill="#b91c1c">nếu r2 ≤ r3: nhảy về địa chỉ 3</text><rect x="850" y="40" width="560" height="320" rx="16" fill="#e0f2fe" stroke="#1f2937" stroke-width="3"/><text x="1130" y="78" font-size="26" font-weight="bold" text-anchor="middle" fill="#1f2937">bộ xử lý</text><rect x="890" y="100" width="220" height="60" rx="8" fill="#fde68a" stroke="#1f2937" stroke-width="2"/><text x="1000" y="140" font-size="24" text-anchor="middle" fill="#1f2937">bộ đếm = 3</text><g font-size="24" fill="#1f2937"><rect x="890" y="190" width="160" height="50" fill="#ffffff" stroke="#1f2937" stroke-width="2"/><text x="910" y="224">r1 = 0</text><rect x="890" y="245" width="160" height="50" fill="#ffffff" stroke="#1f2937" stroke-width="2"/><text x="910" y="279">r2 = 1</text><rect x="890" y="300" width="160" height="50" fill="#ffffff" stroke="#1f2937" stroke-width="2"/><text x="910" y="334">r3 = 10</text><rect x="1160" y="215" width="200" height="110" rx="10" fill="#bbf7d0" stroke="#1f2937" stroke-width="2"/><text x="1260" y="262" text-anchor="middle">khối tính</text><text x="1260" y="296" text-anchor="middle">r1 + r2</text></g><line x1="1050" y1="270" x2="1155" y2="270" stroke="#1f2937" stroke-width="3" marker-end="url(#arP7)"/><path d="M885,130 C760,130 700,220 615,220" fill="none" stroke="#1f2937" stroke-width="3" marker-end="url(#arP7)"/><text x="700" y="130" font-size="22" fill="#1f2937">trỏ tới</text></svg></div>
+        focus: [1, 1, 1, 1, 1]
+        say: "Hình vẽ hai nơi. Bên trái là bộ nhớ chứa sáu lệnh của vòng lặp, mỗi lệnh nằm ở một địa chỉ từ 0 đến 5. Bên phải là bộ xử lý, có bộ đếm chương trình đang chỉ vào địa chỉ 3, ba thanh ghi r1, r2, r3, và khối tính. Bộ xử lý nạp lệnh ở địa chỉ 3, lấy r1 và r2 đưa vào khối tính, rồi ghi tổng trở lại r1. Mũi tên đỏ là lệnh nhảy, nó chỉ đổi bộ đếm về 3, và vòng lặp chính là chỗ đó."
+
+  - id: example
+    kind: example
+    title: "Vòng lặp cộng 1 đến 10 bằng hợp ngữ"
+    checks:
+      - "alg.run_asm(alg.SUM_1_TO_10)[0]['r1'] == 55"
+      - "alg.run_asm(alg.SUM_1_TO_10)[1] == 33 == 3 + 10 * 3"
+      - "[alg.run_asm(alg.SUM_1_TO_10[:2] + [(None, 'li', 'r3', k)] + alg.SUM_1_TO_10[3:])[0]['r1'] for k in (1, 2, 3, 9)] == [1, 3, 6, 45] and alg.run_asm(alg.SUM_1_TO_10[:2] + [(None, 'li', 'r3', 3)] + alg.SUM_1_TO_10[3:])[0]['r2'] == 4"
+      - "45 + 10 == 55 and not (11 <= 10)"
+    steps:
+      - show: |
+          <div class="code"><div>      li   r1, 0          # s = 0</div>
+          <div>      li   r2, 1          # i = 1</div>
+          <div>      li   r3, 10         # giới hạn</div>
+          <div>lap:  add  r1, r1, r2     # s = s + i</div>
+          <div>      addi r2, r2, 1      # i = i + 1</div>
+          <div>      ble  r2, r3, lap    # nếu i ≤ 10 thì quay lại</div></div>
+        focus: [["1.1", "1.2", "1.3"], "1.4", "1.5", "1.6", "1.6"]
+        say: "Ba lệnh đầu đặt s bằng 0, i bằng 1, và giới hạn bằng 10 vào ba thanh ghi. Lệnh có nhãn lap cộng i vào s. Lệnh tiếp theo tăng i thêm 1. Lệnh cuối so sánh i với 10, nếu chưa vượt thì nhảy về nhãn lap. Vòng lặp kết thúc khi i bằng 11."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>sau vòng</th><th>r1 (s)</th><th>r2 (i)</th><th>ble: $r2 \le 10$?</th></tr>
+          <tr><td>1</td><td>$0 + 1 = 1$</td><td>2</td><td>có → nhảy về lap</td></tr>
+          <tr><td>2</td><td>$1 + 2 = 3$</td><td>3</td><td>có → nhảy về lap</td></tr>
+          <tr><td>3</td><td>$3 + 3 = 6$</td><td>4</td><td>có → nhảy về lap</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Bước một, chạy tay ba vòng đầu. Vòng một, r1 bằng 0 cộng 1 bằng 1, r2 tăng lên 2, vì 2 không vượt 10 nên nhảy về lap. Vòng hai, r1 bằng 1 cộng 2 bằng 3, r2 lên 3. Vòng ba, r1 bằng 3 cộng 3 bằng 6, r2 lên 4, đúng như bảng phép gán ở phần chuẩn bị."
+      - show: |
+          <p><b>Bước 2.</b> Vòng thứ 10: r1 $= 45 + 10 = 55$, r2 $= 11$; lệnh ble so $11 \le 10$: sai → <b>không nhảy</b>, chương trình chạy tiếp xuống dưới và dừng.</p>
+        say: "Bước hai, xem vòng cuối, vòng thứ mười. Trước vòng này r1 bằng 45, cộng 10 được 55, r2 tăng lên 11. Lệnh so sánh 11 với 10, vì 11 lớn hơn 10 nên không nhảy, chương trình đi tiếp và dừng."
+      - show: |
+          <p><b>Bước 3.</b> Máy ảo chạy thật: r1 = $\hl{55}$; số lệnh đã chạy $= 3 + 10 \times 3 = \hl{33}$.</p>
+          <p class="note">Một vòng = 3 lệnh. Tập lệnh tách “so sánh” và “nhảy” thành hai lệnh (như x86) sẽ tốn 4 lệnh mỗi vòng.</p>
+        focus: [1, 1, 2]
+        say: "Bước ba, chạy thật trên máy ảo, thanh ghi r1 cuối cùng bằng 55. Số lệnh đã chạy là 3 lệnh khởi tạo cộng 10 vòng, mỗi vòng 3 lệnh, tổng 33 lệnh. Với tập lệnh tách so sánh và nhảy thành hai lệnh riêng, như họ chip x86, mỗi vòng sẽ tốn 4 lệnh."
+
+  - id: verify2
+    kind: check
+    title: "Tự kiểm: công thức tổng và đếm từng loại lệnh"
+    checks:
+      - "10 * 11 // 2 == 55 == alg.run_asm(alg.SUM_1_TO_10)[0]['r1']"
+      - "[alg.run_asm(alg.SUM_1_TO_10)[2].count(op) for op in ('li', 'add', 'addi', 'ble')] == [3, 10, 10, 10] and 3 + 10 + 10 + 10 == 33"
+    steps:
+      - show: |
+          $$1 + 2 + \dots + 10 = \frac{10 \times 11}{2} = 55\ ✓$$
+        say: "Kiểm bằng đường khác, ta không chạy vòng lặp mà dùng công thức tổng ở phần chuẩn bị, vì r1 cộng dồn đúng các số từ 1 đến 10. Một cộng 2 cộng cho tới 10 bằng 10 nhân 11 chia 2, bằng 55, khớp giá trị của r1."
+      - show: |
+          <table class="t"><tr><th>lệnh</th><th>li</th><th>add</th><th>addi</th><th>ble</th><th>tổng</th></tr>
+          <tr><td>số lần máy ảo chạy</td><td>3</td><td>10</td><td>10</td><td>10</td><td>$\hl{33}$ ✓</td></tr></table>
+        focus: [1, 1, 1]
+        say: "Với số lệnh, ta đếm thẳng từng loại trong nhật ký của máy ảo thay vì nhân. Lệnh nạp hằng chạy 3 lần, còn cộng, cộng hằng và so sánh nhảy mỗi loại chạy 10 lần, đúng một lần mỗi vòng. Cộng lại 3 cộng 10 cộng 10 cộng 10 bằng 33, khớp công thức 3 cộng 10 nhân 3."
+
+  - id: loadstore
+    kind: concept
+    title: "Vì sao phải nạp và lưu"
+    steps:
+      - show: |
+          <p>Biến trong chương trình nằm ở <b>bộ nhớ</b> (hàng tỉ ô). Thanh ghi chỉ có vài chục, nhưng nhanh hơn bộ nhớ hàng trăm lần.</p>
+          <p>Kiến trúc nạp–lưu: chỉ lệnh nạp và lưu được chạm vào bộ nhớ; phép tính chỉ làm trên thanh ghi.</p>
+          <div class="box key">Trình biên dịch cố giữ biến dùng nhiều trong thanh ghi — đó là một lý do mã đã biên dịch tối ưu chạy nhanh hơn nhiều.</div>
+        focus: [1, 1, 2, 3]
+        say: "Biến của chương trình nằm trong bộ nhớ, có hàng tỉ ô. Thanh ghi chỉ có vài chục, nhưng nhanh hơn bộ nhớ hàng trăm lần. Với kiến trúc nạp lưu, chỉ lệnh nạp và lệnh lưu được chạm vào bộ nhớ, còn mọi phép tính làm trên thanh ghi. Vì vậy trình biên dịch cố giữ các biến dùng nhiều trong thanh ghi, một lý do khiến mã đã tối ưu chạy nhanh hơn nhiều."
+
+  # ───────────────────────── 5. BỘ ĐẾM CHƯƠNG TRÌNH ─────────────────────────
+  - id: pc
+    kind: concept
+    title: "Bộ đếm chương trình và vòng nạp–giải mã–thực thi"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bước</th><th>việc làm</th></tr>
+          <tr><td>1. <b>Nạp lệnh</b></td><td>đọc lệnh ở địa chỉ mà bộ đếm chương trình đang trỏ tới</td></tr>
+          <tr><td>2. <b>Giải mã</b></td><td>xác định loại lệnh và các thanh ghi cần dùng</td></tr>
+          <tr><td>3. <b>Thực thi</b></td><td>tính, nạp/lưu, hoặc đổi bộ đếm chương trình (nếu là lệnh nhảy)</td></tr>
+          <tr><td>4. Sang lệnh sau</td><td>không nhảy thì bộ đếm chương trình trỏ sang lệnh <b>kế tiếp</b></td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bộ xử lý lặp mãi một vòng gồm bốn bước. Một, nạp lệnh ở địa chỉ mà bộ đếm chương trình đang trỏ tới. Hai, giải mã, xác định loại lệnh và các thanh ghi cần dùng. Ba, thực thi, tức là tính, nạp lưu, hoặc đổi bộ đếm chương trình nếu là lệnh nhảy. Bốn, nếu không nhảy thì bộ đếm chương trình trỏ sang lệnh kế tiếp."
+
+  # ───────────────────────── 6. TỰ KIỂM ─────────────────────────
+  - id: verify
+    kind: check
+    title: "Tự kiểm: ba thói quen"
+    checks:
+      - "alg.run_asm(alg.SUM_1_TO_10)[0]['r2'] == 11"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thói quen tự kiểm</th></tr>
+          <tr><td>Chạy tay vài vòng đầu, ghi giá trị mọi thanh ghi sau mỗi lệnh.</td></tr>
+          <tr><td>Kiểm điều kiện dừng ở vòng cuối: khi thoát, r2 phải bằng 11.</td></tr>
+          <tr><td>Đếm lệnh = lệnh ngoài vòng + số vòng × lệnh mỗi vòng.</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Tự kiểm bằng ba cách. Một, chạy tay vài vòng đầu, ghi giá trị mọi thanh ghi sau mỗi lệnh. Hai, kiểm điều kiện dừng ở vòng cuối, khi thoát vòng lặp thì r2 phải bằng 11. Ba, đếm lệnh bằng số lệnh ngoài vòng cộng số vòng nhân số lệnh mỗi vòng, vì mỗi vòng chạy lại đúng các lệnh đó."
+
+  # ───────────────────────── 7. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi người mới hay mắc"
+    checks:
+      - "sum(range(1, 10)) == 45 and sum(range(1, 11)) == 55"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Nghĩ một dòng mã nguồn là một lệnh máy <b class="red">(sai)</b>
+          <br><span class="note">Một dòng <code>for</code> thành nhiều lệnh. Số bước đếm trong khoá thuật toán là mô hình, không phải số lệnh thật.</span></div>
+        say: "Lỗi thứ nhất, nghĩ một dòng mã nguồn là một lệnh máy. Một dòng vòng lặp thành nhiều lệnh, và số bước đếm trong khoá thuật toán chỉ là mô hình, không phải số lệnh thật."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Lệch một ở điều kiện nhảy <b class="red">(sai)</b>
+          <br><span class="note">Dùng “nhỏ hơn hẳn” thay cho “nhỏ hơn hoặc bằng” thì vòng lặp bỏ mất số 10:</span>
+          $$1 + 2 + \dots + 9 = 45 \ne 55$$</div>
+        say: "Lỗi thứ hai, lệch một ở điều kiện nhảy. Dùng nhỏ hơn hẳn thay cho nhỏ hơn hoặc bằng thì vòng lặp bỏ mất số 10, và kết quả chỉ còn 45."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Nghĩ thanh ghi là “biến” có tên cố định <b class="red">(chưa đúng)</b>
+          <br><span class="note">Trình biên dịch gán biến vào thanh ghi theo từng đoạn mã; một thanh ghi chứa nhiều biến khác nhau theo thời gian.</span></div>
+        say: "Lỗi thứ ba, nghĩ mỗi thanh ghi là một biến có tên cố định. Trình biên dịch gán biến vào thanh ghi theo từng đoạn mã, nên một thanh ghi chứa nhiều biến khác nhau theo thời gian."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Nghĩ mọi lệnh tốn cùng thời gian <b class="red">(sai)</b>
+          <br><span class="note">Nạp từ bộ nhớ có thể chậm hơn phép cộng hàng trăm lần nếu dữ liệu không có sẵn gần bộ xử lý.</span></div>
+        say: "Lỗi thứ tư, nghĩ mọi lệnh tốn cùng thời gian. Một lệnh nạp từ bộ nhớ có thể chậm hơn phép cộng hàng trăm lần nếu dữ liệu không có sẵn ở gần bộ xử lý."
+
+  # ───────────────────────── 8. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.run_asm(alg.SUM_1_TO_10[:2] + [(None, 'li', 'r3', 100)] + alg.SUM_1_TO_10[3:])[0]['r1'] == 5050"
+      - "alg.run_asm(alg.SUM_1_TO_10[:2] + [(None, 'li', 'r3', 100)] + alg.SUM_1_TO_10[3:])[1] == 303"
+      - "100 * 101 == 10100 and 10100 // 2 == 5050 and 100 * 3 == 300 and 3 + 300 == 303 and 3 + 100 * 4 == 403"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Đổi <code>li r3, 10</code> thành <code>li r3, 100</code>. Cuối cùng r1 bằng bao nhiêu?</td></tr>
+          <tr><td>2</td><td>Chương trình mới chạy bao nhiêu lệnh?</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, đổi giới hạn trong r3 từ 10 thành 100, cuối cùng r1 bằng bao nhiêu? Câu hai, chương trình mới chạy bao nhiêu lệnh? Dừng video và làm ra giấy."
+        pause: 8
+      - show: |
+          <p>① Vòng chạy với $i = 1, 2, \dots, 100$, nên r1 là tổng từ 1 đến 100:</p>
+          $$\frac{100 \times 101}{2} = \frac{10100}{2} = \hl{5050}$$
+        focus: [1, 2]
+        say: "Đáp án câu một, giới hạn mới là 100 nên vòng lặp chạy với i từ 1 đến 100, và r1 là tổng từ 1 đến 100. Theo công thức, 100 nhân 101 bằng 10100, chia 2 được 5050."
+      - show: |
+          <table class="t"><tr><th>phần</th><th>số lệnh</th></tr>
+          <tr><td>khởi tạo</td><td>3</td></tr>
+          <tr><td>100 vòng × 3 lệnh</td><td>300</td></tr>
+          <tr><td>tổng</td><td>$\hl{303}$ — máy ảo cũng ra 303 ✓</td></tr>
+          <tr><td>nếu tách so sánh và nhảy: $3 + 100 \times 4$</td><td>403</td></tr></table>
+        focus: [0, "1.2", ["1.3", "1.4"], "1.5"]
+        say: "Câu hai, tách thành hai phần. Ba lệnh khởi tạo chỉ chạy một lần. Mỗi vòng có 3 lệnh, 100 vòng là 300 lệnh, cộng lại 303 lệnh, và máy ảo cũng đếm ra 303. Nếu tập lệnh phải tách so sánh và nhảy thành hai lệnh thì sẽ là 3 cộng 100 nhân 4, bằng 403 lệnh."
+
+  # ───────────────────────── 9. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">thanh ghi: ít mà nhanh</span><span class="a">→</span>
+          <span class="n">lệnh: tính, nạp/lưu, nhảy</span><span class="a">→</span>
+          <span class="n">vòng lặp = nhảy ngược có điều kiện</span><span class="a">→</span>
+          <span class="n">nạp – giải mã – thực thi</span></div>
+        say: "Tổng kết lại, thanh ghi ít nhưng rất nhanh. Lệnh máy gồm lệnh tính toán, nạp lưu và nhảy. Vòng lặp chỉ là một lệnh nhảy ngược có điều kiện. Bộ xử lý lặp mãi vòng nạp, giải mã, thực thi."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> mọi ngôn ngữ cấp cao cuối cùng thành chuỗi lệnh máy — hiểu tầng này giúp đọc được hiệu năng và lỗi ở tầng trên.</div>
+        say: "Điều cần mang theo, mọi ngôn ngữ cấp cao cuối cùng đều thành một chuỗi lệnh máy, và hiểu tầng này giúp ta đọc được hiệu năng và lỗi ở tầng trên."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 8): <b>hiệu năng bộ xử lý</b> — số lệnh, số chu kỳ mỗi lệnh và tần số xung nhịp.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 8, ta học cách đo hiệu năng bộ xử lý, bằng số lệnh, số chu kỳ mỗi lệnh và tần số xung nhịp. Hẹn gặp bạn ở bài tiếp theo."

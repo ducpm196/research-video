@@ -1,0 +1,204 @@
+id: L07
+course: DEN
+series: "DEN · Kỹ thuật dữ liệu"
+title: "Bài 7 — Chỉ mục ngược và tìm kiếm toàn văn: TF-IDF và BM25"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/den.yaml L07; audit/den/verify_den.py L07; S. Robertson, H. Zaragoza, The Probabilistic Relevance Framework: BM25 and Beyond (2009); C. Manning, P. Raghavan, H. Schütze, Introduction to Information Retrieval (2008), chương 1, 6"
+assumes: [arith, frac, log, cdot, approx, sub]
+# Quy ước: BM25 dạng Lucene — idf(t) = ln(1 + (N − n + 0,5)/(n + 0,5)), N số văn bản, n số văn bản chứa t; điểm của văn bản d:
+#   Σ idf · tf·(k1 + 1) / (tf + k1·(1 − b + b·|d| / độ dài trung bình)), k1 = 1,2, b = 0,75 (alg.bm25). Văn bản đã tách từ, không bỏ dấu.
+#   Tên TF-IDF, BM25 chỉ trên màn hình; lời đọc “công thức xếp hạng”.
+objectives:
+  - "Dựng chỉ mục ngược"
+  - "Tính điểm xếp hạng cho truy vấn ngắn"
+  - "Biết giới hạn của tìm theo từ khoá"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Tìm “mèo” trong một tỉ trang"
+    steps:
+      - show: |
+          <p>Tìm mọi văn bản chứa “mèo” bằng cách đọc từng văn bản: một tỉ trang là đọc cả kho. Máy tìm kiếm trả lời trong chưa đầy một giây — vì nó đã chuẩn bị sẵn <b>danh sách ngược</b>: với mỗi từ, những văn bản nào chứa nó. Còn câu hỏi thứ hai: trong hàng triệu kết quả, trang nào lên đầu?</p>
+          <div class="box key">Hôm nay: <b>chỉ mục ngược</b> để tìm nhanh, và <b>công thức xếp hạng</b> (BM25) để sắp kết quả.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, tìm mọi văn bản chứa từ mèo bằng cách đọc từng văn bản thì với một tỉ trang là phải đọc cả kho. Máy tìm kiếm trả lời trong chưa đầy một giây, vì nó đã chuẩn bị sẵn danh sách ngược, với mỗi từ là những văn bản nào chứa nó. Còn câu hỏi thứ hai, trong hàng triệu kết quả, trang nào lên đầu? Hôm nay ta học chỉ mục ngược để tìm nhanh, và công thức xếp hạng để sắp kết quả."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: lôgarit tự nhiên, trung bình, đếm từ"
+    checks:
+      - "math.log(1) == 0 and round(math.log(1.6), 3) == 0.47 and round(math.log(2), 3) == 0.693"
+      - "(3 + 2 + 4) / 3 == 3 and ['mèo', 'đen', 'mèo'].count('mèo') == 2"
+    steps:
+      - show: |
+          <table class="t"><tr><th>số $x$</th><th>1</th><th>1,6</th><th>2</th></tr>
+          <tr><td>$\ln x$</td><td>0</td><td>$\approx 0{,}470$</td><td>$\approx 0{,}693$</td></tr></table>
+          <p>$\ln$ (lôgarit tự nhiên): $x$ càng lớn thì $\ln x$ càng lớn, nhưng tăng <b>chậm dần</b>; $\ln 1 = 0$.</p>
+        focus: [1, 2, 2]
+        say: "Ở khoá Toán cho khoa học máy tính, ta đã gặp lôgarit tự nhiên. Bảng cho lôgarit tự nhiên của 1 bằng 0, của 1 phẩy 6 khoảng 0 phẩy 470, của 2 khoảng 0 phẩy 693. Số trong ngoặc càng lớn thì lôgarit càng lớn, nhưng tăng chậm dần."
+      - show: |
+          <table class="t"><tr><th>văn bản</th><th>tách thành từ</th><th>độ dài</th><th>số lần “mèo”</th></tr>
+          <tr><td>① mèo đen mèo</td><td>mèo | đen | mèo</td><td>3</td><td>2</td></tr>
+          <tr><td>② chó đen</td><td>chó | đen</td><td>2</td><td>0</td></tr>
+          <tr><td>③ mèo trắng chó con</td><td>mèo | trắng | chó | con</td><td>4</td><td>1</td></tr></table>
+          <p>Độ dài trung bình $= \frac{3 + 2 + 4}{3} = 3$.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Ta tách mỗi văn bản thành từ rồi đếm. Văn bản 1 có 3 từ, trong đó mèo xuất hiện 2 lần. Văn bản 2 có 2 từ, không có mèo, còn văn bản 3 có 4 từ và 1 lần mèo. Độ dài trung bình là 3 cộng 2 cộng 4, chia 3, bằng 3."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: chỉ mục ngược và công thức xếp hạng"
+    checks:
+      - "alg.inverted_index([['mèo', 'đen', 'mèo'], ['chó', 'đen'], ['mèo', 'trắng', 'chó', 'con']])['mèo'] == [(1, 2), (3, 1)]"
+    steps:
+      - show: |
+          <p>Ba văn bản: ① “mèo đen mèo” ② “chó đen” ③ “mèo trắng chó con”. <b>Chỉ mục ngược</b>: mèo → (①, 2 lần), (③, 1 lần); đen → ①, ②; chó → ②, ③.</p>
+          <p><b>Công thức xếp hạng</b> cộng cho mỗi từ truy vấn $t$:</p>
+          <p>$\text{idf}(t) \cdot \frac{\text{tf} \cdot (k_1 + 1)}{\text{tf} + k_1 \cdot (1 - b + b \cdot \frac{|d|}{\text{độ dài trung bình}})}$</p>
+          <table class="t"><tr><th>phần</th><th>ý nghĩa</th></tr>
+          <tr><td>$\text{idf}(t) = \ln(1 + \frac{N - n + 0{,}5}{n + 0{,}5})$</td><td>từ hiếm (ít văn bản chứa) được thưởng nhiều</td></tr>
+          <tr><td>tf, $k_1 = 1{,}2$</td><td>số lần xuất hiện: thêm lần thì tăng nhưng <b>bão hoà</b></td></tr>
+          <tr><td>$b = 0{,}75$, $|d|$</td><td>văn bản dài bị phạt: nhiều chữ thì dễ chứa từ hơn</td></tr></table>
+        focus: [1, 1, 2, 3, 4, "4.2", "4.3", "4.4"]
+        say: "Ta có ba văn bản, mèo đen mèo, chó đen, và mèo trắng chó con. Chỉ mục ngược ghi mèo nằm ở văn bản 1 hai lần và văn bản 3 một lần, đen ở văn bản 1 và 2, chó ở văn bản 2 và 3. Công thức xếp hạng cộng một điểm cho mỗi từ truy vấn t. Điểm đó là trọng số độ hiếm của t nhân một phân số theo số lần xuất hiện và độ dài văn bản. Bảng giải thích từng phần. Trọng số độ hiếm bằng lôgarit tự nhiên của 1 cộng N trừ n cộng 0 phẩy 5, chia n cộng 0 phẩy 5, nên từ hiếm được thưởng nhiều. Số lần xuất hiện, cùng k 1 bằng 1 phẩy 2, làm điểm tăng khi từ lặp lại, nhưng bão hoà dần. Hệ số b bằng 0 phẩy 75 cùng độ dài văn bản phạt văn bản dài, vì nhiều chữ thì dễ chứa từ hơn."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Lật ngược: từ chỉ về văn bản"
+    checks:
+      - "alg.inverted_index([['mèo', 'đen', 'mèo'], ['chó', 'đen'], ['mèo', 'trắng', 'chó', 'con']]) == {'mèo': [(1, 2), (3, 1)], 'đen': [(1, 1), (2, 1)], 'chó': [(2, 1), (3, 1)], 'trắng': [(3, 1)], 'con': [(3, 1)]}"
+    steps:
+      - show: |
+          <div><svg width="1500" height="360" viewBox="0 0 1500 360"><g fill="#1f2937"><rect x="30" y="60" width="390" height="70" rx="10" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="50" y="90" font-size="19" fill="#2a78d6">văn bản 1</text><text x="50" y="118" font-size="22">mèo đen mèo</text><rect x="30" y="160" width="390" height="70" rx="10" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="50" y="190" font-size="19" fill="#2a78d6">văn bản 2</text><text x="50" y="218" font-size="22">chó đen</text><rect x="30" y="260" width="390" height="70" rx="10" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="50" y="290" font-size="19" fill="#2a78d6">văn bản 3</text><text x="50" y="318" font-size="22">mèo trắng chó con</text><text x="225" y="40" text-anchor="middle" font-size="22" font-weight="bold">kho văn bản</text><line x1="440" y1="185" x2="580" y2="185" stroke="#2a78d6" stroke-width="5"/><polygon points="580,172 604,185 580,198" fill="#2a78d6"/><text x="510" y="165" text-anchor="middle" font-size="19">dựng một lần</text><text x="900" y="40" text-anchor="middle" font-size="22" font-weight="bold">chỉ mục ngược: từ → danh sách</text><rect x="630" y="60" width="110" height="46" rx="8" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="685" y="91" text-anchor="middle" font-size="21">mèo</text><text x="760" y="91" font-size="20" fill="#eb6834">văn bản 1 (2 lần), văn bản 3 (1 lần)</text><rect x="630" y="118" width="110" height="46" rx="8" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="685" y="149" text-anchor="middle" font-size="21">đen</text><text x="760" y="149" font-size="20" fill="#1f2937">văn bản 1, văn bản 2</text><rect x="630" y="176" width="110" height="46" rx="8" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="685" y="207" text-anchor="middle" font-size="21">chó</text><text x="760" y="207" font-size="20" fill="#1f2937">văn bản 2, văn bản 3</text><rect x="630" y="234" width="110" height="46" rx="8" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="685" y="265" text-anchor="middle" font-size="21">trắng</text><text x="760" y="265" font-size="20" fill="#1f2937">văn bản 3</text><rect x="630" y="292" width="110" height="46" rx="8" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="685" y="323" text-anchor="middle" font-size="21">con</text><text x="760" y="323" font-size="20" fill="#1f2937">văn bản 3</text><rect x="1250" y="55" width="220" height="60" rx="10" fill="#d1fae5" stroke="#059669" stroke-width="3"/><text x="1360" y="94" text-anchor="middle" font-size="21">truy vấn “mèo”</text><text x="1360" y="160" text-anchor="middle" font-size="19" fill="#059669">tra đúng một dòng,</text><text x="1360" y="188" text-anchor="middle" font-size="19" fill="#059669">không đọc văn bản 2</text></g></svg></div>
+        focus: [1, 1, 1]
+        say: "Hình bên trái là kho ba văn bản, mỗi văn bản là một dãy từ. Ta dựng chỉ mục ngược một lần, lật ngược quan hệ, nên mỗi từ chỉ về danh sách văn bản chứa nó, kèm số lần xuất hiện. Khi có truy vấn mèo, máy chỉ tra đúng một dòng của chỉ mục và nhận ngay văn bản 1 và văn bản 3, không cần đọc văn bản 2."
+
+  - id: example
+    kind: example
+    title: "Xếp hạng cho truy vấn “mèo”"
+    checks:
+      - "round(alg.bm25_idf(3, 2), 3) == 0.47 and round(math.log(1.6), 3) == 0.47"
+      - "[round(x, 3) for x in alg.bm25(['mèo'], [['mèo', 'đen', 'mèo'], ['chó', 'đen'], ['mèo', 'trắng', 'chó', 'con']])] == [0.646, 0.0, 0.414]"
+      - "round(alg.bm25(['mèo'], [['mèo', 'mèo', 'x'], ['mèo', 'y', 'z']])[0] / alg.bm25(['mèo'], [['mèo', 'mèo', 'x'], ['mèo', 'y', 'z']])[1], 3) == 1.375"
+    steps:
+      - show: |
+          <p><b>Bước 1</b> — $N = 3$, “mèo” có trong $n = 2$ văn bản: $\text{idf} = \ln(1 + \frac{3 - 2 + 0{,}5}{2 + 0{,}5}) = \ln(1 + \frac{1{,}5}{2{,}5}) = \ln 1{,}6 \approx 0{,}470$.</p>
+        say: "Bước một, tính trọng số độ hiếm. Có 3 văn bản, và từ mèo có trong 2 văn bản. Vậy trọng số độ hiếm bằng lôgarit tự nhiên của 1 cộng 1 phẩy 5 chia 2 phẩy 5, tức lôgarit của 1 phẩy 6, khoảng 0 phẩy 47."
+      - show: |
+          <p><b>Bước 2</b> — văn bản ① “mèo đen mèo”: tf $= 2$, $|d| = 3$ bằng độ dài trung bình, nên phần độ dài $1 - 0{,}75 + 0{,}75 \cdot \frac{3}{3} = 1$.</p>
+          <p>Điểm $= 0{,}470 \cdot \frac{2 \cdot 2{,}2}{2 + 1{,}2 \cdot 1} = 0{,}470 \cdot 1{,}375 = \hl{0{,}646}$.</p>
+        focus: [1, 1, 2]
+        say: "Bước hai, văn bản 1 có mèo hai lần và dài 3, đúng bằng độ dài trung bình. Vì thế phần độ dài bằng 1 trừ 0 phẩy 75 cộng 0 phẩy 75 nhân 3 chia 3, tức bằng 1. Điểm bằng 0 phẩy 47 nhân 2 nhân 2 phẩy 2 chia 3 phẩy 2, tức 0 phẩy 47 nhân 1 phẩy 375, khoảng 0 phẩy 646."
+      - show: |
+          <p><b>Bước 3</b> — văn bản ③ “mèo trắng chó con”: tf $= 1$, $|d| = 4$, phần độ dài $1 - 0{,}75 + 0{,}75 \cdot \frac{4}{3} = 1{,}25$.</p>
+          <p>Điểm $= 0{,}470 \cdot \frac{2{,}2}{1 + 1{,}2 \cdot 1{,}25} = 0{,}470 \cdot 0{,}88 \approx 0{,}414$. Văn bản ② không có “mèo” → điểm 0.</p>
+        focus: [1, 1, 2, 2]
+        say: "Bước ba, văn bản 3 có mèo một lần và dài 4. Phần độ dài bằng 1 trừ 0 phẩy 75 cộng 0 phẩy 75 nhân 4 chia 3, bằng 1 phẩy 25. Điểm bằng 0 phẩy 47 nhân 2 phẩy 2 chia 2 phẩy 5, tức 0 phẩy 47 nhân 0 phẩy 88, khoảng 0 phẩy 414. Văn bản 2 không có mèo nên điểm 0."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>Bước 4 — xếp hạng</th><th>tf, $|d|$</th><th>điểm</th></tr>
+          <tr><td>① mèo đen mèo</td><td>2, 3</td><td>$\hl{0{,}646}$</td></tr>
+          <tr><td>③ mèo trắng chó con</td><td>1, 4</td><td>0,414</td></tr>
+          <tr><td>② chó đen</td><td>0</td><td>0</td></tr></table>
+          <p>① lên đầu: “mèo” hai lần trong văn bản ngắn. Nhưng trong cùng độ dài, hai lần chỉ được 1,375 lần điểm của một lần — không phải gấp đôi.</p>
+        focus: [1, "1.2", "1.3", 2, 2]
+        say: "Bước bốn, xếp hạng. Văn bản 1 được 0 phẩy 646, đứng đầu. Văn bản 3 được 0 phẩy 414, rồi tới văn bản 2 với điểm 0. Văn bản 1 lên đầu, vì mèo xuất hiện hai lần trong một văn bản ngắn. Nhưng trong cùng độ dài, hai lần chỉ được 1 phẩy 375 lần điểm của một lần, không phải gấp đôi."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: tỉ số điểm không cần trọng số độ hiếm"
+    checks:
+      - "round(2 * 2.2 / (2 + 1.2), 3) == 1.375 and round(2.2 / (1 + 1.2 * 1.25), 2) == 0.88 and 1.375 / 0.88 == 1.5625"
+      - "(lambda s: round(s[0] / s[2], 4))(alg.bm25(['mèo'], [['mèo', 'đen', 'mèo'], ['chó', 'đen'], ['mèo', 'trắng', 'chó', 'con']])) == 1.5625 and round(0.646 / 0.414, 2) == 1.56"
+    steps:
+      - show: |
+          <table class="t"><tr><th>đường khác</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>chỉ mục ngược: “mèo” → ①, ③</td><td>② không có trong danh sách</td><td>điểm ② $= 0$ ✓</td></tr>
+          <tr><td>tỉ số ① chia ③: trọng số độ hiếm triệt tiêu</td><td>$\frac{1{,}375}{0{,}88} = 1{,}5625$</td><td></td></tr>
+          <tr><td>tỉ số hai điểm đã tính</td><td>$\frac{0{,}646}{0{,}414}$</td><td>$\approx 1{,}56$ ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Kiểm bằng đường khác. Nhìn chỉ mục ngược, mèo chỉ trỏ tới văn bản 1 và văn bản 3, nên văn bản 2 phải được 0 mà không cần tính. Lấy điểm văn bản 1 chia điểm văn bản 3, trọng số độ hiếm có ở cả hai nên triệt tiêu, còn 1 phẩy 375 chia 0 phẩy 88, bằng 1 phẩy 5625. Chia thẳng hai điểm đã tính, 0 phẩy 646 chia 0 phẩy 414, cũng được khoảng 1 phẩy 56, khớp."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp"
+    checks:
+      - "round((2 * 2.2 / (2 + 1.2)) / (1 * 2.2 / (1 + 1.2)), 3) == 1.375"
+      - "(lambda E: [round(x, 3) for x in alg.bm25(['mèo'], E)[:3]] == [2.037, 0.0, 1.304] and sum(map(len, E)) / len(E) == 3)([['mèo', 'đen', 'mèo'], ['chó', 'đen'], ['mèo', 'trắng', 'chó', 'con']] + [['a', 'b', 'c']] * 7)"
+      - "round(alg.bm25_idf(10, 2), 3) == 1.482 and round(math.log(4.4), 3) == 1.482 and 2.037 / 0.646 > 3"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Tưởng tìm từ khoá hiểu nghĩa <b class="red">(không thấy đồng nghĩa)</b>
+          <br><span class="note">Tìm “xe hơi” không ra văn bản chỉ viết “ô tô”. Tìm theo vector nhúng hiểu nghĩa gần, nhưng lại kém với mã sản phẩm, tên riêng. Thường kết hợp cả hai rồi xếp lại.</span></div>
+        say: "Lỗi thứ nhất, tưởng tìm từ khoá hiểu được nghĩa, nên không thấy từ đồng nghĩa. Tìm xe hơi không ra văn bản chỉ viết ô tô. Tìm theo vector nhúng hiểu được nghĩa gần, nhưng lại kém với mã sản phẩm và tên riêng. Thường ta kết hợp cả hai, rồi xếp hạng lại."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Tách từ tiếng Việt theo dấu cách <b class="red">(“ô” và “tô” thành hai từ)</b>
+          <br><span class="note">Tiếng Việt viết theo âm tiết: “cơ sở dữ liệu” là 4 âm tiết nhưng 2 từ. Dùng bộ tách từ, hoặc chỉ mục cả cặp âm tiết liền nhau.</span></div>
+        say: "Lỗi thứ hai, tách từ tiếng Việt theo dấu cách, nên ô và tô thành hai từ. Tiếng Việt viết theo âm tiết, cơ sở dữ liệu là 4 âm tiết nhưng chỉ 2 từ. Hãy dùng bộ tách từ, hoặc đưa vào chỉ mục cả cặp âm tiết liền nhau."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Đếm số lần xuất hiện thô <b class="red">(nhồi từ khoá thắng)</b>
+          <br><span class="note">Nếu điểm tăng tuyến tính theo tf, trang lặp “mèo” 100 lần lên đầu. Công thức xếp hạng bão hoà: từ 1 lần lên 2 lần chỉ nhân điểm 1,375 (cùng độ dài), và càng về sau càng tăng ít.</span></div>
+        say: "Lỗi thứ ba, đếm số lần xuất hiện thô, nên trang nhồi từ khoá thắng. Nếu điểm tăng tuyến tính theo số lần, trang lặp từ mèo 100 lần sẽ lên đầu. Công thức xếp hạng bão hoà, từ 1 lần lên 2 lần chỉ nhân điểm với 1 phẩy 375 khi cùng độ dài, và càng về sau càng tăng ít."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Đặt <b>ngưỡng điểm cố định</b>, ví dụ “chỉ trả kết quả có điểm trên 1” <b class="red">(điểm đổi khi kho đổi)</b></div>
+          <table class="t"><tr><th>kho</th><th>idf của “mèo”</th><th>điểm ①</th><th>điểm ③</th><th>qua ngưỡng 1?</th></tr>
+          <tr><td>3 văn bản</td><td>0,470</td><td>0,646</td><td>0,414</td><td>không văn bản nào</td></tr>
+          <tr><td>thêm 7 văn bản dài 3, không có “mèo” ($N = 10$)</td><td>$\ln 4{,}4 \approx 1{,}482$</td><td>2,037</td><td>1,304</td><td>cả hai</td></tr></table>
+          <p class="note">Văn bản ① và ③ không đổi một chữ, nhưng điểm tăng hơn 3 lần. Người có kinh nghiệm dùng <b>thứ hạng</b>, không so điểm giữa hai thời điểm hay hai chỉ mục.</p>
+        focus: [1, 2, "2.2", "2.3", "2.3", 3, 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, đặt ngưỡng điểm cố định, ví dụ chỉ trả kết quả có điểm trên 1, trong khi điểm đổi khi kho đổi. Bảng so cùng truy vấn mèo trên hai kho. Với kho 3 văn bản, văn bản 1 được 0 phẩy 646 và văn bản 3 được 0 phẩy 414, không văn bản nào qua ngưỡng. Thêm 7 văn bản dài 3 không có mèo thì mèo hiếm hơn, nên trọng số độ hiếm lên khoảng 1 phẩy 482. Khi đó văn bản 1 được 2 phẩy 037, văn bản 3 được 1 phẩy 304, cả hai qua ngưỡng. Văn bản 1 và 3 không đổi một chữ, nhưng điểm tăng hơn 3 lần. Vì vậy, người có kinh nghiệm dùng thứ hạng, không so điểm giữa hai thời điểm hay hai chỉ mục."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "[round(x, 3) for x in alg.bm25(['chó'], [['mèo', 'đen', 'mèo'], ['chó', 'đen'], ['mèo', 'trắng', 'chó', 'con']])] == [0.0, 0.544, 0.414] and [round(x, 3) for x in alg.bm25(['mèo', 'đen'], [['mèo', 'đen', 'mèo'], ['chó', 'đen'], ['mèo', 'trắng', 'chó', 'con']])][0] == 1.116"
+      - "round(1 - 0.75 + 0.75 * 2 / 3, 2) == 0.75 and round(1 + 1.2 * 0.75, 2) == 1.9 and round(0.47 * 2.2 / 1.9, 3) == 0.544 and round(0.646 + 0.47, 3) == 1.116"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Cùng ba văn bản, truy vấn “chó”. Điểm của ② và ③? Văn bản nào lên đầu, vì sao?</td></tr>
+          <tr><td>2</td><td>Truy vấn “mèo đen”: điểm của ① (cộng điểm hai từ)?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, cùng ba văn bản, truy vấn là chó. Điểm của văn bản 2 và 3 là bao nhiêu, văn bản nào lên đầu, và vì sao? Câu hai, truy vấn mèo đen, điểm của văn bản 1 bằng tổng điểm hai từ là bao nhiêu? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① “chó” cũng có trong 2 văn bản → idf vẫn 0,470. ②: $|d| = 2$, phần độ dài $1 - 0{,}75 + 0{,}75 \cdot \frac{2}{3} = 0{,}75$.</p>
+          <p>②: $0{,}470 \cdot \frac{2{,}2}{1 + 1{,}2 \cdot 0{,}75} = 0{,}470 \cdot \frac{2{,}2}{1{,}9} \approx \hl{0{,}544}$; ③: như ví dụ, 0,414. ② lên đầu vì <b>ngắn hơn</b>.</p>
+        focus: [1, 1, 2, 2]
+        say: "Đáp án câu một, từ chó cũng có trong 2 văn bản, nên trọng số độ hiếm vẫn là 0 phẩy 47. Văn bản 2 dài 2, nên phần độ dài bằng 1 trừ 0 phẩy 75 cộng 0 phẩy 75 nhân 2 chia 3, bằng 0 phẩy 75. Văn bản 2 được 0 phẩy 47 nhân 2 phẩy 2 chia 1 phẩy 9, khoảng 0 phẩy 544, còn văn bản 3 như ví dụ được 0 phẩy 414. Cả hai đều có chó một lần, nên văn bản 2 lên đầu vì ngắn hơn."
+      - show: |
+          <p>② “mèo” trong ①: 0,646 (ví dụ). “đen” có trong 2 văn bản → idf 0,470; ① có “đen” 1 lần, $|d| = 3$ → $0{,}470 \cdot \frac{2{,}2}{1 + 1{,}2} = 0{,}470$.</p>
+          <p>Cộng hai từ: $0{,}646 + 0{,}470 = \hl{1{,}116}$.</p>
+        focus: [1, 1, 2]
+        say: "Câu hai, từ mèo trong văn bản 1 được 0 phẩy 646 như ví dụ. Từ đen cũng có trong 2 văn bản, xuất hiện 1 lần trong văn bản 1 dài 3, nên được 0 phẩy 47 nhân 2 phẩy 2 chia 2 phẩy 2, bằng 0 phẩy 47. Cộng hai từ được 0 phẩy 646 cộng 0 phẩy 47, bằng 1 phẩy 116."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">chỉ mục ngược: từ → văn bản</span><span class="a">→</span>
+          <span class="n">từ hiếm thưởng nhiều</span><span class="a">→</span>
+          <span class="n">lặp lại bão hoà, văn bản dài bị phạt</span><span class="a">→</span>
+          <span class="n">tách từ đúng, kết hợp tìm theo nghĩa</span></div>
+        say: "Tổng kết lại, chỉ mục ngược nối từ với văn bản. Công thức xếp hạng thưởng từ hiếm, làm số lần lặp lại bão hoà, và phạt văn bản dài. Hãy tách từ đúng, và kết hợp với tìm theo nghĩa."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> tìm nhanh nhờ <b>chuẩn bị trước</b> lúc ghi; xếp hạng tốt nhờ đo <b>bằng chứng hiếm</b> chứ không đếm thô.</div>
+        say: "Điều cần mang theo, tìm nhanh nhờ chuẩn bị trước lúc ghi, và xếp hạng tốt nhờ đo bằng chứng hiếm chứ không đếm thô."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 8): <b>nhật ký sự kiện phân vùng</b> — vị trí đọc, nhóm tiêu thụ, thứ tự theo khoá.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 8, ta học nhật ký sự kiện phân vùng, với vị trí đọc, nhóm tiêu thụ, và thứ tự theo khoá. Hẹn gặp bạn ở bài tiếp theo."

@@ -1,0 +1,193 @@
+id: L09
+course: DEN
+series: "DEN · Kỹ thuật dữ liệu"
+title: "Bài 9 — Xử lý luồng có trạng thái: điểm kiểm tra và đúng một lần"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/den.yaml L09; audit/den/verify_den.py L09; P. Carbone và cộng sự, State Management in Apache Flink (VLDB 2017); K. M. Chandy, L. Lamport, Distributed Snapshots (1985); bài 8 (vị trí đọc)"
+assumes: [arith, frac, cdot]
+# Quy ước: điểm kiểm tra lưu CÙNG LÚC trạng thái (ví dụ bộ đếm) và vị trí đọc của mọi phân vùng. Sập thì khôi phục điểm kiểm tra gần nhất và đọc
+#   lại từ vị trí đã lưu (alg.replay_events). Thời gian đuổi kịp = tồn đọng / (tốc độ xử lý − tốc độ đến). Tốc độ là SỐ MINH HOẠ.
+#   Tên Flink chỉ trên màn hình.
+objectives:
+  - "Giải thích điểm kiểm tra và phát lại"
+  - "Ước lượng lượng phát lại và thời gian đuổi kịp"
+  - "Phân biệt đúng một lần bên trong hệ và tác động ra ngoài"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Bộ đếm lượt xem sau một lần sập"
+    steps:
+      - show: |
+          <p>Bộ xử lý đếm lượt xem mỗi video theo thời gian thực. Máy sập, khởi động lại. Nếu đếm lại từ 0, mất hết số cũ. Nếu đọc lại vài phút sự kiện mà vẫn giữ số cũ, mỗi lượt xem bị đếm <b>hai lần</b>. Làm sao số cuối cùng vẫn đúng?</p>
+          <div class="box key">Hôm nay: <b>xử lý luồng có trạng thái</b> — điểm kiểm tra lưu trạng thái cùng vị trí đọc, và giới hạn thật của “đúng một lần”.</div>
+        focus: [1, 1, 1, 1, 1, 2]
+        say: "Chào bạn, bộ xử lý đếm lượt xem của mỗi video theo thời gian thực. Máy sập rồi khởi động lại. Nếu đếm lại từ 0 thì mất hết số cũ. Nếu đọc lại vài phút sự kiện mà vẫn giữ số cũ, mỗi lượt xem bị đếm hai lần. Làm sao số cuối cùng vẫn đúng? Hôm nay ta học xử lý luồng có trạng thái, với điểm kiểm tra lưu trạng thái cùng vị trí đọc, và giới hạn thật của đúng một lần."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: bội số, chia lấy dư, tốc độ nhân thời gian"
+    checks:
+      - "40 % 30 == 10 and 40 - 40 % 30 == 30 and 75 % 30 == 15 and 75 - 75 % 30 == 60 and 1000 * 10 == 10000"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ý</th><th>ví dụ</th></tr>
+          <tr><td>mốc cách đều 30 giây: <b>bội số</b> của 30</td><td>0, 30, 60, 90…</td></tr>
+          <tr><td>mốc gần nhất <b>trước</b> giây $s$ $= s - (s \text{ chia lấy dư cho } 30)$</td><td>$s = 40$: $40 - 10 = 30$; $s = 75$: $75 - 15 = 60$</td></tr>
+          <tr><td>số sự kiện $=$ tốc độ $\cdot$ thời gian</td><td>1000 mỗi giây trong 10 giây → $1000 \cdot 10 = 10\,000$</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Ta ôn lại ba phép tính. Các mốc cách đều 30 giây là bội số của 30, tức 0, 30, 60, 90. Mốc gần nhất trước giây s bằng s trừ số dư khi chia s cho 30, ví dụ 40 trừ 10 bằng 30, và 75 trừ 15 bằng 60. Số sự kiện bằng tốc độ nhân thời gian, nên 1000 sự kiện mỗi giây trong 10 giây là 10 nghìn sự kiện."
+      - show: |
+          <div class="box key">Ở bài 8, ta đã học: nhật ký sự kiện <b>không xoá khi đọc</b>, và bên đọc tự ghi nhận <b>vị trí đọc</b>. Vì vậy, biết vị trí cũ là đọc lại được mọi sự kiện từ đó.</div>
+        say: "Ở bài 8, ta đã học rằng nhật ký sự kiện không xoá khi đọc, và bên đọc tự ghi nhận vị trí đọc của mình. Vì vậy, chỉ cần biết vị trí cũ là đọc lại được mọi sự kiện từ đó."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: trạng thái, điểm kiểm tra, phát lại"
+    steps:
+      - show: |
+          <table class="t"><tr><th>khái niệm</th><th>nghĩa</th></tr>
+          <tr><td><b>trạng thái</b></td><td>dữ liệu bộ xử lý nhớ giữa các sự kiện: bộ đếm, tổng theo cửa sổ, phiên người dùng</td></tr>
+          <tr><td><b>điểm kiểm tra</b></td><td>chụp <b>cùng lúc</b> trạng thái và vị trí đọc mọi phân vùng, lưu ra bộ nhớ bền</td></tr>
+          <tr><td><b>phát lại</b></td><td>sau sập: nạp điểm kiểm tra, đọc lại từ vị trí đã lưu</td></tr>
+          <tr><td><b>đúng một lần</b> (trong hệ)</td><td>mỗi sự kiện ảnh hưởng trạng thái đúng một lần — vì trạng thái và vị trí quay về cùng một thời điểm</td></tr></table>
+          <p>Mấu chốt: trạng thái “bộ đếm = 1200” chỉ có nghĩa đi kèm “đã đọc tới vị trí 5000”.</p>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", 2]
+        say: "Bảng có bốn khái niệm. Trạng thái là dữ liệu bộ xử lý nhớ giữa các sự kiện, như bộ đếm, tổng theo cửa sổ, hay phiên người dùng. Điểm kiểm tra chụp cùng lúc trạng thái và vị trí đọc của mọi phân vùng, rồi lưu ra bộ nhớ bền. Phát lại là sau khi sập, nạp điểm kiểm tra và đọc lại từ vị trí đã lưu. Đúng một lần bên trong hệ nghĩa là mỗi sự kiện ảnh hưởng trạng thái đúng một lần, vì trạng thái và vị trí quay về cùng một thời điểm. Mấu chốt là trạng thái bộ đếm bằng 1200 chỉ có nghĩa khi đi kèm đã đọc tới vị trí 5000."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Quay về điểm kiểm tra, đọc lại đoạn đã mất"
+    checks:
+      - "alg.replay_events(30, 40, 1000) == 10000"
+    steps:
+      - show: |
+          <div><svg width="1500" height="375" viewBox="0 0 1500 375"><g fill="#1f2937"><line x1="120" y1="150" x2="1400" y2="150" stroke="#6b7280" stroke-width="3"/><line x1="120" y1="143" x2="120" y2="157" stroke="#6b7280" stroke-width="2"/><text x="120" y="183" text-anchor="middle" font-size="19">giây 0</text><line x1="330" y1="143" x2="330" y2="157" stroke="#6b7280" stroke-width="2"/><text x="330" y="183" text-anchor="middle" font-size="19">giây 10</text><line x1="540" y1="143" x2="540" y2="157" stroke="#6b7280" stroke-width="2"/><text x="540" y="183" text-anchor="middle" font-size="19">giây 20</text><line x1="750" y1="143" x2="750" y2="157" stroke="#6b7280" stroke-width="2"/><text x="750" y="183" text-anchor="middle" font-size="19">giây 30</text><line x1="960" y1="143" x2="960" y2="157" stroke="#6b7280" stroke-width="2"/><text x="960" y="183" text-anchor="middle" font-size="19">giây 40</text><line x1="1170" y1="143" x2="1170" y2="157" stroke="#6b7280" stroke-width="2"/><text x="1170" y="183" text-anchor="middle" font-size="19">giây 50</text><line x1="1380" y1="143" x2="1380" y2="157" stroke="#6b7280" stroke-width="2"/><text x="1380" y="183" text-anchor="middle" font-size="19">giây 60</text><line x1="120" y1="150" x2="120" y2="70" stroke="#059669" stroke-width="4"/><polygon points="120,70 160,82 120,94" fill="#059669"/><line x1="750" y1="150" x2="750" y2="70" stroke="#059669" stroke-width="4"/><polygon points="750,70 790,82 750,94" fill="#059669"/><text x="800" y="66" font-size="20" fill="#059669">điểm kiểm tra: bộ đếm và vị trí đọc</text><rect x="750" y="132" width="210" height="36" fill="#eb6834" opacity="0.35"/><line x1="946" y1="106" x2="974" y2="134" stroke="#b91c1c" stroke-width="5"/><line x1="974" y1="106" x2="946" y2="134" stroke="#b91c1c" stroke-width="5"/><text x="984" y="118" font-size="20" fill="#b91c1c">sập</text><path d="M 960 200 Q 855 250 750 200" fill="none" stroke="#2a78d6" stroke-width="4"/><polygon points="750,200 756,218 768,206" fill="#2a78d6"/><text x="855" y="270" text-anchor="middle" font-size="20" fill="#2a78d6">quay về giây 30</text><text x="855" y="300" text-anchor="middle" font-size="20" fill="#eb6834">phát lại 10 giây</text><rect x="120" y="315" width="560" height="50" rx="10" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="400" y="348" text-anchor="middle" font-size="20">bộ nhớ bền: bộ đếm và vị trí của giây 30</text><rect x="840" y="315" width="560" height="50" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="1120" y="348" text-anchor="middle" font-size="20">nhật ký: vẫn giữ mọi sự kiện từ giây 30</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình là trục thời gian từ giây 0 tới giây 60. Cờ xanh ở giây 0 và giây 30 là hai điểm kiểm tra, mỗi lần lưu cùng lúc bộ đếm và vị trí đọc ra bộ nhớ bền. Ở giây 40 máy sập, nên phần màu cam từ giây 30 tới 40 chỉ còn trong bộ nhớ và bị mất. Khi khởi động lại, ta quay về giây 30 rồi đọc lại 10 giây sự kiện từ nhật ký, vì nhật ký vẫn còn giữ chúng."
+
+  - id: example
+    kind: example
+    title: "Điểm kiểm tra mỗi 30 giây, sập ở giây 40"
+    checks:
+      - "alg.replay_events(30, 40, 1000) == 10000 and 40 - 30 == 10"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thời điểm</th><th>việc xảy ra</th></tr>
+          <tr><td><b>Bước 1</b> — giây 30</td><td>điểm kiểm tra: lưu bộ đếm và vị trí đọc</td></tr></table>
+        focus: [1, "1.2"]
+        say: "Bước một, ta theo dòng thời gian. Ở giây 30 có điểm kiểm tra, lưu bộ đếm và vị trí đọc."
+      - show: |
+          <table class="t"><tr><th>thời điểm</th><th>việc xảy ra</th></tr>
+          <tr><td><b>Bước 2</b> — giây 30 – 40</td><td>xử lý $1000 \cdot 10 = 10\,000$ sự kiện, bộ đếm tăng trong bộ nhớ</td></tr></table>
+        focus: [1, "1.2"]
+        say: "Bước hai, từ giây 30 tới 40, bộ xử lý xử lý 10 nghìn sự kiện, 1000 mỗi giây, bộ đếm tăng trong bộ nhớ. Phần tăng này chưa được lưu ra bộ nhớ bền."
+      - show: |
+          <table class="t"><tr><th>thời điểm</th><th>việc xảy ra</th></tr>
+          <tr><td><b>Bước 3</b> — giây 40</td><td>sập: mất bộ đếm trong bộ nhớ; điểm kiểm tra gần nhất $40 - 10 = 30$</td></tr></table>
+        focus: [1, "1.2", "1.2"]
+        say: "Bước ba, ở giây 40 máy sập, mất bộ đếm trong bộ nhớ. Điểm kiểm tra gần nhất là 40 trừ 10, tức giây 30. Đó là chỗ duy nhất còn trạng thái đáng tin."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>thời điểm</th><th>việc xảy ra</th></tr>
+          <tr><td><b>Bước 4</b> — khởi động lại</td><td>nạp bộ đếm của giây 30, đọc lại từ vị trí giây 30: phát lại $\hl{10\,000}$ sự kiện</td></tr></table>
+          <p>Bộ đếm cuối <b>đúng</b>: 10 000 sự kiện được tính lại trên nền trạng thái giây 30, không cộng hai lần.</p>
+        focus: [1, "1.2", 2]
+        say: "Bước bốn, khởi động lại. Khi khởi động lại, nạp bộ đếm của giây 30 và đọc lại từ vị trí giây 30, tức phát lại 10 nghìn sự kiện. Bộ đếm cuối cùng đúng, vì 10 nghìn sự kiện được tính lại trên nền trạng thái giây 30, không cộng hai lần."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: đếm thẳng từ giây 0 với ba cách khôi phục"
+    checks:
+      - "40 * 1000 == 40000 and 30 * 1000 + 10 * 1000 == 40000 and 40000 + 10000 == 50000 and 0 + 0 == 0"
+    steps:
+      - show: |
+          <p>Giả sử bắt đầu đếm từ giây 0, mỗi sự kiện là một lượt xem. Đếm thẳng tới giây 40: $40 \cdot 1000 = 40\,000$ lượt.</p>
+          <table class="t"><tr><th>cách khôi phục</th><th>bộ đếm khi đuổi kịp giây 40</th><th>so với 40 000</th></tr>
+          <tr><td>nạp bộ đếm giây 30 (30 000), đọc lại từ vị trí giây 30</td><td>$30\,000 + 10\,000 = 40\,000$</td><td>đúng ✓</td></tr>
+          <tr><td>bộ đếm của giây 40 nhưng vị trí của giây 30</td><td>$40\,000 + 10\,000 = 50\,000$</td><td>thừa 10 000</td></tr>
+          <tr><td>đếm lại từ 0, đọc tiếp từ giây 40</td><td>0</td><td>thiếu 40 000</td></tr></table>
+        focus: [1, 2, "2.2", "2.3", "2.4"]
+        say: "Kiểm bằng đường khác, đếm thẳng từ đầu. Giả sử bắt đầu đếm từ giây 0, mỗi sự kiện là một lượt xem, thì tới giây 40 có 40 nhân 1000, bằng 40 nghìn lượt. Nạp bộ đếm 30 nghìn của giây 30 rồi đọc lại từ vị trí giây 30 cho 30 nghìn cộng 10 nghìn, bằng 40 nghìn, đúng. Nếu bộ đếm là của giây 40 mà vị trí là của giây 30, ta được 50 nghìn, thừa 10 nghìn, vì 10 giây bị đếm hai lần. Nếu đếm lại từ 0 và đọc tiếp từ giây 40 thì thiếu cả 40 nghìn, đúng như hai cách sai trong phần mở đầu."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp"
+    checks:
+      - "[round(alg.replay_events(T, 2 * T - 1e-6, 2000)) for T in (30, 120, 600)] == [60000, 240000, 1200000] and [T * 2000 for T in (30, 120, 600)] == [60000, 240000, 1200000]"
+      - "[T * 2000 / (10000 - 2000) for T in (30, 120, 600)] == [7.5, 30.0, 150.0] and [T * 2000 / 2 / 8000 for T in (30, 120, 600)] == [3.75, 15.0, 75.0]"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Tin “đúng một lần” cho cả tác động ra ngoài <b class="red">(gửi thư hai lần)</b>
+          <br><span class="note">Bộ xử lý gửi thư cảnh báo ở giây 35. Sau sập, phát lại từ giây 30 → thư <b>gửi lại</b>. Trạng thái trong hệ quay lui được, thư đã gửi thì không. Dùng khoá lũy đẳng (mã sự kiện) ở bên nhận, hoặc ghi ra ngoài theo giao dịch gắn với điểm kiểm tra.</span></div>
+        say: "Lỗi thứ nhất, tin đúng một lần áp dụng cho cả tác động ra ngoài, nên gửi thư hai lần. Bộ xử lý gửi thư cảnh báo ở giây 35. Sau sập, phát lại từ giây 30 nên thư bị gửi lại. Trạng thái trong hệ quay lui được, còn thư đã gửi thì không. Hãy dùng khoá lũy đẳng theo mã sự kiện ở bên nhận, hoặc ghi ra ngoài theo giao dịch gắn với điểm kiểm tra."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Lưu trạng thái và vị trí đọc ở hai lúc khác nhau <b class="red">(đếm thiếu hoặc thừa)</b>
+          <br><span class="note">Lưu bộ đếm lúc giây 30 nhưng vị trí lúc giây 31: sau sập bỏ qua 1 giây sự kiện. Hai thứ phải thuộc <b>cùng một</b> điểm kiểm tra.</span></div>
+        say: "Lỗi thứ hai, lưu trạng thái và vị trí đọc ở hai lúc khác nhau, nên đếm thiếu hoặc thừa. Lưu bộ đếm lúc giây 30 nhưng vị trí lúc giây 31 thì sau sập sẽ bỏ qua 1 giây sự kiện. Hai thứ phải thuộc cùng một điểm kiểm tra."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Để trạng thái phình không giới hạn <b class="red">(điểm kiểm tra chậm, hết bộ nhớ)</b>
+          <br><span class="note">Nhớ mọi phiên người dùng mãi mãi thì điểm kiểm tra ngày càng lớn. Đặt thời gian sống cho trạng thái, và đóng cửa sổ thời gian.</span></div>
+        say: "Lỗi thứ ba, để trạng thái phình không giới hạn, nên điểm kiểm tra chậm và hết bộ nhớ. Nhớ mọi phiên người dùng mãi mãi thì điểm kiểm tra ngày càng lớn. Hãy đặt thời gian sống cho trạng thái, và đóng các cửa sổ thời gian."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Chọn chu kỳ điểm kiểm tra theo lượng phát lại <b>trung bình</b> <b class="red">(cam kết khôi phục bị vỡ ở ca tệ nhất)</b></div>
+          <p>Sự kiện đến 2000 mỗi giây, xử lý tối đa 10 000 mỗi giây → tồn đọng giảm 8000 mỗi giây.</p>
+          <table class="t"><tr><th>chu kỳ</th><th>phát lại tệ nhất (sập ngay trước điểm kế)</th><th>đuổi kịp tệ nhất</th><th>đuổi kịp trung bình</th></tr>
+          <tr><td>30 giây</td><td>60 000</td><td>7,5 giây</td><td>3,75 giây</td></tr>
+          <tr><td>120 giây</td><td>240 000</td><td>30 giây</td><td>15 giây</td></tr>
+          <tr><td>600 giây</td><td>1 200 000</td><td>150 giây</td><td>75 giây</td></tr></table>
+        focus: [1, 2, "3.2", "3.3", "3.4", 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, chọn chu kỳ điểm kiểm tra theo lượng phát lại trung bình, nên cam kết thời gian khôi phục bị vỡ ở ca tệ nhất. Ví dụ sự kiện đến 2000 mỗi giây, xử lý tối đa 10 nghìn mỗi giây, nên tồn đọng giảm 8000 mỗi giây. Chu kỳ 30 giây thì ca tệ nhất phát lại 60 nghìn sự kiện, đuổi kịp trong 7 phẩy 5 giây. Chu kỳ 120 giây thì tệ nhất 240 nghìn, mất 30 giây, gấp đôi con số trung bình 15 giây. Chu kỳ 600 giây thì tệ nhất mất 150 giây. Người có kinh nghiệm chọn chu kỳ từ cam kết khôi phục cho ca tệ nhất, cộng thêm thời gian khởi động, chứ không theo trung bình."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "60 * 5000 == 300000 and 300000 / (20000 - 5000) == 20"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Điểm kiểm tra mỗi 60 giây, sự kiện đến 5000 mỗi giây. Sập ngay trước điểm kiểm tra kế tiếp: phát lại tối đa bao nhiêu sự kiện?</td></tr>
+          <tr><td>2</td><td>Bộ xử lý chạy tối đa 20 000 sự kiện mỗi giây, sự kiện mới vẫn đến 5000 mỗi giây. Mất bao lâu để đuổi kịp?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, điểm kiểm tra mỗi 60 giây, sự kiện đến 5000 mỗi giây. Nếu sập ngay trước điểm kiểm tra kế tiếp, phải phát lại tối đa bao nhiêu sự kiện? Câu hai, bộ xử lý chạy tối đa 20 nghìn sự kiện mỗi giây, và sự kiện mới vẫn đến 5000 mỗi giây. Mất bao lâu để đuổi kịp? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① Sập ngay trước điểm kế tiếp → mất gần trọn một chu kỳ, gần 60 giây.</p>
+          <p>Phát lại gần $60 \cdot 5000 = \hl{300\,000}$ sự kiện.</p>
+        focus: [1, 2]
+        say: "Đáp án câu một, sập ngay trước điểm kiểm tra kế tiếp nghĩa là mất gần trọn một chu kỳ, gần 60 giây. Vậy phải phát lại gần 60 nhân 5000, bằng 300 nghìn sự kiện."
+      - show: |
+          <p>② Mỗi giây xử lý 20 000 nhưng 5000 sự kiện mới đổ vào → tồn đọng giảm $20\,000 - 5000 = 15\,000$ mỗi giây.</p>
+          <p>$\frac{300\,000}{15\,000} = \hl{20}$ giây (chưa kể thời gian khởi động). Điểm kiểm tra thưa hơn thì phát lại lâu hơn.</p>
+        focus: [1, 2, 2]
+        say: "Câu hai, mỗi giây tồn đọng giảm 20 nghìn trừ 5000, bằng 15 nghìn, vì sự kiện mới vẫn đổ vào. Vậy mất 300 nghìn chia 15 nghìn, bằng 20 giây, chưa kể thời gian khởi động. Điểm kiểm tra càng thưa thì phát lại càng lâu."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">trạng thái + vị trí đọc: cùng một điểm kiểm tra</span><span class="a">→</span>
+          <span class="n">sập: nạp lại, phát lại</span><span class="a">→</span>
+          <span class="n">đúng một lần với trạng thái trong hệ</span><span class="a">→</span>
+          <span class="n">tác động ra ngoài: khoá lũy đẳng</span></div>
+        say: "Tổng kết lại, trạng thái và vị trí đọc phải thuộc cùng một điểm kiểm tra. Khi sập ta nạp lại và phát lại, nên trạng thái trong hệ đúng một lần, còn tác động ra ngoài cần khoá lũy đẳng."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> “đúng một lần” thật ra là “<b>ít nhất một lần</b> + <b>không đổi khi lặp lại</b>” — luôn hỏi phần nào không lặp lại được.</div>
+        say: "Điều cần mang theo, đúng một lần thật ra là ít nhất một lần cộng với không đổi khi lặp lại, nên luôn hỏi phần nào không lặp lại được."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 10): <b>thu thập thay đổi và mẫu hộp thư đi</b>.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 10, ta học thu thập thay đổi và mẫu hộp thư đi. Hẹn gặp bạn ở bài tiếp theo."

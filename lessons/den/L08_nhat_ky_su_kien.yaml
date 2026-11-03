@@ -1,0 +1,192 @@
+id: L08
+course: DEN
+series: "DEN · Kỹ thuật dữ liệu"
+title: "Bài 8 — Nhật ký sự kiện phân vùng: vị trí đọc, nhóm tiêu thụ, thứ tự theo khoá"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/den.yaml L08; audit/den/verify_den.py L08; J. Kreps, N. Narkhede, J. Rao, Kafka: a Distributed Messaging System for Log Processing (NetDB 2011); tài liệu Apache Kafka — phân vùng, nhóm tiêu thụ (phiên bản hiện hành); M. Kleppmann (2017), chương 11"
+assumes: [arith, frac, cdot]
+# Quy ước: chủ đề chia P phân vùng; mỗi phân vùng là nhật ký chỉ ghi thêm, mỗi sự kiện có vị trí (offset) tăng dần. Trong một nhóm tiêu thụ, mỗi
+#   phân vùng giao cho ĐÚNG MỘT thành viên; chia theo khoảng: mỗi người ⌊P/C⌋, P mod C người đầu thêm 1 (alg.range_assign).
+#   Phân vùng của sự kiện = băm(khoá) mod P. Tên Kafka chỉ trên màn hình. Tốc độ 1000 sự kiện mỗi giây là SỐ MINH HOẠ.
+objectives:
+  - "Giải thích thứ tự chỉ đảm bảo trong một phân vùng"
+  - "Chia phân vùng cho nhóm tiêu thụ"
+  - "Chọn thời điểm ghi nhận vị trí đọc"
+asr_reviewed:
+  - {sentence: "Bước bốn, gom lại thành bảng để rút ra quy tắc.", reason: "ASR chép “Bước 4, gom lại thành bản để trúc tra quy tắc” (0.727): lệch âm/thanh thuần Việt: bảng/bản, rút ra/trúc tra — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Đơn bị huỷ trước khi được tạo"
+    steps:
+      - show: |
+          <p>Hệ thống nhận ba sự kiện của đơn 42: “tạo”, “thanh toán”, “huỷ”. Bộ xử lý phía sau lại thấy “huỷ” trước “tạo” — và báo lỗi. Không ai làm sai: các sự kiện đi qua <b>các phân vùng khác nhau</b>, xử lý song song.</p>
+          <div class="box key">Hôm nay: <b>nhật ký sự kiện phân vùng</b> — thứ tự nằm ở đâu, chia việc cho nhóm tiêu thụ thế nào, và ghi nhận vị trí đọc khi nào.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, hệ thống nhận ba sự kiện của đơn 42 là tạo, thanh toán và huỷ. Bộ xử lý phía sau lại thấy huỷ trước tạo, và báo lỗi. Không ai làm sai cả, các sự kiện đi qua các phân vùng khác nhau và được xử lý song song. Hôm nay ta học nhật ký sự kiện phân vùng, thứ tự nằm ở đâu, chia việc cho nhóm tiêu thụ thế nào, và ghi nhận vị trí đọc khi nào."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: chia có dư, ước số, và băm khoá"
+    checks:
+      - "divmod(12, 5) == (2, 2) and [d for d in range(1, 13) if 12 % d == 0] == [1, 2, 3, 4, 6, 12] and 1234567 % 12 == 7"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ý</th><th>ví dụ</th></tr>
+          <tr><td><b>chia có dư</b></td><td>12 chia 5 được 2, dư 2: $12 = 5 \cdot 2 + 2$</td></tr>
+          <tr><td><b>ước số</b>: chia hết, không dư</td><td>các ước của 12: 1, 2, 3, 4, 6, 12</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Ta ôn lại hai phép chia. 12 chia 5 được 2, dư 2, vì 12 bằng 5 nhân 2 cộng 2. Một số là ước của 12 nếu 12 chia hết cho nó, không dư, nên các ước của 12 là 1, 2, 3, 4, 6 và 12."
+      - show: |
+          <div class="box key">Ở bài 4, ta đã học: phân vùng $=$ băm(khoá) chia lấy dư cho số phân vùng. <b>Cùng khoá → cùng số băm → cùng phân vùng</b>, ví dụ băm ra 1 234 567, chia lấy dư cho 12 được 7.</div>
+        say: "Ở bài 4, ta đã học rằng phân vùng bằng giá trị băm của khoá chia lấy dư cho số phân vùng. Cùng một khoá thì luôn băm ra cùng một số, nên luôn vào cùng phân vùng, ví dụ băm ra 1 triệu 234 nghìn 567, chia lấy dư cho 12 được 7."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: phân vùng, vị trí đọc, nhóm tiêu thụ"
+    steps:
+      - show: |
+          <table class="t"><tr><th>khái niệm</th><th>nghĩa</th></tr>
+          <tr><td><b>phân vùng</b></td><td>một nhật ký chỉ ghi thêm; thứ tự chỉ đảm bảo <b>trong</b> một phân vùng</td></tr>
+          <tr><td><b>khoá sự kiện</b></td><td>phân vùng = băm(khoá) mod P: cùng khoá → cùng phân vùng → giữ thứ tự</td></tr>
+          <tr><td><b>vị trí đọc</b></td><td>số thứ tự sự kiện trong phân vùng; bên đọc tự ghi nhận đã đọc tới đâu</td></tr>
+          <tr><td><b>nhóm tiêu thụ</b></td><td>mỗi phân vùng giao cho đúng một thành viên; nhóm khác đọc độc lập từ đầu</td></tr></table>
+          <p>Nhật ký <b>không xoá khi đọc</b>: sự kiện giữ theo thời hạn, nên có thể đọc lại từ một vị trí cũ.</p>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", 2]
+        say: "Bảng có bốn khái niệm. Phân vùng là một nhật ký chỉ ghi thêm, và thứ tự chỉ được đảm bảo bên trong một phân vùng. Khoá sự kiện quyết định phân vùng bằng băm khoá chia lấy dư cho P, nên cùng khoá thì cùng phân vùng và giữ thứ tự. Vị trí đọc là số thứ tự của sự kiện trong phân vùng, và bên đọc tự ghi nhận mình đã đọc tới đâu. Trong một nhóm tiêu thụ, mỗi phân vùng giao cho đúng một thành viên, còn nhóm khác đọc độc lập từ đầu. Nhật ký không xoá khi đọc, sự kiện được giữ theo thời hạn, nên có thể đọc lại từ một vị trí cũ."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Ba nhật ký, hai người đọc"
+    steps:
+      - show: |
+          <div><svg width="1500" height="392" viewBox="0 0 1500 392"><g fill="#1f2937"><text x="300" y="40" text-anchor="middle" font-size="19" fill="#6b7280">vị trí 0</text><text x="450" y="40" text-anchor="middle" font-size="19" fill="#6b7280">vị trí 1</text><text x="600" y="40" text-anchor="middle" font-size="19" fill="#6b7280">vị trí 2</text><text x="750" y="40" text-anchor="middle" font-size="19" fill="#6b7280">vị trí 3</text><text x="900" y="40" text-anchor="middle" font-size="19" fill="#6b7280">vị trí 4</text><text x="20" y="98" font-size="21" font-weight="bold">phân vùng 0</text><rect x="230" y="60" width="140" height="56" rx="8" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="300" y="96" text-anchor="middle" font-size="18">đơn 8 tạo</text><rect x="380" y="60" width="140" height="56" rx="8" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="450" y="96" text-anchor="middle" font-size="18">đơn 8 huỷ</text><rect x="530" y="60" width="140" height="56" rx="8" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="600" y="96" text-anchor="middle" font-size="18">đơn 5 tạo</text><text x="20" y="208" font-size="21" font-weight="bold">phân vùng 1</text><rect x="230" y="170" width="140" height="56" rx="8" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="300" y="206" text-anchor="middle" font-size="18">đơn 42 tạo</text><rect x="380" y="170" width="140" height="56" rx="8" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="450" y="206" text-anchor="middle" font-size="18">đơn 17 tạo</text><rect x="530" y="170" width="140" height="56" rx="8" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="600" y="206" text-anchor="middle" font-size="16">đơn 42 thanh toán</text><rect x="680" y="170" width="140" height="56" rx="8" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="750" y="206" text-anchor="middle" font-size="18">đơn 42 huỷ</text><rect x="830" y="170" width="140" height="56" rx="8" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="900" y="206" text-anchor="middle" font-size="18">đơn 17 huỷ</text><text x="20" y="318" font-size="21" font-weight="bold">phân vùng 2</text><rect x="230" y="280" width="140" height="56" rx="8" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="300" y="316" text-anchor="middle" font-size="18">đơn 9 tạo</text><rect x="380" y="280" width="140" height="56" rx="8" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="450" y="316" text-anchor="middle" font-size="18">đơn 3 tạo</text><rect x="530" y="280" width="140" height="56" rx="8" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="600" y="316" text-anchor="middle" font-size="18">đơn 9 huỷ</text><polygon points="750,228 738,248 762,248" fill="#2a78d6"/><text x="772" y="248" font-size="18" fill="#2a78d6">A đã xử lý xong tới vị trí 3</text><rect x="1180" y="60" width="290" height="190" rx="12" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="1325" y="140" text-anchor="middle" font-size="21">thành viên A</text><text x="1325" y="170" text-anchor="middle" font-size="19">phân vùng 0 và 1</text><rect x="1180" y="280" width="290" height="80" rx="12" fill="#d1fae5" stroke="#059669" stroke-width="3"/><text x="1325" y="316" text-anchor="middle" font-size="21">thành viên B</text><text x="1325" y="344" text-anchor="middle" font-size="19">phân vùng 2</text><line x1="1000" y1="88" x2="1175" y2="130" stroke="#2a78d6" stroke-width="3"/><line x1="1000" y1="198" x2="1175" y2="190" stroke="#2a78d6" stroke-width="3"/><line x1="1000" y1="308" x2="1175" y2="320" stroke="#059669" stroke-width="3"/><text x="590" y="378" text-anchor="middle" font-size="20" fill="#eb6834">mọi sự kiện của đơn 42 ở cùng phân vùng 1, nên giữ đúng thứ tự</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ một chủ đề có 3 phân vùng, mỗi phân vùng là một nhật ký chỉ ghi thêm, sự kiện mới nối vào bên phải với vị trí tăng dần. Mọi sự kiện của đơn 42 có cùng khoá nên nằm trong phân vùng 1, theo đúng thứ tự tạo, thanh toán, huỷ. Trong nhóm tiêu thụ, thành viên A đọc phân vùng 0 và 1, thành viên B đọc phân vùng 2, mỗi phân vùng chỉ một người. Mũi tên xanh là vị trí đọc mà A tự ghi nhận, A đã xử lý xong tới vị trí 3 của phân vùng 1."
+
+  - id: example
+    kind: example
+    title: "Chia 12 phân vùng"
+    checks:
+      - "alg.range_assign(12, 5) == [3, 3, 2, 2, 2] and alg.range_assign(12, 13).count(0) == 1 and alg.range_assign(12, 6) == [2] * 6"
+    steps:
+      - show: |
+          <p><b>Bước 1</b> — 12 phân vùng, 5 thành viên: $12 = 5 \cdot 2 + 2$ → mỗi người 2, <b>2 người đầu</b> thêm 1 → $\hl{3, 3, 2, 2, 2}$.</p>
+          <p>Người nhận 3 làm nhiều hơn người nhận 2 là $\frac{3 - 2}{2} = 50\%$.</p>
+        focus: [1, 1, 2]
+        say: "Bước một, chia 12 phân vùng cho 5 thành viên. 12 chia 5 được 2, dư 2, nên mỗi người 2 phân vùng, và 2 người đầu nhận thêm 1, thành 3, 3, 2, 2, 2. Hai người nhận 3 làm nhiều hơn người nhận 2 là 1 chia 2, tức 50 phần trăm."
+      - show: |
+          <p><b>Bước 2</b> — 6 thành viên: 6 là ước của 12, $12 = 6 \cdot 2$ dư 0 → mỗi người đúng 2 phân vùng, đều.</p>
+        say: "Bước hai, với 6 thành viên. 6 là ước của 12, 12 bằng 6 nhân 2 không dư, nên mỗi người đúng 2 phân vùng, rất đều."
+      - show: |
+          <p><b>Bước 3</b> — 13 thành viên: mỗi phân vùng chỉ giao cho <b>một</b> người → 12 người mỗi người một phân vùng, <b>1 người ngồi không</b>.</p>
+        say: "Bước ba, với 13 thành viên. Mỗi phân vùng chỉ giao cho một người, nên 12 người mỗi người một phân vùng, và 1 người ngồi không."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>Bước 4 — số thành viên</th><th>số phân vùng mỗi người</th></tr>
+          <tr><td>5</td><td>3, 3, 2, 2, 2 — hai người làm nhiều hơn 50%</td></tr>
+          <tr><td>6</td><td>2 mỗi người — đều</td></tr>
+          <tr><td>13</td><td>12 người một phân vùng, 1 người ngồi không</td></tr></table>
+          <p>Số phân vùng là <b>trần song song</b> của một nhóm: thêm người quá số phân vùng không nhanh hơn. Chọn số phân vùng có nhiều ước (12, 24, 60) để chia đều với nhiều cỡ nhóm.</p>
+        focus: [1, "1.2", 2, 2]
+        say: "Bước bốn, gom lại thành bảng để rút ra quy tắc. Chia đều chỉ khi số thành viên là ước của số phân vùng. Số phân vùng là trần song song của một nhóm, thêm người quá số phân vùng không làm nhanh hơn. Hãy chọn số phân vùng có nhiều ước như 12, 24, 60 để chia đều với nhiều cỡ nhóm."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: liệt kê từng phân vùng cho từng người"
+    checks:
+      - "(lambda n: [list(range(sum(n[:i]), sum(n[:i + 1]))) for i in range(5)])(alg.range_assign(12, 5)) == [[0, 1, 2], [3, 4, 5], [6, 7], [8, 9], [10, 11]]"
+      - "sum(alg.range_assign(12, 5)) == 12 and 3 + 3 + 2 + 2 + 2 == 12 and sum(alg.range_assign(12, 13)) == 12"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thành viên</th><th>A</th><th>B</th><th>C</th><th>D</th><th>E</th></tr>
+          <tr><td>phân vùng</td><td>0, 1, 2</td><td>3, 4, 5</td><td>6, 7</td><td>8, 9</td><td>10, 11</td></tr>
+          <tr><td>số lượng</td><td>3</td><td>3</td><td>2</td><td>2</td><td>2</td></tr></table>
+          <p>$3 + 3 + 2 + 2 + 2 = 12$: mỗi phân vùng từ 0 tới 11 có đúng một người ✓.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Kiểm bằng đường khác, liệt kê thẳng từng phân vùng cho từng người theo khoảng. A nhận phân vùng 0, 1, 2, B nhận 3, 4, 5, rồi C nhận 6, 7, D nhận 8, 9, E nhận 10, 11. Đếm lại được 3, 3, 2, 2, 2, khớp với phép chia có dư. Cộng lại bằng 12, nên mỗi phân vùng từ 0 tới 11 có đúng một người đọc."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp"
+    checks:
+      - "2 * 1000 * 600 == 1200000 and 1200000 / 2500 == 480 and 1200000 / (2500 - 2000) == 2400 and 480 / 60 == 8 and 2400 / 60 == 40"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Gửi sự kiện không có khoá, hoặc khoá sai <b class="red">(mất thứ tự)</b>
+          <br><span class="note">Không khoá thì sự kiện rải đều các phân vùng. Muốn mọi sự kiện của một đơn giữ thứ tự thì <b>khoá = mã đơn</b>.</span></div>
+        say: "Lỗi thứ nhất, gửi sự kiện không có khoá, hoặc chọn khoá sai, nên mất thứ tự. Không có khoá thì sự kiện rải đều các phân vùng. Muốn mọi sự kiện của một đơn giữ thứ tự thì khoá phải là mã đơn."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Ghi nhận vị trí đọc <b>trước</b> khi xử lý xong <b class="red">(mất sự kiện khi sập)</b>
+          <br><span class="note">Sập giữa chừng: vị trí đã tiến, sự kiện chưa xử lý bị bỏ qua mãi mãi. Ghi nhận <b>sau</b> khi xử lý thì sập chỉ gây xử lý lại — bên xử lý phải chịu được trùng.</span></div>
+        say: "Lỗi thứ hai, ghi nhận vị trí đọc trước khi xử lý xong, nên mất sự kiện khi sập. Nếu sập giữa chừng, vị trí đã tiến lên, và sự kiện chưa xử lý bị bỏ qua mãi mãi. Ghi nhận sau khi xử lý thì sập chỉ gây xử lý lại, và bên xử lý phải chịu được trùng lặp."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Tăng số phân vùng khi đang chạy <b class="red">(khoá đổi phân vùng)</b>
+          <br><span class="note">băm(khoá) mod 12 khác mod 16: sự kiện mới của đơn 42 sang phân vùng khác, có thể được xử lý trước sự kiện cũ. Chọn đủ phân vùng từ đầu.</span></div>
+        say: "Lỗi thứ ba, tăng số phân vùng khi đang chạy, nên khoá đổi phân vùng. Băm chia lấy dư cho 12 khác chia lấy dư cho 16, nên sự kiện mới của đơn 42 sang phân vùng khác, và có thể được xử lý trước sự kiện cũ. Hãy chọn đủ phân vùng ngay từ đầu."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Sau sự cố, ước lượng thời gian đuổi kịp tồn đọng bằng <b>tồn đọng chia tốc độ xử lý</b> <b class="red">(quên sự kiện mới vẫn đổ vào)</b></div>
+          <p>Một thành viên giữ 2 phân vùng, mỗi phân vùng 1000 sự kiện mỗi giây, xử lý tối đa 2500 sự kiện mỗi giây. Dừng 10 phút.</p>
+          <table class="t"><tr><th>đại lượng</th><th>tính</th><th>kết quả</th></tr>
+          <tr><td>tồn đọng</td><td>$2 \cdot 1000 \cdot 600$</td><td>1 200 000 sự kiện</td></tr>
+          <tr><td>tính sai</td><td>$\frac{1\,200\,000}{2500}$</td><td>480 giây = 8 phút</td></tr>
+          <tr><td>tính đúng: chỉ phần dư ra mới trả nợ</td><td>$\frac{1\,200\,000}{2500 - 2000}$</td><td>2400 giây = 40 phút</td></tr></table>
+        focus: [1, 2, "3.2", "3.3", "3.4", "3.4"]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, sau sự cố, ước lượng thời gian đuổi kịp tồn đọng bằng tồn đọng chia tốc độ xử lý, quên rằng sự kiện mới vẫn đổ vào. Ví dụ một thành viên giữ 2 phân vùng, mỗi phân vùng 1000 sự kiện mỗi giây, xử lý tối đa 2500, và bị dừng 10 phút. Tồn đọng là 2 nhân 1000 nhân 600 giây, bằng 1 triệu 200 nghìn sự kiện. Tính sai là chia cho 2500, ra 480 giây, tức 8 phút. Tính đúng phải trừ 2000 sự kiện mới đổ vào mỗi giây, chỉ phần dư 500 mới trả nợ, nên mất 2400 giây, tức 40 phút. Người có kinh nghiệm luôn để dư công suất, vì thời gian đuổi kịp tỉ lệ nghịch với phần dư đó."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.range_assign(8, 3) == [3, 3, 2] and max(alg.range_assign(8, 3)) * 1000 == 3000 > 2500 and alg.range_assign(8, 4) == [2, 2, 2, 2] and 2 * 1000 <= 2500"
+      - "divmod(8, 3) == (2, 2) and 3 * 1000 == 3000"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>8 phân vùng, mỗi phân vùng 1000 sự kiện mỗi giây; mỗi thành viên xử lý tối đa 2500 sự kiện mỗi giây. Nhóm 3 người có theo kịp không?</td></tr>
+          <tr><td>2</td><td>Cần ít nhất mấy người?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, có 8 phân vùng, mỗi phân vùng 1000 sự kiện mỗi giây, và mỗi thành viên xử lý tối đa 2500 sự kiện mỗi giây. Nhóm 3 người có theo kịp không? Câu hai, cần ít nhất mấy người? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① $8 = 3 \cdot 2 + 2$ → chia 3, 3, 2.</p>
+          <p>Người nặng nhất: $3 \cdot 1000 = 3000$ sự kiện mỗi giây $\gt 2500$ → <b>không</b> theo kịp, hàng đợi dồn mãi.</p>
+        introduces: [ltgt]
+        focus: [1, 2, 2]
+        say: "Đáp án câu một, 8 chia 3 được 2, dư 2, nên chia được 3, 3, 2. Hai người nhận 3 phân vùng, tức 3 nhân 1000, bằng 3000 sự kiện mỗi giây, lớn hơn 2500. Vì vậy nhóm không theo kịp, và hàng đợi dồn mãi."
+      - show: |
+          <table class="t"><tr><th>câu 2: số người</th><th>chia</th><th>người nặng nhất</th><th>theo kịp?</th></tr>
+          <tr><td>3</td><td>3, 3, 2</td><td>3000</td><td>không</td></tr>
+          <tr><td>4</td><td>2, 2, 2, 2</td><td>2000</td><td><b>có</b></td></tr></table>
+          <p>② Ít nhất <b>4</b> người. Luôn kiểm người <b>nặng nhất</b>, không chỉ tổng tải.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Câu hai, thử tăng dần số người. 3 người thì người nặng nhất nhận 3000, không được. 4 người thì mỗi người 2 phân vùng, tức 2000 sự kiện mỗi giây, trong giới hạn 2500. Vậy cần ít nhất 4 người, và luôn kiểm người nặng nhất, không chỉ tổng tải."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">thứ tự chỉ trong một phân vùng</span><span class="a">→</span>
+          <span class="n">cùng khoá, cùng phân vùng</span><span class="a">→</span>
+          <span class="n">mỗi phân vùng một thành viên: số phân vùng là trần</span><span class="a">→</span>
+          <span class="n">ghi nhận vị trí sau khi xử lý, chịu được trùng</span></div>
+        say: "Tổng kết lại, thứ tự chỉ có trong một phân vùng, và cùng khoá thì cùng phân vùng. Mỗi phân vùng giao cho một thành viên, nên số phân vùng là trần song song. Ghi nhận vị trí sau khi xử lý, và chịu được trùng lặp."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> thứ tự toàn cục rất đắt — hãy hỏi <b>thứ tự giữa những gì</b> mới thật sự cần, rồi chỉ trả giá cho phần đó.</div>
+        say: "Điều cần mang theo, thứ tự toàn cục rất đắt, nên hãy hỏi thứ tự giữa những gì mới thật sự cần, rồi chỉ trả giá cho phần đó."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 9): <b>xử lý luồng có trạng thái</b> — điểm kiểm tra và đúng một lần.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 9, ta học xử lý luồng có trạng thái, với điểm kiểm tra và đúng một lần. Hẹn gặp bạn ở bài tiếp theo."

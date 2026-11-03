@@ -1,0 +1,165 @@
+id: L07
+course: CLC
+series: "CLC · Điện toán đám mây"
+title: "Bài 7 — Cơ sở dữ liệu được quản lý: bản sao, khôi phục theo thời điểm, RPO và RTO"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/clc.yaml L07; audit/clc/verify_clc.py L07; tài liệu sao lưu và khôi phục theo thời điểm của dịch vụ cơ sở dữ liệu được quản lý (bản hiện hành, tên chỉ trên màn hình); ISO/IEC 27031:2011 (định nghĩa RPO, RTO); bài 4"
+assumes: [arith, frac, cdot, approx]
+# Quy ước: điểm khôi phục mục tiêu (RPO) = lượng dữ liệu tối đa được phép mất, đo bằng thời gian; thời gian khôi phục mục tiêu (RTO) = thời gian tối đa
+#   để chạy lại. Khôi phục = bản chụp nhanh gần nhất + phát lại nhật ký giao dịch đã đẩy đi (alg.worst_data_loss_minutes). MB = 10^6 byte. Tốc độ
+#   khôi phục 200 MB/s là SỐ MINH HOẠ. Tên RPO, RTO chỉ trên màn hình.
+objectives:
+  - "Định nghĩa điểm khôi phục mục tiêu và thời gian khôi phục mục tiêu"
+  - "Chọn cấu hình sao lưu theo mục tiêu"
+  - "Phân biệt bản sao với bản sao lưu"
+asr_reviewed:
+  - {sentence: "Đổi cùng đơn vị, với MB bằng 10 mũ 6 byte và GB bằng 10 mũ 9 byte, 500 GB bằng 500 nghìn MB.", reason: "ASR chép “Đổi cùng đơn vị, với Megabyte bằng 10 mũ 6b và Gigabyte bằng 10 mũ 9b, 500GB bằng 500.000 MB.” (0.846): MB đọc “mê-ga-byte” theo lexicon của khoá, ASR viết “MB/megabyte”; byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); GB đọc “ghi-ga-byte” theo lexicon của khoá, ASR viết “GB/gigabyte” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Kiểm bằng đường khác, đổi tốc độ ra GB mỗi phút trước khi chia, vì một phút có 60 giây.", reason: "ASR chép “Kiểm bằng đường khác, đổi tốc độ ra gigabyte mỗi phút trước khi chia vì 1 phút có 60 giây.” (0.952): GB đọc “ghi-ga-byte” theo lexicon của khoá, ASR viết “GB/gigabyte” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Trước hết, một bài toán quen thuộc, chép 500 GB ở tốc độ 200 MB mỗi giây mất bao lâu.", reason: "ASR chép “Trước hết, một bài toán quen thuộc chép 500GB ở tốc độ 200MB mỗi giây mất bao lâu.” (1.0): GB đọc “ghi-ga-byte” theo lexicon của khoá, ASR viết “GB/gigabyte”; MB đọc “mê-ga-byte” theo lexicon của khoá, ASR viết “MB/megabyte” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bản sao đọc dùng để chia tải đọc, và có thể trễ vài giây.", reason: "ASR chép “Bản sao độc dùng để chia tải độc và có thể trễ vai dây.” (0.786): lệch âm/thanh thuần Việt: đọc/độc, đọc/độc, vài/vai — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Lệnh xoá lúc 15 giờ 07"
+    steps:
+      - show: |
+          <p>15 giờ 07, một kỹ sư chạy lệnh xoá trên nhầm cơ sở dữ liệu thật. Cơ sở dữ liệu có bản sao ở vùng sẵn sàng khác — và bản sao cũng xoá theo ngay trong một giây. Câu hỏi còn lại: khôi phục về <b>15 giờ 06</b> được không, và mất bao lâu?</p>
+          <div class="box key">Hôm nay: <b>cơ sở dữ liệu được quản lý</b> — bản sao để chịu lỗi, sao lưu để quay ngược thời gian, và hai con số mục tiêu.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, lúc 15 giờ 07 phút, một kỹ sư chạy lệnh xoá trên nhầm cơ sở dữ liệu thật. Cơ sở dữ liệu có bản sao ở vùng sẵn sàng khác, và bản sao cũng xoá theo ngay trong một giây. Câu hỏi còn lại là khôi phục về 15 giờ 06 phút được không, và mất bao lâu? Hôm nay ta học cơ sở dữ liệu được quản lý, với bản sao để chịu lỗi, sao lưu để quay ngược thời gian, và hai con số mục tiêu."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: thời gian bằng khối lượng chia tốc độ"
+    checks:
+      - "500e9 / 1e6 == 500000 and 500000 / 200 == 2500 and round(2500 / 60, 1) == 41.7"
+    steps:
+      - show: |
+          <p>Chép 500 GB ở tốc độ 200 MB mỗi giây mất bao lâu? Trước hết đổi cùng đơn vị: với MB $= 10^6$ byte và GB $= 10^9$ byte, 500 GB $= 500\,000$ MB.</p>
+        say: "Trước hết, một bài toán quen thuộc, chép 500 GB ở tốc độ 200 MB mỗi giây mất bao lâu. Đổi cùng đơn vị, với MB bằng 10 mũ 6 byte và GB bằng 10 mũ 9 byte, 500 GB bằng 500 nghìn MB."
+      - show: |
+          $$\text{thời gian} = \frac{\text{khối lượng}}{\text{tốc độ}} = \frac{500\,000}{200} = 2500 \text{ giây} \approx 41{,}7 \text{ phút}$$
+        say: "Thời gian bằng khối lượng chia tốc độ, 500 nghìn chia 200, bằng 2500 giây, chia 60 được khoảng 41 phẩy 7 phút."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: bản sao, sao lưu, hai mục tiêu"
+    steps:
+      - show: |
+          <table class="t"><tr><th>khái niệm</th><th>nghĩa</th></tr>
+          <tr><td><b>bản sao chờ</b> (vùng sẵn sàng khác)</td><td>nhận mọi thay đổi gần như tức thì; máy chính hỏng thì lên thay — chống <b>hỏng máy</b></td></tr>
+          <tr><td><b>bản sao đọc</b></td><td>chia tải đọc; có thể trễ vài giây</td></tr>
+          <tr><td><b>chụp nhanh + nhật ký</b></td><td>bản chụp định kỳ, cộng nhật ký giao dịch đẩy đi mỗi vài phút — chống <b>sai dữ liệu</b>, quay về một thời điểm</td></tr>
+          <tr><td><b>điểm khôi phục mục tiêu</b> (RPO)</td><td>tối đa mất bao nhiêu phút dữ liệu</td></tr>
+          <tr><td><b>thời gian khôi phục mục tiêu</b> (RTO)</td><td>tối đa bao lâu thì chạy lại</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", "1.6"]
+        say: "Bảng có năm khái niệm. Bản sao chờ ở vùng sẵn sàng khác nhận mọi thay đổi gần như tức thì, và lên thay khi máy chính hỏng, tức chống hỏng máy. Bản sao đọc dùng để chia tải đọc, và có thể trễ vài giây. Chụp nhanh cộng nhật ký là bản chụp định kỳ, cộng nhật ký giao dịch được đẩy đi mỗi vài phút, dùng để chống sai dữ liệu và quay về một thời điểm. Điểm khôi phục mục tiêu là tối đa mất bao nhiêu phút dữ liệu. Thời gian khôi phục mục tiêu là tối đa bao lâu thì hệ chạy lại."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Mất phần nằm sau vạch đẩy cuối cùng"
+    steps:
+      - show: |
+          <div><svg width="1500" height="320" viewBox="0 0 1500 320"><g fill="#1f2937" font-size="22"><line x1="100" y1="170" x2="1380" y2="170" stroke="#6b7280" stroke-width="3"/><line x1="120" y1="140" x2="120" y2="200" stroke="#2a78d6" stroke-width="4"/><text x="120" y="230" text-anchor="middle" font-size="19">15:00</text><line x1="360" y1="140" x2="360" y2="200" stroke="#2a78d6" stroke-width="4"/><text x="360" y="230" text-anchor="middle" font-size="19">15:05</text><line x1="600" y1="140" x2="600" y2="200" stroke="#2a78d6" stroke-width="4"/><text x="600" y="230" text-anchor="middle" font-size="19">15:10</text><line x1="840" y1="140" x2="840" y2="200" stroke="#2a78d6" stroke-width="4"/><text x="840" y="230" text-anchor="middle" font-size="19">15:15</text><line x1="1080" y1="140" x2="1080" y2="200" stroke="#2a78d6" stroke-width="4"/><text x="1080" y="230" text-anchor="middle" font-size="19">15:20</text><rect x="1080" y="150" width="144" height="40" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><line x1="1224" y1="90" x2="1224" y2="250" stroke="#b91c1c" stroke-width="4"/><text x="1224" y="80" text-anchor="middle" fill="#b91c1c">15:23 sự cố</text><text x="600" y="105" text-anchor="middle" fill="#2a78d6">vạch xanh: nhật ký được đẩy đi mỗi 5 phút</text><text x="1152" y="285" text-anchor="middle" fill="#b91c1c">phần mất: chưa kịp đẩy, tối đa 5 phút</text></g></svg></div>
+        focus: [1, 1, 1]
+        say: "Hình vẽ trục thời gian quanh một sự cố lúc 15 giờ 23. Mỗi vạch xanh là một lần nhật ký giao dịch được đẩy ra nơi an toàn, cứ 5 phút một lần. Dữ liệu ghi sau vạch cuối, đoạn đỏ, chưa kịp đẩy nên có thể mất, và đoạn này không bao giờ dài quá 5 phút."
+
+  - id: example
+    kind: example
+    title: "Hai cấu hình sao lưu"
+    checks:
+      - "alg.worst_data_loss_minutes(24 * 60, 5) == 5 and alg.worst_data_loss_minutes(24 * 60) == 1440 and round(500e9 / 200e6 / 60, 1) == 41.7"
+    steps:
+      - show: |
+          <p><b>Bước 1</b> — chỉ chụp nhanh mỗi ngày: sự cố xảy ra ngay trước lần chụp kế tiếp thì mất cả ngày, tức tới <b>24 giờ</b> dữ liệu.</p>
+        say: "Bước một, nếu chỉ chụp nhanh mỗi ngày, sự cố xảy ra ngay trước lần chụp kế tiếp sẽ làm mất cả ngày, tức tới 24 giờ dữ liệu."
+      - show: |
+          <p><b>Bước 2</b> — thêm đẩy nhật ký mỗi 5 phút: mất tối đa $\hl{5}$ phút, và chọn được thời điểm quay về, ví dụ 15 giờ 06, ngay trước một lệnh xoá nhầm.</p>
+        say: "Bước hai, thêm đẩy nhật ký mỗi 5 phút thì mất tối đa 5 phút, và còn chọn được thời điểm quay về, ví dụ 15 giờ 06, ngay trước một lệnh xoá nhầm."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>thời gian khôi phục</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>dựng 500 GB từ bản chụp ở 200 MB/s</td><td>$\frac{500\,000}{200}$</td><td>2500 s ≈ 41,7 phút</td></tr>
+          <tr><td>phát lại nhật ký</td><td>từ lúc chụp tới 15 giờ 06</td><td>cộng thêm</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Bước ba, tính thời gian khôi phục. Dựng cơ sở dữ liệu 500 GB từ bản chụp ở 200 MB mỗi giây mất 2500 giây, khoảng 41 phẩy 7 phút. Sau đó còn phải phát lại nhật ký từ lúc chụp tới 15 giờ 06, nên tổng còn dài hơn."
+      - show: |
+          <p><b>Bước 4 — đối chiếu mục tiêu:</b> mục tiêu “chạy lại trong 15 phút” thì khôi phục từ sao lưu <b>không đạt</b>; cần bản sao chờ lên thay. Sao lưu lo việc <b>quay về đúng thời điểm</b>, bản sao lo việc <b>chạy lại nhanh</b>.</p>
+        say: "Bước bốn, đối chiếu mục tiêu, nếu cần chạy lại trong 15 phút thì khôi phục từ sao lưu không đạt, phải có bản sao chờ lên thay. Sao lưu lo việc quay về đúng thời điểm, còn bản sao lo việc chạy lại nhanh, hai thứ bổ sung cho nhau."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: đổi tốc độ ra GB mỗi phút"
+    checks:
+      - "200e6 * 60 / 1e9 == 12 and round(500 / 12, 1) == 41.7"
+    steps:
+      - show: |
+          <table class="t"><tr><th>cách khác</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>đổi tốc độ</td><td>200 MB/s nhân 60 giây</td><td>12 000 MB = 12 GB mỗi phút</td></tr>
+          <tr><td>chia thẳng theo phút</td><td>$\frac{500}{12}$</td><td>≈ 41,7 phút ✓</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Kiểm bằng đường khác, đổi tốc độ ra GB mỗi phút trước khi chia, vì một phút có 60 giây. 200 MB mỗi giây nhân 60 giây bằng 12 nghìn MB, tức 12 GB mỗi phút. 500 GB chia 12 GB mỗi phút được khoảng 41 phẩy 7 phút, khớp kết quả."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Coi bản sao là bản sao lưu <b class="red">(lệnh xoá được sao chép ngay)</b>
+          <br><span class="note">Bản sao chống hỏng máy, không chống sai dữ liệu. Cần cả hai: bản sao chờ cho thời gian khôi phục ngắn, chụp nhanh + nhật ký cho quay về thời điểm.</span></div>
+        say: "Lỗi thứ nhất, coi bản sao là bản sao lưu, trong khi lệnh xoá được sao chép sang ngay. Bản sao chống hỏng máy, không chống sai dữ liệu. Cần cả hai, bản sao chờ cho thời gian khôi phục ngắn, và chụp nhanh cộng nhật ký để quay về một thời điểm."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Chưa bao giờ thử khôi phục <b class="red">(sao lưu hỏng mà không biết)</b>
+          <br><span class="note">Khôi phục định kỳ ra một cơ sở dữ liệu thử, đếm dòng, chạy truy vấn kiểm tra, ghi lại thời gian thật — đó mới là thời gian khôi phục bạn có.</span></div>
+        say: "Lỗi thứ hai, chưa bao giờ thử khôi phục, nên bản sao lưu hỏng mà không biết. Hãy khôi phục định kỳ ra một cơ sở dữ liệu thử, đếm dòng, chạy truy vấn kiểm tra, và ghi lại thời gian thật, vì đó mới là thời gian khôi phục bạn có."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Bản sao lưu cùng tài khoản, cùng quyền <b class="red">(kẻ xấu xoá luôn sao lưu)</b>
+          <br><span class="note">Mã độc tống tiền có quyền quản trị là xoá được cả bản sao lưu. Sao chép bản sao lưu sang tài khoản khác, khoá chống xoá có thời hạn.</span></div>
+        say: "Lỗi thứ ba, để bản sao lưu cùng tài khoản và cùng quyền, nên kẻ xấu xoá luôn sao lưu. Mã độc tống tiền có quyền quản trị là xoá được cả bản sao lưu. Hãy sao chép bản sao lưu sang tài khoản khác, và khoá chống xoá có thời hạn."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.worst_data_loss_minutes(360, 1) == 1 and alg.worst_data_loss_minutes(360) == 360 and round(200e9 / 100e6 / 60, 1) == 33.3"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Chụp nhanh mỗi 6 giờ, đẩy nhật ký mỗi 1 phút. Mất tối đa bao nhiêu dữ liệu? Nếu tắt đẩy nhật ký?</td></tr>
+          <tr><td>2</td><td>Cơ sở dữ liệu 200 GB, khôi phục ở 100 MB/s. Riêng dựng từ bản chụp mất bao lâu? Mục tiêu 15 phút có đạt không?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, chụp nhanh mỗi 6 giờ, đẩy nhật ký mỗi 1 phút. Mất tối đa bao nhiêu dữ liệu, và nếu tắt đẩy nhật ký thì sao? Câu hai, cơ sở dữ liệu 200 GB, khôi phục ở 100 MB mỗi giây. Riêng việc dựng từ bản chụp mất bao lâu, và mục tiêu 15 phút có đạt không? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <p>① Có đẩy nhật ký: mất tối đa khoảng giữa hai lần đẩy = <b>1 phút</b>. Tắt đẩy nhật ký: chỉ còn bản chụp, mất tới <b>6 giờ</b>.</p>
+        say: "Đáp án câu một, có đẩy nhật ký thì mất tối đa bằng khoảng giữa hai lần đẩy, tức 1 phút. Tắt đẩy nhật ký thì chỉ còn bản chụp, có thể mất tới 6 giờ."
+      - show: |
+          <p>② 200 GB $= 200\,000$ MB → $\frac{200\,000}{100} = 2000$ s ≈ $\hl{33{,}3}$ phút &gt; 15 → <b>không đạt</b>. Cần bản sao chờ sẵn (chuyển trong vài phút) — khôi phục từ sao lưu là lưới an toàn cuối.</p>
+        say: "Câu hai, 200 GB bằng 200 nghìn MB, chia 100 được 2000 giây, khoảng 33 phẩy 3 phút, lớn hơn 15 nên không đạt. Cần một bản sao chờ sẵn để chuyển trong vài phút, còn khôi phục từ sao lưu là lưới an toàn cuối cùng."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">bản sao: chống hỏng máy, thời gian khôi phục ngắn</span><span class="a">→</span>
+          <span class="n">chụp nhanh + nhật ký: quay về một thời điểm</span><span class="a">→</span>
+          <span class="n">mất tối đa = khoảng đẩy nhật ký</span><span class="a">→</span>
+          <span class="n">thử khôi phục định kỳ; sao lưu tách quyền</span></div>
+        say: "Tổng kết lại, bản sao chống hỏng máy và cho thời gian khôi phục ngắn, còn chụp nhanh cộng nhật ký cho quay về một thời điểm. Lượng dữ liệu mất tối đa bằng khoảng đẩy nhật ký, và hãy thử khôi phục định kỳ, sao lưu tách quyền."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> bản sao lưu chưa từng khôi phục thử <b>chưa phải</b> bản sao lưu — chỉ là hy vọng.</div>
+        say: "Điều cần mang theo, bản sao lưu chưa từng được khôi phục thử thì chưa phải là bản sao lưu, mà chỉ là hy vọng."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 8): <b>chi phí đám mây</b> — dữ liệu ra ngoài, gắn nhãn, chi phí trên một đơn vị.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 8, ta học chi phí đám mây, với dữ liệu ra ngoài, gắn nhãn, và chi phí trên một đơn vị. Hẹn gặp bạn ở bài tiếp theo."

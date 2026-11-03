@@ -1,0 +1,314 @@
+id: L01
+course: CVI
+series: "CVI · Thị giác máy tính"
+title: "Bài 1 — Lọc ảnh bằng tích chập: làm mờ, phát hiện cạnh Sobel"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/cvi.yaml L01; audit/cvi/verify_cvi.py L01; audit/cvi/sources_L01.md (bài không nêu sự kiện lịch sử; mọi số tự tính); CS115 bài 34 (trượt bộ lọc, tương quan chéo, kích thước đầu ra — đã học)"
+assumes: [arith, cdot, frac, approx, power, sub]
+# Quy ước (cả khoá): ảnh I, bộ lọc K cỡ 3 × 3; I ⋆ K = tương quan chéo (đặt K lên ô, nhân từng cặp, cộng — KHÔNG lật), là phép mà thư viện
+#   học sâu gọi là “tích chập” (alg.cvi_xcorr2d); I ∗ K = tích chập toán học (lật K 180 độ trước, alg.cvi_conv2d). Đầu ra “valid”: cạnh
+#   N − k + 1. Sobel ngang S_x = [−1 0 1; −2 0 2; −1 0 1] đo thay đổi theo chiều ngang (dương khi bên phải sáng hơn); S_y là chuyển vị
+#   (dương khi bên dưới sáng hơn). Độ lớn cạnh = căn(G_x² + G_y²). Tín hiệu một chiều có hạt nhiễu 9 và cạnh 0 → 12 là SỐ MINH HOẠ.
+#   Tên Sobel chỉ trên màn hình (probe p1: ≤ 5/8, lexicon_vi.CVI.yaml); lời đọc nói “bộ lọc tìm cạnh”.
+objectives:
+  - "Tính một điểm ra của bộ lọc 3 × 3: làm mờ trung bình, Sobel ngang và dọc"
+  - "Suy ra Sobel = làm mượt theo một chiều nhân lấy hiệu theo chiều kia"
+  - "Giải thích bằng số vì sao làm mờ trước khi lấy cạnh giảm cạnh giả do nhiễu"
+  - "Nhận ra lỗi đổi dấu khi lật bộ lọc, lỗi lưu số âm vào ảnh 8 bit và lỗi ngưỡng cố định khi đổi độ sáng"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Một hạt nhiễu mạnh gần bằng một cạnh thật"
+    checks:
+      - "max(map(abs, alg.cvi_filter1d([0, 0, 0, 9, 0, 0, 0, 0, 12, 12, 12, 12], [-1, 0, 1]))) == 12 and abs(alg.cvi_filter1d([0, 0, 0, 9, 0, 0, 0, 0, 12, 12, 12, 12], [-1, 0, 1])[1]) == 9"
+    steps:
+      - show: |
+          <p>Một camera kiểm tra mép tấm thép trên dây chuyền. Bộ tìm cạnh báo cạnh thật với độ mạnh <b>12</b>, nhưng một hạt nhiễu đơn lẻ cũng cho độ mạnh <b>9</b>. Đặt ngưỡng 6 thì máy thấy “cạnh” ở cả hai chỗ.</p>
+          <div class="box key">Hôm nay: một bộ lọc 3 × 3 làm mờ và tìm cạnh thế nào? Vì sao bộ tìm cạnh nổi tiếng nhất lại có sẵn một phép làm mờ bên trong? Và làm mờ trước giúp được bao nhiêu?</div>
+        focus: [1, 1, 1, 2, 2]
+        say: "Chào bạn, một camera kiểm tra mép tấm thép trên dây chuyền. Bộ tìm cạnh báo cạnh thật với độ mạnh 12, nhưng một hạt nhiễu đơn lẻ cũng cho độ mạnh 9. Đặt ngưỡng 6 thì máy thấy cạnh ở cả hai chỗ. Hôm nay ta hỏi, một bộ lọc 3 nhân 3 làm mờ và tìm cạnh thế nào. Vì sao bộ tìm cạnh nổi tiếng nhất có sẵn một phép làm mờ bên trong, và làm mờ trước giúp được bao nhiêu?"
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại ba điều sẽ dùng"
+    checks:
+      - "alg.cvi_xcorr2d([[1, 2], [3, 4]], [[1, 0], [0, -1]]) == [[-3]]"
+      - "alg.cvi_out_size(640, 3) == 638 and len(alg.cvi_xcorr2d([[0] * 6] * 6, [[0] * 3] * 3)) == 4"
+      - "(10 + 20 + 30) / 3 == 20 and (1 * 10 + 2 * 20 + 1 * 30) / 4 == 20"
+    steps:
+      - show: |
+          <p><b>① Trượt bộ lọc</b> (khoá Toán cho khoa học máy tính, phần mạng tích chập): đặt bộ lọc lên một ô của ảnh, nhân từng cặp số cùng chỗ, cộng lại, rồi trượt sang ô kế bên.</p>
+          $$\begin{bmatrix} 1 & 2 \\ 3 & 4 \end{bmatrix} \text{ với } \begin{bmatrix} 1 & 0 \\ 0 & -1 \end{bmatrix}: \quad 1 \cdot 1 + 2 \cdot 0 + 3 \cdot 0 + 4 \cdot (-1) = -3$$
+        focus: [1, 1, 2]
+        say: "Điều thứ nhất là trượt bộ lọc, như ở khoá Toán cho khoa học máy tính, phần mạng tích chập. Ta đặt bộ lọc lên một ô của ảnh, nhân từng cặp số cùng chỗ, cộng lại, rồi trượt sang ô kế bên. Ví dụ ô 1, 2, 3, 4 với bộ lọc 1, 0, 0, âm 1 cho 1 trừ 4, bằng âm 3."
+      - show: |
+          <p><b>② Kích thước đầu ra khi không đệm:</b> bộ lọc cạnh $k$ trên ảnh cạnh $N$ cho $N - k + 1$ vị trí. Ảnh 6 × 6 với bộ lọc 3 × 3 còn 4 × 4; ảnh rộng 640 còn 638.</p>
+        focus: [1, 1]
+        say: "Điều thứ hai, khi không đệm thêm viền, bộ lọc cạnh k trên ảnh cạnh N chỉ có N trừ k cộng 1 vị trí đặt được. Vì vậy ảnh 6 nhân 6 với bộ lọc 3 nhân 3 còn 4 nhân 4, và ảnh rộng 640 còn 638."
+      - show: |
+          <p><b>③ Trung bình có trọng số:</b> trung bình thường của 10, 20, 30 là $\frac{10 + 20 + 30}{3} = 20$. Trọng số 1, 2, 1 (ô giữa nặng gấp đôi): $\frac{1 \cdot 10 + 2 \cdot 20 + 1 \cdot 30}{4} = 20$ — chia cho tổng trọng số để độ sáng không đổi.</p>
+        focus: [1, 1, 1]
+        say: "Điều thứ ba là trung bình có trọng số. Trung bình thường của 10, 20 và 30 là 20. Với trọng số 1, 2, 1, tức ô giữa nặng gấp đôi, ta chia cho tổng trọng số là 4, vẫn được 20, nên độ sáng chung không đổi."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: tương quan chéo, tích chập, G x, G y và độ lớn cạnh"
+    checks:
+      - "alg.cvi_conv2d([[1, 2], [3, 4]], [[1, 0], [0, -1]]) == [[3]] and alg.cvi_xcorr2d([[1, 2], [3, 4]], [[1, 0], [0, -1]]) == [[-3]]"
+      - "math.sqrt(30 ** 2 + 40 ** 2) == 50"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ký hiệu</th><th>đọc là</th><th>nghĩa</th></tr>
+          <tr><td>$I \star K$</td><td>tương quan chéo</td><td>trượt, nhân từng cặp, cộng — <b>không lật</b> $K$; thư viện học sâu gọi phép này là “tích chập”</td></tr>
+          <tr><td>$I \ast K$</td><td>tích chập (toán học)</td><td>lật $K$ 180 độ trước rồi mới trượt</td></tr></table>
+          <p class="note">Làm thử với ví dụ ôn nền: không lật cho $-3$; lật bộ lọc thành $\begin{bmatrix} -1 & 0 \\ 0 & 1 \end{bmatrix}$ cho $-1 + 4 = 3$ — đổi dấu.</p>
+        introduces: [xcorr, conv]
+        focus: [0, "1.2", "1.3", 2]
+        say: "Bảng có hai phép. Ngôi sao năm cánh đọc là tương quan chéo, tức trượt, nhân từng cặp, cộng lại mà không lật bộ lọc, và thư viện học sâu gọi chính phép này là tích chập. Dấu sao nhỏ đọc là tích chập theo nghĩa toán học, lật bộ lọc 180 độ trước rồi mới trượt. Làm thử với ví dụ ôn nền, không lật cho âm 3, còn lật bộ lọc thì cho âm 1 cộng 4, bằng 3, tức đổi dấu."
+      - clear: true
+        show: |
+          <p>$G_x$: độ thay đổi theo chiều <b>ngang</b> (dương khi bên phải sáng hơn). $G_y$: độ thay đổi theo chiều <b>dọc</b> (dương khi bên dưới sáng hơn).</p>
+          $$\text{độ lớn cạnh} = \sqrt{G_x^2 + G_y^2}, \qquad G_x = 30,\ G_y = 40 \;\Rightarrow\; \sqrt{900 + 1600} = 50$$
+        introduces: [sqrt, implies]
+        focus: [1, 1, 2, 2]
+        say: "Chữ G với chỉ số dưới x là độ thay đổi theo chiều ngang, dương khi bên phải sáng hơn. G với chỉ số dưới y là độ thay đổi theo chiều dọc, dương khi bên dưới sáng hơn. Độ lớn cạnh bằng căn của G x bình phương cộng G y bình phương, như độ dài cạnh huyền của tam giác vuông. Làm thử, G x bằng 30, G y bằng 40, mũi tên kép đọc là suy ra, độ lớn bằng căn của 2500, bằng 50."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Bộ lọc tìm cạnh đặt lên vùng có cột phải sáng"
+    checks:
+      - "alg.cvi_xcorr2d([[0, 0, 10]] * 3, [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]) == [[40]] and [[p * k for p, k in zip(r1, r2)] for r1, r2 in zip([[0, 0, 10]] * 3, [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]])] == [[0, 0, 10], [0, 0, 20], [0, 0, 10]]"
+    steps:
+      - show: |
+          <div><svg width="1400" height="360" viewBox="0 0 1400 360">
+          <defs><marker id="cv1a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs>
+          <g font-size="22" fill="#1f2937" text-anchor="middle"><text x="165" y="60">vùng ảnh 3 × 3</text><text x="525" y="60">bộ lọc tìm cạnh ngang</text><text x="885" y="60">tích từng ô</text></g>
+          <g stroke="#6b7280" stroke-width="2">
+          <rect x="60" y="80" width="70" height="70" fill="#111827"/><rect x="130" y="80" width="70" height="70" fill="#111827"/><rect x="200" y="80" width="70" height="70" fill="#e5e7eb"/>
+          <rect x="60" y="150" width="70" height="70" fill="#111827"/><rect x="130" y="150" width="70" height="70" fill="#111827"/><rect x="200" y="150" width="70" height="70" fill="#e5e7eb"/>
+          <rect x="60" y="220" width="70" height="70" fill="#111827"/><rect x="130" y="220" width="70" height="70" fill="#111827"/><rect x="200" y="220" width="70" height="70" fill="#e5e7eb"/>
+          <rect x="420" y="80" width="210" height="210" fill="#ffffff"/><line x1="490" y1="80" x2="490" y2="290"/><line x1="560" y1="80" x2="560" y2="290"/><line x1="420" y1="150" x2="630" y2="150"/><line x1="420" y1="220" x2="630" y2="220"/>
+          <rect x="780" y="80" width="210" height="210" fill="#ffffff"/><rect x="920" y="80" width="70" height="210" fill="#d1fae5"/><line x1="850" y1="80" x2="850" y2="290"/><line x1="920" y1="80" x2="920" y2="290"/><line x1="780" y1="150" x2="990" y2="150"/><line x1="780" y1="220" x2="990" y2="220"/>
+          </g>
+          <g font-size="26" text-anchor="middle">
+          <text x="95" y="124" fill="#ffffff">0</text><text x="165" y="124" fill="#ffffff">0</text><text x="235" y="124" fill="#1f2937">10</text>
+          <text x="95" y="194" fill="#ffffff">0</text><text x="165" y="194" fill="#ffffff">0</text><text x="235" y="194" fill="#1f2937">10</text>
+          <text x="95" y="264" fill="#ffffff">0</text><text x="165" y="264" fill="#ffffff">0</text><text x="235" y="264" fill="#1f2937">10</text>
+          <g fill="#1f2937"><text x="455" y="124">−1</text><text x="525" y="124">0</text><text x="595" y="124">1</text>
+          <text x="455" y="194">−2</text><text x="525" y="194">0</text><text x="595" y="194">2</text>
+          <text x="455" y="264">−1</text><text x="525" y="264">0</text><text x="595" y="264">1</text>
+          <text x="815" y="124">0</text><text x="885" y="124">0</text><text x="955" y="124">10</text>
+          <text x="815" y="194">0</text><text x="885" y="194">0</text><text x="955" y="194">20</text>
+          <text x="815" y="264">0</text><text x="885" y="264">0</text><text x="955" y="264">10</text></g></g>
+          <line x1="285" y1="185" x2="408" y2="185" stroke="#1f2937" stroke-width="3" marker-end="url(#cv1a)"/>
+          <line x1="645" y1="185" x2="768" y2="185" stroke="#1f2937" stroke-width="3" marker-end="url(#cv1a)"/>
+          <g font-size="20" fill="#6b7280" text-anchor="middle"><text x="346" y="160">đặt chồng</text><text x="706" y="160">nhân</text></g>
+          <g font-size="26" fill="#1f2937"><text x="1030" y="160">cộng cả 9 ô:</text><text x="1030" y="205" fill="#059669" font-weight="bold">10 + 20 + 10 = 40</text></g>
+          <text x="700" y="335" font-size="22" fill="#6b7280" text-anchor="middle">cột trái nhân số âm, cột phải nhân số dương: chỉ khi trái và phải khác nhau thì tổng mới khác 0</text>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình bên trái là một vùng ảnh 3 nhân 3, hai cột trái tối có giá trị 0, cột phải sáng có giá trị 10. Bộ lọc ở giữa có cột trái là số âm, cột giữa bằng 0, cột phải là số dương, và hàng giữa nặng gấp đôi. Đặt chồng lên nhau, nhân từng ô, chỉ cột phải còn khác 0, là 10, 20 và 10. Cộng cả 9 ô được 40, và vì cột trái nhân số âm, cột phải nhân số dương, nên chỉ khi trái và phải khác nhau thì tổng mới khác 0."
+
+  # ───────────────────────── 5. SUY RA ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra bộ lọc tìm cạnh: lấy hiệu theo ngang, làm mượt theo dọc"
+    checks:
+      - "alg.cvi_filter1d([0, 0, 10], [-1, 0, 1]) == [10] and alg.cvi_filter1d([5, 5, 5], [-1, 0, 1]) == [0]"
+      - "alg.cvi_filter1d([10, 10, 10], [1, 2, 1]) == [40] and alg.cvi_filter1d([10, 0, 0], [1, 2, 1]) == [10]"
+      - "np.outer([1, 2, 1], [-1, 0, 1]).tolist() == [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]"
+    steps:
+      - show: |
+          <p><b>Bước 1 — lấy hiệu theo ngang.</b> Cạnh dọc là chỗ bên phải khác bên trái, nên ta tính “phải trừ trái” bằng bộ lọc một hàng $[-1 \;\; 0 \;\; 1]$.</p>
+          <p class="note">Làm thử: hàng 0, 0, 10 cho $-0 + 0 + 10 = 10$; hàng phẳng 5, 5, 5 cho $-5 + 5 = 0$.</p>
+        focus: [1, 1, 2]
+        say: "Bước một, lấy hiệu theo chiều ngang. Một cạnh dọc là chỗ bên phải khác bên trái, nên ta tính phải trừ trái bằng bộ lọc một hàng âm 1, 0, 1. Làm thử, hàng 0, 0, 10 cho 10, còn hàng phẳng 5, 5, 5 cho 0, đúng như mong muốn."
+      - show: |
+          <p><b>Bước 2 — làm mượt theo dọc.</b> Một điểm ảnh lẻ có thể là nhiễu, nên ta lấy trung bình có trọng số 1, 2, 1 theo cột: hàng giữa tin nhiều nhất.</p>
+          <p class="note">Làm thử: cột 10, 10, 10 cho $10 + 20 + 10 = 40$; cột có một điểm lạ 10, 0, 0 chỉ cho 10.</p>
+        focus: [1, 1, 2]
+        say: "Bước hai, làm mượt theo chiều dọc. Vì một điểm ảnh lẻ có thể chỉ là nhiễu, ta lấy trung bình có trọng số 1, 2, 1 theo cột, tức hàng giữa được tin nhiều nhất. Làm thử, cột 10, 10, 10 cho 40, còn cột chỉ có một điểm lạ 10, 0, 0 chỉ cho 10."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — ghép hai bước.</b> Làm cả hai cùng lúc tức là nhân trọng số cột với trọng số hàng, ô hàng $i$, cột $j$ bằng tích của hai số:</p>
+          $$\begin{bmatrix} 1 \\ 2 \\ 1 \end{bmatrix} \text{ nhân } \begin{bmatrix} -1 & 0 & 1 \end{bmatrix} = \begin{bmatrix} -1 & 0 & 1 \\ -2 & 0 & 2 \\ -1 & 0 & 1 \end{bmatrix} = S_x$$
+          <p class="note">Đó chính là bộ lọc Sobel ngang. Chuyển vai trò hai chiều cho ta $S_y$, đo thay đổi theo dọc.</p>
+        focus: [1, 2, 3, 3]
+        say: "Bước ba là ghép hai bước. Làm cả hai cùng lúc nghĩa là nhân trọng số cột với trọng số hàng, ô ở hàng i, cột j bằng tích của hai số tương ứng. Kết quả là ma trận âm 1, 0, 1, rồi âm 2, 0, 2, rồi âm 1, 0, 1, đó chính là bộ lọc tìm cạnh ngang, mang tên người đề xuất, hiện trên màn hình. Đổi vai trò hai chiều, ta được bộ lọc S y đo thay đổi theo chiều dọc."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Bốn vùng ảnh qua bộ lọc tìm cạnh"
+    checks:
+      - "alg.cvi_xcorr2d([[0, 0, 10]] * 3, [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]) == [[40]]"
+      - "alg.cvi_xcorr2d([[7] * 3] * 3, [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]) == [[0]] and sum(sum(r) for r in [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]) == 0"
+      - "alg.cvi_xcorr2d([[0, 0, 10]] * 3, [[-1, -2, -1], [0, 0, 0], [1, 2, 1]]) == [[0]]"
+      - "alg.cvi_xcorr2d([[0, 0, 10], [0, 10, 10], [10, 10, 10]], [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]) == [[30]] and alg.cvi_xcorr2d([[0, 0, 10], [0, 10, 10], [10, 10, 10]], [[-1, -2, -1], [0, 0, 0], [1, 2, 1]]) == [[30]] and round(math.sqrt(1800), 1) == 42.4"
+    steps:
+      - show: |
+          <p><b>Bước 1 — cạnh dọc.</b> Vùng có hai cột trái 0, cột phải 10. Cột trái góp $-(0 + 2 \cdot 0 + 0) = 0$, cột phải góp $10 + 2 \cdot 10 + 10$:</p>
+          $$G_x = 0 + 0 + 40 = \hlg{40}$$
+        focus: [1, 2]
+        say: "Bước một là một cạnh dọc, vùng có hai cột trái bằng 0 và cột phải bằng 10. Cột trái góp 0, cột giữa nhân 0, còn cột phải góp 10 cộng 2 nhân 10 cộng 10, nên G x bằng 40."
+      - show: |
+          <p><b>Bước 2 — vùng phẳng.</b> Mọi ô bằng 7: $G_x = 7 \cdot (-1 + 0 + 1 - 2 + 0 + 2 - 1 + 0 + 1) = 7 \cdot 0 = \hlg{0}$, vì các trọng số cộng lại bằng 0.</p>
+        say: "Bước hai là một vùng phẳng, mọi ô đều bằng 7. Vì các trọng số của bộ lọc cộng lại bằng 0, nên G x bằng 7 nhân 0, bằng 0, tức vùng phẳng không có cạnh."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — cùng vùng ở bước 1, đo theo dọc.</b> $S_y = \begin{bmatrix} -1 & -2 & -1 \\ 0 & 0 & 0 \\ 1 & 2 & 1 \end{bmatrix}$ lấy hàng dưới trừ hàng trên. Ba hàng của vùng giống hệt nhau, nên $G_y = \hlg{0}$: cạnh này chỉ có hướng ngang.</p>
+        focus: [1, 1, 1]
+        say: "Bước ba, vẫn vùng ở bước một nhưng đo theo chiều dọc. Bộ lọc S y lấy hàng dưới trừ hàng trên, có trọng số 1, 2, 1. Vì ba hàng của vùng giống hệt nhau, G y bằng 0, nghĩa là cạnh này chỉ thay đổi theo chiều ngang."
+      - show: |
+          <p><b>Bước 4 — cạnh chéo.</b> Vùng $\begin{bmatrix} 0 & 0 & 10 \\ 0 & 10 & 10 \\ 10 & 10 & 10 \end{bmatrix}$: $G_x = 10 + 20 + 0 = 30$, $G_y = -10 + 40 = 30$.</p>
+          $$\text{độ lớn} = \sqrt{30^2 + 30^2} = \sqrt{1800} \approx \hlo{42{,}4}$$
+        focus: [1, 2]
+        say: "Bước bốn là một cạnh chéo, góc trên trái tối, góc dưới phải sáng. G x bằng 30 và G y cũng bằng 30, nên theo công thức độ lớn cạnh, ta được căn của 1800, xấp xỉ 42 phẩy 4, và hướng của cạnh nghiêng đúng 45 độ."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: lọc hai lượt một chiều thay cho một bộ lọc 3 × 3"
+    checks:
+      - "alg.cvi_filter1d([sum(c * w for c, w in zip(col, [1, 2, 1])) for col in zip(*[[0, 0, 10]] * 3)], [-1, 0, 1]) == [40]"
+      - "alg.cvi_filter1d([sum(c * w for c, w in zip(col, [1, 2, 1])) for col in zip(*[[0, 0, 10], [0, 10, 10], [10, 10, 10]])], [-1, 0, 1]) == [30]"
+    steps:
+      - show: |
+          <p><b>Đường khác 1 — hai lượt một chiều.</b> Vì $S_x$ là tích của cột 1, 2, 1 với hàng −1, 0, 1, ta có thể lọc cột trước rồi lọc hàng sau.</p>
+          <table class="t"><tr><th>vùng</th><th>lượt 1: mỗi cột nhân 1, 2, 1 rồi cộng</th><th>lượt 2: phải trừ trái</th></tr>
+          <tr><td>cạnh dọc (bước 1)</td><td>0, 0, 40</td><td>$40 - 0 = 40$ ✓</td></tr>
+          <tr><td>cạnh chéo (bước 4)</td><td>10, 30, 40</td><td>$40 - 10 = 30$ ✓</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Kiểm tra thứ nhất dùng hai lượt một chiều, vì bộ lọc ngang là tích của cột 1, 2, 1 với hàng âm 1, 0, 1, nên ta có thể lọc cột trước rồi lọc hàng sau. Với cạnh dọc, lượt một cho 0, 0, 40, lượt hai lấy 40 trừ 0, bằng 40, khớp. Với cạnh chéo, lượt một cho 10, 30, 40, lượt hai lấy 40 trừ 10, bằng 30, cũng khớp."
+      - show: |
+          <p class="note">Cách này còn rẻ hơn: một bộ lọc 3 × 3 cần 9 phép nhân mỗi điểm ảnh, hai lượt một chiều chỉ cần $3 + 3 = 6$.</p>
+        say: "Cách hai lượt này còn rẻ hơn, vì một bộ lọc 3 nhân 3 cần 9 phép nhân mỗi điểm ảnh, còn hai lượt một chiều chỉ cần 3 cộng 3, bằng 6 phép nhân."
+
+  # ───────────────────────── 8. VÌ SAO LÀM MỜ ─────────────────────────
+  - id: blur
+    kind: concept
+    title: "Làm mờ trước: hạt nhiễu yếu đi gấp ba, cạnh thật chỉ yếu một phần ba"
+    checks:
+      - "[round(v, 6) for v in alg.cvi_filter1d([0, 0, 0, 9, 0, 0, 0, 0, 12, 12, 12, 12], [1 / 3] * 3)] == [0, 3, 3, 3, 0, 0, 4, 8, 12, 12]"
+      - "alg.cvi_filter1d([0, 0, 0, 9, 0, 0, 0, 0, 12, 12, 12, 12], [-1, 0, 1]) == [0, 9, 0, -9, 0, 0, 12, 12, 0, 0]"
+      - "[round(v, 6) for v in alg.cvi_filter1d(alg.cvi_filter1d([0, 0, 0, 9, 0, 0, 0, 0, 12, 12, 12, 12], [1 / 3] * 3), [-1, 0, 1])] == [3, 0, -3, -3, 4, 8, 8, 4]"
+    steps:
+      - show: |
+          <p>Một hàng điểm ảnh: hạt nhiễu 9 đứng riêng, rồi một cạnh thật từ 0 lên 12:</p>
+          <table class="t"><tr><th>tín hiệu</th><td>0, 0, 0, <b class="red">9</b>, 0, 0, 0, 0, 12, 12, 12, 12</td></tr>
+          <tr><th>làm mờ trung bình 3 ô</th><td>0, 3, 3, 3, 0, 0, 4, 8, 12, 12</td></tr></table>
+        focus: [1, "2.1", "2.2"]
+        say: "Xét một hàng điểm ảnh có một hạt nhiễu 9 đứng riêng, rồi một cạnh thật từ 0 lên 12. Tín hiệu là 0, 0, 0, 9, rồi bốn số 0, rồi bốn số 12. Làm mờ bằng trung bình 3 ô, hạt nhiễu tan thành ba số 3, còn cạnh thành một dốc 4, 8, 12."
+      - clear: true
+        show: |
+          <div><svg width="1400" height="380" viewBox="0 0 1400 380">
+          <g font-size="22" fill="#1f2937" text-anchor="middle"><text x="325" y="40">lấy hiệu trên tín hiệu thô</text><text x="1005" y="40">lấy hiệu sau khi làm mờ</text></g>
+          <line x1="60" y1="300" x2="590" y2="300" stroke="#1f2937" stroke-width="2"/><line x1="740" y1="300" x2="1270" y2="300" stroke="#1f2937" stroke-width="2"/>
+          <line x1="60" y1="210" x2="590" y2="210" stroke="#dc2626" stroke-width="2" stroke-dasharray="8 6"/><line x1="740" y1="210" x2="1270" y2="210" stroke="#dc2626" stroke-width="2" stroke-dasharray="8 6"/>
+          <g stroke="#1f2937" stroke-width="1">
+          <rect x="130" y="165" width="40" height="135" fill="#fb923c"/><rect x="230" y="165" width="40" height="135" fill="#fb923c"/>
+          <rect x="380" y="120" width="40" height="180" fill="#60a5fa"/><rect x="430" y="120" width="40" height="180" fill="#60a5fa"/>
+          <rect x="760" y="255" width="40" height="45" fill="#fb923c"/><rect x="860" y="255" width="40" height="45" fill="#fb923c"/><rect x="910" y="255" width="40" height="45" fill="#fb923c"/>
+          <rect x="960" y="240" width="40" height="60" fill="#60a5fa"/><rect x="1010" y="180" width="40" height="120" fill="#60a5fa"/><rect x="1060" y="180" width="40" height="120" fill="#60a5fa"/><rect x="1110" y="240" width="40" height="60" fill="#60a5fa"/>
+          </g>
+          <g font-size="22" fill="#1f2937" text-anchor="middle">
+          <text x="150" y="155">9</text><text x="250" y="155">9</text><text x="400" y="110">12</text><text x="450" y="110">12</text>
+          <text x="780" y="245">3</text><text x="880" y="245">3</text><text x="930" y="245">3</text><text x="980" y="230">4</text><text x="1030" y="170">8</text><text x="1080" y="170">8</text><text x="1130" y="230">4</text></g>
+          <text x="700" y="345" font-size="21" fill="#6b7280" text-anchor="middle">độ lớn hiệu (bỏ dấu); cam: do hạt nhiễu; lam: do cạnh thật; đường đứt nét đỏ: ngưỡng 6</text>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình bên trái là độ lớn của hiệu phải trừ trái trên tín hiệu thô, hạt nhiễu cho hai cột cao 9, cạnh thật cho hai cột cao 12, và cả bốn cột đều vượt ngưỡng 6. Hình bên phải là cùng phép lấy hiệu sau khi làm mờ. Hạt nhiễu chỉ còn cao 3, dưới ngưỡng, còn cạnh thật vẫn cao 8, trên ngưỡng. Tỉ số nhiễu so với cạnh giảm từ 9 phần 12 xuống 3 phần 8, đó là lý do bộ lọc tìm cạnh có sẵn phần làm mượt 1, 2, 1."
+
+  # ───────────────────────── 9. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi của người đã đi làm"
+    checks:
+      - "alg.cvi_conv2d([[0, 0, 10]] * 3, [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]) == [[-40]]"
+      - "int(np.array([-40]).astype(np.uint8)[0]) == 216 and int(np.clip(-40, 0, 255)) == 0"
+      - "alg.cvi_xcorr2d([[0, 100, 100]] * 3, [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]) == [[400]]"
+      - "alg.cvi_xcorr2d([[0, 0, 5]] * 3, [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]) == [[20]] and 20 < 30 < 40"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Lẫn tương quan chéo với tích chập <b class="red">(đổi dấu: 40 thành −40)</b>
+          <br><span class="note">Lật bộ lọc tìm cạnh 180 độ làm cột âm sang phải: cùng vùng cho $-40$, hướng cạnh bị đảo. Phép thử: chạy trên vùng biết trước (trái tối, phải sáng) và xem dấu.</span></div>
+        focus: [1, 1, 1]
+        say: "Lỗi thứ nhất là lẫn tương quan chéo với tích chập, làm 40 đổi thành âm 40. Lật bộ lọc tìm cạnh 180 độ sẽ đưa cột âm sang phải, nên cùng vùng cho âm 40 và hướng cạnh bị đảo. Phép thử là chạy trên một vùng biết trước, trái tối và phải sáng, rồi xem dấu."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Lưu kết quả có dấu vào ảnh 8 bit không dấu <b class="red">(−40 thành 216, hoặc thành 0)</b>
+          <br><span class="note">Ép kiểu làm $-40$ quay vòng thành $256 - 40 = 216$; kẹp về khoảng 0 tới 255 thì mọi cạnh “tối sang sáng theo chiều ngược” biến mất. Sửa: giữ số có dấu, hoặc lấy độ lớn trước khi lưu.</span></div>
+        focus: [1, 1, 1]
+        say: "Lỗi thứ hai là lưu kết quả có dấu vào ảnh 8 bit không dấu, nên âm 40 thành 216, hoặc thành 0. Ép kiểu làm âm 40 quay vòng thành 256 trừ 40, bằng 216, còn kẹp về khoảng 0 tới 255 thì mọi cạnh theo chiều ngược lại biến mất. Cách sửa là giữ số có dấu, hoặc lấy độ lớn trước khi lưu."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Đệm số 0 quanh viền <b class="red">(cạnh giả 400 ở mép ảnh)</b>
+          <br><span class="note">Ảnh đều 100 khắp nơi, đệm cột 0 bên trái: ô mép có vùng 0, 100, 100 mỗi hàng nên $G_x = 400$ — mạnh gấp 10 lần cạnh thật ở ví dụ. Sửa: đệm bằng cách lặp lại điểm ảnh mép, hoặc bỏ dải viền khi đo.</span></div>
+        focus: [1, 1, 1]
+        say: "Lỗi thứ ba là đệm số 0 quanh viền để giữ kích thước, làm hiện cạnh giả 400 ở mép ảnh. Một ảnh đều 100 khắp nơi, đệm thêm cột 0 bên trái, thì ô ở mép có vùng 0, 100, 100 mỗi hàng nên G x bằng 400, mạnh gấp 10 lần cạnh thật ở ví dụ. Cách sửa là đệm bằng cách lặp lại điểm ảnh ở mép, hoặc bỏ dải viền khi đo."
+      - show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Ngưỡng cạnh cố định khi ánh sáng thay đổi <b class="red">(buổi chiều mất cạnh)</b></div>
+          <table class="t"><tr><th>cùng mép thép, ngưỡng 30</th><th>vùng ảnh</th><th>$G_x$</th><th>kết luận</th></tr>
+          <tr><td>buổi sáng</td><td>0, 0, 10 mỗi hàng</td><td>40</td><td>có cạnh</td></tr>
+          <tr><td>buổi chiều, tối đi một nửa</td><td>0, 0, 5 mỗi hàng</td><td>20</td><td class="red">bỏ sót</td></tr></table>
+        focus: [1, "2.2", "2.3", 0]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, đặt ngưỡng cạnh cố định trong khi ánh sáng thay đổi. Buổi sáng, mép thép cho G x bằng 40, vượt ngưỡng 30. Buổi chiều ảnh tối đi một nửa, bộ lọc tuyến tính nên G x cũng giảm một nửa còn 20, và cạnh bị bỏ sót. Người làm nghề đặt ngưỡng theo tỉ lệ của cạnh mạnh nhất trong ảnh, hoặc chuẩn hoá độ sáng trước khi lọc."
+
+  # ───────────────────────── 10. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: làm mờ một điểm, đo một cạnh ngang, rồi chọn ngưỡng"
+    checks:
+      - "alg.cvi_xcorr2d([[9, 0, 0], [0, 0, 0], [0, 0, 0]], [[1 / 9] * 3] * 3) == [[1.0]]"
+      - "alg.cvi_xcorr2d([[10, 10, 10], [0, 0, 0], [0, 0, 0]], [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]) == [[0]] and alg.cvi_xcorr2d([[10, 10, 10], [0, 0, 0], [0, 0, 0]], [[-1, -2, -1], [0, 0, 0], [1, 2, 1]]) == [[-40]]"
+      - "0.5 * 40 == 20 and 0.5 * 20 == 10 and 20 >= 0.5 * 40 and 10 >= 0.5 * 20"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Làm mờ trung bình 3 × 3 (mỗi trọng số $\frac{1}{9}$) tại tâm vùng chỉ có một điểm 9 ở góc, còn lại 0. Ra bao nhiêu?</td></tr>
+          <tr><td>2</td><td>Vùng hàng trên 10, 10, 10, hai hàng dưới 0. Tính $G_x$, $G_y$ và độ lớn cạnh.</td></tr>
+          <tr><td>3</td><td>Dây chuyền chạy cả sáng lẫn chiều. Bạn giữ ngưỡng 30 cố định hay dùng “một nửa cạnh mạnh nhất trong ảnh”?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", 0]
+        say: "Bây giờ đến lượt bạn. Câu một, làm mờ trung bình 3 nhân 3, mỗi trọng số một phần chín, tại tâm một vùng chỉ có một điểm 9 ở góc, còn lại là 0, ra bao nhiêu? Câu hai, vùng có hàng trên 10, 10, 10 và hai hàng dưới bằng 0, hãy tính G x, G y và độ lớn cạnh. Câu ba, dây chuyền chạy cả sáng lẫn chiều, bạn giữ ngưỡng 30 cố định, hay dùng một nửa cạnh mạnh nhất trong ảnh? Dừng video và làm ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <p><b>Câu 1.</b> $\frac{9 + 0 + \dots + 0}{9} = \hlg{1}$ — một hạt nhiễu 9 chỉ còn 1, nhưng nó loang ra cả vùng 3 × 3.</p>
+          <p><b>Câu 2.</b> Ba cột giống nhau nên $G_x = 0$. Hàng dưới trừ hàng trên: $G_y = 0 - (10 + 20 + 10) = -40$; độ lớn $\sqrt{0 + 1600} = \hlg{40}$ — cạnh ngang, bên trên sáng hơn.</p>
+        introduces: [dots]
+        focus: [1, 1, 2, 2]
+        say: "Câu một, ta cộng 9 với tám số 0 rồi chia 9, được 1, nghĩa là hạt nhiễu 9 chỉ còn 1, nhưng nó loang ra cả vùng 3 nhân 3. Dấu ba chấm nghĩa là cứ thế cộng tiếp các số còn lại. Câu hai, ba cột giống nhau nên G x bằng 0. Hàng dưới trừ hàng trên cho G y bằng âm 40, nên độ lớn là căn của 1600, bằng 40, một cạnh ngang với bên trên sáng hơn."
+      - show: |
+          <table class="t"><tr><th>câu 3</th><th>sáng: cạnh 40</th><th>chiều: cạnh 20</th><th>mất gì</th></tr>
+          <tr><td>ngưỡng cố định 30</td><td>thấy</td><td class="red">bỏ sót</td><td>phải chỉnh tay mỗi khi đổi đèn</td></tr>
+          <tr><td>một nửa cạnh mạnh nhất</td><td>ngưỡng 20: thấy</td><td>ngưỡng 10: thấy</td><td>ảnh không có cạnh nào thì nhiễu thành “cạnh mạnh nhất”</td></tr></table>
+          <p class="note">Chọn ngưỡng theo tỉ lệ, kèm một ngưỡng sàn tuyệt đối nhỏ để ảnh trống không báo cạnh giả.</p>
+        focus: [0, "1.2", "1.3", 2]
+        say: "Câu ba là một đánh đổi. Ngưỡng cố định 30 thấy cạnh buổi sáng nhưng bỏ sót buổi chiều, và phải chỉnh tay mỗi khi đổi đèn. Ngưỡng bằng một nửa cạnh mạnh nhất là 20 buổi sáng, 10 buổi chiều, nên thấy cả hai, nhưng ảnh không có cạnh nào thì nhiễu lại thành cạnh mạnh nhất. Vì vậy hãy chọn ngưỡng theo tỉ lệ, kèm một ngưỡng sàn tuyệt đối nhỏ để ảnh trống không báo cạnh giả."
+
+  # ───────────────────────── 11. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">trượt bộ lọc: nhân từng cặp, cộng</span><span class="a">→</span>
+          <span class="n">trọng số cộng bằng 1: làm mờ; cộng bằng 0: tìm thay đổi</span><span class="a">→</span>
+          <span class="n">tìm cạnh = làm mượt 1, 2, 1 nhân hiệu −1, 0, 1</span><span class="a">→</span>
+          <span class="n">độ lớn căn của G x bình phương cộng G y bình phương</span><span class="a">→</span>
+          <span class="n">làm mờ trước: nhiễu 9 còn 3, cạnh 12 còn 8</span></div>
+        say: "Tổng kết lại, lọc ảnh là trượt bộ lọc, nhân từng cặp và cộng lại. Trọng số cộng bằng 1 thì làm mờ, cộng bằng 0 thì tìm thay đổi. Bộ lọc tìm cạnh là làm mượt 1, 2, 1 theo một chiều nhân với hiệu âm 1, 0, 1 theo chiều kia, và độ lớn cạnh là căn của tổng hai bình phương. Làm mờ trước làm hạt nhiễu 9 còn 3, trong khi cạnh 12 vẫn còn 8."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> mỗi bộ lọc là một câu hỏi đặt cho từng vùng ảnh — “trái khác phải bao nhiêu?”. Hãy thử nó trên một vùng biết trước đáp án (phẳng, một cạnh, một hạt nhiễu) trước khi tin nó trên ảnh thật.</div>
+        say: "Điều cần mang theo, mỗi bộ lọc là một câu hỏi đặt cho từng vùng ảnh, chẳng hạn trái khác phải bao nhiêu. Hãy thử nó trên một vùng biết trước đáp án, như vùng phẳng, một cạnh, hay một hạt nhiễu, trước khi tin nó trên ảnh thật."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 2): <b>biểu đồ tần suất và ngưỡng</b> — đếm xem mỗi mức sáng có bao nhiêu điểm ảnh, rồi để máy tự chọn ngưỡng tách vật khỏi nền.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 2, ta học biểu đồ tần suất và ngưỡng, tức đếm xem mỗi mức sáng có bao nhiêu điểm ảnh, rồi để máy tự chọn ngưỡng tách vật khỏi nền. Hẹn gặp bạn ở bài tiếp theo."

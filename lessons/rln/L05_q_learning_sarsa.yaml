@@ -1,0 +1,267 @@
+id: L05
+course: RLN
+series: "RLN · Học tăng cường"
+title: "Bài 5 — Q-learning và SARSA: học ngoài chính sách và theo chính sách"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/rln.yaml L05; audit/rln/verify_rln.py L05; audit/rln/sources_L05.md; R. S. Sutton, A. G. Barto, Reinforcement Learning: An Introduction, bản 2 (2018), mục 6.4 (công thức 6.7), 6.5 (công thức 6.8, Watkins 1989), Ví dụ 6.6 (đi men vách đá), PDF chính thức incompleteideas.net/book/RLbook2020.pdf; C. Watkins, P. Dayan, Q-learning, Machine Learning 8 (1992); RLN bài 3 (epsilon tham lam), bài 4 (cập nhật sai phân thời gian)"
+assumes: [arith, power, approx, frac, cdot, sub, disc, dots, policy, prob, given, lr, assign, prime, tderr]
+# Quy ước: Q(s, a) là ước lượng giá trị khi ở s chọn a rồi chơi tiếp; a' là hành động ở s'. Lưới vách đá theo Ví dụ 6.6 của Sutton & Barto:
+#   4 hàng × 12 cột, xuất phát góc trái dưới, đích góc phải dưới, 10 ô vách giữa; −1 mỗi bước, rơi vách −100 và về xuất phát; γ = 1;
+#   epsilon = 0,1. Tốc độ học α = 0,1 là số bài chọn cho mô phỏng (alg.rln_cliff; 20 lần chạy × 500 lượt, hạt giống 0..19) —
+#   sách không ghi α trong phần đã trích. Tên “Q-learning”, “SARSA” chỉ trên màn hình (chưa đạt probe); lời đọc nói “học Q lấy số lớn
+#   nhất” (ngoài chính sách) và “học Q theo hành động thật” (theo chính sách).
+objectives:
+  - "Viết cập nhật học Q lấy số lớn nhất và học Q theo hành động thật cho cùng một bước"
+  - "Tính xác suất rơi vách mỗi bước khi còn khám phá, và giải thích vì sao cách theo hành động thật chọn đường an toàn"
+  - "Phân biệt giá trị học được với điểm số khi chạy thật còn khám phá"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Cùng một lưới, hai cách học đi hai đường"
+    checks:
+      - "alg.rln_cliff('q', 500, alpha=0.1, seed=0)[1] == 13"
+      - "(lambda rs: round(sum(sum(r[0][-100:]) / 100 for r in rs) / 20))([alg.rln_cliff('q', 500, alpha=0.1, seed=k) for k in range(20)]) == -47"
+      - "(lambda rs: round(sum(sum(r[0][-100:]) / 100 for r in rs) / 20))([alg.rln_cliff('sarsa', 500, alpha=0.1, seed=k) for k in range(20)]) == -23"
+    steps:
+      - show: |
+          <p>Một robot học đi từ góc trái tới góc phải của lưới, men theo một vách đá. Mỗi bước bị trừ 1; rơi vách bị trừ 100 và phải về điểm xuất phát. Khi học, cứ 10 lần thì 1 lần nó chọn bừa để khám phá.</p>
+          <p>Cách học thứ nhất tìm ra đường ngắn nhất, <b>13 bước</b> sát vách — nhưng điểm trung bình mỗi lượt chỉ khoảng <b>−47</b>. Cách thứ hai đi đường vòng xa vách hơn, điểm trung bình khoảng <b>−23</b>.</p>
+          <div class="box key">Hôm nay: hai cách học giá trị của hành động khác nhau đúng một chỗ. Chỗ đó là gì, và nó khiến robot chọn đường nào?</div>
+        focus: [1, 1, 1, 2, 2, 3]
+        say: "Chào bạn, một robot học đi từ góc trái tới góc phải của lưới, men theo một vách đá. Mỗi bước bị trừ 1, còn rơi vách bị trừ 100 và phải về điểm xuất phát. Khi học, cứ 10 lần thì 1 lần nó chọn bừa để khám phá. Cách học thứ nhất tìm ra đường ngắn nhất, 13 bước sát vách, nhưng điểm trung bình mỗi lượt chỉ khoảng âm 47. Cách thứ hai đi đường vòng xa vách hơn, điểm trung bình khoảng âm 23. Hôm nay ta xem hai cách học khác nhau đúng ở chỗ nào, và chỗ đó khiến robot chọn đường nào."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại hai điều từ bài 3 và bài 4"
+    checks:
+      - "[round(p, 3) for p in alg.rln_eps_greedy([5, 1, 0, -2], 0.1)] == [0.925, 0.025, 0.025, 0.025]"
+      - "round(6 + 0.5 * (1 + 0.9 * 10 - 6), 10) == 8"
+    steps:
+      - show: |
+          <p><b>① Bài 4 — sửa từng bước:</b> $V(s) \leftarrow V(s) + \alpha \cdot \delta$ với $\delta = r + \gamma \cdot V(s') - V(s)$.</p>
+          <p class="note">Ví dụ: $V(s) = 6$, $r = 1$, $V(s') = 10$, $\gamma = 0{,}9$, $\alpha = 0{,}5$ → $6 + 0{,}5 \cdot 4 = 8$.</p>
+        focus: [1, 1, 2]
+        say: "Điều thứ nhất, ở bài 4 ta sửa giá trị từng bước. V của s thay bằng V của s cộng an-pha nhân đen-ta, với đen-ta bằng r cộng gam-ma nhân V của s phẩy, trừ V của s. Ví dụ V của s bằng 6, r bằng 1, V của s phẩy bằng 10, gam-ma 0 phẩy 9 và an-pha 0 phẩy 5 thì giá trị mới là 8."
+      - show: |
+          <p><b>② Bài 3 — chọn kiểu epsilon tham lam:</b> với xác suất $1 - \varepsilon$ chọn hành động đang tốt nhất; với xác suất $\varepsilon$ chọn bừa một trong $k$ hành động.</p>
+          <p class="note">4 hành động, $\varepsilon = 0{,}1$: tốt nhất được chọn $0{,}9 + \frac{0{,}1}{4} = 0{,}925$; mỗi hành động khác $\frac{0{,}1}{4} = 0{,}025$.</p>
+        introduces: [eps]
+        focus: [1, 1, 2]
+        say: "Điều thứ hai, ở bài 3 ta chọn kiểu tham lam xen khám phá. Với xác suất 1 trừ xác suất khám phá thì chọn hành động đang tốt nhất, còn với xác suất khám phá thì chọn bừa một trong k hành động. Với 4 hành động và xác suất khám phá bằng 0 phẩy 1, hành động tốt nhất được chọn với xác suất 0 phẩy 925, mỗi hành động khác 0 phẩy 025."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: Q(s, a), a phẩy, và số lớn nhất theo hành động"
+    checks:
+      - "max([5, 1, 0, -2]) == 5"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ký hiệu</th><th>đọc</th><th>nghĩa</th></tr>
+          <tr><td>$Q(s, a)$</td><td>Q của s và a</td><td>lợi nhuận kỳ vọng nếu ở $s$ chọn $a$, rồi chơi tiếp</td></tr>
+          <tr><td>$a'$</td><td>a phẩy</td><td>hành động chọn ở trạng thái sau $s'$</td></tr>
+          <tr><td>$\max_{a'} Q(s', a')$</td><td>số lớn nhất theo a phẩy</td><td>giá trị của hành động tốt nhất ở $s'$; ví dụ bốn giá trị 5, 1, 0, −2 → 5</td></tr></table>
+        introduces: [max_fn]
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Bài dùng ba ký hiệu. Q của s và a là lợi nhuận kỳ vọng nếu ở s chọn hành động a, rồi chơi tiếp. a phẩy là hành động chọn ở trạng thái sau. Số lớn nhất theo a phẩy của Q là giá trị của hành động tốt nhất ở trạng thái sau, như bốn giá trị 5, 1, 0, âm 2 thì số lớn nhất là 5."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Lưới vách đá: đường ngắn và đường an toàn"
+    checks:
+      - "1 + 11 + 1 == 13 and 3 + 11 + 3 == 17"
+    steps:
+      - show: |
+          <div><svg width="1000" height="420" viewBox="0 0 1000 420"><defs><marker id="rl5r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#dc2626"/></marker><marker id="rl5b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#2a78d6"/></marker></defs>
+          <rect x="80" y="40" width="840" height="280" fill="#ffffff"/>
+          <rect x="150" y="250" width="700" height="70" fill="#fee2e2"/>
+          <rect x="80" y="250" width="70" height="70" fill="#dbeafe"/>
+          <rect x="850" y="250" width="70" height="70" fill="#d1fae5"/>
+          <path d="M80,40 V320 M150,40 V320 M220,40 V320 M290,40 V320 M360,40 V320 M430,40 V320 M500,40 V320 M570,40 V320 M640,40 V320 M710,40 V320 M780,40 V320 M850,40 V320 M920,40 V320 M80,40 H920 M80,110 H920 M80,180 H920 M80,250 H920 M80,320 H920" stroke="#9ca3af" stroke-width="1" fill="none"/>
+          <text x="500" y="294" font-size="24" fill="#b91c1c" text-anchor="middle" font-weight="bold">vách đá: −100, về xuất phát</text>
+          <polyline points="128,262 128,215 872,215 872,258" fill="none" stroke="#dc2626" stroke-width="4" marker-end="url(#rl5r)"/>
+          <polyline points="102,262 102,75 898,75 898,258" fill="none" stroke="#2a78d6" stroke-width="4" stroke-dasharray="10 6" marker-end="url(#rl5b)"/>
+          <g font-size="23" text-anchor="start"><text x="80" y="365" fill="#dc2626" font-weight="bold">đường sát vách: 13 bước</text><text x="560" y="365" fill="#2a78d6" font-weight="bold">đường xa vách: 17 bước</text>
+          <text x="80" y="402" fill="#6b7280">ô xanh dương: xuất phát</text><text x="560" y="402" fill="#6b7280">ô xanh lá: đích</text></g>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình là lưới 4 hàng 12 cột của sách giáo khoa chuẩn, ô xanh dương là xuất phát, ô xanh lá là đích, dải đỏ giữa là vách đá. Đường đỏ đi sát vách, lên một bước, sang phải 11 bước, xuống một bước, tổng 13 bước. Đường xanh đứt nét đi vòng lên hàng trên cùng, lên 3, sang 11, xuống 3, tổng 17 bước. Không có khám phá thì đường đỏ tốt hơn, nhưng cứ chọn bừa một lần trong 10 thì đi sát vách rất dễ rơi."
+
+  # ───────────────────────── 5. SUY RA CÔNG THỨC ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Từ sửa giá trị trạng thái sang sửa giá trị hành động"
+    checks:
+      - "round(2 + 0.1 * (-1 + 1 * 5 - 2), 10) == 2.2"
+      - "round(2 + 0.1 * (-1 + 1 * 1 - 2), 10) == 1.8"
+    steps:
+      - show: |
+          <p><b>Bước 1.</b> Muốn tự chọn hành động thì cần giá trị của <b>từng hành động</b>, nên thay $V(s)$ bằng $Q(s, a)$. Đích một bước vẫn là thưởng ngay cộng gam-ma nhân giá trị phía sau:</p>
+          $$Q(s, a) \leftarrow Q(s, a) + \alpha \cdot \big(r + \gamma \cdot \hlo{\text{giá trị phía sau}} - Q(s, a)\big)$$
+        focus: [1, 2]
+        say: "Bước một, muốn tự chọn hành động thì cần giá trị của từng hành động, nên ta thay V của s bằng Q của s và a. Đích một bước vẫn là thưởng ngay cộng gam-ma nhân giá trị phía sau, chỉ còn phải quyết định giá trị phía sau là gì."
+      - show: |
+          <p><b>Bước 2 — theo hành động thật.</b> Lấy đúng hành động $a'$ mà robot <b>sẽ làm</b> ở $s'$ (kể cả khi đó là nước chọn bừa):</p>
+          $$Q(s, a) \leftarrow Q(s, a) + \alpha \cdot \big(r + \gamma \cdot \hlb{Q(s', a')} - Q(s, a)\big)$$
+          <p class="note">Năm thứ dùng tới: trạng thái, hành động, thưởng, trạng thái sau, hành động sau — chữ đầu tiếng Anh ghép lại thành tên SARSA. Đây là học <b>theo chính sách</b> đang chạy.</p>
+        focus: [1, 2, 3, 3]
+        say: "Bước hai là cách theo hành động thật. Ta lấy đúng hành động a phẩy mà robot sẽ làm ở s phẩy, kể cả khi đó là nước chọn bừa. Cập nhật dùng năm thứ, trạng thái, hành động, thưởng, trạng thái sau và hành động sau. Vì nó đánh giá đúng cách robot đang chơi, ta gọi là học theo chính sách."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — lấy số lớn nhất.</b> Lấy giá trị của hành động <b>tốt nhất</b> ở $s'$, dù robot có làm hành động đó hay không:</p>
+          $$Q(s, a) \leftarrow Q(s, a) + \alpha \cdot \big(r + \gamma \cdot \hlg{\max_{a'} Q(s', a')} - Q(s, a)\big)$$
+          <p class="note">Đây là học Q (Watkins, 1989) — học <b>ngoài chính sách</b>: nó học giá trị của cách chơi tham lam, không phải của cách đang chạy.</p>
+        focus: [1, 2, 3]
+        say: "Bước ba là cách lấy số lớn nhất. Ta lấy giá trị của hành động tốt nhất ở s phẩy, dù robot có làm hành động đó hay không. Đây là phương pháp học Q, công bố năm 1989, học ngoài chính sách, vì nó học giá trị của cách chơi tham lam chứ không phải của cách đang chạy."
+      - clear: true
+        show: |
+          <p><b>Làm thử ngay</b> cùng một bước: $Q(s, a) = 2$, $r = -1$, $\gamma = 1$, $\alpha = 0{,}1$. Ở $s'$: hành động tốt nhất có $Q = 5$, nhưng robot chọn bừa hành động có $Q(s', a') = 1$.</p>
+          <table class="t"><tr><th>cách</th><th>đích</th><th>giá trị mới</th></tr>
+          <tr><td>lấy số lớn nhất</td><td>$-1 + 5 = 4$</td><td>$2 + 0{,}1 \cdot (4 - 2) = \hlg{2{,}2}$</td></tr>
+          <tr><td>theo hành động thật</td><td>$-1 + 1 = 0$</td><td>$2 + 0{,}1 \cdot (0 - 2) = \hlb{1{,}8}$</td></tr></table>
+        focus: [1, 1, "2.2", "2.3"]
+        say: "Làm thử ngay cùng một bước, với Q của s và a bằng 2, r bằng âm 1, gam-ma bằng 1 và an-pha bằng 0 phẩy 1. Ở trạng thái sau, hành động tốt nhất có giá trị 5, nhưng robot chọn bừa hành động có giá trị 1. Cách lấy số lớn nhất có đích âm 1 cộng 5, bằng 4, nên giá trị mới là 2 phẩy 2. Cách theo hành động thật có đích âm 1 cộng 1, bằng 0, nên giá trị mới là 1 phẩy 8."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Vì sao đường sát vách tốn điểm khi còn khám phá"
+    checks:
+      - "round(0.1 / 4, 10) == 0.025"
+      - "round(0.025 * -100, 10) == -2.5"
+      - "round(11 * 0.025, 3) == 0.275"
+      - "(lambda rs: round(sum(sum(r[3][-100:]) / 100 for r in rs) / 20, 2))([alg.rln_cliff('q', 500, alpha=0.1, seed=k) for k in range(20)]) == 0.3"
+    steps:
+      - show: |
+          <p><b>Bước 1.</b> Đứng ở một ô sát vách, robot chọn bừa với xác suất 0,1; trong 4 hướng, đúng 1 hướng dẫn xuống vách:</p>
+          $$P(\text{rơi ở bước này}) = 0{,}1 \cdot \frac{1}{4} = \hl{0{,}025}$$
+        focus: [1, 2]
+        say: "Bước một, đứng ở một ô sát vách, robot chọn bừa với xác suất 0 phẩy 1, và trong 4 hướng thì đúng 1 hướng dẫn xuống vách. Vậy xác suất rơi ở bước này là 0 phẩy 1 nhân một phần tư, bằng 0 phẩy 025."
+      - show: |
+          <p><b>Bước 2.</b> Mỗi lần rơi mất 100 điểm, nên mỗi bước sát vách “tốn” trung bình:</p>
+          $$0{,}025 \cdot (-100) = \hl{-2{,}5} \text{ điểm}$$
+        focus: [1, 2]
+        say: "Bước hai, mỗi lần rơi mất 100 điểm, nên tính trung bình mỗi bước sát vách tốn 0 phẩy 025 nhân âm 100, bằng âm 2 phẩy 5 điểm. Con số đó lớn hơn hẳn cái giá 1 điểm của một bước đi thêm."
+      - show: |
+          <p><b>Bước 3.</b> Đường sát vách có 11 lần đứng ngay cạnh vách (ô xuất phát và 10 ô phía trên vách):</p>
+          $$11 \cdot 0{,}025 = 0{,}275 \text{ lần rơi mỗi lượt}$$
+          <p class="note">Mô phỏng 20 lần chạy, 100 lượt cuối: học Q lấy số lớn nhất rơi trung bình <b>0,30</b> lần mỗi lượt — gần với ước tính.</p>
+        focus: [1, 2, 3]
+        say: "Bước ba, đường sát vách có 11 lần đứng ngay cạnh vách, gồm ô xuất phát và 10 ô phía trên vách. Nhân lên được 11 nhân 0 phẩy 025, bằng 0 phẩy 275 lần rơi mỗi lượt. Mô phỏng 20 lần chạy, xét 100 lượt cuối, cách lấy số lớn nhất rơi trung bình 0 phẩy 3 lần mỗi lượt, gần với ước tính."
+      - clear: true
+        show: |
+          <p><b>Bước 4.</b> Cách <b>theo hành động thật</b> đưa cái giá −100 của nước chọn bừa vào đích của các ô sát vách, nên các ô đó bị đánh giá thấp, robot học đi xa vách. Cách <b>lấy số lớn nhất</b> giả định nước sau luôn tốt nhất, nên không thấy rủi ro đó.</p>
+          <table class="t"><tr><th>khi còn khám phá</th><th>học Q lấy số lớn nhất</th><th>học Q theo hành động thật</th></tr>
+          <tr><td>đường học được</td><td>sát vách, 13 bước</td><td>xa vách</td></tr>
+          <tr><td>điểm trung bình mỗi lượt</td><td>khoảng −47</td><td>khoảng $\hlg{-23}$</td></tr></table>
+        focus: [1, 1, "2.2", "2.3"]
+        say: "Bước bốn, cách theo hành động thật đưa cái giá âm 100 của nước chọn bừa vào đích của các ô sát vách, nên các ô đó bị đánh giá thấp và robot học đi xa vách. Cách lấy số lớn nhất giả định nước sau luôn tốt nhất, nên không thấy rủi ro đó. Kết quả là cách thứ nhất học đường sát vách 13 bước. Nhưng khi còn khám phá, điểm trung bình của nó khoảng âm 47, so với khoảng âm 23 của cách theo hành động thật."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: đếm bước, và đo lại bằng mô phỏng"
+    checks:
+      - "alg.rln_cliff('q', 500, alpha=0.1, seed=0)[1] == 13 and not alg.rln_cliff('q', 500, alpha=0.1, seed=0)[2]"
+      - "(lambda rs: round(sum(sum(r[3][-100:]) / 100 for r in rs) / 20, 2))([alg.rln_cliff('sarsa', 500, alpha=0.1, seed=k) for k in range(20)]) == 0.05"
+    steps:
+      - show: |
+          <p><b>Đường khác 1 — đếm ô trên hình:</b> đường đỏ $1 + 11 + 1 = 13$ bước, tức điểm −13 nếu không rơi; đường xanh $3 + 11 + 3 = 17$ bước, điểm −17.</p>
+          <p class="note">Đi tham lam theo bảng học được của cách lấy số lớn nhất: đúng 13 bước, không rơi ✓.</p>
+        focus: [1, 1, 2]
+        say: "Kiểm tra thứ nhất là đếm ô trên hình. Đường đỏ có 1 cộng 11 cộng 1, bằng 13 bước, tức âm 13 điểm nếu không rơi, còn đường xanh có 3 cộng 11 cộng 3, bằng 17 bước. Đi tham lam theo bảng học được của cách lấy số lớn nhất, robot đi đúng 13 bước và không rơi, khớp với cách đếm."
+      - show: |
+          <p><b>Đường khác 2 — đo số lần rơi</b> trong 100 lượt cuối, 20 lần chạy, vẫn chọn bừa 10%:</p>
+          <table class="t"><tr><th>cách học</th><th>lần rơi mỗi lượt</th></tr>
+          <tr><td>lấy số lớn nhất</td><td>0,30</td></tr>
+          <tr><td>theo hành động thật</td><td>$\hlg{0{,}05}$</td></tr></table>
+          <p class="note">Rơi ít hơn khoảng 6 lần — đúng lý do điểm trung bình tốt hơn, dù đường dài hơn.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Kiểm tra thứ hai là đo số lần rơi trong 100 lượt cuối của 20 lần chạy, khi robot vẫn chọn bừa 10 phần trăm. Cách lấy số lớn nhất rơi khoảng 0 phẩy 3 lần mỗi lượt. Cách theo hành động thật chỉ rơi khoảng 0 phẩy 05 lần. Rơi ít hơn khoảng 6 lần chính là lý do điểm trung bình tốt hơn, dù đường dài hơn."
+
+  # ───────────────────────── 8. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi cả người đã đi làm"
+    checks:
+      - "13 < 17 and -13 > -17"
+      - "round(-1 + 0 - 0, 10) == -1"
+      - "(lambda rs: round(sum(sum(r[0][-100:]) / 100 for r in rs) / 20))([alg.rln_cliff('q', 500, alpha=0.1, seed=k) for k in range(20)]) == -47 < -13"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Nghĩ cách lấy số lớn nhất đánh giá cách robot <b>đang</b> chơi <b class="red">(nó học cách chơi tham lam)</b>
+          <br><span class="note">Phép thử: đi tham lam theo bảng học được và so với điểm khi còn khám phá — 13 bước so với khoảng −47 điểm.</span></div>
+        say: "Lỗi thứ nhất, nghĩ cách lấy số lớn nhất đánh giá cách robot đang chơi, trong khi nó học cách chơi tham lam. Phép thử là đi tham lam theo bảng học được rồi so với điểm khi còn khám phá, 13 bước so với khoảng âm 47 điểm."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Kết luận “theo hành động thật luôn tốt hơn” <b class="red">(tuỳ có còn khám phá không)</b>
+          <br><span class="note">Nếu khi chạy thật robot thôi chọn bừa, đường sát vách cho −13, tốt hơn −17 của đường vòng. Phép thử: chấm cả hai cách với đúng chính sách sẽ chạy thật.</span></div>
+        say: "Lỗi thứ hai, kết luận cách theo hành động thật luôn tốt hơn, trong khi điều đó tuỳ có còn khám phá hay không. Nếu khi chạy thật robot thôi chọn bừa, đường sát vách cho âm 13, tốt hơn âm 17 của đường vòng. Phép thử là chấm cả hai cách với đúng chính sách sẽ chạy thật."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Quên đặt giá trị ở ô kết thúc bằng 0 <b class="red">(đích sai)</b>
+          <br><span class="note">Bước vào đích: đích chỉ là $r = -1$, không cộng thêm giá trị nào phía sau. Phép thử: in giá trị ở ô đích sau khi học, phải đúng bằng 0.</span></div>
+        say: "Lỗi thứ ba, quên đặt giá trị ở ô kết thúc bằng 0, nên đích sai. Khi bước vào đích, đích chỉ là r bằng âm 1, không cộng thêm giá trị nào phía sau. Phép thử là in giá trị ở ô đích sau khi học, nó phải đúng bằng 0."
+      - show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Báo cáo giá trị học được làm điểm dự kiến khi hệ thống vẫn khám phá lúc chạy thật <b class="red">(lệch hơn 3 lần)</b></div>
+          <table class="t"><tr><th>con số</th><th>giá trị</th></tr>
+          <tr><td>giá trị học được của đường tham lam</td><td>−13</td></tr>
+          <tr><td>điểm thật khi vẫn chọn bừa 10%</td><td>khoảng $\hl{-47}$</td></tr></table>
+          <p class="note">Đo điểm bằng đúng chính sách sẽ triển khai, kể cả phần khám phá, trước khi hứa với ai một con số.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, báo cáo giá trị học được làm điểm dự kiến khi hệ thống vẫn khám phá lúc chạy thật. Giá trị học được của đường tham lam là âm 13. Điểm thật khi vẫn chọn bừa 10 phần trăm là khoảng âm 47, lệch hơn 3 lần. Hãy đo điểm bằng đúng chính sách sẽ triển khai, kể cả phần khám phá, trước khi hứa với ai một con số."
+
+  # ───────────────────────── 9. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: robot kho hàng cạnh cầu thang"
+    checks:
+      - "round(-1 + 0.9 * -4, 10) == -4.6 and round(-5 + 0.5 * (-4.6 + 5), 10) == -4.8"
+      - "round(-1 + 0.9 * -20, 10) == -19 and round(-5 + 0.5 * (-19 + 5), 10) == -12"
+    steps:
+      - show: |
+          <p>$Q(s, a) = -5$, $r = -1$, $\gamma = 0{,}9$, $\alpha = 0{,}5$. Ở $s'$ có hai hành động: “đi tiếp” $Q = -4$ và “sát mép cầu thang” $Q = -20$. Robot vừa chọn bừa “sát mép”.</p>
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Giá trị mới theo cách lấy số lớn nhất?</td></tr>
+          <tr><td>2</td><td>Giá trị mới theo cách theo hành động thật?</td></tr>
+          <tr><td>3</td><td>Robot làm việc thật trong kho và <b>vẫn phải khám phá</b> để thích nghi. Chọn cách nào?</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", "2.4", 0]
+        say: "Bây giờ đến lượt bạn, với Q của s và a bằng âm 5, r bằng âm 1, gam-ma 0 phẩy 9, an-pha 0 phẩy 5. Ở trạng thái sau có hai hành động, đi tiếp có giá trị âm 4, sát mép cầu thang có giá trị âm 20, và robot vừa chọn bừa sát mép. Câu một, giá trị mới theo cách lấy số lớn nhất là bao nhiêu? Câu hai, giá trị mới theo cách theo hành động thật là bao nhiêu? Câu ba, robot làm việc thật trong kho và vẫn phải khám phá để thích nghi, vậy chọn cách nào? Dừng video và làm ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu</th><th>đích</th><th>giá trị mới</th></tr>
+          <tr><td>1 — số lớn nhất</td><td>$-1 + 0{,}9 \cdot (-4) = -4{,}6$</td><td>$-5 + 0{,}5 \cdot 0{,}4 = \hlg{-4{,}8}$</td></tr>
+          <tr><td>2 — hành động thật</td><td>$-1 + 0{,}9 \cdot (-20) = -19$</td><td>$-5 + 0{,}5 \cdot (-14) = \hlb{-12}$</td></tr></table>
+        focus: ["1.2", "1.2", "1.3", "1.3"]
+        say: "Đáp án câu một, đích là âm 1 cộng 0 phẩy 9 nhân âm 4, bằng âm 4 phẩy 6. Hiệu với giá trị cũ là 0 phẩy 4, nên giá trị mới là âm 5 cộng 0 phẩy 2, bằng âm 4 phẩy 8. Câu hai, đích là âm 1 cộng 0 phẩy 9 nhân âm 20, bằng âm 19. Hiệu là âm 14, nên giá trị mới là âm 5 cộng âm 7, bằng âm 12."
+      - show: |
+          <p><b>Câu 3.</b> Theo hành động thật: giá trị phản ánh cả những lần chọn bừa sẽ còn xảy ra, nên robot tự tránh xa cầu thang khi còn khám phá.</p>
+          <p class="note">Đánh đổi: đường dài hơn một chút. Đổi sang lấy số lớn nhất khi khám phá chỉ diễn ra trong mô phỏng, còn lúc chạy thật robot đi tham lam.</p>
+        focus: [1, 2, 2]
+        say: "Câu ba, chọn cách theo hành động thật, vì giá trị phản ánh cả những lần chọn bừa sẽ còn xảy ra, nên robot tự tránh xa cầu thang khi còn khám phá. Cái giá là đường dài hơn một chút. Hãy đổi sang cách lấy số lớn nhất khi khám phá chỉ diễn ra trong mô phỏng, còn lúc chạy thật robot đi tham lam."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">sửa từng bước cho giá trị của hành động Q(s, a)</span><span class="a">→</span>
+          <span class="n">phía sau dùng hành động thật: học theo chính sách</span><span class="a">→</span>
+          <span class="n">phía sau dùng số lớn nhất: học ngoài chính sách</span><span class="a">→</span>
+          <span class="n">còn khám phá thì cách thứ nhất né rủi ro, cách thứ hai học đường tham lam</span></div>
+        say: "Tổng kết lại, ta sửa từng bước cho giá trị của từng hành động. Nếu phía sau dùng hành động thật thì đó là học theo chính sách, còn nếu dùng số lớn nhất thì là học ngoài chính sách. Khi còn khám phá, cách thứ nhất né rủi ro, còn cách thứ hai học đường tham lam."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> hỏi “giá trị này là của <b>chính sách nào</b>?” — chính sách đang chạy, hay chính sách tham lam sẽ triển khai — và đo điểm bằng đúng chính sách đó.</div>
+        say: "Điều cần mang theo, hãy hỏi giá trị này là của chính sách nào, chính sách đang chạy hay chính sách tham lam sẽ triển khai, rồi đo điểm bằng đúng chính sách đó."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 6): <b>xấp xỉ hàm và mạng Q sâu</b> — khi có quá nhiều trạng thái để ghi bảng, dùng mạng nơ-ron, kèm bộ nhớ phát lại và mạng mục tiêu.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 6, ta học xấp xỉ hàm và mạng Q sâu, dùng khi có quá nhiều trạng thái để ghi thành bảng, kèm bộ nhớ phát lại và mạng mục tiêu. Hẹn gặp bạn ở bài tiếp theo."

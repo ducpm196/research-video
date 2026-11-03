@@ -1,0 +1,295 @@
+id: L04
+course: RLN
+series: "RLN · Học tăng cường"
+title: "Bài 4 — Học từ kinh nghiệm: Monte Carlo và sai phân thời gian TD(0)"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/rln.yaml L04; audit/rln/verify_rln.py L04; audit/rln/sources_L04.md; R. S. Sutton, A. G. Barto, Reinforcement Learning: An Introduction, bản 2 (2018), mục 6.1 (công thức 6.1 và 6.2, sai số TD 6.5), 6.2 (Ví dụ 6.2 bước ngẫu nhiên), 6.3 (Ví dụ 6.4 người dự đoán), PDF chính thức incompleteideas.net/book/RLbook2020.pdf; RLN bài 0 (G_t = r_{t+1} + γ·G_{t+1}), bài 1 (giá trị theo chính sách), bài 3 (trung bình cộng dồn)"
+assumes: [arith, power, approx, frac, cdot, sub, disc, dots, policy, prob, given, sum]
+# Quy ước: V(s) là ƯỚC LƯỢNG giá trị của s theo chính sách đang chạy; s' (đọc “s phẩy”) là trạng thái kế tiếp; an-pha = tốc độ học;
+#   đen-ta = sai số TD = r + γ·V(s') − V(s); mũi tên ← nghĩa là “thay bằng”. Tên “Monte Carlo” và “TD(0)” chỉ trên màn hình (lexicon RLN:
+#   chưa đạt probe); lời đọc nói “ước lượng bằng trung bình lượt chơi” và “sai phân thời gian”.
+# Ví dụ 6.4 và 6.2 lấy nguyên số của Sutton & Barto (sources_L04.md); 4, 6, 8 và V = 6, V(s') = 10 là SỐ MINH HOẠ của giáo án.
+#   Mô phỏng bước ngẫu nhiên: alg.rln_td_walk (hạt giống 0..99, trung bình 100 lần chạy, V ban đầu 0,5 như sách).
+objectives:
+  - "Ước lượng giá trị bằng trung bình lợi nhuận quan sát được (Monte Carlo)"
+  - "Viết và chạy một bước cập nhật TD(0) mà không chờ hết lượt chơi"
+  - "Giải thích vì sao hai cách cho hai đáp số khác nhau trên cùng dữ liệu (Ví dụ 6.4)"
+  - "Chọn tốc độ học và phương pháp cho một nhiệm vụ mà kết quả đến muộn"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Tám lượt chơi, hai đáp số"
+    checks:
+      - "alg.rln_batch_mc([[('A', 0), ('B', 0)]] + [[('B', 1)]] * 6 + [[('B', 0)]]) == {'B': 0.75, 'A': 0.0}"
+      - "abs(alg.rln_batch_td([[('A', 0), ('B', 0)]] + [[('B', 1)]] * 6 + [[('B', 0)]], alpha=0.05, sweeps=3000)['A'] - 0.75) < 1e-6"
+    steps:
+      - show: |
+          <p>Bạn chỉ có nhật ký <b>8 lượt chơi</b>, không biết luật. Một lượt đi từ A sang B; bảy lượt khác bắt đầu ở B rồi kết thúc ngay.</p>
+          <p>Hai phương pháp học từ cùng 8 lượt đó cho hai câu trả lời: giá trị của A là <b>0</b>, hoặc là <b>0,75</b>.</p>
+          <div class="box key">Hôm nay: học giá trị chỉ từ kinh nghiệm, không cần luật chơi — cách chờ hết lượt và cách cập nhật từng bước. Mỗi cách đúng theo nghĩa nào, và khi nào nên chọn cách nào?</div>
+        focus: [1, 1, 2, 3, 3]
+        say: "Chào bạn, giả sử bạn chỉ có nhật ký 8 lượt chơi và không biết luật. Một lượt đi từ A sang B, bảy lượt khác bắt đầu ở B rồi kết thúc ngay. Hai phương pháp học từ cùng 8 lượt đó lại cho hai câu trả lời, giá trị của A là 0, hoặc là 0 phẩy 75. Hôm nay ta học giá trị chỉ từ kinh nghiệm, bằng cách chờ hết lượt và bằng cách cập nhật từng bước. Mỗi cách đúng theo nghĩa nào, và khi nào nên chọn cách nào?"
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại ba điều từ các bài trước"
+    checks:
+      - "[round(x, 10) for x in alg.rln_incr_means([4, 6, 8])] == [4, 5, 6]"
+      - "round(alg.rln_returns_backward([-1, -1, 10], 0.9)[0], 10) == round(-1 + 0.9 * 8, 10) == 6.2"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài</th><th>điều đã học</th><th>ví dụ số</th></tr>
+          <tr><td>bài 0</td><td>lợi nhuận tính ngược: $G_t = r_{t+1} + \gamma \cdot G_{t+1}$</td><td>chuỗi −1, −1, 10: $G_1 = 8$, $G_0 = -1 + 0{,}9 \cdot 8 = 6{,}2$</td></tr>
+          <tr><td>bài 1</td><td>giá trị $V(s)$: lợi nhuận <b>kỳ vọng</b> nếu từ $s$ cứ chơi theo chính sách $\pi$</td><td>A sang B thưởng 1, B về A thưởng 0: giá trị của A ≈ 5,263</td></tr>
+          <tr><td>bài 3</td><td>trung bình cộng dồn: mới = cũ + (số mới − cũ) / $n$</td><td>4, 6, 8 → 4; 5; 6</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Bảng nhắc lại ba điều từ các bài trước. Ở bài 0, lợi nhuận tính ngược theo công thức G t bằng r t cộng 1, cộng gam-ma nhân G t cộng 1, như chuỗi âm 1, âm 1, 10 cho 6 phẩy 2. Ở bài 1, giá trị V của s là lợi nhuận kỳ vọng nếu từ s cứ chơi theo chính sách pi, như giá trị của A khoảng 5 phẩy 263. Ở bài 3, trung bình cộng dồn lấy giá trị cũ cộng phần chênh chia n, nên dãy 4, 6, 8 cho 4, rồi 5, rồi 6."
+      - show: |
+          <p>Điều mới hôm nay: <b>không biết</b> xác suất chuyển trạng thái và phần thưởng của trò chơi. Chỉ có các lượt chơi đã ghi lại — nên phải <b>ước lượng</b> kỳ vọng bằng trung bình của những gì quan sát được.</p>
+          <p class="note">Ở khoá Toán cho khoa học máy tính: trung bình của nhiều lần thử tiến về kỳ vọng khi số lần thử tăng.</p>
+        focus: [1, 1, 2]
+        say: "Điều mới hôm nay là ta không biết xác suất chuyển trạng thái và phần thưởng của trò chơi. Ta chỉ có các lượt chơi đã ghi lại, nên phải ước lượng kỳ vọng bằng trung bình của những gì quan sát được. Ở khoá Toán cho khoa học máy tính, ta đã biết trung bình của nhiều lần thử tiến về kỳ vọng khi số lần thử tăng."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: an-pha, mũi tên gán, s phẩy và đen-ta"
+    checks:
+      - "round(6 + 0.5 * (10 - 6), 10) == 8 and round(1 + 0.9 * 10 - 6, 10) == 4"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ký hiệu</th><th>đọc</th><th>nghĩa</th></tr>
+          <tr><td>$\alpha$</td><td>an-pha</td><td>tốc độ học, từ 0 tới 1: dịch giá trị cũ một phần $\alpha$ về phía đích</td></tr>
+          <tr><td>$V(s) \leftarrow 6 + 0{,}5 \cdot (10 - 6)$</td><td>V của s thay bằng …</td><td>mũi tên: bỏ giá trị cũ, ghi giá trị mới = 8</td></tr>
+          <tr><td>$s'$</td><td>s phẩy</td><td>trạng thái ngay sau $s$</td></tr></table>
+        introduces: [lr, assign, prime]
+        focus: [1, "1.2", "1.3", "1.3", "1.4"]
+        say: "Bài dùng thêm ba ký hiệu. Chữ Hy Lạp an-pha là tốc độ học, một số từ 0 tới 1, cho biết dịch giá trị cũ bao nhiêu phần về phía đích. Mũi tên quay trái đọc là thay bằng, nghĩa là bỏ giá trị cũ và ghi giá trị mới. Ví dụ 6 cộng 0 phẩy 5 nhân 10 trừ 6 cho giá trị mới là 8. Còn s phẩy là trạng thái ngay sau s."
+      - show: |
+          <p>Chữ Hy Lạp $\delta$, đọc <b>đen-ta</b>: <b>sai số sai phân thời gian</b> — đích một bước trừ giá trị cũ.</p>
+          $$\delta = r + \gamma \cdot V(s') - V(s)$$
+          <p class="note">Làm thử: $r = 1$, $V(s') = 10$, $\gamma = 0{,}9$, $V(s) = 6$: $\delta = 1 + 9 - 6 = 4$. Dương nghĩa là “tốt hơn mình tưởng”.</p>
+        introduces: [tderr]
+        focus: [1, 2, 3, 3]
+        say: "Chữ Hy Lạp nhỏ này đọc là đen-ta, là sai số sai phân thời gian, bằng đích một bước trừ giá trị cũ. Đen-ta bằng r cộng gam-ma nhân V của s phẩy, trừ V của s. Làm thử với r bằng 1, V của s phẩy bằng 10, gam-ma bằng 0 phẩy 9 và V của s bằng 6, ta được 1 cộng 9 trừ 6, bằng 4. Đen-ta dương nghĩa là tình hình tốt hơn mình tưởng."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Chờ hết lượt, hay sửa ngay sau mỗi bước"
+    steps:
+      - show: |
+          <div><svg width="1000" height="400" viewBox="0 0 1000 400"><defs><marker id="rl4a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker><marker id="rl4b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#eb6834"/></marker><marker id="rl4c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#2a78d6"/></marker></defs>
+          <g font-size="24" text-anchor="middle">
+          <text x="120" y="45" fill="#1f2937" font-weight="bold" text-anchor="start">chờ hết lượt</text>
+          <circle cx="160" cy="110" r="30" fill="#f3f4f6" stroke="#1f2937" stroke-width="2"/><text x="160" y="118" fill="#1f2937">s₀</text>
+          <circle cx="400" cy="110" r="30" fill="#f3f4f6" stroke="#1f2937" stroke-width="2"/><text x="400" y="118" fill="#1f2937">s₁</text>
+          <circle cx="640" cy="110" r="30" fill="#f3f4f6" stroke="#1f2937" stroke-width="2"/><text x="640" y="118" fill="#1f2937">s₂</text>
+          <rect x="840" y="80" width="110" height="60" rx="8" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="895" y="118" fill="#1f2937">hết</text>
+          </g>
+          <line x1="192" y1="110" x2="365" y2="110" stroke="#1f2937" stroke-width="2.5" marker-end="url(#rl4a)"/>
+          <line x1="432" y1="110" x2="605" y2="110" stroke="#1f2937" stroke-width="2.5" marker-end="url(#rl4a)"/>
+          <line x1="672" y1="110" x2="835" y2="110" stroke="#1f2937" stroke-width="2.5" marker-end="url(#rl4a)"/>
+          <path d="M895,145 C895,200 160,200 160,148" fill="none" stroke="#eb6834" stroke-width="3" marker-end="url(#rl4b)"/>
+          <text x="530" y="218" font-size="22" fill="#eb6834" text-anchor="middle">cuối lượt mới biết lợi nhuận thật G, sửa mọi trạng thái đã ghé</text>
+          <g font-size="24" text-anchor="middle">
+          <text x="120" y="268" fill="#1f2937" font-weight="bold" text-anchor="start">sửa từng bước</text>
+          <circle cx="160" cy="318" r="30" fill="#f3f4f6" stroke="#1f2937" stroke-width="2"/><text x="160" y="326" fill="#1f2937">s₀</text>
+          <circle cx="400" cy="318" r="30" fill="#f3f4f6" stroke="#1f2937" stroke-width="2"/><text x="400" y="326" fill="#1f2937">s₁</text>
+          <circle cx="640" cy="318" r="30" fill="#f3f4f6" stroke="#1f2937" stroke-width="2"/><text x="640" y="326" fill="#1f2937">s₂</text>
+          </g>
+          <line x1="192" y1="318" x2="365" y2="318" stroke="#1f2937" stroke-width="2.5" marker-end="url(#rl4a)"/>
+          <line x1="432" y1="318" x2="605" y2="318" stroke="#1f2937" stroke-width="2.5" marker-end="url(#rl4a)"/>
+          <path d="M400,350 C400,392 160,392 160,354" fill="none" stroke="#2a78d6" stroke-width="3" marker-end="url(#rl4c)"/>
+          <text x="830" y="300" font-size="22" fill="#2a78d6" text-anchor="middle">mỗi bước: dùng r và</text>
+          <text x="830" y="330" font-size="22" fill="#2a78d6" text-anchor="middle">ước lượng của s₁ để sửa s₀</text>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình trên là cách chờ hết lượt. Tác tử đi hết lượt chơi, tới cuối mới biết lợi nhuận thật, rồi quay lại sửa mọi trạng thái đã ghé. Hình dưới là cách sửa từng bước. Vừa sang s một, tác tử đã dùng phần thưởng vừa nhận và ước lượng hiện có của s một để sửa s không, không cần chờ tới cuối."
+
+  # ───────────────────────── 5. SUY RA CÔNG THỨC ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra hai cách cập nhật từ trung bình cộng dồn"
+    checks:
+      - "[round(x, 10) for x in alg.rln_incr_means([4, 6, 8])] == [4, 5, 6] and round(5 + (8 - 5) / 3, 10) == 6"
+      - "round(4 + 0.5 * (6 - 4), 10) == 5 and round(5 + 0.5 * (8 - 5), 10) == 6.5"
+      - "round(6 + 0.5 * (1 + 0.9 * 10 - 6), 10) == 8"
+    steps:
+      - show: |
+          <p><b>Bước 1.</b> Giá trị là <b>kỳ vọng</b> của lợi nhuận, nên ước lượng nó bằng trung bình các lợi nhuận $G$ quan sát được. Viết dạng cộng dồn như bài 3, lần thứ $n$:</p>
+          $$V(s) \leftarrow V(s) + \frac{1}{n} \cdot \big(G - V(s)\big)$$
+          <p class="note">Làm thử với 4, 6, 8: lần 3 có $5 + \frac{1}{3} \cdot (8 - 5) = 6$ = trung bình ✓.</p>
+        focus: [1, 2, 3]
+        say: "Bước một, giá trị là kỳ vọng của lợi nhuận, nên ta ước lượng nó bằng trung bình các lợi nhuận G quan sát được. Viết dạng cộng dồn như bài 3, ở lần thứ n, V của s thay bằng V của s cộng 1 phần n nhân hiệu G trừ V của s. Làm thử với 4, 6, 8, ở lần thứ ba ta có 5 cộng một phần ba nhân 3, bằng 6, đúng bằng trung bình."
+      - show: |
+          <p><b>Bước 2.</b> Thay $\frac{1}{n}$ bằng một số cố định $\alpha$, để lần gần đây được tính nặng hơn:</p>
+          $$V(s) \leftarrow V(s) + \alpha \cdot \big(\hlb{G} - V(s)\big)$$
+          <p class="note">Đây là cách <b>chờ hết lượt</b> (Monte Carlo). Làm thử $\alpha = 0{,}5$ với 4, 6, 8: 4 → 5 → 6,5.</p>
+        focus: [1, 2, 3, 3]
+        say: "Bước hai, ta thay 1 phần n bằng một số cố định an-pha, để những lần gần đây được tính nặng hơn. Khi đó V của s thay bằng V của s cộng an-pha nhân hiệu G trừ V của s. Đây là cách chờ hết lượt, vì phải hết lượt mới có G. Làm thử với an-pha bằng 0 phẩy 5 và dãy 4, 6, 8, giá trị đi từ 4 lên 5 rồi lên 6 phẩy 5."
+      - clear: true
+        show: |
+          <p><b>Bước 3.</b> Theo bài 0, $G_t = r_{t+1} + \gamma \cdot G_{t+1}$. Phần $G_{t+1}$ chưa biết, nhưng ta đã có ước lượng của nó là $V(s')$. Thay vào chỗ $G$:</p>
+          $$V(s) \leftarrow V(s) + \alpha \cdot \big(\hlo{r + \gamma \cdot V(s')} - V(s)\big) = V(s) + \alpha \cdot \delta$$
+        focus: [1, 1, 2]
+        say: "Bước ba, theo công thức của bài 0, G t bằng r t cộng 1, cộng gam-ma nhân G t cộng 1. Phần G t cộng 1 chưa biết, nhưng ta đã có ước lượng của nó là V của s phẩy, nên thay vào chỗ G. Vậy V của s thay bằng V của s cộng an-pha nhân đen-ta, với đích mới là r cộng gam-ma nhân V của s phẩy."
+      - show: |
+          <p class="note">Đây là cách <b>sửa từng bước</b> (TD(0)): chỉ cần chờ <b>một</b> bước. Dùng ước lượng của chính mình làm đích gọi là <b>tự khởi động</b>.</p>
+          <p class="note">Làm thử: $V(s) = 6$, $r = 1$, $V(s') = 10$, $\gamma = 0{,}9$, $\alpha = 0{,}5$: $6 + 0{,}5 \cdot (1 + 9 - 6) = 6 + 2 = \hlg{8}$.</p>
+        focus: [1, 1, 2]
+        say: "Đây là cách sửa từng bước, vì chỉ cần chờ một bước là có đích. Dùng ước lượng của chính mình làm đích như vậy gọi là tự khởi động. Làm thử với V của s bằng 6, r bằng 1, V của s phẩy bằng 10, gam-ma 0 phẩy 9 và an-pha 0 phẩy 5, ta được 6 cộng 0 phẩy 5 nhân 4, bằng 8."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Tám lượt chơi của Sutton và Barto, từng phép tính"
+    checks:
+      - "sum([1] * 6 + [0, 0]) == 6 and round(6 / 8, 10) == 0.75 == alg.rln_batch_mc([[('A', 0), ('B', 0)]] + [[('B', 1)]] * 6 + [[('B', 0)]])['B']"
+      - "alg.rln_batch_mc([[('A', 0), ('B', 0)]] + [[('B', 1)]] * 6 + [[('B', 0)]])['A'] == 0.0"
+      - "round(0 + 1 * 0.75, 10) == 0.75 and abs(alg.rln_batch_td([[('A', 0), ('B', 0)]] + [[('B', 1)]] * 6 + [[('B', 0)]], alpha=0.05, sweeps=3000)['A'] - 0.75) < 1e-6"
+    steps:
+      - show: |
+          <table class="t"><tr><th>lượt</th><th>đi qua và phần thưởng</th></tr>
+          <tr><td>1</td><td>A, thưởng 0, sang B, thưởng 0, hết</td></tr>
+          <tr><td>2 tới 7</td><td>B, thưởng 1, hết (6 lượt)</td></tr>
+          <tr><td>8</td><td>B, thưởng 0, hết</td></tr></table>
+          <p class="note">Không chiết khấu: $\gamma = 1$, vì mọi lượt đều kết thúc.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Đây là tám lượt chơi lấy từ sách giáo khoa chuẩn của ngành, bản 2 năm 2018. Lượt một đi từ A, thưởng 0, sang B, thưởng 0, rồi hết. Sáu lượt tiếp theo bắt đầu ở B, thưởng 1, rồi hết. Lượt cuối bắt đầu ở B, thưởng 0, rồi hết. Ta không chiết khấu, tức gam-ma bằng 1, vì mọi lượt đều kết thúc."
+      - clear: true
+        show: |
+          <p><b>Bước 1 — giá trị của B.</b> B xuất hiện 8 lần, lợi nhuận sau B là 1 ở sáu lần, 0 ở hai lần:</p>
+          $$V(B) = \frac{6 \cdot 1 + 2 \cdot 0}{8} = \hlb{0{,}75}$$
+          <p class="note">Cả hai cách đều cho 0,75.</p>
+        focus: [1, 2, 3]
+        say: "Bước một là giá trị của B. B xuất hiện 8 lần, lợi nhuận sau B là 1 ở sáu lần và 0 ở hai lần, nên trung bình là 6 chia 8, bằng 0 phẩy 75. Cả hai cách đều cho con số này."
+      - show: |
+          <p><b>Bước 2 — chờ hết lượt.</b> A chỉ xuất hiện một lần, và lợi nhuận sau A lần đó là $0 + 0 = 0$:</p>
+          $$V(A) = \hl{0}$$
+        focus: [1, 2]
+        say: "Bước hai, theo cách chờ hết lượt. A chỉ xuất hiện một lần, và lợi nhuận sau A lần đó là 0 cộng 0, nên giá trị của A bằng 0."
+      - show: |
+          <p><b>Bước 3 — sửa từng bước.</b> Đích của A là thưởng ngay cộng ước lượng của B, vì lần nào ở A cũng sang B:</p>
+          $$V(A) = 0 + 1 \cdot V(B) = \hlg{0{,}75}$$
+          <p class="note">Hai đáp số khác nhau từ <b>cùng một</b> dữ liệu.</p>
+        focus: [1, 1, 2, 3]
+        say: "Bước ba, theo cách sửa từng bước. Đích của A là thưởng ngay cộng ước lượng của B, vì lần nào ở A cũng sang B. Vậy giá trị của A bằng 0 cộng 1 nhân 0 phẩy 75, bằng 0 phẩy 75. Hai đáp số khác nhau đến từ cùng một dữ liệu."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>cách</th><th>V(A)</th><th>đúng theo nghĩa nào</th></tr>
+          <tr><td>chờ hết lượt</td><td>0</td><td>sai số nhỏ nhất trên <b>chính 8 lượt</b> đã thấy (bằng 0)</td></tr>
+          <tr><td>sửa từng bước</td><td>0,75</td><td>đúng hẳn với mô hình suy từ dữ liệu: A luôn sang B, B cho 1 với xác suất 0,75</td></tr></table>
+          <p class="note">Nếu trò chơi đúng là chỉ phụ thuộc trạng thái hiện tại, cách thứ hai dự đoán <b>lượt chơi mới</b> tốt hơn.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Bước bốn, đặt hai đáp số cạnh nhau. Cách chờ hết lượt cho 0, có sai số nhỏ nhất trên chính 8 lượt đã thấy. Cách sửa từng bước cho 0 phẩy 75, đúng hẳn với mô hình suy từ dữ liệu, A luôn sang B, và B cho 1 với xác suất 0 phẩy 75. Nếu trò chơi đúng là chỉ phụ thuộc trạng thái hiện tại, cách thứ hai dự đoán lượt chơi mới tốt hơn."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: giải thẳng bước ngẫu nhiên năm ô"
+    checks:
+      - "(lambda V: [round(V[k], 4) for k in 'ABCDE'])(alg.rln_eval({'A': {'x': [(0.5, 0, None), (0.5, 0, 'B')]}, 'B': {'x': [(0.5, 0, 'A'), (0.5, 0, 'C')]}, 'C': {'x': [(0.5, 0, 'B'), (0.5, 0, 'D')]}, 'D': {'x': [(0.5, 0, 'C'), (0.5, 0, 'E')]}, 'E': {'x': [(0.5, 0, 'D'), (0.5, 1, None)]}}, {s: 'x' for s in 'ABCDE'}, 1.0, tol=1e-15)) == [round(k / 6, 4) for k in range(1, 6)]"
+      - "[round(x, 3) for x in (sum(alg.rln_td_walk(0.1, n, seed=k) for k in range(100)) / 100 for n in (0, 10, 100))] == [0.236, 0.128, 0.055]"
+    steps:
+      - show: |
+          <p>Ví dụ 6.2 của sách: năm ô A, B, C, D, E; bắt đầu ở C, mỗi bước sang trái hoặc phải với xác suất 0,5. Ra mép phải được 1, mép trái được 0.</p>
+          <p><b>Đường khác:</b> không học, giải thẳng. Giá trị một ô = nửa ô trái + nửa ô phải, nên các giá trị cách đều nhau từ 0 tới 1:</p>
+          $$V(A), \dots, V(E) = \frac{1}{6}, \frac{2}{6}, \frac{3}{6}, \frac{4}{6}, \frac{5}{6}$$
+        introduces: [dots]
+        focus: [1, 1, 2, 3]
+        say: "Ta kiểm bằng ví dụ 6.2 của sách, gồm năm ô A, B, C, D, E, bắt đầu ở C, mỗi bước sang trái hoặc phải với xác suất 0 phẩy 5. Ra mép phải được 1, ra mép trái được 0. Đường khác là không học mà giải thẳng, vì giá trị một ô bằng nửa ô trái cộng nửa ô phải, nên các giá trị cách đều nhau từ 0 tới 1. Vậy năm ô có giá trị một phần sáu, hai phần sáu, và cứ thế tới năm phần sáu."
+      - clear: true
+        show: |
+          <p>Chạy cách sửa từng bước với $\alpha = 0{,}1$, bắt đầu mọi ô bằng 0,5, đo độ lệch so với đáp số giải thẳng (trung bình 100 lần chạy):</p>
+          <table class="t"><tr><th>số lượt đã chơi</th><th>0</th><th>10</th><th>100</th></tr>
+          <tr><td>độ lệch trung bình</td><td>0,236</td><td>0,128</td><td>0,055</td></tr></table>
+          <p class="note">Độ lệch giảm dần: học từ kinh nghiệm tiến về đúng đáp số mà phương trình cho.</p>
+        focus: [1, 2, 3]
+        say: "Bây giờ chạy cách sửa từng bước với an-pha bằng 0 phẩy 1, bắt đầu mọi ô bằng 0 phẩy 5, rồi đo độ lệch so với đáp số giải thẳng, lấy trung bình 100 lần chạy. Độ lệch là 0 phẩy 236 lúc đầu, 0 phẩy 128 sau 10 lượt, và 0 phẩy 055 sau 100 lượt. Độ lệch giảm dần, nên học từ kinh nghiệm tiến về đúng đáp số mà phương trình cho."
+
+  # ───────────────────────── 8. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi cả người đã đi làm"
+    checks:
+      - "round(1 + 0.9 * 0, 10) == 1 and round(1 + 0.9 * 10, 10) == 10"
+      - "round(6 + 1 * (8 - 6), 10) == 8"
+      - "[round(x, 3) for x in (sum(alg.rln_td_walk(a, 1000, seed=k) for k in range(100)) / 100 for a in (0.1, 0.02))] == [0.055, 0.024]"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Tin cách sửa từng bước ngay từ đầu <b class="red">(thiên lệch)</b>
+          <br><span class="note">Đích dùng ước lượng của chính mình. Nếu $V(s')$ ban đầu là 0 trong khi giá trị thật là 10, đích là $1 + 0{,}9 \cdot 0 = 1$ thay vì 10. Phép thử: đổi giá trị ban đầu, xem kết quả sau ít lượt có đổi theo không.</span></div>
+        say: "Lỗi thứ nhất, tin cách sửa từng bước ngay từ đầu, trong khi nó có thiên lệch. Đích dùng ước lượng của chính mình, nên nếu V của s phẩy ban đầu là 0 trong khi giá trị thật là 10, đích chỉ là 1 thay vì 10. Phép thử là đổi giá trị ban đầu, rồi xem kết quả sau ít lượt có đổi theo không."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Chọn $\alpha = 1$ cho “học nhanh” <b class="red">(chỉ nhớ lần cuối)</b>
+          <br><span class="note">Với 4, 6, 8 và $\alpha = 1$: giá trị là 8, quên hẳn 4 và 6. Phép thử: so với trung bình 6 của cả ba lần.</span></div>
+        say: "Lỗi thứ hai, chọn an-pha bằng 1 cho học nhanh, kết quả là chỉ nhớ lần cuối. Với 4, 6, 8 và an-pha bằng 1, giá trị là 8, quên hẳn 4 và 6. Phép thử là so với trung bình 6 của cả ba lần."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Dùng cách chờ hết lượt cho nhiệm vụ không bao giờ dừng <b class="red">(không bao giờ cập nhật)</b>
+          <br><span class="note">Không có cuối lượt thì không có $G$. Phép thử: hỏi “lần cập nhật đầu tiên xảy ra lúc nào?”.</span></div>
+        say: "Lỗi thứ ba, dùng cách chờ hết lượt cho nhiệm vụ không bao giờ dừng, nên không bao giờ cập nhật. Không có cuối lượt thì không có lợi nhuận G. Phép thử là hỏi lần cập nhật đầu tiên xảy ra lúc nào."
+      - show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Giữ $\alpha$ cố định rồi chờ sai số tự về 0 <b class="red">(dao động mãi)</b></div>
+          <table class="t"><tr><th>độ lệch, trung bình 100 lần chạy</th><th>sau 100 lượt</th><th>sau 1000 lượt</th></tr>
+          <tr><td>$\alpha = 0{,}1$</td><td>0,055</td><td>0,055</td></tr>
+          <tr><td>$\alpha = 0{,}02$</td><td>chậm hơn</td><td>$\hlg{0{,}024}$</td></tr></table>
+          <p class="note">Sách ghi: với $\alpha$ cố định, giá trị “dao động mãi” theo các lượt gần nhất. Giảm dần $\alpha$, hoặc chấp nhận một mức nhiễu đã đo.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, giữ an-pha cố định rồi chờ sai số tự về 0. Với an-pha bằng 0 phẩy 1, độ lệch dừng ở 0 phẩy 055, từ lượt 100 tới lượt 1000 không giảm nữa. Với an-pha bằng 0 phẩy 02, lúc đầu học chậm hơn, nhưng sau 1000 lượt độ lệch chỉ còn 0 phẩy 024. Sách ghi rõ, với an-pha cố định, giá trị dao động mãi theo các lượt gần nhất, nên hãy giảm dần an-pha, hoặc chấp nhận một mức nhiễu đã đo."
+
+  # ───────────────────────── 9. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: một bước của mỗi cách, và một quyết định"
+    checks:
+      - "round(2 + 0.9 * 4 - 5, 10) == 0.6 and round(5 + 0.1 * 0.6, 10) == 5.06"
+      - "round(5 + 0.1 * (7 - 5), 10) == 5.2"
+    steps:
+      - show: |
+          <p>$V(s) = 5$, $\alpha = 0{,}1$, $\gamma = 0{,}9$. Tác tử nhận $r = 2$ rồi sang $s'$ có $V(s') = 4$; cuối lượt, lợi nhuận thật từ $s$ là $G = 7$.</p>
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Tính đen-ta và giá trị mới theo cách sửa từng bước.</td></tr>
+          <tr><td>2</td><td>Tính giá trị mới theo cách chờ hết lượt.</td></tr>
+          <tr><td>3</td><td>Bạn dự đoán khách hàng có quay lại không; kết quả chỉ biết sau 30 ngày. Chọn cách nào?</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", "2.4", 0]
+        say: "Bây giờ đến lượt bạn, với V của s bằng 5, an-pha bằng 0 phẩy 1, gam-ma bằng 0 phẩy 9. Tác tử nhận r bằng 2 rồi sang s phẩy có giá trị 4, và cuối lượt lợi nhuận thật từ s là 7. Câu một, tính đen-ta và giá trị mới theo cách sửa từng bước. Câu hai, tính giá trị mới theo cách chờ hết lượt. Câu ba, bạn dự đoán khách hàng có quay lại không, mà kết quả chỉ biết sau 30 ngày, vậy chọn cách nào? Dừng video và làm ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>1</td><td>$\delta = 2 + 0{,}9 \cdot 4 - 5 = 0{,}6$; $\;5 + 0{,}1 \cdot 0{,}6$</td><td>$\hlg{5{,}06}$</td></tr>
+          <tr><td>2</td><td>$5 + 0{,}1 \cdot (7 - 5)$</td><td>$\hlg{5{,}2}$</td></tr></table>
+        focus: ["1.2", "1.2", "1.3"]
+        say: "Đáp án câu một, đen-ta bằng 2 cộng 0 phẩy 9 nhân 4 trừ 5, bằng 0 phẩy 6. Vì vậy giá trị mới là 5 cộng 0 phẩy 1 nhân 0 phẩy 6, bằng 5 phẩy 06. Câu hai, giá trị mới là 5 cộng 0 phẩy 1 nhân hiệu 7 trừ 5, bằng 5 phẩy 2."
+      - show: |
+          <p><b>Câu 3.</b> Sửa từng bước: mỗi ngày đã có tín hiệu (mở ứng dụng, thêm vào giỏ) để cập nhật, không chờ 30 ngày.</p>
+          <p class="note">Đánh đổi: học sớm nhưng thiên lệch theo ước lượng hiện tại. Đổi sang chờ hết lượt khi lượt ngắn, hoặc khi ước lượng trung gian chưa đáng tin.</p>
+        focus: [1, 2, 2]
+        say: "Câu ba, nên sửa từng bước, vì mỗi ngày đã có tín hiệu như mở ứng dụng hay thêm vào giỏ để cập nhật, không cần chờ 30 ngày. Cái giá là học sớm nhưng thiên lệch theo ước lượng hiện tại. Hãy đổi sang chờ hết lượt khi lượt ngắn, hoặc khi các ước lượng trung gian chưa đáng tin."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">giá trị = lợi nhuận kỳ vọng</span><span class="a">→</span>
+          <span class="n">không biết luật: lấy trung bình lợi nhuận thật (chờ hết lượt)</span><span class="a">→</span>
+          <span class="n">thay lợi nhuận bằng r + γ nhân V(s phẩy): sửa từng bước</span><span class="a">→</span>
+          <span class="n">nhanh hơn, nhưng thiên lệch theo ước lượng của chính mình</span></div>
+        say: "Tổng kết lại, giá trị là lợi nhuận kỳ vọng. Khi không biết luật chơi, ta lấy trung bình các lợi nhuận thật, tức cách chờ hết lượt. Thay lợi nhuận bằng thưởng ngay cộng gam-ma nhân ước lượng của trạng thái sau, ta được cách sửa từng bước, nhanh hơn nhưng thiên lệch theo ước lượng của chính mình."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> trước khi chọn cách học, hỏi <b>kết quả thật đến sau bao lâu</b> và <b>ước lượng trung gian đáng tin tới đâu</b> — rồi đo độ lệch trên một bài toán giải thẳng được.</div>
+        say: "Điều cần mang theo, trước khi chọn cách học, hãy hỏi kết quả thật đến sau bao lâu, và ước lượng trung gian đáng tin tới đâu. Rồi đo độ lệch trên một bài toán nhỏ giải thẳng được."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 5): <b>Q-learning và SARSA</b> — học giá trị của từng hành động để tự chọn cách chơi, theo hai kiểu khác nhau.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 5, ta học giá trị của từng hành động để tự chọn cách chơi, theo hai kiểu, học ngoài chính sách và học theo chính sách. Hẹn gặp bạn ở bài tiếp theo."

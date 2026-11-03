@@ -1,0 +1,243 @@
+id: L09
+course: DSY
+series: "DSY · Hệ phân tán và dữ liệu lớn"
+title: "Bài 9 — Xử lý luồng: cửa sổ, thời gian sự kiện và dữ liệu đến muộn"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/dsy.yaml L09; audit/dsy/verify_dsy.py L09; T. Akidau và cộng sự, The Dataflow Model, VLDB 2015; T. Akidau, S. Chernyak, R. Lax, Streaming Systems (2018), chương 2–3"
+assumes: [arith, ltgt]
+# Quy ước: cửa sổ nhảy 5 giây [0, 5), [5, 10), [10, 15) theo THỜI GIAN SỰ KIỆN (lúc sự việc xảy ra). Mốc nước = thời gian sự kiện lớn nhất đã thấy
+#   − độ trễ cho phép L; cửa sổ đóng khi mốc nước ≥ cận phải; sự kiện đến sau khi cửa sổ của nó đã đóng bị bỏ (alg.stream_windows). Dãy đến
+#   theo thứ tự: 1, 2, 7, 3, 8, 12, 4 (giây sự kiện). Hình cửa sổ: audit/dsy/figs.py window_fig (sáu sự kiện đúng giờ).
+objectives:
+  - "Gom luồng theo cửa sổ thời gian"
+  - "Phân biệt thời gian sự kiện và thời gian xử lý"
+  - "Hiểu mốc nước và đánh đổi giữa đúng và sớm"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Điện thoại mất sóng, gửi bù sau 10 phút"
+    steps:
+      - show: |
+          <p>Đếm số lượt bấm mỗi 5 giây từ hàng triệu điện thoại. Một điện thoại vào thang máy, mất sóng, 10 phút sau mới gửi bù các lượt bấm cũ. Tính chúng vào cửa sổ nào — lúc bấm, hay lúc tới máy chủ?</p>
+          <div class="box key">Hôm nay: <b>xử lý luồng</b> — cửa sổ thời gian, <b>thời gian sự kiện</b> và dữ liệu <b>đến muộn</b>.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, ta đếm số lượt bấm mỗi 5 giây từ hàng triệu điện thoại. Một điện thoại vào thang máy và mất sóng, 10 phút sau mới gửi bù các lượt bấm cũ. Vậy tính chúng vào cửa sổ nào, lúc bấm hay lúc tới máy chủ? Hôm nay ta học xử lý luồng, với cửa sổ thời gian, thời gian sự kiện, và dữ liệu đến muộn."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: chia lấy phần nguyên, và giá trị lớn nhất đã thấy"
+    checks:
+      - "[t // 5 for t in (3, 7, 5, 12)] == [0, 1, 1, 2] and 4 < 5 and not 5 < 5"
+      - "list(__import__('itertools').accumulate([1, 2, 7, 3, 8, 12, 4], max)) == [1, 2, 7, 7, 8, 12, 12]"
+    steps:
+      - show: |
+          <p>Cửa sổ 5 giây của một sự kiện ở giây $t$: lấy <b>phần nguyên</b> của $t / 5$.</p>
+          <table class="t"><tr><th>giây sự kiện</th><th>phần nguyên của chia 5</th><th>cửa sổ</th></tr>
+          <tr><td>3</td><td>$\lfloor 3 / 5 \rfloor = 0$</td><td>[0, 5)</td></tr>
+          <tr><td>7</td><td>$\lfloor 7 / 5 \rfloor = 1$</td><td>[5, 10)</td></tr>
+          <tr><td>5</td><td>$\lfloor 5 / 5 \rfloor = 1$</td><td>[5, 10) — cận phải 5 của [0, 5) không lấy</td></tr>
+          <tr><td>12</td><td>$\lfloor 12 / 5 \rfloor = 2$</td><td>[10, 15)</td></tr></table>
+        introduces: [floor]
+        focus: [1, 2, "2.2", "2.3", "2.4", "2.5"]
+        say: "Bài này dựa trên hai phép tính nhỏ. Thứ nhất, muốn biết một sự kiện ở giây t rơi vào cửa sổ 5 giây nào, ta lấy phần nguyên của t chia 5, tức là chia rồi bỏ phần lẻ. Giây 3 cho phần nguyên bằng 0, nên thuộc cửa sổ từ 0 tới 5. Giây 7 cho 1, thuộc cửa sổ từ 5 tới 10. Giây 5 cũng cho 1, vì cửa sổ từ 0 tới 5 lấy cận trái nhưng không lấy cận phải. Giây 12 cho 2, thuộc cửa sổ từ 10 tới 15."
+      - show: |
+          <p><b>Giá trị lớn nhất đã thấy</b> khi đọc lần lượt một dãy:</p>
+          <table class="t"><tr><th>đọc tới</th><td>1</td><td>2</td><td>7</td><td>3</td><td>8</td><td>12</td><td>4</td></tr>
+          <tr><th>lớn nhất đã thấy</th><td>1</td><td>2</td><td>7</td><td>$\hl{7}$</td><td>8</td><td>12</td><td>$\hl{12}$</td></tr></table>
+          <p class="note">Chỉ tăng hoặc đứng yên, không bao giờ giảm — kể cả khi gặp số nhỏ tới muộn.</p>
+        focus: [1, 2, 3]
+        say: "Thứ hai, giá trị lớn nhất đã thấy khi đọc lần lượt một dãy. Đọc dãy 1, 2, 7, 3, 8, 12, 4, ta ghi dưới mỗi số giá trị lớn nhất tính tới đó, được 1, 2, 7, 7, 8, 12, 12. Khi gặp số 3 hay số 4 tới muộn, giá trị lớn nhất đứng yên, nó chỉ tăng hoặc đứng yên, không bao giờ giảm."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: cửa sổ nhảy, hai loại thời gian"
+    checks:
+      - "alg.tumbling([1, 2, 3, 7, 8, 12], 5) == {0: 3, 1: 2, 2: 1}"
+    steps:
+      - show: |
+          <div>{{WIN}}</div>
+          <p><b>Cửa sổ nhảy</b> 5 giây: [0, 5), [5, 10), [10, 15) — không chồng nhau. Sáu sự kiện ở giây 1, 2, 3, 7, 8, 12 → $\hl{3, 2, 1}$.</p>
+          <p><b>Thời gian sự kiện</b>: lúc việc xảy ra (ghi trong dữ liệu). <b>Thời gian xử lý</b>: lúc máy chủ nhận. Mất sóng làm hai thời gian cách nhau tuỳ ý.</p>
+        focus: [1, 2, 2, 3, 3, 3]
+        say: "Hình vẽ cửa sổ nhảy 5 giây, các đoạn từ 0 tới 5, từ 5 tới 10, từ 10 tới 15, không chồng lên nhau. Sáu sự kiện ở giây 1, 2, 3, 7, 8 và 12 cho số đếm 3, 2, 1. Có hai loại thời gian. Thời gian sự kiện là lúc việc xảy ra, ghi trong dữ liệu. Thời gian xử lý là lúc máy chủ nhận. Mất sóng làm hai thời gian này cách nhau tuỳ ý."
+
+  # ───────────────────────── 3. MỐC NƯỚC ─────────────────────────
+  - id: watermark
+    kind: concept
+    title: "Mốc nước: khi nào đóng cửa sổ?"
+    steps:
+      - show: |
+          <p>Theo thời gian sự kiện thì không biết chắc đã nhận đủ chưa. <b>Mốc nước</b> = thời gian sự kiện lớn nhất đã thấy trừ độ trễ cho phép L: “coi như mọi sự kiện cũ hơn mốc này đã tới”.</p>
+          <p>Cửa sổ [0, 5) <b>đóng</b> (xuất kết quả) khi mốc nước ≥ 5. Sự kiện của cửa sổ đã đóng mà tới sau thì bị bỏ (hoặc gửi bản sửa).</p>
+        focus: [1, 1, 2, 2]
+        say: "Theo thời gian sự kiện thì ta không biết chắc đã nhận đủ chưa. Mốc nước là thời gian sự kiện lớn nhất đã thấy trừ đi độ trễ cho phép L, nghĩa là coi như mọi sự kiện cũ hơn mốc này đã tới. Cửa sổ từ 0 tới 5 đóng và xuất kết quả khi mốc nước đạt 5. Sự kiện của một cửa sổ đã đóng mà tới sau thì bị bỏ, hoặc phải gửi một bản sửa."
+
+  # ───────────────────────── 4. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Mốc nước đi theo dòng sự kiện"
+    checks:
+      - "[m - 2 for m in __import__('itertools').accumulate([1, 2, 7, 3, 8, 12, 4], max)] == [-1, 0, 5, 5, 6, 10, 10]"
+      - "alg.stream_windows([1, 2, 7, 3, 8, 12, 4], 5, 2)[2] == {0: 2, 1: 5, 2: None}"
+    steps:
+      - show: |
+          <div><svg width="1500" height="340" viewBox="0 0 1500 340"><g font-size="22" fill="#1f2937"><text x="20" y="40" font-weight="bold">thứ tự đến, từ trái sang phải; độ trễ cho phép L = 2</text><text x="20" y="100">giây sự kiện</text><text x="20" y="185" fill="#eb6834">mốc nước</text><rect x="260" y="60" width="130" height="64" rx="8" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="325" y="103" text-anchor="middle" font-size="28">1</text><text x="325" y="185" text-anchor="middle" font-size="26" fill="#eb6834" font-weight="bold">-1</text><rect x="430" y="60" width="130" height="64" rx="8" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="495" y="103" text-anchor="middle" font-size="28">2</text><text x="495" y="185" text-anchor="middle" font-size="26" fill="#eb6834" font-weight="bold">0</text><rect x="600" y="60" width="130" height="64" rx="8" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="665" y="103" text-anchor="middle" font-size="28">7</text><text x="665" y="185" text-anchor="middle" font-size="26" fill="#eb6834" font-weight="bold">5</text><rect x="770" y="60" width="130" height="64" rx="8" fill="#fee2e2" stroke="#b91c1c" stroke-width="3"/><text x="835" y="103" text-anchor="middle" font-size="28">3</text><text x="835" y="185" text-anchor="middle" font-size="26" fill="#eb6834" font-weight="bold">5</text><text x="835" y="245" text-anchor="middle" fill="#b91c1c" font-weight="bold">bị bỏ</text><rect x="940" y="60" width="130" height="64" rx="8" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="1005" y="103" text-anchor="middle" font-size="28">8</text><text x="1005" y="185" text-anchor="middle" font-size="26" fill="#eb6834" font-weight="bold">6</text><rect x="1110" y="60" width="130" height="64" rx="8" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="1175" y="103" text-anchor="middle" font-size="28">12</text><text x="1175" y="185" text-anchor="middle" font-size="26" fill="#eb6834" font-weight="bold">10</text><rect x="1280" y="60" width="130" height="64" rx="8" fill="#fee2e2" stroke="#b91c1c" stroke-width="3"/><text x="1345" y="103" text-anchor="middle" font-size="28">4</text><text x="1345" y="185" text-anchor="middle" font-size="26" fill="#eb6834" font-weight="bold">10</text><text x="1345" y="245" text-anchor="middle" fill="#b91c1c" font-weight="bold">bị bỏ</text><text x="665" y="245" text-anchor="middle" fill="#059669" font-weight="bold">đóng [0, 5): 2</text><text x="1175" y="245" text-anchor="middle" fill="#059669" font-weight="bold">đóng [5, 10): 2</text><text x="20" y="310">mốc nước = lớn nhất đã thấy trừ 2; cửa sổ đóng khi mốc nước đạt cận phải; sự kiện tới sau đó bị bỏ</text></g></svg></div>
+        focus: [1, 1, 1, 1, 1]
+        say: "Hình vẽ bảy sự kiện theo thứ tự đến, từ trái sang phải, với độ trễ cho phép L bằng 2. Hàng dưới màu cam là mốc nước, bằng giá trị lớn nhất đã thấy trừ 2, nên lần lượt là âm 1, 0, 5, 5, 6, 10, 10. Ngay khi thấy sự kiện giây 7, mốc nước nhảy lên 5, cửa sổ từ 0 tới 5 đóng với 2 sự kiện. Sự kiện giây 3 tới ngay sau đó, cửa sổ của nó đã đóng, nên bị bỏ. Tương tự, thấy giây 12 thì mốc nước lên 10, cửa sổ thứ hai đóng, và sự kiện giây 4 tới muộn cũng bị bỏ."
+
+  - id: example
+    kind: example
+    title: "Bảy sự kiện, ba mức độ trễ cho phép"
+    checks:
+      - "alg.stream_windows([1, 2, 7, 3, 8, 12, 4], 5, 2)[:2] == ({0: 2, 1: 2, 2: 1}, [3, 4])"
+      - "alg.stream_windows([1, 2, 7, 3, 8, 12, 4], 5, 5)[:2] == ({0: 3, 1: 2, 2: 1}, [4])"
+      - "alg.stream_windows([1, 2, 7, 3, 8, 12, 4], 5, 8)[:2] == ({0: 4, 1: 2, 2: 1}, []) and alg.tumbling([1, 2, 7, 3, 8, 12, 4], 5) == {0: 4, 1: 2, 2: 1}"
+    steps:
+      - show: |
+          <p>Sự kiện tới theo thứ tự (giây sự kiện): <b>1, 2, 7, 3, 8, 12, 4</b> — sự kiện 3 và 4 tới muộn.</p>
+          <table class="t"><tr><th>cửa sổ</th><th>sự kiện thuộc cửa sổ (đếm hết, không bỏ gì)</th><th>đáp án đúng</th></tr>
+          <tr><td>[0, 5)</td><td>1, 2, 3, 4</td><td>4</td></tr>
+          <tr><td>[5, 10)</td><td>7, 8</td><td>2</td></tr>
+          <tr><td>[10, 15)</td><td>12</td><td>1</td></tr></table>
+        focus: [1, 2, "2.2", "2.3", "2.4"]
+        say: "Bước một, tìm đáp án đúng. Sự kiện tới theo thứ tự 1, 2, 7, 3, 8, 12, 4, trong đó sự kiện 3 và 4 tới muộn. Nếu đếm hết, không bỏ gì, cửa sổ từ 0 tới 5 có 1, 2, 3, 4, tức 4 sự kiện. Cửa sổ từ 5 tới 10 có 7 và 8, tức 2. Cửa sổ từ 10 tới 15 có 12, tức 1."
+      - show: |
+          <p><b>Bước 2 — L = 2</b>, mốc nước = lớn nhất đã thấy trừ 2:</p>
+          <table class="t"><tr><th>lúc thấy</th><th>mốc nước</th><th>việc xảy ra</th></tr>
+          <tr><td>7</td><td>5</td><td>đóng [0, 5) với 1, 2 → 2; sau đó 3 tới → <b class="red">bỏ</b></td></tr>
+          <tr><td>12</td><td>10</td><td>đóng [5, 10) với 7, 8 → 2; sau đó 4 tới → <b class="red">bỏ</b></td></tr></table>
+          <p>Kết quả 2, 2, 1.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Bước hai, độ trễ cho phép L bằng 2, như trong hình. Khi thấy giây 7, mốc nước bằng 5, cửa sổ đầu đóng với hai sự kiện 1 và 2, nên sự kiện 3 tới sau bị bỏ. Khi thấy giây 12, mốc nước bằng 10, cửa sổ thứ hai đóng với 7 và 8, nên sự kiện 4 tới sau cũng bị bỏ. Kết quả là 2, 2, 1."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — L = 5</b>, mốc nước = lớn nhất đã thấy trừ 5:</p>
+          <table class="t"><tr><th>lúc thấy</th><th>mốc nước</th><th>việc xảy ra</th></tr>
+          <tr><td>7</td><td>2</td><td>[0, 5) còn mở → 3 tới vẫn được tính</td></tr>
+          <tr><td>12</td><td>7</td><td>đóng [0, 5) với 1, 2, 3 → 3; sau đó 4 tới → <b class="red">bỏ</b></td></tr>
+          <tr><td>hết luồng</td><td>—</td><td>[5, 10) và [10, 15) xuất 2 và 1</td></tr></table>
+          <p>Kết quả 3, 2, 1.</p>
+        focus: [1, "2.2", "2.3", "2.4", 3]
+        say: "Bước ba, L bằng 5. Khi thấy giây 7, mốc nước mới bằng 2, cửa sổ đầu còn mở, nên sự kiện 3 tới vẫn được tính. Khi thấy giây 12, mốc nước bằng 7, cửa sổ đầu đóng với 1, 2, 3, và sự kiện 4 tới sau bị bỏ. Hết luồng, hai cửa sổ còn lại xuất 2 và 1. Kết quả là 3, 2, 1."
+      - clear: true
+        show: |
+          <p><b>Bước 4 — L = 8</b>: mốc nước lớn nhất chỉ là $12 - 8 = 4 \lt 5$, nên <b>không</b> cửa sổ nào đóng giữa chừng.</p>
+          <table class="t"><tr><th>cửa sổ</th><th>xuất lúc</th><th>đếm</th></tr>
+          <tr><td>[0, 5)</td><td>hết luồng</td><td>1, 2, 3, 4 → $\hl{4}$</td></tr>
+          <tr><td>[5, 10)</td><td>hết luồng</td><td>2</td></tr>
+          <tr><td>[10, 15)</td><td>hết luồng</td><td>1</td></tr></table>
+        focus: [1, 2, "2.2", 2]
+        say: "Bước bốn, L bằng 8. Mốc nước lớn nhất chỉ là 12 trừ 8, bằng 4, nhỏ hơn 5, nên không cửa sổ nào đóng giữa chừng. Cửa sổ đầu đợi tới hết luồng và đếm đủ 1, 2, 3, 4, được 4. Kết quả 4, 2, 1 đúng, nhưng chỉ có khi luồng kết thúc."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>độ trễ cho phép L</th><th>kết quả [0,5), [5,10), [10,15)</th><th>bị bỏ</th><th>[0,5) xuất lúc</th></tr>
+          <tr><td>2</td><td>2, 2, 1</td><td>3, 4</td><td>ngay khi thấy 7</td></tr>
+          <tr><td>5</td><td>3, 2, 1</td><td>4</td><td>khi thấy 12</td></tr>
+          <tr><td>8</td><td>$\hl{4, 2, 1}$ — đúng</td><td>không</td><td>cuối luồng</td></tr></table>
+          <div class="box key">L nhỏ: kết quả <b>sớm</b> nhưng thiếu. L lớn: <b>đúng</b> nhưng muộn. Không có L nào vừa sớm vừa chắc đúng.</div>
+        focus: [1, "1.2", "1.3", "1.4", 2, 2]
+        say: "Bước năm, đặt ba kết quả cạnh nhau. Với L bằng 2, cửa sổ đầu xuất ngay khi thấy 7, được 2, 2, 1 và bỏ mất sự kiện 3 và 4. Với L bằng 5, cửa sổ đầu xuất khi thấy 12, được 3, 2, 1 và bỏ mất sự kiện 4. Với L bằng 8, kết quả đúng 4, 2, 1, nhưng phải chờ tới cuối luồng. L nhỏ cho kết quả sớm nhưng thiếu, L lớn cho kết quả đúng nhưng muộn. Không có L nào vừa sớm vừa chắc chắn đúng."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác"
+    checks:
+      - "all(alg.stream_windows([1, 2, 7, 3, 8, 12, 4], 5, L)[1] == ([3, 4] if L <= 2 else [4] if L <= 7 else []) for L in range(0, 12))"
+      - "(7 - 2 >= 5, 7 - 3 >= 5, 12 - 7 >= 5, 12 - 8 >= 5) == (True, False, True, False)"
+    steps:
+      - show: |
+          <p>Không mô phỏng lại cả luồng — chỉ hỏi từng sự kiện muộn: lúc nó tới, cửa sổ của nó (cận phải 5) đã đóng chưa?</p>
+          <table class="t"><tr><th>sự kiện muộn</th><th>lớn nhất đã thấy lúc nó tới</th><th>bị bỏ khi</th></tr>
+          <tr><td>3</td><td>7</td><td>$7 - L \ge 5$, tức $L \le 2$</td></tr>
+          <tr><td>4</td><td>12</td><td>$12 - L \ge 5$, tức $L \le 7$</td></tr></table>
+          <p>Vậy $L \le 2$: bỏ 3 và 4; $L$ từ 3 tới 7: bỏ 4; $L \ge 8$: không bỏ gì — <b>khớp</b> ba hàng của bảng ✓. L nhỏ nhất cho đáp án đúng là $\hl{8}$.</p>
+        introduces: [geq]
+        focus: [1, "2.2", "2.3", 3, 3]
+        say: "Kiểm bằng đường khác, không mô phỏng lại cả luồng, chỉ hỏi từng sự kiện muộn xem lúc nó tới, cửa sổ của nó, có cận phải là 5, đã đóng chưa. Sự kiện 3 tới khi lớn nhất đã thấy là 7, nên bị bỏ khi 7 trừ L lớn hơn hoặc bằng 5, tức L không quá 2. Sự kiện 4 tới khi lớn nhất đã thấy là 12, nên bị bỏ khi L không quá 7. Vậy L không quá 2 thì bỏ cả 3 và 4, L từ 3 tới 7 thì chỉ bỏ 4, L từ 8 trở lên thì không bỏ gì, khớp đúng ba hàng của bảng. Từ đó còn đọc ra L nhỏ nhất cho đáp án đúng là 8."
+
+  # ───────────────────────── 5. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc, 1 lỗi người đã đi làm"
+    checks:
+      - "max(len([k for k in range(M // 5 + 1) if (k + 1) * 5 > M - 2]) for M in range(700, 720)) == 2"
+      - "max(len([k for k in range(M // 5 + 1) if (k + 1) * 5 > M - 600]) for M in range(700, 720)) == 121 and 600 // 60 == 10"
+      - "(lambda arr: __import__('collections').Counter(i // 3 for i in range(len(arr))))([1, 2, 7, 3, 8, 12, 4]) == {0: 3, 1: 3, 2: 1}"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Gom theo thời gian xử lý <b class="red">(không tái lập)</b>
+          <br><span class="note">Kết quả phụ thuộc mạng nhanh hay chậm lúc chạy: chạy lại cùng dữ liệu ra số khác. Gom theo thời gian sự kiện thì kết quả chỉ phụ thuộc dữ liệu.</span></div>
+        say: "Lỗi thứ nhất, gom theo thời gian xử lý. Kết quả phụ thuộc mạng nhanh hay chậm lúc chạy, chạy lại cùng dữ liệu lại ra số khác. Gom theo thời gian sự kiện thì kết quả chỉ phụ thuộc dữ liệu."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Lặng lẽ bỏ dữ liệu đến muộn <b class="red">(sai âm thầm)</b>
+          <br><span class="note">Đếm số sự kiện bị bỏ và cảnh báo khi tăng; hoặc cho phép gửi bản sửa cho cửa sổ đã đóng.</span></div>
+        say: "Lỗi thứ hai, lặng lẽ bỏ dữ liệu đến muộn. Hãy đếm số sự kiện bị bỏ và cảnh báo khi con số tăng, hoặc cho phép gửi bản sửa cho cửa sổ đã đóng."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Tin đồng hồ của thiết bị là chính xác <b class="red">(rủi ro)</b>
+          <br><span class="note">Ở bài 1: đồng hồ các máy lệch nhau, có thể nhảy lùi khi đồng bộ lại; đồng hồ điện thoại còn có thể bị người dùng chỉnh tay. Kẹp thời gian sự kiện vào khoảng hợp lý quanh thời gian nhận.</span></div>
+        say: "Lỗi thứ ba, tin đồng hồ của thiết bị là chính xác. Ở bài 1, ta đã thấy đồng hồ các máy lệch nhau, và có thể nhảy lùi khi đồng bộ lại, còn đồng hồ điện thoại thì người dùng có thể chỉnh tay. Vì vậy hãy kẹp thời gian sự kiện vào một khoảng hợp lý quanh thời gian nhận."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Đặt L thật lớn “cho chắc đúng” <b class="red">(đắt và muộn)</b></div>
+          <table class="t"><tr><th>độ trễ cho phép L</th><th>mỗi cửa sổ xuất chậm thêm</th><th>số cửa sổ phải giữ mở cùng lúc</th></tr>
+          <tr><td>2 giây</td><td>khoảng 2 giây</td><td>tối đa 2</td></tr>
+          <tr><td>600 giây (10 phút, như điện thoại trong thang máy)</td><td>khoảng 10 phút</td><td>tới $\hl{121}$</td></tr></table>
+          <p class="note">Cách làm của người có kinh nghiệm: đo xem bao nhiêu sự kiện thật sự tới muộn hơn L, chọn L vừa đủ, phần tới muộn hơn thì gửi bản sửa cho cửa sổ đã xuất.</p>
+        focus: [1, 2, 2, "2.2", "2.3", 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, đặt độ trễ cho phép thật lớn cho chắc đúng. Cửa sổ từ 0 tới 5 chỉ đóng khi đã thấy sự kiện từ giây 5 cộng L trở đi, nên mỗi cửa sổ xuất chậm thêm khoảng L. Mọi cửa sổ chưa đóng phải được giữ trong bộ nhớ. Với L bằng 2 giây, chỉ chậm khoảng 2 giây, và cùng lúc chỉ có tối đa 2 cửa sổ mở. Với L bằng 600 giây, tức 10 phút như chiếc điện thoại trong thang máy, kết quả chậm khoảng 10 phút, và có tới 121 cửa sổ 5 giây cùng mở. Người có kinh nghiệm đo xem bao nhiêu sự kiện thật sự tới muộn hơn L, chọn L vừa đủ, còn phần tới muộn hơn nữa thì gửi bản sửa cho cửa sổ đã xuất."
+
+  # ───────────────────────── 6. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.tumbling([0, 4, 5, 9, 10, 14, 14], 5) == {0: 2, 1: 2, 2: 3}"
+      - "alg.stream_windows([0, 4, 10, 5, 9, 14, 14], 5, 3)[:2] == ({0: 2, 1: 2, 2: 3}, [])"
+      - "[t // 5 for t in (0, 4, 5, 9, 10, 14, 14)] == [0, 0, 1, 1, 2, 2, 2] and [m - 3 for m in __import__('itertools').accumulate([0, 4, 10, 5, 9, 14, 14], max)] == [-3, 1, 7, 7, 7, 11, 11]"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Cửa sổ nhảy 5 giây, sự kiện ở giây 0, 4, 5, 9, 10, 14, 14. Số đếm mỗi cửa sổ?</td></tr>
+          <tr><td>2</td><td>Thứ tự tới là 0, 4, 10, 5, 9, 14, 14 và L = 3. Sự kiện nào bị bỏ?</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, cửa sổ nhảy 5 giây, sự kiện ở giây 0, 4, 5, 9, 10, 14, 14, số đếm mỗi cửa sổ là bao nhiêu? Câu hai, nếu thứ tự tới là 0, 4, 10, 5, 9, 14, 14 với L bằng 3, sự kiện nào bị bỏ? Dừng video và làm ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 1: sự kiện</th><td>0</td><td>4</td><td>5</td><td>9</td><td>10</td><td>14</td><td>14</td></tr>
+          <tr><th>phần nguyên của chia 5</th><td>0</td><td>0</td><td>1</td><td>1</td><td>2</td><td>2</td><td>2</td></tr></table>
+          <p>[0,5): 0, 4 → 2; [5,10): 5, 9 → 2; [10,15): 10, 14, 14 → $\hl{3}$. Chú ý 5 thuộc cửa sổ thứ hai (cận phải không lấy).</p>
+        focus: [1, 1, 2, 2]
+        say: "Đáp án câu một, làm từng bước. Lấy phần nguyên của mỗi giây chia 5, được 0, 0, 1, 1, 2, 2, 2. Vậy cửa sổ đầu có 0 và 4, đếm 2, cửa sổ thứ hai có 5 và 9, đếm 2, chú ý 5 thuộc cửa sổ thứ hai vì cận phải không lấy. Cửa sổ thứ ba có 10, 14, 14, đếm 3."
+      - show: |
+          <table class="t"><tr><th>câu 2: đến</th><td>0</td><td>4</td><td>10</td><td>5</td><td>9</td><td>14</td><td>14</td></tr>
+          <tr><th>mốc nước (L = 3)</th><td>−3</td><td>1</td><td>7</td><td>7</td><td>7</td><td>11</td><td>11</td></tr></table>
+          <p>Thấy 10 → mốc nước 7 ≥ 5: đóng [0,5). [5,10) còn mở tới khi thấy 14 (mốc nước 11 ≥ 10), nên 5 và 9 vẫn được tính: $\hl{\text{không sự kiện nào bị bỏ}}$.</p>
+        focus: [1, 2, 2, 2]
+        say: "Câu hai, ghi mốc nước bằng lớn nhất đã thấy trừ 3, được âm 3, 1, 7, 7, 7, 11, 11. Khi thấy 10 thì mốc nước là 7, đóng cửa sổ đầu, nhưng hai sự kiện 0 và 4 của nó đều đã tới. Cửa sổ thứ hai còn mở tới khi thấy 14, mốc nước 11, nên 5 và 9 tới muộn vẫn được tính. Vậy không sự kiện nào bị bỏ."
+
+  # ───────────────────────── 7. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">gom theo thời gian sự kiện</span><span class="a">→</span>
+          <span class="n">mốc nước = lớn nhất đã thấy − L</span><span class="a">→</span>
+          <span class="n">đóng cửa sổ khi mốc nước qua cận phải</span><span class="a">→</span>
+          <span class="n">L: đánh đổi sớm và đúng</span></div>
+        say: "Tổng kết lại, gom theo thời gian sự kiện. Mốc nước bằng thời gian lớn nhất đã thấy trừ L, cửa sổ đóng khi mốc nước qua cận phải, và L là đánh đổi giữa sớm và đúng."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> với dữ liệu không bao giờ dừng, “đã đủ chưa” là một <b>lựa chọn</b> có chủ đích, không phải một sự thật. Ghi rõ lựa chọn đó.</div>
+        say: "Điều cần mang theo, với dữ liệu không bao giờ dừng, câu hỏi đã đủ chưa là một lựa chọn có chủ đích, không phải một sự thật. Hãy ghi rõ lựa chọn đó trong thiết kế của hệ thống."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 10): đếm, tra cứu trên dữ liệu khổng lồ bằng ít bộ nhớ — <b>cấu trúc xác suất</b>.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 10, ta học cách đếm và tra cứu trên dữ liệu khổng lồ bằng rất ít bộ nhớ, với cấu trúc xác suất. Hẹn gặp bạn ở bài tiếp theo."

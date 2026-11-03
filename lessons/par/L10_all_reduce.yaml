@@ -1,0 +1,273 @@
+id: L10
+course: PAR
+series: "PAR · Tính toán song song và GPU"
+title: "Bài 10 — Truyền thông tập thể: all-reduce vòng và máy chủ tham số"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/par.yaml L10; audit/par/verify_par.py L10; audit/par/sources_L10.md (câu trích nguyên văn, đọc 2026-11-02); P. Patarasuk, X. Yuan, Bandwidth Optimal All-reduce Algorithms for Clusters of Workstations, JPDC 2009 (bản tác giả tại cs.fsu.edu) [PY09]; A. Sergeev, M. Del Balso, Horovod: fast and easy distributed deep learning in TensorFlow, arXiv 1802.05799 (2018) [HO18]; PAR bài 2 (cộng theo cây); NET bài 2 (thông lượng); CS115 bài 9 (gradient)"
+assumes: [arith, frac, approx, power]
+# Quy ước: n = số máy (mỗi máy một thẻ), D = dung lượng gradient của MỖI máy, B = băng thông mỗi đường nối (byte mỗi giây, như bài 7).
+#   Vòng: máy i gửi cho máy i + 1 (máy cuối gửi cho máy 0); mọi đường chạy cùng lúc, mỗi đường một chiều mỗi bước.
+#   “all-reduce” = gộp toàn phần (mọi máy nhận tổng của mọi máy); “reduce-scatter” = rút gọn phân tán; “all-gather” = gom lại.
+#   Máy chủ tham số: nhận rồi gửi NỐI TIẾP qua một đường (nếu đường chạy hai chiều cùng lúc thì chỉ còn một nửa — ghi trên màn hình).
+#   GB = 10⁹ byte. Mọi băng thông, độ trễ (10 GB/s, 25 GB/s, 0,05 ms, 5 ms) là SỐ MINH HOẠ.
+objectives:
+  - "Mô phỏng tay gộp toàn phần theo vòng: rút gọn phân tán rồi gom lại, mỗi pha n − 1 bước"
+  - "Suy ra lượng mỗi máy gửi 2(n − 1)/n · D và biết nó không vượt 2D"
+  - "So sánh thời gian với một máy chủ tham số nhận n · D qua một đường"
+  - "Chọn cách gộp theo cỡ gói: gói lớn thì vòng, gói nhỏ thì độ trễ quyết định"
+asr_reviewed:
+  - {sentence: "Vòng phải đi 30 bước, mỗi bước 5 mi li giây trễ, cộng 0 phẩy 15 mi li giây dữ liệu, khoảng 150 mi li giây.", reason: "ASR chép “Vòng phải đi 30 bước, mỗi bước 5 mili dây trễ, cộng 0,15 mili dây dữ liệu, khoảng 150 mili dây.” (0.746): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Lỗi thứ hai là gộp từng gói nhỏ một.", reason: "ASR chép “Lỗi thứ 2 là gục từng có nhỏ 1.” (0.778): lệch âm/thanh thuần Việt: gộp/gục, gói/có — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Máy chủ chỉ có 2 lần trễ, 10 mi li giây, cộng 2 phẩy 56 mi li giây dữ liệu, tổng 12 phẩy 56 mi li giây.", reason: "ASR chép “Máy chủ chỉ có hai lần trễ, 10 ms, cộng 2,56 ms dữ liệu, tổng 12,56 ms.” (0.793): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Có n máy, mỗi máy giữ một vector gradient D byte.", reason: "ASR chép “Có N máy, mỗi máy giữ một vector gradient dê bay.” (0.815): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: véc tơ/vector — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Mọi máy gửi gradient vào một máy chủ, máy chủ cộng rồi gửi tổng trở lại, nên đường vào máy chủ phải chở n nhân D byte, đó là cổ chai.", reason: "ASR chép “Mọi máy gửi Gradian vào một máy chủ, máy chủ cộng rồi gửi tổng trở lại, nên đường vào máy chủ phải chở N nhân dê bay, đó là cổ trai.” (0.939): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: chai/trai — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Câu một, mỗi máy có 2 GB gradient, vòng mất bao lâu nếu bỏ qua trễ, còn máy chủ tham số với một máy và với hai máy chia đôi thì sao?", reason: "ASR chép “Câu 1, mỗi máy có 2GB Gradient, vòng mất bao lâu nếu bỏ qua trễ, còn máy chủ tham số với một máy và với hai máy chia đôi thì sao?” (0.943): GB đọc “ghi-ga-byte” theo lexicon của khoá, ASR viết “GB/gigabyte” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Sau n trừ 1 bước, mỗi mảnh đã đi qua đủ n máy, nên mỗi máy giữ tổng đầy đủ của đúng một mảnh, và mỗi máy đã gửi n trừ 1 nhân D chia n.", reason: "ASR chép “Sau N trừ một bước, mỗi mảnh đã đi qua đủ N máy nên mỗi máy giữ tổng đầy đủ của đúng một mảnh và mỗi máy đã gửi N trừ một nhân dây chia N.” (0.972): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bước bốn, với 8 máy, máy chủ nhận 8 GB rồi gửi lại 8 GB, mất 0 phẩy 8 cộng 0 phẩy 8 bằng 1 phẩy 6 giây.", reason: "ASR chép “Bước 4, với 8 máy, máy chủ nhận 8GB rồi gửi lại 8GB, mất 0,8 cộng 0,8 bằng 1,6 giây.” (1.0): GB đọc “ghi-ga-byte” theo lexicon của khoá, ASR viết “GB/gigabyte” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Một máy chủ nhận 32 GB rồi gửi 32 GB, mất 2 phẩy 56 giây.", reason: "ASR chép “Một máy chủ nhận 32GB rồi gửi 32GB, mất 2,56 giây.” (1.0): GB đọc “ghi-ga-byte” theo lexicon của khoá, ASR viết “GB/gigabyte” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Hai máy chủ chia đôi, mỗi máy chủ 16 GB vào và 16 GB ra, mất 1 phẩy 28 giây.", reason: "ASR chép “Hai máy chủ chia đôi, mỗi máy chủ 16GB vào và 16GB ra, mất 1,28 giây.” (1.0): GB đọc “ghi-ga-byte” theo lexicon của khoá, ASR viết “GB/gigabyte” — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Thêm thẻ, mà nửa thời gian chỉ để chờ cộng gradient"
+    checks:
+      - "alg.par_ps_time(8, 1, 10) == 1.6 and round(alg.par_ring_time(8, 1, 10), 3) == 0.175"
+    steps:
+      - show: |
+          <p>Huấn luyện trên 8 thẻ, mỗi bước mỗi thẻ có <b>1 GB gradient</b> phải cộng với 7 thẻ kia (số minh hoạ). Gửi hết về một máy trung tâm qua đường 10 GB/s: riêng việc nhận rồi gửi lại đã mất <b>1,6 giây</b> mỗi bước.</p>
+          <p>Năm 2018, một đội lớn ghi lại: với cách gom về máy chủ tham số chuẩn, ở 128 thẻ họ “mất khoảng một nửa tài nguyên” vì truyền thông.</p>
+          <div class="box key">Hôm nay ta trả lời: làm sao mọi máy cùng có tổng mà không dồn vào một chỗ? Mỗi máy phải gửi bao nhiêu? Và khi nào cách đó lại thua?</div>
+        focus: [1, 1, 2, 3]
+        say: "Chào bạn, ta huấn luyện trên 8 thẻ, và mỗi bước mỗi thẻ có 1 GB gradient phải cộng với 7 thẻ kia, đây là số minh hoạ. Nếu gửi hết về một máy trung tâm qua đường 10 GB mỗi giây, riêng việc nhận rồi gửi lại đã mất 1 phẩy 6 giây mỗi bước. Năm 2018, một đội lớn ghi lại rằng với cách gom về máy chủ tham số chuẩn, ở 128 thẻ họ mất khoảng một nửa tài nguyên vì truyền thông. Hôm nay ta trả lời ba câu hỏi, làm sao mọi máy cùng có tổng mà không dồn vào một chỗ, mỗi máy phải gửi bao nhiêu, và khi nào cách đó lại thua."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại ba điều sẽ dùng"
+    checks:
+      - "1 / 10 == 0.1 and 0.1 + 0.001 == 0.101"
+      - "(1 + 3 + 5 + 7) / 4 == 4"
+      - "alg.Fraction(7, 8) * 2 == alg.Fraction(7, 4)"
+    steps:
+      - show: |
+          <p><b>① Thời gian gửi</b> (khoá mạng máy tính, bài 2): dung lượng chia thông lượng, cộng độ trễ. Gửi 1 GB qua đường 10 GB mỗi giây, độ trễ 1 mi li giây: $\frac{1}{10} + 0{,}001 = 0{,}101$ giây.</p>
+          <p><b>② Gradient</b> (khoá toán cho khoa học máy tính, bài 9): vector chỉ hướng sửa trọng số. Huấn luyện <b>song song dữ liệu</b>: mỗi thẻ tính gradient trên phần dữ liệu riêng, rồi lấy trung bình. Bốn thẻ có 1, 3, 5, 7: trung bình $\frac{1 + 3 + 5 + 7}{4} = 4$.</p>
+        focus: [1, 1, 2, 2, 2]
+        say: "Điều thứ nhất, ở khoá mạng máy tính, bài 2, thời gian gửi bằng dung lượng chia thông lượng, cộng thêm độ trễ. Gửi 1 GB qua đường 10 GB mỗi giây với độ trễ 1 mi li giây mất 0 phẩy 101 giây. Điều thứ hai, ở khoá toán cho khoa học máy tính, bài 9, gradient là vector chỉ hướng sửa trọng số. Khi huấn luyện song song dữ liệu, mỗi thẻ tính gradient trên phần dữ liệu riêng, rồi lấy trung bình. Bốn thẻ có 1, 3, 5, 7 thì trung bình bằng 16 chia 4, bằng 4."
+      - show: |
+          <p><b>③ Bài 2, cộng theo cây:</b> cộng nhiều số thì có thể cộng từng cặp song song, mỗi tầng số giá trị giảm một nửa. Ở đây phép cộng là cộng <b>từng phần tử</b> của các vector gradient.</p>
+          <p>Dấu chấm giữa dòng là phép nhân: $2 \cdot \frac{7}{8} = \frac{7}{4} = 1{,}75$.</p>
+        introduces: [cdot]
+        focus: [1, 1, 2]
+        say: "Điều thứ ba, ở bài 2, ta cộng nhiều số theo cây, cộng từng cặp song song, mỗi tầng số giá trị giảm một nửa. Ở bài này phép cộng là cộng từng phần tử của các vector gradient. Và dấu chấm giữa dòng là phép nhân, 2 nhân 7 phần 8 bằng 7 phần 4, tức 1 phẩy 75."
+
+  # ───────────────────────── 3. NGÔN NGỮ ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: n, D, mảnh, và ba phép tập thể"
+    steps:
+      - show: |
+          <table class="t"><tr><th>tên</th><th>lời đọc</th><th>nghĩa</th></tr>
+          <tr><td>$n$, $D$</td><td>số máy, dung lượng</td><td>$n$ máy, mỗi máy giữ một vector gradient $D$ byte</td></tr>
+          <tr><td>mảnh</td><td>mảnh</td><td>cắt vector thành $n$ phần bằng nhau, mỗi phần $\frac{D}{n}$</td></tr>
+          <tr><td>all-reduce</td><td><b>gộp toàn phần</b></td><td>xong thì MỌI máy có tổng của mọi máy</td></tr>
+          <tr><td>reduce-scatter</td><td><b>rút gọn phân tán</b></td><td>xong thì mỗi máy có tổng đầy đủ của MỘT mảnh</td></tr>
+          <tr><td>all-gather</td><td><b>gom lại</b></td><td>mỗi máy chuyền mảnh đầy đủ của mình cho mọi máy khác</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", "1.6"]
+        say: "Bài dùng các tên sau, tên tiếng Anh chỉ ghi trên màn hình. Có n máy, mỗi máy giữ một vector gradient D byte. Ta cắt vector thành n mảnh bằng nhau, mỗi mảnh D chia n. Gộp toàn phần nghĩa là xong việc thì mọi máy có tổng của mọi máy. Rút gọn phân tán nghĩa là xong việc thì mỗi máy có tổng đầy đủ của một mảnh. Gom lại nghĩa là mỗi máy chuyền mảnh đầy đủ của mình cho mọi máy khác."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Một ngôi sao với một cổ chai, và một vòng tròn không có cổ chai"
+    steps:
+      - show: |
+          <div><svg width="1600" height="380" viewBox="0 0 1600 380"><defs><marker id="ar10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs>
+          <g font-size="22" text-anchor="middle" fill="#1f2937">
+          <rect x="290" y="150" width="170" height="70" rx="10" fill="#fde8e8" stroke="#e11d48" stroke-width="3"/><text x="375" y="180" font-weight="bold">máy chủ</text><text x="375" y="208">tham số</text>
+          <circle cx="110" cy="70" r="40" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="110" y="78">máy 1</text>
+          <circle cx="640" cy="70" r="40" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="640" y="78">máy 2</text>
+          <circle cx="110" cy="300" r="40" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="110" y="308">máy 3</text>
+          <circle cx="640" cy="300" r="40" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="640" y="308">máy 4</text>
+          <text x="375" y="350" fill="#b91c1c">đường vào máy chủ chở n nhân D</text>
+          <circle cx="1150" cy="70" r="40" fill="#dcfce7" stroke="#059669" stroke-width="2"/><text x="1150" y="78">máy 1</text>
+          <circle cx="1450" cy="190" r="40" fill="#dcfce7" stroke="#059669" stroke-width="2"/><text x="1450" y="198">máy 2</text>
+          <circle cx="1150" cy="310" r="40" fill="#dcfce7" stroke="#059669" stroke-width="2"/><text x="1150" y="318">máy 3</text>
+          <circle cx="850" cy="190" r="40" fill="#dcfce7" stroke="#059669" stroke-width="2"/><text x="850" y="198">máy 4</text>
+          <text x="1150" y="200" fill="#059669">mỗi bước mọi đường</text><text x="1150" y="228" fill="#059669">cùng chở một mảnh</text>
+          </g>
+          <g stroke="#1f2937" stroke-width="3">
+          <line x1="145" y1="90" x2="285" y2="160" marker-end="url(#ar10)"/><line x1="605" y1="90" x2="465" y2="160" marker-end="url(#ar10)"/>
+          <line x1="145" y1="280" x2="285" y2="210" marker-end="url(#ar10)"/><line x1="605" y1="280" x2="465" y2="210" marker-end="url(#ar10)"/>
+          <line x1="1188" y1="88" x2="1412" y2="172" marker-end="url(#ar10)"/><line x1="1412" y1="208" x2="1188" y2="292" marker-end="url(#ar10)"/>
+          <line x1="1112" y1="292" x2="888" y2="208" marker-end="url(#ar10)"/><line x1="888" y1="172" x2="1112" y2="88" marker-end="url(#ar10)"/>
+          </g>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình bên trái là máy chủ tham số. Mọi máy gửi gradient vào một máy chủ, máy chủ cộng rồi gửi tổng trở lại, nên đường vào máy chủ phải chở n nhân D byte, đó là cổ chai. Hình bên phải là vòng tròn, mỗi máy chỉ gửi cho máy bên cạnh. Ở mỗi bước, mọi đường cùng chở một mảnh nhỏ, nên không đường nào phải chở nhiều hơn đường khác."
+
+  # ───────────────────────── 5. SUY RA ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra: mỗi máy gửi 2(n − 1)/n · D"
+    checks:
+      - "alg.par_ring_allreduce([[1, 2, 3], [10, 20, 30], [100, 200, 300]])[2] == 4 == 2 * (3 - 1)"
+      - "alg.par_ring_allreduce([[1] * 8 for _ in range(4)])[1] == [12] * 4 and alg.Fraction(2 * 3, 4) * 8 == 12"
+      - "[float(2 * alg.Fraction(n - 1, n)) for n in (2, 8, 64, 1024)] == [1.0, 1.75, 1.96875, 1.998046875]"
+    steps:
+      - show: |
+          <p><b>Bước 1 — cắt mảnh.</b> Cắt vector của mỗi máy thành $n$ mảnh, mỗi mảnh $\frac{D}{n}$, vì ta muốn $n$ máy cùng làm việc trên $n$ phần khác nhau.</p>
+          <p><b>Bước 2 — rút gọn phân tán, $n - 1$ bước.</b> Mỗi bước, mỗi máy gửi một mảnh cho máy bên phải; máy nhận <b>cộng</b> vào mảnh cùng số của mình. Sau $n - 1$ bước, mỗi mảnh đã đi qua đủ $n$ máy, nên mỗi máy giữ tổng đầy đủ của đúng một mảnh. Đã gửi: $(n - 1) \cdot \frac{D}{n}$.</p>
+        focus: [1, 2, 2, 2, 2]
+        say: "Bước một là cắt mảnh. Ta cắt vector của mỗi máy thành n mảnh, mỗi mảnh D chia n, vì muốn n máy cùng làm việc trên n phần khác nhau. Bước hai là rút gọn phân tán, gồm n trừ 1 bước. Mỗi bước, mỗi máy gửi một mảnh cho máy bên phải, và máy nhận cộng vào mảnh cùng số của mình. Sau n trừ 1 bước, mỗi mảnh đã đi qua đủ n máy, nên mỗi máy giữ tổng đầy đủ của đúng một mảnh, và mỗi máy đã gửi n trừ 1 nhân D chia n."
+      - show: |
+          <p><b>Bước 3 — gom lại, thêm $n - 1$ bước.</b> Mỗi máy chuyền mảnh đầy đủ vòng quanh; máy nhận <b>thay</b> mảnh cũ bằng mảnh mới. Lại gửi $(n - 1) \cdot \frac{D}{n}$.</p>
+          <p><b>Bước 4 — cộng hai pha.</b></p>
+          $$\text{mỗi máy gửi} = \hlg{2 \cdot \frac{n - 1}{n} \cdot D}, \text{ qua } 2(n - 1) \text{ bước}$$
+          <p class="note">Làm thử $n = 4$, $D = 8$ số: $2 \cdot \frac{3}{4} \cdot 8 = 12$ số — máy chạy thử đếm đúng 12 cho mỗi máy ✓.</p>
+        focus: [1, 1, 2, 3, 4]
+        say: "Bước ba là gom lại, thêm n trừ 1 bước. Mỗi máy chuyền mảnh đầy đủ vòng quanh, và máy nhận thay mảnh cũ bằng mảnh mới, nên lại gửi n trừ 1 nhân D chia n. Bước bốn, cộng hai pha lại. Mỗi máy gửi 2 nhân n trừ 1 chia n nhân D, qua 2 nhân n trừ 1 bước. Làm thử với 4 máy, mỗi máy 8 số, ta được 2 nhân 3 phần 4 nhân 8 bằng 12 số, và máy chạy thử đếm đúng 12 cho mỗi máy."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>số máy $n$</th><th>2</th><th>8</th><th>64</th><th>1024</th></tr>
+          <tr><td>$2 \cdot \frac{n - 1}{n}$</td><td>1</td><td>1,75</td><td>1,969</td><td>1,998</td></tr></table>
+          <div class="box key">Phân số $\frac{n - 1}{n}$ luôn nhỏ hơn 1, nên mỗi máy gửi <b>chưa tới 2D</b> dù có bao nhiêu máy. Bài báo năm 2009 của hai tác giả Patarasuk và Yuan chứng minh đây là mức <b>ít nhất có thể</b>: vòng là cách gộp <b>tối ưu băng thông</b>.</div>
+        focus: [1, "1.2", 2, 2]
+        say: "Bảng cho thấy hệ số 2 nhân n trừ 1 chia n. Với 2 máy là 1, 8 máy là 1 phẩy 75, 64 máy khoảng 1 phẩy 969, nghìn máy gần 2. Vì phân số n trừ 1 chia n luôn nhỏ hơn 1, mỗi máy gửi chưa tới 2 lần D, dù có bao nhiêu máy. Bài báo năm 2009 của hai tác giả chứng minh đây là mức ít nhất có thể, nên vòng là cách gộp tối ưu băng thông."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "8 máy, mỗi máy 1 GB, từng phép tính"
+    checks:
+      - "alg.Fraction(1, 8) * 1000 == 125 and 2 * alg.Fraction(7, 8) == alg.Fraction(7, 4)"
+      - "round(alg.par_ring_time(8, 1, 10), 3) == 0.175 and 14 * alg.Fraction(1, 8) / 10 == alg.Fraction(7, 40)"
+      - "alg.par_ps_bytes(8, 1)['server_in'] == 8 and alg.par_ps_time(8, 1, 10) == 1.6 and round(1.6 / 0.175, 1) == 9.1 and round(0.8 / 0.175, 2) == 4.57"
+      - "round(alg.par_ring_time(64, 1, 10), 4) == 0.1969 and alg.par_ps_time(64, 1, 10) == 12.8"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. cỡ mảnh</td><td>1 GB chia 8</td><td>125 MB</td></tr>
+          <tr><td>Bước 2. mỗi máy gửi</td><td>$2 \cdot \frac{7}{8} \cdot 1$ GB</td><td>$\hlb{1{,}75}$ GB</td></tr>
+          <tr><td>Bước 3. thời gian, đường 10 GB/s (minh hoạ)</td><td>14 bước, mỗi bước 125 MB, mọi đường cùng lúc: $\frac{1{,}75}{10}$</td><td>$\hlg{0{,}175}$ giây</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Ta tính cho 8 máy, mỗi máy 1 GB. Bước một, cỡ mảnh là 1 GB chia 8, bằng 125 MB. Bước hai, mỗi máy gửi 2 nhân 7 phần 8 nhân 1 GB, bằng 1 phẩy 75 GB. Bước ba, với đường 10 GB mỗi giây, có 14 bước, mỗi bước 125 MB chạy trên mọi đường cùng lúc, nên mất 1 phẩy 75 chia 10, bằng 0 phẩy 175 giây."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>cách</th><th>đường bận nhất chở</th><th>thời gian</th></tr>
+          <tr><td>Bước 4</td><td>máy chủ tham số, 8 máy</td><td>nhận 8 GB rồi gửi lại 8 GB</td><td>0,8 + 0,8 = $\hl{1{,}6}$ giây</td></tr>
+          <tr><td>Bước 5</td><td>vòng, 64 máy</td><td>$2 \cdot \frac{63}{64} \approx 1{,}97$ GB</td><td>≈ 0,197 giây</td></tr>
+          <tr><td>Bước 6</td><td>máy chủ tham số, 64 máy</td><td>nhận 64 GB rồi gửi lại 64 GB</td><td>12,8 giây</td></tr></table>
+          <p class="note">Với 8 máy, máy chủ chậm hơn vòng khoảng 9,1 lần; nếu đường của nó chạy hai chiều cùng lúc thì còn 0,8 giây, vẫn chậm hơn khoảng 4,57 lần. Thêm máy: vòng gần như đứng yên, máy chủ tăng theo số máy.</p>
+        focus: [0, "1.2", "1.3", "1.4", 2, 2]
+        say: "Bây giờ so với máy chủ tham số. Bước bốn, với 8 máy, máy chủ nhận 8 GB rồi gửi lại 8 GB, mất 0 phẩy 8 cộng 0 phẩy 8 bằng 1 phẩy 6 giây. Bước năm, vòng 64 máy chỉ gửi khoảng 1 phẩy 97 GB mỗi máy, mất khoảng 0 phẩy 197 giây. Bước sáu, máy chủ với 64 máy phải nhận 64 GB rồi gửi lại 64 GB, mất 12 phẩy 8 giây. Với 8 máy, máy chủ chậm hơn vòng khoảng 9 lần, và kể cả khi đường chạy hai chiều cùng lúc vẫn chậm hơn khoảng 4 phẩy 57 lần. Thêm máy thì vòng gần như đứng yên, còn máy chủ tăng theo số máy."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: chạy tay vòng 3 máy, từng bước"
+    checks:
+      - "[[m[0][0], m[1][0], m[2][0]] for m in alg.par_ring_trace([[1, 2, 3], [10, 20, 30], [100, 200, 300]])[1]] == [[1, 222, 303], [11, 20, 333], [111, 220, 300]]"
+      - "all(m == [[111], [222], [333]] for m in alg.par_ring_trace([[1, 2, 3], [10, 20, 30], [100, 200, 300]])[3]) and [1 + 10 + 100, 2 + 20 + 200, 3 + 30 + 300] == [111, 222, 333]"
+      - "alg.par_ring_allreduce([[1, 2, 3], [10, 20, 30], [100, 200, 300]])[1] == [4, 4, 4] and 2 * alg.Fraction(2, 3) * 3 == 4"
+    steps:
+      - show: |
+          <p>Ba máy, mỗi máy một vector 3 số (mỗi mảnh 1 số). Tổng đúng, cộng thẳng từng cột: $[1 + 10 + 100;\ 2 + 20 + 200;\ 3 + 30 + 300] = [111;\ 222;\ 333]$.</p>
+          <table class="t"><tr><th>thời điểm</th><th>máy 0</th><th>máy 1</th><th>máy 2</th></tr>
+          <tr><td>ban đầu</td><td>1, 2, 3</td><td>10, 20, 30</td><td>100, 200, 300</td></tr>
+          <tr><td>sau rút gọn phân tán (2 bước)</td><td>1, <b>222</b>, 303</td><td>11, 20, <b>333</b></td><td><b>111</b>, 220, 300</td></tr>
+          <tr><td>sau gom lại (2 bước nữa)</td><td>111, 222, 333</td><td>111, 222, 333</td><td>111, 222, 333</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.3", "2.4"]
+        say: "Kiểm tra đi đường khác, chạy tay vòng 3 máy, mỗi mảnh chỉ 1 số. Vì tổng không phụ thuộc cách chuyền, ta cộng thẳng từng cột, tổng đúng là 111, 222 và 333. Sau hai bước rút gọn phân tán, máy 0 giữ tổng đầy đủ 222 của mảnh giữa, máy 1 giữ 333, máy 2 giữ 111, mỗi máy đúng một mảnh. Các số còn lại như 303 chỉ là tổng dở dang. Sau hai bước gom lại, cả ba máy đều có 111, 222, 333, khớp với cộng thẳng."
+      - show: |
+          <p>Đếm số đã gửi: 4 bước, mỗi bước mỗi máy gửi 1 số → <b>4 số</b> mỗi máy. Công thức: $2 \cdot \frac{3 - 1}{3} \cdot 3 = 4$ ✓.</p>
+          <p class="note">Thứ tự cộng mỗi mảnh khác nhau: mảnh giữa được cộng $2 + 200$ rồi mới $+\,20$. Với số nguyên không sao; với số thực, bài báo năm 2009 lưu ý tổng có thể lệch chút vì “cách đặt ngoặc khác nhau”.</p>
+        focus: [1, 1, 2]
+        say: "Đếm số đã gửi, có 4 bước, mỗi bước mỗi máy gửi 1 số, nên mỗi máy gửi 4 số, đúng bằng 2 nhân 2 phần 3 nhân 3. Còn một điểm tinh tế, mỗi mảnh được cộng theo thứ tự khác nhau, ví dụ mảnh giữa được cộng 2 với 200 trước rồi mới cộng 20. Với số nguyên thì không sao, còn với số thực, bài báo năm 2009 lưu ý tổng có thể lệch chút vì cách đặt ngoặc khác nhau."
+
+  # ───────────────────────── 8. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi của người đã đi làm"
+    checks:
+      - "round(alg.par_ring_time(64, 1e-3, 10, 50e-6) * 1e3, 2) == 6.5 and round(126 * 50e-6 * 1e3, 1) == 6.3 and round(2 * 63 / 64 * 1e-3 / 10 * 1e3, 3) == 0.197"
+      - "alg.par_ring_time(8, 1, 1) == 1.75 and round(alg.par_ring_time(8, 1, 1) / alg.par_ring_time(8, 1, 10)) == 10"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> “Thêm máy thì vòng chậm theo” <b class="red">(lượng gửi mỗi máy chưa tới 2D)</b>
+          <br><span class="note">Từ 8 lên 64 máy: 1,75 lên khoảng 1,97 GB. Cái tăng là <b>số bước</b>: 14 lên 126.</span></div>
+          <div class="box warn"><b>Lỗi 2.</b> Gộp từng gói nhỏ một <b class="red">(độ trễ quyết định)</b>
+          <br><span class="note">64 máy, gói 1 MB, trễ 0,05 ms mỗi bước (minh hoạ): 126 bước nhân 0,05 ms = 6,3 ms trễ, so với 0,197 ms chuyển dữ liệu. Bài báo năm 2009 ghi: vòng chỉ tối ưu về băng thông, không về số lượt.</span></div>
+        focus: [1, 1, 2, 2, 2, 2]
+        say: "Lỗi thứ nhất là nghĩ thêm máy thì vòng chậm theo. Từ 8 lên 64 máy, lượng gửi mỗi máy chỉ tăng từ 1 phẩy 75 lên khoảng 1 phẩy 97 GB, cái tăng là số bước, từ 14 lên 126. Lỗi thứ hai là gộp từng gói nhỏ một. Lấy 64 máy, gói 1 MB và độ trễ 0 phẩy 05 mi li giây mỗi bước. Khi đó 126 bước tốn 6 phẩy 3 mi li giây chỉ cho trễ, trong khi chuyển dữ liệu chỉ mất 0 phẩy 197. Bài báo năm 2009 ghi rõ vòng chỉ tối ưu về băng thông, không tối ưu về số lượt."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Đo băng thông trung bình của cụm máy rồi tính thời gian vòng <b class="red">(vòng đi nhanh bằng đường CHẬM NHẤT)</b></div>
+          <table class="t"><tr><th>8 máy, 1 GB</th><th>mỗi bước chờ</th><th>thời gian</th></tr>
+          <tr><td>mọi đường 10 GB/s</td><td>đường 10 GB/s</td><td>0,175 giây</td></tr>
+          <tr><td>7 đường 10 GB/s, 1 đường 1 GB/s</td><td>đường 1 GB/s</td><td>$\hl{1{,}75}$ giây — chậm gấp 10</td></tr></table>
+          <p class="note">Mỗi bước, mọi máy chờ mảnh từ máy bên trái; một đường chậm làm cả vòng chậm. Đo từng đường, không đo trung bình.</p>
+        focus: [1, "2.2", "2.3", 3, 3]
+        say: "Lỗi thứ ba hay gặp ở người đã đi làm, là đo băng thông trung bình của cụm máy rồi tính thời gian vòng. Nếu mọi đường đều 10 GB mỗi giây thì mất 0 phẩy 175 giây. Nhưng chỉ cần 1 trong 8 đường còn 1 GB mỗi giây, mỗi bước mọi máy phải chờ đường đó, nên mất 1 phẩy 75 giây, chậm gấp 10. Mỗi bước, mọi máy chờ mảnh từ máy bên trái, nên một đường chậm làm cả vòng chậm. Hãy đo từng đường, đừng đo trung bình."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> So gradient sau khi gộp giữa hai lần chạy bằng dấu bằng tuyệt đối <b class="red">(lệch chữ số cuối là bình thường)</b>
+          <br><span class="note">Số máy khác nhau thì thứ tự cộng khác nhau. Muốn tái lập từng bit phải cố định số máy và thứ tự cộng; còn kiểm đúng thì so bằng sai số nhỏ.</span></div>
+        say: "Lỗi thứ tư là so gradient sau khi gộp giữa hai lần chạy bằng dấu bằng tuyệt đối. Số máy khác nhau thì thứ tự cộng khác nhau, nên lệch chữ số cuối là bình thường. Muốn tái lập từng bit thì phải cố định số máy và thứ tự cộng, còn muốn kiểm đúng thì so bằng một sai số nhỏ."
+
+  # ───────────────────────── 9. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: vòng hay máy chủ tham số?"
+    checks:
+      - "round(alg.par_ring_time(16, 2, 25), 6) == 0.15 and 2 * alg.Fraction(15, 16) * 2 == alg.Fraction(15, 4)"
+      - "alg.par_ps_time(16, 2, 25) == 2.56 and alg.par_ps_time(16, 2, 25, servers=2) == 1.28"
+      - "round(alg.par_ring_time(16, 2e-3, 25, 5e-3) * 1e3, 2) == 150.15 and round(alg.par_ps_time(16, 2e-3, 25, 1, 5e-3) * 1e3, 2) == 12.56"
+    steps:
+      - show: |
+          <p>16 máy, đường 25 GB/s, độ trễ 5 ms mỗi bước hay mỗi lần gửi (số minh hoạ).</p>
+          <table class="t"><tr><th>câu</th><th>tình huống</th></tr>
+          <tr><td>1</td><td>Mỗi máy 2 GB gradient. Vòng mất bao lâu, bỏ qua trễ? Máy chủ tham số, một máy và hai máy chia đôi?</td></tr>
+          <tr><td>2</td><td>Cùng cụm, nhưng mỗi lần gộp chỉ 2 MB. Tính cả trễ: vòng hay máy chủ?</td></tr></table>
+        focus: [1, "2.2", "2.3", 0]
+        say: "Bây giờ đến lượt bạn, với 16 máy, đường 25 GB mỗi giây, và độ trễ 5 mi li giây mỗi bước hay mỗi lần gửi, đều là số minh hoạ. Câu một, mỗi máy có 2 GB gradient, vòng mất bao lâu nếu bỏ qua trễ, còn máy chủ tham số với một máy và với hai máy chia đôi thì sao? Câu hai, cùng cụm đó nhưng mỗi lần gộp chỉ 2 MB, tính cả trễ thì chọn vòng hay máy chủ? Dừng video và làm ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 1: 2 GB</th><th>phép tính</th><th>thời gian</th></tr>
+          <tr><td>vòng</td><td>$2 \cdot \frac{15}{16} \cdot 2 = 3{,}75$ GB, chia 25</td><td>$\hlg{0{,}15}$ giây</td></tr>
+          <tr><td>một máy chủ</td><td>nhận 32 GB rồi gửi 32 GB</td><td>$\frac{64}{25} = 2{,}56$ giây</td></tr>
+          <tr><td>hai máy chủ chia đôi</td><td>mỗi máy chủ 16 GB vào, 16 GB ra</td><td>1,28 giây</td></tr></table>
+          <p class="note">Gói lớn: chọn vòng. Thêm máy chủ chỉ chia nhỏ cổ chai, chưa đuổi kịp vòng.</p>
+        focus: [0, "1.2", "1.3", "1.4", 2]
+        say: "Đáp án câu một. Vòng gửi 2 nhân 15 phần 16 nhân 2, bằng 3 phẩy 75 GB mỗi máy, chia 25 được 0 phẩy 15 giây. Một máy chủ nhận 32 GB rồi gửi 32 GB, mất 2 phẩy 56 giây. Hai máy chủ chia đôi, mỗi máy chủ 16 GB vào và 16 GB ra, mất 1 phẩy 28 giây. Với gói lớn ta chọn vòng, vì thêm máy chủ chỉ chia nhỏ cổ chai chứ chưa đuổi kịp vòng."
+      - show: |
+          <table class="t"><tr><th>câu 2: 2 MB</th><th>phép tính</th><th>thời gian</th></tr>
+          <tr><td>vòng</td><td>30 bước nhân 5 ms trễ, cộng 0,15 ms dữ liệu</td><td>≈ 150,15 ms</td></tr>
+          <tr><td>một máy chủ</td><td>2 lần trễ = 10 ms, cộng 64 MB chia 25 GB/s = 2,56 ms</td><td>$\hlg{12{,}56}$ ms</td></tr></table>
+          <p class="note">Gói nhỏ trên mạng trễ cao: máy chủ (hay một cách gộp ít lượt) thắng. Cách hay hơn: <b>gom nhiều gói nhỏ thành gói lớn</b> rồi mới gộp bằng vòng. Điều kiện đổi lựa chọn là tỉ số giữa trễ và cỡ gói.</p>
+        focus: [0, "1.2", "1.3", 2, 2]
+        say: "Câu hai đảo ngược kết quả. Vòng phải đi 30 bước, mỗi bước 5 mi li giây trễ, cộng 0 phẩy 15 mi li giây dữ liệu, khoảng 150 mi li giây. Máy chủ chỉ có 2 lần trễ, 10 mi li giây, cộng 2 phẩy 56 mi li giây dữ liệu, tổng 12 phẩy 56 mi li giây. Gói nhỏ trên mạng trễ cao thì máy chủ, hay một cách gộp ít lượt, thắng. Cách hay hơn là gom nhiều gói nhỏ thành gói lớn rồi mới gộp theo vòng, và điều kiện đổi lựa chọn là tỉ số giữa trễ và cỡ gói."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">cắt n mảnh</span><span class="a">→</span>
+          <span class="n">rút gọn phân tán: n − 1 bước</span><span class="a">→</span>
+          <span class="n">gom lại: n − 1 bước</span><span class="a">→</span>
+          <span class="n">mỗi máy gửi $2 \cdot \frac{n - 1}{n} \cdot D$, chưa tới 2D</span><span class="a">→</span>
+          <span class="n">gói nhỏ: trễ của 2(n − 1) bước</span></div>
+        say: "Tổng kết lại, ta cắt vector thành n mảnh, rút gọn phân tán trong n trừ 1 bước, rồi gom lại trong n trừ 1 bước nữa. Mỗi máy gửi 2 nhân n trừ 1 chia n nhân D, chưa tới 2 lần D dù có bao nhiêu máy. Cái giá là 2 nhân n trừ 1 bước nối tiếp, nên gói nhỏ thì độ trễ quyết định."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> tìm <b>đường bận nhất</b> trước khi chọn cách gộp. Cổ chai của máy chủ là một đường chở $n \cdot D$; cổ chai của vòng là đường chậm nhất và số bước.</div>
+        say: "Điều cần mang theo, hãy tìm đường bận nhất trước khi chọn cách gộp. Cổ chai của máy chủ là một đường phải chở n nhân D, còn cổ chai của vòng là đường chậm nhất và số bước."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 11): huấn luyện phân tán — song song dữ liệu, chồng tính toán với truyền thông, và vì sao lô lớn cần chỉnh tốc độ học.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 11, ta ghép mọi thứ vào huấn luyện phân tán, với song song dữ liệu, cách chồng tính toán với truyền thông, và vì sao lô lớn cần chỉnh tốc độ học. Hẹn gặp bạn ở bài tiếp theo."

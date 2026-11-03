@@ -1,0 +1,316 @@
+id: L08
+course: PAR
+series: "PAR · Tính toán song song và GPU"
+title: "Bài 8 — GPU: luồng, khối, nhóm 32 luồng chạy chung lệnh, phân kỳ nhánh và truy cập gộp"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/par.yaml L08; audit/par/verify_par.py L08; audit/par/sources_L08.md (câu trích nguyên văn, đọc 2026-11-02); NVIDIA, CUDA C++ Best Practices Guide (docs.nvidia.com, bản hiện hành) — mục Coalesced Access to Global Memory, Strided Accesses, Branching and Divergence [BPG]; J. Nickolls, I. Buck, M. Garland, K. Skadron, Scalable Parallel Programming with CUDA, ACM Queue 6(2), 2008 (bản chép tại grothoff.org) [NI08]; PAR bài 6 (một lệnh nhiều dữ liệu), bài 7 (mái nhà)"
+assumes: [arith, frac, approx, power]
+# Quy ước: “GPU” = bộ xử lý đồ hoạ (lời đọc nói “bộ xử lý đồ hoạ” hoặc “thẻ đồ hoạ”); “warp” = nhóm 32 luồng chạy chung lệnh (tên gốc chỉ
+#   trên màn hình); “khối” = thread block; “cụm xử lý” = SM. Luồng được đánh số t = 0, 1, …, 31 trong một nhóm.
+#   Truy cập bộ nhớ chính: theo [BPG], các lượt đọc của một nhóm 32 luồng gộp thành số GIAO DỊCH 32 byte đủ phục vụ mọi luồng; một
+#   giao dịch = một đoạn 32 byte thẳng hàng (địa chỉ chia 32 lấy phần nguyên = số thứ tự đoạn). Số thực 32 bit = 4 byte, phần tử i ở
+#   địa chỉ 4 · i (tính từ đầu mảng, mảng bắt đầu ở đầu một đoạn). Hiệu suất đọc = byte cần dùng / byte đã chuyển.
+#   Mọi thời gian, số lệnh trong ví dụ là SỐ MINH HOẠ, ghi rõ.
+objectives:
+  - "Đọc được cấu trúc lưới, khối, nhóm 32 luồng và vì sao các khối phải chạy được theo thứ tự bất kỳ"
+  - "Tính số lượt chạy và hiệu suất khi một nhóm 32 luồng rẽ nhiều nhánh"
+  - "Đếm số giao dịch 32 byte khi 32 luồng đọc liền nhau, theo bước nhảy, hay lệch đầu đoạn"
+  - "Chọn cách giao việc cho luồng để đọc gộp và tránh phân kỳ"
+asr_reviewed:
+  - {sentence: "Phiên bản B chỉ thêm một điều kiện, luồng chẵn làm việc này, luồng lẻ làm việc kia, và mất 2 mi li giây.", reason: "ASR chép “Phiên bản B chỉ thay 1 điều kiện, luôn chẳng làm việc này, luôn lẽ làm việc kia và mất 2 milli giây.” (0.723): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh; lệch âm/thanh thuần Việt: thêm/thay, luồng chẵn/luôn chẳng, luồng linh/luôn lẽ — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Phiên bản C đọc ảnh theo cột thay vì theo hàng, mất tới 8 mi li giây.", reason: "ASR chép “phiên bản sẽ đọc ảnh theo cục thay vì theo hàng, mất tới 8 mê lý dây.” (0.765): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh; lệch âm/thanh thuần Việt: cột/cục — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Thẻ minh hoạ chuyển 1 nghìn tỉ byte mỗi giây, nhưng đọc theo cột chỉ dùng 12 phẩy 5 phần trăm số byte đã chuyển.", reason: "ASR chép “Thế minh hòa chuyển 1.000 tỷ bay mỗi giây, nhưng đọc theo cột chỉ dùng 12,5% số bay đã chuyển.” (0.808): “tỉ” ASR viết chính tả “tỷ” (cùng âm); byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: thẻ/thế, hoạ/hoà — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Ở câu ba, điều kiện t nhỏ hơn 16 chia mỗi nhóm thành 16 luồng đúng và 16 luồng sai, nên nhóm chạy 2 lượt.", reason: "ASR chép “Ở câu 3, điều kiện tế nhỏ hơn 16 chi mỗi nhóm thành 16 lùng đúng và 16 lùng sai nên nhóm chạy hai lượt.” (0.857): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: chia/chi, luồng/lùng, luồng/lùng — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Vậy chỉ còn 125 tỉ byte có ích mỗi giây, ít hơn 8 lần, khớp với 8 mi li giây so với 1 mi li giây, nếu nhân bị chặn bởi băng thông.", reason: "ASR chép “Vậy chỉ còn 125 tỷ bay có ít mỗi giây, ít hơn 8 lần, khớp với 8 mili giây so với 1 mili giây nếu nhân bị chặn bởi băng thông.” (0.861): “tỉ” ASR viết chính tả “tỷ” (cùng âm); byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Làm thử với đọc liền nhau, luồng 0 tới 7 nằm ở đoạn 0, luồng 8 tới 15 ở đoạn 1, và luồng 31 ở đoạn 3, tổng cộng 4 giao dịch cho 128 byte.", reason: "ASR chép “Làm thử với độc liền nhau, luôn 0 tới 7 nằm ở đoạn 0, luôn 8 tới 15 ở đoạn 1 và luôn 31 ở đoạn 3, tổng cộng 4 giao dịch cho 128 vai.” (0.881): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: đọc/độc, luồng/luôn, luồng/luôn, luồng/luôn — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Theo hướng dẫn tối ưu chính thức của hãng, các lượt đọc của 32 luồng được gộp lại thành số giao dịch 32 byte cần để phục vụ mọi luồng.", reason: "ASR chép “Theo hướng dẫn tối ưu chính thức của hãng, các lượt đọc của 32 luôn được gộp lại thành số giao dịch 32 bai cần để phục vụ mọi luôn.” (0.912): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: luồng/luôn, luồng/luôn — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bước bốn là phiên bản C, đọc một cột của ảnh 32 cột, mỗi luồng cách nhau 128 byte, nên mỗi luồng một đoạn riêng, tổng 32 giao dịch, hiệu suất chỉ 12 phẩy 5 phần trăm.", reason: "ASR chép “Bước 4 là phiên bản xe, độc 1 cột của ảnh 32 cột, mỗi lùng cách nhau 128 bài, nên mỗi lùng một đoạn riêng, tổng 32 giao dịch, hiệu suất chỉ 12,5%.” (0.913): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: đọc/độc, luồng/lùng, luồng/lùng — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Số thực 32 bit chiếm 4 byte, nên phần tử thứ 5 nằm ở địa chỉ 4 nhân 5 bằng 20.", reason: "ASR chép “Số thực 32 biết chiếm 4 bài nên phần tử thứ 5 nằm ở địa chỉ 4 nhân 5 bằng 20.” (0.917): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: bit/biết — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bước năm, đọc liền nhau nhưng lệch 4 byte so với đầu đoạn, các địa chỉ vắt qua 5 đoạn, hiệu suất 80 phần trăm.", reason: "ASR chép “Bước năm, đọc liền nhau nhân lệch 4 bài so với đầu đoạn, các địa chỉ vắt qua 5 đoạn, hiệu xuất 80%.” (0.923): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: nhưng/nhân — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Mỗi giao dịch chuyển 32 byte, trong khi 32 luồng chỉ cần 128 byte, nên hiệu suất đọc bằng 128 chia 32 nhân số giao dịch.", reason: "ASR chép “Mỗi giao dịch chuyển 32 bay, trong khi 32 luồng chỉ cần 128 bay, nên hiệu suất độc bằng 128 chia 32 nhân số giao dịch.” (0.925): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: đọc/độc — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Cách một, 32 luồng đọc 32 hàng khác nhau, cách nhau 1024 nhân 4 byte, nên mỗi luồng một đoạn, 32 giao dịch, hiệu suất 12 phẩy 5 phần trăm.", reason: "ASR chép “Cách 1, 32 luồng đọc 32 hàng khác nhau, cách nhau 1.024 nhân 4 bài, nên mỗi luồng một đoạn, 32 giao dịch, hiểu suốt 12,5%.” (0.93): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: hiệu suất/hiểu suốt — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Cách hai, 32 luồng đọc 32 cột liền nhau của cùng một hàng, cách nhau 4 byte, nên chỉ 4 giao dịch, đạt 100 phần trăm.", reason: "ASR chép “Cách 2, 32 luồng đọc 32 cục liền nhau của cùng một hàng, cách nhau 4 vai, nên chỉ 4 giao dịch đạt 100%.” (0.935): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: cột/cục — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Vậy ta chỉ cần đếm số đoạn 32 byte khác nhau mà các địa chỉ chạm tới.", reason: "ASR chép “Vậy ta chỉ cần đếm số đoạn 32 bay khác nhau mà các địa chỉ chạm tới.” (0.947): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Vì vậy số lượt bằng số nhánh khác nhau trong nhóm, và số giao dịch bằng số đoạn 32 byte mà các luồng chạm tới.", reason: "ASR chép “Vì vậy số lượt bằng số nhánh khác nhau trong nhóm và số giao dịch bằng số đoạn 32-by mà các luồng chạm tới.” (0.963): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Điều thứ hai, ở bài 7, ta thấy nhân có cường độ thấp bị chặn bởi băng thông, nên mỗi byte đọc phí là tốc độ mất đi.", reason: "ASR chép “Điều thứ 2, ở bài 7, ta thấy nhân có cường độ thấp bị chặn bởi băng thông, nên mỗi bay đọc phí là tốc độ mất đi.” (0.964): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Nếu viết điều kiện theo số thứ tự nhóm, tức t chia 32, thì cả 32 luồng cùng đúng hoặc cùng sai, chỉ 1 lượt.", reason: "ASR chép “Nếu viết điều kiện theo số thứ tự nhóm, tức tây chia 32, thì cả 32 luồng cùng đúng hoặc cùng sai, chỉ một lượt.” (0.966): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Trước khi viết, hỏi hai câu, 32 luồng cạnh nhau có đi cùng nhánh không, và có đọc 128 byte liền nhau không.", reason: "ASR chép “Trước khi viết, hỏi hai câu, 32 luồng cạnh nhau có đi cùng nhánh không và có đọc 128 bài liền nhau không?” (0.966): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bộ nhớ được chia thành các đoạn 32 byte, và địa chỉ 100 chia 32 được 3 dư 4, nên nằm ở đoạn số 3.", reason: "ASR chép “Bộ nhớ được chia thành các đoạn 32 bay và địa chỉ 100 chia 32 được 3 dư 4 nên nằm ở đoạn số 3.” (0.967): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Câu một, số giao dịch mỗi lần đọc của một nhóm, câu hai, chọn cách nào, câu ba, điều kiện t nhỏ hơn 16 có làm nhóm phân kỳ không?", reason: "ASR chép “Câu 1, số giao dịch mỗi lần đọc của một nhóm. Câu 2, chọn cách nào. Câu 3, điều kiện tây nhỏ hơn 16 có làm nhóm phân kỳ không?” (0.968): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Hàng nghìn lõi, mà thêm một câu điều kiện là chậm gấp đôi"
+    checks:
+      - "alg.par_warp_passes([t % 2 for t in range(32)])[0] == 2 and alg.par_transactions(32, seg=32) // alg.par_transactions(1, seg=32) == 8"
+    steps:
+      - show: |
+          <p>Đội bạn chuyển hàm xử lý ảnh lên một thẻ đồ hoạ quảng cáo “hàng nghìn lõi” (số đo dưới đây là số minh hoạ).</p>
+          <table class="t"><tr><th>phiên bản</th><th>thay đổi</th><th>thời gian</th></tr>
+          <tr><td>A</td><td>mỗi luồng xử lý một điểm ảnh</td><td>1 ms</td></tr>
+          <tr><td>B</td><td>thêm: luồng chẵn làm việc này, luồng lẻ làm việc kia</td><td><b>2 ms</b></td></tr>
+          <tr><td>C</td><td>đọc ảnh theo cột thay vì theo hàng</td><td><b>8 ms</b></td></tr></table>
+          <div class="box key">Hôm nay ta trả lời: vì sao một câu điều kiện làm chậm gấp đôi? Vì sao đổi hàng sang cột làm chậm gấp 8? Và giao việc cho luồng thế nào cho đúng?</div>
+        focus: [1, "2.2", "2.3", "2.4", 3]
+        say: "Chào bạn, đội bạn chuyển hàm xử lý ảnh lên một thẻ đồ hoạ quảng cáo hàng nghìn lõi, các số đo ở đây là số minh hoạ. Phiên bản A cho mỗi luồng xử lý một điểm ảnh, mất 1 mi li giây. Phiên bản B chỉ thêm một điều kiện, luồng chẵn làm việc này, luồng lẻ làm việc kia, và mất 2 mi li giây. Phiên bản C đọc ảnh theo cột thay vì theo hàng, mất tới 8 mi li giây. Hôm nay ta trả lời vì sao, và giao việc cho luồng thế nào cho đúng."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại ba điều sẽ dùng"
+    checks:
+      - "4 * 5 == 20 and 100 // 32 == 3 and 100 % 32 == 4"
+      - "round(32 / 64 * 100) == 50"
+    steps:
+      - show: |
+          <p><b>① Bài 6, một lệnh nhiều dữ liệu:</b> một lệnh vector làm cùng một phép trên 8 số cùng lúc. Bộ xử lý đồ hoạ đẩy ý này lên <b>32 luồng</b>.</p>
+          <p><b>② Bài 7, mái nhà:</b> nhân có cường độ thấp bị chặn bởi <b>băng thông</b> — mỗi byte đọc phí đi là tốc độ mất đi.</p>
+        focus: [1, 1, 2]
+        say: "Điều thứ nhất, ở bài 6, một lệnh vector làm cùng một phép trên 8 số cùng lúc. Bộ xử lý đồ hoạ đẩy ý này lên 32 luồng. Điều thứ hai, ở bài 7, ta thấy nhân có cường độ thấp bị chặn bởi băng thông, nên mỗi byte đọc phí là tốc độ mất đi."
+      - show: |
+          <p><b>③ Địa chỉ và đoạn.</b> Dấu chấm giữa dòng là phép nhân. Số thực 32 bit chiếm 4 byte, nên phần tử thứ 5 nằm ở địa chỉ $4 \cdot 5 = 20$. Bộ nhớ chia thành <b>đoạn 32 byte</b>; địa chỉ 100 chia 32 được 3, dư 4, nên nằm ở <b>đoạn số 3</b>.</p>
+          <p>Hiệu suất = phần có ích chia phần đã chạy: chạy 64 phần mà chỉ 32 phần có ích là 50%.</p>
+        introduces: [cdot]
+        focus: [1, 1, 1, 2]
+        say: "Điều thứ ba, dấu chấm giữa dòng là phép nhân. Số thực 32 bit chiếm 4 byte, nên phần tử thứ 5 nằm ở địa chỉ 4 nhân 5 bằng 20. Bộ nhớ được chia thành các đoạn 32 byte, và địa chỉ 100 chia 32 được 3 dư 4, nên nằm ở đoạn số 3. Cuối cùng, hiệu suất bằng phần có ích chia phần đã chạy, chạy 64 phần mà chỉ 32 phần có ích là 50 phần trăm."
+
+  # ───────────────────────── 3. NGÔN NGỮ ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: lưới, khối, nhóm 32 luồng, luồng"
+    steps:
+      - show: |
+          <table class="t"><tr><th>tên trên màn hình</th><th>lời đọc</th><th>nghĩa</th></tr>
+          <tr><td>thread</td><td><b>luồng</b></td><td>một dòng lệnh nhỏ, thường lo một phần tử dữ liệu</td></tr>
+          <tr><td>warp</td><td><b>nhóm 32 luồng</b> chạy chung lệnh</td><td>32 luồng liền nhau, mỗi lúc cùng chạy MỘT lệnh</td></tr>
+          <tr><td>block</td><td><b>khối</b></td><td>nhiều nhóm luồng chạy trên cùng một cụm xử lý, dùng chung bộ nhớ nhanh</td></tr>
+          <tr><td>grid</td><td><b>lưới</b></td><td>mọi khối của một lần gọi; số khối theo cỡ dữ liệu</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bài dùng bốn tên, tên gốc tiếng Anh chỉ ghi trên màn hình. Luồng là một dòng lệnh nhỏ, thường lo một phần tử dữ liệu. Nhóm 32 luồng là 32 luồng liền nhau, và mỗi lúc chúng cùng chạy một lệnh. Khối gồm nhiều nhóm luồng chạy trên cùng một cụm xử lý, dùng chung một bộ nhớ nhanh. Lưới là mọi khối của một lần gọi, và số khối đi theo cỡ dữ liệu."
+      - show: |
+          <p>Bài báo năm 2008 của nhóm thiết kế mô hình lập trình: “chạy các <b>nhóm 32 luồng song song gọi là warp</b>” — cái tên mượn từ nghề dệt, “công nghệ luồng song song đầu tiên”.</p>
+          <p>Các khối phải <b>độc lập</b>: “phải chạy được theo <b>thứ tự bất kỳ</b>, song song hay nối tiếp”. Nhờ vậy cùng một chương trình chạy trên thẻ ít hay nhiều cụm xử lý.</p>
+        focus: [1, 2, 2]
+        say: "Bài báo năm 2008 của nhóm thiết kế mô hình lập trình này viết rằng luồng chạy theo các nhóm 32 luồng song song, cái tên tiếng Anh mượn từ sợi dọc trong nghề dệt. Các khối phải độc lập, chạy được theo thứ tự bất kỳ, song song hay nối tiếp. Nhờ vậy cùng một chương trình chạy được trên thẻ có ít hay nhiều cụm xử lý."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Lưới chia khối, khối chia nhóm 32 luồng"
+    steps:
+      - show: |
+          <div><svg width="1600" height="350" viewBox="0 0 1600 350"><defs><marker id="ar8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs>
+          <g font-size="22" text-anchor="middle" fill="#1f2937">
+          <rect x="20" y="40" width="460" height="230" rx="10" fill="#f9fafb" stroke="#1f2937" stroke-width="2"/><text x="250" y="72" font-weight="bold">lưới: 8 khối</text>
+          <rect x="45" y="95" width="95" height="65" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="92" y="135">khối 0</text>
+          <rect x="150" y="95" width="95" height="65" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="197" y="135">khối 1</text>
+          <rect x="255" y="95" width="95" height="65" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="302" y="135">khối 2</text>
+          <rect x="360" y="95" width="95" height="65" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="407" y="135">khối 3</text>
+          <rect x="45" y="180" width="95" height="65" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="92" y="220">khối 4</text>
+          <rect x="150" y="180" width="95" height="65" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="197" y="220">khối 5</text>
+          <rect x="255" y="180" width="95" height="65" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="302" y="220">khối 6</text>
+          <rect x="360" y="180" width="95" height="65" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="407" y="220">khối 7</text>
+          <rect x="560" y="40" width="440" height="230" rx="10" fill="#eff6ff" stroke="#2a78d6" stroke-width="2"/><text x="780" y="72" font-weight="bold">một khối: 128 luồng</text>
+          <rect x="585" y="92" width="390" height="36" rx="5" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="780" y="117">nhóm 0: luồng 0 tới 31</text>
+          <rect x="585" y="136" width="390" height="36" rx="5" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="780" y="161">nhóm 1: luồng 32 tới 63</text>
+          <rect x="585" y="180" width="390" height="36" rx="5" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="780" y="205">nhóm 2: luồng 64 tới 95</text>
+          <rect x="585" y="224" width="390" height="36" rx="5" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="780" y="249">nhóm 3: luồng 96 tới 127</text>
+          <rect x="1080" y="40" width="240" height="105" rx="10" fill="#dcfce7" stroke="#059669" stroke-width="2"/><text x="1200" y="82">cụm xử lý 1</text><text x="1200" y="116">khối 0, 2, 4, 6</text>
+          <rect x="1340" y="40" width="240" height="105" rx="10" fill="#dcfce7" stroke="#059669" stroke-width="2"/><text x="1460" y="82">cụm xử lý 2</text><text x="1460" y="116">khối 1, 3, 5, 7</text>
+          <rect x="1080" y="165" width="500" height="105" rx="10" fill="#dcfce7" stroke="#059669" stroke-width="2"/><text x="1330" y="207">thẻ nhỏ, 1 cụm: khối 0 tới 7</text><text x="1330" y="241">lần lượt, cùng chương trình</text>
+          </g>
+          <line x1="485" y1="155" x2="553" y2="155" stroke="#1f2937" stroke-width="3" marker-end="url(#ar8)"/>
+          <line x1="1005" y1="120" x2="1073" y2="100" stroke="#1f2937" stroke-width="3" marker-end="url(#ar8)"/>
+          <line x1="1005" y1="190" x2="1073" y2="215" stroke="#1f2937" stroke-width="3" marker-end="url(#ar8)"/>
+          <text x="800" y="320" font-size="22" fill="#6b7280" text-anchor="middle">số khối theo cỡ dữ liệu; khối không được chờ nhau, vì không biết khối nào chạy trước</text>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình cho thấy cấu trúc. Một lần gọi tạo một lưới, ở đây có 8 khối. Mỗi khối 128 luồng được cắt thành 4 nhóm 32 luồng liền nhau, nhóm 0 là luồng 0 tới 31, nhóm 1 là luồng 32 tới 63, và cứ thế. Thẻ lớn có hai cụm xử lý thì chia khối ra hai bên, thẻ nhỏ một cụm thì chạy 8 khối lần lượt, mà chương trình không phải đổi gì."
+      - show: |
+          <div><svg width="1600" height="300" viewBox="0 0 1600 300">
+          <g font-size="22" fill="#1f2937">
+          <text x="20" y="60">lượt 1, nhánh A</text><text x="20" y="160">lượt 2, nhánh B</text>
+          <text x="230" y="250" fill="#6b7280">luồng 0 … 31 của MỘT nhóm (chẵn: A, lẻ: B)</text>
+          </g>
+          <g stroke="#1f2937" stroke-width="1">
+          <rect x="230" y="30" width="38" height="44" fill="#2a78d6"/><rect x="268" y="30" width="38" height="44" fill="#e5e7eb"/><rect x="306" y="30" width="38" height="44" fill="#2a78d6"/><rect x="344" y="30" width="38" height="44" fill="#e5e7eb"/><rect x="382" y="30" width="38" height="44" fill="#2a78d6"/><rect x="420" y="30" width="38" height="44" fill="#e5e7eb"/><rect x="458" y="30" width="38" height="44" fill="#2a78d6"/><rect x="496" y="30" width="38" height="44" fill="#e5e7eb"/>
+          <rect x="230" y="130" width="38" height="44" fill="#e5e7eb"/><rect x="268" y="130" width="38" height="44" fill="#eb6834"/><rect x="306" y="130" width="38" height="44" fill="#e5e7eb"/><rect x="344" y="130" width="38" height="44" fill="#eb6834"/><rect x="382" y="130" width="38" height="44" fill="#e5e7eb"/><rect x="420" y="130" width="38" height="44" fill="#eb6834"/><rect x="458" y="130" width="38" height="44" fill="#e5e7eb"/><rect x="496" y="130" width="38" height="44" fill="#eb6834"/>
+          </g>
+          <text x="560" y="60" font-size="26" fill="#1f2937">… (cứ thế tới luồng 31)</text><text x="560" y="160" font-size="26" fill="#1f2937">… (cứ thế tới luồng 31)</text>
+          <g font-size="23" fill="#1f2937">
+          <rect x="1010" y="25" width="560" height="160" rx="10" fill="#fff7ed" stroke="#eb6834" stroke-width="2"/>
+          <text x="1290" y="70" text-anchor="middle">ô màu: luồng đang làm; ô xám: luồng chờ</text>
+          <text x="1290" y="110" text-anchor="middle">2 lượt cho 32 phần việc có ích</text>
+          <text x="1290" y="150" text-anchor="middle" fill="#b91c1c" font-weight="bold">hiệu suất 50%</text>
+          </g>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình thứ hai là chuyện của phiên bản B. Nhóm 32 luồng chỉ chạy được một lệnh mỗi lúc, nên khi luồng chẵn đi nhánh A và luồng lẻ đi nhánh B, nhóm phải chạy hai lượt. Lượt đầu chạy nhánh A, các luồng lẻ đứng chờ, lượt sau chạy nhánh B, các luồng chẵn đứng chờ. Hai lượt chỉ làm được 32 phần việc có ích, nên hiệu suất còn 50 phần trăm."
+
+  # ───────────────────────── 5. SUY RA ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra hai cách đếm: số lượt và số giao dịch"
+    checks:
+      - "alg.par_warp_passes(['A'] * 16 + ['B'] * 16) == (2, alg.Fraction(1, 2))"
+      - "alg.par_warp_passes(['A'] * 31 + ['B']) == (2, alg.Fraction(1, 2)) and alg.par_warp_passes(['A'] * 32) == (1, 1)"
+      - "[4 * t // 32 for t in (0, 7, 8, 31)] == [0, 0, 1, 3] and alg.par_transactions(1, seg=32) == 4 and 32 * 4 == 128"
+    steps:
+      - show: |
+          <p><b>Bước 1 — số lượt.</b> Vì nhóm chỉ chạy một lệnh mỗi lúc, mỗi nhánh có ít nhất một luồng đi vào phải chạy thành một lượt riêng:</p>
+          $$\text{số lượt} = \text{số nhánh khác nhau trong nhóm}$$
+          <p class="note">Làm thử: 16 luồng đi A, 16 luồng đi B → 2 lượt.</p>
+        focus: [1, 1, 2, 3]
+        say: "Bước một là số lượt. Vì nhóm chỉ chạy một lệnh mỗi lúc, mỗi nhánh có ít nhất một luồng đi vào phải chạy thành một lượt riêng. Vậy số lượt bằng số nhánh khác nhau trong nhóm. Làm thử, 16 luồng đi A và 16 luồng đi B thì có 2 lượt."
+      - show: |
+          <p><b>Bước 2 — hiệu suất.</b> Hai nhánh dài như nhau thì mỗi luồng làm đúng một lượt có ích:</p>
+          $$\text{hiệu suất} = \frac{32}{32 \cdot \text{số lượt}}$$
+          <p class="note">Làm thử: chỉ <b>1 luồng</b> đi B, 31 luồng đi A — vẫn 2 lượt, $\frac{32}{64} = 50\%$. Một luồng lạc đàn cũng đủ làm cả nhóm chạy hai lượt.</p>
+        focus: [1, 2, 3, 3]
+        say: "Bước hai, ta tính hiệu suất, tức phần lượt chạy thật sự có ích. Hai nhánh dài như nhau thì mỗi luồng chỉ làm đúng một lượt có ích, nên hiệu suất bằng 32 chia 32 nhân số lượt. Làm thử, chỉ một luồng đi nhánh B còn 31 luồng đi nhánh A, vẫn là 2 lượt, hiệu suất 32 chia 64 bằng 50 phần trăm. Một luồng lạc đàn cũng đủ làm cả nhóm chạy hai lượt."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — số giao dịch.</b> Theo hướng dẫn tối ưu chính thức của hãng, các lượt đọc của 32 luồng <b>gộp</b> lại thành số giao dịch 32 byte cần để phục vụ mọi luồng. Vậy ta đếm số <b>đoạn 32 byte khác nhau</b> bị chạm:</p>
+          $$\text{số giao dịch} = \text{số đoạn khác nhau trong các địa chỉ } 4 \cdot t \cdot \text{bước}$$
+          <p class="note">Làm thử, đọc liền nhau (bước 1): luồng 0 tới 7 ở đoạn 0, luồng 8 tới 15 ở đoạn 1, … luồng 31 ở đoạn 3 → <b>4 giao dịch</b> cho $32 \cdot 4 = 128$ byte.</p>
+        focus: [1, 2, 3, 3]
+        say: "Bước ba là số giao dịch. Theo hướng dẫn tối ưu chính thức của hãng, các lượt đọc của 32 luồng được gộp lại thành số giao dịch 32 byte cần để phục vụ mọi luồng. Vậy ta chỉ cần đếm số đoạn 32 byte khác nhau mà các địa chỉ chạm tới. Làm thử với đọc liền nhau, luồng 0 tới 7 nằm ở đoạn 0, luồng 8 tới 15 ở đoạn 1, và luồng 31 ở đoạn 3, tổng cộng 4 giao dịch cho 128 byte."
+      - show: |
+          <p><b>Bước 4 — hiệu suất đọc.</b> Mỗi giao dịch chuyển 32 byte, nhưng luồng chỉ cần 128 byte:</p>
+          $$\text{hiệu suất đọc} = \frac{128}{32 \cdot \text{số giao dịch}} \qquad \text{liền nhau: } \frac{128}{32 \cdot 4} = 100\%$$
+        focus: [1, 2, 2]
+        say: "Bước bốn là hiệu suất đọc. Mỗi giao dịch chuyển 32 byte, trong khi 32 luồng chỉ cần 128 byte, nên hiệu suất đọc bằng 128 chia 32 nhân số giao dịch. Đọc liền nhau cho 128 chia 128, đúng 100 phần trăm."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Từng phép tính: ba cách rẽ nhánh, ba cách đọc"
+    checks:
+      - "alg.par_warp_passes([t % 2 for t in range(32)]) == (2, alg.Fraction(1, 2))"
+      - "all(alg.par_warp_passes([(t // 32) % 2 for t in range(w * 32, w * 32 + 32)])[0] == 1 for w in range(4))"
+      - "alg.par_transactions(2, seg=32) == 8 and alg.Fraction(128, 32 * 8) == alg.Fraction(1, 2)"
+      - "alg.par_transactions(32, seg=32) == 32 and alg.Fraction(128, 32 * 32) == alg.Fraction(1, 8) and 32 // 4 == 8"
+      - "len({(4 + 4 * t) // 32 for t in range(32)}) == 5 and round(128 / (32 * 5) * 100) == 80"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bước</th><th>điều kiện rẽ nhánh</th><th>trong một nhóm</th><th>số lượt</th><th>hiệu suất</th></tr>
+          <tr><td>Bước 1</td><td>luồng chẵn A, lẻ B</td><td>16 A, 16 B</td><td>2</td><td>$\hl{50\%}$</td></tr>
+          <tr><td>Bước 2</td><td>nhóm chẵn A, nhóm lẻ B (số luồng chia 32, xét chẵn lẻ)</td><td>32 luồng cùng một nhánh</td><td>1</td><td>$\hlg{100\%}$</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.3"]
+        say: "Ta tính từng bước. Bước một là phiên bản B, luồng chẵn đi A, luồng lẻ đi B, nên mỗi nhóm có 16 và 16, chạy 2 lượt, hiệu suất 50 phần trăm. Bước hai, vẫn chia đôi công việc, nhưng xét chẵn lẻ của số nhóm, tức số luồng chia 32. Khi đó cả 32 luồng của một nhóm luôn đi cùng nhánh, chạy 1 lượt, hiệu suất trở lại 100 phần trăm."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>luồng t đọc phần tử</th><th>địa chỉ</th><th>số giao dịch</th><th>hiệu suất đọc</th></tr>
+          <tr><td>Bước 3</td><td>$2 \cdot t$ (bước 2)</td><td>0, 8, 16, …, 248</td><td>8</td><td>$\frac{128}{256} = 50\%$</td></tr>
+          <tr><td>Bước 4</td><td>$32 \cdot t$ (một cột của ảnh 32 cột)</td><td>0, 128, 256, …</td><td>$\hl{32}$</td><td>$\frac{128}{1024} = 12{,}5\%$</td></tr>
+          <tr><td>Bước 5</td><td>$t + 1$ (liền nhau nhưng lệch 4 byte)</td><td>4, 8, …, 128</td><td>5</td><td>$\frac{128}{160} = 80\%$</td></tr></table>
+        introduces: [dots]
+        focus: [0, "1.2", "1.3", "1.3", "1.4"]
+        say: "Giờ tới ba cách đọc, ba chấm nghĩa là cứ thế tiếp tục. Bước ba, luồng t đọc phần tử 2 nhân t, địa chỉ trải từ 0 tới 248, chạm 8 đoạn, nên hiệu suất đọc 50 phần trăm. Bước bốn là phiên bản C, đọc một cột của ảnh 32 cột, mỗi luồng cách nhau 128 byte, nên mỗi luồng một đoạn riêng, tổng 32 giao dịch, hiệu suất chỉ 12 phẩy 5 phần trăm. Từ 4 giao dịch lên 32 là gấp 8, đúng mức chậm của phiên bản C. Bước năm, đọc liền nhau nhưng lệch 4 byte so với đầu đoạn, các địa chỉ vắt qua 5 đoạn, hiệu suất 80 phần trăm."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: liệt kê từng luồng, rồi tính bằng băng thông"
+    checks:
+      - "[(4 * 32 * t) // 32 for t in range(4)] == [0, 4, 8, 12] and [(4 * t) // 32 for t in (0, 1, 7, 8)] == [0, 0, 0, 1]"
+      - "round(1e12 * alg.Fraction(1, 8) / 1e9) == 125 and 1e12 / (1e12 * alg.Fraction(1, 8)) == 8"
+    steps:
+      - show: |
+          <table class="t"><tr><th>đường khác: liệt kê 4 luồng đầu</th><th>luồng 0</th><th>luồng 1</th><th>luồng 2</th><th>luồng 3</th></tr>
+          <tr><td>đọc theo cột (bước 32): địa chỉ → đoạn</td><td>0 → 0</td><td>128 → 4</td><td>256 → 8</td><td>384 → 12</td></tr>
+          <tr><td>đọc liền nhau: địa chỉ → đoạn</td><td>0 → 0</td><td>4 → 0</td><td>8 → 0</td><td>12 → 0</td></tr></table>
+          <p class="note">Theo cột, không hai luồng nào chung đoạn → 32 luồng, 32 đoạn ✓. Liền nhau, 8 luồng chung một đoạn → 32 chia 8 = 4 ✓.</p>
+        focus: [0, "1.2", "1.3", 2]
+        say: "Kiểm tra thứ nhất đi đường khác, liệt kê bốn luồng đầu. Đọc theo cột, luồng 0 ở đoạn 0, luồng 1 ở địa chỉ 128 nên ở đoạn 4, rồi đoạn 8, đoạn 12. Đọc liền nhau, cả bốn luồng đều ở đoạn 0. Theo cột thì không hai luồng nào chung đoạn, nên 32 luồng cần 32 đoạn, còn liền nhau thì 8 luồng chung một đoạn, nên 32 chia 8 bằng 4, khớp."
+      - show: |
+          <p><b>Đường thứ hai, băng thông</b> (bài 7): thẻ chuyển 1 nghìn tỉ byte mỗi giây (số minh hoạ). Đọc theo cột chỉ dùng 12,5% số byte đã chuyển:</p>
+          $$10^{12} \cdot 12{,}5\% = 125 \cdot 10^{9} \text{ byte có ích mỗi giây}$$
+          <p class="note">Ít hơn 8 lần — khớp 8 ms so với 1 ms của phiên bản C nếu nhân bị chặn bởi băng thông.</p>
+        focus: [1, 2, 3]
+        say: "Kiểm tra thứ hai dùng băng thông của bài 7. Thẻ minh hoạ chuyển 1 nghìn tỉ byte mỗi giây, nhưng đọc theo cột chỉ dùng 12 phẩy 5 phần trăm số byte đã chuyển. Vậy chỉ còn 125 tỉ byte có ích mỗi giây, ít hơn 8 lần, khớp với 8 mi li giây so với 1 mi li giây, nếu nhân bị chặn bởi băng thông."
+
+  # ───────────────────────── 8. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi của người đã đi làm"
+    checks:
+      - "round(2 / 2 ** 32, 12) == round(4.656612873e-10, 12)"
+      - "alg.par_transactions(4, seg=32) == 16 and alg.Fraction(128, 32 * 16) == alg.Fraction(1, 4)"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> “Hàng nghìn lõi là hàng nghìn bộ xử lý độc lập” <b class="red">(sai)</b>
+          <br><span class="note">32 luồng của một nhóm chạy CÙNG một lệnh. Bài báo năm 2008 viết: hiệu suất đầy đủ chỉ đạt được khi cả 32 luồng đi cùng một đường.</span></div>
+          <div class="box warn"><b>Lỗi 2.</b> Rẽ nhánh theo dữ liệu ngẫu nhiên, ví dụ “nếu số dương” <b class="red">(gần như mọi nhóm phân kỳ)</b>
+          <br><span class="note">Nửa số dương, nửa số âm: cả 32 luồng cùng dấu có xác suất $\frac{2}{2^{32}} \approx 4{,}7 \cdot 10^{-10}$. Sắp xếp hoặc gom dữ liệu theo nhánh trước.</span></div>
+        focus: [1, 1, 2, 2]
+        say: "Lỗi thứ nhất là nghĩ hàng nghìn lõi là hàng nghìn bộ xử lý độc lập. Thật ra 32 luồng của một nhóm chạy cùng một lệnh, và bài báo năm 2008 viết rằng hiệu suất đầy đủ chỉ đạt khi cả 32 luồng đi cùng một đường. Lỗi thứ hai là rẽ nhánh theo dữ liệu ngẫu nhiên, ví dụ nếu số dương thì làm việc này. Nếu nửa số dương nửa số âm, khả năng cả 32 luồng cùng dấu chỉ khoảng 4 phẩy 7 phần 10 tỉ, nên gần như mọi nhóm đều chạy hai lượt."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Lưu ảnh dạng “mỗi điểm ảnh là 4 số đỏ, lục, lam, độ trong liền nhau”, rồi mỗi luồng chỉ đọc số đỏ <b class="red">(bước 4)</b></div>
+          <table class="t"><tr><th>cách lưu</th><th>luồng t đọc</th><th>số giao dịch</th><th>hiệu suất đọc</th></tr>
+          <tr><td>mảng các điểm ảnh 4 số</td><td>phần tử $4 \cdot t$</td><td>16</td><td>$\hl{25\%}$</td></tr>
+          <tr><td>4 mảng riêng: mọi số đỏ liền nhau</td><td>phần tử $t$</td><td>4</td><td>$\hlg{100\%}$</td></tr></table>
+        focus: [1, "2.2", "2.3", 0]
+        say: "Lỗi thứ ba hay gặp ở người đã đi làm, là lưu ảnh theo kiểu mỗi điểm ảnh có 4 số đỏ, lục, lam và độ trong nằm liền nhau, rồi mỗi luồng chỉ đọc số đỏ. Khi đó luồng t đọc phần tử 4 nhân t, chạm 16 đoạn, hiệu suất đọc chỉ 25 phần trăm. Tách thành 4 mảng riêng, mọi số đỏ nằm liền nhau, thì chỉ còn 4 giao dịch và đạt 100 phần trăm. Cách lưu tốt cho bộ xử lý trung tâm chưa chắc tốt cho thẻ đồ hoạ."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Cho khối sau chờ kết quả của khối trước <b class="red">(chạy được trên máy thử, treo trên máy khác)</b>
+          <br><span class="note">Khối phải chạy được theo thứ tự bất kỳ. Thẻ một cụm chạy khối 0 trước nên trông như đúng; thẻ khác có thể chạy khối 1 trước và chờ mãi. Muốn phối hợp thì tách thành hai lần gọi.</span></div>
+        say: "Lỗi thứ tư là cho khối sau chờ kết quả của khối trước. Vì khối phải chạy được theo thứ tự bất kỳ, chương trình có thể trông như đúng trên máy thử chạy khối 0 trước, rồi treo trên thẻ khác chạy khối 1 trước. Muốn phối hợp giữa các khối, hãy tách thành hai lần gọi."
+
+  # ───────────────────────── 9. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: giao luồng theo hàng hay theo cột?"
+    checks:
+      - "alg.par_transactions(1024, seg=32) == 32 and alg.par_transactions(1, seg=32) == 4"
+      - "alg.Fraction(128, 32 * 32) == alg.Fraction(1, 8) and 32 // 4 == 8"
+      - "alg.par_warp_passes([t < 16 for t in range(32)])[0] == 2 and all(alg.par_warp_passes([(t // 32) < 1 for t in range(w * 32, w * 32 + 32)])[0] == 1 for w in range(2))"
+    steps:
+      - show: |
+          <p>Ma trận 1024 hàng, 1024 cột số 32 bit, lưu <b>theo hàng</b> (các số của một hàng nằm liền nhau). Cần tính tổng của từng cột.</p>
+          <table class="t"><tr><th>cách giao việc</th><th>ở bước k, luồng t đọc</th></tr>
+          <tr><td>1. mỗi luồng lo một <b>hàng</b>, cộng dọc theo hàng</td><td>hàng t, cột k: phần tử $1024 \cdot t + k$</td></tr>
+          <tr><td>2. mỗi luồng lo một <b>cột</b>, cộng dọc theo cột</td><td>hàng k, cột t: phần tử $1024 \cdot k + t$</td></tr></table>
+          <p>Câu 1: số giao dịch mỗi lần đọc của một nhóm, mỗi cách? Câu 2: chọn cách nào? Câu 3: “nếu t nhỏ hơn 16 thì…” trong một nhóm có phân kỳ không?</p>
+        focus: [1, "2.2", "2.3", 3, 3, 0]
+        say: "Bây giờ đến lượt bạn. Ma trận 1024 hàng, 1024 cột số 32 bit, lưu theo hàng, nghĩa là các số của một hàng nằm liền nhau, và cần tính tổng của từng cột. Cách một giao mỗi luồng một hàng, nên ở bước k luồng t đọc phần tử 1024 nhân t cộng k. Cách hai giao mỗi luồng một cột, nên luồng t đọc phần tử 1024 nhân k cộng t. Câu một, số giao dịch mỗi lần đọc của một nhóm, câu hai, chọn cách nào, câu ba, điều kiện t nhỏ hơn 16 có làm nhóm phân kỳ không? Dừng video và làm ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 1</th><th>địa chỉ của 32 luồng</th><th>số giao dịch</th><th>hiệu suất đọc</th></tr>
+          <tr><td>cách 1 (theo hàng)</td><td>cách nhau $1024 \cdot 4$ byte</td><td>$\hl{32}$</td><td>12,5%</td></tr>
+          <tr><td>cách 2 (theo cột)</td><td>liền nhau, cách 4 byte</td><td>$\hlg{4}$</td><td>100%</td></tr></table>
+          <p class="note">Câu 2: chọn cách 2 — ít giao dịch hơn 8 lần. Điều kiện đổi lựa chọn: nếu ma trận lưu <b>theo cột</b> thì cách 1 mới là đọc liền nhau.</p>
+        focus: [0, "1.2", "1.3", 2, 2]
+        say: "Đáp án câu một. Cách một, 32 luồng đọc 32 hàng khác nhau, cách nhau 1024 nhân 4 byte, nên mỗi luồng một đoạn, 32 giao dịch, hiệu suất 12 phẩy 5 phần trăm. Cách hai, 32 luồng đọc 32 cột liền nhau của cùng một hàng, cách nhau 4 byte, nên chỉ 4 giao dịch, đạt 100 phần trăm. Câu hai, chọn cách hai, ít giao dịch hơn 8 lần. Nhưng nếu ma trận lưu theo cột thì cách một mới là đọc liền nhau, và lựa chọn đảo lại."
+      - show: |
+          <table class="t"><tr><th>câu 3: điều kiện</th><th>trong một nhóm</th><th>số lượt</th></tr>
+          <tr><td>$t$ nhỏ hơn 16</td><td>16 luồng đúng, 16 luồng sai</td><td>$\hl{2}$</td></tr>
+          <tr><td>số thứ tự nhóm nhỏ hơn 1 (t chia 32)</td><td>cả 32 luồng cùng đúng hoặc cùng sai</td><td>$\hlg{1}$</td></tr></table>
+          <p class="note">Hướng dẫn chính thức: viết điều kiện theo số thứ tự nhóm để không nhóm nào phân kỳ.</p>
+        focus: ["1.2", "1.3", 2]
+        say: "Ở câu ba, điều kiện t nhỏ hơn 16 chia mỗi nhóm thành 16 luồng đúng và 16 luồng sai, nên nhóm chạy 2 lượt. Nếu viết điều kiện theo số thứ tự nhóm, tức t chia 32, thì cả 32 luồng cùng đúng hoặc cùng sai, chỉ 1 lượt. Hướng dẫn chính thức của hãng khuyên đúng cách này, để không nhóm nào phân kỳ."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">lưới → khối → nhóm 32 luồng</span><span class="a">→</span>
+          <span class="n">một nhóm chạy một lệnh mỗi lúc</span><span class="a">→</span>
+          <span class="n">số lượt = số nhánh khác nhau</span><span class="a">→</span>
+          <span class="n">số giao dịch = số đoạn 32 byte bị chạm</span></div>
+        say: "Tổng kết lại, lưới chia thành khối, khối chia thành nhóm 32 luồng, và một nhóm chỉ chạy một lệnh mỗi lúc. Vì vậy số lượt bằng số nhánh khác nhau trong nhóm, và số giao dịch bằng số đoạn 32 byte mà các luồng chạm tới."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> nghĩ theo <b>nhóm 32 luồng</b>, không theo từng luồng. Trước khi viết, hỏi: 32 luồng cạnh nhau có đi cùng nhánh không, và có đọc 128 byte liền nhau không?</div>
+        say: "Điều cần mang theo, hãy nghĩ theo nhóm 32 luồng chứ không theo từng luồng. Trước khi viết, hỏi hai câu, 32 luồng cạnh nhau có đi cùng nhánh không, và có đọc 128 byte liền nhau không."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 9): nhân ma trận chia khối — chép từng khối nhỏ vào bộ nhớ nhanh để dùng lại nhiều lần, thay vì đọc lại từ bộ nhớ chậm.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 9, ta học nhân ma trận chia khối, chép từng khối nhỏ vào bộ nhớ nhanh để dùng lại nhiều lần, thay vì đọc lại từ bộ nhớ chậm. Hẹn gặp bạn ở bài tiếp theo."

@@ -1,0 +1,291 @@
+id: L05
+course: PAR
+series: "PAR · Tính toán song song và GPU"
+title: "Bài 5 — Bộ nhớ đệm khi song song: tính cục bộ và chia sẻ giả"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+domain_terms: [dòng]   # “dòng” = dòng của bộ nhớ đệm (thuật ngữ), không phải trích tài liệu
+source: "curriculum/par.yaml L05; audit/par/verify_par.py L05; audit/par/sources_L05.md (câu trích nguyên văn, đọc 2026-11-03); University of Cambridge, Computer Architecture course notes 2005, MESI — ghi vào dòng đang chia sẻ thì mọi bản sao khác phải bị huỷ trước; cppreference, std::hardware_destructive_interference_size — khoảng cách tối thiểu giữa hai đối tượng để tránh chia sẻ giả, giá trị do cài đặt quyết định (64 trên x86-64 trong ví dụ); H. Sutter, The Free Lunch Is Over (2005) — chi phí phối hợp giữa các lõi để giữ bộ nhớ đệm nhất quán (trích ở audit/csa/sources_L16.md); CSA bài 10, 11 (dòng 64 byte, tách địa chỉ); PAR bài 3 (tổng riêng)"
+assumes: [arith, frac, approx]
+# Quy ước: địa chỉ đánh theo byte; mỗi dòng bộ nhớ đệm 64 byte (như khoá Hệ thống máy tính); bộ đếm 8 byte (số nguyên 64 bit) trừ quiz
+#   (4 byte). Dòng chứa địa chỉ a là ⌊a / 64⌋ (alg.par_cache_lines). Mô hình huỷ bản sao: một lần ghi phải “kéo dòng về” khi người ghi
+#   trước đó trên dòng là lõi khác hoặc chưa ai (alg.par_line_transfers); các luồng ghi xoay vòng — mô hình của bài, KHÔNG phải số đo
+#   thời gian. “Chia sẻ thật” = hai luồng dùng CÙNG một biến; “chia sẻ giả” = hai biến KHÁC nhau chung một dòng.
+#   Tên C++, hằng số hardware_destructive_interference_size chỉ trên màn hình; lời đọc nói “hằng số của thư viện chuẩn”.
+#   Số minh hoạ: 8 luồng × 1000 lần ghi; 16 luồng × 1000 lần ghi; 1 triệu bộ đếm.
+objectives:
+  - "Tính một biến nằm ở dòng nào của bộ nhớ đệm, và các biến nào chung một dòng"
+  - "Giải thích chia sẻ giả bằng số lần dòng bị kéo qua lại khi các luồng ghi các biến khác nhau trong cùng một dòng"
+  - "Chọn giữa đệm mỗi biến ra một dòng và giữ biến cục bộ rồi ghi một lần, kèm cái giá bộ nhớ"
+asr_reviewed:
+  - {sentence: "Ghép sát tốn 8 nhân 8 bằng 64 byte và kéo 8000 lần.", reason: "ASR chép “Gép sát tốn 8 x 8 bằng 64 by và kéo 8.000 lần.” (0.812): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: ghép/gép, nhân/x — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Một dòng 64 byte chứa được 8 số loại 8 byte.", reason: "ASR chép “Một dòng 64 bay chứa được 8 số loại 8 bay.” (0.846): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Hình trên là cách ghép sát, 8 bộ đếm 8 byte nằm vừa khít một dòng 64 byte, mỗi lõi chỉ ghi vào ô của mình.", reason: "ASR chép “Hình trên là cách ghép sát, 8 bộ đếm 8 bay nằm vừa khuyết một dòng 64 bay, mỗi loại chỉ ghi vào ô của mình.” (0.857): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: khít/khuyết, lõi/loại — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Địa chỉ 130 chia 64 được 2 dư 2, nên nằm ở dòng số 2, byte thứ 2 trong dòng.", reason: "ASR chép “Địa chỉ 134 được 2 dư 2, nên nằm ở dòng số 2, bài thứ 2 trong dòng.” (0.894): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: mươi chia sáu/∅ — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bây giờ đến lượt bạn, 16 luồng, mỗi luồng tăng bộ đếm riêng 1000 lần, bộ đếm 4 byte, dòng 64 byte, đều là số minh hoạ.", reason: "ASR chép “Bây giờ đến lược bạn, 16 luồng, mỗi luồng tăng bộ đếm riêng 1000 lần, bộ đếm 4 bay, dòng 64 bay đều là số minh họa.” (0.903): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: lượt/lược — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Ở khoá Hệ thống máy tính, phần bộ nhớ đệm, ta đã thấy bộ nhớ đệm chép dữ liệu theo từng dòng 64 byte liền nhau, không chép từng byte.", reason: "ASR chép “Ở khóa hệ thống máy tính, phân bộ nhớ đệm, ta đã thấy bộ nhớ đệm chép giữ liệu theo từng dòng 64 bay liền nhau, không chép từng bay.” (0.906): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: phần/phân — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Lỗi thứ hai, đệm nửa dòng, 32 byte vẫn để 2 luồng chung một dòng, vẫn 8000 lần kéo.", reason: "ASR chép “Lỗi thứ hai, đềm nửa dòng, 32 by vẫn để hai luồng chung một dòng, vẫn 8.000 lần kéo.” (0.909): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: đệm/đềm — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Cuối cùng, đếm cặp luồng chung dòng, ghép sát có 8 nhân 7 chia 2, bằng 28 cặp giẫm chân nhau, còn đệm 64 byte thì không có cặp nào.", reason: "ASR chép “Cuối cùng, đếm cặp luồng chung dòng, ghép sát có 8 nhân 7 chi 2, bằng 28 cặp dẫm chân nhau, còn đềm 64 bay thì không có cặp nào.” (0.912): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: chia/chi, đệm/đềm — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Lý do là 8 bộ đếm, mỗi bộ 8 byte, nằm sát nhau trong cùng một dòng 64 byte của bộ nhớ đệm.", reason: "ASR chép “Lý do là 8 bộ đếm, mỗi bộ 8 bai nằm sát nhau trong cùng 1 dòng 64 bai của bộ nhớ đệm.” (0.92): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Đệm cũng chỉ 16 lần kéo và đọc được giữa chừng, nhưng tốn 1024 byte, gấp 16 lần.", reason: "ASR chép “Đệm cũng chỉ 16 lần kéo và đọc được giữa chân, nhưng tốn 1024 bay, gấp 16 lần.” (0.923): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: chừng/chân — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Câu hai, đệm tốn 16 nhân 64, bằng 1024 byte, so với 64 byte khi ghép sát.", reason: "ASR chép “Câu 2 Đệm tốn 16 nhân 64 bằng 1024 bai so với 64 bai khi ghép sát” (0.929): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Câu hai, đệm mỗi bộ đếm ra một dòng thì tốn bao nhiêu byte và kéo bao nhiêu lần?", reason: "ASR chép “Câu 2. Đệm mỗi bộ đếm ra một dòng thì tốn bao nhiêu bai và kéo bao nhiêu lần?” (0.947): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Nếu đệm mỗi bộ đếm ra 32 byte, các địa chỉ 0, 32, 64 cứ thế tới 224 rơi vào dòng 0, 0, 1, 1, 2, 2, 3, 3.", reason: "ASR chép “Nếu đệm mỗi bộ đếm ra 32 bai, các địa chỉ 0, 32, 64 cứ thể tới 224 rơi vào dòng 0, 0, 1, 1, 2, 2, 3, 3.” (0.949): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: thế/thể — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Đệm tốn 8 nhân 64 bằng 512 byte, gấp 8 lần bộ nhớ, nhưng chỉ kéo 8 lần.", reason: "ASR chép “Đệm tốn 8 nhân 64 bằng 512 bai, gấp 8 lần bộ nhớ, nhưng chỉ kéo 8 lần.” (0.957): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Tổng kết lại, bộ nhớ đệm làm việc theo dòng 64 byte, và dòng của một địa chỉ là địa chỉ chia 64 làm tròn xuống.", reason: "ASR chép “Tổng kết lại, bộ nhớ đệm làm việc theo dòng 64 bay, và dòng của một địa chỉ là địa chỉ chia 64 làm tròn xuống.” (0.967): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Mỗi luồng một bộ đếm riêng mà vẫn chậm"
+    checks:
+      - "alg.par_cache_lines([8 * i for i in range(8)]) == [0]"
+      - "alg.par_line_transfers([8 * i for i in range(8)], 1000) == (8000, 8000) and alg.par_line_transfers([64 * i for i in range(8)], 1000) == (8, 8000)"
+    steps:
+      - show: |
+          <p>Rút kinh nghiệm bài 3, một nhóm cho <b>8 luồng</b>, mỗi luồng tăng <b>bộ đếm riêng</b> của mình: không tranh chấp, kết quả luôn đúng. Nhưng thêm luồng mà gần như không nhanh hơn.</p>
+          <p>Lý do: 8 bộ đếm 8 byte nằm sát nhau, chung <b>một dòng 64 byte</b>. Trong mô hình của bài, 8000 lần ghi kéo dòng qua lại <b>8000 lần</b>; tách mỗi bộ đếm ra một dòng thì chỉ <b>8 lần</b>.</p>
+          <div class="box key">Hôm nay: biến nằm ở dòng nào, vì sao hai biến khác nhau lại “giẫm chân” nhau, và sửa bằng cách nào với giá nào.</div>
+        focus: [1, 1, 2, 2, 3]
+        say: "Chào bạn, rút kinh nghiệm từ bài 3, một nhóm cho 8 luồng, mỗi luồng tăng bộ đếm riêng của mình, nên không tranh chấp và kết quả luôn đúng. Nhưng thêm luồng mà chương trình gần như không nhanh hơn. Lý do là 8 bộ đếm, mỗi bộ 8 byte, nằm sát nhau trong cùng một dòng 64 byte của bộ nhớ đệm. Trong mô hình của bài, 8000 lần ghi kéo dòng đó qua lại 8000 lần, còn tách mỗi bộ đếm ra một dòng thì chỉ 8 lần. Hôm nay ta tìm hiểu biến nằm ở dòng nào, vì sao hai biến khác nhau lại giẫm chân nhau, và cách sửa với cái giá của nó."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại ba điều sẽ dùng"
+    checks:
+      - "130 // 64 == 2 and 130 % 64 == 2 and 64 * 2 + 2 == 130"
+      - "64 // 8 == 8"
+      - "alg.par_shared_steps(8, 1000, 'reduce') == 1003"
+    steps:
+      - show: |
+          <table class="t"><tr><th>đã học ở</th><th>điều sẽ dùng</th><th>ví dụ số</th></tr>
+          <tr><td>khoá Hệ thống máy tính, phần bộ nhớ đệm</td><td>bộ nhớ đệm chép dữ liệu theo <b>dòng</b> 64 byte liền nhau, không chép từng byte</td><td>địa chỉ 130: chia 64 được 2 dư 2 — dòng số 2, byte thứ 2 trong dòng</td></tr>
+          <tr><td>cùng phần đó</td><td>một dòng chứa bao nhiêu số</td><td>số 8 byte: $\frac{64}{8} = 8$ số một dòng</td></tr>
+          <tr><td>bài 3</td><td>rút gọn: mỗi luồng tổng riêng, gộp một lần ở cuối</td><td>8 luồng × 1000 lần: 1003 bước</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.4"]
+        say: "Ta ôn ba điều sẽ dùng. Ở khoá Hệ thống máy tính, phần bộ nhớ đệm, ta đã thấy bộ nhớ đệm chép dữ liệu theo từng dòng 64 byte liền nhau, không chép từng byte. Địa chỉ 130 chia 64 được 2 dư 2, nên nằm ở dòng số 2, byte thứ 2 trong dòng. Một dòng 64 byte chứa được 8 số loại 8 byte. Ở bài 3, rút gọn cho mỗi luồng một tổng riêng rồi gộp một lần ở cuối, 8 luồng mỗi luồng 1000 lần chỉ mất 1003 bước."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: dòng của một địa chỉ, chia sẻ thật và chia sẻ giả"
+    steps:
+      - show: |
+          $$\text{dòng của địa chỉ } a = \left\lfloor \frac{a}{64} \right\rfloor$$
+          <p>Làm thử: $\left\lfloor \frac{130}{64} \right\rfloor = 2$; $\left\lfloor \frac{56}{64} \right\rfloor = 0$; $\left\lfloor \frac{64}{64} \right\rfloor = 1$.</p>
+        introduces: [floor]
+        focus: [1, 1, 2]
+        say: "Ký hiệu móc vuông có hai chân ở dưới là làm tròn xuống, tức chia rồi bỏ phần dư. Dòng của địa chỉ a bằng a chia 64, làm tròn xuống. Làm thử, 130 chia 64 làm tròn xuống được 2, địa chỉ 56 thuộc dòng 0, còn địa chỉ 64 đã sang dòng 1."
+      - show: |
+          <table class="t"><tr><th>thuật ngữ</th><th>nghĩa</th></tr>
+          <tr><td><b>nhất quán bộ nhớ đệm</b></td><td>mỗi lõi có bộ nhớ đệm riêng; khi một lõi <b>ghi</b> vào một dòng, bản sao dòng đó ở các lõi khác phải bị <b>huỷ</b> trước</td></tr>
+          <tr><td><b>chia sẻ thật</b></td><td>hai luồng dùng <b>cùng một biến</b> — phải đồng bộ (bài 3)</td></tr>
+          <tr><td><b>chia sẻ giả</b></td><td>hai luồng dùng hai biến <b>khác nhau</b> nhưng <b>chung một dòng</b> — đúng kết quả, nhưng dòng bị kéo qua lại</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.4", "1.4"]
+        say: "Bài dùng ba thuật ngữ. Nhất quán bộ nhớ đệm nghĩa là mỗi lõi có bộ nhớ đệm riêng, và khi một lõi ghi vào một dòng, bản sao dòng đó ở các lõi khác phải bị huỷ trước. Nhờ vậy không lõi nào đọc phải số cũ. Chia sẻ thật là hai luồng dùng cùng một biến, phải đồng bộ như bài 3. Chia sẻ giả là hai luồng dùng hai biến khác nhau nhưng chung một dòng. Kết quả vẫn đúng, nhưng dòng bị kéo qua lại giữa các lõi."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Tám bộ đếm trong một dòng, và tám dòng riêng"
+    checks:
+      - "alg.par_cache_lines([8 * i for i in range(8)]) == [0] and alg.par_cache_lines([64 * i for i in range(8)]) == list(range(8))"
+    steps:
+      - show: |
+          <div><svg width="1200" height="400" viewBox="0 0 1200 400"><defs><marker id="ar5f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs>
+          <text x="100" y="34" font-size="22" font-weight="bold" fill="#b91c1c">ghép sát: 8 bộ đếm, mỗi bộ 8 byte, nằm trong MỘT dòng 64 byte</text>
+          <rect x="100" y="56" width="1000" height="56" fill="none" stroke="#b91c1c" stroke-width="3"/>
+          <rect x="100" y="56" width="125" height="56" fill="#fde8e8" stroke="#e11d48" stroke-width="1.5"/><text x="162" y="92" font-size="20" text-anchor="middle" fill="#1f2937">đếm 0</text>
+          <rect x="117" y="150" width="90" height="40" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="162" y="177" font-size="20" text-anchor="middle" fill="#1f2937">lõi 0</text>
+          <line x1="162" y1="148" x2="162" y2="116" stroke="#1f2937" stroke-width="2.5" marker-end="url(#ar5f)"/>
+          <rect x="225" y="56" width="125" height="56" fill="#fde8e8" stroke="#e11d48" stroke-width="1.5"/><text x="287" y="92" font-size="20" text-anchor="middle" fill="#1f2937">đếm 1</text>
+          <rect x="242" y="150" width="90" height="40" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="287" y="177" font-size="20" text-anchor="middle" fill="#1f2937">lõi 1</text>
+          <line x1="287" y1="148" x2="287" y2="116" stroke="#1f2937" stroke-width="2.5" marker-end="url(#ar5f)"/>
+          <rect x="350" y="56" width="125" height="56" fill="#fde8e8" stroke="#e11d48" stroke-width="1.5"/><text x="412" y="92" font-size="20" text-anchor="middle" fill="#1f2937">đếm 2</text>
+          <rect x="367" y="150" width="90" height="40" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="412" y="177" font-size="20" text-anchor="middle" fill="#1f2937">lõi 2</text>
+          <line x1="412" y1="148" x2="412" y2="116" stroke="#1f2937" stroke-width="2.5" marker-end="url(#ar5f)"/>
+          <rect x="475" y="56" width="125" height="56" fill="#fde8e8" stroke="#e11d48" stroke-width="1.5"/><text x="537" y="92" font-size="20" text-anchor="middle" fill="#1f2937">đếm 3</text>
+          <rect x="492" y="150" width="90" height="40" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="537" y="177" font-size="20" text-anchor="middle" fill="#1f2937">lõi 3</text>
+          <line x1="537" y1="148" x2="537" y2="116" stroke="#1f2937" stroke-width="2.5" marker-end="url(#ar5f)"/>
+          <rect x="600" y="56" width="125" height="56" fill="#fde8e8" stroke="#e11d48" stroke-width="1.5"/><text x="662" y="92" font-size="20" text-anchor="middle" fill="#1f2937">đếm 4</text>
+          <rect x="617" y="150" width="90" height="40" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="662" y="177" font-size="20" text-anchor="middle" fill="#1f2937">lõi 4</text>
+          <line x1="662" y1="148" x2="662" y2="116" stroke="#1f2937" stroke-width="2.5" marker-end="url(#ar5f)"/>
+          <rect x="725" y="56" width="125" height="56" fill="#fde8e8" stroke="#e11d48" stroke-width="1.5"/><text x="787" y="92" font-size="20" text-anchor="middle" fill="#1f2937">đếm 5</text>
+          <rect x="742" y="150" width="90" height="40" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="787" y="177" font-size="20" text-anchor="middle" fill="#1f2937">lõi 5</text>
+          <line x1="787" y1="148" x2="787" y2="116" stroke="#1f2937" stroke-width="2.5" marker-end="url(#ar5f)"/>
+          <rect x="850" y="56" width="125" height="56" fill="#fde8e8" stroke="#e11d48" stroke-width="1.5"/><text x="912" y="92" font-size="20" text-anchor="middle" fill="#1f2937">đếm 6</text>
+          <rect x="867" y="150" width="90" height="40" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="912" y="177" font-size="20" text-anchor="middle" fill="#1f2937">lõi 6</text>
+          <line x1="912" y1="148" x2="912" y2="116" stroke="#1f2937" stroke-width="2.5" marker-end="url(#ar5f)"/>
+          <rect x="975" y="56" width="125" height="56" fill="#fde8e8" stroke="#e11d48" stroke-width="1.5"/><text x="1037" y="92" font-size="20" text-anchor="middle" fill="#1f2937">đếm 7</text>
+          <rect x="992" y="150" width="90" height="40" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="1037" y="177" font-size="20" text-anchor="middle" fill="#1f2937">lõi 7</text>
+          <line x1="1037" y1="148" x2="1037" y2="116" stroke="#1f2937" stroke-width="2.5" marker-end="url(#ar5f)"/>
+          <text x="100" y="222" font-size="20" fill="#b91c1c">một lõi ghi → bản sao dòng này ở các lõi kia bị huỷ; dòng bị kéo qua lại giữa 8 lõi</text>
+          <text x="100" y="268" font-size="22" font-weight="bold" fill="#059669">đệm: mỗi bộ đếm đứng đầu một dòng 64 byte riêng</text>
+          <rect x="100" y="290" width="115" height="50" fill="#f3f4f6" stroke="#059669" stroke-width="2"/><rect x="100" y="290" width="16" height="50" fill="#93c5fd"/><text x="166" y="322" font-size="20" text-anchor="middle" fill="#1f2937">dòng 0</text>
+          <rect x="225" y="290" width="115" height="50" fill="#f3f4f6" stroke="#059669" stroke-width="2"/><rect x="225" y="290" width="16" height="50" fill="#93c5fd"/><text x="291" y="322" font-size="20" text-anchor="middle" fill="#1f2937">dòng 1</text>
+          <rect x="350" y="290" width="115" height="50" fill="#f3f4f6" stroke="#059669" stroke-width="2"/><rect x="350" y="290" width="16" height="50" fill="#93c5fd"/><text x="416" y="322" font-size="20" text-anchor="middle" fill="#1f2937">dòng 2</text>
+          <rect x="475" y="290" width="115" height="50" fill="#f3f4f6" stroke="#059669" stroke-width="2"/><rect x="475" y="290" width="16" height="50" fill="#93c5fd"/><text x="541" y="322" font-size="20" text-anchor="middle" fill="#1f2937">dòng 3</text>
+          <rect x="600" y="290" width="115" height="50" fill="#f3f4f6" stroke="#059669" stroke-width="2"/><rect x="600" y="290" width="16" height="50" fill="#93c5fd"/><text x="666" y="322" font-size="20" text-anchor="middle" fill="#1f2937">dòng 4</text>
+          <rect x="725" y="290" width="115" height="50" fill="#f3f4f6" stroke="#059669" stroke-width="2"/><rect x="725" y="290" width="16" height="50" fill="#93c5fd"/><text x="791" y="322" font-size="20" text-anchor="middle" fill="#1f2937">dòng 5</text>
+          <rect x="850" y="290" width="115" height="50" fill="#f3f4f6" stroke="#059669" stroke-width="2"/><rect x="850" y="290" width="16" height="50" fill="#93c5fd"/><text x="916" y="322" font-size="20" text-anchor="middle" fill="#1f2937">dòng 6</text>
+          <rect x="975" y="290" width="115" height="50" fill="#f3f4f6" stroke="#059669" stroke-width="2"/><rect x="975" y="290" width="16" height="50" fill="#93c5fd"/><text x="1041" y="322" font-size="20" text-anchor="middle" fill="#1f2937">dòng 7</text>
+          <text x="100" y="378" font-size="20" fill="#059669">ô xanh: 8 byte bộ đếm, phần xám bỏ trống — không ai huỷ bản sao của ai, nhưng tốn 8 lần bộ nhớ</text>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình trên là cách ghép sát, 8 bộ đếm 8 byte nằm vừa khít một dòng 64 byte, mỗi lõi chỉ ghi vào ô của mình. Nhưng bộ nhớ đệm làm việc theo cả dòng, nên lõi 0 ghi thì bản sao của cả dòng ở 7 lõi kia bị huỷ, lõi 1 muốn ghi lại phải kéo dòng về. Hình dưới là cách đệm, mỗi bộ đếm đứng đầu một dòng riêng, phần còn lại bỏ trống. Không ai huỷ bản sao của ai, đổi lại tốn gấp 8 lần bộ nhớ."
+
+  # ───────────────────────── 5. SUY RA ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra số lần kéo dòng khi các luồng ghi xoay vòng"
+    checks:
+      - "alg.par_line_transfers([0, 8], 3) == (6, 6) and alg.par_line_transfers([0, 64], 3) == (2, 6)"
+    steps:
+      - show: |
+          <p><b>Bước 1 — luật.</b> Một lần ghi phải kéo dòng về khi lõi đó <b>chưa giữ</b> dòng ở trạng thái được ghi, tức người ghi trước đó trên dòng này là <b>lõi khác</b> (hoặc chưa ai). Vì ghi của lõi kia đã huỷ bản sao của mình.</p>
+          <p><b>Bước 2 — cùng dòng.</b> Nếu các luồng ghi xoay vòng 0, 1, 0, 1… vào cùng một dòng, người ghi trước <b>luôn</b> là lõi khác: mọi lần ghi đều kéo dòng.</p>
+          <p><b>Bước 3 — dòng riêng.</b> Nếu mỗi lõi có dòng riêng, chỉ lần ghi <b>đầu tiên</b> của mỗi lõi phải kéo: số lần kéo = số luồng.</p>
+        focus: [1, 1, 1, 2, 3]
+        say: "Bước một là luật của mô hình. Một lần ghi phải kéo dòng về khi lõi đó chưa giữ dòng ở trạng thái được ghi. Tức là người ghi trước đó trên dòng này là lõi khác hoặc chưa có ai, vì lần ghi của lõi kia đã huỷ bản sao của mình. Bước hai, nếu các luồng ghi xoay vòng vào cùng một dòng thì người ghi trước luôn là lõi khác, nên mọi lần ghi đều kéo dòng. Bước ba, nếu mỗi lõi có dòng riêng thì chỉ lần ghi đầu tiên của mỗi lõi phải kéo, nên số lần kéo bằng số luồng."
+      - clear: true
+        show: |
+          <p><b>Làm thử ngay:</b> 2 luồng, mỗi luồng ghi 3 lần, xoay vòng A, B, A, B, A, B.</p>
+          <table class="t"><tr><th>bố trí</th><th>địa chỉ</th><th>dòng</th><th>số lần kéo</th></tr>
+          <tr><td>sát nhau</td><td>0 và 8</td><td>0 và 0</td><td>6 trên 6 lần ghi</td></tr>
+          <tr><td>đệm</td><td>0 và 64</td><td>0 và 1</td><td>$\hlg{2}$ trên 6 lần ghi</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Làm thử ngay với 2 luồng, mỗi luồng ghi 3 lần, xoay vòng A, B, A, B. Hai biến ở địa chỉ 0 và 8 cùng thuộc dòng 0, nên cả 6 lần ghi đều kéo dòng. Đệm biến thứ hai ra địa chỉ 64 thì hai biến ở hai dòng, chỉ 2 lần ghi đầu phải kéo."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Tám luồng, mỗi luồng ghi 1000 lần: từng bố trí"
+    checks:
+      - "[a // 64 for a in range(0, 64, 8)] == [0] * 8"
+      - "alg.par_line_transfers([8 * i for i in range(8)], 1000) == (8000, 8000)"
+      - "alg.par_cache_lines([64 * i for i in range(8)]) == [0, 1, 2, 3, 4, 5, 6, 7] and alg.par_line_transfers([64 * i for i in range(8)], 1000) == (8, 8000)"
+      - "8 * 8 == 64 and 8 * 64 == 512 and 512 // 64 == 8"
+      - "alg.par_cache_lines([32 * i for i in range(8)]) == [0, 1, 2, 3] and alg.par_line_transfers([32 * i for i in range(8)], 1000) == (8000, 8000)"
+    steps:
+      - show: |
+          <p><b>Bước 1 — ghép sát.</b> Bộ đếm $i$ ở địa chỉ $8 \cdot i$: 0, 8, 16, …, 56. Mọi số này chia 64 đều được 0: <b>cả 8 chung dòng 0</b>.</p>
+        introduces: [cdot, dots]
+        say: "Bước một, ghép sát. Bộ đếm thứ i nằm ở địa chỉ 8 nhân i, tức 0, 8, 16, cứ thế tới 56. Mọi số này chia 64 làm tròn xuống đều được 0, nên cả 8 bộ đếm chung dòng 0."
+      - show: |
+          <p><b>Bước 2 — đếm lần kéo.</b> Ghi xoay vòng, mỗi luồng 1000 lần: người ghi trước luôn là lõi khác, nên $\hl{8000}$ lần kéo trên 8000 lần ghi.</p>
+        say: "Bước hai, đếm lần kéo dòng. Các luồng ghi xoay vòng, mỗi luồng 1000 lần, người ghi trước luôn là lõi khác, nên có 8000 lần kéo dòng trên 8000 lần ghi."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — đệm.</b> Bộ đếm $i$ ở địa chỉ $64 \cdot i$: dòng $i$. Mỗi lõi chỉ kéo dòng của mình một lần: $\hlg{8}$ lần kéo trên 8000 lần ghi.</p>
+          <table class="t"><tr><th>bố trí</th><th>bộ nhớ</th><th>số lần kéo</th></tr>
+          <tr><td>ghép sát</td><td>$8 \cdot 8 = 64$ byte</td><td>8000</td></tr>
+          <tr><td>đệm mỗi bộ một dòng</td><td>$8 \cdot 64 = 512$ byte, gấp 8</td><td>8</td></tr></table>
+        focus: [1, 1, "2.2", "2.3"]
+        say: "Bước ba, đệm. Bộ đếm thứ i nằm ở địa chỉ 64 nhân i, tức ở dòng i, nên mỗi lõi chỉ kéo dòng của mình một lần, tổng cộng 8 lần kéo trên 8000 lần ghi. Ghép sát tốn 8 nhân 8 bằng 64 byte và kéo 8000 lần. Đệm tốn 8 nhân 64 bằng 512 byte, gấp 8 lần bộ nhớ, nhưng chỉ kéo 8 lần."
+      - clear: true
+        show: |
+          <p><b>Bước 4 — đệm nửa vời.</b> Đệm mỗi bộ đếm ra 32 byte: địa chỉ 0, 32, 64, … , 224 rơi vào dòng 0, 0, 1, 1, 2, 2, 3, 3.</p>
+          <table class="t"><tr><th>đệm</th><th>số dòng dùng</th><th>số luồng mỗi dòng</th><th>số lần kéo</th></tr>
+          <tr><td>32 byte</td><td>4</td><td>2</td><td>$\hl{8000}$ — không đỡ chút nào</td></tr></table>
+        focus: [1, "2.2", "2.2"]
+        say: "Bước bốn, đệm nửa vời. Nếu đệm mỗi bộ đếm ra 32 byte, các địa chỉ 0, 32, 64 cứ thế tới 224 rơi vào dòng 0, 0, 1, 1, 2, 2, 3, 3. Mỗi dòng vẫn có 2 luồng thay nhau ghi, nên vẫn 8000 lần kéo, không đỡ chút nào."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác"
+    checks:
+      - "[a >> 6 for a in (0, 56, 64, 130, 448)] == [0, 0, 1, 2, 7]"
+      - "8 * 1000 - 0 == 8000 and 8 * 1 == 8"
+      - "sum(1 for i in range(8) for j in range(i + 1, 8) if (8 * i) // 64 == (8 * j) // 64) == 28"
+    steps:
+      - show: |
+          <table class="t"><tr><th>con số</th><th>đường khác để kiểm</th></tr>
+          <tr><td>dòng của địa chỉ</td><td>64 là 2 mũ 6, nên bỏ 6 bit thấp: 130 → 2, 448 → 7, 56 → 0 ✓</td></tr>
+          <tr><td>8000 và 8</td><td>đếm theo luật: ghép sát, mỗi lần ghi có người ghi trước khác mình trừ khi chỉ có một luồng → 8000; đệm: mỗi lõi chỉ lần đầu → 8 ✓</td></tr>
+          <tr><td>ai giẫm chân ai</td><td>đếm cặp luồng chung dòng: ghép sát có $\frac{8 \cdot 7}{2} = 28$ cặp; đệm 64 byte: 0 cặp ✓</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Ta kiểm theo đường khác. Vì 64 là 2 mũ 6, tìm dòng chỉ cần bỏ 6 bit thấp của địa chỉ, 130 ra 2, 448 ra 7, 56 ra 0, khớp phép chia. Đếm thẳng theo luật, ghép sát thì mỗi lần ghi đều có người ghi trước khác mình, nên 8000, còn đệm thì mỗi lõi chỉ kéo lần đầu, nên 8. Cuối cùng, đếm cặp luồng chung dòng, ghép sát có 8 nhân 7 chia 2, bằng 28 cặp giẫm chân nhau, còn đệm 64 byte thì không có cặp nào."
+
+  # ───────────────────────── 8. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi cả người đã đi làm"
+    checks:
+      - "alg.par_line_transfers([32 * i for i in range(8)], 1000)[0] == 8000"
+      - "10 ** 6 * 64 == 64 * 10 ** 6 and 10 ** 6 * 8 == 8 * 10 ** 6 and 64 // 8 == 8"
+      - "alg.par_line_transfers([64 * i for i in range(8)], 1)[0] == 8"
+    steps:
+      - show: |
+          <table class="t"><tr><th>lỗi</th><th>vì sao sai</th><th>phép thử bắt được</th></tr>
+          <tr><td><b class="red">1.</b> Tin kiểm thử: “kết quả đúng là xong”</td><td>chia sẻ giả không làm sai kết quả, chỉ làm chậm — không kiểm thử đúng/sai nào bắt được</td><td>đo thời gian khi tăng số luồng; công cụ đếm lần trượt bộ nhớ đệm</td></tr>
+          <tr><td><b class="red">2.</b> Đệm nửa dòng</td><td>32 byte: vẫn 2 luồng mỗi dòng, vẫn 8000 lần kéo</td><td>tính dòng của từng biến</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.3"]
+        say: "Bảng có hai lỗi đầu. Lỗi thứ nhất, tin kiểm thử, kết quả đúng là xong. Chia sẻ giả không làm sai kết quả mà chỉ làm chậm, nên không bài kiểm thử đúng sai nào bắt được, phải đo thời gian khi tăng số luồng. Lỗi thứ hai, đệm nửa dòng, 32 byte vẫn để 2 luồng chung một dòng, vẫn 8000 lần kéo."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3</b> (người đã đi làm). Gõ cứng số 64 vào mã
+          <br><span class="note">Cỡ dòng do phần cứng quyết định. Thư viện chuẩn C++ có hằng số <code>std::hardware_destructive_interference_size</code>: “khoảng cách tối thiểu giữa hai đối tượng để tránh chia sẻ giả”, giá trị do bản cài đặt quyết định (ví dụ của trang tham khảo in ra 64 trên x86-64).</span></div>
+        say: "Lỗi thứ ba hay gặp ở người đã đi làm, là gõ cứng số 64 vào mã. Cỡ dòng do phần cứng quyết định. Thư viện chuẩn của một ngôn ngữ lập trình phổ biến có sẵn một hằng số, là khoảng cách tối thiểu giữa hai đối tượng để tránh chia sẻ giả. Giá trị của nó do bản cài đặt quyết định. Hãy dùng hằng số đó thay vì tự đoán."
+      - show: |
+          <div class="box warn"><b>Lỗi 4</b> (người đã đi làm). Đệm mọi thứ
+          <br><span class="note">1 triệu bộ đếm (số minh hoạ): ghép sát 8 MB, đệm 64 MB — gấp 8, đẩy dữ liệu khác ra khỏi bộ nhớ đệm. Thường tốt hơn: biến <b>cục bộ</b> trong luồng, ghi vào mảng chung <b>một lần</b> ở cuối (như rút gọn ở bài 3): 8 lần kéo, không tốn thêm bộ nhớ.</span></div>
+        say: "Lỗi thứ tư cũng của người đã đi làm, là đệm mọi thứ. Một triệu bộ đếm, một số minh hoạ, ghép sát tốn 8 MB, đệm thì tốn 64 MB, gấp 8 lần, và đẩy dữ liệu khác ra khỏi bộ nhớ đệm. Thường tốt hơn là giữ biến cục bộ trong luồng, rồi ghi vào mảng chung đúng một lần ở cuối như phép rút gọn ở bài 3."
+
+  # ───────────────────────── 9. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: 16 luồng, bộ đếm 4 byte"
+    checks:
+      - "64 // 4 == 16 and alg.par_cache_lines([4 * i for i in range(16)]) == [0]"
+      - "alg.par_line_transfers([4 * i for i in range(16)], 1000) == (16000, 16000)"
+      - "alg.par_line_transfers([64 * i for i in range(16)], 1000) == (16, 16000) and 16 * 64 == 1024 and 16 * 4 == 64"
+      - "alg.par_line_transfers([4 * i for i in range(16)], 1) == (16, 16)"
+    steps:
+      - show: |
+          <p>16 luồng, mỗi luồng tăng bộ đếm riêng 1000 lần; bộ đếm 4 byte; dòng 64 byte (số minh hoạ).</p>
+          <table class="t"><tr><th>câu</th><th>hỏi</th></tr>
+          <tr><td>1</td><td>Một dòng chứa mấy bộ đếm? Ghép sát thì bao nhiêu luồng chung một dòng, kéo dòng bao nhiêu lần?</td></tr>
+          <tr><td>2</td><td>Đệm mỗi bộ đếm ra một dòng: tốn bao nhiêu byte, kéo bao nhiêu lần?</td></tr>
+          <tr><td>3</td><td>Cách thứ ba: biến cục bộ, ghi vào mảng ghép sát một lần ở cuối. Bạn chọn cách nào?</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", 0]
+        say: "Bây giờ đến lượt bạn, 16 luồng, mỗi luồng tăng bộ đếm riêng 1000 lần, bộ đếm 4 byte, dòng 64 byte, đều là số minh hoạ. Câu một, một dòng chứa mấy bộ đếm, ghép sát thì bao nhiêu luồng chung một dòng, và kéo dòng bao nhiêu lần? Câu hai, đệm mỗi bộ đếm ra một dòng thì tốn bao nhiêu byte và kéo bao nhiêu lần? Câu ba, cách thứ ba là biến cục bộ, ghi vào mảng ghép sát một lần ở cuối, bạn chọn cách nào? Dừng video và làm ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>1</td><td>$\frac{64}{4} = 16$ bộ đếm một dòng: cả 16 luồng chung dòng 0</td><td>$\hl{16\,000}$ lần kéo trên 16 000 lần ghi</td></tr>
+          <tr><td>2</td><td>$16 \cdot 64 = 1024$ byte, so với $16 \cdot 4 = 64$ byte</td><td>16 lần kéo</td></tr></table>
+        focus: ["1.2", "1.2", "1.3", "1.3"]
+        say: "Đáp án câu một, 64 chia 4 bằng 16, nên một dòng chứa đủ cả 16 bộ đếm. Cả 16 luồng chung dòng 0, và kéo dòng 16 nghìn lần trên 16 nghìn lần ghi. Câu hai, đệm tốn 16 nhân 64, bằng 1024 byte, so với 64 byte khi ghép sát. Đổi lại, mỗi lõi chỉ kéo dòng của mình một lần, tổng 16 lần."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 3: lựa chọn</th><th>được</th><th>mất</th></tr>
+          <tr><td>biến cục bộ, ghi một lần ở cuối</td><td>chỉ 16 lần ghi chung: $\hlg{16}$ lần kéo; mảng vẫn 64 byte</td><td>phải sửa mã; không đọc được số đếm giữa chừng</td></tr>
+          <tr><td>đệm mỗi bộ đếm một dòng</td><td>16 lần kéo, đọc được giữa chừng</td><td>1024 byte, gấp 16</td></tr></table>
+          <p class="note">Chọn biến cục bộ khi chỉ cần kết quả cuối. Cần theo dõi số đếm lúc đang chạy thì đệm, với hằng số cỡ dòng của thư viện chuẩn.</p>
+        focus: [0, "1.2", "1.3", 2]
+        say: "Câu ba là một đánh đổi. Biến cục bộ ghi một lần ở cuối chỉ có 16 lần ghi chung, nên 16 lần kéo, và mảng vẫn chỉ 64 byte, cái giá là phải sửa mã và không đọc được số đếm giữa chừng. Đệm cũng chỉ 16 lần kéo và đọc được giữa chừng, nhưng tốn 1024 byte, gấp 16 lần. Vì vậy chọn biến cục bộ khi chỉ cần kết quả cuối, còn cần theo dõi số đếm lúc đang chạy thì đệm, dùng hằng số cỡ dòng của thư viện chuẩn."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">bộ nhớ đệm làm việc theo dòng 64 byte</span><span class="a">→</span>
+          <span class="n">dòng của $a$ = $\left\lfloor \frac{a}{64} \right\rfloor$</span><span class="a">→</span>
+          <span class="n">ghi một dòng: huỷ bản sao ở lõi khác</span><span class="a">→</span>
+          <span class="n">biến khác nhau chung dòng: kéo qua lại</span><span class="a">→</span>
+          <span class="n">tách dòng, hoặc giữ cục bộ rồi ghi một lần</span></div>
+        say: "Tổng kết lại, bộ nhớ đệm làm việc theo dòng 64 byte, và dòng của một địa chỉ là địa chỉ chia 64 làm tròn xuống. Khi một lõi ghi vào một dòng, bản sao ở các lõi khác bị huỷ. Vì vậy các biến khác nhau mà chung dòng sẽ làm dòng bị kéo qua lại, đó là chia sẻ giả. Cách sửa là tách dòng, hoặc giữ biến cục bộ rồi ghi một lần."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> trên máy nhiều lõi, “riêng” phải là riêng <b>theo dòng</b>, không chỉ riêng theo tên biến. Chậm mà kết quả đúng thì đo, đừng đoán.</div>
+        say: "Điều cần mang theo, trên máy nhiều lõi, riêng phải là riêng theo dòng của bộ nhớ đệm, không chỉ riêng theo tên biến. Chương trình chậm mà kết quả đúng thì hãy đo, đừng đoán."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 6): một lõi cũng làm được nhiều phép một lúc — vector hoá, một lệnh xử lý nhiều số cạnh nhau trong bộ nhớ.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 6, ta xem một lõi cũng làm được nhiều phép một lúc, nhờ vector hoá, tức một lệnh xử lý nhiều số nằm cạnh nhau trong bộ nhớ. Hẹn gặp bạn ở bài tiếp theo."

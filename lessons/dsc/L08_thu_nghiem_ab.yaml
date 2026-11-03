@@ -1,0 +1,200 @@
+id: L08
+course: DSC
+series: "DSC · Khoa học dữ liệu"
+title: "Bài 8 — Thiết kế thí nghiệm và thử nghiệm A/B"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/dsc.yaml L08; audit/dsc/verify_dsc.py L08; R. Kohavi, D. Tang, Y. Xu, Trustworthy Online Controlled Experiments (2020), chương 2 và 17; R. A. Fisher, The Design of Experiments (1935); CS115 bài 44"
+assumes: [arith, frac, approx, sqrt, cdot]
+# Quy ước: so hai tỉ lệ chuyển đổi, kiểm định hai phía mức α = 0,05, độ mạnh 80%; cỡ mẫu theo công thức xấp xỉ chuẩn (alg.ab_sample_size, dùng
+#   statistics.NormalDist). Mô phỏng nhìn trộm: hai nhóm giống hệt nhau p = 10%, 1000 người mỗi nhóm, xem 10 lần, 2000 lần mô phỏng, hạt giống 3
+#   (alg.peeking_fpr). Tên “A/B” chỉ trên màn hình; lời đọc nói “thử nghiệm so sánh hai phương án”.
+objectives:
+  - "Hiểu vì sao phải chia nhóm ngẫu nhiên"
+  - "Ước lượng cỡ mẫu cần thiết"
+  - "Tránh dừng sớm khi vừa thấy kết quả đẹp"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Nút xanh hay nút cam?"
+    steps:
+      - show: |
+          <p>Đổi nút “Mua” từ xanh sang cam. Tuần này tỉ lệ mua tăng từ 10% lên 11%. Nhưng tuần này cũng là tuần lương về. Nút cam thật sự tốt hơn, hay chỉ là trùng hợp?</p>
+          <div class="box key">Hôm nay: <b>thí nghiệm có đối chứng</b> — chia ngẫu nhiên, đủ cỡ mẫu, quyết định trước khi nhìn kết quả.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, ta đổi nút mua từ màu xanh sang màu cam. Tuần này tỉ lệ mua tăng từ 10 lên 11 phần trăm. Nhưng tuần này cũng là tuần lương về, vậy nút cam thật sự tốt hơn, hay chỉ là trùng hợp? Hôm nay ta học thí nghiệm có đối chứng, chia ngẫu nhiên, đủ cỡ mẫu, và quyết định trước khi nhìn kết quả."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: sai số chuẩn của một tỉ lệ và ngưỡng 1,96"
+    checks:
+      - "math.sqrt(0.1 * 0.9 / 900) == 0.01 and round(0.10 - 1.96 * 0.01, 4) == 0.0804 and round(0.10 + 1.96 * 0.01, 4) == 0.1196"
+    steps:
+      - show: |
+          <p>Ở khoá Toán cho khoa học máy tính: tỉ lệ $p$ đo trên $n$ người dao động quanh giá trị thật với <b>sai số chuẩn</b> $\sqrt{\frac{p \cdot (1 - p)}{n}}$.</p>
+          $$p = 10\%,\ n = 900:\quad \sqrt{\frac{0{,}1 \cdot 0{,}9}{900}} = \sqrt{0{,}0001} = 0{,}01 = 1\%$$
+        focus: [1, 1, 2]
+        say: "Ở khoá Toán cho khoa học máy tính, ta đã học rằng một tỉ lệ p đo trên n người sẽ dao động quanh giá trị thật. Độ dao động đó gọi là sai số chuẩn, bằng căn của p nhân 1 trừ p, chia n. Ví dụ p bằng 10 phần trăm và n bằng 900, ta được căn của 0 phẩy 1 nhân 0 phẩy 9 chia 900, tức căn của 0 phẩy 0001, bằng 1 phần trăm."
+      - show: |
+          <p><b>Ngưỡng 1,96</b>: 95% số lần đo rơi trong khoảng trung bình $\pm 1{,}96$ sai số chuẩn. Ở đây: $10\% \pm 1{,}96\%$, tức từ 8,04% tới 11,96%.</p>
+        introduces: [pm]
+        say: "Còn ngưỡng 1 phẩy 96 nghĩa là 95 phần trăm số lần đo rơi trong khoảng trung bình cộng trừ 1 phẩy 96 lần sai số chuẩn. Ở ví dụ này là 10 phần trăm cộng trừ 1 phẩy 96 phần trăm, tức từ 8 phẩy 04 tới 11 phẩy 96 phần trăm."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: ba thành phần của thí nghiệm"
+    steps:
+      - show: |
+          <ol><li><b>Chia ngẫu nhiên</b>: tung đồng xu cho mỗi khách — nhóm A thấy nút xanh, nhóm B thấy nút cam, <b>cùng một thời gian</b>. Mọi biến gây nhiễu (lương, thời tiết…) chia đều hai nhóm.</li>
+          <li><b>Một chỉ số chính</b> chọn trước: tỉ lệ mua.</li>
+          <li><b>Cỡ mẫu</b> và mức ý nghĩa α, độ mạnh chọn trước — không đổi giữa chừng.</li></ol>
+          <p class="note">Độ mạnh 80%: nếu khác biệt thật sự có, thí nghiệm phát hiện được 80% số lần.</p>
+        focus: [1, "1.1", "1.1", "1.2", "1.3", 2]
+        say: "Thí nghiệm có ba thành phần. Một, chia ngẫu nhiên, tung đồng xu cho mỗi khách, nhóm A thấy nút xanh, nhóm B thấy nút cam, trong cùng một thời gian. Nhờ vậy mọi biến gây nhiễu như ngày lương hay thời tiết được chia đều cho hai nhóm. Hai, một chỉ số chính chọn trước, ở đây là tỉ lệ mua. Ba, cỡ mẫu, mức ý nghĩa và độ mạnh được chọn trước, không đổi giữa chừng. Độ mạnh 80 phần trăm nghĩa là nếu khác biệt thật sự có, thí nghiệm phát hiện được 80 phần trăm số lần."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hai quả chuông phải tách nhau đủ xa"
+    checks:
+      - "round(1.96 * math.sqrt(2 * 0.105 * 0.895 / 14751) * 100, 2) == 0.70 and round(1 - __import__('statistics').NormalDist(0.01, math.sqrt(2 * 0.105 * 0.895 / 14751)).cdf(1.96 * math.sqrt(2 * 0.105 * 0.895 / 14751)), 2) == 0.80"
+    steps:
+      - show: |
+          <div><svg width="1500" height="370" viewBox="0 0 1500 370"><g fill="#1f2937" font-size="22"><path d="M 783,320 L 785,149 L 790,144 L 795,138 L 800,132 L 805,127 L 810,122 L 815,116 L 820,112 L 825,107 L 830,103 L 835,99 L 840,95 L 845,92 L 850,89 L 855,87 L 860,85 L 865,83 L 870,82 L 875,81 L 880,80 L 885,80 L 890,80 L 895,81 L 900,82 L 905,84 L 910,86 L 915,88 L 920,91 L 925,94 L 930,98 L 935,102 L 940,106 L 945,110 L 950,115 L 955,120 L 960,125 L 965,130 L 970,136 L 975,142 L 980,147 L 985,153 L 990,159 L 995,165 L 1000,172 L 1005,178 L 1010,184 L 1015,190 L 1020,196 L 1025,202 L 1030,208 L 1035,213 L 1040,219 L 1045,225 L 1050,230 L 1055,235 L 1060,240 L 1065,245 L 1070,250 L 1075,254 L 1080,259 L 1085,263 L 1090,267 L 1095,271 L 1100,274 L 1105,278 L 1110,281 L 1115,284 L 1120,287 L 1125,289 L 1130,292 L 1135,294 L 1140,297 L 1145,299 L 1150,301 L 1155,302 L 1160,304 L 1165,305 L 1170,307 L 1175,308 L 1180,309 L 1185,310 L 1190,311 L 1195,312 L 1200,313 L 1205,314 L 1210,314 L 1215,315 L 1220,316 L 1225,316 L 1230,317 L 1235,317 L 1240,317 L 1245,318 L 1250,318 L 1255,318 L 1260,318 L 1265,319 L 1270,319 L 1275,319 L 1280,319 L 1285,319 L 1290,319 L 1295,319 L 1300,319 L 1305,320 L 1310,320 L 1315,320 L 1320,320 L 1325,320 L 1330,320 L 1335,320 L 1340,320 L 1345,320 L 1350,320 L 1350,320 Z" fill="#059669" opacity="0.25"/><path d="M 150,319 L 155,319 L 160,319 L 165,319 L 170,319 L 175,318 L 180,318 L 185,318 L 190,318 L 195,317 L 200,317 L 205,316 L 210,316 L 215,315 L 220,315 L 225,314 L 230,314 L 235,313 L 240,312 L 245,311 L 250,310 L 255,309 L 260,308 L 265,306 L 270,305 L 275,303 L 280,302 L 285,300 L 290,298 L 295,296 L 300,294 L 305,291 L 310,289 L 315,286 L 320,283 L 325,280 L 330,277 L 335,273 L 340,269 L 345,266 L 350,262 L 355,257 L 360,253 L 365,248 L 370,244 L 375,239 L 380,234 L 385,228 L 390,223 L 395,217 L 400,212 L 405,206 L 410,200 L 415,194 L 420,188 L 425,182 L 430,176 L 435,170 L 440,163 L 445,157 L 450,151 L 455,146 L 460,140 L 465,134 L 470,129 L 475,123 L 480,118 L 485,113 L 490,109 L 495,104 L 500,100 L 505,97 L 510,93 L 515,90 L 520,88 L 525,85 L 530,83 L 535,82 L 540,81 L 545,80 L 550,80 L 555,80 L 560,81 L 565,82 L 570,83 L 575,85 L 580,88 L 585,90 L 590,93 L 595,97 L 600,100 L 605,104 L 610,109 L 615,113 L 620,118 L 625,123 L 630,129 L 635,134 L 640,140 L 645,146 L 650,151 L 655,157 L 660,163 L 665,170 L 670,176 L 675,182 L 680,188 L 685,194 L 690,200 L 695,206 L 700,212 L 705,217 L 710,223 L 715,228 L 720,234 L 725,239 L 730,244 L 735,248 L 740,253 L 745,257 L 750,262 L 755,266 L 760,269 L 765,273 L 770,277 L 775,280 L 780,283 L 785,286 L 790,289 L 795,291 L 800,294 L 805,296 L 810,298 L 815,300 L 820,302 L 825,303 L 830,305 L 835,306 L 840,308 L 845,309 L 850,310 L 855,311 L 860,312 L 865,313 L 870,314 L 875,314 L 880,315 L 885,315 L 890,316 L 895,316 L 900,317 L 905,317 L 910,318 L 915,318 L 920,318 L 925,318 L 930,319 L 935,319 L 940,319 L 945,319 L 950,319 L 955,319 L 960,319 L 965,319 L 970,320 L 975,320 L 980,320 L 985,320 L 990,320 L 995,320 L 1000,320 L 1005,320 L 1010,320 L 1015,320 L 1020,320 L 1025,320 L 1030,320 L 1035,320 L 1040,320 L 1045,320 L 1050,320 L 1055,320 L 1060,320 L 1065,320 L 1070,320 L 1075,320 L 1080,320 L 1085,320 L 1090,320 L 1095,320 L 1100,320 L 1105,320 L 1110,320 L 1115,320 L 1120,320 L 1125,320 L 1130,320 L 1135,320 L 1140,320 L 1145,320 L 1150,320 L 1155,320 L 1160,320 L 1165,320 L 1170,320 L 1175,320 L 1180,320 L 1185,320 L 1190,320 L 1195,320 L 1200,320 L 1205,320 L 1210,320 L 1215,320 L 1220,320 L 1225,320 L 1230,320 L 1235,320 L 1240,320 L 1245,320 L 1250,320 L 1255,320 L 1260,320 L 1265,320 L 1270,320 L 1275,320 L 1280,320 L 1285,320 L 1290,320 L 1295,320 L 1300,320 L 1305,320 L 1310,320 L 1315,320 L 1320,320 L 1325,320 L 1330,320 L 1335,320 L 1340,320 L 1345,320 L 1350,320" fill="none" stroke="#2a78d6" stroke-width="4"/><path d="M 150,320 L 155,320 L 160,320 L 165,320 L 170,320 L 175,320 L 180,320 L 185,320 L 190,320 L 195,320 L 200,320 L 205,320 L 210,320 L 215,320 L 220,320 L 225,320 L 230,320 L 235,320 L 240,320 L 245,320 L 250,320 L 255,320 L 260,320 L 265,320 L 270,320 L 275,320 L 280,320 L 285,320 L 290,320 L 295,320 L 300,320 L 305,320 L 310,320 L 315,320 L 320,320 L 325,320 L 330,320 L 335,320 L 340,320 L 345,320 L 350,320 L 355,320 L 360,320 L 365,320 L 370,320 L 375,320 L 380,320 L 385,320 L 390,320 L 395,320 L 400,320 L 405,320 L 410,320 L 415,320 L 420,320 L 425,320 L 430,320 L 435,320 L 440,320 L 445,320 L 450,320 L 455,320 L 460,320 L 465,320 L 470,319 L 475,319 L 480,319 L 485,319 L 490,319 L 495,319 L 500,319 L 505,318 L 510,318 L 515,318 L 520,318 L 525,317 L 530,317 L 535,317 L 540,316 L 545,316 L 550,315 L 555,315 L 560,314 L 565,313 L 570,313 L 575,312 L 580,311 L 585,310 L 590,309 L 595,307 L 600,306 L 605,304 L 610,303 L 615,301 L 620,299 L 625,297 L 630,295 L 635,293 L 640,290 L 645,288 L 650,285 L 655,282 L 660,279 L 665,275 L 670,272 L 675,268 L 680,264 L 685,260 L 690,256 L 695,251 L 700,247 L 705,242 L 710,237 L 715,232 L 720,226 L 725,221 L 730,215 L 735,210 L 740,204 L 745,198 L 750,192 L 755,186 L 760,180 L 765,174 L 770,168 L 775,161 L 780,155 L 785,149 L 790,144 L 795,138 L 800,132 L 805,127 L 810,122 L 815,116 L 820,112 L 825,107 L 830,103 L 835,99 L 840,95 L 845,92 L 850,89 L 855,87 L 860,85 L 865,83 L 870,82 L 875,81 L 880,80 L 885,80 L 890,80 L 895,81 L 900,82 L 905,84 L 910,86 L 915,88 L 920,91 L 925,94 L 930,98 L 935,102 L 940,106 L 945,110 L 950,115 L 955,120 L 960,125 L 965,130 L 970,136 L 975,142 L 980,147 L 985,153 L 990,159 L 995,165 L 1000,172 L 1005,178 L 1010,184 L 1015,190 L 1020,196 L 1025,202 L 1030,208 L 1035,213 L 1040,219 L 1045,225 L 1050,230 L 1055,235 L 1060,240 L 1065,245 L 1070,250 L 1075,254 L 1080,259 L 1085,263 L 1090,267 L 1095,271 L 1100,274 L 1105,278 L 1110,281 L 1115,284 L 1120,287 L 1125,289 L 1130,292 L 1135,294 L 1140,297 L 1145,299 L 1150,301 L 1155,302 L 1160,304 L 1165,305 L 1170,307 L 1175,308 L 1180,309 L 1185,310 L 1190,311 L 1195,312 L 1200,313 L 1205,314 L 1210,314 L 1215,315 L 1220,316 L 1225,316 L 1230,317 L 1235,317 L 1240,317 L 1245,318 L 1250,318 L 1255,318 L 1260,318 L 1265,319 L 1270,319 L 1275,319 L 1280,319 L 1285,319 L 1290,319 L 1295,319 L 1300,319 L 1305,320 L 1310,320 L 1315,320 L 1320,320 L 1325,320 L 1330,320 L 1335,320 L 1340,320 L 1345,320 L 1350,320" fill="none" stroke="#eb6834" stroke-width="4"/><line x1="150" y1="320" x2="1350" y2="320" stroke="#6b7280" stroke-width="2"/><line x1="217" y1="320" x2="217" y2="330" stroke="#6b7280" stroke-width="2"/><text x="217" y="356" text-anchor="middle" font-size="20">−1%</text><line x1="550" y1="320" x2="550" y2="330" stroke="#6b7280" stroke-width="2"/><text x="550" y="356" text-anchor="middle" font-size="20">0%</text><line x1="883" y1="320" x2="883" y2="330" stroke="#6b7280" stroke-width="2"/><text x="883" y="356" text-anchor="middle" font-size="20">1%</text><line x1="1217" y1="320" x2="1217" y2="330" stroke="#6b7280" stroke-width="2"/><text x="1217" y="356" text-anchor="middle" font-size="20">2%</text><line x1="783" y1="60" x2="783" y2="320" stroke="#b91c1c" stroke-width="3" stroke-dasharray="8 6"/><text x="783" y="45" text-anchor="middle" fill="#b91c1c">ngưỡng 0,70%</text><text x="400" y="120" text-anchor="end" fill="#2a78d6">không có khác biệt</text><text x="1033" y="120" fill="#eb6834">khác biệt thật 1%</text><text x="933" y="290" fill="#059669">80% diện tích</text><text x="1360" y="356" font-size="20">hiệu B trừ A</text></g></svg></div>
+        focus: [1, 1, 1, 1, 1, 1]
+        say: "Hình vẽ hiệu tỉ lệ mua đo được khi mỗi nhóm có mười bốn nghìn bảy trăm năm mươi mốt khách. Nếu nút cam không có tác dụng, hiệu đo được dao động theo quả chuông xanh quanh 0. Nếu nút cam tăng thật 1 điểm phần trăm, hiệu dao động theo quả chuông cam quanh 1 phần trăm. Vạch đỏ ở 0 phẩy 70 phần trăm là ngưỡng, chỉ 5 phần trăm quả chuông xanh vượt qua nó, tính cả hai phía. Phần tô lục là 80 phần trăm quả chuông cam nằm bên phải ngưỡng, đó chính là độ mạnh 80 phần trăm. Ít khách hơn thì hai quả chuông béo ra, chồng lên nhau, và phần tô lục nhỏ đi."
+
+  - id: example
+    kind: example
+    title: "Cần bao nhiêu khách để thấy 10% → 11%?"
+    checks:
+      - "alg.ab_sample_size(0.10, 0.11) == 14751"
+      - "round(0.01 / math.sqrt(2 * 0.105 * 0.895 / 14751), 2) == 2.8"
+    steps:
+      - show: |
+          <p><b>Bước 1</b> — muốn phát hiện tăng từ 10% lên 11%, α = 0,05 hai phía, độ mạnh 80%: công thức cỡ mẫu cho $\hl{14\,751}$ khách <b>mỗi nhóm</b>.</p>
+        say: "Bước một, ta muốn phát hiện mức tăng từ 10 lên 11 phần trăm, với mức ý nghĩa 0 phẩy 05 hai phía và độ mạnh 80 phần trăm. Công thức cỡ mẫu cho mười bốn nghìn bảy trăm năm mươi mốt khách mỗi nhóm."
+      - show: |
+          <p><b>Bước 2</b> — vì sao nhiều vậy? Sai số chuẩn của hiệu hai tỉ lệ (tỉ lệ chung khoảng 10,5%):</p>
+          $$\sqrt{\frac{2 \cdot 0{,}105 \cdot 0{,}895}{14\,751}} \approx 0{,}36\%$$
+        focus: [1, 2, 2]
+        say: "Bước hai, vì sao nhiều vậy? Với ngần ấy khách, sai số chuẩn của hiệu hai tỉ lệ khoảng 0 phẩy 36 phần trăm. Có số 2 trong căn vì hiệu của hai nhóm cộng dồn dao động của cả hai."
+      - show: |
+          <p><b>Bước 3</b> — khác biệt cần thấy là 1%: $\frac{1\%}{0{,}36\%} \approx 2{,}8$ lần sai số chuẩn.</p>
+        say: "Bước ba, khác biệt 1 phần trăm gấp khoảng 2 phẩy 8 lần sai số chuẩn."
+      - clear: true
+        show: |
+          <p><b>Bước 4</b> — $2{,}8 = 1{,}96 + 0{,}84$: phần 1,96 để vượt ngưỡng mức ý nghĩa, phần 0,84 là dư địa để 80% số lần vẫn vượt được.</p>
+          <div class="box key">Khác biệt càng nhỏ, cỡ mẫu càng lớn: giảm khác biệt một nửa thì cần khoảng <b>gấp bốn</b> số khách.</div>
+        focus: [1, 1, 2]
+        say: "Bước bốn, 2 phẩy 8 bằng 1 phẩy 96 cộng 0 phẩy 84. Phần 1 phẩy 96 để vượt ngưỡng mức ý nghĩa, phần 0 phẩy 84 là dư địa để 80 phần trăm số lần vẫn vượt được. Khác biệt càng nhỏ thì cỡ mẫu càng lớn, giảm khác biệt một nửa thì cần khoảng gấp bốn số khách."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác"
+    checks:
+      - "round(2 * 0.105 * 0.895 * (2.8 / 0.01) ** 2) == 14735 and alg.ab_sample_size(0.10, 0.11) - round(2 * 0.105 * 0.895 * (2.8 / 0.01) ** 2) == 16 and round(16 / 14751 * 100, 1) == 0.1"
+      - "round(1 - __import__('statistics').NormalDist().cdf(1.96 - 0.01 / math.sqrt(2 * 0.105 * 0.895 / 14751)), 2) == 0.80"
+    steps:
+      - show: |
+          <table class="t"><tr><th>kiểm</th><th>cách khác</th><th>kết quả</th></tr>
+          <tr><td>14 751</td><td>đi ngược: cần $\frac{1\%}{\text{sai số chuẩn}} = 2{,}8$, giải ra $n = 2 \cdot 0{,}105 \cdot 0{,}895 \cdot \left(\frac{2{,}8}{0{,}01}\right)^2$</td><td>14 735, lệch 0,1% ✓</td></tr>
+          <tr><td>độ mạnh 80%</td><td>với 14 751 khách, xác suất hiệu đo được vượt ngưỡng khi khác biệt thật là 1%</td><td>0,80 ✓</td></tr></table>
+        introduces: [power]
+        focus: [0, "1.2", "1.2", "1.2", "1.3"]
+        say: "Kiểm bằng đường khác. Đi ngược từ yêu cầu 1 phần trăm chia sai số chuẩn phải bằng 2 phẩy 8. Giải ra, n bằng 2 nhân 0 phẩy 105 nhân 0 phẩy 895 nhân bình phương của 2 phẩy 8 chia 0 phẩy 01. Kết quả là mười bốn nghìn bảy trăm ba mươi lăm, chỉ lệch 0 phẩy 1 phần trăm so với công thức, vì công thức tính phương sai riêng cho từng nhóm. Đi xuôi, với mười bốn nghìn bảy trăm năm mươi mốt khách, xác suất hiệu đo được vượt ngưỡng khi khác biệt thật là 1 phần trăm đúng bằng 0 phẩy 80."
+
+  - id: peeking
+    kind: concept
+    title: "Nhìn trộm và dừng sớm"
+    checks:
+      - "alg.peeking_fpr(1000, 10, 2000) == (0.189, 0.0495)"
+    steps:
+      - show: |
+          <p>Mô phỏng: hai nhóm <b>giống hệt nhau</b> (cả hai 10%), mỗi nhóm 1000 khách. Xem kết quả sau mỗi 100 khách, dừng ngay khi thấy “có ý nghĩa”.</p>
+          <table class="t"><tr><th>cách làm</th><th>tỉ lệ báo “có khác biệt” (dương tính giả)</th></tr>
+          <tr><td>kiểm một lần ở cuối</td><td>4,95% — đúng mức α = 5%</td></tr>
+          <tr><td>xem 10 lần, thấy đẹp là dừng</td><td>$\hl{18{,}9\%}$ — gần gấp bốn</td></tr></table>
+          <div class="box key">Mỗi lần nhìn là một lần “bốc thăm” thêm. Quyết định cỡ mẫu trước, hoặc dùng phương pháp được thiết kế cho nhìn nhiều lần.</div>
+        focus: [1, 2, "2.2", "2.3", 3]
+        say: "Mô phỏng hai nhóm giống hệt nhau, cả hai đều 10 phần trăm, mỗi nhóm một nghìn khách. Ta xem kết quả sau mỗi 100 khách, và dừng ngay khi thấy có ý nghĩa. Nếu chỉ kiểm một lần ở cuối, tỉ lệ báo nhầm là có khác biệt là 4 phẩy 95 phần trăm, đúng mức 5 phần trăm. Nếu xem 10 lần, thấy đẹp là dừng, tỉ lệ báo nhầm là 18 phẩy 9 phần trăm, gần gấp bốn. Mỗi lần nhìn là thêm một lần bốc thăm, nên hãy quyết định cỡ mẫu trước, hoặc dùng phương pháp được thiết kế riêng cho việc nhìn nhiều lần."
+
+  # ───────────────────────── 5. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi cả người đã đi làm"
+    checks:
+      - "19600 / 2 == 9800 and math.sqrt(19600 * 0.25) == 70 and round(200 / 70, 2) == 2.86"
+      - "round(2 * (1 - __import__('statistics').NormalDist().cdf(200 / 70)), 3) == 0.004"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> So “trước và sau” thay vì hai nhóm cùng lúc <b class="red">(nhiễu)</b>
+          <br><span class="note">Tuần sau khác tuần trước ở rất nhiều thứ (lương, lễ, thời tiết). Hai nhóm phải chạy song song.</span></div>
+        say: "Lỗi thứ nhất, so trước và sau thay vì so hai nhóm cùng lúc. Tuần sau khác tuần trước ở rất nhiều thứ, như ngày lương, ngày lễ, thời tiết, nên hai nhóm phải chạy song song."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Thí nghiệm quá nhỏ <b class="red">(vô ích)</b>
+          <br><span class="note">500 khách mỗi nhóm không phát hiện nổi 10% → 11%: kết quả “không khác biệt” chỉ có nghĩa là chưa đủ dữ liệu.</span></div>
+        say: "Lỗi thứ hai, thí nghiệm quá nhỏ. Với 500 khách mỗi nhóm thì không phát hiện nổi mức tăng từ 10 lên 11 phần trăm, và kết quả không khác biệt chỉ có nghĩa là chưa đủ dữ liệu."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Theo dõi hai mươi chỉ số rồi báo chỉ số nào “đẹp” <b class="red">(câu cá)</b>
+          <br><span class="note">Chọn một chỉ số chính trước. Nhiều chỉ số thì chắc chắn có chỉ số “đẹp” do ngẫu nhiên.</span></div>
+        say: "Lỗi thứ ba, theo dõi hai mươi chỉ số rồi báo chỉ số nào đẹp. Hãy chọn một chỉ số chính từ trước, vì nhiều chỉ số thì gần như chắc chắn có chỉ số đẹp do ngẫu nhiên."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm cũng mắc).</b> Đọc kết quả mà không kiểm tỉ lệ chia nhóm <b class="red">(chia lệch)</b></div>
+          <table class="t"><tr><th>số minh hoạ</th><th>giá trị</th></tr>
+          <tr><td>thiết kế chia đôi, tổng 19 600 khách → dự kiến mỗi nhóm</td><td>9 800</td></tr>
+          <tr><td>thấy thực tế</td><td>A 10 000, B 9 600</td></tr>
+          <tr><td>độ lệch so với sai số chuẩn $\sqrt{19\,600 \cdot 0{,}25} = 70$</td><td>$\frac{200}{70} \approx 2{,}86$ → khả năng ngẫu nhiên ≈ 0,4%</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", "2.4", 0]
+        say: "Lỗi thứ tư, người đã đi làm cũng hay mắc, là đọc kết quả mà không kiểm tỉ lệ chia nhóm. Với số minh hoạ, thí nghiệm thiết kế chia đôi 19 nghìn 600 khách, nên mỗi nhóm dự kiến 9 nghìn 800. Thực tế nhóm A có 10 nghìn, nhóm B chỉ 9 nghìn 600. Sai số chuẩn của số khách mỗi nhóm là căn của 19 nghìn 600 nhân 0 phẩy 25, bằng 70. Lệch 200 khách là gấp khoảng 2 phẩy 86 lần, khả năng do ngẫu nhiên chỉ khoảng 0 phẩy 4 phần trăm. Chia lệch như vậy báo hiệu hệ thống chia nhóm hoặc ghi nhận có lỗi, nên người làm nghề kiểm tỉ lệ chia nhóm trước khi nhìn tỉ lệ mua."
+
+  # ───────────────────────── 6. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.ab_sample_size(0.10, 0.12) == 3841 and alg.ab_sample_size(0.10, 0.105) == 57763 and round(57763 / 14751, 1) == 3.9"
+      - "round(14751 / 4) == 3688 and 3841 > 3688"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Phát hiện 10% → 12% (α = 0,05, độ mạnh 80%): cần khoảng bao nhiêu khách mỗi nhóm?</td></tr>
+          <tr><td>2</td><td>Phát hiện 10% → 10,5%: khoảng gấp mấy lần so với 10% → 11%?</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, muốn phát hiện mức tăng từ 10 lên 12 phần trăm, với cùng mức ý nghĩa và độ mạnh, cần khoảng bao nhiêu khách mỗi nhóm? Câu hai, muốn phát hiện từ 10 lên 10 phẩy 5 phần trăm thì cần gấp mấy lần so với từ 10 lên 11? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① Ước lượng nhanh: khác biệt gấp đôi (2% thay vì 1%) → cỡ mẫu khoảng $\frac{14\,751}{4} \approx 3688$.</p>
+          <p>Tính đúng bằng công thức: $\hl{3841}$ khách mỗi nhóm — nhỉnh hơn một chút vì ở 12% dao động lớn hơn ở 11%.</p>
+        focus: [1, 1, 2]
+        say: "Đáp án câu một, ước lượng nhanh trước. Khác biệt gấp đôi nên cần khoảng một phần tư, mười bốn nghìn bảy trăm năm mươi mốt chia 4 được khoảng ba nghìn sáu trăm tám mươi tám. Tính đúng bằng công thức được ba nghìn tám trăm bốn mươi mốt khách mỗi nhóm, nhỉnh hơn một chút vì ở mức 12 phần trăm, tỉ lệ dao động mạnh hơn ở mức 11 phần trăm."
+      - show: |
+          <p>② Khác biệt bằng một nửa (0,5%) → khoảng $\hl{4}$ lần. Công thức: 57 763 khách mỗi nhóm, $\frac{57\,763}{14\,751} \approx 3{,}9$ lần.</p>
+        say: "Câu hai, khác biệt chỉ bằng một nửa nên cần khoảng gấp 4 lần. Công thức cho năm mươi bảy nghìn bảy trăm sáu mươi ba khách mỗi nhóm, chia cho mười bốn nghìn bảy trăm năm mươi mốt được khoảng 3 phẩy 9 lần."
+
+  # ───────────────────────── 7. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">chia ngẫu nhiên, chạy song song</span><span class="a">→</span>
+          <span class="n">một chỉ số chính, chọn trước</span><span class="a">→</span>
+          <span class="n">cỡ mẫu tính trước</span><span class="a">→</span>
+          <span class="n">không dừng khi vừa thấy đẹp</span></div>
+        say: "Tổng kết lại, chia ngẫu nhiên và chạy song song, chọn trước một chỉ số chính, tính trước cỡ mẫu, và không dừng khi vừa thấy kết quả đẹp."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> ngẫu nhiên hoá là cách duy nhất làm hai nhóm giống nhau ở cả những điều ta không biết để đo.</div>
+        say: "Điều cần mang theo, chia ngẫu nhiên là cách duy nhất làm hai nhóm giống nhau ở cả những điều ta không biết để đo."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 9): <b>kiểm định nhiều lần</b> và câu cá dữ liệu.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 9, ta học về kiểm định nhiều lần và cái bẫy câu cá dữ liệu. Hẹn gặp bạn ở bài tiếp theo."

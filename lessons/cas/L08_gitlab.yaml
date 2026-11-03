@@ -1,0 +1,242 @@
+# ═══ BÀI TÌNH HUỐNG — sự cố cơ sở dữ liệu GitLab.com ngày 31/1/2017; case-lessons.md §1–§4 ═══
+id: L08
+course: CAS
+series: "CAS · Tình huống chuyên gia"
+title: "Bài 8 — GitLab (2017): lệnh xoá chạy nhầm máy và các bản sao lưu chưa từng khôi phục thử"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/cas.yaml L08; audit/cas/sources_L08.md (câu trích nguyên văn, đọc 2026-11-02); audit/cas/verify_cas.py L08 (audit/cas/ver/L08.py); audit/verify_plan_curricula.py CAS:L08; GitLab, Postmortem of database outage of January 31, about.gitlab.com/blog, 10/2/2017 [GL17]; DBS bài 14 (ghi nhật ký trước, khôi phục), SEC bài 14 (sao lưu, phục hồi); CAS bài 0 (nguyên nhân góp phần, lớp phòng vệ)"
+assumes: [arith, frac]
+# Quy ước: giờ quốc tế (UTC) như bài hậu kiểm. “máy chính / máy phụ” = primary / secondary của cơ sở dữ liệu; “sao chép” = replication;
+#   “bản kết xuất” = sao lưu logic bằng pg_dump; “ảnh chụp đĩa” = LVM snapshot / Azure disk snapshot. Tên GitLab, PostgreSQL, pg_dump,
+#   LVM, Azure chỉ trên màn hình; lời đọc nói “nền tảng lưu mã nguồn”, “hệ quản trị cơ sở dữ liệu”, “công cụ kết xuất”, “đám mây”.
+#   Mốc xoá: nguồn ghi “± 23:30” và mất dữ liệu “17:20 … 23:30” (một chỗ khác ghi “00:00”) → bài dùng 23:30 và nói “khoảng”.
+#   486 GB từ 60 Mbit/s × 18 giờ là ƯỚC LƯỢNG của bài (nguồn không ghi cỡ dữ liệu đã chép). 200 GB, 1 Gbit/s ở quiz: SỐ MINH HOẠ.
+#   Bài hậu kiểm tự ghi là đã nêu tên người xoá trong tài liệu theo dõi (người đó đồng ý) và sẽ không nêu tên lần sau → bài không nêu.
+objectives:
+  - "Dựng dòng thời gian từ tải tăng tới lệnh xoá nhầm và tới khi khôi phục"
+  - "Phân biệt “có sao lưu” với “khôi phục được” qua bốn cách sao lưu của sự cố"
+  - "Tính lượng dữ liệu mất theo thời điểm bản chụp gần nhất, và thời gian chép lại theo băng thông"
+  - "Chọn biện pháp ở mức hệ thống: kiểm khôi phục tự động, chụp dày hơn, người phụ trách"
+asr_reviewed:
+  - {sentence: "Vậy 60 triệu bit mỗi giây là 7 phẩy 5 mê-ga-byte mỗi giây, tức 27 nghìn mê-ga-byte mỗi giờ.", reason: "ASR chép “Vậy 60 triệu bit mỗi giây là 7,5 megabyte mỗi giây, tức 27.000 megabyte mỗi giờ.” (0.833): MB đọc “mê-ga-byte” theo lexicon của khoá, ASR viết “MB/megabyte” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Nhân 7 phẩy 5 mê-ga-byte mỗi giây với 18 giờ, ta ước lượng đã chép khoảng 486 ghi-ga-byte, một con số của riêng bài này.", reason: "ASR chép “Nhân 7,5 MB mỗi giây với 18 giờ, ta ước lượng đã chép khoảng 486 GB, một con số của riêng bài này.” (0.875): MB đọc “mê-ga-byte” theo lexicon của khoá, ASR viết “MB/megabyte”; GB đọc “ghi-ga-byte” theo lexicon của khoá, ASR viết “GB/gigabyte” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Tính theo giờ, 27 nghìn mê-ga-byte mỗi giờ là 27 ghi-ga-byte mỗi giờ, và 27 nhân 18 cũng ra 486.", reason: "ASR chép “Tính theo giờ, 27.000 megabyte mỗi giờ là 27 gigabyte mỗi giờ, và 27 nhân 18 cũng ra 486.” (0.879): MB đọc “mê-ga-byte” theo lexicon của khoá, ASR viết “MB/megabyte”; GB đọc “ghi-ga-byte” theo lexicon của khoá, ASR viết “GB/gigabyte” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bước một, 200 nghìn mê-ga-byte chia 7 phẩy 5 mê-ga-byte mỗi giây là khoảng 26 nghìn 667 giây, tức khoảng 7 phẩy 4 giờ.", reason: "ASR chép “Bước 1, 200.000 MB chia 7,5 MB mỗi giây là khoảng 26.667 giây, tức khoảng 7,4 giờ.” (0.879): MB đọc “mê-ga-byte” theo lexicon của khoá, ASR viết “MB/megabyte” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Lệnh bị dừng chỉ sau một hai giây, nhưng khoảng 300 ghi-ga-byte dữ liệu đã bị xoá.", reason: "ASR chép “Lệnh bị dừng chỉ sau 1-2 giây, nhưng khoảng 300 GB dữ liệu đã bị xóa.” (0.895): GB đọc “ghi-ga-byte” theo lexicon của khoá, ASR viết “GB/gigabyte” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Về băng thông, một byte là 8 bit, nên số triệu bit mỗi giây chia 8 ra số mê-ga-byte mỗi giây.", reason: "ASR chép “Về băng thông, một byte là 8 bit, nên số triệu bit mỗi giây chia 8 ra số megabyte mỗi giây.” (0.909): MB đọc “mê-ga-byte” theo lexicon của khoá, ASR viết “MB/megabyte” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bước hai, 1 tỉ bit mỗi giây là 1000 triệu bit chia 8, bằng 125 mê-ga-byte mỗi giây, nên 200 nghìn chia 125 là 1600 giây, khoảng 26 phẩy 7 phút.", reason: "ASR chép “Bước 2, 1 tỷ bit mỗi giây là 1.000 triệu bit chia 8 bằng 125 megabyte mỗi giây, nền 200.000 chia 125 là 1.600 giây, khoảng 26,7 phút.” (0.915): “tỉ” ASR viết chính tả “tỷ” (cùng âm); MB đọc “mê-ga-byte” theo lexicon của khoá, ASR viết “MB/megabyte”; lệch âm/thanh thuần Việt: nên/nền — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Câu một, cơ sở dữ liệu của bạn 200 ghi-ga-byte, nếu phải chép lại qua đường 60 triệu bit mỗi giây thì mất bao lâu?", reason: "ASR chép “Câu một, cơ sở dữ liệu của bạn 200 GB, nếu phải chép lại qua đường 60 triệu bit mỗi giây thì mất bao lâu?” (0.929): GB đọc “ghi-ga-byte” theo lexicon của khoá, ASR viết “GB/gigabyte” — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Một hai giây, 300 GB, và không bản sao lưu nào như mong đợi"
+    checks:
+      - "300 > 0 and 5000 + 5000 + 700 == 10700"
+    steps:
+      - show: |
+          <p>Ngày 31/1/2017, nền tảng lưu mã nguồn <b>GitLab.com</b> (theo bài hậu kiểm 10/2/2017):</p>
+          <table class="t"><tr><th>điều đã xảy ra</th></tr>
+          <tr><td>một lệnh xoá thư mục dữ liệu được chạy trên <b>máy chính</b> của cơ sở dữ liệu — trong khi người chạy tin đó là <b>máy phụ</b></td></tr>
+          <tr><td>lệnh bị dừng sau một hai giây, nhưng khoảng <b>300 GB</b> dữ liệu đã bị xoá</td></tr>
+          <tr><td>đi tìm bản sao lưu: “việc tìm và dùng bản sao lưu đều thất bại hoàn toàn”</td></tr>
+          <tr><td>dịch vụ ngừng khoảng <b>18 giờ</b>; mất thay đổi của khoảng 5000 dự án, 5000 bình luận, 700 tài khoản mới; kho mã thì không mất</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", "2.5", "2.5"]
+        say: "Chào bạn, ngày 31 tháng 1 năm 2017, một nền tảng lưu mã nguồn trực tuyến gặp sự cố cơ sở dữ liệu, theo bài hậu kiểm họ công bố mười ngày sau. Một lệnh xoá thư mục dữ liệu được chạy trên máy chính, trong khi người chạy tin rằng đó là máy phụ. Lệnh bị dừng chỉ sau một hai giây, nhưng khoảng 300 ghi-ga-byte dữ liệu đã bị xoá. Rồi đến lúc đi tìm bản sao lưu, và bài hậu kiểm viết, việc tìm và dùng bản sao lưu đều thất bại hoàn toàn. Dịch vụ ngừng khoảng 18 giờ, và mất thay đổi của khoảng 5000 dự án, 5000 bình luận, 700 tài khoản mới. Riêng các kho mã được lưu tách riêng nên không mất."
+      - show: |
+          <div class="box key">Hôm nay: dòng thời gian từ tải tăng tới lệnh xoá; bốn cách sao lưu, ba cách không dùng được; tính lượng dữ liệu mất và thời gian chép lại.</div>
+        say: "Hôm nay ta dựng dòng thời gian từ lúc tải tăng tới lệnh xoá, xem bốn cách sao lưu mà ba cách không dùng được, rồi tính lượng dữ liệu mất và thời gian chép lại."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại ba điều sẽ dùng"
+    checks:
+      - "60 / 8 == 7.5 and 7.5 * 3600 == 27000"
+      - "24 - 0 == 24 and 1 - 0 == 1"
+    steps:
+      - show: |
+          <table class="t"><tr><th>điều cần nhớ</th><th>ví dụ số</th></tr>
+          <tr><td>ở khoá Cơ sở dữ liệu: máy chính ghi <b>nhật ký</b> mọi thay đổi; máy phụ đọc nhật ký đó để giữ bản sao giống hệt</td><td>nếu đoạn nhật ký bị xoá khỏi máy chính trước khi máy phụ đọc kịp, máy phụ phải dựng lại từ đầu</td></tr>
+          <tr><td>ở khoá An toàn thông tin: <b>lượng dữ liệu mất tối đa</b> bằng khoảng cách giữa hai bản sao lưu</td><td>sao lưu mỗi 24 giờ: mất tối đa 24 giờ; mỗi 1 giờ: mất tối đa 1 giờ</td></tr>
+          <tr><td>băng thông: 1 byte = 8 bit, nên megabit mỗi giây chia 8 ra megabyte mỗi giây</td><td>60 megabit mỗi giây = 7,5 megabyte mỗi giây = 27&nbsp;000 megabyte mỗi giờ</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.3", "1.3", "1.4", "1.4"]
+        say: "Trước hết, ôn ba điều sẽ dùng. Ở khoá Cơ sở dữ liệu, máy chính ghi nhật ký mọi thay đổi, còn máy phụ đọc nhật ký đó để giữ một bản sao giống hệt. Nếu đoạn nhật ký bị xoá khỏi máy chính trước khi máy phụ đọc kịp, máy phụ phải dựng lại từ đầu. Ở khoá An toàn thông tin, lượng dữ liệu mất tối đa bằng khoảng cách giữa hai bản sao lưu. Sao lưu mỗi 24 giờ thì mất tối đa 24 giờ, mỗi 1 giờ thì mất tối đa 1 giờ. Về băng thông, một byte là 8 bit, nên số triệu bit mỗi giây chia 8 ra số mê-ga-byte mỗi giây. Vậy 60 triệu bit mỗi giây là 7 phẩy 5 mê-ga-byte mỗi giây, tức 27 nghìn mê-ga-byte mỗi giờ."
+
+  # ───────────────────────── 3. NGÔN NGỮ ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Ngôn ngữ của sao lưu và khôi phục"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thuật ngữ</th><th>nghĩa</th></tr>
+          <tr><td><b>sao chép</b> sang máy phụ</td><td>máy phụ chạy theo máy chính từng giây; dùng để <b>chuyển sang</b> khi máy chính hỏng — chép cả lệnh xoá</td></tr>
+          <tr><td><b>bản kết xuất</b></td><td>toàn bộ dữ liệu ghi ra thành tệp, làm định kỳ, cất ở nơi khác</td></tr>
+          <tr><td><b>ảnh chụp đĩa</b></td><td>bản chụp nguyên một ổ đĩa tại một thời điểm</td></tr>
+          <tr><td><b>khôi phục thử</b></td><td>dựng lại thật từ bản sao lưu để biết nó dùng được, và mất bao lâu</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.3", "1.4", "1.5"]
+        say: "Bài dùng bốn thuật ngữ. Sao chép sang máy phụ nghĩa là máy phụ chạy theo máy chính từng giây, dùng để chuyển sang khi máy chính hỏng. Chính vì chạy theo từng giây, nó chép cả lệnh xoá. Bản kết xuất là toàn bộ dữ liệu ghi ra thành tệp, làm định kỳ, và cất ở nơi khác. Ảnh chụp đĩa là bản chụp nguyên một ổ đĩa tại một thời điểm. Còn khôi phục thử là dựng lại thật từ bản sao lưu, để biết nó dùng được, và mất bao lâu."
+
+  # ───────────────────────── 4. HÌNH CƠ CHẾ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Bốn lớp phòng vệ cho dữ liệu, ba lớp thủng"
+    steps:
+      - show: |
+          <div><svg width="1680" height="430" viewBox="0 0 1680 430">
+          <g font-size="23" fill="#1f2937">
+          <rect x="20" y="20" width="390" height="300" rx="12" fill="#fde2e2" stroke="#e11d48" stroke-width="3"/>
+          <text x="215" y="60" text-anchor="middle" font-weight="bold">1. sao chép sang máy phụ</text>
+          <text x="40" y="110">mục đích: chuyển sang</text><text x="40" y="142">khi máy chính hỏng</text>
+          <text x="40" y="200" fill="#e11d48">máy phụ đã bị xoá để</text><text x="40" y="232" fill="#e11d48">dựng lại từ đầu</text>
+          <text x="215" y="295" text-anchor="middle" font-weight="bold" fill="#e11d48">không dùng được</text>
+          <rect x="440" y="20" width="390" height="300" rx="12" fill="#fde2e2" stroke="#e11d48" stroke-width="3"/>
+          <text x="635" y="60" text-anchor="middle" font-weight="bold">2. bản kết xuất mỗi 24 giờ</text>
+          <text x="460" y="110">gửi lên kho đám mây</text>
+          <text x="460" y="168" fill="#e11d48">kho trống: công cụ bản 9.2,</text><text x="460" y="200" fill="#e11d48">cơ sở dữ liệu bản 9.6 → lỗi;</text><text x="460" y="232" fill="#e11d48">thư báo lỗi bị từ chối</text>
+          <text x="635" y="295" text-anchor="middle" font-weight="bold" fill="#e11d48">không dùng được</text>
+          <rect x="860" y="20" width="390" height="300" rx="12" fill="#fde2e2" stroke="#e11d48" stroke-width="3"/>
+          <text x="1055" y="60" text-anchor="middle" font-weight="bold">3. ảnh chụp đĩa đám mây</text>
+          <text x="880" y="110">mỗi 24 giờ, cho máy lưu mã</text>
+          <text x="880" y="168" fill="#e11d48">chưa bật cho máy cơ sở</text><text x="880" y="200" fill="#e11d48">dữ liệu: tưởng các cách</text><text x="880" y="232" fill="#e11d48">khác là đủ</text>
+          <text x="1055" y="295" text-anchor="middle" font-weight="bold" fill="#e11d48">không dùng được</text>
+          <rect x="1280" y="20" width="390" height="300" rx="12" fill="#dcfce7" stroke="#059669" stroke-width="3"/>
+          <text x="1475" y="60" text-anchor="middle" font-weight="bold">4. ảnh chụp cho máy thử</text>
+          <text x="1300" y="110">mỗi 24 giờ, để thử nghiệm;</text><text x="1300" y="142">không định để khôi phục</text>
+          <text x="1300" y="200" fill="#059669">thêm một bản chụp tay</text><text x="1300" y="232" fill="#059669">lúc 17:20: dùng được</text>
+          <text x="1475" y="295" text-anchor="middle" font-weight="bold" fill="#059669">dùng được</text>
+          <text x="840" y="395" text-anchor="middle" font-size="22" fill="#6b7280">lớp cứu được dữ liệu lại là lớp không ai thiết kế để khôi phục — đúng mục “chỗ ta gặp may” ở bài 0</text>
+          </g></svg></div>
+        focus: [1, 1, 1, 1, 1, 1]
+        say: "Hình vẽ bốn cách giữ dữ liệu mà bài hậu kiểm liệt kê, như bốn lớp phòng vệ. Lớp một, sao chép sang máy phụ, để chuyển sang khi máy chính hỏng, nhưng máy phụ đã bị xoá để dựng lại từ đầu. Lớp hai, bản kết xuất mỗi 24 giờ gửi lên kho đám mây, nhưng kho trống. Lý do là công cụ bản 9 phẩy 2 chạy với cơ sở dữ liệu bản 9 phẩy 6 thì báo lỗi, và thư báo lỗi bị từ chối. Lớp ba, ảnh chụp đĩa đám mây, chưa từng bật cho máy cơ sở dữ liệu, vì mọi người tưởng các cách khác là đủ. Chỉ lớp bốn cứu được, là ảnh chụp cho môi trường thử nghiệm, vốn không định dùng để khôi phục, đúng mục chỗ ta gặp may ở bài 0."
+
+  # ───────────────────────── 5. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Dòng thời gian, dữ liệu mất, thời gian chép lại"
+    checks:
+      - "(23 * 60 + 30) - (17 * 60 + 20) == 370 and divmod(370, 60) == (6, 10)"
+      - "(23 * 60 + 30) - (1 * 60) == 1350 and divmod(1350, 60) == (22, 30)"
+      - "round(1350 / 370, 1) == 3.6"
+      - "(24 * 60 + 18 * 60) - (23 * 60 + 30) == 18 * 60 + 30"
+      - "60 / 8 * 18 * 3600 / 1000 == 486"
+      - "divmod((23 * 60 + 30) - (23 * 60), 60) == (0, 30)"
+    steps:
+      - show: |
+          <table class="t"><tr><th>giờ quốc tế</th><th>bài hậu kiểm ghi</th></tr>
+          <tr><td>31/1, 17:20</td><td>một kỹ sư chụp tay ảnh đĩa của máy chính để nạp sang máy thử — thường việc này tự chạy lúc 01:00 mỗi ngày</td></tr>
+          <tr><td>khoảng 19:00</td><td>tải cơ sở dữ liệu tăng: nghi thư rác, cộng một tác vụ xoá một nhân viên bị gắn cờ lạm dụng <b>nhầm</b></td></tr>
+          <tr><td>khoảng 23:00</td><td>máy phụ tụt lại; đoạn nhật ký nó cần đã bị máy chính xoá → phải dựng lại máy phụ <b>bằng tay</b>, chưa tự động, hướng dẫn chưa rõ</td></tr>
+          <tr><td>khoảng 23:30</td><td>công cụ dựng lại treo im lặng; đoán còn tệp cũ, lệnh xoá thư mục chạy — trên <b>máy chính</b></td></tr>
+          <tr><td>1/2, 17:00 → 18:00</td><td>khôi phục xong cơ sở dữ liệu, rồi các phần còn lại</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", "1.5", "1.6"]
+        say: "Đây là dòng thời gian theo bài hậu kiểm, giờ quốc tế. Lúc 17 giờ 20, một kỹ sư chụp tay ảnh đĩa của máy chính để nạp sang máy thử, việc thường tự chạy lúc 1 giờ sáng mỗi ngày. Khoảng 19 giờ, tải cơ sở dữ liệu tăng, nghi do thư rác, cộng một tác vụ đang xoá một nhân viên bị gắn cờ lạm dụng nhầm. Khoảng 23 giờ, máy phụ tụt lại, đoạn nhật ký nó cần đã bị máy chính xoá, nên phải dựng lại máy phụ bằng tay, việc chưa tự động và hướng dẫn chưa rõ. Khoảng 23 giờ 30, công cụ dựng lại treo im lặng, người ta đoán còn tệp cũ, và lệnh xoá thư mục chạy, nhưng trên máy chính. Phải tới 17 giờ ngày hôm sau cơ sở dữ liệu mới khôi phục xong, và 18 giờ mới xong các phần còn lại."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. dữ liệu mất khi khôi phục từ bản chụp tay</td><td>17:20 → 23:30</td><td>$\hl{6}$ giờ $\hl{10}$ phút</td></tr>
+          <tr><td>Bước 2. nếu chỉ có bản tự động lúc 01:00</td><td>01:00 → 23:30</td><td>$\hl{22}$ giờ 30 phút — nguồn ghi “gần 24 giờ”</td></tr>
+          <tr><td>Bước 3. bản chụp tay đỡ được bao nhiêu</td><td>1350 phút chia 370 phút</td><td>mất ít hơn khoảng $\hlg{3{,}6}$ lần</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Ta tính lượng dữ liệu mất. Bước một, khôi phục từ bản chụp tay lúc 17 giờ 20, mọi thay đổi tới khoảng 23 giờ 30 bị mất, tức 6 giờ 10 phút. Bước hai, nếu chỉ có bản tự động lúc 1 giờ sáng, khoảng cách là 22 giờ 30 phút, khớp chữ gần 24 giờ của nguồn. Bước ba, 1350 phút chia 370 phút, nên một bản chụp tay tình cờ đã giúp mất ít hơn khoảng 3 phẩy 6 lần."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 4. thời gian ngừng</td><td>31/1, 23:30 → 1/2, 18:00</td><td>$\hl{18}$ giờ 30 phút — nguồn: “khoảng 18 giờ”</td></tr>
+          <tr><td>Bước 5. vì sao lâu: chép từ máy thử sang máy chính mất khoảng 18 giờ, đĩa mạng bị giới hạn khoảng 60 megabit mỗi giây</td><td>7,5 megabyte mỗi giây nhân 18 nhân 3600 giây</td><td>khoảng $\hl{486}$ GB — ước lượng của bài, nguồn không ghi cỡ dữ liệu</td></tr>
+          <tr><td>Bước 6. sau sự cố: chụp đĩa <b>mỗi giờ</b> thay vì mỗi 24 giờ</td><td>mất tối đa bằng khoảng cách hai bản chụp</td><td>tối đa $\hlg{1}$ giờ thay vì 24 giờ</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.3", "1.3", "1.4"]
+        say: "Tiếp theo là thời gian khôi phục. Bước bốn, từ 23 giờ 30 tới 18 giờ hôm sau là 18 giờ 30 phút, khớp chữ khoảng 18 giờ của nguồn. Bước năm, vì sao lâu như vậy. Bài hậu kiểm ghi việc chép dữ liệu từ máy thử sang máy chính mất khoảng 18 giờ, vì đĩa mạng bị giới hạn khoảng 60 triệu bit mỗi giây. Nhân 7 phẩy 5 mê-ga-byte mỗi giây với 18 giờ, ta ước lượng đã chép khoảng 486 ghi-ga-byte, một con số của riêng bài này. Bước sáu, sau sự cố, ảnh chụp đĩa được làm mỗi giờ, nên dữ liệu mất tối đa chỉ còn 1 giờ thay vì 24 giờ."
+
+  # ───────────────────────── 6. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Kiểm bằng đường khác: cộng dồn từng đoạn, đổi đơn vị theo giờ"
+    checks:
+      - "(60 - 20) + 5 * 60 + 30 == 370"
+      - "(60 - 0) * 22 + 30 == 1350"
+      - "27 * 18 == 486"
+    steps:
+      - show: |
+          <table class="t"><tr><th>con số</th><th>đường khác để kiểm</th></tr>
+          <tr><td>6 giờ 10 phút = 370 phút</td><td>cộng dồn: 17:20 → 18:00 là 40, thêm 5 giờ tới 23:00 là 300, thêm 30: 40 + 300 + 30 = 370 ✓</td></tr>
+          <tr><td>22 giờ 30 phút</td><td>01:00 → 23:00 là 22 giờ, thêm 30 phút: 22 nhân 60 + 30 = 1350 phút ✓</td></tr>
+          <tr><td>486 GB</td><td>tính theo giờ: 27&nbsp;000 megabyte mỗi giờ = 27 GB mỗi giờ; 27 nhân 18 = 486 ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Ta kiểm lại bằng đường khác. Cộng dồn, 17 giờ 20 tới 18 giờ là 40 phút, thêm 5 giờ tới 23 giờ là 300 phút, thêm 30 phút, tổng 370 phút. Từ 1 giờ tới 23 giờ là 22 giờ, nên 22 nhân 60 cộng 30 là 1350 phút. Tính theo giờ, 27 nghìn mê-ga-byte mỗi giờ là 27 ghi-ga-byte mỗi giờ, và 27 nhân 18 cũng ra 486."
+
+  # ───────────────────────── 7. BÀI HỌC SAI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "Những bài học sai hay gặp"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">1.</b> “Lỗi gõ nhầm máy của một người”</td><td>bài hậu kiểm hỏi “vì sao” năm lần: tải tăng → sao chép dừng → dựng lại máy phụ phải làm tay, chưa tự động, hướng dẫn chưa rõ</td><td>tự động hoá việc dựng lại; làm dấu nhắc lệnh khác hẳn giữa các máy và môi trường</td></tr>
+          <tr><td><b class="red">2.</b> “Có sao lưu chạy hằng ngày là an toàn”</td><td>bản kết xuất hỏng <b>lặng lẽ</b> từ lâu: lệch phiên bản, thư báo lỗi bị từ chối</td><td>theo dõi kết quả sao lưu, và <b>khôi phục thử tự động</b> định kỳ</td></tr>
+          <tr><td><b class="red">3.</b> “Đổi lệnh xoá thành lệnh an toàn hơn là xong”</td><td>bài hậu kiểm: chỉ chống được đúng một lệnh, không chống hỏng đĩa hay vô số cách mất dữ liệu khác</td><td>tập trung vào <b>khôi phục nhanh</b>: sai được mà sửa được</td></tr></table>
+        focus: ["1.2", "1.2", "1.2", "1.3", "1.3", "1.4", "1.4"]
+        say: "Bài học sai thứ nhất là kết luận do một người gõ nhầm máy. Bài hậu kiểm hỏi vì sao năm lần, và đi từ tải tăng, tới sao chép dừng, tới việc dựng lại máy phụ phải làm tay, chưa tự động, hướng dẫn chưa rõ. Vì vậy việc cần làm là tự động hoá việc dựng lại, và làm dấu nhắc lệnh khác hẳn giữa các máy. Bài học sai thứ hai là nghĩ có sao lưu chạy hằng ngày là an toàn. Bản kết xuất đã hỏng lặng lẽ từ lâu, nên phải theo dõi kết quả sao lưu, và khôi phục thử tự động định kỳ. Bài học sai thứ ba là nghĩ đổi lệnh xoá thành lệnh an toàn hơn là xong. Chính bài hậu kiểm viết, cách đó chỉ chống đúng một lệnh, không chống hỏng đĩa hay vô số cách mất dữ liệu khác."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">4.</b> “Đã có máy phụ sao chép từng giây, thế là có bản sao lưu” (người đã đi làm)</td><td>sao chép chép cả lệnh xoá, cả dữ liệu hỏng; bài hậu kiểm ghi rõ nó dùng để chuyển sang, <b>không</b> để khôi phục thảm hoạ</td><td>giữ cả bản sao theo thời điểm, cất riêng, có thể quay về một mốc trước lỗi</td></tr>
+          <tr><td><b class="red">5.</b> “Sao lưu là việc của mọi người”</td><td>câu “vì sao” cuối: không ai phụ trách, nên không ai khôi phục thử</td><td>giao một người phụ trách độ bền dữ liệu — việc bài hậu kiểm đã ghi</td></tr></table>
+        focus: ["1.2", "1.2", "1.2", "1.3", "1.3"]
+        say: "Bài học sai thứ tư hay gặp ở người đã đi làm, nghĩ rằng đã có máy phụ sao chép từng giây là có bản sao lưu. Sao chép chép cả lệnh xoá và cả dữ liệu hỏng, và bài hậu kiểm ghi rõ nó dùng để chuyển sang, không phải để khôi phục thảm hoạ. Cần giữ thêm các bản theo thời điểm, cất riêng, để quay về được một mốc trước lỗi. Bài học sai thứ năm là coi sao lưu là việc của mọi người. Câu vì sao cuối cùng của bài hậu kiểm là không ai phụ trách, nên không ai khôi phục thử, và việc cần làm là giao một người phụ trách độ bền dữ liệu."
+
+  # ───────────────────────── 8. BẠN SẼ LÀM GÌ ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Bạn sẽ làm gì?"
+    checks:
+      - "round(200 * 1000 / 7.5 / 3600, 1) == 7.4"
+      - "round(200 * 1000 / 125 / 60, 1) == 26.7"
+      - "1000 / 8 == 125"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>tình huống (số minh hoạ)</th></tr>
+          <tr><td>1</td><td>Cơ sở dữ liệu của bạn <b>200 GB</b>. Nếu phải chép lại qua đường <b>60 megabit mỗi giây</b>, mất bao lâu? Qua đường <b>1 gigabit mỗi giây</b> thì sao?</td></tr>
+          <tr><td>2</td><td>Ngân sách chỉ đủ một việc trong quý này: <b>(a)</b> chụp đĩa mỗi giờ thay vì mỗi ngày, hay <b>(b)</b> mỗi tuần tự động khôi phục thử bản sao lưu sang một máy riêng và đo thời gian. Chọn gì?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn ra quyết định, với số minh hoạ. Câu một, cơ sở dữ liệu của bạn 200 ghi-ga-byte, nếu phải chép lại qua đường 60 triệu bit mỗi giây thì mất bao lâu? Còn qua đường 1 tỉ bit mỗi giây thì sao? Câu hai, ngân sách chỉ đủ một việc trong quý này. Bạn chọn chụp đĩa mỗi giờ thay vì mỗi ngày, hay mỗi tuần tự động khôi phục thử bản sao lưu sang một máy riêng và đo thời gian? Dừng video và viết ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 1: bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. 60 megabit mỗi giây</td><td>200&nbsp;000 megabyte chia 7,5 megabyte mỗi giây ≈ 26&nbsp;667 giây</td><td>khoảng $\hl{7{,}4}$ giờ</td></tr>
+          <tr><td>Bước 2. 1 gigabit mỗi giây</td><td>1000 megabit chia 8 = 125 megabyte mỗi giây; 200&nbsp;000 chia 125 = 1600 giây</td><td>khoảng $\hlg{26{,}7}$ phút</td></tr></table>
+          <p class="note">Thời gian khôi phục do đường chép quyết định — chỉ biết thật khi chép thử.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Đáp án câu một, tính từng bước. Bước một, 200 nghìn mê-ga-byte chia 7 phẩy 5 mê-ga-byte mỗi giây là khoảng 26 nghìn 667 giây, tức khoảng 7 phẩy 4 giờ. Bước hai, 1 tỉ bit mỗi giây là 1000 triệu bit chia 8, bằng 125 mê-ga-byte mỗi giây, nên 200 nghìn chia 125 là 1600 giây, khoảng 26 phẩy 7 phút. Thời gian khôi phục do đường chép quyết định, và chỉ biết thật khi chép thử."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 2: lựa chọn</th><th>được</th><th>mất</th></tr>
+          <tr><td>(a) chụp mỗi giờ</td><td>mất tối đa 1 giờ thay vì 24 giờ — <b>nếu</b> bản chụp dùng được</td><td>không biết bản chụp có hỏng lặng lẽ không, không biết khôi phục mất 26 phút hay 7 giờ</td></tr>
+          <tr><td>(b) khôi phục thử mỗi tuần</td><td>biết chắc bản sao lưu dùng được, đo được thời gian khôi phục thật; phát hiện hỏng lặng lẽ trong vòng một tuần</td><td>vẫn có thể mất tới 24 giờ dữ liệu cho tới khi làm (a)</td></tr></table>
+          <p class="note">Chọn (b) trước: sao lưu chưa khôi phục thử là giả định. Điều kiện đổi: nếu đã có khôi phục thử chạy đều, thì (a) là bước kế tiếp.</p>
+        focus: [1, "1.2", "1.2", "1.3", 2]
+        say: "Đáp án câu hai là một đánh đổi. Chụp mỗi giờ thì mất tối đa 1 giờ thay vì 24 giờ, nhưng chỉ khi bản chụp dùng được. Bạn vẫn không biết bản chụp có hỏng lặng lẽ không, và không biết khôi phục mất 26 phút hay 7 giờ. Khôi phục thử mỗi tuần cho biết chắc bản sao lưu dùng được và đo được thời gian thật, đổi lại vẫn có thể mất tới 24 giờ dữ liệu. Vậy nên chọn khôi phục thử trước, vì sao lưu chưa khôi phục thử chỉ là giả định, và khi việc đó đã chạy đều thì chụp mỗi giờ là bước kế tiếp."
+
+  # ───────────────────────── 9. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Thay đổi hệ thống & tư duy chuyên gia"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">tải tăng, sao chép dừng</span><span class="a">→</span>
+          <span class="n">dựng lại bằng tay, xoá nhầm máy chính</span><span class="a">→</span>
+          <span class="n">4 cách sao lưu, 3 cách không dùng được</span><span class="a">→</span>
+          <span class="n">mất 6 giờ 10 phút dữ liệu, ngừng khoảng 18 giờ</span><span class="a">→</span>
+          <span class="n">khôi phục thử tự động, chụp mỗi giờ, người phụ trách</span></div>
+        say: "Tổng kết lại, tải tăng làm sao chép dừng, việc dựng lại máy phụ phải làm bằng tay, và lệnh xoá chạy nhầm trên máy chính. Trong bốn cách sao lưu, ba cách không dùng được, nên mất 6 giờ 10 phút dữ liệu và ngừng khoảng 18 giờ. Thay đổi hệ thống là khôi phục thử tự động, chụp đĩa mỗi giờ, và giao người phụ trách độ bền dữ liệu."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> bản sao lưu chưa từng khôi phục thử là một <b>giả định</b>, không phải một lớp bảo vệ. Hệ thống tốt là nơi bạn có thể sai, và sửa lại nhanh.</div>
+        say: "Điều cần mang theo, bản sao lưu chưa từng khôi phục thử là một giả định, không phải một lớp bảo vệ. Như bài hậu kiểm viết, môi trường lý tưởng là nơi bạn có thể mắc lỗi, nhưng sửa lại được nhanh, gần như không ảnh hưởng."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 9): Heartbleed, 2014 — thiếu một phép kiểm độ dài: tin con số độ dài do bên kia khai báo. Ta học ở mức phòng thủ: điều kiện kiểm đúng.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 9, ta xem một lỗ hổng năm 2014, chỉ vì thiếu một phép kiểm độ dài, khi phần mềm tin con số độ dài do bên kia khai báo. Ta học ở mức phòng thủ, tức điều kiện kiểm đúng. Hẹn gặp bạn ở bài tiếp theo."

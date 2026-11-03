@@ -1,0 +1,219 @@
+id: L01
+course: DEN
+series: "DEN · Kỹ thuật dữ liệu"
+title: "Bài 1 — Cây gộp theo nhật ký: bộ đệm ghi, tệp bảng có thứ tự, gộp nền"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/den.yaml L01; audit/den/verify_den.py L01; P. O'Neil, E. Cheng, D. Gawlick, E. O'Neil, The Log-Structured Merge-Tree (1996); M. Kleppmann, Designing Data-Intensive Applications (2017), chương 3; B. Bloom (1970)"
+assumes: [arith, cdot, power]
+# Quy ước: tệp bảng có thứ tự (SSTable) liệt kê từ CŨ tới MỚI; đọc đi từ bộ đệm ghi rồi tệp MỚI nhất lùi về cũ (alg.lsm_lookup).
+#   “—” là bia mộ (đánh dấu đã xoá). Gộp: bản mới nhất thắng, bỏ khoá có bia mộ (alg.lsm_compact). Bộ lọc nhiều hàm băm (Bloom) không bao giờ
+#   báo sai “không có”; báo “có thể có” sai với xác suất p (alg.bloom_extra_reads). Tên LSM, SSTable, Bloom chỉ trên màn hình.
+objectives:
+  - "Mô tả đường ghi và đường đọc"
+  - "Giải thích vai trò của bộ lọc ở mỗi tệp"
+  - "Hiểu xoá là ghi bia mộ"
+asr_reviewed:
+  - {sentence: "Khi đọc, ta đi theo mũi tên cam từ bộ đệm sang tệp mới nhất rồi lùi dần về tệp cũ, còn gộp nền chạy ngầm, trộn các tệp cũ thành một tệp và bỏ bản cũ.", reason: "ASR chép “Khi đọc, ta đi theo mũi tên cam từ bộ đệm sang tẹp mới nhất đôi lùi dần về tẹp cũ còn gột nên chạy ngầm, trộn các tẹp cũ thành một tẹp và bỏ bảng cũ.” (0.784): lệch âm/thanh thuần Việt: tệp/tẹp, rồi/đôi, tệp/tẹp, gộp nền/gột nên, tệp/tẹp, tệp/tẹp, bản/bảng — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Với 8 khoá a, c, e, g, k, m, p, t, tìm m thì so với g ở giữa rồi sang nửa phải, so với k rồi lại sang nửa phải, so với m thì thấy.", reason: "ASR chép “Với 8 khóa A, C, E, G, K, M, T, T, tìm M thì so với G ở giữa rồ sang nửa phải, so với K đồ lại sang nửa phải, so với M thì thấy.” (0.917): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: rồi/rồ, rồi/đồ — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Ghi một triệu dòng mỗi giây"
+    steps:
+      - show: |
+          <p>Hệ thống thu số đo từ hàng triệu cảm biến phải ghi rất nhiều mỗi giây. Ghi vào đúng chỗ trên đĩa theo thứ tự khoá nghĩa là nhảy lung tung — chậm. Còn nếu chỉ <b>ghi nối đuôi</b> thì nhanh, nhưng đọc lại một khoá thế nào?</p>
+          <div class="box key">Hôm nay: <b>cây gộp theo nhật ký</b> (LSM) — ghi luôn tuần tự, đọc nhờ thứ tự trong từng tệp và <b>bộ lọc</b>.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, hệ thống thu số đo từ hàng triệu cảm biến phải ghi rất nhiều mỗi giây. Ghi vào đúng chỗ trên đĩa theo thứ tự khoá nghĩa là nhảy lung tung, và rất chậm. Còn nếu chỉ ghi nối đuôi thì nhanh, nhưng đọc lại một khoá thế nào? Hôm nay ta học cây gộp theo nhật ký, ghi luôn tuần tự, đọc nhờ thứ tự trong từng tệp và nhờ bộ lọc."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: ghi tuần tự, tìm trong dãy đã sắp, kỳ vọng"
+    checks:
+      - "2 ** 3 == 8 and math.ceil(math.log2(8)) == 3 and round(5 * 0.01, 2) == 0.05"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài 0: đĩa làm việc theo từng đoạn liền nhau</th><th>làm gì</th><th>tốc độ</th></tr>
+          <tr><td><b>ghi tuần tự</b></td><td>nối đuôi vào cuối một tệp</td><td>nhanh</td></tr>
+          <tr><td><b>ghi ngẫu nhiên</b></td><td>nhảy tới đúng chỗ của từng khoá rồi sửa</td><td>chậm</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Ở bài 0, ta đã thấy đĩa đọc và ghi theo từng đoạn liền nhau. Vì vậy ghi nối đuôi vào cuối một tệp, gọi là ghi tuần tự, thì nhanh. Còn nhảy tới đúng chỗ của từng khoá rồi sửa, gọi là ghi ngẫu nhiên, thì chậm."
+      - show: |
+          <p>Dãy khoá <b>đã sắp</b>: a, c, e, g, k, m, p, t (8 khoá). Tìm “m”: so với giữa (g) → nửa phải; so k → nửa phải; so m → thấy.</p>
+          <p>Mỗi lần so bỏ được một nửa: 8 khoá cần tối đa 3 lần so, vì $2^3 = 8$.</p>
+        focus: [1, 1, 2]
+        say: "Ở khoá Phân tích và thiết kế thuật toán, ta đã học tìm trong dãy đã sắp. Với 8 khoá a, c, e, g, k, m, p, t, tìm m thì so với g ở giữa rồi sang nửa phải, so với k rồi lại sang nửa phải, so với m thì thấy. Mỗi lần so bỏ được một nửa, nên 8 khoá cần tối đa 3 lần so, vì 2 mũ 3 bằng 8."
+      - show: |
+          <p><b>Kỳ vọng</b> số lần một việc xảy ra $=$ số lần thử $\cdot$ xác suất mỗi lần. Ví dụ tung 5 lần, mỗi lần trúng với xác suất 0,01 → trung bình trúng $5 \cdot 0{,}01 = 0{,}05$ lần.</p>
+        say: "Cuối cùng là kỳ vọng. Số lần trung bình một việc xảy ra bằng số lần thử nhân xác suất mỗi lần. Ví dụ thử 5 lần, mỗi lần trúng với xác suất 0 phẩy 01, thì trung bình trúng 5 nhân 0 phẩy 01, bằng 0 phẩy 05 lần."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: bốn thành phần"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thành phần</th><th>vai trò</th></tr>
+          <tr><td><b>nhật ký ghi trước</b></td><td>ghi nối đuôi mọi thay đổi để không mất khi sập</td></tr>
+          <tr><td><b>bộ đệm ghi</b> (trong bộ nhớ)</td><td>giữ các khoá mới, có thứ tự; đầy thì xả ra đĩa thành một tệp</td></tr>
+          <tr><td><b>tệp bảng có thứ tự</b> (SSTable)</td><td>khoá đã sắp, không sửa nữa; mỗi tệp kèm một <b>bộ lọc</b> (Bloom)</td></tr>
+          <tr><td><b>gộp nền</b></td><td>trộn các tệp, giữ bản mới nhất, bỏ bản cũ và khoá đã xoá</td></tr></table>
+          <p><b>Đọc</b>: bộ đệm ghi → tệp mới nhất → … → tệp cũ nhất; dừng ở lần gặp đầu tiên. Bộ lọc nói “chắc chắn không có” thì bỏ qua tệp đó.</p>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", 2, 2]
+        say: "Bảng có bốn thành phần. Nhật ký ghi trước ghi nối đuôi mọi thay đổi, để không mất dữ liệu khi sập. Bộ đệm ghi nằm trong bộ nhớ, giữ các khoá mới có thứ tự, và khi đầy thì xả ra đĩa thành một tệp. Tệp bảng có thứ tự chứa khoá đã sắp, không bao giờ sửa nữa, và mỗi tệp kèm một bộ lọc. Gộp nền trộn các tệp, giữ bản mới nhất, bỏ bản cũ và khoá đã xoá. Khi đọc, ta xem bộ đệm ghi, rồi tệp mới nhất, lùi dần về tệp cũ nhất, và dừng ở lần gặp đầu tiên. Nếu bộ lọc nói chắc chắn không có thì bỏ qua tệp đó."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Đường ghi, đường đọc, và việc dọn dẹp"
+    steps:
+      - show: |
+          <div><svg width="1500" height="400" viewBox="0 0 1500 400"><g fill="#1f2937"><text x="90" y="145" text-anchor="middle" font-size="22" font-weight="bold">ghi</text><rect x="40" y="160" width="100" height="60" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="90" y="198" text-anchor="middle" font-size="20">khoá mới</text><line x1="140" y1="175" x2="214" y2="97" stroke="#2a78d6" stroke-width="4"/><polygon points="225,85 220,102 208,91" fill="#2a78d6"/><line x1="140" y1="195" x2="209" y2="195" stroke="#2a78d6" stroke-width="4"/><polygon points="225,195 209,203 209,187" fill="#2a78d6"/><text x="390" y="40" text-anchor="middle" font-size="20">nhật ký ghi trước: nối đuôi</text><rect x="230" y="58" width="36" height="44" rx="4" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><rect x="270" y="58" width="36" height="44" rx="4" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><rect x="310" y="58" width="36" height="44" rx="4" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><rect x="350" y="58" width="36" height="44" rx="4" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><rect x="390" y="58" width="36" height="44" rx="4" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><rect x="430" y="58" width="36" height="44" rx="4" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><rect x="470" y="58" width="36" height="44" rx="4" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><rect x="510" y="58" width="36" height="44" rx="4" fill="#ffffff" stroke="#2a78d6" stroke-width="2"/><rect x="230" y="160" width="316" height="70" rx="10" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="388" y="190" text-anchor="middle" font-size="20">bộ đệm ghi, trong bộ nhớ</text><text x="388" y="218" text-anchor="middle" font-size="19">khoá có thứ tự</text><line x1="546" y1="195" x2="634" y2="195" stroke="#1f2937" stroke-width="4"/><polygon points="650,195 634,203 634,187" fill="#1f2937"/><text x="598" y="250" text-anchor="middle" font-size="19">đầy thì xả</text><rect x="660" y="118" width="220" height="32" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="770" y="141" text-anchor="middle" font-size="19">bộ lọc</text><rect x="660" y="155" width="220" height="80" rx="8" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="770" y="186" text-anchor="middle" font-size="20" font-weight="bold">tệp 3, mới</text><text x="770" y="220" text-anchor="middle" font-size="20">a = —</text><line x1="780" y1="290" x2="1024" y2="290" stroke="#eb6834" stroke-width="4"/><polygon points="1040,290 1024,298 1024,282" fill="#eb6834"/><rect x="930" y="118" width="220" height="32" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="1040" y="141" text-anchor="middle" font-size="19">bộ lọc</text><rect x="930" y="155" width="220" height="80" rx="8" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="1040" y="186" text-anchor="middle" font-size="20" font-weight="bold">tệp 2</text><text x="1040" y="220" text-anchor="middle" font-size="20">b = 5, c = 7</text><line x1="1050" y1="290" x2="1294" y2="290" stroke="#eb6834" stroke-width="4"/><polygon points="1310,290 1294,298 1294,282" fill="#eb6834"/><rect x="1200" y="118" width="220" height="32" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="1310" y="141" text-anchor="middle" font-size="19">bộ lọc</text><rect x="1200" y="155" width="220" height="80" rx="8" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="1310" y="186" text-anchor="middle" font-size="20" font-weight="bold">tệp 1, cũ</text><text x="1310" y="220" text-anchor="middle" font-size="20">a = 1, b = 2</text><line x1="400" y1="290" x2="744" y2="290" stroke="#eb6834" stroke-width="4"/><polygon points="760,290 744,298 744,282" fill="#eb6834"/><line x1="400" y1="230" x2="400" y2="290" stroke="#eb6834" stroke-width="4"/><text x="1050" y="325" text-anchor="middle" font-size="21" fill="#eb6834">đọc: bộ đệm, rồi tệp mới tới cũ, dừng ở lần gặp đầu tiên</text><line x1="930" y1="355" x2="1420" y2="355" stroke="#d97706" stroke-width="5"/><text x="1175" y="385" text-anchor="middle" font-size="20" fill="#d97706">gộp nền: trộn thành một tệp, bỏ bản cũ</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ đường đi của dữ liệu. Khoá mới được ghi nối đuôi vào nhật ký, đồng thời chèn vào bộ đệm ghi trong bộ nhớ, nơi các khoá luôn có thứ tự. Khi bộ đệm đầy, nó được xả ra đĩa thành một tệp mới, không bao giờ sửa nữa, và mỗi tệp có một bộ lọc nhỏ màu lục. Khi đọc, ta đi theo mũi tên cam từ bộ đệm sang tệp mới nhất rồi lùi dần về tệp cũ, còn gộp nền chạy ngầm, trộn các tệp cũ thành một tệp và bỏ bản cũ."
+
+  - id: example
+    kind: example
+    title: "Ba tệp, bốn lần tìm, một lần gộp"
+    checks:
+      - "[alg.lsm_lookup([{'a': 1, 'b': 2}, {'b': 5, 'c': 7}, {'a': None}], k) for k in 'abcd'] == [(None, 1), (5, 2), (7, 2), (None, 3)]"
+      - "alg.lsm_compact([{'a': 1, 'b': 2}, {'b': 5, 'c': 7}, {'a': None}]) == {'b': 5, 'c': 7}"
+    steps:
+      - show: |
+          <p><b>Bước 1</b> — trạng thái trên đĩa: ba tệp, xếp từ cũ tới mới; bộ đệm ghi đang trống.</p>
+          <table class="t"><tr><th>tệp (cũ → mới)</th><th>nội dung</th></tr>
+          <tr><td>tệp 1</td><td>a = 1, b = 2</td></tr>
+          <tr><td>tệp 2</td><td>b = 5, c = 7</td></tr>
+          <tr><td>tệp 3</td><td>a = — (bia mộ: đã xoá a)</td></tr></table>
+        focus: [1, 2, "2.2", "2.3", "2.4"]
+        say: "Bước một, nhìn trạng thái trên đĩa, bộ đệm ghi đang trống. Bảng có ba tệp xếp từ cũ tới mới. Tệp 1 có a bằng 1 và b bằng 2. Tệp 2 có b bằng 5 và c bằng 7. Tệp 3 chỉ có một bia mộ, đánh dấu đã xoá a."
+      - show: |
+          <table class="t"><tr><th>tệp (cũ → mới)</th><th>nội dung</th></tr>
+          <tr><td>tệp 1</td><td>a = 1, b = 2</td></tr>
+          <tr><td>tệp 2</td><td>b = 5, c = 7</td></tr>
+          <tr><td>tệp 3</td><td>a = — (bia mộ: đã xoá a)</td></tr></table>
+          <p><b>Bước 2</b> — tìm a: xem tệp 3 trước, gặp bia mộ → a <b>đã xoá</b>, chỉ xem <b>1</b> tệp.</p>
+        focus: [2, 2]
+        say: "Bước hai, tìm a. Ta xem tệp mới nhất trước, gặp bia mộ ngay ở tệp 3, nên a đã bị xoá, chỉ xem 1 tệp."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>tệp (cũ → mới)</th><th>nội dung</th></tr>
+          <tr><td>tệp 1</td><td>a = 1, b = 2</td></tr>
+          <tr><td>tệp 2</td><td>b = 5, c = 7</td></tr>
+          <tr><td>tệp 3</td><td>a = — (bia mộ: đã xoá a)</td></tr></table>
+          <table class="t"><tr><th>tìm</th><th>tệp 3</th><th>tệp 2</th><th>tệp 1</th><th>kết quả</th><th>số tệp đã xem</th></tr>
+          <tr><td><b>Bước 3</b> — b</td><td>không</td><td>b = 5 ✓ dừng</td><td>—</td><td>$\hl{5}$ (bản mới che bản cũ 2)</td><td>2</td></tr>
+          <tr><td><b>Bước 4</b> — c</td><td>không</td><td>c = 7 ✓ dừng</td><td>—</td><td>7</td><td>2</td></tr></table>
+        focus: [2, "2.2", "2.2", "2.3"]
+        say: "Bước ba, tìm b. Tệp 3 không có b, tệp 2 có b bằng 5 nên dừng luôn, xem 2 tệp. Bản b bằng 2 ở tệp 1 bị bản mới che, không bao giờ được đọc tới. Bước bốn, tìm c, cũng dừng ở tệp 2 với c bằng 7, xem 2 tệp."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>tìm</th><th>tệp 3</th><th>tệp 2</th><th>tệp 1</th><th>kết quả</th><th>số tệp đã xem</th></tr>
+          <tr><td><b>Bước 5</b> — d</td><td>không</td><td>không</td><td>không</td><td>không có</td><td>3 — phải xem hết</td></tr></table>
+        focus: [1, "1.2"]
+        say: "Bước năm, tìm d. Tìm d thì không có, nhưng phải xem hết cả 3 tệp, vì một tệp cũ hơn vẫn có thể chứa d."
+      - show: |
+          <p><b>Bước 6</b> — gộp ba tệp: bản mới nhất thắng (b = 5 thắng b = 2), khoá có bia mộ bị bỏ hẳn (a).</p>
+          <p>Sau khi gộp: chỉ còn <b>b = 5, c = 7</b>; a và bản b = 2 mới thật sự biến mất.</p>
+        focus: [1, 2]
+        say: "Bước sáu, gộp ba tệp, bản mới nhất thắng nên b bằng 5 thắng b bằng 2, và khoá có bia mộ là a bị bỏ hẳn. Sau khi gộp chỉ còn b bằng 5 và c bằng 7, lúc đó a và bản b cũ mới thật sự biến mất."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: gộp trước rồi mới tìm"
+    checks:
+      - "(lambda T: all(alg.lsm_lookup([alg.lsm_compact(T)], k)[0] == alg.lsm_lookup(T, k)[0] for k in 'abcd') and all(alg.lsm_lookup([alg.lsm_compact(T)], k)[1] == 1 for k in 'abcd'))([{'a': 1, 'b': 2}, {'b': 5, 'c': 7}, {'a': None}])"
+      - "1 + 2 + 2 + 3 == 8 and 4 * 1 == 4"
+    steps:
+      - show: |
+          <table class="t"><tr><th>tìm</th><th>trước khi gộp (3 tệp)</th><th>sau khi gộp (1 tệp: b = 5, c = 7)</th><th>khớp?</th></tr>
+          <tr><td>a</td><td>đã xoá, 1 tệp</td><td>không có, 1 tệp</td><td>✓</td></tr>
+          <tr><td>b</td><td>5, 2 tệp</td><td>5, 1 tệp</td><td>✓</td></tr>
+          <tr><td>c</td><td>7, 2 tệp</td><td>7, 1 tệp</td><td>✓</td></tr>
+          <tr><td>d</td><td>không có, 3 tệp</td><td>không có, 1 tệp</td><td>✓</td></tr></table>
+          <p>Tổng số tệp phải xem: $1 + 2 + 2 + 3 = 8$ trước khi gộp, chỉ $4$ sau khi gộp.</p>
+        focus: [1, "1.2", "1.3", "1.5", 2]
+        say: "Kiểm bằng đường khác, gộp trước rồi mới tìm lại cả bốn khoá trong một tệp duy nhất. Tìm a, sau gộp không còn a, khớp với đã xoá. Tìm b và c vẫn ra 5 và 7, khớp. Tìm d vẫn không có. Kết quả giống hệt, nhưng tổng số tệp phải xem giảm từ 1 cộng 2 cộng 2 cộng 3, bằng 8, xuống còn 4, và đó chính là lý do phải gộp nền."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp"
+    checks:
+      - "round(alg.bloom_extra_reads(5, 0.01), 2) == 0.05 and [round(x, 2) for x in alg.bloom_bits_per_key(0.01)] == [9.59, 6.64]"
+      - "round(alg.bloom_bits_per_key(0.01)[0], 1) == 9.6 and round(alg.bloom_bits_per_key(0.001)[0], 1) == 14.4"
+      - "round(1e9 * alg.bloom_bits_per_key(0.01)[0] / 8 / 1e9, 1) == 1.2 and round(1e9 * alg.bloom_bits_per_key(0.001)[0] / 8 / 1e9, 1) == 1.8"
+      - "round(alg.bloom_extra_reads(5, 0.001), 3) == 0.005 and round(0.05 - 0.005, 3) == 0.045"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Tưởng xoá là xoá ngay <b class="red">(dữ liệu còn trên đĩa)</b>
+          <br><span class="note">Xoá chỉ ghi thêm bia mộ. Bản cũ còn nằm trong tệp cũ tới khi gộp — quan trọng khi luật yêu cầu xoá dữ liệu cá nhân trong thời hạn.</span></div>
+        say: "Lỗi thứ nhất, tưởng xoá là xoá ngay, trong khi dữ liệu vẫn còn trên đĩa. Xoá chỉ ghi thêm một bia mộ, và bản cũ còn nằm trong tệp cũ tới khi gộp. Điều này quan trọng khi luật yêu cầu xoá dữ liệu cá nhân trong thời hạn."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Bỏ bộ lọc ở mỗi tệp <b class="red">(tìm khoá không có rất chậm)</b>
+          <br><span class="note">Khoá không tồn tại phải xem <b>mọi</b> tệp: 5 tệp là 5 lần đọc đĩa. Bộ lọc sai 1% chỉ còn kỳ vọng $5 \cdot 0{,}01 = \hl{0{,}05}$ lần đọc thừa, tốn khoảng 9,6 bit mỗi khoá.</span></div>
+        say: "Lỗi thứ hai, bỏ bộ lọc ở mỗi tệp, nên tìm khoá không có rất chậm. Khoá không tồn tại phải xem mọi tệp, 5 tệp là 5 lần đọc đĩa. Bộ lọc sai 1 phần trăm chỉ còn kỳ vọng 5 nhân 0 phẩy 01, bằng 0 phẩy 05 lần đọc thừa, và tốn khoảng 9 phẩy 6 bit mỗi khoá."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Gộp nền không theo kịp ghi <b class="red">(đọc chậm dần, đĩa đầy)</b>
+          <br><span class="note">Số tệp tăng mãi thì mỗi lần đọc xem nhiều tệp hơn và bản cũ chiếm chỗ. Theo dõi số tệp chờ gộp; khi vượt ngưỡng thì giảm tốc độ ghi.</span></div>
+        say: "Lỗi thứ ba, gộp nền không theo kịp tốc độ ghi, nên đọc chậm dần và đĩa đầy. Số tệp tăng mãi thì mỗi lần đọc phải xem nhiều tệp hơn, và các bản cũ chiếm chỗ. Hãy theo dõi số tệp chờ gộp, và khi vượt ngưỡng thì giảm tốc độ ghi."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Hạ tỉ lệ sai của bộ lọc để “nhanh hơn” mà không tính bộ nhớ <b class="red">(bộ lọc phải nằm trong bộ nhớ)</b></div>
+          <table class="t"><tr><th>tỉ lệ sai</th><th>bit mỗi khoá</th><th>bộ nhớ cho 1 tỉ khoá</th><th>đọc thừa, 5 tệp</th></tr>
+          <tr><td>1%</td><td>9,6</td><td>≈ 1,2 GB</td><td>0,05</td></tr>
+          <tr><td>0,1%</td><td>14,4</td><td>≈ 1,8 GB</td><td>0,005</td></tr></table>
+          <p class="note">Bộ lọc chỉ có ích khi đọc nó không tốn thêm một lần đọc đĩa. Người có kinh nghiệm tính bộ nhớ của bộ lọc cho mọi tệp trước khi đổi tỉ lệ sai.</p>
+        focus: [1, 2, "2.2", "2.3", 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, hạ tỉ lệ sai của bộ lọc để nhanh hơn mà không tính bộ nhớ. Bảng so hai mức cho 1 tỉ khoá. Tỉ lệ sai 1 phần trăm cần khoảng 9 phẩy 6 bit mỗi khoá, tức khoảng 1 phẩy 2 GB, với 0 phẩy 05 lần đọc thừa. Hạ xuống 0 phẩy 1 phần trăm cần 14 phẩy 4 bit mỗi khoá, khoảng 1 phẩy 8 GB, chỉ để bớt 0 phẩy 045 lần đọc thừa. Bộ lọc chỉ có ích khi đọc nó không tốn thêm một lần đọc đĩa, nên người có kinh nghiệm tính bộ nhớ của bộ lọc cho mọi tệp trước khi đổi tỉ lệ sai."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.lsm_lookup([{'a': 1, 'b': 2}, {'b': 5, 'c': 7}, {'a': None}], 'b', {'b': 9}) == (9, 0) and round(alg.bloom_extra_reads(20, 0.02), 2) == 0.4"
+      - "round(20 / alg.bloom_extra_reads(20, 0.02)) == 50"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Cùng ba tệp như ví dụ, nhưng bộ đệm ghi đang có b = 9. Tìm b được gì, xem mấy tệp?</td></tr>
+          <tr><td>2</td><td>20 tệp, bộ lọc sai 2%. Kỳ vọng số lần đọc thừa khi tìm khoá không có? Không có bộ lọc thì bao nhiêu?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, cùng ba tệp như ví dụ, nhưng bộ đệm ghi đang có b bằng 9. Tìm b được gì, và xem mấy tệp? Câu hai, có 20 tệp, bộ lọc sai 2 phần trăm. Kỳ vọng số lần đọc thừa khi tìm khoá không có là bao nhiêu, và không có bộ lọc thì bao nhiêu? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 1: tìm b</th><th>chỗ xem</th><th>thấy?</th></tr>
+          <tr><td>lượt 1</td><td>bộ đệm ghi (mới nhất)</td><td>b = 9 ✓ dừng</td></tr></table>
+          <p>① b = <b>9</b>, xem <b>0</b> tệp — bộ đệm ghi mới nhất, xem trước; b = 5 ở tệp 2 bị che.</p>
+        focus: [1, 2]
+        say: "Đáp án câu một, đường đọc luôn xem bộ đệm ghi trước, và ở đó đã có b bằng 9. Vậy b bằng 9, không phải xem tệp nào, vì bộ đệm ghi là mới nhất, và bản b bằng 5 ở tệp 2 bị che."
+      - show: |
+          <p>② Có bộ lọc: mỗi tệp đọc thừa với xác suất 0,02 → $20 \cdot 0{,}02 = \hl{0{,}4}$ lần.</p>
+          <p>Không có bộ lọc: phải đọc cả 20 tệp → 20 lần, gấp $\frac{20}{0{,}4} = 50$ lần.</p>
+        focus: [1, 2]
+        say: "Câu hai, có bộ lọc thì mỗi tệp chỉ bị đọc thừa với xác suất 0 phẩy 02, nên kỳ vọng là 20 nhân 0 phẩy 02, bằng 0 phẩy 4 lần. Không có bộ lọc thì phải đọc cả 20 tệp, tức 20 lần, gấp 20 chia 0 phẩy 4, bằng 50 lần."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">ghi: nhật ký + bộ đệm ghi</span><span class="a">→</span>
+          <span class="n">xả thành tệp có thứ tự, không sửa</span><span class="a">→</span>
+          <span class="n">đọc: mới → cũ, bộ lọc bỏ tệp</span><span class="a">→</span>
+          <span class="n">gộp nền: bỏ bản cũ, bỏ bia mộ</span></div>
+        say: "Tổng kết lại, khi ghi ta ghi nhật ký và bộ đệm ghi, rồi xả thành tệp có thứ tự không sửa nữa. Khi đọc ta đi từ mới tới cũ, bộ lọc giúp bỏ qua tệp, và gộp nền bỏ bản cũ cùng bia mộ."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> không sửa tại chỗ — <b>ghi thêm rồi dọn sau</b> biến việc khó (ghi ngẫu nhiên) thành việc dễ (ghi tuần tự), đổi lấy việc dọn dẹp nền.</div>
+        say: "Điều cần mang theo, đừng sửa tại chỗ, hãy ghi thêm rồi dọn sau, để biến ghi ngẫu nhiên khó thành ghi tuần tự dễ, đổi lấy việc dọn dẹp nền."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 2): <b>cây B và cây gộp theo nhật ký</b> — khuếch đại ghi, đọc và không gian.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 2, ta so cây B với cây gộp theo nhật ký, qua khuếch đại ghi, đọc và không gian. Hẹn gặp bạn ở bài tiếp theo."

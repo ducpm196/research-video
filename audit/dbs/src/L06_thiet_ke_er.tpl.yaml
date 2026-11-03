@@ -1,0 +1,241 @@
+id: L06
+course: DBS
+series: "DBS · Cơ sở dữ liệu"
+title: "Bài 6 — Thiết kế thực thể–liên kết và chuyển thành bảng"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/dbs.yaml L06; audit/dbs/verify_dbs.py L06 (sqlite3); P. P. Chen (1976); A. Silberschatz, H. F. Korth, S. Sudarshan, Database System Concepts (2019), chương 6"
+assumes: [arith, set, in, fd]
+# Quy ước: sơ đồ kiểu Chen — thực thể (hình chữ nhật), liên kết (hình thoi), thuộc tính (elip), thuộc tính khoá gạch dưới;
+#   bản số 1, N, M ghi cạnh đường nối. Mọi kết quả “nhận / từ chối” do alg.sql_error chạy thật trên sqlite3 với lược đồ
+#   ở checks (DB_DEMO + MonHoc + DangKy).
+objectives:
+  - "Vẽ mô hình thực thể–liên kết từ mô tả nghiệp vụ"
+  - "Chuyển liên kết một–nhiều thành khoá ngoại, nhiều–nhiều thành bảng nối"
+  - "Nhận ra vi phạm 1NF khi lưu danh sách trong một ô"
+asr_reviewed:
+  - {sentence: "Câu truy vấn nối bảng đăng ký với bảng sinh viên theo mã số.", reason: "ASR chép “Câu truy vẫn nối bạn đăng ký với bạn sinh viên theo mã số.” (0.786): lệch âm/thanh thuần Việt: vấn/vẫn, bảng/bạn, bảng/bạn — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Câu hai, bảng nhà xuất bản, bảng sách có khoá ngoại tới nhà xuất bản, bảng bạn đọc, và bảng mượn làm bảng nối.", reason: "ASR chép “bản nhà xuất bản, bản sách … bản bản đọc … bản nối”: bảng/bản lệch thanh hỏi/sắc-ngang ở mọi lần (ASR đã biết, cùng mẫu các câu “bảng” khác của bài chép đúng); bạn/bản lệch thanh — NOT_VERIFIED bằng tai người; tên bảng hiện trên màn hình"}
+  - {sentence: "Khoá chính của bảng mượn gồm mã bạn đọc, mã sách và ngày mượn.", reason: "ASR chép “Khóa chính của bản mượn gồm mã bản đọc, mã sách và ngay mượn”: bảng/bản, bạn/bản, ngày/ngay chỉ lệch thanh; ba cột khoá hiện trên màn hình — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Vẽ trước, tạo bảng sau"
+    steps:
+      - show: |
+          <p>Nghiệp vụ: “Mỗi sinh viên thuộc một lớp. Mỗi sinh viên đăng ký nhiều môn, mỗi môn có nhiều sinh viên, và mỗi lần đăng ký có một điểm.”</p>
+          <p>Bài 5 sửa một bảng đã sai. Tốt hơn là thiết kế đúng ngay từ đầu.</p>
+          <div class="box key">Hôm nay: <b>mô hình thực thể–liên kết</b> — vẽ thứ cần lưu và quan hệ giữa chúng, rồi chuyển thành bảng theo vài quy tắc cố định.</div>
+        focus: [1, 1, 2, 3]
+        say: "Chào bạn, mô tả nghiệp vụ như sau. Mỗi sinh viên thuộc một lớp, mỗi sinh viên đăng ký nhiều môn, mỗi môn có nhiều sinh viên, và mỗi lần đăng ký có một điểm. Ở bài 5 ta sửa một bảng đã thiết kế sai, nhưng tốt hơn là thiết kế đúng ngay từ đầu. Hôm nay ta học mô hình thực thể liên kết, vẽ những thứ cần lưu và quan hệ giữa chúng, rồi chuyển thành bảng theo vài quy tắc cố định."
+
+  # ───────────────────────── 1b. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: khoá chính, khoá ngoại, đếm hai chiều"
+    checks:
+      - 'alg.sql_error("INSERT INTO SinhVien VALUES (5, ''Em'', ''K9'', 5)") == ''FOREIGN KEY constraint failed'''
+      - 'alg.sql(''SELECT lop, COUNT(*) FROM SinhVien WHERE lop IS NOT NULL GROUP BY lop ORDER BY lop'') == [(''K1'', 2), (''K2'', 1)]'
+    steps:
+      - show: |
+          <table class="t"><tr><th>luật (bài 0)</th><th>ví dụ</th><th>kết quả</th></tr>
+          <tr><td>khoá chính: mỗi dòng một mã, không trùng</td><td>SinhVien có mã 1, 2, 3, 4</td><td>thêm mã 2 lần nữa: từ chối</td></tr>
+          <tr><td>khoá ngoại: trỏ tới dòng có thật</td><td>SinhVien.lop → Lop.ma_lop</td><td>thêm lớp K9: từ chối</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Trước hết, ôn lại hai luật của bài 0, vì thiết kế hôm nay chỉ là đặt đúng hai thứ này. Khoá chính cho mỗi dòng một mã không trùng, nên thêm sinh viên mã 2 lần nữa bị từ chối. Khoá ngoại là cột trỏ tới một dòng có thật ở bảng khác, nên thêm sinh viên vào lớp K9 không tồn tại cũng bị từ chối."
+      - show: |
+          <table class="t"><tr><th>hỏi theo chiều</th><th>đếm</th><th>kết luận</th></tr>
+          <tr><td>một sinh viên thuộc mấy lớp?</td><td>tối đa 1</td><td rowspan="2">liên kết <b>1–N</b></td></tr>
+          <tr><td>một lớp có mấy sinh viên?</td><td>K1: 2 (An, Bình); K2: 1 (Chi)</td></tr></table>
+          <p class="note">Bản số đọc bằng cách hỏi <b>cả hai chiều</b>. Nếu cả hai chiều đều “nhiều” thì là M–N.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Thứ hai, muốn biết bản số của một liên kết, ta hỏi theo cả hai chiều. Hỏi một sinh viên thuộc mấy lớp, câu trả lời là tối đa một. Hỏi một lớp có mấy sinh viên, lớp K1 có 2 là An và Bình, lớp K2 có 1 là Chi, tức là nhiều, nên liên kết này là một nhiều. Nếu cả hai chiều đều trả lời là nhiều, đó là liên kết nhiều nhiều."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: thực thể, liên kết, thuộc tính, bản số"
+    steps:
+      - show: |
+          <div>{{ER}}</div>
+          <p><b>Thực thể</b> (chữ nhật): thứ cần lưu — Lop, SinhVien, MonHoc. <b>Thuộc tính</b> (elip), gạch dưới là khoá. <b>Liên kết</b> (thoi): quan hệ giữa thực thể.</p>
+          <p><b>Bản số</b>: “thuộc” là 1–N (một lớp, nhiều sinh viên); “đăng ký” là M–N (nhiều–nhiều), và có thuộc tính riêng <code>diem</code>.</p>
+        focus: [1, 2, 2, 2, 3, 3]
+        say: "Đây là sơ đồ cho nghiệp vụ vừa rồi. Hình chữ nhật là thực thể, tức thứ cần lưu, gồm lớp, sinh viên và môn. Hình elip là thuộc tính, thuộc tính có gạch dưới là khoá. Hình thoi là liên kết, quan hệ giữa các thực thể. Liên kết thuộc có bản số một nhiều, một lớp có nhiều sinh viên. Liên kết đăng ký có bản số nhiều nhiều, và có thuộc tính riêng là điểm, vì điểm thuộc về một lần đăng ký chứ không thuộc riêng sinh viên hay môn."
+
+  # ───────────────────────── 3. CHUYỂN THÀNH BẢNG ─────────────────────────
+  - id: map
+    kind: concept
+    title: "Ba quy tắc chuyển thành bảng"
+    checks:
+      - "alg.sql_error(\"INSERT INTO DangKy VALUES (1, 'M1', 5)\", alg.DB_DEMO + \"CREATE TABLE MonHoc (ma_mon TEXT PRIMARY KEY, ten_mon TEXT NOT NULL); CREATE TABLE DangKy (mssv INTEGER REFERENCES SinhVien(mssv), ma_mon TEXT REFERENCES MonHoc(ma_mon), diem REAL, PRIMARY KEY (mssv, ma_mon)); INSERT INTO MonHoc VALUES ('M1', 'Cơ sở dữ liệu'), ('M2', 'Mạng máy tính'), ('M10', 'Lý thuyết tính toán'); INSERT INTO DangKy VALUES (1, 'M1', 8), (1, 'M2', 7), (2, 'M1', 6), (3, 'M10', 9);\") == 'UNIQUE constraint failed: DangKy.mssv, DangKy.ma_mon'"
+      - "alg.sql_error(\"INSERT INTO DangKy VALUES (1, 'M10', 5)\", alg.DB_DEMO + \"CREATE TABLE MonHoc (ma_mon TEXT PRIMARY KEY, ten_mon TEXT NOT NULL); CREATE TABLE DangKy (mssv INTEGER REFERENCES SinhVien(mssv), ma_mon TEXT REFERENCES MonHoc(ma_mon), diem REAL, PRIMARY KEY (mssv, ma_mon)); INSERT INTO MonHoc VALUES ('M1', 'Cơ sở dữ liệu'), ('M2', 'Mạng máy tính'), ('M10', 'Lý thuyết tính toán'); INSERT INTO DangKy VALUES (1, 'M1', 8), (1, 'M2', 7), (2, 'M1', 6), (3, 'M10', 9);\") is None"
+    steps:
+      - show: |
+          <ol><li><b>Thực thể → bảng</b>, khoá gạch dưới → khoá chính.</li>
+          <li><b>1–N → khoá ngoại ở phía N</b>: SinhVien có cột <code>lop</code> trỏ tới Lop (đúng bài 0).</li>
+          <li><b>M–N → bảng nối</b>: $\text{DangKy}(\text{mssv}, \text{ma\_mon}, \text{diem})$, khoá chính gồm <b>cả hai</b> cột mssv, ma_mon, mỗi cột là một khoá ngoại.</li></ol>
+          <div class="code"><div><span class="kw">CREATE TABLE</span> DangKy (mssv <span class="kw">INTEGER REFERENCES</span> SinhVien, ma_mon <span class="kw">TEXT REFERENCES</span> MonHoc,</div><div>  diem <span class="kw">REAL</span>, <span class="kw">PRIMARY KEY</span> (mssv, ma_mon));</div></div>
+        focus: ["1.1", "1.1", "1.2", "1.2", "1.3", "1.3", 2]
+        say: "Có ba quy tắc. Một, mỗi thực thể thành một bảng, thuộc tính khoá thành khoá chính. Hai, liên kết một nhiều thành một khoá ngoại đặt ở phía nhiều. Bảng sinh viên có cột lớp trỏ tới bảng lớp, đúng như bài 0. Ba, liên kết nhiều nhiều thành một bảng nối, ở đây là bảng đăng ký gồm mã số, mã môn và điểm. Khoá chính của nó gồm cả hai cột mã số và mã môn, mỗi cột lại là một khoá ngoại. Câu lệnh tạo bảng nối trông như thế này."
+      - show: |
+          <p>Khoá ghép làm đúng ý nghiệp vụ: đăng ký trùng (1, M1) lần nữa → <b>từ chối</b>; (1, M10) — cùng sinh viên, môn khác → <b>nhận</b>.</p>
+        focus: [1, 1]
+        say: "Khoá ghép làm đúng ý nghiệp vụ. Đăng ký trùng sinh viên 1 với môn M1 lần nữa thì bị từ chối, còn sinh viên 1 với môn M10, cùng sinh viên nhưng môn khác, thì được nhận."
+
+  # ───────────────────────── 3b. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Bảng nối là những sợi dây bắc cầu"
+    checks:
+      - 'alg.sql(''SELECT s.ten, COUNT(d.ma_mon) FROM SinhVien s LEFT JOIN DangKy d USING (mssv) GROUP BY s.mssv ORDER BY s.mssv'', alg.DB_DEMO + "CREATE TABLE MonHoc (ma_mon TEXT PRIMARY KEY, ten_mon TEXT NOT NULL); CREATE TABLE DangKy (mssv INTEGER REFERENCES SinhVien(mssv), ma_mon TEXT REFERENCES MonHoc(ma_mon), diem REAL, PRIMARY KEY (mssv, ma_mon)); INSERT INTO MonHoc VALUES (''M1'', ''Cơ sở dữ liệu''), (''M2'', ''Mạng máy tính''), (''M10'', ''Lý thuyết tính toán''); INSERT INTO DangKy VALUES (1, ''M1'', 8), (1, ''M2'', 7), (2, ''M1'', 6), (3, ''M10'', 9);") == [(''An'', 2), (''Bình'', 1), (''Chi'', 1), (''Dũng'', 0)]'
+    steps:
+      - show: |
+          <div><svg width="1500" height="470" viewBox="0 0 1500 470"><g font-size="26" font-weight="bold" fill="#1f2937" text-anchor="middle"><text x="190" y="45">SinhVien</text><text x="750" y="45">DangKy (bảng nối)</text><text x="1300" y="45">MonHoc</text></g><line x1="300" y1="100" x2="600" y2="100" stroke="#2a78d6" stroke-width="3"/><line x1="900" y1="100" x2="1150" y2="100" stroke="#eb6834" stroke-width="3"/><line x1="300" y1="100" x2="600" y2="180" stroke="#2a78d6" stroke-width="3"/><line x1="900" y1="180" x2="1150" y2="180" stroke="#eb6834" stroke-width="3"/><line x1="300" y1="180" x2="600" y2="260" stroke="#2a78d6" stroke-width="3"/><line x1="900" y1="260" x2="1150" y2="100" stroke="#eb6834" stroke-width="3"/><line x1="300" y1="260" x2="600" y2="340" stroke="#2a78d6" stroke-width="3"/><line x1="900" y1="340" x2="1150" y2="260" stroke="#eb6834" stroke-width="3"/><rect x="80" y="70" width="220" height="60" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="190" y="109" font-size="24" text-anchor="middle" fill="#1f2937">1 An</text><rect x="80" y="150" width="220" height="60" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="190" y="189" font-size="24" text-anchor="middle" fill="#1f2937">2 Bình</text><rect x="80" y="230" width="220" height="60" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="190" y="269" font-size="24" text-anchor="middle" fill="#1f2937">3 Chi</text><rect x="80" y="310" width="220" height="60" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="190" y="349" font-size="24" text-anchor="middle" fill="#1f2937">4 Dũng</text><rect x="600" y="70" width="300" height="60" rx="6" fill="#f3f4f6" stroke="#1f2937" stroke-width="3"/><text x="750" y="109" font-size="24" text-anchor="middle" fill="#1f2937">(1, M1, 8)</text><rect x="600" y="150" width="300" height="60" rx="6" fill="#f3f4f6" stroke="#1f2937" stroke-width="3"/><text x="750" y="189" font-size="24" text-anchor="middle" fill="#1f2937">(1, M2, 7)</text><rect x="600" y="230" width="300" height="60" rx="6" fill="#f3f4f6" stroke="#1f2937" stroke-width="3"/><text x="750" y="269" font-size="24" text-anchor="middle" fill="#1f2937">(2, M1, 6)</text><rect x="600" y="310" width="300" height="60" rx="6" fill="#f3f4f6" stroke="#1f2937" stroke-width="3"/><text x="750" y="349" font-size="24" text-anchor="middle" fill="#1f2937">(3, M10, 9)</text><rect x="1150" y="70" width="320" height="60" rx="6" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="1310" y="109" font-size="21" text-anchor="middle" fill="#1f2937">M1 Cơ sở dữ liệu</text><rect x="1150" y="150" width="320" height="60" rx="6" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="1310" y="189" font-size="21" text-anchor="middle" fill="#1f2937">M2 Mạng máy tính</text><rect x="1150" y="230" width="320" height="60" rx="6" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="1310" y="269" font-size="21" text-anchor="middle" fill="#1f2937">M10 Lý thuyết tính toán</text><text x="320" y="420" font-size="22" fill="#6b7280">Dũng: không mũi tên nào → 0 lần đăng ký</text><text x="750" y="455" font-size="22" text-anchor="middle" fill="#1f2937">mỗi dòng DangKy = một lần đăng ký: một dây sang sinh viên, một dây sang môn</text></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình cho thấy cơ chế của bảng nối. Mỗi dòng của bảng đăng ký là một lần đăng ký, nó buộc một sợi dây sang đúng một sinh viên và một sợi dây sang đúng một môn. An có 2 sợi dây nên học 2 môn, môn M1 cũng có 2 sợi dây vì cả An và Bình cùng học. Dũng không có sợi dây nào, nghĩa là chưa đăng ký môn nào, và bảng sinh viên không phải đổi gì."
+
+  # ───────────────────────── 4. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Truy vấn qua bảng nối"
+    checks:
+      - "alg.sql('SELECT ten, ten_mon FROM DangKy JOIN SinhVien USING (mssv) JOIN MonHoc USING (ma_mon) ORDER BY ten, ten_mon', alg.DB_DEMO + \"CREATE TABLE MonHoc (ma_mon TEXT PRIMARY KEY, ten_mon TEXT NOT NULL); CREATE TABLE DangKy (mssv INTEGER REFERENCES SinhVien(mssv), ma_mon TEXT REFERENCES MonHoc(ma_mon), diem REAL, PRIMARY KEY (mssv, ma_mon)); INSERT INTO MonHoc VALUES ('M1', 'Cơ sở dữ liệu'), ('M2', 'Mạng máy tính'), ('M10', 'Lý thuyết tính toán'); INSERT INTO DangKy VALUES (1, 'M1', 8), (1, 'M2', 7), (2, 'M1', 6), (3, 'M10', 9);\") == [('An', 'Cơ sở dữ liệu'), ('An', 'Mạng máy tính'), ('Bình', 'Cơ sở dữ liệu'), ('Chi', 'Lý thuyết tính toán')]"
+      - 'alg.sql(''SELECT d.mssv, s.ten FROM DangKy d JOIN SinhVien s USING (mssv) ORDER BY d.rowid'', alg.DB_DEMO + "CREATE TABLE MonHoc (ma_mon TEXT PRIMARY KEY, ten_mon TEXT NOT NULL); CREATE TABLE DangKy (mssv INTEGER REFERENCES SinhVien(mssv), ma_mon TEXT REFERENCES MonHoc(ma_mon), diem REAL, PRIMARY KEY (mssv, ma_mon)); INSERT INTO MonHoc VALUES (''M1'', ''Cơ sở dữ liệu''), (''M2'', ''Mạng máy tính''), (''M10'', ''Lý thuyết tính toán''); INSERT INTO DangKy VALUES (1, ''M1'', 8), (1, ''M2'', 7), (2, ''M1'', 6), (3, ''M10'', 9);") == [(1, ''An''), (1, ''An''), (2, ''Bình''), (3, ''Chi'')]'
+      - 'alg.sql(''SELECT d.ma_mon, m.ten_mon FROM DangKy d JOIN MonHoc m USING (ma_mon) ORDER BY d.rowid'', alg.DB_DEMO + "CREATE TABLE MonHoc (ma_mon TEXT PRIMARY KEY, ten_mon TEXT NOT NULL); CREATE TABLE DangKy (mssv INTEGER REFERENCES SinhVien(mssv), ma_mon TEXT REFERENCES MonHoc(ma_mon), diem REAL, PRIMARY KEY (mssv, ma_mon)); INSERT INTO MonHoc VALUES (''M1'', ''Cơ sở dữ liệu''), (''M2'', ''Mạng máy tính''), (''M10'', ''Lý thuyết tính toán''); INSERT INTO DangKy VALUES (1, ''M1'', 8), (1, ''M2'', 7), (2, ''M1'', 6), (3, ''M10'', 9);") == [(''M1'', ''Cơ sở dữ liệu''), (''M2'', ''Mạng máy tính''), (''M1'', ''Cơ sở dữ liệu''), (''M10'', ''Lý thuyết tính toán'')]'
+    steps:
+      - show: |
+          <p><b>Bước 1</b> — bảng DangKy có 4 dòng; câu hỏi: ai học môn gì?</p>
+          <div class="code"><div><span class="kw">SELECT</span> ten, ten_mon <span class="kw">FROM</span> DangKy</div><div>  <span class="kw">JOIN</span> SinhVien <span class="kw">USING</span> (mssv) <span class="kw">JOIN</span> MonHoc <span class="kw">USING</span> (ma_mon);</div></div>
+        focus: [1, 2, 2]
+        say: "Bước một, bảng đăng ký có bốn dòng, và ta muốn biết ai học môn gì. Câu truy vấn nối bảng đăng ký với bảng sinh viên theo mã số. Rồi nối tiếp với bảng các môn theo mã môn."
+      - show: |
+          <p><b>Bước 2</b> — nối theo mssv: mỗi dòng DangKy tra tên sinh viên.</p>
+          <table class="t"><tr><th>DangKy</th><th>mssv</th><th>ten</th></tr>
+          <tr><td>(1, M1, 8)</td><td>1</td><td>An</td></tr><tr><td>(1, M2, 7)</td><td>1</td><td>An</td></tr>
+          <tr><td>(2, M1, 6)</td><td>2</td><td>Bình</td></tr><tr><td>(3, M10, 9)</td><td>3</td><td>Chi</td></tr></table>
+        focus: [1, "2.2", "2.4", "2.5"]
+        say: "Bước hai, nối theo mã số, mỗi dòng đăng ký tra ra tên sinh viên. Hai dòng đầu có mã 1, nên đều là An. Dòng thứ ba mã 2 là Bình. Dòng cuối mã 3 là Chi."
+      - clear: true
+        show: |
+          <p><b>Bước 3</b> — nối theo ma_mon: tra tên môn.</p>
+          <table class="t"><tr><th>ma_mon</th><th>ten_mon</th></tr>
+          <tr><td>M1</td><td>Cơ sở dữ liệu</td></tr><tr><td>M2</td><td>Mạng máy tính</td></tr>
+          <tr><td>M1</td><td>Cơ sở dữ liệu</td></tr><tr><td>M10</td><td>Lý thuyết tính toán</td></tr></table>
+        focus: [1, "2.2", "2.4", "2.5"]
+        say: "Bước ba, nối tiếp theo mã môn, mỗi dòng tra ra tên môn. Mã M1 là Cơ sở dữ liệu, mã M2 là Mạng máy tính. Dòng thứ ba lại là M1, nên cũng là Cơ sở dữ liệu. Dòng cuối mã M10 là Lý thuyết tính toán."
+      - clear: true
+        show: |
+          <p><b>Bước 4</b> — ghép hai cột lại:</p>
+          <table class="t"><tr><th>ten</th><th>ten_mon</th></tr>
+          <tr><td>An</td><td>Cơ sở dữ liệu</td></tr><tr><td>An</td><td>Mạng máy tính</td></tr>
+          <tr><td>Bình</td><td>Cơ sở dữ liệu</td></tr><tr><td>Chi</td><td>Lý thuyết tính toán</td></tr></table>
+        focus: [1, "2.2", "2.4", "2.5", 2]
+        say: "Bước bốn, ghép tên sinh viên với tên môn trên cùng dòng. An học Cơ sở dữ liệu và Mạng máy tính. Bình học Cơ sở dữ liệu. Chi học Lý thuyết tính toán. Bảng nối chính là cầu giữa hai thực thể."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: đếm từng sinh viên, thử mọi cặp"
+    checks:
+      - 'alg.sql(''SELECT s.ten, COUNT(d.ma_mon) FROM SinhVien s LEFT JOIN DangKy d USING (mssv) GROUP BY s.mssv ORDER BY s.mssv'', alg.DB_DEMO + "CREATE TABLE MonHoc (ma_mon TEXT PRIMARY KEY, ten_mon TEXT NOT NULL); CREATE TABLE DangKy (mssv INTEGER REFERENCES SinhVien(mssv), ma_mon TEXT REFERENCES MonHoc(ma_mon), diem REAL, PRIMARY KEY (mssv, ma_mon)); INSERT INTO MonHoc VALUES (''M1'', ''Cơ sở dữ liệu''), (''M2'', ''Mạng máy tính''), (''M10'', ''Lý thuyết tính toán''); INSERT INTO DangKy VALUES (1, ''M1'', 8), (1, ''M2'', 7), (2, ''M1'', 6), (3, ''M10'', 9);") == [(''An'', 2), (''Bình'', 1), (''Chi'', 1), (''Dũng'', 0)] and 2 + 1 + 1 + 0 == 4'
+      - '4 * 3 == 12 and sum(alg.sql_error(''INSERT INTO DangKy VALUES ('' + str(m) + '', '' + repr(c) + '', 5)'', alg.DB_DEMO + "CREATE TABLE MonHoc (ma_mon TEXT PRIMARY KEY, ten_mon TEXT NOT NULL); CREATE TABLE DangKy (mssv INTEGER REFERENCES SinhVien(mssv), ma_mon TEXT REFERENCES MonHoc(ma_mon), diem REAL, PRIMARY KEY (mssv, ma_mon)); INSERT INTO MonHoc VALUES (''M1'', ''Cơ sở dữ liệu''), (''M2'', ''Mạng máy tính''), (''M10'', ''Lý thuyết tính toán''); INSERT INTO DangKy VALUES (1, ''M1'', 8), (1, ''M2'', 7), (2, ''M1'', 6), (3, ''M10'', 9);") is None for m in range(1, 5) for c in [''M1'', ''M2'', ''M10'']) == 8'
+    steps:
+      - show: |
+          <table class="t"><tr><th>sinh viên</th><th>An</th><th>Bình</th><th>Chi</th><th>Dũng</th><th>tổng</th></tr>
+          <tr><td>số môn (đếm thẳng)</td><td>2</td><td>1</td><td>1</td><td>0</td><td>$2 + 1 + 1 + 0 = 4$</td></tr></table>
+        focus: [1, "1.2", "1.2"]
+        say: "Kiểm bằng đường khác, ta đếm thẳng số môn của từng sinh viên. An 2, Bình 1, Chi 1, Dũng 0, cộng lại được 4, đúng bằng bốn dòng kết quả ở bước bốn. Khớp như vậy là vì mỗi lần đăng ký sinh đúng một dòng, không thừa không thiếu."
+      - show: |
+          <table class="t"><tr><th>thử thêm mọi cặp (sinh viên, môn)</th><th>số cặp</th></tr>
+          <tr><td>có thể: 4 sinh viên nhân 3 môn</td><td>$4 \times 3 = 12$</td></tr>
+          <tr><td>bị từ chối vì đã có (khoá ghép)</td><td>4</td></tr>
+          <tr><td>được nhận</td><td>$12 - 4 = 8$</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Thử thêm bằng máy, cho mọi cặp sinh viên và môn đăng ký thêm một lần. Có 4 nhân 3 bằng 12 cặp có thể. Đúng 4 cặp bị từ chối, vì chúng đã có trong bảng và khoá ghép cấm trùng. 12 trừ 4 bằng 8 cặp còn lại được nhận, khớp với luật khoá chính gồm cả hai cột."
+
+  # ───────────────────────── 5. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi người mới hay mắc"
+    checks:
+      - "alg.sql(\"SELECT mssv FROM SV_Mon WHERE ds_mon LIKE '%M1%'\", \"CREATE TABLE SV_Mon (mssv INTEGER, ds_mon TEXT); INSERT INTO SV_Mon VALUES (1, 'M1,M2'), (2, 'M1'), (3, 'M10');\") == [(1,), (2,), (3,)]"
+      - 'alg.sql(''SELECT COUNT(*) FROM DK2'', "CREATE TABLE DK2 (id INTEGER PRIMARY KEY AUTOINCREMENT, mssv INTEGER, ma_mon TEXT); INSERT INTO DK2 (mssv, ma_mon) VALUES (1, ''M1''); INSERT INTO DK2 (mssv, ma_mon) VALUES (1, ''M1'');") == [(2,)]'
+      - 'alg.sql_error("INSERT INTO DK2 (mssv, ma_mon) VALUES (1, ''M1'')", "CREATE TABLE DK2 (id INTEGER PRIMARY KEY AUTOINCREMENT, mssv INTEGER, ma_mon TEXT, UNIQUE (mssv, ma_mon)); INSERT INTO DK2 (mssv, ma_mon) VALUES (1, ''M1'');") == ''UNIQUE constraint failed: DK2.mssv, DK2.ma_mon'''
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Lưu danh sách “M1,M2” trong một ô <b class="red">(sai — vi phạm 1NF)</b>
+          <br><span class="note">Mỗi ô phải là một giá trị đơn. Tìm ai học M1 bằng “chứa M1” trả cả sinh viên 3, người chỉ học <b>M10</b>. Không đặt được khoá ngoại cho từng môn.</span></div>
+          <table class="t"><tr><th>mssv</th><th>ds_mon</th><th>“chứa M1”?</th></tr>
+          <tr><td>1</td><td>M1,M2</td><td>có</td></tr><tr><td>2</td><td>M1</td><td>có</td></tr><tr><td>3</td><td>M10</td><td><b class="red">có — sai</b></td></tr></table>
+        focus: [1, 1, 2, 1]
+        say: "Lỗi thứ nhất, lưu cả danh sách môn như M1, M2 trong một ô. Đó là vi phạm dạng chuẩn một, mỗi ô phải là một giá trị đơn. Tìm ai học M1 bằng điều kiện chuỗi có chứa M1 sẽ trả cả sinh viên 3, người chỉ học M10. Và không thể đặt khoá ngoại cho từng môn trong ô đó."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Đặt khoá ngoại ở phía “1” <b class="red">(sai)</b>
+          <br><span class="note">Lop không thể có một cột chứa nhiều mssv. Khoá ngoại luôn đặt ở phía N.</span></div>
+        say: "Lỗi thứ hai, đặt khoá ngoại ở phía một. Bảng lớp không thể có một cột chứa nhiều mã số sinh viên, nên khoá ngoại luôn đặt ở phía nhiều."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Bảng nối dùng một cột mã tự tăng làm khoá, quên ràng buộc cặp <b class="red">(thiếu)</b>
+          <br><span class="note">Khi đó (1, M1) đăng ký hai lần vẫn lọt. Nếu thêm mã riêng, vẫn phải khai cặp (mssv, ma_mon) là duy nhất.</span></div>
+          <table class="t"><tr><th>bảng nối có</th><th>thêm (1, M1) lần hai</th><th>số dòng (1, M1)</th></tr>
+          <tr><td>chỉ mã tự tăng làm khoá</td><td><b class="red">nhận</b></td><td>2</td></tr>
+          <tr><td>mã tự tăng + cặp duy nhất</td><td>từ chối</td><td>1</td></tr></table>
+        focus: [1, 1, 1, 2, "2.2", "2.3"]
+        say: "Lỗi thứ ba, cho bảng nối một cột mã tự tăng làm khoá mà quên ràng buộc cặp. Khi đó sinh viên 1 đăng ký môn M1 hai lần vẫn lọt. Nếu muốn thêm mã riêng, vẫn phải khai cặp mã số và mã môn là duy nhất. Người đã đi làm hay gặp lỗi này vì nhiều công cụ tạo bảng tự sinh cột mã tự tăng cho mọi bảng. Chạy thử, chỉ có mã tự tăng thì lần thêm thứ hai được nhận và cặp ấy có 2 dòng. Khai thêm cặp duy nhất thì lần thứ hai bị từ chối, cặp ấy giữ đúng 1 dòng."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Gắn thuộc tính của liên kết vào một thực thể <b class="red">(sai)</b>
+          <br><span class="note"><code>diem</code> thuộc về một lần đăng ký: đặt vào SinhVien thì một sinh viên chỉ có một điểm cho mọi môn.</span></div>
+        say: "Lỗi thứ tư, gắn thuộc tính của liên kết vào một thực thể. Điểm thuộc về một lần đăng ký, nếu đặt vào bảng sinh viên thì mỗi sinh viên chỉ có một điểm cho mọi môn."
+
+  # ───────────────────────── 6. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - 'alg.sql_error("INSERT INTO Muon VALUES (''B1'', ''S1'', ''2026-03-10'')", "CREATE TABLE NXB (ma_nxb TEXT PRIMARY KEY, ten TEXT); CREATE TABLE Sach (ma_sach TEXT PRIMARY KEY, ten TEXT, ma_nxb TEXT REFERENCES NXB(ma_nxb)); CREATE TABLE BanDoc (ma_bd TEXT PRIMARY KEY, ten TEXT); CREATE TABLE Muon (ma_bd TEXT REFERENCES BanDoc(ma_bd), ma_sach TEXT REFERENCES Sach(ma_sach), ngay_muon TEXT, PRIMARY KEY (ma_bd, ma_sach, ngay_muon)); INSERT INTO NXB VALUES (''N1'', ''X''); INSERT INTO Sach VALUES (''S1'', ''Y'', ''N1''); INSERT INTO BanDoc VALUES (''B1'', ''Z''); INSERT INTO Muon VALUES (''B1'', ''S1'', ''2026-01-05'');") is None'
+      - 'alg.sql_error("INSERT INTO Muon VALUES (''B1'', ''S1'', ''2026-03-10'')", "CREATE TABLE NXB (ma_nxb TEXT PRIMARY KEY, ten TEXT); CREATE TABLE Sach (ma_sach TEXT PRIMARY KEY, ten TEXT, ma_nxb TEXT REFERENCES NXB(ma_nxb)); CREATE TABLE BanDoc (ma_bd TEXT PRIMARY KEY, ten TEXT); CREATE TABLE Muon (ma_bd TEXT REFERENCES BanDoc(ma_bd), ma_sach TEXT REFERENCES Sach(ma_sach), ngay_muon TEXT, PRIMARY KEY (ma_bd, ma_sach)); INSERT INTO NXB VALUES (''N1'', ''X''); INSERT INTO Sach VALUES (''S1'', ''Y'', ''N1''); INSERT INTO BanDoc VALUES (''B1'', ''Z''); INSERT INTO Muon VALUES (''B1'', ''S1'', ''2026-01-05'');") == ''UNIQUE constraint failed: Muon.ma_bd, Muon.ma_sach'''
+    steps:
+      - show: |
+          <p>Nghiệp vụ thư viện: “Mỗi cuốn sách có một nhà xuất bản. Mỗi bạn đọc mượn nhiều sách, mỗi sách được nhiều bạn đọc mượn qua thời gian; mỗi lần mượn có ngày mượn.”</p>
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Các liên kết có bản số nào?</td></tr><tr><td>2</td><td>Viết các bảng, nêu khoá chính và khoá ngoại.</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm, với nghiệp vụ thư viện. Mỗi cuốn sách có một nhà xuất bản, mỗi bạn đọc mượn nhiều sách, mỗi sách được nhiều bạn đọc mượn qua thời gian, và mỗi lần mượn có ngày mượn. Câu một, các liên kết có bản số nào? Câu hai, hãy viết các bảng, nêu khoá chính và khoá ngoại. Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <table class="t"><tr><th>liên kết</th><th>hỏi chiều này</th><th>hỏi chiều kia</th><th>bản số</th></tr>
+          <tr><td>Sách – NXB</td><td>một sách: 1 NXB</td><td>một NXB: nhiều sách</td><td>N–1</td></tr>
+          <tr><td>Bạn đọc – Sách (mượn)</td><td>một bạn đọc: nhiều sách</td><td>một sách: nhiều bạn đọc</td><td>M–N, có ngày mượn</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Đáp án câu một, hỏi cả hai chiều cho từng liên kết. Một cuốn sách có một nhà xuất bản, một nhà xuất bản có nhiều sách, nên đây là nhiều một. Một bạn đọc mượn nhiều sách, một sách được nhiều bạn đọc mượn, nên đây là nhiều nhiều, kèm thuộc tính ngày mượn."
+      - clear: true
+        show: |
+          <p>② $\text{NXB}(\underline{\text{ma\_nxb}}, \text{ten})$; $\text{Sach}(\underline{\text{ma\_sach}}, \text{ten}, \text{ma\_nxb})$ — ma_nxb là khoá ngoại; $\text{BanDoc}(\underline{\text{ma\_bd}}, \text{ten})$; $\text{Muon}(\underline{\text{ma\_bd}, \text{ma\_sach}, \text{ngay\_muon}})$, mỗi mã là khoá ngoại.</p>
+          <p class="note">Khoá của Muon phải có ngày mượn: cùng bạn đọc có thể mượn lại cùng cuốn sách lần nữa.</p>
+          <table class="t"><tr><th>khoá của Muon</th><th>bạn đọc B1 mượn lại sách S1 ngày khác</th></tr>
+          <tr><td>(ma_bd, ma_sach)</td><td><b class="red">từ chối</b> — mất lịch sử lần mượn sau</td></tr>
+          <tr><td>(ma_bd, ma_sach, ngay_muon)</td><td>nhận</td></tr></table>
+        focus: [1, 1, 2, "3.2", "3.3"]
+        say: "Câu hai, bảng nhà xuất bản, bảng sách có khoá ngoại tới nhà xuất bản, bảng bạn đọc, và bảng mượn làm bảng nối. Khoá chính của bảng mượn gồm mã bạn đọc, mã sách và ngày mượn. Phải có ngày mượn trong khoá, vì cùng một bạn đọc có thể mượn lại cùng cuốn sách lần nữa. Thử trên máy, nếu khoá chỉ có mã bạn đọc và mã sách, lần mượn lại bị từ chối. Thêm ngày mượn vào khoá thì lần mượn lại được nhận."
+
+  # ───────────────────────── 7. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">nghiệp vụ → thực thể, liên kết</span><span class="a">→</span>
+          <span class="n">1–N: khoá ngoại phía N</span><span class="a">→</span>
+          <span class="n">M–N: bảng nối, khoá ghép</span><span class="a">→</span>
+          <span class="n">mỗi ô một giá trị</span></div>
+        say: "Tổng kết lại, từ nghiệp vụ ta tìm thực thể và liên kết. Liên kết một nhiều thành khoá ngoại ở phía nhiều, liên kết nhiều nhiều thành bảng nối có khoá ghép, và mỗi ô chỉ chứa một giá trị."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> mỗi bảng nên trả lời một câu “mỗi dòng là một … gì?”. Nếu không trả lời được bằng một danh từ, bảng đang trộn nhiều thứ.</div>
+        say: "Điều cần mang theo, mỗi bảng nên trả lời được câu hỏi mỗi dòng là một cái gì. Nếu không trả lời được bằng một danh từ, bảng đó đang trộn nhiều thứ."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 7): <b>lưu trữ</b> — bảng nằm trên trang đĩa thế nào, và vì sao chi phí đo bằng số lần đọc trang.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 7, ta xuống tầng lưu trữ, xem bảng nằm trên các trang đĩa thế nào, và vì sao chi phí được đo bằng số lần đọc trang. Hẹn gặp bạn ở bài tiếp theo."

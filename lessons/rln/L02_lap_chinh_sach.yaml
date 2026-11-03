@@ -1,0 +1,290 @@
+id: L02
+course: RLN
+series: "RLN · Học tăng cường"
+title: "Bài 2 — Lặp chính sách và tốc độ hội tụ của lặp giá trị"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/rln.yaml L02; audit/rln/verify_rln.py L02; audit/rln/sources_L02.md; R. S. Sutton, A. G. Barto, Reinforcement Learning: An Introduction, bản 2 (2018), mục 4.2 (định lý cải thiện chính sách), 4.3 (lặp chính sách: hữu hạn vòng, “surprisingly few iterations”), 4.4 (lặp giá trị, điều kiện dừng); AIF bài 12 (lặp giá trị trên lưới 4 × 3, đã học); RLN bài 1 (phương trình tự nhất quán, Q)"
+assumes: [arith, power, approx, frac, geq, cdot, disc, sub, dots, policy, given, prime, sum]
+# Quy ước: V^* là giá trị tối ưu; sai số của một vòng lặp e_k = sai số lớn nhất qua mọi trạng thái giữa V sau k vòng và V^*.
+#   Lôgarit tự nhiên viết \ln (khoá Toán cho khoa học máy tính). MDP minh hoạ (SỐ MINH HOẠ): ở A “chờ” thưởng 0,5 rồi vẫn ở A, “đi” thưởng 1
+#   sang B; ở B “ở” thưởng 0,2 rồi vẫn ở B, “về” thưởng 0 sang A; γ = 0,9. Lặp chính sách từ (chờ, ở): 3 lần đánh giá, tới (đi, về) với
+#   V = (100/19, 90/19) — đúng trò của bài 1. alg.rln_policy_iteration / rln_value_iteration (tools/checklib.py).
+# Tính co (contraction) suy ra tại chỗ, không trích sách; số vòng k ≥ ln(0,001)/ln(γ): 66 (γ 0,9), 688 (γ 0,99) — VER RLN:L02.
+objectives:
+  - "Chạy lặp chính sách bằng tay: đánh giá, cải thiện theo Q, dừng khi chính sách không đổi"
+  - "Suy ra tính co: mỗi vòng lặp giá trị làm sai số lớn nhất nhỏ đi ít nhất γ lần"
+  - "Tính số vòng cần k ≥ ln(ε) / ln(γ) và thấy vì sao γ gần 1 làm chậm khoảng 1/(1 − γ) lần"
+  - "Đọc đúng điều kiện dừng: thay đổi giữa hai vòng nhỏ chưa chắc sai số thật nhỏ"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "66 vòng hay 688 vòng — chỉ vì đổi γ từ 0,9 lên 0,99"
+    checks:
+      - "math.ceil(math.log(0.001) / math.log(0.9)) == 66 and math.ceil(math.log(0.001) / math.log(0.99)) == 688"
+      - "len(alg.rln_policy_iteration({'A': {'cho': [(1, 0.5, 'A')], 'di': [(1, 1, 'B')]}, 'B': {'o': [(1, 0.2, 'B')], 've': [(1, 0, 'A')]}}, {'A': 'cho', 'B': 'o'}, 0.9)) == 3"
+    steps:
+      - show: |
+          <p>Một nhóm tính kế hoạch cho kho hàng bằng lặp giá trị. Với $\gamma = 0{,}9$, cần <b>66 vòng</b> để sai số nhỏ đi 1000 lần. Đổi sang $\gamma = 0{,}99$ cho kế hoạch “nhìn xa hơn”, con số thành <b>688 vòng</b>.</p>
+          <p>Còn một cách khác — lặp chính sách — giải xong trò hai ô sau đúng <b>3 lần</b> đánh giá.</p>
+          <div class="box key">Hôm nay: cải thiện chính sách thế nào cho chắc chắn tốt lên? Vì sao lặp giá trị luôn hội tụ? Và đếm trước được bao nhiêu vòng?</div>
+        focus: [1, 1, 2, 3]
+        say: "Chào bạn, một nhóm tính kế hoạch cho kho hàng bằng lặp giá trị, với gam-ma bằng 0 phẩy 9 thì cần 66 vòng để sai số nhỏ đi 1000 lần. Đổi sang gam-ma bằng 0 phẩy 99 cho kế hoạch nhìn xa hơn, con số thành 688 vòng. Còn một cách khác là lặp chính sách, giải xong trò hai ô sau đúng 3 lần đánh giá. Hôm nay ta trả lời ba câu hỏi, cải thiện chính sách thế nào cho chắc chắn tốt lên, vì sao lặp giá trị luôn hội tụ, và đếm trước được bao nhiêu vòng."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại ba điều sẽ dùng"
+    checks:
+      - "round(1 + 0.9 * 90 / 19, 3) == 5.263 and round(0 + 0.9 * 100 / 19, 3) == 4.737"
+      - "round(math.log(0.9), 3) == -0.105 and round(math.log(0.001), 3) == -6.908"
+      - "0.9 ** 3 < 0.75 < 0.9 ** 2"
+    steps:
+      - show: |
+          <p><b>① Từ bài 1:</b> giá trị hành động là thưởng ngay cộng $\gamma$ nhân giá trị nơi tới, $Q(s, a) = r + \gamma \cdot V(s')$.</p>
+          <p class="note">Trò hai ô, chính sách luôn đi: $Q(A, \text{sang B}) = 1 + 0{,}9 \cdot 4{,}737 \approx 5{,}263$; $\;Q(A, \text{ở lại}) \approx 4{,}737$. Thấy $Q$ lớn hơn $V$ thì đổi.</p>
+        focus: [1, 2, 2]
+        say: "Điều thứ nhất, ở bài 1 ta đã có giá trị hành động bằng thưởng ngay cộng gam-ma nhân giá trị nơi tới. Trong trò hai ô với chính sách luôn đi, Q của A khi sang B xấp xỉ 5 phẩy 263, còn khi ở lại chỉ xấp xỉ 4 phẩy 737. Quy tắc là thấy hành động nào có Q lớn hơn giá trị hiện tại thì đổi sang nó."
+      - show: |
+          <p><b>② Lặp giá trị</b> (khoá Nền tảng trí tuệ nhân tạo, robot trên lưới 4 × 3): mỗi vòng, ở mọi ô lấy hành động có vế phải lớn nhất:</p>
+          $$V(s) \leftarrow \max_a \big(r + \gamma \cdot V(s')\big)$$
+          <p class="note">Mũi tên trái nghĩa là “thay bằng giá trị mới”; $\max_a$ là lấy số lớn nhất qua các hành động $a$.</p>
+        introduces: [assign, max_fn]
+        focus: [1, 2, 3]
+        say: "Điều thứ hai, ở khoá Nền tảng trí tuệ nhân tạo, robot trên lưới 4 nhân 3 đã dùng lặp giá trị. Mỗi vòng, ở mọi ô, ta thay giá trị cũ bằng số lớn nhất qua các hành động của thưởng ngay cộng gam-ma nhân giá trị nơi tới. Mũi tên trái nghĩa là thay bằng giá trị mới, còn chữ viết dưới chân nghĩa là lấy số lớn nhất qua các hành động a."
+      - clear: true
+        show: |
+          <p><b>③ Lôgarit tự nhiên biến mũ thành nhân:</b> $\ln(0{,}9^k) = k \cdot \ln 0{,}9$, với $\ln 0{,}9 \approx -0{,}105$ là số <b>âm</b>.</p>
+          <p>Vì vậy khi chia hai vế cho $\ln 0{,}9$, chiều bất đẳng thức <b>đảo lại</b>. Ví dụ $0{,}9^k \lt 0{,}75$ đúng từ $k = 3$: $0{,}9^2 = 0{,}81$, $\;0{,}9^3 = 0{,}729$.</p>
+        introduces: [log, ltgt]
+        focus: [1, 1, 2, 2]
+        say: "Điều thứ ba, ở khoá Toán ta đã học lôgarit tự nhiên biến mũ thành nhân. Lôgarit của 0 phẩy 9 mũ k bằng k nhân lôgarit của 0 phẩy 9, và lôgarit của 0 phẩy 9 xấp xỉ âm 0 phẩy 105, một số âm. Vì vậy khi chia hai vế cho lôgarit của 0 phẩy 9, chiều bất đẳng thức đảo lại. Ví dụ 0 phẩy 9 mũ k nhỏ hơn 0 phẩy 75 đúng từ k bằng 3, vì 0 phẩy 9 bình phương là 0 phẩy 81, còn mũ 3 là 0 phẩy 729."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: chính sách tối ưu và sai số của một vòng"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ký hiệu</th><th>đọc</th><th>nghĩa</th></tr>
+          <tr><td>$V^*(s)$</td><td>V sao của s</td><td>giá trị <b>tối ưu</b>: lớn nhất có thể, qua mọi chính sách</td></tr>
+          <tr><td>$\pi^*$</td><td>pi sao</td><td>chính sách tối ưu: đạt $V^*$ ở mọi trạng thái</td></tr>
+          <tr><td>$e_k$</td><td>e k</td><td>sai số lớn nhất, qua mọi trạng thái, giữa $V$ sau $k$ vòng và $V^*$</td></tr></table>
+          <p class="note">Trò hai ô: $V^*(A) \approx 5{,}263$; bắt đầu $V = 0$ nên $e_0 \approx 5{,}263$.</p>
+        introduces: [star]
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Bảng giới thiệu ba ký hiệu. V sao của s là giá trị tối ưu, lớn nhất có thể qua mọi chính sách. Pi sao là chính sách tối ưu, đạt giá trị đó ở mọi trạng thái. e k là sai số lớn nhất, qua mọi trạng thái, giữa giá trị sau k vòng và giá trị tối ưu. Trong trò hai ô, V sao của A xấp xỉ 5 phẩy 263, và vì bắt đầu từ 0 nên sai số ban đầu cũng xấp xỉ 5 phẩy 263."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hai vòng quay: đánh giá rồi cải thiện; sai số co lại mỗi vòng"
+    checks:
+      - "[round(0.9 ** k * 100) for k in range(5)] == [100, 90, 81, 73, 66]"
+    steps:
+      - show: |
+          <div><svg width="1000" height="300" viewBox="0 0 1000 300"><defs><marker id="rl2a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs>
+          <g font-size="25" text-anchor="middle">
+          <rect x="70" y="100" width="300" height="110" rx="12" fill="#dbeafe" stroke="#2a78d6" stroke-width="2.5"/><text x="220" y="148" fill="#1f2937" font-weight="bold">đánh giá</text><text x="220" y="182" font-size="21" fill="#1f2937">tính V của chính sách</text>
+          <rect x="630" y="100" width="300" height="110" rx="12" fill="#d1fae5" stroke="#059669" stroke-width="2.5"/><text x="780" y="148" fill="#1f2937" font-weight="bold">cải thiện</text><text x="780" y="182" font-size="21" fill="#1f2937">ở mỗi ô chọn Q lớn nhất</text>
+          </g>
+          <path d="M220,95 C220,25 780,25 780,95" fill="none" stroke="#1f2937" stroke-width="3" marker-end="url(#rl2a)"/>
+          <path d="M780,215 C780,280 220,280 220,215" fill="none" stroke="#1f2937" stroke-width="3" marker-end="url(#rl2a)"/>
+          <text x="500" y="34" font-size="22" fill="#1f2937" text-anchor="middle">giá trị V</text>
+          <text x="500" y="150" font-size="21" fill="#6b7280" text-anchor="middle">dừng khi</text><text x="500" y="178" font-size="21" fill="#6b7280" text-anchor="middle">không đổi</text>
+          <text x="500" y="296" font-size="22" fill="#1f2937" text-anchor="middle">chính sách mới</text>
+          </svg></div>
+        focus: [1, 1, 1]
+        say: "Hình đầu là lặp chính sách, gồm hai việc quay vòng. Đánh giá là tính giá trị của chính sách hiện tại bằng phương trình tự nhất quán của bài 1. Cải thiện là ở mỗi ô chọn hành động có Q lớn nhất theo giá trị vừa tính, rồi quay lại đánh giá, cho tới khi chính sách không đổi nữa."
+      - clear: true
+        show: |
+          <div><svg width="1000" height="300" viewBox="0 -30 1000 300"><g font-size="22" text-anchor="middle">
+          <line x1="60" y1="220" x2="960" y2="220" stroke="#1f2937" stroke-width="2"/>
+          <rect x="100" y="20" width="110" height="200" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="155" y="250" fill="#1f2937">vòng 0</text><text x="155" y="12" fill="#1f2937">100</text>
+          <rect x="280" y="40" width="110" height="180" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="335" y="250" fill="#1f2937">vòng 1</text><text x="335" y="32" fill="#1f2937">90</text>
+          <rect x="460" y="58" width="110" height="162" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="515" y="250" fill="#1f2937">vòng 2</text><text x="515" y="50" fill="#1f2937">81</text>
+          <rect x="640" y="74" width="110" height="146" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="695" y="250" fill="#1f2937">vòng 3</text><text x="695" y="66" fill="#1f2937">73</text>
+          </g><text x="960" y="120" font-size="22" fill="#6b7280" text-anchor="end">mỗi vòng</text><text x="960" y="150" font-size="22" fill="#6b7280" text-anchor="end">nhân tối đa 0,9</text></svg></div>
+          <p class="note">Cận trên của sai số lặp giá trị (đặt sai số ban đầu là 100): 100, 90, 81, 73 … khi $\gamma = 0{,}9$.</p>
+        focus: [1, 1, 2]
+        say: "Hình thứ hai là lặp giá trị nhìn theo sai số. Nếu sai số ban đầu là 100, thì sau mỗi vòng nó nhỏ hơn hoặc bằng 90, rồi 81, rồi 73, vì mỗi vòng nhân tối đa với gam-ma. Ta sẽ suy ra ngay vì sao lại như vậy."
+
+  # ───────────────────────── 5. SUY RA CÔNG THỨC ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra tính co và số vòng cần thiết"
+    checks:
+      - "round((1 + 0.9 * 3) - (1 + 0.9 * 5), 10) == round(0.9 * (3 - 5), 10) == -1.8"
+      - "round(math.log(0.001) / math.log(0.9), 1) == 65.6 and math.ceil(math.log(0.001) / math.log(0.9)) == 66"
+      - "round(math.log(1000) / (1 - 0.9)) == 69 and round(math.log(1000) / (1 - 0.99)) == 691"
+    steps:
+      - show: |
+          <p><b>Bước 1.</b> Lấy hai bảng giá trị $V$ và $U$ bất kỳ. Ở cùng ô $s$, cùng hành động $a$, vế phải chỉ khác nhau ở phần nơi tới, vì thưởng $r$ như nhau:</p>
+          $$\big(r + \gamma \cdot V(s')\big) - \big(r + \gamma \cdot U(s')\big) = \gamma \cdot \big(V(s') - U(s')\big)$$
+          <p class="note">Làm thử: $r = 1$, $V(s') = 3$, $U(s') = 5$: $\;3{,}7 - 5{,}5 = -1{,}8 = 0{,}9 \cdot (-2)$ ✓.</p>
+        focus: [1, 2, 3]
+        say: "Bước một, lấy hai bảng giá trị bất kỳ, gọi là V và U. Ở cùng ô, cùng hành động, vế phải chỉ khác nhau ở phần nơi tới, vì thưởng r như nhau, nên hiệu của chúng bằng gam-ma nhân hiệu V trừ U ở nơi tới. Làm thử với r bằng 1, V bằng 3, U bằng 5, ta được 3 phẩy 7 trừ 5 phẩy 5, bằng âm 1 phẩy 8, đúng bằng 0 phẩy 9 nhân âm 2."
+      - show: |
+          <p><b>Bước 2.</b> Lấy số lớn nhất qua các hành động không làm khoảng cách xa hơn, nên sau một vòng, ở mọi ô:</p>
+          $$e_{k+1} \le \gamma \cdot e_k$$
+          <p class="note">Áp dụng với $U = V^*$: vì $V^*$ không đổi qua một vòng (nó là điểm bất động), sai số mỗi vòng nhỏ đi ít nhất $\gamma$ lần. Đây gọi là <b>tính co</b>.</p>
+        focus: [1, 2, 3, 3]
+        say: "Bước hai, lấy số lớn nhất qua các hành động không làm khoảng cách xa hơn, nên sau một vòng, ở mọi ô, sai số mới nhỏ hơn hoặc bằng gam-ma nhân sai số cũ. Áp dụng với U là giá trị tối ưu. Vì giá trị tối ưu không đổi qua một vòng, nó là điểm bất động. Vậy sai số mỗi vòng nhỏ đi ít nhất gam-ma lần, và tính chất này gọi là tính co."
+      - clear: true
+        show: |
+          <p><b>Bước 3.</b> Lặp lại $k$ vòng: $e_k \le \gamma^k \cdot e_0$. Muốn sai số nhỏ đi 1000 lần thì cần $\gamma^k \le 0{,}001$. Lấy $\ln$ hai vế rồi chia cho $\ln \gamma$ (số âm, nên đảo chiều):</p>
+          $$k \ge \frac{\ln 0{,}001}{\ln \gamma}$$
+          <p class="note">Làm thử $\gamma = 0{,}9$: $\frac{-6{,}908}{-0{,}105} \approx 65{,}6$, nên cần $\hlg{66}$ vòng. $\gamma = 0{,}99$: $\hlo{688}$ vòng.</p>
+        focus: [1, 1, 2, 3]
+        say: "Bước ba, lặp lại k vòng thì sai số nhỏ hơn hoặc bằng gam-ma mũ k nhân sai số ban đầu. Muốn nhỏ đi 1000 lần thì cần gam-ma mũ k nhỏ hơn hoặc bằng 0 phẩy 001, ta lấy lôgarit hai vế rồi chia cho lôgarit của gam-ma, số âm nên đảo chiều. Ta được k lớn hơn hoặc bằng lôgarit của 0 phẩy 001 chia cho lôgarit của gam-ma. Làm thử với gam-ma bằng 0 phẩy 9 được khoảng 65 phẩy 6, nên cần 66 vòng, còn gam-ma bằng 0 phẩy 99 cần 688 vòng."
+      - show: |
+          <p><b>Bước 4 — quy tắc nhẩm.</b> Khi $\gamma$ gần 1 thì $\ln \gamma \approx -(1 - \gamma)$, nên:</p>
+          $$k \approx \frac{\ln 1000}{1 - \gamma} \approx \frac{6{,}9}{1 - \gamma}$$
+          <p class="note">$\gamma = 0{,}9$: khoảng 69 vòng; $\gamma = 0{,}99$: khoảng 691 vòng. Số vòng tỉ lệ với $\frac{1}{1 - \gamma}$ — đúng bằng “đường chân trời” của bài 0.</p>
+        focus: [1, 2, 3, 3]
+        say: "Bước bốn là quy tắc nhẩm. Khi gam-ma gần 1, lôgarit của gam-ma xấp xỉ âm của 1 trừ gam-ma, nên k xấp xỉ lôgarit của 1000, tức khoảng 6 phẩy 9, chia cho 1 trừ gam-ma. Gam-ma bằng 0 phẩy 9 cho khoảng 69 vòng, gam-ma bằng 0 phẩy 99 cho khoảng 691 vòng. Số vòng tỉ lệ với 1 chia cho 1 trừ gam-ma, đúng bằng đường chân trời đã gặp ở bài 0."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Lặp chính sách bằng tay: ba lần đánh giá"
+    checks:
+      - "(lambda h: [(p, round(V['A'], 3), round(V['B'], 3)) for p, V in h])(alg.rln_policy_iteration({'A': {'cho': [(1, 0.5, 'A')], 'di': [(1, 1, 'B')]}, 'B': {'o': [(1, 0.2, 'B')], 've': [(1, 0, 'A')]}}, {'A': 'cho', 'B': 'o'}, 0.9)) == [({'A': 'cho', 'B': 'o'}, 5.0, 2.0), ({'A': 'cho', 'B': 've'}, 5.0, 4.5), ({'A': 'di', 'B': 've'}, 5.263, 4.737)]"
+      - "round(0.5 + 0.9 * 5, 10) == 5 and round(1 + 0.9 * 2, 10) == 2.8 and round(0.2 + 0.9 * 2, 10) == 2 and round(0.9 * 5, 10) == 4.5"
+      - "round(1 + 0.9 * 4.5, 10) == 5.05 > 5 and round(0.2 + 0.9 * 4.5, 10) == 4.25 < 4.5"
+      - "round(0.5 + 0.9 * 100 / 19, 3) == 5.237 < round(100 / 19, 3) and round(0.2 + 0.9 * 90 / 19, 3) == 4.463 < round(90 / 19, 3)"
+    steps:
+      - show: |
+          <p>Trò mới, $\gamma = 0{,}9$. Ở A: “chờ” thưởng 0,5 và vẫn ở A, “đi” thưởng 1 sang B. Ở B: “ở” thưởng 0,2 và vẫn ở B, “về” thưởng 0 sang A.</p>
+          <p><b>Bước 1 — đánh giá</b> chính sách ban đầu (chờ, ở): mỗi ô tự lặp mãi, nên theo tổng của bài 0, $V(A) = \frac{0{,}5}{0{,}1} = 5$, $\;V(B) = \frac{0{,}2}{0{,}1} = 2$.</p>
+        focus: [1, 1, 1, 2, 2]
+        say: "Xét một trò mới với gam-ma bằng 0 phẩy 9. Ở A, chờ được thưởng 0 phẩy 5 và vẫn ở A, còn đi được thưởng 1 và sang B. Ở B, ở lại được 0 phẩy 2, còn về được 0 và sang A. Bước một là đánh giá chính sách ban đầu, chờ ở A và ở lại B, nên mỗi ô tự lặp mãi. Theo tổng của bài 0, V của A bằng 0 phẩy 5 chia 0 phẩy 1, bằng 5, và V của B bằng 2."
+      - show: |
+          <table class="t"><tr><th>bước 2 — cải thiện</th><th>hành động cũ</th><th>hành động kia</th><th>chọn</th></tr>
+          <tr><td>ở A</td><td>chờ: $0{,}5 + 0{,}9 \cdot 5 = 5$</td><td>đi: $1 + 0{,}9 \cdot 2 = 2{,}8$</td><td>chờ</td></tr>
+          <tr><td>ở B</td><td>ở: $0{,}2 + 0{,}9 \cdot 2 = 2$</td><td>về: $0 + 0{,}9 \cdot 5 = 4{,}5$</td><td class="green">về</td></tr></table>
+        focus: [0, "1.2", "1.3"]
+        say: "Bước hai là cải thiện, ta tính Q của từng hành động theo giá trị vừa có. Ở A, chờ cho 5, đi chỉ cho 2 phẩy 8, nên giữ chờ. Ở B, ở lại cho 2, còn về cho 4 phẩy 5, nên đổi sang về."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — vòng 2.</b> Chính sách (chờ, về): $V(A) = 5$, $\;V(B) = 0 + 0{,}9 \cdot 5 = 4{,}5$.</p>
+          <table class="t"><tr><th>cải thiện</th><th>hành động cũ</th><th>hành động kia</th><th>chọn</th></tr>
+          <tr><td>ở A</td><td>chờ: 5</td><td>đi: $1 + 0{,}9 \cdot 4{,}5 = 5{,}05$</td><td class="green">đi</td></tr>
+          <tr><td>ở B</td><td>về: 4,5</td><td>ở: $0{,}2 + 0{,}9 \cdot 4{,}5 = 4{,}25$</td><td>về</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước ba là vòng 2, chính sách chờ ở A và về ở B có V của A bằng 5, và V của B bằng 0 phẩy 9 nhân 5, bằng 4 phẩy 5. Cải thiện ở A, đi giờ cho 1 cộng 0 phẩy 9 nhân 4 phẩy 5, bằng 5 phẩy 05, lớn hơn 5, nên đổi sang đi. Ở B, về vẫn tốt hơn ở lại, vì 4 phẩy 5 lớn hơn 4 phẩy 25."
+      - clear: true
+        show: |
+          <p><b>Bước 4 — vòng 3.</b> Chính sách (đi, về) chính là trò hai ô của bài 1: $V(A) \approx 5{,}263$, $\;V(B) \approx 4{,}737$.</p>
+          <table class="t"><tr><th>thử đổi</th><th>giá trị nếu đổi</th><th>so với hiện tại</th></tr>
+          <tr><td>A sang “chờ”</td><td>$0{,}5 + 0{,}9 \cdot 5{,}263 \approx 5{,}237$</td><td>nhỏ hơn 5,263</td></tr>
+          <tr><td>B sang “ở”</td><td>$0{,}2 + 0{,}9 \cdot 4{,}737 \approx 4{,}463$</td><td>nhỏ hơn 4,737</td></tr></table>
+          <p class="note">Không đổi được nữa → <b>dừng</b>: (đi, về) là $\pi^*$, sau đúng 3 lần đánh giá.</p>
+        focus: [1, 1, "2.2", "2.3", 3]
+        say: "Bước bốn là vòng 3, chính sách đi ở A và về ở B chính là trò hai ô của bài 1. Khi đó V của A xấp xỉ 5 phẩy 263, và V của B xấp xỉ 4 phẩy 737. Đổi A sang chờ chỉ được 5 phẩy 237, nhỏ hơn. Đổi B sang ở lại chỉ được 4 phẩy 463, cũng nhỏ hơn. Không đổi được nữa nên dừng, chính sách này là tối ưu, sau đúng 3 lần đánh giá."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: lặp giá trị đi đường khác tới cùng đích, và cận số vòng đúng"
+    checks:
+      - "(lambda h: [round(h[k]['A'], 3) for k in (1, 10, 50, 100)])(alg.rln_value_iteration({'A': {'cho': [(1, 0.5, 'A')], 'di': [(1, 1, 'B')]}, 'B': {'o': [(1, 0.2, 'B')], 've': [(1, 0, 'A')]}}, 0.9, 100)) == [1.0, 3.6, 5.239, 5.263]"
+      - "(lambda h: next(k for k in range(200) if max(abs(h[k]['A'] - 100 / 19), abs(h[k]['B'] - 90 / 19)) < 0.001 * 100 / 19))(alg.rln_value_iteration({'A': {'cho': [(1, 0.5, 'A')], 'di': [(1, 1, 'B')]}, 'B': {'o': [(1, 0.2, 'B')], 've': [(1, 0, 'A')]}}, 0.9, 200)) == 65"
+    steps:
+      - show: |
+          <p><b>Đường khác 1 — lặp giá trị</b> trên cùng trò, bắt đầu $V = 0$, không đánh giá chính sách nào:</p>
+          <table class="t"><tr><th>vòng</th><th>1</th><th>10</th><th>50</th><th>100</th></tr>
+          <tr><td>$V(A)$</td><td>1</td><td>3,6</td><td>5,239</td><td>$\hl{5{,}263}$</td></tr></table>
+          <p class="note">Tới đúng $V^*(A) \approx 5{,}263$ mà lặp chính sách tìm ra ✓.</p>
+        focus: [1, 2, 3]
+        say: "Kiểm tra thứ nhất, ta chạy lặp giá trị trên cùng trò, bắt đầu từ 0, không đánh giá chính sách nào. V của A đi từ 1 ở vòng 1, lên 3 phẩy 6 ở vòng 10, 5 phẩy 239 ở vòng 50, và 5 phẩy 263 ở vòng 100. Nó tới đúng giá trị tối ưu mà lặp chính sách đã tìm ra, nên hai đường khớp nhau."
+      - show: |
+          <p><b>Đường khác 2 — đếm thật số vòng.</b> Dừng khi sai số dưới $0{,}001 \cdot 5{,}263$ (nhỏ đi 1000 lần): máy đếm được <b>65 vòng</b>.</p>
+          $$\text{sau 65 vòng: } \; e \lt 0{,}001 \cdot e_0, \qquad \text{cận: } k \ge 66$$
+          <p class="note">Cận của tính co là 66 vòng; thật sự cần 65 — không vượt cận ✓. Cận là bảo đảm cho mọi bài toán, nên thường hơi bi quan.</p>
+        focus: [1, 2, 2]
+        say: "Kiểm tra thứ hai, ta đếm thật số vòng, dừng khi sai số dưới một phần nghìn sai số ban đầu, và máy đếm được 65 vòng. Cận của tính co là 66 vòng, thật sự cần 65, không vượt cận. Cận là bảo đảm cho mọi bài toán, nên thường hơi bi quan một chút."
+
+  # ───────────────────────── 8. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi cả người đã đi làm"
+    checks:
+      - "math.ceil(math.log(0.001) / math.log(0.99)) / math.ceil(math.log(0.001) / math.log(0.9)) > 10"
+      - "round(0.99 / 0.01 * 0.001, 3) == 0.099 and round(0.9 / 0.1 * 0.001, 3) == 0.009"
+      - "(lambda h: max(abs(h[66]['A'] - h[65]['A']), abs(h[66]['B'] - h[65]['B'])) * 0.9 / 0.1 >= max(abs(h[66]['A'] - 100 / 19), abs(h[66]['B'] - 90 / 19)))(alg.rln_value_iteration({'A': {'cho': [(1, 0.5, 'A')], 'di': [(1, 1, 'B')]}, 'B': {'o': [(1, 0.2, 'B')], 've': [(1, 0, 'A')]}}, 0.9, 70))"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Đổi $\gamma$ từ 0,9 lên 0,99 mà giữ nguyên ngân sách tính toán <b class="red">(chậm hơn 10 lần)</b>
+          <br><span class="note">66 vòng thành 688 vòng. Phép thử: tính trước $\frac{\ln 0{,}001}{\ln \gamma}$ trước khi đổi $\gamma$.</span></div>
+        say: "Lỗi thứ nhất, đổi gam-ma từ 0 phẩy 9 lên 0 phẩy 99 mà giữ nguyên ngân sách tính toán, trong khi việc tính chậm hơn hơn 10 lần. 66 vòng thành 688 vòng. Phép thử là tính trước số vòng cần, lôgarit của 0 phẩy 001 chia cho lôgarit của gam-ma, trước khi đổi."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Đổi hành động khi hai hành động <b>bằng nhau</b> <b class="red">(chính sách đổi qua lại mãi)</b>
+          <br><span class="note">Nếu hai hành động có Q bằng nhau mà mỗi vòng chọn tuỳ ý, chính sách có thể nhảy qua lại và vòng lặp không dừng. Quy tắc: chỉ đổi khi hành động mới tốt hơn <b>hẳn</b>.</span></div>
+        say: "Lỗi thứ hai, đổi hành động khi hai hành động bằng nhau, làm chính sách đổi qua lại mãi. Nếu hai hành động có Q bằng nhau mà mỗi vòng chọn tuỳ ý, chính sách có thể nhảy qua lại và vòng lặp không dừng. Quy tắc là chỉ đổi khi hành động mới tốt hơn hẳn."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Nghĩ lặp chính sách luôn nhanh hơn <b class="red">(mỗi vòng phải giải cả một hệ)</b>
+          <br><span class="note">Ở đây 3 vòng, nhưng mỗi vòng là một lần giải hệ cho mọi trạng thái — với bài toán lớn chính việc đó là đắt nhất. Thực tế hay đánh giá dở dang vài lượt quét rồi mới cải thiện.</span></div>
+        say: "Lỗi thứ ba, nghĩ lặp chính sách luôn nhanh hơn, trong khi mỗi vòng phải giải cả một hệ phương trình. Ở đây chỉ 3 vòng, nhưng với bài toán lớn, chính việc giải hệ cho mọi trạng thái là đắt nhất. Trong thực tế, người ta hay đánh giá dở dang vài lượt quét rồi mới cải thiện."
+      - show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Dừng khi “thay đổi giữa hai vòng dưới 0,001” rồi tin sai số thật cũng dưới 0,001 <b class="red">(sai)</b></div>
+          <table class="t"><tr><th>$\gamma$</th><th>thay đổi giữa hai vòng</th><th>sai số thật có thể tới</th></tr>
+          <tr><td>0,9</td><td>0,001</td><td>$\frac{0{,}9}{0{,}1} \cdot 0{,}001 = 0{,}009$</td></tr>
+          <tr><td>0,99</td><td>0,001</td><td>$\frac{0{,}99}{0{,}01} \cdot 0{,}001 = \hl{0{,}099}$</td></tr></table>
+          <p class="note">Theo tính co, phần sai số còn lại là tổng $\gamma + \gamma^2 + \dots$ lần thay đổi cuối, tức $\frac{\gamma}{1 - \gamma}$ lần.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, dừng khi thay đổi giữa hai vòng dưới 0 phẩy 001, rồi tin sai số thật cũng dưới 0 phẩy 001. Với gam-ma bằng 0 phẩy 9, sai số thật có thể tới 0 phẩy 009. Với gam-ma bằng 0 phẩy 99, nó có thể tới 0 phẩy 099, gấp gần 100 lần. Lý do là theo tính co, phần sai số còn lại có thể tới gam-ma chia cho 1 trừ gam-ma lần thay đổi cuối."
+
+  # ───────────────────────── 9. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: đếm vòng và quyết định ngân sách"
+    checks:
+      - "round(math.log(0.01) / math.log(0.95), 1) == 89.8 and math.ceil(math.log(0.01) / math.log(0.95)) == 90"
+      - "math.ceil(math.log(0.001) / math.log(0.999)) == 6905 and round(6905 / 3600, 1) == 1.9 and round(688 / 60, 1) == 11.5"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>$\gamma = 0{,}95$. Cần ít nhất bao nhiêu vòng lặp giá trị để sai số nhỏ đi 100 lần?</td></tr>
+          <tr><td>2</td><td>Một vòng quét kho hàng mất 1 giây. Cần sai số nhỏ đi 1000 lần. So thời gian khi $\gamma = 0{,}99$ và $\gamma = 0{,}999$; bạn chọn gì nếu chỉ có 15 phút?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn. Câu một, với gam-ma bằng 0 phẩy 95, cần ít nhất bao nhiêu vòng lặp giá trị để sai số nhỏ đi 100 lần? Câu hai, một vòng quét kho hàng mất 1 giây và cần sai số nhỏ đi 1000 lần. Hãy so thời gian khi gam-ma bằng 0 phẩy 99 và 0 phẩy 999, rồi chọn nếu chỉ có 15 phút. Dừng video và làm ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <p><b>Câu 1.</b> Cần $0{,}95^k \le 0{,}01$, nên $k \ge \frac{\ln 0{,}01}{\ln 0{,}95} = \frac{-4{,}605}{-0{,}0513} \approx 89{,}8$ → <b>$\hlg{90}$ vòng</b>.</p>
+          <p class="note">Nhẩm: $\frac{\ln 100}{1 - 0{,}95} = \frac{4{,}6}{0{,}05} \approx 92$ — cùng cỡ ✓.</p>
+        focus: [1, 1, 2]
+        say: "Đáp án câu một, cần 0 phẩy 95 mũ k nhỏ hơn hoặc bằng 0 phẩy 01. Vì vậy k lớn hơn hoặc bằng lôgarit của 0 phẩy 01 chia cho lôgarit của 0 phẩy 95, khoảng 89 phẩy 8, tức 90 vòng. Nhẩm bằng quy tắc, 4 phẩy 6 chia 0 phẩy 05 khoảng 92, cùng cỡ."
+      - show: |
+          <table class="t"><tr><th>câu 2</th><th>số vòng</th><th>thời gian</th><th>vừa 15 phút?</th></tr>
+          <tr><td>$\gamma = 0{,}99$</td><td>688</td><td>khoảng 11,5 phút</td><td class="green">vừa</td></tr>
+          <tr><td>$\gamma = 0{,}999$</td><td>6905</td><td>khoảng 1,9 giờ</td><td class="red">không</td></tr></table>
+          <p class="note">Chọn $\gamma = 0{,}99$, hoặc giữ 0,999 nhưng đổi sang lặp chính sách / đánh giá dở dang. Chỉ cần “nhìn xa” nghìn bước khi bài toán thật sự cần điều đó.</p>
+        focus: ["1.2", "1.3", 2]
+        say: "Câu hai, với gam-ma bằng 0 phẩy 99 cần 688 vòng, khoảng 11 phẩy 5 phút, vừa 15 phút. Với 0 phẩy 999 cần 6905 vòng, khoảng 1 phẩy 9 giờ, không vừa. Vậy hãy chọn 0 phẩy 99, hoặc giữ 0 phẩy 999 nhưng đổi sang lặp chính sách hay đánh giá dở dang, vì chỉ cần nhìn xa nghìn bước khi bài toán thật sự cần."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">đánh giá V của chính sách</span><span class="a">→</span>
+          <span class="n">cải thiện: chọn Q lớn nhất, chỉ đổi khi tốt hơn hẳn</span><span class="a">→</span>
+          <span class="n">hữu hạn vòng tới chính sách tối ưu</span><span class="a">→</span>
+          <span class="n">lặp giá trị: sai số nhỏ đi ít nhất γ lần mỗi vòng</span><span class="a">→</span>
+          <span class="n">số vòng khoảng ln(1/ε) chia (1 − γ)</span></div>
+        say: "Tổng kết lại, lặp chính sách xen kẽ đánh giá và cải thiện, chỉ đổi khi tốt hơn hẳn, nên tới chính sách tối ưu sau hữu hạn vòng. Lặp giá trị thì nhờ tính co, sai số mỗi vòng nhỏ đi ít nhất gam-ma lần. Vì vậy số vòng cần khoảng lôgarit của 1 chia cho mức sai số mong muốn, rồi chia cho 1 trừ gam-ma."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> trước khi bấm chạy, <b>đếm trước số vòng</b> từ $\gamma$ và mức sai số cần; dừng theo cận sai số thật, không theo cảm giác “đã đứng yên”.</div>
+        say: "Điều cần mang theo, trước khi bấm chạy, hãy đếm trước số vòng từ gam-ma và mức sai số cần, rồi dừng theo cận sai số thật, không theo cảm giác đã đứng yên."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 3): <b>khám phá và khai thác</b> — khi không biết luật chơi, nên thử cái mới hay dùng cái đã biết, qua bài toán kẻ cướp nhiều tay.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 3, ta học khám phá và khai thác. Khi không biết luật chơi, nên thử cái mới hay dùng cái đã biết, qua bài toán máy đánh bạc nhiều tay, còn gọi là kẻ cướp nhiều tay. Hẹn gặp bạn ở bài tiếp theo."

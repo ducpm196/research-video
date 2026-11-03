@@ -1,0 +1,218 @@
+id: L12
+course: PLC
+series: "PLC · Ngôn ngữ lập trình và trình biên dịch"
+title: "Bài 12 — Lập trình hàm, bất biến và đồng thời an toàn"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/plc.yaml L12; audit/plc/verify_plc.py L12; C. Okasaki, Purely Functional Data Structures (1998), chương 2; J. Hughes, Why Functional Programming Matters, The Computer Journal 32(2), 1989; OSY bài 4 (tranh chấp, mất cập nhật)"
+assumes: [arith]
+# Quy ước: mã minh hoạ kiểu Python (map, filter, reduce, bộ (tuple) là bất biến, danh sách là biến đổi được). Danh sách liên kết bất
+#   biến viết bằng cặp lồng nhau (đầu, đuôi). Kết quả chạy thật bằng Python trong checks (functools.reduce qua __import__).
+objectives:
+  - "Viết hàm thuần và dùng map, filter, reduce"
+  - "Cập nhật dữ liệu bất biến bằng cách tạo mới và dùng chung phần cũ"
+  - "Hiểu vì sao dữ liệu bất biến an toàn khi chạy đồng thời"
+asr_reviewed:
+  - {sentence: "Mỗi lần đổi một ô mà chép cả n ô, thì n lần đổi tốn cỡ n bình phương bước.", reason: "từ “ô” (ô lưới) bị ASR viết thành chữ “O / OK / o”: cùng âm, ASR chọn cách viết chữ cái Latinh; nghĩa hiện trên màn hình"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Hai luồng, một danh sách, không khoá"
+    steps:
+      - show: |
+          <p>Ở khoá Hệ điều hành, hai luồng cùng sửa một biến đếm làm mất cập nhật, nên phải dùng khoá. Khoá thì chậm và dễ gây khoá chết.</p>
+          <div class="box key">Hôm nay: một cách khác — <b>không sửa gì cả</b>. Hàm thuần, dữ liệu <b>bất biến</b>: nhiều luồng cùng đọc mà không cần khoá.</div>
+        focus: [1, 1, 2, 2]
+        say: "Chào bạn, ở khoá Hệ điều hành, hai luồng cùng sửa một biến đếm làm mất cập nhật, nên ta phải dùng khoá. Mà khoá thì chậm và dễ gây khoá chết. Hôm nay ta học một cách khác, đó là không sửa gì cả. Với hàm thuần và dữ liệu bất biến, nhiều luồng cùng đọc mà không cần khoá."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: hàm không tên, phép chia lấy dư, mất cập nhật"
+    checks:
+      - "(lambda x: x * x)(4) == 16 and (6 % 2, 5 % 2) == (0, 1)"
+      - "(lambda dem: (lambda a, b: (a + 1, b + 1))(dem, dem))(5) == (6, 6) and 5 + 1 + 1 == 7"
+    steps:
+      - show: |
+          <div class="code"><div>(lambda x: x * x)(4)     <span class="cm"># hàm không tên, gọi với x = 4 → 16</span></div><div>6 % 2 == 0               <span class="cm"># chia 2 dư 0 → chẵn</span></div><div>5 % 2 == 1               <span class="cm"># chia 2 dư 1 → lẻ</span></div></div>
+        focus: [1, 1, 1, 1]
+        say: "Trước hết, ôn hai mẩu mã mà bài này dùng nhiều. Dòng đầu là một hàm không tên, nhận x và trả về x nhân x, gọi nó với x bằng 4 thì được 16. Dấu phần trăm là phép chia lấy dư, 6 chia 2 dư 0 nên 6 là số chẵn. Còn 5 chia 2 dư 1, nên 5 là số lẻ."
+      - show: |
+          <table class="t"><tr><th>thời điểm</th><th>luồng A</th><th>luồng B</th><th>biến đếm</th></tr>
+          <tr><td>1</td><td>đọc 5</td><td>đọc 5</td><td>5</td></tr>
+          <tr><td>2</td><td>ghi 5 + 1 = 6</td><td></td><td>6</td></tr>
+          <tr><td>3</td><td></td><td>ghi 5 + 1 = 6</td><td>$\hl{6}$, đúng ra phải là 7</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", 0]
+        say: "Điều thứ hai là hiện tượng mất cập nhật, như ở khoá Hệ điều hành. Biến đếm đang là 5, luồng A và luồng B cùng đọc được 5. Luồng A ghi 5 cộng 1 bằng 6. Luồng B cũng ghi 5 cộng 1 bằng 6, đè lên kết quả của A. Hai lần cộng mà biến đếm chỉ tăng 1, ra 6 thay vì 7, và nguyên nhân là cả hai cùng sửa một chỗ."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: hàm thuần, bất biến"
+    steps:
+      - show: |
+          <p><b>Hàm thuần</b>: cùng đầu vào luôn cho cùng kết quả, và không làm gì khác (không sửa biến ngoài, không in, không ghi tệp).</p>
+          <p><b>Dữ liệu bất biến</b>: tạo xong thì không sửa được. Muốn “sửa” thì tạo bản <b>mới</b>; bản cũ vẫn nguyên.</p>
+          <div class="box key">Hàm thuần dễ kiểm thử (chỉ cần đầu vào, đầu ra), dễ chạy song song (không đụng nhau), dễ lưu kết quả để dùng lại.</div>
+        focus: [1, 2, 2, 3]
+        say: "Hàm thuần là hàm mà cùng đầu vào luôn cho cùng kết quả, và không làm gì khác, không sửa biến ngoài, không in, không ghi tệp. Dữ liệu bất biến là dữ liệu tạo xong thì không sửa được. Muốn sửa thì tạo một bản mới, còn bản cũ vẫn nguyên. Hàm thuần dễ kiểm thử vì chỉ cần đầu vào và đầu ra, dễ chạy song song vì không đụng nhau, và dễ lưu kết quả để dùng lại."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hình dung: dữ liệu chảy qua ba trạm, không ô nào bị sửa"
+    steps:
+      - show: |
+          <div><svg width="1500" height="510" viewBox="0 0 1500 510"><g font-size="26" font-weight="bold" fill="#1f2937"><text x="20" y="77">vào</text><text x="20" y="207">lọc chẵn</text><text x="20" y="337">ánh xạ x*x</text><text x="20" y="467">gộp: cộng dồn</text></g><rect x="330" y="35" width="110" height="64" rx="10" fill="#dbeafe" stroke="#1f2937" stroke-width="3"/><text x="385" y="78" font-size="28" font-weight="bold" text-anchor="middle" fill="#1f2937">1</text><rect x="510" y="35" width="110" height="64" rx="10" fill="#dbeafe" stroke="#1f2937" stroke-width="3"/><text x="565" y="78" font-size="28" font-weight="bold" text-anchor="middle" fill="#1f2937">2</text><rect x="690" y="35" width="110" height="64" rx="10" fill="#dbeafe" stroke="#1f2937" stroke-width="3"/><text x="745" y="78" font-size="28" font-weight="bold" text-anchor="middle" fill="#1f2937">3</text><rect x="870" y="35" width="110" height="64" rx="10" fill="#dbeafe" stroke="#1f2937" stroke-width="3"/><text x="925" y="78" font-size="28" font-weight="bold" text-anchor="middle" fill="#1f2937">4</text><rect x="1050" y="35" width="110" height="64" rx="10" fill="#dbeafe" stroke="#1f2937" stroke-width="3"/><text x="1105" y="78" font-size="28" font-weight="bold" text-anchor="middle" fill="#1f2937">5</text><rect x="1230" y="35" width="110" height="64" rx="10" fill="#dbeafe" stroke="#1f2937" stroke-width="3"/><text x="1285" y="78" font-size="28" font-weight="bold" text-anchor="middle" fill="#1f2937">6</text><rect x="330" y="165" width="110" height="64" rx="10" fill="#f3f4f6" stroke="#9ca3af" stroke-width="3" stroke-dasharray="8 6"/><text x="385" y="208" font-size="28" font-weight="bold" text-anchor="middle" fill="#9ca3af">bỏ</text><rect x="510" y="165" width="110" height="64" rx="10" fill="#dbeafe" stroke="#1f2937" stroke-width="3"/><text x="565" y="208" font-size="28" font-weight="bold" text-anchor="middle" fill="#1f2937">2</text><rect x="690" y="165" width="110" height="64" rx="10" fill="#f3f4f6" stroke="#9ca3af" stroke-width="3" stroke-dasharray="8 6"/><text x="745" y="208" font-size="28" font-weight="bold" text-anchor="middle" fill="#9ca3af">bỏ</text><rect x="870" y="165" width="110" height="64" rx="10" fill="#dbeafe" stroke="#1f2937" stroke-width="3"/><text x="925" y="208" font-size="28" font-weight="bold" text-anchor="middle" fill="#1f2937">4</text><rect x="1050" y="165" width="110" height="64" rx="10" fill="#f3f4f6" stroke="#9ca3af" stroke-width="3" stroke-dasharray="8 6"/><text x="1105" y="208" font-size="28" font-weight="bold" text-anchor="middle" fill="#9ca3af">bỏ</text><rect x="1230" y="165" width="110" height="64" rx="10" fill="#dbeafe" stroke="#1f2937" stroke-width="3"/><text x="1285" y="208" font-size="28" font-weight="bold" text-anchor="middle" fill="#1f2937">6</text><rect x="510" y="295" width="110" height="64" rx="10" fill="#fde68a" stroke="#1f2937" stroke-width="3"/><text x="565" y="338" font-size="28" font-weight="bold" text-anchor="middle" fill="#1f2937">4</text><rect x="510" y="425" width="110" height="64" rx="10" fill="#fef9c3" stroke="#1f2937" stroke-width="3"/><text x="565" y="468" font-size="28" font-weight="bold" text-anchor="middle" fill="#1f2937">4</text><rect x="870" y="295" width="110" height="64" rx="10" fill="#fde68a" stroke="#1f2937" stroke-width="3"/><text x="925" y="338" font-size="28" font-weight="bold" text-anchor="middle" fill="#1f2937">16</text><rect x="870" y="425" width="110" height="64" rx="10" fill="#fef9c3" stroke="#1f2937" stroke-width="3"/><text x="925" y="468" font-size="28" font-weight="bold" text-anchor="middle" fill="#1f2937">20</text><rect x="1230" y="295" width="110" height="64" rx="10" fill="#fde68a" stroke="#1f2937" stroke-width="3"/><text x="1285" y="338" font-size="28" font-weight="bold" text-anchor="middle" fill="#1f2937">36</text><rect x="1230" y="425" width="110" height="64" rx="10" fill="#bbf7d0" stroke="#059669" stroke-width="3"/><text x="1285" y="468" font-size="28" font-weight="bold" text-anchor="middle" fill="#059669">56</text><text x="385" y="467" font-size="26" text-anchor="middle" fill="#6b7280">0</text></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ dữ liệu chảy qua ba trạm, mỗi trạm tạo ra một hàng mới chứ không sửa hàng cũ. Hàng trên cùng là các số từ 1 tới 6, trạm lọc bỏ các số lẻ, giữ lại 2, 4, 6. Trạm ánh xạ bình phương từng số còn lại, được 4, 16, 36. Trạm gộp cộng dồn bắt đầu từ 0, được 4, rồi 20, rồi 56, và ô cuối màu xanh lục là kết quả."
+
+  - id: example
+    kind: example
+    title: "map, filter, reduce"
+    checks:
+      - "list(filter(lambda x: x % 2 == 0, range(1, 7))) == [2, 4, 6] and list(map(lambda x: x * x, [2, 4, 6])) == [4, 16, 36]"
+      - "__import__('functools').reduce(lambda a, b: a + b, [4, 16, 36], 0) == 56"
+    steps:
+      - show: |
+          <p>Tổng bình phương các số chẵn từ 1 tới 6, không dùng biến nào bị sửa:</p>
+          <div class="code"><div>chan  = filter(lambda x: x % 2 == 0, range(1, 7))   <span class="cm"># 2, 4, 6</span></div><div>bp    = map(lambda x: x * x, chan)                   <span class="cm"># 4, 16, 36</span></div><div>tong  = reduce(lambda a, b: a + b, bp, 0)             <span class="cm"># 56</span></div></div>
+        focus: [1, 2]
+        say: "Ví dụ, tính tổng bình phương các số chẵn từ 1 tới 6 mà không sửa biến nào. Ba dòng mã ứng với ba trạm, lọc, ánh xạ, và gộp, ta đi qua từng dòng."
+      - show: |
+          <table class="t"><tr><th>Bước một — lọc: giữ x nếu x chia 2 dư 0</th></tr>
+          <tr><td>1 bỏ, 2 giữ, 3 bỏ, 4 giữ, 5 bỏ, 6 giữ → <b>2, 4, 6</b></td></tr></table>
+        focus: [1, "1.2"]
+        say: "Bước một, hàm lọc giữ các phần tử thoả điều kiện, ở đây là chia 2 dư 0. Đi qua từ 1 tới 6, ta giữ 2, 4 và 6, bỏ ba số lẻ."
+      - show: |
+          <table class="t"><tr><th>Bước 2 — ánh xạ x thành x nhân x</th></tr>
+          <tr><td>2 → 4, 4 → 16, 6 → 36</td></tr></table>
+        focus: [1, "1.2"]
+        say: "Bước hai, hàm ánh xạ biến đổi từng phần tử, ở đây là bình phương. Hai thành 4, 4 thành 16, và 6 thành 36."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>Bước 3 — gộp, bắt đầu từ 0</th><th>a</th><th>b</th><th>a + b</th></tr>
+          <tr><td>lần 1</td><td>0</td><td>4</td><td>4</td></tr>
+          <tr><td>lần 2</td><td>4</td><td>16</td><td>20</td></tr>
+          <tr><td>lần 3</td><td>20</td><td>36</td><td>$\hl{56}$</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Bước ba, hàm gộp gom dần thành một giá trị, bắt đầu từ 0. Lần một, 0 cộng 4 bằng 4. Lần hai, 4 cộng 16 bằng 20. Lần ba, 20 cộng 36 bằng 56, đó là kết quả."
+      - show: |
+          <div class="box key">Lọc giữ phần tử thoả điều kiện, ánh xạ biến đổi từng phần tử, gộp gom dần thành một giá trị: $0 + 4 + 16 + 36 = \hl{56}$. Không có biến nào bị gán lại.</div>
+        focus: [1, 1]
+        say: "Bước bốn, tóm lại, lọc giữ phần tử thoả điều kiện, ánh xạ biến đổi từng phần tử, còn gộp thì gom dần thành một giá trị. Kết quả là 0 cộng 4 cộng 16 cộng 36, bằng 56, và suốt quá trình không có biến nào bị gán lại."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: vòng lặp thường và một phép tính gọn"
+    checks:
+      - "(lambda d: exec('s = 0\\nfor x in range(1, 7):\\n    if x % 2 == 0:\\n        s += x * x\\n', d) or d['s'] == 56)({})"
+      - "4 * (1 + 4 + 9) == 4 * 14 == 56 and 2 * 2 == 4 and 4 * 4 == 16 and 6 * 6 == 36"
+    steps:
+      - show: |
+          <table class="t"><tr><th>cách khác</th><th>kết quả</th></tr>
+          <tr><td>vòng lặp thường, một biến <code>s</code> cộng dồn (có sửa biến)</td><td>56 ✓</td></tr>
+          <tr><td>số chẵn là 2 lần 1, 2, 3 → bình phương là 4 lần 1, 4, 9</td><td>$4 \cdot (1 + 4 + 9) = 4 \cdot 14 = 56$ ✓</td></tr></table>
+        introduces: [cdot]
+        focus: ["1.2", "1.3", "1.3"]
+        say: "Kiểm bằng đường khác, thứ nhất, viết một vòng lặp thường với một biến s cộng dồn, cách có sửa biến, cũng ra 56. Thứ hai, các số chẵn 2, 4, 6 là 2 lần của 1, 2, 3, nên bình phương của chúng là 4 lần của 1, 4, 9. Vậy tổng là 4 nhân 14, bằng 56, khớp cả hai cách."
+
+  # ───────────────────────── 4. DÙNG CHUNG ─────────────────────────
+  - id: sharing
+    kind: concept
+    title: "Tạo mới mà không chép lại tất cả"
+    checks:
+      - "(lambda l: (0, l)[1] is l)((1, (2, (3, None))))"
+    steps:
+      - show: |
+          <p>Danh sách liên kết bất biến <code>l = 1 → 2 → 3</code>. Thêm 0 vào đầu: tạo <b>một</b> nút mới <code>0</code> trỏ vào <code>l</code> cũ.</p>
+          <div class="chain"><span class="n">0 (mới)</span><span class="a">→</span><span class="n">1</span><span class="a">→</span><span class="n">2</span><span class="a">→</span><span class="n">3</span></div>
+          <div class="box key">Ba nút cũ được <b>dùng chung</b> — an toàn vì không ai sửa được chúng. Người giữ <code>l</code> vẫn thấy <code>1 → 2 → 3</code>.</div>
+        focus: [1, 1, 2, 3, 3]
+        say: "Lo ngại thường gặp là tạo bản mới thì phải chép lại tất cả. Không hẳn vậy, với danh sách liên kết bất biến 1, 2, 3, thêm 0 vào đầu chỉ cần tạo một nút mới trỏ vào danh sách cũ. Danh sách mới là 0, 1, 2, 3. Ba nút cũ được dùng chung, và điều này an toàn vì không ai sửa được chúng. Người đang giữ danh sách cũ vẫn thấy 1, 2, 3."
+
+  # ───────────────────────── 5. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp"
+    checks:
+      - "(lambda t: (t[0].append(3), t)[1])(([1], 2)) == ([1, 3], 2)"
+      - "(lambda d: exec('import functools\\ndon_gia = 5\\n@functools.lru_cache\\ndef phi(km):\\n    return km * don_gia\\nr1 = phi(10)\\ndon_gia = 6\\nr2 = phi(10)\\n', d) or (d['r1'], d['r2'], 10 * 6) == (50, 50, 60))({})"
+      - "(lambda d: exec('import functools\\n@functools.lru_cache\\ndef phi(km, don_gia):\\n    return km * don_gia\\nr1 = phi(10, 5)\\nr2 = phi(10, 6)\\n', d) or (d['r1'], d['r2']) == (50, 60))({})"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Bất biến ở bề mặt mà bên trong vẫn sửa được <b class="red">(sai)</b>
+          <br><span class="note">Bộ <code>t = ([1], 2)</code> không đổi được phần tử, nhưng <code>t[0].append(3)</code> sửa danh sách bên trong → <code>t</code> thành <code>([1, 3], 2)</code>. Bất biến phải đi tới tận đáy.</span></div>
+        say: "Lỗi thứ nhất, bất biến ở bề mặt mà bên trong vẫn sửa được. Một bộ chứa một danh sách thì không đổi được phần tử, nhưng vẫn thêm được số vào danh sách bên trong, và bộ bị thay đổi. Bất biến phải đi tới tận đáy."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Gọi một hàm là thuần khi nó đọc biến ngoài đang đổi <b class="red">(sai)</b>
+          <br><span class="note">Đọc giờ hệ thống, số ngẫu nhiên, biến toàn cục: cùng đầu vào, khác kết quả. Truyền những thứ đó vào như tham số.</span></div>
+        say: "Lỗi thứ hai, gọi một hàm là thuần khi nó đọc biến ngoài đang thay đổi, như giờ hệ thống, số ngẫu nhiên, hay biến toàn cục. Cùng đầu vào mà khác kết quả, nên hãy truyền những thứ đó vào như tham số."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> “Sửa” mảng bất biến lớn bằng cách chép cả mảng mỗi lần <b class="red">(chậm)</b>
+          <br><span class="note">Mảng n phần tử, mỗi lần đổi một ô mà chép cả n: n lần đổi tốn cỡ $n^2$ bước. Dùng cấu trúc bất biến có dùng chung (cây), hoặc gom thay đổi lại.</span></div>
+        say: "Lỗi thứ ba, sửa một mảng bất biến lớn bằng cách chép cả mảng mỗi lần. Mỗi lần đổi một ô mà chép cả n ô, thì n lần đổi tốn cỡ n bình phương bước. Hãy dùng cấu trúc bất biến có dùng chung, như cây, hoặc gom các thay đổi lại."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Lưu sẵn kết quả (bộ nhớ đệm) cho một hàm <b>không thuần</b>.</div>
+          <div class="code"><div>@lru_cache                        <span class="cm"># nhớ kết quả theo tham số</span></div><div>def phi(km): return km * don_gia  <span class="cm"># đọc biến ngoài don_gia</span></div></div>
+          <table class="t"><tr><th>lần gọi</th><th>don_gia lúc đó</th><th>trả về</th><th>đúng ra</th></tr>
+          <tr><td><code>phi(10)</code> lần đầu</td><td>5</td><td>50</td><td>50</td></tr>
+          <tr><td><code>phi(10)</code> sau khi đổi giá</td><td>6</td><td>$\hl{50}$ (bản cũ)</td><td>60</td></tr></table>
+          <p class="note">Sửa: đưa <code>don_gia</code> thành tham số — <code>phi(10, 6)</code> = 60 — để hàm thuần trở lại, rồi mới lưu kết quả.</p>
+        focus: [1, 2, "3.2", "3.3", 4]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, lưu sẵn kết quả cho một hàm không thuần để chạy nhanh hơn. Hàm phí giao hàng nhân số ki lô mét với đơn giá, nhưng đơn giá là một biến ngoài, và bộ nhớ đệm chỉ nhớ theo tham số. Lần đầu gọi với 10 ki lô mét, đơn giá là 5, nhận 50, đúng. Sau khi đơn giá đổi thành 6, gọi lại vẫn nhận 50, bản cũ trong bộ nhớ đệm, trong khi đúng ra phải là 60. Cách sửa là đưa đơn giá thành tham số để hàm thuần trở lại, rồi mới lưu kết quả, vì chỉ hàm thuần mới lưu kết quả an toàn."
+
+  # ───────────────────────── 6. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "__import__('functools').reduce(lambda a, b: a * b, filter(lambda x: x % 2 == 1, range(1, 6)), 1) == 15"
+      - "(lambda l: all(((9, l)[1] is l, (8, l)[1] is l)) and (9, l) != (8, l))((1, (2, None)))"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Dùng <code>filter</code> và <code>reduce</code>: tích các số lẻ từ 1 tới 5?</td></tr>
+          <tr><td>2</td><td>Danh sách bất biến <code>l = 1 → 2</code>. Tạo <code>a = 9 → l</code> và <code>b = 8 → l</code>. Tổng cộng có bao nhiêu nút? Sửa <code>a</code> có ảnh hưởng <code>b</code> không?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, dùng lọc và gộp để tính tích các số lẻ từ 1 tới 5. Câu hai, danh sách bất biến l gồm 1 và 2, ta tạo a bằng 9 đặt trước l và b bằng 8 đặt trước l, tổng cộng có bao nhiêu nút? Sửa a có ảnh hưởng tới b không? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>① bước</th><th>làm gì</th><th>kết quả</th></tr>
+          <tr><td>lọc</td><td>giữ x chia 2 dư 1</td><td>1, 3, 5</td></tr>
+          <tr><td>gộp, bắt đầu từ 1</td><td>$1 \cdot 1 = 1$, $1 \cdot 3 = 3$, $3 \cdot 5 = 15$</td><td>$\hl{15}$</td></tr></table>
+          <p class="note">Gộp phép nhân phải bắt đầu từ 1: bắt đầu từ 0 thì tích luôn bằng 0.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Đáp án câu một, giải từng bước. Lọc giữ các số chia 2 dư 1, được 1, 3, 5. Gộp bằng phép nhân bắt đầu từ 1, 1 nhân 1 bằng 1, 1 nhân 3 bằng 3, 3 nhân 5 bằng 15. Chú ý gộp phép nhân phải bắt đầu từ 1, vì bắt đầu từ 0 thì tích luôn bằng 0."
+      - show: |
+          <table class="t"><tr><th>② nút</th><th>tạo bởi</th></tr>
+          <tr><td>1, 2</td><td><code>l</code> — dùng chung cho cả a và b</td></tr>
+          <tr><td>9</td><td><code>a</code>, trỏ vào l</td></tr>
+          <tr><td>8</td><td><code>b</code>, trỏ vào l</td></tr></table>
+          <p>Tổng: $2 + 1 + 1 = \hl{4}$ nút. Không ai sửa được nút nào → <code>b</code> không bị ảnh hưởng.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2, 2]
+        say: "Câu hai, đếm từng nút. Hai nút 1 và 2 thuộc l, và được dùng chung cho cả a lẫn b. Danh sách a thêm một nút 9 trỏ vào l. Danh sách b thêm một nút 8 cũng trỏ vào l. Vậy tổng cộng 2 cộng 1 cộng 1 bằng 4 nút. Không ai sửa được nút nào vì chúng bất biến, muốn khác thì tạo nút mới, nên b không bị ảnh hưởng."
+
+  # ───────────────────────── 7. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">hàm thuần: cùng vào, cùng ra</span><span class="a">→</span>
+          <span class="n">bất biến: sửa = tạo mới</span><span class="a">→</span>
+          <span class="n">dùng chung phần cũ</span><span class="a">→</span>
+          <span class="n">đọc đồng thời không cần khoá</span></div>
+        say: "Tổng kết lại, hàm thuần cho cùng kết quả với cùng đầu vào. Với dữ liệu bất biến, sửa nghĩa là tạo mới và dùng chung phần cũ, nên nhiều luồng đọc đồng thời mà không cần khoá."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> nhiều lỗi khó nhất đến từ trạng thái dùng chung bị sửa. Bớt được chỗ sửa nào là bớt được một chỗ có thể sai.</div>
+        say: "Điều cần mang theo, nhiều lỗi khó nhất đến từ trạng thái dùng chung bị sửa. Bớt được chỗ sửa nào là bớt được một chỗ có thể sai."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 13): <b>tình huống chuyên gia theo dòng thời gian</b> — chuyển sang ngôn ngữ an toàn bộ nhớ, từ khoảng 70% lỗ hổng do lỗi bộ nhớ (2019) tới dưới 20% (2025).</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 13, ta đi theo dòng thời gian của các đội lớn khi chuyển sang ngôn ngữ an toàn bộ nhớ. Khi đọc ghi nhầm vùng nhớ là nguồn của khoảng 70% lỗ hổng mỗi năm, họ đã giảm nó xuống dưới 20% như thế nào. Hẹn gặp bạn ở bài tiếp theo."

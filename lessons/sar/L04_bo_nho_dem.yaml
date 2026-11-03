@@ -1,0 +1,212 @@
+id: L04
+course: SAR
+series: "SAR · Kiến trúc hệ thống"
+title: "Bài 4 — Bộ nhớ đệm: ở đâu, bao lâu, làm mất hiệu lực thế nào"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/sar.yaml L04; audit/sar/verify_sar.py L04; R. Nishtala và cộng sự, Scaling Memcache at Facebook, NSDI (2013) (hết hạn đồng loạt, “thundering herd”); A. Vattani, F. Chierichetti, K. Lowenstein, Optimal Probabilistic Cache Stampede Prevention, VLDB (2015); CSA bài 10 (phân cấp bộ nhớ)"
+assumes: [arith, cdot]
+# Quy ước: độ trễ trung bình = h · t_đệm + (1 − h) · t_csdl (alg.cache_latency), bỏ qua thời gian kiểm đệm khi trượt. Hết hạn đồng loạt: 10 000 khoá
+#   nạp cùng lúc, thời gian sống 60 s, có thể cộng ngẫu nhiên đều trong [0, 30] s (alg.stampede, hạt giống 0) — đếm số khoá hết hạn trong giây đông nhất.
+objectives:
+  - "Tính độ trễ trung bình theo tỉ lệ trúng"
+  - "Chọn chiến lược ghi và thời gian sống"
+  - "Tránh hết hạn đồng loạt"
+asr_reviewed:
+  - {sentence: "Lấy thời gian đọc đệm là 1 mi li giây, đọc cơ sở dữ liệu là 50 mi li giây.", reason: "ASR chép “Lấy thời gian độc đệm là 1 millijay, độc cơ sở dữ liệu là 50 millijay.” (0.684): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh; lệch âm/thanh thuần Việt: đọc/độc, đọc (trong “mi li giây đọc” → “millijay độc”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Muốn dưới 5 thì 2h cộng 100 nhân 1 trừ h phải nhỏ hơn 5, nên h lớn hơn 95 phần 98, khoảng 96 phẩy 9 phần trăm.", reason: "ASR chép “Muốn dưới 5 thì 2 giờ cộng 100 nhân 1 trừ hát phải nhỏ hơn 5, nền hát lớn hơn 95 phần 98, khoảng 96,9%.” (0.944): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: nên/nền — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Đúng 60 giây sau khi khởi động, cơ sở dữ liệu sập"
+    checks:
+      - "alg.stampede() == 10000"
+    steps:
+      - show: |
+          <p>Hệ thống khởi động lại, nạp 10 000 khoá vào bộ nhớ đệm, mỗi khoá sống 60 giây. Mọi thứ nhanh như gió — cho tới giây thứ 60: cả $\hl{10\,000}$ khoá hết hạn cùng lúc, mọi yêu cầu dồn thẳng xuống cơ sở dữ liệu.</p>
+          <div class="box key">Hôm nay: <b>bộ nhớ đệm</b> — vì sao nó làm hệ thống nhanh, và vì sao nó có thể làm hệ thống sập.</div>
+        focus: [1, 1, 2]
+        say: "Chào bạn, hệ thống khởi động lại, nạp 10 nghìn khoá vào bộ nhớ đệm, mỗi khoá sống 60 giây. Mọi thứ nhanh như gió cho tới giây thứ 60, khi cả 10 nghìn khoá hết hạn cùng lúc và mọi yêu cầu dồn thẳng xuống cơ sở dữ liệu. Hôm nay ta học bộ nhớ đệm, vì sao nó làm hệ thống nhanh, và vì sao nó có thể làm hệ thống sập."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: phần trăm, trung bình có trọng số, gần thì nhanh"
+    checks:
+      - "abs(0.9 * 20 + 0.1 * 60 - 24) < 1e-9 and abs(1 - 0.9 - 0.1) < 1e-12 and 18 + 6 == 24"
+      - "50 / 1 == 50"
+    steps:
+      - show: |
+          <p>Đổi phần trăm ra số thập phân: $90\% = 0{,}9$. Nếu 90% yêu cầu tìm thấy ngay thì phần còn lại là $1 - 0{,}9 = 0{,}1$, tức 10%.</p>
+        say: "Trước hết, ôn ba điều sẽ dùng. Đổi phần trăm ra số thập phân, 90 phần trăm là 0 phẩy 9. Nếu 90 phần trăm yêu cầu tìm thấy ngay thì phần còn lại là 1 trừ 0 phẩy 9, bằng 0 phẩy 1, tức 10 phần trăm."
+      - show: |
+          <table class="t"><tr><th>đi làm</th><th>số ngày trong 10</th><th>thời gian</th><th>đóng góp</th></tr>
+          <tr><td>đường thông</td><td>9 → 0,9</td><td>20 phút</td><td>$0{,}9 \cdot 20 = 18$</td></tr>
+          <tr><td>tắc đường</td><td>1 → 0,1</td><td>60 phút</td><td>$0{,}1 \cdot 60 = 6$</td></tr>
+          <tr><td colspan="3">trung bình</td><td>$18 + 6 = \hl{24}$ phút</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Thứ hai, trung bình có trọng số. Bạn đi làm, cứ 10 ngày thì 9 ngày đường thông mất 20 phút, đóng góp 0 phẩy 9 nhân 20, bằng 18. Ngày còn lại tắc đường mất 60 phút, đóng góp 0 phẩy 1 nhân 60, bằng 6. Trung bình là 18 cộng 6, bằng 24 phút, và chỉ một ngày tắc đã kéo trung bình lên 4 phút."
+      - show: |
+          <p>Ở khoá Hệ thống máy tính: bộ nhớ chia tầng — tầng <b>gần</b> nhỏ mà nhanh, tầng <b>xa</b> lớn mà chậm. Bộ nhớ đệm của hệ thống web cũng vậy: đọc đệm 1 ms, đọc cơ sở dữ liệu 50 ms, chậm gấp $\frac{50}{1} = 50$ lần.</p>
+        introduces: [frac]
+        say: "Thứ ba, ở khoá Hệ thống máy tính ta đã thấy bộ nhớ chia tầng, tầng gần nhỏ mà nhanh, tầng xa lớn mà chậm. Bộ nhớ đệm của hệ thống web cũng theo ý đó, trong bài này đọc đệm mất 1 mi li giây, đọc cơ sở dữ liệu mất 50, chậm gấp 50 lần."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: tỉ lệ trúng, thời gian sống, chiến lược ghi"
+    steps:
+      - show: |
+          <p><b>Tỉ lệ trúng</b> $h$: phần yêu cầu tìm thấy trong bộ nhớ đệm. Độ trễ trung bình $= h \cdot t_\text{đệm} + (1 - h) \cdot t_\text{csdl}$.</p>
+          <table class="t"><tr><th>chiến lược</th><th>làm gì</th><th>đánh đổi</th></tr>
+          <tr><td>đọc rồi nạp</td><td>trượt thì đọc cơ sở dữ liệu, ghi vào đệm</td><td>đơn giản; lần đầu chậm</td></tr>
+          <tr><td>ghi xuyên</td><td>ghi cơ sở dữ liệu và đệm cùng lúc</td><td>đệm luôn mới; mỗi lần ghi chậm hơn</td></tr>
+          <tr><td>thời gian sống</td><td>tự xoá sau $T$ giây</td><td>$T$ ngắn: mới hơn nhưng trượt nhiều</td></tr></table>
+        introduces: [sub]
+        focus: [1, 1, 2, "2.2", "2.3", "2.4"]
+        say: "Tỉ lệ trúng h là phần yêu cầu tìm thấy trong bộ nhớ đệm. Độ trễ trung bình bằng h nhân thời gian đọc đệm, cộng 1 trừ h nhân thời gian đọc cơ sở dữ liệu. Bảng so ba chiến lược. Đọc rồi nạp là khi trượt thì đọc cơ sở dữ liệu rồi ghi vào đệm, đơn giản nhưng lần đầu chậm. Ghi xuyên là ghi cơ sở dữ liệu và đệm cùng lúc, đệm luôn mới nhưng mỗi lần ghi chậm hơn. Thời gian sống là tự xoá sau T giây, T ngắn thì dữ liệu mới hơn nhưng trượt nhiều hơn."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Ít lần trượt mà chiếm gần hết thời gian"
+    checks:
+      - "90 * 1 == 90 and 10 * 50 == 500 and (90 + 500) / 100 == 5.9 and round(500 / 590 * 100) == 85"
+    steps:
+      - show: |
+          <div><svg width="1500" height="330" viewBox="0 0 1500 330"><g font-size="22" fill="#1f2937"><rect x="20" y="120" width="220" height="90" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="130" y="158" text-anchor="middle">100 yêu cầu</text><text x="130" y="188" text-anchor="middle">trúng 90%</text><line x1="245" y1="140" x2="520" y2="70" stroke="#059669" stroke-width="6"/><text x="300" y="70" fill="#059669">90 trúng</text><rect x="525" y="30" width="330" height="80" rx="10" fill="#d1fae5" stroke="#059669" stroke-width="3"/><text x="690" y="65" text-anchor="middle">bộ nhớ đệm, 1 ms</text><text x="690" y="95" text-anchor="middle">90 lần 1 ms = 90 ms</text><line x1="245" y1="190" x2="520" y2="260" stroke="#b91c1c" stroke-width="2"/><text x="300" y="275" fill="#b91c1c">10 trượt</text><rect x="525" y="220" width="330" height="80" rx="10" fill="#fee2e2" stroke="#b91c1c" stroke-width="3"/><text x="690" y="255" text-anchor="middle">cơ sở dữ liệu, 50 ms</text><text x="690" y="285" text-anchor="middle">10 lần 50 ms = 500 ms</text><rect x="950" y="70" width="60" height="18" fill="#059669"/><rect x="950" y="230" width="333" height="18" fill="#b91c1c"/><text x="1025" y="85">90 ms</text><text x="1295" y="245">500 ms</text><text x="950" y="160" font-weight="bold">tổng 590 ms, chia 100 yêu cầu</text><text x="950" y="192" font-weight="bold" fill="#eb6834">= 5,9 ms mỗi yêu cầu</text></g></svg></div>
+        focus: [1, 1, 1]
+        say: "Hình theo dõi 100 yêu cầu khi tỉ lệ trúng là 90 phần trăm. 90 yêu cầu trúng đệm, mỗi lần 1 mi li giây, tổng 90, còn 10 yêu cầu trượt xuống cơ sở dữ liệu, mỗi lần 50, tổng 500. Cộng lại 590 mi li giây chia 100 yêu cầu, được 5 phẩy 9 mỗi yêu cầu, và thanh đỏ cho thấy 10 lần trượt chiếm khoảng 85 phần trăm thời gian."
+
+  - id: example
+    kind: example
+    title: "Mỗi số 9 thêm vào tỉ lệ trúng"
+    checks:
+      - "round(alg.cache_latency(0.9), 2) == 5.9 and round(alg.cache_latency(0.99), 2) == 1.49 and round(alg.cache_latency(0.5), 1) == 25.5"
+      - "alg.stampede() == 10000 and alg.stampede(jitter=30) == 368"
+      - "0.5 * 1 + 0.5 * 50 == 25.5 and round(0.9 * 1 + 0.1 * 50, 2) == 5.9 and round(0.99 * 1 + 0.01 * 50, 2) == 1.49 and round(5.9 / 1.49, 2) == 3.96"
+      - "round(10000 / 30) == 333 and 333 < 368 < 10000"
+    steps:
+      - show: |
+          <p><b>Bước 1 — trúng 50%:</b> $0{,}5 \cdot 1 + 0{,}5 \cdot 50 = 0{,}5 + 25 = \hl{25{,}5}$ ms.</p>
+          <p><b>Bước 2 — trúng 90%:</b> $0{,}9 \cdot 1 + 0{,}1 \cdot 50 = 0{,}9 + 5 = \hl{5{,}9}$ ms.</p>
+        focus: [1, 1, 2]
+        say: "Lấy thời gian đọc đệm là 1 mi li giây, đọc cơ sở dữ liệu là 50 mi li giây. Bước một, trúng 50 phần trăm, độ trễ là 0 phẩy 5 nhân 1 cộng 0 phẩy 5 nhân 50, bằng 0 phẩy 5 cộng 25, tức 25 phẩy 5 mi li giây. Bước hai, trúng 90 phần trăm, được 0 phẩy 9 cộng 0 phẩy 1 nhân 50, tức 0 phẩy 9 cộng 5, bằng 5 phẩy 9."
+      - show: |
+          <p><b>Bước 3 — trúng 99%:</b> $0{,}99 \cdot 1 + 0{,}01 \cdot 50 = 0{,}99 + 0{,}5 = \hl{1{,}49}$ ms.</p>
+          <table class="t"><tr><th>tỉ lệ trúng</th><th>50%</th><th>90%</th><th>99%</th></tr>
+          <tr><td>độ trễ trung bình</td><td>25,5 ms</td><td>$\hl{5{,}9}$ ms</td><td>$\hl{1{,}49}$ ms</td></tr></table>
+          <p>Từ 90% lên 99%, độ trễ giảm $\frac{5{,}9}{1{,}49} \approx 3{,}96$ — gần 4 lần — phần trượt mới là phần đắt.</p>
+        focus: [1, 2, 3]
+        say: "Bước ba, trúng 99 phần trăm, được 0 phẩy 99 cộng 0 phẩy 01 nhân 50, tức 0 phẩy 99 cộng 0 phẩy 5, bằng 1 phẩy 49 mi li giây. Bảng gom ba kết quả, trúng 50 cho 25 phẩy 5, trúng 90 cho 5 phẩy 9, trúng 99 chỉ còn 1 phẩy 49. Từ 90 lên 99 phần trăm, độ trễ giảm gần 4 lần, vì phần trượt mới là phần đắt."
+      - clear: true
+        show: |
+          <p><b>Bước 4 — hết hạn đồng loạt:</b> 10 000 khoá nạp cùng lúc, cùng sống 60 giây → cả $\hl{10\,000}$ khoá hết hạn trong <b>một</b> giây, giây thứ 60.</p>
+        say: "Bước bốn, quay lại chuyện hết hạn đồng loạt. 10 nghìn khoá nạp cùng lúc, cùng sống 60 giây, nên cả 10 nghìn khoá hết hạn trong đúng một giây, giây thứ 60."
+      - show: |
+          <p><b>Bước 5 — trải ngẫu nhiên:</b> trải đều trên 30 giây thì trung bình $\frac{10\,000}{30} \approx 333$ khoá mỗi giây; vì ngẫu nhiên nên có giây đông hơn.</p>
+          <div class="box key">Chống hết hạn đồng loạt: cộng thêm thời gian sống <b>ngẫu nhiên</b> 0 đến 30 giây. 10 000 khoá trải ra 30 giây: giây đông nhất chỉ còn $\hl{368}$ khoá hết hạn thay vì 10 000.</div>
+        focus: [1, 2, 2, 2]
+        say: "Bước năm, nếu trải đều trên 30 giây thì trung bình khoảng 333 khoá mỗi giây, nhưng vì ngẫu nhiên nên có giây đông hơn trung bình. Để chống hết hạn đồng loạt, hãy cộng thêm vào thời gian sống một khoảng ngẫu nhiên từ 0 đến 30 giây. 10 nghìn khoá trải ra 30 giây thì giây đông nhất chỉ còn 368 khoá hết hạn thay vì 10 nghìn. Máy chủ cơ sở dữ liệu chỉ phải nạp lại vài trăm khoá mỗi giây, thay vì cả 10 nghìn trong một giây."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: đếm từng yêu cầu, chạy lại mô phỏng"
+    checks:
+      - "99 * 1 + 1 * 50 == 149 and 149 / 100 == 1.49 and 50 * 1 + 50 * 50 == 2550 and 2550 / 100 == 25.5"
+      - "round(50 - 0.9 * 49, 2) == 5.9 and round(50 - 0.99 * 49, 2) == 1.49"
+      - "sorted(alg.stampede(jitter=30, seed=s) for s in range(1, 6)) == [359, 360, 364, 371, 376]"
+    steps:
+      - show: |
+          <table class="t"><tr><th>kết quả</th><th>đường khác</th><th>khớp?</th></tr>
+          <tr><td>1,49 ms</td><td>đếm 100 yêu cầu: $99 \cdot 1 + 1 \cdot 50 = 149$ ms, chia 100</td><td>✓</td></tr>
+          <tr><td>25,5 ms</td><td>đếm 100 yêu cầu: $50 \cdot 1 + 50 \cdot 50 = 2550$ ms, chia 100</td><td>✓</td></tr>
+          <tr><td>5,9 ms</td><td>đi từ cơ sở dữ liệu xuống: $50 - 0{,}9 \cdot 49$ (mỗi lần trúng tiết kiệm 49 ms)</td><td>✓</td></tr>
+          <tr><td>368 khoá</td><td>chạy lại mô phỏng với 5 dãy ngẫu nhiên khác: 359 đến 376</td><td>✓ cùng cỡ, xa 10 000</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Kiểm bằng đường khác. Đếm 100 yêu cầu khi trúng 99 phần trăm, 99 lần 1 mi li giây cộng 1 lần 50 là 149, chia 100 được 1 phẩy 49. Khi trúng 50 phần trăm, 50 lần 1 cộng 50 lần 50 là 2550, chia 100 được 25 phẩy 5. Đi theo hướng khác, mỗi lần trúng tiết kiệm 49 mi li giây so với cơ sở dữ liệu, nên 50 trừ 0 phẩy 9 nhân 49 cũng ra 5 phẩy 9. Chạy lại mô phỏng hết hạn với 5 dãy ngẫu nhiên khác, giây đông nhất từ 359 đến 376 khoá, cùng cỡ với 368 và rất xa 10 nghìn."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc, 1 lỗi người đã đi làm"
+    checks:
+      - "[round(1000 * (1 - h)) for h in (0.99, 0.9, 0)] == [10, 100, 1000] and 1000 // 10 == 100"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Sửa dữ liệu mà quên làm mất hiệu lực đệm <b class="red">(dữ liệu cũ)</b>
+          <br><span class="note">Giá sản phẩm đổi trong cơ sở dữ liệu, đệm vẫn trả giá cũ tới khi hết hạn. Xoá hoặc cập nhật khoá đệm ngay trong luồng ghi, và chọn thời gian sống theo mức “cũ” chấp nhận được.</span></div>
+        say: "Lỗi thứ nhất, sửa dữ liệu mà quên làm mất hiệu lực đệm. Giá sản phẩm đổi trong cơ sở dữ liệu mà đệm vẫn trả giá cũ tới khi hết hạn. Hãy xoá hoặc cập nhật khoá đệm ngay trong luồng ghi, và chọn thời gian sống theo mức cũ chấp nhận được."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Nhiều yêu cầu cùng trượt một khoá nóng cùng lúc <b class="red">(dồn xuống)</b>
+          <br><span class="note">Khoá trang chủ hết hạn, 5000 yêu cầu cùng đi tính lại. Cho <b>một</b> yêu cầu tính lại, các yêu cầu khác chờ hoặc dùng tạm bản cũ.</span></div>
+        say: "Lỗi thứ hai, nhiều yêu cầu cùng trượt một khoá nóng cùng lúc. Khoá trang chủ hết hạn, và 5000 yêu cầu cùng đi tính lại. Hãy cho một yêu cầu tính lại, còn các yêu cầu khác chờ hoặc dùng tạm bản cũ."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Coi bộ nhớ đệm là nơi lưu dữ liệu <b class="red">(mất khi khởi động lại)</b>
+          <br><span class="note">Đệm có thể bị xoá bất kỳ lúc nào. Cơ sở dữ liệu phía sau phải chịu được tải khi đệm trống — ít nhất trong lúc đệm đầy lại.</span></div>
+        say: "Lỗi thứ ba, coi bộ nhớ đệm là nơi lưu dữ liệu. Đệm có thể bị xoá bất kỳ lúc nào, nên cơ sở dữ liệu phía sau phải chịu được tải khi đệm trống, ít nhất trong lúc đệm đầy lại."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Triển khai bản mới làm trống toàn bộ đệm giữa giờ đông <b class="red">(đệm lạnh)</b></div>
+          <table class="t"><tr><th>tỉ lệ trúng</th><th>yêu cầu xuống cơ sở dữ liệu (hệ 1000 yêu cầu/s)</th></tr>
+          <tr><td>99% (đệm ấm)</td><td>$1000 \cdot 0{,}01 = 10$ mỗi giây</td></tr>
+          <tr><td>90%</td><td>$1000 \cdot 0{,}1 = 100$ mỗi giây</td></tr>
+          <tr><td>0% (vừa xoá đệm)</td><td>$\hl{1000}$ mỗi giây — gấp 100 lần</td></tr></table>
+          <p class="note">Người làm nghề <b>hâm nóng</b> đệm trước khi chuyển tải, hoặc thay máy từng phần một, và kiểm cơ sở dữ liệu chịu được bao nhiêu khi tỉ lệ trúng tụt.</p>
+        focus: [1, "2.2", "2.4", "2.3", 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, là triển khai bản mới làm trống toàn bộ đệm giữa giờ đông. Với hệ 1000 yêu cầu mỗi giây, đệm ấm trúng 99 phần trăm thì cơ sở dữ liệu chỉ nhận 10 yêu cầu mỗi giây. Ngay sau khi xoá đệm, tỉ lệ trúng về 0, và cơ sở dữ liệu nhận cả 1000, gấp 100 lần lúc thường. Tỉ lệ trúng tụt từ 99 xuống 90 cũng đã nhân tải lên 10 lần. Người làm nghề hâm nóng đệm trước khi chuyển tải, hoặc thay máy từng phần một, và kiểm xem cơ sở dữ liệu chịu được bao nhiêu khi tỉ lệ trúng tụt."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "round(alg.cache_latency(0.95), 2) == 3.45 and round(alg.cache_latency(0.8, 2, 100), 1) == 21.6"
+      - "round(95 / 98 * 100, 1) == 96.9 and alg.cache_latency(95 / 98, 2, 100) <= 5 + 1e-9 and alg.cache_latency(0.96, 2, 100) > 5"
+      - "abs(0.95 * 1 - 0.95) < 1e-12 and round(0.05 * 50, 2) == 2.5 and round(0.8 * 2, 2) == 1.6 and round(0.2 * 100, 2) == 20 and 100 - 5 == 95"
+      - "round(alg.cache_latency(0.9, 1, 25), 2) == 3.4 and round(alg.cache_latency(0.99), 2) == 1.49 and 1.49 < 3.4"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Đệm 1 ms, cơ sở dữ liệu 50 ms, trúng 95%: độ trễ trung bình?</td></tr>
+          <tr><td>2</td><td>Đệm 2 ms, cơ sở dữ liệu 100 ms, trúng 80%: độ trễ trung bình? Muốn dưới 5 ms thì cần trúng ít nhất bao nhiêu?</td></tr>
+          <tr><td>3</td><td>Đệm 1 ms, cơ sở dữ liệu 50 ms, đang trúng 90%. Chọn: nâng tỉ lệ trúng lên 99%, hay thay cơ sở dữ liệu nhanh gấp đôi (25 ms)?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.3", "1.4", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, đệm 1 mi li giây, cơ sở dữ liệu 50, trúng 95 phần trăm, độ trễ trung bình là bao nhiêu? Câu hai, đệm 2, cơ sở dữ liệu 100, trúng 80 phần trăm thì độ trễ trung bình là bao nhiêu? Muốn dưới 5 mi li giây thì cần trúng ít nhất bao nhiêu? Câu ba, đệm 1, cơ sở dữ liệu 50, đang trúng 90 phần trăm, nên nâng tỉ lệ trúng lên 99, hay thay cơ sở dữ liệu nhanh gấp đôi, còn 25 mi li giây? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① $0{,}95 \cdot 1 = 0{,}95$; $0{,}05 \cdot 50 = 2{,}5$; cộng lại $\hl{3{,}45}$ ms.</p>
+          <p>② $0{,}8 \cdot 2 = 1{,}6$; $0{,}2 \cdot 100 = 20$; cộng lại $\hl{21{,}6}$ ms.</p>
+        focus: [1, 2]
+        say: "Đáp án câu một, phần trúng là 0 phẩy 95 nhân 1, bằng 0 phẩy 95, phần trượt là 0 phẩy 05 nhân 50, bằng 2 phẩy 5, cộng lại 3 phẩy 45 mi li giây. Câu hai, phần trúng là 0 phẩy 8 nhân 2, bằng 1 phẩy 6, phần trượt là 0 phẩy 2 nhân 100, bằng 20, cộng lại 21 phẩy 6."
+      - show: |
+          <p>Cần $2h + 100(1 - h) \lt 5$ → $100 - 98h \lt 5$ → $98h \gt 95$ → $h \gt \frac{95}{98} \approx \hl{96{,}9\%}$.</p>
+        say: "Vế sau của câu hai, khai triển ra được 100 trừ 98 h nhỏ hơn 5, tức 98 h lớn hơn 95. Muốn dưới 5 thì 2h cộng 100 nhân 1 trừ h phải nhỏ hơn 5, nên h lớn hơn 95 phần 98, khoảng 96 phẩy 9 phần trăm."
+      - show: |
+          <table class="t"><tr><th>lựa chọn</th><th>tính</th><th>độ trễ</th></tr>
+          <tr><td>trúng 99%, csdl 50 ms</td><td>$0{,}99 \cdot 1 + 0{,}01 \cdot 50$</td><td>$\hl{1{,}49}$ ms</td></tr>
+          <tr><td>trúng 90%, csdl 25 ms</td><td>$0{,}9 \cdot 1 + 0{,}1 \cdot 25$</td><td>3,4 ms</td></tr></table>
+        focus: [1, "1.2", "1.3", 1]
+        say: "Câu ba là một quyết định, cứ tính cả hai. Nâng tỉ lệ trúng lên 99 phần trăm cho 1 phẩy 49 mi li giây. Thay cơ sở dữ liệu nhanh gấp đôi mà vẫn trúng 90 thì được 0 phẩy 9 cộng 0 phẩy 1 nhân 25, bằng 3 phẩy 4. Vậy nâng tỉ lệ trúng có lợi hơn, vì nó cắt bớt số lần trượt, mà phần trượt mới là phần đắt."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">độ trễ = h nhân đệm + (1 − h) nhân csdl</span><span class="a">→</span>
+          <span class="n">phần trượt là phần đắt</span><span class="a">→</span>
+          <span class="n">làm mất hiệu lực khi ghi</span><span class="a">→</span>
+          <span class="n">thời gian sống ngẫu nhiên, một người tính lại</span></div>
+        say: "Tổng kết lại, độ trễ trung bình phụ thuộc tỉ lệ trúng, và phần trượt mới là phần đắt. Hãy làm mất hiệu lực đệm khi ghi, cộng ngẫu nhiên vào thời gian sống, và chỉ cho một yêu cầu tính lại khoá nóng."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> bộ nhớ đệm là một bản sao của sự thật, và mọi bản sao đều có thể cũ. Câu hỏi luôn là: cũ bao lâu thì chấp nhận được?</div>
+        say: "Điều cần mang theo, bộ nhớ đệm là một bản sao của sự thật, và mọi bản sao đều có thể cũ. Câu hỏi luôn là cũ bao lâu thì chấp nhận được."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 5): <b>mở rộng dữ liệu</b> — bản sao đọc, phân mảnh, chọn khoá phân mảnh.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 5, ta học cách mở rộng dữ liệu, với bản sao đọc, phân mảnh, và chọn khoá phân mảnh. Hẹn gặp bạn ở bài tiếp theo."

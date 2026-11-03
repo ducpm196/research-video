@@ -1,0 +1,283 @@
+id: L09
+course: CVI
+series: "CVI · Thị giác máy tính"
+title: "Bài 9 — Phân đoạn ảnh: IoU, hệ số Dice và lớp hiếm"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/cvi.yaml L09; audit/cvi/verify_cvi.py L09; audit/cvi/sources_L09.md (bài không nêu sự kiện có thật; mọi số tự tính); CVI bài 8 (giao trên hợp của hộp, TP/FP/FN khi ghép)"
+assumes: [arith, cdot, frac, approx, geq, cap, cup, sub]
+# Quy ước: mặt nạ = lưới 0/1 cùng cỡ ảnh, 1 = điểm ảnh thuộc vật. Trên điểm ảnh: TP = đoán vật và đúng là vật, FP = đoán vật nhưng là nền,
+#   FN = bỏ sót điểm của vật, TN = nền đoán là nền (alg.cvi_mask_counts). IoU = TP / (TP + FP + FN), Dice = 2TP / (2TP + FP + FN)
+#   (alg.cvi_iou_dice); độ chính xác điểm ảnh = (TP + TN) / số điểm ảnh. mIoU = trung bình IoU của mọi lớp (kể cả nền).
+#   Tên IoU, Dice chỉ trên màn hình (probe không đạt — lexicon_vi.CVI.yaml); lời đọc nói “giao trên hợp”, “hệ số chồng lấp”.
+#   Lưới 10 × 10, ảnh 20 × 20 có vật 4 điểm ảnh, hai bài báo A và B, ảnh chụp vết nứt là SỐ MINH HOẠ.
+objectives:
+  - "Đếm TP, FP, FN trên mặt nạ và tính giao trên hợp, hệ số chồng lấp"
+  - "Suy ra hệ số chồng lấp = 2 · IoU / (1 + IoU) và đổi qua lại hai thước đo"
+  - "Giải thích bằng số vì sao độ chính xác điểm ảnh đánh lừa khi vật nhỏ, và mIoU sửa được"
+  - "Nhận ra hai cách lấy trung bình (theo ảnh, gộp cả tập) và ca mặt nạ rỗng 0/0"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Đúng 99 phần trăm điểm ảnh mà không tô trúng vật nào"
+    checks:
+      - "alg.cvi_mask_counts([[0] * 20 for _ in range(20)], [[int(r < 2 and c < 2) for c in range(20)] for r in range(20)]) == (0, 0, 4, 396) and 396 / 400 == 0.99"
+    steps:
+      - show: |
+          <p>Một mô hình tô <b>vết nứt</b> trên ảnh mặt đường 20 × 20 điểm ảnh. Vết nứt chỉ chiếm 4 điểm ảnh, tức 1% ảnh. Mô hình tô <b>toàn bộ là nền</b>.</p>
+          <p>Báo cáo ghi: “độ chính xác điểm ảnh <b>99%</b>”. Nhưng mô hình không tìm ra một điểm nứt nào.</p>
+          <div class="box key">Hôm nay: chấm một mặt nạ tô điểm ảnh thế nào? Hai thước đo chồng lấp liên hệ ra sao? Và vì sao vật nhỏ làm con số đẹp mà vô nghĩa?</div>
+        focus: [1, 1, 2, 2, 3]
+        say: "Chào bạn, một mô hình tô vết nứt trên ảnh mặt đường 20 nhân 20 điểm ảnh. Vết nứt chỉ chiếm 4 điểm ảnh, tức 1 phần trăm ảnh, và mô hình tô toàn bộ là nền. Báo cáo ghi độ chính xác điểm ảnh 99 phần trăm. Nhưng mô hình không tìm ra một điểm nứt nào. Hôm nay ta hỏi, chấm một mặt nạ tô điểm ảnh thế nào, hai thước đo chồng lấp liên hệ ra sao, và vì sao vật nhỏ làm con số đẹp mà vô nghĩa."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại ba điều sẽ dùng"
+    checks:
+      - "Fraction(25, 175) == Fraction(1, 7)"
+      - "Fraction(80, 100) == Fraction(80 // 20, 100 // 20) == Fraction(4, 5)"
+      - "(Fraction(1, 2) + Fraction(3, 4)) / 2 == Fraction(5, 8) and Fraction(1 + 3, 2 + 4) == Fraction(2, 3)"
+    steps:
+      - show: |
+          <p><b>① Giao trên hợp</b> (bài 8): hai hộp $A$, $B$ — diện tích $A \cap B$ chia diện tích $A \cup B$. Hộp (0, 0, 10, 10) và (5, 5, 15, 15): $\frac{25}{175} = \frac{1}{7} \approx 0{,}143$.</p>
+        focus: [1, 1]
+        say: "Điều thứ nhất, ở bài 8 ta đo hai hộp chồng nhau bằng giao trên hợp, tức diện tích phần giao chia diện tích phần hợp. Hai hộp lệch nửa cạnh cho 25 chia 175, bằng một phần bảy, xấp xỉ 0 phẩy 143."
+      - show: |
+          <p><b>② Chia cả tử và mẫu cho cùng một số</b> không đổi giá trị phân số:</p>
+          $$\frac{80}{100} = \frac{80 : 20}{100 : 20} = \frac{4}{5} = 0{,}8$$
+        focus: [1, 2]
+        say: "Điều thứ hai, chia cả tử và mẫu cho cùng một số khác 0 thì phân số không đổi. Ví dụ 80 phần 100, chia cả hai cho 20, được 4 phần 5, bằng 0 phẩy 8."
+      - show: |
+          <p><b>③ Trung bình của tỉ số khác tỉ số của tổng:</b> hai tỉ số $\frac{1}{2}$ và $\frac{3}{4}$ có trung bình $\frac{0{,}5 + 0{,}75}{2} = 0{,}625$; gộp tử và mẫu thì $\frac{1 + 3}{2 + 4} = \frac{4}{6} \approx 0{,}667$.</p>
+        focus: [1, 1]
+        say: "Điều thứ ba, trung bình của các tỉ số khác tỉ số của tổng. Một phần hai và ba phần tư có trung bình 0 phẩy 625, còn gộp tử với tử, mẫu với mẫu thì được 4 phần 6, xấp xỉ 0 phẩy 667."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: mặt nạ, TP, FP, FN, TN và ba thước đo"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ô</th><th>mô hình tô</th><th>sự thật</th><th>nghĩa</th></tr>
+          <tr><td>TP</td><td>vật</td><td>vật</td><td>tô trúng</td></tr>
+          <tr><td>FP</td><td>vật</td><td>nền</td><td>tô thừa</td></tr>
+          <tr><td>FN</td><td>nền</td><td>vật</td><td>bỏ sót</td></tr>
+          <tr><td>TN</td><td>nền</td><td>nền</td><td>nền đúng là nền</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", "1.5"]
+        say: "Mặt nạ là một lưới số 0 và 1 cùng cỡ ảnh, số 1 là điểm ảnh thuộc vật, và ta đếm bốn loại điểm ảnh. Loại thứ nhất là điểm mô hình tô là vật và đúng là vật, gọi là tô trúng. Loại thứ hai tô là vật nhưng thật ra là nền, gọi là tô thừa. Loại thứ ba là điểm của vật mà mô hình bỏ sót. Loại cuối là nền được giữ đúng là nền."
+      - clear: true
+        show: |
+          $$\text{IoU} = \frac{TP}{TP + FP + FN}, \qquad \text{Dice} = \frac{2\,TP}{2\,TP + FP + FN}, \qquad \text{độ chính xác điểm ảnh} = \frac{TP + TN}{\text{số điểm ảnh}}$$
+          <p class="note">IoU là giao trên hợp của hai vùng tô: giao là TP, hợp là TP + FP + FN. Dice, hệ số chồng lấp, đếm phần giao <b>hai lần</b>. Chỉ độ chính xác điểm ảnh có TN.</p>
+        focus: [1, 2, 2, 2]
+        say: "Ba thước đo hiện trên màn hình, chữ viết tắt chỉ để ghi. Giao trên hợp là số tô trúng chia tổng tô trúng, tô thừa và bỏ sót, vì phần giao của hai vùng là phần tô trúng, còn phần hợp gồm cả ba loại. Hệ số chồng lấp đếm phần giao hai lần, tức hai lần số tô trúng chia cho hai lần số tô trúng cộng tô thừa cộng bỏ sót. Chỉ riêng độ chính xác điểm ảnh có đếm nền đúng."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Lưới 10 × 10: vùng thật và vùng tô lệch nhau một hàng"
+    checks:
+      - "alg.cvi_mask_counts([[int(2 <= r <= 6) for c in range(10)] for r in range(10)], [[int(1 <= r <= 5) for c in range(10)] for r in range(10)]) == (40, 10, 10, 40)"
+    steps:
+      - show: |
+          <div><svg width="1400" height="470" viewBox="0 0 1400 470">
+          <rect x="80" y="80" width="400" height="40" fill="#93c5fd"/><rect x="80" y="120" width="400" height="160" fill="#86efac"/><rect x="80" y="280" width="400" height="40" fill="#fdba74"/>
+          <g stroke="#d1d5db" stroke-width="1"><line x1="80" y1="40" x2="80" y2="440"/><line x1="120" y1="40" x2="120" y2="440"/><line x1="160" y1="40" x2="160" y2="440"/><line x1="200" y1="40" x2="200" y2="440"/><line x1="240" y1="40" x2="240" y2="440"/><line x1="280" y1="40" x2="280" y2="440"/><line x1="320" y1="40" x2="320" y2="440"/><line x1="360" y1="40" x2="360" y2="440"/><line x1="400" y1="40" x2="400" y2="440"/><line x1="440" y1="40" x2="440" y2="440"/><line x1="480" y1="40" x2="480" y2="440"/><line x1="80" y1="40" x2="480" y2="40"/><line x1="80" y1="80" x2="480" y2="80"/><line x1="80" y1="120" x2="480" y2="120"/><line x1="80" y1="160" x2="480" y2="160"/><line x1="80" y1="200" x2="480" y2="200"/><line x1="80" y1="240" x2="480" y2="240"/><line x1="80" y1="280" x2="480" y2="280"/><line x1="80" y1="320" x2="480" y2="320"/><line x1="80" y1="360" x2="480" y2="360"/><line x1="80" y1="400" x2="480" y2="400"/><line x1="80" y1="440" x2="480" y2="440"/></g>
+          <rect x="80" y="80" width="400" height="200" fill="none" stroke="#2a78d6" stroke-width="4"/>
+          <rect x="80" y="120" width="400" height="200" fill="none" stroke="#eb6834" stroke-width="4" stroke-dasharray="12 7"/>
+          <g font-size="24" fill="#1f2937">
+          <rect x="560" y="70" width="34" height="34" fill="#86efac"/><text x="610" y="96">TP: 4 hàng × 10 = 40 điểm ảnh tô trúng</text>
+          <rect x="560" y="130" width="34" height="34" fill="#fdba74"/><text x="610" y="156">FP: hàng dưới cùng của vùng tô, 10 điểm tô thừa</text>
+          <rect x="560" y="190" width="34" height="34" fill="#93c5fd"/><text x="610" y="216">FN: hàng trên cùng của vùng thật, 10 điểm bỏ sót</text>
+          <rect x="560" y="250" width="34" height="34" fill="#ffffff" stroke="#d1d5db"/><text x="610" y="276">TN: 4 hàng nền còn lại, 40 điểm</text>
+          <line x1="560" y1="330" x2="600" y2="330" stroke="#2a78d6" stroke-width="4"/><text x="610" y="338">viền liền: vùng vật thật (50 điểm)</text>
+          <line x1="560" y1="380" x2="600" y2="380" stroke="#eb6834" stroke-width="4" stroke-dasharray="12 7"/><text x="610" y="388">viền đứt: vùng mô hình tô (50 điểm)</text></g>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình là một ảnh 10 nhân 10 điểm ảnh, viền xanh liền là vùng vật thật gồm 5 hàng, viền cam đứt là vùng mô hình tô, cũng 5 hàng nhưng lệch xuống một hàng. Bốn hàng ở giữa màu lục là phần tô trúng, 40 điểm ảnh. Hàng cam bên dưới là 10 điểm tô thừa, còn hàng xanh bên trên là 10 điểm bỏ sót. Bốn hàng trắng còn lại là nền đúng, 40 điểm."
+
+  # ───────────────────────── 5. SUY RA ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra: hệ số chồng lấp chỉ là giao trên hợp viết cách khác"
+    checks:
+      - "2 * 40 + 10 + 10 == 40 + (40 + 10 + 10) == 100"
+      - "Fraction(2 * 40, 40 + 60) == Fraction(2 * 40, 60) / (1 + Fraction(40, 60)) == Fraction(4, 5)"
+      - "all(Fraction(2, 1) * q / (1 + q) >= q for q in [Fraction(k, 10) for k in range(11)])"
+    steps:
+      - show: |
+          <p><b>Bước 1 — tách mẫu số.</b> Đặt $I = TP$ (giao) và $U = TP + FP + FN$ (hợp). Mẫu số của hệ số chồng lấp tách được thành $2\,TP + FP + FN = TP + (TP + FP + FN) = I + U$, nên:</p>
+          $$\text{Dice} = \frac{2 I}{I + U}$$
+          <p class="note">Làm thử: $I = 40$, $U = 60$ → $\frac{80}{40 + 60} = 0{,}8$.</p>
+        focus: [1, 1, 2, 3]
+        say: "Bước một là tách mẫu số. Đặt I là phần giao, tức số tô trúng, và U là phần hợp, tổng ba loại. Khi đó mẫu số của hệ số chồng lấp bằng I cộng U, nên hệ số này là hai I chia cho I cộng U. Làm thử với I bằng 40 và U bằng 60, ta được 80 chia 100, bằng 0 phẩy 8."
+      - show: |
+          <p><b>Bước 2 — chia cả tử và mẫu cho $U$</b> (điều ②), và nhớ $\frac{I}{U} = \text{IoU}$:</p>
+          $$\text{Dice} = \frac{2 \cdot \frac{I}{U}}{\frac{I}{U} + 1} = \frac{2 \cdot \text{IoU}}{1 + \text{IoU}}$$
+          <p class="note">Làm thử: $\text{IoU} = \frac{2}{3}$ → $\frac{2 \cdot \frac{2}{3}}{1 + \frac{2}{3}} = \frac{4/3}{5/3} = 0{,}8$ ✓.</p>
+        focus: [1, 2, 3]
+        say: "Bước hai, theo điều thứ hai, ta chia cả tử và mẫu cho U, và nhớ rằng I chia U chính là giao trên hợp. Vậy hệ số chồng lấp bằng hai lần giao trên hợp, chia cho 1 cộng giao trên hợp. Làm thử với giao trên hợp bằng hai phần ba, ta được bốn phần ba chia năm phần ba, bằng 0 phẩy 8, khớp bước một."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — luôn lớn hơn hoặc bằng.</b> Vì giao trên hợp nằm từ 0 tới 1, nên $1 + \text{IoU} \le 2$, suy ra $\frac{2}{1 + \text{IoU}} \ge 1$, nghĩa là Dice $\ge$ IoU, bằng nhau chỉ khi cả hai bằng 0 hoặc bằng 1.</p>
+          <table class="t"><tr><th>IoU</th><th>0</th><th>0,5</th><th>0,667</th><th>0,9</th><th>1</th></tr>
+          <tr><td>Dice</td><td>0</td><td>0,667</td><td>0,8</td><td>0,947</td><td>1</td></tr></table>
+        focus: [1, 1, "2.2"]
+        say: "Bước ba, vì giao trên hợp nằm từ 0 tới 1, nên 1 cộng giao trên hợp không quá 2, và hai chia cho số đó không nhỏ hơn 1. Nghĩa là hệ số chồng lấp luôn lớn hơn hoặc bằng giao trên hợp, bằng nhau chỉ khi cả hai bằng 0 hoặc bằng 1. Bảng cho thấy giao trên hợp 0 phẩy 5 ứng với hệ số chồng lấp 0 phẩy 667, còn 0 phẩy 9 ứng với 0 phẩy 947."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Chấm lưới 10 × 10 theo bốn thước đo"
+    checks:
+      - "alg.cvi_mask_counts([[int(2 <= r <= 6) for c in range(10)] for r in range(10)], [[int(1 <= r <= 5) for c in range(10)] for r in range(10)])[:3] == (40, 10, 10)"
+      - "round(alg.cvi_iou_dice(40, 10, 10)[0], 3) == 0.667 and alg.cvi_iou_dice(40, 10, 10)[1] == 0.8"
+      - "(40 + 40) / 100 == 0.8"
+      - "round(alg.cvi_iou_dice(40, 10, 10)[0], 3) == 0.667 and round((40 / 60 + 40 / 60) / 2, 3) == 0.667"
+    steps:
+      - show: |
+          <p><b>Bước 1 — đếm.</b> Đọc từ hình: $TP = 40$, $FP = 10$, $FN = 10$, $TN = 40$; cộng lại đủ $100$ điểm ảnh.</p>
+          <p><b>Bước 2 — giao trên hợp.</b> $\text{IoU} = \frac{40}{40 + 10 + 10} = \frac{40}{60} \approx \hlg{0{,}667}$.</p>
+        focus: [1, 1, 2]
+        say: "Bước một là đếm từ hình, có 40 điểm tô trúng, 10 điểm tô thừa, 10 điểm bỏ sót và 40 điểm nền đúng. Cộng lại đủ 100 điểm ảnh. Bước hai, giao trên hợp bằng 40 chia cho 40 cộng 10 cộng 10, tức 40 phần 60, xấp xỉ 0 phẩy 667."
+      - show: |
+          <p><b>Bước 3 — hệ số chồng lấp.</b> $\text{Dice} = \frac{2 \cdot 40}{80 + 10 + 10} = \frac{80}{100} = \hlg{0{,}8}$ — đúng bằng $\frac{2 \cdot 0{,}667}{1{,}667}$.</p>
+        say: "Bước ba, hệ số chồng lấp bằng hai nhân 40 chia cho 80 cộng 10 cộng 10, tức 80 phần 100, bằng 0 phẩy 8, đúng như công thức đổi từ giao trên hợp."
+      - clear: true
+        show: |
+          <p><b>Bước 4 — độ chính xác điểm ảnh và mIoU.</b> Độ chính xác điểm ảnh $= \frac{40 + 40}{100} = 0{,}8$.</p>
+          <table class="t"><tr><th>lớp</th><th>TP của lớp</th><th>FP của lớp</th><th>FN của lớp</th><th>IoU</th></tr>
+          <tr><td>vật</td><td>40</td><td>10</td><td>10</td><td>0,667</td></tr>
+          <tr><td>nền</td><td>40</td><td>10 (hàng bỏ sót)</td><td>10 (hàng tô thừa)</td><td>0,667</td></tr></table>
+          <p>mIoU $= \frac{0{,}667 + 0{,}667}{2} \approx \hlo{0{,}667}$.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Bước bốn, độ chính xác điểm ảnh bằng 40 cộng 40 chia 100, bằng 0 phẩy 8. Lớp vật có giao trên hợp 0 phẩy 667. Coi nền cũng là một lớp, hàng bỏ sót thành phần tô thừa của nền, hàng tô thừa thành phần bỏ sót của nền, nên nền cũng được 0 phẩy 667. Trung bình giao trên hợp qua hai lớp là khoảng 0 phẩy 667."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: đếm bằng tập toạ độ, và thử công thức đổi trên nhiều ca"
+    checks:
+      - "(lambda G, P: (len(G & P), len(G | P)))({(r, c) for r in range(1, 6) for c in range(10)}, {(r, c) for r in range(2, 7) for c in range(10)}) == (40, 60)"
+      - "all(abs(alg.cvi_iou_dice(tp, fp, fn)[1] - 2 * alg.cvi_iou_dice(tp, fp, fn)[0] / (1 + alg.cvi_iou_dice(tp, fp, fn)[0])) < 1e-12 for tp, fp, fn in [(40, 10, 10), (30, 20, 10), (1, 0, 3), (90, 10, 0)])"
+    steps:
+      - show: |
+          <p><b>Đường khác 1 — tập toạ độ.</b> Vùng thật là 50 cặp (hàng, cột) với hàng 1 tới 5; vùng tô là 50 cặp với hàng 2 tới 6. Phần chung có 40 cặp, gộp lại có 60 cặp: $\frac{40}{60}$ ✓ — không cần phân loại TP, FP, FN.</p>
+        focus: [1, 1, 1]
+        say: "Kiểm tra thứ nhất dùng tập toạ độ. Vùng thật là 50 cặp hàng cột với hàng từ 1 tới 5, vùng tô là 50 cặp với hàng từ 2 tới 6. Phần chung có 40 cặp, gộp lại có 60 cặp, nên ta được 40 phần 60 mà không cần phân loại từng điểm."
+      - show: |
+          <table class="t"><tr><th>đường khác 2: TP, FP, FN</th><th>IoU</th><th>Dice đếm thẳng</th><th>$\frac{2 \cdot \text{IoU}}{1 + \text{IoU}}$</th></tr>
+          <tr><td>40, 10, 10</td><td>0,667</td><td>0,8</td><td>0,8 ✓</td></tr>
+          <tr><td>30, 20, 10</td><td>0,5</td><td>0,667</td><td>0,667 ✓</td></tr>
+          <tr><td>1, 0, 3</td><td>0,25</td><td>0,4</td><td>0,4 ✓</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Kiểm tra thứ hai thử công thức đổi trên nhiều ca, nghĩa là so số đếm thẳng với số tính từ giao trên hợp. Với 40, 10, 10, đếm thẳng được 0 phẩy 8, công thức cũng cho 0 phẩy 8. Với 30, 20, 10, cả hai cách đều cho 0 phẩy 667. Với 1, 0, 3, cả hai cách đều cho 0 phẩy 4."
+
+  # ───────────────────────── 8. VẬT NHỎ ─────────────────────────
+  - id: rare
+    kind: concept
+    title: "Vật nhỏ: độ chính xác điểm ảnh 99%, giao trên hợp của vật bằng 0"
+    checks:
+      - "alg.cvi_mask_counts([[0] * 20 for _ in range(20)], [[int(r < 2 and c < 2) for c in range(20)] for r in range(20)]) == (0, 0, 4, 396)"
+      - "alg.cvi_iou_dice(0, 0, 4) == (0.0, 0.0) and 396 / 400 == 0.99 and round((396 / 400 + 0) / 2, 3) == 0.495"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ảnh 20 × 20, vết nứt 4 điểm, tô toàn nền</th><th>giá trị</th></tr>
+          <tr><td>độ chính xác điểm ảnh $\frac{0 + 396}{400}$</td><td>$\hl{0{,}99}$</td></tr>
+          <tr><td>giao trên hợp của vết nứt $\frac{0}{0 + 0 + 4}$</td><td>$\hlg{0}$</td></tr>
+          <tr><td>giao trên hợp của nền $\frac{396}{396 + 4 + 0}$</td><td>0,99</td></tr>
+          <tr><td>mIoU $= \frac{0{,}99 + 0}{2}$</td><td>$\hlo{0{,}495}$</td></tr></table>
+          <p class="note">Độ chính xác điểm ảnh bị 396 điểm nền “dễ” lấn át. mIoU cho mỗi lớp một phiếu ngang nhau, nên lớp hiếm không bị nuốt.</p>
+        focus: [0, "1.2", "1.3", "1.4", "1.5", 2, 2]
+        say: "Quay lại ảnh mặt đường ở phần mở đầu. Độ chính xác điểm ảnh bằng 396 chia 400, tức 0 phẩy 99. Giao trên hợp của vết nứt bằng 0 chia 4, bằng 0. Giao trên hợp của nền là 396 phần 400, cũng 0 phẩy 99. Trung bình qua hai lớp chỉ còn 0 phẩy 495, lộ ngay vấn đề. Độ chính xác điểm ảnh bị 396 điểm nền dễ lấn át. Còn trung bình qua lớp cho mỗi lớp một phiếu ngang nhau, nên lớp hiếm không bị nuốt."
+
+  # ───────────────────────── 9. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi của người đã đi làm"
+    checks:
+      - "round(2 * 0.7 / 1.7, 3) == 0.824 and 0.824 > 0.8"
+      - "alg.cvi_iou_dice(0, 3, 0) == (0.0, 0.0)"
+      - "round(alg.cvi_iou_dice(90, 10, 0)[1], 3) == 0.947 and alg.cvi_iou_dice(1, 0, 3)[1] == 0.4 and round((alg.cvi_iou_dice(90, 10, 0)[1] + alg.cvi_iou_dice(1, 0, 3)[1]) / 2, 3) == 0.674"
+      - "round(alg.cvi_iou_dice(90 + 1, 10 + 0, 0 + 3)[1], 3) == 0.933"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Báo độ chính xác điểm ảnh cho lớp hiếm <b class="red">(99% mà không thấy vật)</b>
+          <br><span class="note">Như ví dụ vết nứt. Phép thử: báo giao trên hợp <b>từng lớp</b>, nhất là lớp nhỏ nhất.</span></div>
+        focus: [1, 1]
+        say: "Lỗi thứ nhất là báo độ chính xác điểm ảnh cho lớp hiếm, được 99 phần trăm mà không thấy vật, như ví dụ vết nứt. Phép thử là báo giao trên hợp của từng lớp, nhất là lớp nhỏ nhất."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> So Dice của bài báo này với IoU của bài báo kia <b class="red">(tưởng A hơn B)</b>
+          <br><span class="note">A báo Dice 0,8; B báo IoU 0,7. Đổi B sang Dice: $\frac{2 \cdot 0{,}7}{1{,}7} \approx 0{,}824$ — B mới hơn. Phép thử: đổi về cùng một thước đo trước khi so.</span></div>
+        focus: [1, 1, 1]
+        say: "Lỗi thứ hai là so hệ số chồng lấp của bài báo này với giao trên hợp của bài báo kia, nên tưởng A hơn B. A báo hệ số chồng lấp 0 phẩy 8, B báo giao trên hợp 0 phẩy 7, nhưng đổi B sang cùng thước đo thì được khoảng 0 phẩy 824, tức B mới hơn. Phép thử là luôn đổi về cùng một thước đo trước khi so."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Quên ca mặt nạ rỗng <b class="red">(0 chia 0)</b>
+          <br><span class="note">Ảnh không có vết nứt, mô hình cũng không tô gì: TP = FP = FN = 0, giao trên hợp là $\frac{0}{0}$. Mô hình tô nhầm 3 điểm thì thành 0. Phải ghi rõ quy ước: tính là 1, hay bỏ ảnh đó ra — hai quy ước cho hai con số khác nhau.</span></div>
+        focus: [1, 1, 1, 1]
+        say: "Lỗi thứ ba là quên ca mặt nạ rỗng, gây phép chia 0 cho 0. Ảnh không có vết nứt và mô hình cũng không tô gì thì cả ba số đếm đều bằng 0, nên giao trên hợp là 0 chia 0. Nếu mô hình tô nhầm 3 điểm thì kết quả thành 0. Vì vậy phải ghi rõ quy ước, tính ảnh đó là 1 hay bỏ ra, vì hai quy ước cho hai con số khác nhau."
+      - show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Không nói trung bình theo ảnh hay gộp cả tập <b class="red">(0,674 hay 0,933?)</b></div>
+          <table class="t"><tr><th>ảnh</th><th>TP, FP, FN</th><th>hệ số chồng lấp</th></tr>
+          <tr><td>1: vật to</td><td>90, 10, 0</td><td>0,947</td></tr>
+          <tr><td>2: vật nhỏ</td><td>1, 0, 3</td><td>0,4</td></tr>
+          <tr><td>trung bình theo ảnh</td><td>—</td><td>$\frac{0{,}947 + 0{,}4}{2} \approx 0{,}674$</td></tr>
+          <tr><td>gộp cả tập</td><td>91, 10, 3</td><td>$\frac{182}{195} \approx 0{,}933$</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", "2.5"]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, không nói rõ trung bình theo ảnh hay gộp cả tập. Ảnh 1 có vật to, hệ số chồng lấp 0 phẩy 947. Ảnh 2 có vật nhỏ, chỉ 0 phẩy 4. Trung bình theo ảnh là 0 phẩy 674, mỗi ảnh một phiếu, nên vật nhỏ kéo xuống mạnh. Gộp cả tập thì vật to lấn át, được 0 phẩy 933, như điều thứ ba của phần ôn nền."
+
+  # ───────────────────────── 10. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: đếm, đổi thước đo, rồi chọn cách báo cáo"
+    checks:
+      - "alg.cvi_iou_dice(30, 20, 10) == (0.5, 60 / 90) and round(60 / 90, 3) == 0.667"
+      - "round(0.9 / (2 - 0.9), 3) == 0.818 and abs(2 * (0.9 / 1.1) / (1 + 0.9 / 1.1) - 0.9) < 1e-12"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>TP = 30, FP = 20, FN = 10. Tính giao trên hợp và hệ số chồng lấp.</td></tr>
+          <tr><td>2</td><td>Một bài báo chỉ ghi Dice 0,9. Giao trên hợp tương ứng bằng bao nhiêu?</td></tr>
+          <tr><td>3</td><td>Đội bảo trì đường cần mô hình tô vết nứt, đa số ảnh không có vết nứt. Bạn báo con số nào cho đội?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", 0]
+        say: "Bây giờ đến lượt bạn. Câu một, có 30 điểm tô trúng, 20 điểm tô thừa và 10 điểm bỏ sót, tính giao trên hợp và hệ số chồng lấp. Câu hai, một bài báo chỉ ghi hệ số chồng lấp 0 phẩy 9, giao trên hợp tương ứng bằng bao nhiêu? Câu ba, đội bảo trì đường cần mô hình tô vết nứt, mà đa số ảnh không có vết nứt nào, bạn báo con số nào cho đội? Dừng video và làm ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <p><b>Câu 1.</b> $\text{IoU} = \frac{30}{30 + 20 + 10} = \hlg{0{,}5}$; $\text{Dice} = \frac{60}{60 + 20 + 10} = \frac{60}{90} \approx \hlg{0{,}667}$ — đúng bằng $\frac{2 \cdot 0{,}5}{1{,}5}$.</p>
+          <p><b>Câu 2.</b> Đảo công thức: từ $\text{Dice} = \frac{2 \cdot \text{IoU}}{1 + \text{IoU}}$, chuyển vế được $\text{IoU} = \frac{\text{Dice}}{2 - \text{Dice}} = \frac{0{,}9}{1{,}1} \approx \hlg{0{,}818}$.</p>
+        focus: [1, 1, 2, 2]
+        say: "Câu một, giao trên hợp bằng 30 chia 60, bằng 0 phẩy 5. Hệ số chồng lấp bằng 60 chia 90, xấp xỉ 0 phẩy 667, khớp công thức đổi. Câu hai, nhân chéo rồi chuyển vế công thức đổi, giao trên hợp bằng hệ số chồng lấp chia cho 2 trừ hệ số đó. Thay số, 0 phẩy 9 chia 1 phẩy 1, xấp xỉ 0 phẩy 818."
+      - show: |
+          <table class="t"><tr><th>câu 3: con số</th><th>được</th><th>mất</th></tr>
+          <tr><td>độ chính xác điểm ảnh</td><td>dễ hiểu</td><td class="red">gần 100% kể cả khi không thấy vết nứt nào</td></tr>
+          <tr><td>giao trên hợp của lớp vết nứt, gộp cả tập</td><td>không bị nền lấn át</td><td>vết dài, to lấn át vết mảnh</td></tr>
+          <tr><td>thêm: số ảnh có nứt mà mô hình không tô điểm nào</td><td>đúng điều đội cần: bỏ sót bao nhiêu chỗ hỏng</td><td>phải ghi quy ước cho ảnh không có nứt</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Câu ba là một đánh đổi. Độ chính xác điểm ảnh dễ hiểu nhưng gần 100 phần trăm kể cả khi không thấy vết nứt nào. Giao trên hợp của lớp vết nứt gộp cả tập không bị nền lấn át, nhưng vết dài và to sẽ lấn át vết mảnh. Nên báo thêm số ảnh có nứt mà mô hình không tô điểm nào, đúng điều đội cần biết, kèm quy ước cho ảnh không có nứt."
+
+  # ───────────────────────── 11. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">đếm TP, FP, FN trên điểm ảnh</span><span class="a">→</span>
+          <span class="n">giao trên hợp = TP / (TP + FP + FN)</span><span class="a">→</span>
+          <span class="n">hệ số chồng lấp = 2 IoU / (1 + IoU), luôn lớn hơn hoặc bằng</span><span class="a">→</span>
+          <span class="n">vật nhỏ: độ chính xác điểm ảnh đánh lừa, dùng mIoU</span><span class="a">→</span>
+          <span class="n">ghi rõ: theo ảnh hay gộp, mặt nạ rỗng tính sao</span></div>
+        say: "Tổng kết lại, ta đếm điểm tô trúng, tô thừa và bỏ sót, rồi giao trên hợp là số tô trúng chia tổng ba loại. Hệ số chồng lấp chỉ là giao trên hợp viết cách khác và luôn lớn hơn hoặc bằng nó. Với vật nhỏ, độ chính xác điểm ảnh đánh lừa, nên dùng trung bình qua lớp. Và luôn ghi rõ trung bình theo ảnh hay gộp cả tập, mặt nạ rỗng tính thế nào."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> khi lớp quan trọng nhất lại là lớp hiếm nhất, đừng để các điểm ảnh “dễ” bỏ phiếu thay nó. Hãy đo riêng lớp hiếm, và đo đúng điều người dùng cần biết.</div>
+        say: "Điều cần mang theo, khi lớp quan trọng nhất lại là lớp hiếm nhất, đừng để các điểm ảnh dễ bỏ phiếu thay nó. Hãy đo riêng lớp hiếm, và đo đúng điều người dùng cần biết."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 10): <b>dịch chuyển miền</b> — khi ảnh thật (ban đêm, trời mưa, camera mới) khác ảnh huấn luyện, và vì sao phải đo độ chính xác theo từng điều kiện.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 10, ta học dịch chuyển miền, tức khi ảnh thật như ban đêm, trời mưa hay camera mới khác ảnh huấn luyện. Ta sẽ thấy vì sao phải đo độ chính xác theo từng điều kiện. Hẹn gặp bạn ở bài tiếp theo."

@@ -1,0 +1,205 @@
+id: L00
+course: ROB
+series: "ROB · Robot tự hành"
+title: "Bài 0 — Kiến trúc robot tự hành: cảm nhận, định vị, lập kế hoạch, điều khiển"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/rob.yaml L00; audit/rob/verify_rob.py L00; R. Siegwart, I. Nourbakhsh, D. Scaramuzza, Introduction to Autonomous Mobile Robots (bản 2, 2011), chương 1; M. Quigley và cộng sự, ROS: an open-source Robot Operating System (2009) — kiểu xuất bản–đăng ký; RBM bài 10 (PID); ESY bài 9 (thời hạn thời gian thực)"
+assumes: [arith, frac]
+# Quy ước: vòng điều khiển 50 Hz (chu kỳ 1000/50 = 20 ms); thời gian từng khối là SỐ MINH HOẠ. Trễ TỆ NHẤT (không phải trung bình) phải nằm trong chu kỳ.
+#   Tên ROS chỉ trên màn hình; lời đọc “hệ điều hành cho robot”. Hz đọc theo luật RBM (“héc”, NOT_VERIFIED bằng tai người).
+objectives:
+  - "Mô tả các khối và luồng dữ liệu của robot tự hành"
+  - "Lập ngân sách trễ cho vòng điều khiển"
+  - "Hiểu kiểu xuất bản–đăng ký giữa các khối"
+asr_reviewed:
+  - {sentence: "Vòng 100 héc chỉ còn 10 mi li giây cho mỗi lần lặp.", reason: "ASR chép “vàng 100 hếch chỉ còn 10 mili giây cho mỗi lần lập.” (0.667): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh; lệch âm/thanh thuần Việt: vòng/vàng, héc/hếch, lặp/lập — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Còn lại 200 mi li giây rảnh, đúng bằng 50 vòng nhân 4 mi li giây dư, khớp với kết quả trước.", reason: "ASR chép “Còn lại 200 mili dây trảnh đúng bằng 50 vòng nhân 4 mili dây dư, khớp với kết quả trước.” (0.739): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh; lệch âm/thanh thuần Việt: rảnh (trong “mi li giây rảnh” → “mili dây trảnh”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Đếm trong trọn một giây, có 50 vòng, mỗi vòng bận 16 mi li giây, tổng cộng 800 mi li giây bận.", reason: "ASR chép “Đếm trong trọng 1 dây có 50 vòng, mỗi vòng bận 16 mili dây, tổng cộng 800 mili dây bận.” (0.75): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh; lệch âm/thanh thuần Việt: trọn/trọng — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Đọc cảm biến cộng định vị là 13 mi li giây, thêm 2 và 1 nữa là 16 mi li giây.", reason: "ASR chép “Đọc cảm biến cộng định vị là 13ml, thêm 2 và 1 nửa là 16ml.” (0.762): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh; lệch âm/thanh thuần Việt: nữa/nửa — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Vòng 10 héc có chu kỳ 1000 chia 10, bằng 100 mi li giây.", reason: "ASR chép “Vòng 10 hét có chu kỳ 1000 chia 10 bằng 100 mili dây.” (0.774): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh; lệch âm/thanh thuần Việt: héc/hét — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Tổng là 16 mi li giây, dư 4 trong chu kỳ 1000 chia 50, bằng 20 mi li giây.", reason: "ASR chép “Tổng là 16 mili dây, dự bốn trong chu kỳ 1000 chia 50 bằng 20 mili dây.” (0.727): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh; lệch âm/thanh thuần Việt: dư (trong “mi li giây dư” → “mili dây dự”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bước định vị mất 9 mi li giây.", reason: "ASR chép “Bước định vị mất chính mi ly giây.” (0.75): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh; lệch âm/thanh thuần Việt: chín/chính — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Robot giao hàng đâm vào cửa kính"
+    checks:
+      - "1000 / 50 == 20"
+    steps:
+      - show: |
+          <p>Robot giao hàng trong toà nhà chạy tốt cả tuần, rồi một hôm đâm vào cửa kính. Cảm biến thấy cửa, bộ lập kế hoạch tính đường tránh — nhưng lệnh rẽ tới bánh xe <b>muộn</b>. Mỗi khối đều “đúng”; hệ thống thì sai vì <b>thời gian</b>.</p>
+          <div class="box key">Hôm nay: kiến trúc của robot tự hành — các khối, dữ liệu đi qua chúng, và <b>ngân sách trễ</b> của vòng điều khiển 20 ms.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, một robot giao hàng trong toà nhà chạy tốt cả tuần, rồi một hôm đâm vào cửa kính. Cảm biến thấy cửa, bộ lập kế hoạch tính được đường tránh, nhưng lệnh rẽ tới bánh xe quá muộn. Mỗi khối đều đúng, còn hệ thống thì sai vì thời gian. Hôm nay ta học kiến trúc của robot tự hành, các khối, dữ liệu đi qua chúng, và ngân sách trễ của một vòng điều khiển 20 mi li giây."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: tần số, chu kỳ và quãng xe đi trong lúc chờ"
+    checks:
+      - "1000 / 50 == 20 and 1000 / 10 == 100 and 1000 / 100 == 10"
+      - "round(1 * 20 / 1000, 3) == 0.02 and round(1 * 100 / 1000, 3) == 0.1"
+    steps:
+      - show: |
+          <p><b>Tần số</b> là số lần lặp mỗi giây (đơn vị Hz); <b>chu kỳ</b> là thời gian của một lần: 1 giây = 1000 ms chia cho tần số.</p>
+          <table class="t"><tr><th>tần số</th><th>chu kỳ</th></tr>
+          <tr><td>10 Hz</td><td>$\frac{1000}{10} = 100$ ms</td></tr>
+          <tr><td>50 Hz</td><td>$\frac{1000}{50} = \hl{20}$ ms</td></tr>
+          <tr><td>100 Hz</td><td>$\frac{1000}{100} = 10$ ms</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", "2.4"]
+        say: "Trước hết, ta ôn hai khái niệm về thời gian mà cả bài sẽ dùng. Tần số là số lần lặp mỗi giây, còn chu kỳ là thời gian của một lần, bằng 1000 mi li giây chia cho tần số. Vòng 10 héc có chu kỳ 1000 chia 10, bằng 100 mi li giây. Vòng 50 héc có chu kỳ 1000 chia 50, bằng 20 mi li giây. Vòng 100 héc chỉ còn 10 mi li giây cho mỗi lần lặp."
+      - show: |
+          <p>Trong lúc robot còn đang tính, xe <b>vẫn chạy</b>: quãng đi thêm = tốc độ nhân thời gian chờ.</p>
+          <table class="t"><tr><th>xe chạy 1 m/s, chờ</th><th>xe đi thêm</th></tr>
+          <tr><td>20 ms</td><td>$1 \cdot 0{,}02 = 0{,}02$ m = 2 cm</td></tr>
+          <tr><td>100 ms</td><td>$1 \cdot 0{,}1 = 0{,}1$ m = 10 cm</td></tr></table>
+        introduces: [cdot]
+        focus: [1, "2.2", "2.3"]
+        say: "Điều thứ hai, trong lúc robot còn đang tính thì xe vẫn chạy, quãng đi thêm bằng tốc độ nhân thời gian chờ. Xe chạy 1 mét mỗi giây, chờ 20 mi li giây thì đi thêm 2 xen-ti-mét. Chờ 100 mi li giây thì xe đã đi thêm 10 xen-ti-mét, đủ để chạm một cánh cửa."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: năm khối và kiểu xuất bản–đăng ký"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">cảm biến</span><span class="a">→</span><span class="n">cảm nhận</span><span class="a">→</span><span class="n">định vị, bản đồ</span><span class="a">→</span><span class="n">lập kế hoạch</span><span class="a">→</span><span class="n">điều khiển → động cơ</span></div>
+          <table class="t"><tr><th>khối</th><th>làm gì</th><th>bài</th></tr>
+          <tr><td>cảm nhận</td><td>từ dữ liệu thô ra vật cản, vạch đường, vật thể</td><td>3, 11</td></tr>
+          <tr><td>định vị, bản đồ</td><td>robot đang ở đâu, quanh nó có gì</td><td>4–7</td></tr>
+          <tr><td>lập kế hoạch</td><td>đường đi tới đích, tránh vật cản gần</td><td>8, 9</td></tr>
+          <tr><td>điều khiển</td><td>bám đường, ra lệnh tốc độ bánh xe</td><td>1, 10</td></tr></table>
+          <p><b>Xuất bản–đăng ký</b>: mỗi khối phát tin lên một “kênh” có tên; khối khác đăng ký kênh đó. Các khối chạy độc lập, mỗi khối một tần số.</p>
+        focus: [1, 2, "2.2", "2.3", "2.4", "2.5", 3]
+        say: "Dữ liệu đi từ cảm biến, qua cảm nhận, định vị và bản đồ, lập kế hoạch, rồi điều khiển ra động cơ. Bảng giới thiệu bốn khối xử lý. Cảm nhận biến dữ liệu thô thành vật cản, vạch đường hay vật thể. Định vị và bản đồ trả lời robot đang ở đâu và quanh nó có gì. Lập kế hoạch tìm đường tới đích và tránh vật cản gần. Điều khiển bám đường và ra lệnh tốc độ bánh xe. Theo kiểu xuất bản và đăng ký, mỗi khối phát tin lên một kênh có tên, khối khác đăng ký kênh đó, nên các khối chạy độc lập, mỗi khối một tần số."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Một chu kỳ 20 ms trên trục thời gian"
+    checks:
+      - "4 + 9 + 2 + 1 == 16 and 20 - 16 == 4 and 4 + 25 + 2 + 1 == 32 and 32 > 20"
+    steps:
+      - show: |
+          <div><svg width="1500" height="430" viewBox="0 0 1500 430"><rect x="140" y="90" width="160" height="60" fill="#93c5fd" stroke="#1f2937" stroke-width="2"/><rect x="300" y="90" width="360" height="60" fill="#fdba74" stroke="#1f2937" stroke-width="2"/><rect x="660" y="90" width="80" height="60" fill="#86efac" stroke="#1f2937" stroke-width="2"/><rect x="740" y="90" width="40" height="60" fill="#d1d5db" stroke="#1f2937" stroke-width="2"/><rect x="780" y="90" width="160" height="60" fill="none" stroke="#059669" stroke-width="3" stroke-dasharray="10 6"/><rect x="140" y="260" width="160" height="60" fill="#93c5fd" stroke="#1f2937" stroke-width="2"/><rect x="300" y="260" width="1000" height="60" fill="#fdba74" stroke="#1f2937" stroke-width="2"/><rect x="1300" y="260" width="80" height="60" fill="#86efac" stroke="#1f2937" stroke-width="2"/><rect x="1380" y="260" width="40" height="60" fill="#d1d5db" stroke="#1f2937" stroke-width="2"/><line x1="940" y1="50" x2="940" y2="350" stroke="#b91c1c" stroke-width="4"/><g font-size="22" fill="#1f2937"><text x="140" y="75">vòng bình thường: 4 + 9 + 2 + 1 = 16 ms</text><text x="784" y="180" fill="#059669">dư 4 ms</text><text x="140" y="245">lúc khó nhất: định vị mất 25 ms</text><text x="952" y="75" fill="#b91c1c">hạn 20 ms</text><text x="952" y="350" fill="#b91c1c">lệnh tới muộn: 4 + 25 + 2 + 1 = 32 ms</text><text x="140" y="400">ô xanh dương: đọc cảm biến, ô cam: định vị, ô lục: tính lệnh, ô xám: gửi lệnh</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình đặt các khối của một vòng điều khiển lên trục thời gian, vạch đỏ đứng là hạn chót 20 mi li giây. Hàng trên là vòng bình thường, bốn khối nối đuôi nhau hết 16 mi li giây, còn dư 4 trước vạch đỏ. Hàng dưới là lúc khó nhất, khối định vị màu cam kéo dài tới 25 mi li giây. Cả vòng hết 32 mi li giây, lệnh tới bánh xe sau vạch đỏ, đúng như chuyện robot đâm vào cửa kính."
+
+  - id: example
+    kind: example
+    title: "Ngân sách 20 ms"
+    checks:
+      - "4 + 9 + 2 + 1 == 16 and 1000 / 50 - (4 + 9 + 2 + 1) == 4"
+      - "4 + 9 == 13 and 13 + 2 + 1 == 16 and round(4 / 20 * 100) == 20"
+    steps:
+      - show: |
+          <table class="t"><tr><th>Bước 1 — vòng 50 Hz (số minh hoạ, trễ tệ nhất)</th><th>ms</th></tr>
+          <tr><td>đọc cảm biến</td><td>4</td></tr>
+          <tr><td>định vị</td><td>9</td></tr>
+          <tr><td>tính lệnh điều khiển</td><td>2</td></tr>
+          <tr><td>gửi lệnh tới động cơ</td><td>1</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bước một, lập bảng ngân sách cho vòng 50 héc với số minh hoạ, tính theo trễ tệ nhất. Đọc cảm biến mất 4 mi li giây. Bước định vị mất 9 mi li giây. Tính lệnh điều khiển mất 2. Gửi lệnh tới động cơ mất 1."
+      - show: |
+          <p><b>Bước 2 — cộng dồn theo thứ tự chạy</b> (các khối nối đuôi nhau):</p>
+          $$4 + 9 = 13, \qquad 13 + 2 + 1 = \hl{16} \text{ ms}$$
+        focus: [1, 2]
+        say: "Bước hai, cộng dồn theo đúng thứ tự chạy, vì khối sau phải chờ khối trước xong. Đọc cảm biến cộng định vị là 13 mi li giây, thêm 2 và 1 nữa là 16 mi li giây."
+      - show: |
+          <p><b>Bước 3 — so với chu kỳ:</b></p>
+          $$\frac{1000}{50} = 20 \text{ ms}, \qquad 20 - 16 = \hl{4} \text{ ms dư}$$
+        focus: [1, 2]
+        say: "Bước ba, so tổng với chu kỳ của vòng. Tổng là 16 mi li giây, dư 4 trong chu kỳ 1000 chia 50, bằng 20 mi li giây."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>Bước 4 — quyết định</th><th>kết luận</th></tr>
+          <tr><td>phần dư $\frac{4}{20}$</td><td>20% chu kỳ — chừa cho lúc máy bận</td></tr>
+          <tr><td>lập kế hoạch toàn cục (chậm, ví dụ mỗi giây một lần)</td><td>chạy ở <b>vòng riêng</b>, không nằm trong vòng 20 ms</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Bước bốn, ra quyết định từ bảng ngân sách. Phần dư 4 trên 20 là 20 phần trăm chu kỳ, chừa lại cho những lúc máy bận việc khác. Lập kế hoạch toàn cục chậm hơn, ví dụ mỗi giây một lần, chạy ở vòng riêng, không nằm trong vòng 20 mi li giây."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: đếm trong trọn một giây"
+    checks:
+      - "50 * 16 == 800 and 1000 - 800 == 200 and 50 * 4 == 200"
+      - "list(__import__('itertools').accumulate([4, 9, 2, 1])) == [4, 13, 15, 16] and max([4, 13, 15, 16]) <= 20"
+    steps:
+      - show: |
+          <table class="t"><tr><th>cách khác</th><th>kết quả</th></tr>
+          <tr><td>mốc xong của từng khối trong một vòng</td><td>4 → 13 → 15 → 16 ms, mốc cuối $\le 20$ ✓</td></tr>
+          <tr><td>một giây có 50 vòng, mỗi vòng bận 16 ms</td><td>$50 \cdot 16 = 800$ ms bận</td></tr>
+          <tr><td>thời gian rảnh trong một giây</td><td>$1000 - 800 = 200$ ms $= 50 \cdot 4$ ✓</td></tr></table>
+        introduces: [geq]
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Kiểm bằng đường khác, thay vì cộng một lần, ta ghi mốc thời gian lúc từng khối xong việc. Các mốc là 4, 13, 15 rồi 16 mi li giây, mốc cuối vẫn trước hạn 20. Đếm trong trọn một giây, có 50 vòng, mỗi vòng bận 16 mi li giây, tổng cộng 800 mi li giây bận. Còn lại 200 mi li giây rảnh, đúng bằng 50 vòng nhân 4 mi li giây dư, khớp với kết quả trước."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Lập ngân sách theo trễ trung bình <b class="red">(lỡ hạn khi tệ nhất)</b>
+          <br><span class="note">Định vị trung bình 9 ms nhưng thỉnh thoảng 25 ms khi nhiều điểm đo — vòng 20 ms trễ hạn đúng lúc khó nhất. Đo phân vị cao và trễ tệ nhất.</span></div>
+        say: "Lỗi thứ nhất, lập ngân sách theo trễ trung bình, nên lỡ hạn khi tệ nhất. Định vị trung bình 9 mi li giây nhưng thỉnh thoảng 25 khi có nhiều điểm đo, và vòng 20 mi li giây trễ hạn đúng lúc khó nhất. Hãy đo phân vị cao và trễ tệ nhất."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Dùng dữ liệu cũ mà không biết là cũ <b class="red">(điều khiển theo quá khứ)</b>
+          <br><span class="note">Mỗi tin phải mang <b>dấu thời gian</b> lúc đo. Khối điều khiển kiểm: tin vị trí đã quá 100 ms thì giảm tốc hoặc dừng, không dùng như mới.</span></div>
+        say: "Lỗi thứ hai, dùng dữ liệu cũ mà không biết là cũ, nên điều khiển theo quá khứ. Mỗi tin phải mang dấu thời gian lúc đo. Khối điều khiển phải kiểm, tin vị trí đã quá 100 mi li giây thì giảm tốc hoặc dừng, không dùng như dữ liệu mới."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Không có đường dừng an toàn độc lập <b class="red">(một khối treo, cả xe chạy mù)</b>
+          <br><span class="note">Khối lập kế hoạch treo thì lệnh cũ vẫn được gửi mãi. Cần bộ giám sát: không nhận lệnh mới trong một khoảng thời gian thì tự dừng động cơ.</span></div>
+        say: "Lỗi thứ ba, không có đường dừng an toàn độc lập, nên một khối treo là cả xe chạy mù. Khi khối lập kế hoạch treo, lệnh cũ vẫn được gửi mãi. Cần một bộ giám sát, không nhận lệnh mới trong một khoảng thời gian thì tự dừng động cơ."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "1000 / 100 == 10 and 4 + 9 + 2 + 1 > 1000 / 100 and 1000 / 40 == 25"
+      - "4 + 2 + 1 == 7 and 10 - 7 == 3 and 7 <= 10 and 9 <= 25"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Muốn tăng vòng điều khiển lên 100 Hz với cùng các khối như ví dụ (tổng 16 ms). Có được không?</td></tr>
+          <tr><td>2</td><td>Nếu chỉ giữ đọc cảm biến, tính lệnh, gửi lệnh trong vòng nhanh, còn định vị chạy vòng riêng 40 Hz, mỗi vòng có bao nhiêu ms?</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, muốn tăng vòng điều khiển lên 100 héc với cùng các khối như ví dụ, tổng 16 mi li giây, có được không? Câu hai, nếu chỉ giữ đọc cảm biến, tính lệnh và gửi lệnh trong vòng nhanh, còn định vị chạy vòng riêng 40 héc, thì mỗi vòng có bao nhiêu mi li giây? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① Chu kỳ mới:</p>
+          $$\frac{1000}{100} = 10 \text{ ms} \lt 16 \text{ ms}$$
+          <p>10 ms không đủ cho 16 ms việc → <b>không được</b>.</p>
+        introduces: [ltgt]
+        focus: [2, 3]
+        say: "Câu một, trước hết tính chu kỳ mới của vòng 100 héc rồi so với tổng 16 mi li giây của các khối. Đáp án câu một, không được, vì chu kỳ 100 héc chỉ còn 1000 chia 100 bằng 10 mi li giây, nhỏ hơn 16."
+      - show: |
+          <table class="t"><tr><th>② vòng</th><th>việc phải làm</th><th>chu kỳ</th><th>kết luận</th></tr>
+          <tr><td>nhanh, 100 Hz</td><td>4 + 2 + 1 = 7 ms</td><td>10 ms</td><td>được, dư 3 ms</td></tr>
+          <tr><td>định vị, 40 Hz</td><td>9 ms</td><td>$\frac{1000}{40} = 25$ ms</td><td>dư nhiều</td></tr></table>
+        focus: [1, "1.2", "1.3", 1]
+        say: "Câu hai, tách thành hai vòng rồi kiểm từng vòng một. Câu hai, vòng nhanh cần 4 cộng 2 cộng 1 bằng 7 mi li giây trong 10, nên được. Vòng định vị 40 héc có 1000 chia 40 bằng 25 mi li giây cho 9 mi li giây việc, dư nhiều. Vòng nhanh dùng ước lượng vị trí mới nhất kèm dấu thời gian, vì vị trí có thể đã cũ tới 25 mi li giây."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">cảm nhận → định vị → lập kế hoạch → điều khiển</span><span class="a">→</span>
+          <span class="n">mỗi khối một tần số, nối bằng kênh tin</span><span class="a">→</span>
+          <span class="n">ngân sách theo trễ tệ nhất</span><span class="a">→</span>
+          <span class="n">dấu thời gian, bộ giám sát tự dừng</span></div>
+        say: "Tổng kết lại, robot tự hành đi từ cảm nhận, định vị, lập kế hoạch tới điều khiển, mỗi khối một tần số và nối với nhau bằng kênh tin. Lập ngân sách theo trễ tệ nhất, gắn dấu thời gian, và có bộ giám sát tự dừng."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> ở robot, câu trả lời <b>đúng nhưng muộn</b> là câu trả lời sai.</div>
+        say: "Điều cần mang theo, ở robot, một câu trả lời đúng nhưng muộn là một câu trả lời sai."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 1): <b>mô hình chuyển động</b> của xe hai bánh vi sai.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 1, ta học mô hình chuyển động của xe hai bánh vi sai. Hẹn gặp bạn ở bài tiếp theo."

@@ -1,0 +1,412 @@
+id: L09
+series: "CS115 · Toán cho Khoa học Máy tính"
+title: "Bài 9 — Gradient Descent, SGD, Momentum & Adam: tự đi xuống đáy từng bước"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "CS115_Toan_cho_Khoa_hoc_May_tinh_Full.tex#L281-L287 (GD, SGD, Momentum, Adam); NN (Sequential vs. batch, epoch, Learning rate, Momentum, Variable learning rate); CITED: Kingma & Ba, Adam, ICLR 2015, arXiv:1412.6980"
+assumes: [vec, sub, cdot, implies, nabla, partial, prime, star, sqrt, zero_vec, dots, transpose, hat]
+# Quy ước ký hiệu của bài (lint kiểm, xem tools/registry/symbols.yaml):
+#   bước lặp: chỉ số dưới k trên vector in đậm (w_k = vị trí sau k bước) — KHÁC bài 1 (x_i = thành phần thứ i): nói rõ ở
+#   step notation_note; tốc độ học η (sym eta); hệ số giữ lại β, β₁, β₂ (sym beta); số rất nhỏ ε (sym epsilon);
+#   gradient tại bước k: g_k (chữ thường, không in đậm khi chỉ có 1 trọng số); ước lượng đã hiệu chỉnh: m̂ (dấu mũ = ước lượng,
+#   cùng nghĩa với ŷ của bài 0); nhân hai số: ·. Công thức theo đúng cách viết của tài liệu (dòng 283–285).
+# Sửa nguồn: A18 (dòng 286 “Adam … phổ biến nhất” là nhận định, không phải định lý).
+# Nối bài trước (nói lại khi dùng, luật 17): bài 0 (hai ngôi nhà, w tốt nhất ≈ 3,36), bài 6 (−∇f là hướng giảm nhanh nhất tại
+#   chỗ; công thức điểm mới = điểm cũ − bước nhỏ · gradient), bài 8 (điểm dừng ∇f = 0; hàm f = x² + y² − xy + x − y có đáy
+#   tại (−1/3, 1/3), giá trị −1/3).
+objectives:
+  - "Đọc thành lời công thức w_{k+1} = w_k − η ∇f(w_k) và tự làm 2–3 bước bằng tay"
+  - "Giải thích vì sao η quá nhỏ thì chậm, quá lớn thì dao động hoặc phân kỳ, bằng hệ số (1 − 2η) của ví dụ"
+  - "Phân biệt Gradient Descent (cả lô dữ liệu) và SGD (một mẫu hay một lô nhỏ); biết một vòng qua dữ liệu gọi là epoch"
+  - "Tính tay trung bình trượt, hiệu chỉnh độ lệch, và bước Momentum"
+  - "Đọc được công thức Adam và giải thích vì sao bước đầu tiên của Adam dài khoảng η cho mọi trọng số"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Khi không giải được phương trình gradient bằng 0"
+    steps:
+      - show: |
+          <p class="big">Bài 8: tìm đáy bằng cách <b>giải</b> $\ \nabla f = \mathbf{0}$.</p>
+          <p>Mô hình thật có hàng triệu trọng số, hàm sai số phức tạp → <b>không giải trực tiếp được</b>.</p>
+        focus: [1, 2]
+        say: "Chào bạn, ở bài 8, ta tìm đáy của một hàm bằng cách giải phương trình gradient bằng vector không. Nhưng mô hình AI thật có hàng triệu trọng số, và hàm sai số phức tạp đến mức không giải trực tiếp được."
+      - show: |
+          <div class="box key">Thay vì giải: <b>đi xuống từng bước</b>, như người xuống núi trong sương mù — mỗi bước chỉ nhìn độ dốc ngay dưới chân.</div>
+        say: "Thay vì giải, ta đi xuống từng bước, như người xuống núi trong sương mù mà bài 6 đã kể. Mỗi bước, ta chỉ nhìn độ dốc ngay dưới chân rồi bước một bước nhỏ xuống dốc."
+      - show: |
+          <p>Hôm nay trả lời 3 câu hỏi:</p>
+          <table class="t"><tr><th>câu hỏi</th><th>trả lời</th></tr>
+          <tr><td>Mỗi bước đi <b>bao xa</b>?</td><td>tốc độ học</td></tr>
+          <tr><td>Dữ liệu quá nhiều thì sao?</td><td><b>SGD</b></td></tr>
+          <tr><td>Đi nhanh và ổn định hơn thế nào?</td><td><b>Momentum</b>, <b>Adam</b></td></tr></table>
+          <p class="note">Với AI: đây là bước ④ <b>tự sửa</b> của bài 0.</p>
+        focus: [1, "2.2", "2.3", "2.4", 3]
+        say: "Hôm nay mình trả lời ba câu hỏi. Mỗi bước đi bao xa, tức là chọn tốc độ học. Dữ liệu quá nhiều thì làm sao, câu trả lời là SGD. Và đi nhanh mà ổn định hơn bằng cách nào, với Momentum và Adam. Đây chính là bước tự sửa trong bốn bước của bài 0."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn bài 6: gradient chỉ hướng dốc lên nhất"
+    checks:
+      - "(lambda w: sp.diff((w - 3)**2, w))(sp.Symbol('w')) == 2*sp.Symbol('w') - 6"
+      - "2*(0 - 3) == -6"
+    steps:
+      - show: |
+          <p>Bài 6: gradient $\nabla f$ chỉ hướng <b>dốc lên nhất</b> ngay tại chỗ, nên $-\nabla f$ chỉ hướng <b>xuống nhanh nhất</b>.</p>
+          <p class="note">Với hàm một biến, gradient chính là đạo hàm $f'$: dương thì hàm đang đi lên, âm thì đang đi xuống.</p>
+        focus: [1, 2]
+        say: "Ôn lại bài 6, gradient là mũi tên chỉ hướng dốc lên nhất ngay tại chỗ đang đứng, nên đi ngược nó là hướng xuống nhanh nhất. Với hàm một biến, gradient chính là đạo hàm, dương thì hàm đang đi lên, âm thì đang đi xuống."
+      - show: |
+          <p>Ví dụ cả bài: $\ f(w) = (w - 3)^2$, đáy tại $w = 3$. &nbsp; Đạo hàm: $\ f'(w) = 2(w - 3)$.</p>
+          <p>Tại $w = 0$, đạo hàm âm → hàm đang đi xuống khi $w$ tăng → nên <b>tăng</b> $w$:</p>
+          $$f'(0) = 2\cdot(0 - 3) = -6 < 0$$
+        focus: ["1.1", "1.3", [2, 3]]
+        say: "Ví dụ dùng suốt bài là f của w bằng w trừ 3, bình phương, có đáy tại w bằng 3. Theo quy tắc đạo hàm của bài 6, đạo hàm là 2 nhân w trừ 3. Tại w bằng 0, đạo hàm bằng âm 6, âm, nên muốn xuống thấp hơn thì phải tăng w."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym_gd
+    kind: symbol
+    title: "Giải mã ký hiệu: vị trí sau k bước, η và công thức Gradient Descent"
+    checks:
+      - "Rational(1,4) > 0"
+    steps:
+      - show: |
+          <div class="box key">$\mathbf{w}_k$: vị trí (bộ trọng số) <b>sau $k$ bước</b>. &nbsp; $\mathbf{w}_0$ là điểm xuất phát, $\mathbf{w}_1$ sau 1 bước, …</div>
+          <p class="note">Khác bài 1: ở đó $x_1, x_2$ là <b>thành phần</b> của một vector. Ở đây chỉ số dưới là <b>số thứ tự bước</b>, gắn vào cả vector in đậm.</p>
+        notation_note: true
+        focus: ["1.1", ["1.3", "1.4"], 2]
+        say: "Ký hiệu đầu tiên, w in đậm có chỉ số k ở dưới là vị trí sau k bước. Với k bằng 0, ta có điểm xuất phát, với k bằng 1 là vị trí sau một bước. Lưu ý, khác bài 1, chỉ số dưới ở đây là số thứ tự bước, không phải thành phần thứ mấy của vector."
+      - show: |
+          <p>$\eta$ (đọc là <b>eta</b>): <b>tốc độ học</b> — một số dương nhỏ, quyết định mỗi bước dài bao nhiêu.</p>
+        introduces: [eta]
+        say: "Ký hiệu thứ hai là chữ Hy Lạp này, đọc là eta, gọi là tốc độ học. Đó là một số dương nhỏ do ta chọn, quyết định mỗi bước đi dài bao nhiêu."
+      - show: |
+          <div class="box key"><b>Gradient Descent</b>:
+          $$\mathbf{w}_{k+1} = \mathbf{w}_k - \eta\,\nabla f(\mathbf{w}_k)$$
+          <span class="note">vị trí mới = vị trí cũ − tốc độ học nhân gradient tại vị trí cũ</span></div>
+        say: "Ghép lại, ta có công thức Gradient Descent. Vị trí mới bằng vị trí cũ trừ eta nhân gradient tại vị trí cũ. Đây đúng là câu điểm mới bằng điểm cũ trừ bước nhỏ nhân gradient mà bài 6 đã viết bằng lời."
+
+  # ───────────────────────── 4. LÀM BẰNG TAY ─────────────────────────
+  - id: gd_1d
+    kind: example
+    title: "Ba bước Gradient Descent bằng tay"
+    checks:
+      - "0 - Rational(1,4)*2*(0 - 3) == Rational(3,2)"
+      - "Rational(3,2) - Rational(1,4)*2*(Rational(3,2) - 3) == Rational(9,4)"
+      - "Rational(9,4) - Rational(1,4)*2*(Rational(9,4) - 3) == Rational(21,8)"
+      - "[(w - 3)**2 for w in (0, Rational(3,2), Rational(9,4), Rational(21,8))] == [9, Rational(9,4), Rational(9,16), Rational(9,64)]"
+    steps:
+      - show: |
+          <p>$f(w) = (w - 3)^2$, &nbsp; $f'(w) = 2(w - 3)$, &nbsp; $w_0 = 0$, &nbsp; $\eta = 0{,}25$:</p>
+          <p>$w_1 = 0 - 0{,}25\cdot 2\cdot(0 - 3) = 0 + 1{,}5 = \hlg{1{,}5}$</p>
+        focus: [1, 2]
+        say: "Làm bằng tay với w không bằng 0 và eta bằng 0 phẩy 25. Bước một, thay vào công thức, w một bằng 0 trừ 0 phẩy 25 nhân 2 nhân âm 3, tức 0 cộng 1 phẩy 5, bằng 1 phẩy 5."
+      - show: |
+          <p>$w_2 = 1{,}5 - 0{,}25\cdot 2\cdot(1{,}5 - 3) = 1{,}5 + 0{,}75 = \hlg{2{,}25}$</p>
+          <p>$w_3 = 2{,}25 - 0{,}25\cdot 2\cdot(2{,}25 - 3) = 2{,}25 + 0{,}375 = \hlg{2{,}625}$</p>
+        focus: [1, 2, 0]
+        say: "Bước hai, thay w bằng 1 phẩy 5, đạo hàm là âm 3, nên w hai bằng 2 phẩy 25. Bước ba, tương tự, w ba bằng 2 phẩy 625. Ta đang tiến dần về 3."
+      - show: |
+          <table class="t"><tr><th>$k$</th><th>0</th><th>1</th><th>2</th><th>3</th></tr>
+          <tr><td>$w_k$</td><td>0</td><td>1,5</td><td>2,25</td><td>2,625</td></tr>
+          <tr><td>khoảng cách tới 3</td><td>3</td><td>1,5</td><td>0,75</td><td>0,375</td></tr>
+          <tr><td>$f(w_k)$</td><td>9</td><td>2,25</td><td>0,5625</td><td>0,140625</td></tr></table>
+          <p class="note">Mỗi bước, khoảng cách tới đáy giảm <b>một nửa</b>; giá trị $f$ giảm dần.</p>
+        focus: [["1.2", "1.3"], "1.4"]
+        say: "Xếp vào bảng, mỗi bước khoảng cách tới đáy giảm đúng một nửa, từ 3 xuống 1 phẩy 5, rồi 0 phẩy 75, rồi 0 phẩy 375. Giá trị của hàm cũng giảm dần, từ 9 xuống còn khoảng 0 phẩy 14."
+
+  - id: gd_pic
+    kind: intuition
+    title: "Nhìn các bước trên đường cong"
+    checks:
+      - "[Rational(3,2) - 0, Rational(9,4) - Rational(3,2), Rational(21,8) - Rational(9,4)] == [Rational(3,2), Rational(3,4), Rational(3,8)]"
+      - "(6 - 3)**2 == 9 and (0 - 3)**2 == 9 and 6 - 1*2*(6 - 3) == 0"
+    steps:
+      - show: |
+          <svg width="900" height="475" viewBox="0 0 900 475"><defs><marker id="g9G" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#059669"/></marker><marker id="g9R" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#b91c1c"/></marker></defs><line x1="30" y1="420" x2="870" y2="420" stroke="#9ca3af" stroke-width="2"/><polyline fill="none" stroke="#2563eb" stroke-width="4" points="37,72 48,92 59,112 70,132 81,151 92,169 103,187 114,204 125,220 136,236 147,251 158,265 169,279 180,292 191,304 202,316 213,328 224,338 235,348 246,357 257,366 268,374 279,381 290,388 301,394 312,400 323,404 334,408 345,412 356,415 367,417 378,419 389,420 400,420 411,420 422,419 433,417 444,415 455,412 466,408 477,404 488,400 499,394 510,388 521,381 532,374 543,366 554,357 565,348 576,338 587,328 598,316 609,304 620,292 631,279 642,265 653,251 664,236 675,220 686,204 697,187 708,169 719,151 730,132 741,112 752,92 763,72"/><path d="M70,118 C235.0,42 565.0,42 730,116" fill="none" stroke="#b91c1c" stroke-width="3" stroke-dasharray="12 8" marker-end="url(#g9R)"/><circle cx="730" cy="132" r="9" fill="#b91c1c"/><text x="400" y="32" font-size="24" text-anchor="middle" fill="#b91c1c">η = 1: nhảy qua lại giữa 0 và 6</text><line x1="70" y1="132" x2="235" y2="348" stroke="#059669" stroke-width="4" marker-end="url(#g9G)"/><line x1="235" y1="348" x2="318" y2="402" stroke="#059669" stroke-width="4" marker-end="url(#g9G)"/><line x1="318" y1="402" x2="359" y2="416" stroke="#059669" stroke-width="4" marker-end="url(#g9G)"/><circle cx="70" cy="132" r="9" fill="#059669"/><text x="88" y="140" font-size="22" text-anchor="start" fill="#059669">w₀ = 0</text><circle cx="235" cy="348" r="9" fill="#059669"/><text x="219" y="354" font-size="22" text-anchor="end" fill="#059669">w₁ = 1,5</text><circle cx="318" cy="402" r="9" fill="#059669"/><text x="288" y="412" font-size="22" text-anchor="end" fill="#059669">w₂ = 2,25</text><circle cx="359" cy="416" r="9" fill="#059669"/><text x="349" y="452" font-size="22" text-anchor="end" fill="#059669">w₃ = 2,625</text><text x="420" y="454" font-size="22" fill="#1f2937">đáy w = 3</text><text x="642.0" y="320" font-size="22" fill="#059669">η = 0,25: bước ngắn dần</text></svg>
+        say: "Đặt các bước vừa tính lên đường cong w trừ 3, bình phương. Với eta bằng 0 phẩy 25, các chấm xanh đi từ 0 tới 1 phẩy 5, rồi 2 phẩy 25, rồi 2 phẩy 625, mỗi bước chỉ dài bằng nửa bước trước. Chỗ dốc thì đạo hàm lớn nên bước dài, gần đáy thì dốc ít nên bước tự ngắn lại. Đường đỏ đứt nét là eta bằng 1, bước quá dài nên nhảy qua lại giữa 0 và 6, cùng độ cao 9, không bao giờ xuống được đáy."
+
+  # ───────────────────────── 5. TỐC ĐỘ HỌC ─────────────────────────
+  - id: lr
+    kind: formula
+    title: "Chọn tốc độ học: quá nhỏ thì chậm, quá lớn thì phân kỳ"
+    checks:
+      - "(lambda w, e: sp.expand((w - e*2*(w - 3)) - 3 - (1 - 2*e)*(w - 3)))(*sp.symbols('w eta')) == 0"
+      - "[1 - 2*e for e in (Rational(1,20), Rational(1,4), 1, Rational(11,10))] == [Rational(9,10), Rational(1,2), -1, Rational(-6,5)]"
+      - "0 - 1*2*(0 - 3) == 6 and 6 - 1*2*(6 - 3) == 0"
+      - "0 - Rational(11,10)*2*(0 - 3) == Rational(33,5) and Rational(33,5) - Rational(11,10)*2*(Rational(33,5) - 3) == Rational(-33,25)"
+      - "Rational(9,10)**3 * 3 == Rational(2187,1000)"
+    steps:
+      - show: |
+          <p>Trừ 3 ở hai vế của $\ w_{k+1} = w_k - 2\eta(w_k - 3)$:</p>
+          $$w_{k+1} - 3 = (w_k - 3) - 2\eta(w_k - 3) = \hlo{(1 - 2\eta)}\,(w_k - 3)$$
+        focus: [0, 1, 2]
+        say: "Vì sao giảm một nửa? Theo công thức, w mới bằng w cũ trừ 2 eta nhân w cũ trừ 3. Trừ 3 ở cả hai vế, rồi đặt w cũ trừ 3 làm thừa số chung, ta được khoảng cách mới bằng 1 trừ 2 eta nhân khoảng cách cũ."
+      - show: |
+          <table class="t"><tr><th>$\eta$</th><th>$1 - 2\eta$</th><th>điều xảy ra (từ $w_0 = 0$)</th></tr>
+          <tr><td>0,05</td><td>0,9</td><td>chậm: $0 \to 0{,}3 \to 0{,}57 \to 0{,}813$</td></tr>
+          <tr><td>0,25</td><td>0,5</td><td>nhanh: khoảng cách giảm một nửa mỗi bước</td></tr>
+          <tr><td>1</td><td>−1</td><td>dao động mãi: $0 \to 6 \to 0 \to 6$</td></tr>
+          <tr><td>1,1</td><td>−1,2</td><td class="red">phân kỳ: $0 \to 6{,}6 \to -1{,}32 \to \dots$ ngày càng xa</td></tr></table>
+        say: "Làm thử với bốn giá trị eta, thay vào hệ số 1 trừ 2 eta. Eta bằng 0 phẩy 05 thì hệ số là 0 phẩy 9, đi rất chậm. Bằng 0 phẩy 25 thì giảm một nửa mỗi bước. Bằng 1 thì hệ số âm 1, nhảy qua lại mãi giữa 0 và 6. Bằng 1 phẩy 1 thì ngày càng xa đáy."
+      - show: |
+          <div class="box key">Hội tụ khi $\ |1 - 2\eta| < 1$, tức $\ 0 < \eta < 1$ (riêng cho hàm này). Kinh nghiệm thực hành: <b>chọn tốc độ học lớn nhất có thể mà không gây dao động</b>.</div>
+          <p class="note">$|\cdot|$ là <b>trị tuyệt đối</b>: bỏ dấu âm, ví dụ $|-1{,}2| = 1{,}2$. Trong thực tế còn giảm $\eta$ dần theo thời gian (lịch tốc độ học).</p>
+        focus: [1, 1, 2]
+        say: "Vậy với hàm này, đi được về đáy khi trị tuyệt đối của 1 trừ 2 eta, tức nó sau khi bỏ dấu âm, nhỏ hơn 1, nghĩa là eta nằm giữa 0 và 1. Kinh nghiệm thực hành là chọn tốc độ học lớn nhất có thể mà không gây dao động. Thực tế người ta còn giảm eta dần theo thời gian."
+
+  # ───────────────────────── 6. HAI CHIỀU ─────────────────────────
+  - id: gd_2d
+    kind: example
+    title: "Hai chiều: lại hàm của bài 8"
+    checks:
+      - "(lambda x, y: (2*x - y + 1, 2*y - x - 1))(0, 0) == (1, -1)"
+      - "(lambda p: [p[0] - Rational(1,2)*(2*p[0] - p[1] + 1), p[1] - Rational(1,2)*(2*p[1] - p[0] - 1)])((0, 0)) == [Rational(-1,2), Rational(1,2)]"
+      - "(lambda p: [p[0] - Rational(1,2)*(2*p[0] - p[1] + 1), p[1] - Rational(1,2)*(2*p[1] - p[0] - 1)])((Rational(-1,2), Rational(1,2))) == [Rational(-1,4), Rational(1,4)]"
+      - "(lambda p: [p[0] - Rational(1,2)*(2*p[0] - p[1] + 1), p[1] - Rational(1,2)*(2*p[1] - p[0] - 1)])((Rational(-1,4), Rational(1,4))) == [Rational(-3,8), Rational(3,8)]"
+      - "[(lambda x, y: x**2 + y**2 - x*y + x - y)(*p) for p in ((0,0), (Rational(-1,2),Rational(1,2)), (Rational(-1,4),Rational(1,4)), (Rational(-3,8),Rational(3,8)))] == [0, Rational(-1,4), Rational(-5,16), Rational(-21,64)]"
+      - "Rational(-1,2) + Rational(1,3) == Rational(-1,6) and Rational(-1,4) + Rational(1,3) == Rational(1,12) and Rational(-3,8) + Rational(1,3) == Rational(-1,24)"
+    steps:
+      - show: |
+          <p>Bài 8: $\ f(x, y) = x^2 + y^2 - xy + x - y$, &nbsp; $\nabla f = (2x - y + 1,\ 2y - x - 1)^T$, &nbsp; đáy tại $\left(-\frac{1}{3}, \frac{1}{3}\right)$, $f = -\frac{1}{3}$.</p>
+          <p>Xuất phát $(0, 0)$, $\eta = 0{,}5$: &nbsp; $\nabla f(0, 0) = (1, -1)^T$ &nbsp; → &nbsp; $(0, 0)^T - 0{,}5\cdot(1, -1)^T = \hlg{(-0{,}5;\ 0{,}5)^T}$</p>
+        focus: ["1.3", "1.2", 2]
+        say: "Giờ thử hai chiều với hàm ví dụ của bài 8, có đáy tại âm một phần ba, một phần ba. Gradient của nó, gồm đạo hàm riêng theo x và theo y, đã được tính ở bài 6. Xuất phát từ gốc với eta bằng 0 phẩy 5, gradient tại gốc là 1, âm 1, nên bước đầu đưa ta tới âm 0 phẩy 5, 0 phẩy 5."
+      - show: |
+          <table class="t"><tr><th>bước</th><th>vị trí</th><th>$f$</th></tr>
+          <tr><td>0</td><td>$(0, 0)$</td><td>0</td></tr><tr><td>1</td><td>$(-0{,}5;\ 0{,}5)$</td><td>$-0{,}25$</td></tr>
+          <tr><td>2</td><td>$(-0{,}25;\ 0{,}25)$</td><td>$-0{,}3125$</td></tr><tr><td>3</td><td>$(-0{,}375;\ 0{,}375)$</td><td>$-0{,}328125$</td></tr></table>
+          <p class="note">Toạ độ thứ nhất trừ $\left(-\frac13\right)$ lần lượt bằng $-\frac16,\ \frac1{12},\ -\frac1{24}$: độ lớn giảm một nửa, dấu đổi phía — tiến dần về đáy, $f$ tiến về $-\frac13$.</p>
+        focus: [1, 2]
+        say: "Làm tiếp như vậy thêm hai bước nữa, ta được các vị trí như trong bảng. Vị trí nhảy qua lại quanh đáy, nhưng khoảng cách giảm một nửa mỗi bước, và giá trị của hàm tiến dần về âm một phần ba, đúng đáy mà bài 8 tìm bằng cách giải phương trình."
+
+  # ───────────────────────── 7. KIỂM TRA ─────────────────────────
+  - id: verify
+    kind: check
+    title: "Phép thử: sai số phải giảm sau mỗi bước"
+    checks:
+      - "(0 - 3)**2 == 9 and (Rational(3,2) - 3)**2 == Rational(9,4) and Rational(9,4) < 9"
+      - "(6 - 3)**2 == 9 and (Rational(33,5) - 3)**2 == Rational(324,25) and Rational(324,25) > 9"
+    steps:
+      - show: |
+          <p><b>Phép thử 1</b>: sau mỗi bước, tính lại $f$. Với $\eta = 0{,}25$: $\ 9 \to 2{,}25$ — giảm ✓</p>
+          <p><b>Phép thử 2</b>: $f$ <b>tăng</b> hoặc đứng yên → giảm $\eta$. Với $\eta = 1{,}1$: $\ 9 \to 12{,}96$ <b class="red">(sai)</b></p>
+        focus: [1, 1, 2]
+        say: "Phép thử luôn làm là tính lại giá trị của hàm sau mỗi bước. Với eta bằng 0 phẩy 25, nó giảm từ 9 xuống 2 phẩy 25, tốt. Với eta bằng 1 phẩy 1, nó tăng lên 12 phẩy 96, nên phải giảm eta."
+
+  # ───────────────────────── 8. SGD ─────────────────────────
+  - id: sgd
+    kind: concept
+    title: "Dữ liệu quá nhiều: SGD dùng một mẫu (hay một lô nhỏ) mỗi bước"
+    checks:
+      - "(lambda w: sp.expand(sp.diff(Rational(1,2)*((6*w - 20)**2 + (5*w - 17)**2), w) - (12*(6*w - 20) + 10*(5*w - 17))/2))(sp.Symbol('w')) == 0"
+      - "12*(6*3 - 20) == -24 and 10*(5*3 - 17) == -20 and Rational(-24 - 20, 2) == -22"
+      - "3 - Rational(1,100)*(-22) == Rational(161,50) and 3 - Rational(1,100)*(-24) == Rational(81,25) and 3 - Rational(1,100)*(-20) == Rational(16,5)"
+      - "round(float(Rational(205,61)), 2) == 3.36"
+    steps:
+      - show: |
+          <p>Bài 0: hai ngôi nhà A, B. Sai số trung bình: $\ f(w) = \frac{1}{2}\big[(6w - 20)^2 + (5w - 17)^2\big]$, tốt nhất tại $w \approx 3{,}36$.</p>
+          <p>Gradient của sai số trung bình = <b>trung bình gradient từng nhà</b>:</p>
+          $$f'(w) = \frac{1}{2}\big[\hlb{12(6w - 20)} + \hlb{10(5w - 17)}\big]$$
+        focus: ["1.2", "1.1", [2, 3]]
+        say: "Nhớ lại bài 0, hai ngôi nhà A và B, và trọng số w tốt nhất khoảng 3 phẩy 36. Lấy sai số trung bình của hai nhà. Vì đạo hàm của tổng bằng tổng các đạo hàm, gradient của nó bằng trung bình gradient của từng nhà."
+      - show: |
+          <p>Tại $w = 3$, $\eta = 0{,}01$: &nbsp; nhà A cho $-24$, nhà B cho $-20$, trung bình $-22$.</p>
+          <ul><li><b>Gradient Descent</b> (cả lô): $\ 3 - 0{,}01\cdot(-22) = \hlg{3{,}22}$</li>
+          <li><b>SGD</b> chỉ dùng nhà A: $\ 3 - 0{,}01\cdot(-24) = 3{,}24$; &nbsp; chỉ nhà B: $\ 3{,}2$</li></ul>
+        focus: [1, "2.1", "2.2"]
+        say: "Tại w bằng 3 với eta bằng 0 phẩy 01, nhà A cho gradient âm 24, nhà B cho âm 20, trung bình âm 22. Gradient Descent dùng cả hai, đi tới 3 phẩy 22. SGD chỉ dùng một nhà mỗi bước, đi tới 3 phẩy 24 hoặc 3 phẩy 2."
+      - clear: true
+        show: |
+          <div class="box key"><b>SGD</b>: $\ \mathbf{w}_{k+1} = \mathbf{w}_k - \eta\,\nabla f_i(\mathbf{w}_k)$ với một mẫu $i$ chọn ngẫu nhiên.
+          <br><span class="note">Mỗi bước rẻ hơn rất nhiều khi có triệu mẫu, đổi lại hướng đi “rung lắc”. Dùng một lô nhỏ (mini-batch) là cách dung hoà. Đi hết toàn bộ dữ liệu một lượt gọi là một <b>epoch</b>.</span></div>
+        say: "Đó là SGD, công thức như trên bảng, với chữ i là một mẫu chọn ngẫu nhiên. Khi có hàng triệu mẫu, mỗi bước rẻ hơn rất nhiều, đổi lại hướng đi rung lắc. Dùng một lô nhỏ vài chục mẫu là cách dung hoà. Đi hết toàn bộ dữ liệu một lượt gọi là một vòng."
+      - show: |
+          <p class="note">Sách tiếng Anh còn gọi hai cách là “sequential” (cập nhật sau từng mẫu, giống SGD) và “batch” (cập nhật sau cả lượt dữ liệu, giống Gradient Descent).</p>
+        notation_note: true
+        say: "Sách tiếng Anh còn dùng hai tên khác cho cùng ý này. Cập nhật sau từng mẫu ứng với SGD, còn cập nhật sau cả lượt dữ liệu ứng với Gradient Descent."
+
+  # ───────────────────────── 9. MOMENTUM ─────────────────────────
+  - id: momentum
+    kind: formula
+    title: "Momentum: tích lũy vận tốc như hòn bi lăn"
+    checks:
+      - "Rational(9,10) < 1"
+      - "(lambda g0, g1: sp.expand(Rational(9,10)*Rational(1,20)*g0 + Rational(1,20)*g1 - Rational(1,20)*(g1 + Rational(9,10)*g0)))(*sp.symbols('g0 g1')) == 0"
+      - "Rational(1,20)*2*(0 - 3) == Rational(-3,10) and 0 - Rational(-3,10) == Rational(3,10)"
+      - "Rational(9,10)*Rational(-3,10) + Rational(1,20)*2*(Rational(3,10) - 3) == Rational(-27,50) and Rational(3,10) + Rational(27,50) == Rational(21,25)"
+      - "(lambda: [float(x) for x in (Rational(21,25), Rational(57,100))])() == [0.84, 0.57]"
+    steps:
+      - show: |
+          <div class="box key"><b>Momentum</b>:
+          $$v_{k+1} = \beta\, v_k + \eta\,\nabla f(\mathbf{w}_k), \qquad \mathbf{w}_{k+1} = \mathbf{w}_k - v_{k+1}$$
+          <span class="note">$v$: “vận tốc”, bắt đầu $v_0 = 0$. &nbsp; $\beta$ (đọc <b>beta</b>): phần vận tốc cũ được giữ lại, thường $0{,}9$.</span></div>
+        introduces: [beta]
+        say: "Cách thứ nhất để đi nhanh hơn là Momentum, theo công thức trên bảng. Chữ v là vận tốc, bắt đầu bằng 0. Chữ Hy Lạp này đọc là beta, là phần vận tốc cũ được giữ lại, thường bằng 0 phẩy 9. Mỗi bước, vận tốc mới bằng beta nhân vận tốc cũ cộng eta nhân gradient."
+      - show: |
+          <p>Vì sao gọi là tích lũy? Thay công thức vào chính nó (với $v_0 = 0$):</p>
+          $$v_2 = \beta\,(\eta\, g_0) + \eta\, g_1 = \eta\,(g_1 + \beta\, g_0)$$
+          <p class="note">$g_k$ = gradient tại bước $k$. Gradient cũ vẫn góp phần, nhỏ dần theo $\beta, \beta^2, \dots$</p>
+        focus: [1, 2, 2, 3]
+        say: "Vì sao gọi là tích lũy? Thay công thức vào chính nó. Vì vận tốc sau bước một bằng eta nhân gradient đầu tiên, nên vận tốc sau bước hai bằng eta nhân gradient mới, cộng beta lần gradient cũ. Gradient cũ vẫn góp phần, chỉ nhỏ dần, giống hòn bi lăn giữ đà khi xuống dốc."
+      - clear: true
+        show: |
+          <p>Công thức: $\ v_{k+1} = \beta\, v_k + \eta\, f'(w_k),\ \ w_{k+1} = w_k - v_{k+1}$</p>
+          <p><b>Làm thử</b> $f = (w - 3)^2$, $\eta = 0{,}05$, $\beta = 0{,}9$, từ $w_0 = 0$:</p>
+          <p>$v_1 = 0 + 0{,}05\cdot(-6) = -0{,}3$, &nbsp; $w_1 = 0 - (-0{,}3) = 0{,}3$</p>
+          <p>$v_2 = 0{,}9\cdot(-0{,}3) + 0{,}05\cdot 2\cdot(0{,}3 - 3) = -0{,}54$, &nbsp; $w_2 = 0{,}3 + 0{,}54 = \hlg{0{,}84}$ &nbsp; (cách thường: $0{,}57$)</p>
+        focus: [2, 3, 4]
+        say: "Làm thử với eta bằng 0 phẩy 05 và beta bằng 0 phẩy 9. Bước một giống hệt bình thường, w một bằng 0 phẩy 3. Bước hai, vận tốc giữ lại 0 phẩy 9 của bước trước, nên w hai bằng 0 phẩy 84, trong khi không có Momentum chỉ tới 0 phẩy 57."
+      - show: |
+          <p class="note">Sách về mạng nơ-ron hay viết cùng ý dưới dạng “thêm số hạng động lượng α · Δw(n − 1)” — là cùng công thức nếu đặt Δw = −v, α = β.</p>
+        notation_note: true
+        say: "Sách về mạng nơ-ron hay viết cùng ý này theo kiểu khác, thêm một số hạng động lượng nhân với bước cũ. Hai cách viết là một, chỉ đổi tên chữ."
+
+  # ───────────────────────── 10. TRUNG BÌNH TRƯỢT ─────────────────────────
+  - id: ema
+    kind: concept
+    title: "Trung bình trượt và hiệu chỉnh độ lệch"
+    checks:
+      - "Rational(9,10)*0 + Rational(1,10)*10 == 1 and Rational(9,10)*1 + Rational(1,10)*10 == Rational(19,10) and Rational(9,10)*Rational(19,10) + Rational(1,10)*10 == Rational(271,100)"
+      - "[m / (1 - Rational(9,10)**k) for m, k in ((1, 1), (Rational(19,10), 2), (Rational(271,100), 3))] == [10, 10, 10]"
+    steps:
+      - show: |
+          $$m_k = \beta\, m_{k-1} + (1 - \beta)\, g_k, \qquad m_0 = 0$$
+          <p class="note">Giữ $\beta$ phần cũ, lấy $1 - \beta$ phần mới: một kiểu trung bình “nhớ lâu” các giá trị gần đây.</p>
+        focus: [0, 1, 2]
+        say: "Adam cần thêm một công cụ, trung bình trượt. Mỗi bước, giữ lại beta phần của giá trị cũ, và lấy 1 trừ beta phần của giá trị mới. Đó là một kiểu trung bình nhớ các giá trị gần đây hơn các giá trị xa."
+      - show: |
+          <p>Làm thử $\beta = 0{,}9$, gradient luôn bằng $10$:</p>
+          <table class="t"><tr><th>$k$</th><th>1</th><th>2</th><th>3</th></tr>
+          <tr><td>$m_k$</td><td>1</td><td>1,9</td><td>2,71</td></tr>
+          <tr><td>$m_k / (1 - \beta^k)$</td><td>$1 / 0{,}1 = \hlg{10}$</td><td>$1{,}9 / 0{,}19 = \hlg{10}$</td><td>$2{,}71 / 0{,}271 = \hlg{10}$</td></tr></table>
+          <div class="box warn">Vì bắt đầu từ $m_0 = 0$, $m_k$ <b>lệch về 0</b> lúc đầu (1 thay vì 10). Chia cho $1 - \beta^k$ ($\beta$ mũ $k$) sửa đúng độ lệch đó.</div>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Làm thử với beta bằng 0 phẩy 9, gradient luôn bằng 10. Ta được 1, rồi 1 phẩy 9, rồi 2 phẩy 71, lệch xa 10 vì bắt đầu từ 0. Chia cho 1 trừ beta mũ k, tức beta nhân với chính nó k lần, ta được đúng 10 ở mọi bước. Đó là hiệu chỉnh độ lệch."
+
+  # ───────────────────────── 11. ADAM ─────────────────────────
+  - id: adam
+    kind: formula
+    title: "Adam = động lượng + trung bình trượt của bình phương gradient"
+    checks:
+      - "(lambda g: (Rational(1,10)*g / (1 - Rational(9,10))) / sp.sqrt(Rational(1,1000)*g**2 / (1 - Rational(999,1000))))(100) == 1"
+      - "(lambda g: (Rational(1,10)*g / (1 - Rational(9,10))) / sp.sqrt(Rational(1,1000)*g**2 / (1 - Rational(999,1000))))(Rational(1,100)) == 1"
+      - "(lambda g: (Rational(1,10)*g) / sp.sqrt(Rational(1,1000)*g**2))(100) == sp.sqrt(10) and abs(float(sp.sqrt(10)) - 3.16) < 0.01"
+    steps:
+      - show: |
+          $$\begin{aligned} m_k &= \beta_1 m_{k-1} + (1 - \beta_1)\, g_k & \hat{m}_k &= m_k / (1 - \beta_1^k) \\ s_k &= \beta_2 s_{k-1} + (1 - \beta_2)\, g_k^2 & \hat{s}_k &= s_k / (1 - \beta_2^k) \end{aligned}$$
+          $$w_{k+1} = w_k - \eta\,\frac{\hat{m}_k}{\sqrt{\hat{s}_k} + \varepsilon}$$
+        introduces: [epsilon]
+        focus: [0, 1, 1, 1, 2]
+        say: "Giờ ghép lại thành Adam, cho từng trọng số. Chữ m là trung bình trượt của gradient, giống động lượng. Chữ s là trung bình trượt của gradient bình phương. Cả hai đều được hiệu chỉnh độ lệch, viết thêm dấu mũ, nghĩa là ước lượng đã sửa. Chữ cuối, đọc là epsilon, là một số rất nhỏ để khỏi chia cho 0."
+      - show: |
+          <p><b>Bước đầu tiên</b> ($k = 1$): $\ \hat{m}_1 = g_1$, $\ \hat{s}_1 = g_1^2$ &nbsp; → &nbsp; bỏ qua $\varepsilon$ rất nhỏ, bước đi $\ \eta\,\dfrac{g_1}{|g_1|}$ (trị tuyệt đối ở mẫu): dài khoảng $\eta$ <b>dù gradient lớn hay nhỏ</b>.</p>
+          <p class="note">Gradient 100 hay 0,01 đều cho tỉ số 1. Adam tự co giãn bước cho từng trọng số theo độ lớn gradient của chính nó.</p>
+        focus: [1, ["1.3", "1.4"], "1.6", 2, 2]
+        say: "Xem bước đầu tiên. Sau hiệu chỉnh, m mũ bằng đúng gradient đầu tiên, còn ước lượng thứ hai bằng bình phương của gradient đó. Bỏ qua epsilon rất nhỏ, tỉ số bằng gradient chia cho chính nó sau khi bỏ dấu âm, tức là 1 hoặc âm 1. Gradient bằng 100 hay 0 phẩy 01 thì bước đi đều dài khoảng eta. Adam tự co giãn bước cho từng trọng số theo độ lớn gradient của chính nó."
+      - clear: true
+        show: |
+          <p class="note">Giá trị mặc định trong bài báo đề xuất Adam (Kingma & Ba, 2015): $\eta = 0{,}001$, $\beta_1 = 0{,}9$, $\beta_2 = 0{,}999$, $\varepsilon = 10^{-8} = 0{,}00000001$.</p>
+          <div class="box warn">Hay gặp câu “Adam phổ biến nhất”: đó là <b>nhận định</b>, không phải định lý — Adam không phải lúc nào cũng tốt nhất.</div>
+        focus: [1, 2, 2]
+        say: "Theo bài báo năm 2015 của hai tác giả đề xuất Adam, các giá trị mặc định như trên bảng. Một lưu ý, bạn sẽ hay gặp câu Adam là phổ biến nhất. Đó là một nhận định, không phải định lý, và Adam không phải lúc nào cũng cho kết quả tốt nhất."
+
+  # ───────────────────────── 12. TRONG AI ─────────────────────────
+  - id: in_ai
+    kind: concept
+    title: "Các bộ tối ưu trong huấn luyện mô hình"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài</th><th>học thêm</th></tr>
+          <tr><td><b>Bài 10</b></td><td>các cách co giãn bước cho từng trọng số khác (Adagrad, RMSprop, Adadelta — chính là vế $s_k$ của Adam), và Nesterov (Momentum “nhìn trước một bước”)</td></tr>
+          <tr><td><b>Bài 22</b></td><td>lan truyền ngược — cách tính gradient thật nhanh cho mạng nơ-ron, để đưa vào các công thức hôm nay</td></tr></table>
+        forward_ref: true
+        focus: ["1.2", "1.2", "1.3"]
+        say: "Ở bài 10, ta học thêm vài cách co giãn bước cho từng trọng số, mà phần trung bình của bình phương gradient trong Adam là một ví dụ. Ta cũng học một biến thể của Momentum nhìn trước một bước. Ở bài 22, ta học cách tính gradient thật nhanh cho mạng nơ-ron, để đưa vào chính các công thức hôm nay."
+
+  # ───────────────────────── 13. LỖI THƯỜNG GẶP ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi người mới hay mắc"
+    checks:
+      - "Rational(11,10) > 1 and abs(1 - 2*Rational(11,10)) > 1"
+      - "(lambda x, y: [sp.diff(x**2 - y**2, v).subs({x: 0, y: 0}) for v in (x, y)])(*sp.symbols('x y')) == [0, 0]"
+      - "abs(float(sp.sqrt(10)) - 3.16) < 0.01"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Chọn $\eta$ quá lớn cho “nhanh” <b class="red">(sai)</b>
+          <br><span class="note">$\eta = 1{,}1$ ở ví dụ: mỗi bước xa đáy thêm 1,2 lần. Thấy sai số tăng thì phải giảm $\eta$.</span></div>
+        say: "Lỗi thứ nhất, chọn eta thật lớn cho nhanh. Với eta bằng 1 phẩy 1 ở ví dụ, mỗi bước lại xa đáy thêm 1 phẩy 2 lần. Thấy sai số tăng thì phải giảm eta."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Thấy sai số của SGD lúc lên lúc xuống rồi kết luận “hỏng” <b class="red">(sai)</b>
+          <br><span class="note">Mỗi bước chỉ nhìn một mẫu nên rung lắc là bình thường. Hãy theo dõi sai số trung bình trên cả lượt dữ liệu.</span></div>
+        say: "Lỗi thứ hai, thấy sai số của SGD lúc lên lúc xuống rồi kết luận thuật toán hỏng. Mỗi bước chỉ nhìn một mẫu nên rung lắc là bình thường. Hãy theo dõi sai số trung bình trên cả lượt dữ liệu."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Tin rằng Gradient Descent dừng lại thì đã tới đáy <b class="red">(sai)</b>
+          <br><span class="note">Nó dừng khi $\nabla f \approx \mathbf{0}$, tức tại một <b>điểm dừng</b> (bài 8): có thể là yên ngựa, như $x^2 - y^2$ tại $(0, 0)$, hoặc đáy địa phương.</span></div>
+        say: "Lỗi thứ ba, tin rằng thuật toán dừng lại thì đã tới đáy. Nó dừng khi gradient gần bằng 0, tức tại một điểm dừng như bài 8 đã học. Đó có thể là yên ngựa, ví dụ x bình phương trừ y bình phương tại gốc, hoặc chỉ là đáy địa phương."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Viết Adam mà quên hiệu chỉnh độ lệch <b class="red">(sai)</b>
+          <br><span class="note">Bước đầu khi đó:</span>
+          $$\eta\cdot\frac{0{,}1\, g}{\sqrt{0{,}001\, g^2}} = \sqrt{10}\cdot\eta\cdot\frac{g}{|g|}$$
+          <span class="note">— dài gấp khoảng 3,16 lần dự định ($\eta$).</span></div>
+        say: "Lỗi thứ tư, tự viết Adam mà quên hiệu chỉnh độ lệch. Khi đó bước đầu tiên bằng căn của 10 nhân eta, tức dài gấp khoảng 3 phẩy 16 lần dự định, với mọi độ lớn gradient."
+
+  # ───────────────────────── 14. TỰ KIỂM TRA ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "1 - Rational(1,4)*2*(1 - 5) == 3 and 3 - Rational(1,4)*2*(3 - 5) == 4"
+      - "1 - 2*Rational(1,4) == Rational(1,2)"
+      - "1 - Rational(3,2)*2*(1 - 5) == 13 and 13 - Rational(3,2)*2*(13 - 5) == -11 and 1 - 2*Rational(3,2) == -2"
+      - "[w - 5 for w in (1, 13, -11)] == [-4, 8, -16] and (13 - 5) == -2*(1 - 5) and (-11 - 5) == -2*(13 - 5) and Rational(3,2)*2*4 == 12 and Rational(3,2)*2*8 == 24"
+    steps:
+      - show: |
+          <p>$f(w) = (w - 5)^2$, xuất phát $w_0 = 1$.</p>
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Với $\eta = 0{,}25$: tính $w_1$, $w_2$.</td></tr>
+          <tr><td>2</td><td>Với $\eta = 1{,}5$: thuật toán có về được đáy không? Vì sao?</td></tr></table>
+        focus: [1, "2.2", "2.3", 0]
+        say: "Bây giờ đến lượt bạn, với hàm f của w bằng w trừ 5, bình phương, xuất phát từ w bằng 1. Câu một, với eta bằng 0 phẩy 25, tính hai bước. Câu hai, với eta bằng 1 phẩy 5, thuật toán có về được đáy không, và vì sao? Hãy dừng video và làm ra giấy."
+        pause: 8
+      - show: |
+          <p>① $f'(w) = 2(w - 5)$. &nbsp; $w_1 = 1 - 0{,}25\cdot 2\cdot(1 - 5) = 1 + 2 = \hlg{3}$</p>
+          <p>$w_2 = 3 - 0{,}25\cdot 2\cdot(3 - 5) = 3 + 1 = \hlg{4}$. &nbsp; Khoảng cách tới 5: $4 \to 2 \to 1$ ✓</p>
+        focus: ["1.1", "1.2", "2.1", "2.2"]
+        say: "Câu một, đạo hàm là 2 nhân w trừ 5. Sau bước một được 1 cộng 2, bằng 3. Sau bước hai được 3 cộng 1, bằng 4. Khoảng cách tới đáy giảm một nửa mỗi bước."
+      - clear: true
+        show: |
+          <p>② Hệ số $\ 1 - 2\eta = 1 - 2\cdot 1{,}5 = \hl{-2}$. Làm thử từ $w_0 = 1$:</p>
+          <table class="t"><tr><th>bước</th><th>$w_k$</th><th>$w_k - 5$</th></tr>
+          <tr><td>0</td><td>$1$</td><td>$-4$</td></tr>
+          <tr><td>1</td><td>$1 - 1{,}5\cdot 2\cdot(1 - 5) = 1 + 12 = 13$</td><td>$8$</td></tr>
+          <tr><td>2</td><td>$13 - 1{,}5\cdot 2\cdot(13 - 5) = 13 - 24 = -11$</td><td>$-16$</td></tr></table>
+          <p>Khoảng cách gấp đôi và đổi phía mỗi bước → <b>phân kỳ</b>, không về được đáy.</p>
+        focus: [1, "2.3", "2.4", 3]
+        say: "Câu hai, thay eta bằng 1 phẩy 5 vào hệ số, 1 trừ 3 bằng âm 2. Làm thử, w một bằng 1 cộng 12, bằng 13. Rồi w hai bằng 13 trừ 24, bằng âm 11. Khoảng cách tới đáy đi từ 4 lên 8 rồi 16, gấp đôi và đổi phía mỗi bước, nên thuật toán phân kỳ."
+
+  # ───────────────────────── 15. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">không giải được $\nabla f = \mathbf{0}$</span><span class="a">→</span>
+          <span class="n">đi ngược gradient: $\mathbf{w}_k - \eta\,\nabla f$</span><span class="a">→</span>
+          <span class="n">chọn $\eta$: hệ số $1 - 2\eta$</span><span class="a">→</span>
+          <span class="n">nhiều dữ liệu: SGD</span><span class="a">→</span>
+          <span class="n">giữ đà: Momentum; co giãn bước: Adam</span></div>
+        say: "Tổng kết chuỗi logic. Khi không giải được phương trình gradient bằng 0, ta đi ngược gradient từng bước. Tốc độ học quyết định đi nhanh, dao động hay phân kỳ. Khi dữ liệu quá nhiều, ta dùng SGD, mỗi bước chỉ nhìn một mẫu hay một lô nhỏ. Muốn giữ đà thì dùng Momentum, muốn tự co giãn bước thì dùng Adam."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> sau mỗi bước, hãy hỏi “sai số có giảm không?”. Không giảm thì nghi $\eta$ trước tiên.</div>
+        say: "Điều cần mang theo, sau mỗi bước hãy hỏi sai số có giảm không. Nếu không giảm, hãy nghi tốc độ học trước tiên."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 10): <b>tối ưu thích nghi</b> — Nesterov, Adagrad, RMSprop, Adadelta, và nhìn lại Adam: mỗi trọng số một tốc độ học riêng.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 10, ta học các cách tối ưu thích nghi, nơi mỗi trọng số có tốc độ học riêng, và nhìn lại Adam kỹ hơn. Hẹn gặp bạn ở bài tiếp theo."

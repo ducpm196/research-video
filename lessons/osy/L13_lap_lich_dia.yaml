@@ -1,0 +1,251 @@
+id: L13
+course: OSY
+series: "OSY · Hệ điều hành"
+title: "Bài 13 — Lập lịch đĩa và đặc điểm SSD"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/osy.yaml L13; audit/verify_plan_curricula.py OSY:L13; Silberschatz, Galvin, Gagne, Operating System Concepts, chương 11"
+assumes: [arith, sub, dots]
+# Quy ước: đĩa có trụ 0..199; “quãng đường” = tổng số trụ đầu đọc đi qua. FCFS (theo thứ tự đến), SSTF (gần nhất trước), SCAN (thang máy):
+#   tên viết tắt chỉ trên màn hình. SSD = ổ thể rắn. Hình sinh bằng audit/osy/seek_svg.py; số do alg.disk_fcfs / disk_sstf / disk_scan tính.
+objectives:
+  - "Mô phỏng theo thứ tự đến, gần nhất trước, thang máy"
+  - "Tính tổng quãng đường đầu đọc"
+  - "Giải thích vì sao ổ thể rắn ít cần lập lịch theo vị trí"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Cùng tám yêu cầu: 640 hay 236 trụ"
+    checks:
+      - "alg.disk_fcfs([98, 183, 37, 122, 14, 124, 65, 67], 53) == 640 and alg.disk_sstf([98, 183, 37, 122, 14, 124, 65, 67], 53) == 236"
+    steps:
+      - show: |
+          <p>Ổ đĩa quay: muốn đọc một khối, đầu đọc phải <b>di chuyển</b> tới đúng trụ — việc tốn nhiều mi li giây, chậm nhất trong cả quá trình đọc.</p>
+          <p>Tám yêu cầu đang chờ. Phục vụ theo thứ tự đến: đầu đọc đi <b>640</b> trụ. Sắp xếp khéo: chỉ <b>236</b> trụ.</p>
+          <div class="box key">Hôm nay: các cách sắp thứ tự phục vụ ổ đĩa quay, và vì sao ổ thể rắn thay đổi bài toán.</div>
+        focus: [1, 2, 2, 3]
+        say: "Chào bạn, với ổ đĩa quay, muốn đọc một khối thì đầu đọc phải di chuyển tới đúng trụ, việc này tốn nhiều mi li giây, chậm nhất trong cả quá trình đọc. Có tám yêu cầu đang chờ. Phục vụ theo thứ tự đến thì đầu đọc phải đi 640 trụ, còn sắp xếp khéo thì chỉ 236 trụ. Hôm nay ta học các cách sắp thứ tự phục vụ ổ đĩa quay, và vì sao ổ thể rắn thay đổi bài toán này."
+
+  # ───────────────────────── 1b. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: khoảng cách giữa hai trụ"
+    checks:
+      - "alg.disk_fcfs([98], 53) == 45 and alg.disk_fcfs([37], 53) == 16"
+      - "alg.disk_fcfs([65, 67], 53) == 12 + 2 == 14 == 67 - 53"
+    steps:
+      - show: |
+          <table class="t"><tr><th>đi từ trụ</th><th>tới trụ</th><th>khoảng cách</th></tr>
+          <tr><td>53</td><td>98</td><td>$|98 - 53| = 45$</td></tr>
+          <tr><td>53</td><td>37</td><td>$|37 - 53| = |-16| = 16$</td></tr></table>
+        focus: [0, "1.2", "1.3"]
+        say: "Bài này chỉ cần một phép tính, khoảng cách giữa hai trụ, viết bằng hai vạch đứng, gọi là giá trị tuyệt đối của hiệu. Đi từ trụ 53 lên trụ 98 thì khoảng cách là 98 trừ 53, bằng 45. Đi từ 53 xuống 37 thì hiệu là âm 16, nhưng giá trị tuyệt đối bỏ dấu âm, nên khoảng cách vẫn là 16 trụ."
+      - show: |
+          <p>Đi <b>một chiều</b> qua nhiều trụ: tổng các đoạn = hiệu hai đầu.</p>
+          $$|65 - 53| + |67 - 65| = 12 + 2 = 14 = 67 - 53$$
+        focus: [1, 2]
+        say: "Điều thứ hai sẽ giúp tự kiểm, khi đầu đọc đi một chiều qua nhiều trụ, tổng các đoạn bằng đúng hiệu của điểm cuối và điểm đầu. Ví dụ từ 53 tới 65 rồi 67 là 12 cộng 2 bằng 14, đúng bằng 67 trừ 53."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: ba cách sắp thứ tự"
+    steps:
+      - show: |
+          <table class="t"><tr><th>cách</th><th>chọn yêu cầu nào tiếp</th></tr>
+          <tr><td><b>FCFS</b> — theo thứ tự đến</td><td>yêu cầu đến sớm nhất</td></tr>
+          <tr><td><b>SSTF</b> — gần nhất trước</td><td>yêu cầu có trụ gần đầu đọc nhất</td></tr>
+          <tr><td><b>SCAN</b> — thang máy</td><td>đi một chiều, phục vụ mọi yêu cầu trên đường, tới cuối đĩa thì quay đầu</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Có ba cách sắp thứ tự. Theo thứ tự đến chọn yêu cầu đến sớm nhất. Gần nhất trước chọn yêu cầu có trụ gần đầu đọc nhất. Thang máy đi một chiều, phục vụ mọi yêu cầu trên đường, tới cuối đĩa thì quay đầu, giống thang máy trong toà nhà."
+
+  # ───────────────────────── 2b. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Đầu đọc đứng trên một đường thẳng các trụ"
+    checks:
+      - "sorted([98, 183, 37, 122, 14, 124, 65, 67]) == [14, 37, 65, 67, 98, 122, 124, 183] and alg.disk_fcfs([65], 53) == 12 and alg.disk_fcfs([37], 53) == 16 and alg.disk_sstf([98, 183, 37, 122, 14, 124, 65, 67], 53) - alg.disk_sstf([q for q in [98, 183, 37, 122, 14, 124, 65, 67] if q != 65], 65) == 12"
+    steps:
+      - show: |
+          <div><svg width="1500" height="365" viewBox="0 0 1500 365"><defs><marker id="arD13" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#b91c1c"/></marker></defs><line x1="50" y1="200" x2="1450" y2="200" stroke="#9ca3af" stroke-width="4"/><text x="50" y="240" font-size="20" text-anchor="middle" fill="#6b7280">0</text><text x="1450" y="240" font-size="20" text-anchor="middle" fill="#6b7280">199</text><circle cx="148" cy="200" r="10" fill="#2563eb"/><text x="148" y="178" font-size="22" text-anchor="middle" fill="#1d4ed8" font-weight="bold">14</text><circle cx="310" cy="200" r="10" fill="#2563eb"/><text x="310" y="178" font-size="22" text-anchor="middle" fill="#1d4ed8" font-weight="bold">37</text><circle cx="507" cy="200" r="10" fill="#2563eb"/><text x="507" y="178" font-size="22" text-anchor="middle" fill="#1d4ed8" font-weight="bold">65</text><circle cx="521" cy="200" r="10" fill="#2563eb"/><text x="521" y="150" font-size="22" text-anchor="middle" fill="#1d4ed8" font-weight="bold">67</text><circle cx="739" cy="200" r="10" fill="#2563eb"/><text x="739" y="178" font-size="22" text-anchor="middle" fill="#1d4ed8" font-weight="bold">98</text><circle cx="908" cy="200" r="10" fill="#2563eb"/><text x="908" y="178" font-size="22" text-anchor="middle" fill="#1d4ed8" font-weight="bold">122</text><circle cx="922" cy="200" r="10" fill="#2563eb"/><text x="922" y="150" font-size="22" text-anchor="middle" fill="#1d4ed8" font-weight="bold">124</text><circle cx="1337" cy="200" r="10" fill="#2563eb"/><text x="1337" y="178" font-size="22" text-anchor="middle" fill="#1d4ed8" font-weight="bold">183</text><path d="M409,150 L437,150 L423,186 z" fill="#b91c1c"/><text x="423" y="130" font-size="22" text-anchor="middle" fill="#b91c1c" font-weight="bold">đầu đọc: 53</text><line x1="310" y1="255" x2="423" y2="255" stroke="#6b7280" stroke-width="3" stroke-dasharray="8 6"/><line x1="310" y1="243" x2="310" y2="267" stroke="#6b7280" stroke-width="3"/><line x1="423" y1="243" x2="423" y2="267" stroke="#1f2937" stroke-width="3"/><line x1="423" y1="255" x2="503" y2="255" stroke="#16a34a" stroke-width="4" marker-end="url(#arD13)"/><text x="366" y="292" font-size="24" text-anchor="middle" fill="#6b7280" font-weight="bold">16</text><text x="453" y="292" font-size="24" text-anchor="start" fill="#16a34a" font-weight="bold">12 → chọn 65</text><text x="750" y="345" font-size="24" text-anchor="middle" fill="#1f2937">gần nhất trước chỉ so khoảng cách hai phía; thang máy giữ một chiều cho tới hết</text></svg></div>
+        focus: [1, 1, 1]
+        say: "Hãy hình dung mặt đĩa như một đường thẳng các trụ, từ 0 tới 199, đầu đọc đang đứng ở trụ 53, còn tám chấm xanh là tám yêu cầu đang chờ. Gần nhất trước chỉ nhìn hai yêu cầu kề hai bên, trụ 65 cách 12 và trụ 37 cách 16, nên nó chọn 65. Thang máy thì không so như vậy, nó giữ nguyên một chiều đi cho tới hết đường rồi mới quay đầu."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Đầu đọc ở trụ 53"
+    checks:
+      - "alg.disk_fcfs([98, 183, 37, 122, 14, 124, 65, 67], 53) == 640"
+      - "alg.disk_sstf([98, 183, 37, 122, 14, 124, 65, 67], 53) == 236 == 12 + 2 + 30 + 23 + 84 + 24 + 2 + 59"
+      - "[abs(b - a) for a, b in zip([53, 65, 67, 37, 14, 98, 122, 124], [65, 67, 37, 14, 98, 122, 124, 183])] == [12, 2, 30, 23, 84, 24, 2, 59]"
+      - "[abs(b - a) for a, b in zip([53] + [98, 183, 37, 122, 14, 124, 65, 67], [98, 183, 37, 122, 14, 124, 65, 67])] == [45, 85, 146, 85, 108, 110, 59, 2] and 45 + 85 + 146 + 85 + 108 + 110 + 59 + 2 == 640"
+      - "[alg.disk_fcfs([b], a) for a, b in [(53, 37), (53, 65), (65, 37), (65, 67), (67, 37), (67, 98), (37, 14), (37, 98)]] == [16, 12, 28, 2, 30, 31, 23, 61]"
+    steps:
+      - show: |
+          <p><b>Bước 1.</b> Hàng đợi: 98, 183, 37, 122, 14, 124, 65, 67. Theo thứ tự đến:</p>
+          <div><svg width="1100" height="278" viewBox="0 0 1100 278"><line x1="40" y1="30" x2="1060" y2="30" stroke="#9ca3af" stroke-width="3"/><text x="40" y="20" font-size="20" fill="#6b7280" text-anchor="middle">0</text><text x="296" y="20" font-size="20" fill="#6b7280" text-anchor="middle">50</text><text x="553" y="20" font-size="20" fill="#6b7280" text-anchor="middle">100</text><text x="809" y="20" font-size="20" fill="#6b7280" text-anchor="middle">150</text><text x="1060" y="20" font-size="20" fill="#6b7280" text-anchor="middle">199</text><polyline points="312,50 542,76 978,102 230,128 665,154 112,180 676,206 373,232 383,258" fill="none" stroke="#dc2626" stroke-width="4"/><circle cx="312" cy="50" r="7" fill="#dc2626"/><text x="300" y="57" font-size="21" text-anchor="end">53</text><circle cx="542" cy="76" r="7" fill="#dc2626"/><text x="552" y="68" font-size="21" text-anchor="start">98</text><circle cx="978" cy="102" r="7" fill="#dc2626"/><text x="990" y="109" font-size="21" text-anchor="start">183</text><circle cx="230" cy="128" r="7" fill="#dc2626"/><text x="218" y="135" font-size="21" text-anchor="end">37</text><circle cx="665" cy="154" r="7" fill="#dc2626"/><text x="677" y="161" font-size="21" text-anchor="start">122</text><circle cx="112" cy="180" r="7" fill="#dc2626"/><text x="100" y="187" font-size="21" text-anchor="end">14</text><circle cx="676" cy="206" r="7" fill="#dc2626"/><text x="688" y="213" font-size="21" text-anchor="start">124</text><circle cx="373" cy="232" r="7" fill="#dc2626"/><text x="361" y="239" font-size="21" text-anchor="end">65</text><circle cx="383" cy="258" r="7" fill="#dc2626"/><text x="395" y="265" font-size="21" text-anchor="start">67</text></svg></div>
+          <p>Đầu đọc chạy qua chạy lại: tổng $\hl{640}$ trụ.</p>
+        focus: [1, 2, 3]
+        say: "Bước một, hàng đợi gồm 98, 183, 37, 122, 14, 124, 65, 67, đầu đọc đang ở trụ 53. Theo thứ tự đến, đầu đọc chạy qua chạy lại khắp đĩa. Cộng các bước, tổng quãng đường là 640 trụ."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>đoạn</th><th>53→98</th><th>→183</th><th>→37</th><th>→122</th><th>→14</th><th>→124</th><th>→65</th><th>→67</th></tr>
+          <tr><td>số trụ</td><td>45</td><td>85</td><td>146</td><td>85</td><td>108</td><td>110</td><td>59</td><td>2</td></tr></table>
+          $$\text{Bước 2. } 45 + 85 + 146 + 85 + 108 + 110 + 59 + 2 = \hl{640}$$
+        focus: [1, 1, 2]
+        say: "Bước hai, cộng từng đoạn theo thứ tự đến. Các đoạn dài 45, 85, 146, 85, 108, 110, 59 và 2 trụ, trong đó ba đoạn dài hơn 100 vì đầu đọc phải băng qua gần hết đĩa. Cộng lại được đúng 640 trụ."
+      - clear: true
+        show: |
+          <p><b>Bước 3.</b> Gần nhất trước: 53 → 65 → 67 → 37 → 14 → 98 → 122 → 124 → 183.</p>
+          <div><svg width="1100" height="278" viewBox="0 0 1100 278"><line x1="40" y1="30" x2="1060" y2="30" stroke="#9ca3af" stroke-width="3"/><text x="40" y="20" font-size="20" fill="#6b7280" text-anchor="middle">0</text><text x="296" y="20" font-size="20" fill="#6b7280" text-anchor="middle">50</text><text x="553" y="20" font-size="20" fill="#6b7280" text-anchor="middle">100</text><text x="809" y="20" font-size="20" fill="#6b7280" text-anchor="middle">150</text><text x="1060" y="20" font-size="20" fill="#6b7280" text-anchor="middle">199</text><polyline points="312,50 373,76 383,102 230,128 112,154 542,180 665,206 676,232 978,258" fill="none" stroke="#16a34a" stroke-width="4"/><circle cx="312" cy="50" r="7" fill="#16a34a"/><text x="300" y="57" font-size="21" text-anchor="end">53</text><circle cx="373" cy="76" r="7" fill="#16a34a"/><text x="383" y="68" font-size="21" text-anchor="start">65</text><circle cx="383" cy="102" r="7" fill="#16a34a"/><text x="395" y="109" font-size="21" text-anchor="start">67</text><circle cx="230" cy="128" r="7" fill="#16a34a"/><text x="240" y="120" font-size="21" text-anchor="start">37</text><circle cx="112" cy="154" r="7" fill="#16a34a"/><text x="100" y="161" font-size="21" text-anchor="end">14</text><circle cx="542" cy="180" r="7" fill="#16a34a"/><text x="552" y="172" font-size="21" text-anchor="start">98</text><circle cx="665" cy="206" r="7" fill="#16a34a"/><text x="675" y="198" font-size="21" text-anchor="start">122</text><circle cx="676" cy="232" r="7" fill="#16a34a"/><text x="686" y="224" font-size="21" text-anchor="start">124</text><circle cx="978" cy="258" r="7" fill="#16a34a"/><text x="990" y="265" font-size="21" text-anchor="start">183</text></svg></div>
+          <p>Tổng $12 + 2 + 30 + 23 + 84 + 24 + 2 + 59 = \hl{236}$ trụ — ít hơn gần 3 lần.</p>
+        focus: [1, 2, 3]
+        say: "Bước ba, với gần nhất trước, từ 53 đi tới 65 vì gần nhất, rồi 67, rồi quay về 37 và 14, sau đó mới sang 98, 122, 124 và 183. Đường đi gọn hơn hẳn. Cộng các bước được 236 trụ, ít hơn gần ba lần."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>đang ở</th><th>gần nhất phía dưới</th><th>gần nhất phía trên</th><th>chọn</th></tr>
+          <tr><td>53</td><td>37 (16)</td><td>65 (12)</td><td>65</td></tr>
+          <tr><td>65</td><td>37 (28)</td><td>67 (2)</td><td>67</td></tr>
+          <tr><td>67</td><td>37 (30)</td><td>98 (31)</td><td>$\hl{37}$</td></tr>
+          <tr><td>37</td><td>14 (23)</td><td>98 (61)</td><td>14</td></tr></table>
+          <p><b>Bước 4.</b> Từ 14 không còn gì phía dưới → đi lên 98, 122, 124, 183.</p>
+        focus: [1, "1.2", "1.4", "1.5", 2]
+        say: "Bước bốn, xem gần nhất trước chọn thế nào ở mỗi chỗ, mỗi bên chỉ cần xét yêu cầu gần nhất. Ở 53, trụ 65 cách 12, gần hơn 37 cách 16, nên chọn 65. Ở 67, trụ 37 cách 30 còn trụ 98 cách 31, chỉ hơn kém 1 trụ mà đầu đọc quay ngược xuống. Ở 37 thì 14 cách 23, gần hơn 98. Từ 14 không còn gì phía dưới, nên đi lên lần lượt 98, 122, 124 và 183."
+
+  # ───────────────────────── 4. THANG MÁY ─────────────────────────
+  - id: scan
+    kind: concept
+    title: "Thang máy và nạn đói của gần nhất trước"
+    checks:
+      - "alg.disk_scan([98, 183, 37, 122, 14, 124, 65, 67], 53) == (236, [37, 14, 65, 67, 98, 122, 124, 183])"
+      - "alg.disk_scan([98, 183, 37, 122, 14, 124, 65, 67], 53, go_to_end=False)[0] == 208"
+    steps:
+      - show: |
+          <div><svg width="1100" height="304" viewBox="0 0 1100 304"><line x1="40" y1="30" x2="1060" y2="30" stroke="#9ca3af" stroke-width="3"/><text x="40" y="20" font-size="20" fill="#6b7280" text-anchor="middle">0</text><text x="296" y="20" font-size="20" fill="#6b7280" text-anchor="middle">50</text><text x="553" y="20" font-size="20" fill="#6b7280" text-anchor="middle">100</text><text x="809" y="20" font-size="20" fill="#6b7280" text-anchor="middle">150</text><text x="1060" y="20" font-size="20" fill="#6b7280" text-anchor="middle">199</text><polyline points="312,50 230,76 112,102 40,128 373,154 383,180 542,206 665,232 676,258 978,284" fill="none" stroke="#2563eb" stroke-width="4"/><circle cx="312" cy="50" r="7" fill="#2563eb"/><text x="324" y="57" font-size="21" text-anchor="start">53</text><circle cx="230" cy="76" r="7" fill="#2563eb"/><text x="240" y="68" font-size="21" text-anchor="start">37</text><circle cx="112" cy="102" r="7" fill="#2563eb"/><text x="122" y="94" font-size="21" text-anchor="start">14</text><circle cx="40" cy="128" r="7" fill="#2563eb"/><text x="28" y="135" font-size="21" text-anchor="end">0</text><circle cx="373" cy="154" r="7" fill="#2563eb"/><text x="383" y="146" font-size="21" text-anchor="start">65</text><circle cx="383" cy="180" r="7" fill="#2563eb"/><text x="393" y="172" font-size="21" text-anchor="start">67</text><circle cx="542" cy="206" r="7" fill="#2563eb"/><text x="552" y="198" font-size="21" text-anchor="start">98</text><circle cx="665" cy="232" r="7" fill="#2563eb"/><text x="675" y="224" font-size="21" text-anchor="start">122</text><circle cx="676" cy="258" r="7" fill="#2563eb"/><text x="686" y="250" font-size="21" text-anchor="start">124</text><circle cx="978" cy="284" r="7" fill="#2563eb"/><text x="990" y="291" font-size="21" text-anchor="start">183</text></svg></div>
+          <p>Thang máy đi về phía trụ 0: 37, 14, chạm 0, quay đầu: 65 … 183. Tổng $53 + 183 = \hl{236}$ trụ.</p>
+          <p class="note">Quay đầu ngay ở yêu cầu xa nhất thay vì chạy tới trụ 0 (biến thể LOOK): còn 208 trụ.</p>
+        focus: [1, 2, 3]
+        say: "Thang máy đi về phía trụ 0, phục vụ 37 rồi 14, chạm trụ 0 thì quay đầu, rồi phục vụ 65 cho tới 183. Tổng quãng đường bằng 53 trụ đi xuống cộng 183 trụ đi lên, tức 236. Nếu quay đầu ngay ở yêu cầu xa nhất thay vì chạy tới trụ 0, chỉ còn 208 trụ."
+      - show: |
+          <div class="box key">Gần nhất trước có thể bỏ đói yêu cầu ở xa: nếu yêu cầu gần trụ 50 cứ đến liên tục, yêu cầu ở trụ 183 chờ mãi. Thang máy bảo đảm mỗi yêu cầu được phục vụ trong <b>hai lượt quét</b>.</div>
+        say: "Điểm yếu của gần nhất trước là nạn đói. Nếu yêu cầu gần trụ 50 cứ đến liên tục, yêu cầu ở trụ 183 phải chờ mãi. Thang máy thì bảo đảm mỗi yêu cầu được phục vụ trong vòng hai lượt quét."
+
+  # ───────────────────────── 5. SSD ─────────────────────────
+  - id: ssd
+    kind: concept
+    title: "Ổ thể rắn: không có đầu đọc"
+    steps:
+      - show: |
+          <ul><li>Ổ thể rắn (SSD) không có bộ phận chuyển động: đọc khối ở “xa” hay “gần” tốn như nhau → sắp theo vị trí <b>gần như vô ích</b>; hệ điều hành thường dùng hàng đợi đơn giản.</li>
+          <li>Nhưng nó có ràng buộc riêng: phải <b>xoá cả khối lớn</b> trước khi ghi lại, và mỗi ô chỉ chịu một số lần ghi hữu hạn → bộ điều khiển trong ổ tự rải đều việc ghi.</li></ul>
+        focus: [0, "1.1", "1.2", "1.2"]
+        say: "Ổ thể rắn khác hẳn. Nó không có bộ phận chuyển động, đọc khối ở xa hay gần đều tốn như nhau, nên sắp thứ tự theo vị trí gần như vô ích, và hệ điều hành thường dùng hàng đợi đơn giản. Nhưng ổ thể rắn có ràng buộc riêng, phải xoá cả một khối lớn trước khi ghi lại. Mỗi ô lại chỉ chịu một số lần ghi hữu hạn, nên bộ điều khiển trong ổ tự rải đều việc ghi."
+
+  # ───────────────────────── 6. TỰ KIỂM ─────────────────────────
+  - id: verify
+    kind: check
+    title: "Tự kiểm"
+    checks:
+      - "53 + 183 == alg.disk_scan([98, 183, 37, 122, 14, 124, 65, 67], 53)[0]"
+      - "16 + 23 + 14 == 53 and 65 + 2 + 31 + 24 + 2 + 59 == 183 and [abs(b - a) for a, b in zip([53, 37, 14, 0, 65, 67, 98, 122, 124], [37, 14, 0, 65, 67, 98, 122, 124, 183])] == [16, 23, 14, 65, 2, 31, 24, 2, 59]"
+      - "len(set([98, 183, 37, 122, 14, 124, 65, 67])) == 8 and alg.disk_fcfs([98, 183, 37, 122, 14, 124, 65, 67], 53) == 640"
+    steps:
+      - show: |
+          <table class="t"><tr><th>phép thử</th><th>với số của bài</th></tr>
+          <tr><td>quãng đường = tổng giá trị tuyệt đối hiệu hai trụ liên tiếp</td><td>thứ tự đến: 640</td></tr>
+          <tr><td>thang máy về 0 rồi quay: trụ đầu + trụ xa nhất phía bên kia</td><td>53 + 183 = 236</td></tr>
+          <tr><td>mọi cách phục vụ đủ mọi yêu cầu, mỗi yêu cầu đúng một lần</td><td>8 yêu cầu</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Tự kiểm bằng ba cách. Một, quãng đường bằng tổng giá trị tuyệt đối của hiệu hai trụ liên tiếp trên đường đi. Hai, với thang máy đi về phía 0 rồi quay lại, quãng đường bằng trụ ban đầu cộng trụ xa nhất ở phía bên kia, vì đầu đọc đi xuống tới 0 rồi đi lên tới đó. Ba, mọi cách phải phục vụ đủ các yêu cầu, mỗi yêu cầu đúng một lần."
+      - show: |
+          <table class="t"><tr><th>đường khác: cộng từng đoạn của thang máy</th><th>số trụ</th></tr>
+          <tr><td>đi xuống: 53 → 37 → 14 → 0</td><td>16 + 23 + 14 = 53</td></tr>
+          <tr><td>đi lên: 0 → 65 → 67 → 98 → 122 → 124 → 183</td><td>65 + 2 + 31 + 24 + 2 + 59 = 183</td></tr>
+          <tr><td>tổng</td><td>$53 + 183 = \hl{236}$ ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Bây giờ kiểm số 236 của thang máy bằng một đường khác, cộng từng đoạn thay vì dùng mẹo trụ đầu cộng trụ xa nhất. Đi xuống từ 53 qua 37, 14 tới 0 là 16 cộng 23 cộng 14, bằng 53. Đi lên từ 0 qua 65, 67, 98, 122, 124 tới 183 là 65 cộng 2 cộng 31 cộng 24 cộng 2 cộng 59, bằng 183. Tổng 236 trụ, khớp mẹo, vì mỗi chiều là đi một chiều nên tổng các đoạn bằng hiệu hai đầu."
+
+  # ───────────────────────── 7. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi người mới hay mắc"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Nghĩ gần nhất trước là tối ưu <b class="red">(sai)</b>
+          <br><span class="note">Nó tham lam từng bước, không bảo đảm tổng nhỏ nhất, và có thể bỏ đói yêu cầu ở xa.</span></div>
+        say: "Lỗi thứ nhất, nghĩ gần nhất trước là tối ưu. Nó chỉ tham lam từng bước, không bảo đảm tổng nhỏ nhất, và có thể bỏ đói yêu cầu ở xa."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Quên đoạn chạy tới trụ 0 khi tính thang máy <b class="red">(thiếu)</b>
+          <br><span class="note">Thang máy chạy tới tận cuối đĩa; chỉ biến thể LOOK mới quay đầu ở yêu cầu xa nhất.</span></div>
+        say: "Lỗi thứ hai, quên đoạn chạy tới trụ 0 khi tính thang máy. Cách thang máy chạy tới tận cuối đĩa, chỉ biến thể quay đầu sớm mới dừng ở yêu cầu xa nhất."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Áp lập lịch theo vị trí cho ổ thể rắn <b class="red">(vô ích)</b>
+          <br><span class="note">Tốn thời gian sắp xếp mà không giảm được gì; nên gộp và giữ thứ tự đơn giản.</span></div>
+        say: "Lỗi thứ ba, áp lập lịch theo vị trí cho ổ thể rắn. Việc đó tốn thời gian sắp xếp mà không giảm được gì, nên chỉ cần gộp yêu cầu và giữ thứ tự đơn giản."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Tính quãng đường từ trụ 0 thay vì từ vị trí đầu đọc <b class="red">(sai)</b>
+          <br><span class="note">Bước đầu tiên là từ trụ 53 tới yêu cầu đầu tiên.</span></div>
+          <table class="t"><tr><th>đoạn đầu, theo thứ tự đến</th><th>đúng: từ 53</th><th>sai: từ 0</th></tr><tr><td>tới trụ 98</td><td>45</td><td><b class="red">98</b></td></tr></table>
+        focus: [1, 1, 2]
+        say: "Lỗi thứ tư, tính quãng đường từ trụ 0 thay vì từ vị trí hiện tại của đầu đọc. Bước đầu tiên là từ trụ 53 tới yêu cầu được phục vụ đầu tiên. Với thứ tự đến, đoạn đầu tới trụ 98 dài 45 trụ, tính nhầm từ 0 sẽ thành 98, thừa 53 trụ."
+
+  # ───────────────────────── 8. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.disk_fcfs([10, 22, 2, 40, 6, 38], 20) == 146 and alg.disk_sstf([10, 22, 2, 40, 6, 38], 20) == 60"
+      - "alg.disk_scan([10, 22, 2, 40, 6, 38], 20, toward_zero=False, go_to_end=False) == (58, [22, 38, 40, 10, 6, 2])"
+      - "[abs(b - a) for a, b in zip([20, 10, 22, 2, 40, 6], [10, 22, 2, 40, 6, 38])] == [10, 12, 20, 38, 34, 32] and 10 + 12 + 20 + 38 + 34 + 32 == 146"
+      - "[abs(b - a) for a, b in zip([20, 22, 10, 6, 2, 38], [22, 10, 6, 2, 38, 40])] == [2, 12, 4, 4, 36, 2] and 2 + 12 + 4 + 4 + 36 + 2 == 60"
+      - "(40 - 20) + (40 - 2) == 20 + 38 == 58"
+    steps:
+      - show: |
+          <p>Đầu đọc ở trụ 20; hàng đợi 10, 22, 2, 40, 6, 38.</p>
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Quãng đường theo thứ tự đến? Theo gần nhất trước?</td></tr>
+          <tr><td>2</td><td>Thang máy đi lên trước, quay đầu ở yêu cầu xa nhất?</td></tr></table>
+        focus: [0, 1, "2.2", "2.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Đầu đọc ở trụ 20, hàng đợi gồm 10, 22, 2, 40, 6 và 38. Câu một, quãng đường theo thứ tự đến và theo gần nhất trước là bao nhiêu? Câu hai, thang máy đi lên trước và quay đầu ở yêu cầu xa nhất thì sao? Dừng video và làm ra giấy."
+        pause: 12
+      - clear: true
+        show: |
+          <p>① Thứ tự đến: 20 → 10 → 22 → 2 → 40 → 6 → 38.</p>
+          $$10 + 12 + 20 + 38 + 34 + 32 = \hl{146} \text{ trụ}$$
+        focus: [1, 2]
+        say: "Đáp án câu một, theo thứ tự đến, đầu đọc đi từ 20 xuống 10, lên 22, xuống 2, lên 40, xuống 6, rồi lên 38. Các đoạn dài 10, 12, 20, 38, 34 và 32, cộng lại 146 trụ."
+      - show: |
+          <p>Gần nhất trước: 20 → 22 → 10 → 6 → 2 → 38 → 40.</p>
+          $$2 + 12 + 4 + 4 + 36 + 2 = \hl{60} \text{ trụ}$$
+        focus: [1, 2]
+        say: "Còn gần nhất trước, từ 20 thì trụ 22 gần nhất, rồi xuống 10, 6, 2, sau cùng mới lên 38 và 40. Các đoạn dài 2, 12, 4, 4, 36 và 2, tổng 60 trụ."
+      - show: |
+          <p>② Thang máy đi lên: 20 → 22 → 38 → 40, quay đầu → 10 → 6 → 2.</p>
+          $$(40 - 20) + (40 - 2) = 20 + 38 = \hl{58} \text{ trụ}$$
+        focus: [1, 2]
+        say: "Câu hai, thang máy đi lên 22, 38, 40, quay đầu xuống 10, 6, 2. Vì mỗi chiều đi một mạch, chiều lên dài 40 trừ 20 bằng 20, chiều xuống dài 40 trừ 2 bằng 38, tổng 58 trụ."
+
+  # ───────────────────────── 9. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">di chuyển đầu đọc đắt nhất</span><span class="a">→</span>
+          <span class="n">gần nhất trước: ngắn nhưng có thể đói</span><span class="a">→</span>
+          <span class="n">thang máy: gọn và công bằng</span><span class="a">→</span>
+          <span class="n">ổ thể rắn: bài toán khác</span></div>
+        say: "Tổng kết lại, di chuyển đầu đọc là phần đắt nhất. Gần nhất trước cho đường ngắn nhưng có thể gây đói. Thang máy vừa gọn vừa công bằng. Còn ổ thể rắn đặt ra một bài toán khác hẳn."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> tối ưu phải theo chi phí <b>thật</b> của phần cứng — khi phần cứng đổi, thuật toán tốt cũ có thể thành vô ích.</div>
+        say: "Điều cần mang theo, tối ưu phải theo chi phí thật của phần cứng, và khi phần cứng đổi, thuật toán tốt ngày trước có thể thành vô ích."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 14), khép lại phần kiến thức: <b>bảo vệ và phân quyền</b> — ai được đọc, ghi, chạy tệp nào.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 14, bài khép lại phần kiến thức của khoá, ta học bảo vệ và phân quyền, ai được đọc, ghi, chạy tệp nào. Hẹn gặp bạn ở bài tiếp theo."

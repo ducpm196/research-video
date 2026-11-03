@@ -1,0 +1,382 @@
+id: L13
+course: PLC
+series: "PLC · Ngôn ngữ lập trình và trình biên dịch"
+title: "Bài 13 — Tình huống chuyên gia theo dòng thời gian: chuyển sang ngôn ngữ an toàn bộ nhớ"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+case: journey
+source: "curriculum/plc.yaml L13; audit/plc/sources_L13.md (câu trích nguyên văn, đọc 2026-11-02); audit/plc/verify_plc.py L13; MSRC Team, A proactive approach to more secure code, MSRC Blog, 2019-07-16 [MS19]; MSRC Team, We need a safer systems programming language, 2019-07-18 [MS19b]; M. Miller, Trends, challenges, and strategic shifts in the software vulnerability mitigation landscape, BlueHat IL 2019 [BH19]; Chromium, The Rule Of 2 (docs/security/rule-of-2.md, số liệu tháng 3/2019) [CR19]; J. Vander Stoep, C. Zhang, Queue the Hardening Enhancements, Google Security Blog, 2019-05-09 [AQ19]; J. Vander Stoep, S. Hines, Rust in the Android platform, 2021-04-06 [AR21]; J. Vander Stoep, Memory Safe Languages in Android 13, 2022-12-01 [AN22]; J. Vander Stoep, A. Rebert, Eliminating Memory Safety Vulnerabilities at the Source, 2024-09-25 [AN24]; J. Vander Stoep, Rust in Android: move fast and fix things, 2025-11-13 [AN25]; PLC bài 5 (kiểu), bài 8 (bộ nhớ), bài 11 (hành vi không xác định), bài 12 (bất biến, đồng thời); khoá SEC bài 11 (an toàn bộ nhớ)"
+assumes: [arith]
+# Quy ước: “lỗi bộ nhớ” = lỗ hổng an toàn bộ nhớ (memory safety vulnerability); “ngoài biên” = đọc/ghi ngoài vùng được cấp (out of bounds);
+#   “dùng sau giải phóng” = use-after-free; “hộp cát” = sandbox; “khối không an toàn” = unsafe{} của Rust; “mật độ lỗ hổng” = số lỗ hổng
+#   chia số dòng mã (mỗi nghìn hay mỗi triệu dòng). Mọi sự kiện, con số có nguồn ghi trong audit/plc/sources_L13.md; con số khác là phép tính
+#   lại (checks) hoặc ghi “(số minh hoạ)”: dịch vụ 200 000 dòng, 20 000 dòng mới mỗi năm, 100 lỗi giảm một nửa mỗi năm, 20 lỗi mới mỗi năm
+#   là SỐ MINH HOẠ. Tuổi thọ trung bình 2,5 năm là tham số mô phỏng của [AN24] (“numbers similar to Android”), không phải số đo.
+#   An ninh chỉ ở mức khái niệm phòng thủ: loại lỗi, tỉ lệ, cách phòng — không có mã hay chuỗi khai thác.
+#   Tên chỉ trên màn hình (lời đọc dùng tên mô tả): CVE, Chromium, Scudo, CrabbyAVIF, QR, AOSP. Luật đọc: lexicon_vi.PLC.yaml (probe p1).
+objectives:
+  - "Kể lại hành trình chuyển sang ngôn ngữ an toàn bộ nhớ qua năm chặng từ 2019 tới 2025, mỗi chặng một điểm nghẽn và một cách xử lý"
+  - "Tính lại tỉ lệ, mật độ lỗ hổng và mức giảm theo tuổi mã từ số liệu đã công bố"
+  - "Chọn cách giảm lỗi bộ nhớ hợp với quy mô của mình, kèm điều kiện đổi lựa chọn"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Bảy phần mười lỗ hổng đến từ một loại lỗi"
+    checks:
+      - "100 - 70 == 30 and 76 - 20 == 56"
+    steps:
+      - show: |
+          <p>Năm 2019, Microsoft viết: <b>khoảng 70%</b> lỗ hổng họ cấp mã định danh công khai (CVE) <b>mỗi năm</b> vẫn là lỗi <b>an toàn bộ nhớ</b> — dù đã có kiểm tra mã, đào tạo, công cụ phân tích.</p>
+          <p>Ở Android, tỉ lệ ấy là <b>76%</b> năm 2019, và năm 2025 lần đầu tiên xuống <b>dưới 20%</b>.</p>
+          <div class="box key">Hôm nay: năm chặng từ 2019 tới 2025 — một hệ hàng chục triệu dòng mã giảm lỗi bộ nhớ thế nào, mà không viết lại tất cả.</div>
+        focus: [1, 2, 3]
+        say: "Chào bạn, năm 2019, Microsoft viết rằng khoảng 70% lỗ hổng họ công bố mỗi năm vẫn là lỗi an toàn bộ nhớ, dù đã có nhiều công cụ và quy trình. Ở hệ điều hành Android, tỉ lệ ấy là 76% năm 2019, và năm 2025 lần đầu tiên xuống dưới 20%. Hôm nay ta xem một hệ hàng chục triệu dòng mã giảm lỗi bộ nhớ thế nào, mà không viết lại tất cả."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại bốn điều từ các bài trước"
+    checks:
+      - "round(0.35 * 240) == 84 and round(84 / 0.35) == 240 and 20 * 12 == 240"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài</th><th>điều đã học</th><th>ví dụ</th></tr>
+          <tr><td>bài 8</td><td>biến cục bộ nằm trên <b>ngăn xếp</b>, bị thu hồi khi hàm trả về</td><td>trả về địa chỉ biến cục bộ trong C → con trỏ trỏ vào vùng sắp bị ghi đè</td></tr>
+          <tr><td>bài 5</td><td>kiểm kiểu <b>tĩnh</b> là kiểm trước khi chạy</td><td>cộng số với chuỗi: báo lỗi trước khi chạy</td></tr>
+          <tr><td>bài 11</td><td><b>hành vi không xác định</b>: trình biên dịch được giả định nó không xảy ra</td><td>tràn số có dấu trong C</td></tr>
+          <tr><td>bài 12</td><td>dữ liệu <b>bất biến</b>: nhiều luồng cùng đọc không cần khoá</td><td>muốn “sửa” thì tạo bản mới</td></tr></table>
+        focus: ["1.2", "1.3", "1.4", "1.5"]
+        say: "Ở bài 8, biến cục bộ nằm trên ngăn xếp và bị thu hồi khi hàm trả về, nên trả về địa chỉ của nó là trỏ vào vùng sắp bị ghi đè. Ở bài 5, kiểm kiểu tĩnh là kiểm trước khi chạy, nên cộng số với chuỗi bị báo lỗi sớm. Ở bài 11, hành vi không xác định là chỗ trình biên dịch được giả định không bao giờ xảy ra, như tràn số có dấu trong C. Ở bài 12, dữ liệu bất biến cho nhiều luồng cùng đọc mà không cần khoá."
+      - show: |
+          <table class="t"><tr><th>phép tính dùng trong bài</th><th>làm thử</th></tr>
+          <tr><td>phần = tỉ lệ nhân tổng</td><td>35% của 240 = 0,35 nhân 240 = $\hlg{84}$</td></tr>
+          <tr><td>tổng = phần chia tỉ lệ</td><td>84 chia 0,35 = 240</td></tr>
+          <tr><td>đổi đơn vị theo thời gian</td><td>20 mỗi tháng nhân 12 tháng = 240 mỗi năm</td></tr></table>
+        focus: ["1.2", "1.3", "1.4"]
+        say: "Bài còn dùng ba phép tính nhỏ, đầu tiên 35% của 240 là 0 phẩy 35 nhân 240, được 84. Ngược lại, biết phần và tỉ lệ thì tổng bằng phần chia tỉ lệ, 84 chia 0 phẩy 35 lại được 240. Cuối cùng là đổi đơn vị theo thời gian, 20 mỗi tháng nhân 12 tháng là 240 mỗi năm."
+
+  # ───────────────────────── 3. NGÔN NGỮ ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Ngôn ngữ của hành trình"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thuật ngữ</th><th>nghĩa</th></tr>
+          <tr><td><b>lỗi an toàn bộ nhớ</b></td><td>đọc hay ghi vùng nhớ không được phép: <b>ngoài biên</b> mảng, hoặc <b>dùng sau giải phóng</b> (con trỏ treo)</td></tr>
+          <tr><td><b>ngôn ngữ an toàn bộ nhớ</b></td><td>mọi truy cập bộ nhớ có nghĩa xác định; phần lớn nhờ thu gom rác; ngôn ngữ hệ thống Rust (bài gọi là <b>ngôn ngữ mới</b>) nhờ kiểm lúc biên dịch</td></tr>
+          <tr><td><b>hộp cát</b> (sandbox)</td><td>tiến trình riêng, ít quyền: lỗi bên trong khó lan ra ngoài</td></tr>
+          <tr><td><b>khối không an toàn</b> (unsafe)</td><td>đoạn mã Rust người viết tự cam đoan là đúng</td></tr>
+          <tr><td><b>mật độ lỗ hổng</b></td><td>số lỗ hổng chia số dòng mã, ví dụ 1 mỗi nghìn dòng</td></tr></table>
+        focus: ["1.2", "1.3", "1.3", "1.4", "1.5", "1.6"]
+        say: "Lỗi an toàn bộ nhớ là đọc hay ghi vùng nhớ không được phép, như đi ra ngoài biên mảng, hoặc dùng sau giải phóng, tức con trỏ treo như ở bài 8. Với ngôn ngữ an toàn bộ nhớ, mọi truy cập bộ nhớ đều có nghĩa xác định, phần lớn nhờ thu gom rác. Riêng ngôn ngữ hệ thống ghi trên màn hình, mà bài gọi là ngôn ngữ mới, thì nhờ kiểm lúc biên dịch. Hộp cát là một tiến trình riêng, ít quyền, nên lỗi bên trong khó lan ra ngoài. Khối không an toàn là đoạn mã của ngôn ngữ mới mà người viết tự cam đoan là đúng. Mật độ lỗ hổng là số lỗ hổng chia số dòng mã, ví dụ một lỗ hổng mỗi nghìn dòng."
+
+  # ───────────────────────── 4. DÒNG THỜI GIAN ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Năm chặng trên một trục thời gian"
+    steps:
+      - show: |
+          <div><svg width="1700" height="320" viewBox="0 0 1700 320">
+          <line x1="30" y1="150" x2="1670" y2="150" stroke="#1f2937" stroke-width="3"/>
+          <g font-size="24" text-anchor="middle" fill="#1f2937">
+          <circle cx="160" cy="150" r="15" fill="#9ca3af"/><text x="160" y="108" font-weight="bold">2019</text><text x="160" y="200">đếm nguyên nhân</text><text x="160" y="232">khoảng 70% mỗi năm</text>
+          <circle cx="500" cy="150" r="15" fill="#2a78d6"/><text x="500" y="108" font-weight="bold">2019 → 2021</text><text x="500" y="200">hộp cát có giá</text><text x="500" y="232">mã mới viết bằng Rust</text>
+          <circle cx="850" cy="150" r="15" fill="#7c3aed"/><text x="850" y="108" font-weight="bold">2022</text><text x="850" y="200">223 xuống 85</text><text x="850" y="232">76% xuống 35%</text>
+          <circle cx="1200" cy="150" r="15" fill="#eb6834"/><text x="1200" y="108" font-weight="bold">2024</text><text x="1200" y="200">lỗi vơi theo tuổi mã</text><text x="1200" y="232">còn 24%</text>
+          <circle cx="1540" cy="150" r="15" fill="#059669"/><text x="1540" y="108" font-weight="bold">2025</text><text x="1540" y="200">dưới 20%</text><text x="1540" y="232">vẫn giữ nhiều lớp phòng</text>
+          </g>
+          <text x="850" y="300" font-size="23" fill="#6b7280" text-anchor="middle">khai sinh → tăng trưởng → quy mô rất lớn → ổn định → tiếp tục phát triển</text>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình là trục thời gian với năm chặng. Năm 2019, các đội đếm nguyên nhân gốc và thấy lỗi bộ nhớ chiếm khoảng 70% mỗi năm. Từ 2019 tới 2021, hộp cát lộ ra cái giá của nó, và mã mới bắt đầu được viết bằng ngôn ngữ mới. Năm 2022, số lỗi bộ nhớ của Android giảm từ 223 xuống 85, năm 2024 tỉ lệ còn 24%, và năm 2025 xuống dưới 20%, mà vẫn giữ nhiều lớp phòng."
+
+  # ───────────────────────── 5. CƠ CHẾ: LỖI GIẢM THEO TUỔI MÃ ─────────────────────────
+  - id: decay
+    kind: concept
+    title: "Cơ chế chung: khoá vòi ở mã mới, lỗi cũ tự vơi dần"
+    checks:
+      - "(n := [100 / 2 ** k for k in range(4)]) == [100, 50, 25, 12.5]"
+      - "(m := [100 / 2 ** k + 20 * k for k in range(4)]) == [100, 70, 65, 72.5]"
+    steps:
+      - show: |
+          <div><svg width="1500" height="330" viewBox="0 0 1500 330">
+          <g font-size="24" text-anchor="middle" fill="#1f2937">
+          <rect x="120" y="60" width="160" height="200" fill="#e11d48" opacity="0.8"/><text x="200" y="300">năm 0: 100</text>
+          <rect x="420" y="160" width="160" height="100" fill="#e11d48" opacity="0.8"/><text x="500" y="300">năm 1: 50</text>
+          <rect x="720" y="210" width="160" height="50" fill="#e11d48" opacity="0.8"/><text x="800" y="300">năm 2: 25</text>
+          <rect x="1020" y="235" width="160" height="25" fill="#e11d48" opacity="0.8"/><text x="1100" y="300">năm 3: 12,5</text>
+          </g>
+          <line x1="80" y1="260" x2="1260" y2="260" stroke="#1f2937" stroke-width="3"/>
+          <text x="1300" y="120" font-size="22" fill="#6b7280">mỗi năm tìm</text><text x="1300" y="150" font-size="22" fill="#6b7280">và sửa được</text><text x="1300" y="180" font-size="22" fill="#6b7280">một nửa số lỗi</text><text x="1300" y="210" font-size="22" fill="#6b7280">còn lại</text>
+          </svg></div>
+          <p class="note">Số minh hoạ: 100 lỗi trong mã viết năm 0, không ai thêm mã mới.</p>
+        focus: [2, 1, 1]
+        say: "Trước các chặng, ta xem cơ chế mà đội Android dựa vào, với một khối mã mới có 100 lỗi, một số minh hoạ. Nếu mỗi năm người ta tìm và sửa được một nửa số lỗi còn lại, thì sau một năm còn 50, sau hai năm còn 25, sau ba năm còn 12 phẩy 5. Mã càng cũ càng ít lỗi, và kiểu giảm mà mỗi năm chia cho cùng một số như vậy gọi là giảm theo cấp số nhân."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>năm</th><th>lỗi còn lại của mã cũ</th><th>thêm 20 lỗi mới mỗi năm (số minh hoạ)</th><th>tổng</th></tr>
+          <tr><td>0</td><td>100</td><td>0</td><td>100</td></tr>
+          <tr><td>1</td><td>50</td><td>20</td><td>70</td></tr>
+          <tr><td>2</td><td>25</td><td>40</td><td>65</td></tr>
+          <tr><td>3</td><td>12,5</td><td>60</td><td>$\hl{72{,}5}$</td></tr></table>
+          <div class="box key">Số lỗi mới không giảm nếu cứ viết mã mới bằng ngôn ngữ cũ. Vì thế đội Android chọn <b>khoá vòi ở mã mới</b>, thay vì viết lại mã cũ.</div>
+        focus: ["1.3", "1.5", 2]
+        say: "Nhưng hệ thật vẫn được viết thêm, nên giả sử mỗi năm mã mới thêm 20 lỗi, một số minh hoạ, thì tổng sau một năm là 50 cộng 20, bằng 70. Tới năm ba, phần cũ còn 12 phẩy 5 nhưng phần mới đã cộng dồn 60, tổng là 72 phẩy 5, lại tăng. Vì thế đội Android chọn khoá vòi ở mã mới, thay vì viết lại mã cũ."
+
+  # ───────────────────────── 6. CHẶNG 1 ─────────────────────────
+  - id: stage1
+    kind: example
+    title: "Chặng 1, năm 2019 — khai sinh: đếm nguyên nhân gốc"
+    stage: {year: "2019", scale: "Microsoft phân loại mọi lỗ hổng từ 2004; khoảng 70% mỗi năm 2006–2018 là lỗi bộ nhớ; Chromium: 5 trên 130 lỗi nghiêm trọng không do hỏng bộ nhớ (3/2019)", source: "[MS19] [MS19b] [BH19] [CR19]", practice: "phân loại nguyên nhân gốc theo năm trước khi chọn giải pháp; chuyển gánh nặng từ người viết tính năng sang người làm ngôn ngữ"}
+    checks:
+      - "130 - 5 == 125 and round(125 / 130 * 100, 1) == 96.2"
+    steps:
+      - show: |
+          <p><b>Quy mô:</b> từ 2004, nhóm ứng phó an ninh của Microsoft phân loại <b>mọi</b> lỗ hổng được báo. Từ 2006 tới 2018, mỗi năm <b>khoảng 70%</b> là lỗi an toàn bộ nhớ, trong mã C và C++.</p>
+          <p><b>Điểm nghẽn:</b> tỉ lệ ấy gần như không đổi suốt hơn mười năm, dù có kiểm tra mã, đào tạo, phân tích tĩnh, kiểm thử bằng dữ liệu ngẫu nhiên. Mã càng nhiều, vấn đề càng tệ hơn.</p>
+          <p><b>Cách nhìn mới:</b> ngôn ngữ an toàn bộ nhớ chuyển gánh nặng từ người viết tính năng sang <b>người làm ngôn ngữ</b>.</p>
+        focus: [1, 2, 3]
+        say: "Ở chặng một, nhóm ứng phó an ninh của Microsoft phân loại mọi lỗ hổng từ năm 2004, và từ 2006 tới 2018, mỗi năm khoảng 70% là lỗi bộ nhớ trong mã C và C cộng cộng. Điểm nghẽn là tỉ lệ ấy gần như không đổi suốt hơn mười năm, dù đã có kiểm tra mã, đào tạo và nhiều công cụ. Cách nhìn mới là dùng ngôn ngữ an toàn bộ nhớ, để gánh nặng chuyển từ người viết tính năng sang người làm ngôn ngữ."
+      - clear: true
+        show: |
+          <p>Đội an ninh của trình duyệt Chromium ghi: tính tới tháng 3/2019, chỉ khoảng <b>5 trên 130</b> lỗi công khai mức nghiêm trọng nhất là <b>không</b> rõ ràng do hỏng bộ nhớ.</p>
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. số lỗi do hỏng bộ nhớ</td><td>130 trừ 5</td><td>$\hlb{125}$ lỗi</td></tr>
+          <tr><td>Bước 2. tỉ lệ</td><td>125 chia 130, nhân 100</td><td>≈ $\hlg{96{,}2}$%</td></tr></table>
+          <p class="note">Thực hành: đếm nguyên nhân gốc của lỗ hổng theo từng năm trước khi chọn giải pháp. Điều kiện: có đủ nhiều năm dữ liệu đã phân loại; vài lỗi lẻ chưa nói lên xu hướng.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Đội an ninh của một trình duyệt mã nguồn mở lớn ghi rằng tới tháng 3 năm 2019, chỉ khoảng 5 trên 130 lỗi nghiêm trọng nhất là không rõ ràng do hỏng bộ nhớ. Bước một, 130 trừ 5 còn 125 lỗi do hỏng bộ nhớ. Bước hai, 125 chia 130 nhân 100 được khoảng 96 phẩy 2%. Thực hành rút ra là đếm nguyên nhân gốc theo từng năm trước khi chọn giải pháp, với điều kiện có đủ nhiều năm dữ liệu."
+
+  # ───────────────────────── 7. CHẶNG 2 ─────────────────────────
+  - id: stage2
+    kind: example
+    title: "Chặng 2, 2019 tới 2021 — tăng trưởng: hộp cát có giá, mã mới đổi ngôn ngữ"
+    stage: {year: "2019 → 2021", scale: "Android 2018: 90% lỗ hổng mức cao là dùng sau giải phóng, tràn số nguyên, ngoài biên; năm 2021 khoảng 70% lỗ hổng mức cao là lỗi bộ nhớ; hàng chục triệu dòng C/C++", source: "[AQ19] [CR19] [AR21]", practice: "quy tắc hai trên ba: không để dữ liệu không tin cậy, ngôn ngữ không an toàn và quyền cao đi cùng nhau; mã mới viết bằng ngôn ngữ an toàn, không viết lại mã cũ"}
+    checks:
+      - "len(list(__import__('itertools').product([0, 1], repeat=3))) == 8 and sum(1 for c in __import__('itertools').product([0, 1], repeat=3) if sum(c) <= 2) == 7"
+    steps:
+      - show: |
+          <p><b>Năm 2019, Android</b> nhìn lại các lỗ hổng mức cao năm 2018: dùng sau giải phóng, tràn số nguyên và đọc ghi ngoài biên chiếm <b>90%</b>. Khoảng <b>80%</b> lỗ hổng mức cao của phần đa phương tiện nằm ở các bộ giải mã phần mềm.</p>
+          <p><b>Cách xử lý:</b> đưa bộ giải mã vào <b>hộp cát</b> ít quyền; thêm kiểm biên mảng tự động, tốn <b>dưới 1%</b> hiệu năng sau khi bỏ các phép kiểm thừa.</p>
+          <table class="t"><tr><th>quy tắc hai trên ba (Chromium)</th></tr>
+          <tr><td>chọn <b>không quá 2</b> trong 3 thứ: dữ liệu vào không tin cậy, ngôn ngữ không an toàn, quyền cao</td></tr></table>
+        focus: [1, 1, 2, 3]
+        say: "Ở chặng hai, năm 2019, đội Android nhìn lại các lỗ hổng mức cao năm 2018, và thấy dùng sau giải phóng, tràn số nguyên, đọc ghi ngoài biên chiếm 90%. Khoảng 80% lỗ hổng mức cao của phần đa phương tiện nằm ở các bộ giải mã phần mềm. Họ đưa bộ giải mã vào hộp cát ít quyền, và thêm kiểm biên mảng tự động, tốn dưới 1% hiệu năng. Đó là quy tắc hai trên ba, chọn không quá hai trong ba thứ, dữ liệu không tin cậy, ngôn ngữ không an toàn, và quyền cao."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. mỗi thứ có hoặc không</td><td>2 nhân 2 nhân 2</td><td>8 tổ hợp</td></tr>
+          <tr><td>Bước 2. tổ hợp bị cấm</td><td>có đủ cả 3</td><td>1 tổ hợp</td></tr>
+          <tr><td>Bước 3. tổ hợp được phép</td><td>8 trừ 1</td><td>$\hlg{7}$ tổ hợp</td></tr></table>
+          <p class="note">Mã C/C++ đọc dữ liệu không tin cậy thì phải vào hộp cát ít quyền, hoặc đổi sang ngôn ngữ an toàn.</p>
+        focus: ["1.2", "1.3", "1.4", 2]
+        say: "Làm thử quy tắc này bằng cách đếm, bước một, mỗi thứ có hoặc không, nên có 2 nhân 2 nhân 2 bằng 8 tổ hợp. Bước hai, chỉ có một tổ hợp bị cấm, là có đủ cả ba thứ. Bước ba, 8 trừ 1 còn 7 tổ hợp được phép. Vậy mã C hay C cộng cộng đọc dữ liệu không tin cậy thì phải vào hộp cát ít quyền, hoặc đổi sang ngôn ngữ an toàn."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>điểm nghẽn, năm 2021</th><th>quyết định</th></tr>
+          <tr><td>lỗi bộ nhớ vẫn là <b>khoảng 70%</b> lỗ hổng mức cao của Android</td><td>ngôn ngữ an toàn là cách <b>rẻ nhất</b> để phòng lỗi bộ nhớ</td></tr>
+          <tr><td>hộp cát <b>tốn kém</b>: thêm tiến trình, bộ nhớ, độ trễ; và <b>không xoá</b> được lỗi</td><td>Rust được đưa vào để viết chính hệ điều hành</td></tr>
+          <tr><td>viết lại <b>hàng chục triệu dòng</b> là không khả thi</td><td>chỉ đổi ngôn ngữ cho <b>mã mới</b></td></tr>
+          <tr><td>khoảng <b>50%</b> lỗi bộ nhớ nằm trong mã <b>chưa tới một năm tuổi</b></td><td>đúng cơ chế khoá vòi vừa thấy</td></tr></table>
+        focus: ["1.2", "1.3", "1.4", "1.5"]
+        say: "Tới năm 2021, lỗi bộ nhớ vẫn là khoảng 70% lỗ hổng mức cao của Android, trong khi ngôn ngữ an toàn là cách rẻ nhất để phòng chúng. Hộp cát tốn thêm tiến trình, bộ nhớ và độ trễ, mà không xoá được lỗi, nên ngôn ngữ mới được đưa vào để viết chính hệ điều hành. Viết lại hàng chục triệu dòng là không khả thi, nên chỉ đổi ngôn ngữ cho mã mới. Khoảng một nửa lỗi bộ nhớ nằm trong mã chưa tới một năm tuổi, đúng cơ chế khoá vòi vừa thấy."
+
+  # ───────────────────────── 8. CHẶNG 3 ─────────────────────────
+  - id: stage3
+    kind: example
+    title: "Chặng 3, năm 2022 — quy mô rất lớn: phần lớn mã mới đã an toàn"
+    stage: {year: "2022", scale: "Android 13: phần lớn mã mới viết bằng ngôn ngữ an toàn; khoảng 21% mã gốc mới là Rust, khoảng 1,5 triệu dòng; lỗi bộ nhớ 223 → 85 mỗi năm", source: "[AN22]", practice: "đo cả số tuyệt đối lẫn tỉ lệ; dùng khối không an toàn ít và bọc lại để soát; vẫn đầu tư công cụ cho mã C/C++ cũ"}
+    checks:
+      - "round((223 - 85) / 223 * 100, 1) == 61.9"
+      - "round(223 / 0.76) == 293 and round(85 / 0.35) == 243 and 20 * 12 == 240"
+      - "1500000 // 1000 == 1500"
+    steps:
+      - show: |
+          <p><b>Quy mô:</b> Android 13 là bản đầu tiên mà <b>phần lớn mã mới</b> viết bằng ngôn ngữ an toàn bộ nhớ. Khoảng <b>21%</b> mã gốc mới là Rust, tổng khoảng <b>1,5 triệu dòng</b> Rust.</p>
+          <table class="t"><tr><th>lỗi bộ nhớ của Android</th><th>2019</th><th>2022</th></tr>
+          <tr><td>số mỗi năm</td><td>223</td><td>85</td></tr>
+          <tr><td>tỉ lệ trên tổng lỗ hổng</td><td>76%</td><td>35%</td></tr></table>
+          <p>Tới lúc đó: <b>0</b> lỗ hổng an toàn bộ nhớ được tìm thấy trong mã Rust của Android.</p>
+        focus: [1, 1, "2.2", "2.3", 3]
+        say: "Ở chặng ba, năm 2022, Android 13 là bản đầu tiên mà phần lớn mã mới được viết bằng ngôn ngữ an toàn bộ nhớ. Khoảng 21% mã gốc mới viết bằng ngôn ngữ mới, tổng cộng khoảng một triệu rưỡi dòng. Số lỗi bộ nhớ mỗi năm giảm từ 223 năm 2019 xuống 85 năm 2022. Tỉ lệ trên tổng lỗ hổng giảm từ 76% xuống 35%. Tới lúc đó, chưa có lỗ hổng an toàn bộ nhớ nào được tìm thấy trong phần mã ấy của Android."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. mức giảm số lỗi bộ nhớ</td><td>223 trừ 85 = 138; chia 223</td><td>≈ $\hlg{61{,}9}$%</td></tr>
+          <tr><td>Bước 2. tổng lỗ hổng năm 2019</td><td>223 chia 0,76</td><td>≈ 293</td></tr>
+          <tr><td>Bước 3. tổng lỗ hổng năm 2022</td><td>85 chia 0,35</td><td>≈ $\hlb{243}$</td></tr>
+          <tr><td>Bước 4. đối chiếu: nguồn ghi “khoảng 20 mỗi tháng”</td><td>20 nhân 12</td><td>240 ✓</td></tr></table>
+          <p class="note">Tổng lỗ hổng gần như đứng yên; cái giảm là phần lỗi bộ nhớ, loại nghiêm trọng nhất: năm 2022 nó chiếm 86% lỗ hổng mức nghiêm trọng nhất.</p>
+        focus: ["1.2", "1.3", "1.4", "1.5", 2]
+        say: "Ta tính lại bốn bước, bước một, 223 trừ 85 là 138, chia 223 được mức giảm khoảng 61 phẩy 9%. Bước hai, theo phép suy ra tổng, năm 2019 có khoảng 223 chia 0 phẩy 76, bằng 293 lỗ hổng. Bước ba, năm 2022 có khoảng 85 chia 0 phẩy 35, bằng 243. Bước bốn, đội ghi khoảng 20 lỗ hổng mỗi tháng, 20 nhân 12 là 240, khớp. Vậy tổng gần như đứng yên, cái giảm là lỗi bộ nhớ, loại chiếm 86% lỗ hổng mức nghiêm trọng nhất."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>điều đội Android ghi</th><th>vì sao quan trọng</th></tr>
+          <tr><td>mật độ lịch sử <b>hơn 1 lỗ hổng mỗi nghìn dòng</b> ở nhiều phần C/C++</td><td>1&nbsp;500&nbsp;000 chia 1000 = $\hl{1500}$: cận trên nếu mã Rust có mật độ cũ; nguồn ước “hàng trăm” lỗ hổng đã được ngăn</td></tr>
+          <tr><td>một thành phần mới có <b>đúng 2</b> chỗ dùng khối không an toàn</td><td>ít, được bọc lại, soát kỹ — chính việc soát đã tìm ra một khả năng tranh chấp</td></tr>
+          <tr><td>“tương quan chưa chắc là nhân quả”</td><td>đội vẫn đầu tư công cụ cho C/C++ cũ, và tự nêu khả năng có giải thích khác</td></tr></table>
+        focus: ["1.2", "1.2", "1.3", "1.4"]
+        say: "Đội Android còn ghi rằng ở nhiều phần C và C cộng cộng, mật độ lịch sử là hơn một lỗ hổng mỗi nghìn dòng. Một triệu rưỡi dòng chia 1000 là 1500, một cận trên, còn nguồn ước là hàng trăm lỗ hổng đã được ngăn. Một thành phần mới chỉ có hai chỗ dùng khối không an toàn, và soát kỹ hai chỗ đó đã tìm ra một khả năng tranh chấp. Đội cũng tự ghi rằng tương quan chưa chắc là nhân quả."
+
+  # ───────────────────────── 9. CHẶNG 4 ─────────────────────────
+  - id: stage4
+    kind: example
+    title: "Chặng 4, năm 2024 — ổn định: lỗi giảm theo tuổi mã"
+    stage: {year: "2024", scale: "76% → 24% sau 6 năm; mô phỏng dùng tuổi thọ trung bình 2,5 năm; mã 5 năm tuổi ít lỗ hổng hơn 3,4 tới 7,4 lần", source: "[AN24]", practice: "khoá vòi ở mã mới; đầu tư vào khả năng gọi qua lại giữa ngôn ngữ thay vì viết lại; đo tỉ lệ quay lui thay đổi"}
+    checks:
+      - "round(__import__('math').exp(5 / 2.5), 2) == 7.39"
+      - "round(__import__('math').exp(1), 3) == 2.718 and round(2.718 * 2.718, 2) == 7.39"
+      - "round(5 / __import__('math').log(3.4), 1) == 4.1"
+      - "76 - 24 == 52"
+    steps:
+      - show: |
+          <p><b>Quy mô:</b> năm 2024, tỉ lệ lỗi bộ nhớ của Android còn <b>24%</b>, từ 76% sau 6 năm — thấp hơn hẳn mức <b>70%</b> chung của ngành. Phần lớn mã vẫn là mã không an toàn, nhưng ngày càng cũ.</p>
+          <p><b>Giải thích của đội:</b> lỗ hổng giảm theo cấp số nhân, có “nửa đời”. Mô phỏng của đội, dựa trên số gần với Android, dùng tuổi thọ trung bình <b>2,5 năm</b>. Mã 5 năm tuổi ít lỗ hổng hơn mã mới <b>3,4 lần</b> (theo một nghiên cứu lớn năm 2022) tới <b>7,4 lần</b> (theo Android và Chromium).</p>
+        focus: [1, 2, 2]
+        say: "Ở chặng bốn, năm 2024, tỉ lệ lỗi bộ nhớ của Android còn 24%, từ 76% sau 6 năm, thấp hơn hẳn mức 70% chung của ngành. Phần lớn mã vẫn không an toàn, nhưng ngày càng cũ, và đội giải thích rằng lỗ hổng giảm theo cấp số nhân, và mô phỏng của họ dùng tuổi thọ trung bình 2 phẩy 5 năm. Theo đội, mã 5 năm tuổi ít lỗ hổng hơn mã mới từ 3 phẩy 4 lần, theo một nghiên cứu năm 2022, tới 7 phẩy 4 lần, theo số của chính họ."
+      - clear: true
+        show: |
+          <p>Với kiểu giảm này và tuổi thọ trung bình 2,5 năm, cứ sau mỗi 2,5 năm, số lỗ hổng còn lại chia cho số e, xấp xỉ 2,718.</p>
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. 5 năm là mấy lần tuổi thọ trung bình</td><td>5 chia 2,5</td><td>2 lần</td></tr>
+          <tr><td>Bước 2. chia cho e hai lần</td><td>2,718 nhân 2,718</td><td>≈ $\hlg{7{,}39}$, khớp “7,4 lần”</td></tr>
+          <tr><td>Bước 3. con số 3,4 lần ứng với tuổi thọ dài hơn</td><td>lỗi sống lâu thì vơi chậm hơn</td><td>≈ 4,1 năm</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Ta tính lại con số 7 phẩy 4, với tuổi thọ trung bình 2 phẩy 5 năm thì cứ mỗi 2 phẩy 5 năm, số lỗ hổng còn lại chia cho số e, xấp xỉ 2 phẩy 718. Bước một, 5 năm chia 2 phẩy 5 là đúng hai lần tuổi thọ trung bình. Bước hai, chia cho e hai lần, tức 2 phẩy 718 nhân 2 phẩy 718, được khoảng 7 phẩy 39, khớp với 7 phẩy 4 lần. Bước ba, con số 3 phẩy 4 lần ứng với tuổi thọ dài hơn, khoảng 4 phẩy 1 năm."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bốn thế hệ chống lỗi bộ nhớ (đội Android, 2024)</th><th>giới hạn hay điều kiện</th></tr>
+          <tr><td>1. vá sau khi bị báo</td><td>chi phí lặp mãi, người dùng hở cho tới khi vá</td></tr>
+          <tr><td>2. giảm thiểu: chim hoàng yến trên ngăn xếp, kiểm luồng điều khiển</td><td>tốn hiệu năng, pin, bộ nhớ; kẻ tấn công tìm đường vòng</td></tr>
+          <tr><td>3. chủ động tìm lỗi: bộ dò lỗi, kiểm thử dữ liệu ngẫu nhiên</td><td>chữa triệu chứng, không chữa gốc</td></tr>
+          <tr><td>4. <b>phòng ngay từ gốc</b>: ngôn ngữ an toàn, giao diện an toàn</td><td>cần gọi qua lại an toàn giữa mã mới và mã cũ</td></tr></table>
+          <p class="note">Đo được: tỉ lệ quay lui thay đổi bằng Rust <b>chưa tới một nửa</b> của C++; bỏ được hộp cát, một bộ tạo mã QR viết bằng Rust nhanh gấp <b>20 lần</b>.</p>
+        focus: ["1.2", "1.3", "1.4", "1.5", 2]
+        say: "Năm 2024, đội chia cách chống lỗi bộ nhớ thành bốn thế hệ, thế hệ một là vá sau khi bị báo, chi phí lặp mãi. Thế hệ hai là các lớp giảm thiểu, tốn hiệu năng, pin và bộ nhớ. Thế hệ ba là chủ động tìm lỗi, nhưng chỉ chữa triệu chứng. Thế hệ bốn là phòng ngay từ gốc bằng ngôn ngữ an toàn, với điều kiện gọi qua lại an toàn giữa mã mới và mã cũ. Kết quả là thay đổi bằng ngôn ngữ mới bị quay lui chưa tới một nửa, và bỏ được hộp cát thì một thành phần trình duyệt nhanh gấp 20 lần."
+
+  # ───────────────────────── 10. CHẶNG 5 ─────────────────────────
+  - id: stage5
+    kind: example
+    title: "Chặng 5, năm 2025 — tiếp tục phát triển: dưới 20%, vẫn nhiều lớp phòng"
+    stage: {year: "2025", scale: "lỗi bộ nhớ lần đầu dưới 20%; khoảng 5 triệu dòng Rust, 1 lỗ hổng suýt lọt; khoảng 4% mã Rust nằm trong khối không an toàn", source: "[AN25]", practice: "giữ nhiều lớp phòng (bộ cấp phát có trang canh); coi lỗi suýt lọt như sự cố thật: cấp mã định danh, hậu kiểm, sửa báo cáo lỗi, thêm đào tạo về khối không an toàn"}
+    checks:
+      - "1 / 5 == 0.2 and 1000 / 0.2 == 5000 and 5000 > 1000"
+      - "5000000 * 4 // 100 == 200000"
+    steps:
+      - show: |
+          <p><b>Quy mô:</b> năm 2025, lỗi bộ nhớ lần đầu tiên <b>dưới 20%</b> tổng lỗ hổng của Android. Có khoảng <b>5 triệu dòng</b> Rust; lượng Rust mới thêm vào đã ngang C++.</p>
+          <p><b>Lỗi suýt lọt:</b> lỗ hổng bộ nhớ đầu tiên trong mã Rust — một lần <b>tràn bộ đệm</b> trong một thư viện, ở khối không an toàn — được sửa <b>trước khi phát hành</b>. Bộ cấp phát bộ nhớ được gia cố, có <b>trang canh</b> quanh vùng cấp phát, đã làm nó không khai thác được.</p>
+        focus: [1, 1, 2, 2]
+        say: "Ở chặng năm, năm 2025, lỗi bộ nhớ lần đầu tiên chiếm dưới 20% tổng lỗ hổng của Android. Lúc này có khoảng 5 triệu dòng ngôn ngữ mới, và lượng mã ấy mới thêm vào đã ngang với C cộng cộng. Cũng năm đó, lỗ hổng bộ nhớ đầu tiên trong mã ngôn ngữ mới, một lần tràn bộ đệm ở khối không an toàn, được sửa trước khi phát hành. Bộ cấp phát được gia cố, có trang canh quanh vùng cấp phát, đã làm nó không khai thác được."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. mật độ của Rust</td><td>1 lỗ hổng chia 5 triệu dòng</td><td>$\hlb{0{,}2}$ mỗi triệu dòng</td></tr>
+          <tr><td>Bước 2. mật độ lịch sử của C/C++</td><td>gần 1000 mỗi triệu dòng (= 1 mỗi nghìn dòng)</td><td>1000</td></tr>
+          <tr><td>Bước 3. so hai mật độ</td><td>1000 chia 0,2</td><td>$\hlg{5000}$ lần — nguồn nói “hơn 1000 lần”</td></tr>
+          <tr><td>Bước 4. mã nằm trong khối không an toàn</td><td>4% của 5&nbsp;000&nbsp;000</td><td>$\hl{200\,000}$ dòng cần soát kỹ</td></tr></table>
+        focus: ["1.2", "1.3", "1.4", "1.5"]
+        say: "Ta tính lại theo cách của đội, bước một, một lỗ hổng chia 5 triệu dòng là 0 phẩy 2 lỗ hổng mỗi triệu dòng. Bước hai, mật độ lịch sử của C và C cộng cộng là gần 1000 mỗi triệu dòng, đúng bằng một mỗi nghìn dòng của năm 2022. Bước ba, 1000 chia 0 phẩy 2 là 5000 lần, nên nguồn nói thận trọng là hơn 1000 lần. Bước bốn, khoảng 4% mã ngôn ngữ mới nằm trong khối không an toàn, tức 200 nghìn dòng cần soát kỹ."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>thực hành khi đã ổn định</th><th>vì sao</th></tr>
+          <tr><td>giữ <b>nhiều lớp phòng</b>: bộ cấp phát có trang canh vẫn bật</td><td>chính nó chặn lỗi suýt lọt năm 2025</td></tr>
+          <tr><td>lỗi suýt lọt vẫn được <b>cấp mã định danh</b> và <b>hậu kiểm</b></td><td>hậu kiểm thấy báo cáo lỗi chưa nói rõ là tràn bộ đệm — đã sửa</td></tr>
+          <tr><td>không cấm khối không an toàn, mà <b>dạy cách dùng đúng</b> và bọc lại</td><td>hệ điều hành cần chạm phần cứng, gọi mã C</td></tr>
+          <tr><td>đo cả <b>tốc độ làm việc</b>: quay lui ít hơn khoảng 4 lần, soát mã ít hơn 25% thời gian</td><td>đường an toàn hơn cũng là đường nhanh hơn</td></tr></table>
+        focus: ["1.2", "1.3", "1.4", "1.5"]
+        say: "Khi đã ổn định, đội vẫn giữ nhiều lớp phòng, vì chính bộ cấp phát có trang canh đã chặn lỗi suýt lọt. Lỗi suýt lọt vẫn được cấp mã định danh và hậu kiểm, nhờ đó báo cáo lỗi được sửa cho rõ hơn. Họ không cấm khối không an toàn, mà dạy cách dùng đúng. Họ còn đo tốc độ làm việc, mã ngôn ngữ mới bị quay lui ít hơn khoảng 4 lần, và tốn ít hơn 25% thời gian soát mã."
+
+  # ───────────────────────── 11. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm bốn con số của hành trình"
+    checks:
+      - "round(0.962 * 130) == 125"
+      - "round(85 / 243, 2) == 0.35 and round(138 / 223, 3) == 0.619"
+      - "round(2.5 * __import__('math').log(2), 2) == 1.73 and round(5 / 1.733, 2) == 2.89 and round(2 ** (5 / (2.5 * __import__('math').log(2))), 2) == 7.39"
+      - "0.2 * 5 == 1.0 and 1000 * 5 == 5000"
+    steps:
+      - show: |
+          <table class="t"><tr><th>con số</th><th>đường khác để kiểm</th></tr>
+          <tr><td>96,2%</td><td>nhân ngược: 0,962 nhân 130 ≈ 125, cộng 5 lỗi còn lại = 130 ✓</td></tr>
+          <tr><td>243 và 35%</td><td>chia ngược: 85 chia 243 ≈ 0,35 ✓</td></tr>
+          <tr><td>7,39 lần</td><td>theo nửa đời: 2,5 năm nhân 0,693 ≈ 1,73 năm; 5 năm ≈ 2,89 lần chia đôi; 2 mũ 2,89 ≈ 7,39 ✓</td></tr>
+          <tr><td>5000 lần</td><td>đếm thẳng: 5 triệu dòng với mật độ cũ → 5000 lỗ hổng, so với 1 lỗ hổng thật ✓</td></tr></table>
+        focus: ["1.2", "1.3", "1.4", "1.4", "1.5"]
+        say: "Ta kiểm lại bốn con số theo đường khác, nhân ngược, 0 phẩy 962 nhân 130 được khoảng 125, cộng 5 là đủ 130. Chia ngược, 85 chia 243 được khoảng 0 phẩy 35. Theo nửa đời, 2 phẩy 5 năm nhân 0 phẩy 693 được khoảng 1 phẩy 73 năm thì số lỗi giảm một nửa. Năm năm là khoảng 2 phẩy 89 lần chia đôi, và 2 mũ 2 phẩy 89 lại ra khoảng 7 phẩy 39. Đếm thẳng, 5 triệu dòng với mật độ cũ sẽ có 5000 lỗ hổng, so với một lỗ hổng thật."
+
+  # ───────────────────────── 12. BÀI HỌC SAI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "Những bài học sai khi đọc hành trình này"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">1.</b> “Lập trình viên giỏi và cẩn thận hơn là hết lỗi bộ nhớ”</td><td>có kiểm tra mã, đào tạo, phân tích tĩnh mà tỉ lệ vẫn khoảng 70% suốt hơn mười năm</td><td>đổi công cụ, không đổ cho người: để ngôn ngữ chặn cả một loại lỗi</td></tr>
+          <tr><td><b class="red">2.</b> “Muốn an toàn thì viết lại toàn bộ sang Rust”</td><td>hàng chục triệu dòng không viết lại được; mã cũ đã vơi lỗi theo tuổi</td><td>khoá vòi ở mã mới; đầu tư vào gọi qua lại an toàn giữa hai ngôn ngữ</td></tr></table>
+        focus: ["1.2", "1.2", "1.3", "1.3"]
+        say: "Bài học sai thứ nhất là nghĩ lập trình viên giỏi và cẩn thận hơn là hết lỗi bộ nhớ. Có kiểm tra mã, đào tạo, phân tích tĩnh mà tỉ lệ vẫn khoảng 70% suốt hơn mười năm, nên hãy đổi công cụ chứ đừng đổ cho người. Bài học sai thứ hai là nghĩ phải viết lại toàn bộ, trong khi hàng chục triệu dòng không viết lại được, và mã cũ đã tự vơi lỗi. Hãy khoá vòi ở mã mới, và đầu tư vào việc gọi qua lại an toàn giữa hai ngôn ngữ."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">3.</b> “Đã dùng ngôn ngữ an toàn thì bỏ các lớp phòng khác”</td><td>năm 2025, lỗi tràn bộ đệm ở khối không an toàn chỉ bị chặn nhờ bộ cấp phát có trang canh</td><td>giữ nhiều lớp phòng, dùng có chọn lọc</td></tr>
+          <tr><td><b class="red">4.</b> “Tỉ lệ giảm là số lỗi giảm, và giảm là nhờ đổi ngôn ngữ”</td><td>năm 2023 tỉ lệ vẫn giảm mà số tuyệt đối tăng nhẹ; đội tự ghi tương quan chưa chắc là nhân quả</td><td>báo cả số tuyệt đối lẫn tỉ lệ; nêu các giải thích khác</td></tr></table>
+        focus: ["1.2", "1.3", "1.3", "1.3"]
+        say: "Bài học sai thứ ba là bỏ các lớp phòng khác khi đã dùng ngôn ngữ an toàn, trong khi lỗi suýt lọt năm 2025 chỉ bị chặn nhờ bộ cấp phát có trang canh. Bài học sai thứ tư hay gặp ở người đã đi làm, là nghĩ tỉ lệ giảm có nghĩa số lỗi giảm, và chắc chắn là nhờ đổi ngôn ngữ. Năm 2023, tỉ lệ lỗi bộ nhớ vẫn giảm mà số tuyệt đối lại tăng nhẹ, vì năm đó có nhiều báo cáo hơn hẳn. Chính đội Android cũng ghi tương quan chưa chắc là nhân quả, nên hãy báo cả số tuyệt đối lẫn tỉ lệ."
+
+  # ───────────────────────── 13. QUYẾT ĐỊNH ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Bạn sẽ làm gì ở quy mô của mình?"
+    checks:
+      - "200000 // 1000 == 200 and 20000 // 1000 == 20"
+      - "round(200 / 7.39) == 27"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>tình huống: dịch vụ 200&nbsp;000 dòng C++ đã chạy 5 năm, đội 5 người, mỗi năm thêm 20&nbsp;000 dòng (số minh hoạ)</th></tr>
+          <tr><td>1</td><td>có người đề nghị viết lại cả 200&nbsp;000 dòng sang Rust trong một năm. Hay chỉ viết phần mới bằng Rust?</td></tr>
+          <tr><td>2</td><td>cần thêm bộ đọc tệp do người dùng tải lên, chạy với quyền cao. Viết bằng C++ trong hộp cát, hay bằng Rust?</td></tr></table>
+        focus: [1, "1.2", "1.3", 0]
+        say: "Đến lượt bạn, với một dịch vụ 200 nghìn dòng C cộng cộng đã chạy 5 năm, mỗi năm thêm 20 nghìn dòng, đều là số minh hoạ. Câu một, có người đề nghị viết lại cả 200 nghìn dòng sang ngôn ngữ mới trong một năm, hay chỉ viết phần mới bằng ngôn ngữ mới? Câu hai, bạn cần thêm bộ đọc tệp do người dùng tải lên, chạy với quyền cao, vậy viết bằng C cộng cộng trong hộp cát, hay bằng ngôn ngữ mới? Dừng video và viết ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <p>Giả sử mật độ mã mới là 1 lỗ hổng mỗi nghìn dòng, như số lịch sử của Android.</p>
+          <table class="t"><tr><th>câu 1: lựa chọn</th><th>được</th><th>mất</th></tr>
+          <tr><td>chỉ viết mã mới bằng Rust</td><td>chặn khoảng 20&nbsp;000 chia 1000 = $\hlg{20}$ lỗ hổng mới mỗi năm</td><td>phải làm cầu gọi qua lại; đội phải học ngôn ngữ mới</td></tr>
+          <tr><td>viết lại cả 200&nbsp;000 dòng</td><td>mã cũ cũng an toàn</td><td>mã 5 năm tuổi chỉ còn khoảng 200 chia 7,39 ≈ $\hl{27}$ lỗ hổng; một năm không thêm tính năng</td></tr></table>
+          <p class="note">Chọn khoá vòi ở mã mới. Điều kiện đổi: phần cũ sẽ còn bị sửa nhiều, hoặc đọc dữ liệu không tin cậy với quyền cao — viết lại riêng phần đó trước.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Đáp án câu một, giả sử mật độ mã mới là một lỗ hổng mỗi nghìn dòng, như số lịch sử của Android. Chỉ viết mã mới bằng ngôn ngữ mới thì chặn được 20 nghìn chia 1000, bằng 20 lỗ hổng mới mỗi năm, đổi lại phải làm cầu gọi qua lại và học ngôn ngữ mới. Viết lại cả dịch vụ thì mã cũ cũng an toàn, nhưng mã 5 năm tuổi chỉ còn khoảng 200 chia 7 phẩy 39, chừng 27 lỗ hổng, mà mất một năm không thêm tính năng. Nên khoá vòi ở mã mới, trừ phần cũ còn bị sửa nhiều hay đọc dữ liệu không tin cậy với quyền cao."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 2: lựa chọn</th><th>được</th><th>mất</th></tr>
+          <tr><td>Rust, chạy ngay trong tiến trình hiện có</td><td>bỏ được ngôn ngữ không an toàn, nên quy tắc hai trên ba đã thoả; không tốn thêm tiến trình</td><td>cần người biết Rust; chỗ gọi xuống C++ phải bọc trong khối không an toàn và soát kỹ</td></tr>
+          <tr><td>C++ trong hộp cát ít quyền</td><td>dùng được thư viện C++ sẵn có</td><td>thêm tiến trình, bộ nhớ, độ trễ; hộp cát không xoá lỗi</td></tr></table>
+          <p class="note">Điều kiện đổi: đội chưa ai viết được Rust và hạn rất gấp — dùng hộp cát ít quyền trước, lên kế hoạch chuyển sau. Với cả hai, vẫn giữ kiểm thử dữ liệu ngẫu nhiên.</p>
+        focus: ["1.2", "1.2", "1.3", 2]
+        say: "Đáp án câu hai cũng là một đánh đổi, viết bằng ngôn ngữ mới thì bỏ được ngôn ngữ không an toàn, nên quy tắc hai trên ba đã thoả mà không tốn thêm tiến trình. Đổi lại cần người biết ngôn ngữ mới, và chỗ gọi xuống C cộng cộng phải bọc trong khối không an toàn, soát kỹ. Viết bằng C cộng cộng trong hộp cát thì dùng được thư viện sẵn có, nhưng tốn thêm tiến trình, bộ nhớ, độ trễ, và không xoá được lỗi. Chỉ khi đội chưa ai viết được ngôn ngữ mới và hạn rất gấp, thì dùng hộp cát trước, rồi lên kế hoạch chuyển sau."
+
+  # ───────────────────────── 14. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi hành trình & tư duy chuyên gia"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">đếm nguyên nhân: khoảng 70%</span><span class="a">→</span>
+          <span class="n">hộp cát có giá: mã mới đổi ngôn ngữ</span><span class="a">→</span>
+          <span class="n">223 xuống 85</span><span class="a">→</span>
+          <span class="n">lỗi vơi theo tuổi mã: 24%</span><span class="a">→</span>
+          <span class="n">dưới 20%, vẫn nhiều lớp phòng</span></div>
+        say: "Tổng kết lại, các đội đếm nguyên nhân gốc và thấy lỗi bộ nhớ chiếm khoảng 70% mỗi năm. Hộp cát có giá, nên mã mới được viết bằng ngôn ngữ an toàn. Số lỗi bộ nhớ của Android giảm từ 223 xuống 85, rồi tỉ lệ còn 24% khi mã cũ vơi lỗi theo tuổi. Năm 2025 tỉ lệ dưới 20%, mà các lớp phòng khác vẫn được giữ."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> một loại lỗi lặp lại hơn mười năm là lỗi của <b>công cụ</b>, không phải của người. Hãy để ngôn ngữ và trình biên dịch chặn cả loại lỗi ở mã mới, và đo bằng số trước khi tin.</div>
+        say: "Điều cần mang theo, một loại lỗi lặp lại suốt hơn mười năm là lỗi của công cụ, không phải của người. Hãy để ngôn ngữ và trình biên dịch chặn cả loại lỗi ấy ở mã mới, và đo bằng số trước khi tin."
+      - clear: true
+        show: |
+          <p class="note">Đây là bài cuối của khoá PLC. Từ chuỗi ký tự, qua từ tố, cây, kiểu, bộ nhớ, mã máy ảo và lập trình hàm, bạn đã thấy lựa chọn ngôn ngữ quyết định cả một loại lỗ hổng ở quy mô hàng chục triệu dòng mã.</p>
+        say: "Đây là bài cuối của khoá ngôn ngữ lập trình và trình biên dịch. Bạn đã đi từ chuỗi ký tự, qua từ tố, cây, kiểu, bộ nhớ, mã máy ảo, tới lập trình hàm. Và bạn đã thấy lựa chọn ngôn ngữ quyết định cả một loại lỗ hổng, ở quy mô hàng chục triệu dòng mã. Cảm ơn bạn đã theo học."

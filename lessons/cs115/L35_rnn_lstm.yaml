@@ -1,0 +1,266 @@
+id: L35
+series: "CS115 · Toán cho Khoa học Máy tính"
+title: "Bài 35 (mở rộng) — Mạng nơ-ron hồi tiếp (RNN), lan truyền ngược theo thời gian & LSTM"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "ML24, NN (chỉ nhắc tên RNN); CITED: Hochreiter & Schmidhuber, “Long Short-Term Memory”, Neural Computation 9(8) (1997) 1735–1780 (truy cập 2026-10-24, no revision given)"
+assumes: [cdot, sub, vec, mat, tanh, sigma, partial, norm, approx, power, lambda, implies, jacobian, dots]
+# Quy ước ký hiệu: bước thời gian t; trạng thái ẩn hₜ (vector in đậm); đầu vào xₜ; cùng một bộ trọng số W (hồi tiếp), U (đầu vào) dùng
+#   ở MỌI bước; LSTM: ô nhớ cₜ, cổng quên fₜ, cổng vào iₜ (các số giữa 0 và 1 do sigmoid tạo ra); ⊙ nhân từng phần tử (giải thích lại).
+# Thuật ngữ: “recurrent” = HỒI TIẾP (đầu ra quay lại làm đầu vào) — KHÔNG phải “hồi quy” (regression, bài 18); nói ở notation_note.
+# Lời đọc: RNN, LSTM chỉ hiện trên màn hình — nói “mạng hồi tiếp”, “mạng bộ nhớ dài ngắn hạn”.
+# Nối bài trước (nói lại khi dùng, luật 17): bài 5 (trị riêng: nhân ma trận nhiều lần → co hoặc giãn theo trị riêng), bài 7 (quy tắc
+#   chuỗi với Jacobian), bài 20 (sigmoid cho số giữa 0 và 1), bài 22 (lan truyền ngược, cổng phân nhánh cộng dồn), bài 23 (tanh, triệt
+#   tiêu gradient).
+objectives:
+  - "Hiểu mạng hồi tiếp: cùng một phép tính lặp lại theo thời gian, mang theo trạng thái"
+  - "Chạy lượt tiến bằng tay cho một chuỗi ngắn"
+  - "Thấy gradient qua k bước là tích k ma trận → triệt tiêu hoặc bùng nổ theo trị riêng"
+  - "Biết cắt gradient và ý tưởng ô nhớ có cổng của LSTM"
+asr_reviewed:
+  - {sentence: "Hàm ngoài là tanh, có đạo hàm 1 trừ h t bình phương, còn hàm trong có đạo hàm bằng w.", reason: "ASR chép “Hàm ngoài là tanh, có đạo hàm 1 trừ ht bình phương, còn hàm trong có đạo hàm bằng v kết.” (0.955): chữ w đọc “vê kép” (luật chung), ASR viết tách chữ — NOT_VERIFIED bằng tai người"}
+  - sentence: "Mạng hồi tiếp tính trạng thái mới h t bằng tanh của W nhân trạng thái cũ cộng U nhân từ mới, với W và U giống nhau ở mọi bước."
+    reason: "W đọc “vê đúp”, ASR chép “Vê Đúc”; h t chép “ht”; cũ→của lẫn vần"
+  - sentence: "Theo đường ô nhớ, gradient chỉ nhân với cổng quên, và mạng học giữ nó gần bằng 1 khi cần nhớ lâu."
+    reason: "gradient đọc theo lexicon, ASR chép “Grady ần”; quên→Quyên lẫn vần — cần người nghe"
+  - sentence: "Lỗi thứ hai, quên cộng dồn gradient của W qua các bước."
+    reason: "W chép “V-dub” — tên chữ cái"
+  - sentence: "Gradient của W được cộng dồn qua mọi bước."
+    reason: "W chép “VDUC” — tên chữ cái"
+  - sentence: "Cùng một W được dùng ở mọi bước, nên giống cổng phân nhánh ở bài 22."
+    reason: "W chép “vế đúc” — tên chữ cái"
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Câu văn có thứ tự — mạng phải nhớ điều đã đọc"
+    steps:
+      - show: |
+          <p class="big">“Tôi sinh ra ở Huế … nên tôi nói giọng ___.” Từ cần đoán phụ thuộc vào một từ ở <b>rất xa</b> phía trước.</p>
+          <div class="box key">Mạng hồi tiếp (RNN): đọc từng từ một, giữ một <b>trạng thái</b> (bộ nhớ) và cập nhật nó ở mỗi bước — bằng <b>cùng</b> một bộ trọng số.</div>
+        focus: [1, 2]
+        say: "Chào bạn, trong câu tôi sinh ra ở Huế nên tôi nói giọng gì, từ cần đoán phụ thuộc vào một từ ở rất xa phía trước. Mạng hồi tiếp đọc từng từ một, giữ một trạng thái như bộ nhớ, và cập nhật nó ở mỗi bước bằng cùng một bộ trọng số."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn nền: nhân ma trận nhiều lần và triệt tiêu gradient"
+    checks:
+      - "(lambda z: sp.simplify(sp.diff(sp.tanh(z), z) - (1 - sp.tanh(z)**2)) == 0)(sp.Symbol('z')) and round(1 - math.tanh(1)**2, 2) == 0.42 and 1 - math.tanh(0)**2 == 1"
+    steps:
+      - show: |
+          <p>Bài 5: nhân nhiều lần với một ma trận, mỗi hướng vector riêng bị kéo giãn theo trị riêng $\lambda$ mũ số lần nhân.</p>
+          <p>Bài 7, 22: gradient của hàm lồng = tích các Jacobian. Bài 23: qua nhiều lớp, tích các số nhỏ làm gradient gần 0 (triệt tiêu).</p>
+          $$\frac{d}{dz}\tanh z = 1 - \tanh^2 z, \qquad z = 0:\ \ 1 - 0^2 = 1, \qquad z = 1:\ \ 1 - 0{,}7616^2 \approx 0{,}42$$
+        focus: [1, 2, 2, 3, 3]
+        say: "Nhắc lại bài 5, nhân nhiều lần với một ma trận thì mỗi hướng vector riêng bị kéo giãn theo trị riêng lũy thừa số lần nhân. Bài 7 và 22, gradient của hàm lồng là tích các Jacobian. Bài 23, qua nhiều lớp, tích các số nhỏ làm gradient gần bằng 0. Cuối cùng, đạo hàm của tanh tại z bằng 1 trừ tanh z bình phương. Tại 0 nó bằng 1, tại 1 nó chỉ còn khoảng 0 phẩy 42."
+
+  # ───────────────────────── 3. MẠNG HỒI TIẾP ─────────────────────────
+  - id: sym_rnn
+    kind: symbol
+    title: "Giải mã: hₜ = tanh(W hₜ₋₁ + U xₜ)"
+    checks:
+      - "(lambda xs: __import__('functools').reduce(lambda acc, x: acc + [round(math.tanh(0.5*acc[-1] + 1.0*x), 4)], xs, [0.0])[1:])([1, 0, 2]) == [0.7616, 0.3634, 0.9749]"
+    steps:
+      - show: |
+          <div class="box key">$\mathbf{h}_t = \tanh(\mathbf{W}\mathbf{h}_{t - 1} + \mathbf{U}\mathbf{x}_t)$ &nbsp; — trạng thái mới từ trạng thái cũ và từ mới; $\mathbf{W}$, $\mathbf{U}$ <b>giống nhau</b> ở mọi bước $t$</div>
+          <p><b>Làm thử ngay</b> (một số, $w = 0{,}5$, $u = 1$, $h_0 = 0$), chuỗi $x = 1, 0, 2$:</p>
+          <p>$h_1 = \tanh(1) \approx 0{,}7616$; &nbsp; $h_2 = \tanh(0{,}5\cdot 0{,}7616) \approx 0{,}3634$; &nbsp; $h_3 = \tanh(0{,}5\cdot 0{,}3634 + 2) \approx \hlg{0{,}9749}$</p>
+        focus: [1, 2, 3]
+        say: "Mạng hồi tiếp tính trạng thái mới h t bằng tanh của W nhân trạng thái cũ cộng U nhân từ mới, với W và U giống nhau ở mọi bước. Làm thử ngay với chuỗi 1, 0, 2. Bước một được 0 phẩy 7616, bước hai còn 0 phẩy 3634, bước ba lên 0 phẩy 9749."
+      - show: |
+          <p class="note">“Recurrent” dịch là <b>hồi tiếp</b> (đầu ra quay lại làm đầu vào) — khác “hồi quy” (regression) của bài 18.</p>
+        notation_note: true
+        say: "Lưu ý thuật ngữ, mạng này gọi là hồi tiếp, vì đầu ra quay lại làm đầu vào, khác với hồi quy của bài 18."
+
+  - id: unroll_pic
+    kind: intuition
+    title: "Duỗi mạng theo thời gian: một ô lặp lại ba lần"
+    checks:
+      - "(lambda hs: [round(v, 2) for v in hs] == [0.76, 0.36, 0.97])((lambda h1: (lambda h2: [h1, h2, math.tanh(0.5*h2 + 2)])(math.tanh(0.5*h1 + 0)))(math.tanh(0.5*0 + 1)))"
+    steps:
+      - show: |
+          <svg width="1300" height="440" viewBox="0 0 1300 440"><defs><marker id="arG35" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#059669"/></marker><marker id="arR35" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#b91c1c"/></marker><marker id="arB35" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#2563eb"/></marker></defs><circle cx="150" cy="180" r="62" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text x="150" y="170" font-size="28" text-anchor="middle" fill="#1f2937">h₀</text><text x="150" y="205" font-size="24" text-anchor="middle" fill="#1f2937">0</text><circle cx="450" cy="180" r="62" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text x="450" y="170" font-size="28" text-anchor="middle" fill="#1f2937">h₁</text><text x="450" y="205" font-size="24" text-anchor="middle" fill="#1f2937">0,76</text><circle cx="750" cy="180" r="62" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text x="750" y="170" font-size="28" text-anchor="middle" fill="#1f2937">h₂</text><text x="750" y="205" font-size="24" text-anchor="middle" fill="#1f2937">0,36</text><circle cx="1050" cy="180" r="62" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text x="1050" y="170" font-size="28" text-anchor="middle" fill="#1f2937">h₃</text><text x="1050" y="205" font-size="24" text-anchor="middle" fill="#1f2937">0,97</text><rect x="390" y="300" width="120" height="50" fill="#dbeafe" stroke="#2563eb" stroke-width="3"/><text x="450" y="334" font-size="24" text-anchor="middle" fill="#1f2937">x₁ = 1</text><line x1="450" y1="298" x2="450" y2="246" stroke="#2563eb" stroke-width="3" marker-end="url(#arB35)"/><rect x="690" y="300" width="120" height="50" fill="#dbeafe" stroke="#2563eb" stroke-width="3"/><text x="750" y="334" font-size="24" text-anchor="middle" fill="#1f2937">x₂ = 0</text><line x1="750" y1="298" x2="750" y2="246" stroke="#2563eb" stroke-width="3" marker-end="url(#arB35)"/><rect x="990" y="300" width="120" height="50" fill="#dbeafe" stroke="#2563eb" stroke-width="3"/><text x="1050" y="334" font-size="24" text-anchor="middle" fill="#1f2937">x₃ = 2</text><line x1="1050" y1="298" x2="1050" y2="246" stroke="#2563eb" stroke-width="3" marker-end="url(#arB35)"/><g stroke="#059669" stroke-width="4"><line x1="214" y1="180" x2="384" y2="180" marker-end="url(#arG35)"/><line x1="514" y1="180" x2="684" y2="180" marker-end="url(#arG35)"/><line x1="814" y1="180" x2="984" y2="180" marker-end="url(#arG35)"/></g><g font-size="22" text-anchor="middle" fill="#059669"><text x="300" y="165">w = 0,5</text><text x="600" y="165">w = 0,5</text><text x="900" y="165">w = 0,5</text></g><g stroke="#b91c1c" stroke-width="3" stroke-dasharray="10 6" fill="none"><path d="M1010,112 Q900,50 790,112" marker-end="url(#arR35)"/><path d="M710,112 Q600,50 490,112" marker-end="url(#arR35)"/></g><g font-size="22" text-anchor="middle" fill="#b91c1c"><text x="900" y="45">× 0,0248</text><text x="600" y="45">× 0,434</text></g><g font-size="22" text-anchor="middle"><text x="650" y="395" fill="#059669">lục: lượt tiến, cùng một w ở mọi bước</text><text x="650" y="428" fill="#b91c1c">đỏ: lượt lùi, mỗi bước lùi nhân thêm một thừa số nhỏ hơn 1</text></g></svg>
+        say: "Hình này duỗi mạng hồi tiếp theo thời gian, với chuỗi 1, 0, 2 vừa làm. Mỗi vòng tròn là một trạng thái, nhận trạng thái trước qua mũi tên lục, và nhận từ mới từ ô xanh phía dưới. Ba mũi tên lục đều mang cùng một trọng số w bằng 0 phẩy 5, đó là ý nghĩa của dùng chung trọng số. Lượt lùi đi theo mũi tên đỏ, từ trạng thái cuối về trạng thái đầu. Mỗi bước lùi, gradient bị nhân thêm một thừa số nhỏ hơn 1, ở đây là 0 phẩy 0248 rồi 0 phẩy 434, ta sẽ tính hai số này ngay sau đây."
+
+  # ───────────────────────── 4. LAN TRUYỀN NGƯỢC THEO THỜI GIAN ─────────────────────────
+  - id: bptt
+    kind: formula
+    title: "Lan truyền ngược theo thời gian: tích k ma trận"
+    checks:
+      - "[round(0.5**10, 6), 1.0**10, round(1.5**10, 3)] == [0.000977, 1.0, 57.665]"
+      - "np.allclose(np.linalg.matrix_power(np.diag([0.9, 0.5]), 20), np.diag([0.9**20, 0.5**20])) and round(0.9**20, 4) == 0.1216 and 0.5**20 < 1e-6"
+    steps:
+      - show: |
+          <p>“Duỗi” mạng theo thời gian thành một đồ thị tính toán dài $k$ bước (bài 22). Bỏ qua tanh cho dễ nhìn: $\ \dfrac{\partial \mathbf{h}_k}{\partial \mathbf{h}_0} = \mathbf{W}\cdot\mathbf{W}\cdots\mathbf{W} = \mathbf{W}^{k}$ (nhân $k$ lần, theo quy tắc chuỗi bài 7)</p>
+          <table class="t"><tr><th>một số $w$</th><th>$w^{1}$</th><th>$w^{10}$</th><th>$w^{50}$</th></tr>
+          <tr><td>0,5</td><td>0,5</td><td>0,000977</td><td>≈ 0 — <b>triệt tiêu</b></td></tr>
+          <tr><td>1</td><td>1</td><td>1</td><td>1</td></tr>
+          <tr><td>1,5</td><td>1,5</td><td>57,665</td><td>≈ 637 triệu — <b>bùng nổ</b></td></tr></table>
+        focus: [1, "1.2", "2.2", "2.4"]
+        say: "Để lan truyền ngược, ta duỗi mạng theo thời gian thành một đồ thị dài k bước như bài 22. Theo quy tắc chuỗi, gradient qua k bước là tích của k lần cùng một ma trận. Với một số nhỏ hơn 1, sau 50 bước gần bằng 0. Lớn hơn 1, sau 50 bước lên tới 637 triệu."
+      - show: |
+          <p class="note">Với ma trận: theo bài 5, mỗi hướng vector riêng nhân với $\lambda^{k}$. Ví dụ trị riêng 0,9 và 0,5, sau 20 bước: $0{,}9^{20} \approx 0{,}12$, $0{,}5^{20} \approx 0{,}000001$ — thông tin từ 20 từ trước gần như mất.</p>
+        say: "Với ma trận, theo bài 5, mỗi hướng vector riêng bị nhân với trị riêng mũ k. Ví dụ trị riêng 0 phẩy 9 và 0 phẩy 5, sau 20 bước còn 0 phẩy 12 và một phần triệu, nên thông tin từ 20 từ trước gần như mất."
+
+  - id: hand_back
+    kind: example
+    title: "Làm tay: gradient co lại qua từng bước lùi"
+    checks:
+      - "(lambda h3: round(1 - h3**2, 4) == 0.0497 and round(0.5*(1 - h3**2), 4) == 0.0248)(math.tanh(0.5*math.tanh(0.5*math.tanh(1)) + 2))"
+      - "(lambda h2: round(1 - h2**2, 3) == 0.868 and round(0.5*(1 - h2**2), 3) == 0.434)(math.tanh(0.5*math.tanh(1)))"
+      - "(lambda h2, h3: round(0.5*(1 - h3**2)*0.5*(1 - h2**2), 4) == 0.0108)(math.tanh(0.5*math.tanh(1)), math.tanh(0.5*math.tanh(0.5*math.tanh(1)) + 2))"
+      - "(lambda z: sp.simplify(sp.diff(sp.tanh(0.5*z + 2), z) - 0.5*(1 - sp.tanh(0.5*z + 2)**2)) == 0)(sp.Symbol('z')) and 0.5**10 == 0.0009765625"
+    steps:
+      - show: |
+          <p><b>Bước 1.</b> Một bước lùi, theo quy tắc chuỗi: đạo hàm ngoài của tanh là $1 - h_t^2$, đạo hàm trong là $w$:</p>
+          $$\frac{\partial h_t}{\partial h_{t - 1}} = w\cdot(1 - h_t^2), \qquad t = 3:\ \ 0{,}5\cdot(1 - 0{,}9749^2) = 0{,}5\cdot 0{,}0497 \approx \hlg{0{,}0248}$$
+        focus: [1, 2, 2]
+        say: "Bước một, tính một bước lùi bằng quy tắc chuỗi. Hàm ngoài là tanh, có đạo hàm 1 trừ h t bình phương, còn hàm trong có đạo hàm bằng w. Ở bước 3, h 3 bằng 0 phẩy 9749, nên thừa số bằng 0 phẩy 5 nhân 0 phẩy 0497, xấp xỉ 0 phẩy 0248."
+      - show: |
+          <p><b>Bước 2.</b> Bước lùi tiếp theo, từ $h_2$ về $h_1$, với $h_2 \approx 0{,}3634$:</p>
+          $$\frac{\partial h_2}{\partial h_1} = 0{,}5\cdot(1 - 0{,}3634^2) = 0{,}5\cdot 0{,}868 \approx \hlg{0{,}434}$$
+        focus: [1, 2]
+        say: "Bước hai, lùi tiếp từ h 2 về h 1, với h 2 xấp xỉ 0 phẩy 3634. Thừa số bằng 0 phẩy 5 nhân 0 phẩy 868, xấp xỉ 0 phẩy 434."
+      - clear: true
+        show: |
+          <p><b>Bước 3.</b> Quy tắc chuỗi nối hai bước lùi bằng phép nhân:</p>
+          $$\frac{\partial h_3}{\partial h_1} = \frac{\partial h_3}{\partial h_2}\cdot\frac{\partial h_2}{\partial h_1} \approx 0{,}0248\cdot 0{,}434 \approx \hlo{0{,}0108}$$
+        focus: [1, 2]
+        say: "Bước ba, quy tắc chuỗi nối hai bước lùi bằng phép nhân. Đạo hàm của h 3 theo h 1 bằng 0 phẩy 0248 nhân 0 phẩy 434, chỉ còn khoảng 0 phẩy 0108, tức là khoảng một phần trăm."
+      - show: |
+          <p><b>Bước 4.</b> Vì $1 - h_t^2 \le 1$, mỗi thừa số không vượt quá $w = 0{,}5$. Qua 10 bước lùi:</p>
+          $$\text{tích 10 thừa số} \le 0{,}5^{10} \approx 0{,}000977$$
+          <p class="note">Đúng con số ở bảng triệt tiêu phía trên: tín hiệu từ 10 từ trước gần như mất.</p>
+        introduces: [geq]
+        focus: [1, 2, 3]
+        say: "Bước bốn, vì 1 trừ h bình phương không bao giờ vượt quá 1, mỗi thừa số không vượt quá w bằng 0 phẩy 5. Qua 10 bước lùi, tích không vượt quá 0 phẩy 5 mũ 10, xấp xỉ 0 phẩy 000977. Đó đúng là con số trong bảng triệt tiêu, nên tín hiệu từ 10 từ trước gần như mất."
+
+  # ───────────────────────── 5. CẮT GRADIENT, LSTM ─────────────────────────
+  - id: lstm
+    kind: concept
+    title: "Chữa: cắt gradient (bùng nổ) và ô nhớ có cổng — LSTM (triệt tiêu)"
+    checks:
+      - "(lambda g: (float(np.linalg.norm(g)), (g*5/np.linalg.norm(g)).tolist()) == (50.0, [3.0, 4.0]))(np.array([30, 40.]))"
+      - "(lambda c, f: __import__('functools').reduce(lambda acc, _: f*acc, range(20), c))(1.0, 1.0) == 1.0 and round(0.9**20, 2) == 0.12"
+    steps:
+      - show: |
+          <p><b>Bùng nổ</b> → <b>cắt gradient</b>: nếu độ dài gradient vượt ngưỡng (ví dụ 5), co lại đúng bằng ngưỡng, giữ hướng. $\ (30;\ 40)$ dài 50 → $(3;\ 4)$.</p>
+          <div class="box key">LSTM (Hochreiter &amp; Schmidhuber, 1997): ô nhớ $\ \mathbf{c}_t = \mathbf{f}_t \odot \mathbf{c}_{t - 1} + \mathbf{i}_t \odot \mathbf{g}_t$ &nbsp; ($\odot$: nhân từng phần tử; $\mathbf{f}_t$ “cổng quên”, $\mathbf{i}_t$ “cổng vào”, mỗi số giữa 0 và 1 nhờ sigmoid — bài 20)</div>
+          <p class="note">Theo đường $\mathbf{c}$, gradient chỉ nhân với $\mathbf{f}_t$ — <b>không</b> nhân lặp lại cùng một ma trận. Mạng học $\mathbf{f}_t \approx 1$ khi cần nhớ lâu: $1^{20} = 1$, so với $0{,}9^{20} \approx 0{,}12$.</p>
+        introduces: [hadamard]
+        focus: [1, 2, "2.1", 3]
+        say: "Bùng nổ được chữa bằng cắt gradient, nếu độ dài vượt ngưỡng thì co lại đúng bằng ngưỡng mà giữ hướng. Triệt tiêu được chữa bằng ô nhớ có cổng. Ô nhớ mới bằng cổng quên nhân ô nhớ cũ, cộng cổng vào nhân thông tin mới. Theo đường ô nhớ, gradient chỉ nhân với cổng quên, và mạng học giữ nó gần bằng 1 khi cần nhớ lâu."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Ví dụ: số tham số không phụ thuộc độ dài chuỗi"
+    checks:
+      - "(lambda d, h: d*h + h*h + h)(10, 20) == 620"
+    steps:
+      - show: |
+          <p>Đầu vào mỗi bước 10 số, trạng thái 20 số: $\mathbf{U}$ có $20\cdot 10$, $\mathbf{W}$ có $20\cdot 20$, hệ số tự do 20 → $200 + 400 + 20 = \hlg{620}$ tham số.</p>
+          <p class="note">Chuỗi dài 5 từ hay 500 từ vẫn dùng đúng 620 tham số — chia sẻ trọng số theo <b>thời gian</b>, giống mạng tích chập chia sẻ theo <b>vị trí</b> (bài 34). Gradient của $\mathbf{W}$ được cộng dồn qua mọi bước (cổng phân nhánh, bài 22).</p>
+        focus: [1, 2, "2.3"]
+        say: "Ví dụ đầu vào mỗi bước 10 số, trạng thái 20 số, thì mạng có 620 tham số. Chuỗi 5 từ hay 500 từ vẫn dùng đúng số tham số đó, vì trọng số được chia sẻ theo thời gian, giống tích chập chia sẻ theo vị trí ở bài 34. Gradient của W được cộng dồn qua mọi bước."
+
+  # ───────────────────────── 7. KIỂM BẰNG MÁY ─────────────────────────
+  - id: verify
+    kind: check
+    title: "Phép thử: đạo hàm qua 3 bước bằng bước nhỏ"
+    checks:
+      - "(lambda f, e, h1: round((f(h1 + e) - f(h1 - e))/(2*e), 4) == 0.0108)(lambda x: math.tanh(0.5*math.tanh(0.5*x + 0) + 2), 1e-6, math.tanh(1))"
+      - "(lambda f, h: (lambda num, ana: abs(num - ana) < 1e-6)((f(0.5 + h) - f(0.5 - h))/(2*h), (lambda hs: (1 - hs[3]**2)*(hs[2] + 0.5*(1 - hs[2]**2)*(hs[1] + 0.5*(1 - hs[1]**2)*hs[0])))((lambda: __import__('functools').reduce(lambda acc, x: acc + [math.tanh(0.5*acc[-1] + x)], [1, 0, 2], [0.0]))())))(lambda w: __import__('functools').reduce(lambda acc, x: math.tanh(w*acc + x), [1, 0, 2], 0.0), 1e-6)"
+    steps:
+      - show: |
+          <p>Chuỗi $1, 0, 2$, so lan truyền ngược với bước nhỏ $0{,}000001$ (bài 6):</p>
+          <table class="t"><tr><th>đạo hàm</th><th>lan truyền ngược</th><th>nhích một chút rồi chia</th></tr>
+          <tr><td>$h_3$ theo $w$</td><td>cộng dồn qua 3 bước</td><td>lệch dưới $0{,}000001$ $\checkmark$</td></tr>
+          <tr><td>$h_3$ theo $h_1$</td><td>$0{,}0248\cdot 0{,}434 \approx 0{,}0108$</td><td>$\approx 0{,}0108$ $\checkmark$</td></tr></table>
+        focus: ["2.2", "2.2", "2.3"]
+        say: "Phép thử, ta tính đạo hàm của trạng thái cuối theo w bằng lan truyền ngược theo thời gian, cộng dồn qua ba bước, rồi bằng bước nhỏ như bài 6. Hai cách lệch nhau dưới một phần triệu. Làm tương tự với đạo hàm theo h 1, nhích h 1 một chút rồi chạy lại hai bước, cũng được khoảng 0 phẩy 0108, khớp với tích của ví dụ."
+
+  # ───────────────────────── 8. LỖI THƯỜNG GẶP ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay mắc"
+    checks:
+      - "(lambda g: (np.clip(g, -5, 5).tolist(), (g*5/np.linalg.norm(g)).tolist(), round(math.degrees(math.atan2(40, 30)), 1), math.degrees(math.atan2(5, 5))))(np.array([30, 40.])) == ([5.0, 5.0], [3.0, 4.0], 53.1, 45.0) and 50/5 == 10"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Nhầm “hồi tiếp” với “hồi quy” <b class="red">(sai)</b>
+          <br><span class="note">Hồi tiếp: đầu ra quay lại làm đầu vào. Hồi quy: dự đoán một con số (bài 18).</span></div>
+        say: "Lỗi thứ nhất, nhầm hồi tiếp với hồi quy. Hồi tiếp là đầu ra quay lại làm đầu vào, còn hồi quy là dự đoán một con số như bài 18."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Quên cộng dồn gradient của $\mathbf{W}$ qua các bước <b class="red">(sai)</b>
+          <br><span class="note">Cùng một $\mathbf{W}$ dùng ở mọi bước → như cổng phân nhánh của bài 22.</span></div>
+        say: "Lỗi thứ hai, quên cộng dồn gradient của W qua các bước. Cùng một W được dùng ở mọi bước, nên giống cổng phân nhánh ở bài 22."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Huấn luyện chuỗi dài mà không cắt gradient <b class="red">(dễ hỏng)</b>
+          <br><span class="note">Một bước gradient bùng nổ có thể đẩy trọng số ra xa, sai số thành “không phải số”.</span></div>
+        say: "Lỗi thứ ba, huấn luyện chuỗi dài mà không cắt gradient. Chỉ một bước bùng nổ có thể đẩy trọng số ra rất xa và làm hỏng cả quá trình học."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Cắt <b>từng số</b> của gradient về đoạn từ −5 đến 5, tưởng giống cắt theo độ dài <b class="red">(đổi hướng)</b></div>
+          <table class="t"><tr><th>cách cắt $(30;\ 40)$</th><th>kết quả</th><th>góc với trục ngang</th></tr>
+          <tr><td>theo độ dài, ngưỡng 5: chia cho $\frac{50}{5} = 10$</td><td>$(3;\ 4)$</td><td>≈ 53,1° — giữ hướng</td></tr>
+          <tr><td>từng số, kẹp về đoạn từ −5 đến 5</td><td>$(5;\ 5)$</td><td>$\hlo{45°}$ — hướng đã đổi</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.3"]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, kẹp từng số của gradient vào đoạn từ âm 5 đến 5, rồi tưởng là giống cắt theo độ dài. Cắt theo độ dài chia cả vector cho 10, được 3 và 4, vẫn giữ góc khoảng 53 độ. Kẹp từng số cho 5 và 5, góc chỉ còn 45 độ, nên bước cập nhật đi sai hướng. Khi cần giữ hướng xuống dốc, hãy cắt theo độ dài."
+
+  # ───────────────────────── 9. TỰ KIỂM TRA ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "round(0.8**10, 3) == 0.107 and 2**10 == 1024"
+      - "(lambda g: (g*1/np.linalg.norm(g)).tolist())(np.array([6, 8.])) == [0.6, 0.8]"
+      - "round(math.tanh(0.5*0 + 1*0), 4) == 0.0"
+      - "math.sqrt(36 + 64) == 10 and round(0.9**50, 4) == 0.0052 and 1**50 == 1"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Một số $w = 0{,}8$: gradient qua 10 bước bị nhân với bao nhiêu? Còn $w = 2$?</td></tr>
+          <tr><td>2</td><td>Cắt gradient $(6;\ 8)$ theo độ dài, ngưỡng 1.</td></tr>
+          <tr><td>3</td><td>$h_0 = 0$, $x_1 = 0$: $h_1$ bằng bao nhiêu?</td></tr>
+          <tr><td>4</td><td>Chuỗi 50 từ, trị riêng lớn nhất của $\mathbf{W}$ là 0,9 (bỏ qua tanh). Tín hiệu từ từ đầu tiên còn bao nhiêu? Chọn mạng hồi tiếp thường hay LSTM?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", "1.5", 0]
+        say: "Bây giờ đến lượt bạn, với bốn câu trên màn hình. Câu một về triệt tiêu và bùng nổ. Câu hai cắt gradient. Câu ba chạy một bước lượt tiến. Câu bốn là một quyết định, chọn loại mạng cho chuỗi dài 50 từ. Hãy dừng video và làm ra giấy."
+        pause: 8
+      - show: |
+          <table class="t"><tr><th>câu</th><th>từng bước</th><th>đáp số</th></tr>
+          <tr><td>①</td><td>nhân 10 lần cùng một số: $0{,}8^{10}$ và $2^{10}$</td><td>$\hlg{0{,}107}$ (triệt tiêu dần); &nbsp; $\hlg{1024}$ (bùng nổ)</td></tr>
+          <tr><td>②</td><td>độ dài $\sqrt{36 + 64} = 10 > 1$, chia cả vector cho 10</td><td>$(\hlg{0{,}6;\ 0{,}8})$</td></tr></table>
+        introduces: [sqrt]
+        focus: ["1.2", "1.2", "1.3"]
+        say: "Câu một, gradient bị nhân 10 lần cùng một số. Với 0 phẩy 8 được khoảng 0 phẩy 107, triệt tiêu dần, còn với 2 thì được 1024, bùng nổ. Câu hai, độ dài bằng căn của 36 cộng 64, bằng 10, lớn hơn ngưỡng 1, nên chia cả vector cho 10, được 0 phẩy 6 và 0 phẩy 8."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu</th><th>từng bước</th><th>đáp số</th></tr>
+          <tr><td>③</td><td>$h_1 = \tanh(0{,}5\cdot 0 + 1\cdot 0) = \tanh(0)$</td><td>$\hlg{0}$</td></tr>
+          <tr><td>④</td><td>$0{,}9^{50} \approx 0{,}0052$: còn khoảng nửa phần trăm; cổng quên gần 1 giữ $1^{50} = 1$</td><td>chọn $\hlg{\text{LSTM}}$</td></tr></table>
+        focus: ["1.2", "1.3", "1.3"]
+        say: "Câu ba, thay số vào công thức, h 1 bằng tanh của 0 nhân 0 phẩy 5 cộng 0, tức là tanh của 0, bằng 0. Câu bốn, 0 phẩy 9 mũ 50 chỉ còn khoảng 0 phẩy 0052, tức là khoảng nửa phần trăm tín hiệu. Mạng bộ nhớ dài ngắn hạn có cổng quên gần bằng 1 giữ được tín hiệu đó, nên ta chọn nó."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">trạng thái mang theo, cùng trọng số mọi bước</span><span class="a">→</span>
+          <span class="n">duỗi theo thời gian, lan truyền ngược</span><span class="a">→</span>
+          <span class="n">tích k ma trận: triệt tiêu / bùng nổ</span><span class="a">→</span>
+          <span class="n">cắt gradient; LSTM: ô nhớ có cổng</span></div>
+        say: "Tổng kết chuỗi logic. Mạng hồi tiếp mang theo trạng thái, dùng cùng trọng số ở mọi bước. Ta duỗi mạng ra theo thời gian để làm lan truyền ngược. Tích nhiều ma trận gây triệt tiêu hoặc bùng nổ. Chữa bằng cắt gradient và ô nhớ có cổng."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> nhân một số nhiều lần thì hoặc tắt, hoặc nổ — muốn nhớ lâu phải có một đường đi mà tín hiệu không bị nhân lặp lại.</div>
+        say: "Điều cần mang theo, nhân một số nhiều lần thì hoặc tắt hoặc nổ, nên muốn nhớ lâu phải có một đường đi mà tín hiệu không bị nhân lặp lại."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 36): <b>tăng cường</b> (boosting) — AdaBoost và gradient boosting, so với rừng ngẫu nhiên.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 36, ta học phương pháp tăng cường, ghép nhiều mô hình yếu nối tiếp nhau, so với rừng ngẫu nhiên. Hẹn gặp bạn ở bài tiếp theo."

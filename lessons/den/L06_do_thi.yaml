@@ -1,0 +1,203 @@
+id: L06
+course: DEN
+series: "DEN · Kỹ thuật dữ liệu"
+title: "Bài 6 — Cơ sở dữ liệu đồ thị: duyệt quan hệ nhiều bước"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/den.yaml L06; audit/den/verify_den.py L06; M. Kleppmann, Designing Data-Intensive Applications (2017), chương 2 (mô hình đồ thị); I. Robinson, J. Webber, E. Eifrem, Graph Databases (bản 2, 2015)"
+assumes: [arith, power, cdot]
+# Quy ước: đồ thị thuộc tính — đỉnh (người), cạnh (quen), thuộc tính trên cả hai. “Bạn của bạn” = đỉnh cách đúng 2 bước, không tính chính mình
+#   và bạn trực tiếp. alg.graph_reach đếm đỉnh KHÁC NHAU trong ≤ k bước (duyệt theo chiều rộng); alg.graph_reach_bound = deg^k là cận trên.
+#   Mỗi người 100 bạn là SỐ MINH HOẠ. Tên Neo4j, Cypher chỉ trên màn hình.
+objectives:
+  - "Mô hình hoá đỉnh, cạnh, thuộc tính"
+  - "Ước lượng chi phí truy vấn nhiều bước"
+  - "Lọc trùng khi duyệt"
+asr_reviewed:
+  - {sentence: "Bước bốn, lọc trùng.", reason: "ASR chép “Bước 4, lọc trung” (0.75): lệch âm/thanh thuần Việt: trùng/trung — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bảng này duyệt đồ thị lần lượt từng bước.", reason: "ASR chép “Bán này duyệt đô thị lần lượt từng bước.” (0.778): lệch âm/thanh thuần Việt: bảng/bán, đồ/đô — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Gợi ý kết bạn: bạn của bạn"
+    checks:
+      - "alg.graph_reach_bound(100, 2) == 10 ** 4 and alg.graph_reach_bound(100, 3) == 10 ** 6"
+    steps:
+      - show: |
+          <p>Mạng xã hội gợi ý “người bạn có thể quen”: bạn của bạn mình. Trong bảng quan hệ, mỗi bước là một phép <b>tự nối</b> bảng quen biết. Hai bước còn ổn; ba, bốn bước thì câu truy vấn dài và chậm dần. Cơ sở dữ liệu đồ thị đi theo cạnh trực tiếp — nhưng có phép màu nào không?</p>
+          <div class="box key">Hôm nay: <b>cơ sở dữ liệu đồ thị</b> — mô hình đỉnh, cạnh, và chi phí thật của truy vấn nhiều bước.</div>
+        focus: [1, 1, 1, 1, 2]
+        say: "Chào bạn, mạng xã hội gợi ý người bạn có thể quen, tức bạn của bạn mình. Trong bảng quan hệ, mỗi bước là một phép tự nối bảng quen biết. Hai bước còn ổn, nhưng ba, bốn bước thì câu truy vấn dài và chậm dần. Cơ sở dữ liệu đồ thị đi theo cạnh trực tiếp, nhưng có phép màu nào không? Hôm nay ta học cơ sở dữ liệu đồ thị, với mô hình đỉnh, cạnh, và chi phí thật của truy vấn nhiều bước."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: lũy thừa, tập hợp không trùng, duyệt theo tầng"
+    checks:
+      - "100 ** 2 == 10 ** 4 and 10 ** 4 * 10 ** 2 == 10 ** 6 and len({'Dũng', 'Dũng', 'Em'}) == 2"
+      - "alg.graph_reach({'A': {'B', 'C'}, 'B': {'A', 'C'}, 'C': {'A', 'B'}}, 'A', 2) == 2"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ý</th><th>ví dụ</th></tr>
+          <tr><td><b>lũy thừa</b>: nhân một số với chính nó nhiều lần</td><td>$100^2 = 100 \cdot 100 = 10^4$; $10^4 \cdot 10^2 = 10^6$</td></tr>
+          <tr><td><b>tập hợp</b>: mỗi phần tử chỉ tính một lần</td><td>danh sách Dũng, Dũng, Em → tập {Dũng, Em} có 2 phần tử</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Ta ôn lại hai ý. Lũy thừa là nhân một số với chính nó nhiều lần, ví dụ 100 mũ 2 bằng 100 nhân 100, bằng 10 mũ 4, và 10 mũ 4 nhân 10 mũ 2 bằng 10 mũ 6. Tập hợp thì mỗi phần tử chỉ tính một lần, nên danh sách Dũng, Dũng, Em cho tập gồm Dũng và Em, có 2 phần tử."
+      - show: |
+          <div class="box key">Ở khoá Phân tích và thiết kế thuật toán, ta đã học <b>duyệt theo chiều rộng</b>: đi từ đỉnh xuất phát ra từng <b>tầng</b> (cách 1 cạnh, rồi 2 cạnh…), <b>đánh dấu</b> đỉnh đã thăm để không đếm lại.</div>
+          <p>Ví dụ tam giác A–B, B–C, C–A: từ A, tầng 1 là B và C; tầng 2 chỉ gặp lại đỉnh đã thăm → chạm tới 2 đỉnh.</p>
+        focus: [1, 1, 2]
+        say: "Ở khoá Phân tích và thiết kế thuật toán, ta đã học duyệt theo chiều rộng, đi từ đỉnh xuất phát ra từng tầng, cách 1 cạnh rồi 2 cạnh. Khi duyệt, ta đánh dấu đỉnh đã thăm để không đếm lại. Ví dụ tam giác A, B, C, từ A thì tầng 1 là B và C, còn tầng 2 chỉ gặp lại đỉnh đã thăm, nên chạm tới đúng 2 đỉnh."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: đồ thị thuộc tính"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thành phần</th><th>ví dụ</th></tr>
+          <tr><td><b>đỉnh</b> có nhãn và thuộc tính</td><td>Người {tên: “An”, tỉnh: “Huế”}</td></tr>
+          <tr><td><b>cạnh</b> có hướng, loại và thuộc tính</td><td>An —QUEN {từ: 2019}→ Bình</td></tr>
+          <tr><td><b>truy vấn theo mẫu</b></td><td>tìm (An)–QUEN–(x)–QUEN–(y), y không phải An, không quen An</td></tr></table>
+          <p>Mỗi đỉnh giữ <b>danh sách cạnh của chính nó</b>: đi từ đỉnh sang hàng xóm không cần tra chỉ mục toàn bảng — chi phí tỉ lệ số cạnh đi qua, không phụ thuộc kích thước cả đồ thị.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2, 2]
+        say: "Bảng có ba thành phần. Đỉnh có nhãn và thuộc tính, ví dụ một người tên An ở Huế. Cạnh có hướng, có loại và thuộc tính, ví dụ An quen Bình từ năm 2019. Truy vấn theo mẫu tìm An quen x, x quen y, với y không phải An và chưa quen An. Mỗi đỉnh giữ danh sách cạnh của chính nó, nên đi từ đỉnh sang hàng xóm không cần tra chỉ mục toàn bảng. Chi phí tỉ lệ với số cạnh đi qua, không phụ thuộc kích thước cả đồ thị."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Đi theo cạnh, tầng một, tầng hai"
+    checks:
+      - "alg.graph_reach_bound(100, 1) == 100 and alg.graph_reach_bound(100, 2) == 10000 and alg.graph_reach_bound(100, 3) == 1000000"
+    steps:
+      - show: |
+          <div><svg width="1500" height="385" viewBox="0 0 1500 385"><g fill="#1f2937"><line x1="90" y1="190" x2="330" y2="100" stroke="#6b7280" stroke-width="3"/><line x1="90" y1="190" x2="330" y2="290" stroke="#6b7280" stroke-width="3"/><line x1="330" y1="100" x2="580" y2="150" stroke="#eb6834" stroke-width="5"/><line x1="330" y1="290" x2="580" y2="150" stroke="#eb6834" stroke-width="5"/><line x1="330" y1="290" x2="580" y2="310" stroke="#6b7280" stroke-width="3"/><line x1="580" y1="150" x2="810" y2="150" stroke="#6b7280" stroke-width="3"/><circle cx="90" cy="190" r="42" fill="#dbeafe" stroke="#1f2937" stroke-width="2"/><text x="90" y="197" text-anchor="middle" font-size="21">An</text><circle cx="330" cy="100" r="42" fill="#f3f4f6" stroke="#1f2937" stroke-width="2"/><text x="330" y="107" text-anchor="middle" font-size="21">Bình</text><circle cx="330" cy="290" r="42" fill="#f3f4f6" stroke="#1f2937" stroke-width="2"/><text x="330" y="297" text-anchor="middle" font-size="21">Chi</text><circle cx="580" cy="150" r="42" fill="#ffedd5" stroke="#1f2937" stroke-width="2"/><text x="580" y="157" text-anchor="middle" font-size="21">Dũng</text><circle cx="580" cy="310" r="42" fill="#d1fae5" stroke="#1f2937" stroke-width="2"/><text x="580" y="317" text-anchor="middle" font-size="21">Em</text><circle cx="810" cy="150" r="42" fill="#f3f4f6" stroke="#1f2937" stroke-width="2"/><text x="810" y="157" text-anchor="middle" font-size="21">Giang</text><text x="90" y="35" text-anchor="middle" font-size="20" fill="#2a78d6">tầng 0</text><text x="330" y="35" text-anchor="middle" font-size="20" fill="#2a78d6">tầng 1</text><text x="580" y="35" text-anchor="middle" font-size="20" fill="#2a78d6">tầng 2</text><text x="810" y="35" text-anchor="middle" font-size="20" fill="#2a78d6">tầng 3</text><text x="650" y="225" font-size="19" fill="#eb6834">2 đường tới</text><text x="650" y="375" text-anchor="middle" font-size="19" fill="#059669">1 đường tới</text><line x1="900" y1="20" x2="900" y2="370" stroke="#d1d5db" stroke-width="2"/><text x="1190" y="60" text-anchor="middle" font-size="22" font-weight="bold">mỗi người 100 bạn</text><text x="930" y="138" font-size="21">1 bước</text><rect x="1030" y="110" width="100" height="38" fill="#b91c1c" opacity="0.45"/><text x="1140" y="138" font-size="21">100</text><text x="930" y="218" font-size="21">2 bước</text><rect x="1030" y="190" width="200" height="38" fill="#b91c1c" opacity="0.70"/><text x="1240" y="218" font-size="21">10 000</text><text x="930" y="298" font-size="21">3 bước</text><rect x="1030" y="270" width="300" height="38" fill="#b91c1c" opacity="0.95"/><text x="1340" y="298" font-size="21">1 000 000</text><text x="1190" y="365" text-anchor="middle" font-size="19">thanh theo số chữ số 0: mỗi bước nhân 100</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình bên trái là đồ thị nhỏ của bài. Từ An, đi theo cạnh tới tầng 1 là Bình và Chi, rồi tầng 2 là Dũng và Em, rồi tầng 3 là Giang. Dũng có 2 đường tới, qua Bình và qua Chi, nên khi duyệt sẽ gặp Dũng hai lần. Hình bên phải cho thấy nếu mỗi người có 100 bạn, mỗi bước số đường nhân thêm 100, từ 100 lên 10 nghìn rồi 1 triệu."
+
+  - id: example
+    kind: example
+    title: "Bạn của bạn trên đồ thị nhỏ"
+    checks:
+      - "(lambda adj: (alg.graph_reach(adj, 'An', 1), alg.graph_reach(adj, 'An', 2), sum(len(adj[f] - {'An'}) for f in adj['An'])))({'An': {'Bình', 'Chi'}, 'Bình': {'An', 'Dũng'}, 'Chi': {'An', 'Dũng', 'Em'}, 'Dũng': {'Bình', 'Chi', 'Giang'}, 'Em': {'Chi'}, 'Giang': {'Dũng'}}) == (2, 4, 3)"
+    steps:
+      - show: |
+          <p><b>Bước 1</b> — cạnh quen: An–Bình, An–Chi, Bình–Dũng, Chi–Dũng, Chi–Em, Dũng–Giang. Mỗi đỉnh giữ danh sách bạn:</p>
+          <table class="t"><tr><th>đỉnh</th><th>An</th><th>Bình</th><th>Chi</th><th>Dũng</th><th>Em</th><th>Giang</th></tr>
+          <tr><td>bạn</td><td>Bình, Chi</td><td>An, Dũng</td><td>An, Dũng, Em</td><td>Bình, Chi, Giang</td><td>Chi</td><td>Dũng</td></tr></table>
+        focus: [1, 2]
+        say: "Bước một, đồ thị có sáu cạnh quen, An với Bình, An với Chi, Bình với Dũng, Chi với Dũng, Chi với Em, và Dũng với Giang. Mỗi đỉnh giữ danh sách bạn của chính nó, như bảng bên dưới."
+      - show: |
+          <table class="t"><tr><th>tầng</th><th>đường đi</th><th>người mới</th></tr>
+          <tr><td><b>Bước 2</b> — tầng 1</td><td>An → Bình, An → Chi</td><td>Bình, Chi</td></tr></table>
+        focus: [1, "1.2", "1.2"]
+        say: "Bước hai, bắt đầu đi từ An. Bảng này duyệt đồ thị lần lượt từng bước. Đọc danh sách bạn của An, ta đi sang Bình và Chi, nên tầng 1 có 2 người."
+      - show: |
+          <table class="t"><tr><th>tầng</th><th>đường đi (bỏ đường quay về An)</th><th>số đường</th></tr>
+          <tr><td><b>Bước 3</b> — tầng 2</td><td>Bình → Dũng; Chi → Dũng; Chi → Em</td><td>3</td></tr></table>
+        focus: [1, "1.2", "1.2"]
+        say: "Bước ba, đi tiếp từ Bình và Chi, bỏ các đường quay về An. Bình sang Dũng, Chi sang Dũng, và Chi sang Em. Vậy tầng 2 có 3 đường."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>Bước 4 — lọc trùng</th><th>số đường tới</th><th>gợi ý</th></tr>
+          <tr><td>$\hl{\text{Dũng}}$</td><td>2 (qua Bình, qua Chi)</td><td>mạnh: 2 bạn chung</td></tr>
+          <tr><td>$\hl{\text{Em}}$</td><td>1 (qua Chi)</td><td>yếu hơn: 1 bạn chung</td></tr></table>
+          <p>3 đường đi nhưng chỉ 2 người khác nhau: duyệt phải <b>lọc trùng</b>.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Bước bốn, lọc trùng. Dũng xuất hiện ở 2 đường, nên Dũng có 2 bạn chung với An, là tín hiệu gợi ý mạnh hơn Em. Em chỉ có 1 đường tới, qua Chi. Ba đường đi nhưng chỉ hai người khác nhau, nên khi duyệt phải lọc trùng."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: đếm bạn chung từng người"
+    checks:
+      - "(lambda adj: [len(adj[y] & adj['An']) for y in ('Dũng', 'Em', 'Giang')])({'An': {'Bình', 'Chi'}, 'Bình': {'An', 'Dũng'}, 'Chi': {'An', 'Dũng', 'Em'}, 'Dũng': {'Bình', 'Chi', 'Giang'}, 'Em': {'Chi'}, 'Giang': {'Dũng'}}) == [2, 1, 0]"
+      - "(lambda adj: sum(len(adj[y] & adj['An']) for y in adj if y != 'An' and y not in adj['An']))({'An': {'Bình', 'Chi'}, 'Bình': {'An', 'Dũng'}, 'Chi': {'An', 'Dũng', 'Em'}, 'Dũng': {'Bình', 'Chi', 'Giang'}, 'Em': {'Chi'}, 'Giang': {'Dũng'}}) == 3"
+    steps:
+      - show: |
+          <table class="t"><tr><th>người chưa quen An</th><th>bạn của người đó → phần chung với bạn của An {Bình, Chi}</th><th>bạn chung</th></tr>
+          <tr><td>Dũng</td><td>{Bình, Chi, Giang} → Bình, Chi</td><td>2</td></tr>
+          <tr><td>Em</td><td>{Chi} → Chi</td><td>1</td></tr>
+          <tr><td>Giang</td><td>{Dũng} → không có</td><td>0</td></tr></table>
+          <p>Tổng bạn chung $2 + 1 + 0 = 3$ = số đường tầng 2 ✓; người có ít nhất 1 bạn chung: Dũng, Em = 2 người ✓.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Kiểm bằng đường khác, không duyệt mà đếm bạn chung của từng người chưa quen An, vì mỗi bạn chung là đúng một đường hai bước. Lấy phần chung giữa bạn của Dũng và bạn của An được Bình và Chi, tức 2 bạn chung. Em có phần chung là Chi, 1 bạn chung. Giang không có bạn chung nào với An. Tổng 2 cộng 1 cộng 0 bằng 3, đúng bằng số đường ở tầng 2, và có đúng 2 người có ít nhất một bạn chung, khớp với Dũng và Em."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp"
+    checks:
+      - "alg.graph_reach_bound(100, 2) == 10 ** 4 and alg.graph_reach_bound(100, 3) == 10 ** 6"
+      - "[alg.graph_reach_bound(100, k) // alg.graph_reach_bound(10, k) for k in (2, 3)] == [100, 1000] and alg.graph_reach_bound(10, 3) == 1000"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Tưởng cơ sở dữ liệu đồ thị làm truy vấn nhiều bước rẻ <b class="red">(bùng nổ theo lũy thừa)</b>
+          <br><span class="note">Mỗi người 100 bạn: hai bước chạm tới $100^2 = 10^4$ đường, ba bước $\hl{10^6}$. Đi theo cạnh nhanh hơn, nhưng <b>không làm số đỉnh phải thăm ít đi</b>. Giới hạn số bước và số kết quả.</span></div>
+        say: "Lỗi thứ nhất, tưởng cơ sở dữ liệu đồ thị làm truy vấn nhiều bước trở nên rẻ, trong khi chi phí bùng nổ theo lũy thừa. Mỗi người 100 bạn thì hai bước chạm tới 100 bình phương, tức 10 mũ 4 đường, và ba bước là 10 mũ 6. Đi theo cạnh nhanh hơn, nhưng không làm số đỉnh phải thăm ít đi, nên hãy giới hạn số bước và số kết quả."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Bỏ qua đỉnh siêu kết nối <b class="red">(một đỉnh triệu cạnh)</b>
+          <br><span class="note">Đi qua một người nổi tiếng có 1 triệu người theo dõi là duyệt 1 triệu cạnh. Lọc theo loại cạnh, thuộc tính, hoặc bỏ qua đỉnh có bậc quá lớn.</span></div>
+        say: "Lỗi thứ hai, bỏ qua đỉnh siêu kết nối, một đỉnh có cả triệu cạnh. Đi qua một người nổi tiếng có 1 triệu người theo dõi là phải duyệt 1 triệu cạnh. Hãy lọc theo loại cạnh, theo thuộc tính, hoặc bỏ qua đỉnh có bậc quá lớn."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Dùng đồ thị cho mọi thứ <b class="red">(tải phân tích, tổng hợp lớn)</b>
+          <br><span class="note">“Tổng doanh thu theo tỉnh” không cần duyệt quan hệ — kho cột làm tốt hơn nhiều. Đồ thị hợp khi câu hỏi là về <b>đường đi và quan hệ</b>.</span></div>
+        say: "Lỗi thứ ba, dùng đồ thị cho mọi thứ, kể cả tải phân tích và tổng hợp lớn. Tổng doanh thu theo tỉnh không cần duyệt quan hệ, và kho cột làm tốt hơn nhiều. Đồ thị hợp khi câu hỏi là về đường đi và quan hệ."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Thử truy vấn trên dữ liệu mẫu ít cạnh, thấy nhanh, rồi đưa lên dữ liệu thật <b class="red">(chậm gấp nhiều bậc)</b></div>
+          <table class="t"><tr><th>số bước</th><th>dữ liệu mẫu: 10 bạn mỗi người</th><th>dữ liệu thật: 100 bạn</th><th>gấp</th></tr>
+          <tr><td>2</td><td>$10^2 = 100$ đường</td><td>$10^4$</td><td>100 lần</td></tr>
+          <tr><td>3</td><td>$10^3 = 1000$ đường</td><td>$10^6$</td><td>1000 lần</td></tr></table>
+          <p class="note">Người có kinh nghiệm thử với <b>số bạn thật</b> (trung bình và lớn nhất), và đặt giới hạn số bước, số kết quả ngay trong truy vấn.</p>
+        focus: [1, 2, "2.2", "2.3", 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, thử truy vấn trên dữ liệu mẫu ít cạnh, thấy nhanh, rồi đưa lên dữ liệu thật thì chậm gấp nhiều bậc. Bảng so dữ liệu mẫu 10 bạn mỗi người với dữ liệu thật 100 bạn. Với 2 bước, mẫu có 100 đường còn thật có 10 mũ 4, gấp 100 lần. Với 3 bước, mẫu có 1000 đường còn thật có 10 mũ 6, gấp 1000 lần, vì số bạn gấp 10 thì số đường gấp 10 mũ số bước. Vì vậy, người có kinh nghiệm thử với số bạn thật, cả trung bình lẫn lớn nhất, và đặt giới hạn số bước, số kết quả ngay trong truy vấn."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.graph_reach_bound(50, 4) == 6250000 and (lambda adj: alg.graph_reach(adj, 'An', 3))({'An': {'Bình', 'Chi'}, 'Bình': {'An', 'Dũng'}, 'Chi': {'An', 'Dũng', 'Em'}, 'Dũng': {'Bình', 'Chi', 'Giang'}, 'Em': {'Chi'}, 'Giang': {'Dũng'}}) == 5"
+      - "50 ** 2 == 2500 and 2500 * 2500 == 6250000"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Mỗi người 50 bạn. Truy vấn bốn bước chạm tối đa bao nhiêu đường?</td></tr>
+          <tr><td>2</td><td>Trên đồ thị nhỏ của ví dụ, trong tối đa ba bước từ An chạm tới bao nhiêu người khác nhau?</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, mỗi người 50 bạn, truy vấn bốn bước chạm tối đa bao nhiêu đường? Câu hai, trên đồ thị nhỏ của ví dụ, trong tối đa ba bước từ An chạm tới bao nhiêu người khác nhau? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① Hai bước: $50^2 = 2500$ đường.</p>
+          <p>Bốn bước: $50^4 = 2500 \cdot 2500 = \hl{6\,250\,000}$ đường.</p>
+        focus: [1, 2]
+        say: "Đáp án câu một, hai bước trước, 50 mũ 2 bằng 2500 đường. Bốn bước là 50 mũ 4, tức 2500 nhân 2500, bằng 6 triệu 250 nghìn đường."
+      - show: |
+          <table class="t"><tr><th>câu 2: tầng</th><th>đi từ</th><th>người mới</th></tr>
+          <tr><td>1 và 2</td><td>như ví dụ</td><td>Bình, Chi; Dũng, Em</td></tr>
+          <tr><td>3</td><td>Dũng → Bình, Chi (đã thăm), Giang; Em → Chi (đã thăm)</td><td><b>Giang</b></td></tr></table>
+          <p>② Bình, Chi, Dũng, Em, Giang $= \hl{5}$ người — cả đồ thị trừ An.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Câu hai, đi theo tầng. Tầng 1 và tầng 2 như ví dụ, được Bình, Chi, rồi Dũng và Em. Tầng 3 đi từ Dũng sang Bình, Chi đã thăm và Giang mới, còn từ Em chỉ về Chi đã thăm, nên chỉ thêm Giang. Tổng cộng chạm tới Bình, Chi, Dũng, Em và Giang, là 5 người, tức cả đồ thị trừ An."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">đỉnh, cạnh, thuộc tính</span><span class="a">→</span>
+          <span class="n">đi theo danh sách cạnh của từng đỉnh</span><span class="a">→</span>
+          <span class="n">chi phí tăng theo lũy thừa số bước</span><span class="a">→</span>
+          <span class="n">lọc trùng, giới hạn bước, cẩn thận đỉnh lớn</span></div>
+        say: "Tổng kết lại, đồ thị có đỉnh, cạnh và thuộc tính, và truy vấn đi theo danh sách cạnh của từng đỉnh. Chi phí vẫn tăng theo lũy thừa số bước, nên phải lọc trùng, giới hạn số bước, và cẩn thận với đỉnh lớn."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> công cụ tốt làm từng bước <b>rẻ hơn</b>, nhưng không đổi được <b>số bước</b> mà bài toán đòi hỏi.</div>
+        say: "Điều cần mang theo, công cụ tốt làm từng bước rẻ hơn, nhưng không đổi được số bước mà bài toán đòi hỏi."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 7): <b>chỉ mục ngược và tìm kiếm toàn văn</b>.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 7, ta học chỉ mục ngược và tìm kiếm toàn văn. Hẹn gặp bạn ở bài tiếp theo."

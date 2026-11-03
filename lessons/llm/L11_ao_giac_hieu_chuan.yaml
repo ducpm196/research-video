@@ -1,0 +1,178 @@
+id: L11
+course: LLM
+series: "LLM · Mô hình ngôn ngữ lớn"
+title: "Bài 11 — Ảo giác, hiệu chuẩn và tự nhất quán"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/llm.yaml L11; audit/llm/verify_llm.py L11; X. Wang và cộng sự, Self-Consistency Improves Chain of Thought Reasoning (2023); S. Kadavath và cộng sự, Language Models (Mostly) Know What They Know (2022); A. Kalai, S. Vempala, Calibrated Language Models Must Hallucinate (2024); MLO bài 10 (hiệu chuẩn)"
+assumes: [arith, approx, frac]
+# Quy ước: biểu quyết đa số k lần (k lẻ), mỗi lần đúng với xác suất p ĐỘC LẬP (alg.majority_vote). Mô hình “tương quan” ở lỗi 2: với xác suất
+#   một nửa, cả k lần cho cùng một đáp án (một lần rút), ngược lại độc lập — số minh hoạ để thấy tương quan làm giảm lợi ích.
+#   Sai số hiệu chuẩn kỳ vọng = Σ (tỉ lệ câu trong nhóm) · |độ đúng − độ tự tin|; hai nhóm 60 / 40 câu là SỐ MINH HOẠ.
+objectives:
+  - "Giải thích vì sao mô hình sinh câu trôi chảy nhưng sai"
+  - "Đo hiệu chuẩn bằng sai số hiệu chuẩn kỳ vọng"
+  - "Tính lợi ích và điều kiện của biểu quyết đa số"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Trích dẫn một bài báo không tồn tại"
+    steps:
+      - show: |
+          <p>Hỏi mô hình nguồn cho một nhận định, nó trả lời tên bài báo, tác giả, năm — đúng định dạng, rất tự tin. Tra lại: bài báo <b>không tồn tại</b>. Mô hình không “nói dối”; nó sinh chuỗi <b>có xác suất cao</b>, và một trích dẫn bịa nhưng đúng khuôn mẫu cũng có xác suất cao.</p>
+          <div class="box key">Hôm nay: <b>ảo giác</b> là gì, đo <b>hiệu chuẩn</b> (mô hình tự tin có đúng mức không), và dùng <b>tự nhất quán</b> để giảm lỗi — khi nào có ích, khi nào không.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, hỏi mô hình nguồn cho một nhận định, nó trả lời tên bài báo, tác giả, năm, đúng định dạng và rất tự tin. Tra lại thì bài báo không tồn tại. Mô hình không nói dối, nó sinh chuỗi có xác suất cao, và một trích dẫn bịa nhưng đúng khuôn mẫu cũng có xác suất cao. Hôm nay ta học ảo giác là gì, đo hiệu chuẩn, tức mô hình tự tin có đúng mức không, và dùng tự nhất quán để giảm lỗi, khi nào có ích và khi nào không."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: xác suất các lần độc lập, và đếm số cách"
+    checks:
+      - "round(0.6 * 0.6, 2) == 0.36 and round(0.6 * 0.6 * 0.4, 3) == 0.144 and math.comb(3, 2) == 3"
+    steps:
+      - show: |
+          <p><b>Độc lập</b> (khoá toán): xác suất nhiều việc cùng xảy ra = <b>nhân</b> các xác suất. Hai lần cùng đúng: $0{,}6 \cdot 0{,}6 = 0{,}36$.</p>
+        introduces: [cdot]
+        say: "Ở khoá toán, ta đã học, khi các lần là độc lập, xác suất nhiều việc cùng xảy ra bằng tích các xác suất. Mỗi lần đúng 0 phẩy 6 thì hai lần cùng đúng là 0 phẩy 6 nhân 0 phẩy 6, bằng 0 phẩy 36."
+      - show: |
+          <table class="t"><tr><th>đúng 2 trong 3 lần</th><th>xác suất</th></tr>
+          <tr><td>đúng, đúng, sai</td><td>$0{,}6 \cdot 0{,}6 \cdot 0{,}4 = 0{,}144$</td></tr>
+          <tr><td>đúng, sai, đúng</td><td>0,144</td></tr>
+          <tr><td>sai, đúng, đúng</td><td>0,144</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Đúng 2 trong 3 lần có ba cách sắp xếp. Đúng, đúng, sai có xác suất 0 phẩy 6 nhân 0 phẩy 6 nhân 0 phẩy 4, bằng 0 phẩy 144. Hai cách còn lại cũng vậy, nên chỉ cần đếm số cách rồi nhân."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: ảo giác, hiệu chuẩn, tự nhất quán"
+    steps:
+      - show: |
+          <table class="t"><tr><th>khái niệm</th><th>nghĩa</th></tr>
+          <tr><td><b>ảo giác</b></td><td>câu trôi chảy, đúng khuôn, nhưng sai sự thật hoặc không có căn cứ</td></tr>
+          <tr><td><b>hiệu chuẩn</b></td><td>trong các câu mô hình tự tin 90%, đúng khoảng 90% câu</td></tr>
+          <tr><td><b>sai số hiệu chuẩn kỳ vọng</b></td><td>chia câu thành nhóm theo độ tự tin; cộng (tỉ lệ câu trong nhóm) × |độ đúng − độ tự tin|</td></tr>
+          <tr><td><b>tự nhất quán</b></td><td>sinh $k$ lần, lấy đáp án xuất hiện nhiều nhất</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bảng giới thiệu bốn khái niệm. Ảo giác là câu trôi chảy, đúng khuôn, nhưng sai sự thật hoặc không có căn cứ. Hiệu chuẩn tốt nghĩa là trong các câu mô hình tự tin 90 phần trăm, đúng khoảng 90 phần trăm số câu. Sai số hiệu chuẩn kỳ vọng chia câu thành nhóm theo độ tự tin, rồi cộng tỉ lệ câu trong nhóm nhân với khoảng cách giữa độ đúng và độ tự tin. Tự nhất quán là sinh k lần, rồi lấy đáp án xuất hiện nhiều nhất."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Biểu đồ hiệu chuẩn: điểm nằm dưới đường chéo là tự tin quá mức"
+    steps:
+      - show: |
+          <div><svg width="1500" height="340" viewBox="0 0 1500 340"><line x1="200" y1="310" x2="870" y2="310" stroke="#6b7280" stroke-width="2"/><line x1="200" y1="310" x2="200" y2="20" stroke="#6b7280" stroke-width="2"/><line x1="200" y1="310" x2="850" y2="30" stroke="#059669" stroke-width="3" stroke-dasharray="10 8"/><line x1="785" y1="58" x2="785" y2="114" stroke="#b91c1c" stroke-width="5"/><line x1="590" y1="142" x2="590" y2="156" stroke="#b91c1c" stroke-width="5"/><circle cx="785" cy="114" r="11" fill="#eb6834"/><circle cx="590" cy="156" r="11" fill="#eb6834"/><g font-size="23" fill="#1f2937"><text x="890" y="316">độ tự tin</text><text x="215" y="22">độ đúng</text><text x="960" y="90" fill="#059669">đường chéo: hiệu chuẩn hoàn hảo</text><text x="960" y="140" fill="#b91c1c">đoạn đỏ: khoảng cách cần cộng</text><text x="960" y="190">nhóm 60 câu: tự tin 0,9, đúng 0,7</text><text x="960" y="230">nhóm 40 câu: tự tin 0,6, đúng 0,55</text></g></svg></div>
+        focus: [1, 1, 1]
+        say: "Hình vẽ độ đúng theo độ tự tin. Mô hình hiệu chuẩn hoàn hảo thì mọi điểm nằm trên đường chéo xanh. Hai điểm cam nằm dưới đường chéo, tức nói chắc hơn thực tế, và đoạn đỏ là khoảng cách mà sai số hiệu chuẩn cộng lại."
+
+  - id: example
+    kind: example
+    title: "Đo hiệu chuẩn và biểu quyết 5 lần"
+    checks:
+      - "round(alg.ece([(60, 0.9, 0.7), (40, 0.6, 0.55)]), 2) == 0.14"
+      - "round(alg.majority_vote(0.6, 5), 3) == 0.683 and round(alg.majority_vote(0.6, 25), 3) == 0.846"
+    steps:
+      - show: |
+          <table class="t"><tr><th>nhóm (100 câu, số minh hoạ)</th><th>độ tự tin</th><th>độ đúng thật</th><th>khoảng cách</th></tr>
+          <tr><td>60 câu</td><td>0,90</td><td class="red">0,70</td><td>0,20</td></tr>
+          <tr><td>40 câu</td><td>0,60</td><td>0,55</td><td>0,05</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Bước một, chia 100 câu thành hai nhóm, một số minh hoạ. Nhóm 60 câu có độ tự tin 0 phẩy 9 nhưng chỉ đúng 0 phẩy 7, cách nhau 0 phẩy 2. Nhóm 40 câu tự tin 0 phẩy 6 và đúng 0 phẩy 55, cách nhau 0 phẩy 05."
+      - show: |
+          $$0{,}6 \cdot 0{,}20 + 0{,}4 \cdot 0{,}05 = 0{,}12 + 0{,}02 = \hl{0{,}14}$$
+          <p>Sai số hiệu chuẩn kỳ vọng 0,14 — mô hình <b>tự tin quá mức</b>.</p>
+        focus: [1, 2]
+        say: "Bước hai, nhân mỗi khoảng cách với tỉ lệ câu của nhóm rồi cộng, 0 phẩy 6 nhân 0 phẩy 2 cộng 0 phẩy 4 nhân 0 phẩy 05, bằng 0 phẩy 14. Vì độ tự tin cao hơn độ đúng, mô hình tự tin quá mức."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — tự nhất quán</b>, mỗi lần đúng 60%, <b>độc lập</b>; đa số 5 lần đúng khi có ít nhất 3 lần đúng:</p>
+          <table class="t"><tr><th>số lần đúng</th><th>số cách</th><th>xác suất</th></tr>
+          <tr><td>3</td><td>10</td><td>$10 \cdot 0{,}6^3 \cdot 0{,}4^2 = 0{,}3456$</td></tr>
+          <tr><td>4</td><td>5</td><td>$5 \cdot 0{,}6^4 \cdot 0{,}4 = 0{,}2592$</td></tr>
+          <tr><td>5</td><td>1</td><td>$0{,}6^5 = 0{,}0778$</td></tr></table>
+        introduces: [power]
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Bước ba, tự nhất quán, mỗi lần đúng 60 phần trăm và độc lập, đa số 5 lần đúng khi có ít nhất 3 lần đúng. Đúng 3 lần có 10 cách, xác suất 0 phẩy 3456. Đúng 4 lần có 5 cách, xác suất 0 phẩy 2592. Đúng cả 5 lần là 0 phẩy 0778."
+      - show: |
+          <p><b>Bước 4</b> — cộng: $\approx \hl{0{,}683}$; với đa số 25 lần ≈ 0,846. Chỉ đúng khi các lần <b>độc lập</b>; các lần sinh giống nhau thì biểu quyết không giúp.</p>
+        say: "Bước bốn, cộng lại được khoảng 0 phẩy 683, và đa số 25 lần thì khoảng 0 phẩy 846. Điều này chỉ đúng khi các lần độc lập, nếu các lần sinh giống hệt nhau thì biểu quyết không giúp gì."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác"
+    checks:
+      - "round(abs((0.6 * 0.9 + 0.4 * 0.6) - (0.6 * 0.7 + 0.4 * 0.55)), 2) == 0.14"
+      - "round(sum(math.comb(5, k) * 0.6 ** k * 0.4 ** (5 - k) for k in (0, 1, 2)), 3) == 0.317 and round(1 - 0.317, 3) == 0.683"
+    steps:
+      - show: |
+          <table class="t"><tr><th>kiểm</th><th>cách khác</th><th>kết quả</th></tr>
+          <tr><td>0,14</td><td>tự tin trung bình 0,78 trừ độ đúng trung bình 0,64 (đúng vì cả hai nhóm cùng tự tin quá mức)</td><td>0,14 ✓</td></tr>
+          <tr><td>0,683</td><td>1 trừ khả năng đa số sai (0, 1 hoặc 2 lần đúng) = 1 − 0,317</td><td>0,683 ✓</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Kiểm bằng đường khác. Vì cả hai nhóm cùng tự tin quá mức, sai số cũng bằng tự tin trung bình 0 phẩy 78 trừ độ đúng trung bình 0 phẩy 64, ra 0 phẩy 14. Khả năng đa số sai là 0 phẩy 317, nên khả năng đúng bằng 1 trừ 0 phẩy 317, đúng 0 phẩy 683."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc"
+    checks:
+      - "round(alg.majority_vote(0.4, 5), 3) == 0.317"
+      - "round(0.5 * 0.6 + 0.5 * alg.majority_vote(0.6, 5), 3) == 0.641"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Biểu quyết khi mỗi lần đúng dưới 50% <b class="red">(tệ hơn)</b>
+          <br><span class="note">Mỗi lần đúng 40%: đa số 5 lần chỉ đúng ≈ 0,317 — thấp hơn một lần. Biểu quyết khuếch đại xu hướng sẵn có, đúng hay sai.</span></div>
+        say: "Lỗi thứ nhất, biểu quyết khi mỗi lần đúng dưới 50 phần trăm, kết quả còn tệ hơn. Mỗi lần đúng 40 phần trăm thì đa số 5 lần chỉ đúng khoảng 0 phẩy 317, thấp hơn một lần. Biểu quyết khuếch đại xu hướng sẵn có, dù đúng hay sai."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Giả định các lần sinh độc lập <b class="red">(sai giống nhau)</b>
+          <br><span class="note">Cùng một mô hình thường sai <b>cùng kiểu</b>. Nếu một nửa số lần cả 5 mẫu trùng nhau (số minh hoạ), độ đúng chỉ còn ≈ 0,641 thay vì 0,683 — lợi ích giảm hơn một nửa.</span></div>
+        say: "Lỗi thứ hai, giả định các lần sinh độc lập, trong khi chúng thường sai giống nhau. Cùng một mô hình thường sai cùng kiểu. Nếu một nửa số lần cả 5 mẫu trùng nhau, một số minh hoạ, độ đúng chỉ còn khoảng 0 phẩy 641 thay vì 0 phẩy 683, lợi ích giảm hơn một nửa."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Tin độ trôi chảy là dấu hiệu đúng <b class="red">(ảo giác nghe rất thật)</b>
+          <br><span class="note">Câu bịa vẫn đúng ngữ pháp, đúng định dạng. Với dữ kiện quan trọng: yêu cầu nguồn, kiểm nguồn tồn tại và nói đúng điều được trích, hoặc cho phép mô hình trả lời “không biết”.</span></div>
+        say: "Lỗi thứ ba, tin độ trôi chảy là dấu hiệu đúng, trong khi ảo giác nghe rất thật. Câu bịa vẫn đúng ngữ pháp và đúng định dạng. Với dữ kiện quan trọng, hãy yêu cầu nguồn, kiểm nguồn có tồn tại và nói đúng điều được trích, hoặc cho phép mô hình trả lời không biết."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "round(alg.majority_vote(0.6, 3), 3) == 0.648 and round(0.6 ** 3 + 3 * 0.6 ** 2 * 0.4, 3) == 0.648"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Mỗi lần đúng 60%, độc lập. Đa số 3 lần đúng với xác suất bao nhiêu? (Gợi ý: cần ít nhất 2 trong 3 lần đúng.)</td></tr>
+          <tr><td>2</td><td>Một mô hình có sai số hiệu chuẩn kỳ vọng bằng 0. Nó có luôn trả lời đúng không?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, mỗi lần đúng 60 phần trăm và độc lập. Đa số 3 lần đúng với xác suất bao nhiêu? Gợi ý, cần ít nhất 2 trong 3 lần đúng. Câu hai, một mô hình có sai số hiệu chuẩn kỳ vọng bằng 0, nó có luôn trả lời đúng không? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <p>① Cả 3 lần đúng: $0{,}6^3 = 0{,}216$; đúng 2 lần (3 cách): $3 \cdot 0{,}6^2 \cdot 0{,}4 = 0{,}432$; cộng $= \hl{0{,}648}$.</p>
+        say: "Đáp án câu một, cả 3 lần đúng có xác suất 0 phẩy 6 mũ 3, bằng 0 phẩy 216. Đúng 2 lần có 3 cách, bằng 3 nhân 0 phẩy 6 bình phương nhân 0 phẩy 4, bằng 0 phẩy 432. Cộng lại được 0 phẩy 648."
+      - show: |
+          <p>② <b>Không</b>: hiệu chuẩn chỉ nói độ tự tin <b>khớp</b> độ đúng. Mô hình nói “tự tin 50%” và đúng 50% vẫn hiệu chuẩn hoàn hảo — nhưng sai một nửa.</p>
+        say: "Câu hai, không, hiệu chuẩn chỉ nói độ tự tin khớp với độ đúng. Mô hình nói tự tin 50 phần trăm và đúng 50 phần trăm vẫn hiệu chuẩn hoàn hảo, nhưng sai một nửa."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">mô hình sinh chuỗi xác suất cao</span><span class="a">→</span>
+          <span class="n">ảo giác: đúng khuôn, sai sự thật</span><span class="a">→</span>
+          <span class="n">đo hiệu chuẩn: tự tin có đúng mức?</span><span class="a">→</span>
+          <span class="n">biểu quyết: chỉ có ích khi trên 50% và ít tương quan</span></div>
+        say: "Tổng kết lại, mô hình sinh chuỗi có xác suất cao, nên ảo giác là câu đúng khuôn nhưng sai sự thật. Hãy đo hiệu chuẩn để biết độ tự tin có đúng mức không, và nhớ biểu quyết chỉ có ích khi mỗi lần đúng trên 50 phần trăm và ít tương quan."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> câu hỏi đúng không phải “mô hình có chắc không”, mà là “<b>khi</b> mô hình nói nó chắc, nó đúng bao nhiêu phần trăm”.</div>
+        say: "Điều cần mang theo, câu hỏi đúng không phải là mô hình có chắc không, mà là khi mô hình nói nó chắc thì nó đúng bao nhiêu phần trăm."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 12): <b>sinh có truy xuất</b> — chỉ mục, tìm kiếm, ghép ngữ cảnh.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 12, ta học sinh có truy xuất, với chỉ mục, tìm kiếm, và ghép ngữ cảnh. Hẹn gặp bạn ở bài tiếp theo."

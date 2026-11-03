@@ -1,0 +1,252 @@
+# ═══ BÀI TÌNH HUỐNG — sự cố kho lưu trữ đối tượng Amazon S3, vùng Bắc Virginia, 28/2/2017; case-lessons.md §1–§4 ═══
+id: L06
+course: CAS
+series: "CAS · Tình huống chuyên gia"
+title: "Bài 6 — Amazon S3 (2017): lệnh gỡ máy gõ sai và lần khởi động lại chưa từng tập"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/cas.yaml L06; audit/cas/sources_L06.md (câu trích nguyên văn, đọc 2026-11-02); audit/cas/verify_cas.py L06 (audit/cas/ver/L06.py); audit/verify_plan_curricula.py CAS:L06; AWS, Summary of the Amazon S3 Service Disruption in the Northern Virginia (US-EAST-1) Region, aws.amazon.com/message/41926/ (sự cố 28/2/2017) [S17]; SAR bài 6 (độ sẵn sàng, miền lỗi), CLD bài 5 (trạng thái mong muốn); CAS bài 0 (lớp phòng vệ, lỗi chủ động, điều kiện tiềm ẩn)"
+assumes: [arith, frac]
+# Quy ước: “kho” = Amazon S3 (tên S3 chỉ trên màn hình, lời đọc nói “kho lưu trữ đối tượng của Amazon”); “hệ con chỉ mục”, “hệ con cấp chỗ”
+#   như CLC bài 12 (index / placement subsystem). Giờ theo giờ Thái Bình Dương như bài tổng kết của AWS; 1:54 chiều viết 13:54.
+#   Mọi giờ là CITED [S17]; khoảng thời gian là VER. Hệ con 100 máy, mức tối thiểu 70, gỡ 4 hay 40, 5 máy mỗi 10 phút, 12 ô: SỐ MINH HOẠ
+#   (bài tổng kết không cho số máy). Không nêu tên, không gọi “người gõ sai”: nguồn viết “an authorized S3 team member”.
+objectives:
+  - "Đọc dòng thời gian khôi phục và tính thời lượng từng chặng"
+  - "Giải thích vì sao gỡ quá nhiều máy buộc hai hệ con khởi động lại toàn bộ, và vì sao lâu hơn dự kiến"
+  - "Đề xuất chặn công cụ không cho gỡ dưới mức dung lượng tối thiểu, và tính tác dụng của gỡ chậm"
+  - "Chọn kích thước ô để thu nhỏ phạm vi ảnh hưởng, kèm đánh đổi"
+asr_reviewed:
+  - {sentence: "Nên chia ô, đúng hướng Amazon đã ghi, và chỉ giữ một khối khi hệ còn nhỏ, việc khởi động lại toàn bộ đã được tập thường xuyên.", reason: "ASR chép “Nên Chiô, đúng hướng Amarron đã ghi và chỉ giữ một khối khi hệ còn nhỏ việc khởi động lại toàn bộ đã được tập thường xuyên.” (0.909): “ô” (ô lưới) ASR viết chữ “O”; lệch âm/thanh thuần Việt: chia (trong “chia ô” → “chiô”); “Amazon” đọc thô (probe CLC p1 8/8, đối chứng 5/8 — PARTIAL), ASR chép “Amarron” — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Một tham số nhập sai, bốn giờ mười bảy phút"
+    checks:
+      - "(13 * 60 + 54) - (9 * 60 + 37) == 4 * 60 + 17"
+    steps:
+      - show: |
+          <p>Sáng 28/2/2017, vùng Bắc Virginia của kho lưu trữ đối tượng <b>Amazon S3</b> (theo bài tổng kết của AWS):</p>
+          <table class="t"><tr><th>giờ Thái Bình Dương</th><th>điều đã xảy ra</th></tr>
+          <tr><td>9:37</td><td>một thành viên được phép của đội chạy lệnh theo <b>kịch bản vận hành</b> có sẵn, định gỡ <b>một số ít</b> máy; một tham số <b>nhập sai</b>, gỡ nhiều máy hơn dự định</td></tr>
+          <tr><td>sau đó</td><td>hai hệ con phải <b>khởi động lại toàn bộ</b>; trong lúc đó kho không phục vụ được yêu cầu nào</td></tr>
+          <tr><td>13:54</td><td>kho chạy bình thường trở lại: <b>4 giờ 17 phút</b></td></tr></table>
+        focus: [1, "2.2", "2.2", "2.3", "2.4"]
+        say: "Chào bạn, sáng ngày 28 tháng 2 năm 2017, kho lưu trữ đối tượng của Amazon ở một vùng phía đông nước Mỹ ngừng phục vụ. Lúc 9 giờ 37, một thành viên được phép của đội chạy một lệnh theo kịch bản vận hành có sẵn, định gỡ một số ít máy. Một tham số của lệnh bị nhập sai, nên nhiều máy hơn dự định bị gỡ. Hai hệ con phải khởi động lại toàn bộ, và trong lúc đó kho không phục vụ được yêu cầu nào. Tới 1 giờ 54 chiều, kho mới chạy bình thường, sau 4 giờ 17 phút."
+      - show: |
+          <div class="box key">Hôm nay: tính lại từng chặng khôi phục; tìm lớp phòng vệ đã thiếu ở <b>công cụ</b>, ở <b>thiết kế</b> và ở <b>trang báo tình trạng</b>; rồi tự thiết kế một công cụ gỡ máy an toàn.</div>
+        say: "Hôm nay ta tính lại từng chặng khôi phục, tìm lớp phòng vệ đã thiếu ở công cụ, ở thiết kế, và ở trang báo tình trạng dịch vụ. Cuối bài, bạn sẽ tự thiết kế một công cụ gỡ máy an toàn hơn."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại ba điều sẽ dùng"
+    checks:
+      - "1 + 12 == 13 and 12 + 0 == 12"
+      - "(13 * 60 + 54) - (9 * 60 + 37) == 257 and 257 == 4 * 60 + 17"
+      - "0.99 * 0.99 < 0.99 and round(0.01 * 0.01, 4) == 0.0001"
+    steps:
+      - show: |
+          <table class="t"><tr><th>điều cần nhớ</th><th>ví dụ số</th></tr>
+          <tr><td>giờ có “sáng / chiều” đổi sang 24 giờ: buổi chiều cộng 12 (trừ 12 giờ trưa)</td><td>1:54 chiều = 13:54; 12:26 trưa giữ nguyên 12:26</td></tr>
+          <tr><td>khoảng thời gian: đổi cả hai mốc ra phút, rồi trừ</td><td>13:54 là 834 phút, 9:37 là 577 phút: 834 − 577 = <b>257 phút</b> = 4 giờ 17 phút</td></tr>
+          <tr><td>ở khoá Kiến trúc hệ thống: dự phòng chỉ giúp khi các bản sao <b>không chung miền lỗi</b></td><td>hai máy, mỗi máy hỏng 1%, độc lập thì cùng hỏng 0,01%; cắm chung một tủ điện thì tủ hỏng là cả hai cùng tắt</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.3", "1.4", "1.4"]
+        say: "Trước hết, ôn ba điều sẽ dùng. Giờ có sáng và chiều đổi sang cách đếm 24 giờ bằng cách cộng 12 cho buổi chiều, nên 1 giờ 54 chiều là 13 giờ 54, còn 12 giờ 26 trưa giữ nguyên. Muốn tính khoảng thời gian, ta đổi cả hai mốc ra phút kể từ nửa đêm rồi trừ. 13 giờ 54 là 834 phút, 9 giờ 37 là 577 phút, hiệu là 257 phút, tức 4 giờ 17 phút. Ở khoá Kiến trúc hệ thống, ta đã thấy dự phòng chỉ giúp khi các bản sao không chung miền lỗi. Hai máy độc lập, mỗi máy hỏng 1 phần trăm, cùng hỏng chỉ 0 phẩy 01 phần trăm, nhưng cắm chung một tủ điện thì tủ hỏng là cả hai cùng tắt."
+
+  # ───────────────────────── 3. NGÔN NGỮ ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Ngôn ngữ của bài tổng kết"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thuật ngữ</th><th>nghĩa trong sự cố này</th></tr>
+          <tr><td><b>hệ con chỉ mục</b></td><td>giữ siêu dữ liệu và <b>vị trí</b> của mọi đối tượng trong vùng; cần cho mọi yêu cầu đọc, liệt kê, ghi, xoá</td></tr>
+          <tr><td><b>hệ con cấp chỗ</b></td><td>cấp chỗ lưu cho đối tượng <b>mới</b> khi ghi; chỉ chạy đúng khi hệ con chỉ mục chạy</td></tr>
+          <tr><td><b>kịch bản vận hành</b></td><td>các bước đã viết sẵn cho một thao tác thường làm, như gỡ máy</td></tr>
+          <tr><td><b>mức dung lượng tối thiểu</b></td><td>số máy ít nhất mà một hệ con cần để còn phục vụ được</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bảng đầu có bốn thuật ngữ. Hệ con chỉ mục giữ siêu dữ liệu và vị trí của mọi đối tượng trong vùng, và cần cho mọi yêu cầu đọc, liệt kê, ghi hay xoá. Hệ con cấp chỗ cấp chỗ lưu cho đối tượng mới khi ghi, và chỉ chạy đúng khi hệ con chỉ mục đang chạy. Kịch bản vận hành là các bước đã viết sẵn cho một thao tác thường làm, như gỡ máy. Mức dung lượng tối thiểu là số máy ít nhất mà một hệ con cần để còn phục vụ được."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>thuật ngữ</th><th>nghĩa</th></tr>
+          <tr><td><b>khởi động lại toàn bộ</b></td><td>dừng và dựng lại cả hệ con, kèm kiểm tính toàn vẹn của siêu dữ liệu — khác thay vài máy hỏng</td></tr>
+          <tr><td><b>ô</b></td><td>một phần nhỏ, độc lập của dịch vụ; hỏng một ô chỉ ảnh hưởng phần của ô đó</td></tr>
+          <tr><td><b>phụ thuộc vòng</b></td><td>công cụ dùng để báo hay sửa sự cố lại cần chính hệ thống đang hỏng</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Bảng thứ hai có thêm ba thuật ngữ. Khởi động lại toàn bộ là dừng và dựng lại cả hệ con, kèm kiểm tính toàn vẹn của siêu dữ liệu, rất khác việc thay vài máy hỏng. Ô là một phần nhỏ và độc lập của dịch vụ, hỏng một ô chỉ ảnh hưởng phần của ô đó. Phụ thuộc vòng là khi công cụ dùng để báo hay sửa sự cố lại cần chính hệ thống đang hỏng."
+
+  # ───────────────────────── 4. HÌNH CƠ CHẾ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hỏng lan theo mũi tên phụ thuộc"
+    steps:
+      - show: |
+          <div><svg width="1680" height="430" viewBox="0 0 1680 430">
+          <defs><marker id="a6" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="16" refX="14" refY="8" orient="auto"><path d="M0,0 L16,8 L0,16 z" fill="#374151"/></marker>
+          <marker id="r6" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="16" refX="14" refY="8" orient="auto"><path d="M0,0 L16,8 L0,16 z" fill="#e11d48"/></marker></defs>
+          <g font-size="23" fill="#1f2937" text-anchor="middle">
+          <rect x="20" y="40" width="300" height="80" rx="10" fill="#e0ecfb" stroke="#2a78d6" stroke-width="2"/>
+          <text x="170" y="75">lệnh gỡ một số ít máy</text><text x="170" y="105" fill="#6b7280" font-size="20">của hệ con thanh toán</text>
+          <rect x="460" y="40" width="300" height="80" rx="10" fill="#fde2e2" stroke="#e11d48" stroke-width="3"/>
+          <text x="610" y="75">hệ con chỉ mục</text><text x="610" y="105" fill="#6b7280" font-size="20">vị trí mọi đối tượng</text>
+          <rect x="460" y="250" width="300" height="80" rx="10" fill="#fde2e2" stroke="#e11d48" stroke-width="3"/>
+          <text x="610" y="285">hệ con cấp chỗ</text><text x="610" y="315" fill="#6b7280" font-size="20">chỗ cho đối tượng mới</text>
+          <line x1="320" y1="80" x2="452" y2="80" stroke="#e11d48" stroke-width="4" marker-end="url(#r6)"/>
+          <line x1="320" y1="110" x2="456" y2="262" stroke="#e11d48" stroke-width="4" marker-end="url(#r6)"/>
+          <text x="300" y="215" fill="#e11d48" font-size="20">gỡ nhầm máy</text>
+          <line x1="610" y1="250" x2="610" y2="128" stroke="#374151" stroke-width="3" marker-end="url(#a6)"/>
+          <text x="700" y="195" font-size="20" fill="#374151">cần</text>
+          <rect x="960" y="30" width="330" height="70" rx="10" fill="#fff7ed" stroke="#b45309" stroke-width="2"/><text x="1125" y="72">đọc, liệt kê, xoá</text>
+          <rect x="960" y="250" width="330" height="70" rx="10" fill="#fff7ed" stroke="#b45309" stroke-width="2"/><text x="1125" y="292">ghi đối tượng mới</text>
+          <rect x="960" y="140" width="330" height="70" rx="10" fill="#fff7ed" stroke="#b45309" stroke-width="2"/><text x="1125" y="182">dịch vụ khác dựa vào kho</text>
+          <rect x="1360" y="140" width="300" height="70" rx="10" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="1510" y="182">trang báo tình trạng</text>
+          <line x1="768" y1="72" x2="952" y2="66" stroke="#374151" stroke-width="3" marker-end="url(#a6)"/>
+          <line x1="768" y1="290" x2="952" y2="286" stroke="#374151" stroke-width="3" marker-end="url(#a6)"/>
+          <line x1="768" y1="100" x2="952" y2="170" stroke="#374151" stroke-width="3" marker-end="url(#a6)"/>
+          <line x1="1290" y1="175" x2="1352" y2="175" stroke="#374151" stroke-width="3" marker-end="url(#a6)"/>
+          <text x="840" y="400" fill="#6b7280" font-size="21">mũi tên: hộp bên phải cần hộp bên trái chạy được</text>
+          </g></svg></div>
+        focus: [1, 1, 1, 1, 1]
+        say: "Hình vẽ đường lan của sự cố theo các mũi tên phụ thuộc. Lệnh định gỡ vài máy của hệ con thanh toán, nhưng những máy bị gỡ nhầm lại phục vụ hai hệ con khác, chỉ mục và cấp chỗ. Hệ con cấp chỗ cần hệ con chỉ mục, nên cả hai cùng phải khởi động lại toàn bộ. Mọi yêu cầu đọc, liệt kê, xoá và ghi đều dừng, kéo theo các dịch vụ khác dựa vào kho, như khởi tạo máy ảo mới. Cuối cùng, cả trang báo tình trạng dịch vụ cũng phụ thuộc chính kho này."
+
+  # ───────────────────────── 5. VÍ DỤ: DÒNG THỜI GIAN KHÔI PHỤC ─────────────────────────
+  - id: example
+    kind: example
+    title: "Tính lại từng chặng khôi phục"
+    checks:
+      - "(12 * 60 + 26) - (9 * 60 + 37) == 169 and 169 == 2 * 60 + 49"
+      - "(13 * 60 + 18) - (9 * 60 + 37) == 221 and 221 == 3 * 60 + 41"
+      - "(13 * 60 + 54) - (9 * 60 + 37) == 257 and (13 * 60 + 54) - (13 * 60 + 18) == 36"
+      - "(11 * 60 + 37) - (9 * 60 + 37) == 120"
+    steps:
+      - show: |
+          <table class="t"><tr><th>giờ</th><th>bài tổng kết ghi</th></tr>
+          <tr><td>9:37</td><td>lệnh gỡ máy chạy; kho ngừng phục vụ</td></tr>
+          <tr><td>11:37</td><td>tới lúc này mới cập nhật được từng dịch vụ trên trang báo tình trạng</td></tr>
+          <tr><td>12:26</td><td>hệ con chỉ mục đủ sức để <b>bắt đầu</b> phục vụ đọc, liệt kê, xoá</td></tr>
+          <tr><td>13:18</td><td>hệ con chỉ mục khôi phục <b>đầy đủ</b></td></tr>
+          <tr><td>13:54</td><td>hệ con cấp chỗ — bắt đầu khôi phục khi chỉ mục chạy được — <b>xong</b>; ghi chạy lại, kho bình thường</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", "1.5", "1.6"]
+        say: "Đây là dòng thời gian theo bài tổng kết, giờ Thái Bình Dương. Lúc 9 giờ 37, lệnh gỡ máy chạy và kho ngừng phục vụ. Phải tới 11 giờ 37 mới cập nhật được từng dịch vụ trên trang báo tình trạng. Lúc 12 giờ 26, hệ con chỉ mục đủ sức để bắt đầu phục vụ đọc, liệt kê và xoá. Lúc 1 giờ 18 chiều, chỉ mục khôi phục đầy đủ. Hệ con cấp chỗ chỉ bắt đầu khôi phục khi chỉ mục đã chạy được, và xong lúc 1 giờ 54 chiều, khi đó việc ghi chạy lại và kho bình thường."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>phép tính (đổi ra phút từ nửa đêm)</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. tới khi đọc bắt đầu chạy lại</td><td>746 − 577</td><td>$\hl{169}$ phút = 2 giờ 49 phút</td></tr>
+          <tr><td>Bước 2. tới khi chỉ mục đầy đủ</td><td>798 − 577</td><td>$\hl{221}$ phút = 3 giờ 41 phút</td></tr>
+          <tr><td>Bước 3. tới khi ghi chạy lại</td><td>834 − 577</td><td>$\hlg{257}$ phút = 4 giờ 17 phút</td></tr>
+          <tr><td>Bước 4. ghi chờ thêm sau khi chỉ mục đầy đủ</td><td>834 − 798</td><td>$\hl{36}$ phút — vì cấp chỗ cần chỉ mục</td></tr>
+          <tr><td>Bước 5. trang tình trạng không cập nhật được</td><td>697 − 577</td><td>$\hl{120}$ phút</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", "1.6"]
+        say: "Ta tính lại từng chặng, đổi mọi mốc ra phút kể từ nửa đêm. Bước một, 12 giờ 26 là phút 746, trừ 577 được 169 phút, tức 2 giờ 49 phút mới đọc lại được. Bước hai, chỉ mục đầy đủ ở phút 798, sau 221 phút, tức 3 giờ 41 phút. Bước ba, ghi chạy lại ở phút 834, sau 257 phút, đúng 4 giờ 17 phút. Bước bốn, ghi còn chờ thêm 36 phút sau khi chỉ mục đầy đủ, vì hệ con cấp chỗ cần chỉ mục mới khôi phục được. Bước năm, trang báo tình trạng không cập nhật được trong 120 phút đầu."
+      - clear: true
+        show: |
+          <p>Vì sao lâu hơn dự kiến? Bài tổng kết ghi ba điều:</p>
+          <table class="t"><tr><th>điều kiện</th><th>bài tổng kết ghi</th></tr>
+          <tr><td>thiết kế</td><td>các hệ con được thiết kế để chịu mất hay gỡ <b>nhiều</b> dung lượng mà khách hàng gần như không thấy</td></tr>
+          <tr><td>chưa từng tập</td><td>ở các vùng lớn, hai hệ con <b>nhiều năm</b> chưa khởi động lại toàn bộ</td></tr>
+          <tr><td>quy mô</td><td>kho tăng trưởng rất mạnh vài năm qua; khởi động lại và kiểm toàn vẹn siêu dữ liệu <b>lâu hơn dự kiến</b></td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Vì sao khôi phục lâu hơn dự kiến, bài tổng kết ghi ba điều. Về thiết kế, các hệ con được làm để chịu mất hay gỡ nhiều dung lượng mà khách hàng gần như không thấy. Nhưng ở các vùng lớn, hai hệ con đã nhiều năm chưa khởi động lại toàn bộ. Trong lúc đó kho tăng trưởng rất mạnh, nên khởi động lại và kiểm toàn vẹn siêu dữ liệu mất lâu hơn mọi người dự kiến."
+      - clear: true
+        show: |
+          <p>Tái hiện lớp phòng vệ mới bằng số (số minh hoạ): hệ con có 100 máy, cần tối thiểu 70; kịch bản định gỡ 4, tham số sai thành 40.</p>
+          <table class="t"><tr><th>bước</th><th>vì sao</th><th>kết quả</th></tr>
+          <tr><td>Bước 6. công cụ cũ</td><td>làm đúng lệnh: còn 100 − 40</td><td>$\hl{60}$ máy, dưới 70: hệ con sập</td></tr>
+          <tr><td>Bước 7. thêm chặn mức tối thiểu</td><td>chỉ cho gỡ khi còn ít nhất 70: tối đa 100 − 70</td><td>gỡ được tối đa $\hlb{30}$; lệnh 40 bị từ chối</td></tr>
+          <tr><td>Bước 8. thêm gỡ chậm: 5 máy mỗi 10 phút</td><td>lệnh đúng 4 máy: 1 lượt; lệnh 30 máy: 30 chia 5 = 6 lượt</td><td>4 máy xong trong 10 phút; 30 máy mất $\hlg{60}$ phút — đủ lâu để cảnh báo kịp kêu</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", "2.4"]
+        say: "Giờ ta tái hiện lớp phòng vệ mới bằng số minh hoạ, hệ con có 100 máy và cần tối thiểu 70, kịch bản định gỡ 4 nhưng tham số sai thành 40. Bước sáu, công cụ cũ làm đúng lệnh, còn 60 máy, dưới mức 70, nên hệ con sập. Bước bảy, thêm phép chặn mức tối thiểu, chỉ cho gỡ khi còn ít nhất 70 máy, tức tối đa 30, và lệnh 40 bị từ chối. Bước tám, thêm gỡ chậm, 5 máy mỗi 10 phút, thì lệnh đúng 4 máy vẫn xong trong một lượt. Một lệnh 30 máy phải đi 6 lượt, mất 60 phút, đủ lâu để cảnh báo kịp kêu."
+
+  # ───────────────────────── 6. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Kiểm bằng đường khác: cộng dồn, liệt kê mọi lệnh"
+    checks:
+      - "(60 - 37) + 3 * 60 + 54 == 257 and (60 - 37) + 2 * 60 + 26 == 169"
+      - "sum(1 for k in range(101) if 100 - k >= 70) == 31 and max(k for k in range(101) if 100 - k >= 70) == 30"
+      - "-(-30 // 5) * 10 == 60 and -(-4 // 5) * 10 == 10"
+    steps:
+      - show: |
+          <table class="t"><tr><th>con số</th><th>đường khác để kiểm</th></tr>
+          <tr><td>257 phút</td><td>cộng dồn: 9:37 → 10:00 là 23 phút, thêm 3 giờ tới 13:00, thêm 54 phút: 23 + 180 + 54 = 257 ✓</td></tr>
+          <tr><td>169 phút</td><td>cộng dồn: 23 + 2 giờ + 26 = 23 + 120 + 26 = 169 ✓</td></tr>
+          <tr><td>tối đa 30 máy</td><td>thử hết mọi lệnh gỡ từ 0 tới 100 máy: đúng 31 lệnh được chấp nhận, là 0, 1, … 30 ✓</td></tr>
+          <tr><td>60 phút</td><td>đếm lượt: lượt 1 xong 5, lượt 2 xong 10, … lượt 6 xong 30 — 6 lượt nhân 10 phút ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Ta kiểm lại bằng đường khác. Cộng dồn, 9 giờ 37 tới 10 giờ là 23 phút, thêm 3 giờ tới 13 giờ, thêm 54 phút, nên tổng là 257 phút. Cũng cộng dồn như vậy, 23 cộng 120 cộng 26 ra 169 phút. Với phép chặn, ta thử hết mọi lệnh gỡ từ 0 tới 100 máy, và đúng 31 lệnh được chấp nhận, là từ 0 tới 30. Với gỡ chậm, ta đếm lượt, vì mỗi lượt 5 máy nên lượt sáu xong 30 máy, tức 6 lượt nhân 10 phút."
+
+  # ───────────────────────── 7. BÀI HỌC SAI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "Những bài học sai hay gặp"
+    checks:
+      - "(11 * 60 + 37) - (9 * 60 + 37) == 120"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">1.</b> “Lỗi gõ phím của một người”</td><td>người đó được phép, theo kịch bản có sẵn; ai gõ sai tham số cũng gây đúng hậu quả này</td><td>như bài 0: gõ sai là lỗi chủ động, công cụ cho gỡ quá nhiều quá nhanh là điều kiện tiềm ẩn</td></tr>
+          <tr><td><b class="red">2.</b> “Dặn đọc lại tham số hai lần”</td><td>dặn dò là đập muỗi</td><td>AWS sửa <b>công cụ</b>: gỡ chậm hơn, chặn dưới mức tối thiểu, rà mọi công cụ vận hành khác</td></tr>
+          <tr><td><b class="red">3.</b> “Hệ chịu được mất máy, nên an toàn”</td><td>chịu mất máy khác với <b>khởi động lại toàn bộ</b> — việc nhiều năm chưa làm ở quy mô thật</td><td>diễn tập khôi phục ở quy mô thật; chia nhỏ thành ô để khôi phục từng phần</td></tr></table>
+        focus: ["1.2", "1.2", "1.2", "1.3", "1.3", "1.4", "1.4"]
+        say: "Bài học sai thứ nhất là kết luận đây là lỗi gõ phím của một người. Người đó được phép và làm theo kịch bản có sẵn, ai gõ sai tham số cũng gây đúng hậu quả này. Như ở bài 0, gõ sai là lỗi chủ động, còn công cụ cho gỡ quá nhiều quá nhanh là điều kiện tiềm ẩn. Bài học sai thứ hai là dặn mọi người đọc lại tham số hai lần, đó chỉ là đập muỗi. Amazon đã sửa chính công cụ, cho gỡ chậm hơn, chặn khi xuống dưới mức tối thiểu, và rà mọi công cụ vận hành khác. Bài học sai thứ ba là nghĩ hệ chịu được mất máy nên an toàn. Chịu mất máy khác hẳn khởi động lại toàn bộ, việc đã nhiều năm chưa làm ở quy mô thật."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">4.</b> “Trang báo tình trạng đặt cạnh dịch vụ cho tiện” (người đã đi làm)</td><td>phụ thuộc vòng: trang cần chính kho đang hỏng, nên <b>120 phút</b> đầu không cập nhật được từng dịch vụ</td><td>như AWS đã sửa: chạy phần quản trị của trang trên <b>nhiều vùng</b>; công cụ chữa cháy không được dựa vào thứ đang cháy</td></tr></table>
+        focus: ["1.2", "1.2", "1.2"]
+        say: "Bài học sai thứ tư hay gặp ở người đã đi làm, đặt trang báo tình trạng ngay cạnh dịch vụ cho tiện. Đó là phụ thuộc vòng, trang cần chính kho đang hỏng, nên suốt 120 phút đầu không cập nhật được từng dịch vụ, và đội phải báo tin qua mạng xã hội. Cách Amazon đã sửa là chạy phần quản trị của trang trên nhiều vùng, vì công cụ chữa cháy không được dựa vào thứ đang cháy."
+
+  # ───────────────────────── 8. BẠN SẼ LÀM GÌ ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Bạn sẽ làm gì?"
+    checks:
+      - "200 - 60 < 150 and 200 - 150 == 50"
+      - "round(1 / 12 * 100, 1) == 8.3 and round(1 / 1 * 100) == 100"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>tình huống (số minh hoạ)</th></tr>
+          <tr><td>1</td><td>Bạn viết công cụ gỡ máy cho một cụm <b>200</b> máy, cần tối thiểu <b>150</b>. Một lệnh yêu cầu gỡ <b>60</b>. Công cụ nên từ chối cả lệnh, hay gỡ phần được phép?</td></tr>
+          <tr><td>2</td><td>Hệ con chỉ mục đang là <b>một khối</b>. Có nên chia thành <b>12 ô</b> độc lập không? Một lỗi làm sập một ô thì bao nhiêu phần trăm đối tượng bị ảnh hưởng?</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn ra quyết định, với số minh hoạ. Câu một, bạn viết công cụ gỡ máy cho một cụm 200 máy, cần tối thiểu 150, và một lệnh yêu cầu gỡ 60, vậy công cụ nên từ chối cả lệnh hay gỡ phần được phép? Câu hai, hệ con chỉ mục đang là một khối, có nên chia thành 12 ô độc lập không, và một lỗi làm sập một ô thì bao nhiêu phần trăm đối tượng bị ảnh hưởng? Dừng video và viết ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 1: lựa chọn</th><th>được</th><th>mất</th></tr>
+          <tr><td>gỡ phần được phép: 200 − 150 = 50 máy</td><td>người vận hành có ngay một phần việc</td><td>nếu 60 là con số <b>gõ sai</b>, công cụ vẫn làm một việc không ai định</td></tr>
+          <tr><td><b>từ chối cả lệnh</b>, báo rõ “tối đa 50”</td><td>tham số sai bị chặn trọn; người gõ phải nhìn lại con số</td><td>mất thêm một lần gõ lệnh khi con số là đúng</td></tr></table>
+          <p class="note">Chọn từ chối cả lệnh. Điều kiện đổi: chỉ tự gỡ phần được phép khi lệnh đến từ một hệ tự động đã kiểm, không phải từ người gõ tay.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Đáp án câu một là một đánh đổi. Gỡ phần được phép, 200 trừ 150 là 50 máy, cho người vận hành ngay một phần việc, nhưng nếu 60 là con số gõ sai thì công cụ vẫn làm một việc không ai định. Từ chối cả lệnh và báo rõ tối đa 50 thì chặn trọn tham số sai, đổi lại mất thêm một lần gõ khi con số là đúng. Vậy nên chọn từ chối cả lệnh, và chỉ tự gỡ phần được phép khi lệnh đến từ một hệ tự động đã kiểm."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 2: lựa chọn</th><th>một lỗi làm sập một phần</th><th>đánh đổi</th></tr>
+          <tr><td>một khối</td><td>$\hl{100\%}$ đối tượng bị ảnh hưởng; khởi động lại cả khối khổng lồ</td><td>đơn giản, ít thành phần</td></tr>
+          <tr><td>12 ô độc lập</td><td>1 chia 12 ≈ $\hlg{8{,}3\%}$; mỗi ô nhỏ nên thử khôi phục được thường xuyên</td><td>thêm tầng định tuyến tới đúng ô; nhiều thứ phải theo dõi hơn</td></tr></table>
+          <p class="note">Chia ô — đúng hướng AWS đã ghi: chia nhỏ để giảm phạm vi ảnh hưởng và thử kỹ việc khôi phục. Điều kiện đổi: hệ còn nhỏ, khởi động lại toàn bộ đã tập được thường xuyên.</p>
+        focus: [1, "1.2", "1.3", "1.3", 2]
+        say: "Đáp án câu hai cũng là một đánh đổi. Một khối thì một lỗi ảnh hưởng 100 phần trăm đối tượng và phải khởi động lại cả khối khổng lồ, đổi lại đơn giản và ít thành phần. Chia 12 ô thì một ô sập chỉ ảnh hưởng 1 phần 12, khoảng 8 phẩy 3 phần trăm, và mỗi ô đủ nhỏ để thử khôi phục thường xuyên. Đổi lại cần thêm tầng định tuyến và nhiều thứ phải theo dõi hơn. Nên chia ô, đúng hướng Amazon đã ghi, và chỉ giữ một khối khi hệ còn nhỏ, việc khởi động lại toàn bộ đã được tập thường xuyên."
+
+  # ───────────────────────── 9. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Thay đổi hệ thống & tư duy chuyên gia"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">tham số nhập sai: gỡ quá nhiều máy</span><span class="a">→</span>
+          <span class="n">hai hệ con khởi động lại toàn bộ, nhiều năm chưa tập</span><span class="a">→</span>
+          <span class="n">4 giờ 17 phút; trang tình trạng phụ thuộc vòng</span><span class="a">→</span>
+          <span class="n">công cụ chặn mức tối thiểu, gỡ chậm, chia ô, trang chạy nhiều vùng</span></div>
+        say: "Tổng kết lại, một tham số nhập sai làm gỡ quá nhiều máy, buộc hai hệ con khởi động lại toàn bộ, việc nhiều năm chưa tập. Kết quả là 4 giờ 17 phút ngừng, trong khi trang báo tình trạng bị phụ thuộc vòng. Thay đổi ở mức hệ thống là công cụ chặn mức tối thiểu và gỡ chậm, chia ô, và trang tình trạng chạy trên nhiều vùng."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> một thao tác chưa từng tập ở quy mô thật thì thời gian khôi phục là <b>ẩn số</b>. Diễn tập khôi phục là một phần của thiết kế, và công cụ phải từ chối những lệnh mà không ai nên chạy.</div>
+        say: "Điều cần mang theo, một thao tác chưa từng tập ở quy mô thật thì thời gian khôi phục là một ẩn số. Diễn tập khôi phục là một phần của thiết kế, và công cụ phải biết từ chối những lệnh mà không ai nên chạy."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 7): Cloudflare, 2019 — một biểu thức chính quy quay lui làm cạn bộ xử lý trên toàn mạng, và vì sao một quy tắc lại đi ra cả thế giới trong vài giây.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 7, ta đọc bài hậu kiểm năm 2019 của một mạng phân phối nội dung. Ở đó, một biểu thức chính quy, tức một mẫu tìm chuỗi, quay lui quá nhiều và làm cạn bộ xử lý trên toàn mạng. Hẹn gặp bạn ở bài tiếp theo."

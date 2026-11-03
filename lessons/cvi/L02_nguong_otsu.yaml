@@ -1,0 +1,314 @@
+id: L02
+course: CVI
+series: "CVI · Thị giác máy tính"
+title: "Bài 2 — Biểu đồ tần suất, cân bằng và ngưỡng Otsu"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/cvi.yaml L02; audit/cvi/verify_cvi.py L02; audit/cvi/sources_L02.md; N. Otsu, A Threshold Selection Method from Gray-Level Histograms, IEEE Trans. Systems, Man, and Cybernetics 9(1), 62–66 (1979) — siêu dữ liệu Crossref, chưa đọc toàn văn; [OCVT] OpenCV 4.x, hướng dẫn Image Thresholding (ngưỡng thích nghi, Otsu: cực tiểu phương sai trong lớp có trọng số); CS115 bài 13 (trung bình, phương sai)"
+assumes: [arith, cdot, frac, approx, power, sub]
+# Quy ước: biểu đồ tần suất h(v) = số điểm ảnh có giá trị v. Ngưỡng t: lớp 0 (tối) gồm giá trị ≤ t, lớp 1 (sáng) gồm giá trị > t.
+#   w_0, w_1 = tỉ lệ điểm ảnh của mỗi lớp; mu_0, mu_1 = trung bình mỗi lớp; phương sai giữa lớp sigma_B bình phương = w_0·w_1·(mu_0 − mu_1)²
+#   (alg.cvi_otsu vét mọi ngưỡng). Phương sai trong lớp sigma_W bình phương = w_0·sigma_0² + w_1·sigma_1²; tổng hai phần = phương sai cả ảnh.
+#   Cân bằng: mức v → làm tròn((L − 1) · tỉ lệ tích lũy tới v) (alg.cvi_equalize), L = số mức. Mọi điểm ảnh, ảnh hoá đơn là SỐ MINH HOẠ.
+#   Tên Otsu chỉ trên màn hình (probe p1: 0/8, lexicon_vi.CVI.yaml); lời đọc nói “phương pháp chọn ngưỡng tự động”.
+objectives:
+  - "Lập biểu đồ tần suất và đọc ra hai đỉnh tối, sáng"
+  - "Vét mọi ngưỡng và chọn ngưỡng làm phương sai giữa hai lớp lớn nhất"
+  - "Cân bằng biểu đồ của một ảnh nhỏ bằng tỉ lệ tích lũy"
+  - "Nhận ra khi ánh sáng không đều hoặc biểu đồ một đỉnh thì một ngưỡng toàn cục thất bại"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Chụp hoá đơn có bóng tay: một ngưỡng làm đen cả nửa tờ"
+    checks:
+      - "alg.cvi_otsu([200, 200, 200, 120, 110, 110, 110, 30])[0] == 120"
+    steps:
+      - show: |
+          <p>Ứng dụng quét giấy tờ phải tách <b>chữ</b> (tối) khỏi <b>giấy</b> (sáng). Ảnh chụp tờ hoá đơn có bóng tay ở nửa dưới: giấy trong bóng chỉ còn sáng 110, tối hơn cả chữ ở nửa trên (120).</p>
+          <p>Một ngưỡng cho cả ảnh xếp giấy trong bóng vào nhóm “chữ” — nửa dưới đen kịt.</p>
+          <div class="box key">Hôm nay: máy tự chọn ngưỡng thế nào? Vì sao “tách hai nhóm xa nhau nhất” cho ra một công thức? Và khi nào một ngưỡng cho cả ảnh là không đủ?</div>
+        focus: [1, 1, 2, 3]
+        say: "Chào bạn, một ứng dụng quét giấy tờ phải tách chữ màu tối khỏi giấy màu sáng. Ảnh chụp tờ hoá đơn có bóng tay ở nửa dưới, giấy trong bóng chỉ còn sáng 110, tối hơn cả chữ ở nửa trên là 120. Một ngưỡng cho cả ảnh sẽ xếp giấy trong bóng vào nhóm chữ, nên nửa dưới đen kịt. Hôm nay ta hỏi, máy tự chọn ngưỡng thế nào, vì sao tách hai nhóm xa nhau nhất lại cho ra một công thức, và khi nào một ngưỡng cho cả ảnh là không đủ."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại ba điều sẽ dùng"
+    checks:
+      - "round(sum([10, 10, 12]) / 3, 3) == 10.667"
+      - "round(sum((x - 32 / 3) ** 2 for x in [10, 10, 12]) / 3, 3) == 0.889"
+      - "2 / 6 == 1 / 3 and [sum([2, 4, 1][:i + 1]) for i in range(3)] == [2, 6, 7]"
+    steps:
+      - show: |
+          <p><b>① Trung bình</b> (khoá Toán cho khoa học máy tính, phần xác suất): cộng lại rồi chia số phần tử. Nhóm 10, 10, 12: $\frac{10 + 10 + 12}{3} = \frac{32}{3} \approx 10{,}667$.</p>
+        focus: [1, 1]
+        say: "Điều thứ nhất là trung bình, như ở khoá Toán cho khoa học máy tính, phần xác suất, ta cộng lại rồi chia cho số phần tử. Nhóm 10, 10, 12 có trung bình 32 chia 3, xấp xỉ 10 phẩy 667."
+      - show: |
+          <p><b>② Phương sai:</b> trung bình của bình phương độ lệch so với trung bình — đo nhóm “toả rộng” bao nhiêu.</p>
+          $$\frac{(10 - 10{,}667)^2 + (10 - 10{,}667)^2 + (12 - 10{,}667)^2}{3} \approx \frac{0{,}444 + 0{,}444 + 1{,}778}{3} \approx 0{,}889$$
+        focus: [1, 2]
+        say: "Điều thứ hai là phương sai, tức trung bình của bình phương độ lệch so với trung bình, đo xem nhóm toả rộng bao nhiêu. Với nhóm 10, 10, 12, ba bình phương độ lệch là 0 phẩy 444, 0 phẩy 444 và 1 phẩy 778, chia 3 được xấp xỉ 0 phẩy 889, một nhóm rất chụm."
+      - show: |
+          <p><b>③ Tỉ lệ và tổng tích lũy:</b> 2 trong 6 điểm là tỉ lệ $\frac{2}{6} = \frac{1}{3}$. Dãy đếm 2, 4, 1 có tổng tích lũy (cộng dồn từ đầu) là 2, 6, 7.</p>
+        focus: [1, 1]
+        say: "Điều thứ ba là tỉ lệ và tổng tích lũy. Hai trong sáu điểm là tỉ lệ một phần ba, còn dãy đếm 2, 4, 1 có tổng tích lũy, tức cộng dồn từ đầu, là 2, 6 và 7."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: h(v), t, w, mu và hai loại phương sai"
+    checks:
+      - "alg.cvi_hist([10, 10, 12, 50, 52, 55], 60)[10] == 2 and alg.cvi_hist([10, 10, 12, 50, 52, 55], 60)[12] == 1"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ký hiệu</th><th>nghĩa</th><th>ví dụ: 10, 10, 12, 50, 52, 55</th></tr>
+          <tr><td>$h(v)$</td><td>biểu đồ tần suất: số điểm ảnh có giá trị $v$</td><td>$h(10) = 2$, $h(12) = 1$</td></tr>
+          <tr><td>$t$</td><td>ngưỡng: lớp 0 gồm giá trị $\le t$, lớp 1 gồm giá trị $\gt t$</td><td>$t = 12$: lớp 0 là 10, 10, 12</td></tr>
+          <tr><td>$w_0,\ w_1$</td><td>tỉ lệ điểm ảnh của lớp 0, lớp 1</td><td>$\frac{3}{6}$ và $\frac{3}{6}$</td></tr>
+          <tr><td>$\mu_0,\ \mu_1$</td><td>trung bình của mỗi lớp (chữ Hy Lạp mu)</td><td>$10{,}667$ và $52{,}333$</td></tr></table>
+        introduces: [geq, ltgt, mu]
+        focus: [0, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bảng giới thiệu bốn ký hiệu. h của v là biểu đồ tần suất, số điểm ảnh có giá trị v, ví dụ h của 10 bằng 2. Chữ t là ngưỡng, lớp 0 gồm các giá trị nhỏ hơn hoặc bằng t, lớp 1 gồm các giá trị lớn hơn t. Chữ w với chỉ số dưới 0 và 1 là tỉ lệ điểm ảnh của mỗi lớp. Chữ Hy Lạp mu với chỉ số dưới là trung bình của mỗi lớp."
+      - clear: true
+        show: |
+          <p>$\sigma_B^2$ (đọc: xích ma B bình phương) — <b>phương sai giữa hai lớp</b>: hai trung bình cách xa nhau bao nhiêu, có tính cỡ mỗi lớp.</p>
+          <p>$\sigma_W^2$ — <b>phương sai trong lớp</b>: mỗi lớp tự toả rộng bao nhiêu, cộng theo tỉ lệ $w_0, w_1$. Chỉ số B, W lấy từ chữ đầu tiếng Anh của “giữa” và “trong”.</p>
+        introduces: [sigma]
+        focus: [1, 2, 2]
+        say: "Chữ Hy Lạp xích ma với chỉ số dưới B và mũ hai là phương sai giữa hai lớp, đo hai trung bình cách xa nhau bao nhiêu, có tính cỡ của mỗi lớp. Xích ma với chỉ số dưới W và mũ hai là phương sai trong lớp, đo mỗi lớp tự toả rộng bao nhiêu, cộng theo tỉ lệ w. Hai chỉ số B và W lấy từ chữ đầu của hai từ tiếng Anh nghĩa là giữa và trong."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Biểu đồ hai đỉnh: đặt ngưỡng ở khe giữa"
+    checks:
+      - "[round(100 + v * 22) for v in (10, 12, 50, 52, 55)] == [320, 364, 1200, 1244, 1310] and round(100 + 32 / 3 * 22) == 335 and round(100 + 157 / 3 * 22) == 1251"
+      - "round(157 / 3 - 32 / 3, 1) == 41.7"
+    steps:
+      - show: |
+          <div><svg width="1500" height="450" viewBox="0 0 1500 450">
+          <defs><marker id="cv2a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs>
+          <rect x="260" y="95" width="522" height="205" fill="#dbeafe"/><rect x="782" y="95" width="588" height="205" fill="#ffedd5"/>
+          <g font-size="22" fill="#1f2937" text-anchor="middle"><text x="521" y="80">lớp 0: tối (≤ 12)</text><text x="1076" y="80">lớp 1: sáng (lớn hơn 12)</text></g>
+          <line x1="250" y1="300" x2="1380" y2="300" stroke="#1f2937" stroke-width="2"/>
+          <g fill="#2a78d6" stroke="#1f2937" stroke-width="1"><rect x="305" y="160" width="30" height="140"/><rect x="349" y="230" width="30" height="70"/></g>
+          <g fill="#eb6834" stroke="#1f2937" stroke-width="1"><rect x="1185" y="230" width="30" height="70"/><rect x="1229" y="230" width="30" height="70"/><rect x="1295" y="230" width="30" height="70"/></g>
+          <g font-size="21" fill="#1f2937" text-anchor="middle"><text x="320" y="150">10</text><text x="364" y="220">12</text><text x="1200" y="220">50</text><text x="1244" y="220">52</text><text x="1310" y="220">55</text></g>
+          <line x1="782" y1="95" x2="782" y2="300" stroke="#dc2626" stroke-width="3" stroke-dasharray="10 6"/>
+          <text x="802" y="140" font-size="22" fill="#dc2626">ngưỡng t = 12</text>
+          <circle cx="335" cy="330" r="9" fill="#2a78d6"/><circle cx="1251" cy="330" r="9" fill="#eb6834"/>
+          <g font-size="21" fill="#1f2937" text-anchor="middle"><text x="335" y="365">trung bình 10,7</text><text x="1251" y="365">trung bình 52,3</text></g>
+          <line x1="350" y1="395" x2="1236" y2="395" stroke="#1f2937" stroke-width="2.5" marker-start="url(#cv2a)" marker-end="url(#cv2a)"/>
+          <text x="793" y="435" font-size="22" fill="#059669" text-anchor="middle">hai trung bình cách nhau ≈ 41,7: càng xa, hai lớp càng tách bạch</text>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình là biểu đồ tần suất của sáu điểm ảnh, cột cao gấp đôi ở giá trị 10 vì có hai điểm bằng 10. Các cột dồn thành hai đỉnh, một đỉnh tối quanh 10 và một đỉnh sáng quanh 52. Đặt ngưỡng ở khe giữa, sau giá trị 12, ta được lớp xanh tối và lớp cam sáng. Trung bình hai lớp là 10 phẩy 7 và 52 phẩy 3, cách nhau khoảng 41 phẩy 7, và hai trung bình càng xa thì hai lớp càng tách bạch."
+
+  # ───────────────────────── 5. SUY RA ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra tiêu chí: tổng phương sai không đổi, nên giữa lớp lớn nhất"
+    checks:
+      - "round(sum((x - 31.5) ** 2 for x in [10, 10, 12, 50, 52, 55]) / 6, 3) == 436.583"
+      - "round(0.5 * sum((x - 32 / 3) ** 2 for x in [10, 10, 12]) / 3 + 0.5 * sum((x - 157 / 3) ** 2 for x in [50, 52, 55]) / 3, 3) == 2.556"
+      - "round(0.5 * (32 / 3 - 31.5) ** 2 + 0.5 * (157 / 3 - 31.5) ** 2, 3) == 434.028 == round(0.5 * 0.5 * (157 / 3 - 32 / 3) ** 2, 3)"
+      - "round(2.556 + 434.028, 3) == 436.584"
+    steps:
+      - show: |
+          <p><b>Bước 1 — muốn gì.</b> Một ngưỡng tốt làm <b>mỗi lớp chụm lại</b>, tức phương sai trong lớp $\sigma_W^2 = w_0 \sigma_0^2 + w_1 \sigma_1^2$ nhỏ nhất. Ở đây $\sigma_0^2, \sigma_1^2$ là phương sai riêng của lớp 0, lớp 1.</p>
+          <p class="note">Làm thử $t = 12$: $\sigma_W^2 = 0{,}5 \cdot 0{,}889 + 0{,}5 \cdot 4{,}222 \approx 2{,}556$.</p>
+        focus: [1, 1, 2]
+        say: "Bước một, ta muốn gì? Một ngưỡng tốt làm mỗi lớp chụm lại, nghĩa là phương sai trong lớp nhỏ nhất, bằng w không nhân phương sai lớp 0 cộng w một nhân phương sai lớp 1. Làm thử với ngưỡng 12, thay hai phương sai riêng 0 phẩy 889 và 4 phẩy 222, mỗi lớp nặng 0 phẩy 5, ta được xấp xỉ 2 phẩy 556."
+      - show: |
+          <p><b>Bước 2 — tổng không đổi.</b> Phương sai của <b>cả ảnh</b> tách đúng thành hai phần, với mọi ngưỡng:</p>
+          $$\sigma^2_{\text{cả ảnh}} = \sigma_W^2 + \sigma_B^2, \qquad 436{,}583 \approx 2{,}556 + 434{,}028$$
+          <p class="note">Phương sai cả ảnh không phụ thuộc $t$, nên $\sigma_W^2$ nhỏ nhất đúng khi $\sigma_B^2$ lớn nhất — hai cách nói cùng một ngưỡng.</p>
+        focus: [1, 2, 3]
+        say: "Bước hai, phương sai của cả ảnh luôn tách đúng thành hai phần, phần trong lớp cộng phần giữa lớp, với mọi ngưỡng. Thay số, 436 phẩy 583 xấp xỉ 2 phẩy 556 cộng 434 phẩy 028. Vì phương sai cả ảnh không phụ thuộc ngưỡng, nên phần trong lớp nhỏ nhất đúng khi phần giữa lớp lớn nhất, hai cách nói cho cùng một ngưỡng."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — công thức gọn của phần giữa lớp.</b> Với hai lớp, khoảng cách của mỗi trung bình tới trung bình chung gộp lại thành:</p>
+          $$\sigma_B^2 = w_0 \cdot w_1 \cdot (\mu_0 - \mu_1)^2$$
+          <p class="note">Làm thử $t = 12$: $0{,}5 \cdot 0{,}5 \cdot (10{,}667 - 52{,}333)^2 = 0{,}25 \cdot 41{,}667^2 \approx \hlg{434{,}028}$ — khớp bước 2.</p>
+        focus: [1, 2, 3]
+        say: "Bước ba, vì chỉ có hai lớp, khoảng cách của mỗi trung bình tới trung bình chung gộp lại được thành một công thức gọn. Phương sai giữa lớp bằng w không nhân w một nhân bình phương hiệu hai trung bình. Làm thử với ngưỡng 12, 0 phẩy 25 nhân 41 phẩy 667 bình phương xấp xỉ 434 phẩy 028, khớp với bước hai."
+      - show: |
+          <div class="box key">Phương pháp Otsu: <b>thử mọi ngưỡng</b> $t$, chọn $t$ làm $w_0 \cdot w_1 \cdot (\mu_0 - \mu_1)^2$ lớn nhất. Hai trung bình phải xa nhau, <b>và</b> hai lớp không được quá lệch cỡ (tích $w_0 w_1$ lớn nhất khi hai lớp bằng nhau).</div>
+        focus: [1, 1]
+        say: "Đó là phương pháp chọn ngưỡng tự động mang tên người đề xuất năm 1979, thử mọi ngưỡng t và chọn ngưỡng làm tích ba thừa số này lớn nhất. Hai trung bình phải xa nhau, và hai lớp không được quá lệch cỡ, vì tích w không nhân w một lớn nhất khi hai lớp bằng nhau."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Vét bốn ngưỡng cho sáu điểm ảnh"
+    checks:
+      - "[round(x, 3) for x in alg.cvi_otsu([10, 10, 12, 50, 52, 55])[1][0][1:]] == [0.333, 0.667, 10.0, 42.25, 231.125]"
+      - "[round(x, 3) for x in alg.cvi_otsu([10, 10, 12, 50, 52, 55])[1][1][1:]] == [0.5, 0.5, 10.667, 52.333, 434.028]"
+      - "[round(x, 3) for x in alg.cvi_otsu([10, 10, 12, 50, 52, 55])[1][2][1:]] == [0.667, 0.333, 20.5, 53.5, 242.0] and round(alg.cvi_otsu([10, 10, 12, 50, 52, 55])[1][3][5], 2) == 110.45"
+      - "alg.cvi_otsu([10, 10, 12, 50, 52, 55])[0] == 12"
+    steps:
+      - show: |
+          <p>Điểm ảnh 10, 10, 12, 50, 52, 55. Các ngưỡng có nghĩa: 10, 12, 50, 52.</p>
+          <p><b>Bước 1.</b> $t = 10$: lớp 0 là 10, 10 ($w_0 = \frac{1}{3}$, $\mu_0 = 10$); lớp 1 là 12, 50, 52, 55 ($\mu_1 = 42{,}25$).</p>
+          $$\sigma_B^2 = \frac{1}{3} \cdot \frac{2}{3} \cdot (10 - 42{,}25)^2 \approx 231{,}1$$
+        focus: [1, 2, 3]
+        say: "Sáu điểm ảnh là 10, 10, 12, 50, 52 và 55, nên chỉ có bốn ngưỡng có nghĩa là 10, 12, 50 và 52. Bước một, ngưỡng 10 cho lớp 0 là hai số 10, chiếm một phần ba, còn lớp 1 có trung bình 42 phẩy 25. Phương sai giữa lớp bằng một phần ba nhân hai phần ba nhân bình phương hiệu, xấp xỉ 231 phẩy 1."
+      - show: |
+          <p><b>Bước 2.</b> $t = 12$: hai lớp ba điểm, $\mu_0 \approx 10{,}667$, $\mu_1 \approx 52{,}333$: $\sigma_B^2 \approx \hlg{434{,}0}$.</p>
+        say: "Bước hai, ngưỡng 12 chia đều ba điểm mỗi lớp, hai trung bình là 10 phẩy 667 và 52 phẩy 333, nên phương sai giữa lớp xấp xỉ 434."
+      - clear: true
+        show: |
+          <p><b>Bước 3.</b> $t = 50$: lớp 0 là 10, 10, 12, 50 ($\mu_0 = 20{,}5$), lớp 1 là 52, 55 ($\mu_1 = 53{,}5$): $\sigma_B^2 = \frac{2}{3} \cdot \frac{1}{3} \cdot 33^2 = 242$. Số 50 sáng bị kéo vào nhóm tối nên $\mu_0$ tăng vọt.</p>
+        focus: [1, 1]
+        say: "Bước ba, ngưỡng 50 kéo điểm sáng 50 vào nhóm tối, nên trung bình lớp 0 tăng vọt lên 20 phẩy 5, lớp 1 còn 52 và 55. Phương sai giữa lớp chỉ còn hai phần ba nhân một phần ba nhân 33 bình phương, bằng 242."
+      - show: |
+          <table class="t"><tr><th>Bước 4 — xếp hạng</th><th>$t = 10$</th><th>$t = 12$</th><th>$t = 50$</th><th>$t = 52$</th></tr>
+          <tr><td>$\sigma_B^2$</td><td>231,1</td><td>$\hlg{434{,}0}$</td><td>242,0</td><td>110,5</td></tr></table>
+          <p class="note">Ngưỡng tốt nhất là 12: tách 10, 10, 12 khỏi 50, 52, 55 — đúng khe giữa hai đỉnh.</p>
+        focus: [1, 2]
+        say: "Bước bốn, đặt bốn ngưỡng cạnh nhau, ngưỡng 52 chỉ được 110 phẩy 5 vì lớp sáng còn một điểm. Ngưỡng tốt nhất là 12, tách 10, 10, 12 khỏi 50, 52, 55, đúng khe giữa hai đỉnh."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: tìm ngưỡng làm phương sai trong lớp nhỏ nhất"
+    checks:
+      - "(lambda px: [round(sum(len(g) / len(px) * (sum((x - sum(g) / len(g)) ** 2 for x in g) / len(g)) for g in ([p for p in px if p <= t], [p for p in px if p > t])), 3) for t in (10, 12, 50, 52)])([10, 10, 12, 50, 52, 55]) == [205.458, 2.556, 194.583, 326.133]"
+      - "all(abs(w + b - 436.583) < 0.001 for w, b in zip([205.458, 2.556, 194.583, 326.133], [r[5] for r in alg.cvi_otsu([10, 10, 12, 50, 52, 55])[1]]))"
+    steps:
+      - show: |
+          <p><b>Đường khác:</b> tính thẳng phương sai trong lớp (không dùng công thức gọn) cho từng ngưỡng, rồi cộng với phần giữa lớp.</p>
+          <table class="t"><tr><th>ngưỡng</th><th>10</th><th>12</th><th>50</th><th>52</th></tr>
+          <tr><td>$\sigma_W^2$ (tính thẳng)</td><td>205,5</td><td>$\hlg{2{,}6}$</td><td>194,6</td><td>326,1</td></tr>
+          <tr><td>$\sigma_W^2 + \sigma_B^2$</td><td>436,6</td><td>436,6</td><td>436,6</td><td>436,6</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Kiểm bằng đường khác, ta tính thẳng phương sai trong lớp cho từng ngưỡng, không dùng công thức gọn. Nhỏ nhất là 2 phẩy 6 ở ngưỡng 12, đúng ngưỡng mà phần giữa lớp lớn nhất. Hàng cuối cộng hai phần, luôn ra 436 phẩy 6, đúng phương sai của cả ảnh, khớp điều đã suy ra ở bước hai."
+
+  # ───────────────────────── 8. CÂN BẰNG ─────────────────────────
+  - id: equalize
+    kind: concept
+    title: "Cân bằng biểu đồ: kéo các mức chen chúc ra cho đều"
+    checks:
+      - "alg.cvi_hist([0, 0, 1, 1, 1, 1, 2, 7], 8) == [2, 4, 1, 0, 0, 0, 0, 1]"
+      - "alg.cvi_equalize([0, 0, 1, 1, 1, 1, 2, 7], 8) == [2, 5, 6, 6, 6, 6, 6, 7] and [round(7 * c / 8, 3) for c in (2, 6, 7, 8)] == [1.75, 5.25, 6.125, 7.0]"
+    steps:
+      - show: |
+          <p>Ảnh tối 3 bit (mức 0 tới 7), 8 điểm ảnh: 0, 0, 1, 1, 1, 1, 2, 7. Mọi thứ chen ở 0 tới 2, khó nhìn.</p>
+          <table class="t"><tr><th>mức $v$</th><th>0</th><th>1</th><th>2</th><th>7</th></tr>
+          <tr><td>$h(v)$</td><td>2</td><td>4</td><td>1</td><td>1</td></tr>
+          <tr><td>tích lũy</td><td>2</td><td>6</td><td>7</td><td>8</td></tr>
+          <tr><td>mức mới $= 7 \cdot \frac{\text{tích lũy}}{8}$, làm tròn</td><td>$1{,}75 \to 2$</td><td>$5{,}25 \to 5$</td><td>$6{,}125 \to 6$</td><td>7</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Xét một ảnh tối 3 bit, mức từ 0 tới 7, có 8 điểm ảnh, mọi thứ chen chúc ở 0 tới 2 nên khó nhìn. Hàng thứ hai là biểu đồ tần suất, 2 điểm ở mức 0, 4 điểm ở mức 1, 1 điểm ở mức 2, 1 điểm ở mức 7. Hàng tích lũy cộng dồn thành 2, 6, 7, 8. Mức mới bằng 7 nhân tỉ lệ tích lũy rồi làm tròn, nên 0 thành 2, 1 thành 5, 2 thành 6, còn 7 giữ nguyên."
+      - clear: true
+        show: |
+          <div><svg width="1400" height="320" viewBox="0 0 1400 320">
+          <defs><marker id="cv2b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs>
+          <line x1="180" y1="80" x2="1200" y2="80" stroke="#1f2937" stroke-width="2"/><line x1="180" y1="250" x2="1200" y2="250" stroke="#1f2937" stroke-width="2"/>
+          <g font-size="22" fill="#1f2937" text-anchor="middle">
+          <text x="200" y="60">0</text><text x="340" y="60">1</text><text x="480" y="60">2</text><text x="620" y="60">3</text><text x="760" y="60">4</text><text x="900" y="60">5</text><text x="1040" y="60">6</text><text x="1180" y="60">7</text>
+          <text x="200" y="285">0</text><text x="340" y="285">1</text><text x="480" y="285">2</text><text x="620" y="285">3</text><text x="760" y="285">4</text><text x="900" y="285">5</text><text x="1040" y="285">6</text><text x="1180" y="285">7</text></g>
+          <g fill="#2a78d6"><circle cx="200" cy="80" r="10"/><circle cx="340" cy="80" r="10"/><circle cx="480" cy="80" r="10"/><circle cx="1180" cy="80" r="10"/></g>
+          <g fill="#059669"><circle cx="480" cy="250" r="10"/><circle cx="900" cy="250" r="10"/><circle cx="1040" cy="250" r="10"/><circle cx="1180" cy="250" r="10"/></g>
+          <g stroke="#1f2937" stroke-width="2.5"><line x1="205" y1="95" x2="472" y2="236" marker-end="url(#cv2b)"/><line x1="347" y1="95" x2="890" y2="238" marker-end="url(#cv2b)"/><line x1="487" y1="95" x2="1030" y2="238" marker-end="url(#cv2b)"/><line x1="1180" y1="95" x2="1180" y2="236" marker-end="url(#cv2b)"/></g>
+          <g font-size="22" fill="#6b7280"><text x="1230" y="88">mức cũ</text><text x="1230" y="258">mức mới</text></g>
+          </svg></div>
+        focus: [1, 1, 1]
+        say: "Hình cho thấy phép cân bằng như một bảng chuyển mức, mức cũ ở trên, mức mới ở dưới. Ba mức chen chúc 0, 1, 2 được kéo giãn ra thành 2, 5, 6, nhóm đông nhất là mức 1 được dành khoảng rộng nhất. Thứ tự sáng tối giữ nguyên, chỉ khoảng cách giữa các mức thay đổi."
+
+  # ───────────────────────── 9. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi của người đã đi làm"
+    checks:
+      - "alg.cvi_otsu([200, 200, 200, 120, 110, 110, 110, 30])[0] == 120 and alg.cvi_otsu([200, 200, 200, 120])[0] == 120 and alg.cvi_otsu([110, 110, 110, 30])[0] == 30"
+      - "alg.cvi_otsu([100, 101, 102, 103, 104, 105])[0] == 102 and round(max(r[5] for r in alg.cvi_otsu([100, 101, 102, 103, 104, 105])[1]) / (sum((x - 102.5) ** 2 for x in range(100, 106)) / 6), 3) == 0.771"
+      - "round(434.028 / 436.583, 3) == 0.994"
+      - "alg.cvi_equalize([0, 0, 1, 1, 1, 1, 2, 7], 8)[2] == 6 and alg.cvi_equalize([2, 2, 2, 2, 5, 6, 7, 7], 8)[2] == 4"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Một ngưỡng cho cả ảnh khi ánh sáng không đều <b class="red">(giấy trong bóng thành chữ)</b></div>
+          <table class="t"><tr><th>vùng</th><th>điểm ảnh (chữ; giấy)</th><th>ngưỡng</th><th>giấy 110 thành</th></tr>
+          <tr><td>cả ảnh một ngưỡng</td><td>120, 30; 200, 110</td><td>120</td><td class="red">chữ</td></tr>
+          <tr><td>riêng nửa sáng</td><td>120; 200</td><td>120</td><td>—</td></tr>
+          <tr><td>riêng nửa trong bóng</td><td>30; 110</td><td>30</td><td>giấy ✓</td></tr></table>
+          <p class="note">Sửa: <b>ngưỡng cục bộ</b> — mỗi điểm ảnh lấy ngưỡng từ một vùng nhỏ quanh nó.</p>
+        focus: [1, "2.2", ["2.3", "2.4"], 3]
+        say: "Lỗi thứ nhất là dùng một ngưỡng cho cả ảnh khi ánh sáng không đều, nên giấy trong bóng thành chữ. Cả ảnh một ngưỡng cho ngưỡng 120, nên giấy 110 trong bóng bị xếp vào nhóm chữ. Chọn ngưỡng riêng cho từng nửa thì nửa sáng được 120, nửa trong bóng được 30, và giấy 110 trở lại là giấy. Cách sửa là ngưỡng cục bộ, mỗi điểm ảnh lấy ngưỡng từ một vùng nhỏ quanh nó."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 2.</b> Tin ngưỡng khi biểu đồ chỉ có một đỉnh <b class="red">(máy vẫn trả về một ngưỡng)</b>
+          <br><span class="note">Nền đều 100, 101, …, 105 không có vật nào, máy vẫn tách ở 102 — cắt đôi nền. Phép thử: tỉ số $\sigma_B^2 / \sigma^2_{\text{cả ảnh}}$ chỉ 0,771, so với 0,994 của ảnh hai đỉnh ở ví dụ.</span></div>
+        introduces: [dots]
+        focus: [1, 1, 1]
+        say: "Lỗi thứ hai là tin ngưỡng khi biểu đồ chỉ có một đỉnh, vì máy vẫn luôn trả về một ngưỡng. Một nền đều 100, 101, tới 105, không có vật nào, mà máy vẫn tách ở 102, tức cắt đôi chính cái nền, dấu ba chấm nghĩa là các số ở giữa. Phép thử là xem tỉ số phần giữa lớp trên phương sai cả ảnh, ở đây chỉ 0 phẩy 771, so với 0 phẩy 994 của ảnh hai đỉnh ở ví dụ."
+      - show: |
+          <div class="box warn"><b>Lỗi 3.</b> Chọn ngưỡng trên ảnh nhiễu <b class="red">(lấm tấm điểm sai)</b>
+          <br><span class="note">Hạt nhiễu lấp khe giữa hai đỉnh, nhiều điểm rơi nhầm phía ngưỡng. Sửa: làm mờ nhẹ trước như ở bài 1, khi trung bình 3 ô làm hạt nhiễu 9 còn 3.</span></div>
+        focus: [1, 1]
+        say: "Lỗi thứ ba là chọn ngưỡng trên ảnh nhiễu, kết quả lấm tấm điểm sai, vì hạt nhiễu lấp khe giữa hai đỉnh và nhiều điểm rơi nhầm phía ngưỡng. Cách sửa là làm mờ nhẹ trước, như ở bài 1, khi trung bình 3 ô làm hạt nhiễu 9 chỉ còn 3."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Cân bằng biểu đồ từng ảnh rồi mới đo hay so sánh <b class="red">(cùng một giá trị, hai kết quả)</b></div>
+          <table class="t"><tr><th>ảnh</th><th>điểm ảnh</th><th>mức 2 sau cân bằng</th></tr>
+          <tr><td>A (ảnh tối ở trên)</td><td>0, 0, 1, 1, 1, 1, 2, 7</td><td>6</td></tr>
+          <tr><td>B</td><td>2, 2, 2, 2, 5, 6, 7, 7</td><td class="red">4</td></tr></table>
+          <p class="note">Cân bằng phụ thuộc cả ảnh, nên không giữ được thang đo. Dùng nó để <b>nhìn</b>; khi đo độ sáng, so ảnh, hay huấn luyện mô hình, dùng một phép biến đổi cố định cho mọi ảnh.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, cân bằng biểu đồ từng ảnh rồi mới đo hay so sánh, nên cùng một giá trị cho hai kết quả. Ở ảnh A, mức 2 thành 6. Ở ảnh B, cũng mức 2 nhưng thành 4, vì phép cân bằng phụ thuộc cả ảnh. Hãy dùng nó để nhìn, còn khi đo độ sáng, so ảnh hay huấn luyện mô hình, dùng một phép biến đổi cố định cho mọi ảnh."
+
+  # ───────────────────────── 10. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: chọn ngưỡng, cân bằng, rồi quyết định cho ứng dụng quét"
+    checks:
+      - "alg.cvi_otsu([20, 22, 24, 80, 84])[0] == 24 and [round(r[5], 1) for r in alg.cvi_otsu([20, 22, 24, 80, 84])[1]] == [169.0, 416.7, 864.0, 361.0]"
+      - "alg.cvi_hist([0, 1, 1, 1, 1, 1, 2, 3], 4) == [1, 5, 1, 1] and alg.cvi_equalize([0, 1, 1, 1, 1, 1, 2, 3], 4) == [0, 2, 3, 3]"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Điểm ảnh 20, 22, 24, 80, 84. Vét mọi ngưỡng, chọn ngưỡng nào?</td></tr>
+          <tr><td>2</td><td>Ảnh 2 bit (mức 0 tới 3): 0, 1, 1, 1, 1, 1, 2, 3. Cân bằng biểu đồ ra mức mới nào?</td></tr>
+          <tr><td>3</td><td>Ứng dụng quét hoá đơn chạy trên điện thoại, ảnh hay có bóng. Bạn dùng một ngưỡng cho cả ảnh hay ngưỡng cục bộ, và vùng nhỏ cỡ bao nhiêu?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", 0]
+        say: "Bây giờ đến lượt bạn. Câu một, năm điểm ảnh 20, 22, 24, 80 và 84, vét mọi ngưỡng, bạn chọn ngưỡng nào? Câu hai, ảnh 2 bit, mức từ 0 tới 3, gồm 0, năm số 1, 2 và 3, cân bằng biểu đồ ra mức mới nào? Câu ba, ứng dụng quét hoá đơn chạy trên điện thoại và ảnh hay có bóng, bạn dùng một ngưỡng cho cả ảnh hay ngưỡng cục bộ, và vùng nhỏ cỡ bao nhiêu? Dừng video và làm ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 1: ngưỡng</th><th>20</th><th>22</th><th>24</th><th>80</th></tr>
+          <tr><td>$w_0 \cdot w_1 \cdot (\mu_0 - \mu_1)^2$</td><td>169,0</td><td>416,7</td><td>$\hlg{864{,}0}$</td><td>361,0</td></tr></table>
+          <p>Ngưỡng 24: lớp 0 là 20, 22, 24 ($\mu_0 = 22$), lớp 1 là 80, 84 ($\mu_1 = 82$): $0{,}6 \cdot 0{,}4 \cdot 60^2 = 864$.</p>
+          <p><b>Câu 2.</b> Tần suất 1, 5, 1, 1; tích lũy 1, 6, 7, 8; mức mới $3 \cdot \frac{\text{tích lũy}}{8}$ làm tròn: 0, 1, 2, 3 thành $\hlg{0, 2, 3, 3}$.</p>
+        focus: [1, 2, 2, 3, 3]
+        say: "Câu một, bảng cho bốn ngưỡng, lớn nhất là 864 ở ngưỡng 24. Lớp 0 là 20, 22, 24 với trung bình 22, lớp 1 là 80 và 84 với trung bình 82. Vì vậy phương sai giữa lớp bằng 0 phẩy 6 nhân 0 phẩy 4 nhân 60 bình phương, bằng 864. Câu hai, tần suất là 1, 5, 1, 1, tích lũy là 1, 6, 7, 8. Nhân 3 rồi chia 8 và làm tròn, các mức 0, 1, 2, 3 thành 0, 2, 3, 3."
+      - show: |
+          <table class="t"><tr><th>câu 3</th><th>được</th><th>mất</th></tr>
+          <tr><td>một ngưỡng cho cả ảnh</td><td>nhanh, ổn định khi đèn đều</td><td class="red">hỏng cả vùng có bóng</td></tr>
+          <tr><td>ngưỡng cục bộ, vùng nhỏ</td><td>theo kịp bóng thay đổi nhanh</td><td>vùng giấy trắng trơn bị “tách” ra nhiễu</td></tr>
+          <tr><td>ngưỡng cục bộ, vùng lớn hơn nét chữ vài lần</td><td>mỗi vùng chứa cả chữ lẫn giấy</td><td>bóng đổi gắt trong một vùng vẫn lọt</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Câu ba là một đánh đổi. Một ngưỡng cho cả ảnh thì nhanh và ổn định khi đèn đều, nhưng hỏng cả vùng có bóng. Ngưỡng cục bộ với vùng quá nhỏ theo kịp bóng, nhưng vùng giấy trắng trơn sẽ bị tách ra thành nhiễu. Lựa chọn hợp lý là vùng lớn hơn nét chữ vài lần để mỗi vùng chứa cả chữ lẫn giấy, chấp nhận rằng bóng đổi quá gắt trong một vùng vẫn có thể lọt."
+
+  # ───────────────────────── 11. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">đếm mỗi mức: biểu đồ tần suất</span><span class="a">→</span>
+          <span class="n">ngưỡng tốt: mỗi lớp chụm lại</span><span class="a">→</span>
+          <span class="n">cả ảnh = trong lớp + giữa lớp</span><span class="a">→</span>
+          <span class="n">chọn $t$ làm $w_0 \cdot w_1 \cdot (\mu_0 - \mu_1)^2$ lớn nhất</span><span class="a">→</span>
+          <span class="n">bóng, một đỉnh: ngưỡng cục bộ, kiểm tỉ số tách</span></div>
+        say: "Tổng kết lại, ta đếm mỗi mức sáng thành biểu đồ tần suất. Một ngưỡng tốt làm mỗi lớp chụm lại, và vì phương sai cả ảnh bằng phần trong lớp cộng phần giữa lớp, ta chọn ngưỡng làm phần giữa lớp lớn nhất. Khi có bóng hay biểu đồ một đỉnh, dùng ngưỡng cục bộ và kiểm tỉ số tách trước khi tin."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> một thuật toán chọn ngưỡng luôn trả về một con số, kể cả khi ảnh không có gì để tách. Hãy nhìn biểu đồ tần suất trước, và đo xem hai lớp có thật sự tách bạch không.</div>
+        say: "Điều cần mang theo, một thuật toán chọn ngưỡng luôn trả về một con số, kể cả khi ảnh không có gì để tách. Hãy nhìn biểu đồ tần suất trước, và đo xem hai lớp có thật sự tách bạch không."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 3): <b>mô hình camera và hiệu chuẩn</b> — ma trận chứa tiêu cự và tâm ảnh, ống kính làm cong đường thẳng ra sao, và vì sao phải hiệu chuẩn trước khi đo.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 3, ta học mô hình camera và hiệu chuẩn, gồm ma trận chứa tiêu cự và tâm ảnh. Ta cũng xem ống kính làm cong đường thẳng ra sao, và vì sao phải hiệu chuẩn trước khi đo. Hẹn gặp bạn ở bài tiếp theo."

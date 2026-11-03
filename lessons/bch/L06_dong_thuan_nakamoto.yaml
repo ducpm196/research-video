@@ -1,0 +1,239 @@
+id: L06
+course: BCH
+series: "BCH · Blockchain và sổ cái phân tán"
+title: "Bài 6 — Đồng thuận Nakamoto: chuỗi nhiều công nhất và số xác nhận"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/bch.yaml L06; audit/bch/verify_bch.py L06; S. Nakamoto, Bitcoin: A Peer-to-Peer Electronic Cash System (2008), mục 5 và 11 — bảng q = 0,1 và q = 0,3 tính lại khớp 7 chữ số; C. Grunspan, R. Pérez-Marco, Double spend races (Int. J. Theor. Appl. Finance, 2018) — công thức chính xác, kiểm bằng mô phỏng; bài 5"
+assumes: [arith, frac, power, exp, sum, factorial, approx, sub, cdot]
+# Quy ước: q = tỉ lệ sức tính của kẻ tấn công, p = 1 − q; z = số khối xác nhận đã có sau giao dịch. Xác suất kẻ tấn công rốt cuộc đuổi kịp
+#   (công thức mục 11 của bài báo): P = 1 − Σ_{k=0}^{z} (λ^k e^{−λ} / k!) · (1 − (q/p)^{z−k}), λ = z · q / p; q ≥ p thì P = 1 (alg.nakamoto_catch_up).
+#   Công thức chính xác (số khối kẻ tấn công theo nhị thức âm): P = 1 − Σ_{k=0}^{z−1} C(k + z − 1, k)(p^z q^k − q^z p^k) (alg.exact_double_spend) — CAO HƠN
+#   công thức Nakamoto; mô phỏng cuộc đua khối trong verify_bch.py khớp công thức chính xác. Mô hình giả định kẻ tấn công bắt đầu cùng lúc với giao dịch, không tính độ trễ mạng.
+objectives:
+  - "Giải thích chọn chuỗi có tổng công lớn nhất"
+  - "Tính xác suất kẻ tấn công đuổi kịp sau z khối"
+  - "Chọn số xác nhận theo giá trị giao dịch"
+asr_reviewed:
+  - {sentence: "Lỗi thứ ba, dùng bảng xấp xỉ như con số chính xác, nên đánh giá thấp rủi ro.", reason: "ASR chép “Lội thứ 3, dùng bản sắp xỉ như con số chính xác, nên đánh giá thấp rũi ro.” (0.778): lệch âm/thanh thuần Việt: lỗi/lội, bảng xấp/bản sắp, rủi/rũi — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Hôm nay ta học đồng thuận theo chuỗi nhiều công nhất, và công thức tính xác suất kẻ tấn công đuổi kịp sau z khối.", reason: "ASR chép “Hôm nay ta học đồng thuận theo chuổi nhiều công nhất và công thức tính xác xuất kẻ tấn công đuổi kịp sau giá khối.” (0.92): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: chuỗi/chuổi — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Tổng kết lại, mỗi nút theo chuỗi có tổng công lớn nhất, nên kẻ tấn công phải đuổi kịp z khối.", reason: "ASR chép “Tổng kết lại, mỗi nút theo chuỗi có tổng công lớn nhất, nên kẻ tấn công phải đuổi kịp giá khối.” (0.952): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Giao hàng sau bao nhiêu khối?"
+    checks:
+      - "round(alg.nakamoto_catch_up(0.1, 6), 7) == 0.0002428"
+    steps:
+      - show: |
+          <p>Cửa hàng nhận thanh toán bằng tiền số. Giao dịch vừa vào khối — giao hàng ngay được chưa? Kẻ gian có thể bí mật đào một chuỗi khác <b>không có</b> giao dịch đó, rồi công bố khi nó dài hơn. Chờ thêm mỗi khối, cơ hội của kẻ gian giảm — nhưng giảm nhanh tới mức nào?</p>
+          <div class="box key">Hôm nay: <b>đồng thuận theo chuỗi nhiều công nhất</b> — và công thức tính xác suất kẻ tấn công đuổi kịp sau z khối.</div>
+        focus: [1, 1, 1, 1, 2]
+        say: "Chào bạn, một cửa hàng nhận thanh toán bằng tiền số. Giao dịch vừa vào khối, vậy giao hàng ngay được chưa? Kẻ gian có thể bí mật đào một chuỗi khác không có giao dịch đó, rồi công bố khi nó dài hơn. Chờ thêm mỗi khối thì cơ hội của kẻ gian giảm, nhưng giảm nhanh tới mức nào? Hôm nay ta học đồng thuận theo chuỗi nhiều công nhất, và công thức tính xác suất kẻ tấn công đuổi kịp sau z khối."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: tổng công, nhân xác suất, giai thừa"
+    checks:
+      - "2 ** 16 == 65536 and 3 * 65536 == 196608 and 2 ** 18 == 262144 and 2 * 262144 == 524288 and 524288 > 196608"
+      - "round(0.1 * 0.1, 6) == 0.01 and round(0.1 / 0.9, 3) == 0.111 and round((0.1 / 0.9) ** 2, 4) == 0.0123"
+      - "math.factorial(3) == 6 and math.factorial(0) == 1"
+    steps:
+      - show: |
+          <p>Ở bài 5: độ khó $k$ bit cần trung bình $2^k$ lần thử cho mỗi khối. <b>Tổng công</b> của một chuỗi = cộng số lần thử kỳ vọng của mọi khối.</p>
+          <table class="t"><tr><th>chuỗi</th><th>số khối</th><th>độ khó</th><th>tổng công</th></tr>
+          <tr><td>A</td><td>3</td><td>16 bit</td><td>$3 \cdot 65536 = 196608$</td></tr>
+          <tr><td>B</td><td>2</td><td>18 bit</td><td>$2 \cdot 262144 = \hl{524288}$</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", 2]
+        say: "Trước hết, nhắc lại bài 5, độ khó k bit cần trung bình 2 mũ k lần thử cho mỗi khối. Tổng công của một chuỗi là cộng số lần thử kỳ vọng của mọi khối trong chuỗi đó. Chuỗi A có 3 khối độ khó 16 bit, tổng công là 3 nhân 65536, bằng 196608 lần thử. Chuỗi B chỉ có 2 khối nhưng độ khó 18 bit, tổng công là 2 nhân 262144, bằng 524288 lần thử. Vậy chuỗi B ngắn hơn mà lại nhiều công hơn, nên luật chọn theo tổng công, chứ không đếm số khối."
+      - show: |
+          <p>Kẻ tấn công nắm 10% sức tính → mỗi khối mới là của kẻ đó với xác suất $0{,}1$. Hai khối liền nhau đều là của kẻ đó: $0{,}1 \cdot 0{,}1 = 0{,}01$ — các lần đào độc lập nên <b>nhân</b> xác suất.</p>
+        say: "Điều thứ hai, nếu kẻ tấn công nắm 10 phần trăm sức tính, thì mỗi khối mới là của kẻ đó với xác suất 0 phẩy 1. Muốn hai khối liền nhau đều là của kẻ đó, ta nhân 0 phẩy 1 với 0 phẩy 1, được 0 phẩy 01, vì các lần đào độc lập với nhau."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>đang tụt sau</th><th>xác suất rốt cuộc gỡ hoà</th><th>với q = 0,1</th></tr>
+          <tr><td>1 khối</td><td>$\frac{q}{p}$</td><td>$\frac{1}{9} \approx 0{,}111$</td></tr>
+          <tr><td>2 khối</td><td>$\left(\frac{q}{p}\right)^2$</td><td>$\approx 0{,}0123$</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Điều thứ ba, bài báo của Nakamoto coi việc đuổi theo là bài toán con bạc cháy túi. Đang tụt sau 1 khối thì xác suất rốt cuộc gỡ hoà là q chia p, với q bằng 0 phẩy 1 là một phần chín, khoảng 0 phẩy 111. Đang tụt sau 2 khối thì phải gỡ được khối thứ nhất rồi gỡ tiếp khối thứ hai, nên nhân hai lần, được khoảng 0 phẩy 0123."
+      - show: |
+          <p>Dấu chấm than sau một số là <b>giai thừa</b>: $3! = 1 \cdot 2 \cdot 3 = 6$; quy ước $0! = 1$. Công thức của bài dùng $k!$ để đếm xác suất kẻ tấn công đã có đúng $k$ khối.</p>
+        say: "Điều cuối, dấu chấm than đặt sau một số gọi là giai thừa, nghĩa là nhân mọi số từ 1 tới số đó. Ví dụ 3 giai thừa bằng 1 nhân 2 nhân 3, bằng 6, và người ta quy ước 0 giai thừa bằng 1. Công thức hôm nay dùng k giai thừa để tính xác suất kẻ tấn công đã có đúng k khối."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: luật chọn chuỗi và công thức đuổi kịp"
+    steps:
+      - show: |
+          <p><b>Luật</b>: mỗi nút theo chuỗi có <b>tổng công</b> lớn nhất (thường là dài nhất). Hai khối cùng lúc thì tạm có hai nhánh; khối tiếp theo quyết định nhánh nào thắng.</p>
+          <table class="t"><tr><th>ký hiệu</th><th>nghĩa</th></tr>
+          <tr><td>$q$, $p = 1 - q$</td><td>tỉ lệ sức tính của kẻ tấn công, của phần còn lại</td></tr>
+          <tr><td>$z$</td><td>số khối xác nhận đã có sau giao dịch</td></tr>
+          <tr><td>$\lambda = z \cdot \frac{q}{p}$</td><td>số khối kẻ tấn công kỳ vọng đào được trong lúc đó</td></tr></table>
+          <p>$P = 1 - \sum_{k=0}^{z} \frac{\lambda^k e^{-\lambda}}{k!} \cdot \left(1 - \left(\frac{q}{p}\right)^{z - k}\right)$ — kẻ tấn công đã có k khối (phân phối Poisson), rồi phải đuổi nốt z − k khối.</p>
+        introduces: [lambda_rate]
+        focus: [1, 1, 2, "2.2", "2.3", "2.4", 3, 3, 3]
+        say: "Luật là mỗi nút theo chuỗi có tổng công lớn nhất, thường là chuỗi dài nhất. Nếu hai khối ra cùng lúc thì tạm có hai nhánh, và khối tiếp theo quyết định nhánh nào thắng. Bảng có ba ký hiệu. q là tỉ lệ sức tính của kẻ tấn công, còn p bằng 1 trừ q là của phần còn lại. z là số khối xác nhận đã có sau giao dịch. Lam-đa bằng z nhân q chia p là số khối kẻ tấn công kỳ vọng đào được trong lúc đó. Xác suất đuổi kịp bằng 1 trừ một tổng theo k từ 0 tới z. Mỗi số hạng là xác suất kẻ tấn công đã có k khối, nhân với xác suất chúng đuổi được nốt z trừ k khối. Đây là công thức ở mục 11 trong bài báo của Nakamoto năm 2008."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Cuộc đua giữa hai chuỗi"
+    checks:
+      - "round(alg.exact_double_spend(0.1, 5) / alg.exact_double_spend(0.1, 6), 1) == 3.0 and round(alg.exact_double_spend(0.1, 7) / alg.exact_double_spend(0.1, 8), 1) == 3.0"
+      - "all(alg.nakamoto_catch_up(0.1, z) < alg.exact_double_spend(0.1, z) for z in range(2, 21)) and alg.nakamoto_catch_up(0.1, 1) > alg.exact_double_spend(0.1, 1)"
+    steps:
+      - show: |
+          <div><svg width="1500" height="330" viewBox="0 0 1500 330"><rect x="80" y="60" width="110" height="60" rx="8" fill="#e5e7eb" stroke="#1f2937" stroke-width="3"/><text x="135" y="99" font-size="22" text-anchor="middle" fill="#1f2937">cũ</text><rect x="220" y="60" width="110" height="60" rx="8" fill="#fed7aa" stroke="#1f2937" stroke-width="3"/><text x="275" y="99" font-size="22" text-anchor="middle" fill="#1f2937">giao dịch</text><rect x="360" y="60" width="110" height="60" rx="8" fill="#bfdbfe" stroke="#1f2937" stroke-width="3"/><text x="415" y="99" font-size="22" text-anchor="middle" fill="#1f2937">1</text><rect x="500" y="60" width="110" height="60" rx="8" fill="#bfdbfe" stroke="#1f2937" stroke-width="3"/><text x="555" y="99" font-size="22" text-anchor="middle" fill="#1f2937">2</text><rect x="640" y="60" width="110" height="60" rx="8" fill="#bfdbfe" stroke="#1f2937" stroke-width="3"/><text x="695" y="99" font-size="22" text-anchor="middle" fill="#1f2937">3</text><rect x="780" y="60" width="110" height="60" rx="8" fill="#bfdbfe" stroke="#1f2937" stroke-width="3"/><text x="835" y="99" font-size="22" text-anchor="middle" fill="#1f2937">4</text><rect x="920" y="60" width="110" height="60" rx="8" fill="#bfdbfe" stroke="#1f2937" stroke-width="3"/><text x="975" y="99" font-size="22" text-anchor="middle" fill="#1f2937">5</text><rect x="1060" y="60" width="110" height="60" rx="8" fill="#bfdbfe" stroke="#1f2937" stroke-width="3"/><text x="1115" y="99" font-size="22" text-anchor="middle" fill="#1f2937">6</text><g stroke="#1f2937" stroke-width="3"><line x1="190" y1="90" x2="220" y2="90"/><line x1="330" y1="90" x2="360" y2="90"/><line x1="470" y1="90" x2="500" y2="90"/><line x1="610" y1="90" x2="640" y2="90"/><line x1="750" y1="90" x2="780" y2="90"/><line x1="890" y1="90" x2="920" y2="90"/><line x1="1030" y1="90" x2="1060" y2="90"/></g><line x1="135" y1="120" x2="360" y2="236" stroke="#b91c1c" stroke-width="3"/><rect x="360" y="210" width="110" height="60" rx="8" fill="#fecaca" stroke="#1f2937" stroke-width="3"/><text x="415" y="249" font-size="22" text-anchor="middle" fill="#1f2937">1</text><rect x="500" y="210" width="110" height="60" rx="8" fill="#fecaca" stroke="#1f2937" stroke-width="3"/><text x="555" y="249" font-size="22" text-anchor="middle" fill="#1f2937">2</text><rect x="640" y="210" width="110" height="60" rx="8" fill="#fecaca" stroke="#1f2937" stroke-width="3"/><text x="695" y="249" font-size="22" text-anchor="middle" fill="#1f2937">3</text><rect x="780" y="210" width="110" height="60" rx="8" fill="#ffffff" stroke="#1f2937" stroke-width="3" stroke-dasharray="10 8"/><rect x="920" y="210" width="110" height="60" rx="8" fill="#ffffff" stroke="#1f2937" stroke-width="3" stroke-dasharray="10 8"/><rect x="1060" y="210" width="110" height="60" rx="8" fill="#ffffff" stroke="#1f2937" stroke-width="3" stroke-dasharray="10 8"/><g font-size="22" fill="#1f2937"><text x="80" y="40">chuỗi công khai: có giao dịch của cửa hàng, rồi z = 6 khối xác nhận</text><text x="1190" y="98" fill="#2a78d6">z = 6</text><text x="80" y="262" fill="#b91c1c">chuỗi bí mật</text><text x="570" y="305" text-anchor="middle" fill="#b91c1c">kẻ gian đã có k = 3 khối</text><text x="990" y="305" text-anchor="middle" fill="#eb6834">còn phải đuổi nốt z − k = 3 khối</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình này cho thấy cuộc đua giữa hai chuỗi khối cùng tranh nhau dài thêm. Hàng trên là chuỗi công khai, có khối chứa giao dịch của cửa hàng, rồi z bằng 6 khối xác nhận nối sau. Hàng dưới là chuỗi bí mật của kẻ gian, tách ra từ khối cũ, không có giao dịch đó, và đã đào được k bằng 3 khối. Kẻ gian còn phải đuổi nốt z trừ k khối, trong khi chuỗi công khai vẫn tiếp tục dài thêm."
+      - clear: true
+        show: |
+          <div><svg width="1500" height="400" viewBox="0 0 1500 400"><g fill="#1f2937"><line x1="230" y1="330" x2="1250" y2="330" stroke="#6b7280" stroke-width="2"/><line x1="230" y1="330" x2="230" y2="30" stroke="#6b7280" stroke-width="2"/><text x="215" y="47" font-size="20" text-anchor="end">1</text><text x="215" y="105" font-size="20" text-anchor="end">0,1</text><text x="215" y="163" font-size="20" text-anchor="end">0,01</text><text x="215" y="221" font-size="20" text-anchor="end">0,001</text><text x="215" y="279" font-size="20" text-anchor="end">0,0001</text><text x="215" y="337" font-size="20" text-anchor="end">0,00001</text><text x="230" y="358" font-size="20" text-anchor="middle">0</text><text x="355" y="358" font-size="20" text-anchor="middle">1</text><text x="480" y="358" font-size="20" text-anchor="middle">2</text><text x="605" y="358" font-size="20" text-anchor="middle">3</text><text x="730" y="358" font-size="20" text-anchor="middle">4</text><text x="855" y="358" font-size="20" text-anchor="middle">5</text><text x="980" y="358" font-size="20" text-anchor="middle">6</text><text x="1105" y="358" font-size="20" text-anchor="middle">7</text><text x="1230" y="358" font-size="20" text-anchor="middle">8</text><text x="1265" y="358" font-size="22">z khối</text><line x1="230" y1="214" x2="1250" y2="214" stroke="#b91c1c" stroke-width="2" stroke-dasharray="10 8"/><polyline points="230,40 355,80 480,115 605,149 730,183 855,216 980,250 1105,283 1230,316" fill="none" stroke="#2a78d6" stroke-width="4"/><polyline points="230,40 355,81 480,113 605,142 730,171 855,199 980,227 1105,255 1230,282" fill="none" stroke="#eb6834" stroke-width="4"/><circle cx="855" cy="216" r="9" fill="#2a78d6"/><circle cx="980" cy="227" r="9" fill="#eb6834"/><g font-size="22"><text x="1265" y="286" fill="#eb6834">chính xác</text><text x="1265" y="330" fill="#2a78d6">xấp xỉ 2008</text><text x="900" y="202" fill="#b91c1c">ngưỡng 0,1%</text><text x="300" y="300">q = 0,1: mỗi khối thêm, xác suất chia khoảng 3</text></g></g></svg></div>
+        focus: [1, 1, 1]
+        say: "Hình thứ hai vẽ xác suất kẻ gian đuổi kịp theo số khối xác nhận, với kẻ gian nắm 10 phần trăm sức tính, trục đứng chia theo bậc mười. Mỗi khối thêm vào, xác suất chính xác giảm khoảng ba lần, và từ 2 khối trở đi, đường xấp xỉ năm 2008 luôn nằm thấp hơn đường chính xác. Đường xấp xỉ xuống dưới ngưỡng 0 phẩy 1 phần trăm ở 5 khối, còn đường chính xác phải tới 6 khối."
+
+  - id: example
+    kind: example
+    title: "Bảng của bài báo 2008 và giá trị chính xác"
+    checks:
+      - "[round(alg.nakamoto_catch_up(0.1, z), 7) for z in (1, 5, 6)] == [0.2045873, 0.0009137, 0.0002428] and [round(alg.nakamoto_catch_up(0.3, z), 7) for z in (5, 10)] == [0.1773523, 0.0416605]"
+      - "[round(alg.exact_double_spend(0.1, z), 7) for z in (1, 5, 6)] == [0.2, 0.0017818, 0.0005914] and [round(alg.exact_double_spend(0.3, z), 4) for z in (5, 10)] == [0.1976, 0.0651]"
+      - "round(0.1 / 0.9, 3) == 0.111 and round(6 * 0.1 / 0.9, 3) == 0.667 and round(math.exp(-6 * 0.1 / 0.9), 3) == 0.513 and round((1 / 9) ** 6, 7) == 0.0000019 and round(1e6 * math.exp(-6 * 0.1 / 0.9) * (1 / 9) ** 6) == 1"
+      - "(lambda lam: [round(math.exp(-lam) * lam ** k / math.factorial(k), 4) for k in range(7)] == [0.5134, 0.3423, 0.1141, 0.0254, 0.0042, 0.0006, 0.0001] and [round(1e6 * math.exp(-lam) * lam ** k / math.factorial(k) * (1 / 9) ** (6 - k)) for k in range(7)] == [1, 6, 17, 35, 52, 63, 63] and round(1e6 * (1 - sum(math.exp(-lam) * lam ** k / math.factorial(k) for k in range(7)))) == 6)(6 * 0.1 / 0.9)"
+      - "1 + 6 + 17 + 35 + 52 + 63 + 63 + 6 == 243 and round(1e6 * alg.nakamoto_catch_up(0.1, 6)) == 243 and round(alg.exact_double_spend(0.1, 6) / alg.nakamoto_catch_up(0.1, 6), 1) == 2.4"
+    steps:
+      - show: |
+          <p><b>Bước 1 — số khối kẻ gian kỳ vọng</b> ($q = 0{,}1$, $z = 6$): $\frac{q}{p} = \frac{0{,}1}{0{,}9} \approx 0{,}111$, nên $\lambda = 6 \cdot 0{,}111 \approx \hl{0{,}667}$ khối.</p>
+        say: "Bước một, làm tay công thức với q bằng 0 phẩy 1 và z bằng 6. q chia p bằng 0 phẩy 1 chia 0 phẩy 9, khoảng 0 phẩy 111, nên lam-đa bằng 6 nhân 0 phẩy 111, khoảng 0 phẩy 667 khối. Trong lúc chờ 6 khối, kẻ gian trung bình chỉ đào được chừng hai phần ba khối."
+      - show: |
+          <p><b>Bước 2 — ca hay gặp nhất, $k = 0$:</b> xác suất chưa có khối nào $e^{-\lambda} \approx 0{,}513$; đuổi nốt 6 khối: $\left(\frac{1}{9}\right)^6 \approx 0{,}0000019$. Tích ≈ <b>1 phần triệu</b>.</p>
+        say: "Bước hai, xét ca hay gặp nhất, kẻ gian chưa có khối nào. Xác suất của ca này là e mũ âm lam-đa, khoảng 0 phẩy 513. Nhưng khi đó kẻ gian phải đuổi nốt 6 khối, xác suất là một phần chín mũ 6, chỉ khoảng 0 phẩy 0000019. Nhân hai số với nhau, ca này chỉ góp khoảng 1 phần triệu."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>k khối kẻ gian đã có</th><th>xác suất có k khối</th><th>đuổi nốt</th><th>đóng góp (phần triệu)</th></tr>
+          <tr><td>0</td><td>0,5134</td><td>$\left(\frac{1}{9}\right)^6$</td><td>1</td></tr>
+          <tr><td>1</td><td>0,3423</td><td>$\left(\frac{1}{9}\right)^5$</td><td>6</td></tr>
+          <tr><td>2</td><td>0,1141</td><td>$\left(\frac{1}{9}\right)^4$</td><td>17</td></tr>
+          <tr><td>3</td><td>0,0254</td><td>$\left(\frac{1}{9}\right)^3$</td><td>35</td></tr>
+          <tr><td>4</td><td>0,0042</td><td>$\left(\frac{1}{9}\right)^2$</td><td>52</td></tr>
+          <tr><td>5</td><td>0,0006</td><td>$\frac{1}{9}$</td><td>63</td></tr>
+          <tr><td>6</td><td>0,0001</td><td>1 (đã ngang)</td><td>63</td></tr>
+          <tr><td>7 trở lên</td><td>0,0000065</td><td>1 (đã vượt)</td><td>6</td></tr></table>
+          <p><b>Bước 3 — cộng mọi ca:</b> $1 + 6 + 17 + 35 + 52 + 63 + 63 + 6 = \hl{243}$ phần triệu ≈ 0,000243 — khớp 0,0002428.</p>
+        focus: [1, "1.2", "1.6", "1.7", "1.9", 2]
+        say: "Bước ba, lập bảng cho mọi số khối k mà kẻ gian có thể đã có, mỗi hàng là xác suất có k khối nhân xác suất đuổi nốt. Hàng đầu là ca vừa tính, chỉ góp 1 phần triệu. Hàng có 4 khối hiếm hơn nhiều, chỉ 0 phẩy 0042, nhưng chỉ cần đuổi nốt 2 khối, nên góp tới 52 phần triệu. Hàng có 5 và 6 khối góp nhiều nhất, mỗi hàng 63 phần triệu. Hàng cuối là ca kẻ gian đã vượt hẳn, góp thêm 6 phần triệu. Cộng tất cả được 243 phần triệu, khớp con số 0 phẩy 0002428 của bảng, và rủi ro đến từ những ca hiếm kẻ gian may mắn đào nhanh."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>q, z</th><th>công thức Nakamoto (2008)</th><th>chính xác (Grunspan, Pérez-Marco 2018)</th></tr>
+          <tr><td>0,1; 1</td><td>0,2045873</td><td>0,2</td></tr>
+          <tr><td>0,1; 5</td><td>0,0009137</td><td>0,0017818</td></tr>
+          <tr><td>0,1; 6</td><td>$\hl{0{,}0002428}$</td><td>0,0005914</td></tr>
+          <tr><td>0,3; 5</td><td>0,1773523</td><td>0,1976</td></tr>
+          <tr><td>0,3; 10</td><td>0,0416605</td><td>0,0651</td></tr></table>
+          <p><b>Bước 4 — cả bảng.</b> Tính lại khớp bảng gốc tới 7 chữ số. Nhưng công thức đó <b>xấp xỉ</b> số khối của kẻ tấn công bằng phân phối Poisson; tính chính xác (và mô phỏng cuộc đua khối cho cùng kết quả) thì xác suất <b>cao hơn</b>, có khi gấp đôi.</p>
+        focus: [1, 1, "1.2", "1.3", "1.4", "1.5", "1.6", 2, 2]
+        say: "Bước bốn, làm như vậy cho nhiều cặp q và z. Bảng so hai cột, công thức của Nakamoto năm 2008, và giá trị chính xác do hai nhà nghiên cứu tính năm 2018. Với q bằng 0 phẩy 1 và 1 khối, hai cột là 0 phẩy 205 và 0 phẩy 2. Với 5 khối, công thức cho 0 phẩy 0009, còn giá trị chính xác là 0 phẩy 0018. Với 6 khối, công thức cho 0 phẩy 00024, còn chính xác là 0 phẩy 00059. Với q bằng 0 phẩy 3 và 5 khối, công thức cho 0 phẩy 177, còn chính xác là 0 phẩy 198. Với 10 khối, hai cột là 0 phẩy 042 và 0 phẩy 065. Tính lại bằng máy, kết quả khớp với bảng của Nakamoto tới 7 chữ số. Nhưng công thức đó xấp xỉ số khối của kẻ tấn công bằng một phân phối đơn giản, còn tính chính xác, và mô phỏng cuộc đua khối, cho xác suất cao hơn, có khi gấp đôi."
+
+      - show: |
+          <p><b>Bước 5 — so hai cột ở z = 6:</b> $\frac{0{,}0005914}{0{,}0002428} \approx \hl{2{,}4}$ — rủi ro thật gấp khoảng 2,4 lần con số xấp xỉ.</p>
+        say: "Bước năm, so hai cột ở 6 khối, lấy 0 phẩy 0005914 chia cho 0 phẩy 0002428, được khoảng 2 phẩy 4. Nghĩa là rủi ro thật gấp khoảng 2 phẩy 4 lần con số xấp xỉ năm 2008."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: đếm tay một khối, rồi cho máy đua"
+    checks:
+      - "round(0.1 + 0.9 * (0.1 / 0.9), 6) == 0.2 == round(alg.exact_double_spend(0.1, 1), 6) and round(alg.nakamoto_catch_up(0.1, 1), 4) == 0.2046"
+      - "(lambda R, A: sum((lambda st: min(list(A(st))[[i for i, h in enumerate(A(1 if x == 1 else 0 for x in st)) if h == 5][0]:]) <= 0)([-1 if R.random() < 0.3 else 1 for _ in range(200)]) for _ in range(20000)))(__import__('random').Random(6), __import__('itertools').accumulate) == 3979 and round(3979 / 20000, 3) == 0.199 and abs(3979 / 20000 - alg.exact_double_spend(0.3, 5)) < 0.004 and round(alg.nakamoto_catch_up(0.3, 5), 3) == 0.177"
+    steps:
+      - show: |
+          <p>Đường thứ nhất, $z = 1$, $q = 0{,}1$: liệt kê ai đào khối mới <b>đầu tiên</b>.</p>
+          <table class="t"><tr><th>ca</th><th>xác suất</th><th>kẻ gian đuổi kịp?</th><th>đóng góp</th></tr>
+          <tr><td>khối đầu là của kẻ gian</td><td>0,1</td><td>đã ngang ngay</td><td>0,1</td></tr>
+          <tr><td>khối đầu là của phía trung thực</td><td>0,9</td><td>tụt 1 khối: $\frac{1}{9}$</td><td>$0{,}9 \cdot \frac{1}{9} = 0{,}1$</td></tr>
+          <tr><td>tổng</td><td></td><td></td><td>$\hl{0{,}2}$ ✓ cột chính xác (xấp xỉ: 0,2046)</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Kiểm bằng đường khác, trước hết đếm tay với một khối xác nhận, q bằng 0 phẩy 1, bằng cách xét ai đào khối mới đầu tiên. Nếu khối đầu là của kẻ gian, xác suất 0 phẩy 1, thì kẻ gian đã ngang ngay, nên chắc chắn đuổi kịp. Nếu khối đầu là của phía trung thực, xác suất 0 phẩy 9, kẻ gian tụt 1 khối và gỡ được với xác suất một phần chín, góp 0 phẩy 1. Cộng lại được đúng 0 phẩy 2, khớp cột chính xác, chứ không phải 0 phẩy 2046 của công thức xấp xỉ."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>q = 0,3; z = 5</th><th>xác suất đuổi kịp</th></tr>
+          <tr><td>máy chơi 20000 cuộc đua, đếm số lần kẻ gian thắng</td><td>3979 lần → $\frac{3979}{20000} \approx \hl{0{,}199}$</td></tr>
+          <tr><td>công thức chính xác</td><td>0,1976 ✓</td></tr>
+          <tr><td>công thức xấp xỉ 2008</td><td>0,177 — thấp hơn hẳn</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Đường thứ hai, cho máy chơi thật 20000 cuộc đua khối, với kẻ gian nắm 30 phần trăm sức tính và cửa hàng chờ 5 khối. Kẻ gian thắng 3979 lần, nên tỉ lệ thắng khoảng 0 phẩy 199. Con số đó rất gần giá trị chính xác 0 phẩy 1976. Còn công thức xấp xỉ năm 2008 chỉ cho 0 phẩy 177, thấp hơn hẳn so với cuộc đua thật."
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc"
+    checks:
+      - "alg.nakamoto_catch_up(0.5, 100) == 1.0 and alg.nakamoto_catch_up(0.6, 6) == 1.0"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Tin số xác nhận khi kẻ tấn công nắm quá nửa <b class="red">(xác suất bằng 1)</b>
+          <br><span class="note">Khi $q \geq p$, kẻ tấn công trung bình đào nhanh hơn phần còn lại: rốt cuộc luôn đuổi kịp. Chờ 100 khối cũng không cứu được.</span></div>
+        say: "Lỗi thứ nhất, tin số xác nhận khi kẻ tấn công nắm quá nửa sức tính, trong khi xác suất bằng 1. Khi q không nhỏ hơn p, kẻ tấn công trung bình đào nhanh hơn phần còn lại, nên rốt cuộc luôn đuổi kịp. Chờ 100 khối cũng không cứu được."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Dùng một số xác nhận cho mọi giao dịch <b class="red">(rủi ro theo giá trị)</b>
+          <br><span class="note">Cốc cà phê: chấp nhận 1 khối. Căn hộ: chờ nhiều khối hơn, vì kẻ gian sẵn sàng bỏ nhiều công hơn cho món lợi lớn hơn.</span></div>
+        say: "Lỗi thứ hai, dùng một số xác nhận cho mọi giao dịch, trong khi rủi ro tuỳ theo giá trị. Cốc cà phê thì chấp nhận 1 khối. Căn hộ thì chờ nhiều khối hơn, vì kẻ gian sẵn sàng bỏ nhiều công hơn cho món lợi lớn hơn."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Dùng bảng xấp xỉ như con số chính xác <b class="red">(đánh giá thấp rủi ro)</b>
+          <br><span class="note">Với q = 0,1, muốn dưới 0,1% thì bảng 2008 nói 5 khối, tính chính xác cần 6. Xác suất chỉ <b>giảm dần</b>, không bao giờ về 0 — chọn số khối theo công thức chính xác, có biên.</span></div>
+        say: "Lỗi thứ ba, dùng bảng xấp xỉ như con số chính xác, nên đánh giá thấp rủi ro. Với q bằng 0 phẩy 1, muốn xác suất dưới 0 phẩy 1 phần trăm thì bảng năm 2008 nói 5 khối, còn tính chính xác cần 6 khối. Xác suất chỉ giảm dần, không bao giờ về 0, nên hãy chọn số khối theo công thức chính xác, có biên."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "min(z for z in range(50) if alg.exact_double_spend(0.1, z) < 0.001) == 6 and min(z for z in range(50) if alg.nakamoto_catch_up(0.1, z) < 0.001) == 5"
+      - "min(z for z in range(200) if alg.exact_double_spend(0.3, z) < 0.001) == 32 and min(z for z in range(100) if alg.nakamoto_catch_up(0.3, z) < 0.001) == 24"
+      - "round(alg.exact_double_spend(0.3, 31), 5) == 0.00106 and round(alg.exact_double_spend(0.3, 32), 5) == 0.00088 and round(alg.exact_double_spend(0.3, 10) / 0.001) == 65"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Muốn xác suất đuổi kịp dưới 0,1% khi kẻ tấn công có 10% sức tính, dùng cột <b>chính xác</b> của bảng: cần ít nhất bao nhiêu khối?</td></tr>
+          <tr><td>2</td><td>Nếu kẻ tấn công có 30% sức tính, đoán xem cần nhiều hơn hay ít hơn 10 khối?</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, muốn xác suất đuổi kịp dưới 0 phẩy 1 phần trăm khi kẻ tấn công có 10 phần trăm sức tính, dùng cột chính xác của bảng, cần ít nhất bao nhiêu khối? Câu hai, nếu kẻ tấn công có 30 phần trăm sức tính, hãy đoán xem cần nhiều hơn hay ít hơn 10 khối? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>① q = 0,1</th><th>chính xác</th><th>dưới 0,001?</th></tr>
+          <tr><td>z = 5</td><td>0,0017818</td><td>chưa</td></tr>
+          <tr><td>z = 6</td><td>0,0005914</td><td>có → $z = \hl{6}$</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Đáp án câu một, dò cột chính xác từ trên xuống. Với 5 khối, xác suất là 0 phẩy 0017818, vẫn lớn hơn 0 phẩy 001, nên chưa đủ, dù bảng năm 2008 nói 5 khối là đủ. Với 6 khối, xác suất là 0 phẩy 0005914, nhỏ hơn 0 phẩy 001, nên cần ít nhất 6 khối."
+      - show: |
+          <table class="t"><tr><th>② q = 0,3</th><th>chính xác</th><th>dưới 0,001?</th></tr>
+          <tr><td>z = 10</td><td>0,0651</td><td>còn xa</td></tr>
+          <tr><td>z = 31</td><td>0,00106</td><td>chưa</td></tr>
+          <tr><td>z = 32</td><td>0,00088</td><td>có → $z = \hl{32}$ (bảng 2008: 24)</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Câu hai, cần nhiều hơn nhiều so với 10 khối. Ở 10 khối, xác suất chính xác còn 0 phẩy 0651, gấp khoảng 65 lần ngưỡng. Ở 31 khối vẫn là 0 phẩy 00106, chưa đủ. Phải tới 32 khối mới còn 0 phẩy 00088, trong khi bảng năm 2008 chỉ đòi 24 khối."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">theo chuỗi có tổng công lớn nhất</span><span class="a">→</span>
+          <span class="n">kẻ tấn công phải đuổi kịp z khối</span><span class="a">→</span>
+          <span class="n">xác suất giảm gần như theo hàm mũ khi $q \lt p$</span><span class="a">→</span>
+          <span class="n">$q \geq p$: luôn đuổi kịp; chọn z theo giá trị</span></div>
+        say: "Tổng kết lại, mỗi nút theo chuỗi có tổng công lớn nhất, nên kẻ tấn công phải đuổi kịp z khối. Khi q nhỏ hơn p, xác suất giảm gần như theo hàm mũ, còn khi q không nhỏ hơn p thì luôn đuổi kịp, và hãy chọn số khối theo giá trị giao dịch."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> “cuối cùng” ở đây là <b>một con số xác suất</b>, không phải một sự kiện — hãy chọn ngưỡng xác suất mình chấp nhận được.</div>
+        say: "Điều cần mang theo, cuối cùng ở đây là một con số xác suất, không phải một sự kiện, nên hãy chọn ngưỡng xác suất mà mình chấp nhận được."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 7): <b>bằng chứng cổ phần</b> và tính cuối cùng theo đa số hai phần ba.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 7, ta học bằng chứng cổ phần, và tính cuối cùng theo đa số hai phần ba. Hẹn gặp bạn ở bài tiếp theo."

@@ -1,0 +1,221 @@
+id: L14
+course: ESY
+series: "ESY · Hệ thống nhúng và thời gian thực"
+title: "Bài 14 — Cập nhật phần sụn an toàn và khởi động tin cậy"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/esy.yaml L14; audit/esy/verify_esy.py L14; NIST SP 800-193, Platform Firmware Resiliency Guidelines (2018); IETF RFC 9019, A Firmware Update Architecture for Internet of Things (2021); NET bài 14 (hàm băm, chữ ký số)"
+assumes: [arith, cdot, frac, approx, power, ltgt]
+# Quy ước: phần sụn = chương trình nạp trong bộ nhớ flash của chip. Mã kiểm tổng minh hoạ bằng CRC-32 (zlib.crc32): bắt lỗi ngẫu nhiên,
+#   nhưng ai cũng tính lại được. Chữ ký số như NET bài 14: nhà sản xuất ký bằng khoá bí mật, thiết bị kiểm bằng khoá công khai.
+#   Cập nhật hai phân vùng A/B có quay lui theo RFC 9019. Số liệu flash là ví dụ; mọi số do Python trong checks.
+objectives:
+  - "Phân biệt mã kiểm tổng và chữ ký số"
+  - "Giải thích khởi động tin cậy"
+  - "Thiết kế cập nhật hai phân vùng có quay lui"
+asr_reviewed:
+  - {sentence: "Bước một là bước chia bộ nhớ, và còn dư 192 ki-lô-byte.", reason: "ASR chép “Bước 1 là bước chia bộ nhớ và còn dư 192 kilobyte.” (0.882): KB đọc “ki-lô-byte” theo lexicon của khoá, ASR viết “kilobyte/kg” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Tải 400 ki-lô-byte qua cổng nối tiếp tốc độ 115 nghìn 200 bit mỗi giây, tức khoảng 11 nghìn 520 byte mỗi giây, mất khoảng 35 phẩy 6 giây.", reason: "ASR chép “Tại 400 kilobytes qua cổng nối tiếp tốc độ 115,200 bit mỗi giây, tức khoảng 11.520 bit mỗi giây, mất khoảng 35,6 giây.” (0.902): KB đọc “ki-lô-byte” theo lexicon của khoá, ASR viết “kilobyte/kg”; byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: tải/tại — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Câu một, hai phân vùng cần 2 nhân 600, bằng 1200, thêm bộ nạp 64 thành 1264, thiếu 240 ki-lô-byte.", reason: "ASR chép “Câu 1, 2 phân vùng cần 2 nhân 600 bằng 1.200 thêm bộ nạp 64 x1.264 thiếu 240 kg.” (0.917): KB đọc “ki-lô-byte” theo lexicon của khoá, ASR viết “kilobyte/kg”; lệch âm/thanh thuần Việt: thành/x — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Muốn vừa thì mỗi phân vùng chỉ được tối đa 1024 trừ 64, chia đôi, tức là 480 ki-lô-byte.", reason: "ASR chép “Muốn vừa thì mỗi phân vùng chỉ được tối đa 1024-64, chia đôi, tức là 480 kilobytes.” (0.918): KB đọc “ki-lô-byte” theo lexicon của khoá, ASR viết “kilobyte/kg”; lệch âm/thanh thuần Việt: trừ/∅ — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Hình vẽ bộ nhớ chương trình 1024 ki-lô-byte như một dải dài, bộ nạp nhỏ ở đầu, rồi hai ngăn bằng nhau là phân vùng A và phân vùng B, phần còn lại để trống.", reason: "ASR chép “Hình vẽ bộ nhớ chương trình 1024 kilobytes như một dải dài, bộ nạp nhỏ ở đầu, rồi hai ngăn bằng nhau là phân vùng A và phân vùng B, phần còn lại để trống.” (0.952): KB đọc “ki-lô-byte” theo lexicon của khoá, ASR viết “kilobyte/kg” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Câu một, bộ nhớ chương trình 1024 ki-lô-byte, bộ nạp 64, phần sụn 600, có làm được hai phân vùng không?", reason: "“byte” đọc thô /bai/ — probe audit/csa/probes/p1_thuat_ngu.md: ASR chép “bay” 8/8 (cùng âm), đối chứng 0/8; lexicon foreign_ok; “bit” ASR chép “bích/biết” (probe p1 CSA: không cách viết nào phân định âm cuối t/ch) — NOT_VERIFIED bằng tai người; “byte” → “bay” cùng âm"}
+  - {sentence: "Giả sử bộ nhớ chương trình có 1024 ki-lô-byte, bộ nạp chiếm 32, hai phân vùng A và B mỗi vùng 400, tổng 832, vừa đủ.", reason: "“byte” đọc thô /bai/ — probe audit/csa/probes/p1_thuat_ngu.md: ASR chép “bay” 8/8 (cùng âm), đối chứng 0/8; lexicon foreign_ok; “bit” ASR chép “bích/biết” (probe p1 CSA: không cách viết nào phân định âm cuối t/ch) — NOT_VERIFIED bằng tai người; “byte” → “bay” cùng âm"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Mười nghìn thiết bị, một bản cập nhật hỏng"
+    steps:
+      - show: |
+          <p>Gửi bản cập nhật qua mạng cho mười nghìn thiết bị. Mất điện giữa lúc ghi: thiết bị không khởi động được nữa. Hoặc tệ hơn: kẻ xấu gửi phần sụn của họ.</p>
+          <div class="box key">Hôm nay: <b>khởi động tin cậy</b> bằng chữ ký số, và <b>cập nhật hai phân vùng</b> có quay lui.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, bạn gửi một bản cập nhật qua mạng cho mười nghìn thiết bị. Mất điện đúng lúc đang ghi, thiết bị không khởi động được nữa. Hoặc tệ hơn, kẻ xấu gửi phần sụn của chính họ. Hôm nay ta học khởi động tin cậy bằng chữ ký số, và cập nhật hai phân vùng có quay lui."
+
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: mã kiểm tổng ai cũng tính được, chữ ký cần khoá bí mật"
+    checks:
+      - "5 + 0 == 5 and 9 + 9 == 18"
+      - "pow(4, 7, 33) == 16 and pow(16, 3, 33) == 4 and pow(5, 3, 33) == 26 != 4"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thông điệp</th><th>mã kiểm tổng đơn giản: cộng các chữ số</th><th>thiết bị kiểm</th></tr>
+          <tr><td>50</td><td>$5 + 0 = 5$</td><td>khớp</td></tr>
+          <tr><td>kẻ xấu sửa thành 99, tự tính lại</td><td>$9 + 9 = 18$</td><td>vẫn khớp — không phát hiện</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Trước hết, xem một mã kiểm tổng đơn giản nhất, cộng các chữ số của thông điệp. Thông điệp 50 có mã kiểm tổng 5 cộng 0, bằng 5, thiết bị cộng lại thấy khớp. Nhưng kẻ xấu sửa thành 99 rồi tự tính lại mã mới là 18 và gửi kèm, thiết bị cộng lại vẫn thấy khớp, vì ai cũng tính được mã này."
+      - show: |
+          <table class="t"><tr><th>chữ ký số, minh hoạ bằng số nhỏ</th><th>tính</th></tr>
+          <tr><td>nhà sản xuất ký thông điệp 4 bằng khoá bí mật 7</td><td>$4^7$ chia 33 dư $\hl{16}$ → chữ ký 16</td></tr>
+          <tr><td>thiết bị kiểm bằng khoá công khai 3</td><td>$16^3$ chia 33 dư 4 → khớp thông điệp ✓</td></tr>
+          <tr><td>kẻ xấu đoán chữ ký 5</td><td>$5^3$ chia 33 dư 26, khác 4 → từ chối</td></tr></table>
+        introduces: [power]
+        focus: [1, "1.2", "1.3", "1.4", 1]
+        say: "Chữ ký số thì khác, như đã học ở khoá Mạng máy tính, ở đây minh hoạ bằng số nhỏ. Nhà sản xuất ký thông điệp 4 bằng khoá bí mật 7, tính 4 mũ 7 chia 33 lấy số dư, được chữ ký 16. Thiết bị kiểm bằng khoá công khai 3, tính 16 mũ 3 chia 33 dư 4, khớp với thông điệp. Kẻ xấu không có khoá bí mật, đoán bừa chữ ký 5 thì 5 mũ 3 chia 33 dư 26, khác 4, nên bị từ chối. Chữ ký thật dùng số dài hàng trăm chữ số nên không đoán nổi."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: mã kiểm tổng và chữ ký số"
+    checks:
+      - "round(2 ** -32, 12) == 2.33e-10"
+      - "__import__('zlib').crc32(b'dat toc do 50') != __import__('zlib').crc32(b'dat toc do 99')"
+    steps:
+      - show: |
+          <table class="t"><tr><th></th><th>mã kiểm tổng (CRC-32)</th><th>chữ ký số (khoá Mạng máy tính)</th></tr>
+          <tr><td>chống</td><td>lỗi ngẫu nhiên khi truyền, ghi</td><td>cả kẻ cố ý sửa</td></tr>
+          <tr><td>ai tính được</td><td><b>ai cũng tính được</b></td><td>chỉ người giữ khoá bí mật mới ký được</td></tr>
+          <tr><td>bỏ sót</td><td>lỗi ngẫu nhiên: khoảng $2^{-32} \approx 2{,}3 \cdot 10^{-10}$</td><td>giả mạo: không làm được trong thực tế</td></tr></table>
+          <p class="note">Kẻ xấu sửa lệnh “tốc độ 50” thành “tốc độ 99”, tính lại CRC mới và gửi kèm — thiết bị kiểm CRC vẫn thấy đúng.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2, 2]
+        say: "So sánh hai thứ. Mã kiểm tổng chống lỗi ngẫu nhiên khi truyền hay khi ghi, còn chữ ký số như khoá Mạng máy tính chống được cả kẻ cố ý sửa. Mã kiểm tổng thì ai cũng tính được, còn chữ ký chỉ người giữ khoá bí mật mới tạo được. Với lỗi ngẫu nhiên, mã kiểm tổng 32 bit chỉ bỏ sót khoảng 2 phần mười tỉ, còn giả mạo chữ ký thì không làm được trong thực tế. Ví dụ, kẻ xấu sửa lệnh tốc độ 50 thành tốc độ 99, tính lại mã kiểm tổng mới và gửi kèm. Thiết bị kiểm mã kiểm tổng vẫn thấy đúng."
+
+  # ───────────────────────── 3. KHỞI ĐỘNG TIN CẬY ─────────────────────────
+  - id: boot
+    kind: concept
+    title: "Chuỗi khởi động tin cậy"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">mã khởi động trong ROM (không sửa được) + khoá công khai</span><span class="a">→</span><span class="n">kiểm chữ ký bộ nạp</span><span class="a">→</span><span class="n">bộ nạp kiểm chữ ký phần sụn</span><span class="a">→</span><span class="n">chạy</span></div>
+          <div class="box key">Mỗi khâu chỉ chạy khâu sau khi chữ ký đúng. Gốc tin cậy là đoạn mã không ai ghi đè được, giữ khoá công khai của nhà sản xuất — khoá bí mật <b>không bao giờ</b> nằm trên thiết bị.</div>
+        focus: [1, 2, 2]
+        say: "Chuỗi khởi động tin cậy bắt đầu từ đoạn mã trong bộ nhớ chỉ đọc, không ai sửa được, giữ khoá công khai của nhà sản xuất. Đoạn đó kiểm chữ ký của bộ nạp, bộ nạp lại kiểm chữ ký của phần sụn, rồi mới chạy. Mỗi khâu chỉ cho khâu sau chạy khi chữ ký đúng, còn khoá bí mật không bao giờ nằm trên thiết bị."
+
+  - id: intuition
+    kind: intuition
+    title: "Hai ngăn: một ngăn đang chạy, một ngăn để ghi"
+    checks:
+      - "32 + 400 + 400 + 192 == 1024 and 1024 - 832 == 192"
+    steps:
+      - show: |
+          <div><svg width="1500" height="340" viewBox="0 0 1500 340"><defs><marker id="arE14" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs><g fill="#1f2937" font-size="22"><rect x="150" y="120" width="38" height="80" fill="#6b7280" stroke="#1f2937" stroke-width="2"/><text x="169" y="100" text-anchor="middle">bộ nạp 32 KB</text><rect x="188" y="120" width="469" height="80" fill="#2a78d6" stroke="#1f2937" stroke-width="2"/><text x="422" y="168" text-anchor="middle" fill="#ffffff">phân vùng A</text><text x="422" y="235" text-anchor="middle">400 KB</text><rect x="656" y="120" width="469" height="80" fill="#eb6834" stroke="#1f2937" stroke-width="2"/><text x="891" y="168" text-anchor="middle" fill="#ffffff">phân vùng B</text><text x="891" y="235" text-anchor="middle">400 KB</text><rect x="1125" y="120" width="225" height="80" fill="#e5e7eb" stroke="#1f2937" stroke-width="2"/><text x="1238" y="168" text-anchor="middle" fill="#1f2937">trống</text><text x="1238" y="235" text-anchor="middle">192 KB</text><text x="422" y="100" text-anchor="middle" fill="#2a78d6">đang chạy, không bị đụng tới</text><line x1="1055" y1="300" x2="1055" y2="206" stroke="#1f2937" stroke-width="3" marker-end="url(#arE14)"/><text x="1069" y="300">bản mới tải về ghi vào đây</text><text x="150" y="300">tổng: 32 + 400 + 400 = 832 KB, dư 192 KB</text></g></svg></div>
+        focus: [1, 1, 1]
+        say: "Hình vẽ bộ nhớ chương trình 1024 ki-lô-byte như một dải dài, bộ nạp nhỏ ở đầu, rồi hai ngăn bằng nhau là phân vùng A và phân vùng B, phần còn lại để trống. Phân vùng A đang chạy và không bị đụng tới trong suốt lúc cập nhật. Bản mới tải về chỉ được ghi vào phân vùng B, nên dù ghi hỏng giữa chừng, bản trong A vẫn còn nguyên để chạy."
+
+  # ───────────────────────── 4. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Cập nhật hai phân vùng có quay lui"
+    checks:
+      - "2 * 400 + 32 == 832 and 832 <= 1024"
+      - "round(400 * 1024 / 11520, 1) == 35.6"
+    steps:
+      - show: |
+          <p><b>Bước 1 — chia bộ nhớ:</b> flash 1024 KB, bộ nạp 32 KB, A và B mỗi vùng 400 KB:</p>
+          $$2 \cdot 400 + 32 = 832 \le 1024 \qquad \text{dư } 1024 - 832 = 192 \text{ KB}$$
+        focus: [1, 2, 2]
+        say: "Giả sử bộ nhớ chương trình có 1024 ki-lô-byte, bộ nạp chiếm 32, hai phân vùng A và B mỗi vùng 400, tổng 832, vừa đủ. Bước một là bước chia bộ nhớ, và còn dư 192 ki-lô-byte. Nếu không vừa thì phải thu gọn phần sụn trước khi tính chuyện cập nhật."
+      - show: |
+          <p><b>Bước 2 — tải vào B:</b> đang chạy A; bản mới ghi vào <b>B</b>, A không bị đụng tới.</p>
+          $$\frac{400 \cdot 1024 \text{ byte}}{11\,520 \text{ byte mỗi giây}} \approx 35{,}6 \text{ giây}$$
+          <p class="note">Qua cổng nối tiếp 115 200 bit mỗi giây (khoảng 11 520 byte mỗi giây): hơn nửa phút — đủ lâu để mất điện giữa chừng.</p>
+        focus: [1, 2, 3]
+        say: "Bước hai, đang chạy A, ta tải bản mới vào B, A không bị đụng tới. Tải 400 ki-lô-byte qua cổng nối tiếp tốc độ 115 nghìn 200 bit mỗi giây, tức khoảng 11 nghìn 520 byte mỗi giây, mất khoảng 35 phẩy 6 giây. Hơn nửa phút là đủ lâu để mất điện đúng lúc đang ghi, nên ghi vào ngăn khác là bắt buộc."
+      - show: |
+          <p><b>Bước 3 — kiểm chữ ký của B:</b> sai → xoá B, tiếp tục chạy A. Đúng → đánh dấu B “chạy thử”, khởi động lại vào B.</p>
+          <table class="t"><tr><th>chữ ký B</th><th>làm gì</th></tr><tr><td>sai</td><td>xoá B, chạy A</td></tr><tr><td>đúng</td><td>B = chạy thử, khởi động lại vào B</td></tr></table>
+        focus: [1, 2, "2.2", "2.3"]
+        say: "Bước ba, kiểm chữ ký của B trước khi tin nó. Bảng chia hai trường hợp theo kết quả kiểm. Nếu chữ ký sai thì xoá B và tiếp tục chạy A. Nếu đúng thì đánh dấu B là chạy thử, rồi khởi động lại vào B."
+      - clear: true
+        show: |
+          <p><b>Bước 4 — B tự kiểm:</b></p>
+          <table class="t"><tr><th>B sau khi khởi động</th><th>bộ nạp làm gì</th></tr>
+          <tr><td>tự kiểm đạt</td><td>đánh dấu B “chính thức”</td></tr>
+          <tr><td>không đạt, hoặc treo (bộ giám sát khởi động lại chip)</td><td>B vẫn “chạy thử” → <b>quay về A</b></td></tr></table>
+          <p class="note">Mất điện ở bước nào thì vẫn còn một bản chạy được.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Bước bốn, B chạy và tự kiểm. Nếu B tự kiểm đạt, đánh dấu B là chính thức. Nếu không đạt, hoặc bị treo và bộ giám sát khởi động lại như bài 12, bộ nạp quay về A. Mất điện ở bước nào thì vẫn còn một bản chạy được."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: cho mất điện ở từng thời điểm"
+    checks:
+      - "(lambda rows: len(rows) == 5 and all(r in ('A', 'B') for r in rows))([('A' if s in ('tai', 'kiem', 'thu') else 'B') for s in ('tai', 'kiem', 'thu', 'chinh_thuc', 'sau')])"
+      - "[('A' if s in ('tai', 'kiem', 'thu') else 'B') for s in ('tai', 'kiem', 'thu', 'chinh_thuc', 'sau')].count('A') == 3"
+    steps:
+      - show: |
+          <table class="t"><tr><th>mất điện khi đang</th><th>A</th><th>B</th><th>bật lại chạy</th></tr>
+          <tr><td>tải vào B</td><td>nguyên</td><td>dở dang</td><td>A ✓</td></tr>
+          <tr><td>kiểm chữ ký B</td><td>nguyên</td><td>chưa kiểm xong</td><td>A ✓</td></tr>
+          <tr><td>B chạy thử, chưa tự kiểm xong</td><td>nguyên</td><td>chạy thử</td><td>A ✓</td></tr>
+          <tr><td>vừa đánh dấu B chính thức</td><td>nguyên</td><td>chính thức</td><td>B ✓</td></tr>
+          <tr><td>sau đó, đang dùng B</td><td>bản cũ</td><td>chính thức</td><td>B ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Kiểm bằng đường khác, vì câu mất điện ở bước nào cũng còn bản chạy được là một lời hứa, ta liệt kê từng thời điểm mất điện. Mất điện khi đang tải vào B, A còn nguyên nên bật lại chạy A. Mất điện khi đang kiểm chữ ký B, cũng chạy A. Mất điện khi B đang chạy thử chưa tự kiểm xong, bộ nạp thấy B chưa chính thức nên vẫn về A. Từ lúc B đã được đánh dấu chính thức trở đi, bật lại sẽ chạy B, cả năm dòng đều có một bản chạy được."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi người mới hay mắc"
+    checks:
+      - "5 < 7 and 8 > 7"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Dùng mã kiểm tổng để chống giả mạo <b class="red">(sai)</b>
+          <br><span class="note">Kẻ tấn công tính lại được. Mã kiểm tổng chống lỗi truyền; chống kẻ xấu phải dùng chữ ký số.</span></div>
+        say: "Lỗi thứ nhất, dùng mã kiểm tổng để chống giả mạo. Kẻ tấn công tính lại được, nên mã kiểm tổng chỉ chống lỗi truyền, còn chống kẻ xấu phải dùng chữ ký số."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Ghi đè bản đang chạy <b class="red">(sai)</b>
+          <br><span class="note">Mất điện giữa chừng là thiết bị thành cục gạch. Luôn ghi vào phân vùng khác.</span></div>
+        say: "Lỗi thứ hai, ghi đè lên bản đang chạy. Mất điện giữa chừng là thiết bị thành cục gạch, nên luôn ghi vào phân vùng khác."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Chấp nhận bản cũ có chữ ký đúng <b class="red">(thiếu)</b>
+          <br><span class="note">Bản cũ có lỗ hổng đã biết vẫn có chữ ký thật. Lưu số phiên bản tối thiểu: thiết bị ở bản 7 thì từ chối bản 5.</span></div>
+          <table class="t"><tr><th>bản gửi tới (chữ ký đúng)</th><th>so với bản 7 đang chạy</th><th>quyết định</th></tr><tr><td>5</td><td>cũ hơn</td><td>từ chối</td></tr><tr><td>8</td><td>mới hơn</td><td>nhận</td></tr></table>
+        focus: [1, 1, 1, 2]
+        say: "Lỗi thứ ba, chấp nhận một bản cũ có chữ ký đúng. Bản cũ có lỗ hổng đã biết vẫn mang chữ ký thật. Hãy lưu số phiên bản tối thiểu, thiết bị đang ở bản 7 thì từ chối bản 5. Bảng cho thấy chữ ký đúng là chưa đủ, thiết bị còn phải so số phiên bản rồi mới nhận bản 8."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Đặt khoá bí mật trong thiết bị hay trong mã nguồn <b class="red">(sai)</b>
+          <br><span class="note">Một thiết bị bị đọc trộm là lộ khoá cho cả đội. Thiết bị chỉ giữ khoá công khai.</span></div>
+        say: "Lỗi thứ tư, đặt khoá bí mật trong thiết bị hay trong mã nguồn. Chỉ một thiết bị bị đọc trộm là lộ khoá của cả đội thiết bị, nên thiết bị chỉ được giữ khoá công khai."
+
+  # ───────────────────────── 6. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "2 * 600 + 64 == 1264 and 1264 > 1024"
+      - "2 * 600 == 1200 and 1264 - 1024 == 240 and (1024 - 64) // 2 == 480"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Flash 1024 KB, bộ nạp 64 KB, phần sụn 600 KB. Có làm được hai phân vùng không?</td></tr>
+          <tr><td>2</td><td>Bản mới có chữ ký đúng, nhưng khởi động vào thì treo. Thiết bị sẽ làm gì?</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, bộ nhớ chương trình 1024 ki-lô-byte, bộ nạp 64, phần sụn 600, có làm được hai phân vùng không? Câu hai, bản mới có chữ ký đúng nhưng khởi động vào thì treo, thiết bị sẽ làm gì? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <p>① Hai phân vùng: $2 \cdot 600 = 1200$; thêm bộ nạp: $1200 + 64 = 1264 \gt 1024$, thiếu 240 KB → $\hl{\text{không}}$.</p>
+          <p class="note">Mỗi phân vùng chỉ được tối đa $\frac{1024 - 64}{2} = 480$ KB: phải thu gọn phần sụn, dùng flash ngoài, hoặc nén.</p>
+        focus: [1, 1, 2]
+        say: "Câu một, hai phân vùng cần 2 nhân 600, bằng 1200, thêm bộ nạp 64 thành 1264, thiếu 240 ki-lô-byte. Đáp án câu một, tổng cần 1264, lớn hơn 1024, nên không làm được, phải thu gọn phần sụn, dùng bộ nhớ ngoài, hoặc nén. Muốn vừa thì mỗi phân vùng chỉ được tối đa 1024 trừ 64, chia đôi, tức là 480 ki-lô-byte."
+      - show: |
+          <table class="t"><tr><th>lúc</th><th>chuyện xảy ra</th></tr>
+          <tr><td>khởi động vào B</td><td>B treo, không ai cho bộ giám sát ăn</td></tr>
+          <tr><td>hết hạn bộ giám sát</td><td>chip tự khởi động lại</td></tr>
+          <tr><td>bộ nạp đọc dấu</td><td>B vẫn “chạy thử”, chưa “chính thức” → $\hl{\text{quay về A}}$</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Câu hai, ta đi lần lượt từng lúc. Khởi động vào B thì B treo, nên không ai cho bộ giám sát ăn nữa. Hết hạn bộ giám sát, chip tự khởi động lại. Bộ nạp đọc dấu của B, thấy B vẫn ở trạng thái chạy thử chưa chính thức, nên quay về chạy A."
+
+  # ───────────────────────── 7. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">mã kiểm tổng: lỗi ngẫu nhiên</span><span class="a">→</span>
+          <span class="n">chữ ký số: kẻ cố ý</span><span class="a">→</span>
+          <span class="n">chuỗi khởi động từ ROM</span><span class="a">→</span>
+          <span class="n">A/B, chạy thử, quay lui, chặn bản cũ</span></div>
+        say: "Tổng kết lại, mã kiểm tổng chống lỗi ngẫu nhiên, chữ ký số chống kẻ cố ý. Khởi động tin cậy đi thành chuỗi từ bộ nhớ chỉ đọc, còn cập nhật dùng hai phân vùng, chạy thử, quay lui, và chặn bản cũ."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> mọi bước có thể hỏng giữa chừng — thiết kế sao cho ở mọi thời điểm luôn còn một đường lui an toàn.</div>
+        say: "Điều cần mang theo, mọi bước đều có thể hỏng giữa chừng, nên hãy thiết kế sao cho ở mọi thời điểm luôn còn một đường lui an toàn."
+      - clear: true
+        forward_ref: true
+        show: |
+          <p class="note">Bài sau, bài 15, cũng là bài cuối của khoá: đi theo dòng thời gian phần mềm trên các robot thăm dò sao Hoả, từ 1997 tới nay — lỗi thật, cách đội kỹ sư sửa từ rất xa, và thực hành rút ra ở mỗi quy mô nhiệm vụ.</p>
+        say: "Bài sau, bài 15, cũng là bài cuối của khoá, ta đi theo dòng thời gian phần mềm trên các robot thăm dò sao Hoả, từ năm 1997 tới nay. Ta sẽ xem những lỗi thật, cách đội kỹ sư sửa chúng từ rất xa, và các thực hành rút ra ở mỗi quy mô nhiệm vụ."

@@ -1,0 +1,185 @@
+id: L06
+course: LLM
+series: "LLM · Mô hình ngôn ngữ lớn"
+title: "Bài 6 — Huấn luyện trước: mất mát entropy chéo và quy luật mở rộng"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/llm.yaml L06; audit/llm/verify_llm.py L06; J. Kaplan và cộng sự, Scaling Laws for Neural Language Models (2020) — C ≈ 6ND; J. Hoffmann và cộng sự, Training Compute-Optimal Large Language Models (2022) — tối ưu tính toán ≈ 20 từ tố mỗi tham số; CS115 bài 20 (entropy chéo), bài 12 (lôgarit)"
+assumes: [arith, log, exp, cdot, power, approx, frac]
+# Quy ước: mất mát = trung bình −ln(xác suất của từ tố đúng) (đơn vị nat, lôgarit tự nhiên); độ hỗn loạn = e^mất mát (khớp bài 1 vì cùng cơ số).
+#   C ≈ 6·N·D phép tính dấu phẩy động (N tham số, D từ tố huấn luyện). 10¹⁴ phép tính hiệu dụng mỗi giây cho một thẻ là SỐ MINH HOẠ.
+#   Tên Chinchilla chỉ trên màn hình; lời đọc “một nghiên cứu năm 2022”.
+objectives:
+  - "Tính mất mát entropy chéo và độ hỗn loạn tương ứng"
+  - "Ước lượng ngân sách tính toán C ≈ 6ND"
+  - "Hiểu tỉ lệ dữ liệu trên tham số là điểm tối ưu, không phải luật"
+asr_reviewed:
+  - {sentence: "Và e mũ lôgarit của 7 lại bằng 7, vì hai phép này triệt tiêu nhau.", reason: "ASR chép “và e-mũ Logatrix của 7 lại bằng 7, vì hai phép này triệt tiêu nhau.” (0.938): “lôgarit” là từ phiên âm, ASR viết lại theo chính tả Latin (“Logatrix/Logarith”); phần còn lại chép đúng nguyên văn — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Hình vẽ mất mát âm lôgarit p theo xác suất p mà mô hình gán cho từ tố đúng.", reason: "chữ cái “p” đọc thô — probe audit/dms/probes/p2_chu_p.md: thô 7/8, đối chứng “tê” 0/8; ASR lẫn p/t, không phải TTS đọc sai; chữ hiện trên màn hình"}
+  - {sentence: "Vì độ hỗn loạn bằng e mũ mất mát, nên nó xấp xỉ 2 phẩy 16.", reason: "tên chữ cái đọc kiểu Việt, ASR chép nhầm chữ (q→quy, x→ích, k→ca) — nhóm đã biết (SKILL Bước 5); chữ hiện trên màn hình"}
+  - {sentence: "Số phép tính xấp xỉ 6 N D, và tỉ lệ dữ liệu trên tham số chọn theo mục tiêu chi phí.", reason: "ASR chép “số phép tính sắp xị 6NG và tỷ lệ dữ liệu trên tham số chọn theo mục tiêu chi phí.” (0.791): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “tỉ” ASR viết chính tả “tỷ” (cùng âm); lệch âm/thanh thuần Việt: xấp xỉ/sắp xị — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Một nghiên cứu năm 2022 cho thấy với ngân sách cố định, mất mát nhỏ nhất khi D xấp xỉ 20 nhân N.", reason: "ASR chép “Một nghiên cứu năm 2022 cho thấy với ngân sách cố định, mất mát nhỏ nhất khi về sắp xỉ 20 nhân N.” (0.933): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: xấp (trong “d xấp” → “về sắp”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Liên hệ với bài 1, độ hỗn loạn bằng e mũ mất mát, vì cùng dùng lôgarit tự nhiên.", reason: "ASR chép “Liên hệ với bài 1, Độ hỗn loạn bằng e mũ mất mát, vì cùng dùng Logatrix tự nhiên.” (0.947): lệch âm/thanh thuần Việt: lôgarit/logatrix — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Một con số quyết định hàng triệu đô"
+    checks:
+      - "6 * 7e9 * 1.4e11 == 5.88e21 and round(5.88e21 / (1e14 * 86400)) == 681"
+    steps:
+      - show: |
+          <p>Trước khi huấn luyện một mô hình 7 tỉ tham số, đội kỹ sư phải trả lời: cần bao nhiêu dữ liệu, bao nhiêu phép tính? Ước lượng nhanh cho ≈ $5{,}9 \cdot 10^{21}$ phép tính — khoảng <b>681 ngày-thẻ</b> nếu mỗi thẻ làm $10^{14}$ phép tính mỗi giây (số minh hoạ).</p>
+          <div class="box key">Hôm nay: <b>mất mát entropy chéo</b> mà mô hình tối ưu khi huấn luyện trước, và <b>quy luật mở rộng</b> để lập ngân sách.</div>
+        focus: [1, 1, 2]
+        say: "Chào bạn, trước khi huấn luyện một mô hình 7 tỉ tham số, đội kỹ sư phải trả lời cần bao nhiêu dữ liệu và bao nhiêu phép tính. Ước lượng nhanh cho khoảng 5 phẩy 9 nhân 10 mũ 21 phép tính, tức khoảng 681 ngày thẻ tính toán nếu mỗi thẻ làm 10 mũ 14 phép tính mỗi giây, một con số minh hoạ. Hôm nay ta học mất mát entropy chéo mà mô hình tối ưu khi huấn luyện trước, và quy luật mở rộng để lập ngân sách."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: lôgarit tự nhiên và độ hỗn loạn của bài 1"
+    checks:
+      - "math.log(1) == 0 and round(math.log(0.5), 3) == -0.693 and round(math.exp(math.log(7)), 9) == 7"
+    steps:
+      - show: |
+          <table class="t"><tr><th>phép</th><th>ví dụ</th><th>nghĩa</th></tr>
+          <tr><td>$\ln 1$</td><td>0</td><td>chắc chắn thì không “ngạc nhiên”</td></tr>
+          <tr><td>$\ln 0{,}5$</td><td>≈ −0,693</td><td>số nhỏ hơn 1 có lôgarit âm</td></tr>
+          <tr><td>$e^{\ln 7}$</td><td>7</td><td>e mũ và lôgarit triệt tiêu nhau</td></tr></table>
+        introduces: [log, exp]
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Từ khoá toán, ta nhớ ba điều về lôgarit tự nhiên. Lôgarit của 1 bằng 0. Lôgarit của 0 phẩy 5 xấp xỉ trừ 0 phẩy 693, vì số nhỏ hơn 1 có lôgarit âm. Và e mũ lôgarit của 7 lại bằng 7, vì hai phép này triệt tiêu nhau."
+      - show: |
+          <p><b>Ở bài 1</b>, độ hỗn loạn của một chuỗi là $PP = P^{-1/N}$: mô hình bối rối như chọn đều trong $PP$ khả năng mỗi bước; mô hình đoán đều 6 từ có độ hỗn loạn đúng bằng 6.</p>
+        say: "Ở bài 1, độ hỗn loạn của một chuỗi bằng xác suất của chuỗi mũ âm 1 chia N, nghĩa là mô hình bối rối như chọn đều trong chừng ấy khả năng mỗi bước. Mô hình đoán đều 6 từ có độ hỗn loạn đúng bằng 6."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: mất mát, độ hỗn loạn, N, D, C"
+    steps:
+      - show: |
+          <p><b>Mất mát entropy chéo</b> ở mỗi vị trí: $-\ln p$, với $p$ là xác suất mô hình gán cho từ tố ĐÚNG tiếp theo. Mất mát của cả tập = trung bình theo mọi vị trí.</p>
+          <p>Liên hệ với bài 1: độ hỗn loạn $= e^{\text{mất mát}}$ (cùng dùng lôgarit tự nhiên).</p>
+          <table class="t"><tr><th>ký hiệu</th><th>nghĩa</th></tr>
+          <tr><td>$N$</td><td>số tham số</td></tr>
+          <tr><td>$D$</td><td>số từ tố dữ liệu huấn luyện</td></tr>
+          <tr><td>$C \approx 6 \cdot N \cdot D$</td><td>số phép tính huấn luyện (2ND đi tới, 4ND lan truyền ngược)</td></tr></table>
+          <p>Nghiên cứu năm 2022: với ngân sách $C$ cố định, mất mát nhỏ nhất khi $D \approx 20 \cdot N$.</p>
+        focus: [1, 1, 2, 3, "3.2", "3.3", "3.4", 4]
+        say: "Mất mát entropy chéo ở mỗi vị trí bằng âm lôgarit tự nhiên của p, với p là xác suất mô hình gán cho từ tố đúng tiếp theo. Mất mát của cả tập là trung bình theo mọi vị trí. Liên hệ với bài 1, độ hỗn loạn bằng e mũ mất mát, vì cùng dùng lôgarit tự nhiên. Bảng giới thiệu ba ký hiệu. N là số tham số. D là số từ tố dữ liệu huấn luyện. C xấp xỉ 6 nhân N nhân D là số phép tính huấn luyện, gồm 2 N D cho chiều đi tới và 4 N D cho lan truyền ngược. Một nghiên cứu năm 2022 cho thấy với ngân sách cố định, mất mát nhỏ nhất khi D xấp xỉ 20 nhân N."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Mất mát phạt nặng khi mô hình gán xác suất nhỏ cho đáp án đúng"
+    steps:
+      - show: |
+          <div><svg width="1500" height="340" viewBox="0 0 1500 340"><line x1="200" y1="300" x2="1330" y2="300" stroke="#6b7280" stroke-width="2"/><line x1="200" y1="300" x2="200" y2="40" stroke="#6b7280" stroke-width="2"/><polyline points="255,60 288,98 332,130 398,163 475,189 585,216 750,245 915,266 1080,282 1190,292 1300,300" fill="none" stroke="#2a78d6" stroke-width="4"/><circle cx="475" cy="189" r="9" fill="#eb6834"/><circle cx="750" cy="245" r="9" fill="#eb6834"/><circle cx="1080" cy="282" r="9" fill="#eb6834"/><g font-size="23" fill="#1f2937"><text x="493" y="177">p = 0,25: 1,386</text><text x="768" y="231">p = 0,5: 0,693</text><text x="1070" y="260">p = 0,8: 0,223</text><text x="1340" y="306">p</text><text x="215" y="36">mất mát −ln p</text><text x="200" y="330" text-anchor="middle">0</text><text x="1300" y="330" text-anchor="middle">1</text></g></svg></div>
+        focus: [1, 1, 1]
+        say: "Hình vẽ mất mát âm lôgarit p theo xác suất p mà mô hình gán cho từ tố đúng. Khi p tiến về 1, mất mát về 0, nghĩa là đoán đúng và tự tin thì không bị phạt. Khi p nhỏ dần, mất mát tăng vọt, nên mô hình bị phạt rất nặng khi tự tin vào câu trả lời sai."
+
+  - id: example
+    kind: example
+    title: "Tính mất mát và lập ngân sách"
+    checks:
+      - "[round(-math.log(p), 3) for p in (0.25, 0.5, 0.8)] == [1.386, 0.693, 0.223] and round((-math.log(0.25) - math.log(0.5) - math.log(0.8)) / 3, 3) == 0.768 and round(math.exp(0.768), 2) == 2.16"
+      - "round(math.exp(2.0), 2) == 7.39 and 20 * 7e9 == 1.4e11 and round(6 * 7e9 * 1.4e11 / 1e21, 2) == 5.88"
+    steps:
+      - show: |
+          <table class="t"><tr><th>vị trí</th><th>xác suất từ tố đúng</th><th>$-\ln p$</th></tr>
+          <tr><td>1</td><td>0,25</td><td>1,386</td></tr>
+          <tr><td>2</td><td>0,50</td><td>0,693</td></tr>
+          <tr><td>3</td><td>0,80</td><td>0,223</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Bước một, tính mất mát ở ba vị trí. Vị trí 1, mô hình gán xác suất 0 phẩy 25 cho từ tố đúng, mất mát 1 phẩy 386. Vị trí 2, xác suất 0 phẩy 5, mất mát 0 phẩy 693. Vị trí 3, xác suất 0 phẩy 8, mất mát 0 phẩy 223."
+      - show: |
+          $$\text{mất mát} = \frac{1{,}386 + 0{,}693 + 0{,}223}{3} \approx 0{,}768 \;\Rightarrow\; PP = e^{0{,}768} \approx 2{,}16$$
+          <p>Một mô hình lớn có mất mát 2,0 thì độ hỗn loạn $e^{2} \approx \hl{7{,}39}$.</p>
+        introduces: [implies]
+        focus: [1, 1, 2]
+        say: "Bước hai, lấy trung bình ba mất mát được xấp xỉ 0 phẩy 768. Vì độ hỗn loạn bằng e mũ mất mát, nên nó xấp xỉ 2 phẩy 16. Một mô hình lớn có mất mát 2 thì độ hỗn loạn xấp xỉ 7 phẩy 39."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — ngân sách</b> cho $N = 7 \cdot 10^9$ tham số theo tỉ lệ 20 từ tố mỗi tham số:</p>
+          <table class="t"><tr><th>đại lượng</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>dữ liệu $D$</td><td>$20 \cdot 7 \cdot 10^9$</td><td>$1{,}4 \cdot 10^{11}$ từ tố</td></tr>
+          <tr><td>phép tính $C$</td><td>$6 \cdot 7 \cdot 10^9 \cdot 1{,}4 \cdot 10^{11}$</td><td>$\approx \hl{5{,}88 \cdot 10^{21}}$</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước ba, lập ngân sách cho mô hình 7 tỉ tham số theo tỉ lệ 20 từ tố mỗi tham số. Dữ liệu cần 20 nhân 7 tỉ, tức 140 tỉ từ tố. Số phép tính xấp xỉ 6 nhân 7 tỉ nhân 140 tỉ, khoảng 5 phẩy 88 nhân 10 mũ 21."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: độ hỗn loạn tính theo định nghĩa của bài 1"
+    checks:
+      - "round((0.25 * 0.5 * 0.8) ** (-1 / 3), 3) == round(math.exp((-math.log(0.25) - math.log(0.5) - math.log(0.8)) / 3), 3) == 2.154"
+    steps:
+      - show: |
+          $$PP = (0{,}25 \cdot 0{,}5 \cdot 0{,}8)^{-1/3} = 0{,}1^{-1/3} \approx 2{,}154$$
+          <p>Khớp $e^{0{,}768} \approx 2{,}16$ tới làm tròn ✓ — vì $e^{\text{trung bình của } -\ln p}$ chính là $P^{-1/N}$.</p>
+        focus: [1, 2]
+        say: "Kiểm bằng định nghĩa của bài 1, lấy tích của cả ba xác suất được 0 phẩy 1, rồi nâng lên lũy thừa âm 1 chia 3, được xấp xỉ 2 phẩy 154. Kết quả khớp với e mũ 0 phẩy 768 tới làm tròn, vì e mũ trung bình của âm lôgarit p chính là xác suất cả chuỗi mũ âm 1 chia N."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc"
+    checks:
+      - "round(2.0 / math.log(2), 3) == 2.885 and round(2 ** (2.0 / math.log(2)), 2) == 7.39"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> So mất mát tính bằng hai cơ số khác nhau <b class="red">(lệch 1,44 lần)</b>
+          <br><span class="note">Mất mát 2,0 nat = $2{,}0 / \ln 2 \approx 2{,}885$ bit. Cùng một mô hình, cùng độ hỗn loạn 7,39 — chỉ khác đơn vị. Ghi rõ cơ số.</span></div>
+        say: "Lỗi thứ nhất, so mất mát tính bằng hai cơ số khác nhau, lệch nhau 1 phẩy 44 lần. Mất mát 2 tính bằng lôgarit tự nhiên bằng 2 chia lôgarit tự nhiên của 2, khoảng 2 phẩy 885 nếu tính bằng lôgarit cơ số 2. Cùng một mô hình, cùng độ hỗn loạn 7 phẩy 39, chỉ khác đơn vị, nên hãy ghi rõ cơ số."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Coi “20 từ tố mỗi tham số” là luật <b class="red">(chỉ là điểm tối ưu huấn luyện)</b>
+          <br><span class="note">Tỉ lệ này tối ưu chi phí HUẤN LUYỆN. Mô hình được dùng nhiều thường huấn luyện lâu hơn nhiều với mô hình nhỏ hơn, vì chi phí phục vụ mỗi ngày lớn hơn chi phí huấn luyện một lần.</span></div>
+        say: "Lỗi thứ hai, coi 20 từ tố mỗi tham số là luật, trong khi nó chỉ là điểm tối ưu cho huấn luyện. Tỉ lệ này tối ưu chi phí huấn luyện. Mô hình được dùng nhiều thường huấn luyện lâu hơn nhiều với kích thước nhỏ hơn, vì chi phí phục vụ mỗi ngày lớn hơn chi phí huấn luyện một lần."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Nghĩ mất mát thấp hơn là “thông minh hơn” <b class="red">(không trực tiếp)</b>
+          <br><span class="note">Mất mát đo khả năng đoán từ tố trên dữ liệu kiểm tra. Năng lực làm việc cụ thể phải đo riêng bằng bộ câu hỏi có đáp án. Dữ liệu kiểm tra lọt vào dữ liệu huấn luyện còn làm mất mát thấp giả.</span></div>
+        say: "Lỗi thứ ba, nghĩ mất mát thấp hơn là thông minh hơn, điều này không trực tiếp. Mất mát đo khả năng đoán từ tố trên dữ liệu kiểm tra, còn năng lực làm từng việc cụ thể phải đo riêng bằng bộ câu hỏi có đáp án. Dữ liệu kiểm tra lọt vào dữ liệu huấn luyện còn làm mất mát thấp giả."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "round(math.exp(1.5), 2) == 4.48 and 20 * 7e10 == 1.4e12 and 6 * 7e10 * 1.4e12 == 5.88e23"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Mất mát giảm từ 2,0 xuống 1,5. Độ hỗn loạn mới là bao nhiêu?</td></tr>
+          <tr><td>2</td><td>Mô hình 70 tỉ tham số theo tỉ lệ 20 từ tố mỗi tham số: cần bao nhiêu từ tố và bao nhiêu phép tính?</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, mất mát giảm từ 2 xuống 1 phẩy 5, độ hỗn loạn mới là bao nhiêu? Câu hai, mô hình 70 tỉ tham số theo tỉ lệ 20 từ tố mỗi tham số thì cần bao nhiêu từ tố và bao nhiêu phép tính? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <p>① $e^{1{,}5} \approx \hl{4{,}48}$ — từ “bối rối như chọn trong 7,4 khả năng” xuống còn 4,5.</p>
+        say: "Đáp án câu một, e mũ 1 phẩy 5 xấp xỉ 4 phẩy 48, tức từ bối rối như chọn trong 7 phẩy 4 khả năng xuống còn 4 phẩy 5."
+      - show: |
+          <table class="t"><tr><th>đại lượng</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>$D$</td><td>$20 \cdot 7 \cdot 10^{10}$</td><td>$1{,}4 \cdot 10^{12}$ từ tố</td></tr>
+          <tr><td>$C$</td><td>$6 \cdot 7 \cdot 10^{10} \cdot 1{,}4 \cdot 10^{12}$</td><td>$\approx \hl{5{,}88 \cdot 10^{23}}$ — gấp 100 lần mô hình 7 tỉ</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.3"]
+        say: "Câu hai, tính hai đại lượng. Dữ liệu cần 20 nhân 70 tỉ, tức 1 phẩy 4 nhân 10 mũ 12 từ tố. Số phép tính khoảng 5 phẩy 88 nhân 10 mũ 23. Con số này gấp 100 lần mô hình 7 tỉ, vì tham số gấp 10 và dữ liệu cũng gấp 10."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">mất mát = trung bình −ln p</span><span class="a">→</span>
+          <span class="n">độ hỗn loạn = e mũ mất mát</span><span class="a">→</span>
+          <span class="n">C ≈ 6ND</span><span class="a">→</span>
+          <span class="n">tỉ lệ dữ liệu / tham số theo mục tiêu chi phí</span></div>
+        say: "Tổng kết lại, mất mát là trung bình âm lôgarit xác suất của từ tố đúng, độ hỗn loạn bằng e mũ mất mát. Số phép tính xấp xỉ 6 N D, và tỉ lệ dữ liệu trên tham số chọn theo mục tiêu chi phí."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> quy luật mở rộng cho phép <b>dự đoán</b> chi phí trước khi chi tiền — nhưng chỉ dự đoán được mất mát, không dự đoán được mọi năng lực.</div>
+        say: "Điều cần mang theo, quy luật mở rộng cho phép dự đoán chi phí trước khi chi tiền, nhưng chỉ dự đoán được mất mát, không dự đoán được mọi năng lực."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 7): <b>sinh văn bản</b> — tham lam, nhiệt độ, giữ k từ tố đầu, lấy mẫu hạt nhân.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 7, ta học cách sinh văn bản, với cách tham lam, nhiệt độ, giữ k từ tố đầu, và lấy mẫu hạt nhân. Hẹn gặp bạn ở bài tiếp theo."

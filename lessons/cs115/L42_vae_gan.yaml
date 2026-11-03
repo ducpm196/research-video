@@ -1,0 +1,260 @@
+id: L42
+series: "CS115 · Toán cho Khoa học Máy tính"
+title: "Bài 42 (mở rộng) — Mô hình sinh (1): Variational Autoencoder & GAN"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "0 kết quả trong nguồn môn học; CITED: Kingma & Welling, “Auto-Encoding Variational Bayes”, arXiv:1312.6114 (2013); Goodfellow et al., “Generative Adversarial Nets”, arXiv:1406.2661 (2014) (truy cập 2026-10-24, no revision given)"
+assumes: [cdot, sub, mu, sigma, normal, exp, log, approx, given, prob, kl, sqrt, pi, geq, max_fn, hat, epsilon, norm, partial, star]
+# Quy ước ký hiệu: dữ liệu x, mã ẩn z; bộ mã hoá cho q(z|x) = N(μ, σ²); tiên nghiệm p(z) = N(0, 1); bộ giải mã cho p(x|z);
+#   ELBO = E_q[ln p(x|z)] − KL(q ‖ p(z)); bộ sinh G, bộ phân biệt D (xác suất “thật”) — chữ D ở đây KHÔNG phải dữ liệu 𝒟 của bài 17.
+# Ví dụ số: mô hình tuyến tính một chiều p(z) = N(0, 1), p(x|z) = N(z, 1) → p(x) = N(0, 2), hậu nghiệm thật N(x/2, 1/2).
+# Lời đọc: VAE, GAN, ELBO chỉ hiện trên màn hình — nói “mạng tự mã hoá biến phân”, “mạng đối kháng”, “cận dưới”.
+# Nối bài trước (nói lại khi dùng, luật 17): bài 14 (phân phối chuẩn), bài 17 (MLE: cực đại ln khả năng; hậu nghiệm), bài 20 (entropy
+#   chéo nhị phân; phân loại thật/giả), bài 22 (lan truyền ngược cần đạo hàm), bài 32 (độ lệch KL ≥ 0), bài 37 (mạng tự mã hoá).
+objectives:
+  - "Hiểu mô hình sinh: học phân phối của dữ liệu để tạo mẫu mới"
+  - "Đọc cận dưới ELBO và công thức KL giữa hai phân phối chuẩn"
+  - "Hiểu mẹo tham số hoá lại z = μ + σ·ε"
+  - "Hiểu trò chơi của GAN và bộ phân biệt tốt nhất D* = p_data/(p_data + p_g)"
+asr_reviewed:
+  - {sentence: "Câu một, thay vào công thức độ lệch, cả hai đều có phương sai 1, và lôgarit của 1 bằng 0.", reason: "ASR chép “Câu một, thay vào công thức độ lệch, cả hai đều có phương sai một và logatic của một bằng không.” (0.952): lệch âm/thanh thuần Việt: lôgarit/logatic — NOT_VERIFIED bằng tai người"}
+  - sentence: "Nhắc lại bài 17, ước lượng hợp lý cực đại làm lớn lôgarit khả năng của dữ liệu."
+    reason: "“lôgarit” chính tả SGK, ASR chép “logatrix” (đã ghi ở L12); phần còn lại khớp"
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Từ nhận dạng ảnh đến vẽ ra ảnh mới"
+    steps:
+      - show: |
+          <p class="big">Mô hình phân loại trả lời “ảnh này là gì?”. Mô hình <b>sinh</b> làm điều khó hơn: <b>tạo ra</b> ảnh mới trông như thật.</p>
+          <div class="box key">Hai ý tưởng (2013–2014): <b>VAE</b> — mạng tự mã hoá (bài 37) có xác suất, rút mã ngẫu nhiên rồi giải mã; <b>GAN</b> — hai mạng thi đấu: một bên làm giả, một bên bắt giả.</div>
+        focus: [1, 1, 2]
+        say: "Chào bạn, mô hình phân loại trả lời ảnh này là gì. Mô hình sinh làm việc khó hơn, tạo ra ảnh mới trông như thật. Hôm nay ta học hai ý tưởng, mạng tự mã hoá biến phân, nối tiếp bài 37, và mạng đối kháng, trong đó hai mạng thi đấu với nhau."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn nền: MLE, độ lệch KL, mạng tự mã hoá"
+    checks:
+      - "round(0.9*math.log(0.9/0.5) + 0.1*math.log(0.1/0.5), 3) == 0.368 and 0.9*math.log(1) + 0.1*math.log(1) == 0 and math.sqrt(9) == 3"
+    steps:
+      - show: |
+          <p>Bài 17: cực đại $\ln p(x)$ trên dữ liệu (MLE). Bài 32: độ lệch $\operatorname{KL}(P \| Q) \ge 0$, bằng 0 khi hai phân phối trùng nhau.</p>
+          <p>Bài 37: mạng tự mã hoá nén $x$ thành mã $z$ rồi giải mã — nhưng mã của nó không có phân phối rõ ràng để <b>rút</b> mã mới.</p>
+        focus: ["1.1", "1.2", 2]
+        say: "Nhắc lại bài 17, ước lượng hợp lý cực đại làm lớn lôgarit khả năng của dữ liệu. Bài 32, độ lệch giữa hai phân phối luôn không âm. Bài 37, mạng tự mã hoá nén dữ liệu thành mã, nhưng mã đó không có phân phối rõ ràng để rút mã mới."
+      - show: |
+          <table class="t"><tr><th>làm thử</th><th>kết quả</th></tr>
+          <tr><td>độ lệch KL của $(0{,}9;\ 0{,}1)$ so với $(0{,}5;\ 0{,}5)$ (bài 32)</td><td>$\approx 0{,}368$</td></tr>
+          <tr><td>độ lệch KL của một phân phối với chính nó</td><td>$0$</td></tr>
+          <tr><td>$\mathcal{N}(2, 9)$: tâm, độ lệch chuẩn (bài 14)</td><td>tâm 2, độ lệch chuẩn $\sqrt{9} = 3$</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Làm thử từng điều bằng số. Ở bài 32, độ lệch của phân phối 0 phẩy 9 và 0 phẩy 1 so với phân phối đều là khoảng 0 phẩy 368. Độ lệch của một phân phối với chính nó bằng 0, nhỏ nhất có thể. Và theo bài 14, phân phối chuẩn có tâm 2, phương sai 9 thì có độ lệch chuẩn bằng căn 9, bằng 3."
+
+  # ───────────────────────── 3. ELBO ─────────────────────────
+  - id: sym_elbo
+    kind: symbol
+    title: "Giải mã: ELBO — cận dưới của ln p(x)"
+    checks:
+      - "(lambda z, m, s: sp.simplify(sp.integrate((sp.exp(-(z - m)**2/(2*s**2))/sp.sqrt(2*sp.pi*s**2))*(sp.log(sp.exp(-(z - m)**2/(2*s**2))/sp.sqrt(2*sp.pi*s**2)) - sp.log(sp.exp(-z**2/2)/sp.sqrt(2*sp.pi))).expand(force=True), (z, -sp.oo, sp.oo)) - Rational(1, 2)*(s**2 + m**2 - 1 - sp.log(s**2))) == 0)(sp.Symbol('z', real=True), sp.Symbol('m', real=True), sp.Symbol('s', positive=True))"
+    steps:
+      - show: |
+          <div class="box key">$\ln p(x) \ \ge\ \underbrace{\mathbb{E}_{q}\big[\ln p(x \mid z)\big]}_{\text{giải mã tốt}} - \underbrace{\operatorname{KL}\big(q(z \mid x)\,\|\,p(z)\big)}_{\text{mã gần } \mathcal{N}(0, 1)}$ &nbsp; (ELBO)</div>
+          <p>Với $q = \mathcal{N}(\mu, \sigma^2)$, $p(z) = \mathcal{N}(0, 1)$: $\ \operatorname{KL} = \frac{1}{2}\big(\sigma^2 + \mu^2 - 1 - \ln\sigma^2\big)$ (máy kiểm bằng tích phân).</p>
+          <p class="note">Vế phải là “cận dưới”: làm nó lớn thì $\ln p(x)$ cũng bị đẩy lên. Vế KL buộc mã của mọi ảnh nằm quanh $\mathcal{N}(0, 1)$ — nên sau này rút $z$ từ $\mathcal{N}(0, 1)$ rồi giải mã là ra ảnh mới.</p>
+        introduces: [expect]
+        focus: [1, 1, 2, 3]
+        say: "Mạng tự mã hoá biến phân làm lớn một cận dưới của lôgarit khả năng, gồm hai phần. Phần đầu đo giải mã tốt. Phần sau là độ lệch giữa phân phối mã và phân phối chuẩn tắc, có công thức gọn trên màn hình. Vế này buộc mã nằm quanh phân phối chuẩn, nên sau này rút mã từ đó là ra ảnh mới."
+
+  - id: gen_pic
+    kind: intuition
+    title: "Nhìn thấy hai cỗ máy sinh ảnh"
+    steps:
+      - show: |
+          <div><svg width="1500" height="490" viewBox="0 0 1500 490"><defs><marker id="ar42" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs><text x="10" y="32" font-size="22" font-weight="bold" fill="#1d4ed8">Mạng tự mã hoá biến phân</text><rect x="10" y="60" width="120" height="70" rx="12" fill="#fde68a" stroke="#1f2937" stroke-width="2.5"/><text x="70.0" y="103" font-size="20" text-anchor="middle" fill="#1f2937">ảnh x</text><line x1="132" y1="95" x2="178" y2="95" stroke="#1f2937" stroke-width="3" marker-end="url(#ar42)"/><rect x="180" y="60" width="170" height="70" rx="12" fill="#dbeafe" stroke="#1f2937" stroke-width="2.5"/><text x="265.0" y="103" font-size="20" text-anchor="middle" fill="#1f2937">bộ mã hoá</text><line x1="352" y1="95" x2="398" y2="95" stroke="#1f2937" stroke-width="3" marker-end="url(#ar42)"/><rect x="400" y="60" width="160" height="70" rx="12" fill="#dbeafe" stroke="#1f2937" stroke-width="2.5"/><text x="480.0" y="90" font-size="20" text-anchor="middle" fill="#1f2937">tâm μ,</text><text x="480.0" y="116" font-size="20" text-anchor="middle" fill="#1f2937">độ rộng σ</text><line x1="562" y1="95" x2="638" y2="95" stroke="#1f2937" stroke-width="3" marker-end="url(#ar42)"/><rect x="640" y="60" width="230" height="70" rx="12" fill="#e0e7ff" stroke="#1f2937" stroke-width="2.5"/><text x="755.0" y="103" font-size="20" text-anchor="middle" fill="#1f2937">z = μ + σ nhân ε</text><line x1="872" y1="95" x2="918" y2="95" stroke="#1f2937" stroke-width="3" marker-end="url(#ar42)"/><rect x="920" y="60" width="180" height="70" rx="12" fill="#dbeafe" stroke="#1f2937" stroke-width="2.5"/><text x="1010.0" y="103" font-size="20" text-anchor="middle" fill="#1f2937">bộ giải mã</text><line x1="1102" y1="95" x2="1148" y2="95" stroke="#1f2937" stroke-width="3" marker-end="url(#ar42)"/><rect x="1150" y="60" width="160" height="70" rx="12" fill="#fde68a" stroke="#1f2937" stroke-width="2.5"/><text x="1230.0" y="103" font-size="20" text-anchor="middle" fill="#1f2937">ảnh dựng lại</text><rect x="640" y="165" width="230" height="70" rx="12" fill="#f3f4f6" stroke="#1f2937" stroke-width="2.5"/><text x="755.0" y="208" font-size="20" text-anchor="middle" fill="#1f2937">ε rút từ N(0, 1)</text><line x1="755" y1="165" x2="755" y2="132" stroke="#1f2937" stroke-width="3" marker-end="url(#ar42)"/><text x="10" y="270" font-size="20" fill="#374151">sinh ảnh mới: bỏ bộ mã hoá, rút thẳng z từ N(0, 1) rồi đưa vào bộ giải mã</text><line x1="10" y1="292" x2="1490" y2="292" stroke="#d1d5db" stroke-width="2"/><text x="10" y="330" font-size="22" font-weight="bold" fill="#b91c1c">Mạng đối kháng</text><rect x="10" y="385" width="150" height="70" rx="12" fill="#f3f4f6" stroke="#1f2937" stroke-width="2.5"/><text x="85.0" y="428" font-size="20" text-anchor="middle" fill="#1f2937">nhiễu</text><line x1="162" y1="420" x2="208" y2="420" stroke="#1f2937" stroke-width="3" marker-end="url(#ar42)"/><rect x="210" y="385" width="160" height="70" rx="12" fill="#dbeafe" stroke="#1f2937" stroke-width="2.5"/><text x="290.0" y="428" font-size="20" text-anchor="middle" fill="#1f2937">bộ sinh G</text><line x1="372" y1="420" x2="418" y2="420" stroke="#1f2937" stroke-width="3" marker-end="url(#ar42)"/><rect x="420" y="385" width="160" height="70" rx="12" fill="#fecaca" stroke="#1f2937" stroke-width="2.5"/><text x="500.0" y="428" font-size="20" text-anchor="middle" fill="#1f2937">ảnh giả</text><line x1="582" y1="420" x2="698" y2="420" stroke="#1f2937" stroke-width="3" marker-end="url(#ar42)"/><rect x="700" y="385" width="200" height="70" rx="12" fill="#dbeafe" stroke="#1f2937" stroke-width="2.5"/><text x="800.0" y="428" font-size="20" text-anchor="middle" fill="#1f2937">bộ phân biệt D</text><line x1="902" y1="420" x2="948" y2="420" stroke="#1f2937" stroke-width="3" marker-end="url(#ar42)"/><rect x="950" y="385" width="270" height="70" rx="12" fill="#bbf7d0" stroke="#1f2937" stroke-width="2.5"/><text x="1085.0" y="428" font-size="20" text-anchor="middle" fill="#1f2937">xác suất “thật”</text><rect x="420" y="300" width="160" height="70" rx="12" fill="#bbf7d0" stroke="#1f2937" stroke-width="2.5"/><text x="500.0" y="343" font-size="20" text-anchor="middle" fill="#1f2937">ảnh thật</text><line x1="582" y1="335" x2="698" y2="405" stroke="#1f2937" stroke-width="3" marker-end="url(#ar42)"/><text x="1240" y="415" font-size="19" fill="#374151">D: đoán đúng thật, giả</text><text x="1240" y="443" font-size="19" fill="#374151">G: làm D đoán sai</text></svg></div>
+        focus: [0, 0, 0, 0, 0]
+        say: "Hàng trên là mạng tự mã hoá biến phân. Ảnh đi qua bộ mã hoá, ra một tâm muy và một độ rộng xích ma, chứ không ra một mã cố định. Mã z được rút bằng cách lấy muy cộng xích ma nhân ép-xi-lôn, với ép-xi-lôn rút từ phân phối chuẩn tắc, rồi bộ giải mã dựng lại ảnh. Khi đã học xong, ta bỏ bộ mã hoá, rút thẳng z từ phân phối chuẩn tắc là sinh được ảnh mới. Hàng dưới là mạng đối kháng, bộ sinh biến nhiễu thành ảnh giả, còn bộ phân biệt nhận cả ảnh thật lẫn ảnh giả và đoán xác suất là thật."
+
+  # ───────────────────────── 4. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Ví dụ: ELBO chạm ln p(x) khi q là hậu nghiệm thật"
+    checks:
+      - "(lambda elbo, lp: (round(lp, 4), round(elbo(1, 0.5, math.sqrt(0.5)), 4), round(elbo(1, 0, 1), 4), round(elbo(1, 1, 0.5), 4)) == (-1.5155, -1.5155, -1.9189, -1.8621))(lambda x, m, s: -0.5*math.log(2*math.pi) - 0.5*((x - m)**2 + s**2) - 0.5*(s**2 + m**2 - 1 - math.log(s**2)), -0.5*math.log(4*math.pi) - 1/4)"
+    steps:
+      - show: |
+          <p>Mô hình nhỏ: $p(z) = \mathcal{N}(0, 1)$, $p(x \mid z) = \mathcal{N}(z, 1)$ → $p(x) = \mathcal{N}(0, 2)$. Tại $x = 1$: $\ \ln p(1) \approx -1{,}5155$.</p>
+          <table class="t"><tr><th>$q(z \mid x = 1)$</th><th>ELBO</th></tr>
+          <tr><td>$\mathcal{N}(0{,}5;\ 0{,}5)$ — hậu nghiệm thật (bài 17)</td><td>$\hlg{-1{,}5155}$ = $\ln p(1)$</td></tr>
+          <tr><td>$\mathcal{N}(0;\ 1)$ — chính tiên nghiệm</td><td>$-1{,}9189$</td></tr>
+          <tr><td>$\mathcal{N}(1;\ 0{,}25)$</td><td>$-1{,}8621$</td></tr></table>
+          <p class="note">ELBO luôn $\le \ln p(x)$, bằng nhau khi $q$ đúng là hậu nghiệm. Bộ mã hoá học cách xấp xỉ hậu nghiệm.</p>
+        focus: ["1.5", "2.2", ["2.3", "2.4"], 3]
+        say: "Ví dụ một mô hình nhỏ, tại x bằng 1, lôgarit khả năng bằng âm 1 phẩy 5155. Khi phân phối mã đúng là hậu nghiệm thật, cận dưới chạm đúng giá trị đó. Với các phân phối khác, cận dưới nhỏ hơn. Vì vậy bộ mã hoá học cách xấp xỉ hậu nghiệm."
+
+  - id: elbo_hand
+    kind: example
+    title: "Làm tay từng bước: ELBO tại x = 1"
+    checks:
+      - "round(-0.5*math.log(2*math.pi), 4) == -0.9189 and (1 - 0)**2 + 1 == 2 and round(-0.5*math.log(2*math.pi) - 0.5*2, 4) == -1.9189"
+      - "0.5*(1 + 0 - 1 - math.log(1)) == 0"
+      - "(1 - 0.5)**2 + 0.5 == 0.75 and round(-0.5*math.log(2*math.pi) - 0.5*0.75, 4) == -1.2939"
+      - "(lambda kl: round(kl, 4) == 0.2216 and round(-0.5*math.log(2*math.pi) - 0.375 - kl, 4) == -1.5155)(0.5*(0.5 + 0.25 - 1 - math.log(0.5)))"
+      - "(lambda rng: (lambda z: round(float(((1 - z)**2).mean()), 2) == 2.0)(rng.normal(0, 1, 400000)))(np.random.default_rng(0))"
+    steps:
+      - clear: true
+        show: |
+          <p>Phần giải mã: $\ \ln p(x \mid z) = -\frac{1}{2}\ln(2\pi) - \frac{1}{2}(x - z)^2$ vì $p(x \mid z) = \mathcal{N}(z, 1)$. Lấy trung bình theo $z$ từ $q = \mathcal{N}(\mu, \sigma^2)$: trung bình của $(x - z)^2$ là $(x - \mu)^2 + \sigma^2$ (bình phương độ lệch tâm cộng phương sai).</p>
+          <p><b>Bước 1 — dòng</b> $q = \mathcal{N}(0;\ 1)$, phần giải mã:</p>
+          $$(1 - 0)^2 + 1 = 2 \quad\Rightarrow\quad -0{,}9189 - \frac{1}{2}\cdot 2 = -1{,}9189$$
+        introduces: [implies]
+        focus: [1, 1, 2, 3]
+        say: "Tính tay hai dòng của bảng, bắt đầu từ phần giải mã. Vì x được sinh từ phân phối chuẩn tâm z, lôgarit mật độ bằng âm một nửa lôgarit của 2 pi, trừ một nửa bình phương của x trừ z. Lấy trung bình theo z, bình phương trung bình bằng bình phương độ lệch tâm cộng phương sai. Bước một, với q là chuẩn tắc, số đó là 1 cộng 1, bằng 2, nên phần giải mã bằng âm 0 phẩy 9189 trừ 1, bằng âm 1 phẩy 9189."
+      - show: |
+          <p><b>Bước 2 — vế KL</b> của dòng đó, $\mu = 0$, $\sigma = 1$:</p>
+          $$\operatorname{KL} = \frac{1}{2}\big(1 + 0 - 1 - \ln 1\big) = 0 \quad\Rightarrow\quad \text{ELBO} = -1{,}9189 - 0 = \hlg{-1{,}9189}$$
+        focus: [1, 2]
+        say: "Bước hai, vế độ lệch của dòng này bằng 0, vì q chính là phân phối chuẩn tắc. Vậy cận dưới bằng âm 1 phẩy 9189, đúng ô thứ hai của bảng."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — dòng hậu nghiệm thật</b> $q = \mathcal{N}(0{,}5;\ 0{,}5)$, phần giải mã:</p>
+          $$(1 - 0{,}5)^2 + 0{,}5 = 0{,}75 \quad\Rightarrow\quad -0{,}9189 - \frac{1}{2}\cdot 0{,}75 = -1{,}2939$$
+        focus: [1, 2]
+        say: "Bước ba, sang dòng hậu nghiệm thật, tâm 0 phẩy 5, phương sai 0 phẩy 5. Bình phương trung bình là 0 phẩy 25 cộng 0 phẩy 5, bằng 0 phẩy 75, nên phần giải mã bằng âm 1 phẩy 2939, tốt hơn dòng trước."
+      - show: |
+          <p><b>Bước 4 — vế KL</b> của dòng đó, $\sigma^2 = 0{,}5$, $\mu^2 = 0{,}25$, $\ln 0{,}5 \approx -0{,}6931$:</p>
+          $$\operatorname{KL} = \frac{1}{2}\big(0{,}5 + 0{,}25 - 1 + 0{,}6931\big) \approx 0{,}2216 \quad\Rightarrow\quad \text{ELBO} \approx -1{,}2939 - 0{,}2216 = \hlg{-1{,}5155}$$
+        focus: [1, 2, 2]
+        say: "Bước bốn, vế độ lệch bây giờ dương, vì q không còn là chuẩn tắc, tính ra khoảng 0 phẩy 2216. Trừ đi, cận dưới bằng âm 1 phẩy 5155, đúng ô thứ nhất của bảng. Dòng này phải trả độ lệch, nhưng giải mã tốt hơn nhiều, nên tổng vẫn cao hơn."
+
+  # ───────────────────────── 5. THAM SỐ HOÁ LẠI ─────────────────────────
+  - id: reparam
+    kind: formula
+    title: "Mẹo tham số hoá lại: z = μ + σ·ε"
+    checks:
+      - "(lambda m, s, e: (sp.diff(m + s*e, m), sp.diff(m + s*e, s)) == (1, e))(*sp.symbols('m s e'))"
+      - "(lambda e: (round(float(np.mean(2 + 3*e)), 1), round(float(np.std(2 + 3*e)), 1)) == (2.0, 3.0))(np.random.default_rng(0).normal(size=200000))"
+    steps:
+      - show: |
+          <p>Lan truyền ngược (bài 22) cần đạo hàm, nhưng “rút ngẫu nhiên $z$ từ $\mathcal{N}(\mu, \sigma^2)$” không có đạo hàm theo $\mu$, $\sigma$.</p>
+          <div class="box key">Rút $\varepsilon$ từ $\mathcal{N}(0, 1)$ (không phụ thuộc tham số), rồi đặt $\ z = \mu + \sigma\cdot\varepsilon$ &nbsp; ⟹ &nbsp; $\frac{\partial z}{\partial\mu} = 1$, $\ \frac{\partial z}{\partial\sigma} = \varepsilon$</div>
+          <p><b>Làm thử ngay</b>: $\mu = 2$, $\sigma = 3$, 200 000 lần rút: trung bình $\hlg{2{,}0}$, độ lệch chuẩn $\hlg{3{,}0}$ — đúng $\mathcal{N}(2, 9)$.</p>
+        focus: [1, "2.3", ["2.4", "2.5"], 3]
+        say: "Lan truyền ngược cần đạo hàm, nhưng việc rút ngẫu nhiên không có đạo hàm theo muy và xích ma. Mẹo là rút ép-xi-lôn từ phân phối chuẩn tắc, rồi đặt z bằng muy cộng xích ma nhân ép-xi-lôn. Khi đó đạo hàm theo muy bằng 1, theo xích ma bằng ép-xi-lôn. Làm thử ngay, ta được đúng trung bình 2 và độ lệch chuẩn 3."
+
+  # ───────────────────────── 6. GAN ─────────────────────────
+  - id: gan
+    kind: formula
+    title: "GAN: trò chơi giữa bộ sinh và bộ phân biệt"
+    checks:
+      - "(lambda a, b, D: sp.solve(sp.diff(a*sp.log(D) + b*sp.log(1 - D), D), D) == [a/(a + b)] and sp.simplify(sp.diff(a*sp.log(D) + b*sp.log(1 - D), D, 2) + a/D**2 + b/(1 - D)**2) == 0)(*sp.symbols('a b D', positive=True))"
+      - "round(0.6/(0.6 + 0.2), 4) == 0.75 and sp.simplify(sp.log(Rational(1, 2)) + sp.log(Rational(1, 2)) + sp.log(4)) == 0"
+      - "[round(a/(a + b), 4) for a, b in ((0.6, 0.2), (0.1, 0.4), (0.5, 0))] == [0.75, 0.2, 1.0]"
+    steps:
+      - show: |
+          <p>Bộ sinh $G$ biến nhiễu ngẫu nhiên thành ảnh giả. Bộ phân biệt $D(x)$ = xác suất $x$ là ảnh <b>thật</b> — một bộ phân loại hai lớp với entropy chéo (bài 20).</p>
+          <div class="box key">Với $G$ cố định, $D$ tốt nhất: $\ D^*(x) = \dfrac{p_{\text{thật}}(x)}{p_{\text{thật}}(x) + p_{\text{giả}}(x)}$ &nbsp; (cho đạo hàm của $a\ln D + b\ln(1 - D)$ bằng 0 được $D = \frac{a}{a + b}$; đạo hàm cấp 2 âm → cực đại)</div>
+          <p>Ví dụ $p_{\text{thật}} = 0{,}6$, $p_{\text{giả}} = 0{,}2$ tại một điểm: $D^* = \hlg{0{,}75}$. Khi giả giống hệt thật: $D^* = \frac{1}{2}$ ở mọi nơi, giá trị trò chơi $= 2\ln\frac{1}{2} = -\ln 4$.</p>
+        focus: [1, "2.3", "3.4"]
+        say: "Mạng đối kháng có bộ sinh G biến nhiễu ngẫu nhiên thành ảnh giả, và bộ phân biệt D đoán xác suất ảnh là thật, dùng entropy chéo như bài 20. Vì muốn phân biệt tốt nhất, cho đạo hàm bằng 0, ta được bộ phân biệt tốt nhất bằng mật độ thật chia tổng hai mật độ. Khi ảnh giả giống hệt thật, D bằng một nửa ở mọi nơi, không phân biệt được nữa."
+      - clear: true
+        show: |
+          <p>Đọc $D^*$ tại ba điểm khác nhau:</p>
+          <table class="t"><tr><th>$p_{\text{thật}}$</th><th>$p_{\text{giả}}$</th><th>$D^* = \frac{p_{\text{thật}}}{p_{\text{thật}} + p_{\text{giả}}}$</th><th>nghĩa</th></tr>
+          <tr><td>0,6</td><td>0,2</td><td>$\frac{0{,}6}{0{,}8} = 0{,}75$</td><td>nghiêng về thật</td></tr>
+          <tr><td>0,1</td><td>0,4</td><td>$\frac{0{,}1}{0{,}5} = 0{,}2$</td><td>nghiêng về giả: bộ sinh đặt quá nhiều ảnh ở đây</td></tr>
+          <tr><td>0,5</td><td>0</td><td>$\frac{0{,}5}{0{,}5} = 1$</td><td>chắc chắn thật: bộ sinh chưa với tới vùng này</td></tr></table>
+        focus: [0, "2.2", "2.3", "2.4"]
+        say: "Đọc bộ phân biệt tốt nhất tại ba điểm bằng số. Điểm có mật độ thật 0 phẩy 6 và giả 0 phẩy 2 cho 0 phẩy 75, nghiêng về thật. Điểm có thật 0 phẩy 1 và giả 0 phẩy 4 cho 0 phẩy 2, nghĩa là bộ sinh đặt quá nhiều ảnh ở đó. Điểm có thật 0 phẩy 5 mà giả bằng 0 cho đúng 1, nghĩa là bộ sinh chưa với tới vùng này, và đó chính là chỗ nó cần học thêm."
+      - show: |
+          <p class="note">Huấn luyện là trò chơi hai bên luân phiên ($D$ cực đại, $G$ cực tiểu), không phải cực tiểu một hàm duy nhất — có thể dao động không hội tụ, hoặc $G$ chỉ sinh vài kiểu ảnh (“sụp chế độ”).</p>
+        say: "Lưu ý, huấn luyện là trò chơi hai bên luân phiên, một bên cực đại, một bên cực tiểu, không phải cực tiểu một hàm duy nhất. Vì vậy nó có thể dao động không hội tụ, hoặc bộ sinh chỉ sinh vài kiểu ảnh."
+
+  # ───────────────────────── 7. KIỂM BẰNG MÁY ─────────────────────────
+  - id: verify
+    kind: check
+    title: "Phép thử: ELBO không bao giờ vượt ln p(x)"
+    checks:
+      - "(round(math.exp(-0.25), 4), round(math.sqrt(4*math.pi), 4), round(math.exp(-0.25)/math.sqrt(4*math.pi), 4), round(math.log(math.exp(-0.25)/math.sqrt(4*math.pi)), 4)) == (0.7788, 3.5449, 0.2197, -1.5155)"
+      - "(lambda elbo, lp: all(elbo(1, m, s) <= lp + 1e-12 for m in np.linspace(-2, 3, 51) for s in np.linspace(0.1, 2, 39)))(lambda x, m, s: -0.5*math.log(2*math.pi) - 0.5*((x - m)**2 + s**2) - 0.5*(s**2 + m**2 - 1 - math.log(s**2)), -0.5*math.log(4*math.pi) - 1/4)"
+    steps:
+      - show: |
+          <p>Máy thử 51 × 39 cặp $(\mu, \sigma)$: ELBO không lần nào vượt $\ln p(1) \approx -1{,}5155$ $\checkmark$ — đúng là cận dưới.</p>
+        say: "Phép thử, máy thử gần hai nghìn cặp muy và xích ma, và cận dưới không lần nào vượt lôgarit khả năng thật. Nghĩa là nó đúng là một cận dưới."
+      - show: |
+          <p>Đường khác cho số $-1{,}5155$: tính thẳng mật độ của $p(x) = \mathcal{N}(0, 2)$ tại $x = 1$, không qua ELBO.</p>
+          <table class="t"><tr><th>phần</th><th>tính</th><th>kết quả</th></tr>
+          <tr><td>tử số</td><td>$e^{-1^2/(2\cdot 2)} = e^{-0{,}25}$</td><td>0,7788</td></tr>
+          <tr><td>mẫu số</td><td>$\sqrt{2\pi\cdot 2} = \sqrt{4\pi}$</td><td>3,5449</td></tr>
+          <tr><td>$p(1)$, rồi $\ln$</td><td>$0{,}7788 / 3{,}5449 \approx 0{,}2197$</td><td>$\ln 0{,}2197 \approx -1{,}5155$ ✓</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Kiểm số âm 1 phẩy 5155 bằng đường khác, nghĩa là tính thẳng mật độ của phân phối chuẩn tâm 0, phương sai 2 tại x bằng 1, không qua cận dưới. Tử số là e mũ âm 0 phẩy 25, bằng 0 phẩy 7788. Mẫu số là căn của 4 pi, bằng 3 phẩy 5449. Chia ra được 0 phẩy 2197, lấy lôgarit được âm 1 phẩy 5155, khớp với cận dưới của hậu nghiệm thật."
+
+  # ───────────────────────── 8. LỖI THƯỜNG GẶP ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Bỏ vế KL của ELBO <b class="red">(mất khả năng sinh)</b>
+          <br><span class="note">Mã không còn quanh $\mathcal{N}(0, 1)$ — rút ngẫu nhiên từ $\mathcal{N}(0, 1)$ cho ảnh vô nghĩa.</span></div>
+        say: "Lỗi thứ nhất, bỏ vế độ lệch. Khi đó mã không còn nằm quanh phân phối chuẩn tắc, và rút ngẫu nhiên từ đó cho ảnh vô nghĩa."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Rút $z$ trực tiếp rồi mong lan truyền ngược qua nó <b class="red">(không có đạo hàm)</b>
+          <br><span class="note">Dùng $z = \mu + \sigma\cdot\varepsilon$.</span></div>
+        say: "Lỗi thứ hai, rút z trực tiếp rồi mong lan truyền ngược qua nó. Phải dùng mẹo tham số hoá lại."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Theo dõi GAN bằng một hàm sai số như các bài trước <b class="red">(dễ sai)</b>
+          <br><span class="note">Sai số của $G$ và $D$ dao động theo nhau; phải xem mẫu sinh ra và các thước đo riêng.</span></div>
+        say: "Lỗi thứ ba, theo dõi mạng đối kháng bằng một hàm sai số như các bài trước. Sai số của hai bên dao động theo nhau, nên phải xem trực tiếp các mẫu sinh ra."
+
+  # ───────────────────────── 9. TỰ KIỂM TRA ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "0.5*(1 + 0 - 1 - math.log(1)) == 0 and round(0.5*(1 + 4 - 1 - math.log(1)), 6) == 2.0"
+      - "round(0.3/(0.3 + 0.3), 2) == 0.5"
+      - "-1 + 2*0.5 == 0 and 1 + 4 - 1 - 0 == 4 and 4/2 == 2"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>KL của $\mathcal{N}(0, 1)$ với $\mathcal{N}(0, 1)$? Của $\mathcal{N}(2, 1)$ với $\mathcal{N}(0, 1)$?</td></tr>
+          <tr><td>2</td><td>$p_{\text{thật}} = p_{\text{giả}} = 0{,}3$ tại một điểm: $D^*$?</td></tr>
+          <tr><td>3</td><td>$\mu = -1$, $\sigma = 2$, $\varepsilon = 0{,}5$: $z$ = ?</td></tr></table>
+        say: "Bây giờ đến lượt bạn, với ba câu trên màn hình. Hãy dừng video và làm ra giấy."
+        pause: 8
+      - clear: true
+        show: |
+          <p>① Thay vào $\frac{1}{2}\big(\sigma^2 + \mu^2 - 1 - \ln\sigma^2\big)$, cả hai đều có $\sigma^2 = 1$, $\ln 1 = 0$:</p>
+          $$\mu = 0:\ \ \frac{1}{2}(1 + 0 - 1 - 0) = \hlg{0} \qquad\qquad \mu = 2:\ \ \frac{1}{2}(1 + 4 - 1 - 0) = \hlg{2}$$
+        focus: [1, 2, 2]
+        say: "Câu một, thay vào công thức độ lệch, cả hai đều có phương sai 1, và lôgarit của 1 bằng 0. Với tâm 0, trong ngoặc là 1 cộng 0 trừ 1, bằng 0, đúng là độ lệch của một phân phối với chính nó. Với tâm 2, trong ngoặc là 1 cộng 4 trừ 1, bằng 4, một nửa của 4 là 2."
+      - show: |
+          <p>② $D^* = \frac{0{,}3}{0{,}3 + 0{,}3} = \frac{0{,}3}{0{,}6} = \hlg{0{,}5}$: hai mật độ bằng nhau nên không phân biệt được.</p>
+          <p>③ $z = \mu + \sigma\cdot\varepsilon = -1 + 2\cdot 0{,}5 = -1 + 1 = \hlg{0}$: mã nằm trên tâm nửa độ lệch chuẩn.</p>
+        focus: [1, 2]
+        say: "Câu hai, 0 phẩy 3 chia 0 phẩy 6 bằng 0 phẩy 5, vì hai mật độ bằng nhau nên bộ phân biệt không biết nghiêng về bên nào. Câu ba, z bằng âm 1 cộng 2 nhân 0 phẩy 5, tức âm 1 cộng 1, bằng 0, nghĩa là mã nằm trên tâm đúng nửa độ lệch chuẩn."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">VAE: ELBO = giải mã − KL</span><span class="a">→</span>
+          <span class="n">tham số hoá lại $z = \mu + \sigma\cdot\varepsilon$</span><span class="a">→</span>
+          <span class="n">rút $z$ từ $\mathcal{N}(0, 1)$ để sinh</span><span class="a">→</span>
+          <span class="n">GAN: $D^* = \frac{p_{\text{thật}}}{p_{\text{thật}} + p_{\text{giả}}}$, trò chơi hai bên</span></div>
+        say: "Tổng kết chuỗi logic. Mạng tự mã hoá biến phân làm lớn cận dưới, gồm giải mã tốt trừ độ lệch giữa hai phân phối. Nó dùng mẹo tham số hoá lại, và sinh ảnh bằng cách rút mã từ phân phối chuẩn tắc. Mạng đối kháng là trò chơi hai bên, với bộ phân biệt tốt nhất có công thức gọn."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> muốn tạo ra dữ liệu, mô hình phải học được <b>phân phối</b> của nó — không chỉ ranh giới giữa các lớp.</div>
+        say: "Điều cần mang theo, muốn tạo ra dữ liệu, mô hình phải học được phân phối của nó, không chỉ ranh giới giữa các lớp."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 43): <b>mô hình sinh</b> (2) — mô hình khuếch tán (diffusion).</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 43, ta học mô hình sinh thứ hai, mô hình khuếch tán, tạo ảnh bằng cách khử nhiễu từng bước. Hẹn gặp bạn ở bài tiếp theo."

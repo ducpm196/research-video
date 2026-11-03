@@ -1,0 +1,199 @@
+id: L03
+course: DSC
+series: "DSC · Khoa học dữ liệu"
+title: "Bài 3 — Dữ liệu thiếu: cơ chế thiếu và cách xử lý"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/dsc.yaml L03; audit/dsc/verify_dsc.py L03; D. B. Rubin, Inference and Missing Data, Biometrika 63(3), 1976; S. van Buuren, Flexible Imputation of Missing Data, 2nd ed. (2018), chương 1–2; CS115 bài 13 (phương sai)"
+assumes: [arith, frac]
+# Quy ước: ba cơ chế thiếu theo Rubin (1976): thiếu hoàn toàn ngẫu nhiên, thiếu ngẫu nhiên (phụ thuộc biến đã quan sát), thiếu không ngẫu nhiên
+#   (phụ thuộc chính giá trị bị thiếu). Phương sai mẫu chia n − 1 (alg.sample_var). Số liệu thu nhập (triệu đồng/tháng) là minh hoạ.
+objectives:
+  - "Phân biệt ba cơ chế thiếu dữ liệu"
+  - "Biết xoá dòng và điền trung bình gây sai lệch thế nào"
+  - "Chọn cách xử lý phù hợp"
+asr_reviewed:
+  - {sentence: "Chia cho 4 trừ 1 bằng 3, phương sai mẫu xấp xỉ 6 phẩy 667.", reason: "ASR chép “Chia cho 4,1 triệu bằng 3, phương sai mẫu sắp xị 6,667.” (0.769): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: trừ/phẩy, xấp xỉ/sắp xị — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Người thu nhập cao không trả lời khảo sát"
+    checks:
+      - "sum([5, 7, 9, 11, 30, 40]) / 6 == 17 and sum([5, 7, 9, 11]) / 4 == 8"
+    steps:
+      - show: |
+          <p>Sáu người có thu nhập 5, 7, 9, 11, 30, 40 triệu. Hai người thu nhập cao bỏ trống câu hỏi. Xoá dòng thiếu rồi tính: trung bình $\hl{8}$ triệu. Thật ra là 17.</p>
+          <div class="box key">Hôm nay: <b>dữ liệu thiếu</b> — vì sao thiếu quyết định cách xử lý nào an toàn.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, sáu người có thu nhập 5, 7, 9, 11, 30 và 40 triệu. Hai người thu nhập cao bỏ trống câu hỏi. Xoá các dòng thiếu rồi tính, trung bình là 8 triệu, trong khi thật ra là 17. Hôm nay ta học về dữ liệu thiếu, vì sao thiếu quyết định cách xử lý nào là an toàn."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: phương sai mẫu"
+    checks:
+      - "[x - 3 for x in [1, 3, 5]] == [-2, 0, 2] and [(x - 3) ** 2 for x in [1, 3, 5]] == [4, 0, 4] and 8 / (3 - 1) == 4 == alg.sample_var([1, 3, 5])"
+    steps:
+      - show: |
+          <p><b>Phương sai mẫu</b> đo các số tản ra quanh trung bình bao xa: lấy mỗi số trừ trung bình, bình phương, cộng lại, rồi chia cho (số phần tử − 1).</p>
+          <table class="t"><tr><th>số</th><th>1</th><th>3</th><th>5</th><th>cộng</th></tr>
+          <tr><td>trừ trung bình 3</td><td>−2</td><td>0</td><td>2</td><td></td></tr>
+          <tr><td>bình phương</td><td>4</td><td>0</td><td>4</td><td>8</td></tr></table>
+          <p>Phương sai mẫu $= \frac{8}{3 - 1} = 4$.</p>
+        focus: [1, 2, "2.2", "2.3", 3]
+        say: "Bài này dùng phương sai mẫu, mà ta đã gặp ở khoá Toán cho khoa học máy tính. Phương sai mẫu đo các số tản ra quanh trung bình bao xa, cách tính là lấy mỗi số trừ trung bình, bình phương, cộng lại, rồi chia cho số phần tử trừ 1. Với 1, 3, 5, trung bình là 3, nên độ lệch là âm 2, 0, và 2. Bình phương lên được 4, 0, 4, cộng lại bằng 8. Chia cho 3 trừ 1 bằng 2, ta được phương sai mẫu bằng 4."
+      - show: |
+          <p>Một số <b>nằm đúng ở trung bình</b> có độ lệch 0: nó không thêm gì vào tổng bình phương, nhưng vẫn làm <b>số phần tử</b> tăng thêm 1.</p>
+        say: "Để ý một điều sẽ dùng ngay trong bài. Một số nằm đúng ở trung bình có độ lệch bằng 0, nên nó không thêm gì vào tổng bình phương, nhưng vẫn làm số phần tử tăng thêm 1, tức làm mẫu số lớn hơn."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: ba cơ chế thiếu"
+    steps:
+      - show: |
+          <table class="t"><tr><th>cơ chế</th><th>nghĩa</th><th>ví dụ</th></tr>
+          <tr><td>thiếu hoàn toàn ngẫu nhiên</td><td>thiếu không liên quan tới gì cả</td><td>phiếu bị ướt mất chữ ngẫu nhiên</td></tr>
+          <tr><td>thiếu ngẫu nhiên</td><td>thiếu phụ thuộc vào biến <b>đã có</b></td><td>người lớn tuổi hay bỏ câu về mạng xã hội (biết tuổi)</td></tr>
+          <tr><td>thiếu không ngẫu nhiên</td><td>thiếu phụ thuộc vào <b>chính giá trị bị thiếu</b></td><td>thu nhập cao thì không khai thu nhập</td></tr></table>
+          <p class="note">Ví dụ mở đầu thuộc loại thứ ba — khó nhất, vì dữ liệu còn lại không cho biết đã mất gì.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Có ba cơ chế thiếu. Thiếu hoàn toàn ngẫu nhiên là thiếu không liên quan tới gì cả, như phiếu bị ướt mất chữ một cách ngẫu nhiên. Thiếu ngẫu nhiên là thiếu phụ thuộc vào một biến đã có, như người lớn tuổi hay bỏ câu về mạng xã hội, mà ta biết tuổi. Thiếu không ngẫu nhiên là thiếu phụ thuộc vào chính giá trị bị thiếu, như người thu nhập cao thì không khai thu nhập. Ví dụ mở đầu thuộc loại thứ ba, khó nhất, vì dữ liệu còn lại không cho biết ta đã mất gì."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hai điểm bịa đứng đúng giữa"
+    checks:
+      - "sum((v - 5) ** 2 for v in [2, 4, 6, 8]) == 20 == sum((v - 5) ** 2 for v in [2, 4, 5, 6, 5, 8])"
+    steps:
+      - show: |
+          <div><svg width="1500" height="380" viewBox="0 0 1500 380"><g fill="#1f2937" font-size="22"><line x1="200" y1="150" x2="1190" y2="150" stroke="#6b7280" stroke-width="2"/><line x1="200" y1="330" x2="1190" y2="330" stroke="#6b7280" stroke-width="2"/><line x1="640" y1="40" x2="640" y2="155" stroke="#059669" stroke-width="3" stroke-dasharray="8 6"/><line x1="640" y1="192" x2="640" y2="335" stroke="#059669" stroke-width="3" stroke-dasharray="8 6"/><text x="200" y="180" text-anchor="middle" font-size="20">1</text><text x="200" y="360" text-anchor="middle" font-size="20">1</text><text x="310" y="180" text-anchor="middle" font-size="20">2</text><text x="310" y="360" text-anchor="middle" font-size="20">2</text><text x="420" y="180" text-anchor="middle" font-size="20">3</text><text x="420" y="360" text-anchor="middle" font-size="20">3</text><text x="530" y="180" text-anchor="middle" font-size="20">4</text><text x="530" y="360" text-anchor="middle" font-size="20">4</text><text x="640" y="180" text-anchor="middle" font-size="20">5</text><text x="640" y="360" text-anchor="middle" font-size="20">5</text><text x="750" y="180" text-anchor="middle" font-size="20">6</text><text x="750" y="360" text-anchor="middle" font-size="20">6</text><text x="860" y="180" text-anchor="middle" font-size="20">7</text><text x="860" y="360" text-anchor="middle" font-size="20">7</text><text x="970" y="180" text-anchor="middle" font-size="20">8</text><text x="970" y="360" text-anchor="middle" font-size="20">8</text><text x="1080" y="180" text-anchor="middle" font-size="20">9</text><text x="1080" y="360" text-anchor="middle" font-size="20">9</text><line x1="640" y1="110" x2="310" y2="110" stroke="#2a78d6" stroke-width="6"/><circle cx="310" cy="110" r="13" fill="#2a78d6"/><line x1="640" y1="110" x2="530" y2="110" stroke="#2a78d6" stroke-width="6"/><circle cx="530" cy="110" r="13" fill="#2a78d6"/><line x1="640" y1="110" x2="750" y2="110" stroke="#2a78d6" stroke-width="6"/><circle cx="750" cy="110" r="13" fill="#2a78d6"/><line x1="640" y1="110" x2="970" y2="110" stroke="#2a78d6" stroke-width="6"/><circle cx="970" cy="110" r="13" fill="#2a78d6"/><line x1="640" y1="290" x2="310" y2="290" stroke="#2a78d6" stroke-width="6"/><circle cx="310" cy="290" r="13" fill="#2a78d6"/><line x1="640" y1="290" x2="530" y2="290" stroke="#2a78d6" stroke-width="6"/><circle cx="530" cy="290" r="13" fill="#2a78d6"/><line x1="640" y1="290" x2="750" y2="290" stroke="#2a78d6" stroke-width="6"/><circle cx="750" cy="290" r="13" fill="#2a78d6"/><line x1="640" y1="290" x2="970" y2="290" stroke="#2a78d6" stroke-width="6"/><circle cx="970" cy="290" r="13" fill="#2a78d6"/><circle cx="640" cy="256" r="13" fill="#eb6834"/><circle cx="640" cy="222" r="13" fill="#eb6834"/><text x="640" y="30" text-anchor="middle" fill="#059669">trung bình 5</text><text x="20" y="118" font-size="24">phần có</text><text x="20" y="298" font-size="24">sau khi điền</text><text x="1220" y="105">tổng bình phương 20</text><text x="1220" y="135">chia 4 − 1 = 3</text><text x="1220" y="285">tổng bình phương 20</text><text x="1220" y="315">chia 6 − 1 = 5</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ mỗi số như một chấm, và đoạn xanh là độ lệch của nó so với trung bình 5. Hàng trên là bốn số đang có, 2, 4, 6, 8, tổng bình phương độ lệch là 20. Hàng dưới thêm hai chấm cam điền bằng 5, nằm đúng trên vạch trung bình nên không có đoạn xanh nào, tổng bình phương vẫn là 20. Nhưng giờ ta chia cho 5 thay vì 3, nên phương sai bị kéo nhỏ lại, dù độ tản thật không hề đổi."
+
+  - id: example
+    kind: example
+    title: "Điền trung bình làm phương sai nhỏ giả tạo"
+    checks:
+      - "round(alg.sample_var([2.0, 4.0, 6.0, 8.0]), 3) == 6.667 and alg.sample_var([2.0, 4.0, 5.0, 6.0, 5.0, 8.0]) == 4.0"
+    steps:
+      - show: |
+          <p>Dãy 2, 4, <b>?</b>, 6, <b>?</b>, 8.</p>
+          <p><b>Bước 1</b> — trung bình phần có: $\frac{2 + 4 + 6 + 8}{4} = \frac{20}{4} = 5$.</p>
+        focus: [1, 2]
+        say: "Xét dãy 2, 4, thiếu, 6, thiếu, 8. Bước một, tính trung bình của phần có giá trị, 2 cộng 4 cộng 6 cộng 8 bằng 20, chia 4 được 5."
+      - show: |
+          <table class="t"><tr><th>số</th><th>2</th><th>4</th><th>6</th><th>8</th><th>cộng</th></tr>
+          <tr><td>trừ 5, bình phương</td><td>9</td><td>1</td><td>1</td><td>9</td><td>20</td></tr></table>
+          <p><b>Bước 2</b> — phương sai mẫu phần có: $\frac{20}{4 - 1} \approx \hl{6{,}667}$.</p>
+        introduces: [approx]
+        focus: [1, "1.2", 2]
+        say: "Bước hai, tính phương sai mẫu của phần có. Độ lệch so với 5 là âm 3, âm 1, 1, 3, bình phương lên được 9, 1, 1, 9, cộng lại bằng 20. Chia cho 4 trừ 1 bằng 3, phương sai mẫu xấp xỉ 6 phẩy 667."
+      - show: |
+          <p><b>Bước 3</b> — điền 5 vào hai ô thiếu → 2, 4, 5, 6, 5, 8. Hai số mới có độ lệch 0, tổng bình phương vẫn 20, nhưng chia cho $6 - 1 = 5$: phương sai còn $\frac{20}{5} = \hl{4{,}0}$.</p>
+        say: "Bước ba, điền 5 vào hai ô thiếu, được 2, 4, 5, 6, 5, 8. Hai số mới có độ lệch bằng 0, nên tổng bình phương vẫn là 20, nhưng giờ chia cho 6 trừ 1 bằng 5. Phương sai mẫu chỉ còn 20 chia 5, bằng 4 phẩy 0."
+      - clear: true
+        show: |
+          <div class="box key"><b>Bước 4</b> — đọc kết quả: hai giá trị “bịa” nằm đúng giữa làm dữ liệu trông <b>chắc chắn hơn thật</b>: khoảng tin cậy hẹp lại một cách giả tạo. Tốt hơn: điền nhiều lần có ngẫu nhiên (điền bội), hoặc thêm cột “có thiếu” để mô hình biết.</div>
+        focus: [1, 1, 1]
+        say: "Bước bốn, đọc kết quả. Hai giá trị bịa nằm đúng giữa làm dữ liệu trông chắc chắn hơn thật, và khoảng tin cậy hẹp lại một cách giả tạo. Cách tốt hơn là điền nhiều lần có yếu tố ngẫu nhiên, gọi là điền bội, hoặc thêm một cột cho biết ô đó có thiếu để mô hình biết."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác"
+    checks:
+      - "sum(x * x for x in [2, 4, 6, 8]) == 120 and 120 - 4 * 25 == 20 and round(20 / 3, 3) == 6.667"
+      - "sum(x * x for x in [2, 4, 5, 6, 5, 8]) == 170 and 170 - 6 * 25 == 20 and 20 / 5 == 4"
+      - "round(alg.sample_var([2, 4, 5, 6, 5, 8]) / alg.sample_var([2, 4, 6, 8]), 9) == round((4 - 1) / (6 - 1), 9) == 0.6"
+    steps:
+      - show: |
+          <p>Đường khác: tổng bình phương độ lệch $=$ (tổng các bình phương) $-$ (số phần tử) $\cdot$ (trung bình)$^2$.</p>
+          <table class="t"><tr><th>dãy</th><th>tổng các bình phương</th><th>trừ $n \cdot 25$</th><th>chia $n - 1$</th></tr>
+          <tr><td>2, 4, 6, 8</td><td>4 + 16 + 36 + 64 = 120</td><td>120 − 100 = 20</td><td>6,667 ✓</td></tr>
+          <tr><td>2, 4, 5, 6, 5, 8</td><td>120 + 25 + 25 = 170</td><td>170 − 150 = 20</td><td>4 ✓</td></tr></table>
+        introduces: [cdot, power]
+        focus: [1, "2.2", "2.3"]
+        say: "Kiểm bằng đường khác, dùng công thức tổng bình phương độ lệch bằng tổng các bình phương trừ số phần tử nhân trung bình bình phương, nên không phải tính lại từng độ lệch. Với 2, 4, 6, 8, tổng các bình phương là 120, trừ 4 nhân 25 bằng 100, còn 20, chia 3 được 6 phẩy 667. Với dãy đã điền, tổng các bình phương là 170, trừ 6 nhân 25 bằng 150, vẫn còn 20, chia 5 được 4, khớp cả hai."
+      - show: |
+          $$\frac{4}{6{,}667} = 0{,}6 = \frac{4 - 1}{6 - 1}$$
+          <p>Điền trung bình vào ô thiếu luôn nhân phương sai với $\frac{\text{số ô có} - 1}{\text{tổng số ô} - 1}$.</p>
+        focus: [1, 1, 2]
+        say: "Còn một phép thử nữa. Tỉ số 4 chia 6 phẩy 667 bằng 0 phẩy 6, đúng bằng 4 trừ 1 chia 6 trừ 1. Đó là vì tổng bình phương giữ nguyên, còn mẫu số tăng từ số ô có trừ 1 lên tổng số ô trừ 1, nên càng thiếu nhiều thì phương sai càng bị co nhiều."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi cả người đã đi làm"
+    checks:
+      - "sum([4, 6, 18, 20, 22, 20]) / 6 == 15 and sum([4, 6]) / 2 == 5"
+      - "sum([4, 6, 15, 15]) / 4 == 10 and sum([4, 6, 15, 15, 18, 20, 22, 20]) / 8 == 15 and sum([4, 6, 5, 5, 18, 20, 22, 20]) / 8 == 12.5"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Xoá dòng thiếu như mặc định <b class="red">(có thể lệch)</b>
+          <br><span class="note">Chỉ không gây lệch khi thiếu hoàn toàn ngẫu nhiên. Như mở đầu: xoá người không khai làm trung bình từ 17 thành 8.</span></div>
+        say: "Lỗi thứ nhất, xoá dòng thiếu như một mặc định. Cách này chỉ không gây lệch khi dữ liệu thiếu hoàn toàn ngẫu nhiên, như ví dụ mở đầu, xoá người không khai làm trung bình từ 17 thành 8."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Mã hoá thiếu bằng một số như −1 hay 0 <b class="red">(sai)</b>
+          <br><span class="note">Số đó lọt vào trung bình, tương quan như một giá trị thật. Giữ thiếu là thiếu, và đếm nó.</span></div>
+        say: "Lỗi thứ hai, mã hoá ô thiếu bằng một số như âm 1 hay 0. Số đó lọt vào trung bình và tương quan như một giá trị thật, nên hãy giữ ô thiếu là thiếu, và đếm nó."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Không hỏi “vì sao thiếu” <b class="red">(bỏ qua thông tin)</b>
+          <br><span class="note">Bản thân việc thiếu thường mang thông tin (khách bỏ trống số điện thoại có thể ít tin tưởng hơn). Báo cáo tỉ lệ thiếu theo từng nhóm.</span></div>
+        say: "Lỗi thứ ba, không hỏi vì sao thiếu. Bản thân việc thiếu thường mang thông tin, khách bỏ trống số điện thoại có thể ít tin tưởng hơn, nên hãy báo cáo tỉ lệ thiếu theo từng nhóm."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm cũng mắc).</b> Điền một trung bình chung khi thiếu tập trung ở một nhóm <b class="red">(kéo lệch)</b></div>
+          <p class="note">Số minh hoạ: nhóm trẻ có 4, 6 và <b>2 ô thiếu</b>; nhóm lớn tuổi có 18, 20, 22, 20. Trung bình chung phần có $= \frac{90}{6} = 15$.</p>
+          <table class="t"><tr><th>cách điền</th><th>2 ô thiếu</th><th>trung bình nhóm trẻ</th><th>trung bình cả 8 người</th></tr>
+          <tr><td>trung bình chung</td><td>15, 15</td><td>10</td><td>15</td></tr>
+          <tr><td>trung bình trong nhóm tuổi</td><td>5, 5</td><td>5</td><td>12,5</td></tr></table>
+        focus: [1, 2, "3.2", "3.3", 0]
+        say: "Lỗi thứ tư, người đã đi làm cũng hay mắc, là điền một trung bình chung khi ô thiếu tập trung ở một nhóm. Với số minh hoạ, nhóm trẻ có 4, 6 và 2 ô thiếu, nhóm lớn tuổi có 18, 20, 22, 20, nên trung bình chung của phần có là 90 chia 6 bằng 15. Điền 15 cho người trẻ làm trung bình nhóm trẻ thành 10, gấp đôi phần có thật, và trung bình cả 8 người là 15. Nếu việc thiếu chỉ phụ thuộc tuổi, tức thiếu ngẫu nhiên, thì điền trung bình trong nhóm tuổi là 5 sẽ hợp lý hơn, cho trung bình cả 8 người là 12 phẩy 5. Người làm nghề điền theo biến đã quan sát được, và luôn ghi lại cách điền trong báo cáo."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.sample_var([1, 3, 5]) == 4.0 and alg.sample_var([1, 3, 3, 5, 3]) == 2.0"
+      - "sum((x - 3) ** 2 for x in [1, 3, 3, 5, 3]) == 8 and 2 / 4 == (3 - 1) / (5 - 1)"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Dãy 1, 3, ?, 5, ?. Phương sai mẫu của phần có? Sau khi điền trung bình?</td></tr>
+          <tr><td>2</td><td>Bệnh nhân nặng hay bỏ lần tái khám nên thiếu chỉ số sức khoẻ lần sau. Cơ chế thiếu nào?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, dãy 1, 3, thiếu, 5, thiếu. Phương sai mẫu của phần có là bao nhiêu? Sau khi điền trung bình thì sao? Câu hai, bệnh nhân nặng hay bỏ lần tái khám nên thiếu chỉ số sức khoẻ lần sau. Đây là cơ chế thiếu nào? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① Bước 1: phần có 1, 3, 5 → trung bình 3; bình phương độ lệch 4, 0, 4, tổng 8; phương sai $\frac{8}{3 - 1} = \hl{4}$.</p>
+        say: "Đáp án câu một, bước một, phần có giá trị là 1, 3, 5, trung bình là 3. Bình phương độ lệch là 4, 0, 4, tổng bằng 8, chia 3 trừ 1 bằng 2, nên phương sai mẫu là 4."
+      - show: |
+          <p>Bước 2: điền 3 → 1, 3, 3, 5, 3. Tổng bình phương vẫn 8, chia $5 - 1 = 4$: phương sai $\hl{2}$ — giảm một nửa, đúng bằng $\frac{3 - 1}{5 - 1}$.</p>
+        say: "Bước hai, điền 3 vào hai ô thiếu, được 1, 3, 3, 5, 3. Tổng bình phương vẫn là 8, nhưng chia cho 5 trừ 1 bằng 4, nên phương sai chỉ còn 2, giảm một nửa, đúng bằng 3 trừ 1 chia 5 trừ 1."
+      - show: |
+          <p>② <b>Thiếu không ngẫu nhiên</b>: việc thiếu phụ thuộc chính sức khoẻ (giá trị bị thiếu). Xoá hay điền trung bình đều làm bệnh nhân trông khoẻ hơn thật.</p>
+        say: "Câu hai, đây là thiếu không ngẫu nhiên, vì việc thiếu phụ thuộc chính sức khoẻ, tức giá trị bị thiếu. Xoá hay điền trung bình đều làm bệnh nhân trông khoẻ hơn thật."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">hỏi vì sao thiếu</span><span class="a">→</span>
+          <span class="n">ba cơ chế: hoàn toàn ngẫu nhiên, ngẫu nhiên, không ngẫu nhiên</span><span class="a">→</span>
+          <span class="n">xoá dòng chỉ an toàn ở loại đầu</span><span class="a">→</span>
+          <span class="n">điền trung bình làm hẹp phương sai</span></div>
+        say: "Tổng kết lại, hãy hỏi vì sao thiếu. Có ba cơ chế, xoá dòng chỉ an toàn với thiếu hoàn toàn ngẫu nhiên, và điền trung bình làm phương sai hẹp lại giả tạo."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> ô trống cũng là dữ liệu. Câu hỏi “vì sao trống?” thường dạy nhiều hơn những ô đầy.</div>
+        say: "Điều cần mang theo, ô trống cũng là dữ liệu. Câu hỏi vì sao trống thường dạy ta nhiều hơn những ô đầy."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 4): <b>thống kê mô tả bền vững</b> — trung vị, tứ phân vị, ngoại lai.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 4, ta học thống kê mô tả bền vững, với trung vị, tứ phân vị và ngoại lai. Hẹn gặp bạn ở bài tiếp theo."

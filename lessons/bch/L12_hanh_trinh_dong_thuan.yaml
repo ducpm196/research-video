@@ -1,0 +1,394 @@
+id: L12
+course: BCH
+series: "BCH · Blockchain và sổ cái phân tán"
+title: "Bài 12 — Tình huống chuyên gia theo dòng thời gian: nâng cấp một chuỗi khối đang chạy"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+case: journey
+source: "curriculum/bch.yaml L12; audit/bch/sources_L12.md (câu trích nguyên văn, đọc 2026-11-02); audit/bch/verify_bch.py L12; S. Nakamoto, Bitcoin: A Peer-to-Peer Electronic Cash System, 2008 [N08]; E. Lombrozo, J. Lau, P. Wuille, BIP 141 Segregated Witness (Consensus layer), giao 2015-12-21 [B141]; BIP 9 Version bits with timeout and delay [B9]; BIP 91 Reduced threshold Segwit MASF, giao 2017-05-22 [B91]; bitcoincore.org, Bitcoin Core 0.13.1 Released 2016-10-27, Segregated Witness Benefits 2016-01-26, Segwit next steps 2016-06-24 [BC16]; bitcoincore.org, Segregated Witness Wallet Development Guide và bài 2017-08-18 [BC17]; ethereum.org, The Merge [E22]; ethereum.org, Ethereum energy consumption [E22e]; ethereum.org, Proof-of-stake (PoS) [E22p]; BCH bài 0 (có cần chuỗi khối), bài 2 (cây Merkle), bài 6 (chuỗi nhiều công nhất), bài 7 (hai phần ba), bài 8 (phí), bài 10 (thông lượng)"
+assumes: [arith]
+# Quy ước: “nâng cấp mềm” = soft fork; “nâng cấp cứng” = hard fork; “nhân chứng” = witness (phần dữ liệu chứng minh giao dịch hợp lệ, chủ
+#   yếu là chữ ký); “tín hiệu sẵn sàng” = version bit; “trọng lượng khối” = block weight; “người xác thực” = validator; “khe” = slot;
+#   “kỷ nguyên” = epoch; “tính cuối cùng” = finality; “Hợp nhất” = The Merge; “chuỗi đồng thuận mới” = Beacon Chain.
+#   Mọi sự kiện và con số có nguồn ghi trong audit/bch/sources_L12.md. Con số khác là phép tính lại (checks) hoặc ghi “(số minh hoạ)”:
+#   giao dịch 250 byte có 100 byte chữ ký, mạng 5 công ty 200 nút, 90 ngày song song, 100 phần cổ phần đều là SỐ MINH HOẠ.
+#   Lời đọc không nói “Bitcoin”, “Ethereum”, “SegWit”, “BIP”, “Merge”, “ETH”, “TWh”: nói “đồng tiền số đầu tiên”, “chuỗi hợp đồng thông
+#   minh”, “nhân chứng tách riêng”, “đề xuất cải tiến số 141”, “Hợp nhất”, “đồng tiền gốc của chuỗi”, “tỉ số điện” (1 số điện = 1 kWh).
+#   Probe: audit/bch/probes/p1_thuat_ngu.md, p2_hanh_trinh.md; luật ở lexicon_vi.BCH.yaml. Nội dung an ninh chỉ mức khái niệm phòng thủ;
+#   không nói giá, không lời khuyên đầu tư.
+objectives:
+  - "Kể lại hành trình nâng cấp chuỗi khối qua năm chặng từ 2008 tới sau 2022, mỗi chặng một điểm nghẽn và một cách xử lý"
+  - "Tính lại dung lượng tiêu đề mỗi năm, trọng lượng khối, ngưỡng tín hiệu, số ngày chạy song song và độ dài một kỷ nguyên"
+  - "Chọn cách nâng cấp hợp với quy mô mạng của chính mình, kèm điều kiện đổi lựa chọn"
+asr_reviewed:
+  - {sentence: "Thực hành rút ra là nút nhẹ kiểm thanh toán bằng tiêu đề và nhánh Merkle.", reason: "ASR chép “Thực hành trúc tra là nút nhẹ kiểm thanh toán bằng tiêu đề và nhánh mơ cô.” (0.824): Merkle đọc “Mơ-cồ” theo lexicon BCH, ASR viết “mơ cổ”; lệch âm/thanh thuần Việt: rút ra/trúc tra — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bước ba, nhân với 80 byte được 4 triệu 204 nghìn 800 byte, khoảng 4 phẩy 2 MB.", reason: "ASR chép “Bước 3, nhân với 80 by được 4.200.000 linh 4.800 by, khoảng 4.2 megabyte.” (0.826): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; MB đọc “mê-ga-byte” theo lexicon của khoá, ASR viết “MB/megabyte” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Ở bài 10, khối một triệu byte, giao dịch 250 byte, chứa được 4000 giao dịch.", reason: "ASR chép “Ở bài 10, khối 1 triệu bài, giao dịch 250 bài, chữa được 4.000 giao dịch.” (0.85): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: chứa (trong “byte chứa” → “bài chữa”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Nói cách khác, mỗi byte nhân chứng nặng 1, còn mỗi byte khác nặng 4.", reason: "ASR chép “Nói cách khác, mỗi bay nhân chứng nặng 1, còn mỗi bay khác nặng 4.” (0.867): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Đếm theo byte, 150 byte cơ sở nặng 4 là 600, cộng 100 byte nhân chứng nặng 1 được 700.", reason: "ASR chép “Đếm theo bay, 150 bay cơ sở nặng 4 là 600, cộng 100 bay nhân chứng nặng 1 được 700.” (0.885): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Ở bài 2, cây Merkle chứng minh một giao dịch thuộc khối 1024 giao dịch bằng 10 mã băm, 320 byte.", reason: "ASR chép “Ở bài 2, Cây mơ cổ chứng minh một giao dịch thuộc hối 1024 giao dịch bằng 10 mã băm, 320 bay.” (0.903): Merkle đọc “Mơ-cồ” theo lexicon BCH, ASR viết “mơ cổ”; byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: khối/hối — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bước bốn, bộ nhớ 2 tỉ byte của máy năm 2008 chứa được khoảng 475 năm tiêu đề.", reason: "ASR chép “Bước 4, bộ nhớ 2 tỷ bay của máy năm 2008 chứa được khoảng 475 năm tiêu đề.” (0.926): “tỉ” ASR viết chính tả “tỷ” (cùng âm); byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Hãy sửa cơ chế trước, và đo thời gian kiểm chứ không chỉ đo số byte.", reason: "ASR chép “Hãy sửa cơ chế trước và đo thời gian kiểm chứ không chỉ đo số bay.” (0.938): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bước hai, giao dịch 250 byte có 100 byte chữ ký, một số minh hoạ, thì trọng lượng là 3 nhân 150 cộng 250, bằng 700.", reason: "ASR chép “Bước 2, giao dịch 250 bai có 100 bai chữ ký, một số minh họa thì trọng lượng là 3 nhân 150 cộng 250 bằng 700.” (0.946): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Chào bạn, năm 2008, sách trắng của Nakamoto tính rằng mỗi khối chỉ thêm một tiêu đề 80 byte, 10 phút một khối, nên mỗi năm chỉ thêm 4 phẩy 2 MB.", reason: "ASR chép “Chào bạn! Năm 2008, sách trắng của Nakamoto tính rằng mỗi khối chỉ thêm 1 tiêu đe 80 bai, 10 phút 1 khối, nên mỗi năm chỉ thêm 4,2 MB.” (0.947): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: đề/đe — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Thứ nhất, khối giới hạn một triệu byte, khoảng 6 phẩy 7 giao dịch mỗi giây như bài 10.", reason: "ASR chép “Thứ nhất, khối giới hạn 1 triệu bay khoảng 6,7 giao dịch mỗi giây như bài 10.” (0.947): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Nút nhẹ chỉ giữ tiêu đề và nhánh Merkle nối giao dịch với khối, nên không cần chạy nút đầy đủ.", reason: "ASR chép “Nút nhẹ chỉ giữ tiêu đề và nhánh mơ cô nối giao dịch với khối, nên không cần chạy nút đầy đủ.” (0.955): Merkle đọc “Mơ-cồ” theo lexicon BCH, ASR viết “mơ cổ” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Nhân chứng có cây Merkle riêng, và gốc của cây này vẫn được ghi vào khối, như gốc cây giao dịch ở bài 2.", reason: "ASR chép “Nhân chứng có cây mơ cổ riêng và gốc của cây này vẫn được ghi vào khối như gốc cây giao dịch ở bài 2.” (0.96): Merkle đọc “Mơ-cồ” theo lexicon BCH, ASR viết “mơ cổ” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Năm 2015, có một khối mất tới 25 giây chỉ để kiểm chữ ký, trong khi mỗi khối bị giới hạn một triệu byte.", reason: "ASR chép “Năm 2015, có một khối mất tới 25 giây chỉ để kiểm chữ ký trong khi mỗi khối bị giới hạn 1 triệu bay.” (0.968): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Nâng cấp một hệ không ai làm chủ"
+    checks:
+      - "80 * 6 * 24 * 365 == 4204800 and round(4204800 / 10**6, 1) == 4.2"
+    steps:
+      - show: |
+          <p>Năm 2008, sách trắng của Nakamoto tính: mỗi khối chỉ thêm một tiêu đề khoảng <b>80 byte</b>, cứ 10 phút một khối, nên mỗi năm chỉ thêm <b>4,2 MB</b>.</p>
+          <p>Năm 2015, có một khối mất <b>25 giây</b> chỉ để kiểm chữ ký; mỗi khối bị giới hạn <b>1&nbsp;000&nbsp;000 byte</b>.</p>
+          <p>Năm 2022, chuỗi hợp đồng thông minh của bài 8 bỏ hẳn bằng chứng công việc, chuyển sang bằng chứng cổ phần; năng lượng được ước tính giảm <b>khoảng 99,95%</b>.</p>
+          <div class="box key">Hôm nay: năm chặng từ 2008 tới sau 2022 — nâng cấp một hệ không ai làm chủ mà không dừng mạng, không mất lịch sử.</div>
+        focus: [1, 2, 3, 3, 4]
+        say: "Chào bạn, năm 2008, sách trắng của Nakamoto tính rằng mỗi khối chỉ thêm một tiêu đề 80 byte, 10 phút một khối, nên mỗi năm chỉ thêm 4 phẩy 2 MB. Năm 2015, có một khối mất tới 25 giây chỉ để kiểm chữ ký, trong khi mỗi khối bị giới hạn một triệu byte. Năm 2022, chuỗi hợp đồng thông minh của bài 8 bỏ bằng chứng công việc, chuyển sang bằng chứng cổ phần. Năng lượng của chuỗi ấy được ước tính giảm khoảng 99 phẩy 95 phần trăm. Hôm nay ta xem cách nâng cấp một hệ không ai làm chủ mà không dừng mạng, không mất lịch sử."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại bốn điều từ các bài trước"
+    checks:
+      - "len(alg.merkle_proof(alg.merkle_levels([str(i).encode() for i in range(1024)]), 357)) == 10 and 10 * 32 == 320"
+      - "round(alg.nakamoto_catch_up(0.1, 6), 7) == 0.0002428"
+      - "(100 - 1) // 3 == 33 and 100 - 33 == 67"
+      - "10**6 // 250 == 4000 and round(4000 / 600, 1) == 6.7"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài</th><th>điều đã học</th><th>ví dụ số</th></tr>
+          <tr><td>bài 2</td><td><b>cây Merkle</b>: chứng minh một giao dịch thuộc khối mà không tải cả khối</td><td>1024 giao dịch → 10 mã băm = 320 byte</td></tr>
+          <tr><td>bài 6</td><td>mỗi nút theo <b>chuỗi có tổng công lớn nhất</b>; đảo một giao dịch khó dần theo số khối xác nhận</td><td>kẻ nắm 10% sức tính, sau 6 khối: ≈ 0,0002428 (bảng Nakamoto 2008)</td></tr>
+          <tr><td>bài 7</td><td>bỏ phiếu theo <b>hai phần ba</b>: chịu được tối đa một phần ba gian lận</td><td>100 bên: chịu 33 bên gian lận, cần 67 phiếu</td></tr>
+          <tr><td>bài 10</td><td><b>thông lượng</b> = cỡ khối chia cỡ giao dịch, chia thời gian giữa hai khối</td><td>1&nbsp;000&nbsp;000 byte, 250 byte, 600 giây → 4000 giao dịch mỗi khối, ≈ 6,7 mỗi giây</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", "1.5"]
+        say: "Bảng nhắc lại bốn điều từ các bài trước. Ở bài 2, cây Merkle chứng minh một giao dịch thuộc khối 1024 giao dịch bằng 10 mã băm, 320 byte. Ở bài 6, mỗi nút theo chuỗi có tổng công lớn nhất, và kẻ nắm 10 phần trăm sức tính đuổi kịp sau 6 khối với xác suất chưa tới 3 phần mười nghìn. Ở bài 7, bỏ phiếu hai phần ba với 100 bên thì chịu được 33 bên gian lận, và cần 67 phiếu để chốt. Ở bài 10, khối một triệu byte, giao dịch 250 byte, chứa được 4000 giao dịch. Chia cho 600 giây, ta được khoảng 6 phẩy 7 giao dịch mỗi giây."
+
+  # ───────────────────────── 3. NGÔN NGỮ ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Ngôn ngữ của hành trình"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thuật ngữ</th><th>nghĩa</th></tr>
+          <tr><td><b>nâng cấp mềm</b> (soft fork)</td><td>luật mới <b>chặt hơn</b>; nút chưa nâng cấp vẫn chấp nhận khối theo luật mới</td></tr>
+          <tr><td><b>nâng cấp cứng</b> (hard fork)</td><td>nút chưa nâng cấp coi khối theo luật mới là sai, nên mạng có thể tách đôi</td></tr>
+          <tr><td><b>nhân chứng</b> (witness)</td><td>phần dữ liệu chứng minh giao dịch hợp lệ, chủ yếu là chữ ký</td></tr>
+          <tr><td><b>tín hiệu sẵn sàng</b></td><td>một bit trong tiêu đề khối, bật lên để báo người tạo khối đã sẵn sàng áp luật mới</td></tr>
+          <tr><td><b>người xác thực</b> (validator)</td><td>bên đặt cọc để được đề xuất khối và bỏ phiếu</td></tr>
+          <tr><td><b>tính cuối cùng</b> (finality)</td><td>khối đã chốt chỉ đảo được nếu chịu mất một lượng cọc rất lớn</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", "1.6", "1.7"]
+        say: "Bài dùng sáu thuật ngữ, ta đọc từng dòng. Nâng cấp mềm là luật mới chặt hơn, nút chưa nâng cấp vẫn nhận khối mới. Nâng cấp cứng là khi nút chưa nâng cấp coi khối mới là sai, nên mạng có thể tách đôi. Nhân chứng là phần dữ liệu chứng minh giao dịch hợp lệ, chủ yếu là chữ ký. Tín hiệu sẵn sàng là một bit trong tiêu đề khối, bật lên khi người tạo khối sẵn sàng. Người xác thực là bên đặt cọc để được đề xuất khối và bỏ phiếu. Tính cuối cùng nghĩa là khối đã chốt chỉ đảo được nếu chịu mất rất nhiều cọc."
+
+  # ───────────────────────── 4. DÒNG THỜI GIAN ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Năm chặng trên một trục thời gian"
+    steps:
+      - show: |
+          <div><svg width="1700" height="320" viewBox="0 0 1700 320">
+          <line x1="30" y1="150" x2="1670" y2="150" stroke="#1f2937" stroke-width="3"/>
+          <g font-size="24" text-anchor="middle" fill="#1f2937">
+          <circle cx="160" cy="150" r="15" fill="#9ca3af"/><text x="160" y="108" font-weight="bold">2008</text><text x="160" y="200">sách trắng</text><text x="160" y="232">4,2 MB mỗi năm</text>
+          <circle cx="500" cy="150" r="15" fill="#2a78d6"/><text x="500" y="108" font-weight="bold">2015 → 2016</text><text x="500" y="200">tách chữ ký</text><text x="500" y="232">trọng lượng khối</text>
+          <circle cx="850" cy="150" r="15" fill="#7c3aed"/><text x="850" y="108" font-weight="bold">2016 → 2017</text><text x="850" y="200">tín hiệu sẵn sàng</text><text x="850" y="232">kích hoạt ở khối 481&#160;824</text>
+          <circle cx="1200" cy="150" r="15" fill="#eb6834"/><text x="1200" y="108" font-weight="bold">2020 → 2022</text><text x="1200" y="200">chạy song song</text><text x="1200" y="232">rồi Hợp nhất</text>
+          <circle cx="1540" cy="150" r="15" fill="#059669"/><text x="1540" y="108" font-weight="bold">sau 2022</text><text x="1540" y="200">khe 12 giây</text><text x="1540" y="232">chốt bằng hai phần ba</text>
+          </g>
+          <text x="850" y="300" font-size="23" fill="#6b7280" text-anchor="middle">khai sinh → tăng trưởng → quy mô lớn → ổn định → tiếp tục phát triển</text>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình là trục thời gian với năm chặng, đi từ trái sang phải. Năm 2008, tiêu đề khối chỉ tăng 4 phẩy 2 MB mỗi năm. Từ 2015 tới 2017, đồng tiền số đầu tiên tách chữ ký, rồi kích hoạt nâng cấp ở khối 481 nghìn 824. Từ 2020, chuỗi hợp đồng thông minh chạy một chuỗi đồng thuận mới song song, Hợp nhất năm 2022, rồi chốt khối bằng hai phần ba cổ phần."
+
+  # ───────────────────────── 5. CƠ CHẾ: TÁCH CHỮ KÝ ─────────────────────────
+  - id: witness
+    kind: concept
+    title: "Cơ chế: tách chữ ký khỏi mã giao dịch"
+    steps:
+      - show: |
+          <div><svg width="1500" height="350" viewBox="0 0 1500 350">
+          <defs><marker id="ah" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="12" refX="14" refY="6" orient="auto"><path d="M0,0 L16,6 L0,12 z" fill="#1f2937"/></marker></defs>
+          <g font-size="24" text-anchor="middle" fill="#1f2937">
+          <text x="300" y="40" font-weight="bold">trước: một khối dữ liệu</text>
+          <rect x="60" y="70" width="480" height="90" rx="10" fill="#f3f4f6" stroke="#1f2937" stroke-width="3"/><text x="300" y="110">đầu vào + đầu ra</text><text x="300" y="142" fill="#dc2626">+ chữ ký</text>
+          <rect x="160" y="240" width="280" height="70" rx="10" fill="#fee2e2" stroke="#dc2626" stroke-width="3"/><text x="300" y="283">mã giao dịch</text>
+          <text x="1100" y="40" font-weight="bold">sau: nhân chứng tách riêng</text>
+          <rect x="820" y="70" width="300" height="90" rx="10" fill="#e0ecfb" stroke="#2a78d6" stroke-width="3"/><text x="970" y="110">phần cơ sở</text><text x="970" y="142">đầu vào + đầu ra</text>
+          <rect x="1180" y="70" width="270" height="90" rx="10" fill="#dcfce7" stroke="#059669" stroke-width="3"/><text x="1315" y="110">nhân chứng</text><text x="1315" y="142">chữ ký</text>
+          <rect x="830" y="240" width="280" height="70" rx="10" fill="#e0ecfb" stroke="#2a78d6" stroke-width="3"/><text x="970" y="283">mã giao dịch</text>
+          <rect x="1170" y="240" width="290" height="70" rx="10" fill="#dcfce7" stroke="#059669" stroke-width="3"/><text x="1315" y="283">cây Merkle riêng</text>
+          </g>
+          <line x1="300" y1="160" x2="300" y2="235" stroke="#1f2937" stroke-width="3" marker-end="url(#ah)"/>
+          <line x1="970" y1="160" x2="970" y2="235" stroke="#1f2937" stroke-width="3" marker-end="url(#ah)"/>
+          <line x1="1315" y1="160" x2="1315" y2="235" stroke="#1f2937" stroke-width="3" marker-end="url(#ah)"/>
+          <g font-size="21" fill="#6b7280"><text x="320" y="205">băm cả chữ ký</text><text x="990" y="205">chỉ băm phần cơ sở</text><text x="1335" y="205">gốc ghi vào khối</text></g>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình bên trái là cách cũ, mã giao dịch được băm từ cả đầu vào, đầu ra và chữ ký. Vì vậy đổi cách ký cũng làm mã giao dịch đổi theo, dù nội dung giữ nguyên. Hình bên phải là cách mới, chữ ký chuyển sang phần nhân chứng, còn mã giao dịch chỉ băm phần cơ sở. Nhân chứng có cây Merkle riêng, và gốc của cây này vẫn được ghi vào khối, như gốc cây giao dịch ở bài 2."
+
+  # ───────────────────────── 6. CHẶNG 1 ─────────────────────────
+  - id: stage1
+    kind: example
+    title: "Chặng 1, năm 2008 — khai sinh: sổ cái không cần bên tin cậy"
+    stage: {year: "2008", scale: "mạng ngang hàng mới; tiêu đề khối khoảng 80 byte, 10 phút một khối, 4,2 MB mỗi năm; máy tính năm 2008 thường có 2 GB RAM", source: "[N08]", practice: "nút nhẹ chỉ giữ tiêu đề và nhánh Merkle; độ khó theo trung bình động để giữ số khối mỗi giờ; bên nhận nhiều thanh toán tự chạy nút đầy đủ"}
+    checks:
+      - "60 // 10 == 6 and 6 * 24 * 365 == 52560 and 52560 * 80 == 4204800"
+      - "2 * 10**9 // 4204800 == 475"
+    steps:
+      - show: |
+          <p><b>Điểm nghẽn:</b> chữ ký số đã có, nhưng vẫn cần một <b>bên tin cậy chung</b> để chống chi tiêu hai lần.</p>
+          <p><b>Cách xử lý:</b> một mạng ngang hàng đóng dấu thời gian bằng chuỗi <b>bằng chứng công việc</b>; an toàn khi đa số sức tính không cấu kết tấn công. Độ khó đặt theo <b>trung bình động</b> để giữ số khối mỗi giờ.</p>
+          <p><b>Nút nhẹ:</b> chỉ giữ tiêu đề của chuỗi dài nhất và nhánh Merkle nối giao dịch với khối của nó, không cần chạy nút đầy đủ.</p>
+        focus: [1, 2, 2, 3]
+        say: "Ở chặng một, năm 2008, chữ ký số đã có, nhưng vẫn cần một bên tin cậy chung để chống chi tiêu hai lần. Sách trắng đề xuất một mạng ngang hàng đóng dấu thời gian bằng chuỗi bằng chứng công việc, an toàn khi đa số sức tính không cấu kết. Độ khó được đặt theo trung bình động, khối ra nhanh quá thì độ khó tăng. Nút nhẹ chỉ giữ tiêu đề và nhánh Merkle nối giao dịch với khối, nên không cần chạy nút đầy đủ."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. khối mỗi giờ</td><td>60 phút chia 10 phút</td><td>6 khối</td></tr>
+          <tr><td>Bước 2. khối mỗi năm</td><td>6 nhân 24 nhân 365</td><td>$\hlb{52\,560}$ khối</td></tr>
+          <tr><td>Bước 3. tiêu đề mỗi năm</td><td>52&nbsp;560 nhân 80 byte</td><td>$\hlg{4\,204\,800}$ byte ≈ 4,2 MB</td></tr>
+          <tr><td>Bước 4. so với RAM 2 GB năm 2008</td><td>2&nbsp;000&nbsp;000&nbsp;000 chia 4&nbsp;204&nbsp;800</td><td>≈ $\hl{475}$ năm tiêu đề</td></tr></table>
+          <p class="note">Thực hành: nút nhẹ kiểm thanh toán bằng tiêu đề và nhánh Merkle. Điều kiện: chỉ tin được khi nút trung thực nắm mạng; bị áp đảo thì nút nhẹ có thể bị lừa — bên nhận thanh toán thường xuyên nên tự chạy nút đầy đủ.</p>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", 2, 2]
+        say: "Làm lại phép tính của sách trắng. Bước một, 60 phút chia 10 phút là 6 khối mỗi giờ. Bước hai, 6 nhân 24 nhân 365 được 52 nghìn 560 khối mỗi năm. Bước ba, nhân với 80 byte được 4 triệu 204 nghìn 800 byte, khoảng 4 phẩy 2 MB. Bước bốn, bộ nhớ 2 tỉ byte của máy năm 2008 chứa được khoảng 475 năm tiêu đề. Thực hành rút ra là nút nhẹ kiểm thanh toán bằng tiêu đề và nhánh Merkle. Điều kiện là nút trung thực nắm mạng, nên bên nhận nhiều thanh toán vẫn nên tự chạy nút đầy đủ."
+
+  # ───────────────────────── 7. CHẶNG 2 ─────────────────────────
+  - id: stage2
+    kind: example
+    title: "Chặng 2, 2015 tới 2016 — tăng trưởng: khối một triệu byte và chữ ký tách riêng"
+    stage: {year: "2015 → 2016", scale: "khối giới hạn 1 000 000 byte; một khối năm 2015 mất 25 giây để kiểm; giao dịch ác ý có thể quá 3 phút", source: "[B141] [BC16]", practice: "tách chữ ký khỏi mã giao dịch; đổi cách đo bằng trọng lượng thay vì nâng thẳng giới hạn; nâng cấp mềm tương thích ngược; ví cũ cảnh giác với đầu ra ai cũng tiêu được"}
+    checks:
+      - "3 * 10**6 + 10**6 == 4 * 10**6"
+      - "3 * 150 + 250 == 700 and 4 * 10**6 // 700 == 5714 and round(5714 / 4000 - 1, 2) == 0.43"
+    steps:
+      - show: |
+          <table class="t"><tr><th>điểm nghẽn khi mạng đông lên</th><th>nối về bài nền</th></tr>
+          <tr><td>mỗi khối giới hạn <b>1&nbsp;000&nbsp;000 byte</b></td><td>bài 10: ≈ 6,7 giao dịch mỗi giây</td></tr>
+          <tr><td>với một số giao dịch, khối lượng băm khi kiểm chữ ký tăng theo <b>bình phương</b> cỡ giao dịch: một khối năm 2015 mất <b>25 giây</b> để kiểm, giao dịch ác ý có thể quá <b>3 phút</b></td><td>nâng thẳng cỡ khối là nâng cả thời gian kiểm</td></tr>
+          <tr><td>mã giao dịch băm cả chữ ký: <b>đổi cách ký là đổi mã</b>, dù nội dung giữ nguyên</td><td>ví khó theo dõi; kênh thanh toán của bài 10 khó dựng</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.3", "1.4"]
+        say: "Ở chặng hai, từ 2015 tới 2016, mạng đông lên và lộ ra ba điểm nghẽn. Thứ nhất, khối giới hạn một triệu byte, khoảng 6 phẩy 7 giao dịch mỗi giây như bài 10. Thứ hai, với một số giao dịch, khối lượng băm khi kiểm chữ ký tăng theo bình phương cỡ giao dịch. Một khối năm 2015 mất 25 giây để kiểm, và giao dịch được dựng ác ý có thể quá 3 phút. Thứ ba, mã giao dịch băm cả chữ ký, nên đổi cách ký là đổi mã, làm ví khó theo dõi."
+      - show: |
+          <div class="box key"><b>Đề xuất cải tiến số 141</b> (giao ngày 21/12/2015): chữ ký chuyển sang <b>nhân chứng</b>, cam kết vào khối riêng với cây giao dịch.
+          <br>Trọng lượng khối = 3 nhân cỡ cơ sở + cỡ toàn phần, không quá <b>4&nbsp;000&nbsp;000</b>. Nói cách khác, mỗi byte nhân chứng nặng 1, mỗi byte khác nặng 4.</div>
+        focus: [1, 1, 1]
+        say: "Cách xử lý là đề xuất cải tiến số 141, giao cuối năm 2015, chuyển chữ ký sang phần nhân chứng. Khối được đo bằng trọng lượng, bằng 3 nhân cỡ cơ sở cộng cỡ toàn phần, và không được quá 4 triệu. Nói cách khác, mỗi byte nhân chứng nặng 1, còn mỗi byte khác nặng 4."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. khối cũ, không có nhân chứng</td><td>3 nhân 1&nbsp;000&nbsp;000 + 1&nbsp;000&nbsp;000</td><td>$\hlb{4\,000\,000}$: vừa đúng giới hạn mới</td></tr>
+          <tr><td>Bước 2. giao dịch 250 byte, trong đó 100 byte chữ ký (số minh hoạ)</td><td>3 nhân 150 + 250</td><td>trọng lượng $\hl{700}$</td></tr>
+          <tr><td>Bước 3. số giao dịch mỗi khối</td><td>4&nbsp;000&nbsp;000 chia 700</td><td>≈ $\hlg{5714}$, so với 4000: nhiều hơn ≈ 43%</td></tr></table>
+          <p class="note">Nhóm phát triển năm 2016 ước “khoảng 70%” nếu mọi ví đều chuyển: tỉ lệ thật phụ thuộc phần chữ ký trong giao dịch. Điều kiện: nút cũ không thấy nhân chứng, coi đầu ra kiểu mới là “ai cũng tiêu được” — chỉ an toàn khi đa số người tạo khối áp luật mới; ví cũ phải cảnh giác.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2, 2]
+        say: "Làm thử bằng số. Bước một, khối cũ không có nhân chứng có trọng lượng 3 nhân một triệu cộng một triệu, bằng 4 triệu, vừa đúng giới hạn mới. Bước hai, giao dịch 250 byte có 100 byte chữ ký, một số minh hoạ, thì trọng lượng là 3 nhân 150 cộng 250, bằng 700. Bước ba, 4 triệu chia 700 được khoảng 5714 giao dịch mỗi khối, nhiều hơn 4000 khoảng 43 phần trăm. Nhóm phát triển năm 2016 ước khoảng 70 phần trăm nếu mọi ví đều chuyển, tuỳ phần chữ ký. Điều kiện là nút cũ coi đầu ra kiểu mới là ai cũng tiêu được, nên chỉ an toàn khi đa số người tạo khối áp luật mới."
+
+  # ───────────────────────── 8. CHẶNG 3 ─────────────────────────
+  - id: stage3
+    kind: example
+    title: "Chặng 3, 2016 tới 2017 — quy mô lớn: kích hoạt khi không ai ra lệnh được"
+    stage: {year: "2016 → 2017", scale: "luật mới chỉ chạy khi người tạo khối khắp nơi cùng áp; cửa sổ 15/11/2016 → 15/11/2017; ngưỡng 1916 trên 2016 khối, rồi 269 trên 336", source: "[B9] [B91] [BC16] [BC17]", practice: "thử trên mạng thử nghiệm nhiều tháng; đo sự sẵn sàng bằng tín hiệu; khoá rồi chờ thêm một chu kỳ; đặt thời hạn thất bại; ngưỡng quá cao thì một nhóm nhỏ chặn được"}
+    checks:
+      - "round(1916 / 2016 * 100, 2) == 95.04 and 2016 * 10 == 20160 and 20160 // (24 * 60) == 14"
+      - "round(269 / 336 * 100, 2) == 80.06 and round(336 * 10 / (24 * 60), 2) == 2.33"
+      - "481824 % 2016 == 0 and 481824 // 2016 == 239 and 2016 - 1916 + 1 == 101"
+    steps:
+      - show: |
+          <p><b>Điểm nghẽn:</b> không có máy chủ trung tâm để cập nhật. Theo bài 6, nếu chỉ một phần nhỏ sức tính áp luật mới, chuỗi dài nhất vẫn có thể chứa khối sai theo luật mới.</p>
+          <table class="t"><tr><th>cách xử lý</th><th>nguồn</th></tr>
+          <tr><td>bật trên <b>mạng thử nghiệm</b> từ tháng 5/2016; tới bản phát hành 27/10/2016 đã chạy hơn sáu tháng, không lỗi đồng thuận nào được biết</td><td>nhóm phát triển, 2016</td></tr>
+          <tr><td><b>tín hiệu sẵn sàng</b> đếm theo từng chu kỳ 2016 khối: đủ 1916 khối báo tín hiệu thì <b>khoá</b>, thêm một chu kỳ nữa mới <b>kích hoạt</b>; quá 15/11/2017 thì thất bại</td><td>đề xuất số 9 và số 141</td></tr>
+          <tr><td>năm 2017: ngưỡng hạ còn <b>80%</b>, 269 trên 336 khối, từ 1/6/2017; khối không báo tín hiệu bị từ chối</td><td>đề xuất số 91</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", "2.3", "2.4", "2.4"]
+        say: "Ở chặng ba, từ 2016 tới 2017, không có máy chủ trung tâm nào để cập nhật. Theo bài 6, nếu chỉ một phần nhỏ sức tính áp luật mới, chuỗi dài nhất vẫn có thể chứa khối sai theo luật mới. Trước hết, nâng cấp chạy trên mạng thử nghiệm từ tháng 5 năm 2016, hơn sáu tháng không có lỗi đồng thuận nào được biết. Tín hiệu sẵn sàng được đếm theo từng chu kỳ 2016 khối, đủ 1916 khối báo tín hiệu thì khoá. Thêm một chu kỳ nữa mới kích hoạt, còn quá ngày 15 tháng 11 năm 2017 là thất bại. Năm 2017, một đề xuất khác hạ ngưỡng còn 80 phần trăm, tức 269 trên 336 khối. Khi đề xuất đó có hiệu lực, khối không báo tín hiệu bị từ chối."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. ngưỡng ban đầu</td><td>1916 chia 2016</td><td>≈ $\hlb{95{,}04}$%</td></tr>
+          <tr><td>Bước 2. một chu kỳ dài bao lâu</td><td>2016 khối nhân 10 phút = 20&nbsp;160 phút</td><td>14 ngày — “khoảng hai tuần”</td></tr>
+          <tr><td>Bước 3. ai chặn được</td><td>2016 − 1916 + 1</td><td>chỉ $\hl{101}$ khối không báo là không khoá được</td></tr>
+          <tr><td>Bước 4. ngưỡng năm 2017</td><td>269 chia 336; 336 nhân 10 phút</td><td>≈ 80,06%; ≈ 2,33 ngày</td></tr>
+          <tr><td>Bước 5. khối kích hoạt 481&nbsp;824</td><td>481&nbsp;824 chia 2016</td><td>đúng $\hlg{239}$: đầu một chu kỳ</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", "1.6"]
+        say: "Làm thử bằng số, bảng có năm bước. Bước một, 1916 chia 2016 được khoảng 95 phẩy 04 phần trăm. Bước hai, 2016 khối nhân 10 phút là 20 nghìn 160 phút, tức 14 ngày, khoảng hai tuần. Bước ba, 2016 trừ 1916 cộng 1 là 101, nên chỉ 101 khối không báo là không khoá được. Bước bốn, 269 chia 336 khoảng 80 phẩy 06 phần trăm, và 336 khối chỉ mất khoảng 2 phẩy 33 ngày. Bước năm, khối 481 nghìn 824 chia 2016 được đúng 239, tức đầu một chu kỳ."
+      - show: |
+          <div class="box key">Năm 2017, nâng cấp được kích hoạt ở khối 481&nbsp;824. Thực hành: thử trên mạng thử nhiều tháng; đo sự sẵn sàng bằng tín hiệu thay vì đoán; khoá rồi chờ một chu kỳ để người còn lại kịp nâng cấp; có thời hạn thất bại rõ ràng. Điều kiện: ngưỡng quá cao thì một nhóm nhỏ chặn được, ngưỡng quá thấp thì nút chưa sẵn sàng có thể đi theo chuỗi sai.</div>
+        say: "Năm 2017, nâng cấp được kích hoạt ở khối 481 nghìn 824. Thực hành rút ra là thử trên mạng thử nhiều tháng, và đo sự sẵn sàng bằng tín hiệu thay vì đoán. Khoá rồi chờ một chu kỳ cho người còn lại, và đặt thời hạn thất bại. Điều kiện là ngưỡng quá cao thì nhóm nhỏ chặn được, quá thấp thì nút chưa sẵn sàng có thể theo chuỗi sai."
+
+  # ───────────────────────── 9. CHẶNG 4 ─────────────────────────
+  - id: stage4
+    kind: example
+    title: "Chặng 4, 2020 tới 2022 — ổn định: thay động cơ giữa chuyến bay"
+    stage: {year: "2020 → 2022", scale: "chuỗi chạy từ 7/2015 bằng bằng chứng công việc, ước 21 TWh mỗi năm; chuỗi đồng thuận mới song song từ 1/12/2020; Hợp nhất ngày 15/9/2022", source: "[E22] [E22e]", practice: "chạy hệ mới song song, chưa giữ giao dịch thật, rồi mới chuyển; giữ nguyên lịch sử và cách dùng; báo rõ người dùng không phải làm gì; nút cần cả phần thực thi lẫn phần đồng thuận"}
+    checks:
+      - "(__import__('datetime').date(2022, 9, 15) - __import__('datetime').date(2020, 12, 1)).days == 653"
+      - "round(21 / 0.0026) == 8077 and round((1 - 0.0026 / 21) * 100, 3) == 99.988"
+    steps:
+      - show: |
+          <p><b>Điểm nghẽn:</b> chuỗi hợp đồng thông minh chạy từ tháng 7/2015 bằng bằng chứng công việc, tốn năng lượng lớn. Ngay từ đầu dự án đã định chuyển sang bằng chứng cổ phần, nhưng làm mà <b>không đánh đổi an ninh và tính phi tập trung</b> mất nhiều năm nghiên cứu.</p>
+          <p><b>Cách xử lý:</b> ngày 1/12/2020, một <b>chuỗi đồng thuận mới</b> chạy <b>song song</b>, chỉ đồng thuận về danh sách người xác thực và số dư của họ, chưa xử lý giao dịch thật.</p>
+          <p>Ngày <b>15/9/2022</b>, hai hệ <b>Hợp nhất</b>: chuỗi mới thành bộ máy đồng thuận cho mọi giao dịch. Không mất lịch sử; người dùng không phải làm gì với tiền hay ví của mình.</p>
+        focus: [1, 1, 2, 3, 3]
+        say: "Ở chặng bốn, chuỗi hợp đồng thông minh chạy từ tháng 7 năm 2015 bằng bằng chứng công việc, tốn rất nhiều năng lượng. Dự án định chuyển sang bằng chứng cổ phần từ đầu, nhưng làm mà không đánh đổi an ninh thì mất nhiều năm. Ngày 1 tháng 12 năm 2020, một chuỗi đồng thuận mới chạy song song, chỉ lo danh sách người xác thực, chưa xử lý giao dịch thật. Ngày 15 tháng 9 năm 2022, hai hệ Hợp nhất, và chuỗi mới thành bộ máy đồng thuận cho mọi giao dịch. Không lịch sử nào bị mất, và người dùng không phải làm gì với ví."
+      - clear: true
+        show: |
+          <div><svg width="1500" height="300" viewBox="0 0 1500 300">
+          <defs><marker id="ah4" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="12" refX="14" refY="6" orient="auto"><path d="M0,0 L16,6 L0,12 z" fill="#1f2937"/></marker></defs>
+          <line x1="60" y1="90" x2="1010" y2="90" stroke="#eb6834" stroke-width="10"/>
+          <line x1="400" y1="210" x2="1010" y2="150" stroke="#2a78d6" stroke-width="10"/>
+          <line x1="1010" y1="120" x2="1440" y2="120" stroke="#059669" stroke-width="12" marker-end="url(#ah4)"/>
+          <g font-size="23" fill="#1f2937">
+          <text x="60" y="60">bằng chứng công việc, từ 7/2015: giữ mọi giao dịch</text>
+          <text x="400" y="255">chuỗi đồng thuận mới, từ 1/12/2020: chỉ người xác thực</text>
+          <text x="1030" y="90">Hợp nhất 15/9/2022</text>
+          <text x="1030" y="175">một chuỗi, đủ lịch sử</text>
+          </g>
+          </svg></div>
+        focus: [1, 1, 1]
+        say: "Hình cho thấy hai chuỗi chạy cạnh nhau. Đường cam giữ mọi giao dịch từ năm 2015, đường xanh dương là chuỗi đồng thuận mới từ cuối năm 2020. Tới ngày Hợp nhất, hai đường gộp thành một, giữ đủ lịch sử, như thay động cơ cho con tàu giữa chuyến bay."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. chạy song song bao lâu</td><td>từ 1/12/2020 tới 15/9/2022</td><td>$\hlb{653}$ ngày</td></tr>
+          <tr><td>Bước 2. năng lượng mỗi năm (bảng của trang chính thức, ước tính)</td><td>21 TWh chia 0,0026 TWh</td><td>≈ $\hl{8077}$ lần (bảng làm tròn 8&nbsp;100)</td></tr>
+          <tr><td>Bước 3. phần giảm</td><td>1 trừ 0,0026 chia 21</td><td>≈ $\hlg{99{,}988}$%</td></tr></table>
+          <p class="note">Trang về Hợp nhất ghi “khoảng 99,95%”; trang năng lượng dẫn một nghiên cứu ghi “hơn 99,988%”: hai <b>ước tính</b> từ hai cách đo, không phải hai sự thật mâu thuẫn. Thực hành: chạy hệ mới song song đủ lâu, chưa giữ giao dịch thật, rồi mới chuyển; giữ nguyên lịch sử và cách dùng. Điều kiện: mọi người vận hành nút cài cả phần thực thi lẫn phần đồng thuận.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2, 2, 2]
+        say: "Làm thử bằng số. Bước một, từ ngày 1 tháng 12 năm 2020 tới ngày 15 tháng 9 năm 2022 là 653 ngày chạy song song. Bước hai, theo bảng ước tính của trang chính thức, mỗi năm bằng chứng công việc tốn khoảng 21 tỉ số điện, cách mới khoảng 2 phẩy 6 triệu, tức ít hơn khoảng 8077 lần. Bước ba, phần giảm là 1 trừ 0 phẩy 0026 chia 21, khoảng 99 phẩy 988 phần trăm. Trang về Hợp nhất ghi khoảng 99 phẩy 95, đó là hai ước tính từ hai cách đo, không mâu thuẫn. Thực hành rút ra là chạy hệ mới song song đủ lâu rồi mới chuyển, giữ nguyên lịch sử và cách dùng. Điều kiện là người vận hành nút cài cả hai phần mềm, thực thi và đồng thuận."
+
+  # ───────────────────────── 10. CHẶNG 5 ─────────────────────────
+  - id: stage5
+    kind: example
+    title: "Chặng 5, sau năm 2022 — tiếp tục phát triển: chốt khối, phạt và giới hạn rút"
+    stage: {year: "2022 → nay", scale: "khe 12 giây, kỷ nguyên 32 khe; người xác thực đặt cọc 32 ETH; mỗi ngày rút tối đa khoảng 0,33% tổng cổ phần", source: "[E22] [E22p]", practice: "nhịp thời gian cố định; chốt bằng hai phần ba cổ phần; phạt khi ký mâu thuẫn; giới hạn tốc độ rút; tách tính năng rút cổ phần sang bản nâng cấp sau"}
+    checks:
+      - "32 * 12 == 384 and 384 / 60 == 6.4 and round(13.3 / 12, 3) == 1.108 and 4 * 6.4 == 25.6"
+      - "100 - (100 - 1) // 3 == 67 and 32 / 4096 == 0.0078125 and 32 / 4096 < 0.5"
+      - "round(100 / 0.33) == 303"
+    steps:
+      - show: |
+          <table class="t"><tr><th>quy tắc sau Hợp nhất</th><th>con số trên trang chính thức</th></tr>
+          <tr><td>thời gian chia thành <b>khe</b> và <b>kỷ nguyên</b>; mỗi khe chọn ngẫu nhiên một người đề xuất khối</td><td>khe 12 giây; kỷ nguyên 32 khe; trước đây khối ra khoảng 13,3 giây một lần</td></tr>
+          <tr><td><b>chốt</b> khi một cặp điểm mốc được ít nhất hai phần ba tổng cổ phần bỏ phiếu; đảo khối đã chốt phải chịu mất ít nhất một phần ba</td><td>quá 4 kỷ nguyên không chốt được thì cổ phần của bên bỏ phiếu ngược đa số bị rút dần</td></tr>
+          <tr><td><b>phạt</b> khi đề xuất hai khối trong một khe hoặc bỏ phiếu mâu thuẫn</td><td>ngày đầu phạt 1 phần 4096 số dư hiệu dụng, tối đa 0,5; ngày 36 bị loại</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.3", "1.3", "1.4"]
+        say: "Ở chặng năm, sau năm 2022, hệ có những quy tắc chỉ mạng rất đông mới cần. Thời gian chia thành khe 12 giây và kỷ nguyên 32 khe, mỗi khe chọn ngẫu nhiên một người đề xuất khối. Trước đó, với bằng chứng công việc, khối ra khoảng 13 phẩy 3 giây một lần. Khối được chốt khi một cặp điểm mốc được ít nhất hai phần ba tổng cổ phần bỏ phiếu, còn đảo khối đã chốt phải mất ít nhất một phần ba. Quá 4 kỷ nguyên không chốt được thì cổ phần của bên bỏ phiếu ngược đa số bị rút dần. Ai đề xuất hai khối trong một khe hay bỏ phiếu mâu thuẫn thì bị phạt, tới ngày 36 bị loại."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. một kỷ nguyên</td><td>32 khe nhân 12 giây = 384 giây</td><td>$\hlb{6{,}4}$ phút</td></tr>
+          <tr><td>Bước 2. khối dày hơn trước bao nhiêu</td><td>13,3 chia 12</td><td>≈ 1,108: khoảng $\hl{10}$%</td></tr>
+          <tr><td>Bước 3. 100 phần cổ phần (số minh hoạ), như bài 7</td><td>chốt: 100 − 33; đảo khối đã chốt: mất hơn 33 phần</td><td>cần $\hlg{67}$ phần</td></tr>
+          <tr><td>Bước 4. phạt ngày đầu với cọc 32</td><td>32 chia 4096</td><td>0,0078125, dưới trần 0,5</td></tr>
+          <tr><td>Bước 5. rút tối đa khoảng 0,33% mỗi ngày</td><td>100% chia 0,33%</td><td>≈ 303 ngày mới rút hết</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", "1.6", "1.6"]
+        say: "Làm thử bằng số, bảng có năm bước. Bước một, 32 khe nhân 12 giây là 384 giây, tức 6 phẩy 4 phút một kỷ nguyên. Bước hai, 13 phẩy 3 chia 12 khoảng 1 phẩy 108, nên khối chỉ dày hơn khoảng 10 phần trăm. Bước ba, với 100 phần cổ phần, một số minh hoạ, chốt cần 100 trừ 33 bằng 67 phần, giống bài 7. Bước bốn, phạt ngày đầu với cọc 32 là 32 chia 4096, bằng 0 phẩy 0078125. Bước năm, mỗi ngày chỉ rút được khoảng 0 phẩy 33 phần trăm tổng cổ phần. Rút hết mất khoảng 303 ngày, nên kẻ vi phạm không kịp rút trước khi bị phạt."
+      - clear: true
+        show: |
+          <p class="note">Hợp nhất <b>không</b> có tính năng rút cổ phần — tính năng này được tách sang một bản nâng cấp sau, để bản lớn tập trung vào việc chuyển đồng thuận. Thực hành: nhịp thời gian cố định, phạt khi ký mâu thuẫn, giới hạn tốc độ thao tác nguy hiểm, chia việc lớn thành nhiều bản nâng cấp. Điều kiện: quy tắc chỉ an toàn khi cổ phần không dồn vào vài bên — hai phần ba tính theo cổ phần, không theo số người.</p>
+        say: "Hợp nhất không có tính năng rút cổ phần, tính năng đó được tách sang bản nâng cấp sau. Thực hành rút ra là nhịp thời gian cố định, phạt khi ký mâu thuẫn, giới hạn tốc độ việc nguy hiểm, và chia việc lớn thành nhiều bản. Điều kiện là cổ phần không dồn vào vài bên, vì như bài 7, hai phần ba tính theo cổ phần chứ không theo số người."
+
+  # ───────────────────────── 11. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm năm con số của hành trình"
+    checks:
+      - "86400 // 600 == 144 and 144 * 365 * 80 == 4204800"
+      - "150 * 4 + 100 * 1 == 700"
+      - "239 * 2000 + 239 * 16 == 481824"
+      - "365 + (31 + 31 + 28 + 31 + 30 + 31 + 30 + 31 + 31) + 14 == 653"
+      - "6.4 * 60 / 12 == 32"
+    steps:
+      - show: |
+          <table class="t"><tr><th>con số</th><th>đường khác để kiểm</th></tr>
+          <tr><td>4&nbsp;204&nbsp;800 byte</td><td>theo ngày: 86&nbsp;400 giây chia 600 = 144 khối; 144 nhân 365 nhân 80 = 4&nbsp;204&nbsp;800 ✓</td></tr>
+          <tr><td>trọng lượng 700</td><td>đếm theo byte: 150 byte cơ sở nặng 4, 100 byte nhân chứng nặng 1; 600 + 100 = 700 ✓</td></tr>
+          <tr><td>khối 481&nbsp;824</td><td>nhân ngược: 239 nhân 2000 = 478&nbsp;000, cộng 239 nhân 16 = 3824, được 481&nbsp;824 ✓</td></tr>
+          <tr><td>653 ngày</td><td>đếm lịch: 1/12/2020 → 1/12/2021 là 365; → 1/9/2022 thêm 274; → 15/9 thêm 14 ✓</td></tr>
+          <tr><td>6,4 phút</td><td>chia ngược: 6,4 nhân 60 = 384 giây, chia 12 giây = 32 khe ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", "1.6"]
+        say: "Ta kiểm lại năm con số theo đường khác. Theo ngày, 86 nghìn 400 giây chia 600 được 144 khối, rồi 144 nhân 365 nhân 80 ra đúng 4 triệu 204 nghìn 800. Đếm theo byte, 150 byte cơ sở nặng 4 là 600, cộng 100 byte nhân chứng nặng 1 được 700. Nhân ngược, 239 nhân 2000 là 478 nghìn, cộng 239 nhân 16 là 3824, được 481 nghìn 824. Đếm lịch, 365 cộng 274 cộng 14 ngày, tổng 653. Chia ngược, 6 phẩy 4 phút là 384 giây, chia 12 giây đúng bằng 32 khe."
+
+  # ───────────────────────── 12. BÀI HỌC SAI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "Những bài học sai khi đọc hành trình này"
+    checks:
+      - "round(13.3 / 12 - 1, 2) == 0.11"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">1.</b> “Có người báo phải đổi đồng cũ sang đồng mới sau nâng cấp, làm theo cho nhanh”</td><td>trang chính thức ghi: không có đồng cũ, đồng mới; người nói khác <b>nhiều khả năng là kẻ lừa đảo</b></td><td>chỉ tin thông báo chính thức; không bao giờ đưa khoá bí mật (bài 3)</td></tr>
+          <tr><td><b class="red">2.</b> “Đổi sang bằng chứng cổ phần thì phí giảm, giao dịch nhanh hẳn”</td><td>đổi đồng thuận không đổi sức chứa; khối chỉ dày hơn khoảng 10%</td><td>tách rõ mục tiêu: năng lượng, an ninh, thông lượng là ba bài toán</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.2", "1.3", "1.3", "1.3"]
+        say: "Bảng có hai bài học sai đầu tiên. Thứ nhất, ở mức con người, có người báo sau nâng cấp phải đổi đồng cũ sang đồng mới, ta làm theo. Trang chính thức ghi rõ không có đồng cũ, đồng mới, và người nói khác nhiều khả năng là kẻ lừa đảo. Hãy chỉ tin thông báo chính thức, và như bài 3, không bao giờ đưa khoá bí mật cho ai. Thứ hai, ở mức hệ thống, là tưởng đổi sang bằng chứng cổ phần thì phí giảm, giao dịch nhanh hẳn. Đó là thay đổi đồng thuận, không mở rộng sức chứa, và khối chỉ dày hơn khoảng 10 phần trăm. Năng lượng, an ninh và thông lượng là ba bài toán khác nhau."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">3.</b> “Muốn chứa thêm thì cứ nâng giới hạn cỡ khối”</td><td>thời gian kiểm có thể tăng theo bình phương: một khối 25 giây, giao dịch ác ý quá 3 phút; khối to thì ít người chạy nổi nút (bài 10)</td><td>sửa cơ chế trước khi nâng giới hạn; đo thời gian kiểm, không chỉ đo byte</td></tr>
+          <tr><td><b class="red">4.</b> “Hệ của mình cũng cần chuỗi khối, cần 95% tín hiệu, cần chạy song song 653 ngày”</td><td>chép quy mô người khổng lồ; theo bài 0, có một bên mọi người cùng tin thì cơ sở dữ liệu có nhật ký và chữ ký là đủ</td><td>hỏi trước: có bao nhiêu bên độc lập, liên lạc được với nhau không</td></tr></table>
+        focus: ["1.2", "1.2", "1.3", "1.3", "1.3"]
+        say: "Thứ ba, ở mức hệ thống, là nghĩ cứ nâng giới hạn cỡ khối, trong khi thời gian kiểm có thể tăng theo bình phương, và khối to thì ít người chạy nổi nút. Hãy sửa cơ chế trước, và đo thời gian kiểm chứ không chỉ đo số byte. Thứ tư, ở mức con người, là chép quy mô người khổng lồ, nghĩ hệ mình cũng cần ngưỡng 95 phần trăm hay 653 ngày song song. Theo bài 0, nếu có một bên mọi người cùng tin, cơ sở dữ liệu có nhật ký và chữ ký là đủ. Hãy hỏi trước có bao nhiêu bên độc lập, có liên lạc được với nhau không."
+
+  # ───────────────────────── 13. QUYẾT ĐỊNH ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Bạn sẽ làm gì ở quy mô của mình?"
+    checks:
+      - "round(0.95 * 200) == 190 and 200 - 190 + 1 == 11"
+      - "(5 - 1) // 3 == 1 and 5 - 1 == 4 and 4 + 4 - 5 == 3 and 3 > 1"
+      - "round(653 / 90, 1) == 7.3"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>tình huống: sổ điểm thưởng dùng chung của 5 công ty, 200 nút, mỗi công ty tự vận hành nút của mình (số minh hoạ)</th></tr>
+          <tr><td>1</td><td>cần thêm một trường dữ liệu mới vào giao dịch. Nâng cấp mềm có ngưỡng tín hiệu 95%, hay nâng cấp cứng theo một ngày hẹn?</td></tr>
+          <tr><td>2</td><td>chuyển từ bằng chứng công việc sang bỏ phiếu hơn hai phần ba giữa 5 công ty. Cần mấy chữ ký để chốt? Đổi một lần hay chạy song song?</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn, với sổ điểm thưởng dùng chung của 5 công ty, 200 nút, một số minh hoạ. Câu một, cần thêm một trường dữ liệu mới vào giao dịch, vậy chọn nâng cấp mềm có ngưỡng 95 phần trăm, hay nâng cấp cứng theo ngày hẹn? Câu hai, mạng chuyển sang bỏ phiếu hơn hai phần ba giữa 5 công ty. Vậy cần mấy chữ ký để chốt, và nên đổi một lần hay chạy song song? Dừng video và viết câu trả lời ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 1: lựa chọn</th><th>được</th><th>mất</th></tr>
+          <tr><td>nâng cấp mềm, ngưỡng 95%</td><td>nút cũ vẫn chạy</td><td>nút cũ không kiểm trường mới; cần 95% của 200 = 190 nút, chỉ 11 nút chưa sẵn sàng là chặn</td></tr>
+          <tr><td>nâng cấp cứng, ngày hẹn</td><td>mọi nút kiểm đủ luật mới; đơn giản</td><td>nút nào quên nâng cấp bị tách khỏi mạng</td></tr></table>
+          <p class="note">Chọn nâng cấp cứng theo ngày hẹn, thử trước trên mạng thử: 5 công ty họp được với nhau. Điều kiện đổi: nhiều bên độc lập không liên lạc hay không thống nhất được, như năm 2017 — khi đó dùng nâng cấp mềm, tín hiệu và thời hạn.</p>
+        focus: [1, "1.2", "1.2", "1.3", 2, 2]
+        say: "Đáp án câu một là một đánh đổi giữa hai cách. Nâng cấp mềm cho nút cũ chạy tiếp, nhưng nút cũ không kiểm trường mới. Ngưỡng 95 phần trăm của 200 nút là 190, nên chỉ 11 nút chưa sẵn sàng là đủ chặn. Nâng cấp cứng cho mọi nút kiểm đủ luật mới, nhưng nút quên nâng cấp bị tách khỏi mạng. Với 5 công ty họp được với nhau, nên chọn nâng cấp cứng theo ngày hẹn, và thử trước trên mạng thử. Khi nhiều bên độc lập không thống nhất được, như năm 2017, mới cần nâng cấp mềm có tín hiệu và thời hạn."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 2: bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. chịu được mấy công ty gian lận</td><td>như bài 7: (5 − 1) chia 3, lấy phần nguyên</td><td>1 công ty</td></tr>
+          <tr><td>Bước 2. chữ ký để chốt</td><td>5 − 1</td><td>4 chữ ký; hai nhóm 4 chung nhau 4 + 4 − 5 = 3 công ty</td></tr></table>
+          <table class="t"><tr><th>lựa chọn</th><th>được</th><th>mất</th></tr>
+          <tr><td>chạy song song 90 ngày (số minh hoạ)</td><td>thử cơ chế mới trên dữ liệu thật mà chưa giữ giao dịch thật</td><td>vận hành hai hệ; ngắn hơn 653 ngày khoảng 7,3 lần</td></tr>
+          <tr><td>đổi một lần</td><td>nhanh, ít việc</td><td>lỗi cơ chế mới lộ ra khi đang giữ điểm thật của khách</td></tr></table>
+          <p class="note">Chọn chạy song song ngắn. Điều kiện đổi: mạng mới chỉ thử nghiệm, chưa giữ giá trị thật — khi đó đổi một lần là đủ.</p>
+        focus: [1, "1.2", "1.3", "2.2", "2.3", 3]
+        say: "Đáp án câu hai, ta làm từng bước. Bước một, như bài 7, 5 trừ 1 chia 3 lấy phần nguyên được 1, nên mạng chịu được 1 công ty gian lận. Bước hai, chốt cần 4 chữ ký, vì hai nhóm 4 công ty luôn chung nhau 3 công ty. Chạy song song 90 ngày, một số minh hoạ, cho thử trên dữ liệu thật, đổi lại phải vận hành hai hệ, nhưng vẫn ngắn hơn 653 ngày khoảng 7 phẩy 3 lần. Đổi một lần thì nhanh, nhưng lỗi của cơ chế mới lộ ra khi đang giữ điểm thật. Nên chọn chạy song song ngắn, trừ khi mạng chưa giữ giá trị thật."
+
+  # ───────────────────────── 14. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi hành trình & tư duy chuyên gia"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">2008: sổ cái không cần bên tin cậy</span><span class="a">→</span>
+          <span class="n">tách chữ ký, đo bằng trọng lượng</span><span class="a">→</span>
+          <span class="n">tín hiệu sẵn sàng, có thời hạn</span><span class="a">→</span>
+          <span class="n">chạy song song rồi Hợp nhất</span><span class="a">→</span>
+          <span class="n">chốt hai phần ba, phạt, giới hạn rút</span></div>
+        say: "Tổng kết lại hành trình. Năm 2008 là một sổ cái không cần bên tin cậy chung. Khi mạng đông lên, chữ ký được tách riêng và khối đo bằng trọng lượng, rồi nâng cấp được kích hoạt bằng tín hiệu có thời hạn. Sau đó chuỗi hợp đồng thông minh chạy hệ mới song song, Hợp nhất, rồi chốt bằng hai phần ba và giới hạn tốc độ rút."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> nâng cấp một hệ không ai làm chủ là việc <b>tương thích ngược, đo được sự sẵn sàng, thử song song và có đường lui</b>. Trước khi chép cách làm của chuỗi lớn, hỏi: mạng của mình có bao nhiêu bên độc lập?</div>
+        say: "Điều cần mang theo, nâng cấp một hệ không ai làm chủ là việc tương thích ngược, đo được sự sẵn sàng, thử song song và có đường lui. Trước khi chép cách làm của một chuỗi lớn, hãy hỏi mạng của mình có bao nhiêu bên độc lập."
+      - clear: true
+        show: |
+          <p class="note">Đây là bài cuối của khoá <b>Blockchain và sổ cái phân tán</b>. Từ chi tiêu hai lần, liên kết băm, cây Merkle, chữ ký và bằng chứng công việc, qua đồng thuận, bằng chứng cổ phần, hợp đồng thông minh, mở rộng và nguồn dữ liệu ngoài, bạn đã đi tới cách nâng cấp một chuỗi khối đang giữ tài sản của rất nhiều người.</p>
+        say: "Đây là bài cuối của khoá chuỗi khối và sổ cái phân tán. Từ chi tiêu hai lần, liên kết băm và cây Merkle, qua đồng thuận và hợp đồng thông minh, bạn đã tới cách nâng cấp một chuỗi khối đang chạy. Cảm ơn bạn đã theo học."

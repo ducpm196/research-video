@@ -1,0 +1,283 @@
+id: L03
+course: DBS
+series: "DBS · Cơ sở dữ liệu"
+title: "Bài 3 — Gom nhóm, hàm tổng hợp và giá trị NULL (lôgic ba trị)"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/dbs.yaml L03; audit/dbs/verify_dbs.py L03 (sqlite3); E. F. Codd (1979); A. Silberschatz, H. F. Korth, S. Sudarshan, Database System Concepts (2019), mục 3.6–3.7"
+assumes: [arith, set, sub, in, geq, ltgt, select, proj, join]
+# Quy ước: CSDL mẫu Lop/SinhVien (alg.DB_DEMO): Dũng có lớp NULL. Ba giá trị chân lý: ĐÚNG, SAI, CHƯA BIẾT (UNKNOWN).
+#   Lời đọc nói “giá trị rỗng” cho NULL, “chưa biết” cho UNKNOWN. Mọi kết quả do alg.sql chạy thật trên sqlite3.
+objectives:
+  - "Dùng COUNT, SUM, AVG, MAX với GROUP BY và HAVING"
+  - "Giải thích vì sao “cột = NULL” không bao giờ đúng"
+  - "Nhận ra bẫy NULL trong NOT IN và trong điều kiện khác"
+asr_reviewed:
+  - {sentence: "K2 chỉ có Chi nên trung bình 9.", reason: "ASR chép “Cà 2 chỉ có chi nên trung bình chính.” (0.778): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: chín/chính — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Có bao nhiêu sinh viên? Tuỳ cách đếm"
+    steps:
+      - show: |
+          <div class="code"><div><span class="kw">SELECT COUNT</span>(*), <span class="kw">COUNT</span>(lop) <span class="kw">FROM</span> SinhVien;   <span class="cm">-- 4 | 3</span></div><div><span class="kw">SELECT COUNT</span>(*) <span class="kw">FROM</span> SinhVien <span class="kw">WHERE</span> lop = <span class="kw">NULL</span>;  <span class="cm">-- 0</span></div></div>
+          <p>Cùng một bảng, ba con số khác nhau. Và Dũng, người không có lớp, không được tìm thấy khi hỏi “lớp bằng rỗng”.</p>
+          <div class="box key">Hôm nay: <b>gom nhóm</b> và hàm tổng hợp, rồi giá trị rỗng <code>NULL</code> với <b>lôgic ba trị</b>.</div>
+        focus: ["1.1", "1.2", 2, 3]
+        say: "Chào bạn, cùng một bảng sinh viên, đếm mọi dòng được 4, đếm cột lớp được 3. Hỏi những dòng có lớp bằng rỗng thì được 0. Cùng một bảng, ba con số khác nhau, và Dũng, người không có lớp, lại không được tìm thấy. Hôm nay ta học gom nhóm và các hàm tổng hợp, rồi giá trị rỗng với logic ba trị."
+
+  # ───────────────────────── 1b. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: và / hoặc, trung bình cộng, mệnh đề lọc"
+    checks:
+      - "[(a and b, a or b) for a, b in [(True, True), (True, False), (False, False)]] == [(True, True), (False, True), (False, False)]"
+      - "8 + 6 + 9 + 7 == 30 and 30 / 4 == 7.5 and alg.sql('SELECT AVG(diem) FROM SinhVien') == [(7.5,)]"
+      - "alg.sql('SELECT ten FROM SinhVien WHERE diem >= 7') == [('An',), ('Chi',), ('Dũng',)]"
+    steps:
+      - show: |
+          <table class="t"><tr><th>$p$</th><th>$q$</th><th>$p$ và $q$</th><th>$p$ hoặc $q$</th></tr>
+          <tr><td>ĐÚNG</td><td>ĐÚNG</td><td>ĐÚNG</td><td>ĐÚNG</td></tr>
+          <tr><td>ĐÚNG</td><td>SAI</td><td>SAI</td><td>ĐÚNG</td></tr>
+          <tr><td>SAI</td><td>SAI</td><td>SAI</td><td>SAI</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Trước hết, ôn bảng chân trị ở khoá Toán rời rạc, nơi mỗi mệnh đề chỉ có hai giá trị, đúng hoặc sai. Đúng và đúng thì đúng, đúng hoặc đúng cũng đúng. Đúng và sai thì sai, vì phép và cần cả hai vế, còn đúng hoặc sai thì đúng, vì phép hoặc chỉ cần một vế. Sai và sai, sai hoặc sai, đều sai."
+      - show: |
+          <p>Trung bình cộng = tổng chia số phần tử: điểm 8, 6, 9, 7 → $\frac{8 + 6 + 9 + 7}{4} = \frac{30}{4} = \hl{7{,}5}$.</p>
+          <p>Mệnh đề lọc (bài 2) giữ dòng có điều kiện <b>ĐÚNG</b>: $\text{diem} \ge 7$ → An, Chi, Dũng.</p>
+        introduces: [frac]
+        focus: [1, 1, 2]
+        say: "Thứ hai, trung bình cộng bằng tổng chia cho số phần tử. Bốn điểm 8, 6, 9, 7 có tổng 30, chia 4 được 7 phẩy 5. Thứ ba, như ở bài 2, mệnh đề lọc chỉ giữ dòng có điều kiện đúng, lọc điểm từ 7 trở lên được An, Chi và Dũng."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: hàm tổng hợp và gom nhóm"
+    checks:
+      - "alg.sql('SELECT COUNT(*), COUNT(lop) FROM SinhVien') == [(4, 3)]"
+      - "alg.sql('SELECT AVG(diem), SUM(diem), MAX(diem) FROM SinhVien') == [(7.5, 30.0, 9.0)]"
+    steps:
+      - show: |
+          <p><b>Hàm tổng hợp</b> biến nhiều dòng thành một số: <code>COUNT</code> (đếm), <code>SUM</code> (tổng), <code>AVG</code> (trung bình), <code>MAX</code>, <code>MIN</code>.</p>
+          <p><code>COUNT(*)</code> đếm <b>dòng</b>: 4. <code>COUNT(lop)</code> đếm ô <b>có giá trị</b> trong cột lop: 3, vì ô của Dũng rỗng.</p>
+          <p>Cả bảng: tổng điểm 30, trung bình 7,5, cao nhất 9.</p>
+        focus: [1, 2, 2, 3]
+        say: "Hàm tổng hợp biến nhiều dòng thành một con số, như đếm, tính tổng, tính trung bình, lấy lớn nhất hay nhỏ nhất. Đếm với dấu sao là đếm dòng, được 4. Đếm theo cột lớp chỉ đếm các ô có giá trị, được 3, vì ô của Dũng rỗng. Trên cả bảng, tổng điểm là 30, trung bình 7 phẩy 5, cao nhất 9."
+      - show: |
+          <div class="code"><div><span class="kw">SELECT</span> lop, <span class="kw">COUNT</span>(*), <span class="kw">AVG</span>(diem)</div><div><span class="kw">FROM</span> SinhVien <span class="kw">GROUP BY</span> lop;</div></div>
+          <table class="t"><tr><th>lop</th><th>số SV</th><th>điểm TB</th></tr>
+          <tr><td>K1</td><td>2</td><td>7 (8 và 6)</td></tr><tr><td>K2</td><td>1</td><td>9</td></tr><tr><td>NULL</td><td>1</td><td>7</td></tr></table>
+          <p class="note"><code>GROUP BY</code> chia dòng thành nhóm cùng giá trị cột, rồi tính hàm tổng hợp cho <b>từng nhóm</b>. Các ô rỗng gom chung một nhóm.</p>
+        focus: [1, 2, "2.2", 3, 3]
+        say: "Câu này gom các dòng theo cột lớp. Kết quả có ba nhóm, mỗi nhóm một dòng. Lớp K1 có 2 sinh viên, điểm trung bình 7, từ 8 và 6. Gom nhóm chia các dòng có cùng giá trị cột vào một nhóm, rồi tính hàm tổng hợp cho từng nhóm. Các ô rỗng được gom chung thành một nhóm riêng."
+
+  # ───────────────────────── 2b. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Gom nhóm là chia dòng vào giỏ, mỗi giỏ ép thành một dòng"
+    steps:
+      - show: |
+          <div><svg width="1500" height="460" viewBox="0 0 1500 460"><defs><marker id="arD3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs><g font-size="24" fill="#6b7280" text-anchor="middle"><text x="195" y="55">4 dòng</text><text x="665" y="55">GROUP BY lop</text><text x="1115" y="55">mỗi nhóm thành 1 dòng</text><text x="1350" y="55">HAVING TB ≥ 7,5</text></g><g font-size="24" fill="#1f2937"><rect x="30" y="80" width="330" height="56" fill="#eff6ff" stroke="#2a78d6" stroke-width="2"/><text x="50" y="117">An, K1, điểm 8</text><rect x="30" y="150" width="330" height="56" fill="#eff6ff" stroke="#2a78d6" stroke-width="2"/><text x="50" y="187">Bình, K1, điểm 6</text><rect x="30" y="220" width="330" height="56" fill="#eff6ff" stroke="#2a78d6" stroke-width="2"/><text x="50" y="257">Chi, K2, điểm 9</text><rect x="30" y="290" width="330" height="56" fill="#eff6ff" stroke="#2a78d6" stroke-width="2"/><text x="50" y="327">Dũng, rỗng, điểm 7</text></g><g stroke="#1f2937" stroke-width="2" fill="none"><line x1="360" y1="108" x2="495" y2="128" marker-end="url(#arD3)"/><line x1="360" y1="178" x2="495" y2="138" marker-end="url(#arD3)"/><line x1="360" y1="248" x2="495" y2="248" marker-end="url(#arD3)"/><line x1="360" y1="318" x2="495" y2="368" marker-end="url(#arD3)"/></g><rect x="500" y="80" width="330" height="96" rx="12" fill="#fff7ed" stroke="#eb6834" stroke-width="3"/><text x="520" y="118" font-size="24" font-weight="bold" fill="#eb6834">nhóm K1</text><text x="520" y="156" font-size="24" fill="#1f2937">An 8, Bình 6</text><line x1="834" y1="128" x2="958" y2="128" stroke="#1f2937" stroke-width="3" marker-end="url(#arD3)"/><rect x="965" y="98" width="300" height="60" fill="#f3f4f6" stroke="#9ca3af" stroke-width="3"/><text x="985" y="136" font-size="24" fill="#1f2937">K1: 2 SV, TB 7</text><text x="1285" y="136" font-size="24" font-weight="bold" fill="#6b7280">bị lọc</text><rect x="500" y="200" width="330" height="96" rx="12" fill="#fff7ed" stroke="#eb6834" stroke-width="3"/><text x="520" y="238" font-size="24" font-weight="bold" fill="#eb6834">nhóm K2</text><text x="520" y="276" font-size="24" fill="#1f2937">Chi 9</text><line x1="834" y1="248" x2="958" y2="248" stroke="#1f2937" stroke-width="3" marker-end="url(#arD3)"/><rect x="965" y="218" width="300" height="60" fill="#bbf7d0" stroke="#059669" stroke-width="3"/><text x="985" y="256" font-size="24" fill="#1f2937">K2: 1 SV, TB 9</text><text x="1285" y="256" font-size="24" font-weight="bold" fill="#059669">qua</text><rect x="500" y="320" width="330" height="96" rx="12" fill="#fff7ed" stroke="#eb6834" stroke-width="3"/><text x="520" y="358" font-size="24" font-weight="bold" fill="#eb6834">nhóm rỗng</text><text x="520" y="396" font-size="24" fill="#1f2937">Dũng 7</text><line x1="834" y1="368" x2="958" y2="368" stroke="#1f2937" stroke-width="3" marker-end="url(#arD3)"/><rect x="965" y="338" width="300" height="60" fill="#f3f4f6" stroke="#9ca3af" stroke-width="3"/><text x="985" y="376" font-size="24" fill="#1f2937">rỗng: 1 SV, TB 7</text><text x="1285" y="376" font-size="24" font-weight="bold" fill="#6b7280">bị lọc</text></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình cho thấy gom nhóm vận hành thế nào. Bốn dòng bên trái được thả vào các giỏ theo giá trị cột lớp, K1 nhận An và Bình, K2 nhận Chi, còn Dũng vào giỏ rỗng. Mỗi giỏ bị ép thành đúng một dòng, mang số sinh viên và điểm trung bình của giỏ. Cuối cùng mệnh đề lọc nhóm đứng ở cửa ra, chỉ giỏ K2 với trung bình 9 đi qua."
+
+  # ───────────────────────── 3. HAVING ─────────────────────────
+  - id: having
+    kind: example
+    title: "WHERE lọc dòng, HAVING lọc nhóm"
+    checks:
+      - "alg.sql('SELECT lop, AVG(diem) FROM SinhVien GROUP BY lop HAVING AVG(diem) >= 7.5') == [('K2', 9.0)]"
+      - "alg.sql('SELECT lop, COUNT(*) FROM SinhVien WHERE diem >= 7 GROUP BY lop ORDER BY lop') == [(None, 1), ('K1', 1), ('K2', 1)]"
+      - "alg.sql('SELECT lop, AVG(diem) FROM SinhVien GROUP BY lop ORDER BY lop') == [(None, 7.0), ('K1', 7.0), ('K2', 9.0)] and (8 + 6) / 2 == 7"
+      - "alg.sql('SELECT lop, GROUP_CONCAT(ten) FROM SinhVien GROUP BY lop ORDER BY lop') == [(None, 'Dũng'), ('K1', 'An,Bình'), ('K2', 'Chi')]"
+    steps:
+      - show: |
+          <div class="code"><div><span class="kw">SELECT</span> lop, <span class="kw">AVG</span>(diem) <span class="kw">FROM</span> SinhVien</div><div><span class="kw">GROUP BY</span> lop <span class="kw">HAVING AVG</span>(diem) &gt;= 7.5;   <span class="cm">-- chỉ K2 (9)</span></div></div>
+          <p><b>Bước 1</b> — chia dòng theo lớp:</p>
+          <table class="t"><tr><th>nhóm</th><th>K1</th><th>K2</th><th>rỗng</th></tr><tr><td>các dòng</td><td>An 8, Bình 6</td><td>Chi 9</td><td>Dũng 7</td></tr></table>
+        focus: ["1.1", "1.2", 2, 3]
+        say: "Muốn chỉ giữ các lớp có điểm trung bình từ 7 phẩy 5 trở lên, ta lọc sau khi gom bằng mệnh đề lọc nhóm. Kết quả chỉ còn lớp K2, trung bình 9. Bước một, hệ quản trị chia các dòng theo cột lớp. K1 gồm An và Bình, K2 gồm Chi, còn Dũng nằm trong nhóm rỗng."
+      - show: |
+          <p><b>Bước 2</b> — tính trung bình từng nhóm:</p>
+          <table class="t"><tr><th>nhóm</th><th>phép tính</th><th>TB</th></tr>
+          <tr><td>K1</td><td>$\frac{8 + 6}{2}$</td><td>7</td></tr><tr><td>K2</td><td>$\frac{9}{1}$</td><td>9</td></tr><tr><td>rỗng</td><td>$\frac{7}{1}$</td><td>7</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Bước hai, tính trung bình cho từng nhóm. K1 có 8 cộng 6 bằng 14, chia 2 được 7. K2 chỉ có Chi nên trung bình 9. Nhóm rỗng chỉ có Dũng nên trung bình 7."
+      - clear: true
+        show: |
+          <p><b>Bước 3</b> — lọc nhóm, $\text{TB} \ge 7{,}5$?</p>
+          <table class="t"><tr><th>nhóm</th><th>K1 (7)</th><th>K2 (9)</th><th>rỗng (7)</th></tr><tr><td>giữ?</td><td>không</td><td>$\hl{\text{có}}$</td><td>không</td></tr></table>
+          <p><code>WHERE</code> lọc <b>dòng</b> trước khi gom; <code>HAVING</code> lọc <b>nhóm</b> sau khi gom.</p>
+        focus: [1, "2.2", 3]
+        say: "Bước ba, mới lọc nhóm, so mỗi trung bình với 7 phẩy 5. K1 và nhóm rỗng đều chỉ 7, nên bị bỏ, chỉ K2 với 9 được giữ. Mệnh đề điều kiện thường lọc từng dòng trước khi gom, còn mệnh đề lọc nhóm lọc cả nhóm sau khi gom."
+      - show: |
+          <p><b>Bước 4</b> — nếu thêm <code>WHERE diem &gt;= 7</code>: Bình (6) bị bỏ <b>trước</b> khi gom.</p>
+          <table class="t"><tr><th>nhóm</th><th>K1</th><th>K2</th><th>rỗng</th></tr><tr><td>còn lại</td><td>An</td><td>Chi</td><td>Dũng</td></tr><tr><td>số SV</td><td>1</td><td>1</td><td>1</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước bốn, thử lọc điểm từ 7 trước khi gom, thì Bình với điểm 6 bị bỏ ngay từ đầu. Lớp K1 chỉ còn An, K2 còn Chi, nhóm rỗng còn Dũng. Mỗi nhóm còn đúng một sinh viên."
+
+  # ───────────────────────── 4. NULL ─────────────────────────
+  - id: null3
+    kind: concept
+    title: "NULL và lôgic ba trị"
+    checks:
+      - "alg.sql('SELECT NULL = NULL, NULL IS NULL') == [(None, 1)]"
+      - "alg.sql('SELECT 1 = NULL OR 1 = 1, 1 = NULL AND 1 = 2, 1 = NULL AND 1 = 1') == [(1, 0, None)]"
+      - "alg.sql('SELECT COUNT(*) FROM SinhVien WHERE lop = NULL') == [(0,)] and alg.sql('SELECT COUNT(*) FROM SinhVien WHERE lop IS NULL') == [(1,)]"
+    steps:
+      - show: |
+          <p>NULL nghĩa là <b>chưa biết</b>. So sánh với NULL — kể cả <code>NULL = NULL</code> — cho kết quả <b>CHƯA BIẾT</b>, không ĐÚNG cũng không SAI.</p>
+          <table class="t"><tr><th></th><th>ĐÚNG</th><th>SAI</th><th>CHƯA BIẾT</th></tr>
+          <tr><td>CHƯA BIẾT và …</td><td>chưa biết</td><td>sai</td><td>chưa biết</td></tr>
+          <tr><td>CHƯA BIẾT hoặc …</td><td>đúng</td><td>chưa biết</td><td>chưa biết</td></tr></table>
+          <div class="box key"><code>WHERE</code> chỉ giữ dòng có điều kiện <b>ĐÚNG</b>. Nên <code>lop = NULL</code> trả 0 dòng; muốn tìm ô rỗng phải viết <code>lop IS NULL</code> → 1 dòng (Dũng).</div>
+        focus: [1, 1, 2, "2.2", "2.3", 3, 3]
+        say: "Giá trị rỗng nghĩa là chưa biết. So sánh bất cứ thứ gì với giá trị rỗng, kể cả rỗng với rỗng, đều cho kết quả chưa biết, không đúng cũng không sai. Bảng này mở rộng phép và, phép hoặc của logic hai trị đã học. Chưa biết và sai thì chắc chắn sai, vì một vế sai đã đủ. Chưa biết hoặc đúng thì chắc chắn đúng, vì một vế đúng đã đủ. Mệnh đề điều kiện chỉ giữ những dòng có điều kiện đúng. Vì vậy so sánh lớp bằng rỗng trả 0 dòng, muốn tìm ô rỗng phải dùng phép kiểm riêng, và được 1 dòng là Dũng."
+
+  # ───────────────────────── 5. BẪY ─────────────────────────
+  - id: traps
+    kind: example
+    title: "Hai cái bẫy"
+    checks:
+      - "alg.sql(\"SELECT ten FROM SinhVien WHERE lop <> 'K1'\") == [('Chi',)]"
+      - "alg.sql(\"SELECT ten FROM SinhVien WHERE lop <> 'K1' OR lop IS NULL\") == [('Chi',), ('Dũng',)]"
+      - "alg.sql(\"SELECT ten FROM SinhVien WHERE lop NOT IN ('K1', NULL)\") == []"
+    steps:
+      - show: |
+          <p>“Ai không thuộc lớp K1?” — <code>WHERE lop &lt;&gt; 'K1'</code> → chỉ <b>Chi</b>. Dũng mất, vì “rỗng khác K1” là CHƯA BIẾT.</p>
+          <p>Đúng ý phải viết: <code>WHERE lop &lt;&gt; 'K1' OR lop IS NULL</code> → Chi, Dũng.</p>
+          <div class="box warn"><code>WHERE lop NOT IN ('K1', NULL)</code> → <b>0 dòng</b>: với Chi, “K2 khác rỗng” là CHƯA BIẾT, nên cả điều kiện không bao giờ ĐÚNG.</div>
+        focus: [1, 1, 2, 3, 3]
+        say: "Bẫy thứ nhất, hỏi ai không thuộc lớp K1, nếu viết điều kiện lớp khác K1 thì chỉ được Chi. Dũng mất, vì rỗng khác K1 là chưa biết. Muốn đúng ý phải thêm hoặc lớp là rỗng, khi đó được Chi và Dũng. Bẫy thứ hai nguy hiểm hơn, điều kiện lớp không nằm trong danh sách gồm K1 và một giá trị rỗng trả về 0 dòng. Với Chi, câu hỏi K2 có khác rỗng không cho kết quả chưa biết, nên cả điều kiện không bao giờ đúng."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: tính tay từng nhóm, và cho máy thử hết 9 cặp"
+    checks:
+      - "(lambda rows: {l: sum(d for _, l2, d in rows if l2 == l) / sum(1 for _, l2, _ in rows if l2 == l) for l in {r[1] for r in rows}} == {l: a for l, a in alg.sql('SELECT lop, AVG(diem) FROM SinhVien GROUP BY lop')})(alg.sql('SELECT ten, lop, diem FROM SinhVien'))"
+      - "(lambda v: all(alg.sql(f'SELECT {x} AND {y}, {x} OR {y}')[0] == tuple({0: 0, 0.5: None, 1: 1}[f(v[x], v[y])] for f in (min, max)) for x in v for y in v))({'1': 1, '0': 0, 'NULL': 0.5})"
+      - "len(list(__import__('itertools').product(range(3), repeat=2))) == 9"
+    steps:
+      - show: |
+          <table class="t"><tr><th>nhóm</th><th>tổng điểm (tay)</th><th>số dòng</th><th>TB tay</th><th>SQL</th></tr>
+          <tr><td>K1</td><td>$8 + 6 = 14$</td><td>2</td><td>7</td><td>7</td></tr>
+          <tr><td>K2</td><td>9</td><td>1</td><td>9</td><td>9</td></tr>
+          <tr><td>rỗng</td><td>7</td><td>1</td><td>7</td><td>7</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Kiểm bằng đường thứ nhất, ta tự cộng điểm của từng nhóm bằng tay rồi chia cho số dòng, không nhờ hàm tổng hợp. K1 có 8 cộng 6 bằng 14, chia 2 được 7, đúng bằng kết quả của SQL. K2 có 9 trên 1 dòng, nên được 9. Nhóm rỗng có 7 trên 1 dòng, được 7, cả ba nhóm đều khớp."
+      - show: |
+          <p>Đường thứ hai: xếp SAI &lt; CHƯA BIẾT &lt; ĐÚNG; khi đó “và” = <b>nhỏ hơn</b> trong hai giá trị, “hoặc” = <b>lớn hơn</b>.</p>
+          <table class="t"><tr><th>thử trên máy</th><th>số cặp</th><th>khớp quy tắc</th></tr><tr><td>mọi cặp của 3 giá trị, cả “và” lẫn “hoặc”</td><td>$3 \times 3 = 9$</td><td>9 / 9</td></tr></table>
+        focus: [1, 1, 2]
+        say: "Đường thứ hai kiểm bảng logic ba trị, ta xếp sai nhỏ nhất, chưa biết ở giữa, đúng lớn nhất. Khi đó phép và lấy giá trị nhỏ hơn, phép hoặc lấy giá trị lớn hơn, ví dụ chưa biết và sai cho sai. Cho máy thử hết 3 nhân 3 bằng 9 cặp, cả 9 cặp đều khớp quy tắc này, nên bảng ở trên đúng."
+
+  # ───────────────────────── 6. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "5 lỗi hay gặp"
+    checks:
+      - "alg.sql('SELECT COUNT(*) FROM SinhVien WHERE lop = NULL') == [(0,)]"
+      - "alg.sql('SELECT COUNT(*), COUNT(lop) FROM SinhVien') == [(4, 3)]"
+      - "alg.sql('SELECT AVG(d) FROM (SELECT 8 AS d UNION ALL SELECT NULL UNION ALL SELECT 6)') == [(7.0,)]"
+      - "alg.sql_error('SELECT lop, ten, COUNT(*) FROM SinhVien GROUP BY lop') is None"
+      - "(8 + 6) / 2 == 7 and abs((8 + 0 + 6) / 3 - 4.67) < 0.005"
+      - "alg.sql(\"SELECT ma_lop FROM Lop WHERE ma_lop NOT IN (SELECT lop FROM SinhVien)\", alg.DB_DEMO + \"INSERT INTO Lop VALUES ('K3', 'Hệ thống thông tin');\") == []"
+      - "alg.sql(\"SELECT ma_lop FROM Lop L WHERE NOT EXISTS (SELECT 1 FROM SinhVien S WHERE S.lop = L.ma_lop)\", alg.DB_DEMO + \"INSERT INTO Lop VALUES ('K3', 'Hệ thống thông tin');\") == [('K3',)]"
+      - "alg.sql(\"SELECT ma_lop FROM Lop WHERE ma_lop NOT IN (SELECT lop FROM SinhVien WHERE lop IS NOT NULL)\", alg.DB_DEMO + \"INSERT INTO Lop VALUES ('K3', 'Hệ thống thông tin');\") == [('K3',)]"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Viết <code>= NULL</code> <b class="red">(sai)</b>
+          <br><span class="note">Luôn cho CHƯA BIẾT, nên 0 dòng. Dùng <code>IS NULL</code>, <code>IS NOT NULL</code>.</span></div>
+        say: "Lỗi thứ nhất, so sánh bằng với giá trị rỗng. Phép so sánh đó luôn cho chưa biết, nên trả 0 dòng. Hãy dùng phép kiểm rỗng riêng."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Dùng <code>COUNT(cột)</code> để đếm dòng <b class="red">(sai)</b>
+          <br><span class="note"><code>COUNT(lop)</code> bỏ ô rỗng: 3 chứ không phải 4.</span></div>
+          <table class="t"><tr><th>cách đếm</th><th><code>COUNT(*)</code></th><th><code>COUNT(lop)</code></th></tr><tr><td>kết quả</td><td>4 dòng</td><td>3 ô có giá trị</td></tr></table>
+        focus: [1, 2]
+        say: "Lỗi thứ hai, đếm theo một cột để đếm số dòng. Đếm theo cột lớp bỏ qua ô rỗng, ra 3 chứ không phải 4."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Nghĩ <code>AVG</code> coi ô rỗng là 0 <b class="red">(sai)</b>
+          <br><span class="note">Điểm 8, rỗng, 6: trung bình là 7 (bỏ ô rỗng), không phải $14 / 3 \approx 4{,}67$.</span></div>
+          <table class="t"><tr><th>cách hiểu</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td><code>AVG</code> thật: bỏ ô rỗng</td><td>$\frac{8 + 6}{2}$</td><td>7</td></tr>
+          <tr><td>coi rỗng là 0 <b class="red">(sai)</b></td><td>$\frac{8 + 0 + 6}{3}$</td><td>$\approx 4{,}67$</td></tr></table>
+        focus: [1, 2]
+        say: "Lỗi thứ ba, nghĩ hàm trung bình coi ô rỗng là 0. Với điểm 8, rỗng và 6, trung bình là 7, vì ô rỗng bị bỏ qua, chứ không phải 14 chia 3."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Lấy cột không gom nhóm cùng hàm tổng hợp <b class="red">(sai)</b>
+          <br><span class="note"><code>SELECT lop, ten, COUNT(*) … GROUP BY lop</code>: nhóm K1 có hai tên, lấy tên nào? Chuẩn SQL báo lỗi; SQLite chọn đại một tên.</span></div>
+        say: "Lỗi thứ tư, lấy một cột không gom nhóm cùng với hàm tổng hợp. Gom theo lớp mà lấy thêm tên thì nhóm K1 có hai tên, biết lấy tên nào? Chuẩn SQL báo lỗi, còn một số hệ quản trị lặng lẽ chọn đại một tên."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 5.</b> <code>NOT IN</code> với truy vấn con có ô rỗng <b class="red">(người đã đi làm)</b>
+          <br><span class="note">Báo cáo “lớp chưa có sinh viên”. Thêm lớp K3 chưa ai học. Cột <code>SinhVien.lop</code> có ô rỗng của Dũng.</span></div>
+          <table class="t"><tr><th>cách viết</th><th>kết quả</th></tr>
+          <tr><td><code>ma_lop NOT IN (SELECT lop FROM SinhVien)</code></td><td><b class="red">0 dòng</b></td></tr>
+          <tr><td><code>NOT EXISTS (… WHERE S.lop = L.ma_lop)</code></td><td>K3</td></tr>
+          <tr><td><code>NOT IN (SELECT lop … WHERE lop IS NOT NULL)</code></td><td>K3</td></tr></table>
+        focus: [1, 1, "2.2", "2.2", "2.3", "2.4"]
+        say: "Lỗi thứ năm, của người đã đi làm, dùng phép không nằm trong với một truy vấn con có ô rỗng. Giả sử thêm lớp K3 chưa ai học, và báo cáo cần liệt kê các lớp chưa có sinh viên. Viết lớp không nằm trong danh sách lớp của sinh viên thì ra 0 dòng, vì danh sách có ô rỗng của Dũng, giống hệt bẫy thứ hai ở trên. Báo cáo kiểu này có thể chạy đúng rất lâu, rồi trống trơn ngay khi có một sinh viên chưa xếp lớp. Viết bằng phép không tồn tại thì ra đúng K3. Hoặc loại ô rỗng khỏi truy vấn con, cũng ra K3."
+
+  # ───────────────────────── 7. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.sql('SELECT COUNT(*) FROM SinhVien WHERE diem > 6') == [(3,)]"
+      - "alg.sql(\"SELECT COUNT(*) FROM SinhVien WHERE lop IN ('K1', 'K2') OR lop IS NULL\") == [(4,)]"
+      - "alg.sql('SELECT lop, COUNT(*) FROM SinhVien GROUP BY lop HAVING COUNT(*) >= 2') == [('K1', 2)]"
+      - "[t for t, d in alg.sql('SELECT ten, diem FROM SinhVien') if d > 6] == ['An', 'Chi', 'Dũng']"
+      - "alg.sql(\"SELECT ten, lop IN ('K1', 'K2'), lop IS NULL FROM SinhVien\") == [('An', 1, 0), ('Bình', 1, 0), ('Chi', 1, 0), ('Dũng', None, 1)]"
+      - "alg.sql('SELECT lop, COUNT(*) FROM SinhVien GROUP BY lop ORDER BY lop') == [(None, 1), ('K1', 2), ('K2', 1)]"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td><code>SELECT COUNT(*) FROM SinhVien WHERE diem &gt; 6;</code> cho bao nhiêu?</td></tr>
+          <tr><td>2</td><td>Viết điều kiện lấy <b>mọi</b> sinh viên thuộc K1, K2 hoặc chưa có lớp.</td></tr>
+          <tr><td>3</td><td>Lớp nào có từ 2 sinh viên trở lên? Viết câu SQL.</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, đếm sinh viên có điểm trên 6 được bao nhiêu? Câu hai, viết điều kiện lấy mọi sinh viên thuộc K1, K2, hoặc chưa có lớp. Câu ba, lớp nào có từ 2 sinh viên trở lên, viết câu SQL cho câu hỏi đó. Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <p>① dò từng điểm so với 6:</p>
+          <table class="t"><tr><th>An 8</th><th>Bình 6</th><th>Chi 9</th><th>Dũng 7</th></tr><tr><td>có</td><td>không (6 không lớn hơn 6)</td><td>có</td><td>có</td></tr></table>
+          <p>→ $\hl{3}$.</p>
+        focus: [1, "2.2", 3]
+        say: "Đáp án câu một, dò từng điểm xem có lớn hơn 6 không. An 8, Chi 9 và Dũng 7 đều lớn hơn, còn Bình đúng bằng 6 nên không tính. Vậy kết quả là 3."
+      - clear: true
+        show: |
+          <p>② <code>WHERE lop IN ('K1', 'K2') OR lop IS NULL</code></p>
+          <table class="t"><tr><th>dòng</th><th>vế trước</th><th>vế sau</th><th>“hoặc”</th></tr>
+          <tr><td>An, Bình, Chi</td><td>ĐÚNG</td><td>SAI</td><td>ĐÚNG</td></tr>
+          <tr><td>Dũng</td><td>CHƯA BIẾT</td><td>ĐÚNG</td><td>ĐÚNG</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Câu hai, lấy lớp thuộc danh sách K1, K2, hoặc lớp là rỗng. Với An, Bình và Chi, vế trước đúng nên cả điều kiện đúng. Với Dũng, vế trước là chưa biết nhưng vế sau đúng, mà chưa biết hoặc đúng thì đúng, nên được đủ 4 dòng, thiếu vế sau thì Dũng sẽ mất."
+      - clear: true
+        show: |
+          <p>③ <code>SELECT lop, COUNT(*) FROM SinhVien GROUP BY lop HAVING COUNT(*) &gt;= 2;</code></p>
+          <table class="t"><tr><th>nhóm</th><th>K1</th><th>K2</th><th>rỗng</th></tr><tr><td>số SV</td><td>2 → $\hl{\text{giữ}}$</td><td>1</td><td>1</td></tr></table>
+        focus: [1, "2.2", "2.2"]
+        say: "Câu ba, gom theo lớp rồi lọc nhóm có số dòng từ 2 trở lên. Nhóm K1 có 2 sinh viên nên được giữ, còn K2 và nhóm rỗng mỗi nhóm chỉ có 1. Kết quả là lớp K1 với 2 sinh viên."
+
+  # ───────────────────────── 8. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n"><code>GROUP BY</code>: chia nhóm</span><span class="a">→</span>
+          <span class="n">hàm tổng hợp: bỏ ô rỗng</span><span class="a">→</span>
+          <span class="n"><code>HAVING</code>: lọc nhóm</span><span class="a">→</span>
+          <span class="n">NULL: ĐÚNG / SAI / CHƯA BIẾT</span></div>
+        say: "Tổng kết lại, gom nhóm chia dòng thành nhóm, hàm tổng hợp tính cho từng nhóm và bỏ qua ô rỗng, mệnh đề lọc nhóm lọc sau khi gom. Còn giá trị rỗng đưa ta vào logic ba trị, đúng, sai và chưa biết."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> mỗi khi một cột có thể rỗng, hỏi ngay “dòng rỗng sẽ đi đâu?” — ở điều kiện, ở phép đếm, ở phép nối.</div>
+        say: "Điều cần mang theo, mỗi khi một cột có thể rỗng, hãy hỏi ngay dòng rỗng sẽ đi đâu, ở điều kiện, ở phép đếm và ở phép nối."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 4): <b>phụ thuộc hàm</b>, bao đóng thuộc tính và cách tìm khoá.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 4, ta học phụ thuộc hàm, bao đóng thuộc tính và cách tìm khoá của một bảng. Hẹn gặp bạn ở bài tiếp theo."

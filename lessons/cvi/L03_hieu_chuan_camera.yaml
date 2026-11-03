@@ -1,0 +1,367 @@
+id: L03
+course: CVI
+series: "CVI · Thị giác máy tính"
+title: "Bài 3 — Mô hình camera và hiệu chuẩn: ma trận nội, méo ống kính"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/cvi.yaml L03; audit/cvi/verify_cvi.py L03; audit/cvi/sources_L03.md; [OCVC] OpenCV 4.x, hướng dẫn Camera Calibration (méo hướng tâm x(1 + k1 r² + k2 r⁴ + k3 r⁶), ma trận camera, ít nhất 10 ảnh mẫu, sai số chiếu lại); ROB bài 11 (phép chiếu lỗ kim u = f·X/Z + c_x, tham số trong và ngoài — đã học); RBM bài 3 (toạ độ thuần nhất, nhân ma trận với vector — đã học)"
+assumes: [arith, cdot, frac, approx, power, sub, implies]
+# Quy ước (giữ như ROB bài 11): hệ camera Z hướng ra trước, X sang phải, Y xuống dưới; toạ độ chuẩn hoá x = X/Z, y = Y/Z;
+#   điểm ảnh u = f_x·x + c_x, v = f_y·y + c_y. Ma trận nội K (chữ K in đậm) = [f_x 0 c_x; 0 f_y c_y; 0 0 1]; K nhân (X, Y, Z) ra
+#   (u·Z, v·Z, Z) rồi chia số cuối (alg.cvi_project). Méo hướng tâm trên toạ độ chuẩn hoá: x_méo = x·(1 + k1·r²), r² = x² + y²
+#   (alg.cvi_distort; bài chỉ dùng k1). Sai số chiếu lại = căn trung bình bình phương khoảng cách (alg.cvi_rmse).
+#   Ảnh 640 × 480, f = 800 điểm ảnh, tâm (320, 240), k1 = −0,2, ống kính 4 mm, điểm cảm biến 0,005 mm là SỐ MINH HOẠ.
+objectives:
+  - "Chiếu một điểm 3D lên ảnh bằng ma trận nội: nhân rồi chia cho số cuối"
+  - "Tính góc nhìn từ tiêu cự và bề rộng ảnh; đổi tiêu cự milimét sang điểm ảnh"
+  - "Tính độ lệch do méo hướng tâm ở tâm và ở góc ảnh"
+  - "Đọc sai số chiếu lại và nhận ra khi nó nhỏ mà hiệu chuẩn vẫn sai"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Sai số chiếu lại 0,16 điểm ảnh, mà góc ảnh lệch 20"
+    checks:
+      - "round(800 * 0.1 - 800 * alg.cvi_distort(0.1, 0, -0.2)[0], 2) == 0.16"
+      - "math.hypot(640 - (800 * alg.cvi_distort(0.4, 0.3, -0.2)[0] + 320), 480 - (800 * alg.cvi_distort(0.4, 0.3, -0.2)[1] + 240)) == 20"
+    steps:
+      - show: |
+          <p>Một nhóm hiệu chuẩn camera đo kích thước linh kiện trên băng chuyền. Họ chụp bàn cờ, nhưng bàn cờ chỉ nằm <b>giữa ảnh</b>. Phần mềm báo sai số chỉ <b>0,16 điểm ảnh</b> — rất tốt.</p>
+          <p>Khi linh kiện chạy ra góc ảnh, phép đo lệch tới <b>20 điểm ảnh</b>.</p>
+          <div class="box key">Hôm nay: ma trận nội của camera là gì? Ống kính bẻ cong đường thẳng ra sao? Và vì sao một sai số nhỏ chưa chắc là hiệu chuẩn tốt?</div>
+        focus: [1, 1, 1, 2, 3]
+        say: "Chào bạn, một nhóm hiệu chuẩn camera để đo kích thước linh kiện trên băng chuyền. Họ chụp bàn cờ, nhưng bàn cờ chỉ nằm ở giữa ảnh. Phần mềm báo sai số chỉ 0 phẩy 16 điểm ảnh, rất tốt. Thế nhưng khi linh kiện chạy ra góc ảnh, phép đo lệch tới 20 điểm ảnh. Hôm nay ta hỏi, ma trận nội của camera là gì, ống kính bẻ cong đường thẳng ra sao, và vì sao một sai số nhỏ chưa chắc là hiệu chuẩn tốt."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại ba điều sẽ dùng"
+    checks:
+      - "800 * 0.5 / 2 + 320 == 520 and 0.5 / 2 == 0.25"
+      - "np.array([[1, 2], [3, 4]]).dot([5, 6]).tolist() == [17, 39]"
+      - "round(math.degrees(math.atan(1)), 6) == 45 and round(math.tan(math.radians(45)), 6) == 1"
+    steps:
+      - show: |
+          <p><b>① Phép chiếu lỗ kim</b> (khoá Robot tự hành): điểm $(X, Y, Z)$ rơi vào cột $u = f \cdot \frac{X}{Z} + c_x$. Điểm $(0{,}5;\ 0{,}25;\ 2)$ m với $f = 800$, $c_x = 320$: $u = 800 \cdot 0{,}25 + 320 = 520$.</p>
+        focus: [1, 1]
+        say: "Điều thứ nhất là phép chiếu lỗ kim, như ở khoá Robot tự hành, điểm X, Y, Z rơi vào cột u bằng f nhân X chia Z cộng c x. Điểm 0 phẩy 5, 0 phẩy 25, 2 mét với f bằng 800 và c x bằng 320 cho u bằng 800 nhân 0 phẩy 25 cộng 320, bằng 520."
+      - show: |
+          <p><b>② Nhân ma trận với vector</b> (khoá Toán cho robot): mỗi hàng nhân từng cặp với vector rồi cộng.</p>
+          $$\begin{bmatrix} 1 & 2 \\ 3 & 4 \end{bmatrix} \begin{bmatrix} 5 \\ 6 \end{bmatrix} = \begin{bmatrix} 1 \cdot 5 + 2 \cdot 6 \\ 3 \cdot 5 + 4 \cdot 6 \end{bmatrix} = \begin{bmatrix} 17 \\ 39 \end{bmatrix}$$
+        focus: [1, 2]
+        say: "Điều thứ hai là nhân ma trận với vector, như ở khoá Toán cho robot, mỗi hàng nhân từng cặp với vector rồi cộng lại. Hàng một cho 1 nhân 5 cộng 2 nhân 6, bằng 17, hàng hai cho 3 nhân 5 cộng 4 nhân 6, bằng 39."
+      - show: |
+          <p><b>③ Tang của một góc</b> trong tam giác vuông: cạnh đối chia cạnh kề, viết $\tan$. Góc 45° có cạnh đối bằng cạnh kề nên $\tan 45° = 1$. Ngược lại, biết tang là 1 thì góc là 45°.</p>
+        introduces: [tan_fn]
+        focus: [1, 1, 1]
+        say: "Điều thứ ba là tang của một góc trong tam giác vuông, bằng cạnh đối chia cạnh kề, viết tắt là ba chữ t a n. Góc 45 độ có cạnh đối bằng cạnh kề, nên tang 45 độ bằng 1. Ngược lại, biết tang bằng 1 thì góc là 45 độ."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: f x, f y, c x, c y, ma trận nội K, hệ số méo k1"
+    checks:
+      - "4 / 0.005 == 800"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ký hiệu</th><th>nghĩa</th><th>ví dụ (ảnh 640 × 480)</th></tr>
+          <tr><td>$f_x,\ f_y$</td><td>tiêu cự tính bằng <b>điểm ảnh</b> theo ngang, theo dọc</td><td>800 và 800</td></tr>
+          <tr><td>$c_x,\ c_y$</td><td>tâm ảnh: nơi trục nhìn thẳng chạm mặt ảnh</td><td>(320, 240)</td></tr>
+          <tr><td>$k_1$</td><td>hệ số méo hướng tâm của ống kính</td><td>$-0{,}2$: điểm bị kéo vào trong</td></tr></table>
+          <p class="note">Vì sao tính bằng điểm ảnh: ống kính 4 mm, mỗi điểm cảm biến rộng 0,005 mm, nên $\frac{4}{0{,}005} = 800$ điểm ảnh.</p>
+        focus: [0, "1.2", "1.3", "1.4", 2]
+        say: "Bảng giới thiệu các tham số trong. f x và f y là tiêu cự tính bằng điểm ảnh theo ngang và theo dọc, ở đây đều là 800. c x và c y là tâm ảnh, nơi trục nhìn thẳng chạm mặt ảnh, ở đây là 320, 240. k một là hệ số méo hướng tâm của ống kính, âm 0 phẩy 2 nghĩa là điểm bị kéo vào trong. Tiêu cự tính bằng điểm ảnh vì ống kính 4 mi-li-mét chia cho bề rộng 0 phẩy 005 mi-li-mét của mỗi điểm cảm biến, bằng 800."
+      - clear: true
+        show: |
+          <p>Ghép bốn số đầu thành <b>ma trận nội</b> $\mathbf{K}$ (chữ K in đậm, để khác bộ lọc ở bài 1):</p>
+          $$\mathbf{K} = \begin{bmatrix} f_x & 0 & c_x \\ 0 & f_y & c_y \\ 0 & 0 & 1 \end{bmatrix} = \begin{bmatrix} 800 & 0 & 320 \\ 0 & 800 & 240 \\ 0 & 0 & 1 \end{bmatrix}$$
+        introduces: [mat]
+        focus: [1, 2, 2]
+        say: "Ghép bốn số đó thành ma trận nội, viết bằng chữ K in đậm để khác với bộ lọc ở bài 1, là một ô nhỏ trượt trên ảnh. Hàng một là f x, 0, c x, hàng hai là 0, f y, c y, hàng ba là 0, 0, 1. Với số của ta, ba hàng là 800, 0, 320, rồi 0, 800, 240, rồi 0, 0, 1."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Từ điểm 3D tới điểm ảnh: chia cho Z, nhân tiêu cự, cộng tâm"
+    checks:
+      - "(0.5 / 2, 0.25 / 2) == (0.25, 0.125) and (800 * 0.25, 800 * 0.125) == (200, 100) and (200 + 320, 100 + 240) == (520, 340)"
+    steps:
+      - show: |
+          <div><svg width="1500" height="330" viewBox="0 0 1500 330">
+          <defs><marker id="cv3a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs>
+          <g stroke-width="2.5">
+          <rect x="30" y="90" width="270" height="120" rx="12" fill="#dbeafe" stroke="#2a78d6"/>
+          <rect x="400" y="90" width="270" height="120" rx="12" fill="#f3f4f6" stroke="#6b7280"/>
+          <rect x="770" y="90" width="270" height="120" rx="12" fill="#ffedd5" stroke="#eb6834"/>
+          <rect x="1140" y="90" width="330" height="120" rx="12" fill="#d1fae5" stroke="#059669"/></g>
+          <g font-size="23" fill="#1f2937" text-anchor="middle">
+          <text x="165" y="135" font-weight="bold">điểm 3D (mét)</text><text x="165" y="175">(0,5; 0,25; 2)</text>
+          <text x="535" y="135" font-weight="bold">chia cho Z</text><text x="535" y="175">(0,25; 0,125)</text>
+          <text x="905" y="135" font-weight="bold">nhân tiêu cự</text><text x="905" y="175">(200; 100)</text>
+          <text x="1305" y="135" font-weight="bold">cộng tâm ảnh</text><text x="1305" y="175">u = 520, v = 340</text></g>
+          <g stroke="#1f2937" stroke-width="3"><line x1="305" y1="150" x2="392" y2="150" marker-end="url(#cv3a)"/><line x1="675" y1="150" x2="762" y2="150" marker-end="url(#cv3a)"/><line x1="1045" y1="150" x2="1132" y2="150" marker-end="url(#cv3a)"/></g>
+          <g font-size="21" fill="#6b7280" text-anchor="middle"><text x="535" y="250">mất độ sâu ở đây</text><text x="905" y="250">mét thành điểm ảnh</text><text x="1305" y="250">gốc dời về góc trên trái</text></g>
+          <text x="750" y="305" font-size="22" fill="#1f2937" text-anchor="middle">ma trận nội làm gọn hai bước cuối trong một phép nhân</text>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình chia phép chiếu thành ba bước. Từ điểm 0 phẩy 5, 0 phẩy 25, 2 mét, ta chia cho Z được 0 phẩy 25 và 0 phẩy 125, và đây là chỗ mất độ sâu. Nhân tiêu cự 800 biến mét thành điểm ảnh, được 200 và 100. Cộng tâm ảnh dời gốc về góc trên trái, ra cột 520 và hàng 340, và ma trận nội làm gọn hai bước cuối trong một phép nhân."
+
+  # ───────────────────────── 5. SUY RA ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra: nhân ma trận nội, rồi chia cho số cuối"
+    checks:
+      - "[sum(r * v for r, v in zip(row, (0.5, 0.25, 2))) for row in [[800, 0, 320], [0, 800, 240], [0, 0, 1]]] == [1040, 680, 2]"
+      - "(1040 / 2, 680 / 2) == alg.cvi_project([[800, 0, 320], [0, 800, 240], [0, 0, 1]], 0.5, 0.25, 2) == (520, 340)"
+      - "(800 * 0.5 + 320 * 2) / 2 == 800 * 0.5 / 2 + 320"
+    steps:
+      - show: |
+          <p><b>Bước 1 — nhân.</b> Theo phép nhân ma trận với vector, $\mathbf{K}$ nhân với điểm $(X, Y, Z)$:</p>
+          $$\mathbf{K} \begin{bmatrix} X \\ Y \\ Z \end{bmatrix} = \begin{bmatrix} f_x X + c_x Z \\ f_y Y + c_y Z \\ Z \end{bmatrix}$$
+        focus: [1, 2]
+        say: "Bước một là nhân, theo phép nhân ma trận với vector, ma trận nội nhân với điểm X, Y, Z. Hàng một cho f x nhân X cộng c x nhân Z, hàng hai cho f y nhân Y cộng c y nhân Z, hàng ba giữ nguyên Z."
+      - show: |
+          <p><b>Bước 2 — chia cho số cuối.</b> Chia hai số đầu cho $Z$, vì $\frac{f_x X + c_x Z}{Z} = f_x \frac{X}{Z} + c_x$:</p>
+          $$u = \frac{f_x X + c_x Z}{Z} = f_x \cdot \frac{X}{Z} + c_x$$
+          <p class="note">Đúng công thức lỗ kim đã ôn — ma trận chỉ là cách viết gọn, phép chia cho $Z$ là chỗ mất độ sâu.</p>
+        focus: [1, 2, 3]
+        say: "Bước hai là chia hai số đầu cho số cuối Z. Vì f x nhân X cộng c x nhân Z, chia cho Z, bằng f x nhân X chia Z cộng c x, ta được đúng công thức lỗ kim đã ôn. Ma trận chỉ là cách viết gọn, còn phép chia cho Z vẫn là chỗ mất độ sâu."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — góc nhìn từ tiêu cự.</b> Nửa ảnh rộng $\frac{W}{2}$ điểm ảnh, cách lỗ kim $f_x$ điểm ảnh, nên theo định nghĩa tang:</p>
+          $$\tan\frac{\text{góc nhìn}}{2} = \frac{W / 2}{f_x} = \frac{320}{800} = 0{,}4 \;\Rightarrow\; \text{góc nhìn} \approx 2 \cdot 21{,}8° = 43{,}6°$$
+          <p class="note">Tiêu cự càng lớn, góc nhìn càng hẹp: ống kính chụp xa.</p>
+        focus: [1, 2, 2, 3]
+        say: "Bước ba, suy ra góc nhìn từ tiêu cự. Nửa ảnh rộng W chia 2 điểm ảnh và cách lỗ kim f x điểm ảnh, nên theo định nghĩa tang, tang của nửa góc nhìn bằng 320 chia 800, bằng 0 phẩy 4. Vậy nửa góc khoảng 21 phẩy 8 độ, và góc nhìn khoảng 43 phẩy 6 độ. Tiêu cự càng lớn thì góc nhìn càng hẹp, như ống kính chụp xa."
+
+  # ───────────────────────── 6. MÉO ỐNG KÍNH ─────────────────────────
+  - id: distort
+    kind: concept
+    title: "Méo hướng tâm: tâm không lệch, góc lệch nhiều"
+    checks:
+      - "alg.cvi_distort(0, 0, -0.2) == (0, 0) and alg.cvi_distort(0.4, 0.3, -0.2) == (0.38, 0.285)"
+      - "round(0.4 ** 2 + 0.3 ** 2, 6) == 0.25 and round(1 - 0.2 * 0.25, 6) == 0.95"
+    steps:
+      - show: |
+          <p>Ống kính thật bẻ tia sáng gần mép nhiều hơn gần tâm. Trên toạ độ chuẩn hoá $x = \frac{X}{Z}$, $y = \frac{Y}{Z}$, với $r^2 = x^2 + y^2$ là bình phương khoảng cách tới tâm:</p>
+          $$x_{\text{méo}} = x \cdot (1 + k_1 r^2), \qquad y_{\text{méo}} = y \cdot (1 + k_1 r^2)$$
+          <p class="note">Ở góc ảnh $x = 0{,}4$, $y = 0{,}3$: $r^2 = 0{,}16 + 0{,}09 = 0{,}25$; $k_1 = -0{,}2$ cho hệ số $1 - 0{,}05 = 0{,}95$, nên $(0{,}38;\ 0{,}285)$.</p>
+        focus: [1, 2, 3, 3]
+        say: "Ống kính thật bẻ tia sáng ở gần mép nhiều hơn ở gần tâm. Trên toạ độ chuẩn hoá, gọi r bình phương là bình phương khoảng cách tới tâm, thì x méo bằng x nhân với 1 cộng k một nhân r bình phương, và y cũng vậy. Ở góc ảnh, x bằng 0 phẩy 4, y bằng 0 phẩy 3, nên r bình phương bằng 0 phẩy 25. Với k một bằng âm 0 phẩy 2, hệ số là 0 phẩy 95, và điểm co về 0 phẩy 38, 0 phẩy 285."
+      - clear: true
+        show: |
+          <div><svg width="1400" height="560" viewBox="0 0 1400 560">
+          <rect x="378" y="6" width="644" height="488" fill="#ffffff" stroke="#9ca3af" stroke-width="2"/>
+          <line x1="400" y1="25" x2="1000" y2="25" stroke="#d1d5db" stroke-width="2"/>
+          <line x1="400" y1="138" x2="1000" y2="138" stroke="#d1d5db" stroke-width="2"/>
+          <line x1="400" y1="250" x2="1000" y2="250" stroke="#d1d5db" stroke-width="2"/>
+          <line x1="400" y1="362" x2="1000" y2="362" stroke="#d1d5db" stroke-width="2"/>
+          <line x1="400" y1="475" x2="1000" y2="475" stroke="#d1d5db" stroke-width="2"/>
+          <line x1="400" y1="25" x2="400" y2="475" stroke="#d1d5db" stroke-width="2"/>
+          <line x1="550" y1="25" x2="550" y2="475" stroke="#d1d5db" stroke-width="2"/>
+          <line x1="700" y1="25" x2="700" y2="475" stroke="#d1d5db" stroke-width="2"/>
+          <line x1="850" y1="25" x2="850" y2="475" stroke="#d1d5db" stroke-width="2"/>
+          <line x1="1000" y1="25" x2="1000" y2="475" stroke="#d1d5db" stroke-width="2"/>
+          <circle cx="400" cy="25" r="9" fill="none" stroke="#6b7280" stroke-width="2"/>
+          <circle cx="415.0" cy="36.3" r="6" fill="#eb6834"/>
+          <circle cx="550" cy="25" r="9" fill="none" stroke="#6b7280" stroke-width="2"/>
+          <circle cx="553.9" cy="30.9" r="6" fill="#eb6834"/>
+          <circle cx="700" cy="25" r="9" fill="none" stroke="#6b7280" stroke-width="2"/>
+          <circle cx="700.0" cy="29.1" r="6" fill="#eb6834"/>
+          <circle cx="850" cy="25" r="9" fill="none" stroke="#6b7280" stroke-width="2"/>
+          <circle cx="846.1" cy="30.9" r="6" fill="#eb6834"/>
+          <circle cx="1000" cy="25" r="9" fill="none" stroke="#6b7280" stroke-width="2"/>
+          <circle cx="985.0" cy="36.3" r="6" fill="#eb6834"/>
+          <circle cx="400" cy="138" r="9" fill="none" stroke="#6b7280" stroke-width="2"/>
+          <circle cx="410.9" cy="141.6" r="6" fill="#eb6834"/>
+          <circle cx="550" cy="138" r="9" fill="none" stroke="#6b7280" stroke-width="2"/>
+          <circle cx="551.9" cy="138.9" r="6" fill="#eb6834"/>
+          <circle cx="700" cy="138" r="9" fill="none" stroke="#6b7280" stroke-width="2"/>
+          <circle cx="700.0" cy="138.0" r="6" fill="#eb6834"/>
+          <circle cx="850" cy="138" r="9" fill="none" stroke="#6b7280" stroke-width="2"/>
+          <circle cx="848.1" cy="138.9" r="6" fill="#eb6834"/>
+          <circle cx="1000" cy="138" r="9" fill="none" stroke="#6b7280" stroke-width="2"/>
+          <circle cx="989.0" cy="141.6" r="6" fill="#eb6834"/>
+          <circle cx="400" cy="250" r="9" fill="none" stroke="#6b7280" stroke-width="2"/>
+          <circle cx="409.6" cy="250.0" r="6" fill="#eb6834"/>
+          <circle cx="550" cy="250" r="9" fill="none" stroke="#6b7280" stroke-width="2"/>
+          <circle cx="551.2" cy="250.0" r="6" fill="#eb6834"/>
+          <circle cx="700" cy="250" r="9" fill="none" stroke="#6b7280" stroke-width="2"/>
+          <circle cx="700.0" cy="250.0" r="6" fill="#eb6834"/>
+          <circle cx="850" cy="250" r="9" fill="none" stroke="#6b7280" stroke-width="2"/>
+          <circle cx="848.8" cy="250.0" r="6" fill="#eb6834"/>
+          <circle cx="1000" cy="250" r="9" fill="none" stroke="#6b7280" stroke-width="2"/>
+          <circle cx="990.4" cy="250.0" r="6" fill="#eb6834"/>
+          <circle cx="400" cy="362" r="9" fill="none" stroke="#6b7280" stroke-width="2"/>
+          <circle cx="410.9" cy="358.4" r="6" fill="#eb6834"/>
+          <circle cx="550" cy="362" r="9" fill="none" stroke="#6b7280" stroke-width="2"/>
+          <circle cx="551.9" cy="361.1" r="6" fill="#eb6834"/>
+          <circle cx="700" cy="362" r="9" fill="none" stroke="#6b7280" stroke-width="2"/>
+          <circle cx="700.0" cy="362.0" r="6" fill="#eb6834"/>
+          <circle cx="850" cy="362" r="9" fill="none" stroke="#6b7280" stroke-width="2"/>
+          <circle cx="848.1" cy="361.1" r="6" fill="#eb6834"/>
+          <circle cx="1000" cy="362" r="9" fill="none" stroke="#6b7280" stroke-width="2"/>
+          <circle cx="989.0" cy="358.4" r="6" fill="#eb6834"/>
+          <circle cx="400" cy="475" r="9" fill="none" stroke="#6b7280" stroke-width="2"/>
+          <circle cx="415.0" cy="463.8" r="6" fill="#eb6834"/>
+          <circle cx="550" cy="475" r="9" fill="none" stroke="#6b7280" stroke-width="2"/>
+          <circle cx="553.9" cy="469.1" r="6" fill="#eb6834"/>
+          <circle cx="700" cy="475" r="9" fill="none" stroke="#6b7280" stroke-width="2"/>
+          <circle cx="700.0" cy="470.9" r="6" fill="#eb6834"/>
+          <circle cx="850" cy="475" r="9" fill="none" stroke="#6b7280" stroke-width="2"/>
+          <circle cx="846.1" cy="469.1" r="6" fill="#eb6834"/>
+          <circle cx="1000" cy="475" r="9" fill="none" stroke="#6b7280" stroke-width="2"/>
+          <circle cx="985.0" cy="463.8" r="6" fill="#eb6834"/>
+          <g font-size="22" fill="#1f2937">
+          <text x="1048" y="60">vòng xám: nơi điểm lẽ ra rơi</text>
+          <text x="1048" y="95">chấm cam: nơi ống kính đưa tới</text>
+          <text x="1048" y="160">tâm ảnh: không lệch</text>
+          <text x="1048" y="195">góc ảnh: lệch vào trong</text>
+          <text x="1048" y="230">16 và 12 điểm ảnh, tức 20</text>
+          </g>
+          <text x="700" y="530" font-size="22" fill="#6b7280" text-anchor="middle">méo hướng tâm k1 = −0,2: độ lệch tăng theo bình phương khoảng cách tới tâm</text>
+          </svg></div>
+        focus: [1, 1, 1]
+        say: "Hình đặt lưới điểm lẽ ra phải rơi, là các vòng xám, cạnh nơi ống kính thật đưa điểm tới, là các chấm cam. Ở tâm, vòng và chấm trùng nhau, càng ra góc thì chấm càng bị kéo vào trong. Độ lệch tăng theo bình phương khoảng cách tới tâm, nên các đường thẳng ở mép ảnh trông cong như thùng phình."
+
+  # ───────────────────────── 7. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Một điểm qua ma trận nội, rồi qua ống kính"
+    checks:
+      - "[sum(r * v for r, v in zip(row, (0.5, 0.25, 2))) for row in [[800, 0, 320], [0, 800, 240], [0, 0, 1]]] == [1040, 680, 2] and alg.cvi_project([[800, 0, 320], [0, 800, 240], [0, 0, 1]], 0.5, 0.25, 2) == (520, 340)"
+      - "0.25 ** 2 + 0.125 ** 2 == 0.078125 and 1 - 0.2 * 0.078125 == 0.984375"
+      - "alg.cvi_distort(0.25, 0.125, -0.2) == (0.24609375, 0.123046875) and round(800 * 0.24609375 + 320, 2) == 516.88 and round(800 * 0.123046875 + 240, 2) == 338.44"
+      - "(800 * 0.38 + 320, 800 * 0.285 + 240) == (624, 468) and math.hypot(640 - 624, 480 - 468) == 20"
+    steps:
+      - show: |
+          <p><b>Bước 1 — nhân ma trận nội.</b> Điểm $(0{,}5;\ 0{,}25;\ 2)$:</p>
+          $$\begin{bmatrix} 800 \cdot 0{,}5 + 320 \cdot 2 \\ 800 \cdot 0{,}25 + 240 \cdot 2 \\ 2 \end{bmatrix} = \begin{bmatrix} 1040 \\ 680 \\ 2 \end{bmatrix} \;\Rightarrow\; (u, v) = \left(\frac{1040}{2}, \frac{680}{2}\right) = \hlg{(520, 340)}$$
+        focus: [1, 2]
+        say: "Bước một, nhân ma trận nội với điểm 0 phẩy 5, 0 phẩy 25, 2. Hàng một cho 400 cộng 640, bằng 1040, hàng hai cho 200 cộng 480, bằng 680, và số cuối là 2, nên chia cho 2 ta được điểm ảnh 520, 340."
+      - show: |
+          <p><b>Bước 2 — khoảng cách tới tâm.</b> Toạ độ chuẩn hoá $(0{,}25;\ 0{,}125)$: $r^2 = 0{,}0625 + 0{,}015625 = 0{,}078125$; hệ số méo $1 - 0{,}2 \cdot 0{,}078125 = 0{,}984375$.</p>
+        say: "Bước hai, toạ độ chuẩn hoá là 0 phẩy 25 và 0 phẩy 125, nên r bình phương bằng 0 phẩy 078125. Thay vào, hệ số méo bằng 1 trừ 0 phẩy 2 nhân số đó, tức 0 phẩy 984375."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — điểm ảnh sau méo.</b> Nhân hệ số rồi chiếu tiếp: $x_{\text{méo}} \approx 0{,}2461$, $y_{\text{méo}} \approx 0{,}1230$:</p>
+          $$u \approx 800 \cdot 0{,}2461 + 320 \approx \hlo{516{,}9}, \qquad v \approx 338{,}4$$
+          <p class="note">Lệch khoảng 3,1 và 1,6 điểm ảnh so với (520, 340) — điểm này còn gần tâm.</p>
+        focus: [1, 2, 3]
+        say: "Bước ba, nhân hệ số méo rồi chiếu tiếp, x méo xấp xỉ 0 phẩy 2461, y méo xấp xỉ 0 phẩy 1230. Vì vậy u xấp xỉ 516 phẩy 9, v xấp xỉ 338 phẩy 4. Điểm lệch khoảng 3 phẩy 1 và 1 phẩy 6 điểm ảnh so với 520, 340, vì nó còn gần tâm."
+      - show: |
+          <p><b>Bước 4 — ở góc ảnh.</b> Điểm lẽ ra rơi vào góc $(640, 480)$ bị kéo về $(800 \cdot 0{,}38 + 320,\ 800 \cdot 0{,}285 + 240) = (624, 468)$:</p>
+          $$\sqrt{16^2 + 12^2} = \sqrt{400} = \hlo{20} \text{ điểm ảnh}$$
+        introduces: [sqrt]
+        focus: [1, 2]
+        say: "Bước bốn, xét điểm lẽ ra rơi đúng vào góc ảnh 640, 480. Ống kính kéo nó về 624, 468, lệch 16 điểm ảnh theo ngang và 12 theo dọc, nên theo định lý tam giác vuông, độ lệch là căn của 400, bằng 20 điểm ảnh."
+
+  # ───────────────────────── 8. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: đi đường lỗ kim không dùng ma trận, và đo sai số chiếu lại"
+    checks:
+      - "800 * 0.5 / 2 + 320 == 520 and 800 * 0.25 / 2 + 240 == 340"
+      - "round(alg.cvi_rmse([(0, 0)] * 3, [(0.6, 0.8), (0, 0.2), (0.4, 0.2)]), 2) == 0.64 and round((1 + 0.04 + 0.2) / 3, 4) == 0.4133"
+    steps:
+      - show: |
+          <p><b>Đường khác 1 — công thức lỗ kim, không dùng ma trận.</b> $u = 800 \cdot \frac{0{,}5}{2} + 320 = 520$, $v = 800 \cdot \frac{0{,}25}{2} + 240 = 340$ ✓ — trùng bước 1.</p>
+        focus: [1, 1]
+        say: "Kiểm tra thứ nhất đi đường lỗ kim, không dùng ma trận. Thay số vào công thức lỗ kim, ta có u bằng 800 nhân 0 phẩy 5 chia 2 cộng 320, bằng 520, và v bằng 340, trùng kết quả của phép nhân ma trận ở bước một."
+      - show: |
+          <p><b>Đường khác 2 — sai số chiếu lại.</b> Sau hiệu chuẩn, chiếu lại các góc bàn cờ và so với góc phát hiện trên ảnh:</p>
+          <table class="t"><tr><th>góc</th><th>lệch (ngang; dọc)</th><th>bình phương khoảng cách</th></tr>
+          <tr><td>1</td><td>0,6; 0,8</td><td>1</td></tr>
+          <tr><td>2</td><td>0; 0,2</td><td>0,04</td></tr>
+          <tr><td>3</td><td>0,4; 0,2</td><td>0,2</td></tr></table>
+          $$\sqrt{\frac{1 + 0{,}04 + 0{,}2}{3}} \approx 0{,}64 \text{ điểm ảnh}$$
+        focus: [1, "2.2", ["2.3", "2.4"], 3]
+        say: "Kiểm tra thứ hai là sai số chiếu lại, tức sau hiệu chuẩn, ta chiếu lại các góc bàn cờ bằng mô hình rồi so với góc phát hiện được trên ảnh. Góc một lệch 0 phẩy 6 và 0 phẩy 8, bình phương khoảng cách bằng 1. Hai góc còn lại cho 0 phẩy 04 và 0 phẩy 2. Lấy trung bình rồi khai căn, ta được khoảng 0 phẩy 64 điểm ảnh, nghĩa là mô hình khớp các góc đã đo tới dưới một điểm ảnh."
+
+  # ───────────────────────── 9. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi của người đã đi làm"
+    checks:
+      - "1040 > 640 and 680 > 480"
+      - "840 * 0.4 - 800 * 0.4 == 16"
+      - "800 * 320 / 640 == 400 and 800 * 0.25 + 320 == 520 and 400 * 0.25 + 160 == 260"
+      - "round(800 * 0.1 - 800 * alg.cvi_distort(0.1, 0, -0.2)[0], 2) == 0.16 and math.hypot(16, 12) == 20"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Quên chia cho số cuối <b class="red">(điểm ảnh 1040 trên ảnh rộng 640)</b>
+          <br><span class="note">Nhân $\mathbf{K}$ xong ra (1040, 680, 2): hai số đầu chưa phải điểm ảnh. Phép thử: điểm ảnh phải nằm trong 0 tới 640 và 0 tới 480.</span></div>
+        focus: [1, 1]
+        say: "Lỗi thứ nhất là quên chia cho số cuối, nên ra điểm ảnh 1040 trên một ảnh chỉ rộng 640. Phép thử đơn giản là mọi điểm ảnh của vật nhìn thấy phải nằm trong khoảng 0 tới 640 theo ngang và 0 tới 480 theo dọc."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Dùng tự lấy nét hoặc thu phóng sau khi hiệu chuẩn <b class="red">(tiêu cự đổi)</b>
+          <br><span class="note">Tiêu cự trôi từ 800 lên 840 (5%): điểm có $\frac{X}{Z} = 0{,}4$ dời từ 320 lên 336 điểm ảnh so với tâm — lệch 16. Sửa: khoá nét và thu phóng, hoặc hiệu chuẩn lại sau mỗi lần đổi.</span></div>
+        focus: [1, 1, 1]
+        say: "Lỗi thứ hai là để camera tự lấy nét hoặc thu phóng sau khi đã hiệu chuẩn, khiến tiêu cự đổi. Tiêu cự trôi từ 800 lên 840, chỉ 5 phần trăm, mà điểm có X chia Z bằng 0 phẩy 4 đã dời 16 điểm ảnh. Cách sửa là khoá nét và thu phóng, hoặc hiệu chuẩn lại sau mỗi lần đổi."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Thu nhỏ ảnh mà giữ ma trận cũ <b class="red">(đã gặp ở khoá Robot tự hành)</b>
+          <br><span class="note">Ảnh 640 × 480 thu còn 320 × 240 thì $f_x, f_y, c_x, c_y$ đều chia đôi: điểm ở cột 520 giờ ở cột $400 \cdot 0{,}25 + 160 = 260$, không phải 520. Lưu ma trận kèm độ phân giải đã hiệu chuẩn.</span></div>
+        focus: [1, 1, 1]
+        say: "Lỗi thứ ba là thu nhỏ ảnh mà giữ ma trận cũ, lỗi bạn đã gặp ở khoá Robot tự hành. Thu ảnh 640 nhân 480 còn 320 nhân 240 thì cả bốn tham số trong đều chia đôi, nên điểm ở cột 520 giờ nằm ở cột 260. Vì vậy cần lưu ma trận kèm độ phân giải đã hiệu chuẩn."
+      - show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Tin sai số chiếu lại nhỏ khi bàn cờ chỉ nằm giữa ảnh <b class="red">(0,16 ở giữa, 20 ở góc)</b></div>
+          <table class="t"><tr><th>vùng ảnh</th><th>độ lệch do méo (k1 = −0,2)</th><th>mô hình bỏ qua méo có lộ ra?</th></tr>
+          <tr><td>giữa ảnh, $\frac{X}{Z} = 0{,}1$</td><td>0,16 điểm ảnh</td><td>không — sai số chiếu lại vẫn “đẹp”</td></tr>
+          <tr><td>góc ảnh</td><td>20 điểm ảnh</td><td class="red">có — nhưng không có góc bàn cờ nào ở đó để đo</td></tr></table>
+          <p class="note">Sai số chiếu lại chỉ đo ở chỗ có điểm mẫu. Chụp ít nhất khoảng 10 ảnh bàn cờ, phủ cả bốn góc và nhiều độ nghiêng.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, tin sai số chiếu lại nhỏ khi bàn cờ chỉ nằm giữa ảnh. Ở giữa ảnh, méo chỉ dời điểm 0 phẩy 16 điểm ảnh, nên một mô hình bỏ qua méo vẫn cho sai số chiếu lại rất đẹp. Ở góc ảnh, méo dời tới 20 điểm ảnh, nhưng không có góc bàn cờ nào ở đó để lộ ra lỗi. Sai số chiếu lại chỉ đo ở chỗ có điểm mẫu, nên hãy chụp ít nhất khoảng 10 ảnh bàn cờ, phủ cả bốn góc và nhiều độ nghiêng."
+
+  # ───────────────────────── 10. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: chiếu một điểm, tính độ méo, rồi lập kế hoạch hiệu chuẩn"
+    checks:
+      - "alg.cvi_project([[800, 0, 320], [0, 800, 240], [0, 0, 1]], -0.4, 0.3, 4) == (240, 300) and -0.4 / 4 == -0.1 and 0.3 / 4 == 0.075"
+      - "round(0.3 ** 2 + 0.4 ** 2, 6) == 0.25 and round(1 - 0.1 * 0.25, 6) == 0.975 and tuple(round(800 * c + o, 6) for c, o in zip(alg.cvi_distort(0.3, 0.4, -0.1), (320, 240))) == (554, 552) and math.hypot(560 - 554, 560 - 552) == 10"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề (cùng $\mathbf{K}$: $f = 800$, tâm (320, 240))</th></tr>
+          <tr><td>1</td><td>Điểm $(-0{,}4;\ 0{,}3;\ 4)$ m rơi vào điểm ảnh nào?</td></tr>
+          <tr><td>2</td><td>$k_1 = -0{,}1$. Điểm có toạ độ chuẩn hoá $(0{,}3;\ 0{,}4)$ rơi vào đâu, lệch bao nhiêu điểm ảnh so với khi không méo?</td></tr>
+          <tr><td>3</td><td>Camera đo linh kiện dài hạn trên băng chuyền. Lập kế hoạch hiệu chuẩn: chụp gì, giữ gì cố định, kiểm lại khi nào?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", 0]
+        say: "Bây giờ đến lượt bạn, cùng ma trận nội như trên. Câu một, điểm âm 0 phẩy 4, 0 phẩy 3, 4 mét rơi vào điểm ảnh nào? Câu hai, với k một bằng âm 0 phẩy 1, điểm có toạ độ chuẩn hoá 0 phẩy 3, 0 phẩy 4 rơi vào đâu, và lệch bao nhiêu điểm ảnh so với khi không méo? Câu ba, camera đo linh kiện lâu dài trên băng chuyền, bạn lập kế hoạch hiệu chuẩn thế nào, chụp gì, giữ gì cố định, và kiểm lại khi nào? Dừng video và làm ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <p><b>Câu 1.</b> Chia cho $Z$: $(-0{,}1;\ 0{,}075)$; nhân 800: $(-80;\ 60)$; cộng tâm: $\hlg{(240, 300)}$ — bên trái, phía dưới tâm.</p>
+          <p><b>Câu 2.</b> $r^2 = 0{,}09 + 0{,}16 = 0{,}25$, hệ số $1 - 0{,}025 = 0{,}975$: $(0{,}2925;\ 0{,}39)$ → $(554, 552)$. Không méo thì $(560, 560)$, nên lệch $\sqrt{6^2 + 8^2} = \hlg{10}$ điểm ảnh.</p>
+        focus: [1, 2, 2]
+        say: "Câu một, chia cho Z được âm 0 phẩy 1 và 0 phẩy 075, nhân 800 được âm 80 và 60, cộng tâm ra 240, 300, tức bên trái và phía dưới tâm. Câu hai, r bình phương bằng 0 phẩy 25 nên hệ số là 0 phẩy 975, điểm rơi vào 554, 552. Không méo thì điểm ở 560, 560, nên độ lệch là căn của 6 bình phương cộng 8 bình phương, bằng 10 điểm ảnh."
+      - show: |
+          <table class="t"><tr><th>câu 3: việc</th><th>vì sao</th></tr>
+          <tr><td>chụp ít nhất khoảng 10 ảnh bàn cờ, phủ cả bốn góc, nhiều độ nghiêng</td><td>méo lớn nhất ở góc; sai số chiếu lại chỉ đo ở chỗ có điểm mẫu</td></tr>
+          <tr><td>khoá nét, khoá thu phóng, ghi độ phân giải</td><td>tiêu cự trôi 5% đã lệch 16 điểm ảnh</td></tr>
+          <tr><td>mỗi ca: đo lại một vật mẫu biết trước kích thước, ở giữa và ở góc</td><td>phát hiện camera bị va, nhiệt làm trôi tham số</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Câu ba là một kế hoạch có lý do cho từng việc. Chụp ít nhất khoảng 10 ảnh bàn cờ phủ cả bốn góc và nhiều độ nghiêng, vì méo lớn nhất ở góc và sai số chiếu lại chỉ đo ở chỗ có điểm mẫu. Khoá nét, khoá thu phóng và ghi lại độ phân giải, vì tiêu cự trôi 5 phần trăm đã lệch 16 điểm ảnh. Mỗi ca làm việc, đo lại một vật mẫu biết trước kích thước ở giữa và ở góc, để phát hiện camera bị va hoặc tham số trôi."
+
+  # ───────────────────────── 11. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">ma trận nội: f x, f y, c x, c y</span><span class="a">→</span>
+          <span class="n">nhân, rồi chia cho số cuối Z</span><span class="a">→</span>
+          <span class="n">góc nhìn: tang nửa góc = (W/2) / f</span><span class="a">→</span>
+          <span class="n">méo: x nhân (1 + k1 r bình phương), lớn nhất ở góc</span><span class="a">→</span>
+          <span class="n">hiệu chuẩn phủ cả ảnh, kiểm lại định kỳ</span></div>
+        say: "Tổng kết lại, ma trận nội gói bốn số tiêu cự và tâm ảnh. Nhân nó với điểm rồi chia cho số cuối Z, ta được điểm ảnh, và tang của nửa góc nhìn bằng nửa bề rộng chia tiêu cự. Ống kính thật còn kéo điểm vào trong theo bình phương khoảng cách tới tâm, nên lệch nhiều nhất ở góc. Vì vậy hiệu chuẩn phải phủ cả ảnh và được kiểm lại định kỳ."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> một con số sai số chỉ nói về chỗ đã đo. Trước khi tin phép đo ở đâu, hãy hỏi “mình có điểm mẫu ở đó không?”.</div>
+        say: "Điều cần mang theo, một con số sai số chỉ nói về chỗ đã đo. Trước khi tin phép đo ở một vùng nào đó, hãy hỏi mình có điểm mẫu ở đó không."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 4): <b>đặc trưng và khớp ảnh</b> — tìm những điểm góc dễ nhận lại, mô tả chúng bằng một dãy số, và ghép điểm giữa hai ảnh.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 4, ta học đặc trưng và khớp ảnh, tức tìm những điểm góc dễ nhận lại, mô tả chúng bằng một dãy số, rồi ghép điểm giữa hai ảnh. Hẹn gặp bạn ở bài tiếp theo."

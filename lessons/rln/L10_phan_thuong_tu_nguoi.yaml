@@ -1,0 +1,293 @@
+id: L10
+course: RLN
+series: "RLN · Học tăng cường"
+title: "Bài 10 — Học phần thưởng từ sở thích của người: mô hình Bradley–Terry và phạt độ lệch"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/rln.yaml L10; audit/rln/verify_rln.py L10; audit/rln/sources_L10.md; P. Christiano và cộng sự, Deep Reinforcement Learning from Human Preferences, arXiv:1706.03741 (NeurIPS 2017) — 900 lần hỏi, chưa tới một giờ cho động tác lộn ngược; mô hình so sánh cặp Bradley–Terry; L. Ouyang và cộng sự, Training language models to follow instructions with human feedback, arXiv:2203.02155 (2022) — công thức (1) mất mát mô hình phần thưởng, K = 4 tới 9 câu mỗi lần xếp hạng, quá khớp khi trộn các cặp, công thức (2) phạt độ lệch, β = 0,02, Hình 36; LLM bài 9 (hàm xích-ma, mất mát so sánh cặp — khoá Mô hình ngôn ngữ lớn); RLN bài 9 (cắt tỉ số)"
+assumes: [arith, approx, frac, cdot, sub, geq, policy, given]
+# Quy ước: điểm thưởng r_A, r_B của hai câu trả lời; hiệu d = r_A − r_B (KHÔNG dùng Δ — sổ chung là định thức); xác suất người chọn A là
+#   σ(d) = 1 / (1 + e mũ âm d) (alg.rln_sigmoid); mất mát khi người chọn A là −ln σ(d). Ví dụ học thẳng hai điểm như hai tham số
+#   (alg.rln_pref_steps) — mô hình thật là mạng nơ-ron cho điểm, đạo hàm theo điểm giống hệt. Phạt độ lệch: r − β·ln(π / π_gốc)
+#   (alg.rln_kl_reward); π_gốc = mô hình trước khi học tăng cường, đóng băng. Tên “Bradley–Terry”, tên mô hình, tên tác giả chỉ trên màn
+#   hình; lời đọc nói “mô hình so sánh cặp”, “hàm xích-ma” (như LLM bài 9). Số câu trả lời 2 điểm / 1,5 điểm, β 0,1 / 1 là SỐ MINH HOẠ.
+objectives:
+  - "Tính xác suất người chọn A hơn B và mất mát −ln σ(r_A − r_B) từ hai điểm thưởng"
+  - "Tính đạo hàm 1 − σ(d) và chạy từng bước học điểm thưởng bằng tay"
+  - "Tính phần thưởng có phạt độ lệch r − β·ln(π / π_gốc) và thấy β đổi lựa chọn"
+  - "Nhận ra lỗi trộn các cặp so sánh của cùng một câu hỏi và lỗi bỏ phạt độ lệch"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Không viết được phần thưởng cho một cú lộn ngược"
+    checks:
+      - "900 < 1000 and 13 < 33 > 31"
+    steps:
+      - show: |
+          <p>Hãy viết công thức phần thưởng cho “một robot mô phỏng lộn ngược đẹp rồi đáp đứng”. Rất khó. Năm 2017, một nhóm tác giả thay công thức bằng câu hỏi cho người: <b>đoạn nào giống lộn ngược hơn?</b> Với <b>900 lần hỏi</b>, trong chưa tới một giờ, robot học được động tác.</p>
+          <p>Năm 2022, cùng ý tưởng được dùng để chỉnh mô hình ngôn ngữ: người chấm xếp hạng câu trả lời, máy học một <b>mô hình phần thưởng</b> từ các lựa chọn đó.</p>
+          <div class="box key">Hôm nay: từ “A hơn B” làm sao ra con số phần thưởng? Học con số đó từng bước ra sao? Và vì sao phải phạt khi mô hình đi xa mô hình ban đầu?</div>
+        focus: [1, 1, 1, 2, 3]
+        say: "Chào bạn, hãy thử viết công thức phần thưởng cho một robot mô phỏng lộn ngược đẹp rồi đáp đứng, rất khó. Năm 2017, một nhóm tác giả thay công thức bằng câu hỏi cho người, đoạn nào giống lộn ngược hơn. Với 900 lần hỏi, trong chưa tới một giờ, robot học được động tác. Năm 2022, cùng ý tưởng được dùng để chỉnh mô hình ngôn ngữ, người chấm xếp hạng câu trả lời và máy học một mô hình phần thưởng từ các lựa chọn đó. Hôm nay ta hỏi, từ A hơn B làm sao ra con số phần thưởng, học nó từng bước ra sao, và vì sao phải phạt khi mô hình đi xa bản ban đầu."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại ba điều sẽ dùng"
+    checks:
+      - "[round(alg.rln_sigmoid(x), 3) for x in (-1, 0, 1)] == [0.269, 0.5, 0.731] and abs(alg.rln_sigmoid(-1) + alg.rln_sigmoid(1) - 1) < 1e-12"
+      - "round(-math.log(0.731), 3) == 0.313 and math.log(1) == 0 and round(math.log(10), 3) == 2.303"
+      - "round(4 - 0.5 * (2 * 4 - 6), 10) == 3"
+    steps:
+      - show: |
+          <p><b>① Hàm xích-ma</b> (khoá Mô hình ngôn ngữ lớn): $\sigma(x) = \frac{1}{1 + e^{-x}}$ biến một số bất kỳ thành xác suất.</p>
+          <table class="t"><tr><th>$x$</th><th>−1</th><th>0</th><th>1</th></tr><tr><td>$\sigma(x)$</td><td>0,269</td><td>0,5</td><td>0,731</td></tr></table>
+          <p class="note">$\sigma(-x) = 1 - \sigma(x)$: 0,269 + 0,731 = 1.</p>
+        introduces: [sigm, exp]
+        focus: [1, "2.2", "2.2", 3]
+        say: "Điều thứ nhất, ở khoá Mô hình ngôn ngữ lớn ta đã gặp hàm xích-ma, bằng 1 chia cho 1 cộng e mũ âm x, biến một số bất kỳ thành xác suất. Tại 0, hàm bằng 0 phẩy 5. Tại 1 là 0 phẩy 731, tại âm 1 là 0 phẩy 269. Hai số đó cộng lại bằng 1, vì xích-ma của âm x bằng 1 trừ xích-ma của x."
+      - show: |
+          <p><b>② Lôgarit tự nhiên</b> $\ln$: $\ln 1 = 0$; $\;\ln 10 \approx 2{,}303$; $\;-\ln 0{,}731 \approx 0{,}313$. Xác suất càng gần 1 thì $-\ln$ càng gần 0.</p>
+          <p><b>③ Một bước giảm dốc</b> (khoá Toán cho khoa học máy tính): $w \leftarrow w - \eta \cdot \text{đạo hàm}$. Ví dụ $w = 4$, đạo hàm $2w - 6 = 2$, $\eta = 0{,}5$: $w$ mới $= 4 - 0{,}5 \cdot 2 = 3$.</p>
+        introduces: [log, assign, eta]
+        focus: [1, 1, 2, 2]
+        say: "Điều thứ hai là lôgarit tự nhiên, lôgarit của 1 bằng 0, lôgarit của 10 xấp xỉ 2 phẩy 303, và âm lôgarit của 0 phẩy 731 xấp xỉ 0 phẩy 313. Xác suất càng gần 1 thì âm lôgarit càng gần 0. Điều thứ ba, ở khoá Toán cho khoa học máy tính, một bước giảm dốc thay w bằng w trừ ê-ta nhân đạo hàm. Ví dụ w bằng 4, đạo hàm 2w trừ 6 bằng 2, ê-ta bằng 0 phẩy 5, nên w mới bằng 3."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: điểm của A và B, hiệu d, mất mát"
+    checks:
+      - "round(alg.rln_sigmoid(2 - 1), 3) == 0.731 and round(-math.log(alg.rln_sigmoid(1)), 3) == 0.313"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ký hiệu</th><th>đọc</th><th>nghĩa</th></tr>
+          <tr><td>$r_A, r_B$</td><td>r A, r B</td><td>điểm thưởng mô hình cho câu trả lời A, B</td></tr>
+          <tr><td>$d = r_A - r_B$</td><td>d</td><td>hiệu hai điểm</td></tr>
+          <tr><td>$P(\text{A hơn B}) = \sigma(d)$</td><td>xác suất A hơn B</td><td>khả năng người chọn A, theo mô hình so sánh cặp</td></tr>
+          <tr><td>$-\ln \sigma(d)$</td><td>âm ln xích-ma của d</td><td>mất mát khi người đã chọn A</td></tr></table>
+        introduces: [prob]
+        focus: [0, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bảng giới thiệu các ký hiệu của bài. R A và r B là điểm thưởng mô hình cho câu trả lời A và B. D là hiệu hai điểm, r A trừ r B. Xác suất người chọn A bằng xích-ma của d, đó là mô hình so sánh cặp. Mất mát khi người đã chọn A là âm lôgarit của xích-ma của d."
+      - show: |
+          <p>Làm thử: $r_A = 2$, $r_B = 1$ nên $d = 1$; $\;P(\text{A hơn B}) = \sigma(1) \approx 0{,}731$; mất mát $-\ln 0{,}731 \approx 0{,}313$.</p>
+          <p class="note">Chỉ <b>hiệu</b> hai điểm có nghĩa: $r_A = 12$, $r_B = 11$ cho đúng cùng xác suất.</p>
+        focus: [1, 1, 2]
+        say: "Làm thử với r A bằng 2 và r B bằng 1, hiệu d bằng 1, nên xác suất A hơn B là xích-ma của 1, xấp xỉ 0 phẩy 731. Mất mát là âm lôgarit của 0 phẩy 731, xấp xỉ 0 phẩy 313. Chỉ hiệu hai điểm có nghĩa, nên 12 và 11 cho đúng cùng xác suất."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hai vòng: học phần thưởng từ người, rồi học chính sách từ phần thưởng"
+    steps:
+      - show: |
+          <div><svg width="1000" height="360" viewBox="0 0 1000 360"><defs><marker id="rl10a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs>
+          <g font-size="22" text-anchor="middle" fill="#1f2937">
+          <rect x="20" y="30" width="230" height="110" rx="10" fill="#ffedd5" stroke="#eb6834" stroke-width="2.5"/><text x="135" y="75" font-weight="bold">người chấm</text><text x="135" y="110">chọn: A hơn B</text>
+          <rect x="370" y="30" width="260" height="110" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="2.5"/><text x="500" y="75" font-weight="bold">mô hình phần thưởng</text><text x="500" y="110">cho điểm r</text>
+          <rect x="370" y="220" width="260" height="110" rx="10" fill="#d1fae5" stroke="#059669" stroke-width="2.5"/><text x="500" y="265" font-weight="bold">chính sách</text><text x="500" y="300">viết câu trả lời</text>
+          <rect x="750" y="220" width="230" height="110" rx="10" fill="#f3f4f6" stroke="#6b7280" stroke-width="2.5"/><text x="865" y="265" font-weight="bold">mô hình gốc</text><text x="865" y="300">đóng băng</text>
+          </g>
+          <line x1="255" y1="85" x2="362" y2="85" stroke="#1f2937" stroke-width="3" marker-end="url(#rl10a)"/>
+          <line x1="500" y1="145" x2="500" y2="212" stroke="#1f2937" stroke-width="3" marker-end="url(#rl10a)"/>
+          <line x1="745" y1="275" x2="638" y2="275" stroke="#1f2937" stroke-width="3" stroke-dasharray="7 5" marker-end="url(#rl10a)"/>
+          <g font-size="20" fill="#1f2937"><text x="310" y="70" text-anchor="middle">học điểm</text>
+          <text x="515" y="185" text-anchor="start" fill="#2a78d6">thưởng r</text>
+          <text x="760" y="200" text-anchor="start" fill="#6b7280">trừ phạt độ lệch</text>
+          <text x="660" y="112" text-anchor="start" fill="#b91c1c">vòng 2: tối ưu r − phạt</text>
+          <text x="660" y="140" text-anchor="start" fill="#b91c1c">bằng cách cắt tỉ số (bài 9)</text></g>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình có hai vòng. Vòng một, người chấm chọn A hơn B, và mô hình phần thưởng học cách cho điểm sao cho câu được chọn có điểm cao hơn. Vòng hai, chính sách viết câu trả lời và nhận thưởng r từ mô hình đó, rồi được tối ưu bằng cách cắt tỉ số như ở bài 9. Mô hình gốc được đóng băng, và chính sách bị trừ một khoản phạt khi viết khác mô hình gốc quá nhiều."
+
+  # ───────────────────────── 5. SUY RA CÔNG THỨC ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra đạo hàm của mất mát và bước học"
+    checks:
+      - "abs((-math.log(alg.rln_sigmoid(1.001)) + math.log(alg.rln_sigmoid(0.999))) / 0.002 + (1 - alg.rln_sigmoid(1))) < 1e-6"
+      - "round(1 - alg.rln_sigmoid(1), 3) == 0.269 and round(1 - alg.rln_sigmoid(0), 3) == 0.5"
+    steps:
+      - show: |
+          <p><b>Bước 1.</b> Mất mát khi người chọn A: $L = -\ln \sigma(d)$ với $d = r_A - r_B$. Theo bài 7, đạo hàm của $\ln \sigma(d)$ theo $d$ là $1 - \sigma(d)$, nên:</p>
+          $$\frac{\text{đạo hàm của } L}{\text{theo } d} = -\big(1 - \sigma(d)\big)$$
+        focus: [1, 2]
+        say: "Bước một, mất mát khi người chọn A là âm lôgarit của xích-ma của d. Theo bài 7, đạo hàm của lôgarit xích-ma theo d là 1 trừ xích-ma, nên đạo hàm của mất mát theo d là âm của 1 trừ xích-ma của d."
+      - show: |
+          <p><b>Bước 2.</b> Vì $d = r_A - r_B$, tăng $r_A$ một đơn vị thì $d$ tăng một, tăng $r_B$ thì $d$ giảm một. Thay vào bước giảm dốc $w \leftarrow w - \eta \cdot \text{đạo hàm}$:</p>
+          $$r_A \leftarrow r_A + \eta \cdot (1 - \sigma(d)), \qquad r_B \leftarrow r_B - \eta \cdot (1 - \sigma(d))$$
+        focus: [1, 1, 2]
+        say: "Bước hai, vì d bằng r A trừ r B, tăng r A một đơn vị thì d tăng một, còn tăng r B thì d giảm một. Thay vào bước giảm dốc, r A được cộng ê-ta nhân 1 trừ xích-ma của d. Còn r B bị trừ đúng lượng đó."
+      - show: |
+          <p class="note">Làm thử tại $d = 1$: $1 - \sigma(1) \approx 0{,}269$; nhích $d$ thêm 0,001 thì mất mát giảm khoảng $0{,}269 \cdot 0{,}001$ ✓. Tại $d = 0$ lực kéo là 0,5 — lớn nhất khi mô hình còn chưa phân biệt được hai câu.</p>
+        say: "Làm thử tại d bằng 1, 1 trừ xích-ma của 1 xấp xỉ 0 phẩy 269. Nhích d thêm 0 phẩy 001 thì mất mát giảm khoảng 0 phẩy 269 nhân 0 phẩy 001, nghĩa là khớp với đạo hàm. Tại d bằng 0, lực kéo là 0 phẩy 5, lớn nhất khi mô hình còn chưa phân biệt được hai câu."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Học điểm thưởng từ một lựa chọn “A hơn B”, từng bước"
+    checks:
+      - "(lambda s: (s[0][0], s[0][1], round(s[0][2], 3), s[0][3]))(alg.rln_pref_steps(0)) == (0.0, 0.5, 0.693, 0.5)"
+      - "(lambda s: (round(s[1][0], 10), round(s[1][1], 3), round(s[1][2], 3), round(s[1][3], 3)))(alg.rln_pref_steps(1)) == (1.0, 0.731, 0.313, 0.269)"
+      - "(lambda s: (round(s[2][0], 3), round(s[2][1], 3), round(s[2][2], 3), round(s[2][3], 3)))(alg.rln_pref_steps(2)) == (1.538, 0.823, 0.195, 0.177)"
+      - "round(0.5 + (1 - alg.rln_sigmoid(1)), 3) == 0.769"
+      - "(lambda s: [round(x[2], 3) for x in s])(alg.rln_pref_steps(2)) == [0.693, 0.313, 0.195]"
+    steps:
+      - show: |
+          <p>Người chấm chọn A hơn B. Bắt đầu $r_A = r_B = 0$, tốc độ $\eta = 1$.</p>
+          <p><b>Bước 1.</b> $d = 0$, $\sigma(0) = 0{,}5$, mất mát $-\ln 0{,}5 \approx 0{,}693$; lực kéo $1 - 0{,}5 = \hlb{0{,}5}$.</p>
+        focus: [1, 2]
+        say: "Người chấm chọn A hơn B, ta bắt đầu với r A và r B đều bằng 0, tốc độ học bằng 1. Bước một, d bằng 0, xích-ma bằng 0 phẩy 5, mất mát là âm lôgarit của 0 phẩy 5, xấp xỉ 0 phẩy 693, và lực kéo là 1 trừ 0 phẩy 5, bằng 0 phẩy 5."
+      - show: |
+          <p><b>Bước 1.</b> $d = 0$, mất mát 0,693, lực kéo 0,5.</p>
+          <p><b>Bước 2.</b> Cập nhật $r_A = 0 + 0{,}5$ và $r_B = 0 - 0{,}5$, nên:</p>
+          $$d = 0{,}5 - (-0{,}5) = 1, \quad \sigma(1) \approx 0{,}731, \quad \text{mất mát} \approx \hlb{0{,}313}$$
+          <p class="note">Lực kéo còn $1 - 0{,}731 \approx 0{,}269$.</p>
+        focus: [2, 3]
+        say: "Bước hai, cập nhật r A thành 0 phẩy 5 và r B thành âm 0 phẩy 5, nên d bằng 1. Xích-ma của 1 xấp xỉ 0 phẩy 731, mất mát xấp xỉ 0 phẩy 313, và lực kéo còn khoảng 0 phẩy 269."
+      - show: |
+          <p><b>Bước 1–2.</b> mất mát 0,693 → 0,313.</p>
+          <p><b>Bước 3.</b> $r_A \approx 0{,}5 + 0{,}269 = 0{,}769$; $r_B \approx -0{,}769$; $d \approx 1{,}538$; $\sigma \approx 0{,}823$; mất mát $\approx \hlg{0{,}195}$.</p>
+        focus: [2, 2]
+        say: "Bước ba, r A tăng thêm 0 phẩy 269 thành khoảng 0 phẩy 769, r B giảm thành khoảng âm 0 phẩy 769, nên d xấp xỉ 1 phẩy 538. Xích-ma xấp xỉ 0 phẩy 823, và mất mát còn khoảng 0 phẩy 195."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>$d$</th><th>$P(\text{A hơn B})$</th><th>mất mát</th><th>lực kéo $1 - \sigma(d)$</th></tr>
+          <tr><td>1</td><td>0</td><td>0,5</td><td>0,693</td><td>0,5</td></tr>
+          <tr><td>2</td><td>1</td><td>0,731</td><td>0,313</td><td>0,269</td></tr>
+          <tr><td>3</td><td>1,538</td><td>0,823</td><td>0,195</td><td>0,177</td></tr></table>
+          <p class="note">Mất mát giảm, lực kéo nhỏ dần: một lựa chọn duy nhất không đẩy điểm ra vô cùng nhanh, nhưng cũng không bao giờ dừng hẳn.</p>
+        focus: [1, "1.2", "1.4", 2]
+        say: "Bước bốn, đặt ba bước cạnh nhau. Lúc đầu hai câu ngang nhau và lực kéo là 0 phẩy 5. Tới bước ba, mô hình đã tin A hơn B với khoảng 0 phẩy 823, và lực kéo chỉ còn 0 phẩy 177. Mất mát giảm dần, lực kéo nhỏ dần nhưng không bao giờ dừng hẳn."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: công thức khác của mất mát, và dời mọi điểm"
+    checks:
+      - "round(math.log(1 + math.exp(-1)), 3) == round(-math.log(alg.rln_sigmoid(1)), 3) == 0.313 and round(math.log(1 + math.exp(-1.538)), 3) == 0.195"
+      - "abs(alg.rln_sigmoid(12 - 11) - alg.rln_sigmoid(2 - 1)) < 1e-12 and abs(alg.rln_sigmoid(0.769 + 5 - (-0.769 + 5)) - alg.rln_sigmoid(1.538)) < 1e-12"
+    steps:
+      - show: |
+          <p><b>Đường khác 1.</b> Vì $\sigma(d) = \frac{1}{1 + e^{-d}}$, lấy âm ln của nó cho $-\ln \sigma(d) = \ln(1 + e^{-d})$, không cần tính xác suất trước:</p>
+          <table class="t"><tr><th>$d$</th><th>$\ln(1 + e^{-d})$</th><th>bảng ví dụ</th></tr>
+          <tr><td>1</td><td>$\ln 1{,}368 \approx 0{,}313$</td><td>0,313 ✓</td></tr>
+          <tr><td>1,538</td><td>$\ln 1{,}215 \approx 0{,}195$</td><td>0,195 ✓</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Kiểm tra thứ nhất, vì xích-ma của d bằng 1 chia cho 1 cộng e mũ âm d, nên âm lôgarit của nó bằng lôgarit của 1 cộng e mũ âm d, không cần tính xác suất trước. Với d bằng 1, ta được lôgarit của 1 phẩy 368, xấp xỉ 0 phẩy 313. Với d bằng 1 phẩy 538, ta được xấp xỉ 0 phẩy 195, khớp cả hai dòng của bảng ví dụ."
+      - show: |
+          <p><b>Đường khác 2.</b> Cộng 5 vào <b>mọi</b> điểm: $r_A = 5{,}769$, $r_B = 4{,}231$ — hiệu vẫn 1,538, xác suất vẫn 0,823 ✓.</p>
+          <p class="note">Mô hình phần thưởng chỉ học được <b>thứ tự và khoảng cách</b>, không học được mốc 0. Muốn so điểm giữa hai lần huấn luyện, phải chuẩn hoá trước.</p>
+        focus: [1, 2, 2]
+        say: "Kiểm tra thứ hai, cộng 5 vào mọi điểm, r A thành 5 phẩy 769, r B thành 4 phẩy 231, hiệu vẫn là 1 phẩy 538 nên xác suất vẫn là 0 phẩy 823. Như vậy mô hình phần thưởng chỉ học được thứ tự và khoảng cách, không học được mốc 0. Muốn so điểm giữa hai lần huấn luyện, ta phải chuẩn hoá trước."
+
+  # ───────────────────────── 8. PHẠT ĐỘ LỆCH ─────────────────────────
+  - id: penalty
+    kind: example
+    title: "Phạt độ lệch so với mô hình gốc"
+    checks:
+      - "round(alg.rln_kl_reward(2, 0.1, 0.5, 0.05), 2) == 1.77 and round(math.log(0.5 / 0.05), 3) == 2.303"
+      - "alg.rln_kl_reward(1.5, 0.1, 0.2, 0.2) == 1.5 and alg.rln_kl_reward(2, 0.1, 0.5, 0.05) > 1.5"
+      - "round(alg.rln_kl_reward(2, 1, 0.5, 0.05), 3) == -0.303 < 1.5 == alg.rln_kl_reward(1.5, 1, 0.2, 0.2)"
+    steps:
+      - show: |
+          <p>Phần thưởng đưa vào học tăng cường cho một câu trả lời:</p>
+          $$R = r - \beta \cdot \ln \frac{\pi(\text{câu})}{\pi_{\text{gốc}}(\text{câu})}$$
+          <p class="note">$\beta$, đọc bê-ta: hệ số phạt. Chính sách viết câu đó <b>nhiều hơn</b> mô hình gốc thì tỉ số lớn hơn 1, $\ln$ dương, bị trừ.</p>
+        introduces: [klcoef]
+        focus: [1, 1, 2, 3, 3]
+        say: "Phần thưởng đưa vào học tăng cường cho một câu trả lời bằng điểm r, trừ bê-ta nhân lôgarit của một tỉ số. Tỉ số đó là xác suất chính sách viết câu này chia cho xác suất mô hình gốc viết câu này. Bê-ta là hệ số phạt. Nếu chính sách viết câu đó nhiều hơn mô hình gốc thì tỉ số lớn hơn 1, lôgarit dương, và phần thưởng bị trừ. Nếu hai xác suất bằng nhau thì lôgarit bằng 0, không bị phạt."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu</th><th>$r$</th><th>$\pi$ / $\pi_{\text{gốc}}$</th><th>$\ln$ tỉ số</th><th>$\beta = 0{,}1$</th><th>$\beta = 1$</th></tr>
+          <tr><td>A: điểm cao, rất khác mô hình gốc</td><td>2</td><td>0,5 / 0,05</td><td>2,303</td><td>$2 - 0{,}230 = \hlg{1{,}77}$</td><td>$2 - 2{,}303 = -0{,}303$</td></tr>
+          <tr><td>B: điểm vừa, giống mô hình gốc</td><td>1,5</td><td>0,2 / 0,2</td><td>0</td><td>1,5</td><td>$\hlg{1{,}5}$</td></tr></table>
+          <p class="note">$\beta$ nhỏ: chọn A. $\beta$ lớn: chọn B. Bài báo năm 2022 dùng $\beta = 0{,}02$; ghi rằng 0 và 2 đều cho kết quả kém.</p>
+        focus: [0, "1.2", "1.3", 2, 2]
+        say: "Bảng so hai câu trả lời. Câu A có điểm 2 nhưng chính sách viết nó với xác suất 0 phẩy 5 trong khi mô hình gốc chỉ 0 phẩy 05, lôgarit tỉ số là 2 phẩy 303. Câu B có điểm 1 phẩy 5 và xác suất bằng mô hình gốc, nên không bị phạt. Với bê-ta bằng 0 phẩy 1, A được 1 phẩy 77 và thắng, còn với bê-ta bằng 1, A chỉ còn âm 0 phẩy 303 và B thắng. Bài báo năm 2022 dùng bê-ta bằng 0 phẩy 02, và ghi rằng 0 và 2 đều cho kết quả kém."
+
+  # ───────────────────────── 9. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi cả người đã đi làm"
+    checks:
+      - "math.comb(9, 2) == 36 and math.comb(4, 2) == 6"
+      - "abs(alg.rln_sigmoid(7 - 6) - alg.rln_sigmoid(1)) < 1e-12"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Đọc điểm thưởng như thang tuyệt đối <b class="red">(chỉ hiệu có nghĩa)</b>
+          <br><span class="note">“Câu này 7 điểm, tốt” không nói gì: 7 và 6 cho đúng xác suất như 2 và 1. Phép thử: cộng một hằng số vào mọi điểm, mọi xác suất phải giữ nguyên.</span></div>
+        say: "Lỗi thứ nhất, đọc điểm thưởng như một thang tuyệt đối, trong khi chỉ hiệu có nghĩa. Nói câu này 7 điểm nên tốt là không nói gì, vì 7 và 6 cho đúng xác suất như 2 và 1. Phép thử là cộng một hằng số vào mọi điểm, mọi xác suất phải giữ nguyên."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Tin mô hình phần thưởng ở nơi nó chưa thấy dữ liệu <b class="red">(tối ưu sẽ tìm ra chỗ sai)</b>
+          <br><span class="note">Nó chỉ học từ các câu người đã chấm. Chính sách được tối ưu càng mạnh càng dễ viết những câu “lạ” mà mô hình cho điểm cao nhầm. Phép thử: định kỳ cho người chấm lại các câu điểm cao nhất.</span></div>
+        say: "Lỗi thứ hai, tin mô hình phần thưởng ở nơi nó chưa thấy dữ liệu. Nó chỉ học từ các câu người đã chấm, nên chính sách được tối ưu càng mạnh càng dễ viết những câu lạ mà mô hình cho điểm cao nhầm. Phép thử là định kỳ cho người chấm lại chính những câu có điểm cao nhất."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Trộn các cặp so sánh của cùng một câu hỏi thành dữ liệu độc lập <b class="red">(quá khớp)</b>
+          <br><span class="note">Bài báo năm 2022 ghi: trộn chúng rồi học một lượt đã quá khớp; họ gom mọi cặp của một câu hỏi vào cùng một phần tử của lô.</span></div>
+          <table class="t"><tr><th>số câu xếp hạng một lần $K$</th><th>số cặp $\frac{K \cdot (K - 1)}{2}$</th></tr>
+          <tr><td>4</td><td>6</td></tr><tr><td>9</td><td>36 — cùng một câu hỏi, rất giống nhau</td></tr></table>
+        focus: [1, 2, 1]
+        say: "Lỗi thứ ba hay gặp ở người đã đi làm, trộn các cặp so sánh của cùng một câu hỏi thành dữ liệu độc lập. Người chấm xếp hạng K câu một lần thì sinh ra K nhân K trừ 1 chia 2 cặp, 4 câu cho 6 cặp, 9 câu cho 36 cặp rất giống nhau. Bài báo năm 2022 ghi rằng trộn chúng rồi học chỉ một lượt đã quá khớp, nên họ gom mọi cặp của một câu hỏi vào cùng một phần tử của lô."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Bỏ phạt độ lệch cho điểm thưởng tăng nhanh <b class="red">(điểm tăng, chất lượng giảm)</b>
+          <br><span class="note">Không có phạt, chính sách trôi xa mô hình gốc, vào vùng mô hình phần thưởng chưa thấy. Phép thử: theo dõi song song điểm thưởng và đánh giá của người trên một tập câu hỏi giữ riêng.</span></div>
+        say: "Lỗi thứ tư, bỏ phạt độ lệch để điểm thưởng tăng nhanh, kết quả là điểm tăng mà chất lượng giảm. Không có phạt, chính sách trôi xa mô hình gốc, vào vùng mô hình phần thưởng chưa thấy. Phép thử là theo dõi song song điểm thưởng và đánh giá của người trên một tập câu hỏi giữ riêng."
+
+  # ───────────────────────── 10. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: một lựa chọn, một bước, một hệ số"
+    checks:
+      - "round(alg.rln_sigmoid(1.5), 3) == 0.818 and round(-math.log(alg.rln_sigmoid(1.5)), 3) == 0.201 and round(1 - alg.rln_sigmoid(1.5), 3) == 0.182"
+      - "round(2 + 0.5 * (1 - alg.rln_sigmoid(1.5)), 3) == 2.091 and round(0.5 - 0.5 * (1 - alg.rln_sigmoid(1.5)), 3) == 0.409"
+      - "round(alg.rln_kl_reward(3, 0.5, 0.6, 0.06), 3) == 1.849 > 1.5 and round(alg.rln_kl_reward(3, 1, 0.6, 0.06), 3) == 0.697 < 1.5"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>$r_A = 2$, $r_B = 0{,}5$, người chọn A. Tính $P(\text{A hơn B})$ và mất mát.</td></tr>
+          <tr><td>2</td><td>Một bước học với $\eta = 0{,}5$: $r_A$ và $r_B$ mới là bao nhiêu?</td></tr>
+          <tr><td>3</td><td>Câu A: $r = 3$, $\pi = 0{,}6$, $\pi_{\text{gốc}} = 0{,}06$. Câu B: $r = 1{,}5$, giống hệt mô hình gốc. Với $\beta = 0{,}5$ và $\beta = 1$, chọn câu nào?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", "1.4", "1.4", 0]
+        say: "Bây giờ đến lượt bạn. Câu một, r A bằng 2, r B bằng 0 phẩy 5, người chọn A, hãy tính xác suất A hơn B và mất mát. Câu hai, làm một bước học với ê-ta bằng 0 phẩy 5, r A và r B mới là bao nhiêu? Câu ba, câu A có điểm 3, chính sách viết nó với 0 phẩy 6, mô hình gốc với 0 phẩy 06. Câu B có điểm 1 phẩy 5 và giống hệt mô hình gốc. Với bê-ta bằng 0 phẩy 5 và bằng 1 thì chọn câu nào? Dừng video và làm ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu</th><th>tính</th><th>kết quả</th></tr>
+          <tr><td>1</td><td>$d = 1{,}5$; $\sigma(1{,}5)$; $-\ln 0{,}818$</td><td>0,818; mất mát 0,201</td></tr>
+          <tr><td>2</td><td>lực kéo $1 - 0{,}818 = 0{,}182$; nhân $\eta = 0{,}5$ được 0,091</td><td>$r_A = 2{,}091$; $r_B = 0{,}409$</td></tr></table>
+        focus: [0, "1.2", "1.3"]
+        say: "Đáp án như bảng. Câu một, hiệu d bằng 1 phẩy 5, xích-ma xấp xỉ 0 phẩy 818, mất mát xấp xỉ 0 phẩy 201. Câu hai, lực kéo là 1 trừ 0 phẩy 818, bằng 0 phẩy 182, nhân 0 phẩy 5 được 0 phẩy 091, nên r A thành 2 phẩy 091 và r B thành 0 phẩy 409."
+      - show: |
+          <p><b>Câu 3.</b> $\ln \frac{0{,}6}{0{,}06} = \ln 10 \approx 2{,}303$.</p>
+          <table class="t"><tr><th>$\beta$</th><th>câu A</th><th>câu B</th><th>chọn</th></tr>
+          <tr><td>0,5</td><td>$3 - 1{,}151 \approx 1{,}849$</td><td>1,5</td><td>A</td></tr>
+          <tr><td>1</td><td>$3 - 2{,}303 \approx 0{,}697$</td><td>1,5</td><td>B</td></tr></table>
+          <p class="note">Đánh đổi: $\beta$ nhỏ thì học nhanh theo điểm nhưng dễ trôi vào chỗ mô hình phần thưởng sai; $\beta$ lớn thì an toàn nhưng gần như không đổi gì. Chọn $\beta$ bằng đánh giá của người, không bằng điểm thưởng.</p>
+        focus: [1, "2.2", "2.3", 3, 3]
+        say: "Câu ba, lôgarit của 0 phẩy 6 chia 0 phẩy 06 bằng lôgarit của 10, xấp xỉ 2 phẩy 303. Với bê-ta bằng 0 phẩy 5, câu A còn khoảng 1 phẩy 849, hơn 1 phẩy 5, nên chọn A. Với bê-ta bằng 1, câu A còn khoảng 0 phẩy 697, nên chọn B. Bê-ta nhỏ thì học nhanh theo điểm nhưng dễ trôi vào chỗ mô hình phần thưởng sai, còn bê-ta lớn thì an toàn nhưng gần như không đổi gì. Vậy hãy chọn bê-ta bằng đánh giá của người, không bằng chính điểm thưởng."
+
+  # ───────────────────────── 11. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">người chọn A hơn B</span><span class="a">→</span>
+          <span class="n">xác suất bằng hàm xích-ma của hiệu điểm</span><span class="a">→</span>
+          <span class="n">mất mát âm ln, lực kéo 1 − xích-ma</span><span class="a">→</span>
+          <span class="n">tối ưu chính sách theo điểm, trừ bê-ta nhân ln tỉ số với mô hình gốc</span></div>
+        say: "Tổng kết lại, người chọn A hơn B, và mô hình so sánh cặp nói xác suất đó bằng hàm xích-ma của hiệu điểm. Mất mát là âm lôgarit của xác suất, với lực kéo 1 trừ xích-ma. Sau đó chính sách được tối ưu theo điểm thưởng, trừ bê-ta nhân lôgarit tỉ số với mô hình gốc."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> mô hình phần thưởng là <b>người chấm thay thế</b>, chỉ đáng tin gần dữ liệu nó đã học — luôn giữ một đường đo bằng người thật bên cạnh điểm của máy.</div>
+        say: "Điều cần mang theo, mô hình phần thưởng là người chấm thay thế, chỉ đáng tin gần dữ liệu nó đã học. Hãy luôn giữ một đường đo bằng người thật bên cạnh điểm của máy."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 11): <b>khai thác phần thưởng</b> — khi tác tử làm đúng điều ta viết, không phải điều ta muốn.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 11, ta học về khai thác phần thưởng, khi tác tử làm đúng điều ta viết, không phải điều ta muốn. Hẹn gặp bạn ở bài tiếp theo."

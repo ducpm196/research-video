@@ -1,0 +1,224 @@
+id: L05
+course: ESY
+series: "ESY · Hệ thống nhúng và thời gian thực"
+title: "Bài 5 — Lấy mẫu và lọc số đơn giản trên vi điều khiển"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/esy.yaml L05; audit/esy/verify_esy.py L05; S. W. Smith, The Scientist and Engineer's Guide to Digital Signal Processing (1997), chương 15 và 19"
+assumes: [arith, cdot, frac, approx, power, ltgt, sqrt, sub, assign, dots]
+# Quy ước: x_k mẫu vào, y_k mẫu ra. Trung bình trượt N mẫu; lọc thông thấp bậc nhất y ← y + a(x − y) với 0 < a ≤ 1 (lọc trung bình
+#   hàm mũ). Đáp ứng bước của lọc bậc nhất: y_k = 1 − (1 − a)^k. Giảm nhiễu √N cần nhiễu các mẫu độc lập (Monte Carlo trong verify).
+#   Chồng phổ đã học ở RBM bài 14 — chỉ nhắc lại điều kiện f_s > 2 f_max. Mọi số do alg.ema_step / Python trong checks.
+objectives:
+  - "Chọn tần số lấy mẫu và đặt lọc tương tự trước ADC"
+  - "Cài lọc trung bình trượt và lọc thông thấp bậc nhất"
+  - "Hiểu đánh đổi giữa giảm nhiễu và độ trễ"
+asr_reviewed:
+  - {sentence: "Bước một, đầu vào nhảy từ 0 lên 1, y bắt đầu từ 0.", reason: "ASR chép “Bước 1, đầu vào nhảy từ không lên 1 thì bắt đầu từ không.” (0.929): lệch âm/thanh thuần Việt: i/thì — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Đáp án câu một, với a bằng 0 phẩy 5 thì khoảng còn lại mỗi mẫu nhân 0 phẩy 5, nên y đi 0 phẩy 5, 0 phẩy 75, rồi 0 phẩy 875.", reason: "ASR chép “Đáp án câu 1 với A bằng 0,5 thì khoảng còn lại mỗi mẫu nhân 0,5 nên ED 0,5, 0,75 rồi 0,875.” (0.933): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: i đi/ed, không (trong “không phẩy” → “”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Cách sửa là giữ thêm bit cho phần lẻ.", reason: "ASR chép “Cách sữa là giữ thêm bích cho phần lẻ”: sửa/sữa nhầm thanh hỏi/ngã, bit → “bích” như probe p1 CSA — NOT_VERIFIED bằng tai người"}
+  - {sentence: "A nhỏ thì đầu ra mượt hơn nhưng chậm hơn, a lớn thì nhanh hơn nhưng còn nhiều nhiễu.", reason: "tên chữ cái đọc kiểu Việt, ASR chép nhầm chữ (q→quy, x→ích, k→ca) — nhóm đã biết (SKILL Bước 5); chữ hiện trên màn hình"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Số đọc nhảy lung tung"
+    steps:
+      - show: |
+          <p>Nhiệt độ phòng gần như không đổi, vậy mà số đọc nhảy 24,8 — 25,3 — 24,6 — 25,1 … vì nhiễu.</p>
+          <p>Không có bộ nhớ lớn, không có thư viện xử lý tín hiệu. Chỉ có vài phép cộng mỗi mẫu.</p>
+          <div class="box key">Hôm nay: chọn tần số lấy mẫu, và hai bộ lọc số rẻ nhất: <b>trung bình trượt</b> và <b>lọc thông thấp bậc nhất</b>.</div>
+        focus: [1, 2, 3]
+        say: "Chào bạn, nhiệt độ phòng gần như không đổi, vậy mà số đọc nhảy lung tung, 24 phẩy 8, 25 phẩy 3, 24 phẩy 6, vì nhiễu. Ta lại không có bộ nhớ lớn, không có thư viện xử lý tín hiệu, chỉ đủ vài phép cộng cho mỗi mẫu. Hôm nay ta học cách chọn tần số lấy mẫu, và hai bộ lọc số rẻ nhất, trung bình trượt và lọc thông thấp bậc nhất."
+
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: trung bình, lũy thừa của số nhỏ hơn 1, chia nguyên"
+    checks:
+      - "round((24.8 + 25.3 + 24.6 + 25.1) / 4, 2) == 24.95"
+      - "round(0.8 ** 2, 2) == 0.64 and round(0.8 ** 3, 3) == 0.512 and round(1 - 0.8 ** 2, 2) == 0.36"
+      - "7 // 4 == 1 and 3 // 4 == 0 and 1 // 4 == 0"
+    steps:
+      - show: |
+          <p>Trung bình bốn số đọc ở trên: $\dfrac{24{,}8 + 25{,}3 + 24{,}6 + 25{,}1}{4} = \hl{24{,}95}$ — các phần nhiễu lên và xuống bù trừ nhau.</p>
+        say: "Trước hết, ôn lại phép lấy trung bình. Trung bình bốn số đọc ở phần mở đầu là tổng của chúng chia 4, bằng 24 phẩy 95, vì các phần nhiễu lệch lên và lệch xuống bù trừ cho nhau."
+      - show: |
+          <table class="t"><tr><th>lũy thừa của 0,8</th><th>giá trị</th><th>1 trừ giá trị đó</th></tr>
+          <tr><td>$0{,}8^1$</td><td>0,8</td><td>0,2</td></tr>
+          <tr><td>$0{,}8^2$</td><td>0,64</td><td>0,36</td></tr>
+          <tr><td>$0{,}8^3$</td><td>0,512</td><td>0,488</td></tr></table>
+        focus: [1, "1.2", "1.3", 1]
+        say: "Tiếp theo, lũy thừa của một số nhỏ hơn 1 thì càng nhân càng nhỏ. 0 phẩy 8 mũ 1 là 0 phẩy 8, và 1 trừ đi nó còn 0 phẩy 2. 0 phẩy 8 mũ 2 là 0 phẩy 64, mũ 3 là 0 phẩy 512. Cột cuối là 1 trừ lũy thừa, tăng dần về phía 1, bài này sẽ gặp lại đúng cột đó."
+      - show: |
+          <table class="t"><tr><th>phép chia nguyên</th><th>kết quả</th><th>phần bị bỏ</th></tr>
+          <tr><td>7 chia nguyên 4</td><td>1</td><td>dư 3</td></tr>
+          <tr><td>3 chia nguyên 4</td><td>0</td><td>dư 3, mất hết</td></tr></table>
+        say: "Cuối cùng, ở khoá Hệ thống máy tính ta đã biết phép chia nguyên bỏ phần lẻ. 7 chia nguyên 4 được 1, dư 3. Còn 3 chia nguyên 4 thì được 0, toàn bộ giá trị bị mất, và chi tiết này sẽ gây ra một lỗi khó thấy ở cuối bài."
+
+  # ───────────────────────── 2. LẤY MẪU ─────────────────────────
+  - id: sampling
+    kind: concept
+    title: "Lấy mẫu: nhắc lại và một quy tắc mới"
+    steps:
+      - show: |
+          <p>Như khoá Toán cho robot: tần số lấy mẫu phải lớn hơn hai lần tần số cao nhất của tín hiệu, $f_s \gt 2 f_{\text{max}}$, nếu không sẽ chồng phổ.</p>
+          <div class="box key">Quy tắc mới: đặt một <b>bộ lọc tương tự</b> (ví dụ một điện trở và một tụ) <b>trước</b> ADC để cắt nhiễu tần số cao. Lọc số sau ADC không gỡ được chồng phổ đã xảy ra.</div>
+        introduces: [sub]
+        focus: [1, 2, 2]
+        say: "Như ở khoá Toán cho robot, tần số lấy mẫu phải lớn hơn hai lần tần số cao nhất của tín hiệu, nếu không sẽ bị chồng phổ. Quy tắc mới là đặt một bộ lọc tương tự, chẳng hạn một điện trở và một tụ điện, ngay trước bộ chuyển đổi, để cắt nhiễu tần số cao. Lọc số đặt sau bộ chuyển đổi không gỡ được chồng phổ đã xảy ra."
+
+  # ───────────────────────── 3. HAI BỘ LỌC ─────────────────────────
+  - id: filters
+    kind: symbol
+    title: "Giải mã: trung bình trượt và lọc bậc nhất"
+    checks:
+      - "(lambda x: [sum(x[max(0, k - 3):k + 1]) / 4 for k in range(len(x))])([0, 0, 0, 1, 1, 1, 1]) == [0, 0, 0, 0.25, 0.5, 0.75, 1.0]"
+      - "abs(np.random.default_rng(1).normal(0, 1, (200000, 4)).mean(axis=1).std() - 0.5) < 0.01"
+    steps:
+      - show: |
+          <p><b>Trung bình trượt</b> $N$ mẫu: $y_k = \dfrac{x_k + x_{k-1} + \dots + x_{k-N+1}}{N}$.</p>
+          <p>Nhiễu các mẫu độc lập thì độ lệch chuẩn của nhiễu giảm $\sqrt{N}$ lần: $N = 4$ → còn một nửa.</p>
+          <p class="note">Cái giá: trễ. Đầu vào nhảy từ 0 lên 1, $N = 4$: ra $0,\ 0{,}25,\ 0{,}5,\ 0{,}75,\ 1$ — mất 4 mẫu mới bắt kịp. Và phải nhớ $N$ mẫu gần nhất.</p>
+        focus: [1, 2, 3, 3]
+        say: "Bộ lọc thứ nhất là trung bình trượt N mẫu, lấy trung bình của N mẫu gần nhất. Nếu nhiễu ở các mẫu độc lập với nhau, độ lệch chuẩn của nhiễu giảm căn N lần, N bằng 4 thì còn một nửa. Cái giá là độ trễ, đầu vào nhảy từ 0 lên 1 thì đầu ra đi 0 phẩy 25, 0 phẩy 5, 0 phẩy 75 rồi mới tới 1, mất 4 mẫu mới bắt kịp. Thêm nữa, phải nhớ đủ N mẫu gần nhất."
+      - show: |
+          <p><b>Lọc thông thấp bậc nhất</b>: $y \leftarrow y + a\,(x - y)$, với $0 \lt a \le 1$ — mỗi mẫu, kéo $y$ về phía $x$ một phần $a$.</p>
+          <div class="box key">Chỉ cần nhớ <b>một</b> số $y$. $a$ nhỏ: mượt hơn nhưng chậm hơn; $a$ lớn: nhanh hơn nhưng còn nhiều nhiễu.</div>
+        focus: [1, 1, 2, 2]
+        say: "Bộ lọc thứ hai là lọc thông thấp bậc nhất, y được thay bằng y cộng a nhân x trừ y, với a nằm giữa 0 và 1. Mỗi mẫu, ta kéo y về phía x một phần a của khoảng cách. Bộ lọc này chỉ cần nhớ đúng một số y. A nhỏ thì đầu ra mượt hơn nhưng chậm hơn, a lớn thì nhanh hơn nhưng còn nhiều nhiễu."
+
+  - id: intuition
+    kind: intuition
+    title: "Mỗi mẫu cắt đi một phần năm khoảng còn lại"
+    checks:
+      - "[round(1 - 0.8 ** k, 4) for k in range(6)] == [0.0, 0.2, 0.36, 0.488, 0.5904, 0.6723]"
+    steps:
+      - show: |
+          <div><svg width="1500" height="345" viewBox="0 0 1500 345"><g fill="#1f2937"><rect x="170" y="280" width="90" height="0" fill="#2a78d6"/><rect x="170" y="60" width="90" height="220" fill="#fde3d3" stroke="#eb6834" stroke-width="2"/><text x="215" y="308" text-anchor="middle" font-size="20">mẫu 0</text><text x="215" y="336" text-anchor="middle" font-size="20" fill="#2a78d6">y = 0</text><rect x="390" y="236" width="90" height="44" fill="#2a78d6"/><rect x="390" y="60" width="90" height="176" fill="#fde3d3" stroke="#eb6834" stroke-width="2"/><text x="435" y="308" text-anchor="middle" font-size="20">mẫu 1</text><text x="435" y="336" text-anchor="middle" font-size="20" fill="#2a78d6">y = 0,2</text><rect x="610" y="201" width="90" height="79" fill="#2a78d6"/><rect x="610" y="60" width="90" height="141" fill="#fde3d3" stroke="#eb6834" stroke-width="2"/><text x="655" y="308" text-anchor="middle" font-size="20">mẫu 2</text><text x="655" y="336" text-anchor="middle" font-size="20" fill="#2a78d6">y = 0,36</text><rect x="830" y="173" width="90" height="107" fill="#2a78d6"/><rect x="830" y="60" width="90" height="113" fill="#fde3d3" stroke="#eb6834" stroke-width="2"/><text x="875" y="308" text-anchor="middle" font-size="20">mẫu 3</text><text x="875" y="336" text-anchor="middle" font-size="20" fill="#2a78d6">y = 0,488</text><rect x="1050" y="150" width="90" height="130" fill="#2a78d6"/><rect x="1050" y="60" width="90" height="90" fill="#fde3d3" stroke="#eb6834" stroke-width="2"/><text x="1095" y="308" text-anchor="middle" font-size="20">mẫu 4</text><text x="1095" y="336" text-anchor="middle" font-size="20" fill="#2a78d6">y = 0,5904</text><rect x="1270" y="132" width="90" height="148" fill="#2a78d6"/><rect x="1270" y="60" width="90" height="72" fill="#fde3d3" stroke="#eb6834" stroke-width="2"/><text x="1315" y="308" text-anchor="middle" font-size="20">mẫu 5</text><text x="1315" y="336" text-anchor="middle" font-size="20" fill="#2a78d6">y = 0,6723</text><line x1="150" y1="60" x2="1440" y2="60" stroke="#b91c1c" stroke-width="2" stroke-dasharray="10 8"/><line x1="150" y1="280" x2="1440" y2="280" stroke="#6b7280" stroke-width="2"/><text x="20" y="68" font-size="22" fill="#b91c1c">đích 1</text><text x="20" y="288" font-size="22">mức 0</text><text x="20" y="40" font-size="20" fill="#eb6834">cam: khoảng còn lại</text></g></svg></div>
+        say: "Hình vẽ lọc bậc nhất với a bằng 0 phẩy 2, đầu vào đã nhảy lên 1, vạch đỏ ở trên là đích. Phần xanh của mỗi cột là y, phần cam là khoảng còn lại từ y tới đích. Mỗi mẫu, bộ lọc lấp đi một phần năm của phần cam, nên phần cam còn lại 0 phẩy 8 lần, co dần mà không bao giờ biến mất hẳn."
+
+  # ───────────────────────── 4. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Đáp ứng bước, a = 0,2"
+    checks:
+      - "(lambda ys: round(ys[-1], 4))([__import__('functools').reduce(lambda y, _: alg.ema_step(y, 1, 0.2), range(k), 0.0) for k in range(11)]) == 0.8926"
+      - "round(1 - 0.8 ** 10, 4) == 0.8926 and [round(1 - 0.8 ** k, 3) for k in (1, 2, 5)] == [0.2, 0.36, 0.672]"
+    steps:
+      - show: |
+          <div><svg width="900" height="400" viewBox="0 0 900 400"><line x1="80" y1="340" x2="860" y2="340" stroke="#e5e7eb" stroke-width="1.5"/><text x="68" y="347" font-size="18" fill="#6b7280" text-anchor="end" font-weight="normal" stroke="#fffbeb" stroke-width="6" paint-order="stroke">0</text><line x1="80" y1="262" x2="860" y2="262" stroke="#e5e7eb" stroke-width="1.5"/><text x="68" y="270" font-size="18" fill="#6b7280" text-anchor="end" font-weight="normal" stroke="#fffbeb" stroke-width="6" paint-order="stroke">0,25</text><line x1="80" y1="185" x2="860" y2="185" stroke="#e5e7eb" stroke-width="1.5"/><text x="68" y="192" font-size="18" fill="#6b7280" text-anchor="end" font-weight="normal" stroke="#fffbeb" stroke-width="6" paint-order="stroke">0,5</text><line x1="80" y1="108" x2="860" y2="108" stroke="#e5e7eb" stroke-width="1.5"/><text x="68" y="114" font-size="18" fill="#6b7280" text-anchor="end" font-weight="normal" stroke="#fffbeb" stroke-width="6" paint-order="stroke">0,75</text><line x1="80" y1="30" x2="860" y2="30" stroke="#e5e7eb" stroke-width="1.5"/><text x="68" y="37" font-size="18" fill="#6b7280" text-anchor="end" font-weight="normal" stroke="#fffbeb" stroke-width="6" paint-order="stroke">1</text><polyline points="80.0,340 80.0,30 860.0,30" fill="none" stroke="#6b7280" stroke-width="2.5" stroke-dasharray="6 6"/><polyline points="80.0,340.0 119.0,278.0 158.0,228.4 197.0,188.7 236.0,157.0 275.0,131.6 314.0,111.3 353.0,95.0 392.0,82.0 431.0,71.6 470.0,63.3 509.0,56.6 548.0,51.3 587.0,47.0 626.0,43.6 665.0,40.9 704.0,38.7 743.0,37.0 782.0,35.6 821.0,34.5 860.0,33.6" fill="none" stroke="#2a78d6" stroke-width="3"/><circle cx="80.0" cy="340.0" r="5" fill="#2a78d6"/><circle cx="119.0" cy="278.0" r="5" fill="#2a78d6"/><circle cx="158.0" cy="228.4" r="5" fill="#2a78d6"/><circle cx="197.0" cy="188.7" r="5" fill="#2a78d6"/><circle cx="236.0" cy="157.0" r="5" fill="#2a78d6"/><circle cx="275.0" cy="131.6" r="5" fill="#2a78d6"/><circle cx="314.0" cy="111.3" r="5" fill="#2a78d6"/><circle cx="353.0" cy="95.0" r="5" fill="#2a78d6"/><circle cx="392.0" cy="82.0" r="5" fill="#2a78d6"/><circle cx="431.0" cy="71.6" r="5" fill="#2a78d6"/><circle cx="470.0" cy="63.3" r="5" fill="#2a78d6"/><circle cx="509.0" cy="56.6" r="5" fill="#2a78d6"/><circle cx="548.0" cy="51.3" r="5" fill="#2a78d6"/><circle cx="587.0" cy="47.0" r="5" fill="#2a78d6"/><circle cx="626.0" cy="43.6" r="5" fill="#2a78d6"/><circle cx="665.0" cy="40.9" r="5" fill="#2a78d6"/><circle cx="704.0" cy="38.7" r="5" fill="#2a78d6"/><circle cx="743.0" cy="37.0" r="5" fill="#2a78d6"/><circle cx="782.0" cy="35.6" r="5" fill="#2a78d6"/><circle cx="821.0" cy="34.5" r="5" fill="#2a78d6"/><circle cx="860.0" cy="33.6" r="5" fill="#2a78d6"/><text x="493" y="148" font-size="20" fill="#1f2937" text-anchor="start" font-weight="normal" stroke="#fffbeb" stroke-width="6" paint-order="stroke">sau 10 mẫu: 0,8926</text><line x1="470.0" y1="71.3" x2="493.4" y2="129.8" stroke="#6b7280" stroke-width="1.5"/><text x="860" y="20" font-size="18" fill="#6b7280" text-anchor="end" font-weight="normal" stroke="#fffbeb" stroke-width="6" paint-order="stroke">đầu vào nhảy lên 1</text><text x="80" y="368" font-size="18" fill="#6b7280" text-anchor="middle" font-weight="normal" stroke="#fffbeb" stroke-width="6" paint-order="stroke">0</text><text x="275" y="368" font-size="18" fill="#6b7280" text-anchor="middle" font-weight="normal" stroke="#fffbeb" stroke-width="6" paint-order="stroke">5</text><text x="470" y="368" font-size="18" fill="#6b7280" text-anchor="middle" font-weight="normal" stroke="#fffbeb" stroke-width="6" paint-order="stroke">10</text><text x="665" y="368" font-size="18" fill="#6b7280" text-anchor="middle" font-weight="normal" stroke="#fffbeb" stroke-width="6" paint-order="stroke">15</text><text x="860" y="368" font-size="18" fill="#6b7280" text-anchor="middle" font-weight="normal" stroke="#fffbeb" stroke-width="6" paint-order="stroke">20</text><text x="860" y="394" font-size="18" fill="#6b7280" text-anchor="end" font-weight="normal" stroke="#fffbeb" stroke-width="6" paint-order="stroke">mẫu thứ k</text></svg></div>
+          <p><b>Bước 1 — mẫu đầu:</b> đầu vào nhảy từ 0 lên 1, $y$ bắt đầu từ 0, $a = 0{,}2$: $y_1 = 0 + 0{,}2 \cdot (1 - 0) = \hl{0{,}2}$.</p>
+        focus: [1, 2, 2]
+        say: "Thử với a bằng 0 phẩy 2, đường cong trên hình là kết quả ta sắp tính từng bước. Bước một, đầu vào nhảy từ 0 lên 1, y bắt đầu từ 0. Thay vào công thức, y mới bằng 0 cộng 0 phẩy 2 nhân 1 trừ 0, tức là 0 phẩy 2."
+      - clear: true
+        show: |
+          <p><b>Bước 2 — mẫu thứ hai:</b> $y_2 = 0{,}2 + 0{,}2 \cdot (1 - 0{,}2) = 0{,}2 + 0{,}16 = \hl{0{,}36}$.</p>
+        say: "Bước hai, mẫu thứ hai, khoảng cách còn lại là 1 trừ 0 phẩy 2, bằng 0 phẩy 8, kéo thêm một phần năm của nó là 0 phẩy 16. Vậy y bằng 0 phẩy 2 cộng 0 phẩy 16, tức là 0 phẩy 36."
+      - show: |
+          <p><b>Bước 3 — quy luật:</b> khoảng còn lại $1 - y$ đi $1 \to 0{,}8 \to 0{,}64 \to \dots$, mỗi mẫu nhân $1 - a = 0{,}8$, nên $y_k = 1 - 0{,}8^{k}$.</p>
+        say: "Bước ba, tìm quy luật, nhìn khoảng còn lại 1 trừ y, nó đi 1, rồi 0 phẩy 8, rồi 0 phẩy 64. Mỗi mẫu khoảng ấy bị nhân với 1 trừ a, tức 0 phẩy 8, nên y k bằng 1 trừ 0 phẩy 8 mũ k."
+      - show: |
+          <table class="t"><tr><th>số mẫu $k$</th><th>$y_k = 1 - 0{,}8^{k}$</th><th>đạt 0,9 chưa?</th></tr>
+          <tr><td>10</td><td>$\approx \hl{0{,}8926}$</td><td>chưa</td></tr>
+          <tr><td>11</td><td>$\approx 0{,}9141$</td><td>đạt</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Bước bốn, dùng công thức để hỏi bao lâu thì bắt kịp. Sau 10 mẫu, y xấp xỉ 0 phẩy 8926, vẫn chưa tới 0 phẩy 9. Phải tới mẫu thứ 11, y xấp xỉ 0 phẩy 9141 mới vượt 0 phẩy 9, đó chính là độ trễ của bộ lọc."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: cập nhật từng mẫu bằng tay, so với công thức"
+    checks:
+      - "[round(v, 4) for v in __import__('itertools').accumulate(range(3), lambda y, _: alg.ema_step(y, 1, 0.2), initial=0.0)] == [0.0, 0.2, 0.36, 0.488]"
+      - "round(1 - 0.8 ** 3, 3) == 0.488 and round(0.36 + 0.2 * 0.64, 3) == 0.488 and round(0.8 ** 10, 4) == 0.1074 and round(0.8 ** 11, 4) == 0.0859"
+    steps:
+      - show: |
+          <table class="t"><tr><th>mẫu</th><th>cập nhật $y + 0{,}2\,(1 - y)$</th><th>công thức $1 - 0{,}8^{k}$</th></tr>
+          <tr><td>1</td><td>$0 + 0{,}2 = 0{,}2$</td><td>0,2 ✓</td></tr>
+          <tr><td>2</td><td>$0{,}2 + 0{,}16 = 0{,}36$</td><td>0,36 ✓</td></tr>
+          <tr><td>3</td><td>$0{,}36 + 0{,}2 \cdot 0{,}64 = 0{,}488$</td><td>0,488 ✓</td></tr></table>
+        focus: [1, "1.4", "1.4"]
+        say: "Kiểm bằng đường khác, vì công thức ở bước ba là ta đoán từ quy luật. Ta chạy thẳng phép cập nhật thêm một mẫu nữa, 0 phẩy 36 cộng 0 phẩy 2 nhân 0 phẩy 64, bằng 0 phẩy 488. Công thức cho 1 trừ 0 phẩy 512, cũng đúng 0 phẩy 488, nên quy luật khớp với phép cập nhật."
+      - show: |
+          <p>Đổi cách nhìn: chưa tới 0,9 nghĩa là khoảng còn lại lớn hơn 0,1. $0{,}8^{10} \approx 0{,}1074 \gt 0{,}1$, còn $0{,}8^{11} \approx 0{,}0859 \lt 0{,}1$ → đúng mẫu 11 ✓.</p>
+        say: "Kiểm thêm câu hỏi bao lâu bằng khoảng còn lại thay vì y. Chưa tới 0 phẩy 9 nghĩa là khoảng còn lại vẫn lớn hơn 0 phẩy 1. 0 phẩy 8 mũ 10 xấp xỉ 0 phẩy 1074, còn lớn hơn 0 phẩy 1, nhưng mũ 11 chỉ còn 0 phẩy 0859, nên đúng là mẫu thứ 11."
+
+
+
+  # ───────────────────────── 5. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi người mới hay mắc"
+    checks:
+      - "(25 * 3) // 4 == 18 and (25 + 3 * (26 - 25) // 4) == 25"
+      - "__import__('functools').reduce(lambda y, _: y + (26 - y) // 4, range(50), 25) == 25 and __import__('functools').reduce(lambda y, _: y + (416 - y) // 4, range(50), 400) == 413 and 413 / 16 == 25.8125 and 26 - 25.8125 == 0.1875"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Mong lọc số sửa được chồng phổ <b class="red">(sai)</b>
+          <br><span class="note">Sau khi lấy mẫu, tần số giả đã nằm lẫn vào tín hiệu. Phải lọc tương tự trước ADC.</span></div>
+        say: "Lỗi thứ nhất, mong bộ lọc số sửa được chồng phổ. Sau khi lấy mẫu, tần số giả đã nằm lẫn vào tín hiệu, nên phải lọc tương tự trước bộ chuyển đổi."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Lọc bậc nhất bằng số nguyên mà chia trước <b class="red">(sai)</b>
+          <br><span class="note">Với $a = 1/4$: <code>y += (x - y) / 4</code> — chênh lệch nhỏ hơn 4 thì phép chia nguyên ra 0, $y$ không bao giờ chạm $x$. Giữ thêm bit phần lẻ.</span></div>
+          <table class="t"><tr><th>$y$ đang 25, $x$ = 26</th><th>dừng ở</th><th>sai</th></tr>
+          <tr><td>số nguyên thường</td><td>25</td><td>1 độ</td></tr>
+          <tr><td>thêm 4 bit phần lẻ (nhân 16: từ 400 tiến về 416)</td><td>413, tức 25,8125</td><td>0,1875 độ</td></tr></table>
+        focus: [1, 1, 1, 2]
+        say: "Lỗi thứ hai, cài lọc bậc nhất bằng số nguyên mà chia trước. Với a bằng một phần tư, nếu chênh lệch nhỏ hơn 4 thì phép chia nguyên ra 0, và y không bao giờ chạm tới x. Cách sửa là giữ thêm bit cho phần lẻ. Bảng cho thấy với 4 bit phần lẻ, y dừng ở 25 phẩy 8125 thay vì 25, sai số giảm từ 1 độ còn 0 phẩy 1875 độ, nhỏ hơn hẳn nhưng chưa bằng 0."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Chọn $N$ hay $a$ chỉ theo “mượt” <b class="red">(thiếu)</b>
+          <br><span class="note">Mượt hơn là chậm hơn. Bộ điều khiển dùng tín hiệu đã lọc sẽ phản ứng muộn, có thể mất ổn định (như khoá Toán cho robot).</span></div>
+        say: "Lỗi thứ ba, chọn N hay a chỉ theo tiêu chí mượt. Mượt hơn là chậm hơn, và một bộ điều khiển dùng tín hiệu đã lọc sẽ phản ứng muộn, thậm chí mất ổn định, như ở khoá Toán cho robot."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Nghĩ trung bình nhiều mẫu luôn giảm nhiễu √N <b class="red">(chưa đúng)</b>
+          <br><span class="note">Chỉ khi nhiễu các mẫu độc lập. Nhiễu trôi chậm (do nhiệt độ) thì trung bình gần như không giảm được.</span></div>
+        say: "Lỗi thứ tư, nghĩ lấy trung bình nhiều mẫu luôn giảm nhiễu căn N lần. Điều đó chỉ đúng khi nhiễu ở các mẫu độc lập, còn nhiễu trôi chậm, như do nhiệt độ, thì trung bình gần như không giảm được."
+
+  # ───────────────────────── 6. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "1 - 0.5 ** 3 == 0.875"
+      - "round(1 / math.sqrt(8), 3) == 0.354"
+      - "[1 - 0.5 ** k for k in (1, 2, 3, 4)] == [0.5, 0.75, 0.875, 0.9375] and round(math.sqrt(8), 3) == 2.828 and min(k for k in range(1, 30) if 1 - 0.8 ** k > 0.9) == 11 and min(k for k in range(1, 30) if 1 - 0.5 ** k > 0.9) == 4"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Lọc bậc nhất $a = 0{,}5$, đầu vào nhảy từ 0 lên 1: sau 3 mẫu $y$ bằng bao nhiêu?</td></tr>
+          <tr><td>2</td><td>Trung bình trượt 8 mẫu, nhiễu độc lập độ lệch chuẩn 1: còn bao nhiêu?</td></tr>
+          <tr><td>3</td><td>Cần $y$ vượt 0,9 sau một bước nhảy trong tối đa 5 mẫu. Chọn $a = 0{,}2$ hay $a = 0{,}5$?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, lọc bậc nhất với a bằng 0 phẩy 5, đầu vào nhảy từ 0 lên 1, sau 3 mẫu y bằng bao nhiêu? Câu hai, trung bình trượt 8 mẫu, nhiễu độc lập có độ lệch chuẩn 1, sau lọc còn bao nhiêu? Câu ba, hệ cần y vượt 0 phẩy 9 trong tối đa 5 mẫu sau một bước nhảy, nên chọn a bằng 0 phẩy 2 hay 0 phẩy 5? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① Khoảng còn lại mỗi mẫu nhân $1 - 0{,}5 = 0{,}5$: $y$ đi $0{,}5 \to 0{,}75 \to 0{,}875$; công thức $1 - 0{,}5^3 = \hl{0{,}875}$.</p>
+        say: "Đáp án câu một, với a bằng 0 phẩy 5 thì khoảng còn lại mỗi mẫu nhân 0 phẩy 5, nên y đi 0 phẩy 5, 0 phẩy 75, rồi 0 phẩy 875. Công thức 1 trừ 0 phẩy 5 mũ 3 cũng cho đúng 0 phẩy 875."
+      - show: |
+          <p>② $\sqrt{8} \approx 2{,}828$, độ lệch chuẩn còn $1 / \sqrt{8} \approx \hl{0{,}354}$ — đổi lại trễ 8 mẫu mới bắt kịp một bước nhảy.</p>
+        say: "Câu hai, căn 8 xấp xỉ 2 phẩy 828, nên độ lệch chuẩn còn 1 chia căn 8, khoảng 0 phẩy 354, đổi lại phải trễ 8 mẫu mới bắt kịp một bước nhảy."
+      - show: |
+          <p>③ $a = 0{,}2$ cần tới mẫu 11 (tính ở trên). $a = 0{,}5$: $1 - 0{,}5^4 = 0{,}9375 \gt 0{,}9$ ở mẫu 4 → chọn <b>$a = 0{,}5$</b>, chấp nhận còn nhiều nhiễu hơn.</p>
+        say: "Câu ba, a bằng 0 phẩy 2 cần tới mẫu thứ 11 như ta đã tính, quá chậm. A bằng 0 phẩy 5 thì ở mẫu thứ 4, y bằng 1 trừ 0 phẩy 5 mũ 4, tức 0 phẩy 9375, đã vượt 0 phẩy 9. Vậy ta chọn a bằng 0 phẩy 5, và chấp nhận đầu ra còn nhiều nhiễu hơn."
+
+  # ───────────────────────── 7. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">lọc tương tự trước ADC</span><span class="a">→</span>
+          <span class="n">$f_s \gt 2 f_{\text{max}}$</span><span class="a">→</span>
+          <span class="n">trung bình trượt: giảm nhiễu √N, nhớ N mẫu</span><span class="a">→</span>
+          <span class="n">lọc bậc nhất: nhớ một số</span></div>
+        say: "Tổng kết lại, lọc tương tự trước bộ chuyển đổi, rồi lấy mẫu với tần số đủ cao. Trung bình trượt giảm nhiễu căn N lần nhưng phải nhớ N mẫu, còn lọc bậc nhất chỉ cần nhớ một số."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> mọi bộ lọc đổi nhiễu lấy độ trễ. Chọn bộ lọc là chọn bao nhiêu trễ mà hệ thống chịu được.</div>
+        say: "Điều cần mang theo, mọi bộ lọc đều đổi nhiễu lấy độ trễ. Chọn bộ lọc là chọn bao nhiêu độ trễ mà hệ thống chịu được."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 6): <b>số dấu phẩy tĩnh</b>, tràn và bão hoà — tính số lẻ khi không có phần cứng số thực.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 6, ta học số dấu phẩy tĩnh, tràn và bão hoà, cách tính số lẻ khi chip không có phần cứng số thực. Hẹn gặp bạn ở bài tiếp theo."

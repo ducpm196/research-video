@@ -1,0 +1,207 @@
+id: L13
+course: WEB
+series: "WEB · Ứng dụng web và di động"
+title: "Bài 13 — Ngoại tuyến trước và đồng bộ: hàng đợi thao tác, xung đột, hợp nhất"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/web.yaml L13; audit/web/verify_web.py L13; M. Shapiro và cộng sự, Conflict-free Replicated Data Types (SSS 2011); M. Kleppmann và cộng sự, Local-first Software (Onward! 2019); bài 6 (lũy đẳng), 12"
+assumes: [arith]
+# Quy ước: “ghi sau thắng” giữ giá trị có dấu thời gian lớn hơn, dấu thời gian lấy từ đồng hồ MÁY KHÁCH (alg.lww_merge). Danh sách việc chỉ thêm:
+#   hợp nhất = hợp hai tập (nửa dàn hợp). Xoá cần ghi dấu đã xoá (không trình bày chi tiết). Giờ viết giờ:phút. Tên CRDT chỉ trên màn hình.
+objectives:
+  - "Thiết kế hàng đợi thao tác chờ gửi"
+  - "So sánh “ghi sau thắng” với hợp nhất theo nghĩa dữ liệu"
+  - "Biết vì sao đồng hồ máy khách không đáng tin"
+asr_reviewed:
+  - {sentence: "Bảng dùng số minh hoạ, mỗi mục 200 byte.", reason: "ASR chép “Bản dùng số minh họa mỗi 1-200 bay.” (0.7): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: bảng/bản, mục/một — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Gửi toàn bộ 5000 mục là 1 triệu byte mỗi lần đồng bộ.", reason: "ASR chép “Gửi toàn bộ 5.000 mục là 1 triệu bai mỗi lần đồng bộ.” (0.929): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Hai người cùng thêm việc, một việc biến mất"
+    checks:
+      - "len({'mua sữa'} | {'gọi mẹ'}) == 2"
+    steps:
+      - show: |
+          <p>Hai vợ chồng dùng chung danh sách việc nhà. Trong thang máy, không có mạng, vợ thêm “mua sữa”, chồng thêm “gọi mẹ”. Ra khỏi thang máy, hai máy đồng bộ — và danh sách chỉ còn <b>một</b> việc. Máy chủ đã giữ bản ghi sau, ghi đè bản kia.</p>
+          <div class="box key">Hôm nay: <b>ngoại tuyến trước</b> — làm việc không cần mạng, rồi đồng bộ mà không mất dữ liệu.</div>
+        focus: [1, 1, 1, 1, 2]
+        say: "Chào bạn, hai vợ chồng dùng chung một danh sách việc nhà. Trong thang máy, không có mạng, vợ thêm mua sữa, còn chồng thêm gọi mẹ. Ra khỏi thang máy, hai máy đồng bộ, và danh sách chỉ còn một việc. Máy chủ đã giữ bản ghi sau, và ghi đè bản kia. Hôm nay ta học ngoại tuyến trước, làm việc không cần mạng, rồi đồng bộ mà không mất dữ liệu."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: phép hợp hai tập, và làm lại không đổi kết quả"
+    checks:
+      - "{'a', 'b'} | {'b', 'c'} == {'a', 'b', 'c'} == {'b', 'c'} | {'a', 'b'}"
+      - "{'a', 'b'} | {'a', 'b'} == {'a', 'b'}"
+    steps:
+      - show: |
+          <p><b>Hợp</b> hai tập: gom mọi phần tử của cả hai, phần tử chung chỉ giữ <b>một lần</b>.</p>
+          <table class="t"><tr><th>phép</th><th>kết quả</th></tr>
+          <tr><td>{a, b} hợp {b, c}</td><td>{a, b, c} — “b” chỉ một lần</td></tr>
+          <tr><td>{b, c} hợp {a, b} (đổi thứ tự)</td><td>{a, b, c} — như cũ</td></tr></table>
+        focus: [1, 2, "2.2", "2.3"]
+        say: "Trước hết, ôn phép hợp hai tập, gom mọi phần tử của cả hai tập, và phần tử chung chỉ giữ một lần. Bảng làm thử hai phép hợp với các chữ cái. Tập a, b hợp với tập b, c cho tập a, b, c, và chữ b chỉ xuất hiện một lần. Đổi thứ tự, lấy b, c hợp với a, b, kết quả vẫn là a, b, c như cũ."
+      - show: |
+          <p>Ở bài 6 ta gọi một thao tác là <b>lũy đẳng</b> khi làm hai lần cũng như làm một lần. Phép hợp có tính chất đó:</p>
+          <p>{a, b} hợp {a, b} $=$ {a, b} — nhận trùng một gói tin cũng vô hại.</p>
+        focus: [1, 2]
+        say: "Ở bài 6 ta gọi một thao tác là lũy đẳng khi làm hai lần cũng cho kết quả như làm một lần, ví dụ gửi lại một yêu cầu có mã không tạo thêm đơn mới. Phép hợp có đúng tính chất đó, tập a, b hợp với chính nó vẫn là a, b, nên nhận trùng một gói tin cũng vô hại."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: hàng đợi thao tác và hai cách hợp nhất"
+    steps:
+      - show: |
+          <table class="t"><tr><th>khái niệm</th><th>nghĩa</th></tr>
+          <tr><td><b>ngoại tuyến trước</b></td><td>ghi vào kho trên máy trước, giao diện cập nhật ngay; mạng chỉ để đồng bộ</td></tr>
+          <tr><td><b>hàng đợi thao tác</b></td><td>lưu từng <b>thao tác</b> (“thêm việc X, mã 7f3c”), không lưu cả danh sách; có mạng thì gửi lần lượt, kèm mã để gửi lại vô hại</td></tr>
+          <tr><td><b>ghi sau thắng</b></td><td>giữ bản có dấu thời gian lớn hơn, bỏ bản kia</td></tr>
+          <tr><td><b>hợp nhất theo nghĩa</b></td><td>kết hợp hai thay đổi theo ý nghĩa dữ liệu: danh sách chỉ thêm thì lấy <b>hợp</b> hai tập</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.3", "1.4", "1.5"]
+        say: "Bảng có bốn khái niệm. Ngoại tuyến trước nghĩa là ghi vào kho trên máy trước, giao diện cập nhật ngay, còn mạng chỉ để đồng bộ. Hàng đợi thao tác lưu từng thao tác, như thêm việc X với một mã riêng, chứ không lưu cả danh sách. Khi có mạng thì gửi lần lượt, kèm mã để gửi lại vô hại. Ghi sau thắng giữ bản có dấu thời gian lớn hơn, và bỏ bản kia. Hợp nhất theo nghĩa kết hợp hai thay đổi theo ý nghĩa của dữ liệu, ví dụ danh sách chỉ thêm thì lấy hợp của hai tập."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hai chiếc máy, hai hàng đợi, hai cách gộp"
+    checks:
+      - "alg.lww_merge((1004, {'mua sữa'}), (1002, {'gọi mẹ'}))[1] == {'mua sữa'} and len({'mua sữa'} | {'gọi mẹ'}) == 2"
+    steps:
+      - show: |
+          <div><svg width="1500" height="430" viewBox="0 0 1500 430"><defs><marker id="arW13" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs><rect x="160" y="40" width="340" height="150" rx="18" fill="#eff6ff" stroke="#2a78d6" stroke-width="3"/><text x="330" y="78" font-size="24" font-weight="bold" text-anchor="middle" fill="#1f2937">máy vợ (10:04)</text><text x="330" y="118" font-size="20" text-anchor="middle" fill="#1f2937">hàng đợi thao tác:</text><text x="330" y="155" font-size="22" text-anchor="middle" fill="#2a78d6">thêm “mua sữa”</text><rect x="1000" y="40" width="340" height="150" rx="18" fill="#eff6ff" stroke="#2a78d6" stroke-width="3"/><text x="1170" y="78" font-size="24" font-weight="bold" text-anchor="middle" fill="#1f2937">máy chồng (10:02)</text><text x="1170" y="118" font-size="20" text-anchor="middle" fill="#1f2937">hàng đợi thao tác:</text><text x="1170" y="155" font-size="22" text-anchor="middle" fill="#2a78d6">thêm “gọi mẹ”</text><text x="750" y="120" font-size="22" text-anchor="middle" fill="#d97706">trong thang máy: không mạng</text><line x1="330" y1="195" x2="380" y2="282" stroke="#1f2937" stroke-width="2" marker-end="url(#arW13)"/><line x1="330" y1="195" x2="1000" y2="282" stroke="#1f2937" stroke-width="2" marker-end="url(#arW13)"/><line x1="1170" y1="195" x2="480" y2="282" stroke="#1f2937" stroke-width="2" marker-end="url(#arW13)"/><line x1="1170" y1="195" x2="1120" y2="282" stroke="#1f2937" stroke-width="2" marker-end="url(#arW13)"/><rect x="120" y="290" width="600" height="120" rx="14" fill="#fee2e2" stroke="#b91c1c" stroke-width="3"/><text x="420" y="335" font-size="22" text-anchor="middle" fill="#b91c1c">gửi cả danh sách, ghi sau thắng</text><text x="420" y="380" font-size="26" font-weight="bold" text-anchor="middle" fill="#b91c1c">{mua sữa}: còn 1 việc</text><rect x="780" y="290" width="600" height="120" rx="14" fill="#dcfce7" stroke="#059669" stroke-width="3"/><text x="1080" y="335" font-size="22" text-anchor="middle" fill="#059669">gửi thao tác, hợp hai tập</text><text x="1080" y="380" font-size="26" font-weight="bold" text-anchor="middle" fill="#059669">{mua sữa, gọi mẹ}: đủ 2 việc</text></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình cho thấy dữ liệu đi đâu. Trong thang máy không có mạng, mỗi máy ghi thao tác thêm việc vào hàng đợi của riêng nó, máy vợ thêm mua sữa, máy chồng thêm gọi mẹ. Khi có mạng, cả hai gửi lên máy chủ, và kết quả phụ thuộc vào cách máy chủ gộp. Ghi sau thắng ở ô đỏ chỉ còn một việc, còn hợp hai tập ở ô xanh giữ đủ cả hai việc."
+
+  - id: example
+    kind: example
+    title: "Hai cách đồng bộ danh sách việc"
+    checks:
+      - "alg.lww_merge((1004, {'mua sữa'}), (1002, {'gọi mẹ'})) == (1004, {'mua sữa'}) and {'mua sữa'} | {'gọi mẹ'} == {'mua sữa', 'gọi mẹ'}"
+    steps:
+      - show: |
+          <p><b>Bước một — ngoại tuyến</b>: mỗi máy ghi vào kho riêng và hàng đợi riêng.</p>
+          <table class="t"><tr><th>máy</th><th>kho trên máy</th><th>hàng đợi chờ gửi</th></tr>
+          <tr><td>vợ (10:04)</td><td>{mua sữa}</td><td>thêm “mua sữa”, mã 7f3c</td></tr>
+          <tr><td>chồng (10:02)</td><td>{gọi mẹ}</td><td>thêm “gọi mẹ”, mã 2b9e</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước một, lúc ngoại tuyến, mỗi máy ghi vào kho riêng trên máy và xếp thao tác vào hàng đợi riêng, nên giao diện cập nhật ngay. Máy vợ lúc 10 giờ 4 phút có danh sách mua sữa, và hàng đợi chứa thao tác thêm mua sữa với mã riêng. Máy chồng lúc 10 giờ 2 phút có danh sách gọi mẹ, và hàng đợi chứa thao tác thêm gọi mẹ với mã riêng."
+      - clear: true
+        show: |
+          <p><b>Bước 2 — cách 1: gửi cả danh sách, ghi sau thắng</b>.</p>
+          <table class="t"><tr><th>bản gửi lên</th><th>dấu thời gian</th><th>kết quả</th></tr>
+          <tr><td>{mua sữa}</td><td>10:04 — lớn hơn</td><td>giữ</td></tr>
+          <tr><td>{gọi mẹ}</td><td>10:02</td><td><b class="red">bỏ</b> — mất “gọi mẹ”</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước hai, cách thứ nhất gửi cả danh sách, và máy chủ để ghi sau thắng. Bản của vợ lúc 10 giờ 4 phút có dấu thời gian lớn hơn nên được giữ. Bản của chồng lúc 10 giờ 2 phút bị bỏ, và việc gọi mẹ mất luôn."
+      - show: |
+          <p><b>Bước 3 — cách 2: gửi thao tác “thêm”, máy chủ lấy hợp</b>.</p>
+          <p>{ } hợp {mua sữa} $=$ {mua sữa}; rồi {mua sữa} hợp {gọi mẹ} $=$ <b>{mua sữa, gọi mẹ}</b> — giữ cả hai.</p>
+        focus: [1, 2]
+        say: "Bước ba, cách thứ hai gửi thao tác thêm, và máy chủ lấy hợp. Bắt đầu từ tập rỗng, hợp với mua sữa được mua sữa, rồi hợp tiếp với gọi mẹ được cả mua sữa lẫn gọi mẹ, nên giữ được cả hai việc."
+      - clear: true
+        show: |
+          <p><b>Bước 4 — mạng chập chờn</b>: thao tác 7f3c đến <b>hai lần</b>, và đến sau 2b9e.</p>
+          <table class="t"><tr><th>thứ tự nhận</th><th>sau mỗi lần hợp</th></tr>
+          <tr><td>gọi mẹ</td><td>{gọi mẹ}</td></tr>
+          <tr><td>mua sữa</td><td>{gọi mẹ, mua sữa}</td></tr>
+          <tr><td>mua sữa (lần hai)</td><td>{gọi mẹ, mua sữa} — không đổi</td></tr></table>
+          <p>Hợp hai tập không phụ thuộc thứ tự đến, và nhận trùng một thao tác cũng không sao — hai máy luôn <b>hội tụ</b> về cùng kết quả.</p>
+        focus: [1, "2.2", "2.3", "2.4", 3]
+        say: "Bước bốn, mạng chập chờn làm thao tác mua sữa đến hai lần, và đến sau thao tác gọi mẹ. Nhận gọi mẹ trước, tập là gọi mẹ. Nhận mua sữa, tập thành gọi mẹ và mua sữa. Nhận mua sữa lần hai, tập không đổi gì. Hợp hai tập không phụ thuộc thứ tự đến, và nhận trùng một thao tác cũng không sao, nên hai máy luôn hội tụ về cùng một kết quả."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: thử mọi thứ tự đến"
+    checks:
+      - "(lambda ps: len(ps) == 6 and len({frozenset(p) for p in ps}) == 1 and set(ps[0]) == {'mua sữa', 'gọi mẹ'})(list(__import__('itertools').permutations(['mua sữa', 'gọi mẹ', 'mua sữa'])))"
+      - "all(__import__('functools').reduce(alg.lww_merge, p)[1] == {'mua sữa'} for p in __import__('itertools').permutations([(1004, {'mua sữa'}), (1002, {'gọi mẹ'}), (1004, {'mua sữa'})]))"
+    steps:
+      - show: |
+          <table class="t"><tr><th>cách khác: liệt kê mọi thứ tự nhận 3 gói (mua sữa, gọi mẹ, mua sữa lần hai)</th><th>kết quả</th></tr>
+          <tr><td>số thứ tự có thể: 3 nhân 2 nhân 1</td><td>6 thứ tự</td></tr>
+          <tr><td>hợp tập, cả 6 thứ tự</td><td>đều ra {mua sữa, gọi mẹ} ✓</td></tr>
+          <tr><td>ghi sau thắng, cả 6 thứ tự</td><td>đều chỉ còn {mua sữa} — luôn mất 1 việc</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Kiểm bằng đường khác, ta không lập luận nữa mà liệt kê mọi thứ tự máy chủ có thể nhận ba gói, gồm mua sữa, gọi mẹ, và mua sữa lần hai. Ba gói có 3 nhân 2 nhân 1, bằng 6 thứ tự. Lấy hợp tập theo cả 6 thứ tự đều ra mua sữa và gọi mẹ, khớp kết quả ở bước bốn. Còn ghi sau thắng thì cả 6 thứ tự đều chỉ còn mua sữa, nghĩa là lần nào cũng mất một việc."
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi thường gặp"
+    checks:
+      - "alg.lww_merge((959, 'tên mới'), (1002, 'tên cũ')) == (1002, 'tên cũ')"
+      - "5000 * 200 == 1000000 and 3 * 200 == 600 and round(1000000 / 600) == 1667"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Tin đồng hồ máy khách <b class="red">(bản mới hơn bị mất)</b>
+          <br><span class="note">Máy chồng sửa tên lúc 10:02 thật. Máy vợ đồng hồ chậm 5 phút, sửa lúc 10:04 thật nhưng ghi dấu <b>9:59</b>. Ghi sau thắng giữ bản của chồng — bản <b>cũ hơn</b>. Dùng dấu thời gian của máy chủ, đồng hồ logic, hoặc hợp nhất theo nghĩa.</span></div>
+        say: "Lỗi thứ nhất, tin đồng hồ máy khách, nên bản mới hơn bị mất. Máy chồng sửa tên lúc 10 giờ 2 phút thật. Máy vợ có đồng hồ chậm 5 phút, sửa lúc 10 giờ 4 phút thật nhưng ghi dấu 9 giờ 59 phút. Ghi sau thắng giữ bản của chồng, là bản cũ hơn. Hãy dùng dấu thời gian của máy chủ, đồng hồ logic, hoặc hợp nhất theo nghĩa."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Xoá bằng cách bỏ khỏi tập <b class="red">(việc đã xoá sống lại)</b>
+          <br><span class="note">Máy A xoá “mua sữa”, máy B chưa biết vẫn còn “mua sữa”: hợp hai tập đưa nó trở lại. Ghi lại <b>dấu đã xoá</b> cho từng mục, và đồng bộ cả dấu đó.</span></div>
+        say: "Lỗi thứ hai, xoá bằng cách bỏ mục khỏi tập, nên việc đã xoá sống lại. Máy A xoá mua sữa, máy B chưa biết nên vẫn còn mua sữa, và hợp hai tập đưa nó trở lại. Hãy ghi lại một dấu đã xoá cho từng mục, và đồng bộ cả dấu đó."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Hàng đợi không có mã thao tác <b class="red">(gửi lại là nhân đôi)</b>
+          <br><span class="note">Mạng chập chờn, thao tác “thêm việc” gửi hai lần thành hai việc. Mỗi thao tác mang một mã duy nhất; máy chủ bỏ qua mã đã thấy (lũy đẳng, như bài 6).</span></div>
+        say: "Lỗi thứ ba, hàng đợi không có mã thao tác, nên gửi lại là nhân đôi. Mạng chập chờn làm thao tác thêm việc gửi hai lần thành hai việc. Mỗi thao tác phải mang một mã duy nhất, và máy chủ bỏ qua mã đã thấy, tức lũy đẳng như ở bài 6."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4.</b> Mỗi lần có mạng lại tải lên <b>toàn bộ</b> dữ liệu <b class="red">(người đã đi làm hay mắc)</b>
+          <br><span class="note">Cách này dễ viết và “chắc ăn” trên mạng văn phòng, nhưng trên di động nó tốn dữ liệu, tốn pin, và còn quay về ghi sau thắng cho cả danh sách. Chỉ gửi các thao tác trong hàng đợi.</span></div>
+          <table class="t"><tr><th>mỗi lần đồng bộ (số minh hoạ, mỗi mục 200 byte)</th><th>dữ liệu gửi</th></tr>
+          <tr><td>toàn bộ 5000 mục</td><td>1 000 000 byte</td></tr>
+          <tr><td>3 thao tác trong hàng đợi</td><td>600 byte — ít hơn khoảng $\hl{1667}$ lần</td></tr></table>
+        focus: [1, 1, 1, 2, "2.2", "2.3"]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, mỗi lần có mạng lại tải lên toàn bộ dữ liệu. Cách này dễ viết và có vẻ chắc ăn khi thử trên mạng văn phòng, nhưng trên di động nó tốn dữ liệu, tốn pin, và còn quay về ghi sau thắng cho cả danh sách. Hãy chỉ gửi các thao tác đang nằm trong hàng đợi. Bảng dùng số minh hoạ, mỗi mục 200 byte. Gửi toàn bộ 5000 mục là 1 triệu byte mỗi lần đồng bộ. Gửi 3 thao tác trong hàng đợi chỉ 600 byte, ít hơn khoảng 1667 lần."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "({'a', 'b'} | {'b', 'c'}) | {'d'} == {'d'} | ({'b', 'c'} | {'a', 'b'}) == {'a', 'b', 'c', 'd'}"
+      - "{'a', 'b'} | {'b', 'c'} == {'a', 'b', 'c'} and {'d'} | {'b', 'c'} == {'b', 'c', 'd'} and {'b', 'c', 'd'} | {'a', 'b'} == {'a', 'b', 'c', 'd'}"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Ba máy ngoại tuyến lần lượt thêm {a, b}, {b, c}, {d}. Đồng bộ theo thứ tự bất kỳ bằng hợp tập: kết quả là gì? Thứ tự có ảnh hưởng không?</td></tr>
+          <tr><td>2</td><td>Trường “tiêu đề ghi chú” là một chuỗi, hai người cùng sửa khác nhau. Hợp tập có dùng được không? Nên làm gì?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.2", "1.3", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, ba máy ngoại tuyến lần lượt thêm a và b, b và c, và d. Đồng bộ theo thứ tự bất kỳ bằng hợp tập thì kết quả là gì? Thứ tự có ảnh hưởng không? Câu hai, trường tiêu đề ghi chú là một chuỗi, và hai người cùng sửa khác nhau. Hợp tập có dùng được không? Nên làm gì? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>thứ tự</th><th>bước 1</th><th>bước 2</th></tr>
+          <tr><td>xuôi</td><td>{a, b} hợp {b, c} = {a, b, c}</td><td>hợp {d} = <b>{a, b, c, d}</b></td></tr>
+          <tr><td>ngược</td><td>{d} hợp {b, c} = {b, c, d}</td><td>hợp {a, b} = <b>{a, b, c, d}</b></td></tr></table>
+          <p>① <b>{a, b, c, d}</b>; thứ tự <b>không</b> ảnh hưởng — hợp tập giao hoán, kết hợp, và lặp lại vô hại.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Đáp án câu một, ta làm từng bước theo hai thứ tự để thấy rõ. Theo thứ tự xuôi, a, b hợp b, c được a, b, c, rồi hợp với d được a, b, c, d. Theo thứ tự ngược, d hợp b, c được b, c, d, rồi hợp với a, b cũng được a, b, c, d. Kết quả là a, b, c, d, và thứ tự không ảnh hưởng, vì hợp tập giao hoán, kết hợp, và lặp lại vô hại."
+      - show: |
+          <p>② Không: một chuỗi không phải tập — hợp hai chuỗi không có nghĩa, ghi sau thắng thì mất một bản. Giữ cả hai bản và cho người dùng chọn, hoặc dùng cấu trúc hợp nhất văn bản theo từng ký tự.</p>
+        say: "Câu hai, không dùng được, vì một chuỗi không phải tập, nên hãy giữ cả hai bản và cho người dùng chọn, hoặc dùng cấu trúc hợp nhất văn bản theo từng ký tự. Đây là lúc ta phải chọn cách hợp nhất theo ý nghĩa của từng loại dữ liệu, không có một cách chung cho mọi trường."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">ghi trên máy trước, đồng bộ sau</span><span class="a">→</span>
+          <span class="n">hàng đợi thao tác có mã</span><span class="a">→</span>
+          <span class="n">hợp nhất theo nghĩa thay cho ghi sau thắng</span><span class="a">→</span>
+          <span class="n">không tin đồng hồ máy khách; xoá bằng dấu đã xoá</span></div>
+        say: "Tổng kết lại, ghi trên máy trước và đồng bộ sau, với hàng đợi thao tác có mã. Hợp nhất theo nghĩa thay cho ghi sau thắng, không tin đồng hồ máy khách, và xoá bằng dấu đã xoá."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> khi hai người cùng đúng, đừng chọn người thắng — hãy thiết kế dữ liệu để <b>giữ được cả hai</b>.</div>
+        say: "Điều cần mang theo, khi hai người cùng đúng, đừng chọn người thắng, hãy thiết kế dữ liệu để giữ được cả hai."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 14): <b>phát hành và tiến hoá API</b> — tương thích ngược, cờ tính năng, phiên bản ứng dụng cũ.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 14, ta học phát hành và tiến hoá API, với tương thích ngược, cờ tính năng, và phiên bản ứng dụng cũ. Hẹn gặp bạn ở bài tiếp theo."

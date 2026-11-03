@@ -1,0 +1,281 @@
+id: L04
+course: PAR
+series: "PAR · Tính toán song song và GPU"
+title: "Bài 4 — Phân rã và cân bằng tải: chia tĩnh, chia động, việc dài trước"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/par.yaml L04; audit/par/verify_par.py L04; audit/par/sources_L04.md (câu trích nguyên văn, đọc 2026-11-02); OpenMP API Specification 5.0 (11/2018), mục 2.9.2 Worksharing-Loop Construct, bảng 2.5 (static: khúc chia xoay vòng theo thứ tự luồng; dynamic: mỗi luồng làm xong một khúc thì xin khúc khác, mặc định khúc 1 lượt lặp; guided); PAR bài 2 (cận dưới T₁/n và đường găng)"
+assumes: [arith, frac, approx, geq]
+# Quy ước: n = số lõi; việc j có độ dài t_j (giây, số minh hoạ); T₁ = tổng độ dài mọi việc (bài 2); “thời gian hoàn thành” C = lúc lõi
+#   xong cuối cùng làm xong. Chia khối = alg.par_static_blocks; chia vòng = alg.par_static_cyclic; chia động = alg.par_list_schedule /
+#   alg.par_dynamic_trace (lõi rảnh sớm nhất nhận việc kế tiếp, hoà thì lõi A); việc dài trước = alg.par_lpt; tối ưu = alg.par_best_makespan
+#   (thử mọi cách gán, chỉ cho ví dụ nhỏ). Dấu nhân: · (\cdot).
+#   Tên OpenMP chỉ trên màn hình (chưa dò phát âm): lời đọc nói “chuẩn lập trình song song bộ nhớ chung phổ biến”.
+#   Số minh hoạ: 8 ảnh dài 8, 7, …, 1 giây; 1000 việc 1 mi li giây, lấy việc 0,1 mi li giây; 1 việc 30 giây giữa 100 việc 1 giây.
+objectives:
+  - "Tính thời gian hoàn thành của chia khối, chia vòng, chia động và việc dài trước cho một danh sách việc"
+  - "Dùng cận dưới max(T₁/n, việc dài nhất) để biết một lịch đã tối ưu chưa"
+  - "Chọn cách chia và cỡ khúc việc khi biết hay không biết trước độ dài việc"
+asr_reviewed:
+  - {sentence: "Chuẩn lập trình song song bộ nhớ chung phổ biến có sẵn cả lịch tĩnh lẫn lịch động có cỡ khúc.", reason: "ASR chép “Chưởng lập trình xong xong bộ nhớ chung phộ biến có sẵn cả lịch tỉnh lẫn lịch đồng có cớ khúc.” (0.762): lệch âm/thanh thuần Việt: chuẩn/chưởng, phổ/phộ, tĩnh/tỉnh, động/đồng, cỡ/cớ — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Hai lõi, tám ảnh: một lõi ngồi chơi 16 giây"
+    checks:
+      - "alg.par_static_blocks([8, 7, 6, 5, 4, 3, 2, 1], 2) == [26, 10] and 26 - 10 == 16"
+      - "alg.par_lpt([8, 7, 6, 5, 4, 3, 2, 1], 2) == [18, 18]"
+    steps:
+      - show: |
+          <p>Tám ảnh cần xử lý, dài 8, 7, 6, 5, 4, 3, 2, 1 giây (số minh hoạ), trên máy <b>2 lõi</b>. Chia đôi danh sách: lõi A làm 4 ảnh đầu, lõi B 4 ảnh sau.</p>
+          <p>Kết quả: A mất <b>26 giây</b>, B xong sau 10 giây rồi <b>ngồi chơi 16 giây</b>. Đổi cách chia, không đổi máy: cả hai xong sau <b>18 giây</b>.</p>
+          <div class="box key">Hôm nay: chia việc thế nào để không lõi nào ngồi chờ, làm sao biết một cách chia đã tốt nhất, và khi nào nên chia động.</div>
+        focus: [1, 1, 2, 2, 3]
+        say: "Chào bạn, tám ảnh cần xử lý, dài 8, 7, 6, 5, 4, 3, 2 và 1 giây, một số minh hoạ, trên máy 2 lõi. Ta chia đôi danh sách, lõi A làm 4 ảnh đầu, lõi B làm 4 ảnh sau. Kết quả lõi A mất 26 giây, còn lõi B xong sau 10 giây rồi ngồi chơi 16 giây. Chỉ đổi cách chia, không đổi máy, cả hai lõi cùng xong sau 18 giây. Hôm nay ta học cách chia việc để không lõi nào ngồi chờ, cách biết một lịch đã tốt nhất, và khi nào nên chia động."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại ba điều sẽ dùng"
+    checks:
+      - "sum([8, 7, 6, 5, 4, 3, 2, 1]) == 36 == 8 * 9 // 2"
+      - "36 / 2 == 18 and max(36 / 2, 8) == 18"
+      - "max([26, 10]) == 26"
+    steps:
+      - show: |
+          <table class="t"><tr><th>điều sẽ dùng</th><th>ví dụ số</th></tr>
+          <tr><td>① Tổng các số từ 1 đến 8</td><td>$8 + 7 + \dots + 1 = \frac{8 \cdot 9}{2} = 36$</td></tr>
+          <tr><td>② Ở bài 2: $n$ lõi mỗi giây làm nhiều nhất $n$ giây việc, nên thời gian ít nhất bằng $\frac{T_1}{n}$; và không ngắn hơn chuỗi phải làm nối tiếp</td><td>$T_1 = 36$, 2 lõi: ít nhất $\frac{36}{2} = 18$ giây</td></tr>
+          <tr><td>③ Lấy số lớn nhất: $\max$</td><td>$\max(26, 10) = 26$: phải chờ lõi chậm nhất</td></tr></table>
+        introduces: [dots, cdot, sub, max_fn]
+        focus: [0, "1.2", "1.3", "1.3", "1.4"]
+        say: "Ta ôn ba điều sẽ dùng. Thứ nhất, tổng các số từ 1 đến 8 bằng 8 nhân 9 chia 2, tức 36, dấu ba chấm là cứ thế tiếp tục và dấu chấm giữa dòng là phép nhân. Thứ hai, ở bài 2, n lõi mỗi giây làm nhiều nhất n giây việc, nên thời gian ít nhất bằng T một, tức tổng công việc, chia n. Với tổng 36 giây trên 2 lõi, ít nhất phải 18 giây. Thứ ba, ký hiệu lấy số lớn nhất, số lớn nhất của 26 và 10 là 26, vì cả nhóm phải chờ lõi chậm nhất."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: thời gian hoàn thành và bốn cách chia"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thuật ngữ</th><th>nghĩa</th></tr>
+          <tr><td>$C$ — <b>thời gian hoàn thành</b></td><td>lúc lõi xong <b>cuối cùng</b> làm xong; $C = \max$ của tổng thời gian các lõi</td></tr>
+          <tr><td><b>chia khối</b> (tĩnh)</td><td>chia trước, mỗi lõi một đoạn liền nhau, cùng số việc</td></tr>
+          <tr><td><b>chia vòng</b> (tĩnh)</td><td>chia trước, việc 1 cho A, việc 2 cho B, việc 3 cho A…</td></tr>
+          <tr><td><b>chia động</b></td><td>việc xếp hàng; lõi nào rảnh thì lấy việc kế tiếp</td></tr>
+          <tr><td><b>việc dài trước</b></td><td>chia động, nhưng sắp hàng việc từ dài tới ngắn</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", "1.5", "1.6"]
+        say: "Bài dùng một chữ và bốn cách chia. Chữ C hoa là thời gian hoàn thành, tức lúc lõi xong cuối cùng làm xong, bằng số lớn nhất trong tổng thời gian của các lõi. Chia khối là chia trước, mỗi lõi một đoạn liền nhau, cùng số việc. Chia vòng cũng chia trước, việc một cho A, việc hai cho B, việc ba lại cho A, cứ thế xoay vòng. Chia động thì việc xếp hàng, lõi nào rảnh thì lấy việc kế tiếp. Việc dài trước là chia động, nhưng sắp hàng việc từ dài tới ngắn."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Ba lịch trên trục thời gian"
+    checks:
+      - "alg.par_static_blocks([8, 7, 6, 5, 4, 3, 2, 1], 2) == [26, 10]"
+      - "alg.par_list_schedule([8, 7, 6, 5, 4, 3, 2, 1], 2, [1, 2, 3, 4, 5, 6, 7, 8]) == [16, 20]"
+      - "alg.par_lpt([8, 7, 6, 5, 4, 3, 2, 1], 2) == [18, 18]"
+    steps:
+      - show: |
+          <div><svg width="1240" height="400" viewBox="0 0 1240 400">
+          <line x1="542" y1="40" x2="542" y2="124" stroke="#7c3aed" stroke-width="2.5" stroke-dasharray="8 6"/>
+          <line x1="542" y1="168" x2="542" y2="252" stroke="#7c3aed" stroke-width="2.5" stroke-dasharray="8 6"/>
+          <line x1="542" y1="296" x2="542" y2="380" stroke="#7c3aed" stroke-width="2.5" stroke-dasharray="8 6"/>
+          <text x="110" y="30" font-size="22" font-weight="bold" fill="#b91c1c">① chia khối: 4 việc đầu cho A, 4 việc sau cho B</text>
+          <text x="96" y="70" font-size="20" text-anchor="end" fill="#1f2937">lõi A</text>
+          <rect x="110" y="44" width="192" height="34" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="206" y="69" font-size="20" text-anchor="middle" fill="#1f2937">8</text>
+          <rect x="302" y="44" width="168" height="34" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="386" y="69" font-size="20" text-anchor="middle" fill="#1f2937">7</text>
+          <rect x="470" y="44" width="144" height="34" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="542" y="69" font-size="20" text-anchor="middle" fill="#1f2937">6</text>
+          <rect x="614" y="44" width="120" height="34" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="674" y="69" font-size="20" text-anchor="middle" fill="#1f2937">5</text>
+          <text x="96" y="112" font-size="20" text-anchor="end" fill="#1f2937">lõi B</text>
+          <rect x="110" y="86" width="96" height="34" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="158" y="111" font-size="20" text-anchor="middle" fill="#1f2937">4</text>
+          <rect x="206" y="86" width="72" height="34" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="242" y="111" font-size="20" text-anchor="middle" fill="#1f2937">3</text>
+          <rect x="278" y="86" width="48" height="34" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="302" y="111" font-size="20" text-anchor="middle" fill="#1f2937">2</text>
+          <rect x="326" y="86" width="24" height="34" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="338" y="111" font-size="20" text-anchor="middle" fill="#1f2937">1</text>
+          <text x="764" y="88" font-size="22" fill="#b91c1c">xong sau 26 (A 26, B 10)</text>
+          <text x="110" y="158" font-size="22" font-weight="bold" fill="#eb6834">② chia động, lấy việc ngắn trước</text>
+          <text x="96" y="198" font-size="20" text-anchor="end" fill="#1f2937">lõi A</text>
+          <rect x="110" y="172" width="24" height="34" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="122" y="197" font-size="20" text-anchor="middle" fill="#1f2937">1</text>
+          <rect x="134" y="172" width="72" height="34" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="170" y="197" font-size="20" text-anchor="middle" fill="#1f2937">3</text>
+          <rect x="206" y="172" width="120" height="34" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="266" y="197" font-size="20" text-anchor="middle" fill="#1f2937">5</text>
+          <rect x="326" y="172" width="168" height="34" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="410" y="197" font-size="20" text-anchor="middle" fill="#1f2937">7</text>
+          <text x="96" y="240" font-size="20" text-anchor="end" fill="#1f2937">lõi B</text>
+          <rect x="110" y="214" width="48" height="34" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="134" y="239" font-size="20" text-anchor="middle" fill="#1f2937">2</text>
+          <rect x="158" y="214" width="96" height="34" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="206" y="239" font-size="20" text-anchor="middle" fill="#1f2937">4</text>
+          <rect x="254" y="214" width="144" height="34" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="326" y="239" font-size="20" text-anchor="middle" fill="#1f2937">6</text>
+          <rect x="398" y="214" width="192" height="34" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="494" y="239" font-size="20" text-anchor="middle" fill="#1f2937">8</text>
+          <text x="764" y="216" font-size="22" fill="#eb6834">xong sau 20 (A 16, B 20)</text>
+          <text x="110" y="286" font-size="22" font-weight="bold" fill="#059669">③ chia động, việc dài trước</text>
+          <text x="96" y="326" font-size="20" text-anchor="end" fill="#1f2937">lõi A</text>
+          <rect x="110" y="300" width="192" height="34" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="206" y="325" font-size="20" text-anchor="middle" fill="#1f2937">8</text>
+          <rect x="302" y="300" width="120" height="34" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="362" y="325" font-size="20" text-anchor="middle" fill="#1f2937">5</text>
+          <rect x="422" y="300" width="96" height="34" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="470" y="325" font-size="20" text-anchor="middle" fill="#1f2937">4</text>
+          <rect x="518" y="300" width="24" height="34" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="530" y="325" font-size="20" text-anchor="middle" fill="#1f2937">1</text>
+          <text x="96" y="368" font-size="20" text-anchor="end" fill="#1f2937">lõi B</text>
+          <rect x="110" y="342" width="168" height="34" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="194" y="367" font-size="20" text-anchor="middle" fill="#1f2937">7</text>
+          <rect x="278" y="342" width="144" height="34" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="350" y="367" font-size="20" text-anchor="middle" fill="#1f2937">6</text>
+          <rect x="422" y="342" width="72" height="34" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="458" y="367" font-size="20" text-anchor="middle" fill="#1f2937">3</text>
+          <rect x="494" y="342" width="48" height="34" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="518" y="367" font-size="20" text-anchor="middle" fill="#1f2937">2</text>
+          <text x="764" y="344" font-size="22" fill="#059669">xong sau 18 (A 18, B 18)</text>
+          <text x="550" y="392" font-size="20" fill="#7c3aed">cận dưới 18 = 36 chia 2</text>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ ba lịch trên trục thời gian, mỗi ô xanh là một ảnh, chiều dài đúng bằng số giây của nó. Lịch một chia khối, lõi A ôm bốn ảnh dài nhất nên xong sau 26 giây, lõi B xong từ giây thứ 10. Lịch hai chia động nhưng lấy việc ngắn trước, ảnh 8 giây đến cuối cùng nên lõi B xong sau 20 giây. Lịch ba lấy việc dài trước, việc ngắn đến sau lấp vào chỗ trống, hai lõi cùng xong ở 18 giây, đúng vạch tím là cận dưới."
+
+  # ───────────────────────── 5. SUY RA ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra cận dưới và cận trên của chia động"
+    checks:
+      - "max(36 / 2, 8) == 18"
+      - "36 / 2 + 8 == 26 and max(alg.par_list_schedule([8, 7, 6, 5, 4, 3, 2, 1], 2, [1, 2, 3, 4, 5, 6, 7, 8])) <= 26"
+    steps:
+      - show: |
+          <p><b>Bước 1 — cận dưới.</b> Vì $n$ lõi mỗi giây làm nhiều nhất $n$ giây việc, và vì một việc không tách ra được nên phải chạy trọn trên một lõi:</p>
+          $$C \geq \max\left(\frac{T_1}{n},\ \text{việc dài nhất}\right)$$
+          <p class="note">Làm thử: $\max\left(\frac{36}{2}, 8\right) = 18$. Lịch nào đạt 18 là tối ưu.</p>
+        focus: [1, 2, 2, 3]
+        say: "Bước một là cận dưới. Vì n lõi mỗi giây làm nhiều nhất n giây việc, thời gian hoàn thành ít nhất bằng T một chia n. Vì một việc không tách ra được, nó chạy trọn trên một lõi, nên thời gian còn ít nhất bằng việc dài nhất. Làm thử, số lớn hơn giữa 36 chia 2 và 8 là 18, nên lịch nào đạt 18 giây là tối ưu."
+      - clear: true
+        show: |
+          <p><b>Bước 2 — cận trên của chia động.</b> Xét việc kết thúc cuối cùng. Lúc nó bắt đầu, mọi lõi đều đang bận, vì nếu có lõi rảnh thì nó đã bắt đầu sớm hơn. Nên lúc bắt đầu không muộn hơn $\frac{T_1}{n}$, rồi cộng độ dài của chính nó:</p>
+          $$C \leq \frac{T_1}{n} + \text{việc dài nhất}$$
+          <p class="note">Làm thử: $\frac{36}{2} + 8 = 26$. Chia động theo thứ tự bất kỳ không bao giờ quá 26 giây; lịch ngắn trước được 20.</p>
+        focus: [1, 1, 1, 2, 3, 3]
+        say: "Bước hai là cận trên của chia động. Xét việc kết thúc cuối cùng. Lúc nó bắt đầu, mọi lõi đều đang bận, vì nếu có lõi rảnh thì nó đã được bắt đầu sớm hơn. Vì vậy lúc bắt đầu không muộn hơn T một chia n, cộng độ dài của chính nó, được thời gian hoàn thành không quá T một chia n cộng việc dài nhất. Làm thử, 36 chia 2 cộng 8 bằng 26. Chia động theo thứ tự nào cũng không quá 26 giây, và lịch lấy việc ngắn trước được 20."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Tám ảnh trên hai lõi, từng cách chia"
+    checks:
+      - "alg.par_static_blocks([8, 7, 6, 5, 4, 3, 2, 1], 2) == [26, 10] and 8 + 7 + 6 + 5 == 26"
+      - "alg.par_static_cyclic([8, 7, 6, 5, 4, 3, 2, 1], 2) == [20, 16] and 8 + 6 + 4 + 2 == 20"
+      - "alg.par_dynamic_trace([8, 7, 6, 5, 4, 3, 2, 1], 2, [1, 2, 3, 4, 5, 6, 7, 8])[-1] == (8, 1, 12) and 12 + 8 == 20"
+      - "[(j, 'AB'[c], t) for j, c, t in alg.par_dynamic_trace([8, 7, 6, 5, 4, 3, 2, 1], 2, [8, 7, 6, 5, 4, 3, 2, 1])] == [(8, 'A', 0), (7, 'B', 0), (6, 'B', 7), (5, 'A', 8), (4, 'A', 13), (3, 'B', 13), (2, 'B', 16), (1, 'A', 17)]"
+      - "alg.par_lpt([8, 7, 6, 5, 4, 3, 2, 1], 2) == [18, 18] and round(36 / 26, 2) == 1.38 and 36 / 18 == 2"
+    steps:
+      - show: |
+          <p><b>Bước 1 — chia khối.</b> A: $8 + 7 + 6 + 5 = 26$; B: $4 + 3 + 2 + 1 = 10$. $C = \max(26, 10) = \hl{26}$ giây.</p>
+        say: "Bước một, chia khối. Lõi A làm 8 cộng 7 cộng 6 cộng 5, bằng 26 giây, lõi B làm 4 cộng 3 cộng 2 cộng 1, bằng 10 giây. Thời gian hoàn thành là số lớn hơn, 26 giây."
+      - show: |
+          <p><b>Bước 2 — chia vòng.</b> A: $8 + 6 + 4 + 2 = 20$; B: $7 + 5 + 3 + 1 = 16$. $C = \hlo{20}$ giây.</p>
+        say: "Bước hai, chia vòng. Lõi A nhận ảnh thứ nhất, thứ ba, thứ năm, thứ bảy, được 8 cộng 6 cộng 4 cộng 2, bằng 20 giây. Lõi B được 7 cộng 5 cộng 3 cộng 1, bằng 16 giây, nên thời gian hoàn thành là 20 giây."
+      - show: |
+          <p><b>Bước 3 — chia động, ngắn trước.</b> Ảnh 1, 2, 3… lần lượt vào lõi rảnh; ảnh 8 giây đến cuối, bắt đầu ở giây 12 trên lõi B: $C = 12 + 8 = \hlo{20}$ giây.</p>
+        say: "Bước ba, chia động nhưng lấy việc ngắn trước. Các ảnh 1, 2, 3 giây lần lượt vào lõi đang rảnh. Ảnh 8 giây đến cuối cùng, bắt đầu ở giây thứ 12 trên lõi B, nên thời gian hoàn thành là 12 cộng 8, bằng 20 giây."
+      - clear: true
+        show: |
+          <p><b>Bước 4 — việc dài trước</b>, mỗi việc vào lõi rảnh sớm nhất:</p>
+          <table class="t"><tr><th>việc</th><th>8</th><th>7</th><th>6</th><th>5</th><th>4</th><th>3</th><th>2</th><th>1</th></tr>
+          <tr><td>lõi</td><td>A</td><td>B</td><td>B</td><td>A</td><td>A</td><td>B</td><td>B</td><td>A</td></tr>
+          <tr><td>bắt đầu lúc</td><td>0</td><td>0</td><td>7</td><td>8</td><td>13</td><td>13</td><td>16</td><td>17</td></tr></table>
+          <p>A: $8 + 5 + 4 + 1 = 18$; B: $7 + 6 + 3 + 2 = 18$. $C = \hlg{18}$ giây = cận dưới, nên tối ưu.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Bước bốn, việc dài trước, mỗi việc vào lõi rảnh sớm nhất. Ảnh 8 vào lõi A, ảnh 7 vào lõi B, B rảnh trước ở giây 7 nên nhận ảnh 6, rồi A rảnh ở giây 8 nhận ảnh 5. Cứ thế, việc ngắn đến sau lấp đúng chỗ trống của lõi rảnh sớm hơn. Lõi A làm 8, 5, 4, 1, lõi B làm 7, 6, 3, 2, cả hai đều 18 giây, bằng cận dưới, nên lịch này tối ưu."
+      - show: |
+          <p><b>Bước 5 — tăng tốc.</b> Một lõi mất 36 giây. Chia khối: $\frac{36}{26} \approx 1{,}38$ lần; việc dài trước: $\frac{36}{18} = \hlg{2}$ lần — đúng bằng số lõi.</p>
+        say: "Bước năm, tính tăng tốc. Một lõi làm hết mất 36 giây. Chia khối chỉ nhanh 36 chia 26, khoảng 1 phẩy 38 lần, còn việc dài trước nhanh đúng 2 lần, bằng số lõi."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: thử hết mọi cách gán"
+    checks:
+      - "alg.par_best_makespan([8, 7, 6, 5, 4, 3, 2, 1], 2) == 18 and 2 ** 8 == 256"
+      - "sum(alg.par_lpt([8, 7, 6, 5, 4, 3, 2, 1], 2)) == sum(alg.par_static_blocks([8, 7, 6, 5, 4, 3, 2, 1], 2)) == 36"
+    steps:
+      - show: |
+          <table class="t"><tr><th>con số</th><th>đường khác để kiểm</th></tr>
+          <tr><td>18 là tốt nhất</td><td>máy thử hết $2^8 = 256$ cách gán 8 ảnh cho 2 lõi: không cách nào dưới 18 ✓</td></tr>
+          <tr><td>mỗi lịch đủ việc</td><td>cộng hai lõi của mọi lịch đều ra 36 = tổng 8 ảnh: không ảnh nào bị bỏ, bị làm hai lần ✓</td></tr>
+          <tr><td>cận đúng</td><td>mọi lịch nằm giữa 18 và 26: 26, 20, 20, 18 ✓</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Ta kiểm theo đường khác. Máy thử hết 2 mũ 8, tức 256 cách gán 8 ảnh cho 2 lõi, và không cách nào dưới 18 giây, khớp cận dưới. Cộng hai lõi của mọi lịch đều ra 36, đúng tổng 8 ảnh, nên không ảnh nào bị bỏ hay bị làm hai lần. Cuối cùng, mọi lịch ta tính, 26, 20, 20 và 18, đều nằm giữa hai cận 18 và 26."
+
+  # ───────────────────────── 8. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi cả người đã đi làm"
+    checks:
+      - "alg.par_static_blocks([8, 7, 6, 5, 4, 3, 2, 1], 2) == [26, 10]"
+      - "round(1000 * 0.1 / (1000 * 1) * 100) == 10 and round(100 * 0.1 / (1000 * 1) * 100) == 1"
+      - "sum([30] + [1] * 100) == 130 and round(130 / 8, 2) == 16.25 and max(alg.par_lpt([30] + [1] * 100, 8)) == 30 and round(130 / 30, 2) == 4.33"
+      - "max(alg.par_lpt([10, 10, 10] + [1] * 100, 8)) == 17 and round(130 / 17, 2) == 7.65"
+    steps:
+      - show: |
+          <table class="t"><tr><th>lỗi</th><th>vì sao sai</th><th>phép thử bắt được</th></tr>
+          <tr><td><b class="red">1.</b> Chia đều <b>số</b> việc, tưởng là chia đều thời gian</td><td>4 ảnh mỗi lõi, nhưng 26 giây so với 10 giây</td><td>in thời gian bận của từng lõi</td></tr>
+          <tr><td><b class="red">2.</b> Chia động từng việc rất nhỏ</td><td>1000 việc 1 mi li giây, mỗi lần lấy việc tốn 0,1 mi li giây: mất 10% (số minh hoạ); lấy mỗi lần một khúc 10 việc: còn 1%</td><td>so tổng thời gian lấy việc với thời gian làm</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.3"]
+        say: "Bảng có hai lỗi đầu. Lỗi thứ nhất, chia đều số việc rồi tưởng là chia đều thời gian, mỗi lõi 4 ảnh nhưng một lõi 26 giây, lõi kia 10 giây. Lỗi thứ hai, chia động từng việc rất nhỏ, ví dụ 1000 việc mỗi việc 1 mi li giây, mỗi lần lấy việc tốn 0 phẩy 1 mi li giây, mất 10 phần trăm. Lấy mỗi lần một khúc 10 việc thì chỉ còn mất 1 phần trăm, đều là số minh hoạ."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3</b> (người đã đi làm). Nhìn thời gian <b>trung bình</b>, quên việc <b>dài nhất</b>
+          <br><span class="note">1 việc 30 giây giữa 100 việc 1 giây, 8 lõi (số minh hoạ): $\frac{130}{8} = 16{,}25$ giây, nhưng $C \geq 30$, nên nhanh nhất chỉ $\frac{130}{30} \approx 4{,}33$ lần. Tách việc 30 giây thành 3 việc 10 giây: $C = 17$, nhanh $\approx 7{,}65$ lần.</span></div>
+        say: "Lỗi thứ ba hay gặp ở người đã đi làm, là nhìn thời gian trung bình mà quên việc dài nhất. Một việc 30 giây giữa 100 việc 1 giây, trên 8 lõi, tưởng chỉ mất 16 phẩy 25 giây. Nhưng việc dài nhất chạy trọn trên một lõi, nên phải ít nhất 30 giây, chỉ nhanh khoảng 4 phẩy 33 lần. Tách nó thành 3 việc 10 giây thì xong sau 17 giây, nhanh khoảng 7 phẩy 65 lần."
+      - show: |
+          <div class="box warn"><b>Lỗi 4</b> (người đã đi làm). Dùng việc dài trước khi <b>không biết</b> độ dài thật
+          <br><span class="note">Sắp sai thứ tự thì quay về một lịch bất kỳ. Khi độ dài khó đoán, chọn chia động với khúc vừa phải, và tách việc lớn. Chuẩn lập trình song song bộ nhớ chung phổ biến (OpenMP) có sẵn cả lịch tĩnh lẫn lịch động có cỡ khúc.</span></div>
+        say: "Lỗi thứ tư cũng của người đã đi làm, là dùng việc dài trước khi không biết độ dài thật. Ước lượng sai thì sắp sai thứ tự, và lịch quay về như một lịch bất kỳ. Khi độ dài khó đoán, hãy chia động với khúc vừa phải và tách việc lớn. Chuẩn lập trình song song bộ nhớ chung phổ biến có sẵn cả lịch tĩnh lẫn lịch động có cỡ khúc."
+
+  # ───────────────────────── 9. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: tám việc trên bốn lõi"
+    checks:
+      - "sum([7, 6, 5, 4, 3, 3, 2, 2]) == 32 and max(32 / 4, 7) == 8"
+      - "alg.par_static_blocks([7, 6, 5, 4, 3, 3, 2, 2], 4) == [13, 9, 6, 4] and alg.par_static_cyclic([7, 6, 5, 4, 3, 3, 2, 2], 4) == [10, 9, 7, 6]"
+      - "alg.par_lpt([7, 6, 5, 4, 3, 3, 2, 2], 4) == [9, 8, 8, 7] and alg.par_best_makespan([7, 6, 5, 4, 3, 3, 2, 2], 4) == 9"
+      - "6 + 5 + 4 + 3 + 3 + 2 + 2 == 25 > 3 * 8"
+      - "round(32 / 9, 2) == 3.56 and round(32 / 7, 2) == 4.57 and round(32 / 13, 2) == 2.46 and round((32 / 7) / (32 / 9) * 100 - 100) == 29"
+    steps:
+      - show: |
+          <p>Tám việc dài 7, 6, 5, 4, 3, 3, 2, 2 giây (số minh hoạ), máy <b>4 lõi</b>.</p>
+          <table class="t"><tr><th>câu</th><th>hỏi</th></tr>
+          <tr><td>1</td><td>Cận dưới của thời gian hoàn thành?</td></tr>
+          <tr><td>2</td><td>Chia khối (2 việc mỗi lõi), chia vòng, việc dài trước: mỗi cách xong sau bao lâu?</td></tr>
+          <tr><td>3</td><td>Việc dài trước có đạt cận dưới không? Nếu không, có lịch nào tốt hơn? Muốn nhanh hơn nữa, làm gì?</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", 0]
+        say: "Bây giờ đến lượt bạn, tám việc dài 7, 6, 5, 4, 3, 3, 2 và 2 giây, một số minh hoạ, trên máy 4 lõi. Câu một, cận dưới của thời gian hoàn thành là bao nhiêu? Câu hai, chia khối hai việc mỗi lõi, chia vòng, và việc dài trước, mỗi cách xong sau bao lâu? Câu ba, việc dài trước có đạt cận dưới không, có lịch nào tốt hơn không, và muốn nhanh hơn nữa thì làm gì? Dừng video và làm ra giấy."
+        pause: 25
+      - clear: true
+        show: |
+          <p>Câu 1: $T_1 = 32$; $\max\left(\frac{32}{4}, 7\right) = \hlb{8}$ giây.</p>
+          <table class="t"><tr><th>câu 2</th><th>bốn lõi</th><th>xong sau</th></tr>
+          <tr><td>chia khối</td><td>7 + 6 = 13; 5 + 4 = 9; 3 + 3 = 6; 2 + 2 = 4</td><td>13</td></tr>
+          <tr><td>chia vòng</td><td>7 + 3 = 10; 6 + 3 = 9; 5 + 2 = 7; 4 + 2 = 6</td><td>10</td></tr>
+          <tr><td>việc dài trước</td><td>7 + 2 = 9; 6 + 2 = 8; 5 + 3 = 8; 4 + 3 = 7</td><td>$\hlg{9}$</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Đáp án câu một, tổng là 32, số lớn hơn giữa 32 chia 4 và 7 là 8 giây. Câu hai, chia khối có một lõi làm 7 cộng 6, nên xong sau 13 giây. Chia vòng có lõi đầu làm 7 cộng 3, xong sau 10 giây. Việc dài trước cho các lõi 9, 8, 8 và 7 giây, xong sau 9 giây."
+      - clear: true
+        show: |
+          <p>Câu 3: 9 chưa bằng cận dưới 8. Nhưng không lịch nào đạt 8: lõi có việc 7 chỉ thêm được việc ngắn nhất là 2, thành 9, hoặc để riêng; khi đó 7 việc còn lại tổng $25 \gt 3 \cdot 8$ không vừa 3 lõi. Máy thử hết mọi cách gán cũng cho <b>9</b>: việc dài trước đã tối ưu.</p>
+          <table class="t"><tr><th>muốn nhanh hơn</th><th>xong sau</th><th>nhanh gấp</th></tr>
+          <tr><td>giữ 4 lõi, việc dài trước</td><td>9</td><td>$\frac{32}{9} \approx 3{,}56$</td></tr>
+          <tr><td>8 lõi: mỗi việc một lõi</td><td>7 (việc dài nhất)</td><td>$\frac{32}{7} \approx 4{,}57$, gấp đôi lõi mà chỉ thêm khoảng 29%</td></tr>
+          <tr><td>tách việc 7 giây ra, nếu được</td><td colspan="2">hạ cận dưới — thường lợi hơn mua lõi</td></tr></table>
+        introduces: [ltgt]
+        focus: [1, 1, 1, "2.2", "2.3", "2.4"]
+        say: "Câu ba, 9 giây chưa bằng cận dưới 8, nhưng không lịch nào đạt được 8. Lõi có việc 7 giây chỉ thêm được việc ngắn nhất là 2 giây thành 9, hoặc để riêng. Khi để riêng, 7 việc còn lại tổng 25 giây, lớn hơn 3 nhân 8, nên không vừa 3 lõi trong 8 giây, và máy thử hết mọi cách gán cũng cho 9. Giữ 4 lõi thì nhanh khoảng 3 phẩy 56 lần. Lên 8 lõi, mỗi việc một lõi, vẫn phải chờ việc 7 giây, nhanh khoảng 4 phẩy 57 lần, gấp đôi số lõi mà chỉ thêm khoảng 29 phần trăm. Nếu tách được việc 7 giây ra, cận dưới hạ xuống, thường lợi hơn mua lõi."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">lõi chậm nhất quyết định thời gian</span><span class="a">→</span>
+          <span class="n">cận dưới: $\max\left(\frac{T_1}{n}, \text{việc dài nhất}\right)$</span><span class="a">→</span>
+          <span class="n">chia động: không quá $\frac{T_1}{n}$ + việc dài nhất</span><span class="a">→</span>
+          <span class="n">việc dài trước lấp chỗ trống; tách việc lớn hạ cận dưới</span></div>
+        say: "Tổng kết lại, lõi chậm nhất quyết định thời gian hoàn thành. Cận dưới là số lớn hơn giữa tổng việc chia số lõi và việc dài nhất. Chia động không bao giờ quá tổng việc chia số lõi cộng việc dài nhất. Việc dài trước để việc ngắn lấp chỗ trống, còn tách việc lớn thì hạ được chính cận dưới."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> đo thời gian bận của <b>từng lõi</b>, không chỉ thời gian tổng. Lõi ngồi chờ là tiền bỏ phí; việc dài nhất là bức tường mà thêm lõi không vượt qua được.</div>
+        say: "Điều cần mang theo, hãy đo thời gian bận của từng lõi, không chỉ thời gian tổng. Lõi ngồi chờ là tiền bỏ phí, còn việc dài nhất là bức tường mà thêm lõi không vượt qua được."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 5): các lõi chia việc đều rồi mà vẫn chậm — vì bộ nhớ đệm: tính cục bộ và chia sẻ giả.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 5, ta xem vì sao các lõi đã chia việc đều mà vẫn chậm, do bộ nhớ đệm, với tính cục bộ và chia sẻ giả. Hẹn gặp bạn ở bài tiếp theo."

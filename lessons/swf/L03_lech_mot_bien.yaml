@@ -1,0 +1,205 @@
+id: L03
+course: SWF
+series: "SWF · Nền tảng phần mềm đúng đắn"
+title: "Bài 3 — Lỗi lệch một và phân tích biên"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/swf.yaml L03; audit/swf/verify_swf.py L03; E. W. Dijkstra, Why Numbering Should Start at Zero, EWD831 (1982); J. Bloch, Extra, Extra — Read All About It: Nearly All Binary Searches and Mergesorts are Broken (Google Research Blog, 2006); CSA bài 1 (số bù hai)"
+assumes: [arith, ltgt, frac, power]
+# Quy ước: khoảng nửa mở [lo, hi) chứa hi − lo phần tử; khoảng đóng [lo, hi] chứa hi − lo + 1. Số học 32 bit có dấu quay vòng
+#   (alg.wrap32, bù hai như CSA); điểm giữa tràn/không tràn do alg.mid32; lỗi trộn hai kiểu khoảng do alg.mixed_search chạy thật.
+objectives:
+  - "Đếm đúng số phần tử của khoảng nửa mở và khoảng đóng"
+  - "Không trộn hai kiểu khoảng trong một vòng lặp"
+  - "Tính điểm giữa không tràn số"
+asr_reviewed:
+  - {sentence: "Một hàm trả khoảng đóng, hàm khác lại nhận nửa mở, và ở ranh giới sẽ lệch một.", reason: "ASR chép “Một ham trả khoảng đóng, ham khác … ở tranh dưới sẽ lệch mục”: hàm/ham lệch thanh, ranh giới → “tranh dưới” (r/tr, gi/d), một/mục lệch âm cuối; độ khớp 0,722 trên câu 18 từ, ý câu vẫn đọc ra được — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Có hai kiểu khoảng.", reason: "ASR chép “Có 2 kiểu khoảnh”: khoảng/khoảnh lệch âm cuối ng/nh; ngay sau câu này màn hình hiện hai kiểu khoảng [a, b] và [a, b), chữ “khoảng” ở các câu khác chép đúng — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Hàng rào 100 m, cọc cách nhau 10 m: mấy cọc?"
+    checks:
+      - "len(range(0, 101, 10)) == 11 and 100 // 10 == 10"
+    steps:
+      - show: |
+          <p>Hàng rào dài 100 m, cứ 10 m một cọc, có cả hai đầu. Câu trả lời vội: 10 cọc. Đúng: $\hl{11}$ cọc — 10 khoảng nhưng 11 cọc.</p>
+          <div class="box key">Hôm nay: <b>lỗi lệch một</b> — lỗi phổ biến nhất trong lập trình — và cách <b>phân tích biên</b> để tránh nó.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, hàng rào dài 100 mét, cứ 10 mét một cọc, có cả hai đầu. Câu trả lời vội là 10 cọc. Đúng ra là 11 cọc, vì có 10 khoảng nhưng 11 cọc. Hôm nay ta học lỗi lệch một, lỗi phổ biến nhất trong lập trình, và cách phân tích biên để tránh nó."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: chia lấy phần nguyên, và bộ đếm quay vòng"
+    checks:
+      - "7 // 2 == 3 and (9999 + 2) % 10000 == 1 and 2 ** 31 - 1 == 2147483647"
+    steps:
+      - show: |
+          <p><b>Chia lấy phần nguyên</b>: trong mã, <code>7 // 2</code> cho <b>3</b> — bỏ phần lẻ. Điểm giữa của vị trí 0 và 7 là <code>(0 + 7) // 2 = 3</code>.</p>
+        say: "Trước hết, trong mã, chia lấy phần nguyên 7 cho 2 được 3, tức bỏ phần lẻ. Vì vậy điểm giữa của vị trí 0 và 7 là 0 cộng 7, chia lấy phần nguyên cho 2, bằng 3."
+      - show: |
+          <table class="t"><tr><th>bộ đếm</th><th>giá trị lớn nhất</th><th>cộng vượt</th></tr>
+          <tr><td>đồng hồ quãng đường 4 chữ số</td><td>9999</td><td>9999 + 2 → <b>0001</b></td></tr>
+          <tr><td>số nguyên 32 bit có dấu (khoá Kiến trúc máy tính)</td><td>$2^{31} - 1 = 2\,147\,483\,647$</td><td>vượt → quay sang số <b>âm</b></td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Bộ đếm trong máy có giới hạn, giống đồng hồ quãng đường. Đồng hồ 4 chữ số tới 9999, cộng thêm 2 thì quay về 0001. Ở khoá Kiến trúc máy tính, số nguyên 32 bit có dấu lớn nhất là 2 mũ 31 trừ 1, cộng vượt thì quay sang số âm."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: khoảng nửa mở và khoảng đóng"
+    checks:
+      - "len(range(3, 11)) == 11 - 3 == 8 and len(range(3, 12)) == 11 - 3 + 1 == 9"
+    steps:
+      - show: |
+          <table class="t"><tr><th>kiểu</th><th>viết</th><th>số phần tử</th><th>ví dụ 3 … 11</th></tr>
+          <tr><td>nửa mở</td><td><code>[lo, hi)</code>: có <code>lo</code>, không có <code>hi</code></td><td><code>hi − lo</code></td><td>3, 4, …, 10: $\hl{8}$</td></tr>
+          <tr><td>đóng</td><td><code>[lo, hi]</code>: có cả hai đầu</td><td><code>hi − lo + 1</code></td><td>3, 4, …, 11: $\hl{9}$</td></tr></table>
+          <div class="box key">Nửa mở hay được dùng (như <code>range</code>, chỉ số mảng từ 0): khoảng rỗng là <code>lo = hi</code>, và hai khoảng liền nhau <code>[a, b)</code>, <code>[b, c)</code> không chồng, không hở.</div>
+        focus: [1, "1.2", "1.3", 2, 2]
+        say: "Có hai kiểu khoảng. Khoảng nửa mở có lo nhưng không có hi, chứa hi trừ lo phần tử, từ 3 tới trước 11 là 8 phần tử. Khoảng đóng có cả hai đầu, chứa hi trừ lo cộng 1 phần tử, từ 3 tới 11 là 9 phần tử. Khoảng nửa mở hay được dùng, vì khoảng rỗng đơn giản là lo bằng hi. Thêm nữa, hai khoảng liền nhau ghép lại không chồng lên nhau và không bị hở."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Đếm cọc hay đếm khoảng"
+    steps:
+      - show: |
+          <div><svg width="1500" height="300" viewBox="0 0 1500 300"><line x1="150" y1="150" x2="1350" y2="150" stroke="#6b7280" stroke-width="4"/><g fill="#1f2937"><line x1="150" y1="70" x2="150" y2="190" stroke="#eb6834" stroke-width="10"/><text x="150" y="225" text-anchor="middle" font-size="21">0</text><line x1="270" y1="70" x2="270" y2="190" stroke="#eb6834" stroke-width="10"/><text x="270" y="225" text-anchor="middle" font-size="21">10</text><line x1="390" y1="70" x2="390" y2="190" stroke="#eb6834" stroke-width="10"/><text x="390" y="225" text-anchor="middle" font-size="21">20</text><line x1="510" y1="70" x2="510" y2="190" stroke="#eb6834" stroke-width="10"/><text x="510" y="225" text-anchor="middle" font-size="21">30</text><line x1="630" y1="70" x2="630" y2="190" stroke="#eb6834" stroke-width="10"/><text x="630" y="225" text-anchor="middle" font-size="21">40</text><line x1="750" y1="70" x2="750" y2="190" stroke="#eb6834" stroke-width="10"/><text x="750" y="225" text-anchor="middle" font-size="21">50</text><line x1="870" y1="70" x2="870" y2="190" stroke="#eb6834" stroke-width="10"/><text x="870" y="225" text-anchor="middle" font-size="21">60</text><line x1="990" y1="70" x2="990" y2="190" stroke="#eb6834" stroke-width="10"/><text x="990" y="225" text-anchor="middle" font-size="21">70</text><line x1="1110" y1="70" x2="1110" y2="190" stroke="#eb6834" stroke-width="10"/><text x="1110" y="225" text-anchor="middle" font-size="21">80</text><line x1="1230" y1="70" x2="1230" y2="190" stroke="#eb6834" stroke-width="10"/><text x="1230" y="225" text-anchor="middle" font-size="21">90</text><line x1="1350" y1="70" x2="1350" y2="190" stroke="#eb6834" stroke-width="10"/><text x="1350" y="225" text-anchor="middle" font-size="21">100</text><text x="210" y="115" text-anchor="middle" font-size="20" fill="#2a78d6">1</text><text x="330" y="115" text-anchor="middle" font-size="20" fill="#2a78d6">2</text><text x="450" y="115" text-anchor="middle" font-size="20" fill="#2a78d6">3</text><text x="570" y="115" text-anchor="middle" font-size="20" fill="#2a78d6">4</text><text x="690" y="115" text-anchor="middle" font-size="20" fill="#2a78d6">5</text><text x="810" y="115" text-anchor="middle" font-size="20" fill="#2a78d6">6</text><text x="930" y="115" text-anchor="middle" font-size="20" fill="#2a78d6">7</text><text x="1050" y="115" text-anchor="middle" font-size="20" fill="#2a78d6">8</text><text x="1170" y="115" text-anchor="middle" font-size="20" fill="#2a78d6">9</text><text x="1290" y="115" text-anchor="middle" font-size="20" fill="#2a78d6">10</text><text x="750" y="280" text-anchor="middle" font-size="25"><tspan fill="#2a78d6">10 khoảng (số xanh)</tspan> nhưng <tspan fill="#eb6834">11 cọc (vạch cam)</tspan></text></g></svg></div>
+        focus: [1, 1, 1]
+        say: "Hình vẽ hàng rào từ 0 tới 100 mét. Có 10 khoảng, đánh số xanh, nhưng có 11 cọc, vạch cam, vì cọc cuối cùng không có khoảng nào đứng sau. Lỗi lệch một xảy ra mỗi khi ta đếm cọc mà tưởng đang đếm khoảng."
+
+  - id: example
+    kind: example
+    title: "Trộn hai kiểu khoảng trong tìm kiếm nhị phân"
+    checks:
+      - "alg.mixed_search([1, 3], 5) == 'IndexError' and alg.mixed_search([1, 3], 0) == 'vô hạn'"
+      - "alg.bin_search([1, 3], 5)[0] == -1 and alg.bin_search([1, 3], 0)[0] == -1"
+    steps:
+      - show: |
+          <table class="t"><tr><th>kiểu</th><th>khởi tạo</th><th>điều kiện</th><th>bỏ nửa phải</th></tr>
+          <tr><td>nửa mở</td><td><code>hi = len(a)</code></td><td><code>lo &lt; hi</code></td><td><code>hi = mid</code></td></tr>
+          <tr><td>đóng</td><td><code>hi = len(a) − 1</code></td><td><code>lo &lt;= hi</code></td><td><code>hi = mid − 1</code></td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Bước một, mỗi kiểu khoảng có bộ ba riêng. Nửa mở khởi tạo hi bằng độ dài mảng, lặp khi lo nhỏ hơn hi, bỏ nửa phải bằng hi bằng điểm giữa. Đóng khởi tạo hi bằng độ dài trừ 1, lặp khi lo nhỏ hơn hoặc bằng hi, bỏ nửa phải bằng điểm giữa trừ 1."
+      - clear: true
+        show: |
+          <p><b>Bước 2</b> — trộn: khởi tạo và cập nhật của nửa mở, điều kiện của đóng (<code>lo &lt;= hi</code>). <code>a = [1, 3]</code>, tìm 5:</p>
+          <table class="t"><tr><th>lo</th><th>hi</th><th>lo &lt;= hi?</th><th>mid</th><th>a[mid]</th><th>làm gì</th></tr>
+          <tr><td>0</td><td>2</td><td>có</td><td>1</td><td>3</td><td>3 &lt; 5 → lo = 2</td></tr>
+          <tr><td>2</td><td>2</td><td>có</td><td>2</td><td class="red">a[2]?</td><td class="red">vượt mảng</td></tr></table>
+        focus: [1, 2, "2.2", "2.3"]
+        say: "Bước hai, thử trộn hai kiểu, lấy khởi tạo và cập nhật của nửa mở nhưng điều kiện của khoảng đóng, với mảng 1, 3, tìm 5. Bảng ghi từng vòng. Vòng một, điểm giữa là 1, giá trị 3 nhỏ hơn 5, nên lo thành 2. Vòng hai, lo bằng hi bằng 2 vẫn thoả điều kiện, điểm giữa là 2, và ta đọc ra ngoài mảng."
+      - clear: true
+        show: |
+          <p><b>Bước 3</b> — cùng bản trộn, tìm 0:</p>
+          <table class="t"><tr><th>lo</th><th>hi</th><th>lo &lt;= hi?</th><th>mid</th><th>a[mid]</th><th>làm gì</th></tr>
+          <tr><td>0</td><td>2</td><td>có</td><td>1</td><td>3</td><td>3 &gt; 0 → hi = 1</td></tr>
+          <tr><td>0</td><td>1</td><td>có</td><td>0</td><td>1</td><td>1 &gt; 0 → hi = 0</td></tr>
+          <tr><td>0</td><td>0</td><td>có</td><td>0</td><td>1</td><td class="red">hi = 0 mãi → lặp vô hạn</td></tr></table>
+        focus: [1, 2, "2.2", "2.3", "2.4"]
+        say: "Bước ba, cùng bản trộn, tìm 0. Bảng ghi từng vòng. Vòng một, giá trị 3 lớn hơn 0, nên hi thành 1. Vòng hai, giá trị 1 lớn hơn 0, nên hi thành 0. Từ đây lo bằng hi bằng 0, điều kiện vẫn đúng, hi gán lại 0 mãi, và vòng lặp chạy vô hạn."
+      - show: |
+          <p><b>Bước 4</b> — bản nửa mở đúng (<code>lo &lt; hi</code>) dừng khi <code>lo = hi</code> và trả <code>−1</code> cả hai lần. Quy tắc: chọn <b>một</b> kiểu khoảng, giữ nó ở cả ba chỗ.</p>
+        say: "Bước bốn, bản nửa mở đúng dùng điều kiện lo nhỏ hơn hi, nên dừng ngay khi lo bằng hi và trả về âm 1 cả hai lần. Quy tắc là chọn một kiểu khoảng, rồi giữ nó ở cả ba chỗ."
+
+  - id: overflow
+    kind: concept
+    title: "Điểm giữa tràn số"
+    checks:
+      - "alg.wrap32((2 ** 31 - 2) + (2 ** 31 - 1)) == -3 and alg.mid32(2 ** 31 - 2, 2 ** 31 - 1, False) == -1"
+      - "alg.mid32(2 ** 31 - 2, 2 ** 31 - 1, True) == 2 ** 31 - 2"
+    steps:
+      - show: |
+          <p>Số nguyên 32 bit có dấu lớn nhất là $2^{31} - 1 = 2\,147\,483\,647$. Với mảng rất lớn, $lo = 2^{31} - 2$, $hi = 2^{31} - 1$.</p>
+        say: "Số nguyên 32 bit có dấu lớn nhất là 2 mũ 31 trừ 1, hơn hai tỉ một trăm triệu. Với một mảng rất lớn, giả sử lo và hi đều sát giá trị đó."
+      - show: |
+          <table class="t"><tr><th>công thức</th><th>phép trung gian</th><th>điểm giữa</th></tr>
+          <tr><td><code>(lo + hi) / 2</code></td><td>tổng vượt giới hạn, quay vòng thành $-3$ (bù hai)</td><td class="red">$\hl{-1}$: chỉ số âm</td></tr>
+          <tr><td><code>lo + (hi − lo) / 2</code></td><td>$hi - lo = 1$, không tràn</td><td>$2^{31} - 2$ ✓</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "So hai công thức. Tính lo cộng hi rồi chia 2 thì tổng vượt giới hạn, quay vòng thành âm 3 theo số bù hai, nên điểm giữa là âm 1, một chỉ số âm. Tính lo cộng hi trừ lo chia 2 thì hi trừ lo bằng 1, không tràn, và điểm giữa đúng."
+      - show: |
+          <p class="note">Lỗi này nằm trong tìm kiếm nhị phân của thư viện Java suốt gần mười năm, tới khi được báo năm 2006. Nó chỉ hiện ra khi mảng có trên một tỉ phần tử — lớn tới mức lúc viết mã không ai thử.</p>
+        say: "Lỗi này nằm trong tìm kiếm nhị phân của một thư viện chuẩn suốt gần mười năm, tới khi được báo năm 2006. Nó chỉ hiện ra khi mảng có trên một tỉ phần tử, lớn tới mức lúc viết mã không ai thử."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: đếm thẳng bằng cách liệt kê"
+    checks:
+      - "len(list(range(3, 11))) == 8 and len(list(range(0, 101, 10))) == 11"
+      - "all(lo + (hi - lo) // 2 == (lo + hi) // 2 for lo in range(20) for hi in range(lo, 20))"
+    steps:
+      - show: |
+          <table class="t"><tr><th>con số</th><th>liệt kê</th><th>đếm</th></tr>
+          <tr><td>nửa mở [3, 11)</td><td>3, 4, 5, 6, 7, 8, 9, 10</td><td>8 = 11 − 3 ✓</td></tr>
+          <tr><td>cọc hàng rào</td><td>0, 10, 20, …, 100</td><td>11 = 100 : 10 + 1 ✓</td></tr>
+          <tr><td>hai công thức điểm giữa</td><td>thử mọi lo ≤ hi dưới 20, khi chưa tràn</td><td>luôn bằng nhau ✓</td></tr></table>
+        introduces: [geq]
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Kiểm bằng cách liệt kê, chậm nhưng chắc. Khoảng nửa mở từ 3 tới trước 11 có 8 số, đúng bằng 11 trừ 3. Cọc hàng rào từ 0 tới 100 có 11 cọc, đúng bằng 100 chia 10 cộng 1. Khi chưa tràn, hai công thức điểm giữa luôn cho cùng kết quả, nên công thức an toàn không làm sai gì cả."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Trộn quy ước khoảng giữa các hàm <b class="red">(sai)</b>
+          <br><span class="note">Một hàm trả khoảng đóng, hàm khác nhận nửa mở: lệch một ở ranh giới. Chọn một quy ước cho cả dự án và ghi vào đặc tả (bài 0).</span></div>
+        say: "Lỗi thứ nhất, trộn quy ước khoảng giữa các hàm. Một hàm trả khoảng đóng, hàm khác lại nhận nửa mở, và ở ranh giới sẽ lệch một. Hãy chọn một quy ước cho cả dự án và ghi vào đặc tả như bài 0."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Chỉ kiểm thử ở giữa <b class="red">(thiếu)</b>
+          <br><span class="note">Lỗi lệch một nằm ở biên. Luôn thử: rỗng, một phần tử, phần tử đầu, phần tử cuối, nhỏ hơn mọi phần tử, lớn hơn mọi phần tử.</span></div>
+        say: "Lỗi thứ hai, chỉ kiểm thử ở giữa. Lỗi lệch một nằm ở biên, nên luôn thử mảng rỗng, một phần tử, phần tử đầu, phần tử cuối, giá trị nhỏ hơn mọi phần tử, và lớn hơn mọi phần tử."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Nghĩ “mảng của tôi không bao giờ lớn thế” <b class="red">(rủi ro)</b>
+          <br><span class="note">Dữ liệu lớn dần theo năm. Dùng công thức không tràn ngay từ đầu, chi phí bằng 0.</span></div>
+        say: "Lỗi thứ ba, nghĩ mảng của mình không bao giờ lớn đến thế. Dữ liệu lớn dần theo năm, nên hãy dùng công thức không tràn ngay từ đầu, chi phí gần như bằng 0."
+
+  # ───────────────────────── 6. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "len(range(5, 20)) == 15 and 20 - 5 + 1 == 16"
+      - "alg.mid32(2147483640, 2147483646, False) == -5 and alg.mid32(2147483640, 2147483646, True) == 2147483643"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Khoảng nửa mở <code>[5, 20)</code> và khoảng đóng <code>[5, 20]</code> có mấy phần tử?</td></tr>
+          <tr><td>2</td><td>32 bit, <code>lo = 2147483640</code>, <code>hi = 2147483646</code>: hai công thức điểm giữa cho gì?</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, khoảng nửa mở từ 5 tới trước 20 và khoảng đóng từ 5 tới 20 có bao nhiêu phần tử? Câu hai, với số 32 bit, lo và hi như trên màn hình, hai công thức điểm giữa cho kết quả gì? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <p>① Nửa mở: $20 - 5 = \hl{15}$. Đóng: $20 - 5 + 1 = \hl{16}$ — thêm 1 vì có cả số 20.</p>
+        say: "Đáp án câu một, khoảng nửa mở có 20 trừ 5 bằng 15 phần tử. Khoảng đóng có 16, thêm 1 vì có cả số 20."
+      - show: |
+          <table class="t"><tr><th>công thức</th><th>trung gian</th><th>điểm giữa</th></tr>
+          <tr><td><code>(lo + hi) / 2</code></td><td>tổng quay vòng thành $-10$</td><td class="red">$\hl{-5}$ (sai)</td></tr>
+          <tr><td><code>lo + (hi − lo) / 2</code></td><td>$hi - lo = 6$</td><td>$2147483640 + 3 = \hl{2147483643}$</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Câu hai, so hai công thức. Công thức thường có tổng quay vòng thành âm 10, nên cho âm 5, sai. Công thức an toàn tính hi trừ lo bằng 6, cộng một nửa là 3 vào lo, cho kết quả đúng."
+
+  # ───────────────────────── 7. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">nửa mở: hi − lo phần tử</span><span class="a">→</span>
+          <span class="n">một quy ước, đủ bộ ba</span><span class="a">→</span>
+          <span class="n">kiểm ở biên</span><span class="a">→</span>
+          <span class="n">điểm giữa: lo + (hi − lo) / 2</span></div>
+        say: "Tổng kết lại, khoảng nửa mở có hi trừ lo phần tử. Dùng một quy ước với đủ bộ ba khởi tạo, điều kiện, cập nhật. Luôn kiểm ở biên, và tính điểm giữa bằng lo cộng một nửa của hi trừ lo."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> lỗi ẩn ở chỗ “gần như giống nhau”: &lt; hay ≤, n hay n − 1. Viết rõ quy ước một lần, rồi kiểm đúng những chỗ đó.</div>
+        say: "Điều cần mang theo, lỗi hay ẩn ở những chỗ gần như giống nhau, nhỏ hơn hay nhỏ hơn hoặc bằng, n hay n trừ 1. Hãy viết rõ quy ước một lần, rồi kiểm đúng những chỗ đó."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 4): <b>kiểm thử</b> có hệ thống — phân hoạch tương đương và giá trị biên.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 4, ta học kiểm thử có hệ thống, với phân hoạch tương đương và giá trị biên. Hẹn gặp bạn ở bài tiếp theo."

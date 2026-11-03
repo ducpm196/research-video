@@ -1,0 +1,201 @@
+id: L09
+course: MLO
+series: "MLO · MLOps: đưa mô hình học máy vào vận hành"
+title: "Bài 9 — Trôi khái niệm, vòng phản hồi và huấn luyện lại"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/mlo.yaml L09; audit/mlo/verify_mlo.py L09; J. Gama và cộng sự, A Survey on Concept Drift Adaptation, ACM Computing Surveys 46(4), 2014; A. J. B. Chaney, B. M. Stewart, B. E. Engelhardt, How Algorithmic Confounding in Recommendation Systems Increases Homogeneity, RecSys (2018)"
+assumes: [arith]
+# Quy ước: trôi dữ liệu = phân bố đầu vào P(x) đổi; trôi khái niệm = quan hệ P(y | x) đổi (cùng đầu vào, nhãn đúng khác đi).
+#   alg.feedback_loop: 5 món, ban đầu mỗi món 10 lượt; mỗi vòng chỉ hiện 2 món nhiều lượt nhất, mỗi món được hiện nhận thêm 10 lượt.
+objectives:
+  - "Phân biệt trôi dữ liệu và trôi khái niệm"
+  - "Nhận ra vòng phản hồi do chính mô hình gây ra"
+  - "Huấn luyện lại có kiểm tra trước khi thay"
+asr_reviewed:
+  - {sentence: "Bước hai, các vòng sau lặp lại y hệt.", reason: "ASR chép “Bước 2, các vòng sau lập lại y hợp.” (0.778): lệch âm/thanh thuần Việt: lặp/lập, hệt/hợp — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Trôi khái niệm có thể xảy ra khi phân bố đầu vào y nguyên, và chỉ lộ ra khi so dự đoán với nhãn thật, nên cần có đường thu nhãn, dù bị trễ.", reason: "ASR chép “Trôi khái niệm có thể xảy ra khi phân bố đầu vào yên nguyên và chỉ lộ ra khi so dự đoán với nhãn thật nên cần có đường thu nhãn, dù bị trễ.” (0.971): lệch âm/thanh thuần Việt: i/yên — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Mô hình tự tạo ra dữ liệu của chính nó"
+    checks:
+      - "alg.feedback_loop()[1] == [110, 110, 10, 10, 10]"
+    steps:
+      - show: |
+          <p>Trang chỉ gợi ý những món đang được bấm nhiều nhất. Khách chỉ bấm được món mình thấy. Dữ liệu mới vì thế toàn là lượt bấm vào chính những món đã được gợi ý — và lần huấn luyện sau, chúng càng được gợi ý nhiều hơn. Ba món còn lại không bao giờ có cơ hội.</p>
+          <div class="box key">Hôm nay: <b>trôi khái niệm</b> và <b>vòng phản hồi</b> — khi thế giới đổi, và khi chính mô hình làm thế giới đổi.</div>
+        focus: [1, 1, 1, 1, 2]
+        say: "Chào bạn, trang chỉ gợi ý những món đang được bấm nhiều nhất. Khách chỉ bấm được món mình thấy. Dữ liệu mới vì thế toàn là lượt bấm vào chính những món đã được gợi ý, và lần huấn luyện sau, chúng càng được gợi ý nhiều hơn. Ba món còn lại không bao giờ có cơ hội. Hôm nay ta học trôi khái niệm và vòng phản hồi, khi thế giới đổi, và khi chính mô hình làm thế giới đổi."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: trôi dữ liệu, tỉ lệ trong một nhóm con"
+    checks:
+      - "round(alg.psi([0.25] * 4, [0.1, 0.2, 0.3, 0.4]), 3) == 0.228"
+      - "30 / 100 == 0.3 and 3 / 100 == 0.03 and round(40 / 70, 3) == 0.571"
+    steps:
+      - show: |
+          <p>Ở bài 8: <b>trôi dữ liệu</b> đo bằng chỉ số ổn định quần thể — so tỉ lệ từng nhóm lúc huấn luyện và hiện tại. Bốn nhóm thu nhập từ 25% mỗi nhóm thành 10/20/30/40% cho chỉ số $\approx 0{,}228$.</p>
+        say: "Ở bài 8, ta đo trôi dữ liệu bằng chỉ số ổn định quần thể, tức so tỉ lệ từng nhóm lúc huấn luyện với hiện tại. Bốn nhóm thu nhập từ 25 phần trăm mỗi nhóm thành 10, 20, 30, 40 phần trăm cho chỉ số khoảng 0 phẩy 228."
+      - show: |
+          <table class="t"><tr><th>đơn mua nhiều khẩu trang (số minh hoạ)</th><th>số đơn gian lận</th><th>tỉ lệ gian lận trong nhóm này</th></tr>
+          <tr><td>100 đơn, năm trước</td><td>30</td><td>$\frac{30}{100} = 0{,}30$</td></tr>
+          <tr><td>100 đơn, mùa dịch</td><td>3</td><td>$\frac{3}{100} = 0{,}03$</td></tr></table>
+          <p>Phần $\frac{40}{70}$: lấy phần của nhóm chia cho tổng. Ví dụ $\frac{40}{70} \approx 0{,}571 = 57{,}1\%$.</p>
+        introduces: [frac]
+        focus: [1, "1.2", "1.3", 2, 2]
+        say: "Phép tính thứ hai là tỉ lệ trong một nhóm con, với số minh hoạ. Năm trước, trong 100 đơn mua nhiều khẩu trang có 30 đơn gian lận, tỉ lệ 0 phẩy 3. Mùa dịch, cũng 100 đơn như thế chỉ có 3 đơn gian lận, tỉ lệ 0 phẩy 03. Cuối cùng, phần của một nhóm bằng số của nhóm chia cho tổng. Ví dụ 40 chia 70 khoảng 0 phẩy 571, tức 57 phẩy 1 phần trăm."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: hai loại trôi, vòng phản hồi"
+    steps:
+      - show: |
+          <table class="t"><tr><th>loại</th><th>cái gì đổi</th><th>ví dụ</th></tr>
+          <tr><td><b>trôi dữ liệu</b></td><td>phân bố đầu vào $P(x)$</td><td>nhiều khách thu nhập cao hơn (bài 8)</td></tr>
+          <tr><td><b>trôi khái niệm</b></td><td>quan hệ $P(y \mid x)$: cùng đầu vào, nhãn đúng khác đi</td><td>sau dịch bệnh, “mua nhiều khẩu trang” không còn là dấu hiệu gian lận</td></tr>
+          <tr><td><b>vòng phản hồi</b></td><td>dự đoán của mô hình làm đổi dữ liệu nó học lần sau</td><td>chỉ gợi ý món phổ biến → chỉ món đó có lượt bấm</td></tr></table>
+        introduces: [prob, given]
+        focus: [1, "1.2", "1.3", "1.3", "1.4"]
+        say: "Bảng phân biệt hai loại trôi và vòng phản hồi. Trôi dữ liệu là khi phân bố đầu vào, ký hiệu P của x, thay đổi, như có nhiều khách thu nhập cao hơn. Trôi khái niệm là khi xác suất của nhãn y khi biết đầu vào x thay đổi, cùng đầu vào mà nhãn đúng khác đi. Chẳng hạn sau dịch bệnh, mua nhiều khẩu trang không còn là dấu hiệu gian lận. Vòng phản hồi là khi dự đoán của mô hình làm đổi chính dữ liệu nó học lần sau, như chỉ gợi ý món phổ biến thì chỉ món đó có lượt bấm."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Vòng phản hồi: cái được hiện thì được bấm"
+    checks:
+      - "(lambda s: [round(s[0], 2), round(s[-1], 2), round(1 - s[0], 2), round(1 - s[-1], 2)] == [0.57, 0.88, 0.43, 0.12])(alg.feedback_loop()[0])"
+    steps:
+      - show: |
+          <div><svg width="1500" height="345" viewBox="0 0 1500 345"><line x1="150" y1="300" x2="1060" y2="300" stroke="#6b7280" stroke-width="2"/><polyline points="180,151 275,127 370,111 465,100 560,92 655,86 750,81 845,77 940,74 1035,71" fill="none" stroke="#eb6834" stroke-width="4"/><polyline points="180,189 275,213 370,229 465,240 560,248 655,254 750,259 845,263 940,266 1035,269" fill="none" stroke="#2a78d6" stroke-width="4"/><circle cx="180" cy="151" r="8" fill="#eb6834"/><circle cx="180" cy="189" r="8" fill="#2a78d6"/><text x="180" y="330" text-anchor="middle" font-size="20">1</text><circle cx="275" cy="127" r="8" fill="#eb6834"/><circle cx="275" cy="213" r="8" fill="#2a78d6"/><text x="275" y="330" text-anchor="middle" font-size="20">2</text><circle cx="370" cy="111" r="8" fill="#eb6834"/><circle cx="370" cy="229" r="8" fill="#2a78d6"/><text x="370" y="330" text-anchor="middle" font-size="20">3</text><circle cx="465" cy="100" r="8" fill="#eb6834"/><circle cx="465" cy="240" r="8" fill="#2a78d6"/><text x="465" y="330" text-anchor="middle" font-size="20">4</text><circle cx="560" cy="92" r="8" fill="#eb6834"/><circle cx="560" cy="248" r="8" fill="#2a78d6"/><text x="560" y="330" text-anchor="middle" font-size="20">5</text><circle cx="655" cy="86" r="8" fill="#eb6834"/><circle cx="655" cy="254" r="8" fill="#2a78d6"/><text x="655" y="330" text-anchor="middle" font-size="20">6</text><circle cx="750" cy="81" r="8" fill="#eb6834"/><circle cx="750" cy="259" r="8" fill="#2a78d6"/><text x="750" y="330" text-anchor="middle" font-size="20">7</text><circle cx="845" cy="77" r="8" fill="#eb6834"/><circle cx="845" cy="263" r="8" fill="#2a78d6"/><text x="845" y="330" text-anchor="middle" font-size="20">8</text><circle cx="940" cy="74" r="8" fill="#eb6834"/><circle cx="940" cy="266" r="8" fill="#2a78d6"/><text x="940" y="330" text-anchor="middle" font-size="20">9</text><circle cx="1035" cy="71" r="8" fill="#eb6834"/><circle cx="1035" cy="269" r="8" fill="#2a78d6"/><text x="1035" y="330" text-anchor="middle" font-size="20">10</text><g fill="#1f2937"><text x="160" y="133" font-size="22" fill="#eb6834">57%</text><text x="1015" y="53" font-size="22" fill="#eb6834">88%</text><text x="160" y="225" font-size="22" fill="#2a78d6">43%</text><text x="1015" y="251" font-size="22" fill="#2a78d6">12%</text><text x="1090" y="70" font-size="22" fill="#eb6834">cam: phần lượt của</text><text x="1090" y="100" font-size="22" fill="#eb6834">2 món được hiện</text><text x="1090" y="150" font-size="22" fill="#2a78d6">xanh: 3 món không</text><text x="1090" y="180" font-size="22" fill="#2a78d6">bao giờ được hiện</text><text x="1090" y="240" font-size="20">trục ngang: vòng 1 tới 10</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ phần lượt bấm qua 10 vòng. Đường cam là 2 món được hiện, đi từ 57 lên 88 phần trăm. Đường xanh là 3 món không bao giờ được hiện, tụt từ 43 xuống 12 phần trăm. Không có món nào đổi chất lượng, chỉ có việc được hiện hay không, và chính mô hình quyết định việc đó."
+
+  - id: example
+    kind: example
+    title: "Năm món ngang nhau, hai món thắng mãi"
+    checks:
+      - "[round(x, 2) for x in alg.feedback_loop()[0][:3]] == [0.57, 0.67, 0.73] and round(alg.feedback_loop()[0][-1], 2) == 0.88"
+      - "[alg.feedback_loop(rounds=r)[1] for r in (1, 2, 3)] == [[20, 20, 10, 10, 10], [30, 30, 10, 10, 10], [40, 40, 10, 10, 10]] and [sum(alg.feedback_loop(rounds=r)[1]) for r in (1, 2, 3)] == [70, 90, 110] and 2 * 110 == 220"
+    steps:
+      - show: |
+          <p>5 món, mỗi món ban đầu 10 lượt. Mỗi vòng chỉ hiện 2 món nhiều lượt nhất (hoà thì món số nhỏ); món được hiện nhận thêm 10 lượt.</p>
+          <table class="t"><tr><th>sau vòng</th><th>lượt 5 món</th><th>phần của 2 món được hiện</th></tr>
+          <tr><td>1</td><td>20, 20, 10, 10, 10</td><td>$\frac{40}{70} \approx 57\%$</td></tr></table>
+          <p><b>Bước 1</b> — năm món hoà nhau, món 1 và 2 được hiện.</p>
+        focus: [1, 1, 2, "2.2", 3]
+        say: "Có 5 món, mỗi món ban đầu 10 lượt. Mỗi vòng chỉ hiện 2 món nhiều lượt nhất, và món được hiện nhận thêm 10 lượt. Bảng ghi lượt của 5 món sau mỗi vòng. Bước một, năm món hoà nhau, nên món một và món hai được hiện, mỗi món lên 20 lượt, và hai món chiếm 40 trên 70, khoảng 57 phần trăm. Từ đây hai món này luôn nhiều lượt nhất."
+      - show: |
+          <table class="t"><tr><th>sau vòng</th><th>lượt 5 món</th><th>phần của 2 món được hiện</th></tr>
+          <tr><td>1</td><td>20, 20, 10, 10, 10</td><td>57%</td></tr>
+          <tr><td>2</td><td>30, 30, 10, 10, 10</td><td>$\frac{60}{90} \approx 67\%$</td></tr>
+          <tr><td>3</td><td>40, 40, 10, 10, 10</td><td>$\frac{80}{110} \approx 73\%$</td></tr></table>
+          <p><b>Bước 2</b> — mỗi vòng tổng tăng 20 lượt, và cả 20 lượt đều về 2 món đó.</p>
+        focus: [1, "1.3", "1.4", 2]
+        say: "Bước hai, các vòng sau lặp lại y hệt. Sau vòng hai, hai món có 60 trên 90 lượt, khoảng 67 phần trăm. Sau vòng ba là 80 trên 110, khoảng 73 phần trăm. Mỗi vòng tổng tăng 20 lượt, và cả 20 lượt đều về hai món đó."
+      - clear: true
+        show: |
+          <p><b>Bước 3</b> — sau vòng $k$: hai món có $2 \cdot (10 + 10k)$ lượt, tổng là $50 + 20k$.</p>
+          $$k = 10:\ \frac{2 \cdot 110}{50 + 200} = \frac{220}{250} = \hl{88\%}$$
+          <p>Sau 10 vòng: 2 món có 110 lượt, 3 món kia vẫn đứng yên ở 10.</p>
+        introduces: [cdot]
+        focus: [1, 1, 2, 3]
+        say: "Bước ba, viết thành công thức. Sau vòng k, mỗi món được hiện có 10 cộng 10 k lượt, nên hai món có 2 nhân 10 cộng 10 k, còn tổng là 50 cộng 20 k. Với k bằng 10, phần của hai món là 220 trên 250, tức 88 phần trăm. Sau 10 vòng, 2 món có 110 lượt, còn 3 món kia vẫn đứng yên ở 10."
+      - show: |
+          <p><b>Bước 4</b> — 3 món kia không dở; chúng <b>chưa bao giờ được hiện</b>.</p>
+          <div class="box key">Sửa: dành một phần nhỏ lượt hiển thị để <b>khám phá</b> ngẫu nhiên, và ghi lại món nào đã được hiện để không nhầm “không được bấm” với “không được thấy”.</div>
+        focus: [1, 1, 2]
+        say: "Bước bốn, rút ra kết luận. Không phải vì chúng dở, mà vì chúng chưa bao giờ được hiện. Cách sửa là dành một phần nhỏ lượt hiển thị để khám phá ngẫu nhiên, và ghi lại món nào đã được hiện, để không nhầm không được bấm với không được thấy."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác"
+    checks:
+      - "all(round(s, 6) == round((20 + 20 * k) / (50 + 20 * k), 6) for k, s in enumerate(alg.feedback_loop()[0], 1))"
+      - "sum(alg.feedback_loop()[1]) == 50 + 20 * 10 == 250 and round(30 / 250, 2) == 0.12 and round(1 - 0.88, 2) == 0.12"
+    steps:
+      - show: |
+          <table class="t"><tr><th>kiểm</th><th>cách khác</th><th>kết quả</th></tr>
+          <tr><td>công thức với mô phỏng</td><td>máy chạy từng vòng, so với $\frac{20 + 20k}{50 + 20k}$ ở cả 10 vòng</td><td>khớp cả 10 ✓</td></tr>
+          <tr><td>đếm tổng</td><td>$110 + 110 + 10 + 10 + 10 = 250 = 50 + 20 \cdot 10$</td><td>✓</td></tr>
+          <tr><td>phần còn lại</td><td>3 món kia: $\frac{30}{250} = 12\%$, và $100\% - 88\% = 12\%$</td><td>✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.4"]
+        say: "Kiểm bằng đường khác. Cho máy chạy từng vòng rồi so với công thức 20 cộng 20 k trên 50 cộng 20 k, khớp cả 10 vòng. Đếm thẳng tổng lượt, 110 cộng 110 cộng ba lần 10 bằng 250, đúng bằng 50 cộng 20 nhân 10, vì mỗi vòng thêm 20 lượt. Ba món kia có 30 trên 250, tức 12 phần trăm. Đi đường ngược, 100 trừ 88 cũng ra 12 phần trăm."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp"
+    checks:
+      - "next(k for k, s in enumerate(alg.feedback_loop()[0], 1) if round(s, 6) >= 0.8) == 5 and 5 * 7 == 35 and 35 // 5 == 7"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Huấn luyện lại theo lịch rồi thay mô hình ngay <b class="red">(thay mù)</b>
+          <br><span class="note">Dữ liệu tuần này có thể hỏng (nhãn thiếu, nguồn lỗi). Mô hình mới phải qua cùng các kiểm thử và so với bản đang chạy trước khi thay.</span></div>
+        say: "Lỗi thứ nhất, huấn luyện lại theo lịch rồi thay mô hình ngay. Dữ liệu tuần này có thể hỏng, nhãn thiếu hay nguồn lỗi, nên mô hình mới phải qua cùng các kiểm thử và so với bản đang chạy trước khi thay."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Chỉ theo dõi đầu vào, bỏ qua trôi khái niệm <b class="red">(không thấy)</b>
+          <br><span class="note">Trôi khái niệm có thể xảy ra khi phân bố đầu vào y nguyên. Chỉ lộ ra khi so dự đoán với <b>nhãn thật</b> — cần đường thu nhãn, dù trễ.</span></div>
+        say: "Lỗi thứ hai, chỉ theo dõi đầu vào mà bỏ qua trôi khái niệm. Trôi khái niệm có thể xảy ra khi phân bố đầu vào y nguyên, và chỉ lộ ra khi so dự đoán với nhãn thật, nên cần có đường thu nhãn, dù bị trễ."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Huấn luyện trên chính quyết định của mô hình <b class="red">(tự xác nhận)</b>
+          <br><span class="note">Mô hình duyệt vay chỉ biết khách được duyệt có trả nợ không; khách bị từ chối không bao giờ có nhãn. Dữ liệu mới chỉ xác nhận lại quyết định cũ.</span></div>
+        say: "Lỗi thứ ba, huấn luyện trên chính quyết định của mô hình. Mô hình duyệt vay chỉ biết khách được duyệt có trả nợ không, còn khách bị từ chối không bao giờ có nhãn, nên dữ liệu mới chỉ xác nhận lại quyết định cũ."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Tăng tần suất huấn luyện lại mà chưa có khám phá <b class="red">(vòng khép nhanh hơn)</b></div>
+          <table class="t"><tr><th>mỗi vòng = một lần huấn luyện lại</th><th>2 món chiếm từ 80% trở lên sau</th></tr>
+          <tr><td>huấn luyện lại hằng tuần</td><td>5 vòng = 35 ngày</td></tr>
+          <tr><td>huấn luyện lại hằng ngày</td><td class="red">5 vòng = 5 ngày</td></tr></table>
+          <p class="note">Huấn luyện lại nhanh giúp đuổi kịp trôi thật, nhưng cũng khép vòng phản hồi nhanh gấp 7. Trước khi tăng tần suất: bật khám phá, ghi lại món đã được hiện, và so với bản đang chạy.</p>
+        focus: [1, 2, "2.2", "2.3", 3, 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, tăng tần suất huấn luyện lại mà chưa có khám phá, làm vòng phản hồi khép nhanh hơn. Coi mỗi vòng là một lần huấn luyện lại, hai món chiếm từ 80 phần trăm trở lên sau 5 vòng. Huấn luyện lại hằng tuần thì mất 35 ngày. Huấn luyện lại hằng ngày thì chỉ mất 5 ngày. Huấn luyện lại nhanh giúp đuổi kịp trôi thật, nhưng cũng khép vòng phản hồi nhanh gấp 7. Trước khi tăng tần suất, hãy bật khám phá, ghi lại món đã được hiện, và so với bản đang chạy."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.feedback_loop(rounds=5)[1] == [60, 60, 10, 10, 10] and round(alg.feedback_loop(rounds=5)[0][-1], 2) == 0.8"
+      - "10 + 10 * 5 == 60 and 50 + 20 * 5 == 150 == sum(alg.feedback_loop(rounds=5)[1])"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Cùng mô hình gợi ý, sau 5 vòng: mỗi món có bao nhiêu lượt? 2 món được hiện chiếm bao nhiêu phần?</td></tr>
+          <tr><td>2</td><td>Mô hình chống thư rác: kẻ gửi rác đổi cách viết, nhưng tỉ lệ thư rác trong hộp thư vẫn như cũ. Đó là trôi gì?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, cùng mô hình gợi ý, sau 5 vòng thì mỗi món có bao nhiêu lượt? 2 món được hiện chiếm bao nhiêu phần? Câu hai, với mô hình chống thư rác, kẻ gửi rác đổi cách viết, nhưng tỉ lệ thư rác trong hộp thư vẫn như cũ. Đó là trôi gì? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① Mỗi món được hiện: $10 + 10 \cdot 5 = 60$ lượt; 3 món kia giữ 10. Tổng $50 + 20 \cdot 5 = 150$.</p>
+          <p>60, 60, 10, 10, 10 → 2 món chiếm $\frac{120}{150} = \hl{80\%}$.</p>
+        focus: [1, 1, 2]
+        say: "Đáp án câu một, làm từng bước. Mỗi món được hiện có 10 cộng 10 nhân 5, bằng 60 lượt, ba món kia giữ 10, và tổng là 50 cộng 20 nhân 5, bằng 150. Vậy các món có 60, 60, 10, 10, 10 lượt, 2 món được hiện chiếm 120 trên 150, tức 80 phần trăm."
+      - show: |
+          <p>② Quan hệ giữa cách viết và nhãn rác đổi → <b>trôi khái niệm</b> (và cũng là trôi dữ liệu nếu phân bố từ ngữ đổi).</p>
+        say: "Câu hai, quan hệ giữa cách viết và nhãn rác đã đổi, nên đó là trôi khái niệm, và cũng là trôi dữ liệu nếu phân bố từ ngữ thay đổi."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">trôi dữ liệu: đầu vào đổi</span><span class="a">→</span>
+          <span class="n">trôi khái niệm: quan hệ đổi, cần nhãn thật</span><span class="a">→</span>
+          <span class="n">vòng phản hồi: mô hình đổi dữ liệu của chính nó</span><span class="a">→</span>
+          <span class="n">huấn luyện lại có kiểm tra, dành chỗ khám phá</span></div>
+        say: "Tổng kết lại, trôi dữ liệu là đầu vào đổi, trôi khái niệm là quan hệ đổi và cần nhãn thật để thấy. Vòng phản hồi là khi mô hình đổi dữ liệu của chính nó, nên hãy huấn luyện lại có kiểm tra, và dành chỗ cho khám phá."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> một mô hình đang chạy là một tác nhân trong thế giới, không chỉ là người quan sát. Hãy hỏi: dữ liệu mai này sẽ khác đi thế nào <b>vì</b> mô hình hôm nay?</div>
+        say: "Điều cần mang theo, một mô hình đang chạy là một tác nhân trong thế giới, không chỉ là người quan sát. Hãy hỏi dữ liệu mai này sẽ khác đi thế nào vì chính mô hình hôm nay."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 10): <b>hiệu chuẩn xác suất</b>.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 10, ta học hiệu chuẩn xác suất. Hẹn gặp bạn ở bài tiếp theo."

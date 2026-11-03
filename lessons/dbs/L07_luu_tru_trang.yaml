@@ -1,0 +1,248 @@
+id: L07
+course: DBS
+series: "DBS · Cơ sở dữ liệu"
+title: "Bài 7 — Lưu trữ: trang đĩa, tệp heap và chi phí quét"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/dbs.yaml L07; audit/dbs/verify_dbs.py L07; R. Ramakrishnan, J. Gehrke, Database Management Systems (2003), chương 8–9"
+assumes: [arith, cdot, frac, approx, power, ltgt]
+# Quy ước: trang 8 KB = 8192 byte; mỗi dòng 80 byte; một phần trang dành cho đầu trang nên lấy tròn 100 dòng mỗi trang (nói rõ).
+#   Giả định thời gian (ghi rõ là giả định, cùng con số OSY bài 11): đọc ngẫu nhiên một trang trên đĩa quay ≈ 8 ms; đọc tuần tự
+#   ≈ 0,05 ms mỗi trang (8 KB ở khoảng 160 MB/s). SSD: đọc ngẫu nhiên ≈ 0,1 ms. Mọi phép tính kiểm bằng math trong checks.
+objectives:
+  - "Ước lượng số trang của một bảng"
+  - "Giải thích vì sao đơn vị chi phí là số lần đọc trang"
+  - "So sánh đọc tuần tự và đọc ngẫu nhiên"
+asr_reviewed:
+  - {sentence: "Một mi li giây bằng một triệu na-nô giây, nên 8 mi li giây là tám triệu na-nô giây.", reason: "ASR chép “Một mili giây bằng 1 triệu nano giây, nên 8 mili giây là 8 triệu nano giây.” (0.684): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Dù chỉ cần một dòng, đĩa vẫn phải đọc cả trang 8 ki-lô-byte chứa nó.", reason: "ASR chép “Du chỉ cần một dòng, đĩa vẫn phải đọc cả trang 8kg bai chứa nó.” (0.788): KB đọc “ki-lô-byte” theo lexicon của khoá, ASR viết “kilobyte/kg”; lệch âm/thanh thuần Việt: dù/du — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Một ki-lô-byte là 1024 byte, nên 8 ki-lô-byte là 8 nhân 1024 bằng 8192 byte.", reason: "ASR chép “1 kg bài là 1.024 bài, nên 8 kg bài là 8 nhân 1.024 bằng 8.192 bài.” (0.806): KB đọc “ki-lô-byte” theo lexicon của khoá, ASR viết “kilobyte/kg”; byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Kiểm bằng đường khác, ta đếm theo byte thay vì theo dòng.", reason: "ASR chép “Kiểm bằng đường khác, ta đếm theo bài thay vì theo dòng.” (0.917): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Một triệu dòng nhân 80 byte được tám mươi triệu byte, chia cho 8192 byte mỗi trang, làm tròn lên được 9766 trang.", reason: "ASR chép “1 triệu dòng nhân 80 bai được 80 triệu bai, chia cho 8.192 bai mỗi trang, làm tròn lên được 9.766 trang.” (0.917): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Còn đọc ngẫu nhiên mỗi trang mất khoảng 8 mi li giây.", reason: "ASR chép “còn độc nỗ nhiên mũi trang mất khoảng 8 mili giây”: cụm “đọc ngẫu nhiên” bị chép lệch cả ở khung 18 (“độc nẫu nhiên”) nhưng đúng ở các câu khác của bài; số 8 và đơn vị đúng — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Lỗi thứ hai, nghĩ dòng rộng cũng không sao.", reason: "ASR chép “Lội thứ hai, nghĩ dòng dòng cũng không sao”: lỗi/lội nhầm thanh (đã biết); rộng → “dòng” lặp từ đứng trước — NOT_VERIFIED bằng tai người; ý “dòng rộng” nói lại ngay ở câu sau (400 byte mỗi dòng)"}
+  - {sentence: "Với ổ thể rắn, đọc ngẫu nhiên khoảng 0 phẩy 1 mi li giây, mười nghìn trang chỉ khoảng 1 giây.", reason: "ASR chép “độc nẫu nhiên khoảng 0,1 mili dây, 10.000 trang chỉ khoảng 1 dây”: số và đơn vị đúng; giây/dây (gi/d) đã biết; “đọc ngẫu” lệch như khung 16"}
+  - {sentence: "Trang, hay khối, là đơn vị mà đĩa đọc và ghi trong một lần, thường là 8 ki-lô-byte.", reason: "“byte” đọc thô /bai/ — probe audit/csa/probes/p1_thuat_ngu.md: ASR chép “bay” 8/8 (cùng âm), đối chứng 0/8; lexicon foreign_ok; “bit” ASR chép “bích/biết” (probe p1 CSA: không cách viết nào phân định âm cuối t/ch) — NOT_VERIFIED bằng tai người; “byte” → “bay” cùng âm"}
+  - {sentence: "Muốn đọc một byte cũng phải đọc cả trang chứa nó.", reason: "“byte” đọc thô /bai/ — probe audit/csa/probes/p1_thuat_ngu.md: ASR chép “bay” 8/8 (cùng âm), đối chứng 0/8; lexicon foreign_ok; “bit” ASR chép “bích/biết” (probe p1 CSA: không cách viết nào phân định âm cuối t/ch) — NOT_VERIFIED bằng tai người; “byte” → “bay” cùng âm"}
+  - {sentence: "Nếu mỗi dòng dài 80 byte, một trang chứa khoảng 102 dòng.", reason: "“byte” đọc thô /bai/ — probe audit/csa/probes/p1_thuat_ngu.md: ASR chép “bay” 8/8 (cùng âm), đối chứng 0/8; lexicon foreign_ok; “bit” ASR chép “bích/biết” (probe p1 CSA: không cách viết nào phân định âm cuối t/ch) — NOT_VERIFIED bằng tai người; “byte” → “bay” cùng âm"}
+  - {sentence: "Nếu mỗi dòng dài tới 400 byte, mỗi trang chỉ còn 20 dòng, bảng một triệu dòng thành năm mươi nghìn trang, quét chậm gấp 5 lần.", reason: "“byte” đọc thô /bai/ — probe audit/csa/probes/p1_thuat_ngu.md: ASR chép “bay” 8/8 (cùng âm), đối chứng 0/8; lexicon foreign_ok; “bit” ASR chép “bích/biết” (probe p1 CSA: không cách viết nào phân định âm cuối t/ch) — NOT_VERIFIED bằng tai người; “byte” → “bay” cùng âm"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Thời gian đi đâu?"
+    steps:
+      - show: |
+          <p>Bảng 1 triệu sinh viên. Câu <code>SELECT * FROM SinhVien WHERE mssv = 123456;</code> mất vài giây, dù so sánh một triệu số chỉ tốn vài mili giây của bộ xử lý.</p>
+          <div class="box key">Hôm nay: bảng nằm trên đĩa thế nào, và vì sao chi phí truy vấn đo bằng <b>số lần đọc trang</b>, không phải số phép so sánh.</div>
+        focus: [1, 1, 2]
+        say: "Chào bạn, một bảng có một triệu sinh viên. Câu truy vấn tìm một mã số mất tới vài giây, dù so sánh một triệu con số chỉ tốn vài mi li giây của bộ xử lý. Hôm nay ta xem bảng nằm trên đĩa thế nào, và vì sao chi phí truy vấn được đo bằng số lần đọc trang, chứ không phải số phép so sánh."
+
+  # ───────────────────────── 1b. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: đơn vị và phép chia làm tròn lên"
+    checks:
+      - "8 * 1024 == 8192 and 8e-3 / 1e-9 == 8 * 10 ** 6"
+      - "math.ceil(1001 / 100) == 11 and 1001 - 10 * 100 == 1 and math.ceil(1000 / 100) == 10"
+    steps:
+      - show: |
+          <table class="t"><tr><th>đơn vị</th><th>bằng</th><th>ví dụ</th></tr>
+          <tr><td>1 KB (ki-lô-byte)</td><td>1024 byte</td><td>8 KB = $8 \cdot 1024 = 8192$ byte</td></tr>
+          <tr><td>1 ms (mi li giây)</td><td>$10^6$ ns (na-nô giây)</td><td>8 ms = $8\,000\,000$ ns</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Trước hết, ôn hai đơn vị ở khoá Hệ thống máy tính. Một ki-lô-byte là 1024 byte, nên 8 ki-lô-byte là 8 nhân 1024 bằng 8192 byte. Một mi li giây bằng một triệu na-nô giây, nên 8 mi li giây là tám triệu na-nô giây."
+      - show: |
+          <p>Chia số dòng cho số dòng mỗi trang phải <b>làm tròn lên</b>: trang cuối chưa đầy vẫn là một trang.</p>
+          <table class="t"><tr><th>số dòng</th><th>100 dòng mỗi trang</th><th>số trang</th></tr>
+          <tr><td>1000</td><td>vừa đủ 10 trang đầy</td><td>10</td></tr>
+          <tr><td>1001</td><td>10 trang đầy + 1 dòng lẻ</td><td>$\lceil 1001 / 100 \rceil = 11$</td></tr></table>
+        introduces: [ceil]
+        focus: [1, 1, "2.2", "2.3"]
+        say: "Thứ hai, khi chia số dòng cho số dòng mỗi trang, ta phải làm tròn lên. Lý do là trang cuối chưa đầy vẫn chiếm trọn một trang trên đĩa. Một nghìn dòng vừa đủ 10 trang đầy. Một nghìn lẻ một dòng thì cần 11 trang, vì dòng lẻ cuối cùng phải nằm ở một trang riêng."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: trang, tệp heap"
+    checks:
+      - "8 * 1024 == 8192 and 8192 // 80 == 102"
+    steps:
+      - show: |
+          <p><b>Trang</b> (khối): đơn vị đĩa đọc và ghi một lần, thường 8 KB = 8192 byte. Đọc 1 byte cũng phải đọc cả trang chứa nó.</p>
+          <p>Mỗi dòng dài 80 byte: $8192 / 80 \approx 102$ dòng mỗi trang; trừ phần đầu trang, lấy tròn <b>100 dòng mỗi trang</b>.</p>
+          <p><b>Tệp heap</b>: các trang của bảng, dòng xếp không theo thứ tự nào — thêm dòng mới vào chỗ còn trống.</p>
+        focus: [1, 1, 2, 2, 3]
+        say: "Trang, hay khối, là đơn vị mà đĩa đọc và ghi trong một lần, thường là 8 ki-lô-byte. Muốn đọc một byte cũng phải đọc cả trang chứa nó. Nếu mỗi dòng dài 80 byte, một trang chứa khoảng 102 dòng. Trừ đi phần đầu trang, ta lấy tròn 100 dòng mỗi trang. Tệp heap là tập các trang của một bảng, các dòng xếp không theo thứ tự nào, dòng mới được thêm vào chỗ còn trống."
+
+  # ───────────────────────── 3. VÌ SAO ĐẾM TRANG ─────────────────────────
+  - id: why
+    kind: concept
+    title: "Vì sao đếm số lần đọc trang"
+    checks:
+      - "8e-3 / 100e-9 == 80000"
+    steps:
+      - show: |
+          <p>Như khoá Hệ điều hành: đọc một trang từ đĩa quay mất khoảng <b>8 ms</b>, còn truy cập bộ nhớ khoảng <b>100 ns</b> — chậm hơn $80\,000$ lần.</p>
+          <div class="box key">So sánh dòng trong bộ nhớ gần như miễn phí so với việc đưa trang lên bộ nhớ. Nên chi phí truy vấn = <b>số lần đọc trang</b>.</div>
+        focus: [1, 2]
+        say: "Như ở khoá Hệ điều hành, đọc một trang từ đĩa quay mất khoảng 8 mi li giây, còn truy cập bộ nhớ chỉ khoảng 100 na-nô giây, chậm hơn tám mươi nghìn lần. So với việc đưa trang từ đĩa lên bộ nhớ, so sánh các dòng gần như miễn phí, nên chi phí truy vấn được đo bằng số lần đọc trang."
+
+  # ───────────────────────── 3b. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Đầu đọc trượt một mạch hay nhảy cóc"
+    steps:
+      - show: |
+          <div><svg width="1500" height="460" viewBox="0 0 1500 460"><defs><marker id="arD7g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#059669"/></marker></defs><defs><marker id="arD7o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#eb6834"/></marker></defs><text x="60" y="40" font-size="26" font-weight="bold" fill="#1f2937">Tệp heap: các trang nằm liền nhau trên đĩa</text><rect x="60" y="170" width="110" height="70" fill="#eff6ff" stroke="#1f2937" stroke-width="2"/><text x="115" y="215" font-size="24" text-anchor="middle" fill="#1f2937">trang 1</text><rect x="185" y="170" width="110" height="70" fill="#eff6ff" stroke="#1f2937" stroke-width="2"/><text x="240" y="215" font-size="24" text-anchor="middle" fill="#1f2937">trang 2</text><rect x="310" y="170" width="110" height="70" fill="#eff6ff" stroke="#1f2937" stroke-width="2"/><text x="365" y="215" font-size="24" text-anchor="middle" fill="#1f2937">trang 3</text><rect x="435" y="170" width="110" height="70" fill="#eff6ff" stroke="#1f2937" stroke-width="2"/><text x="490" y="215" font-size="24" text-anchor="middle" fill="#1f2937">trang 4</text><rect x="560" y="170" width="110" height="70" fill="#eff6ff" stroke="#1f2937" stroke-width="2"/><text x="615" y="215" font-size="24" text-anchor="middle" fill="#1f2937">trang 5</text><rect x="685" y="170" width="110" height="70" fill="#eff6ff" stroke="#1f2937" stroke-width="2"/><text x="740" y="215" font-size="24" text-anchor="middle" fill="#1f2937">trang 6</text><rect x="810" y="170" width="110" height="70" fill="#eff6ff" stroke="#1f2937" stroke-width="2"/><text x="865" y="215" font-size="24" text-anchor="middle" fill="#1f2937">trang 7</text><rect x="935" y="170" width="110" height="70" fill="#eff6ff" stroke="#1f2937" stroke-width="2"/><text x="990" y="215" font-size="24" text-anchor="middle" fill="#1f2937">trang 8</text><rect x="1060" y="170" width="110" height="70" fill="#eff6ff" stroke="#1f2937" stroke-width="2"/><text x="1115" y="215" font-size="24" text-anchor="middle" fill="#1f2937">trang 9</text><rect x="1185" y="170" width="110" height="70" fill="#eff6ff" stroke="#1f2937" stroke-width="2"/><text x="1240" y="215" font-size="24" text-anchor="middle" fill="#1f2937">trang 10</text><line x1="60" y1="120" x2="1290" y2="120" stroke="#059669" stroke-width="5" marker-end="url(#arD7g)"/><text x="60" y="100" font-size="24" fill="#059669" font-weight="bold">tuần tự: đầu đọc trượt một mạch, khoảng 0,05 ms mỗi trang</text><path d="M865,245 Q552.5,370 240,250" fill="none" stroke="#eb6834" stroke-width="4" marker-end="url(#arD7o)"/><path d="M240,245 Q677.5,370 1115,250" fill="none" stroke="#eb6834" stroke-width="4" marker-end="url(#arD7o)"/><path d="M1115,245 Q802.5,370 490,250" fill="none" stroke="#eb6834" stroke-width="4" marker-end="url(#arD7o)"/><text x="60" y="410" font-size="24" fill="#eb6834" font-weight="bold">ngẫu nhiên: mỗi lần nhảy phải dời đầu đọc, khoảng 8 ms mỗi trang</text><text x="60" y="445" font-size="22" fill="#1f2937">mỗi trang 8 KB chứa khoảng 100 dòng: đọc 1 dòng cũng phải đọc cả trang</text></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ các trang của một bảng nằm liền nhau trên đĩa. Đọc tuần tự, đầu đọc trượt một mạch từ trang đầu tới trang cuối, mỗi trang chỉ tốn khoảng 0 phẩy 05 mi li giây. Đọc ngẫu nhiên, mỗi lần nhảy sang một trang xa phải dời đầu đọc, mỗi trang tốn khoảng 8 mi li giây. Dù chỉ cần một dòng, đĩa vẫn phải đọc cả trang 8 ki-lô-byte chứa nó."
+
+  # ───────────────────────── 4. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Một triệu dòng"
+    checks:
+      - "math.ceil(10 ** 6 / 100) == 10000"
+      - "10000 // 2 == 5000"
+    steps:
+      - show: |
+          <p><b>Bước 1</b> — số trang: $10^6$ dòng, 100 dòng mỗi trang → $\lceil 10^6 / 100 \rceil = \hl{10\,000}$ trang.</p>
+          <table class="t"><tr><th>truy vấn (không có chỉ mục)</th><th>số trang phải đọc</th></tr>
+          <tr><td>quét cả bảng</td><td>?</td></tr><tr><td>tìm theo khoá chính</td><td>?</td></tr><tr><td>tìm theo cột không duy nhất, hay theo khoảng</td><td>?</td></tr></table>
+        focus: [1, 2]
+        say: "Bước một, bảng một triệu dòng, 100 dòng mỗi trang, chia ra cần mười nghìn trang. Khi chưa có chỉ mục, ta lần lượt tính ba loại truy vấn trong bảng."
+      - show: |
+          <p><b>Bước 2</b> — quét cả bảng: không có cách nào bỏ qua trang nào → đọc đủ $\hl{10\,000}$ trang.</p>
+        say: "Bước hai, quét cả bảng thì không có cách nào bỏ qua trang nào, vì dòng xếp không theo thứ tự. Vậy phải đọc đủ mười nghìn trang."
+      - clear: true
+        show: |
+          <p><b>Bước 3</b> — tìm theo khoá chính: chỉ có <b>một</b> dòng khớp, gặp là dừng. Dòng đó nằm ở trang 1, 2, … hay 10 000 như nhau:</p>
+          <table class="t"><tr><th>gặp ở</th><th>số trang đã đọc</th></tr>
+          <tr><td>trang đầu (may nhất)</td><td>1</td></tr><tr><td>trang giữa (trung bình)</td><td>≈ 5 000</td></tr><tr><td>trang cuối (xấu nhất)</td><td>10 000</td></tr></table>
+        introduces: [dots]
+        focus: [1, 1, "2.2", "2.3", "2.4"]
+        say: "Bước ba, tìm theo khoá chính thì chỉ có một dòng khớp, nên gặp là dừng. Dòng đó có thể nằm ở bất kỳ trang nào với khả năng như nhau. May nhất là trang đầu, chỉ đọc 1 trang. Trung bình là quãng giữa, khoảng năm nghìn trang. Xấu nhất là trang cuối, phải đọc đủ mười nghìn trang."
+      - clear: true
+        show: |
+          <p><b>Bước 4</b> — tìm theo cột không duy nhất (ví dụ <code>diem = 8</code>) hay theo khoảng: thấy một dòng khớp chưa biết đã hết chưa → vẫn phải đọc $\hl{10\,000}$ trang.</p>
+        say: "Bước bốn, tìm theo một cột không duy nhất, như điểm bằng 8, hay theo một khoảng giá trị. Thấy một dòng khớp rồi vẫn chưa biết đã hết chưa, nên vẫn phải đọc đủ mười nghìn trang."
+      - show: |
+          <table class="t"><tr><th>truy vấn (không có chỉ mục)</th><th>số trang phải đọc</th></tr>
+          <tr><td>quét cả bảng</td><td>10 000</td></tr>
+          <tr><td>tìm theo khoá chính (dừng khi gặp)</td><td>trung bình ≈ 5 000, xấu nhất 10 000</td></tr>
+          <tr><td>tìm theo cột không duy nhất, hay theo khoảng</td><td>10 000 (phải xem hết)</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Gom lại, khi chưa có chỉ mục, mọi truy vấn đều phải quét. Quét cả bảng là đọc đủ mười nghìn trang. Tìm theo khoá chính trung bình khoảng năm nghìn trang, xấu nhất mười nghìn. Tìm theo cột không duy nhất hay theo khoảng thì luôn mười nghìn trang."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: đếm bằng byte, lấy trung bình thẳng"
+    checks:
+      - "10 ** 6 * 80 == 80000000 and math.ceil(10 ** 6 * 80 / 8192) == 9766 and 9766 <= 10000"
+      - "__import__('statistics').mean(range(1, 10001)) == 5000.5"
+      - "round(10000 * 0.05e-3, 2) == 0.5"
+    steps:
+      - show: |
+          <table class="t"><tr><th>đường khác</th><th>tính</th><th>kết quả</th></tr>
+          <tr><td>đếm bằng byte, bỏ qua đầu trang</td><td>$10^6 \cdot 80 = 80\,000\,000$ byte, chia 8192</td><td>9 766 trang — gần 10 000</td></tr>
+          <tr><td>trung bình vị trí trang 1 … 10 000</td><td>$(1 + 10\,000) / 2$</td><td>5 000,5 ≈ 5 000</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.3"]
+        say: "Kiểm bằng đường khác, ta đếm theo byte thay vì theo dòng. Một triệu dòng nhân 80 byte được tám mươi triệu byte, chia cho 8192 byte mỗi trang, làm tròn lên được 9766 trang. Con số này hơi nhỏ hơn mười nghìn vì chưa trừ phần đầu trang, nên mười nghìn là ước lượng hợp lý. Còn trung bình của các vị trí từ trang 1 tới trang mười nghìn là 5000 phẩy 5, khớp với khoảng năm nghìn ở bước ba."
+
+  # ───────────────────────── 5. TUẦN TỰ VS NGẪU NHIÊN ─────────────────────────
+  - id: seqrand
+    kind: concept
+    title: "Đọc tuần tự và đọc ngẫu nhiên"
+    checks:
+      - "round(10000 * 0.05e-3, 2) == 0.5 and round(10000 * 8e-3) == 80"
+      - "round(10000 * 8e-3 / (10000 * 0.05e-3)) == 160"
+      - "round(10000 * 0.1e-3, 2) == 1.0"
+    steps:
+      - show: |
+          <p>Giả định đĩa quay: đọc <b>tuần tự</b> các trang liền nhau ≈ 0,05 ms mỗi trang (đầu đọc không phải di chuyển); đọc <b>ngẫu nhiên</b> ≈ 8 ms mỗi trang.</p>
+          <p>10 000 trang: tuần tự $10\,000 \cdot 0{,}05 = 500$ ms $= \hl{0{,}5}$ giây; ngẫu nhiên $10\,000 \cdot 8 = \hl{80}$ giây — gấp 160 lần.</p>
+          <p class="note">SSD đọc ngẫu nhiên ≈ 0,1 ms: 10 000 trang ≈ 1 giây. Khoảng cách thu hẹp nhiều, nhưng tuần tự vẫn nhanh hơn.</p>
+        focus: [1, 1, 2, 2, 3]
+        say: "Giả định một đĩa quay, đọc tuần tự các trang nằm liền nhau mất khoảng 0 phẩy 05 mi li giây mỗi trang, vì đầu đọc không phải di chuyển. Còn đọc ngẫu nhiên mỗi trang mất khoảng 8 mi li giây. Với mười nghìn trang, đọc tuần tự mất nửa giây, còn đọc ngẫu nhiên mất 80 giây, gấp 160 lần. Với ổ thể rắn, đọc ngẫu nhiên khoảng 0 phẩy 1 mi li giây, mười nghìn trang chỉ khoảng 1 giây. Khoảng cách thu hẹp nhiều, nhưng đọc tuần tự vẫn nhanh hơn."
+      - show: |
+          <div class="box key">Vì vậy đôi khi <b>quét cả bảng tuần tự</b> lại nhanh hơn đọc ngẫu nhiên qua chỉ mục — khi kết quả chiếm nhiều phần của bảng. Bộ tối ưu truy vấn cân nhắc đúng điều này.</div>
+        say: "Vì vậy đôi khi quét cả bảng theo thứ tự lại nhanh hơn đọc ngẫu nhiên qua chỉ mục, khi kết quả chiếm một phần lớn của bảng. Bộ tối ưu truy vấn cân nhắc đúng điều này."
+
+  # ───────────────────────── 6. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi người mới hay mắc"
+    checks:
+      - "math.ceil(10 ** 6 / (8192 // 400)) == 50000 and 8192 // 400 == 20"
+      - "round(10000 * 0.05e-3, 2) == 0.5 and round(50000 * 0.05e-3, 2) == 2.5 and 50000 // 10000 == 5"
+      - "round(0.1e-3 / 100e-9) == 1000"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Đếm chi phí bằng số dòng <b class="red">(sai)</b>
+          <br><span class="note">Đọc 100 dòng trên cùng một trang tốn 1 lần đọc; 100 dòng nằm ở 100 trang khác nhau tốn 100 lần.</span></div>
+        say: "Lỗi thứ nhất, đếm chi phí bằng số dòng. Đọc 100 dòng trên cùng một trang chỉ tốn một lần đọc, còn 100 dòng nằm ở 100 trang khác nhau tốn 100 lần đọc."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Nghĩ dòng rộng không sao <b class="red">(sai)</b>
+          <br><span class="note">Mỗi dòng dài 400 byte: chỉ 20 dòng mỗi trang, bảng 1 triệu dòng thành 50 000 trang — quét chậm gấp 5.</span></div>
+          <table class="t"><tr><th>mỗi dòng</th><th>dòng mỗi trang</th><th>trang (1 triệu dòng)</th><th>quét tuần tự</th></tr>
+          <tr><td>80 byte</td><td>100</td><td>10 000</td><td>$10\,000 \cdot 0{,}05$ ms = 0,5 giây</td></tr>
+          <tr><td>400 byte (thêm cột mô tả dài)</td><td>$8192 / 400 \approx 20$</td><td>50 000</td><td>$50\,000 \cdot 0{,}05$ ms = 2,5 giây</td></tr></table>
+        focus: [1, 1, 2, "2.3"]
+        say: "Lỗi thứ hai, nghĩ dòng rộng cũng không sao. Nếu mỗi dòng dài tới 400 byte, mỗi trang chỉ còn 20 dòng, bảng một triệu dòng thành năm mươi nghìn trang, quét chậm gấp 5 lần. Người đã đi làm hay gây ra lỗi này khi thêm một cột mô tả dài vào một bảng bị quét thường xuyên. Quét tuần tự từ nửa giây thành 2 phẩy 5 giây, dù chẳng truy vấn nào cần đọc cột mô tả ấy."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Nghĩ SSD làm chi phí truy cập biến mất <b class="red">(sai)</b>
+          <br><span class="note">SSD đọc ngẫu nhiên ≈ 0,1 ms, bộ nhớ ≈ 100 ns: vẫn chậm hơn khoảng 1000 lần; số lần đọc trang vẫn là thước đo đúng.</span></div>
+        say: "Lỗi thứ ba, nghĩ ổ thể rắn làm chi phí truy cập biến mất. Ổ thể rắn đọc ngẫu nhiên mất khoảng 0 phẩy 1 mi li giây, so với 100 na-nô giây của bộ nhớ, vẫn chậm hơn khoảng một nghìn lần. Vì thế số lần đọc trang vẫn là thước đo đúng."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Đo một lần rồi kết luận <b class="red">(thiếu)</b>
+          <br><span class="note">Lần chạy thứ hai có thể nhanh hẳn vì các trang đã nằm sẵn trong bộ nhớ đệm của hệ quản trị.</span></div>
+        say: "Lỗi thứ tư, đo một lần rồi kết luận. Lần chạy thứ hai có thể nhanh hẳn, vì các trang đã nằm sẵn trong bộ nhớ đệm của hệ quản trị."
+
+  # ───────────────────────── 7. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "math.ceil(2 * 10 ** 6 / 50) == 40000"
+      - "round(40000 * 8e-3) == 320 and round(40000 * 0.05e-3, 2) == 2.0"
+      - "40000 * 8 == 320000 and round(40000 * 0.05) == 2000 and 320 == 5 * 60 + 20 and round(320 / 2.0) == 160 and 2 * 10 ** 6 % 50 == 0"
+    steps:
+      - show: |
+          <p>Bảng 2 triệu dòng, 50 dòng mỗi trang, cùng giả định 8 ms (ngẫu nhiên) và 0,05 ms (tuần tự) mỗi trang.</p>
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Bảng có bao nhiêu trang?</td></tr><tr><td>2</td><td>Quét tuần tự mất bao lâu? Nếu mỗi trang lại phải đọc ngẫu nhiên thì sao?</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm, với bảng hai triệu dòng, 50 dòng mỗi trang, cùng giả định như trên. Câu một, bảng có bao nhiêu trang? Câu hai, quét tuần tự mất bao lâu? Nếu mỗi trang lại phải đọc ngẫu nhiên thì sao? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <p>① $2 \cdot 10^6 / 50 = \hl{40\,000}$ trang (chia hết, không có trang lẻ).</p>
+        say: "Đáp án câu một, hai triệu dòng chia cho 50 dòng mỗi trang, được bốn mươi nghìn trang. Phép chia vừa hết, nên không có trang lẻ nào phải làm tròn lên."
+      - show: |
+          <table class="t"><tr><th>cách đọc</th><th>nhân</th><th>ra mi li giây</th><th>đổi ra giây</th></tr>
+          <tr><td>tuần tự</td><td>$40\,000 \cdot 0{,}05$ ms</td><td>2 000 ms</td><td>$\hl{2}$ giây</td></tr>
+          <tr><td>ngẫu nhiên</td><td>$40\,000 \cdot 8$ ms</td><td>320 000 ms</td><td>$\hl{320}$ giây = 5 phút 20 giây</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.3"]
+        say: "Câu hai, nhân số trang với thời gian mỗi trang rồi đổi ra giây. Tuần tự, bốn mươi nghìn nhân 0 phẩy 05 mi li giây được hai nghìn mi li giây, tức 2 giây. Ngẫu nhiên, bốn mươi nghìn nhân 8 mi li giây được ba trăm hai mươi nghìn mi li giây, tức 320 giây. Đó là 5 phút 20 giây, chậm gấp 160 lần chỉ vì cách đọc."
+
+  # ───────────────────────── 8. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">dòng nằm trong trang</span><span class="a">→</span>
+          <span class="n">đọc đĩa theo trang</span><span class="a">→</span>
+          <span class="n">chi phí = số lần đọc trang</span><span class="a">→</span>
+          <span class="n">tuần tự ≫ ngẫu nhiên</span></div>
+        say: "Tổng kết lại, các dòng nằm trong trang, đĩa đọc theo từng trang, nên chi phí truy vấn bằng số lần đọc trang. Và đọc tuần tự nhanh hơn đọc ngẫu nhiên rất nhiều."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> trước khi tối ưu, hỏi “tầng chậm nhất ở đâu?”. Ở cơ sở dữ liệu, đó thường là số lần chạm tới đĩa.</div>
+        say: "Điều cần mang theo, trước khi tối ưu hãy hỏi tầng chậm nhất nằm ở đâu. Với cơ sở dữ liệu, đó thường là số lần chạm tới đĩa."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 8): <b>chỉ mục cây B+</b> — tìm một dòng trong một triệu chỉ với 3 lần đọc trang.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 8, ta học chỉ mục cây B cộng, tìm một dòng trong một triệu dòng chỉ với 3 lần đọc trang. Hẹn gặp bạn ở bài tiếp theo."

@@ -1,0 +1,218 @@
+id: L04
+course: ESY
+series: "ESY · Hệ thống nhúng và thời gian thực"
+title: "Bài 4 — Chuyển đổi tương tự–số: độ phân giải và lượng tử hoá"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/esy.yaml L04; audit/esy/verify_esy.py L04; W. R. Bennett (1948); W. Kester, ed., The Data Conversion Handbook (Analog Devices, 2005), mục 2.3 (SNR = 6,02n + 1,76 dB cho sóng sin toàn thang)"
+assumes: [arith, cdot, frac, approx, power, ltgt]
+# Quy ước: ADC n bit, điện áp tham chiếu V_ref; mã ra = ⌊V · 2^n / V_ref⌋ (quy ước chia 2^n, như ATmega328P; có chip chia 2^n − 1 —
+#   lỗi 3); mỗi bậc (LSB) = V_ref / 2^n. SNR lượng tử lý tưởng 6,02n + 1,76 dB nêu như kết quả kinh điển (không chứng minh),
+#   chỉ giải thích vì sao mỗi bit thêm khoảng 6 dB (20·log10 2 ≈ 6,02). Mọi số do alg.adc_volts / math trong checks.
+objectives:
+  - "Đổi mã ADC ra điện áp và ngược lại"
+  - "Tính bước lượng tử và tỉ số tín hiệu trên nhiễu lượng tử lý tưởng"
+  - "Biết thêm bit không thêm độ chính xác khi nhiễu tương tự lớn"
+asr_reviewed:
+  - {sentence: "Đề-xi-ben là thang lô-ga-rít, thêm khoảng 6 nghĩa là tỉ số biên độ gấp đôi.", reason: "ASR chép “Deciben là thang logatic … tỷ số biên độ gấp đôi”: đề-xi-ben → “Deciben” đúng từ, lô-ga-rít → “logatic” cùng bốn âm lệch âm cuối, tỉ/tỷ chỉ khác chính tả — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Câu một, mỗi bậc bao nhiêu mi li vôn?", reason: "ASR chép “Câu 1. Mỗi bậc bao nhiêu mili vốn?”: “mi li vôn” → “mili vốn” lệch thanh; câu khác có cùng đơn vị (khung 19) chép “mV” — đúng đơn vị"}
+  - {sentence: "Với một sóng sin dùng hết thang đo, tỉ số tín hiệu trên nhiễu lượng tử xấp xỉ 6 phẩy 02 nhân n, cộng 1 phẩy 76, tính bằng đề-xi-ben.", reason: "ASR chép “sóng sinh … nhiễu lượng từ sắp xị 6,02n n cộng 1,76”: sin → “sinh” cùng âm (foreign_ok), tử/từ và xấp/sắp nhầm thanh/âm đầu; các số 6,02 và 1,76 khớp"}
+  - {sentence: "Với 10 bit, mỗi bậc 3 phẩy 22 mi li vôn, nhiễu bằng khoảng 3 bậc.", reason: "ASR chép “mỗi bật 3,22 mV, nhiễu bằng khoảng 3 bật”: “mi li vôn” → mV đúng đơn vị; bậc/bật lệch âm cuối c/t (ASR đã biết, như “héc/hét”); số 3,22 khớp"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Cảm biến cho điện áp, chương trình cần con số"
+    steps:
+      - show: |
+          <p>Cảm biến nhiệt cho ra một điện áp thay đổi liên tục, như 0,73 V. Bộ xử lý chỉ làm việc với số nguyên.</p>
+          <div class="box key">Hôm nay: <b>bộ chuyển đổi tương tự–số</b> (ADC) — biến điện áp thành con số, và cái giá: <b>lượng tử hoá</b>.</div>
+        focus: [1, 1, 2]
+        say: "Chào bạn, một cảm biến nhiệt cho ra điện áp thay đổi liên tục, chẳng hạn 0 phẩy 73 vôn. Nhưng bộ xử lý chỉ làm việc với số nguyên. Hôm nay ta học bộ chuyển đổi tương tự số, biến điện áp thành con số, và cái giá phải trả là lượng tử hoá."
+
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: lũy thừa của 2, vôn và mi li vôn, làm tròn xuống"
+    checks:
+      - "2 ** 3 == 8 and 2 ** 10 == 1024 and 2 ** 12 == 4096 and 4096 // 1024 == 4"
+      - "round(3.3 / 1024, 5) == 0.00322 and round(3.3 / 1024 * 1000, 2) == 3.22"
+      - "math.floor(3.7) == 3 and math.floor(2.42) == 2"
+    steps:
+      - show: |
+          <table class="t"><tr><th>số bit $n$</th><th>số mức $2^n$</th></tr>
+          <tr><td>3</td><td>$2^3 = 8$</td></tr>
+          <tr><td>10</td><td>$2^{10} = 1024$</td></tr>
+          <tr><td>12</td><td>$2^{12} = 4096$ — gấp 4 lần 10 bit</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Trước hết, ôn lại điều đã học ở khoá Hệ thống máy tính, n bit biểu diễn được 2 mũ n giá trị khác nhau. Ba bit cho 2 mũ 3 bằng 8 giá trị. Mười bit cho 2 mũ 10 bằng 1024 giá trị. Mười hai bit cho 4096 giá trị, gấp 4 lần mười bit, vì thêm 2 bit là nhân đôi hai lần."
+      - show: |
+          <p><b>Vôn và mi li vôn:</b> 1 V = 1000 mV. Ví dụ $\frac{3{,}3}{1024} \approx 0{,}00322$ V $= 3{,}22$ mV.</p>
+          <p><b>Làm tròn xuống:</b> bỏ phần lẻ, giữ phần nguyên: 3,7 thành 3; 2,42 thành 2.</p>
+        focus: [1, 2]
+        say: "Tiếp theo, một vôn bằng 1000 mi li vôn, nên một số rất nhỏ như 3 phẩy 3 chia 1024, khoảng 0 phẩy 00322 vôn, viết gọn là 3 phẩy 22 mi li vôn. Cuối cùng là làm tròn xuống, tức bỏ phần lẻ và chỉ giữ phần nguyên, nên 3 phẩy 7 thành 3, và 2 phẩy 42 thành 2."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: số bit, điện áp tham chiếu, bậc lượng tử"
+    checks:
+      - "round(3.3 / 1024 * 1000, 2) == 3.22 and alg.adc_volts(512, 10, 3.3) == 1.65"
+      - "math.floor(1 * 1024 / 3.3) == 310 and round(alg.adc_volts(310, 10, 3.3), 4) == 0.999"
+    steps:
+      - show: |
+          <div>{{ADC}}</div>
+          <p>ADC $n$ bit chia khoảng 0 tới $V_{\text{ref}}$ thành $2^n$ bậc. Mỗi bậc: $\dfrac{V_{\text{ref}}}{2^n}$. Mã ra: $\left\lfloor \dfrac{V \cdot 2^n}{V_{\text{ref}}} \right\rfloor$.</p>
+        introduces: [floor]
+        focus: [1, 1, 2, 2]
+        say: "Hình vẽ một bộ chuyển đổi 3 bit cho dễ thấy bậc. Điện áp vào tăng đều, còn mã ra nhảy theo từng bậc. Bộ chuyển đổi n bit chia khoảng từ 0 tới điện áp tham chiếu thành 2 mũ n bậc, mỗi bậc rộng bằng điện áp tham chiếu chia 2 mũ n. Mã ra bằng điện áp nhân 2 mũ n chia điện áp tham chiếu, rồi làm tròn xuống."
+      - clear: true
+        show: |
+          <p>10 bit, $V_{\text{ref}} = 3{,}3$ V: mỗi bậc $3{,}3 / 1024 \approx \hl{3{,}22}$ mV.</p>
+          <p>Đọc được 512 → $512 \cdot 3{,}3 / 1024 = \hl{1{,}65}$ V (đúng nửa thang).</p>
+          <p>Điện áp 1 V → mã $\lfloor 1 \cdot 1024 / 3{,}3 \rfloor = 310$ → đổi ngược $0{,}999$ V: sai dưới một bậc.</p>
+        focus: [1, 2, 3, 3]
+        say: "Với bộ chuyển đổi 10 bit và điện áp tham chiếu 3 phẩy 3 vôn, mỗi bậc khoảng 3 phẩy 22 mi li vôn. Đọc được mã 512 thì điện áp là 1 phẩy 65 vôn, đúng nửa thang. Ngược lại, điện áp 1 vôn cho mã 310. Đổi mã đó ngược ra được 0 phẩy 999 vôn, sai dưới một bậc."
+
+  - id: intuition
+    kind: intuition
+    title: "Điện áp rơi vào một ngăn, mã là số thứ tự của ngăn"
+    checks:
+      - "[round(3.3 * k / 8, 4) for k in range(1, 8)] == [0.4125, 0.825, 1.2375, 1.65, 2.0625, 2.475, 2.8875]"
+      - "3.3 / 8 == 0.4125 and math.floor(1.0 * 8 / 3.3) == 2 and round(2 * 0.4125, 3) == 0.825 and round(1.0 - 0.825, 3) == 0.175 < 0.4125"
+    steps:
+      - show: |
+          <div><svg width="1500" height="340" viewBox="0 0 1500 340"><g fill="#1f2937"><rect x="150" y="110" width="150" height="70" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="225" y="155" text-anchor="middle" font-size="28" font-weight="bold">0</text><rect x="300" y="110" width="150" height="70" fill="#eff6ff" stroke="#2a78d6" stroke-width="2"/><text x="375" y="155" text-anchor="middle" font-size="28" font-weight="bold">1</text><rect x="450" y="110" width="150" height="70" fill="#fed7aa" stroke="#2a78d6" stroke-width="2"/><text x="540" y="155" text-anchor="middle" font-size="28" font-weight="bold">2</text><rect x="600" y="110" width="150" height="70" fill="#eff6ff" stroke="#2a78d6" stroke-width="2"/><text x="675" y="155" text-anchor="middle" font-size="28" font-weight="bold">3</text><rect x="750" y="110" width="150" height="70" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="825" y="155" text-anchor="middle" font-size="28" font-weight="bold">4</text><rect x="900" y="110" width="150" height="70" fill="#eff6ff" stroke="#2a78d6" stroke-width="2"/><text x="975" y="155" text-anchor="middle" font-size="28" font-weight="bold">5</text><rect x="1050" y="110" width="150" height="70" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="1125" y="155" text-anchor="middle" font-size="28" font-weight="bold">6</text><rect x="1200" y="110" width="150" height="70" fill="#eff6ff" stroke="#2a78d6" stroke-width="2"/><text x="1275" y="155" text-anchor="middle" font-size="28" font-weight="bold">7</text><text x="150" y="212" text-anchor="middle" font-size="19">0</text><text x="300" y="212" text-anchor="middle" font-size="19">0,413</text><text x="450" y="212" text-anchor="middle" font-size="19">0,825</text><text x="600" y="212" text-anchor="middle" font-size="19">1,238</text><text x="750" y="212" text-anchor="middle" font-size="19">1,65</text><text x="900" y="212" text-anchor="middle" font-size="19">2,063</text><text x="1050" y="212" text-anchor="middle" font-size="19">2,475</text><text x="1200" y="212" text-anchor="middle" font-size="19">2,888</text><text x="1350" y="212" text-anchor="middle" font-size="19">3,3</text><text x="20" y="153" font-size="22">mã ra</text><text x="20" y="212" font-size="20">vôn</text><line x1="514" y1="70" x2="514" y2="108" stroke="#b91c1c" stroke-width="4"/><line x1="514" y1="182" x2="514" y2="196" stroke="#b91c1c" stroke-width="4"/><text x="514" y="58" text-anchor="middle" font-size="22" fill="#b91c1c">điện áp vào 1,0 V</text><text x="1350" y="58" text-anchor="end" font-size="22">3 bit: 8 ngăn, mỗi ngăn 3,3 : 8 = 0,4125 V</text><line x1="450" y1="240" x2="514" y2="240" stroke="#b91c1c" stroke-width="4"/><line x1="450" y1="230" x2="450" y2="250" stroke="#b91c1c" stroke-width="3"/><line x1="514" y1="230" x2="514" y2="250" stroke="#b91c1c" stroke-width="3"/><text x="150" y="285" font-size="22">1,0 V rơi vào ngăn số 2, nên mã ra là 2. Đổi ngược: 2 x 0,4125 = 0,825 V, đầu trái của ngăn.</text><text x="150" y="320" font-size="22" fill="#b91c1c">đoạn đỏ là sai số lượng tử: 1,0 trừ 0,825 = 0,175 V, luôn nhỏ hơn một ngăn</text></g></svg></div>
+        say: "Hình vẽ bộ chuyển đổi 3 bit như một dãy 8 ngăn kéo nằm cạnh nhau, chia đều khoảng từ 0 tới 3 phẩy 3 vôn, mỗi ngăn rộng 0 phẩy 4125 vôn. Điện áp vào 1 vôn, vạch đỏ, rơi vào ngăn mang số 2, nên mã ra là 2. Khi đổi ngược, ta chỉ biết đầu trái của ngăn, 2 nhân 0 phẩy 4125 bằng 0 phẩy 825 vôn. Đoạn đỏ phía dưới là phần bị mất, 0 phẩy 175 vôn, và nó luôn nhỏ hơn một ngăn, đó chính là sai số lượng tử."
+
+  # ───────────────────────── 3. SNR ─────────────────────────
+  - id: snr
+    kind: concept
+    title: "Mỗi bit thêm khoảng 6 dB"
+    checks:
+      - "round(6.02 * 10 + 1.76, 2) == 61.96 and round(6.02 * 12 + 1.76, 2) == 74.0"
+      - "round(20 * math.log10(2), 2) == 6.02"
+    steps:
+      - show: |
+          <p>Lượng tử hoá luôn sai tới một bậc — coi như một <b>nhiễu</b> nhỏ. Tỉ số tín hiệu trên nhiễu lượng tử, với sóng sin dùng hết thang:</p>
+          <p>$\text{SNR} \approx 6{,}02\,n + 1{,}76$ dB</p>
+          <p>10 bit: $\hl{61{,}96}$ dB. Thêm một bit thì bậc nhỏ đi một nửa, nhiễu giảm một nửa: thêm $6{,}02$ dB.</p>
+          <p class="note">Đề-xi-ben là thang lô-ga-rít: thêm khoảng 6 dB nghĩa là tỉ số biên độ gấp đôi.</p>
+        focus: [1, 1, 2, 3, 3, 4]
+        say: "Lượng tử hoá luôn sai tới một bậc, nên ta coi sai số đó như một nhiễu nhỏ. Với một sóng sin dùng hết thang đo, tỉ số tín hiệu trên nhiễu lượng tử xấp xỉ 6 phẩy 02 nhân n, cộng 1 phẩy 76, tính bằng đề-xi-ben. Đây là một kết quả kinh điển. Với 10 bit, con số là 61 phẩy 96 đề-xi-ben. Thêm một bit thì mỗi bậc nhỏ đi một nửa, nhiễu giảm một nửa, nên tỉ số tăng thêm khoảng 6 đề-xi-ben. Đề-xi-ben là thang lô-ga-rít, thêm khoảng 6 nghĩa là tỉ số biên độ gấp đôi."
+
+  # ───────────────────────── 4. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Thêm bit có luôn tốt hơn không?"
+    checks:
+      - "round(10 / (3.3 / 1024 * 1000), 1) == 3.1 and round(10 / (3.3 / 4096 * 1000), 1) == 12.4"
+      - "round(10 / 3.22, 1) == 3.1 and round(10 / 0.806, 1) == 12.4 and round(3.3 / 4096 * 1000, 2) == 0.81 and round(2 ** 3.6, 1) == 12.1"
+    steps:
+      - show: |
+          <p><b>Bước 1 — bậc của 10 bit:</b> dây cảm biến nhiễu khoảng 10 mV; mỗi bậc $\frac{3{,}3}{1024}$ V $\approx 3{,}22$ mV.</p>
+        say: "Giả sử dây cảm biến nhiễu khoảng 10 mi li vôn, ta so hai bộ chuyển đổi. Bước một, với 10 bit và điện áp tham chiếu 3 phẩy 3 vôn, mỗi bậc rộng 3 phẩy 3 chia 1024, khoảng 3 phẩy 22 mi li vôn."
+      - show: |
+          <p><b>Bước 2 — nhiễu bằng mấy bậc (10 bit):</b></p>
+          <p>$$\frac{10 \text{ mV}}{3{,}22 \text{ mV}} \approx 3{,}1 \text{, tức khoảng } \hl{3} \text{ bậc}$$</p>
+        focus: [2, 2]
+        say: "Bước hai, chia nhiễu cho độ rộng một bậc, 10 chia 3 phẩy 22, khoảng 3 phẩy 1. Với 10 bit, mỗi bậc 3 phẩy 22 mi li vôn, nhiễu bằng khoảng 3 bậc."
+      - show: |
+          <p><b>Bước 3 — làm lại với 12 bit:</b> bậc $\frac{3{,}3}{4096}$ V $\approx 0{,}81$ mV.</p>
+          <p>$$\frac{10 \text{ mV}}{0{,}806 \text{ mV}} \approx 12{,}4 \text{, tức khoảng } \hl{12} \text{ bậc}$$</p>
+        focus: [1, 2]
+        say: "Bước ba, làm lại với 12 bit, mỗi bậc chỉ còn 3 phẩy 3 chia 4096, khoảng 0 phẩy 81 mi li vôn. Chia 10 cho 0 phẩy 806 được khoảng 12 phẩy 4, tức nhiễu bằng khoảng 12 bậc."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>ADC</th><th>mỗi bậc</th><th>nhiễu bằng bao nhiêu bậc</th></tr>
+          <tr><td>10 bit</td><td>3,22 mV</td><td>≈ 3 bậc</td></tr>
+          <tr><td>12 bit</td><td>0,81 mV</td><td>≈ 12 bậc $\approx 2^{3{,}6}$</td></tr></table>
+          <div class="box key">Với 12 bit, khoảng 3 đến 4 bit cuối chỉ đo nhiễu. Thêm bit <b>không</b> thêm độ chính xác khi nhiễu tương tự lớn hơn một bậc — phải giảm nhiễu trước (dây ngắn, lọc, lấy trung bình nhiều mẫu).</div>
+        focus: [1, "1.3", 2, 2]
+        say: "Bước bốn, đặt hai kết quả cạnh nhau. Với 12 bit, nhiễu phủ khoảng 12 bậc, mà 12 xấp xỉ 2 mũ 3 phẩy 6, nghĩa là khoảng 3 đến 4 bit cuối chỉ đang đo nhiễu. Vậy thêm bit không thêm độ chính xác khi nhiễu tương tự lớn hơn một bậc. Phải giảm nhiễu trước, bằng dây ngắn, bộ lọc, hay lấy trung bình nhiều mẫu."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: đếm mã mà nhiễu quét qua"
+    checks:
+      - "(math.floor(0.995 * 1024 / 3.3), math.floor(1.005 * 1024 / 3.3)) == (308, 311) and 311 - 308 == 3"
+      - "(math.floor(0.995 * 4096 / 3.3), math.floor(1.005 * 4096 / 3.3)) == (1235, 1247) and 1247 - 1235 == 12"
+      - "round(math.log2(10 / (3.3 / 4096 * 1000)), 1) == 3.6"
+    steps:
+      - show: |
+          <p>Cách khác: điện áp thật 1 V, nhiễu làm nó dao động trong khoảng 10 mV, từ 0,995 V tới 1,005 V. Đổi hai đầu ra mã:</p>
+          <table class="t"><tr><th>ADC</th><th>mã ở 0,995 V</th><th>mã ở 1,005 V</th><th>chênh</th></tr>
+          <tr><td>10 bit</td><td>308</td><td>311</td><td>3 ✓</td></tr>
+          <tr><td>12 bit</td><td>1235</td><td>1247</td><td>12 ✓</td></tr></table>
+        focus: [1, 2, "2.2", "2.3"]
+        say: "Kiểm bằng đường khác, vì phép chia chỉ cho số bậc trung bình, ta đổi thẳng hai đầu của dải nhiễu ra mã. Giả sử điện áp thật là 1 vôn, nhiễu làm nó dao động từ 0 phẩy 995 tới 1 phẩy 005 vôn. Với 10 bit, hai đầu cho mã 308 và 311, chênh 3 mã. Với 12 bit, hai đầu cho mã 1235 và 1247, chênh 12 mã, khớp với kết quả chia ở trên."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi người mới hay mắc"
+    checks:
+      - "round(512 * 3.3 / 1023, 4) == 1.6516 and round(512 * 5.0 / 1024, 2) == 2.5"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Dùng nguồn nuôi chập chờn làm điện áp tham chiếu <b class="red">(sai)</b>
+          <br><span class="note">Mọi số đọc tỉ lệ với $V_{\text{ref}}$: tham chiếu trôi 5% thì mọi phép đo trôi 5%.</span></div>
+        say: "Lỗi thứ nhất, dùng nguồn nuôi chập chờn làm điện áp tham chiếu. Mọi số đọc tỉ lệ với điện áp tham chiếu, nên tham chiếu trôi 5 phần trăm thì mọi phép đo trôi 5 phần trăm."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Đưa điện áp vượt $V_{\text{ref}}$ <b class="red">(sai)</b>
+          <br><span class="note">Mã bão hoà ở giá trị lớn nhất (1023): mọi điện áp cao hơn đọc ra như nhau — và có thể hỏng chân vào.</span></div>
+        say: "Lỗi thứ hai, đưa vào điện áp vượt điện áp tham chiếu. Mã ra bão hoà ở giá trị lớn nhất là 1023, mọi điện áp cao hơn đều đọc như nhau, và chân vào còn có thể hỏng."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Chép công thức đổi mã mà không xem quy ước chip <b class="red">(thiếu)</b>
+          <br><span class="note">Chia $2^n$ hay chia $2^n - 1$: mã 512 thành 1,65 V hay 1,6516 V. Theo đúng hướng dẫn của nhà sản xuất chip đang dùng.</span></div>
+          <table class="t"><tr><th>quy ước</th><th>mã 512 đổi ra</th></tr><tr><td>chia 1024</td><td>$512 \cdot 3{,}3 / 1024 = 1{,}65$ V</td></tr><tr><td>chia 1023</td><td>$512 \cdot 3{,}3 / 1023 \approx 1{,}6516$ V</td></tr></table>
+        focus: [1, 2]
+        say: "Lỗi thứ ba, chép công thức đổi mã mà không xem quy ước của chip. Chia cho 1024 hay chia cho 1023 làm mã 512 thành 1 phẩy 65 hay 1 phẩy 6516 vôn, nên phải theo đúng hướng dẫn của nhà sản xuất chip đang dùng."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Mua ADC nhiều bit để “chính xác hơn” <b class="red">(chưa đủ)</b>
+          <br><span class="note">Như ví dụ: nhiễu 10 mV thì 12 bit cũng không hơn bao nhiêu. Giảm nhiễu trước.</span></div>
+        say: "Lỗi thứ tư, mua bộ chuyển đổi nhiều bit để chính xác hơn. Như ví dụ vừa rồi, nhiễu 10 mi li vôn thì 12 bit cũng không hơn bao nhiêu, nên phải giảm nhiễu trước."
+
+  # ───────────────────────── 6. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "round(3.3 / 4096 * 1000, 3) == 0.806 and alg.adc_volts(2048, 12, 3.3) == 1.65 and round(6.02 * 12 + 1.76, 2) == 74.0"
+      - "math.floor(2.0 * 4096 / 3.3) == 2482"
+      - "round(2 * 4096 / 3.3, 1) == 2482.4 and 2048 * 2 == 4096 and round(3.3 / 2, 2) == 1.65 and round(6.02 * 12, 2) == 72.24 and round(72.24 + 1.76, 2) == 74.0"
+    steps:
+      - show: |
+          <p>ADC 12 bit, $V_{\text{ref}} = 3{,}3$ V.</p>
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Mỗi bậc bao nhiêu mV? Mã 2048 là bao nhiêu vôn?</td></tr>
+          <tr><td>2</td><td>Điện áp 2 V cho mã nào? SNR lượng tử lý tưởng?</td></tr></table>
+        focus: [1, "2.2", "2.2", "2.3", "2.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm, với bộ chuyển đổi 12 bit và điện áp tham chiếu 3 phẩy 3 vôn. Câu một, mỗi bậc bao nhiêu mi li vôn? Mã 2048 là bao nhiêu vôn? Câu hai, điện áp 2 vôn cho mã nào? Tỉ số tín hiệu trên nhiễu lượng tử lý tưởng là bao nhiêu? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <p>① Mỗi bậc $\frac{3{,}3}{4096} \approx 0{,}000806$ V $= \hl{0{,}806}$ mV. Mã 2048 đúng bằng nửa của 4096 → nửa của 3,3 V $= \hl{1{,}65}$ V.</p>
+        say: "Đáp án câu một, mỗi bậc bằng 3 phẩy 3 chia 4096, khoảng 0 phẩy 000806 vôn, tức 0 phẩy 806 mi li vôn. Mã 2048 đúng bằng nửa của 4096, nên điện áp là nửa của 3 phẩy 3, tức 1 phẩy 65 vôn."
+      - show: |
+          <p>② $\frac{2 \cdot 4096}{3{,}3} \approx 2482{,}4$ → làm tròn xuống $\hl{2482}$. SNR $\approx 6{,}02 \cdot 12 + 1{,}76 = 72{,}24 + 1{,}76 = \hl{74}$ dB.</p>
+        say: "Câu hai, 2 nhân 4096 chia 3 phẩy 3 được khoảng 2482 phẩy 4, làm tròn xuống thành mã 2482. Tỉ số tín hiệu trên nhiễu lượng tử bằng 6 phẩy 02 nhân 12, là 72 phẩy 24, cộng 1 phẩy 76, được khoảng 74 đề-xi-ben."
+
+  # ───────────────────────── 7. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">$2^n$ bậc, mỗi bậc $V_{\text{ref}} / 2^n$</span><span class="a">→</span>
+          <span class="n">sai tới một bậc</span><span class="a">→</span>
+          <span class="n">SNR ≈ 6,02n + 1,76 dB</span><span class="a">→</span>
+          <span class="n">nhiễu tương tự giới hạn số bit có ích</span></div>
+        say: "Tổng kết lại, bộ chuyển đổi n bit có 2 mũ n bậc, mỗi bậc rộng điện áp tham chiếu chia 2 mũ n. Kết quả sai tới một bậc, tỉ số tín hiệu trên nhiễu lượng tử khoảng 6 phẩy 02 n cộng 1 phẩy 76 đề-xi-ben, và nhiễu tương tự giới hạn số bit thật sự có ích."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> độ phân giải (bao nhiêu chữ số) khác độ chính xác (bao nhiêu chữ số đúng). Đừng tin chữ số mà nhiễu đã nuốt mất.</div>
+        say: "Điều cần mang theo, độ phân giải, tức có bao nhiêu chữ số, khác độ chính xác, tức bao nhiêu chữ số là đúng. Đừng tin những chữ số mà nhiễu đã nuốt mất."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 5): <b>lấy mẫu và lọc số</b> đơn giản trên vi điều khiển.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 5, ta học lấy mẫu và lọc số đơn giản ngay trên vi điều khiển. Hẹn gặp bạn ở bài tiếp theo."

@@ -1,0 +1,215 @@
+id: L11
+course: DSY
+series: "DSY · Hệ phân tán và dữ liệu lớn"
+title: "Bài 11 — Lấy mẫu hồ chứa trên luồng dữ liệu"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/dsy.yaml L11; audit/dsy/verify_dsy.py L11; J. S. Vitter, Random Sampling with a Reservoir, ACM TOMS 11(1), 1985 (thuật toán R); DMS bài 19"
+assumes: [arith, frac, cdot]
+# Quy ước: luồng phần tử đánh số 1, 2, …, n (n không biết trước); hồ chứa k ô. Thuật toán R: giữ k phần tử đầu; phần tử thứ i > k được nhận với
+#   xác suất k/i và thay một ô chọn đều. Xác suất cuối của mỗi phần tử tính CHÍNH XÁC bằng Fraction (alg.reservoir_exact); bản lệch một
+#   (nhận với k/(i + 1)) để so. Mô phỏng 100 000 lần chạy trong audit/dsy/verify_dsy.py.
+objectives:
+  - "Lấy mẫu đều k phần tử từ luồng chưa biết độ dài"
+  - "Chứng minh mỗi phần tử có xác suất k/n"
+  - "Nhận ra mẫu lệch"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Lấy 1000 dòng đầu làm mẫu"
+    steps:
+      - show: |
+          <p>Muốn ước lượng thời gian phản hồi trung bình trong ngày, bạn lấy 1000 yêu cầu đầu tiên làm mẫu. Nhưng 1000 yêu cầu đầu đến lúc nửa đêm, máy rảnh — mẫu đẹp hơn thật nhiều.</p>
+          <div class="box key">Hôm nay: <b>lấy mẫu hồ chứa</b> — chọn đều k phần tử từ một luồng không biết trước độ dài, chỉ đi qua một lần, bộ nhớ k ô.</div>
+        focus: [1, 1, 2]
+        say: "Chào bạn, muốn ước lượng thời gian phản hồi trung bình trong ngày, bạn lấy một nghìn yêu cầu đầu tiên làm mẫu. Nhưng một nghìn yêu cầu đầu đến lúc nửa đêm khi máy rảnh, nên mẫu đẹp hơn thực tế nhiều. Hôm nay ta học lấy mẫu hồ chứa, chọn đều k phần tử từ một luồng không biết trước độ dài, chỉ đi qua một lần với bộ nhớ k ô."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: nhân phân số, xác suất “và”, rút thăm đều"
+    checks:
+      - "Fraction(2, 7) * Fraction(7, 8) == Fraction(2, 8) and Fraction(2, 8) == Fraction(1, 4)"
+      - "1 - Fraction(1, 8) == Fraction(7, 8) and Fraction(1, 2) * Fraction(1, 2) == Fraction(1, 4)"
+      - "Fraction(math.comb(9, 1), math.comb(10, 2)) == Fraction(2, 10) and math.comb(10, 2) == 45"
+    steps:
+      - show: |
+          <p><b>Nhân phân số</b>: tử nhân tử, mẫu nhân mẫu; số giống nhau ở tử và mẫu thì <b>triệt tiêu</b>.</p>
+          $$\frac{2}{7} \cdot \frac{7}{8} = \frac{2 \cdot 7}{7 \cdot 8} = \frac{2}{8} = \frac{1}{4}$$
+        focus: [1, 1, 2]
+        say: "Bài này cần ba điều quen thuộc. Thứ nhất, nhân phân số, lấy tử nhân tử, mẫu nhân mẫu, và số giống nhau ở tử và mẫu thì triệt tiêu. Ví dụ 2 phần 7 nhân 7 phần 8, số 7 ở tử và mẫu triệt tiêu, còn 2 phần 8, tức 1 phần 4."
+      - show: |
+          <p>Ở khoá Toán cho khoa học máy tính:</p>
+          <table class="t"><tr><th>quy tắc</th><th>ví dụ</th></tr>
+          <tr><td>không xảy ra = 1 trừ xảy ra</td><td>bị đá ra với $\frac{1}{8}$ → giữ được với $1 - \frac{1}{8} = \frac{7}{8}$</td></tr>
+          <tr><td>các bước ngẫu nhiên độc lập, cần bước này <b>và</b> bước kia: nhân</td><td>hai lần tung đồng xu đều ngửa: $\frac{1}{2} \cdot \frac{1}{2} = \frac{1}{4}$</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Thứ hai, ở khoá Toán cho khoa học máy tính, ta có hai quy tắc xác suất. Một việc không xảy ra có xác suất 1 trừ xác suất nó xảy ra, nên bị đá ra với 1 phần 8 thì giữ được với 7 phần 8. Các bước ngẫu nhiên độc lập, cần bước này và bước kia cùng xảy ra, thì nhân xác suất, ví dụ hai lần tung đồng xu đều ngửa có xác suất 1 phần 4."
+      - clear: true
+        show: |
+          <p><b>Rút thăm đều</b> 2 người trong 10: có $C(10, 2) = 45$ cặp như nhau; cặp chứa một người cố định là 9.</p>
+          $$\frac{9}{45} = \frac{1}{5} = \hl{\frac{2}{10}} = \frac{k}{n}$$
+        focus: [1, 2, 0]
+        say: "Thứ ba, rút thăm đều 2 người trong 10 thì có tổ hợp chập 2 của 10, bằng 45 cặp, khả năng như nhau, và có 9 cặp chứa một người cố định. Vậy mỗi người được chọn với xác suất 9 phần 45, bằng 2 phần 10, đúng bằng k chia n. Hồ chứa phải cho kết quả đều như vậy, dù không biết n từ đầu."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: thuật toán hồ chứa"
+    steps:
+      - show: |
+          <ol><li>Giữ nguyên k phần tử đầu tiên trong hồ.</li>
+          <li>Phần tử thứ $i$ (với $i \gt k$): với xác suất $\dfrac{k}{i}$ thì nhận nó, thay vào một ô chọn ngẫu nhiên đều; còn lại thì bỏ qua.</li></ol>
+          <div class="box key">Mục tiêu: hết luồng dài $n$, <b>mỗi</b> phần tử nằm trong hồ với xác suất đúng $\dfrac{k}{n}$ — như rút thăm k trong n, dù không biết n từ đầu.</div>
+        focus: [1, "1.1", "1.2", 2]
+        say: "Thuật toán có hai bước. Giữ nguyên k phần tử đầu tiên trong hồ. Với phần tử thứ i lớn hơn k, nhận nó với xác suất k chia i, thay vào một ô chọn ngẫu nhiên đều, còn lại thì bỏ qua. Mục tiêu là khi hết luồng dài n, mỗi phần tử nằm trong hồ với xác suất đúng k chia n, như rút thăm k trong n, dù không biết n từ đầu."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Đường đi của phần tử thứ 7"
+    checks:
+      - "[Fraction(2, i) * Fraction(1, 2) for i in (8, 9, 10)] == [Fraction(1, 8), Fraction(1, 9), Fraction(1, 10)]"
+    steps:
+      - show: |
+          <div><svg width="1500" height="440" viewBox="0 0 1500 440"><g font-size="22" fill="#1f2937"><text x="150" y="40" font-weight="bold">luồng, từng phần tử một; dưới mỗi ô: xác suất được nhận vào hồ</text><rect x="150" y="60" width="100" height="60" rx="8" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="200" y="100" text-anchor="middle" font-size="26">1</text><text x="200" y="152" text-anchor="middle">giữ</text><rect x="275" y="60" width="100" height="60" rx="8" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="325" y="100" text-anchor="middle" font-size="26">2</text><text x="325" y="152" text-anchor="middle">giữ</text><rect x="400" y="60" width="100" height="60" rx="8" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="450" y="100" text-anchor="middle" font-size="26">3</text><text x="450" y="152" text-anchor="middle">2/3</text><rect x="525" y="60" width="100" height="60" rx="8" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="575" y="100" text-anchor="middle" font-size="26">4</text><text x="575" y="152" text-anchor="middle">2/4</text><rect x="650" y="60" width="100" height="60" rx="8" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="700" y="100" text-anchor="middle" font-size="26">5</text><text x="700" y="152" text-anchor="middle">2/5</text><rect x="775" y="60" width="100" height="60" rx="8" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="825" y="100" text-anchor="middle" font-size="26">6</text><text x="825" y="152" text-anchor="middle">2/6</text><rect x="900" y="60" width="100" height="60" rx="8" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="950" y="100" text-anchor="middle" font-size="26">7</text><text x="950" y="152" text-anchor="middle">2/7</text><rect x="1025" y="60" width="100" height="60" rx="8" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="1075" y="100" text-anchor="middle" font-size="26">8</text><text x="1075" y="152" text-anchor="middle">2/8</text><rect x="1150" y="60" width="100" height="60" rx="8" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="1200" y="100" text-anchor="middle" font-size="26">9</text><text x="1200" y="152" text-anchor="middle">2/9</text><rect x="1275" y="60" width="100" height="60" rx="8" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="1325" y="100" text-anchor="middle" font-size="26">10</text><text x="1325" y="152" text-anchor="middle">2/10</text><line x1="1075" y1="165" x2="975" y2="270" stroke="#b91c1c" stroke-width="3" stroke-dasharray="8 6"/><line x1="1200" y1="165" x2="975" y2="270" stroke="#b91c1c" stroke-width="3" stroke-dasharray="8 6"/><line x1="1325" y1="165" x2="975" y2="270" stroke="#b91c1c" stroke-width="3" stroke-dasharray="8 6"/><line x1="950" y1="165" x2="900" y2="250" stroke="#eb6834" stroke-width="4"/><text x="20" y="295">hồ chứa k = 2</text><rect x="520" y="250" width="160" height="70" rx="8" fill="#ffffff" stroke="#1f2937" stroke-width="3"/><text x="600" y="293" text-anchor="middle">ô 1</text><rect x="820" y="250" width="160" height="70" rx="8" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="900" y="293" text-anchor="middle">ô 2: 7</text><text x="20" y="375" fill="#b91c1c">8, 9, 10: phần tử thứ j đá đúng ô của 7 với xác suất 2/j nhân 1/2 = 1/j</text><text x="20" y="420" fill="#059669" font-weight="bold">7 còn lại cuối cùng: 2/7 nhân 7/8 nhân 8/9 nhân 9/10 = 2/10</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ luồng 10 phần tử đi qua hồ chứa 2 ô. Dưới mỗi phần tử là xác suất nó được nhận, hai phần tử đầu luôn được giữ, phần tử thứ i sau đó được nhận với 2 phần i. Theo dõi phần tử thứ 7, màu cam, nó vào hồ với xác suất 2 phần 7. Sau đó mỗi phần tử 8, 9, 10 có thể đá nó ra, với xác suất 1 phần 8, 1 phần 9, 1 phần 10."
+
+  - id: example
+    kind: example
+    title: "k = 2, luồng 10 phần tử: chứng minh bằng tích rút gọn"
+    checks:
+      - "set(alg.reservoir_exact(10, 2)) == {Fraction(2, 10)}"
+      - "Fraction(2, 7) * Fraction(7, 8) * Fraction(8, 9) * Fraction(9, 10) == Fraction(2, 10)"
+      - "[1 - Fraction(1, j) for j in (8, 9, 10)] == [Fraction(7, 8), Fraction(8, 9), Fraction(9, 10)] and math.prod([Fraction(j - 1, j) for j in range(3, 11)]) == Fraction(2, 10)"
+    steps:
+      - show: |
+          <p><b>Bước một</b> — phần tử thứ 7 được nhận vào hồ: $\dfrac{k}{i} = \dfrac{2}{7}$.</p>
+        say: "Bước một, phần tử thứ 7 được nhận vào hồ với xác suất k chia i, tức 2 phần 7."
+      - show: |
+          <p><b>Bước 2</b> — phần tử thứ $j$ sau nó đá đúng ô của nó: được nhận ($\frac{2}{j}$) <b>và</b> chọn đúng ô đó ($\frac{1}{2}$).</p>
+          <table class="t"><tr><th>j</th><th>đá ra: $\frac{2}{j} \cdot \frac{1}{2} = \frac{1}{j}$</th><th>giữ được: $1 - \frac{1}{j} = \frac{j - 1}{j}$</th></tr>
+          <tr><td>8</td><td>$\frac{1}{8}$</td><td>$\frac{7}{8}$</td></tr>
+          <tr><td>9</td><td>$\frac{1}{9}$</td><td>$\frac{8}{9}$</td></tr>
+          <tr><td>10</td><td>$\frac{1}{10}$</td><td>$\frac{9}{10}$</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", "2.4"]
+        say: "Bước hai, phần tử thứ j sau nó đá đúng ô của nó khi được nhận, xác suất 2 phần j, và chọn đúng ô đó, xác suất một nửa. Nhân lại được 1 phần j, nên phần tử 7 giữ được với xác suất j trừ 1 phần j. Với j bằng 8, đá ra 1 phần 8, giữ được 7 phần 8. Với j bằng 9, giữ được 8 phần 9. Với j bằng 10, giữ được 9 phần 10."
+      - clear: true
+        show: |
+          <p><b>Bước 3</b> — cần được nhận <b>và</b> giữ được qua cả ba lần: nhân.</p>
+          $$\dfrac{2}{7} \cdot \dfrac{7}{8} \cdot \dfrac{8}{9} \cdot \dfrac{9}{10} = \dfrac{2}{10}$$
+          <p class="note">Tử số và mẫu số liền nhau triệt tiêu: 7 với 7, 8 với 8, 9 với 9.</p>
+        focus: [1, 2, 3]
+        say: "Bước ba, phần tử 7 cần được nhận và giữ được qua cả ba lần, nên ta nhân. 2 phần 7 nhân 7 phần 8 nhân 8 phần 9 nhân 9 phần 10. Tử số và mẫu số liền nhau triệt tiêu, 7 với 7, 8 với 8, 9 với 9, còn 2 phần 10."
+      - show: |
+          <p><b>Bước 4</b> — phần tử đầu tiên: luôn vào hồ, rồi phải giữ được qua $j = 3, 4, \dots, 10$.</p>
+          $$1 \cdot \dfrac{2}{3} \cdot \dfrac{3}{4} \cdot \dfrac{4}{5} \cdots \dfrac{9}{10} = \dfrac{2}{10}$$
+        introduces: [dots]
+        focus: [1, 2]
+        say: "Bước bốn, làm thử với phần tử đầu tiên. Nó luôn vào hồ, rồi phải giữ được qua các phần tử từ 3 tới 10, nhân 2 phần 3, 3 phần 4, cứ thế tới 9 phần 10, và cũng triệt tiêu còn 2 phần 10."
+      - clear: true
+        show: |
+          <div class="box key"><b>Bước 5</b> — tính chính xác bằng phân số cho cả 10 phần tử: tất cả đều $\hl{\frac{2}{10}}$.</div>
+          <table class="t"><tr><th>phần tử</th><td>1</td><td>2</td><td>3</td><td>…</td><td>7</td><td>…</td><td>10</td></tr>
+          <tr><th>xác suất còn trong hồ</th><td>2/10</td><td>2/10</td><td>2/10</td><td>…</td><td>2/10</td><td>…</td><td>2/10</td></tr></table>
+        focus: [1, 2]
+        say: "Bước năm, tính chính xác bằng phân số cho cả 10 phần tử. Tất cả đều bằng 2 phần 10, đúng như rút thăm đều 2 trong 10."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác"
+    checks:
+      - "[sum(e in ((4 if r4 == 1 else 3 if r3 == 1 else 1), (4 if r4 == 2 else 3 if r3 == 2 else 2)) for r3 in range(1, 4) for r4 in range(1, 5)) for e in (1, 2, 3, 4)] == [6, 6, 6, 6] and 3 * 4 == 12"
+      - "sum(alg.reservoir_exact(10, 2)) == 2 and 10 * Fraction(2, 10) == 2"
+    steps:
+      - show: |
+          <p>Không dùng tích: luồng nhỏ 4 phần tử, k = 2. Phần tử thứ $i$ rút một số đều từ 1 tới $i$; rút được 1 hoặc 2 thì thay ô đó (đúng là nhận với $\frac{2}{i}$, ô chọn đều). Liệt kê <b>hết</b> $3 \cdot 4 = 12$ cách rút như nhau:</p>
+          <table class="t"><tr><th>phần tử</th><td>1</td><td>2</td><td>3</td><td>4</td></tr>
+          <tr><th>số cách còn trong hồ</th><td>6</td><td>6</td><td>6</td><td>6</td></tr>
+          <tr><th>xác suất</th><td>6/12</td><td>6/12</td><td>6/12</td><td>$\hl{6/12 = 2/4}$ ✓</td></tr></table>
+          <p class="note">Kiểm thêm: hồ có 2 ô nên tổng xác suất phải là 2; với n = 10: $10 \cdot \frac{2}{10} = 2$ ✓.</p>
+        focus: [1, 1, 1, 1, "2.3", 3]
+        say: "Kiểm bằng đường khác, không dùng tích rút gọn. Lấy luồng nhỏ 4 phần tử với k bằng 2. Phần tử thứ i rút một số đều từ 1 tới i, rút được 1 hoặc 2 thì thay ô đó, đúng là nhận với 2 phần i và chọn ô đều. Phần tử 3 có 3 cách rút, phần tử 4 có 4 cách, nên có 12 cách như nhau, ta liệt kê hết và đếm. Mỗi phần tử còn trong hồ ở đúng 6 trong 12 cách, tức 2 phần 4, đều như k chia n. Kiểm thêm, hồ có 2 ô nên tổng xác suất phải là 2, và với n bằng 10, 10 nhân 2 phần 10 đúng bằng 2."
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc, 1 lỗi người đã đi làm"
+    checks:
+      - "(Fraction(100, 9000), Fraction(100, 1000)) == (Fraction(1, 90), Fraction(1, 10)) and Fraction(1, 10) / Fraction(1, 90) == 9"
+      - "Fraction(100, 10000) == Fraction(1, 100) and 9000 + 1000 == 10000 and Fraction(9000, 10000) * 100 == 90"
+      - "alg.reservoir_exact(10, 2, 1)[:3] == [Fraction(3, 11), Fraction(3, 11), Fraction(2, 11)] and sum(alg.reservoir_exact(10, 2, 1)) == 2"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Lấy k phần tử đầu làm mẫu <b class="red">(lệch)</b>
+          <br><span class="note">Luồng thường có xu hướng theo thời gian (đêm, ngày, cao điểm). Phần đầu không đại diện cho cả luồng.</span></div>
+        say: "Lỗi thứ nhất, lấy k phần tử đầu làm mẫu. Luồng thường có xu hướng theo thời gian, đêm, ngày, giờ cao điểm, nên phần đầu không đại diện cho cả luồng."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Lệch một ở xác suất nhận: dùng $\frac{k}{i+1}$ thay vì $\frac{k}{i}$ <b class="red">(sai)</b>
+          <br><span class="note">Tính chính xác với k = 2, n = 10: hai phần tử đầu còn với xác suất $\frac{3}{11}$, mọi phần tử sau chỉ $\frac{2}{11}$ — không còn đều.</span></div>
+        say: "Lỗi thứ hai, lệch một ở xác suất nhận, dùng k chia i cộng 1 thay vì k chia i. Tính chính xác với k bằng 2 và n bằng 10, hai phần tử đầu còn lại với xác suất 3 phần 11, còn mọi phần tử sau chỉ 2 phần 11, mẫu không còn đều."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Kiểm thuật toán bằng một lần chạy <b class="red">(không đủ)</b>
+          <br><span class="note">Một lần chạy chỉ cho một mẫu. Kiểm tính đều bằng xác suất chính xác (như trên) hoặc chạy hàng chục nghìn lần rồi đếm tần suất.</span></div>
+        say: "Lỗi thứ ba, kiểm thuật toán bằng một lần chạy. Một lần chạy chỉ cho một mẫu, nên hãy kiểm tính đều bằng xác suất chính xác như trên, hoặc chạy hàng chục nghìn lần rồi đếm tần suất."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Mỗi máy giữ một hồ 100 phần tử, rồi gộp hai hồ như nhau <b class="red">(lệch về máy ít việc)</b></div>
+          <table class="t"><tr><th>máy</th><th>số yêu cầu trong ngày</th><th>mỗi yêu cầu vào hồ của máy với</th></tr>
+          <tr><td>A</td><td>9000</td><td>$\frac{100}{9000} = \frac{1}{90}$</td></tr>
+          <tr><td>B</td><td>1000</td><td>$\frac{100}{1000} = \frac{1}{10}$ — <b class="red">gấp 9 lần</b></td></tr></table>
+          <p class="note">Mẫu đúng cho cả hệ: mỗi yêu cầu $\frac{1}{100}$. Gộp theo <b>số lượng</b>: mẫu 100 chung lấy khoảng 90 từ hồ A, 10 từ hồ B (rút theo tỉ lệ 9000 : 1000).</p>
+        focus: [1, 2, "2.2", "2.3", 3, 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, mỗi máy chủ giữ một hồ chứa 100 phần tử, rồi gộp hai hồ lại như nhau. Giả sử máy A nhận 9000 yêu cầu trong ngày, máy B chỉ nhận 1000. Mỗi yêu cầu của máy A vào hồ của nó với xác suất 100 phần 9000, tức 1 phần 90. Mỗi yêu cầu của máy B vào hồ với xác suất 1 phần 10, gấp 9 lần, nên mẫu gộp nghiêng hẳn về máy ít việc. Muốn mẫu đều cho cả hệ, mỗi yêu cầu có xác suất 1 phần 100. Khi đó ta phải gộp theo số lượng, lấy khoảng 90 phần tử từ hồ A và 10 từ hồ B, rút theo tỉ lệ 9000 trên 1000."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "Fraction(1, 3) * Fraction(3, 4) * Fraction(4, 5) == Fraction(1, 5) and set(alg.reservoir_exact(5, 1)) == {Fraction(1, 5)}"
+      - "1 - Fraction(1, 4) == Fraction(3, 4) and 1 - Fraction(1, 5) == Fraction(4, 5)"
+    steps:
+      - show: |
+          <p>k = 1 (chọn đúng một phần tử), luồng 5 phần tử.</p>
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Phần tử thứ 3 được nhận với xác suất bao nhiêu?</td></tr>
+          <tr><td>2</td><td>Xác suất nó còn lại ở cuối? Viết thành tích.</td></tr></table>
+        focus: [1, "2.2", "2.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm, với k bằng 1, tức chọn đúng một phần tử, trên luồng 5 phần tử. Câu một, phần tử thứ 3 được nhận với xác suất bao nhiêu? Câu hai, xác suất nó còn lại ở cuối là bao nhiêu, viết thành tích? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① Nhận với $\dfrac{k}{i} = \dfrac{1}{3}$.</p>
+          <table class="t"><tr><th>phần tử sau</th><th>đá ra (k = 1: được nhận là thay luôn ô duy nhất)</th><th>giữ được</th></tr>
+          <tr><td>4</td><td>$\frac{1}{4}$</td><td>$\frac{3}{4}$</td></tr>
+          <tr><td>5</td><td>$\frac{1}{5}$</td><td>$\frac{4}{5}$</td></tr></table>
+        focus: [1, 2, "2.2", "2.3"]
+        say: "Đáp án câu một, phần tử thứ 3 được nhận với xác suất k chia i, tức 1 phần 3. Sang câu hai, với k bằng 1 thì hồ chỉ có một ô, nên phần tử sau được nhận là thay luôn ô đó. Phần tử 4 đá nó ra với 1 phần 4, nên nó giữ được với 3 phần 4. Phần tử 5 đá ra với 1 phần 5, giữ được với 4 phần 5."
+      - show: |
+          <p>② $\dfrac{1}{3} \cdot \dfrac{3}{4} \cdot \dfrac{4}{5} = \hl{\dfrac{1}{5}}$ — đúng bằng mọi phần tử khác, và bằng $\dfrac{k}{n}$.</p>
+        say: "Câu hai, nhân ba xác suất, 1 phần 3 nhân 3 phần 4 nhân 4 phần 5, bằng 1 phần 5, đúng bằng xác suất của mọi phần tử khác và bằng k chia n."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">giữ k phần tử đầu</span><span class="a">→</span>
+          <span class="n">phần tử thứ i: nhận với xác suất k/i</span><span class="a">→</span>
+          <span class="n">tích rút gọn: mỗi phần tử k/n</span><span class="a">→</span>
+          <span class="n">kiểm bằng xác suất chính xác</span></div>
+        say: "Tổng kết lại, giữ k phần tử đầu, phần tử thứ i được nhận với xác suất k chia i. Tích rút gọn cho mỗi phần tử đúng k chia n, và hãy kiểm thuật toán bằng xác suất chính xác."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> “ngẫu nhiên” cần chứng minh, không phải cảm giác. Một lập luận ngắn (tích rút gọn) đáng tin hơn nghìn lần chạy thử.</div>
+        say: "Điều cần mang theo, ngẫu nhiên cần được chứng minh, không phải cảm giác. Một lập luận ngắn như tích rút gọn đáng tin hơn một nghìn lần chạy thử."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 12): đọc nhanh bảng khổng lồ — <b>lưu trữ theo cột</b> và nén.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 12, ta học cách đọc nhanh những bảng khổng lồ, với lưu trữ theo cột và nén. Hẹn gặp bạn ở bài tiếp theo."

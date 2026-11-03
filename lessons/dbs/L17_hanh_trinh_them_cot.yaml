@@ -1,0 +1,352 @@
+id: L17
+course: DBS
+series: "DBS · Cơ sở dữ liệu"
+title: "Bài 17 — Tình huống chuyên gia theo dòng thời gian: thêm cột khi bảng có hàng triệu dòng"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+case: journey
+source: "curriculum/dbs.yaml L17; audit/dbs/sources_L17.md (câu trích nguyên văn, đọc 2026-11-02); audit/dbs/verify_dbs.py L17; Percona Toolkit, pt-online-schema-change, tài liệu trong mã nguồn bản 3.7.2 (bộ công cụ từ 6/2011) [PT11]; S. Noach, gh-ost: GitHub's online schema migration tool for MySQL, GitHub Blog, 2016-08-01 [GH16]; J. Xu, Online migrations at scale, Stripe Blog, 2017-02-02 [ST17]; MySQL Server Blog, MySQL 8.0: InnoDB now supports Instant ADD COLUMN, 2018-05-09, và MySQL 8.0.12 Release Notes, 2018-07-27 [MY18]; PostgreSQL 11 Release Notes, 2018-10-18 [PG18]; MySQL 8.0.29 Release Notes, 2022-04-26 [MY22]; DBS bài 7 (trang đĩa), bài 11 (giao dịch), bài 13 (khoá), bài 14 (nhật ký); khoá DVO bài 8 (mở rộng rồi thu hẹp)"
+assumes: [arith]
+# Quy ước: “bảng bóng” = bản sao rỗng của bảng, đã mang lược đồ mới (ghost table); “chép bù” = chép các dòng cũ sang (backfill);
+#   “bộ kích hoạt” = trigger; “đổi bảng” = bước thay bảng cũ bằng bảng bóng (cut-over); “thao tác tức thì” = ALGORITHM=INSTANT.
+#   Mọi sự kiện và con số có nguồn ghi trong audit/dbs/sources_L17.md. Con số khác là phép tính lại (checks) hoặc ghi “(số minh hoạ)”:
+#   bảng 5 triệu dòng, 1000 dòng trong 0,5 giây mỗi lô (giá trị mặc định của [PT11], dùng như giả định tốc độ cố định), 28 giờ chép,
+#   1000 tiến trình, 200 GB, 2 thay đổi mỗi tháng đều là SỐ MINH HOẠ.
+#   Lời đọc không nói “trigger”, “binlog”, “ALTER”, “INSTANT”, “Percona”, “Hadoop”: nói “bộ kích hoạt”, “nhật ký nhị phân”, “câu lệnh đổi
+#   bảng”, “thao tác tức thì”, “bộ công cụ mã nguồn mở năm 2011”, “bản chụp, xử lý ngoại tuyến”. Tên sản phẩm: lexicon_vi.DBS.yaml (probe p2).
+objectives:
+  - "Kể lại hành trình đổi lược đồ ở quy mô lớn qua năm chặng từ 2009 tới 2022, mỗi chặng một điểm nghẽn và một cách xử lý"
+  - "Tính lại thời gian chép bù theo lô, số lô, thời gian khi bị điều tiết và số lần thêm cột tức thì còn lại"
+  - "Chọn cách thêm cột hợp với quy mô của chính mình, kèm điều kiện đổi lựa chọn"
+asr_reviewed:
+  - {sentence: "Bảng bóng là bản sao rỗng của bảng, đã mang lược đồ mới.", reason: "ASR chép “Bản bóng là bản sao trọng của bản đã mang lực đồ mới.” (0.692): lệch âm/thanh thuần Việt: bảng/bản, rỗng/trọng, bảng/bản, lược/lực — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Đổi bảng là bước cuối, khi bảng bóng thay chỗ bảng cũ.", reason: "ASR chép “Đổi bản là bước cuối, khi bản bóng thay chỗ bản cũ.” (0.75): lệch âm/thanh thuần Việt: bảng/bản, bảng/bản, bảng/bản — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Ở chặng bốn, trước năm 2018, thêm cột nghĩa là dựng lại cả bảng, mất rất lâu với bảng lớn và cần thêm chỗ đĩa xấp xỉ bằng chính bảng cũ.", reason: "ASR chép “Ở chặn 4, trước năm 2018, thêm cột nghĩa là dựng lại cả bản, mất trất lâu với bản lớn và cần thêm chỗ đi xắp sĩ bằng chính bản cũ.” (0.778): lệch âm/thanh thuần Việt: chặng/chặn, bảng/bản, rất/trất, bảng/bản, đĩa xấp xỉ/đi xắp sĩ, bảng/bản — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Ở chặng ba, năm 2017, Stripe có hàng trăm triệu đối tượng đăng ký thanh toán định kỳ, cần chuyển từ bảng khách hàng sang bảng riêng.", reason: "ASR chép “Ở chặn 3, năm 2017, Striper có hàng trăm triệu đối tượng đăng ký thanh toán định kỳ, cần chuyển từ bản khách hàng sang bản riêng.” (0.875): lệch âm/thanh thuần Việt: chặng/chặn, bảng/bản, bảng/bản; “Stripe” đọc “Xờ-trai-pơ” theo lexicon_vi.DBS.yaml (probe p2 8/8, bản chép luôn là “Striper”) — đúng tên — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Ở chặng hai, năm 2016, nền tảng lưu trữ mã nguồn ấy đổi lược đồ nhiều lần mỗi ngày, trên các bảng từ rỗng tới nhiều trăm GB.", reason: "ASR chép “Ở chặng 2, năm 2016, nền tảng lưu trữ mã nguồn ấy đổi lượt đồ nhiều lần mỗi ngày, trên các bản từ đóng tới nhiều trăm gigabyte.” (0.879): GB đọc “ghi-ga-byte” theo lexicon của khoá, ASR viết “GB/gigabyte”; lệch âm/thanh thuần Việt: lược/lượt, bảng/bản, rỗng/đóng — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Hãy kiểm bằng đường khác như Stripe chạy lại phép tìm, hay đội năm 2016 so tổng kiểm của cả bảng.", reason: "ASR chép “Hãy kiểm bằng đường khác như Striper chạy lại phép tìm, hay đổi năm 2016 so tổng kiểm của cả bản.” (0.885): lệch âm/thanh thuần Việt: đội/đổi, bảng/bản; “Stripe” đọc “Xờ-trai-pơ” theo lexicon_vi.DBS.yaml (probe p2 8/8, bản chép luôn là “Striper”) — đúng tên — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Năm 2017, Stripe cần chuyển hàng trăm triệu đối tượng, và nếu mỗi đối tượng mất 1 giây, làm tuần tự 100 triệu cái sẽ mất hơn 3 năm.", reason: "ASR chép “Năm 2017, Striper cần chuyển hàng trăm triệu đối tượng, và nếu mỗi đối tượng mất một giây, làm tuần tử một trăm triệu cái sẽ mất hơn ba năm.” (0.943): lệch âm/thanh thuần Việt: tự/tử; “Stripe” đọc “Xờ-trai-pơ” theo lexicon_vi.DBS.yaml (probe p2 8/8, bản chép luôn là “Striper”) — đúng tên — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Thêm một cột khi bảng đã có 5 triệu dòng"
+    checks:
+      - "10**8 / (365 * 24 * 3600) > 3"
+    steps:
+      - show: |
+          <p>Bảng người dùng đã có <b>5 000 000 dòng</b> (số minh hoạ). Bạn cần <b>thêm một cột</b>.</p>
+          <p>Năm 2016, đội cơ sở dữ liệu của GitHub viết: với cách làm mặc định của MySQL, thêm hay bỏ cột là thao tác <b>chặn</b> — mà họ đổi lược đồ <b>nhiều lần mỗi ngày</b>.</p>
+          <p>Năm 2017, Stripe chuyển <b>hàng trăm triệu</b> đối tượng: nếu mỗi đối tượng mất 1 giây và làm tuần tự, 100 triệu đối tượng mất <b>hơn 3 năm</b>.</p>
+          <div class="box key">Hôm nay: năm chặng từ 2009 tới 2022 — thêm cột sao cho nhanh, không dừng dịch vụ, không hỏng dữ liệu cũ.</div>
+        focus: [1, 2, 2, 3, 4]
+        say: "Chào bạn, giả sử bảng người dùng của bạn đã có 5 triệu dòng, một số minh hoạ, và bạn cần thêm một cột. Năm 2016, đội cơ sở dữ liệu của một nền tảng lưu trữ mã nguồn lớn viết rằng với cách làm mặc định của MySQL, thêm hay bỏ cột là thao tác chặn. Trong khi đó, họ phải đổi lược đồ nhiều lần mỗi ngày. Năm 2017, Stripe cần chuyển hàng trăm triệu đối tượng, và nếu mỗi đối tượng mất 1 giây, làm tuần tự 100 triệu cái sẽ mất hơn 3 năm. Hôm nay ta đi qua năm chặng từ 2009 tới 2022, để biết cách thêm cột nhanh, không dừng dịch vụ, và không hỏng dữ liệu cũ."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại bốn điều từ các bài trước"
+    checks:
+      - "1000000 // 100 == 10000 and 5000000 // 100 == 50000"
+      - "100 + 10 - 5 == 105"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài</th><th>điều đã học</th><th>ví dụ số</th></tr>
+          <tr><td>bài 7</td><td>bảng nằm trên các <b>trang</b> đĩa; chi phí đo bằng số trang đọc, ghi</td><td>1 000 000 dòng, 100 dòng mỗi trang → 10 000 trang; 5 000 000 dòng → 50 000 trang</td></tr>
+          <tr><td>bài 11</td><td><b>giao dịch</b>: hoặc mọi thao tác cùng thành công, hoặc không có gì xảy ra</td><td>cộng B xong mà trừ A thất bại → huỷ cả hai</td></tr>
+          <tr><td>bài 13</td><td><b>khoá</b>: giao dịch giữ khoá một dòng thì giao dịch khác muốn ghi dòng đó phải chờ</td><td>T1 giữ khoá dòng An, T2 chờ tới khi T1 xong</td></tr>
+          <tr><td>bài 14</td><td><b>nhật ký</b>: mọi thay đổi được ghi thành một dãy bản ghi theo thứ tự; làm lại theo dãy đó thì dựng lại được dữ liệu</td><td>100, rồi “cộng 10”, “trừ 5” → 105</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.3", "1.4", "1.5"]
+        say: "Bảng nhắc lại bốn điều từ các bài trước. Ở bài 7, bảng nằm trên các trang đĩa, nên một triệu dòng với 100 dòng mỗi trang chiếm 10 nghìn trang. Theo cùng cách tính, 5 triệu dòng chiếm 50 nghìn trang. Ở bài 11, giao dịch là hoặc mọi thao tác cùng thành công, hoặc không có gì xảy ra, nên cộng B xong mà trừ A thất bại thì huỷ cả hai. Ở bài 13, giao dịch giữ khoá một dòng thì giao dịch khác muốn ghi dòng đó phải chờ. Ở bài 14, mọi thay đổi được ghi thành một dãy bản ghi theo thứ tự, ví dụ 100 rồi cộng 10, trừ 5, làm lại theo dãy ta được 105."
+
+  # ───────────────────────── 3. NGÔN NGỮ ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Ngôn ngữ của hành trình"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thuật ngữ</th><th>nghĩa</th></tr>
+          <tr><td><b>đổi lược đồ</b></td><td>thêm, bỏ, sửa cột hay chỉ mục của một bảng đang có dữ liệu</td></tr>
+          <tr><td><b>bảng bóng</b></td><td>bản sao rỗng của bảng, đã mang lược đồ mới</td></tr>
+          <tr><td><b>chép bù</b></td><td>chép các dòng cũ sang bảng mới, từng lô một</td></tr>
+          <tr><td><b>bộ kích hoạt</b> (trigger)</td><td>đoạn lệnh hệ quản trị tự chạy mỗi khi một dòng được thêm, sửa, xoá</td></tr>
+          <tr><td><b>đổi bảng</b></td><td>bước cuối: bảng bóng thay chỗ bảng cũ</td></tr>
+          <tr><td><b>điều tiết</b></td><td>chậm lại hoặc dừng hẳn khi máy chủ đang tải cao</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", "1.6", "1.7"]
+        say: "Bài dùng sáu thuật ngữ. Đổi lược đồ là thêm, bỏ, sửa cột hay chỉ mục của một bảng đang có dữ liệu. Bảng bóng là bản sao rỗng của bảng, đã mang lược đồ mới. Chép bù là chép các dòng cũ sang bảng mới, từng lô một. Bộ kích hoạt là đoạn lệnh hệ quản trị tự chạy mỗi khi một dòng được thêm, sửa hay xoá. Đổi bảng là bước cuối, khi bảng bóng thay chỗ bảng cũ. Điều tiết là chậm lại hoặc dừng hẳn khi máy chủ đang tải cao."
+
+  # ───────────────────────── 4. DÒNG THỜI GIAN ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Năm chặng trên một trục thời gian"
+    steps:
+      - show: |
+          <div><svg width="1700" height="320" viewBox="0 0 1700 320">
+          <line x1="30" y1="150" x2="1670" y2="150" stroke="#1f2937" stroke-width="3"/>
+          <g font-size="24" text-anchor="middle" fill="#1f2937">
+          <circle cx="160" cy="150" r="15" fill="#9ca3af"/><text x="160" y="108" font-weight="bold">2009 → 2011</text><text x="160" y="200">bảng bóng</text><text x="160" y="232">+ bộ kích hoạt</text>
+          <circle cx="500" cy="150" r="15" fill="#2a78d6"/><text x="500" y="108" font-weight="bold">2016</text><text x="500" y="200">đọc nhật ký nhị phân</text><text x="500" y="232">dừng được bất cứ lúc nào</text>
+          <circle cx="850" cy="150" r="15" fill="#7c3aed"/><text x="850" y="108" font-weight="bold">2017</text><text x="850" y="200">ghi kép bốn bước</text><text x="850" y="232">hàng trăm triệu đối tượng</text>
+          <circle cx="1200" cy="150" r="15" fill="#eb6834"/><text x="1200" y="108" font-weight="bold">2018</text><text x="1200" y="200">thêm cột tức thì</text><text x="1200" y="232">chỉ sửa siêu dữ liệu</text>
+          <circle cx="1540" cy="150" r="15" fill="#059669"/><text x="1540" y="108" font-weight="bold">2022</text><text x="1540" y="200">thêm ở mọi vị trí</text><text x="1540" y="232">tối đa 64 phiên bản dòng</text>
+          </g>
+          <text x="850" y="300" font-size="23" fill="#6b7280" text-anchor="middle">khai sinh → tăng trưởng → quy mô rất lớn → ổn định → tiếp tục phát triển</text>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình là trục thời gian với năm chặng. Từ 2009 tới 2011, công cụ chép sang bảng bóng nhờ bộ kích hoạt. Năm 2016 có cách đọc nhật ký nhị phân, dừng được bất cứ lúc nào, rồi năm 2017 là ghi kép bốn bước cho hàng trăm triệu đối tượng. Năm 2018, hệ quản trị tự thêm cột tức thì, và năm 2022 thêm được ở mọi vị trí, với giới hạn 64 phiên bản dòng."
+
+  # ───────────────────────── 5. CƠ CHẾ CHUNG ─────────────────────────
+  - id: ghost
+    kind: concept
+    title: "Cơ chế chung: bảng bóng, chép bù, rồi đổi bảng"
+    steps:
+      - show: |
+          <div><svg width="1500" height="330" viewBox="0 0 1500 330">
+          <defs><marker id="ah" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="12" refX="14" refY="6" orient="auto"><path d="M0,0 L16,6 L0,12 z" fill="#1f2937"/></marker></defs>
+          <g font-size="24" text-anchor="middle" fill="#1f2937">
+          <rect x="40" y="110" width="250" height="90" rx="10" fill="#e0ecfb" stroke="#2a78d6" stroke-width="3"/><text x="165" y="150">ứng dụng</text><text x="165" y="182">thêm, sửa, xoá</text>
+          <rect x="520" y="110" width="300" height="90" rx="10" fill="#f3f4f6" stroke="#1f2937" stroke-width="3"/><text x="670" y="150">bảng cũ</text><text x="670" y="182">5 000 000 dòng</text>
+          <rect x="1110" y="110" width="330" height="90" rx="10" fill="#dcfce7" stroke="#059669" stroke-width="3"/><text x="1275" y="150">bảng bóng</text><text x="1275" y="182">đã có cột mới</text>
+          </g>
+          <line x1="290" y1="155" x2="515" y2="155" stroke="#1f2937" stroke-width="3" marker-end="url(#ah)"/>
+          <line x1="820" y1="130" x2="1105" y2="130" stroke="#2a78d6" stroke-width="3" marker-end="url(#ah)"/>
+          <line x1="820" y1="180" x2="1105" y2="180" stroke="#eb6834" stroke-width="3" stroke-dasharray="10 6" marker-end="url(#ah)"/>
+          <g font-size="22" text-anchor="middle">
+          <text x="965" y="108" fill="#2a78d6">① chép bù từng lô</text>
+          <text x="965" y="222" fill="#eb6834">② thay đổi mới chép theo</text>
+          <text x="1275" y="262" fill="#059669">③ đồng bộ rồi: đổi bảng</text>
+          <text x="400" y="135" fill="#1f2937">ghi bình thường</text>
+          </g>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình này là cơ chế chung của mọi chặng đầu. Ứng dụng vẫn ghi bình thường vào bảng cũ, trong khi ta chép bù các dòng cũ sang bảng bóng từng lô một. Mọi thay đổi mới trên bảng cũ cũng phải được chép theo, nếu không bảng bóng sẽ thiếu dữ liệu. Khi hai bảng đã đồng bộ, bảng bóng thay chỗ bảng cũ, và cột mới có mặt mà dịch vụ không phải dừng."
+
+  # ───────────────────────── 6. CHẶNG 1 ─────────────────────────
+  - id: stage1
+    kind: example
+    title: "Chặng 1, 2009 tới 2011 — khai sinh: bảng bóng và bộ kích hoạt"
+    stage: {year: "2009 → 2011", scale: "câu lệnh đổi bảng mặc định chặn ghi; công cụ trực tuyến có từ 2009, bộ công cụ mã nguồn mở từ 6/2011", source: "[GH16] [PT11] [MY18]", practice: "chép sang bản sao theo lô nhỏ có thời gian cố định, bộ kích hoạt chép thay đổi mới, đổi tên nguyên tử, tạm dừng khi bản sao trễ hay tải cao"}
+    checks:
+      - "5000000 // 1000 == 5000 and 5000 * 0.5 == 2500 and divmod(2500, 60) == (41, 40)"
+    steps:
+      - show: |
+          <p><b>Điểm nghẽn:</b> câu lệnh đổi bảng mặc định của MySQL là thao tác <b>chặn</b>; trước bản 5.6, cách duy nhất là <b>chép từng dòng</b> sang bảng mới.</p>
+          <p><b>Cách xử lý</b> (công cụ từ 2009; năm 2011 nằm trong bộ công cụ của Percona): tạo bản sao rỗng, đổi lược đồ trên bản sao, chép dòng sang theo <b>lô nhỏ</b>. <b>Bộ kích hoạt</b> trên bảng cũ chép mọi thay đổi mới sang bản sao.</p>
+          <p>Chép xong, hai bảng được <b>đổi tên cùng lúc</b> trong một thao tác nguyên tử.</p>
+        focus: [1, 1, 2, 2, 3]
+        say: "Ở chặng một, câu lệnh đổi bảng mặc định của MySQL là thao tác chặn. Trước bản 5 chấm 6, cách duy nhất là chép từng dòng sang bảng mới. Từ năm 2009 đã có công cụ làm khác, và năm 2011 một công cụ như vậy nằm trong một bộ công cụ mã nguồn mở. Nó tạo bản sao rỗng, đổi lược đồ trên bản sao, rồi chép dòng sang theo lô nhỏ, còn bộ kích hoạt chép mọi thay đổi mới. Chép xong, hai bảng được đổi tên cùng lúc trong một thao tác nguyên tử."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>mặc định của công cụ</td><td>lô đầu 1000 dòng; chỉnh cỡ lô sao cho mỗi lô chạy 0,5 giây</td><td>giả sử tốc độ không đổi: 1000 dòng mỗi 0,5 giây</td></tr>
+          <tr><td>Bước 1. số lô</td><td>5 000 000 chia 1000</td><td>$\hlb{5000}$ lô</td></tr>
+          <tr><td>Bước 2. thời gian chép</td><td>5000 lô nhân 0,5 giây</td><td>$\hlg{2500}$ giây = 41 phút 40 giây</td></tr></table>
+          <p class="note">Thực hành: lô nhỏ, mỗi lô một khoảng thời gian cố định; tạm dừng chép khi bản sao trễ hoặc máy chủ tải cao. Điều kiện: bảng có khoá chính hoặc chỉ mục duy nhất, chưa có bộ kích hoạt nào.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2, 2]
+        say: "Làm thử với bảng 5 triệu dòng. Công cụ mặc định bắt đầu với lô 1000 dòng, rồi chỉnh cỡ lô sao cho mỗi lô chạy nửa giây, và ta giả sử tốc độ không đổi. Bước một, 5 triệu chia 1000 được 5 nghìn lô. Bước hai, 5 nghìn lô nhân nửa giây được 2500 giây, tức 41 phút 40 giây. Thực hành rút ra là lô nhỏ có thời gian cố định, và tạm dừng chép khi bản sao trễ hay máy chủ tải cao. Điều kiện là bảng có khoá chính hoặc chỉ mục duy nhất, và chưa có bộ kích hoạt nào."
+
+  # ───────────────────────── 7. CHẶNG 2 ─────────────────────────
+  - id: stage2
+    kind: example
+    title: "Chặng 2, năm 2016 — tăng trưởng: bỏ bộ kích hoạt, đọc nhật ký"
+    stage: {year: "2016", scale: "đổi lược đồ nhiều lần mỗi ngày; bảng từ rỗng tới nhiều trăm GB", source: "[GH16]", practice: "không dùng bộ kích hoạt, đọc nhật ký nhị phân, một kết nối ghi tuần tự, dừng hẳn khi điều tiết, hoãn bước đổi bảng, thử trên bản sao và so tổng kiểm"}
+    checks:
+      - "len(range(8, 18)) == 10 and 24 - 10 == 14 and 28 / 14 == 2"
+    steps:
+      - show: |
+          <p><b>Quy mô:</b> GitHub đổi lược đồ <b>nhiều lần mỗi ngày</b>; bảng từ rỗng tới <b>nhiều trăm GB</b>. Càng lớn, nhiều lần đổi càng bị coi là “thao tác rủi ro”, chỉ dám chạy giờ thấp điểm hay cuối tuần.</p>
+          <table class="t"><tr><th>điểm nghẽn của bộ kích hoạt</th><th>nối về bài nền</th></tr>
+          <tr><td>chạy chung giao dịch với câu ghi của ứng dụng, tranh khoá trên cả hai bảng; có lúc khoá cứng cả bảng, cả cơ sở dữ liệu</td><td>bài 11, bài 13</td></tr>
+          <tr><td>dừng chép được nhưng <b>không dừng được bộ kích hoạt</b>, vì gỡ nó là mất dữ liệu; máy chủ chính vẫn sập vì tải của chúng</td><td>bảng bóng thiếu thay đổi mới</td></tr></table>
+        focus: [1, 1, "2.2", "2.2", "2.3", "2.3"]
+        say: "Ở chặng hai, năm 2016, nền tảng lưu trữ mã nguồn ấy đổi lược đồ nhiều lần mỗi ngày, trên các bảng từ rỗng tới nhiều trăm GB. Càng lớn, nhiều lần đổi càng bị coi là thao tác rủi ro, chỉ dám chạy giờ thấp điểm hay cuối tuần. Theo bài 11, bộ kích hoạt chạy chung giao dịch với câu ghi của ứng dụng. Theo bài 13, chúng tranh khoá trên cả hai bảng, có lúc khoá cứng cả cơ sở dữ liệu. Công cụ dừng chép được, nhưng không dừng được bộ kích hoạt, vì gỡ nó ra là mất dữ liệu. Vì thế máy chủ chính vẫn có lúc sập vì tải của chúng."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>cách xử lý của gh-ost (GitHub, 2016)</th><th>vì sao</th></tr>
+          <tr><td><b>không dùng bộ kích hoạt</b>: đọc <b>nhật ký nhị phân</b>, dãy thay đổi đã ghi nhận</td><td>giống bài 14: làm lại theo dãy thay đổi</td></tr>
+          <tr><td>chỉ <b>một kết nối</b> ghi tuần tự vào bảng bóng</td><td>không tranh khoá với ứng dụng</td></tr>
+          <tr><td>điều tiết là <b>dừng hẳn</b>; tạo một tệp cờ là dừng, xoá tệp là chạy tiếp</td><td>mọi lệnh ghi đều do công cụ phát ra</td></tr>
+          <tr><td><b>hoãn bước đổi bảng</b> tới khi người trực có mặt</td><td>vẫn chép theo, giữ bảng bóng đồng bộ</td></tr>
+          <tr><td>thử trên bản sao, so <b>tổng kiểm</b> của cả hai bảng; hàng nghìn lần thử trước khi chạy thật</td><td>tin bằng số đo, không bằng lời hứa</td></tr></table>
+        focus: ["1.2", "1.2", "1.3", "1.4", "1.5", "1.6"]
+        say: "Cách xử lý của đội này là không dùng bộ kích hoạt, mà đọc nhật ký nhị phân, tức dãy các thay đổi đã ghi nhận. Đây đúng là ý của bài 14, làm lại theo dãy thay đổi là dựng lại được dữ liệu. Chỉ một kết nối ghi tuần tự vào bảng bóng, nên công cụ không tranh khoá với ứng dụng. Vì mọi lệnh ghi đều do công cụ phát ra, điều tiết có nghĩa là dừng hẳn, tạo một tệp cờ là dừng, xoá tệp là chạy tiếp. Bước đổi bảng được hoãn tới khi người trực có mặt, trong lúc đó thay đổi mới vẫn được chép theo. Họ thử trên bản sao, so tổng kiểm của hai bảng, hàng nghìn lần trước khi chạy trên máy chủ chính."
+      - clear: true
+        show: |
+          <p>Điều tiết theo giờ, ví dụ trong bài viết năm 2016: dừng khi <code>SELECT HOUR(NOW()) BETWEEN 8 and 17</code> đúng.</p>
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. giờ phải dừng</td><td>giờ 8, 9, …, 17</td><td>10 giờ mỗi ngày</td></tr>
+          <tr><td>Bước 2. giờ được chạy</td><td>24 trừ 10</td><td>$\hlb{14}$ giờ mỗi ngày</td></tr>
+          <tr><td>Bước 3. việc chép cần 28 giờ (số minh hoạ)</td><td>28 chia 14</td><td>$\hlg{2}$ ngày</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Bài viết năm 2016 có một ví dụ điều tiết theo giờ, dừng khi giờ hiện tại nằm từ 8 tới 17. Bước một, các giờ 8, 9, cho tới 17 là 10 giờ phải dừng mỗi ngày. Bước hai, 24 trừ 10 còn 14 giờ được chạy mỗi ngày. Bước ba, nếu việc chép cần 28 giờ, một số minh hoạ, thì 28 chia 14 là 2 ngày, chậm hơn nhưng không ai bị ảnh hưởng giờ cao điểm."
+
+  # ───────────────────────── 8. CHẶNG 3 ─────────────────────────
+  - id: stage3
+    kind: example
+    title: "Chặng 3, năm 2017 — quy mô rất lớn: ghi kép bốn bước"
+    stage: {year: "2017", scale: "hàng trăm triệu đối tượng; 1 giây mỗi đối tượng thì 100 triệu mất hơn 3 năm", source: "[ST17]", practice: "ghi kép, chép bù tìm ngoại tuyến trên bản chụp, chép song song, so hai đường đọc, đổi từng phần nhỏ, gỡ đường cũ sau cùng"}
+    checks:
+      - "10**8 // 1000 == 100000 and 10**8 / 1000 == 100000 and round(100000 / 3600, 1) == 27.8"
+      - "round(10**8 / (365 * 24 * 3600), 2) == 3.17"
+    steps:
+      - show: |
+          <p><b>Quy mô:</b> Stripe có <b>hàng trăm triệu</b> đối tượng đăng ký thanh toán định kỳ, cần chuyển từ bảng khách hàng sang <b>bảng riêng</b>. Không có giờ bảo trì: mọi dịch vụ phải chạy suốt.</p>
+          <table class="t"><tr><th>bước</th><th>việc làm</th><th>kiểm thế nào</th></tr>
+          <tr><td>1. ghi kép</td><td>ghi vào cả bảng cũ lẫn bảng mới, <b>tăng dần</b> tỉ lệ; rồi chép bù phần còn lại</td><td>theo dõi số đo vận hành; chạy lại phép tìm để chắc không sót</td></tr>
+          <tr><td>2. đổi đường đọc</td><td>đọc từ bảng mới</td><td>đọc <b>cả hai</b>, lệch là báo động</td></tr>
+          <tr><td>3. đổi đường ghi</td><td>chỉ ghi vào bảng mới</td><td>mỗi lần đổi không quá vài trăm dòng mã</td></tr>
+          <tr><td>4. gỡ dữ liệu cũ</td><td>xoá phần thuộc mô hình cũ</td><td>gọi tới trường cũ là báo lỗi</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", "2.4", "2.5"]
+        say: "Ở chặng ba, năm 2017, Stripe có hàng trăm triệu đối tượng đăng ký thanh toán định kỳ, cần chuyển từ bảng khách hàng sang bảng riêng. Họ không có giờ bảo trì, mọi dịch vụ phải chạy suốt. Bước một là ghi kép vào cả hai bảng, tăng dần tỉ lệ và theo dõi số đo, rồi chép bù phần còn lại. Bước hai đổi đường đọc sang bảng mới, nhưng đọc cả hai để so, lệch là báo động. Bước ba chỉ ghi vào bảng mới, mỗi lần đổi không quá vài trăm dòng mã. Bước bốn mới gỡ dữ liệu cũ."
+      - clear: true
+        show: |
+          <p>Phần đắt nhất của chép bù là <b>tìm</b> mọi đối tượng cần chuyển: họ tìm <b>ngoại tuyến</b> trên bản chụp của cơ sở dữ liệu, không hỏi máy chủ đang phục vụ, rồi chép bằng <b>nhiều tiến trình song song</b>.</p>
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. tuần tự, 1 giây mỗi đối tượng</td><td>100 000 000 giây chia 31 536 000 giây mỗi năm</td><td>≈ $\hl{3{,}17}$ năm</td></tr>
+          <tr><td>Bước 2. số lô, mỗi lô 1000</td><td>100 000 000 chia 1000</td><td>$\hlb{100\,000}$ lô</td></tr>
+          <tr><td>Bước 3. 1000 tiến trình song song (số minh hoạ)</td><td>100 000 000 chia 1000 = 100 000 giây</td><td>≈ $\hlg{27{,}8}$ giờ</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", "2.4"]
+        say: "Phần đắt nhất của chép bù là tìm mọi đối tượng cần chuyển, nên họ tìm ngoại tuyến trên bản chụp của cơ sở dữ liệu. Sau đó họ chép bằng nhiều tiến trình song song. Bước một, làm tuần tự 100 triệu giây, chia cho 31 triệu 536 nghìn giây mỗi năm, được khoảng 3 phẩy 17 năm. Bước hai, chia thành lô 1000 đối tượng thì có 100 nghìn lô. Bước ba, với 1000 tiến trình song song, một số minh hoạ, còn 100 nghìn giây, khoảng 27 phẩy 8 giờ."
+      - show: |
+          <div class="box key">Ở khoá triển khai và vận hành phần mềm (DevOps), cách này gọi là <b>mở rộng rồi thu hẹp</b>: thêm cái mới mà giữ cái cũ, chuyển dần, cuối cùng mới bỏ cái cũ. Điều kiện để song song nhanh như vậy: cơ sở dữ liệu chịu được tải ghi thêm — nên tăng dần và đo.</div>
+        say: "Ở khoá triển khai và vận hành phần mềm, cách này gọi là mở rộng rồi thu hẹp, thêm cái mới mà giữ cái cũ, chuyển dần, cuối cùng mới bỏ cái cũ. Điều kiện để chép song song nhanh như vậy là cơ sở dữ liệu chịu được tải ghi thêm, nên phải tăng dần và đo."
+
+  # ───────────────────────── 9. CHẶNG 4 ─────────────────────────
+  - id: stage4
+    kind: example
+    title: "Chặng 4, năm 2018 — ổn định: hệ quản trị tự thêm cột tức thì"
+    stage: {year: "2018", scale: "MySQL 8.0.12 (27/7/2018) thêm cột tức thì; PostgreSQL 11 (18/10/2018) thêm cột có mặc định không viết lại bảng", source: "[MY18] [PG18]", practice: "đổi lược đồ chỉ bằng siêu dữ liệu khi được; đòi rõ thao tác tức thì để không lặng lẽ chép cả bảng; biết điều kiện của từng hệ"}
+    checks:
+      - "200 + 200 == 400 and 5000000 // 100 == 50000"
+    steps:
+      - show: |
+          <p><b>Trước:</b> thêm cột là <b>dựng lại cả bảng</b>; với bảng lớn mất rất lâu, nhất là khi có bản sao, và cần thêm chỗ đĩa xấp xỉ bằng chính bảng cũ.</p>
+          <p><b>MySQL 8.0.12, ngày 27/7/2018:</b> thêm cột <b>tức thì</b> — chỉ sửa <b>siêu dữ liệu</b> trong từ điển dữ liệu, không chạm dữ liệu của bảng. Giá trị mặc định lấy từ từ điển; dòng nào được cập nhật mới ghi theo dạng mới.</p>
+          <p><b>PostgreSQL 11, ngày 18/10/2018:</b> thêm cột có mặc định <b>khác rỗng</b> mà không viết lại bảng, khi mặc định là một <b>hằng</b>.</p>
+        focus: [1, 2, 2, 3]
+        say: "Ở chặng bốn, trước năm 2018, thêm cột nghĩa là dựng lại cả bảng, mất rất lâu với bảng lớn và cần thêm chỗ đĩa xấp xỉ bằng chính bảng cũ. Ngày 27 tháng 7 năm 2018, bản 8 chấm 0 chấm 12 của MySQL cho thêm cột tức thì, chỉ sửa siêu dữ liệu trong từ điển dữ liệu mà không chạm dữ liệu của bảng. Giá trị mặc định được lấy từ từ điển, và dòng nào được cập nhật mới ghi theo dạng mới. Ngày 18 tháng 10 năm 2018, bản 11 của một hệ quản trị mã nguồn mở khác cũng thêm được cột có mặc định khác rỗng mà không viết lại bảng, khi mặc định là một hằng."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bảng 5 000 000 dòng, 200 GB (số minh hoạ)</th><th>dựng lại cả bảng</th><th>thêm cột tức thì</th></tr>
+          <tr><td>trang phải ghi (100 dòng mỗi trang, bài 7)</td><td>$\hl{50\,000}$ trang</td><td>$\hlg{0}$ trang dữ liệu</td></tr>
+          <tr><td>chỗ đĩa lúc cao nhất</td><td>200 + 200 = $\hl{400}$ GB</td><td>200 GB</td></tr></table>
+          <table class="t"><tr><th>điều kiện (MySQL, 2018)</th><th>điều kiện (PostgreSQL 11)</th></tr>
+          <tr><td>chỉ thêm ở <b>cuối</b> bảng; câu lệnh chỉ gồm thao tác tức thì. Ghi rõ “tức thì”: không làm được thì <b>báo lỗi ngay</b>, không lặng lẽ chép</td><td>giá trị mặc định là <b>hằng</b></td></tr></table>
+        focus: [1, "1.2", "1.3", "2.2", "2.2"]
+        say: "Làm thử với bảng 5 triệu dòng, 200 GB, một số minh hoạ. Theo cách tính của bài 7, dựng lại cả bảng phải ghi 50 nghìn trang, còn thêm cột tức thì không ghi trang dữ liệu nào. Lúc cao nhất, dựng lại cần 200 cộng 200 là 400 GB đĩa. Với MySQL năm 2018, cột chỉ được thêm ở cuối bảng, câu lệnh chỉ gồm thao tác tức thì, và nếu ghi rõ đòi tức thì mà không làm được thì hệ báo lỗi ngay. Với hệ quản trị thứ hai, ở bản 11, giá trị mặc định phải là hằng."
+
+  # ───────────────────────── 10. CHẶNG 5 ─────────────────────────
+  - id: stage5
+    kind: example
+    title: "Chặng 5, năm 2022 — tiếp tục phát triển: mọi vị trí, giới hạn 64"
+    stage: {year: "2022", scale: "MySQL 8.0.29 (26/4/2022): thêm cột ở mọi vị trí và bỏ cột tức thì; tối đa 64 phiên bản dòng", source: "[MY22] [ST17]", practice: "theo dõi số phiên bản dòng; thao tác tức thì cho thêm, bỏ cột; chuyển dữ liệu sang bảng mới vẫn cần bốn bước"}
+    checks:
+      - "64 // 2 == 32 and 32 * 2 == 64"
+    steps:
+      - show: |
+          <p><b>MySQL 8.0.29, ngày 26/4/2022:</b> cột thêm tức thì được đặt ở <b>mọi vị trí</b>, không chỉ cuối bảng; <b>bỏ cột</b> cũng tức thì.</p>
+          <p>Cái giá: mỗi lần thêm hay bỏ cột tức thì tạo một <b>phiên bản dòng</b> mới, tối đa <b>64</b>. Có một cột đếm số phiên bản để theo dõi.</p>
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>2 lần thêm, bỏ cột tức thì mỗi tháng (số minh hoạ)</td><td>64 chia 2</td><td>$\hlg{32}$ tháng mới chạm giới hạn</td></tr></table>
+        focus: [1, 2, 2, "3.2"]
+        say: "Ở chặng năm, ngày 26 tháng 4 năm 2022, bản 8 chấm 0 chấm 29 của MySQL cho đặt cột thêm tức thì ở mọi vị trí, và bỏ cột cũng tức thì. Cái giá là mỗi lần thêm hay bỏ cột tức thì tạo một phiên bản dòng mới, tối đa 64 phiên bản. Hệ có một cột đếm số phiên bản để người vận hành theo dõi. Nếu đội của bạn thêm hay bỏ cột tức thì 2 lần mỗi tháng, một số minh hoạ, thì 64 chia 2 là 32 tháng mới chạm giới hạn."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>việc cần làm</th><th>công cụ hợp</th></tr>
+          <tr><td>thêm, bỏ một cột</td><td>thao tác tức thì, nếu đủ điều kiện</td></tr>
+          <tr><td>đổi kiểu, thêm chỉ mục, thao tác không có trong danh sách tức thì</td><td>bảng bóng chép bù, có điều tiết</td></tr>
+          <tr><td>chuyển dữ liệu sang bảng mới, mã nhiều dịch vụ cùng phải đổi</td><td>ghi kép bốn bước</td></tr></table>
+          <p class="note">Ổn định không có nghĩa là hết việc: hệ quản trị nhận dần các thực hành tốt, nhưng mỗi thao tác vẫn có điều kiện riêng.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Vậy sau mười mấy năm, mỗi loại việc có một công cụ hợp. Thêm hay bỏ một cột thì dùng thao tác tức thì, nếu đủ điều kiện. Đổi kiểu, thêm chỉ mục, hay thao tác không có trong danh sách tức thì vẫn cần bảng bóng chép bù, có điều tiết. Chuyển dữ liệu sang bảng mới, khi mã của nhiều dịch vụ cùng phải đổi, vẫn cần ghi kép bốn bước. Hệ quản trị nhận dần các thực hành tốt, nhưng mỗi thao tác vẫn có điều kiện riêng."
+
+  # ───────────────────────── 11. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm bốn con số của hành trình"
+    checks:
+      - "1000 / 0.5 == 2000 and 5000000 / 2000 == 2500"
+      - "round(10**8 / 86400, 1) == 1157.4 and 3 * 365 == 1095 and 10**8 / 86400 > 1095"
+      - "14 + 14 == 28"
+      - "32 * 2 == 64"
+    steps:
+      - show: |
+          <table class="t"><tr><th>con số</th><th>đường khác để kiểm</th></tr>
+          <tr><td>2500 giây</td><td>tốc độ: 1000 dòng chia 0,5 giây = 2000 dòng mỗi giây; 5 000 000 chia 2000 = 2500 ✓</td></tr>
+          <tr><td>hơn 3 năm</td><td>100 000 000 giây chia 86 400 giây mỗi ngày ≈ 1157,4 ngày, lớn hơn 3 nhân 365 = 1095 ngày ✓</td></tr>
+          <tr><td>2 ngày</td><td>đếm xuôi: ngày đầu chạy 14 giờ, ngày hai thêm 14 giờ, đủ 28 ✓</td></tr>
+          <tr><td>32 tháng</td><td>nhân ngược: 32 tháng nhân 2 lần mỗi tháng = 64 ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Ta kiểm lại bốn con số theo đường khác. Đổi sang tốc độ, 1000 dòng trong nửa giây là 2000 dòng mỗi giây, và 5 triệu chia 2000 đúng bằng 2500 giây. Đổi sang ngày, 100 triệu giây chia 86 nghìn 400 được khoảng 1157 ngày, lớn hơn 1095 ngày của ba năm. Đếm xuôi, ngày đầu chạy 14 giờ, ngày hai thêm 14 giờ, vừa đủ 28 giờ. Nhân ngược, 32 tháng nhân 2 lần mỗi tháng đúng bằng 64 phiên bản."
+
+  # ───────────────────────── 12. BÀI HỌC SAI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "Những bài học sai khi đọc hành trình này"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">1.</b> “Cứ chạy lúc nửa đêm, có người ngồi canh là xong”</td><td>GitHub ghi: nhiều lần đổi chỉ dám chạy giờ thấp điểm mà vẫn có lần gây sập</td><td>chọn công cụ dừng được, hoãn được bước đổi bảng</td></tr>
+          <tr><td><b class="red">2.</b> “Tạm dừng chép là máy chủ hết tải”</td><td>với bộ kích hoạt, dừng chép không dừng được bộ kích hoạt; máy chủ chính vẫn sập vì tải của chúng</td><td>đo tải của <b>mọi</b> đường ghi thêm, không chỉ đường chép</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.2", "1.3", "1.3"]
+        say: "Bảng có hai bài học sai đầu tiên. Bài học sai thứ nhất là nghĩ cứ chạy lúc nửa đêm, có người ngồi canh là xong. Đội cơ sở dữ liệu năm 2016 ghi rằng nhiều lần đổi chỉ dám chạy giờ thấp điểm mà vẫn có lần gây sập. Hãy chọn công cụ dừng được, và hoãn được bước đổi bảng. Bài học sai thứ hai là tưởng tạm dừng chép là máy chủ hết tải, trong khi bộ kích hoạt vẫn chạy và có lúc làm sập máy chủ chính. Hãy đo tải của mọi đường ghi thêm, không chỉ đường chép."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">3.</b> “Chép bù xong là xong”</td><td>một lô lỗi, một dòng sót, không ai biết</td><td>kiểm bằng đường khác: Stripe chạy lại phép tìm, GitHub so tổng kiểm cả bảng</td></tr>
+          <tr><td><b class="red">4.</b> “Hệ đã thêm cột tức thì, khỏi cần quy trình”</td><td>có điều kiện: vị trí, hằng mặc định, 64 phiên bản; chuyển bảng thì không có thao tác tức thì</td><td>đòi rõ “tức thì” để được báo lỗi thay vì lặng lẽ chép; giữ quy trình bốn bước cho việc lớn</td></tr></table>
+        focus: ["1.2", "1.2", "1.3", "1.3", "1.3"]
+        say: "Bài học sai thứ ba là nghĩ chép bù xong là xong, trong khi một lô lỗi hay một dòng sót có thể không ai biết. Hãy kiểm bằng đường khác như Stripe chạy lại phép tìm, hay đội năm 2016 so tổng kiểm của cả bảng. Bài học sai thứ tư là nghĩ hệ đã thêm cột tức thì nên khỏi cần quy trình. Thao tác tức thì có điều kiện về vị trí, về hằng mặc định, và giới hạn 64 phiên bản, còn chuyển dữ liệu sang bảng mới thì không có thao tác tức thì. Hãy đòi rõ tức thì để được báo lỗi thay vì lặng lẽ chép, và giữ quy trình bốn bước cho việc lớn."
+
+  # ───────────────────────── 13. QUYẾT ĐỊNH ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Bạn sẽ làm gì ở quy mô của mình?"
+    checks:
+      - "2000000 // 1000 == 2000 and 2000 * 0.5 == 1000 and divmod(1000, 60) == (16, 40)"
+      - "10000 // 1000 == 10 and 10 * 0.5 == 5"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>tình huống: bảng 2 000 000 dòng, MySQL bản mới, 3 máy chủ ứng dụng cập nhật cuốn chiếu</th></tr>
+          <tr><td>1</td><td>thêm cột “ngày sinh”, cho phép để trống. Bạn chọn cách nào, tốn bao lâu?</td></tr>
+          <tr><td>2</td><td>tách địa chỉ khách hàng ra bảng riêng, nhiều chỗ trong mã đang đọc nó. Làm một lần hay bốn bước?</td></tr></table>
+        focus: [1, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn ra quyết định, với một bảng 2 triệu dòng, MySQL bản mới, và 3 máy chủ ứng dụng cập nhật cuốn chiếu. Câu một, bạn cần thêm cột ngày sinh, cho phép để trống, vậy chọn cách nào và tốn bao lâu? Câu hai, bạn tách địa chỉ khách hàng ra bảng riêng, trong khi nhiều chỗ trong mã đang đọc nó, vậy làm một lần hay bốn bước? Dừng video và viết ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 1: lựa chọn</th><th>được</th><th>mất</th></tr>
+          <tr><td>thao tác tức thì</td><td>xong ngay, 0 trang dữ liệu phải ghi</td><td>dùng 1 trong 64 phiên bản dòng</td></tr>
+          <tr><td>bảng bóng chép bù</td><td>làm được cả khi không tức thì được</td><td>2 000 000 chia 1000 = 2000 lô; nhân 0,5 giây = 1000 giây ≈ 16 phút 40 giây</td></tr></table>
+          <p class="note">Chọn tức thì, ghi rõ “tức thì”. Điều kiện đổi: câu lệnh còn kèm thao tác không tức thì, như thêm chỉ mục — tách riêng, hoặc dùng bảng bóng.</p>
+        focus: [1, "1.2", "1.3", "1.3", 2]
+        say: "Đáp án câu một có hai lựa chọn. Thao tác tức thì xong ngay, không phải ghi trang dữ liệu nào, đổi lại dùng một trong 64 phiên bản dòng. Bảng bóng làm được cả khi không tức thì được, nhưng 2 triệu chia 1000 là 2000 lô. Nhân nửa giây mỗi lô thì mất 1000 giây, khoảng 16 phút 40 giây. Nên chọn tức thì và ghi rõ đòi tức thì, còn nếu câu lệnh kèm việc như thêm chỉ mục thì tách riêng, hoặc dùng bảng bóng."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 2: lựa chọn</th><th>được</th><th>mất</th></tr>
+          <tr><td>ghi kép bốn bước</td><td>không dừng dịch vụ; bản cũ và bản mới cùng chạy được; so được hai đường đọc</td><td>nhiều lần triển khai, nhiều tuần</td></tr>
+          <tr><td>làm một lần trong giờ bảo trì</td><td>nhanh, ít mã</td><td>phải dừng dịch vụ; khi cập nhật cuốn chiếu, bản cũ đọc chỗ đã mất là hỏng</td></tr></table>
+          <p class="note">Điều kiện đổi: dịch vụ được phép dừng ngắn và bảng nhỏ, ví dụ 10 000 dòng (số minh hoạ) chỉ 10 lô, khoảng 5 giây — khi đó một lần là đủ, đừng chép quy mô người khổng lồ.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Đáp án câu hai cũng là một đánh đổi. Ghi kép bốn bước không dừng dịch vụ, bản cũ và bản mới cùng chạy được, và so được hai đường đọc, đổi lại mất nhiều lần triển khai. Làm một lần trong giờ bảo trì thì nhanh, ít mã, nhưng phải dừng dịch vụ, và khi cập nhật cuốn chiếu, bản cũ đọc chỗ đã mất sẽ hỏng. Chỉ khi dịch vụ được phép dừng ngắn và bảng nhỏ, như 10 nghìn dòng chỉ 10 lô trong khoảng 5 giây, một số minh hoạ, thì một lần là đủ."
+
+  # ───────────────────────── 14. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi hành trình & tư duy chuyên gia"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">bảng bóng + bộ kích hoạt: chép theo lô</span><span class="a">→</span>
+          <span class="n">đọc nhật ký: dừng được, thử được</span><span class="a">→</span>
+          <span class="n">ghi kép bốn bước: hàng trăm triệu</span><span class="a">→</span>
+          <span class="n">thêm cột tức thì: chỉ siêu dữ liệu</span><span class="a">→</span>
+          <span class="n">mọi vị trí, giới hạn 64</span></div>
+        say: "Tổng kết lại hành trình. Bảng bóng với bộ kích hoạt cho chép theo lô mà không chặn ghi. Đọc nhật ký thay cho bộ kích hoạt giúp dừng được và thử được. Ghi kép bốn bước đưa được hàng trăm triệu đối tượng sang bảng mới. Rồi hệ quản trị tự thêm cột tức thì bằng siêu dữ liệu, và sau đó thêm được ở mọi vị trí, với giới hạn 64 phiên bản."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> một thay đổi lược đồ an toàn là thay đổi <b>dừng được, đo được và kiểm được bằng đường khác</b>. Trước khi chọn công cụ, tính thử: bảng của mình bao nhiêu dòng, chép mất bao lâu?</div>
+        say: "Điều cần mang theo, một thay đổi lược đồ an toàn là thay đổi dừng được, đo được, và kiểm được bằng đường khác. Trước khi chọn công cụ, hãy tính thử bảng của mình bao nhiêu dòng, và chép mất bao lâu."
+      - clear: true
+        show: |
+          <p class="note">Đây là bài cuối của khoá DBS. Từ bảng và khoá, qua SQL, chuẩn hoá, chỉ mục, giao dịch và nhật ký, bạn đã đi tới cách đổi lược đồ khi dữ liệu đã tới hàng trăm triệu đối tượng mà không dừng dịch vụ.</p>
+        say: "Đây là bài cuối của khoá Cơ sở dữ liệu. Từ bảng và khoá, qua SQL, chuẩn hoá, chỉ mục, giao dịch và nhật ký, bạn đã đi tới cách đổi lược đồ khi dữ liệu đã tới hàng trăm triệu đối tượng mà không dừng dịch vụ. Cảm ơn bạn đã theo học."

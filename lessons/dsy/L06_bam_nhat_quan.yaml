@@ -1,0 +1,225 @@
+id: L06
+course: DSY
+series: "DSY · Hệ phân tán và dữ liệu lớn"
+title: "Bài 6 — Phân mảnh dữ liệu và băm nhất quán"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/dsy.yaml L06; audit/dsy/verify_dsy.py L06; D. Karger và cộng sự, Consistent Hashing and Random Trees, STOC 1997; G. DeCandia và cộng sự, Dynamo, SOSP 2007; CS112 bài 6 (bảng băm); DMS bài 13 (đồng dư)"
+assumes: [arith, frac, approx]
+# Quy ước: khoá là số nguyên 0..N−1; băm k mod N (DMS bài 13); vòng băm dùng md5 (alg._h), mỗi nút thật có v nút ảo trên vòng, khoá thuộc nút ảo
+#   đầu tiên theo chiều kim đồng hồ (alg.ring_owner_fn). Tỉ lệ khoá phải chuyển đếm trên 100 000 khoá (mod) và 20 000 khoá (vòng): alg.mod_moved,
+#   alg.ring_moved. Hình vòng: audit/dsy/figs.py ring_fig (4 nút, 4 khoá minh hoạ).
+objectives:
+  - "Chia dữ liệu theo khoá ra nhiều máy"
+  - "Biết vì sao băm k mod N tệ khi thêm máy"
+  - "Hiểu băm nhất quán và nút ảo"
+asr_reviewed:
+  - {sentence: "Hàng giữa là máy giữ khoá khi có 4 máy, tức k chia 4 lấy dư, hàng dưới là máy khi có 5 máy, tức k chia 5 lấy dư.", reason: "ASR chép “Hàng giữa là máy giữ khóa khi có 4 máy, tất cả chia 4 lấy dư. Hàng dưới là máy khi có 5 máy, tất cả chia 5 lấy dư.” (0.867): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: tức (trong “tức k” → “tất cả”), tức (trong “tức k” → “tất cả”) — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Thêm một máy, chuyển 80% dữ liệu"
+    checks:
+      - "alg.mod_moved(4, 5) == 0.8"
+    steps:
+      - show: |
+          <p>Dữ liệu chia cho 4 máy theo <code>k mod 4</code>. Thêm máy thứ 5, đổi thành <code>k mod 5</code>: $\hl{80\%}$ số khoá đổi máy — gần như phải chép lại toàn bộ dữ liệu, đúng lúc hệ đang quá tải.</p>
+          <div class="box key">Hôm nay: <b>phân mảnh</b> dữ liệu, và <b>băm nhất quán</b> — thêm một máy chỉ chuyển khoảng phần cần chuyển.</div>
+        focus: [1, 1, 2]
+        say: "Chào bạn, dữ liệu được chia cho 4 máy theo k chia 4 lấy dư. Thêm máy thứ 5 và đổi thành k chia 5 lấy dư, thì 80 phần trăm số khoá đổi máy, gần như phải chép lại toàn bộ dữ liệu, đúng lúc hệ đang quá tải. Hôm nay ta học phân mảnh dữ liệu, và băm nhất quán, khi thêm một máy chỉ chuyển đúng khoảng phần cần chuyển."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: chia lấy dư, hàm băm, phần trăm"
+    checks:
+      - "(13 % 4, 13 % 5, 7 % 4, 7 % 5) == (1, 3, 3, 2) and 13 == 3 * 4 + 1"
+      - "29 % 8 == 5 and 16 / 20 == 0.8"
+    steps:
+      - show: |
+          <p><b>Chia lấy dư</b> (khoá Toán rời rạc): <code>k mod N</code> là số dư khi chia k cho N, luôn nằm trong 0 … N − 1.</p>
+          <table class="t"><tr><th>k</th><th>k mod 4</th><th>k mod 5</th></tr>
+          <tr><td>13</td><td>1 (vì $13 = 3 \cdot 4 + 1$)</td><td>3</td></tr>
+          <tr><td>7</td><td>3</td><td>2</td></tr></table>
+        introduces: [cdot]
+        focus: [1, 1, "2.2", "2.3"]
+        say: "Ở khoá Toán rời rạc, ta đã học phép chia lấy dư. Số dư khi chia k cho N luôn nằm trong khoảng từ 0 tới N trừ 1. Ví dụ 13 chia 4 được 3, dư 1, vì 13 bằng 3 nhân 4 cộng 1, còn 13 chia 5 dư 3. Số 7 chia 4 dư 3, chia 5 dư 2."
+      - show: |
+          <p><b>Hàm băm</b> (khoá Thuật toán, phần bảng băm): biến một khoá bất kỳ, kể cả chuỗi chữ, thành một số. Cùng khoá luôn ra cùng số; các khoá khác nhau rải đều.</p>
+          <table class="t"><tr><th>khoá</th><th>băm (giả sử)</th><th>bảng 8 ô: ô số</th></tr>
+          <tr><td><code>"an"</code></td><td>29</td><td>29 mod 8 = 5</td></tr></table>
+        focus: [1, 1, "2.2"]
+        say: "Ở khoá Thuật toán, phần bảng băm, ta đã gặp hàm băm, biến một khoá bất kỳ, kể cả chuỗi chữ, thành một số. Cùng một khoá luôn ra cùng một số, còn các khoá khác nhau thì rải đều. Giả sử khoá an băm ra 29, bảng có 8 ô, thì khoá nằm ở ô 29 chia 8 dư 5, tức ô số 5."
+      - show: |
+          <p><b>Phần trăm</b>: 16 khoá trong 20 khoá phải chuyển là</p>
+          $$\frac{16}{20} = 0{,}8 = 80\%$$
+        focus: [1, 2]
+        say: "Cuối cùng là phần trăm. Nếu 16 khoá trong 20 khoá phải chuyển máy, thì tỉ lệ là 16 chia 20, bằng 0 phẩy 8, tức 80 phần trăm."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: phân mảnh theo khoảng, theo băm"
+    steps:
+      - show: |
+          <table class="t"><tr><th>cách</th><th>khoá → máy</th><th>ưu</th><th>nhược</th></tr>
+          <tr><td>theo khoảng</td><td>A–F máy 1, G–M máy 2, …</td><td>truy vấn theo dải nhanh</td><td>khoá tăng dần (thời gian) dồn hết vào máy cuối: <b>điểm nóng</b></td></tr>
+          <tr><td>theo băm</td><td>băm(k) quyết định máy</td><td>trải đều tải</td><td>truy vấn theo dải phải hỏi mọi máy</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.3"]
+        say: "Có hai cách phân mảnh. Theo khoảng, các khoá từ A tới F về máy 1, từ G tới M về máy 2, và cứ thế. Ưu điểm là truy vấn theo dải rất nhanh, nhược điểm là khoá tăng dần như thời gian sẽ dồn hết vào máy cuối, tạo điểm nóng. Theo băm, giá trị băm của khoá quyết định máy, ưu điểm là trải đều tải, nhược điểm là truy vấn theo dải phải hỏi mọi máy."
+
+  # ───────────────────────── 3. VÒNG BĂM ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Vì sao k mod N làm gần hết khoá đổi máy"
+    steps:
+      - show: |
+          <div><svg width="1500" height="350" viewBox="0 0 1500 350"><g font-size="23" fill="#1f2937"><text x="20" y="79">khoá k</text><text x="20" y="159">máy: k mod 4</text><text x="20" y="239">máy: k mod 5</text><rect x="230" y="40" width="56" height="60" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="258" y="79" text-anchor="middle">0</text><rect x="230" y="120" width="56" height="60" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="258" y="159" text-anchor="middle">0</text><rect x="230" y="200" width="56" height="60" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="258" y="239" text-anchor="middle">0</text><rect x="292" y="40" width="56" height="60" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="320" y="79" text-anchor="middle">1</text><rect x="292" y="120" width="56" height="60" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="320" y="159" text-anchor="middle">1</text><rect x="292" y="200" width="56" height="60" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="320" y="239" text-anchor="middle">1</text><rect x="354" y="40" width="56" height="60" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="382" y="79" text-anchor="middle">2</text><rect x="354" y="120" width="56" height="60" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="382" y="159" text-anchor="middle">2</text><rect x="354" y="200" width="56" height="60" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="382" y="239" text-anchor="middle">2</text><rect x="416" y="40" width="56" height="60" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="444" y="79" text-anchor="middle">3</text><rect x="416" y="120" width="56" height="60" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="444" y="159" text-anchor="middle">3</text><rect x="416" y="200" width="56" height="60" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="444" y="239" text-anchor="middle">3</text><rect x="478" y="40" width="56" height="60" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="506" y="79" text-anchor="middle">4</text><rect x="478" y="120" width="56" height="60" rx="6" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="506" y="159" text-anchor="middle">0</text><rect x="478" y="200" width="56" height="60" rx="6" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="506" y="239" text-anchor="middle">4</text><rect x="540" y="40" width="56" height="60" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="568" y="79" text-anchor="middle">5</text><rect x="540" y="120" width="56" height="60" rx="6" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="568" y="159" text-anchor="middle">1</text><rect x="540" y="200" width="56" height="60" rx="6" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="568" y="239" text-anchor="middle">0</text><rect x="602" y="40" width="56" height="60" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="630" y="79" text-anchor="middle">6</text><rect x="602" y="120" width="56" height="60" rx="6" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="630" y="159" text-anchor="middle">2</text><rect x="602" y="200" width="56" height="60" rx="6" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="630" y="239" text-anchor="middle">1</text><rect x="664" y="40" width="56" height="60" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="692" y="79" text-anchor="middle">7</text><rect x="664" y="120" width="56" height="60" rx="6" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="692" y="159" text-anchor="middle">3</text><rect x="664" y="200" width="56" height="60" rx="6" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="692" y="239" text-anchor="middle">2</text><rect x="726" y="40" width="56" height="60" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="754" y="79" text-anchor="middle">8</text><rect x="726" y="120" width="56" height="60" rx="6" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="754" y="159" text-anchor="middle">0</text><rect x="726" y="200" width="56" height="60" rx="6" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="754" y="239" text-anchor="middle">3</text><rect x="788" y="40" width="56" height="60" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="816" y="79" text-anchor="middle">9</text><rect x="788" y="120" width="56" height="60" rx="6" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="816" y="159" text-anchor="middle">1</text><rect x="788" y="200" width="56" height="60" rx="6" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="816" y="239" text-anchor="middle">4</text><rect x="850" y="40" width="56" height="60" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="878" y="79" text-anchor="middle">10</text><rect x="850" y="120" width="56" height="60" rx="6" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="878" y="159" text-anchor="middle">2</text><rect x="850" y="200" width="56" height="60" rx="6" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="878" y="239" text-anchor="middle">0</text><rect x="912" y="40" width="56" height="60" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="940" y="79" text-anchor="middle">11</text><rect x="912" y="120" width="56" height="60" rx="6" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="940" y="159" text-anchor="middle">3</text><rect x="912" y="200" width="56" height="60" rx="6" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="940" y="239" text-anchor="middle">1</text><rect x="974" y="40" width="56" height="60" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="1002" y="79" text-anchor="middle">12</text><rect x="974" y="120" width="56" height="60" rx="6" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="1002" y="159" text-anchor="middle">0</text><rect x="974" y="200" width="56" height="60" rx="6" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="1002" y="239" text-anchor="middle">2</text><rect x="1036" y="40" width="56" height="60" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="1064" y="79" text-anchor="middle">13</text><rect x="1036" y="120" width="56" height="60" rx="6" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="1064" y="159" text-anchor="middle">1</text><rect x="1036" y="200" width="56" height="60" rx="6" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="1064" y="239" text-anchor="middle">3</text><rect x="1098" y="40" width="56" height="60" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="1126" y="79" text-anchor="middle">14</text><rect x="1098" y="120" width="56" height="60" rx="6" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="1126" y="159" text-anchor="middle">2</text><rect x="1098" y="200" width="56" height="60" rx="6" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="1126" y="239" text-anchor="middle">4</text><rect x="1160" y="40" width="56" height="60" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="1188" y="79" text-anchor="middle">15</text><rect x="1160" y="120" width="56" height="60" rx="6" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="1188" y="159" text-anchor="middle">3</text><rect x="1160" y="200" width="56" height="60" rx="6" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="1188" y="239" text-anchor="middle">0</text><rect x="1222" y="40" width="56" height="60" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="1250" y="79" text-anchor="middle">16</text><rect x="1222" y="120" width="56" height="60" rx="6" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="1250" y="159" text-anchor="middle">0</text><rect x="1222" y="200" width="56" height="60" rx="6" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="1250" y="239" text-anchor="middle">1</text><rect x="1284" y="40" width="56" height="60" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="1312" y="79" text-anchor="middle">17</text><rect x="1284" y="120" width="56" height="60" rx="6" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="1312" y="159" text-anchor="middle">1</text><rect x="1284" y="200" width="56" height="60" rx="6" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="1312" y="239" text-anchor="middle">2</text><rect x="1346" y="40" width="56" height="60" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="1374" y="79" text-anchor="middle">18</text><rect x="1346" y="120" width="56" height="60" rx="6" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="1374" y="159" text-anchor="middle">2</text><rect x="1346" y="200" width="56" height="60" rx="6" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="1374" y="239" text-anchor="middle">3</text><rect x="1408" y="40" width="56" height="60" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="1436" y="79" text-anchor="middle">19</text><rect x="1408" y="120" width="56" height="60" rx="6" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="1436" y="159" text-anchor="middle">3</text><rect x="1408" y="200" width="56" height="60" rx="6" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="1436" y="239" text-anchor="middle">4</text><text x="230" y="310" fill="#059669" font-weight="bold">xanh lục: giữ máy cũ (k = 0, 1, 2, 3)</text><text x="860" y="310" fill="#b91c1c" font-weight="bold">đỏ: đổi máy, 16 trên 20 khoá</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình xếp 20 khoá, từ 0 tới 19, mỗi cột một khoá. Hàng giữa là máy giữ khoá khi có 4 máy, tức k chia 4 lấy dư, hàng dưới là máy khi có 5 máy, tức k chia 5 lấy dư. Chỉ 4 khoá đầu, 0, 1, 2, 3, có hai số dư bằng nhau và giữ máy cũ, tô xanh lục. 16 khoá còn lại, tô đỏ, đều phải chuyển, vì đổi số chia là đổi gần như mọi số dư."
+
+  - id: ring
+    kind: concept
+    title: "Vòng băm nhất quán"
+    steps:
+      - show: |
+          <div><svg width="900" height="540" viewBox="0 0 900 540"><circle cx="320" cy="270" r="200" fill="none" stroke="#6b7280" stroke-width="3"/><rect x="411" y="89" width="52" height="36" rx="8" fill="#2a78d6"/><text x="437" y="114" font-size="20" fill="#ffffff" text-anchor="middle" font-weight="bold" stroke="none" stroke-width="5" paint-order="stroke">N3</text><rect x="494" y="263" width="52" height="36" rx="8" fill="#2a78d6"/><text x="520" y="288" font-size="20" fill="#ffffff" text-anchor="middle" font-weight="bold" stroke="none" stroke-width="5" paint-order="stroke">N0</text><rect x="100" y="302" width="52" height="36" rx="8" fill="#2a78d6"/><text x="126" y="327" font-size="20" fill="#ffffff" text-anchor="middle" font-weight="bold" stroke="none" stroke-width="5" paint-order="stroke">N2</text><rect x="149" y="114" width="52" height="36" rx="8" fill="#2a78d6"/><text x="175" y="139" font-size="20" fill="#ffffff" text-anchor="middle" font-weight="bold" stroke="none" stroke-width="5" paint-order="stroke">N1</text><circle cx="339" cy="71" r="9" fill="#eb6834"/><text x="343" y="31" font-size="18" fill="#1f2937" text-anchor="middle" font-weight="normal" stroke="#fffbeb" stroke-width="5" paint-order="stroke">k24 → N3</text><circle cx="508" cy="201" r="9" fill="#eb6834"/><text x="551" y="191" font-size="18" fill="#1f2937" text-anchor="middle" font-weight="normal" stroke="#fffbeb" stroke-width="5" paint-order="stroke">k36 → N0</text><circle cx="481" cy="389" r="9" fill="#eb6834"/><text x="518" y="422" font-size="18" fill="#1f2937" text-anchor="middle" font-weight="normal" stroke="#fffbeb" stroke-width="5" paint-order="stroke">k12 → N2</text><circle cx="134" cy="198" r="9" fill="#eb6834"/><text x="91" y="187" font-size="18" fill="#1f2937" text-anchor="middle" font-weight="normal" stroke="#fffbeb" stroke-width="5" paint-order="stroke">k7 → N1</text><text x="600" y="230" font-size="20" fill="#6b7280" text-anchor="start" font-weight="normal" stroke="#fffbeb" stroke-width="5" paint-order="stroke">khoá thuộc nút đầu tiên</text><text x="600" y="260" font-size="20" fill="#6b7280" text-anchor="start" font-weight="normal" stroke="#fffbeb" stroke-width="5" paint-order="stroke">đi theo chiều kim đồng hồ</text></svg></div>
+          <p>Băm cả máy lẫn khoá lên cùng một vòng. Mỗi khoá thuộc máy <b>đầu tiên gặp theo chiều kim đồng hồ</b>. Thêm một máy: chỉ các khoá nằm giữa máy mới và máy liền trước nó đổi chủ.</p>
+        focus: [1, 2, 2, 2]
+        say: "Trên hình, các ô xanh là máy, các chấm cam là khoá, cả hai được băm lên cùng một vòng. Mỗi khoá thuộc máy đầu tiên gặp được khi đi theo chiều kim đồng hồ. Khi thêm một máy, chỉ các khoá nằm giữa máy mới và máy liền trước nó đổi chủ. Mọi khoá khác giữ nguyên."
+
+  # ───────────────────────── 4. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Đo trên 20 000 khoá: nút ảo làm tải đều"
+    checks:
+      - "round(alg.ring_moved(4, 5), 2) == 0.21 and round(alg.ring_moved(4, 5, vnodes=1), 2) == 0.55"
+      - "(lambda c: (max(c.values()), min(c.values())))(__import__('collections').Counter(alg.ring_owner_fn(range(4), 1)(k) for k in range(20000))) == (14850, 768)"
+      - "(lambda c: (max(c.values()), min(c.values())))(__import__('collections').Counter(alg.ring_owner_fn(range(4), 200)(k) for k in range(20000))) == (5660, 4537)"
+      - "20000 / 4 == 5000 and round(14850 / 768) == 19 and 20000 * 20 // 100 == 4000 and round(4221 / 20000 * 100) == 21"
+    steps:
+      - show: |
+          <table class="t"><tr><th>4 máy, 20 000 khoá</th><th>máy nhiều nhất</th><th>máy ít nhất</th></tr>
+          <tr><td>lý tưởng</td><td colspan="2">$20\,000 / 4 = 5000$ mỗi máy</td></tr>
+          <tr><td>mỗi máy 1 điểm trên vòng</td><td>14 850</td><td>768</td></tr></table>
+          <p><b>Bước 1</b> — một điểm mỗi máy: máy nhiều nhất gấp khoảng $\hl{19}$ lần máy ít nhất.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Bước một, đo trên 20 nghìn khoá với 4 máy. Lý tưởng là mỗi máy giữ 20 nghìn chia 4, bằng 5 nghìn khoá. Nếu mỗi máy chỉ có 1 điểm trên vòng, máy nhiều nhất giữ 14 nghìn 850 khoá, máy ít nhất chỉ 768. Máy nhiều nhất gấp khoảng 19 lần máy ít nhất, vì 4 điểm ngẫu nhiên chia vòng thành 4 cung dài ngắn rất khác nhau."
+      - show: |
+          <table class="t"><tr><th>4 máy, 20 000 khoá</th><th>máy nhiều nhất</th><th>máy ít nhất</th></tr>
+          <tr><td>mỗi máy 1 điểm</td><td>14 850</td><td>768</td></tr>
+          <tr><td>mỗi máy 200 <b>nút ảo</b></td><td>$\hl{5660}$</td><td>$\hl{4537}$</td></tr></table>
+          <p><b>Bước 2</b> — nút ảo: mỗi máy đặt 200 điểm trên vòng, giữ 200 cung nhỏ. Tải sát mức 5000.</p>
+        focus: [0, "1.3", 2, 2]
+        say: "Bước hai, cho mỗi máy 200 nút ảo. Bây giờ máy nhiều nhất giữ 5 nghìn 660 khoá, máy ít nhất 4 nghìn 537 khoá. Nút ảo nghĩa là mỗi máy đặt 200 điểm trên vòng, và giữ 200 cung nhỏ. Cộng nhiều cung nhỏ ngẫu nhiên thì các máy gần bằng nhau, sát mức 5 nghìn."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>thêm máy thứ 5</th><th>khoá đổi máy</th></tr>
+          <tr><td><code>k mod N</code> (4 → 5)</td><td>80%</td></tr>
+          <tr><td>vòng, mỗi máy 1 điểm</td><td>55%</td></tr>
+          <tr><td>vòng, mỗi máy 200 nút ảo</td><td>$\hl{21\%}$</td></tr></table>
+          <p><b>Bước 3</b> — thêm máy thứ 5, đo tỉ lệ khoá phải chuyển.</p>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Bước ba, thêm máy thứ 5 và đo tỉ lệ khoá phải chuyển. Với cách chia lấy dư, từ 4 lên 5 máy, 80 phần trăm khoá đổi máy, như hình 20 khoá ở trên. Với vòng mà mỗi máy 1 điểm, 55 phần trăm khoá đổi máy, vì điểm mới có thể rơi vào một cung rất dài. Với vòng 200 nút ảo, chỉ 21 phần trăm."
+      - show: |
+          $$\text{lý tưởng: } \frac{1}{5} = 20\% \;\Rightarrow\; 20\,000 \cdot 20\% = 4000 \text{ khoá}$$
+          <div class="box key"><b>Bước 4</b> — máy mới nhận đúng phần của mình là 4000 khoá; vòng 200 nút ảo chuyển 4 221 khoá $\approx 21\%$. Nút ảo vừa <b>đều tải</b> vừa <b>gần lý tưởng</b>.</div>
+        introduces: [implies]
+        focus: [1, 2, 2]
+        say: "Bước bốn, so với lý tưởng. Có 5 máy thì máy mới nên giữ một phần năm, tức 20 phần trăm, bằng 4 nghìn khoá, và chỉ những khoá đó cần chuyển. Vòng 200 nút ảo chuyển 4 nghìn 221 khoá, khoảng 21 phần trăm, nên nút ảo vừa đều tải vừa gần lý tưởng."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác"
+    checks:
+      - "[k for k in range(20) if k % 4 == k % 5] == [0, 1, 2, 3] and all(sum(k % n == k % (n + 1) for k in range(n * (n + 1))) == n for n in range(2, 12))"
+      - "(lambda a, b: (sum(a(k) != b(k) for k in range(20000)), sum(b(k) == 4 for k in range(20000)), all(b(k) == 4 for k in range(20000) if a(k) != b(k))))(alg.ring_owner_fn(range(4), 200), alg.ring_owner_fn(range(5), 200)) == (4221, 4221, True)"
+    steps:
+      - show: |
+          <table class="t"><tr><th>kiểm</th><th>cách khác</th><th>kết quả</th></tr>
+          <tr><td>80% của <code>k mod N</code></td><td>số dư lặp lại sau mỗi $4 \cdot 5 = 20$ khoá; dò cả 20 khoá: chỉ 4 khoá giữ máy</td><td>$16 / 20 = 80\%$ ✓</td></tr>
+          <tr><td>quy luật N → N + 1</td><td>dò $N(N + 1)$ khoá: đúng N khoá giữ máy, với mọi N từ 2 tới 11</td><td>đổi máy $\frac{N}{N + 1}$</td></tr>
+          <tr><td>21% của vòng</td><td>đếm thẳng số khoá máy mới đang giữ</td><td>4 221 = số khoá đổi máy ✓</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.4", "1.4"]
+        say: "Kiểm bằng đường khác, không dùng máy đo trên 100 nghìn khoá. Số dư khi chia cho 4 và cho 5 lặp lại sau mỗi 4 nhân 5 bằng 20 khoá. Vì vậy chỉ cần dò 20 khoá, và ta thấy đúng 4 khoá giữ máy, tức 16 trên 20, bằng 80 phần trăm. Dò tương tự N nhân N cộng 1 khoá thì luôn có đúng N khoá giữ máy, nên tỉ lệ đổi máy là N chia N cộng 1, với N bằng 4 là bốn phần năm. Với vòng băm, đếm thẳng số khoá máy mới đang giữ được 4 nghìn 221, đúng bằng số khoá đổi máy. Nghĩa là không khoá nào chuyển qua lại giữa 4 máy cũ, khoá chỉ chạy sang máy mới."
+
+  # ───────────────────────── 5. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc, 1 lỗi người đã đi làm"
+    checks:
+      - "(lambda a, b: round(sum(a(k) != b(k) for k in range(20000)) / 20000, 2))(alg.ring_owner_fn(range(4), 200), alg.ring_owner_fn(range(4), 100)) == 0.32"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Phân mảnh theo khoảng với khoá tăng dần <b class="red">(điểm nóng)</b>
+          <br><span class="note">Khoá là thời điểm: mọi bản ghi mới dồn vào máy giữ khoảng mới nhất. Băm khoá, hoặc ghép thêm tiền tố ngẫu nhiên.</span></div>
+        say: "Lỗi thứ nhất, phân mảnh theo khoảng với khoá tăng dần, như thời điểm. Mọi bản ghi mới dồn vào máy giữ khoảng mới nhất, nên hãy băm khoá, hoặc ghép thêm một tiền tố ngẫu nhiên."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Dùng <code>k mod N</code> khi số máy sẽ thay đổi <b class="red">(chuyển gần hết)</b>
+          <br><span class="note">Đổi N là đổi chỗ hầu hết khoá. Dùng vòng băm, hoặc chia trước một số mảnh cố định lớn hơn nhiều số máy.</span></div>
+        say: "Lỗi thứ hai, dùng k chia N lấy dư khi số máy sẽ thay đổi. Đổi N là đổi chỗ hầu hết khoá, nên hãy dùng vòng băm, hoặc chia trước một số mảnh cố định lớn hơn nhiều số máy."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Băm đều mà quên khoá “siêu nóng” <b class="red">(lệch tải)</b>
+          <br><span class="note">Một người nổi tiếng có hàng triệu lượt đọc: băm tốt đến đâu, một khoá vẫn nằm trên một máy. Phải xử lý riêng khoá đó, như chép nó ra nhiều máy.</span></div>
+        say: "Lỗi thứ ba, băm đều mà quên khoá siêu nóng. Một người nổi tiếng có hàng triệu lượt đọc, băm tốt đến đâu thì một khoá vẫn nằm trên một máy, nên phải xử lý riêng khoá đó, như chép nó ra nhiều máy."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Đổi số nút ảo hay hàm băm trong một lần nâng cấp, tưởng chỉ là cấu hình <b class="red">(chuyển dữ liệu ồ ạt)</b></div>
+          <table class="t"><tr><th>thay đổi, 20 000 khoá</th><th>số máy</th><th>khoá đổi máy</th></tr>
+          <tr><td>thêm máy thứ 5, giữ 200 nút ảo</td><td>4 → 5</td><td>21%</td></tr>
+          <tr><td>giảm 200 xuống 100 nút ảo mỗi máy</td><td>4 → 4</td><td>$\hl{32\%}$</td></tr></table>
+          <p class="note">Vị trí trên vòng là một phần của dữ liệu. Đổi nó phải lên kế hoạch như thêm máy: đo trước số khoá phải chuyển, chuyển dần.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, đổi số nút ảo hay đổi hàm băm trong một lần nâng cấp, tưởng chỉ là sửa cấu hình. Thêm máy thứ 5 mà giữ 200 nút ảo thì 21 phần trăm khoá đổi máy, như ta vừa đo. Nhưng giữ nguyên 4 máy, chỉ giảm từ 200 xuống 100 nút ảo mỗi máy, thì 32 phần trăm khoá đổi máy, nhiều hơn cả lúc thêm máy, dù không có máy nào mới. Vị trí trên vòng là một phần của dữ liệu, nên đổi nó phải lên kế hoạch như thêm máy, đo trước số khoá phải chuyển và chuyển dần."
+
+  # ───────────────────────── 6. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "round(alg.mod_moved(10, 11), 3) == 0.909 and round(alg.ring_moved(10, 11), 2) == 0.09"
+      - "sum(k % 10 == k % 11 for k in range(110)) == 10 and round(100 / 110 * 100, 1) == 90.9 and round(100 / 11, 1) == 9.1"
+    steps:
+      - show: |
+          <p>Từ 10 máy lên 11 máy.</p>
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Với <code>k mod N</code>, khoảng bao nhiêu phần trăm khoá đổi máy?</td></tr>
+          <tr><td>2</td><td>Với vòng băm nhiều nút ảo, khoảng bao nhiêu? Lý tưởng là bao nhiêu?</td></tr></table>
+        focus: [1, "2.2", "2.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm, khi tăng từ 10 máy lên 11 máy. Câu một, với k chia N lấy dư, khoảng bao nhiêu phần trăm khoá đổi máy? Câu hai, với vòng băm nhiều nút ảo thì khoảng bao nhiêu, và lý tưởng là bao nhiêu? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 1</th><th>làm</th><th>kết quả</th></tr>
+          <tr><td>chu kỳ số dư</td><td>$10 \cdot 11 = 110$ khoá</td><td>trong đó đúng 10 khoá giữ máy</td></tr>
+          <tr><td>tỉ lệ đổi máy</td><td>$\frac{100}{110} = \frac{10}{11}$</td><td>$\hl{\approx 90{,}9\%}$ (máy đo 100 000 khoá cũng ra 90,9%)</td></tr></table>
+        focus: [0, "1.2", "1.3"]
+        say: "Đáp án câu một, làm từng bước theo quy luật vừa kiểm. Số dư khi chia cho 10 và cho 11 lặp lại sau 10 nhân 11 bằng 110 khoá, và trong đó đúng 10 khoá giữ máy. Vậy 100 trên 110 khoá đổi máy, tức mười phần mười một, khoảng 90 phẩy 9 phần trăm, khớp với máy đo trên 100 nghìn khoá."
+      - show: |
+          <table class="t"><tr><th>câu 2</th><th>làm</th><th>kết quả</th></tr>
+          <tr><td>lý tưởng</td><td>máy mới giữ $\frac{1}{11}$ số khoá</td><td>$\approx 9{,}1\%$</td></tr>
+          <tr><td>vòng nhiều nút ảo</td><td>đo trên 20 000 khoá</td><td>$\hl{\approx 9\%}$, sát lý tưởng</td></tr></table>
+        focus: [0, "1.2", "1.3"]
+        say: "Câu hai, trước hết tính lý tưởng. Có 11 máy thì máy mới nên giữ một phần mười một số khoá, khoảng 9 phẩy 1 phần trăm. Vòng băm nhiều nút ảo, đo trên 20 nghìn khoá, chuyển khoảng 9 phần trăm, sát lý tưởng, so với hơn 90 phần trăm của cách chia lấy dư."
+
+  # ───────────────────────── 7. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">khoảng: dải nhanh, dễ điểm nóng</span><span class="a">→</span>
+          <span class="n">băm: đều tải</span><span class="a">→</span>
+          <span class="n">k mod N: đổi N chuyển gần hết</span><span class="a">→</span>
+          <span class="n">vòng băm + nút ảo: chuyển ≈ 1/N</span></div>
+        say: "Tổng kết lại, phân mảnh theo khoảng thì truy vấn dải nhanh nhưng dễ có điểm nóng. Theo băm thì đều tải, nhưng k chia N lấy dư làm đổi N là chuyển gần hết. Vòng băm với nút ảo chỉ chuyển khoảng một phần N."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> thiết kế cho thay đổi. Hỏi “khi thêm một máy, bao nhiêu thứ phải dịch chuyển?” — câu trả lời tốt là “chỉ phần tối thiểu”.</div>
+        say: "Điều cần mang theo, hãy thiết kế cho thay đổi. Hỏi khi thêm một máy thì bao nhiêu thứ phải dịch chuyển, câu trả lời tốt là chỉ phần tối thiểu."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 7): xử lý dữ liệu lớn theo lô — <b>ánh xạ, xáo trộn, rút gọn</b>.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 7, ta học xử lý dữ liệu lớn theo lô, với ba bước ánh xạ, xáo trộn, rút gọn. Hẹn gặp bạn ở bài tiếp theo."

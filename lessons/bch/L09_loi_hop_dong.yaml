@@ -1,0 +1,205 @@
+id: L09
+course: BCH
+series: "BCH · Blockchain và sổ cái phân tán"
+title: "Bài 9 — Lỗi hợp đồng thông minh và cách phòng: gọi lại, tràn số, quyền"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/bch.yaml L09; audit/bch/verify_bch.py L09; N. Atzei, M. Bartoletti, T. Cimoli, A Survey of Attacks on Ethereum Smart Contracts (POST 2017); tài liệu Solidity — mẫu “Checks-Effects-Interactions”, phép tính có kiểm tra từ bản 0.8 (bản hiện hành); bài 8"
+assumes: [arith, mod]
+# Quy ước: PHÒNG THỦ — lỗi chỉ trình bày ở mức MÔ HÌNH KHÁI NIỆM bằng mô phỏng Python (alg.reentrancy_vault), không có mã tấn công thật.
+#   Mô phỏng: khi hợp đồng gửi tiền ra, bên nhận được chạy mã và có thể gọi lại hàm rút. Tràn số: số nguyên không dấu 8 bit, phép tính lấy dư 256.
+objectives:
+  - "Giải thích lỗi gọi lại ở mức mô hình"
+  - "Áp dụng thứ tự kiểm tra → cập nhật trạng thái → gọi ra ngoài"
+  - "Nhận ra lỗi tràn số và lỗi thiếu kiểm quyền"
+asr_reviewed:
+  - {sentence: "Cứ thế, sau lần rút thứ k thì kho còn 10 trừ k.", reason: "ASR chép “Cứ thế, sau lần trúc thứ ca thì khó còn 10 trứ ca.” (0.769): lệch âm/thanh thuần Việt: rút/trúc, kho/khó, trừ/trứ — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Thêm khoá chống gọi lồng nếu cần.", reason: "ASR chép “thêm khóa chóng gọi lòng nếu cần.” (0.714): lệch âm/thanh thuần Việt: chống/chóng, lồng/lòng — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bảng so hai thứ tự trong hàm rút tiền.", reason: "ASR chép “Bản so 2 thứ tự trong hàm rút tiên.” (0.778): lệch âm/thanh thuần Việt: bảng/bản, tiền/tiên — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Gửi 1, rút 10"
+    checks:
+      - "alg.reentrancy_vault(10, 1, False) == 10 and alg.reentrancy_vault(10, 1, True) == 1"
+    steps:
+      - show: |
+          <p>Một kho chung đang giữ 10 đơn vị của nhiều người. Ai đó gửi vào 1 đơn vị rồi rút ra — và rút được cả <b>10</b>. Không có lỗi mật mã, không có ai lộ khoá. Chỉ là hợp đồng làm hai việc đúng nhưng theo <b>thứ tự sai</b>: chuyển tiền trước, trừ số dư sau.</p>
+          <div class="box key">Hôm nay: ba nhóm lỗi hợp đồng thường gặp — <b>gọi lại</b>, <b>tràn số</b>, <b>thiếu kiểm quyền</b> — và quy tắc phòng tránh từng nhóm.</div>
+        focus: [1, 1, 1, 1, 2]
+        say: "Chào bạn, một kho chung đang giữ 10 đơn vị của nhiều người. Ai đó gửi vào 1 đơn vị rồi rút ra, và rút được cả 10. Không có lỗi mật mã, không có ai lộ khoá. Chỉ là hợp đồng làm hai việc đúng nhưng theo thứ tự sai, chuyển tiền trước, rồi mới trừ số dư. Hôm nay ta học ba nhóm lỗi hợp đồng thường gặp là gọi lại, tràn số, và thiếu kiểm quyền, cùng quy tắc phòng tránh từng nhóm."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: hợp đồng là máy trạng thái, và phép chia lấy dư cho 256"
+    checks:
+      - "2 ** 8 == 256 and 300 % 256 == 44 and 256 % 256 == 0 and 255 % 256 == 255 and (11 + 3) % 12 == 2"
+    steps:
+      - show: |
+          <p>Ở bài 8: hợp đồng là một <b>máy trạng thái</b> trên chuỗi. Mỗi hàm quy định <b>ai</b> được gọi và ở <b>trạng thái nào</b>; gọi sai thì bị từ chối, mọi thay đổi bị huỷ. Ví dụ: hợp đồng ký quỹ đang ở ĐÃ_KÝ_QUỸ, người bán gọi rút_tiền → bị từ chối.</p>
+          <p>Thêm một điều: khi hợp đồng <b>gửi tiền</b> tới một hợp đồng khác, mã của bên nhận <b>được chạy</b> — và mã đó có thể gọi ngược lại.</p>
+        focus: [1, 1, 1, 2]
+        say: "Trước hết, nhắc lại điều đã học ở bài 8. Hợp đồng là một máy trạng thái trên chuỗi, mỗi hàm quy định ai được gọi và ở trạng thái nào, gọi sai thì bị từ chối, và mọi thay đổi bị huỷ. Ví dụ hợp đồng ký quỹ đang ở trạng thái đã ký quỹ mà người bán gọi rút tiền, thì lời gọi bị từ chối. Thêm một điều quan trọng cho hôm nay, khi hợp đồng gửi tiền tới một hợp đồng khác, mã của bên nhận cũng được chạy, và mã đó có thể gọi ngược lại."
+      - clear: true
+        show: |
+          <p>Một ô nhớ <b>8 bit</b> có $2^8 = 256$ giá trị, từ 0 tới 255. Phép tính vượt khoảng đó thì máy chỉ giữ <b>số dư khi chia cho 256</b>, như kim đồng hồ quay vòng.</p>
+          <table class="t"><tr><th>phép tính</th><th>kết quả giữ lại</th></tr>
+          <tr><td>đồng hồ 12 giờ: 11 giờ thêm 3 giờ</td><td>2 giờ</td></tr>
+          <tr><td>$300 \bmod 256$</td><td>44</td></tr>
+          <tr><td>$256 \bmod 256$</td><td>0 — vừa đủ một vòng</td></tr></table>
+        introduces: [power]
+        focus: [1, 1, "2.2", "2.3", "2.4"]
+        say: "Tiếp theo, ta ôn lại phép chia lấy dư cho một số cố định. Một ô nhớ 8 bit có 2 mũ 8, bằng 256 giá trị, từ 0 tới 255, nên phép tính vượt khoảng đó thì máy chỉ giữ số dư khi chia cho 256. Giống như kim đồng hồ 12 giờ, 11 giờ thêm 3 giờ thì kim chỉ 2 giờ. Tương tự, 300 chia 256 dư 44, nên ô nhớ giữ lại 44. Còn 256 chia 256 dư 0, vừa đủ một vòng thì quay về 0."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: kiểm tra → cập nhật → gọi ra ngoài"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thứ tự</th><th>hàm rút tiền</th><th>khi bên nhận gọi lại giữa chừng</th></tr>
+          <tr><td><b>sai</b>: gửi tiền → trừ số dư</td><td>số dư vẫn còn lúc bên nhận chạy mã</td><td>lần gọi lại thấy số dư cũ, rút tiếp — lặp tới khi kho cạn</td></tr>
+          <tr><td><b>đúng</b>: kiểm tra → trừ số dư → gửi tiền</td><td>số dư đã về 0 trước khi tiền đi</td><td>lần gọi lại thấy số dư 0, không rút được thêm</td></tr></table>
+          <p>Quy tắc <b>kiểm tra – cập nhật – gọi ra ngoài</b>: kiểm mọi điều kiện, cập nhật trạng thái của chính mình, <b>sau cùng</b> mới gọi sang hợp đồng hay địa chỉ khác. Thêm khoá chống gọi lồng nếu cần.</p>
+        focus: [1, "1.2", "1.2", "1.3", "1.3", 2, 2]
+        say: "Bảng so hai thứ tự trong hàm rút tiền. Thứ tự sai là gửi tiền rồi mới trừ số dư, nên số dư vẫn còn lúc bên nhận chạy mã. Lần gọi lại thấy số dư cũ, và rút tiếp, lặp tới khi kho cạn. Thứ tự đúng là kiểm tra, trừ số dư, rồi mới gửi tiền, nên số dư đã về 0 trước khi tiền đi. Lần gọi lại thấy số dư 0, và không rút được thêm. Quy tắc kiểm tra, cập nhật, gọi ra ngoài là kiểm mọi điều kiện, cập nhật trạng thái của chính mình, và sau cùng mới gọi sang hợp đồng hay địa chỉ khác. Thêm khoá chống gọi lồng nếu cần."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Kho còn lại sau mỗi lần rút"
+    checks:
+      - "alg.reentrancy_vault(10, 1, False) == 10 and alg.reentrancy_vault(10, 1, True) == 1 and 10 - 10 == 0 and 10 - 1 == 9"
+    steps:
+      - show: |
+          <div><svg width="1500" height="400" viewBox="0 0 1500 400"><text x="400" y="40" font-size="24" text-anchor="middle" fill="#b91c1c">gửi trước, trừ sau: số dư ghi vẫn là 1</text><text x="1130" y="40" font-size="24" text-anchor="middle" fill="#059669">trừ trước, gửi sau: số dư ghi về 0</text><line x1="80" y1="300" x2="740" y2="300" stroke="#6b7280" stroke-width="2"/><line x1="880" y1="300" x2="1440" y2="300" stroke="#6b7280" stroke-width="2"/><line x1="820" y1="20" x2="820" y2="380" stroke="#d1d5db" stroke-width="2"/><rect x="100" y="120" width="44" height="180" fill="#b91c1c"/><text x="122" y="112" font-size="19" text-anchor="middle" fill="#1f2937">9</text><text x="122" y="326" font-size="19" text-anchor="middle" fill="#1f2937">1</text><rect x="162" y="140" width="44" height="160" fill="#b91c1c"/><text x="184" y="132" font-size="19" text-anchor="middle" fill="#1f2937">8</text><text x="184" y="326" font-size="19" text-anchor="middle" fill="#1f2937">2</text><rect x="224" y="160" width="44" height="140" fill="#b91c1c"/><text x="246" y="152" font-size="19" text-anchor="middle" fill="#1f2937">7</text><text x="246" y="326" font-size="19" text-anchor="middle" fill="#1f2937">3</text><rect x="286" y="180" width="44" height="120" fill="#b91c1c"/><text x="308" y="172" font-size="19" text-anchor="middle" fill="#1f2937">6</text><text x="308" y="326" font-size="19" text-anchor="middle" fill="#1f2937">4</text><rect x="348" y="200" width="44" height="100" fill="#b91c1c"/><text x="370" y="192" font-size="19" text-anchor="middle" fill="#1f2937">5</text><text x="370" y="326" font-size="19" text-anchor="middle" fill="#1f2937">5</text><rect x="410" y="220" width="44" height="80" fill="#b91c1c"/><text x="432" y="212" font-size="19" text-anchor="middle" fill="#1f2937">4</text><text x="432" y="326" font-size="19" text-anchor="middle" fill="#1f2937">6</text><rect x="472" y="240" width="44" height="60" fill="#b91c1c"/><text x="494" y="232" font-size="19" text-anchor="middle" fill="#1f2937">3</text><text x="494" y="326" font-size="19" text-anchor="middle" fill="#1f2937">7</text><rect x="534" y="260" width="44" height="40" fill="#b91c1c"/><text x="556" y="252" font-size="19" text-anchor="middle" fill="#1f2937">2</text><text x="556" y="326" font-size="19" text-anchor="middle" fill="#1f2937">8</text><rect x="596" y="280" width="44" height="20" fill="#b91c1c"/><text x="618" y="272" font-size="19" text-anchor="middle" fill="#1f2937">1</text><text x="618" y="326" font-size="19" text-anchor="middle" fill="#1f2937">9</text><rect x="658" y="300" width="44" height="2" fill="#b91c1c"/><text x="680" y="292" font-size="19" text-anchor="middle" fill="#1f2937">0</text><text x="680" y="326" font-size="19" text-anchor="middle" fill="#1f2937">10</text><rect x="900" y="120" width="44" height="180" fill="#059669"/><text x="922" y="112" font-size="19" text-anchor="middle" fill="#1f2937">9</text><text x="922" y="326" font-size="19" text-anchor="middle" fill="#1f2937">1</text><text x="980" y="200" font-size="21" fill="#1f2937">lần gọi lại thấy số dư 0: dừng</text><text x="410" y="370" font-size="21" text-anchor="middle" fill="#1f2937">lần rút thứ mấy, cột là kho còn lại: rút 10 lần, kho cạn</text><text x="1130" y="370" font-size="21" text-anchor="middle" fill="#1f2937">rút 1 lần, kho còn 9</text></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ kho chung còn lại bao nhiêu sau mỗi lần rút, khi kho có 10 đơn vị và kẻ xấu chỉ gửi 1. Bên trái là thứ tự sai, gửi tiền trước rồi mới trừ số dư, nên mỗi lần bên nhận gọi lại, sổ vẫn ghi số dư là 1. Các cột đỏ cứ thấp dần, 9, 8, rồi tới 0, sau 10 lần rút thì kho cạn. Bên phải là thứ tự đúng, số dư về 0 trước khi tiền đi, nên lần gọi lại dừng ngay, kho còn 9."
+
+  - id: example
+    kind: example
+    title: "Mô phỏng: kho 10, gửi 1"
+    checks:
+      - "alg.reentrancy_vault(10, 1, False) == 10 and alg.reentrancy_vault(10, 1, True) == 1"
+    steps:
+      - show: |
+          <p><b>Bước 1 — lần rút đầu, thứ tự sai:</b> số dư ghi là 1, kho có 10, đủ để trả → gửi 1 đi, kho còn <b>9</b>. Số dư <b>chưa</b> bị trừ, vẫn là 1.</p>
+        say: "Bước một, lần rút đầu với thứ tự sai. Số dư ghi của kẻ xấu là 1, kho có 10, đủ để trả, nên hợp đồng gửi 1 đi và kho còn 9. Nhưng số dư chưa bị trừ, sổ vẫn ghi là 1."
+      - show: |
+          <p><b>Bước 2 — bên nhận gọi lại:</b> hàm rút chạy lần nữa, thấy số dư vẫn 1, kho 9 đủ trả → gửi tiếp, kho còn 8.</p>
+          <p>Cứ thế, sau lần rút thứ $k$ kho còn $10 - k$.</p>
+        focus: [1, 1, 2]
+        say: "Bước hai, khi nhận tiền, mã của bên nhận gọi lại hàm rút. Hàm rút chạy lần nữa, thấy số dư vẫn là 1, kho còn 9 vẫn đủ trả, nên gửi tiếp, và kho còn 8. Cứ thế, sau lần rút thứ k thì kho còn 10 trừ k."
+      - show: |
+          <p><b>Bước 3 — khi nào dừng:</b> lần rút thứ 10 đưa kho về $10 - 10 = 0$; lần gọi lại sau đó thấy kho 0 không đủ trả 1 → dừng.</p>
+          $$10 \text{ lần} \times 1 = \hl{10} \text{ — cả kho}$$
+        focus: [1, 1, 2]
+        say: "Bước ba, ta xem vòng rút tiền lặp lại này dừng ở lúc nào. Lần rút thứ 10 đưa kho về 10 trừ 10, bằng 0, nên lần gọi lại sau đó thấy kho không đủ trả 1 và dừng. Tổng cộng 10 lần, mỗi lần 1, kẻ xấu rút được 10, tức cả kho."
+      - clear: true
+        show: |
+          <p><b>Bước 4 — thứ tự đúng:</b> trừ số dư về 0, kho còn 9, rồi mới gửi 1; bên nhận gọi lại thì thấy số dư 0 → dừng.</p>
+          <table class="t"><tr><th>thứ tự</th><th>rút được</th></tr>
+          <tr><td>gửi trước, trừ sau</td><td>$\hl{10}$ — cả kho</td></tr>
+          <tr><td>trừ trước, gửi sau</td><td>1 — đúng phần mình</td></tr></table>
+          <p>Kiểm thử chức năng thông thường (“gửi 1 rút 1”) đều qua với cả hai bản: lỗi chỉ lộ khi bên nhận <b>cố ý</b> gọi lại.</p>
+        focus: [1, 1, "2.2", "2.3", 3]
+        say: "Bước bốn, làm lại với thứ tự đúng. Hợp đồng trừ số dư về 0, kho còn 9, rồi mới gửi 1, nên khi bên nhận gọi lại thì thấy số dư 0 và dừng. Bảng đặt hai kết quả cạnh nhau, thứ tự sai thì kẻ xấu rút được 10, cả kho. Thứ tự đúng thì chỉ rút được 1, đúng phần của mình. Kiểm thử chức năng thông thường như gửi 1 rút 1 đều qua với cả hai bản, lỗi chỉ lộ khi bên nhận cố ý gọi lại."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: một công thức đếm, và máy thử mọi ca nhỏ"
+    checks:
+      - "12 // 5 == 2 and 12 == 2 * 5 + 2 and 2 * 5 == 10 and 10 // 1 == 10 and 10 * 1 == 10"
+      - "all(alg.reentrancy_vault(q, d, False) == d * (q // d) and alg.reentrancy_vault(q, d, True) == d for q in range(1, 31) for d in range(1, q + 1)) and sum(range(1, 31)) == 465"
+    steps:
+      - show: |
+          <p>Đường khác: thứ tự sai thì kẻ xấu rút được <b>số gửi</b> nhân với <b>số lần số gửi nằm trọn trong kho</b>.</p>
+          <table class="t"><tr><th>kho, gửi</th><th>số lần nằm trọn</th><th>công thức</th><th>mô phỏng</th></tr>
+          <tr><td>10, gửi 1</td><td>10</td><td>$10 \cdot 1 = 10$</td><td>10 ✓</td></tr>
+          <tr><td>12, gửi 5</td><td>2, vì $12 = 2 \cdot 5 + 2$</td><td>$2 \cdot 5 = 10$</td><td>10 ✓</td></tr>
+          <tr><td>mọi kho từ 1 tới 30, mọi số gửi</td><td colspan="2">465 ca</td><td>khớp cả 465 ✓</td></tr></table>
+        introduces: [cdot]
+        focus: [1, 1, "2.2", "2.3", "2.4"]
+        say: "Kiểm bằng đường khác, không chạy từng lần rút mà dùng một công thức đếm. Với thứ tự sai, kẻ xấu rút được số đã gửi nhân với số lần số gửi nằm trọn trong kho, vì mỗi lần rút đúng bằng số dư ghi. Kho 10 gửi 1 thì nằm trọn 10 lần, được 10, khớp mô phỏng. Kho 12 gửi 5 thì nằm trọn 2 lần, vì 12 bằng 2 nhân 5 cộng 2, được 10, cũng khớp. Cho máy thử mọi kho từ 1 tới 30 với mọi số gửi, tổng cộng 465 ca, công thức khớp mô phỏng ở cả 465 ca."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay mắc, từ người mới tới người đã đi làm"
+    checks:
+      - "(255 + 1) % 256 == 0 and (0 - 1) % 256 == 255"
+      - "alg.reentrancy_vault(1, 1, False) == 1 and alg.reentrancy_vault(1, 1, True) == 1 and alg.reentrancy_vault(10, 1, False) == 10 and alg.reentrancy_vault(10, 1, True) == 1"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Gọi ra ngoài trước khi cập nhật trạng thái <b class="red">(gọi lại rút cạn)</b>
+          <br><span class="note">Như ví dụ. Luôn theo thứ tự kiểm tra → cập nhật → gọi ra ngoài; ưu tiên để người nhận tự rút phần mình thay vì hợp đồng đẩy tiền đi.</span></div>
+        say: "Lỗi thứ nhất, gọi ra ngoài trước khi cập nhật trạng thái, nên lời gọi lại rút cạn kho, như ví dụ. Hãy luôn theo thứ tự kiểm tra, cập nhật, rồi gọi ra ngoài, và ưu tiên để người nhận tự rút phần mình thay vì hợp đồng đẩy tiền đi."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Tràn số nguyên <b class="red">(0 − 1 thành số rất lớn)</b>
+          <br><span class="note">Số không dấu 8 bit: $255 + 1 \equiv 0$ và $0 - 1 \equiv 255 \pmod{256}$. Số dư 0 trừ 1 thành số dư khổng lồ. Dùng phép tính có kiểm tra (báo lỗi khi tràn) — mặc định ở trình biên dịch mới.</span></div>
+        introduces: [equiv_mod]
+        say: "Lỗi thứ hai, tràn số nguyên, nên 0 trừ 1 thành một số rất lớn. Với số không dấu 8 bit, 255 cộng 1 đồng dư với 0, và 0 trừ 1 đồng dư với 255 theo mô-đun 256. Một số dư bằng 0 bị trừ 1 thành số dư khổng lồ. Hãy dùng phép tính có kiểm tra, báo lỗi khi tràn, là mặc định ở các trình biên dịch mới."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Quên kiểm ai được gọi <b class="red">(ai cũng thành chủ)</b>
+          <br><span class="note">Hàm “đặt chủ sở hữu” hay “rút toàn bộ” không kiểm người gọi: bất kỳ ai cũng gọi được. Mọi hàm đổi quyền hay chuyển tiền phải kiểm người gọi, và được rà soát riêng.</span></div>
+        say: "Lỗi thứ ba, quên kiểm ai được gọi, nên ai cũng thành chủ. Hàm đặt chủ sở hữu hay rút toàn bộ mà không kiểm người gọi thì bất kỳ ai cũng gọi được. Mọi hàm đổi quyền hay chuyển tiền phải kiểm người gọi, và được rà soát riêng."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Kiểm thử gọi lại trên kho chỉ có tiền của chính người thử <b class="red">(hai bản cho cùng kết quả)</b></div>
+          <table class="t"><tr><th>kịch bản kiểm thử, bên nhận có gọi lại</th><th>bản sai thứ tự</th><th>bản đúng thứ tự</th></tr>
+          <tr><td>kho 1, chỉ có 1 đơn vị người thử gửi</td><td>rút 1</td><td>rút 1</td></tr>
+          <tr><td>kho 10, có tiền của người khác</td><td>rút $\hl{10}$</td><td>rút 1</td></tr></table>
+        focus: [1, 2, "2.2", "2.3"]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, viết cả kiểm thử có bên nhận gọi lại, nhưng chạy trên một kho chỉ có tiền của chính người thử. Bảng cho thấy với kho 1 đơn vị, bản sai và bản đúng đều chỉ rút được 1, nên kiểm thử qua và lỗi vẫn nằm đó. Chỉ khi kho có thêm tiền của người khác, như kho 10, bản sai mới lộ ra, rút được 10. Người làm nghề dựng kịch bản giống thật, kho có tiền của nhiều người, và sau mỗi lời gọi kiểm một điều luôn phải đúng, là không ai rút ra nhiều hơn số mình đã gửi."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.reentrancy_vault(12, 5, False) == 10 and alg.reentrancy_vault(12, 5, True) == 5"
+      - "12 - 5 == 7 and 7 - 5 == 2 and 2 < 5 and 5 + 5 == 10 and 3 - 5 == -2 and -2 + 256 == 254 and (3 - 5) % 256 == 254"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Kho có 12 đơn vị, kẻ xấu gửi 5, hợp đồng gửi trước trừ sau, mỗi lần rút đúng số dư đang ghi, dừng khi kho không đủ. Rút được bao nhiêu? Với thứ tự đúng?</td></tr>
+          <tr><td>2</td><td>Số dư kiểu 8 bit không dấu đang là 3, bị trừ 5 không kiểm tra. Kết quả là bao nhiêu?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, kho có 12 đơn vị, kẻ xấu gửi 5, hợp đồng gửi trước trừ sau, mỗi lần rút đúng số dư đang ghi, và dừng khi kho không đủ. Rút được bao nhiêu? Còn với thứ tự đúng thì sao? Câu hai, số dư kiểu 8 bit không dấu đang là 3, bị trừ 5 mà không kiểm tra. Kết quả là bao nhiêu? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>lần rút (sai thứ tự)</th><th>số dư ghi</th><th>kho trước</th><th>kho sau</th></tr>
+          <tr><td>1</td><td>5</td><td>12</td><td>7</td></tr>
+          <tr><td>2 (gọi lại)</td><td>5</td><td>7</td><td>2</td></tr>
+          <tr><td>3 (gọi lại)</td><td>5</td><td>2, không đủ</td><td>dừng</td></tr></table>
+          <p>① Sai thứ tự: $5 + 5 = \hl{10}$. Đúng thứ tự: số dư về 0 trước, chỉ rút được $\hl{5}$.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Đáp án câu một, lập bảng từng lần rút với thứ tự sai. Lần đầu, số dư ghi là 5, kho từ 12 còn 7. Bên nhận gọi lại, số dư vẫn là 5, kho từ 7 còn 2. Lần gọi lại tiếp theo thấy kho chỉ còn 2, không đủ trả 5, nên dừng. Tổng cộng 5 cộng 5, bằng 10, còn với thứ tự đúng thì số dư về 0 trước nên chỉ rút được 5."
+      - show: |
+          <p>② $3 - 5 = -2$, nằm ngoài khoảng 0 tới 255 → cộng thêm một vòng 256: $-2 + 256 = 254$.</p>
+          <p>Vậy $3 - 5 \equiv \hl{254} \pmod{256}$ — số dư 3 thành 254. Phép tính có kiểm tra sẽ báo lỗi và huỷ giao dịch.</p>
+        focus: [1, 1, 2, 2]
+        say: "Câu hai, 3 trừ 5 bằng âm 2, nằm ngoài khoảng từ 0 tới 255. Ta cộng thêm một vòng 256, được âm 2 cộng 256, bằng 254. Vậy 3 trừ 5 đồng dư với 254 theo mô-đun 256, nên số dư 3 thành 254. Phép tính có kiểm tra sẽ báo lỗi và huỷ giao dịch."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">kiểm tra → cập nhật → gọi ra ngoài</span><span class="a">→</span>
+          <span class="n">phép tính có kiểm tra tràn</span><span class="a">→</span>
+          <span class="n">kiểm người gọi ở mọi hàm nhạy cảm</span><span class="a">→</span>
+          <span class="n">nghĩ như kẻ tấn công, rà soát trước triển khai</span></div>
+        say: "Tổng kết lại, hãy theo thứ tự kiểm tra, cập nhật, rồi gọi ra ngoài, dùng phép tính có kiểm tra tràn, và kiểm người gọi ở mọi hàm nhạy cảm. Nghĩ như kẻ tấn công, và rà soát trước khi triển khai."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> kiểm thử cho thấy mã làm đúng khi người dùng <b>tử tế</b>; an toàn đòi hỏi mã vẫn đúng khi người dùng <b>cố ý phá</b>.</div>
+        say: "Điều cần mang theo, kiểm thử cho thấy mã làm đúng khi người dùng tử tế, còn an toàn đòi hỏi mã vẫn đúng khi người dùng cố ý phá."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 10): <b>mở rộng</b> — giới hạn thông lượng, kênh thanh toán, gộp giao dịch.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 10, ta học cách mở rộng, với giới hạn thông lượng, kênh thanh toán, và gộp giao dịch. Hẹn gặp bạn ở bài tiếp theo."

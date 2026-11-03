@@ -1,0 +1,352 @@
+id: L15
+course: DSY
+series: "DSY · Hệ phân tán và dữ liệu lớn"
+title: "Bài 15 — Tình huống chuyên gia theo dòng thời gian: từ Bigtable tới Spanner"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+case: journey
+source: "curriculum/dsy.yaml L15; audit/dsy/sources_L15.md (câu trích nguyên văn, đọc 2026-11-02); F. Chang, J. Dean, S. Ghemawat và cộng sự, Bigtable: A Distributed Storage System for Structured Data, OSDI 2006 [BT06]; J. C. Corbett, J. Dean, M. Epstein và cộng sự, Spanner: Google's Globally-Distributed Database, OSDI 2012 [SP12]; D. F. Bacon, N. Bales, N. Bruno và cộng sự, Spanner: Becoming a SQL System, SIGMOD 2017 [SQ17]; DSY bài 1 (đồng hồ Lamport), bài 5 (đa số), bài 6 (chia mảnh theo số dư, băm nhất quán), bài 13 (cam kết hai pha)"
+assumes: [arith]
+# Quy ước: “mảnh” = một dải dòng liên tiếp theo khoá (tablet). “Độ bất định” = nửa bề rộng khoảng giờ mà đồng hồ trả về (ε của [SP12]).
+#   Mọi sự kiện và con số có nguồn ghi trong audit/dsy/sources_L15.md; con số khác là phép tính lại (checks, audit/dsy/verify_dsy.py L15a–f)
+#   hoặc ghi “(số minh hoạ)”: 20 khách hàng chia 4 → 5 mảnh, giờ thật 100 ms, máy nhanh 5 ms, cửa hàng 200 GB, 5 bản ở 2–3 thành phố.
+#   Lời đọc không nói tên người, “MySQL”, “Megastore”, “Chubby”, “Paxos”, “F1”, “GPS”, “TrueTime”: nói “cơ sở dữ liệu quan hệ”, “một hệ
+#   khác”, “dịch vụ khoá phân tán”, “nhóm đồng thuận đa số”, “hệ quảng cáo”, “vệ tinh định vị”, “đồng hồ trả về khoảng giờ”.
+#   Google, Spanner đọc thô (8/8); Bigtable không đọc được (≤ 3/8) → lời đọc nói “hệ bảng lớn”, chữ Bigtable chỉ trên màn hình
+#   (tools/registry/lexicon_vi.DSY.yaml, probe audit/dsy/probes/p2_hanh_trinh.md).
+objectives:
+  - "Kể lại hành trình lưu trữ dữ liệu của Google từ Bigtable tới Spanner qua năm chặng, mỗi chặng một điểm nghẽn và một cách xử lý"
+  - "Tính lại con số then chốt của từng chặng: số mảnh địa chỉ được, phần khoá phải dời khi chia lại, thời gian chờ cam kết"
+  - "Chọn thực hành phù hợp với quy mô của chính mình, không chép quy mô của hệ thống khác"
+asr_reviewed:
+  - {sentence: "Mã 0 tới 3 có hai số dư như nhau nên đứng yên.", reason: "ASR chép “Mạ không tới bà có hai số dư như nhau nên đứng nhiên.” (0.769): lệch âm/thanh thuần Việt: mã/mạ, ba/bà, yên/nhiên — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Cách xử lý là một bảng sắp theo khoá, mỗi dải dòng liên tiếp là một mảnh khoảng 100 đến 200 mê-ga-byte.", reason: "ASR chép “Cách xử lý là một bản sắp theo khóa, mỗi giải dòng liên tiếp là một mảnh khoảng 100-200 MB.” (0.857): MB đọc “mê-ga-byte” theo lexicon của khoá, ASR viết “MB/megabyte”; lệch âm/thanh thuần Việt: bảng/bản, đến/∅ — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Ở chặng ba, trước năm 2011, hệ quảng cáo của Google chạy trên cơ sở dữ liệu quan hệ chia mảnh bằng tay, hàng chục TB, và mã ứng dụng phải biết mảnh.", reason: "ASR chép “Ở chặn 3, trước năm 2011, hệ quảng cáo của Google chạy trên cơ sở dữ liệu quan hệ chi mảnh bằng tay hàng chục terabyte và mà ứng dụng phải biết mảnh.” (0.895): lệch âm/thanh thuần Việt: chặng/chặn, chia/chi, mã/mà; “TB” đọc “tê-ra-byte” theo lexicon_vi.DSY.yaml, ASR chép “terabyte/tetaby” — đúng đơn vị — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Ở chặng một, hệ bảng lớn được thiết kế cho hàng nghìn TB trên hàng nghìn máy, và chạy thật từ tháng 4 năm 2005.", reason: "ASR chép “Ở chặn 1, hệ bản lớn được thiết kế cho hàng nghìn terabyte trên hàng nghìn máy và chạy thật từ tháng 4 năm 2005.” (0.9): lệch âm/thanh thuần Việt: chặng/chặn, bảng/bản; “TB” đọc “tê-ra-byte” theo lexicon_vi.DSY.yaml, ASR chép “terabyte/tetaby” — đúng đơn vị — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Mảnh gốc dài 128 mê-ga-byte, mỗi dòng khoảng 1 KB, nên chứa 128 nhân 1024, tức 2 mũ 17 vị trí mảnh chỉ mục.", reason: "ASR chép “Mảnh gốc dài 128 MB mỗi dòng khoảng 1 kilobyte nên chứa 128 nhân 1.024 tức 2 mũ 17 vị trí mảnh chỉ 1.” (0.9): MB đọc “mê-ga-byte” theo lexicon của khoá, ASR viết “MB/megabyte”; KB đọc “ki-lô-byte” theo lexicon của khoá, ASR viết “kilobyte/kg”; lệch âm/thanh thuần Việt: mục/một — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Câu một, cửa hàng trực tuyến có một máy chủ chứa 200 ghi-ga-byte, mỗi năm tăng gấp 1 phẩy 5, máy chứa thoải mái 1 TB, vậy có nên chia mảnh ngay không?", reason: "ASR chép “Câu một, cửa hàng trực tuyến có một máy chủ chứa 200GB, mỗi năm tăng gấp 1,5. Máy chứa thoải mái 1TB, vậy có nên chia mảnh ngay không?” (0.943): GB đọc “ghi-ga-byte” theo lexicon của khoá, ASR viết “GB/gigabyte” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Đáp án câu một, bước một là tính dung lượng, 200 nhân 1 phẩy 5 được 300, rồi 450, rồi 675, và năm thứ tư là 1012 phẩy 5 ghi-ga-byte, mới vượt 1 TB.", reason: "ASR chép “Đáp án câu 1, bước 1 là tính dung lượng, 200 nhân 1,5 được 300, rồi 450, rồi 675, và năm thứ 4 là 1012,5 GB, mới vượt 1 TB.” (0.959): GB đọc “ghi-ga-byte” theo lexicon của khoá, ASR viết “GB/gigabyte” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Năm 2017, hệ chạy hơn 5 nghìn cơ sở dữ liệu, hàng chục triệu truy vấn mỗi giây, hàng trăm nghìn TB.", reason: "ASR chép “Năm 2017, hệ chạy hơn 5.000 cơ sở dữ liệu, hàng chục triệu truy vấn mỗi giây, hàng trăm nghìn TETABY.” (0.963): “TB” đọc “tê-ra-byte” theo lexicon_vi.DSY.yaml, ASR chép “terabyte/tetaby” — đúng đơn vị — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Năm 2006 có 388 cụm, năm 2017 hơn 5000 cơ sở dữ liệu"
+    checks:
+      - "2006 + 11 == 2017"
+    steps:
+      - show: |
+          <p>Tháng 8/2006, hệ lưu trữ <b>Bigtable</b> của Google chạy <b>388 cụm</b> với khoảng <b>24 500 máy phục vụ</b>, cho hơn 60 sản phẩm.</p>
+          <p>Trước năm 2011, hệ quảng cáo của Google vẫn chạy trên một cơ sở dữ liệu quan hệ <b>chia mảnh bằng tay</b>; lần chia lại cuối mất <b>hơn hai năm</b>.</p>
+          <p>Năm 2017, hệ kế tiếp <b>Spanner</b> chạy <b>hơn 5000 cơ sở dữ liệu</b>, hàng chục triệu truy vấn mỗi giây.</p>
+          <div class="box key">Hôm nay: đi lại hành trình ấy qua năm chặng. Ở mỗi chặng, quy mô làm lộ ra một điểm nghẽn — và chuyên gia đã xử lý ra sao.</div>
+        focus: [1, 2, 3, 4]
+        say: "Chào bạn, tháng 8 năm 2006, hệ lưu trữ bảng lớn của Google chạy 388 cụm với khoảng 24 nghìn 500 máy phục vụ. Thế nhưng trước năm 2011, hệ quảng cáo của Google vẫn chạy trên một cơ sở dữ liệu quan hệ chia mảnh bằng tay, và lần chia lại cuối mất hơn hai năm. Năm 2017, hệ kế tiếp tên Spanner đã chạy hơn 5 nghìn cơ sở dữ liệu. Hôm nay ta đi qua năm chặng, xem mỗi quy mô làm lộ ra điểm nghẽn nào, và chuyên gia đã xử lý ra sao."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại bốn điều từ các bài trước và phép lũy thừa"
+    checks:
+      - "max(1, 1) + 1 == 2"
+      - "5 // 2 + 1 == 3 and 5 - 3 == 2"
+      - "sum(k % 4 != k % 5 for k in range(20)) / 20 == 0.8"
+      - "2 ** 10 == 1024 and 2 ** 17 == 1024 * 128 == 131072 and 2 ** 17 * 2 ** 17 == 2 ** 34"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài</th><th>điều đã học</th><th>ví dụ số</th></tr>
+          <tr><td>bài 1</td><td>đồng hồ Lamport đếm <b>sự kiện</b>, không đo giờ thật</td><td>nhận thư gửi lúc 1, mình đang ở 1 → số lớn hơn là 1, cộng 1 = 2</td></tr>
+          <tr><td>bài 5</td><td>đồng thuận cần <b>đa số</b> phiếu</td><td>5 nút cần 3 phiếu → chịu được 2 nút hỏng</td></tr>
+          <tr><td>bài 6</td><td>chia khoá theo <b>số dư</b> và băm nhất quán</td><td>4 lên 5 nút: số dư dời 80% khoá, băm nhất quán khoảng 21%</td></tr>
+          <tr><td>bài 13</td><td>cam kết hai pha: chuẩn bị rồi cam kết</td><td>bên đã bỏ phiếu sẵn sàng phải <b>chờ</b> nếu bên điều phối hỏng</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bảng nhắc lại bốn điều từ các bài trước. Ở bài 1, đồng hồ Lamport đếm sự kiện chứ không đo giờ thật, ví dụ nhận thư gửi lúc 1 khi mình đang ở 1 thì được 2. Ở bài 5, nhóm 5 nút cần đa số 3 phiếu, nên chịu được 2 nút hỏng. Ở bài 6, khi tăng từ 4 lên 5 nút, chia theo số dư dời 80 phần trăm khoá, còn băm nhất quán chỉ khoảng 21 phần trăm. Ở bài 13, trong cam kết hai pha, bên đã bỏ phiếu sẵn sàng phải chờ nếu bên điều phối hỏng."
+      - clear: true
+        show: |
+          <p>Lũy thừa: $2^{10} = 1024$, tức khoảng một nghìn.</p>
+          <p>$2^{17} = 2^{10} \cdot 2^{7} = 1024 \cdot 128 = 131\,072$</p>
+          <p>Nhân hai lũy thừa cùng cơ số thì cộng số mũ: $2^{17} \cdot 2^{17} = 2^{34}$</p>
+        introduces: [power, cdot]
+        focus: [1, 2, 3]
+        say: "Ta sẽ cần lũy thừa của 2, viết số 2 với một số mũ nhỏ phía trên, ví dụ 2 mũ 10 bằng 1024, tức khoảng một nghìn. Vì 17 bằng 10 cộng 7, nên 2 mũ 17 bằng 1024 nhân 128, dấu chấm giữa là phép nhân, được 131 nghìn 072. Nhân hai lũy thừa cùng cơ số thì cộng số mũ, nên 2 mũ 17 nhân 2 mũ 17 bằng 2 mũ 34."
+
+  # ───────────────────────── 3. NGÔN NGỮ ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Ngôn ngữ của hành trình"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thuật ngữ</th><th>nghĩa</th></tr>
+          <tr><td><b>mảnh</b></td><td>một dải dòng liên tiếp theo khoá, là đơn vị chia dữ liệu và cân bằng tải</td></tr>
+          <tr><td><b>giao dịch một dòng</b> / <b>nhiều dòng</b></td><td>đọc, sửa, ghi nguyên tử trên một dòng / trên nhiều dòng, có thể ở nhiều máy</td></tr>
+          <tr><td><b>sao chép đồng bộ</b> / <b>nhất quán cuối cùng</b></td><td>ghi xong khi đa số bản sao đã nhận / các bản sao lệch một lúc rồi mới khớp</td></tr>
+          <tr><td><b>độ bất định</b> của đồng hồ</td><td>đồng hồ trả về một khoảng từ sớm nhất tới muộn nhất; độ bất định là nửa bề rộng khoảng đó</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bài dùng bốn thuật ngữ. Mảnh là một dải dòng liên tiếp theo khoá, đơn vị để chia dữ liệu và cân bằng tải. Giao dịch một dòng hay nhiều dòng là đọc, sửa, ghi nguyên tử trên một dòng, hay trên nhiều dòng ở nhiều máy. Sao chép đồng bộ là ghi xong khi đa số bản sao đã nhận, còn nhất quán cuối cùng cho các bản sao lệch một lúc rồi mới khớp. Độ bất định là nửa bề rộng của khoảng giờ mà đồng hồ trả về."
+
+  # ───────────────────────── 4. DÒNG THỜI GIAN ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Năm chặng trên một trục thời gian"
+    steps:
+      - show: |
+          <div><svg width="1700" height="320" viewBox="0 0 1700 320">
+          <line x1="30" y1="150" x2="1670" y2="150" stroke="#1f2937" stroke-width="3"/>
+          <g font-size="24" text-anchor="middle" fill="#1f2937">
+          <circle cx="150" cy="150" r="15" fill="#9ca3af"/><text x="150" y="108" font-weight="bold">2005</text><text x="150" y="200">Bigtable chạy thật</text><text x="150" y="232">mảnh 100–200 MB</text>
+          <circle cx="490" cy="150" r="15" fill="#2a78d6"/><text x="490" y="108" font-weight="bold">2006</text><text x="490" y="200">388 cụm, 24 500 máy</text><text x="490" y="232">hoãn giao dịch nhiều dòng</text>
+          <circle cx="840" cy="150" r="15" fill="#e11d48"/><text x="840" y="108" font-weight="bold">trước 2011</text><text x="840" y="200">chia mảnh bằng tay</text><text x="840" y="232">chia lại mất hơn 2 năm</text>
+          <circle cx="1190" cy="150" r="15" fill="#eb6834"/><text x="1190" y="108" font-weight="bold">2012</text><text x="1190" y="200">Spanner: giao dịch toàn cầu</text><text x="1190" y="232">đồng hồ có độ bất định</text>
+          <circle cx="1540" cy="150" r="15" fill="#059669"/><text x="1540" y="108" font-weight="bold">2012 → 2017</text><text x="1540" y="200">hơn 5000 cơ sở dữ liệu</text><text x="1540" y="232">SQL, 2 tuần một bản</text>
+          </g>
+          <text x="850" y="300" font-size="23" fill="#6b7280" text-anchor="middle">khai sinh → quy mô lớn → đau của tăng trưởng → thiết kế lại → ổn định và tiếp tục phát triển</text>
+          </svg></div>
+        say: "Hình là trục thời gian với năm chặng, từ lúc hệ bảng lớn chạy thật năm 2005, qua 388 cụm năm 2006, tới nỗi đau chia mảnh bằng tay trước năm 2011. Năm 2012 có Spanner với giao dịch toàn cầu, và tới năm 2017 hệ đã chạy hơn 5 nghìn cơ sở dữ liệu."
+
+  # ───────────────────────── 5. CHẶNG 1 ─────────────────────────
+  - id: stage1
+    kind: example
+    title: "Chặng 1, năm 2005 — khai sinh: Bigtable, một bảng lớn sắp theo khoá"
+    stage: {year: "2005", scale: "thiết kế cho hàng petabyte trên hàng nghìn máy; chạy thật từ 4/2005", source: "[BT06] §1, §2, §5, §5.1, §11", practice: "sắp theo khoá dòng, chia dải dòng thành mảnh 100–200 MB, nguyên tử trong một dòng, chọn khoá để dữ liệu hay đọc cùng nằm cạnh nhau"}
+    checks:
+      - "sorted(['com.google.maps', 'org.wikipedia.vi', 'com.cnn.www', 'com.google.www']) == ['com.cnn.www', 'com.google.maps', 'com.google.www', 'org.wikipedia.vi']"
+      - "(128 * 2 ** 20) // 2 ** 10 == 128 * 1024 == 2 ** 17 and 2 ** 17 * 2 ** 17 == 2 ** 34 and round(2 ** 34 / 10 ** 9) == 17"
+    steps:
+      - show: |
+          <p><b>Quy mô:</b> thiết kế để chứa hàng <b>petabyte</b> (nghìn TB) trên <b>hàng nghìn máy</b>; chạy thật từ <b>tháng 4/2005</b>.</p>
+          <p><b>Điểm nghẽn:</b> trang mạng, ảnh vệ tinh quá lớn cho một máy — phải chia ra nhiều máy mà vẫn tìm nhanh được một dòng.</p>
+          <p><b>Cách xử lý:</b> một bảng <b>sắp theo khoá dòng</b>; mỗi dải dòng liên tiếp là một <b>mảnh</b> 100–200 MB; đọc ghi trong <b>một dòng</b> là nguyên tử, chưa có giao dịch nhiều dòng.</p>
+          <p><b>Thực hành:</b> chọn khoá để dữ liệu hay đọc cùng nằm cạnh nhau: trang <code>maps.google.com</code> lưu dưới khoá <code>com.google.maps</code>.</p>
+        focus: [1, 2, 3, 3, 4]
+        say: "Ở chặng một, hệ bảng lớn được thiết kế cho hàng nghìn TB trên hàng nghìn máy, và chạy thật từ tháng 4 năm 2005. Điểm nghẽn là dữ liệu quá lớn cho một máy, nên phải chia ra nhiều máy mà vẫn tìm nhanh được một dòng. Cách xử lý là một bảng sắp theo khoá, mỗi dải dòng liên tiếp là một mảnh khoảng 100 đến 200 mê-ga-byte. Đọc ghi trong một dòng là nguyên tử, nhưng chưa có giao dịch nhiều dòng. Thực hành rút ra là chọn khoá để dữ liệu hay đọc cùng nằm cạnh nhau, chẳng hạn viết ngược tên miền."
+      - clear: true
+        show: |
+          <p><b>Mảnh nào giữ dòng này?</b> Chỉ mục 3 tầng, giống cây B+ (bài báo năm 2006):</p>
+          <table class="t"><tr><th>tầng</th><th>chứa gì</th><th>số vị trí</th></tr>
+          <tr><td>1: một tệp ở dịch vụ khoá phân tán</td><td>vị trí mảnh gốc</td><td>1</td></tr>
+          <tr><td>2: mảnh gốc, 128 MB, mỗi dòng khoảng 1 KB</td><td>vị trí các mảnh chỉ mục</td><td>$128 \cdot 1024 = 2^{17}$</td></tr>
+          <tr><td>3: mỗi mảnh chỉ mục, cũng 128 MB</td><td>vị trí các mảnh dữ liệu</td><td>$2^{17}$ mỗi mảnh</td></tr>
+          <tr><td>tổng</td><td>số mảnh dữ liệu tìm được</td><td>$2^{17} \cdot 2^{17} = \hlg{2^{34}}$, khoảng 17 tỉ</td></tr></table>
+          <p class="note">Bộ nhớ đệm trống: chỉ cần 3 lượt hỏi qua mạng là tìm ra.</p>
+        focus: [1, "2.2", "2.3", "2.4", "2.5", 3]
+        say: "Muốn biết mảnh nào giữ một dòng, hệ bảng lớn dùng chỉ mục ba tầng, giống cây B cộng. Tầng đầu là một tệp ở dịch vụ khoá phân tán, ghi vị trí của mảnh gốc. Mảnh gốc dài 128 mê-ga-byte, mỗi dòng khoảng 1 KB, nên chứa 128 nhân 1024, tức 2 mũ 17 vị trí mảnh chỉ mục. Mỗi mảnh chỉ mục lại chứa 2 mũ 17 vị trí mảnh dữ liệu. Tổng cộng là 2 mũ 17 nhân 2 mũ 17, bằng 2 mũ 34, khoảng 17 tỉ mảnh. Khi bộ nhớ đệm trống, chỉ cần 3 lượt hỏi qua mạng là tìm ra."
+
+  # ───────────────────────── 6. CHẶNG 2 ─────────────────────────
+  - id: stage2
+    kind: example
+    title: "Chặng 2, năm 2006 — quy mô lớn: 388 cụm, 24 500 máy phục vụ"
+    stage: {year: "2006", scale: "388 cụm, khoảng 24 500 máy phục vụ, hơn 60 sản phẩm (8/2006)", source: "[BT06] §4, §8, §9", practice: "hoãn tính năng tới khi rõ cách dùng, thiết kế đơn giản, chịu được mọi kiểu hỏng, đo phần mỗi phụ thuộc góp vào thời gian hỏng"}
+    checks:
+      - "round(1200000 / 8069) == 149"
+      - "30 * 24 * 60 == 43200 and round(43200 * 0.000047) == 2 and round(43200 * 0.000326) == 14 and round(0.0326 / 0.0047) == 7"
+    steps:
+      - show: |
+          <p><b>Quy mô (8/2006):</b> 388 cụm, khoảng <b>24 500 máy phục vụ</b>; riêng 14 cụm bận nhất có <b>8069 máy</b>, nhận hơn <b>1,2 triệu yêu cầu mỗi giây</b>.</p>
+          <p>Tính lại: $\frac{1\,200\,000}{8069}$ → khoảng $\hlg{149}$ yêu cầu mỗi giây cho mỗi máy.</p>
+          <table class="t"><tr><th>bài học nhóm Bigtable ghi lại</th><th>ví dụ</th></tr>
+          <tr><td>hệ lớn hỏng <b>đủ kiểu</b>, không chỉ mạng chia cắt hay máy dừng</td><td>bộ nhớ hỏng, đồng hồ lệch lớn, máy treo → thêm mã kiểm tra vào lời gọi</td></tr>
+          <tr><td><b>hoãn tính năng</b> tới khi rõ cách dùng</td><td>định làm giao dịch nhiều dòng nhưng hoãn: phần lớn ứng dụng chỉ cần giao dịch một dòng</td></tr>
+          <tr><td><b>thiết kế đơn giản</b> là bài học quan trọng nhất</td><td>giao thức thành viên sửa nhiều lần thành quá phức tạp → bỏ, thay bản đơn giản</td></tr></table>
+        focus: [1, 1, 2, "3.2", "3.3", "3.4"]
+        say: "Ở chặng hai, tháng 8 năm 2006, hệ bảng lớn có 388 cụm với khoảng 24 nghìn 500 máy phục vụ. Riêng 14 cụm bận nhất có 8069 máy, cùng nhận hơn 1 phẩy 2 triệu yêu cầu mỗi giây. Chia ra, mỗi máy phục vụ khoảng 149 yêu cầu mỗi giây. Nhóm xây hệ bảng lớn ghi rằng hệ lớn hỏng đủ kiểu, từ bộ nhớ hỏng tới đồng hồ lệch lớn, nên họ thêm mã kiểm tra vào lời gọi. Họ từng định làm giao dịch nhiều dòng nhưng hoãn lại, vì phần lớn ứng dụng chỉ cần giao dịch một dòng. Bài học quan trọng nhất là thiết kế đơn giản, vì một giao thức sửa đi sửa lại thành quá phức tạp cuối cùng phải bỏ."
+      - clear: true
+        show: |
+          <p>Bigtable dựa vào một <b>dịch vụ khoá phân tán</b> có 5 bản sao, chỉ sống khi còn đa số. Đo trên 14 cụm, phần giờ-máy có dữ liệu không truy cập được vì dịch vụ đó: trung bình <b>0,0047%</b>, cụm tệ nhất <b>0,0326%</b>.</p>
+          <table class="t"><tr><th></th><th>tỉ lệ</th><th>trong 30 ngày = $30 \cdot 24 \cdot 60 = 43\,200$ phút</th></tr>
+          <tr><td>trung bình</td><td>0,0047%</td><td>$43\,200 \cdot 0{,}000047$ → khoảng $\hlg{2}$ phút</td></tr>
+          <tr><td>cụm tệ nhất</td><td>0,0326%</td><td>$43\,200 \cdot 0{,}000326$ → khoảng $\hl{14}$ phút</td></tr></table>
+          <p class="note">Thực hành: đo riêng phần mỗi phụ thuộc góp vào thời gian hỏng — trung bình đẹp vẫn có thể giấu một cụm tệ gấp khoảng 7 lần.</p>
+        focus: [1, 1, 2, 3]
+        say: "hệ bảng lớn còn dựa vào một dịch vụ khoá phân tán có 5 bản sao, chỉ sống khi còn đa số. Đo trên 14 cụm, phần giờ máy mất truy cập dữ liệu vì dịch vụ này trung bình là 0 phẩy 0047 phần trăm, cụm tệ nhất là 0 phẩy 0326 phần trăm. Trong 30 ngày, tức 43 nghìn 200 phút, đó là khoảng 2 phút và khoảng 14 phút. Thực hành rút ra là đo riêng từng phụ thuộc, vì con số trung bình đẹp vẫn có thể giấu một cụm tệ gấp khoảng 7 lần."
+
+  # ───────────────────────── 7. CHẶNG 3 ─────────────────────────
+  - id: stage3
+    kind: example
+    title: "Chặng 3, trước năm 2011 — đau của tăng trưởng: chia mảnh bằng tay"
+    stage: {year: "2011", scale: "hệ quảng cáo: hàng chục TB trên cơ sở dữ liệu quan hệ chia mảnh bằng tay; ít nhất 300 ứng dụng dùng một hệ khác chậm hơn vì có lược đồ và sao chép đồng bộ", source: "[SP12] §1, §2.3, §5.4", practice: "để hệ tự chia lại mảnh, ứng dụng không phải biết mảnh; có sẵn giao dịch nhiều dòng trong nền tảng thay vì để mỗi ứng dụng tự lách"}
+    checks:
+      - "[k for k in range(4) if k % 4 != k % 5] == [] and (4 % 4, 4 % 5) == (0, 4) and (7 % 4, 7 % 5) == (3, 2) and (19 % 4, 19 % 5) == (3, 4)"
+      - "sum(k % 4 != k % 5 for k in range(20)) == 16 and 16 / 20 == 0.8"
+    steps:
+      - show: |
+          <p><b>Quy mô:</b> hệ quảng cáo của Google chạy trên một cơ sở dữ liệu quan hệ (MySQL) <b>chia mảnh bằng tay</b>, hàng chục TB; mỗi khách hàng gắn <b>cố định</b> vào một mảnh, mã ứng dụng phải biết cách chia.</p>
+          <p><b>Điểm nghẽn:</b> lần chia lại cuối mất <b>hơn hai năm</b>, hàng chục đội phối hợp kiểm thử. Để hãm tăng trưởng, một phần dữ liệu bị dời sang Bigtable — mất giao dịch, mất truy vấn trên toàn bộ dữ liệu.</p>
+          <p><b>Phía người dùng Bigtable:</b> khó dùng khi lược đồ phức tạp, hay đổi; giữa các trung tâm dữ liệu chỉ <b>nhất quán cuối cùng</b>; ít nhất <b>300 ứng dụng</b> chọn một hệ khác chậm hơn chỉ vì có lược đồ và sao chép đồng bộ.</p>
+        focus: [1, 2, 2, 3, 3]
+        say: "Ở chặng ba, trước năm 2011, hệ quảng cáo của Google chạy trên cơ sở dữ liệu quan hệ chia mảnh bằng tay, hàng chục TB, và mã ứng dụng phải biết mảnh. Lần chia lại cuối mất hơn hai năm, với hàng chục đội phối hợp kiểm thử. Để hãm tăng trưởng, một phần dữ liệu bị dời sang hệ bảng lớn, nên mất giao dịch và mất truy vấn trên toàn bộ dữ liệu. Người dùng hệ bảng lớn cũng phàn nàn rằng nó khó dùng khi lược đồ hay đổi, và giữa các trung tâm dữ liệu chỉ nhất quán cuối cùng. Vì thế ít nhất 300 ứng dụng chọn một hệ khác chậm hơn, chỉ vì nó có lược đồ và sao chép đồng bộ."
+      - clear: true
+        show: |
+          <p><b>Vì sao chia lại đắt, làm thử</b> (số minh hoạ): 20 khách hàng mã 0 tới 19; mảnh = mã chia 4 lấy dư. Thêm mảnh thứ năm: mảnh mới = mã chia 5 lấy dư.</p>
+          <table class="t"><tr><th>mã khách</th><th>chia 4 dư</th><th>chia 5 dư</th><th>phải dời?</th></tr>
+          <tr><td>0, 1, 2, 3</td><td>0, 1, 2, 3</td><td>0, 1, 2, 3</td><td>không</td></tr>
+          <tr><td>4</td><td>0</td><td>4</td><td><b class="red">có</b></td></tr>
+          <tr><td>7 / 19</td><td>3 / 3</td><td>2 / 4</td><td><b class="red">có</b></td></tr>
+          <tr><td>đếm cả 20 mã</td><td></td><td></td><td>16 trên 20 = $\hl{80\%}$ phải dời</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.5"]
+        say: "Làm thử với số minh hoạ, 20 khách hàng mã từ 0 tới 19, mảnh là mã chia 4 lấy dư, và khi thêm mảnh thứ năm thì là mã chia 5 lấy dư. Mã 0 tới 3 có hai số dư như nhau nên đứng yên. Mã 4 chia 4 dư 0 nhưng chia 5 dư 4, nên phải dời, mã 7 và mã 19 cũng vậy. Đếm hết, 16 trên 20 khách hàng phải dời, tức 80 phần trăm, đúng con số của bài 6."
+      - show: |
+          <div class="box key"><b>Thực hành:</b> để hệ <b>tự chia lại</b> mảnh, ứng dụng không phải biết mảnh; có sẵn <b>giao dịch nhiều dòng</b> trong nền tảng. <b>Điều kiện:</b> dữ liệu còn tăng và nhiều đội cùng dùng.</div>
+        say: "Băm nhất quán chỉ dời khoảng 21 phần trăm, nhưng ở đây mã ứng dụng biết mảnh, nên chia lại kéo theo sửa cả ứng dụng. Thực hành rút ra là để hệ tự chia lại mảnh và có sẵn giao dịch nhiều dòng, khi dữ liệu còn tăng và nhiều đội cùng dùng."
+
+  # ───────────────────────── 8. CHẶNG 4 ─────────────────────────
+  - id: stage4
+    kind: example
+    title: "Chặng 4, năm 2012 — Spanner: giao dịch toàn cầu, đồng hồ có độ bất định"
+    stage: {year: "2012", scale: "thiết kế tới hàng triệu máy, hàng trăm trung tâm dữ liệu; khách đầu tiên là hệ quảng cáo, 5 bản sao khắp nước Mỹ", source: "[SP12] §1, §2.1, §3, §4.2.1, §5.4", practice: "nhóm đồng thuận đa số cho mỗi mảnh, cam kết hai pha giữa các nhóm, đồng hồ trả về khoảng bất định và chờ hết bất định trước khi công bố"}
+    checks:
+      - "5 // 2 + 1 == 3 and 5 - 3 == 2"
+      - "30 * 0.2 == 6 and 6 + 1 == 7 and (1 + 7) / 2 == 4"
+      - "(100 - 4, 100 + 4) == (96, 104) and (104 - 4, 104 + 4) == (100, 108) and [x for x in (104, 108, 109) if x - 4 > 104] == [109] and 108 - 100 == 8 == 2 * 4"
+    steps:
+      - show: |
+          <p><b>Cách xử lý:</b> mỗi mảnh được sao chép bằng một <b>nhóm đồng thuận đa số</b>; giao dịch chạm nhiều nhóm thì thủ lĩnh các nhóm chạy <b>cam kết hai pha</b>.</p>
+          <p>Hệ quảng cáo dùng <b>5 bản sao</b> (2 ở bờ tây, 3 ở bờ đông nước Mỹ): đa số là 3, chịu được $5 - 3 = 2$ bản hỏng.</p>
+          <p><b>Điểm nghẽn mới:</b> mọi giao dịch cần <b>dấu thời gian</b> đúng thứ tự trên toàn cầu: T1 xong trước khi T2 bắt đầu thì dấu của T1 phải nhỏ hơn. Mà đồng hồ máy nào cũng lệch một chút.</p>
+          <p><b>Đồng hồ biết mình sai bao nhiêu</b> (TrueTime): hỏi giờ thì nhận một <b>khoảng</b> từ sớm nhất tới muộn nhất, chắc chắn chứa giờ thật; nguồn giờ là GPS và đồng hồ nguyên tử.</p>
+        focus: [1, 1, 2, 3, 4]
+        say: "Ở chặng bốn, năm 2012, Spanner sao chép mỗi mảnh bằng một nhóm đồng thuận cần đa số phiếu. Giao dịch chạm nhiều nhóm thì thủ lĩnh các nhóm chạy cam kết hai pha, và vì mỗi bên là cả một nhóm, nên đỡ chuyện bị chặn khi một máy hỏng. Hệ quảng cáo dùng 5 bản sao, 2 ở bờ tây và 3 ở bờ đông nước Mỹ, nên chịu được 2 bản hỏng. Điểm nghẽn mới là thứ tự toàn cầu, giao dịch xong trước thì dấu thời gian phải nhỏ hơn, mà đồng hồ máy nào cũng lệch. Cách xử lý là một đồng hồ trả về khoảng giờ từ sớm nhất tới muộn nhất, chắc chắn chứa giờ thật, nhờ vệ tinh định vị và đồng hồ nguyên tử."
+      - clear: true
+        show: |
+          <p><b>Độ bất định</b> tăng dần rồi tụt về như răng cưa, từ khoảng <b>1 tới 7 ms</b> (bài báo năm 2012):</p>
+          <table class="t"><tr><th>phần</th><th>ms</th></tr>
+          <tr><td>máy hỏi lại nguồn giờ mỗi 30 giây; giả định đồng hồ trôi tối đa 0,2 ms mỗi giây</td><td>$30 \cdot 0{,}2 = 6$</td></tr>
+          <tr><td>trễ liên lạc tới máy giữ giờ</td><td>1</td></tr>
+          <tr><td>cao nhất / trung bình</td><td>$6 + 1 = 7$ / $\frac{1 + 7}{2} = \hlg{4}$</td></tr></table>
+        focus: [1, "2.2", "2.4"]
+        say: "Theo bài báo năm 2012, độ bất định tăng dần rồi tụt về như răng cưa, từ khoảng 1 tới 7 mi li giây. Máy hỏi lại nguồn giờ mỗi 30 giây, giả định đồng hồ trôi tối đa 0 phẩy 2 mi li giây mỗi giây, nên cộng dồn tới 6, thêm 1 mi li giây trễ liên lạc. Vì vậy phần lớn thời gian, độ bất định khoảng 4 mi li giây."
+      - clear: true
+        show: |
+          <p><b>Chờ cam kết, làm thử</b> (số minh hoạ, độ bất định 4 ms): giao dịch ghi xong lúc giờ thật là 100 ms.</p>
+          <table class="t"><tr><th>bước</th><th>giờ thật</th><th>khoảng nhận được</th><th>việc làm</th></tr>
+          <tr><td>1</td><td>100</td><td>96 tới 104</td><td>đặt dấu thời gian = muộn nhất = 104</td></tr>
+          <tr><td>2</td><td>104</td><td>100 tới 108</td><td>sớm nhất mới 100, chưa chắc đã qua 104 → <b>chờ</b></td></tr>
+          <tr><td>3</td><td>quá 108</td><td>sớm nhất quá 104</td><td>chắc chắn đã qua 104 → mới cho người khác thấy</td></tr>
+          <tr><td>chờ</td><td colspan="3">$108 - 100 = \hlg{8}$ ms $= 2 \cdot 4$, gấp đôi độ bất định</td></tr></table>
+          <p class="note">Ai bắt đầu sau lúc đó sẽ nhận dấu lớn hơn 104 → thứ tự dấu thời gian khớp giờ thật.</p>
+        focus: [1, "2.2", "2.3", "2.4", "2.5", 3]
+        say: "Làm thử với số minh hoạ, độ bất định 4 mi li giây, và giao dịch ghi xong lúc giờ thật là 100. Bước một, hỏi giờ được khoảng 96 tới 104, nên đặt dấu thời gian bằng giá trị muộn nhất, là 104. Bước hai, tới giờ thật 104, khoảng là 100 tới 108, chưa chắc đã qua 104, nên còn phải chờ. Bước ba, khi giờ thật quá 108 thì giá trị sớm nhất đã quá 104, lúc đó mới công bố kết quả. Thời gian chờ là 8 mi li giây, gấp đôi độ bất định, đúng mức chờ tối thiểu mà bài báo năm 2012 ghi. Ai bắt đầu sau lúc đó sẽ nhận dấu lớn hơn 104, nên thứ tự khớp với giờ thật."
+      - clear: true
+        show: |
+          <div class="box key"><b>Thực hành:</b> đừng giả vờ đồng hồ chính xác — trả về khoảng bất định và <b>chờ hết</b> nó trước khi công bố. Đồng hồ càng chính xác, chờ càng ít: nhóm Spanner ghi có thể hạ độ bất định xuống dưới 1 ms.</div>
+          <div class="box warn"><b>Điều kiện:</b> cần thứ tự giao dịch trên nhiều trung tâm dữ liệu. Theo bài báo năm 2012, phần lớn ứng dụng chỉ sao chép trong 3 đến 5 trung tâm dữ liệu của một vùng.</div>
+        focus: [1, 1, 2]
+        say: "Thực hành rút ra là đừng giả vờ đồng hồ chính xác, mà nói rõ độ bất định và chờ hết nó trước khi công bố. Đồng hồ càng chính xác thì thời gian chờ càng ít. Điều kiện là bạn thật sự cần thứ tự giao dịch trên nhiều trung tâm dữ liệu, vì phần lớn ứng dụng chỉ sao chép trong 3 đến 5 trung tâm của một vùng."
+
+  # ───────────────────────── 9. CHẶNG 5 ─────────────────────────
+  - id: stage5
+    kind: example
+    title: "Chặng 5, năm 2012 tới 2017 — ổn định và tiếp tục phát triển"
+    stage: {year: "2012 → 2017", scale: "hơn 5000 cơ sở dữ liệu, hàng chục triệu truy vấn mỗi giây, hàng trăm petabyte (2017)", source: "[SP12] §5.4, §7 [SQ17] §1, §8", practice: "ra mắt bằng giao diện đơn giản rồi thêm SQL, thống nhất một phương ngữ SQL, rà thiết kế lược đồ, phát hành nhịp ngắn nhưng chặn suy giảm hiệu năng bằng kiểm thử liên tục"}
+    checks:
+      - "2 * 5 == 10"
+      - "52 // 2 == 26"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thời điểm</th><th>thay đổi</th><th>bài học</th></tr>
+          <tr><td>2012</td><td>mọi lệnh ghi của hệ quảng cáo đi qua Spanner; tự chuyển sang bản sao khác khi có sự cố, “gần như vô hình”</td><td>sao chép đồng bộ, tự chuyển khi hỏng</td></tr>
+          <tr><td>2012</td><td>việc làm tiếp đã ghi ra: chỉ mục phụ tự động, tự chia lại mảnh theo tải</td><td>biết điểm nghẽn kế tiếp</td></tr>
+          <tr><td>2017</td><td>lúc đầu chỉ có giao diện khoá–giá trị đơn giản; sau thêm SQL, rồi một <b>phương ngữ SQL chung</b> cho cả công ty</td><td>ra mắt đơn giản, làm giàu dần</td></tr>
+          <tr><td>2017</td><td>hơn 5000 cơ sở dữ liệu, hàng chục triệu truy vấn mỗi giây, hàng trăm petabyte; có bản thử nghiệm công khai trên đám mây</td><td>quy mô rất lớn</td></tr>
+          <tr><td>2017</td><td>phiên bản mới khoảng <b>2 tuần một lần</b>; kỹ sư rà thiết kế lược đồ cho ứng dụng mới</td><td>nhịp nhanh nhưng chặn suy giảm hiệu năng</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", "1.5", "1.6"]
+        say: "Chặng năm là giai đoạn ổn định và tiếp tục phát triển. Năm 2012, mọi lệnh ghi của hệ quảng cáo đã đi qua Spanner, và việc tự chuyển bản sao khi có sự cố gần như vô hình với đội đó. Nhóm cũng ghi rõ việc làm tiếp, là chỉ mục phụ tự động và tự chia lại mảnh theo tải. Lúc đầu Spanner chỉ có giao diện khoá giá trị đơn giản, rồi mới thêm SQL và một phương ngữ SQL chung cho cả công ty. Năm 2017, hệ chạy hơn 5 nghìn cơ sở dữ liệu, hàng chục triệu truy vấn mỗi giây, hàng trăm nghìn TB. Phiên bản mới ra khoảng hai tuần một lần, và kỹ sư rà thiết kế lược đồ của các ứng dụng mới."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>đại lượng (bài báo năm 2017)</th><th>tính lại</th></tr>
+          <tr><td>lượng truy vấn SQL: năm trước khi có phương ngữ chung gấp 2, năm sau gấp 5</td><td>sau hai năm: $2 \cdot 5 = \hlg{10}$ lần</td></tr>
+          <tr><td>phiên bản mới khoảng 2 tuần một lần</td><td>$\frac{52}{2} = \hlg{26}$ bản mỗi năm</td></tr></table>
+          <p class="note">Nhịp đó an toàn nhờ kiểm thử chạy liên tục: mỗi ngày sinh hàng triệu truy vấn ngẫu nhiên, so kết quả với một bản cài đặt tham chiếu.</p>
+        focus: ["1.2", "1.3", 2]
+        say: "Tính lại, lượng truy vấn SQL tăng gấp 2 trong năm trước khi có phương ngữ chung, rồi gấp 5 năm sau, tức 10 lần sau hai năm. Hai tuần một bản nghĩa là 52 tuần chia 2, khoảng 26 lần nâng cấp mỗi năm. Nhịp đó an toàn nhờ kiểm thử chạy liên tục, mỗi ngày sinh hàng triệu truy vấn ngẫu nhiên rồi so với một bản cài đặt tham chiếu."
+
+  # ───────────────────────── 10. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm ba con số của hành trình"
+    checks:
+      - "131072 * 131072 == 17179869184 == 16 * 1073741824 == 2 ** 34"
+      - "sum(1 for k in range(20) if k % 4 == k % 5) == 4 and 1 - 4 / 20 == 0.8"
+      - "(100 + 4) + 4 - 100 == 8 == 2 * 4"
+    steps:
+      - show: |
+          <table class="t"><tr><th>con số</th><th>đường khác để kiểm</th></tr>
+          <tr><td>$2^{34}$ mảnh</td><td>$2^{34} = 16 \cdot 2^{30} = 16 \cdot 1\,073\,741\,824 = 17\,179\,869\,184$, khớp $131\,072 \cdot 131\,072$ ✓</td></tr>
+          <tr><td>80% khoá phải dời</td><td>chỉ đứng yên khi hai số dư bằng nhau; trong 20 mã chỉ có 0, 1, 2, 3 → đứng yên $\frac{4}{20}$ = 20%, dời 80% ✓</td></tr>
+          <tr><td>chờ 8 ms</td><td>dấu = giờ ghi + 4; sớm nhất = giờ thật − 4 phải quá dấu → giờ thật quá giờ ghi + 8 ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Ta kiểm lại ba con số bằng đường khác. Vì 2 mũ 34 bằng 16 nhân 2 mũ 30, khoảng 16 nhân 1 phẩy 07 tỉ, nên được khoảng 17 phẩy 2 tỉ, khớp phép nhân lúc trước. Với 80 phần trăm, chỉ 4 mã từ 0 tới 3 có hai số dư bằng nhau, nên đứng yên 20 phần trăm và dời 80 phần trăm. Với 8 mi li giây, vì dấu là giờ ghi cộng 4 và giá trị sớm nhất là giờ thật trừ 4, nên phải chờ tới giờ ghi cộng 8."
+
+  # ───────────────────────── 11. BÀI HỌC SAI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "Những bài học sai khi đọc hành trình này"
+    checks:
+      - "100 + 5 == 105 and 102 > 100 and 102 < 105"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">1.</b> “Bigtable sai vì thiếu giao dịch nhiều dòng”</td><td>năm 2006 phần lớn ứng dụng chỉ cần giao dịch một dòng; tới 2012 nhu cầu mới rõ: ít nhất 300 ứng dụng chịu chậm để có nó</td><td>thêm tính năng khi <b>số đo</b> cho thấy nhu cầu thật</td></tr>
+          <tr><td><b class="red">2.</b> “Hệ của mình cũng cần đồng hồ nguyên tử”</td><td>Spanner thiết kế cho hàng triệu máy, hàng trăm trung tâm; phần lớn ứng dụng chỉ 3–5 trung tâm một vùng</td><td>hỏi trước: có cần thứ tự giao dịch toàn cầu không?</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.3"]
+        say: "Bảng có hai bài học sai đầu tiên. Bài học sai thứ nhất là cho rằng hệ bảng lớn sai vì thiếu giao dịch nhiều dòng. Thật ra năm 2006 phần lớn ứng dụng chỉ cần giao dịch một dòng, và tới năm 2012 nhu cầu mới rõ, khi ít nhất 300 ứng dụng chịu chậm để có nó. Bài học sai thứ hai là nghĩ hệ của mình cũng cần đồng hồ nguyên tử, trong khi Spanner thiết kế cho hàng triệu máy, nên hãy hỏi trước mình có cần thứ tự toàn cầu không."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">3.</b> “Cứ chia mảnh bằng tay, khi nào cần thì chia lại”</td><td>lần chia lại cuối của hệ quảng cáo mất hơn 2 năm, hàng chục đội; chia theo số dư dời 80% khách</td><td>chọn khoá chia sớm, giấu việc chia khỏi mã nghiệp vụ, hoặc dùng hệ tự chia lại</td></tr>
+          <tr><td><b class="red">4.</b> “Đồng hồ máy chủ đã đồng bộ, lấy giờ máy làm thứ tự”</td><td>nhóm Bigtable đã gặp đồng hồ lệch lớn. Minh hoạ: máy A nhanh 5 ms ghi lúc 100 → dấu 105; máy B ghi sau, lúc 102 → dấu 102: bản ghi sau trông như trước</td><td>coi giờ là một khoảng; cần thứ tự thì dùng đồng hồ đếm sự kiện, hoặc chờ hết độ bất định</td></tr></table>
+        focus: ["1.2", "1.3", "1.3", "1.3"]
+        say: "Bài học sai thứ ba là cứ chia mảnh bằng tay, khi nào cần thì chia lại, trong khi lần chia lại cuối của hệ quảng cáo mất hơn hai năm. Bài học sai thứ tư là tin đồng hồ máy chủ đã đồng bộ, rồi lấy giờ máy làm thứ tự. Ví dụ minh hoạ, máy A nhanh 5 mi li giây ghi lúc 100 nên có dấu 105, còn máy B ghi sau, lúc 102, có dấu 102, nên bản ghi sau lại trông như trước. Hãy coi giờ là một khoảng, và khi cần thứ tự thì dùng đồng hồ đếm sự kiện hoặc chờ hết độ bất định."
+
+  # ───────────────────────── 12. QUYẾT ĐỊNH ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Bạn sẽ làm gì ở quy mô của mình?"
+    checks:
+      - "[200 * 1.5 ** n for n in range(5)] == [200, 300, 450, 675, 1012.5] and 200 * 1.5 ** 3 < 1000 < 200 * 1.5 ** 4"
+      - "5 - 3 < 3 and 5 - 2 >= 3 and min(5 - c for c in (2, 2, 1)) >= 3"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>tình huống (số minh hoạ)</th></tr>
+          <tr><td>1</td><td>Cửa hàng trực tuyến: một máy chủ cơ sở dữ liệu quan hệ, 200 GB, mỗi năm tăng gấp 1,5; máy chứa thoải mái 1 TB. Chia mảnh ngay hay chưa?</td></tr>
+          <tr><td>2</td><td>Bạn có 5 bản sao: đặt ở hai thành phố (3 + 2) hay ba thành phố (2 + 2 + 1)?</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn ra quyết định, với các số minh hoạ. Câu một, cửa hàng trực tuyến có một máy chủ chứa 200 ghi-ga-byte, mỗi năm tăng gấp 1 phẩy 5, máy chứa thoải mái 1 TB, vậy có nên chia mảnh ngay không? Câu hai, bạn có 5 bản sao, nên đặt ở hai thành phố theo kiểu 3 cộng 2, hay ở ba thành phố theo kiểu 2 cộng 2 cộng 1? Dừng video và viết câu trả lời ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <p>Câu 1, bước 1: $200 \to 300 \to 450 \to 675 \to \hl{1012{,}5}$ GB — năm thứ 4 mới vượt 1 TB.</p>
+          <table class="t"><tr><th>lựa chọn</th><th>được</th><th>mất</th></tr>
+          <tr><td>chưa chia, giữ một máy</td><td>giao dịch, truy vấn trên toàn bộ dữ liệu, vận hành đơn giản</td><td>phải tính trước lúc chuyển</td></tr>
+          <tr><td>chia mảnh bằng tay ngay</td><td>chịu tải lâu hơn</td><td>mã ứng dụng phải biết mảnh; chia lại sau có thể dời tới 80% khách</td></tr></table>
+          <p class="note">Chọn: chưa chia, nhưng chọn sẵn khoá chia (mã khách hàng) và giấu nó sau một lớp truy cập. Đổi lựa chọn khi dữ liệu tăng nhanh hơn, hay cần phục vụ nhiều vùng.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Đáp án câu một, bước một là tính dung lượng, 200 nhân 1 phẩy 5 được 300, rồi 450, rồi 675, và năm thứ tư là 1012 phẩy 5 ghi-ga-byte, mới vượt 1 TB. Giữ một máy thì còn giao dịch, truy vấn trên toàn bộ dữ liệu và vận hành đơn giản. Chia mảnh bằng tay ngay thì mã ứng dụng phải biết mảnh, và lần chia lại sau có thể dời tới 80 phần trăm khách hàng. Nên chưa chia, nhưng chọn sẵn khoá chia là mã khách hàng và giấu nó sau một lớp truy cập, rồi đổi khi dữ liệu tăng nhanh hơn hay cần nhiều vùng."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>cách đặt 5 bản</th><th>mất cả một thành phố</th><th>còn lại</th><th>ghi được? (cần đa số 3)</th></tr>
+          <tr><td>3 + 2</td><td>thành phố có 3 bản / có 2 bản</td><td>2 / 3</td><td><b class="red">không</b> / được</td></tr>
+          <tr><td>2 + 2 + 1</td><td>bất kỳ thành phố nào</td><td>ít nhất 3</td><td>được</td></tr></table>
+          <p class="note">Đổi lại, 2 + 2 + 1 thì mỗi lần ghi phải chờ xác nhận từ thành phố khác; 3 + 2 có thể đủ đa số ngay trong một thành phố. Chọn 3 thành phố khi mất cả một thành phố là rủi ro thật; chọn 3 + 2 khi độ trễ ghi quan trọng hơn.</p>
+        focus: [1, "1.2", "1.3", 2, 2]
+        say: "Đáp án câu hai dùng quy tắc đa số của bài 5, 5 bản cần 3 bản đồng ý mới ghi được. Với kiểu 3 cộng 2, mất thành phố có 3 bản thì chỉ còn 2 nên không ghi được. Với kiểu 2 cộng 2 cộng 1, mất bất kỳ thành phố nào cũng còn ít nhất 3 bản. Đổi lại, mỗi lần ghi phải chờ thành phố khác xác nhận, còn kiểu 3 cộng 2 có thể đủ đa số ngay trong một thành phố. Hãy chọn ba thành phố khi mất cả một thành phố là rủi ro thật, và chọn 3 cộng 2 khi độ trễ ghi quan trọng hơn."
+
+  # ───────────────────────── 13. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi hành trình & tư duy chuyên gia"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">khoá sắp xếp, mảnh: $2^{34}$ mảnh</span><span class="a">→</span>
+          <span class="n">hoãn tính năng, thiết kế đơn giản</span><span class="a">→</span>
+          <span class="n">chia tay: 80% khoá dời, hơn 2 năm</span><span class="a">→</span>
+          <span class="n">đồng hồ có độ bất định: chờ 8 ms</span><span class="a">→</span>
+          <span class="n">SQL, phương ngữ chung, 2 tuần một bản</span></div>
+        say: "Tổng kết lại, khoá sắp xếp và mảnh cho hệ bảng lớn chỉ mục ba tầng tới 2 mũ 34 mảnh, và năm 2006 nhóm hoãn tính năng, giữ thiết kế đơn giản. Chia mảnh bằng tay làm việc chia lại dời 80 phần trăm khoá và kéo dài hơn hai năm. Spanner nói rõ độ bất định của đồng hồ và chờ khoảng 8 mi li giây để giữ thứ tự toàn cầu, rồi thêm SQL và phát hành hai tuần một lần."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> cùng một câu hỏi — có cần giao dịch nhiều dòng không — có đáp án khác nhau ở năm 2006 và năm 2012, vì quy mô và nhu cầu đã đổi. Hãy đo nhu cầu thật trước khi thêm một tính năng.</div>
+        say: "Điều cần mang theo, cùng một câu hỏi có cần giao dịch nhiều dòng hay không lại có đáp án khác nhau ở năm 2006 và năm 2012, vì quy mô và nhu cầu đã đổi. Hãy đo nhu cầu thật trước khi thêm một tính năng."
+      - clear: true
+        show: |
+          <p class="note">Đây là bài cuối của khoá DSY. Bạn đã đi từ đồng hồ đếm sự kiện và đa số phiếu tới một cơ sở dữ liệu trải khắp thế giới dùng chính những ý đó.</p>
+        say: "Đây là bài cuối của khoá hệ phân tán và dữ liệu lớn. Bạn đã đi từ đồng hồ đếm sự kiện và đa số phiếu, tới một cơ sở dữ liệu trải khắp thế giới dùng chính những ý đó. Cảm ơn bạn đã theo học."

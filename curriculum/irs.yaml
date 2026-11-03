@@ -1,0 +1,133 @@
+# Giáo án KẾ HOẠCH — IRS · Truy hồi thông tin và hệ gợi ý
+# Trạng thái: planned. Ví dụ đã kiểm: audit/verify_plan_curricula.py, mã IRS:Lxx (độ đo xếp hạng tính tay, TF-IDF và cosin numpy,
+#   hợp nhất thứ hạng, bước SGD của phân rã ma trận, trọng số xu hướng hiển thị, ngân sách độ trễ hai tầng).
+# Căn cứ phạm vi (CITED): C. Manning, P. Raghavan, H. Schütze, Introduction to Information Retrieval (2008); K. Järvelin, J. Kekäläinen, nDCG (TOIS 2002);
+#   G. Cormack và cộng sự, hợp nhất thứ hạng nghịch đảo (SIGIR 2009, k = 60); C. Burges và cộng sự, RankNet (ICML 2005);
+#   Y. Koren, R. Bell, C. Volinsky, phân rã ma trận cho gợi ý (IEEE Computer 2009); T. Joachims và cộng sự, học xếp hạng không thiên lệch (WSDM 2017);
+#   J. Carbonell, J. Goldstein, MMR (SIGIR 1998); P. Covington và cộng sự, gợi ý hai tầng (RecSys 2016); Y. Malkov, D. Yashunin, HNSW (2018).
+# Vì sao cần: DEN L07 dạy chỉ mục ngược và BM25; LLM L03, L12 dạy vector nhúng và RAG. Chưa có khoá dạy đo chất lượng xếp hạng, truy hồi dày,
+#   học xếp hạng và hệ gợi ý với thiên lệch của dữ liệu tương tác — phần lõi của tìm kiếm, thương mại điện tử, mạng xã hội.
+# Thứ tự học: sau DEN L07, LLM L03, CS115 L16, L20.
+course: IRS
+status: planned
+lessons:
+  - id: L00
+    title: "Đo chất lượng truy hồi: độ chuẩn xác, độ phủ và hạng nghịch đảo trung bình"
+    spec: lessons/irs/L00_do_chat_luong.yaml
+    requires: []
+    requires_ext: ["CS115:L21"]
+    # Thuật ngữ theo CS115 bài 21 (2026-11-03): precision = “độ chuẩn xác”, recall = “độ phủ”, accuracy = “tỉ lệ đúng” — bản kế hoạch cũ ghi
+    #   “độ chính xác” cho precision, dễ lẫn với accuracy; đã đổi để cả hai khoá một cách gọi.
+    objectives: ["Tính độ chuẩn xác và độ phủ ở k kết quả đầu", "Tính hạng nghịch đảo của kết quả đúng đầu tiên"]
+    example: "10 kết quả, đúng ở vị trí 1, 3, 6; có tất cả 5 tài liệu đúng: P@5 = 2/5, R@5 = 2/5, hạng nghịch đảo = 1; nếu kết quả đúng đầu tiên ở vị trí 3 → 1/3 (VER IRS:L00)"
+    fix: ["Độ phủ cần biết TẤT CẢ tài liệu đúng — trên kho lớn chỉ ước lượng được bằng gộp kết quả nhiều hệ"]
+  - id: L01
+    title: "Độ lợi tích lũy có chiết khấu và chuẩn hoá (nDCG)"
+    spec: lessons/irs/L01_ndcg.yaml
+    requires: [L00]
+    requires_ext: ["CS115:L12"]
+    objectives: ["Tính DCG với chiết khấu 1/log₂(vị trí + 1)", "Chuẩn hoá bằng thứ tự lý tưởng"]
+    example: "mức liên quan theo thứ tự hiện 3, 2, 0, 1: DCG ≈ 4,693; thứ tự lý tưởng 3, 2, 1, 0: ≈ 4,762 → nDCG ≈ 0,985 (VER IRS:L01)"
+    fix: ["nDCG cao vẫn có thể thiếu tài liệu đúng nằm ngoài danh sách — nDCG chỉ chuẩn hoá trên các tài liệu đã được chấm",
+          "Chiết khấu 1/log₂(vị trí + 1) là dạng dùng về sau (Burges và cộng sự 2005 dùng log(1 + j), độ lợi 2^r − 1); bài báo Järvelin–Kekäläinen 2002 chia cho log_b(vị trí) từ vị trí b trở đi, không chiết khấu trước đó — cùng danh sách 3, 2, 0, 1 cho nDCG khác nhau, chỉ so khi cùng công thức (VER IRS:L01)"]
+  - id: L02
+    title: "Mô hình không gian vector: TF-IDF và độ tương tự cosin"
+    spec: lessons/irs/L02_tf_idf.yaml
+    requires: [L00]
+    requires_ext: ["DEN:L07", "LLM:L03"]
+    objectives: ["Tính trọng số TF-IDF của một từ", "Xếp hạng tài liệu theo cosin với câu hỏi"]
+    example: "3 tài liệu, từ “ổ” xuất hiện ở 1 tài liệu, từ “máy” ở cả 3: idf(ổ) = ln 3 ≈ 1,099, idf(máy) = 0 — từ có mặt ở mọi nơi không giúp phân biệt (VER IRS:L02)"
+    fix: ["Cosin không đổi khi văn bản được nhân bản (dài gấp đôi chính nó) — nhưng KHÔNG chống nhồi từ khoá: văn bản chỉ gồm từ khoá trùng hướng câu hỏi, cosin = 1 (bản cũ ghi “tài liệu dài lặp từ khoá không thắng”, chưa chính xác); công thức có bão hoà ở DEN L07 mới chặn việc này",
+          "Độ hiếm ln(N/df) phụ thuộc kho: “từ có ở mọi nơi” (idf = 0) chỉ đúng với kho đó — thêm 7 văn bản không chứa “máy” thì idf(máy) = ln(10/3) ≈ 1,204 (VER IRS:L02)"]
+  - id: L03
+    title: "Truy hồi dày và tìm láng giềng gần đúng"
+    spec: lessons/irs/L03_truy_hoi_day.yaml
+    requires: [L02]
+    requires_ext: ["CS115:L29"]
+    objectives: ["Ước lượng số phép so sánh khi chia vector thành cụm", "Đọc đánh đổi giữa độ phủ và độ trễ của tìm gần đúng"]
+    example: "1 triệu vector chia 1000 cụm, mỗi truy vấn xét 10 cụm gần nhất: so với 1000 tâm + 10 000 vector = 11 000 phép thay vì 1 000 000 (ít hơn ≈ 91 lần), đổi lại có thể sót láng giềng nằm ở cụm thứ 11 (VER IRS:L03)"
+    fix: ["Báo cáo tìm gần đúng phải kèm độ phủ so với tìm chính xác — nhanh mà sót kết quả đúng là vô ích",
+          "Con số 11 000 giả sử mọi cụm đều nhau; câu hỏi thật hay rơi vào vùng đông nên cụm được mở thường to hơn trung bình — đo số phép so trên câu hỏi thật"]
+  - id: L04
+    title: "Truy hồi lai và hợp nhất thứ hạng"
+    spec: lessons/irs/L04_hop_nhat_thu_hang.yaml
+    requires: [L03]
+    objectives: ["Ghép danh sách từ khoá và danh sách vector bằng điểm 1/(k + hạng)", "Giải thích vì sao không cộng thẳng điểm thô của hai hệ"]
+    example: "k = 60: A hạng 1 và 3 → 1/61 + 1/63 ≈ 0,03227; B hạng 2 và 1 → 1/62 + 1/61 ≈ 0,03252 → B đứng trên A (VER IRS:L04)"
+    fix: ["Điểm BM25 và cosin khác thang đo — cộng thẳng để một hệ lấn át hệ kia"]
+  - id: L05
+    title: "Học để xếp hạng: theo điểm, theo cặp, theo danh sách"
+    spec: lessons/irs/L05_hoc_xep_hang.yaml
+    requires: [L01]
+    requires_ext: ["CS115:L20"]
+    objectives: ["Tính mất mát theo cặp log(1 + e^−(sₐ − s_b))", "Giải thích vì sao tối ưu thứ tự khác tối ưu điểm tuyệt đối"]
+    example: "a liên quan hơn b, điểm 2 và 1,5 → mất mát ln(1 + e^−0,5) ≈ 0,474; đảo thành 1,5 và 2 → ≈ 0,974 (VER IRS:L05)"
+    fix: ["Sai ở đầu danh sách đắt hơn sai ở cuối — mất mát theo cặp thuần coi mọi cặp như nhau"]
+  - id: L06
+    title: "Lọc cộng tác theo láng giềng"
+    spec: lessons/irs/L06_loc_cong_tac.yaml
+    requires: [L02]
+    objectives: ["Tính độ tương tự cosin giữa hai người dùng", "Dự đoán điểm bằng trung bình có trọng số của láng giềng"]
+    example: "người dùng U = (5, 3, 0), V = (4, 0, 4) trên 3 sản phẩm: cosin = 20 / (√34 · √32) ≈ 0,606 (VER IRS:L06)"
+    fix: ["Số 0 nghĩa là “chưa chấm”, không phải “ghét” — coi 0 là điểm thật làm sai độ tương tự"]
+  - id: L07
+    title: "Phân rã ma trận cho gợi ý"
+    spec: lessons/irs/L07_phan_ra_ma_tran.yaml
+    requires: [L06]
+    requires_ext: ["CS115:L09", "CS115:L16"]
+    objectives: ["Dự đoán điểm bằng tích vô hướng vector người dùng và sản phẩm", "Thực hiện một bước cập nhật SGD"]
+    example: "p = (1, 2), q = (0,5; 1) → dự đoán 2,5; điểm thật 3 → sai số 0,5; η = 0,1 → p mới = p + η · sai số · q = (1,025; 2,05) (VER IRS:L07)"
+    fix: ["Không chính quy hoá thì người dùng có vài lượt chấm bị khớp quá mức — dự đoán cực đoan"]
+  - id: L08
+    title: "Phản hồi ngầm, lấy mẫu âm và thiên lệch phổ biến"
+    spec: lessons/irs/L08_phan_hoi_ngam.yaml
+    requires: [L07]
+    objectives: ["Phân biệt “không bấm” với “không thích”", "Lấy mẫu âm theo tần suất mũ 0,75 để bớt thiên về sản phẩm phổ biến"]
+    example: "sản phẩm A xuất hiện 100 lần, B 1 lần: lấy mẫu theo tần suất cho tỉ lệ 100 : 1; theo tần suất mũ 0,75 → 100^0,75 ≈ 31,6 : 1 (VER IRS:L08)"
+    fix: ["Không bấm có thể vì chưa thấy — dữ liệu ngầm chỉ là nhãn dương có nhiễu, không có nhãn âm thật"]
+  - id: L09
+    title: "Khởi động lạnh và khám phá trong gợi ý"
+    spec: lessons/irs/L09_khoi_dong_lanh.yaml
+    requires: [L08]
+    requires_ext: ["RLN:L03"]
+    objectives: ["Biểu diễn độ chắc chắn về tỉ lệ bấm bằng phân phối Beta", "Giải thích vì sao lấy mẫu Thompson cho sản phẩm mới cơ hội"]
+    example: "sản phẩm mới Beta(1, 1): trung bình 0,5, rất bất định; sản phẩm cũ 50 bấm / 1000 hiển thị → Beta(51, 951): trung bình ≈ 0,0509, rất chắc (VER IRS:L09)"
+    fix: ["Chỉ xếp theo trung bình thì sản phẩm mới CÓ THỂ bị khoá chết: vài lần đầu không ai bấm đã kéo trung bình xuống dưới sản phẩm cũ, từ đó nó không được hiển thị nữa để biết nó tốt (không phải lúc nào cũng vậy — mô phỏng trong bài: khoảng 1 trong 4–5 lần chạy)"]
+  - id: L10
+    title: "Thiên lệch vị trí: đánh giá ngoại tuyến bằng trọng số nghịch đảo xu hướng"
+    spec: lessons/irs/L10_thien_lech_vi_tri.yaml
+    requires: [L00, L08]
+    requires_ext: ["DSC:L07"]
+    objectives: ["Điều chỉnh lượt bấm theo xác suất được nhìn thấy", "Giải thích vì sao A/B trực tuyến vẫn là thước đo cuối"]
+    example: "vị trí 1 được nhìn với xác suất 1,0, vị trí 5 chỉ 0,2: 10 lượt bấm ở vị trí 5 tương đương 10 / 0,2 = 50 lượt bấm sau điều chỉnh (VER IRS:L10)"
+    fix: ["Xác suất nhìn thấy rất nhỏ cho trọng số rất lớn — phải cắt trọng số, đổi lại có thiên lệch"]
+  - id: L11
+    title: "Đa dạng, công bằng và vòng phản hồi của hệ gợi ý"
+    spec: lessons/irs/L11_da_dang.yaml
+    requires: [L06]
+    requires_ext: ["MLO:L09"]
+    objectives: ["Chọn kết quả bằng MMR: cân giữa liên quan và khác biệt với kết quả đã chọn", "Nhận ra vòng phản hồi làm sản phẩm phổ biến càng phổ biến"]
+    example: "λ = 0,7: ứng viên X liên quan 0,9, giống kết quả đã chọn 0,8 → 0,63 − 0,24 = 0,39; Y liên quan 0,7, giống 0,1 → 0,49 − 0,03 = 0,46 → chọn Y (VER IRS:L11)"
+    fix: ["Huấn luyện lại trên lượt bấm do chính hệ tạo ra củng cố lựa chọn cũ — cần dữ liệu khám phá"]
+  - id: L12
+    title: "Tình huống chuyên gia: thiết kế hệ gợi ý hai tầng trong ngân sách 100 ms"
+    spec: lessons/irs/L12_tinh_huong_hai_tang.yaml
+    requires: [L03, L05, L10]
+    requires_ext: ["SAR:L02"]
+    objectives: ["Lập ngân sách độ trễ cho sinh ứng viên, xếp hạng, xếp lại", "Chọn số ứng viên theo chi phí xếp hạng mỗi ứng viên"]
+    example: "sinh 1000 ứng viên 10 ms, xếp hạng 0,05 ms mỗi ứng viên = 50 ms, mạng và đọc đặc trưng 20 ms → 80 ms < 100 ms; xếp hạng thẳng 10 000 ứng viên → 500 ms, vỡ ngân sách (VER IRS:L12)"
+    fix: ["Chuyên gia đo phân vị 99 của từng tầng, không chỉ trung bình — tầng chậm nhất ở phân vị cao quyết định trải nghiệm"]
+  - id: L13
+    title: "Hành trình: gợi ý video từ đồ thị cùng xem tới hệ thống hai tầng"
+    spec: lessons/irs/L13_hanh_trinh_goi_y_video.yaml
+    requires: [L08, L09, L10, L12]
+    requires_ext: ["DSC:L08"]
+    # Nguồn (đọc nguyên văn 2026-11-03, câu trích ở audit/irs/sources_L13.md): S. Baluja và cộng sự, Video Suggestion and Discovery for
+    #   YouTube: Taking Random Walks Through the View Graph (WWW 2008) [BA08]; P. Covington, J. Adams, E. Sargin, Deep Neural Networks for
+    #   YouTube Recommendations (RecSys 2016) [CO16]; Z. Zhao và cộng sự, Recommending What Video to Watch Next: A Multitask Ranking System
+    #   (RecSys 2019) [ZH19]; M. Chen và cộng sự, Top-K Off-Policy Correction for a REINFORCE Recommender System (WSDM 2019, arXiv 1812.02353)
+    #   [CH19]; X. Yi và cộng sự, Sampling-Bias-Corrected Neural Modeling for Large Corpus Item Recommendations (RecSys 2019) [YI19].
+    #   J. Davidson và cộng sự, The YouTube Video Recommendation System (RecSys 2010): NOT_VERIFIED (ACM chặn, bản lưu trả 429) → không dạy.
+    objectives: ["Kể lại năm chặng 2008 → 2016 → 2019: đồ thị cùng xem, hai mạng nơ-ron sinh ứng viên và xếp hạng, khử thiên lệch vị trí, khám phá có kiểm soát, thêm nguồn ứng viên mới cập nhật hằng ngày", "Tính lại con số của từng chặng bằng kiến thức của khoá (độ chuẩn xác ở gợi ý đầu, bộ nhớ vector nhúng, trọng số nghịch đảo có cắt, hiệu chỉnh tần suất lấy mẫu)", "Chọn kiến trúc gợi ý cho quy mô của mình, kèm điều kiện đổi lựa chọn"]
+    example: "2008: 45 triệu video, 7 giờ video tải lên mỗi phút = 10 080 giờ mỗi ngày; mẫu còn 1,1 triệu người với 12,5 triệu lượt xem ≈ 11,4 lượt mỗi người; gợi ý video phổ biến nhất đúng 8,4% (CITED BA08); 2016: hàng triệu → hàng trăm → hàng chục video, 1 triệu video × 256 số × 4 byte = 1 024 000 000 byte (CITED CO16); 2019: tầng xếp hạng nhận vài trăm ứng viên, tháp nông khử thiên lệch vị trí +0,24% so với −0,07% khi chỉ thêm vị trí làm đặc trưng (CITED ZH19); khám phá trên 5% người dùng +0,07%, trọng số cắt ở 3, nới lên 5 thì −0,52% (CITED CH19); chỉ mục khoảng 10 triệu video làm lại mỗi vài giờ, mục cứ 50 bước gặp một lần → p = 0,02, điểm cộng thêm −ln 0,02 ≈ 3,912 (CITED YI19) (VER IRS:L13)"
+    fix: ["Chỉ dạy điều năm nguồn ghi: không kể “hệ gợi ý tạo 70% thời gian xem” hay các con số báo chí khác (không có trong năm bài báo)", "Năm 2016 không thay hết hệ cũ: bài báo ghi tầng sinh ứng viên trộn thêm ứng viên từ nguồn khác, và năm 2019 vẫn có nhiều nguồn đề cử song song"]

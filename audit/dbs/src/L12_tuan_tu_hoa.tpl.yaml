@@ -1,0 +1,254 @@
+id: L12
+course: DBS
+series: "DBS · Cơ sở dữ liệu"
+title: "Bài 12 — Lịch thực thi, tuần tự hoá xung đột và đồ thị ưu tiên"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/dbs.yaml L12; audit/dbs/verify_dbs.py L12; K. P. Eswaran et al. (1976); A. Silberschatz, H. F. Korth, S. Sudarshan, Database System Concepts (2019), mục 17.6"
+assumes: [arith, sub, set]
+# Quy ước: R_1(A) = giao dịch T1 đọc mục A; W_2(A) = T2 ghi A. Hai thao tác XUNG ĐỘT khi cùng mục, khác giao dịch, ít nhất một
+#   thao tác là ghi. Đồ thị ưu tiên: cạnh Ti → Tj khi một thao tác của Ti đi trước và xung đột với một thao tác của Tj.
+#   Mọi cạnh và kết luận chu trình do alg.precedence_graph tính (DFS tô màu, như duyệt sâu ở CS112).
+objectives:
+  - "Nhận ra hai thao tác xung đột"
+  - "Dựng đồ thị ưu tiên của một lịch"
+  - "Kết luận tuần tự hoá xung đột được hay không bằng kiểm chu trình"
+asr_reviewed:
+  - {sentence: "T2 đọc A rồi T1 đọc A, hai lần đọc, không xung đột.", reason: "ASR chép “T2 độc A rồi T1 độc A, hai lần độc, không xung độc.” (0.733): lệch âm/thanh thuần Việt: đọc/độc, đọc/độc, đọc/độc, đột/độc — NOT_VERIFIED bằng tai người"}
+  - {sentence: "T2 ghi A trước khi T1 đọc A, xung đột, cho cạnh T2 sang T1.", reason: "ASR chép “T2Va trước khi T1 độc A xung đột, cho cạnh T2 sang T1.” (0.865): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: ghi (trong “ghi a” → “va”), đọc/độc — NOT_VERIFIED bằng tai người"}
+  - {sentence: "R 1 của A nghĩa là T1 đọc A, W 2 của A nghĩa là T2 ghi A.", reason: "tên chữ cái đọc kiểu Việt, ASR chép nhầm chữ (q→quy, x→ích, k→ca) — nhóm đã biết (SKILL Bước 5); chữ hiện trên màn hình"}
+  - {sentence: "Câu một, lịch R 1 của A, R 2 của A, W 1 của A, W 2 của A có tuần tự hoá được không?", reason: "tên chữ cái đọc kiểu Việt, ASR chép nhầm chữ (q→quy, x→ích, k→ca) — nhóm đã biết (SKILL Bước 5); chữ hiện trên màn hình"}
+  - {sentence: "Cạnh đó nghĩa là trong mọi lịch tuần tự tương đương, T i phải đứng trước T j.", reason: "tên chữ cái đọc kiểu Việt, ASR chép nhầm chữ (q→quy, x→ích, k→ca) — nhóm đã biết (SKILL Bước 5); chữ hiện trên màn hình"}
+  - {sentence: "Câu hai, lịch R 2 của A, W 2 của A, R 1 của A, R 1 của B, W 1 của B tương đương với thứ tự lần lượt nào?", reason: "tên chữ cái đọc kiểu Việt, ASR chép nhầm chữ (q→quy, x→ích, k→ca) — nhóm đã biết (SKILL Bước 5); chữ hiện trên màn hình"}
+  - {sentence: "Với mỗi cặp thao tác xung đột mà thao tác của T i đi trước, ta vẽ cạnh từ T i sang T j.", reason: "tên chữ cái đọc kiểu Việt, ASR chép nhầm chữ (q→quy, x→ích, k→ca) — nhóm đã biết (SKILL Bước 5); chữ hiện trên màn hình"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Chen nhau mà vẫn an toàn?"
+    steps:
+      - show: |
+          <p>Bài 11: hai giao dịch chen nhau có thể làm mất cập nhật. Nhưng bắt mọi giao dịch chạy lần lượt thì hệ thống chậm như một hàng chờ duy nhất.</p>
+          <div class="box key">Hôm nay: cách kiểm một kiểu chen nhau có <b>tương đương với chạy lần lượt</b> không — chỉ bằng một đồ thị nhỏ.</div>
+        focus: [1, 1, 2]
+        say: "Chào bạn, ở bài 11, hai giao dịch chen nhau có thể làm mất cập nhật. Nhưng nếu bắt mọi giao dịch chạy lần lượt, hệ thống sẽ chậm như chỉ có một hàng chờ. Hôm nay ta học cách kiểm một kiểu chen nhau có tương đương với chạy lần lượt hay không, chỉ bằng một đồ thị nhỏ."
+
+  # ───────────────────────── 1b. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: mất cập nhật và đồ thị có hướng"
+    checks:
+      - "alg.lost_update(100, [10, 10]) == (110, 120)"
+      - "list(__import__('graphlib').TopologicalSorter({'B': {'A'}, 'C': {'B'}}).static_order()) == ['A', 'B', 'C']"
+      - "alg.precedence_graph([('T1', 'R', 'A'), ('T2', 'W', 'A'), ('T2', 'R', 'B'), ('T1', 'W', 'B')])[1] is True"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài 11: hai giao dịch cùng cộng 10 vào 100</th><th>kết quả</th></tr>
+          <tr><td>chạy lần lượt</td><td>120</td></tr>
+          <tr><td>cả hai đọc 100 trước khi ai ghi</td><td><b class="red">110</b> — mất một lần cộng</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Trước hết, nhắc lại bài 11, hai giao dịch cùng cộng 10 vào số dư 100. Chạy lần lượt thì ra 120. Nhưng nếu cả hai cùng đọc 100 trước khi ai ghi, kết quả chỉ là 110, mất một lần cộng."
+      - show: |
+          <table class="t"><tr><th>đồ thị có hướng</th><th>chu trình?</th><th>thứ tự tô-pô</th></tr>
+          <tr><td>A → B, B → C</td><td>không</td><td>A, B, C</td></tr>
+          <tr><td>A → B, B → A</td><td>có</td><td>không có</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Thứ hai, ôn đồ thị có hướng ở khoá Phân tích và thiết kế thuật toán. Với hai cạnh A sang B và B sang C, đồ thị không có chu trình, và thứ tự tô-pô là A, B, C, tức xếp sao cho mọi cạnh đều đi từ trái sang phải. Với hai cạnh A sang B và B sang A, đồ thị có chu trình, nên không có cách xếp nào như vậy, vì A phải vừa đứng trước vừa đứng sau B."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: lịch, R và W, xung đột"
+    checks:
+      - "alg.precedence_graph([('T1', 'R', 'A'), ('T2', 'R', 'A')]) == (set(), False)"
+      - "alg.precedence_graph([('T1', 'R', 'A'), ('T2', 'W', 'A')])[0] == {('T1', 'T2')} and alg.precedence_graph([('T1', 'W', 'A'), ('T2', 'W', 'B')])[0] == set()"
+    steps:
+      - show: |
+          <p><b>Lịch</b>: thứ tự thực sự của các thao tác khi nhiều giao dịch chen nhau. $R_1(A)$: T1 đọc A; $W_2(A)$: T2 ghi A.</p>
+          <p>Hai thao tác <b>xung đột</b> khi: cùng mục, khác giao dịch, và ít nhất một là <b>ghi</b>.</p>
+          <table class="t"><tr><th>cặp</th><th>xung đột?</th></tr>
+          <tr><td>$R_1(A)$, $R_2(A)$</td><td>không — hai lần đọc</td></tr>
+          <tr><td>$R_1(A)$, $W_2(A)$</td><td>có</td></tr>
+          <tr><td>$W_1(A)$, $W_2(B)$</td><td>không — khác mục</td></tr></table>
+        focus: [1, 1, 2, "3.2", "3.3", "3.4"]
+        say: "Một lịch là thứ tự thực sự của các thao tác khi nhiều giao dịch chen nhau. R 1 của A nghĩa là T1 đọc A, W 2 của A nghĩa là T2 ghi A. Hai thao tác xung đột khi chúng cùng một mục, thuộc hai giao dịch khác nhau, và ít nhất một thao tác là ghi. Hai lần đọc cùng A không xung đột. Một lần đọc và một lần ghi cùng A thì xung đột. Hai lần ghi mà khác mục thì không."
+
+  # ───────────────────────── 3. ĐỒ THỊ ─────────────────────────
+  - id: graph
+    kind: concept
+    title: "Đồ thị ưu tiên"
+    steps:
+      - show: |
+          <p>Mỗi giao dịch là một đỉnh. Với mỗi cặp xung đột mà thao tác của $T_i$ đi <b>trước</b>, vẽ cạnh từ $T_i$ sang $T_j$: trong mọi lịch tuần tự tương đương, $T_i$ phải đứng trước $T_j$.</p>
+          <div class="box key">Đồ thị <b>không có chu trình</b> → lịch tuần tự hoá xung đột được, theo thứ tự tô-pô của đồ thị. Có chu trình → không được.</div>
+          <p class="note">Vì sao? Thao tác không xung đột kề nhau đổi chỗ được mà kết quả không đổi; xung đột thì không đổi được, nên chu trình đòi “T1 trước T2 và T2 trước T1”.</p>
+        focus: [1, 1, 1, 2, 2, 3, 3]
+        say: "Mỗi giao dịch là một đỉnh của đồ thị. Với mỗi cặp thao tác xung đột mà thao tác của T i đi trước, ta vẽ cạnh từ T i sang T j. Cạnh đó nghĩa là trong mọi lịch tuần tự tương đương, T i phải đứng trước T j. Nếu đồ thị không có chu trình, lịch tuần tự hoá xung đột được, theo thứ tự tô-pô của đồ thị. Nếu có chu trình thì không được. Vì sao lại như vậy? Các thao tác không xung đột đứng kề nhau đổi chỗ được mà kết quả không đổi, còn thao tác xung đột thì không, nên một chu trình đòi T1 vừa trước vừa sau T2, vô lý."
+
+  # ───────────────────────── 3b. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Trượt các thao tác không xung đột cho tới khi hết chen"
+    steps:
+      - show: |
+          <div><svg width="1500" height="440" viewBox="0 0 1500 440"><defs><marker id="arDCg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#059669"/></marker></defs><defs><marker id="arDCk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9ca3af"/></marker></defs><text x="55" y="45" font-size="24" fill="#1f2937">lịch 2, hai giao dịch chen nhau</text><rect x="55" y="60" width="160" height="70" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="135" y="105" font-size="28" text-anchor="middle" fill="#1f2937" font-weight="bold">R1(A)</text><rect x="230" y="60" width="160" height="70" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="310" y="105" font-size="28" text-anchor="middle" fill="#1f2937" font-weight="bold">W1(A)</text><rect x="405" y="60" width="160" height="70" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="485" y="105" font-size="28" text-anchor="middle" fill="#1f2937" font-weight="bold">R2(A)</text><rect x="580" y="60" width="160" height="70" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="660" y="105" font-size="28" text-anchor="middle" fill="#1f2937" font-weight="bold">W2(A)</text><rect x="755" y="60" width="160" height="70" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="835" y="105" font-size="28" text-anchor="middle" fill="#1f2937" font-weight="bold">R1(B)</text><rect x="930" y="60" width="160" height="70" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="1010" y="105" font-size="28" text-anchor="middle" fill="#1f2937" font-weight="bold">W1(B)</text><rect x="1105" y="60" width="160" height="70" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="1185" y="105" font-size="28" text-anchor="middle" fill="#1f2937" font-weight="bold">R2(B)</text><rect x="1280" y="60" width="160" height="70" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="1360" y="105" font-size="28" text-anchor="middle" fill="#1f2937" font-weight="bold">W2(B)</text><line x1="135" y1="135" x2="135" y2="252" stroke="#9ca3af" stroke-width="3" marker-end="url(#arDCk)"/><line x1="310" y1="135" x2="310" y2="252" stroke="#9ca3af" stroke-width="3" marker-end="url(#arDCk)"/><line x1="485" y1="135" x2="835" y2="252" stroke="#059669" stroke-width="3" marker-end="url(#arDCg)"/><line x1="660" y1="135" x2="1010" y2="252" stroke="#059669" stroke-width="3" marker-end="url(#arDCg)"/><line x1="835" y1="135" x2="485" y2="252" stroke="#059669" stroke-width="3" marker-end="url(#arDCg)"/><line x1="1010" y1="135" x2="660" y2="252" stroke="#059669" stroke-width="3" marker-end="url(#arDCg)"/><line x1="1185" y1="135" x2="1185" y2="252" stroke="#9ca3af" stroke-width="3" marker-end="url(#arDCk)"/><line x1="1360" y1="135" x2="1360" y2="252" stroke="#9ca3af" stroke-width="3" marker-end="url(#arDCk)"/><rect x="55" y="260" width="160" height="70" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="135" y="305" font-size="28" text-anchor="middle" fill="#1f2937" font-weight="bold">R1(A)</text><rect x="230" y="260" width="160" height="70" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="310" y="305" font-size="28" text-anchor="middle" fill="#1f2937" font-weight="bold">W1(A)</text><rect x="405" y="260" width="160" height="70" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="485" y="305" font-size="28" text-anchor="middle" fill="#1f2937" font-weight="bold">R1(B)</text><rect x="580" y="260" width="160" height="70" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="660" y="305" font-size="28" text-anchor="middle" fill="#1f2937" font-weight="bold">W1(B)</text><rect x="755" y="260" width="160" height="70" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="835" y="305" font-size="28" text-anchor="middle" fill="#1f2937" font-weight="bold">R2(A)</text><rect x="930" y="260" width="160" height="70" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="1010" y="305" font-size="28" text-anchor="middle" fill="#1f2937" font-weight="bold">W2(A)</text><rect x="1105" y="260" width="160" height="70" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="1185" y="305" font-size="28" text-anchor="middle" fill="#1f2937" font-weight="bold">R2(B)</text><rect x="1280" y="260" width="160" height="70" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="1360" y="305" font-size="28" text-anchor="middle" fill="#1f2937" font-weight="bold">W2(B)</text><text x="55" y="372" font-size="24" fill="#1f2937">sau khi đổi chỗ: T1 xong hết rồi mới tới T2</text><text x="55" y="415" font-size="24" fill="#059669" font-weight="bold">R1(B), W1(B) vượt qua R2(A), W2(A): khác mục nên không xung đột, đổi chỗ không đổi kết quả</text></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình cho thấy vì sao không có chu trình thì tuần tự hoá được. Hàng trên là một lịch chen nhau, ô xanh của T1, ô cam của T2. Hai thao tác của T1 trên B chỉ đứng sau hai thao tác của T2 trên A, khác mục nên không xung đột, và ta trượt chúng lên trước mà kết quả không đổi. Trượt xong ta được hàng dưới, T1 làm xong hết rồi mới tới T2, đúng một lịch chạy lần lượt."
+
+  # ───────────────────────── 4. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Hai lịch, hai kết luận"
+    checks:
+      - "alg.precedence_graph([('T1', 'R', 'A'), ('T2', 'W', 'A'), ('T2', 'R', 'B'), ('T1', 'W', 'B')]) == ({('T1', 'T2'), ('T2', 'T1')}, True)"
+      - "alg.precedence_graph([('T1', 'R', 'A'), ('T1', 'W', 'A'), ('T2', 'R', 'A'), ('T2', 'W', 'A'), ('T1', 'R', 'B'), ('T1', 'W', 'B'), ('T2', 'R', 'B'), ('T2', 'W', 'B')]) == ({('T1', 'T2')}, False)"
+      - "(lambda s: sum(1 for i in range(len(s)) for j in range(i + 1, len(s)) if s[i][0] != s[j][0]))([('T1', 'R', 'A'), ('T2', 'W', 'A'), ('T2', 'R', 'B'), ('T1', 'W', 'B')]) == 4"
+      - "(lambda s: [(s[i][0], s[j][0]) for i in range(len(s)) for j in range(i + 1, len(s)) if s[i][0] != s[j][0] and s[i][2] == s[j][2] and 'W' in (s[i][1], s[j][1])])([('T1', 'R', 'A'), ('T1', 'W', 'A'), ('T2', 'R', 'A'), ('T2', 'W', 'A'), ('T1', 'R', 'B'), ('T1', 'W', 'B'), ('T2', 'R', 'B'), ('T2', 'W', 'B')]) == [('T1', 'T2')] * 6"
+    steps:
+      - show: |
+          <p><b>Bước 1</b> — Lịch 1: $R_1(A)\ \ W_2(A)\ \ R_2(B)\ \ W_1(B)$. Xét mọi cặp thao tác của <b>hai giao dịch khác nhau</b>:</p>
+          <table class="t"><tr><th>cặp (trước, sau)</th><th>cùng mục?</th><th>có ghi?</th><th>cạnh</th></tr>
+          <tr><td>$R_1(A)$, $W_2(A)$</td><td>có</td><td>có</td><td>T1 → T2</td></tr>
+          <tr><td>$R_1(A)$, $R_2(B)$</td><td>không</td><td></td><td>—</td></tr>
+          <tr><td>$W_2(A)$, $W_1(B)$</td><td>không</td><td></td><td>—</td></tr>
+          <tr><td>$R_2(B)$, $W_1(B)$</td><td>có</td><td>có</td><td>T2 → T1</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", "2.5"]
+        say: "Bước một, với lịch thứ nhất, ta xét mọi cặp thao tác thuộc hai giao dịch khác nhau, có đúng bốn cặp. Cặp T1 đọc A với T2 ghi A cùng mục và có ghi, nên cho cạnh từ T1 sang T2. Cặp T1 đọc A với T2 đọc B khác mục, nên không có cạnh. Cặp T2 ghi A với T1 ghi B cũng khác mục. Cặp T2 đọc B với T1 ghi B cùng mục và có ghi, nên cho cạnh từ T2 sang T1."
+      - clear: true
+        show: |
+          <p><b>Bước 2</b> — vẽ hai cạnh vừa tìm:</p>
+          <div>{{PREC_CYCLE}}</div>
+          <p>T1 → T2 và T2 → T1: chu trình → <b>không</b> tuần tự hoá được.</p>
+        focus: [1, 2, 3]
+        say: "Bước hai, vẽ hai cạnh vừa tìm được lên đồ thị. Cạnh trên vì mục A, cạnh dưới vì mục B. Hai cạnh ngược chiều nhau tạo thành chu trình, nên lịch này không tuần tự hoá được."
+      - clear: true
+        show: |
+          <p><b>Bước 3</b> — Lịch 2: $R_1(A)\ W_1(A)\ R_2(A)\ W_2(A)\ R_1(B)\ W_1(B)\ R_2(B)\ W_2(B)$. Các cặp xung đột:</p>
+          <table class="t"><tr><th>mục</th><th>cặp xung đột (trước, sau)</th><th>cạnh</th></tr>
+          <tr><td>A</td><td>$R_1(A)$, $W_2(A)$ ; $W_1(A)$, $R_2(A)$ ; $W_1(A)$, $W_2(A)$</td><td>T1 → T2</td></tr>
+          <tr><td>B</td><td>$R_1(B)$, $W_2(B)$ ; $W_1(B)$, $R_2(B)$ ; $W_1(B)$, $W_2(B)$</td><td>T1 → T2</td></tr></table>
+          <p class="note">Cặp $R_1$, $R_2$ cùng mục là hai lần đọc — không xung đột.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Bước ba, với lịch thứ hai, ta liệt kê các cặp xung đột theo từng mục. Trên mục A có ba cặp, và trong cả ba, thao tác của T1 đều đi trước. Trên mục B cũng có ba cặp, và T1 cũng luôn đi trước. Cặp hai lần đọc cùng mục không tính, vì đọc không xung đột với đọc."
+      - clear: true
+        show: |
+          <p><b>Bước 4</b> — cả 6 cặp đều cho cùng một cạnh:</p>
+          <div>{{PREC_OK}}</div>
+          <p>Chỉ cạnh T1 → T2. Không chu trình → <b>tương đương</b> chạy T1 xong rồi mới T2, dù hai bên chen nhau.</p>
+        focus: [1, 2, 3]
+        say: "Bước bốn, cả 6 cặp xung đột đều cho cùng một cạnh. Đồ thị chỉ có cạnh từ T1 sang T2. Không có chu trình, nên lịch này tương đương với chạy T1 xong rồi mới chạy T2, dù hai bên đang chen nhau."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: chạy thật bằng số, so với hai thứ tự lần lượt"
+    checks:
+      - "(lambda sched, A, B: __import__('functools').reduce(lambda s, o: {**s, o[0]: s[o[2]]} if o[1] == 'R' else {**s, o[2]: o[3](s)}, sched, {'A': A, 'B': B}))([('T1', 'R', 'A'), ('T2', 'W', 'A', lambda s: 10), ('T2', 'R', 'B'), ('T1', 'W', 'B', lambda s: s['T1'] + 1)], 1, 1) == {'A': 10, 'B': 2, 'T1': 1, 'T2': 1}"
+      - "(lambda sched, A, B: __import__('functools').reduce(lambda s, o: {**s, o[0]: s[o[2]]} if o[1] == 'R' else {**s, o[2]: o[3](s)}, sched, {'A': A, 'B': B}))([('T1', 'R', 'A'), ('T1', 'W', 'B', lambda s: s['T1'] + 1), ('T2', 'W', 'A', lambda s: 10), ('T2', 'R', 'B')], 1, 1) == {'A': 10, 'B': 2, 'T1': 1, 'T2': 2}"
+      - "(lambda sched, A, B: __import__('functools').reduce(lambda s, o: {**s, o[0]: s[o[2]]} if o[1] == 'R' else {**s, o[2]: o[3](s)}, sched, {'A': A, 'B': B}))([('T2', 'W', 'A', lambda s: 10), ('T2', 'R', 'B'), ('T1', 'R', 'A'), ('T1', 'W', 'B', lambda s: s['T1'] + 1)], 1, 1) == {'A': 10, 'B': 11, 'T1': 10, 'T2': 1}"
+      - "(lambda sched, A, B: __import__('functools').reduce(lambda s, o: {**s, o[0]: s[o[2]]} if o[1] == 'R' else {**s, o[2]: o[3](s)}, sched, {'A': A, 'B': B}))([('T1', 'R', 'A'), ('T1', 'W', 'A', lambda s: s['T1'] + 1), ('T2', 'R', 'A'), ('T2', 'W', 'A', lambda s: s['T2'] * 2), ('T1', 'R', 'B'), ('T1', 'W', 'B', lambda s: s['T1'] + 1), ('T2', 'R', 'B'), ('T2', 'W', 'B', lambda s: s['T2'] * 2)], 1, 1)['A'] == (lambda sched, A, B: __import__('functools').reduce(lambda s, o: {**s, o[0]: s[o[2]]} if o[1] == 'R' else {**s, o[2]: o[3](s)}, sched, {'A': A, 'B': B}))([('T1', 'R', 'A'), ('T1', 'W', 'A', lambda s: s['T1'] + 1), ('T2', 'R', 'A'), ('T2', 'W', 'A', lambda s: s['T2'] * 2), ('T1', 'R', 'B'), ('T1', 'W', 'B', lambda s: s['T1'] + 1), ('T2', 'R', 'B'), ('T2', 'W', 'B', lambda s: s['T2'] * 2)], 1, 1)['B'] == 4"
+      - "((lambda sched, A, B: __import__('functools').reduce(lambda s, o: {**s, o[0]: s[o[2]]} if o[1] == 'R' else {**s, o[2]: o[3](s)}, sched, {'A': A, 'B': B}))([('T1', 'R', 'A'), ('T1', 'W', 'A', lambda s: s['T1'] + 1), ('T1', 'R', 'B'), ('T1', 'W', 'B', lambda s: s['T1'] + 1), ('T2', 'R', 'A'), ('T2', 'W', 'A', lambda s: s['T2'] * 2), ('T2', 'R', 'B'), ('T2', 'W', 'B', lambda s: s['T2'] * 2)], 1, 1)['A'], (lambda sched, A, B: __import__('functools').reduce(lambda s, o: {**s, o[0]: s[o[2]]} if o[1] == 'R' else {**s, o[2]: o[3](s)}, sched, {'A': A, 'B': B}))([('T2', 'R', 'A'), ('T2', 'W', 'A', lambda s: s['T2'] * 2), ('T2', 'R', 'B'), ('T2', 'W', 'B', lambda s: s['T2'] * 2), ('T1', 'R', 'A'), ('T1', 'W', 'A', lambda s: s['T1'] + 1), ('T1', 'R', 'B'), ('T1', 'W', 'B', lambda s: s['T1'] + 1)], 1, 1)['A']) == (4, 3) and (1 + 1) * 2 == 4 and 1 * 2 + 1 == 3"
+    steps:
+      - show: |
+          <p>Lịch 1 với số thật, $A = B = 1$: T1 đọc A rồi ghi $B$ = (A đọc được) + 1; T2 ghi $A = 10$ rồi đọc B.</p>
+          <table class="t"><tr><th>chạy</th><th>T1 đọc A</th><th>T2 đọc B</th><th>B cuối</th></tr>
+          <tr><td>lịch 1</td><td>1</td><td>1</td><td>2</td></tr>
+          <tr><td>T1 rồi T2</td><td>1</td><td><b class="red">2</b></td><td>2</td></tr>
+          <tr><td>T2 rồi T1</td><td><b class="red">10</b></td><td>1</td><td><b class="red">11</b></td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Kiểm bằng đường khác, ta gán việc thật cho mỗi giao dịch rồi chạy bằng số, bắt đầu với A và B đều bằng 1. Theo lịch 1, T1 đọc được A bằng 1, T2 đọc được B bằng 1, và B cuối là 2. Chạy T1 rồi T2 thì T2 đọc được B bằng 2, khác lịch 1. Chạy T2 rồi T1 thì T1 đọc được A bằng 10 và B cuối là 11, cũng khác, đúng như chu trình đã báo."
+      - show: |
+          <p>Lịch 2: T1 cộng 1 vào A rồi B; T2 nhân đôi A rồi B; $A = B = 1$.</p>
+          <table class="t"><tr><th>chạy</th><th>A cuối</th><th>B cuối</th></tr>
+          <tr><td>lịch 2</td><td>4</td><td>4</td></tr>
+          <tr><td>T1 rồi T2: $(1 + 1) \cdot 2$</td><td>4</td><td>4</td></tr>
+          <tr><td>T2 rồi T1: $1 \cdot 2 + 1$</td><td>3</td><td>3</td></tr></table>
+        introduces: [cdot]
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Với lịch 2, cho T1 cộng 1 vào A rồi vào B, còn T2 nhân đôi A rồi B, bắt đầu từ 1. Chạy theo lịch 2 được A và B đều bằng 4. Chạy T1 rồi T2 được 1 cộng 1 rồi nhân 2, bằng 4, khớp. Chạy T2 rồi T1 chỉ được 1 nhân 2 cộng 1 bằng 3, nên lịch 2 tương đương đúng thứ tự T1 rồi T2, như đồ thị đã chỉ."
+
+  # ───────────────────────── 5. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi người mới hay mắc"
+    checks:
+      - "alg.precedence_graph([('T1', 'R', 'A'), ('T2', 'R', 'A')])[0] == set()"
+      - "(lambda sched, A, B: __import__('functools').reduce(lambda s, o: {**s, o[0]: s[o[2]]} if o[1] == 'R' else {**s, o[2]: o[3](s)}, sched, {'A': A, 'B': B}))([('T1', 'R', 'A'), ('T2', 'W', 'A', lambda s: 1), ('T2', 'R', 'B'), ('T1', 'W', 'B', lambda s: s['T1'] + 1)], 1, 2) == (lambda sched, A, B: __import__('functools').reduce(lambda s, o: {**s, o[0]: s[o[2]]} if o[1] == 'R' else {**s, o[2]: o[3](s)}, sched, {'A': A, 'B': B}))([('T1', 'R', 'A'), ('T1', 'W', 'B', lambda s: s['T1'] + 1), ('T2', 'W', 'A', lambda s: 1), ('T2', 'R', 'B')], 1, 2) and (lambda sched, A, B: __import__('functools').reduce(lambda s, o: {**s, o[0]: s[o[2]]} if o[1] == 'R' else {**s, o[2]: o[3](s)}, sched, {'A': A, 'B': B}))([('T1', 'R', 'A'), ('T2', 'W', 'A', lambda s: 1), ('T2', 'R', 'B'), ('T1', 'W', 'B', lambda s: s['T1'] + 1)], 1, 2)['T2'] == 2"
+      - "((lambda sched, A, B: __import__('functools').reduce(lambda s, o: {**s, o[0]: s[o[2]]} if o[1] == 'R' else {**s, o[2]: o[3](s)}, sched, {'A': A, 'B': B}))([('T1', 'R', 'A'), ('T2', 'W', 'A', lambda s: 1), ('T2', 'R', 'B'), ('T1', 'W', 'B', lambda s: s['T1'] + 1)], 1, 5)['T2'], (lambda sched, A, B: __import__('functools').reduce(lambda s, o: {**s, o[0]: s[o[2]]} if o[1] == 'R' else {**s, o[2]: o[3](s)}, sched, {'A': A, 'B': B}))([('T1', 'R', 'A'), ('T1', 'W', 'B', lambda s: s['T1'] + 1), ('T2', 'W', 'A', lambda s: 1), ('T2', 'R', 'B')], 1, 5)['T2']) == (5, 2)"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Coi hai lần đọc là xung đột <b class="red">(sai)</b>
+          <br><span class="note">Đọc không đổi dữ liệu; đổi chỗ hai lần đọc không ảnh hưởng gì.</span></div>
+        say: "Lỗi thứ nhất, coi hai lần đọc là xung đột. Đọc không làm thay đổi dữ liệu, nên đổi chỗ hai lần đọc không ảnh hưởng gì."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Vẽ cạnh ngược chiều <b class="red">(sai)</b>
+          <br><span class="note">Cạnh đi từ giao dịch có thao tác <b>trước</b> sang giao dịch có thao tác <b>sau</b>.</span></div>
+        say: "Lỗi thứ hai, vẽ cạnh ngược chiều. Cạnh đi từ giao dịch có thao tác đứng trước sang giao dịch có thao tác đứng sau."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Thử một bộ dữ liệu thấy kết quả đúng rồi kết luận an toàn <b class="red">(sai)</b>
+          <br><span class="note">Một bộ dữ liệu có thể tình cờ cho đúng. Tuần tự hoá phải đúng với <b>mọi</b> dữ liệu — đồ thị kiểm đúng điều đó.</span></div>
+          <table class="t"><tr><th>lịch 1, T2 ghi A = 1</th><th>T2 đọc B: lịch 1</th><th>T2 đọc B: T1 rồi T2</th><th>khớp?</th></tr>
+          <tr><td>dữ liệu thử A = 1, B = 2</td><td>2</td><td>2</td><td>khớp — tình cờ</td></tr>
+          <tr><td>dữ liệu thật A = 1, B = 5</td><td>5</td><td>2</td><td><b class="red">lệch</b></td></tr></table>
+        focus: [1, 1, 2, "2.2", "2.3"]
+        say: "Lỗi thứ ba, thử một bộ dữ liệu, thấy kết quả đúng, rồi kết luận lịch an toàn. Một bộ dữ liệu có thể tình cờ cho đúng, còn tuần tự hoá phải đúng với mọi dữ liệu, và đồ thị kiểm đúng điều đó. Người đã đi làm hay chạy thử đồng thời trên dữ liệu thử, không thấy lỗi rồi đưa lên chạy thật. Bảng cho thấy lịch 1, với A bằng 1 và B bằng 2, tình cờ khớp thứ tự T1 rồi T2. Đổi B thành 5 thì T2 đọc được 5 thay vì 2, lỗi lộ ra."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Chỉ xét cặp thao tác kề nhau <b class="red">(thiếu)</b>
+          <br><span class="note">Xét <b>mọi</b> cặp xung đột theo thứ tự trong lịch, kể cả cách xa nhau.</span></div>
+        say: "Lỗi thứ tư, chỉ xét những cặp thao tác đứng kề nhau. Phải xét mọi cặp xung đột theo thứ tự trong lịch, kể cả khi chúng cách xa nhau."
+
+  # ───────────────────────── 6. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.precedence_graph([('T1', 'R', 'A'), ('T2', 'R', 'A'), ('T1', 'W', 'A'), ('T2', 'W', 'A')]) == ({('T1', 'T2'), ('T2', 'T1')}, True)"
+      - "alg.precedence_graph([('T2', 'R', 'A'), ('T2', 'W', 'A'), ('T1', 'R', 'A'), ('T1', 'R', 'B'), ('T1', 'W', 'B')]) == ({('T2', 'T1')}, False)"
+      - "alg.precedence_graph([('T1', 'R', 'A'), ('T2', 'W', 'A')])[0] == {('T1', 'T2')} and alg.precedence_graph([('T2', 'R', 'A'), ('T1', 'W', 'A')])[0] == {('T2', 'T1')} and alg.precedence_graph([('T1', 'W', 'A'), ('T2', 'W', 'A')])[0] == {('T1', 'T2')}"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>lịch</th><th>hỏi</th></tr>
+          <tr><td>1</td><td>$R_1(A)\ R_2(A)\ W_1(A)\ W_2(A)$</td><td>tuần tự hoá được không?</td></tr>
+          <tr><td>2</td><td>$R_2(A)\ W_2(A)\ R_1(A)\ R_1(B)\ W_1(B)$</td><td>tương đương thứ tự lần lượt nào?</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, lịch R 1 của A, R 2 của A, W 1 của A, W 2 của A có tuần tự hoá được không? Câu hai, lịch R 2 của A, W 2 của A, R 1 của A, R 1 của B, W 1 của B tương đương với thứ tự lần lượt nào? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <table class="t"><tr><th>câu 1: cặp (trước, sau)</th><th>xung đột?</th><th>cạnh</th></tr>
+          <tr><td>$R_1(A)$, $R_2(A)$</td><td>không — hai lần đọc</td><td>—</td></tr>
+          <tr><td>$R_1(A)$, $W_2(A)$</td><td>có</td><td>T1 → T2</td></tr>
+          <tr><td>$R_2(A)$, $W_1(A)$</td><td>có</td><td>T2 → T1</td></tr>
+          <tr><td>$W_1(A)$, $W_2(A)$</td><td>có</td><td>T1 → T2</td></tr></table>
+          <p>Có cả T1 → T2 lẫn T2 → T1: chu trình → <b>không</b>. Đây chính là mất cập nhật của bài 11.</p>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", 2]
+        say: "Đáp án câu một, ta xét lần lượt mọi cặp khác giao dịch. Hai lần đọc A đầu tiên không xung đột. T1 đọc A trước khi T2 ghi A, cho cạnh T1 sang T2. T2 đọc A trước khi T1 ghi A, cho cạnh T2 sang T1. Hai lần ghi A cho thêm cạnh T1 sang T2. Có cạnh cả hai chiều, tức có chu trình, nên lịch không tuần tự hoá được, và đây chính là lỗi mất cập nhật ở bài 11."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 2: cặp (trước, sau)</th><th>xung đột?</th><th>cạnh</th></tr>
+          <tr><td>$R_2(A)$, $R_1(A)$</td><td>không — hai lần đọc</td><td>—</td></tr>
+          <tr><td>$W_2(A)$, $R_1(A)$</td><td>có</td><td>T2 → T1</td></tr>
+          <tr><td>thao tác của T2 với $R_1(B)$, $W_1(B)$</td><td>không — T2 không đụng B</td><td>—</td></tr></table>
+          <p>Chỉ cạnh T2 → T1, không chu trình → tương đương <b>T2 rồi T1</b>.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Câu hai, cũng xét từng cặp. T2 đọc A rồi T1 đọc A, hai lần đọc, không xung đột. T2 ghi A trước khi T1 đọc A, xung đột, cho cạnh T2 sang T1. T2 không hề đụng tới B, nên các thao tác của T1 trên B không tạo cạnh nào. Đồ thị chỉ có cạnh T2 sang T1, không chu trình, nên lịch tương đương chạy T2 xong rồi mới T1."
+
+  # ───────────────────────── 7. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">xung đột: cùng mục, khác giao dịch, có ghi</span><span class="a">→</span>
+          <span class="n">cạnh: trước → sau</span><span class="a">→</span>
+          <span class="n">không chu trình: tuần tự hoá được</span><span class="a">→</span>
+          <span class="n">thứ tự tô-pô = thứ tự lần lượt</span></div>
+        say: "Tổng kết lại, hai thao tác xung đột khi cùng mục, khác giao dịch và có ít nhất một lần ghi. Mỗi cặp xung đột cho một cạnh từ trước sang sau. Đồ thị không có chu trình thì lịch tuần tự hoá được, theo đúng thứ tự tô-pô."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> câu hỏi “có an toàn với mọi dữ liệu không” thường trả lời được bằng cấu trúc (một đồ thị), không phải bằng thử nghiệm.</div>
+        say: "Điều cần mang theo, câu hỏi có an toàn với mọi dữ liệu không thường trả lời được bằng cấu trúc, như một đồ thị, chứ không phải bằng thử nghiệm."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 13): <b>khoá hai pha</b> — luật khoá bảo đảm mọi lịch đều tuần tự hoá được, và cái giá là bế tắc.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 13, ta học khoá hai pha, luật khoá bảo đảm mọi lịch đều tuần tự hoá được, và cái giá phải trả là bế tắc. Hẹn gặp bạn ở bài tiếp theo."

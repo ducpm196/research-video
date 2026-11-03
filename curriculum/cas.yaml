@@ -1,0 +1,120 @@
+# Giáo án KẾ HOẠCH — CAS · Tình huống chuyên gia: phân tích sự cố có thật
+# Trạng thái: planned. Ví dụ đã kiểm: audit/verify_plan_curricula.py, mã CAS:Lxx — tính lại mọi con số tính được (cắt 0,1 còn 23 bit phần lẻ,
+#   giới hạn số nguyên 16 bit, hệ số pound-lực, mô phỏng đảo ngược ưu tiên, đếm bước quay lui của bộ khớp biểu thức chính quy tự cài, tràn int32 năm 2038).
+# Nguồn sự kiện (CITED — đọc LẠI nguyên văn trong phiên 2026-11-02; câu trích + mã HTTP ở audit/cas/sources_Lxx.md, mỗi tệp có mục
+#   “Điều KHÔNG dạy”; bản tải để ở thư mục nháp của phiên, không đưa vào kho):
+#   L00 J. Reason, BMJ 2000 (bản PMC); Google SRE Book ch.15 + phụ lục D (bản hậu kiểm mẫu, sự cố giả định);
+#   L01 GAO/IMTEC-92-26 (2/1992), bảng Phụ lục II (đã xem ảnh trang); L02 Báo cáo Hội đồng điều tra Ariane 501 (19/7/1996) — bản quét ESA
+#   esa-x-1819eng.pdf (đọc ảnh trang) + bản chép toàn văn ĐH Minnesota + thông cáo ESA; L03 NASA MCO MIB Phase I (10/11/1999, bản NASA LLIS);
+#   L04 thư 15/12/1997 của trưởng nhóm phần mềm bay Pathfinder (bản chép cs.unc.edu) và M. Jones 5/12/1997 (cs.cmu.edu) — dạy theo thư
+#   15/12 khi hai bản khác nhau; L05 SEC, lệnh hành chính 34-70694 (16/10/2013) — bản PDF sec.gov TẢI ĐƯỢC lần này, dạy từ bản chính thức
+#   (lần 2026-10-30 chỉ có bản tóm của J. R. Varma); L06 AWS, Summary of the Amazon S3 Service Disruption (2/2017); L07 Cloudflare,
+#   Details of the Cloudflare outage on July 2, 2019 (đối chiếu TOC L14); L08 GitLab, Postmortem of database outage of January 31 (2/2017);
+#   L09 RFC 6520, bản tin OpenSSL 7/4/2014, heartbleed.com, bản vá 1.0.1g; L10 D. Lazer và cộng sự, The Parable of Google Flu (Science
+#   14/3/2014, bản tác giả trên trang G. King); L11 LWN 11/1/2019, glibc NEWS 2.34/2.40, tài liệu ext4 của nhân Linux, tài liệu MariaDB
+#   TIMESTAMP, FAA AD 2015-09-07 (787, qua API federalregister.gov + PDF govinfo.gov). NOT_VERIFIED: Etsy “Blameless PostMortems” (403/429),
+#   MySQL TIMESTAMP (403), thông cáo SEC 2013-222 (403) — không dạy chi tiết chỉ có ở các trang đó.
+# Vì sao cần: người dùng yêu cầu 2026-10-30 “bài thiết kế vận dụng tình huống kinh nghiệm cụ thể của các chuyên gia”. Mỗi khoá đã có một bài tình huống cuối khoá;
+#   khoá này ghép kiến thức NHIỀU khoá để đọc một sự cố thật theo cách người điều tra làm: dòng thời gian → cơ chế kỹ thuật (tính lại bằng số)
+#   → các lớp phòng vệ đã thiếu → thay đổi hệ thống, không đổ lỗi cá nhân.
+# Mỗi bài theo cùng khung: hook = sự cố; symbol = thuật ngữ; example = tái hiện cơ chế bằng số; pitfall = các “bài học sai” hay gặp; quiz = “bạn sẽ làm gì”.
+# Thứ tự học: mỗi bài ghi requires_ext tới các bài nền; học sau các khoá đó, theo bất kỳ thứ tự nào.
+course: CAS
+status: planned
+lessons:
+  - id: L00
+    title: "Phương pháp hậu kiểm không đổ lỗi: dòng thời gian, nguyên nhân góp phần, lớp phòng vệ"
+    spec: lessons/cas/L00_hau_kiem.yaml
+    requires: []
+    see_also: ["DVO:L10"]      # liên quan, không bắt buộc học trước
+    objectives: ["Dựng dòng thời gian từ dữ kiện, tách khỏi suy đoán", "Tìm nhiều nguyên nhân góp phần thay vì một “nguyên nhân gốc”"]
+    example: "mô hình nhiều lớp phòng vệ: 3 lớp độc lập, mỗi lớp lọt 10% → cả ba cùng lọt 0,1%; nếu ba lớp cùng dựa một giả định sai thì chúng lọt cùng lúc — xác suất 10%, không phải 0,1% (VER CAS:L00)"
+    fix: ["“Lỗi con người” là điểm bắt đầu điều tra, không phải kết luận — hỏi vì sao hệ thống cho phép một thao tác gây hậu quả lớn như vậy"]
+  - id: L01
+    title: "Patriot, Dhahran 1991: 0,1 giây không biểu diễn được bằng nhị phân"
+    spec: lessons/cas/L01_patriot.yaml
+    requires: [L00]
+    requires_ext: ["CSA:L04", "ESY:L06"]
+    objectives: ["Tính sai số khi cắt 0,1 còn 23 bit phần lẻ và sai số tích luỹ sau 100 giờ", "Giải thích vì sao lỗi chỉ lộ ra khi hệ chạy liên tục lâu hơn giả định thiết kế"]
+    example: "0,1 cắt còn 23 bit phần lẻ sai ≈ 9,54 · 10⁻⁸ s mỗi nhịp; 100 giờ = 3 600 000 nhịp → ≈ 0,3433 s, khớp bảng GAO (độ lệch cửa sổ theo dõi ≈ 687 m); 8 giờ → 0,0275 s (VER CAS:L01)"
+    fix: ["Thiết kế giả định chạy vài giờ rồi di chuyển; sai số tuyến tính theo thời gian chạy — khởi động lại định kỳ chỉ là biện pháp tạm, phải sửa cách biểu diễn thời gian", "Báo cáo GAO chỉ ghi thanh ghi 24 bit; “cắt sau 23 bit phần lẻ” là MÔ HÌNH tái hiện (khớp cả 6 hàng cột sai số của Phụ lục II, mô hình 24 bit thì không) — không nói như thể GAO viết", "Phụ lục II tự mâu thuẫn ở hàng 100 giờ: 360 000 − 0,3433 = 359 999,6567 nhưng bảng in 359 999,6667 (đã xem ảnh trang); không gán hệ số ≈ 2000 m mỗi giây sai số cho vận tốc tên lửa (báo cáo không ghi)"]
+  - id: L02
+    title: "Ariane 5, chuyến bay 501 (1996): dùng lại mã đúng cho Ariane 4"
+    spec: lessons/cas/L02_ariane5.yaml
+    requires: [L00]
+    requires_ext: ["CSA:L01", "SWF:L00"]
+    objectives: ["Tính giới hạn số nguyên 16 bit có dấu và kiểm khi nào phép đổi tràn", "Phân tích giả định ngầm khi dùng lại thành phần sang môi trường mới"]
+    example: "số nguyên 16 bit có dấu chỉ chứa −32 768 … 32 767; phép đổi số thực 64 bit của biến độ lệch ngang BH không được bảo vệ, quỹ đạo Ariane 5 cho vận tốc ngang lớn hơn → lỗi toán hạng ở H0 + 36,7 s, cả hai bộ tham chiếu quán tính dừng (CITED báo cáo 1996, VER CAS:L02)"
+    fix: ["Hàm căn chỉnh này không cần sau khi cất cánh trên Ariane 5 mà vẫn chạy ≈ 40 s vì “giữ cho giống Ariane 4” — mã không cần thiết vẫn là rủi ro", "Báo cáo KHÔNG ghi giá trị BH — mọi giá trị BH trong bài là số minh hoạ; không nói “một lập trình viên quên kiểm”: quyết định bảo vệ 4/7 biến do các bên cùng đưa ra (mục tiêu tải 80%), và đặc tả không chứa quỹ đạo Ariane 5", "Hai bộ dự phòng cùng phần mềm không độc lập: đặc tả “ngoại lệ → dừng bộ xử lý” tắt hai bộ còn lành (khuyến nghị R3: luôn gửi số đo ước lượng tốt nhất)"]
+  - id: L03
+    title: "Mars Climate Orbiter (1999): đơn vị đo không ghi trong kiểu dữ liệu"
+    spec: lessons/cas/L03_mars_climate_orbiter.yaml
+    requires: [L00]
+    requires_ext: ["SWF:L00", "SDP:L02"]
+    objectives: ["Tính sai lệch khi đọc pound-lực·giây như newton·giây", "Thiết kế giao diện dữ liệu mang đơn vị để máy kiểm được"]
+    example: "1 pound-lực ≈ 4,45 N: xung lực ghi theo lbf·s nhưng đọc như N·s → bị đánh giá thấp 4,45 lần; quỹ đạo tính lại cho cận điểm ≈ 57 km, quá thấp để tàu sống sót (CITED báo cáo MIB 1999, VER CAS:L03)"
+    fix: ["Đặc tả giao diện đã ghi đơn vị mét — nhưng không có phép kiểm tự động nào đối chiếu; tài liệu không thay được kiểm tra", "Phần mềm TRÊN TÀU tính đúng niu-tơn giây; chỉ phần mềm mặt đất ghi sai — không nói “tàu dùng sai đơn vị”. “Thấp hơn kế hoạch khoảng 170 km” = 226 − 57 (VER); báo cáo không ghi xung lực hay số lần đốt thật (bài dùng số minh hoạ), 629 kg là khối lượng lúc phóng", "Dấu hiệu có từ 4/1999 và các lời giải quỹ đạo lệch nhau suốt xuân hè chỉ được báo không chính thức — lệch giữa hai cách tính phải được giải thích, không bỏ qua"]
+  - id: L04
+    title: "Mars Pathfinder (1997): đảo ngược ưu tiên và một cờ cấu hình"
+    spec: lessons/cas/L04_mars_pathfinder.yaml
+    requires: [L00]
+    requires_ext: ["ESY:L10", "OSY:L05"]
+    objectives: ["Mô phỏng dòng thời gian tác vụ thấp giữ khoá, tác vụ vừa chen, tác vụ cao chờ", "Giải thích vì sao bật kế thừa ưu tiên sửa được"]
+    example: "tác vụ thấp giữ khoá cần thêm 2 ms, tác vụ vừa chạy 50 ms không cần khoá: không kế thừa → tác vụ cao chờ 52 ms, vượt hạn 10 ms → tác vụ lập lịch đường truyền phát hiện trễ hạn và khởi động lại máy; có kế thừa → chờ 2 ms (số minh hoạ; cơ chế CITED thư 15/12/1997 của trưởng nhóm phần mềm bay, VER CAS:L04)"
+    fix: ["Lỗi chỉ xuất hiện dưới tải cao hiếm gặp; khả năng sửa từ xa và vết ghi khi chạy là điều cứu nhiệm vụ — thiết kế cho chẩn đoán từ đầu", "Không nói “đồng hồ giám sát (watchdog) khởi động lại”, “gõ lệnh C qua bộ thông dịch lên tàu”, “may mắn còn để công cụ gỡ lỗi” — đó là bản kể lại 5/12/1997; thư 15/12/1997 của đội phần mềm đính chính: tác vụ lập lịch phát hiện tác vụ phân phát chưa xong (hạn chót cứng), công cụ ghi vết để lại theo thiết kế, bản sửa gửi dưới dạng phần sai khác", "Bật kế thừa ưu tiên là một biến cấu hình TOÀN CỤC (đổi mọi khoá của cơ chế chờ nhiều kênh) — đội phân tích, nhờ nhà cung cấp đánh giá, thử kỹ rồi mới gửi; dữ liệu đã thu không mất, chỉ việc của ngày đó bị dời"]
+  - id: L05
+    title: "Knight Capital (2012): một máy chủ thiếu bản triển khai và một cờ dùng lại"
+    spec: lessons/cas/L05_knight_capital.yaml
+    requires: [L00]
+    requires_ext: ["DVO:L07", "DVO:L04"]
+    objectives: ["Phân tích rủi ro của cờ tính năng tái sử dụng và mã chết", "Thiết kế triển khai có kiểm đồng nhất và nút dừng"]
+    example: "mã mới chép lên 7 trong 8 máy chủ; cờ cũ của chức năng Power Peg bỏ từ 2003 được dùng lại → máy thứ 8 chạy mã cũ; trong ≈ 45 phút lỗ hơn 460 triệu đô la, trung bình hơn 10 triệu đô la mỗi phút (CITED lệnh SEC 2013, VER CAS:L05)"
+    fix: ["Không có người thứ hai kiểm việc triển khai và không có quy trình yêu cầu — sửa bằng tự động hoá triển khai và kiểm phiên bản trên mọi máy, không phải dặn “cẩn thận hơn”", "Lệnh SEC 34-70694 tải được (2026-11-02) — dạy từ bản chính thức, không từ bản tóm; mã Power Peg ngừng dùng 2003 nhưng bộ đếm bị dời năm 2005 mà không thử lại; “quay lui” bằng cách gỡ mã mới khỏi 7 máy (cờ vẫn bật) làm cả 8 máy chạy mã cũ — quay lui phải gồm cả cấu hình", "97 thư tự động báo “Power Peg disabled” từ 8:01 không được thiết kế làm cảnh báo; công cụ theo dõi vị thế chỉ cho người nhìn, không tự chặn gửi lệnh"]
+  - id: L06
+    title: "Amazon S3 (2017): lệnh gỡ máy gõ sai và lần khởi động lại chưa từng tập"
+    spec: lessons/cas/L06_aws_s3.yaml
+    requires: [L00]
+    requires_ext: ["SAR:L06", "CLD:L05"]
+    objectives: ["Đọc dòng thời gian khôi phục và tính thời lượng", "Đề xuất chặn công cụ không cho gỡ dưới mức dung lượng tối thiểu"]
+    example: "9:37 sáng giờ Thái Bình Dương: lệnh gỡ một số ít máy có một tham số gõ sai, gỡ nhiều máy hơn dự định; hệ con chỉ mục và hệ con cấp chỗ “nhiều năm chưa khởi động lại hoàn toàn”; hệ con cấp chỗ khôi phục xong lúc 1:54 chiều → 4 giờ 17 phút (CITED AWS, VER CAS:L06)"
+    fix: ["Thao tác chưa từng tập ở quy mô thật thì thời gian khôi phục là ẩn số — diễn tập khôi phục là một phần của thiết kế"]
+  - id: L07
+    title: "Cloudflare (2019): một biểu thức chính quy quay lui làm cạn CPU toàn cầu"
+    spec: lessons/cas/L07_cloudflare_regex.yaml
+    requires: [L00]
+    requires_ext: ["TOC:L03", "DVO:L07"]
+    objectives: ["Đếm số bước của bộ khớp quay lui với mẫu .*.*=.* trên chuỗi dài", "Phân biệt bộ khớp quay lui với bộ khớp theo ôtômat có thời gian tuyến tính"]
+    example: "bộ khớp quay lui tự cài với mẫu .*.*=.* trên chuỗi n chữ x không có dấu “=”, tìm ở mọi vị trí bắt đầu: số bước tăng theo bậc n³ — gấp đôi n thì gấp khoảng 8 lần (Cloudflare đo 4067 bước cho 20 chữ x); luật mới đẩy ra toàn mạng cùng lúc, sự cố kéo dài 27 phút (CITED Cloudflare, VER CAS:L07)"
+    fix: ["Biểu thức chính quy “đúng” vẫn có thể là lỗi hiệu năng; quy trình đẩy luật toàn cầu tức thì bỏ qua phát hành tiệm tiến — hai lỗi cùng lúc mới thành sự cố"]
+  - id: L08
+    title: "GitLab (2017): lệnh xoá chạy nhầm máy và các bản sao lưu chưa từng khôi phục thử"
+    spec: lessons/cas/L08_gitlab.yaml
+    requires: [L00]
+    requires_ext: ["DBS:L14", "SEC:L14"]
+    objectives: ["Phân biệt “có sao lưu” với “khôi phục được”", "Tính lượng dữ liệu mất theo thời điểm bản chụp gần nhất"]
+    example: "lệnh xoá thư mục dữ liệu chạy trên máy chính thay vì máy phụ, dừng sau 1–2 giây nhưng đã xoá ≈ 300 GB; bài hậu kiểm kể 4 cách sao lưu/sao chép, 3 cách không dùng được (bản sao lưu hằng ngày hỏng lặng lẽ vì lệch phiên bản, ảnh đĩa đám mây chưa bật cho cơ sở dữ liệu, máy phụ đã bị xoá); bản chụp tạo thủ công ≈ 6 giờ trước, bản tự động gần 24 giờ → khôi phục từ bản 6 giờ (mất dữ liệu 17:20 → 23:30 = 6 giờ 10 phút), chép sang máy chính mất ≈ 18 giờ (CITED GitLab, VER CAS:L08)"
+    fix: ["Sao lưu chưa từng được khôi phục thử là giả định, không phải bảo vệ — đo bằng diễn tập khôi phục định kỳ"]
+  - id: L09
+    title: "Heartbleed (2014): thiếu một phép kiểm độ dài"
+    spec: lessons/cas/L09_heartbleed.yaml
+    requires: [L00]
+    requires_ext: ["SEC:L11", "NET:L14"]
+    objectives: ["Giải thích lỗi tin độ dài do bên kia khai báo mà không đối chiếu độ dài thật", "Viết điều kiện kiểm đúng (mức khái niệm, phòng thủ)"]
+    example: "trường độ dài trong gói nhịp tim là số 16 bit → khai báo tối đa 65 535 byte (bản tin OpenSSL: lộ tới 64k bộ nhớ mỗi lần); kiểm đúng (RFC 6520 §4, bản vá 1.0.1g): 1 byte loại + 2 byte độ dài + độ dài khai báo + ít nhất 16 byte đệm ≤ độ dài bản ghi thật nhận được, sai thì bỏ qua lặng lẽ; bản ghi 20 byte mang 1 byte dữ liệu (số minh hoạ): khai báo 1 → 20 ≤ 20 nhận, khai báo 65 535 → 65 554 > 20 bỏ (CITED RFC 6520, bản tin OpenSSL 7/4/2014, heartbleed.com, VER CAS:L09)"
+    fix: ["Bài học không phải “đừng dùng thư viện mã nguồn mở” — lỗi nằm trong thư viện mã hoá mã nguồn mở phổ biến nhất từ bản 14/3/2012 tới bản vá 7/4/2014 (heartbleed.com): thư viện mọi người cùng dựa vào cần đầu tư chung vào rà soát và kiểm thử điều kiện biên", "Nguồn đã đọc không ghi “ít người bảo trì” — không dạy chi tiết đó"]
+  - id: L10
+    title: "Google Flu Trends (2013): mô hình đúng hôm qua, sai gấp đôi hôm nay"
+    spec: lessons/cas/L10_google_flu_trends.yaml
+    requires: [L00]
+    requires_ext: ["MLO:L09", "DSC:L10"]
+    objectives: ["Phân tích trôi khái niệm khi hành vi tìm kiếm đổi", "So sánh mô hình chỉ dữ liệu lớn với mô hình kết hợp dữ liệu truyền thống"]
+    example: "tháng 2/2013 dự báo tỉ lệ khám vì bệnh giống cúm hơn gấp đôi số của CDC; mùa 2011–2012 vượt hơn 50% (CITED Lazer 2014); nếu thật 2% mà dự báo 4,2% → sai 110% (số minh hoạ, VER CAS:L10)"
+    fix: ["Lazer và cộng sự chỉ ra mô hình kết hợp dữ liệu chậm của CDC với dữ liệu tìm kiếm tốt hơn từng nguồn riêng (sai số tuyệt đối trung bình ngoài mẫu: 0,486 chỉ Google, 0,311 chỉ CDC trễ, 0,232 kết hợp — CITED; kết hợp bớt ≈ 52% so với chỉ Google, VER CAS:L10) — dữ liệu lớn không thay dữ liệu đo trực tiếp", "Bài báo gọi là “động lực thuật toán” (bộ máy tìm kiếm và người dùng thay đổi) và khớp quá mức (50 triệu cụm từ cho 1152 điểm dữ liệu) — không nói “hoảng loạn truyền thông” là nguyên nhân chính"]
+  - id: L11
+    title: "Năm 2038: một sự cố biết trước — dự báo, kiểm kê, di chuyển"
+    spec: lessons/cas/L11_nam_2038.yaml
+    requires: [L00, L01, L02]
+    requires_ext: ["CSA:L01", "DBS:L00"]
+    objectives: ["Tính thời điểm số giây 32 bit có dấu kể từ 1970 tràn", "Lập kế hoạch kiểm kê và di chuyển trước hạn cho dữ liệu, giao thức, thiết bị nhúng"]
+    example: "2³¹ − 1 = 2 147 483 647 giây sau 00:00:00 UTC 1/1/1970 là 03:14:07 UTC 19/1/2038; một giây sau, số 32 bit có dấu quay về −2³¹ → ngày 13/12/1901 (VER CAS:L11)"
+    fix: ["Đổi kiểu trong mã chưa đủ — cột cơ sở dữ liệu, định dạng tệp, giao thức mạng và thiết bị nhúng không cập nhật được đều mang số 32 bit"]

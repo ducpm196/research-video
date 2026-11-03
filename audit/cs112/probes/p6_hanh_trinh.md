@@ -1,0 +1,13 @@
+# Dò phát âm `cs112_p6_hanh_trinh` (giọng vi-VN-NamMinhNeural, tốc độ -5%; small + medium; ngưỡng 7/8)
+
+checked_at: 2026-11-02T09:20:13Z
+
+| từ | cách viết | điểm | đối chứng âm? | bản chép (small / medium) |
+|---|---|---|---|---|
+| timsort | «Timsort» | 7/8 |  | Theo tim sóc, ta xét hệ thống này. / Theo TeamShop, ta xét hệ thống này. ; phần tim sóc được giải thích ở bước tiếp theo. / Phần tìm sót được giải thích ở bước tiếp theo. ; Hãy nhớ tìm sót khi đọc bài này. / Hãy nhớ tìm sót khi đọc bài này. ; Đây là ví dụ về tim sót trong thực tế. / Đây là ví dụ về tìm sót trong thực tế. |
+| timsort | «Tim-sót» | 6/8 |  | Theo tìm sót, ta xét hệ thống này. / Theo Teamshock, ta xét hệ thống này. ; phần tim sóc được giải thích ở bước tiếp theo. / Phần team shop được giải thích ở bước tiếp theo. ; Hãy nhớ tìm sót khi đọc bài này. / Hãy nhớ tìm sót khi đọc bài này. ; Đây là ví dụ về tim sót trong thực tế. / Đây là ví dụ về tìm sót trong thực tế. |
+| timsort | «Tim sọt» | 5/8 |  | Theo tim sọt, ta xét hệ thống này. / Theo Teamshop, ta xét hệ thống này. ; Phần tim sọc được giải thích ở bước tiếp theo. / Phần tim sọc được giải thích ở bước tiếp theo. ; Hãy nhớ tim xào khi đọc bài này. / Hãy nhớ tìm sau khi đọc bài này. ; Đây là ví dụ về tim sọt trong thực tế. / Đây là ví dụ về tim sọt trong thực tế. |
+| timsort | «Tim-xốp» | 4/8 | ĐỐI CHỨNG | Theo tìm sốt ta xét hệ thống này. / Theo Teamsop, ta xét hệ thống này. ; phần tim sốt được giải thích ở bước tiếp theo. / Phần tim xốp được giải thích ở bước tiếp theo. ; Hãy nhớ tim sốt khi đọc bài này. / Hãy nhớ tìm xốp khi đọc bài này. ; Đây là ví dụ về tim sốt trong thực tế. / Đây là ví dụ về tim xốp trong thực tế. |
+| java | «Java» | 8/8 |  | Theo Java, ta xét hệ thống này. / Theo Java, ta xét hệ thống này. ; Phần Java được giải thích ở bước tiếp theo. / Phần Java được giải thích ở bước tiếp theo. ; Hãy nhớ gia va khi đọc bài này. / Hãy nhớ Java khi đọc bài này. ; Đây là ví dụ về Java trong thực tế. / Đây là ví dụ về Java trong thực tế. |
+| java | «Gia-va» | 8/8 |  | Theo Java, ta xét hệ thống này. / Theo Java, ta xét hệ thống này. ; Phần Java được giải thích ở bước tiếp theo. / Phần Java được giải thích ở bước tiếp theo. ; Hãy nhớ Java khi đọc bài này. / Hãy nhớ Java khi đọc bài này. ; Đây là ví dụ về Java trong thực tế. / Đây là ví dụ về Java trong thực tế. |
+| java | «Gia-la» | 0/8 | ĐỐI CHỨNG | Theo gia la, ta xét hệ thống này. / Theo GiaLa, ta xét hệ thống này. ; Phần gia la được giải thích ở bước tiếp theo. / Phần Gia La được giải thích ở bước tiếp theo. ; Hãy nhớ gia la khi đọc bài này. / Hãy nhớ Gia La khi đọc bài này. ; Đây là ví dụ về gia la trong thực tế. / Đây là ví dụ về gia la trong thực tế. |

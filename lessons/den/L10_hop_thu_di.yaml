@@ -1,0 +1,193 @@
+id: L10
+course: DEN
+series: "DEN · Kỹ thuật dữ liệu"
+title: "Bài 10 — Thu thập thay đổi và mẫu hộp thư đi"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/den.yaml L10; audit/den/verify_den.py L10; C. Richardson, Microservices Patterns (2018), mục Transactional Outbox; M. Kleppmann (2017), chương 11 (thu thập thay đổi dữ liệu); bài 8, 9"
+assumes: [arith, cdot, approx]
+# Quy ước: “ghi đôi” = ghi cơ sở dữ liệu rồi gửi sự kiện bằng hai thao tác riêng; tiến trình sập giữa hai bước với xác suất p mỗi đơn (SỐ MINH HOẠ).
+#   Hộp thư đi: ghi đơn VÀ dòng sự kiện vào bảng hộp thư trong CÙNG giao dịch; bộ chuyển tiếp đọc bảng (hoặc nhật ký thay đổi) rồi gửi
+#   (alg.dual_write_sim: không mất, có thể trùng). Tên CDC, outbox, Debezium chỉ trên màn hình.
+objectives:
+  - "Giải thích lỗi ghi đôi"
+  - "Dùng hộp thư đi trong cùng giao dịch"
+  - "Biết bên nhận vẫn phải lọc trùng"
+asr_reviewed:
+  - {sentence: "Ghi đôi mất kỳ vọng bao nhiêu sự kiện?", reason: "ASR chép “Gì đôi mất kỳ vọng bao nhiêu sự kiến?” (0.778): lệch âm/thanh thuần Việt: ghi/gì, kiện/kiến — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Đơn đã lưu, kho không hề biết"
+    checks:
+      - "10 ** 6 * 0.001 == 1000"
+    steps:
+      - show: |
+          <p>Dịch vụ đặt hàng lưu đơn vào cơ sở dữ liệu, rồi gửi sự kiện “đơn mới” cho dịch vụ kho. Một lần trong nghìn, tiến trình sập đúng giữa hai bước: đơn đã lưu, sự kiện không bao giờ đi. Với 1 triệu đơn mỗi tháng là khoảng <b>1000 đơn</b> kho không biết để giao.</p>
+          <div class="box key">Hôm nay: <b>lỗi ghi đôi</b>, và hai cách chữa — <b>hộp thư đi</b> trong cùng giao dịch, và <b>thu thập thay đổi</b> từ nhật ký của cơ sở dữ liệu.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, dịch vụ đặt hàng lưu đơn vào cơ sở dữ liệu, rồi gửi sự kiện đơn mới cho dịch vụ kho. Cứ một lần trong nghìn, tiến trình sập đúng giữa hai bước, đơn đã lưu nhưng sự kiện không bao giờ đi. Với 1 triệu đơn mỗi tháng là khoảng 1000 đơn mà kho không biết để giao. Hôm nay ta học lỗi ghi đôi, và hai cách chữa là hộp thư đi trong cùng giao dịch, và thu thập thay đổi từ nhật ký của cơ sở dữ liệu."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: phần trăm, kỳ vọng, và giao dịch"
+    checks:
+      - "0.1 / 100 == 0.001 and 0.05 / 100 == 0.0005 and round(1000 * 0.01) == 10"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ý</th><th>ví dụ</th></tr>
+          <tr><td>phần trăm thành số thập phân</td><td>0,1% $= 0{,}001$; 0,05% $= 0{,}0005$</td></tr>
+          <tr><td><b>kỳ vọng</b> số lần xảy ra $= n \cdot p$</td><td>1000 đơn, mỗi đơn hỏng với xác suất 0,01 → trung bình $1000 \cdot 0{,}01 = 10$ đơn</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Ta ôn lại hai phép tính. 0 phẩy 1 phần trăm bằng 0 phẩy 001, còn 0 phẩy 05 phần trăm bằng 0 phẩy 0005. Kỳ vọng số lần xảy ra bằng n nhân p, nên 1000 đơn, mỗi đơn hỏng với xác suất 0 phẩy 01, thì trung bình có 1000 nhân 0 phẩy 01, bằng 10 đơn hỏng."
+      - show: |
+          <div class="box key">Ở khoá Cơ sở dữ liệu, ta đã học <b>giao dịch</b>: mọi thay đổi bên trong <b>cùng thành công hoặc cùng huỷ</b>. Ví dụ chuyển 100 nghìn đồng: trừ tài khoản A và cộng tài khoản B, sập giữa chừng thì cả hai cùng huỷ.</div>
+        say: "Ở khoá Cơ sở dữ liệu, ta đã học giao dịch, tức mọi thay đổi bên trong cùng thành công hoặc cùng huỷ. Ví dụ chuyển 100 nghìn đồng gồm trừ tài khoản A và cộng tài khoản B, nên nếu sập giữa chừng thì cả hai cùng huỷ, không bao giờ chỉ có một nửa."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: ghi đôi, hộp thư đi, thu thập thay đổi"
+    steps:
+      - show: |
+          <table class="t"><tr><th>cách</th><th>các bước</th><th>sập giữa chừng</th></tr>
+          <tr><td><b>ghi đôi</b></td><td>① lưu đơn ② gửi sự kiện — hai việc riêng</td><td>đơn có, sự kiện mất (hoặc ngược lại)</td></tr>
+          <tr><td><b>hộp thư đi</b></td><td>① trong <b>một giao dịch</b>: lưu đơn + thêm dòng vào bảng hộp thư ② bộ chuyển tiếp gửi các dòng chưa gửi</td><td>giao dịch hoặc có cả hai, hoặc không có gì; dòng chưa gửi sẽ được gửi lại</td></tr>
+          <tr><td><b>thu thập thay đổi</b></td><td>đọc nhật ký ghi trước của cơ sở dữ liệu, biến mỗi thay đổi thành sự kiện</td><td>nhật ký là nguồn sự thật; đọc tiếp từ vị trí đã lưu</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.3", "1.3", "1.4", "1.4"]
+        say: "Bảng so ba cách. Ghi đôi gồm lưu đơn rồi gửi sự kiện, là hai việc riêng. Nếu sập giữa chừng thì đơn có mà sự kiện mất, hoặc ngược lại. Hộp thư đi làm trong một giao dịch, lưu đơn và thêm một dòng vào bảng hộp thư, rồi một bộ chuyển tiếp gửi các dòng chưa gửi. Giao dịch hoặc có cả hai, hoặc không có gì, và dòng chưa gửi sẽ được gửi lại. Thu thập thay đổi đọc nhật ký ghi trước của cơ sở dữ liệu, biến mỗi thay đổi thành một sự kiện. Nhật ký là nguồn sự thật, và bộ đọc tiếp tục từ vị trí đã lưu."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hai bước rời hay một giao dịch"
+    steps:
+      - show: |
+          <div><svg width="1500" height="370" viewBox="0 0 1500 370"><g fill="#1f2937"><text x="20" y="40" font-size="22" font-weight="bold">ghi đôi</text><rect x="20" y="60" width="230" height="60" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="135" y="97" text-anchor="middle" font-size="20">dịch vụ đặt hàng</text><line x1="250" y1="90" x2="408" y2="90" stroke="#2a78d6" stroke-width="4"/><polygon points="406,81 420,90 406,99" fill="#2a78d6"/><text x="335" y="78" text-anchor="middle" font-size="18">bước 1</text><rect x="420" y="60" width="260" height="60" rx="10" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="550" y="97" text-anchor="middle" font-size="20">cơ sở dữ liệu: đơn</text><line x1="680" y1="90" x2="948" y2="90" stroke="#b91c1c" stroke-width="4"/><polygon points="946,81 960,90 946,99" fill="#b91c1c"/><text x="760" y="78" text-anchor="middle" font-size="18">bước 2</text><line x1="850" y1="70" x2="880" y2="110" stroke="#b91c1c" stroke-width="5"/><line x1="880" y1="70" x2="850" y2="110" stroke="#b91c1c" stroke-width="5"/><text x="865" y="145" text-anchor="middle" font-size="19" fill="#b91c1c">sập ở đây: sự kiện mất</text><rect x="960" y="60" width="220" height="60" rx="10" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="1070" y="97" text-anchor="middle" font-size="20">hệ gửi tin</text><text x="20" y="205" font-size="22" font-weight="bold">hộp thư đi</text><rect x="20" y="250" width="230" height="60" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="135" y="287" text-anchor="middle" font-size="20">dịch vụ đặt hàng</text><line x1="250" y1="280" x2="388" y2="280" stroke="#059669" stroke-width="4"/><polygon points="386,271 400,280 386,289" fill="#059669"/><rect x="400" y="220" width="420" height="120" rx="12" fill="#d1fae5" stroke="#059669" stroke-width="3" stroke-dasharray="10 6"/><text x="610" y="245" text-anchor="middle" font-size="19" fill="#059669">một giao dịch</text><rect x="420" y="262" width="180" height="58" rx="10" fill="#ffffff" stroke="#059669" stroke-width="2"/><text x="510" y="298" text-anchor="middle" font-size="19">bảng đơn</text><rect x="620" y="262" width="180" height="58" rx="10" fill="#ffffff" stroke="#059669" stroke-width="2"/><text x="710" y="298" text-anchor="middle" font-size="19">bảng hộp thư</text><line x1="820" y1="290" x2="948" y2="290" stroke="#eb6834" stroke-width="4"/><polygon points="946,281 960,290 946,299" fill="#eb6834"/><rect x="960" y="260" width="220" height="60" rx="10" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="1070" y="297" text-anchor="middle" font-size="20">bộ chuyển tiếp</text><line x1="1180" y1="290" x2="1258" y2="290" stroke="#eb6834" stroke-width="4"/><polygon points="1256,281 1270,290 1256,299" fill="#eb6834"/><rect x="1270" y="260" width="210" height="60" rx="10" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="1375" y="297" text-anchor="middle" font-size="20">hệ gửi tin</text><text x="1070" y="355" text-anchor="middle" font-size="19" fill="#eb6834">gửi các dòng chưa gửi, sập thì gửi lại</text></g></svg></div>
+        focus: [1, 1, 1]
+        say: "Hình trên là ghi đôi, dịch vụ lưu đơn vào cơ sở dữ liệu ở bước 1, rồi gửi sự kiện sang hệ gửi tin ở bước 2, nên sập giữa hai bước là sự kiện mất. Hình dưới là hộp thư đi, đơn và dòng hộp thư được ghi trong cùng một giao dịch, khung nét đứt màu lục, nên hoặc có cả hai, hoặc không có gì. Sau đó bộ chuyển tiếp đọc bảng hộp thư và gửi các dòng chưa gửi, nếu nó sập thì lần sau gửi lại."
+
+  - id: example
+    kind: example
+    title: "Mô phỏng một triệu đơn"
+    checks:
+      - "abs(alg.dual_write_sim(10 ** 6, 0.001)[0] - 1000) < 5 * math.sqrt(1000) and alg.dual_write_sim(10 ** 6, 0.001)[0] == 997"
+      - "alg.dual_write_sim(10 ** 6, 0.001, outbox=True)[0] == 0 and alg.dual_write_sim(10 ** 6, 0.001, outbox=True)[1] == 997"
+    steps:
+      - show: |
+          <p><b>Bước 1</b> — ghi đôi, 1 triệu đơn, sập giữa chừng 0,1% (số minh hoạ): kỳ vọng $10^6 \cdot 0{,}001 = 1000$ đơn mất sự kiện.</p>
+        say: "Bước một, tính kỳ vọng cho ghi đôi. Có 1 triệu đơn với xác suất sập giữa chừng 0 phẩy 1 phần trăm, một số minh hoạ. Kỳ vọng là 10 mũ 6 nhân 0 phẩy 001, bằng 1000 đơn mất sự kiện."
+      - show: |
+          <p><b>Bước 2</b> — chạy mô phỏng 1 triệu đơn: <b>997</b> đơn mất sự kiện — gần kỳ vọng 1000, phần lệch nhỏ là do ngẫu nhiên.</p>
+        say: "Bước hai, chạy mô phỏng với 1 triệu đơn. Mô phỏng cho 997 đơn mất sự kiện, rất gần kỳ vọng 1000, phần lệch nhỏ là do ngẫu nhiên."
+      - show: |
+          <table class="t"><tr><th>Bước 3 — hộp thư đi, sập lúc</th><th>còn lại sau sập</th><th>kết quả</th></tr>
+          <tr><td>trước khi giao dịch xong</td><td>không đơn, không dòng hộp thư</td><td>nhất quán</td></tr>
+          <tr><td>sau khi giao dịch xong</td><td>có đơn và dòng hộp thư chưa gửi</td><td>bộ chuyển tiếp gửi sau: không mất</td></tr></table>
+          <p>Đơn mất sự kiện: $\hl{0}$.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Bước ba, xét hộp thư đi. Nếu sập trước khi giao dịch xong thì không có đơn cũng không có dòng hộp thư, vẫn nhất quán. Nếu sập sau khi giao dịch xong thì đơn và dòng hộp thư chưa gửi đều còn, bộ chuyển tiếp sẽ gửi sau. Vậy số đơn mất sự kiện bằng 0."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>Bước 4 — 1 triệu đơn</th><th>đơn mất sự kiện</th><th>sự kiện gửi trùng</th></tr>
+          <tr><td>ghi đôi</td><td>kỳ vọng 1000; mô phỏng: <b>997</b></td><td>0</td></tr>
+          <tr><td>hộp thư đi</td><td>$\hl{0}$</td><td>tới ≈ 1000 (bộ chuyển tiếp sập sau khi gửi, trước khi đánh dấu)</td></tr></table>
+          <p>Hộp thư đi đổi “có thể <b>mất</b>” thành “có thể <b>trùng</b>” — giao ít nhất một lần. Trùng thì chữa được ở bên nhận; mất thì không ai biết để chữa.</p>
+        focus: [1, "1.2", "1.3", 2, 2]
+        say: "Bước bốn, so hai cách. Ghi đôi mất khoảng 1000 sự kiện và không gửi trùng. Hộp thư đi không mất đơn nào, nhưng có thể gửi trùng tới khoảng 1000 sự kiện, khi bộ chuyển tiếp sập sau khi gửi mà trước khi đánh dấu. Hộp thư đi đổi có thể mất thành có thể trùng, tức giao ít nhất một lần. Trùng thì chữa được ở bên nhận, còn mất thì không ai biết để chữa."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: liệt kê mọi chỗ có thể sập"
+    checks:
+      - "[k for k, (db, ev) in {'a': (0, 0), 'b': (1, 0), 'c': (1, 1)}.items() if db > ev] == ['b'] and 10 ** 6 // 1000 == 1000"
+      - "alg.dual_write_sim(10 ** 6, 0.001)[0] == 997 and alg.dual_write_sim(10 ** 6, 0.001, outbox=True)[0] == 0"
+    steps:
+      - show: |
+          <table class="t"><tr><th>sập lúc</th><th>ghi đôi</th><th>hộp thư đi</th></tr>
+          <tr><td>trước khi lưu</td><td>không đơn, không sự kiện: ổn</td><td>không gì cả: ổn</td></tr>
+          <tr><td>sau khi lưu, trước khi gửi</td><td><b class="red">đơn có, sự kiện mất</b></td><td>dòng hộp thư còn, gửi sau: ổn</td></tr>
+          <tr><td>sau khi gửi, trước khi đánh dấu</td><td>đủ: ổn</td><td>gửi lại: <b>trùng</b></td></tr></table>
+          <p>Chỉ ghi đôi có ô <b>mất</b> → hộp thư đi mất 0 ✓; “một lần trong nghìn” với $10^6$ đơn: $\frac{10^6}{1000} = 1000$ ✓.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Kiểm bằng đường khác, không mô phỏng mà liệt kê mọi chỗ có thể sập. Sập trước khi lưu thì cả hai cách đều ổn, vì chưa có gì. Sập sau khi lưu mà trước khi gửi thì ghi đôi mất sự kiện, còn hộp thư đi vẫn giữ dòng chưa gửi để gửi sau. Sập sau khi gửi mà trước khi đánh dấu thì ghi đôi đủ, còn hộp thư đi gửi lại nên bị trùng. Chỉ ghi đôi có ô mất, nên hộp thư đi mất 0, và một lần trong nghìn với 1 triệu đơn cho 1 triệu chia 1000, bằng 1000, khớp kỳ vọng."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp"
+    checks:
+      - "[round(0.999 ** n * 100, 1) for n in (100, 1000)] == [90.5, 36.8] and round(0.999 ** 10000 * 100, 4) == 0.0045"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Gửi sự kiện <b>bên trong</b> giao dịch <b class="red">(giao dịch huỷ, sự kiện đã đi)</b>
+          <br><span class="note">Gửi xong rồi giao dịch bị huỷ: kho nhận đơn không tồn tại. Hệ gửi tin không tham gia giao dịch của cơ sở dữ liệu — chỉ ghi vào bảng hộp thư.</span></div>
+        say: "Lỗi thứ nhất, gửi sự kiện bên trong giao dịch, nên giao dịch huỷ mà sự kiện đã đi. Gửi xong rồi giao dịch bị huỷ thì kho nhận một đơn không tồn tại. Hệ gửi tin không tham gia giao dịch của cơ sở dữ liệu, nên chỉ ghi vào bảng hộp thư."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Bên nhận không lọc trùng <b class="red">(trừ kho hai lần)</b>
+          <br><span class="note">Giao ít nhất một lần nghĩa là có thể nhận lại. Lưu mã sự kiện đã xử lý trong cùng giao dịch với thay đổi của bên nhận; gặp lại thì bỏ qua.</span></div>
+        say: "Lỗi thứ hai, bên nhận không lọc trùng, nên trừ kho hai lần. Giao ít nhất một lần nghĩa là có thể nhận lại. Hãy lưu mã sự kiện đã xử lý trong cùng giao dịch với thay đổi của bên nhận, và gặp lại thì bỏ qua."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Phát thẳng cấu trúc bảng nội bộ <b class="red">(đổi cột là vỡ bên nhận)</b>
+          <br><span class="note">Thu thập thay đổi từ nhật ký phát mọi cột của bảng. Đổi tên một cột là vỡ mọi dịch vụ đọc. Hộp thư đi cho phép định nghĩa <b>hợp đồng sự kiện</b> riêng, có phiên bản.</span></div>
+        say: "Lỗi thứ ba, phát thẳng cấu trúc bảng nội bộ, nên đổi cột là vỡ bên nhận. Thu thập thay đổi từ nhật ký phát ra mọi cột của bảng, và đổi tên một cột là vỡ mọi dịch vụ đọc. Hộp thư đi cho phép định nghĩa một hợp đồng sự kiện riêng, có phiên bản."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Thử vài trăm đơn, không thấy mất, kết luận ghi đôi “đủ tốt” <b class="red">(lỗi hiếm lọt qua thử nghiệm)</b></div>
+          <table class="t"><tr><th>số đơn thử (sập 0,1% mỗi đơn)</th><th>xác suất không thấy lỗi nào $= 0{,}999^n$</th></tr>
+          <tr><td>100</td><td>≈ 90,5%</td></tr>
+          <tr><td>1000</td><td>≈ 36,8%</td></tr>
+          <tr><td>10 000</td><td>≈ 0,0045%</td></tr></table>
+          <p class="note">Người có kinh nghiệm không dựa vào “thử không thấy lỗi”: họ chạy <b>đối soát</b> định kỳ — đếm đơn trong cơ sở dữ liệu và sự kiện kho đã nhận theo từng ngày, lệch là báo động.</p>
+        focus: [1, 2, "2.2", "2.3", 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, thử vài trăm đơn, không thấy mất, rồi kết luận ghi đôi là đủ tốt, trong khi lỗi hiếm lọt qua thử nghiệm. Với xác suất sập 0 phẩy 1 phần trăm mỗi đơn, xác suất không thấy lỗi nào trong n đơn là 0 phẩy 999 mũ n. Thử 100 đơn thì khoảng 90 phẩy 5 phần trăm khả năng không thấy gì. Thử 1000 đơn vẫn còn khoảng 36 phẩy 8 phần trăm, và phải tới 10 nghìn đơn thì gần như chắc chắn thấy lỗi. Vì vậy, người có kinh nghiệm chạy đối soát định kỳ, đếm đơn trong cơ sở dữ liệu và sự kiện kho đã nhận theo từng ngày, lệch là báo động."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "2 * 10 ** 6 * 0.0005 == 1000 and 0.05 / 100 == 0.0005"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>2 triệu đơn, sập giữa hai bước với xác suất 0,05%. Ghi đôi mất kỳ vọng bao nhiêu sự kiện?</td></tr>
+          <tr><td>2</td><td>Chuyển sang hộp thư đi. Bên kho cần thêm gì để kết quả vẫn đúng?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, có 2 triệu đơn, sập giữa hai bước với xác suất 0 phẩy 05 phần trăm. Ghi đôi mất kỳ vọng bao nhiêu sự kiện? Câu hai, chuyển sang hộp thư đi, bên kho cần thêm gì để kết quả vẫn đúng? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① 0,05% $= 0{,}0005$.</p>
+          <p>Kỳ vọng $= n \cdot p = 2 \cdot 10^6 \cdot 0{,}0005 = \hl{1000}$ sự kiện.</p>
+        focus: [1, 2]
+        say: "Đáp án câu một, trước hết 0 phẩy 05 phần trăm bằng 0 phẩy 0005. Kỳ vọng bằng n nhân p, tức 2 nhân 10 mũ 6 nhân 0 phẩy 0005, bằng 1000 sự kiện."
+      - show: |
+          <table class="t"><tr><th>câu 2: kho nhận sự kiện mã E7</th><th>đã có E7 trong bảng mã đã xử lý?</th><th>làm gì</th></tr>
+          <tr><td>lần đầu</td><td>chưa</td><td>trừ kho và lưu E7, <b>trong cùng giao dịch</b></td></tr>
+          <tr><td>lần hai (gửi trùng)</td><td>có</td><td>bỏ qua</td></tr></table>
+          <p>② <b>Lọc trùng theo mã sự kiện</b>: lưu mã đã xử lý cùng giao dịch trừ kho; nhận lại thì bỏ qua.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Câu hai, theo dõi một sự kiện có mã E7. Lần đầu nhận, mã E7 chưa có, nên kho trừ hàng và lưu E7 trong cùng một giao dịch. Lần hai, do gửi trùng, mã E7 đã có nên bỏ qua. Vậy bên kho cần lọc trùng theo mã sự kiện, lưu mã đã xử lý trong cùng giao dịch trừ kho, và nhận lại thì bỏ qua."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">ghi đôi: sập giữa chừng là mất</span><span class="a">→</span>
+          <span class="n">hộp thư đi: một giao dịch, chuyển tiếp sau</span><span class="a">→</span>
+          <span class="n">giao ít nhất một lần</span><span class="a">→</span>
+          <span class="n">bên nhận lọc trùng; hợp đồng sự kiện có phiên bản</span></div>
+        say: "Tổng kết lại, ghi đôi thì sập giữa chừng là mất. Hộp thư đi ghi trong một giao dịch rồi chuyển tiếp sau, nên giao ít nhất một lần. Bên nhận phải lọc trùng, và hợp đồng sự kiện cần có phiên bản."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> đừng cố làm hai hệ <b>cùng thành công</b> — hãy làm <b>một</b> thao tác nguyên tử, và cho phần còn lại tự đuổi theo.</div>
+        say: "Điều cần mang theo, đừng cố làm hai hệ cùng thành công, hãy làm một thao tác nguyên tử, và cho phần còn lại tự đuổi theo."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 11): <b>định dạng cột trên tệp</b> — nhóm hàng, thống kê, đẩy điều kiện xuống.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 11, ta học định dạng cột trên tệp, với nhóm hàng, thống kê, và đẩy điều kiện xuống. Hẹn gặp bạn ở bài tiếp theo."

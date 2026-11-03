@@ -1,0 +1,299 @@
+id: L02
+course: PAR
+series: "PAR · Tính toán song song và GPU"
+title: "Bài 2 — Mô hình công việc–độ dài đường găng và cận lịch tham lam"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/par.yaml L02; audit/par/verify_par.py L02; audit/par/sources_L02.md (câu trích nguyên văn, đọc 2026-11-02); R. P. Brent, The Parallel Evaluation of General Arithmetic Expressions, JACM 21(2), 1974 — Lemma 2 (thời gian t + (q − t)/p với p bộ xử lý), mô hình bỏ qua thời gian truy cập dữ liệu và giao tiếp, cận dưới log2 n và (n − 1)/p cho phép cộng n số; J. Owens và cộng sự, A Survey of General-Purpose Computation on Graphics Hardware (Eurographics 2005) — rút gọn trên bộ xử lý đồ hoạ trong O(log n) lượt, mỗi lượt giảm một nửa; PAR bài 0 (Amdahl)"
+assumes: [arith, frac, approx, geq]
+# Quy ước: n = số lõi (cả khoá); T₁ = công việc = tổng số phép tính = thời gian trên MỘT lõi; T∞ = độ dài đường găng = thời gian khi có
+#   vô số lõi; T_n = thời gian trên n lõi; mỗi phép cộng mất 1 bước (mô hình của Brent 1974: bỏ qua đọc dữ liệu, giao tiếp).
+#   “Lịch tham lam theo tầng” = mỗi bước, mỗi lõi rảnh làm một phép đã sẵn sàng, hết tầng này mới sang tầng sau (alg.par_greedy_tree_steps).
+#   Cận của Brent: T_n ≤ T∞ + (T₁ − T∞)/n; dạng gọn hay gặp T_n ≤ T₁/n + T∞ (lớn hơn một chút). Dấu nhân: · (\cdot).
+#   Tên Brent chỉ trên màn hình (chưa dò phát âm): lời đọc nói “cận của bài báo năm 1974”.
+#   Số minh hoạ: máy 16 lõi và 64 lõi giá gấp 4 ở quiz; 1 bước đồng bộ thêm mỗi tầng ở lỗi 4.
+objectives:
+  - "Tính công việc T₁ và độ dài đường găng T∞ của phép cộng n số theo cây và theo chuỗi"
+  - "Dùng cận dưới max(T₁/n, T∞) và cận trên T∞ + (T₁ − T∞)/n để dự đoán thời gian trên n lõi"
+  - "Nhận ra khi nào thêm lõi vô ích: số lõi vượt xa độ song song T₁/T∞"
+asr_reviewed:
+  - {sentence: "Thứ nhất, ở bài 0, định luật Amdahl nói phần tuần tự giới hạn tăng tốc, 90 phần trăm song song được thì 16 lõi chỉ nhanh 6 phẩy 4 lần.", reason: "ASR chép “Thứ nhất, ở bài 0, định luật am đang nói phần tuần tự giới hạn tăng tốc. 90% song song được thì 16 loại chỉ nhanh 6,4 lần.” (0.941): lệch âm/thanh thuần Việt: lõi/loại; “Amdahl” đọc “Am-đan” theo lexicon_vi.CSA.yaml (probe p1 8/8), ASR chép “am đang/amdang/âm đăng” — cùng âm — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "32 lõi cộng 1024 số: nhanh gấp mấy?"
+    checks:
+      - "alg.par_tree_sum(1024)[:2] == (1023, 10) and alg.par_greedy_tree_steps(1024, 32) == 36"
+      - "round(1023 / 36, 1) == 28.4"
+    steps:
+      - show: |
+          <p>Một bạn viết vòng lặp cộng 1024 số, mỗi lần cộng thêm một số vào tổng, rồi chạy trên máy <b>32 lõi</b>: <b>không nhanh hơn chút nào</b>.</p>
+          <p>Đổi cách cộng thành cộng theo cặp: cùng 1023 phép cộng, 32 lõi xong sau <b>36 bước</b> thay vì 1023 — nhanh khoảng <b>28,4 lần</b>, chưa tới 32.</p>
+          <div class="box key">Hôm nay: đếm “việc” và “đường găng” của một thuật toán, đoán trước thời gian trên n lõi, và biết lúc nào thêm lõi là vô ích.</div>
+        focus: [1, 2, 3]
+        say: "Chào bạn, một bạn viết vòng lặp cộng 1024 số, mỗi lần cộng thêm một số vào tổng, rồi chạy trên máy 32 lõi, và không nhanh hơn chút nào. Đổi sang cộng theo cặp, vẫn đúng 1023 phép cộng, thì 32 lõi xong sau 36 bước, nhanh khoảng 28 phẩy 4 lần. Hôm nay ta học cách đếm việc và đường găng của một thuật toán, đoán trước thời gian trên nhiều lõi, và biết lúc nào thêm lõi là vô ích."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại ba điều sẽ dùng"
+    checks:
+      - "round(1 / (0.1 + 0.9 / 16), 1) == 6.4"
+      - "(lambda h: (h(1024), h(8)))(lambda m: next(k for k in range(64) if m >> k == 1)) == (10, 3) and 2 ** 10 == 1024"
+      - "-(-16 // 32) == 1 and -(-512 // 32) == 16 and -(-33 // 32) == 2"
+    steps:
+      - show: |
+          <table class="t"><tr><th>điều đã biết</th><th>ví dụ số</th></tr>
+          <tr><td>① Ở bài 0: phần tuần tự giới hạn tăng tốc (Amdahl)</td><td>90% song song được, 16 lõi → $\frac{1}{0{,}1 + 0{,}9/16} = 6{,}4$ lần</td></tr>
+          <tr><td>② Chia đôi liên tiếp tới khi còn 1</td><td>1024 → 512 → 256 → … → 1: đúng 10 lần, vì $2^{10} = 1024$</td></tr>
+          <tr><td>③ Chia việc cho lõi, phần lẻ vẫn tốn một bước</td><td>512 việc, 32 lõi: 16 bước; 33 việc: 2 bước; 16 việc: 1 bước</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Ta ôn ba điều sẽ dùng. Thứ nhất, ở bài 0, định luật Amdahl nói phần tuần tự giới hạn tăng tốc, 90 phần trăm song song được thì 16 lõi chỉ nhanh 6 phẩy 4 lần. Thứ hai, chia đôi 1024 liên tiếp tới khi còn 1 thì cần đúng 10 lần, vì 2 mũ 10 bằng 1024. Thứ ba, chia việc cho lõi thì phần lẻ vẫn tốn trọn một bước, 512 việc trên 32 lõi mất 16 bước, nhưng 33 việc mất 2 bước."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: công việc, đường găng, thời gian trên n lõi"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ký hiệu</th><th>đọc</th><th>nghĩa</th></tr>
+          <tr><td>$T_1$</td><td>tê một</td><td><b>công việc</b>: tổng số phép tính, cũng là thời gian trên <b>một</b> lõi</td></tr>
+          <tr><td>$T_\infty$</td><td>tê vô cùng</td><td><b>độ dài đường găng</b>: chuỗi phép tính dài nhất mà phép sau phải chờ phép trước; thời gian khi có vô số lõi</td></tr>
+          <tr><td>$T_n$</td><td>tê n</td><td>thời gian trên $n$ lõi</td></tr></table>
+        introduces: [sub, infty]
+        focus: [0, "1.2", "1.3", "1.3", "1.4"]
+        say: "Bài dùng ba ký hiệu, chữ T với một chỉ số nhỏ ở chân. T một, đọc là tê một, là công việc, tức tổng số phép tính, cũng là thời gian khi chỉ có một lõi. T vô cùng là độ dài đường găng, tức chuỗi phép tính dài nhất mà phép sau phải chờ phép trước. Có vô số lõi thì vẫn phải đi hết chuỗi đó, nên T vô cùng là thời gian ngắn nhất có thể. T n là thời gian trên n lõi."
+      - show: |
+          <p>Hai con số này đi cùng một tỉ số: $\dfrac{T_1}{T_\infty}$ = <b>độ song song</b> — số lõi tối đa còn dùng có ích.</p>
+          <p>Làm thử: 8 phép cộng xếp thành 2 tầng mỗi tầng 4 phép: $T_1 = 8$, $T_\infty = 2$, độ song song $\frac{8}{2} = 4$.</p>
+        focus: [1, 2]
+        say: "Hai con số này đi cùng một tỉ số, T một chia T vô cùng, gọi là độ song song, tức số lõi tối đa còn dùng có ích. Làm thử với 8 phép cộng xếp thành 2 tầng, mỗi tầng 4 phép, thì T một bằng 8, T vô cùng bằng 2, nên độ song song bằng 4."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Cùng 7 phép cộng: cây 3 tầng, chuỗi 7 tầng"
+    checks:
+      - "alg.par_tree_sum(8)[:2] == (7, 3) and alg.par_tree_sum(8)[2] == 36 == sum(range(1, 9))"
+    steps:
+      - show: |
+          <div><svg width="1500" height="360" viewBox="0 0 1500 360">
+          <g stroke="#1f2937" stroke-width="2.5">
+          <line x1="70" y1="310" x2="115" y2="230"/><line x1="160" y1="310" x2="115" y2="230"/><line x1="250" y1="310" x2="295" y2="230"/><line x1="340" y1="310" x2="295" y2="230"/>
+          <line x1="430" y1="310" x2="475" y2="230"/><line x1="520" y1="310" x2="475" y2="230"/><line x1="610" y1="310" x2="655" y2="230"/><line x1="700" y1="310" x2="655" y2="230"/>
+          <line x1="115" y1="230" x2="205" y2="150"/><line x1="295" y1="230" x2="205" y2="150"/><line x1="475" y1="230" x2="565" y2="150"/><line x1="655" y1="230" x2="565" y2="150"/>
+          <line x1="205" y1="150" x2="385" y2="70"/><line x1="565" y1="150" x2="385" y2="70"/>
+          <line x1="960" y1="310" x2="1035" y2="270"/><line x1="1035" y1="270" x2="1110" y2="230"/><line x1="1110" y1="230" x2="1185" y2="190"/><line x1="1185" y1="190" x2="1260" y2="150"/><line x1="1260" y1="150" x2="1335" y2="110"/><line x1="1335" y1="110" x2="1410" y2="70"/>
+          </g>
+          <g font-size="22" text-anchor="middle" fill="#1f2937">
+          <circle cx="70" cy="310" r="22" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="70" y="318">1</text>
+          <circle cx="160" cy="310" r="22" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="160" y="318">2</text>
+          <circle cx="250" cy="310" r="22" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="250" y="318">3</text>
+          <circle cx="340" cy="310" r="22" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="340" y="318">4</text>
+          <circle cx="430" cy="310" r="22" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="430" y="318">5</text>
+          <circle cx="520" cy="310" r="22" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="520" y="318">6</text>
+          <circle cx="610" cy="310" r="22" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="610" y="318">7</text>
+          <circle cx="700" cy="310" r="22" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="700" y="318">8</text>
+          <circle cx="115" cy="230" r="22" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="115" y="238">3</text>
+          <circle cx="295" cy="230" r="22" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="295" y="238">7</text>
+          <circle cx="475" cy="230" r="22" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="475" y="238">11</text>
+          <circle cx="655" cy="230" r="22" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="655" y="238">15</text>
+          <circle cx="205" cy="150" r="22" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="205" y="158">10</text>
+          <circle cx="565" cy="150" r="22" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="565" y="158">26</text>
+          <circle cx="385" cy="70" r="24" fill="#d1fae5" stroke="#059669" stroke-width="2.5"/><text x="385" y="78">36</text>
+          <circle cx="960" cy="310" r="20" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><circle cx="1035" cy="270" r="20" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/>
+          <circle cx="1110" cy="230" r="20" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><circle cx="1185" cy="190" r="20" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/>
+          <circle cx="1260" cy="150" r="20" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><circle cx="1335" cy="110" r="20" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/>
+          <circle cx="1410" cy="70" r="22" fill="#d1fae5" stroke="#059669" stroke-width="2.5"/><text x="1410" y="78">36</text>
+          </g>
+          <g font-size="22" fill="#1f2937">
+          <text x="740" y="237">tầng 1: 4 phép</text><text x="610" y="157">tầng 2: 2 phép</text><text x="425" y="77">tầng 3: 1 phép</text>
+          <text x="1000" y="330">phép 1: 1 + 2</text><text x="1440" y="110" text-anchor="end">phép 7</text>
+          </g>
+          <text x="385" y="28" font-size="24" font-weight="bold" fill="#059669" text-anchor="middle">cộng theo cặp: 7 phép, đường găng 3</text>
+          <text x="1185" y="28" font-size="24" font-weight="bold" fill="#b91c1c" text-anchor="middle">cộng dồn từng số: 7 phép, đường găng 7</text>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ hai cách cộng tám số từ 1 đến 8, mỗi vòng tròn cam là một phép cộng, đường nối chỉ phép nào phải chờ kết quả của phép nào. Bên trái, cộng theo cặp, tầng một có 4 phép làm cùng lúc được, tầng hai có 2 phép, tầng ba có 1 phép, nên đường găng chỉ dài 3. Bên phải, cộng dồn từng số, phép sau luôn chờ phép trước, nên đường găng dài đúng 7. Cả hai đều làm 7 phép cộng và ra cùng tổng 36, nhưng chỉ cách bên trái cho các lõi làm cùng lúc."
+
+  # ───────────────────────── 5. SUY RA ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra cận dưới và cận trên của thời gian trên n lõi"
+    checks:
+      - "max(7 / 2, 3) == 3.5 and alg.par_greedy_tree_steps(8, 2) == 4"
+      - "-(-4 // 2) + -(-2 // 2) + -(-1 // 2) == 4 and 3 + (7 - 3) / 2 == 5 and 7 / 2 + 3 == 6.5"
+      - "all(-(-w // n) <= (w - 1) / n + 1 for w in range(1, 200) for n in range(1, 40))"
+    steps:
+      - show: |
+          <p><b>Bước 1 — cận dưới thứ nhất.</b> Mỗi bước, $n$ lõi làm nhiều nhất $n$ phép. Vì có $T_1$ phép phải làm: $T_n \geq \dfrac{T_1}{n}$.</p>
+          <p><b>Bước 2 — cận dưới thứ hai.</b> Vì phép sau trên đường găng phải chờ phép trước, thêm lõi không rút ngắn được chuỗi đó: $T_n \geq T_\infty$.</p>
+        focus: [1, 1, 2]
+        say: "Bước một, cận dưới thứ nhất. Mỗi bước, n lõi làm nhiều nhất n phép, mà có T một phép phải làm, nên T n ít nhất bằng T một chia n. Bước hai, cận dưới thứ hai, vì phép sau trên đường găng phải chờ phép trước, thêm lõi không rút ngắn được chuỗi đó, nên T n ít nhất bằng T vô cùng."
+      - show: |
+          <p><b>Bước 3 — cận trên.</b> Lịch tham lam làm từng tầng: tầng có $w$ phép mất $\left\lceil \frac{w}{n} \right\rceil$ bước, mà $\left\lceil \frac{w}{n} \right\rceil \leq \frac{w - 1}{n} + 1$.</p>
+          <p>Cộng qua $T_\infty$ tầng, tổng các $w$ là $T_1$, nên:</p>
+          $$T_n \leq T_\infty + \frac{T_1 - T_\infty}{n} \leq \frac{T_1}{n} + T_\infty$$
+          <p class="note">Dạng ở giữa là Lemma 2 của Brent (1974); dạng bên phải gọn hơn, lớn hơn một chút.</p>
+        introduces: [ceil]
+        focus: [1, 1, 3, 4]
+        say: "Bước ba là cận trên, đạt được bằng lịch tham lam làm từng tầng. Ký hiệu móc vuông có hai chân là làm tròn lên, tầng có w phép mất w chia n làm tròn lên số bước, và số đó không quá w trừ 1, chia n, cộng 1. Vì có T vô cùng tầng và tổng số phép là T một, cộng lại ta được T n không quá T vô cùng cộng T một trừ T vô cùng, chia n. Đây là cận trong bài báo năm 1974 về tính biểu thức song song, còn dạng bên phải gọn hơn và lớn hơn một chút."
+      - clear: true
+        show: |
+          <p><b>Làm thử ngay</b> với cây 8 số ở hình, $n = 2$ lõi: $T_1 = 7$, $T_\infty = 3$.</p>
+          <table class="t"><tr><th>tính</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>lịch tham lam thật</td><td>tầng 4 phép: 2 bước; tầng 2 phép: 1; tầng 1 phép: 1</td><td>$\hlg{4}$ bước</td></tr>
+          <tr><td>cận dưới</td><td>$\max\left(\frac{7}{2}, 3\right) = 3{,}5$</td><td>ít nhất 4 bước</td></tr>
+          <tr><td>cận trên của Brent</td><td>$3 + \frac{7 - 3}{2}$</td><td>5 bước</td></tr>
+          <tr><td>dạng gọn</td><td>$\frac{7}{2} + 3$</td><td>6,5 bước</td></tr></table>
+        introduces: [max_fn]
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Làm thử ngay với cây tám số ở hình, trên 2 lõi, T một bằng 7, T vô cùng bằng 3. Lịch tham lam thật mất 2 bước cho tầng 4 phép, 1 bước cho tầng 2 phép, 1 bước cho tầng cuối, tổng 4 bước. Cận dưới lấy số lớn hơn giữa 7 chia 2 và 3, là 3 phẩy 5, nên ít nhất phải 4 bước. Cận trên của bài báo năm 1974 cho 3 cộng 4 chia 2, bằng 5, còn dạng gọn cho 6 phẩy 5, và 4 nằm đúng giữa hai cận."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Cộng 1024 số trên 32 lõi, từng phép tính"
+    checks:
+      - "alg.par_tree_sum(1024)[0] == 1023 == 1024 - 1"
+      - "alg.par_tree_sum(1024)[1] == 10"
+      - "[-(-w // 32) for w in (512, 256, 128, 64, 32, 16, 8, 4, 2, 1)] == [16, 8, 4, 2, 1, 1, 1, 1, 1, 1] and 16 + 8 + 4 + 2 + 1 + 5 == 36 == alg.par_greedy_tree_steps(1024, 32)"
+      - "round(1023 / 32, 2) == 31.97 and round(10 + (1023 - 10) / 32, 2) == 41.66 and round(1023 / 32 + 10, 2) == 41.97"
+      - "round(1023 / 10, 1) == 102.3"
+    steps:
+      - show: |
+          <p><b>Bước 1 — công việc.</b> Mỗi phép cộng gộp hai số thành một, nên từ 1024 số còn 1 số cần đúng $1024 - 1$ phép: $T_1 = \hlb{1023}$.</p>
+        say: "Bước một, tính công việc. Mỗi phép cộng gộp hai số thành một, nên đi từ 1024 số về còn 1 số cần đúng 1024 trừ 1 phép, tức T một bằng 1023."
+      - show: |
+          <p><b>Bước 2 — đường găng.</b> Mỗi tầng chia đôi số giá trị: 1024 → 512 → … → 1 là 10 lần, nên $T_\infty = \hlo{10}$.</p>
+        say: "Bước hai, tính đường găng. Mỗi tầng chia đôi số giá trị còn lại, từ 1024 xuống 1 là 10 lần chia đôi, nên T vô cùng bằng 10."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — lịch tham lam từng tầng</b>, 32 lõi:</p>
+          <table class="t"><tr><th>tầng</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6–10</th></tr>
+          <tr><td>số phép</td><td>512</td><td>256</td><td>128</td><td>64</td><td>32</td><td>16, 8, 4, 2, 1</td></tr>
+          <tr><td>số bước</td><td>16</td><td>8</td><td>4</td><td>2</td><td>1</td><td>1 mỗi tầng</td></tr></table>
+          <p>Tổng: $16 + 8 + 4 + 2 + 1 + 5 = \hlg{36}$ bước.</p>
+        focus: [1, "2.3", "2.3", 3]
+        say: "Bước ba, xếp lịch tham lam từng tầng cho 32 lõi. Tầng một có 512 phép nên mất 16 bước, tầng hai mất 8, tầng ba mất 4, tầng bốn mất 2, tầng năm có đúng 32 phép nên mất 1 bước. Năm tầng cuối có ít phép hơn số lõi, nhưng mỗi tầng vẫn tốn trọn 1 bước. Cộng lại được 36 bước."
+      - clear: true
+        show: |
+          <p><b>Bước 4 — so với hai cận.</b> $T_1 = 1023$, $T_\infty = 10$, $n = 32$:</p>
+          <table class="t"><tr><th>cận</th><th>phép tính</th><th>bước</th></tr>
+          <tr><td>dưới</td><td>$\max\left(\frac{1023}{32}, 10\right) \approx 31{,}97$</td><td>ít nhất 32</td></tr>
+          <tr><td>trên, của Brent</td><td>$10 + \frac{1023 - 10}{32}$</td><td>$\approx 41{,}66$</td></tr>
+          <tr><td>trên, dạng gọn</td><td>$\frac{1023}{32} + 10$</td><td>$\approx 41{,}97$</td></tr></table>
+          <p>Lịch thật 36 bước nằm giữa 32 và 41,66 ✓</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Bước bốn, so với hai cận, với T một bằng 1023, T vô cùng bằng 10 và 32 lõi. Cận dưới là 1023 chia 32, khoảng 31 phẩy 97, nên ít nhất 32 bước. Cận trên của bài báo năm 1974 là 10 cộng 1013 chia 32, khoảng 41 phẩy 66, còn dạng gọn khoảng 41 phẩy 97. Lịch thật 36 bước nằm đúng giữa hai cận."
+      - show: |
+          <p><b>Bước 5 — độ song song.</b> $\dfrac{T_1}{T_\infty} = \dfrac{1023}{10} \approx \hl{102{,}3}$: quá khoảng 100 lõi, lõi thêm gần như ngồi chờ.</p>
+        say: "Bước năm, độ song song bằng 1023 chia 10, khoảng 102 phẩy 3. Vượt quá khoảng 100 lõi, lõi thêm vào gần như chỉ ngồi chờ."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: đếm lại theo đường khác"
+    checks:
+      - "alg.par_tree_sum(1024)[2] == 1024 * 1025 // 2 == 524800"
+      - "sum(1024 // 2 ** k for k in range(1, 11)) == 1023"
+      - "round(1023 / 36, 1) == 28.4 and round(1023 / 36 / 32 * 100) == 89"
+    steps:
+      - show: |
+          <table class="t"><tr><th>con số</th><th>đường khác để kiểm</th></tr>
+          <tr><td>$T_1 = 1023$</td><td>cộng số phép từng tầng: $512 + 256 + … + 1 = 1023$ ✓</td></tr>
+          <tr><td>tổng đúng</td><td>máy cộng thật theo cây ra 524 800; công thức $\frac{1024 \cdot 1025}{2} = 524\,800$ ✓</td></tr>
+          <tr><td>36 bước</td><td>nhanh gấp $\frac{1023}{36} \approx 28{,}4$; chia 32 lõi: mỗi lõi bận khoảng 89% số bước ✓</td></tr></table>
+        introduces: [dots, cdot]
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Ta kiểm ba con số theo đường khác. Cộng số phép của từng tầng, 512 cộng 256 cộng cứ thế tới 1, đúng bằng 1023. Dấu chấm giữa dòng là phép nhân, máy cộng thật theo cây ra 524 nghìn 800, khớp công thức 1024 nhân 1025 chia 2. Cuối cùng, 1023 chia 36 khoảng 28 phẩy 4 lần, chia cho 32 lõi thì mỗi lõi bận khoảng 89 phần trăm số bước."
+
+  # ───────────────────────── 8. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi cả người đã đi làm"
+    checks:
+      - "alg.par_tree_sum(1024)[0] == 1023 and max(1023 / 32, 1023) == 1023"
+      - "alg.par_greedy_tree_steps(1024, 1024) == 10 and round(36 / 10, 1) == 3.6 and round(1023 / (10 * 1024) * 100) == 10"
+      - "36 + 10 == 46 and round(1023 / 46, 1) == 22.2"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Giữ vòng cộng dồn rồi thêm lõi <b class="red">(đường găng 1023)</b>
+          <br><span class="note">Cộng dồn: $T_\infty = T_1 = 1023$, nên $T_n \geq 1023$ với mọi $n$. Phải đổi thuật toán, không phải đổi máy.</span></div>
+        say: "Lỗi thứ nhất, giữ vòng lặp cộng dồn rồi thêm lõi. Cộng dồn có đường găng bằng cả công việc, 1023 bước, nên bao nhiêu lõi cũng không dưới 1023 bước. Phải đổi thuật toán, không phải đổi máy."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Nghĩ 32 lõi là nhanh gấp 32 <b class="red">(thật: 28,4)</b>
+          <br><span class="note">Năm tầng cuối có ít phép hơn số lõi; cận dưới $T_\infty$ luôn còn đó.</span></div>
+        say: "Lỗi thứ hai, nghĩ 32 lõi là nhanh gấp 32. Thật ra chỉ khoảng 28 phẩy 4 lần, vì năm tầng cuối có ít phép hơn số lõi, và đường găng 10 bước luôn còn đó."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3</b> (người đã đi làm). Mua máy nhiều lõi hơn độ song song <b class="red">(lõi ngồi chờ)</b></div>
+          <table class="t"><tr><th>số lõi</th><th>bước</th><th>lõi bận</th></tr>
+          <tr><td>32</td><td>36</td><td>khoảng 89%</td></tr>
+          <tr><td>1024 (gấp 32 lần)</td><td>10 — chỉ nhanh hơn 3,6 lần</td><td>$\frac{1023}{10 \cdot 1024} \approx \hl{10\%}$</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Lỗi thứ ba hay gặp ở người đã đi làm, là mua máy có nhiều lõi hơn độ song song. Từ 32 lên 1024 lõi, gấp 32 lần, mà chỉ từ 36 xuống 10 bước, nhanh hơn 3 phẩy 6 lần, vì đã chạm đường găng. Lúc đó mỗi lõi chỉ bận khoảng 10 phần trăm thời gian."
+      - show: |
+          <div class="box warn"><b>Lỗi 4</b> (người đã đi làm). Tin cận như số đo <b class="red">(mô hình bỏ qua giao tiếp)</b>
+          <br><span class="note">Mô hình của Brent bỏ qua thời gian đọc dữ liệu và trao đổi giữa các lõi. Nếu mỗi tầng tốn thêm 1 bước đồng bộ (số minh hoạ): $36 + 10 = 46$ bước, chỉ còn nhanh $\approx 22{,}2$ lần. Đo thật rồi mới hứa.</span></div>
+        say: "Lỗi thứ tư cũng của người đã đi làm, là tin cận như số đo thật. Bài báo năm 1974 ghi rõ mô hình bỏ qua thời gian đọc dữ liệu và trao đổi giữa các bộ xử lý. Nếu mỗi tầng tốn thêm 1 bước đồng bộ, một số minh hoạ, ta có 46 bước, chỉ còn nhanh khoảng 22 phẩy 2 lần, nên hãy đo thật rồi mới hứa."
+
+  # ───────────────────────── 9. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: 16 lõi hay 64 lõi?"
+    checks:
+      - "alg.par_tree_sum(4096)[:2] == (4095, 12)"
+      - "alg.par_greedy_tree_steps(4096, 16) == 259 == 128 + 64 + 32 + 16 + 8 + 4 + 2 + 1 + 4"
+      - "alg.par_greedy_tree_steps(4096, 64) == 69 == 32 + 16 + 8 + 4 + 2 + 1 + 6"
+      - "round(4095 / 259, 1) == 15.8 and round(4095 / 69, 1) == 59.3 and round(259 / 69, 2) == 3.75 and round(4095 / 69 / 64 * 100) == 93"
+      - "round(12 + 4083 / 16, 1) == 267.2 and round(12 + 4083 / 64, 1) == 75.8 and round(4095 / 12, 1) == 341.2"
+    steps:
+      - show: |
+          <p>Cộng 4096 số theo cặp. Hai máy: <b>16 lõi</b>, và <b>64 lõi</b> giá gấp 4 (số minh hoạ).</p>
+          <table class="t"><tr><th>câu</th><th>hỏi</th></tr>
+          <tr><td>1</td><td>$T_1$, $T_\infty$ và độ song song?</td></tr>
+          <tr><td>2</td><td>lịch tham lam từng tầng mất bao nhiêu bước trên mỗi máy?</td></tr>
+          <tr><td>3</td><td>máy 64 lõi có đáng giá gấp 4 không?</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", 0]
+        say: "Bây giờ đến lượt bạn, cộng 4096 số theo cặp, có hai máy, máy 16 lõi, và máy 64 lõi giá gấp 4, đều là số minh hoạ. Câu một, T một, T vô cùng và độ song song là bao nhiêu? Câu hai, lịch tham lam từng tầng mất bao nhiêu bước trên mỗi máy? Câu ba, máy 64 lõi có đáng giá gấp 4 không? Dừng video và làm ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <p>Câu 1: $T_1 = 4096 - 1 = \hlb{4095}$; $2^{12} = 4096$ nên $T_\infty = \hlo{12}$; độ song song $\frac{4095}{12} \approx 341{,}2$.</p>
+          <table class="t"><tr><th>câu 2</th><th>số bước từng tầng</th><th>tổng</th><th>cận Brent</th></tr>
+          <tr><td>16 lõi</td><td>128, 64, 32, 16, 8, 4, 2, 1, rồi 4 tầng 1 bước</td><td>$\hlg{259}$</td><td>$\approx 267{,}2$</td></tr>
+          <tr><td>64 lõi</td><td>32, 16, 8, 4, 2, 1, rồi 6 tầng 1 bước</td><td>$\hlg{69}$</td><td>$\approx 75{,}8$</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Đáp án câu một, T một bằng 4096 trừ 1, là 4095, và vì 2 mũ 12 bằng 4096 nên T vô cùng bằng 12, độ song song khoảng 341. Câu hai, máy 16 lõi mất 128 bước ở tầng đầu, rồi 64, 32, cứ thế giảm, cộng thêm 4 tầng cuối mỗi tầng một bước, tổng 259 bước, dưới cận 267 phẩy 2. Máy 64 lõi mất 69 bước, dưới cận 75 phẩy 8."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 3</th><th>16 lõi</th><th>64 lõi</th></tr>
+          <tr><td>nhanh gấp</td><td>$\frac{4095}{259} \approx 15{,}8$</td><td>$\frac{4095}{69} \approx 59{,}3$</td></tr>
+          <tr><td>so với nhau</td><td colspan="2">$\frac{259}{69} \approx \hl{3{,}75}$ lần, với giá gấp 4</td></tr>
+          <tr><td>lõi bận</td><td>gần 99%</td><td>khoảng 93%</td></tr></table>
+          <p class="note">Đáng, nếu việc cộng là phần chính và chạy thường xuyên: 64 nhỏ hơn nhiều so với độ song song 341. Đổi ý khi số lõi tiến gần 341, hoặc khi mỗi tầng tốn thêm đồng bộ.</p>
+        focus: ["1.2", "1.3", 2, 2]
+        say: "Câu ba, máy 16 lõi nhanh khoảng 15 phẩy 8 lần, máy 64 lõi nhanh khoảng 59 phẩy 3 lần. So với nhau, máy 64 lõi nhanh hơn khoảng 3 phẩy 75 lần với giá gấp 4, mỗi lõi vẫn bận khoảng 93 phần trăm. Vậy là đáng nếu việc này chạy thường xuyên, vì 64 còn nhỏ hơn nhiều so với độ song song 341. Hãy đổi ý khi số lõi tiến gần 341, hoặc khi mỗi tầng tốn thêm thời gian đồng bộ."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">vẽ phép tính và phép phải chờ</span><span class="a">→</span>
+          <span class="n">$T_1$ = số phép, $T_\infty$ = đường găng</span><span class="a">→</span>
+          <span class="n">$\max\left(\frac{T_1}{n}, T_\infty\right) \leq T_n \leq T_\infty + \frac{T_1 - T_\infty}{n}$</span><span class="a">→</span>
+          <span class="n">độ song song $\frac{T_1}{T_\infty}$ = số lõi còn có ích</span></div>
+        say: "Tổng kết lại, ta vẽ các phép tính và phép nào phải chờ phép nào. Từ đó đếm T một là số phép, và T vô cùng là đường găng. Thời gian trên n lõi nằm giữa cận dưới và cận trên của bài báo năm 1974. Còn độ song song T một chia T vô cùng cho biết số lõi còn dùng có ích."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> trước khi thêm lõi, đếm đường găng. Đường găng dài thì đổi thuật toán; số lõi đã gần độ song song thì thêm lõi chỉ thêm tiền.</div>
+        say: "Điều cần mang theo, trước khi thêm lõi, hãy đếm đường găng. Đường găng dài thì phải đổi thuật toán, còn số lõi đã gần độ song song thì thêm lõi chỉ tốn thêm tiền."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 3): khi nhiều luồng cùng cộng vào <b>một</b> biến chung — tranh chấp dữ liệu, phép toán nguyên tử và phép rút gọn.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 3, ta xem chuyện gì xảy ra khi nhiều luồng cùng cộng vào một biến chung, với tranh chấp dữ liệu, phép toán nguyên tử và phép rút gọn. Hẹn gặp bạn ở bài tiếp theo."

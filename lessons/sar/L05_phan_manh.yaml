@@ -1,0 +1,204 @@
+id: L05
+course: SAR
+series: "SAR · Kiến trúc hệ thống"
+title: "Bài 5 — Mở rộng dữ liệu: bản sao đọc, phân mảnh, chọn khoá phân mảnh"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/sar.yaml L05; audit/sar/verify_sar.py L05; M. Kleppmann, Designing Data-Intensive Applications (O'Reilly, 2017), chương 5 (sao chép) và 6 (phân mảnh); DSY bài 3 (sao chép), DSY bài 6 (băm nhất quán)"
+assumes: [arith, cdot, frac, ceil]
+# Quy ước: số nút = ⌈dữ liệu / dung lượng mỗi nút⌉ × hệ số sao chép (alg.shard_nodes). alg.hot_shard(khoá, số mảnh, hàm khoá) trả (tải mảnh đông nhất,
+#   tải trung bình). Băm khoá khách bằng CRC-32 (zlib). 10 000 lần ghi trong một ngày; khoá ngày tạo = cùng một giá trị cho mọi lần ghi hôm nay.
+objectives:
+  - "Ước lượng số nút cần"
+  - "Phân biệt mở rộng đọc và mở rộng ghi"
+  - "Chọn khoá phân mảnh tránh điểm nóng"
+asr_reviewed:
+  - {sentence: "Cái giá phải trả là 1 tê-ra-byte dữ liệu chiếm tới 3 tê-ra-byte trên đĩa.", reason: "ASR chép “Cái giá phải trả là 1 terabyte dữ liệu chiếm tới 3 terabytes trên địa.” (0.706): “tê-ra-byte” đọc tách âm tiết, ASR viết gộp “terabyte(s)” — đúng đơn vị; số 1 và 3 khớp; đĩa/địa lệch thanh — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Cất 7 phẩy 3 tê-ra-byte vào các ổ 1 tê-ra-byte thì 7 ổ mới chứa 7, phần 0 phẩy 3 còn lại vẫn cần thêm một ổ, nên cần 8 ổ.", reason: "ASR chép “Các 7,3tb vào các ổ 1tb thì 7 ổ mới chứa 7, phần 0,3 còn lại vẫn cần thêm 1 ổ, nên cần 8 ổ.” (0.848): “tê-ra-byte” đọc tách âm tiết (đã dựng ở OSY/NET), ASR viết “TB/terabyte”; lệch âm/thanh thuần Việt: cất/các — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bước một, đổi cùng đơn vị, 5 tê-ra-byte là 5000 GB, chia cho 500 GB mỗi nút được 10 phần, làm tròn lên vẫn là 10.", reason: "ASR chép “Bước 1, đổi cùng đơn vị, 5TB là 5000GB, chia cho 500GB mỗi nút được 10 phần, làm tròn lên vẫn là 10.” (0.931): “tê-ra-byte” đọc tách âm tiết (đã dựng ở OSY/NET), ASR viết “TB/terabyte” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Câu một, 12 tê-ra-byte dữ liệu, mỗi nút 2 tê-ra-byte, sao chép 3, cần bao nhiêu nút?", reason: "ASR chép “Câu 1, 12TB dữ liệu, mỗi nút 2TB, xào chép 3, cần bao nhiêu nút?” (0.75): “tê-ra-byte” đọc tách âm tiết (đã dựng ở OSY/NET), ASR viết “TB/terabyte”; lệch âm/thanh thuần Việt: sao (trong “t ra byte sao” → “tb xào”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Câu hai, 7 phẩy 3 tê-ra-byte như ước lượng ở bài 2, mỗi nút 1 tê-ra-byte, sao chép 3, cần bao nhiêu nút?", reason: "ASR chép “Câu 2, 7,3TB như ước lượng ở bài 2, mỗi nút 1TB, xào chép 3, cần bao nhiêu nút?” (0.8): “tê-ra-byte” đọc tách âm tiết (đã dựng ở OSY/NET), ASR viết “TB/terabyte”; lệch âm/thanh thuần Việt: sao (trong “t ra byte sao” → “tb xào”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Có 5 tê-ra-byte dữ liệu, mỗi nút giữ 500 GB, sao chép 3 bản, thì cần 5000 chia 500 bằng 10, nhân 3, tức 30 nút.", reason: "ASR chép “Có 5TB dữ liệu, mỗi nút giữ 500GB, sau chép 3 bảng thì cần 5000 chia 500 bằng 10, nhân 3, tức 30 nút.” (0.871): “tê-ra-byte” đọc tách âm tiết (đã dựng ở OSY/NET), ASR viết “TB/terabyte”; lệch âm/thanh thuần Việt: sao/sau, bản/bảng — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Mười máy, một máy làm hết việc"
+    checks:
+      - "alg.hot_shard(list(range(10000)), 10, lambda k: 20261029) == (10000, 1000.0)"
+    steps:
+      - show: |
+          <p>Nhóm chia bảng đơn hàng ra 10 máy theo <b>ngày tạo đơn</b>. Hôm nay mọi đơn mới đều mang ngày hôm nay — nên rơi cả vào <b>một</b> máy: $\hl{10\,000}$ lần ghi, gấp 10 lần mức trung bình. Chín máy kia ngồi chơi.</p>
+          <div class="box key">Hôm nay: <b>mở rộng dữ liệu</b> — bản sao đọc, phân mảnh, và vì sao <b>khoá phân mảnh</b> quyết định tất cả.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, nhóm chia bảng đơn hàng ra 10 máy theo ngày tạo đơn. Hôm nay mọi đơn mới đều mang ngày hôm nay, nên rơi cả vào một máy, 10 nghìn lần ghi, gấp 10 lần mức trung bình. Chín máy kia ngồi chơi. Hôm nay ta học cách mở rộng dữ liệu, với bản sao đọc, phân mảnh, và vì sao khoá phân mảnh quyết định tất cả."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: làm tròn lên, sao chép, băm rồi chia lấy dư"
+    checks:
+      - "math.ceil(7.3) == 8 and math.ceil(10) == 10 and 7 * 1 < 7.3 <= 8 * 1 and 1 * 3 == 3"
+      - "__import__('zlib').crc32(b'kh0') == 809381072 and 809381072 % 10 == 2"
+    steps:
+      - show: |
+          <p><b>Làm tròn lên</b> $\lceil x \rceil$: số nguyên nhỏ nhất không nhỏ hơn $x$. Cất 7,3 TB vào các ổ 1 TB: 7 ổ mới chứa 7 TB, phần 0,3 TB còn lại vẫn cần thêm một ổ, nên $\lceil 7{,}3 \rceil = 8$ ổ. Còn $\lceil 10 \rceil = 10$.</p>
+        introduces: [ceil]
+        say: "Trước hết, ôn ba điều sẽ dùng. Làm tròn lên là lấy số nguyên nhỏ nhất không nhỏ hơn số đã cho. Cất 7 phẩy 3 tê-ra-byte vào các ổ 1 tê-ra-byte thì 7 ổ mới chứa 7, phần 0 phẩy 3 còn lại vẫn cần thêm một ổ, nên cần 8 ổ. Còn 10 thì làm tròn lên vẫn là 10."
+      - show: |
+          <p><b>Sao chép</b> (ở khoá Hệ phân tán và dữ liệu lớn): mỗi mẩu dữ liệu nằm trên <b>3</b> máy khác nhau, một máy hỏng vẫn còn bản khác. Cái giá: 1 TB dữ liệu chiếm $1 \cdot 3 = 3$ TB đĩa.</p>
+        say: "Thứ hai, ở khoá Hệ phân tán và dữ liệu lớn ta đã học sao chép, mỗi mẩu dữ liệu nằm trên 3 máy khác nhau, để một máy hỏng vẫn còn bản khác. Cái giá phải trả là 1 tê-ra-byte dữ liệu chiếm tới 3 tê-ra-byte trên đĩa."
+      - show: |
+          <table class="t"><tr><th>khoá</th><th>hàm băm cho số</th><th>chia 10 lấy dư</th><th>về mảnh</th></tr>
+          <tr><td>kh0</td><td>809 381 072</td><td>2</td><td>$\hl{2}$</td></tr></table>
+          <p class="note">Cùng khoá luôn ra cùng số, nên luôn về cùng mảnh; khoá khác nhau ra số “lộn xộn”, nên trải đều.</p>
+        focus: [1, "1.2", 2]
+        say: "Thứ ba, cách chia khoá vào mảnh bằng hàm băm. Hàm băm biến mã khách đầu tiên của ví dụ thành số 809 triệu 381 nghìn 72, chia 10 dư 2, nên khoá này về mảnh 2. Cùng một khoá luôn ra cùng một số nên luôn về cùng mảnh, còn các khoá khác nhau ra số lộn xộn nên trải đều."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: bản sao đọc, phân mảnh"
+    steps:
+      - show: |
+          <table class="t"><tr><th>kỹ thuật</th><th>làm gì</th><th>mở rộng được</th></tr>
+          <tr><td><b>bản sao đọc</b></td><td>một bản chính nhận mọi lần ghi, sao sang nhiều bản phụ để đọc</td><td><b>đọc</b>; ghi vẫn dồn về bản chính</td></tr>
+          <tr><td><b>phân mảnh</b></td><td>chia dữ liệu theo khoá: mỗi mảnh giữ một phần, ở máy riêng</td><td>cả <b>đọc</b> lẫn <b>ghi</b> — nếu khoá chia đều</td></tr></table>
+          <p>Số nút $= \left\lceil \frac{\text{dữ liệu}}{\text{dung lượng mỗi nút}} \right\rceil \cdot \text{hệ số sao chép}$.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Bảng so hai kỹ thuật mở rộng dữ liệu. Bản sao đọc có một bản chính nhận mọi lần ghi, rồi sao sang nhiều bản phụ để đọc, nên mở rộng được việc đọc, còn ghi vẫn dồn về bản chính. Phân mảnh chia dữ liệu theo khoá, mỗi mảnh giữ một phần ở máy riêng, nên mở rộng được cả đọc lẫn ghi, nếu khoá chia đều. Số nút bằng dữ liệu chia dung lượng mỗi nút, làm tròn lên, rồi nhân hệ số sao chép."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Khoá phân mảnh quyết định ai phải làm việc"
+    checks:
+      - "sorted(__import__('collections').Counter(__import__('zlib').crc32(f'kh{i}'.encode()) % 10 for i in range(10000)).items()) == list(enumerate([1044, 984, 989, 1001, 991, 997, 998, 986, 980, 1030]))"
+      - "10000 / 10 == 1000"
+    steps:
+      - show: |
+          <div><svg width="1500" height="330" viewBox="0 0 1500 330"><g font-size="22" fill="#1f2937"><text x="330" y="35" text-anchor="middle" font-weight="bold">khoá = ngày tạo đơn</text><rect x="30" y="270" width="44" height="2" fill="#2a78d6"/><text x="52" y="298" text-anchor="middle" font-size="19">0</text><rect x="92" y="270" width="44" height="2" fill="#2a78d6"/><text x="114" y="298" text-anchor="middle" font-size="19">1</text><rect x="154" y="270" width="44" height="2" fill="#2a78d6"/><text x="176" y="298" text-anchor="middle" font-size="19">2</text><rect x="216" y="270" width="44" height="2" fill="#2a78d6"/><text x="238" y="298" text-anchor="middle" font-size="19">3</text><rect x="278" y="270" width="44" height="2" fill="#2a78d6"/><text x="300" y="298" text-anchor="middle" font-size="19">4</text><rect x="340" y="270" width="44" height="2" fill="#2a78d6"/><text x="362" y="298" text-anchor="middle" font-size="19">5</text><rect x="402" y="270" width="44" height="2" fill="#2a78d6"/><text x="424" y="298" text-anchor="middle" font-size="19">6</text><rect x="464" y="70" width="44" height="200" fill="#b91c1c"/><text x="486" y="298" text-anchor="middle" font-size="19">7</text><rect x="526" y="270" width="44" height="2" fill="#2a78d6"/><text x="548" y="298" text-anchor="middle" font-size="19">8</text><rect x="588" y="270" width="44" height="2" fill="#2a78d6"/><text x="610" y="298" text-anchor="middle" font-size="19">9</text><text x="40" y="110" fill="#b91c1c">một mảnh: cả 10 000</text><text x="40" y="140" fill="#b91c1c">chín mảnh kia: 0</text><line x1="20" y1="250" x2="660" y2="250" stroke="#eb6834" stroke-width="2" stroke-dasharray="8 6"/><text x="1100" y="35" text-anchor="middle" font-weight="bold">khoá = băm của mã khách</text><rect x="800" y="249" width="44" height="21" fill="#2a78d6"/><text x="822" y="298" text-anchor="middle" font-size="19">0</text><rect x="862" y="250" width="44" height="20" fill="#2a78d6"/><text x="884" y="298" text-anchor="middle" font-size="19">1</text><rect x="924" y="250" width="44" height="20" fill="#2a78d6"/><text x="946" y="298" text-anchor="middle" font-size="19">2</text><rect x="986" y="250" width="44" height="20" fill="#2a78d6"/><text x="1008" y="298" text-anchor="middle" font-size="19">3</text><rect x="1048" y="250" width="44" height="20" fill="#2a78d6"/><text x="1070" y="298" text-anchor="middle" font-size="19">4</text><rect x="1110" y="250" width="44" height="20" fill="#2a78d6"/><text x="1132" y="298" text-anchor="middle" font-size="19">5</text><rect x="1172" y="250" width="44" height="20" fill="#2a78d6"/><text x="1194" y="298" text-anchor="middle" font-size="19">6</text><rect x="1234" y="250" width="44" height="20" fill="#2a78d6"/><text x="1256" y="298" text-anchor="middle" font-size="19">7</text><rect x="1296" y="250" width="44" height="20" fill="#2a78d6"/><text x="1318" y="298" text-anchor="middle" font-size="19">8</text><rect x="1358" y="249" width="44" height="21" fill="#2a78d6"/><text x="1380" y="298" text-anchor="middle" font-size="19">9</text><line x1="790" y1="250" x2="1430" y2="250" stroke="#eb6834" stroke-width="2" stroke-dasharray="8 6"/><text x="800" y="225" fill="#059669">mọi mảnh gần 1000, đông nhất 1044</text><text x="1440" y="256" font-size="19" fill="#eb6834">1000</text><text x="20" y="325" font-size="19" fill="#6b7280">số dưới cột: số thứ tự mảnh; vạch cam: trung bình 1000 lần ghi mỗi mảnh</text></g></svg></div>
+        focus: [1, 1, 1]
+        say: "Hình đặt 10 nghìn lần ghi hôm nay vào 10 mảnh theo hai cách chọn khoá. Bên trái, khoá là ngày tạo đơn, mọi đơn hôm nay cùng một ngày nên cùng về một mảnh, cột đỏ cao vút còn chín cột kia bằng không. Bên phải, khoá là băm của mã khách, cột nào cũng sát vạch trung bình 1000, cao nhất là 1044."
+
+  - id: example
+    kind: example
+    title: "Số nút, và hai khoá phân mảnh"
+    checks:
+      - "alg.shard_nodes(5000, 500, 3) == 30"
+      - "alg.hot_shard([f'kh{i}' for i in range(10000)], 10, lambda k: __import__('zlib').crc32(k.encode())) == (1044, 1000.0)"
+      - "5 * 1000 == 5000 and 5000 / 500 == 10 and 10 * 3 == 30 and 10000 / 10 == 1000 and round((1044 - 1000) / 1000 * 100, 1) == 4.4"
+    steps:
+      - show: |
+          <p><b>Bước 1 — đổi đơn vị rồi chia:</b> 5 TB $= 5000$ GB; $\frac{5000}{500} = 10$ phần, làm tròn lên vẫn là 10.</p>
+          <p><b>Bước 2 — nhân hệ số sao chép:</b> $\left\lceil \frac{5000}{500} \right\rceil \cdot 3 = \hl{30}$ nút.</p>
+        focus: [1, 1, 2]
+        say: "Bước một, đổi cùng đơn vị, 5 tê-ra-byte là 5000 GB, chia cho 500 GB mỗi nút được 10 phần, làm tròn lên vẫn là 10. Bước hai, nhân hệ số sao chép 3. Có 5 tê-ra-byte dữ liệu, mỗi nút giữ 500 GB, sao chép 3 bản, thì cần 5000 chia 500 bằng 10, nhân 3, tức 30 nút."
+      - show: |
+          <p><b>Bước 3 — khoá ngày tạo đơn:</b> mọi lần ghi hôm nay mang cùng một ngày → cùng một mảnh: 10 000 lần ghi, trong khi trung bình $\frac{10\,000}{10} = 1000$.</p>
+          <p><b>Bước 4 — khoá băm mã khách:</b> mảnh đông nhất $\hl{1044}$, lệch $\frac{1044 - 1000}{1000} = 4{,}4\%$ so với trung bình.</p>
+        focus: [1, 1, 2]
+        say: "Bước ba, với khoá ngày tạo đơn, mọi lần ghi hôm nay mang cùng một ngày nên rơi vào cùng một mảnh, 10 nghìn lần ghi, trong khi trung bình mỗi mảnh chỉ 1000. Một mảnh làm việc của cả 10 mảnh. Bước bốn, với khoá băm mã khách, mảnh đông nhất nhận 1044, chỉ lệch 4 phẩy 4 phần trăm so với trung bình."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>khoá phân mảnh (10 mảnh, 10 000 lần ghi hôm nay)</th><th>mảnh đông nhất</th><th>trung bình</th></tr>
+          <tr><td>ngày tạo đơn</td><td class="red">10 000</td><td>1000</td></tr>
+          <tr><td>băm của mã khách</td><td>$\hl{1044}$</td><td>1000</td></tr></table>
+          <p class="note"><b>Bước 5 — đánh đổi:</b> băm mã khách trải đều (lệch 4%), nhưng truy vấn “mọi đơn hôm nay” giờ phải hỏi cả 10 mảnh.</p>
+        focus: [1, "1.2", "1.3", 2, 2]
+        say: "Bảng so hai khoá phân mảnh với 10 mảnh và 10 nghìn lần ghi hôm nay. Khoá ngày tạo đơn dồn cả 10 nghìn vào một mảnh, so với trung bình 1000. Khoá băm của mã khách cho mảnh đông nhất 1044, rất gần trung bình. Bước năm, đánh đổi. Băm mã khách trải đều, nhưng truy vấn mọi đơn hôm nay giờ phải hỏi cả 10 mảnh."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: đếm đĩa, đếm từng mảnh, đổi hàm băm"
+    checks:
+      - "30 * 500 == 15000 and 5000 * 3 == 15000"
+      - "sum([1044, 984, 989, 1001, 991, 997, 998, 986, 980, 1030]) == 10000 and min([1044, 984, 989, 1001, 991, 997, 998, 986, 980, 1030]) == 980"
+      - "max(__import__('collections').Counter(int(__import__('hashlib').md5(f'kh{i}'.encode()).hexdigest(), 16) % 10 for i in range(10000)).values()) == 1034"
+    steps:
+      - show: |
+          <table class="t"><tr><th>kết quả</th><th>đường khác</th><th>khớp?</th></tr>
+          <tr><td>30 nút</td><td>đếm đĩa: $30 \cdot 500 = 15\,000$ GB, đúng bằng $5000 \cdot 3$ GB cần cho 3 bản</td><td>✓</td></tr>
+          <tr><td>1044 là mảnh đông nhất</td><td>đếm cả 10 mảnh: tổng đúng 10 000, mảnh vắng nhất 980</td><td>✓</td></tr>
+          <tr><td>băm trải đều</td><td>đổi sang hàm băm khác (MD5): mảnh đông nhất 1034</td><td>✓ vẫn gần 1000</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Kiểm bằng đường khác. Đếm đĩa, 30 nút nhân 500 GB là 15 nghìn GB, đúng bằng 5000 GB nhân 3 bản. Đếm lại cả 10 mảnh, tổng đúng 10 nghìn lần ghi, mảnh vắng nhất 980, nên 1044 đúng là đông nhất và không mảnh nào lệch xa. Đổi sang một hàm băm khác, mảnh đông nhất là 1034, vẫn gần 1000, nghĩa là trải đều đến từ việc băm mã khách, không phải may mắn của một hàm băm."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc, 1 lỗi người đã đi làm"
+    checks:
+      - "sum(__import__('zlib').crc32(f'kh{i}'.encode()) % 10 != __import__('zlib').crc32(f'kh{i}'.encode()) % 11 for i in range(10000)) == 9101 and round(10000 / 11) == 909"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Thêm bản sao đọc để giải quyết quá tải ghi <b class="red">(sai chỗ)</b>
+          <br><span class="note">Mọi lần ghi vẫn qua bản chính; thêm bản sao còn làm bản chính tốn thêm công sao chép. Quá tải ghi cần phân mảnh (hoặc giảm ghi).</span></div>
+        say: "Lỗi thứ nhất, thêm bản sao đọc để giải quyết quá tải ghi. Mọi lần ghi vẫn qua bản chính, thêm bản sao còn làm bản chính tốn thêm công sao chép, nên quá tải ghi cần phân mảnh, hoặc giảm bớt việc ghi."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Khoá phân mảnh tăng dần theo thời gian <b class="red">(điểm nóng)</b>
+          <br><span class="note">Ngày tạo, mã tự tăng: dữ liệu mới luôn rơi vào mảnh cuối. Chọn khoá phân bố đều theo <b>cách dùng</b> (băm mã khách), và kiểm bằng dữ liệu thật trước khi chọn — đây là quyết định cửa một chiều.</span></div>
+        say: "Lỗi thứ hai, chọn khoá phân mảnh tăng dần theo thời gian. Với ngày tạo hay mã tự tăng, dữ liệu mới luôn rơi vào mảnh cuối. Hãy chọn khoá phân bố đều theo cách dùng, như băm mã khách, và kiểm bằng dữ liệu thật trước khi chọn, vì đây là quyết định cửa một chiều."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Đọc ngay từ bản sao sau khi ghi <b class="red">(không thấy dữ liệu mình vừa ghi)</b>
+          <br><span class="note">Bản sao trễ vài trăm mi li giây: khách vừa sửa địa chỉ, tải lại trang vẫn thấy địa chỉ cũ. Đọc từ bản chính ngay sau khi chính người đó ghi.</span></div>
+        say: "Lỗi thứ ba, đọc ngay từ bản sao sau khi ghi. Bản sao trễ vài trăm mi li giây, nên khách vừa sửa địa chỉ mà tải lại trang vẫn thấy địa chỉ cũ. Hãy đọc từ bản chính ngay sau khi chính người đó ghi."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Chọn mảnh bằng “băm chia lấy dư cho số mảnh”, rồi thêm 1 máy <b class="red">(dời gần hết dữ liệu)</b></div>
+          <table class="t"><tr><th>cách chọn mảnh</th><th>từ 10 lên 11 mảnh, số khoá phải dời (trong 10 000)</th></tr>
+          <tr><td>băm, chia lấy dư cho số mảnh</td><td class="red">$\hl{9101}$ khoá, khoảng 91%</td></tr>
+          <tr><td>băm nhất quán (lý tưởng)</td><td>khoảng $\frac{10\,000}{11} \approx 909$ khoá, chỉ phần chuyển sang máy mới</td></tr></table>
+          <p class="note">Người làm nghề tính trước chuyện thêm máy: dùng băm nhất quán, hoặc chia sẵn nhiều mảnh nhỏ rồi chỉ dời cả mảnh.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, là chọn mảnh bằng cách băm rồi chia lấy dư cho số mảnh, đến lúc thêm 1 máy mới biết hậu quả. Với 10 nghìn khoá của ví dụ, đổi từ chia 10 sang chia 11 làm 9101 khoá đổi mảnh, khoảng 91 phần trăm dữ liệu phải dời. Với băm nhất quán, ở khoá Hệ phân tán và dữ liệu lớn, về lý tưởng chỉ khoảng một phần 11, tức khoảng 909 khoá, chuyển sang máy mới. Người làm nghề tính trước chuyện thêm máy, dùng băm nhất quán, hoặc chia sẵn nhiều mảnh nhỏ rồi chỉ dời nguyên cả mảnh."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.shard_nodes(12000, 2000, 3) == 18 and alg.shard_nodes(7300, 1000, 3) == 24"
+      - "12 / 2 == 6 and 6 * 3 == 18 and math.ceil(7.3 / 1) == 8 and 8 * 3 == 24 and 200 * 50 == 10000"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>12 TB dữ liệu, mỗi nút 2 TB, sao chép 3: cần bao nhiêu nút?</td></tr>
+          <tr><td>2</td><td>7,3 TB (ước lượng ở bài 2), mỗi nút 1 TB, sao chép 3: cần bao nhiêu nút?</td></tr>
+          <tr><td>3</td><td>Ứng dụng đọc nhiều gấp 50 lần ghi, ghi chỉ 200/s. Nên bắt đầu bằng bản sao đọc hay phân mảnh?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, 12 tê-ra-byte dữ liệu, mỗi nút 2 tê-ra-byte, sao chép 3, cần bao nhiêu nút? Câu hai, 7 phẩy 3 tê-ra-byte như ước lượng ở bài 2, mỗi nút 1 tê-ra-byte, sao chép 3, cần bao nhiêu nút? Câu ba, ứng dụng đọc nhiều gấp 50 lần ghi, ghi chỉ 200 mỗi giây, nên bắt đầu bằng bản sao đọc hay phân mảnh? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① Chia: $\frac{12}{2} = 6$ phần, làm tròn lên vẫn 6; nhân 3 bản → $6 \cdot 3 = \hl{18}$ nút.</p>
+          <p>② Chia: $\frac{7{,}3}{1} = 7{,}3$, làm tròn lên $\lceil 7{,}3 \rceil = 8$; nhân 3 bản → $8 \cdot 3 = \hl{24}$ nút.</p>
+        focus: [1, 2]
+        say: "Đáp án câu một, 12 chia 2 bằng 6, nhân 3 là 18 nút. Câu hai, 7 phẩy 3 làm tròn lên thành 8, nhân 3 là 24 nút, đừng quên nút thứ 8 cho phần 0 phẩy 3 lẻ."
+      - show: |
+          <table class="t"><tr><th>câu 3</th><th>số</th><th>kết luận</th></tr>
+          <tr><td>ghi</td><td>200/s</td><td>một bản chính chịu được</td></tr>
+          <tr><td>đọc</td><td>$200 \cdot 50 = 10\,000$/s</td><td>chia cho nhiều bản sao đọc</td></tr></table>
+          <p>③ <b>Bản sao đọc</b>: tải chủ yếu là đọc; phân mảnh thêm phức tạp mà chưa cần.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Câu ba là một quyết định, tính hai loại tải. Ghi chỉ 200 lần mỗi giây, nên chỉ một máy giữ bản chính là vẫn chịu được. Đọc gấp 50 lần, tức 10 nghìn mỗi giây, chia được cho nhiều bản sao đọc. Vậy nên bắt đầu bằng bản sao đọc, vì tải chủ yếu là đọc, còn phân mảnh thêm phức tạp mà chưa cần."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">đọc nhiều: bản sao đọc</span><span class="a">→</span>
+          <span class="n">ghi nhiều hoặc dữ liệu lớn: phân mảnh</span><span class="a">→</span>
+          <span class="n">khoá phân mảnh chia đều theo cách dùng</span><span class="a">→</span>
+          <span class="n">số nút = ⌈dữ liệu / nút⌉ nhân bản sao</span></div>
+        say: "Tổng kết lại, đọc nhiều thì dùng bản sao đọc, ghi nhiều hoặc dữ liệu lớn thì phân mảnh. Khoá phân mảnh phải chia đều theo cách dùng, và số nút bằng dữ liệu chia dung lượng nút, làm tròn lên, nhân số bản sao."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> mở rộng không phải thêm máy cho đủ số, mà là chia việc sao cho mọi máy cùng làm.</div>
+        say: "Điều cần mang theo, mở rộng không phải là thêm máy cho đủ số, mà là chia việc sao cho mọi máy cùng làm."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 6): <b>độ sẵn sàng</b> — dự phòng, điểm hỏng đơn, miền lỗi.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 6, ta học độ sẵn sàng, với dự phòng, điểm hỏng đơn, và miền lỗi. Hẹn gặp bạn ở bài tiếp theo."

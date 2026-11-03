@@ -1,0 +1,203 @@
+id: L07
+course: DVO
+series: "DVO · DevOps: tích hợp, triển khai liên tục và vận hành"
+title: "Bài 7 — Phát hành tiệm tiến: canary, cờ tính năng, quay lui tự động"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/dvo.yaml L07; audit/dvo/verify_dvo.py L07; Google SRE Workbook (2018), chương 16 “Canarying Releases”; P. Hodgson, Feature Toggles (martinfowler.com, 2017); DSC bài 8 (kiểm định giả thuyết); CLD bài 8 (chiến lược phát hành)"
+assumes: [arith, prob, approx, geq]
+# Quy ước: lỗi của từng yêu cầu độc lập; số lỗi X trong n yêu cầu ~ Nhị thức(n, p). “canary” chỉ trên màn hình; lời đọc “phát hành thử”.
+#   Giá trị P(X ≥ k | p = p_cũ) tính chính xác bằng alg.binom_tail (phân số). Quy tắc minh hoạ: dừng nếu xác suất này dưới 0,01.
+objectives:
+  - "Quyết định tiếp tục hay quay lui bằng thống kê"
+  - "Tách triển khai khỏi phát hành bằng cờ tính năng"
+  - "Biết vì sao phát hành thử với quá ít lưu lượng là vô ích"
+asr_reviewed:
+  - {sentence: "Nhưng câu một vừa cho thấy 15 lỗi chưa làm quy tắc quay lui, nên phải hỏi ở ngưỡng thật là 19 lỗi.", reason: "ASR chép “Nhưng câu một vừa cho thấy 15 lỗi chưa làm quy tắc quay lui nên phải hỏi ấn ngưỡng thật là 19 lỗi.” (0.96): lệch âm/thanh thuần Việt: ở/ấn — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "20 lỗi trên 1000: xui hay hỏng?"
+    checks:
+      - "round(alg.binom_tail(1000, 20, 0.01), 4) == 0.0033"
+    steps:
+      - show: |
+          <p>Bản mới nhận 5% lưu lượng. Sau 1000 yêu cầu có 20 lỗi; bản cũ thường lỗi 1%, tức khoảng 10 trên 1000. Gấp đôi — nhưng có thể chỉ là xui? Tiếp tục hay quay lui?</p>
+          <div class="box key">Hôm nay: <b>phát hành tiệm tiến</b> — mở dần cho người dùng, và để <b>con số</b> quyết định khi nào dừng.</div>
+        focus: [1, 1, 1, 1, 2]
+        say: "Chào bạn, bản mới nhận 5 phần trăm lưu lượng. Sau 1000 yêu cầu có 20 lỗi, trong khi bản cũ thường lỗi 1 phần trăm, tức khoảng 10 trên 1000. Gấp đôi, nhưng có thể chỉ là xui? Tiếp tục hay quay lui? Hôm nay ta học phát hành tiệm tiến, mở dần cho người dùng, và để con số quyết định khi nào dừng."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: phần trăm, trung bình, và xác suất “từ k trở lên”"
+    checks:
+      - "1000 * 0.01 == 10 and 1000 * 0.05 == 50 and 20 / 1000 == 0.02"
+      - "alg.binom_tail(3, 2, 0.5) == 0.5 and alg.binom_tail(3, 3, 0.5) == 0.125 and len([s for s in __import__('itertools').product('NS', repeat=3) if s.count('N') >= 2]) == 4"
+    steps:
+      - show: |
+          <table class="t"><tr><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>1% của 1000 yêu cầu: $1000 \cdot 0{,}01$</td><td>10 lỗi trung bình</td></tr>
+          <tr><td>20 lỗi trên 1000 yêu cầu: $\frac{20}{1000}$</td><td>0,02 = 2%</td></tr></table>
+        introduces: [cdot, frac]
+        focus: [0, "1.2", "1.3"]
+        say: "Trước hết, ôn hai phép tính với phần trăm. 1 phần trăm của 1000 yêu cầu là 1000 nhân 0 phẩy 01, bằng 10, đó là số lỗi trung bình ta chờ đợi. Ngược lại, 20 lỗi trên 1000 yêu cầu là 20 chia 1000, bằng 0 phẩy 02, tức 2 phần trăm."
+      - show: |
+          <p>Tung 3 đồng xu, mỗi đồng ngửa với xác suất $\frac{1}{2}$: có $2 \cdot 2 \cdot 2 = 8$ kết quả như nhau.</p>
+          <table class="t"><tr><th>câu hỏi</th><th>đếm</th><th>xác suất</th></tr>
+          <tr><td>từ 2 mặt ngửa trở lên: $P(X \geq 2)$</td><td>4 trong 8 kết quả</td><td>0,5</td></tr>
+          <tr><td>cả 3 mặt ngửa: $P(X \geq 3)$</td><td>1 trong 8</td><td>0,125</td></tr></table>
+        focus: [1, 2, "2.2", "2.3", 0]
+        say: "Tiếp theo, xác suất từ k trở lên, ôn bằng ba đồng xu, mỗi đồng ngửa với xác suất một phần hai, có 2 nhân 2 nhân 2, bằng 8 kết quả như nhau. Gọi X là số mặt ngửa, ta hỏi xác suất X lớn hơn hoặc bằng một số nào đó. Từ 2 mặt ngửa trở lên có 4 trong 8 kết quả, tức 0 phẩy 5. Cả 3 mặt ngửa chỉ có 1 trong 8, tức 0 phẩy 125. Bài này làm đúng việc đó, chỉ thay đồng xu bằng 1000 yêu cầu, mỗi yêu cầu lỗi hay không lỗi, và máy làm thay phần đếm."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: phát hành thử, cờ tính năng"
+    steps:
+      - show: |
+          <table class="t"><tr><th>công cụ</th><th>làm gì</th></tr>
+          <tr><td><b>canary</b> (phát hành thử)</td><td>bản mới nhận phần nhỏ lưu lượng (1% → 5% → 25% → 100%); mỗi bậc so chỉ số với bản cũ</td></tr>
+          <tr><td><b>cờ tính năng</b></td><td>công tắc trong mã bật/tắt một tính năng mà không cần triển khai lại</td></tr>
+          <tr><td><b>quay lui tự động</b></td><td>chỉ số vượt ngưỡng định sẵn → tự chuyển về bản cũ, không chờ người</td></tr></table>
+          <div class="box key"><b>Triển khai</b> (đưa mã lên máy) và <b>phát hành</b> (cho người dùng thấy) là hai việc khác nhau; cờ tính năng tách chúng ra.</div>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Bảng giới thiệu ba công cụ. Phát hành thử cho bản mới nhận một phần nhỏ lưu lượng, tăng dần từ 1 lên 5, 25 rồi 100 phần trăm, mỗi bậc đều so chỉ số với bản cũ. Cờ tính năng là công tắc trong mã để bật tắt một tính năng mà không cần triển khai lại. Quay lui tự động chuyển về bản cũ khi chỉ số vượt ngưỡng định sẵn, không chờ người. Triển khai là đưa mã lên máy, phát hành là cho người dùng thấy, và cờ tính năng tách hai việc đó ra."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hai ngọn đồi và một vạch quyết định"
+    checks:
+      - "max(range(40), key=lambda k: math.comb(1000, k) * 0.01 ** k * 0.99 ** (1000 - k)) in (9, 10) and max(range(40), key=lambda k: math.comb(1000, k) * 0.02 ** k * 0.98 ** (1000 - k)) in (19, 20)"
+      - "round(alg.binom_tail(1000, 19, 0.01), 4) == 0.0069 and round(alg.binom_tail(1000, 18, 0.01), 4) == 0.0138"
+    steps:
+      - show: |
+          <div><svg width="1500" height="380" viewBox="0 0 1500 380"><rect x="107" y="299.9" width="26" height="0.1" fill="#2a78d6"/><rect x="143" y="299.2" width="26" height="0.8" fill="#2a78d6"/><rect x="179" y="295.8" width="26" height="4.2" fill="#2a78d6"/><rect x="215" y="286.0" width="26" height="14.0" fill="#2a78d6"/><rect x="251" y="264.6" width="26" height="35.4" fill="#2a78d6"/><rect x="287" y="228.8" width="26" height="71.2" fill="#2a78d6"/><rect x="323" y="180.8" width="26" height="119.2" fill="#2a78d6"/><rect x="359" y="129.0" width="26" height="171.0" fill="#2a78d6"/><rect x="395" y="85.6" width="26" height="214.4" fill="#2a78d6"/><rect x="431" y="61.3" width="26" height="238.7" fill="#2a78d6"/><rect x="467" y="61.1" width="26" height="238.9" fill="#2a78d6"/><rect x="503" y="82.8" width="26" height="217.2" fill="#2a78d6"/><rect x="539" y="119.2" width="26" height="180.8" fill="#2a78d6"/><rect x="575" y="161.2" width="26" height="138.8" fill="#2a78d6"/><rect x="611" y="201.2" width="26" height="98.8" fill="#2a78d6"/><rect x="647" y="234.4" width="26" height="65.6" fill="#2a78d6"/><rect x="683" y="259.2" width="26" height="40.8" fill="#2a78d6"/><rect x="719" y="276.1" width="26" height="23.9" fill="#2a78d6"/><rect x="755" y="286.8" width="26" height="13.2" fill="#2a78d6"/><rect x="791" y="293.1" width="26" height="6.9" fill="#2a78d6"/><rect x="827" y="296.6" width="26" height="3.4" fill="#2a78d6"/><rect x="863" y="298.4" width="26" height="1.6" fill="#2a78d6"/><rect x="899" y="299.3" width="26" height="0.7" fill="#2a78d6"/><rect x="935" y="299.7" width="26" height="0.3" fill="#2a78d6"/><rect x="971" y="299.9" width="26" height="0.1" fill="#2a78d6"/><rect x="1007" y="299.9" width="26" height="0.1" fill="#2a78d6"/><rect x="1043" y="300.0" width="26" height="0.0" fill="#2a78d6"/><rect x="1079" y="300.0" width="26" height="0.0" fill="#2a78d6"/><rect x="1115" y="300.0" width="26" height="0.0" fill="#2a78d6"/><rect x="1151" y="300.0" width="26" height="0.0" fill="#2a78d6"/><rect x="1187" y="300.0" width="26" height="0.0" fill="#2a78d6"/><rect x="1223" y="300.0" width="26" height="0.0" fill="#2a78d6"/><rect x="1259" y="300.0" width="26" height="0.0" fill="#2a78d6"/><rect x="1295" y="300.0" width="26" height="0.0" fill="#2a78d6"/><rect x="1331" y="300.0" width="26" height="0.0" fill="#2a78d6"/><rect x="1367" y="300.0" width="26" height="0.0" fill="#2a78d6"/><rect x="1403" y="300.0" width="26" height="0.0" fill="#2a78d6"/><polyline points="120,300.0 156,300.0 192,300.0 228,300.0 264,300.0 300,299.9 336,299.7 372,299.1 408,297.7 444,294.8 480,289.4 516,280.6 552,267.4 588,249.4 624,227.2 660,202.4 696,177.3 732,155.1 768,138.5 804,129.7 840,129.5 876,137.6 912,152.5 948,172.0 984,193.7 1020,215.3 1056,235.2 1092,252.3 1128,266.2 1164,276.8 1200,284.7 1236,290.2 1272,294.0 1308,296.4 1344,297.9 1380,298.8 1416,299.4" fill="none" stroke="#eb6834" stroke-width="4"/><line x1="100" y1="300" x2="1440" y2="300" stroke="#6b7280" stroke-width="2"/><line x1="786.0" y1="40" x2="786.0" y2="300" stroke="#b91c1c" stroke-width="3" stroke-dasharray="10 8"/><g font-size="22" fill="#1f2937"><text x="120" y="326" text-anchor="middle">0</text><text x="480" y="326" text-anchor="middle">10</text><text x="804" y="326" text-anchor="middle">19</text><text x="1200" y="326" text-anchor="middle">30</text><text x="772.0" y="30" text-anchor="end" fill="#059669">tiếp tục</text><text x="800.0" y="30" fill="#b91c1c">từ 19 lỗi: quay lui</text><text x="130" y="28" fill="#2a78d6">bản tốt như cũ, lỗi 1%</text><text x="1100" y="150" fill="#eb6834">bản hỏng, lỗi 2%</text><text x="770" y="364" text-anchor="middle">số lỗi trong 1000 yêu cầu</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ số lỗi có thể gặp trong 1000 yêu cầu. Các cột xanh là bản tốt như cũ, lỗi 1 phần trăm, ngọn đồi của nó nằm quanh 10 lỗi. Đường cam là một bản hỏng, lỗi 2 phần trăm, ngọn đồi nằm quanh 20 lỗi. Vạch đỏ ở 19 lỗi là quy tắc dừng, bên phải vạch thì quay lui, và phần đồi xanh lọt sang phải là những lần quay lui nhầm, rất mỏng."
+
+  - id: example
+    kind: example
+    title: "Nếu bản mới tốt như cũ, 20 lỗi hiếm đến mức nào?"
+    checks:
+      - "round(alg.binom_tail(1000, 20, 0.01), 4) == 0.0033 and 1000 * 0.01 == 10"
+    steps:
+      - show: |
+          <p><b>Bước 1 — giả thuyết:</b> bản mới <b>tốt như cũ</b>, mỗi yêu cầu lỗi với xác suất 1%, độc lập với nhau.</p>
+          <table class="t"><tr><th>đã thấy</th><th>giá trị</th></tr><tr><td>số yêu cầu</td><td>1000</td></tr><tr><td>số lỗi</td><td>20</td></tr></table>
+        focus: [1, 1, "2.2", "2.3"]
+        say: "Bước một, đặt giả thuyết. Ta giả sử bản mới tốt như bản cũ, mỗi yêu cầu lỗi với xác suất 1 phần trăm, độc lập với nhau. Điều đã thấy là 1000 yêu cầu. Trong đó có 20 lỗi."
+      - show: |
+          <p><b>Bước 2 — mức chờ đợi:</b></p>
+          $$1000 \cdot 0{,}01 = 10 \text{ lỗi trung bình}$$
+        focus: [1, 2]
+        say: "Bước hai, tính mức chờ đợi. Nếu giả thuyết đúng, trung bình có 1000 nhân 0 phẩy 01, bằng 10 lỗi, vậy 20 lỗi là gấp đôi."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — hiếm đến mức nào:</b> xác suất gặp <b>từ 20 lỗi trở lên</b> chỉ do xui</p>
+          $$P(X \geq 20) \approx \hl{0{,}0033} \approx \frac{1}{300}$$
+        focus: [1, 2]
+        say: "Bước ba, hỏi kết quả này hiếm đến mức nào. Máy cộng xác suất của 20 lỗi, 21 lỗi, và cứ thế lên tới 1000, được xác suất gặp từ 20 lỗi trở lên chỉ do xui là khoảng 0 phẩy 0033, cỡ 1 trên 300."
+      - show: |
+          <p><b>Bước 4 — so với quy tắc viết sẵn:</b> $0{,}0033 \lt 0{,}01$ → <b class="red">quay lui</b>.</p>
+          <div class="box key">Quá hiếm để tin là xui → bản mới nhiều khả năng tệ hơn → <b>quay lui</b>. Quy tắc dừng (ví dụ “dưới 0,01 thì quay lui”) phải viết sẵn <b>trước</b> khi phát hành.</div>
+        focus: [1, 2, 2]
+        say: "Bước bốn, so với quy tắc đã viết sẵn, 0 phẩy 0033 nhỏ hơn 0 phẩy 01, nên quay lui. Điều đó quá hiếm để tin là xui, nên bản mới nhiều khả năng tệ hơn. Quy tắc dừng, chẳng hạn dưới 0 phẩy 01 thì quay lui, phải được viết sẵn trước khi phát hành."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: đổi quy tắc thành một ngưỡng số lỗi"
+    checks:
+      - "[round(alg.binom_tail(1000, k, 0.01), 4) for k in (18, 19, 20)] == [0.0138, 0.0069, 0.0033] and min(k for k in range(60) if alg.binom_tail(1000, k, 0.01) < 0.01) == 19"
+    steps:
+      - show: |
+          <p>Đường khác: tìm <b>số lỗi nhỏ nhất</b> mà xác suất “từ chừng ấy trở lên” đã dưới 0,01, rồi chỉ việc so số lỗi đếm được.</p>
+          <table class="t"><tr><th>số lỗi $k$</th><th>$P(X \geq k)$ khi lỗi 1%</th><th>dưới 0,01?</th></tr>
+          <tr><td>18</td><td>0,0138</td><td>chưa</td></tr>
+          <tr><td>19</td><td>0,0069</td><td>có → ngưỡng là 19</td></tr>
+          <tr><td>20</td><td>0,0033</td><td>có</td></tr></table>
+          <div class="box key">Đếm được 20 lỗi, $20 \geq 19$ → quay lui ✓, khớp Bước 4.</div>
+        focus: [1, "2.2", "2.3", "2.4", 3]
+        say: "Kiểm bằng đường khác, ta đổi quy tắc thành một ngưỡng số lỗi, tức số lỗi nhỏ nhất mà xác suất từ chừng ấy trở lên đã dưới 0 phẩy 01. Với 18 lỗi, xác suất là 0 phẩy 0138, chưa dưới ngưỡng. Với 19 lỗi, xác suất là 0 phẩy 0069, đã dưới, nên ngưỡng là 19 lỗi. Với 20 lỗi thì càng dưới, 0 phẩy 0033. Đếm được 20 lỗi, lớn hơn hoặc bằng 19, nên quay lui, khớp với bước bốn, và từ nay hệ thống chỉ cần đếm lỗi rồi so với 19."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc, 1 lỗi người đã đi làm"
+    checks:
+      - "round(alg.binom_tail(100, 3, 0.02), 3) == 0.323 and round(alg.binom_tail(100, 3, 0.01), 3) == 0.079"
+      - "round(1000 * 0.0033, 1) == 3.3 and round(alg.binom_tail(1000, 19, 0.01), 4) == 0.0069 < 0.01"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Phát hành thử với quá ít lưu lượng <b class="red">(không thấy gì)</b>
+          <br><span class="note">Chỉ 100 yêu cầu, quy tắc “từ 3 lỗi thì dừng”: bản hỏng lỗi 2% chỉ bị bắt $0{,}323$ số lần; bản tốt lỗi 1% vẫn bị dừng nhầm $0{,}079$ số lần. Cần đủ lưu lượng để con số có nghĩa.</span></div>
+        say: "Lỗi thứ nhất, phát hành thử với quá ít lưu lượng. Chỉ có 100 yêu cầu với quy tắc từ 3 lỗi thì dừng, bản hỏng có tỉ lệ lỗi 2 phần trăm chỉ bị bắt 32 phần trăm số lần. Trong khi đó bản tốt lỗi 1 phần trăm vẫn bị dừng nhầm gần 8 phần trăm số lần, nên cần đủ lưu lượng để con số có nghĩa."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Nhìn chỉ số liên tục và dừng khi “trông có vẻ ổn” <b class="red">(nhìn trộm)</b>
+          <br><span class="note">Xem kết quả nhiều lần rồi chọn lúc đẹp để kết luận làm tăng tỉ lệ kết luận sai, như đã thấy ở khoá Khoa học dữ liệu. Định trước cỡ mẫu và ngưỡng.</span></div>
+        say: "Lỗi thứ hai, nhìn chỉ số liên tục và dừng khi trông có vẻ ổn. Xem kết quả nhiều lần rồi chọn lúc đẹp để kết luận làm tăng tỉ lệ kết luận sai, như đã thấy ở khoá Khoa học dữ liệu, nên hãy định trước cỡ mẫu và ngưỡng."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Cờ tính năng không bao giờ được dọn <b class="red">(nợ kỹ thuật)</b>
+          <br><span class="note">Trăm cờ bật tắt chồng nhau tạo ra hàng nghìn tổ hợp chưa ai kiểm. Mỗi cờ có hạn dùng; phát hành xong 100% thì xoá cờ và nhánh mã cũ.</span></div>
+        say: "Lỗi thứ ba, cờ tính năng không bao giờ được dọn. Trăm cờ bật tắt chồng nhau tạo ra hàng nghìn tổ hợp chưa ai kiểm, nên mỗi cờ cần có hạn dùng, phát hành xong thì xoá cờ và nhánh mã cũ."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Đọc 0,0033 thành “bản mới chỉ có 0,33% khả năng là tốt” <b class="red">(đảo chiều câu hỏi)</b></div>
+          <table class="t"><tr><th>câu nói</th><th>đúng hay sai</th></tr>
+          <tr><td>Nếu bản mới tốt như cũ, 1000 lần phát hành thử thì khoảng $1000 \cdot 0{,}0033 = 3{,}3$ lần gặp từ 20 lỗi trở lên</td><td>đúng</td></tr>
+          <tr><td>Bản mới chỉ có 0,33% khả năng là tốt</td><td class="red">sai</td></tr>
+          <tr><td>Với ngưỡng 19 lỗi, bản tốt bị quay lui nhầm 0,0069 số lần, dưới 1 trên 100</td><td>đúng</td></tr></table>
+        focus: [1, 0, "2.2", "2.3", "2.4", 0]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, đọc con số 0 phẩy 0033 thành bản mới chỉ có 0 phẩy 33 phần trăm khả năng là tốt. Con số đó trả lời câu hỏi, nếu bản mới tốt thì kết quả này hiếm đến mức nào. Vì thế câu đúng là cứ 1000 lần phát hành thử một bản tốt thì khoảng 3 phẩy 3 lần gặp từ 20 lỗi trở lên. Còn câu bản mới chỉ có 0 phẩy 33 phần trăm khả năng là tốt thì sai, vì muốn nói vậy phải biết trước bình thường bao nhiêu bản mới bị hỏng. Câu đúng thứ hai, với ngưỡng 19 lỗi, bản tốt bị quay lui nhầm 0 phẩy 0069 số lần, dưới 1 trên 100. Người làm nghề ghi rõ con số trả lời câu hỏi nào trong báo cáo, để không ai dùng nó cho câu hỏi khác."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "round(alg.binom_tail(1000, 15, 0.01), 4) == 0.0824 and round(alg.binom_tail(1000, 15, 0.02), 3) == 0.897"
+      - "15 < min(k for k in range(60) if alg.binom_tail(1000, k, 0.01) < 0.01) == 19 and round(alg.binom_tail(1000, 19, 0.02), 2) == 0.62"
+    steps:
+      - show: |
+          <p>Lỗi nền 1%, phát hành thử 1000 yêu cầu, quy tắc “dưới 0,01 thì quay lui”.</p>
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Gặp 15 lỗi. Biết $P(X \geq 15) \approx 0{,}0824$ khi bản mới tốt như cũ. Quay lui hay tiếp tục?</td></tr>
+          <tr><td>2</td><td>Nếu bản mới thật sự lỗi 2%, xác suất gặp từ 15 lỗi trở lên là $0{,}897$. Ý nghĩa?</td></tr></table>
+        focus: [1, "2.2", "2.2", "2.3", "2.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm, với lỗi nền 1 phần trăm, phát hành thử 1000 yêu cầu, quy tắc dưới 0 phẩy 01 thì quay lui. Câu một, gặp 15 lỗi, biết xác suất từ 15 lỗi trở lên là khoảng 0 phẩy 0824 khi bản mới tốt như cũ. Quay lui hay tiếp tục? Câu hai, nếu bản mới thật sự lỗi 2 phần trăm, xác suất gặp từ 15 lỗi trở lên là 0 phẩy 897. Điều đó có ý nghĩa gì? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① $0{,}0824 \gt 0{,}01$: chưa đủ bằng chứng → <b>tiếp tục</b> ở bậc hiện tại, thu thêm dữ liệu.</p>
+          <p>Kiểm bằng ngưỡng: $15 \lt 19$ lỗi → không quay lui ✓.</p>
+        focus: [1, 1, 2]
+        say: "Đáp án câu một, so với quy tắc, 0 phẩy 0824 lớn hơn 0 phẩy 01. Chưa đủ bằng chứng, nên tiếp tục ở bậc hiện tại và thu thêm dữ liệu. Kiểm bằng ngưỡng vừa tìm, 15 lỗi nhỏ hơn 19, nên không quay lui, hai cách khớp nhau."
+      - show: |
+          <p>② 0,897 là xác suất bản lỗi 2% cho <b>từ 15 lỗi</b> — nhưng câu ① cho thấy 15 lỗi <b>chưa</b> làm quy tắc quay lui. Phải hỏi ở ngưỡng thật, 19 lỗi:</p>
+          <table class="t"><tr><th>bản lỗi 2%, 1000 yêu cầu</th><th>xác suất</th></tr>
+          <tr><td>từ 15 lỗi trở lên</td><td>0,897</td></tr>
+          <tr><td>từ 19 lỗi trở lên → bị quay lui</td><td>$\hl{0{,}62}$</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", 0]
+        say: "Câu hai, 0 phẩy 897 là xác suất bản lỗi 2 phần trăm cho từ 15 lỗi trở lên. Nhưng câu một vừa cho thấy 15 lỗi chưa làm quy tắc quay lui, nên phải hỏi ở ngưỡng thật là 19 lỗi. Bản hỏng cho từ 15 lỗi trở lên gần 90 phần trăm số lần. Nhưng nó chạm ngưỡng 19 và bị quay lui chỉ khoảng 62 phần trăm số lần. Vậy 1000 yêu cầu chưa đủ để bắt chắc bản tệ gấp đôi, quyết định đúng là giữ bậc hiện tại lâu hơn để có thêm yêu cầu trước khi mở rộng."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">mở dần theo bậc</span><span class="a">→</span>
+          <span class="n">hỏi: nếu tốt như cũ, kết quả này hiếm đến mức nào?</span><span class="a">→</span>
+          <span class="n">ngưỡng và cỡ mẫu định trước</span><span class="a">→</span>
+          <span class="n">cờ tính năng tách triển khai khỏi phát hành</span></div>
+        say: "Tổng kết lại, mở dần theo bậc, và hỏi nếu bản mới tốt như cũ thì kết quả này hiếm đến mức nào. Ngưỡng và cỡ mẫu phải định trước, và cờ tính năng tách triển khai khỏi phát hành."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> quyết định phát hành là một phép thử thống kê nhỏ — đừng để cảm giác “trông ổn” thay cho con số.</div>
+        say: "Điều cần mang theo, quyết định phát hành là một phép thử thống kê nhỏ, đừng để cảm giác trông ổn thay cho con số."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 8): <b>di chuyển lược đồ cơ sở dữ liệu</b> không ngừng dịch vụ.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 8, ta học cách di chuyển lược đồ cơ sở dữ liệu mà không ngừng dịch vụ. Hẹn gặp bạn ở bài tiếp theo."

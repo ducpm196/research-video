@@ -1,0 +1,203 @@
+id: L07
+course: AIF
+series: "AIF · Nền tảng trí tuệ nhân tạo"
+title: "Bài 7 — Tìm kiếm cây Monte Carlo và công thức UCB1"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/aif.yaml L07; audit/aif/verify_aif.py L07; CS115 bài 12 (lôgarit tự nhiên); P. Auer, N. Cesa-Bianchi, P. Fischer, Finite-time Analysis of the Multiarmed Bandit Problem, Machine Learning 47 (2002) — UCB1; L. Kocsis, C. Szepesvári, Bandit based Monte-Carlo Planning (2006); AIMA bản 4 (2020), mục 5.4"
+assumes: [arith, frac, sqrt, log, approx]
+# Quy ước: UCB1(nút) = thắng/lượt + √2 · √(ln N / lượt), N = tổng lượt ở nút cha (alg.ucb1). Tên “Monte Carlo” chỉ trên màn hình (probe p1: ≤ 6/8),
+#   lời đọc nói “tìm kiếm cây bằng mô phỏng ngẫu nhiên”. alg.ucb_bandit(xác suất thắng, số lần, hạt giống, greedy=) mô phỏng máy đánh bạc nhiều tay:
+#   thử mỗi tay một lần rồi chọn theo UCB1, hoặc chỉ theo tỉ lệ thắng (tham lam).
+objectives:
+  - "Mô tả bốn bước chọn, mở rộng, mô phỏng, lan truyền ngược"
+  - "Tính UCB1 và giải thích cân bằng khai thác–khám phá"
+  - "Biết chọn nước đi cuối cùng theo số lượt thăm"
+asr_reviewed:
+  - {sentence: "Có ba nước, C thắng 5 trên 10, D thắng 9 trên 10, E thắng 0 trên 1.", reason: "ASR chép “Có 3 nước, xe thắng 5 trên 10, dè thắng 9 trên 10, e thắng 0 trên 1.” (0.944): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Cờ vây: không có hàm đánh giá tốt"
+    checks:
+      - "alg.ucb_bandit([0.6, 0.4], 1000, 7, greedy=True)[0] == [3, 997]"
+    steps:
+      - show: |
+          <p>Cờ vây có hàng trăm nước mỗi lượt và rất khó viết hàm đánh giá thế cờ. Ý tưởng khác: từ một thế cờ, <b>chơi thử ngẫu nhiên</b> đến hết ván nhiều lần, đếm tỉ lệ thắng. Nhưng nên chơi thử nước nào nhiều hơn — nước đang thắng nhiều, hay nước chưa thử mấy?</p>
+          <div class="box key">Hôm nay: <b>tìm kiếm cây bằng mô phỏng ngẫu nhiên</b>, và công thức <b>UCB1</b> cân bằng giữa khai thác điều đã biết và khám phá điều chưa biết.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, cờ vây có hàng trăm nước mỗi lượt và rất khó viết hàm đánh giá thế cờ. Ý tưởng khác là từ một thế cờ, chơi thử ngẫu nhiên đến hết ván nhiều lần rồi đếm tỉ lệ thắng. Nhưng nên chơi thử nước nào nhiều hơn, nước đang thắng nhiều, hay nước chưa thử mấy? Hôm nay ta học tìm kiếm cây bằng mô phỏng ngẫu nhiên, và công thức cận trên tin cậy cân bằng giữa khai thác điều đã biết và khám phá điều chưa biết."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: tỉ lệ, căn bậc hai và lôgarit tự nhiên"
+    checks:
+      - "7 / 10 == 0.7 and round(math.sqrt(1.69), 2) == 1.3"
+      - "round(math.log(13), 3) == 2.565 and round(math.exp(2.565)) == 13"
+    steps:
+      - show: |
+          <table class="t"><tr><th>phép</th><th>ví dụ</th><th>nghĩa</th></tr>
+          <tr><td>tỉ lệ thắng</td><td>7 thắng trên 10 lượt = 0,7</td><td>thắng chia lượt</td></tr>
+          <tr><td>căn bậc hai</td><td>$\sqrt{1{,}69} = 1{,}3$ vì $1{,}3 \cdot 1{,}3 = 1{,}69$</td><td>số nhân với chính nó ra số đã cho</td></tr>
+          <tr><td>lôgarit tự nhiên</td><td>$\ln 13 \approx 2{,}565$ vì $e^{2{,}565} \approx 13$</td><td>e mũ bao nhiêu thì ra 13</td></tr></table>
+        introduces: [sqrt, log, cdot, exp]
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Bài này dùng ba phép tính từ khoá toán. Tỉ lệ thắng là số thắng chia số lượt, 7 thắng trên 10 lượt là 0 phẩy 7. Căn bậc hai của 1 phẩy 69 là 1 phẩy 3, vì 1 phẩy 3 nhân 1 phẩy 3 bằng 1 phẩy 69. Lôgarit tự nhiên của 13 xấp xỉ 2 phẩy 565, vì e mũ 2 phẩy 565 xấp xỉ 13."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: bốn bước và công thức UCB1"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">chọn</span><span class="a">→</span><span class="n">mở rộng</span><span class="a">→</span><span class="n">mô phỏng</span><span class="a">→</span><span class="n">lan truyền ngược</span></div>
+          <table class="t"><tr><th>bước</th><th>làm gì</th></tr>
+          <tr><td>chọn</td><td>từ gốc, đi xuống theo con có UCB1 lớn nhất</td></tr>
+          <tr><td>mở rộng</td><td>tới nút còn nước chưa thử: thêm một con mới</td></tr>
+          <tr><td>mô phỏng</td><td>từ con mới, chơi ngẫu nhiên đến hết ván</td></tr>
+          <tr><td>lan truyền ngược</td><td>cộng kết quả (thắng/thua) và một lượt vào mọi nút trên đường đi</td></tr></table>
+          <p>$\text{UCB1} = \frac{\text{thắng}}{n} + \sqrt{2} \cdot \sqrt{\frac{\ln N}{n}}$ — phần đầu là <b>khai thác</b> (tỉ lệ thắng), phần sau là <b>khám phá</b> (lớn khi $n$ nhỏ so với $N$).</p>
+        focus: [1, 2, "2.2", "2.3", "2.4", "2.5", 3, 3]
+        say: "Mỗi vòng có bốn bước, chọn, mở rộng, mô phỏng, và lan truyền ngược. Bảng giải thích từng bước. Bước chọn đi từ gốc xuống theo con có điểm cận trên lớn nhất. Bước mở rộng, tới một nút còn nước chưa thử thì thêm một con mới. Bước mô phỏng, từ con mới chơi ngẫu nhiên đến hết ván. Bước lan truyền ngược cộng kết quả thắng thua và một lượt vào mọi nút trên đường đi. Công thức cận trên bằng số thắng chia n, cộng căn 2 nhân căn của lôgarit tự nhiên N chia n. Phần đầu là khai thác, tức tỉ lệ thắng, còn phần sau là khám phá, lớn khi n nhỏ so với N."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Một vòng tìm kiếm trên cây"
+    steps:
+      - show: |
+          <div><svg width="1500" height="360" viewBox="0 0 1500 360"><defs><marker id="arA7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#eb6834"/></marker></defs>
+          <g stroke="#6b7280" stroke-width="3"><line x1="300" y1="60" x2="180" y2="160"/><line x1="300" y1="60" x2="420" y2="160"/><line x1="420" y1="160" x2="420" y2="260" stroke="#eb6834" stroke-dasharray="8 6"/></g>
+          <path d="M420,280 C430,300 410,320 430,345" fill="none" stroke="#7c3aed" stroke-width="3" stroke-dasharray="4 6"/>
+          <g font-size="24" font-weight="bold" text-anchor="middle" fill="#1f2937">
+          <circle cx="300" cy="60" r="34" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="300" y="68">gốc</text>
+          <circle cx="180" cy="160" r="30" fill="#f3f4f6" stroke="#1f2937" stroke-width="3"/><text x="180" y="168">A</text>
+          <circle cx="420" cy="160" r="30" fill="#f3f4f6" stroke="#1f2937" stroke-width="3"/><text x="420" y="168">B</text>
+          <circle cx="420" cy="260" r="24" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="420" y="268">+</text></g>
+          <g font-size="26" fill="#1f2937">
+          <text x="640" y="80">① chọn: đi xuống theo điểm lớn nhất (gốc → B)</text>
+          <text x="640" y="150">② mở rộng: thêm một con mới dưới B</text>
+          <text x="640" y="220">③ mô phỏng: chơi ngẫu nhiên tới hết ván</text>
+          <text x="640" y="290">④ lan truyền ngược: cộng thắng/thua lên mọi nút đã đi</text></g>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình là một vòng tìm kiếm. Bước một, đi từ gốc xuống theo nút có điểm lớn nhất, ở đây là B. Bước hai, thêm một con mới dưới B, và bước ba, từ con mới chơi ngẫu nhiên tới hết ván. Bước bốn cộng kết quả thắng hay thua lên mọi nút đã đi qua, rồi bắt đầu vòng sau."
+
+  - id: example
+    kind: example
+    title: "Khai thác chọn A, khám phá chọn B"
+    checks:
+      - "round(alg.ucb1(7, 10, 13), 3) == 1.416 and round(alg.ucb1(1, 3, 13), 3) == 1.641"
+      - "round(math.sqrt(2 * math.log(13) / 10), 3) == 0.716 and round(math.sqrt(2 * math.log(13) / 3), 3) == 1.308"
+    steps:
+      - show: |
+          <p>Sau $N = 13$ lượt ở gốc: nước A thắng 7/10, nước B thắng 1/3.</p>
+          <p><b>Bước 1 — khai thác:</b> tỉ lệ thắng A = 0,700, B = 0,333.</p>
+        focus: [1, 2]
+        say: "Sau 13 lượt ở gốc, nước A thắng 7 trên 10 lần, nước B thắng 1 trên 3 lần. Bước một là phần khai thác, tỉ lệ thắng của A bằng 0 phẩy 7, của B bằng 0 phẩy 333."
+      - show: |
+          <p><b>Bước 2 — khám phá cho A</b> ($n = 10$): $\sqrt{\frac{2 \cdot \ln 13}{10}} = \sqrt{\frac{2 \cdot 2{,}565}{10}} = \sqrt{0{,}513} \approx 0{,}716$.</p>
+        say: "Bước hai, tính phần khám phá cho A, với n bằng 10. Lấy 2 nhân lôgarit tự nhiên của 13, bằng 5 phẩy 13, chia 10 được 0 phẩy 513, và căn bậc hai là 0 phẩy 716."
+      - show: |
+          <p><b>Bước 3 — khám phá cho B</b> ($n = 3$): $\sqrt{\frac{2 \cdot 2{,}565}{3}} = \sqrt{1{,}710} \approx 1{,}308$ — gần gấp đôi A, vì B mới thử 3 lần.</p>
+        say: "Bước ba, phần khám phá cho B, với n bằng 3. Lấy 5 phẩy 13 chia 3 được 1 phẩy 71, căn bậc hai là 1 phẩy 308, gần gấp đôi của A vì B mới thử 3 lần."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>nước</th><th>khai thác</th><th>khám phá</th><th>UCB1</th></tr>
+          <tr><td>A ($n = 10$)</td><td>0,700</td><td>0,716</td><td>1,416</td></tr>
+          <tr><td>B ($n = 3$)</td><td>0,333</td><td>1,308</td><td>$\hl{1{,}641}$</td></tr></table>
+          <p>Chỉ nhìn tỉ lệ thắng thì chọn A. UCB1 chọn <b>B</b>: tỉ lệ 1/3 sau 3 lần còn rất không chắc chắn — có thể B thật ra tốt.</p>
+        focus: [1, "1.2", "1.3", 2, 2]
+        say: "Bước bốn, cộng hai phần. Nước A được 1 phẩy 416. Nước B được 1 phẩy 641. Chỉ nhìn tỉ lệ thắng thì chọn A, nhưng công thức chọn B. Tỉ lệ 1 phần 3 sau 3 lần còn rất không chắc chắn, và có thể B thật ra tốt."
+      - clear: true
+        show: |
+          <p>Vì sao cần khám phá? Mô phỏng 1000 lần kéo hai máy, thắng với xác suất 0,6 và 0,4 (hạt giống 7):</p>
+          <table class="t"><tr><th>cách chọn</th><th>số lần kéo máy tốt</th><th>số lần thắng</th></tr>
+          <tr><td>tham lam (chỉ tỉ lệ thắng)</td><td class="red">3</td><td>440</td></tr>
+          <tr><td>UCB1</td><td class="green">820</td><td>$\hl{596}$</td></tr></table>
+          <p>Máy tốt thua ngay lần đầu → cách tham lam không bao giờ quay lại nó. Trong 200 hạt giống: tham lam kẹt ở máy kém 33 lần, UCB1 không lần nào.</p>
+        focus: [1, 1, 2, "2.2", "2.3", 3, 3]
+        say: "Vì sao cần khám phá? Ta mô phỏng 1000 lần kéo hai máy, thắng với xác suất 0 phẩy 6 và 0 phẩy 4. Bảng so hai cách chọn. Cách tham lam chỉ nhìn tỉ lệ thắng, kéo máy tốt đúng 3 lần, được 440 lần thắng. Cách dùng công thức cận trên kéo máy tốt 820 lần, được 596 lần thắng. Máy tốt thua ngay lần đầu, nên cách tham lam không bao giờ quay lại nó. Trong 200 hạt giống ngẫu nhiên, cách tham lam kẹt ở máy kém 33 lần, còn công thức cận trên không lần nào."
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác"
+    checks:
+      - "abs(alg.ucb1(1, 3, 13) - (1 / 3 + math.sqrt(2) * math.sqrt(math.log(13) / 3))) < 1e-9"
+      - "round(alg.ucb1(7, 10, 13) - 0.7, 3) == round(alg.ucb1(3, 10, 13) - 0.3, 3)"
+    steps:
+      - show: |
+          <table class="t"><tr><th>kiểm</th><th>cách khác</th><th>kết quả</th></tr>
+          <tr><td>UCB1 của B</td><td>dạng $\sqrt{2} \cdot \sqrt{\ln 13 / 3}$: $1{,}414 \cdot 0{,}925$</td><td>1,308; cộng 0,333 = 1,641 ✓</td></tr>
+          <tr><td>hai nước cùng $n = 10$</td><td>phần khám phá bằng nhau</td><td>chỉ còn so tỉ lệ thắng ✓</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Kiểm bằng đường khác. Viết công thức theo dạng căn 2 nhân căn của lôgarit 13 chia 3, được 1 phẩy 414 nhân 0 phẩy 925, bằng 1 phẩy 308, cộng 0 phẩy 333 ra 1 phẩy 641, khớp. Và nếu hai nước cùng 10 lượt thì phần khám phá bằng nhau, nên công thức chỉ còn so tỉ lệ thắng, đúng như mong đợi."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc"
+    checks:
+      - "alg.ucb_bandit([0.6, 0.4], 1000, 7) == ([820, 180], 596) and sum(alg.ucb_bandit([0.6, 0.4], 1000, s, greedy=True)[0][0] < 500 for s in range(1, 201)) == 33 and sum(alg.ucb_bandit([0.6, 0.4], 1000, s)[0][0] < 500 for s in range(1, 201)) == 0"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Chọn nước đi cuối cùng theo UCB1 <b class="red">(chọn nhầm nước chưa chắc)</b>
+          <br><span class="note">UCB1 dùng để quyết định <b>thử</b> nước nào. Khi phải đi thật, chọn nước có <b>nhiều lượt thăm nhất</b> — nước được thử nhiều vì nó liên tục tốt.</span></div>
+        say: "Lỗi thứ nhất, chọn nước đi cuối cùng theo công thức cận trên, nên chọn nhầm nước chưa chắc. Công thức này dùng để quyết định thử nước nào. Khi phải đi thật, hãy chọn nước có nhiều lượt thăm nhất, vì nước được thử nhiều là nước liên tục tốt."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Bỏ phần khám phá cho “nhanh hội tụ” <b class="red">(kẹt vĩnh viễn)</b>
+          <br><span class="note">Như mô phỏng: chỉ khai thác thì một lần thua sớm làm nước tốt bị bỏ mãi. Hằng số trước căn (ở đây $\sqrt{2}$) chỉnh được, nhưng không bỏ.</span></div>
+        say: "Lỗi thứ hai, bỏ phần khám phá cho nhanh hội tụ, nên kẹt vĩnh viễn. Như mô phỏng vừa rồi, chỉ khai thác thì một lần thua sớm làm nước tốt bị bỏ mãi. Hằng số đứng trước căn có thể chỉnh, nhưng không được bỏ."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Quên đổi góc nhìn khi lan truyền ngược <b class="red">(tối ưu cho đối thủ)</b>
+          <br><span class="note">Trong trò chơi hai người, một ván thắng của MAX là ván thua của MIN. Ở nút lượt MIN phải cộng theo góc nhìn của MIN, nếu không cây sẽ chọn nước có lợi cho đối thủ.</span></div>
+        say: "Lỗi thứ ba, quên đổi góc nhìn khi lan truyền ngược, nên tối ưu cho đối thủ. Trong trò chơi hai người, một ván thắng của người này là ván thua của người kia. Ở nút đến lượt đối thủ phải cộng theo góc nhìn của đối thủ, nếu không cây sẽ chọn nước có lợi cho đối thủ."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "round(alg.ucb1(5, 10, 20), 3) == 1.274 and round(alg.ucb1(9, 10, 20), 3) == 1.674 and round(alg.ucb1(0, 1, 20), 3) == 2.448"
+    steps:
+      - show: |
+          <p>Gốc có $N = 20$ lượt (tính cả lượt của các nước khác). Ba nước: C thắng 5/10, D thắng 9/10, E thắng 0/1.</p>
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Tính UCB1 của ba nước. Lần tới thử nước nào?</td></tr>
+          <tr><td>2</td><td>Hết thời gian, phải đi thật ngay lúc này: chọn nước nào?</td></tr></table>
+        focus: [0, 1, 1, "2.2", "2.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Gốc có 20 lượt, tính cả lượt của các nước khác. Có ba nước, C thắng 5 trên 10, D thắng 9 trên 10, E thắng 0 trên 1. Câu một, tính điểm cận trên của ba nước, và lần tới thử nước nào? Câu hai, hết thời gian và phải đi thật ngay lúc này, chọn nước nào? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <table class="t"><tr><th>nước</th><th>khai thác</th><th>khám phá ($\ln 20 \approx 3{,}0$)</th><th>UCB1</th></tr>
+          <tr><td>C 5/10</td><td>0,5</td><td>0,774</td><td>≈ 1,274</td></tr>
+          <tr><td>D 9/10</td><td>0,9</td><td>0,774</td><td>≈ 1,674</td></tr>
+          <tr><td>E 0/1</td><td>0</td><td>2,448</td><td>≈ $\hl{2{,}448}$</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Đáp án câu một, tính từng nước. Nước C có khai thác 0 phẩy 5, khám phá 0 phẩy 774, tổng 1 phẩy 274. Nước D có 0 phẩy 9 cộng 0 phẩy 774, bằng 1 phẩy 674. Nước E mới 1 lượt nên phần khám phá rất lớn, 2 phẩy 448, nên lần tới thử E."
+      - show: |
+          <p>② Đi thật: chọn theo <b>số lượt thăm</b> — C và D cùng 10 lượt; hoà thì chọn D (tỉ lệ thắng cao hơn). Không chọn E chỉ vì UCB1 lớn: E mới 1 lượt.</p>
+        say: "Câu hai, đi thật thì chọn theo số lượt thăm. C và D cùng 10 lượt, khi hoà thì chọn D vì tỉ lệ thắng cao hơn. Không chọn E chỉ vì điểm cận trên lớn, vì E mới được thử 1 lần."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">chọn, mở rộng, mô phỏng, lan truyền ngược</span><span class="a">→</span>
+          <span class="n">UCB1 = tỉ lệ thắng + phần khám phá</span><span class="a">→</span>
+          <span class="n">thử theo UCB1</span><span class="a">→</span>
+          <span class="n">đi thật theo số lượt thăm</span></div>
+        say: "Tổng kết lại, mỗi vòng gồm chọn, mở rộng, mô phỏng, và lan truyền ngược. Công thức cận trên bằng tỉ lệ thắng cộng phần khám phá, dùng để chọn nước thử, còn đi thật thì theo số lượt thăm."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> một lựa chọn ít được thử chưa phải là lựa chọn tệ — nó là lựa chọn <b>chưa biết</b>.</div>
+        say: "Điều cần mang theo, một lựa chọn ít được thử chưa phải là lựa chọn tệ, nó là lựa chọn chưa biết."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 8): <b>lôgic mệnh đề cho tác tử</b> — mô hình, kéo theo lôgic, kiểm mô hình.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 8, ta học logic mệnh đề cho tác tử, với mô hình, kéo theo logic, và kiểm mô hình. Hẹn gặp bạn ở bài tiếp theo."

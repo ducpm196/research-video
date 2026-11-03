@@ -1,0 +1,403 @@
+id: L11
+course: EVT
+series: "EVT · Kiến trúc hướng sự kiện"
+title: "Bài 11 — Tình huống chuyên gia theo dòng thời gian: Kafka từ 2011 tới khi bỏ ZooKeeper"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+case: journey
+source: "curriculum/evt.yaml L11; audit/evt/sources_L11.md (câu trích nguyên văn, đọc 2026-11-02); audit/evt/verify_evt.py L11; J. Kreps, N. Narkhede, J. Rao, Kafka: a Distributed Messaging System for Log Processing, NetDB 2011 [K11]; G. Wang và cộng sự, Building a Replicated Logging System with Apache Kafka, PVLDB 8(12), 2015 [V15]; LinkedIn Engineering, Running Kafka At Scale, 2015-03-20 [LI15]; C. McCabe, KIP-500: Replace ZooKeeper with a Self-Managed Metadata Quorum (phiếu KAFKA-9119 tạo 2019-10-30) [KIP500]; Apache Kafka blog: What’s New in 2.8.0 (2021-04-19) [B28], What’s New in 3.3 (2022-10-03) [B33], thông báo 3.5.0, 3.6.0, 3.9.0 (2023–2024) [BK], 4.0.0 (2025-03-18) [B40]; EVT bài 2, bài 4, bài 9; DSY bài 5 (đa số)"
+assumes: [arith, cdot]
+# Quy ước: “máy chủ nhật ký” = broker; “vị trí” = offset (số thứ tự của tin trong nhật ký một phân vùng); “bộ điều khiển” = controller;
+#   “siêu dữ liệu” = danh sách chủ đề, phân vùng, bản sao, ai đang dẫn. Mọi sự kiện và con số có nguồn ở audit/evt/sources_L11.md;
+#   con số khác là phép tính lại (checks, verify_evt.py L11) hoặc ghi “(số minh hoạ)”. Không nêu tên cá nhân trong lời đọc.
+#   Tên sản phẩm KRaft, Raft, Hadoop chỉ trên màn hình; lời đọc: “chế độ tự quản siêu dữ liệu”, “thuật toán đồng thuận theo đa số”.
+#   Kafka, LinkedIn, ZooKeeper: luật đọc ở tools/registry/lexicon_vi.EVT.yaml (probe audit/evt/probes/p1_hanh_trinh.md).
+objectives:
+  - "Kể lại hành trình của hệ nhật ký sự kiện Kafka qua năm chặng, mỗi chặng một điểm nghẽn và một cách xử lý"
+  - "Tính lại con số then chốt của từng chặng: tin mỗi giây, số bản sao để chịu máy hỏng, số nút đa số, số ngày chuyển đổi"
+  - "Chọn thực hành phù hợp với quy mô của chính mình, không chép quy mô của hệ thống khác"
+asr_reviewed:
+  - {sentence: "Cách xử lý ở bản 0 chấm 8 chấm 0 được tóm tắt trong bảng.", reason: "ASR chép “Các xử lý ở bảng 0.8.0 được tóm tắt trong bảng.” (0.786): lệch âm/thanh thuần Việt: cách/các, bản/bảng, chấm/∅, chấm/∅ — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Ở chặng một, năm 2011, hệ nhận hàng trăm GB, tức gần 1 tỉ tin mỗi ngày.", reason: "ASR chép “Ở chẳng 1, năm 2011 hệ nhận hàng trăm gigabyte tức gần 1 tỷ tin mỗi ngày.” (0.864): GB đọc “ghi-ga-byte” theo lexicon của khoá, ASR viết “GB/gigabyte”; “tỉ” ASR viết chính tả “tỷ” (cùng âm); lệch âm/thanh thuần Việt: chặng/chẳng — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Chào bạn, năm 2011, hệ nhật ký sự kiện Kafka ở một mạng xã hội việc làm lớn nhận gần 1 tỉ tin mỗi ngày.", reason: "ASR chép “Chào bạn, năm 2011 hãy nhật ký sự kiện cắp ca ở một mạng xã hội việc làm lớn nhận gần 1 tỷ tin mỗi ngày.” (0.885): “tỉ” ASR viết chính tả “tỷ” (cùng âm); lệch âm/thanh thuần Việt: hệ/hãy; “Kafka” để đọc thô (foreign_ok, probe p1 8/8): ASR chép phiên âm “cắp ca/cấp ca” — đúng âm, không ra chữ Latinh — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Riêng phần nội dung là 400 nghìn nhân 200 byte nhân 8 bit, bằng 640 triệu bit mỗi giây.", reason: "ASR chép “Ruyên phần nội dung là 400.200 bài nhân 8 bit bằng 640 triệu bit mỗi giây.” (0.894): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: riêng/ruyên, nhân/∅ — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Cỡ tin năm 2015 tính theo ngày là 175 nghìn GB chia 800 tỉ tin, khoảng 219 byte, còn tính theo giờ cao điểm là khoảng 212 byte.", reason: "ASR chép “Cở tin năm 2015 tính theo ngày là 175.000 GB chia 800 tỷ tin, khoảng 219.000, còn tính theo giờ cao điểm là khoảng 212.000.” (0.909): “tỉ” ASR viết chính tả “tỷ” (cùng âm); byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: cỡ/cở — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Trong thử nghiệm với tin 200 byte, gộp 50 tin một lần cho 400 nghìn tin mỗi giây, so với 50 nghìn khi gửi lẻ, tức gấp 8 lần.", reason: "ASR chép “Trong thử nghiệm với tin 200b, gột 50 tin một lần cho 400.000 tin mỗi giây so với 50.000 khi gửi lẻ tức gấp 8 lần.” (0.939): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: gộp (trong “byte gộp” → “b gột”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Làm thử với số minh hoạ, mỗi ngày ghi 1 nghìn GB và muốn chịu được 1 máy hỏng.", reason: "ASR chép “Làm thử với số minh họa, mỗi ngày di 1.000 GB và muốn chịu được một máy hỏng.” (0.947): lệch âm/thanh thuần Việt: ghi/di — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Câu một, ba dịch vụ ghi tổng 1000 sự kiện mỗi giây, mỗi sự kiện 1000 byte, cần chịu 1 máy hỏng và có lúc phải tính lại 30 ngày.", reason: "ASR chép “Câu 1, ba dịch vụ ghi tổng 1.000 sự kiện mỗi giây, mỗi sự kiện 1.000 bay, cần chịu một máy hỏng và có lúc phải tính lại 30 ngày.” (0.97): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "650 nghìn GB đọc chia cho 175 nghìn GB ghi được khoảng 3 phẩy 7, tức mỗi byte được nhiều hệ khác nhau đọc lại vài lần.", reason: "ASR chép “650.000 GB đọc chia cho 175.000 GB ghi được khoảng 3,7, tức mỗi bay được nhiều hệ khác nhau đọc lại vài lần.” (0.971): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Từ gần 1 tỉ tin mỗi ngày tới 800 tỉ tin mỗi ngày"
+    checks:
+      - "800 * 10**9 // 10**9 == 800 and 2025 - 2011 == 14"
+    steps:
+      - show: |
+          <p>Năm <b>2011</b>, Kafka ở LinkedIn nhận <b>gần 1 tỉ tin</b> mỗi ngày. Năm <b>2015</b>, con số là <b>hơn 800 tỉ tin</b> mỗi ngày, trên hơn 1100 máy chủ.</p>
+          <p>Năm <b>2025</b>, bản 4.0 chạy <b>hoàn toàn không cần ZooKeeper</b> — hệ điều phối đã đi cùng Kafka hơn 10 năm.</p>
+          <div class="box key">Hôm nay: đi lại hành trình ấy qua năm chặng. Ở mỗi chặng, quy mô làm lộ ra một điểm nghẽn — và chuyên gia đã xử lý ra sao.</div>
+        focus: [1, 1, 2, 3]
+        say: "Chào bạn, năm 2011, hệ nhật ký sự kiện Kafka ở một mạng xã hội việc làm lớn nhận gần 1 tỉ tin mỗi ngày. Bốn năm sau, con số là hơn 800 tỉ tin mỗi ngày, trên hơn 1100 máy chủ. Năm 2025, bản 4 chấm 0 chạy hoàn toàn không cần dịch vụ điều phối bên ngoài, thứ đã đi cùng nó hơn mười năm. Hôm nay ta đi lại hành trình ấy qua năm chặng, xem mỗi quy mô làm lộ ra điểm nghẽn nào và chuyên gia xử lý ra sao."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại bốn điều đã học"
+    checks:
+      - "1_000_000 // 1000 * 1000 == 1_000_000 and 1000 - 1 == 999"
+      - "7 < 30"
+      - "5 // 2 + 1 == 3 and 5 - 3 == 2"
+    steps:
+      - show: |
+          <table class="t"><tr><th>đã học</th><th>điều cần nhớ</th><th>ví dụ số</th></tr>
+          <tr><td>bài 2</td><td>người tiêu thụ <b>lũy đẳng</b>: nhớ mã tin đã xử lý, tin đến lần hai thì bỏ qua</td><td>tin số 42 đến 2 lần → chỉ tính 1 lần</td></tr>
+          <tr><td>bài 4</td><td>trạng thái = <b>gấp</b> các sự kiện; ảnh chụp giới hạn số sự kiện phải phát lại</td><td>1 triệu sự kiện, chụp mỗi 1000 → phát lại tối đa 999</td></tr>
+          <tr><td>bài 9</td><td>muốn tính lại thì nhật ký phải còn giữ dữ liệu cũ</td><td>giữ 7 ngày → không phát lại được 30 ngày</td></tr>
+          <tr><td>khoá hệ phân tán</td><td>đồng thuận cần <b>đa số</b> nút còn sống</td><td>5 nút, đa số là 3 → chịu được 2 nút hỏng</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bảng nhắc lại bốn điều đã học. Ở bài 2, người tiêu thụ lũy đẳng nhớ mã tin đã xử lý, nên tin số 42 đến hai lần chỉ tính một lần. Ở bài 4, trạng thái là kết quả gấp các sự kiện, chụp ảnh mỗi 1000 sự kiện thì chỉ phải phát lại tối đa 999. Ở bài 9, nhật ký chỉ giữ 7 ngày thì không thể phát lại 30 ngày. Ở khoá hệ phân tán, đồng thuận cần đa số, nên 5 nút có đa số là 3 và chịu được 2 nút hỏng."
+
+  # ───────────────────────── 3. NGÔN NGỮ ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Ngôn ngữ của hành trình"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thuật ngữ</th><th>nghĩa</th></tr>
+          <tr><td><b>máy chủ nhật ký</b> (broker)</td><td>máy lưu các phân vùng và trả tin cho người đọc</td></tr>
+          <tr><td><b>vị trí</b> (offset)</td><td>số thứ tự của một tin trong nhật ký của một phân vùng</td></tr>
+          <tr><td><b>siêu dữ liệu</b></td><td>dữ liệu về cụm: có chủ đề nào, phân vùng nào, bản sao ở đâu, ai đang dẫn</td></tr>
+          <tr><td><b>bộ điều khiển</b></td><td>tiến trình quyết định và phát đi các thay đổi siêu dữ liệu</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bài dùng bốn thuật ngữ. Máy chủ nhật ký là máy lưu các phân vùng và trả tin cho người đọc. Vị trí là số thứ tự của một tin trong nhật ký của một phân vùng. Siêu dữ liệu là dữ liệu về chính cụm máy, như phân vùng nào, bản sao ở đâu, ai đang dẫn. Bộ điều khiển là tiến trình quyết định và phát đi các thay đổi siêu dữ liệu."
+
+  # ───────────────────────── 4. DÒNG THỜI GIAN ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Năm chặng trên một trục thời gian"
+    steps:
+      - show: |
+          <div><svg width="1700" height="320" viewBox="0 0 1700 320">
+          <line x1="30" y1="150" x2="1670" y2="150" stroke="#1f2937" stroke-width="3"/>
+          <g font-size="24" text-anchor="middle" fill="#1f2937">
+          <circle cx="150" cy="150" r="15" fill="#9ca3af"/><text x="150" y="108" font-weight="bold">2010 → 2011</text><text x="150" y="200">nhật ký ghi nối đuôi</text><text x="150" y="232">gần 1 tỉ tin mỗi ngày</text>
+          <circle cx="490" cy="150" r="15" fill="#2a78d6"/><text x="490" y="108" font-weight="bold">2012 → 2015</text><text x="490" y="200">thêm bản sao</text><text x="490" y="232">mất máy không mất tin</text>
+          <circle cx="830" cy="150" r="15" fill="#7c3aed"/><text x="830" y="108" font-weight="bold">2015</text><text x="830" y="200">800 tỉ tin mỗi ngày</text><text x="830" y="232">nhiều tầng, đếm kiểm</text>
+          <circle cx="1170" cy="150" r="15" fill="#eb6834"/><text x="1170" y="108" font-weight="bold">2019</text><text x="1170" y="200">siêu dữ liệu</text><text x="1170" y="232">thành một nhật ký</text>
+          <circle cx="1510" cy="150" r="15" fill="#059669"/><text x="1510" y="108" font-weight="bold">2021 → 2025</text><text x="1510" y="200">chuyển dần, có cầu nối</text><text x="1510" y="232">4.0: không ZooKeeper</text>
+          </g>
+          <text x="850" y="300" font-size="23" fill="#6b7280" text-anchor="middle">khai sinh → tăng trưởng → quy mô lớn → điểm nghẽn mới → ổn định và tiếp tục phát triển</text>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình là trục thời gian với năm chặng. Từ 2010 tới 2011, hệ ra đời như một nhật ký chỉ ghi nối đuôi. Từ 2012 tới 2015 nó có bản sao, rồi năm 2015 chạm 800 tỉ tin mỗi ngày. Năm 2019 có đề xuất đưa siêu dữ liệu vào chính nhật ký, và từ 2021 tới 2025 là giai đoạn chuyển dần, ổn định và tiếp tục phát triển."
+
+  # ───────────────────────── 5. CHẶNG 1 ─────────────────────────
+  - id: stage1
+    kind: example
+    title: "Chặng 1, năm 2010 tới 2011 — khai sinh: một nhật ký chỉ ghi nối đuôi"
+    stage: {year: "2010 → 2011", scale: "hàng trăm GB và gần 1 tỉ tin mỗi ngày; một cụm ở mỗi trung tâm dữ liệu", source: "[K11] §1–§5, [V15] §1", practice: "ghi nối đuôi và gộp lô; người đọc tự giữ vị trí và kéo theo sức mình; giữ theo thời gian để đọc lại"}
+    checks:
+      - "round(10**9 / 86400) == 11574"
+      - "400_000 // 50_000 == 8"
+      - "400_000 * 200 * 8 == 640_000_000 and 640_000_000 / 10**9 == 0.64"
+    steps:
+      - show: |
+          <p><b>Quy mô:</b> năm 2011, hệ nhận hàng trăm GB, <b>gần 1 tỉ tin</b> mỗi ngày; ngoài phân tích ngoại tuyến, nhiều tính năng cần dữ liệu với độ trễ <b>không quá vài giây</b>.</p>
+          <p><b>Điểm nghẽn:</b> hệ hàng đợi cũ gửi <b>mỗi tin một vòng mạng</b>, không gộp lô được; và chậm hẳn khi tin <b>dồn lại</b> chờ người đọc ngoại tuyến nạp theo đợt lớn.</p>
+        focus: [1, 1, 2, 2]
+        say: "Ở chặng một, năm 2011, hệ nhận hàng trăm GB, tức gần 1 tỉ tin mỗi ngày. Ngoài phân tích ngoại tuyến, nhiều tính năng cần dữ liệu với độ trễ không quá vài giây. Điểm nghẽn là hệ hàng đợi cũ gửi mỗi tin một vòng mạng, không gộp lô được. Chúng còn chậm hẳn khi tin dồn lại, chờ người đọc ngoại tuyến nạp theo từng đợt lớn."
+      - clear: true
+        show: |
+          <div><svg width="1500" height="300" viewBox="0 0 1500 300">
+          <defs><marker id="ar1" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="16" refX="14" refY="8" orient="auto"><path d="M0,0 L16,8 L0,16 z" fill="#1f2937"/></marker></defs>
+          <g font-size="24" text-anchor="middle" fill="#1f2937">
+          <rect x="120" y="110" width="120" height="70" fill="#e5e7eb" stroke="#9ca3af"/><text x="180" y="153">0</text>
+          <rect x="240" y="110" width="120" height="70" fill="#e5e7eb" stroke="#9ca3af"/><text x="300" y="153">1</text>
+          <rect x="360" y="110" width="120" height="70" fill="#dbeafe" stroke="#2a78d6"/><text x="420" y="153">2</text>
+          <rect x="480" y="110" width="120" height="70" fill="#dbeafe" stroke="#2a78d6"/><text x="540" y="153">3</text>
+          <rect x="600" y="110" width="120" height="70" fill="#dbeafe" stroke="#2a78d6"/><text x="660" y="153">4</text>
+          <rect x="720" y="110" width="120" height="70" fill="#dbeafe" stroke="#2a78d6"/><text x="780" y="153">5</text>
+          <rect x="840" y="110" width="120" height="70" fill="#dbeafe" stroke="#2a78d6"/><text x="900" y="153">6</text>
+          <rect x="960" y="110" width="120" height="70" fill="#dcfce7" stroke="#059669"/><text x="1020" y="153">7</text>
+          <text x="240" y="80" fill="#6b7280">quá 7 ngày → xoá</text>
+          <text x="1260" y="125">ghi nối đuôi</text>
+          <text x="420" y="250">người đọc A ở vị trí 2</text>
+          <text x="900" y="250">người đọc B ở vị trí 6</text>
+          </g>
+          <line x1="1230" y1="145" x2="1095" y2="145" stroke="#1f2937" stroke-width="3" marker-end="url(#ar1)"/>
+          <line x1="420" y1="222" x2="420" y2="192" stroke="#2a78d6" stroke-width="3" marker-end="url(#ar1)"/>
+          <line x1="900" y1="222" x2="900" y2="192" stroke="#2a78d6" stroke-width="3" marker-end="url(#ar1)"/>
+          </svg></div>
+          <p class="note">Mỗi ô là một tin, số trong ô là vị trí của nó (số minh hoạ). Máy chủ không nhớ ai đọc tới đâu; mỗi người đọc tự giữ vị trí của mình.</p>
+        focus: [1, 1, 2]
+        say: "Cách giải là mỗi phân vùng một nhật ký chỉ ghi nối đuôi, tin mới luôn vào cuối và được gọi bằng vị trí chứ không có mã riêng. Mỗi người đọc tự giữ vị trí và tự kéo tin theo sức mình, ở đây A ở vị trí 2, B ở vị trí 6. Máy chủ không nhớ ai đọc tới đâu, nên xoá tin theo thời gian, thường sau 7 ngày."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>lựa chọn năm 2011</th><th>được</th><th>đổi lại</th></tr>
+          <tr><td>người đọc có thể <b>lùi về vị trí cũ</b></td><td>sửa lỗi xong thì đọc lại</td><td>máy chủ phải giữ tin nhiều ngày</td></tr>
+          <tr><td>chỉ bảo đảm <b>ít nhất một lần</b>; thứ tự chỉ trong <b>một phân vùng</b></td><td>đơn giản, rẻ</td><td>người đọc tự lọc tin trùng</td></tr>
+          <tr><td><b>chưa có bản sao</b></td><td>nhanh</td><td>hỏng đĩa là mất tin chưa đọc</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Bảng ghi ba lựa chọn khác và cái giá của chúng. Người đọc có thể lùi về vị trí cũ để đọc lại sau khi sửa lỗi, đổi lại máy chủ phải giữ tin nhiều ngày. Hệ chỉ bảo đảm giao ít nhất một lần, thứ tự chỉ đúng trong một phân vùng, nên người đọc tự lọc tin trùng. Lúc đó chưa có bản sao, nên một máy hỏng đĩa là mất mọi tin chưa đọc."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>con số năm 2011</th><th>tính lại</th></tr>
+          <tr><td>gần 1 tỉ tin mỗi ngày</td><td>$1\,000\,000\,000 : 86\,400 \approx \hlg{11\,574}$ tin mỗi giây, trung bình</td></tr>
+          <tr><td>thử nghiệm: tin 200 byte, gộp 1 tin ↔ gộp 50 tin</td><td>50 000 ↔ 400 000 tin mỗi giây: $400\,000 : 50\,000 = \hlg{8}$ lần</td></tr>
+          <tr><td>riêng phần nội dung, gộp 50 tin</td><td>$400\,000 \cdot 200 \cdot 8 = 640$ triệu bit mỗi giây, bằng $0{,}64$ đường truyền 1 tỉ bit mỗi giây</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.4"]
+        say: "Giờ tính lại các con số. Gần 1 tỉ tin mỗi ngày chia cho 86 nghìn 400 giây, được khoảng 11 nghìn 574 tin mỗi giây trung bình. Trong thử nghiệm với tin 200 byte, gộp 50 tin một lần cho 400 nghìn tin mỗi giây, so với 50 nghìn khi gửi lẻ, tức gấp 8 lần. Riêng phần nội dung là 400 nghìn nhân 200 byte nhân 8 bit, bằng 640 triệu bit mỗi giây. Đó là 0 phẩy 64 của đường truyền 1 tỉ bit, và nhóm tác giả ghi là gần lấp đầy đường truyền."
+
+  # ───────────────────────── 6. CHẶNG 2 ─────────────────────────
+  - id: stage2
+    kind: example
+    title: "Chặng 2, năm 2012 tới 2015 — tăng trưởng: thêm bản sao cho nhật ký"
+    stage: {year: "2012 → 2015", scale: "dự án Apache cấp cao từ tháng 10/2012; hơn 300 triệu thành viên (2015); dùng làm kho gốc và xử lý luồng", source: "[V15] §1–§2, [K11] §3.3", practice: "sao chép mỗi phân vùng: một bản dẫn, các bản theo; tách bầu bản dẫn (đa số) khỏi việc chép dữ liệu (chính–phụ)"}
+    checks:
+      - "[f + 1 for f in (1, 2)] == [2, 3] and [2 * f + 1 for f in (1, 2)] == [3, 5]"
+      - "1 * (1 + 1) == 2 and 1 * (2 * 1 + 1) == 3 and 3 - 2 == 1"
+    steps:
+      - show: |
+          <p><b>Quy mô:</b> từ tháng 10/2012, Kafka là dự án Apache cấp cao, được dùng rộng rãi ngoài LinkedIn. Năm 2015, LinkedIn có hơn <b>300 triệu thành viên</b>, và nhật ký được dùng làm <b>kho gốc</b> cho dữ liệu, không chỉ để chở nhật ký truy cập.</p>
+          <p><b>Điểm nghẽn:</b> bài báo năm 2011 tự ghi: máy chủ chết thì tin chưa đọc <b>không đọc được</b>; đĩa hỏng hẳn thì tin chưa đọc <b>mất vĩnh viễn</b>.</p>
+        focus: [1, 1, 2, 2]
+        say: "Ở chặng hai, từ tháng 10 năm 2012, hệ thành một dự án mã nguồn mở cấp cao và được dùng rộng rãi ngoài công ty nơi nó ra đời. Năm 2015, công ty đó có hơn 300 triệu thành viên, và nhật ký được dùng làm kho gốc cho dữ liệu, không chỉ chở nhật ký truy cập. Điểm nghẽn đã được chính bài báo năm 2011 ghi ra, máy chủ chết thì tin chưa đọc không đọc được. Còn nếu đĩa hỏng hẳn thì tin chưa đọc mất vĩnh viễn."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>cách xử lý (bản 0.8.0, theo bài tóm tắt năm 2015)</th><th>vì sao</th></tr>
+          <tr><td>mỗi phân vùng có <b>một bản dẫn</b> và các <b>bản theo</b>; mọi lần ghi đi qua bản dẫn</td><td>một nơi quyết định thứ tự</td></tr>
+          <tr><td><b>bầu bản dẫn</b> và giữ danh sách bản sao: giao cho ZooKeeper, chạy theo <b>đa số</b></td><td>quyết định cần đồng thuận</td></tr>
+          <tr><td><b>chép dữ liệu</b>: kiểu chính–phụ, bản dẫn chờ <b>mọi bản đồng bộ</b> rồi mới xác nhận</td><td>cùng trung tâm dữ liệu, độ trễ ổn định → ít bản hơn</td></tr>
+          <tr><td>người đọc chỉ thấy tin đã chép tới mọi bản đồng bộ</td><td>không đọc tin có thể bị mất</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Cách xử lý ở bản 0 chấm 8 chấm 0 được tóm tắt trong bảng. Mỗi phân vùng có một bản dẫn và các bản theo, mọi lần ghi đi qua bản dẫn. Việc bầu bản dẫn và giữ danh sách bản sao được giao cho một dịch vụ điều phối bên ngoài, chạy theo đa số. Việc chép dữ liệu theo kiểu chính phụ, bản dẫn chờ mọi bản đồng bộ rồi mới xác nhận. Người đọc chỉ thấy tin đã chép tới mọi bản đồng bộ."
+      - clear: true
+        show: |
+          <p>Muốn chịu được $F$ máy hỏng mà không mất tin (bài tóm tắt năm 2015):</p>
+          <table class="t"><tr><th>số máy hỏng chịu được</th><th>chính–phụ: $F + 1$ bản</th><th>đa số: $2F + 1$ bản</th></tr>
+          <tr><td>$F = 1$</td><td>$1 + 1 = \hlg{2}$</td><td>$2 \cdot 1 + 1 = 3$</td></tr>
+          <tr><td>$F = 2$</td><td>$2 + 1 = \hlg{3}$</td><td>$2 \cdot 2 + 1 = 5$</td></tr></table>
+          <p class="note">Ví dụ nhóm tác giả nêu: nhật ký 2 bản, trong khi cụm ZooKeeper dùng 5 nút — số bản dữ liệu tách khỏi số nút cần cho đồng thuận.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Vì sao chọn chính phụ, khi gọi F là số máy hỏng muốn chịu được? Kiểu chính phụ cần F cộng 1 bản, nên với F bằng 1 chỉ cần 2 bản, còn kiểu đa số cần 2 nhân 1 cộng 1, bằng 3 bản. Với F bằng 2, đó là 3 bản so với 5 bản. Nhóm tác giả nêu ví dụ nhật ký 2 bản trong khi dịch vụ điều phối dùng 5 nút, vì số bản dữ liệu đã tách khỏi số nút đồng thuận."
+      - clear: true
+        show: |
+          <p><b>Làm thử</b> (số minh hoạ): mỗi ngày ghi 1 TB, muốn chịu 1 máy hỏng.</p>
+          <table class="t"><tr><th>cách chép</th><th>đĩa mỗi ngày</th></tr>
+          <tr><td>chính–phụ, 2 bản</td><td>$1 \cdot 2 = \hlg{2}$ TB</td></tr>
+          <tr><td>đa số, 3 bản</td><td>$1 \cdot 3 = 3$ TB — nhiều hơn $3 - 2 = 1$ TB mỗi ngày</td></tr></table>
+          <p class="note">Điều kiện: cách chính–phụ hợp khi các bản ở <b>cùng một trung tâm dữ liệu</b>, độ trễ ít dao động — đúng lý do nhóm tác giả ghi.</p>
+        focus: [1, "2.2", 3]
+        say: "Làm thử với số minh hoạ, mỗi ngày ghi 1 nghìn GB và muốn chịu được 1 máy hỏng. Chép chính phụ 2 bản tốn 2 nghìn GB mỗi ngày, còn đa số 3 bản tốn 3 nghìn GB, nhiều hơn 1 nghìn GB. Cách chính phụ đúng khi các bản ở cùng một trung tâm dữ liệu, nơi độ trễ ít dao động."
+
+  # ───────────────────────── 7. CHẶNG 3 ─────────────────────────
+  - id: stage3
+    kind: example
+    title: "Chặng 3, năm 2015 — quy mô lớn: 800 tỉ tin mỗi ngày, hơn 60 cụm"
+    stage: {year: "2015", scale: "hơn 800 tỉ tin, 175 TB ghi và 650 TB đọc mỗi ngày; đỉnh 13 triệu tin mỗi giây; hơn 1100 máy chủ, hơn 60 cụm", source: "[LI15]", practice: "tách cụm theo loại dữ liệu; mỗi trung tâm dữ liệu một cụm cục bộ, chép sang cụm tổng hợp đúng một lần; đếm kiểm ở mọi tầng"}
+    checks:
+      - "round(800e9 / 86400 / 1e6, 2) == 9.26 and round(13e6 / (800e9 / 86400), 1) == 1.4"
+      - "round(650 / 175, 1) == 3.7"
+      - "175e12 / 800e9 == 218.75 and round(2.75e9 / 13e6) == 212"
+      - "10_000 - 9_990 == 10"
+    steps:
+      - show: |
+          <table class="t"><tr><th>LinkedIn, tháng 3/2015</th><th>con số</th></tr>
+          <tr><td>tin gửi vào mỗi ngày</td><td>hơn <b>800 tỉ</b>, hơn <b>175 TB</b></td></tr>
+          <tr><td>dữ liệu được đọc ra mỗi ngày</td><td>hơn <b>650 TB</b></td></tr>
+          <tr><td>giờ cao điểm</td><td>hơn <b>13 triệu</b> tin, 2,75 GB mỗi giây</td></tr>
+          <tr><td>hạ tầng</td><td>hơn <b>1100</b> máy chủ nhật ký, hơn <b>60</b> cụm</td></tr></table>
+        focus: [1, "1.2", "1.4", "1.5"]
+        say: "Ở chặng ba, năm 2015, nhóm hạ tầng của công ty công bố các con số trong bảng. Mỗi ngày có hơn 800 tỉ tin gửi vào, tức hơn 175 nghìn GB, và hơn 650 nghìn GB được đọc ra. Giờ cao điểm có hơn 13 triệu tin, tức 2 phẩy 75 GB mỗi giây. Để chở hết, họ chạy hơn 1100 máy chủ nhật ký, chia thành hơn 60 cụm."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>tính lại</th><th>kết quả</th></tr>
+          <tr><td>trung bình mỗi giây</td><td>$800 \text{ tỉ} : 86\,400 \approx \hlg{9{,}26}$ triệu tin</td></tr>
+          <tr><td>đỉnh so với trung bình</td><td>$13 : 9{,}26 \approx \hlg{1{,}4}$ lần</td></tr>
+          <tr><td>mỗi byte ghi vào được đọc</td><td>$650 : 175 \approx \hlg{3{,}7}$ lần</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Giờ tính lại từ các con số đó. 800 tỉ tin chia cho 86 nghìn 400 giây, được khoảng 9 phẩy 26 triệu tin mỗi giây trung bình. Đỉnh 13 triệu chia cho 9 phẩy 26 triệu là khoảng 1 phẩy 4 lần, nên phải chừa chỗ cho giờ cao điểm. 650 nghìn GB đọc chia cho 175 nghìn GB ghi được khoảng 3 phẩy 7, tức mỗi byte được nhiều hệ khác nhau đọc lại vài lần."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>điểm nghẽn ở quy mô này</th><th>thực hành LinkedIn chọn</th></tr>
+          <tr><td>một loại dữ liệu lấn át loại khác</td><td>bốn loại tin (hàng đợi, số đo, nhật ký, theo dõi) mỗi loại <b>một cụm riêng</b>; nhật ký tách riêng “vì quá nhiều”</td></tr>
+          <tr><td>nhiều trung tâm dữ liệu</td><td>cụm <b>cục bộ</b> ở mỗi nơi, chép sang cụm <b>tổng hợp</b>, mỗi trung tâm chép <b>một lần</b></td></tr>
+          <tr><td>nhiều tầng → nhiều chỗ tin có thể biến mất</td><td><b>đếm kiểm</b>: mỗi máy gửi định kỳ báo đã gửi bao nhiêu tin; mỗi tầng đếm lại và so</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Quy mô này làm lộ ra ba điểm nghẽn. Một loại dữ liệu có thể lấn át loại khác, nên bốn loại tin là hàng đợi, số đo, nhật ký và theo dõi mỗi loại có một cụm riêng. Mỗi trung tâm dữ liệu có một cụm cục bộ, rồi chép sang cụm tổng hợp đúng một lần. Nhưng nhiều tầng tạo ra rất nhiều chỗ tin có thể biến mất, nên mỗi máy gửi định kỳ báo đã gửi bao nhiêu tin, và mỗi tầng đếm lại để so."
+      - clear: true
+        show: |
+          <p><b>Đếm kiểm, làm thử</b> (số minh hoạ): trong một khung 10 phút, máy gửi báo đã gửi <b>10 000</b> tin vào một chủ đề.</p>
+          <table class="t"><tr><th>tầng</th><th>đếm được</th><th>thiếu</th></tr>
+          <tr><td>cụm cục bộ</td><td>10 000</td><td>0</td></tr>
+          <tr><td>cụm tổng hợp</td><td>9 990</td><td>$10\,000 - 9\,990 = \hl{10}$</td></tr></table>
+          <p class="note">Tin mất ở giữa hai tầng → tìm ở khâu chép từ cục bộ sang tổng hợp, không phải ở máy gửi.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Làm thử đếm kiểm với một số minh hoạ. Trong một khung 10 phút, máy gửi báo đã gửi 10 nghìn tin vào một chủ đề. Cụm cục bộ đếm đủ 10 nghìn, nhưng cụm tổng hợp chỉ đếm được 9 nghìn 990, thiếu 10 tin. Vậy tin mất ở giữa hai tầng, nên ta tìm ở khâu chép từ cục bộ sang tổng hợp, không phải ở máy gửi."
+
+  # ───────────────────────── 8. CHẶNG 4 ─────────────────────────
+  - id: stage4
+    kind: example
+    title: "Chặng 4, năm 2019 — điểm nghẽn mới: siêu dữ liệu nằm ngoài nhật ký"
+    stage: {year: "2019", scale: "mục tiêu hàng trăm nghìn tới hàng triệu phân vùng; cụm nhỏ điển hình 4 máy chủ nhật ký và 3 nút ZooKeeper", source: "[KIP500]", practice: "lưu siêu dữ liệu thành một nhật ký sự kiện; 3 hoặc 5 nút bộ điều khiển chạy đồng thuận đa số; máy chủ chỉ kéo phần thay đổi"}
+    checks:
+      - "[(n, n // 2 + 1, n - (n // 2 + 1)) for n in (3, 4, 5)] == [(3, 2, 1), (4, 3, 1), (5, 3, 2)]"
+      - "1_000_000 // 2_000 == 500"
+    steps:
+      - show: |
+          <table class="t"><tr><th>điểm nghẽn (đề xuất số 500, tạo tháng 10/2019)</th><th>hậu quả</th></tr>
+          <tr><td>bộ điều khiển <b>đẩy</b> thay đổi tới từng máy chủ; có máy nhận một phần rồi thôi</td><td>các máy chủ <b>lệch nhau</b></td></tr>
+          <tr><td>trạng thái trong ZooKeeper thường <b>không khớp</b> trạng thái trong bộ nhớ bộ điều khiển</td><td>có lúc chỉ khởi động lại mới hết lệch</td></tr>
+          <tr><td>ZooKeeper là <b>hệ phân tán thứ hai</b>: cấu hình, công cụ, cách triển khai riêng</td><td>dễ sai, ví dụ bật bảo mật ở một bên mà quên bên kia</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Ở chặng bốn, tháng 10 năm 2019, cộng đồng phát triển mở đề xuất số 500, ghi ra ba điểm nghẽn. Bộ điều khiển đẩy thay đổi tới từng máy chủ, có máy chỉ nhận một phần rồi thôi, nên các máy chủ lệch nhau. Trạng thái trong dịch vụ điều phối thường không khớp trạng thái trong bộ nhớ bộ điều khiển, có lúc chỉ khởi động lại mới hết lệch. Dịch vụ điều phối còn là hệ phân tán thứ hai với cấu hình riêng, nên dễ bật bảo mật ở một bên mà quên bên kia."
+      - clear: true
+        show: |
+          <p><b>Cách xử lý:</b> người dùng được hưởng lợi từ nhật ký, “nhưng chính Kafka bị bỏ ra ngoài” — nên đưa <b>siêu dữ liệu vào chính một nhật ký sự kiện</b>.</p>
+          <table class="t"><tr><th>trước</th><th>sau (chế độ tự quản, KRaft)</th></tr>
+          <tr><td>bộ điều khiển đọc lại toàn bộ trạng thái từ ZooKeeper khi được bầu</td><td>3 nút bộ điều khiển chạy đồng thuận đa số (Raft) trên nhật ký siêu dữ liệu; bản theo là dự phòng nóng</td></tr>
+          <tr><td>bộ điều khiển đẩy thay đổi</td><td>máy chủ <b>tự kéo</b> từ vị trí đã đọc, chỉ lấy phần thay đổi, theo đúng một thứ tự</td></tr>
+          <tr><td>máy chủ mất liên lạc vẫn phục vụ</td><td>chưa có siêu dữ liệu mới thì bị <b>rào lại</b>, không trả lời khách</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", "2.4"]
+        say: "Cách xử lý xuất phát từ một nhận xét, người dùng được hưởng lợi từ nhật ký, nhưng chính hệ lại bị bỏ ra ngoài. Vì vậy siêu dữ liệu được đưa vào một nhật ký sự kiện, giống cách gấp sự kiện ở bài 4. Ba nút bộ điều khiển chạy thuật toán đồng thuận theo đa số trên nhật ký đó, các bản theo là dự phòng nóng. Máy chủ tự kéo từ vị trí đã đọc, chỉ lấy phần thay đổi, theo đúng một thứ tự. Máy chủ chưa lấy được siêu dữ liệu mới thì bị rào lại, không trả lời khách."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>số nút bộ điều khiển</th><th>đa số cần còn sống</th><th>chịu được bao nhiêu nút hỏng</th></tr>
+          <tr><td>3</td><td>$3 : 2$ lấy phần nguyên, cộng 1 $= 2$</td><td>$3 - 2 = \hlg{1}$</td></tr>
+          <tr><td>4</td><td>$4 : 2 + 1 = 3$</td><td>$4 - 3 = 1$ — thêm nút mà không chịu thêm lỗi</td></tr>
+          <tr><td>5</td><td>$5 : 2$ lấy phần nguyên, cộng 1 $= 3$</td><td>$5 - 3 = \hlg{2}$</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Đề xuất ghi rằng 3 nút chịu được 1 nút hỏng, 5 nút chịu được 2, và ta tính lại được. Với 3 nút, 3 chia 2 lấy phần nguyên là 1, cộng 1 được đa số 2, nên chịu được 3 trừ 2 bằng 1 nút hỏng. Với 4 nút, đa số là 3, vẫn chỉ chịu được 1 nút hỏng, nên thêm nút mà không chịu thêm lỗi. Với 5 nút, đa số là 3, chịu được 2 nút hỏng."
+      - clear: true
+        show: |
+          <p><b>Vì sao chỉ kéo phần thay đổi</b> (số minh hoạ): cụm có 1 000 000 bản ghi siêu dữ liệu; một máy chủ khởi động lại sau khi có 2 000 thay đổi.</p>
+          <p>Kéo từ vị trí đã đọc: chỉ 2 000 bản ghi, bằng $1\,000\,000 : 2\,000 = \hlg{500}$ lần ít hơn đọc lại tất cả.</p>
+        focus: [1, 2, 2]
+        say: "Vì sao chỉ kéo phần thay đổi? Làm thử với số minh hoạ, cụm có 1 triệu bản ghi siêu dữ liệu, và một máy chủ khởi động lại sau khi có 2 nghìn thay đổi. Kéo từ vị trí đã đọc thì chỉ cần 2 nghìn bản ghi, ít hơn đọc lại tất cả 500 lần."
+
+  # ───────────────────────── 9. CHẶNG 5 ─────────────────────────
+  - id: stage5
+    kind: example
+    title: "Chặng 5, năm 2021 tới 2025 — ổn định, tiếp tục phát triển: có cầu nối"
+    stage: {year: "2021 → 2025", scale: "hàng nghìn cụm lớn nhỏ được chuyển sang chế độ mới (theo thông báo bản 3.9, 2024)", source: "[B28] [B33] [BK] [B40]", practice: "thử sớm, rồi sẵn sàng cho cụm mới, rồi công cụ chuyển cụm cũ; báo lỗi thời trước; một bản cầu nối; chỉ gỡ ở bản lớn"}
+    checks:
+      - "(__import__('datetime').date(2025, 3, 18) - __import__('datetime').date(2019, 10, 30)).days == 1966"
+      - "round(1966 / 365, 1) == 5.4"
+      - "len(['3.9', 'chuyển', '4.0']) == 3"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thời điểm</th><th>thay đổi</th></tr>
+          <tr><td>4/2021 (bản 2.8)</td><td>bản <b>thử sớm</b> chạy không cần ZooKeeper — <b>chưa dùng cho sản xuất</b></td></tr>
+          <tr><td>10/2022 (bản 3.3)</td><td>sẵn sàng cho sản xuất, nhưng <b>chỉ với cụm mới</b>; vài tính năng còn thiếu</td></tr>
+          <tr><td>6/2023 (bản 3.5)</td><td>ZooKeeper bị <b>đánh dấu lỗi thời</b>, hẹn gỡ ở bản 4.0</td></tr>
+          <tr><td>10/2023 (bản 3.6)</td><td>lần đầu <b>chuyển cụm cũ</b> sẵn sàng cho sản xuất</td></tr>
+          <tr><td>11/2024 (bản 3.9)</td><td>bản 3.x cuối cùng, là <b>cầu nối</b>; đã chuyển hàng nghìn cụm, sửa nhiều lỗi</td></tr>
+          <tr><td>3/2025 (bản 4.0)</td><td>bản lớn đầu tiên <b>hoàn toàn không ZooKeeper</b></td></tr></table>
+        focus: ["1.2", "1.3", "1.4", "1.5", "1.6", "1.7"]
+        say: "Chặng năm là ổn định và tiếp tục phát triển, và bảng cho thấy lõi được thay từ từ. Tháng 4 năm 2021, bản 2 chấm 8 là bản thử sớm chạy không cần dịch vụ điều phối, chưa dùng cho sản xuất. Tháng 10 năm 2022, bản 3 chấm 3 sẵn sàng cho sản xuất, nhưng chỉ với cụm mới. Tháng 6 năm 2023, bản 3 chấm 5 đánh dấu cách chạy cũ là lỗi thời, hẹn gỡ ở bản 4 chấm 0. Tháng 10 năm 2023, bản 3 chấm 6 lần đầu cho chuyển cụm cũ trong sản xuất. Tháng 11 năm 2024, bản 3 chấm 9 là cầu nối, đã chuyển hàng nghìn cụm, và tháng 3 năm 2025 bản 4 chấm 0 bỏ hẳn dịch vụ điều phối bên ngoài."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>tính lại</th><th>kết quả</th></tr>
+          <tr><td>từ đề xuất (30/10/2019) tới bản 4.0 (18/3/2025)</td><td>$\hlg{1966}$ ngày, khoảng $1966 : 365 \approx 5{,}4$ năm</td></tr>
+          <tr><td>nâng từ bản 3.0 lên 4.0</td><td>$\hlg{3}$ bước: lên 3.9 → chuyển siêu dữ liệu → lên 4.0</td></tr></table>
+          <p class="note">Ở quy mô hàng nghìn cụm, không được bắt ai nhảy một bước: mỗi thay đổi lớn có bản thử, bản cầu nối và lời báo trước.</p>
+        focus: ["1.2", "1.3", 2]
+        say: "Tính lại, từ ngày mở đề xuất, 30 tháng 10 năm 2019, tới bản 4 chấm 0 ngày 18 tháng 3 năm 2025 là 1966 ngày, khoảng 5 phẩy 4 năm. Muốn nâng một cụm từ bản 3 chấm 0 lên 4 chấm 0 phải đi 3 bước, lên bản 3 chấm 9, chuyển siêu dữ liệu, rồi mới lên 4 chấm 0. Ở quy mô hàng nghìn cụm, không thể bắt ai nhảy một bước, nên mỗi thay đổi lớn đều có bản thử, bản cầu nối và lời báo trước."
+
+  # ───────────────────────── 10. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm bốn con số của hành trình bằng đường khác"
+    checks:
+      - "11574 * 86400 == 999_993_600 and abs(11574 * 86400 - 10**9) < 86400"
+      - "abs(175e12 / 800e9 - 2.75e9 / 13e6) < 10"
+      - "[3 - k >= 2 for k in (0, 1, 2)] == [True, True, False]"
+      - "365 * 3 + 366 * 2 == 1827 and 1 + 30 + 31 + 31 + 28 + 18 == 139 and 1827 + 139 == 1966"
+    steps:
+      - show: |
+          <table class="t"><tr><th>con số</th><th>đường khác để kiểm</th></tr>
+          <tr><td>11 574 tin mỗi giây</td><td>nhân ngược: $11\,574 \cdot 86\,400 = 999\,993\,600 \approx 1$ tỉ ✓</td></tr>
+          <tr><td>cỡ tin năm 2015</td><td>theo ngày: $175 \text{ TB} : 800 \text{ tỉ} \approx 219$ byte; theo đỉnh: $2{,}75 \text{ GB} : 13 \text{ triệu} \approx 212$ byte — hai đường gần nhau ✓</td></tr>
+          <tr><td>3 nút chịu 1 hỏng</td><td>đếm thẳng: hỏng 1 còn 2, vẫn đủ đa số 2 ✓; hỏng 2 còn 1, không đủ</td></tr>
+          <tr><td>1966 ngày</td><td>30/10/2019 → 30/10/2024 là 5 năm, có 2 năm nhuận: $365 \cdot 3 + 366 \cdot 2 = 1827$; cộng 139 ngày tới 18/3/2025 → 1966 ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.3", "1.4", "1.5"]
+        say: "Ta kiểm bốn con số theo đường khác. Nhân ngược 11 nghìn 574 với 86 nghìn 400 được gần đúng 1 tỉ. Cỡ tin năm 2015 tính theo ngày là 175 nghìn GB chia 800 tỉ tin, khoảng 219 byte, còn tính theo giờ cao điểm là khoảng 212 byte. Hai đường gần nhau, nên các con số năm 2015 khớp với nhau. Với 3 nút, hỏng 1 còn 2, vẫn đủ đa số, còn hỏng 2 thì không đủ. Cuối cùng, 5 năm có 2 năm nhuận cho 1827 ngày, cộng 139 ngày nữa là 1966."
+
+  # ───────────────────────── 11. BÀI HỌC SAI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "Những bài học sai khi đọc hành trình này"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">1.</b> “Dùng nhật ký sự kiện là có giao đúng một lần”</td><td>ngay từ 2011 hệ chỉ bảo đảm <b>ít nhất một lần</b>, thứ tự chỉ trong một phân vùng</td><td>người đọc lũy đẳng, như bài 2; khoá cần thứ tự thì cùng phân vùng</td></tr>
+          <tr><td><b class="red">2.</b> Chép kiến trúc hơn 60 cụm, nhiều tầng của LinkedIn</td><td>chính nhóm LinkedIn ghi: nhiều tầng tạo <b>rất nhiều chỗ tin có thể biến mất</b>, phải dựng thêm hệ đếm kiểm</td><td>bắt đầu một cụm; tách cụm khi có số đo cho thấy một loại dữ liệu lấn át</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.3", "1.3", "1.3"]
+        say: "Bảng có hai bài học sai đầu tiên. Bài học sai thứ nhất là nghĩ dùng nhật ký sự kiện là có giao đúng một lần. Ngay từ năm 2011 hệ chỉ bảo đảm ít nhất một lần, thứ tự chỉ đúng trong một phân vùng, nên người đọc phải lũy đẳng. Bài học sai thứ hai là chép kiến trúc hơn 60 cụm nhiều tầng của công ty năm 2015. Chính họ ghi rằng nhiều tầng tạo ra rất nhiều chỗ tin có thể biến mất, nên phải dựng thêm hệ đếm kiểm. Hãy bắt đầu với một cụm, chỉ tách khi số đo cho thấy một loại dữ liệu lấn át."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">3.</b> Tắt xác nhận để nhanh như thử nghiệm năm 2011</td><td>máy gửi khi đó <b>không chờ xác nhận</b>, nên không có gì bảo đảm tin tới nơi; hợp với nhật ký truy cập, không hợp với đơn hàng</td><td>dữ liệu quan trọng: chờ xác nhận từ mọi bản đồng bộ; gộp lô để lấy lại tốc độ</td></tr>
+          <tr><td><b class="red">4.</b> Nâng thẳng cụm cũ lên bản mới nhất</td><td>bản 4.0 không còn chế độ cũ; cụm cũ phải dừng ở <b>bản cầu nối</b> và chuyển siêu dữ liệu trước</td><td>đọc thông báo lỗi thời; thử nâng ở cụm phụ trước</td></tr></table>
+        focus: ["1.2", "1.2", "1.2", "1.3", "1.3"]
+        say: "Bài học sai thứ ba là tắt xác nhận để nhanh như thử nghiệm năm 2011. Khi đó máy gửi không chờ xác nhận, nên không có gì bảo đảm tin tới nơi, hợp với nhật ký truy cập nhưng không hợp với đơn hàng. Với dữ liệu quan trọng, hãy chờ xác nhận từ mọi bản đồng bộ, rồi gộp lô để lấy lại tốc độ. Bài học sai thứ tư là nâng thẳng cụm cũ lên bản mới nhất, trong khi cụm cũ phải dừng ở bản cầu nối và chuyển siêu dữ liệu trước. Hãy thử nâng ở một cụm phụ trước."
+
+  # ───────────────────────── 12. QUYẾT ĐỊNH ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Bạn sẽ làm gì ở quy mô của mình?"
+    checks:
+      - "1000 * 1000 * 86400 / 10**9 == 86.4"
+      - "round(86.4 * 7 * 2, 1) == 1209.6 and round(86.4 * 30 * 2, 1) == 5184.0"
+      - "round(5184.0 / 1209.6, 2) == 4.29 and 1 + 1 == 2"
+      - "1000 < 11574 and 50_000 // 1000 == 50"
+    steps:
+      - show: |
+          <table class="t"><tr><th>tình huống (số minh hoạ)</th><th>câu hỏi</th></tr>
+          <tr><td>3 dịch vụ ghi tổng 1000 sự kiện mỗi giây, mỗi sự kiện 1000 byte; muốn chịu 1 máy hỏng và có lúc phải tính lại 30 ngày</td><td><b>1.</b> Giữ nhật ký 7 hay 30 ngày? Tốn bao nhiêu đĩa?</td></tr>
+          <tr><td>một đồng nghiệp đề xuất dựng nhiều cụm theo tầng như LinkedIn năm 2015</td><td><b>2.</b> Một cụm hay nhiều cụm?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn ra quyết định, với các số minh hoạ. Câu một, ba dịch vụ ghi tổng 1000 sự kiện mỗi giây, mỗi sự kiện 1000 byte, cần chịu 1 máy hỏng và có lúc phải tính lại 30 ngày. Nên giữ nhật ký 7 hay 30 ngày, và tốn bao nhiêu đĩa? Câu hai, đồng nghiệp đề xuất dựng nhiều cụm theo tầng như hệ năm 2015 vừa học, bạn chọn một cụm hay nhiều cụm? Dừng video và viết ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <p><b>Câu 1, bước 1:</b> mỗi ngày $1000 \cdot 1000 \cdot 86\,400 = 86{,}4$ tỉ byte, tức <b>86,4 GB</b>. Chịu 1 máy hỏng với cách chính–phụ: $F + 1 = 1 + 1 = 2$ bản.</p>
+          <table class="t"><tr><th>lựa chọn</th><th>đĩa</th><th>được</th><th>mất</th></tr>
+          <tr><td>giữ 7 ngày</td><td>$86{,}4 \cdot 7 \cdot 2 = 1209{,}6$ GB</td><td>rẻ</td><td>không tính lại được 30 ngày</td></tr>
+          <tr><td>giữ 30 ngày</td><td>$86{,}4 \cdot 30 \cdot 2 = \hlg{5184}$ GB</td><td>sửa lỗi xong là phát lại được</td><td>đĩa gấp khoảng $5184 : 1209{,}6 \approx 4{,}29$ lần</td></tr></table>
+        focus: [1, 1, "2.2", "2.3"]
+        say: "Đáp án câu một, bước đầu là tính dung lượng mỗi ngày, 1000 nhân 1000 nhân 86 nghìn 400, bằng 86 phẩy 4 GB. Muốn chịu 1 máy hỏng với cách chính phụ thì cần F cộng 1, tức 2 bản. Giữ 7 ngày tốn 86 phẩy 4 nhân 7 nhân 2, bằng 1209 phẩy 6 GB, rẻ nhưng không tính lại được 30 ngày. Giữ 30 ngày tốn 5184 GB, gấp khoảng 4 phẩy 29 lần, đổi lại sửa lỗi xong là phát lại được ngay."
+      - show: |
+          <p class="note"><b>Điều kiện đổi lựa chọn:</b> nếu đã có kho lưu dài hạn rẻ hơn chứa đủ dữ liệu 30 ngày, giữ nhật ký 7 ngày là đủ — phát lại phần cũ từ kho đó.</p>
+        say: "Điều kiện để đổi lựa chọn là thế này. Nếu bạn đã có một kho lưu dài hạn rẻ hơn, chứa đủ dữ liệu của 30 ngày, thì giữ nhật ký 7 ngày là đủ, và phần cũ được phát lại từ kho đó."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 2: lựa chọn</th><th>được</th><th>mất</th></tr>
+          <tr><td>một cụm nhỏ</td><td>1000 tin mỗi giây chỉ bằng $\frac{1}{50}$ tốc độ một máy gửi năm 2011 (50&nbsp;000 tin mỗi giây); ít chỗ để mất tin</td><td>một loại dữ liệu ồn có thể làm chậm loại khác</td></tr>
+          <tr><td>nhiều cụm theo tầng</td><td>tách lỗi, hợp nhiều trung tâm dữ liệu</td><td>nhiều chỗ tin có thể biến mất; phải dựng đếm kiểm</td></tr></table>
+          <p class="note">Điều kiện đổi lựa chọn: khi có nhiều trung tâm dữ liệu, hoặc số đo cho thấy một loại dữ liệu lấn át — đúng hai lý do LinkedIn ghi.</p>
+        focus: [1, "1.2", "1.2", "1.3", 2]
+        say: "Đáp án câu hai là một đánh đổi. Một cụm nhỏ là đủ, vì 1000 tin mỗi giây chỉ bằng một phần năm mươi tốc độ của một máy gửi trong thử nghiệm năm 2011. Một cụm có ít chỗ để mất tin, đổi lại một loại dữ liệu ồn có thể làm chậm loại khác. Nhiều cụm theo tầng tách được lỗi, nhưng tạo nhiều chỗ tin có thể biến mất và cần đếm kiểm. Hãy đổi sang nhiều cụm khi có nhiều trung tâm dữ liệu, hoặc khi số đo cho thấy một loại dữ liệu lấn át."
+
+  # ───────────────────────── 13. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi hành trình & tư duy chuyên gia"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">nhật ký nối đuôi, gộp lô: gấp 8</span><span class="a">→</span>
+          <span class="n">bản sao chính–phụ: F + 1 bản</span><span class="a">→</span>
+          <span class="n">tách cụm, đếm kiểm mọi tầng</span><span class="a">→</span>
+          <span class="n">siêu dữ liệu thành nhật ký, đa số</span><span class="a">→</span>
+          <span class="n">thử sớm, cầu nối, rồi mới gỡ</span></div>
+        say: "Tổng kết lại, nhật ký nối đuôi và gộp lô cho tốc độ gấp 8 lần, bản sao chính phụ cần F cộng 1 bản để chịu F máy hỏng. Ở quy mô 800 tỉ tin mỗi ngày, ta tách cụm và đếm kiểm mọi tầng. Siêu dữ liệu được đưa vào một nhật ký có đồng thuận đa số, và việc thay lõi đi qua bản thử, bản cầu nối, rồi mới gỡ."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> mỗi thực hành tốt là câu trả lời cho một điểm nghẽn ở <b>một quy mô cụ thể</b>. Hệ này thắng nhờ một ý đơn giản — nhật ký có vị trí — rồi cuối cùng áp chính ý đó cho bản thân nó.</div>
+        say: "Điều cần mang theo, mỗi thực hành tốt là câu trả lời cho một điểm nghẽn ở một quy mô cụ thể. Hệ này thắng nhờ một ý đơn giản, nhật ký có vị trí, và cuối cùng áp chính ý đó cho bản thân nó."
+      - clear: true
+        show: |
+          <p class="note">Đây là bài cuối của khoá EVT. Bạn đã đi từ một sự kiện đơn lẻ tới một nhật ký chở hàng trăm tỉ sự kiện mỗi ngày.</p>
+        say: "Đây là bài cuối của khoá kiến trúc hướng sự kiện. Bạn đã đi từ một sự kiện đơn lẻ tới một nhật ký chở hàng trăm tỉ sự kiện mỗi ngày. Cảm ơn bạn đã theo học."

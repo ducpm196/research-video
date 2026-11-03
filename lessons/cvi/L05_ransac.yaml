@@ -1,0 +1,297 @@
+id: L05
+course: CVI
+series: "CVI · Thị giác máy tính"
+title: "Bài 5 — Ước lượng bền vững với RANSAC: bao nhiêu lần thử là đủ"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/cvi.yaml L05; audit/cvi/verify_cvi.py L05; audit/cvi/sources_L05.md; [FB81] M. A. Fischler, R. C. Bolles, Random Sample Consensus: A Paradigm for Model Fitting with Applications to Image Analysis and Automated Cartography, Communications of the ACM 24(6), 381–395 (1981), bản PDF do SRI International lưu (mục II: thủ tục, tập đồng thuận, làm lại bằng bình phương tối thiểu; mục II.B: E(k) = 1/wⁿ, k = log(1 − z)/log(1 − b), ví dụ w = 0,5, n = 4 → 35,7); [L04] Lowe 2004 (phép thử tỉ số, bài 4); DMS bài 19 (xác suất rời rạc)"
+assumes: [arith, cdot, frac, approx, power, sub, geq, ltgt, implies, dots]
+# Quy ước: w = tỉ lệ cặp khớp đúng (điểm trong); s = số cặp tối thiểu để dựng mô hình (đường thẳng 2, phép biến đổi ảnh phẳng 4);
+#   p = độ chắc muốn có rằng ít nhất một lần bốc được toàn điểm đúng; N = số lần bốc. N nhỏ nhất thoả (1 − w mũ s) mũ N ≤ 1 − p
+#   (alg.cvi_ransac_iters). Bài báo năm 1981 viết n cho s, z cho p, b = w mũ n — ghi ở step notation_note.
+#   Đường thẳng 6 điểm đúng y ≈ 2x + 1 và 2 điểm sai (1; 9), (4; 1) là SỐ MINH HOẠ; ngưỡng điểm trong 0,5 (alg.cvi_ransac_line vét
+#   mọi cặp, alg.cvi_lsq_line bình phương tối thiểu). Tên RANSAC chỉ trên màn hình (chưa có probe đạt); lời đọc nói
+#   “phép đồng thuận từ mẫu ngẫu nhiên”.
+objectives:
+  - "Chỉ ra bằng số vì sao bình phương tối thiểu bị một điểm sai lớn kéo lệch"
+  - "Chạy thủ tục bốc mẫu, dựng mô hình, đếm điểm đồng ý trên một ví dụ nhỏ"
+  - "Suy ra và tính số lần bốc N = ln(1 − p) / ln(1 − wˢ), làm tròn lên"
+  - "So sánh chi phí thử thêm với chi phí lọc khớp tốt trước"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Hai điểm sai kéo hệ số góc từ 2 xuống 1"
+    checks:
+      - "[round(v, 2) for v in alg.cvi_lsq_line([(0, 1.0), (1, 3.2), (2, 4.9), (3, 7.1), (4, 9.0), (5, 10.8), (1, 9.0), (4, 1.0)])] == [1.01, 3.22]"
+      - "[round(v, 2) for v in alg.cvi_lsq_line([(0, 1.0), (1, 3.2), (2, 4.9), (3, 7.1), (4, 9.0), (5, 10.8)])] == [1.96, 1.1]"
+    steps:
+      - show: |
+          <p>Sáu điểm đo nằm gần đường $y = 2x + 1$. Thêm <b>hai điểm sai</b> — như hai cặp khớp nhầm viên gạch ở bài 4 — rồi kẻ đường “vừa nhất” bằng bình phương tối thiểu: hệ số góc ra <b>1,01</b> thay vì gần 2.</p>
+          <p>Bỏ hai điểm sai đi thì ra $y \approx 1{,}96x + 1{,}1$. Nhưng máy không biết điểm nào sai.</p>
+          <div class="box key">Hôm nay: làm sao tìm mô hình đúng khi dữ liệu lẫn điểm sai lớn? Phải thử bao nhiêu lần thì đủ chắc? Và vì sao lọc trước lại rẻ hơn thử thêm?</div>
+        focus: [1, 1, 2, 2, 3]
+        say: "Chào bạn, sáu điểm đo nằm gần đường y bằng 2 x cộng 1. Ta thêm hai điểm sai, giống hai cặp khớp nhầm viên gạch ở bài 4, rồi kẻ đường vừa nhất bằng bình phương tối thiểu, và hệ số góc ra 1 phẩy 01 thay vì gần 2. Bỏ hai điểm sai đi thì ra hệ số góc 1 phẩy 96. Nhưng máy không biết điểm nào sai. Hôm nay ta hỏi, làm sao tìm mô hình đúng khi dữ liệu lẫn điểm sai lớn, phải thử bao nhiêu lần thì đủ chắc, và vì sao lọc trước lại rẻ hơn thử thêm?"
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại ba điều sẽ dùng"
+    checks:
+      - "0.5 ** 4 == 0.0625 and 1 - 0.0625 == 0.9375"
+      - "round(math.log(0.01), 3) == -4.605 and round(math.log(0.9375), 4) == -0.0645 and round(2 * math.log(0.9375), 6) == round(math.log(0.9375 ** 2), 6)"
+      - "math.ceil(71.36) == 72 and math.ceil(16.01) == 17"
+    steps:
+      - show: |
+          <p><b>① Xác suất các lần độc lập nhân với nhau</b> (khoá Toán rời rạc, phần xác suất): mỗi cặp đúng với xác suất 0,5 thì</p>
+          $$0{,}5 \cdot 0{,}5 \cdot 0{,}5 \cdot 0{,}5 = 0{,}5^4 = 0{,}0625, \qquad 1 - 0{,}0625 = 0{,}9375$$
+        focus: [1, 2, 2]
+        say: "Điều thứ nhất, như ở khoá Toán rời rạc, xác suất của các lần độc lập nhân với nhau. Mỗi cặp đúng với xác suất 0 phẩy 5 thì cả 4 cặp đều đúng với xác suất 0 phẩy 5 mũ 4, bằng 0 phẩy 0625. Vì vậy ít nhất một cặp sai với xác suất 1 trừ số đó, bằng 0 phẩy 9375."
+      - show: |
+          <p><b>② Lôgarit tự nhiên đưa số mũ xuống thành phép nhân:</b> $\ln(a^N) = N \cdot \ln a$. Số nhỏ hơn 1 có lôgarit âm: $\ln 0{,}01 \approx -4{,}605$, $\ln 0{,}9375 \approx -0{,}0645$.</p>
+        introduces: [log]
+        focus: [1, 1]
+        say: "Điều thứ hai, lôgarit tự nhiên đưa số mũ xuống thành phép nhân, lôgarit của a mũ N bằng N nhân lôgarit của a. Số nhỏ hơn 1 có lôgarit âm, ví dụ lôgarit của 0 phẩy 01 xấp xỉ âm 4 phẩy 605, còn của 0 phẩy 9375 xấp xỉ âm 0 phẩy 0645."
+      - show: |
+          <p><b>③ Chia hai vế bất đẳng thức cho số âm thì đổi chiều:</b> $-2N \le -6$ chia cho $-2$ thành $N \ge 3$. Và <b>làm tròn lên</b> $\lceil 71{,}36 \rceil = 72$: số lần thử phải là số nguyên đủ lớn.</p>
+        introduces: [ceil]
+        focus: [1, 1, 1]
+        say: "Điều thứ ba, chia hai vế của bất đẳng thức cho một số âm thì phải đổi chiều. Ví dụ âm 2 N nhỏ hơn hoặc bằng âm 6, chia cho âm 2 thành N lớn hơn hoặc bằng 3. Còn dấu ngoặc vuông gãy này là làm tròn lên, 71 phẩy 36 làm tròn lên thành 72, vì số lần thử phải là số nguyên đủ lớn."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: w, s, p, N, điểm trong và tập đồng thuận"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ký hiệu</th><th>nghĩa</th><th>ví dụ</th></tr>
+          <tr><td>$w$</td><td>tỉ lệ dữ liệu đúng (điểm trong)</td><td>6 trên 8 điểm: 0,75</td></tr>
+          <tr><td>$s$</td><td>số điểm tối thiểu để dựng mô hình</td><td>đường thẳng 2; phép biến đổi giữa hai ảnh phẳng 4</td></tr>
+          <tr><td>$p$</td><td>độ chắc muốn có: ít nhất một lần bốc được toàn điểm đúng</td><td>0,99</td></tr>
+          <tr><td>$N$</td><td>số lần bốc mẫu</td><td>cần tính</td></tr></table>
+          <p class="note"><b>Điểm trong</b>: điểm cách mô hình không quá một ngưỡng (ở đây 0,5). <b>Tập đồng thuận</b>: mọi điểm trong của một mô hình.</p>
+        focus: [0, "1.2", "1.3", "1.4", "1.5", 2]
+        say: "Bảng giới thiệu bốn ký hiệu. w là tỉ lệ dữ liệu đúng, gọi là điểm trong, ví dụ 6 trên 8 điểm là 0 phẩy 75. s là số điểm tối thiểu để dựng mô hình, đường thẳng cần 2, còn phép biến đổi giữa hai ảnh của một mặt phẳng cần 4. p là độ chắc muốn có rằng ít nhất một lần bốc được toàn điểm đúng, thường lấy 0 phẩy 99. N là số lần bốc mẫu mà ta cần tính. Điểm trong là điểm cách mô hình không quá một ngưỡng, ở đây 0 phẩy 5, và tập đồng thuận là mọi điểm trong của một mô hình."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Đường vừa nhất bị kéo lệch, đường đồng thuận thì không"
+    checks:
+      - "alg.cvi_ransac_line([(0, 1.0), (1, 3.2), (2, 4.9), (3, 7.1), (4, 9.0), (5, 10.8), (1, 9.0), (4, 1.0)], 0.5)[2] == [0, 1, 2, 3, 4, 5]"
+      - "[round(380 - y * 30) for y in (1.0, 3.2, 4.9, 7.1, 9.0, 10.8)] == [350, 284, 233, 167, 110, 56] and [round(120 + x * 140) for x in range(6)] == [120, 260, 400, 540, 680, 820]"
+    steps:
+      - show: |
+          <div><svg width="1500" height="420" viewBox="0 0 1500 420">
+          <line x1="100" y1="380" x2="860" y2="380" stroke="#1f2937" stroke-width="2"/><line x1="100" y1="380" x2="100" y2="30" stroke="#1f2937" stroke-width="2"/>
+          <g font-size="18" fill="#6b7280" text-anchor="middle"><text x="120" y="405">0</text><text x="260" y="405">1</text><text x="400" y="405">2</text><text x="540" y="405">3</text><text x="680" y="405">4</text><text x="820" y="405">5</text></g>
+          <polygon points="120,332 820,38 820,68 120,362" fill="#d1fae5" opacity="0.8"/>
+          <line x1="120" y1="347" x2="820" y2="53" stroke="#059669" stroke-width="4"/>
+          <line x1="120" y1="284" x2="820" y2="131" stroke="#dc2626" stroke-width="3" stroke-dasharray="10 7"/>
+          <g fill="#2a78d6"><circle cx="120" cy="350" r="9"/><circle cx="260" cy="284" r="9"/><circle cx="400" cy="233" r="9"/><circle cx="540" cy="167" r="9"/><circle cx="680" cy="110" r="9"/><circle cx="820" cy="56" r="9"/></g>
+          <g fill="#eb6834"><rect x="251" y="101" width="18" height="18"/><rect x="671" y="341" width="18" height="18"/></g>
+          <g font-size="20" fill="#eb6834"><text x="280" y="96">điểm sai (1; 9)</text><text x="700" y="338">điểm sai (4; 1)</text></g>
+          <g font-size="22" fill="#1f2937">
+          <circle cx="930" cy="80" r="9" fill="#2a78d6"/><text x="955" y="88">6 điểm đúng, gần y = 2x + 1</text>
+          <rect x="921" y="121" width="18" height="18" fill="#eb6834"/><text x="955" y="138">2 điểm sai lớn</text>
+          <line x1="910" y1="185" x2="950" y2="185" stroke="#dc2626" stroke-width="3" stroke-dasharray="10 7"/><text x="965" y="192">vừa nhất mọi điểm: hệ số góc 1,01</text>
+          <line x1="910" y1="235" x2="950" y2="235" stroke="#059669" stroke-width="4"/><text x="965" y="242">đồng thuận: hệ số góc 1,96</text>
+          <rect x="910" y="272" width="40" height="22" fill="#d1fae5"/><text x="965" y="291">dải cách đường 0,5: điểm trong</text></g>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình có sáu chấm lam là điểm đúng, nằm gần đường y bằng 2 x cộng 1, và hai ô cam là điểm sai lớn. Đường đỏ đứt nét là đường vừa nhất mọi điểm, bị hai điểm sai kéo cho nằm nghiêng hẳn, hệ số góc chỉ 1 phẩy 01. Đường lục là đường đồng thuận, dải lục quanh nó gồm những điểm cách đường không quá 0 phẩy 5. Cả sáu điểm đúng nằm trong dải, hai điểm sai nằm ngoài, nên đường lục không bị chúng kéo lệch."
+
+  # ───────────────────────── 5. THỦ TỤC ─────────────────────────
+  - id: concept
+    kind: concept
+    title: "Thủ tục bốc mẫu: ít điểm nhất có thể, rồi đếm ai đồng ý"
+    checks:
+      - "(lambda a, b: [round(abs(y - a * x - b), 2) for x, y in [(0, 1.0), (1, 3.2), (2, 4.9), (3, 7.1), (4, 9.0), (5, 10.8), (1, 9.0), (4, 1.0)]])((4.9 - 1.0) / 2, 1.0) == [0.0, 0.25, 0.0, 0.25, 0.2, 0.05, 6.05, 7.8]"
+      - "[round(abs(y - 8 * x - 1), 2) for x, y in [(0, 1.0), (1, 3.2), (2, 4.9), (3, 7.1), (4, 9.0), (5, 10.8), (1, 9.0), (4, 1.0)]] == [0.0, 5.8, 12.1, 17.9, 24.0, 30.2, 0.0, 32.0] and (9.0 - 1.0) / (1 - 0) == 8"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bước</th><th>làm gì (Fischler và Bolles, 1981)</th></tr>
+          <tr><td>1</td><td>bốc ngẫu nhiên $s$ điểm — ít nhất đủ để dựng mô hình (đường thẳng: 2 điểm)</td></tr>
+          <tr><td>2</td><td>dựng mô hình từ đúng $s$ điểm đó</td></tr>
+          <tr><td>3</td><td>đếm tập đồng thuận: các điểm cách mô hình không quá ngưỡng</td></tr>
+          <tr><td>4</td><td>lặp $N$ lần; giữ mô hình có tập đồng thuận lớn nhất, rồi làm lại bình phương tối thiểu <b>chỉ trên tập đó</b></td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bảng là thủ tục do hai nhà nghiên cứu công bố năm 1981, gọi là phép đồng thuận mẫu ngẫu nhiên. Bước một, bốc ngẫu nhiên s điểm, vừa đủ để dựng mô hình, với đường thẳng là 2 điểm. Bước hai, dựng mô hình từ đúng s điểm đó. Bước ba, đếm tập đồng thuận, tức các điểm cách mô hình không quá ngưỡng. Bước bốn, lặp N lần, giữ mô hình có tập đồng thuận lớn nhất, rồi làm lại bình phương tối thiểu chỉ trên tập đó."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>lần bốc</th><th>hai điểm</th><th>đường dựng được</th><th>khoảng cách dọc của 8 điểm</th><th>điểm trong</th></tr>
+          <tr><td>may</td><td>(0; 1,0) và (2; 4,9)</td><td>$y = 1{,}95x + 1{,}0$</td><td>0; 0,25; 0; 0,25; 0,2; 0,05; <b class="red">6,05; 7,8</b></td><td>$\hlg{6}$</td></tr>
+          <tr><td>xui</td><td>(0; 1,0) và điểm sai (1; 9,0)</td><td>$y = 8x + 1$</td><td>0; 5,8; 12,1; 17,9; 24; 30,2; 0; 32</td><td>2</td></tr></table>
+          <p class="note">Lần may thắng 6 so với 2. Làm lại bình phương tối thiểu trên 6 điểm trong cho $y \approx 1{,}96x + 1{,}1$.</p>
+        focus: [0, "1.2", "1.3", 2]
+        say: "Bảng so hai lần bốc. Lần may bốc hai điểm đúng 0, 1 và 2, 4 phẩy 9, dựng được đường hệ số góc 1 phẩy 95, và sáu điểm cách đường không quá 0 phẩy 5. Lần xui bốc phải một điểm sai, đường dốc hệ số góc 8 chỉ có 2 điểm trong. Vì vậy lần may thắng, và làm lại bình phương tối thiểu trên sáu điểm trong cho hệ số góc 1 phẩy 96."
+
+  # ───────────────────────── 6. SUY RA ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra số lần bốc N từ một điều kiện xác suất"
+    checks:
+      - "0.5 ** 4 == 0.0625"
+      - "round((1 - 0.0625) ** 10, 3) == 0.524"
+      - "round(math.log(1 - 0.99) / math.log(1 - 0.5 ** 4), 2) == 71.36 and alg.cvi_ransac_iters(0.5, 4, 0.99) == 72"
+    steps:
+      - show: |
+          <p><b>Bước 1 — một lần bốc toàn điểm đúng.</b> Mỗi điểm bốc ra đúng với xác suất $w$, các lần độc lập, nên $s$ điểm cùng đúng với xác suất $w^s$.</p>
+          <p class="note">Làm thử $w = 0{,}5$, $s = 4$: $0{,}5^4 = 0{,}0625$ — trung bình 16 lần mới gặp một lần.</p>
+        focus: [1, 1, 2]
+        say: "Bước một, xác suất một lần bốc được toàn điểm đúng. Mỗi điểm bốc ra đúng với xác suất w, và các lần là độc lập, nên theo phép nhân xác suất, s điểm cùng đúng với xác suất w mũ s. Làm thử với w bằng 0 phẩy 5 và s bằng 4, ta được 0 phẩy 0625, tức trung bình 16 lần mới gặp một lần."
+      - show: |
+          <p><b>Bước 2 — N lần đều thất bại.</b> Một lần thất bại với xác suất $1 - w^s$; $N$ lần độc lập đều thất bại:</p>
+          $$\text{xác suất thất bại cả } N \text{ lần} = (1 - w^s)^N$$
+          <p class="note">Làm thử $N = 10$: $0{,}9375^{10} \approx 0{,}524$ — thử 10 lần vẫn hơn một nửa khả năng trượt cả.</p>
+        focus: [1, 2, 3]
+        say: "Bước hai, xác suất N lần đều thất bại. Một lần thất bại với xác suất 1 trừ w mũ s, và các lần độc lập, nên N lần đều thất bại có xác suất bằng số đó mũ N. Làm thử với N bằng 10, 0 phẩy 9375 mũ 10 xấp xỉ 0 phẩy 524, nghĩa là thử 10 lần vẫn hơn một nửa khả năng trượt cả."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — đặt điều kiện.</b> Muốn chắc $p$ rằng ít nhất một lần thành công, tức xác suất thất bại cả $N$ lần không quá $1 - p$. Lấy lôgarit hai vế, đưa $N$ xuống:</p>
+          $$(1 - w^s)^N \le 1 - p \;\Rightarrow\; N \cdot \ln(1 - w^s) \le \ln(1 - p)$$
+        focus: [1, 1, 2]
+        say: "Bước ba là đặt điều kiện. Ta muốn chắc p rằng ít nhất một lần thành công, nghĩa là xác suất thất bại cả N lần không quá 1 trừ p. Lấy lôgarit hai vế và đưa N xuống thành phép nhân, ta được N nhân lôgarit của 1 trừ w mũ s, nhỏ hơn hoặc bằng lôgarit của 1 trừ p."
+      - show: |
+          <p><b>Bước 4 — chia cho số âm, đổi chiều.</b> $\ln(1 - w^s)$ âm, nên chia hai vế cho nó thì dấu đổi chiều:</p>
+          $$N \ge \frac{\ln(1 - p)}{\ln(1 - w^s)} = \frac{\ln 0{,}01}{\ln 0{,}9375} \approx \frac{-4{,}605}{-0{,}0645} \approx 71{,}36 \;\Rightarrow\; N = \lceil 71{,}36 \rceil = \hlg{72}$$
+        focus: [1, 2, 2]
+        say: "Bước bốn, vì lôgarit của 1 trừ w mũ s là số âm, chia hai vế cho nó thì dấu đổi chiều. Vậy N lớn hơn hoặc bằng lôgarit của 1 trừ p chia lôgarit của 1 trừ w mũ s. Thay số được âm 4 phẩy 605 chia âm 0 phẩy 0645, xấp xỉ 71 phẩy 36, làm tròn lên thành 72 lần."
+      - show: |
+          <p class="note">Ghi chú cách viết: bài báo năm 1981 viết $n$ cho $s$, $z$ cho $p$, và $k = \log(1 - z) / \log(1 - b)$ với $b = w^n$; ví dụ của chính bài báo, $w = 0{,}5$, $n = 4$, $z = 0{,}9$, cho $k \approx 35{,}7$.</p>
+        notation_note: true
+        say: "Ghi chú cách viết, bài báo năm 1981 dùng chữ n thay cho s và chữ z thay cho p, nhưng công thức là một. Ví dụ của chính bài báo, với w bằng 0 phẩy 5, bốn điểm và độ chắc 0 phẩy 9, cho khoảng 35 phẩy 7 lần."
+
+  # ───────────────────────── 7. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Số lần bốc khi đổi tỉ lệ đúng và số điểm mỗi mẫu"
+    checks:
+      - "alg.cvi_ransac_iters(0.5, 4, 0.99) == 72"
+      - "round(0.3 ** 4, 4) == 0.0081 and round(math.log(0.01) / math.log(1 - 0.3 ** 4), 1) == 566.2 and alg.cvi_ransac_iters(0.3, 4, 0.99) == 567"
+      - "round(math.log(0.01) / math.log(0.75), 2) == 16.01 and alg.cvi_ransac_iters(0.5, 2, 0.99) == 17"
+      - "round(math.log(0.1) / math.log(15 / 16), 1) == 35.7 and alg.cvi_ransac_iters(0.5, 4, 0.9) == 36"
+    steps:
+      - show: |
+          <p><b>Bước 1.</b> $w = 0{,}5$, $s = 4$, $p = 0{,}99$: như vừa suy ra, $N = \hlg{72}$.</p>
+          <p><b>Bước 2.</b> Tỉ lệ đúng giảm còn $w = 0{,}3$: $0{,}3^4 = 0{,}0081$, $N = \lceil \frac{-4{,}605}{\ln 0{,}9919} \rceil = \lceil 566{,}2 \rceil = \hlo{567}$ — gần gấp 8 lần.</p>
+        focus: [1, 2]
+        say: "Bước một, với w bằng 0 phẩy 5, bốn điểm mỗi mẫu và độ chắc 0 phẩy 99, như vừa suy ra, cần 72 lần. Bước hai, tỉ lệ đúng giảm còn 0 phẩy 3, thì 0 phẩy 3 mũ 4 chỉ còn 0 phẩy 0081, và N bằng 566 phẩy 2 làm tròn lên thành 567, gần gấp 8 lần."
+      - clear: true
+        show: |
+          <p><b>Bước 3.</b> Mô hình chỉ cần $s = 2$ điểm (đường thẳng), $w = 0{,}5$: $N = \lceil \frac{\ln 0{,}01}{\ln 0{,}75} \rceil = \lceil 16{,}01 \rceil = 17$.</p>
+          <p><b>Bước 4.</b> Ví dụ của bài báo năm 1981: $w = 0{,}5$, $s = 4$, chỉ cần $p = 0{,}9$: $\frac{\ln 0{,}1}{\ln(15/16)} \approx 35{,}7$, làm tròn lên 36.</p>
+          <table class="t"><tr><th>$w$</th><th>$s$</th><th>$p$</th><th>$N$</th></tr>
+          <tr><td>0,5</td><td>4</td><td>0,99</td><td>72</td></tr><tr><td>0,3</td><td>4</td><td>0,99</td><td>567</td></tr>
+          <tr><td>0,5</td><td>2</td><td>0,99</td><td>17</td></tr><tr><td>0,5</td><td>4</td><td>0,9</td><td>36</td></tr></table>
+        focus: [1, 2, 3]
+        say: "Bước ba, nếu mô hình chỉ cần 2 điểm như đường thẳng, với w bằng 0 phẩy 5, thì N bằng 16 phẩy 01 làm tròn lên thành 17. Bước bốn, ví dụ của bài báo năm 1981 chỉ đòi độ chắc 0 phẩy 9, cho khoảng 35 phẩy 7, làm tròn thành 36. Bảng đặt bốn trường hợp cạnh nhau, tỉ lệ đúng và số điểm mỗi mẫu quyết định N mạnh nhất, vì chúng nằm ở số mũ."
+
+  # ───────────────────────── 8. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: thử lại 71 và 72, và đếm thẳng các cặp điểm"
+    checks:
+      - "round(0.9375 ** 71, 4) == 0.0102 and round(0.9375 ** 72, 4) == 0.0096 and 0.9375 ** 71 > 0.01 > 0.9375 ** 72"
+      - "math.comb(8, 2) == 28 and math.comb(6, 2) == 15 and round(15 / 28, 3) == 0.536 and round(0.75 ** 2, 4) == 0.5625"
+    steps:
+      - show: |
+          <p><b>Đường khác 1 — thay ngược</b> vào điều kiện, không dùng lôgarit:</p>
+          $$0{,}9375^{71} \approx 0{,}0102 \gt 0{,}01 \quad \text{(chưa đủ)}, \qquad 0{,}9375^{72} \approx 0{,}0096 \le 0{,}01 \quad \text{(đủ)} \checkmark$$
+        focus: [1, 1, 1]
+        say: "Kiểm tra thứ nhất là thay ngược vào điều kiện. 0 phẩy 9375 mũ 71 xấp xỉ 0 phẩy 0102, lớn hơn 0 phẩy 01, nên 71 lần chưa đủ. Còn mũ 72 xấp xỉ 0 phẩy 0096, nên 72 lần là đủ và đúng là số nhỏ nhất."
+      - show: |
+          <p><b>Đường khác 2 — đếm thẳng.</b> 8 điểm có $\frac{8 \cdot 7}{2} = 28$ cặp; 6 điểm đúng tạo $\frac{6 \cdot 5}{2} = 15$ cặp. Bốc một cặp ngẫu nhiên, xác suất toàn đúng là $\frac{15}{28} \approx 0{,}536$ — gần $w^2 = 0{,}75^2 = 0{,}5625$, hơi thấp hơn vì bốc không hoàn lại.</p>
+        focus: [1, 1, 1, 1]
+        say: "Kiểm tra thứ hai là đếm thẳng trên ví dụ đường thẳng. 8 điểm có 28 cặp, còn 6 điểm đúng tạo được 15 cặp. Vậy bốc một cặp ngẫu nhiên, xác suất toàn đúng là 15 phần 28, xấp xỉ 0 phẩy 536, gần với w bình phương bằng 0 phẩy 5625. Nó hơi thấp hơn vì bốc điểm thứ hai không trả lại điểm thứ nhất."
+
+  # ───────────────────────── 9. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi của người đã đi làm"
+    checks:
+      - "[round(v, 2) for v in alg.cvi_lsq_line([(0, 1.0), (1, 3.2), (2, 4.9), (3, 7.1), (4, 9.0), (5, 10.8), (1, 9.0), (4, 1.0)])] == [1.01, 3.22] and 8 ** 2 == 64 and 0.25 ** 2 == 0.0625"
+      - "round(1 - (1 - 0.3 ** 4) ** 72, 3) == 0.443"
+      - "[sum(abs(y - 1.95 * x - 1.0) <= t for x, y in [(0, 1.0), (1, 3.2), (2, 4.9), (3, 7.1), (4, 9.0), (5, 10.8), (1, 9.0), (4, 1.0)]) for t in (0.02, 0.5, 7)] == [2, 6, 7]"
+      - "round(567 / 72, 1) == 7.9 and alg.cvi_ransac_iters(0.3, 4, 0.99) == 567 and alg.cvi_ransac_iters(0.5, 4, 0.99) == 72"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Dùng bình phương tối thiểu trên mọi điểm khi có điểm sai lớn <b class="red">(hệ số góc 2 thành 1,01)</b>
+          <br><span class="note">Bình phương làm điểm xa nhất “kêu to nhất”: một điểm lệch 8 góp 64, bằng cả nghìn điểm lệch 0,25 (mỗi điểm chỉ góp 0,0625). Bài báo năm 1981 phân biệt sai số đo nhỏ (lấy trung bình được) với sai lầm lớn, loại “không triệt tiêu khi lấy trung bình”.</span></div>
+        focus: [1, 1, 1]
+        say: "Lỗi thứ nhất là dùng bình phương tối thiểu trên mọi điểm khi có điểm sai lớn, làm hệ số góc 2 thành 1 phẩy 01. Phép bình phương làm điểm xa nhất kêu to nhất, một điểm lệch 8 góp 64, bằng cả nghìn điểm lệch 0 phẩy 25. Bài báo năm 1981 phân biệt sai số đo nhỏ, có thể lấy trung bình, với sai lầm lớn, loại không triệt tiêu khi lấy trung bình."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Đoán tỉ lệ đúng quá lạc quan <b class="red">(tưởng chắc 99%, thật ra 44%)</b>
+          <br><span class="note">Tính $N = 72$ cho $w = 0{,}5$, nhưng thật ra $w = 0{,}3$: xác suất thành công chỉ $1 - (1 - 0{,}0081)^{72} \approx 0{,}443$. Phép thử: đếm tỉ lệ điểm trong của mô hình tốt nhất, rồi tính lại $N$ theo con số đó.</span></div>
+        focus: [1, 1, 1]
+        say: "Lỗi thứ hai là đoán tỉ lệ đúng quá lạc quan, tưởng chắc 99 phần trăm mà thật ra chỉ 44 phần trăm. Ta tính 72 lần cho w bằng 0 phẩy 5, nhưng nếu thật ra w bằng 0 phẩy 3 thì xác suất thành công chỉ khoảng 0 phẩy 443. Phép thử là đếm tỉ lệ điểm trong của mô hình tốt nhất đã tìm được, rồi tính lại N theo chính con số đó."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Chọn ngưỡng điểm trong tuỳ tiện <b class="red">(quá chặt hay quá lỏng đều hỏng)</b></div>
+          <table class="t"><tr><th>ngưỡng, với đường $y = 1{,}95x + 1{,}0$</th><th>0,02</th><th>0,5</th><th>7</th></tr>
+          <tr><td>số điểm trong</td><td class="red">2</td><td>$\hlg{6}$</td><td class="red">7 — có cả điểm sai (1; 9)</td></tr></table>
+          <p class="note">Bài báo năm 1981 gợi ý đo sai số của dữ liệu đúng rồi đặt ngưỡng cao hơn sai số trung bình một hoặc hai độ lệch chuẩn.</p>
+        focus: [1, "2.2", 3]
+        say: "Lỗi thứ ba là chọn ngưỡng điểm trong tuỳ tiện, vì quá chặt hay quá lỏng đều hỏng. Với cùng một đường, ngưỡng 0 phẩy 02 chỉ giữ 2 điểm, ngưỡng 0 phẩy 5 giữ đúng 6 điểm, còn ngưỡng 7 giữ 7 điểm, có cả điểm sai 1, 9. Bài báo năm 1981 gợi ý đo sai số của dữ liệu đúng, rồi đặt ngưỡng cao hơn sai số trung bình một hoặc hai độ lệch chuẩn."
+      - show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Tăng số lần thử thay vì lọc khớp trước <b class="red">(tốn gần 8 lần)</b></div>
+          <table class="t"><tr><th>cách làm, $s = 4$, $p = 0{,}99$</th><th>tỉ lệ đúng</th><th>số lần bốc</th></tr>
+          <tr><td>khớp thô, bốc nhiều hơn</td><td>0,3</td><td>567</td></tr>
+          <tr><td>lọc bằng phép thử tỉ số trước (bài 4)</td><td>0,5</td><td>72</td></tr></table>
+          <p class="note">Nâng $w$ từ 0,3 lên 0,5 cắt số lần bốc $\frac{567}{72} \approx 7{,}9$ lần. Vì $w$ nằm ở số mũ, lọc đầu vào rẻ hơn thử thêm.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, tăng số lần thử thay vì lọc khớp trước, nên tốn gần 8 lần. Khớp thô có tỉ lệ đúng 0 phẩy 3, phải bốc 567 lần. Lọc bằng phép thử tỉ số gần nhất chia gần nhì ở bài 4 nâng tỉ lệ đúng lên 0 phẩy 5, chỉ cần 72 lần. Vì w nằm ở số mũ, nên lọc đầu vào rẻ hơn thử thêm rất nhiều."
+
+  # ───────────────────────── 10. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: hai phép tính N và một quyết định thời gian thực"
+    checks:
+      - "round(math.log(0.01) / math.log(1 - 0.7 ** 2), 2) == 6.84 and alg.cvi_ransac_iters(0.7, 2, 0.99) == 7"
+      - "round(0.4 ** 4, 4) == 0.0256 and round(math.log(0.01) / math.log(1 - 0.4 ** 4), 1) == 177.6 and alg.cvi_ransac_iters(0.4, 4, 0.99) == 178"
+      - "round(1 - (1 - 0.4 ** 4) ** 100, 3) == 0.925 and round(1 / (1 - 0.925)) == 13 and alg.cvi_ransac_iters(0.6, 4, 0.99) == 34"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề ($p = 0{,}99$)</th></tr>
+          <tr><td>1</td><td>Tìm đường thẳng ($s = 2$), tỉ lệ đúng 0,7. Cần bao nhiêu lần bốc?</td></tr>
+          <tr><td>2</td><td>Ghép ảnh ($s = 4$), tỉ lệ đúng 0,4. Cần bao nhiêu lần bốc?</td></tr>
+          <tr><td>3</td><td>Ứng dụng chạy thời gian thực chỉ kịp 100 lần bốc mỗi khung, với $s = 4$, $w = 0{,}4$. Bạn làm gì?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", 0]
+        say: "Bây giờ đến lượt bạn, với độ chắc 0 phẩy 99. Câu một, tìm đường thẳng cần 2 điểm, tỉ lệ đúng 0 phẩy 7, cần bao nhiêu lần bốc? Câu hai, ghép ảnh cần 4 điểm, tỉ lệ đúng 0 phẩy 4, cần bao nhiêu lần? Câu ba, ứng dụng chạy thời gian thực chỉ kịp 100 lần bốc mỗi khung, với 4 điểm và tỉ lệ đúng 0 phẩy 4, bạn làm gì? Dừng video và làm ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <p><b>Câu 1.</b> $0{,}7^2 = 0{,}49$; $N \ge \frac{\ln 0{,}01}{\ln 0{,}51} \approx 6{,}84$ → $\hlg{7}$ lần.</p>
+          <p><b>Câu 2.</b> $0{,}4^4 = 0{,}0256$; $N \ge \frac{-4{,}605}{\ln 0{,}9744} \approx 177{,}6$ → $\hlg{178}$ lần.</p>
+        focus: [1, 2]
+        say: "Câu một, 0 phẩy 7 bình phương bằng 0 phẩy 49, nên N lớn hơn hoặc bằng lôgarit của 0 phẩy 01 chia lôgarit của 0 phẩy 51, xấp xỉ 6 phẩy 84, làm tròn lên 7 lần. Câu hai, 0 phẩy 4 mũ 4 bằng 0 phẩy 0256, nên N xấp xỉ 177 phẩy 6, làm tròn lên 178 lần."
+      - show: |
+          <table class="t"><tr><th>câu 3</th><th>được</th><th>mất</th></tr>
+          <tr><td>chạy đủ 100 lần</td><td>đúng hạn</td><td>chỉ chắc $1 - 0{,}9744^{100} \approx 0{,}925$: cứ khoảng 13 khung trượt 1</td></tr>
+          <tr><td>lọc khớp chặt hơn để $w = 0{,}6$</td><td>chỉ cần 34 lần, dư thời gian</td><td>còn ít cặp hơn, ảnh ít vân dễ thiếu cặp</td></tr>
+          <tr><td>dùng kết quả khung trước làm gợi ý</td><td>thường gặp ngay mô hình tốt</td><td>chuyển động đột ngột thì gợi ý sai</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Câu ba là một đánh đổi. Chạy đủ 100 lần thì đúng hạn, nhưng chỉ chắc khoảng 0 phẩy 925, cứ khoảng 13 khung lại trượt một khung. Lọc khớp chặt hơn để tỉ lệ đúng lên 0 phẩy 6 thì chỉ cần 34 lần, nhưng còn ít cặp hơn, và ảnh ít vân dễ thiếu cặp. Dùng kết quả của khung trước làm gợi ý thường gặp ngay mô hình tốt, nhưng khi camera chuyển động đột ngột thì gợi ý sai."
+
+  # ───────────────────────── 11. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">điểm sai lớn kéo lệch bình phương tối thiểu</span><span class="a">→</span>
+          <span class="n">bốc s điểm, dựng mô hình, đếm điểm đồng ý</span><span class="a">→</span>
+          <span class="n">thành công một lần: w mũ s</span><span class="a">→</span>
+          <span class="n">$N = \frac{\ln(1 - p)}{\ln(1 - w^s)}$, làm tròn lên</span><span class="a">→</span>
+          <span class="n">lọc trước để nâng w rẻ hơn thử thêm</span></div>
+        say: "Tổng kết lại, điểm sai lớn kéo lệch bình phương tối thiểu, nên ta bốc s điểm, dựng mô hình và đếm xem bao nhiêu điểm đồng ý. Một lần bốc thành công với xác suất w mũ s, từ đó N bằng lôgarit của 1 trừ p chia lôgarit của 1 trừ w mũ s, làm tròn lên. Vì w nằm ở số mũ, lọc trước để nâng w rẻ hơn thử thêm."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> khi dữ liệu có thể sai lớn, đừng hỏi “đường nào vừa với mọi điểm?”, hãy hỏi “đường nào được nhiều điểm đồng ý nhất?” — và tính trước phải hỏi bao nhiêu lần.</div>
+        say: "Điều cần mang theo, khi dữ liệu có thể sai lớn, đừng hỏi đường nào vừa với mọi điểm. Hãy hỏi đường nào được nhiều điểm đồng ý nhất, và tính trước xem phải hỏi bao nhiêu lần."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 6): <b>hình học hai góc nhìn</b> — dùng hai camera đặt cạnh nhau để đo độ sâu từ độ chênh của cùng một điểm giữa hai ảnh, và xem sai số tăng thế nào khi vật ở xa.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 6, ta học hình học hai góc nhìn, dùng hai camera đặt cạnh nhau để đo độ sâu từ độ chênh của cùng một điểm giữa hai ảnh. Ta cũng xem sai số tăng thế nào khi vật ở xa. Hẹn gặp bạn ở bài tiếp theo."

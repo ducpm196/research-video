@@ -1,0 +1,296 @@
+id: L03
+course: PAR
+series: "PAR · Tính toán song song và GPU"
+title: "Bài 3 — Tranh chấp dữ liệu, phép toán nguyên tử và phép rút gọn"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/par.yaml L03; audit/par/verify_par.py L03; audit/par/sources_L03.md (câu trích nguyên văn, đọc 2026-11-02); OSY bài 4 (tranh chấp x++, 924 cách xen kẽ, kết quả 2, 3, 4); CSA bài 4 (phép cộng số thực không kết hợp); PyTorch, Reproducibility (docs.pytorch.org, bản 2.15) — phép nguyên tử không tất định, phép cộng số thực không kết hợp, thuật toán tất định thường chậm hơn; J. Nickolls và cộng sự, Scalable Parallel Programming with CUDA (ACM Queue 2008) — lệnh đọc–sửa–ghi nguyên tử giúp phép rút gọn song song"
+assumes: [arith, approx]
+# Quy ước: x = biến dùng chung, ban đầu 0; “x++” = 3 bước đọc, cộng, ghi (như khoá Hệ điều hành bài 4); n = số luồng (cả khoá gọi là
+#   số lõi); k = số lần tăng mỗi luồng. “Phép toán nguyên tử” = đọc–cộng–ghi gộp thành MỘT bước không ai chen vào được
+#   (alg.par_atomic_counts). “Phép rút gọn” = mỗi luồng cộng vào biến riêng, cuối cùng gộp theo cây cặp đôi (alg.par_reduce_tree).
+#   Mô hình đếm bước của bài: mỗi lần tăng 1 bước; các phép nguyên tử trên CÙNG một biến phải lần lượt (alg.par_shared_steps).
+#   Số thực: số 64 bit của Python (CSA bài 4); cộng dồn = alg.par_reduce_seq. Số minh hoạ: 8 luồng × 1000 lần, 16 luồng × 10 000 sự kiện.
+#   Tên PyTorch, CUDA chỉ trên màn hình; lời đọc nói “một thư viện học sâu lớn”, “mô hình lập trình bộ xử lý đồ hoạ”.
+objectives:
+  - "Liệt kê kết quả có thể của biến đếm dùng chung không khoá, và so với phép tăng nguyên tử"
+  - "Tính số bước của cách dùng phép nguyên tử và cách rút gọn bằng tổng riêng rồi gộp theo cây"
+  - "Giải thích vì sao rút gọn song song số thực cho kết quả khác thứ tự tuần tự, và chọn cách để kết quả tái lập được"
+asr_reviewed:
+  - {sentence: "Vì vậy 0 phẩy 1 cộng 0 phẩy 2 ra 0 phẩy 3 với một đuôi số 4 rất nhỏ.", reason: "ASR chép “Vì vậy, không phải 1 cộng, không phải 2 tra, không phải 3 với 1 đôi số 4 rất nhỏ.” (0.75): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: ra/tra, đuôi/đôi — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Bộ đếm thiếu, tổng tiền lệch ở chữ số cuối"
+    checks:
+      - "alg.race_finals(2) == {2, 3, 4}"
+      - "alg.par_reduce_seq([0.1] * 8) == 0.7999999999999999 and alg.par_reduce_tree([0.1] * 8) == 0.8"
+    steps:
+      - show: |
+          <p>Hai luồng cùng tăng một bộ đếm, mỗi luồng 2 lần. Đúng phải là 4, nhưng máy có thể ra <b>2, 3 hoặc 4</b>.</p>
+          <p>Sửa xong bộ đếm, nhóm cộng 8 khoản 0,1 đồng: chạy một luồng ra <b>0,7999999999999999</b>, chạy song song ra <b>0,8</b>. Không ai viết sai cả.</p>
+          <div class="box key">Hôm nay: vì sao bộ đếm thiếu, phép toán nguyên tử sửa nó với giá nào, và vì sao cộng song song đổi chữ số cuối.</div>
+        focus: [1, 2, 2, 3]
+        say: "Chào bạn, hai luồng cùng tăng một bộ đếm, mỗi luồng 2 lần, đúng phải là 4, nhưng máy có thể ra 2, 3 hoặc 4. Sửa xong bộ đếm, nhóm cộng 8 khoản 0 phẩy 1 đồng, chạy một luồng ra 0 phẩy 7999 cùng nhiều chữ số 9, còn chạy song song ra đúng 0 phẩy 8. Không ai viết sai cả. Hôm nay ta tìm hiểu vì sao bộ đếm thiếu, phép toán nguyên tử sửa nó với giá nào, và vì sao cộng song song làm đổi chữ số cuối."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại ba điều từ các khoá và bài trước"
+    checks:
+      - "alg.race_finals(1) == {1, 2} and alg.par_race_counts(1) == {1: 18, 2: 2}"
+      - "0.1 + 0.2 == 0.30000000000000004"
+      - "alg.par_tree_sum(8)[:2] == (7, 3)"
+    steps:
+      - show: |
+          <table class="t"><tr><th>đã học ở</th><th>điều sẽ dùng</th><th>ví dụ số</th></tr>
+          <tr><td>khoá Hệ điều hành, phần tranh chấp</td><td>x++ là ba bước: <b>đọc</b> x vào thanh ghi, <b>cộng</b> 1, <b>ghi</b> về x; luồng khác chen vào giữa được</td><td>hai luồng mỗi luồng tăng 1 lần: 20 cách xen kẽ, 18 cách ra 1, chỉ 2 cách ra 2</td></tr>
+          <tr><td>khoá Hệ thống máy tính, phần sai số làm tròn</td><td>số thực bị làm tròn sau mỗi phép tính</td><td>0,1 + 0,2 = 0,30000000000000004</td></tr>
+          <tr><td>bài 2</td><td>cộng theo cặp: cây</td><td>8 số: 7 phép cộng, đường găng 3 tầng</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.3", "1.4"]
+        say: "Ta ôn ba điều sẽ dùng. Ở khoá Hệ điều hành, phần tranh chấp, lệnh tăng x là ba bước, đọc x vào thanh ghi, cộng 1, rồi ghi về x, và luồng khác có thể chen vào giữa. Hai luồng mỗi luồng tăng một lần có 20 cách xen kẽ, 18 cách ra 1, chỉ 2 cách ra 2. Ở khoá Hệ thống máy tính, phần sai số làm tròn, số thực bị làm tròn sau mỗi phép tính. Vì vậy 0 phẩy 1 cộng 0 phẩy 2 ra 0 phẩy 3 với một đuôi số 4 rất nhỏ. Ở bài 2, cộng 8 số theo cặp cần 7 phép cộng và đường găng 3 tầng."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: tranh chấp, nguyên tử, rút gọn, kết hợp"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thuật ngữ</th><th>nghĩa</th></tr>
+          <tr><td><b>tranh chấp dữ liệu</b></td><td>hai luồng cùng chạm một biến, ít nhất một luồng ghi, không có gì xếp thứ tự</td></tr>
+          <tr><td><b>phép toán nguyên tử</b></td><td>đọc–cộng–ghi gộp thành <b>một</b> bước phần cứng, không ai chen vào giữa được</td></tr>
+          <tr><td><b>phép rút gọn</b></td><td>gộp nhiều giá trị thành một (tổng, lớn nhất…): mỗi luồng có <b>tổng riêng</b>, cuối cùng gộp lại</td></tr>
+          <tr><td><b>tính kết hợp</b></td><td>$(a + b) + c = a + (b + c)$: đổi cách nhóm không đổi kết quả</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", "1.5", "1.5"]
+        say: "Bài dùng bốn thuật ngữ. Tranh chấp dữ liệu là khi hai luồng cùng chạm một biến, ít nhất một luồng ghi, và không có gì xếp thứ tự cho chúng. Phép toán nguyên tử gộp đọc, cộng, ghi thành một bước của phần cứng, không ai chen vào giữa được. Phép rút gọn gộp nhiều giá trị thành một, mỗi luồng giữ một tổng riêng rồi cuối cùng gộp lại. Tính kết hợp nghĩa là đổi cách nhóm, a cộng b trước hay b cộng c trước, không đổi kết quả. Số nguyên có tính chất này, số thực máy thì không."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Ba cách để bốn luồng cùng cộng"
+    steps:
+      - show: |
+          <div><svg width="1600" height="380" viewBox="0 0 1600 380"><defs><marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs>
+          <g font-size="22" font-weight="bold" text-anchor="middle">
+          <text x="270" y="32" fill="#b91c1c">① biến chung, không khoá</text>
+          <text x="800" y="32" fill="#eb6834">② phép toán nguyên tử</text>
+          <text x="1330" y="32" fill="#059669">③ rút gọn: tổng riêng rồi gộp</text>
+          </g>
+          <g font-size="20" text-anchor="middle" fill="#1f2937">
+          <rect x="40" y="60" width="90" height="46" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="85" y="90">luồng 1</text>
+          <rect x="160" y="60" width="90" height="46" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="205" y="90">luồng 2</text>
+          <rect x="280" y="60" width="90" height="46" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="325" y="90">luồng 3</text>
+          <rect x="400" y="60" width="90" height="46" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="445" y="90">luồng 4</text>
+          <rect x="190" y="240" width="160" height="56" rx="8" fill="#fde8e8" stroke="#e11d48" stroke-width="2.5"/><text x="270" y="275">tổng chung</text>
+          <rect x="570" y="60" width="90" height="46" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="615" y="90">luồng 1</text>
+          <rect x="690" y="60" width="90" height="46" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="735" y="90">luồng 2</text>
+          <rect x="810" y="60" width="90" height="46" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="855" y="90">luồng 3</text>
+          <rect x="930" y="60" width="90" height="46" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="975" y="90">luồng 4</text>
+          <rect x="720" y="240" width="160" height="56" rx="8" fill="#ffedd5" stroke="#eb6834" stroke-width="2.5"/><text x="800" y="275">tổng chung</text>
+          <rect x="1100" y="60" width="90" height="46" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="1145" y="90">luồng 1</text>
+          <rect x="1220" y="60" width="90" height="46" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="1265" y="90">luồng 2</text>
+          <rect x="1340" y="60" width="90" height="46" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="1385" y="90">luồng 3</text>
+          <rect x="1460" y="60" width="90" height="46" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="1505" y="90">luồng 4</text>
+          <rect x="1100" y="140" width="90" height="42" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="1145" y="168">riêng</text>
+          <rect x="1220" y="140" width="90" height="42" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="1265" y="168">riêng</text>
+          <rect x="1340" y="140" width="90" height="42" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="1385" y="168">riêng</text>
+          <rect x="1460" y="140" width="90" height="42" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="1505" y="168">riêng</text>
+          <circle cx="1205" cy="232" r="22" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="1205" y="240">+</text>
+          <circle cx="1445" cy="232" r="22" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="1445" y="240">+</text>
+          <rect x="1255" y="276" width="150" height="48" rx="8" fill="#d1fae5" stroke="#059669" stroke-width="2.5"/><text x="1330" y="307">tổng</text>
+          </g>
+          <g stroke="#1f2937" stroke-width="2.5">
+          <line x1="85" y1="108" x2="240" y2="236" marker-end="url(#ar3)"/><line x1="205" y1="108" x2="255" y2="236" marker-end="url(#ar3)"/>
+          <line x1="325" y1="108" x2="285" y2="236" marker-end="url(#ar3)"/><line x1="445" y1="108" x2="300" y2="236" marker-end="url(#ar3)"/>
+          <line x1="615" y1="108" x2="770" y2="236" marker-end="url(#ar3)"/><line x1="735" y1="108" x2="785" y2="236" marker-end="url(#ar3)"/>
+          <line x1="855" y1="108" x2="815" y2="236" marker-end="url(#ar3)"/><line x1="975" y1="108" x2="830" y2="236" marker-end="url(#ar3)"/>
+          <line x1="1145" y1="108" x2="1145" y2="136" marker-end="url(#ar3)"/><line x1="1265" y1="108" x2="1265" y2="136" marker-end="url(#ar3)"/>
+          <line x1="1385" y1="108" x2="1385" y2="136" marker-end="url(#ar3)"/><line x1="1505" y1="108" x2="1505" y2="136" marker-end="url(#ar3)"/>
+          <line x1="1145" y1="184" x2="1190" y2="214"/><line x1="1265" y1="184" x2="1220" y2="214"/>
+          <line x1="1385" y1="184" x2="1430" y2="214"/><line x1="1505" y1="184" x2="1460" y2="214"/>
+          <line x1="1222" y1="248" x2="1290" y2="274" marker-end="url(#ar3)"/><line x1="1428" y1="248" x2="1370" y2="274" marker-end="url(#ar3)"/>
+          </g>
+          <g font-size="20" text-anchor="middle">
+          <text x="270" y="335" fill="#b91c1c">đọc–cộng–ghi chen nhau:</text><text x="270" y="362" fill="#b91c1c">mất lần cộng</text>
+          <text x="800" y="335" fill="#eb6834">đúng, nhưng xếp hàng</text><text x="800" y="362" fill="#eb6834">từng lần một</text>
+          <text x="1330" y="355" fill="#059669">đúng, và các luồng không chờ nhau</text>
+          </g>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ ba cách để bốn luồng cùng cộng vào một tổng. Cách một, mọi luồng đọc, cộng, ghi thẳng vào biến chung, các bước chen nhau nên có lần cộng bị mất. Cách hai, mỗi lần cộng là một phép nguyên tử, kết quả luôn đúng, nhưng các luồng phải xếp hàng ở biến chung, mỗi lúc chỉ một lần. Cách ba là rút gọn, mỗi luồng cộng vào tổng riêng của mình mà không chờ ai, cuối cùng các tổng riêng gộp theo cây như ở bài 2."
+
+  # ───────────────────────── 5. SUY RA ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra số bước của phép nguyên tử và của phép rút gọn"
+    checks:
+      - "alg.par_shared_steps(4, 3, 'atomic') == 12 and alg.par_shared_steps(4, 3, 'reduce') == 5"
+      - "alg.par_shared_steps(8, 1000, 'atomic') == 8000 and alg.par_shared_steps(8, 1000, 'reduce') == 1003"
+    steps:
+      - show: |
+          <p><b>Bước 1 — nguyên tử.</b> Có $n$ luồng, mỗi luồng tăng $k$ lần. Vì các phép nguyên tử trên <b>cùng một biến</b> phải lần lượt, mọi lần tăng nối thành một chuỗi:</p>
+          $$\text{số bước} = n \cdot k$$
+        introduces: [cdot]
+        focus: [1, 1, 2]
+        say: "Bước một, cách nguyên tử. Có n luồng, mỗi luồng tăng k lần. Vì các phép nguyên tử trên cùng một biến phải lần lượt, mọi lần tăng nối thành một chuỗi, nên số bước bằng n nhân k, dấu chấm giữa dòng là phép nhân."
+      - show: |
+          <p><b>Bước 2 — rút gọn.</b> Mỗi luồng tăng tổng riêng $k$ lần, cùng lúc với các luồng khác: $k$ bước. Gộp $n$ tổng riêng theo cây mất số tầng chia đôi $n$ về 1 (bài 2):</p>
+          $$\text{số bước} = k + \text{số tầng gộp}$$
+        focus: [1, 1, 2]
+        say: "Bước hai, cách rút gọn. Mỗi luồng tăng tổng riêng k lần, cùng lúc với các luồng khác, nên mất k bước. Theo bài 2, gộp n tổng riêng theo cây mất số tầng cần để chia đôi n về 1, nên số bước bằng k cộng số tầng gộp."
+      - clear: true
+        show: |
+          <p><b>Làm thử ngay:</b> 4 luồng, mỗi luồng tăng 3 lần.</p>
+          <table class="t"><tr><th>cách</th><th>phép tính</th><th>số bước</th></tr>
+          <tr><td>nguyên tử</td><td>$4 \cdot 3$</td><td>12</td></tr>
+          <tr><td>rút gọn</td><td>3 bước riêng + 2 tầng gộp (4 → 2 → 1)</td><td>$\hlg{5}$</td></tr></table>
+          <p class="note">Mô hình của bài: mỗi lần tăng 1 bước. Phép nguyên tử thật còn chậm hơn phép thường, nên khoảng cách thật thường lớn hơn.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Làm thử ngay với 4 luồng, mỗi luồng tăng 3 lần. Cách nguyên tử mất 4 nhân 3, bằng 12 bước. Cách rút gọn mất 3 bước riêng cộng 2 tầng gộp, vì 4 về 2 rồi về 1, tổng 5 bước. Đây là mô hình mỗi lần tăng một bước, còn phép nguyên tử thật thường chậm hơn phép thường, nên khoảng cách thật còn lớn hơn."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Từng bước: liệt kê, sửa bằng nguyên tử, rút gọn, và số thực"
+    checks:
+      - "alg.par_race_counts(2) == {2: 702, 3: 216, 4: 6} and sum(alg.par_race_counts(2).values()) == 924"
+      - "alg.par_atomic_counts(2) == {4: 6}"
+      - "alg.par_shared_steps(8, 1000, 'atomic') == 8000 and alg.par_shared_steps(8, 1000, 'reduce') == 1003 and round(8000 / 1003, 2) == 7.98"
+      - "(0.1 + 0.2) + 0.3 == 0.6000000000000001 and 0.1 + (0.2 + 0.3) == 0.6"
+      - "alg.par_reduce_seq([0.1] * 8) == 0.7999999999999999 and alg.par_reduce_tree([0.1] * 8) == 0.8"
+    steps:
+      - show: |
+          <p><b>Bước 1 — không khoá.</b> Hai luồng, mỗi luồng tăng 2 lần, mỗi lần 3 bước: máy duyệt hết <b>924</b> cách xen kẽ.</p>
+          <table class="t"><tr><th>x cuối</th><th>2</th><th>3</th><th>4 (đúng)</th></tr>
+          <tr><td>số cách</td><td>702</td><td>216</td><td>$\hl{6}$</td></tr></table>
+        focus: [1, 1, 2]
+        say: "Bước một, không khoá. Hai luồng, mỗi luồng tăng 2 lần, mỗi lần 3 bước, máy duyệt hết 924 cách xen kẽ. Có 702 cách ra 2, 216 cách ra 3, và chỉ 6 cách ra đúng 4."
+      - show: |
+          <p><b>Bước 2 — nguyên tử.</b> Mỗi lần tăng thành 1 bước: chỉ còn chọn thứ tự 4 lần tăng, <b>6</b> cách, và cả 6 cách đều ra $\hlg{4}$.</p>
+        say: "Bước hai, dùng phép nguyên tử. Mỗi lần tăng giờ là một bước, nên chỉ còn chọn thứ tự của 4 lần tăng, có 6 cách, và cả 6 cách đều ra 4. Sáu cách này chính là 6 cách ra đúng ở bước một."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — cái giá.</b> 8 luồng, mỗi luồng tăng 1000 lần (số minh hoạ):</p>
+          <table class="t"><tr><th>cách</th><th>phép tính</th><th>số bước</th></tr>
+          <tr><td>nguyên tử</td><td>$8 \cdot 1000$</td><td>8000</td></tr>
+          <tr><td>rút gọn</td><td>1000 + 3 tầng gộp</td><td>$\hlg{1003}$</td></tr></table>
+          <p>Rút gọn nhanh hơn $\frac{8000}{1003} \approx 7{,}98$ lần — gần bằng số luồng.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Bước ba là cái giá, với 8 luồng, mỗi luồng tăng 1000 lần, một số minh hoạ. Cách nguyên tử mất 8 nhân 1000, bằng 8000 bước nối tiếp. Cách rút gọn mất 1000 bước riêng cộng 3 tầng gộp, bằng 1003 bước. Vậy rút gọn nhanh hơn khoảng 7 phẩy 98 lần, gần bằng số luồng."
+      - clear: true
+        show: |
+          <p><b>Bước 4 — số thực không kết hợp.</b> Cùng ba số, đổi cách nhóm:</p>
+          $$(0{,}1 + 0{,}2) + 0{,}3 = 0{,}6000000000000001 \qquad 0{,}1 + (0{,}2 + 0{,}3) = 0{,}6$$
+          <p>Rút gọn song song <b>đổi cách nhóm</b>, nên đổi chữ số cuối.</p>
+        focus: [1, 2, 2, 3]
+        say: "Bước bốn, số thực máy không có tính kết hợp. Cộng 0 phẩy 1 với 0 phẩy 2 trước, rồi mới cộng 0 phẩy 3, ta được 0 phẩy 6 với một đuôi 1 rất nhỏ. Còn cộng 0 phẩy 2 với 0 phẩy 3 trước thì ra đúng 0 phẩy 6. Rút gọn song song chính là đổi cách nhóm, nên nó làm đổi chữ số cuối."
+      - show: |
+          <table class="t"><tr><th>8 khoản 0,1</th><th>cách nhóm</th><th>kết quả</th></tr>
+          <tr><td>một luồng, cộng dồn</td><td>$((0{,}1 + 0{,}1) + 0{,}1) + \dots$</td><td>0,7999999999999999</td></tr>
+          <tr><td>song song, gộp theo cây</td><td>từng cặp, rồi cặp của cặp</td><td>$\hlg{0{,}8}$</td></tr></table>
+        introduces: [dots]
+        focus: [0, "1.2", "1.3"]
+        say: "Với 8 khoản 0 phẩy 1 ở đầu bài, một luồng cộng dồn từng khoản, dấu ba chấm nghĩa là cứ thế tiếp tục, và ra 0 phẩy 7999 cùng nhiều chữ số 9. Gộp theo cây, từng cặp rồi cặp của cặp, lại ra 0 phẩy 8. Cả hai đều là kết quả hợp lệ của số thực máy, chỉ khác cách nhóm."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác"
+    checks:
+      - "alg.par_atomic_counts(2) == {4: 6} and alg.par_race_counts(2)[4] == 6"
+      - "alg.par_race_counts(2)[2] + alg.par_race_counts(2)[3] + alg.par_race_counts(2)[4] == 924"
+      - "abs(alg.par_reduce_tree([0.1] * 8) - 0.8) < 1e-15 and abs(alg.par_reduce_seq([0.1] * 8) - 0.8) < 1e-15"
+    steps:
+      - show: |
+          <table class="t"><tr><th>con số</th><th>đường khác để kiểm</th></tr>
+          <tr><td>6 cách ra 4</td><td>x cuối bằng 4 chỉ khi mỗi lần tăng chạy liền 3 bước; khi đó mỗi lần tăng như một khối, đếm thứ tự 2 khối của A, 2 khối của B: 6 cách ✓</td></tr>
+          <tr><td>924 cách</td><td>702 + 216 + 6 = 924 ✓</td></tr>
+          <tr><td>0,8 và 0,7999999999999999</td><td>hai số chỉ lệch một bậc làm tròn nhỏ nhất; đúng cả hai khi so trong sai số $10^{-15}$ ✓</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.4"]
+        say: "Ta kiểm ba con số theo đường khác. Bộ đếm ra 4 chỉ khi mỗi lần tăng chạy liền ba bước. Khi đó mỗi lần tăng như một khối, và ta đếm thứ tự của 2 khối của A với 2 khối của B được đúng 6 cách. Cộng ba nhóm, 702 cộng 216 cộng 6 bằng 924, khớp số cách xen kẽ. Hai tổng 0 phẩy 8 và 0 phẩy 7999 chỉ lệch một bậc làm tròn nhỏ nhất, nên so trong sai số 10 mũ âm 15 thì cả hai đều đúng."
+
+  # ───────────────────────── 8. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi cả người đã đi làm"
+    checks:
+      - "alg.par_shared_steps(8, 1000, 'atomic') == 8 * alg.par_shared_steps(1, 1000, 'atomic')"
+      - "(0.1 + 0.2) + 0.3 != 0.1 + (0.2 + 0.3) and abs(((0.1 + 0.2) + 0.3) - (0.1 + (0.2 + 0.3))) < 1e-15"
+      - "sum(alg.par_race_counts(2)[v] for v in (2, 3)) == 918"
+    steps:
+      - show: |
+          <table class="t"><tr><th>lỗi</th><th>vì sao sai</th><th>phép thử bắt được</th></tr>
+          <tr><td><b class="red">1.</b> Chạy thử thấy ra 4 rồi yên tâm</td><td>918 trên 924 cách xen kẽ là sai; thử nghiệm hay rơi vào thứ tự “một luồng xong rồi luồng kia”</td><td>duyệt mọi cách xen kẽ, hoặc công cụ dò tranh chấp</td></tr></table>
+        say: "Lỗi thứ nhất, chạy thử vài lần thấy ra 4 rồi yên tâm. Trong 924 cách xen kẽ có tới 918 cách sai, chỉ là thử nghiệm hay rơi vào thứ tự một luồng xong rồi luồng kia mới chạy."
+      - show: |
+          <table class="t"><tr><th>lỗi</th><th>vì sao sai</th><th>phép thử bắt được</th></tr>
+          <tr><td><b class="red">1.</b> Chạy thử thấy ra 4 rồi yên tâm</td><td>918 trên 924 cách xen kẽ là sai</td><td>duyệt mọi cách xen kẽ</td></tr>
+          <tr><td><b class="red">2.</b> Thay mọi phép cộng bằng phép nguyên tử trên một biến</td><td>đúng nhưng nối tiếp: 8 luồng thành 8000 bước, rút gọn chỉ 1003</td><td>đo thời gian khi tăng số luồng: không nhanh lên</td></tr></table>
+        focus: ["1.3", "1.3"]
+        say: "Lỗi thứ hai, thay mọi phép cộng bằng phép nguyên tử trên cùng một biến. Kết quả đúng, nhưng 8 luồng thành 8000 bước nối tiếp, chậm như một luồng làm hết, trong khi rút gọn chỉ cần 1003 bước."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3</b> (người đã đi làm). So kết quả số thực bằng dấu bằng giữa chạy 1 luồng và 8 luồng, rồi báo “lỗi phần cứng”
+          <br><span class="note">Trang về tính tái lập của một thư viện học sâu lớn (PyTorch) ghi: phép cộng số thực không kết hợp, nên kết quả khác nhau giữa các cách tính. So trong sai số tương đối, không so bằng tuyệt đối.</span></div>
+        say: "Lỗi thứ ba hay gặp ở người đã đi làm, là so kết quả số thực bằng dấu bằng giữa lần chạy một luồng và tám luồng, rồi báo lỗi phần cứng. Trang hướng dẫn về tính tái lập của một thư viện học sâu lớn ghi rõ, phép cộng số thực không kết hợp, nên mỗi cách tính cho kết quả hơi khác. Hãy so trong một sai số tương đối, đừng so bằng tuyệt đối."
+      - show: |
+          <div class="box warn"><b>Lỗi 4</b> (người đã đi làm). Cần tái lập từng bit mà vẫn dùng phép nguyên tử để rút gọn
+          <br><span class="note">Thứ tự các phép nguyên tử đổi theo từng lần chạy, nên thư viện đó ghi chúng là không tất định. Muốn tái lập: cố định thứ tự gộp (cây cố định), chấp nhận chậm hơn — thư viện cũng ghi phép tất định thường chậm hơn.</span></div>
+        say: "Lỗi thứ tư cũng của người đã đi làm, là cần kết quả tái lập từng chữ số mà vẫn rút gọn bằng phép nguyên tử. Thứ tự các phép nguyên tử đổi theo từng lần chạy, nên thư viện đó ghi chúng là không tất định. Muốn tái lập thì cố định thứ tự gộp, ví dụ một cây cố định, và chấp nhận chạy chậm hơn một chút."
+
+  # ───────────────────────── 9. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: đếm lượt xem và cộng tiền"
+    checks:
+      - "alg.par_shared_steps(16, 10000, 'atomic') == 160000 and alg.par_shared_steps(16, 10000, 'reduce') == 10004"
+      - "round(160000 / 10004, 1) == 16.0"
+      - "sum([10] * 8) == 80 and alg.par_reduce_seq([0.1] * 8) != 0.8"
+    steps:
+      - show: |
+          <p>Hệ thống có <b>16 luồng</b>, mỗi luồng xử lý <b>10 000 sự kiện</b> (số minh hoạ).</p>
+          <table class="t"><tr><th>câu</th><th>hỏi</th></tr>
+          <tr><td>1</td><td>Đếm lượt xem trang: biến chung không khoá, phép nguyên tử, hay rút gọn? Mỗi cách mất bao nhiêu bước?</td></tr>
+          <tr><td>2</td><td>Cộng tiền để đối soát với ngân hàng, phải ra giống nhau mọi lần chạy. Bạn chọn gì?</td></tr></table>
+        focus: [1, "2.2", "2.3", 0]
+        say: "Bây giờ đến lượt bạn, hệ thống có 16 luồng, mỗi luồng xử lý 10 nghìn sự kiện, đều là số minh hoạ. Câu một, đếm lượt xem trang, bạn dùng biến chung không khoá, phép nguyên tử hay rút gọn, và mỗi cách mất bao nhiêu bước? Câu hai, cộng tiền để đối soát với ngân hàng, phải ra giống nhau ở mọi lần chạy, bạn chọn cách nào? Dừng video và làm ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 1</th><th>số bước</th><th>đúng không</th></tr>
+          <tr><td>không khoá</td><td>10 000</td><td class="red">sai, mất lượt đếm</td></tr>
+          <tr><td>nguyên tử</td><td>$16 \cdot 10\,000 = 160\,000$</td><td>đúng, nhưng nối tiếp</td></tr>
+          <tr><td>rút gọn</td><td>$10\,000 + 4$ tầng gộp $= \hlg{10\,004}$</td><td>đúng, nhanh hơn khoảng 16 lần</td></tr></table>
+          <p class="note">Chọn rút gọn. Phép nguyên tử chỉ hợp khi mỗi luồng cập nhật hiếm, ví dụ vài lần mỗi giây.</p>
+        focus: ["1.2", "1.3", "1.4", 2]
+        say: "Đáp án câu một. Không khoá chỉ mất 10 nghìn bước nhưng sai, vì mất lượt đếm. Phép nguyên tử đúng, nhưng 16 nhân 10 nghìn bằng 160 nghìn bước nối tiếp. Rút gọn đúng và chỉ mất 10 nghìn cộng 4 tầng gộp, bằng 10 nghìn 4 bước, nhanh hơn khoảng 16 lần, nên chọn rút gọn, còn phép nguyên tử chỉ hợp khi mỗi luồng cập nhật hiếm."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 2: lựa chọn</th><th>được</th><th>mất</th></tr>
+          <tr><td>ghi tiền bằng <b>số nguyên đồng</b> (0,1 đồng thành 10 xu)</td><td>cộng số nguyên có tính kết hợp: mọi cách gộp đều ra 80 xu</td><td>phải đổi đơn vị ở chỗ nhập và in</td></tr>
+          <tr><td>vẫn số thực, nhưng cố định cây gộp</td><td>mọi lần chạy cùng một kết quả</td><td>đổi số luồng là đổi cây, kết quả lại khác</td></tr>
+          <tr><td>số thực + phép nguyên tử</td><td>viết nhanh</td><td class="red">không tái lập được, không dùng</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Đáp án câu hai là một đánh đổi. Ghi tiền bằng số nguyên, ví dụ 0 phẩy 1 đồng thành 10 xu, thì cộng số nguyên có tính kết hợp, mọi cách gộp đều ra 80 xu, chỉ phải đổi đơn vị lúc nhập và in. Giữ số thực nhưng cố định cây gộp thì mọi lần chạy giống nhau, nhưng đổi số luồng là đổi cây, kết quả lại khác. Số thực cộng bằng phép nguyên tử thì không tái lập được, nên không dùng cho đối soát."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">đọc–cộng–ghi chen nhau: mất cập nhật</span><span class="a">→</span>
+          <span class="n">nguyên tử: đúng, nhưng xếp hàng $n \cdot k$ bước</span><span class="a">→</span>
+          <span class="n">rút gọn: k bước riêng + số tầng gộp</span><span class="a">→</span>
+          <span class="n">đổi cách nhóm: số thực đổi chữ số cuối</span></div>
+        say: "Tổng kết lại, đọc, cộng, ghi chen nhau làm mất cập nhật. Phép nguyên tử sửa được, nhưng các luồng xếp hàng, mất n nhân k bước. Rút gọn chỉ mất k bước riêng cộng số tầng gộp. Rút gọn đổi cách nhóm, nên với số thực nó đổi chữ số cuối."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> đừng chia sẻ thứ có thể giữ riêng. Gộp một lần ở cuối, theo một thứ tự bạn chọn — và hỏi trước: kết quả có cần giống nhau từng chữ số không?</div>
+        say: "Điều cần mang theo, đừng chia sẻ thứ có thể giữ riêng. Hãy gộp một lần ở cuối theo một thứ tự bạn chọn, và hỏi trước xem kết quả có cần giống nhau từng chữ số không."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 4): khi các việc dài ngắn khác nhau — chia việc cho lõi sao cho không lõi nào phải chờ: chia tĩnh, chia động, việc dài trước.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 4, ta học cách chia việc khi các việc dài ngắn khác nhau, để không lõi nào phải ngồi chờ, với chia tĩnh, chia động và làm việc dài trước. Hẹn gặp bạn ở bài tiếp theo."

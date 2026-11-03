@@ -1,0 +1,255 @@
+id: L12
+course: NET
+series: "NET · Mạng máy tính"
+title: "Bài 12 — Tầng ứng dụng: DNS và HTTP"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/net.yaml L12; audit/net/verify_net.py L12; RFC 1034, 1035 (DNS), RFC 9110, 9112 (HTTP); J. Kurose, K. Ross, mục 2.2, 2.4"
+assumes: [arith, dots]
+# Quy ước: “máy chủ tên miền” = máy chủ DNS; gốc, TLD (tên miền cấp cao nhất như .vn), có thẩm quyền. Đếm RTT bỏ qua thời gian truyền
+#   và giả sử bộ đệm DNS đã có địa chỉ (để tách hai việc). Kết nối không bền = mỗi đối tượng một kết nối TCP mới; bền = dùng chung.
+#   Số RTT do alg.http_rtts tính. Hình phân giải lặp sinh bằng audit/net/seq_svg.py.
+objectives:
+  - "Mô tả phân giải tên miền lặp và vai trò bộ đệm"
+  - "Đếm số lượt đi về khi tải trang với HTTP không bền, bền, và bền có đường ống"
+asr_reviewed:
+  - {sentence: "Một lượt thì chờ 50 mi li giây.", reason: "ASR chép “Một lượt thì chờ 50ml dây.” (0.706): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Kết nối không bền, trang HTML tốn 2 lượt, mỗi đối tượng lại mở kết nối mới nên thêm 2 lượt.", reason: "ASR chép “Kết nối không bình, trang HT-ML tốn hai lượt, mỗi đối tượng lại mở kết nối mới nên thêm hai lượt.” (0.884): HTML đọc “hát tê em eo” theo lexicon WEB, ASR viết “html/HT ML”; lệch âm/thanh thuần Việt: bền/bình — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Đặt ba kết quả cạnh nhau cho một trang HTML và 10 đối tượng.", reason: "ASR chép “Đặt 3 kết quả cạnh nhau cho 1 trang HT, ML và 10 đối tượng.” (0.897): HTML đọc “hát tê em eo” theo lexicon WEB, ASR viết “html/HT ML” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Câu hai, kết nối bền, trang HTML vẫn tốn 2 lượt, nhưng mỗi đối tượng chỉ còn 1 lượt yêu cầu.", reason: "ASR chép “Câu 2, kết nối bình, trang html vẫn tốn hai lượt, nhưng mỗi đối tượng chỉ còn một lượt yêu cầu.” (0.952): lệch âm/thanh thuần Việt: bền/bình — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Gói xác nhận thứ ba có thể mang kèm dữ liệu, nên bắt tay tốn đúng một lượt đi về trước byte dữ liệu đầu tiên.", reason: "ASR chép “Gói xác nhận thứ 3 có thể mang kèm giữ liệu, nên bắt tay tốn đúng một lượt đi về trước bay giữ liệu đầu tiên.” (0.962): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Lỗi thứ nhất, nghĩ DNS chỉ dùng UDP.", reason: "DNS đọc “đê en ét” (lexicon_vi.NET.yaml p1 5/8, NOT_VERIFIED); ASR chép “đe an ác”: đủ ba âm tiết; UDP khớp; lỗi/lội — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Câu hai, với HTTP bền, không đường ống thì sao?", reason: "tên chữ cái đọc kiểu Việt, ASR chép nhầm chữ (q→quy, x→ích, k→ca) — nhóm đã biết (SKILL Bước 5); chữ hiện trên màn hình"}
+  - {sentence: "Câu một, với HTTP không bền thì mất bao nhiêu lượt đi về?", reason: "tên chữ cái đọc kiểu Việt, ASR chép nhầm chữ (q→quy, x→ích, k→ca) — nhóm đã biết (SKILL Bước 5); chữ hiện trên màn hình"}
+  - {sentence: "Điều cần mang theo, trên mạng, thứ đắt nhất thường là số lượt đi về chứ không phải số byte, nên hãy gom việc để đi ít lượt hơn.", reason: "“byte” đọc thô /bai/ — probe audit/csa/probes/p1_thuat_ngu.md: ASR chép “bay” 8/8 (cùng âm), đối chứng 0/8; lexicon foreign_ok; “bit” ASR chép “bích/biết” (probe p1 CSA: không cách viết nào phân định âm cuối t/ch) — NOT_VERIFIED bằng tai người; “byte” → “bay” cùng âm"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "22 lượt đi về cho một trang"
+    checks:
+      - "alg.http_rtts(10) == 22 and alg.http_rtts(10, True, True) == 3"
+    steps:
+      - show: |
+          <p>Gõ một tên miền, máy phải hỏi “tên này ở địa chỉ IP nào?”, rồi tải trang HTML và 10 hình ảnh.</p>
+          <p>Mở kết nối mới cho từng thứ: <b>22</b> lượt đi về. Dùng chung một kết nối và gửi dồn yêu cầu: chỉ <b>3</b>.</p>
+          <div class="box key">Hôm nay: DNS — danh bạ của Internet — và HTTP, cách tải trang web, cùng cách đếm lượt đi về.</div>
+        focus: [1, 2, 2, 3]
+        say: "Chào bạn, khi gõ một tên miền, máy phải hỏi tên này ở địa chỉ IP nào, rồi tải trang HTML và 10 hình ảnh. Nếu mở kết nối mới cho từng thứ thì mất 22 lượt đi về. Còn dùng chung một kết nối và gửi dồn yêu cầu thì chỉ mất 3. Hôm nay ta học DNS, danh bạ của Internet, và HTTP, cách tải trang web, cùng cách đếm lượt đi về."
+
+  # ───────────────────────── 1b. CHUẨN BỊ ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: một lượt đi về, và giá của bắt tay"
+    checks:
+      - "1 * 50 == 50 and 3 * 50 == 150 and 22 * 50 == 1100"
+      - "1 + 1 == 2"
+    steps:
+      - show: |
+          <p>Một <b>lượt đi về</b>: gói đi tới máy kia, câu trả lời quay về. Số minh hoạ: mỗi lượt 50 ms.</p>
+          <table class="t"><tr><th>số lượt đi về</th><th>thời gian chờ</th></tr>
+          <tr><td>1</td><td>50 ms</td></tr>
+          <tr><td>3</td><td>3 × 50 = 150 ms</td></tr>
+          <tr><td>22</td><td>22 × 50 = 1100 ms</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", "2.4"]
+        say: "Trước hết, ôn lại đơn vị đo thời gian quen thuộc của mạng, lượt đi về. Một lượt đi về là thời gian để gói tin đi tới máy kia và câu trả lời quay về, lấy số minh hoạ là 50 mi li giây. Một lượt thì chờ 50 mi li giây. Ba lượt thì chờ 3 nhân 50, bằng 150 mi li giây. Còn 22 lượt thì chờ 22 nhân 50, bằng 1100 mi li giây, tức hơn một giây chỉ để chờ."
+      - show: |
+          <table class="t"><tr><th>việc trên một kết nối TCP mới</th><th>số lượt đi về</th></tr>
+          <tr><td>bắt tay ba bước (gói thứ ba mang kèm yêu cầu được)</td><td>1</td></tr>
+          <tr><td>gửi một yêu cầu, chờ trả lời</td><td>1</td></tr>
+          <tr><td><b>cộng</b></td><td>1 + 1 = <b>2</b></td></tr></table>
+        focus: [1, "1.2", "1.2", "1.3", "1.4"]
+        say: "Ở bài 9, ta đã học bắt tay ba bước của TCP. Khách gửi gói mở kết nối, máy chủ đáp lại, rồi khách xác nhận. Gói xác nhận thứ ba có thể mang kèm dữ liệu, nên bắt tay tốn đúng một lượt đi về trước byte dữ liệu đầu tiên. Sau đó, gửi một yêu cầu rồi chờ trả lời tốn thêm một lượt nữa. Cộng lại, một yêu cầu trên kết nối mới tốn 1 cộng 1, bằng 2 lượt đi về."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: tên miền và các máy chủ tên miền"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thành phần</th><th>việc</th></tr>
+          <tr><td>tên miền <code>www.vidu.vn</code></td><td>đọc từ <b>phải</b> sang trái: <code>.vn</code> → <code>vidu.vn</code> → <code>www</code></td></tr>
+          <tr><td>máy chủ <b>gốc</b></td><td>biết ai quản lý từng đuôi như <code>.vn</code>, <code>.com</code></td></tr>
+          <tr><td>máy chủ <b>TLD</b></td><td>biết ai quản lý từng tên trong đuôi, như <code>vidu.vn</code></td></tr>
+          <tr><td>máy chủ <b>có thẩm quyền</b></td><td>giữ địa chỉ IP thật của <code>www.vidu.vn</code></td></tr>
+          <tr><td>phân giải <b>cục bộ</b></td><td>máy của nhà mạng, đi hỏi thay bạn và nhớ kết quả</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", "1.5", "1.6"]
+        say: "Năm thành phần của hệ thống tên miền. Tên miền đọc từ phải sang trái, trước hết là đuôi quốc gia, rồi tên của tổ chức, rồi tên của máy. Máy chủ gốc biết ai quản lý từng đuôi. Máy chủ quản lý đuôi biết ai quản lý từng tên trong đuôi đó. Máy chủ có thẩm quyền giữ địa chỉ IP thật. Máy phân giải cục bộ, thường của nhà mạng, đi hỏi thay bạn và nhớ kết quả."
+
+  # ───────────────────────── 3. PHÂN GIẢI ─────────────────────────
+  - id: resolve
+    kind: concept
+    title: "Phân giải lặp"
+    checks:
+      - "len(['gốc', 'TLD', 'thẩm quyền']) == 3"
+    steps:
+      - show: |
+          <div><svg width="1100" height="560" viewBox="0 0 1100 560"><defs><marker id="q" markerUnits="userSpaceOnUse" markerWidth="18" markerHeight="18" refX="16" refY="9" orient="auto"><path d="M0,0 L18,9 L0,18 z" fill="#374151"/></marker></defs><text x="90" y="48" font-size="28" font-weight="700" text-anchor="middle">máy bạn</text><line x1="90" y1="70" x2="90" y2="540" stroke="#9ca3af" stroke-width="4"/><text x="330" y="48" font-size="28" font-weight="700" text-anchor="middle">phân giải cục bộ</text><line x1="330" y1="70" x2="330" y2="540" stroke="#9ca3af" stroke-width="4"/><text x="590" y="48" font-size="28" font-weight="700" text-anchor="middle">gốc</text><line x1="590" y1="70" x2="590" y2="540" stroke="#9ca3af" stroke-width="4"/><text x="790" y="48" font-size="28" font-weight="700" text-anchor="middle">TLD .vn</text><line x1="790" y1="70" x2="790" y2="540" stroke="#9ca3af" stroke-width="4"/><text x="990" y="48" font-size="28" font-weight="700" text-anchor="middle">thẩm quyền</text><line x1="990" y1="70" x2="990" y2="540" stroke="#9ca3af" stroke-width="4"/><line x1="90" y1="114" x2="330" y2="130" stroke="#374151" stroke-width="3.5" marker-end="url(#q)"/><text x="210" y="102" font-size="20" font-weight="700" fill="#374151" text-anchor="middle" stroke="#fffbeb" stroke-width="7" paint-order="stroke" stroke-linejoin="round">1</text><line x1="330" y1="170" x2="590" y2="186" stroke="#374151" stroke-width="3.5" marker-end="url(#q)"/><text x="460" y="158" font-size="20" font-weight="700" fill="#374151" text-anchor="middle" stroke="#fffbeb" stroke-width="7" paint-order="stroke" stroke-linejoin="round">2</text><line x1="590" y1="226" x2="330" y2="242" stroke="#374151" stroke-width="3.5" marker-end="url(#q)"/><text x="460" y="214" font-size="20" font-weight="700" fill="#374151" text-anchor="middle" stroke="#fffbeb" stroke-width="7" paint-order="stroke" stroke-linejoin="round">3: hỏi .vn</text><line x1="330" y1="282" x2="790" y2="298" stroke="#374151" stroke-width="3.5" marker-end="url(#q)"/><text x="560" y="270" font-size="20" font-weight="700" fill="#374151" text-anchor="middle" stroke="#fffbeb" stroke-width="7" paint-order="stroke" stroke-linejoin="round">4</text><line x1="790" y1="338" x2="330" y2="354" stroke="#374151" stroke-width="3.5" marker-end="url(#q)"/><text x="560" y="326" font-size="20" font-weight="700" fill="#374151" text-anchor="middle" stroke="#fffbeb" stroke-width="7" paint-order="stroke" stroke-linejoin="round">5: hỏi thẩm quyền</text><line x1="330" y1="394" x2="990" y2="410" stroke="#374151" stroke-width="3.5" marker-end="url(#q)"/><text x="660" y="382" font-size="20" font-weight="700" fill="#374151" text-anchor="middle" stroke="#fffbeb" stroke-width="7" paint-order="stroke" stroke-linejoin="round">6</text><line x1="990" y1="450" x2="330" y2="466" stroke="#374151" stroke-width="3.5" marker-end="url(#q)"/><text x="660" y="438" font-size="20" font-weight="700" fill="#374151" text-anchor="middle" stroke="#fffbeb" stroke-width="7" paint-order="stroke" stroke-linejoin="round">7: địa chỉ IP</text><line x1="330" y1="506" x2="90" y2="522" stroke="#374151" stroke-width="3.5" marker-end="url(#q)"/><text x="210" y="494" font-size="20" font-weight="700" fill="#374151" text-anchor="middle" stroke="#fffbeb" stroke-width="7" paint-order="stroke" stroke-linejoin="round">8</text></svg></div>
+          <p>Phân giải cục bộ hỏi lần lượt <b>3</b> máy chủ; mỗi máy chỉ đáp “hỏi tiếp ai”, máy cuối đáp địa chỉ. Kết quả được <b>nhớ</b> theo thời hạn, nên lần sau chỉ còn 2 mũi tên: 1 và 8.</p>
+        focus: [1, 2, 2]
+        say: "Máy của bạn hỏi máy phân giải cục bộ. Máy này hỏi lần lượt ba máy chủ, gốc, máy chủ của đuôi quốc gia, rồi máy chủ có thẩm quyền, mỗi máy chỉ đáp hỏi tiếp ai, máy cuối mới đáp địa chỉ. Kết quả được nhớ lại trong một thời hạn, nên lần sau chỉ cần hai mũi tên giữa máy bạn và máy phân giải cục bộ."
+
+  # ───────────────────────── 3b. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Ba cách tải xếp trên trục thời gian"
+    checks:
+      - "2 * 11 == 22 and 1 + 11 == 12 and 1 + 1 + 1 == 3"
+    steps:
+      - show: |
+          <div><svg width="1500" height="380" viewBox="0 0 1500 380"><g fill="#1f2937" font-size="24"><text x="300" y="72" text-anchor="end">không bền</text><rect x="330" y="40" width="44" height="46" rx="4" fill="#eb6834"/><rect x="380" y="40" width="44" height="46" rx="4" fill="#2a78d6"/><rect x="430" y="40" width="44" height="46" rx="4" fill="#eb6834"/><rect x="480" y="40" width="44" height="46" rx="4" fill="#2a78d6"/><rect x="530" y="40" width="44" height="46" rx="4" fill="#eb6834"/><rect x="580" y="40" width="44" height="46" rx="4" fill="#2a78d6"/><rect x="630" y="40" width="44" height="46" rx="4" fill="#eb6834"/><rect x="680" y="40" width="44" height="46" rx="4" fill="#2a78d6"/><rect x="730" y="40" width="44" height="46" rx="4" fill="#eb6834"/><rect x="780" y="40" width="44" height="46" rx="4" fill="#2a78d6"/><rect x="830" y="40" width="44" height="46" rx="4" fill="#eb6834"/><rect x="880" y="40" width="44" height="46" rx="4" fill="#2a78d6"/><rect x="930" y="40" width="44" height="46" rx="4" fill="#eb6834"/><rect x="980" y="40" width="44" height="46" rx="4" fill="#2a78d6"/><rect x="1030" y="40" width="44" height="46" rx="4" fill="#eb6834"/><rect x="1080" y="40" width="44" height="46" rx="4" fill="#2a78d6"/><rect x="1130" y="40" width="44" height="46" rx="4" fill="#eb6834"/><rect x="1180" y="40" width="44" height="46" rx="4" fill="#2a78d6"/><rect x="1230" y="40" width="44" height="46" rx="4" fill="#eb6834"/><rect x="1280" y="40" width="44" height="46" rx="4" fill="#2a78d6"/><rect x="1330" y="40" width="44" height="46" rx="4" fill="#eb6834"/><rect x="1380" y="40" width="44" height="46" rx="4" fill="#2a78d6"/><text x="1438" y="72" font-weight="700">22</text><text x="300" y="152" text-anchor="end">bền</text><rect x="330" y="120" width="44" height="46" rx="4" fill="#eb6834"/><rect x="380" y="120" width="44" height="46" rx="4" fill="#2a78d6"/><rect x="430" y="120" width="44" height="46" rx="4" fill="#2a78d6"/><rect x="480" y="120" width="44" height="46" rx="4" fill="#2a78d6"/><rect x="530" y="120" width="44" height="46" rx="4" fill="#2a78d6"/><rect x="580" y="120" width="44" height="46" rx="4" fill="#2a78d6"/><rect x="630" y="120" width="44" height="46" rx="4" fill="#2a78d6"/><rect x="680" y="120" width="44" height="46" rx="4" fill="#2a78d6"/><rect x="730" y="120" width="44" height="46" rx="4" fill="#2a78d6"/><rect x="780" y="120" width="44" height="46" rx="4" fill="#2a78d6"/><rect x="830" y="120" width="44" height="46" rx="4" fill="#2a78d6"/><rect x="880" y="120" width="44" height="46" rx="4" fill="#2a78d6"/><text x="938" y="152" font-weight="700">12</text><text x="300" y="232" text-anchor="end">bền + đường ống</text><rect x="330" y="200" width="44" height="46" rx="4" fill="#eb6834"/><rect x="380" y="200" width="44" height="46" rx="4" fill="#2a78d6"/><rect x="430" y="200" width="44" height="46" rx="4" fill="#16a34a"/><text x="488" y="232" font-weight="700">3</text><rect x="330" y="300" width="30" height="30" fill="#eb6834"/><text x="370" y="324">bắt tay TCP</text><rect x="570" y="300" width="30" height="30" fill="#2a78d6"/><text x="610" y="324">1 yêu cầu chờ trả lời</text><rect x="950" y="300" width="30" height="30" fill="#16a34a"/><text x="990" y="324">10 yêu cầu gửi dồn</text><text x="330" y="370" fill="#6b7280">mỗi ô = 1 lượt đi về, đọc từ trái sang phải</text></g></svg></div>
+        say: "Hình xếp ba cách tải trang trên cùng một trục thời gian, mỗi ô là một lượt đi về. Ô cam là bắt tay TCP, ô xanh dương là một yêu cầu phải chờ trả lời. Hàng trên là kết nối không bền, mỗi thứ lại một ô cam rồi một ô xanh, nên dài 22 ô. Hàng giữa là kết nối bền, chỉ có một ô cam ở đầu rồi 11 ô xanh, tổng 12 ô. Hàng dưới có thêm đường ống, 10 yêu cầu được gửi dồn trong một ô xanh lá, nên chỉ còn 3 ô."
+
+  # ───────────────────────── 4. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Đếm lượt đi về: trang HTML + 10 đối tượng"
+    checks:
+      - "alg.http_rtts(10) == 2 + 10 * 2 == 22"
+      - "alg.http_rtts(10, True) == 2 + 10 == 12"
+      - "alg.http_rtts(10, True, True) == 2 + 1 == 3"
+      - "22 * 50 == 1100 and 12 * 50 == 600 and 3 * 50 == 150"
+    steps:
+      - show: |
+          <p><b>Bước 1 — không bền, trang HTML:</b> một kết nối mới, một yêu cầu.</p>
+          $$1 + 1 = 2$$
+        focus: [1, 2]
+        say: "Bước một, kết nối không bền, trước hết tải trang HTML. Trang này cần một kết nối mới, tốn 1 lượt bắt tay, rồi 1 lượt yêu cầu, cộng lại là 2 lượt đi về."
+      - show: |
+          <p><b>Bước 2 — không bền, 10 đối tượng:</b> mỗi đối tượng lại mở kết nối mới, mỗi cái 2 lượt.</p>
+          $$2 + 10 \times 2 = 2 + 20 = \hl{22}$$
+        focus: [1, 2]
+        say: "Bước hai, mỗi hình trong 10 đối tượng lại mở một kết nối mới, nên mỗi cái cũng tốn 2 lượt. 10 nhân 2 bằng 20, cộng 2 lượt của trang HTML, được 22 lượt đi về."
+      - show: |
+          <p><b>Bước 3 — bền:</b> giữ kết nối của trang HTML, mỗi đối tượng chỉ còn 1 lượt yêu cầu.</p>
+          $$2 + 10 \times 1 = \hl{12}$$
+        focus: [1, 2]
+        say: "Bước ba, kết nối bền giữ lại kết nối của trang HTML, nên không phải bắt tay lại. Mỗi đối tượng chỉ còn 1 lượt yêu cầu, tổng là 2 cộng 10, bằng 12 lượt."
+      - show: |
+          <p><b>Bước 4 — bền + đường ống:</b> gửi dồn 10 yêu cầu, chờ các trả lời trong cùng một lượt.</p>
+          $$2 + 1 = \hl{3}$$
+        focus: [1, 2]
+        say: "Bước bốn, có thêm đường ống, máy khách gửi dồn cả 10 yêu cầu mà không chờ từng trả lời. Cả 10 trả lời về trong cùng một lượt, nên tổng chỉ là 2 cộng 1, bằng 3 lượt."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>cách</th><th>trang HTML</th><th>10 đối tượng</th><th>tổng</th></tr>
+          <tr><td><b>không bền</b>: mỗi thứ một kết nối</td><td>1 bắt tay + 1 yêu cầu = 2</td><td>$10 \times 2 = 20$</td><td>$\hl{22}$</td></tr>
+          <tr><td><b>bền</b>: dùng chung kết nối, hỏi lần lượt</td><td>2</td><td>$10 \times 1 = 10$</td><td>$\hl{12}$</td></tr>
+          <tr><td><b>bền + đường ống</b>: gửi dồn 10 yêu cầu</td><td>2</td><td>1</td><td>$\hl{3}$</td></tr></table>
+          <p>Với 50 ms mỗi lượt: 1100 ms, 600 ms, 150 ms.</p>
+        focus: [0, "1.2", "1.3", "1.4", 2]
+        say: "Đặt ba kết quả cạnh nhau cho một trang HTML và 10 đối tượng. Kết nối không bền tốn 22 lượt. Kết nối bền tốn 12 lượt. Kết nối bền có đường ống chỉ tốn 3 lượt. Với 50 mi li giây mỗi lượt, đó là 1100, 600 và 150 mi li giây chờ đợi."
+
+  # ───────────────────────── 5. TỰ KIỂM ─────────────────────────
+  - id: verify
+    kind: check
+    title: "Tự kiểm"
+    checks:
+      - "1 + 10 == 11 and 11 + 11 == 22 == alg.http_rtts(10)"
+      - "1 + 11 == 12 == alg.http_rtts(10, True) and 1 + 2 == 3 == alg.http_rtts(10, True, True)"
+    steps:
+      - show: |
+          <ol><li><b>Mỗi kết nối TCP mới</b> cộng đúng 1 lượt bắt tay — đếm số kết nối trước.</li>
+          <li><b>Mỗi yêu cầu chờ trả lời</b> cộng 1 lượt — trừ khi các yêu cầu được gửi dồn.</li>
+          <li><b>Chưa có địa chỉ?</b> cộng thêm lượt hỏi tên miền trước tất cả.</li></ol>
+        focus: [0, "1.1", "1.2", "1.3"]
+        say: "Tự kiểm bằng ba câu hỏi. Một, mỗi kết nối TCP mới cộng đúng một lượt bắt tay, nên đếm số kết nối trước. Hai, mỗi yêu cầu phải chờ trả lời cộng một lượt, trừ khi các yêu cầu được gửi dồn. Ba, nếu chưa có địa chỉ thì cộng thêm các lượt hỏi tên miền trước tất cả."
+      - show: |
+          <p>Đếm lại theo đường khác: <b>số kết nối</b> + <b>số lần phải chờ trả lời</b>.</p>
+          <table class="t"><tr><th>cách</th><th>số kết nối mới</th><th>số lần chờ trả lời</th><th>tổng</th></tr>
+          <tr><td>không bền</td><td>1 + 10 = 11</td><td>11</td><td>11 + 11 = 22 ✓</td></tr>
+          <tr><td>bền</td><td>1</td><td>11</td><td>1 + 11 = 12 ✓</td></tr>
+          <tr><td>bền + đường ống</td><td>1</td><td>2 (trang HTML, rồi cả lô)</td><td>1 + 2 = 3 ✓</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", 0]
+        say: "Giờ đếm lại bằng một đường khác, không theo từng đối tượng, mà theo số kết nối mới cộng số lần phải chờ trả lời. Không bền có 11 kết nối, gồm trang HTML và 10 đối tượng, và 11 lần chờ, tổng 22. Kết nối bền chỉ có 1 kết nối nhưng vẫn 11 lần chờ, tổng 12. Có đường ống thì chỉ chờ 2 lần, một lần cho trang HTML, một lần cho cả lô 10 yêu cầu, tổng 1 cộng 2, bằng 3. Cả ba khớp với cách đếm ở trên."
+
+  # ───────────────────────── 6. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "5 lỗi hay mắc"
+    checks:
+      - "(20000 - 10000) * 8 == 80000 and 80000 / 10_000_000 * 1000 == 8 and 10 * 8 == 80"
+      - "22 - 3 == 19 and 19 * 100 == 1900"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Nghĩ DNS chỉ dùng UDP <b class="red">(chưa đủ)</b>
+          <br><span class="note">Hỏi đáp thường dùng UDP cổng 53 cho nhanh; câu trả lời quá lớn, hoặc chép cả vùng tên, thì chuyển sang TCP.</span></div>
+        say: "Lỗi thứ nhất, nghĩ DNS chỉ dùng UDP. Hỏi đáp thường dùng UDP ở cổng 53 cho nhanh, nhưng câu trả lời quá lớn, hoặc chép cả vùng tên, thì chuyển sang TCP."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Nghĩ máy chủ gốc biết mọi địa chỉ <b class="red">(sai)</b>
+          <br><span class="note">Gốc chỉ chỉ đường tới máy chủ của đuôi. Không máy nào giữ toàn bộ danh bạ — đó là lý do hệ thống mở rộng được.</span></div>
+        say: "Lỗi thứ hai, nghĩ máy chủ gốc biết mọi địa chỉ. Máy chủ gốc chỉ chỉ đường tới máy chủ của từng đuôi, không máy nào giữ toàn bộ danh bạ, và đó là lý do hệ thống mở rộng được."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Quên lượt bắt tay khi đếm <b class="red">(thiếu)</b>
+          <br><span class="note">Một yêu cầu HTTP trên kết nối mới tốn <b>2</b> lượt: 1 bắt tay TCP + 1 yêu cầu và trả lời.</span></div>
+          $$1 + 1 = 2$$
+        focus: [1, 2]
+        say: "Lỗi thứ ba, quên lượt bắt tay khi đếm. Một yêu cầu HTTP trên kết nối mới tốn 2 lượt đi về, một cho bắt tay TCP, một cho yêu cầu và trả lời."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Tin bộ đệm DNS luôn đúng <b class="red">(sai)</b>
+          <br><span class="note">Đổi địa chỉ máy chủ thì bản nhớ cũ còn dùng cho tới hết thời hạn — nên đổi địa chỉ phải tính trước thời gian lan.</span></div>
+        say: "Lỗi thứ tư, tin bộ đệm DNS luôn đúng. Khi đổi địa chỉ máy chủ, bản nhớ cũ vẫn được dùng cho tới hết thời hạn, nên việc đổi địa chỉ phải tính trước thời gian lan."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 5 (của người đã đi làm).</b> Trang chậm, lao vào nén ảnh trước khi đếm lượt đi về <b class="red">(sửa nhầm chỗ)</b></div>
+          <table class="t"><tr><th>cách sửa (số minh hoạ: 10 ảnh, đường 10 triệu bit/giây, 100 ms mỗi lượt)</th><th>thời gian bớt được</th></tr>
+          <tr><td>nén mỗi ảnh từ 20 000 xuống 10 000 byte: mỗi ảnh bớt 80 000 bit = 8 ms</td><td>10 × 8 = 80 ms</td></tr>
+          <tr><td>chuyển không bền sang bền + đường ống: bớt 22 − 3 = 19 lượt</td><td>19 × 100 = <b>1900 ms</b></td></tr></table>
+        focus: [1, "2.2", "2.2", "2.3", 0]
+        say: "Lỗi thứ năm hay gặp ở người đã đi làm, thấy trang chậm là lao vào nén ảnh trước khi đếm lượt đi về. Lấy số minh hoạ, 10 ảnh, đường truyền 10 triệu bit mỗi giây, mỗi lượt đi về 100 mi li giây. Nén mỗi ảnh từ 20 nghìn xuống 10 nghìn byte, tức bớt 80 nghìn bit, mỗi ảnh nhanh hơn 8 mi li giây, cả 10 ảnh chỉ bớt 80 mi li giây. Còn chuyển sang kết nối bền có đường ống bớt 19 lượt, tức 1900 mi li giây. Người có kinh nghiệm đo xem thời gian đi đâu trước, rồi mới sửa."
+
+  # ───────────────────────── 7. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.http_rtts(5) == 12 and alg.http_rtts(5, True) == 7"
+      - "2 + 5 * 2 == 12 and 2 + 5 * 1 == 7 and (12 - 7) * 40 == 200"
+    steps:
+      - show: |
+          <p>Trang HTML có 5 đối tượng, địa chỉ đã có trong bộ đệm.</p>
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>HTTP không bền: bao nhiêu lượt đi về?</td></tr>
+          <tr><td>2</td><td>HTTP bền, không đường ống?</td></tr>
+          <tr><td>3</td><td>Mỗi lượt 40 ms. Đổi từ cách 1 sang cách 2 thì mỗi lần tải trang bớt bao nhiêu ms?</td></tr></table>
+        focus: [0, 1, "2.2", "2.3", "2.4", "2.4", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Một trang HTML có 5 đối tượng, địa chỉ đã có trong bộ đệm. Câu một, với HTTP không bền thì mất bao nhiêu lượt đi về? Câu hai, với HTTP bền, không đường ống thì sao? Câu ba, mỗi lượt mất 40 mi li giây. Đổi từ cách thứ nhất sang cách thứ hai thì mỗi lần tải trang bớt được bao nhiêu mi li giây? Dừng video và làm ra giấy."
+        pause: 12
+      - clear: true
+        show: |
+          <p>① Không bền: trang HTML 2 lượt, mỗi đối tượng thêm 2 lượt.</p>
+          $$2 + 5 \times 2 = \hl{12}$$
+        focus: [1, 1, 2]
+        say: "Đáp án câu một. Kết nối không bền, trang HTML tốn 2 lượt, mỗi đối tượng lại mở kết nối mới nên thêm 2 lượt. Vậy là 2 cộng 5 nhân 2, bằng 12 lượt."
+      - show: |
+          <p>② Bền: trang HTML 2 lượt, mỗi đối tượng chỉ còn 1 lượt yêu cầu.</p>
+          $$2 + 5 \times 1 = \hl{7}$$
+        focus: [1, 2]
+        say: "Câu hai, kết nối bền, trang HTML vẫn tốn 2 lượt, nhưng mỗi đối tượng chỉ còn 1 lượt yêu cầu. Vậy là 2 cộng 5, bằng 7 lượt."
+      - show: |
+          <p>③ Bớt $12 - 7 = 5$ lượt, mỗi lượt 40 ms:</p>
+          $$5 \times 40 = \hl{200} \text{ ms}$$
+        focus: [1, 2]
+        say: "Câu ba, đổi sang kết nối bền thì bớt 12 trừ 7, bằng 5 lượt. Nhân với 40 mi li giây mỗi lượt, mỗi lần tải trang nhanh hơn 200 mi li giây, mà không phải sửa nội dung trang."
+
+  # ───────────────────────── 8. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">tên miền → gốc → đuôi → thẩm quyền</span><span class="a">→</span>
+          <span class="n">nhớ kết quả</span><span class="a">→</span>
+          <span class="n">HTTP: đếm kết nối và yêu cầu</span><span class="a">→</span>
+          <span class="n">dùng chung, gửi dồn</span></div>
+        say: "Tổng kết lại, phân giải tên miền đi từ gốc, tới máy chủ của đuôi, tới máy chủ có thẩm quyền, rồi nhớ kết quả. Khi tải trang, đếm số kết nối và số yêu cầu, rồi dùng chung kết nối và gửi dồn yêu cầu để bớt lượt đi về."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> trên mạng, thứ đắt nhất thường là <b>số lượt đi về</b>, không phải số byte — hãy gom việc để đi ít lượt hơn.</div>
+        say: "Điều cần mang theo, trên mạng, thứ đắt nhất thường là số lượt đi về chứ không phải số byte, nên hãy gom việc để đi ít lượt hơn."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 13): ai cũng nghe được gói tin trên đường — <b>mật mã cơ bản</b>: đối xứng, khoá công khai, trao đổi khoá.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 13, ta thấy ai cũng có thể nghe được gói tin trên đường, và học mật mã cơ bản, gồm mã đối xứng, khoá công khai và trao đổi khoá. Hẹn gặp bạn ở bài tiếp theo."

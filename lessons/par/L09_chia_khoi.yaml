@@ -1,0 +1,297 @@
+id: L09
+course: PAR
+series: "PAR · Tính toán song song và GPU"
+title: "Bài 9 — Nhân ma trận chia khối: dùng lại dữ liệu trong bộ nhớ nhanh"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/par.yaml L09; audit/par/verify_par.py L09; audit/par/sources_L09.md (câu trích nguyên văn, đọc 2026-11-02); NVIDIA, CUDA C++ Best Practices Guide, mục Shared Memory in Matrix Multiplication (C=AB), bảng Performance Improvements Optimizing C = AB Matrix Multiply [BPG]; J. Nickolls và cộng sự, Scalable Parallel Programming with CUDA, ACM Queue 2008 — bộ nhớ chia sẻ 16 KB mỗi cụm [NI08]; CS115 bài 2 (nhân ma trận); CSA bài 10 (phân cấp bộ nhớ); PAR bài 3 (cộng số thực không kết hợp), bài 7, bài 8"
+assumes: [arith, frac, approx, power]
+# Quy ước: ma trận vuông n hàng n cột, số thực 32 bit (4 byte); A_{ik} = số ở hàng i, cột k. “Bộ nhớ chậm” = bộ nhớ chính của thẻ;
+#   “bộ nhớ nhanh” = bộ nhớ chia sẻ của một cụm xử lý (shared memory), dung lượng M byte. Khối cỡ b: ma trận con b hàng b cột,
+#   b chia hết n. “Số phần tử đọc” = số lần một số được chuyển từ bộ nhớ chậm lên (không tính ghi C, n² lần, nhỏ so với 2n³/b).
+#   16 KB mỗi cụm là con số của thế hệ năm 2008 [NI08]; thẻ hiện nay lớn hơn — ghi rõ trên màn hình. 48 KB trong quiz là SỐ MINH HOẠ.
+#   Băng thông 119,9 / 144,4 / 195,5 GB/s đo trên một thẻ V100 là số của hãng [BPG]. 1 KB = 1024 byte ở bài này (đúng cách đếm 16 KB).
+objectives:
+  - "Đếm số phần tử đọc từ bộ nhớ chậm của nhân ma trận ngây thơ: 2n³"
+  - "Suy ra số đọc của nhân chia khối b: 2n³ chia b, vì mỗi số nạp lên được dùng b lần"
+  - "Chọn cỡ khối lớn nhất mà ba khối vừa bộ nhớ nhanh"
+  - "Nối số đọc với cường độ của bài 7 để biết chia khối có đưa nhân lên mái phẳng không"
+asr_reviewed:
+  - {sentence: "Phiên bản không tối ưu đạt băng thông hiệu dụng 119 phẩy 9 tỉ byte mỗi giây.", reason: "ASR chép “phiên bản không tối ưu đạt ban thông hiệu dụng 119,9 tỷ bai mỗi giây.” (0.85): “tỉ” ASR viết chính tả “tỷ” (cùng âm); byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: băng/ban — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Kiểm thử chỉ so kết quả chứ không đo số byte, nên phải đo thời gian và so với mái nhà.", reason: "ASR chép “Kiểm thử chỉ sau kết quả chứ không đo số bay nên phải đo thời gian và so với máy nhà.” (0.857): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: so/sau, mái/máy — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Thẻ mới có bộ nhớ chia sẻ 48 KB, tức 49 nghìn 152 byte mỗi cụm, một số minh hoạ.", reason: "ASR chép “Thẻ mới có bộ nhớ chia sẻ 48 kilobyte tức 49.152 bay mỗi cùng, một số minh họa.” (0.893): KB đọc “ki-lô-byte” theo lexicon của khoá, ASR viết “kilobyte/kg”; byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: cụm/cùng — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Ở bài 7, cường độ là phép tính chia byte, và nhân ma trận ngây thơ chỉ có 2 phép cho 8 byte, tức 0 phẩy 25.", reason: "ASR chép “Ở bài 7, Cường Độ là phép tính chi bài và nhân ma trận ngây thơ chỉ có 2 phép cho 8 bài, tức 0,25.” (0.897): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: chia (trong “chia byte” → “chi bài”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Khối 16 chỉ cần 3 nghìn 72 byte, cụm giữ được 5 khối, nên luôn có việc khác để chạy khi một khối chờ bộ nhớ.", reason: "ASR chép “Khối 16 chỉ cần 3.072 bay cùng giữ được 5 khối nên luôn có việc khác để chạy khi một khối chờ bộ nhớ.” (0.9): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: cụm (trong “byte cụm” → “bay cùng”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Số phép vẫn là 2 n mũ 3, còn số byte giờ là 4 nhân 2 n mũ 3 chia b.", reason: "ASR chép “Số phép vẫn là 2n mũ 3, còn số 3 giờ là 4 nhân 2n mũ 3 chi b.” (0.905): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: chia/chi — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Câu ba, nếu đổi sang số thực 64 bit, 8 byte mỗi số, ta giữ cỡ khối hay đổi?", reason: "ASR chép “Câu 3, nếu đổi sang số thực 64 biết 8 vai mỗi số, ta giữ cỡ khối hay đổi?” (0.905): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: bit/biết — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Giữ khối 64 với số 8 byte cần 98 nghìn 304 byte, không vừa.", reason: "ASR chép “Giữ khối 64 với số 8 bài cần 98.304 bài, không vừa.” (0.905): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Chia ra, cường độ bằng b chia 4, với khối 32 là 8 phép mỗi byte, gấp 32 lần so với 0 phẩy 25 của cách ngây thơ.", reason: "ASR chép “Chia ra, cường độ bằng B chi 4, với khối 32 là 8 phép mỗi bay, gấp 32 lần so với 0,25 của cách ngay thơ.” (0.912): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: chia/chi, ngây/ngay — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Ở bài 8, các luồng của một khối chạy trên một cụm và dùng chung bộ nhớ chia sẻ, năm 2008 mỗi cụm có 16 KB, tức 16 nghìn 384 byte.", reason: "ASR chép “Ở bài 8, các luận của một khối chạy trên một cụm và dùng chung bộ nhớ chia sẻ năm 2008 mỗi cụm có 16 kilobyte, tức 16.384 bay.” (0.929): KB đọc “ki-lô-byte” theo lexicon của khoá, ASR viết “kilobyte/kg”; byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: luồng/luận — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Đổi sang khối 32 chỉ cần 24 nghìn 576 byte, vừa, và còn chỗ cho một khối luồng thứ hai.", reason: "ASR chép “Đổi sang khối 32 chỉ cần 24.576 bài, vừa và còn chỗ cho một khối lùng thứ 2.” (0.929): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: luồng/lùng — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bước một, cách ngây thơ đọc 2 nhân 1024 mũ 3, tức 2 tỉ 147 triệu 483 nghìn 648 phần tử, khoảng 8 phẩy 59 tỉ byte.", reason: "ASR chép “Bước 1, cách Ngày Thơ đọc 2 nhân 1.024 mũ ba, tức 2.147.483.648 phần tử, khoảng 8,59 tỷ bay.” (0.936): “tỉ” ASR viết chính tả “tỷ” (cùng âm); byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: ngây/ngày — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bước năm nối với bài 7, nơi cường độ số học là số phép chia số byte.", reason: "ASR chép “Bước 5 nối với bài 7, nơi cường độ số học là số phép chia số bay.” (0.941): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bước bốn, khối 64 cần 49 nghìn 152 byte, không vừa.", reason: "ASR chép “Bước 4, khối 64 cần 49.152 bai, không vừa.” (0.947): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "M là dung lượng bộ nhớ nhanh tính bằng byte, ví dụ 16 nghìn 384.", reason: "ASR chép “M là dung lượng bộ nhớ nhanh tính bằng bay, ví dụ 16.384.” (0.95): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Điều cần mang theo, ở đây nhanh hơn không phải nhờ làm ít phép hơn, mà nhờ chuyển ít byte hơn.", reason: "ASR chép “Điều cần mang theo ở đây nhanh hơn không phải nhờ làm ích phép hơn, mà nhờ chuyển ích bay hơn.” (0.952): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Làm thử với M bằng 16 nghìn 384, khối 32 cần 12 nghìn 288 byte nên vừa, còn khối 64 cần 49 nghìn 152 byte nên không vừa.", reason: "ASR chép “Làm thử với M bằng 16.384, khối 32 cần 12.288 bay nên vừa, còn khối 64 cần 49.152 bay nên không vừa.” (0.958): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Trong lúc tính, bộ nhớ nhanh phải giữ 3 khối, một của A, một của B và một của C, mỗi khối b bình phương số, 4 byte mỗi số.", reason: "ASR chép “Trong lúc tính, bộ nhớ nhanh phải giữ 3 khối, 1 của A, 1 của B và 1 của C, mỗi khối B bình phương số, 4 bài mỗi số.” (0.967): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bước ba, khối 32 cần 3 nhân 32 bình phương nhân 4, bằng 12 nghìn 288 byte, vừa 16 nghìn 384.", reason: "ASR chép “Bước 3. Khối 32 cần 3 nhân 32 bình phương nhân 4 bằng 12.288 bài vừa 16.384.” (0.971): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Khối 32 cần 12 nghìn 288 byte, nên mỗi cụm chỉ giữ được một khối luồng, vì hai khối cần 24 nghìn 576.", reason: "ASR chép “Khối 32 cần 12.288 bai nên mỗi cụm chỉ giữ được một khối luồng vì hai khối cần 24.576.” (0.972): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bước hai, chia khối 32 thì chia số đó cho 32, còn 67 triệu 108 nghìn 864 phần tử, khoảng 268 triệu byte.", reason: "ASR chép “Bước 2, chia khối 32 thì chia số đó cho 32, còn 67,108,864 phần tử, khoảng 268 triệu bay.” (0.975): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Khối 64 cần 49 nghìn 152 byte, không vừa 16 nghìn 384, nên lợi ích mất, và phép thử là tính 3 nhân b bình phương nhân 4 trước.", reason: "ASR chép “Khối 64 cần 49.152 bai, 0 vừa 16.384 nên lợi ít mất và phép thử là tính 3 nhân bê bình phương nhân 4 trước.” (0.976): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Cùng một phép nhân, ba cách đọc dữ liệu"
+    checks:
+      - "round(195.5 / 119.9, 2) == 1.63 and 2 * 1024 ** 3 == 2147483648 and 2 * 1024 ** 3 // 32 == 67108864"
+    steps:
+      - show: |
+          <p>Hướng dẫn tối ưu chính thức của hãng làm thẻ đồ hoạ đo cùng một phép nhân ma trận trên một thẻ V100:</p>
+          <table class="t"><tr><th>phiên bản</th><th>băng thông hiệu dụng</th></tr>
+          <tr><td>không tối ưu</td><td>119,9 GB/s</td></tr>
+          <tr><td>chép một khối của A vào bộ nhớ chia sẻ</td><td>144,4 GB/s</td></tr>
+          <tr><td>chép cả khối của B để bỏ các lần đọc thừa</td><td><b>195,5 GB/s</b>, gấp ≈ 1,63 lần</td></tr></table>
+          <div class="box key">Hôm nay ta trả lời: đọc thừa ở đâu ra? Chia khối bớt được bao nhiêu lần đọc? Và khối lớn tới đâu thì phải dừng?</div>
+        focus: [1, "2.2", "2.3", "2.4", 3]
+        say: "Chào bạn, hướng dẫn tối ưu chính thức của hãng làm thẻ đồ hoạ đo cùng một phép nhân ma trận trên một thẻ cụ thể. Phiên bản không tối ưu đạt băng thông hiệu dụng 119 phẩy 9 tỉ byte mỗi giây. Chép một khối của ma trận A vào bộ nhớ chia sẻ thì lên 144 phẩy 4. Chép thêm khối của B để bỏ các lần đọc thừa thì lên 195 phẩy 5, gấp khoảng 1 phẩy 63 lần. Hôm nay ta trả lời đọc thừa ở đâu ra, chia khối bớt được bao nhiêu lần đọc, và khối lớn tới đâu thì phải dừng."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại bốn điều sẽ dùng"
+    checks:
+      - "[[1 * 5 + 2 * 7, 1 * 6 + 2 * 8], [3 * 5 + 4 * 7, 3 * 6 + 4 * 8]] == [[19, 22], [43, 50]]"
+      - "2 / 8 == 0.25 and 16 * 1024 == 16384"
+    steps:
+      - show: |
+          <p><b>① Nhân ma trận</b> (khoá toán cho khoa học máy tính, bài 2): ô hàng i, cột j của kết quả = hàng i của A nhân lần lượt với cột j của B rồi cộng lại. Dấu chấm giữa dòng là phép nhân.</p>
+          $$\begin{bmatrix} 1 & 2 \\ 3 & 4 \end{bmatrix} \begin{bmatrix} 5 & 6 \\ 7 & 8 \end{bmatrix} = \begin{bmatrix} 1 \cdot 5 + 2 \cdot 7 & 1 \cdot 6 + 2 \cdot 8 \\ 3 \cdot 5 + 4 \cdot 7 & 3 \cdot 6 + 4 \cdot 8 \end{bmatrix} = \begin{bmatrix} 19 & 22 \\ 43 & 50 \end{bmatrix}$$
+        introduces: [cdot, mat]
+        focus: [1, 1, 2, 2]
+        say: "Điều thứ nhất, ở khoá toán cho khoa học máy tính, bài 2, ta đã học nhân ma trận. Ô hàng i, cột j của kết quả bằng hàng i của A nhân lần lượt với cột j của B rồi cộng lại, và dấu chấm giữa dòng là phép nhân. Ví dụ ô góc trên trái là 1 nhân 5 cộng 2 nhân 7, bằng 19. Bốn ô cho kết quả 19, 22, 43 và 50."
+      - show: |
+          <table class="t"><tr><th>điều</th><th>đã học ở</th><th>nhắc lại</th></tr>
+          <tr><td>② phân cấp bộ nhớ</td><td>khoá Hệ thống máy tính</td><td>bộ nhớ nhanh thì nhỏ, bộ nhớ lớn thì chậm; dùng lại dữ liệu đang ở gần là cách tăng tốc</td></tr>
+          <tr><td>③ cường độ</td><td>bài 7</td><td>phép tính chia byte; nhân ngây thơ: 2 phép cho 8 byte = 0,25</td></tr>
+          <tr><td>④ khối luồng</td><td>bài 8</td><td>các luồng của một khối chạy trên một cụm, dùng chung <b>bộ nhớ chia sẻ</b> — năm 2008 mỗi cụm có 16 KB = 16 384 byte</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Ba điều còn lại. Ở khoá Hệ thống máy tính, ta đã thấy bộ nhớ nhanh thì nhỏ, bộ nhớ lớn thì chậm, và dùng lại dữ liệu đang ở gần là cách tăng tốc. Ở bài 7, cường độ là phép tính chia byte, và nhân ma trận ngây thơ chỉ có 2 phép cho 8 byte, tức 0 phẩy 25. Ở bài 8, các luồng của một khối chạy trên một cụm và dùng chung bộ nhớ chia sẻ, năm 2008 mỗi cụm có 16 KB, tức 16 nghìn 384 byte."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: n, b, M và dấu tổng"
+    checks:
+      - "sum(k for k in range(1, 4)) == 6"
+    steps:
+      - show: |
+          $$C_{ij} = \sum_{k=1}^{n} A_{ik} \cdot B_{kj}$$
+          <p>$A_{ik}$: số ở hàng $i$, cột $k$ của $A$. Chữ Sigma hoa là <b>máy cộng dồn</b>: cho $k$ chạy từ 1 tới $n$, cộng mọi tích lại. Làm thử: $\sum_{k=1}^{3} k = 1 + 2 + 3 = 6$.</p>
+        introduces: [sum, sub2, sub]
+        focus: [1, 2, 2, 2]
+        say: "Công thức nhân ma trận viết gọn như sau. A i k là số ở hàng i, cột k của A, hai chữ nhỏ dưới chân là số hàng và số cột. Chữ Sigma hoa là một máy cộng dồn, cho k chạy từ 1 tới n rồi cộng mọi tích lại. Làm thử, tổng khi k chạy từ 1 tới 3 của k là 1 cộng 2 cộng 3, bằng 6."
+      - show: |
+          <table class="t"><tr><th>ký hiệu</th><th>nghĩa</th><th>ví dụ của bài</th></tr>
+          <tr><td>$n$</td><td>cỡ ma trận vuông</td><td>1024</td></tr>
+          <tr><td>$b$</td><td>cỡ khối: ma trận con $b$ hàng $b$ cột</td><td>32</td></tr>
+          <tr><td>$M$</td><td>dung lượng bộ nhớ nhanh, byte</td><td>16 384</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Bài dùng thêm ba chữ cái. n là cỡ ma trận vuông, ví dụ của bài là 1024. b là cỡ khối, một ma trận con b hàng b cột, ví dụ 32. M là dung lượng bộ nhớ nhanh tính bằng byte, ví dụ 16 nghìn 384."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Một khối của C cần một dải khối của A và một dải khối của B"
+    steps:
+      - show: |
+          <div><svg width="1600" height="380" viewBox="0 0 1600 380">
+          <g stroke="#1f2937" stroke-width="1.5">
+          <rect x="40" y="40" width="240" height="240" fill="#f9fafb"/><rect x="40" y="100" width="240" height="60" fill="#dbeafe"/>
+          <rect x="400" y="40" width="240" height="240" fill="#f9fafb"/><rect x="520" y="40" width="60" height="240" fill="#dcfce7"/>
+          <rect x="760" y="40" width="240" height="240" fill="#f9fafb"/><rect x="880" y="100" width="60" height="60" fill="#ffedd5"/>
+          <rect x="100" y="100" width="60" height="60" fill="#2a78d6"/><rect x="520" y="100" width="60" height="60" fill="#059669"/>
+          </g>
+          <g stroke="#9ca3af" stroke-width="1"><line x1="100" y1="40" x2="100" y2="280"/><line x1="160" y1="40" x2="160" y2="280"/><line x1="220" y1="40" x2="220" y2="280"/><line x1="40" y1="100" x2="280" y2="100"/><line x1="40" y1="160" x2="280" y2="160"/><line x1="40" y1="220" x2="280" y2="220"/>
+          <line x1="460" y1="40" x2="460" y2="280"/><line x1="520" y1="40" x2="520" y2="280"/><line x1="580" y1="40" x2="580" y2="280"/><line x1="400" y1="100" x2="640" y2="100"/><line x1="400" y1="160" x2="640" y2="160"/><line x1="400" y1="220" x2="640" y2="220"/>
+          <line x1="820" y1="40" x2="820" y2="280"/><line x1="880" y1="40" x2="880" y2="280"/><line x1="940" y1="40" x2="940" y2="280"/><line x1="760" y1="100" x2="1000" y2="100"/><line x1="760" y1="160" x2="1000" y2="160"/><line x1="760" y1="220" x2="1000" y2="220"/></g>
+          <g font-size="24" fill="#1f2937" text-anchor="middle"><text x="160" y="318">A: dải hàng của khối</text><text x="520" y="318">B: dải cột của khối</text><text x="880" y="318">C: một khối kết quả</text>
+          <text x="340" y="170">nhân</text><text x="700" y="170">=</text></g>
+          <rect x="1060" y="40" width="510" height="240" rx="12" fill="#fff7ed" stroke="#eb6834" stroke-width="3"/>
+          <g font-size="23" fill="#1f2937" text-anchor="middle"><text x="1315" y="82" font-weight="bold">bộ nhớ nhanh giữ 3 khối</text>
+          <text x="1315" y="124">khối A đang xét (xanh đậm)</text><text x="1315" y="162">khối B đang xét (lục đậm)</text><text x="1315" y="200">khối C đang cộng dồn</text>
+          <text x="1315" y="250" fill="#b91c1c">mỗi số nạp lên được dùng b lần</text></g>
+          <text x="800" y="362" font-size="22" fill="#6b7280" text-anchor="middle">đi dọc dải: nạp cặp khối kế tiếp, nhân hai khối nhỏ, cộng vào khối C — rồi bỏ cặp cũ</text>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình chia mỗi ma trận thành lưới khối 4 nhân 4. Để tính một khối cam của C, ta cần cả dải hàng xanh của A và cả dải cột lục của B. Mỗi lượt ta chỉ nạp một cặp khối đậm vào bộ nhớ nhanh, nhân hai khối nhỏ, cộng vào khối C, rồi bỏ cặp cũ để nạp cặp kế tiếp. Trong bộ nhớ nhanh, mỗi số nạp lên được dùng b lần thay vì một lần, nên số lần đọc bộ nhớ chậm giảm đi b lần."
+
+  # ───────────────────────── 5. SUY RA ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra số lần đọc: 2n³ và 2n³ chia b"
+    checks:
+      - "alg.par_matmul_reads(2) == 16 == 2 * 2 ** 3"
+      - "(4 // 2) ** 2 * (4 // 2) * 2 * 2 ** 2 == 64 == alg.par_matmul_reads(4, 2) == 2 * 4 ** 3 // 2 and alg.par_matmul_reads(4) == 128"
+      - "3 * 32 * 32 * 4 == 12288 <= 16384 and 3 * 64 * 64 * 4 == 49152 > 16384"
+    steps:
+      - show: |
+          <p><b>Bước 1 — ngây thơ.</b> Có $n^2$ ô kết quả; mỗi ô chạy $n$ bước $k$; mỗi bước đọc một số của A và một số của B. Nhân ba điều đó:</p>
+          $$\text{số đọc} = n^2 \cdot n \cdot 2 = \hl{2n^3}$$
+          <p class="note">Làm thử với $n = 2$: 4 ô, mỗi ô 2 bước, mỗi bước 2 số → $4 \cdot 2 \cdot 2 = 16 = 2 \cdot 2^3$ ✓.</p>
+        focus: [1, 1, 2, 3]
+        say: "Bước một là cách ngây thơ. Có n bình phương ô kết quả, mỗi ô chạy n bước k, và mỗi bước đọc một số của A và một số của B. Vì vậy, nhân ba điều đó lại, số đọc bằng 2 n mũ 3. Làm thử với n bằng 2, có 4 ô, mỗi ô 2 bước, mỗi bước 2 số, tổng 16, đúng bằng 2 nhân 2 mũ 3."
+      - show: |
+          <p><b>Bước 2 — chia khối.</b> Mỗi chiều có $\frac{n}{b}$ khối, nên C có $\left(\frac{n}{b}\right)^2$ khối. Mỗi khối C đi dọc $\frac{n}{b}$ cặp khối; mỗi cặp nạp $2b^2$ số:</p>
+          $$\left(\frac{n}{b}\right)^2 \cdot \frac{n}{b} \cdot 2b^2 = \hlg{\frac{2n^3}{b}}$$
+          <p class="note">Làm thử $n = 4$, $b = 2$: $4 \cdot 2 \cdot 8 = 64 = \frac{2 \cdot 64}{2}$, so với ngây thơ 128 — ít hơn đúng $b = 2$ lần ✓.</p>
+        focus: [1, 1, 1, 2, 3]
+        say: "Bước hai là chia khối. Mỗi chiều có n chia b khối, nên C có n chia b bình phương khối. Mỗi khối C đi dọc n chia b cặp khối, và mỗi cặp nạp 2 b bình phương số. Nhân lại, các b triệt tiêu bớt, còn 2 n mũ 3 chia b. Làm thử với n bằng 4 và b bằng 2, ta được 4 nhân 2 nhân 8 bằng 64, so với ngây thơ 128, ít hơn đúng 2 lần."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — giới hạn.</b> Trong lúc tính, bộ nhớ nhanh phải giữ <b>3 khối</b>: một của A, một của B, một của C. Mỗi khối $b^2$ số, 4 byte mỗi số:</p>
+          $$3 \cdot b^2 \cdot 4 \leq M$$
+          <p class="note">Làm thử, $M = 16\,384$: $b = 32$ cần $12\,288$ byte, vừa; $b = 64$ cần $49\,152$ byte, không vừa.</p>
+        introduces: [geq]
+        focus: [1, 1, 2, 3]
+        say: "Bước ba là giới hạn. Trong lúc tính, bộ nhớ nhanh phải giữ 3 khối, một của A, một của B và một của C, mỗi khối b bình phương số, 4 byte mỗi số. Vì vậy 3 nhân b bình phương nhân 4 phải nhỏ hơn hoặc bằng M. Làm thử với M bằng 16 nghìn 384, khối 32 cần 12 nghìn 288 byte nên vừa, còn khối 64 cần 49 nghìn 152 byte nên không vừa."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Ma trận 1024, từng phép tính"
+    checks:
+      - "alg.par_matmul_reads(1024) == 2 * 1024 ** 3 == 2147483648 and 2 * 1024 ** 3 * 4 == 8589934592"
+      - "alg.par_matmul_reads(1024, 32) == 67108864 and 67108864 * 4 == 268435456 and 2147483648 // 67108864 == 32"
+      - "3 * 32 ** 2 * 4 == 12288 and 3 * 64 ** 2 * 4 == 49152 and max(b for b in range(1, 100) if 12 * b * b <= 16384) == 36"
+      - "2 * 1024 ** 3 / (67108864 * 4) == 8 and alg.par_roofline(10e12, 1e12, 8) == 8e12 and alg.par_roofline(10e12, 1e12, 8) / 10e12 == 0.8"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>số phần tử đọc</th><th>byte</th></tr>
+          <tr><td>Bước 1. ngây thơ</td><td>$2 \cdot 1024^3$</td><td>2&nbsp;147&nbsp;483&nbsp;648 ≈ 2,15 tỉ</td><td>≈ 8,59 GB</td></tr>
+          <tr><td>Bước 2. khối 32</td><td>$\frac{2 \cdot 1024^3}{32}$</td><td>$\hlg{67\,108\,864}$</td><td>≈ 268 MB</td></tr></table>
+          <p class="note">Ít hơn đúng 32 lần — bằng cỡ khối.</p>
+        focus: [0, "1.2", "1.3", 2]
+        say: "Ta tính cho ma trận 1024. Bước một, cách ngây thơ đọc 2 nhân 1024 mũ 3, tức 2 tỉ 147 triệu 483 nghìn 648 phần tử, khoảng 8 phẩy 59 tỉ byte. Bước hai, chia khối 32 thì chia số đó cho 32, còn 67 triệu 108 nghìn 864 phần tử, khoảng 268 triệu byte. Ít hơn đúng 32 lần, bằng cỡ khối."
+      - show: |
+          <table class="t"><tr><th>bước</th><th>cỡ khối</th><th>ba khối cần</th><th>vừa 16 384 byte?</th></tr>
+          <tr><td>Bước 3</td><td>32</td><td>$3 \cdot 32^2 \cdot 4 = 12\,288$</td><td>$\hlg{\text{vừa}}$</td></tr>
+          <tr><td>Bước 4</td><td>64</td><td>$3 \cdot 64^2 \cdot 4 = 49\,152$</td><td>$\hl{\text{không}}$</td></tr></table>
+          <p class="note">Lớn nhất vừa là $b = 36$, nhưng 1024 không chia hết cho 36 — chọn $b = 32$.</p>
+        focus: [0, "1.2", "1.3", 2]
+        say: "Giờ kiểm chỗ chứa. Bước ba, khối 32 cần 3 nhân 32 bình phương nhân 4, bằng 12 nghìn 288 byte, vừa 16 nghìn 384. Bước bốn, khối 64 cần 49 nghìn 152 byte, không vừa. Cỡ lớn nhất vừa là 36, nhưng 1024 không chia hết cho 36, nên ta chọn 32."
+      - clear: true
+        show: |
+          <p><b>Bước 5 — nối với bài 7.</b> Số phép vẫn là $2n^3$; số byte giờ là $4 \cdot \frac{2n^3}{b}$:</p>
+          $$I = \frac{2n^3}{4 \cdot \frac{2n^3}{b}} = \frac{b}{4} = \frac{32}{4} = \hlb{8} \text{ phép mỗi byte}$$
+          <p class="note">Ngây thơ 0,25, khối 32 thì 8 — gấp 32. Trên máy minh hoạ của bài 7 (điểm gãy 10): $\min(10^{13},\ 10^{12} \cdot 8) = 8 \cdot 10^{12}$, tức 80% đỉnh thay vì 2,5%.</p>
+        introduces: [min_fn]
+        focus: [1, 2, 3, 3]
+        say: "Bước năm nối với bài 7, nơi cường độ số học là số phép chia số byte. Số phép vẫn là 2 n mũ 3, còn số byte giờ là 4 nhân 2 n mũ 3 chia b. Chia ra, cường độ bằng b chia 4, với khối 32 là 8 phép mỗi byte, gấp 32 lần so với 0 phẩy 25 của cách ngây thơ. Trên máy minh hoạ của bài 7 có điểm gãy 10, giá trị nhỏ hơn của hai trần là 8 nghìn tỉ, tức 80 phần trăm đỉnh thay vì 2 phẩy 5 phần trăm."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: đếm bằng vòng lặp thật, và kết quả không đổi"
+    checks:
+      - "[alg.par_matmul_reads(8), alg.par_matmul_reads(8, 2), alg.par_matmul_reads(8, 4)] == [1024, 512, 256] and [2 * 8 ** 3 // b for b in (1, 2, 4)] == [1024, 512, 256]"
+      - "round(144.4 / 119.9, 2) == 1.2 and round(195.5 / 144.4, 2) == 1.35"
+    steps:
+      - show: |
+          <table class="t"><tr><th>đường khác: chạy vòng lặp, đếm từng lần đọc</th><th>$n = 8$, ngây thơ</th><th>khối 2</th><th>khối 4</th></tr>
+          <tr><td>máy đếm được</td><td>1024</td><td>512</td><td>256</td></tr>
+          <tr><td>công thức $\frac{2n^3}{b}$</td><td>$2 \cdot 512 = 1024$</td><td>512</td><td>256</td></tr></table>
+          <p class="note">Chia khối chỉ đổi <b>thứ tự</b> các phép nhân–cộng, không đổi phép nào: với số nguyên, kết quả trùng từng ô. Với số thực, cộng theo thứ tự khác có thể lệch ở chữ số cuối (bài 3) — so bằng sai số cho phép.</p>
+        focus: [0, "1.2", "1.3", 2, 2]
+        say: "Kiểm tra thứ nhất đi đường khác, chạy vòng lặp thật với n bằng 8 và đếm từng lần đọc. Máy đếm được 1024 lần cho cách ngây thơ, 512 cho khối 2 và 256 cho khối 4. Công thức 2 n mũ 3 chia b cho đúng ba số đó. Chia khối chỉ đổi thứ tự các phép nhân cộng, nên với số nguyên kết quả trùng từng ô. Với số thực, như bài 3, cộng theo thứ tự khác có thể lệch ở chữ số cuối, nên hãy so bằng sai số cho phép."
+      - show: |
+          <p><b>Đối chiếu số của hãng:</b> chép khối A vào bộ nhớ chia sẻ: $\frac{144{,}4}{119{,}9} \approx 1{,}2$ lần; chép thêm khối B: $\frac{195{,}5}{144{,}4} \approx 1{,}35$ lần nữa.</p>
+          <p class="note">Hướng dẫn ghi rõ: cải thiện “không phải nhờ gộp truy cập tốt hơn”, mà nhờ <b>tránh chuyển thừa</b> từ bộ nhớ chính — đúng điều công thức của ta đếm.</p>
+        focus: [1, 1, 2]
+        say: "Kiểm tra thứ hai đối chiếu số của hãng, chia băng thông sau cho băng thông trước. Theo đó, chép khối A vào bộ nhớ chia sẻ nhanh hơn khoảng 1 phẩy 2 lần, chép thêm khối B nhanh thêm khoảng 1 phẩy 35 lần nữa. Hướng dẫn ghi rõ rằng cải thiện không phải nhờ gộp truy cập tốt hơn, mà nhờ tránh chuyển thừa từ bộ nhớ chính, đúng điều công thức của ta đếm."
+
+  # ───────────────────────── 8. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi của người đã đi làm"
+    checks:
+      - "3 * 64 ** 2 * 4 > 16384 and 2 * 12288 > 16384 and 16384 // 12288 == 1"
+      - "16384 // (3 * 16 ** 2 * 4) == 5 and 2 * 1024 ** 3 // 16 == 2 * (2 * 1024 ** 3 // 32)"
+      - "(0.1 + 0.2) + 0.3 != 0.1 + (0.2 + 0.3)"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> “Khối càng lớn càng tốt” <b class="red">(khối 64 cần 49 152 byte, không vừa 16 384)</b>
+          <br><span class="note">Vượt dung lượng thì khối không giữ được trong bộ nhớ nhanh, lợi ích mất. Phép thử: tính $3 \cdot b^2 \cdot 4$ trước.</span></div>
+          <div class="box warn"><b>Lỗi 2.</b> Thấy kết quả đúng nên tin cách ngây thơ là ổn <b class="red">(đọc nhiều gấp 32 lần)</b>
+          <br><span class="note">Kiểm thử chỉ so kết quả, không đo số byte. Phép thử: đo thời gian, so với mái nhà.</span></div>
+        focus: [1, 1, 2, 2]
+        say: "Lỗi thứ nhất là nghĩ khối càng lớn càng tốt. Khối 64 cần 49 nghìn 152 byte, không vừa 16 nghìn 384, nên lợi ích mất, và phép thử là tính 3 nhân b bình phương nhân 4 trước. Lỗi thứ hai là thấy kết quả đúng nên tin cách ngây thơ là ổn, trong khi nó đọc nhiều gấp 32 lần. Kiểm thử chỉ so kết quả chứ không đo số byte, nên phải đo thời gian và so với mái nhà."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Chọn cỡ khối vừa khít dung lượng, quên rằng các khối luồng cùng chạy trên một cụm <b>chia nhau</b> bộ nhớ chia sẻ</div>
+          <table class="t"><tr><th>cỡ khối</th><th>mỗi khối luồng cần</th><th>số khối luồng chạy cùng lúc trên cụm 16 384 byte</th></tr>
+          <tr><td>32</td><td>12 288 byte</td><td>$\hl{1}$ — hai khối cần 24 576, không vừa</td></tr>
+          <tr><td>16</td><td>3 072 byte</td><td>5 — có việc khác để chạy khi một khối chờ bộ nhớ</td></tr></table>
+          <p class="note">Hướng dẫn của hãng ghi: bộ nhớ chia sẻ “được chia giữa các khối luồng đang ở trên cụm”. Đổi lại, khối 16 đọc gấp đôi khối 32 — phải đo, không đoán.</p>
+        focus: [1, "2.2", "2.3", 3, 3]
+        say: "Lỗi thứ ba hay gặp ở người đã đi làm, là chọn cỡ khối vừa khít dung lượng mà quên rằng các khối luồng cùng chạy trên một cụm phải chia nhau bộ nhớ chia sẻ. Khối 32 cần 12 nghìn 288 byte, nên mỗi cụm chỉ giữ được một khối luồng, vì hai khối cần 24 nghìn 576. Khối 16 chỉ cần 3 nghìn 72 byte, cụm giữ được 5 khối, nên luôn có việc khác để chạy khi một khối chờ bộ nhớ. Hướng dẫn của hãng ghi rõ bộ nhớ chia sẻ được chia giữa các khối đang ở trên cụm. Đổi lại, khối 16 đọc gấp đôi khối 32, nên phải đo chứ không đoán."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> So kết quả chia khối với kết quả ngây thơ bằng dấu bằng tuyệt đối <b class="red">(báo sai oan)</b>
+          <br><span class="note">Bài 3: $(0{,}1 + 0{,}2) + 0{,}3 \neq 0{,}1 + (0{,}2 + 0{,}3)$ trên máy. Đổi thứ tự cộng là đổi chữ số cuối; so bằng sai số tương đối nhỏ.</span></div>
+        introduces: [neq]
+        say: "Lỗi thứ tư là so kết quả chia khối với kết quả ngây thơ bằng dấu bằng tuyệt đối, rồi báo sai oan. Như bài 3, trên máy 0 phẩy 1 cộng 0 phẩy 2 rồi cộng 0 phẩy 3 khác 0 phẩy 1 cộng tổng của 0 phẩy 2 và 0 phẩy 3. Đổi thứ tự cộng là đổi chữ số cuối, nên hãy so bằng một sai số tương đối nhỏ."
+
+  # ───────────────────────── 9. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: chọn cỡ khối cho một thẻ mới"
+    checks:
+      - "3 * 64 ** 2 * 4 == 49152 and 3 * 128 ** 2 * 4 == 196608 > 49152"
+      - "2 * 2048 ** 3 == 17179869184 and 2 * 2048 ** 3 // 64 == 268435456 and 17179869184 // 268435456 == 64"
+      - "3 * 64 ** 2 * 8 == 98304 > 49152 and 3 * 32 ** 2 * 8 == 24576 <= 49152"
+    steps:
+      - show: |
+          <p>Thẻ mới có bộ nhớ chia sẻ <b>48 KB = 49 152 byte</b> mỗi cụm (số minh hoạ). Nhân hai ma trận $n = 2048$, số thực 32 bit. Chỉ xét cỡ khối là lũy thừa của 2.</p>
+          <table class="t"><tr><th>câu</th><th>hỏi</th></tr>
+          <tr><td>1</td><td>Cỡ khối lớn nhất để 3 khối vừa?</td></tr>
+          <tr><td>2</td><td>Số phần tử đọc: ngây thơ và chia khối đó? Ít hơn mấy lần?</td></tr>
+          <tr><td>3</td><td>Đổi sang số thực <b>64 bit</b> (8 byte): giữ cỡ khối hay đổi?</td></tr></table>
+        focus: [1, 1, 1, "2.2", "2.3", "2.4", 0]
+        say: "Bây giờ đến lượt bạn. Thẻ mới có bộ nhớ chia sẻ 48 KB, tức 49 nghìn 152 byte mỗi cụm, một số minh hoạ. Ta nhân hai ma trận 2048 với số thực 32 bit, chỉ xét cỡ khối là lũy thừa của 2. Câu một, cỡ khối lớn nhất để 3 khối vừa là bao nhiêu? Câu hai, số phần tử đọc của cách ngây thơ và của chia khối đó, ít hơn mấy lần? Câu ba, nếu đổi sang số thực 64 bit, 8 byte mỗi số, ta giữ cỡ khối hay đổi? Dừng video và làm ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>1</td><td>$3 \cdot 64^2 \cdot 4 = 49\,152$; khối 128 cần gấp 4</td><td>$\hlg{b = 64}$, vừa khít</td></tr>
+          <tr><td>2</td><td>$2 \cdot 2048^3$ so với $\frac{2 \cdot 2048^3}{64}$</td><td>≈ 17,2 tỉ so với 268 triệu: ít hơn <b>64 lần</b></td></tr></table>
+        focus: ["1.2", "1.3"]
+        say: "Đáp án câu một, 3 nhân 64 bình phương nhân 4 bằng đúng 49 nghìn 152, nên khối 64 vừa khít, còn khối 128 cần gấp 4 lần. Câu hai, ngây thơ đọc 2 nhân 2048 mũ 3, khoảng 17 phẩy 2 tỉ phần tử, còn khối 64 đọc khoảng 268 triệu, ít hơn đúng 64 lần."
+      - show: |
+          <table class="t"><tr><th>câu 3: số 64 bit</th><th>ba khối cần</th><th>vừa 49 152?</th></tr>
+          <tr><td>giữ khối 64</td><td>$3 \cdot 64^2 \cdot 8 = 98\,304$</td><td>$\hl{\text{không}}$</td></tr>
+          <tr><td>đổi khối 32</td><td>$3 \cdot 32^2 \cdot 8 = 24\,576$</td><td>$\hlg{\text{vừa}}$, còn chỗ cho khối luồng thứ hai</td></tr></table>
+          <p class="note">Quyết định: đổi kiểu số thì tính lại cỡ khối. Đổi lại, đọc gấp đôi so với khối 64 — điều kiện để chọn lại là đo trên thẻ thật.</p>
+        focus: [0, "1.2", "1.3", 2]
+        say: "Câu ba là một quyết định. Giữ khối 64 với số 8 byte cần 98 nghìn 304 byte, không vừa. Đổi sang khối 32 chỉ cần 24 nghìn 576 byte, vừa, và còn chỗ cho một khối luồng thứ hai. Vậy đổi kiểu số thì phải tính lại cỡ khối, đổi lại số lần đọc gấp đôi khối 64, và điều kiện để chọn lại là đo trên thẻ thật."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">ngây thơ: $2n^3$ lần đọc</span><span class="a">→</span>
+          <span class="n">khối b: mỗi số dùng b lần → $\frac{2n^3}{b}$</span><span class="a">→</span>
+          <span class="n">cường độ $\frac{b}{4}$</span><span class="a">→</span>
+          <span class="n">giới hạn: $3 \cdot b^2 \cdot 4 \leq M$</span></div>
+        say: "Tổng kết lại, cách ngây thơ đọc 2 n mũ 3 lần. Chia khối b thì mỗi số nạp lên được dùng b lần, nên còn 2 n mũ 3 chia b lần đọc, và cường độ thành b chia 4. Giới hạn là ba khối phải vừa bộ nhớ nhanh."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> nhanh hơn không phải nhờ làm ít phép hơn, mà nhờ <b>chuyển ít byte hơn</b>. Hỏi: mỗi số đã đưa lên bộ nhớ nhanh được dùng mấy lần trước khi bị bỏ?</div>
+        say: "Điều cần mang theo, ở đây nhanh hơn không phải nhờ làm ít phép hơn, mà nhờ chuyển ít byte hơn. Hãy hỏi, mỗi số đã đưa lên bộ nhớ nhanh được dùng mấy lần trước khi bị bỏ."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 10): truyền thông tập thể — nhiều máy cùng cộng gradient bằng cách chuyền theo vòng, hay gửi về một máy chủ tham số.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 10, ta rời một thẻ để sang nhiều máy, học truyền thông tập thể, với cách gộp toàn phần theo vòng và cách gửi về một máy chủ tham số. Hẹn gặp bạn ở bài tiếp theo."

@@ -1,0 +1,265 @@
+id: L34
+series: "CS115 · Toán cho Khoa học Máy tính"
+title: "Bài 34 (mở rộng) — Phép tích chập & mạng nơ-ron tích chập (CNN)"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "ML24, NN, VC24 (chỉ nhắc tên CNN); CITED: LeCun, Bottou, Bengio & Haffner, “Gradient-based learning applied to document recognition”, Proc. IEEE 86(11) (1998) 2278–2324, doi:10.1109/5.726791 (truy cập 2026-10-24, no revision given)"
+assumes: [cdot, sub, sub2, mat, vec, sum, max_fn, relu, approx, dim, transpose]
+# Quy ước ký hiệu: ảnh X, bộ lọc (kernel) K kích thước k × k, đầu ra Y; Y_{ij} = Σ_{a,b} X_{i+a, j+b}·K_{ab} (tương quan chéo — cái mà thư viện
+#   gọi là “tích chập”; nói rõ ở notation_note); N cạnh ảnh, P đệm (padding), S bước (stride).
+# Lời đọc: “CNN” chỉ hiện trên màn hình — nói “mạng tích chập”; “kernel” nói “bộ lọc”; “padding” nói “đệm”; “stride” nói “bước nhảy”;
+#   “pooling” nói “gộp”.
+# Nối bài trước (nói lại khi dùng, luật 17): bài 2 (nhân ma trận), bài 22 (lan truyền ngược: phép tuyến tính thì nhân ma trận chuyển vị),
+#   bài 23 (mạng nhiều lớp, ReLU, số tham số).
+objectives:
+  - "Tính phép tích chập (tương quan chéo) bằng tay trên ảnh nhỏ"
+  - "Tính kích thước đầu ra theo kích thước ảnh, bộ lọc, đệm, bước nhảy"
+  - "Hiểu chia sẻ trọng số: số tham số không phụ thuộc kích thước ảnh"
+  - "Thấy tích chập là phép tuyến tính — nhân với một ma trận thưa"
+  - "Biết lớp gộp (pooling) và cấu trúc một mạng tích chập"
+asr_reviewed:
+  - sentence: "Kích thước đầu ra bằng cạnh ảnh trừ cạnh bộ lọc cộng hai lần đệm, chia cho bước nhảy, rồi cộng 1."
+    reason: "lẫn thanh ở nhiều từ (kích thước→kết thức, cạnh→cảnh, đệm→đêm, một→mục); câu dài, cấu trúc nghe đúng — CẦN NGƯỜI NGHE xác nhận"
+  - sentence: "Nhắc lại bài 23, một lớp của mạng nhiều lớp nối mỗi đầu ra với mọi đầu vào, qua ma trận W rồi hàm ReLU."
+    reason: "W đọc “vê đúp”, ASR chép “vê đúc”; ReLU chép “re lu” — đúng"
+  - sentence: "Nó chỉ chọn số lớn nhất, và lượt lùi dồn gradient cho ô lớn nhất, giống cổng lấy số lớn hơn của bài 22."
+    reason: "“ô” chép “O” — cùng âm"
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Ảnh 32×32 màu với mạng nhiều lớp thường: 50 triệu tham số cho một lớp"
+    checks:
+      - "32*32*3 == 3072 and 3072*(32*32*16) == 50331648 and 3*3*3*16 + 16 == 448"
+    steps:
+      - show: |
+          <p class="big">Ảnh màu 32 × 32 có 3072 số. Lớp tiếp theo cũng có kích thước ảnh, 16 kênh: mạng nhiều lớp thường (bài 23) cần khoảng <b>50 triệu</b> trọng số.</p>
+          <div class="box key">Mạng tích chập: mỗi nơ-ron chỉ nhìn một <b>ô nhỏ</b> 3 × 3, và <b>dùng chung</b> bộ lọc ở mọi vị trí → chỉ <b>448</b> tham số.</div>
+        focus: [1, 1, 2]
+        say: "Chào bạn, một ảnh màu 32 nhân 32 có 3072 con số. Nếu lớp tiếp theo cũng có kích thước ảnh với 16 kênh, mạng nhiều lớp thường cần khoảng 50 triệu trọng số. Mạng tích chập cho mỗi nơ-ron chỉ nhìn một ô nhỏ và dùng chung bộ lọc ở mọi vị trí, nên chỉ cần 448 tham số."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn nền: lớp tuyến tính và lan truyền ngược"
+    steps:
+      - show: |
+          <p>Bài 23: một lớp tính — mỗi đầu ra nối với <b>mọi</b> đầu vào:</p>
+          $$\mathbf{h} = \operatorname{ReLU}(\mathbf{W}\mathbf{x} + \mathbf{b})$$
+          <p>Bài 22: qua lớp tuyến tính, lượt lùi nhân với ma trận chuyển vị $\mathbf{W}^T$.</p>
+        focus: [[1, 2], 3]
+        say: "Nhắc lại bài 23, một lớp của mạng nhiều lớp nối mỗi đầu ra với mọi đầu vào, qua ma trận W rồi hàm ReLU. Nhắc lại bài 22, lượt lùi qua lớp tuyến tính nhân với ma trận chuyển vị."
+
+  # ───────────────────────── 3. PHÉP TÍCH CHẬP ─────────────────────────
+  - id: sym_conv
+    kind: symbol
+    title: "Giải mã: trượt bộ lọc, nhân từng ô, cộng lại"
+    checks:
+      - "(lambda X, K: [[float((X[i:i + 2, j:j + 2]*K).sum()) for j in range(3)] for i in range(3)] == [[0.0, -1.0, -1.0], [-1.0, 1.0, 3.0], [2.0, 0.0, -2.0]])(np.array([[1, 2, 0, 1], [0, 1, 3, 1], [2, 1, 0, 0], [1, 0, 1, 2.]]), np.array([[1, 0], [0, -1.]]))"
+      - "(lambda X, K: np.allclose([[(X[i:i + 2, j:j + 2]*K[::-1, ::-1]).sum() for j in range(3)] for i in range(3)], -np.array([[(X[i:i + 2, j:j + 2]*K).sum() for j in range(3)] for i in range(3)])))(np.array([[1, 2, 0, 1], [0, 1, 3, 1], [2, 1, 0, 0], [1, 0, 1, 2.]]), np.array([[1, 0], [0, -1.]]))"
+    steps:
+      - show: |
+          <div class="box key">$Y_{ij} = \sum_{a, b} X_{i + a,\ j + b}\cdot K_{ab}$ &nbsp; — đặt bộ lọc $\mathbf{K}$ lên ô bắt đầu tại $(i, j)$, nhân từng cặp, cộng lại</div>
+          <p>$\mathbf{X} = \begin{bmatrix} 1 & 2 & 0 & 1 \\ 0 & 1 & 3 & 1 \\ 2 & 1 & 0 & 0 \\ 1 & 0 & 1 & 2 \end{bmatrix}$, &nbsp; $\mathbf{K} = \begin{bmatrix} 1 & 0 \\ 0 & -1 \end{bmatrix}$ &nbsp; → &nbsp; $Y_{11} = 1\cdot 1 + 2\cdot 0 + 0\cdot 0 + 1\cdot(-1) = \hlg{0}$</p>
+          <p>Trượt hết: $\ \mathbf{Y} = \begin{bmatrix} 0 & -1 & -1 \\ -1 & 1 & 3 \\ 2 & 0 & -2 \end{bmatrix}$ ($\sz{3}{3}$)</p>
+        focus: [1, "2.3", 3]
+        say: "Phép tích chập đặt bộ lọc K lên một ô nhỏ của ảnh, nhân từng cặp số rồi cộng lại, sau đó trượt sang ô bên cạnh. Ví dụ ô đầu tiên, 1 nhân 1, cộng 2 nhân 0, cộng 0 nhân 0, cộng 1 nhân âm 1, bằng 0. Trượt hết ảnh 4 nhân 4, ta được kết quả 3 nhân 3."
+      - show: |
+          <p class="note">Định nghĩa toán học “tích chập” thật sự <b>lật</b> bộ lọc trước khi trượt (đổi $K_{ab}$ thành $K_{-a,-b}$); các thư viện học máy thường <b>không lật</b> — đúng tên là tương quan chéo. Với bộ lọc học được thì không khác gì: máy tự học bộ lọc đã lật. Lật $\mathbf{K}$ ở trên cho đúng $-\mathbf{Y}$.</p>
+        notation_note: true
+        say: "Lưu ý, tích chập theo định nghĩa toán học lật bộ lọc trước khi trượt, còn thư viện học máy thường không lật, tên đúng là tương quan chéo. Với bộ lọc học được thì không khác gì, vì máy tự học bộ lọc đã lật."
+
+  - id: slide_pic
+    kind: intuition
+    title: "Nhìn khung trượt: một khung cho đúng một ô đầu ra"
+    checks:
+      - "(lambda X, K: float((X[1:3, 2:4]*K).sum()))(np.array([[1, 2, 0, 1], [0, 1, 3, 1], [2, 1, 0, 0], [1, 0, 1, 2.]]), np.array([[1, 0], [0, -1.]])) == 3.0 and 3*1 + 1*0 + 0*0 + 0*(-1) == 3"
+    steps:
+      - show: |
+          <svg width="1200" height="430" viewBox="0 0 1200 430"><defs><marker id="arC34" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs><rect x="60" y="80" width="70" height="70" fill="#ffffff" stroke="#6b7280" stroke-width="2"/><text x="95" y="125" font-size="28" text-anchor="middle" fill="#1f2937">1</text><rect x="130" y="80" width="70" height="70" fill="#ffffff" stroke="#6b7280" stroke-width="2"/><text x="165" y="125" font-size="28" text-anchor="middle" fill="#1f2937">2</text><rect x="200" y="80" width="70" height="70" fill="#ffffff" stroke="#6b7280" stroke-width="2"/><text x="235" y="125" font-size="28" text-anchor="middle" fill="#1f2937">0</text><rect x="270" y="80" width="70" height="70" fill="#ffffff" stroke="#6b7280" stroke-width="2"/><text x="305" y="125" font-size="28" text-anchor="middle" fill="#1f2937">1</text><rect x="60" y="150" width="70" height="70" fill="#ffffff" stroke="#6b7280" stroke-width="2"/><text x="95" y="195" font-size="28" text-anchor="middle" fill="#1f2937">0</text><rect x="130" y="150" width="70" height="70" fill="#ffffff" stroke="#6b7280" stroke-width="2"/><text x="165" y="195" font-size="28" text-anchor="middle" fill="#1f2937">1</text><rect x="200" y="150" width="70" height="70" fill="#fde68a" stroke="#6b7280" stroke-width="2"/><text x="235" y="195" font-size="28" text-anchor="middle" fill="#1f2937">3</text><rect x="270" y="150" width="70" height="70" fill="#fde68a" stroke="#6b7280" stroke-width="2"/><text x="305" y="195" font-size="28" text-anchor="middle" fill="#1f2937">1</text><rect x="60" y="220" width="70" height="70" fill="#ffffff" stroke="#6b7280" stroke-width="2"/><text x="95" y="265" font-size="28" text-anchor="middle" fill="#1f2937">2</text><rect x="130" y="220" width="70" height="70" fill="#ffffff" stroke="#6b7280" stroke-width="2"/><text x="165" y="265" font-size="28" text-anchor="middle" fill="#1f2937">1</text><rect x="200" y="220" width="70" height="70" fill="#fde68a" stroke="#6b7280" stroke-width="2"/><text x="235" y="265" font-size="28" text-anchor="middle" fill="#1f2937">0</text><rect x="270" y="220" width="70" height="70" fill="#fde68a" stroke="#6b7280" stroke-width="2"/><text x="305" y="265" font-size="28" text-anchor="middle" fill="#1f2937">0</text><rect x="60" y="290" width="70" height="70" fill="#ffffff" stroke="#6b7280" stroke-width="2"/><text x="95" y="335" font-size="28" text-anchor="middle" fill="#1f2937">1</text><rect x="130" y="290" width="70" height="70" fill="#ffffff" stroke="#6b7280" stroke-width="2"/><text x="165" y="335" font-size="28" text-anchor="middle" fill="#1f2937">0</text><rect x="200" y="290" width="70" height="70" fill="#ffffff" stroke="#6b7280" stroke-width="2"/><text x="235" y="335" font-size="28" text-anchor="middle" fill="#1f2937">1</text><rect x="270" y="290" width="70" height="70" fill="#ffffff" stroke="#6b7280" stroke-width="2"/><text x="305" y="335" font-size="28" text-anchor="middle" fill="#1f2937">2</text><rect x="200" y="150" width="140" height="140" fill="none" stroke="#d97706" stroke-width="6"/><rect x="470" y="150" width="70" height="70" fill="#ffffff" stroke="#6b7280" stroke-width="2"/><text x="505" y="195" font-size="28" text-anchor="middle" fill="#1f2937">1</text><rect x="540" y="150" width="70" height="70" fill="#ffffff" stroke="#6b7280" stroke-width="2"/><text x="575" y="195" font-size="28" text-anchor="middle" fill="#1f2937">0</text><rect x="470" y="220" width="70" height="70" fill="#ffffff" stroke="#6b7280" stroke-width="2"/><text x="505" y="265" font-size="28" text-anchor="middle" fill="#1f2937">0</text><rect x="540" y="220" width="70" height="70" fill="#ffffff" stroke="#6b7280" stroke-width="2"/><text x="575" y="265" font-size="28" text-anchor="middle" fill="#1f2937">-1</text><rect x="760" y="115" width="70" height="70" fill="#ffffff" stroke="#6b7280" stroke-width="2"/><text x="795" y="160" font-size="28" text-anchor="middle" fill="#1f2937">0</text><rect x="830" y="115" width="70" height="70" fill="#ffffff" stroke="#6b7280" stroke-width="2"/><text x="865" y="160" font-size="28" text-anchor="middle" fill="#1f2937">-1</text><rect x="900" y="115" width="70" height="70" fill="#ffffff" stroke="#6b7280" stroke-width="2"/><text x="935" y="160" font-size="28" text-anchor="middle" fill="#1f2937">-1</text><rect x="760" y="185" width="70" height="70" fill="#ffffff" stroke="#6b7280" stroke-width="2"/><text x="795" y="230" font-size="28" text-anchor="middle" fill="#1f2937">-1</text><rect x="830" y="185" width="70" height="70" fill="#ffffff" stroke="#6b7280" stroke-width="2"/><text x="865" y="230" font-size="28" text-anchor="middle" fill="#1f2937">1</text><rect x="900" y="185" width="70" height="70" fill="#bbf7d0" stroke="#6b7280" stroke-width="2"/><text x="935" y="230" font-size="28" text-anchor="middle" fill="#1f2937">3</text><rect x="760" y="255" width="70" height="70" fill="#ffffff" stroke="#6b7280" stroke-width="2"/><text x="795" y="300" font-size="28" text-anchor="middle" fill="#1f2937">2</text><rect x="830" y="255" width="70" height="70" fill="#ffffff" stroke="#6b7280" stroke-width="2"/><text x="865" y="300" font-size="28" text-anchor="middle" fill="#1f2937">0</text><rect x="900" y="255" width="70" height="70" fill="#ffffff" stroke="#6b7280" stroke-width="2"/><text x="935" y="300" font-size="28" text-anchor="middle" fill="#1f2937">-2</text><rect x="900" y="185" width="70" height="70" fill="none" stroke="#059669" stroke-width="6"/><g font-size="26" text-anchor="middle" fill="#1f2937"><text x="200" y="60">ảnh X (4 × 4)</text><text x="540" y="130">bộ lọc K</text><text x="865" y="95">đầu ra Y (3 × 3)</text><text x="405" y="230">×</text></g><line x1="625" y1="220" x2="740" y2="220" stroke="#1f2937" stroke-width="3" marker-end="url(#arC34)"/><text x="682" y="205" font-size="22" text-anchor="middle" fill="#1f2937">cộng</text><g font-size="24" text-anchor="middle"><text x="600" y="385" fill="#d97706">khung cam: 3×1 + 1×0 + 0×0 + 0×(−1) = 3</text><text x="600" y="418" fill="#059669">→ ô hàng 2, cột 3 của Y; trượt khung sang ô kế tiếp để ra ô kế tiếp</text></g></svg>
+        focus: [0, 0, 0, 0]
+        say: "Hình này cho thấy cơ chế trượt của phép tích chập. Khung cam phủ bốn ô của ảnh, ở hàng 2 và 3, cột 3 và 4. Nhân từng ô với ô cùng chỗ của bộ lọc rồi cộng lại, 3 nhân 1, cộng 1 nhân 0, cộng 0 nhân 0, cộng 0 nhân âm 1, được 3. Số 3 này đặt vào đúng một ô của đầu ra, hàng 2, cột 3, và mỗi lần trượt khung sang một ô thì ta được thêm một ô đầu ra."
+
+  - id: hand_conv
+    kind: example
+    title: "Làm tay từng ô, rồi qua ReLU"
+    checks:
+      - "2*1 + 0*0 + 1*0 + 3*(-1) == -1 and 2*1 + 1*0 + 1*0 + 0*(-1) == 2"
+      - "(lambda X: np.allclose(X[:3, :3] - X[1:, 1:], [[0, -1, -1], [-1, 1, 3], [2, 0, -2]]))(np.array([[1, 2, 0, 1], [0, 1, 3, 1], [2, 1, 0, 0], [1, 0, 1, 2.]]))"
+      - "np.maximum(np.array([[0, -1, -1], [-1, 1, 3], [2, 0, -2]]), 0).tolist() == [[0, 0, 0], [0, 1, 3], [2, 0, 0]] and int((np.maximum(np.array([[0, -1, -1], [-1, 1, 3], [2, 0, -2]]), 0) > 0).sum()) == 3"
+    steps:
+      - show: |
+          <p><b>Bước 1.</b> Ô hàng 1, cột 2: khung phủ $\begin{bmatrix} 2 & 0 \\ 1 & 3 \end{bmatrix}$ của $\mathbf{X}$.</p>
+          $$Y_{12} = 2\cdot 1 + 0\cdot 0 + 1\cdot 0 + 3\cdot(-1) = \hlg{-1}$$
+        focus: [1, 2, 2]
+        say: "Bước một, ta tính ô hàng 1, cột 2. Khung bây giờ phủ bốn số 2, 0, 1 và 3 của ảnh. Nhân với bộ lọc rồi cộng, 2 nhân 1, cộng hai tích bằng 0, cộng 3 nhân âm 1, được âm 1, khớp với kết quả đã trượt."
+      - clear: true
+        show: |
+          <p><b>Bước 2.</b> Ô hàng 3, cột 1: khung phủ $\begin{bmatrix} 2 & 1 \\ 1 & 0 \end{bmatrix}$.</p>
+          $$Y_{31} = 2\cdot 1 + 1\cdot 0 + 1\cdot 0 + 0\cdot(-1) = \hlg{2}$$
+        focus: [1, 2]
+        say: "Bước hai, ô hàng 3, cột 1, khung phủ bốn số 2, 1, 1 và 0. Chỉ góc trên trái và góc dưới phải bị nhân với số khác 0, nên kết quả là 2 trừ 0, bằng 2."
+      - show: |
+          <p><b>Bước 3.</b> Bộ lọc này chỉ giữ góc trên trái (nhân 1) và góc dưới phải (nhân −1), nên mỗi ô đầu ra là một <b>hiệu theo đường chéo</b>:</p>
+          $$Y_{ij} = X_{ij} - X_{i + 1,\ j + 1}, \qquad Y_{23} = 3 - 0 = \hlg{3}$$
+        focus: [1, 1, 2]
+        say: "Bước ba, nhìn kỹ bộ lọc, chỉ góc trên trái nhân 1 và góc dưới phải nhân âm 1. Vậy mỗi ô đầu ra là số ở góc trên trái trừ số ở góc dưới phải, một phép đo thay đổi theo đường chéo. Thử ô hàng 2, cột 3, được 3 trừ 0, bằng 3, đúng như trong hình."
+      - clear: true
+        show: |
+          <p><b>Bước 4.</b> Lớp tích chập luôn đi kèm ReLU: số âm thành 0, số dương giữ nguyên.</p>
+          $$\operatorname{ReLU}(\mathbf{Y}) = \operatorname{ReLU}\begin{bmatrix} 0 & -1 & -1 \\ -1 & 1 & 3 \\ 2 & 0 & -2 \end{bmatrix} = \begin{bmatrix} 0 & 0 & 0 \\ 0 & 1 & 3 \\ 2 & 0 & 0 \end{bmatrix}$$
+          <p class="note">Còn đúng 3 ô khác 0: những chỗ ảnh <b>giảm</b> theo đường chéo.</p>
+        focus: [1, 2, 3]
+        say: "Bước bốn, sau tích chập luôn có hàm ReLU, biến số âm thành 0 và giữ nguyên số dương. Áp vào ma trận đầu ra, các số âm 1 và âm 2 đều thành 0. Chỉ còn 3 ô khác 0, đánh dấu những chỗ ảnh giảm dần theo đường chéo."
+
+  # ───────────────────────── 4. KÍCH THƯỚC ─────────────────────────
+  - id: size
+    kind: formula
+    title: "Kích thước đầu ra: đệm và bước nhảy"
+    checks:
+      - "(lambda f: (f(4, 2, 0, 1), f(32, 3, 1, 1), f(31, 3, 0, 2)) == (3, 32, 15))(lambda N, k, P, S: (N - k + 2*P)//S + 1)"
+      - "(31 - 3 + 0) % 2 == 0 and (32 - 3 + 2) % 1 == 0"
+    steps:
+      - show: |
+          <div class="box key">cạnh đầu ra $= \dfrac{N - k + 2P}{S} + 1$ &nbsp; ($N$: cạnh ảnh, $k$: cạnh bộ lọc, $P$: đệm thêm số 0 quanh viền, $S$: bước nhảy)</div>
+          <table class="t"><tr><th>$N$</th><th>$k$</th><th>$P$</th><th>$S$</th><th>đầu ra</th></tr>
+          <tr><td>4</td><td>2</td><td>0</td><td>1</td><td>$\frac{4 - 2}{1} + 1 = 3$ (ví dụ trên)</td></tr>
+          <tr><td>32</td><td>3</td><td>1</td><td>1</td><td>$\hlg{32}$ — giữ nguyên kích thước</td></tr>
+          <tr><td>31</td><td>3</td><td>0</td><td>2</td><td>$\frac{28}{2} + 1 = \hlg{15}$ — thu nhỏ gần một nửa</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Kích thước đầu ra bằng cạnh ảnh trừ cạnh bộ lọc cộng hai lần đệm, chia cho bước nhảy, rồi cộng 1. Thay số, ví dụ trên cho 3. Ảnh 32 với bộ lọc 3 và đệm 1 giữ nguyên 32. Ảnh 31 với bước nhảy 2 thu nhỏ còn 15."
+
+  # ───────────────────────── 5. LÀ PHÉP TUYẾN TÍNH ─────────────────────────
+  - id: linear
+    kind: concept
+    title: "Tích chập là nhân với một ma trận thưa"
+    checks:
+      - "Matrix([[1, -1, 0, 0], [0, 1, -1, 0], [0, 0, 1, -1]])*Matrix([1, 2, 3, 4]) == Matrix([-1, -1, -1])"
+    steps:
+      - show: |
+          <p>Một chiều: $\mathbf{x} = (1;\ 2;\ 3;\ 4)$, bộ lọc $(1;\ -1)$: đầu ra $(1 - 2;\ 2 - 3;\ 3 - 4) = (-1;\ -1;\ -1)$, và cũng bằng</p>
+          <p>$\begin{bmatrix} 1 & -1 & 0 & 0 \\ 0 & 1 & -1 & 0 \\ 0 & 0 & 1 & -1 \end{bmatrix}\begin{bmatrix} 1 \\ 2 \\ 3 \\ 4 \end{bmatrix}$ (bài 2) — ma trận <b>thưa</b> (nhiều số 0) và các hàng lặp lại cùng bộ lọc.</p>
+          <p class="note">Vì là phép tuyến tính, lan truyền ngược qua nó là nhân với ma trận chuyển vị (bài 22); bộ lọc dùng chung nên gradient của nó được <b>cộng dồn</b> từ mọi vị trí (cổng phân nhánh, bài 22).</p>
+        focus: [0, [1, 2], 3]
+        say: "Tích chập thực ra là một phép tuyến tính. Ví dụ một chiều, đầu ra trừ từng cặp số liền nhau, cũng bằng nhân với một ma trận thưa có các hàng lặp lại cùng bộ lọc. Vì vậy lượt lùi nhân với ma trận chuyển vị như bài 22, và gradient của bộ lọc dùng chung được cộng dồn từ mọi vị trí."
+
+  # ───────────────────────── 6. CHIA SẺ TRỌNG SỐ, GỘP ─────────────────────────
+  - id: sharing
+    kind: example
+    title: "Ví dụ: đếm tham số, lớp gộp lớn nhất"
+    checks:
+      - "3*3*3*16 + 16 == 448 and 3*3*16*32 + 32 == 4640"
+      - "(lambda X: [[float(X[i:i + 2, j:j + 2].max()) for j in (0, 2)] for i in (0, 2)] == [[2.0, 3.0], [2.0, 2.0]])(np.array([[1, 2, 0, 1], [0, 1, 3, 1], [2, 1, 0, 0], [1, 0, 1, 2.]]))"
+    steps:
+      - show: |
+          <p>Số tham số một lớp $= k\cdot k\cdot C_{\text{vào}}\cdot C_{\text{ra}} + C_{\text{ra}}$ — <b>không</b> phụ thuộc kích thước ảnh. Bộ lọc 3 × 3, 3 kênh vào, 16 kênh ra: $3\cdot 3\cdot 3\cdot 16 + 16 = \hlg{448}$.</p>
+          <p>Lớp <b>gộp lớn nhất</b> 2 × 2 (lấy số lớn nhất mỗi ô, bước nhảy 2) trên $\mathbf{X}$ — không có tham số học, chỉ thu nhỏ ảnh:</p>
+          $$\begin{bmatrix} 1 & 2 & 0 & 1 \\ 0 & 1 & 3 & 1 \\ 2 & 1 & 0 & 0 \\ 1 & 0 & 1 & 2 \end{bmatrix} \ \to\ \begin{bmatrix} 2 & 3 \\ 2 & 2 \end{bmatrix}$$
+        focus: ["1.1", "1.3", [2, 3]]
+        say: "Số tham số của một lớp tích chập bằng cạnh bộ lọc bình phương nhân số kênh vào nhân số kênh ra, cộng số kênh ra, không phụ thuộc kích thước ảnh. Thay số, được 448. Lớp gộp lấy số lớn nhất trong mỗi ô 2 nhân 2, không có tham số học, chỉ thu nhỏ ảnh."
+      - show: |
+          <div class="box key">Mạng tích chập điển hình (LeCun và cộng sự, 1998): [tích chập → ReLU → gộp] lặp vài lần, rồi vài lớp nối đầy đủ + softmax (bài 20, 23).</div>
+          <p class="note">Lớp đầu học các nét, cạnh; lớp sau ghép thành hình, bộ phận; lớp cuối nhận ra vật.</p>
+        focus: [1, 2]
+        say: "Một mạng tích chập điển hình lặp lại tích chập, ReLU rồi gộp vài lần, sau đó là vài lớp nối đầy đủ và hàm chuẩn hoá mũ như bài 20. Lớp đầu học các nét, lớp sau ghép thành hình, và lớp cuối nhận ra vật."
+
+  # ───────────────────────── 7. KIỂM BẰNG MÁY ─────────────────────────
+  - id: verify
+    kind: check
+    title: "Phép thử: tích chập bằng vòng lặp và bằng nhân ma trận"
+    checks:
+      - "(lambda X, K: np.allclose([[(X[i:i + 2, j:j + 2]*K).sum() for j in range(3)] for i in range(3)], X[:3, :3] - X[1:, 1:]))(np.array([[1, 2, 0, 1], [0, 1, 3, 1], [2, 1, 0, 0], [1, 0, 1, 2.]]), np.array([[1, 0], [0, -1.]]))"
+      - "(lambda X, K: (lambda Y, M: np.allclose(M @ X.reshape(-1), Y.reshape(-1)))(np.array([[(X[i:i + 2, j:j + 2]*K).sum() for j in range(3)] for i in range(3)]), np.array([[K[a - i, b - j] if 0 <= a - i < 2 and 0 <= b - j < 2 else 0 for a in range(4) for b in range(4)] for i in range(3) for j in range(3)])))(np.array([[1, 2, 0, 1], [0, 1, 3, 1], [2, 1, 0, 0], [1, 0, 1, 2.]]), np.array([[1, 0], [0, -1.]]))"
+    steps:
+      - show: |
+          <table class="t"><tr><th>đường tính</th><th>9 số của $\mathbf{Y}$</th></tr>
+          <tr><td>trượt khung, nhân từng ô rồi cộng</td><td>$0, -1, -1, -1, 1, 3, 2, 0, -2$</td></tr>
+          <tr><td>ma trận thưa $\sz{9}{16}$ nhân ảnh trải thành 16 số</td><td>trùng đúng 9 số $\checkmark$</td></tr>
+          <tr><td>hiệu chéo $X_{ij} - X_{i + 1,\ j + 1}$ (bước 3)</td><td>trùng đúng 9 số $\checkmark$</td></tr></table>
+        focus: ["1.3", "1.3", "1.4"]
+        say: "Phép thử, máy dựng ma trận thưa 9 nhân 16 từ bộ lọc, nhân với ảnh trải thành vector 16 số. Kết quả trùng đúng 9 số tính bằng cách trượt, nên tích chập đúng là một phép nhân ma trận. Đường thứ ba, lấy hiệu theo đường chéo như bước ba, cũng cho đúng 9 số ấy."
+
+  # ───────────────────────── 8. LỖI THƯỜNG GẶP ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay mắc"
+    checks:
+      - "32*32*16*10 + 10 == 163850 and 64*64*16*10 + 10 == 655370 and round(655370/163850) == 4 and 16*10 + 10 == 170 and 3*3*3*16 + 16 == 448"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Tính sai kích thước đầu ra <b class="red">(lỗi khớp lớp)</b>
+          <br><span class="note">Dùng đúng công thức với đệm và bước nhảy; khi không chia hết, thư viện thường làm tròn xuống.</span></div>
+        say: "Lỗi thứ nhất, tính sai kích thước đầu ra, làm các lớp không khớp nhau. Hãy dùng đúng công thức với đệm và bước nhảy, và nhớ khi không chia hết thì thư viện thường làm tròn xuống."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Nghĩ lớp gộp có tham số cần học <b class="red">(sai)</b>
+          <br><span class="note">Gộp lớn nhất chỉ chọn số lớn nhất; lượt lùi dồn gradient cho ô lớn nhất (như cổng lấy số lớn hơn, bài 22).</span></div>
+        say: "Lỗi thứ hai, nghĩ rằng lớp gộp có tham số cần học. Nó chỉ chọn số lớn nhất, và lượt lùi dồn gradient cho ô lớn nhất, giống cổng lấy số lớn hơn của bài 22."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Quên số kênh vào khi đếm tham số <b class="red">(sai)</b>
+          <br><span class="note">Bộ lọc 3 × 3 trên ảnh màu thực chất là 3 × 3 × 3 = 27 số cho mỗi kênh ra.</span></div>
+        say: "Lỗi thứ ba, quên số kênh vào khi đếm tham số. Bộ lọc 3 nhân 3 trên ảnh màu thực chất có 27 số cho mỗi kênh ra."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Đổi ảnh vào từ 32 × 32 lên 64 × 64, tưởng mạng vẫn chạy như cũ <b class="red">(sai)</b></div>
+          <table class="t"><tr><th>lớp</th><th>ảnh 32 × 32</th><th>ảnh 64 × 64</th></tr>
+          <tr><td>tích chập 3 × 3, 3 → 16 kênh, đệm 1</td><td>448</td><td>448 — không đổi</td></tr>
+          <tr><td>nối đầy đủ: trải $N\cdot N\cdot 16$ số → 10 lớp</td><td>$32\cdot 32\cdot 16\cdot 10 + 10 = 163\,850$</td><td>$64\cdot 64\cdot 16\cdot 10 + 10 = \hlo{655\,370}$</td></tr>
+          <tr><td>gộp trung bình mỗi kênh → 16 số → 10 lớp</td><td>$16\cdot 10 + 10 = 170$</td><td>170 — không đổi</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.3", "2.4"]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, đổi ảnh vào từ 32 lên 64 điểm mỗi cạnh mà tưởng mạng vẫn chạy như cũ. Lớp tích chập vẫn chỉ có 448 tham số, vì nó không phụ thuộc kích thước ảnh. Nhưng lớp nối đầy đủ ở cuối nhận ảnh trải phẳng, nên số trọng số tăng từ khoảng 164 nghìn lên khoảng 655 nghìn, gấp 4 lần. Trọng số đã học không còn khớp kích thước, nên mạng báo lỗi hoặc phải học lại lớp đó. Cách làm phổ biến là lấy trung bình mỗi kênh trước lớp cuối, chỉ còn 170 tham số dù ảnh to hay nhỏ."
+
+  # ───────────────────────── 9. TỰ KIỂM TRA ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "(28 - 5 + 0)//1 + 1 == 24 and 5*5*1*6 + 6 == 156"
+      - "(lambda x, k: [x[i]*k[0] + x[i + 1]*k[1] + x[i + 2]*k[2] for i in range(3)])([1, 0, 2, 1, 3], [1, 1, 1]) == [3, 3, 6]"
+      - "28 - 5 == 23 and 5*5*1*6 == 150 and (5 - 3)//1 + 1 == 3 and (28 - 5 + 2*2)//1 + 1 == 28 and [P for P in range(5) if (28 - 5 + 2*P)//1 + 1 == 28] == [2]"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Ảnh 28 × 28, bộ lọc 5 × 5, không đệm, bước nhảy 1. Đầu ra cạnh bao nhiêu?</td></tr>
+          <tr><td>2</td><td>Lớp đó có 1 kênh vào, 6 kênh ra. Bao nhiêu tham số?</td></tr>
+          <tr><td>3</td><td>Một chiều: $\mathbf{x} = (1;\ 0;\ 2;\ 1;\ 3)$, bộ lọc $(1;\ 1;\ 1)$. Tính đầu ra.</td></tr>
+          <tr><td>4</td><td>Muốn đầu ra vẫn có cạnh 28 với bộ lọc 5 × 5, bước nhảy 1: chọn đệm bao nhiêu?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", "1.5", 0]
+        say: "Bây giờ đến lượt bạn, với bốn câu trên màn hình. Câu một tính kích thước đầu ra. Câu hai đếm tham số. Câu ba tính một tích chập một chiều. Câu bốn là một quyết định, chọn đệm để giữ nguyên kích thước. Hãy dừng video và làm ra giấy."
+        pause: 8
+      - show: |
+          <table class="t"><tr><th>câu</th><th>từng bước</th><th>đáp số</th></tr>
+          <tr><td>①</td><td>$28 - 5 = 23$, chia bước nhảy 1, cộng 1</td><td>$\hlg{24}$</td></tr>
+          <tr><td>②</td><td>$5\cdot 5\cdot 1\cdot 6 = 150$ trọng số, cộng 6 hệ số chặn</td><td>$\hlg{156}$</td></tr></table>
+        focus: ["1.2", "1.3"]
+        say: "Câu một, 28 trừ 5 bằng 23, chia cho bước nhảy 1 rồi cộng 1, được cạnh 24. Câu hai, bộ lọc 5 nhân 5 với 1 kênh vào và 6 kênh ra có 150 trọng số, cộng 6 hệ số chặn, bằng 156 tham số."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu</th><th>từng bước</th><th>đáp số</th></tr>
+          <tr><td>③</td><td>số đầu ra $\frac{5 - 3}{1} + 1 = 3$; &nbsp; $1 + 0 + 2$, &nbsp; $0 + 2 + 1$, &nbsp; $2 + 1 + 3$</td><td>$(\hlg{3;\ 3;\ 6})$</td></tr>
+          <tr><td>④</td><td>$\frac{28 - 5 + 2P}{1} + 1 = 28 \Rightarrow 2P = 4$</td><td>đệm $P = \hlg{2}$</td></tr></table>
+        introduces: [implies]
+        focus: ["1.2", "1.2", "1.3"]
+        say: "Câu ba, công thức kích thước cho 5 trừ 3, cộng 1, bằng 3 số đầu ra. Cộng từng nhóm ba số liền nhau, được 3, 3 và 6. Câu bốn, đặt 28 trừ 5 cộng hai lần đệm, cộng 1, bằng 28, suy ra hai lần đệm bằng 4, nên chọn đệm bằng 2."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">trượt bộ lọc: nhân từng ô, cộng</span><span class="a">→</span>
+          <span class="n">kích thước $\frac{N - k + 2P}{S} + 1$</span><span class="a">→</span>
+          <span class="n">dùng chung bộ lọc: ít tham số</span><span class="a">→</span>
+          <span class="n">là phép tuyến tính: ma trận thưa</span><span class="a">→</span>
+          <span class="n">gộp: thu nhỏ, không tham số</span></div>
+        say: "Tổng kết chuỗi logic. Tích chập trượt bộ lọc trên ảnh, nhân từng ô với nhau, rồi cộng tất cả lại. Kích thước đầu ra theo công thức đệm và bước nhảy. Dùng chung bộ lọc nên rất ít tham số. Nó là phép tuyến tính, nhân với ma trận thưa. Lớp gộp thu nhỏ ảnh và không có tham số."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> đưa hiểu biết về dữ liệu vào kiến trúc (ảnh: điểm gần nhau liên quan, mẫu lặp ở mọi vị trí) giúp mô hình học nhanh hơn với ít tham số hơn.</div>
+        say: "Điều cần mang theo, đưa hiểu biết về dữ liệu vào kiến trúc, như điểm ảnh gần nhau thì liên quan, giúp mô hình học nhanh hơn với ít tham số hơn."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 35): <b>mạng nơ-ron hồi tiếp</b> (RNN), lan truyền ngược theo thời gian và LSTM — cho dữ liệu dạng chuỗi.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 35, ta học mạng nơ-ron hồi tiếp và lan truyền ngược theo thời gian, cho dữ liệu dạng chuỗi như câu văn. Hẹn gặp bạn ở bài tiếp theo."

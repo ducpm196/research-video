@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>{{TITLE}}</title>
+<link rel="stylesheet" href="{{KATEX}}/katex.min.css">
+<script src="{{KATEX}}/katex.min.js"></script>
+<script src="{{KATEX}}/contrib/auto-render.min.js"></script>
+<style>{{CSS}}</style>
+</head>
+<body>
+<div id="stage">
+  <header>
+    <div class="lesson">{{SERIES}} · <b id="lessonTitle"></b></div>
+    <div class="scene"><span id="badge" class="badge"></span><span id="sceneTitle"></span></div>
+  </header>
+  <main id="board"></main>
+  <footer>
+    <div id="caption"></div>
+    <div id="pause" hidden>⏸ Dừng video, tự làm rồi xem tiếp</div>
+    <div class="progress"><div id="bar"></div></div>
+  </footer>
+</div>
+<div id="nav" class="nav">
+  <button onclick="go(-1)">◀</button><span id="pos"></span><button onclick="go(1)">▶</button>
+  <span class="hint">Phím ←/→ · Storyboard xem trước, không phải video</span>
+</div>
+<script>
+const MACROS = {{MACROS}};
+const DATA = {{DATA}};
+// nhãn và màu của từng phân cảnh lấy từ hồ sơ chuyên ngành (tools/profiles/<hồ sơ>.yaml, lv.py player_html)
+const KIND = {{KINDS}};
+let cur = 0;
+function render(i) {
+  const f = DATA.frames[i];
+  document.getElementById('lessonTitle').textContent = DATA.title;
+  const [label, cls] = KIND[f.kind] || [f.kind, 'k-concept'];
+  const badge = document.getElementById('badge');
+  badge.textContent = label; badge.className = 'badge ' + cls;
+  document.getElementById('sceneTitle').textContent = f.scene_title;
+  const board = document.getElementById('board');
+  board.innerHTML = f.blocks.map((b, k) =>
+    `<section class="blk ${k === f.active ? 'active' : 'past'}">${b}</section>`).join('');
+  document.getElementById('caption').textContent = f.caption;
+  document.getElementById('pause').hidden = !f.pause;
+  document.getElementById('bar').style.width = (100 * f.t0 / DATA.total) + '%';
+  document.getElementById('pos').textContent = `${i + 1}/${DATA.frames.length}`;
+  renderMathInElement(document.getElementById('stage'), {
+    delimiters: [{left: '$$', right: '$$', display: true}, {left: '$', right: '$', display: false}],
+    throwOnError: false, strict: 'ignore', macros: {...MACROS}
+  });
+  const focusMiss = applyFocus(board, f.focus || []);
+  const errs = document.querySelectorAll('.katex-error').length;
+  const overflow = board.scrollHeight > board.clientHeight + 2 || board.scrollWidth > board.clientWidth + 2;
+  const capEl = document.getElementById('caption');
+  const capOverflow = capEl.scrollHeight > capEl.clientHeight + 2;
+  // dòng đầu trang hay tiêu đề phân cảnh xuống 2 dòng thì đè lên bảng (lỗi thật: L23 CS112, L11 CS115)
+  const wraps = el => el.offsetHeight > 1.9 * parseFloat(getComputedStyle(el).fontSize);
+  const headWrap = wraps(document.querySelector('header .lesson')) || wraps(document.getElementById('sceneTitle'));
+  return {errs, overflow, capOverflow, focusMiss, headWrap, layout: layoutIssues(board)};
+}
+// Lỗi bố cục đo được bằng hình học (2026-10-27, người dùng: “khoảng cách dòng quá sát, focus bị đè”):
+//  chồng   — hai phần liền nhau của một khối chồng lên nhau theo chiều dọc;
+//  tràn    — công thức (.katex) thò ra ngoài phần chứa nó > 3px (phân số cao lấn dòng dưới);
+//  viền-đè — viền nhấn (phần tử .focus nới thêm độ dày + khoảng cách viền) chạm chữ của một phần khác.
+function layoutIssues(board) {
+  const out = [], R = el => el.getBoundingClientRect();
+  const hOver = (a, b) => a.left < b.right - 1 && b.left < a.right - 1;
+  for (const sec of board.children) {
+    const us = units(sec);
+    for (let i = 0; i + 1 < us.length; i++) {
+      const a = R(us[i]), b = R(us[i + 1]);
+      if (hOver(a, b) && b.top < a.bottom - 1) out.push(`chồng: phần ${i + 1} và ${i + 2} chồng ${Math.round(a.bottom - b.top)}px`);
+    }
+    us.forEach((u, i) => {
+      const r = R(u);
+      for (const k of u.querySelectorAll('.katex')) {
+        const q = R(k);
+        if (q.bottom > r.bottom + 3 || q.top < r.top - 3) { out.push(`tràn: công thức ở phần ${i + 1} thò ra ${Math.round(Math.max(q.bottom - r.bottom, r.top - q.top))}px`); break; }
+      }
+    });
+  }
+  for (const f of board.querySelectorAll('.focus')) {
+    const cs = getComputedStyle(f), ext = parseFloat(cs.outlineWidth) + parseFloat(cs.outlineOffset);
+    const r = R(f), g = {left: r.left - ext, right: r.right + ext, top: r.top - ext, bottom: r.bottom + ext};
+    // viền vẽ vào trong (offset âm) không được chạm chữ của chính phần đó — lỗi thật DMS L02 khung 29: dòng mã cột 0
+    const inset = -parseFloat(cs.outlineOffset);
+    if (inset > 0 && f.textContent.trim()) {
+      // đo từng nút chữ (Range trên cả phần tử sẽ lấy luôn khung các ô <td>, không phải chữ)
+      const tw = document.createTreeWalker(f, NodeFilter.SHOW_TEXT);
+      let lo = Infinity, hi = -Infinity;
+      for (let n = tw.nextNode(); n; n = tw.nextNode()) {
+        if (!n.textContent.trim() || n.parentElement.closest('.katex-mathml')) continue;   // bản MathML ẩn của KaTeX không hiện ra
+        const rg = document.createRange(); rg.selectNodeContents(n);
+        for (const q of rg.getClientRects()) if (q.width > 0) { lo = Math.min(lo, q.left); hi = Math.max(hi, q.right); }
+      }
+      const gap = Math.min(lo - r.left, r.right - hi) - inset;
+      if (lo < hi && gap < 1) out.push(`viền-đè-chữ: viền nhấn ${f.tagName.toLowerCase()} cách chữ ${Math.round(gap)}px`);
+    }
+    const sec = f.closest('section'), cands = [];
+    for (const u of units(sec)) { cands.push(u); if (u.tagName === 'TABLE' || u.tagName === 'UL' || u.tagName === 'OL' || u.classList.contains('code')) cands.push(...units(u)); }
+    for (const o of cands) {
+      if (o === f || o.contains(f) || f.contains(o)) continue;
+      const q = R(o);
+      if (q.height < 2 || !hOver(g, q)) continue;
+      if (g.top < q.bottom - 2 && q.top + 2 < g.bottom) { out.push(`viền-đè: viền nhấn ${f.tagName.toLowerCase()} chạm ${o.tagName.toLowerCase()} (${Math.round(Math.min(g.bottom - q.top, q.bottom - g.top))}px)`); break; }
+    }
+  }
+  // chữ trong hình SVG đè lên nhau (lỗi thật CLD L15 khung 14, 2026-10-31: nhãn dòng thời gian 21px cách nhau 190px → đè chữ):
+  // đo khung thật của từng <text> trên màn hình, báo cặp chồng nhau quá 2px theo cả hai chiều
+  for (const svg of board.querySelectorAll('svg')) {
+    const ts = [...svg.querySelectorAll('text')].filter(t => t.textContent.trim()).map(t => [t, R(t)]);
+    let hit = 0;
+    for (let i = 0; i < ts.length && hit < 3; i++)
+      for (let j = i + 1; j < ts.length && hit < 3; j++) {
+        const a = ts[i][1], b = ts[j][1];
+        const w = Math.min(a.right, b.right) - Math.max(a.left, b.left), h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+        // khung chữ gồm cả khoảng dấu thanh trên/dưới: hai dòng xếp sát (CS112 L01 “trước n₀:” / “không cần thoả”) chồng vài px
+        // mà mắt không thấy đè → chỉ báo khi phần chồng dọc > 35% chiều cao dòng thấp hơn
+        if (w > 2 && h > 0.35 * Math.min(a.height, b.height)) { out.push(`chữ-đè-trong-hình: “${ts[i][0].textContent.trim().slice(0, 24)}” đè “${ts[j][0].textContent.trim().slice(0, 24)}” (${Math.round(w)}px)`); hit++; }
+      }
+    // chữ bị cắt ở mép hình (lỗi thật DAN L09, 2026-10-31: nhãn vượt mép phải viewBox, khung kiểm cũ không thấy). SVG mặc định
+    // overflow: hidden nên phần vượt khung bị cắt; hình khai overflow:visible (CS112 L14) cố ý cho chữ tràn → bỏ qua.
+    if (getComputedStyle(svg).overflow !== 'visible') {
+      const S = R(svg);
+      for (const [t, a] of ts) {
+        const cut = Math.max(S.left - a.left, a.right - S.right, S.top - a.top, a.bottom - S.bottom);
+        if (cut > 3) { out.push(`chữ-tràn-mép-hình: “${t.textContent.trim().slice(0, 24)}” vượt khung hình ${Math.round(cut)}px`); break; }
+      }
+    }
+  }
+  return out;
+}
+window.layoutIssues = layoutIssues;
+// Phần của một khối, đếm giống lv.py html_units: phần tử con (bỏ <br>); bảng → các dòng.
+function units(el) {
+  if (el.tagName === 'TABLE') return [...el.querySelectorAll(':scope > tbody > tr, :scope > thead > tr, :scope > tr')];
+  return [...el.children].filter(c => c.tagName !== 'BR');
+}
+// Công thức $$…$$ được auto-render bọc trong <span> nội tuyến chứa .katex-display (khối): viền đặt lên span nội tuyến
+// thì không hiện (L00 khung 61, 2026-10-27) — đặt lên .katex-display bên trong.
+function visible(el) {
+  return (el.tagName === 'SPAN' && el.querySelector(':scope > .katex-display')) || el;
+}
+// Câu đang nói tới chỗ nào thì viền chỗ đó; phần còn lại của khối đó mờ đi. Trả về số mục không tìm thấy (render FAIL).
+function applyFocus(board, focus) {
+  const secs = [...board.children];
+  let miss = 0;
+  const keep = new Map();   // phần tử cha (khối hoặc phần) → tập phần con được giữ sáng
+  const mark = (parent, child) => { if (!keep.has(parent)) keep.set(parent, new Set()); keep.get(parent).add(child); };
+  for (const [b, u, v] of focus) {
+    const sec = secs[b];
+    if (!sec) { miss++; continue; }
+    sec.classList.remove('past'); sec.classList.add('focused');
+    if (!u) continue;
+    const el = units(sec)[u - 1];
+    if (!el) { miss++; continue; }
+    mark(sec, el);
+    if (!v) { visible(el).classList.add('focus'); continue; }
+    const target = units(el)[v - 1];
+    if (!target) { miss++; continue; }
+    visible(target).classList.add('focus');   // phần con: chỉ viền, không làm mờ anh em (chữ thường xen giữa không mờ được)
+  }
+  for (const [parent, kept] of keep) units(parent).forEach(x => { if (!kept.has(x)) x.classList.add('dim'); });
+  return miss;
+}
+function go(d) { cur = Math.max(0, Math.min(DATA.frames.length - 1, cur + d)); render(cur); }
+document.addEventListener('keydown', e => { if (e.key === 'ArrowRight') go(1); if (e.key === 'ArrowLeft') go(-1); });
+window.renderFrame = render;
+if (!window.__CAPTURE__) { document.body.classList.add('preview'); render(0); }
+</script>
+</body>
+</html>

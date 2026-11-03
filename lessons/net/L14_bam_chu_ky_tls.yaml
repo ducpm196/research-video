@@ -1,0 +1,239 @@
+id: L14
+course: NET
+series: "NET · Mạng máy tính"
+title: "Bài 14 — Hàm băm, chữ ký số và chuỗi tin cậy TLS"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/net.yaml L14; audit/net/verify_net.py L14; R. Rivest, A. Shamir, L. Adleman (1978); FIPS 180-4 (SHA-256); RFC 8446 (TLS 1.3), RFC 5280 (chứng chỉ)"
+assumes: [arith, power, mod, equiv_mod, dots]
+# Quy ước: tên RSA, SHA-256 chỉ ghi trên màn hình (DMS: RSA mọi cách viết ≤ 5/8); lời đọc nói “hệ khoá công khai đồ chơi”, “hàm băm
+#   chuẩn 256 bit”. Số nhỏ n = 33 chỉ để minh hoạ. Chữ ký ký thẳng lên một số nhỏ; thực tế ký lên GIÁ TRỊ BĂM của thông điệp.
+#   Mọi lũy thừa mod do alg.rsa_toy (pow) tính; giá trị băm do hashlib tính (verify_net.py).
+objectives:
+  - "Hiểu ba tính chất cần của hàm băm"
+  - "Ký và kiểm chữ ký với hệ khoá công khai đồ chơi"
+  - "Giải thích chứng chỉ và chuỗi tin cậy của TLS"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Ổ khoá trên thanh địa chỉ"
+    steps:
+      - show: |
+          <p>Bài trước, An và Bình có chung một khoá — nhưng nếu kẻ đứng giữa giả làm Bình thì sao? Trình duyệt hiện ổ khoá khi nó <b>chắc</b> đang nói chuyện với đúng máy chủ.</p>
+          <p>Sự chắc chắn đó đến từ hai thứ: chữ ký số, và một chuỗi chứng chỉ dẫn về một nơi trình duyệt đã tin sẵn.</p>
+          <div class="box key">Hôm nay: hàm băm, chữ ký số, chứng chỉ và chuỗi tin cậy của TLS.</div>
+        focus: [1, 1, 2, 3]
+        say: "Chào bạn, ở bài trước, An và Bình có chung một khoá, nhưng nếu kẻ đứng giữa giả làm Bình thì sao? Trình duyệt hiện ổ khoá khi nó chắc chắn đang nói chuyện với đúng máy chủ. Sự chắc chắn đó đến từ hai thứ, chữ ký số, và một chuỗi chứng chỉ dẫn về một nơi trình duyệt đã tin sẵn. Hôm nay ta học hàm băm, chữ ký số, chứng chỉ, và chuỗi tin cậy của giao thức bảo mật trang web."
+
+  # ───────────────────────── 1b. CHUẨN BỊ ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: số dư và cặp khoá"
+    checks:
+      - "25 % 23 == 2 and 64 == 1 * 33 + 31 and 64 % 33 == 31 and 21 % 20 == 1 and 3 * 11 == 33"
+    steps:
+      - show: |
+          <table class="t"><tr><th>phép tính</th><th>đọc là</th><th>kết quả</th></tr>
+          <tr><td>$25 \bmod 23$</td><td>25 chia 23 dư mấy</td><td>25 = 23 + 2 → <b>2</b></td></tr>
+          <tr><td>$64 \bmod 33$</td><td>64 chia 33 dư mấy</td><td>64 = 33 + 31 → <b>31</b></td></tr>
+          <tr><td>$21 \equiv 1 \pmod{20}$</td><td>21 chia 20 dư 1</td><td>21 = 20 + 1 ✓</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Trước hết, ôn lại phép chia lấy dư của bài 13, ký hiệu ở cột đầu nghĩa là số dư khi chia. Ở bài 13, 25 chia 23 dư 2. Hôm nay ta chia cho 33, ví dụ 64 bằng 33 cộng 31, nên 64 chia 33 dư 31. Dòng cuối đọc là 21 đồng dư với 1 theo mô-đun 20, tức là 21 chia 20 dư 1."
+      - show: |
+          <table class="t"><tr><th>khoá</th><th>ai giữ</th><th>dùng để</th></tr>
+          <tr><td>khoá <b>công khai</b></td><td>đưa cho mọi người</td><td>ai cũng dùng được</td></tr>
+          <tr><td>khoá <b>bí mật</b></td><td>chỉ chủ nhân</td><td>việc chỉ chủ nhân làm được</td></tr></table>
+        focus: [0, "1.2", "1.3"]
+        say: "Cũng ở bài 13, mã khoá công khai cho mỗi người một cặp khoá. Khoá công khai đưa cho mọi người, nên ai cũng dùng được. Khoá bí mật chỉ chủ nhân giữ, nên việc gì dùng nó thì chỉ chủ nhân làm được, và chữ ký số dựa đúng vào điều đó."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: hàm băm"
+    checks:
+      - "__import__('hashlib').sha256(b'abc').hexdigest()[:8] == 'ba7816bf'"
+      - "sum(bin(x ^ y).count('1') for x, y in zip(__import__('hashlib').sha256(b'abc').digest(), __import__('hashlib').sha256(b'abd').digest())) == 122"
+    steps:
+      - show: |
+          <p>Hàm băm biến dữ liệu dài bao nhiêu cũng được thành một “dấu vân tay” dài cố định. SHA-256: 256 bit.</p>
+          <table class="t"><tr><th>đầu vào</th><th>256 bit đầu ra (16 ký tự hệ 16 đầu)</th></tr>
+          <tr><td><code>abc</code></td><td><code>ba7816bf8f01cfea…</code></td></tr>
+          <tr><td><code>abd</code></td><td><code>a52d159f262b2c6d…</code></td></tr></table>
+          <p>Đổi <b>một</b> ký tự, 122 trong 256 bit đầu ra đổi theo — gần một nửa. Cần ba tính chất: tính nhanh; không tìm ngược được đầu vào; không tìm được hai đầu vào cùng đầu ra.</p>
+        focus: [1, "2.2", "2.3", 3, 3]
+        say: "Hàm băm biến dữ liệu dài bao nhiêu cũng được thành một dấu vân tay có độ dài cố định, với hàm băm chuẩn trên màn hình là 256 bit. Đầu vào a b c cho một chuỗi bắt đầu như trên màn hình. Đổi c thành d, đầu ra khác hẳn. Máy đếm được 122 trong 256 bit đã đổi theo, gần một nửa. Một hàm băm tốt cần ba tính chất, tính nhanh, không tìm ngược được đầu vào, và không tìm được hai đầu vào có cùng đầu ra."
+
+  # ───────────────────────── 2b. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Ký bằng khoá riêng, kiểm bằng khoá chung"
+    checks:
+      - "alg.rsa_toy(33, 3, 7, 4) == (16, 4) and pow(16, 3, 33) != 5"
+    steps:
+      - show: |
+          <div><svg width="1500" height="380" viewBox="0 0 1500 380"><defs><marker id="sg" markerUnits="userSpaceOnUse" markerWidth="18" markerHeight="18" refX="16" refY="9" orient="auto"><path d="M0,0 L18,9 L0,18 z" fill="#374151"/></marker></defs><g fill="#1f2937"><text x="230" y="34" text-anchor="middle" font-size="28" font-weight="700">An ký</text><text x="1270" y="34" text-anchor="middle" font-size="28" font-weight="700">Bình kiểm</text><rect x="40" y="60" width="380" height="270" rx="10" fill="#ffffff" stroke="#b91c1c" stroke-width="4"/><text x="230" y="100" text-anchor="middle" font-size="24">khoá bí mật d = 7</text><text x="230" y="136" text-anchor="middle" font-size="24">thông điệp m = 4</text><text x="230" y="172" text-anchor="middle" font-size="24">4 mũ 7 chia 33</text><text x="230" y="208" text-anchor="middle" font-size="24">dư 16</text><text x="230" y="244" text-anchor="middle" font-size="24">chữ ký s = 16</text><rect x="1080" y="60" width="380" height="270" rx="10" fill="#ffffff" stroke="#16a34a" stroke-width="4"/><text x="1270" y="100" text-anchor="middle" font-size="24">khoá công khai</text><text x="1270" y="136" text-anchor="middle" font-size="24">e = 3, n = 33</text><text x="1270" y="172" text-anchor="middle" font-size="24">16 mũ 3 chia 33</text><text x="1270" y="208" text-anchor="middle" font-size="24">dư 4</text><text x="1270" y="244" text-anchor="middle" font-size="24">4 bằng m: đúng</text><line x1="420" y1="180" x2="1072" y2="180" stroke="#374151" stroke-width="3" marker-end="url(#sg)"/><text x="750" y="164" text-anchor="middle" font-size="24">gửi m = 4 và s = 16</text><text x="750" y="222" text-anchor="middle" font-size="22" fill="#6b7280">ai cũng đọc được, nhưng</text><text x="750" y="252" text-anchor="middle" font-size="22" fill="#6b7280">đổi m mà giữ s thì phép kiểm hỏng</text></g></svg></div>
+        say: "Hình cho thấy chữ ký đi đâu và được kiểm ở đâu. Bên trái, An dùng khoá bí mật 7 của mình biến thông điệp 4 thành chữ ký 16. An gửi cả thông điệp lẫn chữ ký qua mạng, ai cũng đọc được hai số này. Bên phải, Bình chỉ cần khoá công khai của An, tính lại từ chữ ký và được 4, khớp với thông điệp. Nếu kẻ gian đổi thông điệp mà giữ nguyên chữ ký, phép kiểm của Bình sẽ không khớp nữa."
+
+  # ───────────────────────── 3. CHỮ KÝ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Ký và kiểm với hệ khoá công khai đồ chơi"
+    checks:
+      - "alg.rsa_toy(33, 3, 7, 4) == (16, 4)"
+      - "4 ** 7 == 16384 and 16384 % 33 == 16 and 16 ** 3 == 4096 and 4096 % 33 == 4"
+      - "(3 * 7) % ((3 - 1) * (11 - 1)) == 1 and 3 * 11 == 33"
+    steps:
+      - show: |
+          <p><b>Bước 1 — khoá của An:</b> $n = 33 = 3 \times 11$. Khoá <b>công khai</b> $e = 3$, khoá <b>bí mật</b> $d = 7$; cặp này chọn sao cho:</p>
+          $$3 \times 7 = 21 \equiv 1 \pmod{20}, \quad 20 = 2 \times 10$$
+        focus: [1, 1, 2]
+        say: "Bước một, khoá của An gồm n bằng 33, tức 3 nhân 11. Khoá công khai e bằng 3, khoá bí mật d bằng 7. Cặp này được chọn sao cho 3 nhân 7 bằng 21, chia 20 dư 1, với 20 là 2 nhân 10."
+      - show: |
+          <p><b>Bước 2 — ký</b> thông điệp $m = 4$ bằng khoá bí mật $d = 7$:</p>
+          $$s = 4^7 \bmod 33 = 16384 \bmod 33 = \hl{16}$$
+        focus: [1, 2, 2]
+        say: "Bước hai, để ký thông điệp 4, An dùng khoá bí mật. Tính 4 mũ 7 bằng 16384, chia 33 dư 16. Số 16 đó là chữ ký."
+      - show: |
+          <p><b>Bước 3 — kiểm</b> bằng khoá công khai $e = 3$:</p>
+          $$16^3 \bmod 33 = 4096 \bmod 33 = \hl{4} = m$$
+        focus: [1, 2, 2]
+        say: "Bước ba, ai cũng kiểm được bằng khoá công khai. Tính 16 mũ 3 bằng 4096, chia 33 dư 4, đúng bằng thông điệp. Vậy chữ ký đúng là của An."
+      - show: |
+          <div class="box key">Chỉ người giữ khoá bí mật mới tạo được $s$ khớp. Thực tế ký lên <b>giá trị băm</b> của thông điệp, không ký thẳng thông điệp dài.</div>
+        say: "Chỉ người giữ khoá bí mật mới tạo được chữ ký khớp. Trên thực tế, người ta ký lên giá trị băm của thông điệp, chứ không ký thẳng thông điệp dài."
+
+  # ───────────────────────── 4. CHUỖI TIN CẬY ─────────────────────────
+  - id: chain
+    kind: concept
+    title: "Chứng chỉ và chuỗi tin cậy"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">gốc (có sẵn trong máy)</span><span class="a">→</span><span class="n">trung gian</span><span class="a">→</span><span class="n">chứng chỉ của trang web</span></div>
+          <ul><li><b>Chứng chỉ</b> = “khoá công khai này thuộc tên miền này”, kèm chữ ký của một tổ chức cấp chứng chỉ.</li>
+          <li>Trình duyệt kiểm chữ ký từng mắt xích, ngược về một <b>gốc</b> mà hệ điều hành đã cài sẵn và tin.</li>
+          <li>Khi bắt tay TLS, máy chủ gửi chứng chỉ và ký lên phần trao đổi khoá — nên kẻ đứng giữa không giả được.</li></ul>
+        focus: [1, "2.1", "2.2", "2.3"]
+        say: "Chuỗi tin cậy gồm ba mắt xích, gốc có sẵn trong máy, một tổ chức trung gian, và chứng chỉ của trang web. Một chứng chỉ nói rằng khoá công khai này thuộc tên miền này, kèm chữ ký của một tổ chức cấp chứng chỉ. Trình duyệt kiểm chữ ký từng mắt xích, ngược về một gốc mà hệ điều hành đã cài sẵn và tin. Khi bắt tay bảo mật, máy chủ gửi chứng chỉ và ký lên phần trao đổi khoá, nên kẻ đứng giữa không giả được."
+
+  # ───────────────────────── 5. TỰ KIỂM ─────────────────────────
+  - id: verify
+    kind: check
+    title: "Tự kiểm: khoá nào làm việc gì?"
+    checks:
+      - "[pow(4, k, 33) for k in range(1, 8)] == [4, 16, 31, 25, 1, 4, 16]"
+      - "16 * 4 == 64 and 64 % 33 == 31 and 31 * 4 == 124 and 124 % 33 == 25 and 25 * 4 == 100 and 100 % 33 == 1"
+      - "pow(16, 3, 33) == 4 and 4 != 5"
+    steps:
+      - show: |
+          <table class="t"><tr><th>việc</th><th>dùng khoá</th><th>của ai</th></tr>
+          <tr><td>ký</td><td>bí mật</td><td>người ký</td></tr>
+          <tr><td>kiểm chữ ký</td><td>công khai</td><td>người ký</td></tr>
+          <tr><td>mã hoá gửi cho Bình</td><td>công khai</td><td>Bình</td></tr>
+          <tr><td>giải mã thư gửi mình</td><td>bí mật</td><td>chính mình</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", "1.5"]
+        say: "Tự kiểm bằng cách hỏi khoá nào làm việc gì. Ký dùng khoá bí mật của người ký, vì chỉ người đó có nó. Kiểm chữ ký dùng khoá công khai của người ký, nên ai cũng kiểm được. Mã hoá thư gửi cho Bình dùng khoá công khai của Bình. Còn giải mã thư gửi cho mình thì dùng khoá bí mật của chính mình."
+      - clear: true
+        show: |
+          <p>Tính lại chữ ký 16 bằng đường khác: nhân thêm một thừa số 4 mỗi bước, lấy dư cho 33 ngay.</p>
+          <table class="t"><tr><th>mũ</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th></tr>
+          <tr><td>phép tính</td><td>4</td><td>16</td><td>16 × 4 = 64</td><td>31 × 4 = 124</td><td>25 × 4 = 100</td><td>1 × 4 = 4</td><td>4 × 4 = 16</td></tr>
+          <tr><td>số dư</td><td>4</td><td>16</td><td>31</td><td>25</td><td>1</td><td>4</td><td><b>16</b> ✓</td></tr></table>
+        focus: [1, "2.3", "2.3", "2.3", "2.3"]
+        say: "Giờ tính lại chữ ký 16 bằng một đường khác, không đi qua số lớn 16384, mà nhân thêm một thừa số 4 mỗi bước rồi lấy dư cho 33 ngay. Bốn nhân 4 bằng 16, rồi 16 nhân 4 bằng 64, dư 31. Lấy 31 nhân 4 bằng 124, dư 25, rồi 25 nhân 4 bằng 100, dư 1. Vì đã về 1, nên nhân tiếp hai lần 4 lại được 4 rồi 16. Ra đúng chữ ký 16, khớp với phép tính trực tiếp."
+      - show: |
+          <p>Thử làm kẻ gian: đổi thông điệp thành $5$, giữ nguyên chữ ký $16$.</p>
+          $$16^3 \bmod 33 = 4 \ne 5$$
+          <p>Bình thấy không khớp → từ chối.</p>
+        focus: [1, 2, 3]
+        say: "Thử thêm một phép kiểm, đóng vai kẻ gian sửa thông điệp từ 4 thành 5 nhưng giữ nguyên chữ ký 16. Bình tính 16 mũ 3 chia 33 vẫn dư 4, khác với 5. Vì không khớp, Bình từ chối thông điệp đã bị sửa."
+
+  # ───────────────────────── 6. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "5 lỗi hay mắc"
+    checks:
+      - "pow(4, 3, 33) == 31 and 4 ** 3 == 64"
+      - "__import__('datetime').date(2026, 3, 1) + __import__('datetime').timedelta(days=90) == __import__('datetime').date(2026, 5, 30)"
+      - "__import__('datetime').date(2026, 5, 30) - __import__('datetime').timedelta(days=30) == __import__('datetime').date(2026, 4, 30)"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Ký bằng khoá công khai <b class="red">(sai)</b>
+          <br><span class="note">Ai cũng có khoá công khai, nên “chữ ký” đó ai cũng làm được. Ký phải dùng khoá <b>bí mật</b>.</span></div>
+          $$4^3 \bmod 33 = 31$$
+        focus: [1, 2, 1]
+        say: "Lỗi thứ nhất, ký bằng khoá công khai. Ví dụ dùng e bằng 3 để ký thông điệp 4, được 4 mũ 3 chia 33 dư 31, và ai có khoá công khai cũng tự tính ra đúng số 31 này. Vì vậy chữ ký như thế ai cũng làm giả được, ký phải dùng khoá bí mật."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Nghĩ hàm băm là mã hoá <b class="red">(sai)</b>
+          <br><span class="note">Băm không có khoá và không giải ngược được. Nó dùng để <b>kiểm</b> dữ liệu có bị đổi không, không dùng để giấu.</span></div>
+        say: "Lỗi thứ hai, nghĩ hàm băm là mã hoá. Băm không có khoá và không giải ngược được, nó dùng để kiểm dữ liệu có bị đổi không, chứ không dùng để giấu."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Nghĩ ổ khoá nghĩa là trang web đáng tin <b class="red">(sai)</b>
+          <br><span class="note">Ổ khoá chỉ nói: kênh được mã hoá và đúng là tên miền đó. Một trang lừa đảo cũng có thể có chứng chỉ hợp lệ cho tên miền của nó.</span></div>
+        say: "Lỗi thứ ba, nghĩ ổ khoá nghĩa là trang web đáng tin. Ổ khoá chỉ nói kênh được mã hoá và đúng là tên miền đó, một trang lừa đảo cũng có thể có chứng chỉ hợp lệ cho tên miền của chính nó."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Bỏ qua cảnh báo chứng chỉ <b class="red">(nguy hiểm)</b>
+          <br><span class="note">Cảnh báo nghĩa là chuỗi tin cậy bị đứt — đúng tình huống kẻ đứng giữa. Đừng bấm “vẫn tiếp tục” trên mạng lạ.</span></div>
+        say: "Lỗi thứ tư, bỏ qua cảnh báo chứng chỉ. Cảnh báo nghĩa là chuỗi tin cậy bị đứt, đúng là tình huống của kẻ đứng giữa, nên đừng bấm vẫn tiếp tục khi dùng mạng lạ."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 5 (của người đã đi làm).</b> Gia hạn chứng chỉ bằng tay, “nhớ là sẽ làm” <b class="red">(rủi ro)</b>
+          <br><span class="note">Mỗi chứng chỉ ghi một <b>ngày hết hạn</b>; qua ngày đó, mọi trình duyệt báo lỗi y như khi bị tấn công.</span></div>
+          <table class="t"><tr><th>ví dụ (số minh hoạ)</th><th>ngày</th></tr>
+          <tr><td>cấp ngày</td><td>1/3/2026</td></tr>
+          <tr><td>hiệu lực 90 ngày → hết hạn</td><td>30/5/2026</td></tr>
+          <tr><td>đặt cảnh báo sớm 30 ngày</td><td>30/4/2026</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", "2.4", 1]
+        say: "Lỗi thứ năm hay gặp ở người đã đi làm, gia hạn chứng chỉ bằng tay và chỉ nhớ là sẽ làm. Mỗi chứng chỉ ghi một ngày hết hạn, qua ngày đó, mọi trình duyệt báo lỗi giống hệt khi bị tấn công. Lấy số minh hoạ, chứng chỉ cấp ngày 1 tháng 3 năm 2026. Hiệu lực 90 ngày thì hết hạn ngày 30 tháng 5. Đặt cảnh báo sớm 30 ngày thì chuông kêu ngày 30 tháng 4. Người có kinh nghiệm cho máy tự gia hạn, và vẫn giữ cảnh báo phòng khi việc tự động hỏng."
+
+  # ───────────────────────── 7. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.rsa_toy(33, 3, 7, 2) == (29, 2)"
+      - "2 ** 7 == 128 and 128 % 33 == 29 and 29 ** 3 == 24389 and 24389 % 33 == 2"
+      - "3 * 33 + 29 == 128 and 739 * 33 + 2 == 24389"
+    steps:
+      - show: |
+          <p>Vẫn khoá của An: $n = 33$, $e = 3$, $d = 7$.</p>
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Ký thông điệp $m = 2$.</td></tr>
+          <tr><td>2</td><td>Kiểm chữ ký vừa tính.</td></tr></table>
+        focus: [1, "2.2", "2.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm, vẫn với khoá của An. Câu một, ký thông điệp 2. Câu hai, kiểm chữ ký vừa tính. Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① Ký bằng khoá bí mật $d = 7$: $s = 2^7 \bmod 33 = 128 \bmod 33 = \hl{29}$.</p>
+          $$128 = 3 \times 33 + 29$$
+        focus: [1, 1, 2]
+        say: "Đáp án câu một, ký bằng khoá bí mật 7. Hai mũ 7 bằng 128, chia 33 dư 29, đó là chữ ký. Kiểm phép chia, 128 bằng 3 lần 33 cộng 29."
+      - show: |
+          <p>② Kiểm bằng khoá công khai $e = 3$: $29^3 \bmod 33 = 24389 \bmod 33 = \hl{2}$ — khớp thông điệp.</p>
+          $$24389 = 739 \times 33 + 2$$
+        focus: [1, 1, 2]
+        say: "Câu hai, kiểm bằng khoá công khai 3. Hai mươi chín mũ 3 bằng 24389, chia 33 dư 2, khớp với thông điệp. Kiểm phép chia, 24389 bằng 739 lần 33 cộng 2."
+
+  # ───────────────────────── 8. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">băm: dấu vân tay</span><span class="a">→</span>
+          <span class="n">ký bằng khoá bí mật</span><span class="a">→</span>
+          <span class="n">kiểm bằng khoá công khai</span><span class="a">→</span>
+          <span class="n">chứng chỉ dẫn về gốc tin sẵn</span></div>
+        say: "Tổng kết lại, hàm băm tạo dấu vân tay, chữ ký được tạo bằng khoá bí mật và kiểm bằng khoá công khai. Chứng chỉ nối khoá công khai với tên miền, và chuỗi chứng chỉ dẫn về một gốc đã tin sẵn."
+      - show: |
+          <div class="box key"><b>Tư duy của cả khoá:</b> mỗi tầng giải một bài toán và tin vào tầng dưới vừa đủ — truyền bit, đi đúng đường, đủ dữ liệu, đúng người. Khi lỗi, hãy hỏi tầng nào đang phá lời hứa của nó.</div>
+        say: "Điều cần mang theo của cả khoá, mỗi tầng giải một bài toán và tin vào tầng dưới vừa đủ, truyền bit, đi đúng đường, đủ dữ liệu, đúng người. Khi có lỗi, hãy hỏi tầng nào đang phá lời hứa của nó."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 15): <b>tình huống chuyên gia theo dòng thời gian</b> — kiểm soát tắc nghẽn từ lần mạng sụp đổ năm 1986 tới QUIC.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 15, ta đi lại hành trình kiểm soát tắc nghẽn từ lần mạng sụp đổ năm 1986 tới bộ chuẩn giao vận mới năm 2021. Ta sẽ thấy mỗi quy tắc gửi gói ra đời từ điểm nghẽn nào. Hẹn gặp bạn ở bài tiếp theo."

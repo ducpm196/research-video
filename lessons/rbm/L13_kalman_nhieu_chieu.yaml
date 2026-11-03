@@ -1,0 +1,254 @@
+id: L13
+course: RBM
+series: "RBM · Toán cho robot và hệ động lực"
+title: "Bài 13 — Lọc Kalman nhiều chiều: vị trí và vận tốc"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/rbm.yaml L13; audit/rbm/verify_rbm.py L13; S. Thrun, W. Burgard, D. Fox, Probabilistic Robotics (2005), bảng 3.1"
+assumes: [arith, cdot, vec, mat, sub, transpose, identity, inverse, hat, cov, frac, approx, implies, assign]
+# Quy ước: trạng thái x = (p, v)^T (vị trí, vận tốc); ước lượng \hat{\mathbf{x}}, hiệp phương sai P (2 × 2, CS115 bài 15);
+#   ma trận chuyển F = [[1, h], [0, 1]]; ma trận đo H = [1, 0] (chỉ đo vị trí); nhiễu đo phương sai R (một số);
+#   nhiễu quá trình Q (ví dụ chính đặt Q = 0 để số gọn; nói rõ trên bảng). Mọi số do alg.kalman_cv tính.
+objectives:
+  - "Viết mô hình vận tốc không đổi bằng ma trận F và H"
+  - "Chạy một bước dự đoán – cập nhật bằng ma trận"
+  - "Thấy hiệp phương sai làm phép đo vị trí sửa được cả vận tốc"
+asr_reviewed:
+  - {sentence: "H P H chuyển vị chỉ lấy ô trên trái của P, bằng 2, nên S bằng 2 cộng 1, bằng 3, và K bằng cột 2, 1 chia 3.", reason: "ASR chép “HP hát chuyển vị chỉ lấy O trên trái của P bằng 2, nền S bằng 2 cộng 1 bằng 3 và K bằng cột 2, 1 chia 3.” (0.933): “ô” (ô lưới) ASR viết chữ “O”; lệch âm/thanh thuần Việt: nên/nền — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Phương sai vị trí nhân với 1 trừ K, tức còn một phần ba của 2, tức 0 phẩy 667, khớp ô trên trái của P mới.", reason: "ASR chép “Phương sai vị trí nhân với 1 trừ ca, tức còn 1 phần 3 của 2, tức 0,667, khớp o trên trái của P mới.” (0.933): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; “ô” (ô lưới) ASR viết chữ “O”; lệch âm/thanh thuần Việt: không (trong “không phẩy” → “”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Đường thứ nhất, nếu chỉ nhìn vị trí thì đây là bài toán một chiều của bài 12, với P bằng 2 là ô trên trái, và R bằng 1.", reason: "ASR chép “Đường thứ nhất, nếu chỉ nhìn vị trí thì đây là bài toán 1 chiều của bài 12 với P bằng 2 là O trên trái và R bằng 1.” (0.968): “ô” (ô lưới) ASR viết chữ “O” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Mọi thứ giống hệt bài 12, S đóng vai P cộng R.", reason: "tên chữ cái đọc kiểu Việt, ASR chép nhầm chữ (q→quy, x→ích, k→ca) — nhóm đã biết (SKILL Bước 5); chữ hiện trên màn hình"}
+  - {sentence: "Ma trận P mới nhỏ hơn ở cả hai số trên đường chéo, tức cả vị trí lẫn vận tốc đều chắc chắn hơn.", reason: "chữ cái “p” đọc thô — probe audit/dms/probes/p2_chu_p.md: thô 7/8, đối chứng “tê” 0/8; ASR lẫn p/t, không phải TTS đọc sai; chữ hiện trên màn hình"}
+  - {sentence: "Nhân một phía làm P mất đối xứng.", reason: "chữ cái “p” đọc thô — probe audit/dms/probes/p2_chu_p.md: thô 7/8, đối chứng “tê” 0/8; ASR lẫn p/t, không phải TTS đọc sai; chữ hiện trên màn hình"}
+  - {sentence: "Bước cập nhật, khi có phép đo z với phương sai R.", reason: "tên chữ cái đọc kiểu Việt, ASR chép nhầm chữ (q→quy, x→ích, k→ca) — nhóm đã biết (SKILL Bước 5); chữ hiện trên màn hình"}
+  - {sentence: "Ước lượng dịch theo K nhân độ lệch z trừ H x mũ, còn P nhân với I trừ K H.", reason: "chữ cái “p” đọc thô — probe audit/dms/probes/p2_chu_p.md: thô 7/8, đối chứng “tê” 0/8; ASR lẫn p/t, không phải TTS đọc sai; chữ hiện trên màn hình"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Chỉ đo vị trí, vẫn biết vận tốc?"
+    steps:
+      - show: |
+          <p>Cảm biến chỉ báo vị trí robot. Nhưng để điều khiển, ta cần cả <b>vận tốc</b>.</p>
+          <p>Lấy hiệu hai lần đo chia thời gian thì nhiễu bị khuếch đại. Có cách tốt hơn không?</p>
+          <div class="box key">Hôm nay: lọc Kalman <b>nhiều chiều</b> — ước lượng cả vị trí lẫn vận tốc, và phép đo vị trí sửa được cả vận tốc.</div>
+        focus: [1, 2, 2, 3]
+        say: "Chào bạn, cảm biến chỉ báo vị trí của robot, nhưng để điều khiển, ta cần cả vận tốc. Lấy hiệu hai lần đo rồi chia cho thời gian thì nhiễu bị khuếch đại. Vậy có cách nào tốt hơn không? Hôm nay ta học lọc Kalman nhiều chiều, ước lượng cùng lúc vị trí và vận tốc, và thấy phép đo vị trí sửa được cả vận tốc."
+
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: nhân hai ma trận, và lọc Kalman một chiều"
+    checks:
+      - "np.allclose(np.array([[1, 1], [0, 1]]) @ np.array([[1, 0], [1, 1]]), [[2, 1], [1, 1]])"
+      - "1 * 1 + 1 * 1 == 2 and 1 * 0 + 1 * 1 == 1 and 0 * 1 + 1 * 1 == 1 and 0 * 0 + 1 * 1 == 1"
+      - "alg.kalman1d_update(0, 1, 1, 1) == (0.5, 0.5, 0.5)"
+    steps:
+      - show: |
+          <p>Nhân hai ma trận (khoá Toán cho khoa học máy tính): ô hàng $i$, cột $j$ = hàng $i$ của ma trận trái nhân với cột $j$ của ma trận phải.</p>
+          <table class="t"><tr><th>ô</th><th>hàng của $\begin{bmatrix} 1 & 1 \\ 0 & 1 \end{bmatrix}$ nhân cột của $\begin{bmatrix} 1 & 0 \\ 1 & 1 \end{bmatrix}$</th><th>kết quả</th></tr>
+          <tr><td>trên trái</td><td>$1 \cdot 1 + 1 \cdot 1$</td><td>2</td></tr>
+          <tr><td>trên phải</td><td>$1 \cdot 0 + 1 \cdot 1$</td><td>1</td></tr>
+          <tr><td>dưới trái</td><td>$0 \cdot 1 + 1 \cdot 1$</td><td>1</td></tr>
+          <tr><td>dưới phải</td><td>$0 \cdot 0 + 1 \cdot 1$</td><td>1</td></tr></table>
+        focus: [1, 1, 2, "2.2", ["2.3", "2.4"], "2.5"]
+        say: "Trước khi vào bài, ta ôn hai điều. Điều thứ nhất là nhân hai ma trận, đã học ở khoá Toán cho khoa học máy tính. Ô ở hàng i cột j bằng hàng i của ma trận trái nhân với cột j của ma trận phải. Ví dụ nhân ma trận 1, 1, 0, 1 với chuyển vị của nó, ô trên trái là 1 nhân 1 cộng 1 nhân 1, bằng 2. Hai ô chéo phụ đều bằng 1. Ô dưới phải bằng 1, nên kết quả là ma trận 2, 1, 1, 1, và ta sẽ gặp lại nó ngay trong ví dụ."
+      - clear: true
+        show: |
+          <p>Lọc Kalman một chiều ở bài 12: $K = \dfrac{P}{P + R}$, ước lượng dịch về phía phép đo một phần $K$ của độ lệch, phương sai nhân với $1 - K$.</p>
+          <table class="t"><tr><th>dự đoán</th><th>phép đo</th><th>$K$</th><th>ước lượng mới</th><th>phương sai mới</th></tr>
+          <tr><td>0, $P = 1$</td><td>1, $R = 1$</td><td>0,5</td><td>0,5</td><td>0,5</td></tr></table>
+        focus: [1, 1, "2.2"]
+        say: "Điều thứ hai là lọc Kalman một chiều ở bài 12, hệ số K bằng P chia P cộng R. Ước lượng dịch về phía phép đo một phần K của độ lệch, và phương sai nhân với 1 trừ K. Ví dụ dự đoán 0 với phương sai 1, đo được 1 với R bằng 1, thì K bằng 0 phẩy 5, ước lượng mới 0 phẩy 5, phương sai mới 0 phẩy 5."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: F, H và hiệp phương sai P"
+    checks:
+      - "np.allclose(np.array([[1, 0.5], [0, 1]]) @ [2, 3], [3.5, 3])"
+    steps:
+      - show: |
+          <p>Trạng thái $\mathbf{x} = (p, v)^T$. Mô hình vận tốc không đổi, bước $h$: $p \leftarrow p + h v$, $v \leftarrow v$.</p>
+          <p>$\mathbf{F} = \begin{bmatrix} 1 & h \\ 0 & 1 \end{bmatrix}$ — ma trận chuyển. $\quad \mathbf{H} = \begin{bmatrix} 1 & 0 \end{bmatrix}$ — chỉ đọc ra vị trí.</p>
+          <p>$\mathbf{P}$: ma trận hiệp phương sai (CS115). Đường chéo là độ không chắc của $p$ và $v$; ô ngoài đường chéo cho biết sai số của chúng <b>liên quan</b> nhau thế nào.</p>
+        introduces: [hmeas]
+        focus: [1, 1, 2, 2, 3, 3]
+        say: "Trạng thái gồm vị trí p và vận tốc v. Theo mô hình vận tốc không đổi, sau một bước h, vị trí tăng thêm h v, còn vận tốc giữ nguyên. Viết thành ma trận chuyển F, hàng trên 1, h và hàng dưới 0, 1. Ma trận đo H bằng 1, 0, nghĩa là cảm biến chỉ đọc ra vị trí. P là ma trận hiệp phương sai đã học, đường chéo là độ không chắc của p và của v. Còn ô ngoài đường chéo cho biết sai số của hai đại lượng liên quan với nhau thế nào."
+
+  # ───────────────────────── 3. CÔNG THỨC ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Hai bước, viết bằng ma trận"
+    checks:
+      - "all(np.allclose(alg.kalman_cv((0, 0), np.eye(2) * s, 1.0, 1, np.zeros((2, 2)), 1)[2], (np.array([[1, 1], [0, 1]]) @ (np.eye(2) * s) @ np.array([[1, 0], [1, 1]]))[:, 0] / ((np.array([[1, 1], [0, 1]]) @ (np.eye(2) * s) @ np.array([[1, 0], [1, 1]]))[0, 0] + 1)) for s in (0.5, 1, 3))"
+    steps:
+      - show: |
+          <p><b>Dự đoán</b>: $\quad \hat{\mathbf{x}} \leftarrow \mathbf{F}\hat{\mathbf{x}}$, $\quad \mathbf{P} \leftarrow \mathbf{F}\mathbf{P}\mathbf{F}^T + \mathbf{Q}$</p>
+          <p><b>Cập nhật</b> (phép đo $z$, phương sai $R$):</p>
+          <p>$S = \mathbf{H}\mathbf{P}\mathbf{H}^T + R$, $\quad \mathbf{K} = \mathbf{P}\mathbf{H}^T / S$</p>
+          <p>$\hat{\mathbf{x}} \leftarrow \hat{\mathbf{x}} + \mathbf{K}(z - \mathbf{H}\hat{\mathbf{x}})$, $\quad \mathbf{P} \leftarrow (\mathbf{I}_2 - \mathbf{K}\mathbf{H})\mathbf{P}$</p>
+          <div class="box key">Giống hệt bài 12: $S$ đóng vai $P + R$, và $\mathbf{K}$ giờ là một <b>cột</b> — mỗi thành phần trạng thái có trọng số riêng.</div>
+        focus: [1, 2, 3, 4, 5, 5]
+        say: "Bước dự đoán, nhân ước lượng với F, và P thành F P F chuyển vị cộng Q, vì sai số cũng bị F biến đổi như trạng thái. Bước cập nhật, khi có phép đo z với phương sai R. Ta tính S bằng H P H chuyển vị cộng R, và K bằng P H chuyển vị chia S. Ước lượng dịch theo K nhân độ lệch z trừ H x mũ, còn P nhân với I trừ K H. Mọi thứ giống hệt bài 12, S đóng vai P cộng R. Điểm mới là K bây giờ là một cột, mỗi thành phần của trạng thái có trọng số riêng."
+
+  - id: intuition
+    kind: intuition
+    title: "Hình dung: đám mây nghiêng nối vị trí với vận tốc"
+    checks:
+      - "abs(1 / 2 - np.array([[2, 1], [1, 1]])[0, 1] / np.array([[2, 1], [1, 1]])[0, 0]) < 1e-12"
+      - "round(1 + 2 / 3 * 0.5, 3) == 1.333 and round(1 / 3 * 0.5, 3) == 0.167 and round((4 / 3 - 1) * 0.5, 3) == 0.167"
+    steps:
+      - show: |
+          <div><svg width="1200" height="450" viewBox="0 0 1200 450"><defs><marker id="km" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#15803d"/></marker></defs><line x1="52.0" y1="400" x2="700.0" y2="400" stroke="#6b7280" stroke-width="2"/><line x1="160" y1="442.0" x2="160" y2="50.0" stroke="#6b7280" stroke-width="2"/><text x="700.0" y="432" font-size="22" text-anchor="end" fill="#6b7280">vị trí p</text><text x="170" y="56.0" font-size="22" text-anchor="start" fill="#6b7280">vận tốc v</text><text x="340" y="430" font-size="20" text-anchor="middle" fill="#6b7280">1</text><text x="520" y="430" font-size="20" text-anchor="middle" fill="#6b7280">2</text><text x="148" y="267" font-size="20" text-anchor="end" fill="#6b7280">1</text><text x="148" y="127" font-size="20" text-anchor="end" fill="#6b7280">2</text><polygon points="594.6,161.0 593.6,152.8 590.7,145.3 585.9,138.8 579.2,133.1 570.7,128.4 560.5,124.8 548.5,122.1 535.0,120.5 520.0,120.0 503.6,120.5 486.0,122.1 467.3,124.8 447.6,128.4 427.1,133.1 405.9,138.8 384.2,145.3 362.2,152.8 340.0,161.0 317.8,170.0 295.8,179.7 274.1,190.0 252.9,200.8 232.4,212.1 212.7,223.8 194.0,235.7 176.4,247.8 160.0,260.0 145.0,272.2 131.5,284.3 119.5,296.2 109.3,307.9 100.8,319.2 94.1,330.0 89.3,340.3 86.4,350.0 85.4,359.0 86.4,367.2 89.3,374.7 94.1,381.2 100.8,386.9 109.3,391.6 119.5,395.2 131.5,397.9 145.0,399.5 160.0,400.0 176.4,399.5 194.0,397.9 212.7,395.2 232.4,391.6 252.9,386.9 274.1,381.2 295.8,374.7 317.8,367.2 340.0,359.0 362.2,350.0 384.2,340.3 405.9,330.0 427.1,319.2 447.6,307.9 467.3,296.2 486.0,284.3 503.6,272.2 520.0,260.0 535.0,247.8 548.5,235.7 560.5,223.8 570.7,212.1 579.2,200.8 585.9,190.0 590.7,179.7 593.6,170.0 594.6,161.0" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><line x1="70.0" y1="365.0" x2="664.0" y2="134.0" stroke="#2a78d6" stroke-width="2.5" stroke-dasharray="10 7"/><line x1="430.0" y1="442.0" x2="430.0" y2="50.0" stroke="#eb6834" stroke-width="3"/><text x="438.0" y="71.0" font-size="22" text-anchor="start" fill="#eb6834" font-weight="bold">phép đo: p = 1,5</text><circle cx="340" cy="260" r="8" fill="#1f2937"/><line x1="340" y1="260" x2="400.0" y2="236.7" stroke="#15803d" stroke-width="4" marker-end="url(#km)"/><circle cx="400.0" cy="236.7" r="8" fill="#15803d"/><text x="760" y="80" font-size="23" text-anchor="start" fill="#2a78d6" font-weight="bold">Elip xanh: dự đoán (1, 1), nghiêng lên</text><text x="760" y="126" font-size="23" text-anchor="start" fill="#2a78d6">vì p lớn thì v cũng thường lớn.</text><text x="760" y="172" font-size="23" text-anchor="start" fill="#2a78d6">Đường đứt: hướng nghiêng, dốc 1/2.</text><text x="760" y="242" font-size="23" text-anchor="start" fill="#eb6834">Phép đo kéo p từ 1 lên 1,333,</text><text x="760" y="288" font-size="23" text-anchor="start" fill="#1f2937">dọc đường nghiêng nên v lên theo:</text><text x="760" y="334" font-size="23" text-anchor="start" fill="#15803d" font-weight="bold">0,333 nhân 1/2 = 0,167.</text><text x="760" y="380" font-size="23" text-anchor="start" fill="#15803d" font-weight="bold">Ước lượng mới (1,333; 1,167).</text></svg></div>
+        focus: [1, 1, 1, 1, 1, 1]
+        say: "Hình này cho thấy vì sao đo vị trí lại sửa được vận tốc. Elip xanh gồm các trạng thái mà dự đoán cho là hợp lý, tâm ở vị trí 1, vận tốc 1. Elip nghiêng lên, vì nếu robot thật ra đi nhanh hơn thì nó cũng đã đi xa hơn. Phép đo màu cam báo vị trí 1 phẩy 5, nên bộ lọc kéo vị trí từ 1 lên 1 phẩy 333. Nhưng nó không kéo thẳng ngang, mà đi dọc theo hướng nghiêng của elip, có độ dốc một nửa. Vì vậy vận tốc tăng theo 0 phẩy 333 nhân một nửa, tức 0 phẩy 167, dù ta không hề đo vận tốc."
+
+  # ───────────────────────── 4. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Một bước: h = 1, P = I₂, đo z = 1,5"
+    checks:
+      - "np.allclose(alg.kalman_cv((0, 1), np.eye(2), 1.5, 1, np.zeros((2, 2)), 1)[0], [1, 1])"
+      - "np.allclose(alg.kalman_cv((0, 1), np.eye(2), 1.5, 1, np.zeros((2, 2)), 1)[1], [[2, 1], [1, 1]])"
+      - "np.allclose(alg.kalman_cv((0, 1), np.eye(2), 1.5, 1, np.zeros((2, 2)), 1)[2], [2 / 3, 1 / 3])"
+      - "np.allclose(alg.kalman_cv((0, 1), np.eye(2), 1.5, 1, np.zeros((2, 2)), 1)[3], [4 / 3, 7 / 6])"
+      - "np.allclose(alg.kalman_cv((0, 1), np.eye(2), 1.5, 1, np.zeros((2, 2)), 1)[4], [[2 / 3, 1 / 3], [1 / 3, 2 / 3]])"
+    steps:
+      - show: |
+          <p>Bắt đầu $\hat{\mathbf{x}} = (0, 1)^T$, $\mathbf{P} = \mathbf{I}_2$; $Q = 0$ cho gọn; $R = 1$.</p>
+          <p><b>Bước 1 —</b> dự đoán: $\hat{\mathbf{x}} = (1, 1)^T$, $\quad \mathbf{P} = \mathbf{F}\mathbf{I}_2\mathbf{F}^T = \begin{bmatrix} 2 & \hl{1} \\ \hl{1} & 1 \end{bmatrix}$</p>
+          <p class="note">Ô ngoài đường chéo thành 1: sai vận tốc thì vị trí dự đoán cũng sai theo — hai sai số đã <b>gắn</b> với nhau.</p>
+        focus: [1, 2, 3]
+        say: "Bắt đầu với vị trí 0, vận tốc 1, P là ma trận đơn vị, Q bằng 0 cho gọn, và R bằng 1. Bước một là dự đoán, vị trí thành 1, vận tốc vẫn 1, và P thành ma trận 2, 1, 1, 1. Ô ngoài đường chéo bây giờ bằng 1, nghĩa là nếu vận tốc sai thì vị trí dự đoán cũng sai theo, hai sai số đã gắn với nhau."
+      - clear: true
+        show: |
+          <p><b>Bước 2 —</b> đo $z = 1{,}5$: $S = \mathbf{H}\mathbf{P}\mathbf{H}^T + R = 2 + 1 = 3$, $\quad \mathbf{K} = (2, 1)^T / 3 = (0{,}667;\ 0{,}333)^T$.</p>
+        say: "Bước hai, bây giờ đo được vị trí 1 phẩy 5. H P H chuyển vị chỉ lấy ô trên trái của P, bằng 2, nên S bằng 2 cộng 1, bằng 3, và K bằng cột 2, 1 chia 3."
+      - show: |
+          <p><b>Bước 3 —</b> độ lệch $z - \mathbf{H}\hat{\mathbf{x}} = 1{,}5 - 1 = 0{,}5$; $\ \hat{\mathbf{x}} = (1, 1)^T + 0{,}5\,\mathbf{K} = \hl{(1{,}333;\ 1{,}167)^T}$ — vận tốc được sửa dù không đo vận tốc.</p>
+        say: "Bước ba, độ lệch là 1 phẩy 5 trừ 1, bằng 0 phẩy 5, nên vị trí thành 1 phẩy 333 và vận tốc thành 1 phẩy 167. Vận tốc được sửa dù ta không hề đo nó, nhờ ô liên kết trong P."
+      - show: |
+          <p><b>Bước 4 —</b> $\mathbf{P} \leftarrow (\mathbf{I}_2 - \mathbf{K}\mathbf{H})\mathbf{P}$:</p>
+          <p>$$\mathbf{P} = \begin{bmatrix} 0{,}667 & 0{,}333 \\ 0{,}333 & 0{,}667 \end{bmatrix}$$</p>
+        focus: [1, 2]
+        say: "Bước bốn, P mới bằng I trừ K H, nhân với P cũ, cho ma trận 0 phẩy 667, 0 phẩy 333, 0 phẩy 333, 0 phẩy 667. Ma trận P mới nhỏ hơn ở cả hai số trên đường chéo, tức cả vị trí lẫn vận tốc đều chắc chắn hơn."
+      - clear: true
+        show: |
+          <div><svg width="760" height="470" viewBox="0 0 760 470"><defs><marker id="ar" markerUnits="userSpaceOnUse" markerWidth="18" markerHeight="18" refX="16" refY="9" orient="auto"><path d="M0,0 L18,9 L0,18 z" fill="#1f2937"/></marker><marker id="ab" markerUnits="userSpaceOnUse" markerWidth="18" markerHeight="18" refX="16" refY="9" orient="auto"><path d="M0,0 L18,9 L0,18 z" fill="#2a78d6"/></marker><marker id="ao" markerUnits="userSpaceOnUse" markerWidth="18" markerHeight="18" refX="16" refY="9" orient="auto"><path d="M0,0 L18,9 L0,18 z" fill="#eb6834"/></marker></defs><line x1="70.0" y1="340.9" x2="565.2" y2="340.9" stroke="#6b7280" stroke-width="2" marker-end="url(#ar)"/><line x1="219.7" y1="410.0" x2="219.7" y2="30.0" stroke="#6b7280" stroke-width="2" marker-end="url(#ar)"/><text x="559.2" y="370.9" font-size="22" fill="#6b7280" text-anchor="end" stroke="#fffbeb" stroke-width="6" paint-order="stroke">vị trí</text><text x="231.7" y="38.0" font-size="22" fill="#6b7280" text-anchor="start" stroke="#fffbeb" stroke-width="6" paint-order="stroke">vận tốc</text><polyline points="334.8,225.8 334.4,215.7 333.1,205.8 330.9,196.0 327.9,186.4 324.1,177.1 319.4,168.2 314.0,159.7 307.9,151.7 301.1,144.3 293.7,137.5 285.7,131.4 277.3,126.0 268.4,121.4 259.1,117.6 249.5,114.5 239.7,112.4 229.7,111.0 219.7,110.6 209.7,111.0 199.7,112.4 189.9,114.5 180.3,117.6 171.0,121.4 162.1,126.0 153.6,131.4 145.7,137.5 138.3,144.3 131.5,151.7 125.4,159.7 120.0,168.2 115.3,177.1 111.5,186.4 108.5,196.0 106.3,205.8 105.0,215.7 104.5,225.8 105.0,235.8 106.3,245.8 108.5,255.6 111.5,265.1 115.3,274.4 120.0,283.3 125.4,291.8 131.5,299.8 138.3,307.2 145.7,314.0 153.6,320.1 162.1,325.5 171.0,330.1 180.3,334.0 189.9,337.0 199.7,339.2 209.7,340.5 219.7,340.9 229.7,340.5 239.7,339.2 249.5,337.0 259.1,334.0 268.4,330.1 277.3,325.5 285.7,320.1 293.7,314.0 301.1,307.2 307.9,299.8 314.0,291.8 319.4,283.3 324.1,274.4 327.9,265.1 330.9,255.6 333.1,245.8 334.4,235.8 334.8,225.8" fill="none" stroke="#6b7280" stroke-width="3" stroke-linejoin="round"/><circle cx="219.7" cy="225.8" r="6" fill="#6b7280" stroke="#fffbeb" stroke-width="2"/><polyline points="372.3,286.3 358.3,294.6 344.2,302.4 330.0,309.6 315.8,316.1 301.8,322.0 288.0,327.2 274.6,331.5 261.6,335.1 249.2,337.8 237.5,339.7 226.5,340.7 216.3,340.9 207.0,340.1 198.7,338.5 191.4,336.0 185.3,332.7 180.2,328.6 176.4,323.7 173.7,318.1 172.3,311.7 172.1,304.7 173.1,297.1 175.4,288.9 178.9,280.3 183.6,271.3 189.4,261.9 196.3,252.2 204.3,242.3 213.3,232.4 223.2,222.3 234.0,212.3 245.5,202.4 257.7,192.6 270.5,183.1 283.8,174.0 297.4,165.2 311.4,156.9 325.5,149.1 339.7,141.9 353.9,135.4 367.9,129.5 381.7,124.4 395.1,120.0 408.1,116.4 420.5,113.7 432.2,111.8 443.2,110.8 453.4,110.7 462.7,111.4 471.0,113.0 478.3,115.5 484.4,118.8 489.5,122.9 493.3,127.8 496.0,133.5 497.4,139.8 497.6,146.8 496.6,154.4 494.3,162.6 490.8,171.2 486.1,180.2 480.3,189.6 473.4,199.3 465.4,209.2 456.4,219.2 446.5,229.2 435.7,239.2 424.2,249.1 412.0,258.9 399.2,268.4 385.9,277.5 372.3,286.3" fill="none" stroke="#2a78d6" stroke-width="3" stroke-linejoin="round"/><circle cx="334.8" cy="225.8" r="6" fill="#2a78d6" stroke="#fffbeb" stroke-width="2"/><polyline points="326.2,159.6 333.5,152.6 341.1,146.1 348.9,140.1 356.9,134.5 365.0,129.5 373.2,125.1 381.4,121.4 389.6,118.2 397.6,115.7 405.4,114.0 413.0,112.9 420.2,112.5 427.2,112.9 433.7,114.0 439.7,115.7 445.3,118.2 450.2,121.4 454.7,125.1 458.4,129.5 461.6,134.5 464.0,140.1 465.8,146.1 466.9,152.6 467.3,159.6 466.9,166.8 465.8,174.4 464.0,182.2 461.6,190.2 458.4,198.4 454.7,206.6 450.2,214.8 445.3,222.9 439.7,230.9 433.7,238.7 427.2,246.3 420.2,253.6 413.0,260.5 405.4,267.0 397.6,273.0 389.6,278.6 381.4,283.6 373.2,288.0 365.0,291.8 356.9,294.9 348.9,297.4 341.1,299.2 333.5,300.2 326.2,300.6 319.3,300.2 312.8,299.2 306.7,297.4 301.2,294.9 296.2,291.8 291.8,288.0 288.0,283.6 284.9,278.6 282.4,273.0 280.6,267.0 279.6,260.5 279.2,253.6 279.6,246.3 280.6,238.7 282.4,230.9 284.9,222.9 288.0,214.8 291.8,206.6 296.2,198.4 301.2,190.2 306.7,182.2 312.8,174.4 319.3,166.8 326.2,159.6" fill="none" stroke="#eb6834" stroke-width="3" stroke-dasharray="12 7" stroke-linejoin="round"/><circle cx="373.2" cy="206.6" r="6" fill="#eb6834" stroke="#fffbeb" stroke-width="2"/><text x="110.3" y="93.3" font-size="20" fill="#1f2937" text-anchor="start" stroke="#fffbeb" stroke-width="6" paint-order="stroke">ban đầu</text><text x="403.9" y="93.3" font-size="20" fill="#1f2937" text-anchor="start" stroke="#fffbeb" stroke-width="6" paint-order="stroke">sau dự đoán (nghiêng)</text><text x="373.2" y="316.0" font-size="20" fill="#1f2937" text-anchor="start" stroke="#fffbeb" stroke-width="6" paint-order="stroke">sau khi đo vị trí</text></svg></div>
+          <p class="note">Mỗi elip gồm các trạng thái cách ước lượng một độ lệch chuẩn.</p>
+        focus: [1, 2]
+        say: "Trên hình, vòng xám ban đầu bị F kéo nghiêng thành elip xanh, rồi phép đo vị trí thu nhỏ nó thành elip cam. Mỗi elip gồm các trạng thái cách ước lượng đúng một độ lệch chuẩn."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: quy về bài 12, rồi đi dọc đường nghiêng"
+    checks:
+      - "tuple(round(v, 3) for v in alg.kalman1d_update(1, 2, 1.5, 1)) == (0.667, 1.333, 0.667)"
+      - "round(np.array([[2, 1], [1, 1]])[0, 1] / np.array([[2, 1], [1, 1]])[0, 0] * (4 / 3 - 1), 3) == 0.167 and round(1 + 1 / 6, 3) == 1.167"
+      - "np.allclose(alg.kalman_cv((0, 1), np.eye(2), 1.5, 1, np.zeros((2, 2)), 1)[3], [1 + 1 / 3, 1 + 1 / 6])"
+    steps:
+      - show: |
+          <p>Đường thứ nhất: chỉ nhìn vị trí, đây là bài toán một chiều của bài 12 với $P = 2$ (ô trên trái), $R = 1$.</p>
+          <table class="t"><tr><th>đại lượng</th><th>một chiều</th><th>khớp ma trận?</th></tr>
+          <tr><td>$K$</td><td>$\dfrac{2}{2 + 1} = 0{,}667$</td><td>thành phần đầu của $\mathbf{K}$ ✓</td></tr>
+          <tr><td>vị trí mới</td><td>$1 + 0{,}667 \cdot 0{,}5 = 1{,}333$</td><td>✓</td></tr>
+          <tr><td>phương sai vị trí</td><td>$(1 - 0{,}667) \cdot 2 = 0{,}667$</td><td>ô trên trái của $\mathbf{P}$ mới ✓</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", "2.4"]
+        say: "Làm sao biết kết quả đúng? Đường thứ nhất, nếu chỉ nhìn vị trí thì đây là bài toán một chiều của bài 12, với P bằng 2 là ô trên trái, và R bằng 1. Theo công thức một chiều, K bằng 2 chia 3,
+ tức 0 phẩy 667, khớp thành phần đầu của cột K. Vị trí mới bằng 1 cộng 0 phẩy 667 nhân 0 phẩy 5, bằng 1 phẩy 333. Phương sai vị trí nhân với 1 trừ K, tức còn một phần ba của 2, tức 0 phẩy 667, khớp ô trên trái của P mới."
+      - show: |
+          <p>Đường thứ hai: vận tốc đi dọc đường nghiêng của elip, độ dốc = $\dfrac{\text{ô liên kết}}{\text{ô vị trí}} = \dfrac{1}{2}$.</p>
+          <table class="t"><tr><th>vị trí tăng</th><th>nhân độ dốc</th><th>vận tốc mới</th></tr>
+          <tr><td>$1{,}333 - 1 = 0{,}333$</td><td>$0{,}333 \cdot \dfrac{1}{2} = 0{,}167$</td><td>$1 + 0{,}167 = 1{,}167$ ✓</td></tr></table>
+        focus: [1, "2.2", "2.2"]
+        say: "Đường thứ hai, theo hình đám mây nghiêng, vận tốc đi dọc đường nghiêng có độ dốc bằng ô liên kết chia ô vị trí, tức 1 chia 2. Vị trí tăng 0 phẩy 333, nhân với một nửa được 0 phẩy 167. Vậy vận tốc mới là 1 phẩy 167, khớp với kết quả tính bằng ma trận."
+
+  # ───────────────────────── 5. ĐỐI XỨNG ─────────────────────────
+  - id: symm
+    kind: concept
+    title: "Giữ P đối xứng, xác định dương"
+    checks:
+      - "np.allclose(alg.kalman_cv((0, 1), np.eye(2), 1.5, 1, np.zeros((2, 2)), 1)[4], alg.kalman_cv((0, 1), np.eye(2), 1.5, 1, np.zeros((2, 2)), 1)[4].T)"
+      - "all(v > 0 for v in np.linalg.eigvalsh(alg.kalman_cv((0, 1), np.eye(2), 1.5, 1, np.zeros((2, 2)), 1)[4]))"
+    steps:
+      - show: |
+          <p>$\mathbf{P}$ là hiệp phương sai nên phải <b>đối xứng</b> và mọi trị riêng <b>dương</b>. Ví dụ trên: trị riêng $1$ và $1/3$ — đúng.</p>
+          <p>Sau hàng nghìn bước, sai số làm tròn có thể làm $\mathbf{P}$ lệch khỏi đối xứng, thậm chí có trị riêng âm — bộ lọc hỏng.</p>
+          <div class="box key">Cách giữ: sau mỗi bước gán $\mathbf{P} \leftarrow (\mathbf{P} + \mathbf{P}^T)/2$, và kiểm trị riêng định kỳ.</div>
+        focus: [1, 1, 2, 3]
+        say: "P là ma trận hiệp phương sai, nên nó phải đối xứng và mọi trị riêng phải dương. Ở ví dụ trên, trị riêng là 1 và một phần ba, đúng như vậy. Nhưng sau hàng nghìn bước, sai số làm tròn có thể làm P lệch khỏi đối xứng, thậm chí có trị riêng âm, và bộ lọc hỏng. Cách giữ đơn giản là sau mỗi bước, thay P bằng trung bình của P và P chuyển vị, rồi kiểm trị riêng định kỳ."
+
+  # ───────────────────────── 6. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi người mới hay mắc"
+    checks:
+      - "not np.allclose(np.array([[1, 1], [0, 1]]) @ np.eye(2), np.array([[1, 1], [0, 1]]) @ np.eye(2) @ np.array([[1, 0], [1, 1]]))"
+      - "abs(alg.kalman_cv((0, 1), np.eye(2), 1.5, 1, np.zeros((2, 2)), 1)[3][1] - 1) > 0.1"
+      - "np.allclose(np.array([[1, 1], [0, 1]]) @ np.eye(2), [[1, 1], [0, 1]]) and np.allclose(np.array([[1, 1], [0, 1]]) @ np.eye(2) @ np.array([[1, 0], [1, 1]]), [[2, 1], [1, 1]])"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Dự đoán $\mathbf{P} \leftarrow \mathbf{F}\mathbf{P}$ <b class="red">(sai)</b>
+          <br><span class="note">Phải nhân hai phía: $\mathbf{F}\mathbf{P}\mathbf{F}^T$. Nhân một phía làm $\mathbf{P}$ mất đối xứng.</span></div>
+          <p>$$\mathbf{P} = \mathbf{I}_2:\quad \mathbf{F}\mathbf{P} = \begin{bmatrix} 1 & 1 \\ 0 & 1 \end{bmatrix} \ \text{(lệch)}, \qquad \mathbf{F}\mathbf{P}\mathbf{F}^T = \begin{bmatrix} 2 & 1 \\ 1 & 1 \end{bmatrix} \ \text{(đối xứng)}$$</p>
+        focus: [1, 1, 1, 2]
+        say: "Lỗi thứ nhất, dự đoán P bằng F nhân P. Phải nhân hai phía, F P F chuyển vị. Nhân một phía làm P mất đối xứng. Với P bằng ma trận đơn vị, F nhân P chính là F, ô trên phải bằng 1 mà ô dưới trái bằng 0, còn nhân hai phía cho ma trận 2, 1, 1, 1 đối xứng."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Cho $\mathbf{P}$ ban đầu chéo rồi nghĩ không cần ô ngoài <b class="red">(sai)</b>
+          <br><span class="note">Chính ô ngoài đường chéo do $\mathbf{F}$ sinh ra mới cho phép đo vị trí sửa vận tốc.</span></div>
+        say: "Lỗi thứ hai, cho P ban đầu là ma trận chéo rồi nghĩ không cần quan tâm ô ngoài. Chính ô ngoài đường chéo do F sinh ra mới cho phép đo vị trí sửa được vận tốc."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Đặt $Q = 0$ trong hệ thật <b class="red">(sai)</b>
+          <br><span class="note">Vận tốc thật không bao giờ hằng tuyệt đối. $Q = 0$ làm $\mathbf{P}$ co về 0, bộ lọc ngừng nghe phép đo. Ví dụ trên đặt $Q = 0$ chỉ để số gọn.</span></div>
+        say: "Lỗi thứ ba, đặt Q bằng 0 trong hệ thật. Vận tốc thật không bao giờ hằng tuyệt đối, và Q bằng 0 làm P co dần về 0, bộ lọc ngừng nghe phép đo. Ví dụ vừa rồi đặt Q bằng 0 chỉ để số gọn."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Sai cỡ ma trận $\mathbf{H}$ <b class="red">(sai)</b>
+          <br><span class="note">$\mathbf{H}$ có số hàng = số đại lượng đo, số cột = số thành phần trạng thái: ở đây 1 hàng, 2 cột.</span></div>
+        say: "Lỗi thứ tư, viết sai cỡ ma trận H. H có số hàng bằng số đại lượng đo được, số cột bằng số thành phần trạng thái, ở đây là một nhân hai."
+
+  # ───────────────────────── 7. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "np.allclose(alg.kalman_cv((0, 1), np.eye(2), 0.5, 1, np.zeros((2, 2)), 1)[3], [2 / 3, 5 / 6])"
+      - "[round(v, 3) for v in np.array([2, 1]) / 1002] == [0.002, 0.001] and round(1 - 1 / 3, 3) == 0.667 and round(1 - 1 / 6, 3) == 0.833"
+      - "np.all(np.abs(alg.kalman_cv((0, 1), np.eye(2), 1.5, 1, np.zeros((2, 2)), 1000)[2]) < 0.003)"
+    steps:
+      - show: |
+          <p>Cùng ví dụ, cùng dự đoán $(1, 1)^T$, $\mathbf{K} = (2/3,\ 1/3)^T$.</p>
+          <table class="t"><tr><th>câu</th><th>đề</th></tr><tr><td>1</td><td>Nếu đo được $z = 0{,}5$, ước lượng mới là gì?</td></tr><tr><td>2</td><td>Nếu $R = 1000$ (cảm biến rất kém), $\mathbf{K}$ xấp xỉ bao nhiêu? Ý nghĩa?</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm, với cùng dự đoán 1, 1 và cùng K. Câu một, nếu đo được 0 phẩy 5, ước lượng mới là gì? Câu hai, nếu R bằng 1000, tức cảm biến rất kém, K xấp xỉ bao nhiêu? Điều đó có nghĩa gì? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① Độ lệch $z - \mathbf{H}\hat{\mathbf{x}} = 0{,}5 - 1 = -0{,}5$.</p>
+          <p>$\hat{\mathbf{x}} = (1, 1)^T - 0{,}5 \cdot (2/3,\ 1/3)^T = (1 - 1/3,\ 1 - 1/6) = \hl{(0{,}667;\ 0{,}833)^T}$ — đo thấy chậm hơn dự đoán, nên vận tốc cũng bị hạ.</p>
+        focus: [1, 2, 2]
+        say: "Đáp án câu một, độ lệch là 0 phẩy 5 trừ 1, bằng âm 0 phẩy 5. Nhân với K rồi cộng vào dự đoán, vị trí thành 1 trừ một phần ba, tức 0 phẩy 667, và vận tốc thành 1 trừ một phần sáu, tức 0 phẩy 833. Đo thấy robot ở sau chỗ dự đoán, nên bộ lọc hiểu là robot chậm hơn, và vận tốc cũng bị hạ."
+      - show: |
+          <p>② $S = 2 + 1000 = 1002$, $\mathbf{K} = (2, 1)^T / 1002 \approx \hl{(0{,}002;\ 0{,}001)^T}$ — gần như bỏ qua phép đo, tin dự đoán.</p>
+        say: "Câu hai, S bằng 2 cộng 1000, tức 1002, nên K chỉ còn cỡ 0 phẩy 002 và 0 phẩy 001. Nghĩa là bộ lọc gần như bỏ qua phép đo và tin dự đoán, đúng như ta muốn khi cảm biến rất kém."
+
+  # ───────────────────────── 8. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">$\mathbf{F}\mathbf{P}\mathbf{F}^T$ sinh liên kết</span><span class="a">→</span>
+          <span class="n">$\mathbf{K}$ là một cột trọng số</span><span class="a">→</span>
+          <span class="n">đo vị trí sửa cả vận tốc</span><span class="a">→</span>
+          <span class="n">giữ $\mathbf{P}$ đối xứng, dương</span></div>
+        say: "Tổng kết lại, bước dự đoán F P F chuyển vị sinh ra liên kết giữa vị trí và vận tốc. K là một cột trọng số, nên phép đo vị trí sửa được cả vận tốc. Và phải giữ P đối xứng, với trị riêng dương."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> đại lượng không đo được vẫn ước lượng được, nếu mô hình nối nó với đại lượng đo được.</div>
+        say: "Điều cần mang theo, một đại lượng không đo được vẫn ước lượng được, nếu mô hình nối nó với một đại lượng đo được."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 14): <b>lấy mẫu tín hiệu</b>, chồng phổ và biến đổi Fourier rời rạc — cảm biến đọc bao nhiêu lần mỗi giây là đủ?</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 14, ta học lấy mẫu tín hiệu, hiện tượng chồng phổ và biến đổi Fourier rời rạc, để trả lời cảm biến cần đọc bao nhiêu lần mỗi giây là đủ. Hẹn gặp bạn ở bài tiếp theo."

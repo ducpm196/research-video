@@ -1,0 +1,175 @@
+id: L09
+course: LLM
+series: "LLM · Mô hình ngôn ngữ lớn"
+title: "Bài 9 — Học theo chỉ dẫn và căn chỉnh theo đánh giá của con người"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/llm.yaml L09; audit/llm/verify_llm.py L09; L. Ouyang và cộng sự, Training language models to follow instructions with human feedback (2022); R. Bradley, M. Terry (1952) — mô hình so sánh cặp; R. Rafailov và cộng sự, Direct Preference Optimization (2023); L. Gao, J. Schulman, J. Hilton, Scaling Laws for Reward Model Overoptimization (2023)"
+assumes: [arith, exp, log, sub, approx, frac, prob]
+# Quy ước: mô hình phần thưởng cho điểm r cho mỗi câu trả lời; xác suất người chấm chọn câu 1 hơn câu 2 là σ(r₁ − r₂) (alg.bradley_terry);
+#   mất mát huấn luyện mô hình phần thưởng = −ln σ(r_chọn − r_bỏ). Ví dụ “khai thác lỗ hổng phần thưởng”: điểm = chất lượng + 0,002 · số từ
+#   là SỐ MINH HOẠ dựng tay để thấy hiện tượng thiên vị độ dài. Tên Bradley–Terry, DPO, RLHF chỉ trên màn hình.
+objectives:
+  - "Mô tả ba giai đoạn: huấn luyện trước, học theo chỉ dẫn, căn chỉnh theo sở thích"
+  - "Tính xác suất chọn và mất mát của mô hình phần thưởng"
+  - "Nhận ra khai thác lỗ hổng phần thưởng"
+asr_reviewed:
+  - {sentence: "Tối ưu mạnh sẽ đẩy mô hình về phía câu dài dòng.", reason: "ASR chép “Tối yêu mạnh sẽ đẩy mô hình về phía câu da dông.” (0.75): lệch âm/thanh thuần Việt: ưu/yêu, dài dòng/da dông — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Mô hình biết nhiều nhưng không biết “giúp”"
+    steps:
+      - show: |
+          <p>Hỏi một mô hình mới huấn luyện trước: “Cách nấu cơm?”. Nó có thể viết tiếp thêm năm câu hỏi khác — vì trên mạng, câu hỏi hay đứng cạnh câu hỏi. Nó <b>đoán chữ</b> giỏi, nhưng chưa biết <b>làm theo yêu cầu</b>.</p>
+          <div class="box key">Hôm nay: <b>học theo chỉ dẫn</b> bằng ví dụ mẫu, rồi <b>căn chỉnh</b> bằng so sánh do con người chấm.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, hỏi một mô hình mới huấn luyện trước, cách nấu cơm thế nào. Nó có thể viết tiếp thêm năm câu hỏi khác, vì trên mạng câu hỏi hay đứng cạnh câu hỏi. Nó đoán chữ giỏi, nhưng chưa biết làm theo yêu cầu. Hôm nay ta học cách dạy mô hình làm theo chỉ dẫn bằng ví dụ mẫu, rồi căn chỉnh bằng các so sánh do con người chấm."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: hàm xích-ma biến điểm thành xác suất"
+    checks:
+      - "[round(1 / (1 + math.exp(-x)), 3) for x in (0, 1, -1)] == [0.5, 0.731, 0.269]"
+    steps:
+      - show: |
+          <p><b>Hàm xích-ma</b> (khoá toán): $\sigma(x) = \frac{1}{1 + e^{-x}}$ biến một số bất kỳ thành xác suất từ 0 tới 1.</p>
+          <table class="t"><tr><th>$x$</th><th>−1</th><th>0</th><th>1</th></tr><tr><td>$\sigma(x)$</td><td>0,269</td><td>0,5</td><td>0,731</td></tr></table>
+        introduces: [sigm]
+        focus: [1, "2.2", "2.2"]
+        say: "Ở khoá toán, ta đã gặp hàm xích-ma, biến một số bất kỳ thành xác suất từ 0 tới 1. Tại 0, hàm bằng đúng 0 phẩy 5. Tại 1 là 0 phẩy 731, còn tại âm 1 là 0 phẩy 269, hai số cộng lại vừa bằng 1."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: ba giai đoạn và mô hình so sánh cặp"
+    steps:
+      - show: |
+          <table class="t"><tr><th>giai đoạn</th><th>dữ liệu</th><th>học gì</th></tr>
+          <tr><td>huấn luyện trước</td><td>văn bản thô, rất nhiều</td><td>đoán từ tố kế tiếp</td></tr>
+          <tr><td>học theo chỉ dẫn</td><td>cặp (yêu cầu, câu trả lời mẫu) do người viết</td><td>trả lời theo yêu cầu</td></tr>
+          <tr><td>căn chỉnh theo sở thích</td><td>người chấm chọn câu tốt hơn trong hai câu</td><td>ưu tiên câu được chọn</td></tr></table>
+          <p><b>Mô hình so sánh cặp</b>: mô hình phần thưởng cho điểm $r$; $P(\text{chọn câu 1}) = \sigma(r_1 - r_2) = \frac{1}{1 + e^{-(r_1 - r_2)}}$. Huấn luyện bằng mất mát $-\ln \sigma(r_{\text{chọn}} - r_{\text{bỏ}})$.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2, 2]
+        say: "Bảng tóm tắt ba giai đoạn. Huấn luyện trước dùng rất nhiều văn bản thô để học đoán từ tố kế tiếp. Học theo chỉ dẫn dùng các cặp yêu cầu và câu trả lời mẫu do người viết, để học trả lời theo yêu cầu. Căn chỉnh theo sở thích dùng lựa chọn của người chấm giữa hai câu, để học ưu tiên câu được chọn. Mô hình so sánh cặp cho mỗi câu một điểm r, và xác suất chọn câu 1 bằng 1 chia cho 1 cộng e mũ âm hiệu hai điểm. Mô hình phần thưởng được huấn luyện bằng mất mát âm lôgarit của xác suất đó, với hiệu là điểm câu được chọn trừ điểm câu bị bỏ."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Từ mô hình đoán chữ tới trợ lý"
+    steps:
+      - show: |
+          <div><svg width="1500" height="330" viewBox="0 0 1500 330"><defs><marker id="arL9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#eb6834"/></marker></defs>
+          <g stroke="#eb6834" stroke-width="3"><line x1="330" y1="90" x2="440" y2="90" marker-end="url(#arL9)"/><line x1="770" y1="90" x2="880" y2="90" marker-end="url(#arL9)"/></g>
+          <g font-size="24" text-anchor="middle" fill="#1f2937">
+          <rect x="40" y="40" width="290" height="100" rx="10" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="185" y="82" font-weight="bold">mô hình nền</text><text x="185" y="118" font-size="21">đoán từ tố kế tiếp</text>
+          <rect x="445" y="40" width="325" height="100" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="607" y="82" font-weight="bold">theo chỉ dẫn</text><text x="607" y="118" font-size="21">học câu trả lời mẫu</text>
+          <rect x="885" y="40" width="330" height="100" rx="10" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="1050" y="82" font-weight="bold">căn chỉnh</text><text x="1050" y="118" font-size="21">ưu tiên câu người chọn</text>
+          <rect x="885" y="200" width="160" height="80" rx="10" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="965" y="250">câu A</text>
+          <rect x="1065" y="200" width="160" height="80" rx="10" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="1145" y="250">câu B</text>
+          <text x="1350" y="235" font-size="22">người chấm</text><text x="1350" y="265" font-size="22">chọn A</text></g>
+          </svg></div>
+        focus: [1, 1, 1]
+        say: "Hình là ba giai đoạn nối tiếp. Mô hình nền chỉ biết đoán từ tố kế tiếp, giai đoạn hai học câu trả lời mẫu theo chỉ dẫn. Ở giai đoạn ba, người chấm xem hai câu trả lời A và B rồi chọn câu tốt hơn, và mô hình học ưu tiên câu được chọn."
+
+  - id: example
+    kind: example
+    title: "Hiệu điểm và xác suất được chọn"
+    checks:
+      - "[round(alg.bradley_terry(d, 0), 3) for d in (0, 1, 3)] == [0.5, 0.731, 0.953]"
+      - "[round(-math.log(alg.bradley_terry(d, 0)), 3) for d in (0, 1, 3)] == [0.693, 0.313, 0.049]"
+    steps:
+      - show: |
+          <table class="t"><tr><th>$r_{\text{chọn}} - r_{\text{bỏ}}$</th><th>$P(\text{chọn đúng})$ = xích-ma của hiệu</th><th>mất mát $-\ln P$</th></tr>
+          <tr><td>0</td><td>0,500</td><td>0,693</td></tr></table>
+        focus: [1, "1.2"]
+        say: "Bước một, hiệu điểm bằng 0, tức mô hình phần thưởng cho hai câu như nhau. Xác suất đồng ý với người chấm chỉ 0 phẩy 5, mất mát âm lôgarit 0 phẩy 5 bằng 0 phẩy 693."
+      - show: |
+          <table class="t"><tr><th>$r_{\text{chọn}} - r_{\text{bỏ}}$</th><th>$P(\text{chọn đúng})$ = xích-ma của hiệu</th><th>mất mát $-\ln P$</th></tr>
+          <tr><td>1</td><td>$\hl{0{,}731}$</td><td>0,313</td></tr>
+          <tr><td>3</td><td>0,953</td><td>0,049</td></tr></table>
+        focus: ["1.2", "1.3"]
+        say: "Bước hai, hiệu điểm bằng 1 thì xác suất 0 phẩy 731, mất mát giảm còn 0 phẩy 313. Hiệu điểm bằng 3 thì xác suất 0 phẩy 953, mất mát chỉ 0 phẩy 049."
+      - clear: true
+        show: |
+          <p><b>Bước 3</b> — mô hình phần thưởng học cho câu người chọn điểm cao hơn (mất mát giảm khi hiệu điểm tăng).</p>
+          <p><b>Bước 4</b> — mô hình ngôn ngữ được tối ưu để sinh câu có điểm cao, kèm một <b>khoản phạt</b> nếu đi quá xa mô hình ban đầu.</p>
+        focus: [1, 2]
+        say: "Bước ba, vì mất mát giảm khi hiệu điểm tăng, mô hình phần thưởng học cách cho câu người chọn điểm cao hơn. Bước bốn, mô hình ngôn ngữ được tối ưu để sinh câu có điểm cao, kèm một khoản phạt nếu đi quá xa mô hình ban đầu."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác"
+    checks:
+      - "abs(alg.bradley_terry(1, 0) + alg.bradley_terry(0, 1) - 1) < 1e-12"
+      - "round(math.log(1 + math.exp(-1)), 3) == round(-math.log(alg.bradley_terry(1, 0)), 3) == 0.313"
+    steps:
+      - show: |
+          <table class="t"><tr><th>kiểm</th><th>cách khác</th><th>kết quả</th></tr>
+          <tr><td>$\sigma(1) + \sigma(-1)$</td><td>chọn A hay chọn B, chỉ một trong hai</td><td>0,731 + 0,269 = 1 ✓</td></tr>
+          <tr><td>mất mát 0,313</td><td>$-\ln \sigma(1) = \ln\left(1 + \frac{1}{e}\right)$</td><td>$\ln 1{,}368 \approx 0{,}313$ ✓</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Kiểm bằng đường khác. Vì người chấm chỉ chọn một trong hai câu, xác suất chọn A cộng xác suất chọn B phải bằng 1, và 0 phẩy 731 cộng 0 phẩy 269 đúng bằng 1. Viết lại mất mát thành lôgarit của 1 cộng e mũ âm 1, tức lôgarit của 1 phẩy 368, cũng ra 0 phẩy 313."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc"
+    checks:
+      - "[round(q + 0.002 * n, 2) for q, n in ((0.9, 40), (0.9, 200), (0.6, 400))] == [0.98, 1.3, 1.4]"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Tối ưu quá mạnh theo mô hình phần thưởng <b class="red">(khai thác lỗ hổng)</b>
+          <br><span class="note">Giả sử mô hình phần thưởng vô tình cộng điểm theo độ dài: điểm = chất lượng + 0,002 nhân số từ (số minh hoạ). Câu ngắn đúng: 0,98; dài đúng: 1,30; <b>dài, lan man, sai một chỗ: 1,40</b> — cao nhất. Tối ưu mạnh sẽ đẩy mô hình về phía câu dài dòng.</span></div>
+        say: "Lỗi thứ nhất, tối ưu quá mạnh theo mô hình phần thưởng, nên mô hình khai thác lỗ hổng của nó. Giả sử mô hình phần thưởng vô tình cộng điểm theo độ dài, một số minh hoạ. Câu ngắn và đúng được 0 phẩy 98, câu dài và đúng được 1 phẩy 3, còn câu dài, lan man, sai một chỗ lại được 1 phẩy 4, cao nhất. Tối ưu mạnh sẽ đẩy mô hình về phía câu dài dòng."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Người chấm không thống nhất <b class="red">(nhãn nhiễu)</b>
+          <br><span class="note">Hai người chấm thường bất đồng ở một tỉ lệ đáng kể các cặp. Cần hướng dẫn chấm rõ, đo mức đồng thuận, và không coi một lựa chọn là sự thật tuyệt đối.</span></div>
+        say: "Lỗi thứ hai, người chấm không thống nhất, nên nhãn bị nhiễu. Hai người chấm thường bất đồng ở một tỉ lệ đáng kể các cặp. Cần hướng dẫn chấm rõ ràng, đo mức đồng thuận, và không coi một lựa chọn là sự thật tuyệt đối."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Nghĩ căn chỉnh làm mô hình “biết đúng sai” <b class="red">(chỉ biết điều người chấm thích)</b>
+          <br><span class="note">Mô hình học điều được chấm cao. Câu trả lời tự tin, trôi chảy thường được chấm cao hơn câu thận trọng — kể cả khi sai. Phải đo độ chính xác riêng.</span></div>
+        say: "Lỗi thứ ba, nghĩ căn chỉnh làm mô hình biết đúng sai, trong khi nó chỉ biết điều người chấm thích. Mô hình học điều được chấm cao. Câu trả lời tự tin, trôi chảy thường được chấm cao hơn câu thận trọng, kể cả khi sai, nên phải đo độ chính xác riêng."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "round(alg.bradley_terry(0, 1), 3) == 0.269 and round(-math.log(alg.bradley_terry(0, 1)), 3) == 1.313"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Mô hình phần thưởng cho câu người chọn điểm 0, câu bị bỏ điểm 1. Xác suất nó “đồng ý” với người chấm là bao nhiêu? Mất mát bao nhiêu?</td></tr>
+          <tr><td>2</td><td>Vì sao cần khoản phạt khi mô hình đi quá xa mô hình ban đầu?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, mô hình phần thưởng cho câu người chọn điểm 0, câu bị bỏ điểm 1. Xác suất nó đồng ý với người chấm là bao nhiêu? Mất mát bao nhiêu? Câu hai, vì sao cần khoản phạt khi mô hình đi quá xa mô hình ban đầu? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <p>① Hiệu điểm $0 - 1 = -1$ → $\sigma(-1) \approx \hl{0{,}269}$; mất mát $-\ln 0{,}269 \approx 1{,}313$ — lớn, nên huấn luyện sẽ đẩy điểm câu được chọn lên.</p>
+        say: "Đáp án câu một, hiệu điểm bằng 0 trừ 1, tức âm 1, nên xác suất xấp xỉ 0 phẩy 269, và mất mát xấp xỉ 1 phẩy 313. Mất mát khá lớn, nên huấn luyện sẽ đẩy điểm câu được chọn lên."
+      - show: |
+          <p>② Mô hình phần thưởng chỉ đúng gần vùng dữ liệu nó đã thấy. Đi quá xa là vào vùng nó chấm sai — đúng nơi xảy ra <b>khai thác lỗ hổng phần thưởng</b>.</p>
+        say: "Câu hai, mô hình phần thưởng chỉ đúng gần vùng dữ liệu nó đã thấy. Đi quá xa là vào vùng nó chấm sai, đúng nơi xảy ra khai thác lỗ hổng phần thưởng."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">huấn luyện trước: đoán chữ</span><span class="a">→</span>
+          <span class="n">học theo chỉ dẫn: ví dụ mẫu</span><span class="a">→</span>
+          <span class="n">căn chỉnh: so sánh cặp, điểm phần thưởng</span><span class="a">→</span>
+          <span class="n">phạt khi đi xa, đo độ đúng riêng</span></div>
+        say: "Tổng kết lại, huấn luyện trước dạy đoán chữ, học theo chỉ dẫn dùng ví dụ mẫu, và căn chỉnh dùng so sánh cặp với điểm phần thưởng. Cần phạt khi đi quá xa mô hình ban đầu, và đo độ đúng riêng."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> khi một thước đo trở thành mục tiêu tối ưu, nó thôi là thước đo tốt — hãy luôn có một phép đo <b>độc lập</b>.</div>
+        say: "Điều cần mang theo, khi một thước đo trở thành mục tiêu tối ưu, nó thôi là thước đo tốt, nên hãy luôn có một phép đo độc lập."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 10): <b>đánh giá mô hình ngôn ngữ</b> — bộ kiểm tra, nhiễm dữ liệu, khoảng tin cậy.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 10, ta học đánh giá mô hình ngôn ngữ, với bộ kiểm tra, nhiễm dữ liệu, và khoảng tin cậy. Hẹn gặp bạn ở bài tiếp theo."

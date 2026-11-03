@@ -1,0 +1,291 @@
+id: L22
+series: "CS115 · Toán cho Khoa học Máy tính"
+title: "Bài 22 — Đồ thị tính toán & lan truyền ngược (backpropagation)"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "tex#L148–L150 (quên nhân với gradient đổ về), L353–L388 (4 cổng, ví dụ f = x·y + max(x, y)); VC24#Backpropagation; NN (gradient checking); AUDIT A12, A13"
+assumes: [cdot, sub, vec, mat, transpose, implies, partial, nabla, sigma, log, approx, prime, hat, eta, neq]
+# Quy ước ký hiệu: hàm sai số cuối cùng L (tài liệu dòng 376 viết ∂L/∂f); “gradient đổ về” = ∂L/∂(đầu ra của cổng) (tài liệu: Upstream
+#   Grad); “gradient cục bộ” = đạo hàm của đầu ra cổng theo đầu vào (Local Grad); tích = gradient gửi xuống (Downstream Grad).
+#   Tên tiếng Anh chỉ hiện trên màn hình; lời đọc dùng tên Việt. Cổng max đọc “cổng lấy số lớn hơn”.
+# Nối bài trước (nói lại khi dùng, luật 17): bài 6 (đạo hàm riêng; đạo hàm bằng bước nhỏ h), bài 7 (quy tắc chuỗi; với vector là nhân
+#   ma trận Jacobian), bài 9 (gradient descent: w ← w − η·gradient), bài 20 (sigmoid; gradient của BCE theo z là ŷ − y).
+# Sửa nguồn: A12 — cổng max khi hai đầu vào bằng nhau không có đạo hàm, thư viện chọn một quy ước; A13 — với vector, “nhân” là nhân
+#   với ma trận Jacobian (chuyển vị), không nhân từng phần tử.
+objectives:
+  - "Vẽ đồ thị tính toán và chạy lượt tiến"
+  - "Áp dụng quy tắc: gradient gửi xuống = gradient đổ về nhân gradient cục bộ"
+  - "Nhớ hành vi của 4 cổng: cộng, nhân, lấy số lớn hơn, phân nhánh"
+  - "Tính gradient cho một nơ-ron logistic và làm một bước gradient descent"
+  - "Kiểm tra gradient bằng đạo hàm bước nhỏ; hiểu trường hợp vector"
+asr_reviewed:
+  - {sentence: "Lượt tiến cho s bằng 3, rồi f bằng 3 nhân 4, bằng 12.", reason: "ASR chép “Lượt tiếng cho F bằng 3, rồi F bằng 3 x4 bằng 12.” (0.8): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: tiến/tiếng, nhân/x — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Câu một, ta đặt s bằng x cộng y cho cổng cộng, rồi f bằng s nhân z cho cổng nhân.", reason: "ASR chép “Câu 1, ta đặt f bằng x cộng y cho cổng cộng, rồi f bằng f nhân vét cho cổng nhân.” (0.857): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Cổng nhân tráo đổi, z nhận 1 nhân s bằng 3, còn s nhận 1 nhân z bằng 4.", reason: "ASR chép “Cổng nhân tráo đuổi, giác nhận một nhân S bằng ba, còn giác nhận một nhân Z bằng bốn.” (0.895): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: đổi/đuổi — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Cổng nhân với 2 gửi xuống cho m gradient bằng 1 nhân 2, tức là 2.", reason: "ASR chép “Cổng nhân với hai gửi xuống cho mGradient bằng một nhân hai, tức là hai.” (0.903): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: gradient (trong “m gradient” → “mgradient”) — NOT_VERIFIED bằng tai người"}
+  - sentence: "Với vector, lớp tuyến tính z bằng W nhân x có ma trận Jacobian chính là W, theo bài 7."
+    reason: "W đọc tên chữ cái, ASR chép “Vduk”; z→“giác”, Jacobian→“gia cô biên” là tên chữ cái/thuật ngữ — các từ khác khớp"
+  - sentence: "Vì vậy gradient gửi xuống bằng W chuyển vị nhân gradient đổ về, một phép nhân ma trận."
+    reason: "W đọc tên chữ cái, ASR chép “V đúc” — tên chữ cái"
+  - sentence: "Cổng cộng gửi nguyên cho b, cổng nhân nhân với x, nên đạo hàm theo w bằng âm 1."
+    reason: "w đọc “vê kép”, ASR chép “viết kép” — tên chữ cái"
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Một triệu tham số — tính gradient thế nào cho kịp?"
+    steps:
+      - show: |
+          <p class="big">Mạng nơ-ron có <b>1 000 000</b> tham số. Cần gradient: một triệu đạo hàm riêng.</p>
+          <p>Cách bài 6 (nhích từng tham số một bước nhỏ $h$): cần khoảng <b>1 000 000 lần</b> chạy lại mô hình.</p>
+          <div class="box key">Lan truyền ngược: chỉ cần <b>1 lượt tiến + 1 lượt lùi</b> — tốn cỡ 2 đến 3 lần chạy mô hình.</div>
+        focus: [1, 2, 3]
+        say: "Chào bạn, một mạng nơ-ron có một triệu tham số, và ta cần một triệu đạo hàm riêng. Nếu nhích từng tham số một bước nhỏ như bài 6, phải chạy lại mô hình khoảng một triệu lần. Lan truyền ngược chỉ cần một lượt tiến và một lượt lùi."
+      - show: |
+          <p class="note">Hôm nay: đồ thị tính toán → quy tắc “gửi xuống = đổ về nhân cục bộ” → 4 cổng → một nơ-ron học một bước.</p>
+        say: "Hôm nay ta học đồ thị tính toán, một quy tắc duy nhất dựa trên quy tắc chuỗi, bốn loại cổng, rồi cho một nơ-ron học một bước."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn nền: quy tắc chuỗi của bài 7"
+    checks:
+      - "(lambda x: sp.diff((3*x + 1)**2, x) == 2*(3*x + 1)*3)(sp.Symbol('x'))"
+    steps:
+      - show: |
+          <p>Bài 7: hàm lồng $L(u(x))$: $\ \dfrac{\partial L}{\partial x} = \dfrac{\partial L}{\partial u}\cdot\dfrac{\partial u}{\partial x}$ &nbsp; — đạo hàm hàm ngoài nhân đạo hàm hàm trong.</p>
+          <p>Ví dụ $L = u^2$, $u = 3x + 1$: $\ \dfrac{\partial L}{\partial x} = 2u\cdot 3$.</p>
+        focus: [1, 2]
+        say: "Nhắc lại bài 7, đạo hàm của hàm lồng bằng đạo hàm hàm ngoài nhân đạo hàm hàm trong. Ví dụ L bằng u bình phương, với u bằng 3 x cộng 1, thì đạo hàm theo x bằng 2 u nhân 3."
+
+  # ───────────────────────── 3. ĐỒ THỊ TÍNH TOÁN ─────────────────────────
+  - id: graph
+    kind: symbol
+    title: "Giải mã: đồ thị tính toán và lượt tiến"
+    checks:
+      - "(lambda x, y: (x*y, max(x, y), x*y + max(x, y)))(2, 3) == (6, 3, 9)"
+    steps:
+      - show: |
+          <div class="row"><div class="col"><svg width="560" height="340" viewBox="0 0 560 340">
+            <g stroke="#6b7280" stroke-width="3" fill="none">
+              <line x1="80" y1="90" x2="205" y2="90"/><line x1="80" y1="90" x2="205" y2="250"/>
+              <line x1="80" y1="250" x2="205" y2="90"/><line x1="80" y1="250" x2="205" y2="250"/>
+              <line x1="255" y1="90" x2="375" y2="170"/><line x1="255" y1="250" x2="375" y2="170"/>
+              <line x1="425" y1="170" x2="500" y2="170"/></g>
+            <circle cx="60" cy="90" r="24" fill="#dbeafe" stroke="#2563eb" stroke-width="3"/><text x="52" y="99" font-size="26">x</text>
+            <circle cx="60" cy="250" r="24" fill="#dbeafe" stroke="#2563eb" stroke-width="3"/><text x="52" y="259" font-size="26">y</text>
+            <circle cx="230" cy="90" r="26" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text x="223" y="100" font-size="30">⋅</text>
+            <circle cx="230" cy="250" r="26" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text x="208" y="258" font-size="20">max</text>
+            <circle cx="400" cy="170" r="26" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text x="390" y="180" font-size="30">+</text>
+            <text x="508" y="180" font-size="28">f</text>
+            <g fill="#059669" font-size="22"><text x="30" y="60">2</text><text x="30" y="300">3</text>
+            <text x="270" y="80">a = 6</text><text x="270" y="290">b = 3</text><text x="440" y="155">9</text></g>
+          </svg></div>
+          <div class="col"><p>$f(x, y) = x\cdot y + \max(x, y)$ tại $x = 2$, $y = 3$.</p>
+          <p>Mỗi nút tròn là <b>một phép tính đơn giản</b>. Lượt tiến: tính từ trái sang phải: $a = 6$, $b = 3$, $f = 9$.</p>
+          <p class="note">$\max(x, y)$ đọc là “số lớn hơn trong hai số $x$, $y$”.</p></div></div>
+        say: "Đồ thị tính toán vẽ một hàm thành các nút, mỗi nút là một phép tính đơn giản. Ví dụ chính, f bằng x nhân y cộng số lớn hơn trong hai số x, y, tại x bằng 2, y bằng 3. Lượt tiến tính từ trái sang phải, a bằng 6, b bằng 3, f bằng 9."
+        introduces: [max_fn]
+
+  # ───────────────────────── 4. QUY TẮC LÙI ─────────────────────────
+  - id: rule
+    kind: formula
+    title: "Một quy tắc cho lượt lùi"
+    steps:
+      - show: |
+          <p>Lượt lùi đi từ phải sang trái, bắt đầu với $\dfrac{\partial L}{\partial f} = 1$ (ở đây $L = f$). Tại mỗi cổng, theo quy tắc chuỗi (bài 7):</p>
+          <div class="box key">gradient gửi xuống $=$ gradient đổ về $\cdot$ gradient cục bộ &nbsp;&nbsp; $\dfrac{\partial L}{\partial \text{vào}} = \dfrac{\partial L}{\partial \text{ra}}\cdot\dfrac{\partial\,\text{ra}}{\partial \text{vào}}$</div>
+          <p class="note">Sách tiếng Anh viết: Downstream Grad = Upstream Grad × Local Grad. Mỗi cổng chỉ cần biết <b>đạo hàm của riêng nó</b>.</p>
+        focus: [1, 2, 3]
+        say: "Lượt lùi đi từ phải sang trái, bắt đầu với đạo hàm của L theo f bằng 1. Tại mỗi cổng, theo quy tắc chuỗi của bài 7, gradient gửi xuống bằng gradient đổ về nhân gradient cục bộ của cổng đó. Nhờ vậy mỗi cổng chỉ cần biết đạo hàm của riêng nó."
+
+  - id: flow_pic
+    kind: intuition
+    title: "Nhìn quy tắc trên một cổng: lục đi tới, đỏ đi lui"
+    checks:
+      - "(lambda x, y, up: (x*y, up*y, up*x))(2, 3, 1) == (6, 3, 2)"
+      - "(lambda x, y: (sp.diff(x*y, x), sp.diff(x*y, y)))(*sp.symbols('x y')) == (sp.Symbol('y'), sp.Symbol('x'))"
+    steps:
+      - show: |
+          <svg width="1100" height="400" viewBox="0 0 1100 400"><defs><marker id="arR22" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#b91c1c"/></marker></defs><g stroke="#6b7280" stroke-width="3" fill="none"><line x1="150" y1="118" x2="502" y2="185"/><line x1="150" y1="282" x2="502" y2="215"/><line x1="600" y1="200" x2="950" y2="200"/></g><circle cx="120" cy="110" r="30" fill="#dbeafe" stroke="#2563eb" stroke-width="3"/><circle cx="120" cy="290" r="30" fill="#dbeafe" stroke="#2563eb" stroke-width="3"/><circle cx="550" cy="200" r="50" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><circle cx="980" cy="200" r="30" fill="#dbeafe" stroke="#2563eb" stroke-width="3"/><g font-size="30" text-anchor="middle" fill="#1f2937"><text x="120" y="120">x</text><text x="120" y="300">y</text><text x="550" y="212">×</text><text x="980" y="210">a</text></g><g font-size="24" text-anchor="middle" fill="#059669"><text x="120" y="60">x = 2</text><text x="120" y="360">y = 3</text><text x="980" y="150">a = 6</text></g><g stroke="#b91c1c" stroke-width="3" stroke-dasharray="10 6" fill="none"><line x1="930" y1="245" x2="612" y2="245" marker-end="url(#arR22)"/><line x1="500" y1="158" x2="160" y2="94" marker-end="url(#arR22)"/><line x1="500" y1="245" x2="160" y2="309" marker-end="url(#arR22)"/></g><g font-size="22" fill="#b91c1c"><text x="700" y="285">đổ về a: 1</text><text x="215" y="70">gửi xuống x: 1 × 3 = 3</text><text x="215" y="355">gửi xuống y: 1 × 2 = 2</text></g><g font-size="22" fill="#d97706"><text x="625" y="100">cục bộ của cổng nhân:</text><text x="625" y="132">theo x là y = 3, theo y là x = 2</text></g></svg>
+        say: "Hình này phóng to cổng nhân của ví dụ chính, a bằng x nhân y. Lượt tiến màu lục đi từ trái sang phải, x bằng 2, y bằng 3, nên a bằng 6. Lượt lùi màu đỏ đi từ phải sang trái, gradient đổ về a bằng 1. Cổng nhân chỉ cần biết gradient cục bộ của riêng nó, theo x là y bằng 3, theo y là x bằng 2. Nhân lên, x nhận 1 nhân 3 bằng 3, còn y nhận 1 nhân 2 bằng 2."
+
+  # ───────────────────────── 5. BỐN CỔNG ─────────────────────────
+  - id: gates
+    kind: concept
+    title: "Bốn cổng: cộng, nhân, lấy số lớn hơn, phân nhánh"
+    checks:
+      - "(lambda a, b: (sp.diff(a + b, a), sp.diff(a + b, b), sp.diff(a*b, a), sp.diff(a*b, b)) == (1, 1, b, a))(*sp.symbols('a b'))"
+    steps:
+      - show: |
+          <table class="t"><tr><th>cổng</th><th>gradient cục bộ</th><th>hành vi</th></tr>
+          <tr><td>cộng $a + b$</td><td>1 và 1</td><td><b>chia đều</b>: gửi nguyên gradient đổ về cho cả hai nhánh</td></tr>
+          <tr><td>nhân $a\cdot b$</td><td>$b$ và $a$</td><td><b>tráo đổi</b>: mỗi nhánh nhận gradient nhân giá trị nhánh kia</td></tr>
+          <tr><td>lấy số lớn hơn</td><td>1 cho nhánh lớn, 0 cho nhánh nhỏ</td><td><b>định tuyến</b>: dồn hết cho nhánh lớn hơn</td></tr>
+          <tr><td>phân nhánh (một biến đi nhiều nơi)</td><td>—</td><td><b>cộng dồn</b> gradient từ mọi nhánh</td></tr></table>
+        say: "Có bốn cổng hay gặp. Cổng cộng chia đều, gửi nguyên gradient cho cả hai nhánh, vì đạo hàm của a cộng b theo a bằng 1. Cổng nhân tráo đổi, vì đạo hàm của a nhân b theo a là b. Cổng lấy số lớn hơn dồn hết cho nhánh lớn. Khi một biến đi nhiều nơi, gradient được cộng dồn."
+      - show: |
+          <p class="note">Cổng lấy số lớn hơn khi hai đầu vào <b>bằng nhau</b> (ví dụ $x = y = 3$): không có đạo hàm. Thư viện chọn một quy ước (thường dồn cho một nhánh) — điểm này hay bị bỏ qua.</p>
+        say: "Lưu ý một trường hợp hay bị bỏ qua. Khi hai đầu vào của cổng lấy số lớn hơn bằng nhau, hàm không có đạo hàm ở đó, và thư viện phải chọn một quy ước, thường là dồn cho một nhánh."
+
+  # ───────────────────────── 6. VÍ DỤ TÀI LIỆU ─────────────────────────
+  - id: example
+    kind: example
+    title: "Ví dụ: lượt lùi cho f = x·y + max(x, y)"
+    checks:
+      - "(lambda x, y: (sp.diff(x*y + sp.Max(x, y), x).subs({x: 2, y: 3}), sp.diff(x*y + sp.Max(x, y), y).subs({x: 2, y: 3})) == (3, 3))(*sp.symbols('x y', real=True))"
+      - "3*1 + 0 == 3 and 2*1 + 1*1 == 3"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bước</th><th>cổng</th><th>gửi xuống</th></tr>
+          <tr><td>①</td><td>cộng $f = a + b$, đổ về 1</td><td>$\frac{\partial L}{\partial a} = 1$, &nbsp; $\frac{\partial L}{\partial b} = 1$</td></tr>
+          <tr><td>②</td><td>lấy số lớn hơn, $y = 3 > x = 2$</td><td>cho $y$: $1\cdot 1 = 1$; &nbsp; cho $x$: $1\cdot 0 = 0$</td></tr>
+          <tr><td>③</td><td>nhân $a = x\cdot y$</td><td>cho $x$: $1\cdot y = 3$; &nbsp; cho $y$: $1\cdot x = 2$</td></tr>
+          <tr><td>④</td><td>phân nhánh: cộng dồn</td><td>$\frac{\partial L}{\partial x} = 3 + 0 = \hlg{3}$; &nbsp; $\frac{\partial L}{\partial y} = 2 + 1 = \hlg{3}$</td></tr></table>
+        say: "Chạy lượt lùi. Cổng cộng gửi 1 cho cả a và b. Cổng lấy số lớn hơn dồn 1 cho y, vì 3 lớn hơn 2, còn x nhận 0. Cổng nhân tráo đổi, x nhận 1 nhân 3, y nhận 1 nhân 2. Cuối cùng cộng dồn, đạo hàm theo x bằng 3, theo y cũng bằng 3."
+      - show: |
+          <p><b>Làm thử ngay</b> bằng cách lấy đạo hàm trực tiếp (bài 6), khi $y$ đang lớn hơn nên $\max(x, y) = y$:</p>
+          $$\frac{\partial f}{\partial x} = y + 0 = 3, \qquad \frac{\partial f}{\partial y} = x + 1 = 3 \ \checkmark$$
+        focus: [1, 2, 2]
+        say: "Làm thử ngay bằng cách lấy đạo hàm trực tiếp như bài 6. Đạo hàm theo x là y cộng 0, bằng 3. Đạo hàm theo y là x cộng 1, vì y đang là số lớn hơn, cũng bằng 3, khớp với lượt lùi."
+
+  # ───────────────────────── 7. MỘT NƠ-RON HỌC ─────────────────────────
+  - id: neuron
+    kind: example
+    title: "Ví dụ: một nơ-ron logistic học một bước"
+    checks:
+      - "(lambda s: (0.5*2 - 1 == 0) and s(0) == 0.5 and round(-math.log(s(0)), 3) == 0.693)(lambda z: 1/(1 + math.exp(-z)))"
+      - "(0.5 - 1) == -0.5 and -0.5*2 == -1.0 and round(0.5 - 0.1*(-1.0), 2) == 0.6 and round(-1 - 0.1*(-0.5), 2) == -0.95"
+      - "(lambda s: round(0.6*2 - 0.95, 2) == 0.25 and round(s(0.25), 3) == 0.562 and round(-math.log(s(0.25)), 3) == 0.576)(lambda z: 1/(1 + math.exp(-z)))"
+    steps:
+      - show: |
+          <p>Mẫu $x = 2$, nhãn $y = 1$; tham số $w = 0{,}5$, $b = -1$. Đồ thị: $\ z = w\cdot x + b \ \to\ \hat{y} = \sigma(z) \ \to\ L = -\ln\hat{y}$ (BCE với $y = 1$, bài 20).</p>
+          <p>Lượt tiến: $z = 0$, $\hat{y} = 0{,}5$, $L = \ln 2 \approx 0{,}693$.</p>
+          <p>Lượt lùi: $\frac{\partial L}{\partial z} = \hat{y} - y = -0{,}5$ (bài 20) → cổng cộng: $\frac{\partial L}{\partial b} = -0{,}5$ → cổng nhân: $\frac{\partial L}{\partial w} = -0{,}5\cdot x = \hlg{-1}$</p>
+        focus: [1, 2, "3.1", ["3.2", "3.3"]]
+        say: "Một nơ-ron logistic với mẫu x bằng 2, nhãn bằng 1. Lượt tiến cho z bằng 0, dự đoán 0 phẩy 5, sai số 0 phẩy 693. Lượt lùi, theo bài 20, đạo hàm theo z bằng dự đoán trừ nhãn, âm 0 phẩy 5. Cổng cộng gửi nguyên cho b, cổng nhân nhân với x, nên đạo hàm theo w bằng âm 1."
+      - show: |
+          <p>Gradient descent (bài 9), $\eta = 0{,}1$ (mũi tên $\leftarrow$: thay bằng giá trị mới):</p>
+          $$w \leftarrow 0{,}5 - 0{,}1\cdot(-1) = 0{,}6, \qquad b \leftarrow -1 - 0{,}1\cdot(-0{,}5) = -0{,}95$$
+          <div class="box key">Chạy lại: $z = 0{,}25$, $\hat{y} \approx 0{,}562$, $L \approx \hlg{0{,}576} < 0{,}693$ — sai số đã giảm.</div>
+        introduces: [assign]
+        focus: [[1, 2], 3, 3]
+        say: "Theo bài 9, đi một bước ngược hướng gradient với tốc độ học 0 phẩy 1, w thành 0 phẩy 6, b thành âm 0 phẩy 95. Chạy lại, dự đoán tăng lên 0 phẩy 562 và sai số giảm còn 0 phẩy 576. Nơ-ron đã học được một chút."
+
+  # ───────────────────────── 8. TRƯỜNG HỢP VECTOR ─────────────────────────
+  - id: vector
+    kind: formula
+    title: "Khi là vector: nhân với ma trận chuyển vị, không nhân từng phần tử"
+    checks:
+      - "Matrix([[1, 2], [3, 4]]).T*Matrix([1, -1]) == Matrix([-2, -2])"
+      - "(lambda x1, x2: [sp.diff((Matrix([[1, 2], [3, 4]])*Matrix([x1, x2])).T*Matrix([1, -1]), v)[0] for v in (x1, x2)] == [-2, -2])(*sp.symbols('x1 x2'))"
+    steps:
+      - show: |
+          <p>Lớp tuyến tính $\mathbf{z} = \mathbf{W}\mathbf{x}$. Jacobian của $\mathbf{z}$ theo $\mathbf{x}$ chính là $\mathbf{W}$ (bài 7). Gradient đổ về là vector $\mathbf{g} = \dfrac{\partial L}{\partial \mathbf{z}}$, nên:</p>
+          <div class="box key">$\dfrac{\partial L}{\partial \mathbf{x}} = \mathbf{W}^T\mathbf{g}$ &nbsp; — nhân ma trận, không nhân từng phần tử</div>
+          <p><b>Làm thử ngay</b>: $\mathbf{W} = \begin{bmatrix} 1 & 2 \\ 3 & 4 \end{bmatrix}$, $\mathbf{g} = \begin{bmatrix} 1 \\ -1 \end{bmatrix}$: $\ \mathbf{W}^T\mathbf{g} = \begin{bmatrix} 1\cdot 1 + 3\cdot(-1) \\ 2\cdot 1 + 4\cdot(-1) \end{bmatrix} = \hlg{\begin{bmatrix} -2 \\ -2 \end{bmatrix}}$</p>
+        focus: [1, 2, "3.4"]
+        say: "Với vector, lớp tuyến tính z bằng W nhân x có ma trận Jacobian chính là W, theo bài 7. Vì vậy gradient gửi xuống bằng W chuyển vị nhân gradient đổ về, một phép nhân ma trận. Làm thử ngay, ta được âm 2 và âm 2, khớp với cách lấy đạo hàm trực tiếp."
+
+  # ───────────────────────── 9. KIỂM TRA GRADIENT ─────────────────────────
+  - id: verify
+    kind: check
+    title: "Phép thử: kiểm tra gradient bằng bước nhỏ"
+    checks:
+      - "(lambda L, h: round((L(0.5 + h) - L(0.5 - h))/(2*h), 4) == -1.0)(lambda w: -math.log(1/(1 + math.exp(-(w*2 - 1)))), 1e-5)"
+      - "(lambda f, h: round((f(2 + h, 3) - f(2 - h, 3))/(2*h), 4) == 3.0 and round((f(2, 3 + h) - f(2, 3 - h))/(2*h), 4) == 3.0)(lambda x, y: x*y + max(x, y), 1e-5)"
+    steps:
+      - show: |
+          <p>Như bài 6: $\ \dfrac{\partial L}{\partial w} \approx \dfrac{L(w + h) - L(w - h)}{2h}$, &nbsp; $h = 0{,}00001$</p>
+          <table class="t"><tr><th></th><th>lan truyền ngược</th><th>bước nhỏ</th></tr>
+          <tr><td>nơ-ron: $\frac{\partial L}{\partial w}$</td><td>−1</td><td>−1,0000 $\checkmark$</td></tr>
+          <tr><td>ví dụ chính: $\frac{\partial f}{\partial x}$, $\frac{\partial f}{\partial y}$</td><td>3; 3</td><td>3,0000; 3,0000 $\checkmark$</td></tr></table>
+          <p class="note">Gọi là <b>kiểm tra gradient</b> (gradient checking): chậm nên chỉ dùng để kiểm code lan truyền ngược, không dùng để huấn luyện.</p>
+        focus: [1, 2, 3]
+        say: "Phép thử, vì chương trình lan truyền ngược rất dễ viết sai, ta tính lại đạo hàm bằng bước nhỏ như bài 6. Cả nơ-ron và ví dụ chính đều khớp đến bốn chữ số. Cách này chậm, nên chỉ dùng để kiểm tra chương trình, không dùng để huấn luyện."
+
+  # ───────────────────────── 10. TRONG AI ─────────────────────────
+  - id: in_ai
+    kind: concept
+    title: "Lan truyền ngược trong học sâu"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ở đâu</th><th>lượt lùi làm gì</th></tr>
+          <tr><td><b>Bài 23</b>: mạng nhiều lớp</td><td>đi qua từng lớp, mỗi lớp nhân với ma trận chuyển vị của nó</td></tr>
+          <tr><td>thư viện học sâu</td><td>tự xây đồ thị tính toán và tự chạy lượt lùi (tự động lấy đạo hàm)</td></tr>
+          <tr><td><b>Bài 35</b> (mở rộng): mạng hồi tiếp</td><td>đi ngược theo thời gian</td></tr></table>
+        forward_ref: true
+        say: "Ở bài 23, mạng nhiều lớp chạy lượt lùi qua từng lớp, mỗi lớp nhân với ma trận chuyển vị của nó. Các thư viện học sâu tự xây đồ thị tính toán và tự chạy lượt lùi. Ở bài mở rộng 35, lượt lùi còn đi ngược theo thời gian."
+
+  # ───────────────────────── 11. LỖI THƯỜNG GẶP ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Quên nhân với gradient đổ về <b class="red">(sai)</b>
+          <br><span class="note">Chỉ lấy gradient cục bộ là bỏ mất phần phía sau của chuỗi.</span></div>
+        say: "Lỗi thứ nhất, quên nhân với gradient đổ về, chỉ lấy gradient cục bộ. Như vậy là bỏ mất phần phía sau của quy tắc chuỗi."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Quên cộng dồn khi một biến đi nhiều nhánh <b class="red">(sai)</b>
+          <br><span class="note">Ví dụ chính: $x$ đi vào cả cổng nhân lẫn cổng lấy số lớn hơn — phải cộng $3 + 0$, không lấy một nhánh.</span></div>
+        say: "Lỗi thứ hai, quên cộng dồn khi một biến đi vào nhiều nhánh. Trong ví dụ, x đi vào cả cổng nhân lẫn cổng lấy số lớn hơn, nên phải cộng gradient của cả hai nhánh."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Với vector, nhân từng phần tử thay vì nhân ma trận <b class="red">(sai)</b>
+          <br><span class="note">Đúng là $\mathbf{W}^T\mathbf{g}$; nhân từng phần tử cho kích thước và kết quả sai.</span></div>
+        say: "Lỗi thứ ba, với vector lại nhân từng phần tử. Đúng ra phải nhân với ma trận chuyển vị, theo quy tắc chuỗi dạng Jacobian của bài 7."
+
+  # ───────────────────────── 12. TỰ KIỂM TRA ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "(lambda x, y, z: ((x + y)*z, sp.diff((x + y)*z, x), sp.diff((x + y)*z, y), sp.diff((x + y)*z, z)))(*sp.symbols('x y z')) and (lambda x, y, z: ((x + y)*z, z, z, x + y))(1, 2, 4) == (12, 4, 4, 3)"
+      - "(lambda u, v: [sp.diff(2*sp.Max(u, v), w).subs({u: 4, v: 1}) for w in (u, v)])(*sp.symbols('u v', real=True)) == [2, 0]"
+      - "max(4, 1) == 4 and 2*max(4, 1) == 8 and 1*2 == 2 and (1 + 2)*4 == 12 and (lambda x, y, z: sp.diff((x + y)*z, x) == z)(*sp.symbols('x y z'))"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>$f = (x + y)\cdot z$ tại $x = 1$, $y = 2$, $z = 4$. Tính $f$ và ba đạo hàm riêng bằng lượt lùi.</td></tr>
+          <tr><td>2</td><td>$g = 2\cdot\max(u, v)$ tại $u = 4$, $v = 1$. Đạo hàm theo $u$ và theo $v$?</td></tr></table>
+        say: "Bây giờ đến lượt bạn, với hai câu trên màn hình. Câu một có một cổng cộng và một cổng nhân. Câu hai có một cổng lấy số lớn hơn. Hãy dừng video và làm ra giấy."
+        pause: 8
+      - show: |
+          <p>① Đặt $s = x + y$ (cổng cộng), rồi $f = s\cdot z$ (cổng nhân).</p>
+          <table class="t"><tr><th>bước</th><th>làm gì</th><th>kết quả</th></tr>
+          <tr><td>tiến</td><td>$s = 1 + 2$, &nbsp; $f = 3\cdot 4$</td><td>$s = 3$, &nbsp; $f = \hlg{12}$</td></tr>
+          <tr><td>cổng nhân</td><td>tráo đổi: $z$ nhận $1\cdot s$, &nbsp; $s$ nhận $1\cdot z$</td><td>$\frac{\partial f}{\partial z} = \hlg{3}$, &nbsp; $\frac{\partial f}{\partial s} = 4$</td></tr>
+          <tr><td>cổng cộng</td><td>chia đều: $4\cdot 1$ cho mỗi nhánh</td><td>$\frac{\partial f}{\partial x} = \frac{\partial f}{\partial y} = \hlg{4}$</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", "2.4"]
+        say: "Câu một, ta đặt s bằng x cộng y cho cổng cộng, rồi f bằng s nhân z cho cổng nhân. Lượt tiến cho s bằng 3, rồi f bằng 3 nhân 4, bằng 12. Cổng nhân tráo đổi, z nhận 1 nhân s bằng 3, còn s nhận 1 nhân z bằng 4. Cổng cộng chia đều, gửi nguyên 4 cho cả x và y. Kiểm nhanh bằng đạo hàm trực tiếp, đạo hàm của x cộng y, nhân z, theo x đúng bằng z, tức là 4."
+      - clear: true
+        show: |
+          <p>② Đặt $m = \max(u, v) = \max(4, 1) = 4$, rồi $g = 2\cdot m = 8$.</p>
+          <table class="t"><tr><th>cổng</th><th>gửi xuống</th></tr>
+          <tr><td>nhân với 2</td><td>$\frac{\partial g}{\partial m} = 1\cdot 2 = 2$</td></tr>
+          <tr><td>lấy số lớn hơn, $u = 4 > v = 1$</td><td>$\frac{\partial g}{\partial u} = 2\cdot 1 = \hlg{2}$, &nbsp; $\frac{\partial g}{\partial v} = 2\cdot 0 = \hlg{0}$</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.3"]
+        say: "Câu hai, đặt m là số lớn hơn trong hai số u và v, bằng 4, nên g bằng 8. Cổng nhân với 2 gửi xuống cho m gradient bằng 1 nhân 2, tức là 2. Cổng lấy số lớn hơn dồn hết số 2 này cho u, vì u bằng 4 lớn hơn v bằng 1. Còn v nhận 2 nhân 0, bằng 0, vì nhích v một chút thì số lớn hơn vẫn là 4."
+
+  # ───────────────────────── 13. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">đồ thị: mỗi nút một phép tính đơn giản</span><span class="a">→</span>
+          <span class="n">lượt tiến: tính giá trị</span><span class="a">→</span>
+          <span class="n">lượt lùi: gửi xuống = đổ về $\cdot$ cục bộ</span><span class="a">→</span>
+          <span class="n">4 cổng: chia đều, tráo đổi, định tuyến, cộng dồn</span><span class="a">→</span>
+          <span class="n">kiểm tra bằng bước nhỏ</span></div>
+        say: "Tổng kết chuỗi logic. Vẽ hàm thành đồ thị gồm các phép tính đơn giản. Lượt tiến tính giá trị. Lượt lùi gửi xuống bằng đổ về nhân cục bộ. Bốn cổng chia đều, tráo đổi, định tuyến và cộng dồn. Kiểm tra lại bằng bước nhỏ."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> một bài toán đạo hàm khổng lồ chỉ là rất nhiều quy tắc chuỗi nhỏ, mỗi cổng chỉ cần biết đạo hàm của riêng nó.</div>
+        say: "Điều cần mang theo, một bài toán đạo hàm khổng lồ chỉ là rất nhiều quy tắc chuỗi nhỏ, mỗi cổng chỉ cần biết đạo hàm của riêng nó."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 23): <b>mạng perceptron nhiều lớp</b> — hàm kích hoạt, khởi tạo, Batch normalization và các siêu tham số.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 23, ta ghép nhiều nơ-ron thành mạng nhiều lớp, với hàm kích hoạt, cách khởi tạo và các siêu tham số. Hẹn gặp bạn ở bài tiếp theo."

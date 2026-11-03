@@ -1,0 +1,222 @@
+id: L13
+course: DSY
+series: "DSY · Hệ phân tán và dữ liệu lớn"
+title: "Bài 13 — Giao dịch phân tán: cam kết hai pha"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/dsy.yaml L13; audit/dsy/verify_dsy.py L13; J. Gray, Notes on Data Base Operating Systems (1978); P. A. Bernstein, V. Hadzilacos, N. Goodman, Concurrency Control and Recovery in Database Systems (1987), chương 7; DBS bài 14"
+assumes: [arith, cdot]
+# Quy ước: một bên điều phối, n bên tham gia. Pha 1 (chuẩn bị): điều phối hỏi, mỗi bên ghi “đã sẵn sàng” xuống đĩa rồi bỏ phiếu có/không.
+#   Pha 2 (quyết định): tất cả có → cam kết, có một không → huỷ. Kết quả theo phiếu và theo việc bên điều phối còn sống: alg.two_phase.
+#   Số thông điệp tối thiểu: 4n (hỏi, phiếu, quyết định, xác nhận).
+objectives:
+  - "Thực hiện một giao dịch trên nhiều máy bằng hai pha"
+  - "Hiểu vì sao bên đã bỏ phiếu có phải chờ"
+  - "Biết cam kết hai pha bảo đảm nguyên tử, không bảo đảm sẵn sàng"
+asr_reviewed:
+  - {sentence: "Vì không phân biệt được hai khả năng, A phải chờ.", reason: "ASR chép “vì không phân biệt được hai khả năng, à, phải chờ.” (0.909): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Trong lúc chờ, A giữ khoá trên dòng tài khoản, mọi giao dịch khác chạm dòng đó cũng bị chặn.", reason: "ASR chép “ai giữ khóa trên dòng tai khoảng”: tên chữ cái A (“a”) nghe thành “ai”, tài/tai lệch thanh, khoản/khoảng lệch âm cuối — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Trừ tiền ở máy này, cộng tiền ở máy kia"
+    steps:
+      - show: |
+          <p>Chuyển 100 nghìn từ tài khoản ở máy A sang tài khoản ở máy B. A trừ xong thì B hỏng: tiền biến mất. B cộng xong mà A không trừ được: tiền tự sinh ra.</p>
+          <div class="box key">Hôm nay: <b>cam kết hai pha</b> — mọi máy cùng cam kết, hoặc cùng huỷ, không có trường hợp nửa vời.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, ta chuyển 100 nghìn từ một tài khoản ở máy A sang một tài khoản ở máy B. Nếu A trừ xong mà B hỏng thì tiền biến mất. Nếu B cộng xong mà A không trừ được thì tiền tự sinh ra. Hôm nay ta học cam kết hai pha, mọi máy cùng cam kết hoặc cùng huỷ, không có trường hợp nửa vời."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: giao dịch nguyên tử, ghi bền vững, và phép “tất cả”"
+    checks:
+      - "(500 - 100) + (300 + 100) == 500 + 300 == 800 and (500 - 100) + 300 == 700"
+      - "[a == 'có' and b == 'có' for a in ('có', 'không') for b in ('có', 'không')] == [True, False, False, False]"
+    steps:
+      - show: |
+          <p><b>Giao dịch nguyên tử</b> (khoá Cơ sở dữ liệu): mọi thay đổi trong giao dịch cùng xảy ra, hoặc cùng không xảy ra.</p>
+          <table class="t"><tr><th>chuyển 100 từ A (500) sang B (300)</th><th>A</th><th>B</th><th>tổng</th></tr>
+          <tr><td>trọn vẹn</td><td>400</td><td>400</td><td>800 ✓</td></tr>
+          <tr><td>nửa vời: chỉ trừ A</td><td>400</td><td>300</td><td><b class="red">700</b>: mất 100</td></tr></table>
+        focus: [1, "2.2", "2.3", 0]
+        say: "Ở khoá Cơ sở dữ liệu, ta đã học giao dịch nguyên tử, mọi thay đổi trong giao dịch cùng xảy ra hoặc cùng không xảy ra. Chuyển 100 từ tài khoản A có 500 sang tài khoản B có 300, làm trọn vẹn thì A còn 400, B thành 400, tổng vẫn là 800. Nếu nửa vời, chỉ trừ A mà không cộng B, tổng còn 700, mất 100. Trên một máy, cơ sở dữ liệu lo việc này bằng nhật ký ghi xuống đĩa, nên khởi động lại vẫn nhớ."
+      - show: |
+          <p>Quyết định của bài này dùng phép <b>“tất cả”</b>: chỉ đúng khi mọi bên đều đúng.</p>
+          <table class="t"><tr><th>phiếu bên 1</th><th>phiếu bên 2</th><th>tất cả có?</th></tr>
+          <tr><td>có</td><td>có</td><td>$\hl{\text{đúng}}$</td></tr><tr><td>có</td><td>không</td><td>sai</td></tr>
+          <tr><td>không</td><td>có</td><td>sai</td></tr><tr><td>không</td><td>không</td><td>sai</td></tr></table>
+        focus: [1, 2, 2]
+        say: "Điều thứ hai, phép tất cả chỉ đúng khi mọi bên đều đúng. Với hai bên, có bốn tổ hợp phiếu, và chỉ tổ hợp có với có cho kết quả đúng. Ba tổ hợp còn lại, chỉ cần một phiếu không là sai."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: hai pha"
+    checks:
+      - "alg.two_phase(['có', 'có']) == ['cam kết', 'cam kết'] and alg.two_phase(['có', 'không']) == ['huỷ', 'huỷ']"
+    steps:
+      - show: |
+          <ol><li><b>Pha chuẩn bị</b>: bên điều phối hỏi mọi bên “sẵn sàng chưa?”. Mỗi bên kiểm được không (đủ tiền, khoá được dòng), ghi “đã sẵn sàng” xuống đĩa, rồi bỏ phiếu <b>có</b> hoặc <b>không</b>.</li>
+          <li><b>Pha quyết định</b>: tất cả <b>có</b> → cam kết; chỉ cần một <b>không</b> (hoặc hết giờ chờ) → huỷ. Gửi quyết định cho mọi bên.</li></ol>
+          <div class="box key">Bỏ phiếu <b>có</b> là một lời hứa: “nếu được bảo cam kết, tôi chắc chắn làm được, kể cả sau khi khởi động lại”.</div>
+        focus: ["1.1", "1.1", "1.2", "1.2", 2]
+        say: "Pha thứ nhất là chuẩn bị, bên điều phối hỏi mọi bên đã sẵn sàng chưa. Mỗi bên kiểm xem có làm được không, như đủ tiền và khoá được dòng, ghi đã sẵn sàng xuống đĩa, rồi bỏ phiếu có hoặc không. Pha thứ hai là quyết định, nếu tất cả bỏ có thì cam kết, chỉ cần một bên bỏ không hoặc hết giờ chờ thì huỷ. Quyết định được gửi cho mọi bên. Bỏ phiếu có là một lời hứa, nếu được bảo cam kết thì chắc chắn làm được, kể cả sau khi khởi động lại."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hai pha trên trục thời gian"
+    checks:
+      - "4 * 2 == 8 and alg.two_phase(['có', 'có']) == ['cam kết', 'cam kết']"
+    steps:
+      - show: |
+          <div><svg width="1500" height="495" viewBox="0 0 1500 495"><defs><marker id="arD13" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs><g font-size="22" fill="#1f2937"><text x="20" y="118">điều phối</text><line x1="200" y1="110" x2="1470" y2="110" stroke="#9ca3af" stroke-width="2"/><text x="20" y="248">bên A</text><line x1="200" y1="240" x2="1470" y2="240" stroke="#9ca3af" stroke-width="2"/><text x="20" y="378">bên B</text><line x1="200" y1="370" x2="1470" y2="370" stroke="#9ca3af" stroke-width="2"/><rect x="230" y="20" width="560" height="40" rx="6" fill="#dbeafe"/><text x="510" y="48" text-anchor="middle">pha 1: chuẩn bị</text><rect x="830" y="20" width="620" height="40" rx="6" fill="#dcfce7"/><text x="1140" y="48" text-anchor="middle">pha 2: quyết định</text><line x1="250" y1="110" x2="330" y2="240" stroke="#2a78d6" stroke-width="3" marker-end="url(#arD13)"/><line x1="270" y1="110" x2="350" y2="370" stroke="#2a78d6" stroke-width="3" marker-end="url(#arD13)"/><rect x="360" y="220" width="120" height="40" rx="6" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="420" y="248" text-anchor="middle" font-size="19">ghi: sẵn sàng</text><rect x="380" y="350" width="120" height="40" rx="6" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="440" y="378" text-anchor="middle" font-size="19">ghi: sẵn sàng</text><line x1="540" y1="240" x2="620" y2="110" stroke="#2a78d6" stroke-width="3" marker-end="url(#arD13)"/><line x1="560" y1="370" x2="640" y2="110" stroke="#2a78d6" stroke-width="3" marker-end="url(#arD13)"/><rect x="680" y="90" width="120" height="40" rx="6" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="740" y="118" text-anchor="middle" font-size="19">ghi: cam kết</text><line x1="850" y1="110" x2="930" y2="240" stroke="#059669" stroke-width="3" marker-end="url(#arD13)"/><line x1="870" y1="110" x2="950" y2="370" stroke="#059669" stroke-width="3" marker-end="url(#arD13)"/><rect x="960" y="220" width="120" height="40" rx="6" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="1020" y="248" text-anchor="middle" font-size="19">cam kết</text><rect x="980" y="350" width="120" height="40" rx="6" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="1040" y="378" text-anchor="middle" font-size="19">cam kết</text><line x1="1150" y1="240" x2="1230" y2="110" stroke="#059669" stroke-width="3" marker-end="url(#arD13)"/><line x1="1170" y1="370" x2="1250" y2="110" stroke="#059669" stroke-width="3" marker-end="url(#arD13)"/><text x="300" y="425" text-anchor="middle" font-size="20">hỏi</text><text x="590" y="425" text-anchor="middle" font-size="20">phiếu có</text><text x="900" y="425" text-anchor="middle" font-size="20">quyết định</text><text x="1200" y="425" text-anchor="middle" font-size="20">xác nhận</text><text x="20" y="475" fill="#b91c1c">mỗi bên nhận hoặc gửi 4 thông điệp: 2 bên là 8; ô cam: ghi xuống đĩa trước khi gửi tiếp</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ một giao dịch với bên điều phối và hai bên A, B, thời gian chạy từ trái sang phải. Ở pha chuẩn bị, điều phối gửi câu hỏi, mỗi bên ghi sẵn sàng xuống đĩa rồi mới gửi phiếu có. Ở pha quyết định, điều phối ghi quyết định cam kết xuống đĩa, gửi cho cả hai bên, và mỗi bên gửi lại xác nhận. Mỗi bên dính tới 4 thông điệp, nên hai bên tốn 8 thông điệp."
+
+  - id: example
+    kind: example
+    title: "Bên điều phối chết sau pha một"
+    checks:
+      - "alg.two_phase(['có', 'có'], coordinator_alive=False) == ['chờ', 'chờ'] and alg.two_phase(['có', 'không'], coordinator_alive=False) == ['chờ', 'huỷ']"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bên</th><th>đã làm ở pha 1</th></tr>
+          <tr><td>A</td><td>ghi “sẵn sàng” xuống đĩa, bỏ phiếu <b>có</b></td></tr>
+          <tr><td>B</td><td>bỏ phiếu <b>không</b> (ví dụ không đủ tiền)</td></tr>
+          <tr><td>điều phối</td><td><b class="red">chết</b> trước khi gửi quyết định</td></tr></table>
+        focus: ["1.2", "1.3", "1.4"]
+        say: "Bước một, dựng tình huống. Bên A đã ghi sẵn sàng xuống đĩa và bỏ phiếu có, bên B bỏ phiếu không, chẳng hạn vì không đủ tiền. Rồi bên điều phối chết trước khi kịp gửi quyết định cho ai."
+      - show: |
+          <p><b>Bước 2 — bên B</b>: phiếu của mình là <b>không</b>, nên phép “tất cả có” chắc chắn sai → quyết định chắc chắn là huỷ.</p>
+          <div class="box key">B tự <b>huỷ</b> được ngay, không cần hỏi ai.</div>
+        focus: [1, 1, 2]
+        say: "Bước hai, xét bên B. Phiếu của B là không, nên phép tất cả có chắc chắn sai, và quyết định chắc chắn là huỷ. Vậy B tự huỷ được ngay, không cần hỏi ai."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — bên A</b> chỉ biết phiếu của mình. Hai khả năng mà A không phân biệt được:</p>
+          <table class="t"><tr><th>nếu thật ra B đã bỏ</th><th>quyết định có thể là</th><th>A tự làm gì thì sai?</th></tr>
+          <tr><td>có</td><td>cam kết (điều phối có thể đã gửi cho B)</td><td>tự huỷ → nửa vời</td></tr>
+          <tr><td>không</td><td>huỷ</td><td>tự cam kết → nửa vời</td></tr></table>
+          <p>Nên A phải <b class="red">chờ</b>.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Bước ba, xét bên A, nó chỉ biết phiếu của mình. Nếu thật ra B đã bỏ có, quyết định có thể là cam kết, và B có thể đã cam kết rồi, nên A tự huỷ sẽ thành nửa vời. Nếu B đã bỏ không, quyết định là huỷ, nên A tự cam kết cũng thành nửa vời. Vì không phân biệt được hai khả năng, A phải chờ."
+      - show: |
+          <table class="t"><tr><th>bên</th><th>đã bỏ phiếu</th><th>điều phối chết trước khi gửi quyết định</th></tr>
+          <tr><td>A</td><td>có</td><td><b class="red">chờ</b>, vẫn giữ khoá trên dòng tài khoản</td></tr>
+          <tr><td>B</td><td>không</td><td>tự <b>huỷ</b></td></tr></table>
+          <div class="box key"><b>Bước 4</b> — mọi giao dịch khác chạm dòng đó cũng bị chặn. Cam kết hai pha bảo đảm <b>nguyên tử</b>, không bảo đảm <b>sẵn sàng</b>.</div>
+        focus: [1, "1.2", 2, 2]
+        say: "Bước bốn, gom kết quả. Trong lúc chờ, A giữ khoá trên dòng tài khoản, mọi giao dịch khác chạm dòng đó cũng bị chặn. Còn B đã tự huỷ. Vậy cam kết hai pha bảo đảm nguyên tử, nhưng không bảo đảm sẵn sàng."
+      - clear: true
+        show: |
+          <p><b>Bước 5 — A hỏi các bên khác</b>:</p>
+          <table class="t"><tr><th>B trả lời</th><th>A làm gì</th></tr>
+          <tr><td>“tôi đã bỏ không” (hoặc “tôi đã nhận huỷ”)</td><td>huỷ an toàn</td></tr>
+          <tr><td>“tôi đã nhận cam kết”</td><td>cam kết an toàn</td></tr>
+          <tr><td>“tôi cũng bỏ có, chưa nhận gì”</td><td><b class="red">cả hai cùng chờ</b> điều phối sống lại</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Bước năm, A có thể hỏi các bên khác. Nếu B trả lời đã bỏ không, hoặc đã nhận lệnh huỷ, thì A huỷ an toàn. Nếu B đã nhận lệnh cam kết, A cam kết an toàn. Nhưng nếu B cũng bỏ có và chưa nhận gì, thì cả hai cùng phải chờ điều phối sống lại."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác: thử hết 8 tổ hợp phiếu của 3 bên"
+    checks:
+      - "len(list(__import__('itertools').product(['có', 'không'], repeat=3))) == 8"
+      - "[sum(alg.two_phase(list(v)) == ['cam kết'] * 3 for v in __import__('itertools').product(['có', 'không'], repeat=3) if v.count('có') == k) for k in range(4)] == [0, 0, 0, 1]"
+      - "[sum(1 for v in __import__('itertools').product(['có', 'không'], repeat=3) if v.count('có') == k) for k in range(4)] == [1, 3, 3, 1]"
+      - "all(alg.two_phase(list(v), coordinator_alive=False).count('chờ') == v.count('có') for v in __import__('itertools').product(['có', 'không'], repeat=3))"
+      - "sum(alg.two_phase(list(v), coordinator_alive=False).count('chờ') for v in __import__('itertools').product(['có', 'không'], repeat=3)) == 12"
+    steps:
+      - show: |
+          <table class="t"><tr><th>số phiếu có</th><th>số tổ hợp</th><th>quyết định</th><th>điều phối chết: số bên phải chờ</th></tr>
+          <tr><td>0</td><td>1</td><td>huỷ</td><td>0</td></tr>
+          <tr><td>1</td><td>3</td><td>huỷ</td><td>1</td></tr>
+          <tr><td>2</td><td>3</td><td>huỷ</td><td>2</td></tr>
+          <tr><td>3</td><td>1</td><td>$\hl{\text{cam kết}}$</td><td>3</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", 1]
+        say: "Kiểm bằng đường khác, ta cho máy thử hết 2 mũ 3 bằng 8 tổ hợp phiếu của 3 bên, xếp theo số phiếu có. Không có phiếu có nào thì 1 tổ hợp, quyết định huỷ. Một phiếu có thì 3 tổ hợp, vẫn huỷ. Hai phiếu có cũng 3 tổ hợp, vẫn huỷ. Chỉ khi cả 3 phiếu đều có, đúng 1 tổ hợp, mới cam kết. Cột cuối cho thấy khi điều phối chết, số bên phải chờ đúng bằng số bên đã bỏ có, cộng cả 8 tổ hợp là 12 lần phải chờ."
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc, 1 lỗi người đã đi làm"
+    checks:
+      - "round(0.99 ** 2, 4) == 0.9801 and round(0.99 ** 10, 3) == 0.904 and 4 * 2 == 8 and 4 * 10 == 40"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Bỏ phiếu “có” mà chưa ghi xuống đĩa <b class="red">(sai)</b>
+          <br><span class="note">Khởi động lại thì quên mất đã hứa. Ghi “đã sẵn sàng” bền vững <b>trước</b> khi gửi phiếu.</span></div>
+        say: "Lỗi thứ nhất, bỏ phiếu có mà chưa ghi xuống đĩa. Khởi động lại thì quên mất mình đã hứa, nên phải ghi đã sẵn sàng một cách bền vững trước khi gửi phiếu."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Bên đã bỏ “có” tự huỷ khi hết giờ chờ <b class="red">(phá nguyên tử)</b>
+          <br><span class="note">Có thể các bên khác đã cam kết: kết quả nửa vời. Phải hỏi lại bên điều phối hoặc các bên khác cho tới khi biết quyết định.</span></div>
+        say: "Lỗi thứ hai, bên đã bỏ có lại tự huỷ khi hết giờ chờ. Có thể các bên khác đã cam kết, và ta có kết quả nửa vời. Phải hỏi lại bên điều phối hoặc các bên khác cho tới khi biết quyết định."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Dùng cam kết hai pha cho mọi thứ <b class="red">(chậm, dễ kẹt)</b>
+          <br><span class="note">Mỗi giao dịch tốn ít nhất 4n thông điệp và giữ khoá qua hai vòng mạng. Nhiều hệ chọn chia dữ liệu sao cho một giao dịch chỉ chạm một máy, hoặc xử lý không đồng bộ qua hàng đợi.</span></div>
+        say: "Lỗi thứ ba, dùng cam kết hai pha cho mọi thứ. Mỗi giao dịch tốn ít nhất 4 n thông điệp và giữ khoá qua hai vòng mạng. Nhiều hệ thống chọn chia dữ liệu sao cho một giao dịch chỉ chạm một máy, hoặc xử lý không đồng bộ qua hàng đợi."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Gom thêm dịch vụ vào cùng một giao dịch hai pha mà không tính lại <b class="red">(huỷ nhiều, chậm hơn)</b></div>
+          <table class="t"><tr><th>giả sử mỗi bên bỏ “có” với xác suất 0,99</th><th>xác suất cam kết</th><th>thông điệp tối thiểu</th></tr>
+          <tr><td>2 bên</td><td>$0{,}99^2 \approx 0{,}980$</td><td>$4 \cdot 2 = 8$</td></tr>
+          <tr><td>10 bên</td><td>$0{,}99^{10} \approx \hl{0{,}904}$: gần 1 trong 10 giao dịch bị huỷ</td><td>$4 \cdot 10 = 40$</td></tr></table>
+        introduces: [power, approx]
+        focus: [1, 2, "2.2", "2.3", 0]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, gom thêm dịch vụ vào cùng một giao dịch hai pha mà không tính lại. Giả sử mỗi bên bỏ phiếu có với xác suất 0 phẩy 99. Với 2 bên, xác suất cam kết là 0 phẩy 99 bình phương, khoảng 0 phẩy 98, và tốn 8 thông điệp. Với 10 bên, xác suất chỉ còn 0 phẩy 99 mũ 10, khoảng 0 phẩy 904, gần 1 trong 10 giao dịch bị huỷ, và tốn 40 thông điệp. Người có kinh nghiệm giữ số bên trong một giao dịch thật ít, và tính lại hai con số này trước khi thêm một bên."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.two_phase(['có', 'không', 'có']) == ['huỷ'] * 3 and 4 * 3 == 12"
+      - "3 + 3 + 3 + 3 == 12 and not all(v == 'có' for v in ['có', 'không', 'có'])"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>3 bên bỏ phiếu: có, không, có. Quyết định là gì?</td></tr>
+          <tr><td>2</td><td>Với 3 bên, tối thiểu bao nhiêu thông điệp (hỏi, phiếu, quyết định, xác nhận)?</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, ba bên bỏ phiếu có, không, có, quyết định là gì? Câu hai, với 3 bên, tối thiểu cần bao nhiêu thông điệp, gồm hỏi, phiếu, quyết định và xác nhận? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 1</th><th>suy luận</th></tr>
+          <tr><td>phiếu</td><td>có, <b>không</b>, có</td></tr>
+          <tr><td>tất cả có?</td><td>sai: bên thứ hai bỏ không</td></tr>
+          <tr><td>quyết định</td><td>$\hl{\text{huỷ}}$, gửi cho cả ba bên</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Đáp án câu một, làm từng bước. Ba phiếu là có, không, có. Phép tất cả có là sai, vì bên thứ hai bỏ không. Vậy quyết định là huỷ, và điều phối gửi lệnh huỷ cho cả ba bên."
+      - show: |
+          <table class="t"><tr><th>câu 2: loại thông điệp</th><th>mỗi bên</th><th>3 bên</th></tr>
+          <tr><td>hỏi</td><td>1</td><td>3</td></tr><tr><td>phiếu</td><td>1</td><td>3</td></tr>
+          <tr><td>quyết định</td><td>1</td><td>3</td></tr><tr><td>xác nhận</td><td>1</td><td>3</td></tr>
+          <tr><td>tổng</td><td>4</td><td>$4 \cdot 3 = \hl{12}$</td></tr></table>
+        focus: [0, ["1.2", "1.3", "1.4", "1.5"], "1.6"]
+        say: "Câu hai, đếm từng loại thông điệp. Mỗi bên nhận một câu hỏi, gửi một phiếu, nhận một quyết định và gửi một xác nhận, tức 4 thông điệp. Với 3 bên, 4 nhân 3 bằng 12 thông điệp."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">chuẩn bị: ghi đĩa, bỏ phiếu</span><span class="a">→</span>
+          <span class="n">tất cả có: cam kết; một không: huỷ</span><span class="a">→</span>
+          <span class="n">đã có thì phải chờ quyết định</span><span class="a">→</span>
+          <span class="n">nguyên tử, không sẵn sàng</span></div>
+        say: "Tổng kết lại, pha chuẩn bị ghi xuống đĩa rồi bỏ phiếu. Tất cả có thì cam kết, một không thì huỷ. Bên đã bỏ có thì phải chờ quyết định, nên cam kết hai pha bảo đảm nguyên tử mà không bảo đảm sẵn sàng."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> một lời hứa trong hệ phân tán phải được ghi lại trước khi nói ra, và người hứa mất quyền tự quyết cho tới khi được giải phóng.</div>
+        say: "Điều cần mang theo, một lời hứa trong hệ phân tán phải được ghi lại trước khi nói ra, và người hứa mất quyền tự quyết cho tới khi được giải phóng."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 14): <b>hàng đợi thông điệp</b> và ngữ nghĩa giao nhận.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 14, ta học hàng đợi thông điệp và các kiểu bảo đảm giao nhận. Hẹn gặp bạn ở bài tiếp theo."

@@ -1,0 +1,221 @@
+id: L11
+course: PLC
+series: "PLC · Ngôn ngữ lập trình và trình biên dịch"
+title: "Bài 11 — Tối ưu mã: gấp hằng số, loại mã chết, đưa ra ngoài vòng lặp"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/plc.yaml L11; audit/plc/verify_plc.py L11; A. V. Aho và cộng sự, Compilers (2006), chương 8–9; ISO/IEC 9899:2018 (C17), mục 6.5 đoạn 5 (tràn số có dấu là hành vi không xác định); IEEE 754-2019 (phép cộng số thực không kết hợp)"
+assumes: [arith]
+# Quy ước: cây tiền tố như bài 3; gấp hằng số = alg.const_fold (từ dưới lên, chỉ gấp nút có hai con là số). Số lần nhân trong vòng lặp
+#   đếm bằng phép nhân thường. Số thực Python (IEEE 754 nhị phân 64 bit) trong checks. Ví dụ C về hành vi không xác định chỉ minh hoạ,
+#   không chạy (NOT_VERIFIED bằng máy; trích dẫn chuẩn C17).
+objectives:
+  - "Gấp hằng số và nhận ra giới hạn của nó"
+  - "Loại mã chết và đưa phép tính bất biến ra ngoài vòng lặp"
+  - "Biết tối ưu phải giữ nguyên hành vi quan sát được"
+asr_reviewed:
+  - {sentence: "Trước tối ưu, vòng lặp chạy một nghìn lần, mỗi lần một phép, tổng cộng một nghìn phép.", reason: "ASR chép “Trước tối yêu, vòng lập chạy một nghìn lần, mỗi lần một phét, tổng cộng một nghìn phét.” (0.778): lệch âm/thanh thuần Việt: ưu/yêu, lặp/lập, phép/phét, phép/phét — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Phép tối ưu thứ nhất là gấp hằng số.", reason: "ASR chép “Phép tối yêu thứ nhất là gấp hàng số”: ưu → “yêu” (cùng vần), hằng/hàng lệch thanh; cụm “gấp hằng số” ở các câu khác của bài chép đúng — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Viết dễ đọc, máy vẫn chạy nhanh"
+    checks:
+      - "24 * 60 * 60 == 86400 and 86400 in compile('24 * 60 * 60 * so_ngay', '<s>', 'eval').co_consts"
+      - "86400 not in compile('so_ngay * 24 * 60 * 60', '<s>', 'eval').co_consts"
+    steps:
+      - show: |
+          <p>Bạn viết <code>giay = 24 * 60 * 60 * so_ngay</code> cho dễ đọc. Máy có phải nhân ba lần mỗi khi chạy không? Không: trình biên dịch tính sẵn <code>24 * 60 * 60 = 86400</code>.</p>
+          <div class="box key">Hôm nay: ba phép <b>tối ưu</b> kinh điển trên cây và mã trung gian — và luật vàng: <b>không được đổi hành vi</b>.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, bạn viết số giây bằng 24 nhân 60 nhân 60 nhân số ngày cho dễ đọc. Vậy máy có phải nhân ba lần mỗi khi chạy không? Không, trình biên dịch tính sẵn phần hằng số. Hôm nay ta học ba phép tối ưu kinh điển, và luật vàng là không được đổi hành vi của chương trình."
+
+  # ───────────────────────── 2. GẤP HẰNG SỐ ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: cây biểu thức và đếm số phép tính"
+    checks:
+      - "alg.parse_expr('2*3+x') == ('+', ('*', 2, 3), 'x') and alg.parse_expr('x+2+3') == ('+', ('+', 'x', 2), 3)"
+      - "(lambda d: exec('n = 0\\ndef nhan(a, b):\\n    global n\\n    n += 1\\n    return a * b\\nk, h = 2, 5\\nfor i in range(4):\\n    t = nhan(k, h)\\n', d) or d['n'] == 4)({}) and 4 * 1 == 4"
+    steps:
+      - show: |
+          <table class="t"><tr><th>biểu thức</th><th>cây (viết tiền tố)</th><th>đọc là</th></tr>
+          <tr><td><code>2*3+x</code></td><td><code>(+ (* 2 3) x)</code></td><td>nhân trước, cộng sau</td></tr>
+          <tr><td><code>x+2+3</code></td><td><code>(+ (+ x 2) 3)</code></td><td>kết hợp trái: cộng từ trái sang</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Trước hết, ôn lại cây biểu thức như ở bài 3, trong đó phép tính nằm ở nút, số và tên nằm ở lá. Biểu thức 2 nhân 3 cộng x có phép cộng ở gốc, con trái là cây 2 nhân 3, con phải là x, vì nhân được làm trước cộng. Biểu thức x cộng 2 cộng 3 kết hợp trái, nên x cộng 2 nằm ở dưới, rồi mới cộng với 3 ở gốc."
+      - show: |
+          <div class="code"><div>for i in range(4):</div><div>    t = k * h</div></div>
+          <p>Vòng lặp chạy 4 lần, mỗi lần một phép nhân → $4 \times 1 = \hl{4}$ phép nhân. Muốn đếm số phép tính: <b>số lần lặp × số phép mỗi lần</b>.</p>
+        focus: [1, 2, 2]
+        say: "Điều thứ hai là cách đếm số phép tính trong một vòng lặp. Vòng lặp này chạy 4 lần, mỗi lần làm một phép nhân k với h. Vậy tổng cộng là 4 nhân 1, bằng 4 phép nhân, tức là số lần lặp nhân với số phép mỗi lần."
+
+  - id: sym
+    kind: symbol
+    title: "Gấp hằng số"
+    checks:
+      - "alg.const_fold(alg.parse_expr('2*3+x')) == ('+', 6, 'x')"
+    steps:
+      - show: |
+          <div><svg width="520" height="300" viewBox="0 0 520 300"><line x1="315" y1="40" x2="150" y2="150" stroke="#6b7280" stroke-width="2.5"/><line x1="150" y1="150" x2="40" y2="260" stroke="#6b7280" stroke-width="2.5"/><rect x="16" y="240" width="48" height="40" rx="6" fill="#fffbeb" stroke="#1f2937" stroke-width="2"/><text x="40" y="268" font-size="22" fill="#1f2937" text-anchor="middle" font-weight="normal">2</text><line x1="150" y1="150" x2="260" y2="260" stroke="#6b7280" stroke-width="2.5"/><rect x="236" y="240" width="48" height="40" rx="6" fill="#fffbeb" stroke="#1f2937" stroke-width="2"/><text x="260" y="268" font-size="22" fill="#1f2937" text-anchor="middle" font-weight="normal">3</text><circle cx="150" cy="150" r="24" fill="#2a78d6"/><text x="150" y="159" font-size="26" fill="#ffffff" text-anchor="middle" font-weight="bold">*</text><line x1="315" y1="40" x2="480" y2="150" stroke="#6b7280" stroke-width="2.5"/><rect x="456" y="130" width="48" height="40" rx="6" fill="#fffbeb" stroke="#1f2937" stroke-width="2"/><text x="480" y="158" font-size="22" fill="#1f2937" text-anchor="middle" font-weight="normal">x</text><circle cx="315" cy="40" r="24" fill="#2a78d6"/><text x="315" y="49" font-size="26" fill="#ffffff" text-anchor="middle" font-weight="bold">+</text></svg></div>
+          <p><b>Gấp hằng số</b>: đi từ dưới lên; nút nào có hai con đều là số thì tính luôn lúc biên dịch. <code>(* 2 3)</code> → <code>6</code>; nút <code>+</code> có con <code>x</code> chưa biết → giữ: <b class="red"><code>(+ 6 x)</code></b>.</p>
+        focus: [1, 2, 2]
+        say: "Phép tối ưu thứ nhất là gấp hằng số. Ta đi từ dưới lên, nút nào có hai con đều là số thì tính luôn lúc biên dịch. Nút 2 nhân 3 thành 6, còn nút cộng có con x chưa biết nên giữ nguyên, cây còn lại 6 cộng x."
+
+  # ───────────────────────── 3. GIỚI HẠN ─────────────────────────
+  - id: limit
+    kind: concept
+    title: "Khi nào không gấp được"
+    checks:
+      - "alg.const_fold(alg.parse_expr('x+2+3')) == ('+', ('+', 'x', 2), 3) and alg.const_fold(alg.parse_expr('2+3+x')) == ('+', 5, 'x')"
+      - "(0.1 + 0.2) + 0.3 != 0.1 + (0.2 + 0.3)"
+    steps:
+      - show: |
+          <p><code>x+2+3</code> kết hợp trái là <code>(+ (+ x 2) 3)</code>: không nút nào có hai con là số → bộ gấp đơn giản <b>không</b> gấp được.</p>
+          <p>Muốn ra <code>x + 5</code> phải <b>đổi nhóm</b>. Với số nguyên quay vòng thì được. Với số thực thì <b>không</b>: $(0{,}1 + 0{,}2) + 0{,}3 = 0{,}6000000000000001$ nhưng $0{,}1 + (0{,}2 + 0{,}3) = 0{,}6$.</p>
+        focus: [1, 1, 2, 2, 2]
+        say: "Nhưng x cộng 2 cộng 3, theo kết hợp trái, có cây x cộng 2 trước rồi mới cộng 3. Không nút nào có hai con đều là số, nên bộ gấp đơn giản không gấp được. Muốn ra x cộng 5 phải đổi nhóm. Với số nguyên quay vòng thì đổi nhóm được. Với số thực thì không, vì 0 phẩy 1 cộng 0 phẩy 2 rồi cộng 0 phẩy 3 cho kết quả lệch ở chữ số cuối."
+
+  # ───────────────────────── 4. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hình dung: ba trạm sửa mã, một luật vàng"
+    steps:
+      - show: |
+          <div><svg width="1500" height="400" viewBox="0 0 1500 400"><defs><marker id="arP11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs><rect x="20" y="40" width="400" height="250" rx="14" fill="#ffffff" stroke="#2a78d6" stroke-width="4"/><text x="220" y="85" font-size="26" font-weight="bold" text-anchor="middle" fill="#2a78d6">gấp hằng số</text><text x="220" y="145" font-size="22" text-anchor="middle" fill="#1f2937">24 * 60 * 60</text><text x="220" y="190" font-size="26" text-anchor="middle" fill="#1f2937">↓</text><text x="220" y="240" font-size="22" font-weight="bold" text-anchor="middle" fill="#059669">86400</text><rect x="550" y="40" width="400" height="250" rx="14" fill="#ffffff" stroke="#eb6834" stroke-width="4"/><text x="750" y="85" font-size="26" font-weight="bold" text-anchor="middle" fill="#eb6834">đưa ra ngoài vòng lặp</text><text x="750" y="145" font-size="22" text-anchor="middle" fill="#1f2937">k * h: 1000 lần</text><text x="750" y="190" font-size="26" text-anchor="middle" fill="#1f2937">↓</text><text x="750" y="240" font-size="22" font-weight="bold" text-anchor="middle" fill="#059669">t = k * h: 1 lần</text><rect x="1080" y="40" width="400" height="250" rx="14" fill="#ffffff" stroke="#d97706" stroke-width="4"/><text x="1280" y="85" font-size="26" font-weight="bold" text-anchor="middle" fill="#d97706">loại mã chết</text><text x="1280" y="145" font-size="22" text-anchor="middle" fill="#1f2937">nhánh điều kiện luôn sai</text><text x="1280" y="190" font-size="26" text-anchor="middle" fill="#1f2937">↓</text><text x="1280" y="240" font-size="22" font-weight="bold" text-anchor="middle" fill="#059669">xoá</text><line x1="424" y1="165" x2="544" y2="165" stroke="#1f2937" stroke-width="3" marker-end="url(#arP11)"/><line x1="954" y1="165" x2="1074" y2="165" stroke="#1f2937" stroke-width="3" marker-end="url(#arP11)"/><rect x="20" y="320" width="1460" height="60" rx="12" fill="#fee2e2" stroke="#b91c1c" stroke-width="3"/><text x="750" y="360" font-size="26" font-weight="bold" text-anchor="middle" fill="#b91c1c">luật vàng: mọi đầu vào cho cùng kết quả như trước khi tối ưu</text></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ bộ tối ưu như một dây chuyền ba trạm, mỗi trạm sửa mã một chút. Trạm gấp hằng số thay 24 nhân 60 nhân 60 bằng 86400. Trạm thứ hai đưa phép tính k nhân h từ một nghìn lần trong vòng lặp ra thành một lần duy nhất, còn trạm thứ ba xoá nhánh không bao giờ chạy. Thanh đỏ ở dưới là luật vàng áp lên cả ba trạm, với mọi đầu vào, chương trình sau tối ưu phải cho cùng kết quả như trước."
+
+  - id: example
+    kind: example
+    title: "Mã chết và phép tính bất biến trong vòng lặp"
+    checks:
+      - "1000 * 1 == 1000 and 1000 - 1 == 999"
+    steps:
+      - show: |
+          <div class="code"><div>for i in range(1000):</div><div>    s += a[i] * (k * h)     <span class="cm"># k, h không đổi trong vòng lặp</span></div></div>
+          <p><b>Bước một — tìm phép tính bất biến:</b> <code>k * h</code> không phụ thuộc <code>i</code>, và k, h không bị gán trong vòng lặp.</p>
+        focus: [1, 2]
+        say: "Xét vòng lặp chạy một nghìn lần, mỗi lần cộng a i nhân k nhân h, với k và h không đổi trong vòng lặp. Bước một, phép tối ưu đưa ra ngoài vòng lặp thấy k nhân h không phụ thuộc i, và cả k lẫn h đều không bị gán lại bên trong."
+      - show: |
+          <table class="t"><tr><th>Bước 2 — đếm phép nhân <code>k * h</code></th><th>số lần lặp</th><th>mỗi lần</th><th>tổng</th></tr>
+          <tr><td>trước tối ưu</td><td>1000</td><td>1</td><td>1000</td></tr>
+          <tr><td>sau khi đưa <code>t = k * h</code> lên trước vòng lặp</td><td>—</td><td>—</td><td>1</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Bước hai, đếm số phép nhân k với h. Trước tối ưu, vòng lặp chạy một nghìn lần, mỗi lần một phép, tổng cộng một nghìn phép. Sau khi tính t bằng k nhân h một lần trước vòng lặp, chỉ còn đúng 1 phép."
+      - show: |
+          <p><b>Bước 3 — số phép nhân bớt được:</b> $1000 - 1 = \hl{999}$. Phép nhân <code>a[i] * t</code> vẫn còn trong vòng lặp vì nó phụ thuộc <code>i</code>.</p>
+        focus: [1, 1]
+        say: "Bước ba, số phép nhân bớt được là một nghìn trừ 1, bằng 999. Phép nhân a i với t vẫn phải ở trong vòng lặp, vì nó phụ thuộc i."
+      - clear: true
+        show: |
+          <div class="code"><div>DEBUG = False</div><div>if DEBUG: ghi_nhat_ky(...)     <span class="cm"># không bao giờ chạy</span></div><div>return x</div><div>x = x + 1                       <span class="cm"># sau return: không bao giờ chạy</span></div></div>
+          <p><b>Bước 4 — loại mã chết</b>: xoá hai đoạn không bao giờ chạy — chương trình nhỏ hơn, không đổi kết quả.</p>
+        focus: [1, 1, 2]
+        say: "Bước bốn, đoạn mã này có một lệnh ghi nhật ký nằm trong điều kiện luôn sai. Nó còn có một dòng nằm sau lệnh trả về. Phép loại mã chết xoá cả hai, chương trình nhỏ hơn mà kết quả không đổi."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: đếm thật bằng máy và hỏi một trình biên dịch thật"
+    checks:
+      - "(lambda d: exec('n = 0\\ndef nhan(a, b):\\n    global n\\n    n += 1\\n    return a * b\\na = list(range(1000))\\nk, h = 2, 5\\ns1 = 0\\nfor i in range(1000):\\n    s1 += nhan(a[i], nhan(k, h))\\nn1 = n\\nn = 0\\nt = nhan(k, h)\\ns2 = 0\\nfor i in range(1000):\\n    s2 += nhan(a[i], t)\\nn2 = n\\n', d) or (d['n1'], d['n2'], d['s1'] == d['s2'], d['s1']) == (2000, 1001, True, 4995000))({})"
+      - "2000 - 1001 == 999"
+      - "6 in compile('2*3+x', '<s>', 'eval').co_consts and compile('x+2+3', '<s>', 'eval').co_consts == (2, 3)"
+    steps:
+      - show: |
+          <table class="t"><tr><th>cách khác: cho máy đếm từng phép nhân</th><th>phép nhân</th><th>tổng s</th></tr>
+          <tr><td>trước tối ưu (k = 2, h = 5, a = 0 … 999)</td><td>2000</td><td>4995000</td></tr>
+          <tr><td>sau tối ưu</td><td>1001</td><td>4995000 ✓</td></tr>
+          <tr><td>chênh lệch</td><td>$2000 - 1001 = \hl{999}$ ✓</td><td>bằng nhau</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Kiểm bằng đường khác, ta không đếm tay nữa mà cho máy chạy cả hai phiên bản, mỗi phép nhân đi qua một hàm có bộ đếm. Phiên bản cũ làm 2000 phép nhân, vì mỗi vòng có hai phép, và tổng s bằng 4995000. Phiên bản mới làm 1001 phép nhân, tổng s vẫn bằng 4995000, nên hành vi không đổi. Chênh lệch là 2000 trừ 1001, đúng bằng 999 như ta đếm tay."
+      - show: |
+          <table class="t"><tr><th>hỏi trình biên dịch thật</th><th>bảng hằng số có</th><th>khớp bộ gấp của ta?</th></tr>
+          <tr><td><code>2*3+x</code></td><td><b>6</b></td><td>✓</td></tr>
+          <tr><td><code>x+2+3</code></td><td>2 và 3, <b>không</b> có 5</td><td>✓</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Thêm một cách nữa, ta hỏi trình biên dịch thật của một ngôn ngữ phổ biến. Với 2 nhân 3 cộng x, bảng hằng số của nó chứa sẵn số 6. Còn với x cộng 2 cộng 3, bảng chỉ có 2 và 3, không có số 5, vì không nút nào có hai con đều là số, đúng như bộ gấp đơn giản của ta."
+
+  # ───────────────────────── 5. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp"
+    checks:
+      - "round(10 - 1 + 1 / 10, 6) == 9.1 and 10 - 8 + 8 / 2 == 6"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Dựa vào hành vi không xác định trong C <b class="red">(nguy hiểm)</b>
+          <br><span class="note">Tràn số nguyên có dấu là hành vi không xác định (C17 mục 6.5). Trình biên dịch được phép giả định nó không xảy ra, nên có thể thay <code>if (x + 1 &gt; x)</code> bằng “luôn đúng” — phép kiểm tràn của bạn biến mất.</span></div>
+        say: "Lỗi thứ nhất, dựa vào hành vi không xác định trong ngôn ngữ C. Tràn số nguyên có dấu là hành vi không xác định. Trình biên dịch được phép giả định nó không xảy ra, nên có thể thay điều kiện x cộng 1 lớn hơn x bằng luôn đúng, và phép kiểm tràn của bạn biến mất."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Tự tay đổi nhóm phép tính số thực để “tối ưu” <b class="red">(sai)</b>
+          <br><span class="note">Như vừa thấy, đổi nhóm làm đổi kết quả. Trình biên dịch chỉ làm vậy khi bạn bật tuỳ chọn cho phép rõ ràng.</span></div>
+        say: "Lỗi thứ hai, tự tay đổi nhóm phép tính số thực để tối ưu. Như vừa thấy, đổi nhóm làm đổi kết quả, và trình biên dịch chỉ làm vậy khi bạn bật một tuỳ chọn cho phép rõ ràng."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Viết mã khó đọc để “giúp” trình biên dịch <b class="red">(lãng phí)</b>
+          <br><span class="note">Gấp hằng số, đưa ra ngoài vòng lặp, loại mã chết là việc trình biên dịch tự làm. Viết cho người đọc; đo trước khi tối ưu tay.</span></div>
+        say: "Lỗi thứ ba, viết mã khó đọc để giúp trình biên dịch. Gấp hằng số, đưa ra ngoài vòng lặp, loại mã chết là việc trình biên dịch tự làm, nên hãy viết cho người đọc, và đo trước khi tối ưu bằng tay."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Tối ưu chỗ mình <b>đoán</b> là chậm, không đo trước.</div>
+          <p>Chương trình chạy 10 giây: hàm A chiếm 1 giây, hàm B chiếm 8 giây.</p>
+          <table class="t"><tr><th>làm gì</th><th>phần được tăng tốc</th><th>tổng thời gian</th></tr>
+          <tr><td>A nhanh gấp 10</td><td>1 → 0,1 giây</td><td>$10 - 1 + 0{,}1 = 9{,}1$ giây</td></tr>
+          <tr><td>B nhanh gấp 2</td><td>8 → 4 giây</td><td>$10 - 8 + 4 = \hl{6}$ giây</td></tr></table>
+        focus: [1, 2, "3.2", "3.3", 0]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, tối ưu chỗ mình đoán là chậm mà không đo trước. Giả sử chương trình chạy 10 giây, trong đó hàm A chiếm 1 giây và hàm B chiếm 8 giây. Làm cho A nhanh gấp 10 lần thì A còn không phẩy một giây, tổng thời gian chỉ giảm xuống 9 phẩy 1 giây. Chỉ làm cho B nhanh gấp 2 lần thì B còn 4 giây, tổng thời gian giảm xuống 6 giây. Người có kinh nghiệm đo xem thời gian thật sự nằm ở đâu, rồi mới chọn chỗ để tối ưu."
+
+  # ───────────────────────── 6. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.const_fold(alg.parse_expr('4*5-x*2')) == ('-', 20, ('*', 'x', 2))"
+      - "alg.const_fold(alg.parse_expr('(1+2)*(3+4)')) == 21"
+    steps:
+      - show: |
+          <p>Gấp hằng số (bộ gấp đơn giản, không đổi nhóm):</p>
+          <table class="t"><tr><th>câu</th><th>biểu thức</th></tr>
+          <tr><td>1</td><td><code>4*5-x*2</code></td></tr>
+          <tr><td>2</td><td><code>(1+2)*(3+4)</code></td></tr></table>
+        focus: [1, "2.2", "2.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm, hãy gấp hằng số bằng bộ gấp đơn giản, không đổi nhóm. Biểu thức một là 4 nhân 5 trừ x nhân 2. Biểu thức hai là 1 cộng 2 trong ngoặc, nhân 3 cộng 4 trong ngoặc. Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>① cây <code>(- (* 4 5) (* x 2))</code>, đi từ dưới lên</th><th>kết quả</th></tr>
+          <tr><td>nút <code>(* 4 5)</code>: hai con là số → gấp</td><td>20</td></tr>
+          <tr><td>nút <code>(* x 2)</code>: có biến x → giữ</td><td><code>(* x 2)</code></td></tr>
+          <tr><td>gốc <code>-</code>: một con chưa là số → giữ</td><td><b class="red"><code>(- 20 (* x 2))</code></b></td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Đáp án biểu thức một, dựng cây rồi đi từ dưới lên. Nút 4 nhân 5 có hai con đều là số, nên gấp thành 20. Nút x nhân 2 có biến x, nên giữ nguyên. Gốc là phép trừ, có một con chưa phải là số, nên cũng giữ, kết quả là 20 trừ x nhân 2."
+      - show: |
+          <table class="t"><tr><th>② cây <code>(* (+ 1 2) (+ 3 4))</code></th><th>kết quả</th></tr>
+          <tr><td>nút <code>(+ 1 2)</code></td><td>3</td></tr>
+          <tr><td>nút <code>(+ 3 4)</code></td><td>7</td></tr>
+          <tr><td>gốc: bây giờ hai con là 3 và 7 → gấp</td><td>$3 \times 7 = \hl{21}$</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Biểu thức hai, cũng đi từ dưới lên. Nút 1 cộng 2 gấp thành 3. Nút 3 cộng 4 gấp thành 7. Sau đó gốc có hai con đều là số, nên gấp tiếp thành 3 nhân 7 bằng 21, ngay lúc biên dịch."
+
+  # ───────────────────────── 7. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">gấp hằng số: từ dưới lên</span><span class="a">→</span>
+          <span class="n">đưa bất biến ra ngoài vòng lặp</span><span class="a">→</span>
+          <span class="n">loại mã chết</span><span class="a">→</span>
+          <span class="n">luôn giữ nguyên hành vi</span></div>
+        say: "Tổng kết lại, gấp hằng số đi từ dưới lên, phép tính bất biến được đưa ra ngoài vòng lặp, mã chết bị loại bỏ, và mọi phép tối ưu phải giữ nguyên hành vi."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> một phép biến đổi chỉ an toàn khi bạn chứng minh được nó không đổi kết quả — với <b>mọi</b> đầu vào, kể cả trường hợp biên như tràn số và làm tròn.</div>
+        say: "Điều cần mang theo, một phép biến đổi chỉ an toàn khi bạn chứng minh được nó không đổi kết quả với mọi đầu vào, kể cả các trường hợp biên như tràn số và làm tròn."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 12): <b>lập trình hàm</b>, dữ liệu bất biến và đồng thời an toàn.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 12, ta học lập trình hàm, dữ liệu bất biến, và cách chạy đồng thời một cách an toàn. Hẹn gặp bạn ở bài tiếp theo."

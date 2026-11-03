@@ -1,0 +1,239 @@
+id: L11
+course: NET
+series: "NET · Mạng máy tính"
+title: "Bài 11 — Điều khiển tắc nghẽn TCP: khởi động chậm và AIMD"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/net.yaml L11; audit/net/verify_net.py L11; V. Jacobson (1988), “Congestion Avoidance and Control”; RFC 5681"
+assumes: [arith, power, dots]
+# Quy ước: cửa sổ tính bằng số gói, theo từng lượt đi về (vòng). Khởi động chậm: nhân đôi nhưng không vượt ngưỡng; sau ngưỡng +1
+#   mỗi vòng. Mất gói phát hiện bằng ba xác nhận trùng: ngưỡng mới = cửa sổ / 2; bản Reno đặt cửa sổ = ngưỡng mới, bản Tahoe đặt về 1.
+#   Tên Reno, Tahoe, AIMD chỉ trên màn hình; lời đọc nói “đường liền / đường đứt”, “tăng cộng, giảm nhân”. Số liệu từ alg.cwnd_trace;
+#   biểu đồ audit/net/cwnd_svg.py (đã chạy validate_palette.js của skill dataviz).
+objectives:
+  - "Vẽ cửa sổ tắc nghẽn theo vòng: khởi động chậm rồi tăng cộng"
+  - "Giải thích tăng cộng – giảm nhân khi mất gói"
+  - "Phân biệt hai cách phản ứng với mất gói"
+asr_reviewed:
+  - {sentence: "Khi nghẽn, gói rơi hàng loạt, nên phải rút mạnh để hàng đợi kịp thoát.", reason: "ASR chép “Khi nhén, gói trơi … trúc mạnh để hàng đời kịp thoát”: nghẽn/nhén, rơi/trơi, rút/trúc (đổi r → tr như TOC “Rai” → “trai”), đợi/đời — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Khi êm, tăng chậm để dò dần phần dư, không gây nghẽn đột ngột.", reason: "ASR chép “khi em tăng chậm … không gây ngãng đột ngục”: êm/em, nghẽn/ngãng, ngột/ngục — nhầm vần của ASR; “nghẽn” ở các câu khác của L11 chép đúng — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Lỗi thứ hai, lẫn cửa sổ tắc nghẽn với cửa sổ của bên nhận.", reason: "ASR chép “Lội thứ 2, lẫn cửa sổ tắt ngạn với cửa sổ của bên nhận”: lỗi/lội, tắc nghẽn/tắt ngạn — nhầm âm cuối và vần; “cửa sổ tắc nghẽn” chép đúng ở các câu khác của L11 — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Không ai biết mạng đang đông cỡ nào"
+    steps:
+      - show: |
+          <p>Bài trước: cửa sổ phải đủ lớn để lấp đường. Nhưng đường đi qua hàng chục bộ định tuyến dùng chung với hàng triệu người — bên gửi không biết chỗ nào đang nghẽn.</p>
+          <p>Gửi quá nhiều thì hàng đợi tràn, gói rơi, ai cũng phải gửi lại — mạng có thể <b>sụp</b>, như đã xảy ra năm 1986.</p>
+          <div class="box key">Hôm nay: TCP tự dò: khởi động chậm, tăng cộng – giảm nhân, và phản ứng khi mất gói.</div>
+        focus: [1, 1, 2, 3]
+        say: "Chào bạn, ở bài trước, cửa sổ phải đủ lớn để lấp đầy đường truyền. Nhưng đường đi qua hàng chục bộ định tuyến dùng chung với hàng triệu người, và bên gửi không biết chỗ nào đang nghẽn. Gửi quá nhiều thì hàng đợi tràn, gói rơi, ai cũng phải gửi lại, và mạng có thể sụp, như đã xảy ra năm 1986. Hôm nay ta học cách TCP tự dò, gồm khởi động chậm, tăng cộng, giảm nhân, và phản ứng khi mất gói."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: nhân đôi, cộng dần và cộng một dãy"
+    checks:
+      - "[2 ** k for k in range(5)] == [1, 2, 4, 8, 16] and 20 - 16 == 4"
+      - "10 + 11 + 12 + 13 + 14 == 60 and 5 * (10 + 14) / 2 == 60"
+      - "1 + 2 + 4 + 8 == 15 and 16 - 1 == 15"
+    steps:
+      - show: |
+          <table class="t"><tr><th>phép</th><th>dãy số</th><th>đếm bước</th></tr>
+          <tr><td>nhân đôi từ 1</td><td>1, 2, 4, 8, 16</td><td>4 lần nhân đôi: $2^4 = 16$</td></tr>
+          <tr><td>cộng 1 mỗi bước</td><td>16, 17, 18, 19, 20</td><td>$20 - 16 = 4$ bước</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3"]
+        say: "Trước khi vào bài, ta ôn hai cách một con số lớn dần. Cách thứ nhất là nhân đôi, bắt đầu từ 1 ta được 1, 2, 4, 8, 16. Sau 4 lần nhân đôi ta có 2 mũ 4, bằng 16, nên số lần nhân đôi chính là số mũ. Cách thứ hai là cộng 1 mỗi bước, từ 16 lên 20 mất 20 trừ 16, bằng 4 bước."
+      - show: |
+          <table class="t"><tr><th>cộng một dãy</th><th>cộng thẳng</th><th>cách nhanh</th></tr>
+          <tr><td>tăng đều 1</td><td>$10 + 11 + 12 + 13 + 14 = 60$</td><td>$5 \times (10 + 14) / 2 = 60$</td></tr>
+          <tr><td>nhân đôi</td><td>$1 + 2 + 4 + 8 = 15$</td><td>$16 - 1 = 15$</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.3"]
+        say: "Ta cũng sẽ cần cộng một dãy số để đếm tổng số gói đã gửi. Với dãy tăng đều 10, 11, 12, 13, 14, cộng thẳng được 60. Cách nhanh là lấy số số hạng nhân với trung bình của số đầu và số cuối, 5 nhân 24 chia 2, cũng bằng 60. Với dãy nhân đôi 1, 2, 4, 8, cộng thẳng được 15. Cách nhanh là lấy số kế tiếp của dãy trừ 1, tức 16 trừ 1, bằng 15."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: cửa sổ tắc nghẽn và ngưỡng"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thuật ngữ</th><th>nghĩa</th></tr>
+          <tr><td><b>cửa sổ tắc nghẽn</b></td><td>số gói bên gửi cho phép “đang bay” — TCP tự đặt theo dấu hiệu nghẽn</td></tr>
+          <tr><td><b>ngưỡng</b></td><td>dưới ngưỡng: khởi động chậm; từ ngưỡng trở lên: tăng cộng</td></tr>
+          <tr><td><b>dấu hiệu mất gói</b></td><td>ba xác nhận trùng nhau (gói sau đến mà gói trước thiếu), hoặc hết giờ chờ</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Ba thuật ngữ cần nắm. Cửa sổ tắc nghẽn là số gói bên gửi cho phép đang bay, TCP tự đặt con số này theo dấu hiệu nghẽn. Ngưỡng là ranh giới, dưới ngưỡng thì khởi động chậm, từ ngưỡng trở lên thì tăng cộng. Dấu hiệu mất gói là ba xác nhận trùng nhau, nghĩa là gói sau đến mà gói trước thiếu, hoặc hết giờ chờ."
+
+  # ───────────────────────── 3. KHỞI ĐỘNG CHẬM ─────────────────────────
+  - id: slowstart
+    kind: concept
+    title: "Khởi động chậm rồi tăng cộng"
+    checks:
+      - "alg.cwnd_trace(8, 16) == [1, 2, 4, 8, 16, 17, 18, 19]"
+    steps:
+      - show: |
+          <div>{{CWND_SS}}</div>
+          <p>Bắt đầu 1 gói; mỗi vòng <b>nhân đôi</b>: 1, 2, 4, 8, 16. Chạm ngưỡng 16 thì chuyển sang <b>+1 mỗi vòng</b>: 17, 18, 19.</p>
+        focus: [1, 2, 2]
+        say: "Cửa sổ bắt đầu từ 1 gói, và mỗi vòng nhân đôi, 1, 2, 4, 8, rồi 16. Chạm ngưỡng 16 thì TCP chuyển sang tăng thêm 1 gói mỗi vòng, 17, 18, 19. Tên gọi khởi động chậm là so với việc gửi cả cửa sổ ngay từ đầu, chứ thật ra nó tăng theo hàm mũ."
+
+  # ───────────────────────── 4. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Mất gói ở cửa sổ 20"
+    checks:
+      - "alg.cwnd_trace(14, 16, loss_at=(8,)) == [1, 2, 4, 8, 16, 17, 18, 19, 20, 10, 11, 12, 13, 14]"
+      - "alg.cwnd_trace(14, 16, loss_at=(8,), variant='tahoe')[8:] == [20, 1, 2, 4, 8, 10]"
+      - "20 // 2 == 10"
+      - "alg.cwnd_trace(9, 16) == [1, 2, 4, 8, 16, 17, 18, 19, 20] and 2 ** 4 == 16 and 16 + 4 == 20"
+      - "alg.cwnd_trace(20, 16, loss_at=(8,))[9] == 10 and alg.cwnd_trace(20, 16, loss_at=(8,))[19] == 20 and 9 + (20 - 10) == 19 and 20 not in alg.cwnd_trace(20, 16, loss_at=(8,))[9:19]"
+      - "alg.cwnd_trace(14, 16, loss_at=(8,))[9:14] == [10, 11, 12, 13, 14] and sum(alg.cwnd_trace(14, 16, loss_at=(8,))[9:14]) == 60"
+      - "alg.cwnd_trace(14, 16, loss_at=(8,), variant='tahoe')[9:14] == [1, 2, 4, 8, 10] and sum(alg.cwnd_trace(14, 16, loss_at=(8,), variant='tahoe')[9:14]) == 25"
+      - "60 - 25 == 35 and 35 > 60 / 2"
+    steps:
+      - show: |
+          <div>{{CWND_LOSS}}</div>
+          <ul><li>Vòng 8, cửa sổ 20: thấy ba xác nhận trùng → ngưỡng mới $= 20 / 2 = 10$.</li>
+          <li>Đường liền: cửa sổ về đúng 10 rồi tăng cộng 11, 12, … — <b>giảm nhân, tăng cộng</b>.</li>
+          <li>Đường đứt: cửa sổ về 1, khởi động chậm lại 1, 2, 4, 8, 10, rồi mới tăng cộng.</li></ul>
+        focus: [1, "2.1", "2.2", "2.3"]
+        say: "Biểu đồ có hai đường. Ở vòng 8, cửa sổ đang là 20 thì bên gửi thấy ba xác nhận trùng, nên đặt ngưỡng mới bằng 20 chia 2, là 10. Ở đường liền, cửa sổ về đúng 10 rồi tăng cộng 11, 12, đó là giảm nhân và tăng cộng. Ở đường đứt, cửa sổ về hẳn 1, khởi động chậm lại 1, 2, 4, 8, rồi 10, sau đó mới tăng cộng."
+      - clear: true
+        show: |
+          <p><b>Bước 1 — vì sao mất ở vòng 8:</b> đếm lại từng giai đoạn.</p>
+          <table class="t"><tr><th>giai đoạn</th><th>vòng</th><th>cửa sổ</th><th>phép</th></tr>
+          <tr><td>khởi động chậm</td><td>0 tới 4</td><td>1, 2, 4, 8, 16</td><td>4 lần nhân đôi: $2^4 = 16$</td></tr>
+          <tr><td>tăng cộng</td><td>5 tới 8</td><td>17, 18, 19, 20</td><td>4 lần cộng 1: $16 + 4 = 20$</td></tr></table>
+        focus: [1, "2.2", "2.3", 0]
+        say: "Bây giờ ta đi lại ví dụ từng bước một. Bước một, khởi động chậm chạy từ vòng 0 tới vòng 4, nhân đôi 4 lần từ 1 lên 16, đúng bằng ngưỡng. Từ vòng 5 tới vòng 8, cửa sổ cộng 1 mỗi vòng, 4 lần, từ 16 lên 20. Vậy cửa sổ đạt 20 đúng ở vòng 8, chỗ mạng báo mất gói."
+      - show: |
+          <p><b>Bước 2 — đường liền mất bao lâu để lấy lại 20:</b> vòng 9 có cửa sổ 10, mỗi vòng cộng 1.</p>
+          $$9 + (20 - 10) = \hl{19}$$
+        focus: [1, 1, 2]
+        say: "Bước hai, hỏi đường liền mất bao lâu để lấy lại mức 20. Ở vòng 9 cửa sổ là 10, và từ đây mỗi vòng chỉ cộng 1. Cần thêm 20 trừ 10, bằng 10 vòng, nên phải tới vòng 19 cửa sổ mới lại bằng 20."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — năm vòng ngay sau khi mất gói</b> (vòng 9 tới 13):</p>
+          <table class="t"><tr><th>vòng</th><th>9</th><th>10</th><th>11</th><th>12</th><th>13</th><th>tổng số gói</th></tr>
+          <tr><td>đường liền</td><td>10</td><td>11</td><td>12</td><td>13</td><td>14</td><td>$\hl{60}$</td></tr>
+          <tr><td>đường đứt</td><td>1</td><td>2</td><td>4</td><td>8</td><td>10</td><td>$\hl{25}$</td></tr></table>
+        focus: [1, "2.2", "2.3", 0]
+        say: "Bước ba, so hai đường trong năm vòng ngay sau khi mất gói, từ vòng 9 tới vòng 13. Đường liền đi 10, 11, 12, 13, 14, cộng lại được 60 gói. Đường đứt đi 1, 2, 4, 8, rồi chỉ lên 10 thay vì 16 vì chạm ngưỡng mới, cộng lại chỉ 25 gói. Mỗi số trong bảng là cửa sổ của một vòng, tức số gói được gửi trong một lượt đi về."
+      - show: |
+          <p><b>Bước 4 — chênh lệch:</b></p>
+          $$60 - 25 = \hl{35} \text{ gói}$$
+          <p>Đường đứt gửi ít hơn quá nửa trong năm vòng đó — vì thế bản đường liền giữ cửa sổ ở nửa thay vì về 1.</p>
+        focus: [2, 3, 3]
+        say: "Bước bốn, lấy 60 trừ 25, đường đứt gửi ít hơn 35 gói chỉ trong năm vòng. Con số 35 lớn hơn một nửa của 60, nghĩa là đường đứt mất quá nửa lượng dữ liệu của giai đoạn này. Đó là lý do bản đường liền chỉ giảm cửa sổ xuống một nửa khi thấy ba xác nhận trùng, thay vì về hẳn 1."
+      - clear: true
+        show: |
+          <div class="box key">Lâu dài, cửa sổ tạo thành hình <b>răng cưa</b>: leo dần lên tới khi mạng báo nghẽn, rồi tụt một nửa.</div>
+        say: "Về lâu dài, cửa sổ tạo thành hình răng cưa, leo dần lên cho tới khi mạng báo nghẽn, rồi tụt xuống một nửa."
+
+  # ───────────────────────── 5. VÌ SAO AIMD ─────────────────────────
+  - id: why
+    kind: concept
+    title: "Vì sao tăng cộng, giảm nhân"
+    steps:
+      - show: |
+          <ul><li><b>Giảm mạnh</b> khi nghẽn: nghẽn thì gói rơi hàng loạt, phải rút nhanh để hàng đợi kịp thoát.</li>
+          <li><b>Tăng chậm</b> khi êm: dò dần phần dư, không gây nghẽn đột ngột.</li>
+          <li>Hai luồng chia chung một đường, cùng làm như vậy, sẽ dần tiến tới <b>chia đều</b> băng thông: mỗi lần nghẽn, luồng lớn mất nhiều hơn luồng nhỏ.</li></ul>
+        focus: ["1.1", "1.2", "1.3", "1.3"]
+        say: "Vì sao lại tăng cộng, giảm nhân? Khi nghẽn, gói rơi hàng loạt, nên phải rút mạnh để hàng đợi kịp thoát. Khi êm, tăng chậm để dò dần phần dư, không gây nghẽn đột ngột. Hai luồng dùng chung một đường mà cùng làm như vậy sẽ dần chia đều băng thông, vì mỗi lần nghẽn, luồng lớn mất nhiều hơn luồng nhỏ."
+
+  # ───────────────────────── 6. TỰ KIỂM ─────────────────────────
+  - id: verify
+    kind: check
+    title: "Tự kiểm"
+    checks:
+      - "5 * (10 + 14) / 2 == 60 and (16 - 1) + 10 == 25"
+    steps:
+      - show: |
+          <ol><li><b>Dưới ngưỡng</b> mỗi bước gấp đôi; <b>từ ngưỡng</b> mỗi bước cộng 1 — kiểm từng cặp số liên tiếp.</li>
+          <li><b>Khi mất gói:</b> ngưỡng mới bằng nửa cửa sổ <b>lúc mất</b>, không phải nửa ngưỡng cũ.</li>
+          <li><b>Hai đường</b> trùng nhau cho tới vòng mất gói, rồi mới tách ra.</li></ol>
+        focus: [0, "1.1", "1.2", "1.3"]
+        say: "Tự kiểm bằng ba cách. Một, dưới ngưỡng mỗi bước gấp đôi, từ ngưỡng trở lên mỗi bước cộng 1, hãy kiểm từng cặp số liên tiếp. Hai, khi mất gói, ngưỡng mới bằng nửa cửa sổ lúc mất, không phải nửa ngưỡng cũ. Ba, hai đường trùng nhau cho tới vòng mất gói, rồi mới tách ra."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>tổng ở bước 3</th><th>cộng thẳng</th><th>cách nhanh (đường khác)</th></tr>
+          <tr><td>đường liền</td><td>60</td><td>$5 \times (10 + 14) / 2 = 60$ ✓</td></tr>
+          <tr><td>đường đứt</td><td>25</td><td>$(16 - 1) + 10 = 25$ ✓</td></tr></table>
+        focus: [0, "1.2", "1.3"]
+        say: "Kiểm hai tổng ở bước ba bằng một đường khác, dùng hai cách cộng nhanh vừa ôn. Đường liền là dãy tăng đều 5 số từ 10 tới 14, nên tổng bằng 5 nhân 24 chia 2, đúng 60. Đường đứt là dãy nhân đôi 1, 2, 4, 8, có tổng 16 trừ 1 bằng 15, cộng thêm vòng cuối 10, được 25, khớp với phép cộng thẳng."
+
+  # ───────────────────────── 7. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi người mới hay mắc"
+    checks:
+      - "20 // 2 == 10 and 16 // 2 == 8"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Nghĩ “khởi động chậm” là tăng chậm <b class="red">(sai)</b>
+          <br><span class="note">Nó nhân đôi mỗi vòng — tăng theo hàm mũ. “Chậm” là so với gửi cả cửa sổ ngay.</span></div>
+        say: "Lỗi thứ nhất, nghĩ khởi động chậm là tăng chậm. Nó nhân đôi mỗi vòng, tức tăng theo hàm mũ, chữ chậm chỉ là so với việc gửi cả cửa sổ ngay lập tức."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Lẫn cửa sổ tắc nghẽn với cửa sổ của bên nhận <b class="red">(sai)</b>
+          <br><span class="note">Bên nhận báo nó còn chứa được bao nhiêu; mạng giới hạn qua cửa sổ tắc nghẽn. Bên gửi dùng số <b>nhỏ hơn</b> trong hai số.</span></div>
+        say: "Lỗi thứ hai, lẫn cửa sổ tắc nghẽn với cửa sổ của bên nhận. Bên nhận báo nó còn chứa được bao nhiêu, còn mạng giới hạn qua cửa sổ tắc nghẽn, và bên gửi dùng số nhỏ hơn trong hai số."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Coi mọi gói mất đều do nghẽn <b class="red">(không luôn đúng)</b>
+          <br><span class="note">Trên sóng không dây, gói có thể mất vì nhiễu. TCP vẫn giảm cửa sổ, nên chạy chậm hơn mức đường truyền cho phép.</span></div>
+        say: "Lỗi thứ ba, coi mọi gói mất đều do nghẽn. Trên sóng không dây, gói có thể mất vì nhiễu, mà TCP vẫn giảm cửa sổ, nên chạy chậm hơn mức đường truyền cho phép."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Tính ngưỡng mới bằng nửa ngưỡng cũ <b class="red">(sai)</b>
+          <br><span class="note">Ngưỡng mới = nửa <b>cửa sổ lúc mất gói</b>: mất ở 20 thì ngưỡng mới là 10, không phải 8.</span></div>
+          <table class="t"><tr><th>cửa sổ lúc mất</th><th>ngưỡng cũ</th><th>đúng: 20 / 2</th><th>sai: 16 / 2</th></tr>
+          <tr><td>20</td><td>16</td><td><b>10</b></td><td class="red">8</td></tr></table>
+        focus: [1, 2]
+        say: "Lỗi thứ tư, tính ngưỡng mới bằng nửa ngưỡng cũ. Ngưỡng mới bằng nửa cửa sổ lúc mất gói, mất ở 20 thì ngưỡng mới là 10, không phải 8."
+
+  # ───────────────────────── 8. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.cwnd_trace(10, 8, loss_at=(7,)) == [1, 2, 4, 8, 9, 10, 11, 12, 6, 7]"
+      - "2 ** 3 == 8 and 8 + 4 == 12 and 12 // 2 == 6 and len(alg.cwnd_trace(10, 8, loss_at=(7,))) == 10"
+    steps:
+      - show: |
+          <p>Ngưỡng ban đầu là 8. Ở vòng 7 (cửa sổ đang 12), thấy ba xác nhận trùng; dùng cách “đường liền”.</p>
+          <p>Viết cửa sổ của các vòng 0 tới 9.</p>
+        focus: [0, 1, 1, 2, 0]
+        say: "Bây giờ đến lượt bạn tự làm. Ngưỡng ban đầu là 8. Ở vòng 7, khi cửa sổ đang là 12, bên gửi thấy ba xác nhận trùng, và dùng cách của đường liền. Hãy viết cửa sổ của các vòng từ 0 tới 9. Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <table class="t"><tr><th>vòng</th><th>0 tới 3</th><th>4 tới 7</th></tr>
+          <tr><td>cửa sổ</td><td>1, 2, 4, 8 (chạm ngưỡng 8)</td><td>9, 10, 11, 12 (mất ở vòng 7)</td></tr></table>
+        focus: [1, 1]
+        say: "Đáp án, khởi động chậm cho 1, 2, 4, 8, chạm ngưỡng, rồi tăng cộng 9, 10, 11, 12. Kiểm lại vị trí, ba lần nhân đôi đưa cửa sổ lên 8 ở vòng 3, rồi bốn lần cộng 1 đưa lên 12 đúng ở vòng 7."
+      - show: |
+          $$\text{ngưỡng mới} = 12 / 2 = 6$$
+          <p>Vòng 8: 6; vòng 9: 7. Cả dãy: $\hl{1, 2, 4, 8, 9, 10, 11, 12, 6, 7}$.</p>
+        focus: [1, 2]
+        say: "Mất gói ở 12 nên ngưỡng mới là 6, cửa sổ về 6 rồi lên 7. Ghép lại, mười vòng từ 0 tới 9 là 1, 2, 4, 8, 9, 10, 11, 12, 6 và 7."
+
+  # ───────────────────────── 9. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">khởi động chậm: nhân đôi</span><span class="a">→</span>
+          <span class="n">từ ngưỡng: +1 mỗi vòng</span><span class="a">→</span>
+          <span class="n">mất gói: ngưỡng = cửa sổ / 2</span><span class="a">→</span>
+          <span class="n">răng cưa, chia đều</span></div>
+        say: "Tổng kết lại, khởi động chậm nhân đôi cửa sổ, từ ngưỡng thì cộng 1 mỗi vòng. Mất gói thì ngưỡng mới bằng nửa cửa sổ, và cửa sổ tạo hình răng cưa, giúp các luồng dần chia đều đường truyền."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> khi không nhìn thấy tài nguyên chung, hãy dò từ từ và lùi nhanh — một quy tắc đơn giản cho mọi bên cũng tạo ra công bằng.</div>
+        say: "Điều cần mang theo, khi không nhìn thấy tài nguyên chung, hãy dò từ từ và lùi thật nhanh, một quy tắc đơn giản cho mọi bên cũng tạo ra sự công bằng."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 12): lên tầng ứng dụng — <b>DNS</b> tìm địa chỉ từ tên miền, và <b>HTTP</b> tải trang web.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 12, ta lên tầng ứng dụng, xem DNS tìm địa chỉ từ tên miền, và HTTP tải một trang web. Hẹn gặp bạn ở bài tiếp theo."

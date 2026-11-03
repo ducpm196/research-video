@@ -1,0 +1,331 @@
+# ═══ BÀI TÌNH HUỐNG (phương pháp) — khoá CAS mở bằng cách đọc một sự cố như người điều tra; case-lessons.md §1–§4 ═══
+id: L00
+course: CAS
+series: "CAS · Tình huống chuyên gia"
+title: "Bài 0 — Phương pháp hậu kiểm không đổ lỗi: dòng thời gian, nguyên nhân góp phần, lớp phòng vệ"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/cas.yaml L00; audit/cas/sources_L00.md (câu trích nguyên văn, đọc 2026-11-02); audit/cas/verify_cas.py L00; audit/verify_plan_curricula.py CAS:L00; J. Reason, Human error: models and management, BMJ 320:768–770, 18/3/2000 (bản PMC1117770) [R00]; Google, Site Reliability Engineering (O'Reilly 2016, bản web sre.google 2017), chương 15 “Postmortem Culture: Learning from Failure” và phụ lục D “Example Postmortem” (sự cố giả định) [SRE]; Cloudflare, Details of the Cloudflare outage on July 2, 2019, 12/7/2019 [CF19]"
+assumes: [arith, frac, power]
+# Quy ước: “hậu kiểm” = bản viết sau sự cố (postmortem); “lớp phòng vệ” = hàng rào, cơ chế bảo vệ (defences, barriers, safeguards
+#   theo [R00]); “lọt” = một lỗi đi qua một lớp mà không bị chặn. Tỉ lệ lọt 10% mỗi lớp và 1000 lỗi là SỐ MINH HOẠ (giáo án CAS:L00).
+#   Bản hậu kiểm mẫu ở phụ lục D của [SRE] là sự cố GIẢ ĐỊNH do sách dựng ra — bài nói rõ điều này; mọi giờ và con số của nó là CITED,
+#   phép trừ thời gian là VER. Lời đọc không nói “Shakespeare”, “SRE”, “Cloudflare” (chưa dò / không cần): nói “dịch vụ tìm thơ”,
+#   “sách vận hành hệ thống tin cậy của Google”, “bài hậu kiểm năm 2019 của một công ty mạng”. Không nêu tên người trong bản mẫu.
+objectives:
+  - "Dựng dòng thời gian từ dữ kiện có giờ, tách khỏi suy đoán, và tính các khoảng thời gian then chốt"
+  - "Tìm nhiều nguyên nhân góp phần thay vì một “nguyên nhân gốc”"
+  - "Tính xác suất một lỗi lọt qua nhiều lớp phòng vệ, khi các lớp độc lập và khi chúng cùng dựa một giả định"
+  - "Chọn việc cần làm ở mức hệ thống, không dừng ở “cẩn thận hơn”"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Một sự cố, hai bản báo cáo"
+    steps:
+      - show: |
+          <p>Cùng một sự cố, hai nhóm viết hai bản báo cáo (số minh hoạ):</p>
+          <table class="t"><tr><th></th><th>bản A</th><th>bản B</th></tr>
+          <tr><td>nguyên nhân</td><td>“kỹ sư trực gõ sai một lệnh”</td><td>4 nguyên nhân góp phần, trong đó công cụ cho phép một lệnh gỡ quá nhiều máy</td></tr>
+          <tr><td>việc cần làm</td><td>nhắc nhở, yêu cầu cẩn thận hơn</td><td>6 việc, mỗi việc có người phụ trách và hạn chót</td></tr>
+          <tr><td>lần sau</td><td>người khác gõ sai, sự cố lặp lại</td><td>lệnh gỡ quá nhiều máy bị công cụ chặn lại</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Chào bạn, hãy hình dung một sự cố được hai nhóm viết thành hai bản báo cáo, với số minh hoạ. Bản A ghi một kỹ sư trực gõ sai lệnh, còn bản B ghi bốn nguyên nhân góp phần, trong đó công cụ cho phép gỡ quá nhiều máy. Bản A chỉ yêu cầu cẩn thận hơn, còn bản B có sáu việc, mỗi việc có người phụ trách. Lần sau, với bản A sự cố lặp lại, còn với bản B công cụ chặn lệnh đó."
+      - clear: true
+        show: |
+          <div class="box warn">“Đổ lỗi cho cá nhân thoả mãn về cảm xúc hơn là nhắm vào tổ chức.” <span class="note">— J. Reason, tạp chí y khoa BMJ, 2000</span></div>
+          <div class="box warn">“Tìm ra một nguyên nhân gốc duy nhất thì dễ chịu, nhưng có thể che khuất sự thật.” <span class="note">— bài hậu kiểm của Cloudflare, 2019</span></div>
+          <div class="box key">Hôm nay: ba công cụ của người điều tra — <b>dòng thời gian</b>, <b>nguyên nhân góp phần</b>, <b>lớp phòng vệ</b> — và một phép tính: vì sao ba lớp, mỗi lớp lọt 10%, không phải lúc nào cũng chỉ lọt 0,1%.</div>
+        focus: [1, 2, 3]
+        say: "Một bài báo y khoa năm 2000 viết rằng đổ lỗi cho cá nhân thoả mãn cảm xúc hơn là nhắm vào tổ chức. Bài hậu kiểm năm 2019 của một công ty mạng nhắc, một nguyên nhân gốc duy nhất thì dễ chịu, nhưng có thể che khuất sự thật. Hôm nay ta học ba công cụ của người điều tra, và tính vì sao ba lớp, mỗi lớp lọt 10 phần trăm, không phải lúc nào cũng chỉ lọt 0 phẩy 1 phần trăm."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại ba phép tính sẽ dùng"
+    checks:
+      - "(16 * 60 + 0) - (14 * 60 + 54) == 66 == (60 - 54) + 60"
+      - "abs(0.1 * 0.1 - 0.01) < 1e-12 and abs(0.1 ** 3 - 0.001) < 1e-12"
+      - "0.001 * 100 == 0.1 and 0.01 * 100 == 1 and 1000 * 0.1 == 100"
+    steps:
+      - show: |
+          <table class="t"><tr><th>phép tính</th><th>cách làm</th><th>ví dụ số</th></tr>
+          <tr><td>khoảng thời gian giữa hai mốc giờ</td><td>đếm tới tròn giờ, rồi cộng phần còn lại</td><td>14:54 → 15:00 là 6 phút, → 16:00 thêm 60 phút: <b>66 phút</b></td></tr>
+          <tr><td>hai việc <b>độc lập</b> cùng xảy ra</td><td>nhân hai tỉ lệ với nhau</td><td>mỗi việc 10% = 0,1; cả hai: 0,1 nhân 0,1 = <b>0,01</b></td></tr>
+          <tr><td>đổi số thập phân ra phần trăm</td><td>nhân 100</td><td>0,01 = 1%; 0,001 = <b>0,1%</b>; 10% của 1000 là 100</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Trước hết, ta ôn ba phép tính sẽ dùng. Khoảng thời gian thì đếm tới tròn giờ rồi cộng phần còn lại, như 14 giờ 54 tới 16 giờ là 6 cộng 60, bằng 66 phút. Hai việc độc lập, tức việc này không ảnh hưởng việc kia, cùng xảy ra với tỉ lệ bằng tích, như 0 phẩy 1 nhân 0 phẩy 1 bằng 0 phẩy 01. Đổi ra phần trăm thì nhân 100, nên 0 phẩy 001 là 0 phẩy 1 phần trăm."
+
+  # ───────────────────────── 3. NGÔN NGỮ ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Ngôn ngữ của người điều tra"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thuật ngữ</th><th>nghĩa</th></tr>
+          <tr><td><b>hậu kiểm</b></td><td>bản viết sau sự cố: điều đã xảy ra, tác động, cách đã khắc phục, các nguyên nhân, và việc cần làm để không lặp lại</td></tr>
+          <tr><td><b>dòng thời gian</b></td><td>chuỗi sự kiện có giờ, ghi từ dữ kiện; suy đoán ghi riêng</td></tr>
+          <tr><td><b>tác động</b></td><td>ảnh hưởng lên người dùng: bao lâu, bao nhiêu người, bao nhiêu yêu cầu hỏng</td></tr>
+          <tr><td><b>yếu tố kích hoạt</b></td><td>sự kiện làm lỗi lộ ra lúc đó — thường không phải nguyên nhân duy nhất</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bảng đầu có bốn thuật ngữ. Hậu kiểm là bản viết sau sự cố, gồm điều đã xảy ra, tác động, cách khắc phục, nguyên nhân, và việc cần làm. Dòng thời gian là chuỗi sự kiện có giờ ghi từ dữ kiện, suy đoán thì ghi riêng. Tác động là ảnh hưởng lên người dùng, bao lâu và bao nhiêu. Yếu tố kích hoạt là sự kiện làm lỗi lộ ra đúng lúc đó, thường không phải nguyên nhân duy nhất."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>thuật ngữ</th><th>nghĩa</th></tr>
+          <tr><td><b>nguyên nhân góp phần</b></td><td>mỗi điều kiện mà nếu thiếu nó, sự cố đã không xảy ra như vậy</td></tr>
+          <tr><td><b>lớp phòng vệ</b></td><td>cơ chế lẽ ra chặn lỗi trước khi thành hậu quả: kỹ thuật (cảnh báo, tự ngắt), con người, quy trình</td></tr>
+          <tr><td><b>lỗi chủ động</b></td><td>thao tác không an toàn của người đang trực tiếp vận hành; tác động ngay, thường ngắn</td></tr>
+          <tr><td><b>điều kiện tiềm ẩn</b></td><td>quyết định từ trước của người thiết kế, viết quy trình, quản lý; nằm im nhiều năm</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bảng thứ hai có thêm bốn thuật ngữ. Nguyên nhân góp phần là mỗi điều kiện mà thiếu nó thì sự cố đã không xảy ra như vậy. Lớp phòng vệ là cơ chế lẽ ra chặn được lỗi, bằng kỹ thuật, con người, hay quy trình. Lỗi chủ động là thao tác không an toàn của người đang vận hành, tác động ngay. Điều kiện tiềm ẩn là quyết định từ trước của người thiết kế hay quản lý, có thể nằm im nhiều năm."
+
+  # ───────────────────────── 4. HAI CÁCH NHÌN LỖI ─────────────────────────
+  - id: concept
+    kind: concept
+    title: "Hai cách nhìn lỗi: con người hay hệ thống"
+    steps:
+      - show: |
+          <table class="t"><tr><th>theo J. Reason (2000)</th><th>cách nhìn con người</th><th>cách nhìn hệ thống</th></tr>
+          <tr><td>nhìn vào</td><td>lỗi của cá nhân: quên, lơ đễnh, cẩu thả</td><td>điều kiện làm việc; lỗi là <b>hệ quả</b>, không phải nguyên nhân</td></tr>
+          <tr><td>biện pháp</td><td>áp phích nhắc nhở, viết thêm thủ tục, kỷ luật</td><td>xây <b>lớp phòng vệ</b> để chặn lỗi hoặc giảm hậu quả</td></tr>
+          <tr><td>điều bị bỏ qua</td><td>người giỏi nhất cũng mắc lỗi tồi tệ nhất; lỗi lặp lại theo khuôn mẫu</td><td>—</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Bài báo năm 2000 của một nhà tâm lý học nghiên cứu lỗi con người phân biệt hai cách nhìn. Cách nhìn con người thấy lỗi của cá nhân, còn cách nhìn hệ thống coi lỗi là hệ quả của điều kiện làm việc. Biện pháp của cách thứ nhất là áp phích, thủ tục và kỷ luật, còn cách thứ hai xây lớp phòng vệ. Cách thứ nhất bỏ qua rằng người giỏi nhất cũng mắc lỗi tồi tệ nhất, và lỗi lặp lại theo khuôn mẫu."
+      - show: |
+          <div class="box key">Ví von của bài báo: lỗi chủ động như <b>muỗi</b> — đập từng con, chúng vẫn tới. Cách tốt nhất là xây phòng vệ tốt hơn và <b>tát cạn đầm lầy</b> nơi chúng sinh ra: các điều kiện tiềm ẩn.</div>
+        say: "Bài báo ví lỗi chủ động như muỗi, đập từng con thì chúng vẫn tới. Cách tốt nhất là xây phòng vệ tốt hơn và tát cạn đầm lầy nơi chúng sinh ra, tức là các điều kiện tiềm ẩn."
+
+  # ───────────────────────── 5. HÌNH CƠ CHẾ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Mô hình miếng phô mai: lỗ hổng phải thẳng hàng"
+    steps:
+      - show: |
+          <div><svg width="1600" height="420" viewBox="0 0 1600 420">
+          <defs><marker id="ar0" markerUnits="userSpaceOnUse" markerWidth="18" markerHeight="18" refX="16" refY="9" orient="auto"><path d="M0,0 L18,9 L0,18 z" fill="#e11d48"/></marker></defs>
+          <g font-size="24" fill="#1f2937" text-anchor="middle">
+          <text x="130" y="60" font-weight="bold">mối nguy</text>
+          <rect x="420" y="80" width="90" height="260" rx="10" fill="#fde68a" stroke="#b45309" stroke-width="3"/>
+          <rect x="740" y="80" width="90" height="260" rx="10" fill="#fde68a" stroke="#b45309" stroke-width="3"/>
+          <rect x="1060" y="80" width="90" height="260" rx="10" fill="#fde68a" stroke="#b45309" stroke-width="3"/>
+          <circle cx="465" cy="140" r="16" fill="#ffffff" stroke="#b45309"/><circle cx="465" cy="210" r="22" fill="#ffffff" stroke="#b45309"/><circle cx="465" cy="290" r="14" fill="#ffffff" stroke="#b45309"/>
+          <circle cx="785" cy="120" r="14" fill="#ffffff" stroke="#b45309"/><circle cx="785" cy="210" r="22" fill="#ffffff" stroke="#b45309"/><circle cx="785" cy="300" r="16" fill="#ffffff" stroke="#b45309"/>
+          <circle cx="1105" cy="160" r="15" fill="#ffffff" stroke="#b45309"/><circle cx="1105" cy="210" r="22" fill="#ffffff" stroke="#b45309"/><circle cx="1105" cy="310" r="13" fill="#ffffff" stroke="#b45309"/>
+          <line x1="200" y1="210" x2="1420" y2="210" stroke="#e11d48" stroke-width="5" marker-end="url(#ar0)"/>
+          <text x="465" y="380">lớp kỹ thuật</text><text x="465" y="410" font-size="21" fill="#6b7280">cảnh báo, tự ngắt</text>
+          <text x="785" y="380">lớp con người</text><text x="785" y="410" font-size="21" fill="#6b7280">người vận hành</text>
+          <text x="1105" y="380">lớp quy trình</text><text x="1105" y="410" font-size="21" fill="#6b7280">duyệt thay đổi</text>
+          <text x="1480" y="200" font-weight="bold" fill="#e11d48">hậu quả</text>
+          <text x="625" y="60" fill="#b45309">lỗ hổng: lỗi chủ động hoặc điều kiện tiềm ẩn</text>
+          </g></svg></div>
+        focus: [1, 1, 1]
+        say: "Hình vẽ mô hình các lát phô mai có lỗ, cũng của bài báo năm 2000. Mỗi lát là một lớp phòng vệ, và lát nào cũng có lỗ, có lỗ mở ra rồi đóng lại, có lỗ di chuyển. Hậu quả chỉ xảy ra khi lỗ của nhiều lát cùng thẳng hàng trong một khoảnh khắc, như mũi tên đỏ xuyên qua cả ba lát."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>lỗ hổng</th><th>sinh ra từ</th><th>ví dụ</th></tr>
+          <tr><td>lỗi chủ động</td><td>người đang vận hành: trượt tay, quên bước, làm sai quy trình</td><td>gõ nhầm một tham số của lệnh</td></tr>
+          <tr><td>điều kiện tiềm ẩn</td><td>quyết định từ trước: thiết kế, quy trình, nhân lực</td><td>công cụ không giới hạn số máy bị gỡ; báo động hay kêu nhầm nên không ai tin</td></tr></table>
+        focus: [0, ["1.2", "1.3"]]
+        say: "Theo bài báo, gần như mọi sự cố là sự kết hợp của cả hai loại lỗ hổng. Ví dụ, gõ nhầm một tham số là lỗi chủ động, còn công cụ không giới hạn số máy bị gỡ là điều kiện tiềm ẩn đã nằm đó từ lâu."
+
+  # ───────────────────────── 6. SUY RA PHÉP TÍNH ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra: bao nhiêu lỗi lọt qua cả ba lớp?"
+    checks:
+      - "1000 * 0.1 == 100 and round(100 * 0.1) == 10 and round(10 * 0.1) == 1"
+      - "abs(0.1 ** 3 - 1 / 1000) < 1e-12 and abs(0.1 ** 3 * 100 - 0.1) < 1e-9"
+      - "abs(0.2 ** 2 - 0.04) < 1e-12"
+    steps:
+      - show: |
+          <p>Giả sử 1000 lỗi đi vào, mỗi lớp lọt 10% (số minh hoạ), và ba lớp <b>độc lập</b>:</p>
+          <table class="t"><tr><th>bước</th><th>vì sao</th><th>còn lọt</th></tr>
+          <tr><td>Bước 1. qua lớp 1</td><td>10% của 1000</td><td>$\hl{100}$ lỗi</td></tr>
+          <tr><td>Bước 2. qua lớp 2</td><td>vì độc lập, lớp 2 vẫn lọt 10% của 100 lỗi này</td><td>$\hl{10}$ lỗi</td></tr>
+          <tr><td>Bước 3. qua lớp 3</td><td>theo cùng lý do, 10% của 10</td><td>$\hlg{1}$ lỗi trong 1000</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Bây giờ ta suy ra phép tính, với 1000 lỗi đi vào, mỗi lớp lọt 10 phần trăm, ba lớp độc lập, đều là số minh hoạ. Bước một, qua lớp một còn 10 phần trăm của 1000, tức 100 lỗi. Bước hai, vì các lớp độc lập, lớp hai vẫn lọt 10 phần trăm của 100 lỗi đó, còn 10. Bước ba, theo cùng lý do, chỉ còn 1 lỗi trong 1000."
+      - show: |
+          $$\text{tỉ lệ lọt cả ba lớp} = 0{,}1 \times 0{,}1 \times 0{,}1 = 0{,}1^{3} = 0{,}001 = 0{,}1\%$$
+          <p>Tổng quát: n lớp độc lập, mỗi lớp lọt tỉ lệ p, thì cả n lớp cùng lọt là <b>p mũ n</b>. Làm thử: hai lớp, mỗi lớp lọt 0,2 → 0,2 mũ 2 = 0,04.</p>
+        focus: [1, 2, 2]
+        say: "Viết gọn lại, mỗi lớp nhân thêm một thừa số 0 phẩy 1, nên tỉ lệ lọt cả ba lớp là 0 phẩy 1 mũ 3, bằng 0 phẩy 1 phần trăm. Tổng quát, n lớp độc lập, mỗi lớp lọt tỉ lệ p, thì lọt cả n lớp là p mũ n. Làm thử với hai lớp, mỗi lớp lọt 0 phẩy 2, ta được 0 phẩy 2 mũ 2, bằng 0 phẩy 04."
+      - clear: true
+        show: |
+          <p>Nhưng nếu ba lớp <b>cùng dựa một giả định</b> — ví dụ cả ba cùng tin một con số cấu hình — thì lỗi làm giả định đó sai sẽ lọt cả ba <b>cùng lúc</b>:</p>
+          <table class="t"><tr><th>bước</th><th>vì sao</th><th>còn lọt</th></tr>
+          <tr><td>Bước 4. qua lớp 1</td><td>10% của 1000</td><td>$\hl{100}$ lỗi</td></tr>
+          <tr><td>Bước 5. qua lớp 2 và lớp 3</td><td>chúng nhìn cùng một thứ, nên lỗi đã lọt lớp 1 cũng lọt hai lớp kia</td><td>vẫn $\hl{100}$ lỗi: <b>10%</b>, gấp 100 lần 0,1%</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Nhưng nếu ba lớp cùng dựa một giả định, như cùng tin một con số cấu hình, thì lỗi làm giả định đó sai sẽ lọt cả ba cùng lúc. Bước bốn, qua lớp một vẫn còn 100 lỗi. Bước năm, hai lớp kia nhìn cùng một thứ nên cũng lọt, vẫn 100 lỗi, tức 10 phần trăm, gấp 100 lần con số ta mong đợi."
+
+  # ───────────────────────── 7. VÍ DỤ: ĐỌC MỘT BẢN HẬU KIỂM ─────────────────────────
+  - id: example
+    kind: example
+    title: "Đọc một bản hậu kiểm mẫu, tính lại từng con số"
+    checks:
+      - "(16 * 60) - (14 * 60 + 54) == 66"
+      - "(15 * 60 + 1) - (14 * 60 + 54) == 7"
+      - "(15 * 60 + 36) - (14 * 60 + 54) == 42"
+      - "(16 * 60 + 30) - (16 * 60) == 30"
+      - "round(1.21e9 / 66 / 1e6, 1) == 18.3"
+      - "(lambda t: (t.count('giảm nhẹ'), t.count('ngăn ngừa'), t.count('quy trình'), t.count('khác'), len(t)))(['giảm nhẹ', 'ngăn ngừa', 'quy trình', 'ngăn ngừa', 'ngăn ngừa', 'ngăn ngừa', 'ngăn ngừa', 'ngăn ngừa', 'khác']) == (1, 6, 1, 1, 9)"
+    steps:
+      - show: |
+          <p>Sách vận hành hệ thống tin cậy của Google (2016) có một <b>bản hậu kiểm mẫu</b> cho một sự cố <b>giả định</b>: dịch vụ tìm thơ Shakespeare.</p>
+          <table class="t"><tr><th>mục</th><th>bản mẫu ghi</th></tr>
+          <tr><td>tóm tắt</td><td>dịch vụ ngừng <b>66 phút</b> khi người dùng đổ xô tìm một bài thơ mới phát hiện</td></tr>
+          <tr><td>tác động</td><td>ước tính <b>1,21 tỉ</b> truy vấn bị mất</td></tr>
+          <tr><td>nguyên nhân</td><td>tải cực cao <b>kết hợp</b> rò rỉ tài nguyên khi tìm một từ không có trong kho thơ</td></tr>
+          <tr><td>yếu tố kích hoạt</td><td>lỗi tiềm ẩn bị kích hoạt khi lưu lượng tăng đột ngột</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", "2.5"]
+        say: "Bây giờ ta đọc bản hậu kiểm mẫu trong sách vận hành hệ thống tin cậy của Google năm 2016, viết cho một sự cố giả định ở một dịch vụ tìm thơ. Tóm tắt ghi dịch vụ ngừng 66 phút khi người dùng đổ xô tìm một bài thơ mới. Tác động là ước tính 1 phẩy 21 tỉ truy vấn bị mất. Nguyên nhân là tải cực cao kết hợp rò rỉ tài nguyên khi tìm một từ không có trong kho. Yếu tố kích hoạt là lưu lượng tăng đột ngột."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>giờ quốc tế</th><th>dữ kiện trong dòng thời gian của bản mẫu</th></tr>
+          <tr><td>14:53</td><td>lưu lượng tới dịch vụ tăng <b>88 lần</b></td></tr>
+          <tr><td>14:54</td><td><b>sự cố bắt đầu</b>: máy phục vụ lần lượt sập</td></tr>
+          <tr><td>15:01</td><td>người trực <b>công bố sự cố</b>, cử người chỉ huy</td></tr>
+          <tr><td>15:34</td><td>phát hiện phép tính số máy cần thêm trên bảng trắng <b>sai một bậc độ lớn</b></td></tr>
+          <tr><td>15:36</td><td>sự cố <b>đã được giảm nhẹ</b>: chỉ mục mới đã chép tới mọi cụm máy</td></tr>
+          <tr><td>16:00</td><td><b>sự cố kết thúc</b>: lưu lượng chia lại cho mọi cụm</td></tr>
+          <tr><td>16:30</td><td>đóng sự cố sau <b>30 phút</b> chạy bình thường</td></tr></table>
+        focus: [0, ["1.2", "1.3"], "1.4", ["1.5", "1.6"], ["1.7", "1.8"]]
+        say: "Đây là dòng thời gian của bản mẫu, theo giờ quốc tế. Lúc 14 giờ 53, lưu lượng tăng 88 lần, một phút sau sự cố bắt đầu. Lúc 15 giờ 1, người trực công bố sự cố. Lúc 15 giờ 34, đội thấy phép tính số máy cần thêm sai một bậc độ lớn, và hai phút sau sự cố được giảm nhẹ. Sự cố kết thúc lúc 16 giờ, rồi được đóng sau 30 phút chạy bình thường."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. thời gian ngừng</td><td>14:54 → 16:00</td><td>$\hlg{66}$ phút — khớp tóm tắt</td></tr>
+          <tr><td>Bước 2. từ lúc bắt đầu tới lúc công bố</td><td>14:54 → 15:01</td><td>$\hl{7}$ phút</td></tr>
+          <tr><td>Bước 3. từ lúc bắt đầu tới lúc giảm nhẹ</td><td>14:54 → 15:36</td><td>$\hl{42}$ phút</td></tr>
+          <tr><td>Bước 4. từ kết thúc tới đóng sự cố</td><td>16:00 → 16:30</td><td>$\hl{30}$ phút — đúng tiêu chí đóng</td></tr></table>
+        focus: [1, "1.2", ["1.3", "1.4"], "1.5"]
+        say: "Ta tính lại từng con số. Bước một, 14 giờ 54 tới 16 giờ là 66 phút, khớp đúng tóm tắt. Bước hai, tới lúc công bố mất 7 phút, và bước ba, tới lúc giảm nhẹ mất 42 phút. Bước bốn, từ lúc kết thúc tới lúc đóng là 30 phút, đúng tiêu chí đóng mà bản mẫu đặt ra."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 5. truy vấn mất mỗi phút (phép tính của bài, bản mẫu không ghi)</td><td>1,21 tỉ chia 66</td><td>khoảng $\hl{18{,}3}$ triệu mỗi phút</td></tr>
+          <tr><td>Bước 6. đếm 9 việc cần làm theo loại</td><td>giảm nhẹ / ngăn ngừa / quy trình / khác</td><td>1 / $\hlb{6}$ / 1 / 1</td></tr></table>
+          <p class="note">Bản mẫu còn có mục “chỗ ta gặp may”: lớp phòng vệ không ai thiết kế mà tình cờ có. Đó là lỗ hổng chờ được vá.</p>
+        focus: ["1.2", "1.3", 2]
+        say: "Bước năm là phép tính riêng của bài, 1 phẩy 21 tỉ chia 66, khoảng 18 phẩy 3 triệu truy vấn mỗi phút. Bước sáu, 9 việc cần làm gồm 1 việc giảm nhẹ, 6 việc ngăn ngừa, 1 việc quy trình, 1 việc khác. Bản mẫu còn có mục chỗ ta gặp may, tức lớp phòng vệ không ai thiết kế mà tình cờ có, một lỗ hổng chờ được vá."
+
+  # ───────────────────────── 8. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Kiểm bằng đường khác: đếm phút từ đầu giờ, liệt kê mọi trường hợp"
+    checks:
+      - "120 - 54 == 66 and (16 - 14) * 60 + 0 - 54 == 66"
+      - "sum(1 for a in range(10) for b in range(10) for c in range(10) if a == 0 and b == 0 and c == 0) == 1"
+      - "sum(1 for a in range(10) if a == 0) * 100 == 100 and sum(1 for a in range(10) if a == 0) / 10 == 0.1"
+      - "len([(a, b, c) for a in range(10) for b in range(10) for c in range(10)]) == 1000"
+    steps:
+      - show: |
+          <table class="t"><tr><th>con số</th><th>đường khác để kiểm</th></tr>
+          <tr><td>66 phút</td><td>đếm phút kể từ 14:00: 14:54 là phút 54, 16:00 là phút 120; 120 − 54 = 66 ✓</td></tr>
+          <tr><td>0,1%</td><td>chia mỗi lớp thành 10 ô, 1 ô là lỗ; một lỗi rơi vào 1 ô ở mỗi lớp: 10 nhân 10 nhân 10 = 1000 tổ hợp, chỉ 1 tổ hợp trúng lỗ cả ba ✓</td></tr>
+          <tr><td>10% khi chung giả định</td><td>lỗi rơi vào <b>cùng</b> ô ở cả ba lớp: chỉ 10 tổ hợp, 1 trúng lỗ → 1 phần 10 ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Ta kiểm lại bằng đường khác. Đếm phút kể từ 14 giờ, thì 16 giờ là phút thứ 120, trừ 54 vẫn là 66. Chia mỗi lớp thành 10 ô có một ô là lỗ, thì có 1000 tổ hợp, và chỉ một tổ hợp trúng lỗ cả ba. Khi chung giả định, lỗi rơi vào cùng một ô ở cả ba lớp, nên chỉ có 10 tổ hợp, một tổ hợp trúng lỗ, đúng 10 phần trăm."
+
+  # ───────────────────────── 9. BÀI HỌC SAI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "Những bài học sai hay gặp"
+    checks:
+      - "abs(0.1 ** 4 - 0.0001) < 1e-12 and 1000 * 0.1 == 100"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">1.</b> “Nguyên nhân: lỗi con người”</td><td>lỗi là hệ quả; người khác ở cùng chỗ sẽ sai y hệt</td><td>coi đó là điểm <b>bắt đầu</b> điều tra: vì sao hệ thống cho một thao tác gây hậu quả lớn như vậy?</td></tr>
+          <tr><td><b class="red">2.</b> “Tìm ra <b>một</b> nguyên nhân gốc”</td><td>bản mẫu ghi tải cao <b>kết hợp</b> rò rỉ; thiếu một trong hai thì không sập</td><td>liệt kê mọi nguyên nhân góp phần</td></tr>
+          <tr><td><b class="red">3.</b> “Biện pháp: cẩn thận hơn”</td><td>áp phích, thêm thủ tục, kỷ luật là đập muỗi; đầm lầy vẫn còn</td><td>đổi điều kiện: công cụ chặn, kiểm tự động, diễn tập</td></tr></table>
+        focus: ["1.2", "1.2", "1.3", "1.4"]
+        say: "Bài học sai thứ nhất là kết luận do lỗi con người, trong khi người khác ở cùng chỗ sẽ sai y hệt. Hãy coi đó là điểm bắt đầu, và hỏi vì sao hệ thống cho phép một thao tác gây hậu quả lớn như vậy. Bài học sai thứ hai là tìm một nguyên nhân gốc, trong khi bản mẫu ghi tải cao kết hợp rò rỉ. Bài học sai thứ ba là dặn cẩn thận hơn, mà áp phích hay kỷ luật chỉ là đập muỗi."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">4.</b> “Thêm một lớp kiểm nữa là an toàn gấp 10” (người đã đi làm)</td><td>chỉ đúng khi lớp mới <b>độc lập</b>: độc lập thì 0,1% còn 0,01%; chung giả định thì vẫn <b>10%</b></td><td>hỏi lớp mới nhìn vào thứ gì <b>khác</b> các lớp cũ</td></tr>
+          <tr><td><b class="red">5.</b> “Viết hậu kiểm xong là xong”</td><td>sách của Google: bản hậu kiểm không ai duyệt thì coi như chưa từng có</td><td>duyệt chung, theo dõi từng việc cần làm tới khi xong</td></tr></table>
+        focus: ["1.2", "1.2", "1.3"]
+        say: "Bài học sai thứ tư hay gặp ở người đã đi làm, nghĩ rằng thêm một lớp kiểm là an toàn gấp 10 lần. Điều đó chỉ đúng khi lớp mới độc lập, còn nếu chung giả định thì tỉ lệ lọt vẫn là 10 phần trăm. Bài học sai thứ năm là viết hậu kiểm xong là xong, trong khi sách của Google ghi, bản hậu kiểm không ai duyệt thì coi như chưa từng có."
+
+  # ───────────────────────── 10. BẠN SẼ LÀM GÌ ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Bạn sẽ làm gì?"
+    checks:
+      - "(10 * 60 + 55) - (10 * 60 + 5) == 50 and (10 * 60 + 20) - (10 * 60 + 5) == 15"
+      - "abs(0.1 * 0.1 - 0.01) < 1e-12 and 0.1 == 0.1 * 1"
+    steps:
+      - show: |
+          <table class="t"><tr><th>giờ</th><th>một sự cố nhỏ (số minh hoạ)</th></tr>
+          <tr><td>10:05</td><td>triển khai một cấu hình mới; 40% yêu cầu bắt đầu hỏng</td></tr>
+          <tr><td>10:20</td><td>đội biết có sự cố — qua <b>khách hàng gọi tới</b>, không phải cảnh báo</td></tr>
+          <tr><td>10:50 → 10:55</td><td>quay lui cấu hình; hệ thống bình thường lúc 10:55</td></tr></table>
+          <p>Câu 1. Tác động kéo dài bao lâu? Mất bao lâu mới phát hiện?</p>
+          <p>Câu 2. Có người duyệt cấu hình rồi (lọt 10%). Chọn thêm: (a) <b>người duyệt thứ hai</b> đọc cùng danh sách kiểm; (b) <b>phép kiểm tự động</b> chạy thử cấu hình trên 1% máy trước. Chọn gì, vì sao?</p>
+        focus: [1, 1, 2, 3, 0]
+        say: "Bây giờ đến lượt bạn, với một sự cố nhỏ và số minh hoạ. Lúc 10 giờ 5, một cấu hình mới làm 40 phần trăm yêu cầu hỏng, tới 10 giờ 20 đội mới biết qua khách hàng gọi tới. Câu một, tác động kéo dài bao lâu, và bao lâu mới phát hiện? Câu hai, đã có một người duyệt lọt 10 phần trăm, bạn thêm người duyệt thứ hai cùng danh sách, hay chạy thử tự động trên 1 phần trăm số máy? Dừng video và viết ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 1</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>tác động</td><td>10:05 → 10:55</td><td>$\hl{50}$ phút</td></tr>
+          <tr><td>thời gian phát hiện</td><td>10:05 → 10:20</td><td>$\hl{15}$ phút — và phát hiện nhờ khách hàng: lớp giám sát đã thiếu</td></tr></table>
+        focus: ["1.2", "1.3"]
+        say: "Đáp án câu một, tác động kéo dài từ 10 giờ 5 tới 10 giờ 55, tức 50 phút. Thời gian phát hiện là 15 phút, và nhờ khách hàng gọi tới, nghĩa là lớp giám sát đã thiếu, một nguyên nhân góp phần cần ghi."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 2: lựa chọn</th><th>được</th><th>mất</th></tr>
+          <tr><td>(a) người duyệt thứ hai, cùng danh sách</td><td>rẻ, làm được ngay</td><td>nhìn cùng thứ với người thứ nhất: lỗi lọt người này dễ lọt người kia — gần <b>10%</b>, không phải 1%</td></tr>
+          <tr><td>(b) chạy thử trên 1% máy</td><td>nhìn vào thứ <b>khác</b>: hành vi thật; nếu độc lập thì 10% nhân 10% = <b>1%</b>, và chỉ 1% máy bị ảnh hưởng</td><td>phải dựng công cụ phát hành từng bậc; chậm hơn mỗi lần triển khai</td></tr></table>
+          <p class="note">Chọn (b), cộng thêm cảnh báo theo tỉ lệ lỗi để không phải chờ khách gọi. Điều kiện đổi: nếu không dựng được phát hành từng bậc ngay, (a) chỉ đáng làm khi người thứ hai dùng danh sách kiểm <b>khác</b>.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Đáp án câu hai là một đánh đổi. Người duyệt thứ hai rẻ và làm ngay được, nhưng nhìn cùng thứ với người thứ nhất, nên vẫn lọt gần 10 phần trăm. Chạy thử trên 1 phần trăm máy nhìn vào hành vi thật, nếu độc lập thì còn 1 phần trăm, đổi lại phải dựng công cụ phát hành từng bậc. Vậy nên chọn chạy thử, cộng cảnh báo theo tỉ lệ lỗi, và chỉ thêm người duyệt khi họ dùng danh sách kiểm khác."
+
+  # ───────────────────────── 11. TỔNG KẾT + BẢN ĐỒ KHOÁ ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic, tư duy và bản đồ khoá học"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">dữ kiện có giờ</span><span class="a">→</span>
+          <span class="n">tính lại các khoảng thời gian, tác động</span><span class="a">→</span>
+          <span class="n">nhiều nguyên nhân góp phần</span><span class="a">→</span>
+          <span class="n">lớp phòng vệ nào thiếu, có độc lập không</span><span class="a">→</span>
+          <span class="n">việc cần làm ở mức hệ thống</span></div>
+        say: "Tổng kết lại, người điều tra đi từ dữ kiện có giờ, tính lại thời gian và tác động, rồi tìm nhiều nguyên nhân góp phần. Sau đó họ hỏi lớp phòng vệ nào đã thiếu, các lớp có độc lập không, và chọn việc cần làm ở mức hệ thống."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> “Không sửa được con người, nhưng sửa được hệ thống và quy trình để giúp con người chọn đúng” (sách của Google). Thêm lớp phòng vệ thì hỏi: lớp này nhìn vào thứ gì <b>khác</b>?</div>
+        say: "Điều cần mang theo là câu trong sách của Google, ta không sửa được con người, nhưng sửa được hệ thống và quy trình để giúp con người chọn đúng. Mỗi khi thêm một lớp phòng vệ, hãy hỏi lớp này nhìn vào thứ gì khác các lớp cũ."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bài</th><th>sự cố có thật</th><th>cơ chế sẽ tính lại</th></tr>
+          <tr><td>bài 1</td><td>tên lửa phòng không Patriot, 1991</td><td>0,1 giây không biểu diễn đúng bằng nhị phân, sai số cộng dồn</td></tr>
+          <tr><td>bài 2</td><td>tên lửa Ariane 5, 1996</td><td>số nguyên 16 bit có dấu bị tràn khi dùng lại mã cũ</td></tr>
+          <tr><td>bài 3</td><td>tàu quỹ đạo khí hậu sao Hoả, 1999</td><td>đơn vị pound-lực đọc như newton</td></tr>
+          <tr><td>bài 4</td><td>tàu Pathfinder trên sao Hoả, 1997</td><td>đảo ngược ưu tiên giữa ba tác vụ</td></tr>
+          <tr><td>bài 5</td><td>công ty chứng khoán Knight Capital, 2012</td><td>một máy chủ thiếu bản triển khai, một cờ dùng lại</td></tr>
+          <tr><td>bài 6</td><td>kho lưu trữ Amazon S3, 2017</td><td>một lệnh gỡ máy gõ sai, khởi động lại chưa từng tập</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", "1.6", "1.7"]
+        forward_ref: true
+        say: "Đây là bản đồ khoá học, mỗi bài một sự cố có thật. Bài 1 là một hệ thống tên lửa phòng không năm 1991, với 0 phẩy 1 giây trong hệ nhị phân. Bài 2 là tên lửa Ariane 5 năm 1996, một số nguyên 16 bit bị tràn. Bài 3 là tàu quỹ đạo khí hậu sao Hoả năm 1999, đơn vị lực hệ Anh–Mỹ bị đọc như đơn vị chuẩn quốc tế. Bài 4 là tàu Pát-phai-đơ năm 1997, với lỗi đảo ngược ưu tiên. Bài 5 là một công ty chứng khoán năm 2012, một máy chủ thiếu bản triển khai. Bài 6 là kho lưu trữ của Amazon năm 2017, một lệnh gỡ máy gõ sai."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bài</th><th>sự cố có thật</th><th>cơ chế sẽ tính lại</th></tr>
+          <tr><td>bài 7</td><td>mạng Cloudflare, 2019</td><td>biểu thức chính quy quay lui làm cạn bộ xử lý</td></tr>
+          <tr><td>bài 8</td><td>GitLab, 2017</td><td>lệnh xoá chạy nhầm máy; các bản sao lưu chưa từng khôi phục thử</td></tr>
+          <tr><td>bài 9</td><td>lỗ hổng Heartbleed, 2014</td><td>thiếu một phép kiểm độ dài (mức phòng thủ)</td></tr>
+          <tr><td>bài 10</td><td>dự báo cúm Google Flu Trends, 2013</td><td>mô hình đúng hôm qua, sai gấp đôi hôm nay</td></tr>
+          <tr><td>bài 11</td><td>năm 2038</td><td>một sự cố biết trước: số giây 32 bit sẽ tràn</td></tr></table>
+        focus: ["1.2", "1.3", "1.4", "1.5", "1.6"]
+        forward_ref: true
+        say: "Bài 7 là một mạng phân phối nội dung năm 2019, một mẫu tìm chuỗi quay lui làm cạn bộ xử lý. Bài 8 là một nền tảng lưu mã nguồn năm 2017, xoá nhầm máy, và các bản sao lưu chưa từng được khôi phục thử. Bài 9 là một lỗ hổng năm 2014, thiếu một phép kiểm độ dài. Bài 10 là dự báo cúm của Google năm 2013, đúng hôm qua mà sai gấp đôi hôm nay. Bài 11 là năm 2038, khi số giây đếm bằng 32 bit sẽ tràn."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 1): Patriot, 1991 — vì sao 0,1 giây không biểu diễn được chính xác bằng nhị phân, và sau 100 giờ chạy liên tục sai số thành bao nhiêu.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 1, ta đọc báo cáo năm 1992 về một hệ thống tên lửa phòng không, để thấy vì sao 0 phẩy 1 giây gây sai số lớn sau 100 giờ chạy liên tục. Hẹn gặp bạn ở bài tiếp theo."

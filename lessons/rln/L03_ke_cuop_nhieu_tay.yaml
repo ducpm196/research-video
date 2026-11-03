@@ -1,0 +1,284 @@
+id: L03
+course: RLN
+series: "RLN · Học tăng cường"
+title: "Bài 3 — Khám phá và khai thác: kẻ cướp nhiều tay, ε-tham lam, UCB"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/rln.yaml L03; audit/rln/verify_rln.py L03; audit/rln/sources_L03.md; R. S. Sutton, A. G. Barto, Reinforcement Learning: An Introduction, bản 2 (2018), mục 2.1 (bài toán kẻ cướp k tay), 2.2 (ε-tham lam), 2.4 (trung bình cộng dồn, công thức 2.3), 2.5 (bài toán thay đổi theo thời gian, bước cố định), 2.7 (UCB, công thức 2.10); AIF bài 7 (UCB1 với hằng số căn 2, đã học)"
+assumes: [arith, power, approx, frac, geq, cdot, sub, dots, sqrt, log, ltgt, max_fn, assign]
+# Quy ước (Sutton & Barto chương 2): k tay (lựa chọn); Q(a) = ước lượng giá trị của tay a (trung bình phần thưởng đã thấy); N(a) = số lần
+#   đã chọn a; t = số lượt đã chơi; epsilon = xác suất khám phá; c = hệ số khám phá của UCB. Hoà thì lấy tay đứng trước (alg.rln_eps_greedy).
+#   UCB(a) = Q(a) + c·√(ln t / N(a)) (alg.rln_ucb); N(a) = 0 thì tay đó được chọn trước (sách: “considered to be a maximizing action”).
+#   Tên UCB chỉ trên màn hình; lời đọc nói “cận trên tin cậy”. Quảng cáo, tiêu đề, phần thưởng là SỐ MINH HOẠ.
+objectives:
+  - "Tính xác suất chọn từng tay theo ε-tham lam: (1 − ε) + ε / k cho tay đang tốt nhất, ε / k cho mỗi tay khác"
+  - "Cập nhật trung bình cộng dồn Q ← Q + (r − Q) / n và biết khi nào nên dùng bước cố định"
+  - "Tính điểm UCB và giải thích vì sao tay ít được thử được cộng thêm nhiều"
+  - "So sánh mất mát của khám phá cố định với khám phá theo độ bất định"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "9 phần trăm lượt hiển thị đổ vào tiêu đề kém"
+    checks:
+      - "round(1 - alg.rln_eps_greedy([5, 1, 1, 1, 1, 1, 1, 1, 1, 1], 0.1)[0], 10) == 0.09"
+    steps:
+      - show: |
+          <p>Một trang tin thử <b>10 tiêu đề</b> cho cùng một bài, mỗi lượt khách vào hiện một tiêu đề, khách bấm thì tính 1 điểm. Đội kỹ thuật cho máy “thử ngẫu nhiên 10% thời gian” và để vậy suốt một năm.</p>
+          <p>Kết quả: dù đã biết rõ tiêu đề nào tốt nhất từ lâu, <b>9%</b> số lượt hiển thị vẫn đổ vào các tiêu đề kém.</p>
+          <div class="box key">Hôm nay: thử cái mới hay dùng cái đã biết? Con số 9% từ đâu ra? Và có cách khám phá “thông minh” hơn tung đồng xu không?</div>
+        focus: [1, 1, 2, 3]
+        say: "Chào bạn, một trang tin thử 10 tiêu đề cho cùng một bài, mỗi lượt khách vào hiện một tiêu đề, và khách bấm thì tính 1 điểm. Đội kỹ thuật cho máy thử ngẫu nhiên 10 phần trăm thời gian và để vậy suốt một năm. Kết quả là dù đã biết rõ tiêu đề nào tốt nhất từ lâu, 9 phần trăm số lượt hiển thị vẫn đổ vào các tiêu đề kém. Hôm nay ta hỏi, thử cái mới hay dùng cái đã biết, con số 9 phần trăm từ đâu ra, và có cách khám phá thông minh hơn tung đồng xu không."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại ba điều sẽ dùng"
+    checks:
+      - "[round(q, 3) for q in alg.rln_incr_means([1, 0, 1, 1])] == [1.0, 0.5, 0.667, 0.75] and sum([1, 0, 1, 1]) / 4 == 0.75"
+      - "round(0.9 * 1 + 0.1 * 0.1, 10) == 0.91"
+      - "[round(math.log(x), 2) for x in (10, 100, 1000)] == [2.3, 4.61, 6.91] and round(math.sqrt(2.25), 2) == 1.5"
+    steps:
+      - show: |
+          <p><b>① Trung bình cộng dồn.</b> Không cần nhớ mọi phần thưởng: mỗi lần có phần thưởng mới $r$, dịch trung bình cũ một phần $\frac{1}{n}$ về phía $r$:</p>
+          $$Q \leftarrow Q + \frac{1}{n} \cdot (r - Q)$$
+          <p class="note">Phần thưởng 1, 0, 1, 1: $Q$ lần lượt 1; $\;1 + \frac{1}{2}(0 - 1) = 0{,}5$; $\;0{,}667$; $\;0{,}75$ — đúng bằng $\frac{1 + 0 + 1 + 1}{4}$.</p>
+        focus: [1, 2, 3]
+        say: "Điều thứ nhất là trung bình cộng dồn, không cần nhớ mọi phần thưởng. Mỗi lần có phần thưởng mới r, ta dịch trung bình cũ một phần n về phía r, với n là số phần thưởng đã có. Với phần thưởng 1, 0, 1, 1, trung bình lần lượt là 1, rồi 0 phẩy 5, rồi 0 phẩy 667, rồi 0 phẩy 75, đúng bằng tổng 3 chia cho 4."
+      - show: |
+          <p><b>② Xác suất theo hai nhánh</b> (khoá Toán cho khoa học máy tính): nhánh 1 xảy ra với xác suất 0,9 và chắc chắn trúng; nhánh 2 xác suất 0,1 và trúng với xác suất 0,1:</p>
+          $$0{,}9 \cdot 1 + 0{,}1 \cdot 0{,}1 = 0{,}91$$
+        focus: [1, 1, 1, 2]
+        say: "Điều thứ hai là xác suất theo hai nhánh, như khoá Toán cho khoa học máy tính. Nhánh 1 xảy ra với xác suất 0 phẩy 9 và chắc chắn trúng. Nhánh 2 xảy ra với xác suất 0 phẩy 1 và trúng với xác suất 0 phẩy 1. Vì vậy tổng là 0 phẩy 9 cộng 0 phẩy 01, bằng 0 phẩy 91."
+      - show: |
+          <p><b>③ Lôgarit tăng rất chậm; căn bậc hai.</b> $\ln 10 \approx 2{,}3$, $\;\ln 100 \approx 4{,}61$, $\;\ln 1000 \approx 6{,}91$: số lượt gấp 10 thì $\ln$ chỉ cộng thêm khoảng 2,3. Và $\sqrt{2{,}25} = 1{,}5$ vì $1{,}5 \cdot 1{,}5 = 2{,}25$.</p>
+          <p class="note">Ở khoá Nền tảng trí tuệ nhân tạo, công thức chọn nút khi tìm kiếm cây bằng mô phỏng đã dùng đúng hai phép này.</p>
+        focus: [1, 1, 1, 2]
+        say: "Điều thứ ba, lôgarit tự nhiên tăng rất chậm, lôgarit của 10 khoảng 2 phẩy 3, của 100 khoảng 4 phẩy 61, của 1000 khoảng 6 phẩy 91. Vậy số lượt gấp 10 thì nó chỉ cộng thêm khoảng 2 phẩy 3. Còn căn của 2 phẩy 25 bằng 1 phẩy 5, vì 1 phẩy 5 nhân 1 phẩy 5 bằng 2 phẩy 25. Ở khoá Nền tảng trí tuệ nhân tạo, công thức chọn nút khi tìm kiếm cây bằng mô phỏng đã dùng đúng hai phép này."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: k, Q(a), N(a), t, ε và c"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ký hiệu</th><th>nghĩa</th><th>ví dụ tiêu đề</th></tr>
+          <tr><td>$k$</td><td>số tay (số lựa chọn)</td><td>10 tiêu đề</td></tr>
+          <tr><td>$Q(a)$</td><td>ước lượng giá trị của tay $a$: trung bình phần thưởng đã thấy</td><td>tỉ lệ bấm đã đo</td></tr>
+          <tr><td>$N(a)$</td><td>số lần đã chọn tay $a$</td><td>số lần đã hiện</td></tr>
+          <tr><td>$t$</td><td>số lượt đã chơi, tính chung mọi tay</td><td>số khách đã vào</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bảng giới thiệu bốn ký hiệu. k là số tay, tức số lựa chọn, ở đây 10 tiêu đề. Q của a là ước lượng giá trị của tay a, tức trung bình phần thưởng đã thấy, như tỉ lệ bấm đã đo. N của a là số lần đã chọn tay a. Còn t là số lượt đã chơi tính chung mọi tay, như số khách đã vào."
+      - clear: true
+        show: |
+          <p>Chữ Hy Lạp $\varepsilon$, đọc là <b>epsilon</b>: xác suất <b>khám phá</b> — chọn ngẫu nhiên một tay thay vì tay đang có $Q$ lớn nhất. Ví dụ $\varepsilon = 0{,}1$.</p>
+          <p>Chữ $c$: hệ số khám phá của công thức <b>cận trên tin cậy</b> (viết tắt UCB) — $c$ càng lớn càng chịu thử tay chưa chắc. Ví dụ $c = 2$.</p>
+        introduces: [eps]
+        focus: [1, 1, 2, 2]
+        say: "Chữ Hy Lạp này là xác suất khám phá, tức chọn ngẫu nhiên một tay thay vì tay đang có Q lớn nhất. Ví dụ xác suất khám phá bằng 0 phẩy 1. Chữ c là hệ số khám phá của công thức cận trên tin cậy, c càng lớn thì càng chịu thử tay chưa chắc. Ví dụ c bằng 2."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hai cách khám phá: tung đồng xu, hoặc cộng điểm cho cái chưa chắc"
+    checks:
+      - "round(alg.rln_ucb([1.0, 0.8], [10, 2], 12, 2)[0], 3) == 1.997 and round(alg.rln_ucb([1.0, 0.8], [10, 2], 12, 2)[1], 3) == 3.029"
+    steps:
+      - show: |
+          <div><svg width="1000" height="320" viewBox="0 0 1000 320"><defs><marker id="rl3a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs>
+          <g font-size="24" text-anchor="middle">
+          <rect x="40" y="125" width="220" height="80" rx="12" fill="#f3f4f6" stroke="#1f2937" stroke-width="2"/><text x="150" y="172" fill="#1f2937" font-weight="bold">tung đồng xu</text>
+          <rect x="520" y="30" width="420" height="90" rx="12" fill="#d1fae5" stroke="#059669" stroke-width="2.5"/><text x="730" y="70" fill="#1f2937" font-weight="bold">khai thác: tay đang tốt nhất</text><text x="730" y="102" font-size="21" fill="#1f2937">xác suất 1 − ε = 0,9</text>
+          <rect x="520" y="205" width="420" height="90" rx="12" fill="#ffedd5" stroke="#eb6834" stroke-width="2.5"/><text x="730" y="245" fill="#1f2937" font-weight="bold">khám phá: một trong 10 tay</text><text x="730" y="277" font-size="21" fill="#1f2937">xác suất ε = 0,1, mỗi tay 1/10</text>
+          </g>
+          <line x1="265" y1="150" x2="512" y2="80" stroke="#1f2937" stroke-width="3" marker-end="url(#rl3a)"/>
+          <line x1="265" y1="180" x2="512" y2="248" stroke="#1f2937" stroke-width="3" marker-end="url(#rl3a)"/>
+          </svg></div>
+        focus: [1, 1, 1]
+        say: "Hình đầu là cách tung đồng xu, gọi là tham lam xen khám phá. Với xác suất 0 phẩy 9, máy khai thác, chọn tay đang có Q lớn nhất. Với xác suất 0 phẩy 1, máy khám phá, chọn đều một trong 10 tay, kể cả chính tay tốt nhất."
+      - clear: true
+        show: |
+          <div><svg width="1000" height="360" viewBox="0 -60 1000 360"><g font-size="22" text-anchor="middle">
+          <line x1="80" y1="260" x2="700" y2="260" stroke="#1f2937" stroke-width="2"/>
+          <rect x="150" y="160" width="140" height="100" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="220" y="215" fill="#1f2937">Q = 1,0</text>
+          <rect x="150" y="60" width="140" height="100" fill="#ffedd5" stroke="#eb6834" stroke-width="2" stroke-dasharray="6 4"/><text x="220" y="115" fill="#1f2937">+ 0,997</text>
+          <rect x="450" y="180" width="140" height="80" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="520" y="227" fill="#1f2937">Q = 0,8</text>
+          <rect x="450" y="-43" width="140" height="223" fill="#ffedd5" stroke="#eb6834" stroke-width="2" stroke-dasharray="6 4"/>
+          <text x="220" y="290" fill="#1f2937">tay A: đã thử 10 lần</text><text x="520" y="290" fill="#1f2937">tay B: mới thử 2 lần</text>
+          </g><g font-size="22" fill="#1f2937"><text x="610" y="70">+ 2,229</text><text x="760" y="110">ít thử → cộng nhiều</text><text x="760" y="150">tổng: A 1,997</text><text x="760" y="185">B 3,029 → chọn B</text></g></svg></div>
+        focus: [1, 1, 1]
+        say: "Hình thứ hai là cách cận trên tin cậy, không tung đồng xu. Mỗi tay có cột xanh là Q đã đo, cộng thêm cột cam đứt nét là phần thưởng cho sự chưa chắc. Tay B mới thử 2 lần nên được cộng nhiều hơn hẳn tay A, và tổng của B lớn hơn, nên máy thử B dù Q của B nhỏ hơn."
+
+  # ───────────────────────── 5. SUY RA CÔNG THỨC ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra xác suất của epsilon tham lam và điểm cận trên tin cậy"
+    checks:
+      - "alg.rln_eps_greedy([5] + [1] * 9, 0.1) == [0.9 + 0.01] + [0.01] * 9 and abs(sum(alg.rln_eps_greedy([5] + [1] * 9, 0.1)) - 1) < 1e-12"
+      - "round(2 * math.sqrt(math.log(12) / 2), 3) == 2.229 and round(2 * math.sqrt(math.log(12) / 10), 3) == 0.997"
+    steps:
+      - show: |
+          <p><b>Bước 1 — tay đang tốt nhất.</b> Nó được chọn ở nhánh khai thác (xác suất $1 - \varepsilon$), <b>và</b> có thể được chọn ở nhánh khám phá (xác suất $\varepsilon$, rồi trúng với $\frac{1}{k}$). Theo phép xác suất hai nhánh:</p>
+          $$P(\text{tay tốt nhất}) = (1 - \varepsilon) + \frac{\varepsilon}{k}$$
+        introduces: [prob]
+        focus: [1, 1, 2]
+        say: "Bước một là tay đang tốt nhất. Nó được chọn ở nhánh khai thác với xác suất 1 trừ xác suất khám phá, và còn có thể được chọn ở nhánh khám phá, rồi trúng với xác suất 1 phần k. Theo phép xác suất hai nhánh, xác suất chọn tay tốt nhất bằng 1 trừ xác suất khám phá, cộng xác suất khám phá chia k."
+      - show: |
+          <p><b>Bước 2 — mỗi tay khác</b> chỉ được chọn ở nhánh khám phá: $P = \frac{\varepsilon}{k}$.</p>
+          <p class="note">Làm thử $k = 10$, $\varepsilon = 0{,}1$: tay tốt nhất $0{,}9 + 0{,}01 = 0{,}91$, mỗi tay khác $0{,}01$. Kiểm tổng: $0{,}91 + 9 \cdot 0{,}01 = 1$ ✓. Vậy $9 \cdot 0{,}01 = 0{,}09$ — đúng 9% của phần mở đầu.</p>
+        focus: [1, 2, 2, 2]
+        say: "Bước hai, mỗi tay khác chỉ được chọn ở nhánh khám phá, nên xác suất là xác suất khám phá chia k. Làm thử với 10 tay và xác suất khám phá bằng 0 phẩy 1, tay tốt nhất có xác suất 0 phẩy 91, mỗi tay khác 0 phẩy 01. Kiểm tổng, 0 phẩy 91 cộng 9 nhân 0 phẩy 01 bằng 1. Vậy chín tay kém chiếm 0 phẩy 09, đúng 9 phần trăm của phần mở đầu."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — cộng điểm cho sự chưa chắc.</b> Tay càng ít thử thì $Q(a)$ càng có thể lệch xa giá trị thật, nên ta cộng một phần thưởng giảm theo $N(a)$, tăng chậm theo $t$:</p>
+          $$\text{điểm}(a) = Q(a) + c \cdot \sqrt{\frac{\ln t}{N(a)}}$$
+          <p class="note">Rồi chọn tay có điểm lớn nhất. Tay chưa thử lần nào ($N = 0$) được chọn trước.</p>
+        focus: [1, 1, 2, 3]
+        say: "Bước ba là cộng điểm cho sự chưa chắc. Tay càng ít thử thì Q càng có thể lệch xa giá trị thật, nên ta cộng một phần thưởng giảm theo N, và tăng chậm theo t. Cụ thể là c nhân căn của lôgarit t chia cho N. Sau đó chọn tay có điểm lớn nhất, và tay chưa thử lần nào được chọn trước."
+      - show: |
+          <p><b>Bước 4 — làm thử</b> với $t = 12$, $c = 2$, $\ln 12 \approx 2{,}485$:</p>
+          <table class="t"><tr><th>tay</th><th>$N$</th><th>$c \cdot \sqrt{\ln t / N}$</th></tr>
+          <tr><td>A</td><td>10</td><td>$2 \cdot \sqrt{0{,}2485} \approx 0{,}997$</td></tr>
+          <tr><td>B</td><td>2</td><td>$2 \cdot \sqrt{1{,}2425} \approx 2{,}229$</td></tr></table>
+          <p class="note">Ghi chú cách viết: khoá Nền tảng trí tuệ nhân tạo dùng hằng số $\sqrt{2}$ thay cho $c$ — cùng một ý.</p>
+        notation_note: true
+        focus: [1, "2.2", "2.3", 3]
+        say: "Bước bốn, làm thử với t bằng 12, c bằng 2, và lôgarit của 12 xấp xỉ 2 phẩy 485. Tay A đã thử 10 lần được cộng 2 nhân căn của 0 phẩy 2485, xấp xỉ 0 phẩy 997. Tay B mới thử 2 lần được cộng 2 nhân căn của 1 phẩy 2425, xấp xỉ 2 phẩy 229. Ở khoá Nền tảng trí tuệ nhân tạo, công thức dùng hằng số căn 2 thay cho c, nhưng là cùng một ý."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Cận trên tin cậy chạy từng bước: thử B, rồi quay về A"
+    checks:
+      - "round(1.0 + 0.997, 3) == 1.997 and round(alg.rln_ucb([1.0, 0.8], [10, 2], 12, 2)[0], 3) == 1.997"
+      - "round(alg.rln_ucb([1.0, 0.8], [10, 2], 12, 2)[1], 3) == 3.029 and max(range(2), key=lambda i: alg.rln_ucb([1.0, 0.8], [10, 2], 12, 2)[i]) == 1"
+      - "[round(x, 3) for x in alg.rln_ucb([1.0, 0.8], [10, 10], 20, 2)] == [2.095, 1.895]"
+      - "round(math.log(20), 3) == 2.996 and round(2 * math.sqrt(math.log(20) / 10), 3) == 1.095"
+    steps:
+      - show: |
+          <p>Hai tay: A đã thử 10 lần, $Q(A) = 1{,}0$; B mới thử 2 lần, $Q(B) = 0{,}8$; $t = 12$, $c = 2$.</p>
+          <p><b>Bước 1.</b> Điểm của A: $1{,}0 + 0{,}997 = \hlb{1{,}997}$.</p>
+        focus: [1, 2]
+        say: "Xét hai tay, A đã thử 10 lần với Q bằng 1, B mới thử 2 lần với Q bằng 0 phẩy 8, t bằng 12 và c bằng 2. Bước một, điểm của A bằng 1 cộng 0 phẩy 997, bằng 1 phẩy 997."
+      - show: |
+          <p><b>Bước 1.</b> Điểm A $= 1{,}997$.</p>
+          <p><b>Bước 2.</b> Điểm của B: $0{,}8 + 2{,}229 = \hlo{3{,}029}$, lớn hơn → <b>chọn B</b>, dù $Q(B)$ nhỏ hơn.</p>
+        focus: [2, 2]
+        say: "Bước hai, điểm của B bằng 0 phẩy 8 cộng 2 phẩy 229, bằng 3 phẩy 029. Điểm này lớn hơn, nên máy chọn B, dù Q của B nhỏ hơn Q của A."
+      - clear: true
+        show: |
+          <p><b>Bước 3.</b> Giả sử về sau B cũng đã được thử 10 lần (A chưa thử thêm) và $Q(B)$ vẫn 0,8. Giờ $N(A) = N(B) = 10$, $t = 20$, $\ln 20 \approx 2{,}996$. Phần cộng của cả hai tay như nhau:</p>
+          $$2 \cdot \sqrt{\frac{2{,}996}{10}} \approx 1{,}095$$
+        focus: [1, 2]
+        say: "Bước ba, giả sử về sau B cũng đã được thử 10 lần, A chưa thử thêm, và Q của B vẫn là 0 phẩy 8. Giờ cả hai tay đã thử 10 lần, t bằng 20, lôgarit của 20 xấp xỉ 2 phẩy 996, nên phần cộng của hai tay như nhau, xấp xỉ 1 phẩy 095."
+      - show: |
+          <table class="t"><tr><th>bước 4</th><th>$Q$</th><th>phần cộng</th><th>điểm</th></tr>
+          <tr><td>A</td><td>1,0</td><td>1,095</td><td>$\hlg{2{,}095}$</td></tr>
+          <tr><td>B</td><td>0,8</td><td>1,095</td><td>1,895</td></tr></table>
+          <p class="note">Độ chắc như nhau thì chỉ còn so $Q$ → <b>quay về A</b>. Cận trên tin cậy khám phá có lý do, rồi tự thôi khám phá.</p>
+        focus: [0, "1.2", "1.3", 2]
+        say: "Bước bốn, đặt hai tay cạnh nhau. Tay A có điểm 2 phẩy 095, tay B chỉ có 1 phẩy 895. Khi độ chắc như nhau thì chỉ còn so Q, nên máy quay về A. Cận trên tin cậy khám phá có lý do, rồi tự thôi khám phá khi đã đủ chắc."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: đếm bằng mô phỏng, và cộng lại xác suất"
+    checks:
+      - "(lambda rng: abs(sum((0 if rng.random() > 0.1 else rng.integers(10)) == 0 for _ in range(100000)) / 100000 - 0.91) < 0.005)(np.random.default_rng(1))"
+      - "abs(sum(alg.rln_eps_greedy([0.2, 0.9, 0.5, 0.1, 0.3], 0.2)) - 1) < 1e-12 and round(alg.rln_eps_greedy([0.2, 0.9, 0.5, 0.1, 0.3], 0.2)[1], 10) == 0.84"
+    steps:
+      - show: |
+          <p><b>Đường khác 1 — mô phỏng.</b> Cho máy chơi 100&nbsp;000 lượt theo epsilon tham lam ($k = 10$, $\varepsilon = 0{,}1$) và đếm số lượt chọn tay tốt nhất:</p>
+          $$\frac{\text{số lượt chọn tay tốt nhất}}{100\,000} \approx 0{,}91 \checkmark$$
+        focus: [1, 1, 2]
+        say: "Kiểm tra thứ nhất là mô phỏng, nghĩa là không dùng công thức. Cho máy chơi 100 nghìn lượt theo tham lam xen khám phá với 10 tay và xác suất khám phá bằng 0 phẩy 1, rồi đếm số lượt chọn tay tốt nhất. Tỉ lệ đếm được xấp xỉ 0 phẩy 91, khớp công thức."
+      - show: |
+          <p><b>Đường khác 2 — cộng lại.</b> Với 5 tay, $\varepsilon = 0{,}2$: tay tốt nhất $0{,}8 + 0{,}04 = 0{,}84$, bốn tay còn lại mỗi tay $0{,}04$.</p>
+          $$0{,}84 + 4 \cdot 0{,}04 = 1 \checkmark$$
+          <p class="note">Tổng khác 1 nghĩa là quên phần khám phá rơi trúng chính tay tốt nhất.</p>
+        focus: [1, 2, 3]
+        say: "Kiểm tra thứ hai là cộng lại mọi xác suất. Với 5 tay và xác suất khám phá 0 phẩy 2, tay tốt nhất có 0 phẩy 84, bốn tay còn lại mỗi tay 0 phẩy 04, nên tổng đúng bằng 1. Nếu tổng khác 1, nghĩa là ta đã quên phần khám phá rơi trúng chính tay tốt nhất."
+
+  # ───────────────────────── 8. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi cả người đã đi làm"
+    checks:
+      - "round(0.09 * 0.5, 3) == 0.045 and round(0.045 * 1000) == 45 and round(0.045 * 10000) == 450"
+      - "round((100 + 0 * 10) / 110, 3) == 0.909 and round(0.9 ** 10, 3) == 0.349"
+      - "alg.rln_ucb([0.5, 0.0], [3, 0], 3, 2)[1] == math.inf"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Không khám phá ($\varepsilon = 0$) <b class="red">(kẹt ở tay đầu tiên có điểm)</b>
+          <br><span class="note">Mọi $Q$ bắt đầu bằng 0; tay đầu được thưởng 1 thì $Q = 1$ lớn nhất mãi, chín tay kia không bao giờ được thử. Phép thử: đếm $N(a)$ — tay nào bằng 0 sau nghìn lượt là chưa từng được biết.</span></div>
+        say: "Lỗi thứ nhất, không khám phá, tức xác suất khám phá bằng 0, nên kẹt ở tay đầu tiên có điểm. Mọi Q bắt đầu bằng 0, tay đầu được thưởng 1 thì Q của nó lớn nhất mãi, chín tay kia không bao giờ được thử. Phép thử là đếm N của từng tay, tay nào bằng 0 sau nghìn lượt là chưa từng được biết."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Giữ $\varepsilon$ cố định mãi <b class="red">(mất mát tăng đều theo thời gian)</b>
+          <br><span class="note">Nếu mỗi tay kém thua tay tốt nhất 0,5 điểm: mỗi lượt mất $0{,}09 \cdot 0{,}5 = 0{,}045$; 1000 lượt mất 45, 10&nbsp;000 lượt mất 450. Sửa: giảm $\varepsilon$ dần, hoặc dùng cận trên tin cậy.</span></div>
+        say: "Lỗi thứ hai, giữ xác suất khám phá cố định mãi, nên mất mát tăng đều theo thời gian. Nếu mỗi tay kém thua tay tốt nhất 0 phẩy 5 điểm, mỗi lượt mất 0 phẩy 09 nhân 0 phẩy 5, bằng 0 phẩy 045, nên 1000 lượt mất 45 và 10 nghìn lượt mất 450. Cách sửa là giảm xác suất khám phá dần, hoặc dùng cận trên tin cậy."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Tính điểm cận trên tin cậy cho tay chưa thử <b class="red">(chia cho 0)</b>
+          <br><span class="note">$N(a) = 0$ làm phép chia hỏng. Quy tắc: tay chưa thử được chọn trước — thử mỗi tay một lần rồi mới dùng công thức.</span></div>
+        say: "Lỗi thứ ba, tính điểm cận trên tin cậy cho tay chưa thử, gây chia cho 0. Quy tắc là tay chưa thử được chọn trước, thử mỗi tay một lần rồi mới dùng công thức."
+      - show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Dùng trung bình cộng dồn $\frac{1}{n}$ khi phần thưởng đổi theo mùa <b class="red">(quên quá chậm)</b></div>
+          <table class="t"><tr><th>100 lượt được 1, rồi 10 lượt được 0</th><th>ước lượng sau 110 lượt</th></tr>
+          <tr><td>trung bình cộng dồn ($\frac{1}{n}$)</td><td>$\frac{100}{110} \approx 0{,}909$ — vẫn tưởng tay rất tốt</td></tr>
+          <tr><td>bước cố định $\frac{1}{10}$</td><td>$0{,}9^{10} \approx 0{,}349$ — đã thấy tay xấu đi</td></tr></table>
+        focus: [1, "2.2", "2.3", 0]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, dùng trung bình cộng dồn khi phần thưởng đổi theo mùa, nên quên quá chậm. Giả sử 100 lượt đầu được 1, rồi 10 lượt sau được 0, trung bình cộng dồn chỉ còn 0 phẩy 909, vẫn tưởng tay rất tốt. Dùng bước cố định 1 phần 10, ước lượng giảm còn 0 phẩy 349, đã thấy tay xấu đi. Khi môi trường đổi theo thời gian, hãy dùng bước cố định và theo dõi ước lượng theo ngày."
+
+  # ───────────────────────── 9. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: tính xác suất, tính điểm, rồi chọn cách khám phá"
+    checks:
+      - "[round(p, 2) for p in alg.rln_eps_greedy([0.9, 0.1, 0.1, 0.1, 0.1], 0.2)] == [0.84, 0.04, 0.04, 0.04, 0.04]"
+      - "[round(x, 3) for x in alg.rln_ucb([0.6, 0.5], [20, 5], 25, 1)] == [1.001, 1.302] and round(math.log(25), 3) == 3.219"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>5 tay, $\varepsilon = 0{,}2$. Xác suất chọn tay đang tốt nhất, và mỗi tay khác?</td></tr>
+          <tr><td>2</td><td>$Q(A) = 0{,}6$, $N(A) = 20$; $Q(B) = 0{,}5$, $N(B) = 5$; $t = 25$, $c = 1$. Tính điểm cận trên tin cậy, chọn tay nào?</td></tr>
+          <tr><td>3</td><td>Chiến dịch 30 ngày, tiêu đề hợp thời trang tuần này có thể nhạt tuần sau. Bạn chọn khám phá thế nào?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", 0]
+        say: "Bây giờ đến lượt bạn. Câu một, với 5 tay và xác suất khám phá bằng 0 phẩy 2, xác suất chọn tay đang tốt nhất và mỗi tay khác là bao nhiêu? Câu hai, Q của A bằng 0 phẩy 6 sau 20 lần, Q của B bằng 0 phẩy 5 sau 5 lần, t bằng 25 và c bằng 1, hãy tính điểm và chọn tay. Câu ba, chiến dịch 30 ngày, tiêu đề hợp thời tuần này có thể nhạt tuần sau, bạn chọn khám phá thế nào? Dừng video và làm ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <p><b>Câu 1.</b> Tay tốt nhất: $0{,}8 + \frac{0{,}2}{5} = \hlg{0{,}84}$; mỗi tay khác $\frac{0{,}2}{5} = 0{,}04$. Kiểm: $0{,}84 + 4 \cdot 0{,}04 = 1$ ✓.</p>
+          <p><b>Câu 2.</b> $\ln 25 \approx 3{,}219$. A: $0{,}6 + \sqrt{3{,}219 / 20} \approx 0{,}6 + 0{,}401 = 1{,}001$; B: $0{,}5 + \sqrt{3{,}219 / 5} \approx 0{,}5 + 0{,}802 = \hlo{1{,}302}$ → <b>chọn B</b>.</p>
+        focus: [1, 1, 2, 2]
+        say: "Đáp án câu một, tay tốt nhất có 0 phẩy 8 cộng 0 phẩy 2 chia 5, bằng 0 phẩy 84, mỗi tay khác 0 phẩy 04, và tổng đúng bằng 1. Câu hai, lôgarit của 25 xấp xỉ 3 phẩy 219. A được 0 phẩy 6 cộng 0 phẩy 401, bằng 1 phẩy 001. B được 0 phẩy 5 cộng 0 phẩy 802, bằng 1 phẩy 302, nên chọn B vì còn chưa chắc."
+      - show: |
+          <table class="t"><tr><th>câu 3</th><th>được</th><th>mất</th></tr>
+          <tr><td>epsilon cố định 0,1 + bước cố định</td><td>luôn theo kịp thay đổi</td><td>luôn dành 10% lượt để thử</td></tr>
+          <tr><td>cận trên tin cậy + bước cố định</td><td>khám phá có lý do</td><td>cần chỉnh $c$; khó hơn khi phần thưởng đổi nhanh</td></tr>
+          <tr><td>epsilon giảm về 0</td><td>ít lãng phí</td><td class="red">không thấy được khi tiêu đề nhạt đi</td></tr></table>
+          <p class="note">Với 30 ngày và thị hiếu đổi theo tuần: giữ một chút khám phá cố định, đo theo ngày. Nếu thị hiếu ổn định thì cận trên tin cậy hoặc giảm epsilon lợi hơn.</p>
+        focus: [0, "1.2", "1.3", "1.4", 2, 2]
+        say: "Câu ba không có một đáp số, mà là đánh đổi. Xác suất khám phá cố định với bước cố định luôn theo kịp thay đổi, nhưng luôn dành 10 phần trăm lượt để thử. Cận trên tin cậy khám phá có lý do, nhưng cần chỉnh c và khó hơn khi phần thưởng đổi nhanh. Xác suất khám phá giảm về 0 thì ít lãng phí, nhưng sẽ không thấy được khi tiêu đề nhạt đi. Với 30 ngày và thị hiếu đổi theo tuần, hãy giữ một chút khám phá cố định và đo theo ngày. Nếu thị hiếu ổn định thì cận trên tin cậy hoặc giảm xác suất khám phá lợi hơn."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">không biết tay nào tốt: phải thử</span><span class="a">→</span>
+          <span class="n">epsilon tham lam: (1 − ε) + ε/k cho tay tốt nhất</span><span class="a">→</span>
+          <span class="n">epsilon cố định: mất mát tăng đều</span><span class="a">→</span>
+          <span class="n">cận trên tin cậy: Q + c căn(ln t / N)</span><span class="a">→</span>
+          <span class="n">đổi theo mùa: bước cố định, đo theo ngày</span></div>
+        say: "Tổng kết lại, khi không biết tay nào tốt thì phải thử. Tham lam xen khám phá cho tay tốt nhất xác suất 1 trừ xác suất khám phá cộng xác suất khám phá chia k, nhưng giữ xác suất khám phá cố định làm mất mát tăng đều. Cận trên tin cậy cộng điểm cho tay chưa chắc rồi tự thôi khám phá. Còn khi phần thưởng đổi theo mùa, dùng bước cố định và đo theo ngày."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> khám phá là một <b>chi phí có chủ đích</b> — hãy đo nó (bao nhiêu lượt, mất bao nhiêu điểm) và cho nó giảm khi đã đủ chắc, trừ khi thế giới đang thay đổi.</div>
+        say: "Điều cần mang theo, khám phá là một chi phí có chủ đích. Hãy đo nó, bao nhiêu lượt và mất bao nhiêu điểm, và cho nó giảm khi đã đủ chắc, trừ khi thế giới đang thay đổi."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 4): <b>học từ kinh nghiệm</b> — ước lượng giá trị bằng trung bình lợi nhuận của các lượt chơi thật, và sai phân thời gian: cập nhật ngay sau mỗi bước, không cần chờ hết lượt.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 4, ta học từ kinh nghiệm, ước lượng giá trị bằng trung bình lợi nhuận của các lượt chơi thật. Ta cũng học sai phân thời gian, tức cập nhật ngay sau mỗi bước, không cần chờ hết lượt chơi. Hẹn gặp bạn ở bài tiếp theo."

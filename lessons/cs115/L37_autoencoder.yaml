@@ -1,0 +1,252 @@
+id: L37
+series: "CS115 · Toán cho Khoa học Máy tính"
+title: "Bài 37 (mở rộng) — Autoencoder: nén phi tuyến bằng mạng nơ-ron (so với PCA)"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "0 kết quả trong nguồn môn học; CITED: Hinton & Salakhutdinov, “Reducing the dimensionality of data with neural networks”, Science 313(5786) (2006) 504–507, doi:10.1126/science.1127647 (truy cập 2026-10-24, no revision given)"
+assumes: [cdot, sub, vec, mat, transpose, norm, hat, sum, approx, relu, sqrt, power]
+# Quy ước ký hiệu: bộ mã hoá z = e(x) (z ít chiều — “mã”), bộ giải mã x̂ = d(z); sai số tái tạo ‖x − x̂‖² (bài 1, 18).
+# Dữ liệu ví dụ: dùng lại lớp 4 bạn của bài 15, 16 (đã trừ trung bình) và 8 điểm trên đường tròn đơn vị.
+# Lời đọc: “autoencoder” nói “mạng tự mã hoá”; tên tiếng Anh chỉ hiện trên màn hình.
+# Nối bài trước (nói lại khi dùng, luật 17): bài 16 (PCA: giữ K trục, sai số = phần phương sai bị bỏ), bài 19 (quá khớp), bài 23 (mạng
+#   nhiều lớp, hàm kích hoạt phi tuyến), bài 9 (gradient descent).
+objectives:
+  - "Hiểu cấu trúc mã hoá – cổ chai – giải mã và hàm sai số tái tạo"
+  - "Thấy mạng tự mã hoá tuyến tính học đúng hướng của PCA (kiểm bằng số)"
+  - "Thấy vì sao cần phi tuyến: dữ liệu nằm trên đường cong"
+  - "Biết mã không duy nhất và sự đánh đổi nén – mất mát"
+asr_reviewed:
+  - {sentence: "Cùng một độ lệch 10 xăng-ti-mét, cột ghi bằng mét lệch 0 phẩy 1, còn cột ghi bằng mi-li-mét lệch 100.", reason: "ASR chép “Cùng mục đổ lệch 10 cm, cột vi bằng mét lệch 0,1 còn cột vi bằng millimet lệch 100.” (0.76): đơn vị mi-li-mét, ASR viết ký hiệu “mm”; lệch âm/thanh thuần Việt: một độ/mục đổ, ghi/vi, ghi/vi — NOT_VERIFIED bằng tai người"}
+  - sentence: "Khởi tạo ngẫu nhiên và chạy gradient descent 3000 bước."
+    reason: "“descent” đọc theo lexicon “đi xen”, ASR chép “đi xem” — lẫn phụ âm cuối, đúng từ (đã gặp ở L09)"
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Dạy mạng nơ-ron tự chép lại đầu vào — qua một khe hẹp"
+    checks:
+      - "784*32 + 32 + 32*784 + 784 == 50992"
+    steps:
+      - show: |
+          <p class="big">Mạng nhận ảnh 784 số, phải <b>trả lại đúng ảnh đó</b> — nhưng ở giữa chỉ có 32 nơ-ron. Muốn chép lại được, 32 số đó phải là một bản <b>nén</b> của ảnh.</p>
+          <div class="box key">Mạng tự mã hoá (autoencoder): mã hoá $\mathbf{x} \to \mathbf{z}$ (ít chiều) → giải mã $\mathbf{z} \to \hat{\mathbf{x}}$; học bằng cách làm $\lVert\mathbf{x} - \hat{\mathbf{x}}\rVert^2$ nhỏ nhất — không cần nhãn.</div>
+        focus: [1, 1, 2]
+        say: "Chào bạn, hãy dạy một mạng nơ-ron tự chép lại đầu vào, nhưng ở giữa chỉ có một khe hẹp 32 nơ-ron. Muốn chép lại được, 32 con số ở khe hẹp phải là một bản nén của ảnh. Đó là mạng tự mã hoá, học mà không cần nhãn."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn nền: PCA của bài 16"
+    steps:
+      - show: |
+          <p>Bài 16: PCA giữ $K$ trục trải rộng nhất; mỗi mẫu nén thành $K$ con số (độ dài bóng), khôi phục bằng trung bình cộng bóng nhân hướng. Sai số khôi phục = phần phương sai bị bỏ.</p>
+          <p>Lớp học 4 bạn, giữ 1 trục $(1;\ 1)$: An, Cường khôi phục đúng; Bình, Dũng về $(6;\ 6)$; tổng bình phương sai số $= 4$.</p>
+        focus: [1, 2]
+        say: "Nhắc lại bài 16, phân tích thành phần chính giữ K trục trải rộng nhất, nén mỗi mẫu thành K con số, rồi khôi phục bằng trung bình cộng bóng nhân hướng. Với lớp học 4 bạn, giữ một trục, tổng bình phương sai số bằng 4."
+
+  # ───────────────────────── 3. CẤU TRÚC ─────────────────────────
+  - id: sym_ae
+    kind: symbol
+    title: "Giải mã: mã hoá – cổ chai – giải mã"
+    steps:
+      - show: |
+          <div class="box key">$\mathbf{z} = e(\mathbf{x})$ (bộ mã hoá, ra ít chiều — <b>cổ chai</b>), &nbsp; $\hat{\mathbf{x}} = d(\mathbf{z})$ (bộ giải mã), &nbsp; sai số $= \sum_i\lVert\mathbf{x}_i - \hat{\mathbf{x}}_i\rVert^2$</div>
+          <p>$e$, $d$ là mạng nhiều lớp (bài 23), học bằng lan truyền ngược và gradient descent. Mạng 784 → 32 → 784 có $784\cdot 32 + 32 + 32\cdot 784 + 784 = 50\,992$ tham số.</p>
+        focus: ["1.1", "1.3", "1.4", 2]
+        say: "Bộ mã hoá e biến x thành mã z ít chiều, gọi là cổ chai. Bộ giải mã d biến z thành bản khôi phục x mũ. Sai số là tổng bình phương độ lệch giữa x và x mũ. Cả hai là mạng nhiều lớp như bài 23, học bằng lan truyền ngược."
+
+  - id: bottleneck_pic
+    kind: intuition
+    title: "Nhìn dữ liệu chen qua cổ chai"
+    checks:
+      - "round(0.70710678*2 + 0.70710678*2, 2) == 2.83 and round(2*math.sqrt(2)*0.70710678, 6) == 2.0"
+    steps:
+      - show: |
+          <svg width="1200" height="420" viewBox="0 0 1200 420"><defs><marker id="arA37" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs><polygon points="260,70 520,165 520,235 260,330" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/><polygon points="680,165 940,70 940,330 680,235" fill="#dcfce7" stroke="#059669" stroke-width="2"/><circle cx="170" cy="120" r="42" fill="#ffffff" stroke="#2563eb" stroke-width="3"/><text x="170" y="129" font-size="26" text-anchor="middle" fill="#1f2937">2</text><circle cx="170" cy="280" r="42" fill="#ffffff" stroke="#2563eb" stroke-width="3"/><text x="170" y="289" font-size="26" text-anchor="middle" fill="#1f2937">2</text><circle cx="600" cy="200" r="42" fill="#fde68a" stroke="#d97706" stroke-width="3"/><text x="600" y="209" font-size="26" text-anchor="middle" fill="#1f2937">2,83</text><circle cx="1030" cy="120" r="42" fill="#ffffff" stroke="#059669" stroke-width="3"/><text x="1030" y="129" font-size="26" text-anchor="middle" fill="#1f2937">2</text><circle cx="1030" cy="280" r="42" fill="#ffffff" stroke="#059669" stroke-width="3"/><text x="1030" y="289" font-size="26" text-anchor="middle" fill="#1f2937">2</text><g stroke="#1f2937" stroke-width="2"><line x1="214" y1="120" x2="552" y2="190" marker-end="url(#arA37)"/><line x1="214" y1="280" x2="552" y2="212" marker-end="url(#arA37)"/><line x1="644" y1="190" x2="984" y2="122" marker-end="url(#arA37)"/><line x1="644" y1="212" x2="984" y2="278" marker-end="url(#arA37)"/></g><g font-size="24" text-anchor="middle" fill="#1f2937"><text x="170" y="45">đầu vào x (2 số)</text><text x="600" y="130">mã z (1 số)</text><text x="1030" y="45">khôi phục x̂ (2 số)</text></g><g font-size="22" text-anchor="middle"><text x="390" y="365" fill="#2563eb">mã hoá: nhân 0,707 rồi cộng</text><text x="810" y="365" fill="#059669">giải mã: nhân z với 0,707</text><text x="600" y="405" fill="#d97706">mọi thông tin phải chen qua cổ chai 1 số</text></g></svg>
+        say: "Hình này cho thấy một mạng tự mã hoá tuyến tính nhỏ nhất, hai số vào, một số ở cổ chai, hai số ra. Điểm 2, 2 của lớp học đi vào bên trái. Bộ mã hoá màu xanh dương nhân mỗi số với 0 phẩy 707 rồi cộng lại, được đúng một số là 2 phẩy 83. Bộ giải mã màu lục nhân số đó với 0 phẩy 707 cho từng đầu ra, và trả lại 2, 2. Mọi thông tin về điểm đó phải chen qua một con số duy nhất ở giữa."
+
+  - id: hand_code
+    kind: example
+    title: "Làm tay: mã hoá, giải mã và cộng sai số"
+    checks:
+      - "(lambda v: round(float(v @ np.array([2, 2.])), 2) == 2.83 and np.allclose(float(v @ np.array([2, 2.]))*v, [2, 2]))(np.array([1, 1.])/math.sqrt(2))"
+      - "(lambda v: float(v @ np.array([1, -1.])) == 0.0 and float(((np.array([1, -1.]) - 0*v)**2).sum()) == 2.0)(np.array([1, 1.])/math.sqrt(2))"
+      - "(lambda v, X: [round(float(((x - (v @ x)*v)**2).sum()), 9) for x in X] == [0, 0, 2, 2])(np.array([1, 1.])/math.sqrt(2), np.array([[2, 2], [-2, -2], [1, -1], [-1, 1.]]))"
+    steps:
+      - show: |
+          <p><b>Bước 1.</b> Chọn trọng số mã hoá và giải mã đều là hướng PCA $\mathbf{v}_1 = \frac{1}{\sqrt{2}}(1;\ 1) \approx (0{,}707;\ 0{,}707)$. Mã hoá $\mathbf{x} = (2;\ 2)$:</p>
+          $$z = 0{,}707\cdot 2 + 0{,}707\cdot 2 = 2\sqrt{2} \approx \hlg{2{,}83}$$
+        focus: [1, 1, 2]
+        say: "Bước một, ta chọn trọng số của cả bộ mã hoá và bộ giải mã đều là hướng của phân tích thành phần chính, 0 phẩy 707 và 0 phẩy 707. Đó là một vector dài 1 theo hướng 1, 1. Mã hoá điểm 2, 2, ta được z bằng 2 nhân căn 2, xấp xỉ 2 phẩy 83."
+      - show: |
+          <p><b>Bước 2.</b> Giải mã: nhân mã với hướng.</p>
+          $$\hat{\mathbf{x}} = 2\sqrt{2}\cdot\frac{1}{\sqrt{2}}(1;\ 1) = (2;\ 2), \qquad \lVert\mathbf{x} - \hat{\mathbf{x}}\rVert^2 = \hlg{0}$$
+        focus: [1, 2]
+        say: "Bước hai, giải mã bằng cách nhân mã với hướng, 2 căn 2 nhân 1 chia căn 2, được lại đúng 2, 2. Sai số tái tạo của điểm này bằng 0."
+      - clear: true
+        show: |
+          <p><b>Bước 3.</b> Điểm $(1;\ -1)$ vuông góc với hướng giữ lại:</p>
+          $$z = 0{,}707\cdot 1 + 0{,}707\cdot(-1) = 0, \qquad \hat{\mathbf{x}} = (0;\ 0), \qquad \lVert\mathbf{x} - \hat{\mathbf{x}}\rVert^2 = 1^2 + 1^2 = \hlo{2}$$
+        focus: [1, 2, 2]
+        say: "Bước ba, điểm 1, âm 1 vuông góc với hướng được giữ lại. Mã của nó bằng 0 phẩy 707 trừ 0 phẩy 707, bằng 0, nên bộ giải mã trả về 0, 0. Sai số tái tạo bằng 1 bình phương cộng 1 bình phương, bằng 2."
+      - show: |
+          <p><b>Bước 4.</b> Cộng sai số của cả 4 điểm:</p>
+          <table class="t"><tr><th>điểm</th><th>(2; 2)</th><th>(−2; −2)</th><th>(1; −1)</th><th>(−1; 1)</th><th>tổng</th></tr>
+          <tr><td>sai số tái tạo</td><td>0</td><td>0</td><td>2</td><td>2</td><td>$\hlg{4}$</td></tr></table>
+        focus: [1, "2.2"]
+        say: "Bước bốn, làm tương tự cho cả bốn điểm, hai điểm nằm trên hướng giữ lại có sai số 0, hai điểm vuông góc mỗi điểm sai 2. Tổng sai số bằng 4, đúng bằng con số của phân tích thành phần chính ở bài 16."
+
+  # ───────────────────────── 4. TUYẾN TÍNH = PCA ─────────────────────────
+  - id: linear_pca
+    kind: example
+    title: "Ví dụ: mạng tự mã hoá tuyến tính học đúng hướng PCA"
+    checks:
+      - "(lambda Xc: (lambda r: round(r[0], 6) == 4.0 and np.allclose(abs(r[1]/np.linalg.norm(r[1])), [0.70710678, 0.70710678]))(__import__('functools').reduce(lambda ed, _: (lambda e, d: (lambda z, R: (e - 0.02*(2*Xc.T @ (R @ d))/4, d - 0.02*(2*R.T @ z)/4))(Xc @ e, np.outer(Xc @ e, d) - Xc))(*ed), range(3000), tuple(np.random.default_rng(0).normal(size=(2, 2))*0.5)) and (lambda e, d: (float(((np.outer(Xc @ e, d) - Xc)**2).sum()), d))(*__import__('functools').reduce(lambda ed, _: (lambda e, d: (lambda z, R: (e - 0.02*(2*Xc.T @ (R @ d))/4, d - 0.02*(2*R.T @ z)/4))(Xc @ e, np.outer(Xc @ e, d) - Xc))(*ed), range(3000), tuple(np.random.default_rng(0).normal(size=(2, 2))*0.5)))))(np.array([[2, 2], [-2, -2], [1, -1], [-1, 1.]]))"
+    steps:
+      - show: |
+          <p>Lớp học (đã trừ trung bình), mạng <b>tuyến tính</b>, cổ chai 1 số: $\ z = \mathbf{e}^T\mathbf{x}$, $\ \hat{\mathbf{x}} = z\cdot\mathbf{d}$. Khởi tạo ngẫu nhiên, gradient descent 3000 bước:</p>
+          <table class="t"><tr><th></th><th>mạng tự mã hoá tuyến tính</th><th>PCA (bài 16)</th></tr>
+          <tr><td>hướng giải mã</td><td>$\mathbf{d}$ chuẩn hoá $= (0{,}7071;\ 0{,}7071)$</td><td>$\mathbf{v}_1 = \frac{1}{\sqrt{2}}(1;\ 1)$</td></tr>
+          <tr><td>tổng bình phương sai số</td><td>$\hlg{4{,}0}$</td><td>4</td></tr></table>
+          <p class="note">Cùng hướng, cùng sai số — nhưng $\mathbf{e}$, $\mathbf{d}$ không có độ dài 1 như $\mathbf{v}_1$ (mã không duy nhất: nhân $z$ với 2 và chia $\mathbf{d}$ cho 2 cho cùng kết quả).</p>
+        focus: [1, 1, ["2.2", "2.3"], 2]
+        say: "Ví dụ lớp học với mạng tuyến tính, cổ chai chỉ một số. Khởi tạo ngẫu nhiên và chạy gradient descent 3000 bước. Hướng giải mã học được trùng hướng 1, 1 của phân tích thành phần chính, và sai số cũng bằng 4. Vậy mạng tuyến tính không làm được gì hơn phân tích thành phần chính."
+
+  # ───────────────────────── 5. CẦN PHI TUYẾN ─────────────────────────
+  - id: nonlinear
+    kind: concept
+    title: "Vì sao cần phi tuyến: dữ liệu trên đường cong"
+    checks:
+      - "(lambda C: [round(float(v), 3) for v in np.linalg.svd(C - C.mean(0), compute_uv=False)] == [2.0, 2.0])(np.c_[np.cos(np.linspace(0, 2*np.pi, 8, endpoint=False)), np.sin(np.linspace(0, 2*np.pi, 8, endpoint=False))])"
+    steps:
+      - show: |
+          <p>8 điểm cách đều trên đường tròn: thực chất chỉ cần <b>1 số</b> (góc) để mô tả. Nhưng PCA thấy hai giá trị kỳ dị bằng nhau (2 và 2): mọi hướng trải như nhau — nén xuống 1 chiều mất <b>một nửa</b> phương sai.</p>
+          <div class="box key">Bộ mã hoá phi tuyến có thể học “góc” làm mã 1 số, bộ giải mã học lại “cos, sin của góc” — nén mà gần như không mất. PCA chỉ chiếu lên đường <b>thẳng</b>, không làm được.</div>
+        focus: [1, 1, 1, 2]
+        say: "Ví dụ tám điểm trên một đường tròn. Thực chất chỉ cần một con số, là góc, để mô tả mỗi điểm. Nhưng phân tích thành phần chính thấy mọi hướng trải như nhau, nén xuống một chiều mất một nửa. Bộ mã hoá phi tuyến có thể học chính góc đó làm mã."
+
+  # ───────────────────────── 6. ĐÁNH ĐỔI ─────────────────────────
+  - id: tradeoff
+    kind: concept
+    title: "Đánh đổi và các biến thể"
+    steps:
+      - show: |
+          <table class="t"><tr><th>điều chỉnh</th><th>hệ quả</th></tr>
+          <tr><td>cổ chai càng hẹp</td><td>nén càng mạnh, khôi phục càng mất mát</td></tr>
+          <tr><td>mạng quá mạnh</td><td>có thể “học thuộc” dữ liệu huấn luyện (bài 19) — kiểm sai số tái tạo trên tập kiểm định</td></tr>
+          <tr><td>khử nhiễu: đầu vào bị nhiễu, bắt trả lại bản sạch</td><td>mạng học cấu trúc thật thay vì chép</td></tr></table>
+          <p class="note">Mã $\mathbf{z}$ không duy nhất và các thành phần không nhất thiết vuông góc như các trục của PCA.</p>
+        focus: [0, "1.1", "1.2", "1.3"]
+        say: "Có một đánh đổi. Cổ chai càng hẹp thì nén càng mạnh nhưng khôi phục càng mất mát. Mạng quá mạnh có thể học thuộc dữ liệu như bài 19, nên phải kiểm sai số tái tạo trên tập kiểm định. Một biến thể hay là cho đầu vào bị nhiễu và bắt mạng trả lại bản sạch."
+
+  # ───────────────────────── 7. KIỂM BẰNG MÁY ─────────────────────────
+  - id: verify
+    kind: check
+    title: "Phép thử: so với SVD của bài 16"
+    checks:
+      - "(lambda Xc: (lambda s: round(float(s[1]**2), 6) == 4.0)(np.linalg.svd(Xc, compute_uv=False)))(np.array([[2, 2], [-2, -2], [1, -1], [-1, 1.]]))"
+    steps:
+      - show: |
+          <p>Theo bài 16, sai số nhỏ nhất khi giữ 1 trục = bình phương giá trị kỳ dị bị bỏ:</p>
+          $$2^2 = 4 \ = \ \text{sai số mạng tuyến tính đạt được} \ = \ 0 + 0 + 2 + 2 \ \checkmark$$
+          <p class="note">Không mạng tuyến tính nào làm tốt hơn.</p>
+        focus: [[1, 2], 3]
+        say: "Phép thử, theo bài 16, sai số nhỏ nhất khi giữ một trục bằng bình phương giá trị kỳ dị bị bỏ, bằng 4, đúng bằng sai số mạng tuyến tính đạt được. Không mạng tuyến tính nào làm tốt hơn được."
+
+  # ───────────────────────── 8. TRONG AI ─────────────────────────
+  - id: in_ai
+    kind: concept
+    title: "Mạng tự mã hoá trong học máy"
+    steps:
+      - show: |
+          <table class="t"><tr><th>dùng để</th><th>vì sao được</th></tr>
+          <tr><td>nén, khử nhiễu ảnh</td><td>mã giữ phần cốt lõi, bỏ nhiễu</td></tr>
+          <tr><td>phát hiện bất thường</td><td>mẫu lạ khôi phục kém → sai số tái tạo lớn</td></tr>
+          <tr><td>tiền huấn luyện đặc trưng khi ít nhãn</td><td>học từ dữ liệu không nhãn</td></tr>
+          <tr><td><b>Bài 42</b> (mở rộng): biến thể xác suất (VAE)</td><td>sinh dữ liệu mới từ mã</td></tr></table>
+        forward_ref: true
+        say: "Mạng tự mã hoá được dùng để nén và khử nhiễu ảnh, và phát hiện bất thường, vì mẫu lạ sẽ khôi phục kém. Ở bài mở rộng 42, một biến thể dùng xác suất để sinh dữ liệu mới từ mã."
+
+  # ───────────────────────── 9. LỖI THƯỜNG GẶP ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay mắc"
+    checks:
+      - "round(0.1**2, 9) == 0.01 and 100**2 == 10000 and round(100**2/0.1**2) == 1000000 and round(0.1*1000, 9) == 100"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Dùng mạng tuyến tính và mong hơn PCA <b class="red">(sai)</b>
+          <br><span class="note">Tuyến tính + sai số bình phương chỉ đạt đúng PCA; cần hàm kích hoạt phi tuyến.</span></div>
+        say: "Lỗi thứ nhất, dùng mạng tuyến tính và mong làm tốt hơn phân tích thành phần chính. Tuyến tính với sai số bình phương chỉ đạt đúng mức đó, cần hàm kích hoạt phi tuyến."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Cổ chai rộng bằng đầu vào <b class="red">(vô ích)</b>
+          <br><span class="note">Mạng chỉ cần chép nguyên văn — không học được gì về cấu trúc.</span></div>
+        say: "Lỗi thứ hai, cổ chai rộng bằng đầu vào. Khi đó mạng chỉ cần chép nguyên văn, không học được gì về cấu trúc."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> So sánh từng số của mã giữa hai lần huấn luyện <b class="red">(sai)</b>
+          <br><span class="note">Mã không duy nhất — chỉ không gian mã và chất lượng khôi phục mới có ý nghĩa.</span></div>
+        say: "Lỗi thứ ba, so sánh từng con số của mã giữa hai lần huấn luyện. Mã không duy nhất, nên chỉ chất lượng khôi phục mới có ý nghĩa."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Đưa vào các đặc trưng có <b>đơn vị khác nhau</b> mà không chuẩn hoá <b class="red">(mạng chỉ học cột số lớn)</b></div>
+          <table class="t"><tr><th>cùng một độ lệch thật 10 cm</th><th>ghi bằng mét</th><th>ghi bằng mi-li-mét</th></tr>
+          <tr><td>độ lệch</td><td>0,1</td><td>100</td></tr>
+          <tr><td>góp vào sai số bình phương</td><td>0,01</td><td>$\hlo{10\,000}$ — gấp 1 triệu lần</td></tr></table>
+          <p class="note">Chuẩn hoá từng cột trước (trừ trung bình, chia độ lệch chuẩn) để mỗi đặc trưng có cùng tiếng nói.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, đưa vào các đặc trưng có đơn vị khác nhau mà không chuẩn hoá. Cùng một độ lệch 10 xăng-ti-mét, cột ghi bằng mét lệch 0 phẩy 1, còn cột ghi bằng mi-li-mét lệch 100. Bình phương lên, cột mét góp 0 phẩy 01, cột mi-li-mét góp 10 nghìn, gấp 1 triệu lần, nên mạng chỉ lo khôi phục cột số lớn. Hãy chuẩn hoá từng cột trước, trừ trung bình rồi chia độ lệch chuẩn."
+
+  # ───────────────────────── 10. TỰ KIỂM TRA ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "100*10 + 10 + 10*100 + 100 == 2110"
+      - "(lambda x, xh: float(((x - xh)**2).sum()))(np.array([1, 2.]), np.array([1, 1.])) == 1.0"
+      - "100*10 + 10 == 1010 and 10*100 + 100 == 1100 and (lambda v: [(round(float(v @ x), 2), round(float(((x - (v @ x)*v)**2).sum()), 9)) for x in (np.array([3, 3.]), np.array([3, -3.]))] == [(4.24, 0), (0.0, 18)])(np.array([1, 1.])/math.sqrt(2)) and 18 > 5 > 0"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Mạng 100 → 10 → 100 (một lớp mỗi bên) có bao nhiêu tham số?</td></tr>
+          <tr><td>2</td><td>$\mathbf{x} = (1;\ 2)$, $\hat{\mathbf{x}} = (1;\ 1)$: sai số tái tạo?</td></tr>
+          <tr><td>3</td><td>Khi nào mạng tự mã hoá chỉ bằng PCA?</td></tr>
+          <tr><td>4</td><td>Dùng mạng của ví dụ (hướng giữ lại $(0{,}707;\ 0{,}707)$) để phát hiện bất thường, ngưỡng sai số 5. Điểm mới $(3;\ 3)$ và $(3;\ -3)$: báo điểm nào?</td></tr></table>
+        focus: [0, "1.5", 0]
+        say: "Bây giờ đến lượt bạn, với bốn câu trên màn hình. Câu cuối là một quyết định, báo bất thường cho điểm nào. Hãy dừng video và làm ra giấy."
+        pause: 8
+      - show: |
+          <table class="t"><tr><th>câu</th><th>từng bước</th><th>đáp số</th></tr>
+          <tr><td>①</td><td>mã hoá $100\cdot 10 + 10 = 1010$; &nbsp; giải mã $10\cdot 100 + 100 = 1100$</td><td>$\hlg{2110}$</td></tr>
+          <tr><td>②</td><td>$(1 - 1)^2 + (2 - 1)^2 = 0 + 1$</td><td>$\hlg{1}$</td></tr>
+          <tr><td>③</td><td>mạng tuyến tính và sai số bình phương</td><td>bằng PCA</td></tr></table>
+        focus: ["1.2", "1.3", "1.4"]
+        say: "Câu một, bộ mã hoá có 100 nhân 10 trọng số cộng 10 hệ số chặn, bằng 1010, bộ giải mã có 10 nhân 100 cộng 100, bằng 1100, tổng cộng 2110 tham số. Câu hai, 1 trừ 1 bình phương bằng 0, 2 trừ 1 bình phương bằng 1, nên sai số tái tạo bằng 1. Câu ba, khi mạng tuyến tính và dùng sai số bình phương, nó chỉ học được đúng như phân tích thành phần chính."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>điểm</th><th>mã $z$</th><th>khôi phục</th><th>sai số</th><th>so ngưỡng 5</th></tr>
+          <tr><td>$(3;\ 3)$</td><td>$3\sqrt{2} \approx 4{,}24$</td><td>$(3;\ 3)$</td><td>0</td><td>bình thường</td></tr>
+          <tr><td>$(3;\ -3)$</td><td>0</td><td>$(0;\ 0)$</td><td>$9 + 9 = 18$</td><td>$\hlo{\text{báo bất thường}}$</td></tr></table>
+        focus: ["1.2", "1.3", "1.3"]
+        say: "Câu bốn, điểm 3, 3 nằm đúng hướng giữ lại, mã bằng 3 căn 2, xấp xỉ 4 phẩy 24, khôi phục đúng 3, 3, sai số 0, nên bình thường. Điểm 3, âm 3 vuông góc với hướng đó, mã bằng 0, khôi phục thành 0, 0. Sai số bằng 9 cộng 9, bằng 18, vượt ngưỡng 5, nên ta báo điểm này là bất thường."
+
+  # ───────────────────────── 11. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">mã hoá → cổ chai → giải mã</span><span class="a">→</span>
+          <span class="n">sai số tái tạo, không cần nhãn</span><span class="a">→</span>
+          <span class="n">tuyến tính = PCA</span><span class="a">→</span>
+          <span class="n">phi tuyến: nén theo đường cong</span></div>
+        say: "Tổng kết chuỗi logic. Mạng tự mã hoá đi qua mã hoá, cổ chai và giải mã, học bằng sai số tái tạo mà không cần nhãn. Bản tuyến tính chỉ bằng phân tích thành phần chính, còn bản phi tuyến nén được dữ liệu nằm trên đường cong."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> buộc mô hình đi qua một khe hẹp là cách khiến nó phải học điều cốt lõi.</div>
+        say: "Điều cần mang theo, buộc mô hình đi qua một khe hẹp là cách khiến nó phải học điều cốt lõi."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 38): <b>phân tích thành phần độc lập</b> (ICA) — tách các nguồn bị trộn lẫn.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 38, ta học phân tích thành phần độc lập, tách các nguồn tín hiệu bị trộn lẫn. Hẹn gặp bạn ở bài tiếp theo."

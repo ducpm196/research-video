@@ -1,0 +1,201 @@
+id: L11
+course: SEC
+series: "SEC · An toàn thông tin"
+title: "Bài 11 — An toàn bộ nhớ và các lớp bảo vệ của hệ điều hành"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/sec.yaml L11; audit/sec/verify_sec.py L11; H. Shacham và cộng sự, On the Effectiveness of Address-Space Randomization, ACM CCS (2004); Microsoft Security Response Center, “A proactive approach to more secure code” (2019) — khoảng 70% lỗ hổng được vá là lỗi an toàn bộ nhớ; CISA/NSA, The Case for Memory Safe Roadmaps (2023); CSA bài 1, OSY bài 9"
+assumes: [arith, power, frac]
+# Quy ước: mức KHÁI NIỆM để hiểu vì sao cần các lớp bảo vệ, không mô tả cách khai thác. Ngẫu nhiên hoá địa chỉ với b bit entropy: số lần đoán vét
+#   trung bình = 2^b / 2 KHI khởi động lại giữ nguyên bố trí (tiến trình con sao chép từ tiến trình cha — trường hợp Shacham 2004: đoán không lặp lại).
+#   Nếu mỗi lần khởi động lại bố trí mới thì các lần đoán độc lập, xác suất 1/2^b → trung bình 2^b lần (verify_sec.py kiểm cả hai bằng Monte Carlo).
+objectives:
+  - "Giải thích tràn bộ đệm ở mức khái niệm"
+  - "Mô tả ngẫu nhiên hoá địa chỉ, vùng nhớ không thực thi, chim hoàng yến"
+  - "Hiểu vì sao ngôn ngữ an toàn bộ nhớ là giải pháp gốc"
+asr_reviewed:
+  - {sentence: "Chép 20 byte mà không kiểm độ dài, phần thừa tràn sang phải và chạm chim hoàng yến trước tiên.", reason: "ASR chép “Chép 20 bay mà không kiểm độ dài, phần thừa trang sang phải và chạm chim hoàn yến trước tiên.” (0.857): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: tràn/trang, hoàng/hoàn — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Mảng 16 byte đặt ở địa chỉ 100 chiếm tới ô 115, nên ghi 20 byte từ ô 100 sẽ tới ô 119, tràn sang 4 ô hàng xóm.", reason: "ASR chép “Mản 16 bay đặt ở địa chỉ 109 tới ô 115, nên ghi 20 bay từ ô 100 sẽ tới ô 119, tràn sang 4 ô hàng xóm.” (0.886): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); “100 chiếm” ASR chép “109” (âm “chiếm” bị nghe thành “chín”), mọi con số khác khớp, địa chỉ 100 hiện trên màn hình; “mảng/mản” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Ở khoá Kiến trúc máy tính, bộ nhớ là một dãy ô 1 byte, mỗi ô có một địa chỉ.", reason: "ASR chép “Ở khóa kiến trúc máy tính, bộ nhớ là một giảy ô một bay, mỗi ô có một địa chỉ.” (0.9): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: dãy/giảy — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Ai đó gửi tên 20 byte, và 4 byte thừa tràn sang ô nhớ bên cạnh, có thể là một biến khác, hoặc địa chỉ mà hàm sẽ quay về khi xong.", reason: "ASR chép “Ai đó gửi tên 20 bay và 4 bay thừa tràn sang ô nhớ bên cạnh có thể là một biến khác hoặc địa chỉ mà hàm sẽ quay về khi xong.” (0.939): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Chào bạn, một hàm cấp 16 byte cho tên người dùng nhưng không kiểm độ dài.", reason: "ASR chép “Chào bạn, một hàm cấp 16 bay cho tên người dùng nhưng không kiểm độ dài.” (0.941): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Ghi 20 ký tự vào chỗ chứa 16"
+    steps:
+      - show: |
+          <p>Một hàm cấp 16 byte cho tên người dùng nhưng không kiểm độ dài. Ai đó gửi tên 20 byte: 4 byte thừa tràn sang ô nhớ <b>bên cạnh</b> — có thể là biến khác, hoặc địa chỉ mà hàm sẽ quay về khi xong. Chương trình làm điều không ai viết.</p>
+          <div class="box key">Hôm nay: <b>an toàn bộ nhớ</b> — lỗi gì, các lớp bảo vệ của hệ điều hành làm gì, và giải pháp gốc.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, một hàm cấp 16 byte cho tên người dùng nhưng không kiểm độ dài. Ai đó gửi tên 20 byte, và 4 byte thừa tràn sang ô nhớ bên cạnh, có thể là một biến khác, hoặc địa chỉ mà hàm sẽ quay về khi xong. Chương trình làm điều mà không ai viết. Hôm nay ta học an toàn bộ nhớ, lỗi đó là gì, các lớp bảo vệ của hệ điều hành làm gì, và giải pháp gốc."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: ô nhớ có địa chỉ, trang có quyền, b bit cho 2 mũ b khả năng"
+    checks:
+      - "100 + 16 - 1 == 115 and 100 + 20 - 1 == 119 and 119 - 115 == 4 and 2 ** 8 == 256"
+    steps:
+      - show: |
+          <table class="t"><tr><th>điều sẽ dùng</th><th>ví dụ</th></tr>
+          <tr><td>ở khoá Kiến trúc máy tính: bộ nhớ là dãy ô 1 byte, mỗi ô một địa chỉ</td><td>mảng 16 byte ở địa chỉ 100 tới 115; ghi 20 byte từ 100 thì tới 119, tràn 4 ô hàng xóm</td></tr>
+          <tr><td>ở khoá Hệ điều hành: mỗi trang nhớ có cờ quyền đọc, ghi, chạy</td><td>trang dữ liệu: đọc, ghi, <b>không</b> chạy</td></tr>
+          <tr><td>$b$ bit ngẫu nhiên cho $2^b$ khả năng</td><td>8 bit: $2^8 = 256$ khả năng</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.3", "1.4"]
+        say: "Trước hết, ôn ba điều bài này sẽ dùng. Ở khoá Kiến trúc máy tính, bộ nhớ là một dãy ô 1 byte, mỗi ô có một địa chỉ. Mảng 16 byte đặt ở địa chỉ 100 chiếm tới ô 115, nên ghi 20 byte từ ô 100 sẽ tới ô 119, tràn sang 4 ô hàng xóm. Ở khoá Hệ điều hành, mỗi trang nhớ có cờ quyền đọc, ghi và chạy, trang dữ liệu được đọc, ghi, nhưng không được chạy. Cuối cùng, b bit ngẫu nhiên cho 2 mũ b khả năng, 8 bit cho 256 khả năng."
+      - show: |
+          <p>Khi gọi một hàm, máy cất <b>địa chỉ quay về</b> lên ngăn xếp, sát cạnh các biến cục bộ của hàm đó. Hàm chạy xong thì nhảy tới địa chỉ này.</p>
+        say: "Điều thứ tư là ngăn xếp. Khi gọi một hàm, máy cất địa chỉ quay về lên ngăn xếp, sát cạnh các biến cục bộ của hàm đó, và hàm chạy xong thì nhảy tới địa chỉ này."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: lỗi bộ nhớ và ba lớp bảo vệ"
+    steps:
+      - show: |
+          <p><b>Lỗi an toàn bộ nhớ</b>: đọc hay ghi ra ngoài vùng được cấp (tràn bộ đệm), dùng vùng đã giải phóng, đọc vùng chưa khởi tạo. Thường gặp ở ngôn ngữ để lập trình viên tự quản lý bộ nhớ.</p>
+          <table class="t"><tr><th>lớp bảo vệ</th><th>làm gì</th></tr>
+          <tr><td><b>chim hoàng yến</b> trên ngăn xếp</td><td>đặt một giá trị ngẫu nhiên trước địa chỉ quay về; bị ghi đè thì dừng chương trình</td></tr>
+          <tr><td><b>vùng nhớ không thực thi</b></td><td>vùng dữ liệu không được chạy như mã</td></tr>
+          <tr><td><b>ngẫu nhiên hoá địa chỉ</b></td><td>đặt mã và dữ liệu ở địa chỉ ngẫu nhiên mỗi lần chạy, kẻ xấu không biết trước nơi cần nhắm</td></tr></table>
+        focus: [1, 1, 2, "2.2", "2.3", "2.4"]
+        say: "Lỗi an toàn bộ nhớ là đọc hay ghi ra ngoài vùng được cấp, gọi là tràn bộ đệm, dùng vùng đã giải phóng, hay đọc vùng chưa khởi tạo. Lỗi này thường gặp ở những ngôn ngữ để lập trình viên tự quản lý bộ nhớ. Bảng giới thiệu ba lớp bảo vệ. Chim hoàng yến đặt một giá trị ngẫu nhiên trước địa chỉ quay về trên ngăn xếp, bị ghi đè thì dừng chương trình. Vùng nhớ không thực thi cấm chạy vùng dữ liệu như mã. Ngẫu nhiên hoá địa chỉ đặt mã và dữ liệu ở địa chỉ ngẫu nhiên mỗi lần chạy, nên kẻ xấu không biết trước nơi cần nhắm."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Các lớp chặn trên đường tràn"
+    steps:
+      - show: |
+          <div><svg width="1500" height="390" viewBox="0 0 1500 390"><g fill="#1f2937"><rect x="60" y="120" width="90" height="80" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><rect x="155" y="120" width="90" height="80" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><rect x="250" y="120" width="90" height="80" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><rect x="345" y="120" width="90" height="80" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><rect x="440" y="120" width="90" height="80" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><rect x="535" y="120" width="90" height="80" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><rect x="630" y="120" width="90" height="80" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><rect x="725" y="120" width="90" height="80" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="438" y="232" text-anchor="middle" font-size="22" fill="#2a78d6">tên: 16 byte (vẽ gọn 8 ô)</text><rect x="830" y="120" width="260" height="80" rx="10" fill="#fef3c7" stroke="#eb6834" stroke-width="3"/><text x="960" y="168" text-anchor="middle" font-size="24">chim hoàng yến</text><rect x="1110" y="120" width="330" height="80" rx="10" fill="#d1fae5" stroke="#059669" stroke-width="3"/><text x="1275" y="168" text-anchor="middle" font-size="24">địa chỉ quay về</text><line x1="60" y1="90" x2="1080" y2="90" stroke="#b91c1c" stroke-width="4"/><polygon points="1090,90 1072,80 1072,100" fill="#b91c1c"/><text x="560" y="70" text-anchor="middle" font-size="24" fill="#b91c1c">chép 20 byte không kiểm độ dài: 4 byte thừa tràn sang phải</text><text x="960" y="245" text-anchor="middle" font-size="22" fill="#eb6834">bị đổi → dừng chương trình</text><text x="1275" y="245" text-anchor="middle" font-size="22" fill="#059669">chưa kịp dùng địa chỉ sai</text><text x="438" y="268" text-anchor="middle" font-size="22" fill="#059669">kiểm độ dài khi chép → không tràn</text><text x="750" y="320" text-anchor="middle" font-size="24" fill="#2a78d6">trang dữ liệu không được chạy; địa chỉ ngẫu nhiên mỗi lần chạy</text><text x="750" y="360" text-anchor="middle" font-size="24" fill="#1f2937">ba lớp làm khai thác khó hơn; sửa lỗi gốc mới làm lỗi biến mất</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ ngăn xếp của một hàm, vùng tên màu xanh nằm trước chim hoàng yến, rồi tới địa chỉ quay về. Chép 20 byte mà không kiểm độ dài, phần thừa tràn sang phải và chạm chim hoàng yến trước tiên. Giá trị ngẫu nhiên đó bị đổi, nên chương trình dừng trước khi kịp quay về một địa chỉ sai. Hai lớp còn lại là trang dữ liệu không được chạy và địa chỉ ngẫu nhiên, nhưng cả ba chỉ làm khai thác khó hơn, còn kiểm độ dài mới làm lỗi biến mất."
+
+  - id: example
+    kind: example
+    title: "Ngẫu nhiên hoá mạnh đến đâu?"
+    checks:
+      - "2 ** 16 // 2 == 32768 and 2 ** 28 // 2 == 134217728 and 2 ** 16 == 65536 and 2 ** 28 == 268435456"
+    steps:
+      - show: |
+          <p><b>Bước 1 — đếm khả năng:</b> với $b$ bit ngẫu nhiên, kẻ xấu phải đoán trong $2^b$ khả năng; mỗi lần sai thường làm chương trình chết.</p>
+          <table class="t"><tr><th>bit ngẫu nhiên</th><th>số khả năng</th></tr>
+          <tr><td>16</td><td>$2^{16} = 65\,536$</td></tr>
+          <tr><td>28</td><td>$2^{28} = 268\,435\,456$</td></tr></table>
+        focus: [1, 1, 2, "2.2", "2.3"]
+        say: "Bước một, đếm số khả năng. Với b bit ngẫu nhiên, kẻ xấu phải đoán trong 2 mũ b khả năng, và mỗi lần sai thường làm chương trình chết. Bảng tính cho hai mức. Với 16 bit, 2 mũ 16 bằng 65 nghìn 536 khả năng. Với 28 bit, 2 mũ 28 bằng hơn 268 triệu khả năng."
+      - show: |
+          <p><b>Bước 2 — giữ nguyên bố trí:</b> chương trình khởi động lại mà <b>giữ nguyên</b> bố trí, mỗi lần đoán loại được một khả năng → trung bình $\frac{2^b}{2}$ lần.</p>
+          <p>16 bit: $\frac{65\,536}{2} = \hl{32\,768}$ lần — dịch vụ tự khởi động lại thì vẫn đoán vét được (nghiên cứu năm 2004).</p>
+        focus: [1, 1, 2]
+        say: "Bước hai, xét trường hợp chương trình khởi động lại mà giữ nguyên bố trí. Mỗi lần đoán loại được một khả năng, nên trung bình cần 2 mũ b chia 2 lần. Với 16 bit, 65 nghìn 536 chia 2 bằng 32 nghìn 768 lần, một dịch vụ tự khởi động lại thì vẫn có thể bị đoán vét, theo một nghiên cứu năm 2004."
+      - show: |
+          <p><b>Bước 3 — 28 bit:</b> $\frac{268\,435\,456}{2} = \hl{134\,217\,728}$ lần: hơn 134 triệu lần chương trình chết, quá nhiều để không bị phát hiện.</p>
+        say: "Bước ba, với 28 bit, hơn 268 triệu chia 2 được 134 triệu 217 nghìn 728 lần. Đó là hơn 134 triệu lần chương trình chết, quá nhiều để không bị phát hiện."
+      - clear: true
+        show: |
+          <p><b>Bước 4 — gom lại:</b></p>
+          <table class="t"><tr><th>bit ngẫu nhiên</th><th>đoán trung bình</th><th>nhận xét</th></tr>
+          <tr><td>16</td><td>$\hl{32\,768}$ lần</td><td>dịch vụ tự khởi động lại thì vẫn đoán vét được (nghiên cứu năm 2004)</td></tr>
+          <tr><td>28</td><td>$\hl{134\,217\,728}$ lần</td><td>quá nhiều lần chết để không bị phát hiện</td></tr></table>
+          <div class="box key">Các lớp bảo vệ làm việc khai thác <b>khó hơn và tốn hơn</b>, không làm lỗi biến mất.</div>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Bước bốn, gom lại hai mức ngẫu nhiên. Bảng cho thấy 16 bit chỉ cần trung bình 32 nghìn 768 lần đoán. Còn 28 bit cần trung bình hơn 134 triệu lần, mỗi lần là một lần chết bị ghi lại. Dù vậy, các lớp bảo vệ chỉ làm việc khai thác khó hơn và tốn hơn, chứ không làm lỗi biến mất."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác"
+    checks:
+      - "sum(range(1, 5)) / 4 == 2.5 == (4 + 1) / 2 and (2 ** 16 + 1) / 2 == 32768.5"
+      - "sum(k * (1 / 4) * (3 / 4) ** (k - 1) for k in range(1, 2000)) > 3.9999 and 2 ** 16 == 65536 == 2 * 32768"
+    steps:
+      - show: |
+          <p>Liệt kê ca nhỏ: $b = 2$, có 4 khả năng, thử lần lượt không lặp.</p>
+          <table class="t"><tr><th>đáp án nằm ở lần thử</th><th>1</th><th>2</th><th>3</th><th>4</th><th>trung bình</th></tr>
+          <tr><td>số lần cần</td><td>1</td><td>2</td><td>3</td><td>4</td><td>$\frac{1 + 2 + 3 + 4}{4} = 2{,}5 = \frac{4 + 1}{2}$</td></tr></table>
+        focus: [1, 2, "2.2"]
+        say: "Kiểm bằng đường khác, liệt kê ca nhỏ với b bằng 2, tức 4 khả năng, thử lần lượt không lặp. Đáp án nằm ở lần thử thứ nhất, thứ hai, thứ ba hay thứ tư thì cần 1, 2, 3 hay 4 lần, vì mỗi lần chỉ loại được một khả năng. Trung bình là 1 cộng 2 cộng 3 cộng 4 chia 4, bằng 2 phẩy 5, đúng bằng 4 cộng 1 chia 2."
+      - show: |
+          <table class="t"><tr><th>mô hình</th><th>ca nhỏ, 4 khả năng</th><th>16 bit</th></tr>
+          <tr><td>giữ nguyên bố trí</td><td>2,5 lần</td><td>$\frac{65\,536 + 1}{2} \approx \hl{32\,768}$ ✓</td></tr>
+          <tr><td>bố trí lại sau mỗi lần chết</td><td>mỗi lần trúng $\frac{1}{4}$ → trung bình 4 lần</td><td>trung bình $65\,536$ lần, gấp đôi</td></tr></table>
+        focus: ["1.2", "1.3", "1.3"]
+        say: "Áp cách đếm đó cho 16 bit, ta được 65 nghìn 536 cộng 1 chia 2, làm tròn còn 32 nghìn 768, nên khớp bảng. Nếu mỗi lần chết chương trình bố trí lại từ đầu, thì mỗi lần đoán là một lần thử mới, trúng với xác suất 1 phần 4. Vì vậy trung bình cần 4 lần với ca nhỏ, và 65 nghìn 536 lần với 16 bit, tức gấp đôi."
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, từ người mới tới người đã đi làm"
+    checks:
+      - "round(10 / 2 ** 16 * 100, 3) == 0.015 and 2 ** 16 // 2 == 32768"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Tin các lớp bảo vệ là đủ <b class="red">(chỉ giảm nhẹ)</b>
+          <br><span class="note">Kẻ tấn công thường ghép nhiều lỗi: một lỗi làm lộ địa chỉ là ngẫu nhiên hoá mất tác dụng. Sửa lỗi gốc vẫn là việc bắt buộc.</span></div>
+        say: "Lỗi thứ nhất, tin các lớp bảo vệ là đủ. Kẻ tấn công thường ghép nhiều lỗi, một lỗi làm lộ địa chỉ là ngẫu nhiên hoá mất tác dụng, nên sửa lỗi gốc vẫn là việc bắt buộc."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Dùng hàm chép chuỗi không giới hạn độ dài <b class="red">(tràn bộ đệm)</b>
+          <br><span class="note">Luôn chép với độ dài tối đa bằng kích thước vùng đích, kiểm độ dài đầu vào ở biên, và bật cảnh báo của trình biên dịch.</span></div>
+        say: "Lỗi thứ hai, dùng hàm chép chuỗi không giới hạn độ dài. Hãy luôn chép với độ dài tối đa bằng kích thước vùng đích, kiểm độ dài đầu vào ở biên, và bật cảnh báo của trình biên dịch."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Viết mã mới bằng ngôn ngữ không an toàn bộ nhớ khi không cần <b class="red">(lặp lại lịch sử)</b>
+          <br><span class="note">Khoảng 70% lỗ hổng được vá trong sản phẩm của một hãng lớn là lỗi an toàn bộ nhớ (2019). Với mã mới, chọn ngôn ngữ tự quản lý hoặc kiểm tra bộ nhớ là giải pháp gốc.</span></div>
+        say: "Lỗi thứ ba, viết mã mới bằng ngôn ngữ không an toàn bộ nhớ khi không cần. Khoảng 70 phần trăm lỗ hổng được vá trong sản phẩm của một hãng phần mềm lớn là lỗi an toàn bộ nhớ, theo báo cáo năm 2019. Với mã mới, chọn ngôn ngữ tự quản lý hoặc tự kiểm tra bộ nhớ là giải pháp gốc."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4.</b> Để dịch vụ tự khởi động lại mãi sau mỗi lần chết, không ai được báo <b class="red">(cho kẻ xấu đoán vét)</b>
+          <br><span class="note">Phép đoán ở bước hai chỉ chạy được khi chương trình chết rồi sống lại im lặng. Người làm nghề coi chết bất thường lặp lại là dấu hiệu tấn công: báo động và ngừng tự khởi động sau một ngưỡng (ví dụ 10 lần).</span></div>
+          <table class="t"><tr><th>cấu hình, 16 bit</th><th>số lần kẻ xấu được thử</th><th>xác suất trúng trước khi bị chặn</th></tr>
+          <tr><td>tự khởi động lại mãi, không báo động</td><td>không giới hạn</td><td class="red">gần chắc chắn, trung bình sau 32 768 lần</td></tr>
+          <tr><td>báo động, ngừng sau 10 lần chết</td><td>10</td><td>$\frac{10}{65\,536} \approx \hl{0{,}015\%}$</td></tr></table>
+        focus: [1, 1, 1, 2, "2.2", "2.3"]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, là để dịch vụ tự khởi động lại mãi sau mỗi lần chết mà không ai được báo. Phép đoán ở bước hai chỉ chạy được khi chương trình chết rồi sống lại im lặng. Người làm nghề coi chết bất thường lặp lại là dấu hiệu tấn công, nên báo động và ngừng tự khởi động sau một ngưỡng, ví dụ 10 lần. Bảng so hai cấu hình với 16 bit. Không báo động thì kẻ xấu gần như chắc chắn trúng, trung bình sau 32 nghìn 768 lần. Ngừng sau 10 lần thì xác suất trúng chỉ 10 chia 65 nghìn 536, khoảng 0 phẩy 015 phần trăm."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "2 ** 8 // 2 == 128 and 2 ** 19 // 2 == 262144 and 2 ** 19 == 524288"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Một hệ nhúng chỉ có 8 bit ngẫu nhiên địa chỉ: đoán trung bình bao nhiêu lần? Hệ khác 19 bit thì sao?</td></tr>
+          <tr><td>2</td><td>Chim hoàng yến bị ghi đè thì chương trình dừng. Đó là bảo vệ bí mật, toàn vẹn hay sẵn sàng? Nó đánh đổi gì?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, một hệ nhúng chỉ có 8 bit ngẫu nhiên địa chỉ, đoán trung bình bao nhiêu lần? Hệ khác có 19 bit thì sao? Câu hai, chim hoàng yến bị ghi đè thì chương trình dừng. Đó là bảo vệ bí mật, toàn vẹn hay sẵn sàng, và nó đánh đổi gì? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <table class="t"><tr><th>bit</th><th>số khả năng</th><th>đoán trung bình</th></tr>
+          <tr><td>8</td><td>$2^8 = 256$</td><td>$\frac{256}{2} = \hl{128}$ lần — gần như không bảo vệ</td></tr>
+          <tr><td>19</td><td>$2^{19} = 524\,288$</td><td>$\frac{524\,288}{2} = \hl{262\,144}$ lần</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Đáp án câu một, lập bảng từng bước. 8 bit cho 2 mũ 8 bằng 256 khả năng, chia 2 được trung bình 128 lần, gần như không bảo vệ. 19 bit cho 524 nghìn 288 khả năng, chia 2 được 262 nghìn 144 lần."
+      - show: |
+          <p>② Chim hoàng yến bị đổi nghĩa là luồng chạy sắp bị làm sai → nó bảo vệ <b>toàn vẹn</b> luồng chạy.</p>
+          <p>Đổi lại, chương trình dừng nên mất <b>sẵn sàng</b>: dừng còn hơn chạy sai.</p>
+        focus: [1, 2]
+        say: "Câu hai, chim hoàng yến bị đổi nghĩa là luồng chạy sắp bị làm sai, nên nó bảo vệ toàn vẹn của luồng chạy, không để chương trình bị điều khiển. Đổi lại, chương trình dừng nên mất sẵn sàng, vì dừng còn hơn chạy sai."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">tràn bộ đệm: ghi ra ngoài vùng được cấp</span><span class="a">→</span>
+          <span class="n">chim hoàng yến, vùng không thực thi, địa chỉ ngẫu nhiên</span><span class="a">→</span>
+          <span class="n">làm khai thác khó hơn, không sửa lỗi</span><span class="a">→</span>
+          <span class="n">giải pháp gốc: ngôn ngữ an toàn bộ nhớ</span></div>
+        say: "Tổng kết lại, tràn bộ đệm là ghi ra ngoài vùng được cấp. Chim hoàng yến, vùng không thực thi và địa chỉ ngẫu nhiên làm khai thác khó hơn chứ không sửa lỗi, và giải pháp gốc là ngôn ngữ an toàn bộ nhớ."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> lớp bảo vệ tốt nhất là lớp làm cho cả một loại lỗi <b>không thể viết ra</b>.</div>
+        say: "Điều cần mang theo, lớp bảo vệ tốt nhất là lớp làm cho cả một loại lỗi không thể viết ra."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 12): <b>an toàn mạng</b> — phân vùng, tường lửa, không tin mặc định.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 12, ta học an toàn mạng, với phân vùng, tường lửa, và không tin mặc định. Hẹn gặp bạn ở bài tiếp theo."

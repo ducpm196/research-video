@@ -1,0 +1,203 @@
+id: L07
+course: DAN
+series: "DAN · Phân tích dữ liệu"
+title: "Bài 7 — Dự báo đường cơ sở và đo sai số dự báo"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/dan.yaml L07; audit/dan/verify_dan.py L07; R. Hyndman, G. Athanasopoulos, Forecasting: Principles and Practice (bản 3, 2021), mục 5.2 (dự báo đơn giản), 5.8 (đo độ chính xác); R. Hyndman, A. Koehler, Another look at measures of forecast accuracy (2006); bài 6"
+assumes: [arith, frac, cdot, approx]
+# Quy ước: chuỗi bài 6, dùng 3 tuần đầu để dự báo tuần thứ 4. Dự báo ngây thơ = giá trị cuối cùng đã biết; ngây thơ theo mùa = giá trị cùng thứ tuần trước
+#   (alg.seasonal_naive). Sai số tuyệt đối trung bình (MAE) = trung bình |thực tế − dự báo| (alg.mae); sai số phần trăm (MAPE) không xác định khi có thực tế 0
+#   (alg.mape trả None). Tên MAE, MAPE chỉ trên màn hình.
+objectives:
+  - "Dựng dự báo ngây thơ và ngây thơ theo mùa"
+  - "Chọn thước đo sai số phù hợp"
+  - "Đánh giá mô hình trên dữ liệu chưa thấy"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Mô hình phức tạp có thắng được cách “lấy tuần trước”?"
+    steps:
+      - show: |
+          <p>Nhóm dữ liệu khoe mô hình dự báo nhu cầu mới, mất hai tháng xây. Câu hỏi đầu tiên nên là: nó có tốt hơn cách đơn giản nhất — <b>“tuần này sẽ giống tuần trước”</b> — không? Nhiều mô hình phức tạp không vượt được đường cơ sở đó.</p>
+          <div class="box key">Hôm nay: <b>dự báo đường cơ sở</b> và cách <b>đo sai số</b> cho công bằng.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, nhóm dữ liệu khoe một mô hình dự báo nhu cầu mới, mất hai tháng xây. Câu hỏi đầu tiên nên là nó có tốt hơn cách đơn giản nhất, tuần này sẽ giống tuần trước, không? Nhiều mô hình phức tạp không vượt được đường cơ sở đó. Hôm nay ta học dự báo đường cơ sở, và cách đo sai số cho công bằng."
+
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: trị tuyệt đối, và vì sao sai số cần nó"
+    checks:
+      - "abs(-3) == 3 and abs(3) == 3"
+      - "(2 + (-2)) / 2 == 0 and (abs(2) + abs(-2)) / 2 == 2"
+    steps:
+      - show: |
+          <p><b>Trị tuyệt đối</b> $\lvert x \rvert$ là khoảng cách từ $x$ tới 0, nên không bao giờ âm: $\lvert -3 \rvert = 3$, $\lvert 3 \rvert = 3$.</p>
+        introduces: [absval]
+        say: "Trước hết, ôn lại trị tuyệt đối, viết bằng hai vạch đứng hai bên một số. Trị tuyệt đối là khoảng cách từ số đó tới 0, nên không bao giờ âm. Trị tuyệt đối của âm 3 là 3, và của 3 cũng là 3."
+      - show: |
+          <table class="t"><tr><th>hai sai số</th><th>cộng thẳng rồi chia 2</th><th>lấy trị tuyệt đối trước</th></tr>
+          <tr><td>$+2$ và $-2$</td><td>$\frac{2 + (-2)}{2} = 0$ — trông như hoàn hảo</td><td>$\frac{2 + 2}{2} = 2$ — đúng mức lệch</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.2"]
+        say: "Vì sao sai số cần trị tuyệt đối? Giả sử hôm qua dự báo thấp hơn thực tế 2, hôm nay cao hơn 2. Cộng thẳng rồi chia 2 được 0, trông như dự báo hoàn hảo, vì hai sai số triệt tiêu nhau. Lấy trị tuyệt đối trước thì được 2, đúng là mức lệch trung bình mỗi ngày."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: hai đường cơ sở, hai thước đo"
+    steps:
+      - show: |
+          <table class="t"><tr><th>khái niệm</th><th>nghĩa</th></tr>
+          <tr><td><b>ngây thơ</b></td><td>mọi ngày tới = giá trị cuối cùng đã biết</td></tr>
+          <tr><td><b>ngây thơ theo mùa</b></td><td>mỗi ngày tới = cùng thứ của tuần trước</td></tr>
+          <tr><td><b>sai số tuyệt đối trung bình</b> (MAE)</td><td>trung bình $\lvert \text{thực} - \text{dự báo} \rvert$ — cùng đơn vị với dữ liệu</td></tr>
+          <tr><td><b>sai số phần trăm</b> (MAPE)</td><td>trung bình $\frac{\lvert \text{thực} - \text{dự báo} \rvert}{\lvert \text{thực} \rvert}$ — không xác định khi thực tế bằng 0</td></tr></table>
+          <p>Luôn đo trên dữ liệu <b>chưa dùng</b> để xây mô hình — giữ riêng một tập kiểm tra.</p>
+        introduces: [absval]
+        focus: [1, "1.2", "1.3", "1.4", "1.5", 2]
+        say: "Bảng có hai đường cơ sở và hai thước đo. Dự báo ngây thơ cho mọi ngày tới bằng giá trị cuối cùng đã biết. Dự báo ngây thơ theo mùa cho mỗi ngày tới bằng cùng thứ của tuần trước. Sai số tuyệt đối trung bình là trung bình của trị tuyệt đối thực trừ dự báo, cùng đơn vị với dữ liệu. Sai số phần trăm là trung bình của sai số tuyệt đối chia trị tuyệt đối của thực tế, và không xác định khi thực tế bằng 0. Hãy luôn đo trên dữ liệu chưa dùng để xây mô hình, như cách chia tập trong khoá khoa học dữ liệu."
+
+  - id: intuition
+    kind: intuition
+    title: "Đường cơ sở nào bám hình dạng tuần?"
+    checks:
+      - "(lambda y: [a - f for a, f in zip(y[21:28], alg.seasonal_naive(y[:21], 7, 7))] == [14] * 7 and y[20] == 170)([100 + (30 if d % 7 in (5, 6) else 0) + 2 * d for d in range(28)])"
+    steps:
+      - show: |
+          <div><svg width="1500" height="360" viewBox="0 0 1500 360"><g fill="#1f2937" font-size="22"><line x1="220" y1="223" x2="220" y2="273" stroke="#059669" stroke-width="2" stroke-dasharray="4 4"/><text x="220" y="350" text-anchor="middle">T2</text><line x1="360" y1="216" x2="360" y2="266" stroke="#059669" stroke-width="2" stroke-dasharray="4 4"/><text x="360" y="350" text-anchor="middle">T3</text><line x1="500" y1="208" x2="500" y2="259" stroke="#059669" stroke-width="2" stroke-dasharray="4 4"/><text x="500" y="350" text-anchor="middle">T4</text><line x1="640" y1="201" x2="640" y2="252" stroke="#059669" stroke-width="2" stroke-dasharray="4 4"/><text x="640" y="350" text-anchor="middle">T5</text><line x1="780" y1="194" x2="780" y2="244" stroke="#059669" stroke-width="2" stroke-dasharray="4 4"/><text x="780" y="350" text-anchor="middle">T6</text><line x1="920" y1="79" x2="920" y2="129" stroke="#059669" stroke-width="2" stroke-dasharray="4 4"/><text x="920" y="350" text-anchor="middle">T7</text><line x1="1060" y1="72" x2="1060" y2="122" stroke="#059669" stroke-width="2" stroke-dasharray="4 4"/><text x="1060" y="350" text-anchor="middle">CN</text><polyline points="220,223 360,216 500,208 640,201 780,194 920,79 1060,72" fill="none" stroke="#2a78d6" stroke-width="4"/><circle cx="220" cy="223" r="6" fill="#2a78d6"/><circle cx="360" cy="216" r="6" fill="#2a78d6"/><circle cx="500" cy="208" r="6" fill="#2a78d6"/><circle cx="640" cy="201" r="6" fill="#2a78d6"/><circle cx="780" cy="194" r="6" fill="#2a78d6"/><circle cx="920" cy="79" r="6" fill="#2a78d6"/><circle cx="1060" cy="72" r="6" fill="#2a78d6"/><polyline points="220,122 360,122 500,122 640,122 780,122 920,122 1060,122" fill="none" stroke="#b91c1c" stroke-width="3" stroke-dasharray="12 8"/><circle cx="220" cy="122" r="6" fill="#b91c1c"/><circle cx="360" cy="122" r="6" fill="#b91c1c"/><circle cx="500" cy="122" r="6" fill="#b91c1c"/><circle cx="640" cy="122" r="6" fill="#b91c1c"/><circle cx="780" cy="122" r="6" fill="#b91c1c"/><circle cx="920" cy="122" r="6" fill="#b91c1c"/><circle cx="1060" cy="122" r="6" fill="#b91c1c"/><polyline points="220,273 360,266 500,259 640,252 780,244 920,129 1060,122" fill="none" stroke="#059669" stroke-width="3"/><circle cx="220" cy="273" r="6" fill="#059669"/><circle cx="360" cy="266" r="6" fill="#059669"/><circle cx="500" cy="259" r="6" fill="#059669"/><circle cx="640" cy="252" r="6" fill="#059669"/><circle cx="780" cy="244" r="6" fill="#059669"/><circle cx="920" cy="129" r="6" fill="#059669"/><circle cx="1060" cy="122" r="6" fill="#059669"/><text x="1230" y="60" fill="#2a78d6" font-weight="bold">thực tế tuần 4</text><text x="1230" y="100" fill="#b91c1c">ngây thơ: luôn 170</text><text x="1230" y="140" fill="#059669">theo mùa: tuần 3</text><text x="1230" y="180" fill="#059669">mỗi khe hở = 14</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ tuần thứ tư bằng đường xanh, có răng cưa cuối tuần. Dự báo ngây thơ là đường đỏ nằm ngang ở 170, quá cao vào ngày thường và quá thấp vào cuối tuần. Dự báo ngây thơ theo mùa là đường lục, có đúng hình dạng của tuần, chỉ thấp hơn đều một khoảng. Mỗi khe hở đứng đều bằng 14, chính là phần tăng trưởng của một tuần."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Dự báo tuần thứ tư"
+    checks:
+      - "(lambda y: (y[21:28], round(alg.mae(y[21:28], [y[20]] * 7), 2), alg.mae(y[21:28], alg.seasonal_naive(y[:21], 7, 7))))([100 + (30 if d % 7 in (5, 6) else 0) + 2 * d for d in range(28)]) == ([142, 144, 146, 148, 150, 182, 184], 20.86, 14.0)"
+    steps:
+      - show: |
+          <table class="t"><tr><th>tuần 4 (chuỗi bài 6)</th><th>T2</th><th>T3</th><th>T4</th><th>T5</th><th>T6</th><th>T7</th><th>CN</th></tr>
+          <tr><td>thực tế</td><td>142</td><td>144</td><td>146</td><td>148</td><td>150</td><td>182</td><td>184</td></tr></table>
+          <p><b>Bước 1</b> — giữ tuần 4 làm tập kiểm tra; chỉ dùng 3 tuần đầu để dự báo.</p>
+        focus: [1, 2]
+        say: "Bước một, nhắc lại chuỗi ở bài 6, doanh thu bằng 100 cộng 2 mỗi ngày, cộng thêm 30 vào cuối tuần. Ta giữ tuần thứ tư làm tập kiểm tra, thực tế từ 142 tăng dần tới 150, rồi 182 và 184 vào cuối tuần, và chỉ dùng 3 tuần đầu để dự báo."
+      - show: |
+          <table class="t"><tr><th>tuần 4</th><th>T2</th><th>T3</th><th>T4</th><th>T5</th><th>T6</th><th>T7</th><th>CN</th></tr>
+          <tr><td>ngây thơ (Chủ nhật tuần 3 = 170)</td><td>170</td><td>170</td><td>170</td><td>170</td><td>170</td><td>170</td><td>170</td></tr>
+          <tr><td>sai số tuyệt đối</td><td>28</td><td>26</td><td>24</td><td>22</td><td>20</td><td>12</td><td>14</td></tr></table>
+          <p><b>Bước 2</b> — $\frac{146}{7} \approx 20{,}86$.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Bước hai, dự báo ngây thơ. Nó lấy Chủ nhật tuần 3 là 170 cho mọi ngày. Sai số tuyệt đối là 28, 26, 24, 22, 20, rồi 12 và 14. Cộng lại được 146, chia 7, khoảng 20 phẩy 86."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>tuần 4</th><th>T2</th><th>T3</th><th>T4</th><th>T5</th><th>T6</th><th>T7</th><th>CN</th></tr>
+          <tr><td>ngây thơ theo mùa (tuần 3)</td><td>128</td><td>130</td><td>132</td><td>134</td><td>136</td><td>168</td><td>170</td></tr>
+          <tr><td>sai số tuyệt đối</td><td>14</td><td>14</td><td>14</td><td>14</td><td>14</td><td>14</td><td>14</td></tr></table>
+          <p><b>Bước 3</b> — trung bình $\hl{14}$, đúng bằng $7 \cdot 2$, phần xu hướng mà cách này chưa tính.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Bước ba, dự báo ngây thơ theo mùa. Nó lấy đúng tuần 3, từ 128 tới 136, rồi 168 và 170. Ngày nào cũng lệch đúng 14. Sai số tuyệt đối trung bình là 14, đúng bằng 7 nhân 2, phần xu hướng mà cách này chưa tính."
+      - show: |
+          <table class="t"><tr><th>đường cơ sở</th><th>sai số tuyệt đối trung bình</th></tr>
+          <tr><td>ngây thơ</td><td>≈ 20,86</td></tr>
+          <tr><td>ngây thơ theo mùa</td><td>14 — mốc phải vượt</td></tr></table>
+          <p><b>Bước 4</b> — mô hình mới phải dưới 14 mới đáng dùng.</p>
+        focus: [0, "1.2", "1.3", 2]
+        say: "Bước bốn, đặt mốc. Ngây thơ cho khoảng 20 phẩy 86. Ngây thơ theo mùa tốt hơn, cho 14, và đó là mốc mạnh nhất trong hai đường cơ sở. Mô hình mới phải có sai số dưới 14 mới đáng dùng."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: tính sai số bằng công thức, không trừ từng ô"
+    checks:
+      - "(lambda y: all(y[d] - y[d - 7] == 14 for d in range(21, 28)))([100 + (30 if d % 7 in (5, 6) else 0) + 2 * d for d in range(28)])"
+      - "28 + 26 + 24 + 22 + 20 == 5 * 24 == 120 and 120 + 12 + 14 == 146"
+    steps:
+      - show: |
+          <table class="t"><tr><th>con số</th><th>đường khác</th><th>kết quả</th></tr>
+          <tr><td>theo mùa: mỗi ngày lệch</td><td>cùng thứ nên mùa vụ triệt tiêu, chỉ còn xu hướng $7 \cdot 2$</td><td>14 ✓</td></tr>
+          <tr><td>ngây thơ: 5 ngày thường</td><td>dãy cách đều 28 … 20, trung bình là số giữa 24: $5 \cdot 24$</td><td>120</td></tr>
+          <tr><td>ngây thơ: cộng cuối tuần</td><td>$120 + 12 + 14$</td><td>146 ✓</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Kiểm bằng đường khác, không trừ lại từng ô. Ngây thơ theo mùa so cùng thứ, nên phần cuối tuần triệt tiêu, chỉ còn bảy ngày xu hướng, 7 nhân 2 bằng 14, cho mọi ngày. Với dự báo ngây thơ, năm sai số ngày thường 28 tới 20 cách đều nhau, nên trung bình là số giữa 24, và tổng là 5 nhân 24 bằng 120. Cộng thêm 12 và 14 của cuối tuần được 146, khớp với bước hai."
+
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, cả người mới lẫn người đã đi làm"
+    checks:
+      - "alg.mape([0, 10, 12, 8], [2, 9, 12, 10]) is None and alg.mae([0, 10, 12, 8], [2, 9, 12, 10]) == 1.25 and alg.mape([1, 100], [2, 100]) == 50.0"
+      - "round((146 / 7 - 18) / (146 / 7) * 100, 1) == 13.7 and round((18 - 14) / 14 * 100) == 29"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Dùng sai số phần trăm khi có giá trị 0 hay rất nhỏ <b class="red">(không xác định, hoặc phình to)</b>
+          <br><span class="note">Thực tế 0, 10, 12, 8; dự báo 2, 9, 12, 10: sai số tuyệt đối trung bình 1,25, sai số phần trăm <b>không xác định</b>. Thực tế 1 và 100, dự báo 2 và 100: lệch 1 đơn vị mà sai số phần trăm 50%.</span></div>
+        say: "Lỗi thứ nhất, dùng sai số phần trăm khi có giá trị 0 hay rất nhỏ, nên kết quả không xác định hoặc phình to. Thực tế 0, 10, 12, 8 và dự báo 2, 9, 12, 10 cho sai số tuyệt đối trung bình 1 phẩy 25, còn sai số phần trăm không xác định. Thực tế 1 và 100, dự báo 2 và 100, chỉ lệch 1 đơn vị mà sai số phần trăm đã là 50 phần trăm."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Đo trên chính dữ liệu đã dùng để xây <b class="red">(sai số đẹp giả)</b>
+          <br><span class="note">Mô hình nhớ quá khứ thì sai số trên quá khứ gần 0. Giữ lại khoảng thời gian <b>sau cùng</b> làm tập kiểm tra — không trộn ngẫu nhiên các ngày.</span></div>
+        say: "Lỗi thứ hai, đo trên chính dữ liệu đã dùng để xây mô hình, nên sai số đẹp giả. Mô hình nhớ quá khứ thì sai số trên quá khứ gần bằng 0. Hãy giữ lại khoảng thời gian sau cùng làm tập kiểm tra, và không trộn ngẫu nhiên các ngày."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Chỉ báo một con số dự báo <b class="red">(không có độ bất định)</b>
+          <br><span class="note">“Tuần sau bán 150” khác “tuần sau bán 130 – 170”. Người lập kế hoạch kho cần khoảng, không chỉ điểm giữa.</span></div>
+        say: "Lỗi thứ ba, chỉ báo một con số dự báo, mà không có độ bất định. Câu tuần sau bán 150 khác với câu tuần sau bán từ 130 tới 170. Người lập kế hoạch kho cần một khoảng, không chỉ điểm giữa."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4.</b> So với đường cơ sở <b>yếu</b> để mô hình trông thắng <b class="red">(lỗi của người đã đi làm)</b>
+          <br><span class="note">Giả sử mô hình mới có sai số tuyệt đối trung bình 18 trên tuần 4.</span></div>
+          <table class="t"><tr><th>so với</th><th>sai số của đường cơ sở</th><th>kết luận</th></tr>
+          <tr><td>ngây thơ</td><td>20,86</td><td>“tốt hơn ≈ 13,7%” — nghe hay</td></tr>
+          <tr><td>ngây thơ theo mùa</td><td>14</td><td class="red">mô hình <b>kém hơn</b> ≈ 29%</td></tr></table>
+        focus: [1, 1, 2, "2.2", "2.3", 0]
+        say: "Lỗi thứ tư là lỗi của người đã đi làm, chọn một đường cơ sở yếu để mô hình trông như thắng. Giả sử mô hình mới có sai số tuyệt đối trung bình 18 trên tuần thứ tư. Bảng so mô hình với hai đường cơ sở. So với ngây thơ có sai số 20 phẩy 86, mô hình tốt hơn khoảng 13 phẩy 7 phần trăm, nghe rất hay. So với ngây thơ theo mùa có sai số 14, mô hình lại kém hơn khoảng 29 phần trăm. Vì vậy người làm nghề luôn báo kết quả so với đường cơ sở mạnh nhất, khi dữ liệu có mùa vụ thì đó là ngây thơ theo mùa."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.mae([20, 30, 25], [22, 27, 25]) == 5 / 3 and round(alg.mape([20, 30, 25], [22, 27, 25]), 2) == 6.67"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Thực tế 20, 30, 25; dự báo 22, 27, 25. Tính sai số tuyệt đối trung bình và sai số phần trăm.</td></tr>
+          <tr><td>2</td><td>Chuỗi bán hàng có nhiều ngày bán 0 (sản phẩm bán chậm). Nên dùng thước đo nào?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, thực tế 20, 30, 25, dự báo 22, 27, 25. Hãy tính sai số tuyệt đối trung bình và sai số phần trăm. Câu hai, chuỗi bán hàng có nhiều ngày bán 0, vì là sản phẩm bán chậm. Nên dùng thước đo nào? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>thực tế</th><th>dự báo</th><th>sai số tuyệt đối</th><th>chia thực tế</th></tr>
+          <tr><td>20</td><td>22</td><td>$\lvert 20 - 22 \rvert = 2$</td><td>$\frac{2}{20} = 10\%$</td></tr>
+          <tr><td>30</td><td>27</td><td>$\lvert 30 - 27 \rvert = 3$</td><td>$\frac{3}{30} = 10\%$</td></tr>
+          <tr><td>25</td><td>25</td><td>0</td><td>0%</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Đáp án câu một, tính từng dòng. Thực tế 20, dự báo 22, sai số tuyệt đối 2, chia 20 được 10 phần trăm. Thực tế 30, dự báo 27, sai số 3, chia 30 cũng được 10 phần trăm. Dòng cuối dự báo đúng, sai số 0."
+      - show: |
+          <p>① Trung bình sai số tuyệt đối: $\frac{2 + 3 + 0}{3} = \frac{5}{3} \approx \hl{1{,}67}$; sai số phần trăm $\frac{10\% + 10\% + 0\%}{3} \approx 6{,}67\%$.</p>
+          <p>② Sai số tuyệt đối trung bình (hoặc chia cho sai số của đường cơ sở) — sai số phần trăm không xác định khi có 0.</p>
+        focus: [1, 1, 2]
+        say: "Lấy trung bình, các sai số tuyệt đối 2, 3 và 0 cho 5 chia 3, khoảng 1 phẩy 67. Sai số phần trăm là 10, 10 và 0 phần trăm, trung bình khoảng 6 phẩy 67 phần trăm. Câu hai, dùng sai số tuyệt đối trung bình, hoặc chia nó cho sai số của đường cơ sở, vì sai số phần trăm không xác định khi có 0."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">dựng đường cơ sở trước: ngây thơ, ngây thơ theo mùa</span><span class="a">→</span>
+          <span class="n">đo trên khoảng thời gian sau cùng chưa dùng</span><span class="a">→</span>
+          <span class="n">chọn thước đo hợp dữ liệu (cẩn thận với 0)</span><span class="a">→</span>
+          <span class="n">báo cả khoảng, không chỉ một điểm</span></div>
+        say: "Tổng kết lại, hãy dựng đường cơ sở trước, ngây thơ và ngây thơ theo mùa, rồi đo trên khoảng thời gian sau cùng chưa dùng. Chọn thước đo hợp với dữ liệu, cẩn thận với giá trị 0, và báo cả khoảng, không chỉ một điểm."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> một mô hình chỉ “tốt” khi so với một <b>đối thủ đơn giản</b> — không có đường cơ sở thì không có kết luận.</div>
+        say: "Điều cần mang theo, một mô hình chỉ tốt khi so với một đối thủ đơn giản, và không có đường cơ sở thì không có kết luận."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 8): <b>phân khúc khách hàng</b> và phân bố lệch.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 8, ta học phân khúc khách hàng và phân bố lệch. Hẹn gặp bạn ở bài tiếp theo."

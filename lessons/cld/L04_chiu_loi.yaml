@@ -1,0 +1,206 @@
+id: L04
+course: CLD
+series: "CLD · Hệ thống hướng dịch vụ"
+title: "Bài 4 — Chịu lỗi: hết giờ, thử lại có lùi, cầu dao ngắt"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/cld.yaml L04; audit/cld/verify_cld.py L04; M. Brooker, Exponential Backoff And Jitter (AWS Architecture Blog, 2015); M. Nygard, Release It!, 2nd ed. (2018), chương 5 (hết giờ, cầu dao ngắt); Google SRE Book (2016), chương 22 (lỗi dây chuyền, bão thử lại)"
+assumes: [arith, cdot, power]
+# Quy ước: tầng 1 gọi tầng 2 gọi tầng 3 gọi dịch vụ dưới cùng; ba tầng gọi, mỗi tầng thử tối đa 3 lần (tính cả lần đầu); dịch vụ dưới cùng luôn lỗi.
+#   alg.retry_storm(4, 3) đếm bằng đệ quy thật = 3³ = 27. Lùi lũy thừa: min(100 · 2^i, 2000) ms (alg.backoff), chưa cộng phần ngẫu nhiên.
+objectives:
+  - "Đặt hết giờ cho mọi lời gọi"
+  - "Thiết kế thử lại có lùi lũy thừa và ngẫu nhiên hoá"
+  - "Dùng cầu dao ngắt và khoá lũy đẳng"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Cơ sở dữ liệu chậm một chút, cả hệ thống sập"
+    checks:
+      - "alg.retry_storm(4, 3) == 27 == 3 ** 3"
+    steps:
+      - show: |
+          <p>Dịch vụ dưới cùng chậm lại. Ba tầng phía trên, tầng nào cũng “cho chắc” thử lại 3 lần. Mỗi yêu cầu của khách biến thành tới $3^3 = \hl{27}$ yêu cầu dồn xuống dịch vụ đang yếu — và nó chết hẳn.</p>
+          <div class="box key">Hôm nay: <b>hết giờ</b>, <b>thử lại có lùi</b>, <b>cầu dao ngắt</b> — chịu lỗi mà không tự làm sập mình.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, dịch vụ dưới cùng chậm lại. Ba tầng phía trên, tầng nào cũng thử lại 3 lần cho chắc. Mỗi yêu cầu của khách biến thành tới 3 mũ 3, tức 27 yêu cầu dồn xuống dịch vụ đang yếu, và nó chết hẳn. Hôm nay ta học hết giờ, thử lại có lùi, và cầu dao ngắt, để chịu lỗi mà không tự làm sập mình."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: lũy thừa, giá trị nhỏ hơn, gọi đồng bộ, lũy đẳng"
+    checks:
+      - "3 ** 3 == 3 * 3 * 3 == 27 and [2 ** i for i in range(4)] == [1, 2, 4, 8]"
+      - "min(1600, 2000) == 1600 and min(3200, 2000) == 2000"
+    steps:
+      - show: |
+          <table class="t"><tr><th>phép</th><th>nghĩa</th><th>ví dụ</th></tr>
+          <tr><td>$3^3$</td><td>nhân 3 với chính nó 3 lần</td><td>$3 \cdot 3 \cdot 3 = 27$</td></tr>
+          <tr><td>$2^i$, $i = 0, 1, 2, 3$</td><td>mỗi lần tăng $i$ thì gấp đôi</td><td>1, 2, 4, 8</td></tr>
+          <tr><td>$\min(a,\ b)$</td><td>lấy số nhỏ hơn trong hai số</td><td>$\min(1600,\ 2000) = 1600$; $\min(3200,\ 2000) = 2000$</td></tr></table>
+        introduces: [min_fn]
+        focus: [1, "1.2", "1.3", "1.3", "1.4"]
+        say: "Bài này dùng ba phép tính nhỏ. 3 mũ 3 là nhân 3 với chính nó 3 lần, 3 nhân 3 nhân 3 bằng 27. 2 mũ i với i bằng 0, 1, 2, 3 cho 1, 2, 4, 8, vì mỗi lần tăng i thì gấp đôi. Hàm min lấy số nhỏ hơn trong hai số. Giá trị nhỏ hơn giữa 1600 và 2000 là 1600, còn giữa 3200 và 2000 là 2000."
+      - show: |
+          <p><b>Gọi đồng bộ</b> (bài 3 của khoá này): tầng trên gửi yêu cầu rồi <b>đứng chờ</b> tầng dưới trả lời; tầng dưới lỗi hay chậm thì tầng trên cũng lỗi hay chậm theo.</p>
+          <table class="t"><tr><th>thao tác</th><th>làm 1 lần</th><th>làm 2 lần</th><th>lũy đẳng?</th></tr>
+          <tr><td>đặt số dư = 500</td><td>500</td><td>500</td><td>có</td></tr>
+          <tr><td>trừ 100 từ số dư 500</td><td>400</td><td>300</td><td>không</td></tr></table>
+        focus: [1, 1, 2, "2.2", "2.3"]
+        say: "Ở bài 3 của khoá này, ta đã học gọi đồng bộ, tầng trên gửi yêu cầu rồi đứng chờ tầng dưới trả lời. Vì thế tầng dưới lỗi hay chậm thì tầng trên cũng lỗi hay chậm theo. Một thao tác gọi là lũy đẳng nếu làm hai lần cho cùng kết quả như làm một lần. Đặt số dư bằng 500 là lũy đẳng, làm mấy lần cũng ra 500. Trừ 100 từ số dư 500 thì không, vì làm một lần còn 400, làm hai lần còn 300."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: bốn công cụ chịu lỗi"
+    steps:
+      - show: |
+          <table class="t"><tr><th>công cụ</th><th>làm gì</th></tr>
+          <tr><td><b>hết giờ</b></td><td>không chờ quá $T$ ms; quá thì coi là lỗi, giải phóng luồng</td></tr>
+          <tr><td><b>thử lại có lùi</b></td><td>chờ 100, 200, 400… ms giữa các lần (lùi lũy thừa), cộng thêm phần <b>ngẫu nhiên</b></td></tr>
+          <tr><td><b>cầu dao ngắt</b></td><td>lỗi liên tiếp quá ngưỡng → <b>ngắt</b>: báo lỗi ngay, không gọi nữa; sau một lúc thử một yêu cầu, ổn thì <b>đóng</b> lại</td></tr>
+          <tr><td><b>khoá lũy đẳng</b></td><td>mỗi thao tác mang một mã; máy chủ gặp lại mã cũ thì trả kết quả cũ, không làm lần hai</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bảng liệt kê bốn công cụ chịu lỗi. Hết giờ nghĩa là không chờ quá một khoảng nhất định, quá thì coi là lỗi và giải phóng luồng. Thử lại có lùi nghĩa là chờ 100, 200, 400 mi li giây giữa các lần, cộng thêm một phần ngẫu nhiên. Cầu dao ngắt báo lỗi ngay khi lỗi liên tiếp quá ngưỡng, sau một lúc thử một yêu cầu, ổn thì đóng lại. Khoá lũy đẳng gắn cho mỗi thao tác một mã, máy chủ gặp lại mã cũ thì trả kết quả cũ, không làm lần hai."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Mỗi tầng thử lại là mỗi tầng nhân ba"
+    checks:
+      - "1 * 3 == 3 and 3 * 3 == 9 and 9 * 3 == 27"
+    steps:
+      - show: |
+          <div><svg width="1500" height="400" viewBox="0 0 1500 400"><g font-size="22" fill="#1f2937"><text x="20" y="52">tầng 1</text><text x="20" y="152">tầng 2</text><text x="20" y="252">tầng 3</text><text x="20" y="352" fill="#b91c1c">dưới cùng</text><rect x="700" y="20" width="100" height="50" rx="8" fill="#dbeafe" stroke="#1f2937" stroke-width="2"/><text x="750" y="53" text-anchor="middle">1</text><line x1="750" y1="70" x2="350" y2="120" stroke="#2a78d6" stroke-width="3"/><rect x="300" y="120" width="100" height="50" rx="8" fill="#dbeafe" stroke="#1f2937" stroke-width="2"/><line x1="750" y1="70" x2="750" y2="120" stroke="#2a78d6" stroke-width="3"/><rect x="700" y="120" width="100" height="50" rx="8" fill="#dbeafe" stroke="#1f2937" stroke-width="2"/><line x1="750" y1="70" x2="1150" y2="120" stroke="#2a78d6" stroke-width="3"/><rect x="1100" y="120" width="100" height="50" rx="8" fill="#dbeafe" stroke="#1f2937" stroke-width="2"/><line x1="350" y1="170" x2="230" y2="220" stroke="#2a78d6" stroke-width="3"/><rect x="190" y="220" width="80" height="50" rx="8" fill="#ffedd5" stroke="#1f2937" stroke-width="2"/><line x1="230" y1="270" x2="200" y2="320" stroke="#b91c1c" stroke-width="2"/><line x1="230" y1="270" x2="230" y2="320" stroke="#b91c1c" stroke-width="2"/><line x1="230" y1="270" x2="260" y2="320" stroke="#b91c1c" stroke-width="2"/><line x1="350" y1="170" x2="350" y2="220" stroke="#2a78d6" stroke-width="3"/><rect x="310" y="220" width="80" height="50" rx="8" fill="#ffedd5" stroke="#1f2937" stroke-width="2"/><line x1="350" y1="270" x2="320" y2="320" stroke="#b91c1c" stroke-width="2"/><line x1="350" y1="270" x2="350" y2="320" stroke="#b91c1c" stroke-width="2"/><line x1="350" y1="270" x2="380" y2="320" stroke="#b91c1c" stroke-width="2"/><line x1="350" y1="170" x2="470" y2="220" stroke="#2a78d6" stroke-width="3"/><rect x="430" y="220" width="80" height="50" rx="8" fill="#ffedd5" stroke="#1f2937" stroke-width="2"/><line x1="470" y1="270" x2="440" y2="320" stroke="#b91c1c" stroke-width="2"/><line x1="470" y1="270" x2="470" y2="320" stroke="#b91c1c" stroke-width="2"/><line x1="470" y1="270" x2="500" y2="320" stroke="#b91c1c" stroke-width="2"/><line x1="750" y1="170" x2="630" y2="220" stroke="#2a78d6" stroke-width="3"/><rect x="590" y="220" width="80" height="50" rx="8" fill="#ffedd5" stroke="#1f2937" stroke-width="2"/><line x1="630" y1="270" x2="600" y2="320" stroke="#b91c1c" stroke-width="2"/><line x1="630" y1="270" x2="630" y2="320" stroke="#b91c1c" stroke-width="2"/><line x1="630" y1="270" x2="660" y2="320" stroke="#b91c1c" stroke-width="2"/><line x1="750" y1="170" x2="750" y2="220" stroke="#2a78d6" stroke-width="3"/><rect x="710" y="220" width="80" height="50" rx="8" fill="#ffedd5" stroke="#1f2937" stroke-width="2"/><line x1="750" y1="270" x2="720" y2="320" stroke="#b91c1c" stroke-width="2"/><line x1="750" y1="270" x2="750" y2="320" stroke="#b91c1c" stroke-width="2"/><line x1="750" y1="270" x2="780" y2="320" stroke="#b91c1c" stroke-width="2"/><line x1="750" y1="170" x2="870" y2="220" stroke="#2a78d6" stroke-width="3"/><rect x="830" y="220" width="80" height="50" rx="8" fill="#ffedd5" stroke="#1f2937" stroke-width="2"/><line x1="870" y1="270" x2="840" y2="320" stroke="#b91c1c" stroke-width="2"/><line x1="870" y1="270" x2="870" y2="320" stroke="#b91c1c" stroke-width="2"/><line x1="870" y1="270" x2="900" y2="320" stroke="#b91c1c" stroke-width="2"/><line x1="1150" y1="170" x2="1030" y2="220" stroke="#2a78d6" stroke-width="3"/><rect x="990" y="220" width="80" height="50" rx="8" fill="#ffedd5" stroke="#1f2937" stroke-width="2"/><line x1="1030" y1="270" x2="1000" y2="320" stroke="#b91c1c" stroke-width="2"/><line x1="1030" y1="270" x2="1030" y2="320" stroke="#b91c1c" stroke-width="2"/><line x1="1030" y1="270" x2="1060" y2="320" stroke="#b91c1c" stroke-width="2"/><line x1="1150" y1="170" x2="1150" y2="220" stroke="#2a78d6" stroke-width="3"/><rect x="1110" y="220" width="80" height="50" rx="8" fill="#ffedd5" stroke="#1f2937" stroke-width="2"/><line x1="1150" y1="270" x2="1120" y2="320" stroke="#b91c1c" stroke-width="2"/><line x1="1150" y1="270" x2="1150" y2="320" stroke="#b91c1c" stroke-width="2"/><line x1="1150" y1="270" x2="1180" y2="320" stroke="#b91c1c" stroke-width="2"/><line x1="1150" y1="170" x2="1270" y2="220" stroke="#2a78d6" stroke-width="3"/><rect x="1230" y="220" width="80" height="50" rx="8" fill="#ffedd5" stroke="#1f2937" stroke-width="2"/><line x1="1270" y1="270" x2="1240" y2="320" stroke="#b91c1c" stroke-width="2"/><line x1="1270" y1="270" x2="1270" y2="320" stroke="#b91c1c" stroke-width="2"/><line x1="1270" y1="270" x2="1300" y2="320" stroke="#b91c1c" stroke-width="2"/><rect x="200" y="320" width="1100" height="50" rx="8" fill="#fee2e2" stroke="#b91c1c" stroke-width="3"/><text x="750" y="353" text-anchor="middle" fill="#b91c1c" font-weight="bold">27 yêu cầu dồn vào dịch vụ đang yếu</text><text x="1300" y="152">3 lần thử</text><text x="1340" y="252">9 lần thử</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ một yêu cầu của khách đi xuống ba tầng, dịch vụ dưới cùng luôn lỗi. Tầng 1 thử 3 lần, nên tầng 2 nhận 3 lời gọi. Mỗi lời gọi ấy ở tầng 2 lại thử 3 lần, nên tầng 3 nhận 9 lời gọi. Mỗi lời gọi ở tầng 3 thử tiếp 3 lần, nên dịch vụ dưới cùng, đúng lúc đang yếu nhất, nhận tới 27 yêu cầu."
+
+  - id: example
+    kind: example
+    title: "Bão thử lại và lịch lùi"
+    checks:
+      - "[alg.retry_storm(k + 1, 3) for k in (1, 2, 3)] == [3, 9, 27] and alg.retry_storm(4, 1) == 1"
+      - "alg.backoff(100, 2000, 6) == [100, 200, 400, 800, 1600, 2000]"
+      - "100 * 2 ** 5 == 3200 and sum(alg.backoff(100, 2000, 6)) == 5100 and alg.retry_storm(2, 3) * 1 * 1 == 3"
+    steps:
+      - show: |
+          <table class="t"><tr><th>số tầng thử lại 3 lần</th><th>1</th><th>2</th><th>3</th></tr>
+          <tr><td>yêu cầu tới dịch vụ dưới cùng</td><td>3</td><td>$3 \cdot 3 = 9$</td><td>$9 \cdot 3 = \hl{27}$</td></tr></table>
+        focus: [1, "1.2", "1.2"]
+        say: "Bước một, đếm số yêu cầu tới dịch vụ dưới cùng theo số tầng thử lại 3 lần. Một tầng cho 3, hai tầng cho 9, ba tầng cho 27. Số yêu cầu tăng theo lũy thừa, vì thêm một tầng là nhân thêm 3."
+      - show: |
+          <table class="t"><tr><th>cách thử lại</th><th>tầng 1</th><th>tầng 2</th><th>tầng 3</th><th>dưới cùng nhận</th></tr>
+          <tr><td>tầng nào cũng thử 3 lần</td><td>3</td><td>3</td><td>3</td><td>27</td></tr>
+          <tr><td>chỉ tầng 3 (gần lỗi nhất) thử</td><td>1</td><td>1</td><td>3</td><td>$\hl{3}$</td></tr></table>
+          <p><b>Bước 2</b> — các tầng khác báo lỗi lên ngay thay vì thử lại.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Bước hai, sửa bằng cách chỉ một tầng thử lại. Nếu tầng nào cũng thử 3 lần, dưới cùng nhận 27 yêu cầu. Nếu chỉ tầng 3, tầng gần dịch vụ lỗi nhất, thử lại, thì dưới cùng chỉ nhận 1 nhân 1 nhân 3, bằng 3 yêu cầu. Các tầng khác báo lỗi lên ngay thay vì thử lại."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>lần chờ $i$</th><th>0</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th></tr>
+          <tr><td>$100 \cdot 2^i$ ms</td><td>100</td><td>200</td><td>400</td><td>800</td><td>1600</td><td>3200</td></tr>
+          <tr><td>$\min(100 \cdot 2^i,\ 2000)$ ms</td><td>100</td><td>200</td><td>400</td><td>800</td><td>1600</td><td>$\hl{2000}$</td></tr></table>
+          <p><b>Bước 3</b> — lùi lũy thừa có chặn trên: lần sau chờ gấp đôi lần trước, nhưng không quá 2000 ms.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Bước ba, lập lịch lùi. Hàng giữa là 100 nhân 2 mũ i, gấp đôi sau mỗi lần, tới lần chờ thứ 5 thì đã là 3200. Hàng cuối lấy giá trị nhỏ hơn giữa số đó và 2000, nên được 100, 200, 400, 800, 1600, rồi dừng ở 2000. Chặn trên để không bao giờ chờ quá lâu."
+      - show: |
+          $$100 + 200 + 400 + 800 + 1600 + 2000 = \hl{5100}$$
+          <div class="box key"><b>Bước 4</b> — sáu lần chờ đã tốn 5,1 giây: hết giờ của tầng gọi phía trên phải <b>dài hơn</b> con số này, nếu không nó bỏ cuộc trước khi tầng dưới thử xong. Thêm phần <b>ngẫu nhiên</b> vào mỗi khoảng chờ để nghìn khách lỗi cùng lúc không thử lại cùng lúc.</div>
+        focus: [1, 2, 2, 2]
+        say: "Bước bốn, cộng sáu khoảng chờ, được 5100 mi li giây, tức 5 phẩy 1 giây. Vì thế hết giờ của tầng gọi phía trên phải dài hơn con số này, nếu không nó bỏ cuộc trước khi tầng dưới thử xong. Cuối cùng, cộng thêm một phần ngẫu nhiên vào mỗi khoảng chờ. Nhờ vậy nghìn khách hàng lỗi cùng lúc sẽ không thử lại cùng lúc."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác"
+    checks:
+      - "len(list(__import__('itertools').product(range(3), repeat=3))) == 27 == alg.retry_storm(4, 3)"
+      - "100 * (2 ** 5 - 1) + 2000 == sum(alg.backoff(100, 2000, 6)) == 5100"
+    steps:
+      - show: |
+          <table class="t"><tr><th>kiểm</th><th>cách khác</th><th>kết quả</th></tr>
+          <tr><td>27 yêu cầu</td><td>liệt kê mọi bộ (lần thử tầng 1, tầng 2, tầng 3), mỗi tầng 3 lựa chọn</td><td>27 bộ ✓</td></tr>
+          <tr><td>tổng chờ 5100 ms</td><td>năm số đầu gấp đôi dần: $100 \cdot (2^5 - 1) = 3100$, cộng lần chặn 2000</td><td>5100 ✓</td></tr></table>
+        focus: [0, "1.2", "1.3"]
+        say: "Kiểm bằng đường khác, vì một con số tính hai cách mà khớp thì đáng tin hơn. Mỗi yêu cầu tới đáy ứng với một bộ ba lựa chọn, lần thử nào ở tầng 1, ở tầng 2, ở tầng 3, mỗi tầng 3 lựa chọn, liệt kê ra đúng 27 bộ. Năm số đầu gấp đôi dần nên tổng bằng 100 nhân 2 mũ 5 trừ 1, tức 3100, cộng lần chặn 2000 là 5100."
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    checks:
+      - "alg.charges_after_retry(2, False) == 3 and alg.charges_after_retry(2, True) == 1"
+      - "1000 + 1000 // 2 + 1000 // 4 == 1750 and 1000 * 3 == 3000 and 1000 + 1000 // 10 == 1100"
+    title: "3 lỗi người mới hay mắc, 1 lỗi người đã đi làm"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Thử lại thao tác không lũy đẳng <b class="red">(trừ tiền hai lần)</b>
+          <br><span class="note">Lệnh trừ tiền đã chạy nhưng phản hồi bị mất; thử lại 2 lần → trừ 3 lần. Gửi kèm <b>khoá lũy đẳng</b>: máy chủ nhận ra mã cũ, chỉ trừ 1 lần.</span></div>
+        say: "Lỗi thứ nhất, thử lại một thao tác không lũy đẳng. Lệnh trừ tiền đã chạy nhưng phản hồi bị mất, thử lại 2 lần là trừ tới 3 lần. Hãy gửi kèm khoá lũy đẳng, để máy chủ nhận ra mã cũ và chỉ trừ 1 lần."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Không đặt hết giờ <b class="red">(treo dây chuyền)</b>
+          <br><span class="note">Thư viện mặc định chờ vô hạn: dịch vụ dưới treo, mọi luồng của dịch vụ trên kẹt chờ, dịch vụ trên cũng treo. Hết giờ tầng trên phải <b>dài hơn</b> tổng thời gian thử lại tầng dưới.</span></div>
+        say: "Lỗi thứ hai, không đặt hết giờ. Thư viện mặc định chờ vô hạn, dịch vụ dưới treo thì mọi luồng của dịch vụ trên kẹt chờ, và dịch vụ trên cũng treo theo. Hết giờ của tầng trên phải dài hơn tổng thời gian thử lại của tầng dưới."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Thử lại lỗi không thể tự hết <b class="red">(phí công)</b>
+          <br><span class="note">Sai mật khẩu, dữ liệu không hợp lệ, không có quyền: thử lại bao nhiêu cũng vậy. Chỉ thử lại lỗi <b>tạm thời</b> (hết giờ, quá tải, mất kết nối).</span></div>
+        say: "Lỗi thứ ba, thử lại những lỗi không thể tự hết. Sai mật khẩu, dữ liệu không hợp lệ, không có quyền thì thử lại bao nhiêu cũng vậy. Chỉ thử lại lỗi tạm thời như hết giờ, quá tải, hay mất kết nối."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Mỗi khách thử lại “có lùi” rồi, nhưng không ai giới hạn <b>tổng</b> lượng thử lại <b class="red">(tải tăng đúng lúc quá tải)</b></div>
+          <table class="t"><tr><th>1000 yêu cầu mỗi giây, mỗi khách thử tối đa 3 lần</th><th>tải thật mỗi giây</th></tr>
+          <tr><td>một nửa số lần gọi lỗi</td><td>$1000 + 500 + 250 = 1750$</td></tr>
+          <tr><td>mọi lần gọi đều lỗi</td><td>$1000 \cdot 3 = 3000$</td></tr>
+          <tr><td>giới hạn thử lại: tối đa 10% lượng yêu cầu</td><td>$\le 1000 + 100 = 1100$</td></tr></table>
+        introduces: [geq]
+        focus: [1, "2.2", "2.3", "2.4", 0]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, mỗi khách đã thử lại có lùi, nhưng không ai giới hạn tổng lượng thử lại. Dịch vụ nhận 1000 yêu cầu mỗi giây, mỗi khách thử tối đa 3 lần, khi một nửa số lần gọi lỗi thì tải thật là 1000 cộng 500 cộng 250, bằng 1750. Khi mọi lần gọi đều lỗi, tải thật lên tới 3000, gấp ba, đúng lúc dịch vụ đang quá tải. Người làm nghề đặt thêm một giới hạn chung, ví dụ thử lại không quá 10 phần trăm lượng yêu cầu, nên tải không vượt 1100. Lùi chỉ giãn các lần thử theo thời gian, còn giới hạn chung mới chặn tổng lượng việc dồn xuống."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.retry_storm(3, 4) == 16 and alg.backoff(50, 1000, 7) == [50, 100, 200, 400, 800, 1000, 1000] and [50 * 2 ** i for i in range(7)][-2:] == [1600, 3200] and sum(alg.backoff(50, 1000, 4)) == 750"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Hai tầng gọi nhau, mỗi tầng thử tối đa 4 lần, dịch vụ dưới cùng luôn lỗi: nó nhận bao nhiêu yêu cầu?</td></tr>
+          <tr><td>2</td><td>Lùi $\min(50 \cdot 2^i,\ 1000)$ ms: liệt kê 7 khoảng chờ. Tổng chờ của 4 lần đầu?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, hai tầng gọi nhau, mỗi tầng thử tối đa 4 lần, dịch vụ dưới cùng luôn lỗi, nó nhận bao nhiêu yêu cầu? Câu hai, lùi theo giá trị nhỏ hơn giữa 50 nhân 2 mũ i và 1000 mi li giây, hãy liệt kê 7 khoảng chờ. Tổng chờ của 4 lần đầu là bao nhiêu? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <table class="t"><tr><th>tầng</th><th>số lời gọi đi xuống</th></tr>
+          <tr><td>tầng trên thử 4 lần</td><td>4</td></tr>
+          <tr><td>mỗi lời gọi ấy, tầng dưới thử 4 lần</td><td>$4 \cdot 4 = 4^2 = \hl{16}$</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Đáp án câu một, ta đếm từng tầng. Tầng trên thử 4 lần, nên tầng dưới nhận 4 lời gọi. Mỗi lời gọi ấy tầng dưới lại thử 4 lần, nên dịch vụ dưới cùng nhận 4 mũ 2 bằng 16 yêu cầu."
+      - show: |
+          <table class="t"><tr><th>$i$</th><th>0</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th></tr>
+          <tr><td>$50 \cdot 2^i$</td><td>50</td><td>100</td><td>200</td><td>400</td><td>800</td><td>1600</td><td>3200</td></tr>
+          <tr><td>chờ (ms)</td><td>50</td><td>100</td><td>200</td><td>400</td><td>800</td><td>1000</td><td>1000</td></tr></table>
+          <p>Tổng 4 lần đầu: $50 + 100 + 200 + 400 = \hl{750}$ ms.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Câu hai, ta lập bảng như ví dụ. Hàng giữa gấp đôi từ 50 lên tới 3200. Lấy giá trị nhỏ hơn với 1000 thì được 50, 100, 200, 400, 800, rồi hai lần cuối bị chặn ở 1000. Tổng 4 lần đầu là 50 cộng 100 cộng 200 cộng 400, bằng 750 mi li giây."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">hết giờ cho mọi lời gọi</span><span class="a">→</span>
+          <span class="n">thử lại ở một tầng, lùi lũy thừa + ngẫu nhiên</span><span class="a">→</span>
+          <span class="n">cầu dao ngắt khi lỗi kéo dài</span><span class="a">→</span>
+          <span class="n">khoá lũy đẳng cho thao tác có tác dụng</span></div>
+        say: "Tổng kết lại, đặt hết giờ cho mọi lời gọi. Chỉ thử lại ở một tầng, lùi lũy thừa cộng ngẫu nhiên. Dùng cầu dao ngắt khi lỗi kéo dài, và khoá lũy đẳng cho thao tác có tác dụng."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> khi một phần đang yếu, điều tốt nhất là <b>bớt</b> gửi việc cho nó — không phải gửi nhiều hơn.</div>
+        say: "Điều cần mang theo, khi một phần của hệ thống đang yếu, điều tốt nhất là bớt gửi việc cho nó, chứ không phải gửi nhiều hơn."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 5): <b>Kubernetes</b> — trạng thái mong muốn và vòng điều khiển.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 5, ta học hệ điều phối Kubernetes, với trạng thái mong muốn và vòng điều khiển. Hẹn gặp bạn ở bài tiếp theo."

@@ -1,0 +1,194 @@
+id: L01
+course: LLM
+series: "LLM · Mô hình ngôn ngữ lớn"
+title: "Bài 1 — Mô hình n-gram, làm trơn và độ hỗn loạn"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/llm.yaml L01; audit/llm/verify_llm.py L01; Jurafsky–Martin bản 3 (nháp 2024), mục 3.3 (độ hỗn loạn), 3.5 (làm trơn cộng một); S. Chen, J. Goodman, An Empirical Study of Smoothing Techniques for Language Modeling (1999)"
+assumes: [arith, prob, given, frac, sub, cdot, power]
+# Quy ước: kho 3 câu như bài 0. Độ hỗn loạn PP = P(chuỗi)^(−1/N), N = số lần dự đoán (4 cho câu 3 từ: 3 từ + dấu kết thúc).
+#   Làm trơn cộng một: P(b | a) = (đếm(a b) + 1) / (đếm(a) + V), V = 6 từ có thể đứng sau (tôi, bạn, thích, mèo, chó, dấu kết thúc).
+#   alg.bigram_prob(câu, add_k=1), alg.perplexity(xác suất, N).
+objectives:
+  - "Tính độ hỗn loạn của một câu"
+  - "Làm trơn cộng một và thấy cái giá của nó"
+  - "So sánh mô hình đúng cách"
+asr_reviewed:
+  - {sentence: "Tổng kết lại, mô hình n-gram nhìn n trừ 1 từ tố trước, và cặp chưa gặp cho xác suất 0.", reason: "ASR chép “Tổng kết lại, mô hình N-RAM nhìn N trừ một từ tối trước và cặp chưa gặp cho xá suốt 0.” (0.818): n-gram đọc “en-gram” theo lexicon LLM, ASR viết “engram/N-RAM”; lệch âm/thanh thuần Việt: tố/tối, xác suất/xá suốt — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Mô hình n-gram cho rằng từ tố tiếp theo phụ thuộc n trừ 1 từ tố trước, và mô hình cặp từ là trường hợp n bằng 2.", reason: "ASR chép “Mô hình Engram cho rằng từ tố tiếp theo phụ thuộc N trừ 1 từ tố trước và mô hình cặp từ là trường hợp N bằng 2.” (0.947): n-gram đọc “en-gram” theo lexicon LLM, ASR viết “engram/N-RAM” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Ở bài sau, bài 2, ta học cách tách văn bản thành từ tố, bằng mã hoá cặp byte.", reason: "ASR chép “Ở bài sau, bài 2, ta học cách tách văn bản thành từ tố bằng mã hóa cặp bay.” (0.947): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Một câu hợp lý bị chấm xác suất 0"
+    checks:
+      - "alg.bigram_prob('<s> chó thích mèo </s>') == 0"
+    steps:
+      - show: |
+          <p>Bài trước, mô hình học từ ba câu chấm câu “chó thích mèo” xác suất <b>0</b> — chỉ vì chưa từng có câu nào bắt đầu bằng “chó”. Mô hình thật đọc hàng nghìn tỉ từ tố vẫn gặp cặp chưa thấy mỗi ngày. Và làm sao biết mô hình này tốt hơn mô hình kia?</p>
+          <div class="box key">Hôm nay: <b>làm trơn</b> để không còn xác suất 0, và <b>độ hỗn loạn</b> — thước đo chuẩn của mô hình ngôn ngữ.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, ở bài trước, mô hình học từ ba câu chấm câu chó thích mèo xác suất 0, chỉ vì chưa từng có câu nào bắt đầu bằng chó. Mô hình thật đọc hàng nghìn tỉ từ tố vẫn gặp cặp chưa thấy mỗi ngày. Và làm sao biết mô hình này tốt hơn mô hình kia? Hôm nay ta học làm trơn để không còn xác suất 0, và độ hỗn loạn, thước đo chuẩn của mô hình ngôn ngữ."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: số mũ âm và số mũ phân số"
+    checks:
+      - "4 ** -1 == 0.25 and 4 ** 0.5 == 2 and round((1 / 4) ** -0.5, 9) == 2"
+    steps:
+      - show: |
+          <table class="t"><tr><th>viết</th><th>nghĩa</th><th>ví dụ</th></tr>
+          <tr><td>$x^{-1}$</td><td>nghịch đảo: $\frac{1}{x}$</td><td>$4^{-1} = \frac{1}{4}$</td></tr>
+          <tr><td>$x^{1/2}$</td><td>căn bậc hai</td><td>$4^{1/2} = 2$</td></tr>
+          <tr><td>$\left(\frac{1}{4}\right)^{-1/2}$</td><td>lật phân số rồi lấy căn</td><td>$4^{1/2} = 2$</td></tr></table>
+        introduces: [inverse]
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Bài này dùng số mũ âm và số mũ phân số. Mũ âm 1 nghĩa là nghịch đảo, 4 mũ âm 1 bằng 1 phần 4. Mũ 1 phần 2 là căn bậc hai, 4 mũ 1 phần 2 bằng 2. Gộp lại, 1 phần 4 mũ âm 1 phần 2 nghĩa là lật phân số thành 4, rồi lấy căn, được 2."
+      - show: |
+          <p><b>Ở bài 0</b>, từ kho ba câu ta đếm được $P(\text{tôi thích mèo}) = \frac{4}{9}$, và câu “chó thích mèo” bị chấm $0$ vì chưa câu nào bắt đầu bằng “chó”.</p>
+        say: "Ở bài 0, từ kho ba câu, ta đếm được xác suất câu tôi thích mèo bằng 4 phần 9, còn câu chó thích mèo bị chấm 0, vì chưa câu nào bắt đầu bằng chó."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: n-gram, độ hỗn loạn, làm trơn cộng một"
+    steps:
+      - show: |
+          <p><b>n-gram</b>: từ tố tiếp theo phụ thuộc $n - 1$ từ tố trước. Bigram là $n = 2$.</p>
+          <p><b>Độ hỗn loạn</b>: $PP = P(w_1, \dots, w_N)^{-1/N}$ với $N$ là số lần dự đoán. Nghĩa trực giác: mô hình bối rối như thể mỗi bước phải chọn đều trong $PP$ khả năng. <b>Càng nhỏ càng tốt</b>.</p>
+          <p><b>Làm trơn cộng một</b>: $P(b \mid a) = \frac{\text{đếm}(a\,b) + 1}{\text{đếm}(a) + V}$, $V$ là số từ có thể đứng sau. Không cặp nào còn xác suất 0.</p>
+        introduces: [dots]
+        focus: [1, 2, 2, 2, 3, 3]
+        say: "Mô hình n-gram cho rằng từ tố tiếp theo phụ thuộc n trừ 1 từ tố trước, và mô hình cặp từ là trường hợp n bằng 2. Độ hỗn loạn bằng xác suất của chuỗi mũ âm 1 chia N, với N là số lần dự đoán. Nghĩa trực giác là mô hình bối rối như thể mỗi bước phải chọn đều trong chừng ấy khả năng. Độ hỗn loạn càng nhỏ càng tốt. Làm trơn cộng một lấy số lần đếm cặp cộng 1, chia số lần đếm ngữ cảnh cộng V, với V là số từ có thể đứng sau. Như vậy không cặp nào còn xác suất 0."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Độ hỗn loạn: mô hình đang phân vân giữa bao nhiêu lựa chọn"
+    steps:
+      - show: |
+          <div><svg width="1500" height="330" viewBox="0 0 1500 330">
+          <line x1="60" y1="260" x2="660" y2="260" stroke="#6b7280" stroke-width="3"/><line x1="840" y1="260" x2="1440" y2="260" stroke="#6b7280" stroke-width="3"/>
+          <g fill="#93c5fd" stroke="#2a78d6" stroke-width="2">
+          <rect x="80" y="170" width="80" height="90"/><rect x="180" y="170" width="80" height="90"/><rect x="280" y="170" width="80" height="90"/>
+          <rect x="380" y="170" width="80" height="90"/><rect x="480" y="170" width="80" height="90"/><rect x="580" y="170" width="80" height="90"/></g>
+          <g fill="#fdba74" stroke="#eb6834" stroke-width="2">
+          <rect x="860" y="60" width="80" height="200"/><rect x="960" y="245" width="80" height="15"/><rect x="1060" y="248" width="80" height="12"/>
+          <rect x="1160" y="250" width="80" height="10"/><rect x="1260" y="252" width="80" height="8"/><rect x="1360" y="254" width="80" height="6"/></g>
+          <g font-size="26" text-anchor="middle" fill="#1f2937">
+          <text x="360" y="300">đoán đều 6 khả năng: độ hỗn loạn 6</text>
+          <text x="1140" y="300">gần như chắc một khả năng: độ hỗn loạn gần 1</text>
+          <text x="360" y="150">mỗi cột 1/6</text></g>
+          </svg></div>
+        focus: [1, 1, 1]
+        say: "Hình giải thích độ hỗn loạn bằng hai mô hình. Bên trái, mô hình chia đều xác suất cho 6 khả năng, như tung một con xúc xắc, nên độ hỗn loạn bằng 6. Bên phải, mô hình dồn gần hết xác suất vào một khả năng, nên độ hỗn loạn gần 1, tức gần như không phân vân."
+
+  - id: example
+    kind: example
+    title: "Trước và sau khi làm trơn"
+    checks:
+      - "round(alg.perplexity(alg.bigram_prob('<s> tôi thích mèo </s>'), 4), 3) == 1.225"
+      - "alg.bigram_prob('<s> chó thích mèo </s>', add_k=1) == __import__('fractions').Fraction(1, 504) and round(alg.perplexity(__import__('fractions').Fraction(1, 504), 4), 3) == 4.738"
+      - "alg.bigram_prob('<s> tôi thích mèo </s>', add_k=1) == __import__('fractions').Fraction(1, 64) and round(alg.perplexity(__import__('fractions').Fraction(1, 64), 4), 3) == 2.828"
+    steps:
+      - show: |
+          <p><b>Bước 1 — độ hỗn loạn khi đếm thô</b>, câu “tôi thích mèo”, 4 lần dự đoán:</p>
+          $$PP = \left(\frac{4}{9}\right)^{-1/4} = \left(\frac{9}{4}\right)^{1/4} \approx \hl{1{,}225}$$
+        focus: [1, 2]
+        say: "Bước một, tính độ hỗn loạn khi đếm thô cho câu tôi thích mèo, có 4 lần dự đoán. Lật 4 phần 9 thành 9 phần 4, rồi lấy căn bậc bốn, được khoảng 1 phẩy 225, tức mô hình gần như không phân vân."
+      - clear: true
+        show: |
+          <p><b>Bước 2 — làm trơn cộng một</b> cho “chó thích mèo”, $V = 6$:</p>
+          <table class="t"><tr><th>bước</th><th>(đếm cặp + 1) ÷ (đếm ngữ cảnh + 6)</th><th>xác suất</th></tr>
+          <tr><td>chó sau đầu câu</td><td>(0 + 1) ÷ (3 + 6)</td><td>$\frac{1}{9}$</td></tr>
+          <tr><td>thích sau chó</td><td>(0 + 1) ÷ (1 + 6)</td><td>$\frac{1}{7}$</td></tr>
+          <tr><td>mèo sau thích</td><td>(2 + 1) ÷ (3 + 6)</td><td>$\frac{3}{9}$</td></tr>
+          <tr><td>hết câu sau mèo</td><td>(2 + 1) ÷ (2 + 6)</td><td>$\frac{3}{8}$</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", "2.5"]
+        say: "Bước hai, làm trơn cộng một cho câu chó thích mèo, với V bằng 6. Chó đứng đầu câu chưa gặp lần nào, nên 0 cộng 1, chia 3 cộng 6, bằng 1 phần 9. Thích sau chó cũng chưa gặp, chó làm ngữ cảnh 1 lần, nên 1 phần 7. Mèo sau thích gặp 2 lần, nên 3 phần 9. Hết câu sau mèo gặp 2 lần, nên 3 phần 8."
+      - show: |
+          $$P = \frac{1}{9} \cdot \frac{1}{7} \cdot \frac{3}{9} \cdot \frac{3}{8} = \hl{\frac{1}{504}}, \quad PP = 504^{1/4} \approx 4{,}738$$
+        say: "Nhân bốn số lại được 1 phần 504, không còn bằng 0. Độ hỗn loạn là căn bậc bốn của 504, khoảng 4 phẩy 738."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu (4 lần dự đoán)</th><th>đếm thô</th><th>làm trơn cộng một</th></tr>
+          <tr><td>tôi thích mèo</td><td>$P = \frac{4}{9}$, $PP \approx 1{,}225$</td><td>$P = \frac{1}{64}$, $PP \approx 2{,}828$</td></tr>
+          <tr><td>chó thích mèo</td><td class="red">$P = 0$, $PP$ vô hạn</td><td>$P = \frac{1}{504}$, $PP \approx 4{,}738$</td></tr></table>
+          <p>Làm trơn <b>lấy bớt</b> xác suất của câu đã gặp (4/9 xuống 1/64) để <b>chia</b> cho câu chưa gặp.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Bước ba, đặt cạnh nhau. Câu tôi thích mèo, sau làm trơn, giảm từ 4 phần 9 xuống 1 phần 64, độ hỗn loạn tăng từ 1 phẩy 225 lên 2 phẩy 828. Câu chó thích mèo đi từ 0 lên 1 phần 504. Làm trơn lấy bớt xác suất của câu đã gặp để chia cho câu chưa gặp."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: sau làm trơn, xác suất vẫn cộng lại bằng 1"
+    checks:
+      - "sum((c + 1) for c in (2, 1, 0, 0, 0, 0)) == 3 + 6"
+      - "alg.bigram_prob('<s> tôi thích mèo </s>', add_k=1) == __import__('fractions').Fraction(1, 3) * __import__('fractions').Fraction(3, 8) * __import__('fractions').Fraction(1, 3) * __import__('fractions').Fraction(3, 8) == __import__('fractions').Fraction(1, 64)"
+    steps:
+      - show: |
+          <table class="t"><tr><th>sau “thích”</th><th>mèo</th><th>chó</th><th>4 từ còn lại</th><th>cộng tử số</th><th>mẫu số</th></tr>
+          <tr><td>đếm + 1</td><td>2 + 1</td><td>1 + 1</td><td>4 lần 0 + 1</td><td>3 + 2 + 4 = 9</td><td>3 + 6 = 9 ✓</td></tr></table>
+        focus: [1, "1.2", "1.2"]
+        say: "Kiểm bằng đường khác, sau khi làm trơn các xác suất đứng sau một ngữ cảnh vẫn phải cộng lại bằng 1. Sau chữ thích, tử số của mèo là 3, của chó là 2, bốn từ còn lại mỗi từ 1, cộng được 9. Mẫu số là 3 cộng 6, cũng bằng 9, nên tổng đúng bằng 1, vì mẫu số cộng đúng V để bù cho V lần cộng thêm 1."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Đo độ hỗn loạn trên chính dữ liệu huấn luyện <b class="red">(lạc quan giả)</b>
+          <br><span class="note">“tôi thích mèo” có độ hỗn loạn 1,225 vì nó NẰM TRONG kho. Phải đo trên văn bản mô hình chưa thấy.</span></div>
+        say: "Lỗi thứ nhất, đo độ hỗn loạn trên chính dữ liệu huấn luyện, một sự lạc quan giả. Câu tôi thích mèo có độ hỗn loạn 1 phẩy 225 vì nó nằm trong kho. Phải đo trên văn bản mà mô hình chưa thấy."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> So độ hỗn loạn giữa hai cách tách từ tố khác nhau <b class="red">(khác đơn vị)</b>
+          <br><span class="note">Độ hỗn loạn tính theo <b>mỗi từ tố</b>. Tách văn bản thành nhiều từ tố nhỏ hơn thì mỗi bước dễ đoán hơn — số nhỏ hơn không có nghĩa mô hình tốt hơn.</span></div>
+        say: "Lỗi thứ hai, so độ hỗn loạn giữa hai cách tách từ tố khác nhau, tức khác đơn vị. Độ hỗn loạn tính theo mỗi từ tố. Tách văn bản thành nhiều từ tố nhỏ hơn thì mỗi bước dễ đoán hơn, nên số nhỏ hơn không có nghĩa là mô hình tốt hơn."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Cộng một khi từ vựng rất lớn <b class="red">(lấy quá nhiều)</b>
+          <br><span class="note">Với 50 000 từ có thể đứng sau, cộng 1 vào mỗi cặp chia gần hết xác suất cho các cặp chưa gặp. Thực tế dùng cộng một lượng nhỏ hơn, hoặc lùi về mô hình ngắn hơn khi thiếu dữ liệu.</span></div>
+        say: "Lỗi thứ ba, cộng một khi từ vựng rất lớn, nên lấy đi quá nhiều. Với 50 nghìn từ có thể đứng sau, cộng 1 vào mỗi cặp chia gần hết xác suất cho các cặp chưa gặp. Thực tế dùng cộng một lượng nhỏ hơn, hoặc lùi về mô hình ngắn hơn khi thiếu dữ liệu."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "round(alg.perplexity(alg.bigram_prob('<s> bạn thích chó </s>'), 4), 3) == 1.732 and round(alg.perplexity(__import__('fractions').Fraction(1, 6 ** 4), 4), 6) == 6"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>“bạn thích chó” có xác suất $\frac{1}{9}$ theo đếm thô. Độ hỗn loạn là bao nhiêu?</td></tr>
+          <tr><td>2</td><td>Một mô hình “ngốc” luôn đoán đều 6 từ có thể đứng sau. Độ hỗn loạn của nó trên bất kỳ câu nào là bao nhiêu?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, câu bạn thích chó có xác suất 1 phần 9 theo đếm thô. Độ hỗn loạn là bao nhiêu? Câu hai, một mô hình ngốc luôn đoán đều 6 từ có thể đứng sau. Độ hỗn loạn của nó trên bất kỳ câu nào là bao nhiêu? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          $$\left(\frac{1}{9}\right)^{-1/4} = 9^{1/4} = \sqrt{\sqrt{9}} = \sqrt{3} \approx \hl{1{,}732}$$
+        introduces: [approx, sqrt]
+        say: "Đáp án câu một, lật 1 phần 9 thành 9, rồi lấy căn bậc bốn, tức căn của căn 9, bằng căn 3, xấp xỉ 1 phẩy 732."
+      - show: |
+          <p>② Mỗi bước xác suất $\frac{1}{6}$ → $P = (1/6)^N$ → $PP = \left((1/6)^N\right)^{-1/N} = \hl{6}$ — đúng nghĩa “chọn đều trong 6 khả năng”. Mô hình tốt phải có độ hỗn loạn nhỏ hơn mức này.</p>
+        say: "Câu hai, mỗi bước xác suất 1 phần 6, nên xác suất cả câu là 1 phần 6 mũ N, và độ hỗn loạn bằng đúng 6, đúng nghĩa chọn đều trong 6 khả năng. Mô hình tốt phải có độ hỗn loạn nhỏ hơn mức này."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">n-gram: nhìn n − 1 từ tố trước</span><span class="a">→</span>
+          <span class="n">cặp chưa gặp: xác suất 0</span><span class="a">→</span>
+          <span class="n">làm trơn: lấy bớt, chia lại</span><span class="a">→</span>
+          <span class="n">độ hỗn loạn trên dữ liệu chưa thấy, cùng cách tách</span></div>
+        say: "Tổng kết lại, mô hình n-gram nhìn n trừ 1 từ tố trước, và cặp chưa gặp cho xác suất 0. Làm trơn lấy bớt rồi chia lại xác suất, và độ hỗn loạn phải đo trên dữ liệu chưa thấy, với cùng cách tách từ tố."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> một mô hình không bao giờ được <b>chắc chắn tuyệt đối</b> rằng điều gì đó không thể xảy ra chỉ vì chưa thấy nó.</div>
+        say: "Điều cần mang theo, một mô hình không bao giờ được chắc chắn tuyệt đối rằng điều gì đó không thể xảy ra, chỉ vì nó chưa thấy điều đó."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 2): <b>tách từ tố</b> — mã hoá cặp byte.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 2, ta học cách tách văn bản thành từ tố, bằng mã hoá cặp byte. Hẹn gặp bạn ở bài tiếp theo."

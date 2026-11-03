@@ -1,0 +1,209 @@
+id: L11
+course: MLO
+series: "MLO · MLOps: đưa mô hình học máy vào vận hành"
+title: "Bài 11 — Tối ưu mô hình để triển khai: lượng tử hoá, chưng cất"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/mlo.yaml L11; audit/mlo/verify_mlo.py L11; B. Jacob và cộng sự, Quantization and Training of Neural Networks for Efficient Integer-Arithmetic-Only Inference, CVPR (2018); G. Hinton, O. Vinyals, J. Dean, Distilling the Knowledge in a Neural Network (2015); CSA bài 3 (biểu diễn số)"
+assumes: [arith, frac, approx, power]
+# Quy ước: lượng tử hoá ĐỐI XỨNG theo tensor, khoảng [−2, 2], 8 bit: bước = 2 / 127; q = làm tròn(x / bước) ∈ [−127, 127]; giá trị khôi phục = q · bước
+#   (alg.quantize_sym). Bộ nhớ = số tham số × số byte mỗi tham số, GB = 10^9 byte (alg.model_memory_gb). int8, float16, float32 chỉ trên màn hình.
+objectives:
+  - "Tính bộ nhớ theo kiểu số"
+  - "Ước lượng sai số lượng tử hoá"
+  - "Biết vì sao phải đánh giá lại sau khi tối ưu"
+asr_reviewed:
+  - {sentence: "Số thực 16 bit chiếm 2 byte.", reason: "ASR chép “Số thực 16 biết chiếm hai bay.” (0.75): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: bit/biết — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Số nguyên 8 bit chiếm đúng 1 byte.", reason: "ASR chép “Số nguyên 8 bịch chiếm đúng một bay.” (0.75): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: bit/bịch — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Nhân số lớn thì nhân phần số rồi giữ đơn vị, 7 tỉ tham số nhân 4 byte được 28 tỉ byte.", reason: "ASR chép “Nhân số lớn thì nhân phần số rồi giữ đơn vị, 7 tỷ tham số nhân 4 bay được 28 tỷ bay.” (0.833): “tỉ” ASR viết chính tả “tỷ” (cùng âm); byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Với bộ nhớ, đếm theo bit, 7 tỉ tham số nhân 8 bit được 56 tỉ bit, chia 8 được 7 tỉ byte.", reason: "ASR chép “Với bộ nhớ, đếm theo bit, 7 tỷ tham số nhân 8 bit được 56 tỷ bit, chia 8 được 7 tỷ bay.” (0.84): “tỉ” ASR viết chính tả “tỷ” (cùng âm); byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Vì 1 GB là 1 tỉ byte, đó là 28 GB.", reason: "ASR chép “Vì 1GB là 1 tỷ bay, đó là 28GB.” (0.846): “tỉ” ASR viết chính tả “tỷ” (cùng âm); byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Số thực 32 bit chiếm 32 chia 8, bằng 4 byte.", reason: "ASR chép “Số thực 32 biết chiếm 32 chia 8, bằng 4 vai.” (0.867): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: bit/biết — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Còn bộ nhớ, 16 bit là 2 byte.", reason: "ASR chép “Còn bộ nhớ, 16 bit là hai bay.” (0.889): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Ở khoá Hệ thống máy tính, ta đã học 8 bit làm thành 1 byte.", reason: "ASR chép “Ở khóa hệ thống máy tính, ta đã học 8 bit làm thành một bay.” (0.933): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Mô hình 13 tỉ tham số ở 16 bit cần bao nhiêu GB?", reason: "ASR chép “Mô hình 13 tỷ tham số ở 16 biết cần bao nhiêu gigabyte?” (0.8): “tỉ” ASR viết chính tả “tỷ” (cùng âm); GB đọc “ghi-ga-byte” theo lexicon của khoá, ASR viết “gigabyte”; lệch âm/thanh thuần Việt: bit/biết — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Chào bạn, một mô hình 7 tỉ tham số, mỗi tham số là số thực 32 bit, tức 4 byte.", reason: "ASR chép “Chào bạn, một mô hình 7 tỷ tham số, mỗi tham số là số thật 32 bit, tức 4 vai.” (0.864): “tỉ” ASR viết chính tả “tỷ” (cùng âm); byte đọc thô, ASR viết “bay” (probe CSA p1 8/8); lệch âm/thanh thuần Việt: thực/thật — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Tổng kết lại, bộ nhớ bằng số tham số nhân số byte.", reason: "ASR chép “Tổng kết lại, bộ nhớ bằng số tham số nhân số bay.” (0.917): byte đọc thô, ASR viết “bay” (probe CSA p1 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Số thực 32 bit, 4 byte mỗi tham số, cần 28 GB.", reason: "ASR chép “Số thực 32-bit, 4 bài mỗi tham số, cần 28 GB.” (0.938): byte đọc thô, ASR viết “bay” (probe CSA p1 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Riêng trọng số đã cần 28 GB, không vừa bộ nhớ của bộ xử lý đồ hoạ 24 GB đang có.", reason: "ASR chép “Riêng trọng số đã cần 28GB, không vừa bộ nhớ của bộ sử lý đồ họa 24GB đang có.” (1.0): GB đọc “ghi-ga-byte” theo lexicon của khoá, ASR viết “GB/gigabyte” — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "28 GB không vừa bộ nhớ đồ hoạ"
+    checks:
+      - "alg.model_memory_gb(7e9, 4) == 28.0 and alg.model_memory_gb(7e9, 1) == 7.0"
+    steps:
+      - show: |
+          <p>Mô hình 7 tỉ tham số, mỗi tham số là số thực 32 bit (4 byte): riêng trọng số đã cần $\hl{28}$ GB — không vừa bộ nhớ của bộ xử lý đồ hoạ 24 GB đang có. Lưu mỗi tham số bằng 1 byte thì chỉ còn 7 GB.</p>
+          <div class="box key">Hôm nay: <b>lượng tử hoá</b> và <b>chưng cất</b> — làm mô hình nhỏ và nhanh hơn, và cái giá phải trả.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, một mô hình 7 tỉ tham số, mỗi tham số là số thực 32 bit, tức 4 byte. Riêng trọng số đã cần 28 GB, không vừa bộ nhớ của bộ xử lý đồ hoạ 24 GB đang có. Lưu mỗi tham số bằng 1 byte thì chỉ còn 7 GB. Hôm nay ta học lượng tử hoá và chưng cất, làm mô hình nhỏ và nhanh hơn, và cái giá phải trả."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: bit và byte, nhân số lớn, làm tròn"
+    checks:
+      - "32 // 8 == 4 and 16 // 8 == 2 and 8 // 8 == 1 and 7e9 * 4 == 28e9 and 28e9 / 1e9 == 28"
+      - "round(82.55) == 83 and round(-44.45) == -44 and round(4.55) == 5"
+    steps:
+      - show: |
+          <table class="t"><tr><th>kiểu số</th><th>số bit</th><th>số byte (8 bit = 1 byte)</th></tr>
+          <tr><td>số thực 32 bit</td><td>32</td><td>$\frac{32}{8} = 4$</td></tr>
+          <tr><td>số thực 16 bit</td><td>16</td><td>2</td></tr>
+          <tr><td>số nguyên 8 bit</td><td>8</td><td>1</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Ở khoá Hệ thống máy tính, ta đã học 8 bit làm thành 1 byte. Số thực 32 bit chiếm 32 chia 8, bằng 4 byte. Số thực 16 bit chiếm 2 byte. Số nguyên 8 bit chiếm đúng 1 byte."
+      - show: |
+          <p><b>Nhân số lớn</b>: 7 tỉ tham số $\times$ 4 byte $=$ 28 tỉ byte $=$ 28 GB (1 GB $=$ 1 tỉ byte).</p>
+          <p><b>Làm tròn</b> về số nguyên gần nhất: $82{,}55 \to 83$, $-44{,}45 \to -44$, $4{,}55 \to 5$.</p>
+        focus: [1, 1, 2]
+        say: "Nhân số lớn thì nhân phần số rồi giữ đơn vị, 7 tỉ tham số nhân 4 byte được 28 tỉ byte. Vì 1 GB là 1 tỉ byte, đó là 28 GB. Làm tròn là lấy số nguyên gần nhất, 82 phẩy 55 thành 83, âm 44 phẩy 45 thành âm 44, và 4 phẩy 55 thành 5."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: lượng tử hoá đối xứng, chưng cất"
+    steps:
+      - show: |
+          <p><b>Lượng tử hoá 8 bit đối xứng</b> trên khoảng $[-2, 2]$: chia khoảng $[0, 2]$ thành 127 bước, mỗi bước $\frac{2}{127} \approx 0{,}01575$.</p>
+          <p>Mã hoá: $q = \text{làm tròn}\left(\frac{x}{\text{bước}}\right)$, số nguyên từ $-127$ đến $127$. Khôi phục: giá trị $= q \cdot \text{bước}$. Sai số tối đa là nửa bước.</p>
+          <div class="box key"><b>Chưng cất</b>: huấn luyện một mô hình <b>nhỏ</b> bắt chước đầu ra (cả xác suất, không chỉ nhãn) của mô hình lớn.</div>
+        introduces: [cdot]
+        focus: [1, 2, 2, 2, 3]
+        say: "Lượng tử hoá 8 bit đối xứng trên khoảng âm 2 đến 2 chia nửa khoảng từ 0 đến 2 thành 127 bước, mỗi bước bằng 2 phần 127, khoảng 0 phẩy 01575. Khi mã hoá, ta lấy x chia bước rồi làm tròn, được số nguyên q từ âm 127 đến 127. Khi khôi phục, ta nhân q với bước. Sai số tối đa là nửa bước. Chưng cất là huấn luyện một mô hình nhỏ bắt chước đầu ra của mô hình lớn, cả xác suất chứ không chỉ nhãn."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Lượng tử hoá là kéo số về vạch gần nhất"
+    checks:
+      - "round(83 * 2 / 127, 4) == 1.3071 and round(4 * 2 / 7, 4) == 1.1429 and round(5 * 2 / 7, 4) == 1.4286 and round(70 * 2 / 127, 2) == 1.1 and round(92 * 2 / 127, 2) == 1.45"
+    steps:
+      - show: |
+          <div><svg width="1500" height="345" viewBox="0 0 1500 345"><line x1="150" y1="110" x2="1250" y2="110" stroke="#6b7280" stroke-width="2"/><line x1="150" y1="240" x2="1250" y2="240" stroke="#6b7280" stroke-width="2"/><line x1="157" y1="85" x2="157" y2="135" stroke="#2a78d6" stroke-width="2"/><line x1="205" y1="85" x2="205" y2="135" stroke="#2a78d6" stroke-width="2"/><line x1="253" y1="85" x2="253" y2="135" stroke="#2a78d6" stroke-width="2"/><line x1="302" y1="85" x2="302" y2="135" stroke="#2a78d6" stroke-width="2"/><line x1="350" y1="85" x2="350" y2="135" stroke="#2a78d6" stroke-width="2"/><line x1="398" y1="85" x2="398" y2="135" stroke="#2a78d6" stroke-width="2"/><line x1="446" y1="85" x2="446" y2="135" stroke="#2a78d6" stroke-width="2"/><line x1="494" y1="85" x2="494" y2="135" stroke="#2a78d6" stroke-width="2"/><line x1="542" y1="85" x2="542" y2="135" stroke="#2a78d6" stroke-width="2"/><line x1="590" y1="85" x2="590" y2="135" stroke="#2a78d6" stroke-width="2"/><line x1="638" y1="85" x2="638" y2="135" stroke="#2a78d6" stroke-width="2"/><line x1="687" y1="85" x2="687" y2="135" stroke="#2a78d6" stroke-width="2"/><line x1="735" y1="85" x2="735" y2="135" stroke="#2a78d6" stroke-width="2"/><line x1="783" y1="85" x2="783" y2="135" stroke="#059669" stroke-width="5"/><line x1="831" y1="85" x2="831" y2="135" stroke="#2a78d6" stroke-width="2"/><line x1="879" y1="85" x2="879" y2="135" stroke="#2a78d6" stroke-width="2"/><line x1="927" y1="85" x2="927" y2="135" stroke="#2a78d6" stroke-width="2"/><line x1="975" y1="85" x2="975" y2="135" stroke="#2a78d6" stroke-width="2"/><line x1="1023" y1="85" x2="1023" y2="135" stroke="#2a78d6" stroke-width="2"/><line x1="1071" y1="85" x2="1071" y2="135" stroke="#2a78d6" stroke-width="2"/><line x1="1120" y1="85" x2="1120" y2="135" stroke="#2a78d6" stroke-width="2"/><line x1="1168" y1="85" x2="1168" y2="135" stroke="#2a78d6" stroke-width="2"/><line x1="1216" y1="85" x2="1216" y2="135" stroke="#2a78d6" stroke-width="2"/><line x1="281" y1="215" x2="281" y2="265" stroke="#2a78d6" stroke-width="5"/><line x1="1154" y1="215" x2="1154" y2="265" stroke="#b91c1c" stroke-width="5"/><line x1="761" y1="60" x2="761" y2="290" stroke="#eb6834" stroke-width="3" stroke-dasharray="8 6"/><g fill="#1f2937" font-size="22"><text x="761" y="50" text-anchor="middle" fill="#eb6834">x = 1,3</text><text x="795" y="165" fill="#059669">83 bước: 1,3071</text><text x="281" y="295" text-anchor="middle">4 bước: 1,1429</text><text x="1154" y="295" text-anchor="middle" fill="#b91c1c">5 bước: 1,4286</text><text x="1270" y="118">8 bit</text><text x="1270" y="248">4 bit</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ một đoạn trục số quanh 1 phẩy 3. Hàng trên là các vạch của 8 bit, cách nhau một bước nhỏ 2 phần 127, nên 1 phẩy 3 được kéo về vạch thứ 83, rất sát. Hàng dưới là vạch của 4 bit, cách nhau 2 phần 7, cả đoạn chỉ có hai vạch, nên 1 phẩy 3 bị kéo xa tới 1 phẩy 4286. Mô hình chỉ lưu số thứ tự của vạch, nên ít bit thì nhẹ hơn nhưng vạch thưa hơn."
+
+  - id: example
+    kind: example
+    title: "1,3 qua 8 bit; bộ nhớ theo kiểu số"
+    checks:
+      - "alg.quantize_sym(1.3)[0] == 83 and round(alg.quantize_sym(1.3)[1], 4) == 1.3071 and round(abs(alg.quantize_sym(1.3)[1] - 1.3), 4) == 0.0071"
+      - "[alg.model_memory_gb(7e9, b) for b in (4, 2, 1)] == [28.0, 14.0, 7.0]"
+    steps:
+      - show: |
+          <p><b>Bước 1</b> — bước $= \frac{2}{127} \approx 0{,}01575$. Chia: $\frac{1{,}3}{0{,}01575} \approx 82{,}55$.</p>
+        say: "Bước một, lấy x bằng 1 phẩy 3, chia cho bước được khoảng 82 phẩy 55."
+      - show: |
+          <p><b>Bước 2</b> — làm tròn: $q = \hl{83}$. Đây là số nguyên 8 bit được lưu thay cho 1,3.</p>
+        say: "Bước hai, làm tròn thành q bằng 83. Đây là số nguyên 8 bit được lưu thay cho 1 phẩy 3."
+      - show: |
+          <p><b>Bước 3</b> — khôi phục: $83 \cdot \frac{2}{127} \approx \hl{1{,}3071}$, sai $0{,}0071$ (dưới nửa bước $0{,}0079$).</p>
+        say: "Bước ba, khôi phục, 83 nhân 2 phần 127 khoảng 1 phẩy 3071, sai 0 phẩy 0071, dưới nửa bước."
+      - clear: true
+        show: |
+          <p><b>Bước 4</b> — bộ nhớ $=$ số tham số $\times$ số byte mỗi tham số:</p>
+          <table class="t"><tr><th>kiểu số</th><th>byte mỗi tham số</th><th>7 tỉ tham số</th></tr>
+          <tr><td><code>float32</code></td><td>4</td><td>28 GB</td></tr>
+          <tr><td><code>float16</code></td><td>2</td><td>14 GB</td></tr>
+          <tr><td><code>int8</code></td><td>1</td><td>$\hl{7}$ GB</td></tr></table>
+        focus: [2, "2.2", "2.3", "2.4"]
+        say: "Bước bốn, bảng cho bộ nhớ của 7 tỉ tham số theo kiểu số. Số thực 32 bit, 4 byte mỗi tham số, cần 28 GB. Số thực 16 bit, 2 byte, cần 14 GB. Số nguyên 8 bit, 1 byte, chỉ cần 7 GB."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác"
+    checks:
+      - "round(82.5 * 2 / 127, 4) == 1.2992 and round(83.5 * 2 / 127, 4) == 1.315 and 82.5 * 2 / 127 < 1.3 < 83.5 * 2 / 127"
+      - "7e9 * 8 / 8 / 1e9 == 7.0 and 28 / 4 == 7"
+    steps:
+      - show: |
+          <table class="t"><tr><th>kiểm</th><th>cách khác</th><th>kết quả</th></tr>
+          <tr><td>$q = 83$</td><td>đi ngược: mọi $x$ trong khoảng từ $82{,}5 \cdot \frac{2}{127} \approx 1{,}2992$ tới $83{,}5 \cdot \frac{2}{127} \approx 1{,}3150$ đều làm tròn về 83</td><td>1,3 nằm trong khoảng ✓</td></tr>
+          <tr><td>7 GB</td><td>đếm bit: 7 tỉ $\times$ 8 bit $=$ 56 tỉ bit, chia 8 được 7 tỉ byte; hoặc $\frac{28}{4} = 7$</td><td>7 GB ✓</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.3", "1.3"]
+        say: "Kiểm bằng đường khác. Đi ngược từ q bằng 83, mọi x nằm giữa 82 phẩy 5 bước và 83 phẩy 5 bước đều làm tròn về 83. Khoảng đó đi từ khoảng 1 phẩy 2992 tới 1 phẩy 315, và 1 phẩy 3 nằm trong khoảng. Với bộ nhớ, đếm theo bit, 7 tỉ tham số nhân 8 bit được 56 tỉ bit, chia 8 được 7 tỉ byte. Hoặc lấy 28 GB chia 4, cũng ra 7 GB."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp"
+    checks:
+      - "[alg.quantize_sym(x)[0] for x in (0.006, -0.004, 0.9, -1.2)] == [0, 0, 57, -76] and round(alg.quantize_sym(0.9)[1], 4) == 0.8976 and round(alg.quantize_sym(-1.2)[1], 4) == -1.1969"
+      - "[(x > 0, alg.quantize_sym(x)[1] > 0) for x in (0.006, -0.004, 0.9, -1.2)] == [(True, False), (False, False), (True, True), (False, False)] and round(0.006 / (2 / 127), 2) == 0.38 and round(1 / 127, 4) == 0.0079"
+      - "round(20 / 127 / (2 / 127)) == 10"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Không đánh giá lại sau khi lượng tử hoá <b class="red">(sai số cộng dồn)</b>
+          <br><span class="note">Sai số nhỏ của từng số đi qua hàng chục lớp có thể cộng dồn. Chạy lại toàn bộ bộ kiểm thử (cả theo nhóm, cả hiệu chuẩn) trên mô hình đã lượng tử hoá.</span></div>
+        say: "Lỗi thứ nhất, không đánh giá lại sau khi lượng tử hoá. Sai số nhỏ của từng số đi qua hàng chục lớp có thể cộng dồn, nên hãy chạy lại toàn bộ bộ kiểm thử, cả theo nhóm và cả hiệu chuẩn, trên mô hình đã lượng tử hoá."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Chọn khoảng theo một giá trị ngoại lai <b class="red">(phí độ phân giải)</b>
+          <br><span class="note">Một trọng số bằng 20 làm khoảng thành $[-20, 20]$: bước to gấp 10 lần, mọi giá trị nhỏ mất chính xác. Cắt ngoại lai hoặc lượng tử hoá theo từng kênh.</span></div>
+        say: "Lỗi thứ hai, chọn khoảng theo một giá trị ngoại lai. Một trọng số bằng 20 làm khoảng thành âm 20 đến 20, bước to gấp 10 lần, và mọi giá trị nhỏ mất chính xác. Hãy cắt ngoại lai, hoặc lượng tử hoá theo từng kênh."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Chỉ tính bộ nhớ trọng số <b class="red">(thiếu)</b>
+          <br><span class="note">Lúc chạy còn cần bộ nhớ cho giá trị trung gian, bộ đệm, lô yêu cầu. Chừa dư địa, và đo thật trên phần cứng đích.</span></div>
+        say: "Lỗi thứ ba, chỉ tính bộ nhớ cho trọng số. Lúc chạy còn cần bộ nhớ cho giá trị trung gian, bộ đệm và lô yêu cầu, nên hãy chừa dư địa, và đo thật trên phần cứng đích."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Chỉ so độ chính xác trung bình, không đếm <b>quyết định bị lật</b> <b class="red">(ca sát ngưỡng)</b></div>
+          <table class="t"><tr><th>điểm cuối (số thực)</th><th>$q$</th><th>khôi phục</th><th>quyết định trước → sau (lớn hơn 0 là “có”)</th></tr>
+          <tr><td>0,006</td><td>0</td><td>0</td><td class="red">có → không</td></tr>
+          <tr><td>−0,004</td><td>0</td><td>0</td><td>không → không</td></tr>
+          <tr><td>0,9</td><td>57</td><td>0,8976</td><td>có → có</td></tr>
+          <tr><td>−1,2</td><td>−76</td><td>−1,1969</td><td>không → không</td></tr></table>
+          <p class="note">Sai số không quá nửa bước (0,0079), nên chỉ ca nằm sát ngưỡng trong nửa bước mới lật. Người làm nghề chạy cả hai bản trên cùng dữ liệu thật và đếm tỉ lệ quyết định bị lật, nhất là ở nhóm ca sát ngưỡng.</p>
+        focus: [1, 2, "2.2", 2, 3, 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, chỉ so độ chính xác trung bình mà không đếm quyết định bị lật. Bảng lượng tử hoá điểm cuối của bốn ca, điểm lớn hơn 0 nghĩa là có. Ca đầu có điểm 0 phẩy 006, chia bước chỉ được khoảng 0 phẩy 38, làm tròn thành 0, nên quyết định lật từ có sang không. Ba ca còn lại giữ nguyên quyết định. Sai số không quá nửa bước, nên chỉ ca nằm sát ngưỡng trong nửa bước mới lật. Người làm nghề chạy cả hai bản trên cùng dữ liệu thật và đếm tỉ lệ quyết định bị lật, nhất là ở nhóm ca sát ngưỡng."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.quantize_sym(-0.7)[0] == -44 and round(alg.quantize_sym(-0.7)[1], 4) == -0.6929"
+      - "alg.quantize_sym(1.3, 2, 4)[0] == 5 and round(alg.quantize_sym(1.3, 2, 4)[1], 4) == 1.4286 and alg.model_memory_gb(13e9, 2) == 26.0"
+      - "round(-0.7 / 0.01575, 2) == -44.44 and round(-0.7 / (2 / 127), 2) == -44.45 and round(1.3 / (2 / 7), 2) == 4.55 and round(10 / 7 - 1.3, 2) == 0.13 and round((10 / 7 - 1.3) / (83 * 2 / 127 - 1.3)) == 18"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Cùng khoảng $[-2, 2]$, 8 bit: $x = -0{,}7$ thành $q$ bao nhiêu? Khôi phục được bao nhiêu?</td></tr>
+          <tr><td>2</td><td>Chỉ dùng 4 bit (bước $\frac{2}{7}$): $x = 1{,}3$ khôi phục thành bao nhiêu? Mô hình 13 tỉ tham số ở 16 bit cần bao nhiêu GB?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, cùng khoảng âm 2 đến 2 với 8 bit, x bằng âm 0 phẩy 7 thành q bao nhiêu, và khôi phục được bao nhiêu? Câu hai, chỉ dùng 4 bit, bước là 2 phần 7, x bằng 1 phẩy 3 khôi phục thành bao nhiêu? Mô hình 13 tỉ tham số ở 16 bit cần bao nhiêu GB? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① Chia: $\frac{-0{,}7}{0{,}01575} \approx -44{,}45$. Làm tròn: $q = \hl{-44}$. Khôi phục: $-44 \cdot \frac{2}{127} \approx \hl{-0{,}6929}$.</p>
+        say: "Đáp án câu một, âm 0 phẩy 7 chia bước khoảng âm 44 phẩy 45, làm tròn thành âm 44, khôi phục khoảng âm 0 phẩy 6929."
+      - show: |
+          <p>② Chia: $1{,}3 : \frac{2}{7} = 4{,}55$. Làm tròn: $q = 5$. Khôi phục: $\frac{10}{7} \approx \hl{1{,}4286}$.</p>
+          <p>Sai $1{,}4286 - 1{,}3 \approx 0{,}13$ — gấp khoảng 18 lần sai số 0,0071 của 8 bit.</p>
+        focus: [1, 2]
+        say: "Câu hai, 1 phẩy 3 chia 2 phần 7 bằng 4 phẩy 55, làm tròn thành 5, khôi phục thành 10 phần 7, khoảng 1 phẩy 4286. Sai 0 phẩy 13, gấp 18 lần so với 8 bit."
+      - show: |
+          <p>Bộ nhớ: 16 bit $=$ 2 byte; 13 tỉ $\times$ 2 byte $=$ 26 tỉ byte $= \hl{26}$ GB.</p>
+        say: "Còn bộ nhớ, 16 bit là 2 byte. Mô hình 13 tỉ tham số nhân 2 byte cần 26 GB."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">bộ nhớ = tham số × byte</span><span class="a">→</span>
+          <span class="n">lượng tử hoá: sai số tối đa nửa bước</span><span class="a">→</span>
+          <span class="n">ít bit hơn: bước to hơn, sai nhiều hơn</span><span class="a">→</span>
+          <span class="n">đánh giá lại trên dữ liệu thật</span></div>
+        say: "Tổng kết lại, bộ nhớ bằng số tham số nhân số byte. Lượng tử hoá có sai số tối đa nửa bước, ít bit hơn thì bước to hơn và sai nhiều hơn, nên luôn đánh giá lại trên dữ liệu thật."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> mọi phép tối ưu đều đổi một thứ lấy một thứ. Đo cả hai phía của cán cân trước khi đưa vào chạy.</div>
+        say: "Điều cần mang theo, mọi phép tối ưu đều đổi một thứ lấy một thứ khác. Hãy đo cả hai phía của cán cân trước khi đưa vào chạy."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 12): <b>thẻ mô hình</b>, công bằng và khả năng giải thích.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 12, ta học về thẻ mô hình, công bằng, và khả năng giải thích. Hẹn gặp bạn ở bài tiếp theo."

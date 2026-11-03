@@ -1,0 +1,262 @@
+# ═══ BÀI TÌNH HUỐNG — sự cố có thật; case-lessons.md §1–§4 ═══
+id: L05
+course: CAS
+series: "CAS · Tình huống chuyên gia"
+title: "Bài 5 — Knight Capital (2012): một máy chủ thiếu bản triển khai và một cờ dùng lại"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/cas.yaml L05; audit/cas/sources_L05.md (câu trích nguyên văn, đọc 2026-11-02); audit/cas/ver/L05.py; audit/verify_plan_curricula.py CAS:L05; U.S. Securities and Exchange Commission, Order Instituting Administrative and Cease-and-Desist Proceedings, In the Matter of Knight Capital Americas LLC, Release No. 34-70694, 16/10/2013 (bản PDF www.sec.gov/litigation/admin/2013/34-70694.pdf, tải được trong phiên này) [SEC13]; khoá DevOps (DVO bài 4: sản phẩm dựng bất biến, mã băm; bài 7: phát hành tiệm tiến, cờ tính năng)"
+assumes: [arith, frac, power, approx]
+# Quy ước: “lệnh mẹ” = lệnh khách gửi vào (parent order); “lệnh con” = lệnh bộ định tuyến gửi ra sàn (child order);
+#   “bộ định tuyến” = SMARS; “chức năng cũ” = Power Peg; “cờ” = cờ tính năng. Mọi con số có giờ, ngày, đô la, số lệnh là CITED [SEC13].
+#   Lệnh mẹ 100 cổ phiếu, lệnh con 10 cổ phiếu, 100 lệnh con mỗi giây, 1% lỗi mỗi máy, 20 máy là SỐ MINH HOẠ, ghi trên màn hình.
+#   Lời đọc không nói Knight Capital, SEC, SMARS, Power Peg, NYSE (chưa có luật đọc): “một công ty môi giới chứng khoán”,
+#   “Uỷ ban Chứng khoán Mỹ”, “bộ định tuyến lệnh”, “chức năng cũ”; tên gốc ở trên màn hình. KHÔNG nêu tên hay chức danh người
+#   (lệnh của uỷ ban ghi “one of Knight's technicians” — bài nói “ở một máy chủ, bản mới không được chép lên”).
+objectives:
+  - "Dựng dòng thời gian từ năm 2003 tới sáng 1/8/2012 và đọc các con số của lệnh xử phạt năm 2013"
+  - "Giải thích vì sao một cờ dùng lại cộng một máy chủ thiếu bản mới đánh thức mã chết"
+  - "Tính tốc độ thua lỗ, tốc độ khớp lệnh, và xác suất có ít nhất một máy lệch khi triển khai bằng tay"
+  - "Thiết kế triển khai có kiểm đồng nhất, có nút dừng, và có giới hạn vốn tự động"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Sáng 1/8/2012: 45 phút, hơn 460 triệu đô la"
+    checks:
+      - "460 / 45 > 10"
+    steps:
+      - show: |
+          <p>Sáng <b>1/8/2012</b>, bộ định tuyến lệnh tự động của công ty môi giới Knight Capital nhận <b>212</b> lệnh nhỏ của khách, rồi gửi ra thị trường <b>hàng triệu</b> lệnh trong khoảng <b>45 phút</b>.</p>
+          <p>Kết quả: hơn <b>4 triệu</b> lần khớp lệnh, 154 mã cổ phiếu, hơn 397 triệu cổ phiếu — và công ty lỗ <b>hơn 460 triệu đô la</b>.</p>
+          <div class="box key">Hôm nay: một cờ tính năng dùng lại, một máy chủ trong tám máy thiếu bản mới, và vì sao không lớp phòng vệ nào dừng được bộ định tuyến.</div>
+        focus: [1, 1, 2, 2, 3]
+        say: "Chào bạn, sáng ngày 1 tháng 8 năm 2012, bộ định tuyến lệnh tự động của một công ty môi giới chứng khoán Mỹ nhận 212 lệnh nhỏ của khách hàng. Trong khoảng 45 phút sau đó, nó gửi ra thị trường hàng triệu lệnh. Theo lệnh xử phạt năm 2013 của Uỷ ban Chứng khoán Mỹ, kết quả là hơn 4 triệu lần khớp lệnh, trên 154 mã cổ phiếu, hơn 397 triệu cổ phiếu. Công ty lỗ hơn 460 triệu đô la. Hôm nay ta tìm hiểu một cờ tính năng bị dùng lại, một máy chủ trong tám máy thiếu bản mới, và vì sao không lớp phòng vệ nào dừng được bộ định tuyến."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: cờ tính năng, mã băm, xác suất ít nhất một lần"
+    checks:
+      - "round(1 - 0.9 ** 2, 2) == 0.19 and round(1 - (1 - 0.1) ** 2, 2) == 0.19"
+      - "0.1 * 0.1 == 0.010000000000000002 or abs(0.1 * 0.1 - 0.01) < 1e-12"
+    steps:
+      - show: |
+          <table class="t"><tr><th>điều đã học</th><th>ví dụ số</th></tr>
+          <tr><td><b>cờ tính năng</b> (khoá DevOps): công tắc trong mã để bật tắt một chức năng mà không triển khai lại</td><td>cờ “bật” thì chạy nhánh mới, “tắt” thì chạy nhánh cũ</td></tr>
+          <tr><td><b>mã băm</b> (khoá DevOps): dấu vân tay của nội dung; đổi một byte là đổi mã băm</td><td>hai máy cùng mã băm thì đang chạy cùng một bản</td></tr>
+          <tr><td><b>ít nhất một lần</b> = 1 trừ xác suất không lần nào</td><td>hai việc độc lập, mỗi việc hỏng 10%: ít nhất một hỏng = 1 − 0,9 nhân 0,9 = <b>0,19</b></td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.4", "1.4"]
+        say: "Trước hết, ta ôn ba điều sẽ dùng. Ở khoá tích hợp và triển khai liên tục, cờ tính năng là công tắc trong mã để bật tắt một chức năng mà không phải triển khai lại. Cờ bật thì chạy nhánh mới, tắt thì chạy nhánh cũ. Cũng ở khoá đó, mã băm là dấu vân tay của nội dung, nên hai máy cùng mã băm thì đang chạy cùng một bản. Xác suất có ít nhất một lần hỏng bằng 1 trừ xác suất không lần nào hỏng. Hai việc độc lập, mỗi việc hỏng 10 phần trăm, thì ít nhất một hỏng là 1 trừ 0 phẩy 9 nhân 0 phẩy 9, bằng 0 phẩy 19."
+
+  # ───────────────────────── 3. NGÔN NGỮ ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Ngôn ngữ của lệnh xử phạt"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thuật ngữ</th><th>nghĩa trong lệnh năm 2013</th></tr>
+          <tr><td><b>lệnh mẹ, lệnh con</b></td><td>bộ định tuyến nhận lệnh mẹ, rồi gửi một hay nhiều lệnh con ra các sàn tuỳ lượng hàng sẵn có</td></tr>
+          <tr><td><b>chức năng cũ Power Peg</b></td><td>ngừng dùng từ <b>2003</b>, nhưng mã vẫn nằm trên máy chủ và <b>gọi được</b></td></tr>
+          <tr><td><b>bộ đếm tích lũy</b></td><td>đếm số cổ phiếu của lệnh mẹ đã khớp, để dừng gửi lệnh con khi đã đủ</td></tr>
+          <tr><td><b>cờ dùng lại</b></td><td>cờ từng bật chức năng cũ, nay được dùng để bật chức năng mới cho chương trình bán lẻ</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bảng có bốn thuật ngữ của lệnh xử phạt. Bộ định tuyến nhận lệnh mẹ, rồi gửi một hay nhiều lệnh con ra các sàn, tuỳ lượng hàng sẵn có. Chức năng cũ đã ngừng dùng từ năm 2003, nhưng mã của nó vẫn nằm trên máy chủ và vẫn gọi được. Bộ đếm tích lũy đếm số cổ phiếu của lệnh mẹ đã khớp, để dừng gửi lệnh con khi đã đủ. Cờ dùng lại là cờ từng bật chức năng cũ, nay được dùng để bật chức năng mới cho một chương trình bán lẻ."
+
+  # ───────────────────────── 4. HÌNH CƠ CHẾ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Một cờ, tám máy chủ, hai đoạn mã"
+    steps:
+      - show: |
+          <div><svg width="1640" height="420" viewBox="0 0 1640 420">
+          <defs><marker id="ar5" markerUnits="userSpaceOnUse" markerWidth="18" markerHeight="18" refX="16" refY="9" orient="auto"><path d="M0,0 L18,9 L0,18 z" fill="#1f2937"/></marker></defs>
+          <g font-size="22" fill="#1f2937" text-anchor="middle">
+          <rect x="20" y="150" width="270" height="110" rx="10" fill="#e0ecfb" stroke="#2a78d6" stroke-width="3"/>
+          <text x="155" y="195" font-weight="bold">lệnh mẹ có cờ “bật”</text><text x="155" y="232">chương trình bán lẻ mới</text>
+          <line x1="290" y1="205" x2="420" y2="120" stroke="#1f2937" stroke-width="3" marker-end="url(#ar5)"/>
+          <line x1="290" y1="205" x2="420" y2="300" stroke="#1f2937" stroke-width="3" marker-end="url(#ar5)"/>
+          <rect x="430" y="40" width="520" height="140" rx="10" fill="#dcfce7" stroke="#059669" stroke-width="3"/>
+          <text x="690" y="80" font-weight="bold">máy 1 tới máy 7: có bản mới</text>
+          <text x="690" y="115">cờ bật → chức năng mới</text><text x="690" y="150">xử lý đúng</text>
+          <rect x="430" y="240" width="520" height="140" rx="10" fill="#fde2e2" stroke="#e11d48" stroke-width="3"/>
+          <text x="690" y="280" font-weight="bold">máy 8: bản mới không được chép lên</text>
+          <text x="690" y="315">cờ bật → chức năng cũ đã chết</text><text x="690" y="350">bộ đếm đã bị dời đi từ 2005</text>
+          <line x1="950" y1="310" x2="1080" y2="310" stroke="#e11d48" stroke-width="3" marker-end="url(#ar5)"/>
+          <rect x="1090" y="240" width="530" height="140" rx="10" fill="#fde68a" stroke="#b45309" stroke-width="3"/>
+          <text x="1355" y="280" font-weight="bold">gửi lệnh con liên tục</text>
+          <text x="1355" y="315">không biết lệnh mẹ đã khớp đủ</text><text x="1355" y="350">không ai dừng tự động</text>
+          </g></svg></div>
+        focus: [1, 1, 1, 1, 1]
+        say: "Hình vẽ một cờ, tám máy chủ, và hai đoạn mã. Lệnh mẹ của chương trình bán lẻ mới mang cờ bật, và được chia cho tám máy chủ của bộ định tuyến. Bảy máy có bản mới, nên cờ bật chạy chức năng mới và xử lý đúng. Máy thứ tám không được chép bản mới, nên cờ bật lại đánh thức chức năng cũ, mà bộ đếm của nó đã bị dời đi từ năm 2005. Vì vậy nó gửi lệnh con liên tục, không biết lệnh mẹ đã khớp đủ."
+
+  # ───────────────────────── 5. SUY RA ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra: không có bộ đếm thì gửi bao nhiêu lệnh"
+    checks:
+      - "100 // 10 == 10"
+      - "100 * 60 == 6000 and 6000 * 10 == 60000 and 60000 // 100 == 600"
+    steps:
+      - show: |
+          <p>Một lệnh mẹ mua 100 cổ phiếu; mỗi lệnh con 10 cổ phiếu; bộ định tuyến gửi được 100 lệnh con mỗi giây (đều là số minh hoạ).</p>
+          <table class="t"><tr><th>bước</th><th>vì sao</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. có bộ đếm</td><td>dừng khi đã khớp 100 cổ phiếu: 100 chia 10</td><td>$\hlg{10}$ lệnh con, rồi dừng</td></tr>
+          <tr><td>Bước 2. bộ đếm không chạy, trong 1 phút</td><td>không có điều kiện dừng nên gửi mãi: 100 nhân 60</td><td>6000 lệnh con</td></tr>
+          <tr><td>Bước 3. số cổ phiếu</td><td>6000 nhân 10</td><td>60&nbsp;000 cổ phiếu cho một lệnh 100: gấp $\hl{600}$ lần</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Bây giờ ta suy ra cơ chế bằng số minh hoạ, một lệnh mẹ mua 100 cổ phiếu, mỗi lệnh con 10 cổ phiếu, và bộ định tuyến gửi được 100 lệnh con mỗi giây. Bước một, có bộ đếm thì dừng khi đã khớp đủ 100 cổ phiếu, tức 100 chia 10, bằng 10 lệnh con. Bước hai, bộ đếm không chạy nên không có điều kiện dừng, trong 1 phút nó gửi 100 nhân 60, bằng 6000 lệnh con. Bước ba, 6000 lệnh con nhân 10 cổ phiếu là 60 nghìn cổ phiếu cho một lệnh chỉ cần 100, gấp 600 lần."
+      - show: |
+          <p class="note">Lệnh xử phạt ghi đúng cơ chế này: vì bộ đếm đã bị dời đi, máy 8 gửi lệnh con liên tục cho mỗi lệnh mẹ, <b>bất kể</b> đã khớp bao nhiêu; một phần khác của hệ thống biết lệnh mẹ đã đủ, nhưng thông tin đó không được gửi tới bộ định tuyến.</p>
+        say: "Lệnh xử phạt ghi đúng cơ chế này. Vì bộ đếm đã bị dời đi, máy thứ tám gửi lệnh con liên tục cho mỗi lệnh mẹ, bất kể đã khớp bao nhiêu. Một phần khác của hệ thống biết lệnh mẹ đã đủ, nhưng thông tin đó không được gửi tới bộ định tuyến."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Tính lại các con số của lệnh xử phạt"
+    checks:
+      - "round(460 / 45, 1) == 10.2"
+      - "round(4e6 / 45) == 88889 and round(4e6 / (45 * 60)) == 1481"
+      - "80 + 74 == 154 and round(3.5 + 3.15, 2) == 6.65"
+      - "round(397e6 / 4e6) == 99"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bước</th><th>phép tính (số trong lệnh năm 2013)</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. lỗ mỗi phút</td><td>hơn 460 triệu đô la chia khoảng 45 phút</td><td>hơn $\hl{10{,}2}$ triệu đô la mỗi phút</td></tr>
+          <tr><td>Bước 2. khớp lệnh mỗi giây</td><td>4 triệu chia 45 nhân 60 giây</td><td>khoảng $\hl{1481}$ lần khớp mỗi giây</td></tr>
+          <tr><td>Bước 3. cổ phiếu mỗi lần khớp</td><td>397 triệu chia 4 triệu</td><td>khoảng 99 cổ phiếu</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Bây giờ ta tính lại các con số của lệnh xử phạt. Bước một, hơn 460 triệu đô la chia khoảng 45 phút, tức hơn 10 phẩy 2 triệu đô la mỗi phút. Bước hai, 4 triệu lần khớp chia cho 45 nhân 60 giây, khoảng 1481 lần khớp mỗi giây, nhanh hơn rất nhiều so với tốc độ một người nhìn màn hình. Bước ba, 397 triệu cổ phiếu chia 4 triệu lần khớp, trung bình khoảng 99 cổ phiếu mỗi lần, đúng kiểu lệnh nhỏ gửi đi liên tục."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>dữ kiện</th><th>phép tính</th></tr>
+          <tr><td>Bước 4. vị thế không mong muốn</td><td>mua ròng khoảng 3,5 tỉ đô la ở 80 mã; bán ròng khoảng 3,15 tỉ ở 74 mã</td><td>80 + 74 = 154 mã, khớp con số ở trên; tổng hai chiều khoảng $\hl{6{,}65}$ tỉ</td></tr>
+          <tr><td>Bước 5. tầm ảnh hưởng</td><td>công ty thường chiếm khoảng 10% giao dịch cổ phiếu niêm yết ở Mỹ; bộ định tuyến này khoảng 1% trở lên</td><td>một lỗi ở đây chạm tới giá của người khác</td></tr></table>
+          <p class="note">Lệnh ghi: ở 75 mã, công ty chiếm hơn 20% khối lượng và góp phần làm giá đổi hơn 5%.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Bước bốn, công ty bị kẹt vị thế mua ròng khoảng 3 phẩy 5 tỉ đô la ở 80 mã, và bán ròng khoảng 3 phẩy 15 tỉ ở 74 mã. Cộng lại 80 với 74 được 154 mã, khớp con số ở trên, và tổng hai chiều khoảng 6 phẩy 65 tỉ đô la. Bước năm, công ty thường chiếm khoảng 10 phần trăm giao dịch cổ phiếu niêm yết ở Mỹ, còn bộ định tuyến này khoảng 1 phần trăm trở lên. Vì vậy lỗi chạm tới giá của người khác, ở 75 mã, công ty chiếm hơn 20 phần trăm khối lượng và góp phần làm giá đổi hơn 5 phần trăm."
+
+  # ───────────────────────── 7. DÒNG THỜI GIAN ─────────────────────────
+  - id: timeline
+    kind: example
+    title: "Dòng thời gian: mã chết nằm chờ chín năm"
+    checks:
+      - "2012 - 2003 == 9 and (9 * 60 + 30) - (8 * 60 + 1) == 89"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thời điểm</th><th>dữ kiện trong lệnh năm 2013</th></tr>
+          <tr><td>2003</td><td>ngừng dùng chức năng cũ; mã vẫn để lại, gọi được</td></tr>
+          <tr><td>2005</td><td>dời bộ đếm tích lũy ra khỏi chức năng cũ; <b>không thử lại</b> chức năng cũ</td></tr>
+          <tr><td>từ 27/7/2012</td><td>triển khai mã mới <b>bằng tay</b>, từng máy qua nhiều ngày; một máy không được chép; <b>không có người thứ hai</b> kiểm, không có quy trình viết thành văn bản đòi điều đó</td></tr>
+          <tr><td>1/8, từ 8:01</td><td>hệ thống gửi <b>97 thư</b> tự động ghi lỗi “Power Peg disabled” trước giờ mở cửa 9:30 — không được thiết kế làm cảnh báo, không ai đọc</td></tr>
+          <tr><td>1/8, sau 9:30</td><td>khoảng 45 phút gửi lệnh; đội kỹ thuật dò lỗi <b>trong lúc vẫn giao dịch</b></td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", "1.4", "1.5", "1.6"]
+        say: "Bây giờ ta đặt các dữ kiện lên dòng thời gian. Năm 2003, công ty ngừng dùng chức năng cũ, nhưng mã vẫn để lại và gọi được. Năm 2005, bộ đếm tích lũy được dời ra khỏi chức năng cũ, và không ai thử lại chức năng đó. Từ ngày 27 tháng 7 năm 2012, mã mới được triển khai bằng tay, từng máy qua nhiều ngày, và ở một máy, bản mới không được chép lên. Không có người thứ hai kiểm, cũng không có quy trình nào đòi điều đó. Sáng 1 tháng 8, từ 8 giờ 1 phút, hệ thống gửi 97 thư tự động báo lỗi của chức năng cũ, nhưng chúng không được thiết kế làm cảnh báo nên không ai đọc. Sau giờ mở cửa, đội kỹ thuật phải dò lỗi trong lúc hệ thống vẫn đang giao dịch."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>dữ kiện</th><th>phép tính</th></tr>
+          <tr><td>Bước 6. mã chết nằm chờ</td><td>2003 tới 2012</td><td>$\hl{9}$ năm</td></tr>
+          <tr><td>Bước 7. cơ hội phát hiện trước giờ mở cửa</td><td>8:01 tới 9:30, 97 thư</td><td>$\hl{89}$ phút</td></tr>
+          <tr><td>Bước 8. một lần “quay lui” làm tệ hơn</td><td>gỡ mã mới khỏi 7 máy đang đúng, nhưng cờ vẫn bật</td><td>từ 1 máy thành <b>8 máy</b> chạy chức năng cũ</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", "1.4"]
+        say: "Từ dòng thời gian, ta tính được ba điều. Bước sáu, mã chết nằm chờ từ 2003 tới 2012, tức 9 năm. Bước bảy, từ 8 giờ 1 tới 9 giờ 30 có 89 phút với 97 thư báo, một cơ hội phát hiện trước giờ mở cửa. Bước tám, trong lúc xử lý, đội gỡ mã mới khỏi bảy máy đang chạy đúng, nhưng cờ vẫn bật. Từ một máy thành tám máy chạy chức năng cũ, và lệnh ghi rằng việc đó làm sự cố tệ hơn."
+
+  # ───────────────────────── 8. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Kiểm bằng đường khác: kiểm đồng nhất bằng mã băm"
+    checks:
+      - "(lambda g: (exec(\"import hashlib\\ndef dau_van_tay(ma):\\n    return hashlib.sha256(ma.encode()).hexdigest()[:12]\\n\\ndef kiem_dong_nhat(may_chu):\\n    dau = {ten: dau_van_tay(ma) for ten, ma in may_chu.items()}\\n    return len(set(dau.values())) == 1, dau\", g), g['kiem_dong_nhat']({**{f'may{i}': 'ban_moi' for i in range(1, 8)}, 'may8': 'ban_cu'})[0])[1])({}) is False"
+      - "(lambda g: (exec(\"import hashlib\\ndef dau_van_tay(ma):\\n    return hashlib.sha256(ma.encode()).hexdigest()[:12]\\n\\ndef kiem_dong_nhat(may_chu):\\n    dau = {ten: dau_van_tay(ma) for ten, ma in may_chu.items()}\\n    return len(set(dau.values())) == 1, dau\", g), g['kiem_dong_nhat']({f'may{i}': 'ban_moi' for i in range(1, 9)})[0])[1])({}) is True"
+      - "8 - 7 == 1 and 7 / 8 == 0.875"
+    steps:
+      - show: |
+          <pre class="code">import hashlib
+          def dau_van_tay(ma):
+              return hashlib.sha256(ma.encode()).hexdigest()[:12]
+
+          def kiem_dong_nhat(may_chu):
+              dau = {ten: dau_van_tay(ma) for ten, ma in may_chu.items()}
+              return len(set(dau.values())) == 1, dau</pre>
+          <table class="t"><tr><th>chạy thử</th><th>kết quả</th></tr>
+          <tr><td>8 máy đều chạy bản mới</td><td>đồng nhất: <b>cho phép bật cờ</b></td></tr>
+          <tr><td>7 máy bản mới, máy 8 bản cũ</td><td><b>không</b> đồng nhất: chặn bật cờ, chỉ ra máy 8</td></tr></table>
+        focus: [1, 1, "2.2", "2.3"]
+        say: "Ta kiểm bằng đường khác, không tin vào lời ai rằng đã chép đủ. Đoạn mã lấy mã băm của bản đang chạy trên mỗi máy, và chỉ coi là đồng nhất khi mọi máy có cùng một dấu vân tay. Chạy thử với tám máy đều chạy bản mới, kết quả là đồng nhất, nên cho phép bật cờ. Với bảy máy bản mới và máy thứ tám bản cũ, kết quả là không đồng nhất, nên phép kiểm chặn việc bật cờ và chỉ ra đúng máy thứ tám."
+
+  # ───────────────────────── 9. BÀI HỌC SAI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "Những bài học sai hay gặp"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">1.</b> “Một kỹ thuật viên quên chép tệp”</td><td>không có người thứ hai kiểm, không có quy trình viết thành văn bản, không có phép kiểm tự động</td><td>tự động hoá triển khai; máy kiểm đồng nhất trước khi bật cờ</td></tr>
+          <tr><td><b class="red">2.</b> “Cẩn thận hơn khi triển khai”</td><td>8 máy, mỗi máy chép tay, chỉ một lần sót là đủ</td><td>xem bảng xác suất ở phần quyết định</td></tr></table>
+        focus: ["1.2", "1.2", "1.3", "1.3"]
+        say: "Bài học sai thứ nhất là kết luận một kỹ thuật viên quên chép tệp. Lệnh xử phạt ghi rõ, không có người thứ hai kiểm, không có quy trình viết thành văn bản, và không có phép kiểm tự động nào. Bài học sai thứ hai là dặn cẩn thận hơn khi triển khai. Tám máy, mỗi máy chép tay, chỉ một lần sót là đủ, và phần quyết định sẽ tính xác suất đó."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">3.</b> “Mã không dùng thì vô hại” (người đã đi làm)</td><td>mã chết vẫn gọi được, lại bị sửa năm 2005 mà không thử lại; một cờ dùng lại đánh thức nó</td><td>xoá hẳn mã chết; không dùng lại tên cờ cũ cho nghĩa mới</td></tr>
+          <tr><td><b class="red">4.</b> “Có sự cố thì quay lui là an toàn”</td><td>gỡ mã ở 7 máy nhưng cờ vẫn bật: cả 8 máy chạy mã cũ</td><td>quay lui cả mã và cấu hình; tập quay lui trước</td></tr>
+          <tr><td><b class="red">5.</b> “Có công cụ theo dõi vị thế là đủ”</td><td>công cụ chỉ hiện cho người nhìn, không tự dừng, còn chậm khi khối lượng lớn</td><td>giới hạn vốn nối thẳng vào việc gửi lệnh; nút dừng có quy trình</td></tr></table>
+        focus: ["1.2", "1.2", "1.3", "1.3", "1.4", "1.4"]
+        say: "Bài học sai thứ ba hay gặp ở người đã đi làm, nghĩ mã không dùng thì vô hại. Mã chết vẫn gọi được, lại bị sửa năm 2005 mà không thử lại, và một cờ dùng lại đã đánh thức nó. Bài học sai thứ tư là tin quay lui luôn an toàn. Đội gỡ mã ở bảy máy nhưng cờ vẫn bật, nên cả tám máy chạy mã cũ. Bài học sai thứ năm là tin có công cụ theo dõi vị thế là đủ. Công cụ đó chỉ hiện cho người nhìn, không tự dừng việc gửi lệnh, và còn chậm khi khối lượng lớn."
+
+  # ───────────────────────── 10. BẠN SẼ LÀM GÌ ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Bạn sẽ làm gì?"
+    checks:
+      - "round(1 - 0.99 ** 8, 3) == 0.077 and round(1 - 0.99 ** 20, 3) == 0.182"
+      - "abs(0.01 * 0.01 - 0.0001) < 1e-12 and round(1 - (1 - 0.0001) ** 20, 4) == 0.002"
+    steps:
+      - show: |
+          <p>Đội bạn triển khai một dịch vụ trên <b>20 máy</b> (số minh hoạ). Chép tay, mỗi máy có <b>1%</b> khả năng bị sót.</p>
+          <table class="t"><tr><th>câu</th><th>câu hỏi</th></tr>
+          <tr><td>1</td><td>Xác suất ít nhất một máy bị sót, với 8 máy và với 20 máy?</td></tr>
+          <tr><td>2</td><td>Chọn: (a) thêm người thứ hai đọc lại danh sách máy; (b) công cụ triển khai tự động, kiểm mã băm mọi máy trước khi bật cờ; (c) như (b), cộng giới hạn tự động và nút dừng cho chính dịch vụ.</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", 0]
+        say: "Bây giờ đến lượt bạn, với số minh hoạ. Đội bạn triển khai một dịch vụ trên 20 máy, chép tay, mỗi máy có 1 phần trăm khả năng bị sót. Câu một, xác suất ít nhất một máy bị sót là bao nhiêu, với 8 máy và với 20 máy? Câu hai, bạn thêm người thứ hai đọc lại danh sách, hay dùng công cụ tự động kiểm mã băm mọi máy trước khi bật cờ, hay làm thêm cả giới hạn tự động và nút dừng? Dừng video và viết ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 1</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. 8 máy</td><td>1 − 0,99 mũ 8</td><td>khoảng $\hl{7{,}7\%}$</td></tr>
+          <tr><td>Bước 2. 20 máy</td><td>1 − 0,99 mũ 20</td><td>khoảng $\hl{18{,}2\%}$: gần một lần trong năm lần triển khai</td></tr>
+          <tr><td>Bước 3. thêm phép kiểm độc lập cũng lọt 1% (như bài 0)</td><td>mỗi máy lọt 1% nhân 1% = 0,01%; 20 máy</td><td>khoảng $\hlg{0{,}2\%}$</td></tr></table>
+        focus: ["1.2", "1.3", "1.4"]
+        say: "Đáp án câu một, bước một, với 8 máy, 1 trừ 0 phẩy 99 mũ 8 là khoảng 7 phẩy 7 phần trăm. Bước hai, với 20 máy là khoảng 18 phẩy 2 phần trăm, gần một lần trong năm lần triển khai. Bước ba, như ở bài 0, thêm một phép kiểm độc lập cũng lọt 1 phần trăm thì mỗi máy chỉ lọt 0 phẩy 01 phần trăm, và 20 máy còn khoảng 0 phẩy 2 phần trăm."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 2: lựa chọn</th><th>được</th><th>mất</th></tr>
+          <tr><td>(a) người thứ hai đọc danh sách</td><td>rẻ, làm ngay</td><td>nhìn cùng danh sách: lỗi chung vẫn lọt; không bắt được mã chết</td></tr>
+          <tr><td>(b) triển khai tự động + kiểm mã băm</td><td>máy kiểm mọi lần, độc lập với người chép</td><td>phải dựng công cụ; vẫn chưa chặn được lỗi trong chính mã mới</td></tr>
+          <tr><td>(c) (b) + giới hạn tự động + nút dừng</td><td>dù lỗi lọt, thiệt hại có trần: lớp cuối không cần người nhìn kịp 1481 lần khớp mỗi giây</td><td>tốn công nhất; giới hạn đặt sai có thể chặn nhầm giao dịch tốt</td></tr></table>
+          <p class="note">Chọn (c) cho hệ thống chạm tiền thật. Điều kiện đổi: dịch vụ không gây thiệt hại tăng theo từng giây thì (b) là đủ.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Đáp án câu hai là một đánh đổi. Người thứ hai đọc danh sách thì rẻ, làm ngay được, nhưng nhìn cùng danh sách, nên lỗi chung vẫn lọt và không bắt được mã chết. Công cụ tự động kiểm mã băm mọi lần, độc lập với người chép, đổi lại phải dựng công cụ, và vẫn chưa chặn được lỗi trong chính mã mới. Thêm giới hạn tự động và nút dừng thì dù lỗi lọt, thiệt hại vẫn có trần, vì lớp cuối không cần người nhìn kịp 1481 lần khớp mỗi giây. Vậy nên chọn cách thứ ba cho hệ thống chạm tiền thật, còn nếu thiệt hại không tăng theo từng giây thì cách thứ hai là đủ."
+
+  # ───────────────────────── 11. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Thay đổi hệ thống & tư duy chuyên gia"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">mã chết từ 2003, sửa năm 2005 không thử lại</span><span class="a">→</span>
+          <span class="n">cờ dùng lại</span><span class="a">→</span>
+          <span class="n">1 trong 8 máy thiếu bản mới</span><span class="a">→</span>
+          <span class="n">lệnh con gửi mãi</span><span class="a">→</span>
+          <span class="n">không giới hạn tự động: 45 phút, hơn 460 triệu đô la</span></div>
+        say: "Tổng kết lại, mã chết từ năm 2003 bị sửa năm 2005 mà không thử lại, một cờ dùng lại đánh thức nó trên một máy trong tám máy thiếu bản mới. Lệnh con bị gửi mãi, và vì không có giới hạn tự động, 45 phút đã làm mất hơn 460 triệu đô la."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> khi máy gửi lệnh nhanh hơn người phản ứng, lớp phòng vệ cuối phải là <b>máy</b>: kiểm đồng nhất trước khi bật, giới hạn tự động khi đang chạy, nút dừng có quy trình. “Cẩn thận hơn” không phải là một lớp phòng vệ.</div>
+        say: "Điều cần mang theo, khi máy gửi lệnh nhanh hơn người phản ứng, lớp phòng vệ cuối phải là máy. Kiểm đồng nhất trước khi bật, giới hạn tự động khi đang chạy, và nút dừng có quy trình, vì cẩn thận hơn không phải là một lớp phòng vệ."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 6): Amazon S3, 2017 — một lệnh gỡ máy gõ sai, và lần khởi động lại chưa từng tập ở quy mô thật.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 6, ta đọc bài hậu kiểm năm 2017 về kho lưu trữ của Amazon, khi một lệnh gỡ máy gõ sai, và lần khởi động lại chưa từng tập ở quy mô thật. Hẹn gặp bạn ở bài tiếp theo."

@@ -1,0 +1,233 @@
+id: L08
+course: CLD
+series: "CLD · Hệ thống hướng dịch vụ"
+title: "Bài 8 — Cập nhật cuốn chiếu, xanh–lam và canary"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/cld.yaml L08; audit/cld/verify_cld.py L08; Kubernetes Docs, Deployments — Rolling Update Deployment: maxUnavailable (làm tròn xuống), maxSurge (làm tròn lên), mặc định 25% (kubernetes.io, đọc 2026-10-28); J. Humble, D. Farley, Continuous Delivery (2010), chương 10"
+assumes: [arith, cdot]
+# Quy ước: n bản; u = ⌊n · maxUnavailable⌋ (số bản được phép thiếu), s = ⌈n · maxSurge⌉ (số bản được phép dư). Trong suốt quá trình: số bản sẵn sàng
+#   ≥ n − u, tổng số Pod ≤ n + s. alg.rolling_update mô phỏng từng bước và trả (u, s, min sẵn sàng, max tổng, số bước). “canary” chỉ trên màn hình;
+#   lời đọc nói “phát hành thử”.
+objectives:
+  - "Tính số Pod tối thiểu sẵn sàng khi cập nhật cuốn chiếu"
+  - "So sánh cuốn chiếu, xanh–lam và phát hành thử"
+  - "Giữ tương thích khi bản cũ và mới chạy cùng lúc"
+asr_reviewed:
+  - {sentence: "Ô xanh là Pod cũ, ô cam đặc là Pod mới đã sẵn sàng, ô cam đứt nét là Pod mới đang khởi động.", reason: "ASR chép “Ô xanh là pốt cũ, ô cam đặt là pốt mới đã sẵn sàng, ô cam đức nét là pốt mới đang khởi động.” (0.792): Pod đọc thô (probe CLD p1: 5/8, ASR viết pốt/phút/pút); lệch âm/thanh thuần Việt: đặc/đặt, đứt/đức — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Vòng một tạo 3 Pod mới cho tổng lên 13, rồi xoá 2 Pod cũ, còn 8 Pod cũ sẵn sàng.", reason: "ASR chép “Vòng 1 tạo 3 phút mới cho tổng lên 13, rồi xóa 2 phút cũ, còn 8 phút cũ sẵn sang.” (0.818): Pod đọc thô (probe CLD p1: 5/8, ASR viết pốt/phút/pút); lệch âm/thanh thuần Việt: sàng/sang — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Pod cũ chỉ bị xoá khi đã có đủ Pod khác sẵn sàng thay chỗ, nên khách không thấy gián đoạn.", reason: "ASR chép “Phúc cụ chỉ bị xóa khi đã có đủ phúc khác sẵn sàng thay chỗ nên khách không thấy gián đoạn.” (0.857): Pod đọc thô (probe CLD p1: 5/8, ASR viết pốt/phút/pút); lệch âm/thanh thuần Việt: cũ (trong “pod cũ” → “phúc cụ”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Trong mỗi vòng, lúc Pod mới vừa được tạo mà Pod cũ chưa xoá, tổng số Pod lên tới 13.", reason: "ASR chép “Trong mỗi vòng, lúc pốt mới vừa được tạo mà pốt cũ chưa xóa, tổng số pốt lên tới 13.” (0.857): Pod đọc thô (probe CLD p1: 5/8, ASR viết pốt/phút/pút) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Vòng hai, 3 Pod mới đã sẵn sàng nên xoá được 3 Pod cũ, còn 5, và tạo thêm 2 Pod mới.", reason: "ASR chép “Vòng 2, 3 phút mới đã sẵn sàng nên xóa được 3 phút cũ, còn 5 và tạo thêm 2 phút mới.” (0.864): Pod đọc thô (probe CLD p1: 5/8, ASR viết pốt/phút/pút) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Tối đa là 4 cộng 1, bằng 5 Pod.", reason: "ASR chép “Tối đa là 4 cộng 1 bằng 5 phút.” (0.889): Pod đọc thô (probe CLD p1: 5/8, ASR viết pốt/phút/pút) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Tối đa là 8 cộng 2, bằng 10 Pod.", reason: "ASR chép “Tối đa là 8 cộng 2 bằng 10 pốt.” (0.889): Pod đọc thô (probe CLD p1: 5/8, ASR viết pốt/phút/pút) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Đối tượng triển khai khai báo muốn có n bản Pod từ một ảnh, ví dụ muốn 3 bản.", reason: "ASR chép “Đối tượng trĩnh khai khai báo muốn có n bản phúc từ một ảnh, ví dụ muốn ba bản.” (0.895): Pod đọc thô (probe CLD p1: 5/8, ASR viết pốt/phút/pút); lệch âm/thanh thuần Việt: triển/trĩnh — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Vòng ba tạo 3, xoá 2, còn 3 Pod cũ.", reason: "ASR chép “Vòng 3 tạo 3, xóa 2, còn 3 pút cũ.” (0.9): Pod đọc thô (probe CLD p1: 5/8, ASR viết pốt/phút/pút) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Vòng bốn tạo 2, xoá 3 Pod cũ cuối cùng.", reason: "ASR chép “Vòng 4 tạo 2, xóa 3 phút cũ cuối cùng.” (0.9): Pod đọc thô (probe CLD p1: 5/8, ASR viết pốt/phút/pút) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Suốt bốn vòng, không lúc nào dưới 8 bản sẵn sàng hay trên 13 Pod, và việc cập nhật xong sau 4 vòng.", reason: "ASR chép “Suốt 4 vòng không lúc nào dưới 8 bản sẵn sàng hay trên 13 phút và vì cập nhật xong sau 4 vòng.” (0.917): Pod đọc thô (probe CLD p1: 5/8, ASR viết pốt/phút/pút); lệch âm/thanh thuần Việt: việc/vì — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Vòng điều khiển thấy thiếu thì tạo, thấy thừa thì xoá, nên khi một Pod chết, nó thấy 2 và tạo lại 1 cho đủ 3.", reason: "ASR chép “Vòng điều khiển thấy thiếu thì tạo, thấy thừa thì xóa, nên khi một phút chức, nó thấy hai và tạo lại một cho đủ ba.” (0.923): Pod đọc thô (probe CLD p1: 5/8, ASR viết pốt/phút/pút); lệch âm/thanh thuần Việt: chết (trong “pod chết” → “phút chức”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Cộng cột tạo được 3 cộng 2 cộng 3 cộng 2, bằng 10 Pod mới, cộng cột xoá cũng được 10 Pod cũ, nên đã thay hết.", reason: "ASR chép “Cộng cột tạo được 3 cộng 2 cộng 3 cộng 2 bằng 10 phút mới, cộng cột xóa cũng được 10 phút cũ nên đã thay hết.” (0.926): Pod đọc thô (probe CLD p1: 5/8, ASR viết pốt/phút/pút) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Vì vậy có tối đa 10 cộng 3, bằng 13 Pod cùng lúc.", reason: "ASR chép “Vì vậy có tối đa 10 cộng 3 bằng 13 phút cùng lúc.” (0.929): Pod đọc thô (probe CLD p1: 5/8, ASR viết pốt/phút/pút) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Một Pod chỉ tính là sẵn sàng khi đã khởi động xong và nhận được yêu cầu, Pod vừa tạo còn đang nạp dữ liệu thì chưa sẵn sàng.", reason: "ASR chép “Một Phúc chỉ tính là sẵn sàng khi đã khởi động xong và nhận được yêu cầu, Phúc vừa tạo còn đang nạp dữ liệu thì chưa sẵn sàng.” (0.931): Pod đọc thô (probe CLD p1: 5/8, ASR viết pốt/phút/pút) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Không có nửa Pod, nên phải làm tròn, và mỗi tham số làm tròn theo một hướng.", reason: "ASR chép “Không có nửa phút nên phải làm tròn và mỗi tham số làm tròn theo một hướng.” (0.941): Pod đọc thô (probe CLD p1: 5/8, ASR viết pốt/phút/pút) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Làm tròn lên cho phép tạo thêm nhiều Pod mới một lúc, nên cập nhật xong nhanh hơn.", reason: "ASR chép “Làm tròn lên cho phép tạo thêm nhiều bốc mới một lúc nên cập nhật xong nhanh hơn.” (0.944): Pod đọc thô (probe CLD p1: 5/8, ASR viết pốt/phút/pút) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Ở mọi hàng, số ô đặc, tức số Pod sẵn sàng, không bao giờ xuống dưới đường xanh lá 8 bản.", reason: "ASR chép “Ở mọi hàng, số ô đặc, tức số pốt sẵn sàng không bao giờ xuống dưới đường xanh lá 8 bản.” (0.952): Pod đọc thô (probe CLD p1: 5/8, ASR viết pốt/phút/pút) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Cuốn chiếu thay dần từng nhóm Pod cũ bằng Pod mới, ít tài nguyên thừa, nhưng bản cũ và bản mới chạy cùng lúc.", reason: "ASR chép “Cũng chiếu thay dần từng nhóm pốt cũ bằng pốt mới, ít tài nguyên thừa, nhưng bản cũ và bản mới chạy cùng lúc.” (0.875): Pod đọc thô (probe CLD p1: 5/8, ASR viết pốt/phút/pút); lệch âm/thanh thuần Việt: cuốn/cũng — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Hãy khai báo kiểm tra sẵn sàng, để Pod chỉ nhận yêu cầu khi đã sẵn sàng thật.", reason: "ASR chép “Hãy khai báo kiểm tra sẵn sàng để phút chỉ nhận yêu cầu khi đã sẵn sàng thật.” (0.944): Pod đọc thô (probe CLD p1: 5/8, ASR viết pốt/phút/pút) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Pod mới vừa khởi động đã nhận lưu lượng trong khi còn đang nạp dữ liệu, và khách gặp lỗi.", reason: "ASR chép “Pốt mới vừa khởi động đã nhận lưu lượng trong khi còn đang nạp dữ liệu và khách gặp lỗi.” (0.95): Pod đọc thô (probe CLD p1: 5/8, ASR viết pốt/phút/pút) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Câu một, 4 bản, được thiếu 25 phần trăm, được dư 25 phần trăm, tối thiểu mấy bản sẵn sàng, và tối đa mấy Pod?", reason: "ASR chép “Câu 1-4 bản được thiếu 25% được dư 25% tối thiểu mấy bản sẵn sàng và tối đa mấy phút.” (0.966): Pod đọc thô (probe CLD p1: 5/8, ASR viết pốt/phút/pút) — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Phát hành lúc 2 giờ chiều mà không ai thấy"
+    steps:
+      - show: |
+          <p>Ngày trước: phát hành phải chọn 2 giờ sáng, tắt hết, chép bản mới, bật lại, cầu mong. Bây giờ: phát hành giữa giờ làm việc, khách vẫn mua hàng bình thường, và nếu bản mới lỗi thì quay lại trong vài phút.</p>
+          <div class="box key">Hôm nay: ba cách phát hành không ngừng dịch vụ — <b>cuốn chiếu</b>, <b>xanh–lam</b>, <b>phát hành thử</b>.</div>
+        focus: [1, 1, 2]
+        say: "Chào bạn, ngày trước phát hành phải chọn 2 giờ sáng, tắt hết, chép bản mới, bật lại, và cầu mong. Bây giờ ta phát hành giữa giờ làm việc, khách vẫn mua hàng bình thường, và nếu bản mới lỗi thì quay lại trong vài phút. Hôm nay ta học ba cách phát hành không ngừng dịch vụ, cuốn chiếu, xanh lam, và phát hành thử."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: khai báo số bản, Pod sẵn sàng, làm tròn xuống và lên"
+    checks:
+      - "alg.reconcile(3, [1]) == [2, 3]"
+      - "math.floor(2.5) == 2 and math.ceil(2.5) == 3 and math.floor(2) == math.ceil(2) == 2 and 10 * 0.25 == 2.5"
+    steps:
+      - show: |
+          <table class="t"><tr><th>điều đã học ở bài 5</th><th>ví dụ</th></tr>
+          <tr><td>đối tượng triển khai khai báo muốn có n bản Pod từ một ảnh</td><td>muốn 3 bản</td></tr>
+          <tr><td>vòng điều khiển: thấy thiếu thì tạo, thấy thừa thì xoá</td><td>1 Pod chết: thấy 2, tạo lại 1, về 3</td></tr>
+          <tr><td>Pod <b>sẵn sàng</b>: đã khởi động xong, nhận được yêu cầu</td><td>Pod vừa tạo còn nạp dữ liệu: chưa sẵn sàng</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Ở bài 5 ta đã học ba điều sẽ dùng hôm nay. Đối tượng triển khai khai báo muốn có n bản Pod từ một ảnh, ví dụ muốn 3 bản. Vòng điều khiển thấy thiếu thì tạo, thấy thừa thì xoá, nên khi một Pod chết, nó thấy 2 và tạo lại 1 cho đủ 3. Một Pod chỉ tính là sẵn sàng khi đã khởi động xong và nhận được yêu cầu, Pod vừa tạo còn đang nạp dữ liệu thì chưa sẵn sàng."
+      - show: |
+          <table class="t"><tr><th>số</th><th>làm tròn xuống $\lfloor \cdot \rfloor$</th><th>làm tròn lên $\lceil \cdot \rceil$</th></tr>
+          <tr><td>2,5</td><td>2</td><td>3</td></tr>
+          <tr><td>2</td><td>2</td><td>2</td></tr></table>
+        introduces: [floor, ceil]
+        focus: [1, "1.2", "1.3", 0]
+        say: "Bài này dùng hai cách làm tròn. Với 2 phẩy 5, làm tròn xuống được 2, làm tròn lên được 3. Với số đã nguyên như 2, cả hai cách đều giữ nguyên 2. Chỉ khi phép nhân ra số lẻ thì hai cách mới cho kết quả khác nhau."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: ba chiến lược phát hành"
+    steps:
+      - show: |
+          <table class="t"><tr><th>chiến lược</th><th>cách làm</th><th>đánh đổi</th></tr>
+          <tr><td><b>cuốn chiếu</b></td><td>thay dần từng nhóm Pod cũ bằng Pod mới</td><td>ít tài nguyên thừa; bản cũ và mới chạy <b>cùng lúc</b></td></tr>
+          <tr><td><b>xanh–lam</b></td><td>dựng đủ một bộ mới bên cạnh, chuyển toàn bộ lưu lượng một lần</td><td>quay lại tức thì; tốn gấp đôi tài nguyên lúc chuyển</td></tr>
+          <tr><td><b>canary</b> (phát hành thử)</td><td>cho bản mới nhận một phần nhỏ (ví dụ 5%) lưu lượng, theo dõi chỉ số rồi mới mở rộng</td><td>lỗi chỉ chạm ít khách; cần chỉ số tốt để quyết định</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Bảng so ba chiến lược phát hành. Cuốn chiếu thay dần từng nhóm Pod cũ bằng Pod mới, ít tài nguyên thừa, nhưng bản cũ và bản mới chạy cùng lúc. Xanh lam dựng đủ một bộ mới bên cạnh rồi chuyển toàn bộ lưu lượng một lần, quay lại tức thì nhưng tốn gấp đôi tài nguyên lúc chuyển. Phát hành thử cho bản mới nhận một phần nhỏ lưu lượng, ví dụ 5 phần trăm, theo dõi chỉ số rồi mới mở rộng, lỗi chỉ chạm ít khách nhưng cần chỉ số tốt để quyết định."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Cuốn chiếu: xanh lùi dần, cam tiến dần"
+    checks:
+      - "(lambda R: all(o + r >= 8 for o, r, s in R) and [o + r for o, r, s in R] == [10, 8, 8, 8, 8, 10] and R[-1] == (0, 10, 0))([(10, 0, 0), (8, 0, 3), (5, 3, 2), (3, 5, 3), (0, 8, 2), (0, 10, 0)])"
+      - "alg.rolling_update(10)[2:5] == (8, 13, 4)"
+    steps:
+      - show: |
+          <div><svg width="1500" height="400" viewBox="0 0 1500 400"><g fill="#1f2937"><text x="40" y="100" font-size="24">bắt đầu</text><rect x="220" y="70" width="40" height="40" rx="5" fill="#2a78d6"/><rect x="270" y="70" width="40" height="40" rx="5" fill="#2a78d6"/><rect x="320" y="70" width="40" height="40" rx="5" fill="#2a78d6"/><rect x="370" y="70" width="40" height="40" rx="5" fill="#2a78d6"/><rect x="420" y="70" width="40" height="40" rx="5" fill="#2a78d6"/><rect x="470" y="70" width="40" height="40" rx="5" fill="#2a78d6"/><rect x="520" y="70" width="40" height="40" rx="5" fill="#2a78d6"/><rect x="570" y="70" width="40" height="40" rx="5" fill="#2a78d6"/><rect x="620" y="70" width="40" height="40" rx="5" fill="#2a78d6"/><rect x="670" y="70" width="40" height="40" rx="5" fill="#2a78d6"/><text x="920" y="100" font-size="24">sẵn sàng 10, tổng 10</text><text x="40" y="152" font-size="24">vòng 1</text><rect x="220" y="122" width="40" height="40" rx="5" fill="#2a78d6"/><rect x="270" y="122" width="40" height="40" rx="5" fill="#2a78d6"/><rect x="320" y="122" width="40" height="40" rx="5" fill="#2a78d6"/><rect x="370" y="122" width="40" height="40" rx="5" fill="#2a78d6"/><rect x="420" y="122" width="40" height="40" rx="5" fill="#2a78d6"/><rect x="470" y="122" width="40" height="40" rx="5" fill="#2a78d6"/><rect x="520" y="122" width="40" height="40" rx="5" fill="#2a78d6"/><rect x="570" y="122" width="40" height="40" rx="5" fill="#2a78d6"/><rect x="622" y="124" width="36" height="36" rx="5" fill="none" stroke="#eb6834" stroke-width="3" stroke-dasharray="6 4"/><rect x="672" y="124" width="36" height="36" rx="5" fill="none" stroke="#eb6834" stroke-width="3" stroke-dasharray="6 4"/><rect x="722" y="124" width="36" height="36" rx="5" fill="none" stroke="#eb6834" stroke-width="3" stroke-dasharray="6 4"/><text x="920" y="152" font-size="24">sẵn sàng 8, tổng 11</text><text x="40" y="204" font-size="24">vòng 2</text><rect x="220" y="174" width="40" height="40" rx="5" fill="#2a78d6"/><rect x="270" y="174" width="40" height="40" rx="5" fill="#2a78d6"/><rect x="320" y="174" width="40" height="40" rx="5" fill="#2a78d6"/><rect x="370" y="174" width="40" height="40" rx="5" fill="#2a78d6"/><rect x="420" y="174" width="40" height="40" rx="5" fill="#2a78d6"/><rect x="470" y="174" width="40" height="40" rx="5" fill="#eb6834"/><rect x="520" y="174" width="40" height="40" rx="5" fill="#eb6834"/><rect x="570" y="174" width="40" height="40" rx="5" fill="#eb6834"/><rect x="622" y="176" width="36" height="36" rx="5" fill="none" stroke="#eb6834" stroke-width="3" stroke-dasharray="6 4"/><rect x="672" y="176" width="36" height="36" rx="5" fill="none" stroke="#eb6834" stroke-width="3" stroke-dasharray="6 4"/><text x="920" y="204" font-size="24">sẵn sàng 8, tổng 10</text><text x="40" y="256" font-size="24">vòng 3</text><rect x="220" y="226" width="40" height="40" rx="5" fill="#2a78d6"/><rect x="270" y="226" width="40" height="40" rx="5" fill="#2a78d6"/><rect x="320" y="226" width="40" height="40" rx="5" fill="#2a78d6"/><rect x="370" y="226" width="40" height="40" rx="5" fill="#eb6834"/><rect x="420" y="226" width="40" height="40" rx="5" fill="#eb6834"/><rect x="470" y="226" width="40" height="40" rx="5" fill="#eb6834"/><rect x="520" y="226" width="40" height="40" rx="5" fill="#eb6834"/><rect x="570" y="226" width="40" height="40" rx="5" fill="#eb6834"/><rect x="622" y="228" width="36" height="36" rx="5" fill="none" stroke="#eb6834" stroke-width="3" stroke-dasharray="6 4"/><rect x="672" y="228" width="36" height="36" rx="5" fill="none" stroke="#eb6834" stroke-width="3" stroke-dasharray="6 4"/><rect x="722" y="228" width="36" height="36" rx="5" fill="none" stroke="#eb6834" stroke-width="3" stroke-dasharray="6 4"/><text x="920" y="256" font-size="24">sẵn sàng 8, tổng 11</text><text x="40" y="308" font-size="24">vòng 4</text><rect x="220" y="278" width="40" height="40" rx="5" fill="#eb6834"/><rect x="270" y="278" width="40" height="40" rx="5" fill="#eb6834"/><rect x="320" y="278" width="40" height="40" rx="5" fill="#eb6834"/><rect x="370" y="278" width="40" height="40" rx="5" fill="#eb6834"/><rect x="420" y="278" width="40" height="40" rx="5" fill="#eb6834"/><rect x="470" y="278" width="40" height="40" rx="5" fill="#eb6834"/><rect x="520" y="278" width="40" height="40" rx="5" fill="#eb6834"/><rect x="570" y="278" width="40" height="40" rx="5" fill="#eb6834"/><rect x="622" y="280" width="36" height="36" rx="5" fill="none" stroke="#eb6834" stroke-width="3" stroke-dasharray="6 4"/><rect x="672" y="280" width="36" height="36" rx="5" fill="none" stroke="#eb6834" stroke-width="3" stroke-dasharray="6 4"/><text x="920" y="308" font-size="24">sẵn sàng 8, tổng 10</text><text x="40" y="360" font-size="24">xong</text><rect x="220" y="330" width="40" height="40" rx="5" fill="#eb6834"/><rect x="270" y="330" width="40" height="40" rx="5" fill="#eb6834"/><rect x="320" y="330" width="40" height="40" rx="5" fill="#eb6834"/><rect x="370" y="330" width="40" height="40" rx="5" fill="#eb6834"/><rect x="420" y="330" width="40" height="40" rx="5" fill="#eb6834"/><rect x="470" y="330" width="40" height="40" rx="5" fill="#eb6834"/><rect x="520" y="330" width="40" height="40" rx="5" fill="#eb6834"/><rect x="570" y="330" width="40" height="40" rx="5" fill="#eb6834"/><rect x="620" y="330" width="40" height="40" rx="5" fill="#eb6834"/><rect x="670" y="330" width="40" height="40" rx="5" fill="#eb6834"/><text x="920" y="360" font-size="24">sẵn sàng 10, tổng 10</text><line x1="615" y1="55" x2="615" y2="385" stroke="#059669" stroke-width="3" stroke-dasharray="10 6"/><text x="615" y="40" text-anchor="middle" font-size="22" fill="#059669">8 bản: mức tối thiểu</text><rect x="1180" y="80" width="30" height="30" rx="5" fill="#2a78d6"/><text x="1222" y="104" font-size="22">Pod cũ</text><rect x="1180" y="130" width="30" height="30" rx="5" fill="#eb6834"/><text x="1222" y="154" font-size="22">Pod mới sẵn sàng</text><rect x="1182" y="182" width="26" height="26" rx="5" fill="none" stroke="#eb6834" stroke-width="3" stroke-dasharray="6 4"/><text x="1222" y="204" font-size="22">Pod mới đang khởi động</text></g></svg></div>
+        focus: [1, 1, 1, 1, 1]
+        say: "Hình vẽ 10 bản được thay qua 4 vòng, mỗi hàng là trạng thái sau một vòng. Ô xanh là Pod cũ, ô cam đặc là Pod mới đã sẵn sàng, ô cam đứt nét là Pod mới đang khởi động. Ở mọi hàng, số ô đặc, tức số Pod sẵn sàng, không bao giờ xuống dưới đường xanh lá 8 bản. Pod cũ chỉ bị xoá khi đã có đủ Pod khác sẵn sàng thay chỗ, nên khách không thấy gián đoạn. Trong mỗi vòng, lúc Pod mới vừa được tạo mà Pod cũ chưa xoá, tổng số Pod lên tới 13."
+
+  - id: example
+    kind: example
+    title: "Cuốn chiếu 10 bản với 25%"
+    checks:
+      - "alg.rolling_update(10, 0.25, 0.25)[:4] == (2, 3, 8, 13)"
+      - "math.floor(10 * 0.25) == 2 and math.ceil(10 * 0.25) == 3"
+    steps:
+      - show: |
+          <p><b>Bước 1</b> — 10 bản, được phép <b>thiếu</b> 25% và <b>dư</b> 25%:</p>
+          $$10 \cdot 0{,}25 = 2{,}5$$
+          <p>Không có nửa Pod, nên phải làm tròn — và mỗi tham số làm tròn một hướng.</p>
+        focus: [1, 2, 3]
+        say: "Bước một, có 10 bản, được phép thiếu 25 phần trăm và dư 25 phần trăm. 10 nhân 0 phẩy 25 bằng 2 phẩy 5. Không có nửa Pod, nên phải làm tròn, và mỗi tham số làm tròn theo một hướng."
+      - show: |
+          <table class="t"><tr><th>tham số</th><th>làm tròn</th><th>kết quả</th><th>nghĩa</th></tr>
+          <tr><td>được thiếu</td><td>xuống: $\lfloor 2{,}5 \rfloor$</td><td>2</td><td>luôn $\geq 10 - 2 = \hl{8}$ bản sẵn sàng</td></tr></table>
+        focus: [1, "1.2", "1.2"]
+        say: "Bước hai, số được thiếu làm tròn xuống thành 2. Vì vậy luôn có ít nhất 10 trừ 2, bằng 8 bản sẵn sàng. Làm tròn xuống nghĩa là thiếu ít hơn, tức an toàn hơn cho khách."
+      - show: |
+          <table class="t"><tr><th>tham số</th><th>làm tròn</th><th>kết quả</th><th>nghĩa</th></tr>
+          <tr><td>được dư</td><td>lên: $\lceil 2{,}5 \rceil$</td><td>3</td><td>tối đa $10 + 3 = \hl{13}$ Pod cùng lúc</td></tr></table>
+        focus: [1, "1.2", "1.2"]
+        say: "Bước ba, số được dư làm tròn lên thành 3. Vì vậy có tối đa 10 cộng 3, bằng 13 Pod cùng lúc. Làm tròn lên cho phép tạo thêm nhiều Pod mới một lúc, nên cập nhật xong nhanh hơn."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>vòng</th><th>tạo Pod mới</th><th>xoá Pod cũ</th><th>còn cũ</th><th>sẵn sàng thấp nhất</th><th>tổng cao nhất</th></tr>
+          <tr><td>1</td><td>3</td><td>2</td><td>8</td><td>8</td><td>13</td></tr>
+          <tr><td>2</td><td>2</td><td>3</td><td>5</td><td>8</td><td>13</td></tr>
+          <tr><td>3</td><td>3</td><td>2</td><td>3</td><td>8</td><td>13</td></tr>
+          <tr><td>4</td><td>2</td><td>3</td><td>0</td><td>8</td><td>13</td></tr></table>
+          <p><b>Bước 4</b> — mô phỏng từng vòng: không lúc nào dưới 8, không lúc nào trên 13; xong sau 4 vòng.</p>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", 2]
+        say: "Bước bốn, ta mô phỏng từng vòng. Vòng một tạo 3 Pod mới cho tổng lên 13, rồi xoá 2 Pod cũ, còn 8 Pod cũ sẵn sàng. Vòng hai, 3 Pod mới đã sẵn sàng nên xoá được 3 Pod cũ, còn 5, và tạo thêm 2 Pod mới. Vòng ba tạo 3, xoá 2, còn 3 Pod cũ. Vòng bốn tạo 2, xoá 3 Pod cũ cuối cùng. Suốt bốn vòng, không lúc nào dưới 8 bản sẵn sàng hay trên 13 Pod, và việc cập nhật xong sau 4 vòng."
+      - show: |
+          <div class="box key"><b>Bước 5</b> — làm tròn theo hướng <b>an toàn</b>: thiếu thì làm tròn xuống (thiếu ít hơn), dư thì làm tròn lên (cập nhật nhanh hơn).</div>
+        say: "Bước năm, rút ra quy tắc. Làm tròn theo hướng an toàn, thiếu thì làm tròn xuống để thiếu ít hơn, dư thì làm tròn lên để cập nhật nhanh hơn."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác: đếm và đổi ra phần trăm"
+    checks:
+      - "3 + 2 + 3 + 2 == 10 == 2 + 3 + 2 + 3 and 10 - (2 + 3 + 2 + 3) == 0"
+      - "Fraction(8, 10) == Fraction(4, 5) and Fraction(8, 10) >= Fraction(3, 4) and 13 / 10 == 1.3 > 1.25 and 2 / 10 < 0.25"
+    steps:
+      - show: |
+          <table class="t"><tr><th>kiểm</th><th>cách khác</th><th>kết quả</th></tr>
+          <tr><td>đã thay hết?</td><td>cộng cột tạo: $3 + 2 + 3 + 2$; cộng cột xoá: $2 + 3 + 2 + 3$</td><td>10 mới, 10 cũ bị xoá ✓</td></tr>
+          <tr><td>thiếu bao nhiêu phần trăm?</td><td>$\frac{8}{10} = 80\%$ còn sẵn sàng</td><td>thiếu thật 20% ≤ 25% ✓</td></tr>
+          <tr><td>dư bao nhiêu phần trăm?</td><td>$\frac{13}{10} = 130\%$</td><td>dư thật 30%, nhỉnh hơn 25% vì làm tròn lên</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", "1.4"]
+        say: "Kiểm bằng đường khác, ta đếm lại và đổi ra phần trăm, vì hai cách tính độc lập mà khớp thì đáng tin. Cộng cột tạo được 3 cộng 2 cộng 3 cộng 2, bằng 10 Pod mới, cộng cột xoá cũng được 10 Pod cũ, nên đã thay hết. Thấp nhất còn 8 trên 10, tức 80 phần trăm, nên thiếu thật chỉ 20 phần trăm, không quá 25. Cao nhất 13 trên 10, tức 130 phần trăm, dư thật 30 phần trăm. Con số này nhỉnh hơn 25 phần trăm vì số được dư làm tròn lên, nên khi tính máy cho cụm hãy dùng 13 chứ đừng dùng 12 phẩy 5."
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc, 1 lỗi người đã đi làm"
+    checks:
+      - "2000 * 5 // 100 == 100 and 100 * 10 == 1000 and 1000 * Fraction(1, 1000) == 1 and 1000 * Fraction(2, 1000) == 2"
+      - "round((1 - 0.002) ** 1000, 3) == 0.135 and round(1 / (1 - 0.002) ** 1000) == 7"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Đổi lược đồ cơ sở dữ liệu không tương thích ngược <b class="red">(bản cũ chết)</b>
+          <br><span class="note">Bản mới đổi tên cột; trong lúc cuốn chiếu, bản cũ vẫn chạy và đọc cột cũ → lỗi. Đổi theo nhiều bước: thêm cột mới, ghi cả hai, chuyển đọc, rồi mới bỏ cột cũ.</span></div>
+        say: "Lỗi thứ nhất, đổi lược đồ cơ sở dữ liệu không tương thích ngược. Bản mới đổi tên cột, trong lúc cuốn chiếu bản cũ vẫn chạy và đọc cột cũ nên bị lỗi. Hãy đổi theo nhiều bước, thêm cột mới, ghi cả hai, chuyển đọc, rồi mới bỏ cột cũ."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Không có kiểm tra sẵn sàng <b class="red">(nhận khách quá sớm)</b>
+          <br><span class="note">Pod mới vừa khởi động đã nhận lưu lượng trong khi còn đang nạp dữ liệu: khách gặp lỗi. Khai báo kiểm tra sẵn sàng để chỉ nhận yêu cầu khi đã sẵn sàng thật.</span></div>
+        say: "Lỗi thứ hai, không có kiểm tra sẵn sàng. Pod mới vừa khởi động đã nhận lưu lượng trong khi còn đang nạp dữ liệu, và khách gặp lỗi. Hãy khai báo kiểm tra sẵn sàng, để Pod chỉ nhận yêu cầu khi đã sẵn sàng thật."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Phát hành thử mà không có tiêu chí dừng <b class="red">(chỉ để cho có)</b>
+          <br><span class="note">Cho 5% lưu lượng vào bản mới nhưng không ai so tỉ lệ lỗi, độ trễ với bản cũ. Viết sẵn ngưỡng: lỗi tăng quá X hoặc p99 tăng quá Y thì tự quay lại.</span></div>
+        say: "Lỗi thứ ba, phát hành thử mà không có tiêu chí dừng. Cho 5 phần trăm lưu lượng vào bản mới nhưng không ai so tỉ lệ lỗi và độ trễ với bản cũ. Hãy viết sẵn ngưỡng, lỗi hay độ trễ tăng quá mức đó thì tự quay lại."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Kết luận phát hành thử quá sớm, khi mới có quá ít yêu cầu <b class="red">(lỗi lọt qua)</b></div>
+          <table class="t"><tr><th>giả sử: 2000 yêu cầu mỗi phút, bản thử nhận 5%</th><th>con số</th></tr>
+          <tr><td>bản thử nhận mỗi phút</td><td>$2000 \cdot 5\% = 100$ yêu cầu</td></tr>
+          <tr><td>sau 10 phút</td><td>1000 yêu cầu</td></tr>
+          <tr><td>bản cũ lỗi 0,1%, bản mới lỗi gấp đôi 0,2%</td><td>kì vọng 1 lỗi so với 2 lỗi</td></tr>
+          <tr><td>bản mới tệ gấp đôi mà 1000 yêu cầu không lỗi nào</td><td>$0{,}998^{1000} \approx 0{,}135$</td></tr></table>
+        introduces: [power, approx]
+        focus: [1, "2.2", "2.4", "2.5", 0]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, kết luận phát hành thử quá sớm, khi mới có quá ít yêu cầu. Giả sử dịch vụ nhận 2000 yêu cầu mỗi phút, bản thử nhận 5 phần trăm, tức 100 yêu cầu mỗi phút, sau 10 phút là 1000 yêu cầu. Bản cũ lỗi 0 phẩy 1 phần trăm, bản mới lỗi gấp đôi, thì trong 1000 yêu cầu ta chỉ kì vọng 1 lỗi so với 2 lỗi, quá ít để phân biệt. Xác suất bản mới tệ gấp đôi mà cả 1000 yêu cầu không lỗi nào là 0 phẩy 998 mũ 1000, khoảng 0 phẩy 135, tức cứ khoảng 7 lần thì có một lần trông hoàn toàn sạch. Người làm nghề tính trước cần bao nhiêu yêu cầu mới đủ thấy khác biệt, rồi mới đặt thời gian chờ cho bản thử."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.rolling_update(4, 0.25, 0.25)[:4] == (1, 1, 3, 5) and alg.rolling_update(8, 0.25, 0.25)[:4] == (2, 2, 6, 10)"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>4 bản, được thiếu 25%, được dư 25%: tối thiểu mấy bản sẵn sàng, tối đa mấy Pod?</td></tr>
+          <tr><td>2</td><td>8 bản, cùng tham số: tối thiểu và tối đa?</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, 4 bản, được thiếu 25 phần trăm, được dư 25 phần trăm, tối thiểu mấy bản sẵn sàng, và tối đa mấy Pod? Câu hai, 8 bản với cùng tham số thì tối thiểu và tối đa là bao nhiêu? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 1: 4 bản</th><th>tính</th></tr>
+          <tr><td>$4 \cdot 0{,}25$</td><td>$= 1$, đã nguyên: làm tròn xuống hay lên đều là 1</td></tr>
+          <tr><td>tối thiểu sẵn sàng</td><td>$4 - 1 = \hl{3}$</td></tr>
+          <tr><td>tối đa Pod</td><td>$4 + 1 = \hl{5}$</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Đáp án câu một, có 4 bản. 4 nhân 0 phẩy 25 bằng 1, đã là số nguyên nên làm tròn xuống hay lên đều được 1. Tối thiểu sẵn sàng là 4 trừ 1, bằng 3 bản. Tối đa là 4 cộng 1, bằng 5 Pod."
+      - show: |
+          <table class="t"><tr><th>câu 2: 8 bản</th><th>tính</th></tr>
+          <tr><td>$8 \cdot 0{,}25$</td><td>$= 2$, đã nguyên</td></tr>
+          <tr><td>tối thiểu sẵn sàng</td><td>$8 - 2 = \hl{6}$</td></tr>
+          <tr><td>tối đa Pod</td><td>$8 + 2 = \hl{10}$</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Câu hai, có 8 bản. 8 nhân 0 phẩy 25 bằng 2, cũng đã nguyên. Tối thiểu sẵn sàng là 8 trừ 2, bằng 6 bản. Tối đa là 8 cộng 2, bằng 10 Pod."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">cuốn chiếu: thiếu làm tròn xuống, dư làm tròn lên</span><span class="a">→</span>
+          <span class="n">bản cũ, mới chạy cùng lúc: phải tương thích</span><span class="a">→</span>
+          <span class="n">xanh–lam: quay lại tức thì</span><span class="a">→</span>
+          <span class="n">phát hành thử: có tiêu chí dừng</span></div>
+        say: "Tổng kết lại, cuốn chiếu làm tròn số được thiếu xuống, số được dư lên. Bản cũ và mới chạy cùng lúc nên phải tương thích. Xanh lam cho quay lại tức thì, còn phát hành thử cần tiêu chí dừng."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> phát hành an toàn không phải là không bao giờ lỗi, mà là lỗi thì chạm ít người và quay lại được nhanh.</div>
+        say: "Điều cần mang theo, phát hành an toàn không phải là không bao giờ lỗi, mà là khi lỗi thì chạm ít người và quay lại được nhanh."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 9): <b>khám phá dịch vụ</b> và <b>cân bằng tải</b>.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 9, ta học khám phá dịch vụ và cân bằng tải. Hẹn gặp bạn ở bài tiếp theo."

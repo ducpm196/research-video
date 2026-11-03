@@ -1,0 +1,308 @@
+id: L01
+course: IRS
+series: "IRS · Truy hồi thông tin và hệ gợi ý"
+title: "Bài 1 — Độ lợi tích lũy có chiết khấu và chuẩn hoá (nDCG)"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/irs.yaml L01; audit/irs/verify_irs.py (verify_parts/L01.py); audit/irs/sources_L01.md (câu trích nguyên văn, đọc 2026-11-03); K. Järvelin, J. Kekäläinen, Cumulated Gain-Based Evaluation of IR Techniques, ACM TOIS 20(4), 2002 [JK02]; C. Burges và cộng sự, Learning to Rank using Gradient Descent, ICML 2005 [BU05]; IRS bài 0; CS115 bài 12 (lôgarit)"
+assumes: [arith, frac, approx, sum, sub]
+# Quy ước: y_i = mức liên quan của kết quả ở vị trí i, thang 0–3 như [JK02] (3 = rất liên quan, 0 = không liên quan); vị trí đếm từ 1.
+#   Chiết khấu dạng phổ biến 1/log₂(i + 1) (dạng [BU05] dùng); DCG@k = Σ y_i / log₂(i + 1); IDCG@k = DCG của thứ tự lý tưởng, sắp
+#   giảm dần MỌI văn bản đã chấm cho câu hỏi (không chỉ văn bản hệ trả về); nDCG@k = DCG@k / IDCG@k.
+#   Dạng gốc [JK02] (b = 2: không chiết khấu vị trí 1, chia log₂ i từ vị trí 2) và độ lợi 2^y − 1 của [BU05] chỉ nêu ở step notation_note
+#   và phần lỗi; lôgarit cơ số 2 viết \log_2 (bài không dùng \ln). DCG, nDCG chỉ trên màn hình; lời đọc nói “độ lợi có chiết khấu”.
+#   Ví dụ chạy suốt bài (số minh hoạ): câu hỏi “máy tính xách tay văn phòng”, hệ X trả 4 kết quả có mức 3, 2, 0, 1.
+objectives:
+  - "Tính độ lợi có chiết khấu với chiết khấu 1/log₂(vị trí + 1)"
+  - "Chuẩn hoá bằng thứ tự lý tưởng lấy từ mọi văn bản đã chấm, không làm tròn giữa chừng"
+  - "Nhận ra hai báo cáo nDCG chỉ so được khi cùng công thức độ lợi và chiết khấu"
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Đúng 3 trên 4 như nhau, nhưng một hệ đặt kết quả tốt nhất lên đầu"
+    checks:
+      - "alg.irs_prec_at_k([1, 1, 0, 1], 4) == alg.irs_prec_at_k([1, 0, 1, 1], 4) == 0.75"
+    steps:
+      - show: |
+          <p>Câu hỏi <b>“máy tính xách tay văn phòng”</b>. Người chấm cho mỗi kết quả một <b>mức liên quan</b> từ 0 đến 3 (số minh hoạ):</p>
+          <table class="t"><tr><th>vị trí</th><th>1</th><th>2</th><th>3</th><th>4</th><th>P@4 (coi mức ≥ 1 là đúng)</th></tr>
+          <tr><td>hệ X</td><td class="green">3</td><td>2</td><td>0</td><td>1</td><td>$\frac{3}{4}$</td></tr>
+          <tr><td>hệ Y</td><td>1</td><td>0</td><td>2</td><td class="green">3</td><td>$\frac{3}{4}$</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Chào bạn, với câu hỏi máy tính xách tay văn phòng, người chấm cho mỗi kết quả một mức liên quan từ 0 đến 3, đây là số minh hoạ. Hệ X đặt kết quả mức 3 ở vị trí đầu, rồi mức 2, 0 và 1. Hệ Y lại đặt kết quả mức 3 ở tận vị trí cuối, nhưng coi mức từ 1 trở lên là đúng thì cả hai đều đúng 3 trên 4."
+      - show: |
+          <div class="box key">Hôm nay ta trả lời: làm sao cộng điểm theo <b>mức</b> liên quan chứ không chỉ đúng hay sai? Làm sao cho vị trí đầu đáng giá hơn vị trí sau? Và đưa về thang 0 đến 1 để so nhiều câu hỏi thế nào?</div>
+        say: "Độ chuẩn xác ở bài trước không thấy được khác biệt này, vì nó chỉ hỏi đúng hay sai. Hôm nay ta trả lời ba câu hỏi, cộng điểm theo mức liên quan thế nào, cho vị trí đầu đáng giá hơn ra sao, và đưa về thang 0 đến 1 để so nhiều câu hỏi."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: tổng, và lôgarit cơ số 2"
+    checks:
+      - "alg.irs_prec_at_k([1, 0, 1, 0, 0], 5) == 0.4 and 1 + 0 + 1 + 0 + 0 == 2"
+      - "math.log2(1) == 0 and math.log2(2) == 1 and math.log2(4) == 2 and round(math.log2(3), 3) == 1.585 and round(math.log2(5), 3) == 2.322"
+      - "round(2 / math.log2(3), 3) == 1.262 and round(1 / math.log2(5), 3) == 0.431"
+    steps:
+      - show: |
+          <p><b>① Ở bài 0</b>, ta đếm kết quả đúng trong $k$ dòng đầu bằng tổng $\sum_{i=1}^{k} y_i$ với $y_i$ là 0 hoặc 1: hệ A có $1 + 0 + 1 + 0 + 0 = 2$, nên độ chuẩn xác ở 5 dòng đầu là $\frac{2}{5} = 0{,}4$.</p>
+          <p class="note">Hôm nay $y_i$ được phép là 0, 1, 2 hoặc 3.</p>
+        focus: [1, 1, 2]
+        say: "Điều thứ nhất, ở bài 0 ta đếm kết quả đúng trong k dòng đầu bằng tổng các y i, mỗi y i là 0 hoặc 1. Hệ A có 1 cộng 0 cộng 1 cộng 0 cộng 0 bằng 2, nên độ chuẩn xác ở 5 dòng đầu là 2 chia 5, tức 0 phẩy 4. Hôm nay y i được phép là 0, 1, 2 hoặc 3, tức mức liên quan nhiều bậc."
+      - show: |
+          <p><b>② Lôgarit cơ số 2</b> (ở khoá Toán cho khoa học máy tính): $\log_2 x$ là số mũ phải nâng 2 lên để được $x$.</p>
+          <table class="t"><tr><th>$x$</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th></tr>
+          <tr><td>$\log_2 x$</td><td>0</td><td>1</td><td>≈ 1,585</td><td>2</td><td>≈ 2,322</td></tr></table>
+          <p class="note">Vì $2^1 = 2$ và $2^2 = 4$, nên $\log_2 3$ nằm giữa 1 và 2. Lôgarit tăng chậm dần: từ 4 lên 5 chỉ thêm 0,322.</p>
+        introduces: [log, power]
+        focus: [1, "2.2", 3, 3]
+        say: "Điều thứ hai là lôgarit cơ số 2, ở khoá Toán cho khoa học máy tính, lôgarit cơ số 2 của x là số mũ phải nâng 2 lên để được x. Bảng cho lôgarit cơ số 2 của 1 bằng 0, của 2 bằng 1, của 3 khoảng 1 phẩy 585, của 4 bằng 2 và của 5 khoảng 2 phẩy 322. Vì 2 mũ 1 bằng 2 và 2 mũ 2 bằng 4, nên lôgarit cơ số 2 của 3 phải nằm giữa 1 và 2. Lôgarit tăng chậm dần, từ 4 lên 5 chỉ thêm 0 phẩy 322."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: mức y, độ lợi tích lũy, chiết khấu, DCG, IDCG, nDCG"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ký hiệu</th><th>tên</th><th>nghĩa</th></tr>
+          <tr><td>$y_i$</td><td>mức liên quan ở vị trí $i$</td><td>0 = không liên quan, …, 3 = rất liên quan</td></tr>
+          <tr><td>$\frac{1}{\log_2(i + 1)}$</td><td>chiết khấu</td><td>vị trí càng sau, điểm càng bị giảm</td></tr>
+          <tr><td>DCG@k</td><td>độ lợi tích lũy có chiết khấu</td><td>tổng các $y_i$ đã nhân chiết khấu, ở $k$ dòng đầu</td></tr>
+          <tr><td>IDCG@k</td><td>độ lợi của thứ tự lý tưởng</td><td>DCG nếu xếp mọi văn bản đã chấm giảm dần theo mức</td></tr>
+          <tr><td>nDCG@k</td><td>độ lợi có chiết khấu chuẩn hoá</td><td>DCG chia IDCG, luôn từ 0 đến 1</td></tr></table>
+        focus: ["1.2", "1.3", "1.4", "1.5", "1.6"]
+        say: "Bảng giải mã từng ký hiệu, y i là mức liên quan ở vị trí i, từ 0 là không liên quan tới 3 là rất liên quan. Phân số 1 chia lôgarit cơ số 2 của i cộng 1 là chiết khấu, vị trí càng sau thì điểm càng bị giảm. Ba chữ D C G, a còng, k là độ lợi tích lũy có chiết khấu, tức tổng các y i đã nhân chiết khấu ở k dòng đầu. Thêm chữ I ở đầu là độ lợi của thứ tự lý tưởng, khi xếp mọi văn bản đã chấm giảm dần theo mức. Thêm chữ n nhỏ ở đầu là bản chuẩn hoá, bằng D C G chia cho bản lý tưởng, nên luôn nằm từ 0 đến 1."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Mỗi vị trí là một cái cân đã bị lấy bớt"
+    checks:
+      - "[round(1 / math.log2(i + 1), 3) for i in range(1, 5)] == [1.0, 0.631, 0.5, 0.431]"
+      - "[round(y / math.log2(i + 1), 3) for i, y in enumerate([3, 2, 0, 1], 1)] == [3.0, 1.262, 0.0, 0.431]"
+    steps:
+      - show: |
+          <div><svg width="1500" height="420" viewBox="0 0 1500 420">
+          <line x1="120" y1="330" x2="1080" y2="330" stroke="#1f2937" stroke-width="2"/>
+          <g font-size="22" fill="#1f2937" text-anchor="middle">
+          <text x="230" y="365">vị trí 1</text><text x="470" y="365">vị trí 2</text><text x="710" y="365">vị trí 3</text><text x="950" y="365">vị trí 4</text>
+          <text x="230" y="398" fill="#6b7280">nhân 1</text><text x="470" y="398" fill="#6b7280">nhân 0,631</text><text x="710" y="398" fill="#6b7280">nhân 0,5</text><text x="950" y="398" fill="#6b7280">nhân 0,431</text>
+          </g>
+          <rect x="160" y="105" width="60" height="225" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/>
+          <rect x="240" y="105" width="60" height="225" fill="#059669"/>
+          <rect x="400" y="180" width="60" height="150" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/>
+          <rect x="480" y="235" width="60" height="95" fill="#059669"/>
+          <rect x="880" y="255" width="60" height="75" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/>
+          <rect x="960" y="298" width="60" height="32" fill="#059669"/>
+          <g font-size="22" text-anchor="middle">
+          <text x="190" y="92" fill="#2a78d6">3</text><text x="270" y="92" fill="#059669" font-weight="bold">3</text>
+          <text x="430" y="167" fill="#2a78d6">2</text><text x="510" y="222" fill="#059669" font-weight="bold">1,262</text>
+          <text x="710" y="310" fill="#6b7280">mức 0</text>
+          <text x="910" y="242" fill="#2a78d6">1</text><text x="990" y="285" fill="#059669" font-weight="bold">0,431</text>
+          </g>
+          <g font-size="22" fill="#1f2937">
+          <rect x="1130" y="120" width="26" height="26" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="1166" y="141">mức liên quan</text>
+          <rect x="1130" y="170" width="26" height="26" fill="#059669"/><text x="1166" y="191">điểm sau chiết khấu</text>
+          <text x="1130" y="250" font-weight="bold">cộng cột xanh lục:</text><text x="1130" y="282">3 + 1,262 + 0 + 0,431</text>
+          </g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình là danh sách của hệ X, mỗi vị trí một cặp cột. Cột xanh nhạt là mức liên quan, cột xanh lục là điểm còn lại sau khi nhân chiết khấu của vị trí đó. Ở vị trí 1, mức 3 được giữ nguyên, ở vị trí 2, mức 2 chỉ còn khoảng 1 phẩy 262, và ở vị trí 4, mức 1 còn 0 phẩy 431. Độ lợi có chiết khấu chính là tổng các cột xanh lục, nên kết quả tốt đặt càng sớm thì tổng càng lớn."
+
+  # ───────────────────────── 5. SUY RA ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra công thức trong bốn bước"
+    checks:
+      - "[sum([3, 2, 3, 0, 0, 1, 2, 2, 3, 0][:n]) for n in (1, 2, 3)] == [3, 5, 8]"
+      - "[round(1 / i, 3) for i in (1, 2, 4)] == [1.0, 0.5, 0.25] and round(1 / math.log2(1024), 1) == 0.1 and round(1 / math.log2(1024 + 1), 3) == 0.1"
+      - "round(alg.irs_dcg([3, 2, 0, 1]), 3) == 4.693"
+      - "round(alg.irs_dcg([3, 2, 1, 0]), 3) == 4.762 and round(alg.irs_ndcg([3, 2, 0, 1]), 3) == 0.985"
+    steps:
+      - show: |
+          <p><b>Bước 1 — cộng theo mức.</b> Thay 0/1 bằng mức liên quan, ta được độ lợi tích lũy: $\text{CG@}k = \sum_{i=1}^{k} y_i$.</p>
+          <p class="note">Làm thử với ví dụ trong bài báo năm 2002: mức 3, 2, 3 cho tổng tích lũy 3, rồi 5, rồi 8.</p>
+        focus: [1, 2]
+        say: "Bước một là cộng theo mức, ta thay 0 hay 1 bằng mức liên quan, và tổng các mức ở k dòng đầu gọi là độ lợi tích lũy. Làm thử với ví dụ trong bài báo năm 2002 của hai tác giả đề xuất độ đo này, ba mức 3, 2, 3 cho tổng tích lũy lần lượt là 3, 5, rồi 8."
+      - show: |
+          <p><b>Bước 2 — vì sao cần chiết khấu.</b> Tổng thô không biết vị trí: 3, 2, 0, 1 và 1, 0, 2, 3 đều cộng ra 6. Người dùng ít khi đọc xuống dưới, nên điểm ở vị trí sau phải giảm, nhưng <b>không quá dốc</b>:</p>
+          <table class="t"><tr><th>vị trí $i$</th><th>1</th><th>2</th><th>4</th><th>1024</th></tr>
+          <tr><td>chia cho vị trí: $\frac{1}{i}$</td><td>1</td><td>0,5</td><td>0,25</td><td>≈ 0,001</td></tr>
+          <tr><td>chia cho lôgarit: $\frac{1}{\log_2(i + 1)}$</td><td>1</td><td>0,631</td><td>0,431</td><td>≈ 0,1</td></tr></table>
+        focus: [1, 1, "2.2", "2.3"]
+        say: "Bước hai, vì sao cần chiết khấu, tổng thô không biết vị trí, nên 3, 2, 0, 1 và 1, 0, 2, 3 đều cộng ra 6. Người dùng ít khi đọc xuống dưới, nên điểm ở vị trí sau phải giảm, nhưng không được giảm quá dốc. Chia cho vị trí thì ở vị trí 1024 chỉ còn khoảng một phần nghìn, như thể người dùng không bao giờ đọc tới. Chia cho lôgarit thì vị trí 1024 vẫn giữ khoảng một phần mười, đúng ý mà bài báo năm 2002 nêu."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — độ lợi có chiết khấu.</b> Nhân mỗi mức với chiết khấu của vị trí rồi cộng:</p>
+          $$\text{DCG@}k = \sum_{i=1}^{k} \frac{\hlb{y_i}}{\log_2(i + 1)}$$
+          <p class="note">Làm thử hệ X: $\frac{3}{1} + \frac{2}{1{,}585} + \frac{0}{2} + \frac{1}{2{,}322} \approx 4{,}693$. Mẫu số dùng $i + 1$ để vị trí 1 chia cho $\log_2 2 = 1$, không chia cho $\log_2 1 = 0$.</p>
+        focus: [2, 3, 3]
+        say: "Bước ba, ta nhân mỗi mức với chiết khấu của vị trí rồi cộng lại, được độ lợi tích lũy có chiết khấu, bằng tổng các y i chia lôgarit cơ số 2 của i cộng 1. Làm thử với hệ X, 3 chia 1, cộng 2 chia 1 phẩy 585, cộng 0, cộng 1 chia 2 phẩy 322, được khoảng 4 phẩy 693. Mẫu số dùng i cộng 1, vì như thế vị trí 1 chia cho lôgarit cơ số 2 của 2 bằng 1, không phải chia cho 0."
+      - show: |
+          <p><b>Bước 4 — chuẩn hoá.</b> Câu hỏi dễ thì DCG lớn, câu hỏi khó thì nhỏ. Để so nhiều câu hỏi, chia cho DCG của <b>thứ tự lý tưởng</b>:</p>
+          $$\text{nDCG@}k = \frac{\text{DCG@}k}{\hl{\text{IDCG@}k}} \qquad \text{hệ X: } \frac{4{,}6925}{4{,}7619} \approx \hlg{0{,}985}$$
+        focus: [1, 1, 2]
+        say: "Bước bốn là chuẩn hoá, câu hỏi dễ có nhiều văn bản mức cao nên độ lợi lớn, câu hỏi khó thì nhỏ. Để so được nhiều câu hỏi, ta chia cho độ lợi của thứ tự lý tưởng, được bản chuẩn hoá. Với hệ X, 4 phẩy 6925 chia 4 phẩy 7619 cho khoảng 0 phẩy 985, ta sẽ tính kỹ ở phần ví dụ."
+      - show: |
+          <div class="box note"><b>Ghi chú về cách viết.</b> Bài báo năm 2002 viết dạng gốc: vị trí 1 không chiết khấu, từ vị trí 2 chia $\log_2 i$; ví dụ của bài báo, mức 3, 2, 3 cho 3, 5, rồi $5 + \frac{3}{\log_2 3} \approx 6{,}89$. Dạng chia $\log_2(i + 1)$ là dạng hay dùng về sau, chẳng hạn trong bài báo năm 2005 về học xếp hạng.</div>
+        notation_note: true
+        say: "Một ghi chú về cách viết, bài báo năm 2002 viết dạng gốc, vị trí 1 không chiết khấu, từ vị trí 2 mới chia lôgarit cơ số 2 của i. Theo ví dụ của chính bài báo, mức 3, 2, 3 cho 3, rồi 5, rồi 5 cộng 3 chia lôgarit cơ số 2 của 3, khoảng 6 phẩy 89. Dạng chia lôgarit cơ số 2 của i cộng 1 là dạng hay dùng về sau, chẳng hạn trong một bài báo năm 2005 về học xếp hạng, và khoá này dùng dạng đó."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Hệ X: mức 3, 2, 0, 1 — từng phép tính"
+    checks:
+      - "3 / math.log2(2) == 3"
+      - "round(2 / math.log2(3), 4) == 1.2619 and 0 / math.log2(4) == 0 and round(1 / math.log2(5), 4) == 0.4307"
+      - "round(alg.irs_dcg([3, 2, 0, 1]), 4) == 4.6925"
+      - "sorted([3, 2, 0, 1], reverse=True) == [3, 2, 1, 0] and round(alg.irs_dcg([3, 2, 1, 0]), 4) == 4.7619 and 1 / math.log2(4) == 0.5"
+      - "round(alg.irs_dcg([3, 2, 0, 1]) / alg.irs_dcg([3, 2, 1, 0]), 3) == 0.985 and round(alg.irs_ndcg([3, 2, 0, 1]), 5) == 0.98544"
+    steps:
+      - show: |
+          <p><b>Bước 1.</b> Vị trí 1, mức 3: $\frac{3}{\log_2 2} = \frac{3}{1} = \hlg{3}$.</p>
+        say: "Bước một, vị trí 1 có mức 3, chiết khấu là 1 chia lôgarit cơ số 2 của 2, tức 1 chia 1. Vậy điểm giữ nguyên, bằng 3."
+      - show: |
+          <p><b>Bước 2.</b> Vị trí 2, mức 2: $\frac{2}{\log_2 3} \approx \frac{2}{1{,}585} \approx \hlg{1{,}2619}$. Vị trí 3, mức 0: $\frac{0}{2} = 0$. Vị trí 4, mức 1: $\frac{1}{\log_2 5} \approx \frac{1}{2{,}322} \approx \hlg{0{,}4307}$.</p>
+        say: "Bước hai, vị trí 2 có mức 2, chia lôgarit cơ số 2 của 3 khoảng 1 phẩy 585, được khoảng 1 phẩy 2619. Vị trí 3 có mức 0 nên góp 0, còn vị trí 4 có mức 1, chia khoảng 2 phẩy 322, được khoảng 0 phẩy 4307. Ta giữ bốn chữ số sau dấu phẩy, chưa làm tròn vội."
+      - show: |
+          <p><b>Bước 3.</b> Cộng bốn điểm lại:</p>
+          $$\text{DCG@}4 = 3 + 1{,}2619 + 0 + 0{,}4307 \approx \hlb{4{,}6925} \approx 4{,}693$$
+        focus: [2, 2]
+        say: "Bước ba, cộng bốn điểm lại, 3 cộng 1 phẩy 2619 cộng 0 cộng 0 phẩy 4307, được khoảng 4 phẩy 6925. Làm tròn ba chữ số sau dấu phẩy thì là 4 phẩy 693."
+      - clear: true
+        show: |
+          <p><b>Bước 4.</b> Thứ tự lý tưởng: xếp các mức đã chấm giảm dần, 3, 2, 1, 0.</p>
+          $$\text{IDCG@}4 = \frac{3}{1} + \frac{2}{1{,}585} + \frac{1}{\log_2 4} + \frac{0}{2{,}322} \approx 3 + 1{,}2619 + \hl{0{,}5} + 0 = \hlb{4{,}7619}$$
+        focus: [1, 2, 2]
+        say: "Bước bốn là thứ tự lý tưởng, ta xếp các mức đã chấm giảm dần, được 3, 2, 1, 0. Hai vị trí đầu giống hệ X, còn mức 1 bây giờ ở vị trí 3, chia lôgarit cơ số 2 của 4 bằng 2, nên được 0 phẩy 5. Cộng lại được khoảng 4 phẩy 7619, làm tròn là 4 phẩy 762."
+      - show: |
+          <p><b>Bước 5.</b> Chia hai số <b>chưa làm tròn</b>:</p>
+          $$\text{nDCG@}4 = \frac{4{,}69254}{4{,}76186} \approx 0{,}98544 \approx \hlg{0{,}985}$$
+          <p class="note">Hệ X chỉ mất 1,5% so với lý tưởng: lỗi duy nhất là đặt mức 0 trước mức 1.</p>
+        focus: [1, 2, 3]
+        say: "Bước năm, ta chia hai số chưa làm tròn, 4 phẩy 69254 chia 4 phẩy 76186. Kết quả khoảng 0 phẩy 98544, làm tròn ba chữ số là 0 phẩy 985. Hệ X chỉ mất khoảng 1 phẩy 5 phần trăm so với lý tưởng, vì lỗi duy nhất là đặt mức 0 trước mức 1."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: đổi chỗ hai vị trí, và so với hệ Y"
+    checks:
+      - "round(1 / math.log2(4) - 1 / math.log2(5), 4) == 0.0693 and round(alg.irs_dcg([3, 2, 1, 0]) - alg.irs_dcg([3, 2, 0, 1]), 4) == 0.0693"
+      - "round(alg.irs_dcg([1, 0, 2, 3]), 3) == 3.292 and round(alg.irs_ndcg([1, 0, 2, 3]), 3) == 0.691"
+      - "alg.irs_ndcg([3, 2, 1, 0]) == 1"
+    steps:
+      - show: |
+          <p>Đường khác: hệ X chỉ khác lý tưởng ở chỗ <b>đổi chỗ vị trí 3 và 4</b> (mức 0 và mức 1). Đổi chỗ chỉ làm mức 1 nhận chiết khấu khác:</p>
+          $$1 \cdot \left(\frac{1}{\log_2 4} - \frac{1}{\log_2 5}\right) \approx 0{,}5 - 0{,}4307 = 0{,}0693 = 4{,}7619 - 4{,}6925 \;\checkmark$$
+        introduces: [cdot]
+        focus: [1, 1, 2]
+        say: "Kiểm tra thứ nhất đi đường khác, hệ X chỉ khác thứ tự lý tưởng ở chỗ đổi chỗ vị trí 3 và vị trí 4. Đổi chỗ chỉ làm kết quả mức 1 nhận chiết khấu khác, nên phần chênh phải bằng 1 nhân hiệu hai chiết khấu, dấu chấm giữa dòng là phép nhân. Hiệu đó là 0 phẩy 5 trừ 0 phẩy 4307, bằng 0 phẩy 0693, đúng bằng 4 phẩy 7619 trừ 4 phẩy 6925, khớp."
+      - show: |
+          <table class="t"><tr><th>hệ</th><th>mức theo vị trí</th><th>DCG@4</th><th>nDCG@4</th></tr>
+          <tr><td>lý tưởng</td><td>3, 2, 1, 0</td><td>4,762</td><td>1</td></tr>
+          <tr><td>X</td><td>3, 2, 0, 1</td><td>4,693</td><td>$\hlg{0{,}985}$</td></tr>
+          <tr><td>Y</td><td>1, 0, 2, 3</td><td>$1 + 0 + \frac{2}{2} + \frac{3}{2{,}322} \approx 3{,}292$</td><td>$\hl{0{,}691}$</td></tr></table>
+          <p class="note">Thứ tự lý tưởng tự chia cho chính nó được đúng 1 — phép thử nhanh cho mọi chương trình tính nDCG.</p>
+        focus: ["1.2", "1.3", "1.4", "1.4", 2]
+        say: "Kiểm tra thứ hai là đặt cả ba danh sách cạnh nhau, thứ tự lý tưởng có độ lợi 4 phẩy 762 và bản chuẩn hoá bằng đúng 1. Hệ X được 4 phẩy 693, chuẩn hoá ra 0 phẩy 985. Hệ Y được 1 cộng 0 cộng 1, vì mức 2 ở vị trí 3 chia 2, rồi cộng thêm 3 chia 2 phẩy 322, khoảng 3 phẩy 292. Chuẩn hoá thì hệ Y chỉ còn 0 phẩy 691, dù độ chuẩn xác của hai hệ như nhau. Thứ tự lý tưởng chia cho chính nó phải ra đúng 1, đó là phép thử nhanh cho mọi chương trình tính độ đo này."
+
+  - id: judged
+    kind: concept
+    title: "Thứ tự lý tưởng lấy từ đâu: mọi văn bản đã chấm"
+    checks:
+      - "round(alg.irs_dcg([3, 3, 2, 1]), 3) == 6.323 and round(alg.irs_ndcg([3, 2, 0, 1], judged=[3, 3, 2, 1, 0]), 3) == 0.742"
+    steps:
+      - show: |
+          <p>Giả sử người chấm biết thêm một văn bản <b>mức 3</b> mà hệ X không trả về. Thứ tự lý tưởng phải tính cả nó:</p>
+          <table class="t"><tr><th>thứ tự lý tưởng lấy từ</th><th>4 mức đầu</th><th>IDCG@4</th><th>nDCG@4 của X</th></tr>
+          <tr><td>danh sách hệ X trả về</td><td>3, 2, 1, 0</td><td>4,762</td><td>0,985</td></tr>
+          <tr><td>mọi văn bản đã chấm</td><td>3, 3, 2, 1</td><td>$3 + \frac{3}{1{,}585} + \frac{2}{2} + \frac{1}{2{,}322} \approx 6{,}323$</td><td>$\hl{0{,}742}$</td></tr></table>
+          <p class="note">Bài báo năm 2002 ghi rõ: thứ tự lý tưởng dựa trên mọi văn bản liên quan của câu hỏi, không dựa trên kết quả của một hệ.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Thứ tự lý tưởng lấy từ đâu, giả sử người chấm biết thêm một văn bản mức 3 mà hệ X không trả về. Nếu lấy thứ tự lý tưởng từ chính danh sách của hệ X, ta vẫn được 0 phẩy 985 như cũ. Nếu lấy từ mọi văn bản đã chấm, bốn mức đầu thành 3, 3, 2, 1, độ lợi lý tưởng khoảng 6 phẩy 323, và hệ X chỉ còn 0 phẩy 742. Bài báo năm 2002 ghi rõ, thứ tự lý tưởng dựa trên mọi văn bản liên quan của câu hỏi, không dựa trên kết quả của một hệ."
+
+  # ───────────────────────── 8. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi của người đã đi làm"
+    checks:
+      - "round(4.693 / 4.762, 3) == 0.986 and round(alg.irs_ndcg([3, 2, 0, 1]), 3) == 0.985"
+      - "round(alg.irs_ndcg([3, 2, 0, 1], judged=[3, 2, 1, 0]), 3) == 0.985 and round(alg.irs_ndcg([3, 2, 0, 1], judged=[3, 3, 2, 1, 0]), 3) == 0.742"
+      - "round(alg.irs_dcg_jk([3, 2, 0, 1]) / alg.irs_dcg_jk([3, 2, 1, 0]), 3) == 0.977 and round(alg.irs_ndcg([3, 2, 0, 1], exp_gain=True), 3) == 0.993"
+      - "alg.irs_ndcg([0, 0, 0, 0]) == 0.0 and round((0.985 + 0.691 + 0) / 3, 3) == 0.559 and round((0.985 + 0.691) / 2, 3) == 0.838"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Làm tròn trước khi chia <b class="red">(4,693 chia 4,762 ≈ 0,9855 → 0,986, sai)</b>
+          <br><span class="note">Chia hai số chưa làm tròn cho 0,98544 → 0,985. Phép thử: tính lại bằng máy từ mức liên quan, không từ số đã chép.</span></div>
+        say: "Lỗi thứ nhất là làm tròn trước khi chia. Lấy 4 phẩy 693 chia 4 phẩy 762 thì được khoảng 0 phẩy 9855, làm tròn thành 0 phẩy 986, sai ở chữ số cuối. Chia hai số chưa làm tròn cho 0 phẩy 98544, tức 0 phẩy 985, nên phép thử là tính lại bằng máy từ chính các mức liên quan."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Lấy thứ tự lý tưởng từ danh sách của chính hệ <b class="red">(0,985 thay vì 0,742)</b>
+          <br><span class="note">Hệ bỏ sót văn bản tốt mà vẫn được điểm gần 1. Phép thử: IDCG phải bằng nhau cho mọi hệ trên cùng câu hỏi.</span></div>
+        say: "Lỗi thứ hai là lấy thứ tự lý tưởng từ danh sách của chính hệ đang đo, nên được 0 phẩy 985 thay vì 0 phẩy 742. Hệ bỏ sót văn bản tốt mà điểm vẫn gần 1. Phép thử là độ lợi lý tưởng phải bằng nhau cho mọi hệ trên cùng một câu hỏi."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> So nDCG của hai báo cáo dùng công thức khác nhau <b class="red">(cùng danh sách 3, 2, 0, 1)</b></div>
+          <table class="t"><tr><th>công thức</th><th>nDCG@4 của hệ X</th></tr>
+          <tr><td>mức $y$, chia $\log_2(i + 1)$ (khoá này)</td><td>0,985</td></tr>
+          <tr><td>dạng gốc 2002: vị trí 1 nguyên, từ vị trí 2 chia $\log_2 i$</td><td>0,977</td></tr>
+          <tr><td>độ lợi $2^{y} - 1$, chia $\log_2(i + 1)$</td><td>0,993</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Lỗi thứ ba hay gặp ở người đã đi làm, là so độ đo của hai báo cáo dùng công thức khác nhau. Với cùng danh sách 3, 2, 0, 1, công thức của khoá này cho 0 phẩy 985. Dạng gốc năm 2002 cho 0 phẩy 977. Còn dạng dùng độ lợi 2 mũ y trừ 1 cho 0 phẩy 993, nên chênh 0 phẩy 016 chỉ vì công thức, không vì hệ tốt hơn."
+      - show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Câu hỏi không có văn bản đúng nào: IDCG = 0, phép chia không xác định <b class="red">(bỏ đi hay tính 0 đổi kết quả: 0,838 hay 0,559)</b>
+          <br><span class="note">Ba câu hỏi 0,985; 0,691; câu thứ ba không có văn bản đúng. Ghi rõ quy ước trong báo cáo, và dùng một quy ước cho mọi hệ.</span></div>
+        say: "Lỗi thứ tư cũng của người đã đi làm, là câu hỏi không có văn bản đúng nào thì độ lợi lý tưởng bằng 0 và phép chia không xác định. Với ba câu hỏi được 0 phẩy 985, 0 phẩy 691 và một câu như vậy, bỏ câu đó đi cho trung bình 0 phẩy 838, tính nó bằng 0 cho 0 phẩy 559. Hãy ghi rõ quy ước trong báo cáo và dùng một quy ước cho mọi hệ."
+
+  # ───────────────────────── 9. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: trang chỉ có 2 dòng thì chọn hệ nào?"
+    checks:
+      - "round(alg.irs_dcg([2, 3, 0, 0]), 3) == 3.893 and round(alg.irs_ndcg([2, 3, 0, 0], judged=[3, 2, 1, 0]), 3) == 0.817"
+      - "alg.irs_ndcg([3, 2, 0, 1], k=2) == 1 and round(alg.irs_ndcg([2, 3, 0, 0], k=2, judged=[3, 2, 1, 0]), 3) == 0.913"
+      - "round(alg.irs_dcg([3, 2]), 3) == 4.262"
+    steps:
+      - show: |
+          <p>Hệ Z trả cho cùng câu hỏi các mức <b>2, 3, 0, 0</b> (văn bản mức 1 không được trả). Các mức đã chấm vẫn là 3, 2, 1, 0.</p>
+          <table class="t"><tr><th>câu</th><th>việc cần làm</th></tr>
+          <tr><td>1</td><td>Tính DCG@4 và nDCG@4 của hệ Z.</td></tr>
+          <tr><td>2</td><td>Trang chỉ hiện 2 dòng: tính nDCG@2 của X (3, 2, 0, 1) và Z, rồi chọn hệ.</td></tr></table>
+        focus: [1, "2.2", "2.3", 0]
+        say: "Bây giờ đến lượt bạn, hệ Z trả cho cùng câu hỏi các mức 2, 3, 0, 0, và văn bản mức 1 không được trả về. Câu một, tính độ lợi có chiết khấu ở 4 dòng và bản chuẩn hoá của hệ Z. Câu hai, trang chỉ hiện 2 dòng, tính bản chuẩn hoá ở 2 dòng của hệ X và hệ Z, rồi chọn hệ. Dừng video lại và làm ra giấy nhé."
+        pause: 20
+      - clear: true
+        show: |
+          <p><b>Câu 1.</b> $\text{DCG@}4 = \frac{2}{1} + \frac{3}{1{,}585} + 0 + 0 \approx 2 + 1{,}893 = 3{,}893$.</p>
+          $$\text{nDCG@}4 = \frac{3{,}893}{4{,}762} \approx \hlg{0{,}817}$$
+          <p class="note">IDCG vẫn là 4,762, vì thứ tự lý tưởng lấy từ các mức đã chấm 3, 2, 1, 0, không từ danh sách của Z.</p>
+        focus: [1, 2, 3]
+        say: "Đáp án câu một, độ lợi có chiết khấu là 2 chia 1, cộng 3 chia 1 phẩy 585, cộng 0 cộng 0, khoảng 3 phẩy 893. Chia cho 4 phẩy 762 được khoảng 0 phẩy 817. Độ lợi lý tưởng vẫn là 4 phẩy 762, vì thứ tự lý tưởng lấy từ các mức đã chấm, không lấy từ danh sách của hệ Z."
+      - show: |
+          <table class="t"><tr><th>câu 2: trang 2 dòng</th><th>DCG@2</th><th>IDCG@2 (3, 2)</th><th>nDCG@2</th></tr>
+          <tr><td>hệ X: 3, 2</td><td>$3 + 1{,}262 = 4{,}262$</td><td>4,262</td><td>$\hlg{1}$</td></tr>
+          <tr><td>hệ Z: 2, 3</td><td>$2 + 1{,}893 = 3{,}893$</td><td>4,262</td><td>0,913</td></tr></table>
+          <p class="note">Chọn X: ở đúng 2 dòng người dùng thấy, X hoàn hảo. Nếu trang dài 10 dòng và Z tìm được nhiều văn bản tốt hơn ở phía dưới, phải tính lại với $k = 10$ — chọn $k$ theo số dòng người dùng thật nhìn thấy.</p>
+        focus: ["1.2", "1.3", 2, 2]
+        say: "Câu hai, ở 2 dòng, hệ X có 3 cộng 1 phẩy 262 bằng 4 phẩy 262, đúng bằng độ lợi lý tưởng, nên được 1. Hệ Z có 2 cộng 1 phẩy 893 bằng 3 phẩy 893, chuẩn hoá được 0 phẩy 913. Vậy với trang 2 dòng ta chọn hệ X. Nếu trang dài 10 dòng và hệ Z tìm được nhiều văn bản tốt ở phía dưới, phải tính lại với k bằng 10, vì k luôn chọn theo số dòng người dùng thật nhìn thấy."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">mức liên quan 0–3</span><span class="a">→</span>
+          <span class="n">nhân chiết khấu $\frac{1}{\log_2(i + 1)}$</span><span class="a">→</span>
+          <span class="n">cộng: DCG</span><span class="a">→</span>
+          <span class="n">chia DCG lý tưởng từ mọi văn bản đã chấm</span><span class="a">→</span>
+          <span class="n">nDCG từ 0 đến 1</span></div>
+        say: "Tổng kết lại, ta cho mỗi kết quả một mức liên quan, nhân với chiết khấu theo vị trí rồi cộng lại thành độ lợi có chiết khấu. Sau đó chia cho độ lợi của thứ tự lý tưởng lấy từ mọi văn bản đã chấm, và được một số từ 0 đến 1."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> một con số nDCG chỉ có nghĩa khi đi kèm ba điều: <b>công thức</b> (độ lợi, chiết khấu), <b>k</b>, và <b>thứ tự lý tưởng lấy từ đâu</b>. Thiếu một trong ba thì đừng so.</div>
+        say: "Điều cần mang theo, một con số của độ đo này chỉ có nghĩa khi đi kèm ba điều, công thức độ lợi và chiết khấu, số dòng k, và thứ tự lý tưởng lấy từ đâu. Thiếu một trong ba điều đó thì đừng đem ra so."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 2): mô hình không gian vector — biến văn bản và câu hỏi thành vector trọng số tần suất nhân độ hiếm, rồi xếp hạng bằng cosin.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 2, ta học mô hình không gian vector, biến văn bản và câu hỏi thành vector có trọng số theo tần suất và độ hiếm của từ. Rồi ta xếp hạng văn bản bằng cosin của góc giữa hai vector. Hẹn gặp bạn ở bài tiếp theo."

@@ -1,0 +1,285 @@
+id: L13
+course: DBS
+series: "DBS · Cơ sở dữ liệu"
+title: "Bài 13 — Khoá hai pha và bế tắc trong cơ sở dữ liệu"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/dbs.yaml L13; audit/dbs/verify_dbs.py L13; K. P. Eswaran, J. N. Gray, R. A. Lorie, I. L. Traiger (1976); A. Silberschatz, H. F. Korth, S. Sudarshan, Database System Concepts (2019), mục 18.1–18.2"
+assumes: [arith, sub, set]
+# Quy ước: khoá chia sẻ S cho đọc (nhiều giao dịch giữ cùng lúc được), khoá độc quyền X cho ghi (chỉ một). Khoá hai pha nghiêm ngặt:
+#   pha tăng chỉ lấy khoá, nhả mọi khoá khi commit. Đồ thị chờ: cạnh Ti → Tj khi Ti đợi khoá Tj đang giữ. Mọi vết chạy / đợi và
+#   kết luận bế tắc do alg.strict_2pl tính.
+objectives:
+  - "Phân biệt khoá chia sẻ và khoá độc quyền"
+  - "Giải thích vì sao khoá hai pha bảo đảm tuần tự hoá"
+  - "Phát hiện bế tắc bằng đồ thị chờ"
+asr_reviewed:
+  - {sentence: "Bước hai, T2 xin khoá độc quyền trên B, B đang trống nên cũng được cấp.", reason: "ASR chép “Bước 2, T2 xin khóa độc quyền trên B, về đàn trống nên cũng được cấp.” (0.882): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: đang (trong “b đang” → “về đàn”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Ở bài sau, bài 14, ta học ghi nhật ký trước và khôi phục sau sự cố, tức chữ D của ACID được làm như thế nào.", reason: "tên chữ cái đọc kiểu Việt, ASR chép nhầm chữ (q→quy, x→ích, k→ca) — nhóm đã biết (SKILL Bước 5); chữ hiện trên màn hình"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Kiểm sau thì muộn, phải chặn trước"
+    steps:
+      - show: |
+          <p>Bài 12 kiểm một lịch <b>sau khi</b> nó đã chạy. Hệ quản trị cần một luật chặn <b>trước</b>, sao cho lịch nào xảy ra cũng tuần tự hoá được.</p>
+          <div class="box key">Hôm nay: <b>khoá hai pha</b> — luật đó — và cái giá của nó: <b>bế tắc</b>, quen thuộc từ khoá Hệ điều hành.</div>
+        focus: [1, 1, 2]
+        say: "Chào bạn, bài 12 kiểm một lịch sau khi nó đã chạy xong. Hệ quản trị cần một luật chặn từ trước, sao cho lịch nào xảy ra cũng tuần tự hoá được. Hôm nay ta học khoá hai pha, chính là luật đó, và cái giá của nó là bế tắc, khái niệm quen thuộc từ khoá Hệ điều hành."
+
+  # ───────────────────────── 1b. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: xung đột, đồ thị ưu tiên, vòng chờ"
+    checks:
+      - "alg.precedence_graph([('T1', 'R', 'A'), ('T2', 'R', 'A')])[0] == set()"
+      - "alg.precedence_graph([('T1', 'R', 'A'), ('T2', 'W', 'A')])[0] == {('T1', 'T2')}"
+      - "alg.precedence_graph([('T1', 'W', 'A'), ('T2', 'W', 'B')])[0] == set()"
+      - "alg.precedence_graph([('T1', 'R', 'A'), ('T2', 'W', 'A'), ('T2', 'R', 'B'), ('T1', 'W', 'B')]) == ({('T1', 'T2'), ('T2', 'T1')}, True)"
+    steps:
+      - show: |
+          <p>Hai thao tác <b>xung đột</b> khi: cùng mục, khác giao dịch, ít nhất một bên ghi.</p>
+          <table class="t"><tr><th>cặp (theo thứ tự)</th><th>cùng mục?</th><th>có ghi?</th><th>cạnh</th></tr>
+          <tr><td>$R_1(A)$ rồi $R_2(A)$</td><td>có</td><td>không</td><td>không có</td></tr>
+          <tr><td>$R_1(A)$ rồi $W_2(A)$</td><td>có</td><td>có</td><td><b>T1 → T2</b></td></tr>
+          <tr><td>$W_1(A)$ rồi $W_2(B)$</td><td>không</td><td>có</td><td>không có</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", "2.4"]
+        say: "Trước hết, nhắc lại bài 12, hai thao tác xung đột khi cùng đụng một mục, thuộc hai giao dịch khác nhau, và ít nhất một bên ghi. Mỗi cặp xung đột cho một cạnh của đồ thị ưu tiên, đi từ giao dịch làm trước sang giao dịch làm sau. T1 đọc A rồi T2 đọc A thì không xung đột, vì chẳng ai ghi. T1 đọc A rồi T2 ghi A thì xung đột, nên có cạnh T1 sang T2. T1 ghi A còn T2 ghi B thì không xung đột, vì khác mục."
+      - show: |
+          <p>Lịch $R_1(A)\ W_2(A)\ R_2(B)\ W_1(B)$:</p>
+          <table class="t"><tr><th>cặp xung đột</th><th>cạnh</th></tr>
+          <tr><td>$R_1(A)$ trước $W_2(A)$</td><td>T1 → T2</td></tr>
+          <tr><td>$R_2(B)$ trước $W_1(B)$</td><td>T2 → T1</td></tr></table>
+          <p>Hai cạnh khép thành <b>chu trình</b> → không tuần tự hoá xung đột được.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Cũng ở bài 12, ta xét lịch T1 đọc A, T2 ghi A, T2 đọc B, rồi T1 ghi B. Cặp trên mục A cho cạnh T1 sang T2. Cặp trên mục B cho cạnh T2 sang T1. Hai cạnh khép thành chu trình, nên lịch này không tuần tự hoá xung đột được."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>ở khoá Hệ điều hành</th><th>đang giữ</th><th>đang chờ</th></tr>
+          <tr><td>tiến trình P1</td><td>máy in</td><td>máy quét</td></tr>
+          <tr><td>tiến trình P2</td><td>máy quét</td><td>máy in</td></tr></table>
+          <p>Vòng chờ khép kín: không ai nhả, không ai chạy tiếp — <b>bế tắc</b>.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Thứ ba, ở khoá Hệ điều hành, bế tắc là khi các bên chờ nhau thành một vòng khép kín. Tiến trình P1 giữ máy in và chờ máy quét. Tiến trình P2 giữ máy quét và chờ máy in. Không ai nhả thứ mình đang giữ, nên không ai chạy tiếp được."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: khoá S, khoá X"
+    checks:
+      - "[r for _, r in alg.strict_2pl([('T1', 'R', 'A'), ('T2', 'R', 'A'), ('T1', 'C', ''), ('T2', 'C', '')])[0]] == ['chạy', 'chạy', 'chạy', 'chạy']"
+      - "alg.strict_2pl([('T1', 'W', 'A'), ('T2', 'R', 'A')])[0][1][1] == 'đợi T1'"
+    steps:
+      - show: |
+          <table class="t"><tr><th></th><th>đang có S</th><th>đang có X</th></tr>
+          <tr><td>xin S (để đọc)</td><td>được</td><td>đợi</td></tr>
+          <tr><td>xin X (để ghi)</td><td>đợi</td><td>đợi</td></tr></table>
+          <p><b>Khoá chia sẻ S</b>: nhiều người cùng đọc được. <b>Khoá độc quyền X</b>: một người ghi thì không ai khác đọc hay ghi.</p>
+          <p class="note">Ví dụ: T1 và T2 cùng đọc A — cả hai chạy. T1 ghi A rồi T2 đọc A — T2 phải đợi T1.</p>
+        focus: [1, "1.2", "1.3", 2, 3]
+        say: "Có hai loại khoá. Muốn đọc thì xin khoá chia sẻ, được cấp nếu mục chỉ đang có khoá chia sẻ, phải đợi nếu ai đó đang giữ khoá độc quyền. Muốn ghi thì xin khoá độc quyền, và phải đợi nếu có bất kỳ khoá nào khác. Tóm lại, khoá chia sẻ cho nhiều người cùng đọc, còn khoá độc quyền nghĩa là một người ghi thì không ai khác được đọc hay ghi. Ví dụ, T1 và T2 cùng đọc A thì cả hai chạy, còn T1 ghi A rồi T2 muốn đọc A thì T2 phải đợi."
+
+  # ───────────────────────── 3. HAI PHA ─────────────────────────
+  - id: twophase
+    kind: concept
+    title: "Luật hai pha"
+    steps:
+      - show: |
+          <ol><li><b>Pha tăng</b>: giao dịch chỉ <b>lấy</b> khoá, không nhả khoá nào.</li>
+          <li><b>Pha giảm</b>: đã nhả một khoá thì không lấy thêm khoá nào nữa.</li></ol>
+          <p><b>Nghiêm ngặt</b>: giữ mọi khoá tới tận khi commit — dạng hệ quản trị hay dùng.</p>
+          <div class="box key">Vì sao bảo đảm tuần tự hoá? Xếp các giao dịch theo thời điểm mỗi bên có <b>đủ</b> khoá. Mọi cặp xung đột đều phải đi theo thứ tự đó, nên đồ thị ưu tiên của bài 12 không thể có chu trình.</div>
+        focus: ["1.1", "1.1", "1.2", 2, 3, 3]
+        say: "Luật hai pha rất ngắn. Pha tăng, giao dịch chỉ lấy khoá, không nhả khoá nào. Pha giảm, một khi đã nhả một khoá thì không lấy thêm khoá nào nữa. Dạng nghiêm ngặt giữ mọi khoá tới tận khi ghi nhận, và đó là dạng hệ quản trị hay dùng. Vì sao luật này bảo đảm tuần tự hoá? Hãy xếp các giao dịch theo thời điểm mỗi bên vừa có đủ khoá, mọi cặp xung đột đều phải đi theo thứ tự đó, nên đồ thị ưu tiên của bài 12 không thể có chu trình."
+
+  # ───────────────────────── 3b. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Số khoá đang giữ, và ai chờ ai"
+    steps:
+      - show: |
+          <div><svg width="1500" height="390" viewBox="0 0 1500 390"><g stroke="#1f2937" stroke-width="2"><line x1="150" y1="320" x2="1420" y2="320"/><line x1="150" y1="320" x2="150" y2="60"/></g><g font-size="22" fill="#1f2937"><text x="160" y="50">số khoá đang giữ</text><text x="1300" y="310">thời gian</text><text x="120" y="258">1</text><text x="120" y="188">2</text><text x="120" y="118">3</text></g><path d="M150,320 L300,320 L300,250 L550,250 L550,180 L800,180 L800,110 L1150,110" fill="none" stroke="#2a78d6" stroke-width="5"/><line x1="1150" y1="110" x2="1150" y2="320" stroke="#eb6834" stroke-width="5"/><circle cx="800" cy="110" r="10" fill="#059669"/><g font-size="22"><text x="310" y="240" fill="#2a78d6">lấy A</text><text x="560" y="170" fill="#2a78d6">lấy B</text><text x="810" y="100" fill="#2a78d6">lấy C</text><text x="880" y="140" fill="#059669" font-weight="bold">đủ mọi khoá</text><text x="1165" y="220" fill="#eb6834" font-weight="bold">ghi nhận:</text><text x="1165" y="250" fill="#eb6834" font-weight="bold">nhả hết một lần</text></g><g font-size="24" text-anchor="middle"><text x="475" y="360" fill="#2a78d6">pha tăng: chỉ lấy, không nhả</text><text x="975" y="360" fill="#1f2937">giữ nguyên tới khi ghi nhận</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ số khoá một giao dịch đang giữ theo thời gian. Trong pha tăng, đường xanh chỉ đi lên, lấy A, rồi B, rồi C, không nhả cái nào. Chấm xanh lá là lúc giao dịch có đủ mọi khoá, và các giao dịch được xếp thứ tự theo đúng thời điểm này. Với khoá hai pha nghiêm ngặt, đường cam cho thấy mọi khoá được nhả một lần, ngay lúc ghi nhận."
+      - clear: true
+        show: |
+          <div><svg width="1500" height="400" viewBox="0 0 1500 400"><defs><marker id="arD13g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#059669"/></marker></defs><defs><marker id="arD13r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#b91c1c"/></marker></defs><defs><marker id="arD13k" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs><g fill="#eff6ff" stroke="#2a78d6" stroke-width="3"><rect x="100" y="60" width="120" height="80"/><rect x="100" y="260" width="120" height="80"/></g><g fill="#fef3c7" stroke="#1f2937" stroke-width="3"><circle cx="560" cy="100" r="55"/><circle cx="560" cy="300" r="55"/><circle cx="1100" cy="100" r="55"/><circle cx="1100" cy="300" r="55"/></g><g font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937"><text x="160" y="110">A</text><text x="160" y="310">B</text><text x="560" y="110">T1</text><text x="560" y="310">T2</text><text x="1100" y="110">T1</text><text x="1100" y="310">T2</text></g><g stroke="#059669" stroke-width="4"><line x1="220" y1="90" x2="498" y2="90" marker-end="url(#arD13g)"/><line x1="220" y1="310" x2="498" y2="310" marker-end="url(#arD13g)"/></g><g stroke="#b91c1c" stroke-width="3" stroke-dasharray="12 9"><line x1="515" y1="135" x2="232" y2="270" marker-end="url(#arD13r)"/><line x1="515" y1="265" x2="232" y2="130" marker-end="url(#arD13r)"/></g><g font-size="22"><text x="300" y="75" fill="#059669">T1 giữ X</text><text x="300" y="350" fill="#059669">T2 giữ X</text><text x="250" y="185" fill="#b91c1c">T2 xin A</text><text x="250" y="230" fill="#b91c1c">T1 xin B</text></g><line x1="760" y1="30" x2="760" y2="380" stroke="#9ca3af" stroke-width="2" stroke-dasharray="6 6"/><g stroke="#1f2937" stroke-width="3" fill="none"><path d="M1060,140 C1000,190 1000,210 1060,258" marker-end="url(#arD13k)"/><path d="M1140,260 C1200,210 1200,190 1140,142" marker-end="url(#arD13k)"/></g><g font-size="22"><text x="985" y="207" text-anchor="end" fill="#1f2937">T1 chờ T2</text><text x="1215" y="207" fill="#1f2937">T2 chờ T1</text><text x="1100" y="30" text-anchor="middle" font-weight="bold" fill="#1f2937">đồ thị chờ</text><text x="1100" y="390" text-anchor="middle" font-weight="bold" fill="#b91c1c">chu trình = bế tắc</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Còn đây là cách bế tắc hình thành. Bên trái, mũi tên xanh lá là khoá đang giữ, T1 giữ A, T2 giữ B, mũi tên đỏ đứt nét là khoá đang xin. Bỏ các mục ở giữa đi, ta được đồ thị chờ bên phải, T1 chờ T2 và T2 chờ T1. Đồ thị chờ có chu trình thì hai bên chờ nhau mãi, đó chính là bế tắc."
+
+  # ───────────────────────── 4. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Hai cách bế tắc"
+    checks:
+      - "alg.strict_2pl([('T1', 'W', 'A'), ('T2', 'W', 'B'), ('T1', 'W', 'B'), ('T2', 'W', 'A')])[1:] == ({('T1', 'T2'), ('T2', 'T1')}, True)"
+      - "alg.strict_2pl([('T1', 'R', 'A'), ('T2', 'R', 'A'), ('T1', 'W', 'A'), ('T2', 'W', 'A')])[1:] == ({('T1', 'T2'), ('T2', 'T1')}, True)"
+      - "[r for _, r in alg.strict_2pl([('T1', 'W', 'A'), ('T2', 'W', 'B'), ('T1', 'W', 'B'), ('T2', 'W', 'A')])[0]] == ['chạy', 'chạy', 'đợi T2', 'đợi T1']"
+      - "[r for _, r in alg.strict_2pl([('T1', 'R', 'A'), ('T2', 'R', 'A'), ('T1', 'W', 'A'), ('T2', 'W', 'A')])[0]] == ['chạy', 'chạy', 'đợi T2', 'đợi T1']"
+      - "alg.lost_update(100, [10, 10]) == (110, 120) and 100 + 10 == 110 and 110 + 10 == 120"
+    steps:
+      - show: |
+          <p><b>Bước 1</b> — T1 xin X trên A. A đang trống → <b>được</b>.</p>
+          <table class="t"><tr><th>mục</th><th>khoá đang có</th></tr><tr><td>A</td><td>X của T1</td></tr><tr><td>B</td><td>trống</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Ví dụ thứ nhất, theo dõi bảng khoá sau mỗi bước. Bước một, T1 xin khoá độc quyền trên A, mà A đang trống, nên được cấp ngay. B vẫn trống."
+      - show: |
+          <p><b>Bước 2</b> — T2 xin X trên B. B đang trống → <b>được</b>.</p>
+          <table class="t"><tr><th>mục</th><th>khoá đang có</th></tr><tr><td>A</td><td>X của T1</td></tr><tr><td>B</td><td>$\hl{\text{X của T2}}$</td></tr></table>
+        focus: [1, "2.3"]
+        say: "Bước hai, T2 xin khoá độc quyền trên B, B đang trống nên cũng được cấp. Bây giờ mỗi giao dịch giữ một mục."
+      - clear: true
+        show: |
+          <p><b>Bước 3</b> — T1 xin X trên B. B có X của T2; bảng tương thích: xin X gặp X → <b class="red">đợi T2</b>.</p>
+          <table class="t"><tr><th>đồ thị chờ</th><th>cạnh</th></tr><tr><td>sau bước 3</td><td>T1 → T2</td></tr></table>
+        focus: [1, 1, "2.2"]
+        say: "Bước ba, T1 xin khoá độc quyền trên B. Theo bảng tương thích, xin khoá độc quyền mà gặp khoá độc quyền thì phải đợi, nên T1 đợi T2. Đồ thị chờ có cạnh đầu tiên, T1 sang T2."
+      - show: |
+          <p><b>Bước 4</b> — T2 xin X trên A. A có X của T1 → <b class="red">đợi T1</b>.</p>
+          <table class="t"><tr><th>đồ thị chờ</th><th>cạnh</th></tr><tr><td>sau bước 4</td><td>T1 → T2, <b>T2 → T1</b> — chu trình</td></tr></table>
+          <p>Bế tắc. Hệ quản trị chọn một giao dịch để huỷ (thường là giao dịch tốn ít công nhất), giao dịch kia chạy tiếp.</p>
+        focus: [1, "2.2", 3, 3]
+        say: "Bước bốn, T2 xin khoá độc quyền trên A, mà A đang có khoá của T1, nên T2 đợi T1. Đồ thị chờ thêm cạnh T2 sang T1, khép thành chu trình, tức bế tắc. Hệ quản trị sẽ chọn một giao dịch để huỷ, thường là giao dịch tốn ít công nhất. Giao dịch kia được khoá và chạy tiếp."
+      - clear: true
+        show: |
+          <p><b>Bước 5</b> — ví dụ hai, kịch bản mất cập nhật của bài 11: số dư A = 100, T1 và T2 mỗi bên cộng 10. Cả hai đọc A trước.</p>
+          <table class="t"><tr><th>thao tác</th><th>A đang có</th><th>kết quả</th></tr>
+          <tr><td>T1 đọc A, xin S</td><td>trống</td><td>được</td></tr>
+          <tr><td>T2 đọc A, xin S</td><td>S của T1</td><td>được (S với S)</td></tr></table>
+        focus: [1, 1, "2.2", "2.3"]
+        say: "Bước năm, ví dụ thứ hai là kịch bản mất cập nhật của bài 11. Số dư A là 100, hai giao dịch mỗi bên muốn cộng thêm 10, và cả hai đọc A trước. T1 đọc A, xin khoá chia sẻ, được ngay. T2 cũng đọc A, xin khoá chia sẻ, và cũng được, vì hai khoá chia sẻ không cản nhau."
+      - show: |
+          <p><b>Bước 6</b> — cùng muốn ghi A:</p>
+          <table class="t"><tr><th>thao tác</th><th>vướng</th><th>kết quả</th></tr>
+          <tr><td>T1 xin X trên A</td><td>S của T2</td><td><b class="red">đợi T2</b></td></tr>
+          <tr><td>T2 xin X trên A</td><td>S của T1</td><td><b class="red">đợi T1</b> → chu trình, bế tắc</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước sáu, cả hai cùng muốn ghi A. T1 xin khoá độc quyền nhưng vướng khoá chia sẻ của T2, nên T1 đợi T2. T2 cũng xin khoá độc quyền, vướng khoá chia sẻ của T1, nên đợi T1, thành chu trình, tức bế tắc."
+      - clear: true
+        show: |
+          <p><b>Bước 7</b> — huỷ T2: T1 ghi $100 + 10 = 110$ rồi ghi nhận; T2 chạy lại, đọc 110, ghi $110 + 10 = \hl{120}$.</p>
+          <div class="box key">Khoá hai pha <b>không cho</b> mất cập nhật xảy ra (không khoá: 110) — đổi lại, đôi khi phải huỷ một giao dịch và chạy lại.</div>
+        focus: [1, 1, 2]
+        say: "Bước bảy, giả sử hệ quản trị huỷ T2, T1 ghi 100 cộng 10 bằng 110 rồi ghi nhận. T2 chạy lại từ đầu, đọc được 110 mới, rồi ghi 110 cộng 10 bằng 120, đúng kết quả. Vậy khoá hai pha không cho mất cập nhật xảy ra, nếu không khoá thì kết quả sai là 110, đổi lại đôi khi phải huỷ một giao dịch và chạy lại."
+
+  # ───────────────────────── 4b. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: liệt kê mọi cách đan xen"
+    checks:
+      - "math.comb(6, 3) == 20 and len(list(alg._interleavings([('T1', 'W', 'A'), ('T1', 'W', 'B'), ('T1', 'C', '')], [('T2', 'W', 'B'), ('T2', 'W', 'A'), ('T2', 'C', '')]))) == 20"
+      - "sum(alg.strict_2pl(s)[2] for s in alg._interleavings([('T1', 'W', 'A'), ('T1', 'W', 'B'), ('T1', 'C', '')], [('T2', 'W', 'B'), ('T2', 'W', 'A'), ('T2', 'C', '')])) == 12 == 2 * math.comb(4, 2)"
+      - "all(alg.strict_2pl(s)[2] == ({s[0][0], s[1][0]} == {'T1', 'T2'}) for s in alg._interleavings([('T1', 'W', 'A'), ('T1', 'W', 'B'), ('T1', 'C', '')], [('T2', 'W', 'B'), ('T2', 'W', 'A'), ('T2', 'C', '')]))"
+      - "[r for _, r in alg.strict_2pl([('T1', 'W', 'A'), ('T2', 'W', 'B'), ('T2', 'C', ''), ('T1', 'W', 'B')])[0]] == ['chạy', 'chạy', 'chạy', 'chạy']"
+    steps:
+      - show: |
+          <p>Mỗi giao dịch có 3 thao tác theo thứ tự (T1: khoá A, khoá B, ghi nhận; T2: khoá B, khoá A, ghi nhận). Chọn 3 trong 6 vị trí cho T1: <b>20</b> cách đan xen.</p>
+          <table class="t"><tr><th>máy chạy cả 20 cách</th><th>số cách</th></tr>
+          <tr><td>bế tắc</td><td>12</td></tr>
+          <tr><td>trong đó: hai thao tác đầu thuộc hai giao dịch khác nhau</td><td>12 / 12</td></tr>
+          <tr><td>đếm tay: 2 cách xếp hai khoá đầu, nhân 6 cách xếp 4 thao tác còn lại</td><td>$2 \times 6 = 12$</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", "2.4"]
+        say: "Kiểm bằng đường khác, ta không lần từng bước nữa mà liệt kê mọi cách đan xen của ví dụ một. Mỗi giao dịch có ba thao tác theo thứ tự, chọn 3 trong 6 vị trí cho T1 thì có 20 cách. Cho máy chạy cả 20 cách, đúng 12 cách bế tắc. Cả 12 cách đều có chung dấu hiệu, mỗi bên đã lấy được khoá đầu trước khi bên kia kịp xin khoá thứ hai. Đếm tay cũng ra như vậy, có 2 cách xếp hai khoá đầu, nhân 6 cách xếp bốn thao tác còn lại, bằng 12."
+      - show: |
+          <table class="t"><tr><th>phá chu trình: huỷ T2</th><th>kết quả</th></tr>
+          <tr><td>T1 giữ A, T2 giữ B</td><td>như bước 2</td></tr>
+          <tr><td>huỷ T2 → nhả mọi khoá của T2</td><td>B trống</td></tr>
+          <tr><td>T1 xin X trên B</td><td>được → chạy tiếp</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Kiểm thêm cách gỡ bế tắc. Ta quay về lúc T1 giữ A và T2 giữ B, như sau bước hai. Huỷ T2 thì mọi khoá của T2 được nhả, B trở lại trống. Lúc đó T1 xin khoá trên B và được ngay, nên chạy tiếp tới cuối."
+
+  # ───────────────────────── 5. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi người mới hay mắc"
+    checks:
+      - "alg.strict_2pl([('T1', 'W', 'A'), ('T2', 'W', 'B'), ('T1', 'W', 'B'), ('T2', 'W', 'A')])[2]"
+      - "sum(alg.strict_2pl(s)[2] for s in alg._interleavings([('T1', 'W', 'A'), ('T1', 'W', 'B'), ('T1', 'C', '')], [('T2', 'W', 'A'), ('T2', 'W', 'B'), ('T2', 'C', '')])) == 0 and len(list(alg._interleavings([1, 2, 3], [4, 5, 6]))) == 20"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Nghĩ khoá hai pha tránh được bế tắc <b class="red">(sai)</b>
+          <br><span class="note">Nó chỉ bảo đảm tuần tự hoá. Bế tắc vẫn xảy ra, như hai ví dụ vừa rồi.</span></div>
+        say: "Lỗi thứ nhất, nghĩ khoá hai pha tránh được bế tắc. Nó chỉ bảo đảm tuần tự hoá, còn bế tắc vẫn xảy ra, như hai ví dụ vừa rồi."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Không viết mã chạy lại khi giao dịch bị huỷ <b class="red">(thiếu)</b>
+          <br><span class="note">Bị chọn làm nạn nhân bế tắc là chuyện bình thường. Ứng dụng phải bắt lỗi đó và chạy lại cả giao dịch.</span></div>
+        say: "Lỗi thứ hai, không viết mã chạy lại khi giao dịch bị huỷ. Bị chọn làm nạn nhân của bế tắc là chuyện bình thường, nên ứng dụng phải bắt lỗi đó và chạy lại cả giao dịch."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Mỗi chỗ trong mã khoá các bảng theo thứ tự khác nhau <b class="red">(sai)</b>
+          <br><span class="note">Ví dụ một là hệ quả trực tiếp. Luôn đụng tới các mục theo cùng một thứ tự (như khoá hệ điều hành).</span></div>
+          <table class="t"><tr><th>thứ tự khoá</th><th>cách đan xen</th><th>bế tắc</th></tr>
+          <tr><td>T1: A rồi B; T2: B rồi A</td><td>20</td><td><b class="red">12</b></td></tr>
+          <tr><td>cả hai: A rồi B</td><td>20</td><td>0</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Lỗi thứ ba, mỗi chỗ trong mã khoá các bảng theo một thứ tự khác nhau, lỗi rất hay gặp khi hai người viết hai chức năng chạm cùng hai bảng. Ví dụ thứ nhất là hệ quả trực tiếp, máy liệt kê 20 cách đan xen thì 12 cách bế tắc. Khi cả hai cùng khoá A trước rồi mới tới B, cả 20 cách đều không bế tắc, như cách tránh bế tắc ở khoá Hệ điều hành."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Nhả khoá sớm cho nhanh <b class="red">(sai)</b>
+          <br><span class="note">Nhả rồi lấy lại là phá luật hai pha: mất bảo đảm tuần tự hoá, và có thể đọc dữ liệu chưa commit.</span></div>
+        say: "Lỗi thứ tư, nhả khoá sớm cho nhanh. Nhả rồi lại lấy thêm khoá là phá luật hai pha, mất bảo đảm tuần tự hoá, và có thể đọc phải dữ liệu chưa được ghi nhận."
+
+  # ───────────────────────── 6. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.strict_2pl([('T1', 'R', 'A'), ('T2', 'R', 'B'), ('T1', 'W', 'B'), ('T2', 'R', 'A')])[0][2][1] == 'đợi T2' and alg.strict_2pl([('T1', 'R', 'A'), ('T2', 'R', 'B'), ('T1', 'W', 'B'), ('T2', 'R', 'A')])[2] is False"
+      - "alg.strict_2pl([('T1', 'W', 'A'), ('T2', 'W', 'A'), ('T3', 'W', 'A')])[1] == {('T2', 'T1'), ('T3', 'T1')} and not alg.strict_2pl([('T1', 'W', 'A'), ('T2', 'W', 'A'), ('T3', 'W', 'A')])[2]"
+      - "[r for _, r in alg.strict_2pl([('T1', 'R', 'A'), ('T2', 'R', 'B'), ('T1', 'W', 'B'), ('T2', 'R', 'A')])[0]] == ['chạy', 'chạy', 'đợi T2', 'chạy'] and alg.strict_2pl([('T1', 'R', 'A'), ('T2', 'R', 'B'), ('T1', 'W', 'B'), ('T2', 'R', 'A')])[1] == {('T1', 'T2')}"
+      - "[r for _, r in alg.strict_2pl([('T1', 'W', 'A'), ('T2', 'W', 'A'), ('T3', 'W', 'A')])[0]] == ['chạy', 'đợi T1', 'đợi T1']"
+      - "sum(alg.strict_2pl(s)[2] for s in alg._interleavings([('T1', 'W', 'A'), ('T1', 'W', 'B'), ('T1', 'C', '')], [('T2', 'W', 'A'), ('T2', 'W', 'B'), ('T2', 'C', '')])) == 0"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>T1 đọc A, T2 đọc B, T1 muốn ghi B, T2 muốn đọc A. Có bế tắc không?</td></tr>
+          <tr><td>2</td><td>T1, T2, T3 lần lượt muốn ghi A. Vẽ đồ thị chờ. Có bế tắc không?</td></tr>
+          <tr><td>3</td><td>Hai lệnh chuyển tiền chạy cùng lúc: A sang B và B sang A, mỗi lệnh khoá tài khoản nguồn trước. Nên sửa thế nào?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.3", "1.4", "1.4", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, T1 đọc A, T2 đọc B, rồi T1 muốn ghi B, còn T2 muốn đọc A. Có bế tắc không? Câu hai, T1, T2, T3 lần lượt muốn ghi A, hãy vẽ đồ thị chờ. Có bế tắc không? Câu ba, hai lệnh chuyển tiền chạy cùng lúc, một lệnh từ A sang B, một lệnh từ B sang A, mỗi lệnh khoá tài khoản nguồn trước. Bạn sẽ sửa thế nào? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① lần từng thao tác:</p>
+          <table class="t"><tr><th>thao tác</th><th>mục đang có</th><th>kết quả</th></tr>
+          <tr><td>T1 đọc A</td><td>A trống</td><td>chạy, T1 giữ S trên A</td></tr>
+          <tr><td>T2 đọc B</td><td>B trống</td><td>chạy, T2 giữ S trên B</td></tr>
+          <tr><td>T1 ghi B</td><td>S của T2</td><td><b class="red">đợi T2</b></td></tr>
+          <tr><td>T2 đọc A</td><td>chỉ S của T1</td><td>chạy (S với S)</td></tr></table>
+          <p>Đồ thị chờ chỉ có T1 → T2: không chu trình, không bế tắc. T2 xong, nhả B, T1 chạy tiếp.</p>
+        focus: [1, "2.2", "2.3", "2.4", "2.5", 3, 3]
+        say: "Đáp án câu một, lần từng thao tác. T1 đọc A, A trống nên chạy, T1 giữ khoá chia sẻ trên A. T2 đọc B, cũng chạy, T2 giữ khoá chia sẻ trên B. T1 muốn ghi B phải đợi T2, vì T2 đang giữ khoá chia sẻ trên B. T2 muốn đọc A thì được, vì A chỉ có khoá chia sẻ của T1. Đồ thị chờ chỉ có một cạnh T1 sang T2, không có chu trình, nên không bế tắc. T2 làm xong và nhả B, rồi T1 chạy tiếp."
+      - clear: true
+        show: |
+          <p>② cả ba muốn ghi A:</p>
+          <table class="t"><tr><th>thao tác</th><th>kết quả</th><th>cạnh</th></tr>
+          <tr><td>T1 xin X trên A</td><td>chạy</td><td></td></tr>
+          <tr><td>T2 xin X trên A</td><td>đợi T1</td><td>T2 → T1</td></tr>
+          <tr><td>T3 xin X trên A</td><td>đợi T1</td><td>T3 → T1</td></tr></table>
+          <p>Không có cạnh nào đi ra từ T1 → <b>không</b> chu trình — chỉ là hàng chờ.</p>
+        focus: ["2.2", "2.3", "2.4", 3]
+        say: "Câu hai, T1 xin khoá độc quyền trên A trước, được và chạy. T2 xin sau nên đợi T1, cho cạnh T2 sang T1. T3 cũng đợi T1, cho cạnh T3 sang T1. Không có cạnh nào đi ra từ T1, nên không có chu trình, đó chỉ là một hàng chờ bình thường."
+      - show: |
+          <p>③ Quyết định: mọi lệnh khoá tài khoản có <b>số nhỏ hơn</b> trước. Cả hai lệnh đều khoá A rồi B → như hàng cuối của bảng lỗi 3: 0 trong 20 cách đan xen bế tắc. Vẫn giữ mã chạy lại cho các bế tắc khác.</p>
+        say: "Câu ba là một quyết định. Hãy cho mọi lệnh khoá tài khoản có số nhỏ hơn trước, bất kể tiền đi chiều nào. Khi đó cả hai lệnh đều khoá A rồi mới tới B, và như đã liệt kê ở lỗi thứ ba, không cách đan xen nào trong 20 cách bị bế tắc. Dù vậy vẫn phải giữ mã chạy lại, vì còn những bế tắc khác ngoài cặp này."
+
+  # ───────────────────────── 7. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">S: đọc chung; X: ghi riêng</span><span class="a">→</span>
+          <span class="n">hai pha: lấy hết rồi mới nhả</span><span class="a">→</span>
+          <span class="n">bảo đảm tuần tự hoá</span><span class="a">→</span>
+          <span class="n">giá phải trả: bế tắc, huỷ và chạy lại</span></div>
+        say: "Tổng kết lại, khoá chia sẻ cho đọc chung, khoá độc quyền cho ghi riêng. Luật hai pha lấy hết khoá rồi mới nhả, bảo đảm tuần tự hoá. Cái giá phải trả là bế tắc, khi đó một giao dịch bị huỷ và chạy lại."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> an toàn khi chạy đồng thời luôn có giá — chờ, huỷ, chạy lại. Thiết kế ứng dụng để chịu được cái giá đó, đừng giả vờ nó không có.</div>
+        say: "Điều cần mang theo, an toàn khi chạy đồng thời luôn có giá, đó là chờ, huỷ và chạy lại. Hãy thiết kế ứng dụng để chịu được cái giá đó, đừng giả vờ nó không tồn tại."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 14): <b>ghi nhật ký trước</b> và khôi phục sau sự cố — chữ D của ACID làm thế nào.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 14, ta học ghi nhật ký trước và khôi phục sau sự cố, tức chữ D của ACID được làm như thế nào. Hẹn gặp bạn ở bài tiếp theo."

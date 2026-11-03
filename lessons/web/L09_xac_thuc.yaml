@@ -1,0 +1,206 @@
+id: L09
+course: WEB
+series: "WEB · Ứng dụng web và di động"
+title: "Bài 9 — Xác thực cho web và di động: phiên, mã truy cập, ủy quyền có PKCE"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/web.yaml L09; audit/web/verify_web.py L09; RFC 6749 (OAuth 2.0), mục 4.1 (luồng mã ủy quyền); RFC 7636 (PKCE), mục 4 và phụ lục B (vector thử); RFC 8252 (OAuth cho ứng dụng gốc); RFC 9700 (thực hành an toàn tốt nhất cho OAuth 2.0, 2025); bài 6"
+assumes: [arith]
+# Quy ước: “phiên cookie” = máy chủ giữ trạng thái phiên, trình duyệt giữ mã phiên trong cookie HttpOnly. “Mã truy cập” = chuỗi có hạn, gửi kèm mỗi
+#   yêu cầu API. PKCE phương thức S256: mã thách thức = base64url(SHA-256(chuỗi bí mật)) bỏ dấu “=” (alg.pkce_challenge); vector lấy nguyên từ
+#   RFC 7636 phụ lục B. Nội dung phòng thủ: không hướng dẫn tấn công. Tên OAuth, PKCE chỉ trên màn hình.
+objectives:
+  - "So sánh phiên cookie với mã truy cập"
+  - "Giải thích luồng mã ủy quyền và vì sao cần PKCE"
+  - "Biết ứng dụng di động không giữ được bí mật"
+asr_reviewed:
+  - {sentence: "Ba byte đầu của mã băm là 13, d 3, 1 e, viết ra thành 24 bit.", reason: "ASR chép “Ba bay đầu của mã BAM là 13, D3, 1E, viết ra thành 24 bit.” (0.9): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: băm/bam — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bước hai, băm chuỗi bí mật bằng hàm băm đã ôn, được đúng 32 byte, tức 256 bit, bắt đầu bằng các byte 13, d 3, 1 e, viết theo hệ mười sáu.", reason: "ASR chép “Bước 2, băm chuỗi bí mật bằng hàm băm đã ôn, được đúng 32 bay, tức 256 bit, bắt đầu bằng các bay 13, V3, 1E, viết theo hệ 16.” (0.925): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bước một, ứng dụng tạo chuỗi bí mật từ 32 byte ngẫu nhiên, viết thành 43 ký tự, nằm trong độ dài cho phép từ 43 tới 128.", reason: "ASR chép “Bước 1 ứng dụng tạo chuỗi bí mật từ 32 bai ngẫu nhiên, viết thành 43 ký tự, nằm trong độ dài cho phép từ 43 tới 128.” (0.974): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Bí mật nằm trong ứng dụng ai cũng tải được"
+    steps:
+      - show: |
+          <p>Ứng dụng di động đăng nhập bằng tài khoản của một dịch vụ khác. Nhóm phát triển nhúng “bí mật máy khách” vào ứng dụng để đổi mã. Nhưng ai cũng tải được tệp ứng dụng và đọc chuỗi bên trong — bí mật đó <b>coi như công khai</b>. Vậy làm sao chứng minh “chính tôi là người đã bắt đầu đăng nhập”?</p>
+          <div class="box key">Hôm nay: <b>xác thực</b> cho web và di động — phiên, mã truy cập, và luồng mã ủy quyền có <b>PKCE</b>.</div>
+        focus: [1, 1, 1, 1, 2]
+        say: "Chào bạn, một ứng dụng di động cho đăng nhập bằng tài khoản của một dịch vụ khác. Nhóm phát triển nhúng một bí mật máy khách vào ứng dụng để đổi mã. Nhưng ai cũng tải được tệp ứng dụng và đọc chuỗi bên trong, nên bí mật đó coi như công khai. Vậy làm sao chứng minh chính tôi là người đã bắt đầu đăng nhập? Hôm nay ta học xác thực cho web và di động, với phiên, mã truy cập, và luồng mã ủy quyền có thêm bằng chứng khoá."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: hàm băm và cách viết byte thành chữ"
+    checks:
+      - "len(__import__('hashlib').sha256(b'abc').digest()) == 32 == len(__import__('hashlib').sha256(b'a' * 1000).digest()) and 32 * 8 == 256"
+      - "__import__('hashlib').sha256(b'abc').hexdigest()[:8] == 'ba7816bf' and __import__('hashlib').sha256(b'abd').hexdigest()[:8] == 'a52d159f'"
+      - "2 ** 6 == 64 and 3 * 8 == 24 == 4 * 6 and math.ceil(256 / 6) == 43"
+    steps:
+      - show: |
+          <p>Ở khoá An toàn thông tin: <b>hàm băm</b> biến chuỗi dài bao nhiêu cũng được thành đúng <b>32 byte = 256 bit</b>. Đổi một ký tự là kết quả đổi hẳn, và không thể suy ngược ra chuỗi ban đầu.</p>
+          <table class="t"><tr><th>chuỗi vào</th><th>8 chữ số hex đầu của mã băm</th></tr>
+          <tr><td>abc</td><td>ba7816bf…</td></tr><tr><td>abd (đổi một ký tự)</td><td>a52d159f…</td></tr></table>
+        focus: [1, 1, 2, "2.2", "2.3"]
+        say: "Trước hết, ôn lại điều đã học ở khoá An toàn thông tin. Hàm băm biến một chuỗi dài bao nhiêu cũng được thành đúng 32 byte, tức 256 bit, và không thể suy ngược ra chuỗi ban đầu. Bảng thử với hai chuỗi chỉ khác nhau đúng một ký tự cuối. Chuỗi a, b, c cho mã băm bắt đầu bằng b, a, 7, 8. Chuỗi a, b, d cho mã băm bắt đầu bằng a, 5, 2, d, khác hẳn dù chỉ đổi một ký tự."
+      - show: |
+          <p>Để gửi 256 bit qua địa chỉ web, ta viết chúng thành chữ: mỗi ký tự chọn trong <b>64 ký tự</b> an toàn cho địa chỉ, nên mang $2^6 = 64$, tức <b>6 bit</b>.</p>
+          <table class="t"><tr><th>số bit</th><th>số ký tự</th></tr>
+          <tr><td>3 byte = 24 bit</td><td>24 chia 6 = 4 ký tự</td></tr>
+          <tr><td>32 byte = 256 bit</td><td>256 chia 6 ≈ 42,7 → $\hl{43}$ ký tự</td></tr></table>
+        introduces: [power]
+        focus: [1, 1, "2.2", "2.3"]
+        say: "Để gửi 256 bit đó qua một địa chỉ web, ta viết chúng thành chữ, mỗi ký tự chọn trong 64 ký tự an toàn cho địa chỉ. Vì 2 mũ 6 bằng 64, mỗi ký tự mang đúng 6 bit thông tin. Ví dụ 3 byte là 24 bit, chia 6 được đúng 4 ký tự. Còn 32 byte là 256 bit, chia 6 được khoảng 42 phẩy 7, làm tròn lên thành 43 ký tự, và đó là độ dài ta sẽ gặp trong ví dụ."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: phiên, mã truy cập, luồng mã ủy quyền"
+    steps:
+      - show: |
+          <table class="t"><tr><th>cách</th><th>giữ ở đâu</th><th>hợp với</th></tr>
+          <tr><td><b>phiên cookie</b></td><td>máy chủ giữ phiên; trình duyệt giữ mã phiên trong cookie <code>HttpOnly</code>, <code>Secure</code></td><td>web cùng miền</td></tr>
+          <tr><td><b>mã truy cập</b> (ngắn hạn) + mã làm mới</td><td>ứng dụng giữ trong kho an toàn của hệ điều hành</td><td>ứng dụng di động, API cho nhiều bên</td></tr></table>
+          <p><b>Luồng mã ủy quyền có PKCE</b>: ① ứng dụng tạo <b>chuỗi bí mật</b> ngẫu nhiên, gửi đi <b>mã thách thức</b> = băm của nó ② người dùng đăng nhập ở máy chủ ủy quyền, nhận về một <b>mã ủy quyền</b> ③ ứng dụng đổi mã ủy quyền lấy mã truy cập, kèm <b>chuỗi bí mật gốc</b> — máy chủ băm lại và so.</p>
+        focus: [1, "1.2", "1.2", "1.3", "1.3", 2, 2, 2, 2, 2]
+        say: "Bảng so hai cách. Phiên cookie để máy chủ giữ phiên, còn trình duyệt giữ mã phiên trong một cookie chỉ máy chủ đọc được và chỉ đi qua kết nối mã hoá. Cách này hợp với web cùng miền. Mã truy cập ngắn hạn đi kèm mã làm mới, được ứng dụng giữ trong kho an toàn của hệ điều hành. Cách này hợp với ứng dụng di động, và API cho nhiều bên. Luồng mã ủy quyền có bằng chứng khoá gồm ba bước. Bước một, ứng dụng tạo một chuỗi bí mật ngẫu nhiên, và gửi đi mã thách thức là băm của nó. Bước hai, người dùng đăng nhập, và ứng dụng nhận về mã ủy quyền. Bước ba, ứng dụng đổi mã ủy quyền lấy mã truy cập, kèm chuỗi bí mật gốc. Máy chủ băm lại chuỗi bí mật và so với mã thách thức."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Chuỗi bí mật không bao giờ rời máy trước bước cuối"
+    steps:
+      - show: |
+          <div><svg width="1500" height="510" viewBox="0 0 1500 510"><defs><marker id="arW9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs><text x="300" y="45" font-size="26" font-weight="bold" text-anchor="middle" fill="#1f2937">ứng dụng</text><line x1="300" y1="65" x2="300" y2="400" stroke="#1f2937" stroke-width="3"/><text x="1180" y="45" font-size="26" font-weight="bold" text-anchor="middle" fill="#1f2937">máy chủ ủy quyền</text><line x1="1180" y1="65" x2="1180" y2="400" stroke="#1f2937" stroke-width="3"/><rect x="40" y="90" width="230" height="70" rx="10" fill="#bbf7d0" stroke="#059669" stroke-width="3"/><text x="155" y="120" font-size="20" text-anchor="middle" fill="#1f2937">giữ kín:</text><text x="155" y="146" font-size="20" text-anchor="middle" font-weight="bold" fill="#059669">chuỗi bí mật</text><line x1="300" y1="140" x2="1174" y2="140" stroke="#2a78d6" stroke-width="4" marker-end="url(#arW9)"/><text x="740" y="124" font-size="22" text-anchor="middle" fill="#2a78d6">① mã thách thức = băm(chuỗi bí mật)</text><line x1="1180" y1="240" x2="306" y2="240" stroke="#d97706" stroke-width="4" marker-end="url(#arW9)"/><text x="740" y="224" font-size="22" text-anchor="middle" fill="#d97706">② mã ủy quyền (sau khi người dùng đăng nhập)</text><line x1="300" y1="340" x2="1174" y2="340" stroke="#059669" stroke-width="4" marker-end="url(#arW9)"/><text x="740" y="324" font-size="22" text-anchor="middle" fill="#059669">③ mã ủy quyền + chuỗi bí mật gốc</text><text x="1200" y="390" font-size="20" fill="#059669">băm lại, so với ①</text><rect x="330" y="420" width="840" height="70" rx="10" fill="#fee2e2" stroke="#b91c1c" stroke-width="3" stroke-dasharray="12 8"/><text x="750" y="450" font-size="22" text-anchor="middle" fill="#b91c1c">kẻ chặn thấy ① và ②, nhưng không có chuỗi bí mật</text><text x="750" y="477" font-size="22" text-anchor="middle" fill="#b91c1c">nên không làm được ③</text></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ ba lượt trao đổi giữa ứng dụng và máy chủ ủy quyền, ô xanh bên trái là chuỗi bí mật mà ứng dụng giữ kín. Lượt một chỉ gửi đi mã thách thức, là băm của chuỗi bí mật, và lượt hai trả về mã ủy quyền sau khi người dùng đăng nhập. Chỉ ở lượt ba, chuỗi bí mật gốc mới được gửi đi, và máy chủ băm lại rồi so với mã thách thức đã nhận ở lượt một. Kẻ chặn được lượt một và lượt hai vẫn thiếu chuỗi bí mật, nên không làm được lượt ba."
+
+  - id: example
+    kind: example
+    title: "Vector thử của RFC 7636"
+    checks:
+      - "alg.pkce_challenge('dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk') == 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM'"
+      - "len('dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk') == 43 and len(alg.pkce_challenge('dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk')) == 43"
+    steps:
+      - show: |
+          <p><b>Bước một — tạo chuỗi bí mật</b>: 32 byte ngẫu nhiên, viết thành 43 ký tự (độ dài cho phép: 43 tới 128).</p>
+          <table class="t"><tr><th>bước</th><th>giá trị</th></tr>
+          <tr><td>chuỗi bí mật (43 ký tự, ngẫu nhiên)</td><td><code>dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk</code></td></tr></table>
+        focus: [1, "2.2"]
+        say: "Bước một, ứng dụng tạo chuỗi bí mật từ 32 byte ngẫu nhiên, viết thành 43 ký tự, nằm trong độ dài cho phép từ 43 tới 128. Bảng theo vector thử chính thức, chuỗi bí mật dài 43 ký tự, được tạo ngẫu nhiên."
+      - show: |
+          <p><b>Bước 2 — băm</b>: hàm băm cho đúng 32 byte, tức 256 bit, bắt đầu bằng các byte <code>13 d3 1e</code>…</p>
+        say: "Bước hai, băm chuỗi bí mật bằng hàm băm đã ôn, được đúng 32 byte, tức 256 bit, bắt đầu bằng các byte 13, d 3, 1 e, viết theo hệ mười sáu."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — viết 256 bit thành chữ</b>, mỗi ký tự 6 bit, bỏ dấu “=” ở cuối:</p>
+          <table class="t"><tr><th>bước</th><th>giá trị</th></tr>
+          <tr><td>chuỗi bí mật (43 ký tự, ngẫu nhiên)</td><td><code>dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk</code></td></tr>
+          <tr><td>băm SHA-256 rồi mã hoá base64url, bỏ “=”</td><td><code>E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM</code></td></tr></table>
+          <p>Tính lại bằng thư viện chuẩn cho <b>đúng từng ký tự</b> vector của RFC 7636 phụ lục B.</p>
+        focus: [1, "2.3", "2.3", 3]
+        say: "Bước ba, viết 256 bit thành chữ, mỗi ký tự mang 6 bit, rồi bỏ dấu bằng ở cuối. Băm chuỗi đó rồi mã hoá theo kiểu an toàn cho địa chỉ, bỏ dấu bằng ở cuối, được mã thách thức cũng dài 43 ký tự. Đúng như phần chuẩn bị, 256 chia 6 làm tròn lên là 43. Tính lại bằng thư viện chuẩn cho kết quả đúng từng ký tự với vector thử của tiêu chuẩn năm 2015."
+      - clear: true
+        show: |
+          <p><b>Bước 4 — máy chủ kiểm ở lượt ③</b>: băm lại chuỗi được gửi lên, so với mã thách thức đã lưu.</p>
+          <table class="t"><tr><th>chuỗi gửi lên ở ③</th><th>băm lại ra</th><th>máy chủ</th></tr>
+          <tr><td>đúng chuỗi bí mật</td><td><code>E9Melhoa…</code> = mã thách thức</td><td>$\hl{\text{cấp mã truy cập}}$</td></tr>
+          <tr><td>đổi ký tự cuối k thành j</td><td>chuỗi khác hẳn</td><td>từ chối</td></tr></table>
+          <p>Kẻ chặn được mã ủy quyền ở bước ② vẫn không đổi được mã truy cập, vì không có chuỗi bí mật — và không thể suy ngược từ mã thách thức.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Bước bốn, ở lượt ba máy chủ băm lại chuỗi được gửi lên và so với mã thách thức đã lưu từ lượt một. Gửi đúng chuỗi bí mật thì băm ra đúng mã thách thức, và máy chủ cấp mã truy cập. Chỉ cần đổi ký tự cuối từ k thành j, kết quả băm khác hẳn, và máy chủ từ chối. Kẻ chặn được mã ủy quyền ở bước hai vẫn không đổi được mã truy cập, vì không có chuỗi bí mật, và không thể suy ngược nó từ mã thách thức."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: viết thành chữ bằng tay 4 ký tự đầu"
+    checks:
+      - "__import__('hashlib').sha256(b'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk').digest()[:3].hex() == '13d31e'"
+      - "(lambda b: [int(b[i:i + 6], 2) for i in range(0, 24, 6)])(''.join(f'{x:08b}' for x in bytes.fromhex('13d31e'))) == [4, 61, 12, 30]"
+      - "''.join('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'[i] for i in (4, 61, 12, 30)) == 'E9Me' == alg.pkce_challenge('dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk')[:4]"
+      - "alg.pkce_challenge('dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXj') != 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM'"
+    steps:
+      - show: |
+          <table class="t"><tr><th>cách khác: làm tay, không gọi thư viện mã hoá</th><th>kết quả</th></tr>
+          <tr><td>3 byte đầu của mã băm: 13, d3, 1e</td><td>00010011 11010011 00011110</td></tr>
+          <tr><td>cắt 24 bit thành 4 nhóm 6 bit</td><td>000100 | 111101 | 001100 | 011110</td></tr>
+          <tr><td>đổi mỗi nhóm thành số</td><td>4, 61, 12, 30</td></tr>
+          <tr><td>tra bảng A…Z, a…z, 0…9, -, _</td><td>$\hl{\text{E9Me}}$ ✓ khớp 4 ký tự đầu</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Kiểm bằng đường khác, ta làm tay phần viết thành chữ, không gọi thư viện mã hoá. Ba byte đầu của mã băm là 13, d 3, 1 e, viết ra thành 24 bit. Cắt 24 bit đó thành 4 nhóm, mỗi nhóm 6 bit, vì mỗi ký tự mang đúng 6 bit. Đổi mỗi nhóm thành số từ 0 tới 63, được 4, 61, 12 và 30. Tra bảng gồm chữ hoa, chữ thường, chữ số, gạch ngang và gạch dưới, được e hoa, 9, m hoa, e thường, khớp đúng 4 ký tự đầu của mã thách thức."
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi thường gặp"
+    checks:
+      - "alg.pkce_challenge('dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk') != 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk' and len('dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk') == 43"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Nhúng bí mật máy khách vào ứng dụng di động hay mã chạy trên trình duyệt <b class="red">(coi như công khai)</b>
+          <br><span class="note">Ứng dụng phát cho người dùng là “máy khách công khai”: không giữ được bí mật. Dùng luồng mã ủy quyền có PKCE, không dùng bí mật nhúng sẵn.</span></div>
+        say: "Lỗi thứ nhất, nhúng bí mật máy khách vào ứng dụng di động hay mã chạy trên trình duyệt, trong khi nó coi như công khai. Ứng dụng phát cho người dùng là máy khách công khai, không giữ được bí mật. Hãy dùng luồng mã ủy quyền có bằng chứng khoá, không dùng bí mật nhúng sẵn."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Lưu mã truy cập ở nơi mã kịch bản đọc được <b class="red">(lỗi chèn mã là lộ mã)</b>
+          <br><span class="note">Trên web, mã lưu trong bộ nhớ cục bộ của trang bị đọc ngay khi có một lỗ hổng chèn mã. Ưu tiên cookie <code>HttpOnly</code>; trên di động dùng kho khoá của hệ điều hành.</span></div>
+        say: "Lỗi thứ hai, lưu mã truy cập ở nơi mã kịch bản đọc được, nên một lỗi chèn mã là lộ mã. Trên web, mã lưu trong bộ nhớ cục bộ của trang bị đọc ngay khi có một lỗ hổng chèn mã. Hãy ưu tiên cookie chỉ máy chủ đọc được, còn trên di động thì dùng kho khoá của hệ điều hành."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Mã truy cập sống quá lâu <b class="red">(lộ một lần, dùng mãi)</b>
+          <br><span class="note">Cho mã truy cập hạn ngắn (ví dụ vài phút), làm mới bằng mã làm mới có thể thu hồi và xoay vòng; đăng xuất thì thu hồi ở máy chủ.</span></div>
+        say: "Lỗi thứ ba, mã truy cập sống quá lâu, nên lộ một lần là bị dùng mãi. Hãy cho mã truy cập hạn ngắn, ví dụ vài phút, làm mới bằng mã làm mới có thể thu hồi và xoay vòng, và khi đăng xuất thì thu hồi ở máy chủ."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4.</b> Chọn phương thức “để nguyên” cho mã thách thức <b class="red">(người đã đi làm hay mắc)</b>
+          <br><span class="note">RFC 7636 còn cho phép phương thức <code>plain</code>: mã thách thức <b>chính là</b> chuỗi bí mật. Thư viện cũ hay cấu hình “cho nhanh” để mặc định này. Hãy luôn dùng <code>S256</code>, như RFC 9700 khuyên.</span></div>
+          <table class="t"><tr><th>phương thức</th><th>mã thách thức gửi ở ①</th><th>kẻ chặn ① biết chuỗi bí mật?</th></tr>
+          <tr><td>để nguyên</td><td>43 ký tự, trùng chuỗi bí mật</td><td class="red">có — làm được ③</td></tr>
+          <tr><td>băm</td><td>43 ký tự, khác hẳn</td><td>không</td></tr></table>
+        focus: [1, 1, 1, 2, "2.2", "2.3"]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, chọn phương thức để nguyên cho mã thách thức. Tiêu chuẩn vẫn cho phép một phương thức trong đó mã thách thức chính là chuỗi bí mật, không băm gì cả. Thư viện cũ hay cấu hình cho nhanh thường để mặc định này, và mọi thứ vẫn chạy bình thường nên không ai để ý. Bảng so hai phương thức khi kẻ xấu chặn được lượt một. Với phương thức để nguyên, mã thách thức trùng đúng 43 ký tự của chuỗi bí mật, nên kẻ chặn làm được lượt ba. Với phương thức băm, mã thách thức khác hẳn và không suy ngược được, nên hãy luôn dùng phương thức băm."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.pkce_challenge('a' * 43) != alg.pkce_challenge('a' * 42 + 'b') and len(alg.pkce_challenge('a' * 43)) == 43"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Kẻ xấu chặn được <b>mã thách thức</b> và <b>mã ủy quyền</b>, nhưng không có chuỗi bí mật. Có đổi được mã truy cập không? Vì sao?</td></tr>
+          <tr><td>2</td><td>Trang web cùng miền với API, người dùng chỉ dùng trình duyệt. Nên chọn phiên cookie hay mã truy cập lưu trong trang?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, kẻ xấu chặn được mã thách thức và mã ủy quyền, nhưng không có chuỗi bí mật. Có đổi được mã truy cập không, và vì sao? Câu hai, trang web cùng miền với API, người dùng chỉ dùng trình duyệt. Nên chọn phiên cookie, hay mã truy cập lưu trong trang? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 1: lần theo lượt ③</th><th>kẻ xấu có?</th></tr>
+          <tr><td>mã ủy quyền</td><td>có (chặn ở ②)</td></tr>
+          <tr><td>chuỗi bí mật mà băm ra đúng mã thách thức</td><td>không — băm không đảo ngược được</td></tr>
+          <tr><td>kết luận</td><td>$\hl{\text{không đổi được}}$</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Đáp án câu một, ta lần theo những gì lượt ba đòi hỏi. Mã ủy quyền thì kẻ xấu có, vì đã chặn được ở lượt hai. Nhưng lượt ba còn đòi chuỗi bí mật mà băm ra đúng mã thách thức, hàm băm không đảo ngược được, và đổi một ký tự là ra mã hoàn toàn khác. Vậy kẻ xấu không đổi được mã truy cập."
+      - show: |
+          <p>② Cùng miền, chỉ trình duyệt → <b>phiên cookie</b> <code>HttpOnly</code>, <code>Secure</code>, cờ cùng trang — mã kịch bản không đọc được; kèm chống giả mạo yêu cầu.</p>
+        say: "Câu hai, trang và API cùng miền, người dùng chỉ dùng trình duyệt, nên trình duyệt tự gửi cookie kèm mỗi yêu cầu mà không cần mã kịch bản chạm vào. Vì vậy chọn phiên cookie chỉ máy chủ đọc được, chỉ đi qua kết nối mã hoá, có cờ cùng trang, để mã kịch bản không đọc được, kèm biện pháp chống giả mạo yêu cầu."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">web cùng miền: phiên cookie an toàn</span><span class="a">→</span>
+          <span class="n">di động, nhiều bên: mã truy cập ngắn hạn</span><span class="a">→</span>
+          <span class="n">máy khách công khai: luồng mã ủy quyền + PKCE</span><span class="a">→</span>
+          <span class="n">không nhúng bí mật; thu hồi được</span></div>
+        say: "Tổng kết lại, web cùng miền dùng phiên cookie an toàn, còn di động và nhiều bên dùng mã truy cập ngắn hạn. Máy khách công khai dùng luồng mã ủy quyền có bằng chứng khoá, không nhúng bí mật, và mọi mã phải thu hồi được."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> đừng giấu bí mật ở nơi người khác cầm trong tay — hãy <b>chứng minh</b> bằng thứ chỉ tồn tại trong phiên hiện tại.</div>
+        say: "Điều cần mang theo, đừng giấu bí mật ở nơi người khác cầm trong tay, hãy chứng minh bằng thứ chỉ tồn tại trong phiên hiện tại."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 10): <b>hiệu năng web</b> — đường kết xuất quan trọng và kích thước tải về.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 10, ta học hiệu năng web, với đường kết xuất quan trọng và kích thước tải về. Hẹn gặp bạn ở bài tiếp theo."

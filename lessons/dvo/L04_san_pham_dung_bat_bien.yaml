@@ -1,0 +1,216 @@
+id: L04
+course: DVO
+series: "DVO · DevOps: tích hợp, triển khai liên tục và vận hành"
+title: "Bài 4 — Sản phẩm dựng bất biến và tái lập được"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/dvo.yaml L04; audit/dvo/verify_dvo.py L04; J. Humble, D. Farley, Continuous Delivery (2010), chương 5 (“chỉ dựng một lần”); Reproducible Builds, SOURCE_DATE_EPOCH specification (reproducible-builds.org); FIPS 180-4 (SHA-256); CLD bài 2 (ảnh container)"
+assumes: [arith]
+# Quy ước: “sản phẩm dựng” = gói kết quả của bước dựng (tệp nén, ảnh container). alg.artifact_digest đóng gói thật bằng zipfile với một thời điểm
+#   sửa cố định rồi băm SHA-256, hiện 12 ký tự đầu. Mã nguồn ví dụ: một tệp app.py một dòng.
+objectives:
+  - "Dựng một lần, triển khai nhiều môi trường"
+  - "Ghi mã băm của sản phẩm dựng"
+  - "Biết vì sao dựng lại có thể ra thứ khác"
+asr_reviewed:
+  - {sentence: "Bản B 10 ngày và bản C 2 ngày thì còn.", reason: "ASR chép “Bán B 10 ngày và bán C 2 ngày thì con.” (0.727): lệch âm/thanh thuần Việt: bản/bán, bản/bán, còn/con — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bảng có ba bản.", reason: "ASR chép “Bản có ba bản” (0.75): lệch âm/thanh thuần Việt: bảng/bản — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Tiếp theo là thứ tự các tệp, vì đổi thứ tự là đổi dãy byte.", reason: "ASR chép “Tiếp theo là thứ tự các tệp, vì đổi thứ tự là đổi giải bay.” (0.867): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: dãy (trong “dãy byte” → “giải bay”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Hàm băm biến một dãy byte bất kỳ thành một chuỗi 64 ký tự, và ta chỉ xem 12 ký tự đầu.", reason: "ASR chép “Hàm băm biến một giải bay bất kỳ thành một chuỗi 64 ký tự và ta chỉ xem 12 ký tự đâu.” (0.88): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: dãy (trong “dãy byte” → “giải bay”), đầu/đâu — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Gói lần một và lần hai cùng dài 128 byte, nhưng khác nhau ở 6 byte.", reason: "ASR chép “Gói lần 1 và lần 2 cùng dài 128 bài, nhưng khác nhau ở 6 bài.” (0.9): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Gói lần một và lần ba thì trùng từng byte.", reason: "ASR chép “Gói lần 1 và lần 3 thì trùng từng bay.” (0.9): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Kiểm bằng đường khác, không băm nữa mà đặt hai gói cạnh nhau và so từng byte.", reason: "ASR chép “Kiểm bằng đường khác, không băm nữa mà đặt hai gói cạnh nhau và so từng bay.” (0.941): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Cả 6 byte đó nằm ở hai chỗ ghi thời điểm, một ở đầu gói, một ở mục lục cuối gói.", reason: "ASR chép “Cả sáu bài đó nằm ở hai chỗ ghi thời điểm, một ở đầu gói, một ở mục lục cuối gói.” (0.952): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Thêm đúng một dấu chấm than, tức một byte, thì mã băm khác hoàn toàn, không giống dù chỉ vài ký tự.", reason: "ASR chép “Thêm đúng một dấu chấm than, tức một bay, thì mã băm khác hoàn toàn, không giống dù chỉ vài ký tự.” (0.955): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Đổi một byte là phải kiểm lại.", reason: "ASR chép “Đổi một bay là phải kiểm lại.” (0.857): byte đọc thô, ASR viết “bay” (probe CSA p1 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Tái lập nghĩa là cùng mã nguồn, cùng công cụ thì dựng ra đúng cùng từng byte.", reason: "ASR chép “Tái lập nghĩa là cùng mảm nguồn, cùng công cụ thì dựng ra đúng cùng từng bay.” (0.882): byte đọc thô, ASR viết “bay” (probe CSA p1 8/8); lệch âm/thanh thuần Việt: mã/mảm — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Mã băm là dấu vân tay của nội dung, đổi một byte là đổi mã băm, và ta dùng nó để chỉ chính xác bản nào.", reason: "ASR chép “Mả băm là giấu vân tay của nội dung, đổi một bay là đổi mả băm và ta dùng nó để chỉ chính xác bản nào.” (0.885): byte đọc thô, ASR viết “bay” (probe CSA p1 8/8); lệch âm/thanh thuần Việt: mã/mả, mã/mả — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Lần hai dựng lại với mã y nguyên, nhưng thời điểm là chiều ngày 2, và mã băm khác hẳn.", reason: "ASR chép “Lần hai dựng lại với mã yên nguyên, nhưng thời điểm là chiều ngày hai và mã băm khắc hẳn.” (0.9): lệch âm/thanh thuần Việt: i/yên, khác/khắc — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Đáp án câu một, có đổi, vì đổi một byte nội dung là đổi mã băm.", reason: "ASR chép “Đáp án câu một có đổi, vì đổi một vai nội dung là đổi mã băm.” (0.938): byte đọc thô, ASR viết “bay” (probe CSA p1 8/8) — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Thử nghiệm thì chạy, lên thật thì hỏng"
+    steps:
+      - show: |
+          <p>Bản đã qua mọi kiểm thử ở môi trường thử nghiệm. Để “sạch sẽ”, nhóm dựng lại từ mã nguồn rồi mới đưa lên môi trường thật. Bản dựng lại kéo về một thư viện vừa lên phiên bản mới — và hỏng.</p>
+          <div class="box key">Hôm nay: <b>sản phẩm dựng bất biến</b> — dựng <b>một lần</b>, thứ đã kiểm chính là thứ chạy thật.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, một bản đã qua mọi kiểm thử ở môi trường thử nghiệm. Để cho sạch sẽ, nhóm dựng lại từ mã nguồn rồi mới đưa lên môi trường thật. Bản dựng lại kéo về một thư viện vừa lên phiên bản mới, và hỏng. Hôm nay ta học về sản phẩm dựng bất biến, chỉ dựng một lần, để thứ đã kiểm chính là thứ chạy thật."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: hàm băm và khoảng phiên bản"
+    checks:
+      - "__import__('hashlib').sha256(b'xin chao').hexdigest()[:12] == 'f9b197ffdaa4' and __import__('hashlib').sha256(b'xin chao!').hexdigest()[:12] == '67fac6d42ab9'"
+      - "[v for v in ['1.4.0', '1.12.1'] if alg.version_key('1.4.0') <= alg.version_key(v) < alg.version_key('2.0.0')] == ['1.4.0', '1.12.1'] and alg.version_key('1.12.1') > alg.version_key('1.4.0')"
+    steps:
+      - show: |
+          <p><b>Hàm băm</b> SHA-256 biến một dãy byte bất kỳ thành một chuỗi 64 ký tự; ta chỉ xem 12 ký tự đầu.</p>
+          <table class="t"><tr><th>nội dung</th><th>mã băm (12 ký tự đầu)</th></tr>
+          <tr><td><code>xin chao</code></td><td><code>f9b197ffdaa4</code></td></tr>
+          <tr><td><code>xin chao!</code> (thêm 1 byte)</td><td><code class="red">67fac6d42ab9</code></td></tr></table>
+        focus: [1, "2.2", "2.3", 0]
+        say: "Trước hết, ôn hàm băm. Hàm băm biến một dãy byte bất kỳ thành một chuỗi 64 ký tự, và ta chỉ xem 12 ký tự đầu. Băm chữ xin chao được một chuỗi như trên bảng. Thêm đúng một dấu chấm than, tức một byte, thì mã băm khác hoàn toàn, không giống dù chỉ vài ký tự."
+      - show: |
+          <p>Ở bài 2, phụ thuộc được ghi bằng một <b>khoảng</b>, ví dụ <code>≥ 1.4.0 và &lt; 2.0.0</code>; khi dựng, công cụ lấy bản mới nhất có trong khoảng.</p>
+          <table class="t"><tr><th>lúc dựng</th><th>các bản đã có</th><th>bản được lấy</th></tr>
+          <tr><td>tuần trước</td><td>1.4.0</td><td>1.4.0</td></tr>
+          <tr><td>hôm nay</td><td>1.4.0, 1.12.1</td><td class="red">1.12.1</td></tr></table>
+        focus: [1, 1, "2.2", "2.3"]
+        say: "Thứ hai, ở bài 2 ta đã ghi phụ thuộc bằng một khoảng phiên bản, ví dụ từ 1 chấm 4 chấm 0 trở lên và nhỏ hơn 2 chấm 0 chấm 0. Khi dựng, công cụ lấy bản mới nhất có trong khoảng đó. Tuần trước chỉ có bản 1 chấm 4 chấm 0, nên bản dựng lấy nó. Hôm nay đã có 1 chấm 12 chấm 1, nên dựng lại từ cùng mã nguồn sẽ lấy bản mới này, đúng như chuyện ở đầu bài."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: bất biến, mã băm, tái lập"
+    steps:
+      - show: |
+          <table class="t"><tr><th>khái niệm</th><th>nghĩa</th></tr>
+          <tr><td><b>bất biến</b></td><td>sản phẩm dựng không bao giờ bị sửa sau khi tạo; muốn đổi thì dựng bản mới</td></tr>
+          <tr><td><b>mã băm</b></td><td>“dấu vân tay” của nội dung (SHA-256): đổi một byte là đổi mã băm; dùng để chỉ chính xác bản nào</td></tr>
+          <tr><td><b>tái lập</b></td><td>cùng mã nguồn, cùng công cụ → dựng ra đúng cùng từng byte</td></tr></table>
+          <div class="chain"><span class="n">dựng 1 lần</span><span class="a">→</span><span class="n">thử nghiệm</span><span class="a">→</span><span class="n">thật</span></div>
+          <p class="note">Cùng một sản phẩm (cùng mã băm) đi qua mọi môi trường; chỉ <b>cấu hình</b> thay đổi theo môi trường.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2, 3]
+        say: "Bảng giới thiệu ba khái niệm. Bất biến nghĩa là sản phẩm dựng không bao giờ bị sửa sau khi tạo, muốn đổi thì dựng bản mới. Mã băm là dấu vân tay của nội dung, đổi một byte là đổi mã băm, và ta dùng nó để chỉ chính xác bản nào. Tái lập nghĩa là cùng mã nguồn, cùng công cụ thì dựng ra đúng cùng từng byte. Quy trình là dựng một lần, rồi đưa qua thử nghiệm và lên môi trường thật. Cùng một sản phẩm với cùng mã băm đi qua mọi môi trường, chỉ có cấu hình thay đổi."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Một gói, hai môi trường, cấu hình cắm từ ngoài vào"
+    steps:
+      - show: |
+          <div><svg width="1500" height="390" viewBox="0 0 1500 390"><defs><marker id="arD4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs><rect x="30" y="150" width="190" height="80" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="125" y="200" font-size="24" text-anchor="middle" fill="#1f2937">mã nguồn</text><line x1="220" y1="190" x2="330" y2="190" stroke="#1f2937" stroke-width="3" marker-end="url(#arD4)"/><text x="275" y="140" font-size="20" text-anchor="middle" fill="#1f2937">dựng</text><text x="275" y="165" font-size="20" text-anchor="middle" fill="#1f2937">1 lần</text><rect x="335" y="135" width="290" height="110" rx="10" fill="#fed7aa" stroke="#eb6834" stroke-width="3"/><text x="480" y="180" font-size="24" text-anchor="middle" fill="#1f2937">gói, mã băm</text><text x="480" y="220" font-size="26" font-weight="bold" text-anchor="middle" fill="#eb6834">dac8a9bd655a</text><line x1="625" y1="165" x2="905" y2="100" stroke="#1f2937" stroke-width="3" marker-end="url(#arD4)"/><line x1="625" y1="215" x2="905" y2="280" stroke="#1f2937" stroke-width="3" marker-end="url(#arD4)"/><rect x="910" y="55" width="360" height="90" rx="10" fill="#ecfdf5" stroke="#059669" stroke-width="3"/><text x="1090" y="92" font-size="24" text-anchor="middle" fill="#1f2937">thử nghiệm</text><text x="1090" y="128" font-size="22" text-anchor="middle" fill="#eb6834">dac8a9bd655a</text><rect x="910" y="235" width="360" height="90" rx="10" fill="#ecfdf5" stroke="#059669" stroke-width="3"/><text x="1090" y="272" font-size="24" text-anchor="middle" fill="#1f2937">thật</text><text x="1090" y="308" font-size="22" text-anchor="middle" fill="#eb6834">dac8a9bd655a</text><rect x="1340" y="65" width="140" height="70" rx="8" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="1410" y="95" font-size="20" text-anchor="middle" fill="#1f2937">cấu hình</text><text x="1410" y="120" font-size="20" text-anchor="middle" fill="#1f2937">thử nghiệm</text><rect x="1340" y="245" width="140" height="70" rx="8" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="1410" y="275" font-size="20" text-anchor="middle" fill="#1f2937">cấu hình</text><text x="1410" y="300" font-size="20" text-anchor="middle" fill="#1f2937">thật</text><line x1="1340" y1="100" x2="1276" y2="100" stroke="#6b7280" stroke-width="3" marker-end="url(#arD4)"/><line x1="1340" y1="280" x2="1276" y2="280" stroke="#6b7280" stroke-width="3" marker-end="url(#arD4)"/><text x="560" y="375" font-size="22" text-anchor="middle" fill="#b91c1c">dựng lại riêng cho môi trường thật: mã băm 9f8086ff674d, chưa từng được kiểm</text></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ đường đi của một sản phẩm dựng. Mã nguồn được dựng đúng một lần thành một gói, gói có mã băm cố định. Chính gói đó, cùng mã băm, đi tới môi trường thử nghiệm rồi tới môi trường thật, còn cấu hình của mỗi nơi được cắm từ ngoài vào. Dòng đỏ ở dưới là cách làm sai, dựng lại riêng cho môi trường thật thì ra một gói có mã băm khác, chưa từng được kiểm."
+
+  - id: example
+    kind: example
+    title: "Cùng mã nguồn, khác mã băm"
+    checks:
+      - "alg.artifact_digest({'app.py': b'print(\"xin chao\")\\n'}, (2026, 10, 1, 9, 0, 0)) == 'dac8a9bd655a'"
+      - "alg.artifact_digest({'app.py': b'print(\"xin chao\")\\n'}, (2026, 10, 2, 14, 30, 0)) == '9f8086ff674d'"
+    steps:
+      - show: |
+          <p><b>Bước 1 — dựng lần một:</b> đóng gói tệp <code>app.py</code> thành tệp nén, băm SHA-256 (12 ký tự đầu).</p>
+          <table class="t"><tr><th>lần dựng</th><th>thời điểm ghi trong gói</th><th>mã băm</th></tr>
+          <tr><td>1</td><td>01/10 09:00</td><td><code>dac8a9bd655a</code></td></tr></table>
+        focus: [1, "2.2"]
+        say: "Bước một, ta đóng gói một tệp mã thành tệp nén, rồi băm, và xem 12 ký tự đầu. Lần một, thời điểm ghi trong gói là 9 giờ ngày 1 tháng 10, cho một mã băm như trên bảng."
+      - show: |
+          <p><b>Bước 2 — dựng lại, y nguyên mã:</b></p>
+          <table class="t"><tr><th>lần dựng</th><th>thời điểm ghi trong gói</th><th>mã băm</th></tr>
+          <tr><td>2</td><td>02/10 14:30</td><td><code class="red">9f8086ff674d</code></td></tr></table>
+        focus: [1, "2.2"]
+        say: "Bước hai, dựng lại một lần nữa. Lần hai dựng lại với mã y nguyên, nhưng thời điểm là chiều ngày 2, và mã băm khác hẳn."
+      - show: |
+          <p><b>Bước 3 — dựng lại, đặt cố định thời điểm:</b></p>
+          <table class="t"><tr><th>lần dựng</th><th>thời điểm ghi trong gói</th><th>mã băm</th></tr>
+          <tr><td>3</td><td>01/10 09:00 (cố định)</td><td><code>dac8a9bd655a</code></td></tr></table>
+        focus: [1, "2.2"]
+        say: "Bước ba, dựng lại nhưng đặt cố định thời điểm ghi trong gói bằng đúng thời điểm của lần một. Lần ba đặt cố định thời điểm như lần một, thì mã băm trùng lần một."
+      - clear: true
+        show: |
+          <p><b>Bước 4 — kết luận:</b> mã nguồn không đổi, nhưng gói chứa cả <b>thời điểm dựng</b> → mã băm khác. Muốn tái lập, cố định mọi thứ không thuộc mã nguồn:</p>
+          <table class="t"><tr><th>thứ cần cố định</th><th>vì sao</th></tr>
+          <tr><td>thời điểm ghi trong gói</td><td>vừa thấy ở bước 2</td></tr>
+          <tr><td>thứ tự các tệp trong gói</td><td>đổi thứ tự là đổi dãy byte</td></tr>
+          <tr><td>phiên bản công cụ và thư viện</td><td>khoảng phiên bản có thể lấy bản mới hơn</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", "2.4"]
+        say: "Bước bốn, kết luận. Mã nguồn không đổi, nhưng gói chứa cả thời điểm dựng nên mã băm khác. Muốn tái lập thì phải cố định mọi thứ không thuộc mã nguồn, trước hết là thời điểm ghi trong gói. Tiếp theo là thứ tự các tệp, vì đổi thứ tự là đổi dãy byte. Cuối cùng là phiên bản công cụ và thư viện, vì một khoảng phiên bản có thể lấy bản mới hơn."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: so thẳng từng byte của hai gói"
+    checks:
+      - "(lambda z, io, src: (lambda pk: (lambda a, b, c: (len(a), len(b), sum(x != y for x, y in zip(a, b)), [i for i, (x, y) in enumerate(zip(a, b)) if x != y], a == c, __import__('hashlib').sha256(a).hexdigest()[:12]))(pk((2026, 10, 1, 9, 0, 0)), pk((2026, 10, 2, 14, 30, 0)), pk((2026, 10, 1, 9, 0, 0))))(lambda mt: (lambda b: (lambda zf: (zf.writestr(z.ZipInfo('app.py', date_time=mt), src), zf.close(), b.getvalue())[2])(z.ZipFile(b, 'w', z.ZIP_STORED)))(io.BytesIO())))(__import__('zipfile'), __import__('io'), b'print(\"xin chao\")\\n') == (128, 128, 6, [10, 11, 12, 66, 67, 68], True, 'dac8a9bd655a')"
+    steps:
+      - show: |
+          <p>Đường khác: không băm nữa, đặt hai gói cạnh nhau và so <b>từng byte</b>.</p>
+          <table class="t"><tr><th>so</th><th>độ dài</th><th>số byte khác nhau</th></tr>
+          <tr><td>lần 1 với lần 2</td><td>128 và 128</td><td>6, nằm ở 2 chỗ ghi thời điểm (đầu gói và mục lục cuối gói)</td></tr>
+          <tr><td>lần 1 với lần 3</td><td>128 và 128</td><td>0 ✓ — trùng từng byte</td></tr></table>
+        focus: [1, "2.2", "2.2", "2.3", 0]
+        say: "Kiểm bằng đường khác, không băm nữa mà đặt hai gói cạnh nhau và so từng byte. Gói lần một và lần hai cùng dài 128 byte, nhưng khác nhau ở 6 byte. Cả 6 byte đó nằm ở hai chỗ ghi thời điểm, một ở đầu gói, một ở mục lục cuối gói. Gói lần một và lần ba thì trùng từng byte. Vậy mã băm khác nhau đúng vì thời điểm, không vì lý do nào khác."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc, 1 lỗi người đã đi làm"
+    checks:
+      - "[d > 14 for d in (20, 10, 2)] == [True, False, False]"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Dựng lại riêng cho môi trường thật <b class="red">(chưa từng được kiểm)</b>
+          <br><span class="note">Thứ chạy thật là một sản phẩm mới mà chưa kiểm thử nào chạy qua. Thăng hạng chính sản phẩm đã kiểm, nhận diện bằng mã băm.</span></div>
+        say: "Lỗi thứ nhất, dựng lại riêng cho môi trường thật. Thứ chạy thật khi đó là một sản phẩm mới mà chưa kiểm thử nào chạy qua. Hãy đưa lên chính sản phẩm đã kiểm, nhận diện bằng mã băm."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Gọi bản bằng nhãn có thể di chuyển <b class="red">(không biết đang chạy gì)</b>
+          <br><span class="note">Nhãn “mới nhất” hay “ổn định” có thể được gán lại cho bản khác. Ghi mã băm vào bản ghi triển khai để biết chính xác thứ đang chạy.</span></div>
+        say: "Lỗi thứ hai, gọi bản bằng một nhãn có thể di chuyển. Nhãn mới nhất hay ổn định có thể được gán lại cho bản khác, nên hãy ghi mã băm vào bản ghi triển khai để biết chính xác thứ đang chạy."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Đóng cấu hình môi trường vào sản phẩm <b class="red">(mỗi nơi một bản)</b>
+          <br><span class="note">Địa chỉ cơ sở dữ liệu nằm trong gói thì thử nghiệm và thật phải là hai gói khác nhau — mất ý nghĩa “dựng một lần”. Cấu hình đưa vào lúc chạy.</span></div>
+        say: "Lỗi thứ ba, đóng cấu hình môi trường vào sản phẩm. Địa chỉ cơ sở dữ liệu nằm trong gói thì thử nghiệm và môi trường thật phải là hai gói khác nhau, mất hẳn ý nghĩa dựng một lần. Cấu hình phải được đưa vào lúc chạy."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Kho sản phẩm dựng tự dọn mọi bản cũ hơn 14 ngày <b class="red">(xoá mất bản đang chạy thật)</b></div>
+          <table class="t"><tr><th>bản</th><th>dựng cách đây</th><th>đang chạy ở</th><th>dọn theo tuổi, giữ 14 ngày</th></tr>
+          <tr><td>A</td><td>20 ngày</td><td>thật</td><td class="red">bị xoá</td></tr>
+          <tr><td>B</td><td>10 ngày</td><td>thử nghiệm</td><td>còn</td></tr>
+          <tr><td>C</td><td>2 ngày</td><td>chưa triển khai</td><td>còn</td></tr></table>
+        focus: [1, 2, "2.2", "2.3", 0, 0]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, kho sản phẩm dựng đầy dần, nên ai đó đặt luật tự dọn mọi bản cũ hơn 14 ngày. Bảng có ba bản. Bản A dựng cách đây 20 ngày, đang chạy ở môi trường thật, và bị xoá vì 20 lớn hơn 14. Bản B 10 ngày và bản C 2 ngày thì còn. Khi cần thêm máy hay quay lui về bản A, hệ thống tìm gói theo mã băm và không thấy, mà dựng lại thì ra gói khác chưa từng được kiểm. Người làm nghề dọn theo cách dùng, giữ mọi bản đang chạy ở bất kỳ môi trường nào cùng vài bản gần nhất từng lên thật, rồi mới dọn theo tuổi."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.artifact_digest({'app.py': b'print(\"xin chao!\")\\n'}, (2026, 10, 1, 9, 0, 0)) != alg.artifact_digest({'app.py': b'print(\"xin chao\")\\n'}, (2026, 10, 1, 9, 0, 0))"
+      - "alg.artifact_digest({'app.py': b'print(\"xin chao!\")\\n'}, (2026, 10, 1, 9, 0, 0)) == 'e31d85ce8d71'"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Thêm một dấu chấm than vào chuỗi trong <code>app.py</code>, giữ nguyên thời điểm: mã băm có đổi không?</td></tr>
+          <tr><td>2</td><td>Bản ghi triển khai chỉ viết “phiên bản: mới nhất”. Khi có sự cố, khó khăn gì xuất hiện?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, thêm một dấu chấm than vào chuỗi trong tệp mã, giữ nguyên thời điểm, mã băm có đổi không? Câu hai, bản ghi triển khai chỉ viết phiên bản mới nhất. Khi có sự cố, khó khăn gì xuất hiện? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>nội dung <code>app.py</code></th><th>thời điểm</th><th>mã băm</th></tr>
+          <tr><td><code>print("xin chao")</code></td><td>01/10 09:00</td><td><code>dac8a9bd655a</code></td></tr>
+          <tr><td><code>print("xin chao!")</code></td><td>01/10 09:00</td><td><code class="red">e31d85ce8d71</code></td></tr></table>
+        focus: [0, "1.2", "1.3"]
+        say: "Đáp án câu một, có đổi, vì đổi một byte nội dung là đổi mã băm. Gói cũ, thời điểm 9 giờ ngày 1 tháng 10, có mã băm như dòng trên. Thêm dấu chấm than, giữ nguyên thời điểm, ta được một mã băm hoàn toàn khác ở dòng dưới."
+      - show: |
+          <table class="t"><tr><th>câu hỏi khi có sự cố</th><th>ghi “mới nhất”</th><th>ghi mã băm</th></tr>
+          <tr><td>bản nào đang chạy?</td><td class="red">không biết chắc</td><td>biết chính xác</td></tr>
+          <tr><td>khác gì bản trước?</td><td class="red">không so được</td><td>so được hai gói</td></tr>
+          <tr><td>quay lui về đâu?</td><td class="red">không biết đúng bản</td><td>gói của bản trước</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Câu hai, đặt hai cách ghi cạnh nhau. Chỉ ghi mới nhất thì ta không biết chính xác bản nào đang chạy, vì nhãn đó có thể đã được gán lại. Ta cũng không so được với bản trước. Và ta không quay lui đúng bản được, còn ghi mã băm thì trả lời được cả ba câu."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">dựng một lần</span><span class="a">→</span>
+          <span class="n">nhận diện bằng mã băm</span><span class="a">→</span>
+          <span class="n">cùng sản phẩm qua mọi môi trường</span><span class="a">→</span>
+          <span class="n">cố định thứ ngoài mã nguồn để tái lập</span></div>
+        say: "Tổng kết lại, dựng một lần, nhận diện bằng mã băm, đưa cùng một sản phẩm qua mọi môi trường, và cố định mọi thứ ngoài mã nguồn để tái lập được."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> bằng chứng kiểm thử chỉ có giá trị cho <b>đúng</b> thứ đã được kiểm. Đổi một byte là phải kiểm lại.</div>
+        say: "Điều cần mang theo, bằng chứng kiểm thử chỉ có giá trị cho đúng thứ đã được kiểm. Đổi một byte là phải kiểm lại."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 5): <b>hạ tầng dạng mã</b> — khai báo và lũy đẳng.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 5, ta học hạ tầng dạng mã, với khai báo và lũy đẳng. Hẹn gặp bạn ở bài tiếp theo."

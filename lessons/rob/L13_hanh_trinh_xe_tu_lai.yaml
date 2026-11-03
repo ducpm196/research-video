@@ -1,0 +1,404 @@
+id: L13
+course: ROB
+series: "ROB · Robot tự hành"
+title: "Bài 13 — Tình huống chuyên gia theo dòng thời gian: xe tự lái từ sa mạc tới đường phố"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+case: journey
+source: "curriculum/rob.yaml L13; audit/rob/sources_L13.md (câu trích nguyên văn, đọc 2026-11-02); audit/verify_plan_curricula.py ROB:L13; audit/rob/verify_rob.py L13; S. Thrun và cộng sự, Stanley: The Robot that Won the DARPA Grand Challenge, Journal of Field Robotics 23(9), 2006, bản tại robots.stanford.edu [ST06]; M. Schwall và cộng sự (Waymo), Waymo Public Road Safety Performance Data, 2020, arXiv:2011.00038 [WM20]; Waymo, Waymo's Safety Methodologies and Safety Readiness Determinations, 10/2020, arXiv:2011.00054 [WS20]; K. D. Kusano và cộng sự (Waymo), Comparison of Waymo Rider-Only Crash Data to Human Benchmarks at 7.1 Million Miles, Traffic Injury Prevention 2024, arXiv:2312.12675v3 [KU24]; K. D. Kusano và cộng sự (Waymo), Comparison of Waymo Rider-Only Crash Rates by Crash Type to Human Benchmarks at 56.7 Million Miles, arXiv:2505.01515v1, 2025 [KU25]; ROB bài 2 (đo quãng đường), bài 5 (Kalman mở rộng), bài 6 (bản đồ lưới), bài 12 (quãng dừng)"
+assumes: [arith, frac, power, cdot, approx, sqrt]
+# Quy ước: quãng dừng = v·t + v²/(2a) như bài 12 (alg.stop_distance), tốc độ lớn nhất dừng kịp trong tầm R là alg.max_safe_speed.
+#   Đơn vị giữ như nguồn: dặm, dặm/giờ; 1 dặm/giờ = 0,44704 m/s (phép đổi, không phải số của nguồn); 1 dặm ≈ 1,609 km.
+#   “Tỉ lệ trên một triệu dặm” = số vụ chia số triệu dặm đã chạy (nguồn viết IPMM). “Mô phỏng phản thực” = counterfactual simulation.
+#   Mọi sự kiện và con số có nguồn ghi trong audit/rob/sources_L13.md. Con số khác là phép tính lại (checks) hoặc ghi “(số minh hoạ)”:
+#   phanh 4 m/s² và trễ 0,2 s ở chặng 3; xe giao hàng 2–3 m/s, tầm 4 m và 8 m, phanh 0,8 m/s², trễ 0,25 s, tuyến 1,5 km, 2000 km thử,
+#   4 lần can thiệp, mốc 1 sự cố mỗi 1000 km, 40% quãng phải chậm lại ở câu đố đều là SỐ MINH HOẠ.
+#   Không nêu tên người; tên tác giả chỉ ở source. Lời đọc không đọc “IPMM”, “UKF”, “MDBCF”, “ODD”, “lidar”: nói bằng lời Việt.
+#   Tên DARPA, Stanley, Stanford, Waymo, Phoenix và từ laser, radar chỉ hiện trên màn hình (probe audit/rob/probes/p1_hanh_trinh.md:
+#   laser mọi cách ≤ 3/8) — lời đọc nói “máy quét tia sáng”, “cảm biến sóng vô tuyến”, “một hãng xe tự lái lớn”, “thành phố thử đầu tiên”.
+objectives:
+  - "Kể lại hành trình xe tự lái qua năm chặng từ cuộc thi sa mạc 2004 tới dịch vụ không người lái năm 2025, mỗi chặng một điểm nghẽn và một cách xử lý"
+  - "Tính lại quãng dừng so với tầm thấy của cảm biến, sai số độ cao do lệch góc nhỏ, quãng đường trung bình giữa hai lần can thiệp và tỉ lệ sự cố trên một triệu dặm"
+  - "Quyết định tốc độ, cảm biến và lúc bỏ người đi kèm cho một đội xe nhỏ, kèm điều kiện đổi lựa chọn"
+asr_reviewed:
+  - {sentence: "Thứ nhất, báo tỉ lệ kèm khoảng tin cậy.", reason: "ASR chép “Thứ nhất, báo tỷ lệ kèm khoảng tiên cậy.” (0.778): “tỉ” ASR viết chính tả “tỷ” (cùng âm); lệch âm/thanh thuần Việt: tin/tiên — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Ở bài 6, bản đồ lưới cho mỗi ô một niềm tin có vật cản hay không.", reason: "ASR chép “Ở bài 6, bản đồ lưới cho mỗi ôm một niềm tin có vật cản hay không?” (0.941): “ô” (ô lưới) ASR viết chữ “O” — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Từ không xe nào về đích tới 56,7 triệu dặm không người lái"
+    checks:
+      - "round(0.05 * 142, 1) == 7.1 and 107 > 15 and 195 > 23 > 5"
+    steps:
+      - show: |
+          <p>Tháng 3/2004: đường đua sa mạc dài <b>142 dặm</b>, 15 xe xuất phát, <b>không xe nào đi quá 5%</b> quãng đường.</p>
+          <p>Tháng 10/2005: 23 xe xuất phát, <b>5 xe về đích</b>; xe thắng chạy hết trong 6 giờ 53 phút 58 giây.</p>
+          <p>Tháng 1/2025: một đội xe chở khách <b>không có người lái</b> đã chạy <b>56,7 triệu dặm</b> trên đường phố của bốn thành phố.</p>
+          <div class="box key">Hôm nay: năm chặng — mỗi quy mô làm lộ ra điểm nghẽn nào, đội làm xe đã xử lý ra sao, và ta rút ra thực hành gì cho robot của mình.</div>
+        focus: [1, 2, 3, 4]
+        say: "Chào bạn, tháng 3 năm 2004, một cuộc đua xe tự lái trên đường sa mạc dài 142 dặm có 15 xe xuất phát, và không xe nào đi quá 5 phần trăm quãng đường. Chỉ 19 tháng sau, đã có 5 xe về đích. Tới tháng 1 năm 2025, một đội xe chở khách không có người lái đã chạy 56 phẩy 7 triệu dặm trên đường phố. Hôm nay ta đi qua năm chặng, xem mỗi quy mô làm lộ ra điểm nghẽn nào, và rút ra thực hành gì cho robot của mình."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại bốn điều từ các bài trước"
+    checks:
+      - "round(10 * math.sin(math.radians(1)), 3) == 0.175"
+      - "abs(alg.stop_distance(1.5, 1, 0.2) - 1.425) < 1e-9"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài</th><th>điều đã học</th><th>ví dụ số</th></tr>
+          <tr><td>bài 2</td><td>lệch một góc nhỏ thì sai số ngang lớn dần theo khoảng cách</td><td>lệch 1° sau 10 m → lệch ngang ≈ 0,175 m</td></tr>
+          <tr><td>bài 5</td><td>lọc Kalman mở rộng gộp mô hình chuyển động với các phép đo</td><td>dự đoán bằng vận tốc, sửa bằng vị trí đo</td></tr>
+          <tr><td>bài 6</td><td>bản đồ lưới: mỗi ô giữ niềm tin “có vật cản hay không”</td><td>đo nhiều lần mới chắc một ô bị chiếm</td></tr>
+          <tr><td>bài 12</td><td>quãng dừng = quãng đi trong lúc phản ứng + quãng phanh</td><td>1,5 m/s, phanh 1 m/s², trễ 0,2 s → $\hlg{1{,}425}$ m</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bảng nhắc lại bốn điều từ các bài trước. Ở bài 2, lệch 1 độ sau 10 mét là lệch ngang khoảng 0 phẩy 175 mét. Ở bài 5, lọc Kalman mở rộng dự đoán bằng mô hình chuyển động rồi sửa bằng phép đo. Ở bài 6, bản đồ lưới cho mỗi ô một niềm tin có vật cản hay không. Ở bài 12, quãng dừng bằng quãng đi trong lúc phản ứng cộng quãng phanh, 1 phẩy 5 mét mỗi giây cho 1 phẩy 425 mét."
+      - show: |
+          $$\text{quãng dừng} = v \cdot t + \dfrac{v^2}{2a}$$
+          <p class="note">$v$ = tốc độ (m/s), $t$ = thời gian phản ứng (s), $a$ = gia tốc phanh (m/s²). Dùng lại ở chặng 3 và ở câu đố.</p>
+        focus: [1, 2]
+        say: "Viết lại công thức của bài 12, quãng dừng bằng v nhân t, cộng v bình phương chia cho 2 a. Ở đây v là tốc độ, t là thời gian phản ứng, a là gia tốc phanh."
+
+  # ───────────────────────── 3. NGÔN NGỮ ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Ngôn ngữ của hành trình"
+    checks:
+      - "round(25 * 0.44704, 2) == 11.18 and round(1.609 * 142) == 228"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thuật ngữ</th><th>nghĩa</th></tr>
+          <tr><td><b>dặm</b>, <b>dặm/giờ</b></td><td>đơn vị của nguồn Mỹ: 1 dặm ≈ 1,609 km; 25 dặm/giờ ≈ 11,18 m/s</td></tr>
+          <tr><td><b>can thiệp</b></td><td>người phải giành lại tay lái</td></tr>
+          <tr><td><b>mô phỏng phản thực</b></td><td>chạy lại trên máy: “nếu người không can thiệp thì chuyện gì xảy ra?”</td></tr>
+          <tr><td><b>tỉ lệ trên một triệu dặm</b></td><td>số vụ chia số triệu dặm đã chạy</td></tr>
+          <tr><td><b>mốc so sánh</b></td><td>tỉ lệ của người lái trên cùng loại đường, cùng thành phố, cùng loại xe</td></tr>
+          <tr><td><b>vùng hoạt động</b></td><td>nơi và điều kiện mà hệ thống được phép chạy</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", "1.6", "1.7"]
+        say: "Bài dùng sáu thuật ngữ. Một dặm khoảng 1 phẩy 609 ki-lô-mét, và 25 dặm một giờ khoảng 11 phẩy 18 mét mỗi giây. Can thiệp là lúc người phải giành lại tay lái. Mô phỏng phản thực là chạy lại trên máy để hỏi, nếu người không can thiệp thì chuyện gì xảy ra. Tỉ lệ trên một triệu dặm là số vụ chia cho số triệu dặm đã chạy. Mốc so sánh là tỉ lệ của người lái trên cùng loại đường, cùng thành phố, cùng loại xe. Vùng hoạt động là nơi và điều kiện mà hệ thống được phép chạy."
+
+  # ───────────────────────── 4. DÒNG THỜI GIAN ─────────────────────────
+  - id: timeline
+    kind: intuition
+    title: "Năm chặng trên một trục thời gian"
+    steps:
+      - show: |
+          <div><svg width="1700" height="330" viewBox="0 0 1700 330">
+          <line x1="30" y1="150" x2="1670" y2="150" stroke="#1f2937" stroke-width="3"/>
+          <g font-size="24" text-anchor="middle" fill="#1f2937">
+          <circle cx="160" cy="150" r="15" fill="#9ca3af"/><text x="160" y="108" font-weight="bold">2004</text><text x="160" y="200">đua sa mạc</text><text x="160" y="232">không xe nào quá 5%</text>
+          <circle cx="500" cy="150" r="15" fill="#2a78d6"/><text x="500" y="108" font-weight="bold">2004 → 2005</text><text x="500" y="200">đo độ tin cậy</text><text x="500" y="232">1 dặm → 418 dặm</text>
+          <circle cx="850" cy="150" r="15" fill="#7c3aed"/><text x="850" y="108" font-weight="bold">2005</text><text x="850" y="200">tầm thấy theo tốc độ</text><text x="850" y="232">22 m → 70 m</text>
+          <circle cx="1200" cy="150" r="15" fill="#eb6834"/><text x="1200" y="108" font-weight="bold">2009 → 2020</text><text x="1200" y="200">đường phố, có người kèm</text><text x="1200" y="232">6,1 triệu dặm</text>
+          <circle cx="1540" cy="150" r="15" fill="#059669"/><text x="1540" y="108" font-weight="bold">2023 → 2025</text><text x="1540" y="200">không người lái</text><text x="1540" y="232">56,7 triệu dặm</text>
+          </g>
+          <text x="850" y="300" font-size="23" fill="#6b7280" text-anchor="middle">khai sinh → tăng trưởng → chạy thật → quy mô thành phố → ổn định và tiếp tục mở rộng</text>
+          </svg></div>
+        focus: [1, 1, 1, 1, 1, 1]
+        say: "Hình là trục thời gian với năm chặng. Năm 2004, không xe nào đi quá 5 phần trăm đường đua. Từ 2004 tới 2005, một đội đo độ tin cậy của xe mình. Năm 2005, tầm nhìn của cảm biến phải theo kịp tốc độ. Từ 2009 tới 2020, xe ra đường phố với người ngồi kèm. Từ 2023 tới 2025, xe chở khách không người lái."
+
+  # ───────────────────────── 5. CƠ CHẾ: TẦM THẤY VÀ QUÃNG DỪNG ─────────────────────────
+  - id: range_mech
+    kind: concept
+    title: "Cơ chế xuyên suốt: thấy xa hơn quãng dừng"
+    steps:
+      - show: |
+          <div><svg width="1600" height="330" viewBox="0 0 1600 330">
+          <defs><marker id="ah" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="12" refX="14" refY="6" orient="auto"><path d="M0,0 L16,6 L0,12 z" fill="#1f2937"/></marker></defs>
+          <rect x="40" y="130" width="90" height="50" rx="8" fill="#1f2937"/>
+          <text x="85" y="215" font-size="22" text-anchor="middle" fill="#1f2937">xe</text>
+          <rect x="130" y="60" width="440" height="40" fill="#dcfce7" stroke="#059669" stroke-width="2"/>
+          <text x="350" y="88" font-size="22" text-anchor="middle" fill="#065f46">máy quét laser thấy ≈ 22 m</text>
+          <rect x="130" y="240" width="1400" height="40" fill="#e0ecfb" stroke="#2a78d6" stroke-width="2"/>
+          <text x="830" y="268" font-size="22" text-anchor="middle" fill="#1e3a8a">camera thường nhìn tới ≈ 70 m</text>
+          <line x1="130" y1="155" x2="486" y2="155" stroke="#059669" stroke-width="6" marker-end="url(#ah)"/>
+          <text x="310" y="140" font-size="22" text-anchor="middle" fill="#059669">dừng ở 25 dặm/giờ</text>
+          <line x1="130" y1="190" x2="804" y2="190" stroke="#e11d48" stroke-width="6" marker-end="url(#ah)"/>
+          <text x="980" y="196" font-size="22" text-anchor="middle" fill="#e11d48">dừng ở 35 dặm/giờ</text>
+          </svg></div>
+        focus: [1, 1, 1]
+        say: "Hình này là cơ chế xuyên suốt của bài, xe chỉ an toàn khi quãng dừng ngắn hơn tầm thấy vật cản của cảm biến. Máy quét tia sáng thấy khoảng 22 mét, đủ cho 25 dặm một giờ nhưng không đủ cho 35. Camera nhìn tới khoảng 70 mét, nên xe chạy nhanh hơn được khi đường trống."
+
+  # ───────────────────────── 6. CHẶNG 1 ─────────────────────────
+  - id: stage1
+    kind: example
+    title: "Chặng 1, năm 2004 — khai sinh: không xe nào đi quá 5%"
+    stage: {year: "2004", scale: "đường 142 dặm qua sa mạc Mojave, tối đa 10 giờ, giải 1 triệu đô; 107 đội đăng ký, 15 xe xuất phát, không xe nào quá 5% quãng đường; không được can thiệp bằng tay", source: "[ST06]", practice: "đo bằng mục tiêu của cả hệ thống trên đường thật (đi hết quãng, trong hạn, không ai chạm vào), không chỉ bằng từng khối chạy tốt riêng lẻ"}
+    checks:
+      - "round(0.05 * 142, 1) == 7.1 and round(142 / 10, 1) == 14.2"
+      - "round(7.1 / 142, 2) == 0.05"
+    steps:
+      - show: |
+          <p><b>Quy mô:</b> năm 2003, cơ quan nghiên cứu quốc phòng Mỹ (DARPA) mở cuộc thi để thúc đẩy xe mặt đất không người lái. Lần đầu, ngày 13/3/2004:</p>
+          <table class="t"><tr><th>luật và kết quả</th><th>con số</th></tr>
+          <tr><td>đường đua qua sa mạc</td><td>142 dặm, tối đa 10 giờ</td></tr>
+          <tr><td>can thiệp bằng tay</td><td><b>tuyệt đối không</b>; đường đua giữ bí mật tới 2 giờ trước giờ đua</td></tr>
+          <tr><td>số đội</td><td>107 đăng ký, 15 xuất phát</td></tr>
+          <tr><td>kết quả</td><td>không xe nào đi quá <b>5%</b> quãng đường</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.5"]
+        say: "Ở chặng một, cơ quan nghiên cứu quốc phòng Mỹ mở một cuộc thi xe không người lái, lần đầu diễn ra ngày 13 tháng 3 năm 2004. Đường đua qua sa mạc dài 142 dặm, phải chạy xong trong tối đa 10 giờ. Luật cấm tuyệt đối can thiệp bằng tay, và đường đua được giữ bí mật tới 2 giờ trước giờ đua. Trong 15 xe xuất phát, không xe nào đi quá 5 phần trăm quãng đường."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. 5% của 142 dặm</td><td>0,05 nhân 142</td><td>xe đi xa nhất chưa quá $\hl{7{,}1}$ dặm</td></tr>
+          <tr><td>Bước 2. tốc độ trung bình tối thiểu để về đích trong hạn</td><td>142 chia 10</td><td>$\hlb{14{,}2}$ dặm/giờ, suốt 10 giờ không ngừng</td></tr></table>
+          <p><b>Điểm nghẽn:</b> không phải một thuật toán riêng lẻ, mà là <b>độ tin cậy của cả hệ thống</b> khi không ai được chạm vào xe.</p>
+          <p class="note">Thực hành: đặt mục tiêu bằng con số của cả hệ thống trên đường thật — đi hết quãng, trong hạn, không ai can thiệp. Điều kiện: phép thử phải giống điều kiện thật, kể cả việc không biết trước đường đi.</p>
+        focus: [1, "1.2", "1.3", 2, 3, 3]
+        say: "Tính lại quy mô của thất bại này. Bước một, 5 phần trăm của 142 dặm là 7 phẩy 1 dặm, nên xe đi xa nhất chưa quá 7 phẩy 1 dặm. Bước hai, muốn về đích trong 10 giờ, xe phải giữ trung bình ít nhất 14 phẩy 2 dặm một giờ, suốt 10 giờ. Điểm nghẽn là độ tin cậy của cả hệ thống khi không ai được chạm vào xe. Thực hành rút ra là đặt mục tiêu bằng con số của cả hệ thống trên đường thật. Điều kiện là phép thử phải giống điều kiện thật."
+
+  # ───────────────────────── 7. CHẶNG 2 ─────────────────────────
+  - id: stage2
+    kind: example
+    title: "Chặng 2, năm 2004 tới 2005 — tăng trưởng: đo độ tin cậy, sửa lỗi bằng xác suất"
+    stage: {year: "2004 → 2005", scale: "xe Stanley của đại học Stanford: quãng trung bình giữa hai lần can thiệp ≈ 1 dặm (12/2004) → 20 dặm (7/2005); 418 dặm cuối trước vòng loại không hỏng; hơn 1200 dặm tự lái; lệch góc dưới 0,5° làm 12,6% mặt đường đi được bị xếp là vật cản", source: "[ST06]", practice: "ghép đủ cả hệ thống sớm (mẫu chạy từ đầu tới cuối gần một năm trước cuộc đua), theo dõi một con số độ tin cậy, đóng băng phần mềm trước ngày chạy; sửa sai số tư thế bằng mô hình xác suất và học tham số từ dữ liệu đã ghi thay vì mua cảm biến đắt"}
+    checks:
+      - "20 / 1 == 20 and round(418 / 20, 1) == 20.9 and 1200 > 418 > 200"
+      - "round(30 * math.sin(math.radians(0.5)), 3) == 0.262 and 0.262 > 0.15"
+      - "round(12.6 / 0.002) == 6300"
+    steps:
+      - show: |
+          <p><b>Cách đo của đội Stanford (xe Stanley):</b> một con số cho cả xe — <b>quãng đường trung bình giữa hai lần người phải can thiệp</b>. Đội ghép đủ hệ thống sớm: mẫu chạy từ đầu tới cuối có từ <b>gần một năm</b> trước cuộc đua.</p>
+          <table class="t"><tr><th>thời điểm</th><th>quãng trung bình giữa hai lần can thiệp</th><th>tính lại</th></tr>
+          <tr><td>12/2004</td><td>≈ 1 dặm</td><td>mốc xuất phát</td></tr>
+          <tr><td>7/2005</td><td>20 dặm</td><td>gấp $\hlb{20}$ lần sau 7 tháng</td></tr>
+          <tr><td>trước vòng loại</td><td>418 dặm cuối <b>không hỏng lần nào</b>, có một lượt 200 dặm</td><td>dài hơn quãng của tháng 7 khoảng 20,9 lần</td></tr></table>
+          <p class="note">Xe đã tự lái hơn 1200 dặm. Mọi phần mềm và phần cứng được gỡ lỗi rồi <b>đóng băng</b> trước cuộc đua.</p>
+        focus: [1, 1, "2.2", "2.3", "2.4", 3]
+        say: "Ở chặng hai, đội sẽ thắng năm 2005 đo cả xe bằng một con số, là quãng đường trung bình giữa hai lần người phải can thiệp. Họ ghép đủ hệ thống rất sớm, gần một năm trước cuộc đua. Tháng 12 năm 2004, con số này khoảng 1 dặm. Tháng 7 năm 2005 nó lên 20 dặm, gấp 20 lần. Trước vòng loại, 418 dặm cuối không hỏng lần nào. Xe đã tự lái hơn 1200 dặm, và mọi phần mềm được đóng băng trước cuộc đua."
+      - clear: true
+        show: |
+          <p><b>Một lỗi thật đội gặp:</b> máy quét laser chiếu xuống đường xa tới <b>30 m</b>; chỉ lệch góc nghiêng dưới <b>0,5°</b> là đường bằng bị vẽ thành vật cản (ngưỡng độ cao 15 cm).</p>
+          <table class="t"><tr><th>bước (như bài 2: sai số = khoảng cách nhân sin góc)</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. lệch 0,5° ở 30 m</td><td>30 nhân sin 0,5°</td><td>≈ $\hl{0{,}262}$ m, vượt ngưỡng 0,15 m</td></tr></table>
+          <p>Trên dữ liệu đã gán nhãn: <b>12,6%</b> mặt đường đi được bị xếp nhầm là vật cản. Hệ đo tư thế đủ chính xác để tránh lỗi này giá <b>hàng trăm nghìn đô</b> — quá đắt cho dự án.</p>
+        focus: [1, "2.2", 3, 3]
+        say: "Một lỗi thật mà đội gặp, máy quét tia sáng chiếu xuống đường xa tới 30 mét, và chỉ lệch góc nghiêng dưới nửa độ là đường bằng bị vẽ thành vật cản. Bước một, theo cách tính của bài 2, lệch nửa độ ở 30 mét cho sai số độ cao khoảng 0 phẩy 262 mét, vượt ngưỡng 15 xen-ti-mét. Kết quả là 12 phẩy 6 phần trăm mặt đường đi được bị xếp nhầm là vật cản. Hệ đo tư thế đủ chính xác thì quá đắt cho dự án."
+      - clear: true
+        show: |
+          <p><b>Cách xử lý:</b> không mua cảm biến đắt hơn, mà <b>coi sai số tư thế là một đại lượng ngẫu nhiên</b> khi so độ cao hai điểm, rồi chỉnh các tham số bằng cách thử lần lượt trên <b>dữ liệu đã ghi</b>.</p>
+          <table class="t"><tr><th>bước</th><th>trước</th><th>sau</th></tr>
+          <tr><td>Bước 2. tỉ lệ đường đi được bị báo nhầm là vật cản</td><td>12,6%</td><td>$\hlg{0{,}002\%}$</td></tr>
+          <tr><td>Bước 3. giảm bao nhiêu lần</td><td colspan="2">12,6 chia 0,002 = 6300 lần</td></tr></table>
+          <p class="note">Thực hành: ghép sớm, đo một con số của cả hệ, đóng băng trước ngày chạy; sửa sai số bằng mô hình xác suất và dữ liệu đã ghi. Điều kiện: có đủ dữ liệu ghi lại từ đúng loại địa hình sẽ chạy.</p>
+        focus: [1, 1, "2.2", "2.3", 3, 3]
+        say: "Cách xử lý không phải là mua cảm biến đắt hơn. Đội coi sai số tư thế là một đại lượng ngẫu nhiên khi so độ cao hai điểm, giống tinh thần bản đồ lưới ở bài 6. Bước hai, sau khi chỉnh tham số trên dữ liệu đã ghi, tỉ lệ báo nhầm giảm từ 12 phẩy 6 xuống 0 phẩy 002 phần trăm. Bước ba, 12 phẩy 6 chia 0 phẩy 002 là giảm 6300 lần. Thực hành rút ra là ghép sớm, đo một con số của cả hệ, sửa sai số bằng xác suất và dữ liệu. Điều kiện là có đủ dữ liệu từ đúng loại địa hình sẽ chạy."
+
+  # ───────────────────────── 8. CHẶNG 3 ─────────────────────────
+  - id: stage3
+    kind: example
+    title: "Chặng 3, năm 2005 — chạy thật: tầm thấy phải theo kịp tốc độ"
+    stage: {year: "2005", scale: "8/10/2005: 195 đội đăng ký, 23 xe xuất phát, 5 xe về đích; xe thắng chạy 6 giờ 53 phút 58 giây, trung bình 19,1 dặm/giờ; máy quét laser thấy ≈ 22 m (đủ cho 25 dặm/giờ), cần 35 dặm/giờ nên thêm camera nhìn ≈ 70 m; lọc Kalman ước lượng 15 biến trạng thái 100 lần mỗi giây", source: "[ST06]", practice: "chọn tốc độ theo tầm thấy của cảm biến (quãng dừng phải ngắn hơn tầm thấy); cảm biến xa chỉ cho phép chạy nhanh khi đường trống, thấy nghi ngờ thì giảm về tốc độ mà cảm biến gần còn đủ; bỏ cảm biến có rủi ro kỹ thuật lớn hơn lợi ích; kiểm dấu thời gian của mọi dòng dữ liệu"}
+    checks:
+      - "round(25 * 0.44704, 2) == 11.18 and round(35 * 0.44704, 2) == 15.65"
+      - "round(alg.stop_distance(25 * 0.44704, 4, 0.2), 1) == 17.8 < 22"
+      - "22 < round(alg.stop_distance(35 * 0.44704, 4, 0.2), 1) == 33.7 < 70"
+      - "round(alg.max_safe_speed(22, 4, 0.2) / 0.44704, 1) == 27.9"
+      - "round(19.1 * (6 + 53 / 60 + 58 / 3600), 1) == 131.8"
+    steps:
+      - show: |
+          <p><b>Quy mô:</b> lần hai, ngày 8/10/2005: 195 đội đăng ký, 23 xe xuất phát, <b>5 xe về đích</b>. Đường giới hạn tốc độ từ 5 tới 50 dặm/giờ.</p>
+          <p><b>Điểm nghẽn:</b> máy quét laser của xe thắng phát hiện vật cản tới khoảng <b>22 m</b>, đủ để tránh chắc chắn ở <b>25 dặm/giờ</b>. Nhưng xem đường đua năm 2004, đội ước tính cần tới <b>35 dặm/giờ</b> mới về đích được.</p>
+          <table class="t"><tr><th>bước (phanh 4 m/s², trễ 0,2 s — số minh hoạ)</th><th>phép tính bài 12</th><th>quãng dừng</th></tr>
+          <tr><td>Bước 1. 25 dặm/giờ ≈ 11,18 m/s</td><td>11,18 nhân 0,2 + 11,18² chia 8</td><td>≈ $\hlg{17{,}8}$ m &lt; 22 m ✓</td></tr>
+          <tr><td>Bước 2. 35 dặm/giờ ≈ 15,65 m/s</td><td>15,65 nhân 0,2 + 15,65² chia 8</td><td>≈ $\hl{33{,}7}$ m &gt; 22 m <b class="red">(không đủ)</b></td></tr></table>
+        focus: [1, 2, 2, "3.2", "3.3"]
+        say: "Ở chặng ba, cuộc đua lần hai ngày 8 tháng 10 năm 2005 có 23 xe xuất phát và 5 xe về đích. Máy quét tia sáng của xe thắng phát hiện vật cản tới khoảng 22 mét, đủ để tránh chắc chắn ở 25 dặm một giờ. Nhưng đội ước tính phải chạy tới 35 dặm một giờ mới về đích được. Bước một, lấy phanh 4 mét trên giây bình phương và trễ 0 phẩy 2 giây, một số minh hoạ, 25 dặm một giờ dừng trong 17 phẩy 8 mét. Bước hai, 35 dặm một giờ cần khoảng 33 phẩy 7 mét, dài hơn tầm của máy quét."
+      - clear: true
+        show: |
+          <p><b>Cách xử lý:</b> thêm một <b>camera màu</b> tìm mặt đường đi được ở xa hơn máy quét — thường nhìn tới khoảng <b>70 m</b>. Thấy điều đáng ngờ thì giảm về 25 dặm/giờ để máy quét kịp nhìn rõ.</p>
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 3. quãng dừng ở 35 dặm/giờ so với tầm camera</td><td>33,7 m so với 70 m</td><td>đủ, còn dư ≈ 36 m</td></tr>
+          <tr><td>Bước 4. tốc độ lớn nhất dừng kịp trong 22 m</td><td>nghiệm của quãng dừng = 22</td><td>≈ 27,9 dặm/giờ — khớp “đủ cho 25”</td></tr>
+          <tr><td>Bước 5. thời gian 6 giờ 53 phút 58 giây, trung bình 19,1 dặm/giờ</td><td>19,1 nhân 6,9</td><td>≈ $\hlb{131{,}8}$ dặm</td></tr></table>
+          <p class="note">Camera làm xe chậm lại trên 13,1% quãng đường; không có camera, xe phải giữ tối đa 25 dặm/giờ và ước tính về đích sau khoảng 7 giờ 5 phút, có thể sau một đội khác.</p>
+        focus: [1, 1, "2.2", "2.3", "2.4", 3]
+        say: "Cách xử lý của đội là thêm một camera màu tìm mặt đường ở xa hơn, thường nhìn tới khoảng 70 mét. Thấy điều đáng ngờ thì xe giảm về 25 dặm một giờ để máy quét kịp nhìn rõ. Bước ba, quãng dừng 33 phẩy 7 mét nằm gọn trong 70 mét. Bước bốn, giải ngược quãng dừng bằng 22 mét, tốc độ lớn nhất khoảng 27 phẩy 9 dặm một giờ, khớp với câu đủ cho 25. Bước năm, gần 6 phẩy 9 giờ nhân 19 phẩy 1 dặm một giờ là khoảng 131 phẩy 8 dặm. Không có camera, xe ước tính về đích chậm hơn khoảng 11 phút."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>điều đội ghi lại sau cuộc đua</th><th>thực hành rút ra</th></tr>
+          <tr><td>lọc Kalman ước lượng <b>15 biến trạng thái</b>, 100 lần mỗi giây, gộp định vị vệ tinh, la bàn, cảm biến quán tính, bánh xe</td><td>gộp nhiều nguồn đo như bài 5</td></tr>
+          <tr><td>mất tín hiệu vệ tinh tới 2 phút: dùng mô hình chặt hơn, sai số cỡ xen-ti-mét; bộ giám sát giảm tốc tối đa về <b>10 dặm/giờ</b></td><td>khi kém chắc chắn thì đi chậm lại</td></tr>
+          <tr><td>dòng dữ liệu của máy quét bị ngắt <b>300–1100 ms</b>, 17 lần; dấu thời gian sai tạo <b>vật cản ma</b>, 4 lần xe đánh lái mạnh</td><td>kiểm dấu thời gian của mọi dòng dữ liệu</td></tr>
+          <tr><td>ra-đa hiệu quả khi thử, nhưng trình điều khiển máy tính nhận dữ liệu nhiều lần gây trục trặc ở vòng loại</td><td>bỏ thứ có rủi ro kỹ thuật lớn hơn lợi ích</td></tr></table>
+          <p class="note">Điều kiện: đường đua tĩnh. Đội tự ghi rằng xe này <b>không chạy được giữa dòng xe cộ</b>.</p>
+        focus: [1, "1.2", "1.4", "1.5", 2]
+        say: "Sau cuộc đua, đội ghi lại các điều sau. Lọc Kalman ước lượng 15 biến trạng thái, 100 lần mỗi giây, gộp nhiều nguồn đo như bài 5. Dòng dữ liệu của máy quét bị ngắt 17 lần, dấu thời gian sai tạo ra vật cản ma và 4 lần xe đánh lái mạnh. Cảm biến sóng vô tuyến hiệu quả khi thử, nhưng gây trục trặc máy tính ở vòng loại nên bị bỏ. Điều kiện là đường đua tĩnh, và chính đội ghi rằng xe chưa chạy được giữa dòng xe cộ."
+
+  # ───────────────────────── 9. CHẶNG 4 ─────────────────────────
+  - id: stage4
+    kind: example
+    title: "Chặng 4, năm 2009 tới 2020 — ra đường phố: người ngồi kèm che mất kết quả thật"
+    stage: {year: "2009 → 2020", scale: "Waymo: hơn 20 triệu dặm trên đường công cộng từ 2009; vùng Phoenix: hơn 6,1 triệu dặm năm 2019 có người ngồi kèm và 65 000 dặm không người lái (2019 tới 9/2020); đầu 2020: 1000–2000 chuyến mỗi tuần, 5–10% không người lái; 47 sự kiện va chạm = 18 thật + 29 mô phỏng", source: "[WM20] [WS20] [KU25]", practice: "mỗi lần người kèm can thiệp đều được mô phỏng phản thực và đưa vào thư viện kịch bản để thử phần mềm sau; ba loại thử (mô phỏng, sân kín, đường công cộng); quyết định sẵn sàng riêng cho từng cấu hình, từng vùng hoạt động, kỹ nhất khi bỏ người kèm"}
+    checks:
+      - "18 + 29 == 47 and round(29 / 47 * 100) == 62"
+      - "round(6.1e6 / 47, -4) == 130000"
+      - "1000 * 0.05 == 50 and 2000 * 0.10 == 200"
+    steps:
+      - show: |
+          <p><b>Quy mô:</b> xe của Waymo đã chạy <b>hơn 20 triệu dặm</b> trên đường công cộng từ năm 2009, phần lớn có <b>người được huấn luyện ngồi sau vô lăng</b>.</p>
+          <table class="t"><tr><th>vùng Phoenix (báo cáo năm 2020 của hãng)</th><th>con số</th></tr>
+          <tr><td>năm 2019, có người ngồi kèm</td><td>hơn <b>6,1 triệu dặm</b></td></tr>
+          <tr><td>không người lái, 2019 tới 9/2020</td><td>65&nbsp;000 dặm</td></tr>
+          <tr><td>đầu 2020</td><td>1000 tới 2000 chuyến mỗi tuần, 5% tới 10% không người lái</td></tr></table>
+          <p><b>Điểm nghẽn:</b> người ngồi kèm giành lái khi thấy nguy hiểm, nên kết quả của xe <b>khi không có người</b> bị che mất.</p>
+        focus: [1, "2.2", "2.4", 3]
+        say: "Ở chặng bốn, xe của một hãng xe tự lái lớn đã chạy hơn 20 triệu dặm trên đường công cộng từ năm 2009, phần lớn có người được huấn luyện ngồi sau vô lăng. Ở thành phố thử đầu tiên, năm 2019, xe chạy hơn 6 phẩy 1 triệu dặm có người ngồi kèm, còn phần không người lái chỉ là 65 nghìn dặm. Đầu năm 2020 có 1000 tới 2000 chuyến mỗi tuần, 5 tới 10 phần trăm không người lái. Điểm nghẽn là người ngồi kèm giành lái khi thấy nguy hiểm, nên kết quả thật của xe khi không có người bị che mất."
+      - clear: true
+        show: |
+          <p><b>Cách xử lý:</b> mỗi lần người kèm can thiệp, đội <b>mô phỏng phản thực</b> vài giây sau đó: nếu xe cứ tự lái thì có va chạm không? Mỗi tình huống được thêm vào <b>thư viện kịch bản</b> để thử mọi bản phần mềm sau.</p>
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. tổng sự kiện có va chạm</td><td>18 thật + 29 chỉ có trong mô phỏng</td><td>$\hlb{47}$, không vụ nào dự kiến gây thương tích nặng</td></tr>
+          <tr><td>Bước 2. phần người kèm đã ngăn</td><td>29 chia 47</td><td>≈ $\hl{62\%}$ — đúng con số hãng nêu năm 2025</td></tr>
+          <tr><td>Bước 3. quãng trung bình giữa hai sự kiện</td><td>6,1 triệu chia 47</td><td>≈ 130&nbsp;000 dặm</td></tr>
+          <tr><td>Bước 4. chuyến không người lái mỗi tuần</td><td>5% của 1000, 10% của 2000</td><td>50 tới 200 chuyến</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", "2.4", "2.5"]
+        say: "Cách xử lý là, mỗi lần người kèm can thiệp, đội mô phỏng phản thực vài giây sau đó, nếu xe cứ tự lái thì có va chạm không. Mỗi tình huống được thêm vào thư viện kịch bản để thử phần mềm sau. Bước một, 18 va chạm thật cộng 29 va chạm chỉ có trong mô phỏng là 47 sự kiện, không vụ nào dự kiến gây thương tích nặng. Bước hai, 29 chia 47 khoảng 62 phần trăm, là phần người ngồi kèm đã ngăn được. Bước ba, 6 phẩy 1 triệu dặm chia 47 là khoảng 130 nghìn dặm mỗi sự kiện. Bước bốn, chuyến không người lái chỉ từ 50 tới 200 mỗi tuần."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>thực hành của hãng (báo cáo phương pháp an toàn, 10/2020)</th><th>điều kiện</th></tr>
+          <tr><td>ba loại thử bổ sung cho nhau: <b>mô phỏng, sân kín, đường công cộng</b></td><td>mỗi loại bổ sung cho loại kia</td></tr>
+          <tr><td>phanh và lái <b>có bản dự phòng</b></td><td>xe không người lái không còn người làm dự phòng</td></tr>
+          <tr><td>quyết định sẵn sàng <b>cho từng cấu hình, từng vùng hoạt động</b>; kỹ nhất khi bỏ người kèm</td><td>vùng mới, xe mới là quyết định mới</td></tr>
+          <tr><td>quản lý rủi ro <b>trước</b> khi phần mềm mới ra đường; theo dõi an toàn <b>sau</b> khi phát hành</td><td>mỗi bản phát hành đều đi qua cả hai</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Báo cáo phương pháp an toàn năm 2020 của hãng nêu các thực hành sau. Ba loại thử bổ sung cho nhau là mô phỏng, sân kín và đường công cộng. Phanh và lái có bản dự phòng, vì xe không còn người làm dự phòng. Quyết định sẵn sàng được ra cho từng cấu hình và từng vùng hoạt động, kỹ nhất khi bỏ người ngồi kèm. Rủi ro được xét trước và theo dõi sau mỗi lần phát hành phần mềm."
+
+  # ───────────────────────── 10. CHẶNG 5 ─────────────────────────
+  - id: stage5
+    kind: example
+    title: "Chặng 5, năm 2023 tới 2025 — ổn định và tiếp tục: so tỉ lệ đúng cách"
+    stage: {year: "2023 → 2025", scale: "chở khách không người lái: 7,14 triệu dặm (10/2023, ba thành phố) → 56,7 triệu dặm (1/2025, bốn thành phố); tai nạn có báo thương tích 48 vụ, 0,85 vụ trên một triệu dặm so với mốc 4,04 của người lái: giảm 79%; tai nạn nghi thương tích nặng 2 vụ", source: "[KU24] [KU25]", practice: "báo tỉ lệ trên một triệu dặm kèm khoảng tin cậy; so với mốc cùng thành phố, cùng loại đường, cùng loại xe, có chỉnh phần người lái không báo; chỉ kết luận về loại sự cố hiếm khi đủ số dặm; số liệu sau triển khai chỉ tăng dần niềm tin, không thay thế đánh giá trước khi triển khai"}
+    checks:
+      - "round(48 / 56.7, 2) == 0.85 and round(1 - 0.85 / 4.04, 2) == 0.79"
+      - "round(24 / 31.159, 2) == 0.77 and round(16 / 18.26, 2) == 0.88"
+      - "round(31.159 + 18.26 + 6.448 + 0.834, 1) == 56.7"
+      - "round(12 / 5.34, 1) == 2.2 and round(3 / 5.34, 1) == 0.6"
+      - "round(0.11 * 7.14, 2) == 0.79 and round(0.11 * 56.7, 1) == 6.2"
+    steps:
+      - show: |
+          <p><b>Quy mô:</b> từ tháng 7/2021, cơ quan an toàn giao thông Mỹ buộc các hãng xe tự lái <b>báo mọi va chạm</b> đạt tiêu chí. Hãng dùng số báo đó để so với người lái:</p>
+          <table class="t"><tr><th>mốc</th><th>số dặm chở khách không người lái</th></tr>
+          <tr><td>hết 10/2023</td><td>7,14 triệu dặm, ba thành phố</td></tr>
+          <tr><td>hết 1/2025</td><td><b>56,7 triệu dặm</b>: Phoenix 31,159 + San Francisco 18,26 + Los Angeles 6,448 + Austin 0,834</td></tr></table>
+          <table class="t"><tr><th>bước (hết 1/2025, tai nạn có báo thương tích)</th><th>phép tính</th><th>tỉ lệ trên một triệu dặm</th></tr>
+          <tr><td>Bước 1. cả bốn thành phố, 48 vụ</td><td>48 chia 56,7</td><td>≈ $\hlb{0{,}85}$</td></tr>
+          <tr><td>Bước 2. riêng Phoenix, 24 vụ</td><td>24 chia 31,159</td><td>≈ 0,77</td></tr>
+          <tr><td>Bước 3. so với mốc người lái 4,04</td><td>1 trừ 0,85 chia 4,04</td><td>giảm ≈ $\hlg{79\%}$</td></tr></table>
+        focus: [1, 2, "3.2", "3.3", "3.4"]
+        say: "Ở chặng năm, từ tháng 7 năm 2021, cơ quan an toàn giao thông Mỹ buộc các hãng xe tự lái báo mọi va chạm đạt tiêu chí. Số dặm chở khách không người lái tăng từ 7 phẩy 14 triệu cuối năm 2023 lên 56 phẩy 7 triệu vào tháng 1 năm 2025. Bước một, 48 vụ có báo thương tích chia 56 phẩy 7 là khoảng 0 phẩy 85 vụ trên một triệu dặm. Bước hai, riêng thành phố đầu tiên có 24 vụ trên 31 phẩy 159 triệu dặm, khoảng 0 phẩy 77. Bước ba, so với mốc 4 phẩy 04 của người lái, tỉ lệ giảm khoảng 79 phần trăm."
+      - clear: true
+        show: |
+          <p><b>Điểm nghẽn mới:</b> sự cố càng hiếm thì càng cần nhiều dặm mới kết luận được. Mốc của người lái cho tai nạn thương tích nặng chỉ là <b>0,11 vụ trên một triệu dặm</b> (mức toàn nước Mỹ).</p>
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>số vụ người lái “dự kiến” gặp</th></tr>
+          <tr><td>Bước 4. ở 7,14 triệu dặm</td><td>0,11 nhân 7,14</td><td>≈ $\hl{0{,}79}$ vụ — chưa tới 1, không kết luận được gì</td></tr>
+          <tr><td>Bước 5. ở 56,7 triệu dặm</td><td>0,11 nhân 56,7</td><td>≈ 6,2 vụ (mốc toàn quốc); xe gặp 2 vụ</td></tr></table>
+          <p>Phân tích của hãng: muốn chứng minh giảm 90% loại tai nạn này cần khoảng <b>56,3 triệu dặm</b>. Năm 2025 mới đạt tới vùng đó.</p>
+        focus: [1, "2.2", "2.3", 3, 3]
+        say: "Điểm nghẽn mới là sự cố càng hiếm thì càng cần nhiều dặm mới kết luận được. Mốc của người lái cho tai nạn thương tích nặng chỉ là 0 phẩy 11 vụ trên một triệu dặm. Bước bốn, ở 7 phẩy 14 triệu dặm, người lái dự kiến gặp khoảng 0 phẩy 79 vụ, chưa tới một vụ, nên chưa kết luận được gì. Bước năm, ở 56 phẩy 7 triệu dặm, người lái dự kiến gặp khoảng 6 phẩy 2 vụ, còn xe gặp 2 vụ. Muốn chứng minh giảm 90 phần trăm loại tai nạn này cần khoảng 56 phẩy 3 triệu dặm, và năm 2025 mới đạt tới đó."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>thực hành khi đã ở quy mô thành phố</th><th>vì sao (theo các báo cáo 2024, 2025)</th></tr>
+          <tr><td>báo tỉ lệ kèm <b>khoảng tin cậy</b></td><td>Phoenix hết 10/2023: 3 vụ thương tích → 0,6, nhưng khoảng từ 0,1 tới 3,2</td></tr>
+          <tr><td>so với mốc <b>cùng thành phố, cùng loại đường, cùng loại xe</b>, chỉnh phần người lái không báo</td><td>khoảng 33% tai nạn có thương tích của người lái không được báo cảnh sát</td></tr>
+          <tr><td>chọn ngưỡng sự cố rõ ràng</td><td>bỏ các va chạm thay đổi vận tốc dưới 1 dặm/giờ thì mất khoảng <b>một nửa</b> số vụ của xe tự lái</td></tr>
+          <tr><td>số liệu sau triển khai chỉ <b>tăng dần niềm tin</b></td><td>không dùng được để quyết định <b>trước</b> khi triển khai một bản mới hay một vùng mới</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.3", "1.4", "1.5"]
+        say: "Ở quy mô thành phố, các báo cáo năm 2024 và 2025 cho bốn thực hành. Thứ nhất, báo tỉ lệ kèm khoảng tin cậy. Ví dụ hết tháng 10 năm 2023, thành phố đầu tiên chỉ có 3 vụ thương tích, tỉ lệ 0 phẩy 6 nhưng khoảng tin cậy từ 0 phẩy 1 tới 3 phẩy 2. Thứ hai, so với mốc cùng thành phố, cùng loại đường, cùng loại xe, và chỉnh cho 33 phần trăm tai nạn thương tích của người lái không được báo cảnh sát. Thứ ba, chọn ngưỡng sự cố rõ ràng, vì bỏ các va chạm rất nhẹ thì mất khoảng một nửa số vụ. Thứ tư, số liệu sau triển khai chỉ tăng dần niềm tin, không thay được đánh giá trước khi chạy bản mới hay vùng mới."
+
+  # ───────────────────────── 11. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm bốn con số của hành trình bằng đường khác"
+    checks:
+      - "abs(alg.max_safe_speed(33.7, 4, 0.2) / 0.44704 - 35) < 0.05"
+      - "round(29 / 47, 2) == 0.62 and round(0.62 * 47) == 29"
+      - "round(0.85 * 56.7) == 48"
+      - "round(4.04 * (1 - 0.79), 2) == 0.85"
+    steps:
+      - show: |
+          <table class="t"><tr><th>con số</th><th>đường khác để kiểm</th></tr>
+          <tr><td>33,7 m ở 35 dặm/giờ</td><td>giải ngược: tốc độ lớn nhất dừng kịp trong 33,7 m là ≈ 35 dặm/giờ ✓</td></tr>
+          <tr><td>62%</td><td>nhân ngược: 0,62 nhân 47 ≈ 29 sự kiện chỉ có trong mô phỏng ✓</td></tr>
+          <tr><td>0,85 trên một triệu dặm</td><td>nhân ngược: 0,85 nhân 56,7 ≈ 48 vụ ✓</td></tr>
+          <tr><td>giảm 79%</td><td>4,04 nhân 0,21 ≈ 0,85, đúng tỉ lệ của xe ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Ta kiểm lại bốn con số theo đường khác. Giải ngược quãng dừng, tốc độ lớn nhất còn dừng kịp trong 33 phẩy 7 mét đúng là khoảng 35 dặm một giờ. Nhân ngược, 0 phẩy 62 nhân 47 được khoảng 29 sự kiện. Tương tự, 0 phẩy 85 nhân 56 phẩy 7 được khoảng 48 vụ. Cuối cùng, mốc 4 phẩy 04 nhân 0 phẩy 21 được khoảng 0 phẩy 85, đúng tỉ lệ của xe."
+
+  # ───────────────────────── 12. BÀI HỌC SAI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "Những bài học sai khi đọc hành trình này"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">1.</b> “Thắng cuộc đua sa mạc là xong xe tự lái”</td><td>đường đua tĩnh; chính đội thắng ghi xe chưa chạy được giữa dòng xe cộ; phải thêm 15 năm và hàng chục triệu dặm</td><td>ghi rõ điều kiện của mỗi kết quả: vùng hoạt động nào, có người kèm không</td></tr>
+          <tr><td><b class="red">2.</b> “Cảm biến đắt hơn sẽ giải quyết”</td><td>đội thắng không mua hệ đo tư thế giá hàng trăm nghìn đô; mô hình xác suất cộng dữ liệu đã ghi giảm báo nhầm 6300 lần</td><td>đo lỗi trước, thử cách mô hình hoá, rồi mới mua</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.3", "1.3", "1.3"]
+        say: "Bảng có hai bài học sai đầu tiên. Bài học sai thứ nhất là nghĩ thắng cuộc đua sa mạc là xong xe tự lái. Đường đua khi đó tĩnh, chính đội thắng ghi rằng xe chưa chạy được giữa dòng xe cộ, và phải thêm khoảng 15 năm cùng hàng chục triệu dặm nữa. Bài học sai thứ hai là nghĩ cảm biến đắt hơn sẽ giải quyết. Đội thắng không mua hệ đo tư thế đắt tiền, mà dùng xác suất cộng dữ liệu đã ghi để giảm báo nhầm 6300 lần. Hãy đo lỗi trước, thử cách mô hình hoá, rồi mới mua."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">3.</b> “Thử có người kèm, không va chạm nào, vậy là an toàn” (lỗi của người đã đi làm)</td><td>người kèm đã ngăn ≈ 62% số sự kiện; kết quả có người kèm không phải kết quả khi không có người</td><td>đếm mọi lần can thiệp, mô phỏng phản thực từng lần</td></tr>
+          <tr><td><b class="red">4.</b> “Chia số vụ cho số dặm là so được với người lái” (lỗi mức hệ thống)</td><td>mốc phải cùng thành phố, cùng loại đường, cùng ngưỡng báo; sự cố hiếm cần hàng chục triệu dặm</td><td>báo khoảng tin cậy, ghi ngưỡng sự cố, chỉ kết luận khi đủ dặm</td></tr>
+          <tr><td><b class="red">5.</b> “Chép quy mô của hãng lớn”</td><td>hàng triệu dặm và đội mô phỏng là lời giải cho quy mô thành phố, không phải cho 10 robot trong khuôn viên</td><td>chọn thực hành theo quy mô và rủi ro của mình</td></tr></table>
+        focus: ["1.2", "1.2", "1.3", "1.3", "1.4"]
+        say: "Bài học sai thứ ba hay gặp ở người đã đi làm, là nghĩ thử có người kèm mà không va chạm nào thì đã an toàn. Người kèm đã ngăn khoảng 62 phần trăm số sự kiện, nên hãy đếm và mô phỏng lại mọi lần can thiệp. Bài học sai thứ tư ở mức hệ thống, là nghĩ cứ chia số vụ cho số dặm là so được với người lái. Mốc phải cùng thành phố, cùng loại đường, cùng ngưỡng báo, và sự cố hiếm cần rất nhiều dặm. Bài học sai thứ năm là chép quy mô của hãng lớn cho 10 robot trong khuôn viên."
+
+  # ───────────────────────── 13. QUYẾT ĐỊNH ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Bạn sẽ làm gì với 10 robot giao hàng?"
+    checks:
+      - "alg.stop_distance(2, 0.8, 0.25) == 3.0 < 4 and alg.stop_distance(3, 0.8, 0.25) == 6.375"
+      - "4 < 6.375 < 8 and round(alg.max_safe_speed(8, 0.8, 0.25), 2) == 3.38"
+      - "1500 / 2 == 750 and 1500 / 3 == 500 and 0.6 * 1500 / 3 + 0.4 * 1500 / 2 == 600"
+      - "2000 / 4 == 500 and 2000 / 1000 == 2"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>tình huống: đội 5 người, 10 robot giao hàng trong khuôn viên trường; tuyến 1,5 km; phanh 0,8 m/s², trễ 0,25 s; cảm biến gần thấy 4 m (số minh hoạ)</th></tr>
+          <tr><td>1</td><td>robot đang chạy 2 m/s. Khách muốn 3 m/s cho nhanh. Tăng tốc ngay, giữ nguyên, hay thêm camera thấy 8 m?</td></tr>
+          <tr><td>2</td><td>đã thử 2000 km có người đi kèm, <b>0 va chạm</b>, người kèm can thiệp 4 lần. Bỏ người kèm được chưa?</td></tr></table>
+        focus: [1, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn, với 10 robot giao hàng trong khuôn viên trường, tuyến dài 1 phẩy 5 ki-lô-mét, đều là số minh hoạ. Câu một, robot đang chạy 2 mét mỗi giây, khách muốn 3 mét mỗi giây, bạn tăng tốc ngay, giữ nguyên, hay thêm camera thấy 8 mét? Câu hai, đã thử 2000 ki-lô-mét có người đi kèm, không va chạm nào, người kèm can thiệp 4 lần, vậy bỏ người kèm được chưa? Dừng video và viết ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 1: lựa chọn</th><th>được</th><th>mất</th></tr>
+          <tr><td>giữ 2 m/s</td><td>quãng dừng 0,5 + 2,5 = 3 m &lt; 4 m ✓</td><td>mỗi chuyến 1500 chia 2 = 750 giây</td></tr>
+          <tr><td>tăng ngay 3 m/s</td><td>500 giây</td><td>quãng dừng 0,75 + 5,625 = $\hl{6{,}375}$ m &gt; 4 m <b class="red">(sai)</b> — đâm trước khi kịp dừng</td></tr>
+          <tr><td>thêm camera 8 m, như xe thắng năm 2005</td><td>6,375 &lt; 8 ✓; nếu 40% quãng phải chậm về 2 m/s: 300 + 300 = $\hlg{600}$ giây</td><td>tiền camera; camera kém khi tối, bụi, ngược sáng</td></tr></table>
+          <p class="note">Điều kiện đổi: nếu camera hay báo nhầm và robot phải chậm lại gần hết quãng, lợi tiến về 0 — khi đó giữ 2 m/s rẻ hơn. Cảm biến gần vẫn là lớp dừng cuối cùng.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2, 2]
+        say: "Câu một có ba lựa chọn. Giữ 2 mét mỗi giây thì quãng dừng 3 mét, nằm trong 4 mét, mỗi chuyến mất 750 giây. Tăng ngay lên 3 mét mỗi giây thì quãng dừng 6 phẩy 375 mét, dài hơn tầm thấy, robot có thể đâm trước khi kịp dừng. Thêm camera thấy 8 mét như xe thắng năm 2005 thì đủ, và nếu 40 phần trăm quãng phải chậm về 2 mét mỗi giây, chuyến chỉ mất 600 giây. Nếu camera hay báo nhầm và robot chậm lại gần hết quãng, lợi tiến về 0, khi đó giữ 2 mét mỗi giây rẻ hơn. Cảm biến gần vẫn là lớp dừng cuối cùng."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 2: lựa chọn</th><th>được</th><th>mất</th></tr>
+          <tr><td>bỏ người kèm ngay</td><td>đỡ công người</td><td>“0 va chạm” chưa nói gì: 4 lần can thiệp có thể chính là 4 va chạm đã được ngăn</td></tr>
+          <tr><td>giữ người kèm, đo tiếp</td><td>quãng trung bình giữa hai lần can thiệp: 2000 chia 4 = $\hlb{500}$ km; mô phỏng lại từng lần trên dữ liệu đã ghi</td><td>thêm vài tuần thử</td></tr></table>
+          <p class="note">Với mốc 1 sự cố mỗi 1000 km (số minh hoạ), 2000 km chỉ “dự kiến” 2 sự cố — quá ít để kết luận. Điều kiện đổi: bỏ người kèm trước ở vùng nhỏ, tốc độ thấp, khi mô phỏng cả 4 lần đều không va chạm và quãng giữa hai lần can thiệp đã tăng tới mức đội đặt ra từ trước.</p>
+        focus: [1, "1.2", "1.3", 2, 2, 2]
+        say: "Câu hai cũng là một đánh đổi. Bỏ người kèm ngay thì đỡ công, nhưng không va chạm nào chưa nói gì, vì 4 lần can thiệp có thể chính là 4 va chạm đã được ngăn. Giữ người kèm và đo tiếp, quãng giữa hai lần can thiệp là 2000 chia 4 bằng 500 ki-lô-mét, và mô phỏng lại từng lần. Với mốc một sự cố mỗi 1000 ki-lô-mét, 2000 ki-lô-mét chỉ dự kiến 2 sự cố, quá ít để kết luận. Điều kiện đổi là bỏ người kèm trước ở vùng nhỏ, tốc độ thấp, khi mô phỏng cả 4 lần đều không va chạm. Quãng giữa hai lần can thiệp cũng phải đạt mức đội đặt ra từ trước."
+
+  # ───────────────────────── 14. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi hành trình & tư duy chuyên gia"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">2004: không xe nào quá 5%</span><span class="a">→</span>
+          <span class="n">2004–2005: đo quãng giữa hai lần can thiệp</span><span class="a">→</span>
+          <span class="n">2005: tầm thấy theo tốc độ</span><span class="a">→</span>
+          <span class="n">2009–2020: mô phỏng phản thực</span><span class="a">→</span>
+          <span class="n">2023–2025: tỉ lệ có mốc và khoảng tin cậy</span></div>
+        say: "Tổng kết lại hành trình. Năm 2004, không xe nào đi quá 5 phần trăm đường đua. Sau đó một đội đo quãng giữa hai lần can thiệp, và năm 2005 tầm thấy của cảm biến phải theo kịp tốc độ. Trên đường phố, mô phỏng phản thực cho biết người kèm đã che bao nhiêu. Ở quy mô thành phố, tỉ lệ sự cố được so với mốc phù hợp, kèm khoảng tin cậy."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> mỗi con số an toàn chỉ đúng trong <b>điều kiện</b> đã đo nó — đường tĩnh hay đông xe, có người kèm hay không, bao nhiêu dặm. Trước khi tin một con số, hãy hỏi nó được đo ở đâu.</div>
+        say: "Điều cần mang theo, mỗi con số an toàn chỉ đúng trong điều kiện đã đo nó, đường tĩnh hay đông xe, có người kèm hay không, và bao nhiêu dặm. Trước khi tin một con số, hãy hỏi nó được đo ở đâu."
+      - clear: true
+        show: |
+          <p class="note">Đây là bài cuối của khoá <b>Robot tự hành</b>. Từ kiến trúc, chuyển động, cảm biến, định vị và bản đồ, qua lập kế hoạch, bám quỹ đạo, thị giác và an toàn, bạn đã đi tới cách các đội làm xe tự lái thật đo và nâng độ tin cậy theo từng quy mô.</p>
+        say: "Đây là bài cuối của khoá robot tự hành. Bạn đã đi từ kiến trúc, cảm biến, định vị và bản đồ, qua lập kế hoạch và an toàn. Cuối cùng là cách các đội làm xe tự lái thật nâng độ tin cậy theo từng quy mô. Cảm ơn bạn đã theo học."

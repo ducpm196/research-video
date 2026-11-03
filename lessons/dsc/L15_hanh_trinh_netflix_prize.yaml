@@ -1,0 +1,375 @@
+id: L15
+course: DSC
+series: "DSC · Khoa học dữ liệu"
+title: "Bài 15 — Tình huống chuyên gia theo dòng thời gian: cuộc thi Netflix Prize 2006–2012"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+case: journey
+source: "curriculum/dsc.yaml L15; audit/dsc/sources_L15.md (câu trích nguyên văn, đọc 2026-11-02); audit/dsc/verify_dsc.py L15; J. Bennett, S. Lanning, The Netflix Prize, KDD Cup and Workshop 2007 [BL07]; A. Narayanan, V. Shmatikov, Robust De-anonymization of Large Datasets, arXiv cs/0610105 v2, 2007 (IEEE S&P 2008) [NS07]; Y. Koren, The BellKor Solution to the Netflix Grand Prize, 2009 [KO09]; A. Töscher, M. Jahrer, R. M. Bell, The BigChaos Solution to the Netflix Grand Prize, 2009 [TJ09]; A. Feuerverger, Y. He, S. Khatri, Statistical Significance of the Netflix Challenge, Statistical Science 27(2), 2012 [FH12]; X. Amatriain (Netflix), Mining Large Streams of User Data for Personalized Recommendations, SIGKDD Explorations 14(2), 2012 [AM12]; blog Netflix Technology 2012 không tải được (403/429) — không dạy chi tiết chỉ có ở đó; DSC bài 8 (thí nghiệm chia nhóm ngẫu nhiên), bài 9 (kiểm định nhiều lần), bài 10 (chia tập), bài 13 (ẩn danh hoá)"
+assumes: [arith, frac, sqrt, approx, power]
+# Quy ước: “sai số căn quân phương” = RMSE (chỉ viết RMSE trên màn hình); “tập công khai” = quiz set (điểm hiện trên bảng xếp hạng);
+#   “tập kín” = test set (điểm không công bố, dùng để chọn đội thắng); “tập thăm dò” = probe set (đội thi tự kiểm); “bộ ghép” = blend /
+#   ensemble; “dự đoán nền” = baseline predictor (trung bình chung + độ lệch của người + độ lệch của phim). Sai số e của một lượt chấm =
+#   dự đoán trừ điểm thật. Phần trăm cải thiện = (RMSE cũ − RMSE mới) / RMSE cũ.
+#   Mọi sự kiện và con số có nguồn ghi trong audit/dsc/sources_L15.md. Con số khác là phép tính lại (checks) hoặc “(số minh hoạ)”: bốn sai
+#   số 1, −1, 2, 0; trọng số 2 và 1 của điểm xếp hạng; cửa hàng 20 000 khách, RMSE 0,95 / 0,90 / 0,89, 2 và 50 mô hình trong quiz.
+#   Lời đọc không nói tên đội thi, Cinematch, RMSE, DVD: nói “đội thắng giải”, “hệ gợi ý cũ của công ty”, “sai số căn quân phương”.
+objectives:
+  - "Kể lại hành trình của cuộc thi Netflix Prize qua năm chặng từ 2006 tới 2012, mỗi chặng một điểm nghẽn và một cách xử lý"
+  - "Tính sai số căn quân phương, phần trăm cải thiện, mức lạc quan khi ghép nhiều mô hình trên một tập công khai"
+  - "Chọn mô hình đưa vào chạy thật theo được và mất ở quy mô của chính mình, kèm điều kiện đổi lựa chọn"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Một triệu đô cho 10%, rồi không triển khai bản thắng giải"
+    checks:
+      - "round(0.9525 * 0.9, 4) in (0.8572, 0.8573) and int(0.9525 * 0.9 * 10000) == 8572"
+    steps:
+      - show: |
+          <p>Tháng 10/2006, Netflix công bố hơn <b>100 triệu</b> lượt chấm điểm phim và treo giải <b>1 triệu đô</b> cho đội làm hệ gợi ý của công ty <b>chính xác hơn 10%</b>.</p>
+          <p>Tháng 7/2009, một đội vượt mốc. Năm 2012, Netflix viết: phần chính xác tăng thêm của các cách mới trong bản thắng giải <b>không đáng</b> công kỹ thuật để đưa vào chạy thật.</p>
+          <div class="box key">Hôm nay: năm chặng từ 2006 tới 2012 — đo thế nào cho công bằng, dữ liệu công khai thì sao, và vì sao mô hình tốt nhất trên bảng điểm chưa chắc là mô hình nên triển khai.</div>
+        focus: [1, 2, 2, 3, 3]
+        say: "Chào bạn, tháng 10 năm 2006, Netflix công bố hơn 100 triệu lượt chấm điểm phim, và treo giải 1 triệu đô cho đội làm hệ gợi ý của công ty chính xác hơn 10 phần trăm. Tháng 7 năm 2009, một đội đã vượt mốc đó. Năm 2012, chính Netflix viết rằng phần chính xác tăng thêm của các cách mới trong bản thắng giải không đáng công kỹ thuật để đưa vào chạy thật. Hôm nay ta đi qua năm chặng, để hiểu đo thế nào cho công bằng, và dữ liệu công khai thì sao. Ta cũng sẽ thấy vì sao mô hình tốt nhất trên bảng điểm chưa chắc là mô hình nên triển khai."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại bốn điều từ các bài trước"
+    checks:
+      - "round(1 - 0.95 ** 20, 3) == 0.642"
+      - "(100 - 90) / 100 == 0.1"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài</th><th>điều đã học</th><th>ví dụ số</th></tr>
+          <tr><td>bài 8</td><td>chia người dùng <b>ngẫu nhiên</b> thành hai nhóm thì mọi biến gây nhiễu được chia đều</td><td>nhóm A thấy nút xanh, nhóm B thấy nút cam, cùng một tuần</td></tr>
+          <tr><td>bài 9</td><td>thử <b>nhiều lần</b> thì có kết quả “tốt” chỉ do may</td><td>20 kiểm định khi không có hiệu ứng nào: 1 trừ 0,95 mũ 20 ≈ 0,642</td></tr>
+          <tr><td>bài 10</td><td>mô hình chỉ được học trên tập huấn luyện; chấm trên tập <b>chưa từng thấy</b>, chia theo thời gian nếu dữ liệu có ngày</td><td>chuẩn hoá bằng trung bình cả tập (4,0) thay vì tập huấn luyện (2,0) là rò rỉ</td></tr>
+          <tr><td>bài 13</td><td>bỏ cột họ tên <b>chưa phải</b> ẩn danh hoá: các cột còn lại có thể nối với nguồn khác</td><td>mỗi tổ hợp mã bưu chính, tuổi phải xuất hiện ít nhất 2 lần</td></tr></table>
+          <p>Phần trăm giảm: từ 100 xuống 90 là (100 − 90) / 100 = 10%.</p>
+        focus: ["1.2", "1.3", "1.4", "1.5", 2]
+        say: "Ở bài 8, chia người dùng ngẫu nhiên thành hai nhóm thì mọi biến gây nhiễu được chia đều. Ở bài 9, thử nhiều lần thì có kết quả tốt chỉ do may, 20 kiểm định không có hiệu ứng nào cho xác suất khoảng 0 phẩy 642. Ở bài 10, mô hình chỉ học trên tập huấn luyện, và được chấm trên dữ liệu chưa từng thấy. Ở bài 13, bỏ cột họ tên chưa phải ẩn danh hoá, vì các cột còn lại có thể nối với nguồn khác. Cuối cùng, từ 100 xuống 90 là giảm 10 phần trăm."
+
+  # ───────────────────────── 3. NGÔN NGỮ ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Sai số căn quân phương và ngôn ngữ của cuộc thi"
+    checks:
+      - "[e * e for e in (1, -1, 2, 0)] == [1, 1, 4, 0] and sum(e * e for e in (1, -1, 2, 0)) / 4 == 1.5 and round(math.sqrt(1.5), 2) == 1.22"
+    steps:
+      - show: |
+          <p>Mỗi lượt chấm có một <b>sai số</b>: dự đoán trừ điểm thật. Bốn lượt chấm (số minh hoạ) có sai số $e_1 = 1$, $e_2 = -1$, $e_3 = 2$, $e_4 = 0$.</p>
+          $$\text{RMSE} = \sqrt{\frac{e_1^2 + e_2^2 + \dots + e_n^2}{n}}$$
+        introduces: [sub, dots]
+        focus: [1, 1, 2, 2]
+        say: "Mỗi lượt chấm có một sai số, bằng dự đoán trừ điểm thật. Ví dụ bốn lượt chấm có sai số 1, âm 1, 2 và 0, chữ e kèm số nhỏ phía dưới là sai số của lượt thứ mấy. Sai số căn quân phương là căn của trung bình các bình phương sai số. Dấu ba chấm nghĩa là cứ thế cộng tiếp tới lượt thứ n, và n là số lượt chấm."
+      - show: |
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. bình phương từng sai số</td><td>1, (−1)², 2², 0²</td><td>1, 1, 4, 0</td></tr>
+          <tr><td>Bước 2. trung bình</td><td>(1 + 1 + 4 + 0) / 4</td><td>1,5</td></tr>
+          <tr><td>Bước 3. lấy căn</td><td>căn của 1,5</td><td>≈ $\hlg{1{,}22}$ sao</td></tr></table>
+        focus: ["1.2", "1.3", "1.4"]
+        say: "Bước một, bình phương từng sai số được 1, 1, 4 và 0, nên sai số âm cũng bị tính như sai số dương. Bước hai, trung bình là 6 chia 4, bằng 1 phẩy 5. Bước ba, lấy căn được khoảng 1 phẩy 22 sao, cùng đơn vị với điểm chấm."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>thuật ngữ</th><th>nghĩa</th></tr>
+          <tr><td><b>tập công khai</b> (quiz)</td><td>nửa dữ liệu chấm điểm; điểm hiện lên bảng xếp hạng</td></tr>
+          <tr><td><b>tập kín</b> (test)</td><td>nửa còn lại; điểm không công bố, dùng để chọn đội thắng</td></tr>
+          <tr><td><b>dự đoán nền</b></td><td>trung bình chung, cộng độ lệch của người chấm, cộng độ lệch của phim</td></tr>
+          <tr><td><b>bộ ghép</b></td><td>trộn dự đoán của nhiều mô hình thành một dự đoán</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bài còn dùng bốn thuật ngữ nữa, ta đọc lần lượt từng dòng. Tập công khai là nửa dữ liệu chấm điểm, điểm của nó hiện lên bảng xếp hạng. Tập kín là nửa còn lại, điểm không công bố và được dùng để chọn đội thắng. Dự đoán nền là trung bình chung, cộng độ lệch của người chấm, cộng độ lệch của phim. Bộ ghép là cách trộn dự đoán của nhiều mô hình thành một dự đoán."
+
+  # ───────────────────────── 4. DÒNG THỜI GIAN ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Năm chặng trên một trục thời gian"
+    steps:
+      - show: |
+          <div><svg width="1700" height="320" viewBox="0 0 1700 320">
+          <line x1="30" y1="150" x2="1670" y2="150" stroke="#1f2937" stroke-width="3"/>
+          <g font-size="24" text-anchor="middle" fill="#1f2937">
+          <circle cx="160" cy="150" r="15" fill="#9ca3af"/><text x="160" y="108" font-weight="bold">10/2006</text><text x="160" y="200">mở cuộc thi</text><text x="160" y="232">tập kín để chấm</text>
+          <circle cx="500" cy="150" r="15" fill="#2a78d6"/><text x="500" y="108" font-weight="bold">2007</text><text x="500" y="200">giải năm đầu: 8,43%</text><text x="500" y="232">chỉ lấy 2 mô hình</text>
+          <circle cx="850" cy="150" r="15" fill="#7c3aed"/><text x="850" y="108" font-weight="bold">11/2007</text><text x="850" y="200">dữ liệu “ẩn danh”</text><text x="850" y="232">vẫn nhận ra được</text>
+          <circle cx="1200" cy="150" r="15" fill="#eb6834"/><text x="1200" y="108" font-weight="bold">7/2009</text><text x="1200" y="200">hàng trăm mô hình</text><text x="1200" y="232">vượt 10%, hoà điểm</text>
+          <circle cx="1540" cy="150" r="15" fill="#059669"/><text x="1540" y="108" font-weight="bold">2012</text><text x="1540" y="200">không triển khai</text><text x="1540" y="232">thử nghiệm thật quyết định</text>
+          </g>
+          <text x="850" y="300" font-size="23" fill="#6b7280" text-anchor="middle">khai sinh → tăng trưởng → quy mô lớn → ổn định → tiếp tục phát triển</text>
+          </svg></div>
+        focus: [1, 1, 1, 1, 1]
+        say: "Hình là trục thời gian với năm chặng. Năm 2006, cuộc thi mở ra với một tập kín để chấm. Năm 2007, giải năm đầu đạt 8 phẩy 43 phần trăm, công ty chỉ lấy hai mô hình, rồi một nghiên cứu cho thấy dữ liệu tưởng ẩn danh vẫn nhận ra được người. Năm 2009, hàng trăm mô hình ghép lại vượt mốc 10 phần trăm. Năm 2012, công ty kể vì sao không triển khai bản thắng giải."
+
+  # ───────────────────────── 5. CƠ CHẾ CHẤM ĐIỂM ─────────────────────────
+  - id: split
+    kind: concept
+    title: "Cơ chế chung: chấm trên dữ liệu đội thi không thấy"
+    steps:
+      - show: |
+          <div><svg width="1600" height="330" viewBox="0 0 1600 330">
+          <defs><marker id="ah" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="12" refX="14" refY="6" orient="auto"><path d="M0,0 L16,6 L0,12 z" fill="#1f2937"/></marker></defs>
+          <g font-size="24" text-anchor="middle" fill="#1f2937">
+          <rect x="30" y="40" width="760" height="100" rx="10" fill="#e0ecfb" stroke="#2a78d6" stroke-width="3"/><text x="410" y="82">tập huấn luyện, có điểm</text><text x="410" y="116">≈ 100 triệu lượt chấm (gồm tập thăm dò ≈ 1,4 triệu)</text>
+          <rect x="880" y="40" width="680" height="100" rx="10" fill="#f3f4f6" stroke="#1f2937" stroke-width="3"/><text x="1220" y="82">lượt chấm mới nhất, giấu điểm</text><text x="1220" y="116">≈ 2,8 triệu</text>
+          <rect x="880" y="210" width="320" height="90" rx="10" fill="#fff4e5" stroke="#eb6834" stroke-width="3"/><text x="1040" y="248">tập công khai 50%</text><text x="1040" y="282">→ bảng xếp hạng</text>
+          <rect x="1240" y="210" width="320" height="90" rx="10" fill="#dcfce7" stroke="#059669" stroke-width="3"/><text x="1400" y="248">tập kín 50%</text><text x="1400" y="282">→ chọn đội thắng</text>
+          </g>
+          <line x1="1100" y1="140" x2="1040" y2="205" stroke="#1f2937" stroke-width="3" marker-end="url(#ah)"/>
+          <line x1="1340" y1="140" x2="1400" y2="205" stroke="#1f2937" stroke-width="3" marker-end="url(#ah)"/>
+          <text x="410" y="230" font-size="22" fill="#6b7280" text-anchor="middle">đội thi học ở đây, tự kiểm trên tập thăm dò</text>
+          </svg></div>
+        focus: [1, 1, 1]
+        say: "Hình này là cơ chế chấm điểm của cả cuộc thi, đội thi có khoảng 100 triệu lượt chấm có điểm để học, trong đó khoảng 1 phẩy 4 triệu lượt là tập thăm dò để tự kiểm. Khoảng 2 phẩy 8 triệu lượt chấm mới nhất bị giấu điểm và chia đôi ngẫu nhiên. Nửa công khai cho điểm lên bảng xếp hạng, còn nửa kín không công bố, chỉ dùng để chọn đội thắng."
+
+  # ───────────────────────── 6. CHẶNG 1 ─────────────────────────
+  - id: stage1
+    kind: example
+    title: "Chặng 1, năm 2006 — khai sinh: mở dữ liệu và giữ một tập kín"
+    stage: {year: "2006", scale: "công ty có hơn 1,9 tỉ lượt chấm của hơn 11,7 triệu người, nhận hơn 2 triệu lượt mỗi ngày; công bố 100 480 507 lượt của 480 189 người cho 17 770 phim", source: "[BL07] [KO09] [TJ09] [FH12]", practice: "đổi mục tiêu kinh doanh thành một con số đo được; chấm trên dữ liệu mới nhất mà đội thi không thấy; giữ điểm của tập kín không công bố"}
+    checks:
+      - "round(100480507 / (480189 * 17770) * 100, 2) == 1.18"
+      - "int(0.9525 * 0.9 * 10000) == 8572 and round(0.9514 * 0.9, 4) == 0.8563"
+    steps:
+      - show: |
+          <p><b>Quy mô</b> (công ty tự ghi, năm 2007): hơn <b>1,9 tỉ</b> lượt chấm của hơn <b>11,7 triệu</b> người, nhận hơn <b>2 triệu</b> lượt mỗi ngày. Hệ gợi ý cũ của công ty (Cinematch) tìm phim “giống nhau” bằng tương quan, chạy lại <b>mỗi tuần</b>.</p>
+          <p><b>Điểm nghẽn:</b> hệ cũ chỉ tốt hơn “đoán bằng điểm trung bình của phim” khoảng 10%, mà “gợi ý tốt” lại khó chấm.</p>
+          <p><b>Cách xử lý:</b> đổi câu hỏi thành một con số dễ chấm: <b>sai số căn quân phương</b> của điểm dự đoán. Công bố dữ liệu, giấu điểm của các lượt chấm <b>mới nhất</b>.</p>
+        focus: [1, 1, 2, 3, 3]
+        say: "Ở chặng một, theo bài viết năm 2007 của chính công ty, họ có hơn 1 phẩy 9 tỉ lượt chấm của hơn 11 phẩy 7 triệu người, và nhận hơn 2 triệu lượt mỗi ngày. Hệ gợi ý cũ của công ty tìm phim giống nhau bằng tương quan, chạy lại mỗi tuần. Điểm nghẽn là hệ cũ chỉ tốt hơn cách đoán bằng điểm trung bình của phim khoảng 10 phần trăm, mà gợi ý tốt lại là thứ khó chấm điểm. Cách xử lý là đổi câu hỏi thành một con số dễ chấm, sai số căn quân phương của điểm dự đoán. Công ty công bố dữ liệu, và giấu điểm của các lượt chấm mới nhất."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. số ô có thể có</td><td>480&nbsp;189 người nhân 17&nbsp;770 phim</td><td>≈ 8,5 tỉ ô</td></tr>
+          <tr><td>Bước 2. phần ô có điểm</td><td>100&nbsp;480&nbsp;507 chia số ô đó</td><td>≈ $\hlb{1{,}18\%}$, tức khoảng 99% bỏ trống</td></tr>
+          <tr><td>Bước 3. mốc của giải lớn</td><td>hệ cũ trên tập kín 0,9525, nhân 0,9</td><td>0,85725 → luật ghi $\hlg{0{,}8572}$</td></tr></table>
+          <p class="note">Thực hành: chấm trên dữ liệu <b>mới hơn</b> dữ liệu học, giấu điểm tập kín. Điều kiện: con số chấm phải đi cùng điều kinh doanh thật cần — sai số căn quân phương chỉ là câu hỏi thay thế.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2, 2]
+        say: "Làm thử với dữ liệu công bố, mỗi phép tính một bước. Bước một, 480 nghìn 189 người nhân 17 nghìn 770 phim được khoảng 8 phẩy 5 tỉ ô. Bước hai, hơn 100 triệu lượt chấm chỉ lấp khoảng 1 phẩy 18 phần trăm số ô. Bước ba, hệ cũ đạt 0 phẩy 9525 trên tập kín, nhân 0 phẩy 9 được 0 phẩy 85725, và luật ghi mốc 0 phẩy 8572. Thực hành rút ra là chấm trên dữ liệu mới hơn dữ liệu học, và giấu điểm tập kín. Điều kiện là con số chấm phải đi cùng điều kinh doanh thật cần."
+
+  # ───────────────────────── 7. CHẶNG 2 ─────────────────────────
+  - id: stage2
+    kind: example
+    title: "Chặng 2, năm 2007 — tăng trưởng: 107 mô hình, chỉ lấy hai"
+    stage: {year: "2007", scale: "giải năm đầu 8,43% với 107 thuật toán, hơn 2000 giờ làm; mô hình làm cho 100 triệu lượt, công ty có hơn 5 tỉ", source: "[AM12] [FH12] [KO09]", practice: "lấy vài thành phần mạnh nhất thay vì cả bộ ghép; làm lại cho quy mô thật và cho dữ liệu mới đến liên tục; làm dự đoán nền thật tốt trước"}
+    checks:
+      - "round((0.9514 - 0.8712) / 0.9514 * 100, 2) == 8.43"
+      - "5_000_000_000 // 100_000_000 == 50 and round((0.9514 - 0.88) / 0.9514 * 100, 1) == 7.5"
+      - "round(3.7 - 0.3 + 0.5, 1) == 3.9"
+    steps:
+      - show: |
+          <p><b>Quy mô:</b> một năm sau, đội đứng đầu nhận giải năm đầu với mức cải thiện <b>8,43%</b>: ghép <b>107</b> thuật toán, sau hơn <b>2000 giờ</b> làm, và trao mã nguồn cho công ty.</p>
+          <table class="t"><tr><th>công ty làm gì (Netflix, 2012)</th><th>con số</th></tr>
+          <tr><td>chỉ lấy <b>2</b> thuật toán mạnh nhất trong bộ ghép: phân rã ma trận, và một loại mạng nơ-ron</td><td>0,8914 và 0,8990; ghép tuyến tính hai cái: <b>0,88</b></td></tr>
+          <tr><td>điểm nghẽn khi đưa vào chạy thật: mô hình làm cho 100 triệu lượt chấm, công ty có hơn <b>5 tỉ</b>; mô hình chưa tự cập nhật khi có lượt chấm mới</td><td>làm lại xong thì cả hai vào chạy thật</td></tr></table>
+        focus: [1, 1, "2.2", "2.2", "2.3", "2.3"]
+        say: "Ở chặng hai, năm 2007, đội đứng đầu nhận giải năm đầu với mức cải thiện 8 phẩy 43 phần trăm. Họ ghép 107 thuật toán, sau hơn 2000 giờ làm, rồi trao mã nguồn cho công ty. Công ty chỉ lấy hai thuật toán mạnh nhất, một cách phân rã ma trận đạt 0 phẩy 8914, và một loại mạng nơ-ron đạt 0 phẩy 8990. Ghép tuyến tính hai cái này được 0 phẩy 88. Điểm nghẽn là mô hình làm cho 100 triệu lượt chấm, trong khi công ty có hơn 5 tỉ, và chưa tự cập nhật khi có lượt chấm mới. Làm lại xong, cả hai vào chạy thật."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. mức cải thiện của giải năm đầu</td><td>hệ cũ trên tập công khai 0,9514, đội đứng đầu 0,8712: (0,9514 − 0,8712) / 0,9514</td><td>≈ $\hlb{8{,}43\%}$ ✓</td></tr>
+          <tr><td>Bước 2. hai mô hình ghép lại</td><td>(0,9514 − 0,88) / 0,9514</td><td>≈ $\hlg{7{,}5\%}$ chỉ với 2 mô hình</td></tr>
+          <tr><td>Bước 3. quy mô thật so với dữ liệu thi</td><td>5 tỉ chia 100 triệu</td><td>gấp $\hl{50}$ lần</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Làm thử với các con số vừa nêu. Bước một, hệ cũ đạt 0 phẩy 9514 trên tập công khai, đội đứng đầu đạt 0 phẩy 8712, lấy hiệu chia cho 0 phẩy 9514 được khoảng 8 phẩy 43 phần trăm, khớp con số của giải. Bước hai, chỉ hai mô hình ghép lại đã cải thiện khoảng 7 phẩy 5 phần trăm. Bước ba, 5 tỉ chia 100 triệu là gấp 50 lần."
+      - show: |
+          <div class="box key">Dự đoán nền (đội thắng giải, 2009): trung bình chung 3,7 sao; phim này được chấm cao hơn trung bình 0,5; người này khó tính, chấm thấp hơn 0,3 → 3,7 − 0,3 + 0,5 = <b>3,9</b> sao. Riêng phần nền, thêm các yếu tố theo ngày chấm, đã đạt 0,9278 — tốt hơn hệ cũ 0,9514. Thực hành: làm phần nền thật tốt trước. Điều kiện: phần nền không tự gợi ý riêng cho từng người, vẫn cần mô hình phía trên.</div>
+        say: "Đội thắng giải về sau ghi một ví dụ: trung bình chung 3 phẩy 7 sao, phim được chấm cao hơn 0 phẩy 5, người khó tính chấm thấp hơn 0 phẩy 3. Vậy dự đoán nền là 3 phẩy 7 trừ 0 phẩy 3 cộng 0 phẩy 5, bằng 3 phẩy 9 sao. Riêng phần nền, thêm các yếu tố theo ngày chấm, đã đạt 0 phẩy 9278, tốt hơn hệ cũ, nhưng vẫn cần mô hình phía trên để gợi ý riêng cho từng người."
+
+  # ───────────────────────── 8. CHẶNG 3 ─────────────────────────
+  - id: stage3
+    kind: example
+    title: "Chặng 3, cuối năm 2007 — công khai dữ liệu: bỏ tên chưa phải ẩn danh"
+    stage: {year: "2007", scale: "dữ liệu công khai của 480 189 người, mỗi người trung bình khoảng 209 lượt chấm có ngày", source: "[NS07] [BL07] [KO09]", practice: "coi dữ liệu thưa, nhiều chiều là dữ liệu nhận diện được; bỏ tên và thêm nhiễu không đủ; trước khi công bố hãy hỏi một người biết vài điều về ai đó thì tìm được gì"}
+    checks:
+      - "round(100480507 / 480189) == 209"
+      - "2 ** 18 < 480189 < 2 ** 19 and 2 ** 19 == 524288 and round(math.log2(480189), 2) == 18.87"
+    steps:
+      - show: |
+          <p><b>Quy mô:</b> dữ liệu công khai gồm lượt chấm <b>có ngày</b> của 480&nbsp;189 người, đã bỏ tên, đã thêm nhiễu vào điểm.</p>
+          <p><b>Điểm nghẽn</b> (nghiên cứu công bố tháng 11/2007): dữ liệu <b>thưa</b> — hai người hiếm khi chấm cùng một nhóm phim — nên chính tập phim mỗi người đã chấm giống như một dấu vân tay.</p>
+          <table class="t"><tr><th>người kia biết về một người</th><th>tìm đúng hồ sơ duy nhất</th></tr>
+          <tr><td>8 lượt chấm (2 lượt có thể sai hẳn), ngày lệch tới 14 ngày</td><td><b>99%</b> số hồ sơ</td></tr>
+          <tr><td>2 lượt chấm, ngày lệch tới 3 ngày</td><td><b>68%</b> số hồ sơ</td></tr></table>
+        focus: [1, 2, "3.2", "3.3"]
+        say: "Ở chặng ba, dữ liệu công khai gồm các lượt chấm có ngày của 480 nghìn 189 người, đã bỏ tên, và đã được thêm nhiễu vào điểm. Tháng 11 năm 2007, một nghiên cứu chỉ ra rằng dữ liệu này rất thưa, nên tập phim mỗi người chấm giống như dấu vân tay. Biết 8 lượt chấm của một người, 2 lượt có thể sai hẳn, ngày lệch tới 14 ngày, thì tìm đúng hồ sơ duy nhất cho 99 phần trăm số người. Chỉ 2 lượt chấm, ngày lệch tới 3 ngày, đã đủ cho 68 phần trăm."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. lượt chấm mỗi người</td><td>100&nbsp;480&nbsp;507 chia 480&nbsp;189</td><td>≈ $\hlb{209}$ lượt, trong 17&nbsp;770 phim</td></tr>
+          <tr><td>Bước 2. mỗi câu hỏi có–không chia đôi số người còn lại</td><td>2 mũ 18 = 262&nbsp;144; 2 mũ 19 = 524&nbsp;288</td><td>cần $\hl{19}$ câu để chỉ ra 1 trong 480&nbsp;189 người</td></tr>
+          <tr><td>Bước 3. sau khi biết 2 lượt chấm có ngày</td><td>nghiên cứu ước tính với 32% hồ sơ còn lại</td><td>chỉ còn thiếu khoảng $\hlg{3}$ câu như thế</td></tr></table>
+          <p class="note">Thực hành (bài 13): bỏ tên và thêm nhiễu chưa phải ẩn danh. Điều kiện: đúng nhất với dữ liệu thưa, nhiều cột như lịch sử xem, mua, tìm kiếm.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Làm thử bằng phép đếm để thấy vì sao. Bước một, hơn 100 triệu lượt chia cho 480 nghìn người được khoảng 209 lượt mỗi người. Bước hai, mỗi câu hỏi có hoặc không chia đôi số người còn lại, 2 mũ 18 chưa đủ, 2 mũ 19 là 524 nghìn 288 thì đủ, nên cần 19 câu để chỉ ra một người. Bước ba, với 32 phần trăm hồ sơ còn lại, biết 2 lượt chấm có ngày thì chỉ còn thiếu khoảng 3 câu. Đúng như bài 13, bỏ tên và thêm nhiễu chưa phải ẩn danh, nhất là với dữ liệu thưa."
+
+  # ───────────────────────── 9. CHẶNG 4 ─────────────────────────
+  - id: stage4
+    kind: example
+    title: "Chặng 4, năm 2009 — quy mô lớn: hàng trăm mô hình và trận hoà"
+    stage: {year: "2009", scale: "hơn 50 000 người dự thi; bộ ghép cuối có hàng trăm mô hình (tập 454; bảng ước lượng tới 800); mốc tập công khai 0,8563, tập kín 0,8572", source: "[TJ09] [KO09] [FH12] [AM12]", practice: "chọn đội thắng bằng tập kín; ước lượng mức lạc quan khi ghép p mô hình trên tập công khai; co hệ số của bộ ghép; ghi luật hoà từ trước"}
+    checks:
+      - "round(2 * 800 / (2817131 / 2), 5) == 0.00114"
+      - "round((0.9525 - 0.8567) / 0.9525 * 100, 2) == 10.06 and round(0.856704, 4) == round(0.856714, 4) == 0.8567"
+      - "round(0.856714 - 0.856704, 6) == 0.00001 and round(0.8572 - 0.8563, 4) == 0.0009"
+      - "round(math.sqrt(0.8558 ** 2 + 0.00114) - 0.8558, 5) == 0.00067 and round(0.00067 / 0.00001) == 67"
+    steps:
+      - show: |
+          <p><b>Quy mô:</b> hơn <b>50&nbsp;000</b> người dự thi. Bộ ghép cuối của đội thắng trộn <b>hàng trăm</b> mô hình; một tập họ dùng có <b>454</b> mô hình.</p>
+          <p><b>Điểm nghẽn:</b> 30 ngày cuối, một mô hình mới dù hay cũng khó làm bộ ghép tốt hơn; ghép trên tập công khai thì dễ <b>học thuộc</b> chính tập đó.</p>
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. cỡ tập công khai</td><td>2&nbsp;817&nbsp;131 lượt chia 2</td><td>≈ 1&nbsp;408&nbsp;566 lượt</td></tr>
+          <tr><td>Bước 2. mức lạc quan khi ghép p mô hình: 2 nhân p chia cỡ tập</td><td>2 nhân 800, chia 1&nbsp;408&nbsp;566</td><td>≈ $\hl{0{,}00114}$ trên bình phương sai số</td></tr></table>
+        focus: [1, 1, 2, "3.2", "3.3"]
+        say: "Ở chặng bốn, năm 2009, đã có hơn 50 nghìn người dự thi. Bộ ghép cuối của đội thắng trộn hàng trăm mô hình, một tập họ dùng có 454 mô hình. Điểm nghẽn là trong 30 ngày cuối, một mô hình mới dù hay cũng khó làm bộ ghép tốt hơn, còn ghép trên tập công khai thì dễ học thuộc chính tập đó. Bước một, tập công khai có khoảng 1 triệu 408 nghìn lượt. Bước hai, theo công thức đội ghi lại, ghép 800 mô hình làm điểm công khai đẹp hơn thật khoảng 2 nhân 800 chia cỡ tập, tức 0 phẩy 00114."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>kết quả 26/7/2009</th><th>tập công khai</th><th>tập kín</th></tr>
+          <tr><td>đội thắng</td><td>0,8554</td><td>0,856704 → <b>0,8567</b></td></tr>
+          <tr><td>đội nộp sau <b>20 phút</b></td><td>0,8553 (tốt hơn)</td><td>0,856714 → <b>0,8567</b></td></tr></table>
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 3. mức cải thiện trên tập kín</td><td>(0,9525 − 0,8567) / 0,9525</td><td>≈ $\hlg{10{,}06\%}$</td></tr>
+          <tr><td>Bước 4. khoảng cách hai đội</td><td>0,856714 − 0,856704</td><td>0,00001: làm tròn 4 chữ số là <b>hoà</b>; luật: nộp trước thắng</td></tr></table>
+        focus: [1, "1.3", "2.2", "2.3"]
+        say: "Ngày 26 tháng 7 năm 2009, đội thắng đạt 0 phẩy 8554 trên tập công khai, còn đội nộp sau 20 phút đạt 0 phẩy 8553, tốt hơn một chút. Nhưng trên tập kín, cả hai làm tròn đều là 0 phẩy 8567. Bước ba, so với 0 phẩy 9525 của hệ cũ, đó là cải thiện khoảng 10 phẩy 06 phần trăm. Bước bốn, hai đội chỉ cách nhau 0 phẩy 00001, làm tròn 4 chữ số là hoà, và luật ghi từ trước là bài nộp trước thắng."
+      - clear: true
+        show: |
+          <p>So cùng một thước đo: đổi mức lạc quan sang sai số căn quân phương, với điểm tập công khai khoảng 0,8558.</p>
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 5. đổi sang thước của bảng xếp hạng</td><td>căn của (0,8558² + 0,00114), trừ 0,8558</td><td>≈ $\hl{0{,}00067}$ (khớp bảng của đội thắng)</td></tr>
+          <tr><td>Bước 6. so với khoảng cách hai đội</td><td>0,00067 chia 0,00001</td><td>gấp khoảng $\hl{67}$ lần</td></tr></table>
+          <div class="box key">Đội thắng viết: dù tập công khai đã cải thiện 10,09%, vẫn <b>không chắc</b> tập kín vượt 10,00%. Thực hành: chọn bằng tập kín, co hệ số của bộ ghép. Điều kiện: tập kín chỉ có giá trị khi không ai được xem điểm của nó.</div>
+        focus: ["2.2", "2.3", 3, 3]
+        say: "Bước năm, để so cùng một thước đo, bình phương 0 phẩy 8558, cộng 0 phẩy 00114, lấy căn rồi trừ 0 phẩy 8558, được khoảng 0 phẩy 00067, khớp bảng của đội thắng. Bước sáu, con số này gấp khoảng 67 lần khoảng cách giữa hai đội, nên bảng xếp hạng công khai không thể phân định thắng thua. Chính đội thắng viết rằng dù tập công khai đã cải thiện 10 phẩy 09 phần trăm, vẫn không chắc tập kín vượt 10 phần trăm. Vậy hãy chọn bằng tập kín, với điều kiện không ai được xem điểm của nó."
+
+  # ───────────────────────── 10. CHẶNG 5 ─────────────────────────
+  - id: stage5
+    kind: example
+    title: "Chặng 5, năm 2012 — ổn định và tiếp tục: xếp hạng và thử nghiệm thật"
+    stage: {year: "2012", scale: "vài tỉ lượt chấm, hàng triệu lượt mới mỗi ngày; hàng chục thử nghiệm chạy song song, mỗi thử nghiệm hàng nghìn người, 2 tới 20 nhóm", source: "[AM12]", practice: "đánh giá đường ngoài máy chỉ để chọn ứng viên; thử nghiệm chia nhóm ngẫu nhiên trên người dùng thật quyết định; tối ưu điều kinh doanh cần (giờ xem, giữ chân), không chỉ sai số"}
+    checks:
+      - "round((0.88 - 0.8567) / 0.88 * 100, 1) == 2.6"
+      - "(round(2 * 0.9 + 1 * 3.0, 1), round(2 * 0.2 + 1 * 4.5, 1)) == (4.8, 4.9)"
+      - "sorted([('A', 2 * 0.9 + 3.0 + 7), ('B', 2 * 0.2 + 4.5 + 7)], key=lambda t: -t[1])[0][0] == 'B'"
+    steps:
+      - show: |
+          <p><b>Quy mô:</b> năm 2012, Netflix có <b>vài tỉ</b> lượt chấm và nhận <b>hàng triệu</b> lượt mới mỗi ngày; hàng chục thử nghiệm trên người dùng chạy cùng lúc.</p>
+          <p><b>Điểm nghẽn:</b> các cách mới trong bản thắng giải cho thêm chút chính xác, nhưng <b>không đáng</b> công kỹ thuật để đưa vào chạy thật; trọng tâm cá nhân hoá đã vượt khỏi chuyện đoán điểm sao.</p>
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>phần còn lại sau 2 mô hình đã chạy thật</td><td>(0,88 − 0,8567) / 0,88</td><td>≈ $\hl{2{,}6\%}$, đổi lấy hàng trăm mô hình</td></tr></table>
+        focus: [1, 2, 2, "3.2"]
+        say: "Ở chặng năm, năm 2012, công ty có vài tỉ lượt chấm và nhận hàng triệu lượt mới mỗi ngày, với hàng chục thử nghiệm trên người dùng chạy cùng lúc. Họ viết rằng các cách mới trong bản thắng giải cho thêm chút chính xác, nhưng không đáng công kỹ thuật để đưa vào chạy thật. Trọng tâm lúc đó đã vượt khỏi chuyện đoán điểm sao. Làm thử, từ 0 phẩy 88 của hai mô hình đã chạy thật xuống 0 phẩy 8567 chỉ là khoảng 2 phẩy 6 phần trăm, đổi lấy hàng trăm mô hình phải duy trì."
+      - clear: true
+        show: |
+          <p><b>Cách xử lý:</b> xếp hạng bằng một điểm ghép <b>độ phổ biến</b> với <b>điểm dự đoán</b>, vì chỉ dùng điểm dự đoán dễ đẩy lên phim quá kén người xem.</p>
+          <table class="t"><tr><th>phim (số minh hoạ)</th><th>độ phổ biến</th><th>điểm dự đoán</th><th>2 × phổ biến + 1 × dự đoán</th></tr>
+          <tr><td>A</td><td>0,9</td><td>3,0</td><td>1,8 + 3,0 = 4,8</td></tr>
+          <tr><td>B</td><td>0,2</td><td>4,5</td><td>0,4 + 4,5 = $\hlg{4{,}9}$ → xếp trước</td></tr></table>
+          <p class="note">Cộng cùng một hằng số vào mọi phim thì thứ tự không đổi; trọng số được học từ dữ liệu cũ.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Cách xử lý là xếp hạng bằng một điểm ghép độ phổ biến với điểm dự đoán, vì chỉ dùng điểm dự đoán dễ đẩy lên những phim quá kén người xem. Với trọng số minh hoạ 2 cho độ phổ biến và 1 cho điểm dự đoán, phim A được 1 phẩy 8 cộng 3, bằng 4 phẩy 8. Phim B được 0 phẩy 4 cộng 4 phẩy 5, bằng 4 phẩy 9, nên xếp trước. Trọng số được học từ dữ liệu cũ, và cộng thêm một hằng số cho mọi phim thì thứ tự không đổi."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>quy trình của Netflix năm 2012</th><th>nối về bài nền</th></tr>
+          <tr><td><b>ngoài máy</b>: đo nhiều chỉ số, kể cả sai số căn quân phương; chỉ để chọn ý tưởng đáng thử</td><td>bài 10: chấm trên dữ liệu chưa thấy</td></tr>
+          <tr><td><b>trên người dùng thật</b>: chia nhóm ngẫu nhiên, hàng nghìn người, 2 tới 20 nhóm; tin nhất là giờ xem và tỉ lệ ở lại</td><td>bài 8: chia ngẫu nhiên</td></tr>
+          <tr><td>hàng chục thử nghiệm chạy song song</td><td>bài 9: thử nhiều thì phải hiệu chỉnh</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Quy trình năm 2012 của công ty có hai vòng. Vòng ngoài máy chấm nhiều chỉ số trên dữ liệu chưa thấy như bài 10, nhưng chỉ để chọn ý tưởng đáng thử. Vòng trên người dùng thật chia nhóm ngẫu nhiên như bài 8, mỗi thử nghiệm hàng nghìn người, 2 tới 20 nhóm, và tin nhất là giờ xem với tỉ lệ ở lại. Hàng chục thử nghiệm chạy song song, nên vẫn cần bài học về thử nhiều lần của bài 9."
+
+  # ───────────────────────── 11. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm bốn con số của hành trình theo đường khác"
+    checks:
+      - "round(0.9525 * (1 - 0.1006), 4) == 0.8567"
+      - "round(0.9514 * (1 - 0.0843), 4) == 0.8712"
+      - "2 ** 19 // 480189 == 1 and 524288 - 480189 == 44099"
+      - "round(0.00114 * 2817131 / 2 / 2) == 803"
+    steps:
+      - show: |
+          <table class="t"><tr><th>con số</th><th>đường khác để kiểm</th></tr>
+          <tr><td>10,06%</td><td>nhân ngược: 0,9525 nhân (1 − 0,1006) ≈ 0,8567 ✓</td></tr>
+          <tr><td>8,43%</td><td>nhân ngược: 0,9514 nhân (1 − 0,0843) ≈ 0,8712 ✓</td></tr>
+          <tr><td>19 câu có–không</td><td>524&nbsp;288 trừ 480&nbsp;189 = 44&nbsp;099 &gt; 0: 19 câu đủ chỗ cho mọi người ✓</td></tr>
+          <tr><td>0,00114 với 800 mô hình</td><td>đi ngược: 0,00114 nhân cỡ tập, chia 2 ≈ 803, gần 800 (vì 0,00114 đã làm tròn) ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Ta kiểm lại bốn con số theo đường khác. Nhân ngược, 0 phẩy 9525 nhân 1 trừ 0 phẩy 1006 được khoảng 0 phẩy 8567, đúng điểm tập kín. Tương tự, 0 phẩy 9514 nhân 1 trừ 0 phẩy 0843 được khoảng 0 phẩy 8712. Với 19 câu, 524 nghìn 288 trừ 480 nghìn 189 vẫn còn dư, nên đủ chỗ cho mọi người. Đi ngược công thức lạc quan được khoảng 803, gần 800 vì con số đã làm tròn."
+
+  # ───────────────────────── 12. BÀI HỌC SAI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "Những bài học sai khi đọc hành trình này"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">1.</b> “Công ty phí 1 triệu đô cho thứ không dùng; đội làm gợi ý đã quyết sai”</td><td>hai thuật toán từ năm 2007 đã vào chạy thật; phần sau chỉ thêm khoảng 2,6%</td><td>đánh giá quyết định theo điều họ biết lúc đó, không theo tiêu đề báo</td></tr>
+          <tr><td><b class="red">2.</b> “Đứng đầu bảng xếp hạng là mô hình tốt nhất”</td><td>đội nộp sau 20 phút tốt hơn trên tập công khai mà hoà trên tập kín; ghép 800 mô hình lạc quan khoảng 0,00067, gấp 67 lần khoảng cách đó</td><td>giữ một tập kín; chọn bằng nó, chỉ một lần</td></tr></table>
+        focus: ["1.2", "1.2", "1.2", "1.3", "1.3"]
+        say: "Bài học sai thứ nhất ở mức con người là nghĩ công ty phí 1 triệu đô cho thứ không dùng, và đội làm gợi ý đã quyết sai. Thật ra hai thuật toán từ năm 2007 đã vào chạy thật, còn phần sau chỉ thêm khoảng 2 phẩy 6 phần trăm. Hãy đánh giá quyết định theo điều người ta biết lúc đó. Bài học sai thứ hai là nghĩ đứng đầu bảng xếp hạng là mô hình tốt nhất, trong khi đội nộp sau 20 phút tốt hơn trên tập công khai mà vẫn hoà trên tập kín. Hãy giữ một tập kín, và chỉ dùng nó để chọn."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">3.</b> “Bỏ tên, thêm chút nhiễu là công bố được”</td><td>dữ liệu thưa: 2 lượt chấm có ngày đã đủ tìm ra 68% số hồ sơ</td><td>hỏi “người biết vài điều về ai đó thì tìm được gì?” trước khi công bố</td></tr>
+          <tr><td><b class="red">4.</b> “Sai số nhỏ hơn là khách hài lòng hơn”</td><td>sai số căn quân phương chỉ là câu hỏi thay thế; Netflix tin giờ xem và tỉ lệ ở lại</td><td>đo ngoài máy để chọn, thử nghiệm chia nhóm ngẫu nhiên để quyết</td></tr></table>
+        focus: ["1.2", "1.2", "1.3", "1.3"]
+        say: "Bài học sai thứ ba là nghĩ bỏ tên, thêm chút nhiễu là công bố được, trong khi với dữ liệu thưa, 2 lượt chấm có ngày đã đủ tìm ra 68 phần trăm số hồ sơ. Trước khi công bố, hãy hỏi một người biết vài điều về ai đó thì tìm được gì. Bài học sai thứ tư ở mức hệ thống là nghĩ sai số nhỏ hơn là khách hài lòng hơn, trong khi sai số chỉ là câu hỏi thay thế. Công ty tin giờ xem cùng tỉ lệ ở lại, nên hãy đo ngoài máy để chọn, và thử nghiệm chia nhóm ngẫu nhiên để quyết."
+
+  # ───────────────────────── 13. QUYẾT ĐỊNH ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Bạn sẽ làm gì ở quy mô của mình?"
+    checks:
+      - "round((0.95 - 0.90) / 0.95 * 100, 2) == 5.26 and round((0.95 - 0.89) / 0.95 * 100, 2) == 6.32"
+      - "round(6.32 - 5.26, 2) == 1.06 and 50 // 2 == 25"
+      - "2 * 50 / 2000 == 0.05 and round(math.sqrt(0.89 ** 2 + 0.05) - 0.89, 3) == 0.028 and round(0.90 - 0.89, 2) == 0.01"
+      - "round(math.sqrt(0.90 ** 2 + 2 * 2 / 2000) - 0.90, 3) == 0.001"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>tình huống (số minh hoạ): cửa hàng sách trực tuyến 20&nbsp;000 khách, 1 người làm dữ liệu, mô hình hiện tại có sai số 0,95</th></tr>
+          <tr><td>1</td><td>Ứng viên X: ghép 2 mô hình, sai số 0,90. Ứng viên Y: ghép 50 mô hình, sai số 0,89. Đưa cái nào vào chạy thật?</td></tr>
+          <tr><td>2</td><td>Sếp muốn công bố lịch sử mua (đã bỏ tên) để mở một cuộc thi nhỏ. Bạn nói gì?</td></tr></table>
+        focus: [1, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn, với một cửa hàng sách trực tuyến có 20 nghìn khách, 1 người làm dữ liệu, mô hình hiện tại có sai số 0 phẩy 95, đều là số minh hoạ. Câu một, ứng viên X ghép 2 mô hình, sai số 0 phẩy 90, ứng viên Y ghép 50 mô hình, sai số 0 phẩy 89, đưa cái nào vào chạy thật? Câu hai, sếp muốn công bố lịch sử mua đã bỏ tên để mở một cuộc thi nhỏ, bạn nói gì? Hãy dừng video và viết câu trả lời ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 1</th><th>cải thiện so với 0,95</th><th>được</th><th>mất</th></tr>
+          <tr><td>X, 2 mô hình</td><td>(0,95 − 0,90) / 0,95 ≈ 5,26%</td><td>một người duy trì được; dễ cập nhật khi có dữ liệu mới</td><td>kém Y khoảng 1,06 điểm phần trăm</td></tr>
+          <tr><td>Y, 50 mô hình</td><td>(0,95 − 0,89) / 0,95 ≈ 6,32%</td><td>sai số thấp nhất ngoài máy</td><td>gấp 25 lần số mô hình phải huấn luyện lại, theo dõi</td></tr></table>
+          <p class="note">Nếu bộ ghép được chỉnh trên một tập chấm 2000 lượt: lạc quan của Y ≈ 2 × 50 / 2000 = 0,05 trên bình phương sai số, đổi sang thước sai số là căn của (0,89² + 0,05) trừ 0,89 ≈ 0,028 — lớn hơn phần Y hơn X (0,01). Của X chỉ ≈ 0,001.</p>
+        focus: [1, "1.2", "1.3", 2, 2]
+        say: "Đáp án câu một là một đánh đổi. Ứng viên X cải thiện 0 phẩy 05 chia 0 phẩy 95, khoảng 5 phẩy 26 phần trăm, một người duy trì được và dễ cập nhật. Ứng viên Y cải thiện khoảng 6 phẩy 32 phần trăm, hơn X khoảng 1 phẩy 06 điểm, nhưng gấp 25 lần số mô hình phải huấn luyện lại và theo dõi. Nếu bộ ghép được chỉnh trên tập chấm chỉ 2000 lượt, mức lạc quan của Y khoảng 0 phẩy 028, lớn hơn cả phần Y hơn X là 0 phẩy 01. Mức lạc quan của X chỉ khoảng 0 phẩy 001."
+      - show: |
+          <div class="box key">Chọn X, rồi thử nghiệm chia nhóm ngẫu nhiên trên khách thật. Điều kiện đổi sang Y: phần hơn của Y vẫn còn trên một tập kín chưa dùng để chỉnh, đo được trên doanh thu hay tỉ lệ quay lại, và lớn hơn công duy trì 50 mô hình.</div>
+        say: "Vậy nên chọn X, rồi thử nghiệm chia nhóm ngẫu nhiên trên khách thật. Chỉ đổi sang Y khi phần hơn của Y còn lại trên một tập kín chưa dùng để chỉnh, đo được trên doanh thu, và lớn hơn công duy trì."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 2: lựa chọn</th><th>được</th><th>mất</th></tr>
+          <tr><td>công bố lịch sử mua đã bỏ tên</td><td>nhiều người cùng thử, ý tưởng mới</td><td>dữ liệu thưa như lịch sử mua nhận diện lại được người; mất lòng tin của khách khó lấy lại</td></tr>
+          <tr><td>không công bố: thi nội bộ, hoặc chỉ công bố số liệu gộp theo nhóm đủ lớn</td><td>giữ quyền riêng tư</td><td>ít người thử hơn</td></tr></table>
+          <p class="note">Điều kiện đổi lựa chọn: khách đã đồng ý rõ ràng, và dữ liệu đã được chuyên gia quyền riêng tư đánh giá với câu hỏi “người biết vài điều về một khách thì tìm được gì?”.</p>
+        focus: ["1.2", "1.2", "1.3", 2]
+        say: "Ở câu hai, công bố lịch sử mua đã bỏ tên thì có nhiều người cùng thử, nhưng dữ liệu thưa như vậy có thể nhận diện lại được người. Lòng tin của khách mất đi thì khó lấy lại. Thi nội bộ, hay chỉ công bố số liệu gộp theo nhóm đủ lớn, thì giữ được quyền riêng tư, đổi lại ít người thử hơn. Chỉ đổi lựa chọn khi khách đã đồng ý rõ ràng, và chuyên gia quyền riêng tư đã đánh giá dữ liệu."
+
+  # ───────────────────────── 14. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi hành trình & tư duy chuyên gia"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">một con số đo được + tập kín</span><span class="a">→</span>
+          <span class="n">107 mô hình, lấy 2 mạnh nhất</span><span class="a">→</span>
+          <span class="n">bỏ tên chưa phải ẩn danh</span><span class="a">→</span>
+          <span class="n">hàng trăm mô hình, hoà trên tập kín</span><span class="a">→</span>
+          <span class="n">thử nghiệm thật quyết định</span></div>
+        say: "Tổng kết lại, cuộc thi bắt đầu bằng một con số đo được và một tập kín. Từ 107 mô hình, công ty chỉ lấy 2 mạnh nhất. Dữ liệu công khai cho thấy bỏ tên chưa phải ẩn danh. Hàng trăm mô hình ghép lại vượt mốc nhưng hoà trên tập kín, và cuối cùng thử nghiệm trên người dùng thật mới là thứ quyết định."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> con số trên bảng điểm là câu hỏi thay thế. Mô hình đáng triển khai là mô hình mà phần hơn của nó <b>còn lại</b> trên dữ liệu chưa thấy, trên người dùng thật, và <b>đáng</b> công duy trì.</div>
+        say: "Điều cần mang theo, con số trên bảng điểm chỉ là câu hỏi thay thế. Mô hình đáng triển khai là mô hình mà phần hơn của nó còn lại trên dữ liệu chưa thấy, trên người dùng thật, và đáng công duy trì."
+      - clear: true
+        show: |
+          <p class="note">Đây là bài cuối của khoá DSC. Từ câu hỏi, dữ liệu sạch, thống kê bền vững, trực quan trung thực, nhân quả và thí nghiệm, tới báo cáo tái lập được, và một cuộc thi có thật, từ dữ liệu tới quyết định triển khai.</p>
+        say: "Đây là bài cuối của khoá khoa học dữ liệu. Bạn đã đi từ câu hỏi, dữ liệu sạch, thống kê bền vững, trực quan trung thực, nhân quả và thí nghiệm, tới báo cáo tái lập được. Bài cuối đưa bạn qua một cuộc thi có thật, từ dữ liệu tới quyết định triển khai. Cảm ơn bạn đã theo học tới bài cuối cùng."

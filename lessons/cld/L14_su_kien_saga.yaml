@@ -1,0 +1,207 @@
+id: L14
+course: CLD
+series: "CLD · Hệ thống hướng dịch vụ"
+title: "Bài 14 — Kiến trúc hướng sự kiện, saga và nhất quán cuối cùng"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/cld.yaml L14; audit/cld/verify_cld.py L14; H. Garcia-Molina, K. Salem, Sagas, ACM SIGMOD (1987); C. Richardson, Microservices Patterns (2018), chương 4; W. Vogels, Eventually Consistent, CACM 52(1), 2009; DSY bài 14 (giao dịch phân tán)"
+assumes: [arith]
+# Quy ước: saga = chuỗi giao dịch cục bộ, mỗi bước có bước bù; bước k lỗi thì chạy bước bù của các bước 1..k−1 theo thứ tự ngược (alg.saga).
+#   Ví dụ đặt vé: giữ ghế ↔ nhả ghế, trừ tiền ↔ hoàn tiền, xuất vé ↔ huỷ vé.
+objectives:
+  - "Thiết kế saga với bước bù trừ"
+  - "Giải thích nhất quán cuối cùng cho người dùng"
+  - "Xử lý sự kiện tới trễ, tới hai lần"
+asr_reviewed:
+  - {sentence: "Ở bài sau, bài 15, ta đi lại mười năm quản lý container ở quy mô lớn, từ Borg tới Kubernetes, theo từng chặng, để thấy mỗi thực hành tốt ra đời từ điểm nghẽn nào.", reason: "ASR chép “Ở bài sau, bài 15, ta đi lại 10 năm quản lý container ở quy mô lớn từ Boga tới Kubernetes theo từng chặn để thấy mỗi thực hành tốt ra đời từ điểm ngãn nào.” (0.919): Borg đọc “Bo-gờ” theo lexicon CLD (probe p3/p4: 7/8, PARTIAL), ASR viết “burger/boga/bò gờ/bog”; lệch âm/thanh thuần Việt: chặng/chặn, nghẽn/ngãn — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Ghế đã giữ, tiền trừ lỗi"
+    checks:
+      - "alg.saga([('giữ ghế', 'nhả ghế'), ('trừ tiền', 'hoàn tiền'), ('xuất vé', 'huỷ vé')], 1) == ['giữ ghế', 'trừ tiền: LỖI', 'nhả ghế']"
+    steps:
+      - show: |
+          <p>Đặt vé xem phim đi qua ba dịch vụ: <b>ghế</b>, <b>thanh toán</b>, <b>vé</b>, mỗi dịch vụ một cơ sở dữ liệu riêng. Ghế đã giữ, bước trừ tiền thì lỗi. Không có một giao dịch chung nào để “huỷ tất cả” — ghế bị giữ mãi, không ai mua được.</p>
+          <div class="box key">Hôm nay: <b>saga</b> — chuỗi bước cục bộ có <b>bước bù</b>, và chấp nhận <b>nhất quán cuối cùng</b>.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, đặt vé xem phim đi qua ba dịch vụ là ghế, thanh toán và vé, mỗi dịch vụ một cơ sở dữ liệu riêng. Ghế đã giữ, bước trừ tiền thì lỗi. Không có một giao dịch chung nào để huỷ tất cả, nên ghế bị giữ mãi và không ai mua được. Hôm nay ta học saga, một chuỗi bước cục bộ có bước bù, và chấp nhận nhất quán cuối cùng."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: giao dịch cục bộ, thử lại và lũy đẳng"
+    checks:
+      - "(500 - 100, 200 + 100) == (400, 300) and 400 + 300 == 500 + 200 == 700"
+      - "alg.charges_after_retry(2, False) == 3 and alg.charges_after_retry(2, True) == 1"
+    steps:
+      - show: |
+          <p><b>Giao dịch</b> trong <b>một</b> cơ sở dữ liệu (khoá Cơ sở dữ liệu): một nhóm thao tác “tất cả hoặc không có gì”.</p>
+          <table class="t"><tr><th>chuyển 100 từ A sang B</th><th>A</th><th>B</th><th>tổng</th></tr>
+          <tr><td>trước</td><td>500</td><td>200</td><td>700</td></tr>
+          <tr><td>giao dịch thành công: trừ A <b>và</b> cộng B</td><td>400</td><td>300</td><td>700</td></tr>
+          <tr><td>giữa chừng lỗi: huỷ cả hai</td><td>500</td><td>200</td><td>700</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", 0]
+        say: "Ở khoá Cơ sở dữ liệu, ta đã học giao dịch, một nhóm thao tác trong một cơ sở dữ liệu theo kiểu tất cả hoặc không có gì. Chuyển 100 từ tài khoản A sang B, trước đó A có 500, B có 200, tổng là 700. Giao dịch thành công thì trừ A và cộng B cùng lúc, A còn 400, B có 300, tổng vẫn 700. Lỗi giữa chừng thì cơ sở dữ liệu huỷ cả hai, mọi thứ như cũ. Nhưng điều này chỉ đúng trong một cơ sở dữ liệu, còn ba dịch vụ có ba cơ sở dữ liệu thì không có giao dịch chung."
+      - show: |
+          <p><b>Thử lại và lũy đẳng</b> (bài 4): phản hồi bị mất, người gọi không biết thao tác đã chạy chưa nên thử lại.</p>
+          <table class="t"><tr><th>trừ tiền, thử lại 2 lần</th><th>số lần thật sự trừ</th></tr>
+          <tr><td>không có khoá lũy đẳng</td><td>$1 + 2 = 3$</td></tr>
+          <tr><td>có khoá lũy đẳng (mỗi đơn một mã, gặp lại mã cũ thì bỏ qua)</td><td>1</td></tr></table>
+        focus: [1, 1, 2, "2.2", "2.3"]
+        say: "Ở bài 4, ta đã học thử lại và lũy đẳng. Phản hồi bị mất thì người gọi không biết thao tác đã chạy chưa, nên thử lại. Trừ tiền rồi thử lại 2 lần, tức tổng cộng 3 lần gửi. Không có khoá lũy đẳng thì máy chủ trừ cả 3 lần. Có khoá lũy đẳng, mỗi đơn mang một mã, máy chủ gặp lại mã cũ thì bỏ qua, nên chỉ trừ 1 lần."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: sự kiện, saga, nhất quán cuối cùng"
+    steps:
+      - show: |
+          <table class="t"><tr><th>khái niệm</th><th>nghĩa</th></tr>
+          <tr><td><b>sự kiện</b></td><td>thông báo “điều này đã xảy ra” (đã giữ ghế), phát cho ai quan tâm</td></tr>
+          <tr><td><b>saga</b> (1987)</td><td>chuỗi giao dịch cục bộ; mỗi bước có một <b>bước bù</b> làm mất tác dụng của nó</td></tr>
+          <tr><td><b>nhất quán cuối cùng</b></td><td>các dịch vụ có thể lệch nhau một lúc, nhưng nếu không có thay đổi mới thì sẽ khớp</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Bảng giới thiệu ba khái niệm. Sự kiện là thông báo điều này đã xảy ra, như đã giữ ghế, phát cho ai quan tâm. Saga, đề xuất năm 1987, là chuỗi giao dịch cục bộ, mỗi bước có một bước bù làm mất tác dụng của nó. Nhất quán cuối cùng nghĩa là các dịch vụ có thể lệch nhau một lúc, nhưng nếu không có thay đổi mới thì cuối cùng sẽ khớp."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Đi tới bằng bước làm, quay về bằng bước bù"
+    steps:
+      - show: |
+          <div><svg width="1500" height="400" viewBox="0 0 1500 400"><g font-size="24" fill="#1f2937"><text x="30" y="100" font-weight="bold">làm</text><text x="30" y="270" font-weight="bold">bù</text><rect x="140" y="60" width="300" height="70" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="290" y="104" text-anchor="middle">1. giữ ghế: xong</text><rect x="580" y="60" width="300" height="70" rx="10" fill="#fee2e2" stroke="#b91c1c" stroke-width="3"/><text x="730" y="104" text-anchor="middle">2. trừ tiền: LỖI</text><rect x="1020" y="60" width="300" height="70" rx="10" fill="#f3f4f6" stroke="#6b7280" stroke-width="3" stroke-dasharray="8 6"/><text x="1170" y="104" text-anchor="middle">3. xuất vé: không chạy</text><line x1="440" y1="95" x2="580" y2="95" stroke="#2a78d6" stroke-width="4"/><line x1="880" y1="95" x2="1020" y2="95" stroke="#6b7280" stroke-width="3" stroke-dasharray="8 6"/><rect x="140" y="230" width="300" height="70" rx="10" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="290" y="274" text-anchor="middle">nhả ghế: chạy</text><rect x="580" y="230" width="300" height="70" rx="10" fill="#f3f4f6" stroke="#6b7280" stroke-width="3" stroke-dasharray="8 6"/><text x="730" y="274" text-anchor="middle">hoàn tiền: không cần</text><rect x="1020" y="230" width="300" height="70" rx="10" fill="#f3f4f6" stroke="#6b7280" stroke-width="3" stroke-dasharray="8 6"/><text x="1170" y="274" text-anchor="middle">huỷ vé: không cần</text><line x1="730" y1="130" x2="730" y2="185" stroke="#eb6834" stroke-width="4"/><line x1="730" y1="185" x2="290" y2="185" stroke="#eb6834" stroke-width="4"/><line x1="290" y1="185" x2="290" y2="230" stroke="#eb6834" stroke-width="4"/><polygon points="280,218 300,218 290,230" fill="#eb6834"/><text x="510" y="176" text-anchor="middle" fill="#eb6834">quay lại, bù bước đã xong</text><text x="750" y="360" text-anchor="middle" font-weight="bold">chỉ bù những bước đã xong, theo thứ tự ngược: lỗi ở bước 2 thì bù 1 bước</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình có hai hàng, hàng trên là các bước làm, hàng dưới là bước bù tương ứng của từng bước. Giữ ghế xong, sang bước trừ tiền thì lỗi, nên bước xuất vé không bao giờ chạy. Mũi tên màu cam quay lại hàng dưới và chỉ chạy nhả ghế, vì hoàn tiền và huỷ vé không cần, tiền chưa trừ và vé chưa xuất. Quy tắc là chỉ bù những bước đã xong, theo thứ tự ngược."
+
+  - id: example
+    kind: example
+    title: "Saga đặt vé"
+    checks:
+      - "alg.saga([('giữ ghế', 'nhả ghế'), ('trừ tiền', 'hoàn tiền'), ('xuất vé', 'huỷ vé')]) == ['giữ ghế', 'trừ tiền', 'xuất vé']"
+      - "alg.saga([('giữ ghế', 'nhả ghế'), ('trừ tiền', 'hoàn tiền'), ('xuất vé', 'huỷ vé')], 1) == ['giữ ghế', 'trừ tiền: LỖI', 'nhả ghế']"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bước</th><th>làm (giao dịch cục bộ)</th><th>bước bù</th><th>dịch vụ</th></tr>
+          <tr><td>1</td><td>giữ ghế</td><td>nhả ghế</td><td>ghế</td></tr>
+          <tr><td>2</td><td>trừ tiền</td><td>hoàn tiền</td><td>thanh toán</td></tr>
+          <tr><td>3</td><td>xuất vé</td><td>huỷ vé</td><td>vé</td></tr></table>
+          <p><b>Bước 1</b> — viết saga: mỗi bước là một giao dịch trong cơ sở dữ liệu của <b>một</b> dịch vụ, kèm bước bù của nó.</p>
+        focus: [0, "1.2", "1.3", "1.4", 2]
+        say: "Bước một, ta viết saga đặt vé thành bảng. Bước một giữ ghế ở dịch vụ ghế, bước bù là nhả ghế. Bước hai trừ tiền ở dịch vụ thanh toán, bước bù là hoàn tiền. Bước ba xuất vé ở dịch vụ vé, bước bù là huỷ vé. Mỗi bước là một giao dịch trong cơ sở dữ liệu của đúng một dịch vụ, nên tự nó vẫn là tất cả hoặc không có gì."
+      - show: |
+          <table class="t"><tr><th>nhật ký khi mọi bước thành công</th></tr>
+          <tr><td>giữ ghế → trừ tiền → xuất vé</td></tr></table>
+          <p><b>Bước 2</b> — không lỗi thì saga chỉ là ba bước nối tiếp, <b>không</b> bước bù nào chạy.</p>
+        focus: [1, 2]
+        say: "Bước hai, nếu mọi bước thành công thì nhật ký đơn giản là giữ ghế, trừ tiền, xuất vé. Không có lỗi thì saga chỉ là ba bước nối tiếp, không bước bù nào chạy."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>nhật ký khi bước 2 lỗi</th></tr>
+          <tr><td>giữ ghế → <b class="red">trừ tiền: LỖI</b> → <b>nhả ghế</b></td></tr></table>
+          <p><b>Bước 3</b> — bước 2 lỗi: các bước <b>đã xong</b> chỉ có bước 1, nên chỉ chạy bù của nó. Ghế được nhả, người khác mua được.</p>
+        focus: [1, 2, 2]
+        say: "Bước ba, giả sử bước trừ tiền lỗi, nhật ký là giữ ghế, trừ tiền lỗi, rồi nhả ghế. Các bước đã xong chỉ có bước một, nên chỉ chạy bước bù của nó. Nhờ vậy ghế được nhả ra, và người khác mua được."
+      - show: |
+          <table class="t"><tr><th>thời điểm</th><th>ghế</th><th>thanh toán</th><th>vé</th><th>khách thấy</th></tr>
+          <tr><td>vừa giữ ghế</td><td>đang giữ</td><td>chưa trừ</td><td>chưa có</td><td>đang xử lý</td></tr>
+          <tr><td>vừa trừ tiền</td><td>đang giữ</td><td>đã trừ</td><td>chưa có</td><td>đang xử lý</td></tr>
+          <tr><td>saga xong</td><td>đã bán</td><td>đã trừ</td><td>đã xuất</td><td>có vé</td></tr></table>
+          <div class="box key"><b>Bước 4</b> — giữa chừng ba dịch vụ <b>lệch nhau</b>; hết saga thì khớp: đó là <b>nhất quán cuối cùng</b>. Giao diện nên nói thật: “Đang xử lý đơn của bạn”.</div>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Bước bốn, xem trạng thái ba dịch vụ theo thời gian. Vừa giữ ghế thì ghế đang giữ, tiền chưa trừ, vé chưa có. Vừa trừ tiền thì tiền đã trừ mà vé vẫn chưa có. Khi saga xong thì ghế đã bán, tiền đã trừ, vé đã xuất. Giữa chừng ba dịch vụ lệch nhau, hết saga thì khớp, đó là nhất quán cuối cùng, nên giao diện nên nói thật là đang xử lý đơn của bạn."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác: thử hết mọi chỗ lỗi"
+    checks:
+      - "[len(alg.saga([('giữ ghế', 'nhả ghế'), ('trừ tiền', 'hoàn tiền'), ('xuất vé', 'huỷ vé')], k)) - k - 1 for k in (0, 1, 2)] == [0, 1, 2]"
+      - "alg.saga([('giữ ghế', 'nhả ghế'), ('trừ tiền', 'hoàn tiền'), ('xuất vé', 'huỷ vé')], 0) == ['giữ ghế: LỖI'] and alg.saga([('giữ ghế', 'nhả ghế'), ('trừ tiền', 'hoàn tiền'), ('xuất vé', 'huỷ vé')], 2)[-2:] == ['hoàn tiền', 'nhả ghế']"
+    steps:
+      - show: |
+          <table class="t"><tr><th>lỗi ở bước</th><th>đã xong</th><th>bước bù chạy</th><th>số bước bù</th></tr>
+          <tr><td>1</td><td>không bước nào</td><td>không</td><td>0</td></tr>
+          <tr><td>2</td><td>giữ ghế</td><td>nhả ghế</td><td>1</td></tr>
+          <tr><td>3</td><td>giữ ghế, trừ tiền</td><td>hoàn tiền, rồi nhả ghế</td><td>2</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", 0]
+        say: "Kiểm bằng đường khác, ta cho máy thử hết mọi chỗ có thể lỗi, rồi đếm số bước bù. Lỗi ngay bước một thì chưa có gì xong, không cần bù gì. Lỗi ở bước hai thì bù một bước, nhả ghế, khớp với ví dụ. Lỗi ở bước ba thì bù hai bước, hoàn tiền rồi mới nhả ghế. Quy luật là lỗi ở bước k thì bù đúng k trừ 1 bước, vì chỉ những bước trước nó đã xong."
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc, 1 lỗi người đã đi làm"
+    checks:
+      - "alg.charges_after_retry(2, False) * 150000 == 450000 and alg.charges_after_retry(2, True) * 150000 == 150000"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Nghĩ bước bù là “quay ngược thời gian” <b class="red">(sai)</b>
+          <br><span class="note">Thư xác nhận đã gửi không thu hồi được; khách đã thấy số dư bị trừ. Bước bù là một hành động <b>mới</b> (gửi thư xin lỗi, hoàn tiền), được thiết kế như một tính năng.</span></div>
+        say: "Lỗi thứ nhất, nghĩ bước bù là quay ngược thời gian. Thư xác nhận đã gửi thì không thu hồi được, khách đã thấy số dư bị trừ. Bước bù là một hành động mới như gửi thư xin lỗi hay hoàn tiền, và phải được thiết kế như một tính năng."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Xử lý sự kiện không lũy đẳng <b class="red">(trừ hai lần)</b>
+          <br><span class="note">Hệ thông điệp thường giao “ít nhất một lần”: cùng sự kiện có thể tới hai lần. Bên nhận ghi lại mã sự kiện đã xử lý, gặp lại thì bỏ qua.</span></div>
+        say: "Lỗi thứ hai, xử lý sự kiện mà không lũy đẳng. Hệ thông điệp thường giao ít nhất một lần, nên cùng một sự kiện có thể tới hai lần. Bên nhận phải ghi lại mã sự kiện đã xử lý, gặp lại thì bỏ qua."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Ghi cơ sở dữ liệu rồi mới phát sự kiện, hai việc rời <b class="red">(mất sự kiện)</b>
+          <br><span class="note">Ghi xong, máy chết trước khi phát: các dịch vụ khác không bao giờ biết. Ghi sự kiện vào <b>cùng giao dịch</b> với dữ liệu (một bảng “hộp thư đi”), rồi một tiến trình khác đọc bảng đó và phát.</span></div>
+        say: "Lỗi thứ ba, ghi cơ sở dữ liệu rồi mới phát sự kiện, như hai việc rời nhau. Ghi xong mà máy chết trước khi phát thì các dịch vụ khác không bao giờ biết. Hãy ghi sự kiện vào cùng giao dịch với dữ liệu trong một bảng hộp thư đi, rồi một tiến trình khác đọc bảng đó và phát."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Viết bước bù như thể nó không bao giờ lỗi <b class="red">(hoàn tiền ba lần, hoặc không lần nào)</b></div>
+          <table class="t"><tr><th>hoàn 150 000 đồng, phản hồi mất, thử lại 2 lần</th><th>khách được hoàn</th></tr>
+          <tr><td>không thử lại bước bù</td><td>có thể 0 đồng: ghế nhả, tiền mất</td></tr>
+          <tr><td>thử lại, không có khoá lũy đẳng</td><td>$3 \cdot 150\,000 = 450\,000$ đồng</td></tr>
+          <tr><td>thử lại tới khi xong, khoá lũy đẳng theo mã đơn</td><td>đúng 150 000 đồng</td></tr></table>
+        introduces: [cdot]
+        focus: [1, 2, "2.2", "2.3", "2.4"]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, viết bước bù như thể nó không bao giờ lỗi. Bước hoàn tiền cũng là một lời gọi qua mạng, nên cũng có thể mất phản hồi, giả sử phải thử lại 2 lần. Không thử lại thì có thể khách không được hoàn đồng nào. Thử lại mà không có khoá lũy đẳng thì khách có thể được hoàn 3 lần, tức 450 nghìn đồng. Người làm nghề cho bước bù thử lại tới khi xong và gắn khoá lũy đẳng theo mã đơn, nên khách được hoàn đúng 150 nghìn đồng."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.saga([('giữ ghế', 'nhả ghế'), ('trừ tiền', 'hoàn tiền'), ('xuất vé', 'huỷ vé')], 2) == ['giữ ghế', 'trừ tiền', 'xuất vé: LỖI', 'hoàn tiền', 'nhả ghế']"
+      - "alg.charges_after_retry(1, True) == 1 and alg.charges_after_retry(1, False) == 2"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Saga đặt vé: bước 3 (xuất vé) lỗi. Những bước bù nào chạy, theo thứ tự nào?</td></tr>
+          <tr><td>2</td><td>Sự kiện “đã trừ tiền đơn 42” tới dịch vụ vé hai lần. Dịch vụ vé nên làm gì ở lần thứ hai?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, với saga đặt vé, bước ba xuất vé bị lỗi. Những bước bù nào chạy, theo thứ tự nào? Câu hai, sự kiện đã trừ tiền đơn 42 tới dịch vụ vé hai lần, dịch vụ vé nên làm gì ở lần thứ hai? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <table class="t"><tr><th>câu 1</th><th>kết quả</th></tr>
+          <tr><td>các bước đã xong (theo thứ tự làm)</td><td>giữ ghế, trừ tiền</td></tr>
+          <tr><td>bù ngược thứ tự</td><td><b>hoàn tiền</b>, rồi <b>nhả ghế</b></td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Đáp án câu một, ta làm hai bước. Trước hết liệt kê các bước đã xong theo thứ tự làm, là giữ ghế rồi trừ tiền. Sau đó bù theo thứ tự ngược, nên chạy hoàn tiền trước, rồi mới nhả ghế."
+      - show: |
+          <table class="t"><tr><th>câu 2: lần tới</th><th>mã “đơn 42” đã có trong danh sách đã xử lý?</th><th>dịch vụ vé làm</th></tr>
+          <tr><td>lần 1</td><td>chưa</td><td>xuất vé, ghi mã “đơn 42”</td></tr>
+          <tr><td>lần 2</td><td>rồi</td><td><b>bỏ qua</b>, không xuất vé lần hai</td></tr></table>
+        focus: [1, "1.2", "1.3", 0]
+        say: "Câu hai, dịch vụ vé giữ một danh sách mã sự kiện đã xử lý. Lần tới thứ nhất, mã đơn 42 chưa có, nên xuất vé và ghi mã lại. Lần tới thứ hai, thấy mã đơn 42 đã được xử lý thì bỏ qua, không xuất vé lần hai. Nhờ vậy khách nhận đúng một vé dù sự kiện tới hai lần."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">mỗi dịch vụ một cơ sở dữ liệu</span><span class="a">→</span>
+          <span class="n">saga: bước cục bộ + bước bù</span><span class="a">→</span>
+          <span class="n">lỗi: bù ngược thứ tự</span><span class="a">→</span>
+          <span class="n">sự kiện lũy đẳng, hộp thư đi</span></div>
+        say: "Tổng kết lại, khi mỗi dịch vụ có cơ sở dữ liệu riêng, saga thay giao dịch chung bằng các bước cục bộ có bước bù. Gặp lỗi thì bù theo thứ tự ngược, xử lý sự kiện lũy đẳng, và phát sự kiện qua hộp thư đi."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> trong hệ phân tán, “huỷ” cũng là một nghiệp vụ cần thiết kế, và “đang xử lý” là một trạng thái thật cần cho người dùng thấy.</div>
+        say: "Điều cần mang theo, trong hệ phân tán, huỷ cũng là một nghiệp vụ cần thiết kế, và đang xử lý là một trạng thái thật cần cho người dùng thấy."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 15): <b>tình huống chuyên gia theo dòng thời gian</b> — mười năm quản lý container ở quy mô lớn, từ Borg tới Kubernetes.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 15, ta đi lại mười năm quản lý container ở quy mô lớn, từ Borg tới Kubernetes, theo từng chặng, để thấy mỗi thực hành tốt ra đời từ điểm nghẽn nào. Hẹn gặp bạn ở bài tiếp theo."

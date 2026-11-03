@@ -1,0 +1,219 @@
+id: L08
+course: DVO
+series: "DVO · DevOps: tích hợp, triển khai liên tục và vận hành"
+title: "Bài 8 — Di chuyển lược đồ cơ sở dữ liệu không ngừng dịch vụ"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/dvo.yaml L08; audit/dvo/verify_dvo.py L08; P. Sadalage, S. Ambler, Refactoring Databases (2006), chương 5; D. Sato, ParallelChange (martinfowler.com, 2014); SQLite docs, ALTER TABLE (RENAME COLUMN, DROP COLUMN); DBS bài 5 (lược đồ)"
+assumes: [arith]
+# Quy ước: alg.migration_sim chạy trên sqlite3 thật (bộ nhớ), bảng kh(id, ten); bản cũ đọc/ghi cột ten, bản mới đọc/ghi cột ho_ten, cùng lúc
+#   (như khi cập nhật cuốn chiếu). “Chạy được” = SELECT và INSERT trên cột của bản đó không lỗi.
+objectives:
+  - "Áp dụng mở rộng rồi thu hẹp"
+  - "Giữ tương thích ngược giữa hai phiên bản chạy song song"
+  - "Tách thay đổi lược đồ khỏi thay đổi mã"
+asr_reviewed:
+  - {sentence: "Bản cũ vẫn thấy cột tên, bản mới thấy cột họ tên, nên cả hai đều chạy.", reason: "ASR chép “Bạn cũ vẫn thấy cuộc tinh, bạn mới thấy cuộc họ tinh, nên cả hai đều chạy.” (0.647): lệch âm/thanh thuần Việt: bản/bạn, cột tên bản/cuộc tinh bạn, cột/cuộc, tên/tinh — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Dòng Chi do bản cũ ghi sau lần chép, nên cột họ tên còn trống.", reason: "ASR chép “Dòng chi do bản củ ghi sau lần chết, nên cục họ tin còn trống.” (0.733): lệch âm/thanh thuần Việt: cũ/củ, chép/chết, cột/cục, tên/tin — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Dòng An có họ tên nhờ lần chép.", reason: "ASR chép “Dòng An có họ tin nhờ lần chiếc.” (0.75): lệch âm/thanh thuần Việt: tên/tin, chép/chiếc — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Mã mới lỗi, quay lui về mã cũ, nhưng lược đồ đã đổi nên mã cũ cũng không chạy.", reason: "ASR chép “Mạ mới lỗi quay lui về mạ cũ nhưng lực đồ đã đổi nên mạ cũ cũng không chạy.” (0.789): lệch âm/thanh thuần Việt: mã/mạ, mã/mạ, lược/lực, mã/mạ — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Đổi tên một cột, nửa số máy chủ báo lỗi"
+    checks:
+      - "alg.migration_sim('mot_buoc') == [('đổi tên cột', False, True)]"
+    steps:
+      - show: |
+          <p>Bản mới đổi tên cột <code>ten</code> thành <code>ho_ten</code> cho rõ nghĩa. Cập nhật cuốn chiếu đang chạy: một nửa máy chủ vẫn là bản cũ, vẫn đọc cột <code>ten</code> — giờ không còn tồn tại. Một nửa số đơn hàng lỗi.</p>
+          <div class="box key">Hôm nay: di chuyển lược đồ theo kiểu <b>mở rộng rồi thu hẹp</b>, để bản cũ và bản mới cùng chạy được.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, bản mới đổi tên một cột trong bảng khách hàng cho rõ nghĩa. Cập nhật cuốn chiếu đang chạy, một nửa máy chủ vẫn là bản cũ, vẫn đọc cột tên cũ, mà cột đó giờ không còn tồn tại. Một nửa số đơn hàng bị lỗi. Hôm nay ta học di chuyển lược đồ theo kiểu mở rộng rồi thu hẹp, để bản cũ và bản mới cùng chạy được."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: lược đồ là gì, cuốn chiếu là gì"
+    checks:
+      - "(lambda db: (db.execute('CREATE TABLE kh (id INTEGER PRIMARY KEY, ten TEXT)'), db.execute('INSERT INTO kh (ten) VALUES (?)', ('An',)), db.execute('SELECT ten FROM kh').fetchall() == [('An',)]))(__import__('sqlite3').connect(':memory:'))[2]"
+      - "(lambda db: (db.execute('CREATE TABLE kh (id INTEGER PRIMARY KEY, ten TEXT)'), db.execute('ALTER TABLE kh RENAME COLUMN ten TO ho_ten'), alg.migration_sim('mot_buoc')[0][1] is False))(__import__('sqlite3').connect(':memory:'))[2]"
+      - "[(4 - k, k) for k in range(5)] == [(4, 0), (3, 1), (2, 2), (1, 3), (0, 4)]"
+    steps:
+      - show: |
+          <p>Ở khoá Cơ sở dữ liệu: <b>lược đồ</b> là tên bảng và tên các cột. Bảng khách hàng <code>kh</code>:</p>
+          <table class="t"><tr><th>id</th><th>ten</th></tr><tr><td>1</td><td>An</td></tr></table>
+          <p>Hỏi cột <code>ten</code> → được “An”. Hỏi một cột <b>không có</b> trong lược đồ → cơ sở dữ liệu báo lỗi, chương trình hỏng.</p>
+        focus: [1, 2, 3, 3]
+        say: "Trước hết, ôn hai ý. Ở khoá Cơ sở dữ liệu, lược đồ là tên bảng và tên các cột, ví dụ bảng khách hàng có cột mã số và cột tên, với một dòng là An. Khi hỏi giá trị ở cột tên, ta nhận được An. Nhưng hỏi một cột không có trong lược đồ thì cơ sở dữ liệu báo lỗi, và chương trình hỏng."
+      - show: |
+          <p>Ở khoá Hệ thống hướng dịch vụ: <b>cập nhật cuốn chiếu</b> thay từng máy chủ một, nên có lúc hai bản cùng chạy.</p>
+          <table class="t"><tr><th>lúc</th><th>0</th><th>1</th><th>2</th><th>3</th><th>4</th></tr>
+          <tr><td>máy chạy bản cũ</td><td>4</td><td>3</td><td>2</td><td>1</td><td>0</td></tr>
+          <tr><td>máy chạy bản mới</td><td>0</td><td>1</td><td>2</td><td>3</td><td>4</td></tr></table>
+        focus: [1, "2.2", "2.3", 0]
+        say: "Ý thứ hai, ở khoá Hệ thống hướng dịch vụ, cập nhật cuốn chiếu thay từng máy chủ một, nên có lúc hai bản cùng chạy. Với 4 máy, số máy chạy bản cũ giảm dần 4, 3, 2, 1, 0. Số máy chạy bản mới tăng dần 0, 1, 2, 3, 4. Ở ba lúc giữa, cả hai bản cùng đọc ghi một cơ sở dữ liệu."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: mở rộng rồi thu hẹp"
+    steps:
+      - show: |
+          <p>Trong lúc cập nhật cuốn chiếu, <b>bản cũ và bản mới chạy cùng lúc</b> trên cùng cơ sở dữ liệu. Mọi trạng thái lược đồ trung gian phải hợp với <b>cả hai</b>.</p>
+          <div class="chain"><span class="n">mở rộng: thêm cái mới, giữ cái cũ</span><span class="a">→</span><span class="n">chuyển dần mã sang cái mới</span><span class="a">→</span><span class="n">thu hẹp: bỏ cái cũ khi không còn ai dùng</span></div>
+          <div class="box key">Mỗi bước là một lần triển khai riêng, có thể quay lui; thay đổi lược đồ và thay đổi mã <b>không</b> đi cùng một bước.</div>
+        focus: [1, 2, 3]
+        say: "Trong lúc cập nhật cuốn chiếu, bản cũ và bản mới chạy cùng lúc trên cùng một cơ sở dữ liệu, nên mọi trạng thái lược đồ trung gian phải hợp với cả hai. Cách làm là mở rộng trước, thêm cái mới mà giữ cái cũ, rồi chuyển dần mã sang cái mới, cuối cùng thu hẹp, bỏ cái cũ khi không còn ai dùng. Mỗi bước là một lần triển khai riêng có thể quay lui, và thay đổi lược đồ với thay đổi mã không đi cùng một bước."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Bảng phình ra rồi mới co lại"
+    steps:
+      - show: |
+          <div><svg width="1500" height="420" viewBox="0 0 1500 420"><defs><marker id="arD8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs><g font-size="24" fill="#1f2937"><text x="30" y="88">một bước</text><text x="30" y="270">mở rộng</text><text x="30" y="300">rồi thu hẹp</text></g><rect x="240" y="50" width="120" height="60" fill="#ffffff" stroke="#1f2937" stroke-width="3"/><text x="300" y="89" font-size="24" text-anchor="middle" fill="#1f2937">id</text><rect x="360" y="50" width="120" height="60" fill="#ffffff" stroke="#1f2937" stroke-width="3"/><text x="420" y="89" font-size="24" text-anchor="middle" fill="#1f2937">ten</text><rect x="700" y="50" width="120" height="60" fill="#fecaca" stroke="#1f2937" stroke-width="3"/><text x="760" y="89" font-size="24" text-anchor="middle" fill="#1f2937">id</text><rect x="820" y="50" width="120" height="60" fill="#fecaca" stroke="#1f2937" stroke-width="3"/><text x="880" y="89" font-size="24" text-anchor="middle" fill="#1f2937">ho_ten</text><line x1="490" y1="80" x2="690" y2="80" stroke="#1f2937" stroke-width="3" marker-end="url(#arD8)"/><text x="960" y="88" font-size="24" fill="#b91c1c">bản cũ hỏi cột ten: lỗi</text><rect x="240" y="250" width="120" height="60" fill="#ffffff" stroke="#1f2937" stroke-width="3"/><text x="300" y="289" font-size="24" text-anchor="middle" fill="#1f2937">id</text><rect x="360" y="250" width="120" height="60" fill="#ffffff" stroke="#1f2937" stroke-width="3"/><text x="420" y="289" font-size="24" text-anchor="middle" fill="#1f2937">ten</text><rect x="560" y="250" width="120" height="60" fill="#bbf7d0" stroke="#1f2937" stroke-width="3"/><text x="620" y="289" font-size="24" text-anchor="middle" fill="#1f2937">id</text><rect x="680" y="250" width="120" height="60" fill="#bbf7d0" stroke="#1f2937" stroke-width="3"/><text x="740" y="289" font-size="24" text-anchor="middle" fill="#1f2937">ten</text><rect x="800" y="250" width="120" height="60" fill="#bbf7d0" stroke="#1f2937" stroke-width="3"/><text x="860" y="289" font-size="24" text-anchor="middle" fill="#1f2937">ho_ten</text><rect x="1140" y="250" width="120" height="60" fill="#ffffff" stroke="#1f2937" stroke-width="3"/><text x="1200" y="289" font-size="24" text-anchor="middle" fill="#1f2937">id</text><rect x="1260" y="250" width="120" height="60" fill="#ffffff" stroke="#1f2937" stroke-width="3"/><text x="1320" y="289" font-size="24" text-anchor="middle" fill="#1f2937">ho_ten</text><line x1="490" y1="280" x2="550" y2="280" stroke="#1f2937" stroke-width="3" marker-end="url(#arD8)"/><line x1="930" y1="280" x2="1130" y2="280" stroke="#1f2937" stroke-width="3" marker-end="url(#arD8)"/><g font-size="22" text-anchor="middle"><text x="360" y="345" fill="#1f2937">lúc đầu</text><text x="740" y="345" fill="#059669">bản cũ và bản mới</text><text x="740" y="375" fill="#059669">đều tìm thấy cột của mình</text><text x="1260" y="345" fill="#1f2937">tắt bản cũ rồi</text><text x="1260" y="375" fill="#1f2937">mới bỏ cột ten</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình so hai cách đổi tên cột. Hàng trên làm một bước, cột tên biến mất ngay, và bản cũ còn đang chạy hỏi cột tên thì gặp lỗi. Hàng dưới cho bảng phình ra trước, có cả cột cũ lẫn cột mới, nên bản cũ và bản mới đều tìm thấy cột của mình. Chỉ khi bản cũ đã tắt hết, bảng mới co lại, bỏ cột tên cũ."
+
+  - id: example
+    kind: example
+    title: "Đổi tên cột qua bốn bước"
+    checks:
+      - "alg.migration_sim('mo_rong_thu_hep') == [('thêm cột mới', True, True), ('chép dữ liệu, ghi cả hai', True, True), ('bản mới đọc cột mới; tắt bản cũ', None, True), ('bỏ cột cũ', None, True)]"
+      - "[x for x in (lambda db: (lambda ex: [ex('CREATE TABLE kh (id INTEGER PRIMARY KEY, ten TEXT)'), ex('INSERT INTO kh (ten) VALUES (?)', ('An',)), ex('ALTER TABLE kh ADD COLUMN ho_ten TEXT'), ex('SELECT * FROM kh').fetchall() == [(1, 'An', None)], ex('UPDATE kh SET ho_ten = ten WHERE ho_ten IS NULL'), ex('INSERT INTO kh (ten, ho_ten) VALUES (?, ?)', ('Bình', 'Bình')), ex('INSERT INTO kh (ten) VALUES (?)', ('Chi',)), ex('SELECT * FROM kh').fetchall() == [(1, 'An', 'An'), (2, 'Bình', 'Bình'), (3, 'Chi', None)], ex('UPDATE kh SET ho_ten = ten WHERE ho_ten IS NULL'), ex('SELECT * FROM kh').fetchall() == [(1, 'An', 'An'), (2, 'Bình', 'Bình'), (3, 'Chi', 'Chi')], ex('ALTER TABLE kh DROP COLUMN ten'), ex('SELECT * FROM kh').fetchall() == [(1, 'An'), (2, 'Bình'), (3, 'Chi')]])(db.execute))(__import__('sqlite3').connect(':memory:')) if x is True or x is False] == [True, True, True, True]"
+    steps:
+      - show: |
+          <p><b>Bước 1 — mở rộng: thêm cột <code>ho_ten</code></b> (còn trống). Bản cũ vẫn thấy <code>ten</code>, bản mới thấy <code>ho_ten</code>.</p>
+          <table class="t"><tr><th>id</th><th>ten</th><th>ho_ten</th></tr><tr><td>1</td><td>An</td><td>(trống)</td></tr></table>
+        focus: [1, 1, 2]
+        say: "Bước một, mở rộng, thêm cột họ tên, lúc đầu còn trống. Bản cũ vẫn thấy cột tên, bản mới thấy cột họ tên, nên cả hai đều chạy. Bảng lúc này có dòng An, cột họ tên trống."
+      - show: |
+          <p><b>Bước 2 — chép dữ liệu sang; bản mới ghi cả hai cột.</b> Bản cũ chưa tắt hết, nó chỉ biết ghi <code>ten</code>:</p>
+          <table class="t"><tr><th>id</th><th>ten</th><th>ho_ten</th><th>ai ghi</th></tr>
+          <tr><td>1</td><td>An</td><td>An</td><td>lần chép</td></tr>
+          <tr><td>2</td><td>Bình</td><td>Bình</td><td>bản mới</td></tr>
+          <tr><td>3</td><td>Chi</td><td class="red">(trống)</td><td>bản cũ</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", "2.4"]
+        say: "Bước hai, chép dữ liệu từ cột tên sang cột họ tên, và bản mới ghi cả hai cột. Nhưng bản cũ chưa tắt hết, và nó chỉ biết ghi cột tên. Dòng An có họ tên nhờ lần chép. Dòng Bình do bản mới ghi nên đủ cả hai cột. Dòng Chi do bản cũ ghi sau lần chép, nên cột họ tên còn trống."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — tắt hết bản cũ, chép bù</b> các dòng <code>ho_ten</code> còn trống; từ đây bản mới đọc cột mới.</p>
+          <table class="t"><tr><th>id</th><th>ten</th><th>ho_ten</th></tr>
+          <tr><td>1</td><td>An</td><td>An</td></tr><tr><td>2</td><td>Bình</td><td>Bình</td></tr><tr><td>3</td><td>Chi</td><td class="green">Chi</td></tr></table>
+        focus: [1, 2, "2.4"]
+        say: "Bước ba, tắt hết bản cũ, rồi chép bù những dòng có cột họ tên còn trống, và từ đây bản mới đọc cột mới. Không còn ai ghi riêng cột tên, nên lần chép bù này là lần cuối. Dòng Chi giờ đã có họ tên."
+      - show: |
+          <p><b>Bước 4 — thu hẹp: bỏ cột <code>ten</code>.</b> Chỉ còn bản mới, và nó không dùng cột này.</p>
+          <table class="t"><tr><th>id</th><th>ho_ten</th></tr><tr><td>1</td><td>An</td></tr><tr><td>2</td><td>Bình</td></tr><tr><td>3</td><td>Chi</td></tr></table>
+        focus: [1, 2]
+        say: "Bước bốn, thu hẹp, bỏ cột tên, vì chỉ còn bản mới và nó không dùng cột này. Bảng còn lại mã số và họ tên, đủ ba khách hàng An, Bình, Chi."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>bản cũ (cột <code>ten</code>)</th><th>bản mới (cột <code>ho_ten</code>)</th></tr>
+          <tr><td>1. thêm cột <code>ho_ten</code></td><td class="green">chạy</td><td class="green">chạy</td></tr>
+          <tr><td>2. chép dữ liệu sang, ghi cả hai cột</td><td class="green">chạy</td><td class="green">chạy</td></tr>
+          <tr><td>3. bản mới đọc cột mới; tắt hết bản cũ</td><td>—</td><td class="green">chạy</td></tr>
+          <tr><td>4. bỏ cột <code>ten</code></td><td>—</td><td class="green">chạy</td></tr></table>
+          <p class="note">Chạy thật trên cơ sở dữ liệu nhỏ: đổi tên một bước làm bản cũ lỗi ngay; bốn bước thì không lúc nào có bản đang chạy bị lỗi.</p>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", 2]
+        say: "Bảng ghi bốn bước đổi tên cột và trạng thái của hai bản. Bước một thêm cột mới, cả hai bản đều chạy. Bước hai chép dữ liệu sang và ghi cả hai cột, cả hai vẫn chạy. Bước ba cho bản mới đọc cột mới và tắt hết bản cũ. Bước bốn mới bỏ cột cũ, lúc đó chỉ còn bản mới và nó vẫn chạy. Chạy thật trên một cơ sở dữ liệu nhỏ, đổi tên một bước làm bản cũ lỗi ngay, còn bốn bước thì không lúc nào có bản đang chạy bị lỗi."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: dò từng bước, cột mỗi bản cần có còn không"
+    checks:
+      - "(lambda cols, old_on: all('ho_ten' in c for c in cols) and all('ten' in c for c, o in zip(cols, old_on) if o) and [o is not None for _, o, _ in alg.migration_sim('mo_rong_thu_hep')] == old_on)([{'ten', 'ho_ten'}, {'ten', 'ho_ten'}, {'ten', 'ho_ten'}, {'ho_ten'}], [True, True, False, False])"
+      - "'ten' not in {'id', 'ho_ten'} and alg.migration_sim('mot_buoc') == [('đổi tên cột', False, True)]"
+    steps:
+      - show: |
+          <p>Đường khác: không chạy truy vấn, chỉ <b>dò danh sách cột</b> sau mỗi bước và hỏi “bản đang chạy có tìm thấy cột của mình không?”.</p>
+          <table class="t"><tr><th>sau bước</th><th>cột có trong bảng</th><th>bản cũ cần <code>ten</code></th><th>bản mới cần <code>ho_ten</code></th></tr>
+          <tr><td>1, 2</td><td>id, ten, ho_ten</td><td>có ✓</td><td>có ✓</td></tr>
+          <tr><td>3, 4</td><td>3: id, ten, ho_ten; 4: id, ho_ten</td><td>đã tắt</td><td>có ✓</td></tr>
+          <tr><td>đổi tên một bước</td><td>id, ho_ten</td><td class="red">không có (lỗi)</td><td>có ✓</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", 0]
+        say: "Kiểm bằng đường khác, ta không chạy truy vấn mà chỉ dò danh sách cột sau mỗi bước, và hỏi bản đang chạy có tìm thấy cột của mình không. Sau bước một và hai, bảng có cả tên lẫn họ tên, nên cả hai bản đều tìm thấy. Sau bước ba và bốn, bản cũ đã tắt, còn bản mới luôn thấy cột họ tên. Riêng cách đổi tên một bước, bảng chỉ còn họ tên trong lúc bản cũ vẫn chạy, nên bản cũ không tìm thấy cột của nó. Kết quả dò tay khớp với lần chạy thật trên cơ sở dữ liệu nhỏ."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc, 1 lỗi người đã đi làm"
+    checks:
+      - "1200 * 2 == 2400"
+      - "(lambda db: (db.execute('CREATE TABLE kh (id INTEGER PRIMARY KEY, ten TEXT, ho_ten TEXT)'), db.execute('UPDATE kh SET ho_ten = ten WHERE ho_ten IS NULL'), db.executemany('INSERT INTO kh (ten) VALUES (?)', [('k',)] * 2400), db.execute('SELECT COUNT(*) FROM kh WHERE ho_ten IS NULL').fetchone()[0] == 2400, db.execute('UPDATE kh SET ho_ten = ten WHERE ho_ten IS NULL'), db.execute('SELECT COUNT(*) FROM kh WHERE ho_ten IS NULL').fetchone()[0] == 0))(__import__('sqlite3').connect(':memory:'))[3::2] == (True, True)"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Gộp thay đổi lược đồ và mã vào một lần triển khai <b class="red">(không quay lui được)</b>
+          <br><span class="note">Mã mới lỗi, quay lui về mã cũ — nhưng lược đồ đã đổi, mã cũ cũng không chạy. Tách: lược đồ mở rộng trước, mã sau, thu hẹp cuối.</span></div>
+        say: "Lỗi thứ nhất, gộp thay đổi lược đồ và thay đổi mã vào một lần triển khai. Mã mới lỗi, quay lui về mã cũ, nhưng lược đồ đã đổi nên mã cũ cũng không chạy. Hãy tách ra, mở rộng lược đồ trước, đổi mã sau, thu hẹp cuối cùng."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Thu hẹp quá sớm <b class="red">(còn người dùng cái cũ)</b>
+          <br><span class="note">Bỏ cột cũ khi vẫn còn một dịch vụ báo cáo chạy đêm đọc nó. Kiểm nhật ký truy vấn để chắc không ai dùng cột cũ trước khi bỏ.</span></div>
+        say: "Lỗi thứ hai, thu hẹp quá sớm. Bỏ cột cũ khi vẫn còn một dịch vụ báo cáo chạy ban đêm đọc nó, nên hãy kiểm nhật ký truy vấn để chắc không ai dùng cột cũ trước khi bỏ."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Chép dữ liệu trên bảng lớn trong một giao dịch <b class="red">(khoá bảng)</b>
+          <br><span class="note">Cập nhật 100 triệu dòng một lần khoá bảng hàng giờ. Chép theo từng lô nhỏ, có thể dừng và chạy tiếp.</span></div>
+        say: "Lỗi thứ ba, chép dữ liệu trên bảng lớn trong một giao dịch. Cập nhật 100 triệu dòng một lần sẽ khoá bảng hàng giờ, nên hãy chép theo từng lô nhỏ, có thể dừng và chạy tiếp."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Chép dữ liệu <b>một lần</b> rồi coi là xong, trong khi bản cũ vẫn đang ghi <b class="red">(dòng thiếu cột mới)</b></div>
+          <table class="t"><tr><th>số minh hoạ: bản cũ thêm 1200 khách mỗi giờ</th><th>dòng có <code>ho_ten</code> trống</th></tr>
+          <tr><td>ngay sau lần chép đầu</td><td>0</td></tr>
+          <tr><td>2 giờ sau, cuốn chiếu chưa xong</td><td>$1200 \cdot 2 = 2400$</td></tr>
+          <tr><td>tắt hết bản cũ, chép bù, đếm lại</td><td>0 ✓</td></tr></table>
+        introduces: [cdot]
+        focus: [1, "2.2", "2.3", "2.4", 0]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, chép dữ liệu một lần rồi coi là xong, trong khi bản cũ vẫn đang ghi. Với số minh hoạ, bản cũ thêm 1200 khách mỗi giờ, ngay sau lần chép đầu thì không dòng nào thiếu họ tên. Nhưng cuốn chiếu kéo dài thêm 2 giờ, nên có 1200 nhân 2, bằng 2400 dòng mà bản mới đọc ra họ tên trống. Người làm nghề tắt hết bản cũ, chép bù, rồi đếm lại số dòng còn trống, phải bằng 0 mới chuyển sang bước sau. Câu hỏi họ đặt ra không phải lệnh chạy có lỗi không, mà dữ liệu có đủ không."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "'12 Lê Lợi, Huế'.split(', ') == ['12 Lê Lợi', 'Huế']"
+      - "(lambda db: (db.execute('CREATE TABLE kh (id INTEGER PRIMARY KEY, dia_chi TEXT)'), db.execute('INSERT INTO kh (dia_chi) VALUES (?)', ('12 Lê Lợi, Huế',)), db.execute('ALTER TABLE kh ADD COLUMN duong TEXT'), db.execute('ALTER TABLE kh ADD COLUMN thanh_pho TEXT'), db.execute(\"UPDATE kh SET duong = substr(dia_chi, 1, instr(dia_chi, ', ') - 1), thanh_pho = substr(dia_chi, instr(dia_chi, ', ') + 2) WHERE duong IS NULL\"), db.execute('ALTER TABLE kh DROP COLUMN dia_chi'), db.execute('SELECT duong, thanh_pho FROM kh').fetchall() == [('12 Lê Lợi', 'Huế')]))(__import__('sqlite3').connect(':memory:'))[-1]"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Cần tách cột <code>dia_chi</code> thành hai cột <code>duong</code> và <code>thanh_pho</code>. Viết các bước mở rộng rồi thu hẹp.</td></tr>
+          <tr><td>2</td><td>Ở bước nào thì bản cũ phải được tắt hết?</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, cần tách cột địa chỉ thành hai cột đường và thành phố, hãy viết các bước mở rộng rồi thu hẹp. Câu hai, ở bước nào thì bản cũ phải được tắt hết? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>việc làm (câu ①)</th></tr>
+          <tr><td>1</td><td>thêm hai cột <code>duong</code>, <code>thanh_pho</code></td></tr>
+          <tr><td>2</td><td>chép bằng cách tách chuỗi: “12 Lê Lợi, Huế” → “12 Lê Lợi” và “Huế”; bản mới ghi cả ba cột</td></tr>
+          <tr><td>3</td><td>tắt hết bản cũ, chép bù dòng còn trống; bản mới đọc hai cột mới</td></tr>
+          <tr><td>4</td><td>bỏ cột <code>dia_chi</code></td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", "1.5"]
+        say: "Đáp án câu một, ta làm bốn bước như ví dụ. Bước một, thêm hai cột đường và thành phố. Bước hai, chép bằng cách tách chuỗi, ví dụ 12 Lê Lợi, Huế tách thành 12 Lê Lợi và Huế, đồng thời bản mới ghi cả ba cột. Bước ba, tắt hết bản cũ, chép bù những dòng hai cột mới còn trống, rồi cho bản mới đọc hai cột mới. Bước bốn, bỏ cột địa chỉ."
+      - show: |
+          <p>② Bản cũ phải tắt hết <b>trước lần chép bù cuối</b> ở bước 3 — nếu không, dòng nó ghi sau đó lại thiếu hai cột mới — và dĩ nhiên trước khi bỏ <code>dia_chi</code>.</p>
+          <table class="t"><tr><th>tắt bản cũ</th><th>hậu quả</th></tr>
+          <tr><td>trước lần chép bù cuối</td><td class="green">không thiếu dòng nào</td></tr>
+          <tr><td>sau lần chép bù, trước bước 4</td><td class="red">dòng ghi xen giữa thiếu cột mới</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Câu hai, bản cũ phải tắt hết trước lần chép bù cuối ở bước ba, và dĩ nhiên trước khi bỏ cột địa chỉ. Nếu tắt trước lần chép bù cuối, không dòng nào thiếu. Nếu chỉ tắt sau lần chép bù, những dòng bản cũ ghi xen giữa sẽ thiếu hai cột mới, dù chưa có lệnh nào báo lỗi."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">bản cũ và mới chạy cùng lúc</span><span class="a">→</span>
+          <span class="n">mở rộng: thêm, giữ cái cũ</span><span class="a">→</span>
+          <span class="n">chuyển mã dần</span><span class="a">→</span>
+          <span class="n">thu hẹp khi không còn ai dùng</span></div>
+        say: "Tổng kết lại, bản cũ và bản mới chạy cùng lúc, nên ta mở rộng trước, thêm cái mới và giữ cái cũ, chuyển mã dần, rồi thu hẹp khi không còn ai dùng cái cũ."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> dữ liệu sống lâu hơn mã. Mọi thay đổi trên dữ liệu phải đi từng bước nhỏ, bước nào cũng quay lui được.</div>
+        say: "Điều cần mang theo, dữ liệu sống lâu hơn mã. Mọi thay đổi trên dữ liệu phải đi từng bước nhỏ, và bước nào cũng quay lui được."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 9): <b>đo hiệu quả giao hàng</b> — bốn chỉ số.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 9, ta học cách đo hiệu quả giao hàng bằng bốn chỉ số. Hẹn gặp bạn ở bài tiếp theo."

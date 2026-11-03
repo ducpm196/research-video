@@ -1,0 +1,201 @@
+id: L11
+course: SAR
+series: "SAR · Kiến trúc hệ thống"
+title: "Bài 11 — Kiến trúc an toàn: phòng thủ nhiều lớp, quyền tối thiểu, mô hình hoá mối đe doạ"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/sar.yaml L11; audit/sar/verify_sar.py L11; J. H. Saltzer, M. D. Schroeder, The Protection of Information in Computer Systems, Proc. IEEE 63(9), 1975 (quyền tối thiểu); A. Shostack, Threat Modeling: Designing for Security (Wiley, 2014); NIST SP 800-207 (2020), Zero Trust Architecture; NET bài 14, SWF bài 12"
+assumes: [arith, power]
+# Quy ước: alg.blast_radius(cấp quyền, dịch vụ bị chiếm) trả tập (tài nguyên, quyền) kẻ tấn công có được. Phòng thủ nhiều lớp minh hoạ bằng mô hình
+#   ĐƠN GIẢN HOÁ: mỗi lớp chặn được 90% đòn tấn công, các lớp độc lập — thực tế các lớp có thể cùng lỗ hổng, nên đây là cận dưới lạc quan.
+objectives:
+  - "Liệt kê tài sản, kẻ tấn công, đường tấn công"
+  - "Đặt kiểm soát ở nhiều lớp"
+  - "Thu hẹp thiệt hại bằng quyền tối thiểu"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Lỗ nhỏ ở dịch vụ báo cáo, mất cả cơ sở dữ liệu"
+    checks:
+      - "len(alg.blast_radius({'bao_cao': {('csdl_chinh', 'đọc'), ('csdl_chinh', 'ghi'), ('kho_bi_mat', 'đọc')}}, 'bao_cao')) == 3"
+    steps:
+      - show: |
+          <p>Dịch vụ báo cáo nội bộ có một thư viện cũ dính lỗ hổng. Kẻ tấn công chiếm được nó — và vì nó dùng tài khoản quản trị cơ sở dữ liệu “cho tiện”, kẻ tấn công đọc, sửa, xoá được mọi bảng, rồi lấy luôn khoá trong kho bí mật.</p>
+          <div class="box key">Hôm nay: <b>kiến trúc an toàn</b> — giả định một phần sẽ bị chiếm, và thiết kế để thiệt hại nhỏ nhất.</div>
+        focus: [1, 1, 2]
+        say: "Chào bạn, dịch vụ báo cáo nội bộ có một thư viện cũ dính lỗ hổng. Kẻ tấn công chiếm được nó, và vì nó dùng tài khoản quản trị cơ sở dữ liệu cho tiện, kẻ tấn công đọc, sửa, xoá được mọi bảng, rồi lấy luôn khoá trong kho bí mật. Hôm nay ta học kiến trúc an toàn, giả định một phần sẽ bị chiếm, và thiết kế để thiệt hại nhỏ nhất."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: quyền là một cặp, và quy tắc nhân xác suất"
+    checks:
+      - "len({('csdl_chinh', 'đọc'), ('csdl_chinh', 'ghi'), ('kho_bi_mat', 'đọc')}) == 3"
+      - "round(1 - 0.9, 10) == 0.1 and 0.5 * 0.5 == 0.25 and round(0.1 * 0.1, 10) == 0.01 and round(0.1 ** 3, 10) == 0.001"
+    steps:
+      - show: |
+          <p>Một <b>quyền</b> là một cặp (tài nguyên, thao tác). Dịch vụ báo cáo trong ví dụ mở đầu có 3 cặp:</p>
+          <table class="t"><tr><th>tài nguyên</th><th>thao tác</th></tr>
+          <tr><td>cơ sở dữ liệu chính</td><td>đọc</td></tr>
+          <tr><td>cơ sở dữ liệu chính</td><td>ghi</td></tr>
+          <tr><td>kho bí mật</td><td>đọc</td></tr></table>
+        focus: [1, 1, 2, 2]
+        say: "Trước hết, ôn hai điều sẽ dùng. Thứ nhất, một quyền là một cặp gồm tài nguyên và thao tác. Dịch vụ báo cáo trong ví dụ mở đầu có 3 cặp, đọc cơ sở dữ liệu chính, ghi cơ sở dữ liệu chính, và đọc kho bí mật. Ai chiếm được dịch vụ thì có đúng 3 cặp quyền ấy."
+      - show: |
+          <p><b>Quy tắc nhân</b>: hai sự kiện độc lập cùng xảy ra có xác suất bằng tích. Tung hai đồng xu, cả hai ngửa: $0{,}5 \cdot 0{,}5 = 0{,}25$.</p>
+          <p>Một lớp chặn 90% thì để lọt $1 - 0{,}9 = 0{,}1$. Lọt qua hai lớp độc lập: $0{,}1 \cdot 0{,}1 = 0{,}01$; ba lớp: $0{,}1^3 = 0{,}001$.</p>
+        introduces: [cdot]
+        focus: [1, 1, 2, 2]
+        say: "Thứ hai, quy tắc nhân của xác suất, hai sự kiện độc lập cùng xảy ra có xác suất bằng tích. Tung hai đồng xu, cả hai cùng ngửa có xác suất 0 phẩy 5 nhân 0 phẩy 5, bằng 0 phẩy 25. Một lớp phòng thủ chặn 90 phần trăm thì để lọt 0 phẩy 1. Lọt qua hai lớp độc lập là 0 phẩy 1 nhân 0 phẩy 1, bằng 0 phẩy 01, còn ba lớp là 0 phẩy 1 mũ 3, bằng 0 phẩy 001."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: mô hình mối đe doạ, ba nguyên tắc"
+    steps:
+      - show: |
+          <p><b>Mô hình hoá mối đe doạ</b>: trả lời bốn câu — ta bảo vệ <b>tài sản</b> gì? <b>Ai</b> muốn tấn công? Họ đi <b>đường nào</b>? Ta <b>chặn</b> ở đâu?</p>
+          <table class="t"><tr><th>nguyên tắc</th><th>nghĩa</th></tr>
+          <tr><td><b>phòng thủ nhiều lớp</b></td><td>không dựa vào một hàng rào: tường lửa, xác thực, quyền, mã hoá, nhật ký</td></tr>
+          <tr><td><b>quyền tối thiểu</b></td><td>mỗi dịch vụ chỉ có đúng quyền nó cần</td></tr>
+          <tr><td><b>không tin mạng nội bộ</b></td><td>xác thực cả lời gọi giữa các dịch vụ bên trong</td></tr></table>
+        focus: [1, 2, "2.2", "2.3", "2.4"]
+        say: "Mô hình hoá mối đe doạ là trả lời bốn câu hỏi, ta bảo vệ tài sản gì, ai muốn tấn công, họ đi đường nào, và ta chặn ở đâu. Bảng giới thiệu ba nguyên tắc. Phòng thủ nhiều lớp là không dựa vào một hàng rào duy nhất, mà có tường lửa, xác thực, phân quyền, mã hoá và nhật ký. Quyền tối thiểu là mỗi dịch vụ chỉ có đúng quyền nó cần. Không tin mạng nội bộ là xác thực cả những lời gọi giữa các dịch vụ bên trong."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Mỗi lớp lọc bớt, không lớp nào phải hoàn hảo"
+    checks:
+      - "[round(1000 * 0.1 ** k) for k in range(4)] == [1000, 100, 10, 1]"
+    steps:
+      - show: |
+          <div><svg width="1500" height="330" viewBox="0 0 1500 330"><g font-size="22" fill="#1f2937"><rect x="20" y="110" width="200" height="90" rx="10" fill="#fee2e2" stroke="#b91c1c" stroke-width="3"/><text x="120" y="150" text-anchor="middle" font-weight="bold">1000 đòn</text><text x="120" y="180" text-anchor="middle">tấn công</text><rect x="370" y="50" width="40" height="210" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="390" y="290" text-anchor="middle" fill="#2a78d6">tường lửa</text><rect x="720" y="50" width="40" height="210" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="740" y="290" text-anchor="middle" fill="#2a78d6">xác thực</text><rect x="1070" y="50" width="40" height="210" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="1090" y="290" text-anchor="middle" fill="#2a78d6">phân quyền</text><line x1="225" y1="155" x2="365" y2="155" stroke="#b91c1c" stroke-width="12"/><text x="295" y="135" text-anchor="middle" fill="#b91c1c">1000</text><line x1="415" y1="155" x2="715" y2="155" stroke="#b91c1c" stroke-width="6"/><text x="565" y="135" text-anchor="middle" fill="#b91c1c">lọt 100</text><line x1="765" y1="155" x2="1065" y2="155" stroke="#b91c1c" stroke-width="3"/><text x="915" y="135" text-anchor="middle" fill="#b91c1c">lọt 10</text><line x1="1115" y1="155" x2="1280" y2="155" stroke="#b91c1c" stroke-width="2"/><text x="1200" y="135" text-anchor="middle" fill="#b91c1c">lọt 1</text><rect x="1285" y="110" width="195" height="90" rx="10" fill="#d1fae5" stroke="#059669" stroke-width="3"/><text x="1382" y="150" text-anchor="middle" font-weight="bold">dữ liệu</text><text x="1382" y="180" text-anchor="middle">cần bảo vệ</text><text x="750" y="30" text-anchor="middle">mỗi lớp chặn 90%, chỉ 1 phần 10 số đòn đi tiếp</text></g></svg></div>
+        focus: [1, 1, 1]
+        say: "Hình vẽ 1000 đòn tấn công đi qua ba lớp khác loại, tường lửa, xác thực và phân quyền. Mỗi lớp chặn 90 phần trăm, nên sau lớp đầu còn 100 đòn, sau lớp thứ hai còn 10, sau lớp thứ ba chỉ còn 1 đòn tới được dữ liệu. Không lớp nào hoàn hảo, nhưng ghép lại thì chỉ lọt một phần nghìn, với điều kiện các lớp hỏng độc lập với nhau."
+
+  - id: example
+    kind: example
+    title: "Thu hẹp phạm vi thiệt hại"
+    checks:
+      - "alg.blast_radius({'bao_cao': {('ban_sao_doc', 'đọc')}}, 'bao_cao') == {('ban_sao_doc', 'đọc')}"
+      - "round(0.1 ** 3, 6) == 0.001 and round(1 - 0.1 ** 3, 3) == 0.999"
+      - "len(alg.blast_radius({'bao_cao': {('csdl_chinh', 'đọc'), ('csdl_chinh', 'ghi'), ('kho_bi_mat', 'đọc')}}, 'bao_cao')) == 3 and round(0.1 / 0.1 ** 3) == 100"
+    steps:
+      - show: |
+          <p><b>Bước 1 — liệt kê quyền đang cấp:</b> dịch vụ báo cáo có quyền quản trị cơ sở dữ liệu chính và đọc kho bí mật → bị chiếm thì kẻ tấn công có <b class="red">3 cặp quyền nguy hiểm</b>.</p>
+        say: "Bước một, liệt kê quyền đang cấp. Dịch vụ báo cáo có quyền quản trị cơ sở dữ liệu chính và đọc kho bí mật, nên khi bị chiếm, kẻ tấn công có 3 cặp quyền nguy hiểm."
+      - show: |
+          <table class="t"><tr><th>cặp quyền</th><th>báo cáo có cần không?</th></tr>
+          <tr><td>ghi cơ sở dữ liệu chính</td><td>không — báo cáo chỉ đọc</td></tr>
+          <tr><td>đọc kho bí mật</td><td>không — không dùng khoá nào</td></tr>
+          <tr><td>đọc cơ sở dữ liệu chính</td><td>chỉ cần dữ liệu báo cáo → thay bằng đọc <b>bản sao</b></td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Bước hai, hỏi từng cặp xem báo cáo có cần không. Ghi cơ sở dữ liệu chính thì không, vì báo cáo chỉ đọc. Đọc kho bí mật cũng không, vì báo cáo không dùng khoá nào. Đọc cơ sở dữ liệu chính thì chỉ cần phần dữ liệu báo cáo, nên thay bằng quyền đọc bản sao."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>dịch vụ báo cáo được cấp</th><th>bị chiếm thì kẻ tấn công có</th></tr>
+          <tr><td>quản trị cơ sở dữ liệu chính + đọc kho bí mật</td><td>đọc, ghi cơ sở dữ liệu chính; đọc mọi khoá — <b class="red">3 quyền nguy hiểm</b></td></tr>
+          <tr><td>chỉ đọc <b>bản sao</b> dữ liệu báo cáo</td><td>đọc bản sao — $\hl{1}$ quyền, không ghi được gì</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Bước ba, so hai cách cấp quyền cho dịch vụ báo cáo. Nếu được cấp quyền quản trị cơ sở dữ liệu chính và đọc kho bí mật, khi bị chiếm kẻ tấn công có ba quyền nguy hiểm, đọc và ghi cơ sở dữ liệu chính, đọc mọi khoá. Nếu chỉ được đọc bản sao dữ liệu báo cáo, khi bị chiếm kẻ tấn công chỉ có một quyền, và không ghi được gì."
+      - show: |
+          <p><b>Bước 4 — thêm nhiều lớp:</b> nếu mỗi lớp chặn được 90% đòn tấn công và các lớp độc lập, ba lớp chỉ để lọt $0{,}1^3 = \hl{0{,}001}$ — một phần nghìn, tức chặn được 99,9%.</p>
+        say: "Bước bốn, thêm nhiều lớp. Với nhiều lớp, nếu mỗi lớp chặn được 90 phần trăm và các lớp độc lập, ba lớp chỉ để lọt 0 phẩy 1 mũ 3, tức một phần nghìn. Nói cách khác, ba lớp chặn được 99 phẩy 9 phần trăm."
+      - show: |
+          <p><b>Bước 5 — kiểm giả thiết:</b> nếu ba lớp dùng chung một điểm yếu, chúng hỏng cùng lúc như <b>một</b> lớp → lọt 0,1, gấp $\frac{0{,}1}{0{,}001} = 100$ lần.</p>
+          <p class="note">Giả thiết độc lập là lạc quan: các lớp dùng chung thư viện hay cùng một mật khẩu thì một lỗ là thủng cả. Đó là lý do dùng lớp <b>khác loại</b>.</p>
+        introduces: [frac]
+        focus: [1, 2]
+        say: "Bước năm, kiểm lại giả thiết độc lập, vì nếu ba lớp dùng chung một điểm yếu thì chúng hỏng cùng lúc như một lớp, để lọt 0 phẩy 1, gấp 100 lần một phần nghìn. Giả thiết độc lập là lạc quan, các lớp dùng chung thư viện hay cùng một mật khẩu thì một lỗ là thủng cả, nên hãy dùng các lớp khác loại."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: đếm thẳng số đòn, so tập quyền"
+    checks:
+      - "1000 - 900 == 100 and 100 - 90 == 10 and 10 - 9 == 1 and 1 / 1000 == 0.001"
+      - "{('csdl_chinh', 'đọc'), ('csdl_chinh', 'ghi'), ('kho_bi_mat', 'đọc')} & {('ban_sao_doc', 'đọc')} == set() and not any(q == 'ghi' for _, q in {('ban_sao_doc', 'đọc')})"
+    steps:
+      - show: |
+          <table class="t"><tr><th>lớp</th><th>đến lớp</th><th>bị chặn (90%)</th><th>lọt qua</th></tr>
+          <tr><td>tường lửa</td><td>1000</td><td>900</td><td>100</td></tr>
+          <tr><td>xác thực</td><td>100</td><td>90</td><td>10</td></tr>
+          <tr><td>phân quyền</td><td>10</td><td>9</td><td>1</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", 1]
+        say: "Kiểm bằng đường khác, đếm thẳng số đòn thay vì nhân xác suất. Tường lửa nhận 1000 đòn, chặn 900, lọt 100. Xác thực nhận 100, chặn 90, lọt 10. Phân quyền nhận 10, chặn 9, lọt 1. Một đòn trên một nghìn đúng bằng 0 phẩy 001, khớp với phép lũy thừa."
+      - show: |
+          <table class="t"><tr><th>tập quyền</th><th>có quyền ghi?</th><th>chạm cơ sở dữ liệu chính hay kho bí mật?</th></tr>
+          <tr><td>quyền rộng (3 cặp)</td><td>có</td><td>có</td></tr>
+          <tr><td>quyền tối thiểu (1 cặp)</td><td>không</td><td>không — hai tập không chung cặp nào</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Với phân quyền, so thẳng hai tập. Tập quyền rộng có quyền ghi và chạm cả cơ sở dữ liệu chính lẫn kho bí mật. Tập quyền tối thiểu không có quyền ghi nào, và không chung cặp nào với tập rộng, nên kẻ chiếm dịch vụ báo cáo không chạm được dữ liệu chính."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Coi mạng nội bộ là vùng tin cậy <b class="red">(một lỗ là vào hết)</b>
+          <br><span class="note">Kẻ tấn công vào được một máy bên trong thì gọi được mọi dịch vụ không xác thực. Xác thực và mã hoá cả lời gọi nội bộ; mỗi dịch vụ một danh tính.</span></div>
+        say: "Lỗi thứ nhất, coi mạng nội bộ là vùng tin cậy. Kẻ tấn công vào được một máy bên trong thì gọi được mọi dịch vụ không xác thực, nên hãy xác thực và mã hoá cả lời gọi nội bộ, mỗi dịch vụ một danh tính."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Cấp quyền rộng “cho tiện”, định thu hẹp sau <b class="red">(không bao giờ thu hẹp)</b>
+          <br><span class="note">Quyền thừa hiếm khi bị gỡ vì không ai biết gỡ có làm hỏng gì không. Bắt đầu từ <b>không có quyền</b>, thêm đúng thứ cần, ghi lý do.</span></div>
+        say: "Lỗi thứ hai, cấp quyền rộng cho tiện, định thu hẹp sau. Quyền thừa hiếm khi bị gỡ vì không ai biết gỡ đi có làm hỏng gì không, nên hãy bắt đầu từ không có quyền nào, chỉ thêm đúng thứ cần, và ghi lý do."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Không ghi nhật ký truy cập <b class="red">(không biết đã mất gì)</b>
+          <br><span class="note">Bị tấn công mà không có nhật ký thì không biết kẻ tấn công đã đọc gì, từ khi nào. Ghi nhật ký truy cập dữ liệu nhạy cảm, lưu ở nơi kẻ chiếm dịch vụ không xoá được.</span></div>
+        say: "Lỗi thứ ba, không ghi nhật ký truy cập. Bị tấn công mà không có nhật ký thì không biết kẻ tấn công đã đọc gì và từ khi nào. Hãy ghi nhật ký truy cập dữ liệu nhạy cảm, lưu ở nơi mà kẻ chiếm dịch vụ không xoá được."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "round(0.2 ** 2, 2) == 0.04 and round(0.2 ** 4, 4) == 0.0016"
+      - "round(1 - 0.8, 10) == 0.2 and round(0.2 ** 3, 10) == 0.008 and round(0.04 * 0.04, 10) == 0.0016"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Mỗi lớp chặn 80%, độc lập. Hai lớp để lọt bao nhiêu? Bốn lớp?</td></tr>
+          <tr><td>2</td><td>Dịch vụ gửi thư cần đọc địa chỉ thư của khách. Nên cấp quyền gì? Không nên cấp gì?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, mỗi lớp chặn được 80 phần trăm và độc lập, hai lớp để lọt bao nhiêu, và bốn lớp thì sao? Câu hai, dịch vụ gửi thư cần đọc địa chỉ thư của khách. Nên cấp quyền gì, và không nên cấp gì? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① Mỗi lớp để lọt $1 - 0{,}8 = 0{,}2$.</p>
+          <table class="t"><tr><th>số lớp</th><td>1</td><td>2</td><td>3</td><td>4</td></tr>
+          <tr><th>để lọt</th><td>0,2</td><td>$0{,}2^2 = \hl{0{,}04}$</td><td>0,008</td><td>$0{,}2^4 = \hl{0{,}0016}$</td></tr></table>
+        focus: [1, 2, 2]
+        say: "Đáp án câu một, mỗi lớp chặn 80 phần trăm thì để lọt 0 phẩy 2. Hai lớp để lọt 0 phẩy 2 bình phương, tức 0 phẩy 04, ba lớp 0 phẩy 008. Bốn lớp để lọt 0 phẩy 0016, tức 0 phẩy 04 nhân 0 phẩy 04, nếu các lớp thật sự độc lập."
+      - show: |
+          <table class="t"><tr><th>cặp quyền</th><th>cấp?</th></tr>
+          <tr><td>đọc cột địa chỉ thư (hoặc một bảng riêng chứa nó)</td><td>có — đúng thứ cần</td></tr>
+          <tr><td>đọc số thẻ, mật khẩu</td><td>không</td></tr>
+          <tr><td>ghi bất kỳ bảng nào; vào kho bí mật khác</td><td>không</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Câu hai, đi từng cặp quyền như ở ví dụ. Chỉ cấp quyền đọc cột địa chỉ thư, hoặc một bảng riêng chứa nó, vì đó đúng là thứ dịch vụ cần. Không cấp quyền đọc số thẻ hay mật khẩu. Cũng không cấp quyền ghi, hay quyền vào kho bí mật khác."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">tài sản, kẻ tấn công, đường tấn công</span><span class="a">→</span>
+          <span class="n">nhiều lớp khác loại</span><span class="a">→</span>
+          <span class="n">quyền tối thiểu thu hẹp thiệt hại</span><span class="a">→</span>
+          <span class="n">xác thực nội bộ, nhật ký không xoá được</span></div>
+        say: "Tổng kết lại, mô hình hoá tài sản, kẻ tấn công và đường tấn công. Đặt nhiều lớp phòng thủ khác loại, dùng quyền tối thiểu để thu hẹp thiệt hại, xác thực cả lời gọi nội bộ, và giữ nhật ký không xoá được."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> câu hỏi không phải “có bị tấn công không”, mà là “khi một phần bị chiếm, kẻ tấn công làm được gì tiếp”.</div>
+        say: "Điều cần mang theo, câu hỏi không phải là có bị tấn công không, mà là khi một phần bị chiếm, kẻ tấn công làm được gì tiếp theo."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 12): <b>thiết kế tổng hợp</b> — từ yêu cầu tới bản kiến trúc.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 12, ta tổng hợp tất cả, đi từ yêu cầu tới một bản kiến trúc hoàn chỉnh. Hẹn gặp bạn ở bài tiếp theo."

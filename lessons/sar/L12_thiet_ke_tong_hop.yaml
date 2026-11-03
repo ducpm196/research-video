@@ -1,0 +1,217 @@
+id: L12
+course: SAR
+series: "SAR · Kiến trúc hệ thống"
+title: "Bài 12 — Thiết kế tổng hợp: từ yêu cầu tới bản kiến trúc"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/sar.yaml L12; audit/sar/verify_sar.py L12; các bài 0–11 của khoá này; M. Kleppmann, Designing Data-Intensive Applications (2017), chương 1; DVO bài 9 (đo hiệu quả)"
+assumes: [arith, cdot, frac, approx, power, ceil]
+# Quy ước: dịch vụ rút gọn đường dẫn. Giả định yêu cầu: 100 triệu đường dẫn mới mỗi tháng, đọc gấp 100 lần ghi, lưu 5 năm, 500 byte mỗi bản ghi,
+#   mã ngắn 7 ký tự trong bảng 62 ký tự (a–z, A–Z, 0–9), cao điểm gấp 3, tháng 30 ngày (alg.shortener_estimate). Số va chạm kỳ vọng khi sinh mã
+#   NGẪU NHIÊN: xấp xỉ n²/(2N) (bài toán ngày sinh).
+objectives:
+  - "Đi đủ các bước: yêu cầu, ước lượng, thành phần, dữ liệu, đánh đổi, rủi ro"
+  - "Trình bày bản thiết kế có số liệu và bản ghi quyết định"
+  - "Dùng lại công cụ của cả khoá"
+asr_reviewed:
+  - {sentence: "Bước bốn, 6 tỉ bản ghi nhân 500 byte là 3 nghìn tỉ byte.", reason: "ASR chép “Bước 4, 6 tỷ bản ghi nhân 500 bai là 3.000 tỷ bai.” (0.733): “tỉ” ASR viết chính tả “tỷ” (cùng âm); byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Tính lưu trữ theo từng năm, mỗi năm 1 phẩy 2 tỉ bản ghi nhân 500 byte là 0 phẩy 6 tê-ra-byte, nhân 5 năm ra 3 tê-ra-byte.", reason: "ASR chép “Tính lưu trữ theo từng năm, mỗi năm 1,2 tỷ bảng ghi nhân 500 byte là 0,6 terabyte, nhân năm năm ra 3 terabyte.” (0.806): “tỉ” ASR viết chính tả “tỷ” (cùng âm); “tê-ra-byte” đọc tách âm tiết (đã dựng ở OSY/NET), ASR viết “TB/terabyte”; lệch âm/thanh thuần Việt: bản (trong “tỉ bản” → “tỷ bảng”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Ví dụ 3000 GB trên nút 1000 GB với 3 bản sao cần 9 nút.", reason: "ASR chép “Ví dụ 3000GB trên nút 1000GB với 3 bảng sao cần 9 nút.” (0.941): lệch âm/thanh thuần Việt: bản/bảng — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Với 3 tê-ra-byte sao chép 3 bản trên nút 1 tê-ra-byte thì cần 9 nút, phân mảnh theo mã ngắn.", reason: "ASR chép “Với 3TB sau chép 3 bảng trên nút 1TB thì cần 9 nút, phân mảnh theo mã ngắn.” (0.727): “tê-ra-byte” đọc tách âm tiết (đã dựng ở OSY/NET), ASR viết “TB/terabyte”; lệch âm/thanh thuần Việt: sao (trong “t ra byte sao” → “tb sau”), bản/bảng — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Lưu trữ trong 5 năm là 3 tê-ra-byte.", reason: "ASR chép “lưu trữ trong 5 năm là 3TB.” (0.778): “tê-ra-byte” đọc tách âm tiết (đã dựng ở OSY/NET), ASR viết “TB/terabyte” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Dữ liệu lưu 5 năm, 500 byte mỗi bản ghi, với mã ngắn 7 ký tự.", reason: "ASR chép “Giữ liệu lưu năm năm, năm trăm bai mỗi bạn ghi với mạng ngắn 7 ký tự.” (0.824): byte đọc thô, ASR viết “bay” (probe CSA p1 8/8); lệch âm/thanh thuần Việt: bản/bạn, mã/mạng — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Vẽ hộp trước, đếm số sau"
+    steps:
+      - show: |
+          <p>Buổi phỏng vấn thiết kế: “hãy thiết kế dịch vụ rút gọn đường dẫn”. Ứng viên vẽ ngay 12 hộp: cân bằng tải, bộ nhớ đệm, hàng đợi, ba cơ sở dữ liệu… Câu hỏi đầu tiên của người phỏng vấn: “mỗi giây bao nhiêu lần ghi?” — không có câu trả lời.</p>
+          <div class="box key">Hôm nay: <b>thiết kế tổng hợp</b> — đi từ yêu cầu và con số, tới thành phần, dữ liệu, đánh đổi và rủi ro.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, trong một buổi phỏng vấn thiết kế, đề bài là thiết kế dịch vụ rút gọn đường dẫn. Ứng viên vẽ ngay 12 hộp gồm cân bằng tải, bộ nhớ đệm, hàng đợi, ba cơ sở dữ liệu. Câu hỏi đầu tiên của người phỏng vấn là mỗi giây bao nhiêu lần ghi, và không có câu trả lời. Hôm nay ta tổng hợp cả khoá, đi từ yêu cầu và con số, tới thành phần, dữ liệu, đánh đổi và rủi ro."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: bốn công cụ của khoá sẽ dùng lại"
+    checks:
+      - "8640000 / 86400 == 100 and 30 * 86400 == 2592000"
+      - "round(alg.cache_latency(0.9), 1) == 5.9 and round(0.9 * 1 + 0.1 * 50, 1) == 5.9"
+      - "alg.shard_nodes(3000, 1000, 3) == 9 and math.ceil(3000 / 1000) * 3 == 9"
+      - "(1e5) ** 2 / (2 * 1e7) == 500"
+    steps:
+      - show: |
+          <table class="t"><tr><th>công cụ (bài)</th><th>quy tắc</th><th>ví dụ nhỏ</th></tr>
+          <tr><td>ước lượng (bài 2)</td><td>mỗi giây = tổng trong kỳ chia số giây của kỳ</td><td>8 640 000 mỗi ngày → $\frac{8\,640\,000}{86\,400} = 100$ mỗi giây</td></tr>
+          <tr><td>bộ nhớ đệm (bài 4)</td><td>trễ trung bình = trúng nhân trễ đệm + trượt nhân trễ cơ sở dữ liệu</td><td>trúng 90%, 1 ms và 50 ms → $0{,}9 \cdot 1 + 0{,}1 \cdot 50 = 5{,}9$ ms</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.3", "1.3"]
+        say: "Trước hết, ôn bốn công cụ của khoá sẽ dùng lại. Ở bài 2, số mỗi giây bằng tổng trong kỳ chia số giây của kỳ. Ví dụ 8 triệu 640 nghìn yêu cầu mỗi ngày chia 86 nghìn 400 giây là 100 yêu cầu mỗi giây. Ở bài 4, độ trễ trung bình bằng tỉ lệ trúng nhân độ trễ đệm, cộng tỉ lệ trượt nhân độ trễ cơ sở dữ liệu. Ví dụ trúng 90 phần trăm với 1 và 50 mi li giây cho 5 phẩy 9 mi li giây."
+      - show: |
+          <table class="t"><tr><th>công cụ (bài)</th><th>quy tắc</th><th>ví dụ nhỏ</th></tr>
+          <tr><td>phân mảnh (bài 5)</td><td>số nút = làm tròn lên (dữ liệu chia sức chứa nút), nhân số bản sao</td><td>3000 GB, nút 1000 GB, 3 bản → $\lceil 3 \rceil \cdot 3 = 9$ nút</td></tr>
+          <tr><td>va chạm (bài toán ngày sinh)</td><td>$n$ mã ngẫu nhiên trong $N$ khả năng → va chạm kỳ vọng $\approx \frac{n^2}{2N}$</td><td>$n = 10^5$, $N = 10^7$ → $\frac{10^{10}}{2 \cdot 10^7} = 500$</td></tr></table>
+        focus: ["1.2", "1.2", "1.3", "1.3"]
+        say: "Ở bài 5, số nút bằng dữ liệu chia sức chứa một nút, làm tròn lên, rồi nhân số bản sao. Ví dụ 3000 GB trên nút 1000 GB với 3 bản sao cần 9 nút. Cuối cùng là bài toán ngày sinh, sinh n mã ngẫu nhiên trong N khả năng thì số va chạm kỳ vọng xấp xỉ n bình phương chia 2N. Ví dụ 100 nghìn mã trong 10 triệu khả năng cho khoảng 500 va chạm."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: sáu bước thiết kế"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">1. yêu cầu và kịch bản thuộc tính</span><span class="a">→</span><span class="n">2. ước lượng</span><span class="a">→</span><span class="n">3. thành phần</span><span class="a">→</span><span class="n">4. dữ liệu</span><span class="a">→</span><span class="n">5. đánh đổi</span><span class="a">→</span><span class="n">6. rủi ro</span></div>
+          <table class="t"><tr><th>yêu cầu (giả định)</th><th>giá trị</th></tr>
+          <tr><td>đường dẫn mới</td><td>100 triệu mỗi tháng</td></tr>
+          <tr><td>tỉ lệ đọc so với ghi</td><td>100 : 1</td></tr>
+          <tr><td>mục tiêu</td><td>chuyển hướng: 99% dưới 50 ms; sẵn sàng 99,9%</td></tr>
+          <tr><td>lưu</td><td>5 năm, 500 byte mỗi bản ghi; mã 7 ký tự</td></tr></table>
+        focus: [1, 2, "2.2", "2.3", "2.4", "2.5"]
+        say: "Thiết kế đi qua sáu bước, yêu cầu và kịch bản thuộc tính, ước lượng, thành phần, dữ liệu, đánh đổi, và rủi ro. Bảng ghi các yêu cầu giả định. Có 100 triệu đường dẫn mới mỗi tháng. Lượt đọc gấp 100 lần lượt ghi. Mục tiêu là 99 phần trăm lần chuyển hướng dưới 50 mi li giây, và sẵn sàng 99 phẩy 9 phần trăm. Dữ liệu lưu 5 năm, 500 byte mỗi bản ghi, với mã ngắn 7 ký tự."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hai đường đi: đọc rất nhiều, ghi rất ít"
+    checks:
+      - "round(alg.shortener_estimate()[0], 1) == 38.6 and round(alg.shortener_estimate()[1] * 3) == 11574 and alg.shard_nodes(3000, 1000, 3) == 9"
+    steps:
+      - show: |
+          <div><svg width="1500" height="330" viewBox="0 0 1500 330"><g font-size="22" fill="#1f2937"><rect x="20" y="130" width="150" height="70" rx="10" fill="#f3f4f6" stroke="#1f2937" stroke-width="2"/><text x="95" y="172" text-anchor="middle">khách</text><line x1="170" y1="165" x2="230" y2="165" stroke="#1f2937" stroke-width="3"/><rect x="230" y="130" width="190" height="70" rx="10" fill="#f3f4f6" stroke="#1f2937" stroke-width="2"/><text x="325" y="172" text-anchor="middle">cân bằng tải</text><line x1="420" y1="165" x2="480" y2="165" stroke="#1f2937" stroke-width="3"/><rect x="480" y="125" width="230" height="80" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="595" y="160" text-anchor="middle">máy chủ</text><text x="595" y="188" text-anchor="middle">ứng dụng</text><line x1="710" y1="145" x2="860" y2="75" stroke="#059669" stroke-width="4"/><text x="850" y="40" text-anchor="end" fill="#059669" font-weight="bold">đọc: 11 574 mỗi giây</text><rect x="860" y="35" width="230" height="80" rx="10" fill="#d1fae5" stroke="#059669" stroke-width="3"/><text x="975" y="82" text-anchor="middle">bộ nhớ đệm</text><text x="1110" y="82" fill="#059669">trúng: trả lời ngay</text><line x1="975" y1="115" x2="975" y2="215" stroke="#d97706" stroke-width="3" stroke-dasharray="8 6"/><text x="990" y="172" fill="#d97706">trượt: hỏi tiếp</text><line x1="710" y1="185" x2="860" y2="255" stroke="#eb6834" stroke-width="4"/><text x="850" y="310" text-anchor="end" fill="#eb6834" font-weight="bold">ghi: 38,6 mỗi giây</text><rect x="860" y="215" width="230" height="80" rx="10" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="975" y="248" text-anchor="middle">cơ sở dữ liệu</text><text x="975" y="276" text-anchor="middle">9 nút</text><text x="1110" y="262">3 TB, 3 bản sao, chia theo mã</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ hai đường đi của dữ liệu trong dịch vụ rút gọn đường dẫn. Đường đọc màu xanh rất đông, khoảng 11 nghìn 574 lần mỗi giây lúc cao điểm, đi vào bộ nhớ đệm trước, trúng thì trả lời ngay, trượt mới hỏi cơ sở dữ liệu. Đường ghi màu cam rất thưa, chỉ khoảng 38 phẩy 6 lần mỗi giây, đi thẳng vào cơ sở dữ liệu 9 nút. Các con số trong ví dụ sẽ giải thích vì sao mỗi hộp ở đó."
+
+  - id: example
+    kind: example
+    title: "Ước lượng, rồi mới chọn thành phần"
+    checks:
+      - "[round(x, 1) for x in alg.shortener_estimate()[:2]] == [38.6, 3858.0] and alg.shortener_estimate()[2] == 62 ** 7 == 3521614606208 and alg.shortener_estimate()[3] == 3.0"
+      - "round(alg.shortener_estimate()[1] * 3) == 11574 and alg.shard_nodes(3000, 1000, 3) == 9"
+      - "30 * 86400 == 2592000 and round(1e8 / 2592000, 2) == 38.58 and 1e8 * 12 * 5 == 6e9 and 6e9 < 62 ** 7"
+      - "6e9 * 500 == 3e12 and round(11574 * 0.1) == 1157 and round(11574 * 0.9) == 10417 and round(alg.cache_latency(0.9), 1) == 5.9"
+    steps:
+      - show: |
+          <p><b>Bước 1 — ghi mỗi giây:</b> 30 ngày có $30 \cdot 86\,400 = 2\,592\,000$ giây → $\frac{10^8}{2\,592\,000} \approx \hl{38{,}6}$ lần ghi mỗi giây.</p>
+        say: "Bước một, số lần ghi mỗi giây. Một tháng 30 ngày có 30 nhân 86 nghìn 400, bằng 2 triệu 592 nghìn giây. Lấy 100 triệu chia cho số đó, được khoảng 38 phẩy 6 lần ghi mỗi giây."
+      - show: |
+          <p><b>Bước 2 — đọc mỗi giây:</b> trung bình $38{,}58 \cdot 100 \approx 3858$; cao điểm gấp 3 → $\approx \hl{11\,574}$ (nhân từ số chưa làm tròn 38,58…).</p>
+        say: "Bước hai, số lần đọc. Đọc gấp 100 lần ghi nên trung bình khoảng 3858 lần mỗi giây. Cao điểm gấp 3 thì khoảng 11 nghìn 574, vì ta nhân từ số chưa làm tròn 38 phẩy 58."
+      - show: |
+          <p><b>Bước 3 — đủ mã không:</b> 5 năm cần $10^8 \cdot 12 \cdot 5 = 6 \cdot 10^9$ mã; 7 ký tự trong bảng 62 ký tự cho $62^7 \approx 3{,}5 \cdot 10^{12}$ mã → thừa nhiều.</p>
+          <p><b>Bước 4 — lưu trữ:</b> $6 \cdot 10^9 \cdot 500$ byte $= 3 \cdot 10^{12}$ byte $= \hl{3}$ TB; sao chép 3 bản trên nút 1 TB → $\lceil 3 \rceil \cdot 3 = 9$ nút.</p>
+        focus: [1, 1, 2, 2, 2]
+        say: "Bước ba, kiểm xem có đủ mã không. Trong 5 năm cần 100 triệu nhân 12 nhân 5, bằng 6 tỉ mã, còn 7 ký tự trong bảng 62 ký tự cho 62 mũ 7, khoảng 3 phẩy 5 nghìn tỉ mã, thừa rất nhiều. Bước bốn, 6 tỉ bản ghi nhân 500 byte là 3 nghìn tỉ byte. Lưu trữ trong 5 năm là 3 tê-ra-byte. Với 3 tê-ra-byte sao chép 3 bản trên nút 1 tê-ra-byte thì cần 9 nút, phân mảnh theo mã ngắn."
+      - clear: true
+        show: |
+          <p><b>Bước 5 — bộ nhớ đệm:</b> giả sử trúng 90% (đường dẫn hay được mở lại), cao điểm 11 574 lần đọc mỗi giây chia ra:</p>
+          <table class="t"><tr><th>nơi trả lời</th><th>lần đọc mỗi giây</th><th>trễ</th></tr>
+          <tr><td>bộ nhớ đệm (trúng)</td><td>$11\,574 \cdot 0{,}9 \approx 10\,417$</td><td>1 ms</td></tr>
+          <tr><td>cơ sở dữ liệu (trượt)</td><td>$11\,574 \cdot 0{,}1 \approx 1157$</td><td>50 ms</td></tr></table>
+          <p>Trễ trung bình $0{,}9 \cdot 1 + 0{,}1 \cdot 50 = \hl{5{,}9}$ ms.</p>
+        focus: [1, 1, "2.3", 3]
+        say: "Bước năm, thêm bộ nhớ đệm. Giả sử trúng 90 phần trăm, vì đường dẫn hay được mở lại. Khi đó cơ sở dữ liệu chỉ nhận khoảng 1157 lần đọc mỗi giây lúc cao điểm. Độ trễ trung bình chỉ 5 phẩy 9 mi li giây, như ở bài 4."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>đại lượng</th><th>tính</th><th>kết quả</th></tr>
+          <tr><td>ghi mỗi giây</td><td>$\frac{10^8}{30 \cdot 86\,400}$</td><td>≈ 38,6</td></tr>
+          <tr><td>đọc mỗi giây (cao điểm gấp 3)</td><td>$38{,}6 \cdot 100 \cdot 3$</td><td>≈ $\hl{11\,574}$</td></tr>
+          <tr><td>số mã có thể có</td><td>$62^7$</td><td>≈ $3{,}5 \cdot 10^{12}$</td></tr>
+          <tr><td>lưu trữ 5 năm</td><td>$10^8 \cdot 12 \cdot 5 \cdot 500$ byte</td><td>$\hl{3}$ TB</td></tr></table>
+          <p>Kết luận từ số: ghi rất ít (một cơ sở dữ liệu thừa sức); đọc nhiều và lặp lại → <b>bộ nhớ đệm</b> là thành phần quan trọng nhất; 3 TB sao chép 3 bản trên nút 1 TB → 9 nút, phân mảnh theo mã ngắn.</p>
+        focus: [1, 2, 2]
+        say: "Bảng gom bốn đại lượng của bước một tới bước bốn. Kết luận từ các con số, việc ghi rất ít nên một cơ sở dữ liệu là thừa sức. Còn đọc nhiều và lặp lại nên bộ nhớ đệm là thành phần quan trọng nhất."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: tính theo đường khác"
+    checks:
+      - "round(1e8 / 30 / 1e6, 2) == 3.33 and round(1e8 / 30 / 86400, 1) == 38.6"
+      - "1e8 * 12 == 1.2e9 and 1.2e9 * 500 / 1e12 == 0.6 and round(0.6 * 5, 6) == 3.0"
+      - "62 ** 6 == 56800235584 and 56800235584 * 62 == 3521614606208 == 62 ** 7 and round(6e9 / 62 ** 7 * 100, 2) == 0.17"
+    steps:
+      - show: |
+          <table class="t"><tr><th>kết quả</th><th>đường khác</th><th>khớp?</th></tr>
+          <tr><td>38,6 ghi mỗi giây</td><td>chia theo ngày trước: $\frac{10^8}{30} \approx 3{,}33$ triệu mỗi ngày, rồi chia 86 400</td><td>≈ 38,6 ✓</td></tr>
+          <tr><td>3 TB</td><td>tính từng năm: $1{,}2 \cdot 10^9$ bản ghi nhân 500 byte = 0,6 TB, nhân 5 năm</td><td>3 TB ✓</td></tr>
+          <tr><td>$62^7$</td><td>$62^6 = 56\,800\,235\,584$, nhân thêm 62</td><td>3 521 614 606 208 ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Kiểm bằng đường khác. Chia theo ngày trước, 100 triệu chia 30 là khoảng 3 phẩy 33 triệu mỗi ngày, chia tiếp 86 nghìn 400 lại ra khoảng 38 phẩy 6. Tính lưu trữ theo từng năm, mỗi năm 1 phẩy 2 tỉ bản ghi nhân 500 byte là 0 phẩy 6 tê-ra-byte, nhân 5 năm ra 3 tê-ra-byte. Lấy 62 mũ 6 nhân thêm 62 ra đúng 3 nghìn 521 tỉ, khớp với 62 mũ 7."
+      - show: |
+          <table class="t"><tr><th>mã cần trong 5 năm</th><th>không gian 7 ký tự</th><th>phần đã dùng</th></tr>
+          <tr><td>$6 \cdot 10^9$</td><td>$62^7 \approx 3{,}5 \cdot 10^{12}$</td><td>$\frac{6 \cdot 10^9}{62^7} \approx \hl{0{,}17\%}$</td></tr></table>
+        focus: [1, "1.2"]
+        say: "Thêm một con số để thấy độ thừa, vì 6 tỉ mã chia cho 62 mũ 7 nên chỉ dùng khoảng 0 phẩy 17 phần trăm không gian mã 7 ký tự. Dù vậy, như lỗi thứ nhất sẽ cho thấy, mã ngẫu nhiên vẫn va chạm hàng triệu lần."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc"
+    checks:
+      - "round(6e9 ** 2 / (2 * 62 ** 7) / 1e6, 1) == 5.1"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Sinh mã ngẫu nhiên mà không kiểm trùng <b class="red">(va chạm)</b>
+          <br><span class="note">5 năm sinh $6 \cdot 10^9$ mã trong không gian $3{,}5 \cdot 10^{12}$: số va chạm kỳ vọng $\approx \frac{n^2}{2N} \approx 5{,}1$ triệu. Kiểm trùng khi ghi (khoá duy nhất), hoặc sinh mã từ bộ đếm tăng dần đã mã hoá.</span></div>
+        say: "Lỗi thứ nhất, sinh mã ngẫu nhiên mà không kiểm trùng. Trong 5 năm sinh 6 tỉ mã trong không gian 3 phẩy 5 nghìn tỉ, số va chạm kỳ vọng khoảng n bình phương chia 2N, tức khoảng 5 phẩy 1 triệu. Hãy kiểm trùng khi ghi bằng khoá duy nhất, hoặc sinh mã từ một bộ đếm tăng dần đã mã hoá."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Thêm thành phần mà con số không đòi <b class="red">(phức tạp thừa)</b>
+          <br><span class="note">39 lần ghi mỗi giây không cần hàng đợi ghi hay cơ sở dữ liệu phân tán đa vùng. Mỗi hộp trên sơ đồ phải có một con số giải thích vì sao nó ở đó.</span></div>
+        say: "Lỗi thứ hai, thêm thành phần mà con số không đòi. 39 lần ghi mỗi giây không cần hàng đợi ghi hay cơ sở dữ liệu phân tán đa vùng. Mỗi hộp trên sơ đồ phải có một con số giải thích vì sao nó ở đó."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Không viết ra đánh đổi và rủi ro <b class="red">(thiết kế một chiều)</b>
+          <br><span class="note">Bản ghi quyết định: “dùng bộ nhớ đệm, chấp nhận đường dẫn vừa xoá còn chạy tối đa 5 phút”; rủi ro: “bị dùng để rải đường dẫn độc → giới hạn tốc độ tạo mã theo khách, quét đường dẫn đích”.</span></div>
+        say: "Lỗi thứ ba, không viết ra đánh đổi và rủi ro. Bản ghi quyết định nên ghi rõ, dùng bộ nhớ đệm và chấp nhận đường dẫn vừa xoá còn chạy tối đa 5 phút. Rủi ro là bị dùng để rải đường dẫn độc, nên phải giới hạn tốc độ tạo mã theo khách, và quét đường dẫn đích."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "62 ** 6 == 56800235584 and 62 ** 6 > 6e9 and round(6e9 ** 2 / (2 * 62 ** 6) / 1e6) == 317"
+      - "round((6e9 - 62 ** 6 * -math.expm1(6e9 * math.log1p(-1 / 62 ** 6))) / 1e6) == 306"
+      - "round(62 ** 6 / 6e9, 1) == 9.5 and (6e9) ** 2 == 3.6e19 and round(6e9 / 62 ** 6 * 100) == 11 and round(6e9 ** 2 / (2 * 62 ** 7) / 1e6, 1) == 5.1"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Nếu dùng mã 6 ký tự thì có bao nhiêu mã? Đủ cho 6 tỉ đường dẫn không?</td></tr>
+          <tr><td>2</td><td>Với mã ngẫu nhiên 6 ký tự, số va chạm kỳ vọng cho 6 tỉ mã là bao nhiêu? Kết luận về cách sinh mã?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, nếu dùng mã 6 ký tự thì có bao nhiêu mã, và có đủ cho 6 tỉ đường dẫn không? Câu hai, với mã ngẫu nhiên 6 ký tự, số va chạm kỳ vọng cho 6 tỉ mã là bao nhiêu? Bạn kết luận gì về cách sinh mã? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① $62^6 = 56\,800\,235\,584 \approx \hl{5{,}68 \cdot 10^{10}}$; chia cho $6 \cdot 10^9$ được $\approx 9{,}5$ → đủ về số lượng (gấp gần 10 lần 6 tỉ).</p>
+        say: "Đáp án câu một, 62 mũ 6 khoảng 5 phẩy 68 nhân 10 mũ 10. Chia cho 6 tỉ được khoảng 9 phẩy 5, nên đủ về số lượng, gấp gần 10 lần 6 tỉ."
+      - show: |
+          <p>② Tử số $(6 \cdot 10^9)^2 = 3{,}6 \cdot 10^{19}$; mẫu số $2 \cdot 5{,}68 \cdot 10^{10}$ → xấp xỉ $\approx 317$ triệu va chạm. Tính chính xác: khoảng $\hl{306}$ triệu, vì $n$ đã bằng khoảng 11% không gian nên xấp xỉ hơi cao.</p>
+        focus: [1, 1, 1, 1]
+        say: "Câu hai, tử số là 6 tỉ bình phương, bằng 3 phẩy 6 nhân 10 mũ 19. Chia cho 2 nhân 5 phẩy 68 nhân 10 mũ 10, công thức xấp xỉ cho khoảng 317 triệu va chạm. Tính chính xác thì khoảng 306 triệu. Công thức hơi cao vì số mã đã bằng khoảng 11 phần trăm không gian."
+      - show: |
+          <table class="t"><tr><th>cách sinh mã</th><th>va chạm kỳ vọng (6 tỉ mã)</th><th>quyết định</th></tr>
+          <tr><td>ngẫu nhiên, 6 ký tự</td><td>≈ 306 triệu</td><td>không dùng được</td></tr>
+          <tr><td>ngẫu nhiên, 7 ký tự</td><td>≈ 5,1 triệu</td><td>dùng được nếu kiểm trùng khi ghi</td></tr>
+          <tr><td>bộ đếm tăng dần, mã hoá ra 7 ký tự</td><td>0</td><td>không cần kiểm trùng</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Kết luận là một quyết định về cách sinh mã. Sinh ngẫu nhiên 6 ký tự cho khoảng 306 triệu va chạm, gần như không dùng được. Sinh ngẫu nhiên 7 ký tự còn khoảng 5 phẩy 1 triệu va chạm, chỉ dùng được nếu kiểm trùng khi ghi. Sinh từ bộ đếm tăng dần rồi mã hoá thì không có va chạm nào, nên khỏi kiểm trùng."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">yêu cầu có thước đo</span><span class="a">→</span>
+          <span class="n">ước lượng: ghi, đọc, lưu trữ</span><span class="a">→</span>
+          <span class="n">thành phần theo con số</span><span class="a">→</span>
+          <span class="n">dữ liệu, sẵn sàng, an toàn</span><span class="a">→</span>
+          <span class="n">bản ghi quyết định: đánh đổi và rủi ro</span></div>
+        say: "Tổng kết các bài đã học, bắt đầu từ yêu cầu có thước đo, ước lượng ghi, đọc, lưu trữ, rồi chọn thành phần theo con số. Sau đó thiết kế dữ liệu, sẵn sàng, an toàn, và viết bản ghi quyết định với đánh đổi và rủi ro."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> một bản kiến trúc tốt là một chuỗi quyết định có số liệu và có lý do — người khác đọc được, kiểm lại được, và biết khi nào phải xem lại.</div>
+        say: "Điều cần mang theo, một bản kiến trúc tốt là một chuỗi quyết định có số liệu và có lý do, người khác đọc được, kiểm lại được, và biết khi nào phải xem lại."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 13): <b>tình huống chuyên gia theo dòng thời gian</b> — Twitter đổi kiến trúc từ một ứng dụng duy nhất năm 2006 tới nhiều dịch vụ nhỏ năm 2014, khi người dùng tăng gấp nhiều lần.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 13, ta đi lại hành trình có thật của mạng xã hội Twitter. Từ một ứng dụng duy nhất năm 2006 tới nhiều dịch vụ nhỏ năm 2014, ta xem họ đổi kiến trúc thế nào khi người dùng tăng gấp nhiều lần."

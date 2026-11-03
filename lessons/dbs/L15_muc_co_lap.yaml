@@ -1,0 +1,262 @@
+id: L15
+course: DBS
+series: "DBS · Cơ sở dữ liệu"
+title: "Bài 15 — Mức cô lập và các dị thường đọc"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/dbs.yaml L15; audit/dbs/verify_dbs.py L15; ANSI X3.135-1992 (SQL-92), mục 4.28; H. Berenson et al., A Critique of ANSI SQL Isolation Levels (1995)"
+assumes: [arith, geq]
+# Quy ước: T1 là giao dịch đang đọc, T2 là giao dịch ghi chen vào. Tên mức giữ nguyên tiếng Anh trên màn hình, lời đọc dùng tên Việt:
+#   đọc chưa ghi nhận (READ UNCOMMITTED), đọc đã ghi nhận (READ COMMITTED), đọc lặp lại được (REPEATABLE READ), tuần tự hoá
+#   (SERIALIZABLE). Bảng dị thường theo chuẩn SQL-92; mặc định của từng hệ quản trị nêu cho PostgreSQL (READ COMMITTED),
+#   MySQL InnoDB (REPEATABLE READ). Mọi giá trị đọc do alg.iso_reads (mô hình nhiều phiên bản: RU, RC, ảnh chụp) tính.
+objectives:
+  - "Phân biệt đọc bẩn, đọc không lặp lại, bóng ma"
+  - "Đọc bảng mức cô lập của chuẩn SQL"
+  - "Chọn mức cô lập phù hợp, và không giả định mặc định"
+asr_reviewed:
+  - {sentence: "Thời điểm thứ hai, T2 ghi A bằng 200.", reason: "ASR chép “Thời điểm thứ 2, T2GA bằng 200.” (0.857): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: ghi (trong “ghi a” → “ga”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "T2 ghi A bằng 200 nhưng chưa ghi nhận, nên số 200 chỉ là tạm thời.", reason: "ASR chép “T2gA bằng 200 nhưng chưa ghi nhận nên số 200 chỉ là tạm thời.” (0.919): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: ghi (trong “ghi a” → “ga”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Câu một, đây là dị thường nào?", reason: "ASR chép “Câu 1, đây là dĩ thương nào?”: dị/dĩ, thường/thương (thanh); câu hỏi 6 từ khớp 0,714 > 0,7 — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Mức đọc đã ghi nhận chặn đọc bẩn, nhưng vẫn cho đọc không lặp lại và bóng ma.", reason: "ASR chép “Mức độc … chặn độc bẩn … cho độc không lập lại”: đọc/độc (thanh nặng), lặp/lập — nhầm thanh của ASR; “đã ghi nhận”, “bóng ma” đúng — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Chuẩn SQL định nghĩa bốn mức cô lập.", reason: "SQL đọc “ét quy eo” (lexicon DBS p1 8/8); ASR chép “SQ Eo” — đủ ba chữ cái, chỉ khác cách viết"}
+  - {sentence: "Thứ ba, bóng ma, T1 chạy cùng một điều kiện hai lần mà ra hai tập dòng khác nhau.", reason: "tên chữ cái đọc kiểu Việt, ASR chép nhầm chữ (q→quy, x→ích, k→ca) — nhóm đã biết (SKILL Bước 5); chữ hiện trên màn hình"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Đọc hai lần, ra hai số"
+    steps:
+      - show: |
+          <p>Trong cùng một giao dịch, bạn đọc số dư được 100. Một lát sau đọc lại, được 200 — không ai trong giao dịch của bạn ghi gì cả.</p>
+          <p>Bài 13: khoá đầy đủ cho kết quả như chạy lần lượt, nhưng chậm. Nhiều hệ thống chọn <b>nới bớt</b> để nhanh hơn.</p>
+          <div class="box key">Hôm nay: các <b>mức cô lập</b> — mỗi mức cho phép những dị thường đọc nào — để chọn đúng sự đánh đổi.</div>
+        focus: [1, 2, 2, 3]
+        say: "Chào bạn, trong cùng một giao dịch, bạn đọc số dư được 100, một lát sau đọc lại được 200, dù trong giao dịch của bạn không ai ghi gì cả. Ở bài 13, khoá đầy đủ cho kết quả như chạy lần lượt, nhưng chậm. Vì thế nhiều hệ thống chọn nới bớt để chạy nhanh hơn. Hôm nay ta học các mức cô lập, mỗi mức cho phép những dị thường đọc nào, để chọn đúng sự đánh đổi."
+
+  # ───────────────────────── 1b. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: huỷ, khoá, và chạy lần lượt"
+    checks:
+      - "alg.iso_reads('RC', {'A': 100}, [('T2', 'W', 'A', 200), ('T2', 'A'), ('T1', 'R', 'A')]) == [100]"
+      - "alg.strict_2pl([('T1', 'R', 'A'), ('T2', 'W', 'A')])[0][1][1] == 'đợi T1'"
+      - "alg.iso_reads('RC', {'A': 100}, [('T1', 'R', 'A'), ('T1', 'R', 'A'), ('T2', 'W', 'A', 200), ('T2', 'C')]) == [100, 100]"
+      - "alg.iso_reads('RC', {'A': 100}, [('T2', 'W', 'A', 200), ('T2', 'C'), ('T1', 'R', 'A'), ('T1', 'R', 'A')]) == [200, 200]"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài 11: giao dịch T2</th><th>A</th></tr>
+          <tr><td>lúc đầu (đã commit)</td><td>100</td></tr>
+          <tr><td>T2 ghi A = 200, <b>chưa</b> commit</td><td>200 — tạm thời</td></tr>
+          <tr><td>T2 huỷ</td><td>$\hl{100}$ — số 200 chưa từng tồn tại</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Trước hết, nhắc lại bài 11, một giao dịch chưa ghi nhận thì mọi thứ nó ghi vẫn có thể bị huỷ. Lúc đầu A bằng 100, đã ghi nhận. T2 ghi A bằng 200 nhưng chưa ghi nhận, nên số 200 chỉ là tạm thời. Nếu T2 huỷ, A quay về 100, coi như số 200 chưa từng tồn tại."
+      - show: |
+          <table class="t"><tr><th>bài 13: khoá hai pha</th><th>kết quả</th></tr>
+          <tr><td>T1 đọc A, giữ khoá S tới khi ghi nhận</td><td>chạy</td></tr>
+          <tr><td>T2 muốn ghi A, xin khoá X</td><td><b class="red">đợi T1</b></td></tr></table>
+          <p>Hai lần đọc của T1 chắc chắn giống nhau — đổi lại T2 phải chờ.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Thứ hai, ở bài 13, khoá hai pha nghiêm ngặt giữ khoá tới khi ghi nhận. T1 đọc A và giữ khoá chia sẻ. T2 muốn ghi A thì phải xin khoá độc quyền, nên phải đợi T1. Nhờ vậy hai lần đọc của T1 chắc chắn giống nhau, nhưng đổi lại T2 phải chờ."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bài 12: chạy lần lượt</th><th>T1 đọc A hai lần được</th></tr>
+          <tr><td>T1 trước, T2 sau</td><td>100, 100</td></tr>
+          <tr><td>T2 trước, T1 sau</td><td>200, 200</td></tr>
+          <tr><td>“100 rồi 200”</td><td><b class="red">không khớp thứ tự nào</b></td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Thứ ba, bài 12 gọi một lịch là đúng khi kết quả giống như chạy các giao dịch lần lượt. Nếu T1 chạy hết trước rồi T2 mới ghi 200, T1 đọc được 100 và 100. Nếu T2 chạy trước, T1 đọc được 200 và 200. Còn đọc được 100 rồi 200 thì không khớp thứ tự lần lượt nào, đó chính là con số lạ ở đầu bài."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: ba dị thường đọc"
+    checks:
+      - "alg.iso_reads('RU', {'A': 100}, [('T2', 'W', 'A', 200), ('T1', 'R', 'A'), ('T2', 'A')]) == [200]"
+      - "alg.iso_reads('RC', {'A': 100}, [('T1', 'R', 'A'), ('T2', 'W', 'A', 200), ('T2', 'C'), ('T1', 'R', 'A')]) == [100, 200]"
+      - "alg.iso_reads('RC', {'An': 8, 'Binh': 6, 'Chi': 9, 'Dung': 7}, [('T1', 'COUNT', lambda v: v >= 7), ('T2', 'INS', 'Em', 8), ('T2', 'C'), ('T1', 'COUNT', lambda v: v >= 7)]) == [3, 4]"
+    steps:
+      - show: |
+          <table class="t"><tr><th>dị thường</th><th>chuyện gì xảy ra</th><th>ví dụ</th></tr>
+          <tr><td><b>đọc bẩn</b></td><td>T1 đọc giá trị T2 ghi mà <b>chưa commit</b></td><td>T2 ghi 200, T1 đọc 200, T2 huỷ: T1 đã dùng số không hề tồn tại</td></tr>
+          <tr><td><b>đọc không lặp lại</b></td><td>T1 đọc cùng một dòng hai lần, ra hai giá trị</td><td>100, rồi T2 ghi 200 và commit, T1 đọc lại 200</td></tr>
+          <tr><td><b>bóng ma</b></td><td>T1 chạy cùng điều kiện hai lần, ra tập dòng khác nhau</td><td>đếm điểm ≥ 7: 3, rồi T2 thêm Em (8) và commit: 4</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.3", "1.3", "1.4", "1.4"]
+        say: "Có ba loại dị thường có thể xảy ra khi đọc dữ liệu. Thứ nhất, đọc bẩn, T1 đọc một giá trị mà T2 ghi nhưng chưa ghi nhận. Ví dụ T2 ghi 200, T1 đọc được 200, rồi T2 huỷ, vậy T1 đã dùng một con số không hề tồn tại. Thứ hai, đọc không lặp lại, T1 đọc cùng một dòng hai lần mà ra hai giá trị. Ví dụ lần đầu 100, rồi T2 ghi 200 và ghi nhận, T1 đọc lại được 200. Thứ ba, bóng ma, T1 chạy cùng một điều kiện hai lần mà ra hai tập dòng khác nhau. Ví dụ đếm sinh viên có điểm từ 7 trở lên được 3, rồi T2 thêm bạn Em điểm 8 và ghi nhận, đếm lại được 4."
+
+  # ───────────────────────── 3. BẢNG MỨC ─────────────────────────
+  - id: levels
+    kind: concept
+    title: "Bốn mức cô lập của chuẩn SQL"
+    steps:
+      - show: |
+          <table class="t"><tr><th>mức</th><th>đọc bẩn</th><th>đọc không lặp lại</th><th>bóng ma</th></tr>
+          <tr><td>READ UNCOMMITTED</td><td>có thể</td><td>có thể</td><td>có thể</td></tr>
+          <tr><td>READ COMMITTED</td><td>không</td><td>có thể</td><td>có thể</td></tr>
+          <tr><td>REPEATABLE READ</td><td>không</td><td>không</td><td>có thể</td></tr>
+          <tr><td>SERIALIZABLE</td><td>không</td><td>không</td><td>không</td></tr></table>
+          <div class="box key">Mức càng cao càng ít dị thường, nhưng càng nhiều chờ khoá hay huỷ giao dịch. Chỉ SERIALIZABLE cho kết quả như chạy lần lượt (bài 12).</div>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", 2, 2]
+        say: "Chuẩn SQL định nghĩa bốn mức cô lập. Mức thấp nhất, đọc chưa ghi nhận, cho phép cả ba dị thường. Mức đọc đã ghi nhận chặn đọc bẩn, nhưng vẫn cho đọc không lặp lại và bóng ma. Mức đọc lặp lại được chặn thêm đọc không lặp lại, nhưng theo chuẩn vẫn có thể có bóng ma. Mức tuần tự hoá chặn cả ba. Mức càng cao càng ít dị thường, nhưng càng phải chờ khoá hay huỷ giao dịch nhiều hơn. Và chỉ mức tuần tự hoá cho kết quả như chạy lần lượt, như bài 12."
+
+  # ───────────────────────── 3b. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Mỗi mức đọc một phiên bản khác nhau"
+    checks:
+      - "[alg.iso_reads(l, {'A': 100}, [('T1', 'R', 'A'), ('T2', 'W', 'A', 200), ('T1', 'R', 'A'), ('T2', 'C'), ('T1', 'R', 'A')]) for l in ('RU', 'RC', 'SNAP')] == [[100, 200, 200], [100, 100, 200], [100, 100, 100]]"
+    steps:
+      - show: |
+          <div><svg width="1500" height="460" viewBox="0 0 1500 460"><g font-size="24" fill="#1f2937"><text x="40" y="70" font-weight="bold">phiên bản của A</text></g><line x1="240" y1="100" x2="1440" y2="100" stroke="#2a78d6" stroke-width="8"/><text x="250" y="88" font-size="24" fill="#2a78d6" font-weight="bold">100 (đã commit)</text><line x1="640" y1="140" x2="900" y2="140" stroke="#eb6834" stroke-width="8" stroke-dasharray="14 10"/><text x="650" y="175" font-size="22" fill="#eb6834" font-weight="bold">200 của T2, chưa commit</text><line x1="900" y1="140" x2="1440" y2="140" stroke="#059669" stroke-width="8"/><text x="1000" y="175" font-size="22" fill="#059669" font-weight="bold">200 đã commit</text><g stroke="#9ca3af" stroke-width="2" stroke-dasharray="6 6"><line x1="380" y1="40" x2="380" y2="440"/><line x1="760" y1="40" x2="760" y2="440"/><line x1="1160" y1="40" x2="1160" y2="440"/></g><g font-size="22" text-anchor="middle" fill="#1f2937"><text x="380" y="215">T1 đọc lần 1</text><text x="760" y="215">T1 đọc giữa chừng</text><text x="1160" y="215">T1 đọc lần 2</text></g><g font-size="24" fill="#1f2937"><text x="40" y="285">đọc cả bản chưa commit</text><text x="40" y="350">đọc bản commit mới nhất</text><text x="40" y="415">ảnh chụp lúc T1 bắt đầu</text></g><g font-size="28" font-weight="bold" text-anchor="middle"><text x="380" y="287" fill="#2a78d6">100</text><text x="760" y="287" fill="#b91c1c">200</text><text x="1160" y="287" fill="#059669">200</text><text x="380" y="352" fill="#2a78d6">100</text><text x="760" y="352" fill="#2a78d6">100</text><text x="1160" y="352" fill="#059669">200</text><text x="380" y="417" fill="#2a78d6">100</text><text x="760" y="417" fill="#2a78d6">100</text><text x="1160" y="417" fill="#2a78d6">100</text></g><g font-size="20" fill="#b91c1c"><text x="800" y="287">đọc bẩn</text><text x="1200" y="352">không lặp lại</text></g></svg></div>
+        focus: [1, 1, 1, 1, 1]
+        say: "Hình vẽ các phiên bản của A theo thời gian, vạch xanh là bản 100 đã ghi nhận, vạch cam đứt nét là bản 200 của T2 khi chưa ghi nhận. Khi T2 ghi nhận, bản 200 thành vạch xanh lá. T1 đọc ba lần, và mỗi cách đọc chọn một phiên bản khác. Đọc cả bản chưa ghi nhận thì giữa chừng đã thấy 200, đó là đọc bẩn, còn đọc bản đã ghi nhận mới nhất thì tới lần hai mới đổi sang 200. Đọc ảnh chụp lúc T1 bắt đầu thì cả ba lần đều là 100."
+
+  # ───────────────────────── 4. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Cùng một dòng thời gian, ba mức"
+    checks:
+      - "[alg.iso_reads(l, {'A': 100}, [('T1', 'R', 'A'), ('T2', 'W', 'A', 200), ('T2', 'C'), ('T1', 'R', 'A')]) for l in ('RU', 'RC', 'SNAP')] == [[100, 200], [100, 200], [100, 100]]"
+      - "[alg.iso_reads(l, {'A': 100}, [('T2', 'W', 'A', 200), ('T1', 'R', 'A'), ('T2', 'A')]) for l in ('RU', 'RC', 'SNAP')] == [[200], [100], [100]]"
+    steps:
+      - show: |
+          <p><b>Bước 1</b> — dòng thời gian, A lúc đầu = 100.</p>
+          <table class="t"><tr><th>thời điểm</th><th>sự kiện</th></tr>
+          <tr><td>thứ nhất</td><td>T1 đọc A</td></tr><tr><td>thứ hai</td><td>T2 ghi A = 200</td></tr>
+          <tr><td>thứ ba</td><td>T2 commit</td></tr><tr><td>thứ tư</td><td>T1 đọc A lần hai</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", "2.5"]
+        say: "Bước một, xét một dòng thời gian, A lúc đầu bằng 100. Thời điểm thứ nhất, T1 đọc A. Thời điểm thứ hai, T2 ghi A bằng 200. Thời điểm thứ ba, T2 ghi nhận. Thời điểm thứ tư, T1 đọc A lần hai."
+      - show: |
+          <p><b>Bước 2</b> — đọc cả bản chưa commit (READ UNCOMMITTED): lần 1 chưa ai ghi → 100; lần 2 bản mới nhất là 200 → 200.</p>
+        say: "Bước hai, nếu T1 đọc cả bản chưa ghi nhận, lần một chưa ai ghi nên được 100. Lần hai, bản mới nhất là 200, nên T1 được 200."
+      - clear: true
+        show: |
+          <p><b>Bước 3</b> — đọc bản đã commit mới nhất (READ COMMITTED):</p>
+          <table class="t"><tr><th>lần đọc</th><th>bản đã commit lúc đó</th><th>T1 được</th></tr>
+          <tr><td>thứ nhất</td><td>100</td><td>100</td></tr>
+          <tr><td>thứ tư</td><td>200 (T2 commit ở thời điểm thứ ba)</td><td>$\hl{200}$ — đọc không lặp lại</td></tr></table>
+        focus: ["2.2", "2.3"]
+        say: "Bước ba, nếu T1 chỉ đọc bản đã ghi nhận mới nhất, lần một bản đã ghi nhận là 100. Lần hai, T2 đã ghi nhận ở thời điểm thứ ba, nên bản đã ghi nhận mới nhất là 200, và T1 được 200, tức đọc không lặp lại."
+      - show: |
+          <p><b>Bước 4</b> — đọc ảnh chụp lúc T1 bắt đầu: ảnh chụp có A = 100 và không đổi trong suốt T1 → lần 1 = 100, lần 2 = $\hl{100}$.</p>
+          <p class="note">Ảnh chụp: mỗi giao dịch thấy dữ liệu như lúc nó bắt đầu — cách nhiều hệ quản trị làm mức REPEATABLE READ.</p>
+        focus: [1, 1, 2]
+        say: "Bước bốn, nếu T1 đọc ảnh chụp lúc nó bắt đầu, ảnh chụp có A bằng 100 và không đổi trong suốt T1. Vì thế cả hai lần T1 đều được 100. Ảnh chụp nghĩa là mỗi giao dịch thấy dữ liệu như lúc nó bắt đầu, đó là cách nhiều hệ quản trị làm mức đọc lặp lại được."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>cách đọc của T1</th><th>lần 1</th><th>lần 2</th></tr>
+          <tr><td>đọc cả bản chưa commit</td><td>100</td><td>200</td></tr>
+          <tr><td>đọc bản đã commit mới nhất</td><td>100</td><td>200</td></tr>
+          <tr><td>đọc ảnh chụp lúc T1 bắt đầu</td><td>100</td><td>$\hl{100}$</td></tr></table>
+          <p><b>Bước 5</b> — đổi kịch bản: T2 ghi 200, T1 đọc, rồi T2 <b>huỷ</b>. T1 được: 200 (đọc cả bản chưa commit — đọc bẩn), 100, 100.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2, 2]
+        say: "Gom lại kết quả của T1 theo ba cách đọc. Đọc cả bản chưa ghi nhận cho 100 rồi 200. Đọc bản đã ghi nhận mới nhất cũng cho 100 rồi 200. Đọc ảnh chụp cho 100 cả hai lần. Bước năm, đổi kịch bản, T2 ghi 200, T1 đọc, rồi T2 huỷ. Lúc này chỉ cách đọc cả bản chưa ghi nhận cho T1 con số 200 không hề tồn tại, hai cách còn lại đều cho 100."
+
+  # ───────────────────────── 4b. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: so với chạy lần lượt, và thử mọi cách đan xen"
+    checks:
+      - "[alg.iso_reads(l, {'A': 100}, [('T1', 'R', 'A'), ('T2', 'W', 'A', 200), ('T2', 'C'), ('T1', 'R', 'A')]) in ([100, 100], [200, 200]) for l in ('RU', 'RC', 'SNAP')] == [False, False, True]"
+      - "(lambda L: len(L) == 6 == math.comb(4, 2) and [sum(len(set(alg.iso_reads(l, {'A': 100}, s))) > 1 for s in L) for l in ('RC', 'SNAP')] == [2, 0])(list(alg._interleavings([('T1', 'R', 'A'), ('T1', 'R', 'A')], [('T2', 'W', 'A', 200), ('T2', 'C')])))"
+    steps:
+      - show: |
+          <table class="t"><tr><th>cách đọc</th><th>T1 được</th><th>khớp một thứ tự chạy lần lượt?</th></tr>
+          <tr><td>cả bản chưa commit</td><td>100, 200</td><td>không</td></tr>
+          <tr><td>bản commit mới nhất</td><td>100, 200</td><td>không</td></tr>
+          <tr><td>ảnh chụp</td><td>100, 100</td><td>có: như T1 chạy trước T2</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Kiểm bằng đường khác, ta so với hai thứ tự chạy lần lượt ở phần chuẩn bị, chỉ có 100, 100 hoặc 200, 200. Đọc cả bản chưa ghi nhận cho 100 rồi 200, không khớp. Đọc bản đã ghi nhận mới nhất cũng vậy, không khớp. Đọc ảnh chụp cho 100, 100, nên khớp đúng thứ tự T1 chạy trước T2."
+      - show: |
+          <p>Hai thao tác của T1, hai của T2: chọn 2 trong 4 vị trí cho T1 → 6 cách đan xen.</p>
+          <table class="t"><tr><th>máy thử cả 6 cách</th><th>số cách hai lần đọc khác nhau</th></tr>
+          <tr><td>bản commit mới nhất</td><td>2 (khi T2 commit rơi vào giữa hai lần đọc)</td></tr>
+          <tr><td>ảnh chụp</td><td>0</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Thử thêm bằng máy, T1 có hai lần đọc, T2 có một lần ghi và một lần ghi nhận, chọn 2 trong 4 vị trí cho T1, nên có 6 cách đan xen. Với cách đọc bản đã ghi nhận mới nhất, 2 trong 6 cách cho hai lần đọc khác nhau, đúng là khi lần ghi nhận của T2 rơi vào giữa hai lần đọc. Với ảnh chụp, không cách nào cả."
+
+  # ───────────────────────── 5. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi người mới hay mắc"
+    checks:
+      - "alg.lost_update(100, [10, 10]) == (110, 120)"
+      - "alg.sql('SELECT x FROM t', 'CREATE TABLE t(x); INSERT INTO t VALUES (100); UPDATE t SET x = x + 10; UPDATE t SET x = x + 10;') == [(120,)]"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Giả định mặc định là SERIALIZABLE <b class="red">(sai)</b>
+          <br><span class="note">Mặc định khác nhau: PostgreSQL là READ COMMITTED, MySQL (InnoDB) là REPEATABLE READ. Phải kiểm cấu hình, hoặc đặt rõ mức cho giao dịch quan trọng.</span></div>
+        say: "Lỗi thứ nhất, giả định mặc định là mức tuần tự hoá. Mặc định mỗi hệ quản trị một khác, ví dụ hai hệ quản trị phổ biến trên màn hình, một bên mặc định đọc đã ghi nhận, bên kia mặc định đọc lặp lại được. Phải kiểm cấu hình, hoặc đặt rõ mức cho những giao dịch quan trọng."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Đọc rồi tính rồi ghi ở READ COMMITTED mà không khoá <b class="red">(sai)</b>
+          <br><span class="note">Mất cập nhật (bài 11) vẫn xảy ra ở mức này. Cập nhật tại chỗ, hoặc khoá dòng khi đọc.</span></div>
+          <table class="t"><tr><th>hai yêu cầu cùng cộng 10 vào số dư 100</th><th>kết quả</th></tr>
+          <tr><td>mã ứng dụng: đọc 100, tính 110, ghi 110 (cả hai)</td><td><b class="red">110</b></td></tr>
+          <tr><td>một câu: <code>UPDATE … SET so_du = so_du + 10</code></td><td>120</td></tr></table>
+        focus: [1, 1, 2, "2.2", "2.3"]
+        say: "Lỗi thứ hai, đọc rồi tính rồi ghi ở mức đọc đã ghi nhận mà không khoá, lỗi rất hay gặp trong mã ứng dụng thật. Mất cập nhật như bài 11 vẫn xảy ra ở mức này, nên hãy cập nhật tại chỗ, hoặc khoá dòng ngay khi đọc. Bảng cho thấy hai yêu cầu cùng cộng 10 vào số dư 100. Nếu mã ứng dụng tự đọc 100, tính 110 rồi ghi 110, cả hai cùng làm vậy thì kết quả là 110. Nếu để hệ quản trị cộng ngay trong một câu cập nhật, nó khoá dòng khi ghi, nên kết quả đúng là 120."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Nghĩ ảnh chụp là SERIALIZABLE <b class="red">(sai)</b>
+          <br><span class="note">Ảnh chụp chặn được ba dị thường đọc nhưng vẫn có dị thường ghi lệch: hai giao dịch đọc cùng ảnh, mỗi bên ghi một chỗ khác, cùng phá một ràng buộc chung.</span></div>
+        say: "Lỗi thứ ba, nghĩ đọc ảnh chụp là tuần tự hoá. Ảnh chụp chặn được ba dị thường đọc, nhưng vẫn có dị thường ghi lệch, khi hai giao dịch đọc cùng một ảnh, mỗi bên ghi một chỗ khác nhau, và cùng phá một ràng buộc chung."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Dùng READ UNCOMMITTED cho báo cáo tiền <b class="red">(sai)</b>
+          <br><span class="note">Đọc bẩn có thể cộng cả những khoản đã bị huỷ. Chỉ dùng khi chấp nhận số gần đúng.</span></div>
+        say: "Lỗi thứ tư, dùng mức đọc chưa ghi nhận cho báo cáo tiền. Đọc bẩn có thể cộng cả những khoản đã bị huỷ, nên chỉ dùng khi chấp nhận một con số gần đúng."
+
+  # ───────────────────────── 6. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.iso_reads('RC', {'An': 8, 'Binh': 6, 'Chi': 9, 'Dung': 7}, [('T1', 'COUNT', lambda v: v >= 7), ('T2', 'INS', 'Em', 8), ('T2', 'C'), ('T1', 'COUNT', lambda v: v >= 7)]) == [3, 4]"
+      - "alg.iso_reads('SNAP', {'An': 8, 'Binh': 6, 'Chi': 9, 'Dung': 7}, [('T1', 'COUNT', lambda v: v >= 7), ('T2', 'INS', 'Em', 8), ('T2', 'C'), ('T1', 'COUNT', lambda v: v >= 7)]) == [3, 3]"
+      - "[n for n, v in {'An': 8, 'Binh': 6, 'Chi': 9, 'Dung': 7}.items() if v >= 7] == ['An', 'Chi', 'Dung'] and 3 + 1 == 4"
+      - "[sum(alg.iso_reads(l, {'A': 100, 'B': 50}, [('T1', 'R', 'A'), ('T2', 'W', 'A', 70), ('T2', 'W', 'B', 80), ('T2', 'C'), ('T1', 'R', 'B')])) for l in ('RC', 'SNAP')] == [180, 150] and alg.iso_reads('RC', {'A': 100, 'B': 50}, [('T1', 'R', 'A'), ('T2', 'W', 'A', 70), ('T2', 'W', 'B', 80), ('T2', 'C'), ('T1', 'R', 'B')]) == [100, 80]"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1, 2</td><td>T1 đếm sinh viên điểm ≥ 7 (được 3), T2 thêm Em điểm 8 rồi commit, T1 đếm lại. Đây là dị thường nào? Ở READ COMMITTED và ở cách đọc ảnh chụp, lần đếm hai ra bao nhiêu?</td></tr>
+          <tr><td>3</td><td>Báo cáo cộng số dư A = 100 và B = 50. Giữa lúc báo cáo đọc A và đọc B, T2 chuyển 30 từ A sang B rồi commit. Chọn cách đọc nào cho báo cáo?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. T1 đếm sinh viên có điểm từ 7 trở lên được 3, T2 thêm bạn Em điểm 8 rồi ghi nhận, sau đó T1 đếm lại. Câu một, đây là dị thường nào? Câu hai, ở mức đọc đã ghi nhận và ở cách đọc ảnh chụp, lần đếm thứ hai ra bao nhiêu? Câu ba, một báo cáo cộng số dư A bằng 100 và B bằng 50, giữa lúc nó đọc A và đọc B thì T2 chuyển 30 từ A sang B rồi ghi nhận. Bạn chọn cách đọc nào cho báo cáo? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <table class="t"><tr><th>điểm ≥ 7?</th><th>An 8</th><th>Bình 6</th><th>Chi 9</th><th>Dũng 7</th><th>Em 8 (mới)</th></tr>
+          <tr><td>lần đếm 1</td><td>có</td><td>không</td><td>có</td><td>có</td><td>chưa có</td></tr></table>
+          <p>① Lần 1 đếm được 3. Không dòng cũ nào đổi, chỉ có một dòng <b>mới</b> chen vào điều kiện → <b>bóng ma</b>.</p>
+        focus: [1, 2, 2]
+        say: "Đáp án câu một, xét từng sinh viên ở lần đếm thứ nhất, An, Chi và Dũng đạt, Bình thì không, nên được 3. Không dòng cũ nào bị đổi, chỉ có một dòng mới là Em chen vào điều kiện. Cùng một điều kiện mà tập dòng khác đi, đó là bóng ma."
+      - show: |
+          <p>② READ COMMITTED: Em đã commit trước lần đếm hai → $3 + 1 = \hl{4}$. Ảnh chụp: vẫn thấy thế giới lúc T1 bắt đầu, chưa có Em → $\hl{3}$.</p>
+        say: "Câu hai, ở mức đọc đã ghi nhận, Em đã được ghi nhận trước lần đếm thứ hai, nên được 3 cộng 1 bằng 4. Còn đọc ảnh chụp thì ra 3, vì T1 vẫn thấy thế giới như lúc nó bắt đầu, khi chưa có Em."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>cách đọc</th><th>đọc A</th><th>đọc B</th><th>tổng</th></tr>
+          <tr><td>bản commit mới nhất</td><td>100 (trước khi chuyển)</td><td>80 (sau khi chuyển)</td><td><b class="red">180</b></td></tr>
+          <tr><td>ảnh chụp</td><td>100</td><td>50</td><td>$\hl{150}$</td></tr></table>
+          <p>③ Quyết định: báo cáo dùng <b>ảnh chụp</b> (hoặc mức cao hơn) — mọi lần đọc thấy cùng một thời điểm, tổng đúng 150.</p>
+        focus: ["1.2", "1.3", 2]
+        say: "Câu ba, nếu đọc bản đã ghi nhận mới nhất, báo cáo đọc A bằng 100 trước khi chuyển, rồi đọc B bằng 80 sau khi chuyển, tổng thành 180, tự sinh ra 30 đồng. Đọc ảnh chụp thì thấy A bằng 100, B bằng 50, tổng đúng 150. Vậy quyết định là cho báo cáo dùng ảnh chụp, hoặc một mức cao hơn, để mọi lần đọc cùng thấy một thời điểm."
+
+  # ───────────────────────── 7. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">đọc bẩn</span><span class="a">→</span>
+          <span class="n">đọc không lặp lại</span><span class="a">→</span>
+          <span class="n">bóng ma</span><span class="a">→</span>
+          <span class="n">mức càng cao, chặn càng nhiều, càng chậm</span></div>
+        say: "Tổng kết lại, có ba dị thường đọc, đọc bẩn, đọc không lặp lại và bóng ma. Mức cô lập càng cao chặn càng nhiều dị thường, nhưng càng chậm."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> “mặc định” là quyết định của người khác. Với dữ liệu quan trọng, hãy tự chọn và ghi rõ mức cô lập.</div>
+        say: "Điều cần mang theo, mặc định là quyết định của người khác. Với dữ liệu quan trọng, hãy tự chọn và ghi rõ mức cô lập."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 16): <b>ngoài mô hình quan hệ</b> — khoá–giá trị, văn bản, cột rộng, đồ thị.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 16, ta đi ra ngoài mô hình quan hệ, với các kiểu cơ sở dữ liệu khoá giá trị, văn bản, cột rộng và đồ thị. Hẹn gặp bạn ở bài tiếp theo."

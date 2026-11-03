@@ -1,0 +1,245 @@
+id: L11
+course: OSY
+series: "OSY · Hệ điều hành"
+title: "Bài 11 — Tập làm việc và hiện tượng trì trệ (thrashing)"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/osy.yaml L11; P. Denning (1968), “The working set model for program behavior”; Silberschatz, Galvin, Gagne, Operating System Concepts, chương 10"
+assumes: [arith, frac, sub, dots, approx]
+# Quy ước: w = độ rộng cửa sổ: số lần tham chiếu gần nhất được xét (chữ thường, không dùng Δ — Δ trong sổ ký hiệu chung là định thức). Tập làm việc tại thời điểm t = tập các trang
+#   khác nhau trong Δ tham chiếu gần nhất. Thời gian xử lý một lỗi trang 8 ms và truy cập bộ nhớ 100 ns là giả định cỡ độ lớn.
+#   “thrashing” chỉ trên màn hình; lời đọc nói “trì trệ”.
+objectives:
+  - "Ước lượng tập làm việc với một cửa sổ"
+  - "Tính thời gian truy cập hiệu dụng khi có lỗi trang"
+  - "Nhận ra trì trệ khi tổng tập làm việc vượt bộ nhớ"
+asr_reviewed:
+  - {sentence: "Có 1 lần lỗi, mất 8 triệu na-nô giây.", reason: "ASR chép “Có một lần lỗi, mất 8 triệu nano dây.” (0.737): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Giả sử truy cập bộ nhớ mất 100 na-nô giây, còn xử lý một lỗi trang phải đọc đĩa mất 8 mi li giây, tức 8 triệu na-nô giây.", reason: "“na-nô giây” → “nanoday”, “mi li giây” → “mili dây”: giây/dây là nhầm gi/d đã biết (CSA L08), na-nô, mi-li cùng âm; đĩa/để là nhầm của ASR; các số 100, 8, 8 triệu khớp"}
+  - {sentence: "Câu hai, chuyển vế bất đẳng thức, p không vượt quá 10 chia cho 8 triệu trừ 100.", reason: "chữ “p” → “tê”: ASR lẫn p/t (probe audit/dms/probes/p2_chu_p.md, đối chứng 0/8); vế/với, trừ/trường là nhầm của ASR; các số khớp"}
+  - {sentence: "Ý nghĩa của nó là số khung mà tiến trình cần để chạy mà không bị lỗi trang liên tục.", reason: "“Ý” đầu câu → “Yến”: ASR thêm âm cuối ở âm tiết đầu câu; mọi từ khác khớp — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Bộ xử lý rảnh 95% mà máy đứng hình"
+    steps:
+      - show: |
+          <p>Mở thêm vài chương trình, máy bỗng chậm như rùa. Đèn ổ đĩa sáng liên tục, nhưng bộ xử lý gần như <b>không làm gì</b>.</p>
+          <p>Hệ điều hành ngây thơ thấy bộ xử lý rảnh → cho chạy thêm chương trình → <b class="red">càng tệ hơn</b>.</p>
+          <div class="box key">Hôm nay: mỗi chương trình thực sự cần bao nhiêu trang, và chuyện gì xảy ra khi tổng nhu cầu vượt bộ nhớ.</div>
+        focus: [1, 1, 2, 3]
+        say: "Chào bạn, mở thêm vài chương trình, máy bỗng chậm như rùa. Đèn ổ đĩa sáng liên tục, nhưng bộ xử lý gần như không làm gì. Một hệ điều hành ngây thơ thấy bộ xử lý rảnh liền cho chạy thêm chương trình, và mọi thứ càng tệ hơn. Hôm nay ta học mỗi chương trình thực sự cần bao nhiêu trang, và chuyện gì xảy ra khi tổng nhu cầu vượt bộ nhớ."
+
+  # ───────────────────────── 1b. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: lỗi trang, tập hợp và trung bình có trọng số"
+    checks:
+      - "set([7, 7, 7, 5]) == {5, 7} and len(set([7, 7, 7, 5])) == 2"
+      - "abs(0.9 * 1 + 0.1 * 11 - 2) < 1e-9"
+    steps:
+      - show: |
+          <table class="t"><tr><th>điều cần nhớ</th><th>ví dụ</th></tr>
+          <tr><td><b>lỗi trang</b>: trang cần dùng không có trong khung nào → nạp từ đĩa</td><td>3 khung, gọi trang thứ tư → phải đuổi một trang</td></tr>
+          <tr><td><b>tập hợp</b>: chỉ giữ các phần tử <b>khác nhau</b>, bỏ trùng</td><td>dãy 7, 7, 7, 5 → tập {5, 7}, có 2 phần tử</td></tr></table>
+        focus: ["1.2", "1.2", "1.3"]
+        say: "Trước hết, ta nhắc lại bài 10, lỗi trang xảy ra khi trang cần dùng không có trong khung nào, phải nạp từ đĩa. Nếu cả 3 khung đã đầy mà gọi trang thứ tư thì phải đuổi một trang ra. Điều thứ hai là tập hợp, chỉ giữ các phần tử khác nhau, nên dãy 7, 7, 7, 5 cho tập gồm 5 và 7, có đúng 2 phần tử."
+      - show: |
+          <p><b>Trung bình có trọng số</b>: 90% số việc mất 1 phút, 10% mất 11 phút. Trung bình mỗi việc:</p>
+          $$0{,}9 \times 1 + 0{,}1 \times 11 = 0{,}9 + 1{,}1 = \hl{2} \text{ phút}$$
+        focus: [1, 2]
+        say: "Điều thứ ba là trung bình có trọng số, giả sử 90 phần trăm số việc mất 1 phút, còn 10 phần trăm mất 11 phút. Trung bình mỗi việc bằng 0 phẩy 9 nhân 1, cộng 0 phẩy 1 nhân 11, được 2 phút, gấp đôi việc nhanh dù việc chậm chỉ chiếm một phần mười."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: tập làm việc với cửa sổ w"
+    steps:
+      - show: |
+          <p><b>Tập làm việc</b> tại thời điểm $t$: tập các trang <b>khác nhau</b> trong <b>w</b> lần tham chiếu gần nhất, w là độ rộng <b>cửa sổ</b> (Denning, 1968).</p>
+          <p>Ý nghĩa: số khung tiến trình cần để chạy <b>không</b> lỗi trang liên tục. w quá nhỏ → thiếu trang đang dùng; quá lớn → gộp cả trang đã thôi dùng.</p>
+        focus: [1, 2, 2]
+        say: "Tập làm việc tại thời điểm t là tập các trang khác nhau trong w lần tham chiếu gần nhất, ở đây w là độ rộng cửa sổ. Ý nghĩa của nó là số khung mà tiến trình cần để chạy mà không bị lỗi trang liên tục. Cửa sổ quá nhỏ thì thiếu trang đang dùng, quá lớn thì gộp cả những trang đã thôi dùng."
+
+  # ───────────────────────── 2b. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Tập làm việc là những gì lọt vào một cửa sổ trượt"
+    checks:
+      - "len([1, 2, 1, 5, 7, 7, 7, 7, 5, 1, 6, 2, 3, 4, 1, 2, 3, 4, 4, 4, 3, 4, 3, 4, 4, 4]) == 26 and set([1, 2, 1, 5, 7, 7, 7, 7, 5, 1, 6, 2, 3, 4, 1, 2, 3, 4, 4, 4, 3, 4, 3, 4, 4, 4][:10]) == {1, 2, 5, 7} and set([1, 2, 1, 5, 7, 7, 7, 7, 5, 1, 6, 2, 3, 4, 1, 2, 3, 4, 4, 4, 3, 4, 3, 4, 4, 4][-10:]) == {3, 4}"
+    steps:
+      - show: |
+          <div><svg width="1450" height="260" viewBox="0 0 1450 260"><defs><marker id="arW11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs><rect x="50" y="110" width="50" height="64" fill="#f1f5f9" stroke="#1f2937" stroke-width="3"/><text x="75" y="152.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">1</text><rect x="102" y="110" width="50" height="64" fill="#f1f5f9" stroke="#1f2937" stroke-width="3"/><text x="127" y="152.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">2</text><rect x="154" y="110" width="50" height="64" fill="#f1f5f9" stroke="#1f2937" stroke-width="3"/><text x="179" y="152.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">1</text><rect x="206" y="110" width="50" height="64" fill="#f1f5f9" stroke="#1f2937" stroke-width="3"/><text x="231" y="152.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">5</text><rect x="258" y="110" width="50" height="64" fill="#f1f5f9" stroke="#1f2937" stroke-width="3"/><text x="283" y="152.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">7</text><rect x="310" y="110" width="50" height="64" fill="#f1f5f9" stroke="#1f2937" stroke-width="3"/><text x="335" y="152.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">7</text><rect x="362" y="110" width="50" height="64" fill="#f1f5f9" stroke="#1f2937" stroke-width="3"/><text x="387" y="152.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">7</text><rect x="414" y="110" width="50" height="64" fill="#f1f5f9" stroke="#1f2937" stroke-width="3"/><text x="439" y="152.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">7</text><rect x="466" y="110" width="50" height="64" fill="#f1f5f9" stroke="#1f2937" stroke-width="3"/><text x="491" y="152.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">5</text><rect x="518" y="110" width="50" height="64" fill="#f1f5f9" stroke="#1f2937" stroke-width="3"/><text x="543" y="152.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">1</text><rect x="570" y="110" width="50" height="64" fill="#f1f5f9" stroke="#1f2937" stroke-width="3"/><text x="595" y="152.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">6</text><rect x="622" y="110" width="50" height="64" fill="#f1f5f9" stroke="#1f2937" stroke-width="3"/><text x="647" y="152.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">2</text><rect x="674" y="110" width="50" height="64" fill="#f1f5f9" stroke="#1f2937" stroke-width="3"/><text x="699" y="152.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">3</text><rect x="726" y="110" width="50" height="64" fill="#f1f5f9" stroke="#1f2937" stroke-width="3"/><text x="751" y="152.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">4</text><rect x="778" y="110" width="50" height="64" fill="#f1f5f9" stroke="#1f2937" stroke-width="3"/><text x="803" y="152.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">1</text><rect x="830" y="110" width="50" height="64" fill="#f1f5f9" stroke="#1f2937" stroke-width="3"/><text x="855" y="152.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">2</text><rect x="882" y="110" width="50" height="64" fill="#f1f5f9" stroke="#1f2937" stroke-width="3"/><text x="907" y="152.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">3</text><rect x="934" y="110" width="50" height="64" fill="#f1f5f9" stroke="#1f2937" stroke-width="3"/><text x="959" y="152.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">4</text><rect x="986" y="110" width="50" height="64" fill="#f1f5f9" stroke="#1f2937" stroke-width="3"/><text x="1011" y="152.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">4</text><rect x="1038" y="110" width="50" height="64" fill="#f1f5f9" stroke="#1f2937" stroke-width="3"/><text x="1063" y="152.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">4</text><rect x="1090" y="110" width="50" height="64" fill="#f1f5f9" stroke="#1f2937" stroke-width="3"/><text x="1115" y="152.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">3</text><rect x="1142" y="110" width="50" height="64" fill="#f1f5f9" stroke="#1f2937" stroke-width="3"/><text x="1167" y="152.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">4</text><rect x="1194" y="110" width="50" height="64" fill="#f1f5f9" stroke="#1f2937" stroke-width="3"/><text x="1219" y="152.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">3</text><rect x="1246" y="110" width="50" height="64" fill="#f1f5f9" stroke="#1f2937" stroke-width="3"/><text x="1271" y="152.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">4</text><rect x="1298" y="110" width="50" height="64" fill="#f1f5f9" stroke="#1f2937" stroke-width="3"/><text x="1323" y="152.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">4</text><rect x="1350" y="110" width="50" height="64" fill="#f1f5f9" stroke="#1f2937" stroke-width="3"/><text x="1375" y="152.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">4</text><rect x="44" y="98" width="530" height="88" rx="10" fill="none" stroke="#2563eb" stroke-width="5"/><rect x="874" y="98" width="530" height="88" rx="10" fill="none" stroke="#d97706" stroke-width="5"/><text x="725" y="52" font-size="26" text-anchor="middle" fill="#1f2937">cửa sổ w = 10 trượt theo thời gian</text><line x1="600" y1="72" x2="850" y2="72" stroke="#1f2937" stroke-width="3" marker-end="url(#arW11)"/><text x="309" y="232" font-size="26" text-anchor="middle" fill="#1d4ed8" font-weight="bold">10 lần đầu: trang 1, 2, 5, 7 → 4 khung</text><text x="1139" y="232" font-size="26" text-anchor="middle" fill="#b45309" font-weight="bold">10 lần cuối: trang 3, 4 → 2 khung</text></svg></div>
+        say: "Hãy hình dung chuỗi tham chiếu là một dải ô, mỗi ô là một lần chương trình gọi tới một trang, tổng cộng 26 lần. Tập làm việc là những trang khác nhau lọt vào một khung cửa sổ phủ 10 ô gần nhất, và khung này trượt sang phải theo thời gian. Khi cửa sổ phủ 10 ô đầu, nó thấy bốn trang 1, 2, 5, 7, nên tiến trình cần 4 khung. Khi cửa sổ trượt tới 10 ô cuối, nó chỉ còn thấy trang 3 và 4, nên 2 khung là đủ, và hai khung kia có thể nhường cho tiến trình khác."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Hai giai đoạn của một chương trình, w = 10"
+    checks:
+      - "set([1, 2, 1, 5, 7, 7, 7, 7, 5, 1]) == {1, 2, 5, 7}"
+      - "[[1, 2, 1, 5, 7, 7, 7, 7, 5, 1, 6, 2, 3, 4, 1, 2, 3, 4, 4, 4, 3, 4, 3, 4, 4, 4][:10].count(p) for p in (1, 2, 5, 7)] == [3, 1, 2, 4] and [[1, 2, 1, 5, 7, 7, 7, 7, 5, 1, 6, 2, 3, 4, 1, 2, 3, 4, 4, 4, 3, 4, 3, 4, 4, 4][-10:].count(p) for p in (3, 4)] == [3, 7] and 3 + 1 + 2 + 4 == 10 and 3 + 7 == 10"
+      - "[1, 2, 1, 5, 7, 7, 7, 7, 5, 1, 6, 2, 3, 4, 1, 2, 3, 4, 4, 4, 3, 4, 3, 4, 4, 4][-10:] == [3, 4, 4, 4, 3, 4, 3, 4, 4, 4]"
+      - "set([1, 2, 1, 5, 7, 7, 7, 7, 5, 1, 6, 2, 3, 4, 1, 2, 3, 4, 4, 4, 3, 4, 3, 4, 4, 4][-10:]) == {3, 4}"
+    steps:
+      - show: |
+          <div class="code"><div>1 2 1 5 7 7 7 7 5 1 | 6 2 3 4 1 2 | 3 4 4 4 3 4 3 4 4 4</div></div>
+          <p><b>Bước 1.</b> Cửa sổ phủ 10 tham chiếu đầu: 1 2 1 5 7 7 7 7 5 1.</p>
+        focus: [1, 2]
+        say: "Đây là chuỗi tham chiếu của một chương trình qua hai giai đoạn. Bước một, đặt cửa sổ rộng 10 lên 10 tham chiếu đầu, gồm 1, 2, 1, 5, 7, 7, 7, 7, 5, 1."
+      - show: |
+          <table class="t"><tr><th>trang</th><th>1</th><th>2</th><th>5</th><th>7</th></tr><tr><td>số lần gọi</td><td>3</td><td>1</td><td>2</td><td>4</td></tr></table>
+          <p><b>Bước 2.</b> Bỏ trùng: tập làm việc gồm trang 1, 2, 5, 7 → cần <b>4</b> khung.</p>
+        focus: [1, 2]
+        say: "Bước hai, đếm từng trang, trang 1 được gọi 3 lần, trang 2 một lần, trang 5 hai lần, trang 7 bốn lần, cộng lại đủ 10. Bỏ trùng thì ở 10 tham chiếu đầu, các trang khác nhau là 1, 2, 5 và 7, nên cần 4 khung."
+      - clear: true
+        show: |
+          <div class="code"><div>1 2 1 5 7 7 7 7 5 1 | 6 2 3 4 1 2 | 3 4 4 4 3 4 3 4 4 4</div></div>
+          <p><b>Bước 3.</b> Cửa sổ trượt tới 10 tham chiếu cuối: 3 4 4 4 3 4 3 4 4 4.</p>
+        focus: [1, 2]
+        say: "Trên bảng vẫn là chuỗi tham chiếu ấy. Bước ba, cho cửa sổ trượt tới 10 tham chiếu cuối, gồm 3, 4, 4, 4, 3, 4, 3, 4, 4, 4."
+      - show: |
+          <table class="t"><tr><th>trang</th><th>3</th><th>4</th></tr><tr><td>số lần gọi</td><td>3</td><td>7</td></tr></table>
+          <p><b>Bước 4.</b> Tập làm việc gồm trang 3, 4 → chỉ cần <b>2</b> khung.</p>
+        focus: [1, 2]
+        say: "Bước bốn, trang 3 được gọi 3 lần, trang 4 bảy lần, cũng đủ 10. Ở 10 tham chiếu cuối, chỉ còn trang 3 và 4, nên chỉ cần 2 khung."
+      - show: |
+          <div class="box key">Tập làm việc <b>thay đổi</b> theo giai đoạn của chương trình: hệ điều hành phải đo liên tục, không đặt cố định.</div>
+        say: "Vì tập làm việc thay đổi theo giai đoạn của chương trình, hệ điều hành phải đo liên tục chứ không đặt cố định."
+
+  # ───────────────────────── 4. CHI PHÍ LỖI TRANG ─────────────────────────
+  - id: eat
+    kind: concept
+    title: "Một lỗi trang trên nghìn lần đã chậm 81 lần"
+    checks:
+      - "round(0.999 * 100 + 0.001 * 8e6, 1) == 8099.9 and round((0.999 * 100 + 0.001 * 8e6) / 100) == 81"
+    steps:
+      - show: |
+          <p>Truy cập bộ nhớ 100 ns; xử lý một lỗi trang (đọc đĩa) 8 ms = 8 000 000 ns. Tỉ lệ lỗi $p$:</p>
+          $$\text{hiệu dụng} = (1 - p) \times 100 + p \times 8\,000\,000 \text{ ns}$$
+          <p>$p = \frac{1}{1000}$: $0{,}999 \times 100 + 0{,}001 \times 8\,000\,000 = 8099{,}9$ ns → chậm $\hl{81}$ lần.</p>
+        focus: [1, 2, 3, 3]
+        say: "Giả sử truy cập bộ nhớ mất 100 na-nô giây, còn xử lý một lỗi trang phải đọc đĩa mất 8 mi li giây, tức 8 triệu na-nô giây. Với tỉ lệ lỗi p, thời gian hiệu dụng bằng 1 trừ p nhân 100, cộng p nhân 8 triệu. Chỉ một lỗi trên một nghìn lần truy cập đã cho khoảng 8100 na-nô giây. Vậy máy chậm đi 81 lần."
+
+  # ───────────────────────── 5. TRÌ TRỆ ─────────────────────────
+  - id: thrash
+    kind: concept
+    title: "Trì trệ: tổng tập làm việc vượt bộ nhớ"
+    checks:
+      - "4 * 300 == 1200 and 4 * 300 > 1000 and 3 * 300 == 900 and 3 * 300 < 1000"
+      - "1000 - 900 == 100 and 1200 - 1000 == 200"
+    steps:
+      - show: |
+          <p>4 tiến trình, mỗi tiến trình có tập làm việc 300 trang; bộ nhớ 1000 khung. Tổng nhu cầu 1200 &gt; 1000.</p>
+          <p>Tiến trình nào cũng thiếu trang → lỗi liên tục → đuổi trang của nhau → mọi người chờ đĩa. Bộ xử lý rảnh vì <b>ai cũng đang chờ</b>.</p>
+          <div class="box key">Chữa: <b>tạm dừng</b> bớt một tiến trình (đưa hẳn ra đĩa). Còn 3 × 300 = 900 &lt; 1000 → ba tiến trình chạy trơn tru, rồi tiến trình kia chạy sau.</div>
+        focus: [1, 2, 2, 3, 3]
+        say: "Có 4 tiến trình, mỗi tiến trình có tập làm việc 300 trang, còn bộ nhớ chỉ có 1000 khung. Tổng nhu cầu là 1200, lớn hơn 1000. Tiến trình nào cũng thiếu trang nên lỗi liên tục, đuổi trang của nhau, và mọi người cùng chờ đĩa. Bộ xử lý rảnh không phải vì hết việc, mà vì ai cũng đang chờ. Cách chữa là tạm dừng bớt một tiến trình, khi đó còn 900 nhỏ hơn 1000, ba tiến trình chạy trơn tru, rồi tiến trình kia chạy sau."
+      - clear: true
+        show: |
+          <p>Xếp bốn tập làm việc vào bộ nhớ 1000 khung:</p>
+          <div><svg width="1400" height="225" viewBox="0 0 1400 225"><rect x="100" y="85" width="300" height="80" fill="#dbeafe" stroke="#1f2937" stroke-width="3"/><text x="250" y="135.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">300</text><text x="250" y="72" font-size="22" text-anchor="middle" fill="#1f2937">tiến trình 1</text><rect x="400" y="85" width="300" height="80" fill="#dcfce7" stroke="#1f2937" stroke-width="3"/><text x="550" y="135.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">300</text><text x="550" y="72" font-size="22" text-anchor="middle" fill="#1f2937">tiến trình 2</text><rect x="700" y="85" width="300" height="80" fill="#fef3c7" stroke="#1f2937" stroke-width="3"/><text x="850" y="135.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">300</text><text x="850" y="72" font-size="22" text-anchor="middle" fill="#1f2937">tiến trình 3</text><rect x="1000" y="85" width="300" height="80" fill="#fecaca" stroke="#b91c1c" stroke-width="3" stroke-dasharray="10 8"/><text x="1150" y="136" font-size="30" text-anchor="middle" fill="#b91c1c" font-weight="bold">300</text><text x="1150" y="72" font-size="22" text-anchor="middle" fill="#b91c1c">tiến trình 4</text><rect x="100" y="85" width="1000" height="80" fill="none" stroke="#1f2937" stroke-width="6"/><line x1="1100" y1="40" x2="1100" y2="58" stroke="#1f2937" stroke-width="3"/><line x1="1100" y1="85" x2="1100" y2="190" stroke="#1f2937" stroke-width="3" stroke-dasharray="6 6"/><text x="1100" y="30" font-size="22" text-anchor="middle" fill="#1f2937" font-weight="bold">hết bộ nhớ: 1000 khung</text><text x="550" y="205" font-size="24" text-anchor="middle" fill="#1f2937">ba tiến trình: 900 khung, còn dư 100</text><text x="1200" y="205" font-size="24" text-anchor="middle" fill="#b91c1c" font-weight="bold">thiếu 200 khung</text></svg></div>
+        focus: [2, 2, 2]
+        say: "Hình xếp bốn tập làm việc, mỗi khối 300 trang, vào một bộ nhớ có 1000 khung. Ba khối đầu chiếm 900 khung và còn dư 100, nhưng khối thứ tư cần 300, nên tổng cộng thiếu 1200 trừ 1000, bằng 200 khung. Vì các tiến trình đuổi trang của nhau, phần thiếu này không nằm yên ở tiến trình 4 mà rải lên cả bốn, nên tiến trình nào cũng lỗi trang liên tục."
+
+  # ───────────────────────── 6. TỰ KIỂM ─────────────────────────
+  - id: verify
+    kind: check
+    title: "Tự kiểm"
+    checks:
+      - "sum([300, 300, 300]) <= 1000"
+      - "999 * 100 == 99900 and 1 * 8000000 == 8000000 and 99900 + 8000000 == 8099900 and 8099900 / 1000 == 8099.9 and round(8099.9 / 100) == 81"
+      - "100 < 8099.9 < 8e6"
+    steps:
+      - show: |
+          <table class="t"><tr><th>phép thử</th><th>với số của bài</th></tr>
+          <tr><td>cộng tập làm việc của mọi tiến trình đang chạy, so với số khung</td><td>3 × 300 = 900 ≤ 1000 ✓</td></tr>
+          <tr><td>lỗi trang cao và bộ xử lý rảnh <b>cùng lúc</b> → trì trệ, không phải thiếu việc</td><td>dấu hiệu</td></tr>
+          <tr><td>thời gian hiệu dụng nằm giữa 100 ns và 8 ms</td><td>8099,9 ns ✓</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Tự kiểm bằng ba cách. Một, cộng tập làm việc của mọi tiến trình đang chạy rồi so với số khung. Hai, nếu tỉ lệ lỗi trang cao và bộ xử lý rảnh cùng lúc, đó là dấu hiệu trì trệ chứ không phải thiếu việc. Ba, thời gian hiệu dụng phải nằm giữa 100 na-nô giây và 8 mi li giây, vì nó là trung bình của hai trường hợp đó."
+      - show: |
+          <table class="t"><tr><th>đường khác: đếm thẳng 1000 lần truy cập, $p = \frac{1}{1000}$</th><th>thời gian</th></tr>
+          <tr><td>999 lần trúng × 100 ns</td><td>99 900 ns</td></tr>
+          <tr><td>1 lần lỗi × 8 000 000 ns</td><td>8 000 000 ns</td></tr>
+          <tr><td>tổng, chia 1000 lần</td><td>$8\,099\,900 : 1000 = \hl{8099{,}9}$ ns ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Bây giờ kiểm con số chậm 81 lần bằng một đường khác, không dùng công thức mà đếm thẳng 1000 lần truy cập với một lỗi. Có 999 lần trúng, vì chỉ một trong nghìn lần là lỗi, mỗi lần trúng mất 100 na-nô giây, tổng 99 nghìn 900 na-nô giây. Có 1 lần lỗi, mất 8 triệu na-nô giây. Cộng lại được 8 triệu 99 nghìn 900, chia cho 1000 lần là 8099 phẩy 9 na-nô giây mỗi lần, khớp với công thức, tức chậm khoảng 81 lần."
+
+  # ───────────────────────── 7. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi người mới hay mắc"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Thấy bộ xử lý rảnh thì cho chạy thêm tiến trình <b class="red">(làm tệ hơn)</b>
+          <br><span class="note">Khi đang trì trệ, thêm tiến trình là thêm nhu cầu trang — phải bớt, không phải thêm.</span></div>
+        say: "Lỗi thứ nhất, thấy bộ xử lý rảnh là cho chạy thêm tiến trình. Khi đang trì trệ, thêm tiến trình là thêm nhu cầu trang, nên phải bớt chứ không phải thêm."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Nghĩ tỉ lệ lỗi 0,1% là nhỏ, không đáng lo <b class="red">(sai)</b>
+          <br><span class="note">Vì đĩa chậm hơn bộ nhớ hàng chục nghìn lần, 0,1% đã làm chậm 81 lần.</span></div>
+          <table class="t"><tr><th>tỉ lệ lỗi</th><th>0</th><th>0,1%</th></tr><tr><td>thời gian hiệu dụng</td><td>100 ns</td><td><b class="red">8099,9 ns</b></td></tr></table>
+        focus: [1, 2]
+        say: "Lỗi thứ hai, nghĩ tỉ lệ lỗi 0 phẩy 1 phần trăm là nhỏ, không đáng lo. Vì đĩa chậm hơn bộ nhớ hàng chục nghìn lần, chừng đó đã làm máy chậm 81 lần."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Đếm số lần tham chiếu thay vì số trang <b>khác nhau</b> <b class="red">(sai)</b>
+          <br><span class="note">Trang 7 được gọi 4 lần liền vẫn chỉ cần một khung.</span></div>
+        say: "Lỗi thứ ba, đếm số lần tham chiếu thay vì số trang khác nhau. Trang 7 được gọi bốn lần liền vẫn chỉ cần một khung."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Nghĩ thêm ổ đĩa nhanh là hết trì trệ <b class="red">(chưa đủ)</b>
+          <br><span class="note">Ổ thể rắn nhanh hơn, nhưng vẫn chậm hơn bộ nhớ cả trăm lần — gốc rễ là thiếu bộ nhớ cho tập làm việc.</span></div>
+        say: "Lỗi thứ tư, nghĩ thay ổ đĩa nhanh là hết trì trệ. Ổ thể rắn nhanh hơn thật, nhưng vẫn chậm hơn bộ nhớ cả trăm lần, và gốc rễ vẫn là thiếu bộ nhớ cho tập làm việc."
+
+  # ───────────────────────── 8. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "sorted(set([1, 2, 1, 5, 7, 7, 7, 7, 5, 1, 6, 2, 3, 4, 1][-5:])) == [1, 2, 3, 4, 6]"
+      - "(110 - 100) / (8e6 - 100) < 1.26e-6 and round(1 / ((110 - 100) / (8e6 - 100)), -4) == 800000"
+      - "all(abs((1 - p) * 100 + p * 8e6 - (100 + p * (8e6 - 100))) < 1e-6 for p in (0, 1e-6, 1e-3)) and 8000000 - 100 == 7999900 and 110 - 100 == 10"
+      - "len(set([6, 2, 3, 4, 1])) == 5 and [1, 2, 1, 5, 7, 7, 7, 7, 5, 1, 6, 2, 3, 4, 1][10:15] == [6, 2, 3, 4, 1]"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Với chuỗi ở ví dụ và w = 5, tập làm việc sau tham chiếu thứ 15 là gì?</td></tr>
+          <tr><td>2</td><td>Muốn chậm không quá 10% (thời gian hiệu dụng ≤ 110 ns), tỉ lệ lỗi tối đa là bao nhiêu?</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, với chuỗi ở ví dụ và cửa sổ rộng 5, tập làm việc sau tham chiếu thứ 15 là gì? Câu hai, muốn máy chậm không quá 10 phần trăm, tức thời gian hiệu dụng không quá 110 na-nô giây, tỉ lệ lỗi tối đa là bao nhiêu? Dừng video và làm ra giấy."
+        pause: 12
+      - clear: true
+        show: |
+          <table class="t"><tr><th>tham chiếu thứ</th><th>11</th><th>12</th><th>13</th><th>14</th><th>15</th></tr><tr><td>trang</td><td>6</td><td>2</td><td>3</td><td>4</td><td>1</td></tr></table>
+          <p>① Năm trang khác nhau, không trùng → tập làm việc gồm trang 1, 2, 3, 4, 6 (cần 5 khung).</p>
+        focus: [1, 2]
+        say: "Đáp án câu một, năm tham chiếu thứ 11 đến 15 là 6, 2, 3, 4, 1, nên tập làm việc gồm các trang 1, 2, 3, 4 và 6. Năm trang này không trùng nhau, nên với cửa sổ rộng 5, tiến trình cần đủ 5 khung."
+      - show: |
+          <p>② Mở ngoặc: $(1 - p) \times 100 + p \times 8\,000\,000 = 100 + p \times (8\,000\,000 - 100)$.</p>
+          $$100 + p \times 7\,999\,900 \le 110 \;\Rightarrow\; p \le \frac{10}{7\,999\,900}$$
+          <p>tức <b>ít hơn 1 lỗi trên khoảng 800 000</b> lần truy cập.</p>
+        introduces: [implies]
+        focus: [2, 1, 2, 3]
+        say: "Câu hai, chuyển vế bất đẳng thức, p không vượt quá 10 chia cho 8 triệu trừ 100. Có được điều này là vì khi mở ngoặc, 1 trừ p nhân 100 cộng p nhân 8 triệu chính bằng 100 cộng p nhân hiệu của 8 triệu và 100. Muốn tổng không quá 110 thì phần p nhân 7 triệu 999 nghìn 900 không được vượt quá 110 trừ 100, tức là 10. Nghĩa là phải ít hơn một lỗi trên khoảng 800 nghìn lần truy cập."
+
+  # ───────────────────────── 9. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">tập làm việc: trang khác nhau trong w lần</span><span class="a">→</span>
+          <span class="n">lỗi trang cực đắt</span><span class="a">→</span>
+          <span class="n">tổng nhu cầu &gt; bộ nhớ: trì trệ</span><span class="a">→</span>
+          <span class="n">bớt tiến trình, không thêm</span></div>
+        say: "Tổng kết lại, tập làm việc là các trang khác nhau trong w lần tham chiếu gần nhất. Lỗi trang cực kỳ đắt. Khi tổng nhu cầu vượt bộ nhớ, máy rơi vào trì trệ, và cách chữa là bớt tiến trình chứ không thêm."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> khi một hệ thống quá tải, nhận thêm việc làm nó tệ đi — biết từ chối hoặc xếp hàng là một tính năng.</div>
+        say: "Điều cần mang theo, khi một hệ thống đã quá tải, nhận thêm việc chỉ làm nó tệ đi, nên biết từ chối hoặc bắt xếp hàng là một tính năng."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 12): dữ liệu lâu dài nằm ở đâu — <b>hệ thống tệp</b>, inode và chỉ mục nhiều tầng.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 12, ta xem dữ liệu lâu dài được tổ chức thế nào trên đĩa, với hệ thống tệp và chỉ mục nhiều tầng. Hẹn gặp bạn ở bài tiếp theo."

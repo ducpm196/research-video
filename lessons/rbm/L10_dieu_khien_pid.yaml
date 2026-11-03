@@ -1,0 +1,244 @@
+id: L10
+course: RBM
+series: "RBM · Toán cho robot và hệ động lực"
+title: "Bài 10 — Điều khiển phản hồi và bộ điều khiển PID"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/rbm.yaml L10; audit/rbm/verify_rbm.py L10; K. J. Åström, R. M. Murray, Feedback Systems (2008), chương 10–11"
+assumes: [arith, cdot, vec, mat, sub, prime, lambda, re_part, integral, frac, sqrt, approx, power, pm, implies]
+# Quy ước: đối tượng bậc nhất x' = −x + u (hệ số 1 cho gọn); đích r; sai số e = r − x; luật điều khiển u = K e + K_i ∫e + K_d e'.
+#   Đối tượng bậc hai (khối lượng) p'' = u. Mọi số do alg.pid_sim (Euler bước 0,001, đã kiểm hội tụ theo bước) và
+#   numpy.roots / numpy.linalg.eigvals tính.
+objectives:
+  - "Giải thích vai trò của P, I, D"
+  - "Tính sai số xác lập của điều khiển tỉ lệ: 1/(1 + K)"
+  - "Thấy hệ số P lớn có thể gây dao động và mất ổn định"
+asr_reviewed:
+  - {sentence: "Ví dụ lambda bình phương cộng 2 lambda cộng 4 có b bình phương trừ 4 c bằng 4 trừ 16, bằng âm 12, nên nghiệm là âm 1 cộng trừ căn 3 i.", reason: "ASR chép “Ví dụ lambda bình phương cộng 2 lambda cộng 4 có bình phương trừ 4C bằng 4 trừ 16, bằng âm 12, nên nghiệm là âm 1 cộng trừ căn bay.” (0.946): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: ba i/bay — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Thêm K d bằng 6 thì trị riêng là gì?", reason: "tên chữ cái đọc kiểu Việt, ASR chép nhầm chữ (q→quy, x→ích, k→ca) — nhóm đã biết (SKILL Bước 5); chữ hiện trên màn hình"}
+  - {sentence: "Bây giờ đối tượng là một khối lượng, p hai phẩy bằng u, vì lực làm đổi gia tốc.", reason: "chữ cái “p” đọc thô — probe audit/dms/probes/p2_chu_p.md: thô 7/8, đối chứng “tê” 0/8; ASR lẫn p/t, không phải TTS đọc sai; chữ hiện trên màn hình"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Đo, so, sửa"
+    steps:
+      - show: |
+          <p>Muốn động cơ quay đúng tốc độ 1. Cấp một mức điện cố định thì tải nặng lên là chậm lại, và không ai sửa.</p>
+          <p><b>Phản hồi</b>: đo tốc độ thật, so với đích, lấy sai lệch để chỉnh lực đẩy — liên tục.</p>
+          <div class="box key">Hôm nay: điều khiển phản hồi và bộ điều khiển <b>PID</b> — ba cách dùng sai lệch: tỉ lệ, tích phân, đạo hàm.</div>
+        focus: [1, 1, 2, 3]
+        say: "Chào bạn, ta muốn một động cơ quay đúng tốc độ 1. Nếu chỉ cấp một mức điện cố định, khi tải nặng lên động cơ sẽ chậm lại, và không ai sửa cả. Cách làm của phản hồi là đo tốc độ thật, so với đích, rồi lấy sai lệch để chỉnh lực đẩy, liên tục không ngừng. Hôm nay ta học điều khiển phản hồi và bộ điều khiển PID, ba cách dùng sai lệch là tỉ lệ, tích phân và đạo hàm."
+
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: trạng thái đứng yên, cộng dồn, nghiệm bậc hai"
+    checks:
+      - "round(alg.euler_ode(lambda t, x: -x + 3, 0.0, 0.01, 2000)[-1], 6) == 3.0 and -3 + 3 == 0"
+      - "0.2 * 5 == 1.0 and round(sum(0.2 * 0.5 for _ in range(10)), 9) == 1.0"
+      - "2 ** 2 - 4 * 4 == -12 and np.allclose(sorted(np.roots([1, 2, 4]), key=lambda z: z.imag), [-1 - 3 ** 0.5 * 1j, -1 + 3 ** 0.5 * 1j]) and abs(math.sqrt(12) - 2 * math.sqrt(3)) < 1e-12"
+    steps:
+      - show: |
+          <p><b>Đứng yên</b> nghĩa là không còn thay đổi: $x' = 0$. Ví dụ $x' = -x + 3$:</p>
+          $$0 = -x + 3 \Rightarrow x_{\text{yên}} = 3$$
+          <p class="note">Thử lại: tại $x = 3$, $x' = -3 + 3 = 0$ — đúng là đứng yên. Mô phỏng Euler của bài 7 từ $x = 0$ cũng dừng ở 3.</p>
+        introduces: [implies]
+        focus: [1, 2, 3, 3]
+        say: "Trước khi vào bài, ta ôn ba điều sẽ dùng. Thứ nhất, một hệ đứng yên khi không còn thay đổi, tức x phẩy bằng 0, nên muốn tìm điểm đứng yên ta chỉ việc đặt x phẩy bằng 0 rồi giải. Ví dụ x phẩy bằng âm x cộng 3, đặt bằng 0 thì x bằng 3. Thử lại tại x bằng 3, x phẩy bằng âm 3 cộng 3, đúng bằng 0, và mô phỏng Euler từ 0 cũng dừng ở 3."
+      - show: |
+          <p><b>Tích phân theo thời gian</b> = cộng dồn: chia thời gian thành khúc nhỏ, cộng (giá trị × độ dài khúc).</p>
+          <table class="t"><tr><th>sai lệch giữ nguyên</th><th>trong</th><th>cộng dồn</th></tr>
+          <tr><td>0,2</td><td>5 giây</td><td>$0{,}2 \cdot 5 = 1$</td></tr>
+          <tr><td>0,2</td><td>10 khúc, mỗi khúc 0,5 giây</td><td>$10 \cdot (0{,}2 \cdot 0{,}5) = 1$</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Thứ hai, tích phân theo thời gian là phép cộng dồn, ta chia thời gian thành nhiều khúc nhỏ rồi cộng giá trị nhân độ dài từng khúc. Một sai lệch 0 phẩy 2 giữ nguyên trong 5 giây cộng dồn được 0 phẩy 2 nhân 5, bằng 1. Chia 5 giây đó thành 10 khúc, mỗi khúc 0 phẩy 5 giây, cộng 10 lần 0 phẩy 1 cũng được 1."
+      - clear: true
+        show: |
+          <p><b>Nghiệm bậc hai</b> $\lambda^2 + b\lambda + c = 0$: $\lambda = \frac{-b \pm \sqrt{b^2 - 4c}}{2}$; nếu $b^2 - 4c < 0$ thì nghiệm phức (bài 9).</p>
+          $$\lambda^2 + 2\lambda + 4:\quad b^2 - 4c = 4 - 16 = -12,\quad \lambda = \frac{-2 \pm 2\sqrt{3}\,i}{2} = -1 \pm \sqrt{3}\,i$$
+        focus: [1, 1, 2]
+        say: "Thứ ba, nghiệm của phương trình bậc hai lambda bình phương cộng b lambda cộng c bằng 0 là âm b cộng trừ căn của b bình phương trừ 4 c, tất cả chia 2. Nếu số trong căn âm thì nghiệm là số phức, như đã gặp ở bài 9. Ví dụ lambda bình phương cộng 2 lambda cộng 4 có b bình phương trừ 4 c bằng 4 trừ 16, bằng âm 12, nên nghiệm là âm 1 cộng trừ căn 3 i."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: e, u và ba khâu"
+    steps:
+      - show: |
+          <p>Đối tượng (động cơ): $x' = -x + u$ — tự chậm dần như bài 7, cộng lực đẩy $u$ ta cấp vào.</p>
+          <p>Sai lệch: $e = r - x$, với $r$ là đích.</p>
+          <p>$u = \underbrace{K e}_{\text{P: tỉ lệ}} + \underbrace{K_i \int e\,dt}_{\text{I: tích phân}} + \underbrace{K_d\, e'}_{\text{D: đạo hàm}}$</p>
+          <div class="box key">P đẩy theo sai lệch <b>hiện tại</b>; I đẩy theo sai lệch <b>tích lũy</b> từ trước tới nay; D đẩy theo việc sai lệch đang <b>đổi nhanh</b> thế nào.</div>
+        focus: [1, 1, 2, 3, 4, 4]
+        say: "Đối tượng ở đây là động cơ, x phẩy bằng âm x cộng u. Nó tự chậm dần như ở bài 7, cộng thêm lực đẩy u ta cấp vào. Sai lệch e bằng đích r trừ x. Bộ PID cấp u bằng tổng ba khâu, K nhân e, K i nhân tích phân của e, và K d nhân đạo hàm của e. Khâu P đẩy theo sai lệch hiện tại, khâu I đẩy theo sai lệch tích lũy từ trước tới nay. Khâu D đẩy theo việc sai lệch đang thay đổi nhanh thế nào."
+
+  - id: intuition
+    kind: intuition
+    title: "Hình dung: vòng đo – so – sửa"
+    checks:
+      - "round(alg.pid_sim(4)[0], 6) == 0.8 and round(4 * (1 - alg.pid_sim(4)[0]), 6) == 0.8"
+      - "round(-0.8 + 4 * 0.2, 9) == 0"
+    steps:
+      - show: |
+          <div><svg width="1200" height="430" viewBox="0 0 1200 430"><defs><marker id="fk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker><marker id="fb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#2a78d6"/></marker></defs><text x="60" y="158" font-size="24" text-anchor="start" fill="#1f2937" font-weight="bold">đích r = 1</text><line x1="190" y1="150" x2="262" y2="150" stroke="#1f2937" stroke-width="3" marker-end="url(#fk)"/><circle cx="285" cy="150" r="22" fill="#fffbeb" stroke="#1f2937" stroke-width="3"/><text x="285" y="159" font-size="28" text-anchor="middle" fill="#1f2937" font-weight="bold">−</text><text x="256" y="194" font-size="20" text-anchor="end" fill="#6b7280">trừ</text><line x1="307" y1="150" x2="400" y2="150" stroke="#1f2937" stroke-width="3" marker-end="url(#fk)"/><text x="352" y="136" font-size="23" text-anchor="middle" fill="#b91c1c" font-weight="bold">e = 0,2</text><rect x="402" y="95" width="260" height="110" rx="10" fill="#dbeafe" stroke="#1f2937" stroke-width="3"/><text x="532" y="142" font-size="24" text-anchor="middle" fill="#1f2937" font-weight="bold">bộ điều khiển</text><text x="532" y="174" font-size="24" text-anchor="middle" fill="#1f2937">u = K nhân e, K = 4</text><line x1="662" y1="150" x2="752" y2="150" stroke="#1f2937" stroke-width="3" marker-end="url(#fk)"/><text x="707" y="136" font-size="23" text-anchor="middle" fill="#2a78d6" font-weight="bold">u = 0,8</text><rect x="754" y="95" width="240" height="110" rx="10" fill="#ffedd5" stroke="#1f2937" stroke-width="3"/><text x="874" y="142" font-size="24" text-anchor="middle" fill="#1f2937" font-weight="bold">động cơ</text><text x="874" y="174" font-size="24" text-anchor="middle" fill="#1f2937">x phẩy = −x + u</text><line x1="994" y1="150" x2="1130" y2="150" stroke="#1f2937" stroke-width="3" marker-end="url(#fk)"/><text x="1070" y="136" font-size="23" text-anchor="middle" fill="#15803d" font-weight="bold">x = 0,8</text><polyline points="1080,150 1080,300 285,300 285,174" fill="none" stroke="#15803d" stroke-width="3" marker-end="url(#fk)"/><text x="660" y="290" font-size="22" text-anchor="middle" fill="#15803d">đo x rồi đưa về so với đích (phản hồi)</text><text x="60" y="370" font-size="23" text-anchor="start" fill="#1f2937">Lúc đứng yên: lực đẩy u = 4 nhân 0,2 = 0,8 vừa đủ bù phần tự chậm −x = −0,8, nên x phẩy = 0.</text><text x="60" y="410" font-size="23" text-anchor="start" fill="#b91c1c" font-weight="bold">Nếu sai lệch e về 0 thì u = 0, động cơ lại chậm đi: khâu P cần sai lệch để còn lực đẩy.</text></svg></div>
+        focus: [1, 1, 1, 1, 1, 1, 1]
+        say: "Hình này vẽ vòng phản hồi, trái tim của mọi bộ điều khiển. Đích r bằng 1 đi vào bộ trừ, bộ trừ lấy đích trừ giá trị đo x để ra sai lệch e. Bộ điều khiển biến sai lệch thành lực đẩy u, và động cơ nhận lực đẩy đó. Tốc độ x đo được lại quay về bộ trừ, nên vòng cứ chạy liên tục. Với khâu P và K bằng 4, vòng đứng yên khi x bằng 0 phẩy 8 và sai lệch bằng 0 phẩy 2. Lúc đó lực đẩy 4 nhân 0 phẩy 2 bằng 0 phẩy 8, vừa đủ bù phần tự chậm âm 0 phẩy 8. Nếu sai lệch về 0 thì lực đẩy cũng về 0, động cơ lại chậm đi, vì thế khâu P luôn để lại một chút sai lệch."
+
+  # ───────────────────────── 3. CHỈ P ─────────────────────────
+  - id: ponly
+    kind: example
+    title: "Chỉ khâu P: còn sai lệch 1/(1 + K)"
+    checks:
+      - "round(alg.pid_sim(4)[0], 6) == 0.8 and round(alg.pid_sim(4)[1], 6) == 0.2"
+      - "round(4 / (1 + 4), 6) == 0.8 and round(1 / (1 + 4), 6) == 0.2"
+      - "all(abs(alg.pid_sim(k)[1] - 1 / (1 + k)) < 1e-6 for k in (1, 4, 9, 19))"
+    steps:
+      - show: |
+          <p><b>Bước 1 —</b> thay $u = K(r - x)$ rồi phá ngoặc, gom các số hạng có $x$:</p>
+          $$x' = -x + K(r - x) = -(1 + K)x + K r$$
+        focus: [1, 2]
+        say: "Bước một, chỉ dùng khâu P, thay u bằng K nhân r trừ x rồi phá ngoặc. Ta được x phẩy bằng âm của 1 cộng K, nhân x, rồi cộng K r."
+      - show: |
+          <p><b>Bước 2 —</b> khi đã yên, $x' = 0$, chuyển vế: $(1 + K)x = K r$.</p>
+        say: "Bước hai, như phần ôn đầu bài, khi hệ đã đứng yên thì x phẩy bằng 0, chuyển vế ta được 1 cộng K nhân x bằng K r."
+      - show: |
+          <p><b>Bước 3 —</b> chia hai vế cho $1 + K$:</p>
+          $$x_{\text{yên}} = \dfrac{K}{1 + K} r, \quad \text{sai lệch còn lại} = r - x_{\text{yên}} = \dfrac{1}{1 + K} r$$
+        focus: [1, 2]
+        say: "Bước ba, chia hai vế cho 1 cộng K. Vậy x lúc yên bằng K chia 1 cộng K, nhân r, và sai lệch còn lại là 1 chia 1 cộng K."
+      - show: |
+          <p><b>Bước 4 —</b> thử $K = 4$, $r = 1$: $x_{\text{yên}} = \frac{4}{5} = 0{,}8$, sai lệch $\frac{1}{5} = \hl{0{,}2}$. Mô phỏng cho đúng số đó.</p>
+        say: "Bước bốn, thử với K bằng 4 và đích bằng 1, 4 chia 5 bằng 0 phẩy 8, nên x dừng ở 0 phẩy 8 và còn sai 0 phẩy 2. Mô phỏng trên máy cũng cho đúng con số đó."
+      - show: |
+          <p>Vì sao không về đúng 1? Muốn giữ $x = 1$ cần lực đẩy $u = 1$ để bù phần tự chậm. Nhưng chỉ khâu P thì $u = K e$: <b>có lực chỉ khi còn sai lệch</b>.</p>
+          <p class="note">Tăng $K$ thì sai lệch nhỏ đi nhưng không bao giờ bằng 0. Trị riêng $-(1 + K)$ cũng âm hơn: hệ về nhanh hơn.</p>
+        focus: [1, 1, 2, 2]
+        say: "Vì sao x không về đúng 1? Muốn giữ x bằng 1, ta cần lực đẩy u bằng 1 để bù phần động cơ tự chậm. Nhưng với khâu P, u bằng K nhân e, tức chỉ có lực khi còn sai lệch. Tăng K thì sai lệch nhỏ đi nhưng không bao giờ bằng 0, đồng thời trị riêng, bằng âm của 1 cộng K, càng âm hơn, nên hệ về nhanh hơn."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: thế ngược, thử hai bên điểm 0,8"
+    checks:
+      - "round(-0.8 + 4 * (1 - 0.8), 9) == 0 and round(-0.9 + 4 * (1 - 0.9), 9) == -0.5 and round(-0.7 + 4 * (1 - 0.7), 9) == 0.5"
+      - "round(4 * (1 - 0.9), 9) == 0.4 and round(4 * (1 - 0.7), 9) == 1.2 and round(4 * (1 - 0.8), 9) == 0.8"
+      - "all(abs(alg.pid_sim(4, h=h)[0] - 0.8) < 1e-6 for h in (0.001, 0.0005))"
+    steps:
+      - show: |
+          <p>Không dùng công thức, thế thẳng vào $x' = -x + 4(1 - x)$ ở ba vị trí:</p>
+          <table class="t"><tr><th>$x$</th><th>sai lệch $e$</th><th>lực $u = 4e$</th><th>$x' = -x + u$</th><th>xu hướng</th></tr>
+          <tr><td>0,7</td><td>0,3</td><td>1,2</td><td>$+0{,}5$</td><td>tăng lên</td></tr>
+          <tr><td>0,8</td><td>0,2</td><td>0,8</td><td>$0$</td><td>đứng yên ✓</td></tr>
+          <tr><td>0,9</td><td>0,1</td><td>0,4</td><td>$-0{,}5$</td><td>giảm xuống</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", 2]
+        say: "Kiểm bằng đường khác, ta không dùng công thức mà thế thẳng ba vị trí vào phương trình. Ở x bằng 0 phẩy 7, sai lệch 0 phẩy 3, lực đẩy 1 phẩy 2, nên x phẩy bằng dương 0 phẩy 5, x còn tăng lên. Ở x bằng 0 phẩy 8, lực đẩy 0 phẩy 8 vừa bù phần tự chậm, x phẩy bằng 0, đúng là đứng yên. Ở x bằng 0 phẩy 9, lực đẩy chỉ 0 phẩy 4, x phẩy bằng âm 0 phẩy 5, nên x tụt về. Cả hai phía đều bị kéo về 0 phẩy 8, khớp với công thức và với mô phỏng."
+
+  # ───────────────────────── 4. THÊM I ─────────────────────────
+  - id: addi
+    kind: concept
+    title: "Thêm khâu I: sai lệch về 0"
+    checks:
+      - "abs(alg.pid_sim(4, ki=4)[1]) < 1e-6"
+      - "abs(alg.pid_sim(4, ki=4, h=0.0005)[0] - alg.pid_sim(4, ki=4)[0]) < 1e-6"
+    steps:
+      - show: |
+          <div><svg width="900" height="430" viewBox="0 0 900 430"><defs><marker id="ar" markerUnits="userSpaceOnUse" markerWidth="18" markerHeight="18" refX="16" refY="9" orient="auto"><path d="M0,0 L18,9 L0,18 z" fill="#1f2937"/></marker><marker id="ab" markerUnits="userSpaceOnUse" markerWidth="18" markerHeight="18" refX="16" refY="9" orient="auto"><path d="M0,0 L18,9 L0,18 z" fill="#2a78d6"/></marker><marker id="ao" markerUnits="userSpaceOnUse" markerWidth="18" markerHeight="18" refX="16" refY="9" orient="auto"><path d="M0,0 L18,9 L0,18 z" fill="#eb6834"/></marker></defs><text x="80.0" y="394.0" font-size="19" fill="#6b7280" text-anchor="middle">0</text><text x="236.0" y="394.0" font-size="19" fill="#6b7280" text-anchor="middle">1</text><text x="392.0" y="394.0" font-size="19" fill="#6b7280" text-anchor="middle">2</text><text x="548.0" y="394.0" font-size="19" fill="#6b7280" text-anchor="middle">3</text><text x="704.0" y="394.0" font-size="19" fill="#6b7280" text-anchor="middle">4</text><text x="860.0" y="394.0" font-size="19" fill="#6b7280" text-anchor="middle">5</text><line x1="80.0" y1="364.0" x2="860.0" y2="364.0" stroke="#e5e7eb" stroke-width="1.5"/><text x="68.0" y="371.0" font-size="19" fill="#6b7280" text-anchor="end">0</text><line x1="80.0" y1="311.7" x2="860.0" y2="311.7" stroke="#e5e7eb" stroke-width="1.5"/><text x="68.0" y="318.7" font-size="19" fill="#6b7280" text-anchor="end">0,2</text><line x1="80.0" y1="259.3" x2="860.0" y2="259.3" stroke="#e5e7eb" stroke-width="1.5"/><text x="68.0" y="266.3" font-size="19" fill="#6b7280" text-anchor="end">0,4</text><line x1="80.0" y1="207.0" x2="860.0" y2="207.0" stroke="#e5e7eb" stroke-width="1.5"/><text x="68.0" y="214.0" font-size="19" fill="#6b7280" text-anchor="end">0,6</text><line x1="80.0" y1="154.7" x2="860.0" y2="154.7" stroke="#e5e7eb" stroke-width="1.5"/><text x="68.0" y="161.7" font-size="19" fill="#6b7280" text-anchor="end">0,8</text><line x1="80.0" y1="102.3" x2="860.0" y2="102.3" stroke="#e5e7eb" stroke-width="1.5"/><text x="68.0" y="109.3" font-size="19" fill="#6b7280" text-anchor="end">1</text><line x1="80.0" y1="50.0" x2="860.0" y2="50.0" stroke="#e5e7eb" stroke-width="1.5"/><text x="68.0" y="57.0" font-size="19" fill="#6b7280" text-anchor="end">1,2</text><line x1="80.0" y1="364.0" x2="860.0" y2="364.0" stroke="#6b7280" stroke-width="2"/><text x="860.0" y="424" font-size="19" fill="#6b7280" text-anchor="end">thời gian t (giây)</text><text x="20.0" y="36.0" font-size="19" fill="#6b7280" text-anchor="start">x(t)</text><line x1="80.0" y1="102.3" x2="860.0" y2="102.3" stroke="#6b7280" stroke-width="2" stroke-dasharray="6 6"/><text x="95.6" y="92.3" font-size="19" fill="#6b7280" text-anchor="start" stroke="#fffbeb" stroke-width="6" paint-order="stroke">đích r = 1</text><polyline points="80.0,364.0 87.8,317.6 95.6,281.5 103.4,253.4 111.2,231.5 119.0,214.5 126.8,201.2 134.6,190.9 142.4,182.9 150.2,176.6 158.0,171.7 165.8,168.0 173.6,165.0 181.4,162.7 189.2,160.9 197.0,159.5 204.8,158.5 212.6,157.6 220.4,157.0 228.2,156.5 236.0,156.1 243.8,155.8 251.6,155.5 259.4,155.3 267.2,155.2 275.0,155.1 282.8,155.0 290.6,154.9 298.4,154.9 306.2,154.8 314.0,154.8 321.8,154.8 329.6,154.7 337.4,154.7 345.2,154.7 353.0,154.7 360.8,154.7 368.6,154.7 376.4,154.7 384.2,154.7 392.0,154.7 399.8,154.7 407.6,154.7 415.4,154.7 423.2,154.7 431.0,154.7 438.8,154.7 446.6,154.7 454.4,154.7 462.2,154.7 470.0,154.7 477.8,154.7 485.6,154.7 493.4,154.7 501.2,154.7 509.0,154.7 516.8,154.7 524.6,154.7 532.4,154.7 540.2,154.7 548.0,154.7 555.8,154.7 563.6,154.7 571.4,154.7 579.2,154.7 587.0,154.7 594.8,154.7 602.6,154.7 610.4,154.7 618.2,154.7 626.0,154.7 633.8,154.7 641.6,154.7 649.4,154.7 657.2,154.7 665.0,154.7 672.8,154.7 680.6,154.7 688.4,154.7 696.2,154.7 704.0,154.7 711.8,154.7 719.6,154.7 727.4,154.7 735.2,154.7 743.0,154.7 750.8,154.7 758.6,154.7 766.4,154.7 774.2,154.7 782.0,154.7 789.8,154.7 797.6,154.7 805.4,154.7 813.2,154.7 821.0,154.7 828.8,154.7 836.6,154.7 844.4,154.7 852.2,154.7 860.0,154.7" fill="none" stroke="#2a78d6" stroke-width="3" stroke-linejoin="round"/><text x="854.0" y="184.7" font-size="20" fill="#1f2937" text-anchor="end" stroke="#fffbeb" stroke-width="6" paint-order="stroke">chỉ P, K = 4: dừng ở 0,8</text><polyline points="80.0,364.0 87.8,316.4 95.6,277.5 103.4,245.7 111.2,219.6 119.0,198.3 126.8,180.9 134.6,166.6 142.4,154.9 150.2,145.4 158.0,137.6 165.8,131.2 173.6,125.9 181.4,121.7 189.2,118.1 197.0,115.3 204.8,112.9 212.6,111.0 220.4,109.4 228.2,108.2 236.0,107.1 243.8,106.2 251.6,105.5 259.4,105.0 267.2,104.5 275.0,104.1 282.8,103.8 290.6,103.5 298.4,103.3 306.2,103.1 314.0,103.0 321.8,102.9 329.6,102.8 337.4,102.7 345.2,102.6 353.0,102.6 360.8,102.5 368.6,102.5 376.4,102.5 384.2,102.5 392.0,102.4 399.8,102.4 407.6,102.4 415.4,102.4 423.2,102.4 431.0,102.4 438.8,102.4 446.6,102.4 454.4,102.4 462.2,102.4 470.0,102.4 477.8,102.4 485.6,102.3 493.4,102.3 501.2,102.3 509.0,102.3 516.8,102.3 524.6,102.3 532.4,102.3 540.2,102.3 548.0,102.3 555.8,102.3 563.6,102.3 571.4,102.3 579.2,102.3 587.0,102.3 594.8,102.3 602.6,102.3 610.4,102.3 618.2,102.3 626.0,102.3 633.8,102.3 641.6,102.3 649.4,102.3 657.2,102.3 665.0,102.3 672.8,102.3 680.6,102.3 688.4,102.3 696.2,102.3 704.0,102.3 711.8,102.3 719.6,102.3 727.4,102.3 735.2,102.3 743.0,102.3 750.8,102.3 758.6,102.3 766.4,102.3 774.2,102.3 782.0,102.3 789.8,102.3 797.6,102.3 805.4,102.3 813.2,102.3 821.0,102.3 828.8,102.3 836.6,102.3 844.4,102.3 852.2,102.3 860.0,102.3" fill="none" stroke="#eb6834" stroke-width="3" stroke-dasharray="12 7" stroke-linejoin="round"/><text x="854.0" y="88.3" font-size="20" fill="#1f2937" text-anchor="end" stroke="#fffbeb" stroke-width="6" paint-order="stroke">P + I: về 1</text></svg></div>
+          <p>Khâu I cộng dồn sai lệch. Còn sai lệch dù nhỏ thì tích phân vẫn lớn thêm, lực đẩy vẫn tăng — tới khi sai lệch <b>đúng bằng 0</b>.</p>
+          <p class="note">Lúc đó lực $u = 1$ nằm hẳn trong phần tích phân đã tích lũy, không cần sai lệch nữa.</p>
+        focus: [1, 2, 2, 3]
+        say: "Trên hình, đường xanh là chỉ có khâu P, dừng ở 0 phẩy 8. Đường cam thêm khâu I với K i bằng 4, và về đúng 1. Khâu I cộng dồn sai lệch theo thời gian, nên còn sai lệch dù nhỏ thì tích phân vẫn lớn thêm và lực đẩy vẫn tăng, cho tới khi sai lệch đúng bằng 0. Lúc đó lực đẩy cần thiết nằm hẳn trong phần tích phân đã tích lũy, không cần sai lệch nữa."
+
+  # ───────────────────────── 5. THÊM D ─────────────────────────
+  - id: addd
+    kind: concept
+    title: "Khâu D và cái giá của P lớn"
+    checks:
+      - "np.allclose(sorted(np.roots([1, 0, 4]), key=lambda z: z.imag), [-2j, 2j])"
+      - "np.allclose(sorted(np.roots([1, 2, 4]), key=lambda z: z.imag), [-1 - 3 ** 0.5 * 1j, -1 + 3 ** 0.5 * 1j])"
+      - "max(np.linalg.eigvals(np.array([[-1, 0, -4], [1, -1, 0], [0, 1, -1]])).real) < 0 and max(np.linalg.eigvals(np.array([[-1, 0, -10], [1, -1, 0], [0, 1, -1]])).real) > 0"
+    steps:
+      - show: |
+          <p>Đối tượng là một khối lượng: $p'' = u$ (lực đổi gia tốc). Chỉ khâu P, $u = K(r - p)$: $\lambda^2 + K = 0$.</p>
+          <p>$K = 4$: $\lambda = \pm 2i$, phần thực 0 — <b>dao động mãi</b> quanh đích (bài 9).</p>
+          <p>Thêm khâu D, $u = K(r - p) - K_d\,p'$ với $K_d = 2$: $\lambda^2 + 2\lambda + 4 = 0$, $\lambda = -1 \pm \sqrt{3}\,i$ — <b>tắt dần</b>.</p>
+          <div class="box warn">Tăng $K$ quá tay cũng nguy hiểm: với đối tượng có ba tầng trễ, $K = 4$ còn ổn định nhưng $K = 10$ có trị riêng phần thực dương — <b>mất ổn định</b>.</div>
+        focus: [1, 1, 2, 3, 3, 4]
+        say: "Bây giờ đối tượng là một khối lượng, p hai phẩy bằng u, vì lực làm đổi gia tốc. Chỉ dùng khâu P, ta được phương trình lambda bình phương cộng K bằng 0. Với K bằng 4, trị riêng là cộng trừ 2 i, phần thực bằng 0, nên khối dao động mãi quanh đích, như ở bài 9. Thêm khâu D, hãm theo vận tốc với K d bằng 2, phương trình thành lambda bình phương cộng 2 lambda cộng 4, và trị riêng là âm 1 cộng trừ căn 3 i, dao động tắt dần. Cuối cùng, tăng K quá tay cũng nguy hiểm. Với một đối tượng có ba tầng trễ nối tiếp, K bằng 4 còn ổn định, nhưng K bằng 10 đã có trị riêng phần thực dương, tức mất ổn định."
+
+  # ───────────────────────── 6. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi người mới hay mắc"
+    checks:
+      - "all(alg.pid_sim(k)[1] > 0.04 for k in (1, 4, 9, 19))"
+      - "[round(alg.pid_sim(k)[1], 6) for k in (1, 4, 9, 19)] == [0.5, 0.2, 0.1, 0.05]"
+      - "alg.pid_sim(-0.5)[1] > alg.pid_sim(0)[1]"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Mong khâu P đưa sai lệch về 0 <b class="red">(sai)</b>
+          <br><span class="note">Với đối tượng tự chậm dần, P luôn để lại $\frac{1}{1 + K}$. Cần khâu I.</span></div>
+          <table class="t"><tr><th>$K$</th><th>1</th><th>4</th><th>9</th><th>19</th></tr><tr><td>sai lệch còn lại $\frac{1}{1 + K}$</td><td>0,5</td><td>0,2</td><td>0,1</td><td>0,05</td></tr></table>
+        focus: [1, 2]
+        say: "Lỗi thứ nhất, mong khâu P đưa sai lệch về đúng 0. Với đối tượng tự chậm dần, khâu P luôn để lại sai lệch 1 chia 1 cộng K, nên cần thêm khâu I."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Cứ tăng $K$ cho nhanh <b class="red">(sai)</b>
+          <br><span class="note">Với đối tượng có trễ, $K$ lớn gây dao động rồi mất ổn định.</span></div>
+        say: "Lỗi thứ hai, cứ tăng K cho hệ chạy nhanh hơn. Với đối tượng có trễ, K lớn gây dao động, rồi mất ổn định."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Để tích phân tích lũy khi động cơ đã chạy hết công suất <b class="red">(sai)</b>
+          <br><span class="note">Lực thật bị chặn, nhưng tích phân vẫn lớn mãi; khi tới đích hệ vọt lố rất xa. Phải ngừng tích phân lúc bị chặn.</span></div>
+        say: "Lỗi thứ ba, để tích phân tiếp tục tích lũy khi động cơ đã chạy hết công suất. Lực thật bị chặn, nhưng tích phân vẫn lớn mãi, nên khi tới đích hệ vọt lố rất xa. Phải ngừng tích phân trong lúc lực bị chặn."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Sai dấu phản hồi <b class="red">(sai)</b>
+          <br><span class="note">Sai lệch phải là $r - x$. Đảo dấu thì lực đẩy ra xa đích, sai lệch lớn hơn cả khi không điều khiển.</span></div>
+        say: "Lỗi thứ tư, sai dấu phản hồi. Sai lệch phải là r trừ x. Nếu đảo dấu, lực sẽ đẩy ra xa đích, và sai lệch còn lớn hơn cả khi không điều khiển."
+
+  # ───────────────────────── 7. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "abs(alg.pid_sim(9)[1] - 0.1) < 1e-6 and abs(alg.pid_sim(19)[1] - 0.05) < 1e-6"
+      - "np.allclose(sorted(np.roots([1, 0, 9]), key=lambda z: z.imag), [-3j, 3j]) and np.allclose(np.roots([1, 6, 9]), [-3, -3], atol=1e-6)"
+      - "round(1 / 0.05, 9) == 20 and 6 ** 2 - 4 * 9 == 0 and (3j) ** 2 == -9 and round(1 / (1 + 9), 9) == 0.1"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Đối tượng $x' = -x + u$, chỉ khâu P. Với $K = 9$, sai lệch còn bao nhiêu? Cần $K$ bao nhiêu để sai lệch $0{,}05$?</td></tr>
+          <tr><td>2</td><td>Khối lượng $p'' = u$, $K = 9$. Chỉ P thì sao? Với $K_d = 6$ thì trị riêng là gì?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, với đối tượng bậc nhất và chỉ khâu P, K bằng 9 thì sai lệch còn bao nhiêu? Và cần K bằng bao nhiêu để sai lệch còn 0 phẩy 05? Câu hai, với khối lượng và K bằng 9, chỉ dùng P thì sao? Thêm K d bằng 6 thì trị riêng là gì? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① $\dfrac{1}{1 + 9} = \hl{0{,}1}$.</p>
+          <p>Cần $\dfrac{1}{1 + K} = 0{,}05 \Rightarrow 1 + K = \dfrac{1}{0{,}05} = 20 \Rightarrow K = \hl{19}$. Kiểm: $\frac{1}{20} = 0{,}05$ ✓</p>
+        focus: [1, 2, 2]
+        say: "Đáp án câu một, sai lệch bằng 1 chia 10, tức 0 phẩy 1. Muốn còn 0 phẩy 05 thì 1 cộng K phải bằng 20, tức K bằng 19. Kiểm lại, 1 chia 20 đúng bằng 0 phẩy 05."
+      - show: |
+          <p>② Chỉ P: $\lambda^2 + 9 = 0$, $\lambda = \pm 3i$ (vì $(3i)^2 = -9$), phần thực 0 — dao động mãi.</p>
+        say: "Câu hai, chỉ dùng P thì phương trình là lambda bình phương cộng 9 bằng 0. Vì 3 i bình phương bằng âm 9, trị riêng là cộng trừ 3 i, phần thực bằng 0, nên khối dao động mãi."
+      - show: |
+          <p>Với $K_d = 6$: $b^2 - 4c = 36 - 36 = 0$, nên $\lambda^2 + 6\lambda + 9 = (\lambda + 3)^2$, trị riêng kép $\hl{-3}$ — về đích nhanh, không dao động.</p>
+        say: "Thêm K d bằng 6, số trong căn bằng 36 trừ 36, bằng 0, nên hai nghiệm trùng nhau. Phương trình thành lambda cộng 3 bình phương, trị riêng kép âm 3, nên khối về đích nhanh mà không dao động."
+
+  # ───────────────────────── 8. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">sai lệch $e = r - x$</span><span class="a">→</span>
+          <span class="n">P: còn $\frac{1}{1 + K}$</span><span class="a">→</span>
+          <span class="n">I: xoá sai lệch</span><span class="a">→</span>
+          <span class="n">D: hãm dao động; $K$ lớn quá: mất ổn định</span></div>
+        say: "Tổng kết lại, phản hồi dùng sai lệch giữa đích và giá trị đo. Khâu P còn để lại sai lệch 1 chia 1 cộng K. Khâu I xoá sai lệch đó. Khâu D hãm dao động, và hệ số P quá lớn có thể làm hệ mất ổn định."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> điều khiển là thay đổi trị riêng của hệ. Mỗi lần chỉnh hệ số, hãy hỏi trị riêng đi về đâu.</div>
+        say: "Điều cần mang theo, điều khiển thực chất là thay đổi trị riêng của hệ. Mỗi lần chỉnh một hệ số, hãy hỏi trị riêng đi về đâu."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 11): <b>rời rạc hoá</b> và ổn định số — bộ điều khiển chạy trên máy tính theo từng bước thời gian.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 11, ta học rời rạc hoá và ổn định số, vì bộ điều khiển thật chạy trên máy tính theo từng bước thời gian. Hẹn gặp bạn ở bài tiếp theo."

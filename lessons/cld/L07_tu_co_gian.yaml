@@ -1,0 +1,198 @@
+id: L07
+course: CLD
+series: "CLD · Hệ thống hướng dịch vụ"
+title: "Bài 7 — Tự co giãn theo chỉ số"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/cld.yaml L07; audit/cld/verify_cld.py L07; Kubernetes Docs, Horizontal Pod Autoscaling — Algorithm details: desiredReplicas = ceil[currentReplicas × (currentMetricValue / desiredMetricValue)], dung sai mặc định 0,1 (kubernetes.io, đọc 2026-10-28)"
+assumes: [arith, cdot, frac, ceil]
+# Quy ước: bộ tự co giãn ngang (HPA) tính số bản mong muốn = ⌈số bản hiện tại · chỉ số hiện tại / chỉ số mục tiêu⌉; nếu tỉ số lệch khỏi 1 không quá
+#   dung sai 0,1 thì giữ nguyên (alg.hpa, tính bằng phân số). Chỉ số ở đây: phần trăm CPU trung bình so với yêu cầu.
+objectives:
+  - "Áp dụng công thức của bộ tự co giãn ngang"
+  - "Giải thích dung sai và dao động co giãn"
+  - "Biết khi nào co giãn không giúp gì"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "8 giờ tối, khuyến mãi bắt đầu"
+    checks:
+      - "alg.hpa(4, 90, 60) == 6"
+    steps:
+      - show: |
+          <p>8 giờ tối khuyến mãi bắt đầu, CPU của 4 bản dịch vụ vọt lên 90%. Không ai kịp thêm máy bằng tay. Vài phút sau đã có $\hl{6}$ bản, CPU về quanh mục tiêu. Nửa đêm vắng khách, số bản tự giảm.</p>
+          <div class="box key">Hôm nay: <b>tự co giãn</b> — số bản đi theo chỉ số, bằng một công thức đơn giản.</div>
+        focus: [1, 1, 1, 1, 2]
+        say: "Chào bạn, 8 giờ tối khuyến mãi bắt đầu, CPU của 4 bản dịch vụ vọt lên 90 phần trăm. Không ai kịp thêm máy bằng tay. Vài phút sau đã có 6 bản, và CPU về quanh mục tiêu. Nửa đêm vắng khách, số bản tự giảm. Hôm nay ta học tự co giãn, số bản đi theo chỉ số, bằng một công thức đơn giản."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: phần trăm CPU so với yêu cầu, tỉ số, làm tròn lên"
+    checks:
+      - "Fraction('0.45') / Fraction('0.5') == Fraction(9, 10) and Fraction('0.3') / Fraction('0.5') == Fraction(3, 5)"
+      - "math.ceil(Fraction(24, 5)) == 5 and math.ceil(6) == 6 and math.ceil(Fraction(10, 3)) == 4"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bản yêu cầu</th><th>đang dùng</th><th>phần trăm CPU</th></tr>
+          <tr><td>0,5 CPU</td><td>0,45 CPU</td><td>$\frac{0{,}45}{0{,}5} = 90\%$</td></tr>
+          <tr><td>0,5 CPU</td><td>0,3 CPU</td><td>$\frac{0{,}3}{0{,}5} = 60\%$</td></tr></table>
+        focus: [0, 0, "1.2", "1.3"]
+        say: "Ở bài 6 ta đã học yêu cầu CPU, là phần CPU mà bộ xếp lịch giữ chỗ cho mỗi bản. Phần trăm CPU trong bài này luôn tính so với yêu cầu đó, không phải so với cả máy. Một bản yêu cầu 0 phẩy 5 CPU mà đang dùng 0 phẩy 45 thì ở mức 90 phần trăm. Nếu nó chỉ dùng 0 phẩy 3 CPU thì ở mức 60 phần trăm."
+      - show: |
+          <table class="t"><tr><th>số</th><th>làm tròn lên $\lceil \cdot \rceil$</th><th>vì sao</th></tr>
+          <tr><td>4,8</td><td>5</td><td>số nguyên nhỏ nhất không nhỏ hơn 4,8</td></tr>
+          <tr><td>6</td><td>6</td><td>đã nguyên thì giữ nguyên</td></tr>
+          <tr><td>3,33</td><td>4</td><td>dù chỉ lố 0,33 vẫn lên 4</td></tr></table>
+        introduces: [ceil]
+        focus: [1, "1.2", "1.3", "1.4", 0]
+        say: "Làm tròn lên nghĩa là lấy số nguyên nhỏ nhất không nhỏ hơn số đã cho. 4 phẩy 8 làm tròn lên thành 5. 6 đã là số nguyên nên giữ nguyên 6. 3 phẩy 33 chỉ lố 0 phẩy 33 nhưng vẫn làm tròn lên thành 4. Số bản dịch vụ phải là số nguyên, và thiếu một bản thì quá tải, nên ta làm tròn lên chứ không làm tròn thông thường."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: công thức co giãn ngang"
+    steps:
+      - show: |
+          <p>$\text{mong muốn} = \left\lceil \text{hiện tại} \cdot \frac{\text{chỉ số hiện tại}}{\text{chỉ số mục tiêu}} \right\rceil$</p>
+          <p>Ý nghĩa: nếu tải chia đều, tổng công việc giữ nguyên; muốn mỗi bản chỉ ở mức mục tiêu thì cần nhiều bản hơn theo đúng tỉ lệ. Làm tròn <b>lên</b> để không thiếu.</p>
+          <div class="box key"><b>Dung sai</b> 0,1: nếu tỉ số $\frac{\text{hiện tại}}{\text{mục tiêu}}$ nằm trong khoảng 0,9 đến 1,1 thì <b>giữ nguyên</b>, tránh co giãn liên tục vì dao động nhỏ.</div>
+        focus: [1, 2, 2, 3]
+        say: "Số bản mong muốn bằng số bản hiện tại nhân tỉ số giữa chỉ số hiện tại và chỉ số mục tiêu, rồi làm tròn lên. Ý nghĩa là nếu tải chia đều thì tổng công việc giữ nguyên, muốn mỗi bản chỉ ở mức mục tiêu thì cần nhiều bản hơn theo đúng tỉ lệ đó. Ta làm tròn lên để không thiếu. Dung sai 0 phẩy 1 nghĩa là nếu tỉ số nằm trong khoảng 0 phẩy 9 đến 1 phẩy 1 thì giữ nguyên, tránh co giãn liên tục vì những dao động nhỏ."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Lượng việc giữ nguyên, chỉ chia lại"
+    checks:
+      - "4 * 90 == 6 * 60 == 360"
+    steps:
+      - show: |
+          <div><svg width="1500" height="400" viewBox="0 0 1500 400"><g font-size="24" fill="#1f2937"><rect x="110" y="50" width="80" height="270" fill="#eb6834"/><text x="150" y="40" text-anchor="middle" font-size="22">90%</text><rect x="220" y="50" width="80" height="270" fill="#eb6834"/><text x="260" y="40" text-anchor="middle" font-size="22">90%</text><rect x="330" y="50" width="80" height="270" fill="#eb6834"/><text x="370" y="40" text-anchor="middle" font-size="22">90%</text><rect x="440" y="50" width="80" height="270" fill="#eb6834"/><text x="480" y="40" text-anchor="middle" font-size="22">90%</text><rect x="820" y="140" width="80" height="180" fill="#2a78d6"/><text x="860" y="130" text-anchor="middle" font-size="22">60%</text><rect x="925" y="140" width="80" height="180" fill="#2a78d6"/><text x="965" y="130" text-anchor="middle" font-size="22">60%</text><rect x="1030" y="140" width="80" height="180" fill="#2a78d6"/><text x="1070" y="130" text-anchor="middle" font-size="22">60%</text><rect x="1135" y="140" width="80" height="180" fill="#2a78d6"/><text x="1175" y="130" text-anchor="middle" font-size="22">60%</text><rect x="1240" y="140" width="80" height="180" fill="#2a78d6"/><text x="1280" y="130" text-anchor="middle" font-size="22">60%</text><rect x="1345" y="140" width="80" height="180" fill="#2a78d6"/><text x="1385" y="130" text-anchor="middle" font-size="22">60%</text><line x1="80" y1="140" x2="1460" y2="140" stroke="#059669" stroke-width="3" stroke-dasharray="10 6"/><text x="610" y="130" font-size="22" fill="#059669">mục tiêu 60%</text><line x1="80" y1="320" x2="1460" y2="320" stroke="#6b7280" stroke-width="2"/><text x="320" y="360" text-anchor="middle">trước: 4 bản, mỗi bản 90%</text><text x="320" y="392" text-anchor="middle" fill="#eb6834">tổng 360 phần trăm-bản</text><text x="1080" y="360" text-anchor="middle">sau: 6 bản, mỗi bản 60%</text><text x="1080" y="392" text-anchor="middle" fill="#2a78d6">tổng vẫn 360 phần trăm-bản</text><text x="1080" y="40" text-anchor="middle" font-weight="bold">cùng một lượng việc, chia cho nhiều bản hơn</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình bên trái là 4 bản, mỗi bản bận 90 phần trăm, cộng lại là 360 phần trăm của một bản. Đường xanh lá là mục tiêu 60 phần trăm. Nếu tải chia đều, lượng việc không đổi khi ta thêm bản, nên 360 chia cho 60 cần đúng 6 bản như hình bên phải. Công thức co giãn chỉ làm đúng việc này, rồi làm tròn lên khi phép chia không ra số nguyên."
+
+  - id: example
+    kind: example
+    title: "Ba tình huống, một công thức"
+    checks:
+      - "alg.hpa(4, 90, 60) == 6 and alg.hpa(4, 63, 60) == 4 and alg.hpa(10, 20, 60) == 4"
+      - "Fraction(90, 60) == Fraction(3, 2) and abs(Fraction(63, 60) - 1) == Fraction(1, 20) and 10 * Fraction(20, 60) == Fraction(10, 3)"
+    steps:
+      - show: |
+          <table class="t"><tr><th>tình huống</th><th>tỉ số $\frac{\text{hiện tại}}{\text{mục tiêu}}$</th><th>lệch khỏi 1</th><th>mong muốn</th></tr>
+          <tr><td>4 bản, CPU 90%, mục tiêu 60%</td><td>$\frac{90}{60} = 1{,}5$</td><td>0,5 &gt; 0,1: phải co giãn</td><td>?</td></tr></table>
+        focus: [1, "1.2", "1.2"]
+        say: "Bước một, tình huống khuyến mãi, 4 bản ở CPU 90 phần trăm, mục tiêu 60. Tỉ số là 90 chia 60, bằng 1 phẩy 5. Tỉ số lệch khỏi 1 tới 0 phẩy 5, lớn hơn dung sai 0 phẩy 1, nên phải co giãn."
+      - show: |
+          $$\left\lceil 4 \cdot 1{,}5 \right\rceil = \lceil 6 \rceil = \hl{6}$$
+          <p><b>Bước 2</b> — nhân ra đúng số nguyên nên làm tròn lên không đổi gì: tăng từ 4 lên 6 bản.</p>
+        focus: [1, 2]
+        say: "Bước hai, lấy 4 nhân 1 phẩy 5, bằng đúng 6. Kết quả đã nguyên nên làm tròn lên không đổi gì, và số bản tăng từ 4 lên 6."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>tình huống</th><th>tỉ số $\frac{\text{hiện tại}}{\text{mục tiêu}}$</th><th>lệch khỏi 1</th><th>mong muốn</th></tr>
+          <tr><td>4 bản, CPU 63%, mục tiêu 60%</td><td>$\frac{63}{60} = 1{,}05$</td><td>0,05 ≤ 0,1</td><td>giữ $\hl{4}$</td></tr></table>
+          <p><b>Bước 3</b> — lệch nhỏ hơn dung sai thì <b>không</b> nhân gì cả, giữ nguyên số bản.</p>
+        focus: [1, "1.2", "1.2", 2]
+        say: "Bước ba, sau khi đã ổn định, 4 bản ở CPU 63 phần trăm. Tỉ số là 63 chia 60, bằng 1 phẩy 05. Tỉ số chỉ lệch 0 phẩy 05, không quá dung sai, nên ta giữ nguyên 4 bản. Lệch nhỏ hơn dung sai thì bộ co giãn không nhân gì cả."
+      - show: |
+          <table class="t"><tr><th>tình huống</th><th>tỉ số $\frac{\text{hiện tại}}{\text{mục tiêu}}$</th><th>lệch khỏi 1</th><th>mong muốn</th></tr>
+          <tr><td>10 bản, CPU 20%, mục tiêu 60%</td><td>$\frac{20}{60} = \frac{1}{3}$</td><td>0,67 &gt; 0,1</td><td>$\lceil 10 \cdot \frac{1}{3} \rceil = \lceil 3{,}33 \rceil = \hl{4}$</td></tr></table>
+          <p><b>Bước 4</b> — co giãn cũng chạy theo chiều <b>giảm</b>: nửa đêm vắng khách, 10 bản xuống 4.</p>
+        focus: [1, "1.2", "1.2", 2]
+        say: "Bước bốn, nửa đêm vắng khách, 10 bản chỉ ở CPU 20 phần trăm. Tỉ số là 20 chia 60, bằng một phần ba, lệch khỏi 1 khoảng 0 phẩy 67, nên phải co giãn. 10 nhân một phần ba khoảng 3 phẩy 33, làm tròn lên thành 4. Vậy co giãn cũng chạy theo chiều giảm, nên 10 bản xuống còn 4."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác: lượng việc chia lại"
+    checks:
+      - "4 * 90 / 6 == 60 and 10 * 20 / 4 == 50 and 10 * 20 / 3 > 60"
+      - "math.ceil(4 * Fraction(63, 60)) == 5 and Fraction(4 * 63, 5) == Fraction(252, 5) and float(Fraction(252, 5)) == 50.4"
+    steps:
+      - show: |
+          <table class="t"><tr><th>kiểm</th><th>tổng lượng việc chia cho số bản mới</th><th>kết quả</th></tr>
+          <tr><td>6 bản lúc khuyến mãi</td><td>$4 \cdot 90 = 360$, chia 6 bản</td><td>đúng 60% ✓</td></tr>
+          <tr><td>4 bản lúc nửa đêm</td><td>$10 \cdot 20 = 200$, chia 4 bản</td><td>50% ≤ 60% ✓; chia 3 bản thì 66,7% vượt mục tiêu</td></tr>
+          <tr><td>nếu bỏ dung sai ở 63%</td><td>$\lceil 4 \cdot 1{,}05 \rceil = 5$ bản, $\frac{252}{5}$</td><td>50,4%: thêm một bản chỉ vì lệch 3%</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.3", "1.4", "1.4"]
+        say: "Kiểm bằng đường khác, ta không dùng công thức mà cộng lượng việc rồi chia lại. Lúc khuyến mãi, 4 nhân 90 bằng 360, chia cho 6 bản được đúng 60 phần trăm. Lúc nửa đêm, 10 nhân 20 bằng 200, chia 4 bản được 50 phần trăm, không vượt mục tiêu. Nếu chỉ giữ 3 bản thì mỗi bản 66 phẩy 7 phần trăm, vượt mục tiêu, nên 4 là số bản nhỏ nhất đủ dùng. Còn nếu bỏ dung sai ở mức 63 phần trăm, 4 nhân 1 phẩy 05 bằng 4 phẩy 2, làm tròn lên thành 5 bản. Mỗi bản khi đó chỉ 50 phẩy 4 phần trăm, tức là thêm hẳn một bản chỉ vì lệch 3 phần trăm, đó chính là lý do có dung sai."
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc, 1 lỗi người đã đi làm"
+    checks:
+      - "alg.hpa(8, 90, 60) == 12 and 12 * 20 == 240 and 10 * 20 == 200 and 200 // 20 == 10"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Co giãn theo CPU khi nút thắt ở chỗ khác <b class="red">(vô ích)</b>
+          <br><span class="note">Cơ sở dữ liệu phía sau đã quá tải: thêm bản dịch vụ chỉ thêm kết nối dồn vào nó, làm tệ hơn. Tìm nút thắt trước, co giãn sau.</span></div>
+        say: "Lỗi thứ nhất, co giãn theo CPU khi nút thắt nằm ở chỗ khác. Cơ sở dữ liệu phía sau đã quá tải thì thêm bản dịch vụ chỉ thêm kết nối dồn vào nó, làm tình hình tệ hơn. Hãy tìm nút thắt trước, rồi mới co giãn."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Không đặt yêu cầu CPU <b class="red">(chỉ số vô nghĩa)</b>
+          <br><span class="note">Phần trăm CPU được tính <b>so với yêu cầu</b>. Không có yêu cầu thì không có phần trăm, bộ co giãn không hoạt động.</span></div>
+        say: "Lỗi thứ hai, không đặt yêu cầu CPU. Phần trăm CPU được tính so với yêu cầu, không có yêu cầu thì không có phần trăm, và bộ co giãn không hoạt động."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Quên thời gian khởi động <b class="red">(co giãn trễ)</b>
+          <br><span class="note">Bản mới cần 60 giây để sẵn sàng: đỉnh tải đột ngột vẫn làm quá tải trong phút đó. Giữ dư địa (mục tiêu 60% chứ không 90%), hoặc tăng trước theo lịch đã biết.</span></div>
+        say: "Lỗi thứ ba, quên thời gian khởi động. Bản mới cần 60 giây để sẵn sàng, nên đỉnh tải đột ngột vẫn làm quá tải trong phút đó. Hãy giữ dư địa, chẳng hạn mục tiêu 60 chứ không phải 90 phần trăm, hoặc tăng trước theo lịch đã biết."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Đặt trần số bản theo cảm tính, không theo sức chứa phía sau <b class="red">(cơ sở dữ liệu sập)</b></div>
+          <table class="t"><tr><th>giả sử: mỗi bản mở 20 kết nối, cơ sở dữ liệu nhận tối đa 200</th><th>số kết nối</th></tr>
+          <tr><td>khuyến mãi: 8 bản ở 90%, mục tiêu 60% → $\lceil 8 \cdot 1{,}5 \rceil = 12$ bản</td><td>$12 \cdot 20 = 240$ &gt; 200: lỗi kết nối</td></tr>
+          <tr><td>trần đặt theo sức chứa: $\frac{200}{20} = 10$ bản</td><td>$10 \cdot 20 = 200$: vừa khít</td></tr></table>
+        focus: [1, "2.1", "2.2", "2.2", "2.3", 0]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, đặt trần số bản theo cảm tính, không theo sức chứa phía sau. Giả sử mỗi bản mở 20 kết nối tới cơ sở dữ liệu, và cơ sở dữ liệu nhận tối đa 200 kết nối. Lúc khuyến mãi, 8 bản ở 90 phần trăm với mục tiêu 60, công thức cho 8 nhân 1 phẩy 5, bằng 12 bản. 12 bản mở 240 kết nối, vượt 200, nên chính lúc đông khách nhất thì lỗi kết nối bùng lên. Người làm nghề tính trần từ sức chứa phía sau, 200 chia 20 bằng 10 bản, rồi mới cho bộ co giãn chạy trong giới hạn đó. Phần tải còn thiếu thì phải xử lý ở cơ sở dữ liệu, đúng như lỗi thứ nhất đã nói."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.hpa(3, 80, 50) == 5 and alg.hpa(6, 66, 60) == 6 and alg.hpa(6, 67, 60) == 7"
+      - "Fraction(6 * 67, 60) == Fraction(67, 10) and 3 * 80 / 5 == 48 and round(67 / 60, 3) == 1.117 and Fraction(66, 60) == Fraction(11, 10)"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>3 bản, CPU 80%, mục tiêu 50%: bao nhiêu bản?</td></tr>
+          <tr><td>2</td><td>6 bản, mục tiêu 60%: CPU 66% thì sao? CPU 67% thì sao?</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, 3 bản, CPU 80 phần trăm, mục tiêu 50, cần bao nhiêu bản? Câu hai, 6 bản với mục tiêu 60, CPU 66 phần trăm thì sao, CPU 67 thì sao? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <p>① Tỉ số $\frac{80}{50} = 1{,}6$, lệch 0,6 &gt; 0,1 nên phải co giãn: $\lceil 3 \cdot 1{,}6 \rceil = \lceil 4{,}8 \rceil = \hl{5}$.</p>
+          <p class="note">Kiểm lại: $3 \cdot 80 = 240$, chia 5 bản được 48% ≤ 50%.</p>
+        focus: [1, 1, 2]
+        say: "Đáp án câu một, tỉ số là 80 chia 50, bằng 1 phẩy 6, lệch 0 phẩy 6 nên phải co giãn. 3 nhân 1 phẩy 6 bằng 4 phẩy 8, làm tròn lên thành 5. Kiểm lại bằng lượng việc, 3 nhân 80 bằng 240, chia 5 bản được 48 phần trăm, không vượt mục tiêu."
+      - show: |
+          <table class="t"><tr><th>CPU</th><th>tỉ số</th><th>so với dung sai</th><th>mong muốn</th></tr>
+          <tr><td>66%</td><td>$\frac{66}{60} = 1{,}1$</td><td>lệch đúng 0,1: còn trong dung sai</td><td>giữ $\hl{6}$</td></tr>
+          <tr><td>67%</td><td>$\frac{67}{60} \approx 1{,}117$</td><td>lệch 0,117 &gt; 0,1</td><td>$\lceil 6 \cdot \frac{67}{60} \rceil = \lceil 6{,}7 \rceil = \hl{7}$</td></tr></table>
+        introduces: [approx]
+        focus: [1, "1.2", "1.3", "1.3"]
+        say: "Câu hai, ở 66 phần trăm tỉ số là 1 phẩy 1, lệch đúng bằng dung sai, vẫn tính là trong dung sai nên giữ 6. Ở 67 phần trăm tỉ số khoảng 1 phẩy 117, vượt dung sai. 6 nhân 67 chia 60 bằng 6 phẩy 7, làm tròn lên thành 7. Chỉ một phần trăm CPU chênh nhau mà kết quả khác, vì 66 nằm đúng biên còn 67 đã ra ngoài."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">mong muốn: nhân theo tỉ số chỉ số / mục tiêu, làm tròn lên</span><span class="a">→</span>
+          <span class="n">dung sai chống dao động</span><span class="a">→</span>
+          <span class="n">cần yêu cầu CPU để có phần trăm</span><span class="a">→</span>
+          <span class="n">co giãn đúng chỗ nút thắt</span></div>
+        say: "Tổng kết lại, số bản mong muốn bằng số bản hiện tại nhân tỉ số chỉ số trên mục tiêu, làm tròn lên. Dung sai chống dao động, cần đặt yêu cầu CPU để có phần trăm, và chỉ co giãn đúng chỗ có nút thắt."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> tự động hoá chỉ tốt bằng chỉ số nó dựa vào. Chọn chỉ số phản ánh đúng thứ đang thiếu.</div>
+        say: "Điều cần mang theo, tự động hoá chỉ tốt bằng chỉ số mà nó dựa vào. Hãy chọn chỉ số phản ánh đúng thứ đang thiếu."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 8): <b>cập nhật cuốn chiếu</b>, xanh–lam và canary.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 8, ta học các cách phát hành, cập nhật cuốn chiếu, xanh lam, và phát hành thử. Hẹn gặp bạn ở bài tiếp theo."

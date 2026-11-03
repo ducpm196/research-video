@@ -1,0 +1,352 @@
+id: L08
+course: CVI
+series: "CVI · Thị giác máy tính"
+title: "Bài 8 — Phát hiện đối tượng: giao trên hợp, loại bỏ không cực đại, độ chính xác trung bình"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/cvi.yaml L08; audit/cvi/verify_cvi.py L08; audit/cvi/sources_L08.md; [R15] O. Russakovsky và cộng sự, ImageNet Large Scale Visual Recognition Challenge, IJCV 2015, arXiv:1409.0575, mục 4.2–4.3 và thuật toán 2 (tiêu chí giao trên hợp lớn hơn 0,5 theo Everingham và cộng sự 2010; ghép tham lam theo điểm; phạt phát hiện trùng; ngưỡng nới cho vật nhỏ); [Y16] J. Redmon và cộng sự, You Only Look Once, arXiv:1506.02640 (45 khung mỗi giây, 63,4 mAP trên PASCAL VOC 2007; loại bỏ không cực đại); [COCO] kho cocoapi chính thức, cocoeval.py (10 ngưỡng 0,5 tới 0,95, 101 mức độ phủ) và coco.py (hộp ghi [x, y, rộng, cao]); CS115 bài 21 (độ chuẩn xác, độ phủ — đã học)"
+assumes: [arith, cdot, frac, approx, geq, sub]
+# Quy ước: hộp viết (x1, y1, x2, y2) — góc trên trái, góc dưới phải, toạ độ liên tục, diện tích (x2 − x1)·(y2 − y1) (alg.cvi_box_iou).
+#   Giao trên hợp viết IoU trên màn hình; lời đọc nói “giao trên hợp”. Một phát hiện = (điểm tin cậy, hộp). Ghép tham lam theo [R15]
+#   thuật toán 2 (alg.cvi_match_dets): xếp phát hiện theo điểm giảm dần, mỗi phát hiện lấy hộp thật chưa ghép có giao trên hợp ≥ ngưỡng
+#   lớn nhất. AP = diện tích dưới đường độ chuẩn xác đã nội suy (lấy giá trị lớn nhất phía độ phủ cao hơn) (alg.cvi_ap 'all');
+#   cocoeval đọc tại 101 mức độ phủ (alg.cvi_ap101) — với ví dụ của bài hai cách cho cùng 0,392 khi lấy trung bình 10 ngưỡng.
+#   Ba người, các hộp, điểm tin cậy, lớp “xe” AP 0,60 là SỐ MINH HOẠ. Tên PASCAL VOC, COCO, YOLO, ILSVRC chỉ trên màn hình.
+#   Không dạy cách “11 điểm” của PASCAL VOC 2007: bài báo Everingham 2010 chưa đọc được (NOT_VERIFIED, sources_L08.md).
+objectives:
+  - "Tính giao trên hợp của hai hộp từ toạ độ góc"
+  - "Chạy loại bỏ không cực đại để giữ một hộp cho mỗi vật"
+  - "Ghép phát hiện với hộp thật, dựng đường độ chuẩn xác – độ phủ và tính độ chính xác trung bình"
+  - "Giải thích vì sao ngưỡng giao trên hợp 0,5 hay 0,75 đổi hẳn con số, và báo cáo phải ghi ngưỡng"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Cùng một mô hình, hai báo cáo: 0,917 và 0,5"
+    checks:
+      - "round(alg.cvi_ap(alg.cvi_match_dets([(0.95, (1, 0, 11, 10)), (0.9, (23, 0, 33, 10)), (0.8, (60, 0, 70, 10)), (0.6, (41, 1, 50, 10)), (0.4, (80, 0, 90, 10))], [(0, 0, 10, 10), (20, 0, 30, 10), (40, 0, 50, 10)], 0.5), 3), 3) == 0.917"
+      - "alg.cvi_ap(alg.cvi_match_dets([(0.95, (1, 0, 11, 10)), (0.9, (23, 0, 33, 10)), (0.8, (60, 0, 70, 10)), (0.6, (41, 1, 50, 10)), (0.4, (80, 0, 90, 10))], [(0, 0, 10, 10), (20, 0, 30, 10), (40, 0, 50, 10)], 0.75), 3) == 0.5"
+    steps:
+      - show: |
+          <p>Một đội làm camera đếm người qua cổng. Hai kỹ sư chấm <b>cùng một mô hình</b> trên <b>cùng một ảnh</b>: người thứ nhất báo độ chính xác trung bình <b>0,917</b>, người thứ hai báo <b>0,5</b>. Không ai tính sai.</p>
+          <div class="box key">Hôm nay: thế nào là “tìm đúng” một vật? Vì sao một vật chỉ được giữ một hộp? Và con số độ chính xác trung bình được dựng từ đâu, phụ thuộc vào điều gì?</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, một đội làm camera đếm người qua cổng. Hai kỹ sư chấm cùng một mô hình trên cùng một ảnh, người thứ nhất báo độ chính xác trung bình 0 phẩy 917, người thứ hai báo 0 phẩy 5. Không ai tính sai cả. Hôm nay ta hỏi, thế nào là tìm đúng một vật, vì sao mỗi vật chỉ giữ một hộp, và con số này được dựng từ đâu."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại ba điều sẽ dùng"
+    checks:
+      - "Fraction(9, 9 + 99) == Fraction(1, 12) and Fraction(9, 9 + 1) == Fraction(9, 10)"
+      - "(15 - 5) * (12 - 2) == 100"
+      - "max(0, min(10, 15) - max(0, 5)) == 5 and max(0, min(10, 30) - max(0, 20)) == 0"
+    steps:
+      - show: |
+          <p><b>① Độ chuẩn xác và độ phủ</b> (khoá Toán cho khoa học máy tính, phần đánh giá phân loại): độ chuẩn xác $= \frac{TP}{TP + FP}$ — trong các lần máy báo, bao nhiêu lần đúng; độ phủ $= \frac{TP}{TP + FN}$ — trong các vật thật, máy tìm ra bao nhiêu.</p>
+          <p class="note">Ví dụ xét nghiệm: 9 đúng, 99 báo nhầm, 1 bỏ sót → độ chuẩn xác $\frac{9}{108} = \frac{1}{12}$, độ phủ $\frac{9}{10}$.</p>
+        focus: [1, 1, 2]
+        say: "Điều thứ nhất là độ chuẩn xác và độ phủ, như ở khoá Toán cho khoa học máy tính, phần đánh giá phân loại. Độ chuẩn xác là số lần đúng chia số lần máy báo, độ phủ là số lần đúng chia số vật thật. Với 9 đúng, 99 báo nhầm và 1 bỏ sót, ta được một phần mười hai và chín phần mười."
+      - show: |
+          <p><b>② Diện tích hình chữ nhật</b> từ hai góc: rộng $= x_2 - x_1$, cao $= y_2 - y_1$. Hộp từ (5, 2) tới (15, 12):</p>
+          $$(15 - 5) \cdot (12 - 2) = 10 \cdot 10 = 100$$
+        focus: [1, 2]
+        say: "Điều thứ hai là diện tích hình chữ nhật khi biết hai góc. Chiều rộng là x hai trừ x một, chiều cao là y hai trừ y một, nên hộp từ điểm 5, 2 tới điểm 15, 12 có diện tích 10 nhân 10, bằng 100."
+      - show: |
+          <p><b>③ Phần chung của hai đoạn thẳng:</b> đoạn [0, 10] và [5, 15] chung từ $\max(0, 5) = 5$ tới $\min(10, 15) = 10$, dài 5. Hai đoạn rời nhau [0, 10] và [20, 30]: $10 - 20 \lt 0$, nên độ dài chung lấy bằng 0.</p>
+        introduces: [max_fn, min_fn, ltgt]
+        focus: [1, 1]
+        say: "Điều thứ ba là phần chung của hai đoạn thẳng, bắt đầu ở đầu trái lớn hơn và kết thúc ở đầu phải nhỏ hơn. Đoạn 0 tới 10 và đoạn 5 tới 15 chung từ 5 tới 10, dài 5, còn hai đoạn rời nhau cho hiệu âm, nên độ dài chung lấy bằng 0."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: hộp, giao, hợp, IoU và AP"
+    checks:
+      - "alg.cvi_box_iou((0, 0, 10, 10), (5, 5, 15, 15))[:2] == (25, 175)"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ký hiệu</th><th>nghĩa</th></tr>
+          <tr><td>$(x_1, y_1, x_2, y_2)$</td><td>một hộp: góc trên trái $(x_1, y_1)$, góc dưới phải $(x_2, y_2)$; trục $y$ hướng xuống như hàng điểm ảnh</td></tr>
+          <tr><td>$A \cap B$</td><td>giao: phần thuộc cả hai hộp</td></tr>
+          <tr><td>$A \cup B$</td><td>hợp: phần thuộc ít nhất một hộp</td></tr>
+          <tr><td>$\text{IoU}(A, B) = \dfrac{\text{diện tích } A \cap B}{\text{diện tích } A \cup B}$</td><td>giao trên hợp: 0 là rời nhau, 1 là trùng khít</td></tr></table>
+        introduces: [cap, cup]
+        focus: [0, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bảng giới thiệu các ký hiệu. Một hộp ghi bằng góc trên trái và góc dưới phải, trục y hướng xuống như hàng điểm ảnh. Chữ U ngược là phép giao, phần thuộc cả hai hộp. Chữ U xuôi là phép hợp, phần thuộc ít nhất một hộp. Giao trên hợp là diện tích giao chia diện tích hợp, từ 0 khi rời nhau tới 1 khi trùng khít."
+      - clear: true
+        show: |
+          <p><b>AP</b> (độ chính xác trung bình) của <b>một lớp</b> vật: diện tích dưới đường độ chuẩn xác – độ phủ, đi từ 0 tới 1. <b>mAP</b>: trung bình AP của mọi lớp.</p>
+          <p class="note">Ví dụ (số minh hoạ): lớp “người” AP 0,917, lớp “xe” AP 0,60 → mAP $= \frac{0{,}917 + 0{,}60}{2} \approx 0{,}758$.</p>
+        focus: [1, 1, 2]
+        say: "Độ chính xác trung bình của một lớp vật là diện tích dưới đường độ chuẩn xác theo độ phủ, nằm trong khoảng 0 tới 1. Lấy trung bình qua mọi lớp, ta được độ chính xác trung bình của cả mô hình. Ví dụ với số minh hoạ, lớp người được 0 phẩy 917, lớp xe được 0 phẩy 6, trung bình là khoảng 0 phẩy 758."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hai cặp hộp: lệch nửa cạnh và lệch một điểm ảnh"
+    checks:
+      - "alg.cvi_box_iou((0, 0, 10, 10), (5, 5, 15, 15)) == (25, 175, 25 / 175) and round(25 / 175, 3) == 0.143"
+      - "alg.cvi_box_iou((0, 0, 10, 10), (1, 0, 11, 10))[:2] == (90, 110) and round(90 / 110, 3) == 0.818"
+    steps:
+      - show: |
+          <div><svg width="1400" height="420" viewBox="0 0 1400 420">
+          <rect x="100" y="60" width="200" height="200" fill="#dbeafe" fill-opacity="0.6" stroke="#2a78d6" stroke-width="3"/>
+          <rect x="200" y="160" width="200" height="200" fill="#ffedd5" fill-opacity="0.6" stroke="#eb6834" stroke-width="3"/>
+          <rect x="200" y="160" width="100" height="100" fill="#059669" fill-opacity="0.45"/>
+          <rect x="1000" y="60" width="200" height="200" fill="#dbeafe" fill-opacity="0.6" stroke="#2a78d6" stroke-width="3"/>
+          <rect x="1020" y="60" width="200" height="200" fill="none" stroke="#eb6834" stroke-width="3" stroke-dasharray="10 6"/>
+          <rect x="1020" y="60" width="180" height="200" fill="#059669" fill-opacity="0.35"/>
+          <g font-size="24" fill="#1f2937">
+          <text x="85" y="110" text-anchor="end">A</text><text x="415" y="320">B</text>
+          <text x="250" y="218" text-anchor="middle" font-size="21">giao 25</text>
+          <text x="985" y="165" text-anchor="end">C</text><text x="1235" y="165">D</text>
+          <text x="1110" y="170" text-anchor="middle" font-size="21">giao 90</text></g>
+          <g font-size="23" fill="#1f2937">
+          <text x="470" y="120">A: (0, 0, 10, 10); B: (5, 5, 15, 15)</text>
+          <text x="470" y="170">hợp = 100 + 100 − 25 = 175</text>
+          <text x="470" y="220" fill="#dc2626">IoU = 25 / 175 ≈ 0,143: hai vật khác nhau</text></g>
+          <g font-size="23" fill="#1f2937" text-anchor="middle">
+          <text x="1110" y="310">C: (0, 0, 10, 10); D: (1, 0, 11, 10)</text>
+          <text x="1110" y="350">hợp = 100 + 100 − 90 = 110</text>
+          <text x="1110" y="390" fill="#059669">IoU = 90 / 110 ≈ 0,818: cùng một vật</text></g>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Bên trái, hai hộp A và B cỡ 10 nhân 10 lệch nhau nửa cạnh, phần giao màu lục chỉ 5 nhân 5, bằng 25. Hợp là 100 cộng 100 trừ 25, bằng 175, nên giao trên hợp chỉ khoảng 0 phẩy 143, coi là hai vật khác nhau. Bên phải, C và D lệch nhau một điểm ảnh, giao bằng 90, hợp bằng 110. Giao trên hợp khoảng 0 phẩy 818, rõ ràng là cùng một vật."
+
+  # ───────────────────────── 5. SUY RA ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra giao trên hợp: giao theo từng chiều, hợp trừ phần đếm hai lần"
+    checks:
+      - "max(0, min(10, 15) - max(0, 5)) == 5 and max(0, min(10, 15) - max(0, 5)) * max(0, min(10, 15) - max(0, 5)) == 25"
+      - "100 + 100 - 25 == 175 and round(25 / 175, 3) == 0.143"
+      - "alg.cvi_box_iou((0, 0, 10, 10), (20, 0, 30, 10))[2] == 0"
+    steps:
+      - show: |
+          <p><b>Bước 1 — giao theo từng chiều.</b> Phần giao của hai hộp cũng là một hình chữ nhật, nên theo điều ③, chiều rộng của nó là phần chung của hai đoạn trên trục $x$, chiều cao là phần chung trên trục $y$:</p>
+          $$\text{rộng giao} = \max\big(0,\ \min(x_2^A, x_2^B) - \max(x_1^A, x_1^B)\big)$$
+          <p class="note">Làm thử A, B: $\max(0, \min(10, 15) - \max(0, 5)) = 5$; chiều cao cũng 5; giao $= 5 \cdot 5 = 25$.</p>
+        introduces: [power]
+        focus: [1, 1, 2, 3]
+        say: "Bước một là giao theo từng chiều. Phần giao của hai hộp cũng là một hình chữ nhật, nên theo điều thứ ba, chiều rộng của nó là phần chung của hai đoạn trên trục x, chiều cao là phần chung trên trục y. Chỉ số trên A và B cho biết toạ độ đó của hộp nào. Làm thử với A và B, chiều rộng giao là 10 trừ 5, bằng 5, chiều cao cũng 5, nên giao bằng 25."
+      - show: |
+          <p><b>Bước 2 — hợp.</b> Cộng hai diện tích thì phần giao bị <b>đếm hai lần</b>, nên trừ đi một lần:</p>
+          $$\text{hợp} = \text{diện tích } A + \text{diện tích } B - \text{giao} = 100 + 100 - 25 = 175$$
+        focus: [1, 2]
+        say: "Bước hai là phần hợp. Cộng hai diện tích thì phần giao bị đếm hai lần, nên ta trừ đi một lần, được 100 cộng 100 trừ 25, bằng 175."
+      - show: |
+          <p><b>Bước 3 — chia.</b> $\text{IoU} = \frac{25}{175} \approx 0{,}143$. Hai hộp rời nhau, như (0, 0, 10, 10) và (20, 0, 30, 10), cho rộng giao $\max(0, 10 - 20) = 0$, nên giao trên hợp bằng 0 chứ không âm.</p>
+        focus: [1, 1]
+        say: "Bước ba, chia giao cho hợp, được 25 chia 175, xấp xỉ 0 phẩy 143. Với hai hộp rời nhau, chiều rộng giao là số lớn hơn giữa 0 và một số âm, tức bằng 0, nên giao trên hợp bằng 0 chứ không bao giờ âm."
+
+  # ───────────────────────── 6. LOẠI BỎ KHÔNG CỰC ĐẠI ─────────────────────────
+  - id: nms
+    kind: concept
+    title: "Loại bỏ không cực đại: mỗi vật giữ một hộp có điểm cao nhất"
+    checks:
+      - "alg.cvi_nms([(0, 0, 10, 10), (1, 0, 11, 10), (5, 5, 15, 15)], [0.9, 0.8, 0.7], 0.5) == [0, 2]"
+      - "alg.cvi_box_iou((0, 0, 10, 10), (1, 0, 11, 10))[2] > 0.5 > alg.cvi_box_iou((0, 0, 10, 10), (5, 5, 15, 15))[2]"
+    steps:
+      - show: |
+          <p>Mạng phát hiện thường cho <b>nhiều hộp chồng nhau</b> quanh cùng một vật. Quy trình loại bỏ không cực đại, ngưỡng 0,5:</p>
+          <table class="t"><tr><th>bước</th><th>việc làm</th></tr>
+          <tr><td>1</td><td>xếp các hộp theo điểm tin cậy, giảm dần</td></tr>
+          <tr><td>2</td><td>giữ hộp điểm cao nhất còn lại</td></tr>
+          <tr><td>3</td><td>bỏ mọi hộp có giao trên hợp với nó lớn hơn 0,5</td></tr>
+          <tr><td>4</td><td>còn hộp thì quay lại bước 2</td></tr></table>
+        focus: [1, "2.2", "2.3", ["2.4", "2.5"]]
+        say: "Mạng phát hiện thường cho nhiều hộp chồng nhau quanh cùng một vật, nên ta dùng quy trình loại bỏ không cực đại với ngưỡng 0 phẩy 5. Đầu tiên xếp các hộp theo điểm tin cậy, giảm dần. Rồi giữ hộp có điểm cao nhất còn lại. Sau đó bỏ mọi hộp chồng với nó quá 0 phẩy 5, rồi lặp lại với các hộp còn lại."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>hộp</th><th>điểm</th><th>IoU với A</th><th>kết quả</th></tr>
+          <tr><td>A (0, 0, 10, 10)</td><td>0,9</td><td>—</td><td>giữ (cao nhất)</td></tr>
+          <tr><td>D (1, 0, 11, 10)</td><td>0,8</td><td>0,818 lớn hơn 0,5</td><td class="red">bỏ: trùng vật với A</td></tr>
+          <tr><td>B (5, 5, 15, 15)</td><td>0,7</td><td>0,143</td><td>giữ: vật khác</td></tr></table>
+          <p class="note">Còn lại A và B — hai vật, mỗi vật một hộp. Mạng phát hiện một lượt nổi tiếng năm 2016 cũng ghi rằng bước này “cộng thêm 2 tới 3%” độ chính xác trung bình.</p>
+        focus: [0, "1.2", "1.3", "1.4", 2]
+        say: "Chạy thử với ba hộp. Hộp A có điểm 0 phẩy 9 cao nhất, nên được giữ. Hộp D có giao trên hợp với A là 0 phẩy 818, lớn hơn 0 phẩy 5, nên bị bỏ vì trùng vật với A. Hộp B chỉ chồng với A 0 phẩy 143, nên được giữ như một vật khác. Cuối cùng còn A và B, hai vật, mỗi vật một hộp."
+
+  # ───────────────────────── 7. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Năm phát hiện, ba người thật: ghép, dựng đường cong, tính diện tích"
+    checks:
+      - "[round(alg.cvi_box_iou(b, g)[2], 3) for b, g in [((1, 0, 11, 10), (0, 0, 10, 10)), ((23, 0, 33, 10), (20, 0, 30, 10)), ((41, 1, 50, 10), (40, 0, 50, 10))]] == [0.818, 0.538, 0.81]"
+      - "alg.cvi_match_dets([(0.95, (1, 0, 11, 10)), (0.9, (23, 0, 33, 10)), (0.8, (60, 0, 70, 10)), (0.6, (41, 1, 50, 10)), (0.4, (80, 0, 90, 10))], [(0, 0, 10, 10), (20, 0, 30, 10), (40, 0, 50, 10)], 0.5) == [True, True, False, True, False]"
+      - "[(round(p, 3), round(r, 3)) for p, r in alg.cvi_pr_curve([True, True, False, True, False], 3)] == [(1.0, 0.333), (1.0, 0.667), (0.667, 0.667), (0.75, 1.0), (0.6, 1.0)]"
+      - "round(alg.cvi_ap([True, True, False, True, False], 3), 3) == 0.917 and round((1 + 1 + 0.75) / 3, 3) == 0.917"
+    steps:
+      - show: |
+          <p>Ba người thật: $G_1 = (0, 0, 10, 10)$, $G_2 = (20, 0, 30, 10)$, $G_3 = (40, 0, 50, 10)$. Sau loại bỏ không cực đại còn năm phát hiện.</p>
+          <table class="t"><tr><th>phát hiện</th><th>điểm</th><th>IoU lớn nhất với người thật</th></tr>
+          <tr><td>1</td><td>0,95</td><td>0,818 với $G_1$</td></tr>
+          <tr><td>2</td><td>0,90</td><td>0,538 với $G_2$</td></tr>
+          <tr><td>3</td><td>0,80</td><td>0 (nền)</td></tr>
+          <tr><td>4</td><td>0,60</td><td>0,810 với $G_3$</td></tr>
+          <tr><td>5</td><td>0,40</td><td>0 (nền)</td></tr></table>
+        focus: [1, ["2.2", "2.3"], ["2.4", "2.6"], "2.5"]
+        say: "Ảnh có ba người thật, và sau loại bỏ không cực đại còn năm phát hiện. Phát hiện 1 và 2 có điểm cao nhất, chồng với G một và G hai mức 0 phẩy 818 và 0 phẩy 538. Phát hiện 3 và 5 rơi vào nền. Phát hiện 4 chồng với G ba mức 0 phẩy 81."
+      - show: |
+          <p><b>Bước 1 — ghép, ngưỡng 0,5.</b> Đi theo điểm giảm dần, mỗi phát hiện ghép với người thật <b>chưa ai ghép</b> có giao trên hợp ≥ 0,5: phát hiện 1, 2, 4 <b>đúng</b>; 3 và 5 <b>sai</b>. Dãy: đúng, đúng, sai, đúng, sai.</p>
+        focus: [1, 1, 1]
+        say: "Bước một là ghép với ngưỡng 0 phẩy 5. Ta đi theo điểm giảm dần, mỗi phát hiện được ghép với người thật chưa ai ghép mà giao trên hợp lớn hơn hoặc bằng 0 phẩy 5. Vì vậy phát hiện 1, 2 và 4 đúng, còn 3 và 5 sai, ta được dãy đúng, đúng, sai, đúng, sai."
+      - clear: true
+        show: |
+          <p><b>Bước 2 — độ chuẩn xác và độ phủ sau mỗi phát hiện</b> (3 người thật):</p>
+          <table class="t"><tr><th>sau phát hiện</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th></tr>
+          <tr><td>độ chuẩn xác</td><td>1/1</td><td>2/2</td><td>2/3</td><td>3/4</td><td>3/5</td></tr>
+          <tr><td>độ phủ</td><td>1/3</td><td>2/3</td><td>2/3</td><td>3/3</td><td>3/3</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước hai, sau mỗi phát hiện ta tính lại hai chỉ số, với 3 người thật. Độ chuẩn xác lần lượt là 1 phần 1, 2 phần 2, 2 phần 3, 3 phần 4 và 3 phần 5. Độ phủ lần lượt là 1 phần 3, 2 phần 3, giữ 2 phần 3, rồi lên 3 phần 3 và giữ nguyên."
+      - clear: true
+        show: |
+          <div><svg width="1400" height="420" viewBox="0 0 1400 420">
+          <rect x="150" y="50" width="400" height="300" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
+          <rect x="550" y="125" width="200" height="225" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
+          <line x1="150" y1="350" x2="790" y2="350" stroke="#1f2937" stroke-width="2"/><line x1="150" y1="350" x2="150" y2="30" stroke="#1f2937" stroke-width="2"/>
+          <g fill="#2a78d6"><circle cx="350" cy="50" r="9"/><circle cx="550" cy="50" r="9"/><circle cx="550" cy="150" r="9"/><circle cx="750" cy="125" r="9"/><circle cx="750" cy="170" r="9"/></g>
+          <g font-size="21" fill="#1f2937" text-anchor="middle"><text x="150" y="378">0</text><text x="350" y="378">1/3</text><text x="550" y="378">2/3</text><text x="750" y="378">1</text><text x="450" y="410">độ phủ</text></g>
+          <g font-size="21" fill="#1f2937" text-anchor="end"><text x="138" y="57">1</text><text x="138" y="132">0,75</text><text x="138" y="357">0</text></g>
+          <g font-size="23" fill="#1f2937"><text x="840" y="110">điểm xanh: năm cặp (độ phủ, độ chuẩn xác)</text>
+          <text x="840" y="160">vùng lục: ở mỗi độ phủ lấy độ chuẩn xác</text><text x="840" y="195">lớn nhất từ đó về bên phải</text>
+          <text x="840" y="250">ba bậc rộng 1/3, cao 1; 1; 0,75</text>
+          <text x="840" y="300" fill="#059669" font-weight="bold">diện tích ≈ 0,917 = AP</text></g>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Bước ba, vẽ năm cặp thành các điểm xanh. Ở mỗi độ phủ, ta lấy độ chuẩn xác lớn nhất từ đó về bên phải, nên điểm 2 phần 3 bị điểm cao hơn bên phải che. Đường bao đó là vùng màu lục gồm ba bậc, mỗi bậc rộng 1 phần 3. Ba bậc lần lượt cao 1, 1 và 0 phẩy 75."
+      - show: |
+          <p><b>Bước 4 — diện tích.</b> $\text{AP} = \frac{1}{3} \cdot 1 + \frac{1}{3} \cdot 1 + \frac{1}{3} \cdot 0{,}75 = \frac{2{,}75}{3} \approx \hlg{0{,}917}$ — con số của kỹ sư thứ nhất.</p>
+        say: "Bước bốn, cộng diện tích ba bậc rộng một phần ba, cao 1, 1 và 0 phẩy 75, ta được 2 phẩy 75 chia 3. Kết quả xấp xỉ 0 phẩy 917, đúng con số của kỹ sư thứ nhất."
+
+  # ───────────────────────── 8. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: đếm ô vuông, và đọc 101 mức độ phủ"
+    checks:
+      - "sum(1 for i in range(20) for j in range(20) if 0 <= i < 10 and 0 <= j < 10 and 5 <= i < 15 and 5 <= j < 15) == 25 and sum(1 for i in range(20) for j in range(20) if (i < 10 and j < 10) or (5 <= i < 15 and 5 <= j < 15)) == 175"
+      - "round(alg.cvi_ap101([True, True, False, True, False], 3), 3) == 0.916 and (34 + 33 + 34 * 0.75) / 101 == alg.cvi_ap101([True, True, False, True, False], 3)"
+    steps:
+      - show: |
+          <p><b>Đường khác 1 — đếm ô.</b> Chia mặt phẳng thành ô vuông cạnh 1, đếm ô nằm trong cả A lẫn B: 25 ô; nằm trong ít nhất một hộp: 175 ô. Tỉ số $\frac{25}{175}$ ✓ — không cần công thức.</p>
+        focus: [1, 1]
+        say: "Kiểm tra thứ nhất là đếm ô, ta chia mặt phẳng thành các ô vuông cạnh 1 rồi đếm. Số ô nằm trong cả A lẫn B là 25, số ô nằm trong ít nhất một hộp là 175, khớp tỉ số 25 phần 175 mà không cần công thức."
+      - show: |
+          <p><b>Đường khác 2 — đọc tại 101 mức độ phủ</b> 0; 0,01; …; 1 như bộ chấm của COCO: 34 + 33 mức đầu đọc được 1, 34 mức cuối đọc được 0,75:</p>
+          $$\frac{34 + 33 + 34 \cdot 0{,}75}{101} \approx 0{,}916$$
+          <p class="note">Gần khớp 0,917: hai cách chỉ khác nhau ở chỗ lấy mẫu độ phủ.</p>
+        introduces: [dots]
+        focus: [1, 2, 3]
+        say: "Kiểm tra thứ hai đọc đường bao tại 101 mức độ phủ từ 0 tới 1, cách nhau 0 phẩy 01, như bộ chấm của một bộ dữ liệu lớn. Có 67 mức đọc được 1 và 34 mức cuối đọc được 0 phẩy 75, nên trung bình xấp xỉ 0 phẩy 916. Kết quả gần khớp 0 phẩy 917, vì hai cách chỉ khác ở chỗ lấy mẫu."
+
+  # ───────────────────────── 9. NGƯỠNG KHÁC ─────────────────────────
+  - id: threshold
+    kind: example
+    title: "Đổi ngưỡng ghép: 0,75 và trung bình mười ngưỡng"
+    checks:
+      - "alg.cvi_match_dets([(0.95, (1, 0, 11, 10)), (0.9, (23, 0, 33, 10)), (0.8, (60, 0, 70, 10)), (0.6, (41, 1, 50, 10)), (0.4, (80, 0, 90, 10))], [(0, 0, 10, 10), (20, 0, 30, 10), (40, 0, 50, 10)], 0.75) == [True, False, False, True, False]"
+      - "alg.cvi_ap([True, False, False, True, False], 3) == 0.5 and round(1 / 3 * 1 + 1 / 3 * 0.5, 3) == 0.5"
+      - "(lambda D, G: round(sum(alg.cvi_ap(alg.cvi_match_dets(D, G, round(0.5 + 0.05 * i, 2)), 3) for i in range(10)) / 10, 3))([(0.95, (1, 0, 11, 10)), (0.9, (23, 0, 33, 10)), (0.8, (60, 0, 70, 10)), (0.6, (41, 1, 50, 10)), (0.4, (80, 0, 90, 10))], [(0, 0, 10, 10), (20, 0, 30, 10), (40, 0, 50, 10)]) == 0.392"
+      - "round((0.917 + 6 * 0.5 + 3 * 0) / 10, 3) == 0.392"
+    steps:
+      - show: |
+          <p><b>Ngưỡng 0,75.</b> Phát hiện 2 chỉ chồng 0,538 nên thành <b>sai</b>. Dãy: đúng, sai, sai, đúng, sai; độ phủ chỉ tới 2/3.</p>
+          $$\text{AP}_{0{,}75} = \frac{1}{3} \cdot 1 + \frac{1}{3} \cdot 0{,}5 = \hlo{0{,}5}$$
+          <p class="note">Con số của kỹ sư thứ hai: cùng mô hình, chỉ đổi yêu cầu hộp phải khít hơn.</p>
+        focus: [1, 2, 3]
+        say: "Với ngưỡng 0 phẩy 75, phát hiện 2 chỉ chồng 0 phẩy 538 nên thành sai, dãy là đúng, sai, sai, đúng, sai, và độ phủ chỉ tới 2 phần 3. Đường bao có hai bậc, cao 1 và 0 phẩy 5, nên độ chính xác trung bình bằng 0 phẩy 5. Đó là con số của kỹ sư thứ hai, cùng mô hình, chỉ đổi yêu cầu hộp phải khít hơn."
+      - show: |
+          <table class="t"><tr><th>ngưỡng</th><th>0,50</th><th>0,55 tới 0,80 (6 ngưỡng)</th><th>0,85; 0,90; 0,95</th></tr>
+          <tr><td>AP</td><td>0,917</td><td>0,5</td><td>0 (không hộp nào đủ khít)</td></tr></table>
+          <p>Bộ chấm của COCO lấy trung bình 10 ngưỡng 0,50; 0,55; …; 0,95: $\frac{0{,}917 + 6 \cdot 0{,}5 + 3 \cdot 0}{10} \approx \hlo{0{,}392}$.</p>
+        focus: [1, 1, 2]
+        say: "Bảng quét mười ngưỡng. Ở 0 phẩy 5 ta có 0 phẩy 917, từ 0 phẩy 55 tới 0 phẩy 8 chỉ còn 0 phẩy 5, và từ 0 phẩy 85 trở lên bằng 0 vì không hộp nào đủ khít. Bộ chấm của một bộ dữ liệu lớn hay dùng lấy trung bình mười ngưỡng này, được khoảng 0 phẩy 392, một con số thứ ba cho cùng mô hình."
+
+  # ───────────────────────── 10. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi của người đã đi làm"
+    checks:
+      - "alg.cvi_match_dets([(0.95, (1, 0, 11, 10)), (0.93, (0, 1, 10, 11)), (0.9, (23, 0, 33, 10)), (0.8, (60, 0, 70, 10)), (0.6, (41, 1, 50, 10)), (0.4, (80, 0, 90, 10))], [(0, 0, 10, 10), (20, 0, 30, 10), (40, 0, 50, 10)], 0.5) == [True, False, True, False, True, False]"
+      - "round(alg.cvi_ap([True, False, True, False, True, False], 3), 3) == 0.756 and round(alg.cvi_box_iou((0, 1, 10, 11), (1, 0, 11, 10))[2], 3) == 0.681"
+      - "alg.cvi_box_iou((0, 0, 4, 4), (1, 0, 5, 4))[2] == 0.6 and round(alg.cvi_box_iou((0, 0, 100, 100), (1, 0, 101, 100))[2], 2) == 0.98"
+      - "round(min(0.5, 4 * 4 / ((4 + 10) * (4 + 10))), 3) == 0.082"
+      - "alg.cvi_xywh_to_xyxy((5, 5, 10, 10)) == (5, 5, 15, 15) and alg.cvi_box_iou((5, 5, 15, 15), (5, 5, 10, 10))[2] == 0.25"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Quên loại bỏ không cực đại <b class="red">(hộp trùng bị chấm sai: AP 0,917 tụt còn 0,756)</b>
+          <br><span class="note">Thêm một hộp thứ hai điểm 0,93 cũng ôm người $G_1$: người đó đã được ghép, nên hộp này thành <b>sai</b>. Cách chấm phạt cả phát hiện trùng lẫn phát hiện thừa. Hai hộp ấy chồng nhau 0,681, loại bỏ không cực đại đã bỏ được nó.</span></div>
+        focus: [1, 1, 1]
+        say: "Lỗi thứ nhất là quên loại bỏ không cực đại, làm điểm tụt từ 0 phẩy 917 còn 0 phẩy 756. Một hộp thứ hai điểm 0 phẩy 93 cũng ôm người G một, mà người đó đã được ghép, nên hộp này bị chấm sai vì cách chấm phạt cả phát hiện trùng. Hai hộp ấy chồng nhau 0 phẩy 681, nên bước loại bỏ đã bỏ được nó."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Báo AP mà không ghi ngưỡng <b class="red">(0,917, 0,5 hay 0,392?)</b>
+          <br><span class="note">Cùng mô hình cho ba con số. So hai bài báo, hai đội, hai phiên bản: phải cùng ngưỡng, cùng cách lấy trung bình, cùng tập ảnh.</span></div>
+        focus: [1, 1]
+        say: "Lỗi thứ hai là báo độ chính xác trung bình mà không ghi ngưỡng, vì cùng một mô hình cho ba con số 0 phẩy 917, 0 phẩy 5 và 0 phẩy 392. Khi so hai bài báo, hai đội hay hai phiên bản, phải cùng ngưỡng, cùng cách lấy trung bình, và cùng tập ảnh."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Dùng một ngưỡng cứng cho vật rất nhỏ <b class="red">(lệch 1 điểm ảnh đã mất 40%)</b></div>
+          <table class="t"><tr><th>hộp lệch 1 điểm ảnh</th><th>IoU</th></tr>
+          <tr><td>vật 4 × 4</td><td>0,6 — sát ngưỡng 0,5</td></tr>
+          <tr><td>vật 100 × 100</td><td>0,98</td></tr></table>
+          <p class="note">Cuộc thi nhận dạng ảnh quy mô lớn (Russakovsky và cộng sự, 2015) nới ngưỡng cho vật nhỏ: $\min\big(0{,}5,\ \frac{w h}{(w + 10)(h + 10)}\big)$ — vật 4 × 4 chỉ cần 0,082.</p>
+        focus: [1, ["2.2", "2.3"], 3]
+        say: "Lỗi thứ ba là dùng một ngưỡng cứng cho vật rất nhỏ. Vật 4 nhân 4 lệch chỉ 1 điểm ảnh đã còn 0 phẩy 6, sát ngưỡng, còn vật 100 nhân 100 vẫn được 0 phẩy 98. Vì vậy cuộc thi nhận dạng ảnh quy mô lớn, theo bài tổng kết năm 2015, nới ngưỡng cho vật nhỏ, vật 4 nhân 4 chỉ cần 0 phẩy 082."
+      - show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Lẫn cách ghi hộp <b class="red">(hộp đúng bị chấm sai)</b>
+          <br><span class="note">Bộ dữ liệu COCO ghi hộp là <b>[x, y, rộng, cao]</b>. Hộp [5, 5, 10, 10] nghĩa là (5, 5, 15, 15); đọc nhầm thành góc (5, 5, 10, 10) thì chỉ còn 5 × 5 và giao trên hợp với hộp thật chỉ 0,25 — một phát hiện đúng thành sai. Phép thử: vẽ hộp thật và hộp đoán lên vài ảnh trước khi chấm cả tập.</span></div>
+        focus: [1, 1, 1, 1]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm là lẫn cách ghi hộp. Một bộ dữ liệu lớn rất phổ biến ghi hộp là x, y, rộng, cao, nên 5, 5, 10, 10 đi từ 5, 5 tới 15, 15. Đọc nhầm thành hai góc thì hộp chỉ còn 5 nhân 5, giao trên hợp với hộp thật chỉ 0 phẩy 25. Phép thử là vẽ hộp thật và hộp đoán lên vài ảnh trước khi chấm cả tập."
+
+  # ───────────────────────── 11. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: một giao trên hợp, một lượt loại bỏ, rồi chọn ngưỡng báo cáo"
+    checks:
+      - "alg.cvi_box_iou((0, 0, 4, 4), (2, 0, 6, 4)) == (8, 24, 1 / 3)"
+      - "alg.cvi_nms([(0, 0, 4, 4), (2, 0, 6, 4), (1, 0, 5, 4)], [0.9, 0.8, 0.7], 0.5) == [0, 1] and alg.cvi_box_iou((0, 0, 4, 4), (1, 0, 5, 4))[2] == 0.6"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Giao trên hợp của (0, 0, 4, 4) và (2, 0, 6, 4)?</td></tr>
+          <tr><td>2</td><td>Ba hộp (0, 0, 4, 4) điểm 0,9; (2, 0, 6, 4) điểm 0,8; (1, 0, 5, 4) điểm 0,7. Chạy loại bỏ không cực đại, ngưỡng 0,5: giữ hộp nào?</td></tr>
+          <tr><td>3</td><td>Camera A đếm người qua cổng; camera B dẫn cánh tay robot gắp linh kiện. Mỗi bên báo AP ở ngưỡng nào?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", 0]
+        say: "Bây giờ đến lượt bạn. Câu một, tính giao trên hợp của hai hộp trong bảng. Câu hai, chạy loại bỏ không cực đại với ngưỡng 0 phẩy 5 trên ba hộp, giữ hộp nào? Câu ba, camera A đếm người qua cổng, camera B dẫn cánh tay robot gắp linh kiện, mỗi bên báo ở ngưỡng nào? Dừng video và làm ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <p><b>Câu 1.</b> Rộng giao $\min(4, 6) - \max(0, 2) = 2$, cao 4, giao $= 8$; hợp $= 16 + 16 - 8 = 24$; IoU $= \frac{8}{24} = \hlg{\frac{1}{3}}$.</p>
+          <p><b>Câu 2.</b> Giữ (0, 0, 4, 4). Hộp (2, 0, 6, 4) chồng $\frac{1}{3}$, không lớn hơn 0,5 → giữ. Hộp (1, 0, 5, 4) chồng 0,6 với hộp đầu → bỏ. Kết quả: <b>giữ hộp 1 và 2</b>.</p>
+        focus: [1, 1, 2, 2]
+        say: "Câu một, chiều rộng giao là 4 trừ 2, bằng 2, chiều cao 4, nên giao bằng 8. Hợp bằng 16 cộng 16 trừ 8, bằng 24, nên giao trên hợp là một phần ba. Câu hai, ta giữ hộp đầu có điểm cao nhất, hộp thứ hai chỉ chồng một phần ba nên được giữ. Hộp thứ ba chồng 0 phẩy 6 với hộp đầu nên bị bỏ, kết quả là giữ hộp 1 và hộp 2."
+      - show: |
+          <table class="t"><tr><th>câu 3</th><th>cần gì</th><th>báo ngưỡng</th><th>đánh đổi</th></tr>
+          <tr><td>A: đếm người</td><td>đủ người, không đếm trùng; hộp hơi lệch vẫn được</td><td>0,5</td><td>ngưỡng lỏng không thấy hộp lệch nửa người</td></tr>
+          <tr><td>B: robot gắp</td><td>vị trí khít, lệch vài điểm ảnh là gắp trượt</td><td>0,75, kèm trung bình 0,5 tới 0,95</td><td>con số thấp hơn nhiều, nhưng nói đúng điều robot cần</td></tr></table>
+          <p class="note">Báo cáo luôn ghi: ngưỡng, cách lấy trung bình, tập ảnh.</p>
+        focus: [0, "1.2", "1.3", 2]
+        say: "Câu ba là quyết định theo việc cần làm. Đếm người cần đủ người, không đếm trùng, hộp hơi lệch vẫn được, nên báo ở ngưỡng 0 phẩy 5. Robot gắp cần vị trí khít, nên báo ở 0 phẩy 75 kèm trung bình mười ngưỡng, con số thấp hơn nhưng nói đúng điều robot cần. Dù chọn gì, báo cáo luôn ghi ngưỡng, cách lấy trung bình và tập ảnh."
+
+  # ───────────────────────── 12. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">giao trên hợp: giao chia hợp</span><span class="a">→</span>
+          <span class="n">loại bỏ không cực đại: một vật một hộp</span><span class="a">→</span>
+          <span class="n">ghép theo điểm: đúng, sai, phạt hộp trùng</span><span class="a">→</span>
+          <span class="n">độ chuẩn xác theo độ phủ: diện tích là AP</span><span class="a">→</span>
+          <span class="n">ngưỡng 0,5 / 0,75 / trung bình: ba con số</span></div>
+        say: "Tổng kết lại, giao trên hợp đo hai hộp chồng nhau bao nhiêu, và loại bỏ không cực đại giữ mỗi vật một hộp. Ghép theo điểm cho dãy đúng sai, rồi diện tích dưới đường độ chuẩn xác theo độ phủ là độ chính xác trung bình. Cùng một mô hình cho ba con số tuỳ ngưỡng."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> một con số đánh giá chỉ có nghĩa kèm <b>luật chấm</b> của nó. Trước khi so hai mô hình, hãy hỏi: ngưỡng bao nhiêu, ghép thế nào, trung bình qua cái gì?</div>
+        say: "Điều cần mang theo, một con số đánh giá chỉ có nghĩa khi đi kèm luật chấm của nó. Trước khi so hai mô hình, hãy hỏi ngưỡng bao nhiêu, ghép thế nào, và trung bình qua cái gì."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 9): <b>phân đoạn ảnh</b> — thay vì vẽ hộp, tô từng điểm ảnh thuộc vật; đo bằng giao trên hợp trên điểm ảnh và hệ số chồng lấp, và vì sao vật nhỏ làm độ chính xác điểm ảnh đánh lừa ta.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 9, ta học phân đoạn ảnh, tức tô từng điểm ảnh thuộc vật thay vì vẽ hộp. Ta đo bằng giao trên hợp trên điểm ảnh và hệ số chồng lấp. Hẹn gặp bạn ở bài tiếp theo."

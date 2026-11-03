@@ -1,0 +1,330 @@
+id: L07
+course: PAR
+series: "PAR · Tính toán song song và GPU"
+title: "Bài 7 — Mô hình roofline: bị chặn bởi tính toán hay bởi băng thông"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/par.yaml L07; audit/par/verify_par.py L07; audit/par/sources_L07.md (câu trích nguyên văn, đọc 2026-11-02); S. Williams, A. Waterman, D. Patterson, Roofline: An Insightful Visual Performance Model for Floating-Point Programs and Multicore Architectures, UC Berkeley EECS-2008-134 (10/2008; bản tạp chí CACM 2009) [WWP08]; PAR bài 6 (vector hoá); CSA bài 10 (phân cấp bộ nhớ)"
+assumes: [arith, frac, approx, power]
+# Quy ước: F = đỉnh tính toán (phép tính mỗi giây), B = băng thông bộ nhớ chính (byte mỗi giây), I = cường độ số học = số phép tính chia
+#   số byte đi giữa bộ nhớ chính và chip (đếm SAU bộ nhớ đệm, như [WWP08] gọi “operational intensity”). Hiệu năng tối đa = min(F, B · I).
+#   Máy ví dụ F = 10 nghìn tỉ phép/s, B = 1 nghìn tỉ byte/s là SỐ MINH HOẠ (bậc độ lớn một thẻ tính toán), ghi rõ trên màn hình.
+#   Số thực 32 bit = 4 byte. Một phép nhân–cộng tính là 2 phép. “Roofline” đọc là “mô hình mái nhà” (tên gốc chỉ trên màn hình).
+#   Số thật duy nhất của nguồn: máy Opteron X2 17,6 tỉ phép/s, 15 tỉ byte/s; nhân mẫu lưới 8 phép cho 24 byte [WWP08].
+objectives:
+  - "Tính cường độ số học = số phép tính chia số byte đọc ghi bộ nhớ chính"
+  - "Suy ra và dùng hiệu năng tối đa = min(đỉnh tính toán, băng thông nhân cường độ)"
+  - "Đọc điểm gãy F chia B để biết một nhân bị chặn bởi tính toán hay bởi băng thông"
+  - "Chọn phần cứng hoặc hướng tối ưu theo vị trí của nhân trên hình mái nhà"
+asr_reviewed:
+  - {sentence: "Phép cộng vector một tỉ phần tử cần 0 phẩy 1 mi li giây tính và 12 mi li giây chuyển, nên xong sau 12 mi li giây.", reason: "ASR chép “Phép cộng vector 1 tỷ phần tử cần 0,1 ms tính và 12 ms chuyển, nền xong sau 12 ms.” (0.704): “tỉ” ASR viết chính tả “tỷ” (cùng âm); tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh; lệch âm/thanh thuần Việt: nên/nền — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Với 1 nghìn tỉ byte mỗi giây, chuyển 1 tỉ byte mất một phần nghìn giây, tức 1 mi li giây.", reason: "ASR chép “Với một nghìn tỷ bay mỗi giây, chuyển một tỷ bay mất một phần nghìn giây, tức một mili giây.” (0.732): “tỉ” ASR viết chính tả “tỷ” (cùng âm); byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Một việc 0 phẩy 1 mi li giây và một việc 12 mi li giây thì xong sau 12 mi li giây.", reason: "ASR chép “Một việc không phải một mili giây và một việc 12 mili giây thì xong sau 12 mili giây.” (0.756): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Làm thử, mỗi phần tử tốn 12 byte, nên Q bằng 12 tỉ byte, chia 1 nghìn tỉ được 12 mi li giây.", reason: "ASR chép “Làm thử, mỗi phần tử tốn 12 bai, nên quý bằng 12 tỷ bai, chia 1 nghìn tỷ được 12 mg.” (0.76): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); “tỉ” ASR viết chính tả “tỷ” (cùng âm); tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Điều thứ hai, một số thực 32 bit chiếm 4 byte, nên 3 số chiếm 12 byte.", reason: "ASR chép “Điều thứ 2, một số thật 32 biết chiếm 4 bài, nên 3 số chiếm 12 bài.” (0.8): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: thực/thật, bit/biết — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Thẻ X có đỉnh 20 nghìn tỉ phép mỗi giây và băng thông 1 nghìn tỉ byte mỗi giây.", reason: "ASR chép “Thệ x có đỉnh 20.000 tỷ phép mỗi giây và băng thông 1.000 tỷ bay mỗi giây.” (0.8): “tỉ” ASR viết chính tả “tỷ” (cùng âm); byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: thẻ/thệ — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Chương trình làm nhiều phép trên mỗi byte thì I lớn, làm ít thì I nhỏ.", reason: "ASR chép “Chương trình làm nhiều phép trên mỗi bay thị y lớn, làm ít thị y nhỏ.” (0.812): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: thì (trong “byte thì” → “bay thị”), thì/thị — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Chương trình đọc ghi Q byte, và đường ống chuyển B byte mỗi giây, nên nó cần ít nhất Q chia B giây.", reason: "ASR chép “Chương trình độc vi quy bay và đường ống chuyển bê bay mỗi giây, nên nó cần ít nhất quy chia bê giây.” (0.826): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: đọc ghi/độc vi — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Mỗi phần tử làm 1 phép, đọc 8 byte và ghi 4 byte, nên cường độ bằng 1 phần 12, khoảng 0 phẩy 083 phép mỗi byte.", reason: "ASR chép “Mỗi phần tử là một phép, đọc 8 bài và ghi 4 bài, nên cường độ bằng một phần 12, khoảng 0.083 phép mỗi bài.” (0.828): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: làm/là, không (trong “không phẩy” → “”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "B là băng thông bộ nhớ chính, số byte mỗi giây, máy ví dụ có 1 nghìn tỉ.", reason: "ASR chép “B là ban thông bộ nhớ chính, số bai mỗi giây, mẫy ví dụ có 1 nghìn tỉ.” (0.833): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: băng/ban, máy/mẫy — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Chương trình làm W phép tính, và khối tính làm F phép mỗi giây, nên nó cần ít nhất W chia F giây.", reason: "ASR chép “Chương trình làm về đúc phép tính và khối tính làm ép ép mỗi giây, nên nó cần ít nhất về đúc chia ép giây.” (0.833): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: phép/ép — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Làm thử với phép cộng hai vector một tỉ số, W bằng 10 mũ 9 phép, chia 10 mũ 13 được 0 phẩy 1 mi li giây.", reason: "ASR chép “Làm thử với phép cộng 2 vector 1 tỷ số về đúc bằng 10 mũ 9 phép, chia 10 mũ 13 được 0,1 ms.” (0.836): “tỉ” ASR viết chính tả “tỷ” (cùng âm); chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Mỗi giây chỉ có 1 nghìn tỉ byte tới, nên mỗi byte phải được dùng cho ít nhất 10 phép thì khối tính mới bận hết.", reason: "ASR chép “Mỗi giây chỉ có 1 nghìn tỷ bai tới nên mỗi bai phải được dùng cho ít nhất 10 phép thị khối tính mới bận hết.” (0.846): “tỉ” ASR viết chính tả “tỷ” (cùng âm); byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: thì/thị — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Máy hai chip đo trong bài báo có đỉnh 17 phẩy 6 tỉ phép mỗi giây và băng thông đo được 15 tỉ byte mỗi giây.", reason: "ASR chép “Máy hai chiếp đo trong bài báo có đỉnh 17,6 tỷ phép mỗi giây và băng thông đo được 15 tỷ bay mỗi giây.” (0.857): “tỉ” ASR viết chính tả “tỷ” (cùng âm); byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: chip/chiếp — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Chia W cho từng giới hạn và thay W chia Q bằng I, ta được hiệu năng nhỏ hơn hoặc bằng min của F và B nhân I.", reason: "ASR chép “Chia v-đút cho từng giới hạn và thay v-đút chia quy bằng y, ta được hiểu năng nhỏ hơn hoặc bằng min của f và b nhân y.” (0.862): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: hiệu/hiểu — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Làm thử, cộng hai số 32 bit là 1 phép, đọc 8 byte và ghi 4 byte, nên I bằng 1 phần 12, khoảng 0 phẩy 083 phép mỗi byte.", reason: "ASR chép “Làm thử, cộng 2 số 32 bit là 1 phép, đọc 8 bai và ghi 4 bai, nên y bằng 1 phần 12, khoảng 0,083 phép mỗi bai.” (0.882): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: không (trong “không phẩy” → “”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Dữ liệu nằm ở bộ nhớ chính, đi qua một đường ống 1 nghìn tỉ byte mỗi giây, tới khối tính làm được 10 nghìn tỉ phép mỗi giây.", reason: "ASR chép “Dữ liệu nằm ở bộ nhớ chính, đi qua một đường ống 1.000 tỷ bay mỗi giây, tới khối tính làm được 10.000 tỷ phép mỗi giây.” (0.897): “tỉ” ASR viết chính tả “tỷ” (cùng âm); byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Điều thứ ba, ở bài 6, một lệnh vector 256 bit xử lý 8 số 32 bit cùng lúc, nên phép tính rẻ đi tới 8 lần, nhưng số byte cần đọc thì không đổi.", reason: "ASR chép “Điều thứ 3, ở bài 6, một lệnh vector 256 biết xử lý 8 số 32-bit cùng lúc, nên phép tính rẽ đi tới 8 lần, nhưng số 3 cần độc thì không đổi.” (0.902): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: bit/biết, rẻ/rẽ, đọc/độc — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Băng thông là số byte bộ nhớ chuyển được mỗi giây.", reason: "ASR chép “Băng thông là số bay bộ nhớ chuyển được mỗi giây.” (0.909): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bước một, cộng hai vector số 32 bit, c i bằng a i cộng b i, chữ i nhỏ dưới chân là phần tử thứ i.", reason: "ASR chép “Bước 1, cộng 2 vét tờ số 32 bit ce bằng ai cộng bi, chữ i nhỏ dưới chân là phần tử thứ i.” (0.912): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: tơ/tờ, i (trong “c i” → “ce”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Mỗi phép nhân cộng gồm 2 phép, phải đọc lại một số của A và một số của B từ bộ nhớ chính, tức 8 byte.", reason: "ASR chép “Mỗi phép nhân cộng gồm 2 phép, phải đọc lại một số của A và một số của B từ bộ nhớ 9, tức 8 bài.” (0.923): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: chính/chín — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Cường độ nhỏ thì sửa số byte, cường độ lớn thì sửa phép tính.", reason: "ASR chép “Cường độ nhỏ thì sửa số bay, cường độ lớn thì sửa phép tính.” (0.929): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Lưu ý, byte ở đây là byte đi giữa bộ nhớ chính và chip, đếm sau khi bộ nhớ đệm đã lọc bớt, đúng cách định nghĩa của nhóm ba tác giả đề xuất mô hình năm 2008.", reason: "ASR chép “Lưu ý, bay ở đây là bay đi giữa bộ nhớ chính và chip, đếm sau khi bộ nhớ đềm đã lọc bớt, đúng cách định nghĩa của nhóm ba tác giả đề xuất mô hình năm 2008.” (0.93): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: đệm/đềm — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Vì vậy thời gian lớn hơn hoặc bằng số lớn hơn trong hai số W chia F và Q chia B.", reason: "ASR chép “Vì vậy, thời gian lớn hơn hoặc bằng số lớn hơn trong hai số về đúc chia F và quy chia B.” (0.93): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bước bốn, vì 682 phẩy 7 lớn hơn 10, B nhân I khoảng 682 phẩy 7 nghìn tỉ, vượt xa F.", reason: "ASR chép “Bước 4, vì 682,7 lớn hơn 10, bề nhân y khoảng 682,7 nghìn tỷ, vượt xa ép.” (0.931): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “tỉ” ASR viết chính tả “tỷ” (cùng âm) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Chia ra, cường độ khoảng 682 phẩy 7 phép mỗi byte.", reason: "ASR chép “Chia ra cường độ khoảng 682,7 phép mỗi bay.” (0.933): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Hai giới hạn gặp nhau ở điểm gãy, F chia B bằng 10 phép mỗi byte.", reason: "ASR chép “Hai giới hạn gặp nhau ở điểm gãy, F chia B bằng 10 phép mỗi bay.” (0.938): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Nhân mẫu lưới của phương trình nhiệt làm 8 phép cho mỗi 24 byte, cường độ khoảng 0 phẩy 33, nên hiệu năng tối đa chỉ khoảng 5 tỉ.", reason: "ASR chép “Nhân mẫu lưới của phương trình nhiệt làm tám phép cho mỗi 24 bay cường độ khoảng 0,33 nên hiệu năng tối đa chỉ khoảng 5 tỷ.” (0.939): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); “tỉ” ASR viết chính tả “tỷ” (cùng âm) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "I là cường độ số học, bằng số phép tính chia số byte phải đọc và ghi.", reason: "ASR chép “Y là cường độ số học, bằng số phép tính chia số bai phải đọc và ghi.” (0.941): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Trong trường hợp lý tưởng, mỗi số của ba ma trận chỉ đi qua đường ống một lần, nên Q bằng 3 nhân 4096 bình phương nhân 4 byte.", reason: "ASR chép “Trong trường hợp lý tưởng, mỗi số của ba ma trận chỉ đi qua đường ống một lần, nền quy bằng ba nhân 4.096 bình phương nhân bốn bay.” (0.943): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: nên/nền — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Mỗi ô kết quả cần 4096 phép nhân và 4096 phép cộng, nên W bằng 2 nhân 4096 mũ 3, khoảng 137 tỉ phép.", reason: "ASR chép “Mỗi ô kết quả cần 4.096 phép nhân và 4.096 phép cộng, nên về đúc bằng 2 nhân 4.096 mũ ba, khoảng 137 tỷ phép.” (0.946): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “tỉ” ASR viết chính tả “tỷ” (cùng âm) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Hôm nay ta trả lời ba câu hỏi, chương trình đang chạm trần nào, trần đó tính bằng gì, và nên sửa phép tính hay sửa số byte.", reason: "ASR chép “Hôm nay ta trả lời ba câu hỏi, chương trình đang chạm trần nào, trần đó tính bằng gì, và nên sửa phép tính hay sửa số bay.” (0.964): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Hai tuần tối ưu phép tính, không nhanh thêm chút nào"
+    checks:
+      - "round(alg.par_roofline(10e12, 1e12, 1 / 12) / 1e9, 1) == 83.3 and alg.par_roofline(10e12, 1e12, 1 / 12) / 10e12 < 0.01"
+    steps:
+      - show: |
+          <p>Một thẻ tính toán ghi đỉnh <b>10 nghìn tỉ phép mỗi giây</b> (số minh hoạ). Hàm cộng hai vector của đội bạn đo được chỉ khoảng <b>83 tỉ</b> — chưa tới 1% đỉnh.</p>
+          <p>Cả đội dành hai tuần bớt phép tính thừa, viết lại vòng lặp. Đo lại: <b>vẫn 83 tỉ</b>.</p>
+          <div class="box key">Hôm nay ta trả lời: chương trình đang chạm trần nào? Trần đó tính bằng gì? Và nên sửa phép tính hay sửa số byte?</div>
+        focus: [1, 1, 2, 2, 3]
+        say: "Chào bạn, một thẻ tính toán ghi đỉnh 10 nghìn tỉ phép mỗi giây, một số minh hoạ. Hàm cộng hai vector của đội bạn đo được chỉ khoảng 83 tỉ phép mỗi giây, chưa tới 1 phần trăm đỉnh. Cả đội dành hai tuần bớt phép tính thừa và viết lại vòng lặp. Đo lại, vẫn là 83 tỉ. Hôm nay ta trả lời ba câu hỏi, chương trình đang chạm trần nào, trần đó tính bằng gì, và nên sửa phép tính hay sửa số byte."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại bốn điều sẽ dùng"
+    checks:
+      - "1e9 / 1e12 == 1e-3 and 12 / 4 == 3"
+      - "256 // 32 == 8"
+      - "min(10, 3) == 3 and max(0.1, 12) == 12"
+    steps:
+      - show: |
+          <p><b>① Dấu nhân.</b> Dấu chấm giữa dòng là phép nhân: $2 \cdot 4 = 8$.</p>
+          <p><b>② Byte và băng thông.</b> Một số thực 32 bit chiếm 4 byte, nên 3 số chiếm 12 byte. <b>Băng thông</b> là số byte bộ nhớ chuyển được mỗi giây: với 1 nghìn tỉ byte mỗi giây, chuyển 1 tỉ byte mất $\frac{10^9}{10^{12}} = 0{,}001$ giây, tức 1 mi li giây.</p>
+        introduces: [cdot]
+        focus: [1, 2, 2, 2]
+        say: "Điều thứ nhất, dấu chấm giữa dòng là phép nhân, ví dụ 2 nhân 4 bằng 8. Điều thứ hai, một số thực 32 bit chiếm 4 byte, nên 3 số chiếm 12 byte. Băng thông là số byte bộ nhớ chuyển được mỗi giây. Với 1 nghìn tỉ byte mỗi giây, chuyển 1 tỉ byte mất một phần nghìn giây, tức 1 mi li giây."
+      - show: |
+          <p><b>③ Bài 6, vector hoá:</b> một lệnh vector 256 bit xử lý $256 : 32 = 8$ số 32 bit cùng lúc — phép tính rẻ đi tới 8 lần, nhưng <b>số byte cần đọc không đổi</b>.</p>
+          <p><b>④ Nhỏ hơn và lớn hơn.</b> $\min(10, 3) = 3$ là lấy số nhỏ hơn; $\max(0{,}1;\ 12) = 12$ là lấy số lớn hơn. Hai việc chạy chồng lên nhau thì xong sau việc lâu hơn: 0,1 mi li giây và 12 mi li giây thì xong sau 12.</p>
+        introduces: [min_fn, max_fn]
+        focus: [1, 2, 2, 2]
+        say: "Điều thứ ba, ở bài 6, một lệnh vector 256 bit xử lý 8 số 32 bit cùng lúc, nên phép tính rẻ đi tới 8 lần, nhưng số byte cần đọc thì không đổi. Điều thứ tư, chữ min nghĩa là lấy số nhỏ hơn, min của 10 và 3 bằng 3, còn ký hiệu thứ hai, ba chữ m a x, là lấy số lớn hơn. Hai việc chạy chồng lên nhau thì xong sau việc lâu hơn. Một việc 0 phẩy 1 mi li giây và một việc 12 mi li giây thì xong sau 12 mi li giây."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: F, B và cường độ số học I"
+    checks:
+      - "1 / 12 < 0.084 and round(1 / 12, 3) == 0.083"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ký hiệu</th><th>nghĩa</th><th>đơn vị</th><th>máy ví dụ (minh hoạ)</th></tr>
+          <tr><td>$F$</td><td>đỉnh tính toán</td><td>phép tính mỗi giây</td><td>10 nghìn tỉ</td></tr>
+          <tr><td>$B$</td><td>băng thông bộ nhớ chính</td><td>byte mỗi giây</td><td>1 nghìn tỉ</td></tr>
+          <tr><td>$I$</td><td><b>cường độ số học</b> = số phép tính chia số byte</td><td>phép mỗi byte</td><td>tuỳ chương trình</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.4"]
+        say: "Bài dùng ba chữ cái. F là đỉnh tính toán, số phép tính mỗi giây, máy ví dụ có 10 nghìn tỉ. B là băng thông bộ nhớ chính, số byte mỗi giây, máy ví dụ có 1 nghìn tỉ. I là cường độ số học, bằng số phép tính chia số byte phải đọc và ghi. Chương trình làm nhiều phép trên mỗi byte thì I lớn, làm ít thì I nhỏ."
+      - show: |
+          <p>Byte ở đây là byte đi giữa <b>bộ nhớ chính</b> và chip, đếm <b>sau</b> khi bộ nhớ đệm đã lọc bớt — đúng cách định nghĩa của nhóm Williams, Waterman, Patterson (2008).</p>
+          <p>Làm thử: cộng hai số 32 bit là 1 phép, đọc 8 byte, ghi 4 byte; $I = \frac{1}{12} \approx 0{,}083$ phép mỗi byte.</p>
+        focus: [1, 2]
+        say: "Lưu ý, byte ở đây là byte đi giữa bộ nhớ chính và chip, đếm sau khi bộ nhớ đệm đã lọc bớt, đúng cách định nghĩa của nhóm ba tác giả đề xuất mô hình năm 2008. Làm thử, cộng hai số 32 bit là 1 phép, đọc 8 byte và ghi 4 byte, nên I bằng 1 phần 12, khoảng 0 phẩy 083 phép mỗi byte."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Một đường ống và một xưởng tính"
+    steps:
+      - show: |
+          <div><svg width="1500" height="330" viewBox="0 0 1500 330"><defs><marker id="ar7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#eb6834"/></marker></defs>
+          <g font-size="24" text-anchor="middle" fill="#1f2937">
+          <rect x="30" y="60" width="330" height="170" rx="12" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/>
+          <text x="195" y="110" font-weight="bold">bộ nhớ chính</text><text x="195" y="150">dữ liệu nằm ở đây</text><text x="195" y="190">(vector, ma trận)</text>
+          <rect x="1050" y="60" width="420" height="170" rx="12" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/>
+          <text x="1260" y="110" font-weight="bold">khối tính</text><text x="1260" y="150">F = 10 nghìn tỉ phép/s</text><text x="1260" y="190">(minh hoạ)</text>
+          <text x="705" y="105">đường ống B = 1 nghìn tỉ byte/s</text>
+          <text x="705" y="200" fill="#b91c1c" font-weight="bold">mỗi byte tới cần ≥ 10 phép thì khối tính mới bận hết</text>
+          </g>
+          <line x1="370" y1="145" x2="1040" y2="145" stroke="#eb6834" stroke-width="12" marker-end="url(#ar7)"/>
+          <text x="750" y="300" font-size="23" fill="#6b7280" text-anchor="middle">I nhỏ: khối tính ngồi chờ đường ống. I lớn: đường ống chờ khối tính.</text>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình cho thấy cơ chế. Dữ liệu nằm ở bộ nhớ chính, đi qua một đường ống 1 nghìn tỉ byte mỗi giây, tới khối tính làm được 10 nghìn tỉ phép mỗi giây. Mỗi giây chỉ có 1 nghìn tỉ byte tới, nên mỗi byte phải được dùng cho ít nhất 10 phép thì khối tính mới bận hết. Cường độ nhỏ thì khối tính ngồi chờ đường ống, cường độ lớn thì đường ống chờ khối tính."
+
+  # ───────────────────────── 5. SUY RA ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra mái nhà: hai giới hạn, lấy cái thấp hơn"
+    checks:
+      - "1e9 / 10e12 == 1e-4 and 12e9 / 1e12 == 0.012"
+      - "max(1e9 / 10e12, 12e9 / 1e12) == 0.012 and round(1e9 / 0.012 / 1e9, 1) == 83.3"
+      - "min(10e12, 1e12 * (1e9 / 12e9)) == 1e12 / 12 and 10e12 / 1e12 == 10"
+    steps:
+      - show: |
+          <p><b>Bước 1 — thời gian tính.</b> Chương trình làm $W$ phép tính. Vì khối tính làm $F$ phép mỗi giây, nó cần ít nhất $\frac{W}{F}$ giây.</p>
+          <p class="note">Làm thử, cộng hai vector 1 tỉ số: $W = 10^9$ phép, $\frac{10^9}{10^{13}} = 0{,}0001$ giây = 0,1 mi li giây.</p>
+        focus: [1, 1, 2]
+        say: "Bước một là thời gian tính. Chương trình làm W phép tính, và khối tính làm F phép mỗi giây, nên nó cần ít nhất W chia F giây. Làm thử với phép cộng hai vector một tỉ số, W bằng 10 mũ 9 phép, chia 10 mũ 13 được 0 phẩy 1 mi li giây."
+      - show: |
+          <p><b>Bước 2 — thời gian chuyển.</b> Chương trình đọc ghi $Q$ byte. Vì đường ống chuyển $B$ byte mỗi giây, nó cần ít nhất $\frac{Q}{B}$ giây.</p>
+          <p class="note">Làm thử: mỗi phần tử 12 byte, $Q = 12 \cdot 10^9$ byte, $\frac{12 \cdot 10^9}{10^{12}} = 0{,}012$ giây = 12 mi li giây.</p>
+        focus: [1, 1, 2]
+        say: "Bước hai là thời gian chuyển. Chương trình đọc ghi Q byte, và đường ống chuyển B byte mỗi giây, nên nó cần ít nhất Q chia B giây. Làm thử, mỗi phần tử tốn 12 byte, nên Q bằng 12 tỉ byte, chia 1 nghìn tỉ được 12 mi li giây."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — chồng lên nhau.</b> Dù tính và chuyển chạy song song hoàn hảo, chương trình vẫn xong sau việc lâu hơn:</p>
+          $$\text{thời gian} \geq \max\left(\frac{W}{F}, \frac{Q}{B}\right) = \max(0{,}1;\ 12) = 12 \text{ mi li giây}$$
+        introduces: [geq]
+        focus: [1, 2, 2]
+        say: "Bước ba, dù việc tính và việc chuyển chạy song song hoàn hảo, chương trình vẫn chỉ xong sau việc lâu hơn. Vì vậy thời gian lớn hơn hoặc bằng số lớn hơn trong hai số W chia F và Q chia B. Thay số, số lớn hơn trong 0 phẩy 1 và 12 là 12 mi li giây."
+      - clear: true
+        show: |
+          <p><b>Bước 4 — đổi sang hiệu năng.</b> Hiệu năng = số phép chia thời gian. Chia $W$ cho từng giới hạn, và thay $\frac{W}{Q} = I$:</p>
+          $$\text{hiệu năng} \leq \hlg{\min(F,\ B \cdot I)}$$
+          <p class="note">Làm thử: $\min\left(10^{13},\ 10^{12} \cdot \frac{1}{12}\right) \approx 83{,}3$ tỉ phép mỗi giây — đúng số đội bạn đo được.</p>
+          <div class="box key"><b>Điểm gãy</b> $= \frac{F}{B} = \frac{10^{13}}{10^{12}} = 10$ phép mỗi byte. $I$ nhỏ hơn: bị chặn bởi <b>băng thông</b>. $I$ lớn hơn: bị chặn bởi <b>tính toán</b>.</div>
+        focus: [1, 2, 3, 4, 4]
+        say: "Bước bốn, hiệu năng bằng số phép chia thời gian. Chia W cho từng giới hạn và thay W chia Q bằng I, ta được hiệu năng nhỏ hơn hoặc bằng min của F và B nhân I. Làm thử, min của 10 mũ 13 và 10 mũ 12 nhân 1 phần 12 là khoảng 83 phẩy 3 tỉ, đúng con số đội bạn đo được. Hai giới hạn gặp nhau ở điểm gãy, F chia B bằng 10 phép mỗi byte. Cường độ nhỏ hơn điểm gãy thì bị chặn bởi băng thông, lớn hơn thì bị chặn bởi tính toán."
+
+  - id: roof
+    kind: concept
+    title: "Vẽ hai giới hạn lên một hình: mái nhà"
+    steps:
+      - show: |
+          <div><svg width="1400" height="440" viewBox="0 0 1400 440">
+          <line x1="120" y1="380" x2="1140" y2="380" stroke="#1f2937" stroke-width="2"/><line x1="120" y1="40" x2="120" y2="380" stroke="#1f2937" stroke-width="2"/>
+          <g font-size="20" fill="#6b7280" text-anchor="middle"><text x="120" y="408">1/16</text><text x="400" y="408">1</text><text x="610" y="408">8</text><text x="1100" y="408">1024</text><text x="630" y="436">cường độ I (phép mỗi byte), thang nhân đôi</text></g>
+          <g font-size="20" fill="#6b7280" text-anchor="end"><text x="110" y="386">10 tỉ</text><text x="110" y="286">100 tỉ</text><text x="110" y="186">1000 tỉ</text><text x="110" y="86">10 nghìn tỉ</text></g>
+          <line x1="120" y1="300" x2="633" y2="80" stroke="#2a78d6" stroke-width="5"/>
+          <line x1="633" y1="80" x2="1100" y2="80" stroke="#eb6834" stroke-width="5"/>
+          <line x1="633" y1="80" x2="633" y2="380" stroke="#6b7280" stroke-width="2" stroke-dasharray="8 6"/>
+          <text x="640" y="355" font-size="21" fill="#1f2937">điểm gãy I = 10</text>
+          <text x="270" y="130" font-size="22" fill="#2a78d6" font-weight="bold" text-anchor="middle">mái nghiêng: B nhân I</text>
+          <text x="880" y="62" font-size="22" fill="#eb6834" font-weight="bold" text-anchor="middle">mái phẳng: F</text>
+          <circle cx="149" cy="288" r="10" fill="#b91c1c"/><text x="168" y="330" font-size="21" fill="#b91c1c">cộng hai vector, I ≈ 0,083</text>
+          <circle cx="1059" cy="80" r="10" fill="#059669"/><text x="1059" y="130" font-size="21" fill="#059669" text-anchor="middle">nhân ma trận 4096, I ≈ 683</text>
+          <text x="1180" y="200" font-size="20" fill="#1f2937">hiệu năng</text><text x="1180" y="226" font-size="20" fill="#1f2937">(phép/giây,</text><text x="1180" y="252" font-size="20" fill="#1f2937">thang nhân 10)</text>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Vẽ hai giới hạn lên một hình, trục ngang là cường độ, trục đứng là hiệu năng, cả hai trục đều giãn theo cấp nhân. Đường xanh nghiêng là B nhân I, đường cam phẳng là F, và chương trình không bao giờ vượt lên trên hai đường này. Hình dáng giống mái nhà, nên các tác giả gọi là mô hình mái nhà. Chấm đỏ là phép cộng vector nằm ở mái nghiêng, chấm lục là phép nhân ma trận nằm ở mái phẳng."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Hai chương trình trên cùng một máy, từng phép tính"
+    checks:
+      - "round(1 / 12, 3) == 0.083 and round(alg.par_roofline(10e12, 1e12, 1 / 12) / 1e9, 1) == 83.3"
+      - "round(alg.par_roofline(10e12, 1e12, 1 / 12) / 10e12 * 100, 2) == 0.83"
+      - "2 * 4096 ** 3 == 137438953472 and 3 * 4096 ** 2 * 4 == 201326592 and round(2 * 4096 ** 3 / (12 * 4096 ** 2), 1) == 682.7"
+      - "alg.par_roofline(10e12, 1e12, 2 * 4096 / 12) == 10e12 and round(1e12 * 2 * 4096 / 12 / 1e12, 1) == 682.7"
+      - "2 / 8 == 0.25 and alg.par_roofline(10e12, 1e12, 0.25) == 250e9 and alg.par_roofline(10e12, 1e12, 0.25) / 10e12 == 0.025"
+    steps:
+      - show: |
+          <p><b>Bước 1.</b> Cộng hai vector số 32 bit, $c_i = a_i + b_i$: mỗi phần tử 1 phép, đọc 8 byte, ghi 4 byte.</p>
+          $$I = \frac{1}{12} \approx \hlb{0{,}083} \text{ phép mỗi byte}$$
+        introduces: [sub]
+        focus: [1, 2]
+        say: "Bước một, cộng hai vector số 32 bit, c i bằng a i cộng b i, chữ i nhỏ dưới chân là phần tử thứ i. Mỗi phần tử làm 1 phép, đọc 8 byte và ghi 4 byte, nên cường độ bằng 1 phần 12, khoảng 0 phẩy 083 phép mỗi byte."
+      - show: |
+          <p><b>Bước 2.</b> Vì $0{,}083 \lt 10$, chương trình nằm bên trái điểm gãy: $\min(10^{13},\ 10^{12} \cdot 0{,}083) \approx \hl{83{,}3}$ tỉ phép mỗi giây = 0,83% đỉnh. Bị chặn bởi <b>băng thông</b>.</p>
+        introduces: [ltgt]
+        say: "Bước hai, vì 0 phẩy 083 nhỏ hơn 10, chương trình nằm bên trái điểm gãy. Min của hai giới hạn là khoảng 83 phẩy 3 tỉ phép mỗi giây, tức 0 phẩy 83 phần trăm đỉnh, và nó bị chặn bởi băng thông."
+      - clear: true
+        show: |
+          <p><b>Bước 3.</b> Nhân hai ma trận 4096 hàng, 4096 cột: $W = 2 \cdot 4096^3 \approx 1{,}37 \cdot 10^{11}$ phép (mỗi ô kết quả 4096 phép nhân và 4096 phép cộng). Lý tưởng, mỗi số của $A$, $B$, $C$ chỉ đi qua đường ống một lần: $Q = 3 \cdot 4096^2 \cdot 4 \approx 2{,}01 \cdot 10^{8}$ byte.</p>
+          $$I = \frac{2 \cdot 4096^3}{12 \cdot 4096^2} = \frac{2 \cdot 4096}{12} \approx \hlb{682{,}7}$$
+        focus: [1, 1, 1, 2]
+        say: "Bước ba, nhân hai ma trận cỡ 4096 nhân 4096. Mỗi ô kết quả cần 4096 phép nhân và 4096 phép cộng, nên W bằng 2 nhân 4096 mũ 3, khoảng 137 tỉ phép. Trong trường hợp lý tưởng, mỗi số của ba ma trận chỉ đi qua đường ống một lần, nên Q bằng 3 nhân 4096 bình phương nhân 4 byte. Chia ra, cường độ khoảng 682 phẩy 7 phép mỗi byte."
+      - show: |
+          <p><b>Bước 4.</b> Vì $682{,}7 \gt 10$: $B \cdot I \approx 682{,}7$ nghìn tỉ, vượt $F$, nên hiệu năng tối đa là $\hlg{F = 10}$ nghìn tỉ. Bị chặn bởi <b>tính toán</b>.</p>
+        say: "Bước bốn, vì 682 phẩy 7 lớn hơn 10, B nhân I khoảng 682 phẩy 7 nghìn tỉ, vượt xa F. Vậy hiệu năng tối đa chính là F, 10 nghìn tỉ phép mỗi giây, và phép nhân ma trận lý tưởng bị chặn bởi tính toán."
+      - clear: true
+        show: |
+          <p><b>Bước 5.</b> Cùng phép nhân ma trận nhưng viết <b>ngây thơ</b>, không giữ lại số nào: mỗi phép nhân–cộng (2 phép) đọc lại một số của $A$ và một số của $B$ từ bộ nhớ chính, 8 byte.</p>
+          $$I = \frac{2}{8} = 0{,}25 \quad\Rightarrow\quad \min(10^{13},\ 10^{12} \cdot 0{,}25) = \hl{250} \text{ tỉ} = 2{,}5\% \text{ đỉnh}$$
+          <p class="note">Cường độ là tính chất của <b>cách viết</b>, không chỉ của bài toán.</p>
+        introduces: [implies]
+        focus: [1, 1, 2, 3]
+        say: "Bước năm, cùng phép nhân ma trận nhưng viết ngây thơ, không giữ lại số nào. Mỗi phép nhân cộng gồm 2 phép, phải đọc lại một số của A và một số của B từ bộ nhớ chính, tức 8 byte. Cường độ chỉ còn 2 chia 8 bằng 0 phẩy 25, mũi tên kép nghĩa là suy ra hiệu năng tối đa 250 tỉ, chỉ 2 phẩy 5 phần trăm đỉnh. Vậy cường độ là tính chất của cách viết, không chỉ của bài toán."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: tính thời gian thật, và thử với một máy có thật"
+    checks:
+      - "round(1e9 / max(1e9 / 10e12, 12e9 / 1e12) / 1e9, 1) == 83.3"
+      - "round(2 * 4096 ** 3 / 10e12 * 1e3, 1) == 13.7 and round(3 * 4096 ** 2 * 4 / 1e12 * 1e3, 2) == 0.2 and round(2 * 4096 ** 3 / max(2 * 4096 ** 3 / 10e12, 3 * 4096 ** 2 * 4 / 1e12) / 1e12) == 10"
+      - "round(8 / 24, 2) == 0.33 and round(alg.par_roofline(17.6, 15, 8 / 24), 6) == 5.0"
+    steps:
+      - show: |
+          <table class="t"><tr><th>đường khác: tính thời gian rồi chia</th><th>tính</th><th>chuyển</th><th>xong sau</th><th>hiệu năng</th></tr>
+          <tr><td>cộng vector, 1 tỉ phần tử</td><td>0,1 ms</td><td>12 ms</td><td>12 ms</td><td>$10^9 : 0{,}012 \approx 83{,}3$ tỉ ✓</td></tr>
+          <tr><td>nhân ma trận 4096</td><td>13,7 ms</td><td>0,2 ms</td><td>13,7 ms</td><td>đúng bằng $F$ = 10 nghìn tỉ ✓</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3"]
+        say: "Kiểm tra thứ nhất đi đường khác, tính thời gian rồi mới chia. Phép cộng vector một tỉ phần tử cần 0 phẩy 1 mi li giây tính và 12 mi li giây chuyển, nên xong sau 12 mi li giây. Hiệu năng là 1 tỉ chia 0 phẩy 012, khoảng 83 phẩy 3 tỉ, khớp. Phép nhân ma trận cần 13 phẩy 7 mi li giây tính và chỉ 0 phẩy 2 mi li giây chuyển, xong sau 13 phẩy 7, đúng bằng đỉnh F."
+      - show: |
+          <p><b>Máy có thật trong bài báo năm 2008:</b> máy hai chip Opteron X2 có đỉnh <b>17,6</b> tỉ phép mỗi giây và băng thông đo được <b>15</b> tỉ byte mỗi giây. Nhân mẫu lưới của phương trình nhiệt làm <b>8 phép cho 24 byte</b>.</p>
+          $$I = \frac{8}{24} \approx 0{,}33 \quad\Rightarrow\quad \min(17{,}6;\ 15 \cdot 0{,}33) \approx \hlb{5} \text{ tỉ phép mỗi giây}$$
+          <p class="note">Mái nhà cho biết: dù tối ưu phép tính đến đâu, nhân này trên máy đó không vượt 5 tỉ.</p>
+        focus: [1, 1, 2, 3]
+        say: "Kiểm tra thứ hai dùng một máy có thật trong bài báo năm 2008. Máy hai chip đo trong bài báo có đỉnh 17 phẩy 6 tỉ phép mỗi giây và băng thông đo được 15 tỉ byte mỗi giây. Nhân mẫu lưới của phương trình nhiệt làm 8 phép cho mỗi 24 byte, cường độ khoảng 0 phẩy 33, nên hiệu năng tối đa chỉ khoảng 5 tỉ. Dù tối ưu phép tính đến đâu, nhân này trên máy đó không vượt 5 tỉ."
+
+  # ───────────────────────── 8. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi của người đã đi làm"
+    checks:
+      - "alg.par_roofline(10e12, 1e12, 1 / 12) == alg.par_roofline(20e12, 1e12, 1 / 12) and alg.par_roofline(10e12, 2e12, 1 / 12) == 2 * alg.par_roofline(10e12, 1e12, 1 / 12)"
+      - "max(0.05e-3, 12e-3) == max(0.1e-3, 12e-3)"
+      - "round(alg.par_roofline(10e12, 1e12, 1 / 12) / (1e12 / 12) * 100) == 100"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Bớt phép tính cho một nhân bị chặn bởi băng thông <b class="red">(không nhanh thêm)</b></div>
+          <table class="t"><tr><th>cộng vector</th><th>tính</th><th>chuyển</th><th>xong sau</th></tr>
+          <tr><td>trước khi sửa</td><td>0,1 ms</td><td>12 ms</td><td>12 ms</td></tr>
+          <tr><td>bớt một nửa phép tính</td><td>0,05 ms</td><td>12 ms</td><td class="red">12 ms</td></tr></table>
+          <p class="note">Phép thử: so $I$ với điểm gãy TRƯỚC khi sửa.</p>
+        focus: [1, "2.3", 3]
+        say: "Lỗi thứ nhất là chuyện mở bài, bớt phép tính cho một nhân bị chặn bởi băng thông. Thời gian tính giảm từ 0 phẩy 1 xuống 0 phẩy 05 mi li giây, nhưng chuyển vẫn 12 mi li giây, nên xong sau vẫn 12. Phép thử là so cường độ với điểm gãy trước khi sửa."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Mua thẻ có đỉnh tính gấp đôi cho nhân cộng vector <b class="red">(vẫn 83,3 tỉ)</b>
+          <br><span class="note">$\min(2 \cdot 10^{13},\ 10^{12} \cdot 0{,}083)$ không đổi. Thẻ có băng thông gấp đôi mới cho 166,7 tỉ.</span></div>
+        say: "Lỗi thứ hai, mua thẻ có đỉnh tính gấp đôi cho nhân cộng vector. Min của hai giới hạn không đổi, vẫn 83 phẩy 3 tỉ. Thẻ có băng thông gấp đôi mới cho gấp đôi, khoảng 166 phẩy 7 tỉ."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Báo cáo “chỉ đạt 0,83% đỉnh, chương trình tệ” <b class="red">(thật ra đạt 100% trần của nó)</b>
+          <br><span class="note">Với $I \approx 0{,}083$, trần là $B \cdot I \approx 83{,}3$ tỉ: đo được 83 tỉ là đã chạm mái nghiêng. Hãy báo “phần trăm của mái nhà”, không phải “phần trăm của đỉnh”.</span></div>
+        say: "Lỗi thứ ba hay gặp ở người đã đi làm, là báo cáo rằng chương trình chỉ đạt 0 phẩy 83 phần trăm đỉnh, nên viết tệ. Thật ra với cường độ 0 phẩy 083, trần của nó là 83 phẩy 3 tỉ, và đo được 83 tỉ nghĩa là đã chạm mái nghiêng. Hãy báo phần trăm của mái nhà, không phải phần trăm của đỉnh."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Tưởng gấp đôi bộ nhớ đệm thì cường độ tăng <b class="red">(bài báo năm 2008 gọi đây là ngộ nhận)</b>
+          <br><span class="note">Bộ nhớ đệm lớn hơn chỉ bớt lượt trượt vì thiếu chỗ hay xung đột. Phép cộng vector đọc mỗi số đúng một lần: không có gì để dùng lại, $I$ vẫn 1/12.</span></div>
+        say: "Lỗi thứ tư là tưởng gấp đôi bộ nhớ đệm thì cường độ tăng, bài báo năm 2008 xếp đây vào ngộ nhận. Bộ nhớ đệm lớn hơn chỉ bớt các lần trượt vì thiếu chỗ hay vì xung đột. Phép cộng vector đọc mỗi số đúng một lần, không có gì để dùng lại, nên cường độ vẫn là 1 phần 12."
+
+  # ───────────────────────── 9. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: chọn thẻ nào cho nhân của mình?"
+    checks:
+      - "20e12 / 1e12 == 20 and 10e12 / 2e12 == 5"
+      - "alg.par_roofline(20e12, 1e12, 4) == 4e12 and alg.par_roofline(10e12, 2e12, 4) == 8e12"
+      - "alg.par_roofline(20e12, 1e12, 40) == 20e12 and alg.par_roofline(10e12, 2e12, 40) == 10e12"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thẻ (số minh hoạ)</th><th>đỉnh $F$</th><th>băng thông $B$</th></tr>
+          <tr><td>X</td><td>20 nghìn tỉ phép/s</td><td>1 nghìn tỉ byte/s</td></tr>
+          <tr><td>Y</td><td>10 nghìn tỉ phép/s</td><td>2 nghìn tỉ byte/s</td></tr></table>
+          <p>Câu 1: điểm gãy của mỗi thẻ? Câu 2: nhân của bạn có $I = 4$; thẻ nào nhanh hơn? Câu 3: nếu viết lại để $I = 40$, có đổi lựa chọn không?</p>
+        focus: [0, "1.2", "1.3", 2, 0]
+        say: "Bây giờ đến lượt bạn, với hai thẻ minh hoạ. Thẻ X có đỉnh 20 nghìn tỉ phép mỗi giây và băng thông 1 nghìn tỉ byte mỗi giây. Thẻ Y có đỉnh 10 nghìn tỉ và băng thông 2 nghìn tỉ. Câu một, điểm gãy của mỗi thẻ, câu hai, nhân có cường độ 4 thì thẻ nào nhanh hơn, câu ba, nếu viết lại để cường độ thành 40 thì có đổi lựa chọn không. Dừng video và làm ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu</th><th>thẻ X</th><th>thẻ Y</th></tr>
+          <tr><td>1. điểm gãy $\frac{F}{B}$</td><td>20 : 1 = 20</td><td>10 : 2 = 5</td></tr>
+          <tr><td>2. $I = 4$</td><td>$\min(20;\ 1 \cdot 4)$ = 4 nghìn tỉ</td><td>$\min(10;\ 2 \cdot 4)$ = $\hlg{8}$ nghìn tỉ</td></tr></table>
+          <p class="note">Câu 2: $I = 4$ nằm dưới cả hai điểm gãy, nên băng thông quyết định — chọn Y, nhanh gấp đôi dù đỉnh chỉ bằng nửa.</p>
+        focus: ["1.2", "1.3", 2]
+        say: "Đáp án câu một, điểm gãy của X là 20 chia 1 bằng 20, của Y là 10 chia 2 bằng 5. Câu hai, với cường độ 4, thẻ X cho min của 20 và 4 là 4 nghìn tỉ, thẻ Y cho min của 10 và 8 là 8 nghìn tỉ. Cường độ 4 nằm dưới cả hai điểm gãy, nên băng thông quyết định, ta chọn Y, nhanh gấp đôi dù đỉnh chỉ bằng nửa."
+      - show: |
+          <table class="t"><tr><th>câu 3: $I = 40$</th><th>thẻ X</th><th>thẻ Y</th></tr>
+          <tr><td>hiệu năng</td><td>$\min(20;\ 40)$ = $\hlg{20}$ nghìn tỉ</td><td>$\min(10;\ 80)$ = 10 nghìn tỉ</td></tr></table>
+          <p class="note">Đổi lựa chọn: khi đã chia khối để $I$ vượt cả hai điểm gãy, đỉnh tính quyết định — chọn X. Điều kiện để chọn đúng là đo $I$ của nhân thật.</p>
+        focus: ["1.2", 2, 2]
+        say: "Câu ba, với cường độ 40, thẻ X cho min của 20 và 40 là 20 nghìn tỉ, thẻ Y cho min của 10 và 80 là 10 nghìn tỉ. Khi đã viết lại để cường độ vượt cả hai điểm gãy, đỉnh tính quyết định, nên ta đổi sang X. Điều kiện để chọn đúng là đo cường độ của chính nhân mình trước khi mua."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">thời gian ≥ $\max\left(\frac{W}{F}, \frac{Q}{B}\right)$</span><span class="a">→</span>
+          <span class="n">hiệu năng ≤ $\min(F, B \cdot I)$</span><span class="a">→</span>
+          <span class="n">điểm gãy F/B</span><span class="a">→</span>
+          <span class="n">I nhỏ: sửa byte; I lớn: sửa phép tính</span></div>
+        say: "Tổng kết lại, thời gian ít nhất là số lớn hơn giữa thời gian tính và thời gian chuyển, nên hiệu năng nhiều nhất là min của F và B nhân I. Điểm gãy F chia B chia đôi thế giới. Cường độ nhỏ thì sửa số byte, cường độ lớn thì sửa phép tính."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> trước khi tối ưu hay mua phần cứng, tính <b>cường độ</b> của nhân và đặt nó lên mái nhà của máy. Con số đo được chỉ có nghĩa khi so với <b>trần của chính nó</b>.</div>
+        say: "Điều cần mang theo, trước khi tối ưu hay mua phần cứng, hãy tính cường độ của nhân và đặt nó lên mái nhà của máy. Con số đo được chỉ có nghĩa khi so với trần của chính nó."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 8): bộ xử lý đồ hoạ — luồng, khối, nhóm 32 luồng chạy chung lệnh, và vì sao đọc bộ nhớ liền nhau thì nhanh.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 8, ta vào bên trong bộ xử lý đồ hoạ, với luồng, khối, và nhóm 32 luồng chạy chung lệnh, rồi xem vì sao đọc bộ nhớ liền nhau thì nhanh. Hẹn gặp bạn ở bài tiếp theo."

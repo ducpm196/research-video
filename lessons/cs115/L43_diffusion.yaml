@@ -1,0 +1,237 @@
+id: L43
+series: "CS115 · Toán cho Khoa học Máy tính"
+title: "Bài 43 (mở rộng) — Mô hình sinh (2): mô hình khuếch tán (diffusion)"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "0 kết quả trong nguồn môn học; CITED: Ho, Jain & Abbeel, “Denoising Diffusion Probabilistic Models”, arXiv:2006.11239 (2020) (truy cập 2026-10-24, no revision given)"
+assumes: [cdot, sub, sqrt, normal, mu, sigma, var, epsilon, beta, prod, approx, sum, power, hat]
+# Quy ước ký hiệu: bước t = 1 … T; lịch nhiễu βₜ (KHÁC β của Momentum/Adam bài 9 — notation_note); ᾱₜ = tích (1 − βₛ) với s = 1…t
+#   (viết \bar{\alpha}_t, giải thích trong bài); nhiễu ε ~ N(0, 1) (ε như mẹo tham số hoá lại ở bài 42).
+# Lời đọc: “diffusion” nói “khuếch tán”; DDPM chỉ hiện trên màn hình.
+# Nối bài trước (nói lại khi dùng, luật 17): bài 13 (phương sai của tổng biến độc lập; Var(aX) = a²Var(X)), bài 14 (phân phối chuẩn),
+#   bài 18 (MSE), bài 22 (lan truyền ngược), bài 42 (mô hình sinh; z = μ + σ·ε).
+objectives:
+  - "Hiểu ý tưởng: phá ảnh bằng nhiễu từng bước, rồi học cách đi ngược"
+  - "Gộp nhiều bước thêm nhiễu thành một công thức đóng"
+  - "Tính lượng tín hiệu còn lại theo lịch nhiễu"
+  - "Hiểu mô hình học dự đoán nhiễu bằng MSE; vì sao sinh mẫu chậm"
+asr_reviewed:
+  - {sentence: "Bước một, nhiễu rút được bằng 1.", reason: "ASR chép “Bước 1, nhiễu trúc được bằng mục” (0.714): lệch âm/thanh thuần Việt: rút/trúc, một/mục — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Nên hai nhiễu nhỏ gộp lại thành một nhiễu với hệ số căn 0 phẩy 5904, xấp xỉ 0 phẩy 768.", reason: "ASR chép “nên 2 nhũ nhỏ gột lại thành 1 nhũ với hệ số căng 0,5904, xắp xỉ 0,768.” (0.793): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: nhiễu/nhũ, gộp/gột, nhiễu/nhũ, căn/căng, xấp/xắp, không (trong “không phẩy” → “”) — NOT_VERIFIED bằng tai người"}
+  - sentence: "Lỗi thứ nhất, nhầm bê-ta ở đây với bê-ta của bài 9."
+    reason: "bê-ta được ASR chép đúng “beta” (bộ chấm quy “bê” về chữ b nên lệch); nhầm→nhằm lẫn thanh"
+  - sentence: "Câu hai, hệ số của ảnh gốc bằng 0 phẩy 9, hệ số của nhiễu bằng căn 0 phẩy 19, xấp xỉ 0 phẩy 436."
+    reason: "lẫn thanh hệ→hề, nhiễu→nhiểu, căn→căng; mọi con số khớp"
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Làm hỏng ảnh thì dễ — học cách sửa lại từng chút"
+    steps:
+      - show: |
+          <p class="big">Thêm một chút nhiễu vào ảnh, lặp 1000 lần: ảnh thành <b>nhiễu thuần</b>. Nếu học được cách <b>bỏ đi một chút nhiễu</b> mỗi bước, ta đi ngược từ nhiễu ra ảnh mới.</p>
+          <div class="box key">Mô hình khuếch tán (Ho và cộng sự, 2020): phá có kế hoạch, rồi học cách sửa — mỗi bước sửa chỉ là một bài toán nhỏ.</div>
+        focus: [1, 1, 2]
+        say: "Chào bạn, thêm một chút nhiễu vào ảnh và lặp lại 1000 lần, ảnh thành nhiễu thuần. Nếu học được cách bỏ đi một chút nhiễu mỗi bước, ta có thể đi ngược từ nhiễu ra một ảnh mới. Đó là ý tưởng của mô hình khuếch tán."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn nền: phương sai của tổng, mẹo z = μ + σ·ε"
+    checks:
+      - "round(0.9**2*1, 9) == 0.81 and round(0.81 + 0.19, 9) == 1 and 2 + 3*0.5 == 3.5"
+    steps:
+      - show: |
+          <p>Bài 13: $\operatorname{Var}(aX) = a^2\operatorname{Var}(X)$; với $X$, $Y$ độc lập: $\operatorname{Var}(X + Y) = \operatorname{Var}(X) + \operatorname{Var}(Y)$.</p>
+          <p>Bài 42: một biến $\mathcal{N}(\mu, \sigma^2)$ viết được là $\mu + \sigma\cdot\varepsilon$ với $\varepsilon$ chuẩn tắc.</p>
+        focus: [1, 2]
+        say: "Nhắc lại bài 13, nhân một biến với a thì phương sai nhân a bình phương, và phương sai của tổng hai biến độc lập bằng tổng hai phương sai. Nhắc lại bài 42, một biến phân phối chuẩn viết được là muy cộng xích ma nhân ép-xi-lôn."
+      - show: |
+          <table class="t"><tr><th>làm thử</th><th>tính</th><th>kết quả</th></tr>
+          <tr><td>$X$ phương sai 1, nhân với $a = 0{,}9$</td><td>$0{,}9^2\cdot 1$</td><td>phương sai 0,81</td></tr>
+          <tr><td>cộng thêm một biến độc lập phương sai 0,19</td><td>$0{,}81 + 0{,}19$</td><td>phương sai 1</td></tr>
+          <tr><td>$\mu = 2$, $\sigma = 3$, rút được $\varepsilon = 0{,}5$</td><td>$2 + 3\cdot 0{,}5$</td><td>$3{,}5$</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Làm thử từng điều bằng số. Một biến có phương sai 1, nhân với 0 phẩy 9 thì phương sai còn 0 phẩy 81. Cộng thêm một biến độc lập có phương sai 0 phẩy 19, phương sai trở lại đúng bằng 1, đây chính là mẹo của bài hôm nay. Với muy bằng 2, xích ma bằng 3 và ép-xi-lôn rút được 0 phẩy 5, ta có 2 cộng 1 phẩy 5, bằng 3 phẩy 5."
+
+  # ───────────────────────── 3. THÊM NHIỄU ─────────────────────────
+  - id: sym_forward
+    kind: symbol
+    title: "Giải mã: một bước thêm nhiễu với βₜ"
+    steps:
+      - show: |
+          <div class="box key">$x_t = \sqrt{1 - \beta_t}\cdot x_{t - 1} + \sqrt{\beta_t}\cdot\varepsilon$, &nbsp; $\varepsilon$ chuẩn tắc, $\beta_t$ nhỏ (lịch nhiễu)</div>
+          <p class="note">Hệ số được chọn để phương sai giữ ở 1: nếu $\operatorname{Var}(x_{t - 1}) = 1$ thì $\operatorname{Var}(x_t) = (1 - \beta_t) + \beta_t = 1$ (bài 13).</p>
+          <p class="note">$\beta_t$ ở đây là <b>lịch nhiễu</b>, khác $\beta$ (hệ số giữ lại) của Momentum, Adam ở bài 9.</p>
+        notation_note: true
+        focus: [1, 2, 3]
+        say: "Mỗi bước thêm nhiễu, ảnh cũ nhân căn của 1 trừ bê-ta t, cộng căn bê-ta t nhân một nhiễu chuẩn tắc, với bê-ta t nhỏ. Hệ số được chọn để phương sai giữ đúng bằng 1, theo bài 13. Lưu ý, bê-ta ở đây là lượng nhiễu thêm vào ở mỗi bước, khác với bê-ta của Momentum trong bài chín."
+
+  - id: noise_pic
+    kind: intuition
+    title: "Nhìn thấy ảnh chìm dần vào nhiễu"
+    checks:
+      - "(lambda ab: [round(float(ab[t - 1]), 4) for t in (1, 100, 500)] == [0.9999, 0.897, 0.0786] and float(ab[-1]) < 1e-4)(np.cumprod(1 - np.linspace(1e-4, 0.02, 1000)))"
+    steps:
+      - show: |
+          <div><svg width="1500" height="470" viewBox="0 0 1500 470"><defs><marker id="ar43" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker><marker id="ar43g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#15803d"/></marker></defs><rect x="170" y="80.0" width="150" height="0.0" fill="#d1d5db" stroke="#1f2937" stroke-width="2"/><rect x="170" y="80.0" width="150" height="260.0" fill="#60a5fa" stroke="#1f2937" stroke-width="2"/><text x="245.0" y="370" font-size="22" font-weight="bold" text-anchor="middle" fill="#1f2937">bước 1</text><text x="245.0" y="398" font-size="20" text-anchor="middle" fill="#1d4ed8">ảnh: 1</text><line x1="330" y1="60" x2="460" y2="60" stroke="#1f2937" stroke-width="3" marker-end="url(#ar43)"/><line x1="460" y1="440" x2="330" y2="440" stroke="#15803d" stroke-width="3" marker-end="url(#ar43g)"/><rect x="470" y="80.0" width="150" height="26.8" fill="#d1d5db" stroke="#1f2937" stroke-width="2"/><rect x="470" y="106.8" width="150" height="233.2" fill="#60a5fa" stroke="#1f2937" stroke-width="2"/><text x="545.0" y="370" font-size="22" font-weight="bold" text-anchor="middle" fill="#1f2937">bước 100</text><text x="545.0" y="398" font-size="20" text-anchor="middle" fill="#1d4ed8">ảnh: 0,897</text><line x1="630" y1="60" x2="760" y2="60" stroke="#1f2937" stroke-width="3" marker-end="url(#ar43)"/><line x1="760" y1="440" x2="630" y2="440" stroke="#15803d" stroke-width="3" marker-end="url(#ar43g)"/><rect x="770" y="80.0" width="150" height="239.6" fill="#d1d5db" stroke="#1f2937" stroke-width="2"/><rect x="770" y="319.6" width="150" height="20.4" fill="#60a5fa" stroke="#1f2937" stroke-width="2"/><text x="845.0" y="370" font-size="22" font-weight="bold" text-anchor="middle" fill="#1f2937">bước 500</text><text x="845.0" y="398" font-size="20" text-anchor="middle" fill="#1d4ed8">ảnh: 0,079</text><line x1="930" y1="60" x2="1060" y2="60" stroke="#1f2937" stroke-width="3" marker-end="url(#ar43)"/><line x1="1060" y1="440" x2="930" y2="440" stroke="#15803d" stroke-width="3" marker-end="url(#ar43g)"/><rect x="1070" y="80.0" width="150" height="260.0" fill="#d1d5db" stroke="#1f2937" stroke-width="2"/><text x="1145.0" y="370" font-size="22" font-weight="bold" text-anchor="middle" fill="#1f2937">bước 1000</text><text x="1145.0" y="398" font-size="20" text-anchor="middle" fill="#1d4ed8">ảnh: ≈ 0</text><text x="20" y="66" font-size="20" fill="#1f2937">thêm nhiễu</text><text x="20" y="446" font-size="20" fill="#15803d">mạng khử nhiễu</text><g font-size="20"><rect x="1360" y="120" width="26" height="26" fill="#60a5fa" stroke="#1f2937"/><text x="1394" y="140" fill="#1f2937">phần ảnh</text><rect x="1360" y="160" width="26" height="26" fill="#d1d5db" stroke="#1f2937"/><text x="1394" y="180" fill="#1f2937">phần nhiễu</text><text x="1360" y="230" fill="#374151">mỗi cột</text><text x="1360" y="256" fill="#374151">cao đúng 1</text></g></svg></div>
+        focus: [0, 0, 0, 0]
+        say: "Mỗi cột là phương sai của ảnh bị nhiễu ở một bước, chia làm phần còn lại của ảnh, màu xanh, và phần nhiễu, màu xám. Vì hệ số được chọn để phương sai giữ đúng bằng 1, mọi cột đều cao bằng nhau, chỉ có tỉ lệ hai màu thay đổi. Phần ảnh còn 0 phẩy 897 ở bước 100, chỉ 0 phẩy 079 ở bước 500, và gần như bằng 0 ở bước 1000. Mũi tên đen trên cùng là chiều thêm nhiễu, còn mũi tên xanh dưới cùng là chiều mạng học để khử nhiễu, đi ngược lại."
+
+  # ───────────────────────── 4. GỘP BƯỚC ─────────────────────────
+  - id: closed
+    kind: formula
+    title: "Gộp t bước thành một công thức"
+    checks:
+      - "(lambda b1, b2: sp.simplify((sp.sqrt(1 - b2)*sp.sqrt(1 - b1))**2 - (1 - b1)*(1 - b2)) == 0 and sp.simplify((1 - b2)*b1 + b2 - (1 - (1 - b1)*(1 - b2))) == 0)(*sp.symbols('b1 b2', positive=True))"
+    steps:
+      - show: |
+          <p>Hai bước: $\ x_2 = \sqrt{1 - \beta_2}\big(\sqrt{1 - \beta_1}\,x_0 + \sqrt{\beta_1}\,\varepsilon_1\big) + \sqrt{\beta_2}\,\varepsilon_2$. Hai nhiễu độc lập cộng lại có phương sai $(1 - \beta_2)\beta_1 + \beta_2 = 1 - (1 - \beta_1)(1 - \beta_2)$ (bài 13).</p>
+          <div class="box key">Đặt $\bar{\alpha}_t = \prod_{s = 1}^{t}(1 - \beta_s)$: &nbsp; $x_t = \sqrt{\bar{\alpha}_t}\cdot x_0 + \sqrt{1 - \bar{\alpha}_t}\cdot\varepsilon$ — nhảy thẳng tới bước $t$</div>
+          <p class="note">$\bar{\alpha}_t$ (an-pha ngang) chỉ là tên của tích này — khác nhân tử $\alpha$ của bài 24, 25.</p>
+        introduces: [alpha, bar]
+        focus: [["1.1", "1.2"], ["2.1", "2.2"]]
+        say: "Gộp hai bước, phần ảnh gốc nhân căn của tích hai số 1 trừ bê-ta, còn hai nhiễu độc lập cộng lại, theo bài 13, có phương sai bằng 1 trừ tích đó. Đặt an-pha ngang t là tích các số 1 trừ bê-ta, ta nhảy thẳng tới bước t bằng một công thức, không cần làm từng bước."
+
+  - id: two_steps
+    kind: example
+    title: "Làm tay từng bước: hai bước thêm nhiễu, rồi gộp"
+    checks:
+      - "round(0.8*2 + 0.6*1, 9) == 2.2 and round(0.8*2.2 + 0.6*(-0.5), 9) == 1.46"
+      - "round(0.64*0.64, 9) == 0.4096 and round(math.sqrt(0.4096), 9) == 0.64 and round(0.64*2, 9) == 1.28"
+      - "round(0.8*0.6*1 + 0.6*(-0.5), 9) == 0.18 and round(1.28 + 0.18, 9) == 1.46"
+      - "round(0.48**2 + 0.6**2, 9) == round(1 - 0.4096, 9) == 0.5904 and round(math.sqrt(0.5904), 4) == 0.7684"
+    steps:
+      - show: |
+          <p>Một điểm ảnh $x_0 = 2$; hai bước cùng $\beta = 0{,}36$, nên $\sqrt{1 - \beta} = \sqrt{0{,}64} = 0{,}8$ và $\sqrt{\beta} = 0{,}6$. Nhiễu rút được: $\varepsilon_1 = 1$, $\varepsilon_2 = -0{,}5$.</p>
+          <p><b>Bước 1</b>:</p>
+          $$x_1 = 0{,}8\cdot 2 + 0{,}6\cdot 1 = 1{,}6 + 0{,}6 = 2{,}2$$
+        focus: [1, 2, 3]
+        say: "Làm tay với một điểm ảnh bằng 2, hai bước cùng bê-ta bằng 0 phẩy 36, nên hệ số co ảnh là căn 0 phẩy 64, bằng 0 phẩy 8, và hệ số nhiễu là 0 phẩy 6. Bước một, nhiễu rút được bằng 1. Ảnh mới bằng 0 phẩy 8 nhân 2 cộng 0 phẩy 6 nhân 1, bằng 2 phẩy 2."
+      - show: |
+          <p><b>Bước 2</b> (dùng $x_1 = 2{,}2$):</p>
+          $$x_2 = 0{,}8\cdot 2{,}2 + 0{,}6\cdot(-0{,}5) = 1{,}76 - 0{,}3 = \hlg{1{,}46}$$
+        focus: [1, 2]
+        say: "Bước hai, lấy 2 phẩy 2 vừa tính, nhiễu rút được bằng âm 0 phẩy 5. Ảnh mới bằng 1 phẩy 76 trừ 0 phẩy 3, bằng 1 phẩy 46."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — tách phần ảnh gốc</b>: phá ngoặc, $x_2 = 0{,}8\cdot 0{,}8\cdot x_0 + (\text{phần nhiễu})$.</p>
+          $$\bar{\alpha}_2 = 0{,}64\cdot 0{,}64 = 0{,}4096,\qquad \sqrt{\bar{\alpha}_2} = 0{,}64,\qquad 0{,}64\cdot 2 = 1{,}28$$
+        focus: [1, 2, 2]
+        say: "Bước ba, phá ngoặc để tách phần ảnh gốc, vì x hai bằng 0 phẩy 8 nhân 0 phẩy 8 nhân x không, cộng phần nhiễu. An-pha ngang hai bằng 0 phẩy 64 nhân 0 phẩy 64, bằng 0 phẩy 4096, căn của nó bằng 0 phẩy 64. Vậy phần ảnh gốc là 0 phẩy 64 nhân 2, bằng 1 phẩy 28, đúng như công thức gộp."
+      - show: |
+          <p><b>Bước 4 — phần nhiễu</b>: $\ 0{,}8\cdot 0{,}6\cdot\varepsilon_1 + 0{,}6\cdot\varepsilon_2 = 0{,}48 - 0{,}3 = 0{,}18$, và $1{,}28 + 0{,}18 = 1{,}46$ ✓</p>
+          $$\text{phương sai phần nhiễu: } 0{,}48^2 + 0{,}6^2 = 0{,}2304 + 0{,}36 = 0{,}5904 = 1 - 0{,}4096$$
+        focus: [1, 2, 2]
+        say: "Bước bốn, phần nhiễu bằng 0 phẩy 48 nhân 1 cộng 0 phẩy 6 nhân âm 0 phẩy 5, bằng 0 phẩy 18, cộng 1 phẩy 28 ra đúng 1 phẩy 46. Phương sai của phần nhiễu bằng 0 phẩy 48 bình phương cộng 0 phẩy 6 bình phương, bằng 0 phẩy 5904, đúng bằng 1 trừ an-pha ngang hai. Nên hai nhiễu nhỏ gộp lại thành một nhiễu với hệ số căn 0 phẩy 5904, xấp xỉ 0 phẩy 768."
+
+  # ───────────────────────── 5. LỊCH NHIỄU ─────────────────────────
+  - id: schedule
+    kind: example
+    title: "Ví dụ: tín hiệu còn lại theo lịch tuyến tính"
+    checks:
+      - "(lambda ab: [round(float(np.sqrt(ab[t - 1])), 4) for t in (1, 100, 500, 1000)] == [0.9999, 0.9471, 0.2803, 0.0064] and round(float(ab[-1])*1e5, 2) == 4.04)(np.cumprod(1 - np.linspace(1e-4, 0.02, 1000)))"
+    steps:
+      - show: |
+          <p>Lịch tuyến tính: $\beta_t$ từ 0,0001 tăng đều tới 0,02, $T = 1000$ bước. Hệ số của ảnh gốc $\sqrt{\bar{\alpha}_t}$:</p>
+          <table class="t"><tr><th>bước $t$</th><th>1</th><th>100</th><th>500</th><th>1000</th></tr>
+          <tr><td>$\sqrt{\bar{\alpha}_t}$ (còn lại của ảnh)</td><td>0,9999</td><td>0,9471</td><td>0,2803</td><td>$\hlg{0{,}0064}$</td></tr></table>
+          <p class="note">$\bar{\alpha}_{1000} \approx 4\cdot 10^{-5}$: ở bước cuối gần như chỉ còn nhiễu — nên khi sinh, ta bắt đầu từ nhiễu chuẩn tắc.</p>
+        focus: [1, 2, 3]
+        say: "Ví dụ lịch tuyến tính với 1000 bước. Phần còn lại của ảnh gốc giảm từ gần 1 ở bước đầu, còn 0 phẩy 28 ở bước 500, và chỉ 0 phẩy 0064 ở bước cuối. Vì gần như chỉ còn nhiễu, khi sinh ảnh ta bắt đầu từ nhiễu chuẩn tắc."
+
+  # ───────────────────────── 6. HỌC ĐI NGƯỢC ─────────────────────────
+  - id: reverse
+    kind: concept
+    title: "Học đi ngược: dự đoán nhiễu"
+    steps:
+      - show: |
+          <p>Huấn luyện: lấy ảnh $x_0$, chọn ngẫu nhiên $t$ và $\varepsilon$, tạo $x_t$ bằng công thức gộp. Mạng $\hat{\varepsilon}(x_t, t)$ học <b>đoán lại nhiễu</b>:</p>
+          <div class="box key">sai số $= \big(\varepsilon - \hat{\varepsilon}(x_t, t)\big)^2$ — đúng MSE của bài 18, học bằng lan truyền ngược (bài 22)</div>
+          <p>Sinh ảnh: bắt đầu từ nhiễu $x_T$, mỗi bước trừ bớt phần nhiễu mạng đoán (và thêm chút nhiễu mới), lặp $T$ bước → $x_0$.</p>
+          <p class="note">Cần hàng trăm, hàng nghìn bước gọi mạng → sinh chậm hơn GAN (bài 42), đổi lại ổn định và chất lượng cao.</p>
+        focus: [1, 2, [3, 4]]
+        say: "Khi huấn luyện, ta lấy một ảnh, chọn ngẫu nhiên bước t và nhiễu, rồi tạo ảnh bị nhiễu bằng công thức gộp. Mạng phải đoán lại đúng nhiễu đó, với sai số bình phương như bài 18. Khi sinh, ta bắt đầu từ nhiễu và trừ dần phần nhiễu mạng đoán qua từng bước, nên chậm hơn mạng đối kháng."
+
+  # ───────────────────────── 7. KIỂM BẰNG MÔ PHỎNG ─────────────────────────
+  - id: verify
+    kind: check
+    title: "Phép thử: 100 bước từng bước = một bước gộp"
+    checks:
+      - "round(2*0.9471, 3) == 1.894 and round(0.9471**2, 3) == 0.897 and round(math.sqrt(1 - 0.897), 3) == 0.321"
+      - "(lambda rng, beta: (lambda x: (round(float(np.mean(x)), 2), round(float(np.std(x)), 2)) == (round(2*float(np.sqrt(np.prod(1 - beta))), 2), round(float(np.sqrt(1 - np.prod(1 - beta))), 2)))(__import__('functools').reduce(lambda x, b: np.sqrt(1 - b)*x + np.sqrt(b)*rng.normal(size=x.shape), beta, np.full(200000, 2.0))))(np.random.default_rng(0), np.linspace(1e-4, 0.02, 1000)[:100])"
+    steps:
+      - show: |
+          <p>Lấy $x_0 = 2$ cho 200 000 mẫu, thêm nhiễu <b>từng bước</b> 100 lần theo lịch trên; đo trung bình và độ lệch chuẩn của $x_{100}$, so với công thức gộp $\ 2\sqrt{\bar{\alpha}_{100}} \approx 1{,}89$ và $\sqrt{1 - \bar{\alpha}_{100}} \approx 0{,}32$: khớp đến 2 chữ số $\checkmark$</p>
+        say: "Phép thử, vì muốn chắc công thức gộp đúng, ta lấy hai trăm nghìn mẫu bắt đầu từ 2, thêm nhiễu từng bước 100 lần, rồi đo trung bình và độ lệch chuẩn. Kết quả khớp với công thức gộp, khoảng 1 phẩy 89 và 0 phẩy 32, đến hai chữ số."
+      - show: |
+          <p>Hai số của công thức gộp tính lại bằng tay từ bảng lịch nhiễu ($\sqrt{\bar{\alpha}_{100}} = 0{,}9471$):</p>
+          <table class="t"><tr><th>đại lượng</th><th>tính từ bảng</th><th>mô phỏng</th></tr>
+          <tr><td>trung bình $2\sqrt{\bar{\alpha}_{100}}$</td><td>$2\cdot 0{,}9471 \approx 1{,}894$</td><td>1,89 ✓</td></tr>
+          <tr><td>độ lệch chuẩn $\sqrt{1 - \bar{\alpha}_{100}}$</td><td>$\bar{\alpha}_{100} \approx 0{,}897$, $\ \sqrt{0{,}103} \approx 0{,}321$</td><td>0,32 ✓</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Tính lại hai số đó bằng tay từ bảng lịch nhiễu, nghĩa là không cần mô phỏng. Trung bình bằng 2 nhân 0 phẩy 9471, xấp xỉ 1 phẩy 894. Bình phương 0 phẩy 9471 được an-pha ngang khoảng 0 phẩy 897, nên độ lệch chuẩn bằng căn 0 phẩy 103, xấp xỉ 0 phẩy 321, khớp cả hai số mô phỏng."
+
+  # ───────────────────────── 8. LỖI THƯỜNG GẶP ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Nhầm $\beta_t$ với $\beta$ của Momentum, Adam <b class="red">(sai)</b>
+          <br><span class="note">Cùng chữ, khác nghĩa: ở đây là lượng nhiễu thêm vào mỗi bước.</span></div>
+        say: "Lỗi thứ nhất, nhầm bê-ta ở đây với bê-ta của bài 9. Cùng chữ nhưng khác nghĩa, ở đây là lượng nhiễu thêm vào mỗi bước."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Mô phỏng từng bước khi huấn luyện <b class="red">(chậm vô ích)</b>
+          <br><span class="note">Dùng công thức gộp để nhảy thẳng tới bước $t$.</span></div>
+        say: "Lỗi thứ hai, mô phỏng từng bước khi huấn luyện. Hãy dùng công thức gộp để nhảy thẳng tới bước t."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Cộng nhiễu mà không co ảnh lại <b class="red">(phương sai nổ)</b>
+          <br><span class="note">Thiếu hệ số $\sqrt{1 - \beta_t}$ thì phương sai tăng mãi thay vì giữ ở 1.</span></div>
+        say: "Lỗi thứ ba, cộng nhiễu mà không co ảnh lại. Thiếu hệ số căn của 1 trừ bê-ta, phương sai sẽ tăng mãi thay vì giữ ở 1."
+
+  # ───────────────────────── 9. TỰ KIỂM TRA ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "round((1 - 0.1)*(1 - 0.1), 2) == 0.81 and round(math.sqrt(0.81), 1) == 0.9 and round(math.sqrt(1 - 0.81), 4) == 0.4359"
+      - "round(0.9**2 + math.sqrt(0.19)**2, 9) == 1 and round(0.436**2, 2) == 0.19"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>$\beta_1 = \beta_2 = 0{,}1$. Tính $\bar{\alpha}_2$.</td></tr>
+          <tr><td>2</td><td>Hệ số của $x_0$ và của nhiễu trong $x_2$?</td></tr></table>
+        say: "Bây giờ đến lượt bạn, với hai câu trên màn hình. Hãy dừng video và làm ra giấy."
+        pause: 8
+      - show: |
+          <p>① Mỗi bước giữ lại $1 - 0{,}1 = 0{,}9$; nhân hai thừa số:</p>
+          $$\bar{\alpha}_2 = (1 - 0{,}1)\cdot(1 - 0{,}1) = 0{,}9\cdot 0{,}9 = \hlg{0{,}81}$$
+        focus: [1, 2]
+        say: "Câu một, mỗi bước giữ lại 1 trừ 0 phẩy 1, bằng 0 phẩy 9, và an-pha ngang là tích của các thừa số đó. Vậy 0 phẩy 9 nhân 0 phẩy 9, bằng 0 phẩy 81."
+      - show: |
+          <p>② Thay $\bar{\alpha}_2 = 0{,}81$ vào công thức gộp:</p>
+          $$\sqrt{0{,}81} = \hlg{0{,}9}\qquad \sqrt{1 - 0{,}81} = \sqrt{0{,}19} \approx \hlg{0{,}436}$$
+          <p class="note">Kiểm: $0{,}9^2 + 0{,}436^2 \approx 0{,}81 + 0{,}19 = 1$ — phương sai vẫn bằng 1 ✓</p>
+        focus: [1, 2, 3]
+        say: "Thay an-pha ngang bằng 0 phẩy 81 vào công thức gộp. Câu hai, hệ số của ảnh gốc bằng 0 phẩy 9, hệ số của nhiễu bằng căn 0 phẩy 19, xấp xỉ 0 phẩy 436. Kiểm lại, bình phương hai hệ số cộng lại bằng 0 phẩy 81 cộng 0 phẩy 19, đúng bằng 1."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">thêm nhiễu từng bước, giữ phương sai 1</span><span class="a">→</span>
+          <span class="n">gộp: $x_t = \sqrt{\bar{\alpha}_t}x_0 + \sqrt{1 - \bar{\alpha}_t}\varepsilon$</span><span class="a">→</span>
+          <span class="n">mạng đoán nhiễu (MSE)</span><span class="a">→</span>
+          <span class="n">sinh: từ nhiễu, khử dần T bước</span></div>
+        say: "Tổng kết chuỗi logic. Thêm nhiễu từng bước mà giữ phương sai bằng 1. Gộp lại để nhảy thẳng tới bước bất kỳ. Mạng học đoán nhiễu bằng sai số bình phương. Khi sinh, đi từ nhiễu và khử dần qua nhiều bước."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> một bài toán rất khó (vẽ ảnh từ hư không) có thể tách thành rất nhiều bài toán rất dễ (bỏ bớt một chút nhiễu).</div>
+          <p class="note">Đây là bài cuối của phần mở rộng. Bài 45 là tình huống chuyên gia kết thúc lộ trình: <b>từ Adam tới AdamW</b>, theo dòng thời gian.</p>
+        forward_ref: true
+        focus: [1, 1, 2, 2]
+        say: "Điều cần mang theo, một bài toán rất khó như vẽ ảnh từ hư không có thể tách thành rất nhiều bài toán rất dễ, mỗi bài chỉ bỏ bớt một chút nhiễu. Đây là bài cuối của phần mở rộng. Bài 45 là tình huống chuyên gia kết thúc lộ trình, đi theo dòng thời gian của bộ tối ưu Adam ở bài 9, từ năm 2014 tới nay. Cảm ơn bạn đã theo học đến đây."

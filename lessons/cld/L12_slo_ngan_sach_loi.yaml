@@ -1,0 +1,204 @@
+id: L12
+course: CLD
+series: "CLD · Hệ thống hướng dịch vụ"
+title: "Bài 12 — Mục tiêu mức dịch vụ và ngân sách lỗi"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/cld.yaml L12; audit/cld/verify_cld.py L12; B. Beyer, C. Jones, J. Petoff, N. R. Murphy (biên tập), Site Reliability Engineering (O'Reilly, 2016), chương 3 (chấp nhận rủi ro, ngân sách lỗi) và chương 4 (mục tiêu mức dịch vụ)"
+assumes: [arith, cdot, approx]
+# Quy ước: SLI = chỉ số mức dịch vụ (tỉ lệ yêu cầu “tốt”); SLO = mục tiêu cho SLI trong một cửa sổ (30 ngày = 43 200 phút); ngân sách lỗi = 1 − SLO.
+#   Tên viết tắt chỉ trên màn hình; lời đọc nói “chỉ số mức dịch vụ”, “mục tiêu mức dịch vụ”. alg.error_budget_min(slo, days).
+objectives:
+  - "Viết chỉ số và mục tiêu mức dịch vụ"
+  - "Tính ngân sách lỗi"
+  - "Dùng ngân sách lỗi để cân bằng tốc độ phát hành và độ tin cậy"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "“Hệ thống phải luôn chạy”"
+    steps:
+      - show: |
+          <p>Sếp yêu cầu: “dịch vụ phải sẵn sàng 100%”. Nhóm ngừng mọi lần phát hành vì sợ lỗi; tính năng mới chậm hàng tháng. Trong khi đó mạng di động của khách tự nó đã rớt nhiều hơn dịch vụ của bạn.</p>
+          <div class="box key">Hôm nay: <b>mục tiêu mức dịch vụ</b> và <b>ngân sách lỗi</b> — biến “đủ tin cậy” thành một con số để quyết định.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, sếp yêu cầu dịch vụ phải sẵn sàng 100 phần trăm. Nhóm ngừng mọi lần phát hành vì sợ lỗi, và tính năng mới chậm hàng tháng. Trong khi đó mạng di động của khách tự nó đã rớt nhiều hơn dịch vụ của bạn. Hôm nay ta học mục tiêu mức dịch vụ và ngân sách lỗi, biến đủ tin cậy thành một con số để ra quyết định."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: phần trăm, phần bù, số phút trong một khoảng thời gian"
+    checks:
+      - "round(99.9 / 100, 3) == 0.999 and round(1 - 0.999, 3) == 0.001 and round(0.001 * 100, 1) == 0.1"
+      - "24 * 60 == 1440 and 7 * 1440 == 10080 and 30 * 1440 == 43200"
+    steps:
+      - show: |
+          <table class="t"><tr><th>viết dạng phần trăm</th><th>dạng số thập phân</th><th>phần bù: 1 trừ nó</th></tr>
+          <tr><td>99%</td><td>0,99</td><td>0,01 = 1%</td></tr>
+          <tr><td>99,9%</td><td>0,999</td><td>0,001 = 0,1%</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.3"]
+        say: "Bài này dùng phần trăm và phần bù của nó. 99 phần trăm viết dạng thập phân là 0 phẩy 99, nên phần bù, tức 1 trừ nó, là 0 phẩy 01, hay 1 phần trăm. 99 phẩy 9 phần trăm là 0 phẩy 999, chia 100 rồi viết lại. Phần bù của nó là 0 phẩy 001, tức 0 phẩy 1 phần trăm."
+      - show: |
+          <table class="t"><tr><th>khoảng thời gian</th><th>số phút</th></tr>
+          <tr><td>1 ngày</td><td>$24 \cdot 60 = 1440$</td></tr>
+          <tr><td>7 ngày</td><td>$7 \cdot 1440 = 10\,080$</td></tr>
+          <tr><td>30 ngày</td><td>$30 \cdot 1440 = 43\,200$</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Ta cũng cần đổi một khoảng thời gian ra phút. Một ngày có 24 giờ, mỗi giờ 60 phút, nên có 1440 phút. 7 ngày có 7 nhân 1440, bằng 10 nghìn 080 phút. 30 ngày có 43 nghìn 200 phút, con số ta sẽ dùng suốt bài."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: SLI, SLO, ngân sách lỗi"
+    steps:
+      - show: |
+          <table class="t"><tr><th>khái niệm</th><th>nghĩa</th><th>ví dụ</th></tr>
+          <tr><td><b>SLI</b> (chỉ số mức dịch vụ)</td><td>tỉ lệ yêu cầu “tốt” đo được</td><td>yêu cầu trả lời đúng trong 300 ms / tổng yêu cầu</td></tr>
+          <tr><td><b>SLO</b> (mục tiêu mức dịch vụ)</td><td>mức SLI muốn đạt trong một cửa sổ thời gian</td><td>99,9% trong 30 ngày</td></tr>
+          <tr><td><b>ngân sách lỗi</b></td><td>$1 - \text{SLO}$: phần được phép hỏng</td><td>0,1% yêu cầu, hay 43,2 phút</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Bảng giới thiệu ba khái niệm. Chỉ số mức dịch vụ là tỉ lệ yêu cầu tốt đo được, chẳng hạn số yêu cầu trả lời đúng trong 300 mi li giây chia tổng số yêu cầu. Mục tiêu mức dịch vụ là mức chỉ số muốn đạt trong một cửa sổ thời gian, chẳng hạn 99 phẩy 9 phần trăm trong 30 ngày. Ngân sách lỗi bằng 1 trừ mục tiêu, là phần được phép hỏng, ở đây 0 phẩy 1 phần trăm số yêu cầu, hay 43 phẩy 2 phút."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Ngân sách lỗi là một quỹ phút bị tiêu dần"
+    checks:
+      - "round(43.2 - 12, 1) == 31.2 and round(31.2 - 20, 1) == 11.2 and round(43.2 * 18 / 30, 2) == 25.92"
+    steps:
+      - show: |
+          <div><svg width="1500" height="380" viewBox="0 0 1500 380"><g font-size="22" fill="#1f2937"><line x1="120" y1="300" x2="1320" y2="300" stroke="#6b7280" stroke-width="2"/><line x1="120" y1="300" x2="120" y2="40" stroke="#6b7280" stroke-width="2"/><text x="1320" y="332" text-anchor="end">ngày 30</text><text x="120" y="332" text-anchor="middle">ngày 0</text><text x="600" y="332" text-anchor="middle">ngày 12</text><text x="20" y="70">43,2</text><text x="20" y="296">0</text><text x="20" y="30">phút còn lại</text><line x1="120" y1="62" x2="1320" y2="300" stroke="#059669" stroke-width="3" stroke-dasharray="10 8"/><text x="800" y="80" fill="#059669">đường đứt nét: tiêu đều, ngày 12 còn 25,92</text><polyline points="120,62 320,62 320,128 600,128 600,238" fill="none" stroke="#2a78d6" stroke-width="5"/><text x="332" y="96" fill="#b91c1c">sự cố ngày 5: tốn 12 phút</text><text x="588" y="205" text-anchor="end" fill="#b91c1c">phát hành lỗi ngày 12: tốn 20 phút</text><circle cx="600" cy="238" r="9" fill="#eb6834"/><text x="618" y="282" fill="#eb6834" font-weight="bold">còn 11,2 phút: dưới đường đứt nét</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ một tháng với mục tiêu 99 phẩy 9 phần trăm, quỹ ban đầu là 43 phẩy 2 phút được phép ngừng. Ngày 5 có một sự cố tốn 12 phút, quỹ còn 31 phẩy 2, ngày 12 một lần phát hành lỗi tốn thêm 20 phút, quỹ còn 11 phẩy 2. Đường đứt nét màu xanh lá là cách tiêu đều, theo đó ngày 12 lẽ ra còn 25 phẩy 92 phút. Vì đường thật đã nằm dưới đường tiêu đều, nhóm nên chậm phát hành lại và ưu tiên sửa nguyên nhân sự cố."
+
+  - id: example
+    kind: example
+    title: "Mỗi số 9 thêm vào chia ngân sách cho 10"
+    checks:
+      - "[round(alg.error_budget_min(s), 2) for s in (0.99, 0.999, 0.9999)] == [432.0, 43.2, 4.32]"
+      - "round(0.001 * 2000000) == 2000"
+    steps:
+      - show: |
+          <p><b>Bước 1</b> — đổi cửa sổ ra phút:</p>
+          $$30 \cdot 24 \cdot 60 = 43\,200 \text{ phút}$$
+          <p>Ngân sách $= (1 - \text{SLO}) \cdot 43\,200$.</p>
+        focus: [1, 2, 3]
+        say: "Bước một, đổi cửa sổ 30 ngày ra phút. 30 nhân 24 nhân 60 bằng 43 nghìn 200 phút. Ngân sách bằng 1 trừ mục tiêu, nhân với số phút đó, vì ngân sách là phần thời gian được phép hỏng."
+      - show: |
+          <p><b>Bước 2</b> — mục tiêu 99%: phần bù là 0,01.</p>
+          $$0{,}01 \cdot 43\,200 = 432 \text{ phút} = \frac{432}{60} = 7{,}2 \text{ giờ}$$
+        introduces: [frac]
+        focus: [1, 2, 2]
+        say: "Bước hai, với mục tiêu 99 phần trăm, phần bù là 0 phẩy 01. Nhân với 43 nghìn 200 được 432 phút. Chia cho 60 thì ra 7 phẩy 2 giờ được phép ngừng mỗi tháng."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>mục tiêu</th><th>99%</th><th>99,9%</th><th>99,99%</th></tr>
+          <tr><td>phần bù</td><td>0,01</td><td>0,001</td><td>0,0001</td></tr>
+          <tr><td>ngân sách mỗi 30 ngày</td><td>432 phút (7,2 giờ)</td><td>$\hl{43{,}2}$ phút</td><td>$\hl{4{,}32}$ phút</td></tr></table>
+          <p><b>Bước 3</b> — mỗi số 9 thêm vào làm phần bù nhỏ đi 10 lần, nên ngân sách chia cho 10.</p>
+        focus: [1, "1.3", 2]
+        say: "Bước ba, bảng cho ngân sách theo ba mục tiêu, 99 phần trăm cho 432 phút, 99 phẩy 9 cho 43 phẩy 2 phút. 99 phẩy 99 chỉ còn 4 phẩy 32 phút, tức chưa tới 5 phút cả tháng. Mỗi số 9 thêm vào làm phần bù nhỏ đi 10 lần, nên ngân sách bị chia cho 10."
+      - show: |
+          <p><b>Bước 4</b> — tính theo số yêu cầu: 2 triệu yêu cầu mỗi tháng, mục tiêu 99,9%:</p>
+          $$0{,}001 \cdot 2\,000\,000 = \hl{2000} \text{ yêu cầu được phép hỏng}$$
+          <div class="box key">Còn ngân sách → được phát hành, thử nghiệm. Hết ngân sách → tạm dừng tính năng mới, dồn sức vào độ tin cậy.</div>
+        focus: [2, 3]
+        say: "Bước bốn, tính theo số yêu cầu, 2 triệu yêu cầu mỗi tháng với mục tiêu 99 phẩy 9 thì được phép hỏng 2000 yêu cầu. Còn ngân sách thì được phát hành và thử nghiệm, hết ngân sách thì tạm dừng tính năng mới và dồn sức vào độ tin cậy."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác"
+    checks:
+      - "30 * 24 == 720 and round(0.001 * 720, 2) == 0.72 and round(0.72 * 60, 1) == 43.2"
+      - "30 * 24 * 3600 == 2592000 and round(0.0001 * 2592000, 1) == 259.2 and round(259.2 / 60, 2) == 4.32"
+      - "2000000 - round(0.999 * 2000000) == 2000"
+    steps:
+      - show: |
+          <table class="t"><tr><th>kiểm</th><th>cách khác</th><th>kết quả</th></tr>
+          <tr><td>99,9%</td><td>đi qua giờ: 30 ngày = 720 giờ; 0,1% của 720 giờ = 0,72 giờ</td><td>$0{,}72 \cdot 60 = 43{,}2$ phút ✓</td></tr>
+          <tr><td>99,99%</td><td>đi qua giây: 2 592 000 giây, nhân 0,0001 = 259,2 giây</td><td>$\frac{259{,}2}{60} = 4{,}32$ phút ✓</td></tr>
+          <tr><td>2000 yêu cầu</td><td>số yêu cầu phải tốt: 0,999 nhân 2 triệu = 1 998 000</td><td>2 triệu trừ đi còn 2000 ✓</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Kiểm bằng đường khác, vì đi qua một đơn vị khác mà vẫn khớp thì phép tính đáng tin. Đi qua giờ, 30 ngày là 720 giờ, 0 phẩy 1 phần trăm của nó là 0 phẩy 72 giờ, nhân 60 được 43 phẩy 2 phút. Đi qua giây, 30 ngày là 2 triệu 592 nghìn giây, nhân 0 phẩy 0001 được 259 phẩy 2 giây, chia 60 được 4 phẩy 32 phút. Đếm số yêu cầu phải tốt, 0 phẩy 999 nhân 2 triệu là 1 triệu 998 nghìn, nên phần được hỏng là 2000."
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc, 1 lỗi người đã đi làm"
+    checks:
+      - "10 * 200 == 2000 == round(0.001 * 2000000) and round(10 / 43.2 * 100) == 23 and round(2000000 / 43200) == 46"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Đặt mục tiêu 100% <b class="red">(không thể và tê liệt)</b>
+          <br><span class="note">Không đạt được (mạng, phần cứng, người dùng đều có lỗi), và ngân sách bằng 0 nghĩa là mọi thay đổi đều “vi phạm”. Chọn mục tiêu theo điều người dùng thật sự nhận ra.</span></div>
+        say: "Lỗi thứ nhất, đặt mục tiêu 100 phần trăm. Mục tiêu đó không đạt được vì mạng, phần cứng, người dùng đều có lỗi, và ngân sách bằng 0 nghĩa là mọi thay đổi đều vi phạm. Hãy chọn mục tiêu theo điều người dùng thật sự nhận ra."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Đo ở máy chủ thay vì ở chỗ người dùng thấy <b class="red">(đo sai thứ)</b>
+          <br><span class="note">Máy chủ trả lời trong 50 ms nhưng bộ cân bằng tải phía trước đang trả lỗi: chỉ số đẹp, khách thì không vào được. Đo càng gần người dùng càng tốt.</span></div>
+        say: "Lỗi thứ hai, đo ở máy chủ thay vì ở chỗ người dùng thấy. Máy chủ trả lời trong 50 mi li giây nhưng bộ cân bằng tải phía trước đang trả lỗi, thì chỉ số đẹp mà khách không vào được. Hãy đo càng gần người dùng càng tốt."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Cam kết với khách đúng bằng mục tiêu nội bộ <b class="red">(không có đệm)</b>
+          <br><span class="note">Cam kết hợp đồng (có bồi thường) nên <b>lỏng hơn</b> mục tiêu nội bộ: mục tiêu 99,9% thì cam kết 99,5%, để có chỗ phát hiện và sửa trước khi vi phạm hợp đồng.</span></div>
+        say: "Lỗi thứ ba, cam kết với khách đúng bằng mục tiêu nội bộ. Cam kết trong hợp đồng có bồi thường nên lỏng hơn mục tiêu nội bộ. Chẳng hạn mục tiêu 99 phẩy 9 thì cam kết 99 phẩy 5, để có chỗ phát hiện và sửa trước khi vi phạm hợp đồng."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Tính ngân sách theo phút ngừng khi lưu lượng không đều <b class="red">(đánh giá thấp sự cố giờ cao điểm)</b></div>
+          <table class="t"><tr><th>sự cố 10 phút lúc cao điểm, 200 yêu cầu mỗi phút, hỏng hết</th><th>đã tiêu</th></tr>
+          <tr><td>tính theo phút: 10 trên 43,2 phút</td><td>khoảng 23% ngân sách</td></tr>
+          <tr><td>tính theo yêu cầu: $10 \cdot 200 = 2000$ trên 2000 yêu cầu</td><td><b>100%</b> ngân sách</td></tr></table>
+        focus: [1, 2, "2.2", "2.3", 0]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, tính ngân sách theo phút ngừng trong khi lưu lượng không đều. Dịch vụ 2 triệu yêu cầu mỗi tháng trung bình chỉ khoảng 46 yêu cầu mỗi phút, nhưng giờ cao điểm có thể lên 200 yêu cầu mỗi phút. Tính theo phút, sự cố 10 phút lúc cao điểm chỉ tiêu khoảng 23 phần trăm của 43 phẩy 2 phút. Tính theo yêu cầu, 10 nhân 200 bằng 2000 yêu cầu hỏng, tức tiêu sạch ngân sách cả tháng. Người làm nghề đo chỉ số theo tỉ lệ yêu cầu tốt, vì đó mới là thứ khách hàng thật sự chịu."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "round(alg.error_budget_min(0.995), 1) == 216.0 and round(alg.error_budget_min(0.999, 7), 2) == 10.08 and 216 - 150 == 66"
+      - "round(150 / 216 * 100) == 69 and round(20 / 30 * 100) == 67 and round(1 - 0.995, 3) == 0.005"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Mục tiêu 99,5% trong 30 ngày: ngân sách bao nhiêu phút?</td></tr>
+          <tr><td>2</td><td>Đến ngày 20 đã ngừng tổng 150 phút. Còn lại bao nhiêu? Nên làm gì?</td></tr>
+          <tr><td>3</td><td>Mục tiêu 99,9% nhưng cửa sổ 7 ngày: ngân sách bao nhiêu phút?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.3", "1.4", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, mục tiêu 99 phẩy 5 phần trăm trong 30 ngày, ngân sách bao nhiêu phút? Câu hai, đến ngày 20 đã ngừng tổng cộng 150 phút. Còn lại bao nhiêu, và nên làm gì? Câu ba, mục tiêu 99 phẩy 9 nhưng cửa sổ 7 ngày, ngân sách bao nhiêu phút? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <p>① Phần bù: $1 - 0{,}995 = 0{,}005$. Ngân sách: $0{,}005 \cdot 43\,200 = \hl{216}$ phút.</p>
+        focus: [1, 1]
+        say: "Đáp án câu một, phần bù của 99 phẩy 5 phần trăm là 0 phẩy 005. Nhân với 43 nghìn 200, ta được 216 phút."
+      - show: |
+          <table class="t"><tr><th>câu 2</th><th>tính</th></tr>
+          <tr><td>còn lại</td><td>$216 - 150 = \hl{66}$ phút cho 10 ngày</td></tr>
+          <tr><td>đã tiêu</td><td>$\frac{150}{216} \approx 69\%$ ngân sách, trong $\frac{20}{30} \approx 67\%$ thời gian</td></tr>
+          <tr><td>quyết định</td><td>tiêu nhanh hơn tiêu đều một chút → phát hành thận trọng hơn</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Câu hai, ta tính từng ý. Còn lại 216 trừ 150, bằng 66 phút cho 10 ngày cuối. Đã tiêu khoảng 69 phần trăm ngân sách, tức gần 70 phần trăm, trong khoảng 67 phần trăm thời gian, tức hai phần ba tháng. Vì tiêu nhanh hơn đường tiêu đều một chút, nhóm nên phát hành thận trọng hơn."
+      - show: |
+          <p>③ Cửa sổ 7 ngày $= 7 \cdot 24 \cdot 60 = 10\,080$ phút; ngân sách $0{,}001 \cdot 10\,080 = \hl{10{,}08}$ phút.</p>
+        focus: [1, 1]
+        say: "Câu ba, cửa sổ 7 ngày có 10 nghìn 080 phút. Nhân với 0 phẩy 001, ngân sách là 10 phẩy 08 phút, nên cửa sổ ngắn thì mỗi sự cố chiếm phần lớn hơn."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">chỉ số: tỉ lệ yêu cầu tốt</span><span class="a">→</span>
+          <span class="n">mục tiêu trong một cửa sổ</span><span class="a">→</span>
+          <span class="n">ngân sách lỗi = 1 − mục tiêu</span><span class="a">→</span>
+          <span class="n">còn: phát hành; hết: củng cố</span></div>
+        say: "Tổng kết lại, chỉ số mức dịch vụ là tỉ lệ yêu cầu tốt, mục tiêu đặt trong một cửa sổ thời gian, và ngân sách lỗi bằng 1 trừ mục tiêu. Còn ngân sách thì phát hành, hết ngân sách thì củng cố."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> độ tin cậy là một tính năng có giá. Ngân sách lỗi cho cả nhóm phát triển và nhóm vận hành <b>một con số chung</b> để thôi tranh cãi.</div>
+        say: "Điều cần mang theo, độ tin cậy là một tính năng có giá. Ngân sách lỗi cho cả nhóm phát triển và nhóm vận hành một con số chung để thôi tranh cãi."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 13): <b>cấu hình, bí mật</b> và an toàn chuỗi cung ứng.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 13, ta học quản lý cấu hình, bí mật và an toàn chuỗi cung ứng. Hẹn gặp bạn ở bài tiếp theo."

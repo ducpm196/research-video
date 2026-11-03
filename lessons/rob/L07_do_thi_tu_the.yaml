@@ -1,0 +1,219 @@
+id: L07
+course: ROB
+series: "ROB · Robot tự hành"
+title: "Bài 7 — Định vị và lập bản đồ đồng thời: đồ thị tư thế và đóng vòng"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/rob.yaml L07; audit/rob/verify_rob.py L07; F. Lu, E. Milios, Globally Consistent Range Scan Alignment for Environment Mapping (1997); G. Grisetti và cộng sự, A Tutorial on Graph-Based SLAM (2010); RBM bài 16 (bình phương tối thiểu); bài 2 (trôi)"
+assumes: [arith, sub, approx]
+# Quy ước: đồ thị tư thế MỘT CHIỀU để thấy ý chính: x0 = 0 cố định, các cạnh đo quãng đường x_{i+1} − x_i = d_i, cạnh đóng vòng x_j − x_i = d.
+#   Giải bình phương tối thiểu mọi ràng buộc, trọng số bằng nhau (alg.pose_graph_1d, numpy.linalg.lstsq). Tên SLAM chỉ trên màn hình; lời đọc
+#   “định vị và lập bản đồ đồng thời”. Số đo là SỐ MINH HOẠ.
+objectives:
+  - "Giải thích đồ thị tư thế"
+  - "Thấy đóng vòng chia đều sai số tích lũy"
+  - "Hiểu tác hại của đóng vòng sai"
+asr_reviewed:
+  - {sentence: "Tối ưu kéo mọi bước còn 0 phẩy 5 mét, cả bản đồ co lại một nửa.", reason: "ASR chép “Tối yêu kéo mọi bước còn không phải 5 m, cả bản đồ có lại 1 nữa.” (0.706): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; đơn vị mét, ASR viết ký hiệu “m”; lệch âm/thanh thuần Việt: ưu/yêu, co/có, nửa/nữa — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Cạnh từ bánh xe trên sàn trơn kém tin cậy hơn cạnh từ quét khớp với tường.", reason: "ASR chép “Cảnh từ bánh xe trên sàn trân kém tinh cậy hơn cảnh từ quét khớp với tương.” (0.706): lệch âm/thanh thuần Việt: cạnh/cảnh, trơn/trân, tin/tinh, cạnh/cảnh, tường/tương — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Cạnh đóng vòng nói x j trừ x i xấp xỉ d, khi robot nhận ra nơi đã đến, nối hai nút xa nhau.", reason: "ASR chép “Cảnh đóng vòng nói xy trừ xy sắp xỉ dê, khi robot nhận ra nơi đã đến, nối hai nút xa nhau.” (0.783): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: cạnh/cảnh, i xấp (trong “x i xấp” → “xy sắp”) — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Đi một vòng, tưởng chưa về chỗ cũ"
+    checks:
+      - "[round(float(x), 3) for x in alg.pose_graph_1d([1, 1, 1], [(0, 3, 2.7)])] == [0.925, 1.85, 2.775]"
+    steps:
+      - show: |
+          <p>Robot đi một vòng quanh tầng nhà và quay về cửa thang máy. Theo đếm bánh xe, nó vẫn còn cách điểm xuất phát 30 cm — vì sai số đã tích lũy suốt đường. Nhưng camera <b>nhận ra</b> cửa thang máy. Thông tin “đây là chỗ cũ” sửa được gì cho cả đường đi?</p>
+          <div class="box key">Hôm nay: <b>định vị và lập bản đồ đồng thời</b> — biểu diễn đường đi bằng <b>đồ thị tư thế</b>, và dùng <b>đóng vòng</b> để chia đều sai số.</div>
+        focus: [1, 1, 1, 1, 2]
+        say: "Chào bạn, robot đi một vòng quanh tầng nhà và quay về cửa thang máy. Theo đếm bánh xe, nó vẫn còn cách điểm xuất phát 30 xen-ti-mét, vì sai số đã tích lũy suốt đường. Nhưng camera nhận ra cửa thang máy. Thông tin đây là chỗ cũ sửa được gì cho cả đường đi? Hôm nay ta học định vị và lập bản đồ đồng thời, biểu diễn đường đi bằng đồ thị tư thế, và dùng đóng vòng để chia đều sai số."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: sai số cộng dồn và bình phương tối thiểu"
+    checks:
+      - "round(3 * 0.1, 2) == 0.3 and [round(x, 1) for x in (1 + 0.1, 2 + 0.2, 3 + 0.3)] == [1.1, 2.2, 3.3]"
+      - "[round((x - 1.0) ** 2 + (x - 1.2) ** 2, 4) for x in (1.0, 1.1, 1.2)] == [0.04, 0.02, 0.04] and round((1.0 + 1.2) / 2, 2) == 1.1"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bước thật 1 m, bánh xe đếm dư 0,1 m mỗi bước</th><th>sau 1 bước</th><th>sau 2 bước</th><th>sau 3 bước</th></tr>
+          <tr><td>vị trí theo đếm bánh xe</td><td>1,1</td><td>2,2</td><td>3,3</td></tr>
+          <tr><td>sai số đã tích lũy</td><td>0,1</td><td>0,2</td><td>$\hl{0{,}3}$</td></tr></table>
+        focus: [0, "1.2", "1.3"]
+        say: "Trước hết, nhắc lại điều đã học ở bài 2 khi đo quãng đường bằng bánh xe, sai số của từng bước cộng dồn chứ không tự triệt tiêu. Giả sử mỗi bước thật dài 1 mét nhưng bánh xe đếm dư 0 phẩy 1 mét, thì vị trí đếm được là 1 phẩy 1, rồi 2 phẩy 2, rồi 3 phẩy 3. Sau 3 bước sai số đã tích lũy thành 0 phẩy 3 mét, đúng cỡ 30 xen-ti-mét ở phần mở đầu."
+      - show: |
+          <p>Ở khoá Toán cho robot, <b>bình phương tối thiểu</b>: khi các phép đo mâu thuẫn, chọn giá trị làm tổng bình phương sai lệch nhỏ nhất. Hai lần đo một đoạn: 1,0 m và 1,2 m.</p>
+          <table class="t"><tr><th>chọn $x$</th><th>$(x - 1{,}0)^2 + (x - 1{,}2)^2$</th></tr>
+          <tr><td>1,0</td><td>0,04</td></tr><tr><td>1,1</td><td>$\hl{0{,}02}$ — nhỏ nhất</td></tr><tr><td>1,2</td><td>0,04</td></tr></table>
+        introduces: [power]
+        focus: [1, 1, "2.2", "2.3", "2.4"]
+        say: "Điều thứ hai, ở khoá Toán cho robot ta đã gặp bình phương tối thiểu, khi các phép đo mâu thuẫn thì chọn giá trị làm tổng bình phương sai lệch nhỏ nhất. Ví dụ đo một đoạn hai lần, được 1 phẩy 0 mét và 1 phẩy 2 mét. Chọn 1 phẩy 0 thì tổng bình phương sai lệch là 0 phẩy 04. Chọn 1 phẩy 1, đúng trung bình, thì tổng chỉ còn 0 phẩy 02, nhỏ nhất. Chọn 1 phẩy 2 thì tổng lại là 0 phẩy 04, nên sai lệch được chia đều cho hai phép đo."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: nút, cạnh, đóng vòng"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thành phần</th><th>nghĩa</th></tr>
+          <tr><td><b>nút</b> $x_i$</td><td>tư thế robot ở thời điểm $i$ (ở đây chỉ một toạ độ)</td></tr>
+          <tr><td><b>cạnh đo quãng đường</b></td><td>$x_{i+1} - x_i \approx d_i$ — từ bánh xe, có sai số</td></tr>
+          <tr><td><b>cạnh đóng vòng</b></td><td>$x_j - x_i \approx d$ — nhận ra nơi đã đến, nối hai nút xa nhau</td></tr>
+          <tr><td><b>tối ưu</b></td><td>tìm các $x_i$ làm tổng bình phương sai lệch mọi cạnh nhỏ nhất (bình phương tối thiểu)</td></tr></table>
+          <p>Bản đồ được dựng lại từ các tư thế đã sửa: mỗi lần quét gắn vào tư thế tương ứng.</p>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", 2]
+        say: "Bảng giới thiệu các thành phần. Mỗi nút x i là tư thế của robot ở thời điểm i, ở đây chỉ một toạ độ cho dễ thấy. Cạnh đo quãng đường nói x i cộng 1 trừ x i xấp xỉ d i, lấy từ bánh xe nên có sai số. Cạnh đóng vòng nói x j trừ x i xấp xỉ d, khi robot nhận ra nơi đã đến, nối hai nút xa nhau. Tối ưu là tìm các x i làm tổng bình phương sai lệch của mọi cạnh nhỏ nhất, như bình phương tối thiểu ở khoá toán cho robot. Bản đồ được dựng lại từ các tư thế đã sửa, mỗi lần quét gắn vào tư thế tương ứng."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Đóng vòng kéo cả chuỗi như lò xo"
+    checks:
+      - "[round(float(x), 3) for x in alg.pose_graph_1d([1, 1, 1], [(0, 3, 2.7)])] == [0.925, 1.85, 2.775] and round(3 - 2.7, 1) == 0.3"
+    steps:
+      - show: |
+          <div><svg width="1500" height="450" viewBox="0 0 1500 450"><g font-size="23"><line x1="150" y1="110" x2="1350" y2="110" stroke="#2a78d6" stroke-width="3"/><circle cx="150" cy="110" r="13" fill="#2a78d6"/><circle cx="550" cy="110" r="13" fill="#2a78d6"/><circle cx="950" cy="110" r="13" fill="#2a78d6"/><circle cx="1350" cy="110" r="13" fill="#2a78d6"/><text x="150" y="150" text-anchor="middle" fill="#1f2937">0</text><text x="550" y="150" text-anchor="middle" fill="#1f2937">1</text><text x="950" y="150" text-anchor="middle" fill="#1f2937">2</text><text x="1350" y="150" text-anchor="middle" fill="#1f2937">3</text><text x="150" y="70" fill="#2a78d6" font-weight="bold">đếm bánh xe: ba bước, mỗi bước 1 m</text><rect x="1230" y="236" width="120" height="28" fill="#fecaca"/><line x1="150" y1="250" x2="1230" y2="250" stroke="#b91c1c" stroke-width="3" stroke-dasharray="12 8"/><circle cx="150" cy="250" r="13" fill="#b91c1c"/><circle cx="1230" cy="250" r="13" fill="#b91c1c"/><text x="1230" y="290" text-anchor="middle" fill="#b91c1c">2,7</text><text x="1290" y="210" text-anchor="middle" fill="#b91c1c">lệch 0,3</text><text x="150" y="210" fill="#b91c1c" font-weight="bold">đóng vòng: camera nhận ra, x3 cách x0 là 2,7 m</text><line x1="150" y1="380" x2="1260" y2="380" stroke="#059669" stroke-width="3"/><circle cx="150" cy="380" r="13" fill="#059669"/><circle cx="520" cy="380" r="13" fill="#059669"/><circle cx="890" cy="380" r="13" fill="#059669"/><circle cx="1260" cy="380" r="13" fill="#059669"/><text x="150" y="425" text-anchor="middle" fill="#059669">0</text><text x="520" y="425" text-anchor="middle" fill="#059669">0,925</text><text x="890" y="425" text-anchor="middle" fill="#059669">1,85</text><text x="1260" y="425" text-anchor="middle" fill="#059669">2,775</text><text x="150" y="340" fill="#059669" font-weight="bold">sau tối ưu: mỗi cạnh nhường 0,075 m</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ ba cách nhìn cùng một đường đi trên một trục. Hàng xanh trên cùng là đếm bánh xe, ba bước, mỗi bước 1 mét, nên nút cuối ở 3 mét. Hàng đỏ là cạnh đóng vòng, camera nhận ra chỗ cũ và nói nút cuối chỉ cách điểm đầu 2 phẩy 7 mét, lệch 0 phẩy 3 mét. Hàng lục là kết quả tối ưu, mỗi cạnh như một lò xo bị kéo nhẹ, không cạnh nào phải gánh hết 0 phẩy 3 mét."
+
+  - id: example
+    kind: example
+    title: "Ba bước 1 m, đóng vòng nói 2,7 m"
+    checks:
+      - "[round(float(x), 3) for x in alg.pose_graph_1d([1, 1, 1], [(0, 3, 2.7)])] == [0.925, 1.85, 2.775] and round(1 - 0.925, 3) == 0.075 and round(2.775 - 2.7, 3) == 0.075"
+      - "1 + 1 + 1 == 3 and round(3 - 2.7, 1) == 0.3 and round(0.3 / 4, 3) == 0.075 and round(3 * 0.925, 3) == 2.775"
+    steps:
+      - show: |
+          <table class="t"><tr><th>Bước 1 — cộng dồn đếm bánh xe</th><th>$x_1$</th><th>$x_2$</th><th>$x_3$</th></tr>
+          <tr><td>mỗi bước đo 1 m, $x_0 = 0$</td><td>1</td><td>2</td><td>$\hl{3}$</td></tr></table>
+        focus: [1, "1.2"]
+        say: "Bước một, chỉ dùng đếm bánh xe và cộng dồn từ điểm đầu bằng 0. Mỗi bước đo 1 mét, nên x 1 bằng 1, x 2 bằng 2, và nút cuối x 3 bằng 3 mét."
+      - show: |
+          <p><b>Bước 2 — đo độ mâu thuẫn</b> giữa đếm bánh xe và đóng vòng:</p>
+          $$3 - 2{,}7 = \hl{0{,}3} \text{ m}$$
+        focus: [1, 2]
+        say: "Bước hai, so với cạnh đóng vòng để thấy hai nguồn mâu thuẫn bao nhiêu. Đếm bánh xe nói 3 mét, đóng vòng nói 2 phẩy 7 mét, lệch nhau 0 phẩy 3 mét."
+      - show: |
+          <p><b>Bước 3 — chia đều</b>: vòng có 4 cạnh cùng trọng số (3 cạnh quãng đường, 1 cạnh đóng vòng), mỗi cạnh nhường</p>
+          $$\frac{0{,}3}{4} = \hl{0{,}075} \text{ m}$$
+        focus: [1, 2]
+        say: "Bước ba, vòng này có 4 cạnh cùng trọng số, ba cạnh quãng đường và một cạnh đóng vòng, nên như ví dụ hai lần đo, sai lệch được chia đều. Mỗi cạnh nhường 0 phẩy 3 chia 4, bằng 0 phẩy 075 mét."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>Bước 4 — ràng buộc (số minh hoạ)</th><th>đo được</th><th>sau tối ưu</th></tr>
+          <tr><td>$x_1 - x_0$</td><td>1</td><td>0,925</td></tr>
+          <tr><td>$x_2 - x_1$</td><td>1</td><td>0,925</td></tr>
+          <tr><td>$x_3 - x_2$</td><td>1</td><td>0,925</td></tr>
+          <tr><td>đóng vòng $x_3 - x_0$</td><td>2,7</td><td>2,775</td></tr></table>
+          <p>Tư thế: $x_1 = 0{,}925$, $x_2 = 1{,}850$, $x_3 = \hl{2{,}775}$. Sai lệch 0,3 m được <b>chia đều</b>: mỗi cạnh lệch 0,075 m — không cạnh nào gánh hết.</p>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", 2, 2]
+        say: "Bước bốn, mỗi cạnh quãng đường còn 1 trừ 0 phẩy 075, và bảng có bốn ràng buộc với số minh hoạ. Cạnh đo quãng đường thứ nhất báo 1 mét, sau tối ưu còn 0 phẩy 925. Cạnh thứ hai cũng vậy. Cạnh thứ ba cũng vậy. Cạnh đóng vòng báo điểm cuối cách điểm đầu 2 phẩy 7 mét, sau tối ưu là 2 phẩy 775. Các tư thế là 0 phẩy 925, 1 phẩy 85 và 2 phẩy 775. Sai lệch 0 phẩy 3 mét được chia đều, mỗi cạnh lệch 0 phẩy 075 mét, không cạnh nào gánh hết."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: thử nhiều độ dài bước, tính tổng bình phương"
+    checks:
+      - "[round(3 * (1 - s) ** 2 + (3 * s - 2.7) ** 2, 4) for s in (1, 0.9, 0.925, 0.95)] == [0.09, 0.03, 0.0225, 0.03]"
+      - "min((round(3 * (1 - s / 1000) ** 2 + (3 * s / 1000 - 2.7) ** 2, 8), s) for s in range(800, 1001))[1] == 925"
+    steps:
+      - show: |
+          <table class="t"><tr><th>mỗi bước dài $s$</th><th>3 cạnh quãng đường: $3 \cdot (1 - s)^2$</th><th>đóng vòng: $(3s - 2{,}7)^2$</th><th>tổng</th></tr>
+          <tr><td>1 (bỏ qua đóng vòng)</td><td>0</td><td>0,09</td><td>0,09</td></tr>
+          <tr><td>0,9 (tin hẳn đóng vòng)</td><td>0,03</td><td>0</td><td>0,03</td></tr>
+          <tr><td>0,925</td><td>0,016875</td><td>0,005625</td><td>$\hl{0{,}0225}$</td></tr>
+          <tr><td>0,95</td><td>0,0075</td><td>0,0225</td><td>0,03</td></tr></table>
+        introduces: [cdot]
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Kiểm bằng đường khác, không dùng quy tắc chia đều mà thử thẳng nhiều độ dài bước s rồi tính tổng bình phương sai lệch. Bỏ qua đóng vòng, s bằng 1, thì cạnh đóng vòng gánh hết, tổng là 0 phẩy 09. Tin hẳn đóng vòng, s bằng 0 phẩy 9, thì ba cạnh quãng đường gánh hết, tổng là 0 phẩy 03. Với s bằng 0 phẩy 925 tổng chỉ còn 0 phẩy 0225, nhỏ nhất bảng. Lên 0 phẩy 95 thì tổng lại tăng về 0 phẩy 03, nên 0 phẩy 925 đúng là đáy, khớp kết quả tối ưu."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay mắc, từ người mới tới người đã đi làm"
+    checks:
+      - "[round(float(x), 3) for x in alg.pose_graph_1d([1, 1, 1], [(0, 3, 1.0)])] == [0.5, 1.0, 1.5]"
+      - "(lambda x: [round(v, 3) for v in (1 - x[0], x[2] - 1.0)] == [0.5, 0.5] and round(3 * (1 - x[0]) ** 2 + (x[2] - 1.0) ** 2, 3) == 1.0)([float(v) for v in alg.pose_graph_1d([1, 1, 1], [(0, 3, 1.0)])])"
+      - "round(4 * 0.075 ** 2, 4) == 0.0225 and round(1.0 / 0.0225) == 44"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Chấp nhận đóng vòng sai <b class="red">(bản đồ méo cả bộ)</b>
+          <br><span class="note">Hai hành lang giống nhau: camera tưởng $x_3$ trùng chỗ $x_1$, đóng vòng $x_3 - x_0 = 1$. Tối ưu kéo mọi bước còn 0,5 m — cả bản đồ co lại một nửa. Kiểm nhiều dấu hiệu, và loại đóng vòng mâu thuẫn mạnh với phần còn lại.</span></div>
+        say: "Lỗi thứ nhất, chấp nhận một đóng vòng sai, nên cả bản đồ bị méo. Với hai hành lang giống nhau, camera tưởng nút cuối trùng chỗ nút thứ nhất, nên đóng vòng nói hiệu bằng 1 mét. Tối ưu kéo mọi bước còn 0 phẩy 5 mét, cả bản đồ co lại một nửa. Hãy kiểm nhiều dấu hiệu, và loại đóng vòng mâu thuẫn mạnh với phần còn lại."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Cho mọi cạnh trọng số như nhau <b class="red">(tin cái kém bằng cái tốt)</b>
+          <br><span class="note">Cạnh từ bánh xe trên sàn trơn kém tin cậy hơn cạnh từ quét khớp tường. Trọng số nên là nghịch đảo phương sai của từng phép đo.</span></div>
+        say: "Lỗi thứ hai, cho mọi cạnh trọng số như nhau, tức tin cái kém bằng cái tốt. Cạnh từ bánh xe trên sàn trơn kém tin cậy hơn cạnh từ quét khớp với tường. Trọng số nên là nghịch đảo phương sai của từng phép đo."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Chỉ sửa tư thế hiện tại <b class="red">(bản đồ cũ vẫn sai)</b>
+          <br><span class="note">Đóng vòng sửa <b>cả quá khứ</b>: mọi tư thế trên vòng đều dời. Bản đồ phải dựng lại từ các tư thế mới, không chỉ dời robot về đúng chỗ.</span></div>
+        say: "Lỗi thứ ba, chỉ sửa tư thế hiện tại, nên bản đồ cũ vẫn sai. Đóng vòng sửa cả quá khứ, mọi tư thế trên vòng đều dời đi. Bản đồ phải dựng lại từ các tư thế mới, không chỉ dời robot về đúng chỗ."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4.</b> Tối ưu xong là dùng, không xem sai lệch còn lại của từng cạnh <b class="red">(đóng vòng sai lọt qua)</b>
+          <br><span class="note">Người làm nghề in ra sai lệch của <b>từng cạnh</b> sau tối ưu. Cạnh nào lệch xa hơn hẳn sai số đo dự kiến thì gỡ đóng vòng đó rồi tối ưu lại.</span></div>
+          <table class="t"><tr><th>đóng vòng</th><th>sai lệch mỗi cạnh</th><th>tổng bình phương</th></tr>
+          <tr><td>đúng, $x_3 - x_0 = 2{,}7$</td><td>0,075</td><td>0,0225</td></tr>
+          <tr><td>sai, $x_3 - x_0 = 1$ (Lỗi 1)</td><td>0,5</td><td>$\hl{1{,}0}$ — gấp khoảng 44 lần</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", 1]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, tối ưu xong là dùng ngay mà không xem sai lệch còn lại của từng cạnh. Người làm nghề in ra sai lệch từng cạnh, cạnh nào lệch xa hơn hẳn sai số đo dự kiến thì gỡ đóng vòng đó rồi tối ưu lại. Với đóng vòng đúng 2 phẩy 7 mét, mỗi cạnh chỉ lệch 0 phẩy 075, tổng bình phương 0 phẩy 0225. Với đóng vòng sai ở lỗi thứ nhất, mỗi cạnh lệch tới 0 phẩy 5, tổng bình phương 1, gấp khoảng 44 lần. Con số lớn bất thường đó chính là tín hiệu để nghi ngờ đóng vòng, trước khi bản đồ méo được dùng."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "[round(float(x), 3) for x in alg.pose_graph_1d([2, 2], [(0, 2, 3.8)])] == [1.933, 3.867]"
+      - "2 + 2 == 4 and round(4 - 3.8, 1) == 0.2 and round(0.2 / 3, 3) == 0.067 and round(2 - 0.067, 3) == 1.933 and round(4 - 2 * 0.2 / 3, 3) == 3.867 and round(float(alg.pose_graph_1d([2, 2], [(0, 2, 3.8)])[1]) - 3.8, 3) == 0.067"
+      - "round(3 * 0.1, 1) == 0.3 and 3 - 1 == 2 and round(2 / 0.3, 1) == 6.7"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Hai bước đo 2 m và 2 m; đóng vòng nói $x_2 - x_0 = 3{,}8$ m. Sai lệch là bao nhiêu, chia cho mấy cạnh?</td></tr>
+          <tr><td>2</td><td>Tính $x_1$, $x_2$ sau tối ưu.</td></tr>
+          <tr><td>3</td><td>Quyết định: ba bước 1 m, đếm bánh xe sai cỡ 0,1 m mỗi bước; camera báo $x_3 - x_0 = 1$ m. Nhận đóng vòng này không?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.4", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, hai bước đo 2 mét và 2 mét, đóng vòng nói x 2 trừ x 0 bằng 3 phẩy 8 mét. Sai lệch là bao nhiêu, và chia cho mấy cạnh? Câu hai, tính x 1 và x 2 sau tối ưu. Câu ba là một quyết định, ba bước 1 mét, đếm bánh xe sai cỡ 0 phẩy 1 mét mỗi bước, camera báo x 3 trừ x 0 bằng 1 mét, có nên nhận đóng vòng này không? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① Cộng dồn: $2 + 2 = 4$ m. Sai lệch $4 - 3{,}8 = 0{,}2$ m, chia đều cho <b>3</b> cạnh (hai cạnh quãng đường và cạnh đóng vòng):</p>
+          $$\frac{0{,}2}{3} \approx 0{,}067 \text{ m mỗi cạnh}$$
+        focus: [1, 1, 2]
+        say: "Trước hết cộng dồn hai bước đo, được 2 cộng 2 bằng 4 mét, trong khi đóng vòng nói 3 phẩy 8 mét. Đáp án câu một, sai lệch là 4 trừ 3 phẩy 8, bằng 0 phẩy 2 mét, chia đều cho 3 cạnh gồm hai cạnh quãng đường và cạnh đóng vòng, mỗi cạnh khoảng 0 phẩy 067 mét. Ở đây vòng có 3 cạnh chứ không phải 4 như ví dụ, vì chỉ có hai bước."
+      - show: |
+          <table class="t"><tr><th>② tính</th><th>kết quả</th></tr>
+          <tr><td>mỗi bước $2 - 0{,}067$</td><td>$x_1 \approx \hl{1{,}933}$</td></tr>
+          <tr><td>hai bước $4 - \frac{2 \cdot 0{,}2}{3}$</td><td>$x_2 \approx \hl{3{,}867}$</td></tr>
+          <tr><td>thử lại cạnh đóng vòng $3{,}867 - 3{,}8$</td><td>0,067 ✓ — đúng phần nó nhường</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Câu hai, x 1 khoảng 1 phẩy 933 và x 2 khoảng 3 phẩy 867. Mỗi bước đo 2 mét nhường 0 phẩy 067, nên x 1 khoảng 1 phẩy 933 mét. Hai bước như vậy cho x 2 khoảng 3 phẩy 867 mét. Thử lại, cạnh đóng vòng bây giờ lệch 3 phẩy 867 trừ 3 phẩy 8, bằng 0 phẩy 067, đúng bằng phần nó nhường."
+      - clear: true
+        show: |
+          <p>③ Sai số dự kiến sau 3 bước: $3 \cdot 0{,}1 = 0{,}3$ m. Mâu thuẫn: $3 - 1 = \hl{2}$ m, gần gấp 7 lần.</p>
+          <p>→ <b>Không nhận</b>: nhận vào thì như Lỗi 1, cả bản đồ co lại một nửa. Cần thêm dấu hiệu khác trước khi tin.</p>
+        focus: [1, 1, 2]
+        say: "Câu ba, sai số dự kiến sau ba bước chỉ cỡ 3 nhân 0 phẩy 1, bằng 0 phẩy 3 mét. Nhưng đếm bánh xe nói 3 mét còn camera nói 1 mét, mâu thuẫn tới 2 mét, gần gấp 7 lần mức dự kiến. Vì vậy không nhận đóng vòng này, nhận vào thì như lỗi thứ nhất, cả bản đồ co lại một nửa, và cần thêm dấu hiệu khác trước khi tin."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">nút: tư thế; cạnh: phép đo</span><span class="a">→</span>
+          <span class="n">đóng vòng nối nút xa</span><span class="a">→</span>
+          <span class="n">bình phương tối thiểu chia đều sai số</span><span class="a">→</span>
+          <span class="n">kiểm đóng vòng, dựng lại bản đồ</span></div>
+        say: "Tổng kết lại, mỗi nút là một tư thế, mỗi cạnh là một phép đo, và đóng vòng nối hai nút xa nhau. Bình phương tối thiểu chia đều sai số, nhưng phải kiểm đóng vòng và dựng lại bản đồ."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> một bằng chứng mới về hiện tại có thể sửa <b>cả quá khứ</b> — nhưng một bằng chứng sai cũng làm hỏng cả quá khứ.</div>
+        say: "Điều cần mang theo, một bằng chứng mới về hiện tại có thể sửa cả quá khứ, nhưng một bằng chứng sai cũng làm hỏng cả quá khứ."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 8): <b>lập kế hoạch đường đi theo mẫu</b> — bản đồ ngẫu nhiên và cây mở rộng nhanh.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 8, ta học lập kế hoạch đường đi theo mẫu, với bản đồ ngẫu nhiên và cây mở rộng nhanh. Hẹn gặp bạn ở bài tiếp theo."

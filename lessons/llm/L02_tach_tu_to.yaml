@@ -1,0 +1,207 @@
+id: L02
+course: LLM
+series: "LLM · Mô hình ngôn ngữ lớn"
+title: "Bài 2 — Tách từ tố: mã hoá cặp byte (BPE)"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/llm.yaml L02; audit/llm/verify_llm.py L02; R. Sennrich, B. Haddow, A. Birch, Neural Machine Translation of Rare Words with Subword Units, ACL (2016) — ví dụ low, lower, newest, widest; P. Gage, A New Algorithm for Data Compression (1994); Unicode / RFC 3629 (UTF-8)"
+assumes: [arith]
+# Quy ước: dấu cuối từ viết </w> (trên màn hình &lt;/w&gt;; lời đọc “dấu cuối từ”). alg.bpe_merges(kho, n) học n luật gộp (hoà lấy cặp gặp trước);
+#   alg.bpe_encode(từ, luật) tách một từ mới bằng các luật theo đúng thứ tự học. Số byte UTF-8 đếm bằng str.encode() của Python.
+#   Tên BPE chỉ trên màn hình; lời đọc “mã hoá cặp byte”.
+objectives:
+  - "Chạy vài bước học luật gộp của mã hoá cặp byte"
+  - "Tách một từ chưa gặp bằng các luật đã học"
+  - "Hiểu vì sao số từ tố khác nhau giữa các ngôn ngữ"
+asr_reviewed:
+  - {sentence: "Thứ hai, máy lưu chữ thành byte, chữ a không dấu cần 1 byte, còn chữ ô hay chữ e huyền cần 2 byte.", reason: "ASR chép “Thứ hai, máy lưu chữ thành bay, chữ A không dấu cần một bay, còn chữ O hay chữ E huyền cần hai bay.” (0.833): byte đọc thô, ASR viết “bay” (probe CSA p1: “bay” 8/8); “ô” là tên chữ cái, ASR viết chữ “O”; mọi con số khớp — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Hoà thì lấy cặp gặp trước, nên luật sáu gộp n và e.", reason: "ASR chép “Hoa thì lấy cặp gặp trước, nền lực 6 gộp N và E.” (0.769): lệch âm/thanh thuần Việt: hoà/hoa, nên luật/nền lực — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Tổng kết lại, bắt đầu từ chữ cái hay byte, gộp cặp hay gặp nhất và lặp lại.", reason: "ASR chép “Tổng kết lại, bắt đầu từ chữ cái hay bay, gột cặp hay gặp nhất và lập lại.” (0.833): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: gộp (trong “byte gộp” → “bay gột”), lặp/lập — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Lần ba gộp đuôi e s t với dấu cuối từ, 9 lần.", reason: "ASR chép “Lần 3 gọt đuôi, ST với giấu cuối từ, 9 lần.” (0.88): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: gộp/gọt — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Lỗi thứ hai, quên rằng chữ có dấu tốn nhiều byte hơn, nên tiếng Việt đắt hơn.", reason: "ASR chép “Lỗi thứ 2, quên rằng chữ có dấu tốn nhiều bay hơn, nền tiếng Việt đắt hơn.” (0.882): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: nên/nền — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bộ tách theo byte bắt đầu từ byte của văn bản, câu tôi thích mèo có 13 ký tự nhưng 16 byte, còn câu tiếng Anh cùng nghĩa có 11 ký tự và 11 byte.", reason: "ASR chép “Bộ tách theo bai bắt đầu từ bai của văn bản, câu tôi thích mèo có 13 ký tự nhưng 16 bai, còn câu tiếng Anh cùng nghĩa có 11 ký tự và 11 bai.” (0.897): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Hôm nay ta học mã hoá cặp byte, cách học các mảnh từ từ dữ liệu mà hầu hết mô hình ngôn ngữ lớn dùng để tách văn bản.", reason: "ASR chép “Hôm nay ta học mã hóa cặp bay, cách học các mảnh từ từ dữ liệu mà hầu hết mô hình ngôn ngữ lớn dùng để tách văn bản.” (0.966): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Từ chưa từng gặp: “lowest”"
+    checks:
+      - "alg.bpe_encode('lowest', [p for p, _ in alg.bpe_merges({'l o w </w>': 5, 'l o w e r </w>': 2, 'n e w e s t </w>': 6, 'w i d e s t </w>': 3}, 5)[0]]) == ['low', 'est</w>']"
+    steps:
+      - show: |
+          <p>Kho học có “low”, “lower”, “newest”, “widest” — nhưng không có “lowest”. Nếu mỗi <b>từ</b> là một từ tố, mô hình bó tay trước từ mới. Nếu mỗi <b>chữ cái</b> là một từ tố, chuỗi quá dài. Cách ở giữa: ghép chữ cái thành <b>mảnh hay gặp</b>, và “lowest” thành “low” + “est”.</p>
+          <div class="box key">Hôm nay: <b>mã hoá cặp byte</b> — học các mảnh từ từ dữ liệu, cách mà hầu hết mô hình ngôn ngữ lớn dùng để tách văn bản.</div>
+        focus: [1, 1, 1, 1, 2]
+        say: "Chào bạn, kho học có bốn từ tiếng Anh như trên màn hình, nhưng không có từ thứ năm. Nếu mỗi từ là một từ tố, mô hình bó tay trước từ mới. Nếu mỗi chữ cái là một từ tố, chuỗi quá dài. Cách ở giữa là ghép chữ cái thành những mảnh hay gặp, và từ mới được tách thành hai mảnh đã biết. Hôm nay ta học mã hoá cặp byte, cách học các mảnh từ từ dữ liệu mà hầu hết mô hình ngôn ngữ lớn dùng để tách văn bản."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: đếm có trọng số, và byte của chữ có dấu"
+    checks:
+      - "5 + 2 == 7 and [len(c.encode()) for c in ('a', 'ô', 'è')] == [1, 2, 2]"
+    steps:
+      - show: |
+          <p><b>Đếm có trọng số:</b> từ “low” xuất hiện 5 lần, “lower” 2 lần; cặp chữ “l o” nằm trong cả hai → gặp $5 + 2 = 7$ lần.</p>
+          <table class="t"><tr><th>chữ</th><th>a</th><th>ô</th><th>è</th></tr><tr><td>số byte khi lưu theo chuẩn UTF-8</td><td>1</td><td>2</td><td>2</td></tr></table>
+        focus: [1, 1, "2.2"]
+        say: "Bài này cần hai điều. Thứ nhất, đếm có trọng số, từ thứ nhất xuất hiện 5 lần, từ thứ hai 2 lần, và cặp chữ l o nằm trong cả hai, nên gặp 5 cộng 2 bằng 7 lần. Thứ hai, máy lưu chữ thành byte, chữ a không dấu cần 1 byte, còn chữ ô hay chữ e huyền cần 2 byte."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: thuật toán học luật gộp"
+    steps:
+      - show: |
+          <ol><li>Tách mỗi từ trong kho thành chữ cái, thêm dấu cuối từ &lt;/w&gt;.</li>
+          <li>Đếm mọi <b>cặp kề nhau</b>, nhân với tần số của từ chứa cặp đó.</li>
+          <li>Gộp cặp nhiều nhất thành một ký hiệu mới, ghi lại <b>luật gộp</b>.</li>
+          <li>Lặp lại bước 2–3 cho tới đủ số luật (số luật quyết định kích thước bộ từ tố).</li></ol>
+          <p><b>Tách từ mới</b>: bắt đầu từ chữ cái, áp dụng các luật gộp <b>theo đúng thứ tự đã học</b>.</p>
+        focus: [1, "1.1", "1.2", "1.3", "1.4", 2]
+        say: "Thuật toán có bốn bước. Bước một, tách mỗi từ trong kho thành chữ cái, thêm dấu cuối từ. Bước hai, đếm mọi cặp kề nhau, nhân với tần số của từ chứa cặp đó. Bước ba, gộp cặp nhiều nhất thành một ký hiệu mới, và ghi lại luật gộp. Bước bốn, lặp lại bước hai và ba cho tới đủ số luật, vì số luật quyết định kích thước bộ từ tố. Để tách một từ mới, bắt đầu từ chữ cái, rồi áp dụng các luật gộp theo đúng thứ tự đã học."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Gộp dần: chữ cái thành mảnh"
+    steps:
+      - show: |
+          <div><svg width="1500" height="330" viewBox="0 0 1500 330"><g font-size="26" font-weight="bold" text-anchor="middle" fill="#1f2937">
+          <text x="140" y="62" font-weight="normal" font-size="22">bắt đầu</text>
+          <rect x="260" y="30" width="70" height="50" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="295" y="64">n</text>
+          <rect x="340" y="30" width="70" height="50" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="375" y="64">e</text>
+          <rect x="420" y="30" width="70" height="50" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="455" y="64">w</text>
+          <rect x="500" y="30" width="70" height="50" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="535" y="64">e</text>
+          <rect x="580" y="30" width="70" height="50" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="615" y="64">s</text>
+          <rect x="660" y="30" width="70" height="50" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="695" y="64">t</text>
+          <rect x="740" y="30" width="100" height="50" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="790" y="64">&lt;/w&gt;</text>
+          <text x="140" y="162" font-weight="normal" font-size="22">sau luật 1–2</text>
+          <rect x="260" y="130" width="70" height="50" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="295" y="164">n</text>
+          <rect x="340" y="130" width="70" height="50" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="375" y="164">e</text>
+          <rect x="420" y="130" width="70" height="50" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="455" y="164">w</text>
+          <rect x="500" y="130" width="230" height="50" rx="6" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="615" y="164">est</text>
+          <rect x="740" y="130" width="100" height="50" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="790" y="164">&lt;/w&gt;</text>
+          <text x="140" y="262" font-weight="normal" font-size="22">sau luật 3</text>
+          <rect x="260" y="230" width="70" height="50" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="295" y="264">n</text>
+          <rect x="340" y="230" width="70" height="50" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="375" y="264">e</text>
+          <rect x="420" y="230" width="70" height="50" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="455" y="264">w</text>
+          <rect x="500" y="230" width="340" height="50" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="3"/><text x="670" y="264">est&lt;/w&gt;</text>
+          <text x="1150" y="164" font-weight="normal" font-size="24">7 ký hiệu → 5 → 4</text></g>
+          </svg></div>
+        focus: [1, 1, 1]
+        say: "Hình cho thấy một từ trong kho thay đổi qua các luật gộp. Lúc đầu nó là 7 ký hiệu, chữ cái cộng dấu cuối từ. Sau luật một và hai, ba chữ e, s, t thành một mảnh, rồi sau luật ba mảnh đó dính luôn dấu cuối từ, nên chỉ còn 4 ký hiệu."
+
+  - id: example
+    kind: example
+    title: "Năm luật gộp đầu tiên"
+    checks:
+      - "alg.bpe_merges({'l o w </w>': 5, 'l o w e r </w>': 2, 'n e w e s t </w>': 6, 'w i d e s t </w>': 3}, 5)[0] == [(('e', 's'), 9), (('es', 't'), 9), (('est', '</w>'), 9), (('l', 'o'), 7), (('lo', 'w'), 7)]"
+      - "6 + 3 == 9 and 5 + 2 == 7"
+    steps:
+      - show: |
+          <p>Kho: low ×5, lower ×2, newest ×6, widest ×3. <b>Bước 1 — đếm mọi cặp kề nhau</b> (có trọng số):</p>
+          <table class="t"><tr><th>cặp</th><th>e s</th><th>s t</th><th>t &lt;/w&gt;</th><th>w e</th><th>l o</th><th>o w</th></tr>
+          <tr><td>số lần</td><td>9</td><td>9</td><td>9</td><td>8</td><td>7</td><td>7</td></tr></table>
+        focus: [1, "2.2", "2.2"]
+        say: "Kho gồm bốn từ với tần số 5, 2, 6 và 3. Bước một, đếm mọi cặp chữ đứng cạnh nhau, rồi nhân số cặp trong mỗi từ với số lần từ đó xuất hiện. Cặp e s gặp 9 lần, cặp s t và t với dấu cuối từ cũng 9 lần, w e 8 lần, còn l o và o w 7 lần."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>lần</th><th>cặp được gộp</th><th>số lần</th><th>vì sao</th></tr>
+          <tr><td>1</td><td>e + s → es</td><td>9</td><td>newest (6) + widest (3); hoà thì lấy cặp gặp trước</td></tr>
+          <tr><td>2</td><td>es + t → est</td><td>9</td><td>cùng hai từ đó</td></tr>
+          <tr><td>3</td><td>est + &lt;/w&gt; → est&lt;/w&gt;</td><td>9</td><td>đuôi “est” cuối từ</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Bước hai, gộp cặp nhiều nhất và đếm lại sau mỗi lần gộp. Lần một gộp e và s, 9 lần, vì 6 lần trong từ thứ ba cộng 3 lần trong từ thứ tư, và hoà thì lấy cặp gặp trước. Lần hai, ghép mảnh vừa tạo với chữ t đứng sau nó, cặp này cũng xuất hiện 9 lần. Lần ba gộp đuôi e s t với dấu cuối từ, 9 lần."
+      - show: |
+          <table class="t"><tr><th>lần</th><th>cặp được gộp</th><th>số lần</th><th>vì sao</th></tr>
+          <tr><td>4</td><td>l + o → lo</td><td>7</td><td>low (5) + lower (2)</td></tr>
+          <tr><td>5</td><td>lo + w → low</td><td>7</td><td>cùng hai từ đó</td></tr></table>
+        focus: ["1.2", "1.3"]
+        say: "Lần bốn gộp l và o, 7 lần, vì 5 lần trong từ đầu cộng 2 lần trong từ thứ hai. Lần năm gộp mảnh l o với w, cũng 7 lần."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — tách từ mới</b> “lowest”: l o w e s t &lt;/w&gt; → áp dụng 5 luật theo thứ tự → <b class="red">low + est&lt;/w&gt;</b> — <b>2</b> từ tố thay vì 7 ký hiệu.</p>
+        say: "Bước ba, tách từ mới chưa gặp. Bắt đầu từ 7 ký hiệu, áp dụng năm luật theo đúng thứ tự, chỉ còn 2 từ tố, mảnh l o w và mảnh e s t có dấu cuối từ."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: đếm lại bằng tay"
+    checks:
+      - "sum(f for w, f in {'l o w </w>': 5, 'l o w e r </w>': 2, 'n e w e s t </w>': 6, 'w i d e s t </w>': 3}.items() if 'e s' in w) == 9"
+      - "alg.bpe_encode('lowest', [p for p, _ in alg.bpe_merges({'l o w </w>': 5, 'l o w e r </w>': 2, 'n e w e s t </w>': 6, 'w i d e s t </w>': 3}, 5)[0]]) == ['low', 'est</w>'] and len('l o w e s t </w>'.split()) == 7"
+    steps:
+      - show: |
+          <table class="t"><tr><th>con số</th><th>đếm lại</th><th>kết quả</th></tr>
+          <tr><td>cặp e s: 9</td><td>chỉ newest (6) và widest (3) có “e s”</td><td>6 + 3 = 9 ✓</td></tr>
+          <tr><td>“lowest”: 2 từ tố</td><td>7 ký hiệu; “low” dùng luật 4, 5; “est&lt;/w&gt;” dùng luật 1, 2, 3</td><td>2 ✓</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Kiểm bằng đường khác, đếm lại bằng tay. Chỉ hai từ có cặp e s, với tần số 6 và 3, nên đúng 9 lần. Từ mới có 7 ký hiệu, mảnh l o w dùng luật bốn và năm, mảnh đuôi dùng luật một, hai, ba, nên còn đúng 2 từ tố."
+
+  - id: pitfalls
+    kind: pitfall
+    checks:
+      - "[len(s.encode()) for s in ('Tôi thích mèo', 'I like cats')] == [16, 11] and [len(s) for s in ('Tôi thích mèo', 'I like cats')] == [13, 11]"
+      - "alg.bpe_encode('newer', [p for p, _ in alg.bpe_merges({'l o w </w>': 5, 'l o w e r </w>': 2, 'n e w e s t </w>': 6, 'w i d e s t </w>': 3}, 5)[0]]) == ['n', 'e', 'w', 'e', 'r', '</w>']"
+    title: "3 lỗi người mới hay mắc"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Đồng nhất từ tố với từ <b class="red">(ước lượng sai chi phí)</b>
+          <br><span class="note">Giá tiền, giới hạn ngữ cảnh, tốc độ đều tính theo <b>từ tố</b>. Từ hiếm bị tách thành nhiều mảnh: “newer” với 5 luật trên vẫn là 6 ký hiệu.</span></div>
+        say: "Lỗi thứ nhất, đồng nhất từ tố với từ, nên ước lượng sai chi phí. Giá tiền, giới hạn ngữ cảnh và tốc độ đều tính theo từ tố. Từ hiếm bị tách thành nhiều mảnh, ví dụ một từ mới với năm luật trên vẫn là 6 ký hiệu."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Quên rằng chữ có dấu tốn nhiều byte hơn <b class="red">(tiếng Việt đắt hơn)</b>
+          <br><span class="note">Bộ tách theo byte bắt đầu từ byte UTF-8: “Tôi thích mèo” có 13 ký tự nhưng <b>16 byte</b>; “I like cats” 11 ký tự, 11 byte. Bộ tách học chủ yếu từ tiếng Anh thường cắt tiếng Việt thành nhiều từ tố hơn cho cùng nội dung.</span></div>
+        say: "Lỗi thứ hai, quên rằng chữ có dấu tốn nhiều byte hơn, nên tiếng Việt đắt hơn. Bộ tách theo byte bắt đầu từ byte của văn bản, câu tôi thích mèo có 13 ký tự nhưng 16 byte, còn câu tiếng Anh cùng nghĩa có 11 ký tự và 11 byte. Bộ tách học chủ yếu từ tiếng Anh thường cắt tiếng Việt thành nhiều từ tố hơn cho cùng nội dung."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Dùng bộ tách khác với bộ tách lúc huấn luyện <b class="red">(mô hình đọc sai)</b>
+          <br><span class="note">Mỗi mô hình gắn với đúng một bộ luật gộp và bảng mã từ tố. Đổi bộ tách thì cùng một văn bản thành dãy số khác — mô hình nhận vào thứ nó chưa từng học.</span></div>
+        say: "Lỗi thứ ba, dùng bộ tách khác với bộ tách lúc huấn luyện, nên mô hình đọc sai. Mỗi mô hình gắn với đúng một bộ luật gộp và bảng mã từ tố. Đổi bộ tách thì cùng một văn bản thành dãy số khác, và mô hình nhận vào thứ nó chưa từng học."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.bpe_merges({'l o w </w>': 5, 'l o w e r </w>': 2, 'n e w e s t </w>': 6, 'w i d e s t </w>': 3}, 6)[0][5] == (('n', 'e'), 6)"
+      - "(lambda c: sorted(k for k, v in c.items() if v == 6))(__import__('collections').Counter(x for w, f in {'low </w>': 5, 'low e r </w>': 2, 'n e w est</w>': 6, 'w i d est</w>': 3}.items() for x in zip(w.split(), w.split()[1:]) for _ in range(f))) == [('e', 'w'), ('n', 'e'), ('w', 'est</w>')]"
+      - "alg.bpe_encode('low', [p for p, _ in alg.bpe_merges({'l o w </w>': 5, 'l o w e r </w>': 2, 'n e w e s t </w>': 6, 'w i d e s t </w>': 3}, 5)[0]]) == ['low', '</w>']"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Sau 5 luật trên, kho thành: low &lt;/w&gt; ×5, low e r &lt;/w&gt; ×2, n e w est&lt;/w&gt; ×6, w i d est&lt;/w&gt; ×3. Luật gộp thứ 6 là gì?</td></tr>
+          <tr><td>2</td><td>Từ “low” được tách thành mấy từ tố?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, sau năm luật trên, kho trở thành như trên màn hình. Luật gộp thứ sáu là gì? Câu hai, từ đầu tiên của kho được tách thành mấy từ tố? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <table class="t"><tr><th>cặp</th><th>n e</th><th>e w</th><th>w est&lt;/w&gt;</th></tr>
+          <tr><td>số lần (chỉ trong newest ×6)</td><td>6</td><td>6</td><td>6</td></tr></table>
+          <p>① Ba cặp hoà ở 6 lần → lấy cặp gặp trước: luật 6 là <b>n + e → ne</b>.</p>
+        focus: [1, 2]
+        say: "Đáp án câu một, có ba cặp cùng xuất hiện nhiều nhất, 6 lần, đều trong từ thứ ba. Hoà thì lấy cặp gặp trước, nên luật sáu gộp n và e."
+      - show: |
+          <p>② “low”: l o w &lt;/w&gt; → luật 4, 5 cho <b>low + &lt;/w&gt;</b> = <b>2</b> từ tố (không luật nào gộp “low” với dấu cuối từ).</p>
+        say: "Câu hai, từ đầu tiên đi qua luật bốn và năm thành mảnh l o w, và không có luật nào gộp mảnh này với dấu cuối từ, nên được 2 từ tố."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">bắt đầu từ chữ cái / byte</span><span class="a">→</span>
+          <span class="n">gộp cặp hay gặp nhất, lặp lại</span><span class="a">→</span>
+          <span class="n">tách từ mới theo đúng thứ tự luật</span><span class="a">→</span>
+          <span class="n">chi phí tính theo từ tố, khác nhau giữa ngôn ngữ</span></div>
+        say: "Tổng kết lại, bắt đầu từ chữ cái hay byte, gộp cặp hay gặp nhất và lặp lại. Tách từ mới theo đúng thứ tự luật, và nhớ rằng chi phí tính theo từ tố, khác nhau giữa các ngôn ngữ."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> mô hình không đọc chữ như ta — nó đọc <b>các mảnh</b> mà bộ tách đã chọn. Nhiều lỗi kỳ lạ (đếm chữ cái sai, đánh vần sai) bắt nguồn từ đây.</div>
+        say: "Điều cần mang theo, mô hình không đọc chữ như ta, nó đọc các mảnh mà bộ tách đã chọn. Nhiều lỗi kỳ lạ như đếm chữ cái sai hay đánh vần sai bắt nguồn từ đây."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 3): <b>vector nhúng</b> và độ tương tự cosin.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 3, ta học vector nhúng và độ tương tự cô-sin. Hẹn gặp bạn ở bài tiếp theo."

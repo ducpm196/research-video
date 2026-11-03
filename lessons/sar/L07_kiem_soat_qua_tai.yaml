@@ -1,0 +1,208 @@
+id: L07
+course: SAR
+series: "SAR · Kiến trúc hệ thống"
+title: "Bài 7 — Kiểm soát quá tải: giới hạn tốc độ, giảm tải, áp lực ngược"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/sar.yaml L07; audit/sar/verify_sar.py L07; J. S. Turner, New Directions in Communications (or Which Way to the Information Age?), IEEE Communications Magazine 24(10), 1986 (thùng rò, thùng token); Google SRE Book (2016), chương 21 (xử lý quá tải) và 22 (lỗi dây chuyền); CLD bài 10"
+assumes: [arith, cdot]
+# Quy ước: thùng token sức chứa B, nạp r token mỗi giây, bắt đầu đầy; mỗi yêu cầu lấy 1 token, hết token thì bị từ chối (alg.token_bucket).
+#   Ví dụ: r = 10, B = 20, dồn 1000 yêu cầu mỗi giây trong 5 giây (5000 yêu cầu cách nhau 1 ms).
+objectives:
+  - "Cài thùng token"
+  - "Thiết kế từ chối có kiểm soát khi quá tải"
+  - "Dùng áp lực ngược thay vì để hàng đợi phình vô hạn"
+asr_reviewed:
+  - {sentence: "Thùng bắt đầu đầy với 20 token, nên 20 yêu cầu đầu tiên, đến trong 20 mi li giây đầu, được nhận ngay.", reason: "ASR chép “Thùng bắt đầu đầy với 20 tô cần, nên 20 yêu cầu đầu tiên đến trọng 20 mili giấy đầu được nhận ngay.” (0.83): token đọc “tâu-cần” theo lexicon SAR (probe p1 8/8), ASR viết “tô cần”; tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh; lệch âm/thanh thuần Việt: trong/trọng — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Giây đầu nhận 29, gồm 20 token có sẵn và 9 token vừa nạp.", reason: "ASR chép “Giây đầu nhận 29, gồm 20 tô cần có sẵn và 9 tô cần vừa nạp.” (0.895): token đọc “tâu-cần” theo lexicon SAR (probe p1 8/8), ASR viết “tô cần” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Nhận hết để không phụ lòng khách thì hàng đợi phình, độ trễ bùng nổ, hết giờ, thử lại, rồi sập.", reason: "ASR chép “Nhận hết để không phụ lòng khách thi hàng đời phinh, đồ trễ buồn nổ, hết giờ, thử lại, rồi sập.” (0.762): lệch âm/thanh thuần Việt: thì/thi, đợi phình độ/đời phinh đồ, bùng/buồn — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Câu một, thùng 5 token mỗi giây, sức chứa 10, khách gửi 100 yêu cầu mỗi giây trong 2 giây, tức 200 yêu cầu, được nhận bao nhiêu?", reason: "ASR chép “Câu một, thùng 5 tô cần mỗi giây, sức chứa 10, khách gửi 100 yêu cầu mỗi giây trong 2 giây, tức 200 yêu cầu, được nhận bao nhiêu?” (0.968): token đọc “tâu-cần” theo lexicon SAR (probe p1 8/8), ASR viết “tô cần” — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Chậm dần rồi chết hẳn"
+    steps:
+      - show: |
+          <p>Một kịch bản lỗi của khách hàng gọi giao diện lập trình 1000 lần mỗi giây. Máy chủ cố phục vụ hết: hàng đợi dài ra, mọi yêu cầu chậm dần, hết giờ, khách khác thử lại — rồi cả hệ thống sập. Không ai được phục vụ, kể cả khách bình thường.</p>
+          <div class="box key">Hôm nay: <b>kiểm soát quá tải</b> — từ chối có kiểm soát để phần còn lại vẫn chạy.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, một kịch bản lỗi của khách hàng gọi giao diện lập trình 1000 lần mỗi giây. Máy chủ cố phục vụ hết, hàng đợi dài ra, mọi yêu cầu chậm dần, hết giờ, khách khác lại thử lại, rồi cả hệ thống sập. Không ai được phục vụ, kể cả khách bình thường. Hôm nay ta học kiểm soát quá tải, từ chối có kiểm soát để phần còn lại vẫn chạy."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: tốc độ nhân thời gian, phần lẻ, hàng chờ dài ra"
+    checks:
+      - "10 * 3 == 30 and math.floor(7.8) == 7 and math.floor(19.95) == 19"
+      - "(1000 - 100) * 5 == 4500"
+    steps:
+      - show: |
+          <table class="t"><tr><th>điều cần nhớ</th><th>ví dụ số</th></tr>
+          <tr><td>lượng nạp = tốc độ $\cdot$ thời gian</td><td>vòi chảy 10 lít mỗi giây trong 3 giây: $10 \cdot 3 = 30$ lít</td></tr>
+          <tr><td>chỉ dùng được phần nguyên</td><td>có 7,8 vé, mỗi người cần trọn 1 vé → chỉ 7 người vào</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.3", "1.3"]
+        say: "Trước hết, ôn hai điều sẽ dùng. Lượng nạp vào bằng tốc độ nhân thời gian. Ví dụ vòi chảy 10 lít mỗi giây trong 3 giây thì được 10 nhân 3, bằng 30 lít. Thứ hai, chỉ dùng được phần nguyên. Có 7 phẩy 8 vé mà mỗi người cần trọn 1 vé thì chỉ 7 người được vào, phần lẻ không đủ cho người thứ tám."
+      - show: |
+          <p><b>Hàng chờ dài ra</b> khi việc đến nhanh hơn việc được làm: mỗi giây thêm đúng phần chênh lệch. Đến 1000 yêu cầu mỗi giây, máy làm được 100 → mỗi giây thêm 900 yêu cầu chờ; sau 5 giây là $900 \cdot 5 = \hl{4500}$ yêu cầu đang chờ, và người cuối hàng chờ rất lâu.</p>
+        say: "Điều thứ ba, hàng chờ dài ra khi việc đến nhanh hơn việc được làm, mỗi giây thêm đúng phần chênh lệch. Nếu đến 1000 yêu cầu mỗi giây mà máy chỉ làm được 100, thì mỗi giây thêm 900 yêu cầu chờ. Sau 5 giây đã có 4500 yêu cầu đang chờ, và người cuối hàng phải chờ rất lâu."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: thùng token, giảm tải, áp lực ngược"
+    steps:
+      - show: |
+          <table class="t"><tr><th>công cụ</th><th>làm gì</th></tr>
+          <tr><td><b>thùng token</b></td><td>thùng chứa tối đa $B$ token, nạp $r$ token mỗi giây; mỗi yêu cầu lấy 1 token, hết thì từ chối. Cho phép dồn ngắn tới $B$, trung bình không quá $r$.</td></tr>
+          <tr><td><b>giảm tải</b></td><td>khi quá tải, chủ động bỏ việc ít quan trọng (thống kê, gợi ý) để giữ việc quan trọng (thanh toán)</td></tr>
+          <tr><td><b>áp lực ngược</b></td><td>bên nhận báo “chậm lại” cho bên gửi (hàng đợi có giới hạn, từ chối sớm), thay vì nhận vô hạn</td></tr></table>
+        introduces: [sub]
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Bảng giới thiệu ba công cụ. Thùng token chứa tối đa B token, được nạp r token mỗi giây, mỗi yêu cầu lấy 1 token, hết thì bị từ chối, nên cho phép dồn ngắn tới B mà trung bình không quá r. Giảm tải là khi quá tải, chủ động bỏ những việc ít quan trọng như thống kê hay gợi ý, để giữ việc quan trọng như thanh toán. Áp lực ngược là bên nhận báo cho bên gửi chậm lại, bằng hàng đợi có giới hạn và từ chối sớm, thay vì nhận vô hạn."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Thùng token: vòi nạp chậm, cửa ra có điều kiện"
+    steps:
+      - show: |
+          <div><svg width="1500" height="330" viewBox="0 0 1500 330"><g font-size="22" fill="#1f2937"><text x="20" y="150">1000 yêu cầu</text><text x="20" y="178">mỗi giây</text><line x1="160" y1="160" x2="560" y2="160" stroke="#1f2937" stroke-width="3"/><polygon points="560,150 580,160 560,170" fill="#1f2937"/><rect x="640" y="40" width="160" height="40" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="720" y="67" text-anchor="middle" fill="#059669">vòi nạp</text><text x="830" y="58" fill="#059669">nạp 10 token</text><text x="830" y="84" fill="#059669">mỗi giây</text><line x1="720" y1="80" x2="720" y2="110" stroke="#059669" stroke-width="3" stroke-dasharray="6 5"/><path d="M600 110 L620 290 L820 290 L840 110" fill="none" stroke="#2a78d6" stroke-width="4"/><rect x="626" y="230" width="188" height="56" fill="#93c5fd"/><text x="720" y="265" text-anchor="middle">còn token</text><text x="720" y="320" text-anchor="middle" fill="#2a78d6">sức chứa 20 token</text><line x1="860" y1="160" x2="1100" y2="110" stroke="#059669" stroke-width="3"/><text x="1110" y="105" fill="#059669" font-weight="bold">có token: lấy 1, nhận</text><line x1="860" y1="190" x2="1100" y2="240" stroke="#b91c1c" stroke-width="3"/><text x="1110" y="235" fill="#b91c1c" font-weight="bold">hết token: từ chối ngay</text><text x="1110" y="263" fill="#b91c1c">báo “thử lại sau”</text></g></svg></div>
+        focus: [1, 1, 1]
+        say: "Hình vẽ thùng token như một cái thùng có vòi nạp. Vòi nạp đều 10 token mỗi giây, nhưng thùng chỉ chứa được 20, nạp thêm khi đầy thì tràn mất. Mỗi yêu cầu đến phải lấy 1 token, còn token thì được nhận, hết token thì bị từ chối ngay và được báo thử lại sau."
+
+  - id: example
+    kind: example
+    title: "Thùng 10 token mỗi giây, sức chứa 20"
+    checks:
+      - "alg.token_bucket(10, 20, [i * 0.001 for i in range(5000)]) == 69 and 20 + 10 * 4.999 < 70"
+      - "alg.token_bucket(10, 20, [i * 0.001 for i in range(20)]) == 20 and round(10 * 4.999, 2) == 49.99 and math.floor(20 + 10 * 4.999) == 69 and 5000 - 69 == 4931"
+    steps:
+      - show: |
+          <p><b>Bước 1 — token có sẵn:</b> khách dồn 1000 yêu cầu mỗi giây trong 5 giây, tổng 5000 yêu cầu. Thùng bắt đầu <b>đầy 20</b> token → 20 yêu cầu đầu (đến trong 20 mi li giây đầu) được nhận ngay.</p>
+        say: "Bước một, khách dồn 1000 yêu cầu mỗi giây trong 5 giây, tổng 5000 yêu cầu. Thùng bắt đầu đầy với 20 token, nên 20 yêu cầu đầu tiên, đến trong 20 mi li giây đầu, được nhận ngay."
+      - show: |
+          <p><b>Bước 2 — token nạp thêm:</b> yêu cầu cuối đến lúc 4,999 giây. Từ lúc bắt đầu tới đó vòi nạp $10 \cdot 4{,}999 = 49{,}99$ token. Thùng không bao giờ đầy lại (vừa có token là bị lấy ngay), nên không token nào bị tràn mất.</p>
+        say: "Bước hai, yêu cầu cuối đến lúc 4 phẩy 999 giây. Từ lúc bắt đầu tới đó, vòi nạp 10 nhân 4 phẩy 999, bằng 49 phẩy 99 token. Thùng không bao giờ đầy lại, vì vừa có token là bị lấy ngay, nên không token nào bị tràn mất."
+      - show: |
+          <p><b>Bước 3 — cộng lại, bỏ phần lẻ:</b> $20 + 49{,}99 = 69{,}99$ token, mỗi yêu cầu cần trọn 1 token → nhận $\hl{69}$ yêu cầu.</p>
+        say: "Bước ba, cộng lại được 20 cộng 49 phẩy 99, bằng 69 phẩy 99 token. Mỗi yêu cầu cần trọn 1 token, nên bỏ phần lẻ, nhận được 69 yêu cầu."
+      - clear: true
+        show: |
+          <p><b>Bước 4 — gom lại:</b></p>
+          <table class="t"><tr><th>nguồn token</th><th>số lượng</th></tr>
+          <tr><td>có sẵn lúc đầu</td><td>20</td></tr>
+          <tr><td>nạp thêm trong 4,999 giây</td><td>≈ 49,99 → dùng được 49</td></tr>
+          <tr><td><b>số yêu cầu được nhận</b></td><td>$\hl{69}$ trên 5000</td></tr></table>
+          <div class="box key">4931 yêu cầu bị từ chối <b>ngay</b>, với mã lỗi “quá nhiều yêu cầu” và thời điểm nên thử lại — máy chủ không mất công xử lý chúng, khách khác vẫn được phục vụ.</div>
+        focus: [1, 2, "2.2", "2.3", "2.4", 3]
+        say: "Bước bốn, bảng gom lại số token dùng được. Có sẵn lúc đầu là 20. Nạp thêm trong 4 phẩy 999 giây được khoảng 49 phẩy 99, tức dùng được 49. Tổng số yêu cầu được nhận là 69 trên 5000. Còn 5000 trừ 69, bằng 4931 yêu cầu bị từ chối ngay. Chúng nhận mã lỗi quá nhiều yêu cầu và thời điểm nên thử lại, nên máy chủ không mất công xử lý chúng và khách khác vẫn được phục vụ."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: đếm từng giây"
+    checks:
+      - "[alg.token_bucket(10, 20, [i * 0.001 for i in range(1000 * s)]) for s in range(1, 6)] == [29, 39, 49, 59, 69]"
+      - "20 + 10 * 5 == 70 and 69 <= 70"
+      - "alg.token_bucket(10, 20, [i * 0.1 for i in range(50)]) == 50"
+    steps:
+      - show: |
+          <table class="t"><tr><th>giây</th><th>nhận thêm trong giây đó</th><th>cộng dồn</th></tr>
+          <tr><td>1</td><td>20 có sẵn + 9 nạp</td><td>29</td></tr>
+          <tr><td>2</td><td>10</td><td>39</td></tr>
+          <tr><td>3</td><td>10</td><td>49</td></tr>
+          <tr><td>4</td><td>10</td><td>59</td></tr>
+          <tr><td>5</td><td>10</td><td>$\hl{69}$ ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.6"]
+        say: "Kiểm bằng đường khác, máy cho chạy thùng và đếm số được nhận sau từng giây. Giây đầu nhận 29, gồm 20 token có sẵn và 9 token vừa nạp. Mỗi giây sau chỉ nhận thêm 10, vì thùng đã cạn và chỉ còn vòi nạp 10 token mỗi giây. Cộng dồn sau 5 giây là 69, khớp với cách tính ở trên."
+      - show: |
+          <table class="t"><tr><th>kiểm thêm</th><th>tính</th><th>kết quả</th></tr>
+          <tr><td>trần lý thuyết</td><td>$B + r \cdot T = 20 + 10 \cdot 5 = 70 \geq 69$</td><td>✓</td></tr>
+          <tr><td>khách <b>lịch sự</b>: đều 10 yêu cầu/s trong 5 giây</td><td>50 yêu cầu</td><td>nhận đủ $\hl{50}$ ✓ — thùng chỉ chặn phần vượt</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        introduces: [geq]
+        say: "Thêm hai kiểm tra nữa. Trần lý thuyết là B cộng r nhân T, bằng 20 cộng 10 nhân 5, bằng 70, không nhỏ hơn 69. Còn khách lịch sự gửi đều 10 yêu cầu mỗi giây trong 5 giây, tổng 50 yêu cầu, thì được nhận đủ cả 50, vì thùng chỉ chặn phần vượt."
+
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc, 1 lỗi người đã đi làm"
+    checks:
+      - "10 * 10 == 100 and 20 * 10 == 200 and 100 // 20 == 5 and 20 * 5 == 100"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Không biết từ chối <b class="red">(sụp hẳn)</b>
+          <br><span class="note">Nhận hết để “không phụ lòng khách”: hàng đợi phình, độ trễ bùng nổ (như CLD), hết giờ, thử lại, sập. Từ chối nhanh một phần còn hơn phục vụ chậm tất cả.</span></div>
+        say: "Lỗi thứ nhất, không biết từ chối. Nhận hết để không phụ lòng khách thì hàng đợi phình, độ trễ bùng nổ, hết giờ, thử lại, rồi sập. Từ chối nhanh một phần còn hơn phục vụ chậm tất cả."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Giới hạn chung cho mọi khách <b class="red">(một người làm hại tất cả)</b>
+          <br><span class="note">Một kịch bản lỗi dùng hết hạn mức chung, mọi khách khác bị từ chối. Giới hạn <b>theo từng khách</b> (mỗi khoá truy cập một thùng).</span></div>
+        say: "Lỗi thứ hai, đặt giới hạn chung cho mọi khách. Một kịch bản lỗi dùng hết hạn mức chung thì mọi khách khác bị từ chối, nên hãy giới hạn theo từng khách, mỗi khoá truy cập một thùng."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Từ chối mà không nói khi nào thử lại <b class="red">(bão thử lại)</b>
+          <br><span class="note">Khách thử lại ngay lập tức, nhân đôi tải. Trả kèm thời gian chờ đề nghị, và khách thử lại có lùi, có ngẫu nhiên (CLD).</span></div>
+        say: "Lỗi thứ ba, từ chối mà không nói khi nào thử lại. Khách thử lại ngay lập tức, nhân đôi tải, nên hãy trả kèm thời gian chờ đề nghị, và để khách thử lại có lùi, có ngẫu nhiên."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Đặt giới hạn trên <b>từng máy chủ</b> rồi quên rằng số máy thay đổi <b class="red">(hạn mức trôi theo số máy)</b></div>
+          <table class="t"><tr><th>số máy</th><th>giới hạn mỗi máy</th><th>khách thật sự được gửi</th></tr>
+          <tr><td>10</td><td>10 yêu cầu/s</td><td>100 yêu cầu/s (đúng hợp đồng)</td></tr>
+          <tr><td>20 (tự động thêm máy lúc đông)</td><td>10 yêu cầu/s</td><td>$\hl{200}$ yêu cầu/s — gấp đôi</td></tr></table>
+          <p class="note">Người làm nghề đếm hạn mức ở <b>một kho đếm chung</b>, hoặc chia hạn mức cho số máy đang chạy: 20 máy thì mỗi máy $\frac{100}{20} = 5$ yêu cầu/s.</p>
+        introduces: [frac]
+        focus: [1, 2, "2.2", "2.3", 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, là đặt giới hạn trên từng máy chủ rồi quên rằng số máy thay đổi. Với 10 máy, mỗi máy cho khách 10 yêu cầu mỗi giây, thì khách được 100 yêu cầu mỗi giây, đúng hợp đồng. Lúc đông, hệ thống tự thêm lên 20 máy, mỗi máy vẫn cho 10, nên khách được gửi tới 200, gấp đôi. Đó là lúc hệ thống đang đông nhất, nên hạn mức nới ra đúng lúc cần chặt nhất. Người làm nghề đếm hạn mức ở một kho đếm chung, hoặc chia hạn mức cho số máy đang chạy, 20 máy thì mỗi máy 100 chia 20, bằng 5 yêu cầu mỗi giây."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.token_bucket(5, 10, [i * 0.01 for i in range(200)]) == 19 and alg.token_bucket(100, 50, [i * 0.005 for i in range(1000)]) == 549"
+      - "199 * 0.01 == 1.99 and round(5 * 1.99, 2) == 9.95 and math.floor(10 + 5 * 1.99) == 19"
+      - "999 * 0.005 == 4.995 and math.floor(50 + 100 * 4.995) == 549 and 200 / 100 == 2"
+      - "alg.token_bucket(5, 30, [0.0] * 30) == 30 and alg.token_bucket(5, 20, [0.0] * 30) == 20"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Thùng 5 token mỗi giây, sức chứa 10. Khách gửi 100 yêu cầu mỗi giây trong 2 giây (200 yêu cầu). Nhận bao nhiêu?</td></tr>
+          <tr><td>2</td><td>Thùng 100 mỗi giây, sức chứa 50; khách gửi 200 mỗi giây trong 5 giây (1000 yêu cầu). Nhận bao nhiêu? Vì sao gần một nửa?</td></tr>
+          <tr><td>3</td><td>Khách hợp lệ đôi khi dồn <b>30</b> yêu cầu cùng lúc, trung bình 5 mỗi giây. Chọn tốc độ nạp $r$ và sức chứa $B$ thế nào?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.3", "1.4", "1.4", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, thùng 5 token mỗi giây, sức chứa 10, khách gửi 100 yêu cầu mỗi giây trong 2 giây, tức 200 yêu cầu, được nhận bao nhiêu? Câu hai, thùng 100 mỗi giây, sức chứa 50, khách gửi 200 mỗi giây trong 5 giây, tức 1000 yêu cầu, được nhận bao nhiêu? Vì sao gần một nửa? Câu ba, khách hợp lệ đôi khi dồn 30 yêu cầu cùng lúc, trung bình 5 mỗi giây. Chọn tốc độ nạp r và sức chứa B thế nào? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① 200 yêu cầu cách nhau 0,01 giây → yêu cầu cuối đến lúc 1,99 giây. Có sẵn 10, nạp thêm $5 \cdot 1{,}99 = 9{,}95$ → tổng $10 + 9{,}95 = 19{,}95$ → bỏ phần lẻ: $\hl{19}$ yêu cầu.</p>
+        say: "Đáp án câu một, 200 yêu cầu cách nhau 0 phẩy 01 giây, nên yêu cầu cuối đến lúc 1 phẩy 99 giây. Có sẵn 10 token, nạp thêm 5 nhân 1 phẩy 99, bằng 9 phẩy 95. Tổng là 19 phẩy 95, bỏ phần lẻ thì nhận 19 yêu cầu."
+      - show: |
+          <p>② Yêu cầu cuối đến lúc 4,995 giây: $50 + 100 \cdot 4{,}995 = 549{,}5$ → $\hl{549}$. Khách gửi 200 mỗi giây, gấp đôi tốc độ nạp 100, nên về lâu dài chỉ được nhận khoảng một nửa.</p>
+        say: "Câu hai, yêu cầu cuối đến lúc 4 phẩy 995 giây. Có 50 token sẵn cộng 100 nhân 4 phẩy 995, bằng 549 phẩy 5, nên nhận 549. Khách gửi 200 mỗi giây, gấp đôi tốc độ nạp 100, nên về lâu dài chỉ được nhận khoảng một nửa."
+      - show: |
+          <table class="t"><tr><th>chọn</th><th>khách dồn 30 cùng lúc được nhận</th><th>kết luận</th></tr>
+          <tr><td>$r = 5$, $B = 20$</td><td>20</td><td>chặn nhầm 10 yêu cầu hợp lệ</td></tr>
+          <tr><td>$r = 5$, $B = 30$</td><td>$\hl{30}$</td><td>đủ: dồn ngắn tới 30, trung bình không quá 5</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.3"]
+        say: "Câu ba là một quyết định. Tốc độ nạp r đặt bằng mức trung bình, 5 mỗi giây, còn sức chứa B phải đủ cho lần dồn lớn nhất. Nếu chọn B bằng 20 thì khách dồn 30 chỉ được nhận 20, chặn nhầm 10 yêu cầu hợp lệ. Chọn B bằng 30 thì nhận đủ 30, mà trung bình về lâu dài vẫn không quá 5 mỗi giây."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">thùng token: dồn ngắn tới B, trung bình không quá r</span><span class="a">→</span>
+          <span class="n">giới hạn theo từng khách</span><span class="a">→</span>
+          <span class="n">giảm tải: bỏ việc ít quan trọng</span><span class="a">→</span>
+          <span class="n">từ chối sớm, kèm thời gian thử lại</span></div>
+        say: "Tổng kết lại, thùng token cho dồn ngắn tới B mà trung bình không quá r, và nên giới hạn theo từng khách. Giảm tải bằng cách bỏ việc ít quan trọng, và từ chối sớm, kèm thời gian nên thử lại."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> một hệ thống bền không phải hệ thống không bao giờ quá tải, mà là hệ thống <b>biết cách nói “không”</b> khi quá tải.</div>
+        say: "Điều cần mang theo, một hệ thống bền không phải hệ thống không bao giờ quá tải, mà là hệ thống biết cách nói không khi quá tải."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 8): <b>hàng đợi</b> và xử lý bất đồng bộ.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 8, ta học hàng đợi và xử lý bất đồng bộ. Hẹn gặp bạn ở bài tiếp theo."

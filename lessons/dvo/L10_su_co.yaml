@@ -1,0 +1,212 @@
+id: L10
+course: DVO
+series: "DVO · DevOps: tích hợp, triển khai liên tục và vận hành"
+title: "Bài 10 — Sự cố: phát hiện, khôi phục, rút kinh nghiệm không đổ lỗi"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/dvo.yaml L10; audit/dvo/verify_dvo.py L10; Google SRE Book (2016), chương 14 (quản lý sự cố) và 15 (văn hoá rút kinh nghiệm); J. Allspaw, Blameless PostMortems and a Just Culture (Etsy Code as Craft, 2012); CLD bài 12 (ngân sách lỗi)"
+assumes: [arith, frac, approx]
+# Quy ước: MTBF = thời gian trung bình giữa hai lần hỏng; MTTR = thời gian trung bình để khôi phục. Độ sẵn sàng trạng thái dừng = MTBF/(MTBF + MTTR)
+#   (alg.availability_mtbf). Tên viết tắt chỉ trên màn hình; lời đọc nói đầy đủ bằng tiếng Việt.
+objectives:
+  - "Tính độ sẵn sàng từ thời gian giữa hai lần hỏng và thời gian khôi phục"
+  - "Ưu tiên rút ngắn thời gian khôi phục"
+  - "Viết báo cáo sau sự cố không đổ lỗi"
+asr_reviewed:
+  - {sentence: "Bước một, đề bài.", reason: "ASR chép “Bước 1. Đề bay” (0.75): lệch âm/thanh thuần Việt: bài/bay — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Hai giờ sáng, điện thoại reo"
+    steps:
+      - show: |
+          <p>Hai giờ sáng, cảnh báo: tỉ lệ lỗi thanh toán 30%. Người trực mất 40 phút để tìm ai biết hệ thống, 20 phút để tìm cách quay lui. Sáng hôm sau, cuộc họp chỉ xoay quanh câu “ai làm hỏng?”.</p>
+          <div class="box key">Hôm nay: <b>sự cố</b> — khôi phục nhanh, và học từ nó mà không đổ lỗi.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, hai giờ sáng, cảnh báo báo tỉ lệ lỗi thanh toán 30 phần trăm. Người trực mất 40 phút để tìm ai biết hệ thống, rồi 20 phút để tìm cách quay lui. Sáng hôm sau, cuộc họp chỉ xoay quanh câu ai làm hỏng. Hôm nay ta học xử lý sự cố, khôi phục nhanh, và học từ nó mà không đổ lỗi."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: phân số thành phần trăm, phút thành giờ"
+    checks:
+      - "9 / 10 * 100 == 90 and round(99 / 100 * 100, 6) == 99 and 15 / 60 == 0.25 and 45 / 60 == 0.75"
+      - "round(23 / 24 * 100, 2) == 95.83 and 23 + 1 == 24"
+    steps:
+      - show: |
+          <table class="t"><tr><th>phân số</th><th>chia ra</th><th>nhân 100</th></tr>
+          <tr><td>$\frac{9}{10}$</td><td>0,9</td><td>90%</td></tr>
+          <tr><td>$\frac{99}{100}$</td><td>0,99</td><td>99%</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Trước hết, ôn cách đổi phân số thành phần trăm, ta chia tử cho mẫu rồi nhân 100. 9 phần 10 bằng 0 phẩy 9, tức 90 phần trăm. 99 phần 100 bằng 0 phẩy 99, tức 99 phần trăm."
+      - show: |
+          <p>Phút đổi ra giờ: chia cho 60.</p>
+          <p>$15 \text{ phút} = \frac{15}{60} = 0{,}25 \text{ giờ}$, $\quad 45 \text{ phút} = \frac{45}{60} = 0{,}75 \text{ giờ}$</p>
+        focus: [1, 2, 2]
+        say: "Phút đổi ra giờ thì chia cho 60. 15 phút bằng 15 phần 60, tức 0 phẩy 25 giờ. 45 phút bằng 0 phẩy 75 giờ."
+      - show: |
+          <p>Một ví dụ đời thường: tiệm mở 23 giờ, đóng 1 giờ để dọn, rồi lặp lại.</p>
+          <p>Phần thời gian mở cửa $= \frac{23}{23 + 1} = \frac{23}{24} \approx 95{,}83\%$</p>
+        focus: [1, 2, 2]
+        say: "Một ví dụ đời thường, một tiệm mở cửa 23 giờ, đóng 1 giờ để dọn, rồi lặp lại. Phần thời gian mở cửa là 23 chia cho tổng 23 cộng 1, tức 23 phần 24. Kết quả khoảng 95 phẩy 83 phần trăm, và đó chính là kiểu phép tính của cả bài hôm nay."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: MTBF, MTTR, độ sẵn sàng"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ký hiệu</th><th>nghĩa</th></tr>
+          <tr><td><b>MTBF</b></td><td>thời gian trung bình <b>giữa hai lần hỏng</b></td></tr>
+          <tr><td><b>MTTR</b></td><td>thời gian trung bình để <b>khôi phục</b></td></tr></table>
+          <p>Mỗi chu kỳ: chạy tốt một khoảng MTBF, rồi hỏng một khoảng MTTR. Phần thời gian chạy tốt:</p>
+          <p>$\text{độ sẵn sàng} = \frac{\text{MTBF}}{\text{MTBF} + \text{MTTR}}$</p>
+        focus: [1, "1.2", "1.3", 2, 3]
+        say: "Bảng giới thiệu hai ký hiệu. Ký hiệu thứ nhất là thời gian trung bình giữa hai lần hỏng. Ký hiệu thứ hai là thời gian trung bình để khôi phục. Mỗi chu kỳ gồm một khoảng chạy tốt rồi một khoảng hỏng. Độ sẵn sàng là phần thời gian chạy tốt, bằng thời gian giữa hai lần hỏng chia tổng của nó với thời gian khôi phục."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Dải thời gian: xanh là chạy, đỏ là hỏng"
+    steps:
+      - show: |
+          <div><svg width="1500" height="350" viewBox="0 0 1500 350"><g stroke="#1f2937" stroke-width="2"><rect x="60" y="120" width="380" height="60" fill="#bbf7d0"/><rect x="440" y="120" width="60" height="60" fill="#fecaca"/><rect x="500" y="120" width="380" height="60" fill="#bbf7d0"/><rect x="880" y="120" width="60" height="60" fill="#fecaca"/><rect x="940" y="120" width="380" height="60" fill="#bbf7d0"/><rect x="1320" y="120" width="60" height="60" fill="#fecaca"/></g><g fill="none" stroke="#2a78d6" stroke-width="3"><line x1="60" y1="245" x2="500" y2="245"/><line x1="60" y1="232" x2="60" y2="258"/><line x1="500" y1="232" x2="500" y2="258"/></g><g font-size="22" fill="#1f2937"><text x="250" y="100" text-anchor="middle" fill="#059669">chạy tốt: trung bình 720 giờ</text><text x="470" y="215" text-anchor="middle" fill="#b91c1c">hỏng: 1 giờ</text><text x="280" y="290" text-anchor="middle" fill="#2a78d6">một chu kỳ: 720 + 1 = 721 giờ</text><text x="1000" y="290" text-anchor="middle" fill="#1f2937">phần thời gian chạy tốt = 720 chia 721</text><text x="1440" y="335" font-size="19" text-anchor="end" fill="#6b7280">độ dài các đoạn không theo tỉ lệ</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ thời gian của hệ thống thành một dải dài, đoạn xanh là lúc chạy tốt, đoạn đỏ là lúc hỏng và đang khôi phục. Mỗi chu kỳ gồm một đoạn xanh dài trung bình 720 giờ, rồi một đoạn đỏ dài 1 giờ, cộng lại 721 giờ. Độ sẵn sàng chỉ là phần xanh trong mỗi chu kỳ, 720 chia 721. Muốn tăng phần xanh, ta có thể kéo dài đoạn xanh, hoặc rút ngắn đoạn đỏ."
+
+  - id: example
+    kind: example
+    title: "Rút thời gian khôi phục từ 1 giờ xuống 15 phút"
+    checks:
+      - "round(alg.availability_mtbf(720, 1), 5) == 0.99861 and round(alg.availability_mtbf(720, 0.25), 5) == 0.99965"
+      - "720 + 1 == 721 and 720 + 0.25 == 720.25 and round(720 / 721 * 100, 3) == 99.861 and round(720 / 720.25 * 100, 3) == 99.965"
+    steps:
+      - show: |
+          <p><b>Bước 1 — đề bài:</b> hỏng trung bình mỗi 720 giờ (một tháng), khôi phục mất 1 giờ. Một chu kỳ dài:</p>
+          <p>$720 + 1 = 721$ giờ</p>
+        focus: [1, 2]
+        say: "Bước một, đề bài. Hệ thống hỏng trung bình mỗi 720 giờ, tức khoảng một tháng, và mỗi lần khôi phục mất 1 giờ, nên một chu kỳ dài 720 cộng 1, bằng 721 giờ."
+      - show: |
+          <p><b>Bước 2 — độ sẵn sàng:</b></p>
+          $$\frac{720}{720 + 1} = \frac{720}{721} \approx \hl{99{,}861\%}$$
+        focus: [2, 2]
+        say: "Bước hai, độ sẵn sàng là phần chạy tốt trong chu kỳ. 720 chia 721, khoảng 99 phẩy 861 phần trăm."
+      - show: |
+          <p><b>Bước 3 — chỉ rút thời gian khôi phục</b>, không làm hệ thống ít hỏng hơn:</p>
+          <p>$15 \text{ phút} = 0{,}25 \text{ giờ}$, chu kỳ còn $720 + 0{,}25 = 720{,}25$ giờ</p>
+        focus: [1, 2]
+        say: "Bước ba, ta không làm hệ thống ít hỏng hơn, chỉ rút thời gian khôi phục còn 15 phút. Đổi ra giờ được 0 phẩy 25 giờ, nên chu kỳ còn 720 phẩy 25 giờ."
+      - show: |
+          <p><b>Bước 4 — độ sẵn sàng mới:</b></p>
+          $$\frac{720}{720{,}25} \approx \hl{99{,}965\%}$$
+        focus: [2, 2]
+        say: "Bước bốn, tính lại độ sẵn sàng. 720 chia 720 phẩy 25, khoảng 99 phẩy 965 phần trăm."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>khôi phục mất</th><th>độ sẵn sàng</th></tr>
+          <tr><td>1 giờ</td><td>99,861%</td></tr><tr><td>15 phút</td><td>99,965%</td></tr></table>
+          <div class="box key">Rút thời gian khôi phục (cảnh báo tốt, quay lui một lệnh, sổ tay xử lý) thường <b>rẻ hơn</b> nhiều so với làm cho không bao giờ hỏng.</div>
+        focus: [1, 2]
+        say: "Bước năm, đặt hai kết quả cạnh nhau, độ sẵn sàng tăng từ 99 phẩy 861 lên 99 phẩy 965 phần trăm mà hệ thống không hỏng ít đi chút nào. Rút thời gian khôi phục bằng cảnh báo tốt, quay lui một lệnh, sổ tay xử lý, thường rẻ hơn nhiều so với làm cho không bao giờ hỏng."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: tính phần hỏng rồi cộng lại"
+    checks:
+      - "round(1 / 721 * 100, 3) == 0.139 and round(0.25 / 720.25 * 100, 3) == 0.035"
+      - "round(100 - 0.139, 3) == 99.861 and round(100 - 0.035, 3) == 99.965 and round(alg.availability_mtbf(720, 1) * 100, 3) == 99.861 and round(alg.availability_mtbf(720, 0.25) * 100, 3) == 99.965"
+    steps:
+      - show: |
+          <p>Đường khác: tính <b>phần đỏ</b> (phần hỏng) trước, rồi lấy 100% trừ đi.</p>
+          <table class="t"><tr><th>khôi phục</th><th>phần hỏng</th><th>100% trừ phần hỏng</th></tr>
+          <tr><td>1 giờ</td><td>$\frac{1}{721} \approx 0{,}139\%$</td><td>99,861% ✓</td></tr>
+          <tr><td>15 phút</td><td>$\frac{0{,}25}{720{,}25} \approx 0{,}035\%$</td><td>99,965% ✓</td></tr></table>
+        focus: [1, 2, "2.2", "2.3", 0]
+        say: "Kiểm bằng đường khác, ta tính phần đỏ, tức phần hỏng, trước rồi lấy 100 phần trăm trừ đi. Cách này đúng vì hai phần xanh và đỏ phải cộng lại đúng bằng cả chu kỳ. Với khôi phục 1 giờ, phần hỏng là 1 chia 721, khoảng 0 phẩy 139 phần trăm, trừ ra được 99 phẩy 861. Với khôi phục 15 phút, phần hỏng là 0 phẩy 25 chia 720 phẩy 25, khoảng 0 phẩy 035 phần trăm, trừ ra được 99 phẩy 965. Hai đường khớp nhau."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc, 1 lỗi người đã đi làm"
+    checks:
+      - "15 + 40 + 20 == 75 and 75 / 60 == 1.25 and 20 / 60 == 1 / 3"
+      - "round(alg.availability_mtbf(720, 1 / 3) * 100, 3) == 99.954 and round(alg.availability_mtbf(720, 1.25) * 100, 3) == 99.827"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Tìm nguyên nhân gốc trước khi khôi phục <b class="red">(kéo dài sự cố)</b>
+          <br><span class="note">Trong sự cố, việc đầu tiên là <b>dừng thiệt hại</b>: quay lui, tắt cờ tính năng, chuyển lưu lượng. Điều tra kỹ để sau, khi khách đã dùng được.</span></div>
+        say: "Lỗi thứ nhất, đi tìm nguyên nhân gốc trước khi khôi phục. Trong sự cố, việc đầu tiên là dừng thiệt hại, như quay lui, tắt cờ tính năng, hay chuyển lưu lượng. Điều tra kỹ để sau, khi khách đã dùng được."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Báo cáo sau sự cố để tìm người có lỗi <b class="red">(giấu thông tin)</b>
+          <br><span class="note">Bị phạt vì nhận lỗi thì lần sau không ai kể thật. Hỏi “hệ thống nào đã cho phép lỗi này xảy ra?” — thiếu kiểm thử, thiếu cảnh báo, công cụ dễ gõ nhầm.</span></div>
+        say: "Lỗi thứ hai, viết báo cáo sau sự cố để tìm người có lỗi. Bị phạt vì nhận lỗi thì lần sau không ai kể thật. Hãy hỏi hệ thống nào đã cho phép lỗi này xảy ra, như thiếu kiểm thử, thiếu cảnh báo, hay công cụ dễ gõ nhầm."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Báo cáo xong không ai làm gì <b class="red">(lặp lại)</b>
+          <br><span class="note">Mỗi hành động khắc phục cần người chịu trách nhiệm và hạn chót, được theo dõi như mọi công việc khác.</span></div>
+        say: "Lỗi thứ ba, viết báo cáo xong không ai làm gì, và sự cố lặp lại. Mỗi hành động khắc phục cần có người chịu trách nhiệm và hạn chót, được theo dõi như mọi công việc khác."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Chỉ tính thời gian khôi phục từ lúc bắt tay vào sửa <b class="red">(con số đẹp, khách chịu lâu hơn)</b></div>
+          <table class="t"><tr><th>đoạn của sự cố hai giờ sáng</th><th>phút</th></tr>
+          <tr><td>lỗi bắt đầu → cảnh báo kêu (số minh hoạ)</td><td>15</td></tr>
+          <tr><td>tìm người biết hệ thống</td><td>40</td></tr>
+          <tr><td>tìm cách quay lui và quay lui</td><td>20</td></tr>
+          <tr><td>khách thật sự chịu lỗi</td><td>$15 + 40 + 20 = 75$</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", "2.5", 0]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, chỉ tính thời gian khôi phục từ lúc bắt tay vào sửa, nên con số trông rất đẹp. Quay lại sự cố hai giờ sáng, giả sử từ lúc lỗi bắt đầu tới lúc cảnh báo kêu mất 15 phút, đây là số minh hoạ. Tìm người biết hệ thống mất thêm 40 phút. Tìm cách quay lui và quay lui mất 20 phút. Khách thật sự chịu lỗi 15 cộng 40 cộng 20, bằng 75 phút, chứ không phải 20 phút như báo cáo ghi. Người làm nghề đo từ lúc khách bắt đầu gặp lỗi, vì đoạn phát hiện và đoạn tìm người thường dài hơn cả đoạn sửa."
+      - show: |
+          <table class="t"><tr><th>hỏng mỗi 720 giờ, khôi phục ghi là</th><th>độ sẵn sàng</th></tr>
+          <tr><td>20 phút (chỉ đoạn sửa)</td><td>$\frac{720}{720 + \frac{1}{3}} \approx 99{,}954\%$</td></tr>
+          <tr><td>75 phút = 1,25 giờ (cả sự cố)</td><td>$\frac{720}{721{,}25} \approx 99{,}827\%$</td></tr></table>
+        focus: [1, "1.2", "1.3", 0]
+        say: "Đưa vào công thức độ sẵn sàng với hỏng mỗi 720 giờ. Nếu chỉ ghi 20 phút, tức một phần ba giờ, độ sẵn sàng là khoảng 99 phẩy 954 phần trăm. Nếu ghi đúng 75 phút, tức 1 phẩy 25 giờ, chỉ còn khoảng 99 phẩy 827 phần trăm. Báo cáo đẹp hơn thực tế, nên nhóm không thấy rằng việc đáng đầu tư nhất là cảnh báo sớm và sổ tay gọi đúng người."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "round(alg.availability_mtbf(360, 0.25), 5) == 0.99931 == round(alg.availability_mtbf(1440, 1), 5)"
+      - "360 + 0.25 == 360.25 and 360 * 4 == 1440 and 360.25 * 4 == 1441 and sp.Rational(360, 1) / sp.Rational(1441, 4) == sp.Rational(1440, 1441)"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Hỏng mỗi 360 giờ, khôi phục 15 phút: độ sẵn sàng?</td></tr>
+          <tr><td>2</td><td>Hỏng mỗi 1440 giờ, khôi phục 1 giờ: độ sẵn sàng? So với câu 1, nhận xét gì?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, hỏng mỗi 360 giờ, khôi phục mất 15 phút, độ sẵn sàng là bao nhiêu? Câu hai, hỏng mỗi 1440 giờ, khôi phục mất 1 giờ, độ sẵn sàng là bao nhiêu? So với câu một, bạn nhận xét gì? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① 15 phút = 0,25 giờ, chu kỳ $360 + 0{,}25 = 360{,}25$ giờ.</p>
+          <p>$\frac{360}{360{,}25} \approx \hl{99{,}931\%}$</p>
+        focus: [1, 2]
+        say: "Đáp án câu một, đổi 15 phút thành 0 phẩy 25 giờ, chu kỳ dài 360 phẩy 25 giờ. Độ sẵn sàng là 360 chia 360 phẩy 25, khoảng 99 phẩy 931 phần trăm."
+      - show: |
+          <p>② Chu kỳ $1440 + 1 = 1441$ giờ: $\frac{1440}{1441} \approx \hl{99{,}931\%}$.</p>
+          <p>Vì sao bằng nhau đúng? Nhân cả tử và mẫu của câu 1 với 4: $\frac{360 \cdot 4}{360{,}25 \cdot 4} = \frac{1440}{1441}$.</p>
+          <p>Vậy <b>khôi phục nhanh gấp 4</b> có tác dụng ngang <b>ít hỏng hơn 4 lần</b> — và thường dễ đạt hơn nhiều.</p>
+        introduces: [cdot]
+        focus: [1, 2, 2, 3]
+        say: "Câu hai, chu kỳ dài 1440 cộng 1, bằng 1441 giờ, độ sẵn sàng là 1440 chia 1441, cũng khoảng 99 phẩy 931 phần trăm. Hai kết quả không chỉ gần nhau mà bằng nhau đúng. Nhân cả tử và mẫu của câu một với 4, ta được 1440 trên 1441. Vậy khôi phục nhanh gấp 4 có tác dụng ngang với ít hỏng hơn 4 lần, và thường dễ đạt hơn nhiều."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">sẵn sàng = giữa hai lần hỏng / (giữa hai lần hỏng + khôi phục)</span><span class="a">→</span>
+          <span class="n">khôi phục nhanh: rẻ và hiệu quả</span><span class="a">→</span>
+          <span class="n">dừng thiệt hại trước, điều tra sau</span><span class="a">→</span>
+          <span class="n">rút kinh nghiệm không đổ lỗi</span></div>
+        say: "Tổng kết lại, độ sẵn sàng phụ thuộc cả thời gian giữa hai lần hỏng và thời gian khôi phục. Khôi phục nhanh thường rẻ và hiệu quả, nên dừng thiệt hại trước, điều tra sau, và rút kinh nghiệm không đổ lỗi."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> con người sẽ luôn mắc lỗi; hệ thống tốt là hệ thống làm cho lỗi khó xảy ra, dễ phát hiện, và nhanh sửa.</div>
+        say: "Điều cần mang theo, con người sẽ luôn mắc lỗi, và hệ thống tốt là hệ thống làm cho lỗi khó xảy ra, dễ phát hiện, và nhanh sửa."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 11): <b>theo dõi và cảnh báo</b> có ý nghĩa.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 11, ta học cách theo dõi và cảnh báo sao cho có ý nghĩa. Hẹn gặp bạn ở bài tiếp theo."

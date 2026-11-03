@@ -1,0 +1,291 @@
+id: L06
+course: PAR
+series: "PAR · Tính toán song song và GPU"
+title: "Bài 6 — Vector hoá: một lệnh, nhiều dữ liệu"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/par.yaml L06; audit/par/verify_par.py L06; audit/par/sources_L06.md (câu trích nguyên văn, đọc 2026-11-03); Rust core::arch x86, __m256 (doc.rust-lang.org) — tập 256 bit gồm 8 số f32, ứng với tính năng avx; _mm256_add_ps — cộng các số thực 32 bit đóng gói; GCC, Auto-vectorization in GCC (gcc.gnu.org/projects/tree-ssa/vectorization.html) — ví dụ a[i] = b[i] + c[i], vòng phần dư khi số lượt không chia hết hệ số vector hoá, không vector hoá khi có thể phụ thuộc giữa các truy cập; CSA bài 7 (lệnh, thanh ghi); PAR bài 2 (đường găng), bài 3 (số thực không kết hợp)"
+assumes: [arith, frac, approx]
+# Quy ước: w = số làn = số bit của thanh ghi vector chia số bit của một phần tử (256 / 32 = 8); N = số phần tử của vòng lặp.
+#   Vòng vector hoá: ⌊N / w⌋ lệnh vector, rồi N − w · ⌊N / w⌋ lượt vô hướng ở cuối (vòng phần dư) — alg.par_vector_split, alg.par_vector_add.
+#   Chỉ đếm LỆNH CỘNG (bỏ qua lệnh nạp, lưu, nhảy) — mô hình của bài, ghi trên màn hình. a[i] = a[i − 1] + b[i]: alg.par_recurrence
+#   (width = w là vector hoá ngây thơ, mỗi khúc đọc giá trị cũ). Tổng theo làn: alg.par_lane_sum.
+#   Tên AVX, SIMD, GCC, C, Rust chỉ trên màn hình; lời đọc nói “một lệnh, nhiều dữ liệu”, “thanh ghi vector 256 bit”, “trình biên dịch”.
+#   Số minh hoạ: băng thông 20 GB/s, lõi 2 tỉ phép cộng mỗi giây (Lỗi 3).
+objectives:
+  - "Tính số làn của thanh ghi vector và số lệnh vector, số lượt phần dư cho một vòng lặp"
+  - "Nhận ra điều kiện để vector hoá: các lượt lặp không phụ thuộc nhau"
+  - "Giải thích vì sao vector hoá một phép tổng số thực đổi chữ số cuối, và vì sao ít lệnh hơn chưa chắc nhanh hơn ngần ấy lần"
+asr_reviewed:
+  - {sentence: "Nhưng bộ nhớ chỉ đưa được 20 tỉ byte mỗi giây, mỗi phần tử cần đọc 8 byte và ghi 4 byte, tức chỉ khoảng 1 phẩy 67 tỉ phần tử mỗi giây.", reason: "ASR chép “Nhưng bộ nhớ chỉ đưa được 20 tỷ bai mỗi giây, mỗi phần tử cần đọc 8 bai và ghi 4 bai, tức chỉ khoảng 1,67 tỷ phần tử mỗi giây.” (0.861): “tỉ” ASR viết chính tả “tỷ” (cùng âm); byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Lỗi thứ hai, ép vector hoá vòng có phụ thuộc, làn sau dùng giá trị cũ nên ra 1, 1, 1 thay vì 1, 2, 3.", reason: "ASR chép “Lỗi thứ 2, F vét tờ hóa vòng có phụ thuộc là sau dùng giá trị cũ nên ra 1, 1, 1 thay vì 1, 2, 3.” (0.889): lệch âm/thanh thuần Việt: ép/f, tơ/tờ, làn/là — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Ở bài sau, bài 7, ta học cách biết một chương trình bị chặn bởi phép tính hay bởi bộ nhớ, bằng mô hình mái nhà, đếm số phép tính trên mỗi byte phải đọc.", reason: "ASR chép “Ở bài sau, bài 7, ta học cách biết một chương trình bị chặn bởi phép tính hay bởi bộ nhớ bằng mô hình máy nhà, đếm số phép tính trên mỗi bài phải đọc.” (0.943): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: mái/máy — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Đáp án vòng A, số làn w bằng 512 chia 64, tức 8, và 1000 chia hết cho 8 được 125, không có phần dư.", reason: "ASR chép “Đáp án vòng A, số lạng V kết bằng 512 chia 64, tức 8 và 1000 chia hết cho 8 được 125, không có phần dư.” (0.944): chữ w đọc “vê kép” (luật chung), ASR viết tách chữ; lệch âm/thanh thuần Việt: làn/lạng — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Vòng B, s i bằng s i trừ 1 chia 2 cộng x i, có vector hoá trực tiếp được không?", reason: "ASR chép “Vòng B, S y bằng S y trừ 1 chia 2 cộng x y, có vét tờ hóa trực tiếp được không?” (0.955): lệch âm/thanh thuần Việt: tơ/tờ — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Cùng một vòng lặp, ít lệnh hơn gần 8 lần"
+    checks:
+      - "alg.par_vector_split(1003, 8) == (125, 3) and 125 + 3 == 128 and round(1003 / 128, 2) == 7.84"
+      - "alg.par_recurrence([1] * 8, width=8) != alg.par_recurrence([1] * 8)"
+    steps:
+      - show: |
+          <p>Vòng lặp cộng hai mảng 1003 số thực: <b>1003 lệnh cộng</b>. Trình biên dịch đổi sang thanh ghi vector 256 bit: chỉ còn <b>128 lệnh cộng</b>, ít hơn khoảng <b>7,84 lần</b> — cùng một lõi.</p>
+          <p>Vòng lặp kế bên, mỗi phần tử cộng dồn phần tử trước nó, thì trình biên dịch <b>không chịu đổi</b>. Ép đổi bằng tay thì ra kết quả sai.</p>
+          <div class="box key">Hôm nay: một lệnh làm được mấy phép, đếm lệnh cho một vòng lặp, và khi nào vòng lặp không vector hoá được.</div>
+        focus: [1, 1, 2, 2, 3]
+        say: "Chào bạn, một vòng lặp cộng hai mảng 1003 số thực cần 1003 lệnh cộng. Trình biên dịch đổi sang dùng thanh ghi vector 256 bit, chỉ còn 128 lệnh cộng, ít hơn khoảng 7 phẩy 84 lần, trên cùng một lõi. Vòng lặp kế bên, mỗi phần tử cộng dồn phần tử đứng trước nó, thì trình biên dịch không chịu đổi. Ép đổi bằng tay thì ra kết quả sai. Hôm nay ta học một lệnh làm được mấy phép, cách đếm lệnh cho một vòng lặp, và khi nào vòng lặp không vector hoá được."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại ba điều sẽ dùng"
+    checks:
+      - "32 // 8 == 4 and 256 // 8 == 32"
+      - "divmod(1003, 8) == (125, 3) and 8 * 125 + 3 == 1003"
+      - "alg.par_tree_sum(8)[:2] == (7, 3)"
+    steps:
+      - show: |
+          <table class="t"><tr><th>điều sẽ dùng</th><th>ví dụ số</th></tr>
+          <tr><td>① 8 bit là 1 byte</td><td>số thực 32 bit chiếm $\frac{32}{8} = 4$ byte; thanh ghi 256 bit chứa $\frac{256}{8} = 32$ byte</td></tr>
+          <tr><td>② Chia có dư</td><td>1003 chia 8 được 125, dư 3: $8 \cdot 125 + 3 = 1003$</td></tr>
+          <tr><td>③ Ở khoá Hệ thống máy tính: lệnh làm việc trên <b>thanh ghi</b>; ở bài 2: phép phải chờ phép trước thì nối thành đường găng</td><td>cộng dồn 8 số: đường găng 7; cộng theo cặp: 3</td></tr></table>
+        introduces: [cdot]
+        focus: [0, "1.2", "1.3", "1.4", "1.4"]
+        say: "Ta ôn ba điều sẽ dùng. Thứ nhất, 8 bit là 1 byte, nên số thực 32 bit chiếm 4 byte, và thanh ghi 256 bit chứa 32 byte. Thứ hai, chia có dư, 1003 chia 8 được 125 dư 3, vì 8 nhân 125 cộng 3 bằng 1003, dấu chấm giữa dòng là phép nhân. Thứ ba, ở khoá Hệ thống máy tính, lệnh của bộ xử lý làm việc trên thanh ghi. Còn ở bài 2, phép nào phải chờ phép trước thì nối thành đường găng, cộng dồn 8 số có đường găng 7, cộng theo cặp chỉ 3."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: thanh ghi vector, làn, w và vòng phần dư"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thuật ngữ</th><th>nghĩa</th></tr>
+          <tr><td><b>thanh ghi vector</b></td><td>thanh ghi rộng (ví dụ 256 bit) chứa nhiều số đứng cạnh nhau</td></tr>
+          <tr><td><b>làn</b>, số làn $w$</td><td>mỗi ô của thanh ghi; $w = \frac{\text{bit thanh ghi}}{\text{bit một số}}$</td></tr>
+          <tr><td><b>một lệnh, nhiều dữ liệu</b></td><td>một lệnh cộng cả $w$ làn cùng lúc</td></tr>
+          <tr><td><b>vòng phần dư</b></td><td>vài lượt cuối không đủ $w$ phần tử, làm từng số như cũ</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bài dùng bốn thuật ngữ. Thanh ghi vector là thanh ghi rộng, ví dụ 256 bit, chứa nhiều số đứng cạnh nhau. Mỗi ô của nó gọi là một làn, số làn w bằng số bit của thanh ghi chia số bit của một số. Một lệnh, nhiều dữ liệu, nghĩa là một lệnh cộng cả w làn cùng lúc. Vòng phần dư là vài lượt cuối không đủ w phần tử, phải làm từng số như cũ."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Tám lệnh, một lệnh, và một chuỗi phải chờ"
+    steps:
+      - show: |
+          <div><svg width="1500" height="400" viewBox="0 0 1500 400"><defs><marker id="ar6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#b91c1c"/></marker></defs>
+          <text x="60" y="32" font-size="22" font-weight="bold" fill="#b91c1c">vô hướng: 8 lệnh, mỗi lệnh 1 cặp</text>
+          <text x="60" y="80" font-size="22" fill="#1f2937">lệnh 1:  c<tspan font-size="15" baseline-shift="sub">0</tspan> = a<tspan font-size="15" baseline-shift="sub">0</tspan> + b<tspan font-size="15" baseline-shift="sub">0</tspan></text>
+          <text x="60" y="124" font-size="22" fill="#1f2937">lệnh 2:  c<tspan font-size="15" baseline-shift="sub">1</tspan> = a<tspan font-size="15" baseline-shift="sub">1</tspan> + b<tspan font-size="15" baseline-shift="sub">1</tspan></text>
+          <text x="60" y="168" font-size="22" fill="#1f2937">…</text>
+          <text x="60" y="212" font-size="22" fill="#1f2937">lệnh 8:  c<tspan font-size="15" baseline-shift="sub">7</tspan> = a<tspan font-size="15" baseline-shift="sub">7</tspan> + b<tspan font-size="15" baseline-shift="sub">7</tspan></text>
+          <text x="760" y="32" font-size="22" font-weight="bold" fill="#059669">một lệnh, nhiều dữ liệu: 256 bit = 8 làn, mỗi làn 32 bit</text>
+          <rect x="760" y="52" width="80" height="42" rx="4" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="800" y="81" font-size="22" text-anchor="middle" fill="#1f2937">a<tspan font-size="15" baseline-shift="sub">0</tspan></text>
+          <rect x="845" y="52" width="80" height="42" rx="4" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="885" y="81" font-size="22" text-anchor="middle" fill="#1f2937">a<tspan font-size="15" baseline-shift="sub">1</tspan></text>
+          <rect x="930" y="52" width="80" height="42" rx="4" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="970" y="81" font-size="22" text-anchor="middle" fill="#1f2937">a<tspan font-size="15" baseline-shift="sub">2</tspan></text>
+          <rect x="1015" y="52" width="80" height="42" rx="4" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="1055" y="81" font-size="22" text-anchor="middle" fill="#1f2937">a<tspan font-size="15" baseline-shift="sub">3</tspan></text>
+          <rect x="1100" y="52" width="80" height="42" rx="4" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="1140" y="81" font-size="22" text-anchor="middle" fill="#1f2937">a<tspan font-size="15" baseline-shift="sub">4</tspan></text>
+          <rect x="1185" y="52" width="80" height="42" rx="4" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="1225" y="81" font-size="22" text-anchor="middle" fill="#1f2937">a<tspan font-size="15" baseline-shift="sub">5</tspan></text>
+          <rect x="1270" y="52" width="80" height="42" rx="4" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="1310" y="81" font-size="22" text-anchor="middle" fill="#1f2937">a<tspan font-size="15" baseline-shift="sub">6</tspan></text>
+          <rect x="1355" y="52" width="80" height="42" rx="4" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="1395" y="81" font-size="22" text-anchor="middle" fill="#1f2937">a<tspan font-size="15" baseline-shift="sub">7</tspan></text>
+          <rect x="760" y="104" width="80" height="42" rx="4" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="800" y="133" font-size="22" text-anchor="middle" fill="#1f2937">b<tspan font-size="15" baseline-shift="sub">0</tspan></text>
+          <rect x="845" y="104" width="80" height="42" rx="4" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="885" y="133" font-size="22" text-anchor="middle" fill="#1f2937">b<tspan font-size="15" baseline-shift="sub">1</tspan></text>
+          <rect x="930" y="104" width="80" height="42" rx="4" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="970" y="133" font-size="22" text-anchor="middle" fill="#1f2937">b<tspan font-size="15" baseline-shift="sub">2</tspan></text>
+          <rect x="1015" y="104" width="80" height="42" rx="4" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="1055" y="133" font-size="22" text-anchor="middle" fill="#1f2937">b<tspan font-size="15" baseline-shift="sub">3</tspan></text>
+          <rect x="1100" y="104" width="80" height="42" rx="4" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="1140" y="133" font-size="22" text-anchor="middle" fill="#1f2937">b<tspan font-size="15" baseline-shift="sub">4</tspan></text>
+          <rect x="1185" y="104" width="80" height="42" rx="4" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="1225" y="133" font-size="22" text-anchor="middle" fill="#1f2937">b<tspan font-size="15" baseline-shift="sub">5</tspan></text>
+          <rect x="1270" y="104" width="80" height="42" rx="4" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="1310" y="133" font-size="22" text-anchor="middle" fill="#1f2937">b<tspan font-size="15" baseline-shift="sub">6</tspan></text>
+          <rect x="1355" y="104" width="80" height="42" rx="4" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="1395" y="133" font-size="22" text-anchor="middle" fill="#1f2937">b<tspan font-size="15" baseline-shift="sub">7</tspan></text>
+          <rect x="760" y="186" width="80" height="42" rx="4" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="800" y="215" font-size="22" text-anchor="middle" fill="#1f2937">c<tspan font-size="15" baseline-shift="sub">0</tspan></text>
+          <rect x="845" y="186" width="80" height="42" rx="4" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="885" y="215" font-size="22" text-anchor="middle" fill="#1f2937">c<tspan font-size="15" baseline-shift="sub">1</tspan></text>
+          <rect x="930" y="186" width="80" height="42" rx="4" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="970" y="215" font-size="22" text-anchor="middle" fill="#1f2937">c<tspan font-size="15" baseline-shift="sub">2</tspan></text>
+          <rect x="1015" y="186" width="80" height="42" rx="4" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="1055" y="215" font-size="22" text-anchor="middle" fill="#1f2937">c<tspan font-size="15" baseline-shift="sub">3</tspan></text>
+          <rect x="1100" y="186" width="80" height="42" rx="4" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="1140" y="215" font-size="22" text-anchor="middle" fill="#1f2937">c<tspan font-size="15" baseline-shift="sub">4</tspan></text>
+          <rect x="1185" y="186" width="80" height="42" rx="4" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="1225" y="215" font-size="22" text-anchor="middle" fill="#1f2937">c<tspan font-size="15" baseline-shift="sub">5</tspan></text>
+          <rect x="1270" y="186" width="80" height="42" rx="4" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="1310" y="215" font-size="22" text-anchor="middle" fill="#1f2937">c<tspan font-size="15" baseline-shift="sub">6</tspan></text>
+          <rect x="1355" y="186" width="80" height="42" rx="4" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="1395" y="215" font-size="22" text-anchor="middle" fill="#1f2937">c<tspan font-size="15" baseline-shift="sub">7</tspan></text>
+          <text x="1100" y="172" font-size="20" text-anchor="middle" fill="#059669">cộng cả 8 làn cùng lúc: MỘT lệnh</text>
+          <text x="60" y="268" font-size="22" font-weight="bold" fill="#b91c1c">phụ thuộc giữa các lượt: a<tspan font-size="15" baseline-shift="sub">i</tspan> = a<tspan font-size="15" baseline-shift="sub">i − 1</tspan> + b<tspan font-size="15" baseline-shift="sub">i</tspan></text>
+          <rect x="60" y="286" width="110" height="44" rx="6" fill="#fde8e8" stroke="#e11d48" stroke-width="2"/><text x="115" y="316" font-size="22" text-anchor="middle" fill="#1f2937">a<tspan font-size="15" baseline-shift="sub">1</tspan></text>
+          <line x1="172" y1="308" x2="216" y2="308" stroke="#b91c1c" stroke-width="2.5" marker-end="url(#ar6)"/>
+          <rect x="220" y="286" width="110" height="44" rx="6" fill="#fde8e8" stroke="#e11d48" stroke-width="2"/><text x="275" y="316" font-size="22" text-anchor="middle" fill="#1f2937">a<tspan font-size="15" baseline-shift="sub">2</tspan></text>
+          <line x1="332" y1="308" x2="376" y2="308" stroke="#b91c1c" stroke-width="2.5" marker-end="url(#ar6)"/>
+          <rect x="380" y="286" width="110" height="44" rx="6" fill="#fde8e8" stroke="#e11d48" stroke-width="2"/><text x="435" y="316" font-size="22" text-anchor="middle" fill="#1f2937">a<tspan font-size="15" baseline-shift="sub">3</tspan></text>
+          <line x1="492" y1="308" x2="536" y2="308" stroke="#b91c1c" stroke-width="2.5" marker-end="url(#ar6)"/>
+          <rect x="540" y="286" width="110" height="44" rx="6" fill="#fde8e8" stroke="#e11d48" stroke-width="2"/><text x="595" y="316" font-size="22" text-anchor="middle" fill="#1f2937">a<tspan font-size="15" baseline-shift="sub">4</tspan></text>
+          <line x1="652" y1="308" x2="696" y2="308" stroke="#b91c1c" stroke-width="2.5" marker-end="url(#ar6)"/>
+          <rect x="700" y="286" width="110" height="44" rx="6" fill="#fde8e8" stroke="#e11d48" stroke-width="2"/><text x="755" y="316" font-size="22" text-anchor="middle" fill="#1f2937">a<tspan font-size="15" baseline-shift="sub">5</tspan></text>
+          <line x1="812" y1="308" x2="856" y2="308" stroke="#b91c1c" stroke-width="2.5" marker-end="url(#ar6)"/>
+          <rect x="860" y="286" width="110" height="44" rx="6" fill="#fde8e8" stroke="#e11d48" stroke-width="2"/><text x="915" y="316" font-size="22" text-anchor="middle" fill="#1f2937">a<tspan font-size="15" baseline-shift="sub">6</tspan></text>
+          <line x1="972" y1="308" x2="1016" y2="308" stroke="#b91c1c" stroke-width="2.5" marker-end="url(#ar6)"/>
+          <rect x="1020" y="286" width="110" height="44" rx="6" fill="#fde8e8" stroke="#e11d48" stroke-width="2"/><text x="1075" y="316" font-size="22" text-anchor="middle" fill="#1f2937">a<tspan font-size="15" baseline-shift="sub">7</tspan></text>
+          <line x1="1132" y1="308" x2="1176" y2="308" stroke="#b91c1c" stroke-width="2.5" marker-end="url(#ar6)"/>
+          <rect x="1180" y="286" width="110" height="44" rx="6" fill="#fde8e8" stroke="#e11d48" stroke-width="2"/><text x="1235" y="316" font-size="22" text-anchor="middle" fill="#1f2937">a<tspan font-size="15" baseline-shift="sub">8</tspan></text>
+          <text x="60" y="372" font-size="20" fill="#b91c1c">lượt sau phải chờ kết quả lượt trước: 8 làn không thể cùng chạy</text>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình bên trái là cách cũ, mỗi lệnh cộng một cặp số, nên 8 cặp cần 8 lệnh. Bên phải là một lệnh, nhiều dữ liệu, 8 số của a nằm trong một thanh ghi 256 bit, 8 số của b trong thanh ghi khác, và một lệnh cộng cả 8 làn cùng lúc. Hàng dưới là vòng lặp a i bằng a i trừ 1 cộng b i, chữ i nhỏ ở chân là số thứ tự của phần tử. Mỗi lượt cần kết quả của lượt ngay trước, nên 8 làn không thể cùng chạy."
+
+  # ───────────────────────── 5. SUY RA ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra số lệnh của vòng lặp đã vector hoá"
+    checks:
+      - "alg.par_vector_split(20, 8) == (2, 4) and 2 + 4 == 6 and 8 * 2 + 4 == 20"
+    steps:
+      - show: |
+          <p><b>Bước 1 — số làn.</b> Vì mỗi làn chứa một số: $w = \dfrac{256}{32} = 8$.</p>
+          <p><b>Bước 2 — lệnh vector.</b> Mỗi lệnh vector xử lý $w$ phần tử liền nhau, nên đi được $\left\lfloor \frac{N}{w} \right\rfloor$ lần trọn khúc.</p>
+          <p><b>Bước 3 — phần dư.</b> Còn $N - w \cdot \left\lfloor \frac{N}{w} \right\rfloor$ phần tử, làm từng số. Tổng số lệnh cộng:</p>
+          $$\left\lfloor \frac{N}{w} \right\rfloor + \left(N - w \cdot \left\lfloor \frac{N}{w} \right\rfloor\right)$$
+        introduces: [floor]
+        focus: [1, 2, 3, 4]
+        say: "Bước một, vì mỗi làn chứa một số, số làn w bằng 256 chia 32, tức 8. Bước hai, mỗi lệnh vector xử lý w phần tử liền nhau, nên đi được N chia w, làm tròn xuống, lần trọn khúc. Bước ba, còn lại N trừ w nhân số khúc đó phần tử, làm từng số một. Cộng hai phần được tổng số lệnh cộng của vòng lặp."
+      - show: |
+          <p class="note"><b>Làm thử ngay</b> với $N = 20$, $w = 8$: $\left\lfloor \frac{20}{8} \right\rfloor = 2$ lệnh vector, phần dư $20 - 16 = 4$, tổng $2 + 4 = \hlg{6}$ lệnh thay vì 20. Kiểm: $8 \cdot 2 + 4 = 20$ ✓</p>
+        say: "Làm thử ngay với N bằng 20 và w bằng 8. Ta có 20 chia 8 làm tròn xuống bằng 2 lệnh vector, phần dư 20 trừ 16 bằng 4, tổng 6 lệnh thay vì 20. Kiểm lại, 8 nhân 2 cộng 4 đúng bằng 20."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Vòng lặp 1003 phần tử, từng phép tính"
+    checks:
+      - "256 // 32 == 8"
+      - "alg.par_vector_split(1003, 8) == (125, 3)"
+      - "alg.par_vector_add(list(range(1003)), list(range(1003)), 8)[1:] == (125, 3) and round(1003 / 128, 2) == 7.84"
+      - "256 // 64 == 4 and alg.par_vector_split(1003, 4) == (250, 3) and 250 + 3 == 253 and round(1003 / 253, 2) == 3.96"
+      - "alg.par_recurrence([1] * 8) == [0, 1, 2, 3, 4, 5, 6, 7, 8] and alg.par_recurrence([1] * 8, width=8) == [0] + [1] * 8"
+    steps:
+      - show: |
+          <p><b>Bước 1 — số làn.</b> Số thực 32 bit, thanh ghi 256 bit: $w = \frac{256}{32} = \hlb{8}$.</p>
+        say: "Bước một, số thực 32 bit và thanh ghi 256 bit, nên số làn w bằng 256 chia 32, tức 8."
+      - show: |
+          <p><b>Bước 2 — chia khúc.</b></p>
+          $$1003 = 8 \cdot \hlb{125} + \hlo{3}$$
+          <p><b>125</b> lệnh vector, <b>3</b> lượt phần dư.</p>
+        say: "Bước hai, chia khúc, 1003 bằng 8 nhân 125 cộng 3, nên có 125 lệnh vector và 3 lượt phần dư."
+      - show: |
+          <p><b>Bước 3 — so số lệnh cộng.</b> $125 + 3 = 128$ so với 1003: ít hơn $\frac{1003}{128} \approx \hlg{7{,}84}$ lần, gần bằng $w = 8$ vì phần dư nhỏ.</p>
+        say: "Bước ba, so số lệnh cộng, 125 cộng 3 bằng 128 lệnh, so với 1003 lệnh lúc đầu, ít hơn khoảng 7 phẩy 84 lần. Con số gần bằng 8 vì phần dư chỉ có 3."
+      - clear: true
+        show: |
+          <p><b>Bước 4 — số thực 64 bit.</b> $w = \frac{256}{64} = 4$: $1003 = 4 \cdot 250 + 3$, tổng $250 + 3 = 253$ lệnh, ít hơn $\approx 3{,}96$ lần.</p>
+          <table class="t"><tr><th>phần tử</th><th>số làn</th><th>lệnh cộng</th><th>ít hơn</th></tr>
+          <tr><td>32 bit</td><td>8</td><td>128</td><td>7,84 lần</td></tr>
+          <tr><td>64 bit</td><td>4</td><td>253</td><td>3,96 lần</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước bốn, nếu dùng số thực 64 bit, số làn chỉ còn 256 chia 64, bằng 4. Khi đó 1003 bằng 4 nhân 250 cộng 3, tổng 253 lệnh, ít hơn khoảng 3 phẩy 96 lần. Số nhỏ hơn thì thanh ghi chứa được nhiều làn hơn."
+      - clear: true
+        show: |
+          <p><b>Bước 5 — vòng có phụ thuộc.</b> $a_i = a_{i-1} + b_i$, với $a_0 = 0$ và mọi $b_i = 1$:</p>
+          <table class="t"><tr><th>cách chạy</th><th>$a_1$ … $a_8$</th></tr>
+          <tr><td>đúng: từng lượt</td><td>1, 2, 3, 4, 5, 6, 7, 8</td></tr>
+          <tr><td>ép 8 làn cùng lúc: mỗi làn đọc $a_{i-1}$ cũ, đều bằng 0</td><td class="red">1, 1, 1, 1, 1, 1, 1, 1</td></tr></table>
+        introduces: [sub]
+        focus: [1, "2.2", "2.3"]
+        say: "Bước năm là vòng có phụ thuộc, a i bằng a i trừ 1 cộng b i, với phần tử đầu bằng 0 và mọi b bằng 1. Chạy đúng từng lượt ta được 1, 2, 3 cho tới 8. Ép 8 làn chạy cùng lúc thì mỗi làn đọc giá trị a đứng trước khi nó còn là 0, nên cả 8 làn đều ra 1, sai từ làn thứ hai."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác"
+    checks:
+      - "alg.par_vector_add([1.0] * 1003, [2.0] * 1003, 8)[0] == [3.0] * 1003"
+      - "125 * 8 + 3 == 1003 and 250 * 4 + 3 == 1003"
+      - "alg.par_recurrence([1] * 8) == [0] + list(range(1, 9)) and 8 * 9 // 2 == 36 == sum(alg.par_recurrence([1] * 8))"
+    steps:
+      - show: |
+          <table class="t"><tr><th>con số</th><th>đường khác để kiểm</th></tr>
+          <tr><td>125 lệnh + 3 lượt</td><td>nhân ngược: $125 \cdot 8 + 3 = 1003$ phần tử, không thừa không thiếu ✓</td></tr>
+          <tr><td>kết quả đúng</td><td>máy chạy vòng đã vector hoá với $a_i = 1$, $b_i = 2$: cả 1003 phần tử đều bằng 3, giống vòng cũ ✓</td></tr>
+          <tr><td>vòng phụ thuộc</td><td>đúng thì $a_i = i$, tổng 8 số đầu $\frac{8 \cdot 9}{2} = 36$; bản ép 8 làn chỉ ra 8 <b class="red">(sai)</b></td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Ta kiểm theo đường khác. Nhân ngược, 125 nhân 8 cộng 3 bằng 1003, nên không thừa, không thiếu phần tử nào. Máy chạy thật vòng đã vector hoá với mọi a bằng 1 và mọi b bằng 2, cả 1003 phần tử đều ra 3, giống hệt vòng cũ. Với vòng phụ thuộc, đúng thì a i bằng i, tổng 8 số đầu là 8 nhân 9 chia 2, bằng 36, còn bản ép 8 làn chỉ ra tổng 8, nên phép kiểm tổng bắt được ngay."
+
+  # ───────────────────────── 8. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi cả người đã đi làm"
+    checks:
+      - "alg.par_vector_split(1003, 8)[1] == 3 and 125 * 8 == 1000"
+      - "round(20e9 / 12 / 1e9, 2) == 1.67 and min(2e9, 20e9 / 12) == 20e9 / 12 and min(16e9, 20e9 / 12) == 20e9 / 12"
+      - "alg.par_reduce_seq([0.1] * 16) == 1.6000000000000003 and alg.par_lane_sum([0.1] * 16, 8) == 1.5999999999999999"
+    steps:
+      - show: |
+          <table class="t"><tr><th>lỗi</th><th>vì sao sai</th><th>phép thử bắt được</th></tr>
+          <tr><td><b class="red">1.</b> Tự viết vòng vector, quên phần dư</td><td>125 khúc chỉ phủ 1000 phần tử: bỏ sót 3 số, hoặc đọc quá cuối mảng</td><td>thử với $N$ không chia hết cho 8, ví dụ 1003</td></tr>
+          <tr><td><b class="red">2.</b> Ép vector hoá vòng có phụ thuộc</td><td>làn sau dùng giá trị cũ: 1, 1, 1… thay vì 1, 2, 3…</td><td>so với bản chạy từng lượt; so tổng</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.3"]
+        say: "Bảng có hai lỗi đầu. Lỗi thứ nhất, tự viết vòng vector mà quên phần dư, 125 khúc chỉ phủ 1000 phần tử, nên bỏ sót 3 số hoặc đọc quá cuối mảng. Phép thử là chạy với N không chia hết cho 8, ví dụ 1003. Lỗi thứ hai, ép vector hoá vòng có phụ thuộc, làn sau dùng giá trị cũ nên ra 1, 1, 1 thay vì 1, 2, 3."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3</b> (người đã đi làm). Kỳ vọng nhanh gấp 8 vì ít lệnh gấp 8</div>
+          <table class="t"><tr><th>số minh hoạ</th><th>vô hướng</th><th>vector 8 làn</th></tr>
+          <tr><td>lõi cộng được, phần tử mỗi giây</td><td>2 tỉ</td><td>16 tỉ</td></tr>
+          <tr><td>bộ nhớ 20 GB/s, mỗi phần tử đọc 8 byte + ghi 4 byte</td><td colspan="2">$\frac{20 \cdot 10^9}{12} \approx 1{,}67$ tỉ phần tử mỗi giây — cả hai đều bị chặn ở đây</td></tr></table>
+          <p class="note">Mảng không nằm trong bộ nhớ đệm thì bộ nhớ không theo kịp: ít lệnh hơn 8 lần mà gần như không nhanh hơn. Đo trước khi hứa.</p>
+        introduces: [power]
+        focus: [1, "2.2", "2.3", 3]
+        say: "Lỗi thứ ba hay gặp ở người đã đi làm, là kỳ vọng nhanh gấp 8 vì ít lệnh gấp 8. Với số minh hoạ, lõi cộng được 2 tỉ phần tử mỗi giây, bản vector 16 tỉ. Nhưng bộ nhớ chỉ đưa được 20 tỉ byte mỗi giây, mỗi phần tử cần đọc 8 byte và ghi 4 byte, tức chỉ khoảng 1 phẩy 67 tỉ phần tử mỗi giây. Khi mảng không nằm trong bộ nhớ đệm, cả hai bản đều bị chặn ở đó, nên hãy đo trước khi hứa."
+      - show: |
+          <div class="box warn"><b>Lỗi 4</b> (người đã đi làm). Vector hoá một phép tổng số thực rồi đòi kết quả y hệt
+          <br><span class="note">Tổng theo 8 làn là 8 tổng riêng rồi gộp — chính là đổi cách nhóm ở bài 3. 16 khoản 0,1: cộng dồn ra 1,6000000000000003, theo 8 làn ra 1,5999999999999999. So trong sai số, hoặc cố định cách tính.</span></div>
+        say: "Lỗi thứ tư cũng của người đã đi làm, là vector hoá một phép tổng số thực rồi đòi kết quả y hệt bản cũ. Tổng theo 8 làn là 8 tổng riêng rồi gộp, chính là đổi cách nhóm như ở bài 3. Với 16 khoản 0 phẩy 1, cộng dồn ra 1 phẩy 6 kèm một đuôi số 3 rất nhỏ, còn theo 8 làn ra 1 phẩy 5999 cùng nhiều chữ số 9. Hãy so trong sai số, hoặc cố định cách tính."
+
+  # ───────────────────────── 9. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: vòng nào vector hoá được?"
+    checks:
+      - "512 // 64 == 8 and alg.par_vector_split(1000, 8) == (125, 0) and 1000 / 125 == 8"
+      - "alg.par_vector_split(1000, 16) == (62, 8) and 62 + 8 == 70 and round(1000 / 70, 2) == 14.29"
+    steps:
+      - show: |
+          <p>Thanh ghi <b>512 bit</b>, mảng 1000 phần tử (số minh hoạ).</p>
+          <table class="t"><tr><th>vòng</th><th>mã</th><th>hỏi</th></tr>
+          <tr><td>A</td><td>$y_i = 2 \cdot x_i + y_i$, số thực 64 bit</td><td>vector hoá được không? mấy lệnh?</td></tr>
+          <tr><td>B</td><td>$s_i = \frac{s_{i-1}}{2} + x_i$</td><td>vector hoá trực tiếp được không?</td></tr>
+          <tr><td>C</td><td>như A nhưng số thực 32 bit</td><td>mấy lệnh, ít hơn mấy lần?</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", 0]
+        say: "Bây giờ đến lượt bạn, thanh ghi 512 bit và mảng 1000 phần tử, đều là số minh hoạ. Vòng A, y i bằng 2 nhân x i cộng y i, số thực 64 bit, có vector hoá được không, và mất mấy lệnh? Vòng B, s i bằng s i trừ 1 chia 2 cộng x i, có vector hoá trực tiếp được không? Vòng C giống vòng A nhưng số thực 32 bit, mất mấy lệnh và ít hơn mấy lần? Dừng video và làm ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>vòng</th><th>phép tính</th><th>kết luận</th></tr>
+          <tr><td>A</td><td>$w = \frac{512}{64} = 8$; $1000 = 8 \cdot 125 + 0$</td><td>được: mỗi lượt chỉ dùng $x_i$, $y_i$ của chính nó; 125 lệnh, ít hơn $\hlg{8}$ lần, không có phần dư</td></tr>
+          <tr><td>B</td><td>lượt $i$ cần $s_{i-1}$ vừa tính</td><td class="red">không vector hoá trực tiếp: phụ thuộc giữa các lượt, đường găng 1000</td></tr></table>
+        focus: ["1.2", "1.2", "1.3"]
+        say: "Đáp án vòng A, số làn w bằng 512 chia 64, tức 8, và 1000 chia hết cho 8 được 125, không có phần dư. Mỗi lượt chỉ dùng x i và y i của chính nó, nên vector hoá được, mất 125 lệnh, ít hơn 8 lần. Vòng B thì lượt i cần s i trừ 1 vừa tính xong, nên không vector hoá trực tiếp được, vì đường găng dài 1000."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>vòng C</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>số làn</td><td>$\frac{512}{32}$</td><td>16</td></tr>
+          <tr><td>chia khúc</td><td>$1000 = 16 \cdot 62 + 8$</td><td>62 lệnh vector + 8 lượt phần dư = $\hlg{70}$ lệnh</td></tr>
+          <tr><td>ít hơn</td><td>$\frac{1000}{70}$</td><td>$\approx 14{,}29$ lần — phần dư 8 lượt làm mất bớt so với 16</td></tr></table>
+          <p class="note">Quyết định: chọn số 32 bit nếu đủ chính xác, và chọn cỡ mảng chia hết cho số làn nếu được. Vòng B: giữ tuần tự, hoặc đổi thuật toán.</p>
+        focus: ["1.2", "1.3", "1.4", 2]
+        say: "Vòng C dùng số thực 32 bit, nên số làn là 512 chia 32, bằng 16. Khi đó 1000 bằng 16 nhân 62 cộng 8, tức 62 lệnh vector và 8 lượt phần dư, tổng 70 lệnh. Vậy ít hơn 1000 chia 70, khoảng 14 phẩy 29 lần, phần dư 8 lượt làm mất bớt so với 16. Quyết định là chọn số 32 bit nếu đủ chính xác, chọn cỡ mảng chia hết cho số làn nếu được, còn vòng B thì giữ tuần tự hoặc đổi thuật toán."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">số làn $w$ = bit thanh ghi / bit một số</span><span class="a">→</span>
+          <span class="n">$\left\lfloor \frac{N}{w} \right\rfloor$ lệnh vector + phần dư</span><span class="a">→</span>
+          <span class="n">chỉ khi các lượt không phụ thuộc nhau</span><span class="a">→</span>
+          <span class="n">ít lệnh chưa chắc nhanh: bộ nhớ có theo kịp?</span></div>
+        say: "Tổng kết lại, số làn bằng số bit của thanh ghi chia số bit của một số. Một vòng N phần tử cần N chia w làm tròn xuống lệnh vector, cộng phần dư. Điều kiện là các lượt không phụ thuộc nhau. Và ít lệnh hơn chưa chắc nhanh hơn ngần ấy lần, vì còn phải hỏi bộ nhớ có theo kịp không."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> trước khi vector hoá, hỏi “lượt này có cần kết quả của lượt trước không?”. Sau khi vector hoá, đo: số lệnh giảm là lời hứa, thời gian giảm mới là kết quả.</div>
+        say: "Điều cần mang theo, trước khi vector hoá hãy hỏi lượt này có cần kết quả của lượt trước không. Sau khi vector hoá thì đo, vì số lệnh giảm chỉ là lời hứa, thời gian giảm mới là kết quả."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 7): khi nào bị chặn bởi phép tính, khi nào bị chặn bởi bộ nhớ — mô hình mái nhà, đếm số phép tính trên mỗi byte phải đọc.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 7, ta học cách biết một chương trình bị chặn bởi phép tính hay bởi bộ nhớ, bằng mô hình mái nhà, đếm số phép tính trên mỗi byte phải đọc. Hẹn gặp bạn ở bài tiếp theo."

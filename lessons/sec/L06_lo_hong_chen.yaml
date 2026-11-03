@@ -1,0 +1,199 @@
+id: L06
+course: SEC
+series: "SEC · An toàn thông tin"
+title: "Bài 6 — Lỗ hổng chèn: truy vấn, lệnh, mã kịch bản trên trang"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/sec.yaml L06; audit/sec/verify_sec.py L06; OWASP Top 10 (2021), A03 Injection; OWASP Cross Site Scripting Prevention Cheat Sheet (mã hoá đầu ra theo ngữ cảnh); Python docs, html.escape, sqlite3 (tham số “?”); SWF bài 12"
+assumes: [arith]
+# Quy ước: mức KHÁI NIỆM để hiểu phòng thủ. alg.sql_concat_vs_param(đầu vào) chạy sqlite3 thật trên bảng 2 người dùng: trả (câu lệnh ghép chuỗi, số
+#   dòng khi ghép chuỗi, số dòng khi tham số hoá). alg.render_safe = html.escape. Lời đọc không đọc mã; mô tả bằng tiếng Việt.
+objectives:
+  - "Nhận ra mẫu chung của lỗ hổng chèn"
+  - "Dùng tham số hoá cho truy vấn và lệnh"
+  - "Mã hoá đầu ra theo ngữ cảnh"
+asr_reviewed:
+  - {sentence: "Tổng kết lại, lỗ hổng chèn là khi dữ liệu bị hiểu thành mã.", reason: "ASR chép “Tổng kết lại, lỗ hổng chen là khi giữ liệu bị hiểu thanh mả.” (0.786): lệch âm/thanh thuần Việt: chèn/chen, thành mã/thanh mả — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Ô tìm kiếm trả về mọi tài khoản"
+    checks:
+      - "alg.sql_concat_vs_param(\"x' OR '1'='1\")[1:] == (2, 0)"
+    steps:
+      - show: |
+          <p>Ô tìm người dùng ghép thẳng chữ người gõ vào câu truy vấn. Ai đó gõ một chuỗi có dấu nháy và một điều kiện luôn đúng — và kết quả trả về <b>mọi</b> tài khoản, thay vì không ai.</p>
+          <div class="box key">Hôm nay: <b>lỗ hổng chèn</b> — khi <b>dữ liệu</b> của người dùng bị hiểu thành <b>mã</b>, và cách tách hai thứ đó ra.</div>
+        focus: [1, 1, 2]
+        say: "Chào bạn, ô tìm người dùng ghép thẳng chữ người gõ vào câu truy vấn. Ai đó gõ một chuỗi có dấu nháy và một điều kiện luôn đúng, và kết quả trả về mọi tài khoản thay vì không ai. Hôm nay ta học lỗ hổng chèn, khi dữ liệu của người dùng bị hiểu thành mã, và cách tách hai thứ đó ra."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: chuỗi, dấu nháy, truy vấn lọc, thẻ trang web"
+    checks:
+      - "'xin' + 'chao' == 'xinchao' and alg.sql_concat_vs_param('alice')[2] == 1"
+    steps:
+      - show: |
+          <table class="t"><tr><th>điều sẽ dùng</th><th>ví dụ</th></tr>
+          <tr><td>chuỗi nằm giữa hai dấu nháy</td><td><code>'alice'</code>: dấu nháy đánh dấu chỗ chuỗi bắt đầu và kết thúc</td></tr>
+          <tr><td>ghép chuỗi bằng dấu cộng</td><td><code>'xin' + 'chao'</code> → <code>'xinchao'</code></td></tr>
+          <tr><td>truy vấn lọc theo điều kiện</td><td>bảng có 2 người <code>alice</code>, <code>bob</code>; lấy người tên là <code>alice</code> → $\hl{1}$ dòng</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Trước hết, ôn ba điều bài này sẽ dùng. Trong mã, chuỗi nằm giữa hai dấu nháy, dấu nháy đánh dấu chỗ chuỗi bắt đầu và kết thúc. Dấu cộng ghép hai chuỗi, xin cộng chào thành xin chào viết liền. Ở khoá Cơ sở dữ liệu, một truy vấn lọc theo điều kiện, bảng có 2 người, lấy người có đúng một cái tên thì được 1 dòng."
+      - show: |
+          <p>Trang web: trình duyệt đọc <code>&lt;b&gt;An&lt;/b&gt;</code> là một <b>thẻ</b> in đậm và hiện ra chữ <b>An</b>. Dấu nhỏ hơn và lớn hơn là ký tự đặc biệt mở, đóng thẻ.</p>
+        say: "Điều thứ tư là trang web, trình duyệt đọc một chữ An nằm trong thẻ in đậm là lệnh in đậm, và hiện ra chữ An đậm. Dấu nhỏ hơn và dấu lớn hơn là ký tự đặc biệt dùng để mở và đóng thẻ."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: một mẫu, nhiều nơi"
+    steps:
+      - show: |
+          <p><b>Mẫu chung</b>: chương trình ghép chuỗi người dùng vào một ngôn ngữ khác (truy vấn, lệnh hệ thống, trang web), rồi đưa cho bộ thông dịch của ngôn ngữ đó. Ký tự đặc biệt trong dữ liệu làm đổi <b>cấu trúc</b> câu lệnh.</p>
+          <table class="t"><tr><th>nơi chèn</th><th>cách phòng thủ đúng</th></tr>
+          <tr><td>truy vấn cơ sở dữ liệu</td><td>câu lệnh <b>tham số hoá</b>: dữ liệu gửi riêng, không bao giờ thành mã</td></tr>
+          <tr><td>lệnh hệ thống</td><td>gọi chương trình với danh sách đối số, không qua trình thông dịch lệnh</td></tr>
+          <tr><td>trang web (mã kịch bản)</td><td><b>mã hoá đầu ra</b> theo ngữ cảnh: ký tự đặc biệt thành thực thể, hiển thị như chữ</td></tr></table>
+        focus: [1, 1, 2, "2.2", "2.3", "2.4"]
+        say: "Mẫu chung là chương trình ghép chuỗi của người dùng vào một ngôn ngữ khác như truy vấn, lệnh hệ thống hay trang web, rồi đưa cho bộ thông dịch của ngôn ngữ đó. Ký tự đặc biệt trong dữ liệu làm đổi cấu trúc của câu lệnh. Bảng cho cách phòng thủ đúng ở mỗi nơi. Với truy vấn, dùng câu lệnh tham số hoá, dữ liệu được gửi riêng và không bao giờ thành mã. Với lệnh hệ thống, gọi chương trình với một danh sách đối số, không qua trình thông dịch lệnh. Với trang web, mã hoá đầu ra theo ngữ cảnh, biến ký tự đặc biệt thành thực thể để hiển thị như chữ."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Dữ liệu đi chung kênh hay đi kênh riêng"
+    steps:
+      - show: |
+          <div><svg width="1500" height="495" viewBox="0 0 1500 495"><g fill="#1f2937"><text x="180" y="35" text-anchor="start" font-size="24" fill="#b91c1c" font-weight="bold">ghép chuỗi (sai)</text><rect x="180" y="50" width="420" height="100" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="390" y="94" text-anchor="middle" font-size="26">câu lệnh mẫu</text><text x="390" y="126" text-anchor="middle" font-size="22" fill="#4b5563">phần mã của ta</text><text x="630" y="112" text-anchor="middle" font-size="30">+</text><rect x="660" y="50" width="300" height="100" rx="10" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="810" y="94" text-anchor="middle" font-size="26">chữ người gõ</text><text x="810" y="126" text-anchor="middle" font-size="22" fill="#4b5563">dữ liệu</text><line x1="960" y1="100" x2="1098" y2="100" stroke="#1f2937" stroke-width="3"/><polygon points="1098,100 1083,106 1083,94" fill="#1f2937"/><rect x="1100" y="50" width="360" height="100" rx="10" fill="#fee2e2" stroke="#b91c1c" stroke-width="3"/><text x="1280" y="94" text-anchor="middle" font-size="26">bộ thông dịch</text><text x="1280" y="126" text-anchor="middle" font-size="22" fill="#4b5563">đọc tất cả như mã</text><text x="820" y="190" text-anchor="middle" font-size="22" fill="#b91c1c">dấu nháy trong dữ liệu đóng chuỗi sớm, phần sau thành mã</text><text x="180" y="240" text-anchor="start" font-size="24" fill="#059669" font-weight="bold">tham số hoá (đúng)</text><rect x="180" y="255" width="420" height="80" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="390" y="289" text-anchor="middle" font-size="26">câu lệnh có chỗ trống ?</text><text x="390" y="321" text-anchor="middle" font-size="22" fill="#4b5563">đi theo kênh mã</text><rect x="180" y="355" width="420" height="80" rx="10" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="390" y="389" text-anchor="middle" font-size="26">chữ người gõ</text><text x="390" y="421" text-anchor="middle" font-size="22" fill="#4b5563">đi theo kênh dữ liệu</text><line x1="600" y1="295" x2="1098" y2="295" stroke="#1f2937" stroke-width="3"/><polygon points="1098,295 1083,301 1083,289" fill="#1f2937"/><line x1="600" y1="395" x2="1098" y2="395" stroke="#059669" stroke-width="3"/><polygon points="1098,395 1083,401 1083,389" fill="#059669"/><text x="850" y="282" text-anchor="middle" font-size="22">kênh mã</text><text x="850" y="382" text-anchor="middle" font-size="22" fill="#059669">kênh dữ liệu</text><rect x="1100" y="255" width="360" height="180" rx="10" fill="#d1fae5" stroke="#059669" stroke-width="3"/><text x="1280" y="339" text-anchor="middle" font-size="26">bộ thông dịch</text><text x="1280" y="371" text-anchor="middle" font-size="22" fill="#4b5563">dữ liệu vào chỗ trống</text><text x="820" y="475" text-anchor="middle" font-size="22" fill="#059669">dữ liệu chỉ được điền vào chỗ trống, không bao giờ thành mã</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình trên là cách ghép chuỗi, phần mã của ta và chữ người gõ bị dán liền rồi đưa cho bộ thông dịch. Bộ thông dịch đọc tất cả như mã, nên một dấu nháy trong dữ liệu đóng chuỗi sớm, và phần sau thành mã. Hình dưới là tham số hoá, câu lệnh có chỗ trống đi theo kênh mã, chữ người gõ đi theo kênh dữ liệu riêng. Dữ liệu chỉ được điền vào chỗ trống, nên chuỗi nào cũng chỉ là dữ liệu."
+
+  - id: example
+    kind: example
+    title: "Ghép chuỗi và tham số hoá, chạy thật"
+    checks:
+      - "alg.sql_concat_vs_param('alice')[1:] == (1, 1) and alg.sql_concat_vs_param(\"x' OR '1'='1\")[1:] == (2, 0)"
+      - "alg.render_safe('<script>alert(1)</script>') == '&lt;script&gt;alert(1)&lt;/script&gt;'"
+    steps:
+      - show: |
+          <p><b>Bước 1 — tên hợp lệ</b> (bảng có 2 người):</p>
+          <table class="t"><tr><th>đầu vào</th><th>ghép chuỗi</th><th>tham số hoá</th></tr>
+          <tr><td><code>alice</code></td><td>1 dòng</td><td>1 dòng</td></tr></table>
+        focus: [1, "2.2"]
+        say: "Bước một, chạy thật trên một cơ sở dữ liệu có 2 người dùng. Với đầu vào là đúng tên một người dùng, cả hai cách đều trả 1 dòng, nên chạy thử với dữ liệu tốt không phân biệt được hai cách."
+      - show: |
+          <p><b>Bước 2 — chuỗi có dấu nháy và một điều kiện luôn đúng:</b></p>
+          <table class="t"><tr><th>đầu vào</th><th>ghép chuỗi</th><th>tham số hoá</th></tr>
+          <tr><td>chuỗi có dấu nháy + điều kiện luôn đúng</td><td class="red">$\hl{2}$ dòng — mọi người</td><td class="green">0 dòng — không ai tên như vậy</td></tr></table>
+        focus: [1, "2.2", "2.2"]
+        say: "Bước hai, đưa vào một chuỗi có dấu nháy và một điều kiện luôn đúng. Cách ghép chuỗi trả 2 dòng, tức mọi người. Cách tham số hoá trả 0 dòng, vì không ai có tên như vậy."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — viết đúng:</b> dấu hỏi giữ chỗ, dữ liệu đi riêng.</p>
+          <div class="code"><div>con.execute("SELECT name FROM users WHERE name = ?", (ten,))   <span class="cm"># dữ liệu đi riêng</span></div></div>
+        focus: [1, 2]
+        say: "Bước ba, viết đúng bằng tham số hoá. Đoạn mã dùng dấu hỏi giữ chỗ, và dữ liệu được gửi riêng ở đối số thứ hai, không bao giờ dán vào câu lệnh."
+      - show: |
+          <p><b>Bước 4 — trang web:</b> mã hoá đầu ra tên <code>&lt;script&gt;alert(1)&lt;/script&gt;</code>.</p>
+          <table class="t"><tr><th>ký tự</th><th>thành</th><th>số lần trong tên</th></tr>
+          <tr><td>dấu nhỏ hơn</td><td><code>&amp;lt;</code></td><td>2</td></tr>
+          <tr><td>dấu lớn hơn</td><td><code>&amp;gt;</code></td><td>2</td></tr></table>
+          <p>Kết quả <code>&amp;lt;script&amp;gt;…</code> — trình duyệt <b>hiện ra chữ</b>, không chạy.</p>
+        focus: [1, 2, "2.2", 3]
+        say: "Bước bốn, với trang web, một cái tên chứa thẻ mã kịch bản được mã hoá đầu ra. Bảng cho thấy mỗi dấu nhỏ hơn và lớn hơn thành một thực thể. Tên này có 2 dấu nhỏ hơn và 2 dấu lớn hơn. Kết quả không còn thẻ nào, nên trình duyệt hiện ra chữ chứ không chạy."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác"
+    checks:
+      - "[n for n in ['alice', 'bob'] if n == \"x' OR '1'='1\"] == [] and alg.sql_concat_vs_param(\"x' OR '1'='1\")[1] == len(['alice', 'bob']) == 2"
+      - "len('<script>alert(1)</script>') == 25 and sum(ch in '<>' for ch in '<script>alert(1)</script>') == 4 and 25 + 4 * 3 == len(alg.render_safe('<script>alert(1)</script>')) == 37 and alg.render_safe('<script>alert(1)</script>').count('<') == 0"
+    steps:
+      - show: |
+          <table class="t"><tr><th>con số</th><th>cách khác</th><th>kết quả</th></tr>
+          <tr><td>2 dòng khi ghép chuỗi</td><td>đọc tay: phần “điều kiện luôn đúng” đúng với từng dòng của bảng 2 người</td><td>2 trên 2 ✓</td></tr>
+          <tr><td>0 dòng khi tham số hoá</td><td>so nguyên cả chuỗi với <code>alice</code>, <code>bob</code></td><td>không trùng ai ✓</td></tr>
+          <tr><td>độ dài sau mã hoá</td><td>đếm: 25 ký tự, 4 ký tự đặc biệt, mỗi cái thêm 3 ký tự</td><td>$25 + 4 \times 3 = \hl{37}$ ✓</td></tr>
+          <tr><td>còn thẻ không</td><td>đếm dấu nhỏ hơn trong kết quả</td><td>0 lần → không có thẻ ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Kiểm bằng đường khác. Đọc tay, phần điều kiện luôn đúng đúng với từng dòng của bảng, nên ghép chuỗi trả đủ 2 trên 2 dòng. So nguyên cả chuỗi với hai cái tên trong bảng thì không trùng ai, nên tham số hoá trả 0 dòng. Đếm tay, tên dài 25 ký tự có 4 ký tự đặc biệt, mỗi cái thêm 3 ký tự, nên kết quả dài 25 cộng 12 bằng 37, khớp với máy. Trong kết quả không còn dấu nhỏ hơn nào, nên không thể có thẻ nào."
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, từ người mới tới người đã đi làm"
+    checks:
+      - "[x in ('ten', 'ngay_tao') for x in ['ten', 'ngay_tao', 'mat_khau']] == [True, True, False] and sum(x in ('ten', 'ngay_tao') for x in ['ten', 'ngay_tao', 'mat_khau']) == 2"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Lọc danh sách ký tự “nguy hiểm” <b class="red">(luôn thiếu)</b>
+          <br><span class="note">Mỗi ngôn ngữ, mỗi bảng mã ký tự có cách viết khác cho cùng ký tự. Danh sách chặn luôn sót. Tách dữ liệu khỏi mã bằng tham số hoá, đừng cố “làm sạch” chuỗi.</span></div>
+        say: "Lỗi thứ nhất, lọc một danh sách ký tự nguy hiểm. Mỗi ngôn ngữ, mỗi bảng mã ký tự có cách viết khác cho cùng một ký tự, nên danh sách chặn luôn sót. Hãy tách dữ liệu khỏi mã bằng tham số hoá, đừng cố làm sạch chuỗi."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Mã hoá đầu ra sai ngữ cảnh <b class="red">(vẫn chạy)</b>
+          <br><span class="note">Mã hoá cho nội dung HTML không đủ khi đặt dữ liệu vào thuộc tính, vào đường dẫn, hay vào mã kịch bản. Dùng thư viện khuôn mẫu tự mã hoá theo đúng ngữ cảnh.</span></div>
+        say: "Lỗi thứ hai, mã hoá đầu ra sai ngữ cảnh. Mã hoá cho nội dung trang không đủ khi đặt dữ liệu vào thuộc tính, vào đường dẫn, hay vào mã kịch bản, nên hãy dùng thư viện khuôn mẫu tự mã hoá theo đúng ngữ cảnh."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Tin dữ liệu “nội bộ” <b class="red">(chèn bậc hai)</b>
+          <br><span class="note">Tên người dùng đã lưu trong cơ sở dữ liệu vẫn là dữ liệu người dùng. Khi đem ra ghép vào truy vấn hay trang khác, vẫn phải tham số hoá và mã hoá đầu ra.</span></div>
+        say: "Lỗi thứ ba, tin dữ liệu nội bộ. Tên người dùng đã lưu trong cơ sở dữ liệu vẫn là dữ liệu người dùng, khi đem ra ghép vào truy vấn hay trang khác thì vẫn phải tham số hoá và mã hoá đầu ra."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4.</b> Tham số hoá giá trị nhưng vẫn ghép <b>tên cột</b> để sắp xếp <b class="red">(chỗ giữ chỗ không nhận tên cột)</b>
+          <br><span class="note">Dấu hỏi giữ chỗ chỉ nhận giá trị, nên tham số “sắp xếp theo” hay bị ghép thẳng vào câu lệnh. Người làm nghề so tham số với một <b>danh sách cho phép</b> cố định; không khớp thì từ chối.</span></div>
+          <table class="t"><tr><th>tham số gửi lên</th><th>trong danh sách cho phép?</th><th>xử lý</th></tr>
+          <tr><td><code>ten</code></td><td>có</td><td>sắp theo tên</td></tr>
+          <tr><td><code>ngay_tao</code></td><td>có</td><td>sắp theo ngày tạo</td></tr>
+          <tr><td><code>mat_khau</code></td><td class="red">không</td><td class="green">từ chối</td></tr></table>
+        focus: [1, 1, 1, 2, "2.4", 2]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, là tham số hoá giá trị nhưng vẫn ghép tên cột để sắp xếp. Dấu hỏi giữ chỗ chỉ nhận giá trị, không nhận tên cột, nên tham số sắp xếp theo hay bị ghép thẳng vào câu lệnh. Người làm nghề so tham số đó với một danh sách cho phép cố định, không khớp thì từ chối. Bảng thử ba tham số, tên và ngày tạo có trong danh sách nên được dùng. Cột mật khẩu không có trong danh sách nên bị từ chối. Thử 3 tham số, 2 được dùng, 1 bị từ chối, và chữ người gửi không bao giờ vào câu lệnh."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.render_safe('<b>An</b>') == '&lt;b&gt;An&lt;/b&gt;' and alg.sql_concat_vs_param('bob')[1:] == (1, 1)"
+      - "len('<b>An</b>') == 9 and 9 + 4 * 3 == len(alg.render_safe('<b>An</b>')) == 21"
+      - "(lambda c: c.execute('CREATE TABLE u(n TEXT)') and c.execute('INSERT INTO u VALUES (?)', (\"O'Brien\",)) and c.execute('SELECT n FROM u').fetchall())(__import__('sqlite3').connect(':memory:')) == [(\"O'Brien\",)]"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Tên hiển thị là <code>&lt;b&gt;An&lt;/b&gt;</code>. Sau khi mã hoá đầu ra, trình duyệt hiện gì?</td></tr>
+          <tr><td>2</td><td>Đồng nghiệp đề xuất “xoá mọi dấu nháy khỏi đầu vào” để chống chèn truy vấn. Vì sao chưa đủ? Nên làm gì?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, tên hiển thị là một chữ An nằm trong thẻ in đậm. Sau khi mã hoá đầu ra, trình duyệt hiện gì? Câu hai, đồng nghiệp đề xuất xoá mọi dấu nháy khỏi đầu vào để chống chèn truy vấn. Vì sao chưa đủ? Nên làm gì? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <p>① Hai dấu nhỏ hơn, hai dấu lớn hơn đều thành thực thể: 9 ký tự thành $9 + 4 \times 3 = 21$ ký tự <code>&amp;lt;b&amp;gt;An&amp;lt;/b&amp;gt;</code>.</p>
+          <p>Trình duyệt hiện nguyên chữ <code>&lt;b&gt;An&lt;/b&gt;</code> (không in đậm) — thẻ thành chữ.</p>
+        focus: [1, 1, 2]
+        say: "Đáp án câu một, làm từng bước. Hai dấu nhỏ hơn và hai dấu lớn hơn đều thành thực thể, nên chuỗi 9 ký tự thành 9 cộng 12 bằng 21 ký tự. Trình duyệt hiện nguyên cả thẻ thành chữ, không in đậm."
+      - show: |
+          <p>② Vì sao chưa đủ: ở trường số, đầu vào đổi được cấu trúc câu lệnh mà <b>không cần</b> dấu nháy; còn tên thật như <code>O'Brien</code> bị làm hỏng.</p>
+          <p>Nên làm: <b>tham số hoá</b> — dữ liệu không bao giờ thành mã, và <code>O'Brien</code> vẫn được lưu đúng nguyên văn.</p>
+        focus: [1, 1, 2]
+        say: "Câu hai, trước hết hỏi xoá dấu nháy chặn được gì. Ở trường số, đầu vào đổi được cấu trúc câu lệnh mà không cần dấu nháy, còn tên thật có dấu nháy thì bị làm hỏng. Nên hãy dùng tham số hoá, dữ liệu không bao giờ thành mã, và tên có dấu nháy vẫn được lưu đúng nguyên văn."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">dữ liệu bị hiểu thành mã</span><span class="a">→</span>
+          <span class="n">truy vấn, lệnh: tham số hoá</span><span class="a">→</span>
+          <span class="n">trang web: mã hoá đầu ra đúng ngữ cảnh</span><span class="a">→</span>
+          <span class="n">không lọc danh sách, không tin dữ liệu đã lưu</span></div>
+        say: "Tổng kết lại, lỗ hổng chèn là khi dữ liệu bị hiểu thành mã. Với truy vấn và lệnh, dùng tham số hoá. Với trang web, mã hoá đầu ra đúng ngữ cảnh. Đừng lọc theo danh sách, và đừng tin dữ liệu đã lưu."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> đừng hỏi “chuỗi này có nguy hiểm không” — hãy dùng cách mà <b>chuỗi nào cũng chỉ là dữ liệu</b>.</div>
+        say: "Điều cần mang theo, đừng hỏi chuỗi này có nguy hiểm không, hãy dùng cách mà chuỗi nào cũng chỉ là dữ liệu."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 7): <b>mã hoá đối xứng dùng đúng</b> — chế độ và số dùng một lần.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 7, ta học cách dùng đúng mã hoá đối xứng, với chế độ mã và số dùng một lần. Hẹn gặp bạn ở bài tiếp theo."

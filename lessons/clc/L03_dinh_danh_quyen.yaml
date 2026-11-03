@@ -1,0 +1,167 @@
+id: L03
+course: CLC
+series: "CLC · Điện toán đám mây"
+title: "Bài 3 — Định danh và quyền truy cập: chính sách, vai trò, từ chối tường minh"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/clc.yaml L03; audit/clc/verify_clc.py L03; tài liệu “Policy evaluation logic” của một nhà cung cấp lớn — mặc định từ chối, từ chối tường minh thắng (bản hiện hành, tên chỉ trên màn hình); J. Saltzer, M. Schroeder, The Protection of Information in Computer Systems (1975) — đặc quyền tối thiểu; bài 0"
+assumes: [arith]
+# Quy ước: mỗi câu lệnh chính sách = (hiệu lực cho phép / từ chối, tập thao tác, tài nguyên). Luật đánh giá rút gọn: có câu từ chối khớp → TỪ CHỐI;
+#   không có từ chối, có cho phép khớp → CHO; không câu nào khớp → TỪ CHỐI NGẦM ĐỊNH (alg.iam_eval). Bỏ qua điều kiện, ranh giới quyền, chính sách
+#   tổ chức. Chính sách viết dạng giản lược trong <code>. Tên IAM chỉ trên màn hình.
+objectives:
+  - "Đánh giá một yêu cầu theo tập chính sách"
+  - "Áp dụng đặc quyền tối thiểu"
+  - "Dùng vai trò tạm thời thay cho khoá dài hạn"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Một khoá trong kho mã công khai"
+    steps:
+      - show: |
+          <p>Một lập trình viên dán khoá truy cập vào tệp cấu hình để chạy thử, rồi đẩy mã lên kho công khai. Vài phút sau, công cụ tự động của kẻ xấu đã tìm thấy khoá và bật hàng trăm máy ảo đào tiền ảo. Khoá đó có quyền <b>làm mọi thứ</b>, và <b>không bao giờ hết hạn</b>.</p>
+          <div class="box key">Hôm nay: <b>định danh và quyền truy cập</b> — cách hệ thống quyết định “cho hay không”, và cách cấp đúng quyền, trong đúng thời gian.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, một lập trình viên dán khoá truy cập vào tệp cấu hình để chạy thử, rồi đẩy mã lên một kho công khai. Vài phút sau, công cụ tự động của kẻ xấu đã tìm thấy khoá và bật hàng trăm máy ảo đào tiền ảo. Khoá đó có quyền làm mọi thứ, và không bao giờ hết hạn. Hôm nay ta học định danh và quyền truy cập, cách hệ thống quyết định cho hay không, và cách cấp đúng quyền trong đúng thời gian."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: xác thực khác cấp quyền, và dấu sao nghĩa là mọi"
+    checks:
+      - "len(['xác thực', 'cấp quyền']) == 2"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu hỏi</th><th>tên gọi</th><th>ví dụ thẻ ra vào toà nhà</th></tr>
+          <tr><td>bạn là <b>ai</b>?</td><td>xác thực</td><td>quẹt thẻ, máy biết đó là thẻ của An</td></tr>
+          <tr><td>bạn được làm <b>gì</b>?</td><td>cấp quyền</td><td>thẻ của An mở được tầng 3, không mở được phòng máy chủ</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Trước hết, phân biệt hai câu hỏi. Bạn là ai là câu hỏi xác thực, như quẹt thẻ ra vào thì máy biết đó là thẻ của An. Bạn được làm gì là câu hỏi cấp quyền, như thẻ của An mở được tầng 3 nhưng không mở được phòng máy chủ, và bài hôm nay nói về câu hỏi thứ hai."
+      - show: |
+          <p>Trong chính sách, dấu sao <code>*</code> nghĩa là <b>mọi</b>: thao tác <code>*</code> là mọi thao tác (đọc, ghi, xoá…), tài nguyên <code>*</code> là mọi tài nguyên.</p>
+        say: "Trong chính sách, dấu sao nghĩa là mọi. Thao tác dấu sao là mọi thao tác như đọc, ghi, xoá, còn tài nguyên dấu sao là mọi tài nguyên."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: chủ thể, chính sách, luật đánh giá"
+    steps:
+      - show: |
+          <table class="t"><tr><th>khái niệm</th><th>nghĩa</th></tr>
+          <tr><td><b>chủ thể</b></td><td>ai đang gọi: người dùng, hay <b>vai trò</b> mà một máy, một hàm đang mang</td></tr>
+          <tr><td><b>câu lệnh chính sách</b></td><td>(cho phép / từ chối, thao tác, tài nguyên)</td></tr>
+          <tr><td><b>vai trò</b></td><td>tập quyền mà chủ thể <b>mượn tạm</b>, nhận thông tin xác thực có hạn (ví dụ một giờ)</td></tr></table>
+          <p><b>Luật đánh giá</b>: ① có câu <b>từ chối</b> nào khớp → từ chối, dù có bao nhiêu câu cho phép ② không có, mà có câu <b>cho phép</b> khớp → cho ③ không câu nào khớp → <b>từ chối ngầm định</b>.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2, 2, 2]
+        say: "Bảng có ba khái niệm. Chủ thể là ai đang gọi, có thể là người dùng, hay một vai trò mà máy hoặc hàm đang mang. Câu lệnh chính sách gồm hiệu lực cho phép hay từ chối, thao tác, và tài nguyên. Vai trò là tập quyền mà chủ thể mượn tạm, và nhận thông tin xác thực có hạn, ví dụ một giờ. Luật đánh giá có ba bước. Một, nếu có câu từ chối nào khớp thì từ chối, dù có bao nhiêu câu cho phép. Hai, nếu không có từ chối mà có câu cho phép khớp thì cho, và ba, nếu không câu nào khớp thì từ chối ngầm định."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hai câu hỏi theo đúng thứ tự"
+    steps:
+      - show: |
+          <div><svg width="1500" height="335" viewBox="0 0 1500 335"><defs><marker id="arC3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs><g font-size="22" fill="#1f2937"><rect x="20" y="125" width="160" height="80" rx="10" fill="#f3f4f6" stroke="#6b7280" stroke-width="2"/><text x="100" y="172" text-anchor="middle">yêu cầu</text><polygon points="430,70 590,165 430,260 270,165" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text x="430" y="158" text-anchor="middle">có câu từ chối</text><text x="430" y="188" text-anchor="middle">khớp?</text><polygon points="900,70 1060,165 900,260 740,165" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text x="900" y="158" text-anchor="middle">có câu cho phép</text><text x="900" y="188" text-anchor="middle">khớp?</text><rect x="330" y="285" width="200" height="45" rx="8" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="430" y="315" text-anchor="middle">TỪ CHỐI</text><rect x="800" y="285" width="200" height="45" rx="8" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="900" y="315" text-anchor="middle">CHO</text><rect x="1150" y="125" width="320" height="80" rx="10" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/><text x="1310" y="172" text-anchor="middle">TỪ CHỐI NGẦM ĐỊNH</text><text x="450" y="280" font-size="20">có</text><text x="920" y="280" font-size="20">có</text><text x="610" y="155" font-size="20">không</text><text x="1080" y="155" font-size="20">không</text></g><g stroke="#1f2937" stroke-width="3" fill="none"><line x1="180" y1="165" x2="268" y2="165" marker-end="url(#arC3)"/><line x1="590" y1="165" x2="738" y2="165" marker-end="url(#arC3)"/><line x1="1060" y1="165" x2="1148" y2="165" marker-end="url(#arC3)"/><line x1="430" y1="260" x2="430" y2="283" marker-end="url(#arC3)"/><line x1="900" y1="260" x2="900" y2="283" marker-end="url(#arC3)"/></g></svg></div>
+        focus: [1, 1, 1]
+        say: "Hình vẽ luật đánh giá như hai câu hỏi theo đúng thứ tự. Câu đầu tiên luôn là có câu từ chối nào khớp không, có thì dừng ngay ở từ chối. Chỉ khi không có từ chối mới hỏi tới cho phép, và nếu cũng không có thì mặc định là từ chối."
+
+  - id: example
+    kind: example
+    title: "Hai câu lệnh, ba yêu cầu"
+    checks:
+      - "[alg.iam_eval([('allow', {'*'}, 'bao-cao'), ('deny', {'xoá'}, 'bao-cao')], a, r) for a, r in (('đọc', 'bao-cao'), ('xoá', 'bao-cao'), ('ghi', 'kho-khac'))] == ['allow', 'deny', 'implicit-deny']"
+    steps:
+      - show: |
+          <div class="code"><div>① cho phép   thao tác: *      tài nguyên: kho "bao-cao"</div><div>② từ chối   thao tác: xoá    tài nguyên: kho "bao-cao"</div></div>
+        say: "Bước một, đọc hai câu lệnh. Câu một cho phép mọi thao tác trên kho báo cáo, câu hai từ chối thao tác xoá trên kho báo cáo."
+      - show: |
+          <table class="t"><tr><th>yêu cầu</th><th>câu khớp</th><th>kết quả</th></tr>
+          <tr><td>đọc kho bao-cao</td><td>① cho phép</td><td><b>cho</b></td></tr></table>
+        focus: [1, "1.2"]
+        say: "Bước hai, xét yêu cầu đọc kho báo cáo. Không có câu từ chối nào khớp, vì câu hai chỉ nói về xoá, còn câu một cho phép, nên được cho."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>yêu cầu</th><th>câu khớp</th><th>kết quả</th></tr>
+          <tr><td>xoá kho bao-cao</td><td>① cho phép, ② từ chối</td><td>$\hl{\text{từ chối}}$ — từ chối tường minh thắng</td></tr></table>
+        focus: [1, "1.2"]
+        say: "Bước ba, xét yêu cầu xoá kho báo cáo. Câu hỏi đầu tiên đã có câu hai khớp, nên dừng ngay ở từ chối, dù câu một cũng cho phép."
+      - show: |
+          <table class="t"><tr><th>yêu cầu</th><th>câu khớp</th><th>kết quả</th></tr>
+          <tr><td>ghi kho kho-khac</td><td>không câu nào</td><td>từ chối ngầm định</td></tr></table>
+        focus: [1, "1.2"]
+        say: "Bước bốn, xét yêu cầu ghi vào một kho khác. Không câu nào nói về kho đó, nên rơi xuống ô cuối, từ chối ngầm định."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: thử hết mọi tổ hợp"
+    checks:
+      - "[alg.iam_eval([('allow', {'*'}, 'bao-cao'), ('deny', {'xoá'}, 'bao-cao')], a, r) for r in ('bao-cao', 'kho-khac') for a in ('đọc', 'ghi', 'xoá')] == ['allow', 'allow', 'deny', 'implicit-deny', 'implicit-deny', 'implicit-deny']"
+    steps:
+      - show: |
+          <table class="t"><tr><th>tài nguyên \ thao tác</th><th>đọc</th><th>ghi</th><th>xoá</th></tr>
+          <tr><td>bao-cao</td><td>cho</td><td>cho</td><td class="red">từ chối</td></tr>
+          <tr><td>kho-khac</td><td>ngầm định từ chối</td><td>ngầm định từ chối</td><td>ngầm định từ chối</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Kiểm bằng đường khác, vì chỉ có 3 thao tác và 2 kho, máy thử hết 6 tổ hợp. Ở kho báo cáo, đọc và ghi được cho, chỉ xoá bị từ chối. Ở kho khác, cả ba đều bị từ chối ngầm định, đúng như đi theo hình hai câu hỏi."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Khoá truy cập dài hạn trong mã nguồn <b class="red">(rò rỉ hàng đầu)</b>
+          <br><span class="note">Máy và hàm dùng <b>vai trò</b> gắn sẵn, nhận thông tin xác thực tạm thời tự xoay vòng. Người dùng đăng nhập qua hệ định danh của công ty. Quét kho mã để chặn khoá trước khi đẩy lên.</span></div>
+        say: "Lỗi thứ nhất, để khoá truy cập dài hạn trong mã nguồn, là nguyên nhân rò rỉ hàng đầu. Máy và hàm nên dùng vai trò gắn sẵn, nhận thông tin xác thực tạm thời tự xoay vòng. Người dùng đăng nhập qua hệ định danh của công ty, và kho mã được quét để chặn khoá trước khi đẩy lên."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Cho quyền “*” cho nhanh <b class="red">(vi phạm đặc quyền tối thiểu)</b>
+          <br><span class="note">Hàm chỉ cần đọc một kho mà có quyền mọi thao tác trên mọi tài nguyên: một lỗi trong hàm là kẻ xấu có cả tài khoản. Cấp đúng thao tác, đúng tài nguyên; xem lại quyền không dùng tới.</span></div>
+        say: "Lỗi thứ hai, cho quyền mọi thứ cho nhanh, vi phạm nguyên tắc đặc quyền tối thiểu. Một hàm chỉ cần đọc một kho mà có quyền mọi thao tác trên mọi tài nguyên, thì một lỗi trong hàm là kẻ xấu có cả tài khoản. Hãy cấp đúng thao tác trên đúng tài nguyên, và định kỳ xem lại quyền không dùng tới."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Dùng tài khoản gốc hằng ngày <b class="red">(không giới hạn được)</b>
+          <br><span class="note">Tài khoản gốc vượt qua mọi chính sách. Khoá nó bằng xác thực nhiều lớp, cất đi; làm việc hằng ngày bằng vai trò có giới hạn.</span></div>
+        say: "Lỗi thứ ba, dùng tài khoản gốc hằng ngày, nên không giới hạn được gì. Tài khoản gốc vượt qua mọi chính sách. Hãy khoá nó bằng xác thực nhiều lớp và cất đi, còn làm việc hằng ngày bằng vai trò có giới hạn."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "[alg.iam_eval([('allow', {'đọc'}, '*'), ('deny', {'*'}, 'luong')], a, r) for a, r in (('đọc', 'bao-cao'), ('đọc', 'luong'), ('ghi', 'bao-cao'))] == ['allow', 'deny', 'implicit-deny']"
+    steps:
+      - show: |
+          <div class="code"><div>① cho phép   thao tác: đọc    tài nguyên: *</div><div>② từ chối   thao tác: *      tài nguyên: kho "luong"</div></div>
+          <table class="t"><tr><th>yêu cầu</th><th>thao tác</th><th>tài nguyên</th></tr><tr><td>(a)</td><td>đọc</td><td>bao-cao</td></tr><tr><td>(b)</td><td>đọc</td><td>luong</td></tr><tr><td>(c)</td><td>ghi</td><td>bao-cao</td></tr></table>
+        focus: [1, 1, 2, 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một cho phép đọc mọi tài nguyên, câu hai từ chối mọi thao tác trên kho lương. Hãy đánh giá ba yêu cầu, đọc kho báo cáo, đọc kho lương, và ghi kho báo cáo. Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <p>(a) đọc bao-cao: không có từ chối khớp (② chỉ nói kho luong), ① cho phép → <b>cho</b>.</p>
+          <p>(b) đọc luong: ② từ chối khớp → <b>từ chối</b>, dù ① cũng cho phép.</p>
+        focus: [1, 2]
+        say: "Đáp án, yêu cầu a đọc kho báo cáo không gặp câu từ chối nào, vì câu hai chỉ nói về kho lương, và câu một cho phép, nên được cho. Yêu cầu b đọc kho lương gặp ngay câu hai từ chối, nên bị từ chối, dù câu một cũng cho phép."
+      - show: |
+          <p>(c) ghi bao-cao: không có từ chối khớp, ① chỉ cho <b>đọc</b> → không câu nào cho phép ghi → <b>từ chối ngầm định</b>.</p>
+        say: "Yêu cầu c ghi kho báo cáo không gặp câu từ chối nào, nhưng câu một chỉ cho phép đọc. Không câu nào cho phép ghi, nên bị từ chối ngầm định."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">mặc định: từ chối</span><span class="a">→</span>
+          <span class="n">từ chối tường minh thắng mọi cho phép</span><span class="a">→</span>
+          <span class="n">đặc quyền tối thiểu: đúng thao tác, đúng tài nguyên</span><span class="a">→</span>
+          <span class="n">vai trò, thông tin xác thực tạm thời; cất tài khoản gốc</span></div>
+        say: "Tổng kết lại, mặc định là từ chối, và từ chối tường minh thắng mọi cho phép. Hãy cấp đặc quyền tối thiểu, đúng thao tác trên đúng tài nguyên, dùng vai trò với thông tin xác thực tạm thời, và cất tài khoản gốc đi."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> câu hỏi đúng không phải “người này cần quyền gì?”, mà “<b>nếu</b> quyền này bị lộ thì mất bao nhiêu?”.</div>
+        say: "Điều cần mang theo, câu hỏi đúng không phải người này cần quyền gì, mà là nếu quyền này bị lộ thì mất bao nhiêu."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 4): <b>lưu trữ</b> — đối tượng, khối, tệp và độ bền.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 4, ta học lưu trữ, với đối tượng, khối, tệp, và độ bền. Hẹn gặp bạn ở bài tiếp theo."

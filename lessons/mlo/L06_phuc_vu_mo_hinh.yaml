@@ -1,0 +1,198 @@
+id: L06
+course: MLO
+series: "MLO · MLOps: đưa mô hình học máy vào vận hành"
+title: "Bài 6 — Phục vụ mô hình: theo lô, trực tuyến, độ trễ và thông lượng"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/mlo.yaml L06; audit/mlo/verify_mlo.py L06; D. Crankshaw và cộng sự, Clipper: A Low-Latency Online Prediction Serving System, NSDI (2017) (gộp lô thích ứng); C. Huyen, Designing Machine Learning Systems (2022), chương 7; CLD bài 10 (hàng đợi)"
+assumes: [arith, frac]
+# Quy ước: mô hình chạy trên bộ xử lý đồ hoạ; một lô 32 yêu cầu mất 20 ms, một yêu cầu đơn mất 5 ms (số giả định cho ví dụ, cùng cỡ thực tế).
+#   Yêu cầu đến đều 100 mỗi giây. alg.batch_tradeoff trả (thời gian chờ thêm của yêu cầu đầu lô, thông lượng gộp lô, thông lượng từng cái).
+objectives:
+  - "Chọn dự đoán theo lô hay trực tuyến"
+  - "Đánh đổi gộp lô với độ trễ"
+  - "Đặt giới hạn thời gian chờ khi gộp lô"
+asr_reviewed:
+  - {sentence: "Cách sửa là gộp tối đa 32 cái hoặc tối đa 10 mi li giây, điều kiện nào tới trước.", reason: "ASR chép “Các sữa là gột tối đa 32 cái hoặc tối đa 10 mili giây, điều kiện nào tới trước.” (0.791): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh; lệch âm/thanh thuần Việt: cách sửa/các sữa, gộp/gột — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Gộp lô cho nhanh, khách chờ lâu hơn"
+    checks:
+      - "alg.batch_tradeoff(100, 32, 20, 5) == (310.0, 1600.0, 200.0)"
+    steps:
+      - show: |
+          <p>Nhóm đổi bộ phục vụ sang gộp 32 yêu cầu mỗi lần cho bộ xử lý đồ hoạ: thông lượng tăng gấp 8. Nhưng giờ thấp điểm, khách thấy câu trả lời chậm hẳn — yêu cầu đầu tiên của mỗi lô phải chờ đủ 32 cái.</p>
+          <div class="box key">Hôm nay: <b>phục vụ mô hình</b> — theo lô hay trực tuyến, và đánh đổi giữa <b>thông lượng</b> với <b>độ trễ</b>.</div>
+        focus: [1, 1, 2]
+        say: "Chào bạn, nhóm đổi bộ phục vụ sang gộp 32 yêu cầu mỗi lần cho bộ xử lý đồ hoạ, và thông lượng tăng gấp 8. Nhưng giờ thấp điểm, khách thấy câu trả lời chậm hẳn, vì yêu cầu đầu tiên của mỗi lô phải chờ đủ 32 cái. Hôm nay ta học cách phục vụ mô hình, theo lô hay trực tuyến, và đánh đổi giữa thông lượng với độ trễ."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: đổi mi li giây ra giây, và đếm khoảng giữa các lần đến"
+    checks:
+      - "1000 / 5 == 200 and 1000 / 50 == 20 and 3 * 20 == 60"
+    steps:
+      - show: |
+          <p>1 giây $= 1000$ ms. Mỗi việc mất 5 ms thì một giây làm được $\frac{1000}{5} = \hl{200}$ việc.</p>
+        say: "Trước hết ta ôn hai phép tính. Một giây bằng 1000 mi li giây, nên nếu mỗi việc mất 5 mi li giây thì một giây làm được 1000 chia 5, bằng 200 việc."
+      - show: |
+          <p>Khách đến đều 50 người mỗi giây: hai người liền nhau cách $\frac{1000}{50} = 20$ ms.</p>
+          <div><svg width="1500" height="120" viewBox="0 0 1500 120"><line x1="200" y1="50" x2="1000" y2="50" stroke="#6b7280" stroke-width="2"/><g font-size="22" fill="#1f2937"><circle cx="250" cy="50" r="13" fill="#2a78d6"/><circle cx="483" cy="50" r="13" fill="#2a78d6"/><circle cx="717" cy="50" r="13" fill="#2a78d6"/><circle cx="950" cy="50" r="13" fill="#2a78d6"/><text x="250" y="100" text-anchor="middle">0 ms</text><text x="483" y="100" text-anchor="middle">20</text><text x="717" y="100" text-anchor="middle">40</text><text x="950" y="100" text-anchor="middle">60</text><text x="1050" y="58" fill="#eb6834">4 người, 3 khoảng</text></g></svg></div>
+          <p>Người thứ 4 đến sau người đầu <b>3</b> khoảng: $3 \cdot 20 = \hl{60}$ ms — đếm khoảng, không đếm người.</p>
+        introduces: [cdot]
+        focus: [1, 2, 3, 3]
+        say: "Phép tính thứ hai, khách đến đều 50 người mỗi giây thì hai người liền nhau cách nhau 1000 chia 50, bằng 20 mi li giây. Hình vẽ bốn người đến lúc 0, 20, 40 và 60 mi li giây. Người thứ tư đến sau người đầu ba khoảng, tức 3 nhân 20, bằng 60 mi li giây. Nhớ đếm khoảng, không đếm người, vì 4 người chỉ có 3 khoảng."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: theo lô, trực tuyến, gộp lô"
+    steps:
+      - show: |
+          <table class="t"><tr><th>cách</th><th>khi nào</th><th>ví dụ</th></tr>
+          <tr><td><b>theo lô</b> (ngoại tuyến)</td><td>dự đoán trước cho mọi đối tượng, lưu lại</td><td>gợi ý sản phẩm cho mọi khách mỗi đêm</td></tr>
+          <tr><td><b>trực tuyến</b></td><td>dự đoán ngay khi có yêu cầu</td><td>chặn giao dịch gian lận khi đang thanh toán</td></tr>
+          <tr><td><b>gộp lô</b> trực tuyến</td><td>gom vài yêu cầu chạy một lần cho bộ xử lý đồ hoạ</td><td>dịch văn bản cho nhiều người dùng</td></tr></table>
+          <p><b>Thông lượng</b>: số yêu cầu xử lý được mỗi giây. <b>Độ trễ</b>: thời gian một yêu cầu chờ tới khi có kết quả.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Bảng so ba cách phục vụ. Theo lô, hay ngoại tuyến, là dự đoán trước cho mọi đối tượng rồi lưu lại, như gợi ý sản phẩm cho mọi khách mỗi đêm. Trực tuyến là dự đoán ngay khi có yêu cầu, như chặn giao dịch gian lận khi đang thanh toán. Gộp lô trực tuyến là gom vài yêu cầu chạy một lần cho bộ xử lý đồ hoạ, như dịch văn bản cho nhiều người dùng. Thông lượng là số yêu cầu xử lý được mỗi giây, còn độ trễ là thời gian một yêu cầu chờ tới khi có kết quả."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Ai phải chờ ai trong một lô"
+    checks:
+      - "(lambda a: len(a) == 32 and a[-1] - a[0] == 310 and a[1] - a[0] == 10)([i * 1000 / 100 for i in range(32)])"
+    steps:
+      - show: |
+          <div><svg width="1500" height="320" viewBox="0 0 1500 320"><line x1="260" y1="110" x2="1330" y2="110" stroke="#6b7280" stroke-width="2"/><line x1="260" y1="250" x2="1330" y2="250" stroke="#6b7280" stroke-width="2"/><circle cx="260" cy="110" r="7" fill="#2a78d6"/><circle cx="260" cy="250" r="7" fill="#2a78d6"/><rect x="260" y="220" width="15" height="20" fill="#059669"/><circle cx="290" cy="110" r="7" fill="#2a78d6"/><circle cx="290" cy="250" r="7" fill="#2a78d6"/><rect x="290" y="220" width="15" height="20" fill="#059669"/><circle cx="320" cy="110" r="7" fill="#2a78d6"/><circle cx="320" cy="250" r="7" fill="#2a78d6"/><rect x="320" y="220" width="15" height="20" fill="#059669"/><circle cx="350" cy="110" r="7" fill="#2a78d6"/><circle cx="350" cy="250" r="7" fill="#2a78d6"/><rect x="350" y="220" width="15" height="20" fill="#059669"/><circle cx="380" cy="110" r="7" fill="#2a78d6"/><circle cx="380" cy="250" r="7" fill="#2a78d6"/><rect x="380" y="220" width="15" height="20" fill="#059669"/><circle cx="410" cy="110" r="7" fill="#2a78d6"/><circle cx="410" cy="250" r="7" fill="#2a78d6"/><rect x="410" y="220" width="15" height="20" fill="#059669"/><circle cx="440" cy="110" r="7" fill="#2a78d6"/><circle cx="440" cy="250" r="7" fill="#2a78d6"/><rect x="440" y="220" width="15" height="20" fill="#059669"/><circle cx="470" cy="110" r="7" fill="#2a78d6"/><circle cx="470" cy="250" r="7" fill="#2a78d6"/><rect x="470" y="220" width="15" height="20" fill="#059669"/><circle cx="500" cy="110" r="7" fill="#2a78d6"/><circle cx="500" cy="250" r="7" fill="#2a78d6"/><rect x="500" y="220" width="15" height="20" fill="#059669"/><circle cx="530" cy="110" r="7" fill="#2a78d6"/><circle cx="530" cy="250" r="7" fill="#2a78d6"/><rect x="530" y="220" width="15" height="20" fill="#059669"/><circle cx="560" cy="110" r="7" fill="#2a78d6"/><circle cx="560" cy="250" r="7" fill="#2a78d6"/><rect x="560" y="220" width="15" height="20" fill="#059669"/><circle cx="590" cy="110" r="7" fill="#2a78d6"/><circle cx="590" cy="250" r="7" fill="#2a78d6"/><rect x="590" y="220" width="15" height="20" fill="#059669"/><circle cx="620" cy="110" r="7" fill="#2a78d6"/><circle cx="620" cy="250" r="7" fill="#2a78d6"/><rect x="620" y="220" width="15" height="20" fill="#059669"/><circle cx="650" cy="110" r="7" fill="#2a78d6"/><circle cx="650" cy="250" r="7" fill="#2a78d6"/><rect x="650" y="220" width="15" height="20" fill="#059669"/><circle cx="680" cy="110" r="7" fill="#2a78d6"/><circle cx="680" cy="250" r="7" fill="#2a78d6"/><rect x="680" y="220" width="15" height="20" fill="#059669"/><circle cx="710" cy="110" r="7" fill="#2a78d6"/><circle cx="710" cy="250" r="7" fill="#2a78d6"/><rect x="710" y="220" width="15" height="20" fill="#059669"/><circle cx="740" cy="110" r="7" fill="#2a78d6"/><circle cx="740" cy="250" r="7" fill="#2a78d6"/><rect x="740" y="220" width="15" height="20" fill="#059669"/><circle cx="770" cy="110" r="7" fill="#2a78d6"/><circle cx="770" cy="250" r="7" fill="#2a78d6"/><rect x="770" y="220" width="15" height="20" fill="#059669"/><circle cx="800" cy="110" r="7" fill="#2a78d6"/><circle cx="800" cy="250" r="7" fill="#2a78d6"/><rect x="800" y="220" width="15" height="20" fill="#059669"/><circle cx="830" cy="110" r="7" fill="#2a78d6"/><circle cx="830" cy="250" r="7" fill="#2a78d6"/><rect x="830" y="220" width="15" height="20" fill="#059669"/><circle cx="860" cy="110" r="7" fill="#2a78d6"/><circle cx="860" cy="250" r="7" fill="#2a78d6"/><rect x="860" y="220" width="15" height="20" fill="#059669"/><circle cx="890" cy="110" r="7" fill="#2a78d6"/><circle cx="890" cy="250" r="7" fill="#2a78d6"/><rect x="890" y="220" width="15" height="20" fill="#059669"/><circle cx="920" cy="110" r="7" fill="#2a78d6"/><circle cx="920" cy="250" r="7" fill="#2a78d6"/><rect x="920" y="220" width="15" height="20" fill="#059669"/><circle cx="950" cy="110" r="7" fill="#2a78d6"/><circle cx="950" cy="250" r="7" fill="#2a78d6"/><rect x="950" y="220" width="15" height="20" fill="#059669"/><circle cx="980" cy="110" r="7" fill="#2a78d6"/><circle cx="980" cy="250" r="7" fill="#2a78d6"/><rect x="980" y="220" width="15" height="20" fill="#059669"/><circle cx="1010" cy="110" r="7" fill="#2a78d6"/><circle cx="1010" cy="250" r="7" fill="#2a78d6"/><rect x="1010" y="220" width="15" height="20" fill="#059669"/><circle cx="1040" cy="110" r="7" fill="#2a78d6"/><circle cx="1040" cy="250" r="7" fill="#2a78d6"/><rect x="1040" y="220" width="15" height="20" fill="#059669"/><circle cx="1070" cy="110" r="7" fill="#2a78d6"/><circle cx="1070" cy="250" r="7" fill="#2a78d6"/><rect x="1070" y="220" width="15" height="20" fill="#059669"/><circle cx="1100" cy="110" r="7" fill="#2a78d6"/><circle cx="1100" cy="250" r="7" fill="#2a78d6"/><rect x="1100" y="220" width="15" height="20" fill="#059669"/><circle cx="1130" cy="110" r="7" fill="#2a78d6"/><circle cx="1130" cy="250" r="7" fill="#2a78d6"/><rect x="1130" y="220" width="15" height="20" fill="#059669"/><circle cx="1160" cy="110" r="7" fill="#2a78d6"/><circle cx="1160" cy="250" r="7" fill="#2a78d6"/><rect x="1160" y="220" width="15" height="20" fill="#059669"/><circle cx="1190" cy="110" r="7" fill="#2a78d6"/><circle cx="1190" cy="250" r="7" fill="#2a78d6"/><rect x="1190" y="220" width="15" height="20" fill="#059669"/><rect x="260.0" y="58" width="930" height="20" fill="#b91c1c" opacity="0.8"/><rect x="1190.0" y="58" width="60" height="20" fill="#059669"/><g font-size="22" fill="#1f2937"><text x="20" y="118">gộp lô 32</text><text x="20" y="258">từng cái</text><text x="260.0" y="45" fill="#b91c1c">yêu cầu đầu lô chờ 310 ms</text><text x="1260.0" y="75" fill="#059669">chạy 20 ms</text><text x="260.0" y="150" fill="#2a78d6">chấm xanh: một yêu cầu đến, cách nhau 10 ms</text><text x="260.0" y="300" fill="#059669">ô lục: chạy ngay, 5 ms mỗi cái</text><text x="560" y="190" text-anchor="middle" font-size="20">100 ms</text><text x="860" y="190" text-anchor="middle" font-size="20">200 ms</text><text x="1160" y="190" text-anchor="middle" font-size="20">300 ms</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ cùng 32 yêu cầu đến đều, cách nhau 10 mi li giây, trên hai trục thời gian. Ở trục dưới, mỗi yêu cầu được chạy ngay trong 5 mi li giây, không ai chờ ai. Ở trục trên, gộp lô 32 bắt yêu cầu đầu tiên ngồi chờ suốt đoạn đỏ cho tới khi yêu cầu thứ 32 đến, rồi cả lô mới chạy 20 mi li giây. Thời gian chờ đó không do máy chậm, mà do phải đợi đủ người."
+
+  - id: example
+    kind: example
+    title: "Lô 32 ở 100 yêu cầu mỗi giây"
+    checks:
+      - "alg.batch_tradeoff(100, 32, 20, 5) == (310.0, 1600.0, 200.0) and Fraction(31, 100) * 1000 == 310"
+      - "1600 / 200 == 8 and 31 * 10 == 310 and 310 + 20 == 330 and 1000 / 100 == 10"
+    steps:
+      - show: |
+          <p>Một lô 32 yêu cầu chạy mất 20 ms; một yêu cầu đơn mất 5 ms. Yêu cầu đến đều 100 mỗi giây.</p>
+          <p><b>Bước 1</b> — chạy từng cái: thông lượng tối đa $\frac{1000}{5} = \frac{1}{5 \text{ ms}} = \hl{200}$ mỗi giây.</p>
+        focus: [1, 1, 1, 2]
+        say: "Một lô 32 yêu cầu chạy mất 20 mi li giây, một yêu cầu đơn mất 5 mi li giây. Yêu cầu đến đều 100 mỗi giây. Bảng so hai cách. Bước một, chạy từng cái, mỗi giây làm được 1000 chia 5, nên thông lượng tối đa của cách chạy từng cái là 200 mỗi giây."
+      - show: |
+          <table class="t"><tr><th></th><th>từng cái</th><th>gộp lô 32</th></tr>
+          <tr><td>thông lượng tối đa</td><td>200 mỗi giây</td><td>$\frac{32}{20 \text{ ms}} = 32 \cdot \frac{1000}{20} = \hl{1600}$ mỗi giây</td></tr></table>
+          <p><b>Bước 2</b> — gấp $\frac{1600}{200} = 8$ lần.</p>
+        focus: [1, "1.2", 2]
+        say: "Bước hai, gộp lô 32 là 32 chia 20 mi li giây, bằng 1600 mỗi giây. Vì mỗi giây chạy được 1000 chia 20, tức 50 lô, mỗi lô 32 yêu cầu. So với 200 thì gấp 8 lần."
+      - show: |
+          <table class="t"><tr><th></th><th>từng cái</th><th>gộp lô 32</th></tr>
+          <tr><td>thông lượng tối đa</td><td>200 mỗi giây</td><td>1600 mỗi giây</td></tr>
+          <tr><td>chờ thêm của yêu cầu đầu lô</td><td>0</td><td>$31 \cdot 10$ ms $= \frac{31}{100}$ giây $= \hl{310}$ ms</td></tr></table>
+          <p><b>Bước 3</b> — 100 yêu cầu mỗi giây thì cách nhau 10 ms; 32 yêu cầu có 31 khoảng.</p>
+        focus: [2, "1.3"]
+        say: "Bước ba, 100 yêu cầu mỗi giây thì hai yêu cầu cách nhau 10 mi li giây, và 32 yêu cầu có 31 khoảng. Nhưng yêu cầu đầu lô phải chờ thêm 31 yêu cầu nữa, tức 31 phần 100 giây, bằng 310 mi li giây."
+      - clear: true
+        show: |
+          <p><b>Bước 4</b> — yêu cầu đầu lô có kết quả sau $310 + 20 = \hl{330}$ ms, so với 5 ms khi chạy từng cái.</p>
+          <div class="box key">Gộp lô tăng thông lượng gấp 8 nhưng thêm tới 310 ms chờ khi tải thấp. Sửa: gộp <b>tối đa 32 hoặc tối đa 10 ms</b>, điều kiện nào tới trước.</div>
+        focus: [1, 2, 2]
+        say: "Bước bốn, yêu cầu đầu lô chờ 310 rồi chạy thêm 20, nên có kết quả sau 330 mi li giây, so với 5 mi li giây khi chạy từng cái. Gộp lô tăng thông lượng gấp 8 nhưng thêm tới 310 mi li giây chờ khi tải thấp. Cách sửa là gộp tối đa 32 cái hoặc tối đa 10 mi li giây, điều kiện nào tới trước."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác"
+    checks:
+      - "(lambda a: a[-1] - a[0])([i * 1000 / 100 for i in range(32)]) == 310.0"
+      - "1000 // 20 == 50 and 50 * 32 == 1600 and 1000 // 5 == 200"
+    steps:
+      - show: |
+          <table class="t"><tr><th>kiểm</th><th>cách khác</th><th>kết quả</th></tr>
+          <tr><td>310 ms</td><td>liệt kê giờ đến: 0, 10, 20, …, yêu cầu thứ 32 đến lúc 310 ms</td><td>310 − 0 = 310 ✓</td></tr>
+          <tr><td>1600 mỗi giây</td><td>đếm theo lô: 1 giây chứa 50 lô 20 ms, mỗi lô 32 yêu cầu: $50 \cdot 32$</td><td>1600 ✓</td></tr>
+          <tr><td>200 mỗi giây</td><td>1 giây chứa 200 lần 5 ms</td><td>200 ✓</td></tr></table>
+        introduces: [dots]
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Kiểm bằng đường khác, không dùng công thức mà liệt kê và đếm. Liệt kê giờ đến 0, 10, 20 mi li giây, và cứ thế, thì yêu cầu thứ 32 đến lúc 310, đúng bằng thời gian chờ. Đếm theo lô, một giây chứa 50 lô 20 mi li giây, mỗi lô 32 yêu cầu, nên 50 nhân 32 bằng 1600. Một giây chứa 200 lần 5 mi li giây, khớp thông lượng chạy từng cái."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp"
+    checks:
+      - "[alg.batch_tradeoff(r, 32, 20, 5)[0] for r in (100, 1000, 3100)] == [310.0, 31.0, 10.0]"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Đo độ trễ trung bình <b class="red">(che đuôi)</b>
+          <br><span class="note">Gộp lô làm vài yêu cầu chờ rất lâu trong khi phần lớn nhanh. Người dùng cảm nhận đuôi chậm: đo phân vị 99, như CLD.</span></div>
+        say: "Lỗi thứ nhất, đo độ trễ trung bình. Gộp lô làm vài yêu cầu chờ rất lâu trong khi phần lớn nhanh, mà người dùng cảm nhận đuôi chậm, nên hãy đo phân vị 99, như khoá Hệ thống hướng dịch vụ."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Dự đoán trực tuyến cho việc không cần ngay <b class="red">(tốn kém)</b>
+          <br><span class="note">Gợi ý trang chủ đổi mỗi ngày một lần thì tính sẵn theo lô ban đêm rẻ hơn nhiều, và không có độ trễ khi khách mở trang.</span></div>
+        say: "Lỗi thứ hai, dự đoán trực tuyến cho việc không cần ngay. Gợi ý trang chủ chỉ đổi mỗi ngày một lần thì tính sẵn theo lô ban đêm rẻ hơn nhiều, và không có độ trễ khi khách mở trang."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Không có phương án dự phòng khi mô hình chậm hay lỗi <b class="red">(cả trang chết theo)</b>
+          <br><span class="note">Đặt hết giờ cho lời gọi mô hình; quá giờ thì trả kết quả mặc định an toàn (gợi ý phổ biến, cho qua có kiểm tra sau) thay vì làm hỏng cả yêu cầu.</span></div>
+        say: "Lỗi thứ ba, không có phương án dự phòng khi mô hình chậm hay lỗi. Hãy đặt hết giờ cho lời gọi mô hình, quá giờ thì trả một kết quả mặc định an toàn, như gợi ý phổ biến, thay vì làm hỏng cả yêu cầu."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Thử tải ở giờ cao điểm rồi dùng cấu hình gộp lô đó cho cả ngày <b class="red">(thấp điểm chậm)</b></div>
+          <table class="t"><tr><th>tải</th><th>chờ đủ lô 32: $31 \cdot \frac{1000}{\text{tải}}$ ms</th></tr>
+          <tr><td>100 mỗi giây</td><td class="red">310 ms</td></tr>
+          <tr><td>1000 mỗi giây</td><td>31 ms</td></tr>
+          <tr><td>3100 mỗi giây</td><td>10 ms</td></tr></table>
+          <p class="note">Thời gian chờ tỉ lệ nghịch với tải. Người làm nghề thử tải ở <b>cả</b> giờ thấp điểm, và đặt mốc chờ tối đa: với mốc 10 ms, lô chỉ đầy khi tải từ 3100 mỗi giây trở lên.</p>
+        focus: [1, 2, "2.2", "2.3", "2.4", 3, 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, thử tải ở giờ cao điểm rồi dùng cấu hình gộp lô đó cho cả ngày, nên giờ thấp điểm bị chậm. Bảng tính thời gian chờ đủ lô 32, bằng 31 nhân 1000 chia tải. Tải 100 mỗi giây phải chờ 310 mi li giây. Tải 1000 mỗi giây chỉ chờ 31 mi li giây. Tải 3100 mỗi giây thì chờ đúng 10 mi li giây. Thời gian chờ tỉ lệ nghịch với tải, nên người làm nghề thử tải ở cả giờ thấp điểm, và đặt mốc chờ tối đa. Với mốc 10 mi li giây, lô chỉ đầy khi tải từ 3100 mỗi giây trở lên."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.batch_tradeoff(1000, 32, 20, 5)[0] == 31.0 and alg.batch_tradeoff(100, 8, 8, 5) == (70.0, 1000.0, 200.0)"
+      - "1000 / 1000 == 1 and 31 * 1 == 31 and 7 * 10 == 70 and 1000 / 200 == 5"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Giờ cao điểm 1000 yêu cầu mỗi giây, vẫn lô 32: yêu cầu đầu lô chờ thêm bao lâu?</td></tr>
+          <tr><td>2</td><td>Giờ thấp điểm 100 yêu cầu mỗi giây, đổi sang lô 8 (chạy mất 8 ms): chờ thêm bao lâu? Thông lượng tối đa?</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, giờ cao điểm 1000 yêu cầu mỗi giây, vẫn lô 32, yêu cầu đầu lô chờ thêm bao lâu? Câu hai, giờ thấp điểm 100 yêu cầu mỗi giây, đổi sang lô 8 chạy mất 8 mi li giây, chờ thêm bao lâu, và thông lượng tối đa là bao nhiêu? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① Khoảng giữa hai yêu cầu: $\frac{1000}{1000} = 1$ ms; lô 32 có 31 khoảng.</p>
+          <p>Chờ thêm: $\frac{31}{1000}$ giây $= \hl{31}$ ms — lúc đông, gộp lô gần như miễn phí.</p>
+        focus: [1, 1, 2]
+        say: "Đáp án câu một, làm từng bước. Khoảng giữa hai yêu cầu là 1000 chia 1000, bằng 1 mi li giây, và lô 32 có 31 khoảng. Vậy chờ thêm 31 phần 1000 giây, tức 31 mi li giây, lúc đông thì gộp lô gần như miễn phí."
+      - show: |
+          <p>② Khoảng 10 ms, lô 8 có 7 khoảng: chờ $\frac{7}{100}$ giây $= \hl{70}$ ms.</p>
+          <p>Thông lượng $\frac{8}{8 \text{ ms}} = \hl{1000}$ mỗi giây $= 5 \cdot 200$ — vẫn gấp 5 lần chạy từng cái.</p>
+        focus: [1, 2]
+        say: "Câu hai, khoảng giữa hai yêu cầu là 10 mi li giây, lô 8 có 7 khoảng, nên chờ 7 phần 100 giây, tức 70 mi li giây. Thông lượng 8 chia 8 mi li giây bằng 1000 mỗi giây, vẫn gấp 5 lần chạy từng cái."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">không cần ngay: theo lô</span><span class="a">→</span>
+          <span class="n">cần ngay: trực tuyến</span><span class="a">→</span>
+          <span class="n">gộp lô: thông lượng đổi lấy độ trễ</span><span class="a">→</span>
+          <span class="n">giới hạn chờ, đo phân vị 99, có dự phòng</span></div>
+        say: "Tổng kết lại, việc không cần ngay thì tính theo lô, cần ngay thì trực tuyến. Gộp lô đổi độ trễ lấy thông lượng, nên hãy giới hạn thời gian chờ, đo phân vị 99, và có phương án dự phòng."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> không có cấu hình “nhanh nhất” chung chung — chỉ có cấu hình hợp nhất với mức tải và yêu cầu độ trễ cụ thể.</div>
+        say: "Điều cần mang theo, không có cấu hình nhanh nhất chung chung, chỉ có cấu hình hợp nhất với mức tải và yêu cầu độ trễ cụ thể."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 7): <b>phát hành mô hình an toàn</b> — chạy bóng, phát hành thử, thử nghiệm hai nhóm.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 7, ta học phát hành mô hình an toàn, với chạy bóng, phát hành thử, và thử nghiệm hai nhóm. Hẹn gặp bạn ở bài tiếp theo."

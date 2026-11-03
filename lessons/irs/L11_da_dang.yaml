@@ -1,0 +1,301 @@
+id: L11
+course: IRS
+series: "IRS · Truy hồi thông tin và hệ gợi ý"
+title: "Bài 11 — Đa dạng, công bằng và vòng phản hồi của hệ gợi ý"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/irs.yaml L11; audit/irs/verify_irs.py (verify_parts/L11.py); audit/irs/sources_L11.md (câu trích nguyên văn, đọc 2026-11-03); J. Carbonell, J. Goldstein, The Use of MMR, Diversity-Based Reranking for Reordering Documents and Producing Summaries, SIGIR 1998 [CG98]; Z. Zhao và cộng sự, RecSys 2019 — vòng phản hồi [ZH19]; P. Covington và cộng sự, RecSys 2016 — lấy mẫu huấn luyện từ mọi lượt xem [CO16]; IRS bài 1 (chiết khấu theo vị trí), bài 9 (khám phá); MLO bài 9 (vòng phản hồi)"
+assumes: [arith]
+# Quy ước (theo symbols.IRS.yaml):
+#   - rel(D) = mức liên quan của ứng viên D với câu hỏi (0 tới 1); sim(D, E) = độ giống giữa hai ứng viên (0 tới 1); S = các kết quả đã chọn.
+#   - “cách chọn cân liên quan với khác biệt” = MMR (Carbonell, Goldstein 1998; tên gốc chỉ trên màn hình):
+#     điểm(D) = λ · rel(D) − (1 − λ) · max sim(D, E) với E trong S; chọn tham lam từng ô. λ (lambda, đọc “lam-đa”) do người làm chọn.
+#   - mức được nhìn thấy của một nhóm = tổng chiết khấu 1/log₂(vị trí + 1) của các vị trí nhóm đó chiếm (cùng chiết khấu với bài 1).
+#   - Ví dụ chạy suốt bài (số minh hoạ): câu hỏi “tai nghe”; A tai nghe đen 0,95; X cùng mẫu màu trắng 0,9 (giống A 0,8); Y tai nghe thể thao
+#     0,7; Z hộp đựng tai nghe 0,6. Độ giống: A–X 0,8; A–Y 0,1; A–Z 0,2; X–Y 0,1; X–Z 0,2; Y–Z 0,3.
+objectives:
+  - "Chọn kết quả bằng cách cân liên quan với khác biệt so với kết quả đã chọn"
+  - "Đo mức được nhìn thấy của một nhóm theo vị trí, không chỉ theo số lượng"
+  - "Nhận ra vòng phản hồi làm sản phẩm đang dẫn càng dẫn, và sửa bằng dữ liệu khám phá"
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Hai ô đầu là cùng một chiếc tai nghe"
+    checks:
+      - "alg.irs_mmr_select([0.95, 0.9, 0.7, 0.6], [[1, .8, .1, .2], [.8, 1, .1, .2], [.1, .1, 1, .3], [.2, .2, .3, 1]], 1.0, 2) == [0, 1]"
+      - "alg.irs_feedback_loop((0.10, 0.12), (600, 400), 4, 1000)[1:] == [(1000.0, 0.0)] * 3"
+    steps:
+      - show: |
+          <p>Người dùng gõ <b>“tai nghe”</b>. Hệ xếp theo mức liên quan, trang điện thoại có 2 ô (số minh hoạ):</p>
+          <table class="t"><tr><th>ô</th><th>sản phẩm</th><th>mức liên quan</th></tr>
+          <tr><td>1</td><td>A: tai nghe đen</td><td>0,95</td></tr>
+          <tr><td>2</td><td>X: <b>cùng mẫu đó, màu trắng</b></td><td>0,9</td></tr></table>
+          <p>Một tai nghe khác, B, tốt hơn cả A, từ một ngày nọ không bao giờ được hiện nữa.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Chào bạn, người dùng gõ tai nghe, và hệ xếp theo mức liên quan cho trang điện thoại có 2 ô, đây là số minh hoạ. Ô thứ nhất là A, một chiếc tai nghe đen, liên quan 0 phẩy 95. Ô thứ hai là X, cùng mẫu đó nhưng màu trắng, liên quan 0 phẩy 9, nên người dùng thấy hai lần một thứ. Trong khi đó, một tai nghe khác, B, tốt hơn cả A, từ một ngày nọ không bao giờ được hiện nữa."
+      - show: |
+          <div class="box key">Hôm nay ta trả lời: làm sao chọn danh sách vừa liên quan vừa không trùng lặp? Đo “ai được nhìn thấy” thế nào cho công bằng? Và vì sao hệ học từ chính lượt bấm của nó lại tự khoá vào lựa chọn cũ?</div>
+        say: "Hôm nay ta trả lời ba câu hỏi, làm sao chọn danh sách vừa liên quan vừa không trùng lặp, và đo ai được nhìn thấy thế nào cho công bằng. Câu thứ ba là vì sao hệ học từ chính lượt bấm của nó lại tự khoá vào lựa chọn cũ."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại ba điều sẽ dùng"
+    checks:
+      - "round(0.7 * 0.9, 2) == 0.63 and round((1 - 0.7) * 0.8, 2) == 0.24 and max(0.8, 0.1) == 0.8"
+      - "[round(1 / math.log2(i + 1), 3) for i in (1, 2, 3, 4)] == [1.0, 0.631, 0.5, 0.431]"
+    steps:
+      - show: |
+          <p><b>① Trộn hai điểm bằng một trọng số.</b> Với trọng số 0,7 cho điểm thứ nhất thì điểm thứ hai nhận 1 − 0,7 = 0,3: $0{,}7 \cdot 0{,}9 = 0{,}63$ và $0{,}3 \cdot 0{,}8 = 0{,}24$.</p>
+          <p><b>② Lấy số lớn nhất.</b> $\max(0{,}8;\ 0{,}1) = 0{,}8$.</p>
+        introduces: [cdot, max_fn]
+        focus: [1, 1, 1, 2]
+        say: "Điều thứ nhất là trộn hai điểm bằng một trọng số, dấu chấm giữa dòng là phép nhân. Điểm thứ nhất nhận trọng số 0 phẩy 7 thì điểm thứ hai nhận 1 trừ 0 phẩy 7, bằng 0 phẩy 3. Ví dụ 0 phẩy 7 nhân 0 phẩy 9 bằng 0 phẩy 63, còn 0 phẩy 3 nhân 0 phẩy 8 bằng 0 phẩy 24. Điều thứ hai, ba chữ m a x là lấy số lớn nhất, giữa 0 phẩy 8 và 0 phẩy 1 thì được 0 phẩy 8."
+      - show: |
+          <p><b>③ Ở bài 1</b>, độ lợi ở vị trí $i$ được nhân chiết khấu $\frac{1}{\log_2(i + 1)}$ vì vị trí càng sâu càng ít người nhìn:</p>
+          <table class="t"><tr><th>vị trí</th><th>1</th><th>2</th><th>3</th><th>4</th></tr>
+          <tr><td>chiết khấu</td><td>1</td><td>0,631</td><td>0,5</td><td>0,431</td></tr></table>
+          <p class="note">Ở khoá đưa mô hình học máy vào vận hành, ta đã gặp <b>vòng phản hồi</b>: dự đoán của mô hình làm đổi chính dữ liệu dùng để huấn luyện lại nó.</p>
+        introduces: [frac, log, sub]
+        focus: [1, "2.2", 3]
+        say: "Điều thứ ba, ở bài 1, độ lợi ở vị trí i được nhân với chiết khấu 1 chia lôgarit cơ số 2 của i cộng 1, vì vị trí càng sâu càng ít người nhìn. Hàng chiết khấu là 1, 0 phẩy 631, 0 phẩy 5 và 0 phẩy 431 cho bốn vị trí đầu. Còn ở khoá đưa mô hình học máy vào vận hành, ta đã gặp vòng phản hồi, khi dự đoán của mô hình làm đổi chính dữ liệu dùng để huấn luyện lại nó."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: rel, sim, tập đã chọn S và hệ số lambda"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ký hiệu</th><th>đọc là</th><th>nghĩa</th><th>ví dụ</th></tr>
+          <tr><td>$\text{rel}(D)$</td><td>liên quan của D</td><td>mức liên quan của ứng viên D với câu hỏi</td><td>$\text{rel}(\text{X}) = 0{,}9$</td></tr>
+          <tr><td>$\text{sim}(D, E)$</td><td>độ giống của D và E</td><td>độ giống của hai ứng viên, từ 0 tới 1</td><td>$\text{sim}(\text{A}, \text{X}) = 0{,}8$</td></tr>
+          <tr><td>$S$</td><td>tập S</td><td>các kết quả đã chọn vào danh sách</td><td>sau ô 1: $S$ = {A}</td></tr>
+          <tr><td>$\lambda$</td><td>lambda</td><td>hệ số cân bằng: phần dành cho liên quan</td><td>$\lambda = 0{,}7$</td></tr></table>
+        introduces: [lambda]
+        focus: ["1.2", "1.3", "1.4", "1.5"]
+        say: "Bảng giải mã từng ký hiệu, ba chữ r e l viết tắt mức liên quan của ứng viên D với câu hỏi, như của X là 0 phẩy 9. Ba chữ s i m viết tắt độ giống của hai ứng viên, từ 0 tới 1, như A và X giống nhau 0 phẩy 8 vì cùng một mẫu. Chữ S là tập các kết quả đã chọn vào danh sách, sau ô thứ nhất thì S chỉ có A. Chữ Hy Lạp này là lambda, hệ số cân bằng do người làm chọn, cho biết phần dành cho liên quan, ví dụ lambda bằng 0 phẩy 7."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Bản đồ ứng viên: chọn một cái, rồi đẩy những cái quá gần ra xa"
+    steps:
+      - show: |
+          <div><svg width="1500" height="420" viewBox="0 0 1500 420">
+          <rect x="60" y="30" width="1060" height="360" rx="14" fill="#f9fafb" stroke="#d1d5db" stroke-width="2"/>
+          <text x="590" y="380" font-size="21" fill="#6b7280" text-anchor="middle">gần nhau = giống nhau (minh hoạ)</text>
+          <circle cx="300" cy="150" r="70" fill="#fee2e2" stroke="#b91c1c" stroke-width="3" stroke-dasharray="10 6"/>
+          <circle cx="280" cy="140" r="16" fill="#059669"/><text x="300" y="68" font-size="22" text-anchor="middle" fill="#059669" font-weight="bold">A 0,95</text>
+          <circle cx="330" cy="180" r="14" fill="#2a78d6"/><text x="400" y="235" font-size="22" text-anchor="middle" fill="#2a78d6">X 0,9</text>
+          <circle cx="900" cy="140" r="14" fill="#2a78d6"/><text x="900" y="105" font-size="22" text-anchor="middle" fill="#2a78d6">Y 0,7</text>
+          <circle cx="640" cy="300" r="14" fill="#2a78d6"/><text x="640" y="345" font-size="22" text-anchor="middle" fill="#2a78d6">Z 0,6</text>
+          <text x="300" y="275" font-size="20" fill="#b91c1c" text-anchor="middle">vùng bị phạt sau khi chọn A</text>
+          <g font-size="22" fill="#1f2937">
+          <text x="1160" y="110">① chọn A: liên quan nhất</text>
+          <text x="1160" y="170">② X gần A → bị phạt</text>
+          <text x="1160" y="230">③ Y xa A → giữ gần hết</text>
+          <text x="1192" y="265">điểm, được chọn</text>
+          </g></svg></div>
+        say: "Hình là bản đồ ứng viên, hai chấm càng gần thì hai sản phẩm càng giống nhau, các vị trí chỉ là minh hoạ. Chấm xanh lá là A, liên quan nhất, nên được chọn trước. Ngay khi chọn A, cả vùng tròn đỏ quanh A bị phạt, và X nằm sát A nên mất nhiều điểm. Y ở xa A nên giữ gần hết điểm liên quan, và được chọn vào ô thứ hai."
+
+  # ───────────────────────── 5. SUY RA ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra điểm cân liên quan với khác biệt"
+    checks:
+      - "round(alg.irs_mmr(0.9, 0.8, 1.0), 2) == 0.9 and round(alg.irs_mmr(0.9, 0.8, 0.0), 2) == -0.8"
+      - "round(alg.irs_mmr(0.9, 0.8, 0.7), 2) == 0.39"
+    steps:
+      - show: |
+          <p><b>Bước 1 — chỉ xếp theo liên quan</b> cho A rồi X: hai ô gần như một. Ta cần trừ điểm cho ứng viên <b>giống</b> những gì đã có.</p>
+          <p><b>Bước 2 — giống tới mức nào?</b> Lấy độ giống <b>lớn nhất</b> với các kết quả đã chọn, vì chỉ cần trùng một cái là đã thừa:</p>
+          $$\max_{E \in S} \text{sim}(D, E) \qquad \text{X so với } S = \{\text{A}\}: 0{,}8$$
+        introduces: [in, set]
+        focus: [1, 1, 2, 3]
+        say: "Bước một, chỉ xếp theo liên quan thì ta được A rồi X, hai ô gần như một. Vì vậy ta cần trừ điểm cho ứng viên giống những gì đã có trong danh sách. Bước hai là giống tới mức nào, ta lấy độ giống lớn nhất với các kết quả đã chọn, vì chỉ cần trùng một cái là đã thừa. Ký hiệu E thuộc S nghĩa là E chạy qua các kết quả trong tập S, dấu ngoặc nhọn liệt kê tập đó, và với S chỉ có A thì X được 0 phẩy 8."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — trộn bằng $\lambda$</b> (Carbonell, Goldstein 1998):</p>
+          $$\text{điểm}(D) = \hlb{\lambda} \cdot \text{rel}(D) - (1 - \hlb{\lambda}) \cdot \max_{E \in S} \text{sim}(D, E)$$
+          <p class="note">Theo bài báo: $\lambda = 1$ cho đúng danh sách xếp theo liên quan; $\lambda = 0$ cho danh sách khác nhau nhất. Làm thử X với $\lambda = 1$: $0{,}9$; với $\lambda = 0$: $-0{,}8$.</p>
+        focus: [1, 2, 3, 3]
+        say: "Bước ba là trộn hai phần bằng lambda, theo bài báo năm 1998 của hai tác giả đề xuất cách này. Điểm của D bằng lambda nhân mức liên quan của D, trừ 1 trừ lambda nhân độ giống lớn nhất. Bài báo ghi rằng lambda bằng 1 cho đúng danh sách xếp theo liên quan, còn lambda bằng 0 cho danh sách khác nhau nhất. Làm thử với X, lambda bằng 1 cho 0 phẩy 9, lambda bằng 0 cho âm 0 phẩy 8."
+      - show: |
+          <p><b>Bước 4 — chọn từng ô.</b> Ô đầu tiên $S$ còn rỗng nên phần phạt bằng 0; mỗi ô sau, tính lại điểm mọi ứng viên còn lại theo $S$ mới, chọn điểm cao nhất.</p>
+          $$\lambda = 0{,}7\text{, X ở ô 2:} \quad 0{,}7 \cdot 0{,}9 - 0{,}3 \cdot 0{,}8 = 0{,}63 - 0{,}24 = \hl{0{,}39}$$
+        focus: [1, 1, 2]
+        say: "Bước bốn là chọn từng ô, ở ô đầu tiên S còn rỗng nên phần phạt bằng 0. Mỗi ô sau, ta tính lại điểm của mọi ứng viên còn lại theo tập S mới, rồi chọn điểm cao nhất. Làm thử X ở ô thứ hai với lambda 0 phẩy 7, 0 phẩy 63 trừ 0 phẩy 24 bằng 0 phẩy 39."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Chọn 3 ô với lambda 0,7, và đo ai được nhìn thấy"
+    checks:
+      - "round(alg.irs_mmr(0.95, 0, 0.7), 3) == 0.665 and round(alg.irs_mmr(0.9, 0, 0.7), 2) == 0.63"
+      - "[round(alg.irs_mmr(r, s, 0.7), 2) for r, s in ((0.9, 0.8), (0.7, 0.1), (0.6, 0.2))] == [0.39, 0.46, 0.36]"
+      - "[round(alg.irs_mmr(r, s, 0.7), 2) for r, s in ((0.9, 0.8), (0.6, 0.3))] == [0.39, 0.33]"
+      - "alg.irs_mmr_select([0.95, 0.9, 0.7, 0.6], [[1, .8, .1, .2], [.8, 1, .1, .2], [.1, .1, 1, .3], [.2, .2, .3, 1]], 0.7, 3) == [0, 2, 1]"
+      - "round(0.95 + 0.9, 2) == 1.85 and round(0.95 + 0.7, 2) == 1.65"
+      - "round(alg.irs_exposure([3, 4]), 3) == 0.931 and round(alg.irs_exposure([1, 2, 3, 4]), 3) == 2.562 and round(alg.irs_exposure([3, 4]) / alg.irs_exposure([1, 2, 3, 4]) * 100, 1) == 36.3"
+    steps:
+      - show: |
+          <p><b>Bước 1 — ô 1.</b> $S$ rỗng nên chỉ còn phần liên quan: A được $0{,}7 \cdot 0{,}95 = \hlg{0{,}665}$, cao nhất (X chỉ 0,63). Chọn A.</p>
+        say: "Bước một là ô thứ nhất, S còn rỗng nên chỉ còn phần liên quan. A được 0 phẩy 7 nhân 0 phẩy 95, bằng 0 phẩy 665, cao nhất vì X chỉ được 0 phẩy 63, nên ta chọn A."
+      - show: |
+          <p><b>Bước 2 — ô 2</b>, $S$ = {A}:</p>
+          <table class="t"><tr><th>ứng viên</th><th>$0{,}7 \cdot \text{rel}$</th><th>giống A</th><th>$0{,}3 \cdot$ giống</th><th>điểm</th></tr>
+          <tr><td>X</td><td>0,63</td><td>0,8</td><td>0,24</td><td>0,39</td></tr>
+          <tr><td>Y</td><td>0,49</td><td>0,1</td><td>0,03</td><td>$\hlg{0{,}46}$</td></tr>
+          <tr><td>Z</td><td>0,42</td><td>0,2</td><td>0,06</td><td>0,36</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Bước hai là ô thứ hai, khi S chỉ có A. X được 0 phẩy 63 trừ 0 phẩy 24, bằng 0 phẩy 39, vì nó giống A tới 0 phẩy 8. Y được 0 phẩy 49 trừ 0 phẩy 03, bằng 0 phẩy 46, cao nhất, nên Y vào ô thứ hai. Z được 0 phẩy 42 trừ 0 phẩy 06, bằng 0 phẩy 36."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — ô 3</b>, $S$ = {A, Y}. Lấy độ giống <b>lớn nhất</b> với A hoặc Y:</p>
+          <table class="t"><tr><th>ứng viên</th><th>giống A, giống Y</th><th>lớn nhất</th><th>điểm</th></tr>
+          <tr><td>X</td><td>0,8; 0,1</td><td>0,8</td><td>$0{,}63 - 0{,}24 = \hlg{0{,}39}$</td></tr>
+          <tr><td>Z</td><td>0,2; 0,3</td><td>0,3</td><td>$0{,}42 - 0{,}09 = 0{,}33$</td></tr></table>
+          <p class="note">Danh sách: <b>A, Y, X</b> — so với xếp thuần theo liên quan: A, X, Y.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Bước ba là ô thứ ba, S gồm A và Y, nên ta lấy độ giống lớn nhất với A hoặc Y. X giống A 0 phẩy 8 và giống Y 0 phẩy 1, lớn nhất là 0 phẩy 8, điểm vẫn 0 phẩy 39. Z giống Y 0 phẩy 3, điểm 0 phẩy 42 trừ 0 phẩy 09, bằng 0 phẩy 33, nên X vào ô thứ ba. Danh sách cuối là A, Y, X, so với A, X, Y khi xếp thuần theo liên quan."
+      - show: |
+          <p><b>Bước 4 — trang 2 ô được gì, mất gì?</b></p>
+          <table class="t"><tr><th>hai ô đầu</th><th>tổng liên quan</th><th>độ giống giữa hai ô</th></tr>
+          <tr><td>xếp theo liên quan: A, X</td><td>$0{,}95 + 0{,}9 = 1{,}85$</td><td class="red">0,8</td></tr>
+          <tr><td>cân liên quan và khác biệt: A, Y</td><td>$0{,}95 + 0{,}7 = 1{,}65$</td><td class="green">0,1</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước bốn là xem trang 2 ô được gì, mất gì. Xếp theo liên quan cho A và X, tổng liên quan 1 phẩy 85 nhưng hai ô giống nhau 0 phẩy 8. Cân liên quan với khác biệt cho A và Y, tổng liên quan 1 phẩy 65, mất 0 phẩy 2, đổi lại độ giống chỉ còn 0 phẩy 1, người dùng có hai lựa chọn thật sự."
+      - clear: true
+        show: |
+          <p><b>Bước 5 — ai được nhìn thấy?</b> Danh sách 4 ô; hai sản phẩm của người bán nhỏ đứng ở vị trí 3 và 4 (minh hoạ). Theo chiết khấu của bài 1:</p>
+          $$\frac{\frac{1}{\log_2 4} + \frac{1}{\log_2 5}}{1 + 0{,}631 + 0{,}5 + 0{,}431} = \frac{0{,}5 + 0{,}431}{2{,}562} \approx \hl{36{,}3\%}$$
+          <p class="note">Chiếm 2 trên 4 ô, tức 50% số ô, nhưng chỉ nhận khoảng 36,3% mức được nhìn thấy.</p>
+        focus: [1, 2, 3]
+        say: "Bước năm hỏi ai được nhìn thấy, với danh sách 4 ô và hai sản phẩm của người bán nhỏ đứng ở vị trí 3 và 4, một số minh hoạ. Theo chiết khấu của bài 1, nhóm này được 0 phẩy 5 cộng 0 phẩy 431, chia cho tổng chiết khấu 2 phẩy 562, khoảng 36 phẩy 3 phần trăm. Chiếm 2 trên 4 ô, tức một nửa số ô, nhưng nhóm này chỉ nhận khoảng 36 phẩy 3 phần trăm mức được nhìn thấy."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: lambda bằng bao nhiêu thì X thắng Y?"
+    checks:
+      - "abs((0.8 - 0.1) / (1.7 - 0.8) - 7 / 9) < 1e-12 and round(7 / 9, 3) == 0.778"
+      - "[round(alg.irs_mmr(0.9, 0.8, 0.8), 2), round(alg.irs_mmr(0.7, 0.1, 0.8), 2)] == [0.56, 0.54] and [round(alg.irs_mmr(0.9, 0.8, 0.75), 3), round(alg.irs_mmr(0.7, 0.1, 0.75), 3)] == [0.475, 0.5]"
+      - "alg.irs_mmr_select([0.95, 0.9, 0.7, 0.6], [[1, .8, .1, .2], [.8, 1, .1, .2], [.1, .1, 1, .3], [.2, .2, .3, 1]], 0.8, 3) == [0, 1, 2]"
+    steps:
+      - show: |
+          <p>Đường khác: không thử từng giá trị, mà <b>giải</b> xem X và Y hoà nhau ở ô 2 khi nào.</p>
+          $$0{,}9\lambda - 0{,}8(1 - \lambda) = 0{,}7\lambda - 0{,}1(1 - \lambda) \;\Rightarrow\; 1{,}7\lambda - 0{,}8 = 0{,}8\lambda - 0{,}1 \;\Rightarrow\; \lambda = \frac{0{,}7}{0{,}9} \approx 0{,}778$$
+        introduces: [implies]
+        focus: [1, 2, 2]
+        say: "Kiểm tra bằng đường khác, ta không thử từng giá trị, mà giải xem X và Y hoà nhau ở ô hai khi nào. Phá ngoặc hai vế được 1 phẩy 7 lambda trừ 0 phẩy 8 bằng 0 phẩy 8 lambda trừ 0 phẩy 1, mũi tên kép đọc là suy ra. Chuyển vế, 0 phẩy 9 lambda bằng 0 phẩy 7, nên lambda xấp xỉ 0 phẩy 778."
+      - show: |
+          <table class="t"><tr><th>$\lambda$</th><th>X ở ô 2</th><th>Y ở ô 2</th><th>ô 2 chọn</th></tr>
+          <tr><td>0,75 (dưới 0,778)</td><td>0,475</td><td>0,5</td><td>Y</td></tr>
+          <tr><td>0,8 (trên 0,778)</td><td>0,56</td><td>0,54</td><td>X</td></tr></table>
+          <p class="note">Thử thẳng hai phía của 0,778 cho đúng hai kết quả trái nhau ✓ — và với 0,7 ở phần ví dụ, Y thắng.</p>
+        focus: [0, "1.2", "1.3", 2]
+        say: "Ta thử thẳng ở hai phía của 0 phẩy 778 để kiểm lại phép giải. Với lambda 0 phẩy 75, X được 0 phẩy 475 còn Y được 0 phẩy 5, nên chọn Y. Với lambda 0 phẩy 8, X được 0 phẩy 56, vượt Y với 0 phẩy 54, nên chọn X. Hai phía cho đúng hai kết quả trái nhau, khớp với phép giải."
+
+  - id: loop
+    kind: concept
+    title: "Vòng phản hồi: B tốt hơn mà không bao giờ được hiện"
+    checks:
+      - "alg.irs_feedback_loop((0.10, 0.12), (600, 400), 4, 1000) == [(600, 400)] + [(1000.0, 0.0)] * 3 and round(600 * 0.10) == 60 and round(400 * 0.12) == 48"
+      - "alg.irs_feedback_loop((0.10, 0.12), (1000, 0), 4, 1000, by='rate') == [(1000, 0)] + [(1000.0, 0.0)] * 3"
+      - "alg.irs_feedback_loop((0.10, 0.12), (1000, 0), 4, 1000, explore=0.1, by='rate') == [(1000, 0), (950.0, 50.0), (50.0, 950.0), (50.0, 950.0)]"
+    steps:
+      - show: |
+          <p>Tỉ lệ bấm thật (minh hoạ): A 0,10; <b>B 0,12</b>. Mỗi ngày 1000 lần hiện, hệ dồn cho sản phẩm “thắng” hôm trước.</p>
+          <table class="t"><tr><th>cách chọn người thắng</th><th>ngày 1</th><th>ngày 2</th><th>ngày 3, 4</th></tr>
+          <tr><td>nhiều lượt bấm hơn</td><td>A 600 (60 bấm), B 400 (48 bấm)</td><td>A 1000, B 0</td><td class="red">A 1000, B 0 mãi</td></tr>
+          <tr><td>tỉ lệ bấm cao hơn, B chưa hiện lần nào</td><td>A 1000, B 0</td><td>A 1000, B 0</td><td class="red">không ai đo được B</td></tr>
+          <tr><td>tỉ lệ bấm, cộng 10% khám phá</td><td>A 1000, B 0</td><td>A 950, B 50</td><td class="green">B 950: tìm ra B tốt hơn</td></tr></table>
+          <p class="note">Bảng tính theo kỳ vọng; 50 lần hiện mỗi ngày còn ít, nên thực tế có khi cần thêm vài ngày mới lộ ra.</p>
+        focus: [1, "2.2", "2.3", "2.4", "2.4"]
+        say: "Bây giờ là vòng phản hồi, với tỉ lệ bấm thật minh hoạ của A là 0 phẩy 10 và của B là 0 phẩy 12, mỗi ngày 1000 lần hiện dồn cho sản phẩm thắng hôm trước. Nếu người thắng là sản phẩm nhiều lượt bấm hơn, ngày đầu A hiện 600 lần được 60 bấm, B hiện 400 lần chỉ được 48 bấm, nên từ ngày hai B không bao giờ được hiện nữa. Nếu so tỉ lệ bấm mà B chưa từng được hiện, thì không ai đo được B. Chỉ khi dành 10 phần trăm cho khám phá, B có 50 lần hiện mỗi ngày, tỉ lệ 0 phẩy 12 dần lộ ra, và theo kỳ vọng thì từ ngày ba B được ưu tiên. Một bài báo năm 2019 gọi đây là vòng phản hồi, vì mô hình học từ dữ liệu do chính hệ hiện tại tạo ra."
+
+  # ───────────────────────── 8. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi của người đã đi làm"
+    checks:
+      - "alg.irs_mmr_select([0.95, 0.9, 0.7, 0.6], [[1, .8, .1, .2], [.8, 1, .1, .2], [.1, .1, 1, .3], [.2, .2, .3, 1]], 0.3, 3) == [0, 2, 3]"
+      - "[round(alg.irs_mmr(0.9, 0.8, 0.3), 2), round(alg.irs_mmr(0.6, 0.3, 0.3), 2)] == [-0.29, -0.03]"
+      - "2 / 4 == 0.5 and round(alg.irs_exposure([3, 4]) / alg.irs_exposure([1, 2, 3, 4]), 3) == 0.363"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Lọc trùng bằng mã sản phẩm <b class="red">(A và X khác mã nhưng là cùng một mẫu)</b>
+          <br><span class="note">Phép thử: đo độ giống giữa các ô kề nhau trên danh sách thật, không chỉ so mã.</span></div>
+        say: "Lỗi thứ nhất là lọc trùng bằng mã sản phẩm. A và X có hai mã khác nhau nhưng là cùng một mẫu, nên vẫn chiếm hai ô đầu. Phép thử là đo độ giống giữa các ô kề nhau trên danh sách thật, không chỉ so mã."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Đa dạng quá tay, $\lambda = 0{,}3$ <b class="red">(ô 3 là hộp đựng Z, bỏ mất X liên quan 0,9)</b></div>
+          $$\text{ô 3: X} = 0{,}27 - 0{,}7 \cdot 0{,}8 = -0{,}29 \qquad \text{Z} = 0{,}18 - 0{,}7 \cdot 0{,}3 = -0{,}03$$
+          <p class="note">Phép thử: mọi ô vẫn phải đủ liên quan — đặt một ngưỡng liên quan tối thiểu trước khi cân khác biệt.</p>
+        focus: [1, 2, 3]
+        say: "Lỗi thứ hai là đa dạng quá tay, với lambda bằng 0 phẩy 3, ô thứ ba thành hộp đựng Z và bỏ mất X liên quan 0 phẩy 9. Ở ô ba, X được 0 phẩy 27 trừ 0 phẩy 56, bằng âm 0 phẩy 29, còn Z được 0 phẩy 18 trừ 0 phẩy 21, bằng âm 0 phẩy 03. Phép thử là đòi mọi ô vẫn phải đủ liên quan, đặt một ngưỡng liên quan tối thiểu trước khi cân khác biệt."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Huấn luyện lại chỉ trên lượt bấm vào chính gợi ý của hệ <b class="red">(vòng phản hồi: B không bao giờ có dữ liệu)</b>
+          <br><span class="note">Đội gợi ý video năm 2016 lấy mẫu huấn luyện từ <b>mọi</b> lượt xem, kể cả xem từ trang khác, “không chỉ lượt xem trên gợi ý của chính mình”, vì nếu không, nội dung mới rất khó nổi lên.</span></div>
+        say: "Lỗi thứ ba hay gặp ở người đã đi làm, là huấn luyện lại chỉ trên lượt bấm vào chính gợi ý của hệ, nên B không bao giờ có dữ liệu. Một bài báo năm 2016 ghi rằng đội gợi ý video lấy mẫu huấn luyện từ mọi lượt xem, kể cả lượt xem từ trang khác, chứ không chỉ lượt xem trên gợi ý của chính mình. Lý do họ ghi là nếu không làm vậy, nội dung mới rất khó nổi lên."
+      - show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Đo công bằng bằng <b>số ô</b>: “người bán nhỏ có 2 trên 4 ô, tức 50%” <b class="red">(theo mức được nhìn thấy chỉ ≈ 36,3%)</b>
+          <br><span class="note">Ô cuối ít người nhìn hơn ô đầu. Hãy cộng chiết khấu theo vị trí, như đo độ lợi ở bài 1.</span></div>
+        say: "Lỗi thứ tư cũng của người đã đi làm, là đo công bằng bằng số ô, người bán nhỏ có 2 trên 4 ô nên báo 50 phần trăm. Theo mức được nhìn thấy thì nhóm này chỉ nhận khoảng 36 phẩy 3 phần trăm, vì ô cuối ít người nhìn hơn ô đầu. Hãy cộng chiết khấu theo vị trí, đúng như cách đo độ lợi ở bài 1."
+
+  # ───────────────────────── 9. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: chọn lambda cho hai trang khác nhau"
+    checks:
+      - "[round(alg.irs_mmr(0.9, 0.8, 0.8), 2), round(alg.irs_mmr(0.7, 0.1, 0.8), 2), round(alg.irs_mmr(0.6, 0.2, 0.8), 2)] == [0.56, 0.54, 0.44]"
+      - "round(alg.irs_exposure([2, 4]) / alg.irs_exposure([1, 2, 3, 4]) * 100, 1) == 41.4 and round(alg.irs_exposure([2, 4]), 3) == 1.062"
+    steps:
+      - show: |
+          <p>Cùng bốn ứng viên A, X, Y, Z và ô 1 đã là A.</p>
+          <table class="t"><tr><th>câu</th><th>việc cần làm</th></tr>
+          <tr><td>1</td><td>Với $\lambda = 0{,}8$, tính điểm X, Y, Z ở ô 2. Ô 2 chọn gì?</td></tr>
+          <tr><td>2</td><td>Đưa hai sản phẩm của người bán nhỏ lên vị trí 2 và 4: họ nhận bao nhiêu phần trăm mức được nhìn thấy?</td></tr>
+          <tr><td>3</td><td>Trang “tìm đúng mã sản phẩm” và trang “gợi ý khám phá cuối tuần”: mỗi trang nên đặt $\lambda$ cao hay thấp?</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", 0]
+        say: "Bây giờ đến lượt bạn, vẫn bốn ứng viên A, X, Y, Z, và ô thứ nhất đã là A. Câu một, với lambda bằng 0 phẩy 8, tính điểm của X, Y, Z ở ô thứ hai, và ô hai chọn gì. Câu hai, đưa hai sản phẩm của người bán nhỏ lên vị trí 2 và 4, họ nhận bao nhiêu phần trăm mức được nhìn thấy. Câu ba, trang tìm đúng mã sản phẩm và trang gợi ý khám phá cuối tuần, mỗi trang nên đặt lambda cao hay thấp. Dừng video lại và làm ra giấy nhé."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu</th><th>từng bước</th><th>đáp số</th></tr>
+          <tr><td>1. X</td><td>$0{,}8 \cdot 0{,}9 - 0{,}2 \cdot 0{,}8 = 0{,}72 - 0{,}16$</td><td>$\hlg{0{,}56}$</td></tr>
+          <tr><td>1. Y</td><td>$0{,}8 \cdot 0{,}7 - 0{,}2 \cdot 0{,}1 = 0{,}56 - 0{,}02$</td><td>0,54</td></tr>
+          <tr><td>1. Z</td><td>$0{,}8 \cdot 0{,}6 - 0{,}2 \cdot 0{,}2 = 0{,}48 - 0{,}04$</td><td>0,44</td></tr>
+          <tr><td>2</td><td>$\frac{0{,}631 + 0{,}431}{2{,}562} = \frac{1{,}062}{2{,}562}$</td><td>≈ 41,4%</td></tr></table>
+        focus: ["1.2", "1.3", "1.4", "1.5"]
+        say: "Đáp án câu một, X được 0 phẩy 72 trừ 0 phẩy 16, bằng 0 phẩy 56, cao nhất, nên ô hai chọn X, đúng như phép giải lambda trên 0 phẩy 778. Y được 0 phẩy 56 trừ 0 phẩy 02, bằng 0 phẩy 54. Z được 0 phẩy 48 trừ 0 phẩy 04, bằng 0 phẩy 44. Câu hai, nhóm người bán nhỏ được 0 phẩy 631 cộng 0 phẩy 431, bằng 1 phẩy 062, chia 2 phẩy 562, khoảng 41 phẩy 4 phần trăm, tăng từ 36 phẩy 3."
+      - show: |
+          <table class="t"><tr><th>câu 3</th><th>chọn</th><th>được</th><th>mất</th></tr>
+          <tr><td>tìm đúng mã sản phẩm</td><td>$\lambda$ cao, gần 1</td><td>đúng thứ người dùng gõ</td><td>ít gợi ý mới</td></tr>
+          <tr><td>gợi ý khám phá cuối tuần</td><td>$\lambda$ thấp hơn, ví dụ 0,7</td><td>nhiều lựa chọn khác nhau, dữ liệu khám phá</td><td>mỗi ô bớt liên quan một chút</td></tr></table>
+          <p class="note">Điều kiện đổi lựa chọn: người dùng đã biết rõ mình cần gì thì tăng $\lambda$; danh sách dài, người dùng đang lướt xem thì giảm $\lambda$ — nhưng luôn giữ ngưỡng liên quan tối thiểu.</p>
+        focus: [0, "1.2", "1.3", 2]
+        say: "Câu ba là một quyết định có đánh đổi. Trang tìm đúng mã sản phẩm nên đặt lambda cao, gần 1, được đúng thứ người dùng gõ, đổi lại ít gợi ý mới. Trang gợi ý khám phá cuối tuần nên đặt lambda thấp hơn, ví dụ 0 phẩy 7, được nhiều lựa chọn khác nhau và dữ liệu khám phá, đổi lại mỗi ô bớt liên quan một chút. Người dùng đã biết rõ mình cần gì thì tăng lambda, còn đang lướt xem thì giảm lambda, nhưng luôn giữ một ngưỡng liên quan tối thiểu."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">chỉ xếp theo liên quan → trùng lặp</span><span class="a">→</span>
+          <span class="n">trừ độ giống lớn nhất với ô đã chọn</span><span class="a">→</span>
+          <span class="n">lambda cân hai phần, chọn từng ô</span><span class="a">→</span>
+          <span class="n">đo ai được nhìn thấy theo vị trí</span><span class="a">→</span>
+          <span class="n">khám phá để thoát vòng phản hồi</span></div>
+        say: "Tổng kết lại, chỉ xếp theo liên quan thì dễ trùng lặp, nên ta trừ độ giống lớn nhất với các ô đã chọn, và dùng lambda để cân hai phần khi chọn từng ô. Công bằng được đo bằng mức được nhìn thấy theo vị trí, không phải số ô. Và vì hệ học từ chính lượt bấm nó tạo ra, ta cần dữ liệu khám phá để thoát vòng phản hồi."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> danh sách là <b>một sản phẩm</b>, không phải mười điểm số riêng lẻ. Và hỏi “hệ đã cho người dùng cơ hội thấy thứ gì khác chưa?” trước khi tin rằng người dùng không thích nó.</div>
+        say: "Điều cần mang theo, danh sách là một sản phẩm hoàn chỉnh, không phải mười điểm số riêng lẻ. Trước khi tin rằng người dùng không thích một thứ, hãy hỏi hệ đã cho họ cơ hội thấy nó chưa."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 12): <b>tình huống chuyên gia — thiết kế hệ gợi ý hai tầng trong ngân sách 100 ms</b>: lấy vài trăm ứng viên từ hàng triệu, xếp hạng kỹ, rồi xếp lại cho đa dạng, mà vẫn kịp thời gian.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 12, ta giải một tình huống chuyên gia, thiết kế hệ gợi ý hai tầng trong ngân sách 100 mi li giây. Ta sẽ lấy vài trăm ứng viên từ hàng triệu sản phẩm, xếp hạng kỹ, rồi xếp lại cho đa dạng mà vẫn kịp thời gian. Hẹn gặp bạn ở bài tiếp theo."

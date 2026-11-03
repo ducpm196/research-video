@@ -1,0 +1,292 @@
+id: L08
+course: IRS
+series: "IRS · Truy hồi thông tin và hệ gợi ý"
+title: "Bài 8 — Phản hồi ngầm, lấy mẫu âm và thiên lệch phổ biến"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/irs.yaml L08; audit/irs/verify_irs.py (verify_parts/L08.py); audit/irs/sources_L08.md (câu trích nguyên văn, đọc 2026-11-03); Y. Hu, Y. Koren, C. Volinsky, Collaborative Filtering for Implicit Feedback Datasets, ICDM 2008 [HU08]; T. Mikolov và cộng sự, Distributed Representations of Words and Phrases, NIPS 2013 [MI13]; P. Covington và cộng sự, RecSys 2016 [CO16]; X. Yi và cộng sự, RecSys 2019 [YI19]; S. Baluja và cộng sự, WWW 2008 [BA08]; CS115 bài 12 (lũy thừa, lôgarit); IRS bài 7 (phân rã ma trận)"
+assumes: [arith]
+# Quy ước (theo khoá IRS):
+#   - phản hồi ngầm = dấu vết hành vi (bấm, xem hết, mua), không phải điểm chấm; “dương” = có hành vi; “mẫu âm” = sản phẩm chọn ra để coi
+#     như người đó không muốn, trong lúc huấn luyện.
+#   - c_A = số lần sản phẩm A xuất hiện trong dữ liệu (tần suất); lấy mẫu âm theo c mũ 0,75 rồi chia tổng (Mikolov và cộng sự 2013).
+#   - độ tin cậy 1 + 40 · r (Hu, Koren, Volinsky 2008, r = số lần xem; hệ số 40 là số bài báo chọn). Không viết chữ alpha vì sổ chung dành
+#     alpha cho nhân tử.
+#   - p = xác suất một sản phẩm lọt vào một lô huấn luyện; hiệu chỉnh điểm − ln p (Yi và cộng sự 2019). \ln là lôgarit tự nhiên.
+#   - Số A 100 lần, B 1 lần, cửa hàng 3 sản phẩm 100 / 10 / 1, người dùng 1000 / 10 lượt: SỐ MINH HOẠ. word2vec, YouTube chỉ trên màn hình
+#     (YouTube đọc được nhưng bài không cần).
+objectives:
+  - "Phân biệt “không bấm” với “không thích” và nêu hệ quả cho dữ liệu huấn luyện"
+  - "Lấy mẫu âm theo tần suất mũ 0,75 và tính phần của sản phẩm hiếm"
+  - "Tính hiệu chỉnh trừ lôgarit tần suất cho sản phẩm hay lọt vào lô"
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Không ai chấm sao, chỉ có lượt xem: không xem nghĩa là gì?"
+    checks:
+      - "alg.irs_neg_probs([100, 1], 1) == [100 / 101, 1 / 101] and round(100 / 101 * 100, 1) == 99.0"
+    steps:
+      - show: |
+          <p>Cửa hàng video không có điểm sao, chỉ có nhật ký: ai đã <b>xem hết</b> video nào. Video A xuất hiện <b>100 lần</b>, video B mới ra chỉ <b>1 lần</b> (số minh hoạ).</p>
+          <table class="t"><tr><th>người dùng</th><th>A</th><th>B</th><th>C</th></tr>
+          <tr><td>U</td><td class="green">xem</td><td>–</td><td>–</td></tr>
+          <tr><td>V</td><td class="green">xem</td><td class="green">xem</td><td>–</td></tr></table>
+          <p class="note">Dấu “–” có thể là không thích, có thể là chưa từng thấy. Dữ liệu không nói.</p>
+        focus: [1, 1, "2.2", "2.3", 3]
+        say: "Chào bạn, cửa hàng video lần này không có điểm sao, chỉ có nhật ký ai đã xem hết video nào. Video A xuất hiện 100 lần, còn video B mới ra chỉ 1 lần, số minh hoạ. Người U xem A, chưa xem B và C. Người V xem cả A và B. Dấu gạch có thể là không thích, cũng có thể là chưa từng thấy, và dữ liệu không nói điều đó."
+      - show: |
+          <p>Nếu chọn “mẫu âm” theo đúng tần suất, A bị chọn <b>100 : 1</b> so với B — tức khoảng <b>99%</b> số mẫu âm là A.</p>
+          <div class="box key">Hôm nay ta trả lời: dữ liệu ngầm thiếu gì? Chọn mẫu âm thế nào cho không lệch về món phổ biến? Và bù thế nào khi món phổ biến cứ lọt vào lô huấn luyện?</div>
+        focus: [1, 2, 2]
+        say: "Nếu chọn mẫu âm theo đúng tần suất, A bị chọn nhiều gấp 100 lần B, tức khoảng 99 phần trăm số mẫu âm là A. Hôm nay ta trả lời ba câu hỏi, dữ liệu ngầm thiếu gì, và chọn mẫu âm thế nào cho bớt lệch về món phổ biến. Câu thứ ba là bù thế nào khi món phổ biến cứ lọt vào lô huấn luyện."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: lũy thừa có số mũ phân số, tỉ lệ thành phần, lôgarit"
+    checks:
+      - "round(16 ** 0.75, 9) == 8 and round(math.sqrt(math.sqrt(16)) ** 3, 9) == 8"
+      - "round(100 ** 0.75, 2) == 31.62 and round(10 * math.sqrt(10), 2) == 31.62"
+      - "round(100 / 101, 3) == 0.99 and round(math.log(0.02), 3) == -3.912 and round(math.log(0.5), 3) == -0.693"
+    steps:
+      - show: |
+          <table class="t"><tr><th>điều cần nhớ</th><th>ví dụ số</th></tr>
+          <tr><td>① mũ 0,75 = mũ $\frac{3}{4}$: lấy căn bậc bốn rồi mũ 3</td><td>$16^{0{,}75} = (\sqrt{\sqrt{16}})^3 = 2^3 = 8$</td></tr>
+          <tr><td>② với 100: $100^{0{,}75} = 10^{1{,}5} = 10\sqrt{10}$</td><td>≈ 31,62</td></tr>
+          <tr><td>③ tỉ lệ thành phần: chia cho tổng</td><td>$100 : 1 \to \frac{100}{101} \approx 0{,}99$</td></tr></table>
+        introduces: [power, sqrt, frac, approx]
+        focus: ["1.2", "1.2", "1.3", "1.4"]
+        say: "Bảng ôn ở khoá Toán cho khoa học máy tính, mũ 0 phẩy 75 chính là mũ 3 phần 4, tức lấy căn bậc bốn rồi mũ 3. Ví dụ 16 mũ 0 phẩy 75 bằng căn của căn 16 là 2, mũ 3 bằng 8. Với 100, mũ 0 phẩy 75 bằng 10 mũ 1 phẩy 5, tức 10 nhân căn 10, khoảng 31 phẩy 62. Muốn đổi tỉ lệ 100 trên 1 thành phần trăm, ta chia cho tổng 101, được khoảng 0 phẩy 99."
+      - show: |
+          <p><b>④ Lôgarit tự nhiên</b> của số nhỏ hơn 1 là số âm, càng nhỏ càng âm nhiều:</p>
+          $$\ln 0{,}5 \approx -0{,}693 \qquad \ln 0{,}02 \approx -3{,}912$$
+          <p><b>⑤ Ở bài 7</b>, mỗi người một vector p, mỗi sản phẩm một vector q, và điểm dự đoán là tích vô hướng $\mathbf{p} \cdot \mathbf{q}$.</p>
+        introduces: [log, vec, cdot]
+        focus: [1, 2, 2, 3]
+        say: "Điều thứ tư, lôgarit tự nhiên của một số nhỏ hơn 1 là số âm, càng nhỏ thì càng âm nhiều. Lôgarit của 0 phẩy 5 khoảng âm 0 phẩy 693, còn của 0 phẩy 02 khoảng âm 3 phẩy 912. Hai con số này sẽ quay lại ở cuối phần suy ra. Điều thứ năm, ở bài 7, mỗi người có một vector p, mỗi sản phẩm một vector q, và điểm dự đoán là tích vô hướng của hai vector."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: tần suất c, xác suất chọn làm mẫu âm, độ tin cậy, xác suất lọt lô p"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ký hiệu</th><th>đọc là</th><th>nghĩa</th><th>ví dụ</th></tr>
+          <tr><td>$c_A$</td><td>c của A</td><td>số lần sản phẩm A xuất hiện trong dữ liệu</td><td>100</td></tr>
+          <tr><td>$P_{\text{âm}}(B)$</td><td>xác suất B được chọn làm mẫu âm</td><td>$\frac{c_B^{0{,}75}}{c_A^{0{,}75} + c_B^{0{,}75}}$</td><td>≈ 0,031</td></tr>
+          <tr><td>$1 + 40 \cdot r$</td><td>độ tin cậy</td><td>xem $r$ lần thì tin “thích” bao nhiêu</td><td>$r = 1$: 41</td></tr>
+          <tr><td>$p$</td><td>p</td><td>xác suất một sản phẩm lọt vào một lô huấn luyện</td><td>0,02</td></tr></table>
+        introduces: [sub, prob]
+        focus: ["1.2", "1.3", "1.4", "1.5"]
+        say: "Bảng giải mã ký hiệu, c với chữ A nhỏ dưới chân là số lần sản phẩm A xuất hiện trong dữ liệu, ví dụ 100. Chữ P với chữ âm nhỏ dưới chân, và ngoặc B, đọc là xác suất B được chọn làm mẫu âm, tính bằng tần suất mũ 0 phẩy 75 chia tổng, khoảng 0 phẩy 031. Biểu thức 1 cộng 40 nhân r là độ tin cậy, xem r lần thì ta tin người đó thích bao nhiêu, xem 1 lần được 41. Chữ p thường là xác suất một sản phẩm lọt vào một lô huấn luyện, ví dụ 0 phẩy 02."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Ba cách chia phần mẫu âm giữa món phổ biến và món hiếm"
+    steps:
+      - show: |
+          <div><svg width="1500" height="420" viewBox="0 0 1500 420">
+          <line x1="100" y1="340" x2="1400" y2="340" stroke="#1f2937" stroke-width="2"/>
+          <g font-size="23" text-anchor="middle" fill="#1f2937">
+          <rect x="160" y="42" width="110" height="298" fill="#2a78d6"/><rect x="280" y="337" width="110" height="3" fill="#eb6834"/>
+          <text x="275" y="378" font-weight="bold">theo tần suất (mũ 1)</text><text x="215" y="30">A 99%</text><text x="335" y="320" fill="#eb6834">B 1%</text>
+          <rect x="610" y="51" width="110" height="289" fill="#2a78d6"/><rect x="730" y="331" width="110" height="9" fill="#eb6834"/>
+          <text x="725" y="378" font-weight="bold">mũ 0,75</text><text x="665" y="39">A 96,9%</text><text x="785" y="314" fill="#eb6834">B 3,1%</text>
+          <rect x="1060" y="190" width="110" height="150" fill="#2a78d6"/><rect x="1180" y="190" width="110" height="150" fill="#eb6834"/>
+          <text x="1175" y="378" font-weight="bold">đều nhau (mũ 0)</text><text x="1115" y="178">A 50%</text><text x="1235" y="178" fill="#eb6834">B 50%</text>
+          </g>
+          <text x="750" y="410" font-size="22" fill="#6b7280" text-anchor="middle">phần mẫu âm dành cho A (xuất hiện 100 lần) và B (1 lần)</text>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình so ba cách chia phần mẫu âm giữa video phổ biến A và video hiếm B. Theo đúng tần suất, A chiếm 99 phần trăm, B chỉ 1 phần trăm, gần như không bao giờ được dùng làm mẫu âm. Lấy mũ 0 phẩy 75 thì B lên khoảng 3 phẩy 1 phần trăm, gấp ba lần, trong khi A vẫn là phần lớn. Chia đều thì mỗi bên một nửa, bỏ hẳn thông tin món nào hay được xem."
+
+  # ───────────────────────── 5. SUY RA ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Từ dữ liệu chỉ có dương tới mẫu âm và phép bù tần suất"
+    checks:
+      - "1 + 40 * 0 == 1 and 1 + 40 * 1 == 41 and 1 + 40 * 3 == 121"
+      - "round(alg.irs_neg_probs([100, 1])[1], 3) == 0.031 and round(alg.irs_neg_probs([100, 1])[1] / alg.irs_neg_probs([100, 1], 1)[1], 1) == 3.1"
+      - "round(alg.irs_logq(0, 0.02), 3) == 3.912 and round(alg.irs_logq(0, 0.5), 3) == 0.693"
+    steps:
+      - show: |
+          <p><b>Bước 1 — dữ liệu chỉ có dương.</b> Hu, Koren, Volinsky (2008): người không xem một chương trình có thể vì không thích, hoặc vì <b>không biết</b> nó, hoặc không rảnh. Nên mỗi lượt xem được coi là “có lẽ thích”, kèm độ tin cậy tăng theo số lần xem:</p>
+          $$\text{độ tin cậy} = 1 + 40 \cdot r: \quad r = 0 \Rightarrow 1, \quad r = 1 \Rightarrow 41, \quad r = 3 \Rightarrow 121$$
+        introduces: [implies]
+        focus: [1, 1, 1, 2]
+        say: "Bước một, dữ liệu ngầm chỉ có dương. Bài báo năm 2008 về phản hồi ngầm nhận xét rằng người không xem một chương trình có thể vì không thích, vì không biết nó, hoặc vì không rảnh. Vì vậy mỗi lượt xem chỉ được coi là có lẽ thích, kèm một độ tin cậy tăng theo số lần xem. Theo công thức của bài báo, chưa xem lần nào được 1, xem 1 lần được 41, xem 3 lần được 121, với hệ số 40 là số các tác giả chọn."
+      - show: |
+          <p><b>Bước 2 — cần mẫu âm.</b> Chỉ học từ dương thì mô hình cho mọi thứ điểm cao cũng không bị phạt. Nên ta chọn vài sản phẩm người đó chưa xem, coi tạm là âm. Câu hỏi là chọn <b>theo phân phối nào</b>.</p>
+          <p class="note">Bài báo năm 2013 về vector từ (word2vec) thử nhiều phân phối và thấy tần suất mũ 3/4 tốt hơn hẳn tần suất thường và phân phối đều.</p>
+        focus: [1, 1, 1, 2]
+        say: "Bước hai là cần mẫu âm. Chỉ học từ dương thì mô hình cho mọi thứ điểm cao cũng không bị phạt gì. Vì thế ta chọn vài sản phẩm người đó chưa xem và coi tạm là âm, và câu hỏi là chọn theo phân phối nào. Một bài báo năm 2013 về vector từ đã thử nhiều phân phối, và thấy tần suất mũ 3 phần 4 tốt hơn hẳn tần suất thường lẫn phân phối đều."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — làm phẳng bằng mũ 0,75.</b> Vì mũ nhỏ hơn 1 nén số lớn mạnh hơn số nhỏ, khoảng cách giữa món phổ biến và món hiếm co lại:</p>
+          $$P_{\text{âm}}(B) = \frac{1^{0{,}75}}{100^{0{,}75} + 1^{0{,}75}} = \frac{1}{31{,}62 + 1} \approx \hlg{0{,}031} \quad \text{so với} \quad \frac{1}{101} \approx 0{,}010$$
+        focus: [1, 2, 2]
+        say: "Bước ba là làm phẳng bằng mũ 0 phẩy 75, vì mũ nhỏ hơn 1 nén số lớn mạnh hơn số nhỏ, nên khoảng cách giữa món phổ biến và món hiếm co lại. Thay số, xác suất B được chọn làm mẫu âm là 1 chia 31 phẩy 62 cộng 1, khoảng 0 phẩy 031. Theo tần suất thường, con số đó chỉ khoảng 0 phẩy 010, nhỏ hơn ba lần."
+      - show: |
+          <p><b>Bước 4 — bù tần suất lọt lô.</b> Khi mẫu âm lấy ngay từ các sản phẩm khác trong cùng lô, món phổ biến lọt vào lô thường hơn nên bị phạt quá tay (Yi và cộng sự 2019). Họ trừ lôgarit tần suất vào điểm lúc huấn luyện:</p>
+          $$\text{điểm đã bù} = \text{điểm} - \ln p: \qquad p = 0{,}02 \Rightarrow +3{,}912, \qquad p = 0{,}5 \Rightarrow +0{,}693$$
+        focus: [1, 1, 1, 2, 2]
+        say: "Bước bốn là bù tần suất lọt lô. Khi mẫu âm lấy ngay từ các sản phẩm khác trong cùng lô, món phổ biến lọt vào lô thường hơn nên bị phạt quá tay. Một bài báo năm 2019 của đội gợi ý video chỉ ra điều này, và họ trừ lôgarit của tần suất lọt lô vào điểm lúc huấn luyện. Món hiếm có p bằng 0 phẩy 02 được cộng 3 phẩy 912, còn món phổ biến có p bằng 0 phẩy 5 chỉ được cộng 0 phẩy 693. Nhờ vậy phần phạt thừa của món phổ biến được bù lại."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Cửa hàng ba sản phẩm, từng phép tính"
+    checks:
+      - "[round(c ** 0.75, 2) for c in [100, 10, 1]] == [31.62, 5.62, 1.0] and round(sum(c ** 0.75 for c in [100, 10, 1]), 2) == 38.25"
+      - "[round(x, 3) for x in alg.irs_neg_probs([100, 10, 1], 1)] == [0.901, 0.09, 0.009]"
+      - "[round(x, 3) for x in alg.irs_neg_probs([100, 10, 1])] == [0.827, 0.147, 0.026]"
+      - "round(alg.irs_neg_probs([100, 10, 1])[2] / alg.irs_neg_probs([100, 10, 1], 1)[2], 1) == 2.9"
+      - "1 / 50 == 0.02 and round(alg.irs_logq(1.5, 1 / 50), 3) == 5.412"
+    steps:
+      - show: |
+          <p><b>Bước 1.</b> Ba sản phẩm xuất hiện 100, 10 và 1 lần. Lấy mũ 0,75 từng số:</p>
+          $$100^{0{,}75} \approx 31{,}62 \qquad 10^{0{,}75} \approx 5{,}62 \qquad 1^{0{,}75} = 1 \qquad \text{tổng} \approx 38{,}25$$
+        focus: [1, 2]
+        say: "Bước một, cửa hàng có ba sản phẩm xuất hiện 100, 10 và 1 lần, ta lấy mũ 0 phẩy 75 cho từng số. Được khoảng 31 phẩy 62, 5 phẩy 62 và 1, cộng lại khoảng 38 phẩy 25."
+      - show: |
+          <p><b>Bước 2.</b> Chia cho tổng để ra phần mẫu âm, và so với cách theo tần suất thường (tổng 111):</p>
+          <table class="t"><tr><th>sản phẩm</th><th>theo tần suất</th><th>theo mũ 0,75</th></tr>
+          <tr><td>phổ biến (100)</td><td>$\frac{100}{111} \approx 0{,}901$</td><td>$\frac{31{,}62}{38{,}25} \approx 0{,}827$</td></tr>
+          <tr><td>vừa (10)</td><td>≈ 0,090</td><td>≈ 0,147</td></tr>
+          <tr><td>hiếm (1)</td><td>≈ 0,009</td><td>≈ $\hlg{0{,}026}$</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Bước hai, ta chia cho tổng để ra phần mẫu âm, rồi so với cách theo tần suất thường có tổng 111. Món phổ biến giảm từ khoảng 0 phẩy 901 xuống 0 phẩy 827. Món vừa tăng từ 0 phẩy 090 lên 0 phẩy 147. Món hiếm tăng từ 0 phẩy 009 lên khoảng 0 phẩy 026."
+      - clear: true
+        show: |
+          <p><b>Bước 3.</b> Món hiếm được chọn làm mẫu âm thường hơn bao nhiêu lần?</p>
+          $$\frac{0{,}026}{0{,}009} \approx \hl{2{,}9} \text{ lần}$$
+          <p class="note">Mô hình bây giờ được dạy cả rằng món hiếm không hợp với mọi người, chứ không chỉ học “món phổ biến thì tránh”.</p>
+        focus: [1, 2, 3]
+        say: "Bước ba, ta hỏi món hiếm được chọn làm mẫu âm thường hơn bao nhiêu lần. Lấy 0 phẩy 026 chia 0 phẩy 009, khoảng 2 phẩy 9 lần. Nhờ vậy mô hình được dạy cả rằng món hiếm không hợp với mọi người, chứ không chỉ học một điều là món phổ biến thì tránh."
+      - show: |
+          <p><b>Bước 4.</b> Bù tần suất lọt lô: một sản phẩm cứ khoảng 50 bước huấn luyện mới gặp một lần, nên $p = \frac{1}{50} = 0{,}02$ (ví dụ của Yi và cộng sự 2019). Điểm thô 1,5 (số minh hoạ):</p>
+          $$1{,}5 - \ln 0{,}02 \approx 1{,}5 + 3{,}912 = \hlo{5{,}412}$$
+        focus: [1, 1, 2]
+        say: "Bước bốn là bù tần suất lọt lô, một sản phẩm cứ khoảng 50 bước huấn luyện mới gặp một lần. Vì vậy p bằng 1 chia 50, bằng 0 phẩy 02, đúng ví dụ của bài báo năm 2019. Với điểm thô 1 phẩy 5, một số minh hoạ, điểm đã bù là 1 phẩy 5 cộng 3 phẩy 912, khoảng 5 phẩy 412."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: lũy thừa qua lôgarit, và tổng phải bằng 1"
+    checks:
+      - "round(0.75 * math.log(100), 3) == 3.454 and round(math.exp(0.75 * math.log(100)), 2) == 31.62"
+      - "abs(sum(alg.irs_neg_probs([100, 10, 1])) - 1) < 1e-12 and round(0.827 + 0.147 + 0.026, 3) == 1"
+    steps:
+      - show: |
+          <p>Đường khác: $x^{0{,}75} = e^{0{,}75 \cdot \ln x}$, vì lôgarit biến mũ thành phép nhân:</p>
+          $$100^{0{,}75} = e^{0{,}75 \cdot \ln 100} = e^{0{,}75 \cdot 4{,}605} = e^{3{,}454} \approx 31{,}62 \;\checkmark$$
+        introduces: [exp]
+        focus: [1, 2]
+        say: "Kiểm tra thứ nhất đi đường khác, x mũ 0 phẩy 75 bằng e mũ 0 phẩy 75 nhân lôgarit của x, vì lôgarit biến số mũ thành phép nhân. Lôgarit của 100 khoảng 4 phẩy 605, nhân 0 phẩy 75 được 3 phẩy 454, và e mũ 3 phẩy 454 khoảng 31 phẩy 62, khớp."
+      - show: |
+          <table class="t"><tr><th>phép thử tổng</th><th>cộng lại</th></tr>
+          <tr><td>theo mũ 0,75</td><td>$0{,}827 + 0{,}147 + 0{,}026 = 1$ ✓</td></tr>
+          <tr><td>thứ tự giữ nguyên</td><td>phổ biến &gt; vừa &gt; hiếm ở cả hai cách ✓</td></tr></table>
+        focus: ["1.2", "1.3"]
+        say: "Kiểm tra thứ hai là phép thử tổng, các phần mẫu âm theo mũ 0 phẩy 75 cộng lại phải đúng bằng 1, và 0 phẩy 827 cộng 0 phẩy 147 cộng 0 phẩy 026 đúng bằng 1. Thứ tự cũng phải giữ nguyên, phổ biến hơn vừa, vừa hơn hiếm, vì mũ 0 phẩy 75 chỉ nén khoảng cách chứ không đảo thứ tự."
+
+  - id: hindsight
+    kind: concept
+    title: "Không xem chưa chắc là chê: ba nhóm tác giả cùng cảnh báo"
+    steps:
+      - show: |
+          <table class="t"><tr><th>nguồn</th><th>điều họ ghi</th></tr>
+          <tr><td>Hu, Koren, Volinsky (2008), dữ liệu xem truyền hình</td><td>không có phản hồi âm: không xem có thể vì không biết chương trình; xem dưới nửa chương trình thì không coi là thích</td></tr>
+          <tr><td>Baluja và cộng sự (2008), video trực tuyến</td><td>“nhìn lại không sáng suốt”: một gợi ý không được xem chưa chắc là sai, vì nếu được hiện ra, người dùng có thể đã xem</td></tr>
+          <tr><td>Covington và cộng sự (2016)</td><td>dùng lượt <b>xem hết</b> làm dương, vì dữ liệu ngầm nhiều hơn điểm chấm hàng bậc độ lớn</td></tr></table>
+          <p class="note">Hệ quả: độ đo ngoại tuyến trên dữ liệu ngầm thường đánh giá thấp gợi ý tốt mà người dùng chưa từng được thấy.</p>
+        focus: [0, "1.2", "1.3", "1.4", 2]
+        say: "Bảng gom lời cảnh báo của các nhóm tác giả về dữ liệu ngầm. Nhóm viết năm 2008 về dữ liệu xem truyền hình ghi rằng không có phản hồi âm, không xem có thể chỉ vì không biết chương trình, và xem dưới một nửa thì không coi là thích. Nhóm viết năm 2008 về video trực tuyến gọi đó là nhìn lại không sáng suốt, một gợi ý không được xem chưa chắc là sai, vì nếu được hiện ra, người dùng có thể đã xem. Nhóm viết năm 2016 dùng lượt xem hết làm dương, vì dữ liệu ngầm nhiều hơn điểm chấm hàng bậc độ lớn. Hệ quả là độ đo ngoại tuyến trên dữ liệu ngầm thường đánh giá thấp những gợi ý tốt mà người dùng chưa từng được thấy."
+
+  # ───────────────────────── 8. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi của người đã đi làm"
+    checks:
+      - "round(1000 / (1000 + 99 * 10) * 100, 1) == 50.3 and 10 / (100 * 10) == 0.01"
+      - "round(1 / 3, 3) == 0.333 and round(alg.irs_neg_probs([100, 10, 1], 1)[0], 3) == 0.901 and round(alg.irs_neg_probs([100, 10, 1], 0)[0], 3) == 0.333"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Coi mọi ô “chưa xem” là nhãn âm thật <b class="red">(phạt cả những món người dùng chưa từng thấy)</b>
+          <br><span class="note">Video B mới chỉ xuất hiện 1 lần: hầu như ai cũng “chưa xem” B. Phép thử: tách “đã hiện mà không bấm” khỏi “chưa từng hiện”.</span></div>
+        say: "Lỗi thứ nhất là coi mọi ô chưa xem là nhãn âm thật, tức phạt cả những món người dùng chưa từng thấy. Video B mới chỉ xuất hiện 1 lần, nên hầu như ai cũng chưa xem B, và mô hình sẽ học rằng B tệ. Phép thử là tách riêng loại đã hiện mà không bấm khỏi loại chưa từng hiện."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Chỉ lấy dữ liệu từ các lượt xem <b>do chính hệ gợi ý tạo ra</b> <b class="red">(món mới khó nổi lên)</b>
+          <br><span class="note">Covington và cộng sự (2016) lấy mẫu huấn luyện từ mọi lượt xem, kể cả xem ở trang khác, vì nếu không, nội dung mới rất khó nổi lên và hệ thiên hẳn về khai thác cái đã biết.</span></div>
+        say: "Lỗi thứ hai là chỉ lấy dữ liệu từ những lượt xem do chính hệ gợi ý tạo ra, khiến món mới khó nổi lên. Nhóm viết năm 2016 lấy mẫu huấn luyện từ mọi lượt xem, kể cả xem ở trang khác. Họ ghi rằng nếu không làm vậy, nội dung mới rất khó nổi lên và hệ sẽ thiên hẳn về khai thác cái đã biết."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Để vài người cực tích cực chiếm phần lớn mất mát <b class="red">(1 người chiếm hơn một nửa)</b></div>
+          <table class="t"><tr><th>cách lấy mẫu (số minh hoạ)</th><th>người tích cực: 1000 lượt</th><th>99 người: mỗi người 10 lượt</th><th>phần của người tích cực</th></tr>
+          <tr><td>lấy mọi lượt</td><td>1000</td><td>990</td><td class="red">$\frac{1000}{1990} \approx 50{,}3\%$</td></tr>
+          <tr><td>cố định 10 mẫu mỗi người</td><td>10</td><td>990</td><td class="green">$\frac{10}{1000} = 1\%$</td></tr></table>
+          <p class="note">Covington và cộng sự (2016) sinh một số mẫu cố định cho mỗi người dùng để mọi người được tính ngang nhau trong mất mát.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Lỗi thứ ba hay gặp ở người đã đi làm, là để vài người cực tích cực chiếm phần lớn mất mát. Với số minh hoạ, một người xem 1000 lượt và 99 người mỗi người 10 lượt, lấy mọi lượt thì người tích cực chiếm khoảng 50 phẩy 3 phần trăm. Cố định 10 mẫu cho mỗi người thì phần đó chỉ còn 1 phần trăm. Đó chính là cách nhóm viết năm 2016 làm, để mọi người dùng được tính ngang nhau."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Lấy mẫu âm <b>đều</b> trên toàn kho <b class="red">(món phổ biến chỉ nhận 0,333 phần âm dù chiếm 0,901 phần dương)</b>
+          <br><span class="note">Mô hình học rằng “phổ biến là tốt” và đẩy món phổ biến lên mọi trang — thiên lệch phổ biến. Mũ 0,75 cho 0,827, gần với 0,901 hơn. Phép thử: so tỉ lệ dương và tỉ lệ âm của từng nhóm sản phẩm.</span></div>
+        say: "Lỗi thứ tư cũng của người đã đi làm, là lấy mẫu âm đều trên toàn kho. Món phổ biến chiếm 0 phẩy 901 phần dương nhưng chỉ nhận 0 phẩy 333 phần âm, nên mô hình học rằng phổ biến là tốt và đẩy nó lên mọi trang, đó là thiên lệch phổ biến. Mũ 0 phẩy 75 cho 0 phẩy 827 phần âm, gần hơn nhiều. Phép thử là so tỉ lệ dương và tỉ lệ âm của từng nhóm sản phẩm."
+
+  # ───────────────────────── 9. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: hai sản phẩm 81 và 1 lần, và chọn số mũ"
+    checks:
+      - "round(81 ** 0.75, 9) == 27 and round(math.sqrt(math.sqrt(81)) ** 3, 9) == 27"
+      - "round(alg.irs_neg_probs([81, 1])[1], 4) == 0.0357 and round(alg.irs_neg_probs([81, 1], 1)[1], 4) == 0.0122"
+      - "round(alg.irs_logq(0, 0.5), 3) == 0.693 and round(alg.irs_logq(0, 0.02) - alg.irs_logq(0, 0.5), 3) == 3.219"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Sản phẩm C xuất hiện 81 lần, D 1 lần. Tỉ lệ chọn làm mẫu âm theo mũ 0,75 là bao nhiêu? So với theo tần suất.</td></tr>
+          <tr><td>2</td><td>Hai món có xác suất lọt lô 0,02 và 0,5. Phép bù cộng thêm cho mỗi món bao nhiêu, chênh nhau bao nhiêu?</td></tr>
+          <tr><td>3</td><td>Cửa hàng vừa nhập nhiều sản phẩm mới ít lượt xem. Bạn chọn số mũ 1, 0,75 hay 0 cho mẫu âm?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", 0]
+        say: "Bây giờ đến lượt bạn với ba câu trong bảng. Câu một, sản phẩm C xuất hiện 81 lần, D chỉ 1 lần, tỉ lệ chọn làm mẫu âm theo mũ 0 phẩy 75 là bao nhiêu, và so với theo tần suất thì sao. Câu hai, hai món có xác suất lọt lô 0 phẩy 02 và 0 phẩy 5, phép bù cộng thêm cho mỗi món bao nhiêu, chênh nhau bao nhiêu. Câu ba, cửa hàng vừa nhập nhiều sản phẩm mới ít lượt xem, bạn chọn số mũ 1, 0 phẩy 75 hay 0 cho mẫu âm. Dừng video lại và làm ra giấy nhé."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu</th><th>từng bước</th><th>đáp số</th></tr>
+          <tr><td>1</td><td>$81^{0{,}75} = (\sqrt{\sqrt{81}})^3 = 3^3 = 27$ → tỉ lệ $27 : 1$; phần của D $\frac{1}{28} \approx 0{,}0357$</td><td>so với $81 : 1$, phần $\frac{1}{82} \approx 0{,}0122$</td></tr>
+          <tr><td>2</td><td>$-\ln 0{,}02 \approx 3{,}912$; $-\ln 0{,}5 \approx 0{,}693$</td><td>chênh ≈ $\hlo{3{,}219}$</td></tr></table>
+        focus: ["1.2", "1.2", "1.3"]
+        say: "Đáp án câu một, 81 mũ 0 phẩy 75 bằng căn của căn 81 là 3, mũ 3 bằng 27, nên tỉ lệ là 27 trên 1, phần của D là 1 chia 28, khoảng 0 phẩy 0357. Theo tần suất thường thì tỉ lệ 81 trên 1, phần của D chỉ 1 chia 82, khoảng 0 phẩy 0122, nhỏ gần ba lần. Câu hai, món lọt lô với xác suất 0 phẩy 02 được cộng khoảng 3 phẩy 912, món 0 phẩy 5 được cộng 0 phẩy 693, chênh nhau khoảng 3 phẩy 219."
+      - show: |
+          <table class="t"><tr><th>câu 3: số mũ</th><th>được</th><th>mất</th></tr>
+          <tr><td>1 (theo tần suất)</td><td>giữ đúng thông tin món nào hay xem</td><td>món mới gần như không bao giờ làm mẫu âm</td></tr>
+          <tr><td>0,75</td><td>món hiếm được dạy nhiều hơn mà vẫn giữ thứ tự; bài báo năm 2013 thấy tốt nhất trên các việc họ thử</td><td>vẫn phải kiểm trên dữ liệu của mình</td></tr>
+          <tr><td>0 (đều)</td><td>đơn giản</td><td>thiên lệch phổ biến như lỗi 4</td></tr></table>
+          <p class="note">Chọn 0,75 làm điểm xuất phát, đo trên lượt xem giữ riêng rồi thử hai nhóm trực tuyến. Món mới hầu như chưa có lượt xem nào thì mẫu âm không giúp được: cần cho chúng cơ hội được hiện.</p>
+        focus: [0, "1.2", "1.3", "1.4", 2, 2]
+        say: "Câu ba, ta so ba số mũ theo được và mất. Số mũ 1 giữ đúng thông tin món nào hay được xem, nhưng món mới gần như không bao giờ làm mẫu âm. Số mũ 0 phẩy 75 dạy món hiếm nhiều hơn mà vẫn giữ thứ tự, và bài báo năm 2013 thấy nó tốt nhất trên các việc họ thử. Số mũ 0 đơn giản nhưng gây thiên lệch phổ biến như lỗi thứ tư. Vậy ta chọn 0 phẩy 75 làm điểm xuất phát, đo trên lượt xem giữ riêng rồi thử hai nhóm trực tuyến. Món mới hầu như chưa có lượt xem nào thì mẫu âm không giúp được, ta cần cho chúng cơ hội được hiện ra."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">dữ liệu ngầm: chỉ có dương</span><span class="a">→</span>
+          <span class="n">“chưa xem” ≠ “chê”</span><span class="a">→</span>
+          <span class="n">mẫu âm theo tần suất mũ 0,75</span><span class="a">→</span>
+          <span class="n">bù điểm − ln p</span><span class="a">→</span>
+          <span class="n">mỗi người dùng tính ngang nhau</span></div>
+        say: "Tổng kết lại, dữ liệu ngầm chỉ có dương, và chưa xem không có nghĩa là chê. Ta chọn mẫu âm theo tần suất mũ 0 phẩy 75 để món hiếm cũng được dạy, bù điểm bằng cách trừ lôgarit của tần suất lọt lô, và giữ cho mỗi người dùng được tính ngang nhau."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> nhãn của dữ liệu ngầm là <b>dấu vết của những gì đã được hiện ra</b>, không phải ý kiến của người dùng về mọi thứ.</div>
+        say: "Điều cần mang theo, nhãn của dữ liệu ngầm là dấu vết của những gì đã được hiện ra, không phải ý kiến của người dùng về mọi thứ trong kho."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 9): khởi động lạnh và khám phá — sản phẩm mới chưa có lượt xem nào thì làm sao biết nó tốt, nếu không bao giờ cho nó được hiện ra?</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 9, ta học khởi động lạnh và khám phá trong gợi ý. Sản phẩm mới chưa có lượt xem nào thì làm sao biết nó tốt, nếu ta không bao giờ cho nó được hiện ra. Hẹn gặp bạn ở bài tiếp theo."

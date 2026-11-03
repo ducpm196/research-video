@@ -1,0 +1,166 @@
+id: L10
+course: CLC
+series: "CLC · Điện toán đám mây"
+title: "Bài 10 — Khôi phục thảm hoạ nhiều vùng: sao lưu–khôi phục, chờ sẵn, chủ động–chủ động"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/clc.yaml L10; audit/clc/verify_clc.py L10; whitepaper “Disaster Recovery of Workloads on AWS: Recovery in the Cloud” (2021, tên chỉ trên màn hình) — bốn chiến lược; bài 1, 7"
+assumes: [arith, frac, cdot]
+# Quy ước: bốn chiến lược theo thứ tự tốn kém tăng dần: sao lưu–khôi phục, đèn mồi (chỉ dữ liệu sao chép, máy tắt), chờ sẵn thu nhỏ, chủ động–chủ động.
+#   Mốc thời gian khôi phục trong bảng là CỠ ĐỘ LỚN thường gặp, không phải cam kết. Chủ động–chủ động n vùng chịu f vùng hỏng: mỗi vùng gánh 1/(n − f) tải,
+#   tổng n/(n − f) (alg.active_active_capacity).
+objectives:
+  - "So bốn chiến lược theo thời gian khôi phục và chi phí"
+  - "Tính dung lượng thường trực của chủ động–chủ động"
+  - "Diễn tập chuyển vùng"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Cả một vùng ngừng hoạt động"
+    steps:
+      - show: |
+          <p>Hiếm, nhưng đã xảy ra: một sự cố của dịch vụ nội bộ làm <b>cả một vùng</b> của nhà cung cấp lớn gián đoạn nhiều giờ. Các ứng dụng chỉ chạy ở vùng đó dừng theo. Công ty có kế hoạch chuyển vùng trên giấy — nhưng lần đầu chạy thật, kịch bản thiếu quyền, thiếu bản sao ảnh máy, mất thêm nửa ngày.</p>
+          <div class="box key">Hôm nay: <b>khôi phục thảm hoạ nhiều vùng</b> — bốn chiến lược, cái giá của mỗi cái, và vì sao phải diễn tập.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, hiếm nhưng đã xảy ra, một sự cố của dịch vụ nội bộ làm cả một vùng của nhà cung cấp lớn gián đoạn nhiều giờ. Các ứng dụng chỉ chạy ở vùng đó dừng theo. Công ty có kế hoạch chuyển vùng trên giấy, nhưng lần đầu chạy thật thì kịch bản thiếu quyền, thiếu bản sao ảnh máy, và mất thêm nửa ngày. Hôm nay ta học khôi phục thảm hoạ nhiều vùng, bốn chiến lược, cái giá của mỗi cái, và vì sao phải diễn tập."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: chia tải khi một quầy nghỉ"
+    checks:
+      - "300 / 3 == 100 and 300 / (3 - 1) == 150 and 150 / 300 == 0.5"
+    steps:
+      - show: |
+          <p>Siêu thị có 300 khách mỗi giờ, 3 quầy thu ngân chia đều: mỗi quầy $\frac{300}{3} = 100$ khách.</p>
+          <p>Nếu phải chịu được <b>1 quầy nghỉ</b>, 2 quầy còn lại gánh hết: mỗi quầy $\frac{300}{3 - 1} = 150$ khách, tức $\frac{1}{2}$ tổng tải.</p>
+        focus: [1, 1, 2]
+        say: "Trước hết, một bài toán đời thường. Siêu thị có 300 khách mỗi giờ và 3 quầy thu ngân chia đều, mỗi quầy 100 khách. Nếu phải chịu được 1 quầy nghỉ, 2 quầy còn lại gánh hết, mỗi quầy 300 chia 2, bằng 150 khách, tức một nửa tổng tải."
+      - show: |
+          <p>Vậy mỗi quầy phải <b>đủ sức</b> 150 khách, dù ngày thường chỉ phục vụ 100: phần dư 50 là “bảo hiểm”. Công thức: mỗi nơi gánh $\frac{1}{n - f}$ tải, với $n$ nơi và $f$ nơi được phép hỏng.</p>
+        say: "Vậy mỗi quầy phải đủ sức 150 khách, dù ngày thường chỉ phục vụ 100, phần dư 50 là bảo hiểm. Công thức chung là mỗi nơi gánh 1 chia n trừ f phần tải, với n nơi và f nơi được phép hỏng."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: bốn chiến lược"
+    steps:
+      - show: |
+          <table class="t"><tr><th>chiến lược</th><th>vùng dự phòng có gì</th><th>thời gian khôi phục (cỡ)</th><th>chi phí thường trực</th></tr>
+          <tr><td><b>sao lưu – khôi phục</b></td><td>chỉ bản sao lưu</td><td>nhiều giờ</td><td>thấp nhất</td></tr>
+          <tr><td><b>đèn mồi</b></td><td>dữ liệu sao chép liên tục, máy tắt</td><td>vài chục phút</td><td>thấp</td></tr>
+          <tr><td><b>chờ sẵn thu nhỏ</b></td><td>toàn bộ hệ chạy ở cỡ nhỏ</td><td>vài phút (tăng cỡ)</td><td>trung bình</td></tr>
+          <tr><td><b>chủ động – chủ động</b></td><td>chạy đầy đủ, đang phục vụ người dùng</td><td>gần như ngay</td><td>cao nhất</td></tr></table>
+          <p>Chọn theo <b>thời gian khôi phục mục tiêu</b> và <b>lượng dữ liệu được phép mất</b> của từng hệ — không phải mọi hệ đều cần chủ động – chủ động.</p>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", 2]
+        say: "Bảng so bốn chiến lược. Sao lưu và khôi phục chỉ giữ bản sao lưu ở vùng dự phòng, khôi phục mất nhiều giờ, chi phí thường trực thấp nhất. Đèn mồi sao chép dữ liệu liên tục nhưng để máy tắt, khôi phục mất vài chục phút, chi phí thấp. Chờ sẵn thu nhỏ chạy toàn bộ hệ ở cỡ nhỏ, khôi phục mất vài phút để tăng cỡ, chi phí trung bình. Chủ động chủ động chạy đầy đủ và đang phục vụ người dùng, khôi phục gần như ngay, chi phí cao nhất. Hãy chọn theo thời gian khôi phục mục tiêu và lượng dữ liệu được phép mất của từng hệ, vì không phải hệ nào cũng cần chủ động chủ động."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Chừa chỗ trống để gánh phần của vùng hỏng"
+    steps:
+      - show: |
+          <div><svg width="1500" height="330" viewBox="0 0 1500 330"><g font-size="22" fill="#1f2937"><text x="330" y="45" text-anchor="middle" font-weight="bold">ngày thường: mỗi vùng chạy 1/3 tải</text><rect x="30" y="80" width="200" height="200" rx="8" fill="none" stroke="#6b7280" stroke-width="3" /><text x="130" y="310" text-anchor="middle">vùng 1</text><rect x="50" y="213" width="160" height="67" fill="#93c5fd" stroke="#2a78d6" stroke-width="2"/><line x1="30" y1="180" x2="230" y2="180" stroke="#eb6834" stroke-width="3"/><rect x="250" y="80" width="200" height="200" rx="8" fill="none" stroke="#6b7280" stroke-width="3" /><text x="350" y="310" text-anchor="middle">vùng 2</text><rect x="270" y="213" width="160" height="67" fill="#93c5fd" stroke="#2a78d6" stroke-width="2"/><line x1="250" y1="180" x2="450" y2="180" stroke="#eb6834" stroke-width="3"/><rect x="470" y="80" width="200" height="200" rx="8" fill="none" stroke="#6b7280" stroke-width="3" /><text x="570" y="310" text-anchor="middle">vùng 3</text><rect x="490" y="213" width="160" height="67" fill="#93c5fd" stroke="#2a78d6" stroke-width="2"/><line x1="470" y1="180" x2="670" y2="180" stroke="#eb6834" stroke-width="3"/><text x="1130" y="45" text-anchor="middle" font-weight="bold">vùng 3 hỏng: hai vùng còn lại mỗi vùng 1/2</text><rect x="830" y="80" width="200" height="200" rx="8" fill="none" stroke="#6b7280" stroke-width="3" /><text x="930" y="310" text-anchor="middle">vùng 1</text><rect x="850" y="180" width="160" height="100" fill="#93c5fd" stroke="#2a78d6" stroke-width="2"/><line x1="830" y1="180" x2="1030" y2="180" stroke="#eb6834" stroke-width="3"/><rect x="1050" y="80" width="200" height="200" rx="8" fill="none" stroke="#6b7280" stroke-width="3" /><text x="1150" y="310" text-anchor="middle">vùng 2</text><rect x="1070" y="180" width="160" height="100" fill="#93c5fd" stroke="#2a78d6" stroke-width="2"/><line x1="1050" y1="180" x2="1250" y2="180" stroke="#eb6834" stroke-width="3"/><rect x="1270" y="80" width="200" height="200" rx="8" fill="none" stroke="#b91c1c" stroke-width="3" stroke-dasharray="10 8"/><text x="1370" y="310" text-anchor="middle">vùng 3</text><text x="1370" y="185" text-anchor="middle" fill="#b91c1c">hỏng</text><text x="720" y="185" font-size="20" fill="#eb6834">vạch cam:</text><text x="720" y="212" font-size="20" fill="#eb6834">sức chứa 1/2</text></g></svg></div>
+        focus: [1, 1, 1]
+        say: "Hình vẽ ba vùng chủ động chủ động, cột xanh là tải đang chạy, vạch cam là sức chứa của mỗi vùng. Ngày thường, mỗi vùng chỉ chạy một phần ba tải, còn chừa chỗ trống tới vạch cam. Khi vùng 3 hỏng, hai vùng còn lại mỗi vùng nhận một nửa tải, vừa chạm vạch cam, nên không ai bị quá tải."
+
+  - id: example
+    kind: example
+    title: "Hai vùng chủ động – chủ động"
+    checks:
+      - "alg.active_active_capacity(2) == (1.0, 2.0) and alg.active_active_capacity(3) == (0.5, 1.5)"
+    steps:
+      - show: |
+          <p><b>Bước 1 — 2 vùng, chịu 1 vùng hỏng:</b> mỗi vùng gánh $\frac{1}{2 - 1} = 100\%$ tải → tổng dung lượng thường trực $2 \cdot 1 = \hl{2}$ lần tải đầy.</p>
+        say: "Bước một, với 2 vùng phải chịu 1 vùng hỏng, mỗi vùng gánh 1 chia 2 trừ 1, tức 100 phần trăm tải. Tổng dung lượng thường trực là 2 nhân 1, bằng 2 lần tải đầy."
+      - show: |
+          <p><b>Bước 2 — 3 vùng:</b> mỗi vùng gánh $\frac{1}{3 - 1} = 50\%$ tải → tổng $3 \cdot 0{,}5 = 1{,}5$ lần tải đầy.</p>
+        say: "Bước hai, với 3 vùng, mỗi vùng chỉ cần gánh 1 chia 3 trừ 1, tức 50 phần trăm. Tổng là 3 nhân 0 phẩy 5, bằng 1 phẩy 5 lần tải đầy."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>số vùng</th><th>ngày thường mỗi vùng chạy</th><th>sức chứa mỗi vùng</th><th>đang dùng</th></tr>
+          <tr><td>2</td><td>$\frac{1}{2}$ tải</td><td>1 tải</td><td>50%</td></tr>
+          <tr><td>3</td><td>$\frac{1}{3}$ tải</td><td>$\frac{1}{2}$ tải</td><td>$\frac{1/3}{1/2} \approx 66{,}7\%$</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Bước ba, xem ngày thường mỗi vùng dùng bao nhiêu sức chứa. Với 2 vùng, mỗi vùng chạy một nửa tải trên sức chứa 1 tải, tức dùng 50 phần trăm. Với 3 vùng, mỗi vùng chạy một phần ba tải trên sức chứa một nửa, tức dùng khoảng 66 phẩy 7 phần trăm, ít lãng phí hơn."
+      - show: |
+          <p><b>Bước 4 — đánh đổi:</b> thêm vùng thứ ba giảm phần dư “bảo hiểm”, nhưng tăng độ phức tạp đồng bộ dữ liệu giữa các vùng.</p>
+        say: "Bước bốn, đánh đổi, thêm vùng thứ ba giảm phần dư bảo hiểm, nhưng tăng độ phức tạp đồng bộ dữ liệu giữa các vùng."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: cho từng vùng hỏng"
+    checks:
+      - "all(abs(1 / (3 - 1) - 0.5) < 1e-12 for _ in range(3)) and alg.active_active_capacity(3) == (0.5, 1.5)"
+      - "[1 / 2 for dead in range(3) for alive in range(3) if alive != dead] == [0.5] * 6"
+    steps:
+      - show: |
+          <table class="t"><tr><th>vùng hỏng</th><th>hai vùng còn lại mỗi vùng nhận</th><th>so với sức chứa 1/2</th></tr>
+          <tr><td>vùng 1</td><td>1/2</td><td>vừa đủ ✓</td></tr>
+          <tr><td>vùng 2</td><td>1/2</td><td>vừa đủ ✓</td></tr>
+          <tr><td>vùng 3</td><td>1/2</td><td>vừa đủ ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Kiểm bằng đường khác, cho lần lượt từng vùng hỏng, vì vùng nào cũng có thể là vùng hỏng. Vùng 1 hỏng thì hai vùng kia mỗi vùng nhận một nửa, vừa đủ sức chứa. Vùng 2 hỏng cũng vậy. Vùng 3 hỏng cũng vậy, nên sức chứa một nửa mỗi vùng là đủ cho mọi trường hợp."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Kế hoạch chuyển vùng chưa diễn tập <b class="red">(kế hoạch chưa có)</b>
+          <br><span class="note">Thiếu quyền, thiếu ảnh máy, hạn mức tài nguyên của vùng dự phòng quá thấp, tên miền trỏ cứng — chỉ diễn tập mới lộ ra. Diễn tập định kỳ, đo thời gian thật.</span></div>
+        say: "Lỗi thứ nhất, kế hoạch chuyển vùng chưa diễn tập, tức là kế hoạch chưa có. Thiếu quyền, thiếu ảnh máy, hạn mức tài nguyên của vùng dự phòng quá thấp, tên miền trỏ cứng, chỉ diễn tập mới lộ ra. Hãy diễn tập định kỳ, và đo thời gian thật."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Công cụ chuyển vùng phụ thuộc chính vùng bị hỏng <b class="red">(không bấm được nút chuyển)</b>
+          <br><span class="note">Bảng điều khiển, kịch bản tự động, kho bí mật đều nằm ở vùng chính: vùng hỏng là mất luôn công cụ cứu. Đặt đường chuyển vùng ở nơi độc lập.</span></div>
+        say: "Lỗi thứ hai, công cụ chuyển vùng phụ thuộc chính vùng bị hỏng, nên không bấm được nút chuyển. Bảng điều khiển, kịch bản tự động, và kho bí mật đều nằm ở vùng chính, nên vùng hỏng là mất luôn công cụ cứu. Hãy đặt đường chuyển vùng ở một nơi độc lập."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Ghi đồng thời ở hai vùng mà không thiết kế xung đột <b class="red">(dữ liệu lệch)</b>
+          <br><span class="note">Chủ động – chủ động với ghi ở cả hai nơi: cùng một bản ghi sửa ở hai vùng trong lúc mạng giữa vùng chậm. Chọn: mỗi khoá chỉ ghi ở một vùng “chủ nhà”, hoặc dữ liệu hợp nhất được.</span></div>
+        say: "Lỗi thứ ba, ghi đồng thời ở hai vùng mà không thiết kế xử lý xung đột, nên dữ liệu lệch. Với chủ động chủ động ghi ở cả hai nơi, cùng một bản ghi có thể bị sửa ở hai vùng trong lúc mạng giữa vùng chậm. Hãy chọn, hoặc mỗi khoá chỉ ghi ở một vùng chủ nhà, hoặc dùng dữ liệu hợp nhất được."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "[round(x, 3) for x in alg.active_active_capacity(4, 1)] == [0.333, 1.333] and [round(x, 3) for x in alg.active_active_capacity(5, 2)] == [0.333, 1.667]"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Chủ động – chủ động 4 vùng, phải chịu 1 vùng hỏng. Mỗi vùng gánh bao nhiêu, tổng dung lượng thường trực?</td></tr>
+          <tr><td>2</td><td>Hệ báo cáo nội bộ: chấp nhận ngừng 1 ngày, mất 1 giờ dữ liệu. Chọn chiến lược nào?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, chủ động chủ động trên 4 vùng, phải chịu được 1 vùng hỏng. Mỗi vùng gánh bao nhiêu, và tổng dung lượng thường trực là bao nhiêu? Câu hai, một hệ báo cáo nội bộ chấp nhận ngừng 1 ngày và mất 1 giờ dữ liệu. Chọn chiến lược nào? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① $n = 4$, $f = 1$: mỗi vùng $\frac{1}{4 - 1} = \frac{1}{3} \approx 33\%$; tổng $4 \cdot \frac{1}{3} = \frac{4}{3} \approx \hl{1{,}33}$ lần tải đầy.</p>
+        say: "Đáp án câu một, n bằng 4 và f bằng 1, nên mỗi vùng gánh 1 chia 3, khoảng 33 phần trăm. Tổng là 4 nhân một phần ba, bằng 4 phần 3, khoảng 1 phẩy 33 lần tải đầy."
+      - show: |
+          <p>② Ngừng 1 ngày, mất 1 giờ dữ liệu là mục tiêu rộng → <b>sao lưu – khôi phục</b> (sao lưu cách nhau dưới 1 giờ, sao chép sang vùng khác): rẻ nhất mà vẫn đạt mục tiêu.</p>
+        say: "Câu hai, ngừng 1 ngày và mất 1 giờ dữ liệu là mục tiêu khá rộng, nên chọn sao lưu và khôi phục. Các bản sao lưu cách nhau dưới 1 giờ và được sao chép sang vùng khác, đó là cách rẻ nhất mà vẫn đạt mục tiêu."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">sao lưu → đèn mồi → chờ sẵn → chủ động–chủ động</span><span class="a">→</span>
+          <span class="n">nhanh hơn thì đắt hơn</span><span class="a">→</span>
+          <span class="n">chọn theo mục tiêu từng hệ</span><span class="a">→</span>
+          <span class="n">diễn tập; công cụ chuyển vùng độc lập</span></div>
+        say: "Tổng kết lại, bốn chiến lược đi từ sao lưu, đèn mồi, chờ sẵn, tới chủ động chủ động, nhanh hơn thì đắt hơn. Hãy chọn theo mục tiêu của từng hệ, diễn tập thường xuyên, và để công cụ chuyển vùng độc lập."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> thứ quyết định khôi phục nhanh không phải kế hoạch hay nhất, mà kế hoạch <b>đã chạy thử gần đây nhất</b>.</div>
+        say: "Điều cần mang theo, thứ quyết định khôi phục nhanh không phải kế hoạch hay nhất, mà là kế hoạch đã chạy thử gần đây nhất."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 11): <b>tổng hợp</b> — đưa một ứng dụng lên đám mây theo các trụ cột kiến trúc tốt.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 11, ta tổng hợp, đưa một ứng dụng lên đám mây theo các trụ cột kiến trúc tốt. Hẹn gặp bạn ở bài tiếp theo."

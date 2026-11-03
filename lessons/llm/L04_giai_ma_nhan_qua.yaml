@@ -1,0 +1,189 @@
+id: L04
+course: LLM
+series: "LLM · Mô hình ngôn ngữ lớn"
+title: "Bài 4 — Transformer giải mã: mặt nạ nhân quả và vị trí"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/llm.yaml L04; audit/llm/verify_llm.py L04; A. Vaswani và cộng sự, Attention Is All You Need (2017); A. Radford và cộng sự, Improving Language Understanding by Generative Pre-Training (2018) — mô hình chỉ giải mã; CS115 bài 20 (hàm chuẩn hoá mũ), bài 41 (cơ chế chú ý)"
+assumes: [arith, frac, sub]
+# Quy ước: mặt nạ nhân quả M[i][j] = 1 nếu j ≤ i (vị trí i chỉ nhìn chính nó và các vị trí trước) — alg.causal_mask(n).
+#   Điểm chú ý của các vị trí bị che được đặt âm vô cùng trước hàm chuẩn hoá mũ, tương đương chuẩn hoá chỉ trên các vị trí được phép
+#   (alg.softmax_t trên đoạn được phép). Tên Transformer chỉ trên màn hình; lời đọc “kiến trúc chú ý nhiều tầng” như CS115 bài 41.
+objectives:
+  - "Giải thích mô hình chỉ giải mã sinh từ trái sang phải"
+  - "Dựng và đếm mặt nạ nhân quả"
+  - "Giải thích vì sao cần thông tin vị trí"
+asr_reviewed:
+  - {sentence: "Mặt nạ nhân quả cho vị trí i chỉ được chú ý tới các vị trí j không lớn hơn i.", reason: "ASR chép “Mặt nạ nhân quả cho vị trí y chỉ được chú ý tới các vị trí y không lớn hơn y.” (0.952): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Học đoán chữ tiếp theo mà được nhìn trước đáp án"
+    checks:
+      - "[round(x, 3) for x in alg.softmax_t([2, 1, 0, 5])][3] == 0.93"
+    steps:
+      - show: |
+          <p>Huấn luyện mô hình đoán từ tố thứ 4 khi đã biết 3 từ tố đầu. Nếu cơ chế chú ý được nhìn <b>cả</b> câu, nó chỉ cần chép từ tố thứ 4 — có lúc dồn tới 93% trọng số vào chính đáp án. Mất mát giảm rất nhanh, nhưng khi sinh văn bản thật thì chẳng có gì để chép.</p>
+          <div class="box key">Hôm nay: mô hình <b>chỉ giải mã</b> dùng <b>mặt nạ nhân quả</b> để không nhìn trước tương lai, và <b>thông tin vị trí</b> để biết thứ tự.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, ta huấn luyện mô hình đoán từ tố thứ tư khi đã biết 3 từ tố đầu. Nếu cơ chế chú ý được nhìn cả câu, nó chỉ cần chép từ tố thứ tư, có lúc dồn tới 93 phần trăm trọng số vào chính đáp án. Mất mát giảm rất nhanh, nhưng khi sinh văn bản thật thì chẳng có gì để chép. Hôm nay ta học mô hình chỉ giải mã, dùng mặt nạ nhân quả để không nhìn trước tương lai, và thông tin vị trí để biết thứ tự."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: hàm chuẩn hoá mũ và cơ chế chú ý"
+    checks:
+      - "[round(x, 3) for x in alg.softmax_t([1, 0])] == [0.731, 0.269] and alg.softmax_t([0, 0]) == [0.5, 0.5]"
+    steps:
+      - show: |
+          <p><b>Hàm chuẩn hoá mũ</b> (khoá toán): biến điểm số thành trọng số dương có tổng bằng 1: $\text{trọng số}_i = \frac{e^{z_i}}{\sum_j e^{z_j}}$.</p>
+          <table class="t"><tr><th>điểm số</th><th>trọng số</th></tr><tr><td>(0, 0)</td><td>(0,5; 0,5)</td></tr><tr><td>(1, 0)</td><td>(0,731; 0,269)</td></tr></table>
+        introduces: [exp, sum]
+        focus: [1, "2.2", "2.3"]
+        say: "Ở khoá toán, ta đã học hàm chuẩn hoá mũ, biến các điểm số thành trọng số dương có tổng bằng 1. Hai điểm bằng nhau 0 và 0 cho trọng số chia đôi. Điểm 1 và 0 cho 0 phẩy 731 và 0 phẩy 269, điểm cao hơn được trọng số lớn hơn."
+      - show: |
+          <p><b>Cơ chế chú ý</b> (khoá toán): mỗi từ tố có <b>truy vấn</b>, <b>khoá</b>, <b>giá trị</b>; điểm = tích vô hướng của truy vấn với khoá; trọng số = chuẩn hoá mũ của các điểm; đầu ra = trộn các giá trị theo trọng số.</p>
+        say: "Cũng ở khoá toán, ta đã học cơ chế chú ý. Mỗi từ tố có truy vấn, khoá và giá trị, và điểm số là tích vô hướng của truy vấn với khoá. Trọng số là hàm chuẩn hoá mũ của các điểm, còn đầu ra là trộn các giá trị theo trọng số."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: chỉ giải mã, mặt nạ nhân quả, vị trí"
+    steps:
+      - show: |
+          <table class="t"><tr><th>khái niệm</th><th>nghĩa</th></tr>
+          <tr><td><b>mô hình chỉ giải mã</b></td><td>chồng nhiều tầng chú ý; ở mỗi vị trí, dự đoán từ tố KẾ TIẾP; sinh văn bản bằng cách lặp: đoán, thêm vào cuối, đoán tiếp</td></tr>
+          <tr><td><b>mặt nạ nhân quả</b></td><td>vị trí $i$ chỉ được chú ý tới vị trí $j \leq i$; điểm chú ý của vị trí sau bị đặt âm vô cùng trước hàm chuẩn hoá mũ → trọng số 0</td></tr>
+          <tr><td><b>thông tin vị trí</b></td><td>cộng (hoặc xoay) vào mỗi vector nhúng một tín hiệu theo vị trí, vì bản thân phép chú ý không biết thứ tự</td></tr></table>
+        introduces: [geq]
+        focus: [1, "1.2", "1.3", "1.3", "1.4"]
+        say: "Bảng giới thiệu ba khái niệm. Mô hình chỉ giải mã chồng nhiều tầng chú ý, ở mỗi vị trí dự đoán từ tố kế tiếp, và sinh văn bản bằng cách lặp lại, đoán, thêm vào cuối, rồi đoán tiếp. Mặt nạ nhân quả cho vị trí i chỉ được chú ý tới các vị trí j không lớn hơn i. Điểm chú ý của vị trí sau bị đặt âm vô cùng trước hàm chuẩn hoá mũ, nên trọng số bằng 0. Thông tin vị trí là một tín hiệu theo vị trí được cộng hoặc xoay vào mỗi vector nhúng, vì bản thân phép chú ý không biết thứ tự."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Vị trí 3 chỉ được nhìn về phía trước nó"
+    steps:
+      - show: |
+          <div><svg width="1500" height="320" viewBox="0 0 1500 320"><defs><marker id="arL4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#059669"/></marker></defs>
+          <g fill="none" stroke-width="4"><path d="M770,200 C700,90 380,90 300,195" stroke="#059669" marker-end="url(#arL4)"/>
+          <path d="M770,200 C730,120 600,120 540,195" stroke="#059669" marker-end="url(#arL4)"/>
+          <path d="M800,200 C820,140 800,120 780,198" stroke="#059669" marker-end="url(#arL4)"/>
+          <path d="M800,200 C860,110 970,110 1030,195" stroke="#b91c1c" stroke-dasharray="10 8"/></g>
+          <g font-size="28" text-anchor="middle" fill="#1f2937">
+          <rect x="220" y="205" width="160" height="70" rx="10" fill="#f3f4f6" stroke="#1f2937" stroke-width="2"/><text x="300" y="250">Hôm</text>
+          <rect x="460" y="205" width="160" height="70" rx="10" fill="#f3f4f6" stroke="#1f2937" stroke-width="2"/><text x="540" y="250">nay</text>
+          <rect x="700" y="205" width="160" height="70" rx="10" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="780" y="250">trời</text>
+          <rect x="940" y="205" width="160" height="70" rx="10" fill="#fee2e2" stroke="#b91c1c" stroke-width="2" stroke-dasharray="8 6"/><text x="1020" y="250">đẹp</text></g>
+          <g font-size="23"><text x="1130" y="150" fill="#b91c1c">bị che: là đáp án cần đoán</text><text x="250" y="70" fill="#059669">được nhìn: chính nó và các từ trước</text></g>
+          </svg></div>
+        focus: [1, 1, 1]
+        say: "Hình vẽ lúc mô hình học trên câu hôm nay trời đẹp. Từ tố thứ ba, trời, được chú ý tới chính nó và hai từ trước, các mũi tên xanh. Mũi tên đỏ đứt nét tới từ đẹp bị che, vì đẹp chính là đáp án mà vị trí này phải đoán."
+
+  - id: example
+    kind: example
+    title: "Mặt nạ 4 × 4 và một hàng chú ý"
+    checks:
+      - "alg.causal_mask(4) == [[1, 0, 0, 0], [1, 1, 0, 0], [1, 1, 1, 0], [1, 1, 1, 1]] and sum(map(sum, alg.causal_mask(4))) == 10 == 4 * 5 // 2"
+      - "[round(x, 3) for x in alg.softmax_t([2, 1, 0])] == [0.665, 0.245, 0.09] and [round(x, 3) for x in alg.softmax_t([2, 1, 0, 5])] == [0.046, 0.017, 0.006, 0.93]"
+    steps:
+      - show: |
+          <table class="t"><tr><th>vị trí \ được nhìn</th><th>1</th><th>2</th><th>3</th><th>4</th></tr>
+          <tr><td>1</td><td>✓</td><td>—</td><td>—</td><td>—</td></tr>
+          <tr><td>2</td><td>✓</td><td>✓</td><td>—</td><td>—</td></tr>
+          <tr><td>3</td><td>✓</td><td>✓</td><td>✓</td><td>—</td></tr>
+          <tr><td>4</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bước một, dựng mặt nạ cho chuỗi 4 từ tố. Vị trí 1 chỉ nhìn chính nó. Vị trí 2 nhìn vị trí 1 và 2. Vị trí 3 nhìn ba vị trí đầu. Vị trí 4 nhìn cả bốn."
+      - show: |
+          <p><b>Bước 2 — đếm ô được phép:</b> $1 + 2 + 3 + 4 = \frac{4 \cdot 5}{2} = \hl{10}$ trong 16 ô.</p>
+        introduces: [cdot]
+        say: "Bước hai, đếm ô được phép, 1 cộng 2 cộng 3 cộng 4, bằng 4 nhân 5 chia 2, bằng 10 trong 16 ô."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — hàng của vị trí 3</b>, điểm chú ý (2, 1, 0, 5), <b>có</b> mặt nạ: ô thứ 4 bị đặt âm vô cùng, chỉ chuẩn hoá 3 ô đầu.</p>
+          <table class="t"><tr><th></th><th>ô 1</th><th>ô 2</th><th>ô 3</th><th>ô 4</th></tr>
+          <tr><td>$e^{z}$</td><td>7,389</td><td>2,718</td><td>1</td><td>0 (bị che)</td></tr>
+          <tr><td>chia tổng 11,107</td><td>0,665</td><td>0,245</td><td>0,090</td><td>0</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước ba, xét hàng của vị trí 3 với điểm chú ý 2, 1, 0 và 5, khi có mặt nạ thì ô thứ tư bị đặt âm vô cùng. Lấy e mũ từng điểm được 7 phẩy 389, 2 phẩy 718 và 1, còn ô bị che cho 0. Chia cho tổng 11 phẩy 107, được 0 phẩy 665, 0 phẩy 245 và 0 phẩy 09."
+      - show: |
+          <p><b>Bước 4 — không có mặt nạ:</b> thêm $e^5 \approx 148{,}41$, tổng ≈ 159,52 → (0,046; 0,017; 0,006; <span class="red">0,930</span>) — vị trí 3 nhìn trộm đáp án ở vị trí 4.</p>
+        say: "Bước bốn, nếu không có mặt nạ, ô thứ tư góp thêm e mũ 5, khoảng 148 phẩy 41, tổng thành khoảng 159 phẩy 52. Khi đó ô thứ tư chiếm 0 phẩy 93, tức vị trí 3 nhìn trộm đáp án ở vị trí 4."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: trọng số cộng bằng 1, ô được phép đếm thẳng"
+    checks:
+      - "abs(sum(alg.softmax_t([2, 1, 0])) - 1) < 1e-12 and round(0.665 + 0.245 + 0.090, 3) == 1.0"
+      - "sum(1 for i in range(4) for j in range(4) if j <= i) == 10"
+    steps:
+      - show: |
+          <table class="t"><tr><th>kiểm</th><th>cách khác</th><th>kết quả</th></tr>
+          <tr><td>trọng số hàng 3</td><td>cộng lại: 0,665 + 0,245 + 0,090</td><td>1,000 ✓</td></tr>
+          <tr><td>10 ô được phép</td><td>đếm từng cặp (i, j) có j ≤ i: 1, 2, 3, 4 ô mỗi hàng</td><td>10 ✓</td></tr></table>
+        introduces: [geq]
+        focus: [1, "1.2", "1.3"]
+        say: "Kiểm bằng đường khác. Vì hàm chuẩn hoá mũ cho tổng bằng 1, ba trọng số 0 phẩy 665, 0 phẩy 245 và 0 phẩy 09 phải cộng lại bằng 1, và đúng như vậy. Đếm thẳng từng cặp có cột không vượt hàng, mỗi hàng có 1, 2, 3, 4 ô, tổng 10, khớp công thức."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Quên mặt nạ khi huấn luyện <b class="red">(học chép đáp án)</b>
+          <br><span class="note">Mất mát lúc huấn luyện thấp bất thường, nhưng sinh văn bản thì vô nghĩa. Dấu hiệu: mất mát huấn luyện tốt hơn hẳn mất mát khi sinh từng từ.</span></div>
+        say: "Lỗi thứ nhất, quên mặt nạ khi huấn luyện, nên mô hình học chép đáp án. Mất mát lúc huấn luyện thấp bất thường, nhưng sinh văn bản thì vô nghĩa. Dấu hiệu là mất mát huấn luyện tốt hơn hẳn mất mát khi sinh từng từ."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Bỏ thông tin vị trí <b class="red">(mất thứ tự)</b>
+          <br><span class="note">Không có vị trí, “chó cắn người” và “người cắn chó” là cùng một tập từ tố — phép chú ý cho cùng kết quả ở mỗi từ. Thứ tự phải được đưa vào bằng tín hiệu vị trí.</span></div>
+        say: "Lỗi thứ hai, bỏ thông tin vị trí, nên mất thứ tự. Không có vị trí, chó cắn người và người cắn chó là cùng một tập từ tố, và phép chú ý cho cùng kết quả ở mỗi từ. Thứ tự phải được đưa vào bằng tín hiệu vị trí."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Nghĩ mô hình “đọc” cả câu rồi mới trả lời <b class="red">(sinh từng từ)</b>
+          <br><span class="note">Mỗi từ tố đầu ra chỉ dựa vào phần đã có bên trái. Muốn mô hình “suy nghĩ”, phải để nó viết các bước trung gian ra thành từ tố trước câu trả lời.</span></div>
+        say: "Lỗi thứ ba, nghĩ mô hình đọc cả câu rồi mới trả lời, trong khi nó sinh từng từ. Mỗi từ tố đầu ra chỉ dựa vào phần đã có bên trái. Muốn mô hình suy nghĩ, phải để nó viết các bước trung gian ra thành từ tố trước câu trả lời."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "sum(map(sum, alg.causal_mask(6))) == 21 and alg.softmax_t([7.0]) == [1.0]"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Chuỗi 6 từ tố: mặt nạ nhân quả có bao nhiêu ô được phép trong 36?</td></tr>
+          <tr><td>2</td><td>Vị trí 1 có điểm chú ý 7 với chính nó. Sau hàm chuẩn hoá mũ, trọng số của nó là bao nhiêu? Vì sao không phụ thuộc giá trị 7?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, chuỗi 6 từ tố thì mặt nạ nhân quả có bao nhiêu ô được phép trong 36? Câu hai, vị trí 1 có điểm chú ý 7 với chính nó. Sau hàm chuẩn hoá mũ, trọng số của nó là bao nhiêu, và vì sao không phụ thuộc giá trị 7? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <p>① $1 + 2 + 3 + 4 + 5 + 6 = \frac{6 \cdot 7}{2} = \hl{21}$ ô.</p>
+        say: "Đáp án câu một, cộng 1 tới 6, bằng 6 nhân 7 chia 2, bằng 21 ô."
+      - show: |
+          $$\frac{e^{7}}{e^{7}} = \hl{1}$$
+          <p>② Chỉ một ô được phép, chuẩn hoá một số luôn ra 1, dù điểm là 7 hay bao nhiêu — vị trí đầu chỉ chép chính nó.</p>
+        focus: [1, 2]
+        say: "Câu hai, chỉ có một ô được phép, nên trọng số bằng e mũ 7 chia e mũ 7, bằng 1. Chuẩn hoá một số luôn ra 1, dù điểm là 7 hay bao nhiêu, nên vị trí đầu chỉ chép chính nó."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">mỗi vị trí đoán từ tố kế tiếp</span><span class="a">→</span>
+          <span class="n">mặt nạ: chỉ nhìn bên trái</span><span class="a">→</span>
+          <span class="n">vị trí: đưa thứ tự vào</span><span class="a">→</span>
+          <span class="n">sinh văn bản: lặp đoán – thêm – đoán</span></div>
+        say: "Tổng kết lại, mỗi vị trí đoán từ tố kế tiếp, mặt nạ chỉ cho nhìn bên trái, tín hiệu vị trí đưa thứ tự vào, và sinh văn bản là lặp lại đoán, thêm, rồi đoán tiếp."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> lúc huấn luyện phải giữ đúng <b>điều kiện</b> lúc dùng — mô hình không được biết điều nó sẽ không biết khi chạy thật.</div>
+        say: "Điều cần mang theo, lúc huấn luyện phải giữ đúng điều kiện lúc dùng, mô hình không được biết điều mà nó sẽ không biết khi chạy thật."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 5): <b>chi phí tính toán</b> — tham số, phép tính và bộ nhớ đệm khoá–giá trị.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 5, ta học chi phí tính toán, gồm số tham số, số phép tính, và bộ nhớ đệm khoá giá trị. Hẹn gặp bạn ở bài tiếp theo."

@@ -1,0 +1,287 @@
+id: L09
+course: IRS
+series: "IRS · Truy hồi thông tin và hệ gợi ý"
+title: "Bài 9 — Khởi động lạnh và khám phá trong gợi ý"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/irs.yaml L09; audit/irs/verify_irs.py (verify_parts/L09.py); audit/irs/sources_L09.md (câu trích nguyên văn, đọc 2026-11-03); O. Chapelle, L. Li, An Empirical Evaluation of Thompson Sampling, NIPS 2011 — thuật toán 2, tiên nghiệm Beta(1,1), phản hồi về theo lô [CL11]; S. Baluja và cộng sự, WWW 2008 — gợi ý phổ biến cho người xem ít [BA08]; P. Covington và cộng sự, RecSys 2016 — đặc trưng nhân khẩu làm tiên nghiệm cho người mới [CO16]; M. Chen và cộng sự, WSDM 2019 — khám phá ngẫu nhiên đều không dùng được, chia 90/5/5 [CH19]; RLN bài 3 (kẻ cướp nhiều tay)"
+assumes: [arith]
+# Quy ước (theo symbols.IRS.yaml):
+#   - tỉ lệ bấm = số lượt bấm chia số lần hiển thị; “hiện” = hiển thị một sản phẩm cho một người.
+#   - Beta(a, b): niềm tin về tỉ lệ bấm, a = 1 + số lượt bấm, b = 1 + số lần hiện mà không bấm; viết chữ a, b (không dùng α, β).
+#     Trung bình a/(a + b); độ lệch chuẩn đo độ bất định.
+#   - “lấy mẫu theo niềm tin” = Thompson sampling (tên gốc chỉ trên màn hình; dò phát âm 0–4/8, không đọc).
+#   - “xếp theo trung bình” = luôn hiện sản phẩm có trung bình lớn nhất (khai thác thuần, kiểu tham lam).
+#   - Ví dụ chạy suốt bài (số minh hoạ): sản phẩm cũ 50 bấm / 1000 hiện → Beta(51, 951); sản phẩm mới chưa hiện lần nào → Beta(1, 1),
+#     tỉ lệ thật (người xem video không biết) 0,08.
+objectives:
+  - "Biểu diễn độ chắc chắn về tỉ lệ bấm bằng phân phối Beta và cập nhật nó sau mỗi lần hiển thị"
+  - "Tính xác suất lấy mẫu theo niềm tin cho sản phẩm mới một cơ hội"
+  - "Giải thích vì sao chỉ xếp theo trung bình có thể khoá chết sản phẩm mới, và chọn cách khám phá có kiểm soát"
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Tai nghe mới hiện 19 lần, rồi biến mất mãi mãi"
+    checks:
+      - "alg.irs_beta_mean(1, 20) < alg.irs_beta_mean(51, 951) and round(alg.irs_beta_mean(51, 951), 4) == 0.0509"
+      - "alg.irs_bandit_run([0.08, 0.05], 2000, 'greedy', 0, [(1, 1), (51, 951)]) == [19, 1981]"
+    steps:
+      - show: |
+          <p>Cửa hàng có một tai nghe cũ: <b>50 lượt bấm trên 1000 lần hiện</b>. Hôm thứ hai, một tai nghe mới lên kệ (số minh hoạ).</p>
+          <table class="t"><tr><th>lần hiện của tai nghe mới</th><th>1 … 19</th><th>20 … 2000</th></tr>
+          <tr><td>có ai bấm không?</td><td>không ai bấm</td><td class="red">không bao giờ được hiện nữa</td></tr></table>
+        focus: [1, "2.2", "2.2"]
+        say: "Chào bạn, cửa hàng của bạn có một tai nghe cũ, được bấm 50 lần trên 1000 lần hiện, và hôm thứ hai một tai nghe mới lên kệ, một số minh hoạ. Hệ gợi ý cho tai nghe mới hiện 19 lần, không may không ai bấm. Từ lần thứ 20 tới lần thứ 2000, nó không bao giờ được hiện nữa, dù thật ra nó tốt hơn tai nghe cũ."
+      - show: |
+          <div class="box key">Hôm nay ta trả lời: làm sao ghi lại “mình chắc tới mức nào” về một tỉ lệ bấm? Làm sao cho sản phẩm mới một cơ hội mà không làm phiền người dùng? Và người dùng mới, chưa xem gì, thì gợi ý gì?</div>
+        say: "Hôm nay ta trả lời ba câu hỏi, làm sao ghi lại mình chắc tới mức nào về một tỉ lệ bấm, làm sao cho sản phẩm mới một cơ hội mà không làm phiền người dùng. Và với người dùng mới, chưa xem gì cả, thì nên gợi ý gì."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại ba điều sẽ dùng"
+    checks:
+      - "50 / 1000 == 0.05 and round(51 / 1002, 4) == 0.0509"
+      - "round(1 - 0.1 + 0.1 / 10, 2) == 0.91 and round(0.1 / 10, 2) == 0.01"
+      - "round(0.92 * 0.92, 4) == 0.8464 and round(0.92 ** 19, 3) == 0.205"
+    steps:
+      - show: |
+          <p><b>① Tỉ lệ bấm</b> = số lượt bấm chia số lần hiện: $\frac{50}{1000} = 0{,}05$.</p>
+          <p><b>② Ở khoá Học tăng cường</b>, bài toán kẻ cướp nhiều tay: chọn giữa <b>khai thác</b> (chọn tay đang tốt nhất) và <b>khám phá</b> (thử tay khác). Với xác suất khám phá 0,1 và 10 tay, tay tốt nhất được chọn với xác suất $1 - 0{,}1 + \frac{0{,}1}{10} = 0{,}91$.</p>
+        introduces: [frac]
+        focus: [1, 2, 2]
+        say: "Điều thứ nhất, tỉ lệ bấm bằng số lượt bấm chia số lần hiện, 50 chia 1000 bằng 0 phẩy 05. Điều thứ hai, ở khoá Học tăng cường, bài toán kẻ cướp nhiều tay phải chọn giữa khai thác, tức chọn tay đang tốt nhất, và khám phá, tức thử tay khác. Với xác suất khám phá 0 phẩy 1 và 10 tay, tay tốt nhất được chọn với xác suất 1 trừ 0 phẩy 1, cộng 0 phẩy 1 chia 10, bằng 0 phẩy 91."
+      - show: |
+          <p><b>③ Hai việc độc lập cùng xảy ra thì nhân xác suất.</b> Mỗi lần hiện, người xem không bấm với xác suất 0,92. Hai lần liền không bấm: $0{,}92 \cdot 0{,}92 \approx 0{,}846$. Mười chín lần liền:</p>
+          $$0{,}92^{19} \approx 0{,}205 \quad \text{(số mũ 19 = nhân 19 lần)}$$
+        introduces: [cdot, approx, power]
+        focus: [1, 1, 2]
+        say: "Điều thứ ba, hai việc độc lập cùng xảy ra thì ta nhân xác suất, dấu chấm giữa dòng là phép nhân. Nếu mỗi lần hiện người xem không bấm với xác suất 0 phẩy 92, thì hai lần liền không bấm là 0 phẩy 92 nhân 0 phẩy 92, xấp xỉ 0 phẩy 846. Mười chín lần liền là 0 phẩy 92 mũ 19, số mũ nghĩa là nhân 19 lần, xấp xỉ 0 phẩy 205, tức khoảng một phần năm."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: niềm tin Beta(a, b), trung bình và độ lệch chuẩn"
+    checks:
+      - "alg.irs_beta_post(1, 1, 50, 1000) == (51, 951) and round(alg.irs_beta_sd(1, 1), 3) == 0.289 and round(alg.irs_beta_sd(51, 951), 4) == 0.0069"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ký hiệu</th><th>nghĩa</th><th>tai nghe mới</th><th>tai nghe cũ</th></tr>
+          <tr><td>$\text{Beta}(a, b)$</td><td>niềm tin về tỉ lệ bấm</td><td>Beta(1, 1)</td><td>Beta(51, 951)</td></tr>
+          <tr><td>$a$</td><td>1 + số lượt bấm</td><td>1 + 0</td><td>1 + 50</td></tr>
+          <tr><td>$b$</td><td>1 + số lần hiện mà không bấm</td><td>1 + 0</td><td>1 + 950</td></tr>
+          <tr><td>độ lệch chuẩn</td><td>đo độ bất định: càng lớn càng chưa chắc</td><td>≈ 0,289</td><td>≈ 0,0069</td></tr></table>
+        focus: ["1.2", "1.3", "1.4", "1.5", "1.5"]
+        say: "Bảng giải mã một ký hiệu mới, Beta a b, đọc là phân phối Beta với hai số a và b, ghi lại niềm tin của ta về tỉ lệ bấm. Số a bằng 1 cộng số lượt bấm, nên tai nghe mới có a bằng 1, tai nghe cũ có a bằng 51. Số b bằng 1 cộng số lần hiện mà không bấm, nên tai nghe cũ có b bằng 1 cộng 950, tức 951. Hàng cuối là độ lệch chuẩn, đo độ bất định, tai nghe mới khoảng 0 phẩy 289, tai nghe cũ chỉ khoảng 0 phẩy 0069. Độ lệch chuẩn càng lớn thì ta càng chưa chắc về tỉ lệ thật."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Một vệt trải rộng và một mũi nhọn"
+    steps:
+      - show: |
+          <div><svg width="1500" height="430" viewBox="0 0 1500 430">
+          <line x1="150" y1="330" x2="1360" y2="330" stroke="#1f2937" stroke-width="2"/>
+          <g font-size="21" fill="#6b7280" text-anchor="middle"><text x="150" y="360">0</text><text x="270" y="360">0,05</text><text x="390" y="360">0,1</text><text x="750" y="360">0,25</text><text x="1350" y="360">0,5</text><text x="750" y="400">tỉ lệ bấm thật có thể là bao nhiêu? (chiều cao không theo tỉ lệ)</text></g>
+          <line x1="150" y1="250" x2="1350" y2="250" stroke="#2a78d6" stroke-width="6"/>
+          <text x="1350" y="232" font-size="23" fill="#2a78d6" font-weight="bold" text-anchor="end">tai nghe mới, Beta(1, 1): mọi mức như nhau (kéo dài tới 1)</text>
+          <polyline fill="none" stroke="#eb6834" stroke-width="5" points="198,330 210,330 220,330 227,327 234,318 239,303 244,278 248,242 253,200 258,156 263,122 268,102 270,100 272,102 277,120 282,150 287,187 292,223 296,255 301,280 306,299 311,312 316,320 323,326 330,329 342,330"/>
+          <text x="300" y="80" font-size="23" fill="#eb6834" font-weight="bold">tai nghe cũ, Beta(51, 951): dồn quanh 0,05</text>
+          <g fill="#2a78d6"><circle cx="438" cy="290" r="9"/><circle cx="894" cy="290" r="9"/><circle cx="1206" cy="290" r="9"/><circle cx="222" cy="290" r="9"/></g>
+          <g fill="#eb6834"><circle cx="262" cy="305" r="7"/><circle cx="276" cy="305" r="7"/><circle cx="268" cy="315" r="7"/></g>
+          <text x="620" y="170" font-size="21" fill="#1f2937">chấm tròn: các số rút ngẫu nhiên từ mỗi niềm tin</text>
+          </svg></div>
+        say: "Hình cho thấy hai niềm tin, trục ngang là tỉ lệ bấm thật có thể là bao nhiêu. Tai nghe mới chưa có dữ liệu, niềm tin Beta 1 1 là một vệt phẳng màu xanh, mọi mức từ 0 tới 1 đều có thể như nhau. Tai nghe cũ đã có 1000 lần hiện, niềm tin là một mũi nhọn màu cam dồn quanh 0 phẩy 05. Các chấm là những số rút ngẫu nhiên từ mỗi niềm tin, chấm xanh rải khắp trục, còn chấm cam luôn nằm sát 0 phẩy 05. Vì vậy một số rút từ vệt xanh thường lớn hơn số rút từ mũi nhọn cam."
+
+  # ───────────────────────── 5. SUY RA ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Cập nhật niềm tin, rồi lấy mẫu theo niềm tin"
+    checks:
+      - "alg.irs_beta_post(1, 1, 50, 1000) == (51, 951) and alg.irs_beta_post(1, 1, 0, 19) == (1, 20)"
+      - "round(alg.irs_beta_mean(51, 951), 4) == 0.0509 and alg.irs_beta_mean(1, 1) == 0.5"
+      - "round(alg.irs_beta_p_beats(1, 1, 51, 951), 3) == round(1 - alg.irs_beta_mean(51, 951), 3) == 0.949"
+    steps:
+      - show: |
+          <p><b>Bước 1 — cập nhật.</b> Mỗi lượt bấm cộng 1 vào $a$, mỗi lần hiện mà không bấm cộng 1 vào $b$, vì $a$ đếm bằng chứng “tốt”, $b$ đếm bằng chứng “không tốt”:</p>
+          $$\text{Beta}(1, 1) \xrightarrow{\ 50 \text{ bấm},\ 950 \text{ không bấm}\ } \text{Beta}(1 + 50,\ 1 + 950) = \text{Beta}(51, 951)$$
+        focus: [1, 2]
+        say: "Bước một là cập nhật, mỗi lượt bấm cộng 1 vào a, mỗi lần hiện mà không bấm cộng 1 vào b, vì a đếm bằng chứng tốt, còn b đếm bằng chứng không tốt. Làm thử với tai nghe cũ, từ Beta 1 1, thêm 50 lượt bấm và 950 lần không bấm, ta được Beta 51 951."
+      - show: |
+          <p><b>Bước 2 — trung bình.</b> Trung bình của Beta là phần “tốt” trong tổng bằng chứng:</p>
+          $$\text{trung bình} = \frac{a}{a + b} \qquad \frac{1}{1 + 1} = 0{,}5 \qquad \frac{51}{51 + 951} \approx \hlb{0{,}0509}$$
+          <p class="note">Tai nghe mới: trung bình 0,5 nhưng rất bất định. Tai nghe cũ: 0,0509, gần đúng 50 chia 1000, và rất chắc.</p>
+        focus: [1, 2, 3]
+        say: "Bước hai, vì a đếm bằng chứng tốt, nên trung bình của Beta là phần bằng chứng tốt trong tổng bằng chứng, a chia a cộng b. Tai nghe mới có trung bình 1 chia 2 bằng 0 phẩy 5, còn tai nghe cũ có 51 chia 1002, khoảng 0 phẩy 0509. Tai nghe mới rất bất định, còn tai nghe cũ thì gần đúng 50 chia 1000 và rất chắc chắn."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — lấy mẫu theo niềm tin</b> (Thompson sampling, thuật toán 2 trong bài báo của Chapelle, Li 2011): mỗi lượt, rút <b>một số ngẫu nhiên</b> từ niềm tin của mỗi sản phẩm, hiện sản phẩm có số rút <b>lớn nhất</b>, rồi cập nhật bước 1.</p>
+          $$\text{hiện sản phẩm có } \max(\text{số rút}) \qquad \text{tiên nghiệm ban đầu Beta}(1, 1)$$
+        introduces: [max_fn]
+        focus: [1, 1, 2]
+        say: "Bước ba là lấy mẫu theo niềm tin, cách làm trong thuật toán thứ hai của một bài báo năm 2011. Mỗi lượt, ta rút một số ngẫu nhiên từ niềm tin của mỗi sản phẩm, hiện sản phẩm có số rút lớn nhất, rồi cập nhật như bước một. Ba chữ m a x nghĩa là lấy số lớn nhất, và niềm tin ban đầu của mọi sản phẩm mới là Beta 1 1."
+      - show: |
+          <p><b>Bước 4 — cơ hội của tai nghe mới.</b> Số rút từ Beta(1, 1) rơi đều trên 0 tới 1, nên nó lớn hơn một số $y$ cho trước với xác suất $1 - y$. Lấy trung bình theo mọi $y$ rút từ tai nghe cũ:</p>
+          $$\text{xác suất tai nghe mới được hiện} = 1 - \text{trung bình cũ} = 1 - 0{,}0509 \approx \hlg{0{,}949}$$
+        focus: [1, 1, 2]
+        say: "Bước bốn là cơ hội của tai nghe mới, số rút từ Beta 1 1 rơi đều trên đoạn từ 0 tới 1, nên nó lớn hơn một số y cho trước với xác suất 1 trừ y. Lấy trung bình theo mọi số y rút từ tai nghe cũ, xác suất tai nghe mới được hiện bằng 1 trừ trung bình của tai nghe cũ. Thay số, 1 trừ 0 phẩy 0509, xấp xỉ 0 phẩy 949, tức lượt đầu sản phẩm mới gần như chắc được thử."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "19 lần không ai bấm: xếp theo trung bình và lấy mẫu theo niềm tin"
+    checks:
+      - "alg.irs_beta_post(1, 1, 0, 19) == (1, 20) and round(alg.irs_beta_mean(1, 20), 4) == 0.0476 and alg.irs_beta_mean(1, 20) < alg.irs_beta_mean(51, 951)"
+      - "round(0.92 ** 19, 3) == 0.205"
+      - "round(alg.irs_beta_p_beats(1, 20, 51, 951), 3) == 0.355"
+      - "[round(alg.irs_beta_p_beats(1, 1 + n, 51, 951), 3) for n in (40, 60)] == [0.123, 0.045]"
+      - "sum(alg.irs_bandit_run([0.08, 0.05], 2000, 'greedy', s, [(1, 1), (51, 951)])[0] < 100 for s in range(100)) == 25"
+      - "sum(alg.irs_bandit_run([0.08, 0.05], 2000, 'thompson', s, [(1, 1), (51, 951)])[0] < 100 for s in range(100)) == 0"
+    steps:
+      - show: |
+          <p><b>Bước 1.</b> Tai nghe mới hiện 19 lần, không ai bấm:</p>
+          $$\text{Beta}(1, 1 + 19) = \text{Beta}(1, 20) \qquad \text{trung bình} = \frac{1}{21} \approx \hl{0{,}0476} \lt 0{,}0509$$
+        introduces: [ltgt]
+        focus: [1, 2]
+        say: "Bước một, tai nghe mới hiện 19 lần và không ai bấm, nên niềm tin thành Beta 1, 1 cộng 19, tức Beta 1 20. Trung bình là 1 chia 21, khoảng 0 phẩy 0476, nhỏ hơn 0 phẩy 0509 của tai nghe cũ."
+      - show: |
+          <p><b>Bước 2.</b> Nếu luôn <b>xếp theo trung bình</b>, từ lượt 20 tai nghe cũ luôn thắng — tai nghe mới không còn được hiện, nên trung bình của nó không bao giờ đổi nữa. Khi tỉ lệ thật là 0,08, chuyện “19 lần liền không bấm” xảy ra với xác suất:</p>
+          $$0{,}92^{19} \approx \hl{0{,}205} \quad \text{— khoảng 1 trong 5 sản phẩm tốt bị khoá chết}$$
+        focus: [1, 1, 2]
+        say: "Bước hai, nếu luôn xếp theo trung bình, thì từ lượt 20 tai nghe cũ luôn thắng, tai nghe mới không còn được hiện, nên trung bình của nó không bao giờ đổi nữa. Giả sử tỉ lệ thật của tai nghe mới là 0 phẩy 08, chuyện 19 lần liền không bấm xảy ra với xác suất 0 phẩy 92 mũ 19. Kết quả xấp xỉ 0 phẩy 205, nghĩa là khoảng 1 trong 5 sản phẩm tốt bị khoá chết."
+      - clear: true
+        show: |
+          <p><b>Bước 3.</b> Lấy mẫu theo niềm tin với Beta(1, 20): số rút vẫn trải rộng, nên còn thắng tai nghe cũ khá thường xuyên (tích phân số):</p>
+          <table class="t"><tr><th>lần hiện không ai bấm</th><th>niềm tin</th><th>xác suất vẫn được hiện</th></tr>
+          <tr><td>0</td><td>Beta(1, 1)</td><td>≈ 0,949</td></tr>
+          <tr><td>19</td><td>Beta(1, 20)</td><td>≈ $\hlg{0{,}355}$</td></tr>
+          <tr><td>40</td><td>Beta(1, 41)</td><td>≈ 0,123</td></tr>
+          <tr><td>60</td><td>Beta(1, 61)</td><td>≈ 0,045</td></tr></table>
+        focus: [1, "2.3", "2.4", "2.5"]
+        say: "Bước ba, lấy mẫu theo niềm tin với Beta 1 20, số rút vẫn trải rộng, nên còn thắng tai nghe cũ khá thường xuyên. Sau 19 lần không ai bấm, xác suất tai nghe mới vẫn được hiện là khoảng 0 phẩy 355, tính bằng tích phân số. Sau 40 lần, nó giảm còn 0 phẩy 123. Sau 60 lần, chỉ còn 0 phẩy 045, nên khám phá tự giảm dần khi bằng chứng xấu chồng lên."
+      - clear: true
+        show: |
+          <p><b>Bước 4.</b> Mô phỏng 2000 lượt, tỉ lệ thật: mới 0,08, cũ 0,05; chạy lại 100 lần với hạt giống ngẫu nhiên khác nhau.</p>
+          <table class="t"><tr><th>cách chọn</th><th>số lần chạy tai nghe mới bị hiện dưới 100 lần</th></tr>
+          <tr><td>xếp theo trung bình</td><td class="red">25 trên 100</td></tr>
+          <tr><td>lấy mẫu theo niềm tin</td><td class="green">0 trên 100</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước bốn là mô phỏng 2000 lượt hiện, với tỉ lệ thật của tai nghe mới là 0 phẩy 08 và của tai nghe cũ là 0 phẩy 05, chạy lại 100 lần. Xếp theo trung bình làm tai nghe mới bị hiện dưới 100 lần ở 25 trên 100 lần chạy, gần với một phần năm đã tính. Lấy mẫu theo niềm tin thì không lần chạy nào bỏ rơi sản phẩm tốt hơn."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: rút thật 200 nghìn cặp số và đếm"
+    checks:
+      - "abs(float((np.random.default_rng(0).beta(1, 1, 200000) > np.random.default_rng(1).beta(51, 951, 200000)).mean()) - alg.irs_beta_p_beats(1, 1, 51, 951)) < 0.005"
+      - "abs(float((np.random.default_rng(2).beta(1, 20, 200000) > np.random.default_rng(3).beta(51, 951, 200000)).mean()) - alg.irs_beta_p_beats(1, 20, 51, 951)) < 0.005"
+      - "abs(float(np.random.default_rng(4).beta(51, 951, 200000).mean()) - 51 / 1002) < 0.0002"
+    steps:
+      - show: |
+          <p>Đường khác: không dùng công thức, cho máy <b>rút thật</b> 200&nbsp;000 cặp số rồi đếm số lần số của tai nghe mới lớn hơn.</p>
+          <table class="t"><tr><th>so sánh</th><th>đếm từ 200&nbsp;000 cặp rút</th><th>công thức / tích phân</th></tr>
+          <tr><td>Beta(1, 1) với Beta(51, 951)</td><td>≈ 0,949</td><td>0,949 ✓</td></tr>
+          <tr><td>Beta(1, 20) với Beta(51, 951)</td><td>≈ 0,354</td><td>0,355 ✓</td></tr>
+          <tr><td>trung bình các số rút từ Beta(51, 951)</td><td>≈ 0,0509</td><td>51 chia 1002 ✓</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Kiểm tra bằng đường khác, ta không dùng công thức mà cho máy rút thật 200 nghìn cặp số, rồi đếm số lần số của tai nghe mới lớn hơn. Với Beta 1 1, tỉ lệ đếm được khoảng 0 phẩy 949, khớp công thức 1 trừ trung bình, nghĩa là bước bốn đúng. Với Beta 1 20, đếm được khoảng 0 phẩy 354, khớp tích phân số 0 phẩy 355 trong sai số rút ngẫu nhiên. Trung bình các số rút từ Beta 51 951 cũng ra khoảng 0 phẩy 0509, đúng 51 chia 1002."
+
+  - id: newuser
+    kind: concept
+    title: "Còn người dùng mới thì sao?"
+    steps:
+      - show: |
+          <table class="t"><tr><th>người dùng</th><th>điều nguồn đã ghi</th><th>cách làm</th></tr>
+          <tr><td>mới xem 1 video</td><td>gợi ý video phổ biến nhất là cách hữu ích cho người xem rất ít (Baluja và cộng sự 2008)</td><td>bắt đầu bằng độ phổ biến</td></tr>
+          <tr><td>chưa có lịch sử</td><td>đặc trưng nhân khẩu học cho “tiên nghiệm” để gợi ý hợp lý với người mới (Covington và cộng sự 2016)</td><td>dùng vùng, thiết bị, ngôn ngữ</td></tr>
+          <tr><td>xem nhiều</td><td>gợi ý theo lịch sử thắng dần khi có nhiều lượt xem (2008)</td><td>chuyển sang cá nhân hoá</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Còn với người dùng mới, chưa xem gì, ta dựa vào những điều hai nhóm kỹ sư đã ghi lại. Với người mới xem rất ít, một bài báo năm 2008 ghi rằng gợi ý video phổ biến nhất là cách hữu ích. Với người chưa có lịch sử, một bài báo năm 2016 dùng đặc trưng như vùng và thiết bị làm niềm tin ban đầu, để gợi ý hợp lý ngay từ đầu. Khi người dùng xem nhiều hơn, gợi ý theo lịch sử của chính họ dần thắng gợi ý phổ biến."
+
+  # ───────────────────────── 8. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi của người đã đi làm"
+    checks:
+      - "alg.irs_beta_mean(*alg.irs_beta_post(1, 1, 0, 0)) == 0.5"
+      - "round(0.1 / 10000, 5) == 0.00001"
+      - "round(alg.irs_beta_mean(*alg.irs_beta_post(1, 1, 0, 100)), 4) == 0.0098 and round(alg.irs_beta_mean(*alg.irs_beta_post(1, 1, 5, 100)), 4) == 0.0588 and alg.irs_beta_mean(1, 101) < alg.irs_beta_mean(51, 951) < alg.irs_beta_mean(6, 96)"
+      - "90 + 5 + 5 == 100"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Xếp theo tỉ lệ bấm thô, sản phẩm chưa hiện lần nào được gán 0 <b class="red">(0 lần hiện → điểm 0 → không bao giờ được hiện)</b>
+          <br><span class="note">Phép thử: sản phẩm chưa có dữ liệu phải có niềm tin Beta(1, 1), trung bình 0,5 và độ bất định lớn, không phải “0%”.</span></div>
+        say: "Lỗi thứ nhất là xếp theo tỉ lệ bấm thô, và sản phẩm chưa hiện lần nào được gán điểm 0, nên không bao giờ được hiện. Phép thử là hỏi niềm tin của sản phẩm chưa có dữ liệu là gì. Đúng ra phải là Beta 1 1, trung bình 0 phẩy 5 với độ bất định rất lớn, chứ không phải 0 phần trăm."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Khám phá ngẫu nhiên đều trên cả kho <b class="red">(10 000 sản phẩm, xác suất khám phá 0,1 → mỗi sản phẩm chỉ 0,00001)</b>
+          <br><span class="note">Bài báo năm 2019 của đội gợi ý video ghi: khám phá ngẫu nhiên kiểu tham lam “không dùng được” vì dễ đưa ra gợi ý không phù hợp. Lấy mẫu theo niềm tin chỉ thử nhiều những sản phẩm còn bất định mà có thể tốt.</span></div>
+        say: "Lỗi thứ hai là khám phá ngẫu nhiên đều trên cả kho. Với 10 nghìn sản phẩm và xác suất khám phá 0 phẩy 1, mỗi sản phẩm chỉ được 0 phẩy 1 chia 10 nghìn lượt, mà người dùng lại thấy toàn gợi ý lạc đề. Bài báo năm 2019 của một đội gợi ý video ghi rằng kiểu khám phá này không dùng được trên hệ thật. Lấy mẫu theo niềm tin chỉ thử nhiều những sản phẩm còn bất định mà có thể tốt."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Đếm lần hiện ngay, nhưng lượt bấm về trễ vài giờ <b class="red">(sản phẩm tốt bị đánh giá kém hơn sản phẩm cũ)</b></div>
+          <table class="t"><tr><th>100 lần hiện, 5 lượt bấm</th><th>niềm tin</th><th>trung bình</th></tr>
+          <tr><td>lúc cập nhật, lượt bấm chưa về</td><td>Beta(1, 101)</td><td class="red">≈ 0,0098 &lt; 0,0509</td></tr>
+          <tr><td>đợi đủ lượt bấm</td><td>Beta(6, 96)</td><td class="green">≈ 0,0588 &gt; 0,0509</td></tr></table>
+          <p class="note">Bài báo năm 2011 ghi: phản hồi thường về theo lô, không ngay. Chỉ cập nhật các lần hiện đã đủ thời gian chờ lượt bấm.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Lỗi thứ ba hay gặp ở người đã đi làm, là đếm lần hiện ngay lập tức, trong khi lượt bấm về trễ vài giờ. Một sản phẩm có 100 lần hiện và 5 lượt bấm, nhưng lúc cập nhật lượt bấm chưa về, niềm tin thành Beta 1 101, trung bình chỉ 0 phẩy 0098, thua tai nghe cũ. Đợi đủ lượt bấm thì là Beta 6 96, trung bình 0 phẩy 0588, thắng tai nghe cũ. Bài báo năm 2011 ghi rằng phản hồi thường về theo lô, nên chỉ cập nhật những lần hiện đã chờ đủ lâu."
+      - show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Đo giá trị của khám phá bằng tỉ lệ bấm ngay hôm đó <b class="red">(khám phá luôn trông “tốn” trong ngắn hạn)</b>
+          <br><span class="note">Đội gợi ý video năm 2019 chia người dùng 90%, 5%, 5%, chỉ 5% được phục vụ có khám phá, rồi đo trên nhóm đó: thời gian xem tăng 0,07%, có ý nghĩa thống kê. Lợi ích của khám phá đến từ dữ liệu mới cho lần huấn luyện sau.</span></div>
+        say: "Lỗi thứ tư cũng của người đã đi làm, là đo giá trị của khám phá bằng tỉ lệ bấm ngay hôm đó, nên khám phá luôn trông tốn kém. Đội gợi ý video năm 2019 chia người dùng thành ba nhóm 90, 5 và 5 phần trăm, chỉ 5 phần trăm được phục vụ có khám phá. Họ đo trên đúng nhóm đó và thấy thời gian xem tăng 0 phẩy 07 phần trăm, có ý nghĩa thống kê. Lợi ích của khám phá đến từ dữ liệu mới cho lần huấn luyện sau."
+
+  # ───────────────────────── 9. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: một chiếc loa mới"
+    checks:
+      - "alg.irs_beta_post(1, 1, 2, 10) == (3, 9) and alg.irs_beta_mean(3, 9) == 0.25"
+      - "alg.irs_beta_mean(3, 9) > alg.irs_beta_mean(51, 951) and round(alg.irs_beta_p_beats(3, 9, 51, 951), 3) == 0.983"
+      - "round(alg.irs_beta_sd(3, 9), 3) == 0.120"
+    steps:
+      - show: |
+          <p>Một chiếc loa mới được hiện <b>10 lần</b>, có <b>2 lượt bấm</b>. Sản phẩm cũ vẫn là Beta(51, 951).</p>
+          <table class="t"><tr><th>câu</th><th>việc cần làm</th></tr>
+          <tr><td>1</td><td>Niềm tin mới của chiếc loa là Beta mấy? Trung bình bao nhiêu?</td></tr>
+          <tr><td>2</td><td>Xếp theo trung bình thì hiện sản phẩm nào? Lấy mẫu theo niềm tin thì chiếc loa có còn chắc được hiện không?</td></tr>
+          <tr><td>3</td><td>Trang có 10 ô gợi ý: bạn áp lấy mẫu theo niềm tin cho cả 10 ô, hay chỉ cho 1 ô dành riêng?</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", 0]
+        say: "Bây giờ đến lượt bạn, một chiếc loa mới được hiện 10 lần và có 2 lượt bấm, còn sản phẩm cũ vẫn là Beta 51 951. Câu một, niềm tin mới của chiếc loa là Beta mấy, trung bình bao nhiêu. Câu hai, xếp theo trung bình thì hiện sản phẩm nào, và lấy mẫu theo niềm tin thì chiếc loa có còn chắc được hiện không. Câu ba, trang có 10 ô gợi ý, bạn áp lấy mẫu theo niềm tin cho cả 10 ô, hay chỉ cho một ô dành riêng. Dừng video lại và làm ra giấy nhé."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu</th><th>từng bước</th><th>đáp số</th></tr>
+          <tr><td>1</td><td>$a = 1 + 2$, $b = 1 + 8$; trung bình $\frac{3}{3 + 9}$</td><td>Beta(3, 9), $\hlg{0{,}25}$</td></tr>
+          <tr><td>2. xếp theo trung bình</td><td>$0{,}25 \gt 0{,}0509$</td><td>hiện chiếc loa</td></tr>
+          <tr><td>2. lấy mẫu theo niềm tin</td><td>tích phân số, độ lệch chuẩn còn ≈ 0,120</td><td>≈ 0,983</td></tr></table>
+        focus: ["1.2", "1.2", "1.3", "1.4"]
+        say: "Đáp án câu một, a bằng 1 cộng 2 bằng 3, b bằng 1 cộng 8 lần không bấm bằng 9, nên niềm tin là Beta 3 9. Trung bình là 3 chia 12, bằng 0 phẩy 25. Câu hai, xếp theo trung bình thì 0 phẩy 25 lớn hơn 0 phẩy 0509, nên hiện chiếc loa. Lấy mẫu theo niềm tin cũng hiện nó với xác suất khoảng 0 phẩy 983, dù độ lệch chuẩn còn khoảng 0 phẩy 12, tức chưa chắc lắm."
+      - show: |
+          <table class="t"><tr><th>câu 3</th><th>được</th><th>mất</th></tr>
+          <tr><td>cả 10 ô theo niềm tin</td><td>sản phẩm mới lên nhanh, dữ liệu khám phá nhiều</td><td>trang đầu kém ổn định, khó so với hệ cũ</td></tr>
+          <tr><td>1 ô dành riêng</td><td>9 ô vẫn tốt như cũ; đo lợi ích trên ô đó</td><td>sản phẩm mới chờ lâu hơn để đủ bằng chứng</td></tr></table>
+          <p class="note">Chọn 1 ô khi trang đầu là doanh thu chính và cần so sánh sạch; tăng số ô khi kho đổi nhanh (nhiều sản phẩm mới mỗi ngày).</p>
+        focus: [0, "1.2", "1.3", 2]
+        say: "Câu ba là một quyết định có đánh đổi. Áp cho cả 10 ô thì sản phẩm mới lên nhanh và có nhiều dữ liệu khám phá, nhưng trang đầu kém ổn định và khó so với hệ cũ. Dành riêng 1 ô thì 9 ô vẫn tốt như cũ và đo được lợi ích trên ô đó, đổi lại sản phẩm mới chờ lâu hơn. Chọn 1 ô khi trang đầu là doanh thu chính, và tăng số ô khi kho đổi nhanh, có nhiều sản phẩm mới mỗi ngày."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">niềm tin Beta(1 + bấm, 1 + không bấm)</span><span class="a">→</span>
+          <span class="n">trung bình a chia (a + b), độ lệch chuẩn = độ bất định</span><span class="a">→</span>
+          <span class="n">rút mẫu, hiện số rút lớn nhất</span><span class="a">→</span>
+          <span class="n">sản phẩm mới được thử, khám phá tự giảm</span></div>
+        say: "Tổng kết lại, mỗi sản phẩm có một niềm tin Beta, a bằng 1 cộng số lượt bấm, b bằng 1 cộng số lần không bấm. Trung bình nói tỉ lệ ước lượng, còn độ lệch chuẩn nói ta chắc tới mức nào. Lấy mẫu theo niềm tin rút một số từ mỗi niềm tin rồi hiện số lớn nhất, nên sản phẩm mới được thử, và khám phá tự giảm khi bằng chứng tích lũy."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> “chưa có dữ liệu” không phải “tệ”. Hãy lưu cả <b>độ bất định</b>, không chỉ trung bình — và đo giá trị của khám phá trên một nhóm riêng, theo thời gian.</div>
+        say: "Điều cần mang theo, chưa có dữ liệu không có nghĩa là tệ. Hãy lưu cả độ bất định chứ không chỉ trung bình, và đo giá trị của khám phá trên một nhóm người dùng riêng, theo thời gian."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 10): <b>thiên lệch vị trí</b> — kết quả ở đầu danh sách được bấm nhiều hơn chỉ vì được nhìn thấy, và cách điều chỉnh lượt bấm theo xác suất được nhìn thấy khi đánh giá ngoại tuyến.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 10, ta học thiên lệch vị trí, khi kết quả ở đầu danh sách được bấm nhiều hơn chỉ vì được nhìn thấy. Ta sẽ điều chỉnh lượt bấm theo xác suất được nhìn thấy. Hẹn gặp bạn ở bài tiếp theo."

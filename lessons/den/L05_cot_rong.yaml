@@ -1,0 +1,197 @@
+id: L05
+course: DEN
+series: "DEN · Kỹ thuật dữ liệu"
+title: "Bài 5 — Kho cột rộng: thiết kế bảng theo truy vấn"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/den.yaml L05; audit/den/verify_den.py L05; A. Lakshman, P. Malik, Cassandra: A Decentralized Structured Storage System (2010); F. Chang và cộng sự, Bigtable (OSDI 2006); bài 4 (khoá phân vùng)"
+assumes: [arith, cdot]
+# Quy ước: khoá chính = (khoá phân vùng, khoá sắp xếp). Khoá phân vùng quyết định MÁY nào giữ dữ liệu; khoá sắp xếp quyết định THỨ TỰ trong
+#   phân vùng. MB = 10^6 byte, GB = 10^9 byte. Cảm biến ghi 100 byte mỗi giây là SỐ MINH HOẠ. Tên Cassandra chỉ trên màn hình.
+objectives:
+  - "Thiết kế khoá phân vùng và khoá sắp xếp cho một truy vấn"
+  - "Giới hạn kích thước phân vùng bằng chia theo thời gian"
+  - "Chấp nhận chép dữ liệu thay cho phép nối"
+asr_reviewed:
+  - {sentence: "Bước bốn, xét truy vấn dài hơn.", reason: "ASR chép “Bước 4 sẽ trì vấn dài hơn.” (0.714): lệch âm/thanh thuần Việt: xét truy/sẽ trì — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Một MB là 10 mũ 6 byte, một GB là 10 mũ 9 byte, nên 8 triệu 640 nghìn byte bằng 8 phẩy 64 MB.", reason: "ASR chép “1 MB là 10 mũ 6 bai, 1 GB là 10 mũ 9 bai, nên 8.640.000 bai bằng 8,64 MB.” (0.9): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Mỗi giây 100 byte, một ngày 86400 giây, nên 100 nhân 86400, bằng 8 triệu 640 nghìn byte, tức 8 phẩy 64 MB.", reason: "ASR chép “Mỗi giây 100 bai, 1 ngày 86.400 giây, nên 100 nhân 86.400, bằng 8.640.000 bai, tích 8,64 megabyte.” (0.9): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); MB đọc “mê-ga-byte” theo lexicon của khoá, ASR viết “MB/megabyte”; lệch âm/thanh thuần Việt: tức (trong “byte tức” → “bai tích”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bảng tính cho ba mức ghi, mức 100 byte mỗi giây cho 8 phẩy 64 MB mỗi ngày như ví dụ.", reason: "ASR chép “Bản tính cho 3 mức ghi, mức 100 bai mỗi dây cho 8,64 MB mỗi ngày như ví dụ.” (0.917): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: bảng/bản — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Đếm giây của cả năm trước, 86400 nhân 365 bằng 31 triệu 536 nghìn giây, nhân 100 byte được khoảng 3 tỉ 154 triệu byte, tức khoảng 3 phẩy 15 GB, cũng khớp.", reason: "ASR chép “Đếm giây của cả năm trước, 86.400 nhân 365 bằng 31 triệu 536.000 giây, nhân 100 bai được khoảng 3.154 triệu bai, tức khoảng 3,15 gigabyte, cũng khớp.” (0.926): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); “tỉ” ASR viết chính tả “tỷ” (cùng âm); GB đọc “ghi-ga-byte” theo lexicon của khoá, ASR viết “GB/gigabyte” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Đi theo giờ, mỗi giờ 100 nhân 3600, bằng 360 nghìn byte, tức 0 phẩy 36 MB, nhân 24 giờ được 8 phẩy 64 MB, khớp.", reason: "ASR chép “Đi theo giờ, mỗi giờ 100 nhân 3600 bằng 360.000 bai, tức 0,36 MB, nhần 24 giờ được 8,64 MB khớp.” (0.949): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: nhân/nhần — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Một thiết bị ghi gấp 100 lần, 10 nghìn byte mỗi giây, có phân vùng ngày nặng 864 MB.", reason: "ASR chép “Một thiết bị ghi gấp 100 lần, 10.000 bai mỗi giây có phân vùng ngày nặng 864 MB.” (0.958): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Chào bạn, một cảm biến ghi 100 byte mỗi giây, và khoá phân vùng là mã cảm biến.", reason: "ASR chép “Chào bạn, một cảm biến ghi mục trăm bay mỗi giây và khóa phân vùng là mạ cảm biến.” (0.842): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: một/mục, mã/mạ — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Câu một, thiết bị gửi 1000 byte mỗi 10 giây.", reason: "ASR chép “Câu 1. Thiết bị gửi 1.000 bai mỗi 10 giây.” (0.909): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Phân vùng theo thiết bị và ngày nặng bao nhiêu MB, còn theo thiết bị và tháng 30 ngày thì sao?", reason: "ASR chép “Phân vùng theo thiết bị và ngày nặng bao nhiêu megabyte, còn theo thiết bị và tháng 30 ngày thì sao?” (0.955): MB đọc “mê-ga-byte” theo lexicon của khoá, ASR viết “MB/megabyte” — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Một phân vùng 3 GB"
+    checks:
+      - "round(86400 * 100 * 365 / 1e9, 2) == 3.15"
+    steps:
+      - show: |
+          <p>Một cảm biến ghi 100 byte mỗi giây, khoá phân vùng là mã cảm biến. Sau một năm, phân vùng của nó nặng khoảng <b>3,15 GB</b> — nằm trọn trên một máy, mỗi lần sửa chữa hay sao chép phải chuyển cả khối. Thiết kế đúng ngay từ đầu rẻ hơn rất nhiều.</p>
+          <div class="box key">Hôm nay: <b>kho cột rộng</b> — chọn khoá phân vùng và khoá sắp xếp <b>từ câu truy vấn</b>, và giữ phân vùng có giới hạn.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, một cảm biến ghi 100 byte mỗi giây, và khoá phân vùng là mã cảm biến. Sau một năm, phân vùng của nó nặng khoảng 3 phẩy 15 GB, nằm trọn trên một máy, và mỗi lần sửa chữa hay sao chép phải chuyển cả khối. Thiết kế đúng ngay từ đầu rẻ hơn rất nhiều. Hôm nay ta học kho cột rộng, chọn khoá phân vùng và khoá sắp xếp từ câu truy vấn, và giữ phân vùng có giới hạn."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: giây trong ngày, MB và GB, khoá phân vùng"
+    checks:
+      - "60 * 60 * 24 == 86400 and 8640000 / 1e6 == 8.64 and 3153600000 / 1e9 == 3.1536"
+    steps:
+      - show: |
+          <table class="t"><tr><th>đại lượng</th><th>tính</th><th>bằng</th></tr>
+          <tr><td>giây trong một ngày</td><td>$60 \cdot 60 \cdot 24$</td><td>86 400</td></tr>
+          <tr><td>1 MB, 1 GB</td><td>$10^6$ byte, $10^9$ byte</td><td>8 640 000 byte $= 8{,}64$ MB</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Ta ôn lại hai phép đổi. Một ngày có 60 nhân 60 nhân 24, bằng 86400 giây. Một MB là 10 mũ 6 byte, một GB là 10 mũ 9 byte, nên 8 triệu 640 nghìn byte bằng 8 phẩy 64 MB."
+      - show: |
+          <div class="box key">Ở bài 4, ta đã học <b>khoá phân vùng</b>: băm khoá rồi chia lấy dư để chọn máy. Mọi dòng có <b>cùng</b> khoá phân vùng nằm trên <b>cùng một máy</b> — ví dụ mọi số đo của cảm biến X.</div>
+        say: "Ở bài 4, ta đã học khoá phân vùng, tức băm khoá rồi chia lấy dư để chọn máy. Vì vậy mọi dòng có cùng khoá phân vùng nằm trên cùng một máy, ví dụ mọi số đo của cảm biến X."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: khoá phân vùng, khoá sắp xếp"
+    steps:
+      - show: |
+          <div class="code"><div>bảng so_do_theo_ngay</div><div>  khoá chính: ((cam_bien, ngay), thoi_gian)</div><div>  truy vấn:   số đo của cảm biến X trong ngày Y, theo thời gian</div></div>
+          <table class="t"><tr><th>phần</th><th>vai trò</th></tr>
+          <tr><td><b>khoá phân vùng</b> (cam_bien, ngay)</td><td>băm ra máy giữ dữ liệu; một truy vấn nên chạm <b>đúng một</b> phân vùng</td></tr>
+          <tr><td><b>khoá sắp xếp</b> thoi_gian</td><td>thứ tự trên đĩa trong phân vùng: đọc một khoảng thời gian là đọc liên tục</td></tr></table>
+          <p>Quy trình: <b>viết truy vấn trước</b>, rồi mỗi truy vấn chính một bảng.</p>
+        focus: [1, 2, "2.2", "2.3", 3]
+        say: "Bảng mẫu có khoá chính gồm khoá phân vùng là cặp cảm biến và ngày, cùng khoá sắp xếp là thời gian, cho truy vấn số đo của cảm biến X trong ngày Y theo thời gian. Bảng bên dưới giải thích từng phần. Khoá phân vùng được băm để chọn máy giữ dữ liệu, và một truy vấn nên chạm đúng một phân vùng. Khoá sắp xếp là thứ tự trên đĩa trong phân vùng, nên đọc một khoảng thời gian là đọc liên tục. Quy trình là viết truy vấn trước, rồi mỗi truy vấn chính có một bảng."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Một khối lớn mãi, hay nhiều khối nhỏ có hạn"
+    steps:
+      - show: |
+          <div><svg width="1500" height="365" viewBox="0 0 1500 365"><g fill="#1f2937"><text x="20" y="70" font-size="22" font-weight="bold">khoá: cam_bien</text><rect x="300" y="40" width="1150" height="50" rx="8" fill="#fee2e2" stroke="#b91c1c" stroke-width="3"/><text x="875" y="73" text-anchor="middle" font-size="22" fill="#b91c1c">cảm biến X: cả năm trong một phân vùng, một máy, tăng mãi</text><text x="20" y="175" font-size="22" font-weight="bold">khoá: (cam_bien, ngay)</text><rect x="300" y="140" width="145" height="55" rx="8" fill="#d1fae5" stroke="#059669" stroke-width="3"/><text x="372" y="175" text-anchor="middle" font-size="20">X, ngày 1</text><text x="372" y="222" text-anchor="middle" font-size="19" fill="#2a78d6">máy A</text><rect x="465" y="140" width="145" height="55" rx="8" fill="#d1fae5" stroke="#059669" stroke-width="3"/><text x="537" y="175" text-anchor="middle" font-size="20">X, ngày 2</text><text x="537" y="222" text-anchor="middle" font-size="19" fill="#2a78d6">máy B</text><rect x="630" y="140" width="145" height="55" rx="8" fill="#d1fae5" stroke="#059669" stroke-width="3"/><text x="702" y="175" text-anchor="middle" font-size="20">X, ngày 3</text><text x="702" y="222" text-anchor="middle" font-size="19" fill="#2a78d6">máy C</text><rect x="795" y="140" width="145" height="55" rx="8" fill="#d1fae5" stroke="#059669" stroke-width="3"/><text x="867" y="175" text-anchor="middle" font-size="20">X, ngày 4</text><text x="867" y="222" text-anchor="middle" font-size="19" fill="#2a78d6">máy A</text><rect x="960" y="140" width="145" height="55" rx="8" fill="#d1fae5" stroke="#059669" stroke-width="3"/><text x="1032" y="175" text-anchor="middle" font-size="20">X, ngày 5</text><text x="1032" y="222" text-anchor="middle" font-size="19" fill="#2a78d6">máy B</text><rect x="1125" y="140" width="145" height="55" rx="8" fill="#d1fae5" stroke="#059669" stroke-width="3"/><text x="1197" y="175" text-anchor="middle" font-size="20">X, ngày 6</text><text x="1197" y="222" text-anchor="middle" font-size="19" fill="#2a78d6">máy C</text><rect x="1290" y="140" width="145" height="55" rx="8" fill="#d1fae5" stroke="#059669" stroke-width="3"/><text x="1362" y="175" text-anchor="middle" font-size="20">X, ngày 7</text><text x="1362" y="222" text-anchor="middle" font-size="19" fill="#2a78d6">máy A</text><line x1="372" y1="230" x2="372" y2="262" stroke="#6b7280" stroke-width="2"/><rect x="300" y="262" width="1150" height="62" rx="8" fill="#ffffff" stroke="#059669" stroke-width="2"/><text x="330" y="300" font-size="20">00:00:00</text><text x="458" y="300" font-size="20" fill="#eb6834">→</text><text x="510" y="300" font-size="20">00:00:01</text><text x="638" y="300" font-size="20" fill="#eb6834">→</text><text x="690" y="300" font-size="20">00:00:02</text><text x="818" y="300" font-size="20" fill="#eb6834">→</text><text x="870" y="300" font-size="20">…</text><text x="998" y="300" font-size="20" fill="#eb6834">→</text><text x="1050" y="300" font-size="20">23:59:58</text><text x="1178" y="300" font-size="20" fill="#eb6834">→</text><text x="1230" y="300" font-size="20">23:59:59</text><text x="20" y="300" font-size="20">trong ngày 1:</text><text x="875" y="352" text-anchor="middle" font-size="20" fill="#eb6834">khoá sắp xếp thoi_gian: đọc một khoảng giờ là đọc liền một đoạn</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình so hai cách chọn khoá phân vùng cho cảm biến X. Ở trên, khoá chỉ là mã cảm biến, nên cả năm số đo dồn vào một phân vùng trên một máy và lớn lên mãi. Ở dưới, khoá là cặp cảm biến và ngày, nên mỗi ngày là một phân vùng nhỏ, rải ra máy A, máy B, máy C. Bên trong mỗi phân vùng, các số đo xếp theo thời gian, nên đọc một khoảng giờ là đọc liền một đoạn."
+
+  - id: example
+    kind: example
+    title: "Chia phân vùng theo ngày"
+    checks:
+      - "86400 * 100 / 1e6 == 8.64 and round(86400 * 100 * 365 / 1e9, 2) == 3.15 and 86400 * 365 == 31536000"
+    steps:
+      - show: |
+          <p><b>Bước 1</b> — một ngày của một cảm biến: $100 \cdot 86\,400 = 8\,640\,000$ byte $= \hl{8{,}64}$ MB.</p>
+        say: "Bước một, tính lượng dữ liệu một ngày của một cảm biến. Mỗi giây 100 byte, một ngày 86400 giây, nên 100 nhân 86400, bằng 8 triệu 640 nghìn byte, tức 8 phẩy 64 MB."
+      - show: |
+          <table class="t"><tr><th>khoá phân vùng</th><th>kích thước một phân vùng</th></tr>
+          <tr><td><b>Bước 2</b> — cam_bien</td><td>$100 \cdot 86\,400 \cdot 365 \approx 3{,}15$ GB sau 1 năm, tăng mãi</td></tr></table>
+        focus: [1, "1.2", "1.2"]
+        say: "Bước hai, xét khoá chỉ có mã cảm biến. Chỉ dùng mã cảm biến thì sau 1 năm một phân vùng nặng 100 nhân 86400 nhân 365, khoảng 3 phẩy 15 GB. Phân vùng này còn tăng mãi, vì mỗi ngày lại thêm 8 phẩy 64 MB."
+      - show: |
+          <table class="t"><tr><th>khoá phân vùng</th><th>kích thước một phân vùng</th></tr>
+          <tr><td><b>Bước 3</b> — (cam_bien, ngay)</td><td>$100 \cdot 86\,400 = \hl{8{,}64}$ MB, cố định mỗi ngày</td></tr></table>
+          <p>Truy vấn “cảm biến X, ngày Y” vẫn chạm đúng một phân vùng.</p>
+        focus: [1, "1.2", 2]
+        say: "Bước ba, thêm ngày vào khoá phân vùng. Dùng cặp cảm biến và ngày thì mỗi phân vùng chỉ 100 nhân 86400, bằng 8 phẩy 64 MB, cố định mỗi ngày. Truy vấn cảm biến X ngày Y vẫn chạm đúng một phân vùng."
+      - show: |
+          <p><b>Bước 4</b> — truy vấn “cảm biến X, cả tuần” chạm 7 phân vùng, tổng $7 \cdot 8{,}64 = 60{,}48$ MB — chấp nhận được, và có thể hỏi song song.</p>
+        say: "Bước bốn, xét truy vấn dài hơn. Truy vấn cảm biến X cả tuần chạm 7 phân vùng, tổng cộng 7 nhân 8 phẩy 64, bằng 60 phẩy 48 MB. Như vậy chấp nhận được, và có thể hỏi 7 phân vùng song song."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: đi theo giờ, rồi theo giây của cả năm"
+    checks:
+      - "100 * 3600 == 360000 and round(0.36 * 24, 2) == 8.64"
+      - "86400 * 365 == 31536000 and 100 * 31536000 == 3153600000 and round(3153600000 / 1e9, 2) == 3.15"
+    steps:
+      - show: |
+          <table class="t"><tr><th>đường khác</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>theo giờ rồi nhân 24</td><td>$100 \cdot 3600 = 360\,000$ byte $= 0{,}36$ MB mỗi giờ; $0{,}36 \cdot 24$</td><td>8,64 MB ✓</td></tr>
+          <tr><td>đếm giây của cả năm trước</td><td>$86\,400 \cdot 365 = 31\,536\,000$ giây; $100 \cdot 31\,536\,000 = 3\,153\,600\,000$ byte</td><td>$\approx 3{,}15$ GB ✓</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Kiểm bằng đường khác. Đi theo giờ, mỗi giờ 100 nhân 3600, bằng 360 nghìn byte, tức 0 phẩy 36 MB, nhân 24 giờ được 8 phẩy 64 MB, khớp. Đếm giây của cả năm trước, 86400 nhân 365 bằng 31 triệu 536 nghìn giây, nhân 100 byte được khoảng 3 tỉ 154 triệu byte, tức khoảng 3 phẩy 15 GB, cũng khớp."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp"
+    checks:
+      - "[r * 86400 / 1e6 for r in (100, 1000, 10000)] == [8.64, 86.4, 864.0]"
+      - "[r * 3600 / 1e6 for r in (100, 1000, 10000)] == [0.36, 3.6, 36.0] and 864 / 24 == 36"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Thiết kế bảng như cơ sở dữ liệu quan hệ <b class="red">(không có phép nối)</b>
+          <br><span class="note">Truy vấn mới “mọi cảm biến vượt ngưỡng hôm nay” cần một bảng mới, khoá theo (ngày, mức cảnh báo), ghi đồng thời. Chép dữ liệu là cách làm bình thường ở đây.</span></div>
+        say: "Lỗi thứ nhất, thiết kế bảng như cơ sở dữ liệu quan hệ, trong khi ở đây không có phép nối. Truy vấn mới mọi cảm biến vượt ngưỡng hôm nay cần một bảng mới, khoá theo ngày và mức cảnh báo, và ghi đồng thời. Chép dữ liệu là cách làm bình thường ở đây."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Lọc trên cột không thuộc khoá <b class="red">(quét toàn bộ cụm)</b>
+          <br><span class="note">Hỏi “mọi số đo có nhiệt độ trên 40” khi khoá là (cam_bien, ngay): mọi phân vùng trên mọi máy phải đọc. Câu hỏi thường xuyên thì phải có bảng riêng.</span></div>
+        say: "Lỗi thứ hai, lọc trên cột không thuộc khoá, nên phải quét toàn bộ cụm. Hỏi mọi số đo có nhiệt độ trên 40 khi khoá là cảm biến và ngày thì mọi phân vùng trên mọi máy phải đọc. Câu hỏi thường xuyên thì phải có bảng riêng."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Xoá nhiều trong một phân vùng <b class="red">(bia mộ làm đọc chậm)</b>
+          <br><span class="note">Xoá là ghi bia mộ (bài 1). Đọc qua hàng nghìn bia mộ rất chậm. Dữ liệu hết hạn thì dùng thời gian sống tự động và chia phân vùng theo thời gian để bỏ cả phân vùng.</span></div>
+        say: "Lỗi thứ ba, xoá nhiều trong một phân vùng, nên bia mộ làm đọc chậm. Xoá ở đây là ghi bia mộ, như cây gộp theo nhật ký, và đọc qua hàng nghìn bia mộ rất chậm. Dữ liệu hết hạn thì dùng thời gian sống tự động, và chia phân vùng theo thời gian để bỏ cả phân vùng một lần."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Tính kích thước phân vùng cho thiết bị <b>trung bình</b> <b class="red">(thiết bị lớn nhất mới làm vỡ phân vùng)</b></div>
+          <table class="t"><tr><th>thiết bị ghi mỗi giây</th><th>phân vùng (thiết bị, ngày)</th><th>phân vùng (thiết bị, giờ)</th></tr>
+          <tr><td>100 byte</td><td>8,64 MB</td><td>0,36 MB</td></tr>
+          <tr><td>1000 byte</td><td>86,4 MB</td><td>3,6 MB</td></tr>
+          <tr><td>10 000 byte</td><td>864 MB</td><td>36 MB</td></tr></table>
+          <p class="note">Người có kinh nghiệm đặt một <b>ngưỡng kích thước</b> cho nhóm mình, tính cho <b>thiết bị ghi nhiều nhất</b>, rồi mới chọn chia theo ngày hay theo giờ.</p>
+        focus: [1, 2, "2.4", "2.4", 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, tính kích thước phân vùng cho thiết bị trung bình, trong khi thiết bị lớn nhất mới làm vỡ phân vùng. Bảng tính cho ba mức ghi, mức 100 byte mỗi giây cho 8 phẩy 64 MB mỗi ngày như ví dụ. Một thiết bị ghi gấp 100 lần, 10 nghìn byte mỗi giây, có phân vùng ngày nặng 864 MB. Chia theo giờ thì phân vùng của nó chỉ còn 864 chia 24, bằng 36 MB. Vì vậy, người có kinh nghiệm đặt một ngưỡng kích thước cho nhóm mình, tính cho thiết bị ghi nhiều nhất, rồi mới chọn chia theo ngày hay theo giờ."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "1000 * 86400 / 10 / 1e6 == 8.64 and round(1000 * 86400 / 10 * 30 / 1e6, 1) == 259.2"
+      - "86400 // 10 == 8640 and 1000 * 8640 == 8640000 and round(30 * 8.64, 1) == 259.2"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Thiết bị gửi 1000 byte mỗi 10 giây. Phân vùng theo (thiết bị, ngày) nặng bao nhiêu MB? Theo (thiết bị, tháng 30 ngày)?</td></tr>
+          <tr><td>2</td><td>Truy vấn chính: “đơn hàng của khách K, mới nhất trước”. Chọn khoá phân vùng và khoá sắp xếp.</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, thiết bị gửi 1000 byte mỗi 10 giây. Phân vùng theo thiết bị và ngày nặng bao nhiêu MB, còn theo thiết bị và tháng 30 ngày thì sao? Câu hai, truy vấn chính là đơn hàng của khách K, mới nhất trước. Chọn khoá phân vùng và khoá sắp xếp. Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① Số lần gửi mỗi ngày: $\frac{86\,400}{10} = 8640$ lần.</p>
+          <p>Mỗi ngày: $1000 \cdot 8640 = 8\,640\,000$ byte $= \hl{8{,}64}$ MB; tháng 30 ngày: $30 \cdot 8{,}64 = 259{,}2$ MB.</p>
+        focus: [1, 2, 2]
+        say: "Đáp án câu một, trước hết đếm số lần gửi mỗi ngày, 86400 chia 10, bằng 8640 lần. Vậy mỗi ngày 1000 nhân 8640, bằng 8 phẩy 64 MB. Theo tháng 30 ngày thì 30 nhân 8 phẩy 64, bằng 259 phẩy 2 MB."
+      - show: |
+          <table class="t"><tr><th>câu 2: phần khoá</th><th>chọn</th><th>vì</th></tr>
+          <tr><td>khoá phân vùng</td><td><b>mã khách</b></td><td>truy vấn “khách K” chạm đúng một phân vùng</td></tr>
+          <tr><td>khoá sắp xếp</td><td><b>thời điểm đặt, giảm dần</b></td><td>đơn mới nhất nằm đầu, đọc liền một đoạn</td></tr></table>
+          <p>② Khách mua rất nhiều thì thêm năm vào khoá phân vùng.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Câu hai, chọn từng phần của khoá. Khoá phân vùng là mã khách, vì truy vấn của khách K khi đó chạm đúng một phân vùng. Khoá sắp xếp là thời điểm đặt theo thứ tự giảm dần, vì đơn mới nhất nằm đầu và được đọc liền một đoạn. Nếu khách mua rất nhiều thì thêm năm vào khoá phân vùng."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">viết truy vấn trước</span><span class="a">→</span>
+          <span class="n">khoá phân vùng: một truy vấn, một phân vùng</span><span class="a">→</span>
+          <span class="n">khoá sắp xếp: đọc liên tục</span><span class="a">→</span>
+          <span class="n">chia theo thời gian, chép dữ liệu cho truy vấn mới</span></div>
+        say: "Tổng kết lại, hãy viết truy vấn trước. Khoá phân vùng sao cho một truy vấn chạm một phân vùng, khoá sắp xếp để đọc liên tục, chia theo thời gian để phân vùng có giới hạn, và chép dữ liệu cho truy vấn mới."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> ở quy mô lớn, <b>dung lượng rẻ, phối hợp đắt</b> — chép dữ liệu thêm một lần thường rẻ hơn một truy vấn chạm cả cụm.</div>
+        say: "Điều cần mang theo, ở quy mô lớn dung lượng thì rẻ còn phối hợp thì đắt, nên chép dữ liệu thêm một lần thường rẻ hơn một truy vấn chạm cả cụm."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 6): <b>cơ sở dữ liệu đồ thị</b> — duyệt quan hệ nhiều bước.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 6, ta học cơ sở dữ liệu đồ thị, với cách duyệt quan hệ nhiều bước. Hẹn gặp bạn ở bài tiếp theo."

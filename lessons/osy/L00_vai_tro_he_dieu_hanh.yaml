@@ -1,0 +1,262 @@
+id: L00
+course: OSY
+series: "OSY · Hệ điều hành"
+title: "Bài 0 — Vai trò của hệ điều hành: chế độ nhân, lời gọi hệ thống"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/osy.yaml L00; audit/verify_plan_curricula.py OSY:L00; R. Arpaci-Dusseau, A. Arpaci-Dusseau, Operating Systems: Three Easy Pieces, chương 2 và 6"
+assumes: [arith, power, approx]
+# Quy ước: “nhân” = phần lõi của hệ điều hành chạy ở chế độ đặc quyền; “lời gọi hệ thống” = system call (tên tiếng Anh chỉ trên màn hình).
+#   Chi phí chuyển ngữ cảnh 5 µs là giả định minh hoạ cỡ độ lớn; lời đọc nói “phần triệu giây”.
+objectives:
+  - "Phân biệt chế độ nhân và chế độ người dùng"
+  - "Giải thích lời gọi hệ thống khác lời gọi hàm thường thế nào"
+  - "Ước lượng chi phí chuyển ngữ cảnh"
+asr_reviewed:
+  - {sentence: "Một mi li giây là một phần nghìn giây.", reason: "ASR chép “Một mili dây là một phần nghìn dây.” (0.706): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Lỗi thứ năm, nghĩ lỗi trong nhân chỉ làm hỏng một chương trình.", reason: "ASR chép “Lội thứ 5. Nghỉ lỗi trong nhân chỉ làm hổng một chương trình.” (0.769): lệch âm/thanh thuần Việt: lỗi/lội, nghĩ/nghỉ, hỏng/hổng — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Gom vào bộ đệm 4096 byte rồi mới ghi thì chỉ cần 15 nghìn 625 lời gọi, khoảng 0 phẩy 016 giây, ít hơn 64 lần.", reason: "ASR chép “Gom vào bộ đệm 4.096 bai rồi mới ghi thì chỉ cần 15.625 lời gọi, khoảng 0.016 giây, ít hơn 64 lần.” (0.949): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: không (trong “không phẩy” → “”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Nó có đổi chế độ và kiểm quyền, nên đọc tệp từng byte một chậm hơn đọc cả khối rất nhiều.", reason: "“byte” đọc thô /bai/ — probe audit/csa/probes/p1_thuat_ngu.md: ASR chép “bay” 8/8 (cùng âm), đối chứng 0/8; lexicon foreign_ok; “bit” ASR chép “bích/biết” (probe p1 CSA: không cách viết nào phân định âm cuối t/ch) — NOT_VERIFIED bằng tai người; “byte” → “bay” cùng âm"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Vì sao chương trình không được đọc thẳng ổ đĩa?"
+    steps:
+      - show: |
+          <p>Chương trình của bạn muốn đọc một tệp. Nó không tự ra lệnh cho ổ đĩa — nó <b>nhờ</b> hệ điều hành.</p>
+          <p>Nếu mọi chương trình đều điều khiển thẳng phần cứng, một chương trình lỗi có thể xoá dữ liệu của tất cả chương trình khác.</p>
+          <div class="box key">Hôm nay: hệ điều hành làm gì, chế độ nhân, và lời gọi hệ thống — cánh cửa duy nhất từ chương trình vào phần cứng.</div>
+        focus: [1, 2, 3]
+        say: "Chào bạn, chương trình của bạn muốn đọc một tệp, nhưng nó không tự ra lệnh cho ổ đĩa mà phải nhờ hệ điều hành. Nếu mọi chương trình đều điều khiển thẳng phần cứng, một chương trình lỗi có thể xoá dữ liệu của tất cả chương trình khác. Hôm nay ta học hệ điều hành làm gì, chế độ nhân, và lời gọi hệ thống, cánh cửa duy nhất từ chương trình vào phần cứng."
+
+  # ───────────────────────── 1b. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: đổi đơn vị thời gian và tính phần trăm"
+    checks:
+      - "1 * 1000 == 1000 and 1 * 1000 * 1000 == 1000000"
+      - "abs(5 * 1e-6 - 0.000005) < 1e-18"
+      - "abs(0.25 / 1 * 100 - 25) < 1e-12 and abs(0.005 / 1 * 100 - 0.5) < 1e-12"
+    steps:
+      - show: |
+          <table class="t"><tr><th>đơn vị</th><th>đọc là</th><th>bằng bao nhiêu giây</th></tr>
+          <tr><td>1 s</td><td>một giây</td><td>1</td></tr>
+          <tr><td>1 ms</td><td>một phần nghìn giây</td><td>$\frac{1}{1000}$</td></tr>
+          <tr><td>1 µs</td><td>một phần triệu giây</td><td>$\frac{1}{1000000} = 10^{-6}$</td></tr></table>
+          <p>Ví dụ: 5 µs $= 5 \times 10^{-6}$ s $= 0{,}000005$ s.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Trước hết, ta ôn hai phép tính sẽ dùng trong bài. Thứ nhất là đổi đơn vị thời gian, bắt đầu từ một giây. Một mi li giây là một phần nghìn giây. Một phần triệu giây là một chia một triệu, viết gọn là 10 mũ trừ 6 giây. Ví dụ, 5 phần triệu giây bằng 5 nhân 10 mũ trừ 6, tức 0 phẩy 000005 giây."
+      - show: |
+          <table class="t"><tr><th>bỏ ra</th><th>trong tổng</th><th>phần trăm = phần ÷ tổng × 100</th></tr>
+          <tr><td>0,25 s</td><td>1 s</td><td>$\frac{0{,}25}{1} \times 100 = 25\%$</td></tr>
+          <tr><td>0,005 s</td><td>1 s</td><td>$\frac{0{,}005}{1} \times 100 = 0{,}5\%$</td></tr></table>
+        focus: [0, "1.2", "1.3"]
+        say: "Thứ hai là phần trăm, bằng phần bỏ ra chia cho tổng, rồi nhân 100. Bỏ ra 0 phẩy 25 giây trong mỗi giây là 25 phần trăm thời gian. Bỏ ra 0 phẩy 005 giây trong mỗi giây chỉ là 0 phẩy 5 phần trăm."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: chế độ người dùng, chế độ nhân"
+    steps:
+      - show: |
+          <table class="t"><tr><th>chế độ</th><th>ai chạy</th><th>được làm</th></tr>
+          <tr><td><b>người dùng</b></td><td>chương trình bình thường</td><td>tính toán, đọc ghi vùng nhớ của chính mình</td></tr>
+          <tr><td><b>nhân</b></td><td>phần lõi hệ điều hành</td><td>mọi lệnh: điều khiển thiết bị, đổi bảng trang, tắt ngắt</td></tr></table>
+          <p class="note">Bộ xử lý giữ một bit chế độ. Lệnh đặc quyền chạy ở chế độ người dùng gây lỗi, và quyền điều khiển chuyển về nhân.</p>
+        focus: [0, "1.2", "1.3", 2]
+        say: "Bộ xử lý có hai chế độ chạy. Ở chế độ người dùng, chương trình bình thường chỉ được tính toán và đọc ghi vùng nhớ của chính mình. Ở chế độ nhân, phần lõi của hệ điều hành được chạy mọi lệnh, như điều khiển thiết bị, đổi bảng trang hay tắt ngắt. Bộ xử lý giữ một bit cho biết chế độ hiện tại, và nếu chương trình người dùng chạy lệnh đặc quyền thì sinh lỗi, quyền điều khiển chuyển về nhân."
+
+  # ───────────────────────── 3. LỜI GỌI HỆ THỐNG ─────────────────────────
+  - id: syscall
+    kind: concept
+    title: "Lời gọi hệ thống: cánh cửa có người gác"
+    steps:
+      - show: |
+          <ol><li>Chương trình đặt số hiệu dịch vụ và tham số vào thanh ghi, rồi chạy một lệnh <b>bẫy</b> đặc biệt.</li>
+          <li>Bộ xử lý chuyển sang chế độ nhân và nhảy tới địa chỉ do <b>nhân</b> định sẵn — chương trình không chọn được chỗ nhảy.</li>
+          <li>Nhân <b>kiểm tra</b> quyền và tham số, làm việc (ví dụ đọc tệp), rồi trở về chế độ người dùng.</li></ol>
+        focus: [0, "1.1", "1.2", "1.3"]
+        say: "Lời gọi hệ thống đi qua ba bước. Một, chương trình đặt số hiệu dịch vụ cần dùng và các tham số vào thanh ghi, rồi chạy một lệnh bẫy đặc biệt. Hai, bộ xử lý chuyển sang chế độ nhân và nhảy tới địa chỉ do nhân định sẵn, chương trình không tự chọn được chỗ nhảy. Ba, nhân kiểm tra quyền và tham số, làm việc được nhờ như đọc tệp, rồi trở về chế độ người dùng."
+      - show: |
+          <div class="box key">Khác lời gọi hàm thường: có <b>đổi chế độ</b> và <b>kiểm quyền</b>, nên đắt hơn nhiều — vì vậy thư viện gom dữ liệu vào bộ đệm rồi mới gọi một lần.</div>
+        say: "Điều khác với lời gọi hàm thường là có đổi chế độ và kiểm quyền, nên đắt hơn nhiều. Vì vậy các thư viện thường gom dữ liệu vào bộ đệm, rồi mới gọi hệ thống một lần cho cả khối."
+
+  # ───────────────────────── 3b. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Đường đi của một lời gọi hệ thống"
+    steps:
+      - show: |
+          <div><svg width="1500" height="460" viewBox="0 0 1500 460"><defs><marker id="arO0" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs><rect x="0" y="0" width="1500" height="190" fill="#eff6ff"/><rect x="0" y="230" width="1500" height="230" fill="#fff7ed"/><line x1="0" y1="210" x2="1500" y2="210" stroke="#b91c1c" stroke-width="3" stroke-dasharray="14 10"/><text x="20" y="34" font-size="24" font-weight="bold" fill="#1d4ed8">chế độ người dùng</text><text x="20" y="448" font-size="24" font-weight="bold" fill="#c2410c">chế độ nhân</text><rect x="80" y="60" width="300" height="100" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="3"/><text x="230" y="102" font-size="26" font-weight="bold" text-anchor="middle" fill="#1f2937">chương trình</text><text x="230" y="136" font-size="24" font-weight="normal" text-anchor="middle" fill="#1f2937">muốn đọc tệp</text><rect x="470" y="280" width="260" height="100" rx="10" fill="#ffedd5" stroke="#ea580c" stroke-width="3"/><text x="600" y="322" font-size="26" font-weight="bold" text-anchor="middle" fill="#1f2937">cổng vào</text><text x="600" y="356" font-size="24" font-weight="normal" text-anchor="middle" fill="#1f2937">nhân định sẵn</text><rect x="820" y="280" width="260" height="100" rx="10" fill="#ffedd5" stroke="#ea580c" stroke-width="3"/><text x="950" y="322" font-size="26" font-weight="bold" text-anchor="middle" fill="#1f2937">kiểm quyền</text><text x="950" y="356" font-size="24" font-weight="normal" text-anchor="middle" fill="#1f2937">và tham số</text><rect x="1170" y="280" width="280" height="100" rx="10" fill="#e5e7eb" stroke="#374151" stroke-width="3"/><text x="1310" y="322" font-size="26" font-weight="bold" text-anchor="middle" fill="#1f2937">ổ đĩa</text><text x="1310" y="356" font-size="24" font-weight="normal" text-anchor="middle" fill="#1f2937">đọc khối dữ liệu</text><g fill="none" stroke="#1f2937" stroke-width="3"><path d="M380,110 C460,110 560,170 590,272" marker-end="url(#arO0)"/><line x1="730" y1="330" x2="812" y2="330" marker-end="url(#arO0)"/><line x1="1080" y1="330" x2="1162" y2="330" marker-end="url(#arO0)"/><path d="M1310,280 C1310,120 900,90 388,92" marker-end="url(#arO0)"/></g><text x="560" y="150" font-size="24" font-weight="normal" text-anchor="middle" fill="#1f2937">1. lệnh bẫy</text><text x="1000" y="70" font-size="24" font-weight="normal" text-anchor="middle" fill="#1f2937">4. trả dữ liệu, về chế độ người dùng</text><text x="771" y="310" font-size="24" font-weight="bold" text-anchor="middle" fill="#1f2937">2</text><text x="1121" y="310" font-size="24" font-weight="bold" text-anchor="middle" fill="#1f2937">3</text><text x="20" y="262" font-size="20" fill="#b91c1c">ranh giới: chương trình không tự chọn chỗ nhảy</text></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình này vẽ đường đi của một lời gọi hệ thống. Dải xanh phía trên là chế độ người dùng, dải cam phía dưới là chế độ nhân, đường đỏ đứt nét là ranh giới giữa hai chế độ. Chương trình chạy lệnh bẫy, bộ xử lý đưa nó qua ranh giới, nhưng chỉ tới đúng cổng vào mà nhân đã định sẵn. Nhân kiểm quyền và tham số, ra lệnh cho ổ đĩa, rồi trả dữ liệu và đưa bộ xử lý về chế độ người dùng."
+
+  # ───────────────────────── 4. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Chi phí chuyển ngữ cảnh"
+    checks:
+      - "abs(1000 * 5e-6 - 0.005) < 1e-15"
+      - "abs(100000 * 5e-6 - 0.5) < 1e-12"
+      - "1000 * 5 == 5000 and abs(5000 * 1e-6 - 0.005) < 1e-15 and abs(0.005 / 1 * 100 - 0.5) < 1e-12"
+      - "100000 * 5 == 500000 and abs(500000 * 1e-6 - 0.5) < 1e-12 and abs(0.5 / 1 * 100 - 50) < 1e-9"
+    steps:
+      - show: |
+          <p>Bộ định thời ngắt bộ xử lý định kỳ để nhân giành lại quyền điều khiển và có thể <b>chuyển</b> sang chương trình khác: lưu thanh ghi của chương trình cũ, nạp của chương trình mới.</p>
+          <p>Giả sử mỗi lần chuyển tốn 5 µs. 1000 lần mỗi giây: $1000 \times 5 \times 10^{-6} = 0{,}005$ s → $\hl{0{,}5\%}$ thời gian bộ xử lý.</p>
+          <p>100 000 lần mỗi giây: $\hl{50\%}$ — gần một nửa thời gian chỉ để chuyển qua lại.</p>
+        focus: [1, 1, 2, 3]
+        say: "Bộ định thời ngắt bộ xử lý định kỳ, để nhân giành lại quyền điều khiển và có thể chuyển sang chương trình khác. Mỗi lần chuyển, nhân lưu các thanh ghi của chương trình cũ và nạp các thanh ghi của chương trình mới. Giả sử mỗi lần chuyển tốn 5 phần triệu giây, thì 1000 lần mỗi giây chỉ tốn 0 phẩy 5 phần trăm thời gian. Nhưng 100 nghìn lần mỗi giây thì tốn tới 50 phần trăm, gần một nửa thời gian chỉ để chuyển qua lại."
+      - clear: true
+        show: |
+          <p><b>Bước 1.</b> Tổng thời gian chuyển trong một giây, tính bằng µs:</p>
+          $$1000 \times 5 = \hl{5000} \text{ µs}$$
+        focus: [0, 1, 2]
+        say: "Bây giờ ta làm lại từng bước. Bước 1, nhân số lần chuyển với thời gian mỗi lần. 1000 lần, mỗi lần 5 phần triệu giây, được 5000 phần triệu giây."
+      - show: |
+          <p><b>Bước 2.</b> Đổi ra giây (chia cho một triệu):</p>
+          $$5000 \times 10^{-6} = \hl{0{,}005} \text{ s}$$
+        focus: [1, 2]
+        say: "Bước 2, đổi ra giây bằng cách chia cho một triệu. 5000 phần triệu giây bằng 0 phẩy 005 giây."
+      - show: |
+          <p><b>Bước 3.</b> Phần trăm của một giây:</p>
+          $$\frac{0{,}005}{1} \times 100 = \hl{0{,}5\%}$$
+        focus: [1, 2]
+        say: "Bước 3, chia cho tổng là một giây rồi nhân 100. Ta được 0 phẩy 5 phần trăm thời gian bộ xử lý, một cái giá rất nhỏ."
+      - show: |
+          <p><b>Bước 4.</b> Tăng lên 100 000 lần mỗi giây:</p>
+          $$100000 \times 5 = 500000 \text{ µs} = 0{,}5 \text{ s} \;\to\; \hl{50\%}$$
+        focus: [1, 2, 2]
+        say: "Bước 4, lặp lại với 100 nghìn lần mỗi giây. 100 nghìn nhân 5 bằng 500 nghìn phần triệu giây, tức nửa giây. Vậy một nửa thời gian bộ xử lý chỉ dùng để chuyển qua lại, chưa làm được việc gì có ích."
+
+  # ───────────────────────── 5. VIỆC CỦA HỆ ĐIỀU HÀNH ─────────────────────────
+  - id: jobs
+    kind: concept
+    title: "Ba việc chính: ảo hoá, đồng thời, lưu trữ bền"
+    steps:
+      - show: |
+          <table class="t"><tr><th>việc</th><th>nghĩa</th><th>bài</th></tr>
+          <tr><td>ảo hoá</td><td>mỗi chương trình tưởng có riêng bộ xử lý và bộ nhớ</td><td>1–3, 8–11</td></tr>
+          <tr><td>đồng thời</td><td>nhiều luồng chạy xen nhau mà vẫn đúng</td><td>4–7</td></tr>
+          <tr><td>lưu trữ bền</td><td>dữ liệu còn sau khi tắt máy</td><td>12–14</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Có thể gom việc của hệ điều hành thành ba nhóm, ứng với các phần của khoá. Ảo hoá, làm mỗi chương trình tưởng mình có riêng bộ xử lý và bộ nhớ. Đồng thời, cho nhiều luồng chạy xen nhau mà kết quả vẫn đúng. Lưu trữ bền, giữ dữ liệu còn nguyên sau khi tắt máy."
+
+  # ───────────────────────── 6. TỰ KIỂM ─────────────────────────
+  - id: verify
+    kind: check
+    title: "Tự kiểm"
+    checks:
+      - "abs(2000 * 3e-6 - 0.006) < 1e-15"
+      - "1000000 // 5 == 200000 and 1000000 % 5 == 0"
+      - "abs(1000 / 200000 * 100 - 0.5) < 1e-12 and abs(100000 / 200000 * 100 - 50) < 1e-9"
+    steps:
+      - show: |
+          <p><b>Kiểm bằng đường khác:</b> nếu chỉ chuyển liên tục không nghỉ, một giây chứa được bao nhiêu lần chuyển?</p>
+          <table class="t"><tr><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>$\frac{1000000}{5}$</td><td>200 000 lần là trần</td></tr>
+          <tr><td>$\frac{1000}{200000} \times 100$</td><td>$0{,}5\%$ ✓ khớp bước 3</td></tr>
+          <tr><td>$\frac{100000}{200000} \times 100$</td><td>$50\%$ ✓ khớp bước 4</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Kiểm lại bằng đường khác, không đổi đơn vị nữa mà hỏi một giây chứa được bao nhiêu lần chuyển, nếu bộ xử lý chỉ làm mỗi việc đó. Vì mỗi lần mất 5 phần triệu giây, ta lấy một triệu chia 5, được 200 nghìn lần, đó là trần. 1000 lần trên 200 nghìn lần là 0 phẩy 5 phần trăm, khớp bước 3. 100 nghìn trên 200 nghìn là 50 phần trăm, khớp bước 4."
+      - show: |
+          <ol><li>Thao tác có chạm phần cứng, bộ nhớ của người khác, hay quyền không? Có thì phải qua lời gọi hệ thống.</li>
+          <li>Phần thời gian = số lần mỗi giây × thời gian mỗi lần (đổi µs ra giây).</li>
+          <li>Ai giành lại quyền khi chương trình chạy vòng lặp vô hạn? Ngắt bộ định thời.</li></ol>
+        focus: [0, "1.1", "1.2", "1.3"]
+        say: "Tự kiểm bằng ba câu hỏi. Một, thao tác này có chạm vào phần cứng, bộ nhớ của chương trình khác hay quyền hạn không, nếu có thì phải qua lời gọi hệ thống, vì chỉ nhân được làm việc đó. Hai, phần thời gian bằng số lần mỗi giây nhân thời gian mỗi lần, nhớ đổi phần triệu giây ra giây. Ba, khi một chương trình chạy vòng lặp vô hạn, ai giành lại quyền điều khiển, câu trả lời là ngắt của bộ định thời."
+
+  # ───────────────────────── 7. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "5 lỗi hay gặp, kể cả của người đã đi làm"
+    checks:
+      - "1000000 * 64 // 4096 == 15625 and 1000000 * 64 % 4096 == 0"
+      - "abs(1000000 * 1e-6 - 1) < 1e-9 and round(15625 * 1e-6, 3) == 0.016 and 1000000 // 15625 == 64"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Coi lời gọi hệ thống như gọi hàm thường <b class="red">(sai)</b>
+          <br><span class="note">Có đổi chế độ và kiểm quyền; gọi đọc tệp từng byte một chậm hơn đọc cả khối rất nhiều.</span></div>
+        say: "Lỗi thứ nhất, coi lời gọi hệ thống như gọi hàm thường. Nó có đổi chế độ và kiểm quyền, nên đọc tệp từng byte một chậm hơn đọc cả khối rất nhiều."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Nghĩ tài khoản quản trị là chế độ nhân <b class="red">(sai)</b>
+          <br><span class="note">Chương trình của quản trị viên vẫn chạy ở chế độ người dùng; nó chỉ được nhân cho phép nhiều việc hơn.</span></div>
+        say: "Lỗi thứ hai, nghĩ tài khoản quản trị là chế độ nhân. Chương trình của quản trị viên vẫn chạy ở chế độ người dùng, chỉ là được nhân cho phép làm nhiều việc hơn."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3 — của người đã đi làm.</b> Ghi nhật ký mỗi dòng bằng một lời gọi hệ thống <b class="red">(chậm)</b></div>
+          <table class="t"><tr><th>1 000 000 dòng × 64 byte</th><th>số lời gọi</th><th>tốn (giả sử 1 µs mỗi lời gọi)</th></tr>
+          <tr><td>ghi từng dòng</td><td>1 000 000</td><td>1 s</td></tr>
+          <tr><td>gom vào bộ đệm 4096 byte</td><td>$\frac{1000000 \times 64}{4096} = 15625$</td><td>$\approx \hl{0{,}016}$ s</td></tr></table>
+        focus: [1, 2, "2.2", "2.3"]
+        say: "Lỗi thứ ba hay gặp ở người đã đi làm, là ghi nhật ký mỗi dòng bằng một lời gọi hệ thống riêng. Giả sử ghi một triệu dòng nhật ký, mỗi dòng có độ dài 64 byte, và mỗi lời gọi tốn 1 phần triệu giây. Ghi từng dòng cần một triệu lời gọi, mất trọn 1 giây chỉ cho phần đổi chế độ. Gom vào bộ đệm 4096 byte rồi mới ghi thì chỉ cần 15 nghìn 625 lời gọi, khoảng 0 phẩy 016 giây, ít hơn 64 lần."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Nghĩ chuyển ngữ cảnh chỉ tốn thời gian lưu thanh ghi <b class="red">(thiếu)</b>
+          <br><span class="note">Chương trình mới còn phải làm nóng lại bộ nhớ đệm và bộ đệm dịch địa chỉ — chi phí ẩn thường lớn hơn.</span></div>
+        say: "Lỗi thứ tư, nghĩ chuyển ngữ cảnh chỉ tốn thời gian lưu thanh ghi. Chương trình mới còn phải làm đầy lại bộ nhớ đệm và bộ đệm dịch địa chỉ, chi phí ẩn này thường lớn hơn."
+      - show: |
+          <div class="box warn"><b>Lỗi 5.</b> Nghĩ lỗi trong nhân chỉ làm hỏng một chương trình <b class="red">(sai)</b>
+          <br><span class="note">Nhân chạy với mọi quyền; lỗi ở đó có thể làm treo hoặc lộ dữ liệu của cả máy.</span></div>
+        say: "Lỗi thứ năm, nghĩ lỗi trong nhân chỉ làm hỏng một chương trình. Nhân chạy với mọi quyền, nên lỗi ở đó có thể làm treo cả máy, hoặc làm lộ dữ liệu của mọi chương trình."
+
+  # ───────────────────────── 8. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "abs(2000 * 3e-6 - 0.006) < 1e-15"
+      - "2000 * 3 == 6000 and abs(6000 * 1e-6 * 100 - 0.6) < 1e-12"
+      - "abs(0.01 * 1000000 - 10000) < 1e-6 and 10000 // 5 == 2000 and 2000 * 5 / 1000000 * 100 == 1"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>2000 lần chuyển ngữ cảnh mỗi giây, mỗi lần 3 µs: tốn bao nhiêu phần trăm thời gian?</td></tr>
+          <tr><td>2</td><td>Lệnh nào sau đây cần lời gọi hệ thống: cộng hai số, mở tệp, gửi gói tin mạng?</td></tr>
+          <tr><td>3</td><td>Mỗi lần chuyển 5 µs. Muốn chi phí chuyển không quá 1% thời gian, cho phép tối đa bao nhiêu lần mỗi giây?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, 2000 lần chuyển ngữ cảnh mỗi giây, mỗi lần 3 phần triệu giây, tốn bao nhiêu phần trăm thời gian? Câu hai, việc nào sau đây cần lời gọi hệ thống, cộng hai số, mở tệp, hay gửi một gói tin mạng? Câu ba, mỗi lần chuyển tốn 5 phần triệu giây, muốn chi phí không quá 1 phần trăm thời gian thì cho phép tối đa bao nhiêu lần mỗi giây? Dừng video và làm ra giấy."
+        pause: 10
+      - clear: true
+        show: |
+          <p>① Làm từng bước:</p>
+          <table class="t"><tr><th>bước</th><th>phép tính</th></tr>
+          <tr><td>nhân</td><td>$2000 \times 3 = 6000$ µs</td></tr>
+          <tr><td>đổi ra giây</td><td>$6000 \times 10^{-6} = 0{,}006$ s</td></tr>
+          <tr><td>phần trăm</td><td>$\frac{0{,}006}{1} \times 100 = \hl{0{,}6\%}$</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Đáp án câu một, làm từng bước như ví dụ. 2000 nhân 3 bằng 6000 phần triệu giây. Đổi ra giây được 0 phẩy 006 giây. Chia cho một giây rồi nhân 100, được 0 phẩy 6 phần trăm."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>việc</th><th>chạm thiết bị hay quyền?</th><th>cần lời gọi hệ thống?</th></tr>
+          <tr><td>cộng hai số</td><td>không, chỉ dùng thanh ghi</td><td>không</td></tr>
+          <tr><td>mở tệp</td><td>có, ổ đĩa và quyền đọc</td><td>$\hl{\text{có}}$</td></tr>
+          <tr><td>gửi gói tin</td><td>có, thiết bị mạng</td><td>$\hl{\text{có}}$</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Câu hai, hỏi từng việc có chạm thiết bị hay quyền không. Cộng hai số chỉ dùng thanh ghi, nên không cần. Mở tệp chạm ổ đĩa và phải kiểm quyền đọc, nên cần lời gọi hệ thống. Gửi gói tin chạm thiết bị mạng, nên cũng cần."
+      - show: |
+          <p>③ Ngân sách 1% của một giây $= 0{,}01$ s $= 10000$ µs.</p>
+          $$\frac{10000}{5} = \hl{2000} \text{ lần mỗi giây}$$
+        focus: [0, 1, 2]
+        say: "Câu ba là một quyết định. Ngân sách 1 phần trăm của một giây là 0 phẩy 01 giây, tức 10 nghìn phần triệu giây. Chia cho 5 phần triệu giây mỗi lần, được tối đa 2000 lần chuyển mỗi giây."
+
+  # ───────────────────────── 9. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">hai chế độ: người dùng, nhân</span><span class="a">→</span>
+          <span class="n">lời gọi hệ thống: bẫy vào nhân, kiểm quyền</span><span class="a">→</span>
+          <span class="n">ngắt định thời: nhân giành lại quyền</span><span class="a">→</span>
+          <span class="n">chuyển ngữ cảnh có giá</span></div>
+        say: "Tổng kết lại, bộ xử lý có hai chế độ, người dùng và nhân. Lời gọi hệ thống bẫy vào nhân, nơi quyền được kiểm tra. Ngắt của bộ định thời giúp nhân giành lại quyền điều khiển. Và mỗi lần chuyển ngữ cảnh đều có giá."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> bảo vệ cần một ranh giới mà phần không tin cậy không thể vượt qua — chế độ nhân là ranh giới đầu tiên của mọi hệ thống an toàn.</div>
+        say: "Điều cần mang theo, muốn bảo vệ thì cần một ranh giới mà phần không đáng tin không thể vượt qua, và chế độ nhân là ranh giới đầu tiên của mọi hệ thống an toàn."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 1): <b>tiến trình và luồng</b> — trạng thái, tạo tiến trình con, chuyển ngữ cảnh.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 1, ta học tiến trình và luồng, các trạng thái của chúng, và cách tạo tiến trình con. Hẹn gặp bạn ở bài tiếp theo."

@@ -1,0 +1,238 @@
+id: L14
+course: OSY
+series: "OSY · Hệ điều hành"
+title: "Bài 14 — Bảo vệ và phân quyền trong hệ điều hành"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/osy.yaml L14; audit/verify_plan_curricula.py OSY:L14; B. Lampson (1971), “Protection”; POSIX chmod"
+assumes: [arith, power, dots]
+# Quy ước: r = đọc, w = ghi, x = chạy (với thư mục: đi vào). Ba nhóm: chủ sở hữu, nhóm, người khác. Một chữ số bát phân = 3 bit
+#   (r = 4, w = 2, x = 1). Chuyển rwx → số do biểu thức trong checks tính (sum theo vị trí), không gõ tay.
+objectives:
+  - "Đọc bit quyền rwx và đổi sang số bát phân"
+  - "Giải thích quyền x trên thư mục"
+  - "Phân biệt danh sách quyền truy cập và khả năng"
+asr_reviewed:
+  - {sentence: "Số 7 bằng 4 cộng 2 cộng 1, tức ba bit 1, 1, 1, là r w x.", reason: "ASR chép “Số 7 bằng 4 cộng 2 cộng 1, tức 3 bit 1, 1, 1 là rv kết x.” (0.947): chữ w đọc “vê kép” (luật chung), ASR viết tách chữ — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Với thư mục, ba bit mang nghĩa khác.", reason: "ba/bà là nhầm thanh, bit/biết là nhầm âm cuối đã biết (probe p1 CSA: NOT_VERIFIED); “ba quyền r, w, x” hiện trên màn hình — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Chủ có r w x, bằng 4 cộng 2 cộng 1, được 7.", reason: "tên chữ cái đọc kiểu Việt, ASR chép nhầm chữ (q→quy, x→ích, k→ca) — nhóm đã biết (SKILL Bước 5); chữ hiện trên màn hình"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Ai được đọc bảng lương?"
+    steps:
+      - show: |
+          <p>Một máy chủ có hàng trăm người dùng. Tệp bảng lương: kế toán được sửa, trưởng phòng được đọc, những người khác <b>không được nhìn thấy</b>.</p>
+          <div class="box key">Ở bài 0, chế độ nhân là ranh giới đầu tiên. Hôm nay: ranh giới thứ hai — nhân kiểm <b>ai</b> được làm <b>gì</b> với <b>tệp nào</b>.</div>
+        focus: [1, 1, 2, 2]
+        say: "Chào bạn, một máy chủ có hàng trăm người dùng. Tệp bảng lương thì kế toán được sửa, trưởng phòng được đọc, còn những người khác không được nhìn thấy. Ở bài 0, ta thấy chế độ nhân là ranh giới đầu tiên. Hôm nay ta học ranh giới thứ hai, nhân kiểm tra ai được làm gì với tệp nào."
+
+  # ───────────────────────── 1b. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: ai kiểm quyền, và ba bit thành một số"
+    checks:
+      - "(lambda g: sum(v for ch, v in zip(g, (4, 2, 1)) if ch != '-'))('r-x') == 4 * 1 + 2 * 0 + 1 * 1 == 5 and 2 ** 3 == 8 and (lambda g: sum(v for ch, v in zip(g, (4, 2, 1)) if ch != '-'))('rwx') == 7 and (lambda g: sum(v for ch, v in zip(g, (4, 2, 1)) if ch != '-'))('---') == 0"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bước</th><th>chuyện gì xảy ra khi chương trình mở tệp</th></tr>
+          <tr><td>1</td><td>chương trình không tự đọc đĩa, mà làm <b>lời gọi hệ thống</b></td></tr>
+          <tr><td>2</td><td>bộ xử lý chuyển sang <b>chế độ nhân</b></td></tr>
+          <tr><td>3</td><td>nhân <b>kiểm quyền</b> rồi mới làm, hoặc từ chối</td></tr></table>
+        focus: ["1.2", "1.3", "1.4"]
+        say: "Trước hết, ta nhắc lại bài 0, chương trình không tự ra lệnh cho ổ đĩa mà phải làm một lời gọi hệ thống để nhờ hệ điều hành. Khi đó bộ xử lý chuyển sang chế độ nhân, nơi chương trình thường không tự can thiệp được. Nhân kiểm tra quyền rồi mới làm, hoặc từ chối, và bài hôm nay nói về chính phép kiểm tra đó."
+      - show: |
+          <table class="t"><tr><th>vị trí</th><th>trái</th><th>giữa</th><th>phải</th></tr>
+          <tr><td>trọng số</td><td>4</td><td>2</td><td>1</td></tr>
+          <tr><td>bit</td><td>1</td><td>0</td><td>1</td></tr></table>
+          $$4 \times 1 + 2 \times 0 + 1 \times 1 = \hl{5}$$
+        focus: [1, 1, 2]
+        say: "Điều thứ hai là đổi ba bit thành một số. Ba vị trí từ trái sang phải có trọng số 4, 2 và 1, nên ba bit 1, 0, 1 cho 4 nhân 1 cộng 2 nhân 0 cộng 1 nhân 1, bằng 5. Ba bit có 2 mũ 3 bằng 8 cách bật tắt, nên số thu được luôn nằm từ 0 đến 7, đúng một chữ số của hệ bát phân."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: rwx và ba nhóm người"
+    checks:
+      - "4 + 2 + 1 == 7 and 4 + 1 == 5"
+      - "''.join((lambda d: ('r' if d & 4 else '-') + ('w' if d & 2 else '-') + ('x' if d & 1 else '-'))(int(d)) for d in '077') == '---rwxrwx'"
+    steps:
+      - show: |
+          <p>Mỗi tệp ghi 9 bit quyền, chia ba nhóm: <b>chủ sở hữu</b>, <b>nhóm</b>, <b>người khác</b>. Mỗi nhóm 3 bit: r = đọc, w = ghi, x = chạy.</p>
+          <div class="code"><div>rwx  r-x  ---</div><div>chủ  nhóm khác</div></div>
+          <p>Mỗi nhóm 3 bit = một chữ số bát phân: r = 4, w = 2, x = 1. Ví dụ rwx = 4 + 2 + 1 = 7; r-x = 4 + 1 = 5.</p>
+        focus: [1, "2.1", "2.2", 3, 3]
+        say: "Mỗi tệp ghi 9 bit quyền, chia làm ba nhóm, chủ sở hữu, nhóm, và người khác. Mỗi nhóm có 3 bit, r là đọc, w là ghi, x là chạy, dấu gạch ngang nghĩa là không có quyền đó. Ví dụ ở đây, chủ có đủ ba quyền, nhóm được đọc và chạy, người khác không có gì. Vì mỗi nhóm có 3 bit nên viết được bằng một chữ số bát phân, r bằng 4, w bằng 2, x bằng 1. Vậy r w x bằng 7, còn r gạch x bằng 5."
+
+  # ───────────────────────── 2b. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Nhân chọn đúng một bộ ba quyền"
+    checks:
+      - "(lambda g: sum(v for ch, v in zip(g, (4, 2, 1)) if ch != '-'))('rwx') == 7 and (lambda g: sum(v for ch, v in zip(g, (4, 2, 1)) if ch != '-'))('r-x') == 5 and (lambda g: sum(v for ch, v in zip(g, (4, 2, 1)) if ch != '-'))('---') == 0"
+    steps:
+      - show: |
+          <div><svg width="1300" height="405" viewBox="0 0 1300 405"><defs><marker id="arP14" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs><rect x="560" y="40" width="60" height="60" fill="#dcfce7" stroke="#1f2937" stroke-width="3"/><text x="590" y="80.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">r</text><rect x="620" y="40" width="60" height="60" fill="#dcfce7" stroke="#1f2937" stroke-width="3"/><text x="650" y="80.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">w</text><rect x="680" y="40" width="60" height="60" fill="#dcfce7" stroke="#1f2937" stroke-width="3"/><text x="710" y="80.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">x</text><text x="650" y="135" font-size="24" text-anchor="middle" fill="#1f2937" font-weight="bold">chủ = 7</text><rect x="820" y="40" width="60" height="60" fill="#dcfce7" stroke="#1f2937" stroke-width="3"/><text x="850" y="80.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">r</text><rect x="880" y="40" width="60" height="60" fill="#f1f5f9" stroke="#1f2937" stroke-width="3"/><text x="910" y="80.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">-</text><rect x="940" y="40" width="60" height="60" fill="#dcfce7" stroke="#1f2937" stroke-width="3"/><text x="970" y="80.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">x</text><text x="910" y="135" font-size="24" text-anchor="middle" fill="#1f2937" font-weight="bold">nhóm = 5</text><rect x="1080" y="40" width="60" height="60" fill="#f1f5f9" stroke="#1f2937" stroke-width="3"/><text x="1110" y="80.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">-</text><rect x="1140" y="40" width="60" height="60" fill="#f1f5f9" stroke="#1f2937" stroke-width="3"/><text x="1170" y="80.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">-</text><rect x="1200" y="40" width="60" height="60" fill="#f1f5f9" stroke="#1f2937" stroke-width="3"/><text x="1230" y="80.5" font-size="30" font-weight="bold" text-anchor="middle" fill="#1f2937">-</text><text x="1170" y="135" font-size="24" text-anchor="middle" fill="#1f2937" font-weight="bold">khác = 0</text><rect x="560" y="200" width="180" height="60" fill="#fef3c7" stroke="#1f2937" stroke-width="3"/><text x="650" y="238.4" font-size="24" font-weight="bold" text-anchor="middle" fill="#1f2937">là chủ tệp?</text><line x1="650" y1="198" x2="650" y2="147" stroke="#1f2937" stroke-width="3" marker-end="url(#arP14)"/><text x="662" y="180" font-size="22" text-anchor="start" fill="#16a34a" font-weight="bold">có</text><rect x="820" y="200" width="180" height="60" fill="#fef3c7" stroke="#1f2937" stroke-width="3"/><text x="910" y="238.4" font-size="24" font-weight="bold" text-anchor="middle" fill="#1f2937">cùng nhóm?</text><line x1="910" y1="198" x2="910" y2="147" stroke="#1f2937" stroke-width="3" marker-end="url(#arP14)"/><text x="922" y="180" font-size="22" text-anchor="start" fill="#16a34a" font-weight="bold">có</text><rect x="1080" y="200" width="180" height="60" fill="#fef3c7" stroke="#1f2937" stroke-width="3"/><text x="1170" y="238.4" font-size="24" font-weight="bold" text-anchor="middle" fill="#1f2937">còn lại</text><line x1="1170" y1="198" x2="1170" y2="147" stroke="#1f2937" stroke-width="3" marker-end="url(#arP14)"/><rect x="40" y="200" width="400" height="60" fill="#dbeafe" stroke="#1f2937" stroke-width="3"/><text x="240" y="238.4" font-size="24" font-weight="bold" text-anchor="middle" fill="#1f2937">người dùng mở tệp</text><line x1="440" y1="230" x2="556" y2="230" stroke="#1f2937" stroke-width="3" marker-end="url(#arP14)"/><line x1="740" y1="230" x2="816" y2="230" stroke="#b91c1c" stroke-width="3" marker-end="url(#arP14)"/><text x="780" y="290" font-size="22" text-anchor="middle" fill="#b91c1c" font-weight="bold">không</text><line x1="1000" y1="230" x2="1076" y2="230" stroke="#b91c1c" stroke-width="3" marker-end="url(#arP14)"/><text x="1040" y="290" font-size="22" text-anchor="middle" fill="#b91c1c" font-weight="bold">không</text><text x="650" y="345" font-size="24" text-anchor="middle" fill="#1f2937" font-weight="bold">chỉ dùng MỘT bộ ba: bit cần dùng là 1 → cho phép, là 0 → từ chối</text><text x="650" y="385" font-size="22" text-anchor="middle" fill="#1f2937">trưởng phòng (cùng nhóm) đọc: bộ r-x, bit r = 1 → cho phép; ghi: bit w = 0 → từ chối</text></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ nhân kiểm quyền như một dãy câu hỏi, đi từ trái sang phải. Trước tiên nhân hỏi người dùng có phải chủ tệp không, nếu có thì chỉ xét ba bit của chủ. Nếu không, nhân hỏi người đó có cùng nhóm không, có thì xét ba bit của nhóm, còn lại thì xét ba bit của người khác. Trong bộ ba đã chọn, bit ứng với việc cần làm bằng 1 thì cho phép, bằng 0 thì từ chối, nên trưởng phòng cùng nhóm đọc được tệp nhưng không ghi được."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "rwxr-x--- = 750"
+    checks:
+      - "int('750', 8) == 0b111101000"
+      - "''.join(str(sum(v for ch, v in zip(g, (4, 2, 1)) if ch != '-')) for g in ('rwx', 'r-x', '---')) == '750'"
+    steps:
+      - show: |
+          <p><b>Bước 1.</b> Chủ: rwx, đủ cả ba bit.</p>
+          $$4 + 2 + 1 = \hl{7}$$
+        focus: [1, 2]
+        say: "Bước một, đổi từng nhóm, bắt đầu từ chủ. Chủ có r w x, bằng 4 cộng 2 cộng 1, được 7."
+      - show: |
+          <p><b>Bước 2.</b> Nhóm: r-x, thiếu bit ghi ở giữa.</p>
+          $$4 + 0 + 1 = \hl{5}$$
+        focus: [1, 2]
+        say: "Bước hai, nhóm có r gạch x, thiếu bit ghi ở giữa nên vị trí đó tính là 0. Vậy được 4 cộng 0 cộng 1, bằng 5."
+      - show: |
+          <p><b>Bước 3.</b> Người khác: ---, không có bit nào.</p>
+          $$0 + 0 + 0 = \hl{0}$$
+        focus: [1, 2]
+        say: "Bước ba, người khác có ba dấu gạch ngang, không có bit nào được bật. Vậy cộng ba số 0 lại, ta được 0 cho nhóm người khác."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>nhóm</th><th>bit</th><th>tính</th><th>số</th></tr>
+          <tr><td>chủ</td><td>rwx</td><td>4 + 2 + 1</td><td>7</td></tr>
+          <tr><td>nhóm</td><td>r-x</td><td>4 + 0 + 1</td><td>5</td></tr>
+          <tr><td>khác</td><td>---</td><td>0</td><td>0</td></tr></table>
+          <p><b>Bước 4.</b> rwxr-x--- = $\hl{750}$. Kế toán (chủ) sửa được; trưởng phòng (cùng nhóm) đọc được; người khác bị từ chối.</p>
+        focus: [1, 2, 2]
+        say: "Bước bốn, ghép ba chữ số theo thứ tự chủ, nhóm, người khác, ba kết quả 7, 5, 0 trong bảng cho quyền viết là 750. Kế toán là chủ nên sửa được, trưởng phòng cùng nhóm nên đọc được. Còn người khác thì bị từ chối."
+
+  # ───────────────────────── 4. THƯ MỤC ─────────────────────────
+  - id: dir
+    kind: concept
+    title: "Quyền trên thư mục"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bit</th><th>trên tệp</th><th>trên thư mục</th></tr>
+          <tr><td>r</td><td>đọc nội dung</td><td>liệt kê <b>tên</b> các mục</td></tr>
+          <tr><td>w</td><td>sửa nội dung</td><td>tạo, xoá, đổi tên mục bên trong</td></tr>
+          <tr><td>x</td><td>chạy như chương trình</td><td><b>đi vào</b>: dùng thư mục trong đường dẫn</td></tr></table>
+          <p class="note">Muốn mở <code>/a/b/c.txt</code> cần quyền x trên <code>/a</code> và <code>/a/b</code>, rồi quyền r trên <code>c.txt</code>.</p>
+        focus: [0, "1.2", "1.3", "1.4", 2]
+        say: "Với thư mục, ba bit mang nghĩa khác. Quyền r cho liệt kê tên các mục bên trong. Quyền w cho tạo, xoá và đổi tên các mục bên trong, kể cả tệp không phải của mình. Quyền x không phải là chạy, mà là được đi vào, tức được dùng thư mục đó trong đường dẫn. Vì vậy muốn mở một tệp sâu bên trong, cần quyền x trên mọi thư mục dọc đường, rồi quyền r trên chính tệp đó."
+
+  # ───────────────────────── 5. ACL VÀ KHẢ NĂNG ─────────────────────────
+  - id: acl
+    kind: concept
+    title: "Danh sách quyền và khả năng"
+    steps:
+      - show: |
+          <p>Hình dung một <b>ma trận quyền</b>: hàng = người dùng, cột = tài nguyên, ô = quyền (Lampson, 1971).</p>
+          <ul><li><b>Danh sách quyền truy cập</b> (ACL): lưu theo <b>cột</b> — mỗi tệp giữ danh sách ai được làm gì. Dễ trả lời “ai đọc được tệp này?”.</li>
+          <li><b>Khả năng</b> (capability): lưu theo <b>hàng</b> — mỗi tiến trình giữ “vé” cho những gì nó được làm. Dễ trao và thu hẹp quyền.</li></ul>
+          <p class="note">Bit rwx là một danh sách quyền rút gọn chỉ ba mục; mô tả tệp đang mở mà tiến trình giữ là một dạng khả năng.</p>
+        focus: [1, "2.1", "2.2", 3]
+        say: "Hãy hình dung một ma trận quyền, hàng là người dùng, cột là tài nguyên, mỗi ô ghi quyền. Danh sách quyền truy cập lưu ma trận theo cột, mỗi tệp giữ danh sách ai được làm gì, nên dễ trả lời câu hỏi ai đọc được tệp này. Khả năng lưu theo hàng, mỗi tiến trình giữ những tấm vé cho việc nó được làm, nên dễ trao và thu hẹp quyền. Chín bit quyền chính là một danh sách rút gọn chỉ ba mục, còn tệp đang mở mà tiến trình giữ là một dạng khả năng."
+
+  # ───────────────────────── 6. TỰ KIỂM ─────────────────────────
+  - id: verify
+    kind: check
+    title: "Tự kiểm"
+    checks:
+      - "all(int(d) <= 7 for d in '750')"
+      - "[format(int(d), '03b') for d in '750'] == ['111', '101', '000'] and ''.join((lambda d: ('r' if d & 4 else '-') + ('w' if d & 2 else '-') + ('x' if d & 1 else '-'))(int(d)) for d in '750') == 'rwxr-x---'"
+    steps:
+      - show: |
+          <table class="t"><tr><th>phép thử</th></tr>
+          <tr><td>mỗi chữ số từ 0 đến 7; đổi ngược ra rwx phải khớp</td></tr>
+          <tr><td>xét người dùng theo thứ tự: là chủ? → bộ ba của chủ; cùng nhóm? → của nhóm; còn lại → của người khác. Chỉ dùng <b>một</b> bộ</td></tr>
+          <tr><td>với đường dẫn, kiểm x trên từng thư mục dọc đường</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Tự kiểm bằng ba cách. Một, mỗi chữ số phải từ 0 đến 7, và đổi ngược ra r w x phải khớp. Hai, xét người dùng theo thứ tự, là chủ thì dùng bộ ba của chủ, cùng nhóm thì dùng bộ của nhóm, còn lại dùng bộ của người khác, và chỉ dùng đúng một bộ. Ba, với đường dẫn, kiểm quyền x trên từng thư mục dọc đường."
+      - show: |
+          <table class="t"><tr><th>đường khác: đổi ngược 750 ra bit</th><th>3 bit</th><th>chữ</th></tr>
+          <tr><td>7 = 4 + 2 + 1</td><td>111</td><td>rwx</td></tr>
+          <tr><td>5 = 4 + 1</td><td>101</td><td>r-x</td></tr>
+          <tr><td>0</td><td>000</td><td>---</td></tr></table>
+          <p>Ghép lại: rwx r-x --- ✓ — khớp chuỗi ban đầu.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Bây giờ kiểm số 750 bằng đường ngược lại, đổi từng chữ số ra ba bit rồi ra chữ. Số 7 bằng 4 cộng 2 cộng 1, tức ba bit 1, 1, 1, là r w x. Số 5 bằng 4 cộng 1, tức 1, 0, 1, là r gạch x. Số 0 là ba bit 0, tức ba dấu gạch. Ghép lại được đúng chuỗi ban đầu, nên phép đổi xuôi là đúng."
+
+  # ───────────────────────── 7. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi người mới hay mắc"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Nghĩ x trên thư mục là “chạy thư mục” <b class="red">(sai)</b>
+          <br><span class="note">x trên thư mục = được đi vào; thiếu x thì không mở được tệp bên trong dù tệp cho phép đọc.</span></div>
+        say: "Lỗi thứ nhất, nghĩ quyền x trên thư mục là chạy thư mục. Nó nghĩa là được đi vào, và thiếu x thì không mở được tệp bên trong, dù tệp đó cho phép đọc."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Cộng dồn quyền của chủ, nhóm và người khác <b class="red">(sai)</b>
+          <br><span class="note">Chủ của tệp quyền 077 lại <b>không</b> đọc được, dù “người khác” được đọc — chỉ bộ ba của chủ được xét.</span></div>
+          <table class="t"><tr><th>quyền 077</th><th>chủ</th><th>nhóm</th><th>khác</th></tr><tr><td>bộ ba</td><td><b class="red">---</b></td><td>rwx</td><td>rwx</td></tr></table>
+        focus: [1, 2]
+        say: "Lỗi thứ hai, cộng dồn quyền của chủ, nhóm và người khác. Với quyền 077, chính chủ lại không đọc được, dù người khác được đọc, vì chỉ bộ ba của chủ được xét."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Đặt 777 “cho chạy được” <b class="red">(nguy hiểm)</b>
+          <br><span class="note">Ai cũng sửa được — kẻ xấu chèn mã vào là mọi người chạy theo. Cấp ít quyền nhất đủ dùng.</span></div>
+        say: "Lỗi thứ ba, đặt quyền 777 chỉ để cho chạy được. Như vậy ai cũng sửa được, kẻ xấu chèn mã vào là mọi người chạy theo, nên hãy cấp ít quyền nhất đủ dùng."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Nghĩ thu hồi quyền là có hiệu lực ngay với mọi tiến trình <b class="red">(chưa chắc)</b>
+          <br><span class="note">Quyền thường được kiểm lúc <b>mở</b> tệp; tiến trình đã mở từ trước vẫn đọc tiếp được.</span></div>
+        say: "Lỗi thứ tư, nghĩ thu hồi quyền là có hiệu lực ngay với mọi tiến trình. Quyền thường được kiểm lúc mở tệp, nên tiến trình đã mở từ trước vẫn đọc tiếp được."
+
+  # ───────────────────────── 8. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "''.join(('r' if d & 4 else '-') + ('w' if d & 2 else '-') + ('x' if d & 1 else '-') for d in (6, 4, 0)) == 'rw-r-----'"
+      - "''.join(str(sum(v for ch, v in zip(g, (4, 2, 1)) if ch != '-')) for g in ('rwx', 'r-x', 'r-x')) == '755'"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Quyền 640 viết dạng rwx thế nào? Người cùng nhóm sửa tệp được không?</td></tr>
+          <tr><td>2</td><td>Viết rwxr-xr-x dưới dạng số.</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, quyền 640 viết dạng r w x thế nào, và người cùng nhóm có sửa tệp được không? Câu hai, viết r w x r gạch x r gạch x dưới dạng số. Dừng video và làm ra giấy."
+        pause: 10
+      - clear: true
+        show: |
+          <table class="t"><tr><th>chữ số</th><th>tách</th><th>bộ ba</th></tr>
+          <tr><td>6 (chủ)</td><td>4 + 2</td><td>rw-</td></tr>
+          <tr><td>4 (nhóm)</td><td>4</td><td>r--</td></tr>
+          <tr><td>0 (khác)</td><td>0</td><td>---</td></tr></table>
+          <p>① $\hl{\text{rw-r-----}}$. Nhóm có r-- → bit w = 0 → <b>không</b> sửa được.</p>
+        focus: [1, 2, 2]
+        say: "Đáp án câu một, tách từng chữ số, 6 bằng 4 cộng 2 là đọc và ghi, 4 là chỉ đọc, 0 là không gì. Ghép lại được r w gạch, r gạch gạch, và ba gạch. Người cùng nhóm dùng bộ r gạch gạch, bit ghi bằng 0, nên chỉ đọc chứ không sửa được."
+      - show: |
+          <p>② rwx → 7; r-x → 5; r-x → 5.</p>
+          $$4 + 2 + 1 = 7, \quad 4 + 0 + 1 = 5 \;\to\; \hl{755}$$
+        focus: [1, 2]
+        say: "Câu hai, tách thành ba bộ, r w x là 4 cộng 2 cộng 1 bằng 7, hai bộ r gạch x đều là 4 cộng 0 cộng 1 bằng 5. Ba nhóm là 7, 5, 5, viết là 755."
+
+  # ───────────────────────── 9. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">chủ, nhóm, khác × r, w, x</span><span class="a">→</span>
+          <span class="n">một chữ số bát phân mỗi nhóm</span><span class="a">→</span>
+          <span class="n">x trên thư mục = đi vào</span><span class="a">→</span>
+          <span class="n">danh sách quyền hay khả năng</span></div>
+        say: "Tổng kết lại, quyền gồm ba nhóm chủ, nhóm, người khác, mỗi nhóm ba bit r, w, x, viết thành một chữ số bát phân. Quyền x trên thư mục nghĩa là được đi vào. Và có hai cách lưu ma trận quyền, theo danh sách quyền hoặc theo khả năng."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> cấp ít quyền nhất đủ dùng — mỗi quyền thừa là một cửa cho lỗi và kẻ xấu.</div>
+        say: "Điều cần mang theo, hãy cấp ít quyền nhất đủ dùng, vì mỗi quyền thừa là thêm một cánh cửa cho lỗi và kẻ xấu."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 15): <b>tình huống chuyên gia theo dòng thời gian</b> — bộ lập lịch của Linux từ 2002 tới 2024: mỗi khi số máy, số người dùng tăng, cách chọn tiến trình chạy tiếp phải đổi ra sao.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 15, ta đi lại hơn hai mươi năm của bộ lập lịch trong một nhân hệ điều hành mã nguồn mở, từ năm 2002 tới 2024. Mỗi khi số bộ xử lý và số người dùng tăng, cách chọn tiến trình chạy tiếp lại phải đổi, và ta xem chuyên gia đã đổi ra sao. Hẹn gặp bạn ở bài tiếp theo."

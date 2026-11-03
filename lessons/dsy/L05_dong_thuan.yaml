@@ -1,0 +1,220 @@
+id: L05
+course: DSY
+series: "DSY · Hệ phân tán và dữ liệu lớn"
+title: "Bài 5 — Đồng thuận: đa số, bầu thủ lĩnh và nhật ký sao chép"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/dsy.yaml L05; audit/dsy/verify_dsy.py L05; D. Ongaro, J. Ousterhout, In Search of an Understandable Consensus Algorithm (Raft), USENIX ATC 2014; L. Lamport, Paxos Made Simple (2001); M. J. Fischer, N. A. Lynch, M. S. Paterson, JACM 32(2), 1985 (FLP)"
+assumes: [arith, ltgt, frac]
+# Quy ước: n nút, đa số = ⌊n/2⌋ + 1 (alg.majority_tolerance). Mô tả theo thuật toán kiểu Raft: nhiệm kỳ đánh số tăng dần, mỗi nút bầu tối đa
+#   một phiếu mỗi nhiệm kỳ, mục nhật ký được cam kết khi đa số đã lưu. Hai đa số luôn giao nhau: kiểm bằng vét cạn (alg.quorum_overlap).
+#   Tên thuật toán (Raft, Paxos) chỉ ở trên màn hình; kết quả FLP nêu như định lý đã công bố, không chứng minh.
+objectives:
+  - "Hiểu vì sao cần đa số"
+  - "Hiểu bầu thủ lĩnh theo nhiệm kỳ"
+  - "Biết khi nào một mục nhật ký được cam kết"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Hai thủ lĩnh cùng lúc"
+    steps:
+      - show: |
+          <p>Hai máy chủ, một chính một phụ. Mạng giữa chúng chập chờn; máy phụ tưởng máy chính đã chết nên tự lên làm chính. Giờ có <b>hai</b> máy chính, mỗi máy nhận ghi khác nhau — dữ liệu tách làm hai, gọi là “não chia đôi”.</p>
+          <div class="box key">Hôm nay: <b>đồng thuận</b> — nhiều nút cùng thống nhất một giá trị, một thủ lĩnh, một nhật ký, dù có nút hỏng.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, có hai máy chủ, một chính một phụ. Mạng giữa chúng chập chờn, máy phụ tưởng máy chính đã chết nên tự lên làm chính. Giờ có hai máy chính, mỗi máy nhận ghi khác nhau, dữ liệu tách làm hai, gọi là não chia đôi. Hôm nay ta học đồng thuận, nhiều nút cùng thống nhất một giá trị, một thủ lĩnh, một nhật ký, dù có nút hỏng."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: phần nguyên, hai tập lớn giao nhau, phía thiểu số phải từ chối"
+    checks:
+      - "[(n, n // 2, n % 2) for n in (4, 5, 7)] == [(4, 2, 0), (5, 2, 1), (7, 3, 1)]"
+      - "alg.quorum_overlap(5, 3, 3) and 3 + 3 - 5 == 1 and alg.majority_tolerance(5)[0] == 3 and 2 < 3"
+    steps:
+      - show: |
+          <p><b>Phần nguyên của phép chia</b>: chia rồi bỏ phần dư.</p>
+          <table class="t"><tr><th>n</th><th>n chia 2</th><th>phần nguyên</th></tr>
+          <tr><td>4</td><td>2 dư 0</td><td>2</td></tr>
+          <tr><td>5</td><td>2 dư 1</td><td>2</td></tr>
+          <tr><td>7</td><td>3 dư 1</td><td>3</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Bài này dùng phép chia lấy phần nguyên, tức là chia rồi bỏ phần dư. 4 chia 2 được 2, không dư, phần nguyên là 2. 5 chia 2 được 2 dư 1, phần nguyên là 2. 7 chia 2 được 3 dư 1, phần nguyên là 3."
+      - show: |
+          <table class="t"><tr><th>nhắc lại</th><th>ví dụ với 5 nút</th></tr>
+          <tr><td>bài 3: hai tập có tổng cỡ lớn hơn N thì chung ít nhất một máy</td><td>tập 3 nút và tập 3 nút: $3 + 3 - 5 = 1$ nút chung</td></tr>
+          <tr><td>bài 4: khi mạng bị chia, phía không đủ hơn một nửa phải từ chối ghi để giữ nhất quán</td><td>chia 3 và 2: phía 2 nút từ chối</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3"]
+        say: "Bài này còn dựa vào hai điều đã học. Ở bài 3, theo nguyên lý chuồng bồ câu, hai tập có tổng cỡ lớn hơn N thì chung ít nhất một máy. Với 5 nút, tập 3 nút và tập 3 nút chung ít nhất 3 cộng 3 trừ 5, bằng 1 nút. Ở bài 4, khi mạng bị chia, phía không đủ hơn một nửa phải từ chối ghi để giữ nhất quán, ví dụ chia 3 và 2 thì phía 2 nút từ chối."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: đa số và số nút hỏng chịu được"
+    checks:
+      - "[alg.majority_tolerance(n) for n in (3, 4, 5)] == [(2, 1), (3, 1), (3, 2)]"
+      - "alg.quorum_overlap(5, 3, 3) and not alg.quorum_overlap(4, 2, 2)"
+    steps:
+      - show: |
+          <p><b>Đa số</b> của $n$ nút: $\lfloor n/2 \rfloor + 1$. Mọi quyết định cần đa số đồng ý. Hai đa số luôn có chung ít nhất một nút (như bài 3), nên không thể có hai quyết định trái nhau.</p>
+          <table class="t"><tr><th>số nút</th><th>đa số</th><th>chịu được bao nhiêu nút hỏng</th></tr>
+          <tr><td>3</td><td>2</td><td>1</td></tr><tr><td>4</td><td>3</td><td>1</td></tr><tr><td>5</td><td>3</td><td>$\hl{2}$</td></tr></table>
+        introduces: [floor]
+        focus: [1, 1, 1, 2, "2.2", "2.3", "2.4"]
+        say: "Đa số của n nút là phần nguyên của n chia 2, cộng 1. Mọi quyết định cần đa số đồng ý. Hai đa số luôn có chung ít nhất một nút, như bài 3, nên không thể có hai quyết định trái nhau. Bảng cho số nút hỏng chịu được. 3 nút có đa số là 2, chịu được 1 nút hỏng. 4 nút có đa số là 3, cũng chỉ chịu được 1. 5 nút có đa số là 3, chịu được 2."
+
+  # ───────────────────────── 3. BẦU THỦ LĨNH ─────────────────────────
+  - id: election
+    kind: concept
+    title: "Bầu thủ lĩnh theo nhiệm kỳ"
+    steps:
+      - show: |
+          <ol><li>Thời gian chia thành <b>nhiệm kỳ</b> đánh số 1, 2, 3, …</li>
+          <li>Nút không nghe thủ lĩnh quá một khoảng chờ <b>ngẫu nhiên</b> → tăng số nhiệm kỳ, tự ứng cử, xin phiếu.</li>
+          <li>Mỗi nút bầu <b>tối đa một phiếu</b> mỗi nhiệm kỳ. Được đa số phiếu → thủ lĩnh của nhiệm kỳ đó.</li>
+          <li>Thấy số nhiệm kỳ lớn hơn của mình → lùi xuống làm nút thường.</li></ol>
+          <div class="box key">Mỗi nhiệm kỳ có tối đa một thủ lĩnh: hai ứng viên cùng đạt đa số thì hai đa số giao nhau tại một nút đã bầu hai lần — vô lý.</div>
+        focus: ["1.1", "1.2", "1.3", "1.4", 2, 2]
+        say: "Bầu thủ lĩnh diễn ra theo nhiệm kỳ. Thời gian chia thành các nhiệm kỳ đánh số 1, 2, 3. Nút nào không nghe thấy thủ lĩnh quá một khoảng chờ ngẫu nhiên thì tăng số nhiệm kỳ, tự ứng cử và xin phiếu. Mỗi nút bầu tối đa một phiếu mỗi nhiệm kỳ, ai được đa số phiếu là thủ lĩnh của nhiệm kỳ đó. Thấy số nhiệm kỳ lớn hơn của mình thì lùi xuống làm nút thường. Vì thế mỗi nhiệm kỳ có tối đa một thủ lĩnh, vì nếu hai ứng viên cùng đạt đa số thì hai đa số giao nhau tại một nút đã bầu hai lần, điều đó vô lý."
+
+  # ───────────────────────── 4. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hai ứng viên, một nhiệm kỳ"
+    steps:
+      - show: |
+          <div><svg width="1500" height="400" viewBox="0 0 1500 400"><g font-size="23" fill="#1f2937"><rect x="115" y="125" width="670" height="150" rx="16" fill="none" stroke="#2a78d6" stroke-width="4" stroke-dasharray="12 8"/><rect x="865" y="125" width="420" height="150" rx="16" fill="none" stroke="#eb6834" stroke-width="4" stroke-dasharray="12 8"/><text x="450" y="100" text-anchor="middle" fill="#2a78d6" font-weight="bold">N1 ứng cử: phiếu của N1, N2, N3 = 3, đủ đa số</text><text x="1075" y="60" text-anchor="middle" fill="#eb6834" font-weight="bold">N5 ứng cử cùng nhiệm kỳ:</text><text x="1075" y="100" text-anchor="middle" fill="#eb6834" font-weight="bold">phiếu của N4, N5 = 2, thiếu</text><circle cx="200" cy="200" r="55" fill="#dbeafe" stroke="#2a78d6" stroke-width="5"/><text x="200" y="208" text-anchor="middle" font-weight="bold">N1</text><circle cx="450" cy="200" r="55" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="450" y="208" text-anchor="middle" font-weight="bold">N2</text><circle cx="700" cy="200" r="55" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="700" y="208" text-anchor="middle" font-weight="bold">N3</text><circle cx="950" cy="200" r="55" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="950" y="208" text-anchor="middle" font-weight="bold">N4</text><circle cx="1200" cy="200" r="55" fill="#ffedd5" stroke="#eb6834" stroke-width="5"/><text x="1200" y="208" text-anchor="middle" font-weight="bold">N5</text><text x="750" y="330" text-anchor="middle" fill="#b91c1c">muốn thêm phiếu, N5 phải xin N1, N2 hoặc N3</text><text x="750" y="368" text-anchor="middle" fill="#b91c1c">nhưng mỗi nút chỉ bầu một phiếu mỗi nhiệm kỳ</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ 5 nút trong cùng một nhiệm kỳ, có hai nút cùng ứng cử. Nút 1 nhận được phiếu của nút 1, nút 2 và nút 3, tức 3 phiếu, đủ đa số. Nút 5 chỉ có phiếu của nút 4 và nút 5, tức 2 phiếu, còn thiếu. Muốn thêm phiếu, nút 5 phải xin một trong ba nút đã bầu cho nút 1, nhưng mỗi nút chỉ bầu một phiếu mỗi nhiệm kỳ, nên nhiệm kỳ này chỉ có một thủ lĩnh."
+
+  - id: example
+    kind: example
+    title: "Khi nào một mục nhật ký được cam kết"
+    checks:
+      - "1 + 2 == 3 == alg.majority_tolerance(5)[0] and 1 + 1 < 3"
+    steps:
+      - show: |
+          <p><b>Bước một</b> — 5 nút. Thủ lĩnh nhận lệnh “ghi x = 7”, thêm vào nhật ký của mình ở <b>vị trí 12</b>, gửi cho 4 nút còn lại.</p>
+          <table class="t"><tr><th>nút</th><th>thủ lĩnh</th><th>nút 2</th><th>nút 3</th><th>nút 4</th><th>nút 5</th></tr>
+          <tr><td>có mục 12?</td><td>có</td><td>đang gửi</td><td>đang gửi</td><td>đang gửi</td><td>đang gửi</td></tr></table>
+        focus: [1, 1, 2]
+        say: "Bước một, xét 5 nút. Thủ lĩnh nhận lệnh ghi x bằng 7, thêm vào nhật ký của mình ở vị trí 12, rồi gửi cho 4 nút còn lại. Lúc này chỉ thủ lĩnh có mục 12, bốn nút kia đang chờ nhận."
+      - show: |
+          <p><b>Bước 2</b> — một nút xác nhận đã lưu:</p>
+          <table class="t"><tr><th>đã lưu mục 12</th><th>tổng</th><th>trạng thái</th></tr>
+          <tr><td>thủ lĩnh + 1 nút</td><td>2/5</td><td>chưa cam kết — có thể bị ghi đè nếu thủ lĩnh hỏng</td></tr></table>
+          <p class="note">2 nhỏ hơn đa số 3: ba nút chưa có mục 12 vẫn đủ đa số để bầu một thủ lĩnh mới không có nó.</p>
+        focus: [1, "2.2", 3]
+        say: "Bước hai, một nút xác nhận đã lưu. Khi mới có thủ lĩnh và 1 nút lưu, tức 2 trên 5, mục đó chưa cam kết và có thể bị ghi đè nếu thủ lĩnh hỏng. Lý do là 2 nhỏ hơn đa số 3, nên ba nút chưa có mục 12 vẫn đủ đa số để bầu một thủ lĩnh mới không có nó."
+      - clear: true
+        show: |
+          <p><b>Bước 3</b> — thêm một nút xác nhận:</p>
+          <table class="t"><tr><th>đã lưu mục 12</th><th>tổng</th><th>trạng thái</th></tr>
+          <tr><td>thủ lĩnh + 2 nút</td><td>$\hl{3/5}$</td><td><b>cam kết</b>: áp dụng <code>x = 7</code>, rồi báo khách “thành công”</td></tr></table>
+        focus: [1, "2.2", "2.2"]
+        say: "Bước ba, thêm một nút nữa xác nhận. Khi thủ lĩnh và 2 nút đã lưu, tức 3 trên 5, là đa số, mục đó được cam kết. Thủ lĩnh áp dụng x bằng 7 vào dữ liệu, rồi mới báo khách thành công."
+      - show: |
+          <p><b>Bước 4</b> — vì sao đã cam kết thì không mất:</p>
+          <table class="t"><tr><th>nhóm</th><th>số nút</th></tr>
+          <tr><td>có mục 12</td><td>3</td></tr><tr><td>không có</td><td>2</td></tr>
+          <tr><td>thủ lĩnh mới cần</td><td>3 phiếu &gt; 2 nút không có mục 12</td></tr></table>
+          <div class="box key">Đa số bầu thủ lĩnh mới chắc chắn chứa một nút có mục 12; luật bầu chỉ cho nút có nhật ký đủ mới thắng.</div>
+        focus: [1, "2.2", "2.4", 3, 3]
+        say: "Bước bốn, vì sao đã cam kết thì không mất. Có 3 nút giữ mục 12 và chỉ 2 nút không có. Thủ lĩnh mới cần 3 phiếu, nhiều hơn số nút không có mục 12. Đã cam kết thì không mất, vì thủ lĩnh mới phải được đa số bầu, mà đa số đó chắc chắn chứa một nút có mục 12. Luật bầu chỉ cho nút có nhật ký đủ mới thắng."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: liệt kê mọi nhóm 3 người bầu"
+    checks:
+      - "math.comb(5, 3) == 10 and sum(1 for v in __import__('itertools').combinations(range(5), 3) if not set(v) & {0, 1, 2}) == 0"
+      - "sum(1 for v in __import__('itertools').combinations(range(5), 3) if not set(v) & {0, 1}) == 1"
+    steps:
+      - show: |
+          <table class="t"><tr><th>mục 12 nằm ở</th><th>số nhóm 3 người bầu (trong 5 nút)</th><th>nhóm không ai có mục 12</th><th>kết luận</th></tr>
+          <tr><td>3 nút (đã cam kết)</td><td>10</td><td>0</td><td>không mất ✓</td></tr>
+          <tr><td>2 nút (chưa cam kết)</td><td>10</td><td><b class="red">1</b>: đúng ba nút còn lại</td><td>có thể mất ✓</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.3"]
+        say: "Kiểm bằng đường khác, ta liệt kê mọi nhóm 3 người bầu trong 5 nút, có tổ hợp chập 3 của 5, bằng 10 nhóm. Khi mục 12 nằm ở 3 nút, không nhóm nào trong 10 nhóm thiếu nó, nên không thể mất. Khi mục 12 chỉ nằm ở 2 nút, có đúng 1 nhóm không ai có nó, là ba nút còn lại. Nhóm đó có thể bầu một thủ lĩnh không có mục 12, đúng như Bước 2."
+
+  # ───────────────────────── 5. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc, 1 lỗi người đã đi làm"
+    checks:
+      - "[(n, alg.majority_tolerance(n)[0], n - 1, alg.majority_tolerance(n)[0] - 1, alg.majority_tolerance(n)[1]) for n in (3, 5, 7)] == [(3, 2, 2, 1, 1), (5, 3, 4, 2, 2), (7, 4, 6, 3, 3)]"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Dùng 2 nút, hoặc số nút chẵn <b class="red">(sai)</b>
+          <br><span class="note">2 nút: đa số là 2, một nút hỏng là đứng cả hệ. 4 nút chịu lỗi bằng 3 nút. Dùng số lẻ: 3, 5, 7.</span></div>
+        say: "Lỗi thứ nhất, dùng 2 nút hoặc số nút chẵn. Với 2 nút, đa số là 2, một nút hỏng là đứng cả hệ, còn 4 nút chịu lỗi như 3 nút. Hãy dùng số lẻ, 3, 5 hay 7."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Báo thành công trước khi đa số đã lưu <b class="red">(mất dữ liệu)</b>
+          <br><span class="note">Thủ lĩnh hỏng ngay sau đó, thủ lĩnh mới không có mục này — lệnh “đã thành công” biến mất.</span></div>
+        say: "Lỗi thứ hai, báo thành công trước khi đa số đã lưu. Nếu thủ lĩnh hỏng ngay sau đó, thủ lĩnh mới không có mục này, và lệnh đã báo thành công biến mất."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Tin rằng đồng thuận luôn kết thúc được <b class="red">(không bảo đảm)</b>
+          <br><span class="note">Fischer, Lynch, Paterson (1985): không thuật toán tất định nào bảo đảm đi tới đồng thuận khi mạng không giới hạn thời gian và có thể có một nút hỏng. Hệ thật dùng khoảng chờ ngẫu nhiên: an toàn luôn giữ, còn tiến triển thì gần như luôn có.</span></div>
+        say: "Lỗi thứ ba, tin rằng đồng thuận luôn kết thúc được. Một kết quả năm 1985 chứng minh rằng không thuật toán tất định nào bảo đảm đi tới đồng thuận, khi mạng không giới hạn thời gian và có thể có một nút hỏng. Hệ thống thật dùng khoảng chờ ngẫu nhiên, an toàn thì luôn giữ, còn tiến triển thì gần như luôn có."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Thêm nút vào nhóm đồng thuận để <b>ghi nhanh hơn</b> <b class="red">(ngược lại)</b></div>
+          <table class="t"><tr><th>số nút</th><th>đa số</th><th>thủ lĩnh gửi mỗi lần ghi</th><th>chờ xác nhận</th><th>chịu được hỏng</th></tr>
+          <tr><td>3</td><td>2</td><td>2</td><td>1</td><td>1</td></tr>
+          <tr><td>5</td><td>3</td><td>4</td><td>2</td><td>2</td></tr>
+          <tr><td>7</td><td>4</td><td>6</td><td>3</td><td>$\hl{3}$</td></tr></table>
+          <p class="note">Mọi lần ghi vẫn qua <b>một</b> thủ lĩnh. Thêm nút là mua thêm sức chịu lỗi, không mua tốc độ; muốn ghi nhiều hơn thì chia dữ liệu cho nhiều nhóm đồng thuận riêng.</p>
+        focus: [1, "2.2", "2.3", "2.4", 3, 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, thấy ghi chậm thì thêm nút vào nhóm đồng thuận. Với 3 nút, mỗi lần ghi thủ lĩnh gửi cho 2 nút và chờ 1 xác nhận. Với 5 nút, gửi cho 4 và chờ 2. Với 7 nút, gửi cho 6 và chờ 3, việc của thủ lĩnh còn nặng hơn. Mọi lần ghi vẫn phải đi qua một thủ lĩnh, nên thêm nút là mua thêm sức chịu lỗi, từ 1 lên 3 nút hỏng, chứ không mua tốc độ. Muốn ghi được nhiều hơn, người có kinh nghiệm chia dữ liệu cho nhiều nhóm đồng thuận riêng, mỗi nhóm có thủ lĩnh của mình."
+
+  # ───────────────────────── 6. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.majority_tolerance(7) == (4, 3) and 3 < 4"
+      - "7 // 2 == 3 and 3 + 1 == 4 and 7 - 4 == 3"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>7 nút: đa số là mấy? Chịu được mấy nút hỏng?</td></tr>
+          <tr><td>2</td><td>Nhiệm kỳ 5, một ứng viên được 3 phiếu (kể cả phiếu của chính nó) trong 7 nút. Nó có thành thủ lĩnh không?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, với 7 nút, đa số là mấy? Chịu được mấy nút hỏng? Câu hai, ở nhiệm kỳ 5, một ứng viên được 3 phiếu, kể cả phiếu của chính nó, trong 7 nút. Nó có thành thủ lĩnh không? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 1</th><th>tính</th><th>kết quả</th></tr>
+          <tr><td>phần nguyên của 7 chia 2</td><td>$\lfloor 7/2 \rfloor$</td><td>3</td></tr>
+          <tr><td>đa số</td><td>$3 + 1$</td><td>$\hl{4}$</td></tr>
+          <tr><td>chịu được hỏng</td><td>$7 - 4$</td><td>$\hl{3}$ nút</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Đáp án câu một, làm từng bước. 7 chia 2 được 3 dư 1, phần nguyên là 3. Cộng thêm 1, đa số là 4. Còn lại 7 trừ 4, nên chịu được 3 nút hỏng."
+      - show: |
+          <table class="t"><tr><th>câu 2</th><th>so sánh</th><th>kết quả</th></tr>
+          <tr><td>phiếu nhận được và đa số của 7</td><td>$3 \lt 4$</td><td><b>không</b> thành thủ lĩnh</td></tr>
+          <tr><td>sau đó</td><td>hết khoảng chờ ngẫu nhiên</td><td>một nút mở nhiệm kỳ 6, bầu lại</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Câu hai, so số phiếu với đa số. Ứng viên có 3 phiếu, nhỏ hơn đa số 4, nên không thành thủ lĩnh. Hết khoảng chờ ngẫu nhiên, một nút sẽ mở nhiệm kỳ 6 và bầu lại."
+
+  # ───────────────────────── 7. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">hai đa số luôn giao nhau</span><span class="a">→</span>
+          <span class="n">một phiếu mỗi nhiệm kỳ: tối đa một thủ lĩnh</span><span class="a">→</span>
+          <span class="n">đa số đã lưu: cam kết</span><span class="a">→</span>
+          <span class="n">số nút lẻ</span></div>
+        say: "Tổng kết lại, hai đa số luôn giao nhau, nên với một phiếu mỗi nhiệm kỳ thì có tối đa một thủ lĩnh. Mục nhật ký được cam kết khi đa số đã lưu, và nên dùng số nút lẻ."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> an toàn đến từ lập luận đếm (đa số giao nhau); tiến triển đến từ thời gian và ngẫu nhiên. Tách hai thứ đó ra khi thiết kế.</div>
+        say: "Điều cần mang theo, tính an toàn đến từ một lập luận đếm, hai đa số giao nhau, còn tiến triển đến từ thời gian và tính ngẫu nhiên. Hãy tách hai thứ đó ra khi thiết kế."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 6): chia dữ liệu ra nhiều máy — <b>phân mảnh</b> và <b>băm nhất quán</b>.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 6, ta học cách chia dữ liệu ra nhiều máy, với phân mảnh và băm nhất quán. Hẹn gặp bạn ở bài tiếp theo."

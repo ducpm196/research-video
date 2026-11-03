@@ -1,0 +1,201 @@
+id: L12
+course: SEC
+series: "SEC · An toàn thông tin"
+title: "Bài 12 — An toàn mạng: phân vùng, tường lửa, không tin mặc định"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/sec.yaml L12; audit/sec/verify_sec.py L12; NIST SP 800-207, Zero Trust Architecture (2020); NIST SP 800-41 Rev. 1, Guidelines on Firewalls and Firewall Policy (2009) (mặc định từ chối); NET bài 5 (cổng, địa chỉ)"
+assumes: [arith]
+# Quy ước: alg.firewall(luật, nguồn, đích, cổng) khớp LUẬT ĐẦU TIÊN, “*” khớp mọi thứ, không khớp luật nào → “chặn” (mặc định từ chối).
+#   Bộ luật ví dụ: [(“ứng dụng”, “csdl”, 5432, “cho”), (“*”, “web”, 443, “cho”)]. Cổng 5432: cơ sở dữ liệu; 443: web có mã hoá; 22: đăng nhập từ xa.
+objectives:
+  - "Thiết kế phân vùng mạng theo mức tin cậy"
+  - "Viết luật tường lửa mặc định từ chối"
+  - "Giải thích mô hình không tin mặc định"
+asr_reviewed:
+  - {sentence: "Dòng cuối là mặc định, còn lại thì chặn.", reason: "ASR chép “Dòng cuối là mặc định, còn lại thi chẳng.” (0.778): lệch âm/thanh thuần Việt: thì chặn/thi chẳng — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Luật hẹp đặt trước, và cuối cùng là mặc định chặn.", reason: "ASR chép “Luộc hẹp đặt trước và cuối cùng là mặt định chẳng.” (0.727): lệch âm/thanh thuần Việt: luật/luộc, mặc/mặt, chặn/chẳng — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Một máy in bị chiếm, cả công ty mất dữ liệu"
+    steps:
+      - show: |
+          <p>Mạng công ty “phẳng”: mọi máy nói chuyện được với mọi máy. Một máy in cũ có lỗ hổng bị chiếm từ xa. Từ máy in, kẻ xấu đi thẳng tới máy chủ cơ sở dữ liệu — vì không có gì ngăn giữa chúng.</p>
+          <div class="box key">Hôm nay: <b>phân vùng mạng</b>, <b>tường lửa mặc định từ chối</b>, và <b>không tin mặc định</b> — kể cả bên trong.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, mạng công ty là mạng phẳng, mọi máy nói chuyện được với mọi máy. Một máy in cũ có lỗ hổng bị chiếm từ xa. Từ máy in, kẻ xấu đi thẳng tới máy chủ cơ sở dữ liệu, vì không có gì ngăn giữa chúng. Hôm nay ta học phân vùng mạng, tường lửa mặc định từ chối, và không tin mặc định, kể cả bên trong."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: cổng, quyền tối thiểu, đọc luật từ trên xuống"
+    checks:
+      - "5 * 4 == 20"
+      - "alg.rbac_allowed(['kiem_toan'], 'hoa_don', 'đọc') and not alg.rbac_allowed(['kiem_toan'], 'hoa_don', 'tạo')"
+    steps:
+      - show: |
+          <table class="t"><tr><th>điều sẽ dùng</th><th>ví dụ</th></tr>
+          <tr><td>ở khoá Mạng máy tính: mỗi dịch vụ nghe ở một <b>cổng</b></td><td>443: web có mã hoá; 5432: cơ sở dữ liệu; 22: đăng nhập từ xa</td></tr>
+          <tr><td>quyền tối thiểu (bài 4): chỉ cấp đúng quyền cần</td><td>vai trò kiểm toán được <b>đọc</b> hoá đơn, không được <b>tạo</b></td></tr>
+          <tr><td>mạng phẳng: máy nào cũng gọi được máy nào</td><td>5 máy: mỗi máy gọi được 4 máy kia → $5 \times 4 = 20$ đường gọi</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Trước hết, ôn ba điều bài này sẽ dùng. Ở khoá Mạng máy tính, mỗi dịch vụ nghe ở một cổng, cổng 443 cho web có mã hoá, 5432 cho cơ sở dữ liệu, và 22 cho đăng nhập từ xa. Ở bài 4 của khoá này, quyền tối thiểu nghĩa là chỉ cấp đúng quyền cần, vai trò kiểm toán được đọc hoá đơn nhưng không được tạo. Mạng phẳng là máy nào cũng gọi được máy nào, 5 máy thì mỗi máy gọi được 4 máy kia, tức 20 đường gọi."
+      - show: |
+          <p>Đọc luật như một chuỗi câu “nếu… thì…”: xét từ trên xuống, gặp câu <b>đầu tiên</b> đúng thì làm theo và <b>dừng</b>; không câu nào đúng thì làm theo dòng cuối, “còn lại: chặn”.</p>
+        say: "Điều thứ tư là cách đọc luật. Đọc luật như một chuỗi câu nếu thì, xét từ trên xuống, gặp câu đầu tiên đúng thì làm theo và dừng lại. Nếu không câu nào đúng thì làm theo dòng cuối, còn lại thì chặn."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: vùng, luật, mặc định từ chối"
+    steps:
+      - show: |
+          <table class="t"><tr><th>khái niệm</th><th>nghĩa</th></tr>
+          <tr><td><b>vùng mạng</b></td><td>nhóm máy cùng mức tin cậy: vùng công khai (web), vùng ứng dụng, vùng dữ liệu, vùng văn phòng</td></tr>
+          <tr><td><b>luật tường lửa</b></td><td>(nguồn, đích, cổng, cho hay chặn); xét từ trên xuống, <b>luật khớp đầu tiên</b> quyết định</td></tr>
+          <tr><td><b>mặc định từ chối</b></td><td>không khớp luật nào → chặn; chỉ mở đúng những đường cần</td></tr>
+          <tr><td><b>không tin mặc định</b></td><td>mỗi lời gọi đều xác thực và kiểm quyền, dù đến từ trong mạng</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bảng giới thiệu bốn khái niệm. Vùng mạng là nhóm máy cùng mức tin cậy, như vùng công khai cho web, vùng ứng dụng, vùng dữ liệu và vùng văn phòng. Luật tường lửa gồm nguồn, đích, cổng, và cho hay chặn, xét từ trên xuống, luật khớp đầu tiên quyết định. Mặc định từ chối nghĩa là không khớp luật nào thì chặn, chỉ mở đúng những đường cần. Không tin mặc định nghĩa là mỗi lời gọi đều được xác thực và kiểm quyền, dù đến từ trong mạng."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Vùng, cửa, và đường bị chặn"
+    steps:
+      - show: |
+          <div><svg width="1500" height="500" viewBox="0 0 1500 500"><g fill="#1f2937"><rect x="40" y="150" width="220" height="100" rx="10" fill="#f3f4f6" stroke="#6b7280" stroke-width="3"/><text x="150" y="208" text-anchor="middle" font-size="26">Internet</text><rect x="360" y="60" width="300" height="100" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="510" y="104" text-anchor="middle" font-size="26">vùng công khai</text><text x="510" y="136" text-anchor="middle" font-size="22" fill="#4b5563">web :443</text><rect x="360" y="260" width="300" height="100" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="510" y="304" text-anchor="middle" font-size="26">vùng ứng dụng</text><text x="510" y="336" text-anchor="middle" font-size="22" fill="#4b5563">ứng dụng</text><rect x="800" y="260" width="300" height="100" rx="10" fill="#d1fae5" stroke="#059669" stroke-width="3"/><text x="950" y="304" text-anchor="middle" font-size="26">vùng dữ liệu</text><text x="950" y="336" text-anchor="middle" font-size="22" fill="#4b5563">csdl :5432</text><rect x="1200" y="60" width="260" height="100" rx="10" fill="#fef3c7" stroke="#eb6834" stroke-width="3"/><text x="1330" y="104" text-anchor="middle" font-size="26">vùng văn phòng</text><text x="1330" y="136" text-anchor="middle" font-size="22" fill="#4b5563">máy in</text><line x1="260" y1="180" x2="358" y2="120" stroke="#059669" stroke-width="4"/><polygon points="358,120 349,133 342,122" fill="#059669"/><text x="250" y="125" text-anchor="middle" font-size="22" fill="#059669">luật 2: cho</text><line x1="660" y1="310" x2="798" y2="310" stroke="#059669" stroke-width="4"/><polygon points="798,310 783,316 783,304" fill="#059669"/><text x="730" y="295" text-anchor="middle" font-size="22" fill="#059669">luật 1: cho</text><line x1="1250" y1="160" x2="1000" y2="258" stroke="#b91c1c" stroke-width="3" stroke-dasharray="10 7"/><text x="1250" y="220" text-anchor="middle" font-size="22" fill="#b91c1c">máy in → csdl: chặn</text><polyline points="150,250 150,400 950,400 950,362" fill="none" stroke="#b91c1c" stroke-width="3" stroke-dasharray="10 7"/><text x="550" y="435" text-anchor="middle" font-size="22" fill="#b91c1c">Internet → csdl: chặn (mặc định từ chối)</text><text x="750" y="480" text-anchor="middle" font-size="24" fill="#1f2937">chỉ 2 đường được mở; mọi đường khác bị chặn, kể cả từ bên trong</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình chia mạng thành bốn vùng theo mức tin cậy, vùng công khai có web, vùng ứng dụng, vùng dữ liệu, và vùng văn phòng có máy in. Mũi tên xanh là hai đường duy nhất được mở, mọi nguồn gọi web ở cổng 443, và ứng dụng gọi cơ sở dữ liệu ở cổng 5432. Đường đứt nét đỏ là các đường bị chặn, kể cả máy in trong văn phòng gọi tới cơ sở dữ liệu. Một máy bị chiếm vì vậy chỉ đi được tới những nơi luật cho phép."
+
+  - id: example
+    kind: example
+    title: "Hai luật, bốn yêu cầu"
+    checks:
+      - "[alg.firewall([('ứng dụng', 'csdl', 5432, 'cho'), ('*', 'web', 443, 'cho')], s, d, p) for s, d, p in (('ứng dụng', 'csdl', 5432), ('internet', 'csdl', 5432), ('internet', 'web', 443), ('internet', 'web', 22))] == ['cho', 'chặn', 'cho', 'chặn']"
+      - "alg.firewall([('ứng dụng', 'csdl', 5432, 'cho'), ('*', 'web', 443, 'cho')], 'máy in', 'csdl', 5432) == 'chặn'"
+    steps:
+      - show: |
+          <p><b>Bước 1 — đọc bộ luật</b>, xét từ trên xuống:</p>
+          <div class="code"><div>1. ứng dụng → csdl, cổng 5432 : cho</div><div>2. *        → web,  cổng 443  : cho</div><div>   (còn lại)                 : chặn</div></div>
+        focus: [1, 2, 2]
+        say: "Bước một, đọc bộ luật từ trên xuống. Luật một cho ứng dụng gọi cơ sở dữ liệu ở cổng 5432, luật hai cho mọi nguồn gọi web ở cổng 443. Dòng cuối là mặc định, còn lại thì chặn."
+      - show: |
+          <p><b>Bước 2 — hai yêu cầu tới csdl:</b></p>
+          <table class="t"><tr><th>yêu cầu</th><th>luật 1</th><th>luật 2</th><th>kết quả</th></tr>
+          <tr><td>ứng dụng → csdl :5432</td><td>khớp</td><td>(không xét)</td><td class="green">cho</td></tr>
+          <tr><td>Internet → csdl :5432</td><td>sai nguồn</td><td>sai đích</td><td class="red">chặn</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước hai, xét hai yêu cầu tới cơ sở dữ liệu. Ứng dụng gọi cơ sở dữ liệu khớp luật một, được cho qua, và luật hai không cần xét nữa. Từ ngoài mạng gọi cơ sở dữ liệu sai nguồn ở luật một, sai đích ở luật hai, nên không khớp luật nào và bị chặn."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — hai yêu cầu tới web:</b></p>
+          <table class="t"><tr><th>yêu cầu</th><th>luật 1</th><th>luật 2</th><th>kết quả</th></tr>
+          <tr><td>Internet → web :443</td><td>sai nguồn</td><td>khớp</td><td class="green">cho</td></tr>
+          <tr><td>Internet → web :22</td><td>sai nguồn</td><td>sai cổng</td><td class="red">chặn</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước ba, xét hai yêu cầu tới web. Từ ngoài mạng gọi web ở cổng 443 sai nguồn ở luật một nhưng khớp luật hai, nên được cho qua. Từ ngoài mạng gọi web ở cổng đăng nhập từ xa sai cổng ở luật hai, nên không khớp luật nào và bị chặn."
+      - show: |
+          <p><b>Bước 4 — máy in bị chiếm</b> gọi tới csdl:</p>
+          <table class="t"><tr><th>yêu cầu</th><th>luật 1</th><th>luật 2</th><th>kết quả</th></tr>
+          <tr><td>máy in → csdl :5432</td><td>sai nguồn</td><td>sai đích</td><td class="red"><b>chặn</b></td></tr></table>
+        focus: [1, "2.2", "2.2"]
+        say: "Bước bốn, máy in bị chiếm gọi tới cơ sở dữ liệu. Máy in sai nguồn ở luật một và sai đích ở luật hai, nên bị chặn. Trong mạng phẳng ở câu chuyện mở đầu, chính đường này đã để lộ dữ liệu."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác"
+    checks:
+      - "len([(s, d, p) for s in ('internet', 'văn phòng', 'máy in', 'ứng dụng') for d in ('web', 'csdl') for p in (22, 443, 5432)]) == 24 and sum(alg.firewall([('ứng dụng', 'csdl', 5432, 'cho'), ('*', 'web', 443, 'cho')], *r) == 'cho' for r in [(s, d, p) for s in ('internet', 'văn phòng', 'máy in', 'ứng dụng') for d in ('web', 'csdl') for p in (22, 443, 5432)]) == 5"
+      - "sum(any(a in ('*', r[0]) and b in ('*', r[1]) and c in ('*', r[2]) for a, b, c, _ in [('ứng dụng', 'csdl', 5432, 'cho'), ('*', 'web', 443, 'cho')]) for r in [(s, d, p) for s in ('internet', 'văn phòng', 'máy in', 'ứng dụng') for d in ('web', 'csdl') for p in (22, 443, 5432)]) == 5 == 4 + 1"
+    steps:
+      - show: |
+          <p>Liệt kê <b>mọi</b> yêu cầu: 4 nguồn (Internet, văn phòng, máy in, ứng dụng) × 2 đích (web, csdl) × 3 cổng (22, 443, 5432) $= 24$ ca.</p>
+          <table class="t"><tr><th>cách đếm</th><th>số ca được cho qua</th></tr>
+          <tr><td>máy chạy tường lửa trên cả 24 ca</td><td>5</td></tr>
+          <tr><td>đếm tay theo luật: luật 2 mở cho 4 nguồn, luật 1 mở cho 1 nguồn</td><td>$4 + 1 = \hl{5}$ ✓</td></tr>
+          <tr><td>còn lại</td><td>$24 - 5 = 19$ ca bị chặn, gồm mọi đường từ máy in tới csdl</td></tr></table>
+        focus: [1, 1, 2, "2.2", "2.3", "2.4"]
+        say: "Kiểm bằng đường khác, ta liệt kê mọi yêu cầu có thể. Có 4 nguồn, 2 đích và 3 cổng, nhân lại được 24 ca. Bảng so hai cách đếm. Cho máy chạy tường lửa trên cả 24 ca, có 5 ca được cho qua. Đếm tay theo luật, luật hai mở cho 4 nguồn, luật một mở cho 1 nguồn, cộng lại cũng bằng 5. Còn lại 19 ca bị chặn, trong đó có mọi đường từ máy in tới cơ sở dữ liệu."
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, từ người mới tới người đã đi làm"
+    checks:
+      - "alg.firewall([('*', '*', '*', 'cho'), ('internet', 'csdl', 5432, 'chặn')], 'internet', 'csdl', 5432) == 'cho'"
+      - "sum(alg.firewall([('*', 'csdl', '*', 'cho')] + [('ứng dụng', 'csdl', 5432, 'cho'), ('*', 'web', 443, 'cho')], *r) == 'cho' for r in [(s, d, p) for s in ('internet', 'văn phòng', 'máy in', 'ứng dụng') for d in ('web', 'csdl') for p in (22, 443, 5432)]) == 16 and 16 - 5 == 11 and alg.firewall([('*', 'csdl', '*', 'cho')] + [('ứng dụng', 'csdl', 5432, 'cho'), ('*', 'web', 443, 'cho')], 'máy in', 'csdl', 5432) == 'cho'"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Tin mọi thứ bên trong mạng nội bộ <b class="red">(một máy bị chiếm là đủ)</b>
+          <br><span class="note">Lời gọi giữa các dịch vụ bên trong vẫn phải xác thực, kiểm quyền và mã hoá. Đó là ý chính của không tin mặc định.</span></div>
+        say: "Lỗi thứ nhất, tin mọi thứ bên trong mạng nội bộ, trong khi chỉ một máy bị chiếm là đủ. Lời gọi giữa các dịch vụ bên trong vẫn phải xác thực, kiểm quyền và mã hoá, đó là ý chính của không tin mặc định."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Đặt luật “cho tất cả” lên đầu <b class="red">(luật chặn phía sau vô dụng)</b>
+          <br><span class="note">Luật khớp đầu tiên quyết định: luật 1 “cho mọi thứ” thì luật 2 “chặn Internet → csdl” không bao giờ được xét. Luật hẹp đặt trước, và cuối cùng là mặc định chặn.</span></div>
+        say: "Lỗi thứ hai, đặt luật cho tất cả lên đầu. Luật khớp đầu tiên quyết định, nên nếu luật một cho mọi thứ thì luật hai chặn ngoài mạng gọi cơ sở dữ liệu không bao giờ được xét. Luật hẹp đặt trước, và cuối cùng là mặc định chặn."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Mở cổng tạm rồi quên đóng <b class="red">(cửa sau vĩnh viễn)</b>
+          <br><span class="note">Mọi luật có người chịu trách nhiệm, lý do và ngày hết hạn; định kỳ rà luật không còn dùng. Luật tường lửa là mã: lưu trong kho, được xem xét như mã.</span></div>
+        say: "Lỗi thứ ba, mở cổng tạm rồi quên đóng, thành cửa sau vĩnh viễn. Mọi luật cần có người chịu trách nhiệm, lý do và ngày hết hạn, và định kỳ rà các luật không còn dùng. Luật tường lửa là mã, được lưu trong kho và xem xét như mã."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4.</b> Sửa bộ luật mà chỉ đọc lại bằng mắt <b class="red">(không thấy đường mới mở)</b>
+          <br><span class="note">Người làm nghề giữ một bảng ca kiểm (24 ca như phần tự kiểm, kèm kết quả mong đợi) và cho máy chạy lại sau <b>mỗi</b> thay đổi luật; ca nào đổi kết quả thì phải có lý do được duyệt.</span></div>
+          <table class="t"><tr><th>bộ luật</th><th>số ca được cho qua trên 24</th></tr>
+          <tr><td>hai luật ban đầu</td><td>5</td></tr>
+          <tr><td>thêm lên đầu “* → csdl, mọi cổng: cho” để gỡ lỗi</td><td class="red">16: $\hl{11}$ đường mới mở, có cả máy in → csdl</td></tr></table>
+        focus: [1, 1, 2, "2.2", "2.3", "2.3"]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, là sửa bộ luật mà chỉ đọc lại bằng mắt. Người làm nghề giữ một bảng ca kiểm, như 24 ca ở phần tự kiểm kèm kết quả mong đợi, và cho máy chạy lại sau mỗi thay đổi luật. Bảng cho thấy hai luật ban đầu cho qua 5 ca. Thêm lên đầu một luật cho mọi nguồn gọi cơ sở dữ liệu ở mọi cổng để gỡ lỗi, số ca cho qua thành 16. Như vậy có 11 đường mới mở, trong đó có cả máy in gọi tới cơ sở dữ liệu. Bảng ca kiểm báo ngay điều này, còn mắt người đọc một dòng luật thì dễ bỏ qua."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.firewall([('ứng dụng', 'csdl', 5432, 'cho'), ('*', 'web', 443, 'cho')], 'văn phòng', 'web', 443) == 'cho' and alg.firewall([('ứng dụng', 'csdl', 5432, 'cho'), ('*', 'web', 443, 'cho')], 'ứng dụng', 'csdl', 22) == 'chặn'"
+      - "alg.firewall([('trung chuyển', 'csdl', 22, 'cho')] + [('ứng dụng', 'csdl', 5432, 'cho'), ('*', 'web', 443, 'cho')], 'trung chuyển', 'csdl', 22) == 'cho' and alg.firewall([('trung chuyển', 'csdl', 22, 'cho')] + [('ứng dụng', 'csdl', 5432, 'cho'), ('*', 'web', 443, 'cho')], 'văn phòng', 'csdl', 22) == 'chặn'"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Với hai luật ở ví dụ: máy văn phòng gọi web cổng 443? Ứng dụng gọi csdl cổng 22?</td></tr>
+          <tr><td>2</td><td>Quản trị viên cần đăng nhập từ xa vào csdl để bảo trì. Thiết kế đúng là gì?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, với hai luật ở ví dụ, máy văn phòng gọi web ở cổng 443 thì sao? Ứng dụng gọi cơ sở dữ liệu ở cổng đăng nhập từ xa thì sao? Câu hai, quản trị viên cần đăng nhập từ xa vào cơ sở dữ liệu để bảo trì, thiết kế đúng là gì? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>yêu cầu</th><th>luật 1</th><th>luật 2</th><th>kết quả</th></tr>
+          <tr><td>văn phòng → web :443</td><td>sai nguồn</td><td>khớp</td><td class="green">cho</td></tr>
+          <tr><td>ứng dụng → csdl :22</td><td>sai cổng (chỉ mở 5432)</td><td>sai đích</td><td class="red">chặn</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Đáp án câu một, xét từng luật như ở ví dụ. Văn phòng gọi web ở cổng 443 sai nguồn ở luật một nhưng khớp luật hai, nên được cho qua. Ứng dụng gọi cơ sở dữ liệu ở cổng đăng nhập từ xa sai cổng ở luật một, vì luật một chỉ mở cổng 5432, và sai đích ở luật hai, nên bị chặn."
+      - show: |
+          <p>② Không mở cổng 22 từ mọi nơi. Đi qua một <b>máy trung chuyển</b> riêng có xác thực nhiều yếu tố, và ghi nhật ký mọi phiên.</p>
+          <div class="code"><div>0. trung chuyển → csdl, cổng 22 : cho</div><div>1. ứng dụng → csdl, cổng 5432 : cho</div><div>2. *        → web,  cổng 443  : cho</div><div>   (còn lại)                 : chặn</div></div>
+          <p>Kiểm lại: trung chuyển → csdl :22 <b class="green">cho</b>; văn phòng → csdl :22 vẫn <b class="red">chặn</b>.</p>
+        focus: [1, 1, 2, 3]
+        say: "Câu hai, không mở cổng đăng nhập từ xa cho mọi nơi. Thay vào đó, đi qua một máy trung chuyển riêng có xác thực nhiều yếu tố, và ghi nhật ký mọi phiên. Bộ luật chỉ thêm đúng một dòng, cho máy trung chuyển gọi cơ sở dữ liệu ở cổng đó. Kiểm lại, máy trung chuyển được cho qua, còn máy văn phòng gọi cùng cổng đó vẫn bị chặn."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">chia vùng theo mức tin cậy</span><span class="a">→</span>
+          <span class="n">luật hẹp trước, mặc định chặn</span><span class="a">→</span>
+          <span class="n">luật có hạn, có người chịu trách nhiệm</span><span class="a">→</span>
+          <span class="n">bên trong vẫn xác thực từng lời gọi</span></div>
+        say: "Tổng kết lại, chia mạng thành vùng theo mức tin cậy, đặt luật hẹp trước và mặc định chặn. Mỗi luật có hạn và có người chịu trách nhiệm, và bên trong mạng vẫn xác thực từng lời gọi."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> câu hỏi không phải “có bị chiếm không”, mà là “khi một máy bị chiếm, kẻ xấu đi được tới đâu?”.</div>
+        say: "Điều cần mang theo, câu hỏi không phải là có bị chiếm không, mà là khi một máy bị chiếm thì kẻ xấu đi được tới đâu."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 13): <b>ghi nhật ký an ninh</b>, phát hiện xâm nhập và tỉ lệ nền.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 13, ta học ghi nhật ký an ninh, phát hiện xâm nhập, và tỉ lệ nền. Hẹn gặp bạn ở bài tiếp theo."

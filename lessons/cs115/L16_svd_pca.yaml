@@ -1,0 +1,302 @@
+id: L16
+series: "CS115 · Toán cho Khoa học Máy tính"
+title: "Bài 16 — SVD & PCA: nén dữ liệu bằng cái bóng dài nhất"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "tex#L144–L146 (PCA và SVD), L200–L214 (A = UΣVᵀ, các bước PCA với S = XᵀX/N); LA24#Dimension-Reduction; AUDIT A6, A15"
+assumes: [cdot, sub, vec, mat, transpose, dim, norm, rank, lambda, mu, var, Sigma_mat, sigma, approx, sqrt, implies]
+# Quy ước ký hiệu (AUDIT A6): ma trận dữ liệu X kích thước N × D (mỗi HÀNG là một mẫu, N mẫu, D đặc trưng); dữ liệu đã trừ trung bình
+#   viết \mathbf{X}_c; ma trận hiệp phương sai viết \mathbf{S} = \frac{1}{N}\mathbf{X}_c^T\mathbf{X}_c (như tài liệu dòng 212 — KHÔNG dùng
+#   Σ cho hiệp phương sai trong bài này, vì Σ ở đây là ma trận giá trị kỳ dị; bài 15 dùng Σ cho hiệp phương sai — nói ở notation_note);
+#   giá trị kỳ dị σ₁ ≥ σ₂ (AUDIT A15: tài liệu dòng 206 viết “giá trị đơn lẻ”); trị riêng của S là λ, và λᵢ = σᵢ²/N; chia N (như bài 13, 15).
+# Lời đọc: nói tên Việt “phân rã giá trị kỳ dị”, “phân tích thành phần chính”; chữ tắt SVD/PCA chỉ hiện trên màn hình.
+# Nối bài trước (nói lại khi dùng, luật 17): bài 1 (phép chiếu = cái bóng, tích vô hướng với vector độ dài 1), bài 3 (hạng = số hàng
+#   khác 0 sau khi khử), bài 4 (bộ vector trực chuẩn), bài 5 (vector riêng, trị riêng), bài 15 (ma trận hiệp phương sai, elip,
+#   phương sai dọc trục = trị riêng).
+# Dữ liệu: dùng lại lớp 4 bạn của bài 15 — (8; 8), (4; 4), (7; 5), (5; 7), trung bình (6; 6), hiệp phương sai [[2,5; 1,5],[1,5; 2,5]].
+objectives:
+  - "Hiểu PCA là tìm hướng có “cái bóng” trải rộng nhất"
+  - "Chứng minh hướng đó là vector riêng có trị riêng lớn nhất của ma trận hiệp phương sai"
+  - "Đọc được A = UΣVᵀ và quan hệ λ = σ²/N giữa SVD và PCA"
+  - "Nén dữ liệu từ D xuống K chiều, tính được tỉ lệ phương sai giữ lại và số lượng số cần lưu"
+  - "Nhớ bước bắt buộc: trừ trung bình trước khi làm PCA"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Lưu 1000 ảnh, mỗi ảnh 784 con số"
+    checks:
+      - "1000*784 == 784000 and 50*(1000 + 784) == 89200 and round(89200/784000*100, 1) == 11.4"
+    steps:
+      - show: |
+          <p class="big">1000 ảnh chữ số viết tay, mỗi ảnh $28\cdot 28 = 784$ điểm ảnh → <b>784 000</b> con số.</p>
+          <div class="box key">Giữ lại 50 “hướng quan trọng nhất”: chỉ cần khoảng <b>89 200</b> con số (11,4%) mà ảnh vẫn nhận ra được.</div>
+        focus: [1, 2]
+        say: "Chào bạn, hãy hình dung 1000 ảnh chữ số viết tay, mỗi ảnh 784 điểm ảnh, tổng cộng 784 nghìn con số. Nếu chỉ giữ lại 50 hướng quan trọng nhất, ta cần khoảng 89 nghìn 200 con số, tức 11 phẩy 4 phần trăm, mà ảnh vẫn nhận ra được."
+      - show: |
+          <p class="note">Hôm nay: tìm “hướng quan trọng nhất” bằng cái bóng dài nhất — phân tích thành phần chính (PCA), và công cụ tính nó — phân rã giá trị kỳ dị (SVD).</p>
+        say: "Hôm nay ta học cách tìm các hướng quan trọng nhất đó bằng ý tưởng cái bóng dài nhất, gọi là phân tích thành phần chính. Công cụ để tính nó gọi là phân rã giá trị kỳ dị."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn nền: cái bóng, vector riêng và lớp học của bài 15"
+    checks:
+      - "(lambda u: (Matrix([[8 - 6, 8 - 6]])*u)[0] == 2*sp.sqrt(2) and (u.T*u)[0] == 1)(Matrix([1, 1])/sp.sqrt(2))"
+    steps:
+      - show: |
+          <p>Bài 1: với $\mathbf{u}$ dài 1 ($\lVert\mathbf{u}\rVert = 1$), tích vô hướng $\mathbf{u}^T\mathbf{d}$ là độ dài <b>cái bóng</b> của $\mathbf{d}$ trên đường thẳng theo $\mathbf{u}$.</p>
+          <p>Bài 15: lớp 4 bạn (8; 8), (4; 4), (7; 5), (5; 7), trung bình (6; 6), ma trận hiệp phương sai $\begin{bmatrix} 2{,}5 & 1{,}5 \\ 1{,}5 & 2{,}5 \end{bmatrix}$, vector riêng $(1; 1)$ với $\lambda = 4$ và $(1; -1)$ với $\lambda = 1$.</p>
+        focus: [1, 2]
+        say: "Nhắc lại bài 1, với vector u có độ dài 1, tích vô hướng của u với vector d là độ dài cái bóng của d trên đường thẳng theo u. Và ở bài 15, lớp 4 bạn có trung bình 6 và 6, với vector riêng 1, 1 ứng với trị riêng 4."
+
+  # ───────────────────────── 3. CÁI BÓNG DÀI NHẤT ─────────────────────────
+  - id: shadow
+    kind: intuition
+    title: "Chiếu lên hướng nào thì bóng trải rộng nhất?"
+    checks:
+      - "(lambda D, f: [round(f(D, t), 3) for t in (0, 45, 90, 135)] == [2.5, 4.0, 2.5, 1.0])([(2, 2), (-2, -2), (1, -1), (-1, 1)], lambda D, t: sum((x*math.cos(math.radians(t)) + y*math.sin(math.radians(t)))**2 for x, y in D)/4)"
+      # hình: bóng trên (1; 1)/căn 2 là ±2,83 và 0, 0; trên (1; -1)/căn 2 là 0, 0 và ±1,41 — dải bóng dài gấp đôi
+      - "(lambda D: (sorted(round((x + y)/math.sqrt(2), 2) for x, y in D), sorted(round((x - y)/math.sqrt(2), 2) for x, y in D)) == ([-2.83, 0.0, 0.0, 2.83], [-1.41, 0.0, 0.0, 1.41]))([(2, 2), (-2, -2), (1, -1), (-1, 1)])"
+      - "(2*2*math.sqrt(2)) / (2*math.sqrt(2)) == 2"
+    steps:
+      - show: |
+          <p>Trừ trung bình: các vector lệch $(2; 2)$, $(-2; -2)$, $(1; -1)$, $(-1; 1)$. Chiếu lên đường thẳng nghiêng góc $\theta$, đo <b>phương sai của các bóng</b>:</p>
+          <table class="t"><tr><th>góc nghiêng</th><th>0°</th><th>45°</th><th>90°</th><th>135°</th></tr>
+          <tr><td>phương sai của bóng</td><td>2,5</td><td>$\hlg{4}$</td><td>2,5</td><td>1</td></tr></table>
+          <div class="box key">Hướng 45° — tức vector $(1; 1)$ — giữ được độ trải lớn nhất. Đó là <b>thành phần chính thứ nhất</b>.</div>
+        introduces: [theta]
+        focus: [1, 1, 2, 3]
+        say: "Trừ trung bình, ta có bốn vector lệch. Chiếu chúng lên một đường thẳng nghiêng góc thê ta, rồi đo phương sai của các cái bóng. Nằm ngang được 2 phẩy 5, nghiêng 45 độ được 4, lớn nhất. Hướng đó gọi là thành phần chính thứ nhất."
+      - clear: true
+        show: |
+          <div><svg width="1500" height="530" viewBox="0 0 1500 530"><line x1="210" y1="230" x2="590" y2="230" stroke="#d1d5db" stroke-width="2"/><line x1="400" y1="40" x2="400" y2="420" stroke="#d1d5db" stroke-width="2"/><line x1="220" y1="410" x2="580" y2="50" stroke="#059669" stroke-width="4"/><circle cx="510" cy="120" r="10" fill="#2563eb"/><text x="448" y="108" font-size="24" fill="#2563eb">An</text><circle cx="290" cy="340" r="10" fill="#2563eb"/><text x="306" y="376" font-size="24" fill="#2563eb">Cường</text><line x1="455" y1="285" x2="400.0" y2="230.0" stroke="#6b7280" stroke-width="2" stroke-dasharray="6 6"/><circle cx="455" cy="285" r="10" fill="#2563eb"/><text x="469" y="315" font-size="24" fill="#2563eb">Bình</text><line x1="345" y1="175" x2="400.0" y2="230.0" stroke="#6b7280" stroke-width="2" stroke-dasharray="6 6"/><circle cx="345" cy="175" r="10" fill="#2563eb"/><text x="259" y="167" font-size="24" fill="#2563eb">Dũng</text><line x1="290.0" y1="340.0" x2="510.0" y2="120.0" stroke="#059669" stroke-width="12" stroke-opacity="0.45"/><circle cx="510.0" cy="120.0" r="7" fill="#059669"/><circle cx="290.0" cy="340.0" r="7" fill="#059669"/><circle cx="400.0" cy="230.0" r="7" fill="#059669"/><circle cx="400.0" cy="230.0" r="7" fill="#059669"/><text x="400" y="480" font-size="26" text-anchor="middle" fill="#059669" font-weight="700">hướng 45°: bóng trải rộng, phương sai 4</text><line x1="910" y1="230" x2="1290" y2="230" stroke="#d1d5db" stroke-width="2"/><line x1="1100" y1="40" x2="1100" y2="420" stroke="#d1d5db" stroke-width="2"/><line x1="920" y1="50" x2="1280" y2="410" stroke="#ea580c" stroke-width="4"/><line x1="1210" y1="120" x2="1100.0" y2="230.0" stroke="#6b7280" stroke-width="2" stroke-dasharray="6 6"/><circle cx="1210" cy="120" r="10" fill="#2563eb"/><text x="1224" y="108" font-size="24" fill="#2563eb">An</text><line x1="990" y1="340" x2="1100.0" y2="230.0" stroke="#6b7280" stroke-width="2" stroke-dasharray="6 6"/><circle cx="990" cy="340" r="10" fill="#2563eb"/><text x="910" y="370" font-size="24" fill="#2563eb">Cường</text><circle cx="1155" cy="285" r="10" fill="#2563eb"/><text x="1071" y="321" font-size="24" fill="#2563eb">Bình</text><circle cx="1045" cy="175" r="10" fill="#2563eb"/><text x="1059" y="161" font-size="24" fill="#2563eb">Dũng</text><line x1="1045.0" y1="175.0" x2="1155.0" y2="285.0" stroke="#ea580c" stroke-width="12" stroke-opacity="0.45"/><circle cx="1100.0" cy="230.0" r="7" fill="#ea580c"/><circle cx="1100.0" cy="230.0" r="7" fill="#ea580c"/><circle cx="1155.0" cy="285.0" r="7" fill="#ea580c"/><circle cx="1045.0" cy="175.0" r="7" fill="#ea580c"/><text x="1100" y="480" font-size="26" text-anchor="middle" fill="#ea580c" font-weight="700">hướng 135°: bóng hẹp, phương sai 1</text></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình này đặt trung bình 6 và 6 ở giữa, rồi thả bóng của bốn bạn xuống hai đường thẳng. Bên trái, đường nghiêng 45 độ, An và Cường nằm sẵn trên đường, còn Bình và Dũng rơi xuống đúng tâm, nên các bóng trải dài từ âm 2 phẩy 83 đến 2 phẩy 83. Bên phải, đường nghiêng 135 độ, chỉ Bình và Dũng nằm trên đường, các bóng chỉ trải từ âm 1 phẩy 41 đến 1 phẩy 41. Dải màu đậm cho thấy bóng bên trái dài gấp đôi, nên giữ bóng bên trái thì mất ít thông tin hơn."
+      - show: |
+          <p class="note">Bóng càng trải rộng, càng ít thông tin bị mất khi chỉ giữ bóng. Hướng 135° (bóng hẹp nhất, phương sai 1) là thành phần chính thứ hai, vuông góc với thành phần thứ nhất.</p>
+        say: "Bóng càng trải rộng thì càng ít thông tin bị mất khi ta chỉ giữ lại cái bóng. Hướng 135 độ có bóng hẹp nhất, và nó vuông góc với hướng thứ nhất, gọi là thành phần chính thứ hai."
+
+  # ───────────────────────── 4. VÌ SAO LÀ VECTOR RIÊNG ─────────────────────────
+  - id: proof
+    kind: formula
+    title: "Vì sao hướng tốt nhất là vector riêng lớn nhất"
+    checks:
+      - "(lambda a, b: sp.expand(((a*Matrix([1, 1])/sp.sqrt(2) + b*Matrix([1, -1])/sp.sqrt(2)).T*Matrix([[Rational(5, 2), Rational(3, 2)], [Rational(3, 2), Rational(5, 2)]])*(a*Matrix([1, 1])/sp.sqrt(2) + b*Matrix([1, -1])/sp.sqrt(2)))[0] - 4*a**2 - b**2) == 0)(*sp.symbols('a b'))"
+      - "(lambda S: max(S.eigenvals().keys()) == 4)(Matrix([[Rational(5, 2), Rational(3, 2)], [Rational(3, 2), Rational(5, 2)]]))"
+    steps:
+      - show: |
+          <p>Phương sai của bóng trên $\mathbf{u}$ là $\ \mathbf{u}^T\mathbf{S}\mathbf{u}$ ($\mathbf{S}$ = ma trận hiệp phương sai). Viết $\mathbf{u}$ theo hai vector riêng <b>trực chuẩn</b> (bài 4): $\ \mathbf{u} = a\cdot\mathbf{v}_1 + b\cdot\mathbf{v}_2$, $\ a^2 + b^2 = 1$.</p>
+          <div class="box key">$$\mathbf{u}^T\mathbf{S}\mathbf{u} = 4a^2 + 1\cdot b^2 \le 4\cdot(a^2 + b^2) = 4$$ — lớn nhất khi $a = 1$, tức $\mathbf{u} = \mathbf{v}_1$</div>
+        focus: [0, "1.2", ["1.6", "1.7"], "2.1"]
+        say: "Vì sao lại là vector riêng? Phương sai của bóng trên u bằng u chuyển vị nhân S nhân u. Theo bài 4, viết u theo hai vector riêng trực chuẩn, với a bình phương cộng b bình phương bằng 1. Thay vào, phương sai bằng 4 a bình phương cộng b bình phương, không vượt quá 4."
+      - show: |
+          <p class="note">Tổng quát: hướng có bóng trải rộng nhất là vector riêng ứng với trị riêng <b>lớn nhất</b> của $\mathbf{S}$, và phương sai giữ được đúng bằng trị riêng đó.</p>
+        say: "Nên phương sai lớn nhất khi a bằng 1, tức u trùng vector riêng thứ nhất. Tổng quát, hướng có bóng rộng nhất là vector riêng ứng với trị riêng lớn nhất, và phương sai giữ được đúng bằng trị riêng đó."
+
+  # ───────────────────────── 5. KÝ HIỆU SVD ─────────────────────────
+  - id: sym_svd
+    kind: symbol
+    title: "Giải mã: A = U Σ Vᵀ — phân rã giá trị kỳ dị"
+    checks:
+      - "(lambda Xc, U, V: U*sp.diag(4, 2)*V.T == Xc and U.T*U == sp.eye(2) and V.T*V == sp.eye(2))(Matrix([[2, 2], [-2, -2], [1, -1], [-1, 1]]), Matrix([[1, 0], [-1, 0], [0, 1], [0, -1]])/sp.sqrt(2), Matrix([[1, 1], [1, -1]])/sp.sqrt(2))"
+      - "sorted(sp.sqrt(v) for v in (Matrix([[2, 2], [-2, -2], [1, -1], [-1, 1]]).T*Matrix([[2, 2], [-2, -2], [1, -1], [-1, 1]])).eigenvals().keys()) == [2, 4]"
+    steps:
+      - show: |
+          <div class="box key">Mọi ma trận $\mathbf{A}$ viết được thành $\ \mathbf{A} = \mathbf{U}\mathbf{\Sigma}\mathbf{V}^T$: &nbsp; $\mathbf{U}$, $\mathbf{V}$ có các cột trực chuẩn (xoay), &nbsp; $\mathbf{\Sigma}$ đường chéo chứa <b>giá trị kỳ dị</b> $\sigma_1 \ge \sigma_2 \ge \dots \ge 0$ (kéo giãn).</div>
+          <p>Cột của $\mathbf{V}$ là vector riêng của $\mathbf{A}^T\mathbf{A}$; &nbsp; $\sigma_i^2$ là trị riêng của $\mathbf{A}^T\mathbf{A}$.</p>
+        introduces: [dots]
+        focus: ["1.2", 1, "1.7"]
+        say: "Ký hiệu mới, A bằng U nhân xích ma hoa nhân V chuyển vị, đọc là phân rã giá trị kỳ dị. Mọi ma trận đều tách được thành ba phần, xoay, kéo giãn, rồi xoay. Ma trận ở giữa có đường chéo chứa các giá trị kỳ dị, xếp từ lớn đến nhỏ, không âm."
+      - show: |
+          <p>Lớp học, $\mathbf{X}_c$ (4 hàng là 4 vector lệch, kích thước $\sz{4}{2}$):</p>
+          <p>$$\begin{bmatrix} 2 & 2 \\ -2 & -2 \\ 1 & -1 \\ -1 & 1 \end{bmatrix} = \underbrace{\frac{1}{\sqrt{2}}\begin{bmatrix} 1 & 0 \\ -1 & 0 \\ 0 & 1 \\ 0 & -1 \end{bmatrix}}_{\mathbf{U}}\ \underbrace{\begin{bmatrix} 4 & 0 \\ 0 & 2 \end{bmatrix}}_{\mathbf{\Sigma}}\ \underbrace{\frac{1}{\sqrt{2}}\begin{bmatrix} 1 & 1 \\ 1 & -1 \end{bmatrix}}_{\mathbf{V}^T}$$</p>
+        focus: [2, 2]
+        say: "Với dữ liệu lớp học đã trừ trung bình, máy tách được như trên màn hình. Hai giá trị kỳ dị là 4 và 2, và hai cột của V chính là hai hướng 1, 1 và 1, âm 1 mà ta vừa tìm được bằng cái bóng."
+      - show: |
+          <p class="note">Ở bài 15, $\mathbf{\Sigma}$ in đậm là ma trận hiệp phương sai. Trong bài này $\mathbf{\Sigma}$ là ma trận giá trị kỳ dị; hiệp phương sai viết $\mathbf{S}$. Có sách gọi $\sigma_i$ là “giá trị đơn lẻ” — thuật ngữ thông dụng là <b>giá trị kỳ dị</b> (singular value).</p>
+        notation_note: true
+        say: "Cẩn thận về ký hiệu. Ở bài 15, xích ma hoa in đậm là ma trận hiệp phương sai, còn trong bài này nó là ma trận giá trị kỳ dị, và hiệp phương sai được viết bằng chữ S. Có sách gọi các số này là giá trị đơn lẻ, còn tên thông dụng là giá trị kỳ dị."
+
+  # ───────────────────────── 6. NỐI SVD VỚI PCA ─────────────────────────
+  - id: link
+    kind: formula
+    title: "PCA chính là SVD của dữ liệu đã trừ trung bình"
+    checks:
+      - "Matrix([[2, 2], [-2, -2], [1, -1], [-1, 1]]).T*Matrix([[2, 2], [-2, -2], [1, -1], [-1, 1]])/4 == Matrix([[Rational(5, 2), Rational(3, 2)], [Rational(3, 2), Rational(5, 2)]])"
+      - "Rational(4**2, 4) == 4 and Rational(2**2, 4) == 1"
+    steps:
+      - show: |
+          <p>$\mathbf{S} = \frac{1}{N}\mathbf{X}_c^T\mathbf{X}_c$ (bài 15). Thay $\mathbf{X}_c = \mathbf{U}\mathbf{\Sigma}\mathbf{V}^T$, vì $\mathbf{U}^T\mathbf{U} = \mathbf{I}$:</p>
+          <div class="box key">$$\mathbf{S} = \frac{1}{N}\mathbf{V}\mathbf{\Sigma}^2\mathbf{V}^T$$ $\implies$ trục chính = cột của $\mathbf{V}$, &nbsp; $\lambda_i = \dfrac{\sigma_i^2}{N}$</div>
+        introduces: [identity]
+        focus: ["1.1", 2]
+        say: "Ma trận hiệp phương sai bằng một phần N nhân X c chuyển vị nhân X c, như cách tính ở bài 15. Thay phân rã vào, vì U chuyển vị nhân U bằng ma trận đơn vị, ta được trục chính là cột của V, và trị riêng bằng giá trị kỳ dị bình phương chia N."
+      - show: |
+          <p><b>Làm thử ngay</b>: $$\lambda_1 = \frac{4^2}{4} = 4, \qquad \lambda_2 = \frac{2^2}{4} = 1$$ — khớp trị riêng ở bài 15 $\checkmark$</p>
+          <p class="note">Máy tính thường dùng SVD trực tiếp trên $\mathbf{X}_c$ (chính xác hơn so với lập $\mathbf{S}$ rồi tìm trị riêng). Tóm gọn: “PCA là SVD trên dữ liệu đã trừ trung bình”.</p>
+        focus: [1, 2]
+        say: "Làm thử ngay, 4 bình phương chia 4 bằng 4, và 2 bình phương chia 4 bằng 1, khớp với trị riêng ở bài 15. Đó là lý do người ta nói phân tích thành phần chính chính là phân rã giá trị kỳ dị trên dữ liệu đã trừ trung bình."
+
+  # ───────────────────────── 7. NÉN VÀ KHÔI PHỤC ─────────────────────────
+  - id: compress
+    kind: example
+    title: "Ví dụ: nén lớp học từ 2 chiều xuống 1 chiều"
+    checks:
+      - "(lambda v: [round(float((Matrix([d]) * v)[0]), 2) for d in ([2, 2], [-2, -2], [1, -1], [-1, 1])] == [2.83, -2.83, 0.0, 0.0])(Matrix([1, 1])/sp.sqrt(2))"
+      - "(lambda v: [list(Matrix([6, 6]) + (Matrix([d]) * v)[0]*v) for d in ([2, 2], [-2, -2], [1, -1], [-1, 1])] == [[8, 8], [4, 4], [6, 6], [6, 6]])(Matrix([1, 1])/sp.sqrt(2))"
+      - "Rational(4, 4 + 1) == Rational(4, 5) and 4*2 == 8 and 1*(4 + 2) == 6"
+      - "(Matrix([[2, 2]])*Matrix([1, 1])/sp.sqrt(2))[0] == 2*sp.sqrt(2) and round(2*math.sqrt(2), 2) == 2.83 and (Matrix([[1, -1]])*Matrix([1, 1]))[0] == 0"
+      - "Matrix([6, 6]) + 2*sp.sqrt(2)*Matrix([1, 1])/sp.sqrt(2) == Matrix([8, 8]) and Matrix([7, 5]) - Matrix([6, 6]) == Matrix([1, -1]) and Matrix([1, -1]).norm() == sp.sqrt(2) and round(math.sqrt(2), 2) == 1.41"
+    steps:
+      - show: |
+          <p><b>Bước 1 — bóng.</b> Bóng = tích vô hướng của vector lệch với $\mathbf{v}_1 = \frac{1}{\sqrt{2}}(1; 1)$:</p>
+          $$\text{An: } \frac{2\cdot 1 + 2\cdot 1}{\sqrt{2}} = \frac{4}{\sqrt{2}} = 2\sqrt{2} \approx 2{,}83 \qquad \text{Bình: } \frac{1\cdot 1 + (-1)\cdot 1}{\sqrt{2}} = \frac{0}{\sqrt{2}} = 0$$
+        focus: [1, 2, 2]
+        say: "Bước một, tính bóng của từng bạn trên hướng thứ nhất, bằng tích vô hướng của vector lệch với v một. Với An, 2 nhân 1 cộng 2 nhân 1 bằng 4, chia căn 2 được 2 căn 2, xấp xỉ 2 phẩy 83. Với Bình, 1 trừ 1 bằng 0, nên bóng của Bình bằng 0."
+      - show: |
+          <p><b>Bước 2.</b> Giữ $K = 1$ thành phần: mỗi bạn chỉ còn <b>một số</b> = độ dài bóng trên $\mathbf{v}_1 = \frac{1}{\sqrt{2}}(1; 1)$:</p>
+          <table class="t"><tr><th>bạn</th><th>An (8; 8)</th><th>Cường (4; 4)</th><th>Bình (7; 5)</th><th>Dũng (5; 7)</th></tr>
+          <tr><td>bóng (1 số)</td><td>2,83</td><td>−2,83</td><td>0</td><td>0</td></tr>
+          <tr><td>khôi phục: trung bình + bóng $\cdot\ \mathbf{v}_1$</td><td>(8; 8) ✓</td><td>(4; 4) ✓</td><td>$\hlo{(6; 6)}$</td><td>$\hlo{(6; 6)}$</td></tr></table>
+        focus: [1, "2.3"]
+        say: "Giữ một thành phần, mỗi bạn chỉ còn một con số, là độ dài cái bóng trên hướng thứ nhất. Khôi phục bằng trung bình cộng bóng nhân hướng, An và Cường được trả lại đúng, còn Bình và Dũng bị kéo về 6 và 6, vì phần lệch của họ nằm trên hướng bị bỏ."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — khôi phục.</b> An: $$(6; 6) + 2\sqrt{2}\cdot\frac{1}{\sqrt{2}}(1; 1) = (6; 6) + (2; 2) = (8; 8)\ \checkmark$$</p>
+          <p>Bình: khôi phục được $(6; 6)$; phần bị mất $= (7; 5) - (6; 6) = (1; -1)$, dài $\sqrt{2} \approx 1{,}41$ — nằm đúng trên hướng thứ hai đã bỏ.</p>
+        focus: [1, 2, 2]
+        say: "Bước ba, khôi phục An, lấy trung bình 6 và 6 cộng bóng 2 căn 2 nhân hướng một chia căn 2 nhân 1, 1, tức cộng thêm 2 và 2, được lại đúng 8 và 8. Với Bình, khôi phục chỉ được 6 và 6. Phần bị mất là 1 và âm 1, dài căn 2, xấp xỉ 1 phẩy 41, nằm đúng trên hướng thứ hai đã bỏ."
+      - show: |
+          <div class="box key">Phương sai giữ lại $= \dfrac{\lambda_1}{\lambda_1 + \lambda_2} = \dfrac{4}{5} = \hlg{80\%}$</div>
+          <p>Số cần lưu: $N\cdot D = 4\cdot 2 = 8$ &nbsp; → &nbsp; $K\cdot(N + D) = 1\cdot(4 + 2) = 6$ (các bóng + hướng). Với 1000 ảnh, $D = 784$, $K = 50$: $\ 50\cdot 1784 = 89\,200$.</p>
+        focus: [1, ["2.1", "2.2"], "2.5"]
+        say: "Tỉ lệ phương sai giữ lại bằng trị riêng thứ nhất chia tổng hai trị riêng, tức 4 phần 5, bằng 80 phần trăm. Thay vì N nhân D số, ta lưu K nhân N cộng D số, gồm các bóng và các hướng. Với ảnh, đó là 89 nghìn 200 số như ở đầu bài."
+
+  # ───────────────────────── 8. HẠNG ─────────────────────────
+  - id: rank_sv
+    kind: concept
+    title: "Hạng = số giá trị kỳ dị khác 0"
+    checks:
+      - "(lambda R: R.rank() == 1 and sorted(sp.sqrt(v) for v in (R.T*R).eigenvals().keys()) == [0, 2*sp.sqrt(5)])(Matrix([[1, 1], [-1, -1], [2, 2], [-2, -2]]))"
+      - "round(2*math.sqrt(5), 2) == 4.47"
+    steps:
+      - show: |
+          <p>Bài 3: hạng là số hàng khác 0 còn lại sau khi khử — số “hướng độc lập thật sự”.</p>
+          <p>Dữ liệu nằm hẳn trên một đường: $(1; 1)$, $(-1; -1)$, $(2; 2)$, $(-2; -2)$ </p>
+          <p>→ &nbsp; giá trị kỳ dị $\approx 4{,}47$ và $\hlo{0}$, &nbsp; hạng $= 1$.</p>
+          <div class="box key">Hạng của ma trận = số giá trị kỳ dị khác 0. Giá trị kỳ dị bằng 0 ⟹ bỏ hướng đó <b>không mất gì</b>.</div>
+        focus: [1, [2, 3], 4]
+        say: "Nhắc lại bài 3, hạng là số hàng khác 0 còn lại sau khi khử, tức số hướng độc lập thật sự. Nếu dữ liệu nằm hẳn trên một đường, giá trị kỳ dị thứ hai bằng 0, và hạng bằng 1. Bỏ hướng có giá trị kỳ dị bằng 0 thì không mất gì cả."
+
+  # ───────────────────────── 9. KIỂM BẰNG MÁY ─────────────────────────
+  - id: verify
+    kind: check
+    title: "Phép thử: thư viện numpy cho cùng kết quả"
+    checks:
+      - "(lambda s: [round(float(x), 6) for x in s] == [4.0, 2.0])(np.linalg.svd(np.array([[8, 8], [4, 4], [7, 5], [5, 7.]]) - np.array([6, 6.]), compute_uv=False))"
+      - "(lambda Vt: abs(abs(Vt[0][0]) - 1/math.sqrt(2)) < 1e-12 and abs(Vt[0][0] - Vt[0][1]) < 1e-12)(np.linalg.svd(np.array([[8, 8], [4, 4], [7, 5], [5, 7.]]) - np.array([6, 6.]))[2])"
+    steps:
+      - show: |
+          <p>Gọi <code>np.linalg.svd</code> trên dữ liệu đã trừ trung bình: giá trị kỳ dị <b>4,000000</b> và <b>2,000000</b>; hàng đầu của $\mathbf{V}^T$ là $\pm(0{,}7071;\ 0{,}7071)$ $= \pm\frac{1}{\sqrt{2}}(1; 1)\ \checkmark$</p>
+          <p class="note">Dấu $\pm$: vector riêng đổi dấu vẫn là vector riêng — thư viện có thể trả về $-\mathbf{v}_1$; hướng (đường thẳng) không đổi.</p>
+        focus: [1, 1, 2]
+        say: "Phép thử bằng thư viện máy tính, vì tính tay dễ nhầm. Ta được hai giá trị kỳ dị 4 và 2, và hướng thứ nhất là 0 phẩy 7071, 0 phẩy 7071, đúng như tính tay. Thư viện có thể trả về vector đổi dấu, nhưng đường thẳng thì vẫn vậy."
+
+  # ───────────────────────── 10. TRONG AI ─────────────────────────
+  - id: in_ai
+    kind: concept
+    title: "Giảm chiều trong học máy"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ở đâu</th><th>giảm chiều dùng để làm gì</th></tr>
+          <tr><td>hằng ngày</td><td>nén ảnh, khử nhiễu, vẽ dữ liệu nhiều chiều lên mặt phẳng 2 chiều để nhìn</td></tr>
+          <tr><td><b>Bài 26</b></td><td>một cách chiếu khác — chọn hướng tách hai lớp tốt nhất, thay vì hướng trải rộng nhất</td></tr>
+          <tr><td><b>Bài 32</b></td><td>cách vẽ dữ liệu nhiều chiều giữ các điểm láng giềng gần nhau, khi đường thẳng không đủ</td></tr></table>
+        forward_ref: true
+        focus: ["1.2", "1.3", "1.4"]
+        say: "Giảm chiều được dùng để nén ảnh, khử nhiễu, và vẽ dữ liệu nhiều chiều lên mặt phẳng. Ở bài 26, ta chiếu theo hướng tách hai lớp tốt nhất. Ở bài 32, ta vẽ dữ liệu theo cách giữ các điểm láng giềng gần nhau, khi đường thẳng không đủ."
+
+  # ───────────────────────── 11. LỖI THƯỜNG GẶP ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc"
+    checks:
+      - "(lambda Y: (Y.T*Y/4) == Matrix([[Rational(201, 2), 0], [0, 2]]))(Matrix([[10, 2], [10, -2], [11, 0], [9, 0]]))"
+      - "(lambda Y: (lambda C: C*Matrix([0, 1]) == 2*Matrix([0, 1]) and C == Matrix([[Rational(1, 2), 0], [0, 2]]))((Y - sp.ones(4, 1)*Matrix([[10, 0]])).T*(Y - sp.ones(4, 1)*Matrix([[10, 0]]))/4))(Matrix([[10, 2], [10, -2], [11, 0], [9, 0]]))"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Quên trừ trung bình <b class="red">(sai)</b>
+          <br><span class="note">Dữ liệu (10; 2), (10; −2), (11; 0), (9; 0): trừ trung bình (10; 0) thì trục chính là <b>dọc</b> (phương sai 2 so với 0,5). Không trừ: trục chính thành <b>ngang</b> — chỉ về phía trung bình, sai hẳn.</span></div>
+        say: "Lỗi thứ nhất, quên trừ trung bình. Với bốn điểm trên màn hình, trừ trung bình thì trục chính là trục dọc, phương sai 2 so với 0 phẩy 5. Không trừ thì trục chính thành trục ngang, chỉ về phía trung bình, sai hẳn."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Lấy giá trị kỳ dị làm phương sai <b class="red">(sai)</b>
+          <br><span class="note">Phương sai dọc trục là $\lambda_i = \frac{\sigma_i^2}{N}$: lớp học có $\sigma_2 = 2$ nhưng phương sai dọc trục thứ hai chỉ là $\frac{2^2}{4} = 1$. ($\sigma_1 = 4$ và $\lambda_1 = \frac{16}{4} = 4$ trùng nhau chỉ là tình cờ.)</span></div>
+        say: "Lỗi thứ hai, lấy giá trị kỳ dị làm phương sai. Theo công thức nối hai bên, phương sai bằng giá trị kỳ dị bình phương chia N. Với lớp học, giá trị kỳ dị thứ hai là 2, nhưng phương sai chỉ bằng 1."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Các đặc trưng khác đơn vị mà không chuẩn hoá <b class="red">(dễ sai)</b>
+          <br><span class="note">Chiều cao tính bằng cm (phương sai hàng chục) cạnh thu nhập tính bằng triệu (phương sai hàng nghìn): thành phần chính bị đặc trưng có số to chiếm hết. Thường chia mỗi cột cho độ lệch chuẩn của nó trước.</span></div>
+        say: "Lỗi thứ ba, ghép các đặc trưng khác đơn vị mà không chuẩn hoá. Đặc trưng có con số to sẽ chiếm hết thành phần chính. Vì vậy người ta thường chia mỗi cột cho độ lệch chuẩn của nó trước."
+
+  # ───────────────────────── 12. TỰ KIỂM TRA ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "Rational(6, 6 + 3 + 1) == Rational(3, 5) and Rational(6 + 3, 10) == Rational(9, 10)"
+      - "Rational(6**2, 9) == 4"
+      - "2*(100 + 10) == 220 and 100*10 == 1000"
+      - "6 + 3 + 1 == 10 and Rational(1, 10) == Rational(10, 100) and 6**2 == 36 and 36 // 9 == 4"
+      - "100*2 + 10*2 == 220 and Rational(220, 1000) == Rational(22, 100)"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Ma trận hiệp phương sai có trị riêng 6, 3, 1. Giữ 1 thành phần thì giữ bao nhiêu phần trăm phương sai? Giữ 2?</td></tr>
+          <tr><td>2</td><td>$N = 9$ mẫu, giá trị kỳ dị lớn nhất $\sigma_1 = 6$. Phương sai dọc trục chính?</td></tr>
+          <tr><td>3</td><td>$N = 100$, $D = 10$, giữ $K = 2$. Cần lưu bao nhiêu số (bóng + hướng), so với ban đầu?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", 0]
+        say: "Bây giờ đến lượt bạn, với ba câu trên màn hình. Câu một về tỉ lệ phương sai giữ lại. Câu hai đổi giá trị kỳ dị thành phương sai. Câu ba đếm số con số cần lưu. Hãy dừng video và làm ra giấy."
+        pause: 8
+      - show: |
+          <p><b>Câu 1.</b> Tổng phương sai $= 6 + 3 + 1 = 10$.</p>
+          $$\text{giữ 1: } \frac{6}{10} = \hlg{60\%} \qquad \text{giữ 2: } \frac{6 + 3}{10} = \hlg{90\%} \qquad \text{mất: } \frac{1}{10} = 10\%$$
+        focus: [1, 2, 2]
+        say: "Đáp án câu một, tổng phương sai bằng tổng các trị riêng, 6 cộng 3 cộng 1 bằng 10. Giữ một thành phần được 6 chia 10, bằng 60 phần trăm, giữ hai thành phần được 9 chia 10, bằng 90 phần trăm. Phần mất đi chỉ còn 1 chia 10, tức 10 phần trăm."
+      - clear: true
+        show: |
+          <p><b>Câu 2.</b> Dùng công thức nối SVD với PCA, $\lambda_i = \frac{\sigma_i^2}{N}$:</p>
+          $$\lambda_1 = \frac{6^2}{9} = \frac{36}{9} = \hlg{4} \quad (\text{không phải } 6)$$
+        focus: [1, 2, 2]
+        say: "Câu hai, dùng công thức nối hai bên, trị riêng bằng giá trị kỳ dị bình phương chia N. Vậy 6 bình phương bằng 36, chia 9 được 4. Đáp án là 4, không phải 6, đúng như lỗi thứ hai đã cảnh báo."
+      - show: |
+          <p><b>Câu 3.</b> Đếm từng phần:</p>
+          <table class="t"><tr><th>phần</th><th>số con số</th></tr>
+          <tr><td>ban đầu $N\cdot D$</td><td>$100\cdot 10 = 1000$</td></tr>
+          <tr><td>bóng $N\cdot K$</td><td>$100\cdot 2 = 200$</td></tr>
+          <tr><td>hướng $D\cdot K$</td><td>$10\cdot 2 = 20$</td></tr>
+          <tr><td>sau nén $K\cdot(N + D)$</td><td>$2\cdot 110 = \hlg{220}$, tức 22%</td></tr></table>
+        focus: [0, "2.2", ["2.3", "2.4"], "2.5"]
+        say: "Câu ba, đếm từng phần. Ban đầu có 100 nhân 10, bằng 1000 số. Sau khi nén, mỗi mẫu còn 2 bóng, tức 200 số, cộng 2 hướng, mỗi hướng 10 số, tức 20 số. Tổng cộng 220 số, đúng bằng 2 nhân 110, chỉ bằng 22 phần trăm ban đầu."
+
+  # ───────────────────────── 13. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">trừ trung bình</span><span class="a">→</span>
+          <span class="n">bóng trải rộng nhất = vector riêng lớn nhất của $\mathbf{S}$</span><span class="a">→</span>
+          <span class="n">tính bằng SVD: $\mathbf{X}_c = \mathbf{U}\mathbf{\Sigma}\mathbf{V}^T$, $\lambda = \frac{\sigma^2}{N}$</span><span class="a">→</span>
+          <span class="n">giữ $K$ trục: lưu $K\cdot(N + D)$ số</span></div>
+        say: "Tổng kết chuỗi logic. Trừ trung bình trước. Hướng có cái bóng trải rộng nhất là vector riêng lớn nhất của ma trận hiệp phương sai. Ta tính nó bằng phân rã giá trị kỳ dị, với trị riêng bằng giá trị kỳ dị bình phương chia N. Giữ K trục để nén dữ liệu."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> dữ liệu nhiều chiều thường chỉ “sống” trên vài hướng. Tìm các hướng đó, bỏ phần còn lại — mất ít, lợi nhiều.</div>
+        say: "Điều cần mang theo, dữ liệu nhiều chiều thường chỉ thực sự trải ra trên vài hướng. Tìm các hướng đó và bỏ phần còn lại, ta mất ít mà lợi nhiều."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 17): <b>ước lượng tham số</b> — MLE, MAP và cách tiếp cận Bayes: chọn tham số hợp lý nhất từ dữ liệu.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 17, ta học ước lượng tham số, tức cách chọn tham số hợp lý nhất cho mô hình từ dữ liệu. Hẹn gặp bạn ở bài tiếp theo."

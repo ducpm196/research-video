@@ -1,0 +1,182 @@
+id: L10
+course: AIF
+series: "AIF · Nền tảng trí tuệ nhân tạo"
+title: "Bài 10 — Lập kế hoạch: biểu diễn hành động bằng điều kiện và hiệu ứng"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/aif.yaml L10; audit/aif/verify_aif.py L10; R. Fikes, N. Nilsson, STRIPS (1971); G. Sussman, A Computational Model of Skill Acquisition (1973) — dị thường Sussman; AIMA bản 4 (2020), chương 11 (thế giới khối)"
+assumes: [arith, land]
+# Quy ước: thế giới khối 3 khối A, B, C và bàn T; trạng thái là tập “x nằm trên y”. Một hành động: đặt x lên y (x và y phải trống; y = T luôn được).
+#   alg.blocks_plan(đầu, mục tiêu) = BFS tìm kế hoạch ngắn nhất; alg.blocks_subgoals(đầu, [mục tiêu con…]) đạt từng mục tiêu con một cách riêng rẽ
+#   (mỗi lần kế hoạch ngắn nhất cho riêng mục tiêu con đó) cho tới khi tất cả cùng đúng. STRIPS chỉ trên màn hình.
+objectives:
+  - "Biểu diễn hành động bằng tiền điều kiện và hiệu ứng thêm, xoá"
+  - "Tìm kế hoạch bằng tìm kiếm trong không gian trạng thái"
+  - "Hiểu vì sao đạt từng mục tiêu con riêng lẻ có thể thất bại"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Đảo ngược một chồng khối"
+    checks:
+      - "alg.blocks_plan({('A', 'B'), ('B', 'C'), ('C', 'T')}, {('A', 'T'), ('B', 'A'), ('C', 'B')}) == [('A', 'T'), ('B', 'A'), ('C', 'B')]"
+    steps:
+      - show: |
+          <p>Chồng khối: A trên B, B trên C, C trên bàn. Mục tiêu: đảo ngược — C trên B, B trên A. Robot mỗi lần chỉ nhấc được một khối đang trống ở trên. Kế hoạch ngắn nhất có <b>3</b> hành động. Làm sao máy tự lập kế hoạch như vậy cho mọi bài?</p>
+          <div class="box key">Hôm nay: <b>lập kế hoạch</b> — mô tả hành động bằng <b>điều kiện</b> và <b>hiệu ứng</b>, rồi tìm dãy hành động đưa trạng thái đầu tới mục tiêu.</div>
+        focus: [1, 1, 1, 1, 1, 2]
+        say: "Chào bạn, ta có một chồng khối, A trên B, B trên C, C trên bàn. Mục tiêu là đảo ngược, C trên B và B trên A. Robot mỗi lần chỉ nhấc được một khối đang trống ở trên. Kế hoạch ngắn nhất có 3 hành động. Làm sao máy tự lập kế hoạch như vậy cho mọi bài? Hôm nay ta học lập kế hoạch, mô tả hành động bằng điều kiện và hiệu ứng, rồi tìm dãy hành động đưa trạng thái đầu tới mục tiêu."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: thêm, xoá phần tử của tập hợp"
+    checks:
+      - "({1, 2} - {1}) | {3} == {2, 3}"
+    steps:
+      - show: |
+          <table class="t"><tr><th>tập ban đầu</th><th>xoá</th><th>thêm</th><th>tập mới</th></tr>
+          <tr><td>{1, 2}</td><td>1</td><td>3</td><td>{2, 3}</td></tr></table>
+          <p class="note">Ở bài 1, tìm theo chiều rộng luôn tìm ra dãy ít bước nhất, vì nó mở mọi trạng thái cách đầu 1 bước trước khi mở trạng thái cách 2 bước.</p>
+        focus: [1, "1.2", 2]
+        say: "Ta cần hai điều đã học. Từ khoá toán rời rạc, tập 1 và 2, xoá phần tử 1 rồi thêm phần tử 3, được tập 2 và 3. Từ bài 1, tìm theo chiều rộng luôn tìm ra dãy ít bước nhất, vì nó mở mọi trạng thái cách đầu 1 bước trước khi mở trạng thái cách 2 bước."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: trạng thái, hành động, điều kiện, hiệu ứng"
+    steps:
+      - show: |
+          <p><b>Trạng thái</b>: tập các sự kiện đang đúng, như “A trên B”, “C trên bàn”. Một khối <b>trống</b> nếu không có khối nào trên nó.</p>
+          <table class="t"><tr><th>hành động: đặt x từ chỗ u lên y</th><th></th></tr>
+          <tr><td><b>tiền điều kiện</b></td><td>x trên u $\land$ x trống $\land$ y trống (bàn luôn trống)</td></tr>
+          <tr><td><b>thêm</b></td><td>x trên y; u trống</td></tr>
+          <tr><td><b>xoá</b></td><td>x trên u; y trống</td></tr></table>
+          <p>Mục tiêu là một tập sự kiện cần đúng. <b>Kế hoạch</b>: dãy hành động, mỗi hành động có tiền điều kiện đúng lúc thực hiện, và cuối cùng mọi sự kiện mục tiêu đúng.</p>
+        introduces: [land]
+        focus: [1, 1, 2, "2.2", "2.3", "2.4", 3, 3]
+        say: "Trạng thái là tập các sự kiện đang đúng, như A trên B, hay C trên bàn. Một khối trống nếu không có khối nào trên nó. Bảng mô tả hành động đặt x từ chỗ u lên y. Tiền điều kiện là x đang trên u, x trống và y trống, riêng bàn thì luôn trống. Hiệu ứng thêm là x trên y, và u trở nên trống. Hiệu ứng xoá là x không còn trên u, và y không còn trống. Mục tiêu là một tập sự kiện cần đúng. Kế hoạch là dãy hành động, mỗi hành động có tiền điều kiện đúng lúc thực hiện, và cuối cùng mọi sự kiện mục tiêu đều đúng."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Bốn khung của một kế hoạch"
+    steps:
+      - show: |
+          <div><svg width="1500" height="330" viewBox="0 0 1500 330"><g font-size="28" font-weight="bold" text-anchor="middle" fill="#1f2937"><line x1="30" y1="250" x2="240" y2="250" stroke="#6b7280" stroke-width="4"/><rect x="40" y="190" width="80" height="58" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2.5"/><text x="80" y="229">C</text><rect x="40" y="128" width="80" height="58" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2.5"/><text x="80" y="167">B</text><rect x="40" y="66" width="80" height="58" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2.5"/><text x="80" y="105">A</text><text x="135" y="300" font-size="24" font-weight="normal">đầu</text><line x1="400" y1="250" x2="610" y2="250" stroke="#6b7280" stroke-width="4"/><rect x="410" y="190" width="80" height="58" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2.5"/><text x="450" y="229">C</text><rect x="410" y="128" width="80" height="58" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2.5"/><text x="450" y="167">B</text><rect x="500" y="190" width="80" height="58" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2.5"/><text x="540" y="229">A</text><text x="505" y="300" font-size="24" font-weight="normal">① A xuống bàn</text><line x1="770" y1="250" x2="980" y2="250" stroke="#6b7280" stroke-width="4"/><rect x="780" y="190" width="80" height="58" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2.5"/><text x="820" y="229">C</text><rect x="870" y="190" width="80" height="58" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2.5"/><text x="910" y="229">A</text><rect x="870" y="128" width="80" height="58" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2.5"/><text x="910" y="167">B</text><text x="875" y="300" font-size="24" font-weight="normal">② B lên A</text><line x1="1140" y1="250" x2="1350" y2="250" stroke="#6b7280" stroke-width="4"/><rect x="1240" y="190" width="80" height="58" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2.5"/><text x="1280" y="229">A</text><rect x="1240" y="128" width="80" height="58" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2.5"/><text x="1280" y="167">B</text><rect x="1240" y="66" width="80" height="58" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2.5"/><text x="1280" y="105">C</text><text x="1245" y="300" font-size="24" font-weight="normal">③ C lên B</text></g></svg></div>
+        focus: [1, 1, 1]
+        say: "Hình vẽ bốn khung liên tiếp của kế hoạch đảo chồng khối. Khung đầu là chồng A trên B trên C, sau bước một A nằm riêng trên bàn, sau bước hai B lên A. Khung cuối, C lên B, chồng đã đảo ngược, và mỗi bước chỉ nhấc một khối đang trống ở trên."
+
+  - id: example
+    kind: example
+    title: "Tìm kế hoạch bằng tìm theo chiều rộng"
+    checks:
+      - "alg.blocks_apply({('A', 'B'), ('B', 'C'), ('C', 'T')}, [('A', 'T'), ('B', 'A'), ('C', 'B')]) == {('A', 'T'), ('B', 'A'), ('C', 'B')}"
+    steps:
+      - show: |
+          <p>Đầu: A trên B, B trên C, C trên bàn. Mục tiêu: C trên B, B trên A.</p>
+          <table class="t"><tr><th>bước</th><th>hành động</th><th>tiền điều kiện</th><th>thêm</th><th>xoá</th></tr>
+          <tr><td>1</td><td>đặt A lên bàn</td><td>A trên B ✓, A trống ✓</td><td>A trên bàn; B trống</td><td>A trên B</td></tr></table>
+        focus: [1, "2.2", "2.2"]
+        say: "Bắt đầu từ chồng A trên B trên C, và mục tiêu là đảo ngược. Bước một, đặt A lên bàn, tiền điều kiện đúng vì A đang trên B và A trống. Hiệu ứng thêm A trên bàn và B trống, hiệu ứng xoá A trên B."
+      - show: |
+          <table class="t"><tr><th>bước</th><th>hành động</th><th>tiền điều kiện</th><th>thêm</th><th>xoá</th></tr>
+          <tr><td>2</td><td>đặt B lên A</td><td>B trên C ✓, B trống ✓, A trống ✓</td><td>B trên A; C trống</td><td>B trên C; A trống</td></tr></table>
+        focus: ["1.2", "1.2"]
+        say: "Bước hai, đặt B lên A, tiền điều kiện đúng vì B đang trên C, B trống, và A trống. Hiệu ứng thêm B trên A và C trống, còn hiệu ứng xoá B trên C và A trống."
+      - show: |
+          <table class="t"><tr><th>bước</th><th>hành động</th><th>tiền điều kiện</th><th>thêm</th><th>xoá</th></tr>
+          <tr><td>3</td><td>đặt C lên B</td><td>C trên bàn ✓, C trống ✓, B trống ✓</td><td>C trên B</td><td>C trên bàn; B trống</td></tr></table>
+          <p>Mọi sự kiện mục tiêu đã đúng: C trên B, B trên A ✓.</p>
+        focus: [1, "1.2", 2]
+        say: "Bước ba, đặt C lên B, vì C trên bàn và trống, và B trống. Hiệu ứng thêm C trên B, xoá C trên bàn và B trống. Bây giờ mọi sự kiện mục tiêu đều đúng."
+      - clear: true
+        show: |
+          <p>Tìm theo chiều rộng trong không gian trạng thái với các hành động này cho đúng kế hoạch $\hl{3}$ bước — ngắn nhất.</p>
+        say: "Tìm theo chiều rộng trong không gian trạng thái, với đúng các hành động này, cho kế hoạch 3 bước, và đó là kế hoạch ngắn nhất."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: vì sao không thể ít hơn 3 bước"
+    checks:
+      - "alg.blocks_apply({('A', 'B'), ('B', 'C'), ('C', 'T')}, [('A', 'T'), ('B', 'A'), ('C', 'B')]) == {('A', 'T'), ('B', 'A'), ('C', 'B')}"
+      - "len({x for x, y in {('A', 'T'), ('B', 'A'), ('C', 'B')}} - {x for x, y in {('A', 'T'), ('B', 'A'), ('C', 'B')} & {('A', 'B'), ('B', 'C'), ('C', 'T')}}) == 3"
+    steps:
+      - show: |
+          <table class="t"><tr><th>khối</th><th>đang nằm trên</th><th>mục tiêu nằm trên</th><th>phải di chuyển?</th></tr>
+          <tr><td>A</td><td>B</td><td>bàn</td><td>có</td></tr>
+          <tr><td>B</td><td>C</td><td>A</td><td>có</td></tr>
+          <tr><td>C</td><td>bàn</td><td>B</td><td>có</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Kiểm bằng một lập luận khác, không cần tìm kiếm. Khối A đang trên B nhưng phải về bàn, nên phải di chuyển. Khối B đang trên C nhưng phải lên A, cũng phải di chuyển. Khối C đang trên bàn nhưng phải lên B, cũng vậy."
+      - show: |
+          <div class="chain"><span class="n">mỗi hành động dời đúng 1 khối</span><span class="a">→</span><span class="n">cả 3 khối phải dời</span><span class="a">→</span><span class="n">cần ít nhất 3 bước</span><span class="a">→</span><span class="n">kế hoạch 3 bước là ngắn nhất ✓</span></div>
+        say: "Vì mỗi hành động chỉ dời một khối, mà cả 3 khối đều phải dời, nên cần ít nhất 3 bước. Kế hoạch 3 bước là ngắn nhất, khớp kết quả tìm theo chiều rộng."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc"
+    checks:
+      - "alg.blocks_plan({('C', 'A'), ('A', 'T'), ('B', 'T')}, {('A', 'B'), ('B', 'C')}) == [('C', 'T'), ('B', 'C'), ('A', 'B')]"
+      - "[sum(map(len, alg.blocks_subgoals({('C', 'A'), ('A', 'T'), ('B', 'T')}, g))) for g in ([('A', 'B'), ('B', 'C')], [('B', 'C'), ('A', 'B')])] == [5, 7]"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Đạt từng mục tiêu con riêng lẻ <b class="red">(phá mục tiêu đã đạt)</b>
+          <br><span class="note">Đầu: C trên A, A và B trên bàn. Mục tiêu: A trên B <b>và</b> B trên C. Làm “A trên B” trước (hạ C, đặt A lên B) rồi làm “B trên C” thì phải hạ A xuống — phá mục tiêu vừa đạt. Đạt riêng từng cái theo thứ tự này tốn <b>5</b> bước, thứ tự ngược lại tốn <b>7</b>; kế hoạch tính cả hai cùng lúc chỉ <b class="green">3</b> bước: hạ C, đặt B lên C, đặt A lên B.</span></div>
+        say: "Lỗi thứ nhất, đạt từng mục tiêu con riêng lẻ, nên phá mục tiêu đã đạt. Trạng thái đầu là C trên A, A và B trên bàn, mục tiêu là A trên B và B trên C. Làm A trên B trước, tức hạ C và đặt A lên B, rồi làm B trên C thì phải hạ A xuống, phá mục tiêu vừa đạt. Đạt riêng từng cái theo thứ tự này tốn 5 bước, thứ tự ngược lại tốn 7 bước. Kế hoạch tính cả hai cùng lúc chỉ 3 bước, hạ C, đặt B lên C, rồi đặt A lên B."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Quên hiệu ứng xoá <b class="red">(trạng thái sai)</b>
+          <br><span class="note">Đặt x lên y mà không xoá “y trống” thì bước sau có thể đặt thêm khối lên y — hai khối cùng trên một khối. Mỗi hành động phải nói rõ điều gì <b>không còn đúng</b>.</span></div>
+        say: "Lỗi thứ hai, quên hiệu ứng xoá nên trạng thái sai. Đặt x lên y mà không xoá sự kiện y trống thì bước sau có thể đặt thêm khối lên y, hai khối cùng nằm trên một khối. Mỗi hành động phải nói rõ điều gì không còn đúng."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Lập kế hoạch một lần rồi chạy mù <b class="red">(thế giới đổi)</b>
+          <br><span class="note">Kế hoạch giả định hành động luôn thành công. Robot thật có thể làm rơi khối: phải kiểm trạng thái sau mỗi bước và lập kế hoạch lại khi khác dự kiến.</span></div>
+        say: "Lỗi thứ ba, lập kế hoạch một lần rồi chạy mù, trong khi thế giới thay đổi. Kế hoạch giả định hành động luôn thành công, nhưng robot thật có thể làm rơi khối, nên phải kiểm trạng thái sau mỗi bước, và lập kế hoạch lại khi khác dự kiến."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.blocks_plan({('A', 'T'), ('B', 'T'), ('C', 'T')}, {('A', 'B'), ('B', 'C')}) == [('B', 'C'), ('A', 'B')]"
+      - "sum(map(len, alg.blocks_subgoals({('A', 'T'), ('B', 'T'), ('C', 'T')}, [('A', 'B'), ('B', 'C')]))) == 4"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Ba khối đều nằm trên bàn. Mục tiêu: A trên B, B trên C. Kế hoạch ngắn nhất là gì?</td></tr>
+          <tr><td>2</td><td>Nếu làm “A trên B” trước thì chuyện gì xảy ra khi tới “B trên C”?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, ba khối đều nằm trên bàn, mục tiêu là A trên B và B trên C. Kế hoạch ngắn nhất là gì? Câu hai, nếu làm A trên B trước thì chuyện gì xảy ra khi tới B trên C? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <p>① <b>2</b> bước: đặt B lên C, rồi đặt A lên B — xây từ dưới lên. Không thể ít hơn: A và B đều phải dời.</p>
+        say: "Đáp án câu một, 2 bước, đặt B lên C rồi đặt A lên B, tức xây từ dưới lên. Không thể ít hơn, vì cả A và B đều phải dời."
+      - show: |
+          <table class="t"><tr><th>làm “A trên B” trước</th><th>số bước</th></tr>
+          <tr><td>đặt A lên B</td><td>1</td></tr>
+          <tr><td>B không còn trống → hạ A xuống bàn</td><td>2</td></tr>
+          <tr><td>đặt B lên C, đặt lại A lên B</td><td>4 — gấp đôi</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Câu hai, làm A trên B trước thì sao. Bước một đặt A lên B. Nhưng khi đó B không còn trống, nên phải hạ A xuống bàn. Rồi đặt B lên C và đặt lại A lên B, tổng cộng 4 bước, gấp đôi."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">trạng thái = tập sự kiện</span><span class="a">→</span>
+          <span class="n">hành động: tiền điều kiện, thêm, xoá</span><span class="a">→</span>
+          <span class="n">tìm kiếm cho kế hoạch ngắn nhất</span><span class="a">→</span>
+          <span class="n">mục tiêu con tương tác: lập kế hoạch cho cả tổ hợp</span></div>
+        say: "Tổng kết lại, trạng thái là một tập sự kiện, hành động có tiền điều kiện, hiệu ứng thêm và xoá, và tìm kiếm cho kế hoạch ngắn nhất. Các mục tiêu con tương tác với nhau, nên phải lập kế hoạch cho cả tổ hợp."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> làm xong từng việc nhỏ chưa chắc là làm xong việc lớn — <b>thứ tự</b> và <b>tương tác</b> giữa các việc quyết định chi phí.</div>
+        say: "Điều cần mang theo, làm xong từng việc nhỏ chưa chắc là làm xong việc lớn, vì thứ tự và tương tác giữa các việc quyết định chi phí."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 11): <b>mạng Bayes</b> — suy diễn khi không chắc chắn.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 11, ta học mạng Bayes, cách suy diễn khi không chắc chắn. Hẹn gặp bạn ở bài tiếp theo."

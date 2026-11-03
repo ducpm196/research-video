@@ -1,0 +1,210 @@
+id: L04
+course: AIF
+series: "AIF · Nền tảng trí tuệ nhân tạo"
+title: "Bài 4 — Tìm kiếm cục bộ: leo đồi, khởi động lại ngẫu nhiên, mô phỏng tôi luyện"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/aif.yaml L04; audit/aif/verify_aif.py L04; CS115 bài 12 (hàm mũ e) và bài 13 (kỳ vọng); AIMA bản 4 (2020), mục 4.1 (8 hậu: trạng thái có 17 cặp tấn công nhau, leo đồi dốc nhất thành công 14%); S. Kirkpatrick, C. D. Gelatt, M. P. Vecchi, Optimization by Simulated Annealing, Science 220 (1983)"
+assumes: [arith, frac, approx, power]
+# Quy ước: alg.queens_hill_climb() = 5000 lần leo đồi dốc nhất từ trạng thái ngẫu nhiên (hạt giống 1), mỗi cột một hậu; trả (tỉ lệ thành công,
+#   số bước trung bình khi thành công, khi kẹt). alg.queens_conflicts(st): số cặp hậu tấn công nhau, st[c] = hàng của hậu ở cột c (đếm từ 0).
+#   Khởi động lại: số lần chạy kỳ vọng 1/p (phân phối hình học). Mô phỏng tôi luyện: nhận bước xấu đi Δ với xác suất e^(−Δ/T).
+objectives:
+  - "Giải thích cực tiểu địa phương và cao nguyên"
+  - "Ước lượng lợi ích của khởi động lại ngẫu nhiên"
+  - "Hiểu vai trò của nhiệt độ trong mô phỏng tôi luyện"
+asr_reviewed:
+  - {sentence: "Hậu ở hàng 1 cột 0 và hậu ở hàng 3 cột 3 có chênh hàng 2 khác chênh cột 3, nên không.", reason: "ASR chép “Hậu ở hàng một cục không và hậu ở hàng ba cục ba có trên hàng hai khác trên cục ba, nên không.” (0.783): lệch âm/thanh thuần Việt: cột/cục (ASR lẫn “cột/cục” 28 lần trên toàn kho báo cáo, các khoá khác đã xem xét), cột/cục, chênh/trên, chênh cột/trên cục — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Vì vậy số lần chạy kỳ vọng là 1 chia p, khoảng 6 phẩy 7 lần.", reason: "ASR chép “Vì vậy số lần chạy kỳ vọng là 1 GP khoảng 6,7 lần.” (0.903): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: chia (trong “chia p” → “gp”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Láng giềng là dời một hậu trong cột của nó, có 8 nhân 7 bằng 56 láng giềng.", reason: "ASR chép “Lán viền là giờ một hậu trong cụt của nó, có 8 nhân 7 bằng 56 láng viền.” (0.75): lệch âm/thanh thuần Việt: láng giềng/lán viền, dời/giờ, cột/cụt, giềng/viền — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Trạng thái là hàng của hậu ở từng cột.", reason: "ASR chép “Trạng thái là hàng của Hậu ở Tân Cô.” (0.778): lệch âm/thanh thuần Việt: từng cột/tân cô — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Tám quân hậu, 17 cặp đang tấn công nhau"
+    checks:
+      - "alg.queens_conflicts([4, 5, 6, 3, 4, 5, 6, 5]) == 17"
+    steps:
+      - show: |
+          <p>Đặt 8 quân hậu lên bàn cờ, mỗi cột một quân, sao cho không cặp nào tấn công nhau. Một cách xếp ngẫu nhiên có <b>17</b> cặp tấn công. Ở đây ta không cần <b>đường đi</b> — chỉ cần <b>trạng thái cuối</b> tốt. Vậy cứ sửa dần cho đỡ xung đột được không?</p>
+          <div class="box key">Hôm nay: <b>tìm kiếm cục bộ</b> — chỉ giữ một trạng thái và cải thiện dần; vì sao nó kẹt, và hai cách thoát.</div>
+        focus: [1, 1, 1, 1, 2]
+        say: "Chào bạn, đặt 8 quân hậu lên bàn cờ, mỗi cột một quân, sao cho không cặp nào tấn công nhau. Một cách xếp ngẫu nhiên có 17 cặp đang tấn công. Ở đây ta không cần đường đi, chỉ cần trạng thái cuối tốt. Vậy cứ sửa dần cho đỡ xung đột được không? Hôm nay ta học tìm kiếm cục bộ, chỉ giữ một trạng thái và cải thiện dần, vì sao nó kẹt, và hai cách thoát."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: hai hậu tấn công nhau khi nào, và số lần thử kỳ vọng"
+    checks:
+      - "(lambda a, b: abs(a[0] - b[0]) == abs(a[1] - b[1]))((0, 0), (2, 2)) and not (lambda a, b: abs(a[0] - b[0]) == abs(a[1] - b[1]))((1, 0), (3, 3))"
+      - "round(1 / 0.5) == 2 and round(math.exp(-1), 3) == 0.368"
+    steps:
+      - show: |
+          <table class="t"><tr><th>hai hậu (hàng, cột)</th><th>cùng hàng?</th><th>cùng đường chéo? (chênh hàng = chênh cột)</th><th>tấn công?</th></tr>
+          <tr><td>(0, 0) và (2, 2)</td><td>không</td><td>2 = 2 → có</td><td class="red">có</td></tr>
+          <tr><td>(1, 0) và (3, 3)</td><td>không</td><td>2 ≠ 3 → không</td><td class="green">không</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Mỗi cột chỉ có một hậu, nên hai hậu tấn công nhau khi cùng hàng, hoặc cùng đường chéo, tức chênh lệch hàng bằng chênh lệch cột. Hậu ở hàng 0 cột 0 và hậu ở hàng 2 cột 2 có chênh hàng 2 bằng chênh cột 2, nên tấn công nhau. Hậu ở hàng 1 cột 0 và hậu ở hàng 3 cột 3 có chênh hàng 2 khác chênh cột 3, nên không."
+      - show: |
+          <p><b>Số lần thử kỳ vọng:</b> tung đồng xu tới khi ra mặt ngửa, mỗi lần thành công với $p = \frac{1}{2}$ → trung bình cần $\frac{1}{p} = 2$ lần.</p>
+          <p><b>Hàm mũ:</b> $e \approx 2{,}718$, nên $\frac{1}{e} \approx 0{,}368$; số mũ càng âm, kết quả càng gần 0.</p>
+        introduces: [exp]
+        focus: [1, 2, 2]
+        say: "Hai điều nữa từ khoá toán. Tung đồng xu tới khi ra mặt ngửa, mỗi lần thành công với xác suất một nửa, thì trung bình cần 1 chia p, bằng 2 lần. Số e xấp xỉ 2 phẩy 718, nên e mũ âm 1 xấp xỉ 0 phẩy 368, và số mũ càng âm thì kết quả càng gần 0."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: hàm mục tiêu, láng giềng, leo đồi"
+    checks:
+      - "8 * 7 == 56"
+    steps:
+      - show: |
+          <table class="t"><tr><th>khái niệm</th><th>8 hậu</th></tr>
+          <tr><td><b>trạng thái</b></td><td>hàng của hậu ở từng cột</td></tr>
+          <tr><td><b>hàm mục tiêu</b> $h$</td><td>số cặp hậu tấn công nhau; muốn $h = 0$</td></tr>
+          <tr><td><b>láng giềng</b></td><td>dời một hậu trong cột của nó: $8 \cdot 7 = 56$ láng giềng</td></tr>
+          <tr><td><b>leo đồi dốc nhất</b></td><td>chuyển sang láng giềng có $h$ nhỏ nhất; dừng khi không láng giềng nào tốt hơn</td></tr></table>
+          <p>Dừng ở chỗ không có láng giềng tốt hơn nhưng $h \gt 0$: <b>cực tiểu địa phương</b>. Nhiều láng giềng bằng nhau: <b>cao nguyên</b> — không biết đi đâu.</p>
+        introduces: [cdot, ltgt]
+        focus: [1, "1.2", "1.3", "1.4", "1.5", 2, 2]
+        say: "Bảng giới thiệu bốn khái niệm cho bài toán 8 hậu. Trạng thái là hàng của hậu ở từng cột. Hàm mục tiêu h là số cặp hậu tấn công nhau, và ta muốn h bằng 0. Láng giềng là dời một hậu trong cột của nó, có 8 nhân 7 bằng 56 láng giềng. Leo đồi dốc nhất chuyển sang láng giềng có h nhỏ nhất, và dừng khi không láng giềng nào tốt hơn. Dừng ở chỗ không có láng giềng tốt hơn nhưng h vẫn lớn hơn 0 gọi là cực tiểu địa phương. Nhiều láng giềng bằng nhau gọi là cao nguyên, thuật toán không biết đi đâu."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Bản đồ địa hình của hàm mục tiêu"
+    steps:
+      - show: |
+          <div><svg width="1500" height="360" viewBox="0 0 1500 360">
+          <line x1="60" y1="320" x2="1460" y2="320" stroke="#9ca3af" stroke-width="2"/>
+          <path d="M60,80 C180,80 220,250 330,250 C430,250 460,140 560,140 L820,140 C900,140 960,300 1080,312 C1200,322 1260,120 1460,90" fill="none" stroke="#2a78d6" stroke-width="5"/>
+          <circle cx="330" cy="250" r="16" fill="#eb6834"/><circle cx="690" cy="140" r="16" fill="#eb6834"/><circle cx="1080" cy="312" r="16" fill="#059669"/>
+          <g font-size="25" text-anchor="middle" fill="#1f2937">
+          <text x="330" y="205">cực tiểu địa phương: h = 1</text>
+          <text x="690" y="105">cao nguyên: mọi láng giềng bằng nhau</text>
+          <text x="1080" y="270">lời giải: h = 0</text>
+          <text x="160" y="50">xuất phát: h = 17</text></g>
+          </svg></div>
+        focus: [1, 1, 1]
+        say: "Hãy hình dung mỗi trạng thái là một điểm trên một bản đồ địa hình, và độ cao là số cặp tấn công h. Leo đồi chỉ biết đi xuống dốc gần nhất, nên có thể dừng ở một hố nông, gọi là cực tiểu địa phương, hoặc đứng yên trên một cao nguyên phẳng. Lời giải là chỗ thấp nhất, nơi h bằng 0, nhưng từ hố nông không thể thấy nó."
+
+  - id: example
+    kind: example
+    title: "5000 lần leo đồi, và tính lợi ích của khởi động lại"
+    checks:
+      - "(lambda r: (round(r[0], 3), round(r[1], 2), round(r[2], 2)))(alg.queens_hill_climb()) == (0.149, 4.11, 3.05)"
+      - "(lambda r: (round(1 / r[0], 1), round((1 - r[0]) / r[0] * r[2] + r[1], 1)))(alg.queens_hill_climb()) == (6.7, 21.5)"
+    steps:
+      - show: |
+          <p><b>Bước 1 — tính $h$ trên bàn 4 × 4</b> (ghi hàng của hậu ở cột 0, 1, 2, 3):</p>
+          <table class="t"><tr><th>trạng thái</th><th>vì sao</th><th>$h$</th></tr>
+          <tr><td>0, 0, 0, 0</td><td>cả 4 hậu cùng hàng: mọi cặp tấn công</td><td>6</td></tr>
+          <tr><td>0, 1, 2, 3</td><td>cả 4 hậu cùng đường chéo</td><td>6</td></tr>
+          <tr><td>1, 3, 0, 2</td><td>không cặp nào cùng hàng hay chéo</td><td>$\hl{0}$ — lời giải</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Bước một, tính h trên bàn 4 nhân 4 cho quen, mỗi trạng thái ghi hàng của hậu ở cột 0, 1, 2 và 3. Trạng thái 0, 0, 0, 0 có cả 4 hậu cùng hàng, nên mọi cặp, tức 6 cặp, tấn công nhau. Trạng thái 0, 1, 2, 3 có cả 4 hậu cùng đường chéo, cũng 6 cặp. Trạng thái 1, 3, 0, 2 không có cặp nào tấn công, h bằng 0, là một lời giải."
+      - clear: true
+        show: |
+          <p><b>Bước 2 — chạy thật 5000 lần</b> leo đồi dốc nhất trên 8 hậu, mỗi lần từ trạng thái ngẫu nhiên:</p>
+          <table class="t"><tr><th>kết cục</th><th>tỉ lệ</th><th>bước trung bình</th></tr>
+          <tr><td>tìm được lời giải ($h = 0$)</td><td>$\hl{14{,}9\%}$</td><td>4,11</td></tr>
+          <tr><td>kẹt ở cực tiểu địa phương</td><td>85,1%</td><td>3,05 rồi dừng</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước hai, chạy thật 5000 lần leo đồi dốc nhất trên 8 hậu, mỗi lần từ một trạng thái ngẫu nhiên. 14 phẩy 9 phần trăm số lần tìm được lời giải, trung bình sau 4 phẩy 11 bước. 85 phẩy 1 phần trăm bị kẹt, trung bình sau 3 phẩy 05 bước thì dừng."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — khởi động lại ngẫu nhiên:</b> kẹt thì bắt đầu lại từ trạng thái ngẫu nhiên mới. Như tung đồng xu, mỗi lần thành công với $p = 0{,}149$:</p>
+          $$\text{số lần chạy kỳ vọng} = \frac{1}{p} = \frac{1}{0{,}149} \approx \hl{6{,}7}$$
+        focus: [1, 1, 2]
+        say: "Bước ba là khởi động lại ngẫu nhiên, kẹt thì bắt đầu lại từ một trạng thái ngẫu nhiên mới. Giống như tung đồng xu, mỗi lần thành công với xác suất p bằng 0 phẩy 149. Vì vậy số lần chạy kỳ vọng là 1 chia p, khoảng 6 phẩy 7 lần."
+      - show: |
+          <p><b>Bước 4 — tổng số bước kỳ vọng:</b> trung bình 5,7 lần kẹt, mỗi lần 3,05 bước, cộng lần cuối thành công 4,11 bước:</p>
+          $$\frac{1 - p}{p} \cdot 3{,}05 + 4{,}11 \approx 5{,}7 \cdot 3{,}05 + 4{,}11 \approx \hl{21{,}5} \text{ bước}$$
+        focus: [1, 1, 2]
+        say: "Bước bốn, tính tổng số bước kỳ vọng. Trung bình có khoảng 5 phẩy 7 lần kẹt, mỗi lần tốn 3 phẩy 05 bước, rồi cộng lần cuối thành công tốn 4 phẩy 11 bước. Tổng cộng khoảng 21 phẩy 5 bước, quá rẻ so với duyệt hết bàn cờ."
+      - clear: true
+        show: |
+          <p><b>Mô phỏng tôi luyện</b>: chọn láng giềng ngẫu nhiên; tốt hơn thì nhận; xấu đi một lượng $\Delta$ thì vẫn nhận với xác suất $e^{-\Delta / T}$. Nhiệt độ $T$ cao lúc đầu (đi lung tung, thoát được cực tiểu), giảm dần về 0 (thành leo đồi).</p>
+        introduces: [delta_sym]
+        focus: [1, 1, 1]
+        say: "Cách thoát thứ hai là mô phỏng tôi luyện. Thuật toán chọn một láng giềng ngẫu nhiên, tốt hơn thì nhận, xấu đi một lượng đen-ta thì vẫn nhận với xác suất e mũ âm đen-ta chia T. Nhiệt độ T cao lúc đầu nên đi lung tung và thoát được cực tiểu, rồi giảm dần về 0, khi đó thuật toán trở thành leo đồi."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác"
+    checks:
+      - "alg.queens_conflicts([0, 0, 0, 0]) == 6 == 4 * 3 // 2 and alg.queens_conflicts([1, 3, 0, 2]) == 0"
+      - "abs(sum(k * 0.149 * (1 - 0.149) ** (k - 1) for k in range(1, 3000)) - 1 / 0.149) < 1e-6"
+    steps:
+      - show: |
+          <table class="t"><tr><th>con số</th><th>đường khác</th><th>kết quả</th></tr>
+          <tr><td>6 cặp khi 4 hậu cùng hàng</td><td>số cặp từ 4 phần tử: $\frac{4 \cdot 3}{2}$</td><td>6 ✓</td></tr>
+          <tr><td>$\frac{1}{p} \approx 6{,}7$ lần</td><td>cộng thẳng: 1 lần với xác suất $p$, 2 lần với xác suất $(1-p) p$, …</td><td>6,71 ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.3"]
+        say: "Kiểm hai con số bằng đường khác. Khi 4 hậu cùng hàng, số cặp chính là số cách chọn 2 trong 4, bằng 4 nhân 3 chia 2, đúng 6. Với số lần chạy kỳ vọng, ta cộng thẳng từng khả năng, 1 lần với xác suất p, 2 lần với xác suất 1 trừ p nhân p, và cứ thế. Máy cộng ra 6 phẩy 71, khớp 1 chia p, vì hai cách tính cùng một kỳ vọng."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc"
+    checks:
+      - "sum(1 for p in __import__('itertools').permutations(range(8)) if alg.queens_conflicts(list(p)) == 0) == 92"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Leo đồi kẹt thì kết luận “vô nghiệm” <b class="red">(sai)</b>
+          <br><span class="note">Leo đồi không đầy đủ: 85% lần chạy kẹt dù bài toán 8 hậu có 92 lời giải. Kẹt chỉ nói về điểm xuất phát, không nói về bài toán.</span></div>
+        say: "Lỗi thứ nhất, leo đồi kẹt thì kết luận vô nghiệm, điều này sai. Leo đồi không đầy đủ, 85 phần trăm số lần chạy bị kẹt dù bài toán 8 hậu có 92 lời giải. Kẹt chỉ nói về điểm xuất phát, không nói về bài toán."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Giảm nhiệt độ quá nhanh <b class="red">(thành leo đồi)</b>
+          <br><span class="note">Nhiệt độ về gần 0 ngay thì gần như không bao giờ nhận bước xấu → kẹt như leo đồi. Lịch giảm nhiệt là tham số phải thử và đo.</span></div>
+        say: "Lỗi thứ hai, giảm nhiệt độ quá nhanh, nên thuật toán thành leo đồi. Nhiệt độ về gần 0 ngay thì gần như không bao giờ nhận bước xấu, và kẹt như leo đồi. Lịch giảm nhiệt là một tham số phải thử và đo."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Dùng tìm kiếm cục bộ khi cần cả đường đi <b class="red">(chọn sai công cụ)</b>
+          <br><span class="note">Tìm kiếm cục bộ chỉ giữ trạng thái hiện tại, không bảo đảm đường ngắn nhất. Hợp với bài cần cấu hình cuối (xếp lịch, bố trí, 8 hậu); bài cần đường đi tối ưu dùng A*.</span></div>
+        say: "Lỗi thứ ba, dùng tìm kiếm cục bộ khi cần cả đường đi, tức chọn sai công cụ. Tìm kiếm cục bộ chỉ giữ trạng thái hiện tại, không bảo đảm đường ngắn nhất. Nó hợp với bài cần cấu hình cuối như xếp lịch, bố trí, hay 8 hậu, còn bài cần đường đi tối ưu thì dùng A sao."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "[round(math.exp(-1 / t), 3) for t in (2, 0.5)] == [0.607, 0.135] and round(1 - (1 - 0.149) ** 10, 2) == 0.8"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Mô phỏng tôi luyện, bước xấu đi $\Delta = 1$: xác suất nhận ở $T = 2$ và $T = 0{,}5$ là bao nhiêu?</td></tr>
+          <tr><td>2</td><td>Leo đồi thành công 14,9% mỗi lần. Khởi động lại tối đa 10 lần thì xác suất tìm được lời giải là bao nhiêu?</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, trong mô phỏng tôi luyện, một bước xấu đi đen-ta bằng 1 được nhận với xác suất bao nhiêu khi T bằng 2, và khi T bằng 0 phẩy 5? Câu hai, leo đồi thành công 14 phẩy 9 phần trăm mỗi lần, khởi động lại tối đa 10 lần thì xác suất tìm được lời giải là bao nhiêu? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <table class="t"><tr><th>nhiệt độ</th><th>xác suất nhận bước xấu $\Delta = 1$</th></tr>
+          <tr><td>$T = 2$</td><td>$e^{-1/2} \approx \hl{0{,}607}$</td></tr>
+          <tr><td>$T = 0{,}5$</td><td>$e^{-1/0{,}5} = e^{-2} \approx \hl{0{,}135}$</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Đáp án câu một, ta chỉ thay số vào công thức. Với T bằng 2, e mũ âm 1 phần 2 xấp xỉ 0 phẩy 607. Với T bằng 0 phẩy 5, e mũ âm 2 xấp xỉ 0 phẩy 135, nên nguội hơn thì khó nhận bước xấu hơn."
+      - show: |
+          <p>② Xác suất <b>cả 10 lần đều kẹt</b>: $(1 - 0{,}149)^{10} = 0{,}851^{10} \approx 0{,}20$. Vậy tìm được lời giải: $1 - 0{,}20 \approx \hl{0{,}80}$.</p>
+        say: "Câu hai, tính qua phần bù. Xác suất cả 10 lần đều kẹt là 0 phẩy 851 mũ 10, xấp xỉ 0 phẩy 20, nên xác suất tìm được lời giải là 1 trừ 0 phẩy 20, xấp xỉ 0 phẩy 80."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">giữ một trạng thái, đi sang láng giềng tốt hơn</span><span class="a">→</span>
+          <span class="n">kẹt ở cực tiểu địa phương, cao nguyên</span><span class="a">→</span>
+          <span class="n">khởi động lại: kỳ vọng 1/p lần</span><span class="a">→</span>
+          <span class="n">tôi luyện: nhận bước xấu với xác suất giảm dần</span></div>
+        say: "Tổng kết lại, tìm kiếm cục bộ giữ một trạng thái và đi sang láng giềng tốt hơn, nên dễ kẹt ở cực tiểu địa phương hay cao nguyên. Khởi động lại cần kỳ vọng 1 chia p lần, còn tôi luyện nhận bước xấu với xác suất giảm dần."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> đôi khi phải chấp nhận <b>tệ đi một chút</b> để thoát khỏi một chỗ trông có vẻ tốt.</div>
+        say: "Điều cần mang theo, đôi khi phải chấp nhận tệ đi một chút để thoát khỏi một chỗ trông có vẻ tốt."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 5): <b>bài toán thoả ràng buộc</b> — quay lui, lan truyền ràng buộc, chọn biến ít giá trị nhất.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 5, ta học bài toán thoả ràng buộc, với quay lui, lan truyền ràng buộc, và chọn biến còn ít giá trị nhất. Hẹn gặp bạn ở bài tiếp theo."

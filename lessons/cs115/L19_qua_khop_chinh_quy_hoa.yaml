@@ -1,0 +1,335 @@
+id: L19
+series: "CS115 · Toán cho Khoa học Máy tính"
+title: "Bài 19 — Quá khớp, chính quy hoá L1/L2 (Lasso, Ridge) & cross-validation"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "DC23#Ch3, Ch4; tex#L165–L166 (quá khớp), L406 (SVM có số hạng L2); ML24#Overfitting (đa thức bậc cao, tập huấn luyện/kiểm tra); NN#Dropout; AUDIT A9, T18"
+assumes: [cdot, sub, vec, mat, transpose, inverse, implies, sum, hat, lambda, identity, det, dim, approx, neq, power, geq, dots, norm, zero_vec, prime, log]
+# Quy ước ký hiệu: λ (lam-đa) ở bài này là ĐỘ MẠNH CỦA PHẠT — khác trị riêng λ của bài 5, 15, 16 (nói ở notation_note);
+#   phạt viết bằng tổng: λ·Σ wⱼ² (L2) và λ·Σ |wⱼ| (L1), chỉ số j chạy từ 1 — KHÔNG phạt b = w₀; ma trận phạt viết \mathbf{I}'
+#   (ma trận đơn vị có số 0 ở góc trên trái) — giải thích trong bài; tài liệu viết ‖w‖₂², ‖w‖₁ — nói ở notation_note.
+# Dữ liệu: 6 điểm huấn luyện x = 0…5, y = 2x + 1 + nhiễu (0,5; −0,5; 0,3; −0,4; 0,6; −0,3); 5 điểm kiểm định x = 0,5…4,5,
+#   nhiễu (0,2; −0,3; 0,1; 0,3; −0,2). Mọi số trên màn hình được máy tính lại trong `checks`.
+# Lời đọc: “Ridge”, “Lasso”, “cross-validation” chỉ hiện trên màn hình; nói “phạt L2”, “phạt L1”, “kiểm định chéo”.
+# Nối bài trước (nói lại khi dùng, luật 17): bài 18 (MSE, phương trình chuẩn, hồi quy đa thức, cột trùng làm XᵀX không khả nghịch),
+#   bài 17 (MAP = MLE cộng log tiên nghiệm), bài 2 (định thức, nghịch đảo).
+objectives:
+  - "Nhận ra quá khớp: sai số huấn luyện nhỏ nhưng sai số trên dữ liệu mới lớn"
+  - "Chia dữ liệu huấn luyện / kiểm định / kiểm tra và biết dùng mỗi phần để làm gì"
+  - "Viết hàm mục tiêu có phạt L2, giải bằng phương trình chuẩn mới, thấy vì sao luôn khả nghịch"
+  - "Phân biệt phạt L2 (co nhỏ) và phạt L1 (đẩy về đúng 0)"
+  - "Chọn độ mạnh phạt bằng kiểm định chéo K phần"
+asr_reviewed:   # ASR-checked, CHƯA nghe bằng tai — cần người nghe (REVIEW_L19.md)
+  - {sentence: "Giả sử w âm thì đạo hàm cho w bằng a cộng 1, bằng 1 phẩy 5, cũng trái với giả sử.", reason: "ASR chép “Giả sử về kết âm thì đạo hàm cho về kết bằng A cộng 1, bằng 1,5 cũng trái với giả sử.” (0.917): chữ w đọc “vê kép” (luật chung), ASR viết tách chữ — NOT_VERIFIED bằng tai người"}
+  - sentence: "Vì vậy ta chia dữ liệu làm ba phần, phần huấn luyện để học w, phần kiểm định để chọn mô hình, và phần kiểm tra để chấm điểm cuối, chỉ dùng một lần."
+    reason: "tên chữ w (vê kép) → “vk” (tên chữ cái); “dữ liệu” → “giữ liệu” (cặp d/gi giọng Bắc) — INFERRED ASR"
+  - sentence: "Phép thử, ta giải phương trình chuẩn mới, rồi giải theo một cách khác bằng thư viện, và hai cách cho cùng một w."
+    reason: "tên chữ w (vê kép) → “v kết” (tên chữ cái); độ khớp 0,96 — INFERRED ASR"
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Đường cong đi qua mọi điểm — nhưng đoán sai điểm mới"
+    checks:
+      - "(lambda x, y: np.allclose(np.vander(x, 6, increasing=True) @ np.linalg.solve(np.vander(x, 6, increasing=True), y), y))(np.arange(6.), 2*np.arange(6.) + 1 + np.array([0.5, -0.5, 0.3, -0.4, 0.6, -0.3]))"
+    steps:
+      - show: |
+          <div class="row"><div class="col"><svg width="560" height="420" viewBox="0 0 470 350">
+            <line x1="40" y1="330" x2="440" y2="330" stroke="#9ca3af" stroke-width="2"/>
+            <line x1="60" y1="20" x2="60" y2="340" stroke="#9ca3af" stroke-width="2"/>
+            <line x1="60" y1="303" x2="410" y2="68" stroke="#059669" stroke-width="4"/>
+            <polyline fill="none" stroke="#dc2626" stroke-width="4" points="60,294 67,304 74,310 81,312 88,311 95,307 102,302 109,295 116,287 123,279 130,270 137,261 144,253 151,244 158,237 165,229 172,223 179,217 186,212 193,207 200,203 207,199 214,196 221,193 228,190 235,188 242,185 249,182 256,179 263,176 270,172 277,167 284,162 291,156 298,150 305,143 312,135 319,127 326,118 333,109 340,100 347,90 354,81 361,73 368,66 375,60 382,56 389,55 396,57 403,63 410,73"/>
+            <circle cx="60" cy="294" r="8" fill="#2563eb"/><circle cx="130" cy="270" r="8" fill="#2563eb"/><circle cx="200" cy="203" r="8" fill="#2563eb"/>
+            <circle cx="270" cy="172" r="8" fill="#2563eb"/><circle cx="340" cy="100" r="8" fill="#2563eb"/><circle cx="410" cy="73" r="8" fill="#2563eb"/>
+            <rect x="89" y="271" width="12" height="12" fill="#d97706"/><rect x="159" y="235" width="12" height="12" fill="#d97706"/><rect x="229" y="178" width="12" height="12" fill="#d97706"/>
+            <rect x="299" y="125" width="12" height="12" fill="#d97706"/><rect x="369" y="89" width="12" height="12" fill="#d97706"/>
+          </svg></div>
+          <div class="col"><p><span style="color:#2563eb">●</span> 6 điểm huấn luyện &nbsp; <span style="color:#d97706">■</span> 5 điểm mới</p>
+          <p><span style="color:#dc2626"><b>Đa thức bậc 5</b></span>: đi qua <b>đúng cả 6</b> điểm huấn luyện.</p>
+          <p><span style="color:#059669"><b>Đường thẳng</b></span>: không qua điểm nào, nhưng đoán điểm mới tốt hơn.</p></div></div>
+        say: "Chào bạn, đây là 6 điểm dữ liệu màu xanh dương. Đường cong đỏ, một đa thức bậc 5, đi qua đúng cả 6 điểm. Đường thẳng xanh lá không qua điểm nào. Nhưng với 5 điểm mới màu cam, đường thẳng lại đoán tốt hơn."
+      - show: |
+          <div class="box key">Học thuộc lòng dữ liệu cũ ≠ hiểu quy luật. Hôm nay: <b>quá khớp</b>, cách <b>phạt</b> mô hình quá phức tạp, và cách <b>chọn</b> mức phạt.</div>
+        say: "Học thuộc lòng dữ liệu cũ không có nghĩa là hiểu quy luật. Hôm nay ta học hiện tượng quá khớp, cách phạt mô hình quá phức tạp, và cách chọn mức phạt cho đúng."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn nền: hồi quy của bài 18"
+    steps:
+      - show: |
+          <p>Bài 18: $\hat{\mathbf{y}} = \mathbf{X}\mathbf{w}$ (cột đầu của $\mathbf{X}$ toàn số 1, nên $w_0 = b$); &nbsp; MSE $= \frac{1}{N}\sum_{i}(y_i - \hat{y}_i)^2$; &nbsp; phương trình chuẩn $\mathbf{X}^T\mathbf{X}\mathbf{w} = \mathbf{X}^T\mathbf{y}$.</p>
+          <p>Hồi quy đa thức bậc 5: các cột $1, x, x^2, \dots, x^5$ — vẫn tuyến tính theo $\mathbf{w}$, cùng công thức.</p>
+        focus: ["1.1", "1.5", 2]
+        say: "Nhắc lại bài 18, dự đoán bằng X nhân w, với cột đầu toàn số 1 nên w không chính là b. Ta làm nhỏ trung bình bình phương sai lệch bằng cách giải phương trình chuẩn. Hồi quy đa thức chỉ thêm các cột x mũ 2, x mũ 3, và cứ thế."
+
+  # ───────────────────────── 3. QUÁ KHỚP ─────────────────────────
+  - id: overfit
+    kind: concept
+    title: "Quá khớp: sai số huấn luyện nhỏ, sai số mới lớn"
+    checks:
+      - "(lambda x, y, xv, yv: [tuple(round(float(v), 3) for v in (lambda w: (np.mean((np.vander(x, d + 1, increasing=True) @ w - y)**2), np.mean((np.vander(xv, d + 1, increasing=True) @ w - yv)**2)))(np.linalg.lstsq(np.vander(x, d + 1, increasing=True), y, rcond=None)[0])) for d in (1, 3, 5)] == [(0.194, 0.054), (0.118, 0.039), (0.0, 0.832)])(np.arange(6.), 2*np.arange(6.) + 1 + np.array([0.5, -0.5, 0.3, -0.4, 0.6, -0.3]), np.array([0.5, 1.5, 2.5, 3.5, 4.5]), 2*np.array([0.5, 1.5, 2.5, 3.5, 4.5]) + 1 + np.array([0.2, -0.3, 0.1, 0.3, -0.2]))"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bậc đa thức</th><th>MSE huấn luyện (6 điểm cũ)</th><th>MSE kiểm định (5 điểm mới)</th></tr>
+          <tr><td>1 (đường thẳng)</td><td>0,194</td><td>0,054</td></tr>
+          <tr><td>3</td><td>0,118</td><td>$\hlg{0{,}039}$</td></tr>
+          <tr><td>5</td><td>$\hlo{0}$</td><td>$\hlo{0{,}832}$</td></tr></table>
+          <div class="box key"><b>Quá khớp</b>: mô hình khớp cả <b>nhiễu</b> của dữ liệu huấn luyện — sai số huấn luyện rất nhỏ, sai số trên dữ liệu mới lớn.</div>
+        focus: [0, "1.4", "1.4", 2]
+        say: "Đo hai loại sai số. Bậc càng cao, sai số trên 6 điểm cũ càng nhỏ, bậc 5 bằng đúng 0. Nhưng trên 5 điểm mới, bậc 5 có sai số 0 phẩy 832, gấp hơn 15 lần đường thẳng. Mô hình đã khớp cả nhiễu, gọi là quá khớp."
+      - show: |
+          <p class="note">Sai số huấn luyện bằng 0 là <b>dấu hiệu nghi ngờ</b> quá khớp (không phải luôn luôn). Phải nhìn sai số trên dữ liệu mô hình <b>chưa thấy</b>.</p>
+          <p>Chia dữ liệu làm ba: <b>huấn luyện</b> (học $\mathbf{w}$) — <b>kiểm định</b> (chọn bậc, chọn mức phạt) — <b>kiểm tra</b> (chấm điểm cuối, chỉ dùng một lần).</p>
+        focus: [1, 2]
+        say: "Sai số huấn luyện bằng 0 là dấu hiệu đáng nghi, nên phải đo trên dữ liệu mô hình chưa thấy. Vì vậy ta chia dữ liệu làm ba phần, phần huấn luyện để học w, phần kiểm định để chọn mô hình, và phần kiểm tra để chấm điểm cuối, chỉ dùng một lần."
+
+  # ───────────────────────── 4. PHẠT L2 ─────────────────────────
+  - id: sym_ridge
+    kind: symbol
+    title: "Giải mã: phạt L2 — thêm λ nhân tổng bình phương hệ số"
+    checks:
+      - "(lambda w: sum(v**2 for v in w[1:]))([1.5, -5.285, 11.071, -6.054, 1.379, -0.111]) > 100"
+    steps:
+      - show: |
+          <p>Đa thức bậc 5 khớp nhiễu bằng các hệ số <b>rất lớn, đan dấu</b>: $\ \mathbf{w} \approx (1{,}5;\ -5{,}3;\ 11{,}1;\ -6{,}1;\ 1{,}4;\ -0{,}1)$</p>
+          $$\text{mục tiêu mới} = \operatorname{MSE}(\mathbf{w}) + \lambda\sum_{j = 1}^{D} w_j^2$$
+          <p class="note">λ (độ mạnh của phạt) $\ge 0$ do ta chọn.</p>
+          <p class="note">Tổng bắt đầu từ $j = 1$: <b>không phạt</b> $w_0 = b$ (dời cả đường lên xuống không làm mô hình phức tạp hơn).</p>
+        focus: [1, 1, [2, 3], 4]
+        say: "Để khớp nhiễu, đa thức bậc 5 dùng các hệ số rất lớn và đan dấu, như 11 phẩy 1 và âm 6 phẩy 1. Ý tưởng là phạt điều đó. Ta cộng thêm lam-đa nhân tổng bình phương các hệ số, với lam-đa là độ mạnh của phạt. Lưu ý không phạt hệ số tự do b."
+      - show: |
+          <p class="note">Ở bài 5, 15, 16, $\lambda$ là trị riêng. Ở bài này, $\lambda$ là <b>độ mạnh của phạt</b> — cùng chữ, khác nghĩa. Sách hay viết phạt L2 là $\lambda\lVert\mathbf{w}\rVert_2^2$ và phạt L1 là $\lambda\lVert\mathbf{w}\rVert_1$ — chính là các tổng trong bài này. Tên tiếng Anh: Ridge (L2), Lasso (L1).</p>
+        notation_note: true
+        say: "Lưu ý ký hiệu. Ở các bài 5, 15 và 16, lam-đa là trị riêng, còn ở đây nó là độ mạnh của phạt, cùng chữ nhưng khác nghĩa. Sách hay viết các phần phạt bằng ký hiệu độ dài có chỉ số dưới, chính là các tổng trong bài này."
+
+  # ───────────────────────── 5. NGHIỆM CÓ PHẠT ─────────────────────────
+  - id: ridge_formula
+    kind: formula
+    title: "Phương trình chuẩn mới và vì sao luôn giải được"
+    checks:
+      - "(lambda D, lam: sp.expand((D.T*D + lam*sp.eye(3)).det() - lam*(lam**2 + 64*lam + 40)) == 0)(Matrix([[1, 1, 1], [1, 2, 2], [1, 3, 3], [1, 4, 4]]), sp.Symbol('lam', positive=True))"
+      - "(lambda D: (D.T*D + sp.eye(3)).det() == 105 and (D.T*D).det() == 0)(Matrix([[1, 1, 1], [1, 2, 2], [1, 3, 3], [1, 4, 4]]))"
+    steps:
+      - show: |
+          <p>Lấy gradient như bài 18 (phần phạt có đạo hàm $2\lambda w_j$), cho bằng $\mathbf{0}$:</p>
+          $$\big(\mathbf{X}^T\mathbf{X} + N\lambda\,\mathbf{I}'\big)\,\mathbf{w} = \mathbf{X}^T\mathbf{y}$$
+          <p class="note">$\mathbf{I}'$: ma trận đơn vị nhưng số 0 ở góc trên trái — không phạt $b$. Hệ số $N$ xuất hiện vì MSE có $\frac{1}{N}$; nhiều sách gộp $N\lambda$ thành một chữ $\lambda$.</p>
+        focus: [1, [2, 3]]
+        say: "Lấy gradient như bài 18, phần phạt có đạo hàm bằng hai lần lam-đa nhân với chính hệ số đó. Cho gradient bằng không, ta được phương trình chuẩn mới, chỉ cộng thêm một ma trận đơn vị nhân N lam-đa, với số 0 ở góc vì không phạt b."
+      - show: |
+          <p>Bài 18: hai cột trùng nhau làm $\det(\mathbf{X}^T\mathbf{X}) = 0$. Cộng thêm $\lambda\mathbf{I}$ (ví dụ $\lambda = 1$):</p>
+          $$\det(\mathbf{X}^T\mathbf{X}) = 0 \qquad\text{thành}\qquad \det(\mathbf{X}^T\mathbf{X} + \mathbf{I}) = \hlg{105} \neq 0$$
+          <p class="note">Tổng quát ở ví dụ này: $\ \det(\mathbf{X}^T\mathbf{X} + \lambda\mathbf{I}) = \lambda\cdot(\lambda^2 + 64\lambda + 40) > 0$ với mọi $\lambda > 0$.</p>
+          <div class="box key">Với mọi $\lambda > 0$: $\ \mathbf{X}^T\mathbf{X} + \lambda\mathbf{I}$ luôn khả nghịch — phạt L2 sửa luôn lỗi “cột trùng” của bài 18.</div>
+        focus: [1, 2, [3, 4]]
+        say: "Còn nhớ ở bài 18, hai cột trùng nhau làm định thức bằng 0, không có nghịch đảo. Cộng thêm ma trận đơn vị, định thức thành 105, khác 0. Tổng quát, vì mỗi hướng đều được cộng thêm lam-đa dương, ma trận luôn khả nghịch với mọi lam-đa dương."
+
+  # ───────────────────────── 6. CHỌN λ ─────────────────────────
+  - id: choose_lambda
+    kind: example
+    title: "Ví dụ: đa thức bậc 5 với các mức phạt khác nhau"
+    checks:
+      - "(lambda x, y, xv, yv: [tuple(round(float(v), 3) for v in (lambda w: (np.mean((np.vander(x, 6, increasing=True) @ w - y)**2), np.mean((np.vander(xv, 6, increasing=True) @ w - yv)**2)))(np.linalg.solve(np.vander(x, 6, increasing=True).T @ np.vander(x, 6, increasing=True) + lam*np.diag([0, 1, 1, 1, 1, 1.]), np.vander(x, 6, increasing=True).T @ y))) for lam in (0, 0.01, 0.1, 1, 10)] == [(0.0, 0.832), (0.059, 0.188), (0.105, 0.076), (0.152, 0.06), (0.295, 0.252)])(np.arange(6.), 2*np.arange(6.) + 1 + np.array([0.5, -0.5, 0.3, -0.4, 0.6, -0.3]), np.array([0.5, 1.5, 2.5, 3.5, 4.5]), 2*np.array([0.5, 1.5, 2.5, 3.5, 4.5]) + 1 + np.array([0.2, -0.3, 0.1, 0.3, -0.2]))"
+    steps:
+      - show: |
+          <table class="t"><tr><th>$N\lambda$</th><th>0</th><th>0,01</th><th>0,1</th><th>1</th><th>10</th></tr>
+          <tr><td>MSE huấn luyện</td><td>0</td><td>0,059</td><td>0,105</td><td>0,152</td><td>0,295</td></tr>
+          <tr><td>MSE kiểm định</td><td>0,832</td><td>0,188</td><td>0,076</td><td>$\hlg{0{,}060}$</td><td>0,252</td></tr></table>
+          <p>Phạt càng mạnh, sai số huấn luyện càng <b>tăng</b> (đó là cái giá), còn sai số kiểm định giảm rồi lại tăng: chọn $N\lambda = 1$.</p>
+        focus: [0, "1.2", "1.3", 2]
+        say: "Thử năm mức phạt cho đa thức bậc 5. Phạt càng mạnh, sai số huấn luyện càng tăng, đó là cái giá phải trả. Còn sai số kiểm định giảm từ 0 phẩy 832 xuống 0 phẩy 06, rồi lại tăng khi phạt quá mạnh. Vì vậy ta chọn mức phạt ở chỗ thấp nhất của sai số kiểm định, tức là bằng 1."
+      - show: |
+          <p class="note">Phạt quá yếu: vẫn quá khớp. Phạt quá mạnh: các hệ số bị ép gần 0, mô hình quá đơn giản (<b>chưa khớp</b>). λ được chọn bằng sai số <b>kiểm định</b>, không bao giờ bằng sai số huấn luyện (vì sai số huấn luyện luôn nhỏ nhất khi λ = 0).</p>
+        say: "Phạt quá yếu thì vẫn quá khớp, phạt quá mạnh thì mô hình quá đơn giản, gọi là chưa khớp. Lam-đa phải được chọn bằng sai số kiểm định, vì sai số huấn luyện luôn nhỏ nhất khi không phạt."
+
+  # ───────────────────────── 7. PHẠT L1 ─────────────────────────
+  - id: lasso
+    kind: concept
+    title: "Phạt L1: đẩy hệ số về đúng 0"
+    checks:
+      - "(lambda g: [round(float(g[int(np.argmin([(w - a)**2 + 2*abs(w) for w in g]))]), 2) for a in (3, 0.5)] == [2.0, 0.0] and [round(float(g[int(np.argmin([(w - a)**2 + 2*w**2 for w in g]))]), 2) for a in (3, 0.5)] == [1.0, 0.17])(np.arange(-5, 5.0001, 0.01))"
+    steps:
+      - show: |
+          <p>Phạt L1: $\ \operatorname{MSE}(\mathbf{w}) + \lambda\sum_{j = 1}^{D} |w_j|$ &nbsp; ($|w_j|$: giá trị tuyệt đối).</p>
+          <p>So sánh trên bài toán một hệ số: làm nhỏ $(w - a)^2 + \text{phạt}$ với $\lambda = 2$ (máy dò bước 0,01):</p>
+          <table class="t"><tr><th>$a$ (hệ số khi không phạt)</th><th>phạt L2: $2w^2$</th><th>phạt L1: $2|w|$</th></tr>
+          <tr><td>3</td><td>1</td><td>2</td></tr>
+          <tr><td>0,5</td><td>0,17 (nhỏ, khác 0)</td><td>$\hlg{0}$ (đúng bằng 0)</td></tr></table>
+        focus: [1, 2, "3.3"]
+        say: "Phạt L1 dùng tổng các giá trị tuyệt đối thay vì bình phương. So sánh trên bài toán một hệ số với lam-đa bằng 2. Khi hệ số ban đầu là 0 phẩy 5, phạt L2 chỉ co nó về 0 phẩy 17, còn phạt L1 đẩy nó về đúng bằng 0."
+      - show: |
+          <div class="box key">L2 co mọi hệ số <b>nhỏ lại</b>; L1 đưa nhiều hệ số về <b>đúng 0</b> — tự động bỏ bớt đặc trưng không cần thiết.</div>
+          <p class="note">Lý do: gần 0, phạt $w^2$ gần như phẳng (đạo hàm $2w \to 0$), còn phạt $|w|$ luôn có độ dốc 1 — đủ mạnh để giữ $w$ ở đúng 0.</p>
+        focus: [1, 2]
+        say: "Vậy phạt L2 co mọi hệ số nhỏ lại, còn phạt L1 đưa nhiều hệ số về đúng 0, tự động bỏ bớt đặc trưng. Lý do là gần 0, bình phương gần như phẳng, còn giá trị tuyệt đối luôn có độ dốc bằng 1, đủ mạnh để giữ hệ số ở đúng 0."
+
+  - id: lasso_hand
+    kind: example
+    title: "Ví dụ: tính tay hai cách phạt trên một hệ số"
+    checks:
+      - "(lambda w, a: sp.solve(sp.diff((w - a)**2 + 2*w**2, w), w) == [a/3])(sp.Symbol('w'), sp.Symbol('a'))"
+      - "Rational(3, 3) == 1 and Rational(1, 2)/3 == Rational(1, 6) and round(1/6, 2) == 0.17"
+      - "(lambda w, a: sp.solve(sp.diff((w - a)**2 + 2*w, w), w) == [a - 1] and sp.solve(sp.diff((w - a)**2 - 2*w, w), w) == [a + 1])(sp.Symbol('w'), sp.Symbol('a'))"
+      - "3 - 1 == 2 and Rational(1, 2) - 1 == -Rational(1, 2) and Rational(1, 2) + 1 == Rational(3, 2)"
+      - "(lambda f: f(0) == 0.25 and f(0) < min(f(k/100) for k in list(range(-300, 0)) + list(range(1, 301))))(lambda w: (w - 0.5)**2 + 2*abs(w))"
+    steps:
+      - show: |
+          <p><b>Bước 1 — phạt L2.</b> Làm nhỏ $(w - a)^2 + 2w^2$; cho đạo hàm bằng 0 rồi chuyển vế:</p>
+          $$2(w - a) + 4w = 0 \implies 6w = 2a \implies w = \frac{a}{3}$$
+        focus: [1, 2, 2]
+        say: "Bước một, tính tay bài toán một hệ số với phạt L2, làm nhỏ w trừ a, bình phương, cộng 2 w bình phương. Đạo hàm bằng 2 nhân w trừ a, cộng 4 w. Cho bằng 0 rồi chuyển vế, 6 w bằng 2 a, nên w bằng a chia 3."
+      - show: |
+          $$a = 3:\ w = \frac{3}{3} = \hlg{1} \qquad a = 0{,}5:\ w = \frac{0{,}5}{3} \approx \hlg{0{,}17}$$
+          <p class="note">Phạt L2 chỉ chia hệ số cho 3: co nhỏ, nhưng không bao giờ về đúng 0 (trừ khi $a = 0$).</p>
+        focus: [1, 1, 2]
+        say: "Bước hai, thay số, với a bằng 3 thì w bằng 1, khớp với bảng máy dò. Với a bằng 0 phẩy 5, w bằng 0 phẩy 5 chia 3, khoảng 0 phẩy 17. Phạt L2 chỉ chia hệ số cho 3, nên co nhỏ mà không bao giờ về đúng 0."
+      - show: |
+          <p><b>Bước 3 — phạt L1</b>, làm nhỏ $(w - a)^2 + 2|w|$. Giả sử $w > 0$, khi đó $|w| = w$:</p>
+          $$2(w - a) + 2 = 0 \implies w = a - 1 \qquad a = 3:\ w = \hlg{2} > 0\ \checkmark$$
+        focus: [1, 1, 2, 2]
+        say: "Bước ba, chuyển sang phạt L1, làm nhỏ w trừ a, bình phương, cộng 2 lần trị tuyệt đối của w. Trị tuyệt đối có hai nhánh, nên ta xét từng vùng, trước hết giả sử w dương thì trị tuyệt đối của w chính là w. Cho đạo hàm bằng 0, ta được w bằng a trừ 1. Với a bằng 3, w bằng 2, đúng là số dương nên nhận, khớp với bảng máy dò."
+      - clear: true
+        show: |
+          <p><b>Bước 4 — phạt L1 với $a = 0{,}5$</b>: thử cả hai vùng.</p>
+          <table class="t"><tr><th>giả sử</th><th>đạo hàm bằng 0 cho</th><th>với $a = 0{,}5$</th><th>hợp lệ?</th></tr>
+          <tr><td>$w > 0$</td><td>$w = a - 1$</td><td>$-0{,}5$</td><td>không (ra số âm)</td></tr>
+          <tr><td>$w < 0$</td><td>$w = a + 1$</td><td>$1{,}5$</td><td>không (ra số dương)</td></tr>
+          <tr><td>$w = 0$</td><td>điểm gãy của $|w|$</td><td>$\hlg{0}$</td><td>còn lại duy nhất</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Bước bốn, với a bằng 0 phẩy 5, ta thử cả hai vùng. Giả sử w dương thì w bằng a trừ 1, bằng âm 0 phẩy 5, trái với giả sử. Giả sử w âm thì đạo hàm cho w bằng a cộng 1, bằng 1 phẩy 5, cũng trái với giả sử. Hàm liên tục nên chỗ nhỏ nhất chỉ còn là điểm gãy w bằng 0, đúng như máy đã dò."
+
+  # ───────────────────────── 8. KIỂM ĐỊNH CHÉO ─────────────────────────
+  - id: cv
+    kind: concept
+    title: "Kiểm định chéo K phần: dùng hết dữ liệu để chọn λ"
+    checks:
+      - "100 // 5 == 20 and 100 - 20 == 80"
+    steps:
+      - show: |
+          <div class="row"><div class="col"><svg width="520" height="280" viewBox="0 0 520 280">
+            <g font-size="20">
+            <text x="0" y="38">lượt 1</text><rect x="80" y="18" width="80" height="30" fill="#d97706"/><rect x="160" y="18" width="320" height="30" fill="#bfdbfe"/>
+            <text x="0" y="88">lượt 2</text><rect x="80" y="68" width="80" height="30" fill="#bfdbfe"/><rect x="160" y="68" width="80" height="30" fill="#d97706"/><rect x="240" y="68" width="240" height="30" fill="#bfdbfe"/>
+            <text x="0" y="138">lượt 3</text><rect x="80" y="118" width="160" height="30" fill="#bfdbfe"/><rect x="240" y="118" width="80" height="30" fill="#d97706"/><rect x="320" y="118" width="160" height="30" fill="#bfdbfe"/>
+            <text x="0" y="188">lượt 4</text><rect x="80" y="168" width="240" height="30" fill="#bfdbfe"/><rect x="320" y="168" width="80" height="30" fill="#d97706"/><rect x="400" y="168" width="80" height="30" fill="#bfdbfe"/>
+            <text x="0" y="238">lượt 5</text><rect x="80" y="218" width="320" height="30" fill="#bfdbfe"/><rect x="400" y="218" width="80" height="30" fill="#d97706"/>
+            </g>
+          </svg></div>
+          <div class="col"><p>Chia dữ liệu huấn luyện thành $K = 5$ phần. Mỗi lượt: học trên 4 phần <span style="color:#2563eb">(xanh)</span>, đo sai số trên phần còn lại <span style="color:#d97706">(cam)</span>.</p>
+          <p>Lấy <b>trung bình 5 sai số</b> cho mỗi λ; chọn λ có trung bình nhỏ nhất; học lại trên toàn bộ.</p></div></div>
+        say: "Khi dữ liệu ít, để riêng một phần kiểm định thì phí. Kiểm định chéo chia dữ liệu thành K phần, ví dụ 5. Mỗi lượt học trên 4 phần và đo sai số trên phần còn lại. Lấy trung bình 5 sai số cho mỗi mức phạt, rồi chọn mức có trung bình nhỏ nhất."
+      - show: |
+          <p class="note">Mỗi điểm dữ liệu được dùng để kiểm định đúng một lần. Tập <b>kiểm tra</b> vẫn để riêng, không tham gia vào việc chọn λ.</p>
+        say: "Nhờ vậy mỗi điểm dữ liệu được dùng để kiểm định đúng một lần. Tập kiểm tra vẫn để riêng, không tham gia vào việc chọn lam-đa."
+
+  # ───────────────────────── 9. KIỂM BẰNG MÁY ─────────────────────────
+  - id: verify
+    kind: check
+    title: "Phép thử: phương trình chuẩn mới khớp với cách dò trực tiếp"
+    checks:
+      - "(lambda X, y: np.allclose(np.linalg.solve(X.T @ X + np.diag([0, 1, 1, 1, 1, 1.]), X.T @ y), np.linalg.lstsq(np.vstack([X, np.diag([0, 1, 1, 1, 1, 1.])]), np.r_[y, np.zeros(6)], rcond=None)[0]))(np.vander(np.arange(6.), 6, increasing=True), 2*np.arange(6.) + 1 + np.array([0.5, -0.5, 0.3, -0.4, 0.6, -0.3]))"
+      - "(lambda X, y: (lambda w: round(float(np.sum(w[1:]**2)), 2) < 1)(np.linalg.solve(X.T @ X + np.diag([0, 1, 1, 1, 1, 1.]), X.T @ y)))(np.vander(np.arange(6.), 6, increasing=True), 2*np.arange(6.) + 1 + np.array([0.5, -0.5, 0.3, -0.4, 0.6, -0.3]))"
+    steps:
+      - show: |
+          <table class="t"><tr><th>phép thử</th><th>kết quả</th></tr>
+          <tr><td>① giải $(\mathbf{X}^T\mathbf{X} + \mathbf{I}')\mathbf{w} = \mathbf{X}^T\mathbf{y}$, và giải bình phương nhỏ nhất trên dữ liệu có thêm các “điểm giả” phạt hệ số</td><td>hai cách cho <b>cùng</b> $\mathbf{w}$ $\checkmark$</td></tr>
+          <tr><td>② tổng bình phương các hệ số (trừ $b$)</td><td>hơn 100 khi không phạt → dưới 1 khi $N\lambda = 1$ $\checkmark$</td></tr></table>
+        focus: ["1.2", "1.3"]
+        say: "Phép thử, ta giải phương trình chuẩn mới, rồi giải theo một cách khác bằng thư viện, và hai cách cho cùng một w. Tổng bình phương các hệ số giảm từ hơn 100 xuống dưới 1, đúng như mục đích của phạt."
+
+  # ───────────────────────── 10. TRONG AI ─────────────────────────
+  - id: in_ai
+    kind: concept
+    title: "Chống quá khớp trong học máy"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài</th><th>liên hệ</th></tr>
+          <tr><td>Bài 17</td><td>phạt L2 chính là MAP với tiên nghiệm “hệ số nhỏ” (phân phối chuẩn tâm 0) — $\ln$ tiên nghiệm cho đúng số hạng $-\text{hằng số}\cdot\sum w_j^2$</td></tr>
+          <tr><td><b>Bài 23</b></td><td>mạng nơ-ron dùng thêm cách “tắt ngẫu nhiên một số nơ-ron khi học” (dropout) để chống quá khớp</td></tr>
+          <tr><td><b>Bài 25</b></td><td>hàm mục tiêu của SVM có sẵn một phần phạt L2</td></tr></table>
+        forward_ref: true
+        focus: ["1.2", "1.3", "1.4"]
+        say: "Nhắc lại bài 17, phạt L2 chính là ước lượng hậu nghiệm cực đại với tiên nghiệm cho rằng hệ số nhỏ. Ở bài 23, mạng nơ-ron còn tắt ngẫu nhiên một số nơ-ron khi học để chống quá khớp. Ở bài 25, hàm mục tiêu của một mô hình phân loại có sẵn phần phạt L2."
+
+  # ───────────────────────── 11. LỖI THƯỜNG GẶP ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Chọn λ (hoặc bậc đa thức) theo sai số huấn luyện <b class="red">(sai)</b>
+          <br><span class="note">Sai số huấn luyện luôn nhỏ nhất khi λ = 0 và bậc cao nhất — sẽ luôn chọn mô hình quá khớp.</span></div>
+        say: "Lỗi thứ nhất, chọn mức phạt hay bậc đa thức theo sai số huấn luyện. Sai số đó luôn nhỏ nhất khi không phạt và bậc cao nhất, nên ta sẽ luôn chọn mô hình quá khớp."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Dùng tập kiểm tra để chọn λ <b class="red">(sai)</b>
+          <br><span class="note">Khi đó điểm trên tập kiểm tra không còn là “dữ liệu chưa thấy” — điểm số cuối bị đẹp giả.</span></div>
+        say: "Lỗi thứ hai, dùng tập kiểm tra để chọn mức phạt. Khi đó tập kiểm tra không còn là dữ liệu chưa thấy, và điểm số cuối bị đẹp giả."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Phạt khi các đặc trưng khác thang đo, hoặc phạt cả $b$ <b class="red">(dễ sai)</b>
+          <br><span class="note">Đặc trưng đo bằng số to có hệ số nhỏ nên ít bị phạt — hãy chuẩn hoá các cột trước (như bài 16). Phạt $b$ kéo cả đường về gốc toạ độ, vô lý.</span></div>
+        say: "Lỗi thứ ba, phạt khi các đặc trưng có thang đo khác nhau, hoặc phạt cả hệ số tự do b. Hãy chuẩn hoá các cột trước, như đã nói ở bài 16 về các đặc trưng khác đơn vị. Còn phạt b thì kéo cả đường thẳng về gốc toạ độ một cách vô lý."
+
+  # ───────────────────────── 12. TỰ KIỂM TRA ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "Rational(10, 4 + 1) == 2 and Rational(10, 4) == Rational(5, 2)"
+      - "(lambda g: round(float(g[int(np.argmin([(w - 1)**2 + 4*abs(w) for w in g]))]), 2) == 0.0)(np.arange(-5, 5.0001, 0.01))"
+      - "100 // 5 == 20 and 100 - 100 // 5 == 80"
+      - "(lambda w: sp.diff((w - 1)**2 + 4*w, w) == 2*w + 2 and sp.diff((w - 1)**2 - 4*w, w) == 2*w - 6 and ((w - 1)**2 + 4*abs(w)).subs(w, 0) == 1)(sp.Symbol('w'))"
+      - "Rational(5, 2) - 2 == Rational(1, 2)"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Một đặc trưng, không có $b$: không phạt thì $w = \frac{\sum x_i y_i}{\sum x_i^2}$. Với $\sum x_i y_i = 10$, $\sum x_i^2 = 4$, phạt L2 làm mẫu số thành $\sum x_i^2 + 1$. Tính $w$ trước và sau khi phạt.</td></tr>
+          <tr><td>2</td><td>Làm nhỏ $(w - 1)^2 + 4|w|$. Đáp án $w$ bằng bao nhiêu?</td></tr>
+          <tr><td>3</td><td>100 mẫu, kiểm định chéo $K = 5$: mỗi lượt học trên bao nhiêu mẫu?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", 0]
+        say: "Bây giờ đến lượt bạn, với ba câu trên màn hình. Câu một về phạt L2 với một đặc trưng. Câu hai về phạt L1. Câu ba về kiểm định chéo. Hãy dừng video và làm ra giấy."
+        pause: 8
+      - clear: true
+        show: |
+          <p>① Thay số vào công thức, trước và sau khi mẫu số được cộng thêm 1:</p>
+          $$w_{\text{trước}} = \frac{10}{4} = 2{,}5 \qquad w_{\text{sau}} = \frac{10}{4 + 1} = \hlg{2}$$
+          <p class="note">Hệ số bị co nhỏ 0,5 — đúng vai trò của phạt L2.</p>
+        focus: [1, 2, 3]
+        say: "Đáp án câu một, ta thay số vào công thức, trước và sau khi mẫu số được cộng thêm 1. Trước khi phạt, w bằng 10 chia 4, bằng 2 phẩy 5, sau khi phạt bằng 10 chia 5, bằng 2. Hệ số bị co nhỏ 0 phẩy 5, đúng vai trò của phạt L2."
+      - show: |
+          <p>② Xét từng vùng như ví dụ tính tay:</p>
+          <table class="t"><tr><th>vùng</th><th>đạo hàm</th><th>nghĩa là</th></tr>
+          <tr><td>$w > 0$</td><td>$2(w - 1) + 4 = 2w + 2 > 0$</td><td>hàm tăng: muốn nhỏ thì lùi về 0</td></tr>
+          <tr><td>$w < 0$</td><td>$2(w - 1) - 4 = 2w - 6 < 0$</td><td>hàm giảm: muốn nhỏ thì tiến về 0</td></tr></table>
+          <p>Nên $w = \hlg{0}$ — phạt L1 đủ mạnh đẩy về đúng 0.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Câu hai, xét từng vùng như ví dụ tính tay. Khi w dương, đạo hàm bằng 2 w cộng 2, luôn dương, nên hàm tăng và muốn nhỏ thì phải lùi về 0. Khi w âm, đạo hàm bằng 2 w trừ 6, luôn âm, nên hàm giảm khi tiến về 0. Vậy w bằng 0, phạt L1 đủ mạnh đẩy hệ số về đúng 0."
+      - clear: true
+        show: |
+          <p>③ Chia 100 mẫu thành 5 phần, mỗi lượt để riêng một phần:</p>
+          $$\frac{100}{5} = 20 \text{ mẫu mỗi phần} \qquad 100 - 20 = \hlg{80} \text{ mẫu để học}$$
+        focus: [1, 2]
+        say: "Câu ba, chia 100 mẫu thành 5 phần, mỗi lượt để riêng một phần để đo. Mỗi phần có 20 mẫu, nên mỗi lượt học trên 100 trừ 20, bằng 80 mẫu."
+
+  # ───────────────────────── 13. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">quá khớp: huấn luyện tốt, dữ liệu mới tệ</span><span class="a">→</span>
+          <span class="n">phạt L2: co hệ số, luôn khả nghịch</span><span class="a">→</span>
+          <span class="n">phạt L1: đưa hệ số về 0</span><span class="a">→</span>
+          <span class="n">chọn λ bằng kiểm định chéo</span><span class="a">→</span>
+          <span class="n">tập kiểm tra: dùng một lần</span></div>
+        say: "Tổng kết chuỗi logic. Quá khớp là khi mô hình tốt trên dữ liệu huấn luyện nhưng tệ trên dữ liệu mới. Phạt L2 co các hệ số và luôn giải được. Phạt L1 đưa hệ số về 0. Chọn mức phạt bằng kiểm định chéo, và tập kiểm tra chỉ dùng một lần."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> mục tiêu không phải khớp dữ liệu cũ, mà là đoán đúng dữ liệu <b>chưa thấy</b>.</div>
+        say: "Điều cần mang theo, mục tiêu không phải khớp dữ liệu cũ, mà là đoán đúng dữ liệu chưa thấy."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 20): <b>Logistic, Softmax</b> và Cross-Entropy — từ dự đoán con số sang dự đoán xác suất để phân loại.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 20, ta chuyển từ dự đoán một con số sang dự đoán xác suất để phân loại, với hàm hình chữ S và một hàm sai số mới. Hẹn gặp bạn ở bài tiếp theo."

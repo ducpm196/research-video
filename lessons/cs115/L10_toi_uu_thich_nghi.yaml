@@ -1,0 +1,378 @@
+id: L10
+series: "CS115 · Toán cho Khoa học Máy tính"
+title: "Bài 10 — Tối ưu thích nghi: Nesterov, Adagrad, RMSprop, Adadelta & Adam nhìn lại"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "DC23 Chương 3 (Momentum, Nesterov, Adagrad, RMSprop, Adadelta, Adam); tex#L285-L286; CITED: Sutskever, Martens, Dahl & Hinton, ICML 2013 (dạng Nesterov theo động lượng); Duchi, Hazan & Singer, JMLR 12 (2011) 2121–2159 (Adagrad); Tieleman & Hinton 2012, bài giảng 6, Coursera Neural Networks for Machine Learning (RMSprop — chưa từng đăng thành bài báo); Zeiler, arXiv:1212.5701 (2012) (Adadelta)"
+assumes: [vec, sub, cdot, implies, nabla, partial, prime, sqrt, zero_vec, dots, transpose, hat, eta, beta, epsilon]
+# Quy ước ký hiệu (giữ đúng bài 9): bước lặp w_k; tốc độ học η; hệ số giữ lại β (bài báo Adadelta gọi là ρ — chỉ nói bằng lời,
+#   không dùng thêm chữ mới); gradient tại bước k: g_k; trung bình trượt bình phương gradient: s_k (như bài 9); tổng bình
+#   phương gradient của Adagrad: G_k (chữ hoa, không in đậm — không phải ma trận); số rất nhỏ ε; nhân hai số: ·.
+#   Với hai trọng số x, y: mọi phép trên g², √, chia đều làm RIÊNG cho từng trọng số (nói rõ ở sym_adagrad).
+# Nối bài trước (nói lại khi dùng, luật 17): bài 9 (w_{k+1} = w_k − η ∇f(w_k); với (w − 3)² khoảng cách nhân (1 − 2η) mỗi bước;
+#   Momentum v_{k+1} = βv_k + η∇f(w_k); trung bình trượt; Adam), bài 6 (đạo hàm riêng: giữ biến kia đứng yên), bài 5 (độ cong).
+# Sửa nguồn: A18 (Adam “phổ biến nhất” là nhận định).
+objectives:
+  - "Giải thích bằng ví dụ thung lũng dẹt x² + 25y² vì sao một tốc độ học chung không hợp cho mọi trọng số"
+  - "Tính tay một bước Nesterov và so với Momentum"
+  - "Viết và tính tay Adagrad, RMSprop; giải thích vì sao bước của Adagrad nhỏ dần mãi còn RMSprop thì không"
+  - "Nói được Adadelta bỏ tốc độ học thế nào và cái giá phải trả (bước đầu phụ thuộc ε)"
+  - "Nhận ra Adam = Momentum + RMSprop + hiệu chỉnh độ lệch"
+asr_reviewed:   # ASR-checked, CHƯA nghe bằng tai — cần người nghe (REVIEW_L10.md §3, §7)
+  - {sentence: "Vẽ đường đi trên mặt phẳng x, y, đáy ở gốc toạ độ.", reason: "ASR chép “Vẽ đường đi trên mạc phẳng x, y, đáy ở gốc tòa đầu.” (0.769): lệch âm/thanh thuần Việt: mặt/mạc, toạ độ/toà đầu — NOT_VERIFIED bằng tai người"}
+  - sentence: "Hai, Nesterov, một phiên bản của Momentum biết giảm tốc sớm."
+    reason: "Nesterov: probe l10_probe2.py “Nê-sờ-tê-rốp” 5/6 khi đứng một mình; trong bài ASR chép biến thể gần (“neserop”) — INFERRED ASR nghe nhầm, cần người nghe (REVIEW_L10.md B32)"
+  - sentence: "Cách đầu tiên là Nesterov."
+    reason: "Nesterov: probe l10_probe2.py “Nê-sờ-tê-rốp” 5/6 khi đứng một mình; trong bài ASR chép biến thể gần (“neserope”) — INFERRED ASR nghe nhầm, cần người nghe (REVIEW_L10.md B32)"
+  - sentence: "Nesterov nhìn trước để phanh."
+    reason: "Nesterov: probe l10_probe2.py “Nê-sờ-tê-rốp” 5/6 khi đứng một mình; trong bài ASR chép biến thể gần (“nesterope”) — INFERRED ASR nghe nhầm, cần người nghe (REVIEW_L10.md B32)"
+  - sentence: "Ba, Adagrad, RMSprop và Adadelta, cho mỗi trọng số một tốc độ học riêng."
+    reason: "Adagrad, RMSprop: nút thắt B32 OPEN (probe tốt nhất 1/6 và 2/6; ASR chép “adagrac”, “arms pop”) — cần người nghe"
+  - sentence: "Cách thứ hai là Adagrad, gọi gọn là cách cộng dồn."
+    reason: "Adagrad: nút thắt B32 OPEN (probe “A-đa-grát” chặt 1/6, tiền tố 5/6; ASR chép “adagac”) — cần người nghe"
+  - sentence: "Adadelta thay eta bằng thông tin về các bước đã đi."
+    reason: "ASR chép đúng tên nhưng tách hai chữ “Ada Delta” (bí danh một từ không áp dụng được); probe “A-đa-đeo-ta” 5/6"
+  - sentence: "Bài báo năm 2012 đề xuất Adadelta viết bằng ký hiệu khác, nhưng ý nghĩa như nhau."
+    reason: "ASR chép đúng tên nhưng tách “Ada Delta” (như khung 68, probe “A-đa-đeo-ta” 5/6) — câu viết lại 2026-10-27 (nêu năm 2012 thay cho “bài báo gốc”)"
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Một tốc độ học chung có hợp với mọi trọng số không?"
+    steps:
+      - show: |
+          <p class="big">Bài 9: Adam tự co giãn bước <b>cho từng trọng số</b>.</p>
+          <p>Hôm nay: <b>vì sao</b> cần như vậy, và các cách làm điều đó.</p>
+        focus: [1, 2]
+        say: "Chào bạn, ở bài 9, ta thấy Adam tự co giãn độ dài bước cho từng trọng số riêng. Hôm nay ta trả lời vì sao lại cần như vậy, và học các cách làm điều đó."
+      - show: |
+          <table class="t"><tr><th>phần</th><th>nội dung</th></tr>
+          <tr><td>1</td><td>Khi nào một tốc độ học chung là <b>không đủ</b>? → thung lũng dẹt</td></tr>
+          <tr><td>2</td><td><b>Nesterov</b>: Momentum biết “phanh” sớm</td></tr>
+          <tr><td>3</td><td><b>Adagrad</b>, <b>RMSprop</b>, <b>Adadelta</b>: mỗi trọng số một tốc độ học</td></tr>
+          <tr><td>4</td><td>Adam nhìn lại: ghép các mảnh trên</td></tr></table>
+          <p class="note">Với AI: vẫn là bước ④ <b>tự sửa</b> của bài 0.</p>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", 2]
+        say: "Hôm nay có bốn phần. Một, khi nào một tốc độ học chung là không đủ. Hai, Nesterov, một phiên bản của Momentum biết giảm tốc sớm. Ba, Adagrad, RMSprop và Adadelta, cho mỗi trọng số một tốc độ học riêng. Bốn, nhìn lại Adam. Tất cả vẫn là bước tự sửa trong bốn bước của bài 0."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn bài 9 trong một phút"
+    checks:
+      - "(lambda w, e: sp.expand((w - e*2*(w - 3)) - 3 - (1 - 2*e)*(w - 3)))(*sp.symbols('w eta')) == 0"
+    steps:
+      - show: |
+          <p>Gradient Descent: $\ \mathbf{w}_{k+1} = \mathbf{w}_k - \eta\,\nabla f(\mathbf{w}_k)$</p>
+          <p class="note">Với $f = (w - 3)^2$: khoảng cách tới đáy nhân với $(1 - 2\eta)$ mỗi bước — đi về đáy khi $0 < \eta < 1$.</p>
+        focus: [0, 1, 2]
+        say: "Ôn lại bài 9, nơi ta học cách đi xuống đáy từng bước. Cách đi thường lấy vị trí cũ, rồi trừ cho tích của eta với gradient. Với hàm w trừ 3 bình phương, mỗi bước khoảng cách tới đáy nhân với 1 trừ 2 eta, nên đi về được đáy khi eta nằm giữa 0 và 1."
+      - show: |
+          <p>Momentum: $\ v_{k+1} = \beta\, v_k + \eta\,\nabla f(\mathbf{w}_k),\ \ \mathbf{w}_{k+1} = \mathbf{w}_k - v_{k+1}$ &nbsp; (giữ đà, $\beta \approx 0{,}9$)</p>
+          <p>Trung bình trượt: $\ s_k = \beta\, s_{k-1} + (1 - \beta)\, g_k^2$ &nbsp; (nhớ các giá trị gần đây; $g_k$ = gradient tại bước $k$)</p>
+        focus: [1, 2, 2]
+        say: "Cũng ở bài 9, Momentum giữ lại beta phần vận tốc cũ, như hòn bi giữ đà. Và trung bình trượt giữ lại beta phần giá trị cũ, lấy 1 trừ beta phần giá trị mới. Ở đây nó lấy trung bình của bình phương gradient."
+
+  # ───────────────────────── 3. THUNG LŨNG DẸT ─────────────────────────
+  - id: valley
+    kind: example
+    title: "Thung lũng dẹt: một tốc độ học không hợp cho cả hai hướng"
+    checks:
+      - "(lambda x, y: (sp.diff(x**2 + 25*y**2, x), sp.diff(x**2 + 25*y**2, y)))(*sp.symbols('x y')) == (2*sp.Symbol('x'), 50*sp.Symbol('y'))"
+      - "1 - 2*Rational(35,1000) == Rational(93,100) and 1 - 50*Rational(35,1000) == Rational(-3,4)"
+      - "[(Rational(93,100)**k, Rational(-3,4)**k) for k in (1, 2, 3)] == [(Rational(93,100), Rational(-3,4)), (Rational(8649,10000), Rational(9,16)), (Rational(804357,1000000), Rational(-27,64))]"
+      - "1 - 2*Rational(1,10) == Rational(4,5) and 1 - 50*Rational(1,10) == -4"
+      - "1 - 2*Rational(1,4) == Rational(1,2) and 1 - 50*Rational(1,100) == Rational(1,2)"
+      - "Rational(2,50) == Rational(1,25)"
+    steps:
+      - show: |
+          <p>$f(x, y) = x^2 + 25y^2$ — đáy tại $(0, 0)$, nhưng <b>dốc theo $y$ gấp nhiều lần theo $x$</b>.</p>
+          <p>Đạo hàm riêng (bài 6: giữ biến kia đứng yên): $\ \dfrac{\partial f}{\partial x} = 2x,\ \ \dfrac{\partial f}{\partial y} = 50y$</p>
+        focus: [1, 2]
+        say: "Xét hàm x bình phương cộng 25 y bình phương, đáy tại gốc, nhưng theo hướng y thì dốc hơn rất nhiều so với hướng x. Theo cách tính đạo hàm riêng của bài 6, giữ biến kia đứng yên, ta được 2 x và 50 y."
+      - show: |
+          <p>Gradient Descent tách thành hai phép tính riêng, giống bài 9:</p>
+          $$x_{k+1} = (1 - 2\eta)\,x_k, \qquad y_{k+1} = (1 - 50\eta)\,y_k$$
+          <p class="note">Hướng $x$ cần $0 < \eta < 1$; hướng $y$ cần $0 < \eta < 0{,}04$.</p>
+        focus: [1, 2, 3]
+        say: "Thay vào công thức, mỗi hướng đi riêng. X mới bằng 1 trừ 2 eta nhân x cũ, y mới bằng 1 trừ 50 eta nhân y cũ. Theo điều kiện của bài 9, hướng x cần eta dưới 1, nhưng hướng y cần eta dưới 0 phẩy 04."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>$\eta$</th><th>hệ số theo $x$</th><th>hệ số theo $y$</th><th>từ $(1, 1)$, 3 bước</th></tr>
+          <tr><td>0,035</td><td>0,93 (rất chậm)</td><td>−0,75 (đổi phía)</td><td>$x$: 0,93 → 0,86 → 0,80; &nbsp; $y$: −0,75 → 0,56 → −0,42</td></tr>
+          <tr><td>0,1</td><td>0,8</td><td class="red">−4 (phân kỳ)</td><td>$y$: −4 → 16 → −64</td></tr></table>
+          <div class="box key">Một $\eta$ chung: chọn nhỏ cho hướng dốc thì hướng thoải đi rất chậm. Nếu được chọn riêng, $\eta_x = 0{,}25,\ \eta_y = 0{,}01$, cả hai hệ số đều bằng $\hlg{0{,}5}$.</div>
+        focus: ["1.2", "1.2", "1.3", 2, 2]
+        say: "Thử với eta bằng 0 phẩy 035. Hướng x chỉ nhân 0 phẩy 93 mỗi bước, rất chậm, còn hướng y đổi phía qua lại. Với eta bằng 0 phẩy 1, hướng y phân kỳ. Nếu mỗi hướng được chọn tốc độ học riêng, cả hai hệ số đều là 0 phẩy 5. Đó là ý tưởng của hôm nay."
+
+  - id: valley_pic
+    kind: intuition
+    title: "Nhìn đường đi trên thung lũng dẹt"
+    checks:
+      - "[(round(0.93**k, 4), (-0.75)**k) for k in range(5)] == [(1.0, 1.0), (0.93, -0.75), (0.8649, 0.5625), (0.8044, -0.421875), (0.7481, 0.31640625)]"
+      - "[(1 - 2*Rational(1,4))**k for k in range(4)] == [1, Rational(1,2), Rational(1,4), Rational(1,8)] and [(1 - 50*Rational(1,100))**k for k in range(4)] == [1, Rational(1,2), Rational(1,4), Rational(1,8)]"
+    steps:
+      - show: |
+          <svg width="1300" height="420" viewBox="0 0 1300 420"><defs><marker id="v10R" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#b91c1c"/></marker><marker id="v10G" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#059669"/></marker></defs><line x1="67" y1="215" x2="873" y2="215" stroke="#9ca3af" stroke-width="2"/><line x1="160" y1="25" x2="160" y2="405" stroke="#9ca3af" stroke-width="2"/><text x="881" y="223" font-size="24" fill="#6b7280">x</text><text x="170" y="33" font-size="24" fill="#6b7280">y</text><line x1="780" y1="50" x2="737" y2="339" stroke="#b91c1c" stroke-width="4" marker-end="url(#v10R)"/><line x1="737" y1="339" x2="696" y2="122" stroke="#b91c1c" stroke-width="4" marker-end="url(#v10R)"/><line x1="696" y1="122" x2="659" y2="285" stroke="#b91c1c" stroke-width="4" marker-end="url(#v10R)"/><line x1="659" y1="285" x2="624" y2="163" stroke="#b91c1c" stroke-width="4" marker-end="url(#v10R)"/><line x1="780" y1="50" x2="470" y2="132" stroke="#059669" stroke-width="5" marker-end="url(#v10G)"/><line x1="470" y1="132" x2="315" y2="174" stroke="#059669" stroke-width="5" marker-end="url(#v10G)"/><line x1="315" y1="174" x2="238" y2="194" stroke="#059669" stroke-width="5" marker-end="url(#v10G)"/><circle cx="780" cy="50" r="7" fill="#b91c1c"/><circle cx="737" cy="339" r="7" fill="#b91c1c"/><circle cx="696" cy="122" r="7" fill="#b91c1c"/><circle cx="659" cy="285" r="7" fill="#b91c1c"/><circle cx="624" cy="163" r="7" fill="#b91c1c"/><circle cx="780" cy="50" r="7" fill="#059669"/><circle cx="470" cy="132" r="7" fill="#059669"/><circle cx="315" cy="174" r="7" fill="#059669"/><circle cx="238" cy="194" r="7" fill="#059669"/><circle cx="160" cy="215" r="10" fill="#1f2937"/><text x="146" y="249" font-size="24" text-anchor="end" fill="#1f2937">đáy (0, 0)</text><text x="796" y="58" font-size="24" fill="#1f2937">xuất phát (1, 1)</text><text x="687" y="372" font-size="24" fill="#b91c1c">η chung = 0,035: y đổi phía, x đi chậm</text><text x="234" y="75" font-size="24" fill="#059669">η riêng 0,25 và 0,01: thẳng về đáy</text></svg>
+        say: "Vẽ đường đi trên mặt phẳng x, y, đáy ở gốc toạ độ. Đường đỏ dùng một eta chung bằng 0 phẩy 035. Theo hướng y dốc, mỗi bước bị văng sang phía bên kia trục, còn theo hướng x thoải, mỗi bước chỉ nhích một chút. Sau 4 bước, x vẫn còn khoảng 0 phẩy 75. Đường xanh cho mỗi hướng một tốc độ học riêng, 0 phẩy 25 cho x và 0 phẩy 01 cho y. Cả hai toạ độ cùng giảm một nửa mỗi bước, nên đi thẳng về đáy, sau 3 bước đã ở 0 phẩy 125."
+
+  # ───────────────────────── 4. NESTEROV ─────────────────────────
+  - id: nesterov
+    kind: formula
+    title: "Nesterov: tính gradient ở chỗ sắp tới"
+    checks:
+      - "Rational(9,10)*0 + Rational(1,20)*2*(0 - 0 - 3) == Rational(-3,10)"
+      - "Rational(3,10) - Rational(9,10)*Rational(-3,10) == Rational(57,100)"
+      - "Rational(9,10)*Rational(-3,10) + Rational(1,20)*2*(Rational(57,100) - 3) == Rational(-513,1000) and Rational(3,10) + Rational(513,1000) == Rational(813,1000)"
+    steps:
+      - show: |
+          <div class="box key"><b>Nesterov</b> (viết theo dạng Momentum của bài 9):
+          $$v_{k+1} = \beta\, v_k + \eta\,\nabla f(\hlo{\mathbf{w}_k - \beta\, v_k}), \qquad \mathbf{w}_{k+1} = \mathbf{w}_k - v_{k+1}$$
+          <span class="note">Khác Momentum <b>một chỗ</b>: gradient được tính tại $\mathbf{w}_k - \beta v_k$ — chỗ mà đà cũ sắp đưa ta tới.</span></div>
+        say: "Cách đầu tiên là Nesterov. Theo đúng dạng Momentum của bài 9, công thức chỉ khác một chỗ. Gradient không tính tại vị trí hiện tại, mà tại chỗ mà đà cũ sắp đưa ta tới. Nhờ nhìn trước một bước, nó biết phanh sớm khi sắp vượt qua đáy."
+      - show: |
+          <p><b>Làm thử</b> $f = (w - 3)^2$, $\eta = 0{,}05$, $\beta = 0{,}9$, $w_0 = 0$. Bước 1 giống Momentum: $\ v_1 = -0{,}3$, $\ w_1 = 0{,}3$.</p>
+          <p>Bước 2: nhìn trước tới $\ 0{,}3 - 0{,}9\cdot(-0{,}3) = 0{,}57$, &nbsp; $v_2 = 0{,}9\cdot(-0{,}3) + 0{,}05\cdot 2\cdot(0{,}57 - 3) = -0{,}513$</p>
+          <p>$w_2 = 0{,}3 + 0{,}513 = \hlg{0{,}813}$ &nbsp; (Momentum: $0{,}84$)</p>
+        focus: [1, 1, [2, 3]]
+        say: "Làm thử với hàm w trừ 3 bình phương của bài 9, cùng eta và beta như hôm đó. Bước một giống hệt Momentum, w một bằng 0 phẩy 3. Bước hai, đà cũ đưa ta tới 0 phẩy 57, ta tính gradient ở đó, và được w hai bằng 0 phẩy 813, hơi chậm hơn 0 phẩy 84 của Momentum vì đã bắt đầu phanh."
+
+  - id: nesterov_cmp
+    kind: example
+    title: "Nesterov vượt quá đáy ít hơn"
+    checks:
+      - "(lambda xs: abs(max(xs) - 4.81) < 0.005 and abs(abs(xs[-1] - 3) - 0.60) < 0.005)(((w := 0.0), (v := 0.0)) and [(w := w - (v := 0.9*v + 0.05*2*(w - 3))) for _ in range(30)])"
+      - "(lambda xs: abs(max(xs) - 4.06) < 0.005 and abs(abs(xs[-1] - 3) - 0.13) < 0.005)(((w := 0.0), (v := 0.0)) and [(w := w - (v := 0.9*v + 0.05*2*((w - 0.9*v) - 3))) for _ in range(30)])"
+    steps:
+      - show: |
+          <table class="t"><tr><th>cùng $\eta = 0{,}05$, $\beta = 0{,}9$, $w_0 = 0$</th><th>Momentum</th><th>Nesterov</th></tr>
+          <tr><td>vị trí xa nhất sau khi vượt đáy $w = 3$</td><td>4,81</td><td>$\hlg{4{,}06}$</td></tr>
+          <tr><td>cách đáy sau 30 bước</td><td>0,60</td><td>$\hlg{0{,}13}$</td></tr></table>
+          <p class="note">Cả hai đều vượt qua đáy rồi quay lại — đó là tính chất của “đà”. Nesterov vượt ít hơn và lắng nhanh hơn ở ví dụ này.</p>
+        focus: [1, 2, "1.2", "1.3"]
+        say: "Chạy tiếp ba mươi bước bằng máy. Cả hai đều vượt qua đáy rồi quay lại, vì đó là bản chất của việc giữ đà. Nhưng Momentum vượt tới 4 phẩy 81, còn Nesterov chỉ tới 4 phẩy 06. Sau ba mươi bước, Nesterov cách đáy 0 phẩy 13, Momentum vẫn còn cách 0 phẩy 6."
+
+  # ───────────────────────── 5. ADAGRAD ─────────────────────────
+  - id: sym_adagrad
+    kind: symbol
+    title: "Giải mã ký hiệu: tổng G của Adagrad"
+    checks:
+      - "Rational(1,10)*2/sp.sqrt(4) == Rational(1,10) and Rational(1,10)*50/sp.sqrt(2500) == Rational(1,10)"
+      - "1 - Rational(1,10) == Rational(9,10)"
+    steps:
+      - show: |
+          <div class="box key"><b>Adagrad</b> — với <b>từng trọng số riêng</b>:
+          $$G_k = G_{k-1} + g_k^2, \qquad w_{k+1} = w_k - \eta\,\frac{g_k}{\sqrt{G_k} + \varepsilon}$$
+          <span class="note">$G_k$ (chữ hoa, không in đậm): <b>tổng</b> bình phương mọi gradient từ đầu tới bước $k$, bắt đầu $G_0 = 0$.</span></div>
+        say: "Cách thứ hai là Adagrad, gọi gọn là cách cộng dồn. Ký hiệu mới là chữ G hoa, không in đậm, không phải ma trận. Nó là tổng bình phương của mọi gradient từ đầu tới giờ, tính riêng cho từng trọng số. Bước đi bằng eta nhân gradient, chia cho căn của G cộng epsilon."
+      - show: |
+          <p><b>Thung lũng dẹt</b>, từ $(1, 1)$, $\eta = 0{,}1$: gradient $(2, 50)$ → $G_1 = (4, 2500)$.</p>
+          <p>Bước: $\ \left(0{,}1\cdot\dfrac{2}{2},\ \ 0{,}1\cdot\dfrac{50}{50}\right) = (0{,}1;\ 0{,}1)$ &nbsp; → &nbsp; tới $\hlg{(0{,}9;\ 0{,}9)}$ &nbsp; (Gradient Descent: tới $(0{,}8;\ -4)$)</p>
+        focus: [1, "1.5", 2, "2.3"]
+        say: "Làm thử trên thung lũng dẹt với eta bằng 0 phẩy 1. Gradient là 2 và 50, nên G là 4 và 2500. Chia mỗi gradient cho căn của G tương ứng, cả hai hướng đều bước đúng 0 phẩy 1, và ta tới 0 phẩy 9, 0 phẩy 9. Còn cách đi thường thì bị văng tới âm 4 theo hướng y."
+
+  - id: adagrad_sparse
+    kind: concept
+    title: "Điểm mạnh của Adagrad: đặc trưng hiếm được bước dài"
+    checks:
+      - "1 + 1 + 1 + 1 == 4 and 0 + 0 + 0 + 1 == 1 and 1/sp.sqrt(4) == Rational(1,2) and 1/sp.sqrt(1) == 1"
+    steps:
+      - show: |
+          <p>Hai trọng số: $A$ có gradient $1$ ở <b>mọi</b> bước; $B$ chỉ có gradient $1$ ở bước 4 (đặc trưng hiếm, ví dụ một từ ít gặp).</p>
+          <table class="t"><tr><th>ở bước 4</th><th>$G_4$</th><th>bước / $\eta$</th></tr>
+          <tr><td>$A$ (thường gặp)</td><td>$1 + 1 + 1 + 1 = 4$</td><td>$1 / \sqrt{4} = 0{,}5$</td></tr>
+          <tr><td>$B$ (hiếm gặp)</td><td>$0 + 0 + 0 + 1 = 1$</td><td>$1 / \sqrt{1} = \hlg{1}$</td></tr></table>
+          <p class="note">Trọng số ít được cập nhật thì mỗi lần có tín hiệu được bước dài hơn — Adagrad được thiết kế cho dữ liệu thưa như vậy (Duchi và cộng sự, 2011).</p>
+        focus: [0, 1, 2, 3]
+        say: "Cách cộng dồn có một điểm mạnh. Giả sử trọng số A có gradient bằng 1 ở mọi bước, còn trọng số B ứng với một đặc trưng hiếm, chỉ có gradient ở bước 4. Ở bước 4, G của A là 4 nên bước bằng một nửa eta, còn G của B là 1 nên bước bằng cả eta. Trọng số hiếm được bước dài hơn."
+  - id: adagrad_problem
+    kind: concept
+    title: "Điểm yếu của Adagrad: bước nhỏ dần mãi"
+    checks:
+      - "[round(float(1/sp.sqrt(k)), 3) for k in (1, 2, 3, 4)] == [1.0, 0.707, 0.577, 0.5]"
+      - "sp.limit(1/sp.sqrt(sp.Symbol('k', positive=True)), sp.Symbol('k', positive=True), sp.oo) == 0"
+    steps:
+      - show: |
+          <p>Gradient luôn bằng $1$: $\ G_k = k$, bước $= \dfrac{\eta}{\sqrt{k}}$</p>
+          <table class="t"><tr><th>$k$</th><th>1</th><th>2</th><th>3</th><th>4</th><th>100</th></tr>
+          <tr><td>bước / $\eta$</td><td>1</td><td>0,707</td><td>0,577</td><td>0,5</td><td class="red">0,1</td></tr></table>
+          <div class="box warn">$G_k$ chỉ <b>cộng thêm</b>, không bao giờ giảm → bước nhỏ dần về 0, kể cả khi còn xa đáy.</div>
+        focus: [0, 1, 2, 3]
+        say: "Nhưng cách cộng dồn có một điểm yếu. Giả sử gradient luôn bằng 1. Khi đó G bằng k, và bước đi bằng eta chia căn k, nhỏ dần, tới bước một trăm chỉ còn một phần mười. Vì G chỉ cộng thêm mà không bao giờ giảm, nên bước đi tiến dần về 0, kể cả khi còn xa đáy."
+
+  # ───────────────────────── 6. RMSPROP ─────────────────────────
+  - id: rmsprop
+    kind: formula
+    title: "RMSprop: thay tổng bằng trung bình trượt"
+    checks:
+      - "[round(float(1/sp.sqrt(1 - Rational(9,10)**k)), 2) for k in (1, 2, 3)] == [3.16, 2.29, 1.92]"
+      - "sp.limit(1/sp.sqrt(1 - Rational(9,10)**sp.Symbol('k', positive=True)), sp.Symbol('k', positive=True), sp.oo) == 1"
+    steps:
+      - show: |
+          <div class="box key"><b>RMSprop</b>: $\ s_k = \beta\, s_{k-1} + (1 - \beta)\, g_k^2, \qquad w_{k+1} = w_k - \eta\,\dfrac{g_k}{\sqrt{s_k} + \varepsilon}$
+          <br><span class="note">Giống Adagrad, nhưng $G_k$ (tổng) được thay bằng $s_k$ (trung bình trượt của bài 9) → gradient cũ được <b>quên dần</b>.</span></div>
+        say: "Cách thứ ba là RMSprop, gọi gọn là cách trung bình trượt, sửa đúng điểm yếu đó. Công thức giống cách cộng dồn, nhưng tổng G được thay bằng trung bình trượt s của bài 9. Gradient cũ được quên dần, nên mẫu số không tăng mãi."
+      - show: |
+          <p>Gradient luôn bằng $1$, $\beta = 0{,}9$: $\ s_k = 1 - 0{,}9^k$, bước $= \dfrac{\eta}{\sqrt{1 - 0{,}9^k}}$</p>
+          <table class="t"><tr><th>$k$</th><th>1</th><th>2</th><th>3</th><th>rất lớn</th></tr>
+          <tr><td>bước / $\eta$</td><td class="red">3,16</td><td>2,29</td><td>1,92</td><td>$\hlg{\to 1}$</td></tr></table>
+          <p class="note">Bước tiến về đúng $\eta$, không về 0. Nhưng RMSprop không hiệu chỉnh độ lệch, nên mấy bước đầu dài hơn dự định (như lỗi 4 của bài 9).</p>
+        focus: [1, [1, 2], 3]
+        say: "Làm thử với gradient luôn bằng 1 và beta bằng 0 phẩy 9. Theo công thức trung bình trượt, s bằng 1 trừ 0 phẩy 9 mũ k, nên bước đi tiến dần về đúng eta, không về 0. Nhưng vì không hiệu chỉnh độ lệch, mấy bước đầu dài hơn dự định, bước đầu gấp 3 phẩy 16 lần."
+
+  # ───────────────────────── 7. ADADELTA ─────────────────────────
+  - id: adadelta
+    kind: concept
+    title: "Adadelta: bỏ hẳn tốc độ học η"
+    checks:
+      - "abs(float(-sp.sqrt(Rational(1,10**6))/sp.sqrt(Rational(1,10) + Rational(1,10**6))) + 0.003162) < 1e-6"
+    steps:
+      - show: |
+          <div class="box key"><b>Adadelta</b>: thay $\eta$ bằng $\sqrt{D_{k-1} + \varepsilon}$, với $D$ là trung bình trượt của bình phương <b>các bước đã đi</b>:
+          $$b_k = -\frac{\sqrt{D_{k-1} + \varepsilon}}{\sqrt{s_k + \varepsilon}}\, g_k, \qquad w_{k+1} = w_k + b_k, \qquad D_k = \beta\, D_{k-1} + (1 - \beta)\, b_k^2$$
+          <span class="note">$b_k$: <b>bước</b> đi ở lần $k$ (chữ b của “bước”). Bài báo đề xuất Adadelta (Zeiler, 2012) viết khác và gọi hệ số giữ lại là rho; ở đây giữ $\beta$ như bài 9.</span></div>
+        notation_note: true
+        say: "Cách thứ tư là Adadelta, bỏ hẳn tốc độ học eta. Thay vào đó, nó dùng D, trung bình trượt của bình phương các bước đã đi. Chữ b là bước đi ở lần thứ k, lấy chữ đầu của từ bước. Bài báo năm 2012 đề xuất Adadelta viết bằng ký hiệu khác, nhưng ý nghĩa như nhau."
+      - show: |
+          <p>Làm thử: gradient luôn bằng 1, $\beta = 0{,}9$, $\varepsilon = 10^{-6} = 0{,}000001$, $D_0 = 0$:</p>
+          <p>$b_1 = -\dfrac{\sqrt{0 + 10^{-6}}}{\sqrt{0{,}1 + 10^{-6}}} \approx \hl{-0{,}0032}$</p>
+          <div class="box warn">Không cần chọn $\eta$, nhưng bước đầu rất nhỏ và <b>do $\varepsilon$ quyết định</b>; vẫn phải chọn $\beta$ và $\varepsilon$.</div>
+        focus: [1, 2, 3]
+        say: "Làm thử với gradient luôn bằng 1, beta bằng 0 phẩy 9 và epsilon bằng một phần triệu. Bước đầu tiên chỉ khoảng 0 phẩy 0032. Vậy Adadelta không cần chọn eta, nhưng bước đầu rất nhỏ và do epsilon quyết định, và ta vẫn phải chọn beta và epsilon."
+
+  # ───────────────────────── 8. ADAM NHÌN LẠI ─────────────────────────
+  - id: adam_review
+    kind: concept
+    title: "Adam nhìn lại: ghép các mảnh"
+    steps:
+      - show: |
+          <table class="t"><tr><th>Phương pháp</th><th>Nhớ gì</th><th>Chia cho</th></tr>
+          <tr><td>Momentum, Nesterov</td><td>vận tốc (đà)</td><td>—</td></tr>
+          <tr><td>Adagrad</td><td>—</td><td>căn <b>tổng</b> bình phương gradient</td></tr>
+          <tr><td>RMSprop</td><td>—</td><td>căn <b>trung bình trượt</b> bình phương gradient</td></tr>
+          <tr><td>Adadelta</td><td>trung bình trượt bình phương bước đi (thay $\eta$)</td><td>như RMSprop</td></tr>
+          <tr><td><b>Adam</b></td><td>trung bình trượt gradient $m$ (như đà)</td><td>như RMSprop, có <b>hiệu chỉnh độ lệch</b></td></tr></table>
+        say: "Đặt tất cả cạnh nhau. Momentum và bản nhìn trước của nó nhớ vận tốc. Cách cộng dồn chia cho căn của tổng bình phương gradient. Cách thứ ba chia cho căn của một trung bình chỉ nhớ các bình phương gần đây. Adadelta thay eta bằng thông tin về các bước đã đi. Còn Adam nhớ đà như Momentum, chia như cách trung bình trượt, và thêm hiệu chỉnh độ lệch."
+      - show: |
+          <div class="box key">Tóm gọn: Adam = <b>động lượng</b> + <b>RMSprop</b>. Đúng như bảng — cộng thêm phần hiệu chỉnh độ lệch của bài 9.</div>
+          <p class="note">Câu hay gặp “Adam phổ biến nhất” là nhận định, không phải định lý.</p>
+        focus: [1, 2]
+        say: "Tóm gọn, Adam là động lượng ghép với cách trung bình trượt, cộng thêm phần hiệu chỉnh độ lệch đã học ở bài 9. Còn câu Adam phổ biến nhất chỉ là một nhận định, không phải định lý."
+
+  # ───────────────────────── 9. KIỂM TRA ─────────────────────────
+  - id: compare
+    kind: example
+    title: "So sánh trên thung lũng dẹt: thứ hạng đổi theo η"
+    checks:
+      - "abs((((p := np.array([1.0, 1.0])), (G := np.zeros(2))) and [(p := p - 0.1*(g := np.array([2*p[0], 50*p[1]]))/(np.sqrt(G := G + g**2) + 1e-8)) for _ in range(10)] and float(p[0]**2 + 25*p[1]**2)) - 7.97) < 0.005 and abs((((p := np.array([1.0, 1.0])), (s := np.zeros(2))) and [(p := p - 0.1*(g := np.array([2*p[0], 50*p[1]]))/(np.sqrt(s := 0.9*s + 0.1*g**2) + 1e-8)) for _ in range(10)] and float(p[0]**2 + 25*p[1]**2)) - 0.027) < 0.0005 and abs((((p := np.array([1.0, 1.0])), (m := np.zeros(2)), (s := np.zeros(2))) and [(p := p - 0.1*((m := 0.9*m + 0.1*(g := np.array([2*p[0], 50*p[1]])))/(1 - 0.9**k))/(np.sqrt((s := 0.999*s + 0.001*g**2)/(1 - 0.999**k)) + 1e-8)) for k in range(1, 11)] and float(p[0]**2 + 25*p[1]**2)) - 0.15) < 0.005"
+      - "abs((((p := np.array([1.0, 1.0])), (G := np.zeros(2))) and [(p := p - 0.5*(g := np.array([2*p[0], 50*p[1]]))/(np.sqrt(G := G + g**2) + 1e-8)) for _ in range(10)] and float(p[0]**2 + 25*p[1]**2)) - 0.0003) < 0.00005 and abs((((p := np.array([1.0, 1.0])), (s := np.zeros(2))) and [(p := p - 0.5*(g := np.array([2*p[0], 50*p[1]]))/(np.sqrt(s := 0.9*s + 0.1*g**2) + 1e-8)) for _ in range(10)] and float(p[0]**2 + 25*p[1]**2)) - 0.009) < 0.0005 and abs((((p := np.array([1.0, 1.0])), (m := np.zeros(2)), (s := np.zeros(2))) and [(p := p - 0.5*((m := 0.9*m + 0.1*(g := np.array([2*p[0], 50*p[1]])))/(1 - 0.9**k))/(np.sqrt((s := 0.999*s + 0.001*g**2)/(1 - 0.999**k)) + 1e-8)) for k in range(1, 11)] and float(p[0]**2 + 25*p[1]**2)) - 0.85) < 0.005"
+    steps:
+      - show: |
+          <p>$f = x^2 + 25y^2$ từ $(1, 1)$, sau 10 bước (tính bằng máy; RMSprop $\beta = 0{,}9$; Adam dùng các giá trị mặc định của bài 9 trừ $\eta$):</p>
+          <table class="t"><tr><th>$\eta$</th><th>Adagrad</th><th>RMSprop</th><th>Adam</th></tr>
+          <tr><td>0,1</td><td>$f = 7{,}97$</td><td>$\hlg{f = 0{,}027}$</td><td>$f = 0{,}15$</td></tr>
+          <tr><td>0,5</td><td>$\hlg{f = 0{,}0003}$</td><td>$f = 0{,}009$</td><td>$f = 0{,}85$</td></tr></table>
+          <div class="box warn">Cùng một bài toán, đổi $\eta$ là đổi người thắng. Muốn so hai bộ tối ưu phải thử nhiều $\eta$ cho mỗi cách.</div>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Cho máy tính chạy đủ mười bước, trên đúng hàm ở đầu bài. Với eta bằng 0 phẩy 1, cách trung bình trượt tốt nhất và cách cộng dồn kém nhất. Nhưng với eta bằng 0 phẩy 5, cách cộng dồn lại tốt nhất, còn Adam kém nhất. Vậy muốn so hai bộ tối ưu, phải thử nhiều giá trị eta cho mỗi cách."
+  - id: verify
+    kind: check
+    title: "Phép thử: mỗi trọng số bước đúng η ở bước đầu"
+    checks:
+      - "(1 - Rational(9,10))**2 + 25*(1 - Rational(9,10))**2 == Rational(26,100) and 1 + 25 == 26"
+      - "Rational(26,100) < 26"
+    steps:
+      - show: |
+          <p>Bước đầu Adagrad từ $(1, 1)$: mỗi hướng đi $\ \eta\cdot\dfrac{g}{\sqrt{g^2}} = \eta = 0{,}1$, vì chia gradient cho chính độ lớn của nó.</p>
+          <p>Thay lại vào $f$, giá trị phải giảm:</p>
+          $$f(1, 1) = 26 \ \to\ f(0{,}9;\ 0{,}9) = 0{,}81 + 20{,}25 = 21{,}06 \ \checkmark$$
+        focus: [1, [2, 3]]
+        say: "Phép thử thứ nhất, ở bước đầu của cách cộng dồn, mỗi hướng đi đúng eta, vì ta chia gradient cho chính độ lớn của nó. Phép thử thứ hai, thay lại vào hàm, giá trị giảm từ 26 xuống 21 phẩy 06, đúng là đi xuống."
+
+  # ───────────────────────── 10. TRONG AI ─────────────────────────
+  - id: in_ai
+    kind: concept
+    title: "Liên hệ các bài sau"
+    checks:
+      - "Matrix([[2,0],[0,50]]).inv()*Matrix([2,50]) == Matrix([1,1])"
+    steps:
+      - show: |
+          <p><b>Bài 11</b> (phương pháp Newton): chia gradient cho <b>đúng độ cong</b> của từng hướng (2 và 50) → từ $(1, 1)$, một bước tới thẳng đáy $(0, 0)$ ở thung lũng này.</p>
+          <p class="note">Các bộ tối ưu hôm nay chỉ <b>ước lượng</b> độ lớn từ gradient, rẻ hơn nhiều so với tính độ cong.</p>
+        forward_ref: true
+        focus: [1, 1, 2]
+        say: "Ở bài 11, ta học một phương pháp chia gradient cho đúng độ cong của từng hướng, ở đây là 2 và 50. Với thung lũng này, từ điểm 1, 1, nó tới thẳng đáy chỉ trong một bước. Các bộ tối ưu hôm nay chỉ ước lượng độ lớn từ gradient, rẻ hơn nhiều so với tính độ cong."
+
+  # ───────────────────────── 11. LỖI THƯỜNG GẶP ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi người mới hay mắc"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Dùng Adagrad cho huấn luyện dài rồi thắc mắc vì sao “học mãi không tiến” <b class="red">(sai lựa chọn)</b>
+          <br><span class="note">Tổng $G_k$ tăng mãi → bước tiến về 0. Huấn luyện dài: dùng RMSprop hoặc Adam.</span></div>
+        say: "Lỗi thứ nhất, dùng cách cộng dồn cho một lần huấn luyện dài rồi thắc mắc vì sao mô hình học mãi không tiến. Lý do là tổng G tăng mãi nên bước đi tiến về 0. Huấn luyện dài thì nên dùng cách trung bình trượt hoặc Adam."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Nghĩ “thích nghi” là khỏi phải chọn gì <b class="red">(sai)</b>
+          <table class="t"><tr><th>phương pháp</th><th>vẫn phải chọn</th></tr>
+          <tr><td>Adam, RMSprop, Adagrad</td><td>$\eta$</td></tr>
+          <tr><td>Adadelta</td><td>$\beta$ và $\varepsilon$</td></tr></table></div>
+        say: "Lỗi thứ hai, nghĩ rằng thích nghi là khỏi phải chọn tham số nào. Adam, cách trung bình trượt và cách cộng dồn vẫn cần chọn eta, còn Adadelta vẫn cần chọn beta và epsilon."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Bỏ $\varepsilon$ khỏi mẫu số <b class="red">(sai)</b>
+          <br><span class="note">Ở trọng số có gradient bằng 0 ngay từ đầu, $G = 0$ hoặc $s = 0$ → chia cho 0.</span></div>
+        say: "Lỗi thứ ba, bỏ epsilon khỏi mẫu số cho gọn. Ở một trọng số có gradient bằng 0 ngay từ đầu, G hoặc s bằng 0, và ta chia cho 0."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> So hai bộ tối ưu bằng <b>một</b> lần chạy rồi kết luận “Adam luôn tốt nhất” <b class="red">(sai)</b>
+          <br><span class="note">Kết quả phụ thuộc bài toán, $\eta$, khởi tạo. Hãy thử vài $\eta$ và vài lần chạy cho mỗi cách.</span></div>
+        say: "Lỗi thứ tư, so hai bộ tối ưu bằng một lần chạy rồi kết luận Adam luôn tốt nhất. Kết quả phụ thuộc bài toán, tốc độ học và điểm xuất phát, nên hãy thử vài giá trị eta và vài lần chạy cho mỗi cách."
+
+  # ───────────────────────── 12. TỰ KIỂM TRA ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "Rational(1)*3/sp.sqrt(9) == 1 and Rational(1)*4/sp.sqrt(9 + 16) == Rational(4,5)"
+      - "1 - 50*Rational(1,25) == -1"
+      - "Rational(2,50) == Rational(4,100) and all(abs(1 - 50*e) < 1 for e in (Rational(1,1000), Rational(1,100), Rational(39,1000))) and abs(1 - 50*Rational(41,1000)) > 1 and abs(1 - 50*Rational(4,100)) == 1"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Một trọng số nhận gradient lần lượt $3$ rồi $4$. Với Adagrad, $\eta = 1$, bỏ qua $\varepsilon$: tính độ dài hai bước.</td></tr>
+          <tr><td>2</td><td>Gradient Descent trên $f = x^2 + 25y^2$: $\eta$ phải nhỏ hơn bao nhiêu để hướng $y$ không phân kỳ, không dao động mãi?</td></tr></table>
+        say: "Bây giờ đến lượt bạn, với hai câu. Câu một, một trọng số nhận gradient lần lượt là 3 rồi 4, dùng cách cộng dồn với eta bằng 1, bỏ qua epsilon, tính độ dài hai bước. Câu hai, với thung lũng dẹt, eta phải nhỏ hơn bao nhiêu để hướng y không phân kỳ? Hãy dừng video và làm ra giấy."
+        pause: 8
+      - show: |
+          <p>① $G_1 = 9$: bước $\ \dfrac{3}{\sqrt 9} = \hlg{1}$. &nbsp; $G_2 = 9 + 16 = 25$: bước $\ \dfrac{4}{\sqrt{25}} = \hlg{0{,}8}$ — gradient lớn hơn mà bước <b>ngắn</b> hơn.</p>
+        focus: [["1.1", "1.2"], ["1.3", "1.4"], 1]
+        say: "Câu một, G bằng 9 nên bước đầu bằng 3 chia 3, bằng 1. Sau đó G bằng 25, bước hai bằng 4 chia 5, bằng 0 phẩy 8. Gradient lớn hơn mà bước lại ngắn hơn."
+      - show: |
+          <p>② Hướng $y$: $\ y_{k+1} = (1 - 50\eta)\,y_k$. Không phân kỳ, không dao động mãi khi hệ số nằm giữa $-1$ và $1$:</p>
+          $$-1 < 1 - 50\eta < 1$$
+          <p>Trừ 1 ở mọi vế rồi đổi dấu: $\ 0 < 50\eta < 2$; &nbsp; chia cho 50: $\ 0 < \eta < \hlg{0{,}04}$.</p>
+          <p class="note">Đúng bằng $\eta = 0{,}04$: hệ số $1 - 50\cdot 0{,}04 = -1$ — dao động mãi.</p>
+        focus: [1, [1, 2], "3.1", "3.2", 4]
+        say: "Câu hai, theo hướng y, mỗi bước y nhân với 1 trừ 50 eta. Muốn không phân kỳ, không dao động mãi, hệ số này phải nằm giữa âm 1 và 1. Trừ 1 ở mọi vế rồi đổi dấu, ta được 50 eta nằm giữa 0 và 2. Chia cho 50, eta phải nhỏ hơn 0 phẩy 04. Đúng bằng 0 phẩy 04 thì hệ số là âm 1, nên dao động mãi."
+
+  # ───────────────────────── 13. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">thung lũng dẹt: một $\eta$ không đủ</span><span class="a">→</span>
+          <span class="n">Nesterov: nhìn trước để phanh</span><span class="a">→</span>
+          <span class="n">Adagrad: chia căn tổng $g^2$</span><span class="a">→</span>
+          <span class="n">RMSprop: thay tổng bằng trung bình trượt</span><span class="a">→</span>
+          <span class="n">Adam: đà + RMSprop + hiệu chỉnh</span></div>
+        say: "Tổng kết chuỗi logic. Ở thung lũng dẹt, một tốc độ học chung là không đủ. Nesterov nhìn trước để phanh. Cách cộng dồn chia cho căn tổng bình phương gradient, nhưng bước nhỏ dần mãi. Cách thứ ba thay tổng bằng một trung bình chỉ nhớ các giá trị gần đây. Cuối cùng, Adam ghép phần giữ đà với cách thứ ba, và thêm bước hiệu chỉnh độ lệch."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> mỗi trọng số có “độ dốc quen thuộc” riêng. Chia gradient cho độ lớn quen thuộc đó là cách rẻ để cho mỗi trọng số một bước vừa phải.</div>
+        say: "Điều cần mang theo, mỗi trọng số có một độ lớn gradient quen thuộc riêng. Chia gradient cho độ lớn đó là cách rẻ để mỗi trọng số có một bước đi vừa phải."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 11): <b>tối ưu lồi & phương pháp Newton</b> — dùng đúng độ cong để bước nhanh hơn, và vì sao hàm lồi chỉ có một đáy.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 11, ta học tối ưu lồi, và một phương pháp dùng đúng độ cong để bước nhanh hơn, và vì sao hàm lồi chỉ có một đáy. Hẹn gặp bạn ở bài tiếp theo."

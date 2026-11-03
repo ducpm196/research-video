@@ -1,0 +1,298 @@
+id: L10
+course: DBS
+series: "DBS · Cơ sở dữ liệu"
+title: "Bài 10 — Thực thi và tối ưu truy vấn: các thuật toán nối"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/dbs.yaml L10; audit/dbs/verify_dbs.py L10 (sqlite3 EXPLAIN QUERY PLAN); P. G. Selinger et al. (1979); R. Ramakrishnan, J. Gehrke, Database Management Systems (2003), chương 14"
+assumes: [arith, cdot, frac, ltgt, join]
+# Quy ước: R (vòng ngoài) M = 1000 trang, S N = 500 trang; chi phí = số lần đọc/ghi trang, không tính ghi kết quả.
+#   Lồng theo trang: M + M·N. Lồng theo khối với B = 102 trang đệm: M + ⌈M/(B − 2)⌉·N. Nối băm hai pha (giả sử đủ đệm chia một
+#   lần): 3(M + N) — đọc và ghi khi chia ngăn, đọc lại khi ghép. Nối trộn khi hai bảng đã sắp theo khoá nối: M + N.
+#   Mọi số do alg.join_costs tính; kế hoạch thực thi lấy thật từ SQLite.
+objectives:
+  - "Ước lượng chi phí nối lồng, nối lồng theo khối, nối băm, nối trộn"
+  - "Đọc kế hoạch thực thi của hệ quản trị"
+  - "Biết thứ tự viết bảng không quyết định thứ tự nối"
+asr_reviewed:
+  - {sentence: "Lượt đầu đọc R1 rồi đọc S1, S2.", reason: "ASR chép “Lược đầu đọc Adder 1 đổi đọc S1, S2.” (0.727): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: lượt/lược, rồi/đổi — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Lượt hai đọc R2 rồi lại S1, S2.", reason: "ASR chép “Lược hai độc R2 đổi lại S1, S2.” (0.727): lệch âm/thanh thuần Việt: lượt/lược, đọc/độc, rồi/đổi — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Lượt ba đọc R3 rồi lại S1, S2.", reason: "ASR chép “Lược 3 đọc ED3 đổi lại S1, S2.” (0.727): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: lượt/lược, rồi/đổi — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Câu hai, lồng theo khối với 52 trang đệm thì sao?", reason: "ASR chép “lòng theo khối với 52 trang đệm thứ 6”: lồng/lòng (thanh), “thì sao” → “thứ sáu” (cặp âm gần ở cuối câu hỏi); số 52 khớp — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Nối theo khối chia nhỏ số lần đọc S.", reason: "ASR chép “chiên nhỏ số lần độc X”: chia/chiên, đọc/độc (thanh), chữ S → X (tên chữ cái đọc kiểu Việt “ét”/“ích”, nhóm đã biết); chữ S hiện trên màn hình — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Cùng một câu nối, 500 000 hay 4 500 lần đọc"
+    steps:
+      - show: |
+          <p>Nối bảng R (1000 trang) với S (500 trang). Cách ngây thơ: <b>501 000</b> lần đọc trang. Cách tốt: khoảng <b>4 500</b>.</p>
+          <p>Ở 8 ms mỗi lần đọc ngẫu nhiên (bài 7): hơn một tiếng so với chưa tới một phút.</p>
+          <div class="box key">Hôm nay: các <b>thuật toán nối</b>, chi phí của chúng, và cách hệ quản trị tự chọn.</div>
+        focus: [1, 1, 2, 3]
+        say: "Chào bạn, nối một bảng R có một nghìn trang với bảng S có năm trăm trang. Cách ngây thơ tốn năm trăm lẻ một nghìn lần đọc trang, còn cách tốt chỉ khoảng bốn nghìn năm trăm. Ở 8 mi li giây mỗi lần đọc như bài 7, đó là hơn một tiếng so với chưa tới một phút. Hôm nay ta học các thuật toán nối, chi phí của chúng, và cách hệ quản trị tự chọn."
+
+  # ───────────────────────── 1b. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: đếm trang, vòng lặp lồng, làm tròn lên"
+    checks:
+      - "10 ** 6 // 100 == 10000 and 10000 * 8 / 1000 == 80"
+      - "sum(1 for i in range(3) for j in range(4)) == 3 * 4 == 12"
+      - "math.ceil(10 / 3) == 4 and math.ceil(1000 / 100) == 10"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài 7</th><th>giá trị</th></tr>
+          <tr><td>bảng $10^6$ dòng, 100 dòng mỗi trang</td><td>$10^6 : 100 = 10\,000$ trang</td></tr>
+          <tr><td>quét toàn bảng</td><td>10 000 lần đọc trang</td></tr>
+          <tr><td>ở 8 ms mỗi lần đọc</td><td>$10\,000 \cdot 8 = 80\,000$ ms = 80 giây</td></tr></table>
+        introduces: [power]
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Trước hết, nhắc lại bài 7, chi phí được đếm bằng số lần đọc trang, vì đọc đĩa chậm hơn tính toán rất nhiều. Bảng một triệu dòng, mỗi trang 100 dòng, thì có một triệu chia 100 bằng mười nghìn trang. Quét toàn bảng là mười nghìn lần đọc trang. Ở 8 mi li giây mỗi lần đọc, mất mười nghìn nhân 8, bằng tám mươi nghìn mi li giây, tức 80 giây."
+      - show: |
+          <div class="code"><div>for i in 1..3:        # vòng ngoài: 3 lần</div><div>    for j in 1..4:    # vòng trong: 4 lần mỗi lượt</div><div>        làm việc(i, j)</div></div>
+          <p>Thân trong chạy $3 \cdot 4 = 12$ lần: mỗi lượt của vòng ngoài, vòng trong chạy lại <b>từ đầu</b>.</p>
+        focus: [1, 1, 2]
+        say: "Thứ hai, ôn vòng lặp lồng nhau ở khoá Phân tích và thiết kế thuật toán. Vòng ngoài chạy 3 lần, và mỗi lượt của nó, vòng trong lại chạy trọn 4 lần từ đầu. Vậy phần thân bên trong chạy 3 nhân 4 bằng 12 lần, đây chính là khuôn của nối lồng."
+      - show: |
+          <table class="t"><tr><th>chia</th><th>kết quả thật</th><th>làm tròn lên</th><th>nghĩa</th></tr>
+          <tr><td>10 món, mỗi túi 3</td><td>3,33</td><td>$\lceil \frac{10}{3} \rceil = 4$</td><td>4 túi, túi cuối chỉ 1 món</td></tr>
+          <tr><td>1000 trang, mỗi khối 100</td><td>10</td><td>$\lceil \frac{1000}{100} \rceil = 10$</td><td>10 khối vừa khít</td></tr></table>
+        introduces: [ceil]
+        focus: [1, "1.2", "1.3"]
+        say: "Thứ ba, phép làm tròn lên, viết bằng cặp ngoặc vuông gãy, là số nguyên nhỏ nhất không bé hơn kết quả chia. Chia 10 món vào túi 3 món được 3 phẩy 33, làm tròn lên thành 4 túi, vì túi cuối vẫn phải có dù chỉ 1 món. Chia một nghìn trang thành khối 100 trang được đúng 10 khối, làm tròn lên vẫn là 10."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: vòng ngoài, vòng trong, trang đệm"
+    steps:
+      - show: |
+          <p>$M$ = số trang của R, $N$ = số trang của S. R ở <b>vòng ngoài</b>: đi qua từng phần của R, với mỗi phần duyệt S ở <b>vòng trong</b>.</p>
+          <p>$B$ = số trang <b>đệm</b> trong bộ nhớ hệ quản trị dành cho phép nối.</p>
+          <p class="note">Chi phí tính bằng số lần đọc (và ghi) trang như bài 7; không tính ghi kết quả ra, vì như nhau với mọi cách.</p>
+        focus: [1, 1, 2, 3]
+        say: "Gọi M là số trang của R, N là số trang của S. R ở vòng ngoài, tức ta đi qua từng phần của R, và với mỗi phần lại duyệt bảng S ở vòng trong. B là số trang đệm trong bộ nhớ mà hệ quản trị dành cho phép nối. Chi phí tính bằng số lần đọc và ghi trang như bài 7, không tính phần ghi kết quả ra, vì cách nào cũng như nhau."
+
+  # ───────────────────────── 3. BỐN THUẬT TOÁN ─────────────────────────
+  - id: algos
+    kind: concept
+    title: "Bốn cách nối"
+    checks:
+      - "alg.join_costs(1000, 500)['page_nlj'] == 501000 and 1000 + 1000 * 500 == 501000"
+      - "alg.join_costs(1000, 500, B=102)['block_nlj'] == 6000 and math.ceil(1000 / 100) == 10"
+      - "alg.join_costs(1000, 500)['hash'] == 4500"
+      - "1000 + 500 == 1500"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thuật toán</th><th>ý chính</th><th>chi phí</th><th>M = 1000, N = 500</th></tr>
+          <tr><td>lồng theo trang</td><td>mỗi trang R, đọc cả S</td><td>$M + M \cdot N$</td><td>501 000</td></tr>
+          <tr><td>lồng theo khối</td><td>mỗi khối $B - 2$ trang R, đọc cả S</td><td>$M + \lceil \frac{M}{B - 2} \rceil N$</td><td>6 000 ($B = 102$)</td></tr>
+          <tr><td>nối băm</td><td>băm cả hai theo khoá nối thành ngăn, nối từng cặp ngăn</td><td>$3(M + N)$</td><td>4 500</td></tr>
+          <tr><td>nối trộn</td><td>hai bảng đã sắp theo khoá nối: đi song song</td><td>$M + N$</td><td>1 500</td></tr></table>
+        focus: ["1.2", "1.3", "1.3", "1.4", "1.4", "1.5"]
+        say: "Có bốn cách nối chính. Lồng theo trang, với mỗi trang của R, đọc lại cả bảng S, tốn M cộng M nhân N, tức năm trăm lẻ một nghìn lần đọc. Lồng theo khối, nạp một khối B trừ 2 trang của R vào bộ nhớ, rồi mới đọc cả S một lần cho cả khối. Với 102 trang đệm, R chia thành 10 khối, chi phí còn sáu nghìn, dấu ngoặc trên màn hình nghĩa là làm tròn lên. Nối băm, băm cả hai bảng theo khoá nối vào các ngăn, ghi ra rồi đọc lại để nối từng cặp ngăn, tốn 3 lần tổng số trang, tức bốn nghìn năm trăm. Nối trộn, nếu hai bảng đã sắp theo khoá nối thì đi song song trên cả hai, chỉ một nghìn năm trăm lần đọc."
+      - show: |
+          <div class="box key">Với lồng theo trang, đổi vòng ngoài thành bảng <b>nhỏ hơn</b> (S): $500 + 500 \cdot 1000 = 500\,500$ — bớt chút ít. Đổi thuật toán mới là cú nhảy lớn.</div>
+        say: "Với nối lồng theo trang, đổi vòng ngoài thành bảng nhỏ hơn là S thì còn năm trăm nghìn năm trăm lần đọc, chỉ bớt chút ít. Đổi thuật toán mới là cú nhảy lớn."
+
+  # ───────────────────────── 3b. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Lồng theo khối: nạp nhiều trang R, đọc S ít lần"
+    checks:
+      - "math.ceil(1000 / (102 - 2)) * 500 == 5000 and 1000 + 5000 == alg.join_costs(1000, 500, B=102)['block_nlj']"
+    steps:
+      - show: |
+          <div><svg width="1500" height="430" viewBox="0 0 1500 430"><defs><marker id="arDAb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#2a78d6"/></marker></defs><defs><marker id="arDAo" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#eb6834"/></marker></defs><rect x="380" y="20" width="740" height="150" fill="#f9fafb" stroke="#1f2937" stroke-width="2"/><text x="400" y="52" font-size="24" fill="#1f2937" font-weight="bold">bộ nhớ: B = 102 trang đệm</text><rect x="410" y="70" width="380" height="80" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="600" y="118" font-size="24" text-anchor="middle" fill="#1f2937">100 trang: một khối của R</text><rect x="810" y="70" width="140" height="80" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="880" y="118" font-size="22" text-anchor="middle" fill="#1f2937">1 trang S</text><rect x="965" y="70" width="135" height="80" fill="#d1fae5" stroke="#059669" stroke-width="3"/><text x="1032" y="118" font-size="22" text-anchor="middle" fill="#1f2937">1 trang ra</text><rect x="80" y="250" width="54" height="70" fill="#93c5fd" stroke="#2a78d6" stroke-width="2"/><rect x="140" y="250" width="54" height="70" fill="#eff6ff" stroke="#2a78d6" stroke-width="2"/><rect x="200" y="250" width="54" height="70" fill="#eff6ff" stroke="#2a78d6" stroke-width="2"/><rect x="260" y="250" width="54" height="70" fill="#eff6ff" stroke="#2a78d6" stroke-width="2"/><rect x="320" y="250" width="54" height="70" fill="#eff6ff" stroke="#2a78d6" stroke-width="2"/><rect x="380" y="250" width="54" height="70" fill="#eff6ff" stroke="#2a78d6" stroke-width="2"/><rect x="440" y="250" width="54" height="70" fill="#eff6ff" stroke="#2a78d6" stroke-width="2"/><rect x="500" y="250" width="54" height="70" fill="#eff6ff" stroke="#2a78d6" stroke-width="2"/><rect x="560" y="250" width="54" height="70" fill="#eff6ff" stroke="#2a78d6" stroke-width="2"/><rect x="620" y="250" width="54" height="70" fill="#eff6ff" stroke="#2a78d6" stroke-width="2"/><rect x="900" y="250" width="520" height="70" fill="#fff7ed" stroke="#eb6834" stroke-width="3"/><text x="1160" y="295" font-size="24" text-anchor="middle" fill="#1f2937">S trên đĩa: 500 trang</text><line x1="107" y1="245" x2="560" y2="158" stroke="#2a78d6" stroke-width="3" marker-end="url(#arDAb)"/><line x1="1000" y1="245" x2="890" y2="158" stroke="#eb6834" stroke-width="3" marker-end="url(#arDAo)"/><g font-size="22" fill="#1f2937"><text x="80" y="355">R trên đĩa: 1000 trang = 10 khối</text><text x="80" y="383">nạp từng khối một lần: 1000 lần đọc</text><text x="900" y="355" fill="#eb6834">mỗi khối R: đọc trọn S một lần</text><text x="900" y="383" fill="#eb6834">10 khối × 500 = 5000 lần đọc</text></g><text x="750" y="420" font-size="24" text-anchor="middle" fill="#059669" font-weight="bold">tổng 1000 + 5000 = 6000, so với 501 000 khi đọc S cho từng trang R</text></svg></div>
+        focus: [1, 1, 1, 1, 1]
+        say: "Hình cho thấy dữ liệu đi đâu trong nối lồng theo khối. Bộ nhớ có 102 trang đệm, dành 100 trang chứa một khối của R, một trang để đọc dần S, và một trang để gom kết quả. R có một nghìn trang, chia thành 10 khối, mỗi khối nạp đúng một lần. Với mỗi khối, ta đọc trọn S một lần, so mọi dòng của S với cả 100 trang R đang nằm sẵn trong bộ nhớ. Vậy S chỉ bị đọc 10 lần thay vì một nghìn lần."
+
+  # ───────────────────────── 4. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Tính chi phí từng bước, rồi hỏi hệ quản trị"
+    checks:
+      - "alg.sql('EXPLAIN QUERY PLAN SELECT ten, ten_lop FROM SinhVien JOIN Lop ON lop = ma_lop') == [(4, 0, 216, 'SCAN SinhVien'), (6, 0, 47, 'SEARCH Lop USING INDEX sqlite_autoindex_Lop_1 (ma_lop=?)')]"
+      - "alg.sql('EXPLAIN QUERY PLAN SELECT ten, ten_lop FROM Lop JOIN SinhVien ON lop = ma_lop') == alg.sql('EXPLAIN QUERY PLAN SELECT ten, ten_lop FROM SinhVien JOIN Lop ON lop = ma_lop')"
+      - "1000 * 500 == 500000 and 1000 + 500000 == alg.join_costs(1000, 500)['page_nlj']"
+      - "102 - 2 == 100 and math.ceil(1000 / 100) == 10 and 10 * 500 == 5000 and 1000 + 5000 == alg.join_costs(1000, 500, B=102)['block_nlj']"
+      - "1500 + 1500 == 3000 and 3000 + 1500 == 3 * 1500 == alg.join_costs(1000, 500)['hash']"
+      - "[c * 8 / 1000 for c in (501000, 6000, 4500, 1500)] == [4008, 48, 36, 12] and round(4008 / 60) == 67"
+    steps:
+      - show: |
+          <p><b>Bước 1</b> — lồng theo trang, R ở ngoài ($M = 1000$, $N = 500$):</p>
+          <table class="t"><tr><th>việc</th><th>số lần đọc</th></tr>
+          <tr><td>đọc mỗi trang R một lần</td><td>1000</td></tr>
+          <tr><td>mỗi trang R đọc trọn S</td><td>$1000 \cdot 500 = 500\,000$</td></tr>
+          <tr><td>tổng</td><td>$\hl{501\,000}$</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Bước một, tính lại nối lồng theo trang với R ở vòng ngoài. Đọc mỗi trang của R một lần là một nghìn lần đọc. Với mỗi trang R lại đọc trọn S, thêm một nghìn nhân năm trăm, bằng năm trăm nghìn lần. Cộng lại là năm trăm lẻ một nghìn lần đọc."
+      - clear: true
+        show: |
+          <p><b>Bước 2</b> — lồng theo khối, $B = 102$:</p>
+          <table class="t"><tr><th>việc</th><th>số lần đọc</th></tr>
+          <tr><td>khối $B - 2 = 100$ trang → $\lceil \frac{1000}{100} \rceil = 10$ khối</td><td>—</td></tr>
+          <tr><td>đọc R một lần</td><td>1000</td></tr>
+          <tr><td>mỗi khối đọc trọn S</td><td>$10 \cdot 500 = 5000$</td></tr>
+          <tr><td>tổng</td><td>$\hl{6000}$</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", "2.5"]
+        say: "Bước hai, lồng theo khối với 102 trang đệm. Trừ 2 trang cho S và kết quả, mỗi khối có 100 trang, nên R chia thành 10 khối. Đọc R vẫn là một nghìn lần. Mỗi khối đọc trọn S một lần, 10 nhân 500 bằng năm nghìn. Tổng là sáu nghìn lần đọc."
+      - clear: true
+        show: |
+          <p><b>Bước 3</b> — nối băm, hai pha:</p>
+          <table class="t"><tr><th>pha</th><th>việc</th><th>số lần đọc, ghi</th></tr>
+          <tr><td>chia ngăn</td><td>đọc R và S, ghi các ngăn ra đĩa</td><td>$1500 + 1500 = 3000$</td></tr>
+          <tr><td>ghép</td><td>đọc lại từng cặp ngăn</td><td>1500</td></tr>
+          <tr><td>tổng</td><td>$3 \cdot 1500$</td><td>$\hl{4500}$</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Bước ba, nối băm có hai pha. Pha chia ngăn đọc cả R và S, tổng một nghìn năm trăm trang, rồi ghi các ngăn ra đĩa, thêm một nghìn năm trăm, được ba nghìn. Pha ghép đọc lại từng cặp ngăn, thêm một nghìn năm trăm nữa. Tổng là 3 nhân một nghìn năm trăm, bằng bốn nghìn năm trăm."
+      - show: |
+          <p><b>Bước 4</b> — đổi ra thời gian, 8 ms mỗi lần đọc:</p>
+          <table class="t"><tr><th>cách</th><th>lần đọc</th><th>thời gian</th></tr>
+          <tr><td>lồng theo trang</td><td>501 000</td><td>4008 giây ≈ 67 phút</td></tr>
+          <tr><td>lồng theo khối</td><td>6000</td><td>48 giây</td></tr>
+          <tr><td>nối băm</td><td>4500</td><td>36 giây</td></tr>
+          <tr><td>nối trộn (đã sắp)</td><td>1500</td><td>12 giây</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", "2.5"]
+        say: "Bước bốn, đổi ra thời gian với 8 mi li giây mỗi lần đọc. Lồng theo trang mất bốn nghìn lẻ tám giây, khoảng 67 phút. Lồng theo khối còn 48 giây. Cách nối băm chỉ mất 36 giây. Nối trộn, khi hai bảng đã sắp sẵn, chỉ 12 giây."
+      - clear: true
+        show: |
+          <div class="code"><div><span class="kw">EXPLAIN QUERY PLAN</span></div><div><span class="kw">SELECT</span> ten, ten_lop <span class="kw">FROM</span> SinhVien <span class="kw">JOIN</span> Lop <span class="kw">ON</span> lop = ma_lop;</div></div>
+          <div class="code"><div>SCAN SinhVien</div><div>SEARCH Lop USING INDEX sqlite_autoindex_Lop_1 (ma_lop=?)</div></div>
+          <p>Vòng ngoài quét SinhVien; với mỗi dòng, tra Lop qua chỉ mục khoá chính — <b>nối lồng dùng chỉ mục</b>: vòng trong không quét, chỉ tra.</p>
+          <p class="note">Viết ngược <code>FROM Lop JOIN SinhVien</code>: kế hoạch <b>y hệt</b>. Bộ tối ưu tự chọn thứ tự.</p>
+        focus: [1, "2.1", "2.2", 3, 4]
+        say: "Bước năm, hỏi thẳng hệ quản trị nó sẽ nối hai bảng mẫu thế nào. Dòng đầu cho biết nó quét bảng sinh viên. Dòng hai cho biết với mỗi dòng, nó tra bảng lớp qua chỉ mục của khoá chính. Đó là nối lồng dùng chỉ mục, vòng trong không quét mà chỉ tra. Viết ngược thứ tự hai bảng, kế hoạch y hệt, vì bộ tối ưu tự chọn thứ tự nối."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: cho máy đếm từng lần đọc"
+    checks:
+      - "(lambda M, N: [x for r in range(1, M + 1) for x in ['R%d' % r] + ['S%d' % s for s in range(1, N + 1)]])(3, 2) == ['R1', 'S1', 'S2', 'R2', 'S1', 'S2', 'R3', 'S1', 'S2'] and 3 + 3 * 2 == 9"
+      - "sum(1 + 500 for r in range(1000)) == 501000"
+      - "sum(len(range(b, min(b + 100, 1000))) + 500 for b in range(0, 1000, 100)) == 6000"
+      - "alg.join_costs(1000, 500)['page_nlj'] == 501000 and alg.join_costs(1000, 500, B=102)['block_nlj'] == 6000"
+    steps:
+      - show: |
+          <p>Ca nhỏ: R có 3 trang, S có 2 trang, lồng theo trang. Ghi lại từng lần đọc:</p>
+          <table class="t"><tr><th>lượt ngoài</th><th>đọc</th><th>số lần</th></tr>
+          <tr><td>trang R1</td><td>R1, S1, S2</td><td>3</td></tr>
+          <tr><td>trang R2</td><td>R2, S1, S2</td><td>3</td></tr>
+          <tr><td>trang R3</td><td>R3, S1, S2</td><td>3</td></tr></table>
+          <p>Đếm thẳng: 9 lần; công thức: $3 + 3 \cdot 2 = 9$ — khớp.</p>
+        focus: [1, "2.2", "2.3", "2.4", 3]
+        say: "Kiểm bằng đường khác, ta cho máy ghi lại từng lần đọc trong một ca nhỏ, R có 3 trang và S có 2 trang. Lượt đầu đọc R1 rồi đọc S1, S2. Lượt hai đọc R2 rồi lại S1, S2. Lượt ba đọc R3 rồi lại S1, S2. Đếm thẳng được 9 lần, vì mỗi lượt đọc 1 trang R và 2 trang S, khớp công thức 3 cộng 3 nhân 2 bằng 9."
+      - show: |
+          <table class="t"><tr><th>cho máy chạy vòng lặp đếm</th><th>đếm được</th><th>công thức</th></tr>
+          <tr><td>lồng theo trang, 1000 và 500</td><td>501 000</td><td>$M + M \cdot N$</td></tr>
+          <tr><td>lồng theo khối, 10 khối 100 trang</td><td>6000</td><td>$M + \lceil \frac{M}{B - 2} \rceil N$</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Rồi cho máy chạy đúng vòng lặp ấy với số thật, cộng một lần mỗi khi đọc một trang. Lồng theo trang với một nghìn và năm trăm trang đếm được năm trăm lẻ một nghìn. Lồng theo khối với 10 khối 100 trang đếm được sáu nghìn, khớp cả hai công thức."
+
+  # ───────────────────────── 5. TỐI ƯU ─────────────────────────
+  - id: optimizer
+    kind: concept
+    title: "Bộ tối ưu chọn thế nào"
+    steps:
+      - show: |
+          <ol><li>Liệt kê nhiều kế hoạch: thứ tự nối, thuật toán nối, dùng hay không dùng chỉ mục.</li>
+          <li>Ước lượng chi phí mỗi kế hoạch bằng <b>thống kê</b>: số dòng, số trang, số giá trị khác nhau của mỗi cột.</li>
+          <li>Chọn kế hoạch rẻ nhất theo ước lượng.</li></ol>
+          <div class="box warn">Thống kê cũ hay sai thì ước lượng sai, và kế hoạch chọn ra có thể tệ. Nhiều hệ quản trị có lệnh cập nhật thống kê.</div>
+        focus: ["1.1", "1.2", "1.3", 2, 2]
+        say: "Bộ tối ưu làm ba việc. Một, liệt kê nhiều kế hoạch, gồm thứ tự nối, thuật toán nối, và có dùng chỉ mục hay không. Hai, ước lượng chi phí mỗi kế hoạch bằng thống kê, như số dòng, số trang và số giá trị khác nhau của mỗi cột. Ba, chọn kế hoạch rẻ nhất theo ước lượng. Thống kê cũ hay sai thì ước lượng sai, và kế hoạch được chọn có thể rất tệ, nên nhiều hệ quản trị có lệnh riêng để cập nhật thống kê."
+
+  # ───────────────────────── 6. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi người mới hay mắc"
+    checks:
+      - "alg.join_costs(500, 1000)['page_nlj'] == 500500"
+      - "100000 * 50000 == 5 * 10 ** 9 and 1000 * 100 == 100000 and 500 * 100 == 50000 and 5 * 10 ** 9 // alg.join_costs(1000, 500)['page_nlj'] == 9980"
+      - "alg.sql('EXPLAIN QUERY PLAN SELECT ten FROM SinhVien WHERE diem >= 7')[0][3] == 'SCAN SinhVien'"
+      - "alg.sql('EXPLAIN QUERY PLAN SELECT ten FROM SinhVien WHERE diem >= 7', alg.DB_DEMO + 'CREATE INDEX idx_diem ON SinhVien(diem);')[0][3] == 'SEARCH SinhVien USING INDEX idx_diem (diem>?)'"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Sắp lại thứ tự bảng trong câu SQL để “tối ưu” <b class="red">(vô ích)</b>
+          <br><span class="note">Bộ tối ưu tự chọn thứ tự dựa trên thống kê, như SQLite vừa cho thấy.</span></div>
+        say: "Lỗi thứ nhất, sắp lại thứ tự bảng trong câu SQL để tối ưu. Việc đó vô ích, vì bộ tối ưu tự chọn thứ tự dựa trên thống kê, như hệ quản trị vừa cho thấy."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Đếm chi phí bằng số dòng nhân số dòng <b class="red">(sai)</b>
+          <br><span class="note">Đơn vị là trang. Lồng theo trang đọc S một lần cho mỗi <b>trang</b> R, không phải mỗi dòng.</span></div>
+          <table class="t"><tr><th>giả sử 100 dòng mỗi trang</th><th>R</th><th>S</th><th>“chi phí”</th></tr>
+          <tr><td>đếm theo dòng</td><td>100 000</td><td>50 000</td><td>$5 \cdot 10^9$ <b class="red">(sai)</b></td></tr>
+          <tr><td>đếm theo trang</td><td>1000</td><td>500</td><td>501 000</td></tr></table>
+        focus: [1, 1, "2.2", "2.3"]
+        say: "Lỗi thứ hai, đếm chi phí bằng số dòng nhân số dòng. Đơn vị là trang, nối lồng theo trang đọc lại S một lần cho mỗi trang của R, không phải mỗi dòng. Giả sử mỗi trang 100 dòng, đếm theo dòng ra tới 5 nhân 10 mũ 9, phóng đại gần mười nghìn lần. Đếm đúng theo trang chỉ là năm trăm lẻ một nghìn."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Nghĩ nối băm luôn tốt nhất <b class="red">(sai)</b>
+          <br><span class="note">Bảng trong nhỏ có chỉ mục, hay hai bảng đã sắp sẵn: nối lồng dùng chỉ mục hoặc nối trộn có thể rẻ hơn. Nối băm cũng chỉ làm được điều kiện bằng.</span></div>
+        say: "Lỗi thứ ba, nghĩ nối băm lúc nào cũng tốt nhất. Khi bảng trong nhỏ và có chỉ mục, hay hai bảng đã sắp sẵn, nối lồng dùng chỉ mục hoặc nối trộn có thể rẻ hơn. Nối băm cũng chỉ làm được với điều kiện bằng."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Tối ưu mà không xem kế hoạch thực thi <b class="red">(sai)</b>
+          <br><span class="note">Luôn chạy lệnh xem kế hoạch trước và sau khi thêm chỉ mục.</span></div>
+          <table class="t"><tr><th><code>WHERE diem &gt;= 7</code></th><th>kế hoạch SQLite</th></tr>
+          <tr><td>trước khi thêm chỉ mục</td><td>SCAN SinhVien</td></tr>
+          <tr><td>sau <code>CREATE INDEX idx_diem ON SinhVien(diem)</code></td><td>SEARCH … idx_diem (diem&gt;?)</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", 2]
+        say: "Lỗi thứ tư, tối ưu mà không xem kế hoạch thực thi. Hãy luôn xem kế hoạch trước và sau khi thêm chỉ mục. Ví dụ lọc điểm từ 7, trước khi có chỉ mục hệ quản trị quét cả bảng. Sau khi thêm chỉ mục trên điểm, kế hoạch đổi sang tìm qua chỉ mục. Người đã đi làm hay thêm chỉ mục rồi tin là đã nhanh, trong khi bộ tối ưu có thể vẫn không dùng nó, chỉ kế hoạch thực thi mới cho biết."
+
+  # ───────────────────────── 7. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "200 * 3000 == 600000 and 52 - 2 == 50 and math.ceil(200 / 50) == 4 and 4 * 3000 == 12000 and 200 + 3000 == 3200"
+      - "alg.join_costs(200, 3000)['page_nlj'] == 600200 and alg.join_costs(200, 3000, B=52)['block_nlj'] == 200 + 4 * 3000 == 12200 and alg.join_costs(200, 3000)['hash'] == 9600"
+    steps:
+      - show: |
+          <p>R có 200 trang, S có 3000 trang, R ở vòng ngoài.</p>
+          <table class="t"><tr><th>câu</th><th>tính chi phí</th></tr>
+          <tr><td>1</td><td>lồng theo trang</td></tr>
+          <tr><td>2</td><td>lồng theo khối với $B = 52$</td></tr>
+          <tr><td>3</td><td>nối băm</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", 0]
+        say: "Bây giờ đến lượt bạn tự làm, với R có 200 trang, S có ba nghìn trang, R ở vòng ngoài. Câu một, chi phí nối lồng theo trang là bao nhiêu? Câu hai, lồng theo khối với 52 trang đệm thì sao? Câu ba, nối băm thì sao? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <p>① lồng theo trang: đọc R một lần là 200; mỗi trang R đọc trọn S: $200 \cdot 3000 = 600\,000$.</p>
+          <p>Tổng: $200 + 600\,000 = \hl{600\,200}$.</p>
+        focus: [1, 1, 2]
+        say: "Đáp án câu một, đọc R một lần mất 200 lần đọc. Mỗi trang R lại đọc trọn S, thêm 200 nhân ba nghìn bằng sáu trăm nghìn. Tổng là sáu trăm nghìn hai trăm."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 2 — lồng theo khối</th><th>giá trị</th></tr>
+          <tr><td>trang cho khối R: $52 - 2$</td><td>50</td></tr>
+          <tr><td>số khối: $\lceil \frac{200}{50} \rceil$</td><td>4</td></tr>
+          <tr><td>đọc S: $4 \cdot 3000$</td><td>12 000</td></tr>
+          <tr><td>tổng: $200 + 12\,000$</td><td>$\hl{12\,200}$</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Câu hai, ta tính từng bước. Trừ 2 trang đệm cho S và kết quả, khối R có 50 trang. R chia thành 200 chia 50 bằng 4 khối. Mỗi khối đọc trọn S, 4 nhân ba nghìn bằng mười hai nghìn. Cộng 200 lần đọc R, tổng là mười hai nghìn hai trăm."
+      - clear: true
+        show: |
+          <p>③ nối băm: tổng số trang $200 + 3000 = 3200$; chia ngăn đọc rồi ghi, ghép đọc lại → $3 \cdot 3200 = \hl{9\,600}$.</p>
+        say: "Câu ba, tổng số trang là 200 cộng ba nghìn bằng ba nghìn hai trăm. Pha chia ngăn đọc rồi ghi, pha ghép đọc lại, tức ba lượt, nên chi phí là 3 nhân ba nghìn hai trăm, bằng chín nghìn sáu trăm."
+
+  # ───────────────────────── 8. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">lồng theo trang: $M + M \cdot N$</span><span class="a">→</span>
+          <span class="n">theo khối: chia số lần đọc S</span><span class="a">→</span>
+          <span class="n">băm: $3(M + N)$; trộn: $M + N$</span><span class="a">→</span>
+          <span class="n">bộ tối ưu chọn bằng thống kê</span></div>
+        say: "Tổng kết lại, nối lồng theo trang tốn M cộng M nhân N. Nối theo khối chia nhỏ số lần đọc S. Nối băm tốn 3 lần tổng số trang, nối trộn chỉ tốn tổng số trang. Và bộ tối ưu chọn cách nối dựa trên thống kê."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> thuật toán khác nhau có thể chênh hàng trăm lần trên cùng dữ liệu. Biết ước lượng chi phí giúp bạn đọc hiểu, và nghi ngờ đúng chỗ, kế hoạch của máy.</div>
+        say: "Điều cần mang theo, các thuật toán khác nhau có thể chênh nhau hàng trăm lần trên cùng dữ liệu. Biết ước lượng chi phí giúp bạn đọc hiểu kế hoạch của máy, và nghi ngờ đúng chỗ."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 11): <b>giao dịch và tính chất ACID</b> — nhiều người cùng ghi một lúc thì sao?</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 11, ta học giao dịch và tính chất ACID, để trả lời câu hỏi khi nhiều người cùng ghi một lúc thì sao. Hẹn gặp bạn ở bài tiếp theo."

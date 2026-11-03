@@ -1,0 +1,219 @@
+id: L09
+course: ROB
+series: "ROB · Robot tự hành"
+title: "Bài 9 — Tránh vật cản cục bộ: cửa sổ động"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/rob.yaml L09; audit/rob/verify_rob.py L09; D. Fox, W. Burgard, S. Thrun, The Dynamic Window Approach to Collision Avoidance, IEEE Robotics & Automation Magazine 4(1) (1997); bài 1 (xe vi sai), bài 8 (lập kế hoạch toàn cục)"
+assumes: [arith, sqrt, cdot, approx, omega_sym, sub]
+# Quy ước: chu kỳ 0,2 s, tốc độ hiện tại 0,4 m/s, gia tốc tối đa 0,5 m/s²: cửa sổ tốc độ [0,4 − 0,5·0,2; 0,4 + 0,5·0,2] = [0,3; 0,5].
+#   Tốc độ an toàn khi còn khoảng trống d: v ≤ √(2·a·d). Điểm = 0,4·hướng + 0,4·khoảng trống + 0,2·tốc độ, mỗi phần đã chuẩn hoá về [0, 1]
+#   (alg.dwa_score); ba ứng viên và trọng số là SỐ MINH HOẠ.
+objectives:
+  - "Sinh các cặp vận tốc khả thi trong một chu kỳ"
+  - "Loại vận tốc không dừng kịp"
+  - "Chấm điểm và thấy ảnh hưởng của trọng số"
+asr_reviewed:
+  - {sentence: "Bán kính quay bằng v chia ô-mê-ga, nên cặp 0 phẩy 3 và 0 phẩy 5 là rẽ trái với bán kính 0 phẩy 6 mét.", reason: "ASR chép “Bán kính quay bằng V-omega nên cặp 0,3 và 0,5 là đệ trái với bán kính 0,6 m.” (0.83): ô-mê-ga (ω) đọc tách âm tiết, ASR viết “omega/ω”; đơn vị mét, ASR viết ký hiệu “m”; lệch âm/thanh thuần Việt: chia (trong “chia ô mê ga” → “omega”), rẽ/đệ — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Hình vẽ mỗi lệnh như một điểm, trục ngang là tốc độ v, trục đứng là vận tốc góc ô-mê-ga.", reason: "ASR chép “Hình vẽ mỗi lệnh như 1 điểm, trục ngang là tốc độ V, trục đứng là vận tốc góp omega.” (0.857): ô-mê-ga (ω) đọc tách âm tiết, ASR viết “omega/ω”; lệch âm/thanh thuần Việt: góc (trong “góc ô mê ga” → “góp omega”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Lệnh cho xe là một cặp v và ô-mê-ga, tốc độ tiến và vận tốc góc, như cặp 0 phẩy 5 và 0 nghĩa là đi thẳng.", reason: "ASR chép “Lệnh cho xe là một cặp V và Omega, tốc độ tiến và vận tốc góc, như cặp 0.5 và không nghĩa là đi thẳng.” (0.909): ô-mê-ga (ω) đọc tách âm tiết, ASR viết “omega/ω”; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Robot cần quyết định ngay trong chu kỳ này, đi tiếp, rẽ, hay chậm lại, với tốc độ mà bánh xe thật sự đạt được.", reason: "ASR chép “Robo cần quyết định ngay trong chu kỳ này đi tiếp, rẻ hay chậm lại với tốc độ mà bánh xe thật sự đạt được.” (0.92): robot đọc thô (probe RBM p1: 7/8, r → tr/ro); lệch âm/thanh thuần Việt: rẽ/rẻ — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Một người bước ra từ cửa phòng"
+    checks:
+      - "round(math.sqrt(2 * 0.5 * 0.2), 3) == 0.447"
+    steps:
+      - show: |
+          <p>Robot đang đi theo đường đã lập kế hoạch thì một người bước ra từ cửa phòng, cách 20 cm. Lập kế hoạch lại cả đường mất cả giây. Robot cần quyết định <b>ngay trong chu kỳ này</b>: đi tiếp, rẽ, hay chậm lại — với tốc độ mà bánh xe <b>thật sự</b> đạt được.</p>
+          <div class="box key">Hôm nay: <b>cửa sổ động</b> — chọn cặp vận tốc tốt nhất trong số vận tốc đạt được ngay, an toàn, hướng về đích.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, robot đang đi theo đường đã lập kế hoạch thì một người bước ra từ cửa phòng, cách 20 xen-ti-mét. Lập kế hoạch lại cả đường mất cả giây. Robot cần quyết định ngay trong chu kỳ này, đi tiếp, rẽ, hay chậm lại, với tốc độ mà bánh xe thật sự đạt được. Hôm nay ta học cửa sổ động, chọn cặp vận tốc tốt nhất trong số vận tốc đạt được ngay, an toàn, và hướng về đích."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: quãng phanh, cặp (v, ω) và tổng có trọng số"
+    checks:
+      - "round(0.5 ** 2 / (2 * 0.5), 2) == 0.25 and round(math.sqrt(2 * 0.5 * 0.2), 3) == 0.447 and round(2 * 0.5 * 0.2, 1) == 0.2"
+      - "round(0.3 / 0.5, 1) == 0.6 and alg.diff_drive(0.5, 0.5, 0.5)[1] == 0"
+      - "round(alg.dwa_score(1, 0, 0.5), 2) == 0.5 and round(0.4 * 1 + 0.4 * 0 + 0.2 * 0.5, 2) == 0.5"
+    steps:
+      - show: |
+          <p><b>Quãng phanh:</b> đang đi $v$, phanh đều với gia tốc $a$ thì cần quãng $\frac{v^2}{2a}$. Đi 0,5 m/s, $a = 0{,}5$ m/s²: cần $\frac{0{,}25}{1} = \hl{0{,}25}$ m.</p>
+          <p>Đảo lại: chỉ còn khoảng trống $d$ thì phải có $v \leq \sqrt{2ad}$. Với $d = 0{,}2$ m: $\sqrt{0{,}2} \approx 0{,}447$ m/s.</p>
+        introduces: [power]
+        focus: [1, 1, 2, 2]
+        say: "Trước hết, ôn quãng phanh, đang đi với tốc độ v mà phanh đều với gia tốc a thì cần quãng v bình phương chia 2 a. Đi 0 phẩy 5 mét mỗi giây, gia tốc 0 phẩy 5, thì cần 0 phẩy 25 chia 1, bằng 0 phẩy 25 mét. Đảo lại, nếu chỉ còn khoảng trống d thì tốc độ không được vượt căn của 2 a d. Với d bằng 0 phẩy 2 mét, đó là căn của 0 phẩy 2, khoảng 0 phẩy 447 mét mỗi giây."
+      - show: |
+          <table class="t"><tr><th>nhắc lại bài 1 (xe vi sai)</th><th>ví dụ</th></tr>
+          <tr><td>lệnh cho xe là một cặp $(v, \omega)$: tốc độ tiến và vận tốc góc</td><td>$(0{,}5;\ 0)$: đi thẳng</td></tr>
+          <tr><td>bán kính quay $\frac{v}{\omega}$, $\omega$ dương là rẽ trái</td><td>$(0{,}3;\ 0{,}5)$: rẽ trái, bán kính $\frac{0{,}3}{0{,}5} = 0{,}6$ m</td></tr>
+          <tr><td>tổng có trọng số: $0{,}4 \cdot$ hướng $+ 0{,}4 \cdot$ khoảng trống $+ 0{,}2 \cdot$ tốc độ</td><td>$(1;\ 0;\ 0{,}5)$ cho $0{,}4 + 0 + 0{,}1 = 0{,}5$</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Điều thứ hai nhắc lại bài 1 về xe vi sai, cùng một phép tính sẽ dùng để chấm điểm. Lệnh cho xe là một cặp v và ô-mê-ga, tốc độ tiến và vận tốc góc, như cặp 0 phẩy 5 và 0 nghĩa là đi thẳng. Bán kính quay bằng v chia ô-mê-ga, nên cặp 0 phẩy 3 và 0 phẩy 5 là rẽ trái với bán kính 0 phẩy 6 mét. Tổng có trọng số nhân mỗi điểm với trọng số rồi cộng, như điểm 1, 0 và 0 phẩy 5 cho tổng 0 phẩy 5."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: ba bộ lọc và một hàm điểm"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bước</th><th>giữ lại cặp $(v, \omega)$ nào</th></tr>
+          <tr><td><b>cửa sổ động</b></td><td>đạt được trong một chu kỳ với gia tốc tối đa: $v \in [v_0 - a h,\ v_0 + a h]$</td></tr>
+          <tr><td><b>an toàn</b></td><td>dừng kịp trước vật cản gần nhất: $v \leq \sqrt{2 a d}$, $d$ là khoảng trống theo cung đó</td></tr>
+          <tr><td><b>chấm điểm</b></td><td>$0{,}4 \cdot \text{hướng} + 0{,}4 \cdot \text{khoảng trống} + 0{,}2 \cdot \text{tốc độ}$; chọn điểm cao nhất</td></tr></table>
+          <p>Mỗi chu kỳ lặp lại từ đầu, với tốc độ hiện tại mới — chỉ nhìn rất gần, nên rất nhanh.</p>
+        introduces: [in, geq]
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Bảng cho ba bước. Cửa sổ động chỉ giữ các vận tốc đạt được trong một chu kỳ với gia tốc tối đa, tức v nằm giữa v 0 trừ a h và v 0 cộng a h. Bước an toàn chỉ giữ vận tốc dừng kịp trước vật cản gần nhất, v không vượt căn của 2 a d, với d là khoảng trống theo cung đi đó. Bước chấm điểm lấy 0 phẩy 4 nhân điểm hướng, cộng 0 phẩy 4 nhân điểm khoảng trống, cộng 0 phẩy 2 nhân điểm tốc độ, rồi chọn điểm cao nhất. Mỗi chu kỳ lặp lại từ đầu với tốc độ hiện tại mới, chỉ nhìn rất gần nên rất nhanh."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Mỗi lệnh là một điểm trên mặt phẳng (v, ω)"
+    checks:
+      - "(round(0.4 - 0.5 * 0.2, 2), round(0.4 + 0.5 * 0.2, 2)) == (0.3, 0.5) and not (0.3 <= 0.1 <= 0.5) and 0.5 > round(math.sqrt(2 * 0.5 * 0.2), 3) == 0.447"
+    steps:
+      - show: |
+          <div><svg width="1500" height="450" viewBox="0 0 1500 450"><rect x="650" y="60" width="320" height="330" fill="#dbeafe"/><g font-size="22" fill="#1f2937"><line x1="170" y1="390" x2="1290" y2="390" stroke="#6b7280" stroke-width="2"/><line x1="170" y1="390" x2="170" y2="60" stroke="#6b7280" stroke-width="2"/><line x1="810" y1="390" x2="810" y2="60" stroke="#2a78d6" stroke-width="2" stroke-dasharray="8 6"/><line x1="885" y1="390" x2="1290" y2="390" stroke="#b91c1c" stroke-width="8"/><circle cx="970" cy="390" r="12" fill="#b91c1c"/><circle cx="650" cy="240" r="12" fill="#059669"/><circle cx="330" cy="90" r="12" fill="#9ca3af"/><text x="630" y="248" fill="#059669" font-weight="bold" text-anchor="end">(0,3; 0,5) giữ lại</text><text x="350" y="98" fill="#6b7280">(0,1; 1) ngoài cửa sổ</text><text x="990" y="372" fill="#b91c1c">(0,5; 0) quá 0,447: không dừng kịp</text><text x="820" y="86" fill="#2a78d6">đang 0,4</text><text x="650" y="422" text-anchor="middle">0,3</text><text x="970" y="422" text-anchor="middle">0,5</text><text x="1290" y="422" text-anchor="end">tốc độ v (m/s)</text><text x="160" y="80" text-anchor="end">ω</text><text x="1178" y="135" fill="#2a78d6">dải xanh: cửa sổ động,</text><text x="1178" y="167" fill="#2a78d6">đạt được trong 0,2 s</text></g></svg></div>
+        focus: [1, 1, 1, 1, 1]
+        say: "Hình vẽ mỗi lệnh như một điểm, trục ngang là tốc độ v, trục đứng là vận tốc góc ô-mê-ga. Robot đang đi 0 phẩy 4, và trong một chu kỳ 0 phẩy 2 giây chỉ đổi được tốc độ trong dải xanh, từ 0 phẩy 3 tới 0 phẩy 5, gọi là cửa sổ động. Điểm xám có tốc độ 0 phẩy 1 nằm ngoài dải nên bánh xe không đạt được ngay. Còn điểm đỏ đi thẳng 0 phẩy 5 rơi vào đoạn đỏ, nhanh quá 0 phẩy 447 nên không dừng kịp. Chỉ điểm lục, rẽ trái vừa, qua được cả hai bộ lọc."
+
+  - id: example
+    kind: example
+    title: "Ba ứng viên trong cửa sổ"
+    checks:
+      - "(round(0.4 - 0.5 * 0.2, 2), round(0.4 + 0.5 * 0.2, 2)) == (0.3, 0.5) and round(math.sqrt(2 * 0.5 * 0.2), 3) == 0.447"
+      - "[round(alg.dwa_score(*c), 2) for c in ((0.55, 0.5, 1.0), (0.8, 0.65, 0.6), (0.9, 0.35, 0.2))] == [0.62, 0.7, 0.54]"
+      - "[0.3 <= v <= 0.5 for v in (0.5, 0.3, 0.1)] == [True, True, False] and [v <= math.sqrt(2 * 0.5 * 0.2) for v in (0.5, 0.3)] == [False, True]"
+    steps:
+      - show: |
+          <p><b>Bước 1 — cửa sổ động.</b> Tốc độ hiện tại 0,4 m/s, gia tốc tối đa 0,5 m/s², chu kỳ 0,2 s:</p>
+          $$[0{,}4 - 0{,}5 \cdot 0{,}2;\ 0{,}4 + 0{,}5 \cdot 0{,}2] = [\hl{0{,}3};\ \hl{0{,}5}] \text{ m/s}$$
+        focus: [1, 2]
+        say: "Bước một, tốc độ hiện tại 0 phẩy 4 mét mỗi giây, gia tốc tối đa 0 phẩy 5, chu kỳ 0 phẩy 2 giây. Trong một chu kỳ tốc độ chỉ đổi được 0 phẩy 5 nhân 0 phẩy 2, bằng 0 phẩy 1, nên cửa sổ vận tốc là từ 0 phẩy 3 tới 0 phẩy 5 mét mỗi giây."
+      - show: |
+          <table class="t"><tr><th>Bước 2 — ứng viên $(v, \omega)$ (số minh hoạ)</th><th>$v$ trong $[0{,}3;\ 0{,}5]$?</th></tr>
+          <tr><td>(0,5; 0) đi thẳng nhanh</td><td>có</td></tr>
+          <tr><td>(0,3; 0,5) rẽ trái vừa</td><td>có</td></tr>
+          <tr><td>(0,1; 1) rẽ gắt chậm</td><td><b class="red">không</b> — $0{,}1 \lt 0{,}3$, phải giảm 0,3 m/s trong một chu kỳ</td></tr></table>
+        introduces: [ltgt]
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Bước hai, xét ba ứng viên với số minh hoạ qua bộ lọc cửa sổ. Đi thẳng nhanh có tốc độ 0 phẩy 5, nằm trong cửa sổ. Rẽ trái vừa có tốc độ 0 phẩy 3, cũng nằm trong cửa sổ. Rẽ gắt chậm có tốc độ 0 phẩy 1, nhỏ hơn 0 phẩy 3, vì phải giảm 0 phẩy 3 mét mỗi giây trong một chu kỳ, nên bánh xe không làm được và bị loại ngay."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — an toàn.</b> Vật cản thẳng trước 0,2 m, nên đi thẳng chỉ an toàn khi</p>
+          $$v \leq \sqrt{2 \cdot 0{,}5 \cdot 0{,}2} \approx \hl{0{,}447} \text{ m/s} \quad\text{nhưng}\quad 0{,}5 \gt 0{,}447$$
+        focus: [1, 2]
+        say: "Bước ba, vật cản thẳng trước 0 phẩy 2 mét, nên đi thẳng chỉ an toàn khi v không vượt căn của 2 nhân 0 phẩy 5 nhân 0 phẩy 2, khoảng 0 phẩy 447. Ứng viên đi thẳng nhanh có 0 phẩy 5 lớn hơn 0 phẩy 447, nên bị loại ở bước an toàn."
+      - show: |
+          <table class="t"><tr><th>Bước 4 — điểm $(v, \omega)$</th><th>hướng</th><th>khoảng trống</th><th>tốc độ</th><th>điểm</th></tr>
+          <tr><td>(0,5; 0) đi thẳng nhanh</td><td>0,55</td><td>0,50</td><td>1,0</td><td>0,62 — đã loại</td></tr>
+          <tr><td>(0,3; 0,5) rẽ trái vừa</td><td>0,80</td><td>0,65</td><td>0,6</td><td>$\hl{0{,}70}$</td></tr>
+          <tr><td>(0,1; 1) rẽ gắt chậm</td><td>0,90</td><td>0,35</td><td>0,2</td><td>0,54 — đã loại</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.3"]
+        say: "Bước bốn, chấm điểm cả ba để thấy hàm điểm hoạt động, dù hai ứng viên đã bị loại. Đi thẳng nhanh được 0 phẩy 62. Rẽ trái vừa được 0 phẩy 4 nhân 0 phẩy 8, cộng 0 phẩy 4 nhân 0 phẩy 65, cộng 0 phẩy 2 nhân 0 phẩy 6, bằng 0 phẩy 7. Rẽ gắt chậm được 0 phẩy 54. Rẽ trái vừa vừa qua cả hai bộ lọc vừa có điểm cao nhất, nên ta chọn rẽ trái vừa."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: mô phỏng phanh từng bước nhỏ"
+    checks:
+      - "[round(sum(max(v - 0.5 * 0.001 * k, 0) * 0.001 for k in range(int(v / 0.5 / 0.001) + 2)), 2) for v in (0.5, 0.447, 0.44)] == [0.25, 0.2, 0.19]"
+      - "sum(max(0.5 - 0.5 * 0.001 * k, 0) * 0.001 for k in range(1002)) > 0.2 > sum(max(0.44 - 0.5 * 0.001 * k, 0) * 0.001 for k in range(882))"
+    steps:
+      - show: |
+          <table class="t"><tr><th>phanh từ tốc độ</th><th>mô phỏng: cứ 0,001 s giảm tốc rồi cộng quãng</th><th>so với vật cản 0,2 m</th></tr>
+          <tr><td>0,5 m/s</td><td>$\approx 0{,}25$ m</td><td><b class="red">va</b></td></tr>
+          <tr><td>0,447 m/s</td><td>$\approx 0{,}20$ m</td><td>vừa chạm biên</td></tr>
+          <tr><td>0,44 m/s</td><td>$\approx 0{,}19$ m</td><td>dừng kịp ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Kiểm bằng đường khác, không dùng công thức căn mà cho máy mô phỏng phanh, cứ mỗi một phần nghìn giây giảm tốc rồi cộng quãng đi được. Phanh từ 0 phẩy 5 mét mỗi giây thì đi thêm khoảng 0 phẩy 25 mét, vượt vật cản ở 0 phẩy 2 mét nên va. Phanh từ 0 phẩy 447 thì đi khoảng 0 phẩy 2 mét, vừa chạm biên, đúng là tốc độ giới hạn. Phanh từ 0 phẩy 44 thì chỉ đi khoảng 0 phẩy 19 mét và dừng kịp, khớp với công thức."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay mắc, từ người mới tới người đã đi làm"
+    checks:
+      - "round(alg.stop_distance(0.447, 0.5, 0.2), 3) == 0.289 and round(0.447 * 0.2, 3) == 0.089 and round(alg.max_safe_speed(0.2, 0.5, 0.2), 3) == 0.358 and round(alg.stop_distance(0.358, 0.5, 0.2), 2) == 0.2 and round(0.358 * 0.2, 3) == 0.072 and round(0.358 ** 2 / (2 * 0.5), 3) == 0.128 and round(0.447 ** 2 / (2 * 0.5), 1) == 0.2"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Chỉ dùng tránh vật cản cục bộ <b class="red">(kẹt trong góc chết)</b>
+          <br><span class="note">Hành lang cụt hình chữ U: mọi hướng “về đích” đều bị tường chặn, robot quay vòng mãi. Cửa sổ động đi theo <b>đường toàn cục</b> (bài 8), không thay nó.</span></div>
+        say: "Lỗi thứ nhất, chỉ dùng tránh vật cản cục bộ, nên kẹt trong góc chết. Ở một hành lang cụt hình chữ U, mọi hướng về đích đều bị tường chặn, và robot quay vòng mãi. Cửa sổ động đi theo đường toàn cục đã lập kế hoạch, không thay thế nó."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Bỏ ràng buộc gia tốc <b class="red">(chọn vận tốc không đạt được)</b>
+          <br><span class="note">Chọn 1 m/s khi đang 0,4 m/s và chỉ tăng được 0,1 m/s mỗi chu kỳ: lệnh “đẹp” trên giấy nhưng bánh xe không làm được — mô phỏng sai, va chạm thật.</span></div>
+        say: "Lỗi thứ hai, bỏ ràng buộc gia tốc, nên chọn một vận tốc không đạt được. Chọn 1 mét mỗi giây khi đang 0 phẩy 4 và chỉ tăng được 0 phẩy 1 mỗi chu kỳ. Lệnh trông đẹp trên giấy nhưng bánh xe không làm được, nên mô phỏng sai và va chạm thật."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Chỉnh trọng số theo một tình huống <b class="red">(hành vi kỳ lạ ở chỗ khác)</b>
+          <br><span class="note">Trọng số đổi hẳn lựa chọn (bài tự làm). Chỉnh trên một bộ tình huống thử đa dạng, đo cả thời gian tới đích lẫn khoảng cách gần nhất tới vật cản.</span></div>
+        say: "Lỗi thứ ba, chỉnh trọng số theo một tình huống, nên hành vi kỳ lạ ở chỗ khác. Trọng số có thể đổi hẳn lựa chọn, như ta sẽ thấy ở bài tự làm. Hãy chỉnh trên một bộ tình huống thử đa dạng, đo cả thời gian tới đích lẫn khoảng cách gần nhất tới vật cản."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4.</b> Tính quãng phanh mà quên trễ của một chu kỳ <b class="red">(tưởng an toàn)</b>
+          <br><span class="note">Lệnh vừa chọn được giữ suốt chu kỳ 0,2 s rồi mới có lệnh phanh. Người làm nghề cộng quãng đi trong lúc trễ: $v \cdot 0{,}2 + \frac{v^2}{2a}$.</span></div>
+          <table class="t"><tr><th>tốc độ</th><th>đi trong 0,2 s trễ</th><th>quãng phanh</th><th>tổng</th><th>vật cản 0,2 m</th></tr>
+          <tr><td>0,447</td><td>0,089</td><td>0,2</td><td>$\hl{0{,}289}$</td><td><b class="red">va</b></td></tr>
+          <tr><td>0,358</td><td>0,072</td><td>0,128</td><td>0,2</td><td>vừa dừng kịp</td></tr></table>
+        focus: [1, 1, "2.2", "2.3"]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, tính quãng phanh mà quên trễ của một chu kỳ. Lệnh vừa chọn được giữ suốt chu kỳ 0 phẩy 2 giây rồi mới có lệnh phanh, nên người làm nghề cộng thêm quãng đi trong lúc trễ. Ở tốc độ 0 phẩy 447, xe đi thêm 0 phẩy 089 mét trước khi phanh, tổng là 0 phẩy 289 mét, vượt vật cản 0 phẩy 2 mét. Tính cả trễ thì tốc độ an toàn thật chỉ khoảng 0 phẩy 358 mét mỗi giây."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "[round(alg.dwa_score(*c, w=(0.2, 0.2, 0.6)), 2) for c in ((0.55, 0.5, 1.0), (0.8, 0.65, 0.6), (0.9, 0.35, 0.2))] == [0.81, 0.65, 0.37] and round(math.sqrt(2 * 0.5 * 0.5), 3) == 0.707"
+      - "[round(x, 2) for x in (0.2 * 0.55, 0.2 * 0.5, 0.6 * 1.0, 0.2 * 0.8, 0.2 * 0.65, 0.6 * 0.6, 0.2 * 0.9, 0.2 * 0.35, 0.6 * 0.2)] == [0.11, 0.1, 0.6, 0.16, 0.13, 0.36, 0.18, 0.07, 0.12]"
+      - "0.5 > math.sqrt(2 * 0.5 * 0.2) and not (0.3 <= 0.1 <= 0.5) and math.sqrt(2 * 0.5 * 0.5) > 0.5 and round(math.sqrt(0.5), 3) == 0.707"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Đổi trọng số thành 0,2 cho hướng, 0,2 cho khoảng trống, 0,6 cho tốc độ. Điểm ba ứng viên? Ứng viên nào thắng?</td></tr>
+          <tr><td>2</td><td>Nếu vật cản ở 0,5 m thì tốc độ an toàn tối đa là bao nhiêu? Ứng viên đi thẳng còn bị loại không?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, đổi trọng số thành 0 phẩy 2 cho hướng, 0 phẩy 2 cho khoảng trống và 0 phẩy 6 cho tốc độ. Điểm ba ứng viên là bao nhiêu, và ứng viên nào thắng? Câu hai, nếu vật cản ở 0 phẩy 5 mét thì tốc độ an toàn tối đa là bao nhiêu? Ứng viên đi thẳng còn bị loại không? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>① ứng viên</th><th>$0{,}2 \cdot$ hướng $+ 0{,}2 \cdot$ khoảng trống $+ 0{,}6 \cdot$ tốc độ</th><th>điểm</th></tr>
+          <tr><td>đi thẳng nhanh</td><td>$0{,}11 + 0{,}10 + 0{,}60$</td><td>$\hl{0{,}81}$</td></tr>
+          <tr><td>rẽ trái vừa</td><td>$0{,}16 + 0{,}13 + 0{,}36$</td><td>0,65</td></tr>
+          <tr><td>rẽ gắt chậm</td><td>$0{,}18 + 0{,}07 + 0{,}12$</td><td>0,37</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Đáp án câu một, tính lại từng tổng có trọng số với trọng số mới. Đi thẳng nhanh được 0 phẩy 11 cộng 0 phẩy 1 cộng 0 phẩy 6, bằng 0 phẩy 81. Rẽ trái vừa được 0 phẩy 16 cộng 0 phẩy 13 cộng 0 phẩy 36, bằng 0 phẩy 65. Rẽ gắt chậm được 0 phẩy 18 cộng 0 phẩy 07 cộng 0 phẩy 12, bằng 0 phẩy 37."
+      - show: |
+          <div class="box key">Điểm cao nhất là <b>đi thẳng nhanh</b> — trọng số tốc độ cao làm robot “liều”. Nhưng nếu vật cản vẫn ở 0,2 m, nó đã bị loại ở bước an toàn ($0{,}5 \gt 0{,}447$), rẽ gắt nằm ngoài cửa sổ, nên robot vẫn <b>rẽ trái vừa</b>. Điểm không vượt qua được bộ lọc.</div>
+        focus: [1, 1, 1]
+        say: "Vậy điểm cao nhất là đi thẳng nhanh, vì trọng số tốc độ cao làm robot liều hơn. Nhưng nếu vật cản vẫn ở 0 phẩy 2 mét thì ứng viên này đã bị loại ở bước an toàn, còn rẽ gắt nằm ngoài cửa sổ. Vì vậy robot vẫn rẽ trái vừa, điểm cao không bao giờ vượt qua được bộ lọc."
+      - clear: true
+        show: |
+          <p>② $\sqrt{2 \cdot 0{,}5 \cdot 0{,}5} = \sqrt{0{,}5} \approx \hl{0{,}707}$ m/s $\gt 0{,}5$ → đi thẳng <b>không</b> còn bị loại.</p>
+          <table class="t"><tr><th>trọng số</th><th>đi thẳng nhanh</th><th>rẽ trái vừa</th><th>robot chọn</th></tr>
+          <tr><td>0,4 / 0,4 / 0,2</td><td>0,62</td><td>0,70</td><td>rẽ trái vừa</td></tr>
+          <tr><td>0,2 / 0,2 / 0,6</td><td>0,81</td><td>0,65</td><td>$\hl{\text{đi thẳng nhanh}}$</td></tr></table>
+        focus: [1, 1, "2.2", "2.3"]
+        say: "Câu hai, căn của 2 nhân 0 phẩy 5 nhân 0 phẩy 5, khoảng 0 phẩy 707 mét mỗi giây, lớn hơn 0 phẩy 5, nên đi thẳng không còn bị loại. Lúc này trọng số mới quyết định lựa chọn. Với trọng số cũ, rẽ trái vừa vẫn thắng, 0 phẩy 7 so với 0 phẩy 62. Với trọng số nghiêng về tốc độ, đi thẳng nhanh thắng với 0 phẩy 81, nên trọng số đổi hẳn hành vi của robot."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">vận tốc đạt được trong một chu kỳ</span><span class="a">→</span>
+          <span class="n">loại vận tốc không dừng kịp</span><span class="a">→</span>
+          <span class="n">chấm điểm hướng, khoảng trống, tốc độ</span><span class="a">→</span>
+          <span class="n">đi theo đường toàn cục, chỉnh trọng số trên nhiều tình huống</span></div>
+        say: "Tổng kết lại, cửa sổ động chỉ xét vận tốc đạt được trong một chu kỳ, loại vận tốc không dừng kịp, rồi chấm điểm theo hướng, khoảng trống và tốc độ. Nó đi theo đường toàn cục, và trọng số phải chỉnh trên nhiều tình huống."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> lựa chọn tốt nhất là lựa chọn tốt nhất <b>trong số những gì làm được ngay</b> — không phải lựa chọn đẹp nhất trên lý thuyết.</div>
+        say: "Điều cần mang theo, lựa chọn tốt nhất là lựa chọn tốt nhất trong số những gì làm được ngay, không phải lựa chọn đẹp nhất trên lý thuyết."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 10): <b>bám quỹ đạo</b> bằng điểm nhìn trước.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 10, ta học bám quỹ đạo bằng điểm nhìn trước. Hẹn gặp bạn ở bài tiếp theo."

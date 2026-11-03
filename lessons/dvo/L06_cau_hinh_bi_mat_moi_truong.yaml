@@ -1,0 +1,209 @@
+id: L06
+course: DVO
+series: "DVO · DevOps: tích hợp, triển khai liên tục và vận hành"
+title: "Bài 6 — Quản lý cấu hình và bí mật theo môi trường"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/dvo.yaml L06; audit/dvo/verify_dvo.py L06 (kho git thật trong thư mục tạm); A. Wiggins, The Twelve-Factor App, mục III “Config” (12factor.net); OWASP Secrets Management Cheat Sheet; NIST SP 800-57 Part 1 Rev. 5 (2020), mục 5.3 (thời hạn dùng khoá); CLD bài 13"
+assumes: [arith, frac]
+# Quy ước: kho mã lưu MỌI phiên bản đã ghi; xoá tệp ở lần ghi sau không xoá nó khỏi lịch sử (verify_dvo.py dựng kho git thật để kiểm).
+#   Cửa sổ phơi nhiễm: khoá lộ ở thời điểm ngẫu nhiên đều trong chu kỳ xoay vòng T thì còn dùng được trung bình T/2, tối đa T.
+objectives:
+  - "Tách cấu hình khỏi mã"
+  - "Biết bí mật đã vào lịch sử kho mã thì coi như đã lộ"
+  - "Xoay vòng bí mật để thu hẹp cửa sổ phơi nhiễm"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Xoá mật khẩu khỏi mã rồi mà"
+    steps:
+      - show: |
+          <p>Một bạn lỡ ghi mật khẩu cơ sở dữ liệu vào tệp cấu hình và đẩy lên kho mã. Phát hiện ra, bạn xoá dòng đó ở lần ghi kế tiếp. Ba tháng sau, ai đó lật lịch sử kho mã và thấy mật khẩu — vẫn còn dùng được.</p>
+          <div class="box key">Hôm nay: <b>cấu hình</b> và <b>bí mật</b> theo từng môi trường — để ở đâu, và làm gì khi đã lộ.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, một bạn lỡ ghi mật khẩu cơ sở dữ liệu vào tệp cấu hình và đẩy lên kho mã. Phát hiện ra, bạn xoá dòng đó ở lần ghi kế tiếp. Ba tháng sau, ai đó lật lịch sử kho mã và thấy mật khẩu, mà vẫn còn dùng được. Hôm nay ta học quản lý cấu hình và bí mật theo từng môi trường, để ở đâu, và làm gì khi đã lộ."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: một gói nhiều nơi, lịch sử chỉ thêm, trung bình của một khoảng"
+    checks:
+      - "sum(range(0, 11)) == 55 and Fraction(sum(range(0, 11)), 11) == 5 and Fraction(10, 2) == 5"
+    steps:
+      - show: |
+          <p>Ở bài 4: dựng <b>một lần</b>, cùng một gói (cùng mã băm) đi qua mọi môi trường; chỉ cấu hình được cắm vào lúc chạy.</p>
+          <table class="t"><tr><th>môi trường</th><th>gói</th><th>địa chỉ cơ sở dữ liệu (cắm vào lúc chạy)</th></tr>
+          <tr><td>thử nghiệm</td><td>cùng một gói</td><td><code>db-thu-nghiem</code></td></tr>
+          <tr><td>thật</td><td>cùng một gói</td><td><code>db-that</code></td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Trước hết, nhắc lại bài 4, ta dựng đúng một lần, rồi cùng một gói, cùng mã băm, đi qua mọi môi trường, chỉ có cấu hình được cắm vào lúc chạy. Ở môi trường thử nghiệm, gói đó đọc địa chỉ cơ sở dữ liệu thử nghiệm. Ở môi trường thật, vẫn gói đó, nhưng đọc địa chỉ cơ sở dữ liệu thật."
+      - show: |
+          <p>Ở khoá Hệ thống hướng dịch vụ, ảnh container gồm các <b>lớp chồng lên nhau</b>; “xoá tệp” chỉ thêm một lớp mới che tệp đi.</p>
+          <table class="t"><tr><th>lớp</th><th>việc</th><th>còn đọc được mật khẩu?</th></tr>
+          <tr><td>1</td><td>chép tệp có mật khẩu</td><td class="red">có, trong lớp 1</td></tr>
+          <tr><td>2</td><td>xoá tệp đó</td><td>chỉ che đi, lớp 1 vẫn nằm trong ảnh</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Thứ hai, ở khoá Hệ thống hướng dịch vụ, ta đã thấy ảnh đóng gói chương trình gồm các lớp chồng lên nhau. Lớp một chép vào một tệp có mật khẩu. Lớp hai xoá tệp đó, nhưng thật ra chỉ thêm một lớp che đi, lớp một vẫn nằm trong ảnh và vẫn đọc được."
+      - clear: true
+        show: |
+          <p>Trung bình của các số cách đều từ 0 tới 10:</p>
+          $$\frac{0 + 1 + 2 + \dots + 10}{11} = \frac{55}{11} = 5 = \frac{10}{2}$$
+        introduces: [dots]
+        focus: [1, 2, 2]
+        say: "Thứ ba, một phép tính nhỏ. Lấy trung bình các số cách đều từ 0 tới 10, tổng là 55, chia cho 11 số được 5. Kết quả đúng bằng nửa của 10, vì các số rải đều nên trung bình nằm ngay giữa khoảng."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: cấu hình theo môi trường, kho bí mật, xoay vòng"
+    steps:
+      - show: |
+          <table class="t"><tr><th>khái niệm</th><th>nghĩa</th></tr>
+          <tr><td><b>cấu hình theo môi trường</b></td><td>cùng một sản phẩm dựng; thử nghiệm và thật khác nhau ở biến môi trường hoặc tệp gắn vào lúc chạy</td></tr>
+          <tr><td><b>kho bí mật</b></td><td>nơi lưu bí mật đã mã hoá, ghi nhật ký ai đọc, cấp theo quyền tối thiểu</td></tr>
+          <tr><td><b>xoay vòng</b></td><td>thay bí mật định kỳ (và ngay khi nghi lộ), để bí mật cũ hết hiệu lực</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Bảng giới thiệu ba khái niệm. Cấu hình theo môi trường nghĩa là cùng một sản phẩm dựng, còn thử nghiệm và môi trường thật khác nhau ở biến môi trường hoặc tệp gắn vào lúc chạy. Kho bí mật là nơi lưu bí mật đã mã hoá, ghi nhật ký ai đọc, và cấp theo quyền tối thiểu. Xoay vòng là thay bí mật định kỳ, và thay ngay khi nghi bị lộ, để bí mật cũ hết hiệu lực."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Khoá lộ giữa chu kỳ còn sống tới lần xoay kế tiếp"
+    checks:
+      - "90 - 30 == 60 and [d for d in range(0, 91, 7) if d >= 30][0] == 35 and 35 - 30 == 5"
+    steps:
+      - show: |
+          <div><svg width="1500" height="400" viewBox="0 0 1500 400"><defs><marker id="arD6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#b91c1c"/></marker></defs><text x="570" y="40" font-size="22" text-anchor="middle" fill="#b91c1c">ngày 30: khoá lộ</text><text x="20" y="118" font-size="24" font-weight="bold" fill="#2a78d6">xoay 90 ngày</text><line x1="180" y1="110" x2="1350" y2="110" stroke="#6b7280" stroke-width="3"/><line x1="180" y1="88" x2="180" y2="132" stroke="#2a78d6" stroke-width="4"/><line x1="1350" y1="88" x2="1350" y2="132" stroke="#2a78d6" stroke-width="4"/><rect x="570" y="96" width="780" height="28" fill="#fecaca" stroke="#b91c1c" stroke-width="2"/><circle cx="570" cy="110" r="11" fill="#b91c1c"/><text x="960" y="166" font-size="22" text-anchor="middle" fill="#b91c1c">còn dùng được 60 ngày</text><text x="20" y="268" font-size="24" font-weight="bold" fill="#2a78d6">xoay 7 ngày</text><line x1="180" y1="260" x2="1350" y2="260" stroke="#6b7280" stroke-width="3"/><line x1="180" y1="238" x2="180" y2="282" stroke="#2a78d6" stroke-width="4"/><line x1="271" y1="238" x2="271" y2="282" stroke="#2a78d6" stroke-width="4"/><line x1="362" y1="238" x2="362" y2="282" stroke="#2a78d6" stroke-width="4"/><line x1="453" y1="238" x2="453" y2="282" stroke="#2a78d6" stroke-width="4"/><line x1="544" y1="238" x2="544" y2="282" stroke="#2a78d6" stroke-width="4"/><line x1="635" y1="238" x2="635" y2="282" stroke="#2a78d6" stroke-width="4"/><line x1="726" y1="238" x2="726" y2="282" stroke="#2a78d6" stroke-width="4"/><line x1="817" y1="238" x2="817" y2="282" stroke="#2a78d6" stroke-width="4"/><line x1="908" y1="238" x2="908" y2="282" stroke="#2a78d6" stroke-width="4"/><line x1="999" y1="238" x2="999" y2="282" stroke="#2a78d6" stroke-width="4"/><line x1="1090" y1="238" x2="1090" y2="282" stroke="#2a78d6" stroke-width="4"/><line x1="1181" y1="238" x2="1181" y2="282" stroke="#2a78d6" stroke-width="4"/><line x1="1272" y1="238" x2="1272" y2="282" stroke="#2a78d6" stroke-width="4"/><rect x="570" y="246" width="65" height="28" fill="#fecaca" stroke="#b91c1c" stroke-width="2"/><circle cx="570" cy="260" r="11" fill="#b91c1c"/><text x="602" y="316" font-size="22" text-anchor="middle" fill="#b91c1c">còn 5 ngày</text><text x="180" y="370" font-size="20" text-anchor="middle" fill="#1f2937">0</text><text x="544" y="370" font-size="20" text-anchor="middle" fill="#1f2937">28</text><text x="635" y="370" font-size="20" text-anchor="middle" fill="#1f2937">35</text><text x="1350" y="370" font-size="20" text-anchor="middle" fill="#1f2937">90</text><text x="1370" y="370" font-size="20" fill="#1f2937">ngày</text><g font-size="20" fill="#2a78d6"><line x1="1380" y1="190" x2="1380" y2="226" stroke="#2a78d6" stroke-width="4"/><text x="1392" y="214">= lần xoay</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ hai trục thời gian 90 ngày, mỗi vạch xanh là một lần xoay vòng khoá. Giả sử khoá lộ vào ngày 30, chấm đỏ. Nếu xoay 90 ngày một lần, khoá lộ còn dùng được tới ngày 90, tức 60 ngày, là dải đỏ dài ở hàng trên. Nếu xoay 7 ngày một lần, lần xoay kế tiếp là ngày 35, nên khoá lộ chỉ còn dùng được 5 ngày."
+
+  - id: example
+    kind: example
+    title: "Lịch sử nhớ mọi thứ; xoay vòng thu hẹp thiệt hại"
+    checks:
+      - "Fraction(90, 2) == 45 and float(Fraction(7, 2)) == 3.5"
+    steps:
+      - show: |
+          <p><b>Bước 1 — lần ghi 1</b> đẩy lên kho mã:</p>
+          <table class="t"><tr><th>lần ghi</th><th>nội dung tệp cấu hình</th></tr>
+          <tr><td>1</td><td><code>db_password = hunter2</code></td></tr></table>
+        focus: [1, "2.2"]
+        say: "Bước một, bảng ghi lần ghi đầu tiên của tệp cấu hình. Lần ghi một chứa dòng mật khẩu."
+      - show: |
+          <p><b>Bước 2 — lần ghi 2</b> xoá dòng đó. Kho mã giữ <b>cả hai</b> lần ghi:</p>
+          <table class="t"><tr><th>lần ghi</th><th>nội dung tệp cấu hình</th><th>ai đọc kho xem được?</th></tr>
+          <tr><td>1</td><td><code>db_password = hunter2</code></td><td class="red">có</td></tr>
+          <tr><td>2</td><td><i>(đã xoá dòng)</i></td><td>không còn mật khẩu</td></tr></table>
+          <p>Xoá ở lần ghi 2 không làm mật khẩu hết hiệu lực — chỉ <b>đổi mật khẩu</b> mới làm được.</p>
+        focus: [1, 2, "2.2", 3]
+        say: "Bước hai, lần ghi hai đã xoá dòng đó. Nhưng kho mã giữ cả hai lần ghi. Ai có quyền đọc kho đều xem được lần ghi một. Xoá ở lần ghi hai không làm mật khẩu hết hiệu lực, chỉ đổi mật khẩu mới làm được."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — xoay 90 ngày:</b> khoá lộ vào thời điểm ngẫu nhiên trong chu kỳ xoay vòng $T$, nên thời gian còn lại rải đều từ 0 tới $T$:</p>
+          $$\text{trung bình} = \frac{T}{2} = \frac{90}{2} = \hl{45} \text{ ngày}, \quad \text{tối đa } 90 \text{ ngày}$$
+        focus: [1, 1, 2]
+        say: "Bước ba, xoay vòng 90 ngày. Nếu khoá lộ vào một thời điểm ngẫu nhiên trong chu kỳ xoay vòng T, thì thời gian còn lại rải đều từ 0 tới T, nên nó còn dùng được trung bình T chia 2. Với T bằng 90, trung bình 45 ngày, và tối đa 90 ngày nếu lộ ngay sau một lần xoay."
+      - show: |
+          <p><b>Bước 4 — xoay 7 ngày:</b></p>
+          $$\frac{7}{2} = \hl{3{,}5} \text{ ngày}, \quad \text{tối đa } 7 \text{ ngày}$$
+        focus: [1, 2]
+        say: "Bước bốn, xoay vòng 7 ngày. Trung bình chỉ còn 7 chia 2, bằng 3 phẩy 5 ngày, và tối đa 7 ngày."
+      - show: |
+          <table class="t"><tr><th>chu kỳ xoay $T$</th><th>trung bình $\frac{T}{2}$</th><th>tối đa</th></tr>
+          <tr><td>90 ngày</td><td>45 ngày</td><td>90 ngày</td></tr>
+          <tr><td>7 ngày</td><td>3,5 ngày</td><td>7 ngày</td></tr></table>
+        focus: [1, "1.2", "1.3", 0]
+        say: "Bước năm, ta so sánh hai chu kỳ xoay khoá với nhau. Xoay 90 ngày, khoá lộ sống trung bình 45 ngày. Xoay 7 ngày, chỉ 3 phẩy 5 ngày. Xoay vòng không ngăn được lộ, nhưng cắt ngắn thời gian kẻ xấu dùng được khoá."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: liệt kê các ngày lộ cách đều"
+    checks:
+      - "[90 - d for d in range(5, 90, 10)] == [85, 75, 65, 55, 45, 35, 25, 15, 5] and sum(90 - d for d in range(5, 90, 10)) == 405 and Fraction(405, 9) == 45"
+      - "[7 - (d + Fraction(1, 2)) for d in range(7)] == [Fraction(13, 2) - k for k in range(7)] and sum(7 - (d + Fraction(1, 2)) for d in range(7)) / 7 == Fraction(7, 2)"
+    steps:
+      - show: |
+          <p>Đường khác: không dùng công thức, chia 90 ngày thành 9 đoạn 10 ngày, cho khoá lộ ở <b>giữa</b> mỗi đoạn, rồi đếm số ngày còn lại.</p>
+          <table class="t"><tr><th>lộ ngày</th><th>5</th><th>15</th><th>25</th><th>35</th><th>45</th><th>55</th><th>65</th><th>75</th><th>85</th></tr>
+          <tr><td>còn lại</td><td>85</td><td>75</td><td>65</td><td>55</td><td>45</td><td>35</td><td>25</td><td>15</td><td>5</td></tr></table>
+          <p>$\frac{405}{9} = \hl{45}$ ngày ✓</p>
+        focus: [1, 2, "2.2", 3, 3]
+        say: "Kiểm bằng đường khác, không dùng công thức. Ta chia 90 ngày thành 9 đoạn 10 ngày, và cho khoá lộ ở giữa mỗi đoạn, ngày 5, 15, cho tới 85. Số ngày còn lại lần lượt là 85, 75, giảm dần tới 5. Cộng lại được 405, rồi chia cho 9 lần lộ, vì trung bình là tổng chia số lần, được 45 ngày. Làm tương tự với chu kỳ 7 ngày cũng ra 3 phẩy 5, khớp công thức T chia 2."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc, 1 lỗi người đã đi làm"
+    checks:
+      - "Fraction(10, 2) == 5"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Viết lại lịch sử kho mã và coi như xong <b class="red">(vẫn đã lộ)</b>
+          <br><span class="note">Bản sao trên máy người khác, bộ nhớ đệm của dịch vụ lưu trữ, nhật ký đường ống vẫn còn. Việc bắt buộc đầu tiên là <b>đổi bí mật</b>; dọn lịch sử chỉ là việc thứ hai.</span></div>
+        say: "Lỗi thứ nhất, viết lại lịch sử kho mã và coi như xong. Bản sao trên máy người khác, bộ nhớ đệm của dịch vụ lưu trữ, nhật ký đường ống vẫn còn. Việc bắt buộc đầu tiên là đổi bí mật, dọn lịch sử chỉ là việc thứ hai."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> In bí mật ra nhật ký đường ống <b class="red">(lộ qua nhật ký)</b>
+          <br><span class="note">Lệnh in mọi biến môi trường để gỡ lỗi sẽ in luôn mật khẩu. Che bí mật trong nhật ký, và không in toàn bộ môi trường.</span></div>
+        say: "Lỗi thứ hai, in bí mật ra nhật ký đường ống. Lệnh in mọi biến môi trường để gỡ lỗi sẽ in luôn mật khẩu, nên hãy che bí mật trong nhật ký, và không in toàn bộ môi trường."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Dùng chung bí mật giữa thử nghiệm và thật <b class="red">(một lỗ thủng, hai nơi chết)</b>
+          <br><span class="note">Môi trường thử nghiệm thường ít được bảo vệ hơn. Mỗi môi trường một bộ bí mật riêng; lộ ở thử nghiệm không mở được hệ thống thật.</span></div>
+        say: "Lỗi thứ ba, dùng chung bí mật giữa thử nghiệm và môi trường thật. Môi trường thử nghiệm thường ít được bảo vệ hơn, nên mỗi môi trường phải có một bộ bí mật riêng, lộ ở thử nghiệm không mở được hệ thống thật."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Xoay vòng định kỳ bằng cách thu hồi khoá cũ <b>ngay lúc</b> tạo khoá mới <b class="red">(tự gây sự cố)</b></div>
+          <table class="t"><tr><th>20 máy chủ, mỗi máy nạp lại bí mật 10 phút một lần</th><th>máy bị từ chối</th><th>thời gian lỗi mỗi máy</th></tr>
+          <tr><td>thu hồi khoá cũ ngay</td><td class="red">tới 20 máy</td><td>trung bình 5 phút, tối đa 10 phút</td></tr>
+          <tr><td>hai khoá cùng hiệu lực: phát khoá mới, chờ hơn 10 phút, rồi mới thu hồi khoá cũ</td><td>0 máy</td><td>0 phút</td></tr></table>
+        focus: [1, "2.1", "2.2", "2.3", 0]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, xoay vòng định kỳ bằng cách thu hồi khoá cũ ngay lúc tạo khoá mới. Giả sử có 20 máy chủ, mỗi máy nạp lại bí mật 10 phút một lần. Thu hồi ngay thì cả 20 máy bị cơ sở dữ liệu từ chối cho tới lần nạp kế tiếp, theo đúng phép tính vừa học là trung bình 5 phút, tối đa 10 phút mỗi máy. Người làm nghề cho hai khoá cùng hiệu lực một thời gian, phát khoá mới, chờ quá một chu kỳ nạp, rồi mới thu hồi khoá cũ, nên không máy nào lỗi. Riêng khi khoá đã lộ thì thu hồi ngay vẫn đúng, vì một vài phút lỗi rẻ hơn để kẻ xấu dùng tiếp."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "Fraction(30, 2) == 15 and Fraction(1, 2) * 24 == 12"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Xoay vòng khoá mỗi 30 ngày: một khoá lộ ngẫu nhiên còn dùng được trung bình bao lâu? Tối đa bao lâu?</td></tr>
+          <tr><td>2</td><td>Phát hiện mật khẩu nằm trong lần ghi của tuần trước. Ba việc cần làm, theo thứ tự?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, xoay vòng khoá mỗi 30 ngày, một khoá lộ ngẫu nhiên còn dùng được trung bình bao lâu? Và lâu nhất thì còn dùng được bao lâu? Câu hai, phát hiện mật khẩu nằm trong lần ghi của tuần trước. Ba việc cần làm theo thứ tự là gì? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① Thời gian còn lại rải đều từ 0 tới 30 ngày:</p>
+          $$\frac{30}{2} = \hl{15} \text{ ngày trung bình}, \quad \text{tối đa } 30 \text{ ngày (lộ ngay sau một lần xoay)}$$
+        focus: [1, 2, 2]
+        say: "Đáp án câu một, vì khoá lộ vào lúc ngẫu nhiên nên thời gian còn lại rải đều từ 0 tới 30 ngày. Trung bình 30 chia 2 bằng 15 ngày. Tối đa 30 ngày, khi khoá lộ ngay sau một lần xoay."
+      - show: |
+          <table class="t"><tr><th>thứ tự</th><th>việc</th><th>vì sao trước việc sau</th></tr>
+          <tr><td>1</td><td>đổi mật khẩu ngay</td><td>chỉ việc này làm mật khẩu cũ hết hiệu lực</td></tr>
+          <tr><td>2</td><td>kiểm nhật ký truy cập xem đã bị dùng chưa</td><td>biết có thiệt hại cần xử lý không</td></tr>
+          <tr><td>3</td><td>chuyển bí mật vào kho bí mật</td><td>để không lặp lại; rồi mới dọn lịch sử</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Câu hai, ba việc theo thứ tự. Việc một, đổi mật khẩu ngay, vì chỉ việc này làm mật khẩu cũ hết hiệu lực. Việc hai, kiểm nhật ký truy cập xem mật khẩu đã bị dùng chưa, để biết có thiệt hại cần xử lý không. Việc ba, chuyển bí mật vào kho bí mật để không lặp lại, sau đó mới dọn lịch sử."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">cấu hình đưa vào lúc chạy</span><span class="a">→</span>
+          <span class="n">bí mật trong kho bí mật, mỗi môi trường riêng</span><span class="a">→</span>
+          <span class="n">đã vào lịch sử = đã lộ → đổi ngay</span><span class="a">→</span>
+          <span class="n">xoay vòng định kỳ</span></div>
+        say: "Tổng kết lại, cấu hình đưa vào lúc chạy, bí mật để trong kho bí mật và mỗi môi trường một bộ riêng. Bí mật đã vào lịch sử là đã lộ, phải đổi ngay, và xoay vòng định kỳ."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> giả định mọi bí mật rồi sẽ lộ, và thiết kế để khi lộ thì thiệt hại nhỏ, thời gian ngắn.</div>
+        say: "Điều cần mang theo, hãy giả định mọi bí mật rồi sẽ lộ, và thiết kế để khi lộ thì thiệt hại nhỏ, thời gian ngắn."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 7): <b>phát hành tiệm tiến</b> — phát hành thử, cờ tính năng, quay lui tự động.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 7, ta học phát hành tiệm tiến, với phát hành thử, cờ tính năng, và quay lui tự động. Hẹn gặp bạn ở bài tiếp theo."

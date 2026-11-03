@@ -1,0 +1,249 @@
+id: L10
+course: OSY
+series: "OSY · Hệ điều hành"
+title: "Bài 10 — Thay trang FIFO, LRU, OPT và nghịch lý Belady"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/osy.yaml L10; audit/verify_plan_curricula.py OSY:L10; L. Belady, R. Nelson, G. Shedler (1969), “An anomaly in space-time characteristics of certain programs running in a paging machine”"
+assumes: [arith, dots]
+# Quy ước: FIFO = vào trước ra trước, LRU = lâu nhất chưa dùng, OPT = tối ưu (biết trước tương lai) — tên viết tắt và “Belady” chỉ trên
+#   màn hình; lời đọc dùng tên tiếng Việt. Bảng vết sinh bằng audit/osy/pagetrace.py; số lỗi trang trong checks do alg.page_faults tính.
+objectives:
+  - "Đếm lỗi trang với mỗi thuật toán"
+  - "Giải thích nghịch lý Belady"
+  - "Giải thích vì sao lâu nhất chưa dùng xấp xỉ tối ưu"
+asr_reviewed:
+  - {sentence: "Trước hết, ta nhắc lại bài 9, nơi chương trình được cắt thành các mẩu bằng nhau gọi là trang, mỗi trang 4 KiB.", reason: "ASR chép “Trước hết, ta nhắc lại bài chính nơi chương trình được cắt thành các mẫu bằng nhau gọi là trang, mỗi trang 4 kilobyte.” (0.875): lệch âm/thanh thuần Việt: chín/chính, mẩu/mẫu; KiB/MiB/TiB đọc theo lexicon_vi.OSY.yaml (“ki-lô-byte”, “mê-ga-byte”, “tê-ra-byte”), ASR chép “kilobyte/MB/TB/terabyte” hoặc tách “kg bay” — đúng đơn vị, chỉ khác cách viết — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Thêm bộ nhớ mà chạy chậm hơn"
+    checks:
+      - "alg.page_faults([1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5], 3, 'FIFO') == 9 and alg.page_faults([1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5], 4, 'FIFO') == 10"
+    steps:
+      - show: |
+          <p>Cùng một chuỗi truy cập trang. Máy có 3 khung: <b>9</b> lỗi trang. Nâng lên 4 khung: <b class="red">10</b> lỗi trang.</p>
+          <div class="box key">Thêm bộ nhớ mà lỗi <b>tăng</b>? Hôm nay: khi bộ nhớ đầy phải đuổi trang nào ra, và vì sao một cách đuổi “hợp lý” lại cho kết quả ngược đời này.</div>
+        focus: [1, 1, 2]
+        say: "Chào bạn, cùng một chuỗi truy cập trang, máy có 3 khung thì bị 9 lỗi trang. Nâng lên 4 khung thì bị tới 10 lỗi trang. Thêm bộ nhớ mà lỗi lại tăng, hôm nay ta học khi bộ nhớ đầy phải đuổi trang nào ra, và vì sao một cách đuổi tưởng hợp lý lại cho kết quả ngược đời này."
+
+  # ───────────────────────── 1b. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: trang, khung và hàng đợi"
+    checks:
+      - "(lambda q, m: {x for x in range(10) if alg.page_faults(q + [x], 3, m) == alg.page_faults(q, 3, m)})([1, 2, 3, 4], 'FIFO') == {2, 3, 4}"
+    steps:
+      - show: |
+          <table class="t"><tr><th>từ</th><th>nghĩa</th><th>ví dụ</th></tr>
+          <tr><td>trang</td><td>mẩu chương trình, cỡ cố định</td><td>4 KiB</td></tr>
+          <tr><td>khung</td><td>ô bộ nhớ cùng cỡ với trang</td><td>3 khung → giữ cùng lúc 3 trang</td></tr>
+          <tr><td>bit có mặt</td><td>trong bảng trang: 1 = trang đang ở một khung, 0 = trang đang ở đĩa</td><td>có mặt = 0 → phải nạp</td></tr></table>
+        focus: ["1.2", "1.3", "1.4"]
+        say: "Trước hết, ta nhắc lại bài 9, nơi chương trình được cắt thành các mẩu bằng nhau gọi là trang, mỗi trang 4 KiB. Bộ nhớ cũng được cắt thành các khung cùng cỡ, nên máy có 3 khung thì cùng lúc chỉ giữ được 3 trang. Bảng trang ghi trang nào nằm ở khung nào, kèm một bit có mặt, bằng 0 nghĩa là trang đang nằm trên đĩa và phải nạp vào."
+      - show: |
+          <table class="t"><tr><th>hàng đợi (đầu → cuối)</th><th>việc vừa làm</th></tr>
+          <tr><td>1, 2, 3</td><td>đã đủ 3 chỗ</td></tr>
+          <tr><td>2, 3, $\hl{4}$</td><td>4 vào ở cuối, 1 ra ở đầu</td></tr></table>
+        focus: [0, "1.2", "1.3"]
+        say: "Công cụ thứ hai là hàng đợi, một dãy mà phần tử mới luôn vào ở cuối, còn phần tử ra luôn là phần tử đứng đầu. Hàng đợi đang có 1, 2, 3 và đã đủ cả 3 chỗ. Cho trang 4 vào thì trang 1 ở đầu phải ra, còn lại 2, 3, 4."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: lỗi trang và ba cách đuổi"
+    steps:
+      - show: |
+          <p><b>Lỗi trang</b>: trang cần dùng không có trong khung nào → nạp từ đĩa (chậm hàng nghìn lần). Nếu mọi khung đều đầy, phải <b>đuổi</b> một trang.</p>
+          <table class="t"><tr><th>cách</th><th>đuổi trang nào</th></tr>
+          <tr><td><b>FIFO</b> — vào trước ra trước</td><td>trang được <b>nạp</b> sớm nhất</td></tr>
+          <tr><td><b>LRU</b> — lâu nhất chưa dùng</td><td>trang lần <b>dùng</b> gần nhất xa nhất về quá khứ</td></tr>
+          <tr><td><b>OPT</b> — tối ưu</td><td>trang lần dùng tới xa nhất trong <b>tương lai</b> (không bao giờ dùng lại thì đuổi trước)</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", "2.4"]
+        say: "Lỗi trang xảy ra khi trang cần dùng không có trong khung nào, phải nạp từ đĩa, chậm hàng nghìn lần. Nếu mọi khung đều đầy thì phải đuổi một trang ra. Cách vào trước ra trước đuổi trang được nạp sớm nhất. Cách lâu nhất chưa dùng đuổi trang có lần dùng gần nhất xa nhất về quá khứ. Cách tối ưu đuổi trang mà lần dùng tới xa nhất trong tương lai, nhưng đòi biết trước tương lai."
+
+  # ───────────────────────── 2b. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hai cách xếp hàng các trang trong khung"
+    checks:
+      - "alg.page_faults([1, 2, 3, 1, 4, 1], 3, 'FIFO') == 5 and alg.page_faults([1, 2, 3, 1, 4, 1], 3, 'LRU') == 4"
+      - "(lambda q, m: {x for x in range(10) if alg.page_faults(q + [x], 3, m) == alg.page_faults(q, 3, m)})([1, 2, 3, 1, 4], 'FIFO') == {2, 3, 4} and (lambda q, m: {x for x in range(10) if alg.page_faults(q + [x], 3, m) == alg.page_faults(q, 3, m)})([1, 2, 3, 1, 4], 'LRU') == {3, 1, 4}"
+    steps:
+      - show: |
+          <p>Đã gọi 1, 2, 3 rồi gọi <b>lại</b> 1 (trúng). Khung đầy; trang 4 tới:</p>
+          <div><svg width="1400" height="440" viewBox="0 0 1400 440"><defs><marker id="arO10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs><text x="40" y="58" font-size="26" text-anchor="start" fill="#1f2937" font-weight="bold">Vào trước ra trước: xếp theo lúc NẠP</text><rect x="470" y="80" width="130" height="90" fill="#fecaca" stroke="#1f2937" stroke-width="3"/><text x="535" y="137.6" font-size="36" font-weight="bold" text-anchor="middle" fill="#1f2937">1</text><rect x="610" y="80" width="130" height="90" fill="#dbeafe" stroke="#1f2937" stroke-width="3"/><text x="675" y="137.6" font-size="36" font-weight="bold" text-anchor="middle" fill="#1f2937">2</text><rect x="750" y="80" width="130" height="90" fill="#dbeafe" stroke="#1f2937" stroke-width="3"/><text x="815" y="137.6" font-size="36" font-weight="bold" text-anchor="middle" fill="#1f2937">3</text><line x1="465" y1="125" x2="330" y2="125" stroke="#b91c1c" stroke-width="3" marker-end="url(#arO10)"/><text x="200" y="134" font-size="24" text-anchor="middle" fill="#b91c1c">đuổi trang 1</text><line x1="1070" y1="125" x2="900" y2="125" stroke="#1f2937" stroke-width="3" marker-end="url(#arO10)"/><text x="1190" y="134" font-size="24" text-anchor="middle" fill="#1f2937">trang 4 vào</text><text x="700" y="212" font-size="22" text-anchor="middle" fill="#1f2937">gọi lại 1 không đổi thứ tự → trang 4 tới thì đuổi 1</text><text x="40" y="258" font-size="26" text-anchor="start" fill="#1f2937" font-weight="bold">Lâu nhất chưa dùng: gọi lại thì dời về cuối</text><rect x="470" y="280" width="130" height="90" fill="#fecaca" stroke="#1f2937" stroke-width="3"/><text x="535" y="337.6" font-size="36" font-weight="bold" text-anchor="middle" fill="#1f2937">2</text><rect x="610" y="280" width="130" height="90" fill="#dbeafe" stroke="#1f2937" stroke-width="3"/><text x="675" y="337.6" font-size="36" font-weight="bold" text-anchor="middle" fill="#1f2937">3</text><rect x="750" y="280" width="130" height="90" fill="#dbeafe" stroke="#1f2937" stroke-width="3"/><text x="815" y="337.6" font-size="36" font-weight="bold" text-anchor="middle" fill="#1f2937">1</text><line x1="465" y1="325" x2="330" y2="325" stroke="#b91c1c" stroke-width="3" marker-end="url(#arO10)"/><text x="200" y="334" font-size="24" text-anchor="middle" fill="#b91c1c">đuổi trang 2</text><line x1="1070" y1="325" x2="900" y2="325" stroke="#1f2937" stroke-width="3" marker-end="url(#arO10)"/><text x="1190" y="334" font-size="24" text-anchor="middle" fill="#1f2937">trang 4 vào</text><text x="700" y="412" font-size="22" text-anchor="middle" fill="#1f2937">gọi lại 1 → dời 1 về cuối → trang 4 tới thì đuổi 2</text></svg></div>
+        focus: [1, 2, 2, 2]
+        say: "Hình này cho thấy chỗ khác nhau duy nhất giữa hai cách, sau khi đã gọi các trang 1, 2, 3 rồi gọi lại trang 1. Ở hàng trên, vào trước ra trước xếp các trang theo lúc nạp, gọi lại trang 1 không làm đổi thứ tự, nên khi trang 4 tới thì trang 1 ở đầu hàng bị đuổi. Ở hàng dưới, lâu nhất chưa dùng dời trang 1 về cuối ngay khi nó được dùng lại, nên trang 2 trở thành trang lâu nhất chưa dùng và bị đuổi. Nếu ngay sau đó chương trình gọi lại trang 1, cách trên bị thêm một lỗi, còn cách dưới thì trúng."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Vào trước ra trước, 3 khung"
+    checks:
+      - "alg.page_faults([1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5], 3, 'FIFO') == 9"
+      - "[alg.page_faults([1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5][:k], 3, 'FIFO') for k in (3, 4, 7, 9, 12)] == [3, 4, 7, 7, 9] and [1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5][7:] == [1, 2, 3, 4, 5] and 4 + 3 == 7 and 7 + 2 == 9"
+      - "(lambda q, m: {x for x in range(10) if alg.page_faults(q + [x], 3, m) == alg.page_faults(q, 3, m)})([1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5][:4], 'FIFO') == {2, 3, 4} and (lambda q, m: {x for x in range(10) if alg.page_faults(q + [x], 3, m) == alg.page_faults(q, 3, m)})([1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5][:7], 'FIFO') == {1, 2, 5} and (lambda q, m: {x for x in range(10) if alg.page_faults(q + [x], 3, m) == alg.page_faults(q, 3, m)})([1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5][:11], 'FIFO') == {5, 3, 4}"
+    steps:
+      - show: |
+          <p>Chuỗi tham chiếu: 1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5.</p>
+          <div><table class="t trace"><tr><th>tham chiếu</th><th>1</th><th>2</th><th>3</th><th>4</th><th>1</th><th>2</th><th>5</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th></tr><tr><td>khung 1</td><td>1</td><td>1</td><td>1</td><td>4</td><td>4</td><td>4</td><td>5</td><td>5</td><td>5</td><td>5</td><td>5</td><td>5</td></tr><tr><td>khung 2</td><td></td><td>2</td><td>2</td><td>2</td><td>1</td><td>1</td><td>1</td><td>1</td><td>1</td><td>3</td><td>3</td><td>3</td></tr><tr><td>khung 3</td><td></td><td></td><td>3</td><td>3</td><td>3</td><td>2</td><td>2</td><td>2</td><td>2</td><td>2</td><td>4</td><td>4</td></tr><tr><td>lỗi</td><td><b class="red">●</b></td><td><b class="red">●</b></td><td><b class="red">●</b></td><td><b class="red">●</b></td><td><b class="red">●</b></td><td><b class="red">●</b></td><td><b class="red">●</b></td><td></td><td></td><td><b class="red">●</b></td><td><b class="red">●</b></td><td></td></tr></table></div>
+          <p><b>Bước 1.</b> Gọi 1, 2, 3: khung còn trống, nạp vào → 3 lỗi.</p>
+        focus: [1, 2, 3]
+        say: "Chuỗi tham chiếu là 1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5, với 3 khung. Bảng ghi nội dung các khung sau mỗi lần tham chiếu, chấm đỏ đánh dấu lỗi trang. Bước một, ba lỗi đầu là nạp vào khung còn trống, vẫn tính là lỗi vì trang chưa có trong bộ nhớ."
+      - show: |
+          <p><b>Bước 2.</b> Gọi 4: hàng đợi 1, 2, 3 → đuổi 1 (đầu hàng) → 4 lỗi.</p>
+        say: "Bước hai, khi gọi trang 4, hàng đợi theo lúc nạp đang là 1, 2, 3, nên ta đuổi trang 1 vì nó vào sớm nhất, nâng tổng lên 4 lỗi."
+      - show: |
+          <p><b>Bước 3.</b> Gọi 1, 2, 5: mỗi lần lại đuổi đầu hàng (2, rồi 3, rồi 4):</p>
+          $$4 + 3 = 7 \text{ lỗi}$$
+        say: "Bước ba, gọi lại 1 thì đuổi 2, gọi 2 thì đuổi 3, gọi 5 thì đuổi 4, mỗi lần đều là trang đứng đầu hàng, nên tổng lên 7 lỗi."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>lượt</th><th>8</th><th>9</th><th>10</th><th>11</th><th>12</th></tr><tr><td>gọi trang</td><td>1</td><td>2</td><td>3</td><td>4</td><td>5</td></tr></table>
+          <p>Sau bước 3: khung giữ 1, 2, 5 (đúng thứ tự nạp), đã có 7 lỗi.</p>
+          <p><b>Bước 4.</b> Gọi 1, 2: cả hai đang có mặt → trúng, vẫn 7 lỗi.</p>
+        focus: [1, 2, 3]
+        say: "Còn lại năm lần gọi cuối, từ lượt 8 đến lượt 12, là các trang 1, 2, 3, 4, 5. Sau bước ba, các khung đang giữ 1, 2 và 5 theo đúng thứ tự nạp, và ta đã có 7 lỗi. Bước bốn, vì trang 1 và trang 2 đang có mặt, nên hai lần gọi 1 và 2 tiếp theo đều trúng, tổng vẫn là 7 lỗi."
+      - show: |
+          <p><b>Bước 5.</b> Gọi 3 đuổi 1, gọi 4 đuổi 2, gọi 5 trúng:</p>
+          $$7 + 2 = \hl{9} \text{ lỗi}$$
+        focus: [1, 2]
+        say: "Bước năm, gọi 3 thì đuổi 1, gọi 4 thì đuổi 2, rồi gọi 5 thì trúng vì trang 5 vẫn còn trong khung. Tổng cộng là 7 cộng 2, bằng 9 lỗi."
+
+  # ───────────────────────── 4. BELADY ─────────────────────────
+  - id: belady
+    kind: concept
+    title: "Nghịch lý Belady: 4 khung, 10 lỗi"
+    checks:
+      - "alg.page_faults([1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5], 4, 'FIFO') == 10"
+    steps:
+      - show: |
+          <div><table class="t trace"><tr><th>tham chiếu</th><th>1</th><th>2</th><th>3</th><th>4</th><th>1</th><th>2</th><th>5</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th></tr><tr><td>khung 1</td><td>1</td><td>1</td><td>1</td><td>1</td><td>1</td><td>1</td><td>5</td><td>5</td><td>5</td><td>5</td><td>4</td><td>4</td></tr><tr><td>khung 2</td><td></td><td>2</td><td>2</td><td>2</td><td>2</td><td>2</td><td>2</td><td>1</td><td>1</td><td>1</td><td>1</td><td>5</td></tr><tr><td>khung 3</td><td></td><td></td><td>3</td><td>3</td><td>3</td><td>3</td><td>3</td><td>3</td><td>2</td><td>2</td><td>2</td><td>2</td></tr><tr><td>khung 4</td><td></td><td></td><td></td><td>4</td><td>4</td><td>4</td><td>4</td><td>4</td><td>4</td><td>3</td><td>3</td><td>3</td></tr><tr><td>lỗi</td><td><b class="red">●</b></td><td><b class="red">●</b></td><td><b class="red">●</b></td><td><b class="red">●</b></td><td></td><td></td><td><b class="red">●</b></td><td><b class="red">●</b></td><td><b class="red">●</b></td><td><b class="red">●</b></td><td><b class="red">●</b></td><td><b class="red">●</b></td></tr></table></div>
+          <p>Với 4 khung, trang 1 và 2 bị đuổi <b>đúng lúc</b> sắp được dùng lại → $\hl{10}$ lỗi, nhiều hơn 3 khung.</p>
+          <div class="box key">Vào trước ra trước bỏ qua việc trang có <b>đang được dùng</b> hay không — nên thêm khung không chắc giảm lỗi (Belady, 1969).</div>
+        focus: [1, 2, 3]
+        say: "Bây giờ cùng chuỗi đó với 4 khung. Trang 1 và trang 2 bị đuổi đúng lúc chúng sắp được dùng lại, nên có 10 lỗi, nhiều hơn khi chỉ có 3 khung. Lý do là vào trước ra trước bỏ qua việc trang có đang được dùng hay không, nên thêm khung không chắc làm giảm lỗi, hiện tượng này được công bố năm 1969."
+
+  # ───────────────────────── 5. LRU VÀ OPT ─────────────────────────
+  - id: lru
+    kind: concept
+    title: "Lâu nhất chưa dùng và tối ưu"
+    checks:
+      - "alg.page_faults([1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5], 3, 'LRU') == 10 and alg.page_faults([1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5], 3, 'OPT') == 7"
+      - "all(alg.page_faults([1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5], n, p) >= alg.page_faults([1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5], n + 1, p) for n in range(1, 6) for p in ('LRU', 'OPT'))"
+    steps:
+      - show: |
+          <table class="t"><tr><th>3 khung</th><th>FIFO</th><th>LRU</th><th>OPT</th></tr>
+          <tr><td>số lỗi</td><td>9</td><td>10</td><td>$\hl{7}$</td></tr></table>
+          <p>Tối ưu là cận dưới: không cách nào ít lỗi hơn, nhưng cần biết trước tương lai — chỉ dùng để <b>so sánh</b>.</p>
+          <p>Lâu nhất chưa dùng đoán tương lai bằng quá khứ gần. Chuỗi này cố tình xấu với nó (10 lỗi), nhưng với chương trình thật — vòng lặp dùng lại dữ liệu vừa dùng — nó thường gần tối ưu.</p>
+          <div class="box key">Lâu nhất chưa dùng và tối ưu <b>không</b> bị nghịch lý Belady: máy kiểm từ 1 đến 6 khung, thêm khung không bao giờ làm tăng lỗi.</div>
+        focus: [1, 2, 3, 3, 4]
+        say: "So sánh trên 3 khung, vào trước ra trước 9 lỗi, lâu nhất chưa dùng 10 lỗi, tối ưu chỉ 7 lỗi. Tối ưu là cận dưới, không cách nào ít lỗi hơn, nhưng nó cần biết trước tương lai nên chỉ dùng để so sánh. Lâu nhất chưa dùng đoán tương lai bằng quá khứ gần. Chuỗi này cố tình xấu với nó, nhưng với chương trình thật hay dùng lại dữ liệu vừa dùng, nó thường gần tối ưu. Và hai cách này không bị nghịch lý trên, máy đã kiểm từ 1 đến 6 khung."
+
+  # ───────────────────────── 6. TỰ KIỂM ─────────────────────────
+  - id: verify
+    kind: check
+    title: "Tự kiểm"
+    checks:
+      - "alg.page_faults([1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5], 3, 'OPT') >= len(set([1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5]))"
+      - "len(set([1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5])) == 5 and alg.page_faults([1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5], 3, 'FIFO') == 9 and alg.page_faults([1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5], 3, 'OPT') == 7"
+      - "[i + 1 for i in range(12) if alg.page_faults([1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5][:i + 1], 3, 'FIFO') == alg.page_faults([1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5][:i], 3, 'FIFO')] == [8, 9, 12] and 12 - 3 == alg.page_faults([1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5], 3, 'FIFO')"
+    steps:
+      - show: |
+          <table class="t"><tr><th>phép thử</th><th>với vào trước ra trước, 3 khung</th></tr>
+          <tr><td>số lỗi ≥ số trang khác nhau (lần đầu gặp luôn lỗi)</td><td>9 ≥ 5 ✓</td></tr>
+          <tr><td>số lỗi của mọi cách ≥ số lỗi của tối ưu</td><td>9 ≥ 7 ✓</td></tr>
+          <tr><td>mỗi cột đổi <b>đúng một</b> khung khi lỗi, không đổi khi trúng</td><td>✓</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Tự kiểm bằng ba cách. Một, số lỗi luôn lớn hơn hoặc bằng số trang khác nhau trong chuỗi, vì lần đầu gặp trang nào cũng lỗi, ở đây ít nhất là 5. Hai, số lỗi của mọi cách đều lớn hơn hoặc bằng số lỗi của cách tối ưu. Ba, trong bảng vết, mỗi cột chỉ đổi đúng một khung khi có lỗi, và không đổi gì khi trúng."
+      - show: |
+          <table class="t"><tr><th>đường khác: đếm lần <b>trúng</b></th><th>kết quả</th></tr>
+          <tr><td>trúng ở lượt 8 (trang 1), lượt 9 (trang 2), lượt 12 (trang 5)</td><td>3 lần</td></tr>
+          <tr><td>số lỗi = số lần gọi − số lần trúng</td><td>$12 - 3 = \hl{9}$ ✓</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Bây giờ kiểm bằng một đường khác, thay vì đếm lỗi, ta đếm lần trúng. Trong 12 lần gọi, chỉ trúng 3 lần, ở lượt 8 với trang 1, lượt 9 với trang 2, và lượt 12 với trang 5. Vậy số lỗi bằng 12 trừ 3, bằng 9, khớp với cách đếm chấm đỏ."
+
+  # ───────────────────────── 7. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi người mới hay mắc"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Với vào trước ra trước, cập nhật thứ tự khi trang được <b>dùng lại</b> <b class="red">(sai)</b>
+          <br><span class="note">Vào trước ra trước chỉ nhớ lúc <b>nạp</b>; cập nhật khi dùng lại là đang làm lâu nhất chưa dùng.</span></div>
+        say: "Lỗi thứ nhất, với vào trước ra trước mà lại cập nhật thứ tự khi trang được dùng lại. Cách này chỉ nhớ lúc nạp, còn cập nhật khi dùng lại là đang làm cách lâu nhất chưa dùng."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Nghĩ thêm bộ nhớ luôn giảm lỗi trang <b class="red">(sai với FIFO)</b>
+          <br><span class="note">Ví dụ trên: 3 khung 9 lỗi, 4 khung 10 lỗi.</span></div>
+          <table class="t"><tr><th>số khung</th><th>3</th><th>4</th></tr><tr><td>lỗi, vào trước ra trước</td><td>9</td><td><b class="red">10</b></td></tr></table>
+        focus: [1, 2]
+        say: "Lỗi thứ hai, nghĩ thêm bộ nhớ luôn giảm lỗi trang. Với vào trước ra trước thì sai, như ví dụ 3 khung 9 lỗi mà 4 khung 10 lỗi."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Quên đếm các lỗi “nạp lần đầu” <b class="red">(thiếu)</b>
+          <br><span class="note">Khung còn trống vẫn là lỗi trang — trang chưa có trong bộ nhớ.</span></div>
+        say: "Lỗi thứ ba, quên đếm các lỗi khi nạp lần đầu. Dù khung còn trống thì vẫn là lỗi trang, vì trang đó chưa có trong bộ nhớ."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Cài lâu nhất chưa dùng chính xác trong phần cứng <b class="red">(quá đắt)</b>
+          <br><span class="note">Ghi thời điểm mỗi lần truy cập bộ nhớ là không khả thi; máy thật dùng bit “đã truy cập” để xấp xỉ.</span></div>
+        say: "Lỗi thứ tư, đòi cài cách lâu nhất chưa dùng chính xác trong phần cứng. Ghi thời điểm của mỗi lần truy cập bộ nhớ là không khả thi, nên máy thật dùng một bit đã truy cập để xấp xỉ."
+
+  # ───────────────────────── 8. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "[alg.page_faults([7, 0, 1, 2, 0, 3, 0, 4], 3, p) for p in ('FIFO', 'LRU', 'OPT')] == [7, 6, 6]"
+      - "(lambda q, m: {x for x in range(10) if alg.page_faults(q + [x], 3, m) == alg.page_faults(q, 3, m)})([7, 0, 1, 2, 0, 3, 0, 4][:4], 'FIFO') == {0, 1, 2} and (lambda q, m: {x for x in range(10) if alg.page_faults(q + [x], 3, m) == alg.page_faults(q, 3, m)})([7, 0, 1, 2, 0, 3, 0, 4][:6], 'FIFO') == {1, 2, 3} and (lambda q, m: {x for x in range(10) if alg.page_faults(q + [x], 3, m) == alg.page_faults(q, 3, m)})([7, 0, 1, 2, 0, 3, 0, 4][:7], 'FIFO') == {2, 3, 0} and (lambda q, m: {x for x in range(10) if alg.page_faults(q + [x], 3, m) == alg.page_faults(q, 3, m)})([7, 0, 1, 2, 0, 3, 0, 4], 'FIFO') == {3, 0, 4}"
+      - "(lambda q, m: {x for x in range(10) if alg.page_faults(q + [x], 3, m) == alg.page_faults(q, 3, m)})([7, 0, 1, 2, 0, 3, 0, 4][:4], 'LRU') == {0, 1, 2} and (lambda q, m: {x for x in range(10) if alg.page_faults(q + [x], 3, m) == alg.page_faults(q, 3, m)})([7, 0, 1, 2, 0, 3, 0, 4][:6], 'LRU') == {2, 0, 3} and (lambda q, m: {x for x in range(10) if alg.page_faults(q + [x], 3, m) == alg.page_faults(q, 3, m)})([7, 0, 1, 2, 0, 3, 0, 4], 'LRU') == {3, 0, 4} and 3 + 4 == 7 and 3 + 3 == 6"
+      - "all(p not in [7, 0, 1, 2, 0, 3, 0, 4][4:] for p in (7,)) and all(p not in [7, 0, 1, 2, 0, 3, 0, 4][6:] for p in (1, 2))"
+    steps:
+      - show: |
+          <p>Chuỗi 7, 0, 1, 2, 0, 3, 0, 4 với 3 khung.</p>
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Số lỗi với vào trước ra trước?</td></tr>
+          <tr><td>2</td><td>Với lâu nhất chưa dùng? Với tối ưu?</td></tr></table>
+        focus: [0, 1, "2.2", "2.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Chuỗi tham chiếu 7, 0, 1, 2, 0, 3, 0, 4 với 3 khung. Câu một, vào trước ra trước bị bao nhiêu lỗi? Câu hai, lâu nhất chưa dùng và tối ưu thì sao? Dừng video và làm ra giấy."
+        pause: 12
+      - clear: true
+        show: |
+          <p>① Vào trước ra trước, 3 khung:</p>
+          <div><table class="t trace"><tr><th>tham chiếu</th><th>7</th><th>0</th><th>1</th><th>2</th><th>0</th><th>3</th><th>0</th><th>4</th></tr><tr><td>khung 1</td><td>7</td><td>7</td><td>7</td><td>2</td><td>2</td><td>2</td><td>2</td><td>4</td></tr><tr><td>khung 2</td><td></td><td>0</td><td>0</td><td>0</td><td>0</td><td>3</td><td>3</td><td>3</td></tr><tr><td>khung 3</td><td></td><td></td><td>1</td><td>1</td><td>1</td><td>1</td><td>0</td><td>0</td></tr><tr><td>lỗi</td><td><b class="red">●</b></td><td><b class="red">●</b></td><td><b class="red">●</b></td><td><b class="red">●</b></td><td></td><td><b class="red">●</b></td><td><b class="red">●</b></td><td><b class="red">●</b></td></tr></table></div>
+          <p>Gọi 2 đuổi 7, gọi 3 đuổi 0, gọi 0 đuổi 1, gọi 4 đuổi 2 → $3 + 4 = \hl{7}$ lỗi (chỉ lần gọi 0 thứ hai trúng).</p>
+        focus: [1, 2, 3, 3]
+        say: "Đáp án câu một, ta lập bảng vết cho vào trước ra trước. Ba lần gọi đầu nạp vào khung trống, được 3 lỗi. Sau đó gọi 2 thì đuổi 7, gọi 3 thì đuổi 0, gọi lại 0 thì đuổi 1, gọi 4 thì đuổi 2, thêm 4 lỗi nữa. Tổng là 3 cộng 4 bằng 7 lỗi, chỉ lần gọi trang 0 thứ hai là trúng."
+      - clear: true
+        show: |
+          <p>② Lâu nhất chưa dùng, 3 khung:</p>
+          <div><table class="t trace"><tr><th>tham chiếu</th><th>7</th><th>0</th><th>1</th><th>2</th><th>0</th><th>3</th><th>0</th><th>4</th></tr><tr><td>khung 1</td><td>7</td><td>7</td><td>7</td><td>2</td><td>2</td><td>2</td><td>2</td><td>4</td></tr><tr><td>khung 2</td><td></td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr><tr><td>khung 3</td><td></td><td></td><td>1</td><td>1</td><td>1</td><td>3</td><td>3</td><td>3</td></tr><tr><td>lỗi</td><td><b class="red">●</b></td><td><b class="red">●</b></td><td><b class="red">●</b></td><td><b class="red">●</b></td><td></td><td><b class="red">●</b></td><td></td><td><b class="red">●</b></td></tr></table></div>
+          <p>Gọi 2 đuổi 7; gọi 3 đuổi <b>1</b> (0 vừa được dùng); gọi 4 đuổi 2 → $3 + 3 = \hl{6}$ lỗi.</p>
+        focus: [2, 3, 3]
+        say: "Câu hai, với lâu nhất chưa dùng, gọi 2 thì đuổi 7. Đến lúc gọi 3, trang 0 vừa được dùng lại nên được giữ, trang bị đuổi là trang 1, và gọi 4 thì đuổi 2. Tổng là 3 cộng 3 bằng 6 lỗi, trúng cả hai lần gọi trang 0 phía sau."
+      - show: |
+          <p>Tối ưu: gọi 2 đuổi 7 (không bao giờ dùng lại); gọi 3 đuổi 1 hoặc 2 (cả hai không dùng lại) → cũng $\hl{6}$ lỗi.</p>
+        say: "Còn cách tối ưu nhìn vào tương lai, gọi 2 thì đuổi 7 vì 7 không bao giờ được dùng lại, gọi 3 thì đuổi trang 1 hoặc 2 vì cả hai đều không dùng lại. Nó cũng bị 6 lỗi, nên ở chuỗi này lâu nhất chưa dùng đã đạt mức tối ưu."
+
+  # ───────────────────────── 9. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">khung đầy → phải đuổi</span><span class="a">→</span>
+          <span class="n">vào trước ra trước: có nghịch lý</span><span class="a">→</span>
+          <span class="n">tối ưu: cận dưới, cần tương lai</span><span class="a">→</span>
+          <span class="n">lâu nhất chưa dùng: quá khứ đoán tương lai</span></div>
+        say: "Tổng kết lại, khi khung đầy thì phải đuổi một trang. Vào trước ra trước đơn giản nhưng có nghịch lý thêm khung mà tăng lỗi. Tối ưu là cận dưới nhưng cần biết tương lai. Lâu nhất chưa dùng lấy quá khứ gần để đoán tương lai."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> mọi bộ nhớ đệm đều đặt cược rằng quá khứ gần lặp lại — đo mẫu truy cập thật trước khi chọn cách đuổi.</div>
+        say: "Điều cần mang theo, mọi bộ nhớ đệm đều đặt cược rằng quá khứ gần sẽ lặp lại, nên hãy đo mẫu truy cập thật trước khi chọn cách đuổi."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 11): khi tổng nhu cầu vượt bộ nhớ — <b>tập làm việc</b> và hiện tượng trì trệ.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 11, ta xem chuyện gì xảy ra khi tổng nhu cầu vượt bộ nhớ, với tập làm việc và hiện tượng trì trệ. Hẹn gặp bạn ở bài tiếp theo."

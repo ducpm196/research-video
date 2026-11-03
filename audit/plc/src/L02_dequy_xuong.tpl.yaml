@@ -1,0 +1,204 @@
+id: L02
+course: PLC
+series: "PLC · Ngôn ngữ lập trình và trình biên dịch"
+title: "Bài 2 — Phân tích cú pháp đệ quy xuống và độ ưu tiên toán tử"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/plc.yaml L02; audit/plc/verify_plc.py L02; R. Nystrom, Crafting Interpreters (2021), chương 6; A. V. Aho và cộng sự, Compilers (2006), mục 4.4; TOC bài 7 (văn phạm phi ngữ cảnh)"
+assumes: [arith]
+# Quy ước: văn phạm viết kiểu BNF trong <div class="code">: “::=” là “gồm”, “|” là “hoặc”, “( … )*” là “lặp không hay nhiều lần”.
+#   Cây viết tiền tố (+ 1 (* 2 3)) và vẽ bằng audit/plc/figs.py (cây từ alg.parse_expr). Hàm phân tích minh hoạ bằng mã kiểu Python;
+#   lời đọc mô tả bằng tiếng Việt. Mọi cây và giá trị do alg.parse_expr / alg.ast_eval / alg.ast_str trong checks.
+objectives:
+  - "Viết văn phạm biểu thức có tầng ưu tiên"
+  - "Biến mỗi luật văn phạm thành một hàm đệ quy"
+  - "Tránh đệ quy trái"
+asr_reviewed:
+  - {sentence: "Dấu hai chấm hai chấm bằng đọc là gồm, gạch đứng là hoặc, còn ngoặc kèm dấu sao là lặp lại không hay nhiều lần.", reason: "ASR chép “Dấu 2.2. bàn đọc là gồm, gạt đứng là hoặc … dấu sau là lập lại”: ASR đổi “hai chấm hai chấm” thành chữ số, bằng/bàn, gạch/gạt, sao/sau lệch thanh–âm cuối; ký hiệu ::= | ( )* hiện trên màn hình — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "1 + 2 * 3 bằng 7 hay 9?"
+    checks:
+      - "alg.ast_eval(alg.parse_expr('1+2*3')) == 7 and (1 + 2) * 3 == 9"
+    steps:
+      - show: |
+          <p>Dãy từ tố <code>1 + 2 * 3</code>. Tính từ trái sang: 9. Nhân trước cộng sau: 7. Máy chọn thế nào?</p>
+          <div class="box key">Hôm nay: <b>phân tích cú pháp đệ quy xuống</b> — mỗi luật văn phạm là một hàm — và cách văn phạm <b>mã hoá</b> độ ưu tiên toán tử.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, với dãy từ tố 1 cộng 2 nhân 3, tính từ trái sang được 9, còn nhân trước cộng sau được 7. Máy chọn thế nào? Câu trả lời nằm ở văn phạm. Hôm nay ta học phân tích cú pháp đệ quy xuống, mỗi luật văn phạm là một hàm, và cách văn phạm mã hoá độ ưu tiên toán tử."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: thứ tự phép tính và hàm tự gọi lại chính nó"
+    checks:
+      - "[t for _, t in alg.lex('1+2*3')] == ['1', '+', '2', '*', '3'] and 2 * 3 == 6 and 1 + 6 == 7 and 1 + 2 == 3 and 3 * 3 == 9"
+      - "(lambda d: exec('def sau(s):\\n    if s.startswith(\"(\"):\\n        return 1 + sau(s[1:-1])\\n    return 0\\n', d) or [d['sau'](s) for s in ('((7))', '(7)', '7')] == [2, 1, 0])({})"
+    steps:
+      - show: |
+          <p>Ở bài 1, bộ phân tích từ vựng cắt <code>1+2*3</code> thành 5 từ tố: <code>1</code> <code>+</code> <code>2</code> <code>*</code> <code>3</code>. Quy ước toán học quen thuộc:</p>
+          <table class="t"><tr><th>biểu thức</th><th>làm trước</th><th>rồi</th><th>kết quả</th></tr>
+          <tr><td><code>1+2*3</code></td><td>nhân: 2 × 3 = 6</td><td>1 + 6</td><td>$\hl{7}$</td></tr>
+          <tr><td><code>(1+2)*3</code></td><td>ngoặc: 1 + 2 = 3</td><td>3 × 3</td><td>$\hl{9}$</td></tr></table>
+        focus: [1, 2, "2.2", "2.3"]
+        say: "Trước hết, nhắc lại bài 1, bộ phân tích từ vựng đã cắt chuỗi 1 cộng 2 nhân 3 thành 5 từ tố, ba số và hai dấu phép. Theo quy ước toán học quen thuộc, nhân chia làm trước, cộng trừ làm sau, phần trong ngoặc làm trước hết. Với 1 cộng 2 nhân 3, ta nhân 2 với 3 được 6, rồi cộng 1 được 7. Với 1 cộng 2 trong ngoặc rồi nhân 3, ta cộng trong ngoặc được 3, rồi nhân 3 được 9."
+      - clear: true
+        show: |
+          <p>Một hàm có thể <b>gọi lại chính nó</b> trên phần nhỏ hơn — gọi là <b>đệ quy</b>. Hàm đếm số lớp ngoặc:</p>
+          <div class="code"><div>def sau(s):</div><div>    if s bắt đầu bằng "(": return 1 + sau(phần bên trong)</div><div>    return 0</div></div>
+          <table class="t"><tr><th>lời gọi</th><th>trả về</th></tr><tr><td><code>sau("((7))")</code> = 1 + <code>sau("(7)")</code></td><td>1 + 1 = $\hl{2}$</td></tr>
+          <tr><td><code>sau("(7)")</code> = 1 + <code>sau("7")</code></td><td>1 + 0 = 1</td></tr><tr><td><code>sau("7")</code></td><td>0</td></tr></table>
+        focus: [1, 2, "3.2", "3.3", "3.4"]
+        say: "Điều thứ hai là đệ quy, một hàm có thể gọi lại chính nó trên một phần nhỏ hơn của dữ liệu. Ví dụ hàm đếm số lớp ngoặc, nếu chuỗi bắt đầu bằng ngoặc mở thì trả 1 cộng kết quả của phần bên trong, còn không thì trả 0. Với chuỗi 7 nằm trong hai lớp ngoặc, hàm trả 1 cộng kết quả của chuỗi 7 trong một lớp ngoặc. Lời gọi đó lại trả 1 cộng kết quả của chuỗi 7 trần, bằng 0, nên được 1. Cộng ngược lên, lời gọi đầu tiên trả 1 cộng 1 bằng 2."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: văn phạm ba tầng"
+    steps:
+      - show: |
+          <div class="code"><div>expr ::= term ( ("+" | "-") term )*</div><div>term ::= atom ( ("*" | "/") atom )*</div><div>atom ::= SO | TEN | "(" expr ")"</div></div>
+          <p><code>::=</code> đọc là “gồm”, <code>|</code> là “hoặc”, <code>( … )*</code> là “lặp lại không hay nhiều lần”.</p>
+          <div class="box key">Tầng <b>thấp</b> hơn (nằm sâu hơn trong cây) gắn <b>chặt</b> hơn: nhân nằm dưới cộng, nên mọi phép nhân được ghép xong trước khi phép cộng nhìn thấy nó.</div>
+        focus: ["1.1", "1.2", "1.3", 2, 3, 3]
+        say: "Văn phạm có ba tầng, như khoá Lý thuyết tính toán. Một biểu thức gồm các hạng nối với nhau bằng dấu cộng hoặc trừ. Một hạng gồm các nguyên tố nối với nhau bằng dấu nhân hoặc chia. Một nguyên tố là một số, một tên, hoặc cả một biểu thức trong ngoặc. Dấu hai chấm hai chấm bằng đọc là gồm, gạch đứng là hoặc, còn ngoặc kèm dấu sao là lặp lại không hay nhiều lần. Tầng thấp hơn gắn chặt hơn, phép nhân nằm dưới phép cộng, nên mọi phép nhân được ghép xong trước khi phép cộng nhìn thấy nó."
+
+  # ───────────────────────── 3. HÀM ─────────────────────────
+  - id: code
+    kind: concept
+    title: "Mỗi luật một hàm"
+    steps:
+      - show: |
+          <div class="code"><div>def expr():</div><div>    v = term()</div><div>    while peek() in ("+", "-"):</div><div>        op = eat(); v = (op, v, term())</div><div>    return v</div></div>
+          <p class="note"><code>peek()</code> nhìn từ tố kế tiếp, <code>eat()</code> lấy nó đi. <code>term()</code> viết y hệt với <code>*</code> và <code>/</code>; <code>atom()</code> lấy số, tên, hoặc gặp <code>(</code> thì gọi lại <code>expr()</code> — đó là chỗ <b>đệ quy</b>.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2, 2]
+        say: "Mỗi luật của văn phạm biến thành một hàm phân tích riêng. Hàm phân tích biểu thức trước hết gọi hàm phân tích hạng. Sau đó, chừng nào từ tố kế tiếp còn là dấu cộng hoặc trừ, nó lấy dấu đó đi, gọi tiếp hàm phân tích hạng, và ghép thành một nút mới với cây cũ ở bên trái. Hết dấu thì trả về cây. Hàm phân tích hạng viết y hệt với dấu nhân và chia. Hàm phân tích nguyên tố lấy số hay tên, còn gặp ngoặc mở thì gọi lại hàm phân tích biểu thức, đó là chỗ đệ quy."
+
+  # ───────────────────────── 4. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hình dung: các hàm gọi nhau, mỗi hàm ăn đúng từ tố của mình"
+    steps:
+      - show: |
+          <div><svg width="1500" height="470" viewBox="0 0 1500 470"><defs><marker id="arP2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs><rect x="640" y="17" width="220" height="56" rx="12" fill="#fed7aa" stroke="#1f2937" stroke-width="3"/><text x="750" y="54" font-size="26" font-weight="bold" text-anchor="middle" fill="#1f2937">biểu thức</text><rect x="310" y="127" width="180" height="56" rx="12" fill="#bfdbfe" stroke="#1f2937" stroke-width="3"/><text x="400" y="164" font-size="26" font-weight="bold" text-anchor="middle" fill="#1f2937">hạng</text><rect x="1010" y="127" width="180" height="56" rx="12" fill="#bfdbfe" stroke="#1f2937" stroke-width="3"/><text x="1100" y="164" font-size="26" font-weight="bold" text-anchor="middle" fill="#1f2937">hạng</text><rect x="300" y="237" width="200" height="56" rx="12" fill="#d1fae5" stroke="#1f2937" stroke-width="3"/><text x="400" y="274" font-size="26" font-weight="bold" text-anchor="middle" fill="#1f2937">nguyên tố</text><rect x="860" y="237" width="200" height="56" rx="12" fill="#d1fae5" stroke="#1f2937" stroke-width="3"/><text x="960" y="274" font-size="26" font-weight="bold" text-anchor="middle" fill="#1f2937">nguyên tố</text><rect x="1160" y="237" width="200" height="56" rx="12" fill="#d1fae5" stroke="#1f2937" stroke-width="3"/><text x="1260" y="274" font-size="26" font-weight="bold" text-anchor="middle" fill="#1f2937">nguyên tố</text><line x1="680" y1="73" x2="470" y2="125" stroke="#1f2937" stroke-width="3" marker-end="url(#arP2)"/><line x1="820" y1="73" x2="1030" y2="125" stroke="#1f2937" stroke-width="3" marker-end="url(#arP2)"/><line x1="400" y1="183" x2="400" y2="235" stroke="#1f2937" stroke-width="3" marker-end="url(#arP2)"/><line x1="1070" y1="183" x2="990" y2="235" stroke="#1f2937" stroke-width="3" marker-end="url(#arP2)"/><line x1="1130" y1="183" x2="1230" y2="235" stroke="#1f2937" stroke-width="3" marker-end="url(#arP2)"/><g font-size="22" font-weight="bold"><text x="750" y="128" text-anchor="middle" fill="#eb6834">lấy dấu +</text><text x="1110" y="232" text-anchor="middle" fill="#2a78d6">lấy dấu *</text></g><text x="70" y="393" font-size="22" fill="#1f2937">từ tố:</text><rect x="285" y="355" width="90" height="56" rx="8" fill="#d1fae5" stroke="#1f2937" stroke-width="2"/><text x="330" y="393" font-size="28" font-weight="bold" text-anchor="middle" fill="#1f2937">1</text><text x="330" y="445" font-size="20" text-anchor="middle" fill="#1f2937">nguyên tố lấy</text><rect x="495" y="355" width="90" height="56" rx="8" fill="#fed7aa" stroke="#1f2937" stroke-width="2"/><text x="540" y="393" font-size="28" font-weight="bold" text-anchor="middle" fill="#1f2937">+</text><text x="540" y="445" font-size="20" text-anchor="middle" fill="#1f2937">biểu thức lấy</text><rect x="705" y="355" width="90" height="56" rx="8" fill="#d1fae5" stroke="#1f2937" stroke-width="2"/><text x="750" y="393" font-size="28" font-weight="bold" text-anchor="middle" fill="#1f2937">2</text><text x="750" y="445" font-size="20" text-anchor="middle" fill="#1f2937">nguyên tố lấy</text><rect x="915" y="355" width="90" height="56" rx="8" fill="#bfdbfe" stroke="#1f2937" stroke-width="2"/><text x="960" y="393" font-size="28" font-weight="bold" text-anchor="middle" fill="#1f2937">*</text><text x="960" y="445" font-size="20" text-anchor="middle" fill="#1f2937">hạng lấy</text><rect x="1125" y="355" width="90" height="56" rx="8" fill="#d1fae5" stroke="#1f2937" stroke-width="2"/><text x="1170" y="393" font-size="28" font-weight="bold" text-anchor="middle" fill="#1f2937">3</text><text x="1170" y="445" font-size="20" text-anchor="middle" fill="#1f2937">nguyên tố lấy</text></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ các lời gọi hàm khi phân tích 1 cộng 2 nhân 3, mỗi hộp là một lần gọi, mũi tên đi từ hàm gọi tới hàm được gọi. Hàm biểu thức ở trên cùng gọi hàm hạng hai lần, và chính nó lấy dấu cộng, tô cam. Lần gọi hạng thứ hai gọi hàm nguyên tố hai lần, và chính nó lấy dấu nhân, tô xanh. Hàng dưới cùng cho thấy mỗi từ tố bị đúng một hàm lấy đi, ba số do hàm nguyên tố lấy, nên dấu nhân nằm sâu hơn dấu cộng trong cây."
+
+  - id: example
+    kind: example
+    title: "Lần theo 1 + 2 * 3"
+    checks:
+      - "alg.ast_str(alg.parse_expr('1+2*3')) == '(+ 1 (* 2 3))' and alg.ast_eval(alg.parse_expr('1+2*3')) == 7"
+      - "alg.ast_str(alg.parse_expr('(1+2)*3')) == '(* (+ 1 2) 3)' and alg.ast_eval(alg.parse_expr('(1+2)*3')) == 9"
+    steps:
+      - show: |
+          <p><b>Bước một —</b> <code>expr</code> gọi <code>term</code>; <code>term</code> lấy <code>1</code>, nhìn thấy <code>+</code> (không phải nhân hay chia) → trả <code>1</code>.</p>
+        say: "Lần theo từng bước. Bước một, hàm biểu thức gọi hàm hạng, hàm hạng lấy số 1, rồi nhìn thấy dấu cộng chứ không phải dấu nhân hay chia. Vì dấu cộng không thuộc tầng của nó, hàm hạng dừng lại và trả về 1."
+      - show: |
+          <p><b>Bước 2 —</b> <code>expr</code> thấy <code>+</code>, lấy đi, gọi <code>term</code> lần hai: lấy <code>2</code>, thấy <code>*</code>, lấy đi, lấy <code>3</code> → trả cây <code>(* 2 3)</code>.</p>
+        say: "Bước hai, hàm biểu thức thấy dấu cộng, lấy đi, rồi gọi hàm hạng lần hai. Lần này hàm hạng lấy 2, thấy dấu nhân thuộc tầng của nó, nên lấy dấu nhân, lấy tiếp 3, và trả về cây 2 nhân 3."
+      - show: |
+          <p><b>Bước 3 —</b> hết từ tố, <code>expr</code> ghép: <code>(+ 1 (* 2 3))</code>. Tính từ dưới lên: 2 × 3 = 6, rồi 1 + 6 = $\hl{7}$.</p>
+        say: "Bước ba, không còn từ tố nào, hàm biểu thức ghép 1 cộng với cây vừa nhận, được cây cộng có con phải là phép nhân. Tính từ dưới lên, 2 nhân 3 bằng 6, rồi 1 cộng 6 bằng 7, đúng như quy ước nhân trước cộng sau."
+      - clear: true
+        show: |
+          <div>{{TREE}}</div>
+          <p><b>Bước 4 —</b> phép nhân nằm <b>sâu hơn</b> nên được tính trước. Viết <code>(1+2)*3</code> thì <code>atom</code> gặp ngoặc, cả <code>1+2</code> thành một nguyên tố: cây <code>(* (+ 1 2) 3)</code> → $\hl{9}$.</p>
+        focus: [1, 2, 2]
+        say: "Bước bốn, nhìn lại cây vừa dựng, phép nhân nằm sâu hơn nên được tính trước. Nếu viết 1 cộng 2 trong ngoặc rồi nhân 3, hàm nguyên tố gặp ngoặc mở và đọc cả 1 cộng 2 thành một nguyên tố. Cây khi đó có phép nhân ở gốc, và kết quả là 9."
+
+  # ───────────────────────── 5. LỖI ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: hỏi bộ phân tích của một ngôn ngữ thật"
+    checks:
+      - "(lambda b: (type(b.op).__name__, type(b.right.op).__name__))(__import__('ast').parse('1+2*3', mode='eval').body) == ('Add', 'Mult') and eval('1+2*3') == 7"
+      - "(lambda b: (type(b.op).__name__, type(b.left.op).__name__))(__import__('ast').parse('(1+2)*3', mode='eval').body) == ('Mult', 'Add') and eval('(1+2)*3') == 9"
+    steps:
+      - show: |
+          <table class="t"><tr><th>biểu thức</th><th>gốc cây (bộ phân tích có sẵn)</th><th>con</th><th>máy tính ra</th></tr>
+          <tr><td><code>1+2*3</code></td><td>phép cộng</td><td>con phải là phép nhân</td><td>7 ✓</td></tr>
+          <tr><td><code>(1+2)*3</code></td><td>phép nhân</td><td>con trái là phép cộng</td><td>9 ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", 1]
+        say: "Kiểm bằng đường khác, ta đưa hai biểu thức cho bộ phân tích cú pháp có sẵn của một ngôn ngữ phổ biến, rồi xem cây nó dựng. Với 1 cộng 2 nhân 3, gốc là phép cộng, con phải là phép nhân, và máy tính ra 7, khớp cây của ta. Với 1 cộng 2 trong ngoặc rồi nhân 3, gốc là phép nhân, con trái là phép cộng, và máy tính ra 9. Hai cách độc lập cho cùng một cây, nên văn phạm ba tầng đã mã hoá đúng độ ưu tiên."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "Lỗi người mới và người đã đi làm hay mắc"
+    checks:
+      - "(lambda f: [f(10), f(100), f(1000)] == [1, 1, 'RecursionError'])(lambda n: (lambda d: exec('try:\\n    r = alg.ast_eval(alg.parse_expr(\"(\" * N + \"1\" + \")\" * N))\\nexcept RecursionError:\\n    r = \"RecursionError\"\\n', d) or d['r'])({'N': n, 'alg': alg}))"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Viết văn phạm <b>đệ quy trái</b> rồi dịch thẳng thành hàm <b class="red">(lặp vô hạn)</b>
+          <br><span class="note"><code>expr ::= expr "+" term | term</code> → <code>expr()</code> việc đầu tiên là gọi <code>expr()</code>, chưa lấy từ tố nào: gọi mãi tới tràn ngăn xếp. Viết lại thành vòng lặp như trên.</span></div>
+        say: "Lỗi thứ nhất, viết văn phạm đệ quy trái, biểu thức gồm biểu thức cộng hạng, rồi dịch thẳng thành hàm. Việc đầu tiên của hàm biểu thức là gọi lại chính nó khi chưa lấy từ tố nào, nên gọi mãi tới khi tràn ngăn xếp. Phải viết lại thành vòng lặp như bài vừa học."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Đặt mọi phép trên cùng một tầng <b class="red">(sai)</b>
+          <br><span class="note">Một vòng lặp chung cho cả cộng và nhân → <code>1+2*3</code> thành <code>(* (+ 1 2) 3)</code> = 9. Mỗi mức ưu tiên cần một tầng riêng.</span></div>
+        say: "Lỗi thứ hai, đặt mọi phép trên cùng một tầng. Một vòng lặp chung cho cả cộng và nhân sẽ biến 1 cộng 2 nhân 3 thành 9, nên mỗi mức ưu tiên cần một tầng riêng."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Quên kiểm từ tố còn thừa ở cuối <b class="red">(thiếu)</b>
+          <br><span class="note"><code>1 + 2 3</code>: <code>expr()</code> dừng sau <code>1+2</code>, bỏ lơ <code>3</code>. Sau khi phân tích xong, phải kiểm đã hết từ tố; còn thì báo lỗi cú pháp.</span></div>
+        say: "Lỗi thứ ba, quên kiểm từ tố còn thừa ở cuối. Với dãy 1 cộng 2 rồi 3, hàm biểu thức dừng sau 1 cộng 2 và bỏ lơ số 3. Sau khi phân tích xong phải kiểm đã hết từ tố, còn thì báo lỗi cú pháp."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Đưa bộ phân tích đệ quy xuống ra nhận dữ liệu từ bên ngoài mà không giới hạn độ sâu.</div>
+          <table class="t"><tr><th>số lớp ngoặc lồng quanh <code>1</code></th><th>bộ phân tích vừa viết</th></tr>
+          <tr><td>10</td><td>cây đúng, giá trị 1</td></tr><tr><td>100</td><td>cây đúng, giá trị 1</td></tr>
+          <tr><td>1000</td><td><b class="red">tràn ngăn xếp lời gọi</b>, chương trình dừng</td></tr></table>
+          <p class="note">Mỗi lớp ngoặc thêm vài lời gọi hàm lồng nhau (biểu thức → hạng → nguyên tố). Người có kinh nghiệm đặt <b>giới hạn độ sâu</b> và báo lỗi cú pháp rõ ràng khi vượt.</p>
+        focus: [1, 1, "2.2", "2.4", 3, 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, đưa bộ phân tích đệ quy xuống ra nhận dữ liệu từ bên ngoài mà không giới hạn độ sâu. Dữ liệu đó có thể là tệp cấu hình hay yêu cầu gửi qua mạng, do người khác soạn ra. Thử với số 1 nằm trong 10 lớp ngoặc, hay 100 lớp ngoặc, bộ phân tích vừa viết đều dựng đúng cây và cho giá trị 1. Nhưng với 1000 lớp ngoặc, ngăn xếp lời gọi bị tràn và chương trình dừng hẳn, nên kẻ xấu chỉ cần gửi một chuỗi ngoặc dài là làm sập dịch vụ. Lý do là mỗi lớp ngoặc thêm vài lời gọi lồng nhau, từ biểu thức xuống hạng rồi xuống nguyên tố. Người có kinh nghiệm luôn đặt một giới hạn độ sâu, và báo lỗi cú pháp rõ ràng khi đầu vào vượt quá giới hạn đó."
+
+  # ───────────────────────── 6. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.ast_str(alg.parse_expr('2*3+4*5')) == '(+ (* 2 3) (* 4 5))' and alg.ast_eval(alg.parse_expr('2*3+4*5')) == 26"
+      - "alg.ast_str(alg.parse_expr('2*(3+4)')) == '(* 2 (+ 3 4))' and alg.ast_eval(alg.parse_expr('2*(3+4)')) == 14"
+      - "2 * 3 == 6 and 4 * 5 == 20 and 6 + 20 == 26 and 3 + 4 == 7 and 2 * 7 == 14"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>viết cây dạng tiền tố và tính giá trị</th></tr><tr><td>1</td><td><code>2*3+4*5</code></td></tr><tr><td>2</td><td><code>2*(3+4)</code></td></tr></table>
+        focus: [1, "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm, viết cây dạng tiền tố và tính giá trị cho hai biểu thức. Biểu thức thứ nhất là 2 nhân 3 cộng 4 nhân 5. Biểu thức thứ hai là 2 nhân ngoặc 3 cộng 4. Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu 1: <code>2*3+4*5</code></th><th>kết quả</th></tr>
+          <tr><td><code>term</code> lần một: 2, thấy <code>*</code>, lấy 3, gặp <code>+</code> thì dừng</td><td><code>(* 2 3)</code> = 6</td></tr>
+          <tr><td><code>expr</code> lấy <code>+</code>; <code>term</code> lần hai: 4, <code>*</code>, 5</td><td><code>(* 4 5)</code> = 20</td></tr>
+          <tr><td>ghép ở gốc</td><td><code>(+ (* 2 3) (* 4 5))</code> = 6 + 20 = $\hl{26}$</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Đáp án câu một, giải từng bước. Hàm hạng lần một lấy 2, thấy dấu nhân, lấy 3, gặp dấu cộng thì dừng, trả cây 2 nhân 3, giá trị 6. Hàm biểu thức lấy dấu cộng, gọi hàm hạng lần hai, được cây 4 nhân 5, giá trị 20. Ghép ở gốc là phép cộng với hai con là hai phép nhân, 6 cộng 20 bằng 26."
+      - show: |
+          <table class="t"><tr><th>câu 2: <code>2*(3+4)</code></th><th>kết quả</th></tr>
+          <tr><td><code>term</code> lấy 2, thấy <code>*</code>; <code>atom</code> gặp <code>(</code> → gọi lại <code>expr</code></td><td>—</td></tr>
+          <tr><td><code>expr</code> bên trong: 3 <code>+</code> 4, gặp <code>)</code> thì dừng</td><td><code>(+ 3 4)</code> = 7</td></tr>
+          <tr><td><code>term</code> ghép</td><td><code>(* 2 (+ 3 4))</code> = 2 × 7 = $\hl{14}$</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Câu hai, cũng giải từng bước. Hàm hạng lấy 2, thấy dấu nhân, rồi hàm nguyên tố gặp ngoặc mở nên gọi lại hàm biểu thức, đây là chỗ đệ quy. Hàm biểu thức bên trong lấy 3 cộng 4, gặp ngoặc đóng thì dừng, trả cây cộng có giá trị 7. Hàm hạng ghép phép nhân ở gốc, con phải là phép cộng trong ngoặc, 2 nhân 7 bằng 14."
+
+  # ───────────────────────── 7. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">mỗi mức ưu tiên một tầng</span><span class="a">→</span>
+          <span class="n">mỗi luật một hàm</span><span class="a">→</span>
+          <span class="n">lặp thay cho đệ quy trái</span><span class="a">→</span>
+          <span class="n">tầng sâu gắn chặt hơn</span></div>
+        say: "Tổng kết lại, mỗi mức ưu tiên là một tầng của văn phạm, mỗi luật là một hàm, dùng vòng lặp thay cho đệ quy trái, và tầng càng sâu thì gắn càng chặt."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> khi cấu trúc dữ liệu (văn phạm) được viết đúng, mã xử lý gần như tự viết ra — mỗi luật một hàm, mỗi lựa chọn một nhánh.</div>
+        say: "Điều cần mang theo, khi cấu trúc dữ liệu, ở đây là văn phạm, được viết đúng, mã xử lý gần như tự viết ra, mỗi luật một hàm, mỗi lựa chọn một nhánh."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 3): <b>cây cú pháp trừu tượng</b>, tính kết hợp, và cách đánh giá cây.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 3, ta học cây cú pháp trừu tượng, tính kết hợp của phép toán, và cách đánh giá một cây. Hẹn gặp bạn ở bài tiếp theo."

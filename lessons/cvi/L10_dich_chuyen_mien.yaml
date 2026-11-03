@@ -1,0 +1,278 @@
+id: L10
+course: CVI
+series: "CVI · Thị giác máy tính"
+title: "Bài 10 — Dịch chuyển miền và độ bền: khi ảnh thật khác ảnh huấn luyện"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/cvi.yaml L10; audit/cvi/verify_cvi.py L10; audit/cvi/sources_L10.md; [B18] S. Beery, G. Van Horn, P. Perona, Recognition in Terra Incognita, ECCV 2018, arXiv:1807.04975 (bẫy ảnh: lỗi 20,83% ở điểm đặt máy đã thấy, 41,08% ở điểm mới; chia tập theo điểm đặt và theo ngày); [R19] B. Recht, R. Roelofs, L. Schmidt, V. Shankar, Do ImageNet Classifiers Generalize to ImageNet?, ICML 2019, arXiv:1902.10811 (tập kiểm tra mới 10 000 ảnh, độ chính xác tụt 11% tới 14%, thứ hạng gần như giữ nguyên); MLO bài 8 (giám sát trôi dữ liệu); CS115 bài 13 (phương sai)"
+assumes: [arith, cdot, frac, approx, geq, sub, sqrt]
+# Quy ước: “lát” = một nhóm ảnh cùng điều kiện (ban ngày, ban đêm, mưa…). n_s = số ảnh của lát s trong tập kiểm tra, a_s = tỉ lệ đúng của lát s;
+#   w_s = tỉ trọng lát s trong TẬP KIỂM TRA, q_s = tỉ trọng lát s KHI TRIỂN KHAI. Độ chính xác chung = Σ w_s · a_s (alg.cvi_mix_acc);
+#   kỳ vọng khi triển khai = Σ q_s · a_s — chỉ đúng khi tỉ lệ đúng TRONG mỗi lát không đổi (giả thiết, nói rõ trong bài).
+#   Sai số chuẩn của tỉ lệ đúng đo trên n ảnh: căn(a · (1 − a) / n); “khoảng hai sai số chuẩn” ≈ khoảng tin cậy 95% (xấp xỉ chuẩn).
+#   900/100 ảnh ngày/đêm, mưa/nắng, mùa đông 70% ban đêm là SỐ MINH HOẠ. Sự kiện thật chỉ theo [B18], [R19] (sources_L10.md).
+#   Lời đọc: “ImageNet” theo luật lexicon (I-mịt-nét); không đọc tên tác giả.
+objectives:
+  - "Tách độ chính xác theo lát (sáng, tối, mưa) thay vì một con số chung"
+  - "Tính độ chính xác kỳ vọng khi tỉ trọng các lát lúc triển khai khác tập kiểm tra"
+  - "Ước lượng cần bao nhiêu ảnh mỗi lát để con số đủ tin, bằng sai số chuẩn"
+  - "Lập tập kiểm tra theo điều kiện triển khai và chia tập không rò rỉ (theo điểm đặt camera, theo ngày)"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "90,5% trên tập kiểm tra, khoảng 72,5% ngoài đường"
+    checks:
+      - "round(alg.cvi_mix_acc([(900, 0.95), (100, 0.5)]), 3) == 0.905 and round(alg.cvi_mix_acc([(0.5, 0.95), (0.5, 0.5)]), 3) == 0.725"
+    steps:
+      - show: |
+          <p>Một mô hình nhận biển báo giao thông đạt <b>90,5%</b> trên tập kiểm tra 1000 ảnh. Đưa lên xe chạy cả ngày lẫn đêm, đội vận hành chỉ thấy khoảng <b>72,5%</b> đúng.</p>
+          <p>Mô hình không đổi. Ảnh đổi: tập kiểm tra có 900 ảnh ban ngày và 100 ảnh ban đêm; trên đường, một nửa thời gian là ban đêm.</p>
+          <div class="box key">Hôm nay: vì sao một con số chung che mất điều kiện yếu? Tính trước con số khi triển khai thế nào? Và cần bao nhiêu ảnh mỗi điều kiện để tin được?</div>
+        focus: [1, 1, 2, 2, 3]
+        say: "Chào bạn, một mô hình nhận biển báo giao thông đạt 90 phẩy 5 phần trăm trên tập kiểm tra 1000 ảnh. Đưa lên xe chạy cả ngày lẫn đêm, đội vận hành chỉ thấy khoảng 72 phẩy 5 phần trăm đúng. Mô hình không hề đổi, chỉ ảnh đổi. Tập kiểm tra có 900 ảnh ban ngày và 100 ảnh ban đêm, còn trên đường thì một nửa thời gian là ban đêm. Hôm nay ta hỏi, vì sao một con số chung che mất điều kiện yếu, tính trước con số khi triển khai thế nào, và cần bao nhiêu ảnh mỗi điều kiện để tin được."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại ba điều sẽ dùng"
+    checks:
+      - "(900 * 0.95 + 100 * 0.5) / 1000 == 0.905 and 0.9 * 0.95 + 0.1 * 0.5 == 0.905"
+      - "0.5 * (1 - 0.5) == 0.25 and math.sqrt(0.25 / 100) == 0.05"
+      - "round((41.08 - 20.83) / 20.83, 2) == 0.97"
+    steps:
+      - show: |
+          <p><b>① Trung bình có trọng số</b> (bài 2 dùng tỉ lệ $w$ của mỗi lớp): 900 ảnh đúng 95%, 100 ảnh đúng 50%:</p>
+          $$\frac{900 \cdot 0{,}95 + 100 \cdot 0{,}5}{1000} = 0{,}9 \cdot 0{,}95 + 0{,}1 \cdot 0{,}5 = 0{,}905$$
+        focus: [1, 2, 2]
+        say: "Điều thứ nhất là trung bình có trọng số, như ở bài 2 ta nhân mỗi lớp với tỉ lệ w của nó. Với 900 ảnh đúng 95 phần trăm và 100 ảnh đúng 50 phần trăm, tổng số ảnh đúng chia 1000 bằng 0 phẩy 905. Đó cũng là 0 phẩy 9 nhân 0 phẩy 95, cộng 0 phẩy 1 nhân 0 phẩy 5."
+      - show: |
+          <p><b>② Một lần đoán là một đồng xu</b> đúng với xác suất $a$ (khoá Toán cho khoa học máy tính, phần xác suất): phương sai $a \cdot (1 - a)$. Trung bình của $n$ lần đoán độc lập có phương sai nhỏ đi $n$ lần, nên độ lệch chuẩn của nó — gọi là <b>sai số chuẩn</b> — là</p>
+          $$\sqrt{\frac{a \cdot (1 - a)}{n}}, \qquad a = 0{,}5,\ n = 100: \ \sqrt{\frac{0{,}25}{100}} = 0{,}05$$
+        focus: [1, 1, 2]
+        say: "Điều thứ hai, một lần đoán giống một đồng xu, đúng với xác suất a, như ở khoá Toán cho khoa học máy tính, phần xác suất, phương sai của nó là a nhân 1 trừ a. Trung bình của n lần đoán độc lập có phương sai nhỏ đi n lần, nên độ lệch chuẩn của nó, gọi là sai số chuẩn, bằng căn của a nhân 1 trừ a chia n. Với a bằng 0 phẩy 5 và n bằng 100, ta được căn của 0 phẩy 0025, bằng 0 phẩy 05."
+      - show: |
+          <p><b>③ Tăng bao nhiêu phần trăm:</b> từ $a$ lên $b$ là $\frac{b - a}{a}$. Lỗi từ 20,83% lên 41,08%: $\frac{41{,}08 - 20{,}83}{20{,}83} \approx 0{,}97$, tức tăng khoảng 97%, gần gấp đôi.</p>
+        focus: [1, 1]
+        say: "Điều thứ ba là tăng bao nhiêu phần trăm, từ a lên b thì tăng b trừ a chia a. Lỗi từ 20 phẩy 83 phần trăm lên 41 phẩy 08 phần trăm là tăng khoảng 0 phẩy 97, tức gần gấp đôi, con số ta sẽ gặp lại ở một nghiên cứu thật."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: lát s, a s, w s, q s và tổng có trọng số"
+    checks:
+      - "round(sum(w * a for w, a in [(0.9, 0.95), (0.1, 0.5)]), 3) == 0.905 and round(sum(q * a for q, a in [(0.5, 0.95), (0.5, 0.5)]), 3) == 0.725"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ký hiệu</th><th>nghĩa</th><th>ví dụ biển báo</th></tr>
+          <tr><td>lát $s$</td><td>nhóm ảnh cùng điều kiện</td><td>ban ngày, ban đêm</td></tr>
+          <tr><td>$a_s$</td><td>tỉ lệ đúng trên lát $s$</td><td>0,95 và 0,5</td></tr>
+          <tr><td>$w_s$</td><td>tỉ trọng lát $s$ trong <b>tập kiểm tra</b></td><td>0,9 và 0,1</td></tr>
+          <tr><td>$q_s$</td><td>tỉ trọng lát $s$ <b>khi triển khai</b></td><td>0,5 và 0,5</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bảng giới thiệu các ký hiệu. Một lát s là một nhóm ảnh cùng điều kiện, như ban ngày hay ban đêm. a với chỉ số dưới s là tỉ lệ đúng trên lát đó, ở đây 0 phẩy 95 và 0 phẩy 5. w với chỉ số s là tỉ trọng của lát trong tập kiểm tra, 0 phẩy 9 và 0 phẩy 1. q với chỉ số s là tỉ trọng của lát khi triển khai thật, ở đây mỗi lát một nửa."
+      - clear: true
+        show: |
+          $$\text{độ chính xác chung} = \sum_s w_s \cdot a_s, \qquad \text{kỳ vọng khi triển khai} = \sum_s q_s \cdot a_s$$
+          <p class="note">Dấu tổng Sigma hoa: cộng qua mọi lát. Hai công thức dùng <b>cùng</b> các $a_s$, chỉ khác trọng số.</p>
+        introduces: [sum]
+        focus: [1, 2, 2]
+        say: "Chữ Sigma hoa là dấu tổng, nghĩa là cộng qua mọi lát s. Độ chính xác chung là tổng của w s nhân a s, còn kỳ vọng khi triển khai là tổng của q s nhân a s. Hai công thức dùng cùng các tỉ lệ đúng a s, chỉ khác trọng số."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Cùng hai lát, hai cách pha: con số chung đổi theo"
+    checks:
+      - "round(alg.cvi_mix_acc([(900, 0.95), (100, 0.5)]), 3) == 0.905 and round(alg.cvi_mix_acc([(500, 0.95), (500, 0.5)]), 3) == 0.725"
+    steps:
+      - show: |
+          <div><svg width="1500" height="350" viewBox="0 0 1500 350">
+          <rect x="250" y="70" width="900" height="70" fill="#60a5fa" stroke="#1f2937" stroke-width="2"/><rect x="1150" y="70" width="100" height="70" fill="#1e3a8a" stroke="#1f2937" stroke-width="2"/>
+          <rect x="250" y="210" width="500" height="70" fill="#60a5fa" stroke="#1f2937" stroke-width="2"/><rect x="750" y="210" width="500" height="70" fill="#1e3a8a" stroke="#1f2937" stroke-width="2"/>
+          <g font-size="24" text-anchor="end" fill="#1f2937"><text x="230" y="113">tập kiểm tra</text><text x="230" y="253">khi triển khai</text></g>
+          <g font-size="23" text-anchor="middle"><text x="700" y="113" fill="#ffffff">ban ngày: 900 ảnh, đúng 95%</text>
+          <text x="500" y="253" fill="#ffffff">ban ngày 50%, đúng 95%</text><text x="1000" y="253" fill="#ffffff">ban đêm 50%, đúng 50%</text></g>
+          <text x="1200" y="172" font-size="21" text-anchor="middle" fill="#1e3a8a">ban đêm: 100 ảnh, đúng 50%</text>
+          <g font-size="24" fill="#1f2937" font-weight="bold"><text x="1280" y="113">chung 90,5%</text><text x="1280" y="253" fill="#dc2626">72,5%</text></g>
+          <text x="750" y="330" font-size="21" fill="#6b7280" text-anchor="middle">tỉ lệ đúng trong mỗi lát giữ nguyên; chỉ tỉ trọng các lát thay đổi</text>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ mỗi tập ảnh thành một thanh, chiều dài mỗi đoạn là tỉ trọng của lát. Thanh trên là tập kiểm tra, đoạn ban ngày dài 900, đoạn ban đêm chỉ 100, nên con số chung 90 phẩy 5 phần trăm gần như chỉ là ban ngày. Thanh dưới là lúc triển khai, ban đêm chiếm một nửa. Tỉ lệ đúng trong mỗi lát giữ nguyên, nhưng pha lại thì con số chung tụt còn 72 phẩy 5 phần trăm."
+
+  # ───────────────────────── 5. SUY RA ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra con số khi triển khai, và nói rõ giả thiết"
+    checks:
+      - "900 * 0.95 + 100 * 0.5 == 905 and 905 / 1000 == 0.905"
+      - "round(500 * 0.95 + 500 * 0.5) == 725 and 725 / 1000 == 0.725"
+    steps:
+      - show: |
+          <p><b>Bước 1 — đếm ảnh đúng theo lát.</b> Ban ngày $900 \cdot 0{,}95 = 855$, ban đêm $100 \cdot 0{,}5 = 50$, tổng 905 trên 1000: độ chính xác chung 0,905 — chính là $\sum_s w_s \cdot a_s$ vì chia cho 1000 biến số ảnh thành tỉ trọng.</p>
+        focus: [1, 1, 1, 1]
+        say: "Bước một là đếm ảnh đúng theo lát. Ban ngày 900 nhân 0 phẩy 95 được 855 ảnh đúng, ban đêm 100 nhân 0 phẩy 5 được 50 ảnh đúng. Tổng 905 trên 1000, nên độ chính xác chung là 0 phẩy 905. Đó đúng là tổng w s nhân a s, vì chia cho 1000 biến số ảnh thành tỉ trọng."
+      - show: |
+          <p><b>Bước 2 — giả thiết.</b> Nếu tỉ lệ đúng <b>trong</b> mỗi lát không đổi khi ra đường (ảnh đêm trên đường giống ảnh đêm trong tập kiểm tra), thì 1000 ảnh trên đường có 500 ảnh ngày, 500 ảnh đêm:</p>
+          $$500 \cdot 0{,}95 + 500 \cdot 0{,}5 = 475 + 250 = 725 \;\Rightarrow\; \sum_s q_s \cdot a_s = \hlo{0{,}725}$$
+        introduces: [implies]
+        focus: [1, 1, 2]
+        say: "Bước hai là nói rõ giả thiết, tỉ lệ đúng trong mỗi lát không đổi khi ra đường, tức ảnh đêm trên đường giống ảnh đêm trong tập kiểm tra. Khi đó 1000 ảnh trên đường có 500 ảnh ngày đúng 475, và 500 ảnh đêm đúng 250. Tổng là 725, suy ra kỳ vọng 0 phẩy 725."
+      - show: |
+          <p class="note"><b>Bước 3 — khi giả thiết sai.</b> Nếu trên đường còn có lát mà tập kiểm tra không hề có (mưa lớn, camera mới), công thức không nói được gì cho lát đó: phải thu ảnh của lát mới mà đo.</p>
+        say: "Bước ba, khi giả thiết sai thì sao? Nếu trên đường có lát mà tập kiểm tra không hề có, như mưa lớn hay camera mới, thì công thức không nói được gì cho lát đó, nên ta phải thu ảnh của lát mới để đo."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Bao nhiêu ảnh ban đêm thì con số đáng tin?"
+    checks:
+      - "math.sqrt(0.5 * 0.5 / 100) == 0.05 and 2 * 0.05 == 0.1"
+      - "round(math.sqrt(0.5 * 0.5 / 10), 3) == 0.158 and round(2 * math.sqrt(0.5 * 0.5 / 10), 2) == 0.32"
+      - "round(math.sqrt(0.95 * 0.05 / 900), 4) == 0.0073"
+      - "round(0.25 * (2 / 0.02) ** 2) == 2500 and round(2 * math.sqrt(0.25 / 2500), 3) == 0.02"
+    steps:
+      - show: |
+          <p><b>Bước 1.</b> 100 ảnh đêm, đúng 50%:</p>
+          $$\sqrt{\frac{0{,}5 \cdot 0{,}5}{100}} = 0{,}05, \qquad 2 \cdot 0{,}05 = 0{,}1 \;\Rightarrow\; \text{khoảng } 40\% \text{ tới } 60\%$$
+        focus: [1, 2]
+        say: "Bước một, với 100 ảnh đêm đúng 50 phần trăm, sai số chuẩn bằng căn của 0 phẩy 25 chia 100, bằng 0 phẩy 05. Hai sai số chuẩn là 0 phẩy 1, nên tỉ lệ đúng thật nằm khoảng 40 tới 60 phần trăm."
+      - show: |
+          <p><b>Bước 2.</b> Chỉ 10 ảnh đêm: $\sqrt{\frac{0{,}25}{10}} \approx 0{,}158$, hai sai số chuẩn $\approx 0{,}32$ — khoảng <b>18% tới 82%</b>: gần như không biết gì.</p>
+        say: "Bước hai, nếu chỉ có 10 ảnh đêm thì sai số chuẩn xấp xỉ 0 phẩy 158, hai sai số chuẩn khoảng 0 phẩy 32, tức khoảng 18 tới 82 phần trăm, gần như không biết gì."
+      - clear: true
+        show: |
+          <p><b>Bước 3.</b> Ban ngày 900 ảnh, đúng 95%: $\sqrt{\frac{0{,}95 \cdot 0{,}05}{900}} \approx 0{,}0073$ — rất chắc. Tập kiểm tra cũ đo ban ngày kỹ, ban đêm sơ sài.</p>
+        say: "Bước ba, ban ngày có 900 ảnh đúng 95 phần trăm, sai số chuẩn chỉ khoảng 0 phẩy 0073, rất chắc. Vậy tập kiểm tra cũ đo ban ngày rất kỹ, nhưng đo ban đêm sơ sài."
+      - show: |
+          <p><b>Bước 4 — đặt hàng thu ảnh.</b> Muốn hai sai số chuẩn chỉ còn 0,02 ở lát đêm: giải $2 \cdot \sqrt{0{,}25 / n} = 0{,}02$ bằng cách bình phương rồi chuyển vế.</p>
+          $$n = 0{,}25 \cdot \left(\frac{2}{0{,}02}\right)^2 = 0{,}25 \cdot 10\,000 = \hlo{2500} \text{ ảnh đêm}$$
+        introduces: [power]
+        focus: [1, 1, 2]
+        say: "Bước bốn là đặt hàng thu ảnh. Muốn hai sai số chuẩn ở lát đêm chỉ còn 0 phẩy 02, ta bình phương hai vế rồi chuyển vế. Được n bằng 0 phẩy 25 nhân bình phương của 2 chia 0 phẩy 02, tức 2500 ảnh đêm."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: mô phỏng con đường, và đo lại nhiều lần một lát nhỏ"
+    checks:
+      - "(lambda r: abs(np.where(r.random(100000) < 0.5, r.random(100000) < 0.5, r.random(100000) < 0.95).mean() - 0.725) < 0.005)(np.random.default_rng(3))"
+      - "(lambda r: abs((r.random((20000, 100)) < 0.5).mean(axis=1).std() - 0.05) < 0.002)(np.random.default_rng(5))"
+    steps:
+      - show: |
+          <p><b>Đường khác 1 — mô phỏng.</b> Cho máy tung 100&nbsp;000 ảnh trên đường: mỗi ảnh là đêm với xác suất 0,5; ảnh đêm đúng với xác suất 0,5, ảnh ngày 0,95. Tỉ lệ đúng đếm được $\approx 0{,}725$ ✓.</p>
+        focus: [1, 1, 1]
+        say: "Kiểm tra thứ nhất là mô phỏng, không dùng công thức. Cho máy tung 100 nghìn ảnh trên đường, mỗi ảnh là ảnh đêm với xác suất 0 phẩy 5, ảnh đêm đúng với xác suất 0 phẩy 5, ảnh ngày đúng với xác suất 0 phẩy 95. Tỉ lệ đúng đếm được xấp xỉ 0 phẩy 725, khớp phép tính."
+      - show: |
+          <p><b>Đường khác 2 — đo lại nhiều lần.</b> Lặp 20&nbsp;000 lần: lấy 100 ảnh đêm mới, đo tỉ lệ đúng. Độ lệch chuẩn của 20&nbsp;000 kết quả $\approx 0{,}05$ ✓ — đúng bằng sai số chuẩn tính tay.</p>
+        focus: [1, 1, 1]
+        say: "Kiểm tra thứ hai là đo lại nhiều lần một lát nhỏ. Lặp 20 nghìn lần, mỗi lần lấy 100 ảnh đêm mới và đo tỉ lệ đúng. Độ lệch chuẩn của 20 nghìn kết quả xấp xỉ 0 phẩy 05, đúng bằng sai số chuẩn tính tay."
+
+  # ───────────────────────── 8. NGHIÊN CỨU THẬT ─────────────────────────
+  - id: real
+    kind: concept
+    title: "Hai nghiên cứu thật: điểm đặt camera mới, và tập kiểm tra làm lại"
+    checks:
+      - "round((41.08 - 20.83) / 20.83 * 100) == 97 and round(41.08 / 20.83, 2) == 1.97"
+      - "9 + 1 + 10 == 20"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bẫy ảnh động vật hoang dã (Beery và cộng sự, 2018)</th><th>lỗi phân loại</th></tr>
+          <tr><td>điểm đặt camera <b>đã có</b> trong dữ liệu huấn luyện</td><td>20,83%</td></tr>
+          <tr><td>điểm đặt camera <b>mới</b></td><td>41,08% — tăng 97%</td></tr></table>
+          <p class="note">20 điểm đặt: 9 điểm chỉ để thử, 1 điểm để chỉnh mô hình; ở 10 điểm còn lại, ảnh ngày lẻ để thử, ngày chẵn để học, và tập học với tập chỉnh không chung chuỗi ảnh nào.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Nghiên cứu thứ nhất, năm 2018, dùng camera bẫy ảnh chụp động vật hoang dã, nền gần như không đổi ở mỗi điểm đặt. Ở các điểm đặt đã có trong dữ liệu huấn luyện, lỗi phân loại là 20 phẩy 83 phần trăm. Ở điểm đặt mới, lỗi là 41 phẩy 08 phần trăm, tăng 97 phần trăm như ở phần ôn nền. Nhóm tác giả chia tập theo điểm đặt và theo ngày, và giữ cho tập học với tập chỉnh không chung chuỗi ảnh nào."
+      - show: |
+          <table class="t"><tr><th>tập kiểm tra làm lại (Recht và cộng sự, 2019)</th><th>kết quả</th></tr>
+          <tr><td>10&nbsp;000 ảnh mới, theo đúng quy trình cũ của bộ dữ liệu ImageNet</td><td>độ chính xác tụt <b>11% tới 14%</b></td></tr>
+          <tr><td>so thứ tự các mô hình trên tập cũ và tập mới</td><td><b>thứ hạng</b> gần như giữ nguyên</td></tr></table>
+          <p class="note">Bài học: con số trên tập kiểm tra cũ nhạy với cả những chi tiết nhỏ của cách thu và lọc ảnh; so sánh tương đối giữa các mô hình bền hơn con số tuyệt đối.</p>
+        focus: [0, "1.2", "1.3", 2]
+        say: "Nghiên cứu thứ hai, năm 2019, nói về một tập ảnh rất nổi tiếng. Nhóm tác giả làm lại tập kiểm tra 10 nghìn ảnh theo đúng quy trình cũ của bộ dữ liệu ImageNet, và độ chính xác của các mô hình tụt từ 11 tới 14 phần trăm. Nhưng thứ hạng giữa các mô hình gần như giữ nguyên. Bài học là con số tuyệt đối nhạy với cả chi tiết nhỏ của cách thu và lọc ảnh, còn so sánh tương đối giữa các mô hình bền hơn."
+
+  # ───────────────────────── 9. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi của người đã đi làm"
+    checks:
+      - "round(alg.cvi_mix_acc([(900, 0.95), (100, 0.5)]), 3) == 0.905"
+      - "round(2 * math.sqrt(0.25 / 10), 2) == 0.32"
+      - "round(alg.cvi_mix_acc([(0.3, 0.95), (0.7, 0.5)]), 3) == 0.635"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Báo một con số chung <b class="red">(90,5% che mất ban đêm 50%)</b>
+          <br><span class="note">Phép thử: luôn kèm bảng theo lát — mỗi điều kiện một dòng, có số ảnh của lát.</span></div>
+        say: "Lỗi thứ nhất là báo một con số chung, để 90 phẩy 5 phần trăm che mất ban đêm chỉ 50 phần trăm. Phép thử là luôn kèm bảng theo lát, mỗi điều kiện một dòng, có cả số ảnh của lát."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Chia ngẫu nhiên từng ảnh vào tập học và tập thử <b class="red">(cùng camera, cùng ngày ở cả hai bên)</b>
+          <br><span class="note">Ảnh liền nhau của một camera gần như giống hệt: mô hình “nhớ nền” rồi được chấm trên chính nền đó, nên con số đẹp giả. Chia theo điểm đặt, theo ngày, theo chuỗi ảnh như nghiên cứu bẫy ảnh.</span></div>
+        focus: [1, 1, 1]
+        say: "Lỗi thứ hai là chia ngẫu nhiên từng ảnh vào tập học và tập thử, nên cùng camera, cùng ngày nằm ở cả hai bên. Ảnh liền nhau của một camera gần như giống hệt, mô hình nhớ nền rồi được chấm trên chính nền đó, nên con số đẹp giả. Hãy chia theo điểm đặt, theo ngày, theo chuỗi ảnh như nghiên cứu bẫy ảnh."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Kết luận từ lát quá nhỏ <b class="red">(10 ảnh đêm: 50% ± 32%)</b>
+          <br><span class="note">Mười ảnh cho khoảng 18% tới 82%. Phép thử: in số ảnh và sai số chuẩn cạnh mỗi con số của lát.</span></div>
+        focus: [1, 1]
+        say: "Lỗi thứ ba là kết luận từ một lát quá nhỏ, ví dụ 10 ảnh đêm cho 50 phần trăm, cộng trừ tới 32 phần trăm. Phép thử là in số ảnh và sai số chuẩn ngay cạnh mỗi con số của lát."
+      - show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Tính kỳ vọng một lần lúc ra mắt rồi thôi <b class="red">(mùa đông đêm dài hơn)</b></div>
+          <table class="t"><tr><th>thời điểm</th><th>tỉ trọng ban đêm</th><th>kỳ vọng $\sum_s q_s a_s$</th></tr>
+          <tr><td>lúc ra mắt</td><td>50%</td><td>72,5%</td></tr>
+          <tr><td>mùa đông</td><td>70%</td><td class="red">$0{,}3 \cdot 0{,}95 + 0{,}7 \cdot 0{,}5 = 63{,}5\%$</td></tr></table>
+          <p class="note">Theo dõi cả <b>tỉ trọng các lát</b> lẫn tỉ lệ đúng từng lát theo thời gian, như việc giám sát trôi dữ liệu ở khoá đưa mô hình học máy vào vận hành.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, tính kỳ vọng một lần lúc ra mắt rồi thôi. Lúc ra mắt ban đêm chiếm một nửa, kỳ vọng 72 phẩy 5 phần trăm. Mùa đông đêm dài hơn, ban đêm chiếm 70 phần trăm, kỳ vọng tụt còn 63 phẩy 5 phần trăm dù mô hình không đổi. Hãy theo dõi cả tỉ trọng các lát lẫn tỉ lệ đúng từng lát theo thời gian, như việc giám sát trôi dữ liệu ở khoá đưa mô hình học máy vào vận hành."
+
+  # ───────────────────────── 10. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: con số chung, con số triển khai, và cỡ mẫu"
+    checks:
+      - "round(alg.cvi_mix_acc([(800, 0.92), (200, 0.7)]), 3) == 0.876 and round(alg.cvi_mix_acc([(0.6, 0.92), (0.4, 0.7)]), 3) == 0.832"
+      - "round(0.7 * 0.3 * (2 / 0.05) ** 2) == 336 and round(2 * math.sqrt(0.21 / 336), 3) == 0.05"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Tập kiểm tra: 800 ảnh trời nắng đúng 92%, 200 ảnh trời mưa đúng 70%. Con số chung? Khi triển khai mưa chiếm 40% thì kỳ vọng bao nhiêu?</td></tr>
+          <tr><td>2</td><td>Cần bao nhiêu ảnh mưa để hai sai số chuẩn của tỉ lệ đúng 70% chỉ còn 0,05?</td></tr>
+          <tr><td>3</td><td>Trước khi cho xe chạy ở thành phố mới, bạn chọn điều kiện ra mắt nào: con số chung trên 90%, hay mọi lát trên một mức sàn?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.4", 0]
+        say: "Bây giờ đến lượt bạn. Câu một, tập kiểm tra có 800 ảnh trời nắng đúng 92 phần trăm và 200 ảnh trời mưa đúng 70 phần trăm, con số chung là bao nhiêu? Khi triển khai mưa chiếm 40 phần trăm thì kỳ vọng bao nhiêu? Câu hai, cần bao nhiêu ảnh mưa để hai sai số chuẩn của tỉ lệ đúng 70 phần trăm chỉ còn 0 phẩy 05? Câu ba, trước khi cho xe chạy ở thành phố mới, bạn chọn điều kiện ra mắt nào? Dừng video và làm ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <p><b>Câu 1.</b> Chung: $0{,}8 \cdot 0{,}92 + 0{,}2 \cdot 0{,}7 = \hlg{0{,}876}$. Triển khai: $0{,}6 \cdot 0{,}92 + 0{,}4 \cdot 0{,}7 = \hlo{0{,}832}$.</p>
+          <p><b>Câu 2.</b> $n = 0{,}7 \cdot 0{,}3 \cdot \left(\frac{2}{0{,}05}\right)^2 = 0{,}21 \cdot 1600 = \hlg{336}$ ảnh mưa.</p>
+        focus: [1, 1, 2]
+        say: "Câu một, con số chung là 0 phẩy 8 nhân 0 phẩy 92 cộng 0 phẩy 2 nhân 0 phẩy 7, bằng 0 phẩy 876. Khi mưa chiếm 40 phần trăm, kỳ vọng là 0 phẩy 6 nhân 0 phẩy 92 cộng 0 phẩy 4 nhân 0 phẩy 7, bằng 0 phẩy 832. Câu hai, theo công thức đã chuyển vế, n bằng 0 phẩy 21 nhân bình phương của 2 chia 0 phẩy 05, tức 0 phẩy 21 nhân 1600, bằng 336 ảnh mưa."
+      - show: |
+          <table class="t"><tr><th>câu 3: điều kiện ra mắt</th><th>được</th><th>mất</th></tr>
+          <tr><td>con số chung trên 90%</td><td>dễ đạt, dễ báo cáo</td><td class="red">lát yếu và hiếm lọt qua</td></tr>
+          <tr><td>mọi lát trên mức sàn, mỗi lát đủ ảnh</td><td>bảo vệ điều kiện xấu nhất</td><td>tốn công thu ảnh cho từng lát</td></tr>
+          <tr><td>thêm: ảnh của chính thành phố mới, chia theo điểm đặt</td><td>đo đúng miền sẽ chạy</td><td>phải chạy thử trước khi có số</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Câu ba là một đánh đổi. Con số chung trên 90 phần trăm dễ đạt và dễ báo cáo, nhưng lát yếu và hiếm sẽ lọt qua. Đặt mức sàn cho mọi lát, mỗi lát đủ ảnh, thì bảo vệ được điều kiện xấu nhất nhưng tốn công thu ảnh. Tốt nhất là thêm ảnh của chính thành phố mới, chia theo điểm đặt, để đo đúng miền sẽ chạy, dù phải chạy thử trước khi có số."
+
+  # ───────────────────────── 11. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">con số chung = tổng tỉ trọng nhân tỉ lệ đúng</span><span class="a">→</span>
+          <span class="n">đổi tỉ trọng khi triển khai: 90,5% thành 72,5%</span><span class="a">→</span>
+          <span class="n">lát mới chưa có ảnh: phải thu mà đo</span><span class="a">→</span>
+          <span class="n">sai số chuẩn: lát nhỏ không đáng tin</span><span class="a">→</span>
+          <span class="n">chia tập theo điểm đặt, theo ngày</span></div>
+        say: "Tổng kết lại, con số chung là tổng của tỉ trọng nhân tỉ lệ đúng từng lát, nên khi tỉ trọng đổi lúc triển khai, 90 phẩy 5 phần trăm có thể thành 72 phẩy 5. Lát mới chưa có ảnh thì phải thu ảnh mà đo. Sai số chuẩn cho biết lát nhỏ không đáng tin, và tập thử phải chia theo điểm đặt, theo ngày."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> đừng hỏi “mô hình đúng bao nhiêu phần trăm?”, mà hỏi “đúng bao nhiêu <b>ở điều kiện nào</b>, đo trên <b>bao nhiêu ảnh</b>, và điều kiện lúc chạy thật có giống không?”.</div>
+        say: "Điều cần mang theo, đừng hỏi mô hình đúng bao nhiêu phần trăm, mà hỏi đúng bao nhiêu ở điều kiện nào, đo trên bao nhiêu ảnh, và điều kiện lúc chạy thật có giống không."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 11): <b>tình huống chuyên gia</b> — một mô hình đúng vì nền ảnh chứ không vì vật, và phép thử giữ vật, đổi nền để lật tẩy nó.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 11, ta xem một tình huống chuyên gia, khi mô hình đúng vì nền ảnh chứ không vì vật, và phép thử giữ vật, đổi nền để lật tẩy nó. Hẹn gặp bạn ở bài tiếp theo."

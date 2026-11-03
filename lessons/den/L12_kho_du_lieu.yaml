@@ -1,0 +1,200 @@
+id: L12
+course: DEN
+series: "DEN · Kỹ thuật dữ liệu"
+title: "Bài 12 — Kho dữ liệu: bảng sự kiện, bảng chiều và chiều thay đổi chậm"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/den.yaml L12; audit/den/verify_den.py L12; R. Kimball, M. Ross, The Data Warehouse Toolkit (bản 3, 2013), chương 1–2, 5 (chiều thay đổi chậm loại 1 và 2); bài 0, 11"
+assumes: [arith]
+# Quy ước: lược đồ hình sao — bảng sự kiện (mỗi dòng một giao dịch, có số đo và khoá tới các bảng chiều) và bảng chiều (khách, sản phẩm, ngày).
+#   Chiều thay đổi chậm loại 1 = ghi đè; loại 2 = thêm dòng mới, mỗi dòng có khoảng hiệu lực [từ, đến). Ví dụ chạy trên sqlite3 (alg.scd_report).
+#   Ngày viết năm-tháng-ngày. Tên SCD chỉ trên màn hình.
+objectives:
+  - "Thiết kế lược đồ hình sao"
+  - "So sánh ghi đè và lưu lịch sử của bảng chiều"
+  - "Chọn độ mịn của bảng sự kiện"
+asr_reviewed:
+  - {sentence: "Hãy lưu ở độ mịn dòng hàng, rồi dựng bảng tổng hợp từ đó.", reason: "ASR chép “Hãy lưu ở độ miệng dòng hàng, đôi dựng bản tổng hợp từ đó.” (0.786): lệch âm/thanh thuần Việt: mịn/miệng, rồi/đôi, bảng/bản — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Báo cáo tháng 2 tự đổi số"
+    checks:
+      - "alg.scd_report(False)[0] == ('2026-02', 'Đà Nẵng', 100)"
+    steps:
+      - show: |
+          <p>Tháng 3, phòng kinh doanh in lại báo cáo doanh thu <b>tháng 2</b> — và con số của Hà Nội đã giảm, Đà Nẵng tăng. Không ai sửa đơn hàng nào. Chỉ có một khách chuyển nhà từ Hà Nội vào Đà Nẵng, và ai đó đã <b>ghi đè</b> tỉnh của khách.</p>
+          <div class="box key">Hôm nay: <b>kho dữ liệu</b> — bảng sự kiện, bảng chiều, và cách giữ lịch sử để báo cáo quá khứ không tự đổi.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, tháng 3, phòng kinh doanh in lại báo cáo doanh thu tháng 2, và con số của Hà Nội đã giảm, Đà Nẵng thì tăng. Không ai sửa đơn hàng nào. Chỉ có một khách chuyển nhà từ Hà Nội vào Đà Nẵng, và ai đó đã ghi đè tỉnh của khách. Hôm nay ta học kho dữ liệu, với bảng sự kiện, bảng chiều, và cách giữ lịch sử để báo cáo quá khứ không tự đổi."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: phép nối, cộng theo nhóm, so sánh ngày"
+    checks:
+      - "[(m, d[k]) for k, m in [('k1', 100), ('k2', 50)] for d in [{'k1': 'Hà Nội', 'k2': 'Huế'}]] == [(100, 'Hà Nội'), (50, 'Huế')]"
+      - "'2026-01-01' <= '2026-02-10' < '2026-03-01' and not ('2026-03-10' < '2026-03-01') and '2026-12-31' < '2027-01-01'"
+    steps:
+      - show: |
+          <table class="t"><tr><th>đơn: mã khách, tiền</th><th>khách: mã, tỉnh</th><th>nối theo mã khách</th></tr>
+          <tr><td>k1, 100</td><td>k1, Hà Nội</td><td>100, Hà Nội</td></tr>
+          <tr><td>k2, 50</td><td>k2, Huế</td><td>50, Huế</td></tr></table>
+          <p>Rồi <b>cộng theo nhóm</b>: gom các dòng cùng tỉnh, cộng tiền.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Ở khoá Cơ sở dữ liệu, ta đã học phép nối hai bảng theo khoá. Đơn của khách k1 trị giá 100 nối với dòng khách k1 ở Hà Nội cho ra 100 thuộc Hà Nội. Tương tự, đơn 50 của khách k2 nối ra 50 thuộc Huế. Sau đó cộng theo nhóm, tức gom các dòng cùng tỉnh và cộng tiền."
+      - show: |
+          <p>Ngày viết <b>năm-tháng-ngày</b> thì so như so chữ: 2026-02-10 nhỏ hơn 2026-03-01.</p>
+          <p><b>Khoảng nửa mở</b> [từ, đến): ngày $d$ thuộc khoảng nếu từ $\le d \lt$ đến. Ví dụ 2026-02-10 thuộc [2026-01-01, 2026-03-01); 2026-03-10 thì không.</p>
+        introduces: [geq, ltgt]
+        focus: [1, 2, 2]
+        say: "Ngày viết theo năm, tháng, ngày thì so như so chữ, nên ngày 10 tháng 2 nhỏ hơn ngày 1 tháng 3. Khoảng nửa mở từ, đến nghĩa là ngày d thuộc khoảng nếu từ nhỏ hơn hoặc bằng d, và d nhỏ hơn đến. Ví dụ ngày 10 tháng 2 thuộc khoảng từ 1 tháng 1 tới trước 1 tháng 3, còn ngày 10 tháng 3 thì không."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: lược đồ hình sao"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bảng</th><th>chứa gì</th><th>ví dụ</th></tr>
+          <tr><td><b>sự kiện</b> (ở giữa)</td><td>mỗi dòng một sự việc đo được; số đo + khoá tới chiều</td><td>đơn: ngày, mã khách, mã sản phẩm, tiền</td></tr>
+          <tr><td><b>chiều</b> (xung quanh)</td><td>mô tả để lọc và nhóm</td><td>khách: tên, tỉnh; sản phẩm: loại; ngày: tháng, quý</td></tr></table>
+          <p><b>Độ mịn</b>: một dòng sự kiện là gì — một đơn, hay một dòng hàng trong đơn. Chọn mịn nhất có thể; gộp lên thì dễ, tách xuống thì không.</p>
+          <p><b>Chiều thay đổi chậm</b>: loại 1 <b>ghi đè</b> (chỉ giữ hiện tại); loại 2 <b>thêm dòng</b> có khoảng hiệu lực (giữ lịch sử).</p>
+        focus: [1, "1.2", "1.3", 2, 2, 3]
+        say: "Bảng này giới thiệu hai loại bảng trong kho dữ liệu. Bảng sự kiện ở giữa, mỗi dòng là một sự việc đo được, gồm số đo và khoá tới các chiều, ví dụ đơn hàng có ngày, mã khách, mã sản phẩm và số tiền. Bảng chiều ở xung quanh chứa mô tả để lọc và nhóm, như tên và tỉnh của khách, loại sản phẩm, tháng và quý của ngày. Độ mịn là một dòng sự kiện nghĩa là gì, một đơn hay một dòng hàng trong đơn. Hãy chọn mịn nhất có thể, vì gộp lên thì dễ còn tách xuống thì không. Chiều thay đổi chậm loại 1 ghi đè và chỉ giữ hiện tại, còn loại 2 thêm dòng có khoảng hiệu lực và giữ lịch sử."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Ngôi sao, và trục thời gian của một khách"
+    steps:
+      - show: |
+          <div><svg width="1500" height="370" viewBox="0 0 1500 370"><g fill="#1f2937"><rect x="220" y="140" width="300" height="72" rx="10" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="370" y="170" text-anchor="middle" font-size="20" font-weight="bold">sự kiện: đơn hàng</text><text x="370" y="196" text-anchor="middle" font-size="18">ngày, mã khách, mã sp, tiền</text><rect x="20" y="20" width="250" height="72" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="145" y="50" text-anchor="middle" font-size="20" font-weight="bold">chiều khách</text><text x="145" y="76" text-anchor="middle" font-size="18">tên, tỉnh</text><rect x="470" y="20" width="250" height="72" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="595" y="50" text-anchor="middle" font-size="20" font-weight="bold">chiều sản phẩm</text><text x="595" y="76" text-anchor="middle" font-size="18">loại</text><rect x="245" y="280" width="250" height="72" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="370" y="310" text-anchor="middle" font-size="20" font-weight="bold">chiều ngày</text><text x="370" y="336" text-anchor="middle" font-size="18">tháng, quý</text><line x1="145" y1="92" x2="300" y2="140" stroke="#6b7280" stroke-width="3"/><line x1="595" y1="92" x2="440" y2="140" stroke="#6b7280" stroke-width="3"/><line x1="370" y1="212" x2="370" y2="280" stroke="#6b7280" stroke-width="3"/><line x1="790" y1="20" x2="790" y2="360" stroke="#d1d5db" stroke-width="2"/><text x="1140" y="45" text-anchor="middle" font-size="22" font-weight="bold">khách k1 trong chiều khách loại 2</text><line x1="830" y1="200" x2="1470" y2="200" stroke="#6b7280" stroke-width="3"/><rect x="830" y="150" width="300" height="50" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="980" y="183" text-anchor="middle" font-size="20">Hà Nội</text><rect x="1130" y="150" width="340" height="50" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="1300" y="183" text-anchor="middle" font-size="20">Đà Nẵng</text><line x1="830" y1="200" x2="830" y2="215" stroke="#1f2937" stroke-width="2"/><text x="830" y="238" text-anchor="middle" font-size="19">01-01</text><line x1="1130" y1="200" x2="1130" y2="215" stroke="#1f2937" stroke-width="2"/><text x="1130" y="238" text-anchor="middle" font-size="19">03-01</text><circle cx="1010" cy="290" r="11" fill="#2a78d6"/><line x1="1010" y1="279" x2="1010" y2="205" stroke="#2a78d6" stroke-width="3" stroke-dasharray="6 4"/><text x="1010" y="325" text-anchor="middle" font-size="19">đơn 02-10: 100</text><circle cx="1230" cy="290" r="11" fill="#059669"/><line x1="1230" y1="279" x2="1230" y2="205" stroke="#059669" stroke-width="3" stroke-dasharray="6 4"/><text x="1230" y="325" text-anchor="middle" font-size="19">đơn 03-10: 200</text><text x="1140" y="110" text-anchor="middle" font-size="19" fill="#eb6834">mỗi đơn rơi vào đúng một khoảng hiệu lực</text></g></svg></div>
+        focus: [1, 1, 1]
+        say: "Bên trái là lược đồ hình sao, bảng sự kiện đơn hàng ở giữa giữ số tiền và các khoá, ba bảng chiều khách, sản phẩm và ngày ở xung quanh giữ phần mô tả. Bên phải là trục thời gian của khách k1 trong chiều khách loại 2, khoảng Hà Nội từ 1 tháng 1 và khoảng Đà Nẵng từ 1 tháng 3. Đơn ngày 10 tháng 2 rơi vào khoảng Hà Nội, đơn ngày 10 tháng 3 rơi vào khoảng Đà Nẵng, mỗi đơn đúng một khoảng."
+
+  - id: example
+    kind: example
+    title: "Khách chuyển nhà ngày 1/3"
+    checks:
+      - "alg.scd_report(True) == [('2026-02', 'Hà Nội', 100), ('2026-03', 'Đà Nẵng', 200)]"
+      - "alg.scd_report(False) == [('2026-02', 'Đà Nẵng', 100), ('2026-03', 'Đà Nẵng', 200)]"
+    steps:
+      - show: |
+          <table class="t"><tr><th>Bước 1 — bảng chiều khách (loại 2)</th><th>tỉnh</th><th>hiệu lực</th></tr>
+          <tr><td>khoá thay thế 1, khách k1</td><td>Hà Nội</td><td>2026-01-01 tới trước 2026-03-01</td></tr>
+          <tr><td>khoá thay thế 2, khách k1</td><td>Đà Nẵng</td><td>từ 2026-03-01</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Bước một, bảng chiều khách theo loại 2 có hai dòng cho khách k1. Dòng đầu ghi Hà Nội, hiệu lực từ đầu năm tới trước ngày 1 tháng 3. Dòng sau ghi Đà Nẵng, hiệu lực từ ngày 1 tháng 3."
+      - show: |
+          <p><b>Bước 2</b> — đơn 100 ngày 2026-02-10: so với dòng Hà Nội, $2026\text{-}01\text{-}01 \le 2026\text{-}02\text{-}10 \lt 2026\text{-}03\text{-}01$ → khớp; với dòng Đà Nẵng, 2026-02-10 nhỏ hơn 2026-03-01 → không khớp.</p>
+        say: "Bước hai, xét đơn 100 ngày 10 tháng 2. Ngày này nằm trong khoảng của dòng Hà Nội, nên khớp. Nó nhỏ hơn ngày 1 tháng 3 nên không khớp dòng Đà Nẵng, vậy đơn 100 thuộc Hà Nội."
+      - show: |
+          <p><b>Bước 3</b> — đơn 200 ngày 2026-03-10: không nhỏ hơn 2026-03-01 → không khớp dòng Hà Nội; từ 2026-03-01 trở đi → khớp dòng Đà Nẵng.</p>
+        say: "Bước ba, xét đơn 200 ngày 10 tháng 3. Ngày này không nhỏ hơn ngày 1 tháng 3, nên không khớp dòng Hà Nội, mà khớp dòng Đà Nẵng. Vậy đơn 200 thuộc Đà Nẵng."
+      - clear: true
+        show: |
+          <p><b>Bước 4</b> — chạy thật trên sqlite3, cộng theo (tháng, tỉnh):</p>
+          <table class="t"><tr><th>cách</th><th>tháng 2</th><th>tháng 3</th></tr>
+          <tr><td>loại 2 (lịch sử)</td><td>$\hl{\text{Hà Nội } 100}$</td><td>Đà Nẵng 200</td></tr>
+          <tr><td>loại 1 (ghi đè)</td><td>Đà Nẵng 100 — sai với lúc mua</td><td>Đà Nẵng 200</td></tr></table>
+        focus: [1, 2, "2.2", "2.3"]
+        say: "Bước bốn, ta nối theo điều kiện ngày đơn nằm trong khoảng hiệu lực, chạy thật trên một cơ sở dữ liệu nhỏ. Kết quả được cộng theo tháng và tỉnh, và bảng so hai cách. Loại 2 cho tháng 2 thuộc Hà Nội 100, tháng 3 thuộc Đà Nẵng 200. Loại 1 ghi đè làm tháng 2 cũng thành Đà Nẵng 100, sai với lúc khách mua."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: đếm số dòng khớp và tổng tiền"
+    checks:
+      - "(lambda D, F: [sum(1 for _, a, b in D if a <= d < b) for d, _ in F])([('Hà Nội', '2026-01-01', '2026-03-01'), ('Đà Nẵng', '2026-03-01', '9999-12-31')], [('2026-02-10', 100), ('2026-03-10', 200)]) == [1, 1]"
+      - "sum(x[2] for x in alg.scd_report(True)) == sum(x[2] for x in alg.scd_report(False)) == 300"
+      - "(lambda D, F: sum(m for _, m in F for _ in D))([('Hà Nội', '2026-01-01', '2026-03-01'), ('Đà Nẵng', '2026-03-01', '9999-12-31')], [('2026-02-10', 100), ('2026-03-10', 200)]) == 600"
+    steps:
+      - show: |
+          <table class="t"><tr><th>đường khác</th><th>đếm</th><th>kết quả</th></tr>
+          <tr><td>mỗi đơn khớp mấy dòng chiều (có điều kiện ngày)?</td><td>đơn 100: 1 dòng; đơn 200: 1 dòng</td><td>không nhân đôi ✓</td></tr>
+          <tr><td>tổng tiền loại 2 và loại 1</td><td>$100 + 200$ cả hai cách</td><td>300 = 300 ✓</td></tr>
+          <tr><td>nếu bỏ điều kiện ngày</td><td>mỗi đơn khớp 2 dòng: 2 lần 300</td><td>600 — gấp đôi</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Kiểm bằng đường khác, đếm số dòng khớp và tổng tiền. Với điều kiện ngày, mỗi đơn khớp đúng 1 dòng chiều, nên không đơn nào bị nhân đôi. Tổng tiền của cả hai cách đều là 100 cộng 200, bằng 300, vì ghi đè chỉ đổi nhãn tỉnh chứ không đổi tiền. Nếu bỏ điều kiện ngày, mỗi đơn khớp 2 dòng và tổng thành 600, gấp đôi, đúng như lỗi thứ hai sắp nói."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp"
+    checks:
+      - "[x for x in alg.scd_report(True) if x[0] == '2026-02'] == [('2026-02', 'Hà Nội', 100)] and [x for x in alg.scd_report(False) if x[0] == '2026-02'] == [('2026-02', 'Đà Nẵng', 100)]"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Ghi đè thuộc tính dùng để nhóm báo cáo <b class="red">(quá khứ tự viết lại)</b>
+          <br><span class="note">Tỉnh, hạng thành viên, phòng ban phụ trách: dùng loại 2. Ghi đè chỉ hợp với sửa lỗi chính tả, hay thuộc tính không ai báo cáo theo.</span></div>
+        say: "Lỗi thứ nhất, ghi đè thuộc tính dùng để nhóm báo cáo, nên quá khứ tự viết lại. Tỉnh, hạng thành viên, phòng ban phụ trách đều nên dùng loại 2. Ghi đè chỉ hợp với sửa lỗi chính tả, hay thuộc tính không ai báo cáo theo."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Nối bằng mã khách mà không xét khoảng hiệu lực <b class="red">(mỗi đơn nhân đôi)</b>
+          <br><span class="note">Khách k1 có 2 dòng chiều: nối chỉ theo mã thì mỗi đơn khớp 2 dòng, doanh thu gấp đôi. Nối theo khoá thay thế của từng dòng chiều, hoặc thêm điều kiện ngày.</span></div>
+        say: "Lỗi thứ hai, nối bằng mã khách mà không xét khoảng hiệu lực, nên mỗi đơn bị nhân đôi. Khách k1 có 2 dòng chiều, nối chỉ theo mã thì mỗi đơn khớp 2 dòng, và doanh thu gấp đôi. Hãy nối theo khoá thay thế của từng dòng chiều, hoặc thêm điều kiện ngày."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Bảng sự kiện quá thô <b class="red">(không trả lời được câu hỏi mới)</b>
+          <br><span class="note">Chỉ lưu doanh thu theo ngày thì không bao giờ hỏi được “sản phẩm nào hay mua cùng nhau”. Lưu ở độ mịn dòng hàng, rồi dựng bảng tổng hợp từ đó.</span></div>
+        say: "Lỗi thứ ba, bảng sự kiện quá thô, nên không trả lời được câu hỏi mới. Chỉ lưu doanh thu theo ngày thì không bao giờ hỏi được sản phẩm nào hay được mua cùng nhau. Hãy lưu ở độ mịn dòng hàng, rồi dựng bảng tổng hợp từ đó."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Đối soát báo cáo chạy lại chỉ bằng <b>tổng</b> <b class="red">(ghi đè không đổi tổng)</b></div>
+          <table class="t"><tr><th>tháng 2</th><th>báo cáo đã công bố (lịch sử)</th><th>chạy lại sau khi ghi đè</th></tr>
+          <tr><td>Hà Nội</td><td>100</td><td>0</td></tr>
+          <tr><td>Đà Nẵng</td><td>0</td><td>100</td></tr>
+          <tr><td><b>tổng</b></td><td>100</td><td>100 — khớp, nên không ai thấy</td></tr></table>
+          <p class="note">Người có kinh nghiệm lưu lại báo cáo đã chốt, và khi chạy lại thì so <b>từng nhóm</b>, không chỉ so tổng.</p>
+        focus: [1, "2.2", "2.3", "2.4", 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, đối soát báo cáo chạy lại chỉ bằng tổng, trong khi ghi đè không làm đổi tổng. Báo cáo tháng 2 đã công bố ghi Hà Nội 100, còn chạy lại sau khi ghi đè thì Hà Nội còn 0. Đà Nẵng từ 0 thành 100. Tổng vẫn là 100 ở cả hai bản, khớp, nên không ai thấy gì. Vì vậy, người có kinh nghiệm lưu lại báo cáo đã chốt, và khi chạy lại thì so từng nhóm, không chỉ so tổng."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "(lambda rows, d: [t for t, a, b in rows if a <= d < b])([('Hà Nội', '2026-01-01', '2026-03-01'), ('Đà Nẵng', '2026-03-01', '2026-05-01'), ('Huế', '2026-05-01', '9999-12-31')], '2026-04-15') == ['Đà Nẵng']"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Ngày 2026-05-01 khách k1 chuyển tiếp ra Huế. Bảng chiều loại 2 có mấy dòng cho k1? Dòng Đà Nẵng đổi gì?</td></tr>
+          <tr><td>2</td><td>Đơn ngày 2026-04-15 thuộc tỉnh nào trong báo cáo?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, ngày 1 tháng 5 năm 2026, khách k1 chuyển tiếp ra Huế. Bảng chiều loại 2 có mấy dòng cho k1, và dòng Đà Nẵng đổi gì? Câu hai, đơn ngày 15 tháng 4 năm 2026 thuộc tỉnh nào trong báo cáo? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>① khách k1</th><th>tỉnh</th><th>hiệu lực</th></tr>
+          <tr><td>khoá thay thế 1</td><td>Hà Nội</td><td>2026-01-01 tới trước 2026-03-01 (giữ nguyên)</td></tr>
+          <tr><td>khoá thay thế 2</td><td>Đà Nẵng</td><td>2026-03-01 tới trước <b>2026-05-01</b> (được đóng)</td></tr>
+          <tr><td>khoá thay thế 3</td><td>Huế</td><td>từ 2026-05-01 (dòng mới)</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Đáp án câu một, bảng có 3 dòng cho k1. Dòng Hà Nội giữ nguyên. Dòng Đà Nẵng được đóng lại với hiệu lực tới trước ngày 1 tháng 5. Dòng Huế được thêm mới, hiệu lực từ ngày 1 tháng 5."
+      - show: |
+          <table class="t"><tr><th>② đơn 2026-04-15 so với</th><th>khoảng</th><th>khớp?</th></tr>
+          <tr><td>Hà Nội</td><td>[2026-01-01, 2026-03-01)</td><td>không: 04-15 không nhỏ hơn 03-01</td></tr>
+          <tr><td>Đà Nẵng</td><td>[2026-03-01, 2026-05-01)</td><td><b>có</b></td></tr>
+          <tr><td>Huế</td><td>từ 2026-05-01</td><td>không: 04-15 nhỏ hơn 05-01</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Câu hai, so ngày 15 tháng 4 với từng khoảng. Nó không nhỏ hơn ngày 1 tháng 3, nên không thuộc Hà Nội. Nó nằm từ 1 tháng 3 tới trước 1 tháng 5, nên khớp dòng Đà Nẵng. Nó nhỏ hơn ngày 1 tháng 5 nên không thuộc Huế, vậy đơn thuộc Đà Nẵng."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">bảng sự kiện ở giữa, bảng chiều xung quanh</span><span class="a">→</span>
+          <span class="n">độ mịn càng mịn càng tốt</span><span class="a">→</span>
+          <span class="n">loại 2: thêm dòng, khoảng hiệu lực</span><span class="a">→</span>
+          <span class="n">nối theo dòng chiều đúng thời điểm</span></div>
+        say: "Tổng kết lại, bảng sự kiện ở giữa, bảng chiều xung quanh, và độ mịn càng mịn càng tốt. Chiều thay đổi chậm loại 2 thêm dòng với khoảng hiệu lực, và nối theo dòng chiều đúng thời điểm."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> một báo cáo đáng tin phải cho <b>cùng con số</b> mỗi lần in lại — sự thật của quá khứ không được phụ thuộc vào hiện tại.</div>
+        say: "Điều cần mang theo, một báo cáo đáng tin phải cho cùng con số mỗi lần in lại, vì sự thật của quá khứ không được phụ thuộc vào hiện tại."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 13): <b>xử lý theo lô quy mô lớn và chất lượng dữ liệu</b>.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 13, ta học xử lý theo lô quy mô lớn và chất lượng dữ liệu. Hẹn gặp bạn ở bài tiếp theo."

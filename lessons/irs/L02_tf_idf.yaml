@@ -1,0 +1,275 @@
+id: L02
+course: IRS
+series: "IRS · Truy hồi thông tin và hệ gợi ý"
+title: "Bài 2 — Mô hình không gian vector: TF-IDF và độ tương tự cosin"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/irs.yaml L02; audit/irs/verify_irs.py (verify_parts/L02.py); audit/irs/sources_L02.md; C. Manning, P. Raghavan, H. Schütze, Introduction to Information Retrieval (2008), chương 6 (sách tham khảo; trang không tải được ngày 2026-11-03 — chỉ dạy định nghĩa toán, máy tự kiểm); DEN bài 7 (chỉ mục ngược, công thức xếp hạng có bão hoà); LLM bài 3 (cosin); CS115 bài 12 (lôgarit tự nhiên)"
+assumes: [arith, frac, approx, sqrt, sub, norm, cdot, cos, log]
+# Quy ước: kho 3 văn bản đồ chơi (số minh hoạ), mỗi “từ” là một âm tiết để dễ đếm: d1 = “máy ổ máy”, d2 = “máy pin”, d3 = “máy pin màn”.
+#   Bộ từ theo thứ tự (máy, ổ, pin, màn). tf = số lần từ t có trong văn bản d; df = số văn bản chứa t; N = số văn bản của kho;
+#   idf = ln(N / df) (lôgarit tự nhiên, chỉ dùng \ln); trọng số = tf · idf. Vector viết chữ thường không in đậm, như LLM bài 3:
+#   cos(q, d) = q · d / (‖q‖ ‖d‖). TF-IDF chỉ trên màn hình; lời đọc nói “trọng số tần suất nhân độ hiếm”.
+objectives:
+  - "Tính trọng số tần suất nhân độ hiếm của một từ trong một văn bản"
+  - "Biểu diễn văn bản và câu hỏi thành vector rồi xếp hạng bằng cosin"
+  - "Giải thích vì sao cosin không đổi khi văn bản dài gấp đôi, và vì sao nó vẫn thua nhồi từ khoá"
+scenes:
+  - id: hook
+    kind: hook
+    title: "Tìm “máy pin”, hệ lại trả về trang bán ổ cứng"
+    checks:
+      - "round(alg.cosine([1, 0, 1, 0], [2, 1, 0, 0]), 3) == 0.632"
+    steps:
+      - show: |
+          <p>Kho có ba văn bản (số minh hoạ): <b>d1</b> “máy ổ máy”, <b>d2</b> “máy pin”, <b>d3</b> “máy pin màn”. Người dùng gõ <b>“máy pin”</b>.</p>
+          <p>Hệ đếm từ chung, so bằng cosin của các vector đếm: d1 được <b>0,632</b> — chỉ vì có chữ “máy” hai lần, dù d1 nói về ổ cứng.</p>
+          <div class="box key">Hôm nay ta trả lời: biến văn bản thành vector thế nào? Từ nào đáng tin hơn từ nào? Và xếp hạng bằng góc giữa hai vector ra sao?</div>
+        focus: [1, 2, 3]
+        say: "Chào bạn, kho có ba văn bản đồ chơi, d1 là máy ổ máy, d2 là máy pin, d3 là máy pin màn, và người dùng gõ máy pin. Một hệ đơn giản chỉ đếm từ rồi so bằng cosin, và d1 được tới 0 phẩy 632, chỉ vì có chữ máy hai lần dù d1 nói về ổ cứng. Hôm nay ta trả lời ba câu hỏi, biến văn bản thành vector thế nào, từ nào đáng tin hơn từ nào, và xếp hạng bằng góc giữa hai vector ra sao."
+
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: lôgarit tự nhiên, độ dài vector và cosin"
+    checks:
+      - "math.log(1) == 0 and round(math.log(3), 3) == 1.099 and round(math.log(1.5), 3) == 0.405"
+      - "math.sqrt(3 ** 2 + 4 ** 2) == 5 and 1 * 2 + 2 * 3 + 0 * 1 == 8 and round(alg.cosine([1, 2, 0], [2, 3, 1]), 3) == 0.956"
+    steps:
+      - show: |
+          <p><b>① Lôgarit tự nhiên</b> (ở khoá Toán cho khoa học máy tính): $\ln x$ là số mũ của $e \approx 2{,}718$ để được $x$.</p>
+          <table class="t"><tr><th>$x$</th><th>1</th><th>1,5</th><th>3</th></tr>
+          <tr><td>$\ln x$</td><td>0</td><td>≈ 0,405</td><td>≈ 1,099</td></tr></table>
+          <p class="note">Số trong ngoặc bằng 1 thì lôgarit bằng 0; số càng lớn thì lôgarit càng lớn, nhưng tăng chậm.</p>
+        introduces: [log, approx]
+        focus: [1, "2.2", 3]
+        say: "Điều thứ nhất là lôgarit tự nhiên, ở khoá Toán cho khoa học máy tính, lôgarit tự nhiên của x, viết hai chữ l n, là số mũ của e, khoảng 2 phẩy 718, để được x. Bảng cho lôgarit của 1 bằng 0, lôgarit của 1 phẩy 5 khoảng 0 phẩy 405, và lôgarit của 3 khoảng 1 phẩy 099. Số trong ngoặc bằng 1 thì lôgarit bằng 0, số càng lớn thì lôgarit càng lớn nhưng tăng chậm."
+      - show: |
+          <p><b>② Độ dài và cosin</b> (ở khoá Mô hình ngôn ngữ lớn): độ dài $\lVert u \rVert$ là căn của tổng bình phương, $\lVert (3, 4) \rVert = \sqrt{9 + 16} = 5$. Dấu chấm giữa hai vector là tích vô hướng, nhân từng cặp rồi cộng.</p>
+          $$\cos(u, v) = \frac{u \cdot v}{\lVert u \rVert \, \lVert v \rVert} \qquad u = (1, 2, 0),\ v = (2, 3, 1)\!: \ \frac{8}{\sqrt{5} \cdot \sqrt{14}} \approx 0{,}956$$
+        introduces: [norm, sqrt, cdot, cos, frac]
+        focus: [1, 1, 1, 2, 2]
+        say: "Điều thứ hai, ở khoá Mô hình ngôn ngữ lớn, độ dài của một vector, viết giữa hai cặp vạch đứng, là căn của tổng bình phương. Ví dụ vector 3, 4 có độ dài căn của 9 cộng 16, bằng 5. Dấu chấm giữa hai vector là tích vô hướng, nhân từng cặp thành phần rồi cộng. Cosin của hai vector bằng tích vô hướng chia tích hai độ dài, chỉ phụ thuộc hướng. Với vector 1, 2, 0 và 2, 3, 1, ta được 8 chia căn 5 nhân căn 14, khoảng 0 phẩy 956."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: tần suất tf, số văn bản chứa từ df, độ hiếm idf"
+    checks:
+      - "['máy', 'ổ', 'máy'].count('máy') == 2 and sum('máy' in d for d in [['máy', 'ổ', 'máy'], ['máy', 'pin'], ['máy', 'pin', 'màn']]) == 3"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ký hiệu</th><th>tên</th><th>nghĩa</th><th>ví dụ trong kho</th></tr>
+          <tr><td>$N$</td><td>số văn bản</td><td>kho có bao nhiêu văn bản</td><td>3</td></tr>
+          <tr><td>$\text{tf}_{t,d}$</td><td>tần suất</td><td>từ $t$ xuất hiện mấy lần trong văn bản $d$</td><td>“máy” trong d1: 2</td></tr>
+          <tr><td>$\text{df}_t$</td><td>số văn bản chứa từ</td><td>bao nhiêu văn bản có từ $t$</td><td>“máy”: 3; “ổ”: 1</td></tr>
+          <tr><td>$\text{idf}_t = \ln \frac{N}{\text{df}_t}$</td><td>độ hiếm</td><td>từ càng ít văn bản có thì càng lớn</td><td>tính ở phần ví dụ</td></tr></table>
+        introduces: [sub]
+        focus: ["1.2", "1.3", "1.4", "1.5"]
+        say: "Bảng giải mã từng ký hiệu, chữ N là số văn bản của kho, ở đây bằng 3. Hai chữ t f với t và d nhỏ dưới chân là tần suất, từ t xuất hiện mấy lần trong văn bản d, ví dụ từ máy có 2 lần trong d1. Hai chữ d f với t nhỏ dưới chân là số văn bản chứa từ t, từ máy có ở cả 3 văn bản, còn từ ổ chỉ có ở 1. Ba chữ i d f là độ hiếm, bằng lôgarit của N chia d f, từ càng ít văn bản có thì độ hiếm càng lớn."
+
+  - id: intuition
+    kind: intuition
+    title: "Văn bản là một mũi tên trong không gian các từ"
+    checks:
+      - "round(math.degrees(math.acos(0.4055 / math.sqrt(0.4055 ** 2 + 1.0986 ** 2))), 0) == 70"
+    steps:
+      - show: |
+          <div><svg width="1500" height="430" viewBox="0 0 1500 430"><defs><marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs>
+          <line x1="200" y1="360" x2="760" y2="360" stroke="#6b7280" stroke-width="2"/><line x1="200" y1="360" x2="200" y2="40" stroke="#6b7280" stroke-width="2"/>
+          <text x="770" y="368" font-size="22" fill="#6b7280">trục “pin”</text><text x="150" y="30" font-size="22" fill="#6b7280">trục “màn”</text>
+          <line x1="200" y1="360" x2="310" y2="360" stroke="#059669" stroke-width="10" marker-end="url(#ar2)"/>
+          <line x1="200" y1="342" x2="310" y2="342" stroke="#eb6834" stroke-width="5" stroke-dasharray="10 6"/>
+          <line x1="200" y1="360" x2="310" y2="60" stroke="#2a78d6" stroke-width="6" marker-end="url(#ar2)"/>
+          <path d="M 255 360 A 55 55 0 0 0 219 308" fill="none" stroke="#b91c1c" stroke-width="3"/>
+          <g font-size="22">
+          <text x="340" y="395" fill="#059669" font-weight="bold">d2 “máy pin” (dài 0,405)</text>
+          <text x="430" y="330" fill="#eb6834" font-weight="bold">câu hỏi q “máy pin”, trùng hướng d2</text>
+          <text x="325" y="70" fill="#2a78d6" font-weight="bold">d3 “máy pin màn” (0,405; 1,099)</text>
+          <text x="265" y="318" fill="#b91c1c">góc ≈ 70°</text>
+          </g>
+          <g font-size="22" fill="#1f2937">
+          <text x="900" y="110">• mỗi từ là một trục, độ dài theo trục là trọng số</text>
+          <text x="900" y="160">• “máy” có độ hiếm 0: không có trục nào cho nó</text>
+          <text x="900" y="210">• d1 “máy ổ máy” nằm trên trục “ổ”,</text>
+          <text x="925" y="245">vuông góc với mặt phẳng này: góc 90°</text>
+          <text x="900" y="295">• góc càng nhỏ, cosin càng gần 1, càng giống</text>
+          </g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình cho thấy cơ chế, mỗi từ là một trục, và độ dài của văn bản theo trục đó là trọng số của từ trong văn bản. Câu hỏi máy pin và văn bản d2 nằm trùng hướng trên trục pin, nên góc bằng 0. Văn bản d3 có thêm từ màn, nên mũi tên nghiêng lên, lệch khoảng 70 độ so với câu hỏi. Còn d1 chỉ có máy và ổ, mà máy có độ hiếm 0, nên d1 nằm trên trục ổ, vuông góc với câu hỏi."
+
+  - id: formula
+    kind: formula
+    title: "Suy ra trọng số và điểm trong bốn bước"
+    checks:
+      - "math.log(3 / 3) == 0 and round(math.log(3 / 1), 3) == 1.099"
+      - "round(2 * math.log(3 / 3), 3) == 0 and round(1 * math.log(3 / 1), 3) == 1.099"
+      - "[round(x, 3) for x in alg.irs_tfidf([['máy', 'ổ', 'máy'], ['máy', 'pin'], ['máy', 'pin', 'màn']], ['máy', 'ổ', 'pin', 'màn'])[1][0]] == [0, 1.099, 0, 0]"
+    steps:
+      - show: |
+          <p><b>Bước 1 — độ hiếm.</b> Một từ có ở mọi văn bản không giúp phân biệt văn bản nào, nên ta cần một số bằng 0 khi $\text{df}_t = N$ và lớn dần khi từ hiếm đi. Lôgarit của tỉ số làm đúng việc đó:</p>
+          $$\text{idf}_t = \ln \frac{N}{\text{df}_t} \qquad \text{idf}_{\text{máy}} = \ln \frac{3}{3} = \ln 1 = \hl{0}, \quad \text{idf}_{\text{ổ}} = \ln \frac{3}{1} \approx \hlg{1{,}099}$$
+        focus: [1, 1, 2]
+        say: "Bước một là độ hiếm, một từ có ở mọi văn bản thì không giúp phân biệt văn bản nào. Vì vậy ta cần một số bằng 0 khi d f bằng N và lớn dần khi từ hiếm đi, và lôgarit của tỉ số N chia d f làm đúng việc đó. Làm thử, từ máy có ở cả 3 văn bản nên độ hiếm bằng lôgarit của 1, bằng 0, còn từ ổ chỉ có ở 1 văn bản nên được lôgarit của 3, khoảng 1 phẩy 099."
+      - show: |
+          <p><b>Bước 2 — trọng số.</b> Từ lặp nhiều trong văn bản thì văn bản nói nhiều về nó, nên nhân tần suất với độ hiếm:</p>
+          $$w_{t,d} = \text{tf}_{t,d} \cdot \text{idf}_t \qquad \text{d1: } w_{\text{máy}} = 2 \cdot 0 = 0, \quad w_{\text{ổ}} = 1 \cdot 1{,}099 = 1{,}099$$
+        focus: [1, 2]
+        say: "Bước hai là trọng số, từ lặp nhiều trong văn bản thì văn bản nói nhiều về nó, nên ta nhân tần suất với độ hiếm, gọi là trọng số w. Làm thử với d1, từ máy có 2 lần nhưng độ hiếm 0 nên trọng số bằng 0, còn từ ổ có 1 lần nhân 1 phẩy 099, được 1 phẩy 099."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — vector.</b> Xếp trọng số theo thứ tự bộ từ (máy, ổ, pin, màn), mỗi văn bản thành một vector 4 thành phần:</p>
+          $$\text{d1} = (0;\ 1{,}099;\ 0;\ 0)$$
+          <p class="note">Câu hỏi cũng là một văn bản ngắn, nên được biến thành vector theo cùng cách.</p>
+        focus: [1, 2, 3]
+        say: "Bước ba, ta xếp các trọng số theo đúng thứ tự bộ từ máy, ổ, pin, màn, nên mỗi văn bản thành một vector bốn thành phần. Văn bản d1 thành vector 0, 1 phẩy 099, 0, 0. Câu hỏi cũng chỉ là một văn bản ngắn, nên được biến thành vector theo cùng cách đó."
+      - show: |
+          <p><b>Bước 4 — điểm.</b> Văn bản hợp câu hỏi khi hai mũi tên cùng hướng, nên điểm là cosin của góc giữa chúng:</p>
+          $$\text{điểm}(q, d) = \cos(q, d) = \frac{q \cdot d}{\lVert q \rVert \, \lVert d \rVert}$$
+          <p class="note">Xếp các văn bản theo điểm giảm dần. Vì mọi trọng số đều không âm, điểm luôn từ 0 đến 1.</p>
+        focus: [1, 2, 3]
+        say: "Bước bốn là điểm, văn bản hợp câu hỏi khi hai mũi tên cùng hướng, nên điểm là cosin của góc giữa vector câu hỏi q và vector văn bản d. Theo công thức đã ôn, đó là tích vô hướng chia tích hai độ dài. Ta xếp các văn bản theo điểm giảm dần, và vì mọi trọng số đều không âm, điểm luôn nằm từ 0 đến 1."
+
+  - id: example
+    kind: example
+    title: "Câu hỏi “máy pin” trên cả kho, từng phép tính"
+    checks:
+      - "[round(math.log(3 / df), 3) for df in (3, 1, 2, 1)] == [0, 1.099, 0.405, 1.099]"
+      - "[[round(x, 3) for x in v] for v in alg.irs_tfidf([['máy', 'ổ', 'máy'], ['máy', 'pin'], ['máy', 'pin', 'màn']], ['máy', 'ổ', 'pin', 'màn'])[1]] == [[0, 1.099, 0, 0], [0, 0, 0.405, 0], [0, 0, 0.405, 1.099]]"
+      - "round(math.sqrt(math.log(1.5) ** 2 + math.log(3) ** 2), 3) == 1.171 and round(math.log(1.5) ** 2, 3) == 0.164"
+      - "round(alg.cosine([0, 0, math.log(1.5), 0], [0, 0, math.log(1.5), math.log(3)]), 3) == 0.346 and alg.cosine([0, 0, math.log(1.5), 0], [0, 0, math.log(1.5), 0]) == 1"
+      - "alg.cosine([0, 0, math.log(1.5), 0], [0, math.log(3), 0, 0]) == 0"
+    steps:
+      - show: |
+          <p><b>Bước 1.</b> Độ hiếm của bốn từ, với $N = 3$:</p>
+          <table class="t"><tr><th>từ</th><th>máy</th><th>ổ</th><th>pin</th><th>màn</th></tr>
+          <tr><td>$\text{df}$</td><td>3</td><td>1</td><td>2</td><td>1</td></tr>
+          <tr><td>$\text{idf} = \ln \frac{3}{\text{df}}$</td><td>0</td><td>1,099</td><td>$\ln 1{,}5 \approx 0{,}405$</td><td>1,099</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước một, tính độ hiếm của bốn từ với N bằng 3. Từ máy có ở 3 văn bản, ổ ở 1, pin ở 2 và màn ở 1. Vì vậy độ hiếm lần lượt là 0, 1 phẩy 099, lôgarit của 1 phẩy 5 khoảng 0 phẩy 405, và 1 phẩy 099."
+      - show: |
+          <p><b>Bước 2.</b> Nhân tần suất với độ hiếm cho từng văn bản, và cho câu hỏi “máy pin”:</p>
+          <table class="t"><tr><th>vector (máy, ổ, pin, màn)</th><th>trọng số</th></tr>
+          <tr><td>d1 “máy ổ máy”</td><td>(0; 1,099; 0; 0)</td></tr>
+          <tr><td>d2 “máy pin”</td><td>(0; 0; 0,405; 0)</td></tr>
+          <tr><td>d3 “máy pin màn”</td><td>(0; 0; 0,405; 1,099)</td></tr>
+          <tr><td>câu hỏi q “máy pin”</td><td>$\hlb{(0;\ 0;\ 0{,}405;\ 0)}$</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", "2.5"]
+        say: "Bước hai, nhân tần suất với độ hiếm cho từng văn bản và cho câu hỏi. Văn bản d1 thành 0, 1 phẩy 099, 0, 0, vì hai chữ máy bị nhân với 0. Văn bản d2 thành 0, 0, 0 phẩy 405, 0. Văn bản d3 thành 0, 0, 0 phẩy 405, 1 phẩy 099. Câu hỏi máy pin thành 0, 0, 0 phẩy 405, 0, giống hệt d2."
+      - clear: true
+        show: |
+          <p><b>Bước 3.</b> Độ dài: $\lVert q \rVert = \lVert \text{d2} \rVert = 0{,}405$; $\lVert \text{d3} \rVert = \sqrt{0{,}405^2 + 1{,}099^2} \approx \sqrt{0{,}164 + 1{,}207} \approx 1{,}171$.</p>
+          $$q \cdot \text{d3} = 0{,}405 \cdot 0{,}405 \approx 0{,}164 \qquad \cos(q, \text{d3}) = \frac{0{,}164}{0{,}405 \cdot 1{,}171} \approx \hlg{0{,}346}$$
+        introduces: [power]
+        focus: [1, 1, 2, 2]
+        say: "Bước ba, tính độ dài, câu hỏi và d2 đều dài 0 phẩy 405. Văn bản d3 dài căn của 0 phẩy 405 bình phương cộng 1 phẩy 099 bình phương, khoảng căn của 1 phẩy 371, bằng 1 phẩy 171. Tích vô hướng của q và d3 chỉ có một cặp khác 0, là 0 phẩy 405 nhân 0 phẩy 405, khoảng 0 phẩy 164. Chia cho 0 phẩy 405 nhân 1 phẩy 171 được cosin khoảng 0 phẩy 346."
+      - show: |
+          <p><b>Bước 4.</b> Hai văn bản còn lại:</p>
+          $$\cos(q, \text{d2}) = \frac{0{,}164}{0{,}405 \cdot 0{,}405} = \hlg{1} \qquad \cos(q, \text{d1}) = \frac{0}{\dots} = \hl{0}$$
+          <p class="note">Xếp hạng: d2 (1) → d3 (0,346) → d1 (0). Trang ổ cứng xuống cuối, vì “máy” có độ hiếm 0.</p>
+        introduces: [dots]
+        focus: [1, 2, 3]
+        say: "Bước bốn, với d2, tích vô hướng cũng là 0 phẩy 164, chia cho 0 phẩy 405 nhân 0 phẩy 405 được đúng 1, còn với d1, tích vô hướng bằng 0 nên cosin bằng 0. Ba chấm ở mẫu số nghĩa là mẫu số bao nhiêu cũng được, vì tử số đã bằng 0. Vậy thứ hạng là d2 đứng đầu, d3 thứ hai, còn trang ổ cứng d1 xuống cuối, vì chữ máy có độ hiếm 0."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: nhân đôi văn bản, và tính lại không dùng độ hiếm"
+    checks:
+      - "alg.cosine([0, math.log(3), 0, 0], [0, 2 * math.log(3), 0, 0]) == 1 and round(math.log(3) ** 2, 3) == 1.207 and round(2 * math.log(3) ** 2, 3) == 2.414"
+      - "[round(alg.cosine([1, 0, 1, 0], v), 3) for v in ([2, 1, 0, 0], [1, 0, 1, 0], [1, 0, 1, 1])] == [0.632, 1.0, 0.816]"
+    steps:
+      - show: |
+          <p>Phép thử 1: ghép d1 với chính nó, “máy ổ máy máy ổ máy”. Mọi tần suất gấp đôi, vector gấp đôi: $(0;\ 2{,}197;\ 0;\ 0)$.</p>
+          <table class="t"><tr><th>câu hỏi “máy ổ”</th><th>tích vô hướng</th><th>cosin</th></tr>
+          <tr><td>d1</td><td>1,207</td><td>1</td></tr>
+          <tr><td>d1 ghép đôi</td><td>$\hl{2{,}414}$ (gấp đôi)</td><td>$\hlg{1}$ (không đổi)</td></tr></table>
+        focus: [1, 1, "2.2", "2.3"]
+        say: "Phép thử thứ nhất là ghép d1 với chính nó, thành máy ổ máy máy ổ máy. Mọi tần suất gấp đôi nên vector cũng gấp đôi, thành 0, 2 phẩy 197, 0, 0. Với câu hỏi máy ổ, d1 có tích vô hướng 1 phẩy 207 và cosin bằng 1. Bản ghép đôi có tích vô hướng gấp đôi, 2 phẩy 414, nhưng cosin vẫn bằng 1, vì tử và mẫu cùng gấp đôi."
+      - show: |
+          <p>Phép thử 2, đường khác: bỏ độ hiếm, chỉ dùng vector đếm (máy, ổ, pin, màn) và cosin.</p>
+          <table class="t"><tr><th>văn bản</th><th>vector đếm</th><th>cosin với (1, 0, 1, 0)</th><th>có độ hiếm</th></tr>
+          <tr><td>d1</td><td>(2, 1, 0, 0)</td><td>$\frac{2}{\sqrt{5} \cdot \sqrt{2}} \approx \hl{0{,}632}$</td><td>0</td></tr>
+          <tr><td>d2</td><td>(1, 0, 1, 0)</td><td>1</td><td>1</td></tr>
+          <tr><td>d3</td><td>(1, 0, 1, 1)</td><td>$\frac{2}{\sqrt{2} \cdot \sqrt{3}} \approx 0{,}816$</td><td>0,346</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Phép thử thứ hai đi đường khác, ta bỏ độ hiếm, chỉ dùng vector đếm rồi tính cosin. Văn bản d1 được 2 chia căn 5 nhân căn 2, khoảng 0 phẩy 632, đúng con số ở đầu bài, so với 0 khi có độ hiếm. Văn bản d2 vẫn được 1 dù tính cách nào. Văn bản d3 được 0 phẩy 816 khi đếm thô, so với 0 phẩy 346, vì vậy độ hiếm chính là thứ đẩy trang ổ cứng xuống."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi của người đã đi làm"
+    checks:
+      - "round(math.log(10 / 3), 3) == 1.204 and round(math.log(10 / 2), 3) == 1.609 and math.log(3 / 3) == 0"
+      - "alg.cosine([0, 0, 1, 0], [0, 0, 5 * math.log(1.5), 0]) == 1 and round(alg.cosine([0, 0, 1, 0], [0, 0, math.log(1.5), math.log(3)]), 3) == 0.346"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Xếp hạng bằng tích vô hướng thô <b class="red">(d1 ghép đôi được gấp đôi điểm: 2,414 so với 1,207)</b>
+          <br><span class="note">Văn bản dài, lặp lại chính nó, thắng mà không thêm thông tin. Phép thử: nhân đôi một văn bản, điểm phải không đổi.</span></div>
+        say: "Lỗi thứ nhất là xếp hạng bằng tích vô hướng thô, nên bản ghép đôi của d1 được gấp đôi điểm, 2 phẩy 414 so với 1 phẩy 207. Văn bản dài lặp lại chính nó thì thắng mà không thêm thông tin gì. Phép thử là nhân đôi một văn bản, điểm phải không đổi."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Câu hỏi có từ kho chưa từng gặp, như “sạc”: $\text{df} = 0$, $\ln \frac{3}{0}$ không xác định <b class="red">(chương trình chia cho 0)</b>
+          <br><span class="note">Bỏ từ đó khỏi vector câu hỏi, hoặc dùng công thức có cộng thêm hằng số như công thức xếp hạng ở khoá Kỹ thuật dữ liệu.</span></div>
+        say: "Lỗi thứ hai là câu hỏi có một từ kho chưa từng gặp, như chữ sạc. Khi đó d f bằng 0, lôgarit của 3 chia 0 không xác định, và chương trình chia cho 0. Hãy bỏ từ đó khỏi vector câu hỏi, hoặc dùng công thức có cộng thêm hằng số như công thức xếp hạng ở khoá Kỹ thuật dữ liệu."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Tính độ hiếm một lần rồi giữ mãi <b class="red">(thêm 7 văn bản “bàn phím”: “máy” từ 0 thành 1,204)</b></div>
+          <table class="t"><tr><th>từ</th><th>kho 3 văn bản</th><th>kho 10 văn bản</th></tr>
+          <tr><td>máy</td><td>$\ln \frac{3}{3} = 0$</td><td>$\ln \frac{10}{3} \approx 1{,}204$</td></tr>
+          <tr><td>pin</td><td>$\ln \frac{3}{2} \approx 0{,}405$</td><td>$\ln \frac{10}{2} \approx 1{,}609$</td></tr></table>
+          <p class="note">“Từ có ở mọi nơi” chỉ đúng trong một kho cụ thể. Kho đổi thì phải tính lại độ hiếm và mọi vector đã lưu.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Lỗi thứ ba hay gặp ở người đã đi làm, là tính độ hiếm một lần rồi giữ mãi. Thêm 7 văn bản bàn phím vào kho, chữ máy từ độ hiếm 0 thành lôgarit của 10 chia 3, khoảng 1 phẩy 204. Chữ pin cũng đổi từ 0 phẩy 405 thành lôgarit của 5, khoảng 1 phẩy 609. Một từ có ở mọi nơi chỉ đúng trong một kho cụ thể, nên kho đổi thì phải tính lại độ hiếm và mọi vector đã lưu."
+      - show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Tin rằng cosin chống được nhồi từ khoá <b class="red">(“pin pin pin pin pin” được 1, hơn hẳn d3 thật: 0,346)</b>
+          <br><span class="note">Cosin chỉ chống văn bản dài lặp lại chính nó. Văn bản chỉ gồm từ khoá thì trùng hướng câu hỏi. Công thức xếp hạng có bão hoà ở khoá Kỹ thuật dữ liệu ra đời để chặn việc này.</span></div>
+        say: "Lỗi thứ tư cũng của người đã đi làm, là tin rằng cosin chống được nhồi từ khoá. Văn bản pin pin pin pin pin được cosin bằng 1 với câu hỏi pin, hơn hẳn văn bản d3 thật chỉ được 0 phẩy 346. Cosin chỉ chống văn bản dài lặp lại chính nó, còn văn bản chỉ gồm từ khoá thì trùng hướng câu hỏi. Công thức xếp hạng có bão hoà ở khoá Kỹ thuật dữ liệu ra đời để chặn đúng việc này."
+
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: câu hỏi “pin màn”, và lưu vector thế nào?"
+    checks:
+      - "round(alg.cosine([0, 0, math.log(1.5), math.log(3)], [0, 0, math.log(1.5), 0]), 3) == 0.346 and alg.cosine([0, 0, math.log(1.5), math.log(3)], [0, 0, math.log(1.5), math.log(3)]) == 1"
+      - "round(math.log(1.5) / math.sqrt(math.log(1.5) ** 2 + math.log(3) ** 2), 3) == 0.346 and round(math.log(3) / math.sqrt(math.log(1.5) ** 2 + math.log(3) ** 2), 3) == 0.938"
+      - "round(0.346 ** 2 + 0.938 ** 2, 2) == 1.0"
+    steps:
+      - show: |
+          <p>Cùng kho ba văn bản. Người dùng gõ <b>“pin màn”</b>.</p>
+          <table class="t"><tr><th>câu</th><th>việc cần làm</th></tr>
+          <tr><td>1</td><td>Viết vector câu hỏi theo (máy, ổ, pin, màn).</td></tr>
+          <tr><td>2</td><td>Tính cosin với d2 và d3, rồi xếp hạng.</td></tr>
+          <tr><td>3</td><td>Có triệu văn bản: nên lưu vector thế nào để mỗi lần chỉ cần nhân từng cặp rồi cộng?</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", 0]
+        say: "Bây giờ đến lượt bạn, cùng kho ba văn bản, người dùng gõ pin màn. Câu một, viết vector câu hỏi theo thứ tự máy, ổ, pin, màn. Câu hai, tính cosin với d2 và d3, rồi xếp hạng. Câu ba, kho có một triệu văn bản, nên lưu vector thế nào để mỗi lần chỉ cần nhân từng cặp rồi cộng. Dừng video lại và làm ra giấy nhé."
+        pause: 20
+      - clear: true
+        show: |
+          <p><b>Câu 1.</b> Mỗi từ một lần, nhân độ hiếm: $q = (0;\ 0;\ 0{,}405;\ 1{,}099)$ — trùng hướng với d3.</p>
+          <table class="t"><tr><th>câu 2</th><th>phép tính</th><th>cosin</th></tr>
+          <tr><td>d3</td><td>cùng vector với $q$</td><td>$\hlg{1}$</td></tr>
+          <tr><td>d2</td><td>$\frac{0{,}164}{1{,}171 \cdot 0{,}405}$</td><td>≈ 0,346</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Đáp án câu một, mỗi từ có một lần, nhân với độ hiếm, nên q là 0, 0, 0 phẩy 405, 1 phẩy 099, trùng hướng với d3. Câu hai, vì d3 cùng vector với q nên cosin bằng 1 và d3 đứng đầu. Văn bản d2 được 0 phẩy 164 chia 1 phẩy 171 nhân 0 phẩy 405, khoảng 0 phẩy 346, xếp thứ hai, còn d1 vẫn được 0."
+      - show: |
+          <p><b>Câu 3.</b> Chia trước mỗi vector cho độ dài của nó, để mọi vector dài đúng 1:</p>
+          $$\text{d3} \to \left(0;\ 0;\ \frac{0{,}405}{1{,}171};\ \frac{1{,}099}{1{,}171}\right) \approx (0;\ 0;\ 0{,}346;\ 0{,}938), \quad 0{,}346^2 + 0{,}938^2 \approx 1$$
+          <p class="note">Khi đó cosin chính là tích vô hướng, rẻ hơn. Đổi lại: kho đổi thì độ hiếm đổi, phải tính lại và chuẩn hoá lại mọi vector đã lưu.</p>
+        focus: [1, 2, 3, 3]
+        say: "Câu ba, ta chia trước mỗi vector cho độ dài của nó, để mọi vector đã lưu dài đúng 1. Ví dụ d3 thành khoảng 0, 0, 0 phẩy 346, 0 phẩy 938, và tổng bình phương xấp xỉ 1. Khi đó cosin chính là tích vô hướng, chỉ cần nhân từng cặp rồi cộng, rẻ hơn hẳn. Đổi lại, khi kho đổi thì độ hiếm đổi, nên phải tính lại và chuẩn hoá lại mọi vector đã lưu."
+
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">đếm từ: tf</span><span class="a">→</span>
+          <span class="n">độ hiếm $\ln \frac{N}{\text{df}}$</span><span class="a">→</span>
+          <span class="n">trọng số $\text{tf} \cdot \text{idf}$</span><span class="a">→</span>
+          <span class="n">vector văn bản, vector câu hỏi</span><span class="a">→</span>
+          <span class="n">xếp theo cosin</span></div>
+        say: "Tổng kết lại, ta đếm từ rồi nhân với độ hiếm để từ có ở mọi nơi bị bỏ qua. Sau đó xếp trọng số thành vector cho cả văn bản và câu hỏi, rồi xếp hạng bằng cosin của góc giữa hai vector."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> trọng số tốt đo <b>bằng chứng phân biệt</b>, không đo số lần xuất hiện thô. Và mỗi con số độ hiếm chỉ đúng với <b>một kho</b> cụ thể.</div>
+        say: "Điều cần mang theo, trọng số tốt đo bằng chứng giúp phân biệt văn bản, không đo số lần xuất hiện thô. Và mỗi con số độ hiếm chỉ đúng với một kho cụ thể, kho đổi thì nó đổi."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 3): truy hồi dày — vector nhúng hàng trăm chiều không còn số 0, và tìm láng giềng gần đúng để không phải so với cả triệu vector.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 3, ta học truy hồi dày, khi mỗi văn bản là một vector nhúng hàng trăm chiều. Vì không thể so với cả triệu vector, ta học cách tìm láng giềng gần đúng bằng cách chia cụm. Hẹn gặp bạn ở bài tiếp theo."

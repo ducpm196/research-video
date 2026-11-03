@@ -1,0 +1,211 @@
+id: L02
+course: CLD
+series: "CLD · Hệ thống hướng dịch vụ"
+title: "Bài 2 — Ảnh container tái lập: lớp, bộ nhớ đệm khi dựng, ghim phiên bản"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/cld.yaml L02; audit/cld/verify_cld.py L02; Open Container Initiative, Image Format Specification v1.1 (2024), mục “Image Layer Filesystem Changeset”; Docker Docs, Optimize cache usage in builds (đọc 2026-10-28); Reproducible Builds project, Definitions (reproducible-builds.org)"
+assumes: [arith]
+# Quy ước: tệp mô tả dựng ảnh viết theo cú pháp phổ biến (FROM/COPY/RUN/CMD) trong <div class="code">; lời đọc mô tả bằng tiếng Việt.
+#   alg.build_cache mô phỏng bộ nhớ đệm: khoá mỗi bước = băm(khoá bước trước, lệnh, nội dung tệp bước đó đọc); một bước đổi khoá thì mọi bước
+#   sau cũng đổi. Bước đánh số từ 0 trong mô phỏng; trên màn hình đánh số từ 1.
+objectives:
+  - "Giải thích ảnh là chồng lớp"
+  - "Sắp các bước dựng để tận dụng bộ nhớ đệm"
+  - "Ghim phiên bản ảnh nền và thư viện"
+asr_reviewed:
+  - {sentence: "Số 3 đứng đầu là số của bản chính.", reason: "ASR chép “Số 3 đứng đầu là số của bạn 9.” (0.778): lệch âm/thanh thuần Việt: bản chính/bạn chín — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Chỉ đổi một chữ thành a b d, mã đổi hẳn, bắt đầu bằng a 5 2 d.", reason: "ASR chép “Chỉ đổi một chữ thành abv, mả đổi hẳn, bắt đầu bằng a52v.” (0.743): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: mã (trong “a b d mã” → “abv mả”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Hôm nay ta học về ảnh container, dựng nhanh nhờ bộ nhớ đệm, và tái lập được, tức cùng đầu vào thì cùng kết quả.", reason: "ASR chép “Hôm nay ta học về ảnh cần tenner, dựng nhanh nhờ bộ nhớ đệm và tái lập được, tức cùng đầu vào thì cùng kết quả.” (0.941): container đọc thô (probe CLD p1: 5/8, small viết “cần tên nơi”) — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Sửa một dòng, chờ cài lại cả thư viện"
+    checks:
+      - "alg.build_cache([('FROM python:3.12.4', []), ('COPY . .', ['main.py', 'requirements.txt']), ('RUN pip install', []), ('CMD', [])], {'main.py'}) == [1, 2, 3]"
+    steps:
+      - show: |
+          <p>Mỗi lần sửa một dòng mã, lệnh dựng ảnh lại cài toàn bộ thư viện từ đầu — mất năm phút. Lúc khác, cùng tệp mô tả dựng ra hai ảnh chạy khác nhau vì thư viện đã lên phiên bản mới.</p>
+          <div class="box key">Hôm nay: <b>ảnh container</b> — dựng nhanh nhờ bộ nhớ đệm, và <b>tái lập</b>: cùng đầu vào thì cùng kết quả.</div>
+        focus: [1, 1, 2]
+        say: "Chào bạn, mỗi lần sửa một dòng mã, lệnh dựng ảnh lại cài toàn bộ thư viện từ đầu, mất năm phút. Lúc khác, cùng một tệp mô tả lại dựng ra hai ảnh chạy khác nhau, vì thư viện đã lên phiên bản mới. Hôm nay ta học về ảnh container, dựng nhanh nhờ bộ nhớ đệm, và tái lập được, tức cùng đầu vào thì cùng kết quả."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: mã băm, số phiên bản, bộ nhớ đệm"
+    checks:
+      - "__import__('hashlib').sha256(b'abc').hexdigest()[:8] == 'ba7816bf' and __import__('hashlib').sha256(b'abd').hexdigest()[:8] == 'a52d159f'"
+      - "[int(x) for x in '3.12.4'.split('.')] == [3, 12, 4]"
+    steps:
+      - show: |
+          <table class="t"><tr><th>nội dung</th><th>mã băm, 8 ký tự đầu</th></tr>
+          <tr><td><code>abc</code></td><td><code>ba7816bf</code></td></tr>
+          <tr><td><code>abd</code> (đổi một chữ)</td><td><code>a52d159f</code></td></tr></table>
+          <p><b>Mã băm</b>: cùng nội dung luôn ra cùng mã; đổi một chữ thì mã đổi hẳn. Nên so mã băm là cách nhanh để biết “có gì đổi không”.</p>
+        focus: [2, "1.2", "1.3", 2]
+        say: "Bài này dựa vào ba ý quen thuộc. Thứ nhất là mã băm, cùng nội dung luôn ra cùng một mã, ví dụ chuỗi a b c cho mã bắt đầu bằng b a 7 8. Chỉ đổi một chữ thành a b d, mã đổi hẳn, bắt đầu bằng a 5 2 d. Vì vậy so mã băm là cách nhanh để biết có gì thay đổi hay không."
+      - show: |
+          <table class="t"><tr><th>số phiên bản <code>3.12.4</code></th><th>nghĩa</th></tr>
+          <tr><td>3</td><td>bản chính</td></tr><tr><td>12</td><td>bản phụ: thêm tính năng</td></tr><tr><td>4</td><td>bản vá lỗi</td></tr></table>
+          <p><b>Bộ nhớ đệm</b>: giữ lại kết quả đã tính; lần sau đầu vào giống hệt thì lấy kết quả cũ thay vì làm lại.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2, 2]
+        say: "Thứ hai là số phiên bản, ví dụ 3 chấm 12 chấm 4. Số 3 đứng đầu là số của bản chính. Số 12 là bản phụ, thường thêm tính năng. Số 4 đứng cuối là số của bản vá lỗi. Thứ ba là bộ nhớ đệm, tức giữ lại kết quả đã tính. Lần sau đầu vào giống hệt thì lấy kết quả cũ, thay vì làm lại từ đầu."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: ảnh, lớp, bộ nhớ đệm"
+    steps:
+      - show: |
+          <table class="t"><tr><th>khái niệm</th><th>nghĩa</th></tr>
+          <tr><td><b>ảnh</b></td><td>khuôn chỉ đọc để tạo container: hệ tệp + lệnh chạy mặc định</td></tr>
+          <tr><td><b>lớp</b></td><td>mỗi bước dựng tạo một lớp = các tệp bước đó thêm, sửa, xoá; ảnh = chồng các lớp</td></tr>
+          <tr><td><b>bộ nhớ đệm</b></td><td>bước có cùng lệnh, cùng tệp đầu vào, cùng lớp bên dưới → dùng lại lớp cũ, không chạy lại</td></tr></table>
+          <div class="box key">Một bước phải chạy lại thì <b>mọi bước sau nó</b> cũng phải chạy lại, vì lớp bên dưới đã đổi.</div>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Bảng giới thiệu ba khái niệm. Ảnh là khuôn chỉ đọc để tạo container, gồm hệ tệp và lệnh chạy mặc định. Lớp là kết quả của mỗi bước dựng, gồm các tệp bước đó thêm, sửa hay xoá, và ảnh là chồng các lớp. Bộ nhớ đệm cho phép một bước có cùng lệnh, cùng tệp đầu vào, cùng lớp bên dưới dùng lại lớp cũ mà không chạy lại. Một bước phải chạy lại thì mọi bước sau nó cũng phải chạy lại, vì lớp bên dưới đã đổi."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Ảnh là chồng lớp: đổi một lớp, các lớp trên dựng lại"
+    steps:
+      - show: |
+          <div><svg width="1500" height="380" viewBox="0 0 1500 380"><g font-size="22" fill="#1f2937"><text x="320" y="34" text-anchor="middle" font-weight="bold">thứ tự chưa tốt: sửa tệp mã</text><rect x="60" y="258" width="520" height="44" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="80" y="288">bước 1: ảnh nền</text><text x="560" y="288" text-anchor="end" font-size="20" fill="#059669">dùng lại</text><rect x="60" y="206" width="520" height="44" rx="6" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="80" y="236">bước 2: chép toàn bộ mã</text><text x="560" y="236" text-anchor="end" font-size="20" fill="#eb6834">chạy lại</text><rect x="60" y="154" width="520" height="44" rx="6" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="80" y="184">bước 3: cài thư viện</text><text x="560" y="184" text-anchor="end" font-size="20" fill="#eb6834">chạy lại</text><rect x="60" y="102" width="520" height="44" rx="6" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="80" y="132">bước 4: lệnh chạy</text><text x="560" y="132" text-anchor="end" font-size="20" fill="#eb6834">chạy lại</text><text x="1120" y="34" text-anchor="middle" font-weight="bold">thứ tự tốt: sửa tệp mã</text><rect x="860" y="258" width="520" height="44" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="880" y="288">bước 1: ảnh nền</text><text x="1360" y="288" text-anchor="end" font-size="20" fill="#059669">dùng lại</text><rect x="860" y="206" width="520" height="44" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="880" y="236">bước 2: chép danh sách thư viện</text><text x="1360" y="236" text-anchor="end" font-size="20" fill="#059669">dùng lại</text><rect x="860" y="154" width="520" height="44" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="880" y="184">bước 3: cài thư viện</text><text x="1360" y="184" text-anchor="end" font-size="20" fill="#059669">dùng lại</text><rect x="860" y="102" width="520" height="44" rx="6" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="880" y="132">bước 4: chép toàn bộ mã</text><text x="1360" y="132" text-anchor="end" font-size="20" fill="#eb6834">chạy lại</text><rect x="860" y="50" width="520" height="44" rx="6" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="880" y="80">bước 5: lệnh chạy</text><text x="1360" y="80" text-anchor="end" font-size="20" fill="#eb6834">chạy lại</text><line x1="40" y1="320" x2="1440" y2="320" stroke="#6b7280" stroke-width="2"/><text x="750" y="360" text-anchor="middle">lớp xếp từ dưới lên; một lớp đổi thì mọi lớp nằm trên nó phải dựng lại</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ ảnh như một chồng lớp xếp từ dưới lên, mỗi bước dựng là một lớp. Khi sửa tệp mã, lớp nào đọc tệp mã thì phải dựng lại, và mọi lớp nằm trên nó cũng phải dựng lại, vì lớp bên dưới đã đổi. Bên trái, lớp chép toàn bộ mã nằm ngay trên ảnh nền, nên cả lớp cài thư viện cũng màu cam, phải chạy lại. Bên phải, lớp cài thư viện nằm dưới lớp chép mã, nên vẫn màu xanh, được dùng lại."
+
+  - id: example
+    kind: example
+    title: "Thứ tự bước quyết định thời gian dựng"
+    checks:
+      - "alg.build_cache([('FROM python:3.12.4', []), ('COPY requirements.txt', ['requirements.txt']), ('RUN pip install', []), ('COPY . .', ['main.py', 'requirements.txt']), ('CMD', [])], {'main.py'}) == [3, 4]"
+      - "alg.build_cache([('FROM python:3.12.4', []), ('COPY . .', ['main.py', 'requirements.txt']), ('RUN pip install', []), ('CMD', [])], {'main.py'}) == [1, 2, 3]"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thứ tự chưa tốt</th><th>thứ tự tốt</th></tr>
+          <tr><td><div class="code"><div>1 FROM python:3.12.4</div><div>2 COPY . .</div><div>3 RUN pip install …</div><div>4 CMD …</div></div></td>
+          <td><div class="code"><div>1 FROM python:3.12.4</div><div>2 COPY requirements.txt .</div><div>3 RUN pip install …</div><div>4 COPY . .</div><div>5 CMD …</div></div></td></tr></table>
+        focus: [1, "1.2", "1.2"]
+        say: "Bước một, bảng so hai cách sắp bước dựng. Cách chưa tốt chép toàn bộ mã nguồn vào ngay sau ảnh nền, rồi mới cài thư viện. Cách tốt chép riêng tệp danh sách thư viện, cài thư viện, rồi mới chép mã nguồn."
+      - show: |
+          <table class="t"><tr><th>thứ tự chưa tốt, sửa <code>main.py</code></th><th>đọc tệp vừa sửa?</th><th>lớp dưới đổi?</th><th>chạy lại?</th></tr>
+          <tr><td>bước 1: ảnh nền</td><td>không</td><td>không</td><td>dùng lại</td></tr>
+          <tr><td>bước 2: chép toàn bộ mã</td><td><b>có</b></td><td>không</td><td><b>chạy lại</b></td></tr>
+          <tr><td>bước 3: cài thư viện</td><td>không</td><td><b>có</b></td><td><b>chạy lại</b></td></tr>
+          <tr><td>bước 4: lệnh chạy</td><td>không</td><td><b>có</b></td><td><b>chạy lại</b></td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bước hai, xét từng bước của cách chưa tốt khi ta sửa tệp mã chính. Bước 1 là ảnh nền, không đọc tệp nào đổi, nên dùng lại. Bước 2 chép toàn bộ mã, có đọc tệp vừa sửa, nên phải chạy lại. Bước 3 cài thư viện không đọc tệp đó, nhưng lớp bên dưới đã đổi, nên cũng chạy lại. Bước 4 cũng vậy, nên cách chưa tốt chạy lại bước 2, 3 và 4."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>thứ tự tốt, sửa <code>main.py</code></th><th>đọc tệp vừa sửa?</th><th>lớp dưới đổi?</th><th>chạy lại?</th></tr>
+          <tr><td>bước 1–3: ảnh nền, danh sách, cài thư viện</td><td>không</td><td>không</td><td>dùng lại</td></tr>
+          <tr><td>bước 4: chép toàn bộ mã</td><td><b>có</b></td><td>không</td><td><b>chạy lại</b></td></tr>
+          <tr><td>bước 5: lệnh chạy</td><td>không</td><td><b>có</b></td><td><b>chạy lại</b></td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Bước ba, làm tương tự với cách tốt. Ba bước đầu gồm ảnh nền, chép danh sách và cài thư viện đều không đọc tệp mã chính, nên được dùng lại. Bước 4 chép toàn bộ mã nên phải chạy lại. Bước 5 chạy lại vì lớp bên dưới đã đổi, nên cách tốt chỉ chạy lại bước 4 và 5."
+      - show: |
+          <table class="t"><tr><th>giả sử: cài thư viện 300 s, chép mã 2 s, các bước khác ≈ 0 s</th><th>một lần sửa</th><th>10 lần sửa</th></tr>
+          <tr><td>thứ tự chưa tốt: bước 2, 3, 4</td><td>$2 + 300 = 302$ s</td><td>$10 \cdot 302 = 3020$ s ≈ 50 phút</td></tr>
+          <tr><td>thứ tự tốt: bước 4, 5</td><td>$\hl{2}$ s</td><td>$10 \cdot 2 = 20$ s</td></tr></table>
+          <div class="box key"><b>Bước 4</b> — đặt thứ <b>ít thay đổi</b> (ảnh nền, danh sách thư viện) lên trước, thứ <b>hay thay đổi</b> (mã nguồn) xuống sau.</div>
+        introduces: [cdot]
+        focus: [1, "1.2", "1.3", 2]
+        say: "Bước bốn, đổi ra thời gian, giả sử cài thư viện mất 300 giây như ở đầu bài, chép mã mất 2 giây, các bước khác gần như không tốn. Cách chưa tốt mất 302 giây mỗi lần sửa, 10 lần sửa là 3020 giây, khoảng 50 phút chờ. Cách tốt chỉ mất 2 giây mỗi lần, 10 lần là 20 giây. Vậy hãy đặt thứ ít thay đổi như ảnh nền và danh sách thư viện lên trước, thứ hay thay đổi như mã nguồn xuống sau."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác"
+    checks:
+      - "alg.build_cache([('FROM python:3.12.4', []), ('COPY . .', ['main.py', 'requirements.txt']), ('RUN pip install', []), ('CMD', [])], {'main.py'}) == list(range(1, 4)) and alg.build_cache([('FROM python:3.12.4', []), ('COPY requirements.txt', ['requirements.txt']), ('RUN pip install', []), ('COPY . .', ['main.py', 'requirements.txt']), ('CMD', [])], {'main.py'}) == list(range(3, 5))"
+      - "(lambda s, c: len(s) - next(i for i, (_, f) in enumerate(s) if set(f) & c))([('FROM python:3.12.4', []), ('COPY . .', ['main.py', 'requirements.txt']), ('RUN pip install', []), ('CMD', [])], {'main.py'}) == 3 and (lambda s, c: len(s) - next(i for i, (_, f) in enumerate(s) if set(f) & c))([('FROM python:3.12.4', []), ('COPY requirements.txt', ['requirements.txt']), ('RUN pip install', []), ('COPY . .', ['main.py', 'requirements.txt']), ('CMD', [])], {'main.py'}) == 2"
+      - "10 * (2 + 300) == 3020 and round(3020 / 60) == 50 and 10 * 2 == 20"
+    steps:
+      - show: |
+          <table class="t"><tr><th>kiểm</th><th>cách khác</th><th>kết quả</th></tr>
+          <tr><td>số bước chạy lại, chưa tốt</td><td>bước đầu tiên đọc tệp đổi là bước 2 trong 4: $4 - 2 + 1$</td><td>3 bước ✓</td></tr>
+          <tr><td>số bước chạy lại, tốt</td><td>bước đầu tiên đọc tệp đổi là bước 4 trong 5: $5 - 4 + 1$</td><td>2 bước ✓</td></tr>
+          <tr><td>50 phút</td><td>$\frac{3020}{60} \approx 50{,}3$</td><td>≈ 50 phút ✓</td></tr></table>
+        introduces: [frac, approx]
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Kiểm bằng đường khác, không cần dò từng bước, vì chỉ cần tìm bước đầu tiên đọc tệp vừa đổi. Cách chưa tốt có 4 bước, bước đầu tiên đọc tệp mã là bước 2, nên số bước chạy lại là 4 trừ 2 cộng 1, bằng 3. Cách tốt có 5 bước, bước đầu tiên đọc tệp mã là bước 4, nên chạy lại 5 trừ 4 cộng 1, bằng 2 bước. Chia 3020 giây cho 60 được khoảng 50 phẩy 3, khớp với khoảng 50 phút."
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc, 1 lỗi người đã đi làm"
+    checks:
+      - "0 + 0 + 300 + 2 + 0 == 302 and 10 * 302 == 3020 and 10 * 2 == 20"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Dùng thẻ <code>latest</code> cho ảnh nền <b class="red">(không tái lập)</b>
+          <br><span class="note">“latest” là một <b>nhãn di động</b>, không phải phiên bản: hôm nay và tháng sau trỏ tới hai ảnh khác nhau. Ghim phiên bản cụ thể, tốt nhất ghim cả mã băm nội dung.</span></div>
+        say: "Lỗi thứ nhất, dùng thẻ mới nhất cho ảnh nền. Thẻ đó là một nhãn di động, không phải phiên bản, hôm nay và tháng sau có thể trỏ tới hai ảnh khác nhau. Hãy ghim phiên bản cụ thể, tốt nhất ghim cả mã băm nội dung."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Không ghim phiên bản thư viện <b class="red">(lệch ngầm)</b>
+          <br><span class="note">Danh sách chỉ ghi tên thư viện: mỗi lần dựng lấy bản mới nhất. Dùng tệp khoá phiên bản chính xác để hai lần dựng cài đúng cùng các bản.</span></div>
+        say: "Lỗi thứ hai, không ghim phiên bản thư viện. Danh sách chỉ ghi tên thư viện thì mỗi lần dựng lấy bản mới nhất. Hãy dùng tệp khoá phiên bản chính xác, để hai lần dựng cài đúng cùng các bản."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Đưa cả công cụ dựng vào ảnh chạy <b class="red">(ảnh nặng, nhiều lỗ hổng)</b>
+          <br><span class="note">Trình biên dịch, mã nguồn thử nghiệm, bộ nhớ đệm tải về đều nằm lại trong ảnh. Dựng nhiều giai đoạn: giai đoạn dựng tạo kết quả, giai đoạn chạy chỉ chép kết quả.</span></div>
+        say: "Lỗi thứ ba, đưa cả công cụ dựng vào ảnh chạy. Trình biên dịch, mã thử nghiệm, bộ nhớ đệm tải về đều nằm lại trong ảnh. Hãy dựng nhiều giai đoạn, giai đoạn dựng tạo kết quả, còn giai đoạn chạy chỉ chép kết quả sang."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Sắp đúng thứ tự rồi mà máy dựng tự động vẫn chậm <b class="red">(bộ nhớ đệm trống)</b></div>
+          <table class="t"><tr><th>thứ tự tốt, cùng giả sử thời gian như trên</th><th>một lần dựng</th><th>10 lần dựng</th></tr>
+          <tr><td>máy dựng mới tinh mỗi lần, bộ nhớ đệm trống</td><td>chạy cả 5 bước: $0 + 0 + 300 + 2 + 0 = 302$ s</td><td>3020 s</td></tr>
+          <tr><td>lưu bộ nhớ đệm và nạp lại ở lần dựng sau</td><td>chỉ bước 4, 5: 2 s</td><td>20 s</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", 0]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, sắp đúng thứ tự rồi mà máy dựng tự động vẫn chậm. Lý do là nhiều hệ thống dựng tự động cấp một máy mới tinh cho mỗi lần dựng, nên bộ nhớ đệm luôn trống. Khi đó dù thứ tự tốt, cả 5 bước vẫn chạy, nên mỗi lần dựng tốn 302 giây như thứ tự chưa tốt. Nếu lưu bộ nhớ đệm và nạp lại ở lần dựng sau, chỉ còn 2 giây. Người làm nghề đo xem bước nào thật sự được dùng lại, chứ không chỉ tin vào thứ tự trên giấy."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.build_cache([('FROM python:3.12.4', []), ('COPY requirements.txt', ['requirements.txt']), ('RUN pip install', []), ('COPY . .', ['main.py', 'requirements.txt']), ('CMD', [])], {'requirements.txt'}) == [1, 2, 3, 4]"
+    steps:
+      - show: |
+          <p>Với <b>thứ tự tốt</b> ở trên (5 bước):</p>
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Thêm một thư viện vào <code>requirements.txt</code>: những bước nào chạy lại?</td></tr>
+          <tr><td>2</td><td>Không sửa gì, dựng lại: những bước nào chạy lại?</td></tr></table>
+        focus: [1, "2.2", "2.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm với thứ tự tốt ở trên, gồm 5 bước. Câu một, thêm một thư viện vào tệp danh sách, những bước nào chạy lại? Câu hai, không sửa gì mà dựng lại, những bước nào chạy lại? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <table class="t"><tr><th>sửa danh sách thư viện</th><th>đọc tệp vừa sửa?</th><th>chạy lại?</th></tr>
+          <tr><td>bước 1: ảnh nền</td><td>không</td><td>dùng lại</td></tr>
+          <tr><td>bước 2: chép danh sách</td><td><b>có</b> — bước đầu tiên đọc tệp đổi</td><td><b>chạy lại</b></td></tr>
+          <tr><td>bước 3, 4, 5</td><td>lớp dưới đã đổi</td><td><b>chạy lại</b></td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.4"]
+        say: "Câu một, ta tìm bước đầu tiên đọc tệp vừa sửa. Bước 1 là ảnh nền, không đọc, nên dùng lại. Bước 2 chép tệp danh sách, chính là tệp vừa sửa, nên chạy lại. Từ đó bước 3, 4 và 5 đều chạy lại vì lớp bên dưới đã đổi. Đáp án câu một, bước 2 đọc tệp đó nên chạy lại bước 2, 3, 4 và 5, cài lại thư viện là đúng vì danh sách đã đổi."
+      - show: |
+          <p>② Không tệp nào đổi → mọi bước có cùng lệnh, cùng tệp đầu vào, cùng lớp bên dưới → khoá trùng hết.</p>
+          <div class="box key"><b>Không bước nào</b> chạy lại: dùng lại toàn bộ lớp cũ.</div>
+        focus: [1, 2]
+        say: "Câu hai, không tệp nào đổi, nên mỗi bước có cùng lệnh, cùng tệp đầu vào và cùng lớp bên dưới như lần trước. Vì vậy không bước nào chạy lại, mọi khoá đều trùng nên dùng lại toàn bộ lớp cũ."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">ảnh = chồng lớp</span><span class="a">→</span>
+          <span class="n">một bước đổi: mọi bước sau chạy lại</span><span class="a">→</span>
+          <span class="n">ít đổi trước, hay đổi sau</span><span class="a">→</span>
+          <span class="n">ghim phiên bản để tái lập</span></div>
+        say: "Tổng kết lại, ảnh là chồng các lớp, một bước đổi thì mọi bước sau phải chạy lại. Hãy đặt thứ ít đổi lên trước, thứ hay đổi xuống sau, và ghim phiên bản để tái lập."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> một bản dựng đáng tin là bản dựng mà người khác, ở chỗ khác, tháng sau, chạy lại vẫn ra đúng thứ đó.</div>
+        say: "Điều cần mang theo, một bản dựng đáng tin là bản dựng mà người khác, ở chỗ khác, tháng sau chạy lại vẫn ra đúng thứ đó."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 3): <b>giao tiếp giữa dịch vụ</b> — đồng bộ, bất đồng bộ, độ sẵn sàng của chuỗi gọi.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 3, ta học giao tiếp giữa dịch vụ, đồng bộ, bất đồng bộ, và độ sẵn sàng của chuỗi gọi. Hẹn gặp bạn ở bài tiếp theo."

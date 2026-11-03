@@ -1,0 +1,200 @@
+id: L03
+course: ESY
+series: "ESY · Hệ thống nhúng và thời gian thực"
+title: "Bài 3 — Bộ định thời và điều chế độ rộng xung"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/esy.yaml L03; audit/esy/verify_esy.py L03; Microchip, ATmega328P datasheet, mục 15 (Timer/Counter0); E. A. Lee, S. A. Seshia, Introduction to Embedded Systems (2017), mục 10.1"
+assumes: [arith, cdot, frac, approx, ltgt]
+# Quy ước: bộ đếm tăng 0, 1, …, TOP rồi về 0 (TOP + 1 nhịp mỗi chu kỳ); f_clk xung nhịp, N hệ số chia trước.
+#   Mô hình PWM tổng quát: chân ra mức cao khi bộ đếm < CMP, nên độ rộng xung = CMP / (TOP + 1). Một số chip giữ mức cao thêm
+#   một nhịp (CMP + 1) — nói rõ ở lỗi 3, đọc sơ đồ của nhà sản xuất. Mọi số do alg.timer_freq / Python tính trong checks.
+objectives:
+  - "Tính tần số bộ định thời từ xung nhịp, hệ số chia và TOP"
+  - "Tính độ rộng xung PWM"
+  - "Dùng PWM điều khiển độ sáng, tốc độ động cơ"
+asr_reviewed:
+  - {sentence: "Câu một, xung nhịp 8 mê-ga-héc, hệ số chia trước 8, cần TOP bằng bao nhiêu để được một nghìn héc?", reason: "ASR chép “xuân nhịp 8 MHz … cần tốt bằng bao nhiêu để được 1000 Hz”: “mê-ga-héc” → MHz, “héc” → Hz là đúng đơn vị viết tắt; xung/xuân nhầm vần (cùng nhầm ở L08); TOP đọc thô, chữ TOP hiện trên màn hình"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Chân số chỉ có bật và tắt, sao làm đèn sáng một phần tư?"
+    steps:
+      - show: |
+          <p>Chân ra của vi điều khiển chỉ có hai mức: 0 V hoặc 5 V. Vậy làm sao cho đèn sáng mờ, hay động cơ quay chậm?</p>
+          <div class="box key">Hôm nay: <b>bộ định thời</b> tạo nhịp chính xác, và <b>điều chế độ rộng xung</b> — bật tắt thật nhanh, thay đổi tỉ lệ thời gian bật.</div>
+        focus: [1, 1, 2]
+        say: "Chào bạn, chân ra của vi điều khiển chỉ có hai mức, 0 vôn hoặc 5 vôn. Vậy làm sao cho đèn sáng mờ, hay cho động cơ quay chậm? Hôm nay ta học bộ định thời, thứ tạo nhịp chính xác, và điều chế độ rộng xung, tức bật tắt thật nhanh và thay đổi tỉ lệ thời gian bật."
+
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: tần số và chu kỳ, đếm cả số 0, trung bình theo thời gian"
+    checks:
+      - "1 / 1000 == 0.001 and 1 / 50 == 0.02 and 1000 / 50 == 20"
+      - "len(range(0, 10)) == 10 and len(range(0, 250)) == 250 == 249 + 1"
+      - "(5 * 1 + 0 * 3) / 4 == 1.25 and 5 * 1 / 4 == 1.25"
+    steps:
+      - show: |
+          <table class="t"><tr><th>tần số</th><th>chu kỳ = 1 chia tần số</th></tr>
+          <tr><td>1000 lần mỗi giây (1 kHz)</td><td>$\frac{1}{1000}$ giây = 1 ms</td></tr>
+          <tr><td>50 lần mỗi giây</td><td>$\frac{1}{50}$ giây = 20 ms</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Trước hết, ôn lại tần số và chu kỳ, hai đại lượng nghịch đảo của nhau, chu kỳ bằng 1 chia tần số. Một việc lặp lại 1000 lần mỗi giây, tức một ki-lô-héc, thì mỗi lần kéo dài một phần nghìn giây, bằng 1 mi li giây. Lặp lại 50 lần mỗi giây thì mỗi lần kéo dài một phần năm mươi giây, bằng 20 mi li giây."
+      - show: |
+          <p><b>Đếm cả số 0:</b> từ 0 đến 9 có $9 + 1 = 10$ số, không phải 9. Từ 0 đến 249 có $249 + 1 = 250$ số.</p>
+        say: "Tiếp theo, một chỗ rất dễ đếm nhầm, từ 0 đến 9 có bao nhiêu số? Có 10 số chứ không phải 9, vì phải đếm cả số 0. Tương tự, từ 0 đến 249 có 249 cộng 1, bằng 250 số."
+      - show: |
+          <p><b>Trung bình theo thời gian:</b> 5 V trong 1 ms rồi 0 V trong 3 ms, lặp lại mãi → trung bình $\dfrac{5 \cdot 1 + 0 \cdot 3}{4} = 1{,}25$ V.</p>
+        say: "Cuối cùng là trung bình theo thời gian, ví dụ một tín hiệu ở 5 vôn trong 1 mi li giây, rồi 0 vôn trong 3 mi li giây, cứ thế lặp lại mãi. Trong mỗi 4 mi li giây, tổng là 5 nhân 1 cộng 0 nhân 3, chia cho 4 được 1 phẩy 25 vôn, đó là mức mà một thiết bị chậm cảm nhận được."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: bộ đếm, chia trước, TOP"
+    checks:
+      - "alg.timer_freq(16e6, 64, 249) == 1000"
+      - "16e6 / 64 == 250000"
+    steps:
+      - show: |
+          <p>Bộ định thời là một <b>bộ đếm</b> tăng 1 sau mỗi $N$ nhịp xung nhịp ($N$: hệ số chia trước). Đếm tới <b>TOP</b> thì quay về 0: mỗi chu kỳ có $\text{TOP} + 1$ lần đếm.</p>
+          <p>$f = \dfrac{f_{\text{clk}}}{N \cdot (\text{TOP} + 1)}$</p>
+          <p>Thử: 16 MHz, $N = 64$, TOP = 249: bộ đếm tăng $16\,000\,000 / 64 = 250\,000$ lần mỗi giây; chia cho 250 → $\hl{1000}$ chu kỳ mỗi giây (1 kHz).</p>
+        introduces: [sub]
+        focus: [1, 1, 2, 3, 3]
+        say: "Bộ định thời là một bộ đếm, cứ sau N nhịp của xung nhịp thì tăng 1, N gọi là hệ số chia trước. Đếm tới một giá trị TOP thì quay về 0, nên mỗi chu kỳ có TOP cộng 1 lần đếm. Vì thế tần số bằng tần số xung nhịp chia cho N nhân TOP cộng 1. Thử với xung nhịp 16 mê-ga-héc, N bằng 64, TOP bằng 249. Bộ đếm tăng hai trăm năm mươi nghìn lần mỗi giây, chia cho 250 được một nghìn chu kỳ mỗi giây."
+
+  - id: intuition
+    kind: intuition
+    title: "Từ 16 triệu nhịp xuống 1000 vòng mỗi giây"
+    checks:
+      - "16_000_000 // 64 == 250000 and 250000 // 250 == 1000 and 1e6 / 250000 == 4 and 250 * 4 == 1000"
+      - "round(16e6 / (64 * 249)) == 1004"
+    steps:
+      - show: |
+          <div><svg width="1500" height="330" viewBox="0 0 1500 330"><defs><marker id="arE3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs><g fill="#1f2937"><rect x="30" y="60" width="250" height="110" rx="10" fill="#e5e7eb" stroke="#6b7280" stroke-width="3"/><text x="155" y="105" text-anchor="middle" font-size="21" font-weight="bold">xung nhịp</text><text x="155" y="142" text-anchor="middle" font-size="20">16 000 000 nhịp/giây</text><line x1="282" y1="115" x2="318" y2="115" stroke="#1f2937" stroke-width="3" marker-end="url(#arE3)"/><rect x="322" y="60" width="250" height="110" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="447" y="105" text-anchor="middle" font-size="21" font-weight="bold">chia trước N = 64</text><text x="447" y="142" text-anchor="middle" font-size="20">16 000 000 : 64</text><line x1="574" y1="115" x2="610" y2="115" stroke="#1f2937" stroke-width="3" marker-end="url(#arE3)"/><rect x="614" y="60" width="250" height="110" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="739" y="105" text-anchor="middle" font-size="21" font-weight="bold">bộ đếm tăng</text><text x="739" y="142" text-anchor="middle" font-size="20">250 000 lần/giây</text><line x1="866" y1="115" x2="902" y2="115" stroke="#1f2937" stroke-width="3" marker-end="url(#arE3)"/><rect x="906" y="60" width="250" height="110" rx="10" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="1031" y="105" text-anchor="middle" font-size="21" font-weight="bold">đếm 0 đến TOP = 249</text><text x="1031" y="142" text-anchor="middle" font-size="20">250 lần mỗi vòng</text><line x1="1158" y1="115" x2="1194" y2="115" stroke="#1f2937" stroke-width="3" marker-end="url(#arE3)"/><rect x="1198" y="60" width="250" height="110" rx="10" fill="#d1fae5" stroke="#059669" stroke-width="3"/><text x="1323" y="105" text-anchor="middle" font-size="21" font-weight="bold">tràn bộ đếm</text><text x="1323" y="142" text-anchor="middle" font-size="20">1000 vòng/giây</text><text x="30" y="230" font-size="22">mỗi lần đếm cách nhau 1 : 250 000 giây = 4 phần triệu giây</text><text x="30" y="270" font-size="22">một vòng 0 đến 249 = 250 lần đếm x 4 phần triệu giây = 1 ms, tức 1000 vòng mỗi giây</text><text x="30" y="310" font-size="22" fill="#b91c1c">nếu quên số 0 và chia cho 249: 1004 vòng mỗi giây, sai</text></g></svg></div>
+        say: "Hình vẽ đường đi của nhịp đồng hồ qua bộ định thời, từ trái sang phải. Xung nhịp 16 triệu nhịp mỗi giây đi qua bộ chia trước 64, nên bộ đếm chỉ tăng 250 nghìn lần mỗi giây, mỗi lần cách nhau 4 phần triệu giây. Bộ đếm chạy từ 0 đến 249, tức 250 lần đếm mỗi vòng, nên một vòng mất đúng 1 mi li giây và có 1000 vòng mỗi giây. Dòng đỏ ở dưới nhắc rằng quên số 0 mà chia cho 249 thì ra 1004 vòng, sai."
+
+  # ───────────────────────── 3. PWM ─────────────────────────
+  - id: pwm
+    kind: example
+    title: "Điều chế độ rộng xung"
+    checks:
+      - "[1 if c < 3 else 0 for c in range(10)].count(1) == 3 and [1 if c < 7 else 0 for c in range(10)].count(1) == 7"
+      - "round(63 / 250, 3) == 0.252 and round(0.252 * 5, 2) == 1.26"
+      - "250 - 63 == 187 and 187 * 4 == 748 and len(range(0, 63)) == 63 and len(range(63, 250)) == 187"
+      - "63 * 4 == 252 and round(1 - 0.252, 3) == 0.748 and round(5 * 0.252 + 0 * 0.748, 2) == 1.26"
+    steps:
+      - show: |
+          <div>{{PWM}}</div>
+          <p><b>Bước 1 — luật so sánh:</b> thêm giá trị so sánh CMP: chân ra ở mức cao khi bộ đếm $\lt$ CMP. Hình thu nhỏ TOP = 9: CMP = 3 → cao 3 trên 10 lần đếm; CMP = 7 → cao 7 trên 10.</p>
+        focus: [1, 2, 2]
+        say: "Hình vẽ thu nhỏ với TOP bằng 9. Bước một, thêm một giá trị so sánh, chân ra ở mức cao khi bộ đếm nhỏ hơn giá trị so sánh. Giá trị so sánh bằng 3 cho mức cao 3 phần 10 thời gian, bằng 7 cho 7 phần 10."
+      - show: |
+          <p><b>Bước 2 — độ rộng xung:</b> tỉ lệ thời gian mức cao $= \dfrac{\text{CMP}}{\text{TOP} + 1}$. Ví dụ thật: TOP = 249, CMP = 63 → $\frac{63}{250} = \hl{25{,}2\%}$.</p>
+        say: "Bước hai, tỉ lệ thời gian ở mức cao bằng giá trị so sánh chia TOP cộng 1, gọi là độ rộng xung. Với ví dụ thật, TOP bằng 249 và giá trị so sánh bằng 63, độ rộng xung là 25 phẩy 2 phần trăm."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — đổi ra thời gian</b> (một vòng 1 ms, mỗi lần đếm 4 phần triệu giây):</p>
+          <table class="t"><tr><th>mức</th><th>số lần đếm</th><th>thời gian</th></tr>
+          <tr><td>cao (đếm 0 đến 62)</td><td>63</td><td>$63 \cdot 4 = 252$ phần triệu giây $= 0{,}252$ ms</td></tr>
+          <tr><td>thấp (đếm 63 đến 249)</td><td>187</td><td>$1 - 0{,}252 = 0{,}748$ ms</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước ba, đổi ra thời gian thật, một vòng dài 1 mi li giây, mỗi lần đếm 4 phần triệu giây. Mức cao ứng với bộ đếm từ 0 đến 62, tức 63 lần đếm, nhân 4 được 252 phần triệu giây, bằng 0 phẩy 252 mi li giây. Mức thấp ứng với bộ đếm từ 63 đến 249, tức 187 lần đếm, chiếm phần còn lại là 0 phẩy 748 mi li giây."
+      - show: |
+          <p><b>Bước 4 — điện áp trung bình:</b> $\dfrac{5 \cdot 0{,}252 + 0 \cdot 0{,}748}{1} = 0{,}252 \cdot 5 \approx 1{,}26$ V.</p>
+        say: "Bước bốn, tính điện áp trung bình theo thời gian như phần chuẩn bị, 5 vôn trong 0 phẩy 252 mi li giây, 0 vôn trong phần còn lại. Chia cho một vòng 1 mi li giây, điện áp trung bình khoảng 1 phẩy 26 vôn."
+      - clear: true
+        show: |
+          <div class="box key">Bật tắt 1000 lần mỗi giây, mắt không thấy nhấp nháy, động cơ không kịp dừng: chúng chỉ “cảm” được <b>trung bình</b>. Đổi CMP là đổi độ sáng, đổi tốc độ.</div>
+        say: "Bật tắt một nghìn lần mỗi giây thì mắt không thấy nhấp nháy, động cơ không kịp dừng lại, chúng chỉ cảm được giá trị trung bình. Vì thế đổi giá trị so sánh là đổi độ sáng, đổi tốc độ."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: cho bộ đếm chạy 10 vòng rồi đếm mức cao"
+    checks:
+      - "(lambda cnt: (len(cnt), sum(1 for c in cnt if c < 63)))([k % 250 for k in range(2500)]) == (2500, 630)"
+      - "630 / 2500 == 0.252 and round(630 * 5 / 2500, 2) == 1.26"
+    steps:
+      - show: |
+          <table class="t"><tr><th>cách khác: mô phỏng</th><th>kết quả</th></tr>
+          <tr><td>cho bộ đếm chạy 10 vòng: 0, 1, …, 249, 0, 1, …</td><td>2500 lần đếm</td></tr>
+          <tr><td>đếm những lần bộ đếm $\lt$ 63 (chân ở mức cao)</td><td>630 lần</td></tr>
+          <tr><td>tỉ lệ và điện áp trung bình</td><td>$\frac{630}{2500} = 25{,}2\%$; $\frac{630 \cdot 5}{2500} = 1{,}26$ V ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Kiểm bằng đường khác, vì công thức có thể chép sai, ta không dùng công thức mà cho máy chạy bộ đếm thật 10 vòng liền. Mười vòng, mỗi vòng 250 lần, tổng cộng 2500 lần đếm. Đếm những lần bộ đếm nhỏ hơn 63, tức chân đang ở mức cao, được 630 lần. Tỉ lệ 630 trên 2500 đúng bằng 25 phẩy 2 phần trăm, và điện áp trung bình 1 phẩy 26 vôn, khớp với công thức."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi người mới hay mắc"
+    checks:
+      - "round(16e6 / (64 * 249), 1) == 1004.0"
+      - "5.7 < (16e6 / (64 * 249) - 1000) / 1000 * 86400 / 60 < 5.8"
+      - "round(64 / 250, 3) == 0.256"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Lệch một ở TOP <b class="red">(sai)</b>
+          <br><span class="note">Chu kỳ là TOP + 1 lần đếm. Chia cho 249 thay vì 250 ra 1004 Hz, lệch 0,4% — đồng hồ chạy sai mỗi ngày gần 6 phút.</span></div>
+          <table class="t"><tr><th>chia cho</th><th>tần số tính ra</th><th>sai mỗi ngày</th></tr><tr><td>250 (đúng)</td><td>1000 Hz</td><td>0</td></tr><tr><td>249 (lệch một)</td><td>1004 Hz</td><td>gần 6 phút</td></tr></table>
+        focus: [1, 1, 2]
+        say: "Lỗi thứ nhất, lệch một ở TOP. Chu kỳ có TOP cộng 1 lần đếm. Chia cho 249 thay vì 250 cho ra một nghìn lẻ bốn héc, lệch 0 phẩy 4 phần trăm, một chiếc đồng hồ sẽ sai gần 6 phút mỗi ngày."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Quên hệ số chia trước <b class="red">(sai)</b>
+          <br><span class="note">Bỏ $N = 64$ thì tần số tính ra lớn gấp 64 lần.</span></div>
+        say: "Lỗi thứ hai, quên hệ số chia trước. Bỏ mất N bằng 64 thì tần số tính ra lớn gấp 64 lần."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Chép công thức độ rộng xung mà không đọc sơ đồ chip <b class="red">(thiếu)</b>
+          <br><span class="note">Có chip giữ mức cao thêm một nhịp: $\frac{\text{CMP} + 1}{\text{TOP} + 1} = 64 / 250 = 25{,}6\%$. Kiểm trên sơ đồ thời gian của nhà sản xuất.</span></div>
+        say: "Lỗi thứ ba, chép công thức độ rộng xung mà không đọc sơ đồ của chip. Có chip giữ mức cao thêm một nhịp, khi đó độ rộng xung là 64 phần 250, tức 25 phẩy 6 phần trăm, nên phải kiểm trên sơ đồ thời gian của nhà sản xuất."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Chọn tần số PWM quá thấp <b class="red">(sai)</b>
+          <br><span class="note">Vài chục héc thì mắt thấy đèn nhấp nháy, động cơ rung giật. Chọn đủ cao so với thứ đang điều khiển.</span></div>
+        say: "Lỗi thứ tư, chọn tần số điều chế quá thấp. Chỉ vài chục héc thì mắt thấy đèn nhấp nháy, động cơ rung giật, nên phải chọn đủ cao so với thứ đang được điều khiển."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "8e6 / (8 * 1000) - 1 == 999 and alg.timer_freq(8e6, 8, 999) == 1000"
+      - "500 / (999 + 1) == 0.5"
+      - "8_000_000 // 8 == 1_000_000 and 1_000_000 // 1000 == 1000 and 0.5 * 5 == 2.5"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Xung nhịp 8 MHz, chia trước 8. Cần TOP bằng bao nhiêu để được 1 kHz?</td></tr>
+          <tr><td>2</td><td>Muốn độ rộng xung 50%, đặt CMP bằng bao nhiêu?</td></tr>
+          <tr><td>3</td><td>Nguồn 5 V: điện áp trung bình ở câu 2 là bao nhiêu?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, xung nhịp 8 mê-ga-héc, hệ số chia trước 8, cần TOP bằng bao nhiêu để được một nghìn héc? Câu hai, muốn độ rộng xung 50 phần trăm thì đặt giá trị so sánh bằng bao nhiêu? Câu ba, với nguồn 5 vôn, điện áp trung bình ở câu hai là bao nhiêu vôn? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <p>① $\text{TOP} + 1 = \dfrac{8\,000\,000}{8 \cdot 1000} = 1000$ → TOP = $\hl{999}$. Thử lại: $8\,000\,000 : 8 = 1\,000\,000$ lần đếm mỗi giây, chia 1000 lần mỗi vòng → 1000 vòng mỗi giây ✓.</p>
+        say: "Đáp án câu một, TOP cộng 1 bằng 8 triệu chia cho 8 nhân một nghìn, tức một nghìn, nên TOP bằng 999. Thử lại theo chiều xuôi, 8 triệu chia 8 là một triệu lần đếm mỗi giây, chia cho một nghìn lần đếm mỗi vòng thì được đúng một nghìn vòng mỗi giây."
+      - show: |
+          <p>② CMP = $0{,}5 \cdot (\text{TOP} + 1) = 0{,}5 \cdot 1000 = \hl{500}$ (không phải $0{,}5 \cdot 999$).</p>
+          <p>③ Điện áp trung bình $\approx 0{,}5 \cdot 5 = \hl{2{,}5}$ V.</p>
+        focus: [1, 1, 2]
+        say: "Câu hai, giá trị so sánh bằng một nửa của TOP cộng 1, tức một nửa của một nghìn, bằng 500. Nhớ nhân với TOP cộng 1 chứ không nhân với 999. Câu ba, nửa thời gian 5 vôn và nửa thời gian 0 vôn, nên điện áp trung bình khoảng 2 phẩy 5 vôn."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">bộ đếm 0 … TOP</span><span class="a">→</span>
+          <span class="n">$f = f_{\text{clk}} / (N(\text{TOP} + 1))$</span><span class="a">→</span>
+          <span class="n">mức cao khi đếm $\lt$ CMP</span><span class="a">→</span>
+          <span class="n">trung bình = độ rộng xung nhân nguồn</span></div>
+        say: "Tổng kết lại, bộ định thời đếm từ 0 tới TOP, tần số bằng xung nhịp chia N nhân TOP cộng 1. Chân ra ở mức cao khi bộ đếm nhỏ hơn giá trị so sánh, và giá trị trung bình bằng độ rộng xung nhân điện áp nguồn."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> khi chỉ có “bật” và “tắt”, hãy điều khiển <b>tỉ lệ thời gian</b>. Bật tắt đủ nhanh thì thế giới chỉ thấy trung bình.</div>
+        say: "Điều cần mang theo, khi chỉ có bật và tắt, hãy điều khiển tỉ lệ thời gian. Bật tắt đủ nhanh thì thế giới chỉ thấy giá trị trung bình."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 4): <b>chuyển đổi tương tự–số</b> — đọc điện áp thành con số.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 4, ta học chuyển đổi tương tự số, cách đọc một điện áp thành con số. Hẹn gặp bạn ở bài tiếp theo."

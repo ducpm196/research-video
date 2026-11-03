@@ -1,0 +1,277 @@
+id: L07
+course: RLN
+series: "RLN · Học tăng cường"
+title: "Bài 7 — Gradient chính sách REINFORCE và đường cơ sở giảm phương sai"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/rln.yaml L07; audit/rln/verify_rln.py L07; audit/rln/sources_L07.md; R. S. Sutton, A. G. Barto, Reinforcement Learning: An Introduction, bản 2 (2018), mục 13.3 (công thức 13.8, thuật toán của Williams 1992) và 13.4 (đường cơ sở, công thức 13.10–13.11), PDF chính thức incompleteideas.net/book/RLbook2020.pdf; R. J. Williams, Simple statistical gradient-following algorithms for connectionist reinforcement learning, Machine Learning 8 (1992) — qua Sutton & Barto; CS115 (kỳ vọng, phương sai; hàm sigmoid và đạo hàm); RLN bài 0 (lợi nhuận G), bài 4 (chờ hết lượt)"
+assumes: [arith, power, approx, frac, cdot, sub, disc, dots, prob, given, sum]
+# Quy ước: chính sách hai hành động π(a₁) = σ(θ), π(a₂) = 1 − σ(θ) với σ(x) = 1 / (1 + e mũ âm x) (sigm của sổ RLN; lời đọc nói “hàm
+#   chữ S biến số thành xác suất”, không đọc “sigmoid”); θ là MỘT số nên gradient ∇ ở đây chính là đạo hàm theo θ (nói rõ trên màn hình).
+#   ln = lôgarit tự nhiên; b = đường cơ sở. Lợi nhuận 10 và 12, đường cơ sở 11, α = 0,1, lợi nhuận cộng 100 là SỐ MINH HOẠ (giáo án).
+#   Tên “REINFORCE” chỉ trên màn hình; lời đọc nói “gradient chính sách cơ bản”.
+objectives:
+  - "Viết ước lượng gradient G · ∇ ln π và tính nó cho từng hành động"
+  - "Chứng minh trừ đường cơ sở không đổi kỳ vọng, và tính phương sai trước và sau khi trừ"
+  - "Nhận ra đường cơ sở phụ thuộc hành động làm lệch gradient"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Hướng đúng là −0,5, nhưng mỗi lần đo lại ra 5 hoặc −6"
+    checks:
+      - "alg.rln_pg2(10, 12)[1] == [5.0, -6.0] and alg.rln_pg2(10, 12)[2] == -0.5"
+      - "alg.rln_pg2(10, 12, b1=11, b2=11)[1] == [-0.5, -0.5]"
+    steps:
+      - show: |
+          <p>Một tác tử chọn giữa hai hành động, mỗi bên xác suất 0,5; hành động thứ hai cho lợi nhuận cao hơn (12 so với 10). Hướng sửa đúng là “giảm nhẹ hành động thứ nhất”, cỡ <b>−0,5</b>.</p>
+          <p>Nhưng mỗi lần chơi, tín hiệu học lại là <b>+5</b> hoặc <b>−6</b> — lần thì đẩy mạnh sai hướng, lần thì đẩy quá tay. Trừ đi một con số 11 trước khi nhân, mọi lần đều ra đúng <b>−0,5</b>.</p>
+          <div class="box key">Hôm nay: học thẳng xác suất chọn hành động, không qua bảng giá trị — và mẹo trừ đường cơ sở để tín hiệu bớt nhiễu mà không lệch.</div>
+        focus: [1, 1, 2, 2, 3]
+        say: "Chào bạn, một tác tử chọn giữa hai hành động, mỗi bên xác suất 0 phẩy 5, và hành động thứ hai cho lợi nhuận cao hơn, 12 so với 10. Hướng sửa đúng là giảm nhẹ hành động thứ nhất, cỡ âm 0 phẩy 5. Nhưng mỗi lần chơi, tín hiệu học lại là cộng 5 hoặc âm 6, lần thì đẩy mạnh sai hướng, lần thì đẩy quá tay. Trừ đi một con số 11 trước khi nhân, mọi lần đều ra đúng âm 0 phẩy 5. Hôm nay ta học thẳng xác suất chọn hành động, cùng mẹo trừ đường cơ sở để tín hiệu bớt nhiễu mà không lệch."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: kỳ vọng, phương sai, và hàm chữ S"
+    checks:
+      - "0.5 * 5 + 0.5 * -6 == -0.5 and (0.5 * 25 + 0.5 * 36) - (-0.5) ** 2 == 30.25"
+      - "1 / (1 + math.exp(0)) == 0.5 and round((math.log(1 / (1 + math.exp(-0.001))) - math.log(1 / (1 + math.exp(0.001)))) / 0.002, 6) == 0.5"
+    steps:
+      - show: |
+          <p><b>① Khoá Toán cho khoa học máy tính — kỳ vọng và phương sai.</b> $X$ bằng 5 hoặc −6, mỗi giá trị xác suất 0,5:</p>
+          $$\mathbb{E}[X] = 0{,}5 \cdot 5 + 0{,}5 \cdot (-6) = -0{,}5$$
+          $$\operatorname{Var}(X) = \mathbb{E}[X^2] - (\mathbb{E}[X])^2 = 30{,}5 - 0{,}25 = 30{,}25$$
+        introduces: [expect, var]
+        focus: [1, 2, 3]
+        say: "Điều thứ nhất, ở khoá Toán cho khoa học máy tính ta có kỳ vọng và phương sai. X bằng 5 hoặc âm 6, mỗi giá trị xác suất 0 phẩy 5, nên kỳ vọng, viết bằng chữ E kép, là âm 0 phẩy 5. Phương sai bằng kỳ vọng của X bình phương trừ bình phương kỳ vọng, tức 30 phẩy 5 trừ 0 phẩy 25, bằng 30 phẩy 25."
+      - show: |
+          <p><b>② Hàm chữ S</b> $\sigma(\theta) = \frac{1}{1 + e^{-\theta}}$ biến số thực thành xác suất; $\sigma(0) = 0{,}5$. Lôgarit tự nhiên $\ln$ của nó có đạo hàm đẹp:</p>
+          $$\frac{d}{d\theta} \ln \sigma(\theta) = 1 - \sigma(\theta), \qquad \frac{d}{d\theta} \ln\big(1 - \sigma(\theta)\big) = -\sigma(\theta)$$
+          <p class="note">Làm thử ở $\theta = 0$ bằng chênh lệch nhỏ: $\frac{\ln \sigma(0{,}001) - \ln \sigma(-0{,}001)}{0{,}002} \approx 0{,}5 = 1 - 0{,}5$ ✓.</p>
+        introduces: [sigm, exp, log, param]
+        focus: [1, 2, 3]
+        say: "Điều thứ hai, hàm chữ S này biến một số thực theta thành xác suất, và tại theta bằng 0 nó bằng 0 phẩy 5. Lôgarit tự nhiên của nó có đạo hàm đẹp, bằng 1 trừ hàm đó, còn lôgarit của 1 trừ hàm đó có đạo hàm bằng âm hàm đó. Làm thử ở theta bằng 0 bằng một chênh lệch nhỏ, ta được khoảng 0 phẩy 5, đúng bằng 1 trừ 0 phẩy 5."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: chính sách có tham số, gradient, đường cơ sở"
+    checks:
+      - "alg.rln_pg2(10, 12)[0] == [0.5, 0.5]"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ký hiệu</th><th>đọc</th><th>nghĩa</th></tr>
+          <tr><td>$\pi(a \mid s; \theta)$</td><td>pi của a khi biết s, tham số theta</td><td>xác suất chọn $a$; ví dụ $\pi(a_1) = \sigma(\theta)$, $\pi(a_2) = 1 - \sigma(\theta)$, ở $\theta = 0$ đều 0,5</td></tr>
+          <tr><td>$\nabla$</td><td>gradient</td><td>hướng tăng nhanh nhất; ở đây $\theta$ là một số nên $\nabla$ chính là đạo hàm theo $\theta$</td></tr>
+          <tr><td>$b$</td><td>đường cơ sở</td><td>một con số trừ vào lợi nhuận trước khi nhân, ví dụ $b = 11$</td></tr></table>
+        introduces: [nabla, policy]
+        focus: [1, "1.2", "1.2", "1.3", "1.4"]
+        say: "Bài dùng ba ký hiệu. Pi của a khi biết s, với tham số theta, là xác suất chọn hành động a. Ví dụ hành động thứ nhất có xác suất bằng hàm chữ S của theta, và ở theta bằng 0 cả hai đều 0 phẩy 5. Hình tam giác ngược đọc là gradient, chỉ hướng tăng nhanh nhất, và ở đây theta là một số nên gradient chính là đạo hàm theo theta. Chữ b là đường cơ sở, một con số trừ vào lợi nhuận trước khi nhân, ví dụ b bằng 11."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Đẩy xác suất của hành động vừa làm, theo độ lớn lợi nhuận"
+    steps:
+      - show: |
+          <div><svg width="1000" height="370" viewBox="0 0 1000 370"><defs><marker id="rl7g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#059669"/></marker></defs>
+          <g font-size="23" text-anchor="middle">
+          <text x="250" y="36" fill="#1f2937" font-weight="bold">không trừ đường cơ sở</text>
+          <text x="750" y="36" fill="#1f2937" font-weight="bold">trừ đường cơ sở 11</text>
+          <line x1="60" y1="250" x2="440" y2="250" stroke="#1f2937" stroke-width="2"/>
+          <line x1="560" y1="250" x2="940" y2="250" stroke="#1f2937" stroke-width="2"/>
+          <rect x="110" y="150" width="100" height="100" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="160" y="285" fill="#1f2937">hành động 1</text>
+          <rect x="290" y="150" width="100" height="100" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="340" y="285" fill="#1f2937">hành động 2</text>
+          <rect x="610" y="150" width="100" height="100" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="660" y="285" fill="#1f2937">hành động 1</text>
+          <rect x="790" y="150" width="100" height="100" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="840" y="285" fill="#1f2937">hành động 2</text>
+          <text x="60" y="322" fill="#2a78d6" text-anchor="start">hành động 1: G = 10, đẩy lên mạnh</text>
+          <text x="560" y="322" fill="#2a78d6" text-anchor="start">hành động 1: G − b = −1, hạ nhẹ</text><text x="560" y="356" fill="#eb6834" text-anchor="start">hành động 2: G − b = +1, nâng nhẹ</text>
+          </g>
+          <line x1="160" y1="140" x2="160" y2="70" stroke="#059669" stroke-width="6" marker-end="url(#rl7g)"/>
+          <line x1="340" y1="140" x2="340" y2="64" stroke="#059669" stroke-width="6" marker-end="url(#rl7g)"/>
+          <line x1="660" y1="140" x2="660" y2="122" stroke="#b91c1c" stroke-width="4"/>
+          <line x1="840" y1="140" x2="840" y2="118" stroke="#059669" stroke-width="4"/>
+          <text x="60" y="356" font-size="23" fill="#eb6834" text-anchor="start">hành động 2: G = 12, đẩy lên mạnh</text>
+          </svg></div>
+        focus: [1, 1, 1, 1, 1]
+        say: "Hình bên trái là cách không trừ đường cơ sở. Hành động nào vừa làm thì xác suất của nó bị đẩy lên theo độ lớn lợi nhuận, nên cả hai đều bị đẩy lên mạnh, với 10 và 12. Chỉ chênh lệch nhỏ giữa hai lần đẩy mới mang thông tin. Hình bên phải trừ đường cơ sở 11, hành động một có 10 trừ 11 bằng âm 1 nên bị hạ nhẹ, hành động hai có cộng 1 nên được nâng nhẹ. Chỉ phần chênh so với mức trung bình được dùng, nên tín hiệu sạch hơn hẳn."
+
+  # ───────────────────────── 5. SUY RA CÔNG THỨC ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra ước lượng gradient, và vì sao trừ b không làm lệch"
+    checks:
+      - "abs(alg.rln_pg2_true(10, 12) + 0.5) < 1e-12 and round(0.25 * (10 - 12), 10) == -0.5"
+      - "round(0.5 * 10 * 0.5 + 0.5 * 12 * -0.5, 10) == -0.5"
+      - "round(0.5 * 0.5 + 0.5 * -0.5, 10) == 0"
+    steps:
+      - show: |
+          <p><b>Bước 1.</b> Mục tiêu là lợi nhuận kỳ vọng $J(\theta) = \pi(a_1) \cdot 10 + \pi(a_2) \cdot 12$. Lấy đạo hàm thẳng, vì đạo hàm của $\sigma$ là $\sigma \cdot (1 - \sigma)$:</p>
+          $$\nabla J = \sigma \cdot (1 - \sigma) \cdot (10 - 12) = 0{,}25 \cdot (-2) = \hlg{-0{,}5} \text{ ở } \theta = 0$$
+        focus: [1, 2]
+        say: "Bước một, mục tiêu là lợi nhuận kỳ vọng J, bằng xác suất hành động một nhân 10 cộng xác suất hành động hai nhân 12. Lấy đạo hàm thẳng, vì đạo hàm của hàm chữ S bằng chính nó nhân 1 trừ nó, ta được 0 phẩy 25 nhân âm 2, bằng âm 0 phẩy 5 ở theta bằng 0."
+      - show: |
+          <p><b>Bước 2 — mẹo lôgarit.</b> Ngoài đời không tính được $J$ vì không biết lợi nhuận kỳ vọng. Nhưng $\nabla \pi = \pi \cdot \nabla \ln \pi$ (theo đạo hàm của lôgarit), nên:</p>
+          $$\nabla J = \sum_a \pi(a) \cdot G(a) \cdot \nabla \ln \pi(a) = \mathbb{E}\big[\hlo{G \cdot \nabla \ln \pi(a)}\big]$$
+          <p class="note">Một kỳ vọng thì ước lượng bằng mẫu: chơi một lượt, lấy $G$ nhân $\nabla \ln \pi$ của hành động vừa làm.</p>
+        focus: [1, 1, 2, 3]
+        say: "Bước hai là mẹo lôgarit. Ngoài đời ta không tính được J vì không biết lợi nhuận kỳ vọng. Nhưng gradient của pi bằng pi nhân gradient của lôgarit pi, theo đạo hàm của lôgarit, nên gradient của J là kỳ vọng của G nhân gradient của lôgarit pi. Một kỳ vọng thì ước lượng bằng mẫu, chơi một lượt rồi lấy G nhân gradient của lôgarit pi của hành động vừa làm."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — làm thử ngay.</b> Ở $\theta = 0$: $\nabla \ln \pi(a_1) = 1 - 0{,}5 = 0{,}5$ và $\nabla \ln \pi(a_2) = -0{,}5$ (theo phần ôn ②). Kỳ vọng của mẫu:</p>
+          $$0{,}5 \cdot 10 \cdot 0{,}5 + 0{,}5 \cdot 12 \cdot (-0{,}5) = 2{,}5 - 3 = -0{,}5 \checkmark$$
+          <p class="note">Cập nhật: $\theta \leftarrow \theta + \alpha \cdot G \cdot \nabla \ln \pi(a)$ — sách gọi là thuật toán REINFORCE (Williams, 1992).</p>
+        introduces: [lr, assign]
+        focus: [1, 2, 3]
+        say: "Bước ba, làm thử ngay ở theta bằng 0, gradient của lôgarit pi là 0 phẩy 5 cho hành động một và âm 0 phẩy 5 cho hành động hai, theo phần ôn thứ hai. Kỳ vọng của mẫu là 2 phẩy 5 trừ 3, bằng âm 0 phẩy 5, khớp với đạo hàm thẳng. Cập nhật là theta thay bằng theta cộng an-pha nhân mẫu đó, và sách giáo khoa chuẩn gọi đây là thuật toán gradient chính sách cơ bản, công bố năm 1992."
+      - show: |
+          <p><b>Bước 4 — trừ đường cơ sở.</b> Với $b$ không phụ thuộc hành động, phần bị trừ có kỳ vọng bằng 0, vì tổng xác suất luôn bằng 1:</p>
+          $$\mathbb{E}\big[b \cdot \nabla \ln \pi\big] = b \cdot \sum_a \nabla \pi(a) = b \cdot \nabla 1 = 0$$
+          <p class="note">Làm thử: $0{,}5 \cdot 0{,}5 + 0{,}5 \cdot (-0{,}5) = 0$. Vậy $(G - b) \cdot \nabla \ln \pi$ có <b>cùng kỳ vọng</b> −0,5.</p>
+        focus: [1, 2, 3, 3]
+        say: "Bước bốn là trừ đường cơ sở. Với b không phụ thuộc hành động, phần bị trừ có kỳ vọng bằng 0, vì tổng xác suất luôn bằng 1 nên gradient của tổng đó bằng 0. Làm thử, 0 phẩy 5 nhân 0 phẩy 5 cộng 0 phẩy 5 nhân âm 0 phẩy 5, bằng 0. Vậy G trừ b, nhân gradient lôgarit pi, vẫn có cùng kỳ vọng âm 0 phẩy 5."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Hai lần chơi, trước và sau khi trừ đường cơ sở"
+    checks:
+      - "alg.rln_pg2(10, 12)[1][0] == 5.0 and alg.rln_pg2(10, 12)[1][1] == -6.0"
+      - "alg.rln_pg2(10, 12)[3] == 30.25"
+      - "alg.rln_pg2(10, 12, b1=11, b2=11)[1] == [-0.5, -0.5] and alg.rln_pg2(10, 12, b1=11, b2=11)[3] == 0"
+      - "round(0 + 0.1 * 5, 10) == 0.5 and round(0 + 0.1 * -0.5, 10) == -0.05"
+    steps:
+      - show: |
+          <p><b>Bước 1 — chọn hành động 1.</b> $G = 10$, $\nabla \ln \pi(a_1) = 0{,}5$: mẫu $= 10 \cdot 0{,}5 = \hlb{5}$.</p>
+          <p><b>Bước 2 — chọn hành động 2.</b> $G = 12$, $\nabla \ln \pi(a_2) = -0{,}5$: mẫu $= 12 \cdot (-0{,}5) = \hlb{-6}$.</p>
+        focus: [1, 2]
+        say: "Bước một, nếu chọn hành động một thì G bằng 10, gradient lôgarit pi bằng 0 phẩy 5, nên mẫu bằng 5. Bước hai, nếu chọn hành động hai thì G bằng 12, gradient lôgarit pi bằng âm 0 phẩy 5, nên mẫu bằng âm 6."
+      - show: |
+          <p><b>Bước 3 — phương sai.</b> Mẫu là 5 hoặc −6, mỗi giá trị xác suất 0,5, như phần ôn ①:</p>
+          $$\operatorname{Var} = \frac{25 + 36}{2} - (-0{,}5)^2 = \hl{30{,}25}$$
+        focus: [1, 2]
+        say: "Bước ba là phương sai, vì mẫu bằng 5 hoặc âm 6, mỗi giá trị xác suất 0 phẩy 5, giống phần ôn thứ nhất. Phương sai bằng 25 cộng 36 chia 2, trừ 0 phẩy 25, bằng 30 phẩy 25, trong khi giá trị cần đo chỉ là âm 0 phẩy 5."
+      - clear: true
+        show: |
+          <p><b>Bước 4 — trừ $b = 11$.</b></p>
+          <table class="t"><tr><th>hành động</th><th>$G - b$</th><th>nhân $\nabla \ln \pi$</th><th>mẫu</th></tr>
+          <tr><td>1</td><td>$10 - 11 = -1$</td><td>$\cdot\, 0{,}5$</td><td>−0,5</td></tr>
+          <tr><td>2</td><td>$12 - 11 = 1$</td><td>$\cdot\, (-0{,}5)$</td><td>−0,5</td></tr></table>
+          <p class="note">Cả hai lần đều −0,5: kỳ vọng giữ nguyên, phương sai từ 30,25 xuống $\hlg{0}$.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Bước bốn, trừ đường cơ sở bằng 11. Hành động một có 10 trừ 11 bằng âm 1, nhân 0 phẩy 5 được âm 0 phẩy 5. Hành động hai có 12 trừ 11 bằng 1, nhân âm 0 phẩy 5 cũng được âm 0 phẩy 5. Cả hai lần đều ra âm 0 phẩy 5, nên kỳ vọng giữ nguyên còn phương sai từ 30 phẩy 25 xuống 0."
+      - show: |
+          <p><b>Bước 5 — một bước học</b>, $\alpha = 0{,}1$, lượt vừa chơi chọn hành động 1:</p>
+          <table class="t"><tr><th></th><th>$\theta$ mới</th><th>hướng</th></tr>
+          <tr><td>không trừ $b$</td><td>$0 + 0{,}1 \cdot 5 = 0{,}5$</td><td class="red">sai hướng: tăng hành động kém</td></tr>
+          <tr><td>trừ $b = 11$</td><td>$0 + 0{,}1 \cdot (-0{,}5) = -0{,}05$</td><td>đúng hướng</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước năm là một bước học với an-pha bằng 0 phẩy 1, khi lượt vừa chơi chọn hành động một. Không trừ đường cơ sở thì theta mới là 0 phẩy 5, đi sai hướng, vì nó tăng xác suất của hành động kém hơn. Trừ đường cơ sở 11 thì theta mới là âm 0 phẩy 05, đúng hướng."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: đạo hàm bằng chênh lệch nhỏ, và mô phỏng nhiều lượt"
+    checks:
+      - "round(((1 / (1 + math.exp(-0.0001))) * 10 + (1 - 1 / (1 + math.exp(-0.0001))) * 12 - ((1 / (1 + math.exp(0.0001))) * 10 + (1 - 1 / (1 + math.exp(0.0001))) * 12)) / 0.0002, 6) == -0.5"
+      - "(lambda r: abs(sum((10 * 0.5) if r.random() < 0.5 else (12 * -0.5) for _ in range(40000)) / 40000 + 0.5) < 0.1)(__import__('random').Random(7))"
+    steps:
+      - show: |
+          <p><b>Đường khác 1 — chênh lệch nhỏ,</b> không dùng công thức đạo hàm: tính $J$ ở $\theta = 0{,}0001$ và $\theta = -0{,}0001$:</p>
+          $$\frac{J(0{,}0001) - J(-0{,}0001)}{0{,}0002} \approx -0{,}5 \checkmark$$
+        focus: [1, 2]
+        say: "Kiểm tra thứ nhất dùng chênh lệch nhỏ, nghĩa là không dùng công thức đạo hàm. Ta tính J ở theta bằng 0 phẩy 0001 và ở âm 0 phẩy 0001, lấy hiệu chia cho 0 phẩy 0002, được khoảng âm 0 phẩy 5, khớp với cả hai cách trên."
+      - show: |
+          <p><b>Đường khác 2 — mô phỏng:</b> máy chơi 40&nbsp;000 lượt, mỗi lượt chọn bừa theo xác suất 0,5, ghi mẫu 5 hoặc −6, rồi lấy trung bình:</p>
+          <table class="t"><tr><th>cách</th><th>kết quả</th></tr>
+          <tr><td>đạo hàm thẳng</td><td>−0,5</td></tr>
+          <tr><td>trung bình 40&nbsp;000 mẫu</td><td>gần −0,5 (lệch dưới 0,1)</td></tr></table>
+          <p class="note">Mỗi mẫu rất nhiễu, nhưng trung bình của nhiều mẫu thì đúng hướng — ước lượng không lệch.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Kiểm tra thứ hai là mô phỏng, máy chơi 40 nghìn lượt, mỗi lượt chọn bừa theo xác suất 0 phẩy 5, ghi mẫu 5 hoặc âm 6 rồi lấy trung bình. Đạo hàm thẳng cho âm 0 phẩy 5. Trung bình 40 nghìn mẫu cũng ra gần âm 0 phẩy 5, lệch dưới 0 phẩy 1. Mỗi mẫu rất nhiễu, nhưng trung bình của nhiều mẫu thì đúng hướng, nên đây là ước lượng không lệch."
+
+  # ───────────────────────── 8. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi cả người đã đi làm"
+    checks:
+      - "round(0.9 * 10 * 0.09 + 0.1 * 12 * -0.09, 10) == 0.702 and round(alg.rln_pg2_true(10, 12, math.log(9)), 10) == -0.18"
+      - "alg.rln_pg2(10, 12, b1=10, b2=0)[2] == -3.0"
+      - "alg.rln_pg2(110, 112)[1] == [55.0, -56.0] and alg.rln_pg2(110, 112)[3] == 3080.25 and alg.rln_pg2(110, 112, b1=111, b2=111)[3] == 0"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Dùng $\nabla \pi$ thay cho $\nabla \ln \pi$ <b class="red">(ưu ái hành động hay được chọn)</b>
+          <br><span class="note">Khi $\pi(a_1) = 0{,}9$: đúng là $\nabla J = 0{,}09 \cdot (-2) = -0{,}18$; công thức sai cho $0{,}9 \cdot 10 \cdot 0{,}09 + 0{,}1 \cdot 12 \cdot (-0{,}09) = +0{,}702$ — <b>ngược dấu</b>. Phép thử: so với đạo hàm bằng chênh lệch nhỏ.</span></div>
+        say: "Lỗi thứ nhất, dùng gradient của pi thay cho gradient của lôgarit pi, nên ưu ái hành động hay được chọn. Khi xác suất hành động một là 0 phẩy 9, gradient đúng là âm 0 phẩy 18, còn công thức sai cho cộng 0 phẩy 702, ngược dấu. Phép thử là so với đạo hàm tính bằng chênh lệch nhỏ."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Đường cơ sở phụ thuộc hành động <b class="red">(lệch gradient)</b>
+          <br><span class="note">Lấy $b = 10$ cho hành động 1 và $b = 0$ cho hành động 2: mẫu là 0 hoặc −6, kỳ vọng $\hl{-3}$ thay vì −0,5. Đường cơ sở chỉ được phụ thuộc trạng thái. Phép thử: kỳ vọng của mẫu có còn bằng đạo hàm thẳng không.</span></div>
+        say: "Lỗi thứ hai, dùng đường cơ sở phụ thuộc hành động, làm lệch gradient. Lấy b bằng 10 cho hành động một và b bằng 0 cho hành động hai, mẫu là 0 hoặc âm 6, kỳ vọng âm 3 thay vì âm 0 phẩy 5. Đường cơ sở chỉ được phụ thuộc trạng thái, và phép thử là xem kỳ vọng của mẫu còn bằng đạo hàm thẳng không."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Cập nhật bước lớn sau mỗi lượt khi chưa trừ đường cơ sở <b class="red">(nhảy sai hướng)</b>
+          <br><span class="note">Như bước 5: một lượt chọn hành động 1 đẩy $\theta$ lên 0,5 — đi sai hướng gấp 10 lần độ lớn bước đúng. Phép thử: vẽ $\theta$ qua các lượt, đường răng cưa lớn là dấu hiệu.</span></div>
+        say: "Lỗi thứ ba, cập nhật bước lớn sau mỗi lượt khi chưa trừ đường cơ sở, nên nhảy sai hướng. Như bước năm của ví dụ, một lượt chọn hành động một đẩy theta lên 0 phẩy 5, đi sai hướng gấp 10 lần độ lớn bước đúng. Phép thử là vẽ theta qua các lượt, đường răng cưa lớn là dấu hiệu."
+      - show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Cộng thêm một hằng số vào mọi phần thưởng (ví dụ +100 cho “sống sót”) mà không trừ đường cơ sở <b class="red">(phương sai bùng nổ)</b></div>
+          <table class="t"><tr><th>lợi nhuận</th><th>mẫu</th><th>phương sai</th></tr>
+          <tr><td>10 và 12</td><td>5 và −6</td><td>30,25</td></tr>
+          <tr><td>110 và 112</td><td>55 và −56</td><td>$\hl{3080{,}25}$</td></tr>
+          <tr><td>110 và 112, trừ $b = 111$</td><td>−0,5 và −0,5</td><td>$\hlg{0}$</td></tr></table>
+          <p class="note">Hướng đúng vẫn −0,5 ở cả ba dòng. Luôn trừ đường cơ sở (trung bình lợi nhuận theo trạng thái) trước khi nhân.</p>
+        focus: [1, "2.2", "2.3", "2.4", 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, cộng thêm một hằng số vào mọi phần thưởng, ví dụ cộng 100 cho sống sót, mà không trừ đường cơ sở. Với lợi nhuận 10 và 12, phương sai là 30 phẩy 25. Với 110 và 112, mẫu thành 55 và âm 56, phương sai tăng vọt lên 3080 phẩy 25. Trừ đường cơ sở 111 thì cả hai mẫu là âm 0 phẩy 5, phương sai bằng 0. Hướng đúng vẫn là âm 0 phẩy 5 ở cả ba dòng, nên hãy luôn trừ đường cơ sở trước khi nhân."
+
+  # ───────────────────────── 9. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: lợi nhuận 4 và 8"
+    checks:
+      - "alg.rln_pg2(4, 8)[1] == [2.0, -4.0] and alg.rln_pg2(4, 8)[2] == -1.0 and alg.rln_pg2_true(4, 8) == -1.0"
+      - "alg.rln_pg2(4, 8)[3] == 9.0 and alg.rln_pg2(4, 8, b1=6, b2=6)[1] == [-1.0, -1.0] and alg.rln_pg2(4, 8, b1=6, b2=6)[3] == 0"
+    steps:
+      - show: |
+          <p>Vẫn hai hành động, $\theta = 0$ (mỗi bên 0,5). Bây giờ hành động 1 cho lợi nhuận 4, hành động 2 cho 8.</p>
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Tính hai mẫu $G \cdot \nabla \ln \pi$, kỳ vọng và phương sai. Kỳ vọng có bằng đạo hàm thẳng không?</td></tr>
+          <tr><td>2</td><td>Bạn được chọn một đường cơ sở. Chọn số nào để phương sai bằng 0, và vì sao nó không làm lệch?</td></tr></table>
+        focus: [1, "2.2", "2.2", "2.3", 0]
+        say: "Bây giờ đến lượt bạn, vẫn hai hành động, theta bằng 0 nên mỗi bên 0 phẩy 5, nhưng hành động một cho lợi nhuận 4, hành động hai cho 8. Câu một, tính hai mẫu, kỳ vọng và phương sai. Kỳ vọng có bằng đạo hàm thẳng không? Câu hai, bạn được chọn một đường cơ sở, chọn số nào để phương sai bằng 0, và vì sao nó không làm lệch? Dừng video và làm ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>đại lượng</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>hai mẫu</td><td>$4 \cdot 0{,}5$ và $8 \cdot (-0{,}5)$</td><td>2 và −4</td></tr>
+          <tr><td>kỳ vọng</td><td>$0{,}5 \cdot 2 + 0{,}5 \cdot (-4)$</td><td>$\hlg{-1}$</td></tr>
+          <tr><td>đạo hàm thẳng</td><td>$0{,}25 \cdot (4 - 8)$</td><td>−1 ✓</td></tr>
+          <tr><td>phương sai</td><td>$\frac{4 + 16}{2} - 1$</td><td>9</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Đáp án câu một, cộng từng dòng. Hai mẫu là 4 nhân 0 phẩy 5 bằng 2, và 8 nhân âm 0 phẩy 5 bằng âm 4. Kỳ vọng là 0 phẩy 5 nhân 2 cộng 0 phẩy 5 nhân âm 4, bằng âm 1. Đạo hàm thẳng là 0 phẩy 25 nhân 4 trừ 8, cũng bằng âm 1. Phương sai là 4 cộng 16 chia 2, trừ 1, bằng 9."
+      - show: |
+          <p><b>Câu 2.</b> Chọn $b = 6$, lợi nhuận trung bình của trạng thái: hai mẫu là $(4 - 6) \cdot 0{,}5 = -1$ và $(8 - 6) \cdot (-0{,}5) = -1$, phương sai 0. Không lệch vì $b$ không phụ thuộc hành động.</p>
+          <p class="note">Ngoài đời không biết đúng số 6, nên ta <b>học</b> nó: một bộ ước lượng giá trị của trạng thái làm đường cơ sở. Cái giá: bộ ước lượng đoán sai thì đường cơ sở kém đi.</p>
+        focus: [1, 1, 1, 2, 2]
+        say: "Câu hai, chọn b bằng 6, lợi nhuận trung bình của trạng thái. Hai mẫu là 4 trừ 6 nhân 0 phẩy 5 bằng âm 1, và 8 trừ 6 nhân âm 0 phẩy 5 cũng bằng âm 1, nên phương sai bằng 0. Nó không lệch vì b không phụ thuộc hành động. Ngoài đời ta không biết đúng số 6, nên phải học nó bằng một bộ ước lượng giá trị của trạng thái. Cái giá là phải học thêm một bộ ước lượng, và nó đoán sai thì đường cơ sở kém đi."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">mục tiêu: lợi nhuận kỳ vọng J(θ)</span><span class="a">→</span>
+          <span class="n">mẹo lôgarit: gradient của J = kỳ vọng của G nhân gradient của ln π</span><span class="a">→</span>
+          <span class="n">mẫu từng lượt: không lệch nhưng rất nhiễu</span><span class="a">→</span>
+          <span class="n">trừ đường cơ sở b(s): cùng kỳ vọng, phương sai nhỏ</span></div>
+        say: "Tổng kết lại, mục tiêu là lợi nhuận kỳ vọng J của theta. Mẹo lôgarit biến gradient của J thành kỳ vọng của G nhân gradient lôgarit pi, nên mỗi lượt chơi cho một mẫu không lệch nhưng rất nhiễu. Trừ một đường cơ sở chỉ phụ thuộc trạng thái giữ nguyên kỳ vọng mà làm phương sai nhỏ đi."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> một ước lượng “đúng trung bình” vẫn có thể vô dụng nếu nhiễu quá lớn — đo <b>phương sai</b> của tín hiệu học, không chỉ kỳ vọng của nó.</div>
+        say: "Điều cần mang theo, một ước lượng đúng trung bình vẫn có thể vô dụng nếu nhiễu quá lớn, nên hãy đo phương sai của tín hiệu học, không chỉ kỳ vọng của nó."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 8): <b>diễn viên–nhà phê bình và hàm lợi thế</b> — học luôn đường cơ sở bằng một bộ ước lượng giá trị, và sửa chính sách theo “tốt hơn mức trung bình bao nhiêu”.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 8, ta học mô hình diễn viên và nhà phê bình cùng hàm lợi thế. Ta sẽ học luôn đường cơ sở bằng một bộ ước lượng giá trị, và sửa chính sách theo mức tốt hơn trung bình. Hẹn gặp bạn ở bài tiếp theo."

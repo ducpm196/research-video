@@ -1,0 +1,171 @@
+id: L10
+course: LLM
+series: "LLM · Mô hình ngôn ngữ lớn"
+title: "Bài 10 — Đánh giá mô hình ngôn ngữ: bộ kiểm tra, nhiễm dữ liệu, khoảng tin cậy"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/llm.yaml L10; audit/llm/verify_llm.py L10; E. Miller, Adding Error Bars to Evals (Anthropic, 2024) — khoảng tin cậy, so sánh theo cặp; Q. McNemar (1947) — kiểm định câu bất đồng; O. Sainz và cộng sự, NLP Evaluation in trouble: data contamination (2023); CS115 bài 44 (khoảng tin cậy); DSC bài 9 (kiểm định nhiều lần)"
+assumes: [arith, sqrt, cdot, approx, frac, power]
+# Quy ước: khoảng tin cậy 95% xấp xỉ chuẩn cho tỉ lệ đúng p trên n câu: ±1,96·√(p(1 − p)/n) (alg.acc_ci95). So hai mô hình trên CÙNG bộ câu bằng
+#   kiểm định dấu chính xác trên các câu bất đồng (alg.paired_sign_p). Số câu bất đồng 30 / 20 là SỐ MINH HOẠ.
+objectives:
+  - "Tính khoảng tin cậy của độ chính xác"
+  - "So hai mô hình bằng kiểm định theo cặp"
+  - "Nhận ra nhiễm dữ liệu kiểm tra"
+asr_reviewed:
+  - {sentence: "Lỗi thứ nhất, đọc bảng xếp hạng không có sai số, nên thấy chênh lệch ảo.", reason: "ASR chép “Lỗi thứ nhất, đọc bản xếp hạng không có sai số, nên thấy trên là chảo.” (0.75): lệch âm/thanh thuần Việt: bảng/bản, chênh lệch ảo/trên là chảo — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "82% hay 80%: mô hình nào tốt hơn?"
+    checks:
+      - "round(alg.acc_ci95(0.82, 500) * 100, 1) == 3.4"
+    steps:
+      - show: |
+          <p>Bảng xếp hạng ghi: mô hình A đúng 82%, mô hình B đúng 80% trên 500 câu hỏi. Có nên chuyển sang A? Chỉ riêng độ ngẫu nhiên của việc chọn 500 câu đã tạo ra sai lệch khoảng <b>±3,4 điểm</b> — lớn hơn khoảng cách 2 điểm.</p>
+          <div class="box key">Hôm nay: đánh giá mô hình như một <b>phép đo có sai số</b> — khoảng tin cậy, so theo cặp, và cái bẫy nhiễm dữ liệu.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, bảng xếp hạng ghi mô hình A đúng 82 phần trăm, mô hình B đúng 80 phần trăm trên 500 câu hỏi. Vậy có nên chuyển hẳn sang dùng mô hình A không? Chỉ riêng độ ngẫu nhiên của việc chọn 500 câu đã tạo ra sai lệch khoảng cộng trừ 3 phẩy 4 điểm, lớn hơn khoảng cách 2 điểm. Hôm nay ta học đánh giá mô hình như một phép đo có sai số, với khoảng tin cậy, so theo cặp, và cái bẫy nhiễm dữ liệu."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: tỉ lệ đúng, và vì sao nhiều câu thì ít dao động"
+    checks:
+      - "410 / 500 == 0.82 and math.sqrt(0.25) == 0.5 and math.sqrt(4) == 2"
+    steps:
+      - show: |
+          <p><b>Tỉ lệ đúng</b> = số câu đúng chia số câu: $\frac{410}{500} = 0{,}82$, tức 82%.</p>
+        say: "Tỉ lệ đúng bằng số câu đúng chia cho tổng số câu. Mô hình làm đúng 410 trên 500 câu thì tỉ lệ là 0 phẩy 82, tức 82 phần trăm."
+      - show: |
+          <p>Làm lại với bộ câu khác, tỉ lệ sẽ <b>dao động</b> quanh giá trị thật. Độ dao động tỉ lệ với $\frac{1}{\sqrt{n}}$ (khoá toán):</p>
+          $$\text{gấp 4 số câu} \;\Rightarrow\; \frac{1}{\sqrt{4}} = \frac{1}{2} \text{ độ dao động}$$
+        introduces: [implies]
+        focus: [1, 2]
+        say: "Nếu làm lại với một bộ câu khác, tỉ lệ sẽ dao động quanh giá trị thật. Ở khoá toán, ta đã thấy độ dao động tỉ lệ với 1 chia căn n, nên gấp 4 số câu thì dao động chỉ còn một nửa."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: khoảng tin cậy, so theo cặp, nhiễm dữ liệu"
+    steps:
+      - show: |
+          <p><b>Khoảng tin cậy 95%</b> của tỉ lệ đúng $p$ trên $n$ câu: $p \pm 1{,}96 \cdot \sqrt{\frac{p \cdot (1 - p)}{n}}$.</p>
+          <p><b>So theo cặp</b>: hai mô hình làm CÙNG bộ câu. Chỉ những câu hai mô hình <b>bất đồng</b> mới mang thông tin: $b$ câu chỉ A đúng, $c$ câu chỉ B đúng. Nếu hai mô hình ngang nhau, mỗi câu bất đồng nghiêng về A với xác suất $\frac{1}{2}$.</p>
+          <p><b>Nhiễm dữ liệu</b>: câu kiểm tra (hoặc đáp án) đã nằm trong dữ liệu huấn luyện → điểm cao vì <b>nhớ</b>, không vì làm được.</p>
+        focus: [1, 2, 2, 2, 3]
+        say: "Khoảng tin cậy 95 phần trăm của tỉ lệ đúng p trên n câu bằng p cộng trừ 1 phẩy 96 nhân căn của p nhân 1 trừ p chia n. So theo cặp là cho hai mô hình làm cùng một bộ câu. Chỉ những câu mà hai mô hình bất đồng mới mang thông tin, b câu chỉ A đúng và c câu chỉ B đúng. Nếu hai mô hình ngang nhau, mỗi câu bất đồng nghiêng về A với xác suất một nửa. Nhiễm dữ liệu là khi câu kiểm tra hay đáp án đã nằm trong dữ liệu huấn luyện, nên điểm cao vì nhớ chứ không vì làm được."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hai khoảng chồng nhau: chưa phân được thắng thua"
+    steps:
+      - show: |
+          <div><svg width="1500" height="300" viewBox="0 0 1500 300"><rect x="549" y="40" width="537" height="190" fill="#fde68a" opacity="0.6"/><line x1="150" y1="240" x2="1470" y2="240" stroke="#6b7280" stroke-width="2"/><line x1="549" y1="90" x2="1291" y2="90" stroke="#2a78d6" stroke-width="8"/><circle cx="920" cy="90" r="11" fill="#2a78d6"/><line x1="314" y1="170" x2="1086" y2="170" stroke="#eb6834" stroke-width="8"/><circle cx="700" cy="170" r="11" fill="#eb6834"/><g font-size="24" fill="#1f2937"><text x="260" y="272" text-anchor="middle">76%</text><text x="480" y="272" text-anchor="middle">78%</text><text x="700" y="272" text-anchor="middle">80%</text><text x="920" y="272" text-anchor="middle">82%</text><text x="1140" y="272" text-anchor="middle">84%</text><text x="1360" y="272" text-anchor="middle">86%</text><text x="1311" y="98">A: 82% ± 3,4</text><text x="1106" y="178">B: 80% ± 3,5</text><text x="821" y="32" text-anchor="middle">vùng chồng nhau</text></g></svg></div>
+        focus: [1, 1, 1]
+        say: "Hình vẽ khoảng tin cậy của hai mô hình trên trục phần trăm. Đoạn xanh của A và đoạn cam của B chồng lên nhau ở vùng tô vàng. Giá trị thật của mỗi mô hình có thể nằm bất kỳ đâu trong đoạn của nó, nên chênh 2 điểm chưa chắc là thật."
+
+  - id: example
+    kind: example
+    title: "Khoảng ±3,4 và một kiểm định cặp"
+    checks:
+      - "round(alg.acc_ci95(0.82, 500) * 100, 2) == 3.37 and round(alg.acc_ci95(0.80, 500) * 100, 2) == 3.51"
+      - "(30 - 20) / 500 == 0.02 and round(alg.paired_sign_p(30, 20), 3) == 0.203"
+    steps:
+      - show: |
+          $$\sqrt{\frac{0{,}82 \cdot 0{,}18}{500}} = \sqrt{0{,}000\,295} \approx 0{,}0172$$
+          <p>Nhân 1,96: $1{,}96 \cdot 0{,}0172 \approx 0{,}034$ → A: $82\% \pm \hl{3{,}4}$ điểm.</p>
+        focus: [1, 1, 2]
+        say: "Bước một, với mô hình A, p bằng 0 phẩy 82 nên 1 trừ p bằng 0 phẩy 18. Căn của 0 phẩy 82 nhân 0 phẩy 18 chia 500 xấp xỉ 0 phẩy 0172. Nhân 1 phẩy 96 được khoảng 0 phẩy 034, tức 82 phần trăm cộng trừ 3 phẩy 4 điểm."
+      - show: |
+          <p><b>Bước 2</b> — B: $80\% \pm 3{,}5$ điểm, tức từ 76,5% tới 83,5%; A từ 78,6% tới 85,4% — hai khoảng chồng nhau từ 78,6% tới 83,5%.</p>
+        say: "Bước hai, làm tương tự cho B được 80 phần trăm cộng trừ 3 phẩy 5 điểm, tức từ 76 phẩy 5 tới 83 phẩy 5. Khoảng của A từ 78 phẩy 6 tới 85 phẩy 4, nên hai khoảng chồng nhau khá nhiều."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>so theo cặp (số minh hoạ)</th><th>số câu</th></tr>
+          <tr><td>chỉ A đúng ($b$)</td><td>30</td></tr>
+          <tr><td>chỉ B đúng ($c$)</td><td>20</td></tr>
+          <tr><td>chênh lệch</td><td>$\frac{30 - 20}{500} = 2$ điểm</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Bước ba, so theo cặp với số minh hoạ, chỉ đếm những câu hai mô hình bất đồng. Có 30 câu chỉ A đúng. Có 20 câu chỉ B đúng. Chênh lệch là 10 câu trên 500, tức 2 điểm."
+      - show: |
+          <p><b>Bước 4</b> — nếu A, B ngang nhau, 50 câu bất đồng giống 50 lần tung đồng xu. Khả năng lệch ít nhất 30 / 20 (cả hai phía) ≈ <b>0,203</b> — không hiếm. Chưa đủ bằng chứng A tốt hơn.</p>
+        say: "Bước bốn, nếu A và B ngang nhau, 50 câu bất đồng giống 50 lần tung đồng xu. Khả năng thấy lệch ít nhất 30 và 20, tính cả hai phía, là khoảng 0 phẩy 203, không hề hiếm. Vậy chưa đủ bằng chứng để nói A tốt hơn."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác"
+    checks:
+      - "round(alg.acc_ci95(0.82, 2000) * 100, 2) == 1.68 and round(3.37 / 2, 2) == 1.69"
+      - "round(2 * sum(math.comb(50, k) for k in range(30, 51)) / 2 ** 50, 3) == round(alg.paired_sign_p(30, 20), 3) == 0.203"
+    steps:
+      - show: |
+          <table class="t"><tr><th>kiểm</th><th>cách khác</th><th>kết quả</th></tr>
+          <tr><td>khoảng của A</td><td>gấp 4 số câu (2000) thì khoảng phải còn một nửa</td><td>±1,68 ≈ 3,37 : 2 ✓</td></tr>
+          <tr><td>0,203</td><td>đếm thẳng: số cách có từ 30 câu nghiêng về một phía trong 50, nhân 2, chia tổng số cách</td><td>0,203 ✓</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Kiểm bằng đường khác. Vì dao động tỉ lệ với 1 chia căn n, tính lại với 2000 câu được cộng trừ 1 phẩy 68, đúng một nửa của 3 phẩy 37. Đếm thẳng số cách có từ 30 câu nghiêng về một phía trong 50, nhân 2 rồi chia tổng số cách, cũng ra 0 phẩy 203."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc"
+    checks:
+      - "round(alg.paired_sign_p(70, 30), 4) == 0.0001"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Đọc bảng xếp hạng không có sai số <b class="red">(chênh lệch ảo)</b>
+          <br><span class="note">Luôn kèm khoảng tin cậy. So hai mô hình thì dùng so theo cặp: cùng chênh 2 điểm nhưng nếu bất đồng là 70 / 30 câu (tổng 100 câu bất đồng, số minh hoạ) thì khả năng ngẫu nhiên chỉ ≈ 0,0001 — khác biệt thật.</span></div>
+        say: "Lỗi thứ nhất, đọc bảng xếp hạng không có sai số, nên thấy chênh lệch ảo. Hãy luôn kèm khoảng tin cậy, và so hai mô hình thì dùng so theo cặp. Cũng chênh lệch như vậy, nhưng nếu bất đồng là 70 và 30 câu, một số minh hoạ, thì khả năng ngẫu nhiên chỉ khoảng 0 phẩy 0001, đó là khác biệt thật."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Dùng bộ kiểm tra công khai lâu năm <b class="red">(có thể đã nhiễm)</b>
+          <br><span class="note">Bộ câu hỏi đăng trên mạng có thể đã lọt vào dữ liệu huấn luyện. Dấu hiệu: điểm trên câu cũ cao hơn hẳn câu mới cùng độ khó. Giữ một bộ câu riêng, chưa từng công bố.</span></div>
+        say: "Lỗi thứ hai, dùng bộ kiểm tra công khai lâu năm, có thể đã bị nhiễm. Bộ câu hỏi đăng trên mạng có thể đã lọt vào dữ liệu huấn luyện. Dấu hiệu là điểm trên câu cũ cao hơn hẳn câu mới cùng độ khó, nên hãy giữ một bộ câu riêng, chưa từng công bố."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Thử nhiều lời nhắc rồi báo kết quả tốt nhất <b class="red">(câu cá số liệu)</b>
+          <br><span class="note">Thử 20 biến thể rồi chọn cái điểm cao nhất trên chính bộ kiểm tra là quá khớp bộ kiểm tra. Chọn trên bộ kiểm định riêng, báo trên bộ kiểm tra một lần.</span></div>
+        say: "Lỗi thứ ba, thử nhiều lời nhắc rồi báo kết quả tốt nhất, một kiểu câu cá số liệu. Thử 20 biến thể rồi chọn cái điểm cao nhất trên chính bộ kiểm tra là quá khớp bộ kiểm tra. Hãy chọn trên bộ kiểm định riêng, rồi báo kết quả trên bộ kiểm tra đúng một lần."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.n_for_margin(0.8, 0.01) == 6147 and alg.n_for_margin(0.8, 0.02) == 1537"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Muốn khoảng tin cậy chỉ ±1 điểm khi độ chính xác khoảng 80%, cần bao nhiêu câu?</td></tr>
+          <tr><td>2</td><td>Nếu chấp nhận ±2 điểm thì cần bao nhiêu câu? Vì sao không phải một nửa?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, muốn khoảng tin cậy chỉ cộng trừ 1 điểm khi độ chính xác khoảng 80 phần trăm, cần bao nhiêu câu? Câu hai, nếu chấp nhận cộng trừ 2 điểm thì cần bao nhiêu câu? Vì sao không phải một nửa? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <p>① Chuyển vế công thức khoảng: $n \geq \frac{1{,}96^2 \cdot 0{,}8 \cdot 0{,}2}{0{,}01^2} = \frac{0{,}6147}{0{,}0001} \approx \hl{6147}$ câu.</p>
+        introduces: [geq]
+        say: "Đáp án câu một, chuyển vế công thức khoảng, n phải ít nhất bằng 1 phẩy 96 bình phương nhân 0 phẩy 8 nhân 0 phẩy 2, chia 0 phẩy 01 bình phương, khoảng 6147 câu."
+      - show: |
+          <p>② ≈ <b>1537</b> câu — chỉ còn <b>một phần tư</b>, vì sai số tỉ lệ với $\frac{1}{\sqrt{n}}$: gấp đôi độ chính xác cần gấp bốn số câu.</p>
+        say: "Câu hai, khoảng 1537 câu, chỉ còn một phần tư, vì sai số tỉ lệ với 1 chia căn n, nên muốn chính xác gấp đôi thì cần gấp bốn số câu."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">điểm đánh giá có sai số</span><span class="a">→</span>
+          <span class="n">kèm khoảng tin cậy</span><span class="a">→</span>
+          <span class="n">so theo cặp trên câu bất đồng</span><span class="a">→</span>
+          <span class="n">bộ kiểm tra riêng, chưa công bố</span></div>
+        say: "Tổng kết lại, điểm đánh giá có sai số, nên phải kèm khoảng tin cậy. So hai mô hình theo cặp trên các câu bất đồng, và dùng bộ kiểm tra riêng chưa công bố."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> một con số không có sai số đi kèm là một <b>tin đồn</b>, chưa phải một phép đo.</div>
+        say: "Điều cần mang theo, một con số không có sai số đi kèm chỉ là một tin đồn, chưa phải một phép đo."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 11): <b>ảo giác</b>, hiệu chuẩn và tự nhất quán.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 11, ta học ảo giác, hiệu chuẩn, và tự nhất quán. Hẹn gặp bạn ở bài tiếp theo."

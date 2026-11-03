@@ -1,0 +1,211 @@
+id: L03
+course: BCH
+series: "BCH · Blockchain và sổ cái phân tán"
+title: "Bài 3 — Chữ ký số, khoá và địa chỉ: ai được tiêu"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/bch.yaml L03; audit/bch/verify_bch.py L03; R. Rivest, A. Shamir, L. Adleman (1978); SEC 2 (secp256k1) và cách lập địa chỉ từ băm khoá công khai — A. Narayanan và cộng sự (2016), chương 1, 3; bài 1"
+assumes: [arith, power, mod, cdot]
+# Quy ước: RSA ĐỒ CHƠI n = 61 · 53 = 3233, e = 17, d = 2753 (17 · 2753 ≡ 1 theo mô-đun 60 · 52) — chỉ để thấy cơ chế, khoá thật dài hàng nghìn bit
+#   và chuỗi khối thật dùng chữ ký đường cong elip. Ký: s = h^d mod n với h = SHA-256(thông điệp) mod n; kiểm: s^e mod n = h (alg.toy_rsa_sign, alg.toy_rsa_verify).
+#   Địa chỉ = băm của khoá công khai (rút gọn, hiện 40 chữ số hex đầu).
+objectives:
+  - "Giải thích giao dịch được ký bằng khoá bí mật"
+  - "Kiểm chữ ký bằng khoá công khai"
+  - "Giải thích địa chỉ là băm của khoá công khai"
+asr_reviewed:
+  - {sentence: "Bước hai, người kiểm tính s mũ 17 chia lấy dư cho 3233.", reason: "ASR chép “Bước 2 Người kiểm tính F mũ 17 chia lấy dư cho 3.233” (0.95): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Ta lấy n bằng 61 nhân 53, bằng 3233, khoá công khai e bằng 17, và khoá bí mật d bằng 2753.", reason: "ASR chép “Ta lấy N bằng 61 nhân 53, bằng 3233, khóa công khai E bằng 17 và khóa bí mật G bằng 2753.” (0.974): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Khoá công khai gồm e và n, ai cũng có, dùng để kiểm xem s mũ e chia lấy dư cho n có bằng h không.", reason: "ASR chép “Hóa công khai gồm E và N, ai cũng có, dùng để kiểm xem F mũ E chi lấy dư cho N có bằng hát không?” (0.885): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: khoá/hoá, chia/chi — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Với chữ ký đường cong elip, chỉ cần dùng lại số ngẫu nhiên khi ký là đủ để tính ra khoá bí mật.", reason: "ASR chép “Với chữ ký đường công Elite, chỉ cần dùng lại số ngẫu nhiên khi ký là đủ để tính ra khóa bí mật.” (0.913): lệch âm/thanh thuần Việt: cong elip/công elite — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Người kiểm tính s mũ 17 chia lấy dư cho 3233 thì ra bao nhiêu nếu chữ ký đúng?", reason: "ASR chép “Người kiểm tính F mũ 17 chia lấy dư cho 3233 thì ra bao nhiêu nếu chữ ký đúng?” (0.962): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Không có ngân hàng, ai xác nhận đúng là An?"
+    steps:
+      - show: |
+          <p>Ở ngân hàng, An đăng nhập bằng mật khẩu, ngân hàng kiểm rồi chuyển tiền. Trên sổ cái phân tán không có ai giữ mật khẩu của An. Vậy làm sao mọi nút trên mạng — những người An không quen — đều kiểm được “giao dịch này đúng là An cho phép”, và không ai sửa được số tiền?</p>
+          <div class="box key">Hôm nay: <b>chữ ký số</b> — khoá bí mật để ký, khoá công khai để kiểm, và địa chỉ là băm của khoá công khai.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, ở ngân hàng, An đăng nhập bằng mật khẩu, ngân hàng kiểm rồi chuyển tiền. Trên sổ cái phân tán không có ai giữ mật khẩu của An. Vậy làm sao mọi nút trên mạng, những người An không quen, đều kiểm được giao dịch này đúng là An cho phép, và không ai sửa được số tiền? Hôm nay ta học chữ ký số, khoá bí mật để ký, khoá công khai để kiểm, và địa chỉ là băm của khoá công khai."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: chia lấy dư, lũy thừa lấy dư, mã băm"
+    checks:
+      - "17 % 5 == 2 and 17 == 3 * 5 + 2 and 3 ** 4 == 81 == 11 * 7 + 4 and 81 % 7 == 4"
+      - "3 ** 2 == 9 and 9 % 7 == 2 and (2 * 2) % 7 == pow(3, 4, 7) == 4"
+      - "__import__('hashlib').sha256('A trả B 5'.encode()).hexdigest()[:16] == '4f6b2038b6af9984' and __import__('hashlib').sha256('A trả B 50'.encode()).hexdigest()[:16] == 'cd3959ce01c8e7d6'"
+    steps:
+      - show: |
+          <p><b>Chia lấy dư</b>: $17 = 3 \cdot 5 + 2$, nên $17 \bmod 5 = 2$.</p>
+          <p><b>Lũy thừa rồi lấy dư</b>: $3^4 = 81 = 11 \cdot 7 + 4$, nên $3^4 \bmod 7 = 4$.</p>
+        focus: [1, 1, 2]
+        say: "Trước hết, ta ôn phép chia lấy dư đã gặp ở khoá Toán rời rạc, phần mã khoá công khai. 17 chia lấy dư cho 5 bằng 2, vì 17 bằng 3 nhân 5 cộng 2. Lũy thừa rồi lấy dư cũng vậy, 3 mũ 4 bằng 81, mà 81 bằng 11 nhân 7 cộng 4, nên 3 mũ 4 chia lấy dư cho 7 bằng 4."
+      - show: |
+          <table class="t"><tr><th>bình phương dần</th><th>giá trị</th><th>chia lấy dư cho 7</th></tr>
+          <tr><td>$3^2$</td><td>9</td><td>2</td></tr>
+          <tr><td>$3^4 = (3^2)^2$</td><td>dùng số dư: $2 \cdot 2 = 4$</td><td>$\hl{4}$ — khớp cách tính thẳng</td></tr></table>
+        focus: [0, "1.2", "1.3", 0]
+        say: "Khi số mũ lớn, ta không cần tính cả con số khổng lồ, mà bình phương dần và lấy dư sau mỗi bước. 3 mũ 2 bằng 9, chia lấy dư cho 7 còn 2. Bình phương tiếp số dư đó, 2 nhân 2 bằng 4, khớp với cách tính thẳng ở trên. Lát nữa ta sẽ dùng chính mẹo này để tự kiểm một chữ ký bằng tay."
+      - show: |
+          <table class="t"><tr><th>dữ liệu</th><th>16 chữ số đầu của mã băm (hệ 16)</th></tr>
+          <tr><td>A trả B 5</td><td>4f6b2038b6af9984</td></tr>
+          <tr><td>A trả B 50</td><td>cd3959ce01c8e7d6</td></tr></table>
+        focus: [0, "1.2", "1.3"]
+        say: "Ở bài 1, ta đã thấy mã băm giống dấu vân tay của dữ liệu, cùng dữ liệu luôn cho cùng một mã, còn thêm một ký tự là mã đổi hẳn. Bảng này băm dòng A trả B 5 bằng hàm băm hai trăm năm mươi sáu bit. Dòng A trả B 50 chỉ thêm một chữ số 0, mà mã đã khác ngay từ chữ số đầu tiên."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: cặp khoá, ký, kiểm, địa chỉ"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thứ</th><th>ai có</th><th>dùng để</th></tr>
+          <tr><td><b>khoá bí mật</b> $d$</td><td>chỉ An</td><td>ký: $s = h^d \bmod n$, với $h$ là băm của giao dịch</td></tr>
+          <tr><td><b>khoá công khai</b> $(e, n)$</td><td>mọi người</td><td>kiểm: $s^e \bmod n$ có bằng $h$ không</td></tr>
+          <tr><td><b>địa chỉ</b></td><td>mọi người</td><td>băm của khoá công khai — “số tài khoản” để nhận tiền</td></tr></table>
+          <p>Ký trên <b>băm</b> của cả giao dịch: đổi một ký tự (số tiền, người nhận) là băm đổi, chữ ký cũ không còn khớp.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Bảng có ba thứ. Khoá bí mật d chỉ An có, dùng để ký, chữ ký s bằng h mũ d chia lấy dư cho n, với h là băm của giao dịch. Khoá công khai gồm e và n, ai cũng có, dùng để kiểm xem s mũ e chia lấy dư cho n có bằng h không. Địa chỉ ai cũng biết, là băm của khoá công khai, đóng vai số tài khoản để nhận tiền. Chữ ký được tính trên băm của cả giao dịch, nên đổi một ký tự như số tiền hay người nhận là băm đổi, và chữ ký cũ không còn khớp."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Chữ ký đi đâu, ai kiểm cái gì"
+    steps:
+      - show: |
+          <div><svg width="1500" height="400" viewBox="0 0 1500 400"><defs><marker id="arB3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs><text x="40" y="34" font-size="24" font-weight="bold" fill="#eb6834">việc của An</text><rect x="40" y="50" width="260" height="100" rx="12" fill="#ffffff" stroke="#2a78d6" stroke-width="3"/><text x="170" y="90" font-size="22" text-anchor="middle" fill="#1f2937">giao dịch</text><text x="170" y="126" font-size="26" font-weight="bold" text-anchor="middle" fill="#2a78d6">A trả B 5</text><line x1="300" y1="100" x2="365" y2="100" stroke="#1f2937" stroke-width="3" marker-end="url(#arB3)"/><rect x="370" y="50" width="260" height="100" rx="12" fill="#ffffff" stroke="#2a78d6" stroke-width="3"/><text x="500" y="90" font-size="22" text-anchor="middle" fill="#1f2937">băm, lấy dư 3233</text><text x="500" y="126" font-size="26" font-weight="bold" text-anchor="middle" fill="#2a78d6">h = 3010</text><line x1="630" y1="100" x2="695" y2="100" stroke="#1f2937" stroke-width="3" marker-end="url(#arB3)"/><rect x="700" y="50" width="300" height="100" rx="12" fill="#fff7ed" stroke="#eb6834" stroke-width="3"/><text x="850" y="90" font-size="22" text-anchor="middle" fill="#1f2937">ký bằng d = 2753</text><text x="850" y="126" font-size="26" font-weight="bold" text-anchor="middle" fill="#eb6834">s = 2164</text><line x1="1000" y1="100" x2="1065" y2="100" stroke="#1f2937" stroke-width="3" marker-end="url(#arB3)"/><rect x="1070" y="50" width="400" height="100" rx="12" fill="#ffffff" stroke="#1f2937" stroke-width="3"/><text x="1270" y="90" font-size="22" text-anchor="middle" fill="#1f2937">gửi lên mạng</text><text x="1270" y="126" font-size="26" font-weight="bold" text-anchor="middle" fill="#1f2937">giao dịch, s, (17, 3233)</text><line x1="1270" y1="150" x2="1270" y2="225" stroke="#1f2937" stroke-width="3" marker-end="url(#arB3)"/><text x="40" y="384" font-size="24" font-weight="bold" fill="#059669">việc của mọi nút</text><rect x="1070" y="230" width="400" height="100" rx="12" fill="#ffffff" stroke="#2a78d6" stroke-width="3"/><text x="1270" y="270" font-size="22" text-anchor="middle" fill="#1f2937">nút băm lại giao dịch</text><text x="1270" y="306" font-size="26" font-weight="bold" text-anchor="middle" fill="#2a78d6">3010</text><line x1="1070" y1="280" x2="965" y2="280" stroke="#1f2937" stroke-width="3" marker-end="url(#arB3)"/><rect x="560" y="230" width="400" height="100" rx="12" fill="#ffffff" stroke="#2a78d6" stroke-width="3"/><text x="760" y="270" font-size="22" text-anchor="middle" fill="#1f2937">2164 mũ 17, lấy dư 3233</text><text x="760" y="306" font-size="26" font-weight="bold" text-anchor="middle" fill="#2a78d6">3010</text><line x1="560" y1="280" x2="455" y2="280" stroke="#1f2937" stroke-width="3" marker-end="url(#arB3)"/><rect x="40" y="230" width="410" height="100" rx="12" fill="#ecfdf5" stroke="#059669" stroke-width="3"/><text x="245" y="270" font-size="22" text-anchor="middle" fill="#1f2937">hai số khớp nhau</text><text x="245" y="306" font-size="26" font-weight="bold" text-anchor="middle" fill="#059669">hợp lệ, nhận</text><text x="850" y="190" font-size="21" text-anchor="middle" fill="#b91c1c">khoá bí mật không rời tay An</text></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ đường đi của một chữ ký qua hai hàng. Hàng trên là việc của An, giao dịch được băm thành 3010, rồi An dùng khoá bí mật biến 3010 thành chữ ký 2164, và gửi cả giao dịch, chữ ký lẫn khoá công khai lên mạng. Hàng dưới là việc của một nút bất kỳ, nút băm lại giao dịch được 3010, rồi lấy 2164 mũ 17 chia lấy dư cho 3233 cũng được 3010. Hai con số khớp nhau thì giao dịch được nhận, và suốt quá trình khoá bí mật không hề rời khỏi tay An."
+
+  - id: example
+    kind: example
+    title: "Ký “A trả B 5” bằng khoá đồ chơi"
+    checks:
+      - "alg.toy_rsa_sign('A trả B 5') == 2164 and pow(2164, 17, 3233) == 3010 and alg.toy_rsa_verify('A trả B 5', 2164) and not alg.toy_rsa_verify('A trả B 50', 2164)"
+      - "61 * 53 == 3233 and (17 * 2753) % (60 * 52) == 1"
+      - "17 * 2753 == 46801 == 15 * 3120 + 1 and 60 * 52 == 3120 and pow(3010, 2753, 3233) == 2164"
+    steps:
+      - show: |
+          <p><b>Bước 1 — dựng khoá đồ chơi</b> (chỉ để thấy cơ chế):</p>
+          $$n = 61 \cdot 53 = 3233, \quad e = 17, \quad d = 2753$$
+          <p>Vì sao là 2753: $17 \cdot 2753 = 46\,801 = 15 \cdot 3120 + 1$, với $3120 = 60 \cdot 52$.</p>
+        focus: [1, 2, 3, 3]
+        say: "Bước một, dựng một khoá đồ chơi, chỉ để thấy cơ chế, vì khoá thật dài hàng nghìn bit. Ta lấy n bằng 61 nhân 53, bằng 3233, khoá công khai e bằng 17, và khoá bí mật d bằng 2753. Số d được chọn sao cho 17 nhân d bằng 46801, đúng bằng 15 lần 3120 cộng 1. Ở đây 3120 là 60 nhân 52, và chính điều kiện dư 1 này làm phép kiểm đảo ngược được phép ký."
+      - show: |
+          <p><b>Bước 2 — băm giao dịch rồi lấy dư:</b></p>
+          $$h = \text{băm}(\text{A trả B 5}) \bmod 3233 = \hl{3010}$$
+        focus: [2, 2]
+        say: "Bước hai, băm dòng A trả B 5 bằng hàm băm hai trăm năm mươi sáu bit, rồi chia lấy dư cho 3233, được h bằng 3010. Chữ ký sẽ đặt lên con số 3010 này, chứ không đặt lên từng chữ của giao dịch."
+      - show: |
+          <p><b>Bước 3 — An ký bằng khoá bí mật:</b></p>
+          $$s = 3010^{2753} \bmod 3233 = \hl{2164}$$
+        focus: [2, 2]
+        say: "Bước ba, An dùng khoá bí mật để ký, tính 3010 mũ 2753 rồi chia lấy dư cho 3233, được chữ ký s bằng 2164. Với khoá thật, chỉ người giữ khoá bí mật mới tính được con số này."
+      - show: |
+          <p><b>Bước 4 — ai cũng kiểm được bằng khoá công khai:</b></p>
+          $$2164^{17} \bmod 3233 = 3010 = h \quad \text{→ đúng}$$
+        focus: [2, 2]
+        say: "Bước bốn, bất kỳ ai cũng kiểm được bằng khoá công khai, tính 2164 mũ 17 rồi chia lấy dư cho 3233, ra 3010. Con số này đúng bằng h của bước hai, nên chữ ký hợp lệ."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước 5 — kẻ sửa giao dịch</th><th>giá trị</th></tr>
+          <tr><td>băm “A trả B 50”, lấy dư cho 3233</td><td>2441</td></tr>
+          <tr><td>chữ ký cũ cho ra</td><td>3010</td></tr>
+          <tr><td>so sánh</td><td>2441 ≠ 3010 → chữ ký <b class="red">sai</b></td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Bước năm, kẻ gian sửa giao dịch thành A trả B 50 nhưng giữ chữ ký cũ. Nút băm dòng mới rồi lấy dư, ra 2441. Chữ ký cũ mũ 17 lấy dư vẫn cho 3010. Hai số khác nhau, nên giao dịch bị sửa bị từ chối ngay."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: tính tay bằng bình phương dần"
+    checks:
+      - "[pow(2164, 2 ** i, 3233) for i in range(5)] == [2164, 1512, 413, 2453, 596] and 2164 * 2164 % 3233 == 1512 and 1512 * 1512 % 3233 == 413 and 413 * 413 % 3233 == 2453 and 2453 * 2453 % 3233 == 596 and 596 * 2164 % 3233 == 3010 and 16 + 1 == 17"
+      - "pow(2165, 17, 3233) == 79 and sum(1 for m in range(3233) if pow(pow(m, 2753, 3233), 17, 3233) == m) == 3233"
+    steps:
+      - show: |
+          <table class="t"><tr><th>lũy thừa</th><th>cách tính</th><th>chia lấy dư cho 3233</th></tr>
+          <tr><td>$2164^2$</td><td>$2164 \cdot 2164$</td><td>1512</td></tr>
+          <tr><td>$2164^4$</td><td>$1512 \cdot 1512$</td><td>413</td></tr>
+          <tr><td>$2164^8$</td><td>$413 \cdot 413$</td><td>2453</td></tr>
+          <tr><td>$2164^{16}$</td><td>$2453 \cdot 2453$</td><td>596</td></tr>
+          <tr><td>$2164^{17} = 2164^{16} \cdot 2164$</td><td>$596 \cdot 2164$</td><td>$\hl{3010}$ ✓</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.5", "1.6"]
+        say: "Kiểm bằng đường khác, ta tự tính 2164 mũ 17 bằng mẹo bình phương dần ở phần chuẩn bị, mỗi lần lấy dư cho 3233. Bình phương 2164 rồi lấy dư, được 1512. Bình phương 1512 rồi lấy dư, được 413. Bình phương 413, được 2453, và bình phương 2453, được 596, tức là 2164 mũ 16. Vì 17 bằng 16 cộng 1, ta nhân thêm 2164 một lần, 596 nhân 2164 lấy dư được 3010, khớp kết quả của máy."
+      - show: |
+          <table class="t"><tr><th>phép thử của máy</th><th>kết quả</th></tr>
+          <tr><td>chữ ký lệch 1 đơn vị: $2165^{17} \bmod 3233$</td><td>79 ≠ 3010 → <b class="red">sai</b></td></tr>
+          <tr><td>ký rồi kiểm với mọi h từ 0 tới 3232</td><td>3233 / 3233 lần trả lại đúng h ✓</td></tr></table>
+        focus: [0, "1.2", "1.3"]
+        say: "Ta thêm hai phép thử nữa, lần này để máy tính làm. Chữ ký lệch chỉ một đơn vị, 2165 mũ 17 lấy dư cho 3233, ra 79, khác hẳn 3010, nên đoán bừa chữ ký không qua được. Máy ký rồi kiểm với mọi giá trị h từ 0 tới 3232, và cả 3233 lần đều trả lại đúng h, nên phép kiểm luôn đảo ngược được phép ký."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Mất khoá bí mật <b class="red">(không có “quên mật khẩu”)</b>
+          <br><span class="note">Không có bên nào cấp lại khoá. Mất khoá là mất quyền tiêu vĩnh viễn; lộ khoá là ai cũng tiêu được. Sao lưu khoá ngoại tuyến, nhiều bản, ở nhiều nơi; với số tiền lớn dùng thiết bị ký riêng hoặc ký nhiều bên.</span></div>
+        say: "Lỗi thứ nhất, mất khoá bí mật, trong khi không có chức năng quên mật khẩu. Không có bên nào cấp lại khoá. Mất khoá là mất quyền tiêu vĩnh viễn, còn lộ khoá là ai cũng tiêu được. Hãy sao lưu khoá ngoại tuyến, nhiều bản, ở nhiều nơi, và với số tiền lớn thì dùng thiết bị ký riêng hoặc ký nhiều bên."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Ký mà không ràng buộc ngữ cảnh <b class="red">(chữ ký bị phát lại)</b>
+          <br><span class="note">Chữ ký trên “A trả B 5” có thể bị gửi lại lần nữa, hay sang một chuỗi khác. Giao dịch phải gắn đồng cụ thể đang tiêu, hoặc số thứ tự và mã chuỗi, để mỗi chữ ký chỉ dùng được một lần.</span></div>
+        say: "Lỗi thứ hai, ký mà không ràng buộc ngữ cảnh, nên chữ ký bị phát lại. Chữ ký trên dòng A trả B 5 có thể bị gửi lại lần nữa, hay sang một chuỗi khác. Giao dịch phải gắn với đồng cụ thể đang tiêu, hoặc số thứ tự và mã chuỗi, để mỗi chữ ký chỉ dùng được một lần."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Tự viết thuật toán ký <b class="red">(một lỗi nhỏ lộ cả khoá)</b>
+          <br><span class="note">Khoá đồ chơi ở đây phá được trong tích tắc. Với chữ ký đường cong elip, dùng lại số ngẫu nhiên khi ký là đủ để tính ra khoá bí mật. Luôn dùng thư viện đã được kiểm định.</span></div>
+        say: "Lỗi thứ ba, tự viết thuật toán ký, nên một lỗi nhỏ làm lộ cả khoá. Khoá đồ chơi ở đây bị phá trong tích tắc. Với chữ ký đường cong elip, chỉ cần dùng lại số ngẫu nhiên khi ký là đủ để tính ra khoá bí mật. Hãy luôn dùng thư viện đã được kiểm định."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "pow(pow(1234, 2753, 3233), 17, 3233) == 1234"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Một giao dịch có $h = 1234$ (đã lấy dư). An ký được $s$. Người kiểm tính $s^{17} \bmod 3233$ thì ra bao nhiêu nếu chữ ký đúng?</td></tr>
+          <tr><td>2</td><td>Bình biết địa chỉ của An nhưng chưa thấy khoá công khai. Bình kiểm được chữ ký của An khi nào?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, một giao dịch có h bằng 1234, đã lấy dư, và An ký được s. Người kiểm tính s mũ 17 chia lấy dư cho 3233 thì ra bao nhiêu nếu chữ ký đúng? Câu hai, Bình biết địa chỉ của An nhưng chưa thấy khoá công khai. Bình kiểm được chữ ký của An khi nào? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① Bước một, An ký: $s = 1234^{2753} \bmod 3233$.</p>
+          <p>Bước hai, người kiểm tính $s^{17} \bmod 3233$. Kiểm là đảo ngược phép ký, $(h^d)^e \equiv h \pmod{n}$, nên ra đúng $\hl{1234}$.</p>
+        introduces: [equiv_mod]
+        focus: [1, 2, 2]
+        say: "Đáp án câu một, bước một, An ký bằng cách tính 1234 mũ 2753 rồi chia lấy dư cho 3233. Bước hai, người kiểm tính s mũ 17 chia lấy dư cho 3233. Vì kiểm là đảo ngược phép ký, h mũ d rồi mũ e đồng dư với h theo mô-đun n, nên kết quả ra đúng 1234, như máy đã thử với mọi h nhỏ hơn 3233."
+      - show: |
+          <table class="t"><tr><th>②</th><th>Bình làm gì</th></tr>
+          <tr><td>1</td><td>nhận khoá công khai An gửi kèm giao dịch</td></tr>
+          <tr><td>2</td><td>băm khoá đó, so với địa chỉ của An: phải khớp</td></tr>
+          <tr><td>3</td><td>dùng khoá đó kiểm chữ ký như bước 4 của ví dụ</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4"]
+        say: "Câu hai, Bình chỉ kiểm được khi An đưa khoá công khai kèm theo giao dịch. Đầu tiên, Bình nhận khoá công khai đó. Tiếp theo, Bình băm khoá đó và so với địa chỉ của An, hai bên phải khớp nhau. Cuối cùng, Bình dùng khoá đó để kiểm chữ ký, giống hệt bước bốn của ví dụ."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">khoá bí mật ký băm giao dịch</span><span class="a">→</span>
+          <span class="n">khoá công khai kiểm, ai cũng làm được</span><span class="a">→</span>
+          <span class="n">địa chỉ = băm khoá công khai</span><span class="a">→</span>
+          <span class="n">giữ khoá an toàn; chống phát lại; dùng thư viện chuẩn</span></div>
+        say: "Tổng kết lại, khoá bí mật ký lên băm của giao dịch, khoá công khai kiểm và ai cũng làm được, còn địa chỉ là băm của khoá công khai. Hãy giữ khoá an toàn, chống phát lại, và dùng thư viện chuẩn."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> trên sổ cái không có bên tin cậy, <b>sở hữu</b> nghĩa là <b>giữ được khoá</b> — không hơn, không kém.</div>
+        say: "Điều cần mang theo, trên sổ cái không có bên tin cậy, sở hữu nghĩa là giữ được khoá, không hơn và không kém."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 4): <b>mô hình đồng chưa tiêu</b> và mô hình tài khoản.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 4, ta học mô hình đồng chưa tiêu và mô hình tài khoản. Hẹn gặp bạn ở bài tiếp theo."

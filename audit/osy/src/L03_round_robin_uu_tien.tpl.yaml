@@ -1,0 +1,263 @@
+id: L03
+course: OSY
+series: "OSY · Hệ điều hành"
+title: "Bài 3 — Lập lịch Round Robin, độ ưu tiên và nạn đói"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/osy.yaml L03; audit/verify_plan_curricula.py OSY:L03; Silberschatz, Galvin, Gagne, Operating System Concepts, chương 5"
+assumes: [arith, frac, sub, dots, approx]
+# Quy ước: như bài 2 — mọi tiến trình đến lúc 0 theo thứ tự P1, P2, P3; đơn vị ms. Round Robin = xoay vòng (tên tiếng Anh chỉ trên màn hình);
+#   lượng tử q = thời gian tối đa một tiến trình chạy liền mỗi lượt. Thời gian phản hồi = lúc được chạy lần ĐẦU − lúc đến.
+#   Hình sinh bằng audit/osy/gantt_svg.py; số trong checks tính bằng alg.rr_waits.
+objectives:
+  - "Mô phỏng xoay vòng với lượng tử cho trước"
+  - "Phân biệt thời gian chờ và thời gian phản hồi"
+  - "Giải thích nạn đói và kỹ thuật lão hoá"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Gõ phím mà 24 ms sau mới thấy chữ"
+    steps:
+      - show: |
+          <p>Ở bài 2, việc ngắn nhất trước cho chờ trung bình nhỏ nhất. Nhưng với đến trước phục vụ trước, một tiến trình dài 24 ms chạy trước thì trình soạn thảo của bạn phải đợi 24 ms mới phản hồi phím bấm.</p>
+          <div class="box key">Máy tương tác cần mọi tiến trình được chạy <b>sớm</b>, dù chỉ một chút. Hôm nay: chia lượt xoay vòng, độ ưu tiên, và nạn đói.</div>
+        focus: [1, 1, 2, 2]
+        say: "Chào bạn, ở bài 2 ta thấy chạy việc ngắn nhất trước cho thời gian chờ trung bình nhỏ nhất. Nhưng nếu chạy theo thứ tự đến và một tiến trình dài 24 mi li giây chạy trước, trình soạn thảo của bạn phải đợi 24 mi li giây mới phản hồi phím bấm. Máy tương tác cần mọi tiến trình được chạy sớm, dù chỉ một chút. Hôm nay ta học chia lượt xoay vòng, độ ưu tiên, và nạn đói."
+
+  # ───────────────────────── 1b. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: hàng đợi, và chờ = hoàn thành − thời gian chạy"
+    checks:
+      - "(lambda q: (q.pop(0), q + ['P1'])[1])(['P1', 'P2', 'P3']) == ['P2', 'P3', 'P1']"
+      - "alg.sched_waits([24, 3, 3])[1] + 3 == 27 and 27 - 3 == 24"
+    steps:
+      - show: |
+          <p><b>Hàng đợi</b>: lấy ra ở <b>đầu</b>, thêm vào ở <b>cuối</b>, như hàng người ở quầy thu ngân.</p>
+          <table class="t"><tr><th>lúc</th><th>hàng đợi (đầu → cuối)</th></tr>
+          <tr><td>trước</td><td>P1, P2, P3</td></tr>
+          <tr><td>P1 ra chạy, chưa xong, xếp lại</td><td>P2, P3, $\hl{\text{P1}}$</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Trước hết, ta ôn hàng đợi, lấy ra ở đầu và thêm vào ở cuối, giống hàng người ở quầy thu ngân. Lúc đầu hàng là tiến trình 1, 2, 3. Tiến trình 1 ra chạy, chưa xong việc thì xếp lại ở cuối, nên hàng thành 2, 3, rồi 1."
+      - show: |
+          <p>Ở bài 2, khi mọi tiến trình đến lúc 0, mỗi tiến trình từ lúc 0 đến lúc xong chỉ có hai việc: <b>chờ</b> hoặc <b>chạy</b>. Vậy:</p>
+          $$\text{chờ} = \text{hoàn thành} - \text{thời gian chạy}$$
+          <p>Làm thử với P2 của bài 2 (chạy 3 ms, xong lúc 27): $27 - 3 = 24$, đúng thời gian chờ đã tính.</p>
+        focus: [1, 2, 3]
+        say: "Ở bài 2, khi mọi tiến trình đến lúc 0, mỗi tiến trình từ lúc 0 đến lúc xong chỉ làm một trong hai việc, chờ hoặc chạy. Vì vậy thời gian chờ bằng lúc hoàn thành trừ thời gian chạy. Làm thử với tiến trình 2 của bài 2, chạy 3 mi li giây và xong lúc 27, ta được 27 trừ 3 bằng 24, đúng thời gian chờ đã tính ở đó."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: lượng tử q, thời gian phản hồi"
+    steps:
+      - show: |
+          <p><b>Xoay vòng</b> (Round Robin): tiến trình đầu hàng đợi chạy tối đa $q$ ms (<b>lượng tử</b>). Chưa xong thì về <b>cuối</b> hàng đợi.</p>
+          <p><b>Thời gian phản hồi</b> = lúc được chạy lần <b>đầu</b> − lúc đến. Thời gian chờ (bài 2) = tổng mọi lúc nằm trong hàng đợi.</p>
+        focus: [1, 1, 2, 2]
+        say: "Trong cách xoay vòng, tiến trình ở đầu hàng đợi được chạy tối đa q mi li giây, gọi là một lượng tử. Nếu chưa xong, nó quay về cuối hàng đợi. Thời gian phản hồi bằng lúc được chạy lần đầu trừ lúc đến. Còn thời gian chờ, như ở bài 2, là tổng mọi khoảng thời gian tiến trình nằm trong hàng đợi."
+
+  # ───────────────────────── 2b. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hình dung: hàng đợi xoay vòng với q = 4"
+    checks:
+      - "24 - 4 == 20 and 0 + 4 == 4 and 4 + 3 == 7 and 7 + 3 == 10 and 10 + 20 == 30"
+    steps:
+      - show: |
+          <div><svg width="1500" height="390" viewBox="0 0 1500 390"><defs><marker id="arO3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#dc2626"/></marker></defs><text x="300" y="34" font-size="24" font-weight="bold" text-anchor="middle" fill="#1f2937">bộ xử lý</text><text x="760" y="34" font-size="24" font-weight="bold" text-anchor="middle" fill="#1f2937">hàng đợi (đầu → cuối)</text><text x="40" y="93" font-size="24" font-weight="bold" fill="#1f2937">lúc 0</text><rect x="215" y="50" width="170" height="68" rx="10" fill="none" stroke="#1f2937" stroke-width="3"/><rect x="225" y="56" width="150" height="56" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="3"/><text x="300" y="93" font-size="24" font-weight="bold" text-anchor="middle" fill="#1f2937">P1 còn 24</text><rect x="560" y="56" width="150" height="56" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="3"/><text x="635" y="93" font-size="24" font-weight="bold" text-anchor="middle" fill="#1f2937">P2 còn 3</text><rect x="730" y="56" width="150" height="56" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text x="805" y="93" font-size="24" font-weight="bold" text-anchor="middle" fill="#1f2937">P3 còn 3</text><text x="40" y="175" font-size="24" font-weight="bold" fill="#1f2937">lúc 4</text><rect x="215" y="132" width="170" height="68" rx="10" fill="none" stroke="#1f2937" stroke-width="3"/><rect x="225" y="138" width="150" height="56" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="3"/><text x="300" y="175" font-size="24" font-weight="bold" text-anchor="middle" fill="#1f2937">P2 còn 3</text><rect x="560" y="138" width="150" height="56" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text x="635" y="175" font-size="24" font-weight="bold" text-anchor="middle" fill="#1f2937">P3 còn 3</text><rect x="730" y="138" width="150" height="56" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="3"/><text x="805" y="175" font-size="24" font-weight="bold" text-anchor="middle" fill="#1f2937">P1 còn 20</text><text x="40" y="257" font-size="24" font-weight="bold" fill="#1f2937">lúc 7</text><rect x="215" y="214" width="170" height="68" rx="10" fill="none" stroke="#1f2937" stroke-width="3"/><rect x="225" y="220" width="150" height="56" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text x="300" y="257" font-size="24" font-weight="bold" text-anchor="middle" fill="#1f2937">P3 còn 3</text><rect x="560" y="220" width="150" height="56" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="3"/><text x="635" y="257" font-size="24" font-weight="bold" text-anchor="middle" fill="#1f2937">P1 còn 20</text><text x="40" y="339" font-size="24" font-weight="bold" fill="#1f2937">lúc 10</text><rect x="215" y="296" width="170" height="68" rx="10" fill="none" stroke="#1f2937" stroke-width="3"/><rect x="225" y="302" width="150" height="56" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="3"/><text x="300" y="339" font-size="24" font-weight="bold" text-anchor="middle" fill="#1f2937">P1 còn 20</text><text x="560" y="339" font-size="22" fill="#6b7280">trống: P1 chạy liền tới 30</text><path d="M386,100 C600,128 1010,108 886,164" fill="none" stroke="#dc2626" stroke-width="3" stroke-dasharray="10 7" marker-end="url(#arO3)"/><text x="1000" y="178" font-size="22" fill="#dc2626">hết lượng tử 4: P1 về cuối hàng</text></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình này chụp hàng đợi ở bốn mốc, với ba tiến trình cần 24, 3 và 3 mi li giây, lượng tử bằng 4. Lúc 0, tiến trình 1 được chạy, hai tiến trình kia đứng chờ. Lúc 4, nó hết lượng tử mà vẫn còn 20, nên theo mũi tên đỏ về cuối hàng, và tiến trình 2 lên chạy. Tiến trình 2 và 3 chỉ cần 3, ngắn hơn lượng tử, nên chạy một lượt là xong, và từ lúc 10, tiến trình 1 chạy một mình tới 30."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Xoay vòng q = 4 với 24, 3, 3"
+    checks:
+      - "alg.rr_waits([24, 3, 3], 4) == [6, 4, 7] and round(sum(alg.rr_waits([24, 3, 3], 4)) / 3, 2) == 5.67"
+      - "30 - 24 == 6 and 7 - 3 == 4 and 10 - 3 == 7 and 6 + 4 + 7 == 17"
+    steps:
+      - show: |
+          <div>{{RR4}}</div>
+          <p>P1 chạy 0–4 rồi về cuối hàng; P2 chạy 4–7 xong; P3 chạy 7–10 xong; P1 chạy tiếp một mình 10–30.</p>
+        focus: [1, 2, 2]
+        say: "Với lượng tử 4, tiến trình 1 chạy từ 0 đến 4 rồi về cuối hàng. Tiến trình 2 chạy từ 4 đến 7 là xong, tiến trình 3 chạy từ 7 đến 10 là xong. Sau đó tiến trình 1 chạy tiếp một mình từ 10 đến 30."
+      - clear: true
+        show: |
+          <p><b>Bước 1.</b> P1 xong lúc 30, đã chạy 24 ms:</p>
+          $$\text{chờ của P1} = 30 - 24 = \hl{6}$$
+        focus: [1, 2]
+        say: "Vì mọi tiến trình đến lúc 0, thời gian chờ bằng lúc hoàn thành trừ thời gian chạy. Bước 1, tiến trình 1 xong lúc 30 và đã chạy 24, nên chờ 30 trừ 24, bằng 6."
+      - show: |
+          <p><b>Bước 2.</b> P2 xong lúc 7, đã chạy 3 ms:</p>
+          $$\text{chờ của P2} = 7 - 3 = \hl{4}$$
+        focus: [1, 2]
+        say: "Bước 2, tiến trình 2 xong lúc 7 và đã chạy 3. Chờ của nó bằng 7 trừ 3, bằng 4."
+      - clear: true
+        show: |
+          <p><b>Bước 3.</b> P3 xong lúc 10, đã chạy 3 ms:</p>
+          $$\text{chờ của P3} = 10 - 3 = \hl{7}$$
+        focus: [1, 2]
+        say: "Bước 3, tiến trình 3 xong lúc 10 và đã chạy 3. Chờ của nó bằng 10 trừ 3, bằng 7."
+      - show: |
+          <p><b>Bước 4.</b> Trung bình:</p>
+          $$\frac{6 + 4 + 7}{3} = \frac{17}{3} \approx \hl{5{,}67} \text{ ms}$$
+        focus: [1, 2]
+        say: "Bước 4, cộng ba thời gian chờ được 17. Trung bình là 17 phần 3, khoảng 5 phẩy 67 mi li giây."
+
+  # ───────────────────────── 4. SO SÁNH ─────────────────────────
+  - id: compare
+    kind: concept
+    title: "Được gì, mất gì so với bài 2"
+    checks:
+      - "sum(alg.sched_waits([24, 3, 3])) / 3 == 17 and sum(alg.sched_waits(sorted([24, 3, 3]))) / 3 == 3"
+      - "max(alg.rr_response([24, 3, 3], 4)) == 7 and max(alg.sched_waits([24, 3, 3])) == 27 and max(alg.sched_waits(sorted([24, 3, 3]))) == 6"
+      - "max(alg.rr_response([24, 3, 3], 4)) <= (3 - 1) * 4"
+    steps:
+      - show: |
+          <table class="t"><tr><th>cách</th><th>chờ trung bình</th><th>phản hồi chậm nhất</th></tr>
+          <tr><td>đến trước phục vụ trước</td><td>17</td><td>27</td></tr>
+          <tr><td>ngắn nhất trước</td><td>3</td><td>6</td></tr>
+          <tr><td>xoay vòng q = 4</td><td>5,67</td><td>$\hl{7}$</td></tr></table>
+          <p>Xoay vòng không cần biết trước thời gian chạy, mà vẫn bảo đảm mọi tiến trình được chạy lần đầu trong vòng (số tiến trình − 1) × $q$ ms.</p>
+        focus: [0, "1.2", "1.3", "1.4", 2]
+        say: "So sánh ba cách trên cùng ba tiến trình. Đến trước phục vụ trước cho chờ trung bình 17, và tiến trình phản hồi chậm nhất phải đợi 27. Ngắn nhất trước cho chờ trung bình 3 và phản hồi chậm nhất 6, nhưng cần biết trước thời gian chạy. Xoay vòng cho chờ trung bình 5 phẩy 67 và phản hồi chậm nhất 7. Điểm mạnh của nó là không cần biết trước gì, mà vẫn bảo đảm mỗi tiến trình được chạy lần đầu trong vòng số tiến trình trừ 1, nhân q mi li giây."
+
+  # ───────────────────────── 5. CHỌN LƯỢNG TỬ ─────────────────────────
+  - id: quantum
+    kind: concept
+    title: "Chọn lượng tử: quá nhỏ hay quá lớn đều hỏng"
+    checks:
+      - "alg.rr_waits([24, 3, 3], 24) == alg.sched_waits([24, 3, 3])"
+    steps:
+      - show: |
+          <p>$q$ <b>quá lớn</b> (≥ mọi thời gian chạy): không ai bị ngắt giữa chừng → thành đến trước phục vụ trước. Với $q = 24$: chờ đúng 0, 24, 27.</p>
+          <p>$q$ <b>quá nhỏ</b>: chuyển ngữ cảnh liên tục. Bài 0: mỗi lần chuyển tốn vài µs — với $q$ cỡ vài µs, nửa thời gian chỉ để chuyển.</p>
+          <div class="box key">Thực tế: $q$ cỡ 10–100 ms, lớn hơn chi phí chuyển ngữ cảnh hàng nghìn lần.</div>
+        focus: [1, 1, 2, 2, 3]
+        say: "Lượng tử quá lớn, lớn hơn mọi thời gian chạy, thì không ai bị ngắt giữa chừng, và xoay vòng trở thành đến trước phục vụ trước. Máy đã kiểm, với q bằng 24 thì thời gian chờ đúng là 0, 24 và 27. Lượng tử quá nhỏ thì chuyển ngữ cảnh liên tục. Ở bài 0 ta tính mỗi lần chuyển tốn vài phần triệu giây, nên nếu q cũng chỉ vài phần triệu giây thì nửa thời gian mất vào việc chuyển. Thực tế người ta chọn q cỡ 10 đến 100 mi li giây, lớn hơn chi phí chuyển hàng nghìn lần."
+
+  # ───────────────────────── 6. ƯU TIÊN, NẠN ĐÓI ─────────────────────────
+  - id: priority
+    kind: concept
+    title: "Độ ưu tiên, nạn đói và lão hoá"
+    checks:
+      - "127 * 15 / 60 == 31.75"
+    steps:
+      - show: |
+          <p><b>Lập lịch theo độ ưu tiên</b>: luôn chạy tiến trình có ưu tiên cao nhất. Ngắn nhất trước là một trường hợp riêng (ưu tiên = độ ngắn).</p>
+          <p><b>Nạn đói</b>: tiến trình ưu tiên thấp có thể không bao giờ được chạy nếu việc ưu tiên cao đến liên tục.</p>
+          <p><b>Lão hoá</b>: cứ chờ một khoảng thì tăng ưu tiên lên một bậc. Ưu tiên từ 127 (thấp nhất) về 0, mỗi 15 phút một bậc: sau $\frac{127 \times 15}{60} \approx 32$ giờ chắc chắn được chạy.</p>
+        focus: [1, 1, 2, 3, 3]
+        say: "Lập lịch theo độ ưu tiên luôn chạy tiến trình có ưu tiên cao nhất. Ngắn nhất trước chính là một trường hợp riêng, khi ưu tiên là độ ngắn. Nạn đói xảy ra khi tiến trình ưu tiên thấp không bao giờ được chạy, vì việc ưu tiên cao cứ đến liên tục. Cách chữa là lão hoá, cứ chờ một khoảng thì tăng ưu tiên lên một bậc. Ví dụ ưu tiên từ 127 về 0, mỗi 15 phút một bậc, thì sau khoảng 32 giờ chắc chắn tiến trình được chạy."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: verify
+    kind: check
+    title: "Tự kiểm"
+    checks:
+      - "sum([24, 3, 3]) == 30"
+      - "(10 - 4) == alg.rr_waits([24, 3, 3], 4)[0] and (4 - 0) == alg.rr_waits([24, 3, 3], 4)[1] and (7 - 0) == alg.rr_waits([24, 3, 3], 4)[2]"
+    steps:
+      - show: |
+          <p><b>Kiểm bằng đường khác:</b> đọc thẳng trên biểu đồ những khoảng mỗi tiến trình <b>nằm trong hàng đợi</b>.</p>
+          <table class="t"><tr><th>tiến trình</th><th>nằm chờ từ … đến …</th><th>chờ</th><th>so với bước</th></tr>
+          <tr><td>P1</td><td>4 → 10 (P2, P3 đang chạy)</td><td>$10 - 4 = 6$</td><td>✓ bước 1</td></tr>
+          <tr><td>P2</td><td>0 → 4</td><td>$4 - 0 = 4$</td><td>✓ bước 2</td></tr>
+          <tr><td>P3</td><td>0 → 7</td><td>$7 - 0 = 7$</td><td>✓ bước 3</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Kiểm lại bằng đường khác, không dùng công thức hoàn thành trừ thời gian chạy, mà đọc thẳng trên biểu đồ những khoảng mỗi tiến trình nằm trong hàng đợi. Tiến trình 1 nằm chờ từ 4 đến 10, vì lúc đó tiến trình 2 và 3 đang chạy, tức 6, khớp bước 1. Tiến trình 2 nằm chờ từ 0 đến 4, tức 4, khớp bước 2. Tiến trình 3 nằm chờ từ 0 đến 7, tức 7, khớp bước 3."
+      - show: |
+          <ol><li>Mốc cuối biểu đồ vẫn = tổng thời gian chạy (30) — xoay vòng không làm việc nhiều hơn, chỉ chia lại.</li>
+          <li>Mỗi khối dài tối đa $q$; khối ngắn hơn $q$ nghĩa là tiến trình vừa xong.</li>
+          <li>Chờ của mỗi tiến trình = hoàn thành − thời gian chạy (khi đến lúc 0).</li></ol>
+        focus: [0, "1.1", "1.2", "1.3"]
+        say: "Tự kiểm bằng ba cách. Một, mốc cuối của biểu đồ vẫn bằng tổng thời gian chạy là 30, vì xoay vòng không làm thêm việc, chỉ chia lại thứ tự. Hai, mỗi khối dài tối đa q, khối nào ngắn hơn q nghĩa là tiến trình vừa xong. Ba, khi mọi tiến trình đến lúc 0, thời gian chờ bằng lúc hoàn thành trừ thời gian chạy."
+
+  # ───────────────────────── 8. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "5 lỗi hay gặp, kể cả của người đã đi làm"
+    checks:
+      - "round(5 / (10000 + 5) * 100, 2) == 0.05 and round(5 / (100 + 5) * 100, 1) == 4.8 and 90 < (5 / 105) / (5 / 10005) < 100"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Đưa tiến trình bị ngắt về <b>đầu</b> hàng đợi <b class="red">(sai)</b>
+          <br><span class="note">Nó về <b>cuối</b>; nếu về đầu thì chẳng khác gì cho chạy liền — mất ý nghĩa xoay vòng.</span></div>
+        say: "Lỗi thứ nhất, đưa tiến trình bị ngắt về đầu hàng đợi. Nó phải về cuối hàng, nếu về đầu thì chẳng khác gì cho chạy liền, mất ý nghĩa xoay vòng."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Nghĩ xoay vòng luôn cho chờ trung bình nhỏ hơn <b class="red">(sai)</b>
+          <br><span class="note">Ở ví dụ, 5,67 lớn hơn 3 của ngắn nhất trước. Xoay vòng tối ưu <b>phản hồi</b>, không tối ưu chờ trung bình.</span></div>
+        say: "Lỗi thứ hai, nghĩ xoay vòng luôn cho chờ trung bình nhỏ hơn. Ở ví dụ, 5 phẩy 67 lớn hơn 3 của ngắn nhất trước, vì xoay vòng tối ưu thời gian phản hồi chứ không tối ưu chờ trung bình."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3 — của người đã đi làm.</b> Hạ $q$ thật nhỏ cho “mượt” mà không đo phần bị mất <b class="red">(tốn)</b></div>
+          <p>Mỗi lượt gồm $q$ chạy việc thật cộng một lần chuyển 5 µs (giả định của bài 0). Phần mất $= \frac{5}{q + 5}$:</p>
+          <table class="t"><tr><th>$q$</th><th>phần thời gian mất cho chuyển</th></tr>
+          <tr><td>10 ms = 10000 µs</td><td>$\frac{5}{10005} \approx 0{,}05\%$</td></tr>
+          <tr><td>0,1 ms = 100 µs</td><td>$\frac{5}{105} \approx \hl{4{,}8\%}$</td></tr></table>
+        focus: [1, 2, "3.2", "3.3"]
+        say: "Lỗi thứ ba hay gặp ở người đã đi làm, là hạ lượng tử thật nhỏ cho máy có vẻ mượt hơn, mà không đo phần thời gian bị mất. Mỗi lượt gồm q chạy việc thật, cộng một lần chuyển ngữ cảnh 5 phần triệu giây như giả định ở bài 0, nên phần mất bằng 5 chia cho q cộng 5. Với q bằng 10 mi li giây, phần mất chỉ khoảng 0 phẩy 05 phần trăm. Hạ q xuống 0 phẩy 1 mi li giây thì phần mất vọt lên khoảng 4 phẩy 8 phần trăm, gấp gần trăm lần, và đó còn chưa tính chi phí làm nóng lại bộ nhớ đệm."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4.</b> Quên chi phí chuyển ngữ cảnh khi so sánh <b class="red">(lạc quan)</b>
+          <br><span class="note">Biểu đồ coi việc chuyển tốn 0 ms; với $q$ nhỏ, chi phí thật làm mọi con số tệ đi.</span></div>
+        say: "Lỗi thứ tư, quên chi phí chuyển ngữ cảnh khi so sánh. Biểu đồ coi việc chuyển tốn 0 mi li giây, còn với q nhỏ thì chi phí thật làm mọi con số tệ đi."
+      - show: |
+          <div class="box warn"><b>Lỗi 5.</b> Chữa nạn đói bằng cách cho mọi tiến trình cùng ưu tiên <b class="red">(quá đà)</b>
+          <br><span class="note">Mất khả năng ưu tiên việc gấp. Lão hoá giữ được ưu tiên mà vẫn bảo đảm không ai chờ mãi.</span></div>
+        say: "Lỗi thứ năm, chữa nạn đói bằng cách cho mọi tiến trình cùng một ưu tiên. Làm vậy mất khả năng ưu tiên việc gấp, còn lão hoá giữ được ưu tiên mà vẫn bảo đảm không ai chờ mãi."
+
+  # ───────────────────────── 9. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.rr_waits([5, 3, 8], 2) == [7, 6, 8] and sum(alg.rr_waits([5, 3, 8], 2)) / 3 == 7"
+      - "[f - b for f, b in zip([12, 9, 16], [5, 3, 8])] == alg.rr_waits([5, 3, 8], 2) and alg.rr_response([5, 3, 8], 2) == [0, 2, 4]"
+    steps:
+      - show: |
+          <p>P1 = 5, P2 = 3, P3 = 8 ms, đến lúc 0 theo thứ tự đó. Xoay vòng $q = 2$.</p>
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Vẽ biểu đồ thời gian.</td></tr>
+          <tr><td>2</td><td>Tính chờ của từng tiến trình và trung bình.</td></tr></table>
+        focus: [0, 1, "2.2", "2.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Ba tiến trình cần 5, 3 và 8 mi li giây, đến lúc 0 theo thứ tự đó, xoay vòng với q bằng 2. Câu một, vẽ biểu đồ thời gian. Câu hai, tính thời gian chờ của từng tiến trình và trung bình. Dừng video và làm ra giấy."
+        pause: 12
+      - show: |
+          <div>{{RR2}}</div>
+          <p>P1 0–2, P2 2–4, P3 4–6, P1 6–8, P2 8–9 xong, P3 9–11, P1 11–12 xong, P3 12–16 xong.</p>
+        focus: [1, 2, 2, 2]
+        say: "Đáp án câu một, xoay vòng mỗi lượt 2 mi li giây. Ba lượt đầu, mỗi tiến trình chạy 2, đến lúc 6. Lượt hai, tiến trình 1 chạy từ 6 đến 8, tiến trình 2 chỉ còn 1 nên xong lúc 9, tiến trình 3 chạy từ 9 đến 11. Tiến trình 1 còn 1 nên xong lúc 12, rồi tiến trình 3 chạy một mình từ 12 đến 16."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>tiến trình</th><th>hoàn thành</th><th>chạy</th><th>chờ = hoàn thành − chạy</th></tr>
+          <tr><td>P1</td><td>12</td><td>5</td><td>$12 - 5 = 7$</td></tr>
+          <tr><td>P2</td><td>9</td><td>3</td><td>$9 - 3 = 6$</td></tr>
+          <tr><td>P3</td><td>16</td><td>8</td><td>$16 - 8 = 8$</td></tr></table>
+          $$\frac{7 + 6 + 8}{3} = \frac{21}{3} = \hl{7} \text{ ms}$$
+        focus: [0, "1.2", "1.3", "1.4", 2]
+        say: "Câu hai, dùng lại quy tắc chờ bằng hoàn thành trừ thời gian chạy. Tiến trình 1 xong lúc 12, chạy 5, nên chờ 7. Tiến trình 2 xong lúc 9, chạy 3, nên chờ 6. Tiến trình 3 xong lúc 16, chạy 8, nên chờ 8. Trung bình là 21 chia 3, bằng 7 mi li giây."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">xoay vòng: mỗi lượt tối đa $q$</span><span class="a">→</span>
+          <span class="n">phản hồi nhanh, không cần biết trước</span><span class="a">→</span>
+          <span class="n">$q$ vừa phải: lớn hơn nhiều chi phí chuyển</span><span class="a">→</span>
+          <span class="n">ưu tiên + lão hoá: không ai đói</span></div>
+        say: "Tổng kết lại, xoay vòng cho mỗi tiến trình chạy tối đa q mỗi lượt. Nó cho phản hồi nhanh mà không cần biết trước thời gian chạy. Lượng tử phải lớn hơn nhiều chi phí chuyển ngữ cảnh. Và ưu tiên kết hợp lão hoá bảo đảm không ai bị đói."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> công bằng và hiệu quả kéo về hai phía — một cơ chế tốt có tham số (như $q$) để chọn điểm cân bằng.</div>
+        say: "Điều cần mang theo, công bằng và hiệu quả thường kéo về hai phía, nên một cơ chế tốt có tham số, như lượng tử q, để chọn điểm cân bằng."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 4): khi hai luồng cùng sửa một biến — <b>tranh chấp</b> và vùng găng.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 4, ta xem chuyện gì xảy ra khi hai luồng cùng sửa một biến, gọi là tranh chấp. Hẹn gặp bạn ở bài tiếp theo."

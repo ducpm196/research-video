@@ -1,0 +1,199 @@
+id: L08
+course: BCH
+series: "BCH · Blockchain và sổ cái phân tán"
+title: "Bài 8 — Hợp đồng thông minh: máy trạng thái tất định và phí thực thi"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/bch.yaml L08; audit/bch/verify_bch.py L08; G. Wood, Ethereum: A Secure Decentralised Generalised Transaction Ledger (Yellow Paper, bản hiện hành) — phí cơ bản giao dịch 21 000 đơn vị gas; N. Szabo, Smart Contracts (1994); bài 4"
+assumes: [arith, power, cdot]
+# Quy ước: hợp đồng = chương trình lưu trên chuỗi, có trạng thái; mọi nút chạy CÙNG mã trên CÙNG đầu vào và phải ra cùng kết quả (tất định).
+#   Phí = số đơn vị tính toán (gas) · giá mỗi đơn vị; 1 gwei = 10^(−9) đơn vị tiền gốc (ETH) (alg.gas_fee_eth). Giá 20 gwei là SỐ MINH HOẠ.
+#   Tên Ethereum, ETH, gwei chỉ trên màn hình; lời đọc “đơn vị tính toán”, “đồng tiền gốc của chuỗi”.
+objectives:
+  - "Mô hình hoá hợp đồng như máy trạng thái"
+  - "Tính phí theo đơn vị tính toán"
+  - "Biết vì sao hợp đồng phải tất định"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Trung gian giữ tiền không phải là người"
+    steps:
+      - show: |
+          <p>Người mua và người bán ở hai nước, không tin nhau. Bình thường họ cần một bên trung gian giữ tiền tới khi hàng tới. Hợp đồng thông minh là <b>một đoạn mã</b> đóng vai trung gian đó: giữ tiền, và chỉ chuyển khi đúng điều kiện — mọi nút trên mạng cùng chạy và cùng kiểm.</p>
+          <div class="box key">Hôm nay: <b>hợp đồng thông minh</b> — một máy trạng thái chạy trên mọi nút, và cái giá cho mỗi bước tính toán.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, người mua và người bán ở hai nước, không tin nhau. Bình thường họ cần một bên trung gian giữ tiền tới khi hàng tới. Hợp đồng thông minh là một đoạn mã đóng vai trung gian đó, giữ tiền, và chỉ chuyển khi đúng điều kiện, với mọi nút trên mạng cùng chạy và cùng kiểm. Hôm nay ta học hợp đồng thông minh, một máy trạng thái chạy trên mọi nút, và cái giá cho mỗi bước tính toán."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: bảng chuyển trạng thái và lũy thừa âm của 10"
+    checks:
+      - "alg.fsm_run({('TẮT', 'nhấn'): 'BẬT', ('BẬT', 'nhấn'): 'TẮT'}, 'TẮT', ['nhấn', 'nhấn']) == ['TẮT', 'BẬT', 'TẮT']"
+      - "__import__('decimal').Decimal(10) ** -3 == __import__('decimal').Decimal('0.001') and 7 * __import__('decimal').Decimal('1e-3') == __import__('decimal').Decimal('0.007') and __import__('decimal').Decimal(10) ** -9 == __import__('decimal').Decimal('0.000000001')"
+    steps:
+      - show: |
+          <p>Ở bài 4, ngoài mô hình đồng chưa tiêu, ta đã so với <b>mô hình tài khoản</b>: mỗi địa chỉ có một <b>số dư</b>, như sổ ngân hàng. Hợp đồng hôm nay cũng là một tài khoản, chỉ khác là có thêm <b>trạng thái</b> và <b>mã</b>.</p>
+        say: "Trước hết, nhắc lại mô hình tài khoản ở bài 4. Ngoài mô hình đồng chưa tiêu, ta đã so với mô hình tài khoản, nơi mỗi địa chỉ có một số dư, giống như sổ ngân hàng. Hợp đồng hôm nay cũng là một tài khoản như vậy, chỉ khác là có thêm trạng thái và một đoạn mã."
+      - show: |
+          <table class="t"><tr><th>đang ở</th><th>sự kiện “nhấn”</th></tr><tr><td>TẮT</td><td>BẬT</td></tr><tr><td>BẬT</td><td>TẮT</td></tr></table>
+          <p>Ở khoá Nền tảng phần mềm đúng đắn, <b>máy trạng thái</b> là một bảng: đang ở đâu, gặp sự kiện gì, thì sang đâu. Bắt đầu TẮT, nhấn 2 lần: TẮT → BẬT → TẮT. Cặp nào không có trong bảng thì bị <b>từ chối</b>.</p>
+        focus: [1, 2, 2, 2]
+        say: "Tiếp theo, một máy trạng thái nhỏ nhất là công tắc đèn, với bảng hai dòng. Ở khoá Nền tảng phần mềm đúng đắn, máy trạng thái chính là một bảng như thế, cho biết đang ở đâu, gặp sự kiện gì, thì sang đâu. Bắt đầu từ tắt, nhấn 2 lần thì đèn đi tắt, bật, rồi lại tắt. Cặp trạng thái với sự kiện nào không có trong bảng thì bị từ chối."
+      - clear: true
+        show: |
+          <p><b>Lũy thừa âm của 10</b>: nhân với $10^{-3}$ là dời dấu phẩy sang trái 3 chỗ.</p>
+          <table class="t"><tr><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>$10^{-3}$</td><td>0,001 (một phần nghìn)</td></tr>
+          <tr><td>$7 \cdot 10^{-3}$</td><td>0,007</td></tr>
+          <tr><td>$10^{-9}$</td><td>0,000000001 (một phần tỉ)</td></tr></table>
+        introduces: [cdot]
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Cuối cùng, ôn lũy thừa âm của 10, vì phí được tính bằng những phần rất nhỏ của đồng tiền. Nhân với 10 mũ âm 3 là dời dấu phẩy sang trái 3 chỗ, nên 10 mũ âm 3 bằng 0 phẩy 001, tức một phần nghìn. Ví dụ 7 nhân 10 mũ âm 3 bằng 0 phẩy 007. Còn 10 mũ âm 9 có 9 chỗ sau dấu phẩy, bằng một phần tỉ."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: trạng thái, chuyển trạng thái, phí"
+    steps:
+      - show: |
+          <div class="code"><div>trạng thái:  CHỜ_TIỀN → ĐÃ_KÝ_QUỸ → ĐÃ_GIAO → HOÀN_TẤT</div><div>gửi_tiền()     chỉ người mua, chỉ khi CHỜ_TIỀN, đúng số tiền   → ĐÃ_KÝ_QUỸ</div><div>xác_nhận_giao() chỉ người mua, chỉ khi ĐÃ_KÝ_QUỸ               → ĐÃ_GIAO</div><div>rút_tiền()     chỉ người bán, chỉ khi ĐÃ_GIAO, chuyển tiền     → HOÀN_TẤT</div></div>
+          <p><b>Tất định</b>: mọi nút chạy cùng mã trên cùng giao dịch phải ra cùng trạng thái — nên hợp đồng không được đọc giờ máy, số ngẫu nhiên tuỳ nút, hay gọi mạng ra ngoài.</p>
+          <p><b>Phí</b>: mỗi phép tính, mỗi lần ghi trạng thái tốn một số <b>đơn vị tính toán</b> (gas); phí = số đơn vị nhân giá mỗi đơn vị. Hết đơn vị giữa chừng thì mọi thay đổi bị huỷ, phí vẫn mất.</p>
+        focus: [1, 1, 1, 2, 3, 3]
+        say: "Hợp đồng ký quỹ có bốn trạng thái, chờ tiền, đã ký quỹ, đã giao, và hoàn tất. Mỗi hàm chỉ cho một người được gọi, ở một trạng thái. Ví dụ người mua gửi đúng số tiền khi đang chờ tiền thì chuyển sang đã ký quỹ, và người bán chỉ rút được khi đã giao. Tất định nghĩa là mọi nút chạy cùng mã trên cùng giao dịch phải ra cùng trạng thái, nên hợp đồng không được đọc giờ máy, số ngẫu nhiên tuỳ nút, hay gọi mạng ra ngoài. Về phí, mỗi phép tính và mỗi lần ghi trạng thái tốn một số đơn vị tính toán, và phí bằng số đơn vị nhân giá mỗi đơn vị. Hết đơn vị giữa chừng thì mọi thay đổi bị huỷ, nhưng phí vẫn mất."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hợp đồng ký quỹ là bốn ô và ba mũi tên"
+    checks:
+      - "(lambda D: alg.fsm_run(D, 'CHỜ_TIỀN', ['gửi_tiền', 'xác_nhận_giao', 'rút_tiền']) == ['CHỜ_TIỀN', 'ĐÃ_KÝ_QUỸ', 'ĐÃ_GIAO', 'HOÀN_TẤT'] and ('ĐÃ_KÝ_QUỸ', 'rút_tiền') not in D)({('CHỜ_TIỀN', 'gửi_tiền'): 'ĐÃ_KÝ_QUỸ', ('ĐÃ_KÝ_QUỸ', 'xác_nhận_giao'): 'ĐÃ_GIAO', ('ĐÃ_GIAO', 'rút_tiền'): 'HOÀN_TẤT'})"
+    steps:
+      - show: |
+          <div><svg width="1500" height="350" viewBox="0 0 1500 350"><defs><marker id="arB8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker><marker id="arB8r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#b91c1c"/></marker></defs><rect x="50" y="130" width="280" height="80" rx="16" fill="#dbeafe" stroke="#1f2937" stroke-width="3"/><text x="190" y="180" font-size="26" font-weight="bold" text-anchor="middle" fill="#1f2937">CHỜ_TIỀN</text><rect x="420" y="130" width="280" height="80" rx="16" fill="#fef3c7" stroke="#1f2937" stroke-width="3"/><text x="560" y="180" font-size="26" font-weight="bold" text-anchor="middle" fill="#1f2937">ĐÃ_KÝ_QUỸ</text><rect x="790" y="130" width="280" height="80" rx="16" fill="#fef3c7" stroke="#1f2937" stroke-width="3"/><text x="930" y="180" font-size="26" font-weight="bold" text-anchor="middle" fill="#1f2937">ĐÃ_GIAO</text><rect x="1160" y="130" width="280" height="80" rx="16" fill="#d1fae5" stroke="#1f2937" stroke-width="3"/><text x="1300" y="180" font-size="26" font-weight="bold" text-anchor="middle" fill="#1f2937">HOÀN_TẤT</text><line x1="330" y1="170" x2="418" y2="170" stroke="#1f2937" stroke-width="3" marker-end="url(#arB8)"/><text x="375" y="78" font-size="21" text-anchor="middle" fill="#2a78d6">gửi_tiền</text><text x="375" y="106" font-size="19" text-anchor="middle" fill="#1f2937">người mua</text><line x1="700" y1="170" x2="788" y2="170" stroke="#1f2937" stroke-width="3" marker-end="url(#arB8)"/><text x="745" y="78" font-size="21" text-anchor="middle" fill="#2a78d6">xác_nhận_giao</text><text x="745" y="106" font-size="19" text-anchor="middle" fill="#1f2937">người mua</text><line x1="1070" y1="170" x2="1158" y2="170" stroke="#1f2937" stroke-width="3" marker-end="url(#arB8)"/><text x="1115" y="78" font-size="21" text-anchor="middle" fill="#2a78d6">rút_tiền</text><text x="1115" y="106" font-size="19" text-anchor="middle" fill="#1f2937">người bán</text><path d="M520,212 C460,300 660,300 600,214" fill="none" stroke="#b91c1c" stroke-width="3" stroke-dasharray="10 8" marker-end="url(#arB8r)"/><text x="560" y="325" font-size="21" text-anchor="middle" fill="#b91c1c">rút_tiền khi chưa giao: từ chối, giữ nguyên trạng thái</text><text x="1130" y="325" font-size="21" text-anchor="middle" fill="#059669">mọi nút tra cùng bảng: cùng kết quả</text></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ hợp đồng ký quỹ dưới dạng máy trạng thái, mỗi ô là một trạng thái, mỗi mũi tên là một hàm, kèm người được phép gọi. Người mua gửi tiền thì sang đã ký quỹ, người mua xác nhận giao thì sang đã giao, và chỉ lúc đó người bán mới rút tiền để sang hoàn tất. Mũi tên đỏ đứt nét cho thấy nếu người bán gọi rút tiền khi hàng chưa giao, lời gọi bị từ chối và trạng thái giữ nguyên. Vì mọi nút tra cùng một bảng với cùng lời gọi, mọi nút ra cùng một trạng thái."
+
+  - id: example
+    kind: example
+    title: "Phí của một lần chuyển tiền"
+    checks:
+      - "round(alg.gas_fee_eth(21000, 20), 5) == 0.00042 and 21000 * 20 == 420000"
+      - "round(alg.gas_fee_eth(21000, 100), 6) == 0.0021 and 100 // 20 == 5 and round(0.0021 / 0.00042, 6) == 5"
+    steps:
+      - show: |
+          <p><b>Bước 1 — số đơn vị:</b> chuyển tiền đơn giản tốn cố định $\hl{21\,000}$ đơn vị tính toán (gas).</p>
+        say: "Bước một, ta đếm xem giao dịch này dùng hết bao nhiêu đơn vị tính toán. Một lần chuyển tiền đơn giản tốn cố định 21 nghìn đơn vị tính toán."
+      - show: |
+          <p><b>Bước 2 — nhân với giá</b> (số minh hoạ 20 gwei mỗi đơn vị):</p>
+          $$21\,000 \cdot 20 = 420\,000 \text{ gwei}$$
+        focus: [1, 2]
+        say: "Bước hai, nhân với giá, theo số minh hoạ là 20 phần tỉ đồng tiền gốc cho mỗi đơn vị. Ta được 21 nghìn nhân 20, bằng 420 nghìn phần tỉ đồng tiền gốc."
+      - show: |
+          <p><b>Bước 3 — đổi đơn vị</b>, 1 gwei $= 10^{-9}$ ETH, dời dấu phẩy sang trái 9 chỗ:</p>
+          $$420\,000 \cdot 10^{-9} = \hl{0{,}00042} \text{ ETH}$$
+        focus: [1, 2]
+        say: "Bước ba, đổi ra đồng tiền gốc, mỗi phần tỉ là 10 mũ âm 9, nên ta dời dấu phẩy sang trái 9 chỗ. Kết quả, 420 nghìn nhân 10 mũ âm 9 bằng 0 phẩy 00042 đồng tiền gốc của chuỗi."
+      - clear: true
+        show: |
+          <p><b>Bước 4 — phí tỉ lệ với giá:</b> lúc mạng đông, giá lên 100 gwei (số minh hoạ):</p>
+          <table class="t"><tr><th>giá mỗi đơn vị</th><th>phí cho 21 000 đơn vị</th></tr>
+          <tr><td>20 gwei</td><td>0,00042 ETH</td></tr>
+          <tr><td>100 gwei, gấp 5</td><td>$21\,000 \cdot 100 \cdot 10^{-9} = 0{,}0021$ ETH, cũng gấp 5</td></tr></table>
+          <p>Một lần gọi hàm hợp đồng ghi nhiều trạng thái có thể tốn gấp nhiều lần số đơn vị — mã càng ghi ít, phí càng thấp.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Bước bốn, ta thấy phí luôn tỉ lệ thuận với giá của mỗi đơn vị. Lúc mạng đông, giả sử giá lên 100 phần tỉ mỗi đơn vị, gấp 5 lần. Phí khi đó là 21 nghìn nhân 100 nhân 10 mũ âm 9, bằng 0 phẩy 0021, cũng gấp 5 lần. Ngoài ra, một lần gọi hàm hợp đồng ghi nhiều trạng thái có thể tốn gấp nhiều lần số đơn vị, nên mã càng ghi ít thì phí càng thấp."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: đổi giá ra tiền gốc trước rồi mới nhân"
+    checks:
+      - "(lambda D: D(20) * D('1e-9') == D('0.00000002') and D('0.00000002') * 21000 == D('0.00042') and D(21000) * 20 * D('1e-9') == D('0.00042') and D(21000) * 100 * D('1e-9') == D('0.0021'))(__import__('decimal').Decimal)"
+    steps:
+      - show: |
+          <table class="t"><tr><th>đường tính</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>nhân số đơn vị với giá trước, đổi sau</td><td>$420\,000 \cdot 10^{-9}$</td><td>0,00042 ETH</td></tr>
+          <tr><td>đổi giá ra tiền gốc trước</td><td>$20 \cdot 10^{-9} = 0{,}00000002$ mỗi đơn vị</td><td></td></tr>
+          <tr><td>rồi nhân số đơn vị</td><td>$0{,}00000002 \cdot 21\,000$</td><td>0,00042 ETH ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Kiểm bằng đường khác, đổi thứ tự hai phép tính. Đường cũ nhân số đơn vị với giá trước, ra 420 nghìn phần tỉ, rồi mới đổi, được 0 phẩy 00042. Đường mới đổi giá ra tiền gốc trước, vì 20 phần tỉ bằng 0 phẩy 00000002 đồng tiền gốc mỗi đơn vị. Rồi nhân với 21 nghìn đơn vị, cũng được 0 phẩy 00042, khớp với đường cũ."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay mắc, từ người mới tới người đã đi làm"
+    checks:
+      - "(lambda D: D(50000) * 20 * D('1e-9') == D('0.001') and D(52000) * 20 * D('1e-9') == D('0.00104'))(__import__('decimal').Decimal) and 52000 * 12 // 10 == 62400 and 50000 < 52000 < 62400"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Triển khai rồi mới tìm lỗi <b class="red">(thường không sửa được)</b>
+          <br><span class="note">Mã đã lên chuỗi thường bất biến; tiền trong hợp đồng chịu đúng mã đó. Kiểm thử, kiểm chứng và rà soát độc lập <b>trước</b> khi triển khai; nếu cần nâng cấp, thiết kế cơ chế đó từ đầu và công khai.</span></div>
+        say: "Lỗi thứ nhất, triển khai rồi mới tìm lỗi, trong khi thường không sửa được. Mã đã lên chuỗi thường bất biến, và tiền trong hợp đồng chịu đúng mã đó. Hãy kiểm thử, kiểm chứng, và rà soát độc lập trước khi triển khai, còn nếu cần nâng cấp thì thiết kế cơ chế đó từ đầu và công khai."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Dùng giờ hay “ngẫu nhiên” trên chuỗi cho việc quan trọng <b class="red">(người tạo khối điều khiển được)</b>
+          <br><span class="note">Dấu thời gian và mã khối do người tạo khối chọn trong một giới hạn — dùng làm xổ số là để họ gian lận. Cần nguồn ngẫu nhiên kiểm chứng được.</span></div>
+        say: "Lỗi thứ hai, dùng giờ hay số ngẫu nhiên trên chuỗi cho việc quan trọng, trong khi người tạo khối điều khiển được. Dấu thời gian và mã khối do người tạo khối chọn trong một giới hạn, nên dùng làm xổ số là để họ gian lận. Cần một nguồn ngẫu nhiên kiểm chứng được."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Vòng lặp theo dữ liệu tăng mãi <b class="red">(hết đơn vị tính toán, hợp đồng kẹt)</b>
+          <br><span class="note">Hàm trả thưởng duyệt qua mọi người tham gia: khi danh sách đủ dài, mỗi lần gọi vượt giới hạn đơn vị của khối — không ai rút được tiền. Để từng người tự rút phần mình.</span></div>
+        say: "Lỗi thứ ba, viết vòng lặp theo dữ liệu tăng mãi, nên hết đơn vị tính toán và hợp đồng bị kẹt. Một hàm trả thưởng duyệt qua mọi người tham gia, khi danh sách đủ dài thì mỗi lần gọi vượt giới hạn đơn vị của khối, và không ai rút được tiền. Hãy để từng người tự rút phần của mình."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Đặt giới hạn đơn vị sát con số đo lần trước <b class="red">(hết giữa chừng, mất phí, không được gì)</b></div>
+          <table class="t"><tr><th>giới hạn đặt</th><th>hàm cần thật</th><th>kết quả</th><th>phí trả (giá 20 gwei)</th></tr>
+          <tr><td>50 000</td><td>52 000</td><td>hết giữa chừng, mọi thay đổi bị huỷ</td><td>0,001 ETH, mất trắng</td></tr>
+          <tr><td>62 400 (thêm 20%)</td><td>52 000</td><td>chạy xong</td><td>0,00104 ETH, chỉ trả phần dùng thật</td></tr></table>
+        focus: [1, "2.2", "2.2", "2.3", 0]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, đặt giới hạn đơn vị sát đúng con số đo được lần trước. Hôm nay dữ liệu lớn hơn nên hàm cần 52 nghìn đơn vị, nhưng giới hạn chỉ 50 nghìn. Chạy tới giữa chừng thì hết đơn vị, mọi thay đổi bị huỷ, và mất trắng 0 phẩy 001 đồng tiền gốc. Đặt giới hạn 62 nghìn 400, tức thêm 20 phần trăm biên, thì hàm chạy xong, và chỉ trả cho 52 nghìn đơn vị dùng thật. Người làm nghề chạy thử để ước số đơn vị ngay trước khi gửi, cộng một biên an toàn, và theo dõi những lời gọi thất bại vì hết đơn vị."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "round(alg.gas_fee_eth(50000, 30), 6) == 0.0015"
+      - "50000 * 30 == 1500000 and __import__('decimal').Decimal(1500000) * __import__('decimal').Decimal('1e-9') == __import__('decimal').Decimal('0.0015')"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Gọi hàm <code>gửi_tiền()</code> tốn 50 000 đơn vị, giá 30 gwei. Phí bao nhiêu ETH?</td></tr>
+          <tr><td>2</td><td>Hợp đồng ký quỹ đang ở ĐÃ_KÝ_QUỸ. Người bán gọi <code>rút_tiền()</code>. Điều gì xảy ra?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, gọi hàm gửi tiền tốn 50 nghìn đơn vị, với giá 30 phần tỉ mỗi đơn vị. Phí là bao nhiêu đồng tiền gốc? Câu hai, hợp đồng ký quỹ đang ở trạng thái đã ký quỹ, và người bán gọi hàm rút tiền. Điều gì xảy ra? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① Nhân với giá: $50\,000 \cdot 30 = 1\,500\,000$ gwei.</p>
+          <p>Đổi đơn vị: $1\,500\,000 \cdot 10^{-9} = \hl{0{,}0015}$ ETH.</p>
+        focus: [1, 2]
+        say: "Đáp án câu một, trước hết nhân số đơn vị với giá, 50 nghìn nhân 30, bằng 1 triệu 500 nghìn phần tỉ. Sau đó đổi ra tiền gốc, dời dấu phẩy sang trái 9 chỗ, được 0 phẩy 0015 đồng tiền gốc."
+      - show: |
+          <table class="t"><tr><th>hàng ĐÃ_KÝ_QUỸ của bảng</th><th>ai gọi</th><th>sang</th></tr>
+          <tr><td>xác_nhận_giao()</td><td>người mua</td><td>ĐÃ_GIAO</td></tr>
+          <tr><td>rút_tiền()</td><td colspan="2">không có ô nào → <b>bị từ chối</b></td></tr></table>
+          <p>② Mọi thay đổi bị huỷ, hợp đồng vẫn ở ĐÃ_KÝ_QUỸ; người bán vẫn mất phí cho số đơn vị đã dùng.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Câu hai, tra hàng đã ký quỹ của bảng chuyển trạng thái. Hàng này chỉ có một ô, là người mua xác nhận giao để sang đã giao. Hàm rút tiền không có ô nào ở hàng này, nên lời gọi bị từ chối. Mọi thay đổi bị huỷ, hợp đồng vẫn ở trạng thái đã ký quỹ, và người bán vẫn mất phí cho số đơn vị đã dùng."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">hợp đồng = máy trạng thái trên chuỗi</span><span class="a">→</span>
+          <span class="n">mỗi hàm: ai được gọi, ở trạng thái nào</span><span class="a">→</span>
+          <span class="n">tất định: mọi nút cùng kết quả</span><span class="a">→</span>
+          <span class="n">phí theo đơn vị tính toán; kiểm trước khi triển khai</span></div>
+        say: "Tổng kết lại, hợp đồng là một máy trạng thái trên chuỗi, mỗi hàm quy định ai được gọi và ở trạng thái nào. Hợp đồng phải tất định để mọi nút cùng kết quả, phí tính theo đơn vị tính toán, và phải kiểm kỹ trước khi triển khai."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> “mã là luật” cũng có nghĩa <b>lỗi trong mã cũng là luật</b> — cẩn trọng như khi viết hợp đồng thật.</div>
+        say: "Điều cần mang theo, mã là luật cũng có nghĩa là lỗi trong mã cũng là luật, nên hãy cẩn trọng như khi viết một hợp đồng thật."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 9): <b>lỗi hợp đồng thông minh</b> và cách phòng.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 9, ta học các lỗi hợp đồng thông minh và cách phòng. Hẹn gặp bạn ở bài tiếp theo."

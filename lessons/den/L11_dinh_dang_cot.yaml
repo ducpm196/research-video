@@ -1,0 +1,205 @@
+id: L11
+course: DEN
+series: "DEN · Kỹ thuật dữ liệu"
+title: "Bài 11 — Định dạng cột trên tệp: nhóm hàng, thống kê, đẩy điều kiện xuống"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/den.yaml L11; audit/den/verify_den.py L11; đặc tả Apache Parquet — nhóm hàng, thống kê nhỏ nhất–lớn nhất của cột (phiên bản hiện hành); S. Melnik và cộng sự, Dremel: Interactive Analysis of Web-Scale Datasets (VLDB 2010); bài 0"
+assumes: [arith, cdot]
+# Quy ước: tệp chia thành các nhóm hàng; mỗi nhóm lưu từng cột riêng kèm thống kê nhỏ nhất–lớn nhất. Điều kiện lo ≤ ngày ≤ hi bỏ qua mọi nhóm mà
+#   [nhỏ nhất, lớn nhất] không giao [lo, hi] (alg.rowgroups_read). 100 nhóm × 1000 dòng, ngày 0–99; dữ liệu không sắp là ngẫu nhiên hạt giống 3.
+#   Thời gian mở mỗi tệp 2 ms là SỐ MINH HOẠ. Tên Parquet chỉ trên màn hình.
+objectives:
+  - "Giải thích thống kê nhỏ nhất–lớn nhất mỗi nhóm hàng"
+  - "Sắp xếp dữ liệu để bỏ qua được nhiều nhóm"
+  - "Tránh quá nhiều tệp nhỏ"
+asr_reviewed:
+  - {sentence: "Gộp thành 100 tệp thì chỉ còn 0 phẩy 2 giây, nên hãy gộp tệp định kỳ.", reason: "ASR chép “Gột thành 100 tập thì chỉ còn không phải 2 giây, nên hãy gột tập định kỳ.” (0.722): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: gộp/gột, tệp/tập, gộp tệp/gột tập — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Chào bạn, kho dữ liệu lưu 100 ngày đơn hàng trong tệp cột.", reason: "ASR chép “Chào bạn, khó dữ liệu lưu 100 ngày đơn hàng trong tạp cục.” (0.786): lệch âm/thanh thuần Việt: kho/khó, tệp cột/tạp cục — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Lỗi thứ nhất, quá nhiều tệp nhỏ, nên chi phí mở tệp lấn át.", reason: "ASR chép “Lỗi thứ nhất, quá nhiều tẹp nhỏ nên chi phí mở tẹp lấn ác.” (0.786): lệch âm/thanh thuần Việt: tệp/tẹp, tệp/tẹp, át/ác — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Luồng ghi mỗi phút một tệp vài trăm nghìn byte.", reason: "ASR chép “Luồng ghi mỗi phút một tạp vài trăm nghìn bay.” (0.8): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: tệp/tạp — NOT_VERIFIED bằng tai người"}
+  - {sentence: "10 nghìn tệp, mỗi tệp 2 mi li giây để mở và đọc siêu dữ liệu, là 20 giây trước khi đọc byte dữ liệu nào.", reason: "ASR chép “10.000 tập, mỗi tập 20 li dây để mở và đọc siêu dữ liệu là 20 giây trước khi đọc 3 dữ liệu nào.” (0.852): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh; byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: tệp/tập, tệp/tập — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Đọc 1 phần trăm hay 100 phần trăm"
+    checks:
+      - "alg.rowgroups_read([[d] * 1000 for d in range(100)], 42, 42) == 1"
+    steps:
+      - show: |
+          <p>Kho dữ liệu lưu 100 ngày đơn hàng trong tệp cột. Câu hỏi chỉ về <b>một ngày</b>. Có đội đọc 1% tệp, có đội đọc cả 100% — cùng định dạng, cùng dữ liệu. Khác nhau chỉ ở chỗ dữ liệu được <b>sắp xếp</b> thế nào khi ghi.</p>
+          <div class="box key">Hôm nay: <b>định dạng cột trên tệp</b> — nhóm hàng, thống kê nhỏ nhất–lớn nhất, và <b>đẩy điều kiện xuống</b> để khỏi đọc phần không cần.</div>
+        focus: [1, 1, 1, 1, 2]
+        say: "Chào bạn, kho dữ liệu lưu 100 ngày đơn hàng trong tệp cột. Câu hỏi chỉ về một ngày. Có đội đọc 1 phần trăm tệp, có đội đọc cả 100 phần trăm, với cùng định dạng và cùng dữ liệu. Khác nhau chỉ ở chỗ dữ liệu được sắp xếp thế nào khi ghi. Hôm nay ta học định dạng cột trên tệp, với nhóm hàng, thống kê nhỏ nhất và lớn nhất, và đẩy điều kiện xuống để khỏi đọc phần không cần."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: nhỏ nhất, lớn nhất, và một khoảng có chứa một số không"
+    checks:
+      - "min([3, 7, 5]) == 3 and max([3, 7, 5]) == 7 and (3 <= 5 <= 7) and not (3 <= 42 <= 7)"
+      - "alg.scan_bytes(100e6, 50, 8) / 1e9 == 40 and round(alg.scan_bytes(100e6, 50, 8, 'col', 3) / 1e9, 1) == 2.4"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ý</th><th>ví dụ với dãy 3, 7, 5</th></tr>
+          <tr><td>nhỏ nhất, lớn nhất</td><td>3 và 7 → khoảng [3, 7]</td></tr>
+          <tr><td>số 5 có thể có trong dãy?</td><td>5 nằm trong [3, 7] → <b>có thể</b>, phải nhìn vào dãy</td></tr>
+          <tr><td>số 42 có thể có?</td><td>42 nằm ngoài [3, 7] → <b>chắc chắn không</b>, khỏi nhìn</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Ta ôn lại cách dùng nhỏ nhất và lớn nhất. Dãy 3, 7, 5 có nhỏ nhất là 3, lớn nhất là 7, nên mọi số của dãy nằm trong khoảng từ 3 tới 7. Số 5 nằm trong khoảng nên có thể có trong dãy, và ta phải nhìn vào dãy mới biết. Số 42 nằm ngoài khoảng nên chắc chắn không có, khỏi cần nhìn."
+      - show: |
+          <div class="box key">Ở bài 0, ta đã học <b>lưu theo cột</b>: câu hỏi dùng 3 trong 50 cột của bảng 40 GB chỉ đọc 2,4 GB. Hôm nay thêm một cách bỏ bớt nữa: bỏ cả <b>khối dòng</b>.</div>
+        say: "Ở bài 0, ta đã học lưu theo cột, câu hỏi dùng 3 trong 50 cột của bảng 40 GB chỉ phải đọc 2 phẩy 4 GB. Hôm nay ta thêm một cách bỏ bớt nữa, bỏ qua cả một khối dòng."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: nhóm hàng và thống kê"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thành phần</th><th>vai trò</th></tr>
+          <tr><td><b>nhóm hàng</b></td><td>một khối nhiều dòng (ví dụ vài trăm nghìn); bên trong, mỗi cột lưu liền nhau</td></tr>
+          <tr><td><b>thống kê cột</b></td><td>mỗi nhóm ghi nhỏ nhất, lớn nhất, số giá trị rỗng của từng cột</td></tr>
+          <tr><td><b>đẩy điều kiện xuống</b></td><td>bộ đọc so điều kiện với thống kê <b>trước</b> khi đọc: nhóm nào chắc chắn không khớp thì bỏ qua</td></tr>
+          <tr><td><b>chỉ đọc cột cần</b></td><td>như bài 0: chỉ tải các cột câu hỏi dùng</td></tr></table>
+          <p>Thống kê chỉ giúp khi khoảng [nhỏ nhất, lớn nhất] của mỗi nhóm <b>hẹp</b> — tức dữ liệu đã được gom theo cột đó.</p>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", 2]
+        say: "Bảng có bốn thành phần. Nhóm hàng là một khối nhiều dòng, ví dụ vài trăm nghìn dòng, và bên trong mỗi cột được lưu liền nhau. Thống kê cột là mỗi nhóm ghi giá trị nhỏ nhất, lớn nhất và số giá trị rỗng của từng cột. Đẩy điều kiện xuống là bộ đọc so điều kiện với thống kê trước khi đọc, và nhóm nào chắc chắn không khớp thì bỏ qua. Chỉ đọc cột cần là chỉ tải các cột câu hỏi dùng, như lưu theo cột ở bài 0. Thống kê chỉ giúp khi khoảng từ nhỏ nhất tới lớn nhất của mỗi nhóm hẹp, tức dữ liệu đã được gom theo cột đó."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Nhãn trên mỗi thùng: nhỏ nhất, lớn nhất"
+    steps:
+      - show: |
+          <div><svg width="1500" height="345" viewBox="0 0 1500 345"><g fill="#1f2937"><text x="20" y="115" font-size="22" font-weight="bold">sắp theo ngày</text><rect x="220" y="70" width="120" height="70" rx="8" fill="#f3f4f6" stroke="#9ca3af" stroke-width="2"/><text x="280" y="100" text-anchor="middle" font-size="18" fill="#6b7280">nhóm</text><text x="280" y="126" text-anchor="middle" font-size="20">[38, 38]</text><rect x="355" y="70" width="120" height="70" rx="8" fill="#f3f4f6" stroke="#9ca3af" stroke-width="2"/><text x="415" y="100" text-anchor="middle" font-size="18" fill="#6b7280">nhóm</text><text x="415" y="126" text-anchor="middle" font-size="20">[39, 39]</text><rect x="490" y="70" width="120" height="70" rx="8" fill="#f3f4f6" stroke="#9ca3af" stroke-width="2"/><text x="550" y="100" text-anchor="middle" font-size="18" fill="#6b7280">nhóm</text><text x="550" y="126" text-anchor="middle" font-size="20">[40, 40]</text><rect x="625" y="70" width="120" height="70" rx="8" fill="#f3f4f6" stroke="#9ca3af" stroke-width="2"/><text x="685" y="100" text-anchor="middle" font-size="18" fill="#6b7280">nhóm</text><text x="685" y="126" text-anchor="middle" font-size="20">[41, 41]</text><rect x="760" y="70" width="120" height="70" rx="8" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="820" y="100" text-anchor="middle" font-size="18" fill="#6b7280">nhóm</text><text x="820" y="126" text-anchor="middle" font-size="20">[42, 42]</text><rect x="895" y="70" width="120" height="70" rx="8" fill="#f3f4f6" stroke="#9ca3af" stroke-width="2"/><text x="955" y="100" text-anchor="middle" font-size="18" fill="#6b7280">nhóm</text><text x="955" y="126" text-anchor="middle" font-size="20">[43, 43]</text><rect x="1030" y="70" width="120" height="70" rx="8" fill="#f3f4f6" stroke="#9ca3af" stroke-width="2"/><text x="1090" y="100" text-anchor="middle" font-size="18" fill="#6b7280">nhóm</text><text x="1090" y="126" text-anchor="middle" font-size="20">[44, 44]</text><rect x="1165" y="70" width="120" height="70" rx="8" fill="#f3f4f6" stroke="#9ca3af" stroke-width="2"/><text x="1225" y="100" text-anchor="middle" font-size="18" fill="#6b7280">nhóm</text><text x="1225" y="126" text-anchor="middle" font-size="20">[45, 45]</text><rect x="1300" y="70" width="120" height="70" rx="8" fill="#f3f4f6" stroke="#9ca3af" stroke-width="2"/><text x="1360" y="100" text-anchor="middle" font-size="18" fill="#6b7280">nhóm</text><text x="1360" y="126" text-anchor="middle" font-size="20">[46, 46]</text><text x="1440" y="115" font-size="24">…</text><text x="20" y="265" font-size="22" font-weight="bold">không sắp</text><rect x="220" y="220" width="120" height="70" rx="8" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="280" y="250" text-anchor="middle" font-size="18" fill="#6b7280">nhóm</text><text x="280" y="276" text-anchor="middle" font-size="20">[0, 99]</text><rect x="355" y="220" width="120" height="70" rx="8" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="415" y="250" text-anchor="middle" font-size="18" fill="#6b7280">nhóm</text><text x="415" y="276" text-anchor="middle" font-size="20">[1, 99]</text><rect x="490" y="220" width="120" height="70" rx="8" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="550" y="250" text-anchor="middle" font-size="18" fill="#6b7280">nhóm</text><text x="550" y="276" text-anchor="middle" font-size="20">[0, 98]</text><rect x="625" y="220" width="120" height="70" rx="8" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="685" y="250" text-anchor="middle" font-size="18" fill="#6b7280">nhóm</text><text x="685" y="276" text-anchor="middle" font-size="20">[0, 99]</text><rect x="760" y="220" width="120" height="70" rx="8" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="820" y="250" text-anchor="middle" font-size="18" fill="#6b7280">nhóm</text><text x="820" y="276" text-anchor="middle" font-size="20">[2, 99]</text><rect x="895" y="220" width="120" height="70" rx="8" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="955" y="250" text-anchor="middle" font-size="18" fill="#6b7280">nhóm</text><text x="955" y="276" text-anchor="middle" font-size="20">[0, 99]</text><rect x="1030" y="220" width="120" height="70" rx="8" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="1090" y="250" text-anchor="middle" font-size="18" fill="#6b7280">nhóm</text><text x="1090" y="276" text-anchor="middle" font-size="20">[0, 97]</text><rect x="1165" y="220" width="120" height="70" rx="8" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="1225" y="250" text-anchor="middle" font-size="18" fill="#6b7280">nhóm</text><text x="1225" y="276" text-anchor="middle" font-size="20">[1, 99]</text><rect x="1300" y="220" width="120" height="70" rx="8" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="1360" y="250" text-anchor="middle" font-size="18" fill="#6b7280">nhóm</text><text x="1360" y="276" text-anchor="middle" font-size="20">[0, 99]</text><text x="1440" y="265" font-size="24">…</text><text x="760" y="175" text-anchor="middle" font-size="20" fill="#059669">ngày 42: chỉ một nhóm có khoảng chứa 42, các nhóm xám bỏ qua</text><text x="760" y="325" text-anchor="middle" font-size="20" fill="#eb6834">mọi khoảng đều chứa 42: phải đọc cả 100 nhóm</text></g></svg></div>
+        focus: [1, 1, 1]
+        say: "Hình vẽ một đoạn các nhóm hàng, mỗi nhóm mang nhãn khoảng ngày từ nhỏ nhất tới lớn nhất. Ở hàng trên, dữ liệu sắp theo ngày nên mỗi nhóm chỉ chứa một ngày, câu hỏi ngày 42 chỉ cần mở đúng nhóm màu lục, các nhóm xám bỏ qua mà không đọc. Ở hàng dưới, dữ liệu không sắp nên nhãn nhóm nào cũng gần từ 0 tới 99, khoảng nào cũng chứa 42, và bộ đọc phải mở hết."
+
+  - id: example
+    kind: example
+    title: "Sắp theo ngày hay không"
+    checks:
+      - "alg.rowgroups_read([[d] * 1000 for d in range(100)], 42, 42) == 1 and (lambda r: alg.rowgroups_read([[r.randrange(100) for _ in range(1000)] for _ in range(100)], 42, 42))(__import__('random').Random(3)) == 100"
+      - "round(0.99 ** 1000 * 100, 4) == 0.0043"
+    steps:
+      - show: |
+          <p><b>Bước 1</b> — 100 nhóm hàng × 1000 dòng, 100 ngày. Câu hỏi: <code>ngay = 42</code>. Bộ đọc so 42 với khoảng [nhỏ nhất, lớn nhất] của từng nhóm.</p>
+        say: "Bước một, đặt đề bài. Ta có 100 nhóm hàng, mỗi nhóm 1000 dòng, trải trên 100 ngày, và câu hỏi là ngày bằng 42. Bộ đọc so 42 với khoảng từ nhỏ nhất tới lớn nhất của từng nhóm."
+      - show: |
+          <table class="t"><tr><th>cách ghi</th><th>khoảng ngày mỗi nhóm</th><th>nhóm phải đọc</th></tr>
+          <tr><td><b>Bước 2</b> — sắp theo ngày</td><td>nhóm thứ $k$ chứa đúng ngày $k$; nhóm thứ 42: [42, 42]</td><td>$\hl{1}$</td></tr></table>
+        focus: [1, "1.2", "1.2"]
+        say: "Bước hai, ghi dữ liệu đã sắp theo ngày. Mỗi ngày có đúng 1000 dòng, bằng cỡ một nhóm, nên nhóm thứ k chứa đúng ngày k. Chỉ nhóm thứ 42 có khoảng từ 42 tới 42 chứa 42, nên chỉ đọc 1 nhóm."
+      - show: |
+          <table class="t"><tr><th>cách ghi</th><th>khoảng ngày mỗi nhóm</th><th>nhóm phải đọc</th></tr>
+          <tr><td><b>Bước 3</b> — không sắp (thứ tự đến ngẫu nhiên)</td><td>mỗi nhóm ≈ [0, 99]</td><td>100 — thống kê vô dụng</td></tr></table>
+          <p>Một nhóm thiếu hẳn ngày 0: xác suất $0{,}99^{1000} \approx 0{,}0043\%$ — gần như mọi nhóm đều có cả ngày 0 lẫn ngày 99.</p>
+        introduces: [power]
+        focus: [1, "1.2", 2]
+        say: "Bước ba, dữ liệu không sắp, đến theo thứ tự ngẫu nhiên. Mỗi nhóm có khoảng gần từ 0 tới 99, nên phải đọc cả 100 nhóm, thống kê trở nên vô dụng. Lý do là một nhóm 1000 dòng thiếu hẳn ngày 0 chỉ với xác suất 0 phẩy 99 mũ 1000, khoảng 0 phẩy 0043 phần trăm."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>Bước 4 — cách ghi</th><th>nhóm phải đọc</th><th>phần tệp</th></tr>
+          <tr><td>sắp theo ngày</td><td>1</td><td>1%</td></tr>
+          <tr><td>không sắp</td><td>100</td><td>100%</td></tr></table>
+          <p>Chi phí của việc sắp: một lần khi ghi. Lợi ích: mỗi câu hỏi theo ngày, mãi mãi.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Bước bốn, so hai cách. Sắp theo ngày thì đọc 1 trong 100 nhóm, tức 1 phần trăm tệp. Không sắp thì đọc 100 phần trăm, đúng như hai đội ở phần mở đầu. Chi phí của việc sắp chỉ trả một lần khi ghi, còn lợi ích có ở mỗi câu hỏi theo ngày, mãi mãi."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: mở từng nhóm, đếm thẳng"
+    checks:
+      - "sum(42 in g for g in [[d] * 1000 for d in range(100)]) == 1"
+      - "(lambda r: sum(42 in g for g in [[r.randrange(100) for _ in range(1000)] for _ in range(100)]))(__import__('random').Random(3)) == 100"
+    steps:
+      - show: |
+          <table class="t"><tr><th>đường khác: mở hết, đếm nhóm thật sự có dòng ngày 42</th><th>kết quả</th><th>so với thống kê</th></tr>
+          <tr><td>sắp theo ngày</td><td>1 nhóm</td><td>khớp 1 ✓</td></tr>
+          <tr><td>không sắp (cùng dữ liệu ngẫu nhiên)</td><td>100 nhóm</td><td>khớp 100 ✓</td></tr></table>
+          <p>Thống kê không “nói dối”: khi không sắp, dòng ngày 42 <b>thật sự</b> rải khắp mọi nhóm.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Kiểm bằng đường khác, bỏ thống kê, mở từng nhóm và đếm thẳng những nhóm thật sự có dòng ngày 42. Khi sắp theo ngày, chỉ 1 nhóm có, khớp với thống kê. Khi không sắp, cả 100 nhóm đều có dòng ngày 42, cũng khớp với 100. Vậy thống kê không nói dối, vì khi không sắp, dòng ngày 42 thật sự rải khắp mọi nhóm."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp"
+    checks:
+      - "10000 * 0.002 == 20 and round(100 * 0.002, 1) == 0.2"
+      - "(lambda r: (lambda L: (alg.rowgroups_read(L, 42, 42), alg.rowgroups_read(L, 10, 16)))([[d] * 950 + [max(0, d - r.randint(1, 30)) for _ in range(50)] for d in range(100)]))(__import__('random').Random(3)) == (30, 37)"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Quá nhiều tệp nhỏ <b class="red">(chi phí mở tệp lấn át)</b>
+          <br><span class="note">Luồng ghi mỗi phút một tệp vài trăm KB. 10 000 tệp × 2 ms mở và đọc siêu dữ liệu = 20 giây trước khi đọc byte dữ liệu nào; gộp thành 100 tệp còn 0,2 giây. Gộp tệp định kỳ.</span></div>
+        say: "Lỗi thứ nhất, quá nhiều tệp nhỏ, nên chi phí mở tệp lấn át. Luồng ghi mỗi phút một tệp vài trăm nghìn byte. 10 nghìn tệp, mỗi tệp 2 mi li giây để mở và đọc siêu dữ liệu, là 20 giây trước khi đọc byte dữ liệu nào. Gộp thành 100 tệp thì chỉ còn 0 phẩy 2 giây, nên hãy gộp tệp định kỳ."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Bọc cột lọc trong hàm <b class="red">(mất đẩy điều kiện)</b>
+          <br><span class="note">Điều kiện “năm(thời điểm) = 2026” thường không so được với thống kê của cột thời điểm. Viết dạng khoảng trực tiếp trên cột: thời điểm từ 1/1/2026 tới trước 1/1/2027.</span></div>
+        say: "Lỗi thứ hai, bọc cột lọc trong một hàm, nên mất đẩy điều kiện. Điều kiện năm của thời điểm bằng 2026 thường không so được với thống kê của cột thời điểm. Hãy viết dạng khoảng trực tiếp trên cột, thời điểm từ 1 tháng 1 năm 2026 tới trước 1 tháng 1 năm 2027."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Chia thư mục theo cột có quá nhiều giá trị <b class="red">(hàng triệu thư mục)</b>
+          <br><span class="note">Chia theo ngày là hợp lý; chia theo mã khách tạo một thư mục cho mỗi khách, mỗi thư mục vài tệp nhỏ. Chia theo cột ít giá trị, còn cột nhiều giá trị thì <b>sắp</b> trong tệp.</span></div>
+        say: "Lỗi thứ ba, chia thư mục theo cột có quá nhiều giá trị, tạo ra hàng triệu thư mục. Chia theo ngày là hợp lý, nhưng chia theo mã khách tạo một thư mục cho mỗi khách, và mỗi thư mục chỉ vài tệp nhỏ. Hãy chia thư mục theo cột ít giá trị, còn cột nhiều giá trị thì sắp xếp bên trong tệp."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Tin rằng dữ liệu “đã sắp theo ngày” vì ghi theo giờ đến <b class="red">(đơn đến muộn làm khoảng nhóm phình)</b></div>
+          <p>Mô phỏng: mỗi nhóm 950 dòng đúng ngày, 50 dòng đến muộn từ 1 tới 30 ngày trước.</p>
+          <table class="t"><tr><th>câu hỏi</th><th>sắp thật sự</th><th>có 5% đến muộn</th></tr>
+          <tr><td>ngày 42</td><td>1 nhóm</td><td>30 nhóm</td></tr>
+          <tr><td>ngày 10 tới 16</td><td>7 nhóm</td><td>37 nhóm</td></tr></table>
+          <p class="note">Người có kinh nghiệm đo <b>số nhóm thật sự bị đọc</b> của câu hỏi chính sau mỗi lần nạp, và định kỳ sắp lại, gộp lại dữ liệu cũ.</p>
+        focus: [1, 2, "3.2", "3.3", 4]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, tin rằng dữ liệu đã sắp theo ngày chỉ vì ghi theo giờ đến, trong khi đơn đến muộn làm khoảng ngày của nhóm phình ra. Mô phỏng mỗi nhóm có 950 dòng đúng ngày và 50 dòng đến muộn từ 1 tới 30 ngày trước. Câu hỏi ngày 42 khi đó phải đọc 30 nhóm thay vì 1. Câu hỏi một tuần, từ ngày 10 tới 16, phải đọc 37 nhóm thay vì 7. Vì vậy, người có kinh nghiệm đo số nhóm thật sự bị đọc của câu hỏi chính sau mỗi lần nạp, và định kỳ sắp lại, gộp lại dữ liệu cũ."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.rowgroups_read([[d] * 1000 for d in range(100)], 10, 16) == 7 and (lambda r: alg.rowgroups_read([[r.randrange(100) for _ in range(1000)] for _ in range(100)], 10, 16))(__import__('random').Random(3)) == 100"
+      - "16 - 10 + 1 == 7"
+      - "(lambda r: (lambda rows: [sum(1 for i in range(5) if min(x[i * 1000:(i + 1) * 1000]) <= 2 <= max(x[i * 1000:(i + 1) * 1000])) for x in (rows, sorted(rows))])(r.sample([k for k in range(5) for _ in range(1000)], 5000)))(__import__('random').Random(3)) == [5, 1]"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Cùng 100 nhóm, câu hỏi một tuần: ngày từ 10 tới 16. Sắp theo ngày thì đọc mấy nhóm? Không sắp?</td></tr>
+          <tr><td>2</td><td>Câu hỏi thường lọc theo cả ngày lẫn tỉnh. Nên sắp theo thứ tự nào?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, cùng 100 nhóm, câu hỏi một tuần, ngày từ 10 tới 16. Sắp theo ngày thì đọc mấy nhóm? Không sắp thì sao? Câu hai, câu hỏi thường lọc theo cả ngày lẫn tỉnh. Nên sắp theo thứ tự nào? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① Sắp: nhóm thứ $k$ là ngày $k$ → khoảng 10 tới 16 chạm các nhóm 10, 11, …, 16: $16 - 10 + 1 = \hl{7}$ nhóm.</p>
+          <p>Không sắp: mọi nhóm ≈ [0, 99] đều giao với [10, 16] → vẫn 100.</p>
+        focus: [1, 2]
+        say: "Đáp án câu một, khi sắp, nhóm thứ k là ngày k, nên khoảng từ 10 tới 16 chạm các nhóm 10 tới 16, tức 16 trừ 10 cộng 1, bằng 7 nhóm. Không sắp thì mọi nhóm có khoảng gần từ 0 tới 99, đều giao với khoảng từ 10 tới 16, nên vẫn đọc 100."
+      - show: |
+          <p>② Sắp theo <b>ngày, rồi tỉnh</b> trong mỗi ngày: lọc ngày bỏ được nhiều nhóm nhất; tỉnh chỉ giúp thêm khi <b>một ngày trải trên nhiều nhóm</b>.</p>
+          <table class="t"><tr><th>một ngày 5000 dòng, 5 tỉnh, nhóm 1000 dòng: “ngày 42, tỉnh thứ ba”</th><th>nhóm phải đọc</th></tr>
+          <tr><td>chỉ sắp theo ngày, tỉnh lẫn lộn</td><td>5</td></tr>
+          <tr><td>sắp theo ngày rồi tỉnh</td><td>$\hl{1}$</td></tr></table>
+        focus: [1, 1, 2, "2.2", "2.3"]
+        say: "Câu hai, sắp theo ngày trước, rồi theo tỉnh trong mỗi ngày, vì lọc ngày bỏ được nhiều nhóm nhất. Tỉnh chỉ giúp thêm khi một ngày trải trên nhiều nhóm. Ví dụ một ngày có 5000 dòng của 5 tỉnh, mỗi nhóm 1000 dòng, và câu hỏi là ngày 42, tỉnh thứ ba. Nếu chỉ sắp theo ngày, tỉnh lẫn lộn trong cả 5 nhóm của ngày đó nên phải đọc 5 nhóm. Sắp tiếp theo tỉnh thì mỗi tỉnh gọn trong một nhóm, chỉ đọc 1 nhóm."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">nhóm hàng + thống kê nhỏ nhất–lớn nhất</span><span class="a">→</span>
+          <span class="n">so điều kiện trước khi đọc</span><span class="a">→</span>
+          <span class="n">sắp theo cột hay lọc để khoảng hẹp</span><span class="a">→</span>
+          <span class="n">ít tệp lớn, điều kiện viết thẳng trên cột</span></div>
+        say: "Tổng kết lại, mỗi nhóm hàng có thống kê nhỏ nhất và lớn nhất, nên bộ đọc so điều kiện trước khi đọc. Hãy sắp theo cột hay lọc để khoảng mỗi nhóm hẹp, giữ ít tệp lớn, và viết điều kiện thẳng trên cột."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> cách nhanh nhất để đọc dữ liệu là <b>biết trước</b> mình không cần đọc nó.</div>
+        say: "Điều cần mang theo, cách nhanh nhất để đọc dữ liệu là biết trước rằng mình không cần đọc nó."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 12): <b>kho dữ liệu</b> — bảng sự kiện, bảng chiều và chiều thay đổi chậm.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 12, ta học kho dữ liệu, với bảng sự kiện, bảng chiều, và chiều thay đổi chậm. Hẹn gặp bạn ở bài tiếp theo."

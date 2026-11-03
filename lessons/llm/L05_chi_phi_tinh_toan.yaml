@@ -1,0 +1,318 @@
+id: L05
+course: LLM
+series: "LLM · Mô hình ngôn ngữ lớn"
+title: "Bài 5 — Chi phí tính toán: tham số, phép tính và bộ nhớ đệm khoá–giá trị"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/llm.yaml L05; audit/llm/verify_llm.py L05; J. Kaplan và cộng sự, Scaling Laws for Neural Language Models (2020) — số tham số ≈ 12·L·d² cho phần thân, ≈ 2 phép tính mỗi tham số mỗi từ tố khi suy luận; R. Pope và cộng sự, Efficiently Scaling Transformer Inference (2022) — bộ nhớ đệm khoá–giá trị, giới hạn băng thông; J. Ainslie và cộng sự, GQA (2023); MLO bài 11 (lượng tử hoá); CS115 bài 41 (truy vấn, khoá, giá trị)"
+assumes: [arith, cdot, power, approx, frac]
+# Quy ước: L tầng, chiều d, ngữ cảnh n từ tố, 2 byte mỗi số (fp16). Bộ nhớ đệm khoá–giá trị = 2 · L · d · n · 2 byte cho MỖI chuỗi
+#   (alg.kv_cache_bytes), giả định mọi đầu chú ý đều có khoá, giá trị riêng; kiểu chia sẻ khoá giữa nhiều đầu (GQA) làm nhỏ hơn.
+#   Tham số phần thân ≈ 12 · L · d² (bỏ qua bảng nhúng, độ lệch, chuẩn hoá). Suy luận ≈ 2 phép tính mỗi tham số mỗi từ tố (nhân + cộng).
+#   Băng thông 1 TB/s và 300 nghìn tỉ phép tính/s là SỐ MINH HOẠ (bậc độ lớn của một thẻ tính toán hiện nay), ghi rõ trên màn hình.
+#   GB = 10⁹ byte, GiB = 2³⁰ byte; lời đọc nói “đơn vị nhị phân” cho GiB (lexicon LLM chưa dò GiB). ms = mili giây.
+# Độ sâu (pedagogy.md luật 22, viết lại 2026-10-31 từ bản 6 phân cảnh 4,4 phút): ôn nền → hình cơ chế → suy công thức từng bước →
+#   ví dụ từng phép tính → tự kiểm độc lập → lỗi (có lỗi chuyên gia: gộp lô không chia sẻ bộ nhớ đệm) → quiz quyết định → chuỗi logic.
+objectives:
+  - "Suy ra số tham số 12 · L · d² từ cấu trúc một tầng"
+  - "Tính bộ nhớ đệm khoá–giá trị cho một chuỗi và cho nhiều chuỗi"
+  - "Giải thích bằng số vì sao sinh từng từ bị giới hạn bởi băng thông bộ nhớ, không phải phép tính"
+  - "Quyết định một thẻ tính toán phục vụ được bao nhiêu chuỗi cùng lúc"
+asr_reviewed:
+  - {sentence: "Với đường ống 1 nghìn tỉ byte mỗi giây, một số minh hoạ, việc đọc mất 12 phẩy 9 mi li giây.", reason: "ASR chép “với đường ống 1.000 tỷ bay mỗi giây, một số minh họa, việc độc mất 12,9 mili giây.” (0.8): “tỉ” ASR viết chính tả “tỷ” (cùng âm); byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh; lệch âm/thanh thuần Việt: đọc/độc — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bộ nhớ đệm bằng 2 L d n nhân 2 byte cho mỗi chuỗi.", reason: "ASR chép “Bộ nhớ đệm bằng 2 LVN nhân 2 byte cho mỗi chuỗi.” (0.846): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Chào bạn, một mô hình khoảng 6 phẩy 4 tỉ tham số chiếm gần 13 GB ở dạng 2 byte mỗi số, vừa một thẻ tính toán.", reason: "ASR chép “Chào bạn, một mô hình khoảng 6,4 tỷ tham số chiếm gần 13GB ở dạng 2 BI mỗi số, vừa mục thể tính toán.” (0.857): “tỉ” ASR viết chính tả “tỷ” (cùng âm); byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: một thẻ/mục thể — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Một GB là 10 mũ 9 byte.", reason: "ASR chép “1 GB là 10 mũ chín bay.” (0.857): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Hôm nay ta trả lời ba câu hỏi, con số 6 phẩy 4 tỉ từ đâu ra, 34 tỉ byte kia là gì, và vì sao mô hình sinh chữ chậm dù thẻ tính rất nhanh.", reason: "ASR chép “Hôm nay ta trả lời ba câu hỏi, còn số 6,4 tỷ từ đâu ra, 34 tỷ bay kia là gì, và vì sao mô hình sinh chữ chậm dù thể tính rất nhanh.” (0.868): “tỉ” ASR viết chính tả “tỷ” (cùng âm); byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: con/còn, thẻ/thể — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Phép tính thứ ba, một từ tố cần 524 nghìn 288 byte, nên một chuỗi 4096 từ tố cần 2 tỉ 147 triệu byte, khoảng 2 phẩy 15 GB.", reason: "ASR chép “Phép tính thứ ba, một tự tố cần 524.288 bai, nên một chuỗi 4.096 tự tố cần 2.147 triệu bai, khoảng 2,15 gigabyte.” (0.875): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); “2 tỉ 147 triệu” ASR viết gộp “2.147 triệu” (cùng giá trị); GB đọc “ghi-ga-byte” theo lexicon của khoá, ASR viết “GB/gigabyte”; lệch âm/thanh thuần Việt: từ/tự, từ/tự — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Một số ở dạng nửa độ chính xác chiếm 2 byte, nên 6 số chiếm 12 byte.", reason: "ASR chép “Một số ở dạng nửa độ chính xác chiếm hai bay nên 6 số chiếm 10 hai bay.” (0.889): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); “12” ASR viết “10 hai” (đọc “mười hai”, cùng giá trị) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Nhân lần lượt theo số tầng, số từ tố, và số byte mỗi số, ta được 2 nhân L nhân d nhân n nhân 2 byte cho mỗi chuỗi.", reason: "ASR chép “Nhân lần lượt theo số tầng, số tự tố và số bay mỗi số, ta được 2 nhân L nhân D nhân N nhân 2 bay cho mỗi chuỗi.” (0.897): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: từ/tự — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Kiểm tra thứ nhất, vì công thức chỉ là một tích nên ta nhân thẳng, 2 nhân 32 nhân 4096 nhân 4096 nhân 2, cũng được 2 tỉ 147 triệu byte, khớp kết quả phép tính thứ ba.", reason: "ASR chép “Kiểm tra thứ nhất, vì công thức chỉ là mục tích nền ta nhân thẳng, 2 nhân 32 nhân 4.096 nhân 4.096 nhân 2 cũng được 2 tỷ 147 triệu bay, khớp kết quả phép tính thứ 3.” (0.929): “tỉ” ASR viết chính tả “tỷ” (cùng âm); byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: một/mục, nên/nền — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Nhưng phục vụ 16 người dùng cùng lúc, mỗi người ngữ cảnh 4096 từ tố, lại cần thêm khoảng 34 tỉ byte chỉ để nhớ khoá và giá trị của các từ tố đã đọc.", reason: "ASR chép “Nhưng phục vụ 16 người dùng cùng lúc, mỗi người ngửi cảnh 4096 từ tố lại cần thêm khoảng 34 tỷ bay chỉ để nhớ khóa và giá trị của các từ tố đã đọc.” (0.932): “tỉ” ASR viết chính tả “tỷ” (cùng âm); byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: ngữ/ngửi — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Câu hai, 2 nhân 40 nhân 5120 nhân 8192 nhân 2 bằng 6 tỉ 710 triệu 886 nghìn 400 byte, khoảng 6 phẩy 71 GB.", reason: "ASR chép “Câu 2, 2 nhân 40 nhân 5.120 nhân 8.192 nhân 2 bằng 6 tỷ 710.886.400 bai, khoảng 6,71 gigabyte.” (0.935): “tỉ” ASR viết chính tả “tỷ” (cùng âm); byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); GB đọc “ghi-ga-byte” theo lexicon của khoá, ASR viết “GB/gigabyte” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Số 2 đầu là khoá và giá trị, số 2 cuối là 2 byte mỗi số.", reason: "ASR chép “Số 2 đầu là khóa và giá trị. Số 2 cuối là 2 bay mỗi số.” (0.938): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Còn một đơn vị nhị phân là 2 mũ 30 byte, lớn hơn khoảng 7 phần trăm.", reason: "ASR chép “Còn 1 đơn vị nhị phân là 2 mũ 30 bai, lớn hơn khoảng 7 phần trăm.” (0.944): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Làm thử với một từ tố của mô hình ví dụ, 2 nhân 32 nhân 4096 nhân 2 bằng 524 nghìn 288 byte.", reason: "ASR chép “Làm thử với một tự tố của mô hình ví dụ, 2 nhân 32 nhân 4.096 nhân 2 bằng 524.288 bay.” (0.949): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: từ/tự — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Mỗi ma trận có d nhân 4d, tức 4 d bình phương số, nên hai ma trận có 8 d bình phương.", reason: "ASR chép “Mỗi ma trận có dây nhân 4d, tức 4d bình phương số, nên 2 ma trận có 8d bình phương.” (0.957): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Điều cần mang theo, trước khi chọn mô hình hay mua phần cứng, hãy tính bộ nhớ và số byte phải đọc mỗi bước cho đúng số người dùng và độ dài ngữ cảnh thật.", reason: "ASR chép “Điều cần mang theo trước khi chọn mô hình hay mua phần cứng, hãy tính bộ nhớ và số bai phải đọc mỗi bước cho đúng số người dùng và độ dài ngữ cảnh thật.” (0.971): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Một chuỗi cần thêm 2 phẩy 15 GB bộ nhớ đệm.", reason: "ASR chép “Một chuỗi cần thêm 2,15GB bộ nhớ đệm” (1.0): GB đọc “ghi-ga-byte” theo lexicon của khoá, ASR viết “GB/gigabyte” — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Mô hình vừa bộ nhớ, nhưng 16 người dùng thì không"
+    checks:
+      - "alg.kv_cache_bytes(32, 4096, 4096, batch=16) == 32 * 2 ** 30"
+      - "round(12 * 32 * 4096 ** 2 / 1e9, 1) == 6.4 and round(12 * 32 * 4096 ** 2 * 2 / 1e9) == 13 and round(32 * 2 ** 30 / 1e9) == 34"
+    steps:
+      - show: |
+          <p>Một mô hình khoảng 6,4 tỉ tham số chiếm gần 13 GB ở dạng 2 byte mỗi số — vừa một thẻ tính toán. Nhưng phục vụ 16 người dùng cùng lúc, mỗi người ngữ cảnh 4096 từ tố, lại cần thêm khoảng <b>34 GB</b> chỉ để nhớ khoá và giá trị của các từ tố đã đọc.</p>
+          <div class="box key">Hôm nay ta trả lời ba câu hỏi: con số 6,4 tỉ từ đâu ra? 34 GB kia là gì? Và vì sao mô hình sinh chữ chậm dù thẻ tính rất nhanh?</div>
+        focus: [1, 1, 2]
+        say: "Chào bạn, một mô hình khoảng 6 phẩy 4 tỉ tham số chiếm gần 13 GB ở dạng 2 byte mỗi số, vừa một thẻ tính toán. Nhưng phục vụ 16 người dùng cùng lúc, mỗi người ngữ cảnh 4096 từ tố, lại cần thêm khoảng 34 tỉ byte chỉ để nhớ khoá và giá trị của các từ tố đã đọc. Hôm nay ta trả lời ba câu hỏi, con số 6 phẩy 4 tỉ từ đâu ra, 34 tỉ byte kia là gì, và vì sao mô hình sinh chữ chậm dù thẻ tính rất nhanh."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại ba điều sẽ dùng"
+    checks:
+      - "3 * 4 == 12 and 2 * 3 * 4 == 24"
+      - "2 * 6 == 12 and 10 ** 9 == 1000000000 and 2 ** 30 == 1073741824"
+    steps:
+      - show: |
+          <p><b>① Ma trận $a$ hàng $b$ cột có $a \cdot b$ số.</b> Ma trận 3 × 4 có $3 \cdot 4 = 12$ số. Mỗi số là một <b>tham số</b> mô hình học được.</p>
+        say: "Điều thứ nhất, một ma trận a hàng b cột có a nhân b số. Ví dụ ma trận 3 hàng 4 cột có 12 số, và mỗi số là một tham số mà mô hình học được."
+      - show: |
+          <p><b>② Chú ý:</b> mỗi từ tố có ba vector — <b>truy vấn</b> (điều nó đang tìm), <b>khoá</b> (điều nó có), <b>giá trị</b> (điều nó đóng góp). Từ tố mới so truy vấn của nó với khoá của mọi từ tố trước, rồi trộn các giá trị.</p>
+          <p><b>Sinh từng từ</b> (bài 4): đoán một từ tố, thêm vào cuối, rồi đoán tiếp; mặt nạ nhân quả cho mỗi vị trí chỉ nhìn các vị trí trước nó.</p>
+        focus: [1, 1, 2, 2]
+        say: "Điều thứ hai, trong phép chú ý, mỗi từ tố có ba vector, truy vấn là điều nó đang tìm, khoá là điều nó có, và giá trị là điều nó đóng góp. Từ tố mới so truy vấn của nó với khoá của mọi từ tố trước, rồi trộn các giá trị. Ở bài 4, ta đã thấy mô hình sinh từng từ, đoán một từ tố, thêm vào cuối, rồi đoán tiếp. Mặt nạ nhân quả cho mỗi vị trí chỉ nhìn các vị trí trước nó."
+      - show: |
+          <p><b>③ Đơn vị bộ nhớ.</b> Một số ở dạng nửa độ chính xác chiếm <b>2 byte</b>: 6 số chiếm $2 \cdot 6 = 12$ byte.</p>
+          <table class="t"><tr><th>đơn vị</th><th>bằng</th></tr>
+          <tr><td>1 GB</td><td>$10^9$ = 1 000 000 000 byte</td></tr>
+          <tr><td>1 GiB (đơn vị nhị phân)</td><td>$2^{30}$ = 1 073 741 824 byte</td></tr></table>
+        focus: [1, 1, "2.2", "2.3"]
+        say: "Điều thứ ba là đơn vị bộ nhớ. Một số ở dạng nửa độ chính xác chiếm 2 byte, nên 6 số chiếm 12 byte. Một GB là 10 mũ 9 byte. Còn một đơn vị nhị phân là 2 mũ 30 byte, lớn hơn khoảng 7 phần trăm."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: L, d, n"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ký hiệu</th><th>nghĩa</th><th>mô hình ví dụ</th></tr>
+          <tr><td>$L$</td><td>số tầng chồng lên nhau</td><td>32</td></tr>
+          <tr><td>$d$</td><td>chiều của vector ở mỗi vị trí</td><td>4096</td></tr>
+          <tr><td>$n$</td><td>độ dài ngữ cảnh, tính bằng từ tố</td><td>4096</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", 1]
+        say: "Bài dùng ba chữ cái. L là số tầng chồng lên nhau, mô hình ví dụ có 32 tầng. d là chiều của vector ở mỗi vị trí, ở đây là 4096. n là độ dài ngữ cảnh tính bằng từ tố, ở đây cũng là 4096. Giữ ba con số này, ta sẽ dùng lại suốt bài."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Bộ nhớ đệm: nhớ khoá và giá trị để khỏi tính lại"
+    steps:
+      - show: |
+          <div><svg width="1000" height="360" viewBox="0 0 1000 360"><defs><marker id="ar5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#eb6834"/></marker></defs>
+          <rect x="30" y="58" width="640" height="200" rx="10" fill="#f0fdf4" stroke="#059669" stroke-width="2" stroke-dasharray="8 6"/>
+          <text x="350" y="46" font-size="22" fill="#059669" text-anchor="middle" font-weight="bold">bộ nhớ đệm: khoá và giá trị đã tính, đọc lại mỗi bước</text>
+          <g font-size="24" text-anchor="middle">
+          <rect x="50" y="78" width="130" height="46" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="115" y="109" fill="#1f2937">khoá</text>
+          <rect x="50" y="134" width="130" height="46" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="115" y="165" fill="#1f2937">giá trị</text>
+          <rect x="50" y="198" width="130" height="50" rx="6" fill="#f3f4f6" stroke="#1f2937" stroke-width="2"/><text x="115" y="231" fill="#1f2937">Hôm</text>
+          <rect x="205" y="78" width="130" height="46" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="270" y="109" fill="#1f2937">khoá</text>
+          <rect x="205" y="134" width="130" height="46" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="270" y="165" fill="#1f2937">giá trị</text>
+          <rect x="205" y="198" width="130" height="50" rx="6" fill="#f3f4f6" stroke="#1f2937" stroke-width="2"/><text x="270" y="231" fill="#1f2937">nay</text>
+          <rect x="360" y="78" width="130" height="46" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="425" y="109" fill="#1f2937">khoá</text>
+          <rect x="360" y="134" width="130" height="46" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="425" y="165" fill="#1f2937">giá trị</text>
+          <rect x="360" y="198" width="130" height="50" rx="6" fill="#f3f4f6" stroke="#1f2937" stroke-width="2"/><text x="425" y="231" fill="#1f2937">trời</text>
+          <rect x="515" y="78" width="130" height="46" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="580" y="109" fill="#1f2937">khoá</text>
+          <rect x="515" y="134" width="130" height="46" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="580" y="165" fill="#1f2937">giá trị</text>
+          <rect x="515" y="198" width="130" height="50" rx="6" fill="#f3f4f6" stroke="#1f2937" stroke-width="2"/><text x="580" y="231" fill="#1f2937">đẹp</text>
+          <rect x="770" y="78" width="190" height="46" rx="6" fill="#ffedd5" stroke="#eb6834" stroke-width="2.5"/><text x="865" y="109" fill="#1f2937">truy vấn</text>
+          <rect x="770" y="198" width="190" height="50" rx="6" fill="#ffedd5" stroke="#eb6834" stroke-width="2.5"/><text x="865" y="231" fill="#1f2937">từ tố mới</text>
+          </g>
+          <line x1="765" y1="101" x2="682" y2="101" stroke="#eb6834" stroke-width="3" marker-end="url(#ar5)"/>
+          <line x1="865" y1="192" x2="865" y2="132" stroke="#eb6834" stroke-width="2.5" marker-end="url(#ar5)"/>
+          <text x="500" y="300" font-size="22" fill="#1f2937" text-anchor="middle">mỗi từ tố cũ để lại 1 khoá + 1 giá trị, mỗi cái d số, ở MỖI tầng</text>
+          <text x="500" y="336" font-size="22" fill="#1f2937" text-anchor="middle">từ tố mới chỉ tính truy vấn, khoá, giá trị của riêng nó</text>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình cho thấy lúc mô hình đang sinh từ tiếp theo sau bốn từ tố hôm nay trời đẹp. Từ tố mới tính truy vấn của nó, rồi so với khoá của cả bốn từ tố cũ và trộn bốn giá trị. Khoá và giá trị của từ tố cũ không đổi, nên ta lưu sẵn chúng vào bộ nhớ đệm thay vì tính lại. Cái giá phải trả là bộ nhớ, vì mỗi từ tố cũ để lại một khoá và một giá trị ở mọi tầng."
+      - show: |
+          <div><svg width="1000" height="300" viewBox="0 0 1000 300"><defs><marker id="ar5b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#eb6834"/></marker></defs>
+          <g font-size="23" text-anchor="middle">
+          <rect x="20" y="40" width="300" height="200" rx="10" fill="#f9fafb" stroke="#1f2937" stroke-width="2"/>
+          <text x="170" y="74" fill="#1f2937" font-weight="bold">bộ nhớ của thẻ</text>
+          <rect x="45" y="94" width="250" height="56" rx="6" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="170" y="130" fill="#1f2937">trọng số 12,9 GB</text>
+          <rect x="45" y="164" width="250" height="56" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="170" y="200" fill="#1f2937">bộ nhớ đệm</text>
+          <line x1="325" y1="140" x2="655" y2="140" stroke="#eb6834" stroke-width="10" marker-end="url(#ar5b)"/>
+          <text x="490" y="112" fill="#1f2937">1 TB/s (minh hoạ)</text>
+          <text x="490" y="184" fill="#b91c1c" font-weight="bold">đọc 12,9 GB: 12,9 ms</text>
+          <rect x="665" y="40" width="315" height="200" rx="10" fill="#fff7ed" stroke="#eb6834" stroke-width="2"/>
+          <text x="822" y="74" fill="#1f2937" font-weight="bold">khối tính</text>
+          <text x="822" y="122" fill="#1f2937">300 nghìn tỉ phép/s</text>
+          <text x="822" y="152" fill="#1f2937">(minh hoạ)</text>
+          <text x="822" y="206" fill="#059669" font-weight="bold">12,9 tỉ phép: 0,043 ms</text>
+          </g>
+          <text x="500" y="285" font-size="22" fill="#1f2937" text-anchor="middle">mỗi từ tố mới: đọc HẾT trọng số một lần — khối tính ngồi chờ đường ống</text>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình thứ hai là con đường của mỗi bước sinh. Để ra một từ tố mới, thẻ phải đọc toàn bộ 12 phẩy 9 GB trọng số từ bộ nhớ sang khối tính. Với đường ống 1 nghìn tỉ byte mỗi giây, một số minh hoạ, việc đọc mất 12 phẩy 9 mi li giây. Còn phép tính chỉ mất khoảng 0 phẩy 043 mi li giây, nên khối tính phần lớn thời gian ngồi chờ."
+
+  # ───────────────────────── 5. SUY RA CÔNG THỨC ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra hai công thức từ cấu trúc một tầng"
+    checks:
+      - "4 * 4096 ** 2 + 2 * (4096 * 4 * 4096) == 12 * 4096 ** 2"
+      - "4 * 2 ** 2 + 2 * (2 * 4 * 2) == 48 == 12 * 2 ** 2"
+      - "2 * 4096 * 32 == 262144 and 262144 * 2 == 524288 == 2 ** 19"
+    steps:
+      - show: |
+          <p><b>Bước 1 — phần chú ý.</b> Mỗi tầng có 4 ma trận $d \times d$: tạo truy vấn, tạo khoá, tạo giá trị, và trộn đầu ra. Vì mỗi ma trận có $d^2$ số:</p>
+          $$4 \cdot d^2$$
+        focus: [1, 1, 2]
+        say: "Bước một là phần chú ý. Mỗi tầng có 4 ma trận cỡ d nhân d, dùng để tạo truy vấn, tạo khoá, tạo giá trị, và trộn đầu ra. Vì mỗi ma trận có d bình phương số, phần chú ý có 4 d bình phương tham số."
+      - show: |
+          <p><b>Bước 2 — khối truyền thẳng.</b> Hai ma trận: phóng $d \to 4d$ rồi thu $4d \to d$. Mỗi ma trận có $d \cdot 4d = 4d^2$ số, nên hai ma trận:</p>
+          $$2 \cdot 4d^2 = 8 \cdot d^2$$
+        focus: [1, 2]
+        say: "Bước hai là khối truyền thẳng, gồm hai ma trận, một cái phóng từ d lên 4d, một cái thu từ 4d về d. Mỗi ma trận có d nhân 4d, tức 4 d bình phương số, nên hai ma trận có 8 d bình phương."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — cộng rồi nhân số tầng.</b> Một tầng: $4d^2 + 8d^2 = 12 \cdot d^2$. Theo $L$ tầng giống nhau:</p>
+          $$\text{tham số} \approx \hlg{12 \cdot L \cdot d^2}$$
+          <p class="note">Làm thử với $d = 2$: $4 \cdot 4 + 2 \cdot 16 = 48 = 12 \cdot 4$ ✓. Dấu xấp xỉ vì bỏ qua bảng nhúng và vài vector nhỏ.</p>
+        focus: [1, 2, 3, 3]
+        say: "Bước ba, cộng hai phần được 12 d bình phương cho một tầng, rồi nhân với L tầng giống nhau. Vậy số tham số xấp xỉ 12 nhân L nhân d bình phương. Làm thử với d bằng 2, phần chú ý có 16 số, khối truyền thẳng có 32 số, tổng 48, đúng bằng 12 nhân 4. Dấu xấp xỉ là vì ta bỏ qua bảng nhúng và vài vector nhỏ."
+      - clear: true
+        show: |
+          <p><b>Bước 4 — bộ nhớ đệm.</b> Mỗi từ tố cũ, ở mỗi tầng, để lại 1 khoá + 1 giá trị, mỗi cái $d$ số. Nhân lần lượt theo tầng, theo số từ tố, theo byte mỗi số:</p>
+          $$\text{bộ nhớ đệm} = \hlb{2} \cdot L \cdot d \cdot n \cdot 2 \text{ byte cho mỗi chuỗi}$$
+          <p class="note">Số 2 đầu: khoá và giá trị. Số 2 cuối: 2 byte mỗi số. Làm thử, một từ tố của mô hình ví dụ: $2 \cdot 32 \cdot 4096 \cdot 2 = 524\,288$ byte = 0,5 MiB.</p>
+        focus: [1, 1, 2, 3, 3]
+        say: "Bước bốn là bộ nhớ đệm. Mỗi từ tố cũ, ở mỗi tầng, để lại một khoá và một giá trị, mỗi cái có d số. Nhân lần lượt theo số tầng, số từ tố, và số byte mỗi số, ta được 2 nhân L nhân d nhân n nhân 2 byte cho mỗi chuỗi. Số 2 đầu là khoá và giá trị, số 2 cuối là 2 byte mỗi số. Làm thử với một từ tố của mô hình ví dụ, 2 nhân 32 nhân 4096 nhân 2 bằng 524 nghìn 288 byte."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Mô hình 32 tầng, chiều 4096, từng phép tính"
+    checks:
+      - "12 * 32 * 4096 ** 2 == 6442450944"
+      - "12 * 32 * 4096 ** 2 * 2 == 12884901888 == 12 * 2 ** 30"
+      - "alg.kv_cache_bytes(32, 4096, 4096) == 524288 * 4096 == 2147483648 == 2 * 2 ** 30"
+      - "alg.kv_cache_bytes(32, 4096, 4096, batch=16) == 34359738368 > 12884901888"
+    steps:
+      - show: |
+          <p>① Tham số: $12 \cdot 32 \cdot 4096^2 = 6\,442\,450\,944 \approx \hlb{6{,}44}$ tỉ.</p>
+        say: "Phép tính thứ nhất, số tham số bằng 12 nhân 32 nhân 4096 bình phương, bằng 6 tỉ 442 triệu 450 nghìn 944, khoảng 6 phẩy 44 tỉ."
+      - show: |
+          <p>① Tham số: $12 \cdot 32 \cdot 4096^2 \approx 6{,}44$ tỉ.</p>
+          <p>② Trọng số, 2 byte mỗi số: $6{,}44 \text{ tỉ} \cdot 2 \approx \hlb{12{,}9}$ GB.</p>
+        focus: [2, 2]
+        say: "Phép tính thứ hai, mỗi tham số chiếm 2 byte, nên trọng số chiếm khoảng 12 phẩy 9 GB. Con số này đúng bằng 12 đơn vị nhị phân."
+      - show: |
+          <p>① Tham số $\approx 6{,}44$ tỉ. ② Trọng số $\approx 12{,}9$ GB.</p>
+          <p>③ Bộ nhớ đệm, một chuỗi 4096 từ tố: $524\,288 \cdot 4096 = 2\,147\,483\,648$ byte $\approx \hlo{2{,}15}$ GB.</p>
+        focus: [2, 2]
+        say: "Phép tính thứ ba, một từ tố cần 524 nghìn 288 byte, nên một chuỗi 4096 từ tố cần 2 tỉ 147 triệu byte, khoảng 2 phẩy 15 GB. Đây đúng bằng 2 đơn vị nhị phân."
+      - show: |
+          <table class="t"><tr><th>phần</th><th>dung lượng</th></tr>
+          <tr><td>trọng số (dùng chung)</td><td>12,9 GB</td></tr>
+          <tr><td>bộ nhớ đệm, 1 chuỗi</td><td>2,15 GB</td></tr>
+          <tr><td>bộ nhớ đệm, 16 chuỗi</td><td>$16 \cdot 2{,}15 \approx \hl{34{,}4}$ GB</td></tr></table>
+          <p class="note">Với 16 người dùng ngữ cảnh đầy, bộ nhớ đệm lớn gần gấp 3 trọng số.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Phép tính thứ tư, đặt cạnh nhau. Trọng số 12 phẩy 9 GB được mọi người dùng chung. Một chuỗi cần thêm 2 phẩy 15 GB bộ nhớ đệm. Mười sáu chuỗi cần khoảng 34 phẩy 4 GB, vì mỗi người có ngữ cảnh riêng. Vậy với 16 người dùng ngữ cảnh đầy, bộ nhớ đệm lớn gần gấp 3 trọng số."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: tính theo đường khác, và hỏi phép tính hay băng thông"
+    checks:
+      - "2 * 32 * 4096 * 4096 * 2 == alg.kv_cache_bytes(32, 4096, 4096)"
+      - "round(12884901888 / 1e12 * 1e3, 1) == 12.9 and round(2 * 6442450944 / 300e12 * 1e3, 3) == 0.043"
+      - "round((12884901888 / 1e12) / (2 * 6442450944 / 300e12)) == 300"
+    steps:
+      - show: |
+          <p><b>Đường khác:</b> vì công thức chỉ là một tích, nhân thẳng $2 \cdot 32 \cdot 4096 \cdot 4096 \cdot 2 = 2\,147\,483\,648$ byte — khớp kết quả ③ ✓.</p>
+        say: "Kiểm tra thứ nhất, vì công thức chỉ là một tích nên ta nhân thẳng, 2 nhân 32 nhân 4096 nhân 4096 nhân 2, cũng được 2 tỉ 147 triệu byte, khớp kết quả phép tính thứ ba."
+      - show: |
+          <table class="t"><tr><th>mỗi từ tố mới</th><th>khối lượng</th><th>tốc độ (minh hoạ)</th><th>thời gian</th></tr>
+          <tr><td>đọc trọng số</td><td>12,9 GB</td><td>1 TB/s</td><td>$\hl{12{,}9}$ ms</td></tr>
+          <tr><td>tính: 2 phép mỗi tham số</td><td>12,9 tỉ phép</td><td>300 nghìn tỉ phép/s</td><td>$0{,}043$ ms</td></tr></table>
+          <p class="note">Đọc chậm hơn tính khoảng <b>300 lần</b> → sinh từng từ bị giới hạn bởi <b>băng thông</b>.</p>
+        focus: [0, "1.2", "1.3", 2]
+        say: "Kiểm tra thứ hai trả lời câu hỏi chậm vì đâu. Mỗi tham số cần một phép nhân và một phép cộng, nên một từ tố mới cần khoảng 12 phẩy 9 tỉ phép tính. Đọc 12 phẩy 9 GB trọng số mất 12 phẩy 9 mi li giây, còn tính chỉ mất 0 phẩy 043 mi li giây. Việc đọc chậm hơn khoảng 300 lần, nên giới hạn là băng thông."
+
+  # ───────────────────────── 8. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi cả người đã đi làm"
+    checks:
+      - "round(1e12 / 12884901888) == 78 and (2 * 6442450944 / 300e12) / (12884901888 / 1e12) < 0.01"
+      - "round(1e12 / (12884901888 + 16 * 2147483648) * 16) == 339 and 16 * 78 == 1248"
+      - "alg.kv_cache_bytes(32, 4096, 32768) == 8 * alg.kv_cache_bytes(32, 4096, 4096) and alg.kv_cache_bytes(32, 1024, 4096) * 4 == alg.kv_cache_bytes(32, 4096, 4096)"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Mua thẻ nhiều phép tính hơn để sinh nhanh hơn <b class="red">(thật ra thiếu băng thông)</b>
+          <br><span class="note">Một chuỗi: tối đa $\frac{10^{12}}{12{,}9 \cdot 10^9} \approx 78$ từ tố/giây, dù khối tính rảnh hơn 99% thời gian.</span></div>
+        say: "Lỗi thứ nhất, mua thẻ có nhiều phép tính hơn để sinh nhanh hơn, trong khi thật ra thiếu băng thông. Với một chuỗi, mỗi giây đọc được trọng số khoảng 78 lần, nên tối đa khoảng 78 từ tố mỗi giây, dù khối tính rảnh gần hết."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Nghĩ gộp 16 chuỗi thì nhanh gấp 16 <b class="red">(bộ nhớ đệm không dùng chung)</b>
+          <br><span class="note">Mỗi bước đọc trọng số MỘT lần cho cả lô, nhưng đọc bộ nhớ đệm của TỪNG chuỗi.</span></div>
+          <table class="t"><tr><th>mỗi bước, ngữ cảnh đầy</th><th>phải đọc</th><th>từ tố/giây cả lô</th></tr>
+          <tr><td>tưởng tượng: 16 lần một chuỗi</td><td>12,9 GB</td><td>16 nhân 78 = 1248</td></tr>
+          <tr><td>thật: trọng số + 16 bộ nhớ đệm</td><td>12,9 + 34,4 = 47,2 GB</td><td>khoảng 21 bước/giây nhân 16 ≈ <b>339</b></td></tr></table>
+        focus: [1, 1, "2.3", 0]
+        say: "Lỗi thứ hai, nghĩ gộp 16 chuỗi thì nhanh gấp 16. Mỗi bước chỉ đọc trọng số một lần cho cả lô, nhưng phải đọc bộ nhớ đệm của từng chuỗi. Khi mọi chuỗi dùng hết 4096 từ tố, mỗi bước đọc khoảng 47 GB, được khoảng 339 từ tố mỗi giây cho cả lô, không phải 1248. Gộp lô vẫn có lợi, nhưng ít hơn người ta tưởng."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Quên bộ nhớ đệm tăng theo ngữ cảnh <b class="red">(tràn bộ nhớ)</b>
+          <br><span class="note">Ngữ cảnh 32 768 từ tố: bộ nhớ đệm gấp 8, khoảng 17,2 GB mỗi chuỗi. Chia sẻ khoá giữa nhiều đầu chú ý (dùng 1/4 số khoá) thì còn 1/4.</span></div>
+        say: "Lỗi thứ ba, quên rằng bộ nhớ đệm tăng theo ngữ cảnh. Ngữ cảnh 32 nghìn 768 từ tố làm bộ nhớ đệm gấp 8, khoảng 17 phẩy 2 GB mỗi chuỗi. Các mô hình mới chia sẻ khoá giữa nhiều đầu chú ý, dùng một phần tư số khoá thì bộ nhớ đệm còn một phần tư."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Lẫn GB và GiB <b class="red">(lệch 7%)</b>
+          <br><span class="note">2 GiB ≈ 2,15 GB. Thẻ ghi “80 GB” hay “80 GiB” khác nhau gần 6 GB — ghi rõ đơn vị trước khi kết luận “vừa”.</span></div>
+        say: "Lỗi thứ tư, lẫn đơn vị thập phân với đơn vị nhị phân, lệch nhau khoảng 7 phần trăm. Hai đơn vị nhị phân là khoảng 2 phẩy 15 GB. Ở mức 80, hai cách ghi khác nhau gần 6 GB, nên hãy ghi rõ đơn vị trước khi kết luận là vừa."
+
+  # ───────────────────────── 9. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: một thẻ 80 GB phục vụ được mấy chuỗi?"
+    checks:
+      - "12 * 40 * 5120 ** 2 == 12582912000 and round(12 * 40 * 5120 ** 2 * 2 / 1e9, 1) == 25.2"
+      - "alg.kv_cache_bytes(40, 5120, 8192) == 6710886400 and round(alg.kv_cache_bytes(40, 5120, 8192) / 1e9, 2) == 6.71"
+      - "int((80e9 - 12 * 40 * 5120 ** 2 * 2) // alg.kv_cache_bytes(40, 5120, 8192)) == 8"
+      - "12 * 40 * 5120 ** 2 * 2 + 8 * 6710886400 <= 80e9 < 12 * 40 * 5120 ** 2 * 2 + 9 * 6710886400"
+    steps:
+      - show: |
+          <p>Mô hình 40 tầng, chiều 5120, ngữ cảnh 8192 từ tố, 2 byte mỗi số; thẻ có 80 GB.</p>
+          <ol><li>Số tham số và dung lượng trọng số?</li>
+          <li>Bộ nhớ đệm cho một chuỗi?</li>
+          <li>Thẻ phục vụ tối đa bao nhiêu chuỗi ngữ cảnh đầy cùng lúc?</li></ol>
+        focus: [0, 1, "2.1", "2.2", "2.3", 0]
+        say: "Bây giờ đến lượt bạn. Mô hình có 40 tầng, chiều 5120, ngữ cảnh 8192 từ tố, 2 byte mỗi số, và thẻ có 80 GB. Câu một, số tham số và dung lượng trọng số là bao nhiêu? Câu hai, bộ nhớ đệm cho một chuỗi là bao nhiêu? Câu ba, thẻ phục vụ tối đa bao nhiêu chuỗi ngữ cảnh đầy cùng lúc? Dừng video và làm ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <p class="note">40 tầng, chiều 5120, ngữ cảnh 8192, 2 byte mỗi số, thẻ 80 GB.</p>
+          <table class="t"><tr><th>câu</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>① tham số</td><td>$12 \cdot 40 \cdot 5120^2$</td><td>≈ 12,6 tỉ</td></tr>
+          <tr><td>① trọng số</td><td>12,6 tỉ nhân 2 byte</td><td>$\approx \hlb{25{,}2}$ GB</td></tr>
+          <tr><td>② bộ nhớ đệm</td><td>$2 \cdot 40 \cdot 5120 \cdot 8192 \cdot 2$</td><td>$\approx \hlo{6{,}71}$ GB</td></tr></table>
+        focus: ["2.3", "2.4"]
+        say: "Đáp án câu một, 12 nhân 40 nhân 5120 bình phương, khoảng 12 phẩy 6 tỉ tham số, nhân 2 byte được khoảng 25 phẩy 2 GB. Câu hai, 2 nhân 40 nhân 5120 nhân 8192 nhân 2 bằng 6 tỉ 710 triệu 886 nghìn 400 byte, khoảng 6 phẩy 71 GB."
+      - clear: true
+        show: |
+          <p>③ Chỗ còn lại: $80 - 25{,}2 = 54{,}8$ GB. Chia cho 6,71 GB mỗi chuỗi được 8,17 → tối đa <b>$\hlg{8}$ chuỗi</b>.</p>
+          <table class="t"><tr><th>thử lại</th><th>tổng bộ nhớ</th><th>80 GB</th></tr>
+          <tr><td>8 chuỗi</td><td>$25{,}2 + 8 \cdot 6{,}71 \approx 78{,}9$</td><td>vừa</td></tr>
+          <tr><td>9 chuỗi</td><td>$25{,}2 + 9 \cdot 6{,}71 \approx 85{,}6$</td><td class="red">không vừa</td></tr></table>
+          <p class="note">Muốn nhiều hơn: ngữ cảnh ngắn hơn, chia sẻ khoá, hoặc lượng tử hoá.</p>
+        focus: [1, 2, 3]
+        say: "Câu ba, chỗ còn lại là 80 trừ 25 phẩy 2, bằng 54 phẩy 8 GB, chia cho 6 phẩy 71 được 8 phẩy 17, nên tối đa 8 chuỗi. Thử lại, 8 chuỗi dùng khoảng 78 phẩy 9 GB, vừa, còn 9 chuỗi cần khoảng 85 phẩy 6 GB, không vừa. Muốn phục vụ nhiều hơn, hãy rút ngắn ngữ cảnh, chia sẻ khoá, hoặc lượng tử hoá."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">một tầng: 4 d² + 8 d²</span><span class="a">→</span>
+          <span class="n">tham số ≈ 12 L d²</span><span class="a">→</span>
+          <span class="n">bộ nhớ đệm = 2 L d n số, 2 byte mỗi số, mỗi chuỗi</span><span class="a">→</span>
+          <span class="n">mỗi bước đọc hết trọng số + bộ nhớ đệm</span><span class="a">→</span>
+          <span class="n">băng thông quyết định tốc độ</span></div>
+        say: "Tổng kết lại, một tầng có 4 d bình phương tham số chú ý và 8 d bình phương tham số truyền thẳng, nên tổng xấp xỉ 12 L d bình phương. Bộ nhớ đệm bằng 2 L d n nhân 2 byte cho mỗi chuỗi. Mỗi bước sinh đọc hết trọng số và bộ nhớ đệm, nên băng thông quyết định tốc độ."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> trước khi chọn mô hình hay mua phần cứng, tính <b>bộ nhớ</b> và <b>số byte phải đọc mỗi bước</b> cho đúng số người dùng và độ dài ngữ cảnh thật.</div>
+        say: "Điều cần mang theo, trước khi chọn mô hình hay mua phần cứng, hãy tính bộ nhớ và số byte phải đọc mỗi bước cho đúng số người dùng và độ dài ngữ cảnh thật."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 6): <b>huấn luyện trước</b> — mất mát entropy chéo và quy luật mở rộng.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 6, ta học huấn luyện trước, với mất mát entropy chéo và quy luật mở rộng. Hẹn gặp bạn ở bài tiếp theo."

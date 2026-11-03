@@ -1,0 +1,219 @@
+id: L12
+course: SDP
+series: "SDP · Kỹ thuật lập trình và mẫu thiết kế"
+title: "Bài 12 — Kỹ thuật hàm: hàm thuần, bất biến, ghi nhớ"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/sdp.yaml L12; audit/sdp/verify_sdp.py L12; H. Abelson, G. J. Sussman, Structure and Interpretation of Computer Programs, 2nd ed. (1996), mục 1.2.2 và bài tập 3.27 (ghi nhớ); Python Standard Library, functools.lru_cache; PLC bài 7 (chia sẻ tham chiếu), PLC bài 12 (đóng gói hàm)"
+assumes: [arith, approx]
+# Quy ước: alg.fib_calls(n, memo) trả (fib(n), số lời gọi kể cả lần tra bộ nhớ, số lần thật sự tính). Có ghi nhớ: fib(30) có 59 lời gọi,
+#   trong đó 31 lần thật sự tính (fib(0) … fib(30)) và 28 lần chỉ tra bộ nhớ. Không ghi nhớ: 2 692 537 lời gọi, lần nào cũng tính.
+objectives:
+  - "Viết hàm thuần dễ kiểm"
+  - "Dùng dữ liệu bất biến để tránh sửa ngầm"
+  - "Dùng ghi nhớ khi hàm thuần bị gọi lại"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Hai triệu bảy lời gọi cho một con số"
+    checks:
+      - "alg.fib_calls(30, False) == (832040, 2692537, 2692537)"
+      - "(lambda c: (lambda d: exec('def f(n):\\n    c[n] = c.get(n, 0) + 1\\n    return n if n < 2 else f(n - 1) + f(n - 2)\\n', d) or (d['f'](30), c[28], c[27], c[2]))({'c': c}))({}) == (832040, 2, 3, 514229)"
+    steps:
+      - show: |
+          <div class="code"><div>def f(n):</div><div>    return n if n &lt; 2 else f(n - 1) + f(n - 2)</div></div>
+          <p>Dãy Fibonacci: tính <code>f(30)</code> = 832 040: máy đếm được $\hl{2\,692\,537}$ lời gọi hàm. <code>f(28)</code> bị tính lại 2 lần, <code>f(27)</code> 3 lần, <code>f(2)</code> hơn năm trăm nghìn lần.</p>
+          <div class="box key">Hôm nay: <b>hàm thuần</b>, <b>bất biến</b>, và <b>ghi nhớ</b> — tính mỗi giá trị một lần.</div>
+        focus: [1, 2, 2, 3]
+        say: "Chào bạn, hàm f tính số thứ n của dãy bằng cách cộng hai số liền trước, theo đệ quy. Tính f của 30 bằng 832 nghìn 40, máy đếm được 2 triệu 692 nghìn 537 lời gọi hàm. Cùng một giá trị bị tính lại rất nhiều lần, f của 2 bị tính hơn năm trăm nghìn lần. Hôm nay ta học hàm thuần, dữ liệu bất biến, và ghi nhớ, để mỗi giá trị chỉ tính một lần."
+
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: dãy Fibonacci, từ điển, chia sẻ tham chiếu"
+    checks:
+      - "[alg.fib_calls(k, True)[0] for k in range(7)] == [0, 1, 1, 2, 3, 5, 8]"
+      - "(lambda m: (m.__setitem__(5, 5), 5 in m, 6 in m)[1:])({}) == (True, False)"
+      - "(lambda a: (lambda b: (b.sort(), a)[1])(a))([3, 1, 2]) == [1, 2, 3] and (lambda t: (sorted(t), t))((3, 1, 2)) == ([1, 2, 3], (3, 1, 2))"
+    steps:
+      - show: |
+          <table class="t"><tr><th>n</th><th>0</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th></tr>
+          <tr><td>f(n)</td><td>0</td><td>1</td><td>1</td><td>2</td><td>3</td><td>5</td><td>8</td></tr></table>
+          <p class="note">f(0) = 0, f(1) = 1; từ đó mỗi số bằng tổng hai số liền trước: f(6) = 3 + 5 = 8.</p>
+        focus: [1, "1.2", 2]
+        say: "Trước hết, ôn dãy số trong bài. Hai số đầu là 0 và 1, rồi mỗi số bằng tổng hai số liền trước, nên dãy đi 0, 1, 1, 2, 3, 5, 8. Chẳng hạn f của 6 bằng 3 cộng 5, bằng 8."
+      - show: |
+          <div class="code"><div>bang = {}</div><div>bang[5] = 5          <span class="cm"># lưu: đầu vào 5 → kết quả 5</span></div><div>5 in bang            <span class="cm"># True: đã có, tra ngay</span></div><div>6 in bang            <span class="cm"># False: chưa có, phải tính</span></div></div>
+        focus: [1, 1, 1]
+        say: "Thứ hai, từ điển lưu kết quả theo đầu vào. Lưu kết quả của đầu vào 5 vào bảng, thì hỏi 5 có trong bảng không được đúng, tra ngay. Hỏi 6 thì được sai, nghĩa là chưa có và phải tính."
+      - show: |
+          <table class="t"><tr><th>mã</th><th>sau đó</th></tr>
+          <tr><td><code>a = [3, 1, 2]; b = a; b.sort()</code></td><td><code>a</code> cũng thành <code>[1, 2, 3]</code>: hai tên, một danh sách</td></tr>
+          <tr><td><code>t = (3, 1, 2); sorted(t)</code></td><td>trả <code>[1, 2, 3]</code> mới; <code>t</code> vẫn <code>(3, 1, 2)</code></td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Thứ ba, ở khoá Ngôn ngữ lập trình ta đã thấy hai tên có thể cùng trỏ vào một danh sách. Gán b bằng a rồi sắp xếp b tại chỗ, thì a cũng bị đổi thành 1, 2, 3. Một bộ giá trị thì không sửa tại chỗ được, hàm sắp xếp trả một danh sách mới, còn bộ cũ giữ nguyên."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: hàm thuần, bất biến, ghi nhớ"
+    checks:
+      - "alg.fib_calls(28, False)[0] == 317811 and alg.fib_calls(29, False)[0] == 514229"
+    steps:
+      - show: |
+          <table class="t"><tr><th>khái niệm</th><th>nghĩa</th></tr>
+          <tr><td><b>hàm thuần</b></td><td>cùng đầu vào → luôn cùng đầu ra; không đọc hay sửa gì bên ngoài (giờ, tệp, biến toàn cục)</td></tr>
+          <tr><td><b>bất biến</b></td><td>dữ liệu không sửa tại chỗ; “sửa” là tạo bản mới (bộ giá trị, chuỗi)</td></tr>
+          <tr><td><b>ghi nhớ</b></td><td>lưu kết quả theo đầu vào; gọi lại cùng đầu vào thì tra bảng, không tính lại</td></tr></table>
+          <div class="box key">Ghi nhớ chỉ <b>đúng</b> với hàm thuần: kết quả cũ còn đúng vì đầu ra chỉ phụ thuộc đầu vào.</div>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Bảng giải thích ba khái niệm. Hàm thuần là hàm mà cùng đầu vào thì luôn cùng đầu ra, và không đọc hay sửa gì bên ngoài như giờ hệ thống, tệp hay biến toàn cục. Dữ liệu bất biến là dữ liệu không bị sửa tại chỗ, muốn sửa thì tạo một bản mới. Ghi nhớ là lưu kết quả theo đầu vào, gọi lại với cùng đầu vào thì tra bảng, không tính lại. Ghi nhớ chỉ đúng với hàm thuần, vì khi đó kết quả cũ vẫn còn đúng."
+
+  - id: intuition
+    kind: intuition
+    title: "Cây lời gọi: tính lại hay tra bảng"
+    checks:
+      - "alg.fib_calls(5, False) == (5, 15, 15) and alg.fib_calls(5, True) == (5, 9, 6)"
+      - "(lambda c: (lambda d: exec('def f(n):\\n    c[n] = c.get(n, 0) + 1\\n    return n if n < 2 else f(n - 1) + f(n - 2)\\n', d) or d['f'](5))({'c': c}) == 5 and (c[3], c[2]) == (2, 3))({})"
+    steps:
+      - show: |
+          <div><svg width="1500" height="540" viewBox="0 0 1500 540"><g stroke="#1f2937" stroke-width="3"><line x1="487" y1="92" x2="280" y2="138"/><line x1="487" y1="92" x2="695" y2="138"/><line x1="280" y1="182" x2="170" y2="228"/><line x1="280" y1="182" x2="390" y2="228"/><line x1="695" y1="182" x2="610" y2="228"/><line x1="695" y1="182" x2="780" y2="228"/><line x1="170" y1="272" x2="100" y2="318"/><line x1="170" y1="272" x2="240" y2="318"/><line x1="390" y1="272" x2="340" y2="318"/><line x1="390" y1="272" x2="440" y2="318"/><line x1="610" y1="272" x2="560" y2="318"/><line x1="610" y1="272" x2="660" y2="318"/><line x1="100" y1="362" x2="50" y2="408"/><line x1="100" y1="362" x2="150" y2="408"/></g><rect x="447" y="48" width="80" height="44" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="487" y="78" font-size="22" text-anchor="middle" fill="#1f2937">f(5)</text><rect x="240" y="138" width="80" height="44" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="280" y="168" font-size="22" text-anchor="middle" fill="#1f2937">f(4)</text><rect x="655" y="138" width="80" height="44" rx="10" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="695" y="168" font-size="22" text-anchor="middle" fill="#1f2937">f(3)</text><rect x="130" y="228" width="80" height="44" rx="10" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="170" y="258" font-size="22" text-anchor="middle" fill="#1f2937">f(3)</text><rect x="350" y="228" width="80" height="44" rx="10" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="390" y="258" font-size="22" text-anchor="middle" fill="#1f2937">f(2)</text><rect x="570" y="228" width="80" height="44" rx="10" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="610" y="258" font-size="22" text-anchor="middle" fill="#1f2937">f(2)</text><rect x="740" y="228" width="80" height="44" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="780" y="258" font-size="22" text-anchor="middle" fill="#1f2937">f(1)</text><rect x="60" y="318" width="80" height="44" rx="10" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="100" y="348" font-size="22" text-anchor="middle" fill="#1f2937">f(2)</text><rect x="200" y="318" width="80" height="44" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="240" y="348" font-size="22" text-anchor="middle" fill="#1f2937">f(1)</text><rect x="300" y="318" width="80" height="44" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="340" y="348" font-size="22" text-anchor="middle" fill="#1f2937">f(1)</text><rect x="400" y="318" width="80" height="44" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="440" y="348" font-size="22" text-anchor="middle" fill="#1f2937">f(0)</text><rect x="520" y="318" width="80" height="44" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="560" y="348" font-size="22" text-anchor="middle" fill="#1f2937">f(1)</text><rect x="620" y="318" width="80" height="44" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="660" y="348" font-size="22" text-anchor="middle" fill="#1f2937">f(0)</text><rect x="10" y="408" width="80" height="44" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="50" y="438" font-size="22" text-anchor="middle" fill="#1f2937">f(1)</text><rect x="110" y="408" width="80" height="44" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="150" y="438" font-size="22" text-anchor="middle" fill="#1f2937">f(0)</text><rect x="1090" y="48" width="80" height="44" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="1130" y="78" font-size="22" text-anchor="middle" fill="#1f2937">f(5)</text><rect x="1090" y="138" width="80" height="44" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="1130" y="168" font-size="22" text-anchor="middle" fill="#1f2937">f(4)</text><rect x="1090" y="228" width="80" height="44" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="1130" y="258" font-size="22" text-anchor="middle" fill="#1f2937">f(3)</text><rect x="1090" y="318" width="80" height="44" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="1130" y="348" font-size="22" text-anchor="middle" fill="#1f2937">f(2)</text><rect x="1040" y="408" width="80" height="44" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="1080" y="438" font-size="22" text-anchor="middle" fill="#1f2937">f(1)</text><rect x="1140" y="408" width="80" height="44" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="1180" y="438" font-size="22" text-anchor="middle" fill="#1f2937">f(0)</text><rect x="1300" y="138" width="120" height="44" rx="10" fill="#f3f4f6" stroke="#6b7280" stroke-width="3" stroke-dasharray="8 6"/><text x="1360" y="168" font-size="22" text-anchor="middle" fill="#1f2937">tra f(3)</text><rect x="1300" y="228" width="120" height="44" rx="10" fill="#f3f4f6" stroke="#6b7280" stroke-width="3" stroke-dasharray="8 6"/><text x="1360" y="258" font-size="22" text-anchor="middle" fill="#1f2937">tra f(2)</text><rect x="1300" y="318" width="120" height="44" rx="10" fill="#f3f4f6" stroke="#6b7280" stroke-width="3" stroke-dasharray="8 6"/><text x="1360" y="348" font-size="22" text-anchor="middle" fill="#1f2937">tra f(1)</text><g stroke="#1f2937" stroke-width="3"><line x1="1130" y1="92" x2="1130" y2="138"/><line x1="1130" y1="182" x2="1130" y2="228"/><line x1="1130" y1="272" x2="1130" y2="318"/><line x1="1115" y1="362" x2="1088" y2="408"/><line x1="1145" y1="362" x2="1172" y2="408"/></g><g stroke="#6b7280" stroke-width="3" stroke-dasharray="8 6"><line x1="1170" y1="80" x2="1300" y2="150"/><line x1="1170" y1="170" x2="1300" y2="240"/><line x1="1170" y1="260" x2="1300" y2="330"/></g><line x1="960" y1="30" x2="960" y2="500" stroke="#9ca3af" stroke-width="2"/><g font-size="23" text-anchor="middle"><text x="470" y="500" fill="#b91c1c">không ghi nhớ: 15 lời gọi; ô cam bị tính lại</text><text x="470" y="530" fill="#1f2937">f(3) tính 2 lần, f(2) tính 3 lần</text><text x="1225" y="500" fill="#059669">có ghi nhớ: 9 lời gọi</text><text x="1225" y="530" fill="#1f2937">6 lần tính, 3 lần tra bảng</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Bên trái là cây lời gọi khi tính f của 5 không ghi nhớ, mỗi ô là một lời gọi, có tất cả 15 ô. Các ô cam cho thấy cùng một việc bị làm lại, f của 3 tính 2 lần, f của 2 tính 3 lần, và cây phình rất nhanh khi n tăng. Bên phải là khi có ghi nhớ, chỉ một nhánh đi thẳng xuống, mỗi giá trị tính một lần, còn ô xám đứt nét là chỗ chỉ tra bảng. Tổng cộng 9 lời gọi, trong đó 6 lần tính và 3 lần tra."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Thêm một dòng ghi nhớ"
+    checks:
+      - "alg.fib_calls(30, True) == (832040, 59, 31) and 59 - 31 == 28"
+      - "round(2692537 / 59) == 45636"
+    steps:
+      - show: |
+          <div class="code"><div>@functools.lru_cache(maxsize=None)        <span class="cm"># ghi nhớ</span></div><div>def f(n):</div><div>    return n if n &lt; 2 else f(n - 1) + f(n - 2)</div></div>
+          <p><b>Bước 1</b> — dòng ghi nhớ bọc hàm: lần đầu gặp <code>n</code> thì tính rồi lưu; lần sau gặp lại thì tra bảng.</p>
+        focus: [1, 2]
+        say: "Bước một, chỉ cần thêm một dòng ghi nhớ phía trên hàm f. Lần đầu gặp một giá trị n thì tính rồi lưu vào bảng, lần sau gặp lại thì tra bảng."
+      - show: |
+          <p><b>Bước 2</b> — đếm cho <code>f(5)</code> theo hình:</p>
+          <table class="t"><tr><th>loại lời gọi</th><th>những lời gọi</th><th>số</th></tr>
+          <tr><td>thật sự tính</td><td>f(5), f(4), f(3), f(2), f(1), f(0)</td><td>6</td></tr>
+          <tr><td>chỉ tra bảng</td><td>f(3), f(2), f(1)</td><td>3</td></tr>
+          <tr><td>tổng</td><td></td><td>9</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Bước hai, đếm cho f của 5 theo hình. Thật sự tính 6 lần, từ f của 5 xuống f của 0, mỗi giá trị một lần. Chỉ tra bảng 3 lần, khi f của 5, f của 4, f của 3 hỏi tới số thứ hai đã có sẵn. Tổng cộng 9 lời gọi."
+      - clear: true
+        show: |
+          <p><b>Bước 3</b> — cùng quy luật cho <code>f(30)</code>:</p>
+          <table class="t"><tr><th></th><th>lời gọi</th><th>lần thật sự tính</th></tr>
+          <tr><td>không ghi nhớ</td><td>2 692 537</td><td>2 692 537</td></tr>
+          <tr><td>có ghi nhớ</td><td>$\hl{59}$</td><td>$\hl{31}$ (f(0) … f(30))</td></tr></table>
+          <p class="note">28 lời gọi còn lại chỉ tra bảng: $59 - 31 = 28$.</p>
+        focus: [1, 2, "2.2", "2.3", 3]
+        say: "Bước ba, cùng quy luật cho f của 30. Bảng so hai cách. Không ghi nhớ, có 2 triệu 692 nghìn 537 lời gọi, và lần nào cũng tính. Có ghi nhớ, chỉ còn 59 lời gọi, trong đó 31 lần thật sự tính, mỗi giá trị từ f của 0 đến f của 30 đúng một lần. 28 lời gọi còn lại chỉ tra bảng."
+      - show: |
+          <p><b>Bước 4</b> — so: $2\,692\,537 : 59 \approx \hl{45\,636}$. Số lời gọi giảm khoảng 45 nghìn lần.</p>
+        introduces: [approx]
+        say: "Bước bốn, lấy 2 triệu 692 nghìn 537 chia cho 59, được xấp xỉ 45 nghìn 636, nên số lời gọi giảm khoảng 45 nghìn lần."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: đếm lời gọi bằng công thức truy hồi"
+    checks:
+      - "(lambda C: C[:6] == [1, 1, 3, 5, 9, 15] and C[30] == 2692537)(__import__('functools').reduce(lambda C, n: C + [1 + C[-1] + C[-2]], range(2, 31), [1, 1]))"
+      - "2 * alg.fib_calls(31, True)[0] - 1 == 2692537 and alg.fib_calls(31, True)[0] == 1346269"
+      - "all(alg.fib_calls(n, True)[1] == 2 * n - 1 for n in range(2, 31))"
+    steps:
+      - show: |
+          <p>Gọi $C(n)$ là số lời gọi khi không ghi nhớ: một lời gọi cho chính nó, cộng các lời gọi của hai nhánh.</p>
+          $$C(n) = 1 + C(n-1) + C(n-2), \quad C(0) = C(1) = 1$$
+          <table class="t"><tr><th>n</th><th>0</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>…</th><th>30</th></tr>
+          <tr><td>C(n)</td><td>1</td><td>1</td><td>3</td><td>5</td><td>9</td><td>15 ✓</td><td>…</td><td>2 692 537 ✓</td></tr></table>
+        focus: [1, 2, 3, "3.2"]
+        say: "Kiểm bằng đường khác, không chạy hàm mà đếm bằng công thức. Gọi C của n là số lời gọi khi không ghi nhớ, nó bằng một lời gọi cho chính nó, cộng số lời gọi của hai nhánh. Hai giá trị đầu đều bằng 1. Theo công thức, cộng dần ra 3, 5, 9, rồi 15 cho n bằng 5, nên khớp với 15 ô trong hình, và tới n bằng 30 thì đúng 2 triệu 692 nghìn 537."
+      - show: |
+          <table class="t"><tr><th>có ghi nhớ</th><th>tính</th><th>tra bảng</th><th>tổng</th></tr>
+          <tr><td>f(5)</td><td>6</td><td>3</td><td>9</td></tr>
+          <tr><td>f(30)</td><td>31</td><td>28</td><td>59</td></tr></table>
+          <p class="note">Quy luật: tính $n + 1$ lần, tra $n - 2$ lần, tổng $2n - 1$: $2 \cdot 30 - 1 = 59$ ✓.</p>
+        introduces: [cdot]
+        focus: [1, "1.2", "1.3", 2]
+        say: "Với ghi nhớ, đặt hai trường hợp cạnh nhau. f của 5 tính 6 lần và tra 3 lần. f của 30 tính 31 lần và tra 28 lần. Quy luật là tính n cộng 1 lần, tra n trừ 2 lần, tổng 2 n trừ 1, nên 2 nhân 30 trừ 1 bằng 59, khớp số máy đếm."
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp"
+    checks:
+      - "(lambda d: exec('import functools\\n@functools.lru_cache(maxsize=None)\\ndef gia(vung):\\n    return [100, 200]\\n@functools.lru_cache(maxsize=None)\\ndef gia_bo(vung):\\n    return (100, 200)\\ndef run():\\n    gia(\"Bắc\").append(300)\\n    return gia(\"Bắc\"), gia_bo(\"Bắc\") + (300,), gia_bo(\"Bắc\")\\n', d) or d['run']() == ([100, 200, 300], (100, 200, 300), (100, 200)))({})"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Ghi nhớ một hàm không thuần <b class="red">(kết quả cũ sai)</b>
+          <br><span class="note">Ghi nhớ hàm “tỉ giá hôm nay” hay “đọc tệp cấu hình”: lần gọi sau trả giá trị của lần đầu, dù tỉ giá hay tệp đã đổi.</span></div>
+        say: "Lỗi thứ nhất, ghi nhớ một hàm không thuần. Ghi nhớ hàm lấy tỉ giá hôm nay hay hàm đọc tệp cấu hình, thì lần gọi sau vẫn trả giá trị của lần đầu, dù tỉ giá hay tệp đã đổi."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Hàm sửa ngầm danh sách được truyền vào <b class="red">(tác dụng phụ)</b>
+          <br><span class="note">Hàm “sắp xếp và lấy 3 phần tử đầu” gọi <code>xs.sort()</code>: danh sách của người gọi bị đổi thứ tự. Dùng <code>sorted(xs)</code> trả bản mới — chia sẻ tham chiếu như PLC.</span></div>
+        say: "Lỗi thứ hai, hàm sửa ngầm danh sách được truyền vào. Hàm lấy 3 phần tử lớn nhất mà sắp xếp tại chỗ thì danh sách của người gọi bị đổi thứ tự. Hãy trả về một bản mới đã sắp xếp, vì hai biến đang chia sẻ tham chiếu như khoá Ngôn ngữ lập trình."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Bộ nhớ ghi nhớ không giới hạn <b class="red">(tràn bộ nhớ)</b>
+          <br><span class="note">Ghi nhớ hàm nhận đầu vào hầu như không lặp (mã đơn hàng) chỉ làm bảng phình mãi. Đặt giới hạn kích thước, hoặc chỉ ghi nhớ khi đầu vào thật sự lặp lại.</span></div>
+        say: "Lỗi thứ ba, bộ nhớ ghi nhớ không giới hạn. Ghi nhớ một hàm có đầu vào hầu như không lặp lại, như mã đơn hàng, chỉ làm bảng phình mãi. Hãy đặt giới hạn kích thước, hoặc chỉ ghi nhớ khi đầu vào thật sự lặp lại."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4.</b> Hàm có ghi nhớ trả về một <b>danh sách</b>, người gọi sửa nó <b class="red">(làm bẩn bảng ghi nhớ)</b></div>
+          <table class="t"><tr><th>bước</th><th>trả danh sách <code>[100, 200]</code></th><th>trả bộ <code>(100, 200)</code></th></tr>
+          <tr><td>lần gọi 1, người gọi thêm 300</td><td>sửa thẳng vào bản đang lưu</td><td>không sửa được; tạo bộ mới <code>(100, 200, 300)</code></td></tr>
+          <tr><td>lần gọi 2, người khác hỏi</td><td class="red"><code>[100, 200, 300]</code></td><td><code>(100, 200)</code> ✓</td></tr></table>
+        focus: [1, 2, "2.2", "2.3", 2]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, hàm có ghi nhớ trả về một danh sách, và người gọi sửa danh sách đó. Hàm giá theo vùng trả danh sách 100, 200, người gọi đầu tiên thêm 300 vào, tức là sửa thẳng vào bản đang lưu trong bảng ghi nhớ. Lần gọi sau, một người khác nhận về 100, 200, 300, một kết quả không ai tính ra cả. Nếu hàm trả một bộ giá trị bất biến, người gọi muốn thêm thì phải tạo bộ mới, và bảng ghi nhớ vẫn sạch. Người làm nghề chỉ ghi nhớ hàm trả dữ liệu bất biến, hoặc trả một bản sao."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.fib_calls(20, False) == (6765, 21891, 21891) and alg.fib_calls(20, True) == (6765, 39, 21)"
+      - "20 - 0 + 1 == 21 and 39 - 21 == 18 == 20 - 2 and 2 * 20 - 1 == 39"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Có ghi nhớ, <code>f(20)</code> thật sự tính bao nhiêu lần? (gợi ý: mỗi giá trị từ f(0) đến f(20) một lần)</td></tr>
+          <tr><td>2</td><td>Không ghi nhớ, máy đếm 21 891 lời gọi. Có ghi nhớ, máy đếm 39. Bao nhiêu lời gọi chỉ tra bảng?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, có ghi nhớ, f của 20 thật sự tính bao nhiêu lần? Gợi ý, mỗi giá trị từ f của 0 đến f của 20 tính một lần. Câu hai, không ghi nhớ máy đếm được 21 nghìn 891 lời gọi. Có ghi nhớ, máy đếm được 39. Bao nhiêu lời gọi chỉ tra bảng? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <table class="t"><tr><th>giá trị được tính</th><th>f(0), f(1), f(2), …, f(20)</th></tr>
+          <tr><td>đếm</td><td>$20 - 0 + 1 = \hl{21}$ lần</td></tr></table>
+        focus: [1, "1.2"]
+        say: "Đáp án câu một, mỗi giá trị từ f của 0 đến f của 20 được tính đúng một lần. Đếm cả hai đầu, 20 trừ 0 cộng 1, bằng 21 lần."
+      - show: |
+          <table class="t"><tr><th>cách tính</th><th>kết quả</th></tr>
+          <tr><td>tổng lời gọi trừ lần tính: $39 - 21$</td><td>$\hl{18}$ lời gọi chỉ tra bảng</td></tr>
+          <tr><td>theo quy luật: tra $n - 2 = 20 - 2$; tổng $2 \cdot 20 - 1$</td><td>18 và 39 ✓</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Câu hai, lấy tổng lời gọi trừ đi số lần thật sự tính. 39 trừ 21 bằng 18 lời gọi chỉ tra bảng. Kiểm lại bằng quy luật vừa tìm, tra n trừ 2 bằng 18 lần, tổng 2 nhân 20 trừ 1 bằng 39, khớp với số máy đếm."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">hàm thuần: cùng vào, cùng ra</span><span class="a">→</span>
+          <span class="n">bất biến: không sửa ngầm</span><span class="a">→</span>
+          <span class="n">ghi nhớ: đúng nhờ hàm thuần</span><span class="a">→</span>
+          <span class="n">giới hạn bộ nhớ</span></div>
+        say: "Tổng kết lại, hàm thuần cho cùng đầu ra với cùng đầu vào, dữ liệu bất biến tránh sửa ngầm, ghi nhớ đúng nhờ hàm thuần, và cần giới hạn bộ nhớ ghi nhớ."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> hàm thuần dễ kiểm, dễ ghi nhớ, dễ chạy song song. Đẩy phần đọc giờ, đọc tệp, ghi mạng ra <b>rìa</b> chương trình, giữ lõi thuần.</div>
+        say: "Điều cần mang theo, hàm thuần dễ kiểm, dễ ghi nhớ và dễ chạy song song. Hãy đẩy phần đọc giờ, đọc tệp, ghi mạng ra rìa chương trình, và giữ phần lõi thuần."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 13): <b>mùi mã</b> và <b>tái cấu trúc an toàn</b>.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 13, ta học cách nhận ra mùi mã và tái cấu trúc an toàn. Hẹn gặp bạn ở bài tiếp theo."

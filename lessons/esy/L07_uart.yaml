@@ -1,0 +1,238 @@
+id: L07
+course: ESY
+series: "ESY · Hệ thống nhúng và thời gian thực"
+title: "Bài 7 — Giao tiếp nối tiếp không đồng bộ (UART)"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/esy.yaml L07; audit/esy/verify_esy.py L07; Maxim Integrated, Application Note 2141: Determining Clock Accuracy Requirements for UART Communications (2003); Microchip, ATmega328P datasheet, mục 19 (USART0)"
+assumes: [arith, cdot, frac, approx, ltgt]
+# Quy ước: khung 8N1 = 1 bit bắt đầu (0) + 8 bit dữ liệu, bit thấp nhất gửi trước + không chẵn lẻ + 1 bit dừng (1) = 10 bit.
+#   Với UART tốc độ baud = số bit mỗi giây. Thanh ghi chia UBRR = round(f_clk / (16 · baud)) − 1 (chế độ thường của ATmega328P).
+#   Ngưỡng sai lệch: lấy mẫu giữa bit, tới giữa bit dừng (9,5 bit) lệch tích lũy phải < nửa bit → tổng lệch hai bên < 0,5/9,5 ≈ 5,3%;
+#   thực hành giữ mỗi bên ≤ 2% (Maxim AN2141). Mọi số do Python tính trong checks.
+objectives:
+  - "Đọc một khung UART 8N1"
+  - "Tính thời gian truyền và tốc độ byte"
+  - "Kiểm sai lệch tốc độ do xung nhịp"
+asr_reviewed:
+  - {sentence: "Ghép hai nhóm lại, ta được 0 1 0 0, rồi tới 1 0 1 1.", reason: "ASR chép “Gép hai nhóm lại ta được 0100 rồi tới 1011.” (0.688): ASR gộp từng chữ số đọc rời thành số “0100” và “1011” — đúng thứ tự và đúng từng chữ số, nên phép so chữ đọc thấy thiếu/thừa “trăm, nghìn”; ghép/gép lệch phụ âm đầu — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Chữ số 1 là 0 0 0 1.", reason: "ASR chép “Chữ số 1 là 0001.” (0.769): ba chữ số 0 đứng liền được ASR gộp thành một số “0001”, không phải âm thanh cụt — mọi chữ số đều có trong bản chép — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Chữ số 4 là 0 1 0 0.", reason: "ASR chép “Chữ số 4 là 0100.” (0.714): lệch âm/thanh thuần Việt: không/∅, không không/trăm — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Hàng chấm đỏ lệch 6 phần trăm, mẫu cuối rơi ra ngoài khung, nên bên nhận đọc sai bit dừng.", reason: "ASR chép “Hàng chấm đỏ lịch 6% mẫu cuối trơi ra ngoài khung nên bên nhận độc sai bít dưng.” (0.75): lệch âm/thanh thuần Việt: lệch/lịch, rơi/trơi, đọc/độc, bit dừng/bít dưng — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Câu ba, xung nhịp vẫn là 16 mê-ga-héc, và hệ cần gửi ít nhất 3000 byte mỗi giây.", reason: "ASR chép “Câu Ba, xung nhịp vẫn là 16 MHz và hãy cần gửi ít nhất 3.000 bai mỗi giây.” (0.81): “mê-ga-…” đọc tách âm tiết (đã dựng ở NET), ASR viết dạng gộp; byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: héc (trong “mê ga héc” → “mhz”), hệ/hãy — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bảng cho thấy mỗi byte mất khoảng 1 phẩy 042 mi li giây, tức khoảng 16 nghìn 667 nhịp đồng hồ chỉ để đứng chờ.", reason: "ASR chép “Bản cho thấy mỗi bay mất khoảng 1,0420 lý dây, tức khoảng 16,667 nhịp đồng hồ chỉ để đứng chờ.” (0.812): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh; lệch âm/thanh thuần Việt: bảng/bản, hai (trong “hai mi li giây” → “lý dây”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Với vế sau, 100 byte nhân 10 bit là 1000 bit, chia cho 9600 bit mỗi giây.", reason: "ASR chép “Với với sau, 103 nhân 10 bit là 1000 bit, chia cho 9600 bit mỗi giây.” (0.889): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: vế/với — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Câu ba, tốc độ ba mươi tám nghìn bốn trăm chia 10 được 3840 byte mỗi giây, đã đủ hơn 3000, lại chỉ lệch 0 phẩy 16 phần trăm.", reason: "ASR chép “Câu 3, tốc độ 38.410 được 3.843 mỗi giây đã đủ hơn 3.000, lại chỉ lệch 0,16%.” (0.958): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: chia/∅ — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Lệch tích lũy tới giữa bit dừng phải dưới nửa bit, nên tổng lệch hai bên phải dưới khoảng 5 phẩy 3 phần trăm, thực hành giữ mỗi bên dưới 2 phần trăm.", reason: "ASR chép “Lịch tích lũy tới giữ biết dừng phải dưới nữ biết … 5,3% … dưới 2%”: lệch/lịch, nửa/nữ lệch vần–thanh, bit → “biết” như probe p1 CSA; hai con số 5,3% và 2% chép đúng — NOT_VERIFIED bằng tai người (câu đổi chữ “luỹ” → “lũy” theo E38, nội dung giữ nguyên)"}
+  - {sentence: "Khi đó mỗi bit dài khoảng 0 phẩy 104 mi li giây.", reason: "ASR chép “khi đó mỗi biết dài khoảng 0,104 ms”: “0 phẩy 104 mi li giây” → “0,104 ms” đúng số và đơn vị viết tắt; bit → “biết” như probe p1 CSA"}
+  - {sentence: "Mỗi byte đi trong một khung gọi là 8N1, nghĩa là 8 bit dữ liệu, không có bit chẵn lẻ, và 1 bit dừng.", reason: "“byte” đọc thô /bai/ — probe audit/csa/probes/p1_thuat_ngu.md: ASR chép “bay” 8/8 (cùng âm), đối chứng 0/8; lexicon foreign_ok; “bit” ASR chép “bích/biết” (probe p1 CSA: không cách viết nào phân định âm cuối t/ch) — NOT_VERIFIED bằng tai người; “byte” → “bay” cùng âm"}
+  - {sentence: "Tổng cộng mỗi byte tốn 10 bit.", reason: "“byte” đọc thô /bai/ — probe audit/csa/probes/p1_thuat_ngu.md: ASR chép “bay” 8/8 (cùng âm), đối chứng 0/8; lexicon foreign_ok; “bit” ASR chép “bích/biết” (probe p1 CSA: không cách viết nào phân định âm cuối t/ch) — NOT_VERIFIED bằng tai người; “byte” → “bay” cùng âm"}
+  - {sentence: "Mỗi byte ở tốc độ 9600 mất hơn 1 mi li giây, chờ bận là bỏ phí hàng nghìn lệnh, nên hãy dùng ngắt và một bộ đệm vòng.", reason: "“byte” đọc thô /bai/ — probe audit/csa/probes/p1_thuat_ngu.md: ASR chép “bay” 8/8 (cùng âm), đối chứng 0/8; lexicon foreign_ok; “bit” ASR chép “bích/biết” (probe p1 CSA: không cách viết nào phân định âm cuối t/ch) — NOT_VERIFIED bằng tai người; “byte” → “bay” cùng âm"}
+  - {sentence: "Gửi 100 byte ở tốc độ 9600 mất khoảng 104 phẩy 2 mi li giây.", reason: "“byte” đọc thô /bai/ — probe audit/csa/probes/p1_thuat_ngu.md: ASR chép “bay” 8/8 (cùng âm), đối chứng 0/8; lexicon foreign_ok; “bit” ASR chép “bích/biết” (probe p1 CSA: không cách viết nào phân định âm cuối t/ch) — NOT_VERIFIED bằng tai người; “byte” → “bay” cùng âm"}
+  - {sentence: "Mỗi byte tốn 10 bit, nên tốc độ là 960 byte mỗi giây, không phải 1200.", reason: "“byte” đọc thô /bai/ — probe audit/csa/probes/p1_thuat_ngu.md: ASR chép “bay” 8/8 (cùng âm), đối chứng 0/8; lexicon foreign_ok; “bit” ASR chép “bích/biết” (probe p1 CSA: không cách viết nào phân định âm cuối t/ch) — NOT_VERIFIED bằng tai người; “byte” → “bay” cùng âm"}
+  - {sentence: "Lỗi thứ tư, gửi từng byte bằng một vòng chờ bận.", reason: "“byte” đọc thô /bai/ — probe audit/csa/probes/p1_thuat_ngu.md: ASR chép “bay” 8/8 (cùng âm), đối chứng 0/8; lexicon foreign_ok; “bit” ASR chép “bích/biết” (probe p1 CSA: không cách viết nào phân định âm cuối t/ch) — NOT_VERIFIED bằng tai người; “byte” → “bay” cùng âm"}
+  - {sentence: "Gửi 100 byte ở tốc độ 9600 thì mất bao lâu?", reason: "“byte” đọc thô /bai/ — probe audit/csa/probes/p1_thuat_ngu.md: ASR chép “bay” 8/8 (cùng âm), đối chứng 0/8; lexicon foreign_ok; “bit” ASR chép “bích/biết” (probe p1 CSA: không cách viết nào phân định âm cuối t/ch) — NOT_VERIFIED bằng tai người; “byte” → “bay” cùng âm"}
+  - {sentence: "Đáp án câu một, chia cho 10, được mười một nghìn năm trăm hai mươi byte mỗi giây.", reason: "“byte” đọc thô /bai/ — probe audit/csa/probes/p1_thuat_ngu.md: ASR chép “bay” 8/8 (cùng âm), đối chứng 0/8; lexicon foreign_ok; “bit” ASR chép “bích/biết” (probe p1 CSA: không cách viết nào phân định âm cuối t/ch) — NOT_VERIFIED bằng tai người; “byte” → “bay” cùng âm"}
+  - {sentence: "Câu một, ở tốc độ một trăm mười lăm nghìn hai trăm bit mỗi giây, khung 8N1, gửi được bao nhiêu byte mỗi giây?", reason: "“byte” đọc thô /bai/ — probe audit/csa/probes/p1_thuat_ngu.md: ASR chép “bay” 8/8 (cùng âm), đối chứng 0/8; lexicon foreign_ok; “bit” ASR chép “bích/biết” (probe p1 CSA: không cách viết nào phân định âm cuối t/ch) — NOT_VERIFIED bằng tai người; “byte” → “bay” cùng âm"}
+  - {sentence: "Tổng kết lại, mỗi khung có bit bắt đầu bằng 0, 8 bit dữ liệu với bit thấp đi trước, và bit dừng bằng 1, tổng 10 bit mỗi byte.", reason: "“byte” đọc thô /bai/ — probe audit/csa/probes/p1_thuat_ngu.md: ASR chép “bay” 8/8 (cùng âm), đối chứng 0/8; lexicon foreign_ok; “bit” ASR chép “bích/biết” (probe p1 CSA: không cách viết nào phân định âm cuối t/ch) — NOT_VERIFIED bằng tai người; “byte” → “bay” cùng âm"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Chữ rác trên màn hình"
+    steps:
+      - show: |
+          <p>Nối vi điều khiển với máy tính, mong thấy “Xin chao”, nhưng màn hình hiện một dãy ký tự rác.</p>
+          <p>Dây đúng, mã đúng — chỉ có hai đầu <b>không cùng nhịp</b>.</p>
+          <div class="box key">Hôm nay: <b>giao tiếp nối tiếp không đồng bộ</b> (UART) — gửi từng bit qua một sợi dây, không có dây xung nhịp chung.</div>
+        focus: [1, 2, 3]
+        say: "Chào bạn, bạn nối vi điều khiển với máy tính, mong thấy dòng chữ xin chào, nhưng màn hình chỉ hiện một dãy ký tự rác. Dây đúng, mã đúng, chỉ có hai đầu không cùng nhịp. Hôm nay ta học giao tiếp nối tiếp không đồng bộ, gửi từng bit qua một sợi dây mà không có dây xung nhịp chung."
+
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: hệ mười sáu, tần số và chu kỳ, phần trăm lệch"
+    checks:
+      - "0x41 == 65 and format(0x4, '04b') == '0100' and format(0x1, '04b') == '0001' and format(0x41, '08b') == '01000001'"
+      - "round(1 / 9600 * 1000, 3) == 0.104 and round(1 / 1000 * 1000, 3) == 1.0"
+      - "round((9615 - 9600) / 9600 * 100, 2) == 0.16"
+    steps:
+      - show: |
+          <table class="t"><tr><th>chữ số hệ mười sáu</th><th>4 bit</th></tr>
+          <tr><td>4</td><td>0100</td></tr><tr><td>1</td><td>0001</td></tr>
+          <tr><td><code>0x41</code></td><td>0100 0001 = 65</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Trước hết, ôn lại cách đổi hệ mười sáu ở khoá Hệ thống máy tính, mỗi chữ số hệ mười sáu đúng bằng 4 bit. Chữ số 4 là 0 1 0 0. Chữ số 1 là 0 0 0 1. Ghép lại, số 41 hệ mười sáu là 0 1 0 0 0 0 0 1, bằng 65 ở hệ mười, chính là mã của chữ A."
+      - show: |
+          <p>Tần số và chu kỳ nghịch đảo nhau: 9600 bit mỗi giây → mỗi bit dài $\frac{1}{9600}$ giây $\approx 0{,}104$ ms. Thử số tròn: 1000 bit mỗi giây → mỗi bit đúng 1 ms.</p>
+        say: "Tiếp theo, tần số và chu kỳ là nghịch đảo của nhau. Thử với số tròn trước, 1000 bit mỗi giây thì mỗi bit dài đúng 1 mi li giây. Với 9600 bit mỗi giây, mỗi bit dài 1 phần 9600 giây, khoảng 0 phẩy 104 mi li giây."
+      - show: |
+          <p>Phần trăm lệch $= \dfrac{\text{được} - \text{muốn}}{\text{muốn}} \cdot 100\%$. Muốn 9600, được 9615: $\dfrac{15}{9600} \cdot 100\% \approx 0{,}16\%$.</p>
+        say: "Cuối cùng là phần trăm lệch, lấy giá trị được trừ giá trị muốn, chia cho giá trị muốn, rồi nhân 100. Muốn 9600 mà được 9615 thì lệch 15 phần 9600, khoảng 0 phẩy 16 phần trăm."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: khung 8N1"
+    checks:
+      - "[(0x41 >> i) & 1 for i in range(8)] == [1, 0, 0, 0, 0, 0, 1, 0]"
+      - "1 + 8 + 1 == 10"
+    steps:
+      - show: |
+          <p>Dây rảnh ở mức 1. Mỗi byte đi trong một <b>khung</b> 8N1: 8 bit dữ liệu, không bit chẵn lẻ, 1 bit dừng.</p>
+          <table class="t"><tr><th>bắt đầu</th><th>b0</th><th>b1</th><th>b2</th><th>b3</th><th>b4</th><th>b5</th><th>b6</th><th>b7</th><th>dừng</th></tr>
+          <tr><td>0</td><td>1</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>1</td><td>0</td><td>1</td></tr></table>
+          <p>Ví dụ chữ “A” = <code>0x41</code> = <code>0b01000001</code>, gửi <b>bit thấp nhất trước</b>. Tổng: $1 + 8 + 1 = 10$ bit cho mỗi byte.</p>
+        focus: [1, 1, 2, 3, 3]
+        say: "Khi rảnh, dây ở mức 1. Mỗi byte đi trong một khung gọi là 8N1, nghĩa là 8 bit dữ liệu, không có bit chẵn lẻ, và 1 bit dừng. Khung bắt đầu bằng một bit 0 để báo hiệu, tiếp theo là 8 bit dữ liệu, cuối cùng là bit dừng bằng 1. Ví dụ chữ A có mã 41 hệ mười sáu, và bit thấp nhất được gửi trước. Tổng cộng mỗi byte tốn 10 bit."
+
+  # ───────────────────────── 3. TỐC ĐỘ ─────────────────────────
+  - id: speed
+    kind: concept
+    title: "Tốc độ: bit mỗi giây và byte mỗi giây"
+    checks:
+      - "round(1 / 9600 * 1000, 3) == 0.104 and 9600 / 10 == 960"
+    steps:
+      - show: |
+          <p>Hai đầu phải hẹn trước cùng một tốc độ, ví dụ 9600 baud = 9600 bit mỗi giây. Mỗi bit dài $1 / 9600 \approx 0{,}104$ ms.</p>
+          <p>Mỗi byte tốn 10 bit → $9600 / 10 = \hl{960}$ byte mỗi giây, không phải 1200.</p>
+          <div class="box key">Bên nhận thấy cạnh xuống của bit bắt đầu, đợi <b>nửa bit</b>, rồi cứ mỗi một bit lấy mẫu một lần — đúng giữa bit.</div>
+        focus: [1, 1, 2, 3]
+        say: "Hai đầu phải hẹn trước cùng một tốc độ, ví dụ 9600 bit mỗi giây. Khi đó mỗi bit dài khoảng 0 phẩy 104 mi li giây. Mỗi byte tốn 10 bit, nên tốc độ là 960 byte mỗi giây, không phải 1200. Bên nhận thấy cạnh xuống của bit bắt đầu, đợi nửa bit, rồi cứ mỗi một bit lấy mẫu một lần, đúng vào giữa bit."
+
+  - id: intuition
+    kind: intuition
+    title: "Lấy mẫu giữa bit, và lệch nhịp dồn dần"
+    checks:
+      - "[0] + [(0x41 >> i) & 1 for i in range(8)] + [1] == [0, 1, 0, 0, 0, 0, 0, 1, 0, 1]"
+      - "9 < round(9.5 * 1.0355, 2) < 10 and round(9.5 * 1.06, 2) == 10.07 and round(0.5 / 9.5 * 100, 1) == 5.3"
+    steps:
+      - show: |
+          <div><svg width="1500" height="320" viewBox="0 0 1500 320"><g fill="#1f2937"><line x1="200" y1="50" x2="200" y2="300" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="5 5"/><line x1="310" y1="50" x2="310" y2="300" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="5 5"/><line x1="420" y1="50" x2="420" y2="300" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="5 5"/><line x1="530" y1="50" x2="530" y2="300" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="5 5"/><line x1="640" y1="50" x2="640" y2="300" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="5 5"/><line x1="750" y1="50" x2="750" y2="300" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="5 5"/><line x1="860" y1="50" x2="860" y2="300" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="5 5"/><line x1="970" y1="50" x2="970" y2="300" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="5 5"/><line x1="1080" y1="50" x2="1080" y2="300" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="5 5"/><line x1="1190" y1="50" x2="1190" y2="300" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="5 5"/><line x1="1300" y1="50" x2="1300" y2="300" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="5 5"/><text x="255" y="40" text-anchor="middle" font-size="20">bắt đầu</text><circle cx="255" cy="140" r="8" fill="#2a78d6"/><text x="365" y="40" text-anchor="middle" font-size="20">b0</text><circle cx="365" cy="80" r="8" fill="#2a78d6"/><text x="475" y="40" text-anchor="middle" font-size="20">b1</text><circle cx="475" cy="140" r="8" fill="#2a78d6"/><text x="585" y="40" text-anchor="middle" font-size="20">b2</text><circle cx="585" cy="140" r="8" fill="#2a78d6"/><text x="695" y="40" text-anchor="middle" font-size="20">b3</text><circle cx="695" cy="140" r="8" fill="#2a78d6"/><text x="805" y="40" text-anchor="middle" font-size="20">b4</text><circle cx="805" cy="140" r="8" fill="#2a78d6"/><text x="915" y="40" text-anchor="middle" font-size="20">b5</text><circle cx="915" cy="140" r="8" fill="#2a78d6"/><text x="1025" y="40" text-anchor="middle" font-size="20">b6</text><circle cx="1025" cy="80" r="8" fill="#2a78d6"/><text x="1135" y="40" text-anchor="middle" font-size="20">b7</text><circle cx="1135" cy="140" r="8" fill="#2a78d6"/><text x="1245" y="40" text-anchor="middle" font-size="20">dừng</text><circle cx="1245" cy="80" r="8" fill="#2a78d6"/><polyline points="90,80 200,80 200,140 310,140 310,80 420,80 420,140 530,140 530,140 640,140 640,140 750,140 750,140 860,140 860,140 970,140 970,80 1080,80 1080,140 1190,140 1190,80 1300,80 1300,80 1420,80" fill="none" stroke="#1f2937" stroke-width="4"/><text x="20" y="87" font-size="20">mức 1</text><text x="20" y="147" font-size="20">mức 0</text><text x="200" y="193" font-size="20" fill="#d97706" stroke="#fffbeb" stroke-width="6" paint-order="stroke">đầu nhận lệch 3,55%: mẫu cuối vẫn trong bit dừng</text><circle cx="257" cy="215" r="8" fill="#d97706"/><circle cx="371" cy="215" r="8" fill="#d97706"/><circle cx="485" cy="215" r="8" fill="#d97706"/><circle cx="599" cy="215" r="8" fill="#d97706"/><circle cx="713" cy="215" r="8" fill="#d97706"/><circle cx="826" cy="215" r="8" fill="#d97706"/><circle cx="940" cy="215" r="8" fill="#d97706"/><circle cx="1054" cy="215" r="8" fill="#d97706"/><circle cx="1168" cy="215" r="8" fill="#d97706"/><circle cx="1282" cy="215" r="8" fill="#d97706"/><text x="200" y="268" font-size="20" fill="#b91c1c" stroke="#fffbeb" stroke-width="6" paint-order="stroke">đầu nhận lệch 6%: mẫu cuối rơi ra ngoài khung</text><circle cx="258" cy="290" r="8" fill="#b91c1c"/><circle cx="375" cy="290" r="8" fill="#b91c1c"/><circle cx="492" cy="290" r="8" fill="#b91c1c"/><circle cx="608" cy="290" r="8" fill="#b91c1c"/><circle cx="725" cy="290" r="8" fill="#b91c1c"/><circle cx="841" cy="290" r="8" fill="#b91c1c"/><circle cx="958" cy="290" r="8" fill="#b91c1c"/><circle cx="1074" cy="290" r="8" fill="#b91c1c"/><circle cx="1191" cy="290" r="8" fill="#b91c1c"/><circle cx="1308" cy="290" r="8" fill="#b91c1c"/></g></svg></div>
+        say: "Hình vẽ khung của chữ A trên dây, đường đen là mức điện áp, mỗi ô giữa hai vạch đứt là một bit. Chấm xanh là chỗ bên nhận đúng nhịp lấy mẫu, đúng giữa mỗi bit nên đọc chắc chắn. Hàng chấm cam là bên nhận chậm hơn 3 phẩy 55 phần trăm, mỗi mẫu trễ thêm một chút, tới bit dừng thì mẫu đã gần sát mép. Hàng chấm đỏ lệch 6 phần trăm, mẫu cuối rơi ra ngoài khung, nên bên nhận đọc sai bit dừng."
+
+  # ───────────────────────── 4. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Sai lệch tốc độ do xung nhịp"
+    checks:
+      - "round(16e6 / (16 * 9600)) - 1 == 103 and round((16e6 / (16 * 104) - 9600) / 9600 * 100, 2) == 0.16"
+      - "round(16e6 / (16 * 115200)) - 1 == 8 and round((16e6 / (16 * 9) - 115200) / 115200 * 100, 2) == -3.55"
+      - "round(0.5 / 9.5 * 100, 1) == 5.3"
+    steps:
+      - show: |
+          <p>Chip chỉ tạo được tốc độ (UBRR: hệ số chia) $\dfrac{f_{\text{clk}}}{16 \cdot (\text{UBRR} + 1)}$ với UBRR nguyên. Xung nhịp 16 MHz.</p>
+          <p><b>Bước 1 — chọn hệ số chia cho 9600:</b> $\dfrac{16\,000\,000}{16 \cdot 9600} \approx 104{,}17$, làm tròn 104, trừ 1 → UBRR $= 103$.</p>
+        introduces: [sub]
+        focus: [1, 2, 2]
+        say: "Chip chỉ tạo được tốc độ bằng tần số xung nhịp chia cho 16 nhân hệ số chia cộng 1, với hệ số chia là số nguyên, ở đây xung nhịp 16 mê-ga-héc. Bước một, muốn 9600 thì lấy 16 triệu chia cho 16 nhân 9600, được khoảng 104 phẩy 17. Làm tròn thành 104 rồi trừ 1, nên hệ số chia là 103."
+      - show: |
+          <p><b>Bước 2 — tốc độ thật:</b> $\dfrac{16\,000\,000}{16 \cdot 104} \approx 9615$, lệch $\dfrac{9615 - 9600}{9600} \approx +0{,}16\%$.</p>
+        say: "Bước hai, vì hệ số chia phải nguyên, tốc độ thật là 16 triệu chia cho 16 nhân 104, khoảng 9615, lệch 0 phẩy 16 phần trăm so với 9600, rất nhỏ."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — làm lại với 115 200:</b> $\dfrac{16\,000\,000}{16 \cdot 115\,200} \approx 8{,}68$, làm tròn 9, trừ 1 → UBRR $= 8$.</p>
+          <table class="t"><tr><th>muốn</th><th>UBRR</th><th>được</th><th>lệch</th></tr>
+          <tr><td>9600</td><td>103</td><td>9615</td><td>+0,16%</td></tr>
+          <tr><td>115 200</td><td>8</td><td>111 111</td><td>$\hl{-3{,}55\%}$</td></tr></table>
+        focus: [1, 1, "2.3"]
+        say: "Bước ba, làm lại với một trăm mười lăm nghìn hai trăm. 16 triệu chia cho 16 nhân một trăm mười lăm nghìn hai trăm được khoảng 8 phẩy 68, làm tròn thành 9 rồi trừ 1, nên hệ số chia là 8. Muốn một trăm mười lăm nghìn hai trăm thì chọn hệ số chia 8, chỉ được khoảng một trăm mười một nghìn, lệch âm 3 phẩy 55 phần trăm."
+      - show: |
+          <p><b>Bước 4 — so với ngưỡng:</b> lệch tích lũy tới giữa bit dừng (9,5 bit) phải dưới nửa bit: tổng lệch hai bên $\lt 0{,}5 / 9{,}5 \approx 5{,}3\%$; thực hành giữ mỗi bên dưới 2%.</p>
+          <div class="box warn">Lệch 3,55% đã quá 2% — đúng lỗi chữ rác mở đầu.</div>
+        focus: [1, 1, 2]
+        say: "Bước bốn, so với ngưỡng. Lệch tích lũy tới giữa bit dừng phải dưới nửa bit, nên tổng lệch hai bên phải dưới khoảng 5 phẩy 3 phần trăm, thực hành giữ mỗi bên dưới 2 phần trăm. Lệch 3 phẩy 55 phần trăm là quá rủi ro, đúng là lỗi chữ rác lúc mở đầu."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: thử cả các hệ số chia bên cạnh"
+    checks:
+      - "[round((16e6 / (16 * (u + 1)) - 9600) / 9600 * 100, 2) for u in (102, 103, 104)] == [1.13, 0.16, -0.79]"
+      - "[round((16e6 / (16 * (u + 1)) - 115200) / 115200 * 100, 2) for u in (7, 8, 9)] == [8.51, -3.55, -13.19]"
+      - "round(16e6 / (16 * 115200), 2) == 8.68 and round(16e6 / (16 * 9600), 2) == 104.17"
+    steps:
+      - show: |
+          <table class="t"><tr><th>hệ số chia</th><th>lệch so với 9600</th><th>hệ số chia</th><th>lệch so với 115 200</th></tr>
+          <tr><td>102</td><td>+1,13%</td><td>7</td><td>+8,51%</td></tr>
+          <tr><td>103</td><td>$\hl{+0{,}16\%}$</td><td>8</td><td>$\hl{-3{,}55\%}$</td></tr>
+          <tr><td>104</td><td>$-0{,}79\%$</td><td>9</td><td>$-13{,}19\%$</td></tr></table>
+        focus: [1, "1.3", "1.3", 1]
+        say: "Kiểm bằng đường khác, vì làm tròn có thể chọn nhầm, ta thử luôn các hệ số chia ở hai bên. Với 9600, hệ số 103 lệch ít nhất, chỉ 0 phẩy 16 phần trăm. Với một trăm mười lăm nghìn hai trăm, hệ số 8 cũng là tốt nhất nhưng vẫn lệch 3 phẩy 55 phần trăm, hai bên cạnh còn tệ hơn nhiều. Vậy với xung nhịp 16 mê-ga-héc, không hệ số chia nào đưa tốc độ ấy về dưới 2 phần trăm."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi người mới hay mắc"
+    checks:
+      - "round(10 / 9600 * 1000, 3) == 1.042 and round(16e6 * 10 / 9600) == 16667"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Nối chân truyền với chân truyền <b class="red">(sai)</b>
+          <br><span class="note">Truyền của bên này nối vào <b>nhận</b> của bên kia, và hai bên phải chung dây đất.</span></div>
+        say: "Lỗi thứ nhất, nối chân truyền với chân truyền. Chân truyền của bên này phải nối vào chân nhận của bên kia, và hai bên phải chung dây đất."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Hai bên khác tốc độ hoặc khác khung <b class="red">(sai)</b>
+          <br><span class="note">9600 với 115 200, hay 8N1 với có bit chẵn lẻ: nhận ra rác, không báo lỗi gì rõ ràng.</span></div>
+        say: "Lỗi thứ hai, hai bên khác tốc độ hoặc khác định dạng khung. Bên nhận chỉ thấy rác, mà không có báo lỗi nào rõ ràng."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Dùng bộ dao động nội không hiệu chỉnh cho tốc độ cao <b class="red">(rủi ro)</b>
+          <br><span class="note">Dao động nội có thể lệch vài phần trăm theo nhiệt độ — cộng thêm lệch do UBRR là vượt ngưỡng. Dùng thạch anh.</span></div>
+        say: "Lỗi thứ ba, dùng bộ dao động nội chưa hiệu chỉnh cho tốc độ cao. Dao động nội có thể lệch vài phần trăm theo nhiệt độ, cộng thêm lệch do làm tròn là vượt ngưỡng, nên hãy dùng thạch anh."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Gửi từng byte bằng vòng chờ bận <b class="red">(lãng phí)</b>
+          <br><span class="note">Mỗi byte ở 9600 mất hơn 1 ms; chờ bận là bỏ phí hàng nghìn lệnh. Dùng ngắt và bộ đệm vòng.</span></div>
+          <table class="t"><tr><th>một byte ở 9600</th><th>bằng</th></tr><tr><td>thời gian</td><td>10 bit chia 9600, khoảng 1,042 ms</td></tr><tr><td>số nhịp ở 16 MHz</td><td>khoảng 16 667 nhịp chỉ để chờ</td></tr></table>
+        focus: [1, 1, 2]
+        say: "Lỗi thứ tư, gửi từng byte bằng một vòng chờ bận. Mỗi byte ở tốc độ 9600 mất hơn 1 mi li giây, chờ bận là bỏ phí hàng nghìn lệnh, nên hãy dùng ngắt và một bộ đệm vòng. Bảng cho thấy mỗi byte mất khoảng 1 phẩy 042 mi li giây, tức khoảng 16 nghìn 667 nhịp đồng hồ chỉ để đứng chờ."
+
+  # ───────────────────────── 6. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "115200 / 10 == 11520 and round(100 * 10 / 9600 * 1000, 1) == 104.2"
+      - "[(0x4B >> i) & 1 for i in range(8)] == [1, 1, 0, 1, 0, 0, 1, 0]"
+      - "100 * 10 == 1000 and format(0x4B, '08b') == '01001011' and 0x4B == 75"
+      - "round(16e6 / (16 * 38400)) - 1 == 25 and round((16e6 / (16 * 26) - 38400) / 38400 * 100, 2) == 0.16 and 38400 // 10 == 3840 and 3840 >= 3000"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Ở 115 200 baud, khung 8N1: bao nhiêu byte mỗi giây? Gửi 100 byte ở 9600 baud mất bao lâu?</td></tr>
+          <tr><td>2</td><td>Viết 8 bit dữ liệu của <code>0x4B</code> theo thứ tự gửi đi.</td></tr>
+          <tr><td>3</td><td>Xung nhịp 16 MHz, cần ít nhất 3000 byte mỗi giây. Chọn 38 400 (UBRR 25, lệch +0,16%) hay 115 200 (lệch −3,55%)?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.4", "1.4", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, ở tốc độ một trăm mười lăm nghìn hai trăm bit mỗi giây, khung 8N1, gửi được bao nhiêu byte mỗi giây? Gửi 100 byte ở tốc độ 9600 thì mất bao lâu? Câu hai, viết 8 bit dữ liệu của số 4B hệ mười sáu theo thứ tự được gửi đi. Câu ba, xung nhịp vẫn là 16 mê-ga-héc, và hệ cần gửi ít nhất 3000 byte mỗi giây. Nên chọn tốc độ ba mươi tám nghìn bốn trăm bit mỗi giây, lệch 0 phẩy 16 phần trăm, hay tốc độ lớn hơn lệch âm 3 phẩy 55 phần trăm? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① Mỗi byte 10 bit: $115\,200 / 10 = \hl{11\,520}$ byte/s. 100 byte là $100 \cdot 10 = 1000$ bit: $1000 / 9600$ giây $\approx \hl{104{,}2}$ ms.</p>
+        say: "Đáp án câu một, chia cho 10, được mười một nghìn năm trăm hai mươi byte mỗi giây. Với vế sau, 100 byte nhân 10 bit là 1000 bit, chia cho 9600 bit mỗi giây. Gửi 100 byte ở tốc độ 9600 mất khoảng 104 phẩy 2 mi li giây."
+      - show: |
+          <table class="t"><tr><th>bước</th><th>kết quả</th></tr>
+          <tr><td>4 → 0100, B → 1011</td><td><code>0b01001011</code></td></tr>
+          <tr><td>đọc từ bit thấp nhất (phải sang trái)</td><td>$\hl{1,1,0,1,0,0,1,0}$</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Câu hai, đổi từng chữ số hệ mười sáu ra 4 bit, chữ số 4 thành 0 1 0 0, chữ số B thành 1 0 1 1. Ghép hai nhóm lại, ta được 0 1 0 0, rồi tới 1 0 1 1. Bắt đầu từ bit thấp nhất, tức đọc từ phải sang trái, thứ tự gửi là 1, 1, 0, 1, 0, 0, 1, 0."
+      - show: |
+          <p>③ Tốc độ ba mươi tám nghìn bốn trăm: $38\,400 / 10 = 3840$ byte/s, lớn hơn 3000 — <b>đủ</b>, lại chỉ lệch 0,16%. Chọn <b>38 400</b>; tốc độ cao hơn mà lệch 3,55% là mời gọi chữ rác.</p>
+        say: "Câu ba, tốc độ ba mươi tám nghìn bốn trăm chia 10 được 3840 byte mỗi giây, đã đủ hơn 3000, lại chỉ lệch 0 phẩy 16 phần trăm. Vậy ta chọn tốc độ thấp hơn này, còn tốc độ cao hơn mà lệch 3 phẩy 55 phần trăm thì chỉ chuốc lấy chữ rác."
+
+  # ───────────────────────── 7. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">bắt đầu 0, 8 bit thấp trước, dừng 1</span><span class="a">→</span>
+          <span class="n">10 bit mỗi byte</span><span class="a">→</span>
+          <span class="n">lấy mẫu giữa bit</span><span class="a">→</span>
+          <span class="n">lệch tốc độ mỗi bên dưới 2%</span></div>
+        say: "Tổng kết lại, mỗi khung có bit bắt đầu bằng 0, 8 bit dữ liệu với bit thấp đi trước, và bit dừng bằng 1, tổng 10 bit mỗi byte. Bên nhận lấy mẫu giữa bit, nên lệch tốc độ mỗi bên phải dưới khoảng 2 phần trăm."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> khi hai bên không có đồng hồ chung, mọi thoả thuận phải được hẹn trước và sai số phải được tính ra, không đoán.</div>
+        say: "Điều cần mang theo, khi hai bên không có đồng hồ chung, mọi thoả thuận phải được hẹn trước, và sai số phải được tính ra chứ không đoán."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 8): <b>bus I²C và SPI</b>, có dây xung nhịp chung, để nối nhiều chip trên một bo mạch.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 8, ta học hai chuẩn kết nối có dây xung nhịp chung, dùng để nối nhiều chip trên cùng một bo mạch. Hẹn gặp bạn ở bài tiếp theo."

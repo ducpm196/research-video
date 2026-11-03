@@ -1,0 +1,370 @@
+id: L13
+course: PAR
+series: "PAR · Tính toán song song và GPU"
+title: "Bài 13 — Hành trình: bộ xử lý đồ hoạ từ vẽ hình tới huấn luyện trên hàng trăm thẻ"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+case: journey
+source: "curriculum/par.yaml L13; audit/par/sources_L13.md (câu trích nguyên văn, đọc 2026-11-02); audit/par/verify_par.py (verify_parts/L13.py); J. Owens và cộng sự, A Survey of General-Purpose Computation on Graphics Hardware, Eurographics 2005 STAR, bản trên research.nvidia.com [OW05]; J. Nickolls, I. Buck, M. Garland, K. Skadron, Scalable Parallel Programming with CUDA, ACM Queue 6(2) 2008, bản chép tại grothoff.org [NI08]; A. Krizhevsky, I. Sutskever, G. Hinton, ImageNet Classification with Deep Convolutional Neural Networks, NIPS 2012 [KR12]; P. Goyal và cộng sự, Accurate, Large Minibatch SGD: Training ImageNet in 1 Hour, arXiv 1706.02677, 2017 [GO17]; A. Sergeev, M. Del Balso, Horovod: fast and easy distributed deep learning in TensorFlow, arXiv 1802.05799, 2018 [HO18]; PAR bài 0, 1, 2, 8, 10, 11, 12"
+assumes: [arith, frac, approx, cdot]
+# Quy ước (cả khoá): n = số thẻ / số máy; D = dung lượng gradient của một máy; hiệu suất mở rộng = tăng tốc chia số thẻ (bài 0, 1).
+#   Mọi sự kiện và con số có nguồn ghi trong audit/par/sources_L13.md. Con số khác là phép tính lại (checks, verify_parts/L13.py) hoặc
+#   ghi “(số minh hoạ)”: 100 khối dữ liệu nhỏ ở chặng 5; đội 8 thẻ chạy 29 giờ, 64 thẻ, hiệu suất 90% / 50% ở câu tự làm.
+#   Lời đọc không nói tên hãng, tên thẻ, tên thư viện (NVIDIA, CUDA, GeForce, GTX, Tesla, Horovod, NCCL, TensorFlow, ImageNet, ResNet…):
+#   chưa có probe đạt 7/8 (lexicon_vi.PAR.yaml) → chỉ trên màn hình; lời đọc nói “hãng làm thẻ đồ hoạ”, “mô hình lập trình riêng cho
+#   thẻ đồ hoạ”, “mạng nhận dạng ảnh”, “thư viện mã nguồn mở của một công ty gọi xe”, “thư viện truyền thông tập thể của hãng”.
+#   Không nêu tên cá nhân trong lời đọc; tác giả chỉ ở `source`.
+objectives:
+  - "Kể lại năm chặng từ 2005 tới 2018: mượn ống vẽ hình, mô hình lập trình riêng, hai thẻ cho một mạng, 256 thẻ trong một giờ, thư viện mở dùng chung"
+  - "Tính lại con số của từng chặng bằng kiến thức của khoá (tỉ lệ đỉnh tính, nhóm 32 luồng, ảnh mỗi giây, hiệu suất mở rộng, lưu lượng vòng)"
+  - "Chọn số thẻ và cách gộp gradient cho quy mô của mình, kèm điều kiện đổi lựa chọn"
+asr_reviewed:
+  - {sentence: "Bạn đã đi từ phần tuần tự của Amdahl, qua công việc và đường găng, tranh chấp, bộ nhớ đệm và vector.", reason: "ASR chép “Bạn đã đi từ phần tuần tự của Amdang qua công việc và đường găng, tranh chấp, bộ nhớ đệm và vét tơ.” (0.936): “Amdahl” đọc “Am-đan” theo lexicon_vi.CSA.yaml (probe p1 8/8), ASR chép “am đang/amdang/âm đăng” — cùng âm — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Thực hành rút ra là chia việc thành rất nhiều khối độc lập, tránh rẽ nhánh trong nhóm 32 luồng, và chép dữ liệu dùng lại vào bộ nhớ chia sẻ 16 KB.", reason: "ASR chép “Thực hành trúc ra là chia việc thành rất nhiều khối độc lập, tránh rẽ nhánh trong nhóm 32 luồng và chép dữ liệu dùng lại vào bộ nhớ chia sẻ 16 kilobytes.” (0.944): KB đọc “ki-lô-byte” theo lexicon của khoá, ASR viết “kilobyte/kg”; lệch âm/thanh thuần Việt: rút/trúc — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Từ giả vờ vẽ hình tới 256 thẻ trong một giờ"
+    checks:
+      - "round(63 / 14.8, 2) == 4.26 and 5 * 24 == 120 and 256 // 2 == 128"
+    steps:
+      - show: |
+          <p>Năm <b>2005</b>, muốn dùng thẻ đồ hoạ để tính, người ta phải <b>giả vờ vẽ một hình</b>: dữ liệu cất trong ảnh, phép tính viết thành chương trình tô màu từng điểm ảnh.</p>
+          <p>Năm <b>2012</b>, một mạng nhận dạng ảnh được huấn luyện <b>5–6 ngày trên 2 thẻ</b>. Năm <b>2017</b>, một mạng nhận dạng ảnh khác được huấn luyện trong <b>1 giờ trên 256 thẻ</b>.</p>
+          <div class="box key">Hôm nay: năm chặng từ 2005 tới 2018 — mỗi quy mô làm lộ ra điểm nghẽn nào, người làm nghề xử lý ra sao, và ta tính lại con số của họ bằng kiến thức cả khoá.</div>
+        focus: [1, 1, 2, 2, 3]
+        say: "Chào bạn, năm 2005, muốn dùng thẻ đồ hoạ để tính toán, người ta phải giả vờ vẽ một hình. Dữ liệu được cất trong ảnh, còn phép tính được viết thành chương trình tô màu cho từng điểm ảnh. Năm 2012, một mạng nhận dạng ảnh được huấn luyện 5 tới 6 ngày trên 2 thẻ. Năm 2017, một mạng nhận dạng ảnh khác được huấn luyện chỉ trong 1 giờ trên 256 thẻ. Hôm nay ta đi qua năm chặng, xem mỗi quy mô làm lộ ra điểm nghẽn nào, và tính lại con số của họ bằng kiến thức cả khoá."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại năm điều từ các bài trước"
+    checks:
+      - "alg.par_tree_sum(1024)[:2] == (1023, 10)"
+      - "alg.par_warp_passes(['A'] * 16 + ['B'] * 16)[0] == 2 and alg.par_warp_passes(['A'] * 16 + ['B'] * 16)[1] == 0.5"
+      - "alg.par_ring_allreduce([[1] * 8 for _ in range(8)])[1][0] * 8 == 2 * 7 * 8 and 2 * 7 / 8 == 1.75"
+      - "round(alg.par_step_efficiency(100, 30) * 100, 1) == 76.9 and round(alg.par_gustafson(0.1, 16), 1) == 14.5"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài</th><th>điều đã học</th><th>ví dụ số</th></tr>
+          <tr><td>bài 1</td><td><b>mở rộng yếu</b>: mỗi lõi giữ phần việc cũ, bài toán lớn theo số lõi</td><td>10% tuần tự trên máy 16 lõi → 14,5 lần</td></tr>
+          <tr><td>bài 2</td><td>cộng theo cây: <b>công việc</b> và <b>đường găng</b></td><td>1024 số: 1023 phép cộng, 10 tầng</td></tr>
+          <tr><td>bài 8</td><td>nhóm <b>32 luồng chạy chung lệnh</b>; rẽ hai nhánh thì chạy hai lượt</td><td>nửa A, nửa B → hiệu suất 50%</td></tr>
+          <tr><td>bài 10</td><td><b>gộp toàn phần theo vòng</b>: mỗi máy gửi $\frac{2(n - 1)}{n} \cdot D$</td><td>8 máy, 1 GB → 1,75 GB</td></tr>
+          <tr><td>bài 11</td><td>hiệu suất một bước = thời gian tính chia (tính + truyền không chồng được)</td><td>100 ms tính, 30 ms truyền → 76,9%</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", "1.6"]
+        say: "Bảng nhắc lại năm điều từ các bài trước. Ở bài 1, mở rộng yếu là mỗi lõi giữ phần việc cũ và bài toán lớn theo số lõi, nên 10 phần trăm tuần tự trên máy 16 lõi cho 14 phẩy 5 lần. Ở bài 2, cộng 1024 số theo cây cần 1023 phép cộng nhưng đường găng chỉ 10 tầng. Ở bài 8, nhóm 32 luồng chạy chung một lệnh, nên rẽ hai nhánh nửa nọ nửa kia thì chạy hai lượt, hiệu suất 50 phần trăm. Ở bài 10, gộp toàn phần theo vòng cho mỗi máy gửi 2 nhân n trừ 1, chia n, nhân dung lượng D, nên 8 máy với 1 GB gửi 1 phẩy 75 GB. Ở bài 11, hiệu suất một bước bằng thời gian tính chia cho thời gian tính cộng phần truyền không chồng được, 100 và 30 mi li giây cho 76 phẩy 9 phần trăm."
+
+  # ───────────────────────── 3. NGÔN NGỮ ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Ngôn ngữ của hành trình"
+    steps:
+      - show: |
+          <table class="t"><tr><th>thuật ngữ</th><th>nghĩa</th></tr>
+          <tr><td><b>chương trình tô điểm ảnh</b></td><td>đoạn mã thẻ đồ hoạ chạy cho từng điểm ảnh khi vẽ — năm 2005 được mượn để tính</td></tr>
+          <tr><td><b>cụm xử lý</b> (SM)</td><td>một khối trên thẻ gồm vài lõi nhỏ, chạy nhiều nhóm 32 luồng</td></tr>
+          <tr><td><b>song song dữ liệu</b></td><td>mỗi thẻ giữ đủ mô hình, học trên một phần dữ liệu, rồi gộp gradient</td></tr>
+          <tr><td><b>chia mô hình</b></td><td>mỗi thẻ giữ một phần mô hình, các thẻ trao đổi kết quả giữa chừng</td></tr>
+          <tr><td><b>lô toàn cục</b></td><td>tổng số mẫu của mọi thẻ trong một bước = số thẻ nhân số mẫu mỗi thẻ</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", "1.6"]
+        say: "Bài dùng năm thuật ngữ. Chương trình tô điểm ảnh là đoạn mã thẻ đồ hoạ chạy cho từng điểm ảnh khi vẽ, và năm 2005 người ta mượn nó để tính. Cụm xử lý là một khối trên thẻ gồm vài lõi nhỏ, chạy nhiều nhóm 32 luồng. Song song dữ liệu là mỗi thẻ giữ đủ mô hình, học trên một phần dữ liệu, rồi gộp gradient. Chia mô hình là mỗi thẻ chỉ giữ một phần mô hình, và các thẻ trao đổi kết quả giữa chừng. Lô toàn cục là tổng số mẫu của mọi thẻ trong một bước, bằng số thẻ nhân số mẫu mỗi thẻ."
+
+  # ───────────────────────── 4. DÒNG THỜI GIAN ─────────────────────────
+  - id: timeline
+    kind: intuition
+    title: "Năm chặng trên một trục thời gian"
+    steps:
+      - show: |
+          <div><svg width="1700" height="330" viewBox="0 0 1700 330">
+          <line x1="30" y1="150" x2="1670" y2="150" stroke="#1f2937" stroke-width="3"/>
+          <g font-size="24" text-anchor="middle" fill="#1f2937">
+          <circle cx="170" cy="150" r="15" fill="#9ca3af"/><text x="170" y="108" font-weight="bold">2005</text><text x="170" y="200">mượn ống vẽ hình</text><text x="170" y="232">63 so với 14,8 tỉ phép/s</text>
+          <circle cx="500" cy="150" r="15" fill="#2a78d6"/><text x="500" y="108" font-weight="bold">2006 → 2008</text><text x="500" y="200">mô hình lập trình riêng</text><text x="500" y="232">nhóm 32 luồng, khối độc lập</text>
+          <circle cx="850" cy="150" r="15" fill="#7c3aed"/><text x="850" y="108" font-weight="bold">2012</text><text x="850" y="200">hai thẻ cho một mạng</text><text x="850" y="232">5–6 ngày, thẻ 3 GB</text>
+          <circle cx="1200" cy="150" r="15" fill="#eb6834"/><text x="1200" y="108" font-weight="bold">2017</text><text x="1200" y="200">256 thẻ, 1 giờ</text><text x="1200" y="232">lô 8192, tốc độ học × 32</text>
+          <circle cx="1530" cy="150" r="15" fill="#059669"/><text x="1530" y="108" font-weight="bold">2017 → 2018</text><text x="1530" y="200">thư viện mở dùng chung</text><text x="1530" y="232">88% ở 128 thẻ</text>
+          </g>
+          <text x="850" y="305" font-size="23" fill="#6b7280" text-anchor="middle">khai sinh → công cụ riêng → quy mô bài toán thật → quy mô hàng trăm thẻ → ổn định và tiếp tục phát triển</text>
+          </svg></div>
+        focus: [1, 1, 1, 1, 1]
+        say: "Hình là trục thời gian với năm chặng. Năm 2005, người ta mượn ống vẽ hình của thẻ, vốn đã tính nhanh hơn bộ xử lý trung tâm vài lần. Từ 2006 tới 2008, hãng làm thẻ đưa ra một mô hình lập trình riêng, với nhóm 32 luồng và các khối chạy độc lập. Năm 2012, một mạng nơ-ron lớn tới mức phải chia đôi trên hai thẻ. Năm 2017, một nhóm nghiên cứu huấn luyện trên 256 thẻ trong một giờ, rồi tới 2018 việc này thành một thư viện mã nguồn mở mà nhiều đội dùng chung."
+
+  # ───────────────────────── 5. CƠ CHẾ ─────────────────────────
+  - id: mech
+    kind: concept
+    title: "Cơ chế năm 2005: mỗi lượt vẽ ra một ảnh nhỏ bằng nửa"
+    steps:
+      - show: |
+          <div><svg width="1600" height="330" viewBox="0 0 1600 330">
+          <defs><marker id="ah13" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="12" refX="14" refY="6" orient="auto"><path d="M0,0 L16,6 L0,12 z" fill="#1f2937"/></marker></defs>
+          <g font-size="24" text-anchor="middle" fill="#1f2937">
+          <rect x="40" y="60" width="60" height="60" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="70" y="99">3</text>
+          <rect x="100" y="60" width="60" height="60" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="130" y="99">1</text>
+          <rect x="160" y="60" width="60" height="60" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="190" y="99">4</text>
+          <rect x="220" y="60" width="60" height="60" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="250" y="99">1</text>
+          <rect x="280" y="60" width="60" height="60" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="310" y="99">5</text>
+          <rect x="340" y="60" width="60" height="60" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="370" y="99">9</text>
+          <rect x="400" y="60" width="60" height="60" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="430" y="99">2</text>
+          <rect x="460" y="60" width="60" height="60" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="490" y="99">6</text>
+          <text x="280" y="44">ảnh vào: 8 điểm, mỗi điểm một số</text>
+          <rect x="700" y="60" width="60" height="60" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="730" y="99">8</text>
+          <rect x="760" y="60" width="60" height="60" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="790" y="99">10</text>
+          <rect x="820" y="60" width="60" height="60" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="850" y="99">6</text>
+          <rect x="880" y="60" width="60" height="60" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="910" y="99">7</text>
+          <text x="820" y="44">lượt vẽ 1: 4 điểm</text>
+          <rect x="1110" y="60" width="60" height="60" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="1140" y="99">14</text>
+          <rect x="1170" y="60" width="60" height="60" fill="#ffedd5" stroke="#eb6834" stroke-width="2"/><text x="1200" y="99">17</text>
+          <text x="1170" y="44">lượt 2: 2 điểm</text>
+          <rect x="1420" y="60" width="70" height="60" fill="#dcfce7" stroke="#059669" stroke-width="2"/><text x="1455" y="99">31</text>
+          <text x="1455" y="44">lượt 3: 1</text>
+          </g>
+          <line x1="530" y1="90" x2="690" y2="90" stroke="#1f2937" stroke-width="3" marker-end="url(#ah13)"/>
+          <line x1="950" y1="90" x2="1100" y2="90" stroke="#1f2937" stroke-width="3" marker-end="url(#ah13)"/>
+          <line x1="1240" y1="90" x2="1410" y2="90" stroke="#1f2937" stroke-width="3" marker-end="url(#ah13)"/>
+          <g font-size="23" fill="#1f2937"><text x="40" y="190">mỗi điểm ảnh ra = chương trình tô điểm ảnh đọc HAI điểm của nửa đầu và nửa sau rồi cộng: 3 + 5, 1 + 9, 4 + 2, 1 + 6</text>
+          <text x="40" y="232">8 số: 3 lượt vẽ, 7 phép cộng — đúng cây cộng của bài 2; ảnh 1024 nhân 1024 điểm: 20 lượt</text>
+          <text x="40" y="274" fill="#b91c1c">không được ghi vào chỗ tuỳ ý: điểm ra của mỗi chương trình đã định sẵn trước khi chạy</text></g>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình là cách năm 2005 người ta cộng một dãy số trên thẻ đồ hoạ. Dữ liệu là một ảnh, mỗi điểm ảnh giữ một số. Mỗi lượt vẽ ra một ảnh nhỏ bằng nửa, và chương trình tô điểm ảnh đọc hai điểm, một ở nửa đầu một ở nửa sau, rồi cộng lại. Tám số cần 3 lượt vẽ và 7 phép cộng, đúng cây cộng của bài 2, còn chương trình chỉ được ghi vào điểm ảnh đã định sẵn trước khi chạy."
+
+  # ───────────────────────── 6. CHẶNG 1 ─────────────────────────
+  - id: stage1
+    kind: example
+    title: "Chặng 1, năm 2005 — khai sinh: mượn ống vẽ hình để tính"
+    stage: {year: "2005", scale: "thẻ đồ hoạ có 6 bộ xử lý đỉnh và 16 bộ xử lý điểm ảnh; trên 63 tỉ phép tính mỗi giây so với đỉnh 14,8 của một bộ xử lý trung tâm 3,7 GHz; băng thông 35,2 GB/s", source: "[OW05]", practice: "chia ứng dụng thành các đoạn song song dữ liệu độc lập (hạt nhân chạy trên từng phần tử); rút gọn theo lượt giảm một nửa — đúng khi việc đều, không cần ghi vào chỗ tuỳ ý"}
+    checks:
+      - "round(63 / 14.8, 2) == 4.26 and 6 + 16 == 22"
+      - "alg.par_tree_sum(8)[:2] == (7, 3) and alg.par_tree_sum(2 ** 20)[1] == 20 and alg.par_tree_sum(2 ** 20)[0] == 2 ** 20 - 1"
+      - "(l1 := [a + b for a, b in zip([3, 1, 4, 1], [5, 9, 2, 6])]) == [8, 10, 6, 7] and (l2 := [a + b for a, b in zip(l1[:2], l1[2:])]) == [14, 17] and l2[0] + l2[1] == sum([3, 1, 4, 1, 5, 9, 2, 6]) == 31"
+    steps:
+      - show: |
+          <p><b>Quy mô:</b> thẻ đồ hoạ có <b>6</b> bộ xử lý đỉnh và <b>16</b> bộ xử lý điểm ảnh. Một thẻ tính được <b>hơn 63 tỉ phép mỗi giây</b>, so với đỉnh <b>14,8 tỉ</b> của một bộ xử lý trung tâm 3,7 GHz; một thẻ khác đọc bộ nhớ <b>35,2 GB mỗi giây</b>.</p>
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. đỉnh tính so với bộ xử lý trung tâm</td><td>$\frac{63}{14{,}8}$</td><td>$\approx \hlg{4{,}26}$ lần</td></tr>
+          <tr><td>Bước 2. cộng $2^{20}$ = 1 048 576 số theo lượt giảm nửa</td><td>số lượt = số tầng của cây</td><td>$\hlb{20}$ lượt, vẫn 1 048 575 phép cộng</td></tr></table>
+        focus: [1, 1, 1, "2.2", "2.3"]
+        say: "Ở chặng một, năm 2005, một thẻ đồ hoạ có 6 bộ xử lý đỉnh và 16 bộ xử lý điểm ảnh. Một thẻ tính được hơn 63 tỉ phép mỗi giây, trong khi đỉnh của bộ xử lý trung tâm 3 phẩy 7 tỉ nhịp chỉ 14 phẩy 8 tỉ. Một thẻ khác đọc bộ nhớ 35 phẩy 2 GB mỗi giây. Bước một, 63 chia 14 phẩy 8 là khoảng 4 phẩy 26 lần. Bước hai, cộng hơn một triệu số, tức 2 mũ 20, theo lượt giảm một nửa cần 20 lượt, đúng số tầng của cây, nhưng công việc vẫn là 1 triệu 48 nghìn 575 phép cộng."
+      - clear: true
+        show: |
+          <p><b>Điểm nghẽn:</b> mọi thứ phải nói bằng ngôn ngữ vẽ hình — khởi động một phép tính là <b>vẽ một hình</b>, đọc dữ liệu là <b>đọc một điểm trong ảnh</b>; chương trình tô điểm ảnh <b>không ghi được vào chỗ tuỳ ý</b>.</p>
+          <table class="t"><tr><th>việc</th><th>bài khảo sát năm 2005 ghi</th></tr>
+          <tr><td>nhân ma trận</td><td>bị <b>băng thông bộ nhớ</b> chặn mạnh</td></tr>
+          <tr><td>biến đổi tần số nhanh</td><td>chỉ <b>ngang</b> bộ xử lý trung tâm đã tối ưu, khi chạy hai phép một lúc</td></tr></table>
+          <p class="note">Thực hành: chia việc thành các đoạn song song dữ liệu độc lập, mỗi đoạn chạy trên từng phần tử. Điều kiện: việc đều nhau, mỗi kết quả ghi vào chỗ định sẵn.</p>
+        focus: [1, 1, "2.2", "2.3", 3]
+        say: "Điểm nghẽn của chặng này là mọi thứ phải nói bằng ngôn ngữ vẽ hình. Khởi động một phép tính là vẽ một hình, đọc dữ liệu là đọc một điểm trong ảnh, và chương trình tô điểm ảnh không ghi được vào chỗ tuỳ ý. Bài khảo sát năm 2005 ghi rằng nhân ma trận trên thẻ bị băng thông bộ nhớ chặn mạnh, đúng điều mô hình mái nhà ở bài 7 dự đoán. Phép biến đổi tần số nhanh chỉ ngang bộ xử lý trung tâm đã tối ưu, khi chạy hai phép một lúc. Thực hành rút ra là chia việc thành các đoạn song song dữ liệu độc lập, với điều kiện việc đều nhau và mỗi kết quả ghi vào chỗ định sẵn."
+
+  # ───────────────────────── 7. CHẶNG 2 ─────────────────────────
+  - id: stage2
+    kind: example
+    title: "Chặng 2, năm 2006 tới 2008 — công cụ riêng: nhóm 32 luồng, khối chạy độc lập"
+    stage: {year: "2006 → 2008", scale: "kiến trúc thống nhất đồ hoạ và tính toán (11/2006), mô hình lập trình riêng ra năm 2007; thẻ chạy từ 768 tới 12 288 luồng cùng lúc; hình mẫu 14 cụm, 112 lõi; sau chưa tới một năm đã có hàng chục nghìn người lập trình", source: "[NI08]", practice: "viết hạt nhân thành rất nhiều khối độc lập (chạy được theo mọi thứ tự) để cùng chương trình mở rộng trên thẻ ít hay nhiều lõi; tránh rẽ nhánh trong nhóm 32 luồng; chép dữ liệu dùng lại vào bộ nhớ chia sẻ 16 KB"}
+    checks:
+      - "24 * 32 == 768 and 12288 // 768 == 16 and 14 * 8 == 112 and 768 // 8 == 96"
+      - "alg.par_warp_passes(['A'] * 16 + ['B'] * 16) == (2, 0.5) and alg.par_warp_passes(['A'] * 32) == (1, 1)"
+    steps:
+      - show: |
+          <p><b>Cách xử lý của hãng:</b> tháng 11/2006, một kiến trúc thống nhất cho cả đồ hoạ và tính toán; năm 2007, một <b>mô hình lập trình riêng</b> (CUDA) — viết thẳng bằng ngôn ngữ C, không cần giả vờ vẽ.</p>
+          <table class="t"><tr><th>bước</th><th>bài báo năm 2008 ghi</th><th>tính lại</th></tr>
+          <tr><td>Bước 1. một cụm xử lý</td><td>8 lõi nhỏ; 24 nhóm, mỗi nhóm 32 luồng</td><td>$24 \cdot 32 = \hlb{768}$ luồng; $\frac{768}{8} = 96$ luồng mỗi lõi</td></tr>
+          <tr><td>Bước 2. cả thẻ</td><td>từ 768 tới 12 288 luồng; hình mẫu 14 cụm</td><td>$\frac{12\,288}{768} = 16$ cụm; $14 \cdot 8 = 112$ lõi</td></tr>
+          <tr><td>Bước 3. rẽ nhánh trong nhóm</td><td>nhóm chạy lần lượt từng nhánh</td><td>nửa nọ nửa kia: 2 lượt, $\hl{50\%}$</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", "2.4"]
+        say: "Ở chặng hai, tháng 11 năm 2006, hãng làm thẻ đưa ra một kiến trúc thống nhất cho cả đồ hoạ và tính toán. Năm 2007, họ phát hành một mô hình lập trình riêng, viết thẳng bằng ngôn ngữ C mà không cần giả vờ vẽ. Bước một, một cụm xử lý có 8 lõi nhỏ và 24 nhóm 32 luồng, tức 768 luồng, khoảng 96 luồng cho mỗi lõi để che thời gian chờ bộ nhớ. Bước hai, cả thẻ chạy từ 768 tới 12 nghìn 288 luồng, tức tới 16 cụm, còn hình mẫu trong bài báo có 14 cụm với 112 lõi. Bước ba, nếu nhóm 32 luồng rẽ hai nhánh nửa nọ nửa kia thì nhóm chạy lần lượt từng nhánh, hiệu suất còn 50 phần trăm."
+      - clear: true
+        show: |
+          <p><b>Điểm nghẽn mới:</b> thẻ có số lõi rất khác nhau, từ máy tính xách tay tới máy chủ. Làm sao <b>một chương trình</b> chạy tốt trên mọi thẻ?</p>
+          <div class="box key">Luật của mô hình: các khối luồng phải <b>chạy được theo mọi thứ tự</b>, song song hay lần lượt. Nhờ vậy khối được xếp lên bao nhiêu cụm cũng được — chỉ hệ thống chạy cần biết thẻ có mấy cụm.</div>
+          <p class="note">Thực hành: chia thành rất nhiều khối độc lập; tránh rẽ nhánh trong nhóm 32 luồng; chép dữ liệu dùng lại vào bộ nhớ chia sẻ 16 KB của cụm. Sau chưa tới một năm đã có <b>hàng chục nghìn</b> người lập trình theo mô hình này.</p>
+        focus: [1, 2, 2, 3, 3]
+        say: "Điểm nghẽn mới là các thẻ có số lõi rất khác nhau, từ máy tính xách tay tới máy chủ, vậy làm sao một chương trình chạy tốt trên mọi thẻ. Luật của mô hình là các khối luồng phải chạy được theo mọi thứ tự, song song hay lần lượt. Nhờ vậy khối được xếp lên bao nhiêu cụm cũng được, và chỉ hệ thống chạy cần biết thẻ có mấy cụm. Thực hành rút ra là chia việc thành rất nhiều khối độc lập, tránh rẽ nhánh trong nhóm 32 luồng, và chép dữ liệu dùng lại vào bộ nhớ chia sẻ 16 KB. Sau chưa tới một năm, đã có hàng chục nghìn người lập trình theo mô hình này."
+
+  # ───────────────────────── 8. CHẶNG 3 ─────────────────────────
+  - id: stage3
+    kind: example
+    title: "Chặng 3, năm 2012 — bài toán thật: hai thẻ cho một mạng nơ-ron"
+    stage: {year: "2012", scale: "mạng 60 triệu tham số, 650 nghìn nơ-ron; 1,2 triệu ảnh huấn luyện, khoảng 90 lượt; 5–6 ngày trên hai thẻ 3 GB", source: "[KR12]", practice: "khi mô hình không vừa một thẻ thì chia mô hình (mỗi thẻ nửa số nhân chập) và chỉ trao đổi ở một số tầng; chỉnh lượng trao đổi tới khi nó là một phần chấp nhận được của thời gian tính"}
+    checks:
+      - "90 * 1.2e6 == 1.08e8 and [round(1.08e8 / (d * 86400)) for d in (6, 5)] == [208, 250]"
+      - "60e6 / 2 == 30e6"
+    steps:
+      - show: |
+          <p><b>Quy mô:</b> mạng có <b>60 triệu tham số</b>, 650 nghìn nơ-ron; học trên <b>1,2 triệu ảnh</b>, khoảng <b>90 lượt</b>; mất <b>5–6 ngày trên hai thẻ 3 GB</b>.</p>
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. tổng số ảnh đã xử lý</td><td>$90 \cdot 1{,}2$ triệu</td><td>108 triệu lượt ảnh</td></tr>
+          <tr><td>Bước 2. nếu mất 6 ngày</td><td>$\frac{108\ \text{triệu}}{6 \cdot 86\,400\ \text{s}}$</td><td>$\approx \hlb{208}$ ảnh mỗi giây</td></tr>
+          <tr><td>Bước 3. nếu mất 5 ngày</td><td>$\frac{108\ \text{triệu}}{5 \cdot 86\,400\ \text{s}}$</td><td>$\approx \hlb{250}$ ảnh mỗi giây</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", "2.4"]
+        say: "Ở chặng ba, năm 2012, một mạng nhận dạng ảnh có 60 triệu tham số và 650 nghìn nơ-ron. Nó học trên 1 phẩy 2 triệu ảnh, khoảng 90 lượt, mất 5 tới 6 ngày trên hai thẻ 3 GB. Bước một, 90 nhân 1 phẩy 2 triệu là 108 triệu lượt ảnh. Bước hai, nếu mất 6 ngày, tức 6 nhân 86 nghìn 400 giây, thì hai thẻ xử lý khoảng 208 ảnh mỗi giây. Bước ba, nếu mất 5 ngày thì khoảng 250 ảnh mỗi giây."
+      - clear: true
+        show: |
+          <p><b>Điểm nghẽn:</b> “kích thước mạng bị giới hạn chủ yếu bởi bộ nhớ của thẻ và thời gian huấn luyện ta chịu được”. Một thẻ chỉ có 3 GB — mạng quá lớn cho một thẻ.</p>
+          <table class="t"><tr><th>cách xử lý</th><th>vì sao</th></tr>
+          <tr><td><b>chia mô hình</b>: mỗi thẻ giữ nửa số nhân chập</td><td>mỗi thẻ chỉ cần chỗ cho nửa mạng</td></tr>
+          <tr><td>hai thẻ chỉ trao đổi ở <b>một số tầng</b></td><td>chỉnh lượng trao đổi tới khi nó là “một phần chấp nhận được của thời gian tính”</td></tr></table>
+          <p class="note">Thực hành: chia mô hình khi không vừa một thẻ; đo tỉ lệ truyền trên tính như bài 11. Điều kiện: chỉ hai thẻ đọc ghi thẳng bộ nhớ của nhau, không qua máy chủ.</p>
+        focus: [1, 1, "2.2", "2.3", 3]
+        say: "Điểm nghẽn được chính bài báo ghi rõ, kích thước mạng bị giới hạn chủ yếu bởi bộ nhớ của thẻ và thời gian huấn luyện người ta chịu được. Mỗi thẻ đồ hoạ khi ấy chỉ có 3 GB bộ nhớ, nên cả mạng không vừa trong một thẻ. Cách xử lý là chia mô hình, mỗi thẻ giữ nửa số nhân chập, nên mỗi thẻ chỉ cần chỗ cho nửa mạng. Hai thẻ chỉ trao đổi ở một số tầng, và nhóm tác giả chỉnh lượng trao đổi tới khi nó là một phần chấp nhận được của thời gian tính. Đây chính là tỉ lệ truyền trên tính của bài 11, ở thời đại mới có hai thẻ đọc ghi thẳng bộ nhớ của nhau."
+
+  # ───────────────────────── 9. CHẶNG 4 ─────────────────────────
+  - id: stage4
+    kind: example
+    title: "Chặng 4, năm 2017 — quy mô hàng trăm thẻ: 256 thẻ trong một giờ"
+    stage: {year: "2017", scale: "mạng nhận dạng ảnh: 29 giờ trên 8 thẻ với lô 256; lô 8192 trên 256 thẻ trong 1 giờ, giữ nguyên độ chính xác; hiệu suất mở rộng 90% khi đi từ 8 lên 256 thẻ", source: "[GO17]", practice: "giữ cố định số mẫu mỗi thẻ (32) — mở rộng yếu; lô nhân k thì tốc độ học nhân k; khởi động dần tốc độ học trong 5 lượt đầu; đúng tới lô khoảng 8 nghìn"}
+    checks:
+      - "8192 // 256 == 32 and 256 // 8 == 32 and 256 * 32 == 8192"
+      - "round(29 * 8 / 256, 3) == 0.906 and round(29 * 8 / 256 * 60, 1) == 54.4 and round(29 * 8 / 256 / 0.9 * 60, 1) == 60.4"
+      - "round(0.1 * 8192 / 256, 6) == 3.2"
+    steps:
+      - show: |
+          <p><b>Quy mô:</b> trước đó mạng này học trong <b>29 giờ trên 8 thẻ</b>, lô 256 ảnh. Năm 2017: lô <b>8192</b> trên <b>256 thẻ</b> trong <b>1 giờ</b>, độ chính xác như cũ; hiệu suất mở rộng <b>90%</b> khi đi từ 8 lên 256 thẻ.</p>
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. mẫu mỗi thẻ</td><td>$\frac{256}{8}$ và $\frac{8192}{256}$</td><td>đều $\hlb{32}$ — mở rộng yếu như bài 1</td></tr>
+          <tr><td>Bước 2. thời gian lý tưởng</td><td>$29 \cdot \frac{8}{256}$</td><td>$\approx 0{,}906$ giờ = 54,4 phút</td></tr>
+          <tr><td>Bước 3. chia hiệu suất 90%</td><td>$\frac{0{,}906}{0{,}9}$</td><td>$\approx \hlg{1{,}007}$ giờ ≈ 1 giờ ✓</td></tr></table>
+        focus: [1, 1, 1, "2.2", "2.3", "2.4"]
+        say: "Ở chặng bốn, trước đó mạng nhận dạng ảnh này học trong 29 giờ trên 8 thẻ, với lô 256 ảnh. Năm 2017, một nhóm nghiên cứu dùng lô 8192 ảnh trên 256 thẻ, học xong trong 1 giờ mà độ chính xác như cũ. Hiệu suất mở rộng đạt 90 phần trăm khi đi từ 8 lên 256 thẻ. Bước một, 256 chia 8 và 8192 chia 256 đều bằng 32 ảnh mỗi thẻ, nên đây là mở rộng yếu như bài 1. Bước hai, nếu hoàn hảo thì 29 giờ nhân 8 chia 256 còn khoảng 0 phẩy 906 giờ, tức 54 phẩy 4 phút. Bước ba, chia cho hiệu suất 0 phẩy 9 được khoảng 1 phẩy 007 giờ, khớp với một giờ đã báo."
+      - clear: true
+        show: |
+          <p><b>Điểm nghẽn:</b> lô lớn gấp 32 làm việc học <b>khó hội tụ</b>, nhất là lúc đầu. Không khởi động dần thì sai số trên tập kiểm tra cao hơn <b>1,2%</b>.</p>
+          <table class="t"><tr><th>cách xử lý</th><th>tính lại</th></tr>
+          <tr><td><b>quy tắc nhân tuyến tính</b>: lô nhân $k$ thì tốc độ học nhân $k$</td><td>$k = \frac{8192}{256} = 32$; $0{,}1 \cdot 32 = \hl{3{,}2}$</td></tr>
+          <tr><td><b>khởi động dần</b>: tăng tốc độ học từ 0,1 lên 3,2 trong 5 lượt đầu</td><td>tránh sai số vọt lên lúc đổi tốc độ đột ngột</td></tr></table>
+          <p class="note">Thực hành: giữ số mẫu mỗi thẻ cố định, chỉnh tốc độ học theo lô toàn cục, khởi động dần. Điều kiện: nhóm tác giả chỉ kiểm tới lô khoảng 8 nghìn trên bài toán này.</p>
+        focus: [1, 1, "2.2", "2.3", 3]
+        say: "Điểm nghẽn mới không còn là phần cứng. Lô lớn gấp 32 làm việc học khó hội tụ, nhất là lúc đầu, và nếu không khởi động dần thì sai số trên tập kiểm tra cao hơn 1 phẩy 2 phần trăm. Cách xử lý thứ nhất là quy tắc nhân tuyến tính, lô nhân k thì tốc độ học nhân k, với k bằng 32 nên 0 phẩy 1 thành 3 phẩy 2. Cách thứ hai là khởi động dần, tăng tốc độ học từ 0 phẩy 1 lên 3 phẩy 2 trong 5 lượt đầu. Điều kiện cần nhớ là nhóm tác giả chỉ kiểm tới lô khoảng 8 nghìn trên bài toán này."
+
+  # ───────────────────────── 10. CHẶNG 5 ─────────────────────────
+  - id: stage5
+    kind: example
+    title: "Chặng 5, năm 2017 tới 2018 — ổn định và tiếp tục: thư viện mở dùng chung"
+    stage: {year: "2017 → 2018", scale: "một công ty gọi xe: việc huấn luyện có khi mất một tuần; cách chuẩn với máy chủ tham số mất khoảng nửa tài nguyên ở 128 thẻ; thư viện dùng gộp toàn phần theo vòng đạt 88%, có mạng truyền nhanh thì trên 90%", source: "[HO18]", practice: "dùng thuật toán gộp đã chứng minh (vòng, 2009) và thư viện truyền thông của hãng thay vì tự viết; đóng gói thành gói riêng chạy được với nhiều phiên bản nền tảng; gộp nhiều khối gradient nhỏ trước khi gửi; đo dòng thời gian để thấy chỗ nghẽn"}
+    checks:
+      - "0.5 * 128 == 64 and round(0.88 * 128, 1) == 112.6 and round(0.88 / 0.5, 2) == 1.76"
+      - "alg.par_ring_allreduce([[1] * 128 for _ in range(128)])[2] == 2 * 127 and round(2 * 127 / 128, 2) == 1.98"
+      - "100 * 2 * 127 == 25400 and 25400 // 254 == 100"
+    steps:
+      - show: |
+          <p><b>Quy mô:</b> ở một công ty gọi xe, việc huấn luyện có khi mất <b>một tuần</b>. Cách chuẩn của nền tảng, có <b>máy chủ tham số</b>, mất khoảng <b>một nửa tài nguyên</b> vì truyền thông khi chạy 128 thẻ.</p>
+          <table class="t"><tr><th>bước</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>Bước 1. 128 thẻ, mất một nửa</td><td>$0{,}5 \cdot 128$</td><td>chỉ bằng 64 thẻ</td></tr>
+          <tr><td>Bước 2. thư viện mới, hiệu suất 88%</td><td>$0{,}88 \cdot 128$</td><td>bằng ≈ 112,6 thẻ</td></tr>
+          <tr><td>Bước 3. so hai cách</td><td>$\frac{0{,}88}{0{,}5}$</td><td>$\hlg{1{,}76}$ — “nhanh gấp khoảng hai lần”</td></tr></table>
+        focus: [1, 1, "2.2", "2.3", "2.4"]
+        say: "Ở chặng năm, tại một công ty gọi xe, việc huấn luyện có khi mất một tuần. Cách chuẩn của nền tảng, dùng máy chủ tham số, mất khoảng một nửa tài nguyên vì truyền thông khi chạy 128 thẻ. Bước một, mất một nửa nghĩa là 128 thẻ chỉ làm được việc của 64 thẻ. Bước hai, thư viện mới đạt hiệu suất 88 phần trăm, tức bằng khoảng 112 phẩy 6 thẻ. Bước ba, 0 phẩy 88 chia 0 phẩy 5 bằng 1 phẩy 76, khớp với câu nhanh gấp khoảng hai lần của bài báo."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>cách xử lý</th><th>tính lại bằng bài 10</th></tr>
+          <tr><td>dùng <b>gộp toàn phần theo vòng</b>, thuật toán công bố năm 2009, qua thư viện truyền thông của hãng (NCCL)</td><td>128 thẻ: mỗi thẻ gửi $\frac{2 \cdot 127}{128} \cdot D \approx \hlb{1{,}98}\,D$, qua $2 \cdot 127 = 254$ bước</td></tr>
+          <tr><td><b>gộp các khối nhỏ</b> trước khi gửi (Tensor Fusion): tới 65% nhanh hơn ở mạng có nhiều khối nhỏ</td><td>100 khối nhỏ (số minh hoạ): $100 \cdot 254 = 25\,400$ bước, gộp lại chỉ 254</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.3", "1.3"]
+        say: "Cách xử lý thứ nhất là gộp toàn phần theo vòng, thuật toán đã công bố từ năm 2009, chạy qua thư viện truyền thông của hãng làm thẻ. Theo bài 10, với 128 thẻ mỗi thẻ gửi 2 nhân 127 chia 128, khoảng 1 phẩy 98 lần dung lượng gradient, qua 254 bước nối tiếp. Cách thứ hai sinh ra từ chính số bước ấy, vì mạng có rất nhiều khối gradient nhỏ thì mỗi khối lại tốn 254 bước. Với 100 khối nhỏ, một số minh hoạ, ta có 25 nghìn 400 bước, còn gộp lại trước khi gửi chỉ cần 254. Nhóm tác giả đo được nhanh hơn tới 65 phần trăm."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>việc của chặng “ổn định”</th><th>bài báo năm 2018 ghi</th></tr>
+          <tr><td>chạy được với <b>nhiều phiên bản</b> nền tảng</td><td>các đội dùng các bản khác nhau; tách thành gói riêng, cài từ khoảng một giờ còn vài phút</td></tr>
+          <tr><td>sửa ít mã</td><td>chỉ cần thêm vài dòng vào chương trình cũ</td></tr>
+          <tr><td>công cụ đo</td><td>dòng thời gian cho thấy mạng nhiều khối nhỏ nghẽn ở các lần gộp tí hon</td></tr>
+          <tr><td>mạng truyền nhanh hơn</td><td>trên 90%; mạng nhiều tham số nhanh thêm 30%, vì đường găng chuyển từ tính sang truyền</td></tr>
+          <tr><td>tiếp tục</td><td>mở mã nguồn, dựa vào cộng đồng cho các cải tiến sau</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", "1.6"]
+        say: "Chặng này cũng là chặng ổn định, vì thư viện phải phục vụ rất nhiều đội. Các đội dùng nhiều phiên bản nền tảng khác nhau, nên thư viện được tách thành gói riêng, và thời gian cài giảm từ khoảng một giờ còn vài phút. Người dùng chỉ cần thêm vài dòng vào chương trình cũ. Một công cụ vẽ dòng thời gian cho thấy mạng có nhiều khối nhỏ bị nghẽn ở các lần gộp tí hon. Với mạng truyền nhanh hơn, hiệu suất vượt 90 phần trăm, còn mạng nhiều tham số nhanh thêm 30 phần trăm vì đường găng đã chuyển từ tính sang truyền. Cuối cùng, mã nguồn được mở để cộng đồng tiếp tục cải tiến."
+
+  # ───────────────────────── 11. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm bốn con số của hành trình bằng đường khác"
+    checks:
+      - "alg.par_tree_sum(2 ** 20)[1] == 20 and 2 ** 20 == 1048576"
+      - "sum(32 for _ in range(24)) == 768"
+      - "round(5 * 86400 * 250 / 1e6) == 108 and round(1 * 3600 * 0.9 / (29 * 3600 * 8 / 256), 3) == 0.993"
+      - "(r := alg.par_ring_allreduce([[i] * 16 for i in range(8)]))[0][0] == [28] * 16 and r[1] == [28] * 8"
+    steps:
+      - show: |
+          <table class="t"><tr><th>con số</th><th>đường khác để kiểm</th></tr>
+          <tr><td>20 lượt vẽ</td><td>chia đôi liên tiếp: 1 048 576 → 524 288 → … → 1, đếm được 20 lần chia ✓</td></tr>
+          <tr><td>768 luồng</td><td>cộng 32 hai mươi bốn lần: 32, 64, …, 768 ✓</td></tr>
+          <tr><td>≈ 1 giờ</td><td>tính ngược: 250 ảnh mỗi giây trong 5 ngày ra lại 108 triệu ảnh ✓; 256 thẻ chạy 1 giờ với 90% làm được 0,993 lần việc đã định — gần đủ ✓</td></tr>
+          <tr><td>1,98 D</td><td>mô phỏng vòng 8 máy: sau $2 \cdot 7 = 14$ bước mọi máy giữ đúng tổng, mỗi máy gửi $\frac{14}{8}$ dung lượng ✓</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Ta kiểm lại bốn con số theo đường khác. Chia đôi một triệu 48 nghìn 576 liên tiếp tới khi còn 1, ta đếm được đúng 20 lần chia. Cộng 32 hai mươi bốn lần, ta được 768 luồng. Tính ngược, 250 ảnh mỗi giây trong 5 ngày ra lại 108 triệu ảnh, còn 256 thẻ chạy một giờ với hiệu suất 90 phần trăm làm được khoảng 0 phẩy 993 lần việc đã định. Mô phỏng vòng 8 máy cho thấy sau 14 bước mọi máy giữ đúng tổng, và mỗi máy gửi 14 phần 8 dung lượng, cùng công thức đã cho 1 phẩy 98 với 128 thẻ."
+
+  # ───────────────────────── 12. BÀI HỌC SAI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "Những bài học sai khi đọc hành trình này"
+    checks:
+      - "round(0.88 / 0.5, 2) == 1.76 and 8192 // 256 == 32"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">1.</b> “Thẻ đồ hoạ nhanh gấp 100 lần với mọi việc”</td><td>bài báo năm 2008 ghi “100 lần hoặc hơn” cho <b>một số</b> ứng dụng đã tối ưu; năm 2005, nhân ma trận bị băng thông chặn, biến đổi tần số chỉ ngang bộ xử lý trung tâm</td><td>tính cường độ số học (bài 7) trước khi chuyển việc</td></tr>
+          <tr><td><b class="red">2.</b> “Có thư viện gộp gradient là xong”</td><td>ngay với thư viện mới vẫn phải gộp khối nhỏ, mạng nhiều tham số vẫn cần đường truyền nhanh</td><td>đo dòng thời gian, xem đường găng nằm ở tính hay truyền</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.2", "1.3", "1.3"]
+        say: "Bảng có hai bài học sai đầu tiên. Bài học sai thứ nhất là nghĩ thẻ đồ hoạ nhanh gấp 100 lần với mọi việc. Bài báo năm 2008 chỉ ghi 100 lần hoặc hơn cho một số ứng dụng đã tối ưu. Còn năm 2005, nhân ma trận bị băng thông chặn, và biến đổi tần số chỉ ngang bộ xử lý trung tâm. Bài học sai thứ hai là nghĩ có thư viện gộp gradient là xong, trong khi chính thư viện ấy vẫn phải gộp khối nhỏ, và mạng nhiều tham số vẫn cần đường truyền nhanh. Hãy đo dòng thời gian để biết đường găng nằm ở tính hay ở truyền."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bài học sai</th><th>vì sao sai</th><th>nên làm</th></tr>
+          <tr><td><b class="red">3.</b> “Chép lô 8192 của người khổng lồ” (lỗi của người đã đi làm)</td><td>lô 8192 cần quy tắc nhân tốc độ học và khởi động dần; bỏ khởi động thì sai số cao hơn 1,2%; với 8 thẻ, giữ 32 ảnh mỗi thẻ chỉ là lô 256</td><td>giữ số mẫu mỗi thẻ, chỉnh tốc độ học theo lô toàn cục của chính mình</td></tr>
+          <tr><td><b class="red">4.</b> “Hiệu suất thấp thì tự viết lại cách truyền thông” (lỗi của người đã đi làm)</td><td>đội năm 2018 dùng thuật toán vòng từ năm 2009 và thư viện có sẵn của hãng, rồi mới tối ưu phần riêng của mình</td><td>tìm thuật toán đã chứng minh trước khi tự chế</td></tr></table>
+        focus: [1, "1.2", "1.2", "1.3", "1.3", "1.3"]
+        say: "Bài học sai thứ ba hay gặp ở người đã đi làm, là chép lô 8192 của người khổng lồ. Lô ấy cần quy tắc nhân tốc độ học và khởi động dần, bỏ khởi động thì sai số cao hơn 1 phẩy 2 phần trăm. Với 8 thẻ, giữ 32 ảnh mỗi thẻ thì lô chỉ là 256, nên hãy chỉnh tốc độ học theo lô toàn cục của chính mình. Bài học sai thứ tư là thấy hiệu suất thấp thì tự viết lại cách truyền thông. Đội năm 2018 dùng thuật toán vòng từ năm 2009 và thư viện có sẵn của hãng, rồi mới tối ưu phần riêng. Hãy tìm thuật toán đã chứng minh trước khi tự chế."
+
+  # ───────────────────────── 13. QUYẾT ĐỊNH ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Bạn sẽ làm gì ở quy mô của mình?"
+    checks:
+      - "round(29 * 8 / 64 / 0.9, 2) == 4.03 and round(64 * 29 * 8 / 64 / 0.9, 1) == 257.8 and 8 * 29 == 232"
+      - "29 * 8 / 64 / 0.5 == 7.25 and 64 * 7.25 == 464"
+      - "64 * 32 == 2048 and round(0.1 * 2048 / 256, 6) == 0.8"
+      - "round(257.8 / 232, 2) == 1.11 and 464 / 232 == 2"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đội bạn: mạng học 29 giờ trên 8 thẻ, 32 ảnh mỗi thẻ, tốc độ học 0,1 cho lô 256 (số minh hoạ)</th></tr>
+          <tr><td>1</td><td>Thuê 64 thẻ, đo được hiệu suất 90% so với 8 thẻ: học mất bao lâu, tốn bao nhiêu giờ thẻ?</td></tr>
+          <tr><td>2</td><td>Giữ 32 ảnh mỗi thẻ: lô toàn cục và tốc độ học mới?</td></tr>
+          <tr><td>3</td><td>Nếu gộp gradient kiểu cũ chỉ cho hiệu suất 50%: còn đáng thuê 64 thẻ không?</td></tr></table>
+        focus: [0, 1, "1.2", "1.3", "1.4", 0]
+        say: "Bây giờ đến lượt bạn ra quyết định. Đội bạn có một mạng học 29 giờ trên 8 thẻ, 32 ảnh mỗi thẻ, tốc độ học 0 phẩy 1 cho lô 256, đều là số minh hoạ. Câu một, thuê 64 thẻ và đo được hiệu suất 90 phần trăm so với 8 thẻ, vậy học mất bao lâu và tốn bao nhiêu giờ thẻ? Câu hai, nếu giữ 32 ảnh mỗi thẻ, lô toàn cục và tốc độ học mới là bao nhiêu? Câu ba, nếu cách gộp kiểu cũ chỉ cho hiệu suất 50 phần trăm, có còn đáng thuê 64 thẻ không? Dừng video và viết ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu</th><th>phép tính</th><th>kết quả</th></tr>
+          <tr><td>1</td><td>$\frac{29 \cdot 8}{64} = 3{,}625$ giờ, chia 0,9</td><td>$\approx \hlg{4{,}03}$ giờ; $64 \cdot 4{,}03 \approx 257{,}8$ giờ thẻ, so với $8 \cdot 29 = 232$</td></tr>
+          <tr><td>2</td><td>$64 \cdot 32$; tốc độ học $0{,}1 \cdot \frac{2048}{256}$</td><td>lô $2048$, tốc độ học $\hlb{0{,}8}$, khởi động dần</td></tr></table>
+        focus: ["1.2", "1.2", "1.3"]
+        say: "Đáp án câu một, nếu hoàn hảo thì 29 nhân 8 chia 64 là 3 phẩy 625 giờ, chia hiệu suất 0 phẩy 9 được khoảng 4 phẩy 03 giờ. Số giờ thẻ là 64 nhân 4 phẩy 03, khoảng 257 phẩy 8, so với 232 giờ thẻ trên 8 thẻ, chỉ đắt hơn khoảng 11 phần trăm. Câu hai, lô toàn cục là 64 nhân 32 bằng 2048, nên tốc độ học nhân 8, thành 0 phẩy 8, kèm khởi động dần."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>lựa chọn</th><th>được</th><th>mất</th></tr>
+          <tr><td>64 thẻ, gộp theo vòng, 90%</td><td>4,03 giờ thay vì 29 giờ: thử được nhiều ý tưởng mỗi ngày</td><td>+11% giờ thẻ; phải chỉnh tốc độ học, kiểm lại độ chính xác</td></tr>
+          <tr><td>64 thẻ, gộp kiểu cũ, 50%</td><td>$\frac{29 \cdot 8}{64 \cdot 0{,}5} = 7{,}25$ giờ</td><td>$64 \cdot 7{,}25 = \hl{464}$ giờ thẻ, gấp đôi</td></tr>
+          <tr><td>giữ 8 thẻ</td><td>không đổi gì, tốn 232 giờ thẻ</td><td>29 giờ cho mỗi lần thử</td></tr></table>
+          <p class="note">Sửa cách gộp trước, rồi mới thuê thêm. Đổi lựa chọn khi: độ chính xác tụt với lô 2048 dù đã khởi động dần, hoặc mỗi lần thử không cần nhanh hơn một ngày.</p>
+        focus: [1, "1.2", "1.2", "1.3", "1.4", 2]
+        say: "Câu ba là một đánh đổi. Với gộp theo vòng và hiệu suất 90 phần trăm, 64 thẻ học trong khoảng 4 giờ thay vì 29 giờ, chỉ tốn thêm 11 phần trăm giờ thẻ. Đổi lại, phải chỉnh tốc độ học và kiểm lại độ chính xác. Với gộp kiểu cũ chỉ 50 phần trăm, 64 thẻ mất 7 phẩy 25 giờ và tốn 464 giờ thẻ, gấp đôi. Giữ 8 thẻ thì không đổi gì, nhưng mỗi lần thử mất 29 giờ. Vì vậy hãy sửa cách gộp trước rồi mới thuê thêm, và chỉ đổi lựa chọn khi độ chính xác tụt dù đã khởi động dần, hoặc khi mỗi lần thử không cần nhanh hơn."
+
+  # ───────────────────────── 14. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi hành trình & tư duy chuyên gia"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">2005: mượn ống vẽ hình</span><span class="a">→</span>
+          <span class="n">2007: khối độc lập, nhóm 32 luồng</span><span class="a">→</span>
+          <span class="n">2012: chia mô hình trên hai thẻ</span><span class="a">→</span>
+          <span class="n">2017: 256 thẻ, giữ mẫu mỗi thẻ, nhân tốc độ học</span><span class="a">→</span>
+          <span class="n">2018: thư viện mở, gộp theo vòng, gộp khối nhỏ</span></div>
+        say: "Tổng kết lại hành trình. Năm 2005, người ta mượn ống vẽ hình, và rút gọn theo lượt giảm một nửa. Năm 2007, mô hình lập trình riêng đòi các khối độc lập và nhóm 32 luồng. Năm 2012, mạng quá lớn cho một thẻ nên được chia trên hai thẻ. Năm 2017, 256 thẻ học trong một giờ nhờ giữ số mẫu mỗi thẻ và nhân tốc độ học. Năm 2018, một thư viện mở với gộp theo vòng và gộp khối nhỏ giúp nhiều đội dùng chung."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> mỗi bước nhảy quy mô đổi chỗ nghẽn — từ ngôn ngữ lập trình, sang bộ nhớ của thẻ, sang việc học hội tụ, sang truyền thông. Trước khi thêm thẻ, hãy <b>đo xem đường găng đang nằm ở đâu</b>.</div>
+        say: "Điều cần mang theo, mỗi bước nhảy quy mô lại đổi chỗ nghẽn, từ ngôn ngữ lập trình, sang bộ nhớ của thẻ, sang việc học hội tụ, rồi sang truyền thông. Trước khi thêm thẻ, hãy đo xem đường găng đang nằm ở đâu."
+      - clear: true
+        show: |
+          <p class="note">Đây là bài cuối của khoá PAR. Từ phần tuần tự của Amdahl, qua công việc và đường găng, tranh chấp, bộ nhớ đệm, vector, mô hình mái nhà, thẻ đồ hoạ, nhân ma trận chia khối, gộp gradient và huấn luyện phân tán, bạn đã đi tới cách chuyên gia đọc một hệ thống hàng trăm thẻ.</p>
+        say: "Đây là bài cuối của khoá Tính toán song song. Bạn đã đi từ phần tuần tự của Amdahl, qua công việc và đường găng, tranh chấp, bộ nhớ đệm và vector. Rồi tới mô hình mái nhà, thẻ đồ hoạ, nhân ma trận chia khối, gộp gradient và huấn luyện phân tán. Cuối cùng là cách chuyên gia đọc một hệ thống hàng trăm thẻ. Cảm ơn bạn đã theo học."

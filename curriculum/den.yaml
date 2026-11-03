@@ -1,0 +1,135 @@
+# Giáo án KẾ HOẠCH — DEN · Kỹ thuật dữ liệu: NoSQL, dữ liệu lớn và xử lý luồng
+# Trạng thái: planned. Ví dụ đã kiểm: audit/verify_plan_curricula.py, mã DEN:Lxx (sqlite3 thật, BM25 tính tay bằng công thức chuẩn, chia phân vùng).
+# Căn cứ phạm vi: ACM DSTF 2021 — “Big Data Systems (BDS)”, “Data Management (DM)” (sha256 eaa9929c6b74446c); CS2023 DM;
+#   M. Kleppmann, Designing Data-Intensive Applications (2017) chương 2–3 (mô hình dữ liệu, cây LSM và cây B), 6 (phân vùng), 11 (luồng);
+#   P. O'Neil và cộng sự, The Log-Structured Merge-Tree (1996); S. Robertson, H. Zaragoza, The Probabilistic Relevance Framework: BM25 (2009);
+#   R. Kimball, M. Ross, The Data Warehouse Toolkit (bản 3, 2013) — bảng sự kiện, bảng chiều, chiều thay đổi chậm;
+#   tài liệu MongoDB (giới hạn tài liệu 16 MiB), Apache Kafka (phân vùng, nhóm tiêu thụ), Apache Parquet (nhóm hàng, thống kê cột) — đọc theo
+#   phiên bản hiện hành, tên sản phẩm chỉ trên màn hình.
+# Vì sao cần: DBS L16 giới thiệu NoSQL trong một bài; DSY dạy nguyên lý phân tán (MapReduce, cửa sổ luồng, lưu trữ cột). Còn thiếu tầng KỸ THUẬT:
+#   chọn kho lưu trữ theo truy vấn, thiết kế khoá phân vùng, nhật ký sự kiện, xử lý luồng có trạng thái, kho dữ liệu, chất lượng dữ liệu.
+# Thứ tự học: sau DBS (toàn khoá), DSY L03–L14, DSC L02.
+course: DEN
+status: planned
+lessons:
+  - id: L00
+    title: "Hệ thống giao dịch và hệ thống phân tích: hàng và cột"
+    spec: lessons/den/L00_hang_va_cot.yaml
+    requires: []
+    requires_ext: ["DBS:L07", "DSY:L12"]
+    objectives: ["Phân biệt tải giao dịch và tải phân tích", "Ước lượng lượng dữ liệu phải đọc theo cách lưu"]
+    example: "bảng 100 triệu dòng × 50 cột × 8 byte, truy vấn dùng 3 cột: lưu theo hàng đọc 40 GB, lưu theo cột đọc 2,4 GB (VER DEN:L00)"
+    fix: ["Lưu theo cột tốt cho đọc nhiều dòng ít cột; ghi từng dòng lẻ thì lưu theo hàng tốt hơn"]
+  - id: L01
+    title: "Cây gộp theo nhật ký: bộ đệm ghi, tệp bảng có thứ tự, gộp nền"
+    spec: lessons/den/L01_cay_lsm.yaml
+    requires: [L00]
+    requires_ext: ["DSY:L10", "DBS:L14"]
+    objectives: ["Mô tả đường ghi và đường đọc", "Giải thích vai trò của bộ lọc Bloom ở mỗi tệp"]
+    example: "khoá không tồn tại, 5 tệp bảng, mỗi tệp có bộ lọc Bloom dương tính giả 1%: kỳ vọng chỉ 0,05 lần đọc đĩa thừa thay vì 5 (VER DEN:L01)"
+    fix: ["Xoá trong cây LSM là ghi thêm một “bia mộ” — dữ liệu chỉ thật sự biến mất sau khi gộp"]
+  - id: L02
+    title: "Cây B và cây gộp theo nhật ký: khuếch đại ghi, đọc và không gian"
+    spec: lessons/den/L02_khuech_dai.yaml
+    requires: [L01]
+    requires_ext: ["DBS:L08"]
+    objectives: ["Định nghĩa ba loại khuếch đại", "Chọn cấu trúc theo tỉ lệ đọc–ghi"]
+    example: "sửa bản ghi 100 byte trong trang 4096 byte của cây B: ghi lại cả trang → khuếch đại ghi ≈ 40,96 lần (chưa kể nhật ký ghi trước) (VER DEN:L02)"
+    fix: ["Cây LSM cũng khuếch đại ghi (do gộp nhiều tầng) — đánh đổi là ghi TUẦN TỰ, không phải ghi ít hơn"]
+  - id: L03
+    title: "Cơ sở dữ liệu văn bản: nhúng hay tham chiếu, và phi chuẩn hoá có chủ đích"
+    spec: lessons/den/L03_van_ban_nhung.yaml
+    requires: [L00]
+    requires_ext: ["DBS:L05", "DBS:L16"]
+    objectives: ["Quyết định nhúng hay tham chiếu theo mẫu truy cập", "Nhận ra chi phí cập nhật khi phi chuẩn hoá"]
+    example: "giới hạn một văn bản 16 MiB, mỗi dòng đơn hàng 200 byte → tối đa ≈ 83 886 dòng nhúng; dữ liệu tăng không giới hạn (nhật ký) phải tham chiếu (VER DEN:L03)"
+    fix: ["Phi chuẩn hoá chép dữ liệu ra nhiều nơi — mỗi lần đổi phải sửa mọi bản, hoặc chấp nhận bản cũ"]
+  - id: L04
+    title: "Kho khoá–giá trị và thiết kế khoá phân vùng"
+    spec: lessons/den/L04_khoa_phan_vung.yaml
+    requires: [L00]
+    requires_ext: ["DSY:L06", "SAR:L05"]
+    objectives: ["Chọn khoá phân vùng để tải đều", "Nhận ra và chữa phân vùng nóng"]
+    example: "khoá phân vùng = ngày: mọi lượt ghi hôm nay rơi vào 1 phân vùng; thêm hậu tố 0–9 → mỗi phân vùng nhận ≈ 10%, đổi lại đọc cả ngày phải hỏi 10 phân vùng (VER DEN:L04)"
+    fix: ["Băm khoá làm tải đều nhưng mất truy vấn theo khoảng — chọn theo truy vấn chính"]
+  - id: L05
+    title: "Kho cột rộng: thiết kế bảng theo truy vấn"
+    spec: lessons/den/L05_cot_rong.yaml
+    requires: [L04]
+    requires_ext: ["DSY:L03"]
+    objectives: ["Thiết kế khoá phân vùng và khoá sắp xếp cho một truy vấn", "Giới hạn kích thước phân vùng bằng chia theo thời gian"]
+    example: "cảm biến ghi mỗi giây 100 byte: một phân vùng mỗi cảm biến mỗi ngày ≈ 8,64 MB; để cả năm trong một phân vùng ≈ 3,15 GB — quá lớn (VER DEN:L05)"
+    fix: ["Không có phép nối — mỗi truy vấn mới có thể cần một bảng mới chép dữ liệu"]
+  - id: L06
+    title: "Cơ sở dữ liệu đồ thị: duyệt quan hệ nhiều bước"
+    spec: lessons/den/L06_do_thi.yaml
+    requires: [L00]
+    requires_ext: ["CS112:L07", "DBS:L10"]
+    objectives: ["Mô hình hoá đỉnh, cạnh, thuộc tính", "Ước lượng chi phí truy vấn nhiều bước"]
+    example: "mỗi người trung bình 100 bạn: bạn của bạn tối đa 10⁴ người, ba bước tối đa 10⁶ — chi phí tăng theo lũy thừa số bước dù dùng cơ sở dữ liệu nào (VER DEN:L06)"
+    fix: ["Cơ sở dữ liệu đồ thị nhanh vì đi theo cạnh trực tiếp, nhưng không làm số đỉnh phải thăm ít đi"]
+  - id: L07
+    title: "Chỉ mục ngược và tìm kiếm toàn văn: TF-IDF và BM25"
+    spec: lessons/den/L07_chi_muc_nguoc.yaml
+    requires: [L00]
+    requires_ext: ["DBS:L09"]
+    objectives: ["Dựng chỉ mục ngược", "Tính điểm BM25 cho truy vấn ngắn"]
+    example: "3 văn bản “mèo đen mèo”, “chó đen”, “mèo trắng chó con”, truy vấn “mèo” (k₁ = 1,2, b = 0,75): điểm ≈ 0,646; 0; 0,414 (VER DEN:L07)"
+    fix: ["Tìm kiếm từ khoá không hiểu đồng nghĩa; tìm kiếm theo vector nhúng không khớp chính xác mã, tên riêng — thường kết hợp cả hai"]
+  - id: L08
+    title: "Nhật ký sự kiện phân vùng: vị trí đọc, nhóm tiêu thụ, thứ tự theo khoá"
+    spec: lessons/den/L08_nhat_ky_su_kien.yaml
+    requires: [L04]
+    requires_ext: ["DSY:L14"]
+    objectives: ["Giải thích thứ tự chỉ đảm bảo trong một phân vùng", "Chia phân vùng cho nhóm tiêu thụ"]
+    example: "12 phân vùng, 5 thành viên nhóm tiêu thụ: chia 3, 3, 2, 2, 2; 13 thành viên → 1 thành viên ngồi không (VER DEN:L08)"
+    fix: ["Muốn mọi sự kiện của một đơn hàng giữ thứ tự thì phải dùng mã đơn làm khoá phân vùng"]
+  - id: L09
+    title: "Xử lý luồng có trạng thái: điểm kiểm tra và đúng một lần"
+    spec: lessons/den/L09_luong_co_trang_thai.yaml
+    requires: [L08]
+    requires_ext: ["DSY:L09", "SAR:L09"]
+    objectives: ["Giải thích điểm kiểm tra và phát lại", "Phân biệt đúng một lần bên trong hệ và tác động ra ngoài"]
+    example: "điểm kiểm tra mỗi 30 s, sập ở giây thứ 40: khôi phục trạng thái giây 30 và xử lý lại 10 s sự kiện — đầu ra phải lũy đẳng hoặc giao dịch (VER DEN:L09)"
+    fix: ["“Đúng một lần” chỉ đúng với trạng thái trong hệ; gửi thư hay trừ tiền ra ngoài vẫn cần khoá lũy đẳng"]
+  - id: L10
+    title: "Thu thập thay đổi và mẫu hộp thư đi"
+    spec: lessons/den/L10_hop_thu_di.yaml
+    requires: [L08]
+    requires_ext: ["DBS:L11", "CLD:L14"]
+    objectives: ["Giải thích lỗi ghi đôi", "Dùng hộp thư đi trong cùng giao dịch"]
+    example: "ghi cơ sở dữ liệu rồi gửi sự kiện, tiến trình sập giữa hai bước với xác suất 0,1% mỗi đơn: 1 triệu đơn → ≈ 1000 đơn mất sự kiện; ghi cả hai trong một giao dịch rồi chuyển tiếp → 0 (VER DEN:L10)"
+    fix: ["Hộp thư đi cho giao nhận ít nhất một lần — bên nhận vẫn phải lọc trùng"]
+  - id: L11
+    title: "Định dạng cột trên tệp: nhóm hàng, thống kê, đẩy điều kiện xuống"
+    spec: lessons/den/L11_dinh_dang_cot.yaml
+    requires: [L00]
+    requires_ext: ["DSY:L12"]
+    objectives: ["Giải thích thống kê nhỏ nhất–lớn nhất mỗi nhóm hàng", "Sắp xếp dữ liệu để bỏ qua được nhiều nhóm"]
+    example: "100 nhóm hàng, truy vấn một ngày trong 100 ngày: dữ liệu sắp theo ngày → đọc 1 nhóm; không sắp → khoảng ngày mỗi nhóm phủ mọi ngày → đọc cả 100 (VER DEN:L11)"
+    fix: ["Quá nhiều tệp nhỏ làm chậm hơn ít tệp lớn — chi phí mở tệp và đọc siêu dữ liệu"]
+  - id: L12
+    title: "Kho dữ liệu: bảng sự kiện, bảng chiều và chiều thay đổi chậm"
+    spec: lessons/den/L12_kho_du_lieu.yaml
+    requires: [L11]
+    requires_ext: ["DBS:L03", "DSC:L02"]
+    objectives: ["Thiết kế lược đồ hình sao", "So sánh ghi đè và lưu lịch sử của bảng chiều"]
+    example: "khách chuyển từ Hà Nội vào Đà Nẵng ngày 1/3: lưu lịch sử → doanh thu tháng 2 tính cho Hà Nội, tháng 3 cho Đà Nẵng; ghi đè → cả hai tháng thành Đà Nẵng (sqlite3, VER DEN:L12)"
+    fix: ["Ghi đè bảng chiều âm thầm viết lại báo cáo quá khứ"]
+  - id: L13
+    title: "Xử lý theo lô quy mô lớn và chất lượng dữ liệu"
+    spec: lessons/den/L13_lo_va_chat_luong.yaml
+    requires: [L11, L12]
+    requires_ext: ["DSY:L07", "DSY:L08"]
+    objectives: ["Chọn kiểu nối: phát tán bảng nhỏ hay xáo trộn cả hai", "Viết kiểm tra chất lượng và hợp đồng dữ liệu"]
+    example: "nối bảng 1 TB với bảng 1 GB trên 100 máy: phát tán bảng nhỏ gửi ≈ 99 GB; xáo trộn cả hai gửi ≈ 991 GB — gấp ≈ 10 lần (VER DEN:L13)"
+    fix: ["Dữ liệu sai lặng lẽ tệ hơn đường ống dừng — kiểm tra số dòng, khoá trùng, giá trị rỗng trước khi công bố bảng"]
+  - id: L14
+    title: "Tình huống chuyên gia theo dòng thời gian: từ ánh xạ rồi rút gọn tới mô hình luồng dữ liệu"
+    spec: lessons/den/L14_hanh_trinh_lo_toi_luong.yaml
+    requires: [L09, L13]
+    requires_ext: ["DSY:L07", "DSY:L08", "DSY:L09"]
+    kind: journey
+    objectives: ["Kể lại hành trình xử lý dữ liệu lớn qua năm chặng từ 2003 tới 2016, mỗi chặng một điểm nghẽn và một cách xử lý", "Tính lại con số then chốt của từng chặng: số lần máy chết mỗi tháng, thời gian 10 lượt lặp, phiên gộp, lô nhỏ mỗi giây", "Chọn giữa ghi đĩa và giữ trong bộ nhớ, giữa chờ mốc nước và kích hoạt sớm rồi kích hoạt lại, kèm điều kiện đổi lựa chọn"]
+    example: "tháng 8/2004: 29 423 việc, 1,2 máy chết mỗi việc (MR04 Bảng 1) → ≈ 35 308 lần; tắt tác vụ dự phòng 891 → 1283 s = +44% (MR04 §5.4); 10 lượt hồi quy logistic: 80 + 9·76 = 764 s so với 46 + 9·3 = 73 s (RDD12 Hình 7) ≈ 10,5 lần; phiên cách 30 phút: 13:02, 13:20, 13:57 → 2 phiên (DF15 Hình 4); lô 200 ms → 5 lô mỗi giây (SP16) (VER DEN:L14)"
+    fix: ["Chỉ khẳng định điều có trong MR04, RDD12, DF15, SP16 (audit/den/sources_L14.md); bài CACM 2008 về MapReduce không đọc được — không dạy số liệu 2007", "Không nói “Spark nhanh gấp 100 lần”: nguồn ghi tới 20 lần cho việc lặp, k-means chỉ 1,9–3,2 lần", "Quy mô của Cloud Dataflow, Apache Beam: nguồn không ghi, không dạy; đường ống 1000 GB, 20 lượt, trễ 10 phút trong quiz là số minh hoạ"]

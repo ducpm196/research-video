@@ -1,0 +1,210 @@
+id: L03
+course: SEC
+series: "SEC · An toàn thông tin"
+title: "Bài 3 — Xác thực nhiều yếu tố và mã một lần"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/sec.yaml L03; audit/sec/verify_sec.py L03 (kiểm 5 vector chuẩn của RFC 6238, phụ lục B); RFC 4226 (HOTP), RFC 6238 (TOTP); W3C Web Authentication Level 2 (2021) (khoá chống lừa đảo); NIST SP 800-63B"
+assumes: [arith, frac, power]
+# Quy ước: mã một lần theo thời gian (TOTP): bộ đếm = ⌊thời điểm / 30 giây⌋, HMAC-SHA1(bí mật chung, bộ đếm), cắt lấy 6 chữ số (alg.totp).
+#   Bí mật chung trong ví dụ là bí mật THỬ NGHIỆM công khai của RFC 6238 (“12345678901234567890”), không dùng cho hệ thật. HMAC, RFC chỉ trên màn hình.
+objectives:
+  - "Phân biệt các loại yếu tố xác thực"
+  - "Giải thích mã một lần theo thời gian"
+  - "Biết vì sao mã một lần vẫn bị lừa và cách chống"
+asr_reviewed:
+  - {sentence: "Băm có khoá bí mật và khoảng số 2 cho 20 byte, nửa thấp của byte cuối bằng 4, nên ta lấy 4 byte bắt đầu từ vị trí 4.", reason: "ASR chép “Bầm có khóa bí mật và khoảng số 2 cho 20 bai, nửa thấp của bai cuối bằng 4, nên ta lấy 4 bai bắt đầu từ vị trí 4.” (0.871): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: băm/bầm — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bốn byte đó, bỏ bit đầu, đổi ra số được 137 359 152.", reason: "ASR chép “4 bài đó, bỏ biết đầu, đổi ra số được 137-359-152.” (0.92): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: bit/biết — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Mật khẩu bị lộ, tài khoản vẫn an toàn"
+    steps:
+      - show: |
+          <p>Mật khẩu của bạn nằm trong một danh sách bị lộ. Kẻ xấu thử đăng nhập — và bị hỏi thêm mã 6 chữ số đang hiện trên điện thoại của bạn, đổi mỗi 30 giây. Chúng không có điện thoại của bạn, nên dừng lại ở đó.</p>
+          <div class="box key">Hôm nay: <b>xác thực nhiều yếu tố</b> — một bí mật bị lộ chưa đủ để vào.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, mật khẩu của bạn nằm trong một danh sách bị lộ. Kẻ xấu thử đăng nhập, và bị hỏi thêm mã 6 chữ số đang hiện trên điện thoại của bạn, đổi mỗi 30 giây. Chúng không có điện thoại của bạn, nên dừng lại ở đó. Hôm nay ta học xác thực nhiều yếu tố, khi một bí mật bị lộ là chưa đủ để vào."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: chia lấy phần nguyên, xác suất đoán bừa"
+    checks:
+      - "89 // 30 == 2 and 89 % 30 == 29 and 59 // 30 == 1 and 90 // 30 == 3"
+      - "10 ** 6 == 1000000 and 1 - (1 - 0.5) ** 2 == 0.75"
+    steps:
+      - show: |
+          <table class="t"><tr><th>điều sẽ dùng</th><th>ví dụ</th></tr>
+          <tr><td>chia lấy phần nguyên</td><td>89 chia 30 được <b>2</b>, dư 29; 90 chia 30 được <b>3</b>, dư 0</td></tr>
+          <tr><td>số mã 6 chữ số</td><td>từ 000000 tới 999999: $10^6$ = một triệu mã</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Trước hết, ôn hai điều bài này sẽ dùng. Chia lấy phần nguyên, 89 chia 30 được 2, dư 29, còn 90 chia 30 được 3, dư 0. Mã 6 chữ số chạy từ 000000 tới 999999, tức 10 mũ 6, bằng một triệu mã."
+      - show: |
+          <p>Đoán bừa một mã trong một triệu: trúng với xác suất $\frac{1}{10^6}$. Đoán $k$ mã <b>khác nhau</b>: $\frac{k}{10^6}$.</p>
+          <p>Lặp lại $n$ lần độc lập, xác suất trúng ít nhất một lần $= 1 - (1 - p)^n$. Ví dụ tung đồng xu 2 lần, có ít nhất một mặt ngửa: $1 - \left(\frac{1}{2}\right)^2 = \hl{\frac{3}{4}}$.</p>
+        focus: [1, 1, 2, 2]
+        say: "Đoán bừa một mã trong một triệu thì trúng với xác suất một phần triệu. Đoán k mã khác nhau thì trúng với xác suất k phần triệu. Lặp lại n lần độc lập, xác suất trúng ít nhất một lần bằng 1 trừ đi 1 trừ p, tất cả mũ n. Ví dụ tung đồng xu 2 lần, xác suất có ít nhất một mặt ngửa là 1 trừ một phần tư, bằng ba phần tư."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: ba loại yếu tố, mã một lần theo thời gian"
+    steps:
+      - show: |
+          <table class="t"><tr><th>loại yếu tố</th><th>ví dụ</th></tr>
+          <tr><td>thứ bạn <b>biết</b></td><td>mật khẩu, mã PIN</td></tr>
+          <tr><td>thứ bạn <b>có</b></td><td>điện thoại có ứng dụng sinh mã, khoá bảo mật cắm cổng</td></tr>
+          <tr><td>thứ bạn <b>là</b></td><td>vân tay, khuôn mặt (thường để mở khoá thiết bị)</td></tr></table>
+          <p><b>Mã một lần theo thời gian</b>: điện thoại và máy chủ cùng giữ một bí mật; cả hai tính mã từ bí mật và <b>số thứ tự khoảng 30 giây hiện tại</b>, nên ra cùng mã mà không cần gửi gì qua mạng.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2, 2]
+        say: "Bảng phân ba loại yếu tố xác thực. Thứ bạn biết, như mật khẩu hay mã PIN. Thứ bạn có, như điện thoại có ứng dụng sinh mã, hay khoá bảo mật cắm cổng. Thứ bạn là, như vân tay hay khuôn mặt, thường dùng để mở khoá thiết bị. Với mã một lần theo thời gian, điện thoại và máy chủ cùng giữ một bí mật. Cả hai tính mã từ bí mật và số thứ tự của khoảng 30 giây hiện tại, nên ra cùng một mã mà không cần gửi gì qua mạng."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hai đầu tự tính, không ai gửi bí mật"
+    steps:
+      - show: |
+          <div><svg width="1500" height="470" viewBox="0 0 1500 470"><g fill="#1f2937"><rect x="40" y="110" width="330" height="120" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="205" y="164" text-anchor="middle" font-size="26">điện thoại</text><text x="205" y="196" text-anchor="middle" font-size="22" fill="#4b5563">bí mật chung + đồng hồ</text><rect x="1130" y="110" width="330" height="120" rx="10" fill="#d1fae5" stroke="#059669" stroke-width="3"/><text x="1295" y="164" text-anchor="middle" font-size="26">máy chủ</text><text x="1295" y="196" text-anchor="middle" font-size="22" fill="#4b5563">bí mật chung + đồng hồ</text><rect x="450" y="60" width="600" height="70" rx="10" fill="#f3f4f6" stroke="#6b7280" stroke-width="3"/><text x="750" y="103" text-anchor="middle" font-size="24">khoảng số = giây chia 30 (phần nguyên)</text><rect x="450" y="210" width="600" height="70" rx="10" fill="#f3f4f6" stroke="#6b7280" stroke-width="3"/><text x="750" y="253" text-anchor="middle" font-size="24">hàm mã(bí mật, khoảng số) → 6 chữ số</text><text x="205" y="290" text-anchor="middle" font-size="24" fill="#2a78d6" font-weight="bold">tự tính: 359152</text><text x="1295" y="290" text-anchor="middle" font-size="24" fill="#059669" font-weight="bold">tự tính: 359152</text><line x1="205" y1="320" x2="205" y2="380" stroke="#2a78d6" stroke-width="3"/><polygon points="205,380 199,365 211,365" fill="#2a78d6"/><text x="205" y="410" text-anchor="middle" font-size="22" fill="#2a78d6">người dùng gõ mã</text><line x1="330" y1="400" x2="1120" y2="400" stroke="#2a78d6" stroke-width="3"/><polygon points="1120,400 1105,406 1105,394" fill="#2a78d6"/><text x="750" y="385" text-anchor="middle" font-size="22" fill="#b91c1c">qua mạng chỉ có 6 chữ số, bí mật không bao giờ đi qua</text><text x="1295" y="440" text-anchor="middle" font-size="24" fill="#059669" font-weight="bold">so: khớp → cho vào</text><text x="750" y="175" text-anchor="middle" font-size="22" fill="#4b5563">cùng phép tính ở cả hai đầu</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ điện thoại bên trái và máy chủ bên phải, mỗi bên giữ cùng một bí mật và một đồng hồ. Cả hai lấy số giây chia 30 để ra khoảng số, rồi đưa bí mật và khoảng số vào cùng một hàm mã. Hai đầu tự tính ra cùng mã, nên qua mạng chỉ có 6 chữ số người dùng gõ vào, bí mật không bao giờ đi qua. Máy chủ so mã nhận được với mã tự tính, khớp thì cho vào."
+
+  - id: example
+    kind: example
+    title: "Mã đổi theo từng khoảng 30 giây"
+    checks:
+      - "[alg.totp(b'12345678901234567890', t) for t in (59, 60, 89, 90)] == ['287082', '359152', '359152', '969429']"
+      - "alg.totp(b'12345678901234567890', 59, digits=8) == '94287082'"
+    steps:
+      - show: |
+          <p><b>Bước 1 — giây 59:</b> 59 chia 30 được 1, dư 29 → khoảng số 1.</p>
+          <table class="t"><tr><th>thời điểm (giây)</th><th>khoảng số</th><th>mã 6 chữ số</th></tr>
+          <tr><td>59</td><td>1</td><td><code>287082</code></td></tr></table>
+        focus: [1, 2]
+        say: "Bước một, tại giây 59, lấy 59 chia 30 được 1, dư 29, nên ta ở khoảng số 1. Đưa bí mật và khoảng số 1 vào hàm mã, ta được mã 287082."
+      - show: |
+          <p><b>Bước 2 — giây 60 và 89:</b> 60 chia 30 được 2; 89 chia 30 cũng được 2 (dư 29) → cùng khoảng, cùng mã.</p>
+          <table class="t"><tr><th>thời điểm (giây)</th><th>khoảng số</th><th>mã 6 chữ số</th></tr>
+          <tr><td>60</td><td>2</td><td><code>359152</code></td></tr>
+          <tr><td>89</td><td>2</td><td><code>359152</code></td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước hai, tại giây 60, chia 30 được 2, nên sang khoảng số 2. Mã đổi thành 359152. Tại giây 89, chia 30 vẫn được 2, dư 29, nên vẫn là khoảng số 2 và mã giữ nguyên."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — giây 90:</b> 90 chia 30 được 3 → khoảng mới, mã mới.</p>
+          <table class="t"><tr><th>thời điểm (giây)</th><th>khoảng số</th><th>mã 6 chữ số</th></tr>
+          <tr><td>90</td><td>3</td><td><code>969429</code></td></tr></table>
+          <p class="note">Tính bằng bí mật thử nghiệm của tiêu chuẩn RFC 6238; bản 8 chữ số tại giây 59 là <code>94287082</code>, khớp đúng bảng kiểm thử của tiêu chuẩn.</p>
+        focus: [1, 2, 3]
+        say: "Bước ba, tại giây 90, chia 30 được 3, nên sang khoảng số 3. Mã là 969429. Các mã được tính bằng bí mật thử nghiệm của tiêu chuẩn, và bản 8 chữ số tại giây 59 khớp đúng bảng kiểm thử của tiêu chuẩn."
+      - show: |
+          <p><b>Bước 4 — đoán bừa:</b></p>
+          <table class="t"><tr><th>số lần thử trong một khoảng</th><th>xác suất trúng</th></tr>
+          <tr><td>1</td><td>$\frac{1}{10^6}$</td></tr>
+          <tr><td>3 (rồi khoá)</td><td>$\hl{\frac{3}{10^6}}$</td></tr></table>
+          <p>Nên máy chủ phải <b>khoá sau vài lần sai</b>.</p>
+        focus: [1, "2.2", "2.3", 3]
+        say: "Bước bốn, xét kẻ đoán bừa. Mỗi lần đoán trúng với xác suất một phần triệu. Được thử 3 lần, mỗi lần một mã khác nhau, thì xác suất là 3 phần triệu. Vì vậy máy chủ phải khoá sau vài lần sai."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác: tính tay mã tại giây 89"
+    checks:
+      - "__import__('hmac').new(b'12345678901234567890', (89 // 30).to_bytes(8, 'big'), 'sha1').digest()[-1] & 15 == 4"
+      - "__import__('hmac').new(b'12345678901234567890', (2).to_bytes(8, 'big'), 'sha1').digest()[4:8].hex() == '082fef30' and int('082fef30', 16) & 0x7FFFFFFF == 137359152 and 137359152 % 10 ** 6 == 359152"
+      - "alg.totp(b'12345678901234567890', 89) == '359152' and '94287082'[-6:] == alg.totp(b'12345678901234567890', 59)"
+    steps:
+      - show: |
+          <table class="t"><tr><th>bước tính lại (thư viện băm có khoá, không qua hàm của bài)</th><th>kết quả</th></tr>
+          <tr><td>khoảng số: 89 chia 30</td><td>2</td></tr>
+          <tr><td>băm có khoá (bí mật, khoảng số 2) → 20 byte; nửa thấp của byte cuối</td><td>4 → lấy 4 byte từ vị trí 4</td></tr>
+          <tr><td>4 byte <code>082fef30</code>, bỏ bit đầu, đổi ra số</td><td>137 359 152</td></tr>
+          <tr><td>giữ 6 chữ số cuối</td><td>$\hl{359152}$ ✓ khớp bảng</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Kiểm bằng đường khác, tính tay mã tại giây 89 bằng thư viện băm có khoá, không qua hàm của bài. Lấy 89 chia 30 được khoảng số 2. Băm có khoá bí mật và khoảng số 2 cho 20 byte, nửa thấp của byte cuối bằng 4, nên ta lấy 4 byte bắt đầu từ vị trí 4. Bốn byte đó, bỏ bit đầu, đổi ra số được 137 359 152. Giữ 6 chữ số cuối được 359152, khớp với bảng."
+      - show: |
+          <table class="t"><tr><th>bảng kiểm thử của tiêu chuẩn, giây 59</th><th>6 chữ số cuối</th><th>bước 1</th></tr>
+          <tr><td><code>94<b>287082</b></code> (8 chữ số)</td><td><code>287082</code></td><td><code>287082</code> ✓</td></tr></table>
+        focus: [1, "1.2"]
+        say: "Đối chiếu thêm, bản 8 chữ số tại giây 59 trong bảng kiểm thử của tiêu chuẩn là 94287082. Sáu chữ số cuối là 287082, đúng mã ta tính ở bước một, nên cách cắt lấy 6 chữ số cũng đúng."
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, từ người mới tới người đã đi làm"
+    checks:
+      - "1000 / 10 ** 6 == 0.001 and round(1 - 0.999 ** (24 * 120), 2) == 0.94"
+      - "2 * 1 + 1 == 3 and 2 * 10 + 1 == 21 and 10 * 30 == 300"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Nghĩ mã một lần chống được trang giả <b class="red">(vẫn bị lừa)</b>
+          <br><span class="note">Trang giả hỏi cả mật khẩu lẫn mã, rồi dùng ngay trong 30 giây. Khoá bảo mật kiểu xác thực web gắn chữ ký với <b>tên miền</b>: trên trang giả, nó không ký cho trang thật.</span></div>
+        say: "Lỗi thứ nhất, nghĩ mã một lần chống được trang giả. Trang giả hỏi cả mật khẩu lẫn mã rồi dùng ngay trong 30 giây. Khoá bảo mật kiểu xác thực web gắn chữ ký với tên miền, nên trên trang giả nó không ký cho trang thật."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Không giới hạn số lần nhập mã <b class="red">(đoán dần)</b>
+          <br><span class="note">Thử 1000 lần mỗi khoảng là xác suất trúng cỡ 1 phần nghìn mỗi 30 giây — cả ngày (2880 khoảng) thì xác suất trúng khoảng 94%. Khoá tạm sau vài lần sai, báo cho chủ tài khoản.</span></div>
+        say: "Lỗi thứ hai, không giới hạn số lần nhập mã. Thử 1000 lần mỗi khoảng là xác suất trúng cỡ một phần nghìn mỗi 30 giây, và cả ngày thì xác suất trúng khoảng 94 phần trăm. Hãy khoá tạm sau vài lần sai, và báo cho chủ tài khoản."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Khôi phục tài khoản dễ hơn đăng nhập <b class="red">(cửa sau)</b>
+          <br><span class="note">Xác thực hai bước chặt chẽ nhưng “quên điện thoại” chỉ cần trả lời câu hỏi bí mật: kẻ xấu đi đường đó. Quy trình khôi phục phải mạnh ngang đăng nhập.</span></div>
+        say: "Lỗi thứ ba, khôi phục tài khoản dễ hơn đăng nhập. Xác thực hai bước chặt chẽ nhưng quên điện thoại thì chỉ cần trả lời câu hỏi bí mật, và kẻ xấu đi đường đó, nên quy trình khôi phục phải mạnh ngang đăng nhập."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4.</b> Nới cửa sổ lệch đồng hồ quá rộng, cho dùng lại mã <b class="red">(mã sống quá lâu)</b>
+          <br><span class="note">Đồng hồ điện thoại hơi lệch, nên máy chủ chấp nhận cả mã của vài khoảng bên cạnh. Nới quá tay thì nhiều mã cùng đúng và mã bị lộ dùng được lâu. Tiêu chuẩn khuyên lệch nhiều nhất một khoảng, và không nhận lại một mã đã dùng thành công.</span></div>
+          <table class="t"><tr><th>chấp nhận lệch</th><th>số mã cùng đúng</th><th>xác suất mỗi lần đoán</th><th>mã lộ còn dùng thêm</th></tr>
+          <tr><td>1 khoảng mỗi phía</td><td>3</td><td>$\frac{3}{10^6}$</td><td>30 giây</td></tr>
+          <tr><td>10 khoảng mỗi phía</td><td>21</td><td>$\frac{21}{10^6}$</td><td class="red">10 khoảng 30 giây: $\hl{300}$ giây</td></tr></table>
+        focus: [1, 1, 1, 2, "2.2", "2.3"]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, là nới cửa sổ lệch đồng hồ quá rộng. Đồng hồ điện thoại hơi lệch, nên máy chủ chấp nhận cả mã của vài khoảng bên cạnh. Nới quá tay thì nhiều mã cùng đúng, và mã bị lộ dùng được rất lâu. Bảng so hai cách đặt. Lệch một khoảng mỗi phía cho 3 mã cùng đúng, mỗi lần đoán trúng với xác suất 3 phần triệu, mã lộ chỉ dùng thêm 30 giây. Lệch 10 khoảng cho 21 mã cùng đúng, và mã lộ dùng thêm tới 300 giây, nên tiêu chuẩn khuyên lệch nhiều nhất một khoảng, và không nhận lại mã đã dùng."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "5 * 10 / 10 ** 6 == 5e-05 and round(1 - (1 - 3 / 10 ** 6) ** 1000, 4) == 0.003"
+      - "10 * 5 == 50 and 1 - (1 - 5 / 10 ** 6) ** 10 <= 50 / 10 ** 6"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Máy chủ cho thử 5 lần mỗi khoảng, kẻ xấu thử trong 10 khoảng liên tiếp: xác suất trúng tối đa khoảng bao nhiêu?</td></tr>
+          <tr><td>2</td><td>Mật khẩu và mã một lần cùng được lưu trong một ứng dụng trên cùng máy tính bị nhiễm mã độc. Còn là hai yếu tố độc lập không?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, máy chủ cho thử 5 lần mỗi khoảng, kẻ xấu thử trong 10 khoảng liên tiếp, xác suất trúng tối đa khoảng bao nhiêu? Câu hai, mật khẩu và mã một lần cùng được lưu trong một ứng dụng trên cùng một máy tính bị nhiễm mã độc. Hai yếu tố đó còn độc lập không? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <p>① Mỗi khoảng: 5 mã khác nhau → trúng với xác suất $\frac{5}{10^6}$. Mười khoảng: cộng lại nhiều nhất $10 \cdot \frac{5}{10^6} = \frac{50}{10^6}$.</p>
+          <p>$\frac{50}{10^6} = \hl{5 \cdot 10^{-5}}$, tức 5 phần trăm nghìn: nhỏ, nhưng vẫn nên khoá sau vài khoảng sai liên tiếp.</p>
+        introduces: [cdot]
+        focus: [1, 1, 2]
+        say: "Đáp án câu một, trong mỗi khoảng kẻ xấu thử 5 mã khác nhau, nên trúng với xác suất 5 phần triệu. Mười khoảng cộng lại được nhiều nhất 10 nhân 5 phần triệu, bằng 50 phần triệu. Đó là 5 phần trăm nghìn, nhỏ nhưng vẫn nên khoá sau vài khoảng sai liên tiếp."
+      - show: |
+          <table class="t"><tr><th>câu hỏi</th><th>trả lời</th></tr>
+          <tr><td>kẻ xấu cần mấy việc khác nhau để có cả hai yếu tố?</td><td>1: chiếm cái máy đó</td></tr>
+          <tr><td>còn độc lập không?</td><td>$\hl{\text{không}}$ → “thứ bạn có” nên nằm trên thiết bị riêng</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Câu hai, hỏi kẻ xấu cần mấy việc khác nhau để có cả hai yếu tố. Chỉ một việc, là chiếm cái máy đó. Vì vậy hai yếu tố không còn độc lập, và yếu tố thứ bạn có nên nằm trên một thiết bị riêng."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">biết, có, là</span><span class="a">→</span>
+          <span class="n">mã một lần: bí mật chung + khoảng thời gian</span><span class="a">→</span>
+          <span class="n">khoá sau vài lần sai</span><span class="a">→</span>
+          <span class="n">khoá gắn tên miền chống trang giả; khôi phục mạnh ngang đăng nhập</span></div>
+        say: "Tổng kết lại, ba loại yếu tố là thứ bạn biết, thứ bạn có, thứ bạn là. Mã một lần tính từ bí mật chung và khoảng thời gian, cần khoá sau vài lần sai. Khoá gắn tên miền chống được trang giả, và quy trình khôi phục phải mạnh ngang đăng nhập."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> hai yếu tố chỉ có giá trị khi kẻ xấu <b>không lấy được cả hai bằng cùng một cách</b>.</div>
+        say: "Điều cần mang theo, hai yếu tố chỉ có giá trị khi kẻ xấu không lấy được cả hai bằng cùng một cách."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 4): <b>phân quyền</b> — danh sách quyền, vai trò, quyền tối thiểu.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 4, ta học phân quyền, với danh sách quyền, vai trò, và quyền tối thiểu. Hẹn gặp bạn ở bài tiếp theo."

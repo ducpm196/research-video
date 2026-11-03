@@ -1,0 +1,256 @@
+id: L09
+course: DBS
+series: "DBS · Cơ sở dữ liệu"
+title: "Bài 9 — Chỉ mục băm và lựa chọn chỉ mục"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/dbs.yaml L09; audit/dbs/verify_dbs.py L09 (sqlite3 EXPLAIN QUERY PLAN); R. Ramakrishnan, J. Gehrke, Database Management Systems (2003), chương 11"
+assumes: [arith, set, in, ltgt, geq]
+# Quy ước: hàm băm mẫu h(k) = k mod 4, 4 ngăn (mỗi ngăn một trang). Chỉ mục ghép (lop, diem) xếp theo lop trước, trong cùng lop
+#   xếp theo diem. Kế hoạch thực thi lấy thật từ SQLite bằng EXPLAIN QUERY PLAN (SEARCH = dùng chỉ mục, SCAN = quét cả bảng).
+objectives:
+  - "So sánh chỉ mục băm và cây B+"
+  - "Biết chỉ mục ghép (a, b) giúp truy vấn nào"
+  - "Chọn chỉ mục theo mẫu truy vấn"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Một bước thay vì ba"
+    steps:
+      - show: |
+          <p>Bài 8: cây B+ tra một khoá mất 3 lần đọc trang. Với tra cứu “đúng bằng”, có cách nào chỉ cần <b>một</b> lần?</p>
+          <p>Bảng băm (CS112): tính thẳng ra vị trí từ khoá.</p>
+          <div class="box key">Hôm nay: <b>chỉ mục băm</b>, điểm mạnh và điểm mù của nó, và cách <b>chọn chỉ mục</b> theo câu truy vấn hay chạy.</div>
+        focus: [1, 1, 2, 3]
+        say: "Chào bạn, ở bài 8 cây B cộng tra một khoá mất 3 lần đọc trang. Với kiểu tra cứu đúng bằng một giá trị, có cách nào chỉ cần một lần đọc không? Câu trả lời là bảng băm đã học ở khoá Phân tích và thiết kế thuật toán, tính thẳng ra vị trí từ khoá. Hôm nay ta học chỉ mục băm, điểm mạnh và điểm mù của nó, và cách chọn chỉ mục theo những câu truy vấn hay chạy."
+
+  # ───────────────────────── 1b. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: chia lấy dư và cây B+ của bài 8"
+    checks:
+      - "7 == 4 * 1 + 3 and 12 == 4 * 3 + 0 and 15 == 4 * 3 + 3"
+      - "sorted({k % 4 for k in range(100)}) == [0, 1, 2, 3]"
+      - "alg.bplus_height(10 ** 6, 100) == 3"
+    steps:
+      - show: |
+          <table class="t"><tr><th>số</th><th>viết thành</th><th>số dư khi chia 4</th></tr>
+          <tr><td>7</td><td>$4 \times 1 + 3$</td><td>3</td></tr>
+          <tr><td>12</td><td>$4 \times 3 + 0$</td><td>0</td></tr>
+          <tr><td>15</td><td>$4 \times 3 + 3$</td><td>3</td></tr></table>
+          <p class="note">Chia cho 4 thì số dư chỉ có thể là 0, 1, 2 hoặc 3 — đúng 4 khả năng.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Trước hết, ôn lại phép chia lấy dư, vì chỉ mục băm hôm nay dựa trên nó. Số 7 viết thành 4 nhân 1 cộng 3, nên 7 chia 4 dư 3. Số 12 bằng 4 nhân 3 cộng 0, nên dư 0. Số 15 bằng 4 nhân 3 cộng 3, nên dư 3. Chia cho 4 thì số dư chỉ có thể là 0, 1, 2 hoặc 3, đúng bốn khả năng, và đó sẽ là bốn ngăn."
+      - show: |
+          <table class="t"><tr><th>cây B+ (bài 8)</th><th>giá trị</th></tr>
+          <tr><td>mỗi nút rẽ nhánh</td><td>100 con</td></tr>
+          <tr><td>số tầng cho $10^6$ khoá</td><td>3, vì $100^3 = 10^6$</td></tr>
+          <tr><td>tra một khoá</td><td>3 lần đọc trang</td></tr>
+          <tr><td>lá</td><td>đã sắp theo khoá, nối thành chuỗi</td></tr></table>
+        introduces: [power]
+        focus: [1, "1.2", "1.3", "1.4", "1.5"]
+        say: "Thứ hai, nhắc lại cây B cộng ở bài 8. Mỗi nút của cây rẽ được tới khoảng 100 nhánh. Một triệu khoá chỉ cần 3 tầng, vì 100 mũ 3 bằng một triệu. Vậy tra một khoá mất 3 lần đọc trang, mỗi tầng một trang. Các lá đã sắp theo khoá và nối thành chuỗi, nên đi ngang được từ lá này sang lá kế."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: hàm băm và ngăn"
+    checks:
+      - "{b: [k for k in (3, 7, 10, 12, 15) if k % 4 == b] for b in range(4)} == {0: [12], 1: [], 2: [10], 3: [3, 7, 15]}"
+      - "7 % 4 == 3"
+    steps:
+      - show: |
+          <p><b>Chỉ mục băm</b>: hàm băm $h$ biến khoá thành số hiệu <b>ngăn</b>; mỗi ngăn là một trang chứa các khoá rơi vào đó.</p>
+          <p>Ví dụ $h(k) = k \bmod 4$, khoá 3, 7, 10, 12, 15:</p>
+          <table class="t"><tr><th>ngăn</th><th>0</th><th>1</th><th>2</th><th>3</th></tr><tr><td>khoá</td><td>12</td><td>—</td><td>10</td><td>3, 7, 15</td></tr></table>
+          <p>Tìm 7: $7 \bmod 4 = 3$ → đọc thẳng ngăn 3: $\hl{1}$ lần đọc.</p>
+        introduces: [mod]
+        focus: [1, 2, 3, 4]
+        say: "Chỉ mục băm dùng một hàm băm biến khoá thành số hiệu của ngăn, mỗi ngăn là một trang chứa các khoá rơi vào đó. Ví dụ hàm băm là khoá chia lấy dư cho 4, với các khoá 3, 7, 10, 12 và 15. Khoá 12 vào ngăn 0, khoá 10 vào ngăn 2, còn 3, 7, 15 cùng vào ngăn 3. Muốn tìm 7, ta tính 7 chia 4 dư 3, đọc thẳng ngăn 3, chỉ một lần đọc."
+
+  # ───────────────────────── 3. SO SÁNH ─────────────────────────
+  - id: compare
+    kind: concept
+    title: "Băm và cây B+: mỗi bên giỏi một việc"
+    checks:
+      - "[k for k in (3, 7, 10, 12, 15) if 5 <= k <= 11] == [7, 10] and sorted({k % 4 for k in (7, 10)}) == [2, 3]"
+    steps:
+      - show: |
+          <table class="t"><tr><th>truy vấn</th><th>băm</th><th>cây B+</th></tr>
+          <tr><td><code>diem = 8</code></td><td>≈ 1 lần đọc</td><td>3–4 lần đọc</td></tr>
+          <tr><td><code>diem BETWEEN 7 AND 9</code></td><td><b>không dùng được</b></td><td>xuống lá đầu, đi ngang</td></tr>
+          <tr><td><code>ORDER BY diem</code></td><td>không giúp</td><td>lá đã sắp sẵn</td></tr></table>
+          <p class="note">Vì sao băm không làm được khoảng? Hàm băm cố ý xáo trộn: 7 ở ngăn 3, 10 ở ngăn 2 — khoá gần nhau nằm rải rác, phải đọc <b>mọi</b> ngăn.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2, 2]
+        say: "So sánh hai loại chỉ mục. Với truy vấn đúng bằng, băm chỉ khoảng một lần đọc, còn cây B cộng 3 đến 4 lần. Với truy vấn theo khoảng, như điểm từ 7 tới 9, chỉ mục băm không dùng được, còn cây B cộng xuống lá đầu rồi đi ngang. Với yêu cầu sắp xếp, băm không giúp gì, còn lá của cây B cộng đã sắp sẵn. Vì sao băm không làm được khoảng? Vì hàm băm cố ý xáo trộn, 7 ở ngăn 3 còn 10 ở ngăn 2, khoá gần nhau nằm rải rác, nên phải đọc mọi ngăn."
+
+  # ───────────────────────── 3b. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Băm là bốn ngăn tủ, không có thứ tự"
+    checks:
+      - "{b: [k for k in (3, 7, 10, 12, 15) if k % 4 == b] for b in range(4)}[3] == [3, 7, 15]"
+    steps:
+      - show: |
+          <div><svg width="1500" height="420" viewBox="0 0 1500 420"><defs><marker id="arD9b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#2a78d6"/></marker></defs><text x="750" y="45" font-size="26" text-anchor="middle" fill="#2a78d6" font-weight="bold">tìm 7: 7 chia 4 dư 3 → đọc thẳng ngăn 3, đúng 1 trang</text><line x1="1180" y1="62" x2="1180" y2="150" stroke="#2a78d6" stroke-width="4" marker-end="url(#arD9b)"/><g fill="#f3f4f6" stroke="#1f2937" stroke-width="2"><rect x="150" y="160" width="260" height="120"/><rect x="450" y="160" width="260" height="120"/><rect x="750" y="160" width="260" height="120"/><rect x="1050" y="160" width="260" height="120" fill="#dbeafe" stroke="#2a78d6" stroke-width="4"/></g><g font-size="22" text-anchor="middle" fill="#1f2937"><text x="280" y="150">ngăn 0</text><text x="580" y="150">ngăn 1</text><text x="880" y="150">ngăn 2</text><text x="1180" y="150" fill="#2a78d6">ngăn 3</text></g><g font-size="30" text-anchor="middle" fill="#1f2937"><text x="280" y="232">12</text><text x="580" y="232" fill="#6b7280">trống</text><text x="880" y="232" fill="#eb6834" font-weight="bold">10</text><text x="1180" y="232">3, <tspan fill="#eb6834" font-weight="bold">7</tspan>, 15</text></g><line x1="150" y1="310" x2="1310" y2="310" stroke="#eb6834" stroke-width="4" stroke-dasharray="14 10"/><text x="730" y="355" font-size="24" text-anchor="middle" fill="#eb6834" font-weight="bold">khoảng 5 tới 11 gồm 7 và 10, nhưng chúng nằm ở ngăn 3 và ngăn 2</text><text x="730" y="395" font-size="24" text-anchor="middle" fill="#b91c1c">không biết khoá nào rơi vào đâu → phải đọc cả 4 ngăn</text></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình dung chỉ mục băm như bốn ngăn tủ. Muốn tìm 7, ta tính 7 chia 4 dư 3, rồi mở thẳng ngăn 3, chỉ một trang. Nhưng muốn lấy mọi khoá từ 5 tới 11, ta gặp 7 ở ngăn 3 và 10 ở ngăn 2, hai khoá gần nhau bị xáo ra hai ngăn. Không biết trước khoá nào rơi vào đâu, ta phải mở cả bốn ngăn."
+
+  # ───────────────────────── 4. CHỈ MỤC GHÉP ─────────────────────────
+  - id: composite
+    kind: example
+    title: "Chỉ mục ghép (lop, diem)"
+    checks:
+      - "alg.sql(\"EXPLAIN QUERY PLAN SELECT ten FROM SinhVien WHERE lop = 'K1'\", alg.DB_DEMO + 'CREATE INDEX idx_lop_diem ON SinhVien(lop, diem);')[0][3] == 'SEARCH SinhVien USING INDEX idx_lop_diem (lop=?)'"
+      - "alg.sql(\"EXPLAIN QUERY PLAN SELECT ten FROM SinhVien WHERE lop = 'K1' AND diem >= 7\", alg.DB_DEMO + 'CREATE INDEX idx_lop_diem ON SinhVien(lop, diem);')[0][3] == 'SEARCH SinhVien USING INDEX idx_lop_diem (lop=? AND diem>?)'"
+      - "alg.sql('EXPLAIN QUERY PLAN SELECT ten FROM SinhVien WHERE diem >= 7', alg.DB_DEMO + 'CREATE INDEX idx_lop_diem ON SinhVien(lop, diem);')[0][3] == 'SCAN SinhVien'"
+    steps:
+      - show: |
+          <p><b>Bước 1</b> — chỉ mục ghép $(\text{lop}, \text{diem})$ xếp theo lop trước, cùng lop thì theo diem, như danh bạ xếp theo họ rồi theo tên.</p>
+          <table class="t"><tr><th>vị trí</th><th>lop</th><th>diem</th><th>dòng</th></tr>
+          <tr><td>1</td><td>NULL</td><td>7</td><td>Dũng</td></tr>
+          <tr><td>2</td><td>K1</td><td>6</td><td>Bình</td></tr>
+          <tr><td>3</td><td>K1</td><td>8</td><td>An</td></tr>
+          <tr><td>4</td><td>K2</td><td>9</td><td>Chi</td></tr></table>
+        focus: [1, 2, "2.3", "2.5"]
+        say: "Bước một, xem chỉ mục ghép theo lớp rồi điểm thật ra chứa gì, nó xếp theo lớp trước, cùng lớp thì theo điểm. Hệ quản trị này xếp ô rỗng lên đầu, nên vị trí đầu là Dũng. Tiếp theo là hai dòng lớp K1, Bình điểm 6 rồi An điểm 8. Cuối cùng là Chi, lớp K2, điểm 9."
+      - show: |
+          <p><b>Bước 2</b> — <code>lop = 'K1'</code>: các dòng K1 nằm <b>liền nhau</b> ở vị trí 2–3 → nhảy tới vị trí 2, đọc tới hết K1.</p>
+          <p>Kế hoạch SQLite: <code>SEARCH … (lop=?)</code> — dùng chỉ mục.</p>
+        focus: [1, 1, 2]
+        say: "Bước hai, lọc lớp bằng K1. Các dòng K1 nằm liền nhau ở vị trí 2 và 3, nên hệ quản trị nhảy thẳng tới vị trí 2 rồi đọc tới hết K1. Kế hoạch thực thi của hệ quản trị xác nhận nó tìm qua chỉ mục."
+      - clear: true
+        show: |
+          <p><b>Bước 3</b> — <code>lop = 'K1' AND diem &gt;= 7</code>: trong đoạn K1, điểm đã sắp (6, 8) → bắt đầu từ 8 → chỉ An.</p>
+          <p>Kế hoạch: <code>SEARCH … (lop=? AND diem&gt;?)</code> — dùng cả hai cột.</p>
+        focus: [1, 1, 2]
+        say: "Bước ba, lọc lớp K1 và điểm từ 7 trở lên. Trong đoạn K1 điểm đã sắp sẵn là 6 rồi 8, nên bắt đầu từ 8 và chỉ được An. Kế hoạch thực thi cho thấy nó dùng cả hai cột của chỉ mục."
+      - clear: true
+        show: |
+          <p><b>Bước 4</b> — chỉ <code>diem &gt;= 7</code>: đọc cột diem theo thứ tự chỉ mục được 7, 6, 8, 9 — <b>không</b> sắp. Các dòng thoả nằm ở vị trí 1, 3, 4, không liền nhau.</p>
+          <p>Kế hoạch: <code>SCAN SinhVien</code> — quét cả bảng.</p>
+        focus: [1, 1, 2]
+        say: "Bước bốn, chỉ lọc điểm từ 7 trở lên. Đọc cột điểm theo thứ tự chỉ mục ta được 7, 6, 8, 9, không hề sắp, nên các dòng thoả nằm rải ở vị trí 1, 3 và 4. Không có đoạn liền nào để nhảy tới, nên hệ quản trị quét cả bảng."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>điều kiện</th><th>kế hoạch SQLite</th></tr>
+          <tr><td><code>lop = 'K1'</code></td><td>SEARCH … (lop=?)</td></tr>
+          <tr><td><code>lop = 'K1' AND diem &gt;= 7</code></td><td>SEARCH … (lop=? AND diem&gt;?)</td></tr>
+          <tr><td><code>diem &gt;= 7</code></td><td><b>SCAN</b> — quét cả bảng</td></tr></table>
+          <div class="box key">Chỉ mục ghép dùng được khi điều kiện chạm <b>cột đầu</b>. Lọc riêng cột sau thì như tìm theo tên trong danh bạ xếp theo họ.</div>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Gom lại ba kết quả lấy thật từ hệ quản trị. Lọc theo lớp, nó tìm qua chỉ mục. Lọc theo lớp và điểm, nó cũng tìm qua chỉ mục, dùng cả hai cột. Nhưng chỉ lọc theo điểm, nó phải quét cả bảng. Vậy chỉ mục ghép chỉ dùng được khi điều kiện chạm cột đầu, lọc riêng cột sau giống như tìm theo tên trong danh bạ xếp theo họ."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: quét tay rồi so với chỉ mục"
+    checks:
+      - "alg.sql('SELECT lop, diem, ten FROM SinhVien ORDER BY lop, diem') == [(None, 7, 'Dũng'), ('K1', 6, 'Bình'), ('K1', 8, 'An'), ('K2', 9, 'Chi')]"
+      - "[i + 1 for i, r in enumerate(alg.sql('SELECT diem FROM SinhVien ORDER BY lop, diem')) if r[0] >= 7] == [1, 3, 4]"
+      - "alg.sql(\"SELECT ten FROM SinhVien WHERE lop = 'K1' AND diem >= 7\") == alg.sql(\"SELECT ten FROM SinhVien INDEXED BY idx_lop_diem WHERE lop = 'K1' AND diem >= 7\", alg.DB_DEMO + 'CREATE INDEX idx_lop_diem ON SinhVien(lop, diem);') == [('An',)]"
+      - "sorted(r[0] for r in alg.sql('SELECT ten FROM SinhVien WHERE diem >= 7')) == sorted(['An', 'Chi', 'Dũng'])"
+      - "alg.sql('EXPLAIN QUERY PLAN SELECT ten FROM SinhVien WHERE diem >= 7', alg.DB_DEMO + 'CREATE INDEX idx_lop_diem ON SinhVien(lop, diem);' + 'CREATE INDEX idx_diem ON SinhVien(diem);')[0][3] == 'SEARCH SinhVien USING INDEX idx_diem (diem>?)'"
+    steps:
+      - show: |
+          <table class="t"><tr><th>điều kiện</th><th>quét tay 4 dòng</th><th>qua chỉ mục</th></tr>
+          <tr><td>lop = K1 và diem ≥ 7</td><td>An</td><td>An</td></tr>
+          <tr><td>diem ≥ 7</td><td>An, Chi, Dũng</td><td>vị trí 1, 3, 4 — không liền</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Kiểm bằng đường khác, ta quét tay cả bốn dòng rồi so với đường đi qua chỉ mục. Lọc lớp K1 và điểm từ 7, quét tay được đúng An, ép đi qua chỉ mục cũng được An. Lọc điểm từ 7, quét tay được An, Chi và Dũng, nằm ở vị trí 1, 3 và 4 của chỉ mục, không liền nhau, đúng lý do phải quét."
+      - show: |
+          <table class="t"><tr><th>thêm chỉ mục riêng</th><th>kế hoạch cho <code>diem &gt;= 7</code></th></tr>
+          <tr><td>chỉ có $(\text{lop}, \text{diem})$</td><td>SCAN</td></tr>
+          <tr><td>thêm $(\text{diem})$</td><td>SEARCH … idx_diem (diem&gt;?)</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Thử ngược lại để chắc rằng thứ tự cột là nguyên nhân. Khi chỉ có chỉ mục ghép lớp rồi điểm, truy vấn lọc điểm phải quét. Thêm một chỉ mục riêng cho điểm, kế hoạch đổi ngay sang tìm qua chỉ mục, vì cột điểm giờ đứng đầu một chỉ mục."
+
+  # ───────────────────────── 5. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi người mới hay mắc"
+    checks:
+      - "alg.sql('EXPLAIN QUERY PLAN SELECT ten FROM SinhVien WHERE diem >= 7', alg.DB_DEMO + 'CREATE INDEX idx_lop_diem ON SinhVien(lop, diem);')[0][3] == 'SCAN SinhVien'"
+      - "math.ceil(len([k for k in (3, 7, 10, 12, 15) if k % 4 == 3]) / 2) == 2"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Dùng chỉ mục băm cho truy vấn khoảng <b class="red">(sai)</b>
+          <br><span class="note">Băm phá thứ tự; <code>BETWEEN</code>, <code>&lt;</code>, <code>ORDER BY</code> cần cây B+.</span></div>
+        say: "Lỗi thứ nhất, dùng chỉ mục băm cho truy vấn theo khoảng. Băm phá vỡ thứ tự, nên truy vấn khoảng, so sánh lớn nhỏ và sắp xếp đều cần cây B cộng."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Nghĩ chỉ mục $(a, b)$ giúp truy vấn chỉ lọc $b$ <b class="red">(sai)</b>
+          <br><span class="note">Như SQLite cho thấy: lọc riêng diem → SCAN. Cần thêm chỉ mục riêng cho diem nếu truy vấn đó hay chạy.</span></div>
+          <table class="t"><tr><th>người đã đi làm</th><th>tưởng</th><th>thật ra</th></tr>
+          <tr><td>thêm $(\text{lop}, \text{diem})$ cho báo cáo “điểm từ 7”</td><td>báo cáo nhanh lên</td><td>vẫn SCAN</td></tr></table>
+        focus: [1, 1, 1, 2]
+        say: "Lỗi thứ hai, nghĩ chỉ mục ghép a, b giúp truy vấn chỉ lọc theo b. Như hệ quản trị vừa cho thấy, lọc riêng điểm vẫn quét cả bảng. Cần thêm một chỉ mục riêng cho điểm nếu truy vấn đó hay chạy. Người đã đi làm hay mắc lỗi này khi thêm chỉ mục ghép cho một báo cáo chậm mà không hỏi lại kế hoạch thực thi, nên báo cáo vẫn quét như cũ."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Chọn chỉ mục theo cảm tính <b class="red">(sai)</b>
+          <br><span class="note">Liệt kê các câu truy vấn hay chạy nhất, xem cột nào ở <code>WHERE</code>, <code>JOIN</code>, <code>ORDER BY</code>, rồi hỏi hệ quản trị kế hoạch thực thi.</span></div>
+        say: "Lỗi thứ ba, chọn chỉ mục theo cảm tính. Hãy liệt kê các câu truy vấn hay chạy nhất, xem cột nào xuất hiện ở điều kiện lọc, điều kiện nối và sắp xếp, rồi hỏi hệ quản trị kế hoạch thực thi."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Quên rằng băm có thể đụng nhiều khoá một ngăn <b class="red">(thiếu)</b>
+          <br><span class="note">Ngăn 3 có 3 khoá. Ngăn đầy thì phải nối thêm trang tràn, tra cứu không còn đúng 1 lần đọc.</span></div>
+          <table class="t"><tr><th>giả sử mỗi trang chứa</th><th>ngăn 3 (3 khoá) cần</th><th>tìm 15 tệ nhất</th></tr>
+          <tr><td>2 khoá</td><td>2 trang (1 trang tràn)</td><td>2 lần đọc</td></tr></table>
+        focus: [1, 1, 2]
+        say: "Lỗi thứ tư, quên rằng nhiều khoá có thể rơi vào cùng một ngăn. Ngăn 3 đã có ba khoá, ngăn đầy thì phải nối thêm trang tràn, và tra cứu không còn đúng một lần đọc. Ví dụ mỗi trang chỉ chứa 2 khoá, ngăn 3 cần 2 trang, nên tìm 15 có thể mất 2 lần đọc."
+
+  # ───────────────────────── 6. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.sql(\"EXPLAIN QUERY PLAN SELECT ten FROM SinhVien WHERE lop = 'K1' ORDER BY diem\", alg.DB_DEMO + 'CREATE INDEX idx_lop_diem ON SinhVien(lop, diem);') == [(4, 0, 62, 'SEARCH SinhVien USING INDEX idx_lop_diem (lop=?)')]"
+      - "{b: [k for k in (5, 9, 13, 2) if k % 4 == b] for b in range(4)}[1] == [5, 9, 13]"
+      - "(5, 9, 13) == (4 * 1 + 1, 4 * 2 + 1, 4 * 3 + 1) and [len([k for k in (5, 9, 13) if k % 4 == b]) for b in range(4)] == [0, 3, 0, 0]"
+    steps:
+      - show: |
+          <p>Truy vấn hay chạy nhất của hệ thống:</p>
+          <table class="t"><tr><th>câu</th><th>truy vấn</th></tr>
+          <tr><td>1</td><td><code>WHERE mssv = ?</code></td></tr>
+          <tr><td>2</td><td><code>WHERE lop = ? ORDER BY diem</code></td></tr>
+          <tr><td>3</td><td><code>WHERE diem BETWEEN ? AND ?</code></td></tr></table>
+          <p>Mỗi câu nên dùng chỉ mục nào? Với $h(k) = k \bmod 4$, khoá 5, 9, 13 rơi vào đâu?</p>
+        focus: [1, 1, "2.2", "2.3", "2.4", 3, 3, 0]
+        say: "Bây giờ đến lượt bạn tự làm. Hệ thống có ba truy vấn hay chạy nhất. Một, tìm theo mã số. Hai, lọc theo lớp và sắp theo điểm. Ba, lọc điểm trong một khoảng. Mỗi câu nên dùng chỉ mục nào? Thêm nữa, với hàm băm chia dư cho 4, các khoá 5, 9, 13 rơi vào ngăn nào? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <table class="t"><tr><th>câu</th><th>kiểu điều kiện</th><th>chỉ mục</th></tr>
+          <tr><td>1</td><td>đúng bằng một mã</td><td>băm hoặc B+ trên mssv (khoá chính thường đã có B+)</td></tr>
+          <tr><td>2</td><td>đúng bằng lop, rồi sắp diem</td><td>ghép $(\text{lop}, \text{diem})$: đoạn một lớp đã sắp theo diem</td></tr>
+          <tr><td>3</td><td>khoảng trên diem</td><td>B+ trên diem — băm không làm được khoảng</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Đáp án phần một, ta xét kiểu điều kiện của từng câu. Câu một là đúng bằng một mã số, nên dùng băm hoặc cây B cộng trên mã số, thường khoá chính đã có sẵn cây B cộng. Câu hai lọc đúng bằng lớp rồi sắp theo điểm, chỉ mục ghép lớp rồi điểm cho ngay một đoạn đã sắp, hệ quản trị không cần sắp thêm. Câu ba là một khoảng điểm, nên cần cây B cộng trên điểm, vì băm không làm được khoảng."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>khoá</th><th>viết thành</th><th>ngăn</th></tr>
+          <tr><td>5</td><td>$4 \times 1 + 1$</td><td>1</td></tr>
+          <tr><td>9</td><td>$4 \times 2 + 1$</td><td>1</td></tr>
+          <tr><td>13</td><td>$4 \times 3 + 1$</td><td>1</td></tr></table>
+          <p>Cả ba vào <b>ngăn 1</b>, ba ngăn kia trống: hàm băm này kém với dữ liệu đó.</p>
+        focus: [1, "1.2", "1.3", "1.4", 2]
+        say: "Phần hai, tính số dư từng khoá. Số 5 bằng 4 nhân 1 cộng 1. Số 9 bằng 4 nhân 2 cộng 1. Số 13 bằng 4 nhân 3 cộng 1. Cả ba đều dư 1, cùng rơi vào ngăn 1 trong khi ba ngăn kia trống, tức hàm băm này kém với dữ liệu đó."
+
+  # ───────────────────────── 7. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">băm: đúng bằng, ≈ 1 lần đọc</span><span class="a">→</span>
+          <span class="n">B+: khoảng, sắp xếp</span><span class="a">→</span>
+          <span class="n">ghép (a, b): cần chạm cột a</span><span class="a">→</span>
+          <span class="n">chọn theo truy vấn hay chạy</span></div>
+        say: "Tổng kết lại, chỉ mục băm giỏi tra cứu đúng bằng với khoảng một lần đọc. Cây B cộng giỏi truy vấn khoảng và sắp xếp. Chỉ mục ghép chỉ dùng được khi chạm cột đầu. Và ta chọn chỉ mục theo những truy vấn hay chạy nhất."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> đừng đoán hệ quản trị sẽ làm gì — hỏi nó. Kế hoạch thực thi là bằng chứng, cảm giác thì không.</div>
+        say: "Điều cần mang theo, đừng đoán hệ quản trị sẽ làm gì, hãy hỏi nó. Kế hoạch thực thi là bằng chứng, còn cảm giác thì không."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 10): <b>thực thi và tối ưu truy vấn</b> — các thuật toán nối và chi phí của chúng.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 10, ta học thực thi và tối ưu truy vấn, các thuật toán nối bảng và chi phí của chúng. Hẹn gặp bạn ở bài tiếp theo."

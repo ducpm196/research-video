@@ -1,0 +1,198 @@
+id: L01
+course: BCH
+series: "BCH · Blockchain và sổ cái phân tán"
+title: "Bài 1 — Chuỗi liên kết bằng băm: sửa một khối làm hỏng mọi khối sau"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/bch.yaml L01; audit/bch/verify_bch.py L01; S. Haber, W. S. Stornetta, How to Time-Stamp a Digital Document (1991); NIST FIPS 180-4 (SHA-256); S. Nakamoto (2008), mục 3–4; bài 0"
+assumes: [arith]
+# Quy ước: mã khối i = SHA-256(mã khối i − 1 | dữ liệu khối i), mã trước khối đầu là 64 chữ số 0 (alg.block_hash, alg.build_chain). Kiểm chuỗi: tính lại
+#   mã từng khối từ dữ liệu và mã ĐÃ LƯU của khối trước (alg.first_bad_block). Mã băm hiện 8 chữ số hex đầu. Khối đánh số từ 1 trên màn hình (chỉ số 0 trong mã).
+#   Lời đọc nói “hàm băm hai trăm năm mươi sáu bit” cho SHA-256.
+objectives:
+  - "Dựng chuỗi khối mỗi khối chứa mã băm khối trước"
+  - "Kiểm tính toàn vẹn của chuỗi"
+  - "Hiểu liên kết băm phát hiện chứ không ngăn sửa"
+asr_reviewed:
+  - {sentence: "Còn dấu gạch đứng nghĩa là nối hai chuỗi với một vạch ngăn ở giữa, ví dụ a b nối c d thành a b, vạch, c d.", reason: "ASR chép “Còn dấu gạt đứng nghĩa là nối hai chuỗi với một vạc ngăn ở giữa, ví dụ AB nối CG thành AB, vạc CG.” (0.778): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: gạch/gạt, vạch/vạc, vạch (trong “vạch c d” → “vạc cg”) — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Khối 3 là B trả C 2, mã bắt đầu bằng a d c 7.", reason: "ASR chép “Khối 3 là B trả C2 mà bắt đầu bằng A, V, C7.” (0.867): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: mã/mà — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Ở bài sau, bài 2, ta học cây Merkle và bằng chứng thuộc về.", reason: "ASR chép “Ở bài sau, bài hai, ta học cây mơ cổ và bằng chứng thuộc về.” (0.933): Merkle đọc “Mơ-cồ” theo lexicon BCH, ASR viết “mơ cổ” — NOT_VERIFIED bằng tai người"}
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Sửa một dòng trong sổ, ai biết?"
+    steps:
+      - show: |
+          <p>Sổ cái điện tử lưu “B trả C 2”. Ai đó có quyền ghi đĩa sửa thành “B trả C 20”. Nếu sổ chỉ là một bảng, không có gì báo động. Ta muốn một cấu trúc mà sửa <b>bất kỳ</b> dòng cũ nào cũng lộ ngay — và muốn che giấu thì phải viết lại cả phần sau.</p>
+          <div class="box key">Hôm nay: <b>chuỗi liên kết bằng băm</b> — mỗi khối mang mã băm của khối trước.</div>
+        focus: [1, 1, 1, 1, 2]
+        say: "Chào bạn, một sổ cái điện tử lưu dòng B trả C 2. Ai đó có quyền ghi đĩa sửa thành B trả C 20. Nếu sổ chỉ là một bảng thì không có gì báo động. Ta muốn một cấu trúc mà sửa bất kỳ dòng cũ nào cũng lộ ngay, và muốn che giấu thì phải viết lại cả phần sau. Hôm nay ta học chuỗi liên kết bằng băm, mỗi khối mang mã băm của khối trước."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: hàm băm và chữ số thập lục phân"
+    checks:
+      - "[__import__('hashlib').sha256(s.encode()).hexdigest()[:8] for s in ('B trả C 2', 'B trả C 20')] == ['0ece1d22', 'e55a544a'] and all(a != b for a, b in zip('0ece1d22', 'e55a544a'))"
+      - "len(__import__('hashlib').sha256(b'x').hexdigest()) == 64 and 64 * 4 == 256 and 2 ** 4 == 16"
+    steps:
+      - show: |
+          <p>Ở khoá An toàn thông tin: <b>hàm băm</b> biến dữ liệu bất kỳ thành một mã có độ dài cố định. Thêm một chữ số 0:</p>
+          <table class="t"><tr><th>dữ liệu</th><th>8 chữ số đầu của mã băm</th></tr>
+          <tr><td>B trả C 2</td><td><code>0ece1d22…</code></td></tr>
+          <tr><td>B trả C 20</td><td><code>e55a544a…</code></td></tr></table>
+        focus: [1, 1, "2.2", "2.3", 0]
+        say: "Trước hết, ôn lại hàm băm mà ta đã gặp ở khoá An toàn thông tin. Hàm băm biến dữ liệu bất kỳ thành một mã có độ dài cố định. Dòng B trả C 2 cho mã bắt đầu bằng 0 e c e. Chỉ thêm một chữ số 0 thành B trả C 20, mã đổi hoàn toàn, tám chữ số đầu không còn chữ số nào trùng chỗ. Vì vậy chỉ cần so mã là biết dữ liệu có bị sửa hay không."
+      - show: |
+          <p>Mã viết bằng <b>chữ số thập lục phân</b>: 16 ký hiệu 0–9 và a–f, mỗi ký hiệu mang 4 bit. Mã đủ dài 64 ký hiệu, tức 64 × 4 = 256 bit; màn hình chỉ hiện 8 ký hiệu đầu.</p>
+          <p>Dấu gạch đứng <code>|</code> nghĩa là <b>nối</b> hai chuỗi, có vạch ngăn ở giữa: <code>"ab" | "cd"</code> thành <code>"ab|cd"</code>.</p>
+        focus: [1, 1, 1, 2]
+        say: "Mã băm được viết bằng chữ số thập lục phân, gồm 16 ký hiệu, từ 0 tới 9 và từ a tới f, mỗi ký hiệu mang 4 bit. Mã đủ dài có 64 ký hiệu, tức 64 nhân 4, bằng 256 bit. Trên màn hình ta chỉ hiện 8 ký hiệu đầu cho gọn. Còn dấu gạch đứng nghĩa là nối hai chuỗi với một vạch ngăn ở giữa, ví dụ a b nối c d thành a b, vạch, c d."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: mã băm và liên kết"
+    steps:
+      - show: |
+          <p><b>Hàm băm</b> SHA-256: nhận dữ liệu bất kỳ, trả 256 bit; đổi một ký tự là mã đổi hoàn toàn; không tìm được hai dữ liệu khác nhau cùng mã (trong thực tế).</p>
+          <div class="code"><div>mã[1] = băm( "000…0" | dữ liệu[1] )</div><div>mã[i] = băm( mã[i − 1] | dữ liệu[i] )</div></div>
+          <p><b>Kiểm chuỗi</b>: từ đầu tới cuối, tính lại <code>băm(mã đã lưu của khối trước | dữ liệu)</code> và so với mã đã lưu của khối này. Khối đầu tiên không khớp là nơi bị sửa (hoặc nơi kẻ sửa dừng lại).</p>
+        focus: [1, 1, 2, 3, 3]
+        say: "Hàm băm hai trăm năm mươi sáu bit nhận dữ liệu bất kỳ và trả về 256 bit, đổi một ký tự là mã đổi hoàn toàn. Trong thực tế, không tìm được hai dữ liệu khác nhau có cùng mã. Mã của khối đầu là băm của chuỗi toàn số 0 nối với dữ liệu, còn mã của khối i là băm của mã khối trước nối với dữ liệu khối i. Kiểm chuỗi là đi từ đầu tới cuối, tính lại băm của mã đã lưu của khối trước nối với dữ liệu, rồi so với mã đã lưu của khối này. Khối đầu tiên không khớp là nơi bị sửa, hoặc nơi kẻ sửa dừng lại."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Mỗi khối cầm mã của khối trước"
+    steps:
+      - show: |
+          <div><svg width="1500" height="400" viewBox="0 0 1500 400"><defs><marker id="arB1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs><g font-size="22" fill="#1f2937"><rect x="40" y="30" width="320" height="200" rx="12" fill="#f9fafb" stroke="#1f2937" stroke-width="3"/><text x="200" y="70" text-anchor="middle" font-weight="bold">khối 1</text><text x="60" y="115" fill="#6b7280">mã trước: 00000000</text><text x="60" y="160" fill="#2a78d6">dữ liệu: khối 0</text><text x="60" y="205" fill="#059669">mã: 7532f7b2</text><line x1="360" y1="198" x2="405" y2="110" stroke="#1f2937" stroke-width="3" marker-end="url(#arB1)"/><rect x="405" y="30" width="320" height="200" rx="12" fill="#f9fafb" stroke="#1f2937" stroke-width="3"/><text x="565" y="70" text-anchor="middle" font-weight="bold">khối 2</text><text x="425" y="115" fill="#6b7280">mã trước: 7532f7b2</text><text x="425" y="160" fill="#2a78d6">dữ liệu: A trả B 5</text><text x="425" y="205" fill="#059669">mã: fb7c50f3</text><line x1="725" y1="198" x2="770" y2="110" stroke="#1f2937" stroke-width="3" marker-end="url(#arB1)"/><rect x="770" y="30" width="320" height="200" rx="12" fill="#f9fafb" stroke="#1f2937" stroke-width="3"/><text x="930" y="70" text-anchor="middle" font-weight="bold">khối 3</text><text x="790" y="115" fill="#6b7280">mã trước: fb7c50f3</text><text x="790" y="160" fill="#2a78d6">dữ liệu: B trả C 2</text><text x="790" y="205" fill="#059669">mã: adc720a0</text><line x1="1090" y1="198" x2="1135" y2="110" stroke="#1f2937" stroke-width="3" marker-end="url(#arB1)"/><rect x="1135" y="30" width="320" height="200" rx="12" fill="#f9fafb" stroke="#1f2937" stroke-width="3"/><text x="1295" y="70" text-anchor="middle" font-weight="bold">khối 4</text><text x="1155" y="115" fill="#6b7280">mã trước: adc720a0</text><text x="1155" y="160" fill="#2a78d6">dữ liệu: C trả A 1</text><text x="1155" y="205" fill="#059669">mã: febb5dfe</text><rect x="770" y="280" width="320" height="100" rx="12" fill="#fee2e2" stroke="#b91c1c" stroke-width="3" stroke-dasharray="10 8"/><text x="790" y="320" fill="#b91c1c">sửa: B trả C 20</text><text x="790" y="360" fill="#b91c1c">mã tính lại: 91a89d99</text><text x="1155" y="320" fill="#b91c1c">khối 4 vẫn ghi adc720a0</text><text x="1155" y="360" fill="#b91c1c">không khớp: lộ</text><text x="40" y="320" fill="#1f2937">mũi tên: mã của khối này</text><text x="40" y="360" fill="#1f2937">được chép vào khối sau</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ bốn khối nối với nhau thành một chuỗi, từ khối 1 tới khối 4. Mỗi khối ghi mã trước, dữ liệu, và mã của chính nó, còn mũi tên cho thấy mã của khối này được chép vào ô mã trước của khối sau. Ô đỏ đứt nét là chỗ kẻ sửa đổi khối 3 thành B trả C 20 và tính lại mã, được một mã hoàn toàn khác. Nhưng khối 4 vẫn ghi mã cũ của khối 3, nên hai con số không khớp và việc sửa bị lộ."
+
+  - id: example
+    kind: example
+    title: "Bốn khối, sửa khối 3"
+    checks:
+      - "[h[:8] for h in alg.build_chain(['khối 0', 'A trả B 5', 'B trả C 2', 'C trả A 1'])] == ['7532f7b2', 'fb7c50f3', 'adc720a0', 'febb5dfe']"
+      - "(lambda H: alg.first_bad_block(['khối 0', 'A trả B 5', 'B trả C 20', 'C trả A 1'], H) == 2 and alg.first_bad_block(['khối 0', 'A trả B 5', 'B trả C 20', 'C trả A 1'], H[:2] + [alg.block_hash(H[1], 'B trả C 20')] + H[3:]) == 3)(alg.build_chain(['khối 0', 'A trả B 5', 'B trả C 2', 'C trả A 1']))"
+    steps:
+      - show: |
+          <p><b>Bước 1 — khối 1:</b> chưa có khối trước, dùng 64 chữ số 0.</p>
+          <div class="code"><div>mã[1] = băm( "000…0" | "khối 0" ) = 7532f7b2…</div></div>
+        focus: [1, 2]
+        say: "Bước một, ta tính mã băm của khối 1, khối đầu tiên của chuỗi. Khối này chưa có khối trước, nên ta dùng chuỗi 64 chữ số 0, nối với dữ liệu khối 0, rồi băm, được mã bắt đầu bằng 7 5 3 2."
+      - show: |
+          <p><b>Bước 2 — khối 2:</b> mã khối 1 đi vào đầu vào của khối 2.</p>
+          <div class="code"><div>mã[2] = băm( "7532f7b2…" | "A trả B 5" ) = fb7c50f3…</div></div>
+        focus: [1, 2]
+        say: "Bước hai, tính mã khối 2, và để ý rằng mã của khối 1 là một phần đầu vào. Băm mã khối 1 nối với dòng A trả B 5, được mã bắt đầu bằng f b 7 c, nên nếu khối 1 đổi thì mã khối 2 cũng đổi theo."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — làm tiếp tới khối 4:</b></p>
+          <table class="t"><tr><th>khối</th><th>dữ liệu</th><th>mã đã lưu</th></tr>
+          <tr><td>1</td><td>khối 0</td><td><code>7532f7b2…</code></td></tr>
+          <tr><td>2</td><td>A trả B 5</td><td><code>fb7c50f3…</code></td></tr>
+          <tr><td>3</td><td>B trả C 2</td><td><code>adc720a0…</code></td></tr>
+          <tr><td>4</td><td>C trả A 1</td><td><code>febb5dfe…</code></td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", "2.5"]
+        say: "Bước ba, làm tiếp như vậy tới hết, bảng có bốn khối. Khối 1 có dữ liệu khối 0, mã bắt đầu bằng 7 5 3 2. Khối 2 là A trả B 5. Khối 3 là B trả C 2, mã bắt đầu bằng a d c 7. Khối 4 là C trả A 1."
+      - clear: true
+        show: |
+          <p><b>Bước 4 — kẻ sửa khối 3 thành “B trả C 20”, giữ nguyên mã:</b></p>
+          <div class="code"><div>băm( "fb7c50f3…" | "B trả C 20" ) = 91a89d99…</div><div>mã đã lưu của khối 3  = adc720a0…  → khác: báo sai ở khối 3</div></div>
+        focus: [1, 2]
+        say: "Bước bốn, kẻ sửa đổi khối 3 thành B trả C 20 mà giữ nguyên mã. Kiểm chuỗi tính lại, mã ra bắt đầu bằng 9 1 a 8, khác mã đã lưu, nên báo sai ngay ở khối 3."
+      - show: |
+          <p><b>Bước 5 — kẻ sửa tính lại cả mã khối 3</b> thành <code>91a89d99…</code>:</p>
+          <div class="code"><div>khối 4 vẫn ghi mã trước = adc720a0…</div><div>băm( "91a89d99…" | "C trả A 1" ) khác mã đã lưu → <b>báo sai ở khối 4</b></div></div>
+        focus: [1, 2]
+        say: "Bước năm, kẻ sửa khôn hơn, tính lại cả mã khối 3. Lúc này kiểm chuỗi báo sai ở khối 4, vì khối 4 vẫn mang mã cũ của khối 3."
+      - show: |
+          <table class="t"><tr><th>muốn che hoàn toàn</th><th>mã phải tính lại</th></tr>
+          <tr><td>sửa khối 3 trong chuỗi 4 khối</td><td>khối 3 và khối 4: 2 mã</td></tr></table>
+          <p>Muốn che hoàn toàn, kẻ sửa phải tính lại <b>mọi khối sau</b> — và mọi bản sao của các bên khác vẫn giữ mã cũ.</p>
+        focus: [1, 2]
+        say: "Bước sáu, muốn che hoàn toàn trong chuỗi 4 khối, kẻ sửa phải tính lại 2 mã, của khối 3 và khối 4. Tổng quát, kẻ sửa phải tính lại mọi khối sau, mà mọi bản sao của các bên khác vẫn giữ mã cũ."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: so mã mới nhất với bản sao của bên khác"
+    checks:
+      - "(lambda H, H2: H2[-1][:8] == '4aa11acc' and H[-1] != H2[-1] and sum(a != b for a, b in zip(H, H2)) == 2 and alg.first_bad_block(['khối 0', 'A trả B 5', 'B trả C 20', 'C trả A 1'], H2) is None)(alg.build_chain(['khối 0', 'A trả B 5', 'B trả C 2', 'C trả A 1']), alg.build_chain(['khối 0', 'A trả B 5', 'B trả C 20', 'C trả A 1']))"
+      - "alg.block_hash(alg.build_chain(['khối 0', 'A trả B 5'])[-1], 'B trả C 20')[:8] == '91a89d99'"
+    steps:
+      - show: |
+          <table class="t"><tr><th>khối</th><th>bản sao của bên khác</th><th>chuỗi đã viết lại hết</th><th>giống?</th></tr>
+          <tr><td>1</td><td><code>7532f7b2</code></td><td><code>7532f7b2</code></td><td>giống</td></tr>
+          <tr><td>2</td><td><code>fb7c50f3</code></td><td><code>fb7c50f3</code></td><td>giống</td></tr>
+          <tr><td>3</td><td><code>adc720a0</code></td><td><code>91a89d99</code></td><td class="red">khác</td></tr>
+          <tr><td>4 (mới nhất)</td><td><code>febb5dfe</code></td><td><code>4aa11acc</code></td><td class="red">khác</td></tr></table>
+        focus: [1, "1.2", "1.4", "1.5", 0]
+        say: "Kiểm bằng đường khác, giả sử kẻ sửa đã tính lại hết, nên tự kiểm từng khối trên máy của họ không còn báo sai. Hai khối đầu vẫn giống bản sao của bên khác. Khối 3 thì khác, và đó đúng là chỗ đã bị kẻ sửa thay đổi. Khối 4, khối mới nhất, cũng khác, đúng 2 mã như ta đã đếm ở bước sáu. Vậy chỉ cần so một mã mới nhất với bản sao của bên khác là phát hiện, không cần tính lại cả chuỗi."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "3 lỗi người mới hay mắc"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Tưởng liên kết băm ngăn được sửa <b class="red">(nó chỉ phát hiện)</b>
+          <br><span class="note">Tính lại mã cho cả chuỗi chỉ tốn vài mi li giây. Muốn <b>ngăn</b> phải thêm: việc viết lại rất tốn kém, hoặc cần nhiều bên đồng ý, hoặc công bố mã mới nhất ra nơi kẻ sửa không chạm được.</span></div>
+        say: "Lỗi thứ nhất, tưởng liên kết băm ngăn được việc sửa, trong khi nó chỉ phát hiện. Tính lại mã cho cả chuỗi chỉ tốn vài mi li giây. Muốn ngăn thì phải thêm một trong ba thứ, làm việc viết lại rất tốn kém, cần nhiều bên đồng ý, hoặc công bố mã mới nhất ra nơi kẻ sửa không chạm được."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Băm dữ liệu không có ranh giới rõ <b class="red">(hai dữ liệu khác, cùng chuỗi ghép)</b>
+          <br><span class="note">Ghép “AB” + “C” và “A” + “BC” ra cùng “ABC”, nên cùng mã. Dùng dấu phân cách hoặc ghi độ dài từng trường trước khi băm.</span></div>
+        say: "Lỗi thứ hai, băm dữ liệu không có ranh giới rõ, nên hai dữ liệu khác nhau cho cùng chuỗi ghép. Ghép A B với C, và ghép A với B C, đều ra A B C, nên cùng mã. Hãy dùng dấu phân cách, hoặc ghi độ dài từng trường trước khi băm."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Chỉ kiểm khối mới nhất <b class="red">(sửa giữa chuỗi lọt qua)</b>
+          <br><span class="note">Phải tính lại từ đầu, hoặc so mã mới nhất với một bản đáng tin đã lưu ở nơi khác — mã mới nhất “tóm tắt” cả lịch sử.</span></div>
+        say: "Lỗi thứ ba, chỉ kiểm khối mới nhất, nên sửa ở giữa chuỗi lọt qua. Phải tính lại từ đầu, hoặc so mã mới nhất với một bản đáng tin đã lưu ở nơi khác, vì mã mới nhất tóm tắt cả lịch sử."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "(lambda D, H: alg.first_bad_block(D[:1] + ['A trả B 50'] + D[2:], H) == 1 and sum(1 for x, y in zip(alg.build_chain(D[:1] + ['A trả B 50'] + D[2:]), H) if x != y) == 4)(['khối 0', 'A trả B 5', 'B trả C 2', 'C trả A 1', 'A trả C 3'], alg.build_chain(['khối 0', 'A trả B 5', 'B trả C 2', 'C trả A 1', 'A trả C 3']))"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Chuỗi 5 khối. Kẻ sửa đổi khối 2 thành “A trả B 50”, không tính lại gì. Kiểm chuỗi báo sai ở khối nào?</td></tr>
+          <tr><td>2</td><td>Muốn che hoàn toàn, kẻ sửa phải tính lại mã của bao nhiêu khối?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, chuỗi có 5 khối. Kẻ sửa đổi khối 2 thành A trả B 50, và không tính lại gì. Kiểm chuỗi báo sai ở khối nào? Câu hai, muốn che hoàn toàn, kẻ sửa phải tính lại mã của bao nhiêu khối? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <table class="t"><tr><th>kiểm khối</th><th>tính lại</th><th>so với mã đã lưu</th></tr>
+          <tr><td>1</td><td>dữ liệu không đổi</td><td>khớp</td></tr>
+          <tr><td>2</td><td>băm( mã khối 1 | “A trả B 50” )</td><td class="red">khác</td></tr></table>
+          <p>① Sai ở <b>khối 2</b> — dữ liệu đổi nên băm ra mã khác mã đã lưu.</p>
+        focus: [1, "1.2", "1.3", 2]
+        say: "Đáp án câu một, kiểm lần lượt từ đầu. Khối 1 không bị đụng tới, nên mã tính lại khớp mã đã lưu. Ở khối 2, ta băm mã khối 1 nối với dòng A trả B 50. Vậy sai ở khối 2, vì dữ liệu đổi nên băm ra mã khác mã đã lưu."
+      - show: |
+          <p>② Từ khối 2 tới khối 5: $5 - 2 + 1 = \hl{4}$ khối: khối 2, 3, 4, 5 — mọi mã từ chỗ sửa tới cuối đều đổi.</p>
+        introduces: [sub]
+        say: "Câu hai, đếm từ khối 2 tới khối 5, được 5 trừ 2 cộng 1, bằng 4 khối, là khối 2, 3, 4 và 5, vì mọi mã từ chỗ sửa tới cuối đều đổi."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">mã khối = băm(mã trước | dữ liệu)</span><span class="a">→</span>
+          <span class="n">sửa một khối: mã đổi</span><span class="a">→</span>
+          <span class="n">khối sau không khớp: lộ</span><span class="a">→</span>
+          <span class="n">phát hiện, chưa ngăn: cần thêm chi phí hay đồng thuận</span></div>
+        say: "Tổng kết lại, mã khối bằng băm của mã trước nối với dữ liệu, nên sửa một khối là mã đổi, và khối sau không khớp nên sửa bị lộ. Liên kết băm phát hiện chứ chưa ngăn, nên cần thêm chi phí viết lại hay sự đồng thuận."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> một mã băm nhỏ có thể <b>đại diện cho cả lịch sử</b> — giữ được mã đó an toàn là giữ được lịch sử.</div>
+        say: "Điều cần mang theo, một mã băm nhỏ có thể đại diện cho cả lịch sử, và giữ được mã đó an toàn là giữ được lịch sử."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 2): <b>cây Merkle</b> và bằng chứng thuộc về.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 2, ta học cây Merkle và bằng chứng thuộc về. Hẹn gặp bạn ở bài tiếp theo."

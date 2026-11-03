@@ -1,0 +1,296 @@
+id: L09
+course: RLN
+series: "RLN · Học tăng cường"
+title: "Bài 9 — Tối ưu chính sách gần kề (PPO): cắt tỉ số để bước cập nhật an toàn"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/rln.yaml L09; audit/rln/verify_rln.py L09; audit/rln/sources_L09.md; J. Schulman, F. Wolski, P. Dhariwal, A. Radford, O. Klimov, Proximal Policy Optimization Algorithms, arXiv:1707.06347 (2017) — công thức (7) mục tiêu cắt, “ε = 0.2”, “lower bound (i.e., a pessimistic bound)”, Bảng 1 (điểm chuẩn hoá trung bình trên 7 môi trường mô phỏng robot, 3 hạt giống), Bảng 3 (T = 2048, 10 lượt, lô nhỏ 64); RLN bài 7 (gradient chính sách), bài 8 (lợi thế)"
+assumes: [arith, approx, frac, cdot, sub, geq, disc]
+# Quy ước: tỉ số ρ = π_mới(a | s) / π_cũ(a | s) của MỘT mẫu (s, a) lấy bằng chính sách cũ; lợi thế A của mẫu đó (bài 8) là số cố định
+#   khi tối ưu; ε là biên cắt (bài PPO gợi ý 0,2). Mục tiêu một mẫu: min(ρ·A, clip(ρ, 1 − ε, 1 + ε)·A) — alg.rln_ppo_clip.
+#   Tên “PPO” và tên tác giả chỉ trên màn hình (probe chưa đạt); lời đọc nói “tối ưu chính sách gần kề”, “độ lệch giữa hai chính sách”.
+#   Số trong Bảng 1, Bảng 3 là CITED (sources_L09.md); ví dụ hai hành động 0,5 / 0,5 → 0,6 / 0,4 và các mẫu ρ, A là SỐ MINH HOẠ.
+objectives:
+  - "Tính tỉ số ρ = π_mới / π_cũ và mục tiêu cắt min(ρ·A, clip(ρ, 1 − ε, 1 + ε)·A) cho từng mẫu"
+  - "Giải thích bằng số vì sao trung bình ρ·A trên dữ liệu cũ ước lượng được lợi thế dưới chính sách mới"
+  - "Nhận ra phía nào bị cắt, phía nào bị phạt đủ, và vì sao mục tiêu là cận dưới bi quan"
+  - "Quyết định biên cắt và số lượt tối ưu trên một lô dữ liệu, kèm cách theo dõi"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Tối ưu nhiều lượt trên cùng dữ liệu: từ −0,39 lên 0,82"
+    checks:
+      - "-0.39 < 0 < 0.82 and 2048 // 64 * 10 == 320"
+    steps:
+      - show: |
+          <p>Gradient chính sách cơ bản dùng mỗi lô dữ liệu cho <b>một</b> bước cập nhật rồi bỏ đi. Muốn tiết kiệm dữ liệu, ta tối ưu <b>nhiều lượt</b> trên cùng lô đó.</p>
+          <table class="t"><tr><th>7 môi trường mô phỏng robot, 3 hạt giống mỗi môi trường</th><th>điểm chuẩn hoá trung bình</th></tr>
+          <tr><td>tối ưu nhiều lượt, không cắt, không phạt</td><td class="red">−0,39</td></tr>
+          <tr><td>tối ưu nhiều lượt, cắt tỉ số với biên 0,2</td><td>$\hlg{0{,}82}$</td></tr></table>
+          <p class="note">Schulman và cộng sự (2017), Bảng 1. Điểm 0 = chính sách ngẫu nhiên, 1 = kết quả tốt nhất.</p>
+        focus: [1, 1, "2.2", "2.3", 3]
+        say: "Chào bạn, gradient chính sách cơ bản dùng mỗi lô dữ liệu cho một bước cập nhật rồi bỏ đi. Muốn tiết kiệm dữ liệu, ta tối ưu nhiều lượt trên cùng lô đó. Một bài báo năm 2017 đo trên 7 môi trường mô phỏng robot, tối ưu nhiều lượt mà không cắt cho điểm trung bình âm 0 phẩy 39, tệ hơn cả chính sách ngẫu nhiên. Cùng cách đó nhưng cắt tỉ số với biên 0 phẩy 2 thì được 0 phẩy 82. Trên thang này, 0 là chính sách ngẫu nhiên, còn 1 là kết quả tốt nhất."
+      - show: |
+          <div class="box key">Hôm nay: tỉ số giữa chính sách mới và cũ là gì? “Cắt” làm gì với nó? Và vì sao cắt chỉ một phía mà vẫn an toàn?</div>
+        say: "Hôm nay ta trả lời ba câu hỏi, tỉ số giữa chính sách mới và chính sách cũ là gì, cắt làm gì với tỉ số đó, và vì sao chỉ cắt một phía mà vẫn an toàn."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại ba điều sẽ dùng"
+    checks:
+      - "round(1 + 0.9 * 5 - 4, 10) == 1.5"
+      - "min(3, 2.4) == 2.4 and min(-1, -1.6) == -1.6 and max(0.8, min(1.5, 1.2)) == 1.2 and max(0.8, min(0.5, 1.2)) == 0.8"
+    steps:
+      - show: |
+          <p><b>① Gradient chính sách</b> (bài 7): dịch tham số để <b>tăng xác suất</b> của hành động cho kết quả tốt hơn mong đợi, giảm xác suất của hành động kém hơn.</p>
+          <p><b>② Lợi thế</b> (bài 8): $A = r + \gamma \cdot V(s') - V(s)$. Ví dụ $1 + 0{,}9 \cdot 5 - 4 = 1{,}5$ lớn hơn 0: hành động tốt hơn mức trung bình.</p>
+        introduces: [prime]
+        focus: [1, 1, 2, 2]
+        say: "Điều thứ nhất, ở bài 7 ta đã học gradient chính sách, dịch tham số để tăng xác suất của hành động cho kết quả tốt hơn mong đợi. Hành động kém hơn mong đợi thì bị giảm xác suất. Điều thứ hai, ở bài 8, lợi thế A bằng phần thưởng r cộng gam-ma nhân giá trị trạng thái kế tiếp, trừ giá trị trạng thái hiện tại. Ví dụ 1 cộng 0 phẩy 9 nhân 5 trừ 4 bằng 1 phẩy 5, lớn hơn 0, nên hành động tốt hơn mức trung bình."
+      - show: |
+          <p><b>③ Lấy số nhỏ hơn, và kẹp một số vào khoảng.</b></p>
+          <table class="t"><tr><th>phép</th><th>ví dụ</th><th>kết quả</th></tr>
+          <tr><td>$\min(a, b)$: số nhỏ hơn</td><td>$\min(3;\ 2{,}4)$ và $\min(-1;\ -1{,}6)$</td><td>2,4 và −1,6</td></tr>
+          <tr><td>$\operatorname{clip}(x, 0{,}8, 1{,}2)$: kẹp $x$ vào đoạn từ 0,8 tới 1,2</td><td>$x = 1{,}5$ và $x = 0{,}5$</td><td>1,2 và 0,8</td></tr></table>
+        introduces: [min_fn, clipfn]
+        focus: [1, "2.2", "2.2", "2.3", "2.3"]
+        say: "Điều thứ ba là hai phép tính nhỏ. Min của a và b là số nhỏ hơn trong hai số. Ví dụ min của 3 và 2 phẩy 4 là 2 phẩy 4, còn min của âm 1 và âm 1 phẩy 6 là âm 1 phẩy 6, vì âm 1 phẩy 6 nhỏ hơn. Phép kẹp x vào đoạn từ 0 phẩy 8 tới 1 phẩy 2 giữ nguyên x nếu x nằm trong đoạn, còn ra ngoài thì đặt bằng đầu mút gần nhất. Vậy 1 phẩy 5 bị kẹp về 1 phẩy 2, còn 0 phẩy 5 bị kẹp lên 0 phẩy 8."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: π, ρ và ε"
+    checks:
+      - "round(0.6 / 0.4, 10) == 1.5 and round(0.2 / 0.4, 10) == 0.5"
+      - "(1 - 0.2, 1 + 0.2) == (0.8, 1.2)"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ký hiệu</th><th>đọc</th><th>nghĩa</th></tr>
+          <tr><td>$\pi(a \mid s)$</td><td>pi của a khi biết s</td><td>chính sách: xác suất chọn hành động $a$ khi ở trạng thái $s$</td></tr>
+          <tr><td>$\rho = \dfrac{\pi_{\text{mới}}(a \mid s)}{\pi_{\text{cũ}}(a \mid s)}$</td><td>rô</td><td>tỉ số: chính sách mới chọn $a$ nhiều gấp mấy lần chính sách cũ</td></tr>
+          <tr><td>$\varepsilon$</td><td>epsilon</td><td>biên cắt: cho $\rho$ đi xa 1 tối đa bao nhiêu, ví dụ 0,2</td></tr></table>
+        introduces: [policy, given, ratio, eps]
+        focus: [0, "1.2", "1.3", "1.3", "1.4"]
+        say: "Bảng giới thiệu ba ký hiệu. Pi của a khi biết s là chính sách, xác suất chọn hành động a khi đang ở trạng thái s, vạch đứng đọc là khi biết. Rô là tỉ số giữa xác suất chọn a của chính sách mới và của chính sách cũ. Chỉ số dưới mới và cũ cho biết đó là chính sách nào. Biên cắt là biên cắt, cho rô đi xa 1 tối đa bao nhiêu, ví dụ 0 phẩy 2."
+      - show: |
+          <p>Làm thử: chính sách cũ chọn $a$ với xác suất 0,4, chính sách mới với 0,6:</p>
+          $$\rho = \frac{0{,}6}{0{,}4} = 1{,}5 \qquad \text{(mới chọn } a \text{ nhiều gấp 1,5 lần)}$$
+          <p class="note">Mới 0,2, cũ 0,4 → $\rho = 0{,}5$. Hai chính sách giống hệt → $\rho = 1$. Với $\varepsilon = 0{,}2$, vùng “an toàn” của $\rho$ là từ 0,8 tới 1,2.</p>
+        focus: [1, 2, 3, 3]
+        say: "Làm thử, chính sách cũ chọn a với xác suất 0 phẩy 4, chính sách mới với 0 phẩy 6. Tỉ số rô bằng 0 phẩy 6 chia 0 phẩy 4, bằng 1 phẩy 5, nghĩa là chính sách mới chọn a nhiều gấp 1 phẩy 5 lần. Nếu mới là 0 phẩy 2 thì rô bằng 0 phẩy 5, còn hai chính sách giống hệt thì rô bằng 1. Với biên cắt bằng 0 phẩy 2, vùng an toàn của rô là từ 0 phẩy 8 tới 1 phẩy 2."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Mục tiêu một mẫu theo tỉ số: phẳng ở phía có lợi"
+    checks:
+      - "[alg.rln_ppo_clip(r, 2) for r in (0.5, 1.0, 1.2)] == [1.0, 2.0, 2.4] and alg.rln_ppo_clip(1.5, 2) == alg.rln_ppo_clip(2.0, 2) == 2.4"
+      - "alg.rln_ppo_clip(0.5, -2) == alg.rln_ppo_clip(0.2, -2) == -1.6 and alg.rln_ppo_clip(1.0, -2) == -2.0 and alg.rln_ppo_clip(2.0, -2) == -4.0"
+    steps:
+      - show: |
+          <div><svg width="1000" height="350" viewBox="0 0 1000 350"><defs><marker id="rl9a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs>
+          <g font-size="21" fill="#1f2937">
+          <text x="250" y="30" text-anchor="middle" font-weight="bold" fill="#059669">lợi thế dương, A = 2</text>
+          <line x1="60" y1="280" x2="450" y2="280" stroke="#1f2937" stroke-width="2" marker-end="url(#rl9a)"/>
+          <line x1="60" y1="290" x2="60" y2="60" stroke="#1f2937" stroke-width="2" marker-end="url(#rl9a)"/>
+          <polyline points="60,280 288,88 440,88" fill="none" stroke="#059669" stroke-width="5"/>
+          <line x1="288" y1="70" x2="288" y2="280" stroke="#eb6834" stroke-width="2" stroke-dasharray="6 5"/>
+          <circle cx="250" cy="120" r="9" fill="#e11d48"/>
+          <text x="288" y="310" text-anchor="middle" fill="#eb6834">1,2</text><text x="250" y="335" text-anchor="middle">1</text>
+          <text x="380" y="74" text-anchor="middle" fill="#059669">phẳng: 2,4</text>
+          <text x="440" y="335" text-anchor="end">tỉ số rô</text>
+          <text x="560" y="30" text-anchor="start" font-weight="bold" fill="#b91c1c">lợi thế âm, A = −2</text>
+          <line x1="560" y1="70" x2="960" y2="70" stroke="#1f2937" stroke-width="2" marker-end="url(#rl9a)"/>
+          <line x1="560" y1="60" x2="560" y2="300" stroke="#1f2937" stroke-width="2"/>
+          <polyline points="560,150 712,150 940,270" fill="none" stroke="#b91c1c" stroke-width="5"/>
+          <line x1="712" y1="70" x2="712" y2="290" stroke="#eb6834" stroke-width="2" stroke-dasharray="6 5"/>
+          <circle cx="750" cy="170" r="9" fill="#e11d48"/>
+          <text x="712" y="52" text-anchor="middle" fill="#eb6834">0,8</text><text x="752" y="52" text-anchor="middle">1</text>
+          <text x="570" y="190" text-anchor="start" fill="#b91c1c">phẳng: −1,6</text>
+          <text x="940" y="300" text-anchor="end" fill="#b91c1c">dốc xuống mãi</text>
+          </g></svg></div>
+          <p class="note">Chấm đỏ: điểm xuất phát $\rho = 1$ (chính sách mới vẫn là chính sách cũ).</p>
+        focus: [1, 1, 1, 1, 2]
+        say: "Hình vẽ mục tiêu của một mẫu theo tỉ số rô, chấm đỏ là điểm xuất phát rô bằng 1. Bên trái, lợi thế dương bằng 2, mục tiêu tăng theo rô tới 1 phẩy 2 rồi đi ngang ở 2 phẩy 4, nên đẩy rô xa hơn chẳng được thêm gì. Bên phải, lợi thế âm bằng âm 2, giảm rô xuống dưới 0 phẩy 8 cũng không được thêm gì. Nhưng tăng rô thì mục tiêu dốc xuống mãi, không hề bị cắt. Chấm đỏ là lúc chính sách mới vẫn là chính sách cũ."
+
+  # ───────────────────────── 5. SUY RA CÔNG THỨC ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra mục tiêu cắt từ dữ liệu của chính sách cũ"
+    checks:
+      - "round(0.6 * 2 + 0.4 * (-2), 10) == 0.4"
+      - "round(0.5 * (0.6 / 0.5) * 2 + 0.5 * (0.4 / 0.5) * (-2), 10) == 0.4"
+      - "alg.rln_ppo_clip(3.0, 2) == 2.4 and 3.0 * 2 == 6.0"
+    steps:
+      - show: |
+          <p><b>Bước 1 — muốn gì.</b> Đo xem chính sách mới tốt hơn bao nhiêu: trung bình của $A$ khi chọn hành động <b>theo chính sách mới</b>. Hai hành động, lợi thế $+2$ và $-2$; mới chọn với 0,6 và 0,4:</p>
+          $$0{,}6 \cdot 2 + 0{,}4 \cdot (-2) = 0{,}4$$
+        focus: [1, 1, 1, 2]
+        say: "Bước một là nói rõ ta muốn gì. Ta muốn đo chính sách mới tốt hơn bao nhiêu, tức trung bình của lợi thế khi chọn hành động theo chính sách mới. Hai hành động có lợi thế cộng 2 và âm 2, chính sách mới chọn chúng với xác suất 0 phẩy 6 và 0 phẩy 4. Vậy trung bình là 0 phẩy 6 nhân 2 cộng 0 phẩy 4 nhân âm 2, bằng 0 phẩy 4."
+      - show: |
+          <p><b>Bước 2 — nhưng dữ liệu do chính sách cũ thu</b> (0,5 và 0,5). Nhân mỗi mẫu với $\rho$ để bù cho chênh lệch tần suất:</p>
+          $$0{,}5 \cdot \frac{0{,}6}{0{,}5} \cdot 2 + 0{,}5 \cdot \frac{0{,}4}{0{,}5} \cdot (-2) = 1{,}2 - 0{,}8 = 0{,}4 \checkmark$$
+          <p class="note">Vì xác suất cũ nhân tỉ số đúng bằng xác suất mới, trung bình của $\rho \cdot A$ trên dữ liệu cũ bằng trung bình của $A$ dưới chính sách mới.</p>
+        focus: [1, 2, 3]
+        say: "Bước hai, nhưng dữ liệu là do chính sách cũ thu, chọn mỗi hành động với xác suất 0 phẩy 5. Ta nhân mỗi mẫu với rô để bù cho chênh lệch tần suất, được 1 phẩy 2 trừ 0 phẩy 8, đúng bằng 0 phẩy 4. Lý do là xác suất cũ nhân tỉ số đúng bằng xác suất mới, nên trung bình của rô nhân A trên dữ liệu cũ bằng trung bình của A dưới chính sách mới."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — chỗ nguy hiểm.</b> Tối ưu thẳng $\rho \cdot A$ thì với $A = 2$, cứ tăng $\rho$ là mục tiêu tăng: $\rho = 3$ cho 6. Nhưng dữ liệu cũ chỉ đáng tin khi chính sách mới còn <b>gần</b> chính sách cũ.</p>
+          <p><b>Bước 4 — cắt rồi lấy số nhỏ hơn:</b></p>
+          $$L = \min\big(\rho \cdot A,\ \operatorname{clip}(\rho, 1 - \varepsilon, 1 + \varepsilon) \cdot A\big)$$
+          <p class="note">Làm thử $\rho = 3$, $A = 2$, $\varepsilon = 0{,}2$: $\min(6;\ 1{,}2 \cdot 2) = 2{,}4$ — không còn lợi gì khi đẩy $\rho$ quá 1,2.</p>
+        focus: [1, 1, 2, 3, 4]
+        say: "Bước ba là chỗ nguy hiểm. Nếu tối ưu thẳng rô nhân A thì với A bằng 2, cứ tăng rô là mục tiêu tăng, rô bằng 3 cho 6. Nhưng dữ liệu cũ chỉ đáng tin khi chính sách mới còn gần chính sách cũ. Bước bốn, vì vậy ta kẹp rô vào đoạn từ 1 trừ biên cắt tới 1 cộng biên cắt, rồi lấy số nhỏ hơn giữa bản chưa kẹp và bản đã kẹp. Làm thử với rô bằng 3, min của 6 và 2 phẩy 4 là 2 phẩy 4, nên đẩy rô quá 1 phẩy 2 không còn lợi gì."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Bốn mẫu, biên cắt 0,2, từng phép tính"
+    checks:
+      - "round(1.5 * 2, 10) == 3.0 and alg.rln_ppo_clip(1.5, 2) == 2.4"
+      - "round(0.5 * -2, 10) == -1.0 and alg.rln_ppo_clip(0.5, -2) == -1.6"
+      - "alg.rln_ppo_clip(0.5, 2) == 1.0 and round(0.8 * 2, 10) == 1.6"
+      - "alg.rln_ppo_clip(1.5, -2) == -3.0 and round(1.2 * -2, 10) == -2.4"
+    steps:
+      - show: |
+          <p>Biên cắt $\varepsilon = 0{,}2$, đoạn kẹp từ 0,8 tới 1,2.</p>
+          <p><b>Bước 1.</b> $\rho = 1{,}5$, $A = 2$: gốc $1{,}5 \cdot 2 = 3$; kẹp $1{,}2 \cdot 2 = 2{,}4$; $\min = \hlg{2{,}4}$ — <b>bị cắt</b>.</p>
+        focus: [1, 2]
+        say: "Biên cắt là 0 phẩy 2, nên đoạn kẹp là từ 0 phẩy 8 tới 1 phẩy 2. Bước một, rô bằng 1 phẩy 5, A bằng 2, bản chưa kẹp là 3, bản kẹp là 1 phẩy 2 nhân 2 bằng 2 phẩy 4, nên min là 2 phẩy 4 và mẫu này bị cắt."
+      - show: |
+          <p><b>Bước 1.</b> $\rho = 1{,}5$, $A = 2$ → 2,4 (cắt).</p>
+          <p><b>Bước 2.</b> $\rho = 0{,}5$, $A = -2$: gốc $-1$; kẹp $0{,}8 \cdot (-2) = -1{,}6$; $\min = \hl{-1{,}6}$ — <b>bị cắt</b>.</p>
+        focus: [2, 2]
+        say: "Bước hai, rô bằng 0 phẩy 5, A bằng âm 2, bản chưa kẹp là âm 1, bản kẹp là 0 phẩy 8 nhân âm 2, bằng âm 1 phẩy 6. Min là âm 1 phẩy 6, nên đã giảm xác suất hành động xấu đủ nhiều thì không được thưởng thêm."
+      - show: |
+          <p><b>Bước 1–2.</b> 2,4 (cắt); −1,6 (cắt).</p>
+          <p><b>Bước 3.</b> $\rho = 0{,}5$, $A = 2$: gốc $1$; kẹp $0{,}8 \cdot 2 = 1{,}6$; $\min = \hlb{1}$ — <b>giữ bản chưa kẹp</b>: hành động tốt bị giảm xác suất thì bị phạt đủ.</p>
+        focus: [2, 2]
+        say: "Bước ba, rô bằng 0 phẩy 5, A bằng 2, bản chưa kẹp là 1, bản kẹp là 1 phẩy 6. Min là 1, tức giữ bản chưa kẹp, vì chính sách mới đã giảm xác suất của một hành động tốt và phải chịu phạt đủ."
+      - clear: true
+        show: |
+          <table class="t"><tr><th>bước</th><th>$\rho$</th><th>$A$</th><th>gốc $\rho \cdot A$</th><th>kẹp</th><th>$L$</th><th>phía</th></tr>
+          <tr><td>1</td><td>1,5</td><td>2</td><td>3</td><td>2,4</td><td>2,4</td><td>có lợi → cắt</td></tr>
+          <tr><td>2</td><td>0,5</td><td>−2</td><td>−1</td><td>−1,6</td><td>−1,6</td><td>có lợi → cắt</td></tr>
+          <tr><td>3</td><td>0,5</td><td>2</td><td>1</td><td>1,6</td><td>1</td><td>bất lợi → phạt đủ</td></tr>
+          <tr><td>4</td><td>1,5</td><td>−2</td><td>−3</td><td>−2,4</td><td>$\hl{-3}$</td><td>bất lợi → phạt đủ</td></tr></table>
+        focus: ["1.5", "1.5", 1, 1]
+        say: "Bước bốn, rô bằng 1 phẩy 5 và A bằng âm 2, bản chưa kẹp là âm 3, bản kẹp là âm 2 phẩy 4, nên min là âm 3. Mẫu này bị phạt đủ, vì chính sách đã tăng xác suất của hành động xấu. Đặt bốn mẫu cạnh nhau, mẫu nào đi về phía có lợi quá biên thì bị cắt. Mẫu nào đi về phía bất lợi thì giữ nguyên hình phạt, nên mục tiêu luôn nhỏ hơn hoặc bằng bản chưa kẹp."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: công thức theo dấu của A, và đạo hàm bằng 0 khi bị cắt"
+    checks:
+      - "all(alg.rln_ppo_clip(r, A) == (min(r, 1.2) * A if A > 0 else max(r, 0.8) * A) for r, A in [(1.5, 2), (0.5, -2), (0.5, 2), (1.5, -2)])"
+      - "abs((alg.rln_ppo_clip(1.501, 2) - alg.rln_ppo_clip(1.499, 2)) / 0.002) < 1e-9 and abs((alg.rln_ppo_clip(1.001, 2) - alg.rln_ppo_clip(0.999, 2)) / 0.002 - 2) < 1e-6"
+      - "all(alg.rln_ppo_clip(r, A) <= r * A + 1e-12 for r in [0.1 * k for k in range(1, 31)] for A in (-2, -1, 1, 2))"
+    steps:
+      - show: |
+          <p><b>Đường khác 1 — viết theo dấu của $A$</b>, không dùng min:</p>
+          <table class="t"><tr><th>khi</th><th>mục tiêu</th><th>bốn mẫu</th></tr>
+          <tr><td>$A$ dương</td><td>$\min(\rho;\ 1{,}2) \cdot A$</td><td>$1{,}2 \cdot 2 = 2{,}4$; $\;0{,}5 \cdot 2 = 1$</td></tr>
+          <tr><td>$A$ âm</td><td>$\max(\rho;\ 0{,}8) \cdot A$</td><td>$0{,}8 \cdot (-2) = -1{,}6$; $\;1{,}5 \cdot (-2) = -3$</td></tr></table>
+          <p class="note">Khớp cả bốn ô của bảng ví dụ ✓.</p>
+        introduces: [max_fn]
+        focus: [1, "2.2", "2.3", 3]
+        say: "Kiểm tra thứ nhất, ta viết lại theo dấu của A, nghĩa là không dùng phép min. Khi A dương, mục tiêu là số nhỏ hơn giữa rô và 1 phẩy 2, nhân A, cho 2 phẩy 4 và 1. Khi A âm, mục tiêu là số lớn hơn giữa rô và 0 phẩy 8, nhân A, cho âm 1 phẩy 6 và âm 3. Kết quả khớp cả bốn ô của bảng ví dụ."
+      - show: |
+          <p><b>Đường khác 2 — nhích $\rho$ một chút</b> và xem mục tiêu đổi bao nhiêu, với $A = 2$:</p>
+          <table class="t"><tr><th>quanh</th><th>nhích từ −0,001 tới +0,001</th><th>độ dốc</th></tr>
+          <tr><td>$\rho = 1$ (trong đoạn)</td><td>mục tiêu đổi 0,004</td><td>2 → còn kéo $\rho$</td></tr>
+          <tr><td>$\rho = 1{,}5$ (bị cắt)</td><td>mục tiêu không đổi</td><td>$\hlg{0}$ → hết lực kéo</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Kiểm tra thứ hai, ta nhích rô một chút và xem mục tiêu đổi bao nhiêu, với A bằng 2. Quanh rô bằng 1, nhích tổng cộng 0 phẩy 002 làm mục tiêu đổi 0 phẩy 004, nên độ dốc là 2 và tối ưu còn kéo rô đi. Quanh rô bằng 1 phẩy 5, mục tiêu không đổi, độ dốc bằng 0, nên mẫu này không còn kéo chính sách đi xa hơn nữa."
+
+  # ───────────────────────── 8. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi cả người đã đi làm"
+    checks:
+      - "alg.rln_ppo_clip(1.5, -2) == -3.0 != round(1.2 * -2, 10)"
+      - "alg.rln_ppo_clip(1.5, 2) == alg.rln_ppo_clip(1.5, 2.0) and alg.rln_ppo_clip(1.3, 1) == 1.2"
+      - "2048 // 64 * 10 == 320 and 2048 // 64 * 30 == 960"
+      - "max([0.76, 0.82, 0.70]) == 0.82 and 7 * 3 == 21"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Nghĩ phép cắt chặn cả hai phía <b class="red">(phía bất lợi không bị cắt)</b>
+          <br><span class="note">$\rho = 1{,}5$, $A = -2$ cho $-3$, không phải $-2{,}4$. Phép thử: tính bản chưa kẹp và bản kẹp, mục tiêu phải là số nhỏ hơn.</span></div>
+        say: "Lỗi thứ nhất, nghĩ phép cắt chặn cả hai phía, trong khi phía bất lợi không bị cắt. Rô bằng 1 phẩy 5 với A bằng âm 2 cho âm 3, không phải âm 2 phẩy 4. Phép thử là tính cả bản chưa kẹp lẫn bản kẹp, và mục tiêu phải là số nhỏ hơn."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Nghĩ cắt là <b>giữ</b> $\rho$ trong đoạn 0,8 tới 1,2 <b class="red">(chỉ bỏ lực kéo)</b>
+          <br><span class="note">Mẫu bị cắt không kéo nữa, nhưng các mẫu khác vẫn kéo chung một bộ tham số, nên $\rho$ của nó vẫn có thể ra 1,3 hay 2. Phép thử: sau mỗi lượt, đếm tỉ lệ mẫu có $\rho$ ngoài đoạn.</span></div>
+        say: "Lỗi thứ hai, nghĩ phép cắt giữ rô trong đoạn 0 phẩy 8 tới 1 phẩy 2, trong khi nó chỉ bỏ lực kéo. Mẫu bị cắt không kéo nữa, nhưng các mẫu khác vẫn kéo chung một bộ tham số, nên rô của nó vẫn có thể ra 1 phẩy 3 hay 2. Phép thử là sau mỗi lượt, đếm tỉ lệ mẫu có rô nằm ngoài đoạn."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Tính lại lợi thế sau mỗi lượt tối ưu <b class="red">(mục tiêu chạy theo chính nó)</b>
+          <br><span class="note">Lợi thế $A$ và xác suất cũ được tính <b>một lần</b> khi thu dữ liệu rồi giữ cố định suốt các lượt; chỉ $\pi_{\text{mới}}$ thay đổi. Phép thử: ở lượt đầu, mọi $\rho$ phải đúng bằng 1.</span></div>
+        say: "Lỗi thứ ba, tính lại lợi thế sau mỗi lượt tối ưu, làm mục tiêu chạy theo chính nó. Lợi thế và xác suất cũ được tính một lần khi thu dữ liệu, rồi giữ cố định suốt các lượt, chỉ chính sách mới thay đổi. Phép thử là ở lượt đầu tiên, mọi tỉ số rô phải đúng bằng 1."
+      - show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Tăng số lượt tối ưu cho “tận dụng dữ liệu” mà không theo dõi <b class="red">(đi quá xa)</b></div>
+          <table class="t"><tr><th>một lô 2048 bước, lô nhỏ 64</th><th>bước gradient trên cùng dữ liệu</th></tr>
+          <tr><td>10 lượt (Bảng 3 của bài báo)</td><td>$\dfrac{2048}{64} \cdot 10 = 320$</td></tr>
+          <tr><td>30 lượt</td><td>960 — gấp 3, $\rho$ dễ trôi xa</td></tr></table>
+          <p class="note">Biên 0,1 / 0,2 / 0,3 cho 0,76 / 0,82 / 0,70 (Bảng 1, 21 lần chạy). Theo dõi độ lệch giữa chính sách mới và cũ, dừng lượt sớm khi nó vượt ngưỡng.</p>
+        focus: [1, "2.2", "2.3", 3, 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, tăng số lượt tối ưu để tận dụng dữ liệu mà không theo dõi. Với một lô 2048 bước, lô nhỏ 64 và 10 lượt như bảng tham số của bài báo, ta đã có 320 bước gradient trên cùng dữ liệu. Ba mươi lượt là 960 bước, gấp 3, nên rô dễ trôi xa. Bài báo đo biên 0 phẩy 1, 0 phẩy 2, 0 phẩy 3 cho 0 phẩy 76, 0 phẩy 82, 0 phẩy 70. Vậy hãy theo dõi độ lệch giữa hai chính sách và dừng sớm khi nó vượt ngưỡng."
+
+  # ───────────────────────── 9. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: ba mẫu và một quyết định"
+    checks:
+      - "round(alg.rln_ppo_clip(1.1, 3), 10) == 3.3 and alg.rln_ppo_clip(1.4, -1) == -1.4 and alg.rln_ppo_clip(0.7, -1) == -0.8"
+      - "round((alg.rln_ppo_clip(1.1, 3) + alg.rln_ppo_clip(1.4, -1) + alg.rln_ppo_clip(0.7, -1)) / 3, 3) == 0.367"
+    steps:
+      - show: |
+          <p>Biên cắt $\varepsilon = 0{,}2$.</p>
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Tính $L$ cho ba mẫu: ($\rho = 1{,}1$, $A = 3$), ($\rho = 1{,}4$, $A = -1$), ($\rho = 0{,}7$, $A = -1$). Mẫu nào bị cắt?</td></tr>
+          <tr><td>2</td><td>Trung bình $L$ của ba mẫu là bao nhiêu?</td></tr>
+          <tr><td>3</td><td>Sau 5 lượt, 40% số mẫu có $\rho$ ngoài đoạn 0,8 tới 1,2. Bạn làm gì với các lượt còn lại?</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", 0]
+        say: "Bây giờ đến lượt bạn, với biên cắt 0 phẩy 2. Câu một, tính mục tiêu cho ba mẫu, rô 1 phẩy 1 với A bằng 3, rô 1 phẩy 4 với A âm 1, và rô 0 phẩy 7 với A âm 1, mẫu nào bị cắt? Câu hai, trung bình mục tiêu của ba mẫu là bao nhiêu? Câu ba, sau 5 lượt, 40 phần trăm số mẫu có rô ngoài đoạn 0 phẩy 8 tới 1 phẩy 2, bạn làm gì với các lượt còn lại? Dừng video và làm ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>mẫu</th><th>gốc</th><th>kẹp</th><th>$L$</th><th>ghi chú</th></tr>
+          <tr><td>$\rho = 1{,}1$, $A = 3$</td><td>3,3</td><td>3,3</td><td>3,3</td><td>trong đoạn, không cắt</td></tr>
+          <tr><td>$\rho = 1{,}4$, $A = -1$</td><td>−1,4</td><td>−1,2</td><td>−1,4</td><td>bất lợi → phạt đủ</td></tr>
+          <tr><td>$\rho = 0{,}7$, $A = -1$</td><td>−0,7</td><td>−0,8</td><td>−0,8</td><td>có lợi quá biên → <b>bị cắt</b></td></tr></table>
+          <p>Câu 2: $\frac{3{,}3 - 1{,}4 - 0{,}8}{3} = \frac{1{,}1}{3} \approx \hlg{0{,}367}$.</p>
+        focus: ["1.2", "1.3", "1.4", 2]
+        say: "Đáp án câu một, mẫu đầu có rô 1 phẩy 1 nằm trong đoạn, nên mục tiêu là 3 phẩy 3, không cắt. Mẫu thứ hai có bản chưa kẹp âm 1 phẩy 4 nhỏ hơn bản kẹp âm 1 phẩy 2, nên phạt đủ âm 1 phẩy 4. Mẫu thứ ba có bản kẹp âm 0 phẩy 8 nhỏ hơn bản chưa kẹp, nên đây là mẫu bị cắt. Câu hai, cộng ba số được 1 phẩy 1, chia 3, xấp xỉ 0 phẩy 367."
+      - clear: true
+        show: |
+          <p><b>Câu 3 — quyết định.</b> 40% mẫu ra ngoài đoạn nghĩa là chính sách mới đã xa chính sách cũ; dữ liệu cũ không còn đáng tin.</p>
+          <table class="t"><tr><th>lựa chọn</th><th>được</th><th>mất</th></tr>
+          <tr><td>dừng các lượt còn lại, thu dữ liệu mới</td><td>an toàn</td><td>tốn thêm lượt chơi</td></tr>
+          <tr><td>giảm tốc độ học hoặc số lượt cho lần sau</td><td>bước nhỏ, ổn định</td><td>học chậm hơn</td></tr>
+          <tr><td>cứ chạy tiếp</td><td>dùng hết dữ liệu</td><td class="red">dễ sụp như bản không cắt</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Câu ba là một quyết định. Bốn mươi phần trăm mẫu ra ngoài đoạn nghĩa là chính sách mới đã xa chính sách cũ, nên dữ liệu cũ không còn đáng tin. Dừng các lượt còn lại và thu dữ liệu mới thì an toàn nhưng tốn thêm lượt chơi. Giảm tốc độ học hoặc số lượt cho lần sau thì ổn định hơn nhưng học chậm hơn, còn cứ chạy tiếp thì dễ sụp như bản không cắt ở phần mở đầu."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">dữ liệu do chính sách cũ thu</span><span class="a">→</span>
+          <span class="n">nhân tỉ số rô để ước lượng cho chính sách mới</span><span class="a">→</span>
+          <span class="n">chỉ đáng tin khi rô gần 1</span><span class="a">→</span>
+          <span class="n">kẹp rô, lấy số nhỏ hơn: cắt phía có lợi, phạt đủ phía bất lợi</span></div>
+        say: "Tổng kết lại, dữ liệu do chính sách cũ thu, nên ta nhân với tỉ số rô để ước lượng cho chính sách mới. Ước lượng đó chỉ đáng tin khi rô còn gần 1. Vì vậy ta kẹp rô rồi lấy số nhỏ hơn, cắt phía có lợi và giữ nguyên hình phạt ở phía bất lợi."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> mỗi lần tái dùng dữ liệu cũ, hãy hỏi “chính sách đã đi xa nơi thu dữ liệu chưa?” — và <b>đo</b> điều đó, đừng đoán.</div>
+        say: "Điều cần mang theo, mỗi lần tái dùng dữ liệu cũ, hãy hỏi chính sách đã đi xa nơi thu dữ liệu chưa, và hãy đo điều đó chứ đừng đoán."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 10): <b>học phần thưởng từ sở thích của người</b> — khi không viết được phần thưởng bằng công thức, ta cho người chọn câu trả lời tốt hơn và học từ đó.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 10, ta học phần thưởng từ sở thích của người, khi không viết được phần thưởng bằng công thức, ta cho người chọn câu trả lời tốt hơn và học từ đó. Hẹn gặp bạn ở bài tiếp theo."

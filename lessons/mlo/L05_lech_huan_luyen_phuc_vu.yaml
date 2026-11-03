@@ -1,0 +1,189 @@
+id: L05
+course: MLO
+series: "MLO · MLOps: đưa mô hình học máy vào vận hành"
+title: "Bài 5 — Kho đặc trưng và lệch huấn luyện–phục vụ"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/mlo.yaml L05; audit/mlo/verify_mlo.py L05; M. Zinkevich, Rules of Machine Learning (Google, 2017), quy tắc 29–37 (lệch huấn luyện–phục vụ); E. Breck và cộng sự, Data Validation for Machine Learning, MLSys (2019); DSC bài 10 (rò rỉ dữ liệu)"
+assumes: [arith, frac]
+# Quy ước: chuẩn hoá z = (x − trung bình) / độ lệch chuẩn (alg.zscore). Lúc huấn luyện dùng (50, 10); bản phục vụ lỡ tính lại trên dữ liệu
+#   gần đây nên dùng (60, 10). “Kho đặc trưng” = nơi lưu một định nghĩa đặc trưng dùng chung cho huấn luyện và phục vụ.
+objectives:
+  - "Dùng chung một mã tính đặc trưng cho huấn luyện và phục vụ"
+  - "Phát hiện lệch huấn luyện–phục vụ"
+  - "Tránh dùng thông tin tương lai khi tính đặc trưng"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Cùng một khách, hai điểm khác nhau"
+    checks:
+      - "alg.zscore(70, 50, 10) == 2.0 and alg.zscore(70, 60, 10) == 1.0"
+    steps:
+      - show: |
+          <p>Lúc huấn luyện, đặc trưng “số đơn trong tháng” được chuẩn hoá bằng trung bình 50. Bản phục vụ được viết lại riêng và tính trung bình trên dữ liệu tuần này: 60. Cùng một khách 70 đơn: lúc huấn luyện là $\hl{2{,}0}$, lúc phục vụ là $\hl{1{,}0}$.</p>
+          <div class="box key">Hôm nay: <b>lệch huấn luyện–phục vụ</b> — mô hình nhận ở chỗ chạy thật thứ khác với thứ nó đã học.</div>
+        focus: [1, 1, 1, 2]
+        say: "Chào bạn, lúc huấn luyện, đặc trưng số đơn trong tháng được chuẩn hoá bằng trung bình 50. Bản phục vụ được viết lại riêng, và tính trung bình trên dữ liệu tuần này là 60. Cùng một khách có 70 đơn, lúc huấn luyện được 2 phẩy 0, lúc phục vụ chỉ còn 1 phẩy 0. Hôm nay ta học hiện tượng lệch giữa huấn luyện và phục vụ, khi mô hình nhận ở chỗ chạy thật một thứ khác với thứ nó đã học."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: trung bình, độ lệch chuẩn, trừ rồi chia với số âm"
+    checks:
+      - "__import__('statistics').mean([40, 50, 60]) == 50 and __import__('statistics').stdev([40, 50, 60]) == 10.0"
+      - "40 - 60 == -20 and -20 / 10 == -2 and (60 - 50) / 10 == 1"
+    steps:
+      - show: |
+          <table class="t"><tr><th>đại lượng</th><th>ví dụ với 40, 50, 60 đơn</th><th>nghĩa</th></tr>
+          <tr><td>trung bình</td><td>$\frac{40 + 50 + 60}{3} = 50$</td><td>mức điển hình</td></tr>
+          <tr><td>độ lệch chuẩn</td><td>$\sqrt{\frac{(-10)^2 + 0 + 10^2}{3 - 1}} = \sqrt{100} = 10$</td><td>các số tản ra quanh trung bình bao xa</td></tr></table>
+        introduces: [sqrt, power]
+        focus: [1, "1.2", "1.3", "1.3"]
+        say: "Ở khoá Toán cho khoa học máy tính, ta đã học hai đại lượng. Trung bình của 40, 50, 60 đơn là 150 chia 3, bằng 50, mức điển hình. Độ lệch chuẩn đo các số tản ra quanh trung bình bao xa. Ở đây là căn của 100 cộng 0 cộng 100, chia 2, tức căn của 100, bằng 10."
+      - show: |
+          <p><b>Trừ rồi chia</b>, giữ dấu: $\frac{60 - 50}{10} = 1$, còn $\frac{40 - 60}{10} = \frac{-20}{10} = \hl{-2}$.</p>
+          <p class="note">Số âm nghĩa là nằm <b>dưới</b> mức so sánh; số dương là nằm trên.</p>
+        focus: [1, 1, 2]
+        say: "Phép tính thứ hai là trừ rồi chia, nhớ giữ dấu. 60 trừ 50 chia 10 bằng 1, còn 40 trừ 60 bằng âm 20, chia 10 được âm 2. Số âm nghĩa là nằm dưới mức so sánh, số dương là nằm trên."
+
+  - id: sym
+    kind: symbol
+    title: "Giải mã: đặc trưng, lệch, kho đặc trưng"
+    steps:
+      - show: |
+          <p><b>Chuẩn hoá</b>: $z = \frac{x - \text{trung bình}}{\text{độ lệch chuẩn}}$, với trung bình và độ lệch chuẩn <b>lấy từ dữ liệu huấn luyện</b> và giữ cố định.</p>
+          <table class="t"><tr><th>khái niệm</th><th>nghĩa</th></tr>
+          <tr><td><b>lệch huấn luyện–phục vụ</b></td><td>cùng một đầu vào cho ra giá trị đặc trưng khác nhau ở hai nơi</td></tr>
+          <tr><td><b>kho đặc trưng</b></td><td>một định nghĩa đặc trưng (và các tham số như trung bình 50) dùng chung cho cả hai nơi</td></tr></table>
+        focus: [1, 1, 2, "2.2", "2.3"]
+        say: "Chuẩn hoá là lấy x trừ trung bình rồi chia độ lệch chuẩn. Trung bình và độ lệch chuẩn phải lấy từ dữ liệu huấn luyện và giữ cố định. Bảng giới thiệu hai khái niệm. Lệch huấn luyện phục vụ là khi cùng một đầu vào cho ra giá trị đặc trưng khác nhau ở hai nơi. Kho đặc trưng là nơi giữ một định nghĩa đặc trưng, cùng các tham số như trung bình 50, dùng chung cho cả hai nơi."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Cùng năm khách, cả thước đo bị dời"
+    checks:
+      - "[alg.zscore(x, 50, 10) for x in (40, 50, 60, 70, 80)] == [-1, 0, 1, 2, 3] and [alg.zscore(x, 60, 10) for x in (40, 50, 60, 70, 80)] == [-2, -1, 0, 1, 2]"
+    steps:
+      - show: |
+          <div><svg width="1500" height="330" viewBox="0 0 1500 330"><line x1="330" y1="120" x2="1110" y2="120" stroke="#6b7280" stroke-width="2"/><text x="20" y="128" font-size="22" fill="#2a78d6">huấn luyện: trung bình 50</text><line x1="330" y1="112" x2="330" y2="128" stroke="#6b7280" stroke-width="2"/><text x="330" y="156" text-anchor="middle" font-size="20" fill="#1f2937">-3</text><line x1="460" y1="112" x2="460" y2="128" stroke="#6b7280" stroke-width="2"/><text x="460" y="156" text-anchor="middle" font-size="20" fill="#1f2937">-2</text><line x1="590" y1="112" x2="590" y2="128" stroke="#6b7280" stroke-width="2"/><text x="590" y="156" text-anchor="middle" font-size="20" fill="#1f2937">-1</text><line x1="720" y1="112" x2="720" y2="128" stroke="#6b7280" stroke-width="2"/><text x="720" y="156" text-anchor="middle" font-size="20" fill="#1f2937">0</text><line x1="850" y1="112" x2="850" y2="128" stroke="#6b7280" stroke-width="2"/><text x="850" y="156" text-anchor="middle" font-size="20" fill="#1f2937">1</text><line x1="980" y1="112" x2="980" y2="128" stroke="#6b7280" stroke-width="2"/><text x="980" y="156" text-anchor="middle" font-size="20" fill="#1f2937">2</text><line x1="1110" y1="112" x2="1110" y2="128" stroke="#6b7280" stroke-width="2"/><text x="1110" y="156" text-anchor="middle" font-size="20" fill="#1f2937">3</text><circle cx="590" cy="120" r="12" fill="#2a78d6"/><circle cx="720" cy="120" r="12" fill="#2a78d6"/><circle cx="850" cy="120" r="12" fill="#2a78d6"/><circle cx="980" cy="120" r="12" fill="#2a78d6"/><circle cx="1110" cy="120" r="12" fill="#2a78d6"/><line x1="330" y1="260" x2="1110" y2="260" stroke="#6b7280" stroke-width="2"/><text x="20" y="268" font-size="22" fill="#b91c1c">phục vụ lệch: trung bình 60</text><line x1="330" y1="252" x2="330" y2="268" stroke="#6b7280" stroke-width="2"/><text x="330" y="296" text-anchor="middle" font-size="20" fill="#1f2937">-3</text><line x1="460" y1="252" x2="460" y2="268" stroke="#6b7280" stroke-width="2"/><text x="460" y="296" text-anchor="middle" font-size="20" fill="#1f2937">-2</text><line x1="590" y1="252" x2="590" y2="268" stroke="#6b7280" stroke-width="2"/><text x="590" y="296" text-anchor="middle" font-size="20" fill="#1f2937">-1</text><line x1="720" y1="252" x2="720" y2="268" stroke="#6b7280" stroke-width="2"/><text x="720" y="296" text-anchor="middle" font-size="20" fill="#1f2937">0</text><line x1="850" y1="252" x2="850" y2="268" stroke="#6b7280" stroke-width="2"/><text x="850" y="296" text-anchor="middle" font-size="20" fill="#1f2937">1</text><line x1="980" y1="252" x2="980" y2="268" stroke="#6b7280" stroke-width="2"/><text x="980" y="296" text-anchor="middle" font-size="20" fill="#1f2937">2</text><line x1="1110" y1="252" x2="1110" y2="268" stroke="#6b7280" stroke-width="2"/><text x="1110" y="296" text-anchor="middle" font-size="20" fill="#1f2937">3</text><circle cx="460" cy="260" r="12" fill="#b91c1c"/><circle cx="590" cy="260" r="12" fill="#b91c1c"/><circle cx="720" cy="260" r="12" fill="#b91c1c"/><circle cx="850" cy="260" r="12" fill="#b91c1c"/><circle cx="980" cy="260" r="12" fill="#b91c1c"/><line x1="980" y1="168" x2="850" y2="238" stroke="#eb6834" stroke-width="4"/><text x="1000" y="200" font-size="22" fill="#eb6834">khách 70 đơn: 2 thành 1</text><line x1="915.0" y1="60" x2="915.0" y2="300" stroke="#059669" stroke-width="3" stroke-dasharray="10 8"/><text x="915.0" y="50" text-anchor="middle" font-size="20" fill="#059669">ngưỡng minh hoạ 1,5</text></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình đặt năm khách có 40, 50, 60, 70 và 80 đơn lên hai thước đo. Thước trên dùng trung bình 50 của lúc huấn luyện, thước dưới là bản phục vụ lỡ dùng trung bình 60. Cả năm chấm đều trượt sang trái đúng 1 đơn vị, và khách 70 đơn đi từ 2 xuống 1. Nếu mô hình đặt ngưỡng ở 1 phẩy 5, một con số minh hoạ, khách này vượt ngưỡng lúc học nhưng không vượt lúc chạy thật."
+
+  - id: example
+    kind: example
+    title: "Hai bản mã, hai con số"
+    checks:
+      - "alg.zscore(70, 50, 10) == 2.0 and alg.zscore(70, 60, 10) == 1.0 and alg.zscore(40, 50, 10) == -1.0 and alg.zscore(40, 60, 10) == -2.0"
+    steps:
+      - show: |
+          <p><b>Bước 1</b> — lúc huấn luyện, tham số đã lưu: trung bình 50, độ lệch chuẩn 10. Khách 70 đơn: $\frac{70 - 50}{10} = \frac{20}{10} = \hl{2{,}0}$.</p>
+        say: "Bước một, lúc huấn luyện, tham số đã lưu là trung bình 50, độ lệch chuẩn 10. Khách 70 đơn được 70 trừ 50 bằng 20, chia 10, ra 2 phẩy 0."
+      - show: |
+          <p><b>Bước 2</b> — bản phục vụ tự tính lại trung bình trên dữ liệu tuần này: 60. Cùng khách đó: $\frac{70 - 60}{10} = \frac{10}{10} = \hl{1{,}0}$.</p>
+        say: "Bước hai, bản phục vụ tự tính lại trung bình trên dữ liệu tuần này, được 60. Cùng khách đó chỉ còn 70 trừ 60 bằng 10, chia 10, ra 1 phẩy 0."
+      - show: |
+          <table class="t"><tr><th>khách</th><th>huấn luyện: $\frac{x - 50}{10}$</th><th>phục vụ (lệch): $\frac{x - 60}{10}$</th></tr>
+          <tr><td>70 đơn</td><td>2,0</td><td>$\hl{1{,}0}$</td></tr>
+          <tr><td>40 đơn</td><td>$-1{,}0$</td><td>$\hl{-2{,}0}$</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Bước ba, bảng tính đặc trưng cho hai khách theo hai bản mã. Khách 70 đơn được 2 phẩy 0 lúc huấn luyện, nhưng chỉ 1 phẩy 0 lúc phục vụ. Khách 40 đơn được âm 1 lúc huấn luyện, nhưng âm 2 lúc phục vụ."
+      - clear: true
+        show: |
+          <p><b>Bước 4</b> — độ dời $= \frac{60 - 50}{10} = 1$ cho <b>mọi</b> khách. Mọi khách đều bị dời đi 1 đơn vị: mô hình “thấy” khách bớt tích cực hơn thật, và mọi quyết định dựa trên ngưỡng đều lệch theo.</p>
+          <div class="box key">Sửa: một hàm tính đặc trưng, một bộ tham số đã lưu, dùng cho <b>cả</b> huấn luyện lẫn phục vụ. Ghi lại giá trị đặc trưng lúc phục vụ để so với lúc huấn luyện.</div>
+        focus: [1, 1, 2, 2]
+        say: "Bước bốn, độ dời bằng 60 trừ 50, chia 10, bằng 1, cho mọi khách. Mọi khách đều bị dời đi 1 đơn vị, mô hình thấy khách bớt tích cực hơn thật, và mọi quyết định dựa trên ngưỡng đều lệch theo. Cách sửa là dùng một hàm tính đặc trưng với một bộ tham số đã lưu cho cả huấn luyện lẫn phục vụ. Hãy ghi lại giá trị đặc trưng lúc phục vụ để so với lúc huấn luyện."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm bằng đường khác"
+    checks:
+      - "alg.zscore(70, 50, 10) - alg.zscore(70, 60, 10) == 1 and alg.zscore(40, 50, 10) - alg.zscore(40, 60, 10) == 1"
+      - "60 + 10 * 1.0 == 70 and alg.zscore(60 + 10 * 1.0, 50, 10) == 2.0"
+    steps:
+      - show: |
+          <table class="t"><tr><th>kiểm</th><th>cách khác</th><th>kết quả</th></tr>
+          <tr><td>độ dời</td><td>trừ hai cột: $2{,}0 - 1{,}0$ và $-1{,}0 - (-2{,}0)$</td><td>đều bằng 1 ✓ khớp $\frac{60 - 50}{10}$</td></tr>
+          <tr><td>đi ngược</td><td>từ giá trị phục vụ 1,0 tìm lại số đơn: $60 + 10 \cdot 1{,}0 = 70$, rồi chuẩn hoá bằng tham số huấn luyện</td><td>$\frac{70 - 50}{10} = 2{,}0$ ✓</td></tr></table>
+        introduces: [cdot]
+        focus: [1, "1.2", "1.3", "1.3"]
+        say: "Kiểm bằng đường khác. Cách thứ nhất, trừ hai cột của bảng, 2 trừ 1 và âm 1 trừ âm 2, đều bằng 1, khớp với độ dời tính từ hai trung bình. Cách thứ hai, đi ngược, vì giá trị phục vụ 1 phẩy 0 nghĩa là trên trung bình 60 đúng một độ lệch chuẩn, nên số đơn là 60 cộng 10 nhân 1, được 70. Chuẩn hoá lại bằng tham số huấn luyện thì ra 2 phẩy 0, đúng con số lúc học."
+
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp"
+    checks:
+      - "alg.zscore(50, 50, 10) == 0 and alg.zscore(0, 50, 10) == -5 and round(0.02 * -5, 2) == -0.1 and 98 + 2 == 100"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Viết lại mã đặc trưng bằng ngôn ngữ khác cho bản phục vụ <b class="red">(nguồn lệch phổ biến nhất)</b>
+          <br><span class="note">Hai bản mã khác nhau ở chi tiết nhỏ: làm tròn, xử lý giá trị thiếu, múi giờ. Dùng chung một định nghĩa, hoặc ít nhất kiểm hai bản cho cùng kết quả trên dữ liệu mẫu.</span></div>
+        say: "Lỗi thứ nhất, viết lại mã đặc trưng bằng ngôn ngữ khác cho bản phục vụ, nguồn lệch phổ biến nhất. Hai bản mã khác nhau ở chi tiết nhỏ như làm tròn, xử lý giá trị thiếu, múi giờ. Hãy dùng chung một định nghĩa, hoặc ít nhất kiểm hai bản cho cùng kết quả trên dữ liệu mẫu."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Dùng thông tin “tương lai” khi tính đặc trưng huấn luyện <b class="red">(rò rỉ theo thời gian)</b>
+          <br><span class="note">Đặc trưng “số đơn trong tháng” tính trên cả tháng, kể cả những ngày <b>sau</b> lúc cần dự đoán. Lúc phục vụ không có dữ liệu đó → mô hình kém hẳn. Tính đặc trưng “tại thời điểm” dự đoán.</span></div>
+        say: "Lỗi thứ hai, dùng thông tin tương lai khi tính đặc trưng huấn luyện. Đặc trưng số đơn trong tháng được tính trên cả tháng, kể cả những ngày sau lúc cần dự đoán. Lúc phục vụ không có dữ liệu đó nên mô hình kém hẳn, vì vậy hãy tính đặc trưng tại đúng thời điểm dự đoán."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Tính lại tham số chuẩn hoá trên dữ liệu phục vụ <b class="red">(lệch âm thầm)</b>
+          <br><span class="note">Trung bình là một phần của mô hình. Tính lại thì đặc trưng trôi theo dữ liệu, mô hình không được huấn luyện cho thang đo mới.</span></div>
+        say: "Lỗi thứ ba, tính lại tham số chuẩn hoá trên dữ liệu phục vụ. Trung bình là một phần của mô hình, tính lại thì đặc trưng trôi theo dữ liệu, trong khi mô hình không được huấn luyện cho thang đo mới."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Chỉ so <b>trung bình</b> đặc trưng giữa hai nơi <b class="red">(lệch hiếm bị che)</b></div>
+          <table class="t"><tr><th>khách</th><th>huấn luyện (thiếu số liệu → điền 50)</th><th>phục vụ (thiếu số liệu → điền 0)</th></tr>
+          <tr><td>98% có số liệu</td><td>giống nhau</td><td>giống nhau</td></tr>
+          <tr><td>2% thiếu số liệu</td><td>$\frac{50 - 50}{10} = 0$</td><td class="red">$\frac{0 - 50}{10} = -5$</td></tr>
+          <tr><td>trung bình chênh</td><td colspan="2">$0{,}02 \cdot (-5) = -0{,}1$ — trông như nhiễu</td></tr></table>
+          <p class="note">Người làm nghề chạy hai bản mã trên <b>cùng từng mẫu</b> và đếm số mẫu lệch, không chỉ so trung bình.</p>
+        focus: [1, 2, "2.2", "2.3", "2.4", 3]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, chỉ so trung bình đặc trưng giữa hai nơi, nên lệch ở nhóm hiếm bị che. Ví dụ khách thiếu số liệu, bản huấn luyện điền 50, bản phục vụ lại điền 0. Với 98 phần trăm khách có số liệu, hai nơi cho giá trị giống nhau. Với 2 phần trăm thiếu số liệu, huấn luyện được 0, còn phục vụ được âm 5, một giá trị cực đoan. Trung bình chỉ chênh 0 phẩy 02 nhân âm 5, bằng âm 0 phẩy 1, trông như nhiễu. Người làm nghề chạy hai bản mã trên cùng từng mẫu và đếm số mẫu lệch, không chỉ so trung bình."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.zscore(80, 50, 10) == 3.0 and alg.zscore(80, 50, 20) == 1.5"
+      - "80 - 50 == 30 and 30 / 10 == 3.0 and 30 / 20 == 1.5 and 1.5 / 3.0 == 0.5"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Huấn luyện dùng trung bình 50, độ lệch chuẩn 10. Bản phục vụ lỡ dùng độ lệch chuẩn 20. Khách 80 đơn: hai nơi cho giá trị nào?</td></tr>
+          <tr><td>2</td><td>Kể một cách phát hiện lệch này tự động.</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.2", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, huấn luyện dùng trung bình 50, độ lệch chuẩn 10. Bản phục vụ lỡ dùng độ lệch chuẩn 20. Khách có 80 đơn thì hai nơi cho giá trị nào? Câu hai, hãy kể một cách phát hiện lệch này tự động. Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① Bước một, cả hai nơi cùng trừ trung bình 50: $80 - 50 = 30$.</p>
+          <p>Bước hai, chia: huấn luyện $\frac{30}{10} = \hl{3{,}0}$; phục vụ $\frac{30}{20} = \hl{1{,}5}$ — khách bị co lại một nửa, không phải dời đều như lúc nãy.</p>
+        focus: [1, 2, 2]
+        say: "Đáp án câu một, làm từng bước. Bước một, cả hai nơi cùng trừ trung bình 50, được 80 trừ 50 bằng 30. Bước hai, lúc huấn luyện chia 10 được 3 phẩy 0, lúc phục vụ chia 20 chỉ còn 1 phẩy 5, nghĩa là khách bị co lại một nửa, chứ không bị dời đều như ví dụ trước."
+      - show: |
+          <p>② Ghi giá trị đặc trưng lúc phục vụ, so phân bố với lúc huấn luyện hằng ngày; hoặc chạy cả hai bản mã trên cùng mẫu và đòi kết quả trùng.</p>
+        say: "Câu hai, ghi giá trị đặc trưng lúc phục vụ và so phân bố với lúc huấn luyện hằng ngày, hoặc chạy cả hai bản mã trên cùng mẫu và đòi kết quả trùng."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">một định nghĩa đặc trưng</span><span class="a">→</span>
+          <span class="n">tham số lấy từ huấn luyện, giữ cố định</span><span class="a">→</span>
+          <span class="n">tính tại thời điểm dự đoán</span><span class="a">→</span>
+          <span class="n">ghi và so đặc trưng lúc phục vụ</span></div>
+        say: "Tổng kết lại, dùng một định nghĩa đặc trưng, tham số lấy từ huấn luyện và giữ cố định, tính tại đúng thời điểm dự đoán, rồi ghi và so đặc trưng lúc phục vụ."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> mô hình chỉ đúng với đúng thứ nó đã thấy lúc học. Mọi khác biệt giữa “lúc học” và “lúc dùng” là một lỗi tiềm tàng.</div>
+        say: "Điều cần mang theo, mô hình chỉ đúng với đúng thứ nó đã thấy lúc học, nên mọi khác biệt giữa lúc học và lúc dùng là một lỗi tiềm tàng."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 6): <b>phục vụ mô hình</b> — theo lô, trực tuyến, độ trễ và thông lượng.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 6, ta học cách phục vụ mô hình, theo lô hay trực tuyến, cân bằng độ trễ và thông lượng. Hẹn gặp bạn ở bài tiếp theo."

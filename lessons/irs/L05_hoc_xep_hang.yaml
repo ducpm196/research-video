@@ -1,0 +1,302 @@
+id: L05
+course: IRS
+series: "IRS · Truy hồi thông tin và hệ gợi ý"
+title: "Bài 5 — Học để xếp hạng: theo điểm, theo cặp, theo danh sách"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/irs.yaml L05; audit/irs/verify_irs.py (verify_parts/L05.py); audit/irs/sources_L05.md (câu trích nguyên văn, đọc 2026-11-03); C. Burges và cộng sự, Learning to Rank using Gradient Descent, ICML 2005 [BU05]; Z. Zhao và cộng sự, RecSys 2019 [ZH19]; CS115 bài 12 (hàm mũ, lôgarit), bài 20 (logistic, entropy chéo); IRS bài 1 (độ lợi tích lũy có chiết khấu)"
+assumes: [arith]
+# Quy ước (theo khoá IRS):
+#   - y = mức liên quan (như bài 0, bài 1); s_a, s_b = điểm mô hình cho văn bản a, b; o = s_a − s_b (hiệu điểm).
+#   - P(a trên b) = 1 / (1 + e^−o): xác suất mô hình đặt a trên b — chính hàm logistic của CS115 bài 20, nên đọc là “xác suất”.
+#   - mất mát theo cặp = ln(1 + e^−o) = −ln P(a trên b) khi biết chắc a liên quan hơn b (Burges và cộng sự 2005, công thức (3) với P̄ = 1).
+#   - Lôgarit trong bài là lôgarit tự nhiên \ln, trừ khi nhắc lại chiết khấu của bài 1 (lôgarit cơ số 2 chỉ đọc bằng lời, không viết công thức).
+#   - “RankNet” chỉ trên màn hình; lời đọc nói “mạng xếp hạng theo cặp năm 2005”. Mọi số trong hook, quiz là số minh hoạ.
+#   - Cách “theo danh sách” (trọng số theo mức thay đổi của độ lợi tích lũy khi đổi chỗ) chỉ dạy ý, không gán tên hay năm (sources_L05.md).
+objectives:
+  - "Tính mất mát theo cặp ln(1 + e mũ âm của hiệu điểm) cho một cặp văn bản"
+  - "Giải thích vì sao tối ưu thứ tự khác tối ưu điểm tuyệt đối"
+  - "Tính cái giá của một cặp xếp sai ở đầu danh sách so với ở cuối bằng độ lợi tích lũy có chiết khấu"
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Sai số nhỏ hơn 70 lần, mà thứ tự lại sai"
+    checks:
+      - "round(alg.irs_mse([2.4, 2.6], [3, 2]), 2) == 0.36 and alg.irs_mse([10, 1], [3, 2]) == 25.0"
+      - "round(25.0 / alg.irs_mse([2.4, 2.6], [3, 2])) == 69"
+    steps:
+      - show: |
+          <p>Câu hỏi “tai nghe chống ồn”, hai văn bản: <b>a</b> rất liên quan ($y = 3$), <b>b</b> liên quan vừa ($y = 2$). Hai mô hình chấm điểm (số minh hoạ):</p>
+          <table class="t"><tr><th>mô hình</th><th>điểm a</th><th>điểm b</th><th>sai số bình phương trung bình</th><th>thứ tự</th></tr>
+          <tr><td>M1</td><td>2,4</td><td>2,6</td><td>$\frac{0{,}6^2 + 0{,}6^2}{2} = 0{,}36$</td><td class="red">b trên a, sai</td></tr>
+          <tr><td>M2</td><td>10</td><td>1</td><td>$\frac{7^2 + 1^2}{2} = 25$</td><td class="green">a trên b, đúng</td></tr></table>
+        introduces: [frac, power]
+        focus: [1, "2.2", "2.3"]
+        say: "Chào bạn, với câu hỏi tai nghe chống ồn, văn bản a rất liên quan, mức 3, còn văn bản b liên quan vừa, mức 2. Mô hình M1 chấm a 2 phẩy 4 và b 2 phẩy 6, sai số bình phương trung bình chỉ 0 phẩy 36, nhưng nó đặt b lên trên a. Mô hình M2 chấm a 10 và b 1, sai số tới 25, vậy mà thứ tự lại đúng."
+      - show: |
+          <p>Theo sai số, M1 tốt hơn M2 khoảng <b>69 lần</b>. Người dùng chỉ thấy <b>thứ tự</b>: M2 mới đúng.</p>
+          <div class="box key">Hôm nay ta trả lời: vì sao học điểm khác học thứ tự? Mất mát theo cặp tính thế nào? Và vì sao một cặp sai ở đầu danh sách đắt hơn ở cuối?</div>
+        focus: [1, 1, 2]
+        say: "Chia 25 cho 0 phẩy 36, theo sai số thì M1 tốt hơn M2 khoảng 69 lần. Thế nhưng người dùng chỉ nhìn thấy thứ tự, và theo thứ tự thì M2 mới là mô hình đúng. Hôm nay ta trả lời ba câu hỏi, vì sao học điểm khác học thứ tự, mất mát theo cặp tính thế nào, và vì sao một cặp sai ở đầu danh sách đắt hơn ở cuối."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: hàm mũ, lôgarit, hàm logistic và độ lợi có chiết khấu"
+    checks:
+      - "math.exp(0) == 1 and round(math.exp(-0.5), 3) == 0.607 and round(math.exp(0.5), 3) == 1.649"
+      - "math.log(1) == 0 and round(math.log(2), 3) == 0.693 and abs(math.log(math.exp(0.7)) - 0.7) < 1e-12"
+      - "alg.irs_pair_prob(0) == 0.5 and round(alg.irs_pair_prob(0.5), 3) == 0.622"
+      - "round(alg.irs_dcg([3, 2, 1, 0]), 3) == 4.762"
+    steps:
+      - show: |
+          <table class="t"><tr><th>điều cần nhớ</th><th>ví dụ số</th></tr>
+          <tr><td>① hàm mũ $e^{x}$, với $e \approx 2{,}718$: luôn dương; $e^{0} = 1$</td><td>$e^{-0{,}5} \approx 0{,}607$, $\;e^{0{,}5} \approx 1{,}649$</td></tr>
+          <tr><td>② lôgarit tự nhiên $\ln$ làm ngược hàm mũ: $\ln(e^{x}) = x$</td><td>$\ln 1 = 0$, $\;\ln 2 \approx 0{,}693$</td></tr></table>
+        introduces: [exp, log, approx]
+        focus: ["1.2", "1.2", "1.3"]
+        say: "Bảng ôn hai điều ở khoá Toán cho khoa học máy tính, điều thứ nhất là hàm mũ e mũ x, với e xấp xỉ 2 phẩy 718, luôn cho số dương và e mũ 0 bằng 1. Làm thử, e mũ âm 0 phẩy 5 xấp xỉ 0 phẩy 607, còn e mũ 0 phẩy 5 xấp xỉ 1 phẩy 649. Điều thứ hai, lôgarit tự nhiên, viết l n, làm ngược hàm mũ, nên lôgarit của 1 bằng 0 và lôgarit của 2 xấp xỉ 0 phẩy 693."
+      - show: |
+          <p><b>③ Hàm logistic</b> (cũng ở khoá Toán cho khoa học máy tính) biến một số bất kỳ thành xác suất giữa 0 và 1:</p>
+          $$\frac{1}{1 + e^{-z}}: \quad z = 0 \Rightarrow 0{,}5; \qquad z = 0{,}5 \Rightarrow \frac{1}{1 + 0{,}607} \approx 0{,}622$$
+          <p><b>④ Ở bài 1</b>, độ lợi tích lũy có chiết khấu cộng mức liên quan chia lôgarit cơ số 2 của (vị trí + 1); thứ tự lý tưởng 3, 2, 1, 0 được khoảng 4,762.</p>
+        introduces: [implies]
+        focus: [1, 2, 2, 3, 3]
+        say: "Điều thứ ba là hàm logistic, bằng 1 chia cho 1 cộng e mũ âm z, nó biến một số bất kỳ thành một xác suất giữa 0 và 1. Mũi tên kép đọc là suy ra, z bằng 0 suy ra 0 phẩy 5, tức nửa này nửa kia. Với z bằng 0 phẩy 5, ta được 1 chia 1 phẩy 607, khoảng 0 phẩy 622. Điều thứ tư, ở bài 1, độ lợi tích lũy có chiết khấu cộng mức liên quan chia lôgarit cơ số 2 của vị trí cộng 1. Thứ tự lý tưởng 3, 2, 1, 0 được khoảng 4 phẩy 762."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: điểm s, hiệu điểm o và ba cách học xếp hạng"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ký hiệu</th><th>đọc là</th><th>nghĩa</th><th>ví dụ</th></tr>
+          <tr><td>$s_a$, $s_b$</td><td>ét a, ét b</td><td>điểm mô hình chấm cho văn bản a, b</td><td>2 và 1,5</td></tr>
+          <tr><td>$o = s_a - s_b$</td><td>o</td><td>hiệu điểm: dương nghĩa là a đứng trên b</td><td>0,5</td></tr>
+          <tr><td>$P(\text{a trên b})$</td><td>xác suất a trên b</td><td>$\frac{1}{1 + e^{-o}}$, hàm logistic của hiệu điểm</td><td>≈ 0,622</td></tr></table>
+        introduces: [sub, prob]
+        focus: ["1.2", "1.3", "1.4"]
+        say: "Bảng giải mã ký hiệu, s a và s b, với chữ nhỏ dưới chân, là điểm mô hình chấm cho văn bản a và văn bản b, ví dụ 2 và 1 phẩy 5. Chữ o là hiệu điểm s a trừ s b, dương nghĩa là a đứng trên b, ở đây o bằng 0 phẩy 5. Ký hiệu P và ngoặc đọc là xác suất mô hình đặt a trên b, bằng hàm logistic của hiệu điểm, khoảng 0 phẩy 622."
+      - show: |
+          <table class="t"><tr><th>cách học</th><th>mỗi lần nhìn</th><th>học cái gì</th></tr>
+          <tr><td><b>theo điểm</b></td><td>một văn bản</td><td>đoán đúng mức liên quan $y$ (sai số bình phương)</td></tr>
+          <tr><td><b>theo cặp</b></td><td>hai văn bản cùng câu hỏi</td><td>văn bản liên quan hơn phải có điểm cao hơn</td></tr>
+          <tr><td><b>theo danh sách</b></td><td>cả danh sách</td><td>thứ tự cho độ lợi tích lũy có chiết khấu cao nhất</td></tr></table>
+        focus: ["1.2", "1.3", "1.4"]
+        say: "Bảng thứ hai là ba cách học xếp hạng, cách theo điểm nhìn từng văn bản một và cố đoán đúng mức liên quan, như mô hình M1 ở đầu bài. Cách theo cặp nhìn hai văn bản của cùng một câu hỏi, chỉ đòi văn bản liên quan hơn phải có điểm cao hơn. Cách theo danh sách nhìn cả danh sách, và muốn thứ tự cho độ lợi tích lũy có chiết khấu cao nhất."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Mất mát theo cặp: phạt nặng khi đảo, gần 0 khi cách xa đúng chiều"
+    steps:
+      - show: |
+          <div><svg width="1500" height="420" viewBox="0 0 1500 420">
+          <line x1="120" y1="340" x2="1200" y2="340" stroke="#1f2937" stroke-width="2"/><line x1="660" y1="40" x2="660" y2="360" stroke="#9ca3af" stroke-width="2" stroke-dasharray="6 6"/>
+          <g font-size="20" fill="#6b7280" text-anchor="middle"><text x="120" y="368">−3</text><text x="300" y="368">−2</text><text x="480" y="368">−1</text><text x="660" y="368">0</text><text x="840" y="368">1</text><text x="1020" y="368">2</text><text x="1200" y="368">3</text>
+          <text x="660" y="405">hiệu điểm o = điểm a trừ điểm b (a là văn bản liên quan hơn)</text></g>
+          <polyline fill="none" stroke="#2a78d6" stroke-width="5" points="120,96 210,134 300,170 390,204 480,235 570,262 660,285 750,302 840,315 930,324 1020,330 1110,334 1200,336"/>
+          <circle cx="570" cy="262" r="10" fill="#b91c1c"/><text x="550" y="305" font-size="22" fill="#b91c1c" text-anchor="end">đảo chiều, o = −0,5: 0,974</text>
+          <circle cx="750" cy="302" r="10" fill="#059669"/><text x="770" y="268" font-size="22" fill="#059669">đúng chiều, o = 0,5: 0,474</text>
+          <text x="140" y="60" font-size="22" fill="#2a78d6">sai càng xa: mất mát tăng gần như thẳng</text>
+          <text x="1220" y="300" font-size="22" fill="#2a78d6">đúng càng xa:</text><text x="1220" y="328" font-size="22" fill="#2a78d6">gần 0</text>
+          <text x="1210" y="200" font-size="22" fill="#1f2937">mất mát</text>
+          </svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình vẽ mất mát theo cặp theo hiệu điểm o, với a là văn bản liên quan hơn. Bên phải đường đứt nét là đúng chiều, a có điểm cao hơn, và càng cách xa thì mất mát càng gần 0. Bên trái là đảo chiều, điểm đỏ ở o bằng âm 0 phẩy 5 bị phạt 0 phẩy 974, còn điểm xanh lục ở o bằng 0 phẩy 5 chỉ bị 0 phẩy 474. Sai càng xa thì mất mát tăng gần như theo đường thẳng, chứ không vọt lên như bình phương."
+
+  # ───────────────────────── 5. SUY RA ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra mất mát theo cặp từ một xác suất"
+    checks:
+      - "round(alg.irs_pair_prob(0.5), 3) == 0.622 and round(-math.log(alg.irs_pair_prob(0.5)), 3) == 0.474"
+      - "abs(-math.log(alg.irs_pair_prob(0.5)) - alg.irs_pair_loss(2, 1.5)) < 1e-12"
+      - "round(alg.irs_pair_loss(0, 0), 3) == 0.693 and alg.irs_pair_loss(10, 0) < 0.0001 and abs(alg.irs_pair_loss(0, 10) - 10) < 0.0001"
+    steps:
+      - show: |
+          <p><b>Bước 1 — biến hiệu điểm thành xác suất.</b> Mạng xếp hạng theo cặp năm 2005 (RankNet, Burges và cộng sự) dùng hàm logistic của $o$:</p>
+          $$P(\text{a trên b}) = \frac{1}{1 + e^{-o}} \qquad o = 0{,}5 \Rightarrow \frac{1}{1 + 0{,}607} \approx 0{,}622$$
+        focus: [1, 2]
+        say: "Bước một, ta biến hiệu điểm thành xác suất, như mạng xếp hạng theo cặp năm 2005 của một nhóm tác giả đã làm, bằng hàm logistic của o. Làm thử với o bằng 0 phẩy 5, xác suất bằng 1 chia 1 phẩy 607, khoảng 0 phẩy 622."
+      - show: |
+          <p><b>Bước 2 — phạt bằng entropy chéo.</b> Ta biết chắc a liên quan hơn, nên muốn xác suất này bằng 1. Theo entropy chéo của khoá Toán, mất mát là âm lôgarit của xác suất dành cho đáp án đúng:</p>
+          $$\text{mất mát} = -\ln P(\text{a trên b}) = -\ln 0{,}622 \approx 0{,}474$$
+        focus: [1, 1, 2]
+        say: "Bước hai, ta biết chắc a liên quan hơn b, nên muốn xác suất này bằng 1. Theo entropy chéo đã học ở khoá Toán, mất mát là âm lôgarit của xác suất dành cho đáp án đúng. Thay số, âm lôgarit của 0 phẩy 622 xấp xỉ 0 phẩy 474."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — rút gọn.</b> Vì $-\ln \frac{1}{x} = \ln x$, ta lật phân số:</p>
+          $$\text{mất mát} = -\ln \frac{1}{1 + e^{-o}} = \hlg{\ln\left(1 + e^{-o}\right)} = \ln\left(1 + e^{-(s_a - s_b)}\right)$$
+          <p class="note">Làm thử: $\ln(1 + e^{-0{,}5}) = \ln 1{,}607 \approx 0{,}474$ — cùng số với bước 2.</p>
+        focus: [1, 2, 3]
+        say: "Bước ba là rút gọn, vì âm lôgarit của 1 chia x bằng lôgarit của x, ta lật phân số lên. Mất mát còn lại là lôgarit của 1 cộng e mũ âm o, tức e mũ âm của hiệu điểm s a trừ s b. Làm thử, lôgarit của 1 cộng e mũ âm 0 phẩy 5 là lôgarit của 1 phẩy 607, khoảng 0 phẩy 474, đúng bằng số ở bước hai."
+      - show: |
+          <p><b>Bước 4 — đọc hình dáng.</b> Thay vài giá trị của $o$:</p>
+          <table class="t"><tr><th>$o$</th><th>mất mát</th><th>nghĩa</th></tr>
+          <tr><td>0 (hai điểm bằng nhau)</td><td>$\ln 2 \approx 0{,}693$</td><td>chưa phân biệt được</td></tr>
+          <tr><td>10 (đúng chiều, rất xa)</td><td>$\ln(1 + e^{-10}) \lt 0{,}0001$</td><td>gần như không phạt</td></tr>
+          <tr><td>−10 (đảo chiều, rất xa)</td><td>≈ 10</td><td>phạt tăng theo đường thẳng, không bình phương</td></tr></table>
+        introduces: [ltgt]
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Bước bốn, đọc hình dáng bằng cách thay vài giá trị của o. Khi hai điểm bằng nhau, o bằng 0, mất mát là lôgarit của 2, khoảng 0 phẩy 693. Khi đúng chiều và rất xa, o bằng 10, mất mát nhỏ hơn một phần mười nghìn, gần như không phạt. Khi đảo chiều rất xa, o bằng âm 10, mất mát xấp xỉ 10, tăng theo đường thẳng, nên một nhãn nhiễu không kéo mô hình lệch quá mạnh như bình phương."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Một cặp văn bản, từng phép tính"
+    checks:
+      - "2 - 1.5 == 0.5 and round(math.exp(-0.5), 3) == 0.607"
+      - "round(alg.irs_pair_loss(2, 1.5), 3) == 0.474 and round(1 + math.exp(-0.5), 3) == 1.607"
+      - "round(math.exp(0.5), 3) == 1.649 and round(alg.irs_pair_loss(1.5, 2), 3) == 0.974"
+      - "round(alg.irs_pair_loss(2.4, 2.6), 3) == 0.798 and round(alg.irs_pair_loss(10, 1), 4) == 0.0001"
+    steps:
+      - show: |
+          <p><b>Bước 1.</b> Văn bản a liên quan hơn b; mô hình chấm $s_a = 2$, $s_b = 1{,}5$:</p>
+          $$o = s_a - s_b = 2 - 1{,}5 = 0{,}5 \qquad e^{-0{,}5} \approx 0{,}607$$
+        focus: [1, 2]
+        say: "Bước một, văn bản a liên quan hơn văn bản b, và mô hình chấm a 2 điểm, b 1 phẩy 5 điểm. Hiệu điểm o bằng 2 trừ 1 phẩy 5, bằng 0 phẩy 5, nên e mũ âm 0 phẩy 5 xấp xỉ 0 phẩy 607."
+      - show: |
+          <p><b>Bước 2.</b> Cộng 1 rồi lấy lôgarit:</p>
+          $$\ln(1 + 0{,}607) = \ln 1{,}607 \approx \hlg{0{,}474}$$
+        focus: [1, 2]
+        say: "Bước hai, ta cộng 1 vào được 1 phẩy 607, rồi lấy lôgarit tự nhiên. Lôgarit của 1 phẩy 607 xấp xỉ 0 phẩy 474, đó là mất mát khi thứ tự đã đúng nhưng hai điểm còn sát nhau."
+      - clear: true
+        show: |
+          <p><b>Bước 3.</b> Đảo điểm: $s_a = 1{,}5$, $s_b = 2$, nên $o = -0{,}5$ và $e^{0{,}5} \approx 1{,}649$:</p>
+          $$\ln(1 + 1{,}649) = \ln 2{,}649 \approx \hl{0{,}974}$$
+        focus: [1, 2]
+        say: "Bước ba, ta đảo điểm, a được 1 phẩy 5 còn b được 2, nên o bằng âm 0 phẩy 5 và e mũ 0 phẩy 5 xấp xỉ 1 phẩy 649. Lôgarit của 2 phẩy 649 xấp xỉ 0 phẩy 974, gấp đôi mất mát lúc đúng chiều."
+      - show: |
+          <p><b>Bước 4.</b> Chấm lại hai mô hình ở đầu bài bằng mất mát theo cặp:</p>
+          <table class="t"><tr><th>mô hình</th><th>$o = s_a - s_b$</th><th>mất mát theo cặp</th><th>sai số bình phương</th></tr>
+          <tr><td>M1</td><td>$2{,}4 - 2{,}6 = -0{,}2$</td><td>$\ln(1 + e^{0{,}2}) \approx \hl{0{,}798}$</td><td>0,36</td></tr>
+          <tr><td>M2</td><td>$10 - 1 = 9$</td><td>$\ln(1 + e^{-9}) \approx \hlg{0{,}0001}$</td><td>25</td></tr></table>
+        focus: [1, "2.2", "2.3", 2]
+        say: "Bước bốn, ta chấm lại hai mô hình ở đầu bài bằng mất mát theo cặp. Mô hình M1 có hiệu điểm âm 0 phẩy 2, mất mát khoảng 0 phẩy 798. Mô hình M2 có hiệu điểm 9, mất mát chỉ khoảng một phần mười nghìn. Thước đo theo cặp chọn M2, đúng điều người dùng thấy, trong khi sai số bình phương chọn M1."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: đi đường xác suất, và một đẳng thức gọn"
+    checks:
+      - "round(alg.irs_pair_prob(0.5), 4) == 0.6225 and round(-math.log(0.6225), 3) == 0.474"
+      - "round(alg.irs_pair_prob(-0.5), 4) == 0.3775 and round(-math.log(0.3775), 3) == 0.974"
+      - "abs(alg.irs_pair_loss(1.5, 2) - alg.irs_pair_loss(2, 1.5) - 0.5) < 1e-12"
+    steps:
+      - show: |
+          <p>Đường khác: tính xác suất trước, rồi lấy âm lôgarit.</p>
+          <table class="t"><tr><th>$o$</th><th>$P(\text{a trên b}) = \frac{1}{1 + e^{-o}}$</th><th>$-\ln P$</th></tr>
+          <tr><td>0,5</td><td>0,6225</td><td>0,474 ✓</td></tr>
+          <tr><td>−0,5</td><td>0,3775</td><td>0,974 ✓</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Kiểm tra thứ nhất đi đường khác, ta tính xác suất trước rồi mới lấy âm lôgarit, theo đúng bước hai. Với o bằng 0 phẩy 5, xác suất là 0 phẩy 6225, âm lôgarit của nó là 0 phẩy 474, khớp. Với o bằng âm 0 phẩy 5, xác suất chỉ 0 phẩy 3775, âm lôgarit là 0 phẩy 974, cũng khớp."
+      - show: |
+          <p>Phép thử gọn: vì $1 + e^{o} = e^{o}\,(1 + e^{-o})$, nên hiệu hai mất mát đúng bằng $o$:</p>
+          $$\ln(1 + e^{0{,}5}) - \ln(1 + e^{-0{,}5}) = 0{,}5 \qquad 0{,}974 - 0{,}474 = 0{,}5 \;\checkmark$$
+        focus: [1, 2]
+        say: "Kiểm tra thứ hai là một đẳng thức gọn, 1 cộng e mũ o bằng e mũ o nhân với 1 cộng e mũ âm o, nên hiệu hai mất mát đúng bằng o. Thử lại, 0 phẩy 974 trừ 0 phẩy 474 bằng đúng 0 phẩy 5, khớp với hiệu điểm."
+
+  - id: listwise
+    kind: concept
+    title: "Theo danh sách: một cặp sai ở đầu đắt hơn ở cuối"
+    checks:
+      - "round(alg.irs_dcg([3, 2, 1, 0]) - alg.irs_dcg([2, 3, 1, 0]), 3) == 0.369 and round(alg.irs_dcg([3, 2, 1, 0]) - alg.irs_dcg([3, 2, 0, 1]), 3) == 0.069"
+      - "alg.irs_wrong_pairs([2, 3, 1, 0]) == alg.irs_wrong_pairs([3, 2, 0, 1]) == 1"
+      - "round(alg.irs_dcg([2, 3, 1, 0]), 3) == 4.393 and round(alg.irs_dcg([3, 2, 0, 1]), 3) == 4.693 and round(alg.irs_dcg([3, 2, 1, 0]), 3) == 4.762"
+      - "round((alg.irs_dcg([3, 2, 1, 0]) - alg.irs_dcg([2, 3, 1, 0])) / (alg.irs_dcg([3, 2, 1, 0]) - alg.irs_dcg([3, 2, 0, 1])), 1) == 5.3"
+    steps:
+      - show: |
+          <p>Thứ tự lý tưởng 3, 2, 1, 0 có độ lợi tích lũy có chiết khấu ≈ 4,762. Đổi chỗ <b>một</b> cặp:</p>
+          <table class="t"><tr><th>đổi chỗ</th><th>thứ tự mới</th><th>số cặp sai</th><th>DCG mới</th><th>mất đi</th></tr>
+          <tr><td>vị trí 1 và 2</td><td>2, 3, 1, 0</td><td>1</td><td>≈ 4,393</td><td class="red">≈ 0,369</td></tr>
+          <tr><td>vị trí 3 và 4</td><td>3, 2, 0, 1</td><td>1</td><td>≈ 4,693</td><td>≈ 0,069</td></tr></table>
+          <div class="box key">Cùng một cặp sai, ở đầu mất gấp khoảng <b>5,3 lần</b>. Cách học theo danh sách nhân mỗi cặp với mức DCG mất đi khi đổi chỗ, nên ưu tiên sửa cặp ở đầu.</div>
+        focus: [1, "2.2", "2.3", 3, 3]
+        say: "Bây giờ là ý của cách học theo danh sách, xuất phát từ thứ tự lý tưởng 3, 2, 1, 0 với độ lợi tích lũy có chiết khấu khoảng 4 phẩy 762. Đổi chỗ vị trí 1 và 2 chỉ tạo một cặp sai, nhưng độ lợi tụt còn khoảng 4 phẩy 393, mất 0 phẩy 369. Đổi chỗ vị trí 3 và 4 cũng một cặp sai, mà chỉ mất 0 phẩy 069. Cùng một cặp sai, ở đầu mất gấp khoảng 5 phẩy 3 lần ở cuối. Vì vậy cách học theo danh sách nhân mỗi cặp với mức độ lợi mất đi khi đổi chỗ, để ưu tiên sửa cặp ở đầu."
+
+  # ───────────────────────── 8. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp, có lỗi của người đã đi làm"
+    checks:
+      - "alg.irs_mse([2.4, 2.6], [3, 2]) < alg.irs_mse([10, 1], [3, 2]) and alg.irs_pair_loss(2.4, 2.6) > alg.irs_pair_loss(10, 1)"
+      - "alg.irs_wrong_pairs([2, 3, 1, 1, 1, 1, 1, 1, 1, 0]) == 1 and alg.irs_wrong_pairs([3, 2, 1, 1, 1, 1, 1, 0, 1, 1]) == 2"
+      - "1000 * 999 // 2 == 499500"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Chọn mô hình theo sai số bình phương của điểm <b class="red">(M1: 0,36 nhưng xếp sai; M2: 25 nhưng xếp đúng)</b>
+          <br><span class="note">Phép thử: đo thêm một độ đo thứ tự (độ chuẩn xác ở k dòng đầu, độ lợi tích lũy có chiết khấu) trên cùng tập kiểm tra.</span></div>
+        say: "Lỗi thứ nhất là chọn mô hình theo sai số bình phương của điểm, như M1 được 0 phẩy 36 mà xếp sai, M2 được 25 mà xếp đúng. Phép thử là luôn đo thêm một độ đo thứ tự, như độ chuẩn xác ở k dòng đầu hay độ lợi tích lũy có chiết khấu, trên cùng tập kiểm tra."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Ghép cặp văn bản của <b>hai câu hỏi khác nhau</b> <b class="red">(điểm 0,9 của câu này không so được với 0,8 của câu kia)</b>
+          <br><span class="note">Bài báo năm 2005 ghi rõ: chỉ các văn bản trả về cho cùng một câu hỏi mới được xếp với nhau.</span></div>
+        say: "Lỗi thứ hai là ghép cặp văn bản của hai câu hỏi khác nhau, trong khi điểm 0 phẩy 9 của câu này không so được với điểm 0 phẩy 8 của câu kia. Bài báo năm 2005 về mạng xếp hạng theo cặp ghi rõ, chỉ các văn bản trả về cho cùng một câu hỏi mới được xếp với nhau."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Đếm số cặp sai rồi tưởng ít cặp sai là tốt hơn <b class="red">(mọi cặp như nhau)</b></div>
+          <table class="t"><tr><th>mô hình (10 dòng)</th><th>sai ở đâu</th><th>số cặp sai</th><th>3 dòng đầu</th></tr>
+          <tr><td>X</td><td>đổi vị trí 1 và 2</td><td>1</td><td class="red">sai ngay dòng đầu</td></tr>
+          <tr><td>Y</td><td>văn bản mức 0 chen lên vị trí 8</td><td>2</td><td class="green">nguyên vẹn</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Lỗi thứ ba hay gặp ở người đã đi làm, là đếm số cặp sai rồi tưởng ít cặp sai hơn là tốt hơn, tức coi mọi cặp như nhau. Mô hình X chỉ sai một cặp, nhưng đó là đổi chỗ vị trí 1 và 2, người dùng thấy sai ngay dòng đầu. Mô hình Y sai hai cặp ở tận vị trí 8, trong khi ba dòng đầu vẫn nguyên vẹn."
+      - show: |
+          <div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Ghép mọi cặp của câu hỏi có 1000 văn bản <b class="red">(1000 · 999 : 2 = 499&nbsp;500 cặp cho một câu)</b>
+          <br><span class="note">Chỉ ghép cặp có mức liên quan khác nhau, hoặc lấy mẫu vài cặp mỗi văn bản đúng; đo thời gian huấn luyện trước khi tăng dữ liệu.</span></div>
+        introduces: [cdot]
+        say: "Lỗi thứ tư cũng của người đã đi làm, là ghép mọi cặp của một câu hỏi có 1000 văn bản. Dấu chấm giữa là phép nhân, 1000 nhân 999 chia 2 bằng 499 nghìn 500 cặp, chỉ cho một câu hỏi. Hãy chỉ ghép những cặp có mức liên quan khác nhau, hoặc lấy mẫu vài cặp cho mỗi văn bản đúng."
+
+  # ───────────────────────── 9. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: mất mát của một cặp, và chọn mô hình cho trang 3 dòng"
+    checks:
+      - "round(alg.irs_pair_loss(1, 1), 3) == 0.693 and round(alg.irs_pair_loss(3, 1), 3) == 0.127"
+      - "round(alg.irs_dcg([2, 3, 1]), 3) == 4.393 and round(alg.irs_dcg([3, 2, 1]), 3) == 4.762"
+      - "round(math.exp(-2), 3) == 0.135 and round(math.log2(3), 3) == 1.585 and round(math.log(1 + math.exp(-2)), 3) == 0.127"
+      - "alg.irs_wrong_pairs([2, 3, 1, 1, 1, 1, 1, 1, 1, 0]) < alg.irs_wrong_pairs([3, 2, 1, 1, 1, 1, 1, 0, 1, 1]) and alg.irs_dcg([2, 3, 1]) < alg.irs_dcg([3, 2, 1])"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>a liên quan hơn b; lúc đầu $s_a = s_b = 1$. Mất mát theo cặp là bao nhiêu?</td></tr>
+          <tr><td>2</td><td>Sau khi học, $s_a = 3$, $s_b = 1$. Mất mát còn bao nhiêu?</td></tr>
+          <tr><td>3</td><td>Trang chỉ hiện 3 dòng. Chọn X hay Y ở lỗi 3? Tính độ lợi tích lũy có chiết khấu của 3 dòng đầu để quyết.</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", 0]
+        say: "Bây giờ đến lượt bạn với ba câu hỏi trong bảng. Câu một, a liên quan hơn b và lúc đầu hai điểm cùng bằng 1, mất mát theo cặp là bao nhiêu. Câu hai, sau khi học, a được 3 điểm còn b được 1 điểm, mất mát còn bao nhiêu. Câu ba, trang chỉ hiện 3 dòng, bạn chọn mô hình X hay Y ở lỗi thứ ba, hãy tính độ lợi tích lũy có chiết khấu của 3 dòng đầu để quyết. Dừng video lại và làm ra giấy nhé."
+        pause: 20
+      - clear: true
+        show: |
+          <table class="t"><tr><th>câu</th><th>từng bước</th><th>đáp số</th></tr>
+          <tr><td>1</td><td>$o = 1 - 1 = 0$, $e^{0} = 1$, $\ln(1 + 1) = \ln 2$</td><td>≈ 0,693</td></tr>
+          <tr><td>2</td><td>$o = 3 - 1 = 2$, $e^{-2} \approx 0{,}135$, $\ln 1{,}135$</td><td>≈ $\hlg{0{,}127}$</td></tr></table>
+        focus: ["1.2", "1.3", "1.3"]
+        say: "Đáp án câu một, hiệu điểm o bằng 0, e mũ 0 bằng 1, nên mất mát là lôgarit của 2, khoảng 0 phẩy 693, đúng mức chưa phân biệt được. Câu hai, o bằng 3 trừ 1 bằng 2, e mũ âm 2 xấp xỉ 0 phẩy 135, và lôgarit của 1 phẩy 135 khoảng 0 phẩy 127. Mất mát giảm hơn năm lần khi khoảng cách điểm đúng chiều tăng từ 0 lên 2."
+      - show: |
+          <table class="t"><tr><th>câu 3: 3 dòng đầu</th><th>mức liên quan</th><th>độ lợi có chiết khấu</th><th>số cặp sai cả 10 dòng</th></tr>
+          <tr><td>X</td><td>2, 3, 1</td><td>$2 + \frac{3}{1{,}585} + \frac{1}{2} \approx 4{,}393$</td><td>1</td></tr>
+          <tr><td>Y</td><td>3, 2, 1</td><td>$3 + \frac{2}{1{,}585} + \frac{1}{2} \approx \hlg{4{,}762}$</td><td>2</td></tr></table>
+          <p class="note">Chọn Y cho trang 3 dòng. Nếu người dùng cuộn đọc cả 10 dòng (trang danh mục, xuất báo cáo), số cặp sai ở cuối mới đáng kể và phải xét lại.</p>
+        focus: ["1.2", "1.3", 2, 2]
+        say: "Câu ba, ba dòng đầu của X là 2, 3, 1, độ lợi có chiết khấu khoảng 4 phẩy 393, vì lôgarit cơ số 2 của 3 xấp xỉ 1 phẩy 585. Ba dòng đầu của Y vẫn là 3, 2, 1, được khoảng 4 phẩy 762, dù cả danh sách Y sai nhiều cặp hơn. Vậy với trang 3 dòng, ta chọn Y. Điều kiện để đổi lựa chọn là cách đọc, nếu người dùng cuộn đọc hết 10 dòng thì các cặp sai ở cuối mới đáng kể và phải xét lại."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">người dùng chỉ thấy thứ tự</span><span class="a">→</span>
+          <span class="n">theo cặp: logistic của hiệu điểm</span><span class="a">→</span>
+          <span class="n">mất mát ln(1 + e mũ −o)</span><span class="a">→</span>
+          <span class="n">theo danh sách: nhân với DCG mất đi</span></div>
+        say: "Tổng kết lại, người dùng chỉ nhìn thấy thứ tự, nên học điểm cho đúng chưa chắc xếp đúng. Cách theo cặp biến hiệu điểm thành xác suất bằng hàm logistic, và mất mát là lôgarit của 1 cộng e mũ âm hiệu điểm. Cách theo danh sách nhân mỗi cặp với mức độ lợi mất đi, để sai ở đầu bị phạt nặng hơn."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> đo mô hình bằng <b>đúng thứ người dùng thấy</b> — thứ tự ở vài dòng đầu — chứ không bằng con số dễ tính nhất.</div>
+        say: "Điều cần mang theo, hãy đo mô hình bằng đúng thứ người dùng nhìn thấy, là thứ tự ở vài dòng đầu, chứ không bằng con số dễ tính nhất."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 6): hệ gợi ý không có câu hỏi gõ vào — ta học lọc cộng tác theo láng giềng, gợi ý cho một người dựa trên những người giống họ.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 6, hệ gợi ý không có câu hỏi gõ vào, và ta học lọc cộng tác theo láng giềng, gợi ý cho một người dựa trên những người có sở thích giống họ. Hẹn gặp bạn ở bài tiếp theo."

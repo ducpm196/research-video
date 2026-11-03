@@ -1,0 +1,214 @@
+id: L06
+course: ESY
+series: "ESY · Hệ thống nhúng và thời gian thực"
+title: "Bài 6 — Số dấu phẩy tĩnh, tràn và bão hoà"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/esy.yaml L06; audit/esy/verify_esy.py L06; R. Yates, Fixed-Point Arithmetic: An Introduction (2013); CSA bài 4 (số bù hai)"
+assumes: [arith, cdot, frac, approx, power, ltgt]
+# Quy ước: Q8.8 = số nguyên có dấu 16 bit, 8 bit phần lẻ: giá trị thật = số nguyên / 256 (2^8). Phạm vi −128 tới 127,996.
+#   Nhân: tích 32 bit rồi dịch phải 8; tràn: quay vòng theo bù hai (CSA) hoặc bão hoà về biên. Mọi số do alg.q_mul trong checks.
+objectives:
+  - "Biểu diễn số lẻ ở định dạng Q8.8"
+  - "Nhân hai số dấu phẩy tĩnh đúng cách"
+  - "Phân biệt tràn quay vòng và bão hoà"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Không có số thực mà vẫn cần 1,5"
+    steps:
+      - show: |
+          <p>Hệ số khuếch đại 1,5, cảm biến đo 2,25. Nhiều vi điều khiển rẻ <b>không có</b> phần cứng tính số thực: mỗi phép nhân số thực mô phỏng bằng phần mềm, chậm hàng chục lần.</p>
+          <div class="box key">Hôm nay: <b>số dấu phẩy tĩnh</b> — dùng số nguyên mà vẫn biểu diễn được số lẻ — và hai cách xử lý khi số vượt phạm vi: <b>quay vòng</b> và <b>bão hoà</b>.</div>
+        focus: [1, 1, 2]
+        say: "Chào bạn, hệ số khuếch đại là 1 phẩy 5, cảm biến đo được 2 phẩy 25. Nhiều vi điều khiển rẻ không có phần cứng tính số thực, mỗi phép nhân số thực phải mô phỏng bằng phần mềm, chậm hàng chục lần. Hôm nay ta học số dấu phẩy tĩnh, dùng số nguyên mà vẫn biểu diễn được số lẻ, và hai cách xử lý khi số vượt phạm vi, quay vòng và bão hoà."
+
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: dịch bit là nhân chia 2, số bù hai quay vòng"
+    checks:
+      - "13 >> 2 == 3 and 13 / 4 == 3.25 and 3 << 8 == 768 and 3 * 256 == 768"
+      - "2 ** 15 == 32768 and -(2 ** 15) == -32768 and 2 ** 16 == 65536 and 40000 - 65536 == -25536"
+      - "0.375 == 3 / 8 and 3 / 8 * 256 == 96"
+    steps:
+      - show: |
+          <table class="t"><tr><th>phép dịch</th><th>bằng</th><th>làm thử</th></tr>
+          <tr><td>dịch trái 8 bit</td><td>nhân $2^8 = 256$</td><td>3 dịch trái 8 = 768 = $3 \cdot 256$</td></tr>
+          <tr><td>dịch phải 2 bit</td><td>chia 4, bỏ phần lẻ</td><td>13 dịch phải 2 = 3 (vì $13 / 4 = 3{,}25$)</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Trước hết, ôn lại phép dịch bit ở khoá Hệ thống máy tính. Dịch trái 8 bit nghĩa là nhân với 2 mũ 8, tức 256, ví dụ 3 dịch trái 8 thành 768, đúng bằng 3 nhân 256. Dịch phải 2 bit nghĩa là chia 4 và bỏ phần lẻ, nên 13 dịch phải 2 được 3, vì 13 chia 4 bằng 3 phẩy 25."
+      - show: |
+          <table class="t"><tr><th>số nguyên có dấu 16 bit (bù hai)</th><th>giá trị</th></tr>
+          <tr><td>nhỏ nhất, lớn nhất</td><td>$-32\,768$ và $32\,767$</td></tr>
+          <tr><td>muốn lưu 40 000 (vượt)</td><td>quay vòng: $40\,000 - 65\,536 = -25\,536$</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Tiếp theo, số nguyên có dấu 16 bit theo kiểu bù hai cũng đã học ở khoá đó. Nó chứa được từ âm 32768 tới 32767. Nếu cố lưu 40 nghìn, vượt quá biên, giá trị bị quay vòng, trừ đi 65536 và thành âm 25536, đổi cả dấu."
+      - show: |
+          <p>Số lẻ viết thành phân số: $0{,}375 = \frac{3}{8}$, và $\frac{3}{8} \cdot 256 = 96$ — một số lẻ nhân 256 có thể thành số nguyên.</p>
+        say: "Cuối cùng, một số lẻ có thể viết thành phân số, 0 phẩy 375 bằng 3 phần 8. Nhân 3 phần 8 với 256 thì được đúng 96, một số nguyên, và đó chính là ý tưởng của cả bài hôm nay."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: định dạng Q8.8"
+    checks:
+      - "round(1.5 * 256) == 384 and round(2.25 * 256) == 576 and 2 ** 15 - 1 == 32767 and round(32767 / 256, 3) == 127.996"
+    steps:
+      - show: |
+          <p><b>Q8.8</b>: số nguyên có dấu 16 bit, coi 8 bit cuối là phần lẻ. Giá trị thật = số nguyên chia $2^8 = 256$.</p>
+          <p>$1{,}5 \to 1{,}5 \cdot 256 = 384$. $\quad 2{,}25 \to 576$. $\quad$ Bước nhỏ nhất: $1/256 \approx 0{,}0039$.</p>
+          <p>Phạm vi: từ $-128$ tới $32\,767 / 256 \approx 127{,}996$.</p>
+        focus: [1, 2, 3]
+        say: "Định dạng Q8.8 là một số nguyên có dấu 16 bit, nhưng ta coi 8 bit cuối là phần lẻ, nên giá trị thật bằng số nguyên chia cho 2 mũ 8, tức 256. Số 1 phẩy 5 được lưu là 384, số 2 phẩy 25 được lưu là 576, và bước nhỏ nhất là một phần 256, khoảng 0 phẩy 0039. Phạm vi đi từ âm 128 tới khoảng 127 phẩy 996."
+
+  - id: intuition
+    kind: intuition
+    title: "Một cây thước hai mặt"
+    checks:
+      - "[round(v * 256) for v in (1.5, 2.25, 3.375)] == [384, 576, 864] and [v * 256 for v in range(5)] == [0, 256, 512, 768, 1024]"
+    steps:
+      - show: |
+          <div><svg width="1500" height="330" viewBox="0 0 1500 330"><g fill="#1f2937"><line x1="160" y1="170" x2="1240" y2="170" stroke="#1f2937" stroke-width="3"/><line x1="160" y1="160" x2="160" y2="180" stroke="#6b7280" stroke-width="2"/><text x="160" y="145" text-anchor="middle" font-size="22">0</text><text x="160" y="215" text-anchor="middle" font-size="22" fill="#6b7280">0</text><line x1="430" y1="160" x2="430" y2="180" stroke="#6b7280" stroke-width="2"/><text x="430" y="145" text-anchor="middle" font-size="22">1</text><text x="430" y="215" text-anchor="middle" font-size="22" fill="#6b7280">256</text><line x1="700" y1="160" x2="700" y2="180" stroke="#6b7280" stroke-width="2"/><text x="700" y="145" text-anchor="middle" font-size="22">2</text><text x="700" y="215" text-anchor="middle" font-size="22" fill="#6b7280">512</text><line x1="970" y1="160" x2="970" y2="180" stroke="#6b7280" stroke-width="2"/><text x="970" y="145" text-anchor="middle" font-size="22">3</text><text x="970" y="215" text-anchor="middle" font-size="22" fill="#6b7280">768</text><line x1="1240" y1="160" x2="1240" y2="180" stroke="#6b7280" stroke-width="2"/><text x="1240" y="145" text-anchor="middle" font-size="22">4</text><text x="1240" y="215" text-anchor="middle" font-size="22" fill="#6b7280">1024</text><circle cx="565" cy="170" r="9" fill="#2a78d6"/><text x="565" y="90" text-anchor="middle" font-size="24" fill="#2a78d6">1,5</text><line x1="565" y1="98" x2="565" y2="158" stroke="#2a78d6" stroke-width="2"/><text x="565" y="285" text-anchor="middle" font-size="24" fill="#2a78d6">384</text><line x1="565" y1="182" x2="565" y2="262" stroke="#2a78d6" stroke-width="2"/><circle cx="768" cy="170" r="9" fill="#059669"/><text x="768" y="90" text-anchor="middle" font-size="24" fill="#059669">2,25</text><line x1="768" y1="98" x2="768" y2="158" stroke="#059669" stroke-width="2"/><text x="768" y="285" text-anchor="middle" font-size="24" fill="#059669">576</text><line x1="768" y1="182" x2="768" y2="262" stroke="#059669" stroke-width="2"/><circle cx="1071" cy="170" r="9" fill="#eb6834"/><text x="1071" y="90" text-anchor="middle" font-size="24" fill="#eb6834">3,375</text><line x1="1071" y1="98" x2="1071" y2="158" stroke="#eb6834" stroke-width="2"/><text x="1071" y="285" text-anchor="middle" font-size="24" fill="#eb6834">864</text><line x1="1071" y1="182" x2="1071" y2="262" stroke="#eb6834" stroke-width="2"/><text x="1290" y="150" font-size="22">giá trị thật</text><text x="1290" y="215" font-size="22" fill="#6b7280">số nguyên lưu</text><text x="20" y="320" font-size="20">mỗi vạch giá trị 1 cách nhau 256 số nguyên; chia 256 để đọc ra giá trị</text></g></svg></div>
+        say: "Hình là một cây thước có hai mặt, mặt trên ghi giá trị thật, mặt dưới ghi số nguyên mà chip thật sự lưu. Mỗi đơn vị giá trị ứng với 256 số nguyên, nên 1 phẩy 5 nằm ở 384, 2 phẩy 25 nằm ở 576. Tích của chúng, 3 phẩy 375, nằm ở 864, và chip chỉ làm việc với mặt dưới của thước."
+
+  # ───────────────────────── 3. NHÂN ─────────────────────────
+  - id: example
+    kind: example
+    title: "Nhân 1,5 với 2,25"
+    checks:
+      - "384 * 576 == 221184 and 221184 > 65535 and alg.q_mul(384, 576)[0] == 864 and 864 / 256 == 3.375"
+    steps:
+      - show: |
+          <p><b>Bước 1 — đổi sang Q8.8:</b> $1{,}5 \cdot 256 = 384$, $\ 2{,}25 \cdot 256 = 576$.</p>
+        say: "Bước một, đổi hai số sang định dạng Q8.8 bằng cách nhân với 256. Số 1 phẩy 5 thành 384, còn số 2 phẩy 25 thành 576, cả hai đều là số nguyên."
+      - show: |
+          <p><b>Bước 2 — nhân hai số nguyên:</b> $384 \cdot 576 = 221\,184$.</p>
+          <div class="box warn">Tích trung gian 221 184 vượt 16 bit (tối đa 65 535): phải nhân trong biến <b>32 bit</b> rồi mới dịch.</div>
+        focus: [1, 2]
+        say: "Bước hai, nhân 384 với 576 được hai trăm hai mươi mốt nghìn một trăm tám mươi tư. Chú ý, tích trung gian vượt quá 16 bit, nên phải nhân trong một biến 32 bit rồi mới dịch."
+      - show: |
+          <p><b>Bước 3 — dịch phải 8:</b> mỗi thừa số đã nhân 256, nên tích bị nhân $256^2$; chia lại 256:</p>
+          $$\frac{221\,184}{256} = 864$$
+        focus: [1, 2]
+        say: "Bước ba, vì mỗi thừa số đã được nhân 256, tích bị nhân 256 bình phương, nên phải chia lại 256, tức dịch phải 8 bit. Hai trăm hai mươi mốt nghìn một trăm tám mươi tư chia 256 được 864."
+      - show: |
+          <p><b>Bước 4 — đọc kết quả:</b> $864 / 256 = \hl{3{,}375} = 1{,}5 \cdot 2{,}25$. Đúng.</p>
+        say: "Bước bốn, đọc kết quả bằng cách chia cho 256. 864 chia 256 bằng 3 phẩy 375, đúng bằng 1 phẩy 5 nhân 2 phẩy 25."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: tính bằng phân số, rồi nhân ngược"
+    checks:
+      - "__import__('fractions').Fraction(3, 2) * __import__('fractions').Fraction(9, 4) == __import__('fractions').Fraction(27, 8) and 27 * 256 // 8 == 864"
+      - "864 * 256 == 221184"
+    steps:
+      - show: |
+          <table class="t"><tr><th>cách khác</th><th>tính</th><th>so với trên</th></tr>
+          <tr><td>phân số</td><td>$\frac{3}{2} \cdot \frac{9}{4} = \frac{27}{8}$; $\ \frac{27}{8} \cdot 256 = 864$</td><td>khớp 864 ✓</td></tr>
+          <tr><td>nhân ngược</td><td>$864 \cdot 256 = 221\,184$</td><td>khớp tích ở bước 2 ✓</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Kiểm bằng đường khác, không dùng số nguyên lưu trong chip. Viết 1 phẩy 5 là 3 phần 2, 2 phẩy 25 là 9 phần 4, tích là 27 phần 8, nhân 256 được 864, khớp kết quả. Rồi nhân ngược 864 với 256 được đúng hai trăm hai mươi mốt nghìn một trăm tám mươi tư, khớp với tích ở bước hai, nên phép dịch không làm mất gì."
+
+  - id: overflow
+    kind: concept
+    title: "Tràn: quay vòng hay bão hoà"
+    checks:
+      - "alg.q_mul(round(100 * 256), round(2 * 256)) == (32767, -14336) and -14336 / 256 == -56.0"
+      - "200 * 256 == 51200 and 51200 > 32767 and 51200 - 65536 == -14336"
+    steps:
+      - show: |
+          <p>$100 \cdot 2 = 200$, vượt 127,996. Hai cách xử lý:</p>
+          <table class="t"><tr><th>cách</th><th>kết quả</th><th>giá trị</th></tr>
+          <tr><td>quay vòng (bù hai, CSA)</td><td>$-14\,336$</td><td>$\hl{-56}$</td></tr>
+          <tr><td>bão hoà về biên</td><td>$32\,767$</td><td>127,996</td></tr></table>
+          <div class="box key">Lệnh động cơ “quay hết cỡ tiến” mà quay vòng thành “lùi 56” là tai nạn. Điều khiển phải <b>bão hoà</b>: kẹp kết quả vào biên gần nhất.</div>
+        focus: [1, 2, "2.2", "2.3", 3]
+        say: "Bây giờ nhân 100 với 2, được 200, vượt quá 127 phẩy 996. Có hai cách xử lý. Quay vòng theo số bù hai như khoá Hệ thống máy tính cho kết quả âm 56. Bão hoà kẹp về biên gần nhất, cho 127 phẩy 996. Một lệnh động cơ quay hết cỡ tiến mà quay vòng thành lùi 56 là tai nạn, nên bộ điều khiển phải dùng bão hoà."
+      - show: |
+          <p>Vì sao ra $-56$? Giá trị 200 cần số nguyên $200 \cdot 256 = 51\,200 \gt 32\,767$. Quay vòng rồi chia 256:</p>
+          $$51\,200 - 65\,536 = -14\,336, \qquad \frac{-14\,336}{256} = -56$$
+        focus: [1, 1, 2]
+        say: "Vì sao quay vòng lại ra âm 56? Giá trị 200 cần số nguyên 200 nhân 256, bằng 51200, lớn hơn 32767. Như phần chuẩn bị, số bị trừ đi 65536 thành âm 14336, chia 256 thì được âm 56."
+
+  # ───────────────────────── 5. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi người mới hay mắc"
+    checks:
+      - "(round(1.0 * 256) * round(0.5 * 256) + 128) >> 8 == 128"
+      - "(-3) >> 1 == -2"
+      - "5 * 192 == 960 and 960 / 256 == 3.75 and 960 >> 8 == 3 and (960 + 128) >> 8 == 4"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Nhân hai số 16 bit trong biến 16 bit <b class="red">(sai)</b>
+          <br><span class="note">Tích tràn trước khi kịp dịch. Ép sang 32 bit trước khi nhân.</span></div>
+        say: "Lỗi thứ nhất, nhân hai số 16 bit trong một biến 16 bit. Tích bị tràn trước khi kịp dịch, nên phải ép sang 32 bit trước khi nhân."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Quên dịch sau khi nhân <b class="red">(sai)</b>
+          <br><span class="note">Kết quả lớn gấp 256 lần. Mỗi phép nhân Q8.8 phải đi kèm dịch phải 8.</span></div>
+        say: "Lỗi thứ hai, quên dịch phải sau khi nhân. Kết quả sẽ lớn gấp 256 lần, nên mỗi phép nhân Q8.8 phải đi kèm một lần dịch phải 8 bit."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Để tràn quay vòng trong vòng điều khiển <b class="red">(nguy hiểm)</b>
+          <br><span class="note">Tín hiệu nhảy từ cực đại sang cực tiểu. Luôn bão hoà ở đầu ra bộ điều khiển và ở biến tích phân.</span></div>
+        say: "Lỗi thứ ba, để tràn quay vòng trong vòng điều khiển. Tín hiệu sẽ nhảy từ cực đại sang cực tiểu, nên hãy luôn bão hoà ở đầu ra bộ điều khiển và ở biến tích phân."
+      - show: |
+          <div class="box warn"><b>Lỗi 4.</b> Quên rằng dịch phải là làm tròn xuống <b class="red">(lệch)</b>
+          <br><span class="note">Dịch phải làm tròn về phía âm vô cùng; sai số cộng dồn qua nhiều phép. Cộng 128 trước khi dịch để làm tròn gần nhất.</span></div>
+          <table class="t"><tr><th>tích $5 \cdot 192 = 960$ (đúng là 960/256 = 3,75)</th><th>kết quả</th></tr>
+          <tr><td>dịch phải 8 ngay</td><td>3 (lệch 0,75)</td></tr>
+          <tr><td>cộng 128 rồi dịch: 1088 dịch phải 8</td><td>4 (lệch 0,25)</td></tr></table>
+        focus: [1, 1, 1, 2]
+        say: "Lỗi thứ tư, quên rằng dịch phải là làm tròn xuống. Dịch phải luôn làm tròn về phía âm vô cùng, nên sai số cộng dồn qua nhiều phép tính. Muốn làm tròn gần nhất, hãy cộng 128 trước khi dịch. Ví dụ trong bảng, tích 960 ứng với 3 phẩy 75 bước nhỏ nhất, dịch ngay thì ra 3, còn cộng 128 rồi dịch thì ra 4, gần đúng hơn."
+
+  # ───────────────────────── 6. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "round(0.75 * 256) == 192 and alg.q_mul(192, 128)[0] == 96 and 96 / 256 == 0.375"
+      - "alg.q_mul(round(64 * 256), round(4 * 256)) == (32767, 0)"
+      - "192 * 128 == 24576 and 24576 >> 8 == 96 and 64 * 4 == 256 and 16384 * 1024 == 16777216 and (16777216 >> 8) == 65536 and 65536 - 65536 == 0"
+      - "1.5 * 100 == 150 and 150 > 127.996 and alg.q_mul(384, 25600) == (32767, -27136) and -27136 / 256 == -106 and 150 * 256 - 65536 == -27136"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>0,75 ở Q8.8 là số nguyên nào? Nhân với 0,5 (là 128) được gì?</td></tr>
+          <tr><td>2</td><td>$64 \cdot 4$ ở Q8.8: quay vòng ra bao nhiêu? Bão hoà ra bao nhiêu?</td></tr>
+          <tr><td>3</td><td>Lệnh động cơ $= 1{,}5 \cdot$ sai số, sai số có thể tới 100. Q8.8 có đủ không? Nếu không thì làm gì?</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3", "1.3", "1.4", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, 0 phẩy 75 ở định dạng Q8.8 là số nguyên nào? Nhân với 0 phẩy 5, tức 128, được gì? Câu hai, 64 nhân 4 ở định dạng Q8.8, quay vòng ra bao nhiêu? Bão hoà ra bao nhiêu? Câu ba, lệnh động cơ bằng 1 phẩy 5 nhân sai số, sai số có thể lên tới 100, vậy định dạng Q8.8 có đủ không, và nếu không thì phải làm gì? Dừng video và làm ra giấy."
+        pause: 15
+      - clear: true
+        show: |
+          <p>① $0{,}75 \cdot 256 = \hl{192}$; $192 \cdot 128 = 24\,576$, dịch 8 → $96$, tức $96 / 256 = \hl{0{,}375}$.</p>
+        say: "Đáp án câu một, 0 phẩy 75 nhân 256 bằng 192. Nhân với 128 được 24576, dịch phải 8 được 96, chia 256 thì ra 0 phẩy 375, đúng bằng 0 phẩy 75 nhân 0 phẩy 5."
+      - show: |
+          <p>② $64 \cdot 4 = 256$ vượt phạm vi. Số nguyên cần $256 \cdot 256 = 65\,536$, quay vòng trừ $65\,536$ còn $\hl{0}$ — tệ hơn cả âm! Bão hoà: $32\,767 \approx 127{,}996$.</p>
+        say: "Câu hai, 64 nhân 4 bằng 256, vượt phạm vi. Số nguyên cần là 256 nhân 256, bằng 65536, quay vòng trừ 65536 thì còn đúng 0, tệ hơn cả số âm, trong khi bão hoà cho khoảng 127 phẩy 996."
+      - show: |
+          <p>③ $1{,}5 \cdot 100 = 150 \gt 127{,}996$: <b>không đủ</b>. Quay vòng: $150 \cdot 256 - 65\,536 = -27\,136$, tức $-106$ — “tiến 150” thành “lùi 106”. Phải bão hoà, hoặc chọn định dạng ít bit phần lẻ hơn để phạm vi rộng hơn.</p>
+        say: "Câu ba, 1 phẩy 5 nhân 100 bằng 150, lớn hơn 127 phẩy 996, nên định dạng Q8.8 không đủ. Nếu để quay vòng, 150 nhân 256 trừ 65536 bằng âm 27136, tức âm 106, lệnh tiến 150 biến thành lùi 106. Vậy phải bão hoà, hoặc chọn định dạng có ít bit phần lẻ hơn để phạm vi rộng hơn."
+
+  # ───────────────────────── 7. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">giá trị = số nguyên / 256</span><span class="a">→</span>
+          <span class="n">nhân 32 bit, dịch phải 8</span><span class="a">→</span>
+          <span class="n">vượt phạm vi: bão hoà</span><span class="a">→</span>
+          <span class="n">làm tròn: cộng 128 trước khi dịch</span></div>
+        say: "Tổng kết lại, ở định dạng Q8.8 giá trị bằng số nguyên chia 256. Nhân trong 32 bit rồi dịch phải 8, vượt phạm vi thì bão hoà, và muốn làm tròn gần nhất thì cộng 128 trước khi dịch."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> mỗi con số trong máy có phạm vi. Trước mỗi phép tính, hỏi “lớn nhất là bao nhiêu, có vượt không, vượt thì sao”.</div>
+        say: "Điều cần mang theo, mỗi con số trong máy đều có phạm vi. Trước mỗi phép tính, hãy hỏi lớn nhất là bao nhiêu, có vượt không, và vượt thì chuyện gì xảy ra."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 7): <b>giao tiếp nối tiếp UART</b> — gửi từng bit qua một sợi dây.</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 7, ta học giao tiếp nối tiếp không đồng bộ, cách gửi từng bit qua một sợi dây. Hẹn gặp bạn ở bài tiếp theo."

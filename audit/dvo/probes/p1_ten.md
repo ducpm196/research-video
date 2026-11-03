@@ -1,0 +1,14 @@
+# Dò phát âm `dvo_p1_ten` (giọng vi-VN-NamMinhNeural, tốc độ -5%; small + medium; ngưỡng 7/8)
+
+checked_at: 2026-10-29T07:11:27Z
+
+| từ | cách viết | điểm | đối chứng âm? | bản chép (small / medium) |
+|---|---|---|---|---|
+| devops | «DevOps» | 6/8 |  | Theo DevOps, ta sẽ quý trình này. / Theo DevOps, tả xét quy trình này. ; Phần DevOps được giải thích ở bước tiếp theo. / Phần devop được giải thích ở bước tiếp theo. ; Hãy nhớ devolve khi đọc bài này. / Hãy nhớ Đê Vốt khi đọc bài này. ; Đây là ví dụ về DevOps trong thực tế. / Đây là ví dụ về DevOps trong thực tế. |
+| devops | «Đép-óp» | 5/8 |  | Theo depth op, ta sẽ quay trình này. / Theo DevOps, ta xét quy trình này. ; phần đẹp op được giải thích ở bước tiếp theo. / Phần DevOps được giải thích ở bước tiếp theo. ; Hãy nhớ đẹp óp khi đọc bài này. / Hãy nhớ đếp off khi đọc bài này. ; Đây là ví dụ về depth op trong thực tế. / Đây là ví dụ về DevOps trong thực tế. |
+| devops | «Đép-ốp» | 6/8 |  | Theo đếp óp, ta sẽ quý trình này. / Theo DevOps, ta xét quy trình này. ; phần đẹp óp được giải thích ở bước tiếp theo. / Phần desktop được giải thích ở bước tiếp theo. ; Hãy nhớ đẹp óc khi đọc bài này. / Hãy nhớ đếp ốp khi đọc bài này! ; Đây là ví dụ về đẹp op trong thực tế. / Đây là ví dụ về đẹp ốp trong thực tế. |
+| devops | «Đép-ót» | 1/8 | ĐỐI CHỨNG | Theo đếp óc, ta sẽ quay trình này. / Theo dev.org, ta xét quy trình này. ; phần đẹp óc được giải thích ở bước tiếp theo. / Phần DevOps được giải thích ở bước tiếp theo. ; Hãy nhớ đẹp óc khi đọc bài này. / Hãy nhớ đẹp óc khi đọc bài này. ; Đây là ví dụ về đẹp óc trong thực tế. / Đây là ví dụ về đẹp ót trong thực tế. |
+| git | «Git» | 0/8 |  | Theo gích tà xét quy trình này. / Theo ghét, ta xét quy trình này. ; phân ghét được giải thích ở bước tiếp theo. / Phân kiếp được giải thích ở bước tiếp theo. ; Hãy nhớ ghiết khi đọc bài này. / Hãy nhớ ghét khi đọc bài này! ; Đây là ví dụ về ghía trong thực tế. / Đây là ví dụ về ghét trong thực tế. |
+| git | «ghít» | 2/8 |  | Theo ghích, ta sẽ quay trình này. / Theo gức, ta xét quy trình này. ; phần ghét được giải thích ở bước tiếp theo. / Phân kiếp được giải thích ở bước tiếp theo. ; Hãy nhớ kích khi đọc bài này. / Hãy nhớ ghét khi đọc bài này! ; Đây là ví dụ về ghít trong thực tế. / Đây là ví dụ về git trong thực tế. |
+| git | «gít» | 2/8 |  | Theo gích, ta sẽ quay trình này. / Theo ghét, ta xét quy trình này. ; phân ghét được giải thích ở bước tiếp theo. / Phân kiếp được giải thích ở bước tiếp theo. ; Hãy nhớ kích khi đọc bài này. / Hãy nhớ ghét khi đọc bài này! ; Đây là ví dụ về ghít trong thực tế. / Đây là ví dụ về git trong thực tế. |
+| git | «ghíp» | 2/8 | ĐỐI CHỨNG | Theo ghít, ta sẽ quay trình này. / Theo ghếp, ta sẽ quy trình này. ; phân gích được giải thích ở bước tiếp theo. / Phần gít được giải thích ở bước tiếp theo. ; Hãy nhớ gíp khi đọc bài này. / Hãy nhớ gíp khi đọc bài này! ; Đây là ví dụ về giúp trong thực tế. / Đây là ví dụ về Gip trong thực tế. |
