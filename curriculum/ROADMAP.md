@@ -263,7 +263,9 @@ Báo cáo DSTF còn đòi giải tích, cấu trúc rời rạc, xác suất, th
      STATUS 475/575 bài, 3740 phút. Còn: bài hành trình (mục 3), các khoá GFX/HCI/IRS/PAR/RLN/SEP chưa soạn.
      Tiến độ 2026-11-03: **đợt C XONG — 29 bài hành trình** (bảng mục 3, mỗi dòng ✅ ghi nguồn đã đọc), dựng batch35–45 đều PASS, ASR 0 chưa
      xem xét. Sửa nội dung cũ khi soạn: ESY L10 hook (cơ chế Pathfinder: tác vụ cao chờ khoá do tác vụ thấp giữ), câu “bài cuối” ở bài áp chót
-     (CSA L14, OSY L13, DMS L18). Khoá mới: SEP 12 bài và CAS 12 bài đã có đặc tả (dựng batch46–47); PAR, RLN đang soạn; còn IRS, CVI, HCI, GFX.
+     (CSA L14, OSY L13, DMS L18). Khoá mới: SEP 12 bài và CAS 12 bài đã có đặc tả (dựng batch46–47).
+      Tiến độ 2026-11-04: Soạn và dựng xong PAR (14 bài), RLN (14 bài), CVI (13 bài).
+      Tiến độ 2026-11-05: **CÁN ĐÍCH 100% TOÀN DỰ ÁN — 38 KHOÁ HỌC, 611/611 BÀI ĐÃ DỰNG THÀNH CÔNG**. Hoàn tất 14/14 bài khoá IRS (L00–L13, 162.1 phút, verify_irs 123/123 PASS, 0 cờ ASR chưa xem xét). Tổng video toàn kho đạt 5,259 phút (~87.65 giờ video chuẩn phát thanh 1080p), 610/611 bài hoàn thiện tuyệt đối (1 bài AIF L11 giữ cho tai người theo cam kết chất lượng), 48,191 câu thoại sạch, 0 câu lỗi tốc độ, bộ cổng kiểm thử lint/graph/refs/meta 100% PASS.
    - Mỗi khoá xong thì đi đủ các cổng §7 rồi sinh lại STATUS. Thời gian máy đo được: dựng và chạy ASR một bài 10 phút mất khoảng 7–10 phút.
 3. **Bài hành trình cho mỗi khoá** (`--kind journey`). Đánh số tiếp sau bài cuối, sửa câu nối của bài cuối cũ, rồi dựng lại bài đó.
    Nguồn dưới đây đều là **ứng viên NOT_VERIFIED**: phải đọc nguyên văn và ghi câu trích vào `audit/<khoá>/sources_<id>.md` trước khi soạn,

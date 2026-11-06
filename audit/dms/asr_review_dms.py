@@ -3731,6 +3731,497 @@ HAND = {
         'ASR chép “Thực hành trúc ra là chia việc thành rất nhiều khối độc lập, tránh rẽ nhánh trong nhóm 32 luồng và chép dữ liệu dùng lại vào bộ nhớ chia sẻ 16 kilobytes.” (0.944): KB đọc “ki-lô-byte” theo lexicon của khoá, ASR viết “kilobyte/kg”; lệch âm/thanh thuần Việt: rút/trúc — NOT_VERIFIED bằng tai người',
     'Bạn đã đi từ phần tuần tự của Amdahl, qua công việc và đường găng, tranh chấp, bộ nhớ đệm và vector.':
         'ASR chép “Bạn đã đi từ phần tuần tự của Amdang qua công việc và đường găng, tranh chấp, bộ nhớ đệm và vét tơ.” (0.936): “Amdahl” đọc “Am-đan” theo lexicon_vi.CSA.yaml (probe p1 8/8), ASR chép “am đang/amdang/âm đăng” — cùng âm — NOT_VERIFIED bằng tai người',
+    # ── Khoá mới: RLN (2026-11-03) ──
+    'Bước bốn, chuyển gam-ma nhân G sang vế trái, được G nhân 1 trừ gam-ma bằng 1, rồi chia cho 1 trừ gam-ma, được chia vì gam-ma nhỏ hơn 1.':
+        'ASR chép “Bước 4, chuyển gama nhân dây sang với trái, được dây nhân một trừ gama bằng một, rồi chia cho một trừ gama, được chia vì gama nhỏ hơn một.” (0.781): gam-ma (γ) ASR viết “gamma”; lệch âm/thanh thuần Việt: vế/với — NOT_VERIFIED bằng tai người',
+    'Bước hai, theo công thức đệ quy, G một bằng r hai cộng gam-ma nhân G hai.':
+        'ASR chép “Bước 2, theo công thức đệ quy, dê 1 bằng Adder 2 cộng Gamma Nhân v2.” (0.8): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; gam-ma (γ) ASR viết “gamma” — NOT_VERIFIED bằng tai người',
+    'Bước ba, G không bằng r một cộng gam-ma nhân G một.':
+        'ASR chép “Bước 3, về không bằng R1 cộng gamma nhân dế 1.” (0.72): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; gam-ma (γ) ASR viết “gamma” — NOT_VERIFIED bằng tai người',
+    'Lấy căn hai vế, gam-ma phải lớn hơn căn của 0 phẩy 6, xấp xỉ 0 phẩy 775.':
+        'ASR chép “Lấy căn 2 v, gamma phải lớn hơn căn của 0,6, sắp xỉ 0,775.” (0.791): gam-ma (γ) ASR viết “gamma”; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: vế (trong “vế gam ma” → “v gamma”), xấp/sắp, không (trong “không phẩy” → “”) — NOT_VERIFIED bằng tai người',
+    'Đứng ở A mà luôn bước sang B thì ô A đáng giá 5 phẩy 263.':
+        'ASR chép “Đứng ở A mà luôn bước sang B thì OA đáng giá 5,263.” (0.872): “ô” (ô lưới) ASR viết chữ “O”; chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải” — NOT_VERIFIED bằng tai người',
+    'Còn nếu mỗi lần tung đồng xu để chọn đi hay ở, thì cũng ô A đó chỉ đáng giá 3 phẩy 448.':
+        'ASR chép “Còn nếu mỗi lần tung đồng xu để chọn đi hay ở, thì cũng OA đó chỉ đáng giá 3,448.” (0.906): “ô” (ô lưới) ASR viết chữ “O”; chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải” — NOT_VERIFIED bằng tai người',
+    'Còn s phẩy là trạng thái kế tiếp, nơi hành động dẫn tới.':
+        'ASR chép “Còn F phải là trạng thái kế tiếp, nơi hành động dẫn tới.” (0.846): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải” — NOT_VERIFIED bằng tai người',
+    'Hình vẽ trò chơi hai ô.':
+        'ASR chép “Hình vẽ trò chơi 2U.” (0.833): “ô” (ô lưới) ASR viết chữ “O” — NOT_VERIFIED bằng tai người',
+    'Bước hai, sau khi tới s phẩy, phần còn lại của trò chơi chỉ phụ thuộc s phẩy, không cần nhớ đã đi đường nào.':
+        'ASR chép “Bước 2, sau khi tới F-phẩy, phần còn lại của trò chơi chỉ phụ thuộc F-phẩy, không cần nhớ đã đi đường nào.” (0.92): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    'Vì vậy kỳ vọng của G t cộng 1 chính là V của s phẩy.':
+        'ASR chép “Vì vậy, kỳ vọng của GT cộng 1 chính là V của F phải.” (0.867): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải” — NOT_VERIFIED bằng tai người',
+    'Dấu Sigma hoa nghĩa là cộng qua mọi hành động a.':
+        'ASR chép “Dấu sigma hoa nghĩa là cộng qua mọi hành động nha.” (0.909): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    'Với chính sách 1, thay V của B bằng 0 phẩy 9 nhân V của A vào phương trình của A, ta được V của A bằng 1 cộng 0 phẩy 81 nhân V của A.':
+        'ASR chép “Với chính sách 1, thay V của B bằng không phải chính nhân V của A vào phương trình qua, ta được V của A bằng một cộng không phải 81 nhân V của A.” (0.88): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: chín (trong “phẩy chín” → “phải chính”), của (trong “của a” → “qua”) — NOT_VERIFIED bằng tai người',
+    'V của A đi từ 1 ở vòng 1, lên 3 phẩy 428 ở vòng 10, và tới 5 phẩy 263 ở vòng 100.':
+        'ASR chép “V của AD từ 1 ở vòng 1 lên 3,428 ở vòng 10 và tới 5,263 ở vòng 100.” (0.892): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: đi (trong “a đi” → “ad”) — NOT_VERIFIED bằng tai người',
+    'Lỗi thứ nhất, nói giá trị của ô A mà không nói chính sách nào.':
+        'ASR chép “Lỗi thứ nhất, nói giá trị của OA mà không nói chính sách nào.” (0.897): “ô” (ô lưới) ASR viết chữ “O”; chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    'Cùng ô A, hai chính sách cho 5 phẩy 263 và 3 phẩy 448.':
+        'ASR chép “Cùng OA, hai chính sách cho 5,263 và 3,448.” (0.837): “ô” (ô lưới) ASR viết chữ “O”; chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải” — NOT_VERIFIED bằng tai người',
+    'Với 10 nghìn trạng thái, riêng ma trận hệ số đã cần 800 triệu byte.':
+        'ASR chép “Với 10.000 trạng thái, riêng ma trận hệ số đã cần 800 triệu bay.” (0.938): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người',
+    'Ta được k lớn hơn hoặc bằng lôgarit của 0 phẩy 001 chia cho lôgarit của gam-ma.':
+        'ASR chép “Ta được ca lớn hơn hoặc bằng Logarit của 0.001 chi cho Logarit của Gamma.” (0.788): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; gam-ma (γ) ASR viết “gamma”; lệch âm/thanh thuần Việt: không (trong “không phẩy” → “”), chia/chi — NOT_VERIFIED bằng tai người',
+    'Khi gam-ma gần 1, lôgarit của gam-ma xấp xỉ âm của 1 trừ gam-ma, nên k xấp xỉ lôgarit của 1000, tức khoảng 6 phẩy 9, chia cho 1 trừ gam-ma.':
+        'ASR chép “Khi gamma gần 1, logarith của gamma sắp sĩ âm của một trừ gamma nên cả sắp sĩ logarith của 1 nghìn tức khoảng 6,9 chia cho một trừ gamma.” (0.676): gam-ma (γ) ASR viết “gamma”; chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: xấp xỉ (trong “gam ma xấp xỉ” → “gamma sắp sĩ”), xấp xỉ (trong “k xấp xỉ” → “cả sắp sĩ”) — NOT_VERIFIED bằng tai người',
+    'Cụ thể là c nhân căn của lôgarit t chia cho N.':
+        'ASR chép “Cụ thể là xe nhân căn của Logarith Techi cho N.” (0.87): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: chia (trong “t chia” → “techi”) — NOT_VERIFIED bằng tai người',
+    'Bước bốn, làm thử với t bằng 12, c bằng 2, và lôgarit của 12 xấp xỉ 2 phẩy 485.':
+        'ASR chép “Bước 4, làm thử với T bằng 12, C bằng 2 và Logatrix của 12 sắp xỉ 2,485.” (0.885): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: lôgarit/logatrix, xấp/sắp — NOT_VERIFIED bằng tai người',
+    'Đen-ta bằng r cộng gam-ma nhân V của s phẩy, trừ V của s.':
+        'ASR chép “Đen ta bằng add cộng gamma nhân v của x phải trừ v của x.” (0.774): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; gam-ma (γ) ASR viết “gamma”; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải” — NOT_VERIFIED bằng tai người',
+    'Phần G t cộng 1 chưa biết, nhưng ta đã có ước lượng của nó là V của s phẩy, nên thay vào chỗ G.':
+        'ASR chép “Phần GT Cộng 1 chưa biết, nhưng ta đã có ước lượng của nó là V của F phải nên thay vào chỗ G.” (0.92): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải” — NOT_VERIFIED bằng tai người',
+    'Ta kiểm bằng ví dụ 6.2 của sách, gồm năm ô A, B, C, D, E, bắt đầu ở C, mỗi bước sang trái hoặc phải với xác suất 0 phẩy 5.':
+        'ASR chép “Ta kiểm bằng ví dụ 6.2 của sách gồm 5 OA, B, C, G, E bắt đầu ở C mỗi bước sang trái hoặc phải với xác suốt 0,5.” (0.892): “ô” (ô lưới) ASR viết chữ “O”; chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: suất/suốt — NOT_VERIFIED bằng tai người',
+    'Đích dùng ước lượng của chính mình, nên nếu V của s phẩy ban đầu là 0 trong khi giá trị thật là 10, đích chỉ là 1 thay vì 10.':
+        'ASR chép “Đích dùng ước lượng của chính mình nên nếu V của F phải ban đầu là không trong khi giá trị thật là 10, đích chỉ là 1 thay vì 10.” (0.935): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải” — NOT_VERIFIED bằng tai người',
+    'Ta lấy đúng hành động a phẩy mà robot sẽ làm ở s phẩy, kể cả khi đó là nước chọn bừa.':
+        'ASR chép “Ta lấy đúng hành động A phẩy mà robot sẽ làm ở F phẩy, kể cả khi đó là nước chọn bưa.” (0.909): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: bừa/bưa — NOT_VERIFIED bằng tai người',
+    'Ta lấy giá trị của hành động tốt nhất ở s phẩy, dù robot có làm hành động đó hay không.':
+        'ASR chép “Ta lấy giá trị của hành động tốt nhất ở F, dù robot có làm hành động đó hay không?” (0.927): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải” — NOT_VERIFIED bằng tai người',
+    'Phép thử là in giá trị ở ô đích sau khi học, nó phải đúng bằng 0.':
+        'ASR chép “Phép thử là yên giá trị ở Odix sau khi học, nó phải đúng bằng không?” (0.848): “ô” (ô lưới) ASR viết chữ “O”; lệch âm/thanh thuần Việt: in/yên, đích (trong “ô đích” → “odix”) — NOT_VERIFIED bằng tai người',
+    'Theta cũ là một bản chép tham số được giữ nguyên một thời gian, gọi là mạng mục tiêu.':
+        'ASR chép “Teta của là một bản chép tham số được giữ nguyên một thời gian, gọi là mạng mục tiêu.” (0.895): theta đọc “tê-ta” theo lexicon RLN (probe p1: 7/8), ASR viết “teta”; lệch âm/thanh thuần Việt: cũ/của — NOT_VERIFIED bằng tai người',
+    'Công thức là y bằng r cộng gam-ma nhân số lớn nhất của Q tính bằng theta cũ.':
+        'ASR chép “Công thức là y bằng Adder cộng Gamma nhân số lớn nhất của quy tính bằng Teta cũ.” (0.811): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; gam-ma (γ) ASR viết “gamma”; theta đọc “tê-ta” theo lexicon RLN (probe p1: 7/8), ASR viết “teta” — NOT_VERIFIED bằng tai người',
+    'Kết quả trung bình khoảng 0 phẩy 001 mỗi lô.':
+        'ASR chép “Các quả trung bình khoảng 0,001 mỗi lô.” (0.778): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: kết/các, không (trong “không phẩy” → “”) — NOT_VERIFIED bằng tai người',
+    'Phép thử là lô nào có bước kết thúc thì y phải bằng đúng r.':
+        'ASR chép “Phép thử là lô nào có bước kết thúc thì y phải bằng đúng error.” (0.933): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    'Yếu tố thứ nhất là xấp xỉ hàm, dùng mạng nơ-ron thay bảng.':
+        'ASR chép “Yếu tố thứ nhất là sắp sĩ hàm dùng mạng Neuron thay bản.” (0.786): lệch âm/thanh thuần Việt: xấp xỉ/sắp sĩ, bảng/bản — NOT_VERIFIED bằng tai người',
+    'Điều thứ hai, hàm chữ S này biến một số thực theta thành xác suất, và tại theta bằng 0 nó bằng 0 phẩy 5.':
+        'ASR chép “Điều thứ 2, hàm chữ S này biến một số thực Teta thành xác suất, và tại Teta bằng không nó bằng 0,5.” (0.92): theta đọc “tê-ta” theo lexicon RLN (probe p1: 7/8), ASR viết “teta” — NOT_VERIFIED bằng tai người',
+    'Lôgarit tự nhiên của nó có đạo hàm đẹp, bằng 1 trừ hàm đó, còn lôgarit của 1 trừ hàm đó có đạo hàm bằng âm hàm đó.':
+        'ASR chép “Logatic tự nhiên của nó có đạo hàm đẹp, bằng một trừ hàm đó, còn Logatic của một trừ hàm đó có đạo hàm bằng âm hàm đó.” (0.929): lệch âm/thanh thuần Việt: lôgarit/logatic, lôgarit/logatic — NOT_VERIFIED bằng tai người',
+    'Pi của a khi biết s, với tham số theta, là xác suất chọn hành động a.':
+        'ASR chép “Pi của A khi biết x với tham số θ là xác xuất chọn hành động A.” (0.941): theta đọc “tê-ta” theo lexicon RLN (probe p1: 7/8), ASR viết “θ” — NOT_VERIFIED bằng tai người',
+    'Ví dụ hành động thứ nhất có xác suất bằng hàm chữ S của theta, và ở theta bằng 0 cả hai đều 0 phẩy 5.':
+        'ASR chép “Ví dụ hành động thứ nhất có xác sát xuất bằng hàm chữ S của TETA, và ở TETA bằng 0 cả 2 đều 0,5.” (0.868): theta đọc “tê-ta” theo lexicon RLN (probe p1: 7/8), ASR viết “teta”; lệch âm/thanh thuần Việt: suất/sát xuất — NOT_VERIFIED bằng tai người',
+    'Nhưng gradient của pi bằng pi nhân gradient của lôgarit pi, theo đạo hàm của lôgarit, nên gradient của J là kỳ vọng của G nhân gradient của lôgarit pi.':
+        'ASR chép “Nhưng Gradient của Pi bằng Pi nhân Gradient của Logarith Pi, theo đạo hàm của Logarith, nền Gradient của Yi là kỳ vọng của Giai nhân Gradient của Logarith Pi.” (0.921): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: nên/nền — NOT_VERIFIED bằng tai người',
+    'Bước ba, làm thử ngay ở theta bằng 0, gradient của lôgarit pi là 0 phẩy 5 cho hành động một và âm 0 phẩy 5 cho hành động hai, theo phần ôn thứ hai.':
+        'ASR chép “Bước 3, làm thử ngay ở Teta bằng 0, Gradient của Logarith P là 0,5 cho hành động 1 và âm 0,5 cho hành động 2, theo phần ôn thứ 2.” (0.933): theta đọc “tê-ta” theo lexicon RLN (probe p1: 7/8), ASR viết “teta”; pi (π) ASR viết “P/π” — NOT_VERIFIED bằng tai người',
+    'Cập nhật là theta thay bằng theta cộng an-pha nhân mẫu đó, và sách giáo khoa chuẩn gọi đây là thuật toán gradient chính sách cơ bản, công bố năm 1992.':
+        'ASR chép “Cập nhật là Teta thay bằng Teta cộng an pha nhân mẫu đó và sách giáo khoa chuẩn gọi đây là thuộc toán Gradient Chính Sách Cơ Bản, công bố năm 1992.” (0.902): theta đọc “tê-ta” theo lexicon RLN (probe p1: 7/8), ASR viết “teta”; lệch âm/thanh thuần Việt: thuật/thuộc — NOT_VERIFIED bằng tai người',
+    'Vậy G trừ b, nhân gradient lôgarit pi, vẫn có cùng kỳ vọng âm 0 phẩy 5.':
+        'ASR chép “Vậy dây trừ B nhân Gradient Logaritpy vẫn có cùng kỳ vọng âm 0.5.” (0.889): pi (π) ASR viết “P/π”; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: lôgarit (trong “lôgarit pi” → “logaritpy”) — NOT_VERIFIED bằng tai người',
+    'Bước một, nếu chọn hành động một thì G bằng 10, gradient lôgarit pi bằng 0 phẩy 5, nên mẫu bằng 5.':
+        'ASR chép “Bước 1, nếu chọn hành động 1 thì dế bằng 10, gradient logarith p bằng 0,5 nên mẫu bằng 5.” (0.917): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; pi (π) ASR viết “P/π” — NOT_VERIFIED bằng tai người',
+    'Trừ đường cơ sở 11 thì theta mới là âm 0 phẩy 05, đúng hướng.':
+        'ASR chép “Trừ đường cơ sở 11 thì Teta mới là âm 0.05, đúng hướng.” (0.903): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; theta đọc “tê-ta” theo lexicon RLN (probe p1: 7/8), ASR viết “teta” — NOT_VERIFIED bằng tai người',
+    'Như bước năm của ví dụ, một lượt chọn hành động một đẩy theta lên 0 phẩy 5, đi sai hướng gấp 10 lần độ lớn bước đúng.':
+        'ASR chép “Như bước 5 của ví dụ, một lượt chọn hành động 1 đẩy Teta lên 0,5, đi sai hướng gấp 10 lần độ lớn bước đúng.” (0.964): theta đọc “tê-ta” theo lexicon RLN (probe p1: 7/8), ASR viết “teta” — NOT_VERIFIED bằng tai người',
+    'Tổng kết lại, mục tiêu là lợi nhuận kỳ vọng J của theta.':
+        'ASR chép “Tổng kết lại, mục tiêu là lợi những kỳ vọng di của TETA.” (0.846): theta đọc “tê-ta” theo lexicon RLN (probe p1: 7/8), ASR viết “teta”; lệch âm/thanh thuần Việt: nhuận/những — NOT_VERIFIED bằng tai người',
+    'Mẹo lôgarit biến gradient của J thành kỳ vọng của G nhân gradient lôgarit pi, nên mỗi lượt chơi cho một mẫu không lệch nhưng rất nhiễu.':
+        'ASR chép “Mẹo Logarith biến Gradian của di thành kỳ vọng của gia nhân Gradian Logarith P nên mỗi lượt chơi cho một mẫu không lệch nhưng rất nhiễu.” (0.935): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; pi (π) ASR viết “P/π” — NOT_VERIFIED bằng tai người',
+    'Nếu đi chắc chắn tới s phẩy thì Q bằng r cộng gam-ma nhân V của s phẩy, ví dụ 5 phẩy 5.':
+        'ASR chép “Nếu đi chắc chắn tới f\' thì quy bằng r cộng gamma nhân v của f\', ví dụ 5,5.” (0.851): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; gam-ma (γ) ASR viết “gamma” — NOT_VERIFIED bằng tai người',
+    'Ở bài 7, ta sửa chính sách theo G trừ đường cơ sở, nhân gradient lôgarit pi, và đường cơ sở chỉ phụ thuộc trạng thái thì không làm lệch.':
+        'ASR chép “Ở bài 7, ta sửa chính sách theo dây trừ đường cơ sở, nhận Gradient Logaritpy và đường cơ sở chỉ phụ thuộc trạng thái thì không làm lịch.” (0.889): pi (π) ASR viết “P/π”; lệch âm/thanh thuần Việt: nhân/nhận, lôgarit (trong “lôgarit pi” → “logaritpy”), lệch/lịch — NOT_VERIFIED bằng tai người',
+    'An-pha V là tốc độ học của nhà phê bình, phần sửa bảng giá trị.':
+        'ASR chép “An pha với là tốc độ học của nhà phê bình phần sửa bản giá trị.” (0.875): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: bảng/bản — NOT_VERIFIED bằng tai người',
+    'Bước hai, giống bài 4, ta thay G bằng đích một bước, r cộng gam-ma nhân V của s phẩy, nên không phải chờ hết lượt.':
+        'ASR chép “Bước 2, giống bài 4, ta thay dê bằng đích 1 bước r cộng gamma nhân v của f\' nền không phải chờ hết lượt.” (0.868): gam-ma (γ) ASR viết “gamma”; chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: nên/nền — NOT_VERIFIED bằng tai người',
+    'Theta mới bằng 0 cộng 0 phẩy 1 nhân 1 phẩy 5 nhân 0 phẩy 5, bằng 0 phẩy 075, nên xác suất hành động một tăng từ 0 phẩy 5 lên khoảng 0 phẩy 519.':
+        'ASR chép “TETA mới bằng không cộng 0,1 nhân 1,5 nhân 0,5, bằng 0,07 năm nên xác xuất hành động 1 tăng từ 0,5 lên khoảng 0,519.” (0.937): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; theta đọc “tê-ta” theo lexicon RLN (probe p1: 7/8), ASR viết “teta”; lệch âm/thanh thuần Việt: mươi/∅, không (trong “không phẩy” → “”) — NOT_VERIFIED bằng tai người',
+    'Kiểm tra thứ nhất dùng định nghĩa, vì đi chắc chắn tới s phẩy nên Q bằng 1 cộng 0 phẩy 9 nhân 5, bằng 5 phẩy 5.':
+        'ASR chép “Kiểm tra thứ nhất dùng định nhĩa vì đi chắc chắn tới ếch phải nên quý bằng 1 cộng 0,9 nhân năm, bằng 5,5.” (0.893): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: nghĩa/nhĩa — NOT_VERIFIED bằng tai người',
+    'Bây giờ đến lượt bạn, với gam-ma 0 phẩy 9, an-pha theta 0 phẩy 1, an-pha V 0 phẩy 2, theta bằng 0, và tác tử chọn hành động một.':
+        'ASR chép “Bây giờ đến lượt bạn, với gamma 0.9, an pha teta 0.1, an pha v0.2, teta bàn không và tác tử chọn hành động 1.” (0.806): gam-ma (γ) ASR viết “gamma”; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; theta đọc “tê-ta” theo lexicon RLN (probe p1: 7/8), ASR viết “teta”; lệch âm/thanh thuần Việt: bằng/bàn — NOT_VERIFIED bằng tai người',
+    'Câu hai, cũng như vậy nhưng s phẩy là trạng thái kết thúc, đen-ta bằng bao nhiêu?':
+        'ASR chép “Câu 2 cũng như vậy nhưng F phải là trạng thái kết thúc đen ta bằng bao nhiêu?” (0.889): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải” — NOT_VERIFIED bằng tai người',
+    'Theta mới là 0 cộng 0 phẩy 1 nhân 0 phẩy 5 nhân 0 phẩy 5, bằng 0 phẩy 025.':
+        'ASR chép “TETA mới là không cộng không phải 1 nhân, không phải 5 nhân, không phải 5, bằng không phải 0.25.” (0.756): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; theta đọc “tê-ta” theo lexicon RLN (probe p1: 7/8), ASR viết “teta” — NOT_VERIFIED bằng tai người',
+    'Quanh rô bằng 1, nhích tổng cộng 0 phẩy 002 làm mục tiêu đổi 0 phẩy 004, nên độ dốc là 2 và tối ưu còn kéo rô đi.':
+        'ASR chép “Quanh row bằng một, nhất tổng cộng 0.002 là mục tiêu đổi 0.004, nền độ dốc là 2 và tối ưu còn kéo row đi.” (0.741): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; rô (ρ) đọc tách âm tiết, ASR viết “row”; lệch âm/thanh thuần Việt: nhích/nhất, không (trong “không phẩy” → “”), làm/là, nên/nền — NOT_VERIFIED bằng tai người',
+    'Hai số đó cộng lại bằng 1, vì xích-ma của âm x bằng 1 trừ xích-ma của x.':
+        'ASR chép “Hai số đó cộng lại bằng một, vì sigma của âm ít bằng một trừ sigma cuối.” (0.757): xích-ma (σ) đọc tách âm tiết, ASR viết “sigma”; chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: của (trong “xích ma của x” → “sigma cuối”) — NOT_VERIFIED bằng tai người',
+    'Xác suất càng gần 1 thì âm lôgarit càng gần 0.':
+        'ASR chép “Sát xuất càng gần 1 thì âm logo đuít càng gần không.” (0.783): lệch âm/thanh thuần Việt: xác/sát, lôgarit/logo đuít — NOT_VERIFIED bằng tai người',
+    'Ví dụ w bằng 4, đạo hàm 2w trừ 6 bằng 2, ê-ta bằng 0 phẩy 5, nên w mới bằng 3.':
+        'ASR chép “Ví dụ v kép bằng 4, đạo hàm 2 v đúc trừ 6 bằng 2, eta bằng 0.5, nền v kép mới bằng 3.” (0.885): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: nên/nền — NOT_VERIFIED bằng tai người',
+    'D là hiệu hai điểm, r A trừ r B.':
+        'ASR chép “V là hiệu 2 điểm, rA-EB.” (0.667): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: trừ (trong “trừ r b” → “eb”) — NOT_VERIFIED bằng tai người',
+    'Xác suất người chọn A bằng xích-ma của d, đó là mô hình so sánh cặp.':
+        'ASR chép “Sa suốt người chọn A bằng sít ma của G, đó là mô hình so sánh cặp.” (0.765): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: xác suất/sa suốt, xích/sít — NOT_VERIFIED bằng tai người',
+    'Bước một, mất mát khi người chọn A là âm lôgarit của xích-ma của d.':
+        'ASR chép “Bước 1. Mất mát khi người chọn A là âm logarith của sigma của V.” (0.839): xích-ma (σ) đọc tách âm tiết, ASR viết “sigma”; chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    'Bước hai, vì d bằng r A trừ r B, tăng r A một đơn vị thì d tăng một, còn tăng r B thì d giảm một.':
+        'ASR chép “Bước 2, vì dây bằng rA-rB, tăng rA1 đơn vị thì dây tăng 1, còn tăng rB thì dây giảm 1.” (0.873): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: trừ/∅ — NOT_VERIFIED bằng tai người',
+    'Bước một, d bằng 0, xích-ma bằng 0 phẩy 5, mất mát là âm lôgarit của 0 phẩy 5, xấp xỉ 0 phẩy 693, và lực kéo là 1 trừ 0 phẩy 5, bằng 0 phẩy 5.':
+        'ASR chép “Bước 1, dê bằng 0, sigma bằng 0,5, mất mát là âm logadric của 0,5, sắp xỉ 0,693 và lực kéo là 1 trừ 0,5 bằng 0,5.” (0.889): xích-ma (σ) đọc tách âm tiết, ASR viết “sigma”; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: lôgarit/logadric, xấp/sắp, không (trong “không phẩy” → “”) — NOT_VERIFIED bằng tai người',
+    'Xích-ma của 1 xấp xỉ 0 phẩy 731, mất mát xấp xỉ 0 phẩy 313, và lực kéo còn khoảng 0 phẩy 269.':
+        'ASR chép “Sít ma của một sắp sĩ không phải 731, mất má sắp sĩ không phải 313 và lực kéo còn khoảng không phải 269.” (0.743): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: xích/sít, xấp xỉ/sắp sĩ, mát xấp xỉ/má sắp sĩ — NOT_VERIFIED bằng tai người',
+    'Bước ba, r A tăng thêm 0 phẩy 269 thành khoảng 0 phẩy 769, r B giảm thành khoảng âm 0 phẩy 769, nên d xấp xỉ 1 phẩy 538.':
+        'ASR chép “Bước 3, R A tăng thêm 0,269 thành khoảng 0,769, R B giảm thành khoảng âm 0,769, nền dề sắp xỉ 1,538.” (0.837): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: không (trong “không phẩy” → “”), nên xấp (trong “nên d xấp” → “nền dề sắp”) — NOT_VERIFIED bằng tai người',
+    'Xích-ma xấp xỉ 0 phẩy 823, và mất mát còn khoảng 0 phẩy 195.':
+        'ASR chép “Sigma sắp xỉ 0,823 và mất mát còn khoảng 0,195.” (0.78): xích-ma (σ) đọc tách âm tiết, ASR viết “sigma”; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: xấp (trong “xích ma xấp” → “sigma sắp”), không (trong “không phẩy” → “”) — NOT_VERIFIED bằng tai người',
+    'Nếu chính sách viết câu đó nhiều hơn mô hình gốc thì tỉ số lớn hơn 1, lôgarit dương, và phần thưởng bị trừ.':
+        'ASR chép “Nếu chính sách viết câu đó nhiều hơn mô hình gốc thì tỷ số lớn hơn 1, lo gà trích dương và phần thưởng bị trư.” (0.84): “tỉ” ASR viết chính tả “tỷ” (cùng âm); lệch âm/thanh thuần Việt: lôgarit/lo gà trích, trừ/trư — NOT_VERIFIED bằng tai người',
+    'Đáp án như bảng.':
+        'ASR chép “Đáp án như bạn.” (0.75): lệch âm/thanh thuần Việt: bảng/bạn — NOT_VERIFIED bằng tai người',
+    'Câu một, hiệu d bằng 1 phẩy 5, xích-ma xấp xỉ 0 phẩy 818, mất mát xấp xỉ 0 phẩy 201.':
+        'ASR chép “Câu 1, hiệu dê bằng 1,5, sigma sắp xỉ 0,818, mất mát sắp xỉ 0,201.” (0.784): xích-ma (σ) đọc tách âm tiết, ASR viết “sigma”; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: xấp (trong “xích ma xấp” → “sigma sắp”), không (trong “không phẩy” → “”), xấp/sắp — NOT_VERIFIED bằng tai người',
+    'Mất mát là âm lôgarit của xác suất, với lực kéo 1 trừ xích-ma.':
+        'ASR chép “mất mát là âm logo đích của xác sức với lực kéo một trừ sít ma.” (0.774): lệch âm/thanh thuần Việt: lôgarit/logo đích, suất/sức, xích/sít — NOT_VERIFIED bằng tai người',
+    # ── PAR L13 dựng lại (2026-11-03) ──
+    'Mỗi thẻ đồ hoạ khi ấy chỉ có 3 GB bộ nhớ, nên cả mạng không vừa trong một thẻ.':
+        'ASR chép “Mỗi thẻ đồ họa khi ấy chỉ có 3GB bộ nhớ, nên cả mạng không vừa trong một thẻ.” (1.0): GB đọc “ghi-ga-byte” theo lexicon của khoá, ASR viết “GB/gigabyte” — NOT_VERIFIED bằng tai người',
+    # ── Khoá mới: CVI L00 ──
+    'Nếu lưu thẳng từng điểm ảnh mà không nén, một giờ chiếm khoảng 672 tỉ byte.':
+        'ASR chép “Nếu lưu thẳng từng điểm ảnh mà không nén, 1 giờ chiếm khoảng 672 tỷ bay.” (0.9): “tỉ” ASR viết chính tả “tỷ” (cùng âm); byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người',
+    'Một ổ đĩa một nghìn tỉ byte sẽ đầy sau khoảng 89 phút.':
+        'ASR chép “Một ổ đĩa 1000 tỷ bay sẽ đầy sau khoảng 89 phút.” (0.867): “tỉ” ASR viết chính tả “tỷ” (cùng âm); byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người',
+    'Đơn vị hai mũ hai mươi byte vì thế hơi lớn hơn một triệu byte.':
+        'ASR chép “đơn vị 2 mũ 20 bay vì thế hơi lớn hơn 1 triệu bay.” (0.867): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người',
+    'W là chiều rộng, tức số cột điểm ảnh, ở đây 1920.':
+        'ASR chép “Về đúc là chiều động tức số Cột điểm ảnh ở đây 1.920.” (0.857): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: rộng/động — NOT_VERIFIED bằng tai người',
+    'Ảnh là một lưới H hàng, mỗi hàng có W điểm ảnh, nên theo phép nhân có W nhân H điểm ảnh.':
+        'ASR chép “Ảnh là một lưới hát hàng, mỗi hàng có ve đúc điểm ảnh, nên theo phép nhân có ve đúc nhân hát điểm ảnh.” (0.87): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    'Bước hai là đếm số, vì mỗi điểm ảnh có C số, một số cho mỗi kênh, nên cả ảnh có W nhân H nhân C số.':
+        'ASR chép “Bước 2 là đếm số, vì mỗi điểm ảnh có xe số, một số cho mỗi kênh, nên cả ảnh có về đúc nhân hát nhân xe số.” (0.945): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    'Bước ba là đổi ra byte.':
+        'ASR chép “Bước 3 là đổi ra bay.” (0.833): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người',
+    'Vậy dung lượng bằng W nhân H nhân C nhân b, chia cho 8, tính bằng byte.':
+        'ASR chép “Vậy dung lượng bằng V đúc nhân hát nhân c nhân b, chia cho 8, tính bằng bai.” (0.857): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người',
+    'Làm thử, 72 nhân 8 chia 8 bằng 72 byte, nghĩa là với 8 bit mỗi kênh, số byte đúng bằng số con số.':
+        'ASR chép “Làm thử 72 nhân 8 chia 8 bằng 72 bay, nghĩa là với 8 bit mỗi kênh, số bay đúng bằng số con số.” (0.929): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người',
+    'Bước hai, mỗi điểm ảnh có 3 kênh, mỗi kênh 1 byte, nên ta có 2 triệu 73 nghìn 600 nhân 3, bằng 6 triệu 220 nghìn 800 byte.':
+        'ASR chép “Bước 2, mỗi điểm ảnh có 3 kinh, mỗi kinh 1 bay nên ta có 2 triệu 73.600 nhân ba bằng 6 triệu 220.800 bay.” (0.889): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: kênh/kinh, kênh/kinh — NOT_VERIFIED bằng tai người',
+    'Bước ba, đổi ra đơn vị hai mũ hai mươi byte, ta chia cho 1 triệu 48 nghìn 576, được xấp xỉ 5 phẩy 93 đơn vị cho chỉ một khung ảnh.':
+        'ASR chép “Bước 3, đổi ra đơn vị 2 mũ 20 Ba, ta chia cho 1 triệu 48.576 được sắp xỉ 5,93 đơn vị cho chỉ 1 khung ảnh.” (0.95): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: xấp/sắp — NOT_VERIFIED bằng tai người',
+    'Dấu bằng lượn sóng đọc là xấp xỉ.':
+        'ASR chép “Dấu bằng lượng sóng độc là sắp xỉ.” (0.625): lệch âm/thanh thuần Việt: lượn/lượng, đọc/độc, xấp/sắp — NOT_VERIFIED bằng tai người',
+    'Nhân 30 được 186 triệu 624 nghìn byte, tức xấp xỉ 186 phẩy 6 triệu byte mỗi giây.':
+        'ASR chép “Nhân 30 được 186,624,000 bai, tức sắp xỉ 186,6 triệu bai mỗi giây.” (0.903): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: xấp/sắp — NOT_VERIFIED bằng tai người',
+    'Nhân tiếp 3600 giây được khoảng 672 tỉ byte mỗi giờ, đúng con số ở phần mở đầu.':
+        'ASR chép “Nhân tiếp 3600 giây được khoảng 672 tỷ bai mỗi giờ, đúng còn số ở phần mở đầu.” (0.88): “tỉ” ASR viết chính tả “tỷ” (cùng âm); byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: con/còn — NOT_VERIFIED bằng tai người',
+    'Kiểm tra thứ nhất, đếm bit thay vì byte.':
+        'ASR chép “Kiểm tra thứ nhất, đếm bịt thay vì bay.” (0.778): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: bit/bịt — NOT_VERIFIED bằng tai người',
+    'Chia cho 8 được đúng 6 triệu 220 nghìn 800 byte, khớp kết quả cũ.':
+        'ASR chép “chia cho 8 được đúng 6.220.800 bai, khớp kết quả cũ.” (0.947): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người',
+    'Kiểm tra thứ hai là hỏi chính máy, tạo một mảng số nguyên 8 bit có hình dạng 1080, 1920, 3, rồi hỏi nó chiếm bao nhiêu byte.':
+        'ASR chép “Kiểm tra thứ 2 là hỏi chính máy, tạo một mạng số nguyên 8 biết có hình dạng 1.080, 1.920, 3, rồi hỏi nó chiếm bao nhiêu bay.” (0.921): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: mảng/mạng, bit/biết — NOT_VERIFIED bằng tai người',
+    'Máy trả lời 6 triệu 220 nghìn 800, nghĩa là khớp với phép nhân của ta, vì mỗi số 8 bit chiếm đúng một byte.':
+        'ASR chép “Máy trả lời 6.220.800, nghĩa là khớp với phép nhân của ta, vì mỗi số 8 biết chiếm đúng một bay.” (0.931): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: bit/biết — NOT_VERIFIED bằng tai người',
+    'Câu một, ảnh xám 640 nhân 480, 8 bit, chiếm bao nhiêu byte?':
+        'ASR chép “Câu 1, ảnh xám 640 nhân 480, tảm biệt, chiếm bao nhiêu bay?” (0.842): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: tám bit/tảm biệt — NOT_VERIFIED bằng tai người',
+    'Câu hai, một mạng nhận dạng ảnh nhận ảnh màu 224 nhân 224, hỏi ảnh đó bao nhiêu byte, và nhỏ hơn khung 1920 nhân 1080 bao nhiêu lần?':
+        'ASR chép “Câu 2. Một mạng nhận dạng ảnh nhận ảnh màu 224 nhân 224, hỏi ảnh đó bao nhiêu bay và nhỏ hơn khu 1.920 nhân 1.080 bao nhiêu lần?” (0.957): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: khung/khu — NOT_VERIFIED bằng tai người',
+    'Câu ba, camera 3840 nhân 2160, 30 khung mỗi giây, cần lưu một giờ trên ổ một nghìn tỉ byte, lưu thô được không, và bạn làm gì?':
+        'ASR chép “Câu ba, camera 3.840 nhân 2.160, 30 khung mỗi giây, cần lưu 1 giờ trên ổ 1.000 tỷ bay, lưu thô được không và bạn làm gì?” (0.949): “tỉ” ASR viết chính tả “tỷ” (cùng âm); byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người',
+    'Câu một, ảnh xám có một kênh, nên dung lượng là 640 nhân 480 nhân 1 nhân 8 chia 8, bằng 307 nghìn 200 byte.':
+        'ASR chép “Câu 1, ảnh sám có 1 kênh, nền dung lượng là 640 nhân 480 nhân 1 nhân 8 chi 8 bằng 307.200 bai.” (0.914): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: nên/nền, chia/chi — NOT_VERIFIED bằng tai người',
+    'Câu hai, 224 nhân 224 nhân 3 bằng 150 nghìn 528 byte.':
+        'ASR chép “Câu 2, 224 nhân 224 nhân 3 bằng 150.528 bài.” (0.963): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người',
+    'Câu ba, một khung là 24 triệu 883 nghìn 200 byte, nên một giờ khoảng 2 phẩy 69 nghìn tỉ byte.':
+        'ASR chép “Câu Ba, 1 khung là 24,883.200 bay nên 1 giờ khoảng 2,69.000 tỷ bay.” (0.9): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); “tỉ” ASR viết chính tả “tỷ” (cùng âm) — NOT_VERIFIED bằng tai người',
+    'Ổ một nghìn tỉ byte đầy sau khoảng 22 phút, nên lưu thô là không được.':
+        'ASR chép “Ổ 1 nghìn tỷ bay đầy sau khoảng 22 phút nên lưu thô là không được.” (0.889): “tỉ” ASR viết chính tả “tỷ” (cùng âm); byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người',
+    'Tổng kết lại, ảnh là một mảng có H hàng, W cột và C kênh.':
+        'ASR chép “Tổng kết lại, ảnh là một mạng có hát hàng, về đúc cột và xe kênh.” (0.839): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: mảng/mạng — NOT_VERIFIED bằng tai người',
+    'Mỗi số b bit cho 2 mũ b mức, nên dung lượng bằng W nhân H nhân C nhân b chia 8.':
+        'ASR chép “Mỗi số b bit cho 2 mũ b mức, nền dung lượng bằng v đút nhân hát nhân c nhân b chi 8.” (0.844): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: nên/nền, chia/chi — NOT_VERIFIED bằng tai người',
+    'Một khung 1920 nhân 1080 là 6 triệu 220 nghìn 800 byte, và 30 khung mỗi giây là khoảng 186 phẩy 6 triệu byte.':
+        'ASR chép “Một khung 1920 nhân 1080 là 6.220.800 bai và 30 khung mỗi giây là khoảng 186.6 triệu bai.” (0.941): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải” — NOT_VERIFIED bằng tai người',
+    # ── Khoá mới: CVI L01 ──
+    'Làm thử, G x bằng 30, G y bằng 40, mũi tên kép đọc là suy ra, độ lớn bằng căn của 2500, bằng 50.':
+        'ASR chép “Làm thử, gx bằng 30, ge bằng 40, mũi tên kép độc là suy ra, độ lớn bằng căng của 2500 bằng 50.” (0.885): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: i (trong “g i” → “ge”), đọc/độc, căn/căng — NOT_VERIFIED bằng tai người',
+    'G x bằng 30 và G y cũng bằng 30, nên theo công thức độ lớn cạnh, ta được căn của 1800, xấp xỉ 42 phẩy 4, và hướng của cạnh nghiêng đúng 45 độ.':
+        'ASR chép “GX bằng 30 và GY cũng bằng 30, nên theo công thức độ lớn cạnh, ta được căn của 1800, sắp xỉ 42,4 và hướng của cạnh nghiên đúng 45 độ.” (0.92): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: i (trong “g i” → “gy”), xấp/sắp, nghiêng/nghiên — NOT_VERIFIED bằng tai người',
+    'Cách sửa là đệm bằng cách lặp lại điểm ảnh ở mép, hoặc bỏ dải viền khi đo.':
+        'ASR chép “Cắt sữa là đềm bằng cách lập lại điểm ảnh ở mép hoặc bỏ giải viền khi đo.” (0.778): lệch âm/thanh thuần Việt: cách sửa/cắt sữa, đệm/đềm, lặp/lập — NOT_VERIFIED bằng tai người',
+    # ── Khoá mới: CVI L02 ──
+    'Xích ma với chỉ số dưới W và mũ hai là phương sai trong lớp, đo mỗi lớp tự toả rộng bao nhiêu, cộng theo tỉ lệ w.':
+        'ASR chép “SITMA với chỉ số dưới V đúc và mũ 2 là phương sai trong lớp, đo mỗi lớp tự tỏa động bao nhiêu, cộng theo tỷ lệ V kép.” (0.828): xích-ma (σ) đọc tách âm tiết, ASR viết “sigma”; chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “tỉ” ASR viết chính tả “tỷ” (cùng âm); lệch âm/thanh thuần Việt: rộng/động — NOT_VERIFIED bằng tai người',
+    'Hai chỉ số B và W lấy từ chữ đầu của hai từ tiếng Anh nghĩa là giữa và trong.':
+        'ASR chép “Hai chỉ số B và V đút, lấy từ chữ đầu của hai từ tiếng Anh nghĩa là giữa và trong.” (0.927): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    # ── Khoá mới: CVI L03 ──
+    'Điểm 0 phẩy 5, 0 phẩy 25, 2 mét với f bằng 800 và c x bằng 320 cho u bằng 800 nhân 0 phẩy 25 cộng 320, bằng 520.':
+        'ASR chép “Điểm 0,5, 0,25, 2m với x bằng 800 và Cx bằng 320 cho u bằng 800 nhân 0,25 cộng 320 bằng 520.” (0.956): đơn vị mét, ASR viết ký hiệu “m”; chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    'c x và c y là tâm ảnh, nơi trục nhìn thẳng chạm mặt ảnh, ở đây là 320, 240.':
+        'ASR chép “CX và CE là tâm ảnh nơi trục nhìn thẳng chạm mặt ảnh. Ở đây là 320, 240.” (0.941): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: i (trong “c i” → “ce”) — NOT_VERIFIED bằng tai người',
+    'Tiêu cự tính bằng điểm ảnh vì ống kính 4 mi-li-mét chia cho bề rộng 0 phẩy 005 mi-li-mét của mỗi điểm cảm biến, bằng 800.':
+        'ASR chép “Tiêu cử tính bằng điểm ảnh vì ống kính 4 mm chia cho bề rộng 0,005 mm của mỗi điểm cảm biến bằng 800.” (0.786): đơn vị mi-li-mét, ASR viết ký hiệu “mm”; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: cự/cử, không (trong “không phẩy” → “”) — NOT_VERIFIED bằng tai người',
+    'Nửa ảnh rộng W chia 2 điểm ảnh và cách lỗ kim f x điểm ảnh, nên theo định nghĩa tang, tang của nửa góc nhìn bằng 320 chia 800, bằng 0 phẩy 4.':
+        'ASR chép “Nửa ảnh rộng về đúc chia 2 điểm ảnh và cách lỗ kim fx điểm ảnh nên theo định nhễ tan, tan của nửa gốc nhìn bằng 320 chia 800, bằng 0,4.” (0.857): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: nghĩa tang tang/nhễ tan tan, góc/gốc — NOT_VERIFIED bằng tai người',
+    # ── Khoá mới: CVI L04 ──
+    'Điểm p có một láng giềng rất gần là b một, và láng giềng thứ hai xa hơn hẳn.':
+        'ASR chép “Điểm T có một láng giềng rất gần là B1 và láng giềng thứ hai xa hơn hẳn.” (0.947): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    # ── Khoá mới: CVI L05 ──
+    'w là tỉ lệ dữ liệu đúng, gọi là điểm trong, ví dụ 6 trên 8 điểm là 0 phẩy 75.':
+        'ASR chép “V kết là tỷ lệ dữ liệu đúng, gọi là điểm trong, ví dụ 6 trên 8 điểm là 0,75.” (0.917): chữ w đọc “vê kép” (luật chung), ASR viết tách chữ; “tỉ” ASR viết chính tả “tỷ” (cùng âm) — NOT_VERIFIED bằng tai người',
+    'Lấy lôgarit hai vế và đưa N xuống thành phép nhân, ta được N nhân lôgarit của 1 trừ w mũ s, nhỏ hơn hoặc bằng lôgarit của 1 trừ p.':
+        'ASR chép “Lấy log 2v và đưa n xuống thành phép nhân, ta được n nhân log 1 trừ vk mũ x, nhỏ hơn hoặc bằng log 1 trừ P.” (0.8): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: lôgarit/log, vế/v, lôgarit của/log, lôgarit của/log — NOT_VERIFIED bằng tai người',
+    'Bước một, với w bằng 0 phẩy 5, bốn điểm mỗi mẫu và độ chắc 0 phẩy 99, như vừa suy ra, cần 72 lần.':
+        'ASR chép “Bước 1, với VK bằng 0,5, 4 điểm mỗi mẫu và độ chắc 0,99 như vừa suy ra cần 72 lần.” (0.966): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    'Vì w nằm ở số mũ, nên lọc đầu vào rẻ hơn thử thêm rất nhiều.':
+        'ASR chép “Vì v-cap nằm ở số mũ nên lọc đầu vào rẽ hơn thử thêm rất nhiều.” (0.882): chữ w đọc “vê kép” (luật chung), ASR viết tách chữ; lệch âm/thanh thuần Việt: rẻ/rẽ — NOT_VERIFIED bằng tai người',
+    'Một lần bốc thành công với xác suất w mũ s, từ đó N bằng lôgarit của 1 trừ p chia lôgarit của 1 trừ w mũ s, làm tròn lên.':
+        'ASR chép “Một lần bốc thành công với sát suốt V kép mũ S, từ đó n bằng logatric của 1 trừ P chia logatric của 1 trừ V kép mũ S, làm tròn lên.” (0.879): lệch âm/thanh thuần Việt: xác suất/sát suốt, lôgarit/logatric, lôgarit/logatric — NOT_VERIFIED bằng tai người',
+    # ── Khoá mới: CVI L06 ──
+    'Chi phí của d là tổng trị tuyệt đối chênh lệch giữa cửa sổ ở ảnh trái và cửa sổ dời d cột ở ảnh phải, bằng 0 khi khớp hoàn hảo.':
+        'ASR chép “Chi phí của dê là tổng trị tuyệt đối trên lệch giữa cửa sổ, ảnh trái và cửa sổ dời dây cột ở ảnh phải bằng không khi khấp hoàn hảo.” (0.889): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: chênh/trên, ở/∅, khớp/khấp — NOT_VERIFIED bằng tai người',
+    'Đó là một cực tiểu rõ rệt, vì mọi d khác đều có chi phí từ 120 trở lên.':
+        'ASR chép “Đó là một cực tiểu rõ rệt vì mọi giây khác đều có chi phí từ 120 trở lên.” (0.955): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    'Rút gọn, sai lệch độ sâu xấp xỉ Z bình phương nhân sai lệch của d, chia cho f nhân B.':
+        'ASR chép “Rút gọn, sai lệch độ sâu sấp xỉ giác bình phương nhân sai lệch của V, chia cho F nhân B.” (0.952): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    # ── Khoá mới: CVI L07 ──
+    'Tiếp theo là lớp gộp 3 nhân 3 bước 2, lúc này j bằng 2, nên r bằng 7 cộng 2 nhân 2, bằng 11.':
+        'ASR chép “Tiếp theo là lớp gột 3 nhân 3 bước 2, lúc này dì bằng 2, nền R bằng 7 cộng 2 nhân 2, bằng 11.” (0.885): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: gộp/gột, nên/nền — NOT_VERIFIED bằng tai người',
+    'Rồi một lớp 3 nhân 3, j đã là 4, nên r bằng 11 cộng 2 nhân 4, bằng 19.':
+        'ASR chép “Rồi một lớp 3 nhân 3, vi đã là 4, nền R bằng 11 cộng 2 nhân 4, bằng 19.” (0.909): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: nên/nền — NOT_VERIFIED bằng tai người',
+    'Ta cho một hàng 15 điểm ảnh toàn 0, bật một điểm thành 1, chạy qua ba lớp 3 nhân 3 với mọi trọng số bằng 1, rồi xem ô ra số 4 có khác 0 không.':
+        'ASR chép “Ta cho 1 hàng 15 điểm ảnh toàn không, bật 1 điểm thành 1, chạy qua 3 lớp 3 nhân 3 với mọi trọng số bằng 1, rồi xem ODA số 4 có khác không không.” (0.96): “ô” (ô lưới) ASR viết chữ “O”; lệch âm/thanh thuần Việt: ra (trong “ô ra” → “oda”) — NOT_VERIFIED bằng tai người',
+    # ── Khoá mới: CVI L08 ──
+    'Bên phải, C và D lệch nhau một điểm ảnh, giao bằng 90, hợp bằng 110.':
+        'ASR chép “Bên phải, xe và dây lệch nhau một điểm ảnh, giao bằng 90, hợp bằng 110.” (0.947): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    'Số ô nằm trong cả A lẫn B là 25, số ô nằm trong ít nhất một hộp là 175, khớp tỉ số 25 phần 175 mà không cần công thức.':
+        'ASR chép “Số O nằm trong cả A lẫn B là 25, số O nằm trong ít nhất một hộp là 175, khớp tỷ số 25 phần 175 mà không cần công thức.” (0.93): “ô” (ô lưới) ASR viết chữ “O”; “tỉ” ASR viết chính tả “tỷ” (cùng âm) — NOT_VERIFIED bằng tai người',
+    'Bảng quét mười ngưỡng.':
+        'ASR chép “Bản quét 10 ngưỡng.” (0.75): lệch âm/thanh thuần Việt: bảng/bản — NOT_VERIFIED bằng tai người',
+    'Ghép theo điểm cho dãy đúng sai, rồi diện tích dưới đường độ chuẩn xác theo độ phủ là độ chính xác trung bình.':
+        'ASR chép “Gép theo điểm cho dạy đúng sai, rồi diện tích dưới đường đồ chuẩn xác theo đồ phủ là đồ chính xác trung bình.” (0.792): lệch âm/thanh thuần Việt: ghép/gép, dãy/dạy, độ/đồ, độ/đồ, độ/đồ — NOT_VERIFIED bằng tai người',
+    # ── Khoá mới: CVI L09 ──
+    'Loại cuối là nền được giữ đúng là nền.':
+        'ASR chép “Loại cuối là nên được giữ đúng là nên.” (0.778): lệch âm/thanh thuần Việt: nền/nên, nền/nên — NOT_VERIFIED bằng tai người',
+    'Thay số, 0 phẩy 9 chia 1 phẩy 1, xấp xỉ 0 phẩy 818.':
+        'ASR chép “Thay số 0,9 × 1,1 xếp sĩ 0,818.” (0.774): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: chia/∅, xấp xỉ không (trong “xấp xỉ không phẩy” → “xếp sĩ”) — NOT_VERIFIED bằng tai người',
+    'Giao trên hợp của lớp vết nứt gộp cả tập không bị nền lấn át, nhưng vết dài và to sẽ lấn át vết mảnh.':
+        'ASR chép “Giao trên hộp của lớp vết nước gột cả tập không bị nền lấn ác, nhưng vết dài và to sẽ lấn ác vết mảnh.” (0.68): lệch âm/thanh thuần Việt: hợp/hộp, vết nứt gộp/véc nước gột, át/ác, vết/véc, át vết/ác véc — NOT_VERIFIED bằng tai người',
+    # ── Khoá mới: CVI L10 ──
+    'Điều thứ nhất là trung bình có trọng số, như ở bài 2 ta nhân mỗi lớp với tỉ lệ w của nó.':
+        'ASR chép “Điều thứ nhất là trung bình có trọng số, như ở bài hai ta nhân mỗi lớp với tỷ lệ v kết của nó.” (0.917): “tỉ” ASR viết chính tả “tỷ” (cùng âm); chữ w đọc “vê kép” (luật chung), ASR viết tách chữ — NOT_VERIFIED bằng tai người',
+    'Điều thứ ba là tăng bao nhiêu phần trăm, từ a lên b thì tăng b trừ a chia a.':
+        'ASR chép “Điều thứ 3 là tăng bao nhiêu phần trăm, từ A lên B thì tăng B trữ A chia.” (0.923): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: trừ/trữ — NOT_VERIFIED bằng tai người',
+    # ── Khoá mới: CVI L11 ──
+    'Theo bảng bốn ô, trên tập thử cùng phân bố, A đúng 950 trên 1000 ảnh, tức 95 phần trăm.':
+        'ASR chép “Theo bản 4 ô, trên tập thử cùng phân bố, à đúng 950 trên 1 nghìn ảnh, tức 95%” (0.923): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: bảng/bản — NOT_VERIFIED bằng tai người',
+    'Ảnh huấn luyện chụp ở 3 bãi đỗ xe.':
+        'ASR chép “Ảnh huấn liền chục ở 3 bãi đổ xe” (0.667): lệch âm/thanh thuần Việt: luyện chụp/liền chục, đỗ/đổ — NOT_VERIFIED bằng tai người',
+    # ── Khoá mới: CVI L12 ──
+    'Chào bạn, năm 2010, đội thắng cuộc thi nhận dạng ảnh ImageNet sai 28 phẩy 2 phần trăm theo cách tính năm đáp án.':
+        'ASR chép “Chào bạn, năm 2010, đội thắng cuộc thi nhận dạng ảnh E-MIC NextSci 28,2% theo cách tính 5 đáp án.” (0.918): lệch âm/thanh thuần Việt: imagenet sai/e mic nextsci — NOT_VERIFIED bằng tai người',
+    'Bảng tính lại.':
+        'ASR chép “Bạn tính lại.” (0.667): lệch âm/thanh thuần Việt: bảng/bạn — NOT_VERIFIED bằng tai người',
+    'Thực hành rút ra là trước khi chọn cách sửa, hãy nhìn lỗi huấn luyện.':
+        'ASR chép “Thực hành trúc tra là trước khi chọn các sữa, hãy nhìn lỗi huấn luyện.” (0.733): lệch âm/thanh thuần Việt: rút ra/trúc tra, cách sửa/các sữa — NOT_VERIFIED bằng tai người',
+    'Nhóm tác giả ghi rằng học từ đầu trên tập cỡ vừa như ImageNet mà không chính quy hoá mạnh, nó kém mạng có lối tắt cùng cỡ vài điểm phần trăm.':
+        'ASR chép “Nhóm tác giả ghi rằng học từ đầu trên tập cỡ vừa như im miệt nét mà không chính quy hóa mạnh, nó kém mạng có lối tắt cùng cỡ vài điểm phần trăm.” (0.941): lệch âm/thanh thuần Việt: i mịt/im miệt — NOT_VERIFIED bằng tai người',
+    # ── Khoá mới: IRS L00 ──
+    'Ký hiệu y i, với i nhỏ dưới chân, là mức liên quan ở vị trí i, bằng 1 nếu đúng và 0 nếu sai, như hệ A có y 1 bằng 1, y 2 bằng 0.':
+        'ASR chép “Ký hiệu y, với y nhỏ dưới chân, là mức liên quan ở vị trí y, bằng một nếu đúng và không nếu sai, như hệ A có y một bằng một, y hai bằng không.” (0.986): lệch âm/thanh thuần Việt: i/∅ — NOT_VERIFIED bằng tai người',
+    'Hình cho thấy cơ chế, mười ô là mười kết quả của hệ A, ô xanh có dấu tích là kết quả đúng.':
+        'ASR chép “Hình cho thấy cơ chế, 10O là 10 kết quả của hệ A, O xanh có dấu tích là kết quả đúng.” (0.913): “ô” (ô lưới) ASR viết chữ “O” — NOT_VERIFIED bằng tai người',
+    'Bước một là đếm, mỗi kết quả đúng góp 1 và kết quả sai góp 0, nên số kết quả đúng trong k dòng đầu bằng tổng các y i.':
+        'ASR chép “Bước 1 là đếm mỗi kết quả đúng góp 1 và kết quả sai góp 0, nên số kết quả đúng trong ca dòng đầu bằng tổng cắt EIE.” (0.915): lệch âm/thanh thuần Việt: các i i/cắt eie — NOT_VERIFIED bằng tai người',
+    # ── Khoá mới: IRS L01 ──
+    'Điều thứ nhất, ở bài 0 ta đếm kết quả đúng trong k dòng đầu bằng tổng các y i, mỗi y i là 0 hoặc 1.':
+        'ASR chép “Điều thứ nhất, ở bài không ta đếm kết quả đúng trong ca vòng đầu bằng tổng cắt y, mỗi y là 0 hoặc 1.” (0.885): lệch âm/thanh thuần Việt: dòng/vòng, các i/cắt, i/∅ — NOT_VERIFIED bằng tai người',
+    'Hôm nay y i được phép là 0, 1, 2 hoặc 3, tức mức liên quan nhiều bậc.':
+        'ASR chép “Hôm nay, khi được phép là 0, 1, 2 hoặc 3 tức mức liên quan nhiều bật.” (0.857): lệch âm/thanh thuần Việt: i i/khi, bậc/bật — NOT_VERIFIED bằng tai người',
+    'Bảng giải mã từng ký hiệu, y i là mức liên quan ở vị trí i, từ 0 là không liên quan tới 3 là rất liên quan.':
+        'ASR chép “Bản giải mã từng ký hiệu là mức liên quan ở vị trí Y, từ 0 là không liên quan tới 3 là rất liên quan.” (0.926): lệch âm/thanh thuần Việt: bảng/bản, i i/∅ — NOT_VERIFIED bằng tai người',
+    'Ba chữ D C G, a còng, k là độ lợi tích lũy có chiết khấu, tức tổng các y i đã nhân chiết khấu ở k dòng đầu.':
+        'ASR chép “Ba chữ dcd, a còng, ca là độ lợi tích lụy có chiếc khấu, tức tổng các y đã nhân chiếc khấu ở ca vòng đầu.” (0.764): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: luỹ/luỵ, chiết/chiếc, i/∅, chiết/chiếc, dòng/vòng — NOT_VERIFIED bằng tai người',
+    'Thêm chữ n nhỏ ở đầu là bản chuẩn hoá, bằng D C G chia cho bản lý tưởng, nên luôn nằm từ 0 đến 1.':
+        'ASR chép “Thêm chữ n nhỏ ở đầu là bản chuẩn hóa, bằng gcg chia cho bản lý tưởng nên luôn nằm từ 0 đến 1.” (0.92): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    'Hai vị trí đầu giống hệ X, còn mức 1 bây giờ ở vị trí 3, chia lôgarit cơ số 2 của 4 bằng 2, nên được 0 phẩy 5.':
+        'ASR chép “Hai vị trí đầu giống hệ ít còn mức một bây giờ ở vị trí 3 chia logatic cơ số 2 của 4 bằng 2 nên được 0,5.” (0.967): lệch âm/thanh thuần Việt: lôgarit/logatic — NOT_VERIFIED bằng tai người',
+    'Hệ bỏ sót văn bản tốt mà điểm vẫn gần 1.':
+        'ASR chép “Hãy bỏ sóc văn bản tốt mà điểm vẫn gần mục.” (0.727): lệch âm/thanh thuần Việt: hệ/hãy, sót/sóc, một/mục — NOT_VERIFIED bằng tai người',
+    'Rồi ta xếp hạng văn bản bằng cosin của góc giữa hai vector.':
+        'ASR chép “Rồi ta xếp hạng văn bản bằng cosine của góc giữa hai vector.” (0.923): lệch âm/thanh thuần Việt: cosin/cosine — NOT_VERIFIED bằng tai người',
+    # ── Khoá mới: IRS L02 ──
+    'Một hệ đơn giản chỉ đếm từ rồi so bằng cosin, và d1 được tới 0 phẩy 632, chỉ vì có chữ máy hai lần dù d1 nói về ổ cứng.':
+        'ASR chép “Một hệ đơn giản chỉ đếm từ rồi so bằng cosine và dê một được tới 0,632 chỉ vì có chữ mấy hai lần dù dê một nói về ổ cứng.” (0.917): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: cosin/cosine, không (trong “không phẩy” → “”), máy/mấy — NOT_VERIFIED bằng tai người',
+    'Cosin của hai vector bằng tích vô hướng chia tích hai độ dài, chỉ phụ thuộc hướng.':
+        'ASR chép “Cô xin của hai vector bằng tích vô hướng chia tích 2 độ dài chỉ phụ thuộc hướng.” (0.914): lệch âm/thanh thuần Việt: cosin/cô xin — NOT_VERIFIED bằng tai người',
+    'Ba chữ i d f là độ hiếm, bằng lôgarit của N chia d f, từ càng ít văn bản có thì độ hiếm càng lớn.':
+        'ASR chép “Ba chữ Y,Y,F là độ hiếm bằng logarith của N,Y,Y,F từ càng ít văn bản có thì độ hiếm càng lớn.” (0.885): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: chia (trong “chia d” → “i i”) — NOT_VERIFIED bằng tai người',
+    'Văn bản d3 có thêm từ màn, nên mũi tên nghiêng lên, lệch khoảng 70 độ so với câu hỏi.':
+        'ASR chép “Văn bản G3 có thêm từ màn nên mũi tên nghiên lên là khoảng 70 độ so với câu hỏi.” (0.864): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: nghiêng/nghiên, lệch/là — NOT_VERIFIED bằng tai người',
+    'Vì vậy ta cần một số bằng 0 khi d f bằng N và lớn dần khi từ hiếm đi, và lôgarit của tỉ số N chia d f làm đúng việc đó.':
+        'ASR chép “Vì vậy ta cần một số bằng 0 khi gf bằng n và lớn dần khi từ hiếm đi và logarith của tỷ số n gf làm đúng việc đó.” (0.857): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “tỉ” ASR viết chính tả “tỷ” (cùng âm); lệch âm/thanh thuần Việt: chia (trong “chia d f” → “gf”) — NOT_VERIFIED bằng tai người',
+    'Bước bốn là điểm, văn bản hợp câu hỏi khi hai mũi tên cùng hướng, nên điểm là cosin của góc giữa vector câu hỏi q và vector văn bản d.':
+        'ASR chép “Bước 4 là điểm, văn bản hợp câu hỏi khi hai mũi tên cùng hướng, nên điểm là cô sinh của gốc giữa vét tơ câu hỏi quy và vét tơ văn bản d.” (0.925): lệch âm/thanh thuần Việt: cosin/cô sinh, góc/gốc — NOT_VERIFIED bằng tai người',
+    'Văn bản d3 thành 0, 0, 0 phẩy 405, 1 phẩy 099.':
+        'ASR chép “Văn bản G3 thành 0, 0, 0,405, 1,099.” (0.778): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: không (trong “không phẩy” → “”) — NOT_VERIFIED bằng tai người',
+    'Tích vô hướng của q và d3 chỉ có một cặp khác 0, là 0 phẩy 405 nhân 0 phẩy 405, khoảng 0 phẩy 164.':
+        'ASR chép “Tích vô hướng của Quy và G3 chỉ có một cặp khác không là 0,405 nhân 0,405, khoảng 0,164.” (0.879): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: không (trong “không phẩy” → “”), không (trong “không phẩy” → “”), không (trong “không phẩy” → “”) — NOT_VERIFIED bằng tai người',
+    'Chia cho 0 phẩy 405 nhân 1 phẩy 171 được cosin khoảng 0 phẩy 346.':
+        'ASR chép “chia cho 0,405 nhân 1,171 được cô sinh khoảng 0,346.” (0.816): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: không (trong “không phẩy” → “”), cosin/cô sinh, không (trong “không phẩy” → “”) — NOT_VERIFIED bằng tai người',
+    'Bước bốn, với d2, tích vô hướng cũng là 0 phẩy 164, chia cho 0 phẩy 405 nhân 0 phẩy 405 được đúng 1, còn với d1, tích vô hướng bằng 0 nên cosin bằng 0.':
+        'ASR chép “Bước 4, với G2, tích vô hướng cũng là 0.164, chia cho 0.405 nhân 0.405 được đúng 1, còn với G1, tích vô hướng bằng không nên cô xin bằng không.” (0.857): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: không (trong “không phẩy” → “”), không (trong “không phẩy” → “”), không (trong “không phẩy” → “”), cosin/cô xin — NOT_VERIFIED bằng tai người',
+    'Phép thử thứ nhất là ghép d1 với chính nó, thành máy ổ máy máy ổ máy.':
+        'ASR chép “Phép thử thứ nhất là ghép G1 với chính nó thành mấy ổ mấy mấy ổ mấy.” (0.722): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: máy/mấy, máy máy/mấy mấy, máy/mấy — NOT_VERIFIED bằng tai người',
+    'Với câu hỏi máy ổ, d1 có tích vô hướng 1 phẩy 207 và cosin bằng 1.':
+        'ASR chép “Với câu hỏi máy ổ, G1 có tích vô hướng 1,207 và coosin bằng 1.” (0.857): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: cosin/coosin — NOT_VERIFIED bằng tai người',
+    'Bản ghép đôi có tích vô hướng gấp đôi, 2 phẩy 414, nhưng cosin vẫn bằng 1, vì tử và mẫu cùng gấp đôi.':
+        'ASR chép “Bản kép đôi có tích vô hướng gấp đôi 2,414, nhưng cô sinh vẫn bằng một vì tử và mẫu cùng gấp đôi.” (0.873): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: ghép/kép, cosin/cô sinh — NOT_VERIFIED bằng tai người',
+    'Phép thử thứ hai đi đường khác, ta bỏ độ hiếm, chỉ dùng vector đếm rồi tính cosin.':
+        'ASR chép “Phép thử thứ 2 đi đường khác, ta bỏ độ hiếm, chỉ dùng vector đếm rồi tính cosine.” (0.944): lệch âm/thanh thuần Việt: cosin/cosine — NOT_VERIFIED bằng tai người',
+    'Văn bản d2 vẫn được 1 dù tính cách nào.':
+        'ASR chép “Văn bản G2 vẫn được một dù tính cách nào?” (0.909): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    'Văn bản d3 được 0 phẩy 816 khi đếm thô, so với 0 phẩy 346, vì vậy độ hiếm chính là thứ đẩy trang ổ cứng xuống.':
+        'ASR chép “Văn bản G3 được 0,816 khi đếm thô so với 0,346, vì vậy độ hiếm chính là thứ đậy trang ổ cứng xuống.” (0.879): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: không (trong “không phẩy” → “”), không (trong “không phẩy” → “”), đẩy/đậy — NOT_VERIFIED bằng tai người',
+    'Lỗi thứ tư cũng của người đã đi làm, là tin rằng cosin chống được nhồi từ khoá.':
+        'ASR chép “Lỗi thứ tư cũng của người đã đi làm là tin rằng cô xin chống được nhồi từ khóa.” (0.919): lệch âm/thanh thuần Việt: cosin/cô xin — NOT_VERIFIED bằng tai người',
+    'Văn bản pin pin pin pin pin được cosin bằng 1 với câu hỏi pin, hơn hẳn văn bản d3 thật chỉ được 0 phẩy 346.':
+        'ASR chép “Văn bản PIN PIN PIN PIN PIN được cố xin bằng một với câu hỏi PIN, hơn hãng văn bản dê ba thật chỉ được 0,346.” (0.885): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: cosin/cố xin, hẳn/hãng, không (trong “không phẩy” → “”) — NOT_VERIFIED bằng tai người',
+    'Cosin chỉ chống văn bản dài lặp lại chính nó, còn văn bản chỉ gồm từ khoá thì trùng hướng câu hỏi.':
+        'ASR chép “Cô xin chỉ chống văn bản dài lập lại chính nó, còn văn bản chỉ gồm từ khóa thì trùng hướng câu hỏi.” (0.889): lệch âm/thanh thuần Việt: cosin/cô xin, lặp/lập — NOT_VERIFIED bằng tai người',
+    'Câu hai, tính cosin với d2 và d3, rồi xếp hạng.':
+        'ASR chép “Câu 2, tính cô sinh với dê 2 và dê 3, rồi xếp hạng.” (0.889): lệch âm/thanh thuần Việt: cosin/cô sinh — NOT_VERIFIED bằng tai người',
+    'Câu hai, vì d3 cùng vector với q nên cosin bằng 1 và d3 đứng đầu.':
+        'ASR chép “Câu 2, vì dê 3 cùng vét tơ với quy nên cô xin bằng 1 và dê 3 đứng đầu.” (0.923): lệch âm/thanh thuần Việt: cosin/cô xin — NOT_VERIFIED bằng tai người',
+    'Ví dụ d3 thành khoảng 0, 0, 0 phẩy 346, 0 phẩy 938, và tổng bình phương xấp xỉ 1.':
+        'ASR chép “Ví dụ G3 thành khoảng 0, 0, 0.346, 0.938 và tổng bình phương sắp xỉ 1.” (0.852): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: không (trong “không phẩy” → “”), không (trong “không phẩy” → “”), xấp/sắp — NOT_VERIFIED bằng tai người',
+    'Khi đó cosin chính là tích vô hướng, chỉ cần nhân từng cặp rồi cộng, rẻ hơn hẳn.':
+        'ASR chép “Khi đó cô xin chính là tích vô hướng, chỉ cần nhân từng cặp rồi cộng rẻ hơn hẳn.” (0.919): lệch âm/thanh thuần Việt: cosin/cô xin — NOT_VERIFIED bằng tai người',
+    'Sau đó xếp trọng số thành vector cho cả văn bản và câu hỏi, rồi xếp hạng bằng cosin của góc giữa hai vector.':
+        'ASR chép “Sau đó xếp trọng số thành vector cho cả văn bản và câu hỏi, rồi xếp hạng bằng cosine của góc giữa hai vector.” (0.958): lệch âm/thanh thuần Việt: cosin/cosine — NOT_VERIFIED bằng tai người',
+    # ── Khoá mới: IRS L03 ──
+    'Ví dụ cụm gồm bốn điểm trong ngoặc móc nhọn, mũi tên kép nghĩa là suy ra tâm của cụm.':
+        'ASR chép “Ví dụ cùng gồm 4 điểm trong hoặc mất nhọn, mũi tình kép nghĩa là suy ra tâm của cùng.” (0.75): lệch âm/thanh thuần Việt: cụm/cùng, ngoặc móc/hoặc mất, tên/tình, cụm/cùng — NOT_VERIFIED bằng tai người',
+    'Vì vậy với m bằng 1, độ phủ ở 1 láng giềng là 0 chia 1, bằng 0, ta đã sót.':
+        'ASR chép “Vì vậy với em mờ bằng một, độ phủ ở một láng giềng là không chi một, bằng không, ta đã sót.” (0.884): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: chia/chi — NOT_VERIFIED bằng tai người',
+    'Bảng cho bốn điểm của cụm B, điểm ở mép trái chỉ cách q 0 phẩy 25, gần hơn mọi điểm của cụm A.':
+        'ASR chép “Bảng cho 4 điểm của cục b, điểm ở mép trái chỉ cách quy 0,25, gần hơn mọi điểm của cục ma.” (0.885): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: cụm/cục, cụm (trong “cụm a” → “cục ma”) — NOT_VERIFIED bằng tai người',
+    'Tổng kết lại, truy hồi dày dùng vector nhúng dày đặc, so hết thì tốn n phép so.':
+        'ASR chép “Tổng kết lại, truy hồi dây dùng vét tơ nhúng dày đặt, so hết thịt tún nở Phép so.” (0.737): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: dày/dây, đặc/đặt, thì tốn (trong “thì tốn n” → “thịt tún nở”) — NOT_VERIFIED bằng tai người',
+    # ── Khoá mới: IRS L04 ──
+    'Hệ theo vector xếp B đầu với cosin 0 phẩy 83, rồi E, A, C, thang điểm từ 0 tới 1.':
+        'ASR chép “Hệ theo vector set B đầu với cô sinh 0,83, rồi E, A, C thang điểm từ 0 tới 1.” (0.894): lệch âm/thanh thuần Việt: xếp/set, cosin/cô sinh — NOT_VERIFIED bằng tai người',
+    'Ở bài 2 và bài 3, điểm theo vector là cosin của góc giữa hai vector, luôn từ 0 tới 1, ví dụ 0 phẩy 956.':
+        'ASR chép “Ở bài 2 và bài 3, điểm theo vector là cosine của góc giữa 2 vector, luôn từ 0 tới 1, ví dụ 0,956.” (0.931): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: cosin/cosine, không (trong “không phẩy” → “”) — NOT_VERIFIED bằng tai người',
+    'Bảng giải mã từng ký hiệu, r j của d là hạng của văn bản d trong danh sách thứ j, như A hạng 1 ở danh sách từ khoá và hạng 3 ở danh sách vector.':
+        'ASR chép “Bản giải mã từng ký hiệu RY của G là hạng của văn bản G trong danh sách thứ G, như A hạng 1 ở danh sách từ khóa và hạng 3 ở danh sách vector.” (0.849): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: bảng/bản — NOT_VERIFIED bằng tai người',
+    'Văn bản E và D chỉ có mặt ở một danh sách, nên chỉ có một lá phiếu và xuống cuối.':
+        'ASR chép “Văn bản E và G chỉ có mặt ở một danh sách, nên chỉ có một lá phiếu và xuống cuối.” (0.952): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    'Ta cộng thêm hằng số k vào mẫu số, và điểm của văn bản d là tổng theo mọi danh sách j của 1 chia k cộng r j của d.':
+        'ASR chép “Ta cộng thêm hàng số ca vào mẫu số, và điểm của văn bản dê là tổng theo mọi danh sách dê của một chia ca cộng rj của dê.” (0.935): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: hằng/hàng — NOT_VERIFIED bằng tai người',
+    'Điểm của nó là 1 chia 62 cộng 1 chia 61, khoảng 0 phẩy 016129 cộng 0 phẩy 016393, bằng chừng 0 phẩy 03252, lớn hơn A.':
+        'ASR chép “Điểm của nó là 1 chia 62 cộng 1 chia 61, khoảng 0.016129 cộng 0.016393 bằng chừng 0.03252, lớn hơn nha.” (0.949): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    'Thang từ khoá lớn gấp hàng chục lần thang cosin, nên tổng gần như chỉ là điểm từ khoá, và danh sách vector bị bỏ qua.':
+        'ASR chép “Thang từ khóa lớn gấp hàng chục lần thang cosine, nền tổng gần như chỉ là điểm từ khóa và danh sách vector bị bỏ qua.” (0.923): lệch âm/thanh thuần Việt: cosin nên/cosine nền — NOT_VERIFIED bằng tai người',
+    'Lỗi thứ hai là bỏ hằng số làm dịu, dùng 1 chia r.':
+        'ASR chép “Lỗi thứ 2 là bỏ hàng số làm dịu dùng một chia error.” (0.846): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: hằng/hàng — NOT_VERIFIED bằng tai người',
+    'Hệ vector xếp R, S, Q với cosin 0 phẩy 9, 0 phẩy 85 và 0 phẩy 8.':
+        'ASR chép “Hệ vét tơ xếp r, x, quỳ với cô sinh 0,9, 0,85 và 0,8.” (0.884): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: cosin/cô sinh — NOT_VERIFIED bằng tai người',
+    # ── Khoá mới: IRS L05 ──
+    'Bước bốn, đọc hình dáng bằng cách thay vài giá trị của o.':
+        'ASR chép “Bước bốn, đọc hình dáng bằng cách thay vài giá trị của.” (0.96): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    # ── Khoá mới: IRS L06 ──
+    'Người W chấm 1, 2 và 5.':
+        'ASR chép “Người với đúc .1, 2 và 5” (0.714): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: chấm (trong “w chấm” → “với đúc”) — NOT_VERIFIED bằng tai người',
+    'Cosin là tích vô hướng chia tích hai độ dài, ở đây 11 chia căn 5 nhân 5, khoảng 0 phẩy 984.':
+        'ASR chép “Cô Xin là tích vô hướng chia tích 2 độ dài. Ở đây 11 chia căng 5 nhân năm, khoảng không phải 984.” (0.873): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: cosin/cô xin, căn/căng — NOT_VERIFIED bằng tai người',
+    'Bài 2 đã dùng chính số này để xếp văn bản theo câu hỏi, cosin càng gần 1 thì hai vector càng cùng hướng.':
+        'ASR chép “Bài 2 đã dùng chính số này để xếp văn bản theo câu hỏi, cô xin càng gần 1 thì 2 vét tơ càng cùng hướng.” (0.941): lệch âm/thanh thuần Việt: cosin/cô xin — NOT_VERIFIED bằng tai người',
+    'Bảng giải mã ký hiệu, chữ u in đậm là vector hàng điểm của người U, bằng 5, 3, 0, tương tự với v và w.':
+        'ASR chép “Bản giải mã ký hiệu, chữ u in đậm là vector hàng điểm của người u bằng 5, 3, 0, tương tự với v và v két.” (0.906): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: bảng/bản — NOT_VERIFIED bằng tai người',
+    'Còn cosin của u và v là độ tương tự giữa hai người, nằm từ 0 tới 1 khi mọi điểm không âm.':
+        'ASR chép “Còn cosine của U và V là độ tương tự giữa hai người, nằm từ không tới một khi mọi điểm không âm.” (0.957): lệch âm/thanh thuần Việt: cosin/cosine — NOT_VERIFIED bằng tai người',
+    'Hình cho thấy cơ chế, U ở bên trái chưa chấm ốp lưng, còn hai láng giềng V và W đã chấm.':
+        'ASR chép “Hình cho thấy cơ chế, u ở bên trái chưa chấm óc lưng, còn hai láng dìn V và V đúc đã chấm.” (0.844): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: ốp/óc, giềng/dìn — NOT_VERIFIED bằng tai người',
+    'Đường nối dày màu lục nghĩa là U giống V nhiều, độ tương tự 0 phẩy 606, đường mảnh màu xám nghĩa là U giống W ít, chỉ 0 phẩy 344.':
+        'ASR chép “Đường nối dày màu lục nghĩa là U giống V nhiều, độ tương tự 0,606, đường mảnh màu xám nghĩa là U giống V đút ít, chỉ 0,344.” (0.904): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: không (trong “không phẩy” → “”), không (trong “không phẩy” → “”) — NOT_VERIFIED bằng tai người',
+    'Vì V nặng ký hơn, dự đoán sẽ gần 4 của V hơn là gần 5 của W.':
+        'ASR chép “Vì về nặng ký hơn, dự đoán sẽ gần 4 của về hơn là gần 5 của về đúc.” (0.919): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    'Bước một là đo độ giống, theo bài 2, hai hàng điểm là hai vector, nên độ giống của hai người là cosin của hai vector đó.':
+        'ASR chép “Bước 1 là đo độ giống, theo bài 2, hai hàng điểm là hai vector, nên độ giống của hai người là cosine của hai vector đó.” (0.963): lệch âm/thanh thuần Việt: cosin/cosine — NOT_VERIFIED bằng tai người',
+    'Ở đây cả V và W đều đã chấm ốp lưng, nên với k bằng 2 ta lấy cả hai.':
+        'ASR chép “Ở đây, cả V và V đúc đều đã chấm óc lưng, nên với ca bằng hai ta lấy cả hai.” (0.878): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: ốp/óc — NOT_VERIFIED bằng tai người',
+    'Bước ba, ta làm lại y hệt với W.':
+        'ASR chép “Bước 3. Ta làm lại y hợp với Vê Đúc.” (0.737): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: hệt/hợp — NOT_VERIFIED bằng tai người',
+    'Chia ra, độ giống của U và W chỉ khoảng 0 phẩy 344, vì W thích ốp lưng mà chê tai nghe, ngược với U.':
+        'ASR chép “Chia ra, độ giống của U và Vđúc chỉ khoảng 0,344 vì Vđúc thích óc lưng mà chia tay nghe ngược với U.” (0.786): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: không (trong “không phẩy” → “”), ốp/óc, chê tai/chia tay — NOT_VERIFIED bằng tai người',
+    'Người U đã xem video J, và người xem J cũng hay xem L, M, N.':
+        'ASR chép “Người U đã xem video gì và người xem gì cũng hay xem L, M, N.” (0.875): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    'Gợi ý cho U là hợp của hai nhóm, L, M, N, O, P, Q, trong đó N được nhắc hai lần nên đáng đứng đầu.':
+        'ASR chép “gợi ý cho u là hợp của hai nhóm L, M, N, O, T, Q, trong đó N được nhắc hai lần nên đáng đứng đầu.” (0.962): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    'Số 0 nghĩa là chưa chấm, không phải ghét, nên hãy đếm riêng số ô đã chấm trước khi lấy trung bình.':
+        'ASR chép “Số không nghĩa là chưa chấm, không phải ghét, nên hãy đếm riêng số O đã chấm trước khi lấy trung bình.” (0.955): “ô” (ô lưới) ASR viết chữ “O” — NOT_VERIFIED bằng tai người',
+    'U và V chỉ cùng chấm tai nghe, nếu tính cosin trên đúng món chung đó thì ra 5 nhân 4 chia 5 nhân 4, bằng 1, tức giống hệt nhau.':
+        'ASR chép “U và V chỉ cùng chấm tay nghe, nếu tính cô xin trên đúng món chung đó thì ra 5 nhân 4 chia 5 nhân 4 bằng 1, tức giống hệt nhau.” (0.921): lệch âm/thanh thuần Việt: tai/tay, cosin/cô xin — NOT_VERIFIED bằng tai người',
+    'Với một món chung thì cosin luôn bằng 1, nên hãy đòi tối thiểu vài món chung trước khi tin độ giống.':
+        'ASR chép “Với một món chung thì cô xin luôn bằng một, nên hãy đòi tối thiểu vài món chung trước khi tinh độ giống.” (0.889): lệch âm/thanh thuần Việt: cosin/cô xin, tin/tinh — NOT_VERIFIED bằng tai người',
+    'W chấm trung bình chỉ khoảng 2 phẩy 667 mà chấm ốp lưng 5, cao hơn hẳn thói quen, lệch cộng 2 phẩy 333.':
+        'ASR chép “Về đút, chấm trung bình chỉ khoảng 2,667 mà chấm ốc lưng 5, cao hơn hẳn thói quen, lệch cộng 2,333.” (0.862): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: ốp/ốc — NOT_VERIFIED bằng tai người',
+    'Bây giờ đến lượt bạn, ta thay W bằng người X, chưa chấm tai nghe, chấm sạc 4 và chấm ốp lưng 2.':
+        'ASR chép “Bây giờ đến lượt bạn, ta thay về đúc bằng người ích chưa chấm tay nghe chấm sạc 4 và chấm óp lưng 2.” (0.851): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: tai/tay, ốp/óp — NOT_VERIFIED bằng tai người',
+    'Câu một, tính cosin của u và x, với u bằng 5, 3, 0.':
+        'ASR chép “Câu 1, tính coxin của u và x với u bằng 5, 3, 0.” (0.929): lệch âm/thanh thuần Việt: cosin/coxin — NOT_VERIFIED bằng tai người',
+    'Tổng kết lại, mỗi hàng điểm là một vector, độ giống của hai người là cosin của hai vector.':
+        'ASR chép “Tổng kết lại, mỗi hàng điểm là 1 vector, độ giống của 2 người là cosine của 2 vector.” (0.947): lệch âm/thanh thuần Việt: cosin/cosine — NOT_VERIFIED bằng tai người',
+    # ── Khoá mới: IRS L07 ──
+    'Khi đó ta chỉ cần gần 25 triệu số, bằng khoảng 1 phần 343 số ô.':
+        'ASR chép “Khi đó, ta chỉ cần gần 25 triệu số bằng khoảng 1 phần 343 số ố.” (0.955): “ô” (ô lưới) ASR viết chữ “O” — NOT_VERIFIED bằng tai người',
+    'Vì vậy mỗi bước có thêm phần lambda nhân p kéo vector về phía 0.':
+        'ASR chép “Vì vậy, mỗi bước có thêm phần Lam đa nhân tê kéo vector về phía không?” (0.848): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: véc tơ/vector — NOT_VERIFIED bằng tai người',
+    'Làm thử với lambda bằng 0 phẩy 1, p mới là 1 phẩy 015 và 2 phẩy 03, nhích ít hơn so với khi không phạt.':
+        'ASR chép “Làm thử với Lam Da bằng 0,1, về mới là 1,015 và 2,03, nhất ít hơn so với khi không phạt.” (0.828): lam-đa (λ), ASR viết “lambda”; chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: nhích/nhất — NOT_VERIFIED bằng tai người',
+    'Lỗi thứ hai là không chính quy hoá, lambda bằng 0, cho người mới chỉ chấm đúng một phim.':
+        'ASR chép “Lỗi thứ hai là không chính quy hóa, làm đa bằng không, cho người mới chỉ chấm đúng một phim.” (0.95): lam-đa (λ), ASR viết “lambda” — NOT_VERIFIED bằng tai người',
+    'Câu hai, có phạt lambda 0 phẩy 1, p mới là 2 phẩy 08 và 1 phẩy 09, nhích ít hơn một chút.':
+        'ASR chép “Câu 2, có phạt lam đa 0,1, tè mới là 2,08 và 1,09, nhất ít hơn 1 chút.” (0.917): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: nhích/nhất — NOT_VERIFIED bằng tai người',
+    # ── Khoá mới: IRS L08 ──
+    'Người V xem cả A và B.':
+        'ASR chép “Người với xem cả A và B.” (0.857): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    'Một bài báo năm 2019 của đội gợi ý video chỉ ra điều này, và họ trừ lôgarit của tần suất lọt lô vào điểm lúc huấn luyện.':
+        'ASR chép “Một bài báo năm 2019 của đội gợi EVDO chỉ ra điều này và họ trừ Logatic của tần suốt lọc lô vào điểm lúc huấn luyện.” (0.862): lệch âm/thanh thuần Việt: ý video/evdo, lôgarit/logatic, suất lọt/suốt lọc — NOT_VERIFIED bằng tai người',
+    'Bảng gom lời cảnh báo của các nhóm tác giả về dữ liệu ngầm.':
+        'ASR chép “Bản con lời cảnh báo của các nhóm tác giả về dữ liệu ngâm.” (0.786): lệch âm/thanh thuần Việt: bảng gom/bản con, ngầm/ngâm — NOT_VERIFIED bằng tai người',
+    'Theo tần suất thường thì tỉ lệ 81 trên 1, phần của D chỉ 1 chia 82, khoảng 0 phẩy 0122, nhỏ gần ba lần.':
+        'ASR chép “Theo từng xuất thường thì tỷ lệ 81 trên 1, phần của G chỉ 1 chia 82, khoảng 0.00122, nhỏ gần 3 lần.” (0.892): Manhattan đọc “Man-hát-tần” theo lexicon chung, ASR viết “mang hát tân/tầng”; “tỉ” ASR viết chính tả “tỷ” (cùng âm); chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải” — NOT_VERIFIED bằng tai người',
+    # ── Khoá mới: IRS L09 ──
+    'Ba chữ m a x nghĩa là lấy số lớn nhất, và niềm tin ban đầu của mọi sản phẩm mới là Beta 1 1.':
+        'ASR chép “Ba chữ M à ít nghĩa là lấy số lớn nhất và niềm tin ban đầu của mọi sản phẩm mới là beta 11.” (0.885): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; beta đọc “bê-ta”, ASR viết “bê/beta”; lệch âm/thanh thuần Việt: một/∅ — NOT_VERIFIED bằng tai người',
+    # ── Khoá mới: IRS L10 ──
+    'Bước bốn là đo p r bằng hoán đổi ngẫu nhiên, nhóm tác giả năm 2017 đổi chỗ kết quả đứng đầu với kết quả ở một vị trí ngẫu nhiên từ 1 tới 21, suốt 7 ngày.':
+        'ASR chép “Bước bốn là đo TER bằng hoán đổi ngẫu nhiên, nhóm tác giả năm 2017 đổi chỗ kết quả đứng đầu với kết quả ở một vị trí ngẫu nhiên từ 1 tới 21, suốt 7 ngày.” (0.966): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    'Cùng một kết quả, chỉ khác chỗ đứng, nên mức liên quan triệt tiêu, và tỉ số tỉ lệ bấm chính là p j chia p 1.':
+        'ASR chép “Cùng một kết quả, chỉ khác chỗ đứng nên mức liên quan trịt tiêu và tỷ số tỷ lệ bấm chính là PGGP1.” (0.784): “tỉ” ASR viết chính tả “tỷ” (cùng âm); chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: triệt/trịt, chia (trong “p j chia p” → “pggp”) — NOT_VERIFIED bằng tai người',
+    'Đáp án câu một, D có 40 chia 1000 bằng 0 phẩy 04, chia cho 1 vẫn là 0 phẩy 04.':
+        'ASR chép “Đáp án câu 1, về có 40 chia 1.000 bằng 0.04, chia cho 1 vẫn là 0.04.” (0.909): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải” — NOT_VERIFIED bằng tai người',
+    # ── Khoá mới: IRS L11 ──
+    'Điều thứ hai, ba chữ m a x là lấy số lớn nhất, giữa 0 phẩy 8 và 0 phẩy 1 thì được 0 phẩy 8.':
+        'ASR chép “Điều thứ 2, 3 chữ m, ít là lấy số lớn nhất giữa 0,8 và 0,1 thì được 0,8.” (0.98): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    'Điều thứ ba, ở bài 1, độ lợi ở vị trí i được nhân với chiết khấu 1 chia lôgarit cơ số 2 của i cộng 1, vì vị trí càng sâu càng ít người nhìn.':
+        'ASR chép “Điều thứ 3, ở bài 1, đổ lợi ở vị trí y được nhân với chiếc khấu 1 chia logatric cơ số 2 của y cộng 1 vì vị trí càng sâu càng ít người nhìn.” (0.917): lệch âm/thanh thuần Việt: độ/đổ, chiết/chiếc, lôgarit/logatric — NOT_VERIFIED bằng tai người',
+    'Bảng giải mã từng ký hiệu, ba chữ r e l viết tắt mức liên quan của ứng viên D với câu hỏi, như của X là 0 phẩy 9.':
+        'ASR chép “Bản giải mã từng ký hiệu, 3 chữ R, L viết tắt mức liên quan của ứng viên dê với câu hỏi, như của x là 0,9.” (0.949): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: bảng/bản — NOT_VERIFIED bằng tai người',
+    'Y ở xa A nên giữ gần hết điểm liên quan, và được chọn vào ô thứ hai.':
+        'ASR chép “Ở xa A nên giữ gần hết điểm liên quan và được chọn vào ô thứ 2.” (0.971): lệch âm/thanh thuần Việt: i/∅ — NOT_VERIFIED bằng tai người',
+    'Làm thử với X, lambda bằng 1 cho 0 phẩy 9, lambda bằng 0 cho âm 0 phẩy 8.':
+        'ASR chép “Làm thử với x, làm đa bằng một cho 0,9, làm đa bằng không cho âm 0,8.” (0.905): lam-đa (λ), ASR viết “lambda” — NOT_VERIFIED bằng tai người',
+    'Ở ô ba, X được 0 phẩy 27 trừ 0 phẩy 56, bằng âm 0 phẩy 29, còn Z được 0 phẩy 18 trừ 0 phẩy 21, bằng âm 0 phẩy 03.':
+        'ASR chép “Ở O3, ít được 0,27-0,56 bằng âm 0,29, còn giác được 0,18-0,21 bằng âm 0,03.” (0.95): “ô” (ô lưới) ASR viết chữ “O”; lệch âm/thanh thuần Việt: trừ/∅, trừ/∅ — NOT_VERIFIED bằng tai người',
+    'Đáp án câu một, X được 0 phẩy 72 trừ 0 phẩy 16, bằng 0 phẩy 56, cao nhất, nên ô hai chọn X, đúng như phép giải lambda trên 0 phẩy 778.':
+        'ASR chép “Đáp án câu một, ít được 0,72 trừ 0,16, bằng 0,56, cao nhất, nên O2 chọn ít, đúng như phép dải lambda trên 0,778.” (0.952): “ô” (ô lưới) ASR viết chữ “O”; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: không (trong “không phẩy” → “”) — NOT_VERIFIED bằng tai người',
+    # ── Khoá mới: IRS L12 ──
+    'Tổng 80 mi li giây, còn 20 mi li giây dự phòng cho xếp lại và cho những lúc chậm.':
+        'ASR chép “Tổng 80 mili dây, còn 20 mili dây dự phòng cho xếp lại và cho những lúc chậm.” (0.762): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh — NOT_VERIFIED bằng tai người',
+    'B có mô hình tốt hơn ở đầu danh sách, đổi lại mất 7 điểm độ phủ ở tầng đầu.':
+        'ASR chép “V có mô hình tốt hơn ở đầu danh sách, đổi lại mất 7 điểm độ phủ ở tân đầu.” (0.9): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: tầng/tân — NOT_VERIFIED bằng tai người',
+    # ── Khoá mới: IRS L13 ──
+    'Bạn xem J và K, người xem J hay xem L, M, N, người xem K hay xem N, O, P, Q, nên gợi ý hợp các tập đó, và N được nhắc tới hai lần.':
+        'ASR chép “Bạn xem G và K, người xem G hay xem L, M, N, người xem K hay xem N, O, T, Quy nên gợi ý hợp các tập đó và N được nhắc tới 2 lần.” (0.917): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    'Bảng vector của thí nghiệm có 1 triệu video, mỗi video 256 số thực 4 byte, tức khoảng 1 tỉ byte.':
+        'ASR chép “Bảng vector của thiến nghiệm có 1 triệu video, mỗi video 256 số thực 4 bay, tức khoảng 1 tỷ bay.” (0.84): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); “tỉ” ASR viết chính tả “tỷ” (cùng âm); lệch âm/thanh thuần Việt: thí/thiến — NOT_VERIFIED bằng tai người',
+    'Trọng số sửa thiên lệch luôn có cắt, và chính mức cắt cũng được thử trực tuyến.':
+        'ASR chép “Trọng số sử thiên lịch luôn có cắt, và 9 bức cắt cũng được thử trực tuyến.” (0.765): lệch âm/thanh thuần Việt: sửa/sử, lệch/lịch, chính mức/chín bức — NOT_VERIFIED bằng tai người',
+    'Bảng vector năm 2016 tính từng video trước, 256 số nhân 4 byte là 1024 byte, nhân 1 triệu video ra 1 tỉ 024 triệu byte, khớp.':
+        'ASR chép “Bảng vector năm 2016 tính từng video trước, 256 số nhân 4 bay là 1024 bay, nhân 1 triệu video ra 1 tỷ 024 triệu bay, khớp.” (0.909): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); “tỉ” ASR viết chính tả “tỷ” (cùng âm) — NOT_VERIFIED bằng tai người',
     # ── CSA L03 dựng lại (2026-10-29) ──
     'Giải mã dãy bit 3 E 2 0 0 0 0 0 hệ mười sáu.':
         'đọc tách từng ký tự (E36); ASR chép “3-E-2000-0016”: đủ 3, E, 2 và năm chữ số 0, rồi “16” (hệ mười sáu) — dãy ký tự khớp (audit/asr_digits.py lệch chỉ vì công cụ đổi “sáu” thành 6 mà không ghép “mười sáu”); dải/giải, dậy/dãy là nhầm gi/d của ASR',

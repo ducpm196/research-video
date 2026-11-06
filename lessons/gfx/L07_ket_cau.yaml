@@ -1,0 +1,275 @@
+id: L07
+course: GFX
+series: "GFX · Đồ hoạ máy tính"
+title: "Bài 7 — Kết cấu và lấy mẫu: nội suy song tuyến, mipmap, răng cưa"
+version: 2
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/gfx.yaml L07; audit/gfx/verify_gfx.py L07; audit/gfx/sources_L07.md; [WI83] L. Williams, Pyramidal Parametrics, SIGGRAPH 1983 (tháp ảnh thu nhỏ sẵn mipmap, số mức log2(N)+1, chi phí bộ nhớ thêm 1/3); [MS21] S. Marschner, P. Shirley, Fundamentals of Computer Graphics, bản 5, 2021, chương 11 (nội suy song tuyến, phóng đại và thu nhỏ kết cấu); GFX bài 4 (raster hoá và nội suy); RBM bài 14 (định lý lấy mẫu)"
+assumes: [arith, cdot, frac, approx, geq, sub, sub2, in, power, ltgt]
+# Quy ước: toạ độ kết cấu chuẩn hoá (u, v) ∈ [0, 1]² hoặc toạ độ lẻ trong một ô giữa bốn điểm kết cấu góc ô (v00, v10, v01, v11).
+#   Tên mipmap, Nyquist, Williams chỉ hiện trên màn hình; lời đọc nói “tháp ảnh thu nhỏ sẵn” / “bộ ảnh thu nhỏ sẵn”, “định lý lấy mẫu”.
+objectives:
+  - "Nội suy song tuyến từ bốn điểm kết cấu góc ô theo hai bước một chiều"
+  - "Tính số mức và phần bộ nhớ tăng thêm của bộ ảnh thu nhỏ sẵn cho kết cấu vuông lũy thừa của hai"
+  - "Giải thích vì sao thu nhỏ kết cấu mà không lọc gây sọc lấp lánh khi camera chuyển động"
+  - "Chọn cách lọc kết cấu phù hợp giữa lấy mẫu gần nhất, nội suy song tuyến, ba tuyến và lọc theo hướng nhìn"
+asr_reviewed:
+  - sentence: "Bạn sẽ thấy ngay cả phép nội suy kết cấu vừa học, nếu tính thẳng trên byte màu màn hình thì vùng trộn sẽ bị tối sầm xuống."
+    reason: "từ byte đọc theo lexicon, ASR nghe thành bay — NOT_VERIFIED bằng tai người"
+  - sentence: "Tổng kết chuỗi logic của bài, khi phóng đại kết cấu ta dùng nội suy song tuyến bốn góc để làm mượt chuyển tiếp giữa các ô."
+    reason: "từ ô kết cấu, ASR nhận diện các cô — NOT_VERIFIED bằng tai người"
+  - sentence: "Một ảnh 1024 nhân 1024 bốn byte mỗi điểm tốn 4 MB, nếu tạo thêm các mức thu nhỏ sẽ tốn 5 phẩy 33 MB, lãng phí một phần ba bộ nhớ mà không bao giờ dùng tới."
+    reason: "từ byte và MB đọc theo lexicon, ASR nghe thành bay — NOT_VERIFIED bằng tai người"
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Đến gần thì vỡ ô vuông, lùi ra xa thì mặt đường lấp lánh"
+    checks:
+      - "alg.gfx_bilinear(10, 20, 30, 40, 0.5, 0.5) == 25.0"
+      - "alg.gfx_mipmap_stats(1024)[0] == 11 and round(alg.gfx_mipmap_stats(1024)[2], 4) == 0.3333"
+    steps:
+      - show: |
+          <p>Bạn dán một bức ảnh gạch lát 1024 × 1024 lên mặt đường 3D. Khi camera lại gần, mặt gạch hiện thành <b>từng ô vuông sắc cạnh</b>. Khi camera nhìn ra xa, mặt đường <b>nhấp nháy sọc lạ</b> mỗi khi nhân vật bước đi.</p>
+          <div class="box key">Hôm nay: làm sao nội suy mượt giữa bốn điểm kết cấu (như 10, 20, 30, 40 cho ra <b>25</b> ở giữa ô)? Và vì sao chuẩn bị sẵn <b>11 mức</b> ảnh thu nhỏ chỉ tốn thêm <b>$\frac{1}{3}$ bộ nhớ</b> nhưng dập tắt được hiện tượng lấp lánh ở xa?</div>
+        focus: [1, 1, 1, 2, 2]
+        say: "Chào bạn, giả sử bạn dán một bức ảnh gạch lát 1024 nhân 1024 lên mặt đường ba chiều. Khi camera lại sát gần, mặt gạch lộ ra thành từng ô vuông sắc cạnh rất thô. Khi camera nhìn ra xa, mặt đường lại nhấp nháy những sọc lạ mỗi khi nhân vật bước đi. Hôm nay ta học cách nội suy mượt giữa bốn điểm kết cấu như 10, 20, 30, 40 để ra 25 ở giữa ô. Đồng thời ta tính xem vì sao chuẩn bị sẵn 11 mức ảnh thu nhỏ chỉ tốn thêm một phần ba bộ nhớ nhưng chữa dứt được cảnh lấp lánh."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: nội suy một chiều, định lý lấy mẫu và cấp số nhân"
+    checks:
+      - "(1 - 0.5) * 10 + 0.5 * 20 == 15.0 and (1 - 0.25) * 10 + 0.25 * 20 == 12.5"
+      - "sum((1 / 4) ** k for k in range(1, 11)) < 1 / 3 and round(sum((1 / 4) ** k for k in range(1, 11)), 5) == 0.33333"
+    steps:
+      - show: |
+          <p><b>① Nội suy tuyến tính một chiều</b> (đã dùng khi nội suy thuộc tính ở bài 4): giữa hai đầu $a$ và $b$ với tỉ lệ $t \in [0, 1]$, giá trị tại $t$ là $(1 - t) \cdot a + t \cdot b$.</p>
+          <p class="note">Ví dụ giữa $10$ và $20$: tại chính giữa $t = 0{,}5$ cho $(1 - 0{,}5) \cdot 10 + 0{,}5 \cdot 20 = 15$; tại $t = 0{,}25$ cho $0{,}75 \cdot 10 + 0{,}25 \cdot 20 = 12{,}5$.</p>
+        focus: [1, 2, 2]
+        say: "Trước hết ta ôn lại ba công cụ nền tảng sẽ dùng trong bài. Công cụ thứ nhất là nội suy tuyến tính một chiều như khi nội suy trên tam giác ở bài 4. Giá trị tại tỉ lệ t bằng 1 trừ t nhân a cộng t nhân b, nên giữa 10 và 20 tại chính giữa là 15, còn tại một phần tư là 12 phẩy 5."
+      - show: |
+          <p><b>② Định lý lấy mẫu</b> (khoá Toán cho cơ học, phần lấy mẫu tín hiệu): muốn tái tạo đúng một tín hiệu biến thiên nhanh mà không bị răng cưa hay tần số giả, mật độ lấy mẫu phải <b>ít nhất gấp đôi</b> tần số cao nhất của tín hiệu.</p>
+          <p><b>③ Tổng cấp số nhân lùi:</b> mỗi bước giảm diện tích đi 4 lần thì tổng các phần thêm vào là $\frac{1}{4} + \frac{1}{16} + \frac{1}{64} + \dots \approx \frac{1/4}{1 - 1/4} = \frac{1}{3}$.</p>
+        introduces: [dots]
+        focus: [1, 1, 2]
+        say: "Công cụ thứ hai là định lý lấy mẫu ở khoá Toán cho cơ học, phần lấy mẫu tín hiệu. Muốn không bị răng cưa hay tần số giả, mật độ lấy mẫu phải ít nhất gấp đôi tần số cao nhất của tín hiệu. Công cụ thứ ba là cấp số nhân lùi, khi mỗi bước giảm diện tích 4 lần thì tổng một phần tư cộng một phần mười sáu mãi sẽ tiến về một phần ba."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: điểm kết cấu, toạ độ lẻ và tháp ảnh thu nhỏ sẵn"
+    checks:
+      - "int(math.log2(1024)) + 1 == 11"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ký hiệu / thuật ngữ</th><th>nghĩa</th></tr>
+          <tr><td><b>điểm kết cấu</b></td><td>một ô màu trên bức ảnh kết cấu gốc (phân biệt với <b>điểm ảnh</b> trên màn hình)</td></tr>
+          <tr><td>$v_{00}, v_{10}, v_{01}, v_{11}$</td><td>bốn giá trị màu ở bốn góc của một ô lưới kết cấu: dưới–trái, dưới–phải, trên–trái, trên–phải</td></tr>
+          <tr><td>$(u, v) \in [0, 1]^2$</td><td>phần lẻ của toạ độ mẫu bên trong ô bốn điểm kết cấu ($u$ ngang, $v$ dọc)</td></tr>
+          <tr><td><b>mipmap</b> (bộ ảnh thu nhỏ sẵn)</td><td>chuỗi ảnh kết cấu đã lọc trước, mỗi mức sau giảm một nửa chiều rộng và một nửa chiều cao</td></tr></table>
+        introduces: [in]
+        focus: [0, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bảng giải mã bốn thuật ngữ và ký hiệu của bài. Điểm kết cấu là một ô màu trên bức ảnh gốc, phân biệt với điểm ảnh trên màn hình. Bốn giá trị v không không, v một không, v không một, v một một là màu ở bốn góc của một ô lưới kết cấu. Cặp u, v thuộc đoạn từ 0 tới 1 là phần toạ độ lẻ bên trong ô đó theo chiều ngang và chiều dọc. Còn bộ ảnh thu nhỏ sẵn là chuỗi ảnh đã được tính trung bình trước, mỗi mức sau giảm một nửa mỗi chiều."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hình cơ chế: nội suy trong một ô và tháp ảnh giảm nửa mỗi chiều"
+    checks:
+      - "alg.gfx_bilinear(10, 20, 30, 40, 0.5, 0.5) == 25.0"
+      - "1024 // 2 == 512 and 512 // 2 == 256 and (512 * 512) / (1024 * 1024) == 0.25"
+    steps:
+      - show: |
+          <div><svg width="1440" height="430" viewBox="0 0 1440 430">
+          <rect x="110" y="70" width="260" height="260" fill="#f8fafc" stroke="#475569" stroke-width="3"/>
+          <line x1="110" y1="200" x2="370" y2="200" stroke="#2a78d6" stroke-width="2" stroke-dasharray="8 6"/>
+          <line x1="240" y1="70" x2="240" y2="330" stroke="#059669" stroke-width="3"/>
+          <circle cx="110" cy="330" r="10" fill="#1f2937"/><circle cx="370" cy="330" r="10" fill="#1f2937"/>
+          <circle cx="110" cy="70" r="10" fill="#1f2937"/><circle cx="370" cy="70" r="10" fill="#1f2937"/>
+          <circle cx="240" cy="330" r="9" fill="#2a78d6"/><circle cx="240" cy="70" r="9" fill="#2a78d6"/>
+          <circle cx="240" cy="200" r="11" fill="#059669"/>
+          <g font-size="22" fill="#1f2937">
+          <text x="95" y="365" text-anchor="middle">v₀₀ = 10</text><text x="385" y="365" text-anchor="middle">v₁₀ = 20</text>
+          <text x="95" y="52" text-anchor="middle">v₀₁ = 30</text><text x="385" y="52" text-anchor="middle">v₁₁ = 40</text>
+          <text x="240" y="365" text-anchor="middle" fill="#2a78d6">dưới: 15</text>
+          <text x="240" y="52" text-anchor="middle" fill="#2a78d6">trên: 35</text>
+          <text x="258" y="192" fill="#059669" font-weight="bold">giữa (0,5; 0,5) → 25</text>
+          <text x="240" y="408" text-anchor="middle">① Nội suy song tuyến: ngang trước, dọc sau</text></g>
+          <rect x="650" y="60" width="240" height="240" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/>
+          <rect x="920" y="60" width="120" height="120" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/>
+          <rect x="1070" y="60" width="60" height="60" fill="#d1fae5" stroke="#059669" stroke-width="3"/>
+          <rect x="1160" y="60" width="30" height="30" fill="#fae8ff" stroke="#9333ea" stroke-width="2"/>
+          <circle cx="1220" cy="68" r="5" fill="#1f2937"/>
+          <g font-size="22" fill="#1f2937">
+          <text x="770" y="185" text-anchor="middle">Mức 0: N × N</text>
+          <text x="770" y="218" text-anchor="middle">(diện tích = 1)</text>
+          <text x="980" y="215" text-anchor="middle" fill="#eb6834">Mức 1: N/2 × N/2</text>
+          <text x="980" y="245" text-anchor="middle" fill="#eb6834">(diện tích = 1/4)</text>
+          <text x="1135" y="155" fill="#059669">Mức 2: 1/16 … tới 1 × 1</text>
+          <text x="960" y="340" text-anchor="middle">② Bộ ảnh thu nhỏ sẵn: mỗi mức giảm 1/2 cạnh → bằng 1/4 diện tích mức trước</text>
+          <text x="960" y="380" text-anchor="middle" fill="#059669" font-weight="bold">Tổng các mức phụ = 1/4 + 1/16 + 1/64 + … ≈ 1/3 mức gốc</text></g>
+          </svg></div>
+        focus: [1, 1, 1, 1, 1]
+        say: "Hình bên trái minh hoạ nội suy song tuyến giữa bốn điểm kết cấu 10, 20 ở hàng dưới và 30, 40 ở hàng trên. Tại vị trí chính giữa ô 0 phẩy 5 và 0 phẩy 5, ta nội suy ngang ở hàng dưới ra 15, ở hàng trên ra 35, rồi nội suy dọc giữa 15 và 35 được đúng 25. Hình bên phải là tháp ảnh thu nhỏ sẵn, mức 0 có kích thước N nhân N với diện tích chuẩn hoá bằng 1. Mức 1 giảm một nửa mỗi cạnh nên chỉ bằng một phần tư diện tích mức 0, và mức 2 bằng một phần mười sáu. Cộng tất cả các mức thu nhỏ lại chỉ bằng xấp xỉ một phần ba diện tích bức ảnh gốc."
+
+  # ───────────────────────── 5. SUY RA ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra công thức nội suy song tuyến và bộ nhớ của tháp ảnh"
+    checks:
+      - "alg.gfx_bilinear(10, 20, 30, 40, 0.5, 0.5) == 25.0"
+      - "alg.gfx_mipmap_stats(1024) == (11, 1398101, 349525 / 1048576)"
+    steps:
+      - show: |
+          <p><b>Bước 1 — nội suy ngang trên từng hàng.</b> Với toạ độ ngang $u \in [0, 1]$, hàng dưới nối $v_{00}$ với $v_{10}$ và hàng trên nối $v_{01}$ với $v_{11}$:</p>
+          $$v_{\text{dưới}}(u) = (1 - u)\,v_{00} + u\,v_{10}, \qquad v_{\text{trên}}(u) = (1 - u)\,v_{01} + u\,v_{11}$$
+          <p class="note">Làm thử tại $u = 0{,}5$: $v_{\text{dưới}} = 0{,}5 \cdot 10 + 0{,}5 \cdot 20 = 15$; $v_{\text{trên}} = 0{,}5 \cdot 30 + 0{,}5 \cdot 40 = 35$.</p>
+        focus: [1, 2, 3]
+        say: "Bước một, ta thực hiện nội suy tuyến tính theo chiều ngang u trên từng hàng riêng biệt. Theo công thức nội suy một chiều, hàng dưới bằng 1 trừ u nhân v không không cộng u nhân v một không, còn hàng trên nối v không một với v một một. Thay thử u bằng 0 phẩy 5 vào bốn góc 10, 20, 30, 40, ta được hàng dưới bằng 15 và hàng trên bằng 35."
+      - show: |
+          <p><b>Bước 2 — nội suy dọc giữa hai hàng.</b> Dùng tiếp toạ độ dọc $v \in [0, 1]$ nối $v_{\text{dưới}}(u)$ với $v_{\text{trên}}(u)$, rồi khai triển thành bốn trọng số góc ô:</p>
+          $$v(u, v) = (1 - u)(1 - v)\,v_{00} + u(1 - v)\,v_{10} + (1 - u)v\,v_{01} + u\,v\,v_{11}$$
+          <p class="note">Tại $(0{,}5;\ 0{,}5)$: bốn trọng số đều bằng $0{,}25$, nên $v = 0{,}25 \cdot (10 + 20 + 30 + 40) = \hlg{25}$.</p>
+        focus: [[1, 2], 3]
+        say: "Bước hai, ta nội suy theo chiều dọc v giữa hai kết quả vừa tìm được, nên khai triển ra sẽ thành tổng của bốn góc nhân với bốn trọng số diện tích đối diện. Tại điểm chính giữa 0 phẩy 5 và 0 phẩy 5, cả bốn trọng số đều bằng 0 phẩy 25, nên kết quả bằng trung bình cộng của bốn góc là 25."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — số mức và bộ nhớ của bộ ảnh thu nhỏ sẵn.</b> Kết cấu vuông cạnh $N = 2^m$ chia đôi cạnh liên tiếp từ $2^m$ về $2^0 = 1$ có tất cả $m + 1 = \log_2 N + 1$ mức. Tỉ lệ bộ nhớ tăng thêm so với mức gốc là:</p>
+          $$\sum_{k=1}^{m} \left(\frac{1}{4}\right)^k = \frac{1 - (1/4)^{m}}{3} \approx \hlb{\frac{1}{3}}$$
+        introduces: [sum, log]
+        focus: [1, 1, 2]
+        say: "Bước ba, ta suy ra số mức và bộ nhớ của bộ ảnh thu nhỏ sẵn cho kết cấu vuông cạnh N bằng 2 mũ m. Vì cạnh chia đôi liên tiếp từ 2 mũ m về 2 mũ 0 bằng 1, nên tổng số mức bằng lôgarit cơ số 2 của N cộng thêm 1. Diện tích mỗi mức sau bằng một phần tư mức trước, nên tổng tỉ lệ bộ nhớ tăng thêm theo cấp số nhân bằng xấp xỉ một phần ba mức gốc."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Tính tay: nội suy lệch tâm và bộ ảnh 1024 × 1024"
+    checks:
+      - "alg.gfx_bilinear(10, 20, 30, 40, 0.5, 0.5) == 25.0"
+      - "alg.gfx_bilinear(10, 20, 30, 40, 0.25, 0.75) == 27.5"
+      - "alg.gfx_mipmap_stats(1024)[0] == 11 and alg.gfx_mipmap_stats(1024)[1] == 1398101"
+      - "1024 * 1024 == 1048576 and 1398101 - 1048576 == 349525 and round(349525 / 1048576, 4) == 0.3333"
+    steps:
+      - show: |
+          <p><b>Phép tính 1 — nội suy tại giữa ô $(u, v) = (0{,}5;\ 0{,}5)$ và tại $(0{,}25;\ 0{,}75)$</b> cho bốn điểm kết cấu $10, 20, 30, 40$:</p>
+          <table class="t"><tr><th>vị trí $(u, v)$</th><th>hàng dưới $(1-u)v_{00} + u\,v_{10}$</th><th>hàng trên $(1-u)v_{01} + u\,v_{11}$</th><th>ghép dọc $(1-v)v_{\text{dưới}} + v\,v_{\text{trên}}$</th></tr>
+          <tr><td>$(0{,}5;\ 0{,}5)$</td><td>$0{,}5 \cdot 10 + 0{,}5 \cdot 20 = 15$</td><td>$0{,}5 \cdot 30 + 0{,}5 \cdot 40 = 35$</td><td>$0{,}5 \cdot 15 + 0{,}5 \cdot 35 = \hlg{25}$</td></tr>
+          <tr><td>$(0{,}25;\ 0{,}75)$</td><td>$0{,}75 \cdot 10 + 0{,}25 \cdot 20 = 12{,}5$</td><td>$0{,}75 \cdot 30 + 0{,}25 \cdot 40 = 32{,}5$</td><td>$0{,}25 \cdot 12{,}5 + 0{,}75 \cdot 32{,}5 = \hlb{27{,}5}$</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Ta làm hai phép tính nội suy cụ thể trên bốn điểm kết cấu 10, 20, 30 và 40. Ở dòng đầu, tại vị trí chính giữa 0 phẩy 5 và 0 phẩy 5, hàng dưới ra 15, hàng trên ra 35, ghép dọc được đúng 25. Ở dòng hai, tại vị trí 0 phẩy 25 ngang và 0 phẩy 75 dọc gần phía trên trái, hàng dưới ra 12 phẩy 5, hàng trên ra 32 phẩy 5, ghép dọc được 27 phẩy 5."
+      - clear: true
+        show: |
+          <p><b>Phép tính 2 — đếm số mức của kết cấu 1024 × 1024:</b></p>
+          <p>Vì $1024 = 2^{10}$, số mức từ mức $0$ (1024 × 1024) tới mức $10$ (1 × 1) là:</p>
+          $$\log_2(1024) + 1 = 10 + 1 = \hlg{11 \text{ mức}}$$
+          <p class="note">Các cạnh lần lượt: 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1.</p>
+        focus: [1, [2, 3], 4]
+        say: "Phép tính thứ hai là đếm số mức của kết cấu 1024 nhân 1024. Vì 1024 bằng 2 mũ 10, nên tính từ mức 0 nguyên bản tới mức 10 kích thước 1 nhân 1 có tất cả là 10 cộng 1 bằng 11 mức. Độ dài cạnh của 11 mức này lần lượt chia đôi từ 1024, 512, 256 xuống tới 4, 2 và 1."
+      - show: |
+          <p><b>Phép tính 3 — tổng số điểm kết cấu và phần bộ nhớ tăng thêm:</b></p>
+          <table class="t"><tr><th>hạng mục</th><th>số điểm kết cấu</th><th>tỉ lệ so với mức gốc</th></tr>
+          <tr><td>Mức gốc 1024 × 1024</td><td>1&nbsp;048&nbsp;576</td><td>$1$</td></tr>
+          <tr><td>10 mức thu nhỏ ($512^2 + 256^2 + \dots + 1^2$)</td><td>349&nbsp;525</td><td>$\frac{349\,525}{1\,048\,576} \approx \hlb{0{,}3333 \approx \frac{1}{3}}$</td></tr>
+          <tr><td><b>Tổng cả 11 mức</b></td><td>1&nbsp;398&nbsp;101</td><td>$\approx 1{,}3333 \approx \frac{4}{3}$</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Phép tính thứ ba cộng số điểm kết cấu của tất cả các mức. Mức gốc 1024 nhân 1024 có 1 triệu 048 nghìn 576 điểm kết cấu. Cộng 10 mức thu nhỏ từ 512 bình phương xuống 1 bình phương được 349 nghìn 525 điểm, chia cho mức gốc ra 0 phẩy 3333, tức đúng một phần ba. Tổng cộng cả 11 mức là 1 triệu 398 nghìn 101 điểm kết cấu, bằng bốn phần ba mức gốc."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: nội suy dọc trước ngang sau, và quy luật chia ba"
+    checks:
+      - "((1 - 0.5) * 10 + 0.5 * 30) * (1 - 0.5) + ((1 - 0.5) * 20 + 0.5 * 40) * 0.5 == 25.0"
+      - "((1 - 0.75) * 10 + 0.75 * 30) * (1 - 0.25) + ((1 - 0.75) * 20 + 0.75 * 40) * 0.25 == 27.5"
+      - "(1048576 - 1) // 3 == 349525"
+    steps:
+      - show: |
+          <p><b>Đường khác 1 — nội suy dọc trước, ngang sau.</b> Thay vì tính hàng dưới và hàng trên, ta tính cột trái và cột phải theo $v$ trước, rồi nối ngang theo $u$:</p>
+          $$\text{Tại } (0{,}5;\ 0{,}5): \quad v_{\text{trái}} = \frac{10 + 30}{2} = 20, \quad v_{\text{phải}} = \frac{20 + 40}{2} = 30 \implies \frac{20 + 30}{2} = 25 \checkmark$$
+          <p class="note">Tại $(0{,}25;\ 0{,}75)$: $v_{\text{trái}} = 0{,}25 \cdot 10 + 0{,}75 \cdot 30 = 25$; $v_{\text{phải}} = 0{,}25 \cdot 20 + 0{,}75 \cdot 40 = 35 \implies 0{,}75 \cdot 25 + 0{,}25 \cdot 35 = 27{,}5$ ✓.</p>
+        introduces: [implies]
+        focus: [1, 2, 3]
+        say: "Ta kiểm tra lại bằng đường khác thứ nhất là đổi thứ tự, nội suy dọc trên hai cột trước rồi mới nối ngang. Tại điểm giữa ô, cột trái trung bình của 10 và 30 bằng 20, cột phải trung bình của 20 và 40 bằng 30, nên trung bình hai cột bằng 25, khớp hoàn toàn. Tại điểm 0 phẩy 25 và 0 phẩy 75, cột trái bằng 25 và cột phải bằng 35, nên ghép ngang cũng ra đúng 27 phẩy 5."
+      - show: |
+          <p><b>Đường khác 2 — đẳng thức đại số chính xác cho tổng lũy thừa bốn:</b></p>
+          $$1 + 4 + 16 + \dots + 4^{m-1} = \frac{4^m - 1}{4 - 1} = \frac{N^2 - 1}{3}$$
+          <p>Với $N^2 = 1\,048\,576$: số điểm kết cấu thêm vào là $\frac{1\,048\,576 - 1}{3} = \frac{1\,048\,575}{3} = \hlg{349\,525}$ ✓ — không cần cộng từng mức!</p>
+        focus: [1, 2, 3]
+        say: "Đường kiểm tra thứ hai dùng đẳng thức đại số cho tổng các lũy thừa của 4 từ 1 tới 4 mũ m trừ 1, vì hiệu 4 trừ 1 ở mẫu số bằng đúng 3. Do đó tổng tất cả các mức thu nhỏ luôn bằng diện tích mức gốc trừ 1 rồi chia cho 3. Thay 1 triệu 048 nghìn 576 trừ 1 chia 3, ta ra ngay 349 nghìn 525 điểm kết cấu mà không cần cộng từng mức."
+
+  # ───────────────────────── 8. LỖI HAY GẶP ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "Những lỗi hay gặp khi lấy mẫu kết cấu"
+    checks:
+      - "(1024 * 1024 * 4) / (1024 ** 2) == 4.0 and round(4.0 * 4 / 3, 2) == 5.33"
+      - "alg.gfx_bilinear(0, 200, 200, 0, 0.5, 0.5) == 100.0"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Thu nhỏ kết cấu ở xa mà không bật bộ ảnh thu nhỏ sẵn <b class="red">(lấy mẫu dưới tần số Nyquist → sọc lấp lánh)</b>
+          <br><span class="note">Khi một điểm ảnh ở xa phủ cả trăm điểm kết cấu đen trắng (0 và 200), lấy mẫu một điểm duy nhất lúc trúng ô 0, lúc trúng ô 200 khi camera nhúc nhích, làm cả mặt đường nhấp nháy thay vì ra màu xám trung bình 100.</span></div>
+        focus: [1, 1, 1]
+        say: "Lỗi thứ nhất là thu nhỏ kết cấu ở xa mà không dùng bộ ảnh thu nhỏ sẵn, tức vi phạm định lý lấy mẫu. Khi đó một điểm ảnh ở xa phủ hàng trăm điểm kết cấu đen trắng 0 và 200. Việc chỉ nhặt một điểm làm màu nhảy loạn xạ giữa 0 và 200 khi camera nhúc nhích, thay vì ra màu xám trung bình 100."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Bật bộ ảnh thu nhỏ sẵn cho cả giao diện hai chiều luôn vẽ đúng kích thước 1 : 1 <b class="red">(tốn thêm 1/3 bộ nhớ vô ích)</b>
+          <br><span class="note">Một ảnh giao diện 1024 × 1024 bốn kênh 8 bit tốn $4\text{ MB}$; tạo thêm các mức thu nhỏ làm tốn $5{,}33\text{ MB}$ dù không bao giờ thu nhỏ trên màn hình.</span></div>
+        focus: [1, 1]
+        say: "Lỗi thứ hai là bật bộ ảnh thu nhỏ sẵn cho cả những bức ảnh giao diện hai chiều luôn hiển thị đúng tỉ lệ một một trên màn hình. Một ảnh 1024 nhân 1024 bốn byte mỗi điểm tốn 4 MB, nếu tạo thêm các mức thu nhỏ sẽ tốn 5 phẩy 33 MB, lãng phí một phần ba bộ nhớ mà không bao giờ dùng tới."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Chỉ chọn một mức thu nhỏ gần nhất thay vì nội suy giữa hai mức liên tiếp <b class="red">(vệt nhảy độ nét ngang mặt đất)</b>
+          <br><span class="note">Khi đi dọc mặt đường, chỗ chuyển đột ngột từ mức 1 sang mức 2 tạo thành một đường ranh giới mờ rõ rệt; phải nội suy thêm một lần giữa hai mức (lọc ba tuyến) hoặc dùng lọc theo hướng nhìn khi nhìn nghiêng.</span></div>
+        focus: [1, 1, 1]
+        say: "Lỗi thứ ba của người đã đi làm là chỉ chọn đứt đoạn một mức thu nhỏ gần nhất thay vì nội suy giữa hai mức liên tiếp. Khi nhìn dọc mặt đường, chỗ nhảy đột ngột từ mức 1 sang mức 2 tạo thành một vệt ranh giới độ nét rất lộ. Cách sửa là nội suy tuyến tính thêm một lần giữa hai mức kề nhau và bật lọc theo hướng nhìn cho mặt phẳng nghiêng."
+
+  # ───────────────────────── 9. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: tính nội suy, đếm điểm kết cấu và chọn bộ lọc"
+    checks:
+      - "alg.gfx_bilinear(0, 100, 100, 200, 0.5, 0.25) == 75.0"
+      - "alg.gfx_mipmap_stats(256) == (9, 87381, 21845 / 65536)"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề bài</th></tr>
+          <tr><td>1</td><td>Bốn điểm kết cấu góc ô là $v_{00} = 0$, $v_{10} = 100$, $v_{01} = 100$, $v_{11} = 200$. Tính giá trị nội suy song tuyến tại $(u, v) = (0{,}5;\ 0{,}25)$.</td></tr>
+          <tr><td>2</td><td>Một kết cấu 256 × 256 có bao nhiêu mức trong bộ ảnh thu nhỏ sẵn, và có bao nhiêu điểm kết cấu ở các mức thu nhỏ cộng thêm?</td></tr>
+          <tr><td>3</td><td>Trong trò chơi phong cách nghệ thuật điểm ảnh cổ điển (các nhân vật vẽ trên lưới 16 × 16) so với mặt đường nhựa trong cảnh 3D, mỗi loại nên chọn chế độ lọc nào?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", 0]
+        say: "Bây giờ đến lượt bạn tự giải ba câu hỏi. Câu một, cho bốn điểm kết cấu góc ô là 0, 100, 100 và 200, hãy tính giá trị nội suy song tuyến tại u bằng 0 phẩy 5 và v bằng 0 phẩy 25. Câu hai, kết cấu 256 nhân 256 có bao nhiêu mức thu nhỏ sẵn và thêm bao nhiêu điểm kết cấu phụ? Câu ba, nhân vật nghệ thuật điểm ảnh 16 nhân 16 và mặt đường ba chiều nên chọn chế độ lọc nào? Hãy dừng video và tính ra giấy."
+        pause: 20
+      - clear: true
+        show: |
+          <p><b>Đáp án câu 1.</b> Nội suy ngang tại $u = 0{,}5$: hàng dưới $= 0{,}5 \cdot 0 + 0{,}5 \cdot 100 = 50$; hàng trên $= 0{,}5 \cdot 100 + 0{,}5 \cdot 200 = 150$. Nội suy dọc tại $v = 0{,}25$: $(1 - 0{,}25) \cdot 50 + 0{,}25 \cdot 150 = 37{,}5 + 37{,}5 = \hlg{75}$.</p>
+          <p><b>Đáp án câu 2.</b> Vì $256 = 2^8$, số mức là $8 + 1 = \hlg{9 \text{ mức}}$. Mức gốc có $256^2 = 65\,536$ điểm; các mức thu nhỏ thêm $\frac{65\,536 - 1}{3} = \hlb{21\,845}$ điểm (tổng $87\,381$ điểm, tăng thêm $\approx \frac{1}{3}$).</p>
+        focus: [1, 1, 2, 2]
+        say: "Đáp án câu một, nội suy ngang tại u bằng 0 phẩy 5 cho hàng dưới bằng 50 và hàng trên bằng 150. Sau đó nội suy dọc tại v bằng 0 phẩy 25 lấy 0 phẩy 75 nhân 50 cộng 0 phẩy 25 nhân 150, được kết quả bằng 75. Đáp án câu hai, vì 256 bằng 2 mũ 8 nên có 9 mức tất cả. Mức gốc có 65 nghìn 536 điểm, lấy số đó trừ 1 chia 3 được 21 nghìn 845 điểm kết cấu phụ, tổng cộng là 87 nghìn 381 điểm."
+      - show: |
+          <table class="t"><tr><th>trường hợp (câu 3)</th><th>lựa chọn đúng</th><th>đánh đổi / điều kiện</th></tr>
+          <tr><td>Nhân vật nghệ thuật điểm ảnh 16 × 16 phóng to</td><td><b>Lấy mẫu điểm gần nhất</b>, tắt bộ ảnh thu nhỏ sẵn</td><td>Giữ ranh giới ô vuông sắc nét theo đúng ý đồ mỹ thuật; nếu bật nội suy song tuyến hình sẽ bị nhoè mờ</td></tr>
+          <tr><td>Mặt đường nhựa trong cảnh 3D nhìn xa và nghiêng</td><td><b>Nội suy song tuyến + bộ ảnh thu nhỏ sẵn</b> (kèm lọc giữa hai mức và lọc theo hướng nhìn)</td><td>Tốn thêm $\frac{1}{3}$ bộ nhớ và thêm vài phép đọc mẫu, nhưng khử sạch sọc lấp lánh và giữ nét khi nhìn nghiêng</td></tr></table>
+        focus: [0, "1.2", "1.2", "1.3"]
+        say: "Đáp án câu ba là chọn chế độ lọc theo đúng mục đích hiển thị. Với nhân vật nghệ thuật điểm ảnh 16 nhân 16 khi phóng to, ta chọn lấy mẫu điểm gần nhất và tắt bộ ảnh thu nhỏ sẵn để giữ cạnh ô vuông sắc nét. Nếu bật nội suy song tuyến thì hình nhân vật sẽ bị nhoè mờ. Ngược lại, mặt đường ba chiều nhìn xa và nghiêng bắt buộc dùng nội suy song tuyến kết hợp bộ ảnh thu nhỏ sẵn và lọc theo hướng nhìn để khử sạch sọc lấp lánh."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">phóng đại: nội suy song tuyến 4 góc</span><span class="a">→</span>
+          <span class="n">thu nhỏ: 1 điểm ảnh phủ nhiều điểm kết cấu</span><span class="a">→</span>
+          <span class="n">vi phạm định lý lấy mẫu gây lấp lánh</span><span class="a">→</span>
+          <span class="n">tháp ảnh thu nhỏ sẵn: log₂N + 1 mức, thêm 1/3 bộ nhớ</span></div>
+        say: "Tổng kết chuỗi logic của bài, khi phóng đại kết cấu ta dùng nội suy song tuyến bốn góc để làm mượt chuyển tiếp giữa các ô. Khi thu nhỏ ở xa, một điểm ảnh phủ nhiều điểm kết cấu nên lấy mẫu đơn lẻ sẽ vi phạm định lý lấy mẫu và gây sọc lấp lánh. Giải pháp chuẩn là dựng tháp ảnh thu nhỏ sẵn có lôgarit cơ số 2 của N cộng 1 mức, chỉ tốn thêm một phần ba bộ nhớ nhưng lọc sẵn trung bình cho mọi khoảng cách."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> khi một điểm ảnh đại diện cho cả một vùng lớn, đừng nhặt bừa một điểm — hãy <b>tính trung bình trước rồi lưu sẵn</b> để lúc vẽ chỉ cần đọc một lần.</div>
+        say: "Tư duy cốt lõi cần mang theo là khi một điểm ảnh đại diện cho cả một vùng rộng lớn, đừng nhặt bừa một điểm đơn lẻ. Hãy tính trung bình trước rồi lưu sẵn thành tháp nhiều mức để lúc vẽ thời gian thực chỉ cần tra cứu."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 8): <b>màu và gamma — vì sao trung bình hai màu phải tính trong không gian tuyến tính</b>. Khi nội suy song tuyến hay tạo các mức thu nhỏ vừa học, nếu cộng thẳng các byte màu màn hình thì vùng trộn sẽ bị tối sầm xuống!</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 8, ta học về màu và gamma, giải thích vì sao trung bình hai màu phải tính trong không gian tuyến tính. Bạn sẽ thấy ngay cả phép nội suy kết cấu vừa học, nếu tính thẳng trên byte màu màn hình thì vùng trộn sẽ bị tối sầm xuống. Hẹn gặp bạn ở bài tiếp theo."

@@ -6528,3 +6528,219 @@ def irs_tail_any(p_slow, n):
     return 1 - (1 - p_slow) ** n
 
 # ── mốc IRS-B ──
+
+
+# ───────── Tương tác người–máy (HCI): định luật Fitts, Hick–Hyman, KLM, Nielsen–Landauer, SUS, hình vuông Latin, chống lỗi ─────────
+def hci_minutes_diff(h1, m1, h2, m2):
+    """Số phút từ thời điểm h1:m1 tới h2:m2 trong cùng một ngày."""
+    return (h2 * 60 + m2) - (h1 * 60 + m1)
+
+
+def hci_mappings(n):
+    """Số cách ghép 1-1 giữa n nút điều khiển và n thiết bị: n!."""
+    return math.factorial(n)
+
+
+def hci_fitts_id(D, W):
+    """Độ khó theo dạng Shannon (MacKenzie 1992): ID = log₂(D/W + 1) (bit)."""
+    return math.log2(D / W + 1)
+
+
+def hci_fitts_time(D, W, a=0.1, b=0.15):
+    """Thời gian trỏ tới đích theo định luật Fitts: T = a + b · log₂(D/W + 1) (giây)."""
+    return a + b * math.log2(D / W + 1)
+
+
+def hci_hick_time(n, b=0.2, a=0.0):
+    """Thời gian chọn trong n mục quen thuộc có xác suất bằng nhau (Hick 1952): T = a + b · log₂(n + 1)."""
+    return a + b * math.log2(n + 1)
+
+
+def hci_hick_entropy(probs, b=0.2, a=0.0):
+    """Thời gian chọn khi các mục có xác suất khác nhau (Hyman 1953): T = a + b · Σ p_i log₂(1/p_i + 1) hoặc entropy."""
+    h = sum(-p * math.log2(p) for p in probs if p > 0)
+    return a + b * h, h
+
+
+def hci_chunks(s):
+    """Đếm (tổng số ký tự không kể khoảng trắng, số cụm tách bằng khoảng trắng)."""
+    return len(s.replace(" ", "").replace("-", "")), len(s.replace("-", " ").split())
+
+
+HCI_KLM_WEIGHTS = {"K": 0.2, "P": 1.1, "B": 0.1, "H": 0.4, "M": 1.35}
+
+
+def hci_klm_time(ops, weights=None):
+    """Cộng thời gian chuỗi thao tác KLM (Card, Moran, Newell 1980). ops là chuỗi hoặc danh sách ký tự trong {K, P, B, H, M}."""
+    w = weights or HCI_KLM_WEIGHTS
+    return round(sum(w[ch] for ch in ops if ch in w), 4)
+
+
+def hci_nielsen_found(n, lam=0.31):
+    """Tỉ lệ vấn đề khả dụng phát hiện được với n người thử (Nielsen, Landauer 1993): 1 − (1 − λ)^n."""
+    return 1 - (1 - lam) ** n
+
+
+def hci_sus_score(answers):
+    """Điểm SUS (Brooke 1996) từ 10 câu trả lời thang 1..5: câu lẻ cộng (x − 1), câu chẵn cộng (5 − x), nhân 2,5."""
+    odd = sum(x - 1 for x in answers[0::2])
+    even = sum(5 - x for x in answers[1::2])
+    return (odd + even) * 2.5, odd, even
+
+
+def hci_is_latin_square(rows):
+    """Kiểm bảng `rows` (danh sách chuỗi hoặc bộ cùng độ dài n) có phải hình vuông Latin: mỗi hàng và mỗi cột chứa đủ n ký hiệu."""
+    n = len(rows)
+    if any(len(r) != n for r in rows):
+        return False
+    syms = sorted(set(rows[0]))
+    if len(syms) != n:
+        return False
+    return all(sorted(r) == syms for r in rows) and all(sorted(rows[i][j] for i in range(n)) == syms for j in range(n))
+
+
+def hci_wcag_target_ok(w, h, min_px=24):
+    """Kiểm kích thước đích theo WCAG 2.2 tiêu chí 2.5.8 (tối thiểu 24 × 24 điểm ảnh CSS)."""
+    return w >= min_px and h >= min_px
+
+
+def hci_swiss_cheese_leak(rates):
+    """Xác suất lỗi lọt qua mọi lớp bảo vệ độc lập: tích các tỉ lệ lọt của từng lớp."""
+    p = 1.0
+    for r in rates:
+        p *= r
+    return p
+
+
+# ───────── Đồ hoạ máy tính (GFX): biến đổi thuần nhất, chiếu phối cảnh, raster hoá, bộ đệm độ sâu, chiếu sáng, mipmap, sRGB, dò tia ─────────
+def gfx_frame_budget_ms(fps):
+    """Ngân sách thời gian một khung hình (mi li giây) ở tốc độ `fps` khung mỗi giây."""
+    return 1000.0 / fps
+
+
+def gfx_pixels_per_sec(w, h, fps):
+    """Tổng số điểm ảnh cần xuất mỗi giây ở độ phân giải w × h và tốc độ `fps`."""
+    return w * h * fps
+
+
+def gfx_rot2d(deg):
+    """Ma trận quay 2D thuần nhất 3 × 3 quanh gốc một góc `deg` độ."""
+    import numpy as np
+    rad = math.radians(deg)
+    c, s = round(math.cos(rad), 12), round(math.sin(rad), 12)
+    return np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
+
+
+def gfx_trans2d(tx, ty):
+    """Ma trận tịnh tiến 2D thuần nhất 3 × 3 theo (tx, ty)."""
+    import numpy as np
+    return np.array([[1.0, 0.0, float(tx)], [0.0, 1.0, float(ty)], [0.0, 0.0, 1.0]])
+
+
+def gfx_apply2d(M, x, y):
+    """Áp ma trận 3 × 3 cho điểm 2D (x, y, 1) và trả (x′, y′)."""
+    import numpy as np
+    v = M @ np.array([float(x), float(y), 1.0])
+    return round(float(v[0]), 6), round(float(v[1]), 6)
+
+
+def gfx_persp_project(x, y, z, f=1.0):
+    """Chiếu phối cảnh điểm (x, y, z) lên mặt phẳng ảnh ở khoảng cách f: (f·x/z, f·y/z)."""
+    return f * x / z, f * y / z
+
+
+def gfx_persp_interp(z0, z1, u0, u1, t):
+    """Nội suy thuộc tính u tại vị trí màn hình t ∈ [0, 1]: trả (nội suy có hiệu chỉnh phối cảnh theo 1/z, nội suy tuyến tính màn hình)."""
+    inv_z = (1 - t) * (1 / z0) + t * (1 / z1)
+    u_over_z = (1 - t) * (u0 / z0) + t * (u1 / z1)
+    return u_over_z / inv_z, (1 - t) * u0 + t * u1
+
+
+def gfx_ndc_to_pixel(x_ndc, width):
+    """Đổi toạ độ thiết bị chuẩn hoá x ∈ [−1, 1] sang toạ độ màn hình [0, width]."""
+    return (x_ndc + 1) / 2 * width
+
+
+def gfx_barycentric(p, a, b, c):
+    """Toạ độ trọng tâm (α, β, γ) của điểm p đối với tam giác (a, b, c)."""
+    import numpy as np
+    M = np.array([[a[0], b[0], c[0]], [a[1], b[1], c[1]], [1.0, 1.0, 1.0]], dtype=float)
+    w = np.linalg.solve(M, np.array([float(p[0]), float(p[1]), 1.0]))
+    return tuple(round(float(x), 6) for x in w)
+
+
+def gfx_depth_norm(z, n, f):
+    """Giá trị độ sâu chuẩn hoá d ∈ [0, 1] theo công thức chiếu phối cảnh: d = f(z − n) / (z(f − n))."""
+    return f * (z - n) / (z * (f - n))
+
+
+def gfx_depth_step(z, n, f, bits=24):
+    """Khoảng cách độ sâu nhỏ nhất phân biệt được ở khoảng cách z với bộ đệm `bits` bit: Δz ≈ z²(f − n) / (f · n · 2^bits)."""
+    return z * z * (f - n) / (f * n * (2 ** bits))
+
+
+def gfx_lambert(n_vec, l_vec):
+    """Cường độ khuếch tán Lambert: max(0, n · l) với hai vector đơn vị."""
+    dot = sum(a * b for a, b in zip(n_vec, l_vec))
+    return max(0.0, dot)
+
+
+def gfx_blinn_spec(n_dot_h, s):
+    """Phần bóng sáng Blinn–Phong: max(0, n · h)^s."""
+    return max(0.0, n_dot_h) ** s
+
+
+def gfx_bilinear(v00, v10, v01, v11, u, v):
+    """Nội suy song tuyến tại (u, v) ∈ [0, 1]² giữa bốn giá trị góc ô."""
+    return (1 - u) * (1 - v) * v00 + u * (1 - v) * v10 + (1 - u) * v * v01 + u * v * v11
+
+
+def gfx_mipmap_stats(size):
+    """Cho kết cấu vuông `size × size` (lũy thừa của 2): trả (số mức mipmap, tổng số điểm kết cấu mọi mức, tỉ lệ tăng thêm so với mức gốc)."""
+    levels = int(math.log2(size)) + 1
+    total = sum((size >> k) ** 2 for k in range(levels))
+    base = size * size
+    return levels, total, (total - base) / base
+
+
+def gfx_srgb_to_linear(c):
+    """Đổi giá trị sRGB c ∈ [0, 1] sang ánh sáng tuyến tính theo chuẩn IEC 61966-2-1."""
+    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+
+def gfx_linear_to_srgb(x):
+    """Đổi ánh sáng tuyến tính x ∈ [0, 1] sang giá trị sRGB theo chuẩn IEC 61966-2-1."""
+    return 12.92 * x if x <= 0.0031308 else 1.055 * (x ** (1 / 2.4)) - 0.055
+
+
+def gfx_srgb_blend_byte(b1, b2, alpha=0.5):
+    """Trộn hai mức xám 8 bit (0..255) với tỉ lệ alpha: trả (trộn thẳng trên byte, trộn đúng trong không gian tuyến tính rồi mã hoá lại)."""
+    naive = round((1 - alpha) * b1 + alpha * b2)
+    l1, l2 = gfx_srgb_to_linear(b1 / 255.0), gfx_srgb_to_linear(b2 / 255.0)
+    lin_mix = (1 - alpha) * l1 + alpha * l2
+    correct = round(gfx_linear_to_srgb(lin_mix) * 255.0)
+    return naive, correct
+
+
+def gfx_ray_sphere(origin, direction, center, radius):
+    """Giao của tia O + t·D (với D đơn vị) và mặt cầu tâm C bán kính r. Trả (biệt thức Δ, danh sách nghiệm thực t tăng dần)."""
+    oc = [o - c for o, c in zip(origin, center)]
+    a = sum(d * d for d in direction)
+    b = 2.0 * sum(o * d for o, d in zip(oc, direction))
+    c_val = sum(o * o for o in oc) - radius * radius
+    disc = b * b - 4 * a * c_val
+    if disc < 0:
+        return disc, []
+    sq = math.sqrt(disc)
+    t1, t2 = (-b - sq) / (2 * a), (-b + sq) / (2 * a)
+    return disc, sorted([round(t1, 6), round(t2, 6)])
+
+
+def gfx_schlick_fresnel(cos_theta, F0=0.04):
+    """Xấp xỉ Fresnel của Schlick (1994): F(θ) = F₀ + (1 − F₀)(1 − cos θ)^5."""
+    return F0 + (1 - F0) * ((1 - cos_theta) ** 5)
+
+
+def gfx_overdraw_fragments(w, h, overdraw):
+    """Số mảnh phải tô khi khung hình w × h có độ tô đè trung bình `overdraw` lần."""
+    return round(w * h * overdraw)

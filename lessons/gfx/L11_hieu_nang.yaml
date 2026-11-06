@@ -1,0 +1,262 @@
+id: L11
+course: GFX
+series: "GFX · Đồ hoạ máy tính"
+title: "Bài 11 — Hiệu năng thời gian thực: tô đè, số lệnh vẽ và mức chi tiết"
+version: 2
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/gfx.yaml L11; audit/gfx/verify_gfx.py L11; audit/gfx/sources_L11.md; [AMHH18] T. Akenine-Möller, E. Haines, N. Hoffman, Real-Time Rendering, bản 4, CRC Press, 2018, chương 18–19 (tô đè overdraw, kiểm tra độ sâu sớm Early-Z, gom lệnh vẽ, mức chi tiết LOD); GFX bài 0 (ngân sách khung hình 16,67 ms và số điểm ảnh); GFX bài 5 (bộ đệm độ sâu); PAR (mô hình mái nhà hiệu năng)"
+assumes: [arith, cdot, frac, approx, geq, sub, sub2, in, power, ltgt, implies, max_fn, det]
+# Quy ước: màn hình W x H có N_p = W * H điểm ảnh; hệ số tô đè k là số mảnh trung bình được tô bóng trên mỗi điểm ảnh.
+#   Tên LOD, Early-Z, CPU, GPU, shader chỉ hiện trên màn hình; lời đọc nói “mức chi tiết”, “kiểm tra độ sâu sớm”, “bộ xử lý trung tâm”, “bộ xử lý đồ hoạ”.
+objectives:
+  - "Tính tổng số mảnh phải tô bóng khi có hệ số tô đè và lượng công việc tiết kiệm được nhờ sắp xếp từ gần đến xa kèm kiểm tra độ sâu sớm"
+  - "Giải thích ba kỹ thuật giảm tải ở ba tầng: kiểm tra độ sâu sớm (giảm mảnh), gom lệnh vẽ (giảm chi phí điều phối), và mức chi tiết (giảm đỉnh ở xa)"
+  - "Phân tích vì sao tối ưu nhầm tầng không phải điểm nghẽn không làm giảm thời gian dựng khung hình"
+  - "Nêu đúng ngoại lệ không thể sắp xếp từ gần ra xa (vật bán trong suốt) hoặc làm mất kiểm tra độ sâu sớm"
+asr_reviewed:
+  - sentence: "Tổng số lần chạy chương trình tô bóng mảnh bằng k nhân W nhân H."
+    reason: "ký hiệu W đọc theo tên chữ cái, ASR nghe thành về đúc — NOT_VERIFIED bằng tai người"
+  - sentence: "Bước một, ta định lượng số mảnh phải tô bóng trên màn hình kích thước W nhân H với hệ số tô đè trung bình k."
+    reason: "ký hiệu W đọc theo tên chữ cái, ASR nghe thành về đúc — NOT_VERIFIED bằng tai người"
+  - sentence: "Do sắp xếp vật đục từ gần ra xa kết hợp kiểm tra độ sâu sớm kéo k về sát 1, số mảnh tiết kiệm được bằng k trừ 1 nhân W nhân H."
+    reason: "ký hiệu W đọc theo tên chữ cái, ASR nghe thành vê đút — NOT_VERIFIED bằng tai người"
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Màn hình chỉ có 2 triệu điểm ảnh, sao bộ xử lý phải tô bóng hơn 6 triệu mảnh?"
+    checks:
+      - "alg.gfx_overdraw_fragments(1920, 1080, 3) == 6220800"
+      - "alg.gfx_overdraw_fragments(1920, 1080, 1) == 2073600"
+      - "6220800 - 2073600 == 4147200"
+    steps:
+      - show: |
+          <p>Màn hình 1920 × 1080 có đúng 2&nbsp;073&nbsp;600 điểm ảnh. Nhưng khi vẽ từ xa đến gần: bầu trời trước, núi đè lên trời, nhà đè lên núi, nhân vật đè lên nhà — trung bình mỗi điểm ảnh bị <b>tô đè $k = 3$ lần</b>, bắt phần cứng chạy chương trình tô bóng vật lý đắt đỏ tới <b>6&nbsp;220&nbsp;800 lần</b> mỗi khung hình!</p>
+          <div class="box key">Hôm nay: làm sao đảo thứ tự vẽ vật đục <b>từ gần ra xa</b> kết hợp <b>kiểm tra độ sâu sớm</b> để kéo số mảnh tô bóng về gần <b>2&nbsp;073&nbsp;600</b>? Và làm sao phối hợp <b>gom lệnh vẽ</b> với <b>mức chi tiết (LOD)</b> để giữ vững $60$ khung hình mỗi giây?</div>
+        focus: [1, 1, 2, 2]
+        say: "Chào bạn, màn hình 1920 nhân 1080 có đúng 2 triệu 073 nghìn 600 điểm ảnh. Nhưng nếu vẽ cảnh từ xa đến gần, mỗi điểm ảnh bị tô đè trung bình 3 lần, bắt phần cứng chạy tô bóng tới 6 triệu 220 nghìn 800 lần. Hôm nay ta học cách sắp xếp vật đục từ gần ra xa kết hợp kiểm tra độ sâu sớm để kéo số mảnh phải tô về sát 2 triệu 073 nghìn 600. Đồng thời ta kết hợp gom lệnh vẽ và giảm mức chi tiết theo khoảng cách để chẩn đoán đúng điểm nghẽn thời gian thực."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: ngân sách 16,67 ms bài 0, bộ đệm độ sâu bài 5 và điểm nghẽn đường ống"
+    checks:
+      - "round(alg.gfx_frame_budget_ms(60), 2) == 16.67"
+      - "1920 * 1080 == 2073600"
+    steps:
+      - show: |
+          <p><b>① Ngân sách khung hình và số điểm ảnh</b> (bài 0): ở tốc độ $60$ khung hình/giây, toàn bộ một khung hình 1920 × 1080 ($N_p = 2\,073\,600$ điểm ảnh) phải hoàn tất trong đúng $\frac{1000}{60} \approx 16{,}67\text{ ms}$.</p>
+          <p><b>② Bộ đệm độ sâu</b> (bài 5): lưu độ sâu $z_{\text{bộ đệm}}$ gần nhất tại mỗi điểm ảnh; mảnh mới có $z_{\text{mới}} > z_{\text{bộ đệm}}$ sẽ bị loại bỏ vì bị che khuất.</p>
+        focus: [1, 1, 2]
+        say: "Trước hết ta ôn lại ba kiến thức nền tảng từ đầu khoá học. Thứ nhất, ở bài 0, để đạt 60 khung hình mỗi giây trên màn hình 2 triệu 073 nghìn 600 điểm ảnh, mỗi khung hình chỉ có 16 phẩy 67 phần nghìn giây. Thứ hai, ở bài 5, bộ đệm độ sâu lưu khoảng cách gần nhất tại mỗi điểm ảnh để loại bỏ các mảnh nằm khuất phía sau."
+      - show: |
+          <p><b>③ Định luật điểm nghẽn của đường ống song song</b> (khoá Tính toán song song, phần hiệu năng bộ xử lý đồ hoạ): thời gian khung hình bị quyết định bởi <b>công đoạn chậm nhất</b> trong ba công đoạn chạy nối tiếp:</p>
+          $$T_{\text{khung}} = \max\!\big(T_{\text{điều phối lệnh vẽ}},\; T_{\text{xử lý đỉnh}},\; T_{\text{tô bóng mảnh và băng thông}}\big)$$
+        focus: [1, 2]
+        say: "Thứ ba, theo nguyên lý đường ống ở khoá Tính toán song song, thời gian dựng khung hình bị quyết định bởi công đoạn chậm nhất trong ba tầng. Nếu bạn tối ưu nhầm một công đoạn đang rảnh rỗi thì thời gian khung hình sẽ không giảm đi một chút nào."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: hệ số tô đè, kiểm tra độ sâu sớm, lệnh vẽ và mức chi tiết"
+    checks:
+      - "alg.gfx_overdraw_fragments(1920, 1080, 3) / (1920 * 1080) == 3.0"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ký hiệu / thuật ngữ</th><th>nghĩa</th></tr>
+          <tr><td>$N_p = W \cdot H$</td><td>tổng số điểm ảnh trên màn hình (với 1920 × 1080 thì $N_p =$ 2&nbsp;073&nbsp;600)</td></tr>
+          <tr><td><b>hệ số tô đè</b> $k \ge 1$</td><td>số mảnh trung bình được đưa vào tô bóng trên mỗi điểm ảnh: $N_{\text{mảnh}} = k \cdot N_p$</td></tr>
+          <tr><td><b>kiểm tra độ sâu sớm (Early-Z)</b></td><td>phần cứng so sánh bộ đệm độ sâu <b>trước khi</b> chạy chương trình tô bóng mảnh để loại bỏ sớm mảnh bị che</td></tr>
+          <tr><td><b>lệnh vẽ</b> &amp; <b>mức chi tiết (LOD)</b></td><td>một lệnh từ bộ xử lý trung tâm yêu cầu vẽ một lưới; và kỹ thuật thay lưới nhiều tam giác bằng lưới ít tam giác khi vật ở xa</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bảng giải mã bốn thuật ngữ cốt lõi của bài học. Ký hiệu N p bằng tích chiều rộng nhân chiều cao là tổng số điểm ảnh trên màn hình. Hệ số tô đè k là số lần trung bình một điểm ảnh bị các mảnh tam giác tô chồng lên nhau, làm tổng số mảnh phải tính tăng gấp k lần. Kiểm tra độ sâu sớm là cơ chế phần cứng đối chiếu bộ đệm độ sâu ngay trước khi chạy chương trình tô bóng mảnh. Cuối cùng là số lệnh vẽ từ bộ xử lý trung tâm và kỹ thuật chuyển đổi mức chi tiết hình học theo khoảng cách."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hình cơ chế: vẽ từ xa tới gần (tô đè 3 lần) so với vẽ từ gần ra xa"
+    checks:
+      - "alg.gfx_overdraw_fragments(1920, 1080, 3) == 6220800"
+      - "alg.gfx_overdraw_fragments(1920, 1080, 1) == 2073600"
+    steps:
+      - show: |
+          <div><svg width="1440" height="430" viewBox="0 0 1440 430">
+          <rect x="60" y="55" width="610" height="330" fill="#fff7ed" stroke="#eb6834" stroke-width="3" rx="10"/>
+          <rect x="760" y="55" width="620" height="330" fill="#f0fdf4" stroke="#059669" stroke-width="3" rx="10"/>
+          <g font-size="21" fill="#1f2937">
+          <text x="365" y="95" text-anchor="middle" font-weight="bold" fill="#eb6834">① Vẽ từ XA đến GẦN (tô đè k = 3)</text>
+          <text x="95" y="140">Bước 1: vẽ Núi (z = 80) → qua độ sâu → TÔ BÓNG lần 1 (lãng phí!)</text>
+          <text x="95" y="185">Bước 2: vẽ Nhà (z = 30) → nhỏ hơn 80 → TÔ BÓNG đè lần 2 (lãng phí!)</text>
+          <text x="95" y="230">Bước 3: vẽ Xe (z = 10) → nhỏ hơn 30 → TÔ BÓNG đè lần 3 (giữ lại)</text>
+          <text x="365" y="295" text-anchor="middle" font-weight="bold" fill="#eb6834">Tổng số mảnh phải tô bóng = 3 × 2 073 600 = 6 220 800 mảnh</text>
+          <text x="365" y="335" text-anchor="middle">2/3 công sức tính chiếu sáng vật lý bị vứt bỏ!</text>
+          <text x="1070" y="95" text-anchor="middle" font-weight="bold" fill="#059669">② Vẽ từ GẦN ra XA + Kiểm tra độ sâu sớm (k → 1)</text>
+          <text x="790" y="140">Bước 1: vẽ Xe (z = 10) trước → TÔ BÓNG 1 lần duy nhất, ghi z = 10</text>
+          <text x="790" y="185">Bước 2: xét Nhà (z = 30 &gt; 10) → LOẠI SỚM, không chạy tô bóng!</text>
+          <text x="790" y="230">Bước 3: xét Núi (z = 80 &gt; 10) → LOẠI SỚM, không chạy tô bóng!</text>
+          <text x="1070" y="295" text-anchor="middle" font-weight="bold" fill="#059669">Tổng số mảnh phải tô bóng ≈ 1 × 2 073 600 = 2 073 600 mảnh</text>
+          <text x="1070" y="335" text-anchor="middle">Tiết kiệm hơn 4,14 triệu phép tô bóng mỗi khung hình!</text></g>
+          </svg></div>
+        focus: [1, 1, 1, 1, 1]
+        say: "Sơ đồ bên trái cho thấy thảm hoạ hiệu năng khi vẽ các vật đục theo thứ tự từ xa đến gần tại cùng một điểm ảnh. Đầu tiên phần cứng vẽ quả núi ở độ sâu 80, chạy hết công thức tô bóng rồi ghi vào bộ đệm. Tiếp theo ngôi nhà ở độ sâu 30 rồi chiếc xe ở độ sâu 10 lần lượt vượt qua độ sâu và tô đè lên, khiến 6 triệu 220 nghìn 800 mảnh bị tô bóng. Sơ đồ bên phải đảo ngược thứ tự, vẽ chiếc xe gần nhất ở độ sâu 10 trước tiên để ghi mốc z bằng 10. Khi xét ngôi nhà ở độ sâu 30 và núi ở độ sâu 80, bộ kiểm tra độ sâu sớm loại bỏ chúng ngay, kéo số mảnh tô bóng về sát 2 triệu 073 nghìn 600."
+
+  # ───────────────────────── 5. SUY RA ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Công thức chi phí tô đè, chi phí lệnh vẽ và quy tắc chọn mức chi tiết"
+    checks:
+      - "alg.gfx_overdraw_fragments(1920, 1080, 3) == 6220800"
+      - "alg.gfx_overdraw_fragments(1920, 1080, 1) == 2073600"
+      - "50000 // (4 ** 2) == 3125"
+    steps:
+      - show: |
+          <p><b>Bước 1 — định lượng số mảnh tô bóng theo hệ số tô đè $k$:</b></p>
+          $$N_{\text{mảnh}} = k \cdot W \cdot H, \qquad \Delta N_{\text{tiết kiệm}} = (k - 1) \cdot W \cdot H$$
+          <p class="note">Khi sắp xếp vật đục từ gần đến xa (hoặc chạy một lượt chỉ ghi độ sâu trước), hệ số tô đè hiệu dụng giảm từ $k$ về xấp xỉ $1$, cắt bỏ $(k - 1)/k$ tổng chi phí tô bóng mảnh!</p>
+        focus: [1, 2, 3]
+        say: "Bước một, ta định lượng số mảnh phải tô bóng trên màn hình kích thước W nhân H với hệ số tô đè trung bình k. Tổng số lần chạy chương trình tô bóng mảnh bằng k nhân W nhân H. Do sắp xếp vật đục từ gần ra xa kết hợp kiểm tra độ sâu sớm kéo k về sát 1, số mảnh tiết kiệm được bằng k trừ 1 nhân W nhân H."
+      - show: |
+          <p><b>Bước 2 — giảm chi phí điều phối lệnh vẽ trên bộ xử lý trung tâm:</b> với $M$ lệnh vẽ rời rạc, mỗi lệnh tốn chi phí thiết lập trạng thái $c_{\text{lệnh}}$:</p>
+          $$T_{\text{điều phối}} = M \cdot c_{\text{lệnh}} \implies \text{gom } M \text{ vật cùng vật liệu thành } 1 \text{ lệnh vẽ lặp để giảm mạnh } M$$
+        focus: [1, 2]
+        say: "Bước hai, ta xét chi phí điều phối ở phía bộ xử lý trung tâm khi gửi M lệnh vẽ rời rạc sang bộ xử lý đồ hoạ. Vì mỗi lệnh vẽ đều tốn chi phí thiết lập trạng thái cố định, ta phải gộp các lưới tĩnh cùng vật liệu hoặc dùng lệnh vẽ lặp nhiều bản thể để giảm số lệnh M."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — giảm số tam giác theo khoảng cách bằng mức chi tiết (LOD):</b> diện tích hình chiếu của vật tỉ lệ nghịch với bình phương khoảng cách $z^2$ (bài 3):</p>
+          $$A_{\text{màn hình}}(z) = \frac{A_1}{z^2} \implies \text{khi khoảng cách tăng gấp } 2 \text{ lần, diện tích điểm ảnh giảm } 4 \text{ lần}$$
+          <p class="note">Giữ nguyên lưới $50\,000$ tam giác khi vật ở xa chỉ phủ $100$ điểm ảnh sẽ tạo ra hàng trăm tam giác nhỏ hơn một điểm ảnh, làm nghẽn bộ xử lý đỉnh và bộ raster hoá!</p>
+        focus: [1, 2, 3]
+        say: "Bước ba, ta suy ra quy tắc giảm mức chi tiết hình học theo khoảng cách dựa trên phép chiếu phối cảnh ở bài 3. Vì kích thước dài giảm theo 1 phần z nên diện tích vật thể trên màn hình giảm theo bình phương khoảng cách 1 phần z bình phương. Khi vật lùi xa gấp đôi, diện tích điểm ảnh giảm 4 lần, nên ta phải chuyển sang các mức lưới ít tam giác hơn tương ứng để giải phóng bộ xử lý đỉnh."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Tính tay: tiết kiệm 4,14 triệu mảnh tô bóng và bảng chọn mức chi tiết"
+    checks:
+      - "alg.gfx_overdraw_fragments(1920, 1080, 3) == 6220800"
+      - "alg.gfx_overdraw_fragments(1920, 1080, 1) == 2073600"
+      - "6220800 - 2073600 == 4147200"
+      - "round(4147200 / 6220800, 4) == 0.6667"
+    steps:
+      - show: |
+          <p><b>Phép tính 1 — số mảnh tô bóng trên màn hình 1920 × 1080 khi hệ số tô đè $k = 3$:</b></p>
+          $$N_p = 1920 \cdot 1080 = \hlb{2\,073\,600 \text{ điểm ảnh}}$$
+          $$N_{\text{mảnh}}(k = 3) = 3 \cdot 2\,073\,600 = \hlo{6\,220\,800 \text{ mảnh phải tô bóng}}$$
+        focus: [1, 2, 3]
+        say: "Ta thực hiện phép tính thứ nhất trên màn hình độ phân giải 1920 nhân 1080. Nhân chiều rộng với chiều cao, ta có tổng số điểm ảnh N p bằng 2 triệu 073 nghìn 600. Khi cảnh chưa sắp xếp có hệ số tô đè trung bình k bằng 3, tổng số mảnh phải chạy chương trình tô bóng vọt lên gấp 3 lần là 6 triệu 220 nghìn 800 mảnh."
+      - clear: true
+        show: |
+          <p><b>Phép tính 2 — hiệu quả khi sắp xếp vật đục từ gần đến xa kèm kiểm tra độ sâu sớm ($k \to 1$):</b></p>
+          $$N_{\text{mảnh}}(k = 1) = 1 \cdot 2\,073\,600 = \hlg{2\,073\,600 \text{ mảnh}}$$
+          $$\Delta N_{\text{tiết kiệm}} = 6\,220\,800 - 2\,073\,600 = \hlg{4\,147\,200 \text{ mảnh}} \quad \left(\text{giảm } \frac{2}{3} \approx 66{,}7\%\right)$$
+        focus: [1, 2, 3]
+        say: "Phép tính thứ hai đánh giá lượng công việc cắt giảm được khi sắp xếp các vật đục từ gần ra xa và bật kiểm tra độ sâu sớm. Khi đó mỗi điểm ảnh chỉ tô bóng đúng mảnh gần nhất nên số mảnh giảm về 2 triệu 073 nghìn 600. Lấy 6 triệu 220 nghìn 800 trừ đi 2 triệu 073 nghìn 600, ta tiết kiệm được 4 triệu 147 nghìn 200 lần tô bóng, tức giảm đúng hai phần ba khối lượng công việc."
+      - clear: true
+        show: |
+          <p><b>Phép tính 3 — bảng đối chiếu ba kỹ thuật tối ưu trong cùng một khung hình:</b></p>
+          <table class="t"><tr><th>kỹ thuật tối ưu</th><th>trước khi áp dụng</th><th>sau khi áp dụng</th><th>tầng phần cứng được giải phóng</th></tr>
+          <tr><td>Sắp xếp gần → xa + kiểm tra độ sâu sớm</td><td>6&nbsp;220&nbsp;800 mảnh ($k = 3$)</td><td>2&nbsp;073&nbsp;600 mảnh ($k = 1$)</td><td>Bộ tô bóng mảnh &amp; băng thông kết cấu</td></tr>
+          <tr><td>Gom lệnh vẽ lặp cho 500 cây cối giống nhau</td><td>$500$ lệnh vẽ rời rạc</td><td>$1$ lệnh vẽ lặp duy nhất</td><td>Bộ xử lý trung tâm (điều phối lệnh)</td></tr>
+          <tr><td>Bậc mức chi tiết (LOD 0 → LOD 2 ở xa $4\times$)</td><td>50&nbsp;000 tam giác/vật</td><td>3&nbsp;125 tam giác/vật (giảm $16$ lần)</td><td>Bộ xử lý đỉnh &amp; bộ raster hoá tam giác</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bảng tổng hợp đối chiếu ba kỹ thuật tối ưu tương ứng với ba tầng phần cứng khác nhau. Sắp xếp từ gần ra xa kết hợp kiểm tra độ sâu sớm hạ số mảnh từ 6 triệu 220 nghìn 800 xuống 2 triệu 073 nghìn 600, giải phóng bộ tô bóng mảnh. Gom 500 cây vào 1 lệnh vẽ lặp giải phóng bộ xử lý trung tâm, còn hạ mức chi tiết từ 50 nghìn xuống 3 nghìn 125 tam giác giải phóng bộ xử lý đỉnh."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: tính tốc độ mảnh theo giây ở 60 khung hình/giây và kiểm tra điểm nghẽn"
+    checks:
+      - "6220800 * 60 == 373248000"
+      - "2073600 * 60 == 124416000"
+      - "max(22.0, 6.0, 8.0) == 22.0 and max(22.0, 6.0, 2.7) == 22.0"
+    steps:
+      - show: |
+          <p><b>Đường khác 1 — nhân với tốc độ $60$ khung hình/giây (kết nối bài 0):</b></p>
+          $$\text{Khi } k = 3:\;\; 6\,220\,800 \cdot 60 = 373\,248\,000 \approx \hlo{373{,}2 \text{ triệu mảnh/giây}}$$
+          $$\text{Khi } k = 1:\;\; 2\,073\,600 \cdot 60 = 124\,416\,000 \approx \hlg{124{,}4 \text{ triệu mảnh/giây}} \;\; (\text{giảm } 3 \text{ lần!})$$
+        focus: [1, 2, 3]
+        say: "Ta kiểm tra lại bằng đường khác thứ nhất là nhân với tốc độ 60 khung hình mỗi giây như bài 0. Vì mỗi giây có 60 khung hình nên với hệ số tô đè bằng 3, phần cứng phải tô tới hơn 373 triệu mảnh mỗi giây. Khi kéo hệ số tô đè về 1, lưu lượng giảm đúng 3 lần xuống còn 124 phẩy 4 triệu mảnh mỗi giây."
+      - clear: true
+        show: |
+          <p><b>Đường khác 2 — kiểm chứng công thức điểm nghẽn $\max$:</b> bộ xử lý trung tâm $22\text{ ms}$, xử lý đỉnh $6\text{ ms}$, tô bóng mảnh $8\text{ ms}$:</p>
+          $$T_{\text{khung}} = \max(22,\; 6,\; 8) = 22\text{ ms}$$
+          <p class="note">Dù giảm tô bóng từ $8\text{ ms}$ xuống $2{,}7\text{ ms}$, ta có $\max(22,\; 6,\; 2{,}7) = \hlo{22\text{ ms}}$ (khung hình không đổi)!</p>
+        focus: [1, 1, 2]
+        say: "Đường kiểm tra thứ hai minh hoạ định luật điểm nghẽn bằng con số cụ thể. Giả sử bộ xử lý trung tâm đang mất 22 phần nghìn giây để gửi lệnh vẽ, trong khi xử lý đỉnh chỉ mất 6 và tô bóng mảnh chỉ mất 8 phần nghìn giây. Vì hàm cực đại bị khoá ở 22, nên dù giảm tô bóng từ 8 xuống 2 phẩy 7 thì khung hình vẫn mất đúng 22 phần nghìn giây."
+
+  # ───────────────────────── 8. LỖI HAY GẶP ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "Những lỗi hay gặp khi tối ưu hiệu năng thời gian thực"
+    checks:
+      - "max(20.0, 5.0, 4.0) == 20.0"
+      - "alg.gfx_overdraw_fragments(1920, 1080, 3) == 6220800"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Cắt giảm công thức chiếu sáng mảnh trong khi khung hình đang bị nghẽn ở số lệnh vẽ hoặc băng thông bộ nhớ <b class="red">(hình xấu đi nhưng tốc độ không tăng!)</b>
+          <br><span class="note">Luôn phải đo thời gian từng công đoạn trước khi tối ưu: nếu bộ xử lý đồ hoạ đang ngồi chờ bộ xử lý trung tâm gửi từng lệnh vẽ nhỏ lẻ, việc xoá bớt phép tính ánh sáng không làm tăng thêm khung hình nào.</span></div>
+        focus: [1, 1]
+        say: "Lỗi thứ nhất là cắt bỏ công thức chiếu sáng làm hình xấu đi, trong khi khung hình thực chất đang bị nghẽn ở số lệnh vẽ hoặc băng thông bộ nhớ. Nếu không đo đạc để tìm đúng công đoạn giữ giá trị cực đại, mọi công sức tối ưu ở công đoạn khác đều không làm giảm thời gian khung hình."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Sắp xếp cả các vật <b>bán trong suốt</b> (kính màu, khói, lửa) từ gần ra xa <b class="red">(sai thứ tự pha trộn màu!)</b>
+          <br><span class="note">Vật đục che kín hoàn toàn vật sau nên vẽ từ gần ra xa để bật kiểm tra độ sâu sớm. Ngược lại, vật bán trong suốt không che kín mà phải cộng trộn với nền phía sau, nên bắt buộc vẽ sau tất cả vật đục và sắp xếp <b>từ xa đến gần</b>.</span></div>
+        focus: [1, 1]
+        say: "Lỗi thứ hai là áp dụng máy móc quy tắc vẽ từ gần ra xa cho cả những vật bán trong suốt như kính màu, mặt nước hay đám khói. Vật bán trong suốt phải lấy màu nền phía sau để pha trộn, nên bắt buộc phải vẽ sau mọi vật đục và sắp xếp theo thứ tự từ xa đến gần."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Dùng lệnh tự huỷ mảnh hoặc tự ghi đè độ sâu bên trong chương trình tô bóng mảnh <b class="red">(vô hiệu hoá kiểm tra độ sâu sớm!)</b>
+          <br><span class="note">Khi chương trình tô bóng có lệnh cắt thủng điểm ảnh (như vẽ tán lá cây rỗng) hoặc tự sửa giá trị $z$, phần cứng không thể biết mảnh đó có ghi độ sâu hay không trước khi chạy xong chương trình $\implies$ cơ chế kiểm tra độ sâu sớm bị tắt cho vật thể đó!</span></div>
+        focus: [1, 1]
+        say: "Lỗi thứ ba của người đã đi làm là lạm dụng lệnh tự huỷ mảnh hoặc tự sửa giá trị độ sâu ngay bên trong chương trình tô bóng mảnh. Khi đó phần cứng phải chạy xong chương trình tô bóng mới biết mảnh này bị cắt hay được giữ lại, khiến cơ chế kiểm tra độ sâu sớm bị vô hiệu hoá."
+
+  # ───────────────────────── 9. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: tính số mảnh tô đè và chẩn đoán điểm nghẽn"
+    checks:
+      - "alg.gfx_overdraw_fragments(2560, 1440, 2.5) == 9216000"
+      - "alg.gfx_overdraw_fragments(2560, 1440, 1.0) == 3686400"
+      - "9216000 - 3686400 == 5529600"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề bài</th></tr>
+          <tr><td>1</td><td>Màn hình 2560 × 1440 có 3&nbsp;686&nbsp;400 điểm ảnh. Nếu hệ số tô đè trung bình là $k = 2{,}5$, có bao nhiêu mảnh phải tô bóng trong một khung hình? Nếu kéo $k$ về $1{,}0$ thì tiết kiệm được bao nhiêu mảnh?</td></tr>
+          <tr><td>2</td><td>Trong một cảnh có (A) những bức tường đá đục và (B) những tấm kính cửa sổ bán trong suốt, quy trình chuẩn phải vẽ nhóm nào trước và sắp xếp thứ tự mỗi nhóm ra sao?</td></tr>
+          <tr><td>3</td><td>Khi đo hiệu năng một cảnh rừng cây, bạn thấy bộ xử lý trung tâm tốn $25\text{ ms}$ để gửi $8\,000$ lệnh vẽ, còn bộ xử lý đồ hoạ chỉ tốn $9\text{ ms}$. Bạn nên áp dụng kỹ thuật nào trước tiên?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", 0]
+        say: "Bây giờ đến lượt bạn tự giải ba câu hỏi. Câu một, màn hình 2560 nhân 1440 có 3 triệu 686 nghìn 400 điểm ảnh; với hệ số tô đè 2 phẩy 5 thì phải tô bao nhiêu mảnh và kéo về 1 tiết kiệm được bao nhiêu? Câu hai, giữa tường đá đục và kính cửa sổ bán trong suốt, nhóm nào vẽ trước và sắp xếp theo chiều nào? Câu ba, nếu bộ xử lý trung tâm mất 25 phần nghìn giây vì 8 nghìn lệnh vẽ còn bộ xử lý đồ hoạ chỉ mất 9 phần nghìn giây thì cần dùng kỹ thuật nào? Hãy dừng video và tính thử."
+        pause: 20
+      - clear: true
+        show: |
+          <p><b>Đáp án câu 1.</b> Với $k = 2{,}5$: $N_{\text{mảnh}} = 2{,}5 \cdot 3\,686\,400 = \hlo{9\,216\,000 \text{ mảnh}}$. Khi kéo về $k = 1{,}0$: còn $3\,686\,400$ mảnh $\implies$ tiết kiệm được $9\,216\,000 - 3\,686\,400 = \hlg{5\,529\,600 \text{ mảnh}}$ mỗi khung hình.</p>
+          <p><b>Đáp án câu 2.</b> Vẽ <b>nhóm (A) tường đá đục trước</b>, sắp xếp <b>từ gần ra xa</b> (bật đọc và ghi độ sâu) để tận dụng kiểm tra độ sâu sớm. Sau đó mới vẽ <b>nhóm (B) kính bán trong suốt</b>, sắp xếp <b>từ xa đến gần</b> (bật kiểm tra độ sâu nhưng tắt ghi độ sâu) để pha trộn màu đúng thứ tự.</p>
+        focus: [1, 2, 2]
+        say: "Đáp án câu một, nhân 2 phẩy 5 với 3 triệu 686 nghìn 400 ra 9 triệu 216 nghìn mảnh; khi kéo hệ số tô đè về 1 ta tiết kiệm được 5 triệu 529 nghìn 600 mảnh. Đáp án câu hai, ta phải vẽ nhóm tường đá đục trước theo thứ tự từ gần ra xa để tận dụng kiểm tra độ sâu sớm. Sau đó mới vẽ nhóm kính bán trong suốt theo thứ tự từ xa đến gần để pha trộn màu đúng."
+      - show: |
+          <table class="t"><tr><th>chẩn đoán (câu 3)</th><th>hành động đúng</th></tr>
+          <tr><td>Điểm nghẽn nằm ở <b>bộ xử lý trung tâm</b> ($25\text{ ms} > 16{,}67\text{ ms}$) do $8\,000$ lệnh vẽ</td><td><b>Gom lệnh vẽ tĩnh</b> và dùng <b>lệnh vẽ lặp nhiều bản thể</b> cho các cây cùng loại để hạ số lệnh vẽ từ $8\,000$ xuống vài chục lệnh</td></tr>
+          <tr><td>Sai lầm cần tránh</td><td>Không giảm chất lượng tô bóng mảnh ở giai đoạn này vì bộ xử lý đồ hoạ mới dùng $9\text{ ms}$, vẫn còn dư ngân sách</td></tr></table>
+        focus: ["1.2", "1.3"]
+        say: "Đáp án câu ba, do bộ xử lý trung tâm tốn 25 phần nghìn giây còn bộ xử lý đồ hoạ mới tốn 9 phần nghìn giây, điểm nghẽn nằm ở số lệnh vẽ. Giải pháp đúng là gom lệnh vẽ tĩnh và dùng lệnh vẽ lặp nhiều bản thể cho các cây cùng loại, chứ không phải cắt giảm chất lượng tô bóng."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">đo đạc tìm đúng tầng điểm nghẽn</span><span class="a">→</span>
+          <span class="n">nghẽn mảnh: vẽ gần → xa + kiểm tra độ sâu sớm ($k \to 1$)</span><span class="a">→</span>
+          <span class="n">nghẽn lệnh vẽ: gom lưới &amp; vẽ lặp nhiều bản thể</span><span class="a">→</span>
+          <span class="n">nghẽn đỉnh ở xa: giảm bậc mức chi tiết theo $z^2$</span></div>
+        say: "Tổng kết chuỗi logic của bài, nguyên tắc đầu tiên của hiệu năng thời gian thực là đo đạc để xác định đúng công đoạn đang là điểm nghẽn. Nếu nghẽn ở tô bóng mảnh do tô đè, ta sắp xếp vật đục từ gần ra xa kết hợp kiểm tra độ sâu sớm để kéo hệ số tô đè về gần 1. Nếu nghẽn ở điều phối lệnh vẽ, ta gom lưới và vẽ lặp nhiều bản thể; còn nếu nghẽn ở số lượng đỉnh, ta hạ bậc mức chi tiết khi vật lùi ra xa."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> phép tính nhanh nhất chính là <b>phép tính không bao giờ phải chạy</b> — loại mảnh bị che trước khi tô bóng, gộp hàng trăm lệnh vẽ làm một, và đừng vẽ hàng vạn tam giác cho một vật chỉ phủ vài điểm ảnh!</div>
+        say: "Tư duy cốt lõi là phép tính nhanh nhất chính là phép tính không bao giờ phải chạy: loại mảnh bị che trước khi tô bóng, gộp lệnh vẽ, và giảm số tam giác ở xa."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 12 — tình huống chuyên gia): <b>cảnh thế giới mở bị nhấp nháy ở xa — chẩn đoán bộ đệm độ sâu</b>. Khi kết hợp tầm nhìn xa $10\,000\text{ m}$ của cảnh thế giới mở với mặt phẳng cắt gần đặt quá sát camera ($n = 0{,}01\text{ m}$), vì sao các mái nhà ở cách $1\,000\text{ m}$ lại nhấp nháy xuyên qua tường?</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 12, ta bước vào tình huống chuyên gia: chẩn đoán lỗi nhấp nháy ở xa trong cảnh thế giới mở. Khi đặt mặt cắt gần ở 0 phẩy 01 mét và mặt cắt xa ở 10 nghìn mét trên bộ đệm 24 bit, các bức tường cách 1 nghìn mét sẽ nhấp nháy hỗn loạn. Hẹn gặp bạn ở bài tiếp theo."

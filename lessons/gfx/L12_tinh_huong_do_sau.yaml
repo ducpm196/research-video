@@ -1,0 +1,269 @@
+id: L12
+course: GFX
+series: "GFX · Đồ hoạ máy tính"
+title: "Bài 12 — Tình huống chuyên gia: cảnh thế giới mở bị nhấp nháy ở xa — chẩn đoán bộ đệm độ sâu"
+version: 2
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/gfx.yaml L12; audit/gfx/verify_gfx.py L12; audit/gfx/sources_L12.md; [UD12] P. Upchurch, M. Desbrun, Tightening the Precision of Perspective Rendering, Journal of Graphics Tools, 16(1), 2012; [RE15] N. Reed, Depth Precision Visualized, NVIDIA Developer Blog, 2015 (bước lượng tử độ sâu và độ sâu đảo ngược dấu phẩy động); [AMHH18] T. Akenine-Möller, E. Haines, N. Hoffman, Real-Time Rendering, bản 4, 2018, chương 23; GFX bài 3 (chiếu phối cảnh 1/z); GFX bài 5 (bộ đệm độ sâu phi tuyến); GFX bài 11 (chi phí lệnh vẽ và băng thông)"
+assumes: [arith, cdot, frac, approx, geq, sub, sub2, in, power, ltgt, det, implies]
+# Quy ước: n là mặt cắt gần, f là mặt cắt xa, z là khoảng cách thực từ camera, b là số bit của bộ đệm độ sâu nguyên.
+#   Bước lượng tử độ sâu tại khoảng cách z là s_z ≈ z^2 * (f - n) / (f * n * 2^b).
+objectives:
+  - "Chẩn đoán nguyên nhân gây nhấp nháy bề mặt ở xa trong cảnh thế giới mở bằng công thức bước lượng tử độ sâu"
+  - "Chứng minh bằng số vì sao thay đổi mặt cắt xa hầu như không ảnh hưởng tới độ chính xác ở khoảng cách 1000 m, trong khi đẩy mặt cắt gần từ 0,01 m lên 0,5 m giúp cải thiện gấp 50 lần"
+  - "So sánh ba phương án kỹ thuật: đẩy mặt cắt gần, dùng độ sâu đảo ngược dấu phẩy động 32 bit, và tách hai lượt vẽ gần–xa"
+  - "Ra quyết định thiết kế kèm điều kiện đổi lựa chọn dựa trên giới hạn phần cứng và chi phí hiệu năng bài 11"
+asr_reviewed:
+  - sentence: "Bảng giải mã bốn ký hiệu chẩn đoán của tình huống."
+    reason: "từ bảng giải mã, ASR nghe thành bản dạy mà — NOT_VERIFIED bằng tai người"
+  - sentence: "Ta thực hiện phép tính chẩn đoán đầu tiên tại khoảng cách z bằng 1 nghìn mét với n bằng 0 phẩy 01 mét, f bằng 10 nghìn mét và b bằng 24 bit."
+    reason: "các biến số z, n, f, b và đơn vị mét, ASR viết tắt 1.000m, 0.01m — NOT_VERIFIED bằng tai người"
+  - sentence: "Thứ nhất, ở bài 5, độ sâu chuẩn hoá biến thiên theo nghịch đảo 1 phần z để giữ tính tuyến tính khi nội suy trên màn hình."
+    reason: "ký hiệu biến z đọc theo lexicon, ASR nghe thành jack — NOT_VERIFIED bằng tai người"
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Vì sao vật ở xa 1 km bị nhấp nháy đè lên nhau khi nhìn qua camera?"
+    checks:
+      - "round(alg.gfx_depth_step(1000, 0.01, 10000, 24), 2) == 5.96"
+      - "round(alg.gfx_depth_step(1000, 0.5, 10000, 24), 2) == 0.12"
+    steps:
+      - show: |
+          <p>Đội của bạn đang dựng một cảnh thế giới mở rộng lớn: mặt cắt xa đặt ở $f = 10\,000\text{ m}$ ($10\text{ km}$), còn mặt cắt gần đặt ở $n = 0{,}01\text{ m}$ ($1\text{ cm}$) trên bộ đệm độ sâu $24\text{ bit}$. Khi camera nhìn dãy nhà ở cách $z = 1\,000\text{ m}$, những bức tường cách nhau cả mét cứ <b>nhấp nháy rách nát</b> mỗi khi xoay góc nhìn!</p>
+          <div class="box key">Hôm nay: chẩn đoán bằng con số — vì sao ở $z = 1\,000\text{ m}$, một bước lượng tử độ sâu lại phình to tới <b>$5{,}96\text{ m}$</b>? Vì sao sửa mặt cắt xa $f$ là vô ích, còn đẩy mặt cắt gần $n$ lên $0{,}5\text{ m}$ lại thu nhỏ bước nhảy xuống <b>$0{,}12\text{ m}$</b>?</div>
+        focus: [1, 1, 1, 2, 2]
+        say: "Chào bạn, giả sử bạn đang phát triển một cảnh thế giới mở có tầm nhìn xa 10 nghìn mét. Ta đặt mặt cắt gần ở 0 phẩy 01 mét trên bộ đệm độ sâu 24 bit. Khi nhìn dãy nhà cách 1 nghìn mét, các bức tường cách nhau cả mét lại nhấp nháy đè lên nhau dữ dội. Hôm nay ta đóng vai kỹ sư chẩn đoán: tính xem vì sao tại khoảng cách 1 nghìn mét, bước lượng tử độ sâu lại phình to tới 5 phẩy 96 mét. Đồng thời ta chứng minh vì sao chỉnh mặt cắt xa là vô ích, còn đẩy mặt cắt gần lên 0 phẩy 5 mét lại thu nhỏ bước nhảy xuống 0 phẩy 12 mét."
+
+  # ───────────────────────── 2. ÔN NỀN ─────────────────────────
+  - id: prereq
+    kind: prereq
+    title: "Ôn lại: độ sâu chuẩn hoá phi tuyến 1/z bài 5 và chi phí lượt vẽ bài 11"
+    checks:
+      - "2 ** 24 == 16777216"
+      - "round(alg.gfx_depth_norm(0.02, 0.01, 10000), 4) == 0.5000"
+    steps:
+      - show: |
+          <p><b>① Đường cong độ sâu phi tuyến</b> (bài 5): phép chiếu phối cảnh ánh xạ khoảng cách $z \in [n, f]$ sang giá trị bộ đệm $z_n \in [0, 1]$ theo quy luật nghịch đảo $1/z$:</p>
+          $$z_n(z) = \frac{f\,(z - n)}{z\,(f - n)} = \frac{f}{f - n}\left(1 - \frac{n}{z}\right)$$
+          <p class="note">Với $n = 0{,}01\text{ m}$ và $f = 10\,000\text{ m}$: ngay tại $z = 2n = 0{,}02\text{ m}$ ($2\text{ cm}$), giá trị $z_n$ đã vọt lên $0{,}5000$ — tức <b>một nửa trong tổng số $2^{24} = 16\,777\,216$ mức lượng tử</b> bị tiêu sạch trong $1\text{ cm}$ đầu tiên trước ống kính!</p>
+        focus: [1, 2, 3, 3]
+        say: "Trước hết ta ôn lại hai cơ chế từ bài 5 và bài 11. Thứ nhất, ở bài 5, độ sâu chuẩn hoá biến thiên theo nghịch đảo 1 phần z để giữ tính tuyến tính khi nội suy trên màn hình. Hệ quả là tại khoảng cách bằng 2 lần mặt cắt gần, tức chỉ 2 xăng-ti-mét trước ống kính, độ sâu chuẩn hoá đã vọt lên 0 phẩy 5. Điều đó có nghĩa là một nửa trong tổng số hơn 16 triệu mức lượng tử của bộ đệm 24 bit đã bị tiêu sạch chỉ trong 1 xăng-ti-mét đầu tiên."
+      - show: |
+          <p><b>② Chi phí băng thông và lệnh vẽ</b> (bài 11): mọi giải pháp sửa lỗi độ sâu đều phải đặt lên bàn cân hiệu năng:</p>
+          <p>• Tăng kích thước bộ đệm độ sâu từ $24\text{ bit}$ lên $32\text{ bit}$ làm tăng băng thông đọc/ghi độ sâu.<br>• Vẽ cảnh làm hai lượt riêng biệt làm <b>tăng gấp đôi số lệnh vẽ</b> trên bộ xử lý trung tâm.</p>
+        focus: [1, 2, 2]
+        say: "Thứ hai, theo bài 11, mọi phương án kỹ thuật đều có cái giá về hiệu năng thời gian thực. Nếu mở rộng bộ đệm lên 32 bit thì tốn thêm băng thông bộ nhớ. Còn nếu chia thành hai lượt vẽ riêng biệt, số lệnh vẽ trên chip xử lý sẽ tăng gấp đôi."
+
+  # ───────────────────────── 3. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: bước lượng tử độ sâu và điều kiện xảy ra tranh chấp độ sâu"
+    checks:
+      - "round(alg.gfx_depth_step(1000, 0.01, 10000, 24), 4) == 5.9605"
+    steps:
+      - show: |
+          <table class="t"><tr><th>ký hiệu</th><th>nghĩa</th></tr>
+          <tr><td>$n,\; f,\; z$</td><td>khoảng cách mặt cắt gần $n$, mặt cắt xa $f$, và khoảng cách thực $z \in [n, f]$ từ camera (mét)</td></tr>
+          <tr><td>$b,\; 2^b$</td><td>số bit của bộ đệm độ sâu nguyên (thường $b = 24 \implies 2^{24} =$ 16&nbsp;777&nbsp;216 mức)</td></tr>
+          <tr><td>$s_z(z)$</td><td><b>bước lượng tử độ sâu</b> tại khoảng cách $z$: khoảng cách vật lý nhỏ nhất (mét) để hai bề mặt có mã số khác nhau</td></tr>
+          <tr><td>$d_{\text{vật}} < s_z(z)$</td><td>điều kiện nổ ra <b>tranh chấp độ sâu</b>: hai mặt cách nhau $d_{\text{vật}}$ bị gán cùng một số nguyên nên nhấp nháy</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", "1.5"]
+        say: "Bảng giải mã bốn ký hiệu chẩn đoán của tình huống. Ba đại lượng n, f và z lần lượt là khoảng cách mặt cắt gần, mặt cắt xa và khoảng cách thực từ camera tính bằng mét. Số nguyên b là độ rộng bit của bộ đệm độ sâu, với 24 bit ta có 16 triệu 777 nghìn 216 mức rời rạc. Bước lượng tử độ sâu s z tại khoảng cách z là khoảng cách vật lý tối thiểu để hai bề mặt nhận được hai mã số nguyên khác nhau. Khi khoảng cách thực giữa hai bức tường nhỏ hơn bước lượng tử này, chúng bị gán cùng một mã độ sâu và gây ra lỗi nhấp nháy."
+
+  # ───────────────────────── 4. HÌNH DUNG ─────────────────────────
+  - id: intuition
+    kind: intuition
+    title: "Hình cơ chế: dồn vạch chia ở sát mắt làm vùng 1000 m mất sạch vạch chia"
+    checks:
+      - "round(alg.gfx_depth_step(1000, 0.01, 10000, 24), 2) == 5.96"
+      - "round(alg.gfx_depth_step(1000, 0.5, 10000, 24), 2) == 0.12"
+    steps:
+      - show: |
+          <div><svg width="1440" height="430" viewBox="0 0 1440 430">
+          <rect x="60" y="55" width="1320" height="150" fill="#fff7ed" stroke="#eb6834" stroke-width="3" rx="10"/>
+          <rect x="60" y="235" width="1320" height="150" fill="#f0fdf4" stroke="#059669" stroke-width="3" rx="10"/>
+          <g font-size="21" fill="#1f2937">
+          <text x="95" y="82" font-size="19" font-weight="bold" fill="#eb6834">① Cấu hình lỗi: n = 0,01 m, f = 10 000 m, 24 bit → Tại z = 1 000 m, bước lượng tử sz = 5,96 m</text>
+          <rect x="650" y="115" width="460" height="65" fill="#fed7aa" stroke="#eb6834" stroke-width="2"/>
+          <line x1="760" y1="115" x2="760" y2="180" stroke="#dc2626" stroke-width="4"/>
+          <line x1="860" y1="115" x2="860" y2="180" stroke="#2563eb" stroke-width="4"/>
+          <text x="745" y="153" text-anchor="end" fill="#dc2626" font-weight="bold">Mái nhà (1000 m)</text>
+          <text x="875" y="153" fill="#2563eb" font-weight="bold">Tường (1001 m)</text>
+          <text x="880" y="114" font-size="19" text-anchor="middle">Cùng rơi vào 1 ô lượng tử 5,96 m → NHẤP NHÁY!</text>
+          <text x="95" y="275" font-weight="bold" fill="#059669">② Sửa mặt cắt gần: đẩy n = 0,5 m (hoặc dùng độ sâu đảo ngược 32 bit) → Tại z = 1 000 m, sz = 0,12 m!</text>
+          <rect x="650" y="295" width="55" height="65" fill="#bbf7d0" stroke="#059669" stroke-width="2"/>
+          <rect x="705" y="295" width="55" height="65" fill="#dcfce7" stroke="#059669" stroke-width="2"/>
+          <rect x="760" y="295" width="55" height="65" fill="#bbf7d0" stroke="#059669" stroke-width="2"/>
+          <rect x="815" y="295" width="55" height="65" fill="#dcfce7" stroke="#059669" stroke-width="2"/>
+          <line x1="675" y1="295" x2="675" y2="360" stroke="#dc2626" stroke-width="4"/>
+          <line x1="845" y1="295" x2="845" y2="360" stroke="#2563eb" stroke-width="4"/>
+          <text x="900" y="335" fill="#059669" font-weight="bold">Cách nhau hơn 8 ô lượng tử → Tách biệt hoàn toàn!</text></g>
+          </svg></div>
+        focus: [1, 1, 1, 1, 1]
+        say: "Khung phía trên minh hoạ trực quan nguyên nhân gây lỗi nhấp nháy ở khoảng cách 1 nghìn mét khi đặt mặt cắt gần ở 0 phẩy 01 mét. Do các vạch chia bị dồn hết về sát mắt, tại khoảng cách 1 nghìn mét mỗi ô lượng tử độ sâu bị kéo giãn rộng tới 5 phẩy 96 mét. Khi đó mái nhà ở 1 nghìn mét và bức tường ở 1 nghìn lẻ 1 mét cùng rơi tọt vào một ô lượng tử duy nhất nên phần cứng không phân biệt được mặt nào ở trước. Khung phía dưới cho thấy khi đẩy mặt cắt gần lên 0 phẩy 5 mét, bề rộng mỗi ô lượng tử thu nhỏ 50 lần xuống còn 0 phẩy 12 mét. Nhờ đó, hai bề mặt cách nhau hơn 8 ô lượng tử và chấm dứt hoàn toàn hiện tượng nhấp nháy."
+
+  # ───────────────────────── 5. SUY RA ─────────────────────────
+  - id: formula
+    kind: formula
+    title: "Suy ra công thức bước lượng tử độ sâu và tìm thủ phạm thật sự"
+    checks:
+      - "round(alg.gfx_depth_step(1000, 0.01, 10000, 24), 2) == 5.96"
+      - "round((10000 - 0.01) / 10000, 6) == 0.999999"
+    steps:
+      - show: |
+          <p><b>Bước 1 — đạo hàm của độ sâu chuẩn hoá $z_n(z)$ theo khoảng cách $z$:</b></p>
+          $$z_n(z) = \frac{f}{f - n} - \frac{f \cdot n}{(f - n)\,z} \implies \frac{d z_n}{d z} = \frac{f \cdot n}{(f - n)\,z^2}$$
+          <p class="note">Tốc độ thay đổi của $z_n$ tỉ lệ nghịch với bình phương khoảng cách $z^2$: đi xa gấp $10$ lần thì mật độ vạch chia giảm đi $100$ lần!</p>
+        focus: [1, 2, 3]
+        say: "Bước một, ta tìm tốc độ biến thiên của độ sâu chuẩn hoá theo khoảng cách thực z. Lấy đạo hàm của biểu thức độ sâu chuẩn hoá theo z, hằng số đầu bằng 0 nên đạo hàm bằng tích f nhân n chia cho hiệu f trừ n nhân với z bình phương. Vì z bình phương nằm ở mẫu số nên khi khoảng cách tăng gấp 10 lần, mật độ vạch chia độ sâu bị thưa đi tới 100 lần."
+      - show: |
+          <p><b>Bước 2 — suy ra bước lượng tử vật lý $s_z$ ứng với một bước nguyên $\Delta z_n = 2^{-b}$:</b></p>
+          $$s_z \approx \frac{\Delta z_n}{d z_n / d z} = \frac{z^2\,(f - n)}{f \cdot n \cdot 2^b}$$
+        focus: [1, 2, 2]
+        say: "Bước hai, trên bộ đệm b bit, mỗi mức nguyên cách nhau một lượng bằng 2 mũ trừ b. Do đó, chia khoảng cách một mức nguyên cho đạo hàm vừa tìm được, ta thu được công thức bước lượng tử độ sâu. Kết quả suy ra là z bình phương nhân hiệu f trừ n, tất cả chia cho tích f nhân n nhân 2 mũ b."
+      - clear: true
+        show: |
+          <p><b>Bước 3 — tách riêng ảnh hưởng của $f$ và $n$ khi $f$ rất lớn so với $n$:</b></p>
+          $$s_z = \frac{z^2}{n \cdot 2^b} \cdot \underbrace{\left(\frac{f - n}{f}\right)}_{\approx 1 \text{ khi } f \text{ rất lớn so với } n} \approx \hlb{\frac{z^2}{n \cdot 2^b}}$$
+          <p class="note">Kết luận chẩn đoán: khi $f$ rất lớn so với $n$, tỉ số $(f - n)/f \approx 1$ nên <b>thay đổi mặt cắt xa $f$ hầu như không làm thay đổi $s_z$</b>; ngược lại, $s_z$ <b>tỉ lệ nghịch trực tiếp với mặt cắt gần $n$</b>!</p>
+        focus: [1, 2, 3, 3]
+        say: "Bước ba, ta viết lại công thức bằng cách tách thừa số f trừ n tất cả chia cho f ra riêng. Khi mặt cắt xa f lớn hơn rất nhiều so với mặt cắt gần n, tỉ số f trừ n chia f luôn xấp xỉ bằng 1. Điều này chỉ ra rằng thu hẹp hay nới rộng mặt cắt xa f hầu như không làm thay đổi bước lượng tử. Thủ phạm quyết định hoàn toàn nằm ở mặt cắt gần n dưới mẫu số."
+
+  # ───────────────────────── 6. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Tính tay: chẩn đoán ở z = 1000 m và đối chiếu ba kịch bản thông số"
+    checks:
+      - "round(alg.gfx_depth_step(1000, 0.01, 10000, 24), 2) == 5.96"
+      - "round(alg.gfx_depth_step(1000, 0.01, 100000, 24), 2) == 5.96"
+      - "round(alg.gfx_depth_step(1000, 0.01, 100000, 24) / alg.gfx_depth_step(1000, 0.01, 10000, 24), 3) == 1.0"
+      - "round(alg.gfx_depth_step(1000, 0.5, 10000, 24), 2) == 0.12"
+    steps:
+      - show: |
+          <p><b>Phép tính 1 — tính bước lượng tử $s_z$ tại $z = 1\,000\text{ m}$ với cấu hình lỗi ($n = 0{,}01\text{ m},\; f = 10\,000\text{ m},\; b = 24$):</b></p>
+          $$s_z = \frac{1000^2 \cdot (10\,000 - 0{,}01)}{10\,000 \cdot 0{,}01 \cdot 2^{24}} = \frac{10^6 \cdot 9\,999{,}99}{100 \cdot 16\,777\,216} = \frac{99\,999{,}9}{16\,777\,216} \approx \hlo{5{,}96\text{ m}}$$
+          <p class="note">Hai bề mặt cách nhau dưới $6\text{ m}$ ở khoảng cách $1\text{ km}$ đều có nguy cơ bị gộp vào cùng một mức nguyên!</p>
+        focus: [1, 2, 3]
+        say: "Ta thực hiện phép tính chẩn đoán đầu tiên tại khoảng cách z bằng 1 nghìn mét với n bằng 0 phẩy 01 mét, f bằng 10 nghìn mét và b bằng 24 bit. Thay số vào công thức, tử số là 1 triệu nhân 9 nghìn 999 phẩy 99, mẫu số là 100 nhân 16 triệu 777 nghìn 216. Kết quả cho ra bước lượng tử bằng 5 phẩy 96 mét, nghĩa là các bức tường cách nhau vài mét ở xa 1 ki-lô-mét bị gộp chung vào một mức độ sâu."
+      - clear: true
+        show: |
+          <p><b>Phép tính 2 — thử tăng mặt cắt xa gấp $10$ lần lên $f = 100\,000\text{ m}$ (giữ $n = 0{,}01\text{ m}$):</b></p>
+          $$s_z(f = 100\,000) = \frac{1000^2 \cdot (100\,000 - 0{,}01)}{100\,000 \cdot 0{,}01 \cdot 2^{24}} \approx \hlo{5{,}96\text{ m}} \;\implies\; \text{tỉ số } \frac{s_z(100\,000)}{s_z(10\,000)} \approx \hlb{1{,}000}$$
+          <p><b>Phép tính 3 — đẩy mặt cắt gần lên $n = 0{,}5\text{ m}$ ($50\text{ cm}$, giữ $f = 10\,000\text{ m}$):</b></p>
+          $$s_z(n = 0{,}5) = \frac{1000^2 \cdot (10\,000 - 0{,}5)}{10\,000 \cdot 0{,}5 \cdot 2^{24}} \approx \frac{5{,}96}{50} \approx \hlg{0{,}12\text{ m}} \;\; (\text{nhỏ hơn } 50 \text{ lần!})$$
+        focus: [[1, 2], [1, 2], [3, 4], [3, 4]]
+        say: "Phép tính thứ hai thử tăng mặt cắt xa gấp 10 lần từ 10 nghìn lên 100 nghìn mét. Kết quả bước lượng tử vẫn giữ nguyên ở 5 phẩy 96 mét, với tỉ số đúng bằng 1 phẩy 000. Ngược lại ở phép tính thứ ba, ta đẩy mặt cắt gần từ 0 phẩy 01 mét lên 0 phẩy 5 mét. Bước lượng tử tại 1 nghìn mét lập tức giảm 50 lần xuống chỉ còn 0 phẩy 12 mét."
+      - clear: true
+        show: |
+          <p><b>Bảng tổng hợp chẩn đoán tại khoảng cách $z = 1\,000\text{ m}$ (bộ đệm $24\text{ bit}$):</b></p>
+          <table class="t"><tr><th>kịch bản thông số</th><th>mặt cắt gần $n$</th><th>mặt cắt xa $f$</th><th>bước lượng tử $s_z$ tại 1000 m</th><th>trạng thái tường cách $1\text{ m}$</th></tr>
+          <tr><td>Cấu hình ban đầu</td><td>$0{,}01\text{ m}$</td><td>10&nbsp;000 m</td><td>$\hlo{5{,}96\text{ m}}$</td><td>Nhấp nháy nặng ($s_z > 1\text{ m}$)</td></tr>
+          <tr><td>Tăng mặt cắt xa $10\times$</td><td>$0{,}01\text{ m}$</td><td>100&nbsp;000 m</td><td>$\hlo{5{,}96\text{ m}}$</td><td>Không thay đổi (tỉ số $\approx 1{,}000$)</td></tr>
+          <tr><td>Đẩy mặt cắt gần $50\times$</td><td>$0{,}50\text{ m}$</td><td>10&nbsp;000 m</td><td>$\hlg{0{,}12\text{ m}}$</td><td>Hết nhấp nháy ($s_z < 1\text{ m}$)</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Bảng tổng hợp ba kịch bản tại khoảng cách 1 nghìn mét khẳng định rõ kết luận chẩn đoán. Ở cấu hình ban đầu hay khi tăng mặt cắt xa lên 100 nghìn mét, bước lượng tử đều là 5 phẩy 96 mét. Vì con số này lớn hơn khoảng cách 1 mét giữa hai bức tường nên lỗi nhấp nháy vẫn xảy ra. Khi đẩy mặt cắt gần lên 0 phẩy 5 mét, bước lượng tử giảm xuống 0 phẩy 12 mét và dứt điểm lỗi nhấp nháy."
+
+  # ───────────────────────── 7. TỰ KIỂM ─────────────────────────
+  - id: check
+    kind: check
+    title: "Tự kiểm: đếm trực tiếp số mức nguyên giữa z = 1000 m và z = 1001 m"
+    checks:
+      - "int((alg.gfx_depth_norm(1001, 0.01, 10000) - alg.gfx_depth_norm(1000, 0.01, 10000)) * (2 ** 24)) == 0"
+      - "round((alg.gfx_depth_norm(1001, 0.5, 10000) - alg.gfx_depth_norm(1000, 0.5, 10000)) * (2 ** 24), 1) == 8.4"
+    steps:
+      - show: |
+          <p><b>Đường khác 1 — dùng trực tiếp công thức độ sâu chuẩn hoá $z_n(z)$ (bài 5) không qua xấp xỉ đạo hàm:</b></p>
+          <p>Tính hiệu số mức nguyên $\Delta N = \big(z_n(1001) - z_n(1000)\big) \cdot 2^{24}$ giữa mái nhà ($1000\text{ m}$) và bức tường ($1001\text{ m}$):</p>
+          $$\text{Với } n = 0{,}01\text{ m}:\;\; \Delta N \approx \frac{0{,}01}{1000 \cdot 1001} \cdot 16\,777\,216 \approx \hlo{0{,}168 \text{ mức}} < 1 \implies \text{trùng mã nguyên!}$$
+          $$\text{Với } n = 0{,}50\text{ m}:\;\; \Delta N \approx \frac{0{,}50}{1000 \cdot 1001} \cdot 16\,777\,216 \approx \hlg{8{,}38 \text{ mức}} > 8 \implies \text{cách nhau } 8 \text{ mã nguyên!}$$
+        focus: [1, 2, 3, 4]
+        say: "Ta kiểm tra lại bằng đường khác không dùng xấp xỉ đạo hàm. Thay vào đó, ta trừ trực tiếp hai giá trị độ sâu chuẩn hoá rồi nhân với 2 mũ 24. Với n bằng 0 phẩy 01 mét, khoảng cách 1 mét chỉ tương ứng 0 phẩy 168 mức nguyên nên hai mặt bị gộp chung. Với n bằng 0 phẩy 5 mét, khoảng cách 1 mét trải qua 8 phẩy 38 mức nguyên, tách biệt hoàn toàn."
+      - clear: true
+        show: |
+          <p><b>Đường khác 2 — cơ chế của độ sâu đảo ngược dấu phẩy động 32 bit:</b></p>
+          <p>Khi đảo ngược ánh xạ để mặt cắt gần $n \to 1$ và mặt cắt xa $f \to 0$, ở vùng rất xa ($z \to f$) giá trị độ sâu tiến sát về $0$. Vì số dấu phẩy động có <b>số mũ tự động giảm dần</b> khi tiến gần $0$, mật độ vạch chia của dấu phẩy động tăng vọt ở gần $0$, vừa khéo <b>bù trừ trực tiếp</b> cho sự co cụm $1/z$ của phép chiếu phối cảnh!</p>
+        focus: [1, 2, 2, 2]
+        say: "Đường kiểm tra thứ hai giải thích cơ chế vật lý số học của kỹ thuật độ sâu đảo ngược dùng số dấu phẩy động 32 bit. Bằng cách đảo chiều để mặt cắt gần ứng với 1 và mặt cắt xa ứng với 0, các vật ở xa nghìn mét sẽ có giá trị độ sâu nằm sát điểm 0. Số dấu phẩy động có mật độ biểu diễn dày đặc nhất ở sát điểm 0 nhờ phần số mũ giảm dần. Do đó, nó tự động bù trừ cho sự suy giảm 1 phần z của phép chiếu phối cảnh."
+
+  # ───────────────────────── 8. LỖI HAY GẶP ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "Ba phương án kỹ thuật và những sai lầm khi chọn giải pháp"
+    checks:
+      - "round(alg.gfx_depth_step(1000, 0.01, 5000, 24), 2) == 5.96"
+      - "round(alg.gfx_depth_step(500, 0.5, 10000, 24), 2) == 0.03"
+    steps:
+      - show: |
+          <div class="box warn"><b>Sai lầm 1.</b> Cắt giảm tầm nhìn mặt cắt xa từ $10\,000\text{ m}$ xuống $5\,000\text{ m}$ để mong sửa lỗi nhấp nháy ở $1\,000\text{ m}$ <b class="red">(cắt mất núi non ở xa nhưng lỗi vẫn y nguyên!)</b>
+          <br><span class="note">Tại $z = 1\,000\text{ m}$ với $n = 0{,}01\text{ m}$: dù giảm $f$ xuống $5\,000\text{ m}$ thì $s_z$ vẫn bằng $5{,}96\text{ m}$! Đừng bao giờ hy sinh tầm nhìn xa khi thủ phạm là mặt cắt gần $n$.</span></div>
+        focus: [1, 1, 1]
+        say: "Sai lầm phổ biến nhất là cắt ngắn mặt cắt xa từ 10 nghìn mét xuống 5 nghìn mét với hy vọng giảm nhấp nháy. Như công thức đã chỉ rõ, tại khoảng cách 1 nghìn mét bước lượng tử vẫn giữ nguyên ở mức 5 phẩy 96 mét. Vì vậy, việc cắt tầm nhìn chỉ làm mất đi cảnh núi ở xa mà lỗi nhấp nháy không hề giảm."
+      - show: |
+          <div class="box warn"><b>Sai lầm 2.</b> Dùng bộ đệm dấu phẩy động 32 bit nhưng giữ nguyên chiều thuận ($0$ ở gần, $1$ ở xa) <b class="red">(mất hết lợi thế số mũ dấu phẩy động!)</b>
+          <br><span class="note">Số dấu phẩy động chỉ có độ phân giải cực mịn quanh mốc $0$, còn quanh mốc $1$ thì bước nhảy cố định giống số nguyên 23 bit. Phải kết hợp dấu phẩy động với <b>đảo ngược chiều</b> ($1$ ở gần, $0$ ở xa) mới phát huy tác dụng!</span></div>
+        focus: [1, 1, 1]
+        say: "Sai lầm thứ hai là chuyển sang bộ đệm dấu phẩy động 32 bit tốn thêm bộ nhớ nhưng vẫn giữ nguyên quy ước 0 ở gần và 1 ở xa. Khi các vật ở xa dồn về sát mốc 1, phần số mũ không hề thay đổi nên không tăng thêm độ phân giải. Bắt buộc ta phải kết hợp dấu phẩy động với đảo ngược để mặt cắt xa nằm ở mốc 0."
+      - clear: true
+        show: |
+          <p><b>Bảng so sánh quyết định giữa 3 phương án xử lý:</b></p>
+          <table class="t"><tr><th>phương án</th><th>ưu điểm</th><th>đánh đổi / điều kiện áp dụng</th></tr>
+          <tr><td><b>1. Đẩy mặt cắt gần $n$ lên $0{,}5\text{ m}$</b></td><td>Miễn phí hoàn toàn về hiệu năng, chạy trên mọi phần cứng $24\text{ bit}$</td><td>Vật sát mắt hơn $0{,}5\text{ m}$ bị cắt mất; không dùng được nếu có vật cầm tay ở $0{,}05\text{ m}$ chung một lượt vẽ</td></tr>
+          <tr><td><b>2. Độ sâu đảo ngược + dấu phẩy động 32 bit</b></td><td>Chuẩn công nghiệp thế giới mở: giữ được cả $n = 0{,}01\text{ m}$ lẫn tầm xa hàng chục km</td><td>Tốn bộ đệm $32\text{ bit}$ (tăng băng thông bộ nhớ) và cần phần cứng hỗ trợ dải chuẩn hoá $[0, 1]$</td></tr>
+          <tr><td><b>3. Tách hai lượt vẽ gần–xa</b></td><td>Giữ được cả vật sát mắt lẫn cảnh xa trên phần cứng $24\text{ bit}$ cũ</td><td>Phải xoá độ sâu giữa hai lượt và tăng số lệnh vẽ cho các vật cắt qua ranh giới hai vùng</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4"]
+        say: "Bảng so sánh giúp kỹ sư ra quyết định theo đúng bối cảnh dự án. Phương án một đẩy mặt cắt gần lên 0 phẩy 5 mét hoàn toàn miễn phí hiệu năng, rất hợp cho góc nhìn thứ ba không có vật sát ống kính. Phương án hai dùng độ sâu đảo ngược dấu phẩy động 32 bit là chuẩn công nghiệp cho thế giới mở hiện đại khi chấp nhận tăng nhẹ băng thông bộ đệm. Phương án ba tách hai lượt vẽ gần và xa chỉ dùng khi phải hỗ trợ phần cứng cũ không đổi được định dạng bộ đệm."
+
+  # ───────────────────────── 9. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn: tính bước lượng tử ở 500 m và chọn giải pháp độ sâu"
+    checks:
+      - "round(alg.gfx_depth_step(500, 0.01, 10000, 24), 2) == 1.49"
+      - "round(alg.gfx_depth_step(500, 0.2, 10000, 24), 3) == 0.075"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề bài</th></tr>
+          <tr><td>1</td><td>Với cấu hình $n = 0{,}01\text{ m},\; f = 10\,000\text{ m},\; b = 24\text{ bit}$, tại khoảng cách $z = 500\text{ m}$ (gần hơn một nửa so với $1\,000\text{ m}$), bước lượng tử độ sâu $s_z$ bằng bao nhiêu mét?</td></tr>
+          <tr><td>2</td><td>Nếu tại $z = 500\text{ m}$ bạn đẩy mặt cắt gần từ $n = 0{,}01\text{ m}$ lên $n = 0{,}20\text{ m}$ (tăng $20$ lần), bước lượng tử $s_z$ giảm xuống còn bao nhiêu mét?</td></tr>
+          <tr><td>3</td><td>Trong trò chơi góc nhìn thứ nhất trên máy tính hiện đại, nhân vật luôn cầm bản đồ cách mắt $0{,}05\text{ m}$ nhưng đồng thời nhìn thấy tháp canh ở cách $5\,000\text{ m}$. Bạn chọn phương án nào trong 3 phương án và vì sao?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.4", 0]
+        say: "Bây giờ đến lượt bạn tự giải ba câu hỏi. Câu một, với cấu hình ban đầu, tại khoảng cách 500 mét tức gần hơn một nửa so với 1 nghìn mét, bước lượng tử độ sâu bằng bao nhiêu mét? Câu hai, nếu tại 500 mét ta đẩy mặt cắt gần từ 0 phẩy 01 lên 0 phẩy 20 mét thì bước lượng tử giảm còn bao nhiêu? Câu ba, trong trò chơi góc nhìn thứ nhất vừa có vật cầm tay ở 0 phẩy 05 mét vừa nhìn xa 5 nghìn mét trên máy tính hiện đại, bạn chọn phương án nào? Hãy dừng video và tính thử."
+        pause: 20
+      - clear: true
+        show: |
+          <p><b>Đáp án câu 1.</b> Vì $s_z$ tỉ lệ với $z^2$, khi $z$ giảm từ $1\,000\text{ m}$ xuống $500\text{ m}$ (giảm $2$ lần) thì $s_z$ giảm $2^2 = 4$ lần:</p>
+          $$s_z(500\text{ m}) \approx \frac{5{,}9605}{4} \approx \hlo{1{,}49\text{ m}}$$
+          <p><b>Đáp án câu 2.</b> Đẩy $n$ từ $0{,}01\text{ m}$ lên $0{,}20\text{ m}$ (tăng $20$ lần) làm $s_z$ giảm $20$ lần: $s_z \approx \frac{1{,}4901}{20} \approx \hlg{0{,}075\text{ m}}$ ($7{,}5\text{ cm}$).</p>
+        focus: [[1, 2], [1, 2], 3]
+        say: "Đáp án câu một, bước lượng tử tỉ lệ với bình phương khoảng cách z bình phương. Vì vậy khi khoảng cách giảm một nửa xuống 500 mét, bước lượng tử giảm 4 lần xuống 1 phẩy 49 mét. Đáp án câu hai, khi mặt cắt gần tăng 20 lần lên 0 phẩy 20 mét, bước lượng tử giảm 20 lần còn 0 phẩy 075 mét."
+      - show: |
+          <table class="t"><tr><th>lựa chọn cho góc nhìn thứ nhất (câu 3)</th><th>lý do kỹ thuật</th></tr>
+          <tr><td><b>Chọn Phương án 2: độ sâu đảo ngược + dấu phẩy động 32 bit</b> (hoặc vẽ riêng vật cầm tay ở một lớp độ sâu riêng)</td><td>Không thể đẩy $n$ của toàn cảnh lên $0{,}5\text{ m}$ vì sẽ cắt mất vật cầm tay ở $0{,}05\text{ m}$; độ sâu đảo ngược 32 bit giải quyết trọn vẹn cả gần lẫn xa chỉ trong 1 lượt vẽ</td></tr></table>
+        focus: ["1.2", "1.2", "1.2"]
+        say: "Đáp án câu ba, nhân vật có vật cầm tay ở 0 phẩy 05 mét nên ta không thể đẩy mặt cắt gần lên 0 phẩy 5 mét. Do đó, giải pháp tối ưu trên máy hiện đại là dùng độ sâu đảo ngược dấu phẩy động 32 bit. Ngoài ra, ta cũng có thể vẽ riêng vật cầm tay ở một lớp bộ đệm riêng."
+
+  # ───────────────────────── 10. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic chẩn đoán & cầu nối sang bài tổng kết hành trình"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">độ sâu phối cảnh $1/z$ dồn vạch chia về sát $n$</span><span class="a">→</span>
+          <span class="n">bước lượng tử $s_z \approx \frac{z^2}{n \cdot 2^b}$ phình to theo $z^2$</span><span class="a">→</span>
+          <span class="n">sửa $f$ vô ích, phải đẩy $n$ tăng lên</span><span class="a">→</span>
+          <span class="n">hoặc dùng độ sâu đảo ngược dấu phẩy động 32 bit</span></div>
+        focus: [1, 1, 1]
+        say: "Tổng kết bài, phép chiếu phối cảnh 1 phần z dồn hầu hết các mức lượng tử về sát mặt cắt gần n. Hệ quả là bước lượng tử ở xa phình to theo tỉ lệ z bình phương chia n. Do đó, ta cần đẩy mặt cắt gần n ra xa hoặc chuyển sang độ sâu đảo ngược dấu phẩy động 32 bit."
+      - show: |
+          <div class="box key"><b>Tư duy chuyên gia:</b> trước một lỗi hình ảnh ở xa, đừng đoán mò rồi cắt giảm cảnh vật — hãy viết công thức sai số lượng tử để thấy ngay biến số nào nằm ở mẫu số!</div>
+        focus: [1, 1]
+        say: "Tư duy chuyên gia cần nhớ là khi gặp lỗi hiển thị ở xa, đừng đoán mò rồi cắt giảm cảnh vật. Hãy viết công thức sai số lượng tử để nhận diện chính xác biến số nào đang điều khiển lỗi."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 13 — hành trình lịch sử): <b>chiếu sáng từ mô hình kinh nghiệm năm 1975 tới kết xuất dựa trên vật lý thời gian thực</b>. Chúng ta sẽ nhìn lại toàn bộ chặng đường gần 40 năm tiến hoá của các mô hình chiếu sáng đã học từ bài 6 đến bài 10!</p>
+        forward_ref: true
+        focus: [1, 1]
+        say: "Ở bài 13 tới, ta sẽ đi dọc hành trình phát triển chiếu sáng từ năm 1975 đến năm 2012. Đó là bài tổng kết toàn khoá học, hẹn gặp lại bạn trong video tiếp theo."
