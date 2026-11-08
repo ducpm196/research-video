@@ -1,0 +1,289 @@
+import yaml
+
+lesson = {
+    "id": "L01",
+    "course": "ACB",
+    "series": "Phỏng vấn Kỹ sư Tích hợp ACB",
+    "title": "Bài 1 — Tích hợp Core Banking Temenos T24: Bản tin OFS XML và IBM MQ",
+    "voice": "piper:vi_VN-vais1000-medium",
+    "rate": "-5%",
+    "depth": "full",
+    "source": "curriculum/acb.yaml L01; Temenos T24 OFS Programming Guide; IBM MQ Application Programming Reference; Chuẩn tích hợp Core Banking ACB 2026",
+    "assumes": ["arith", "approx"],
+    "objectives": [
+        "Làm chủ cấu trúc bản tin OFS XML và cơ chế giao tiếp qua IBM MQ",
+        "Thiết kế mô hình Request-Reply bất đồng bộ với JMS Correlation ID",
+        "Tối ưu hóa Connection Pool và xử lý biệt lập mã lỗi Timeout T24"
+    ],
+    "scenes": [
+        # 1. HOOK
+        {
+            "id": "hook",
+            "kind": "hook",
+            "title": "Nút thắt sống còn khi tích hợp hệ thống với Core Banking",
+            "steps": [
+                {
+                    "show": """<p>Trong hệ thống ngân hàng, Core Banking Temenos T24 chính là trái tim nắm giữ mọi sổ cái và dòng tiền.</p>
+<div class="box key">Mọi giao dịch nạp rút, chuyển tiền, hay giải ngân đều phải đi qua <b>bản tin OFS</b> và <b>hàng đợi IBM MQ</b>.</div>""",
+                    "focus": [0, 0, 0],
+                    "say": "Chào bạn, trong kiến trúc công nghệ ngân hàng, Core Banking Temenos T24 là trái tim nắm giữ toàn bộ số dư và sổ cái. Mọi giao dịch mở tài khoản, chuyển tiền liên ngân hàng, hay tất toán sổ tiết kiệm đều phải gửi lệnh vào Core T24. Nếu tầng tích hợp xử lý sai cú pháp hoặc treo kết nối hàng đợi, toàn bộ cổng thanh toán sẽ tê liệt ngay lập tức."
+                },
+                {
+                    "show": """<p>Hôm nay, ta mổ xẻ chi tiết: <b>Cấu trúc bản tin OFS XML</b>, <b>mô hình Request-Reply bất đồng bộ</b>, và <b>bí quyết tối ưu hóa 5000 TPS qua IBM MQ</b>.</p>""",
+                    "focus": [0, 0],
+                    "say": "Hôm nay ta cùng phân tích sâu bản chất kỹ thuật: cấu trúc bản tin OFS XML, cơ chế gửi nhận bất đồng bộ qua IBM MQ, và giải pháp xử lý timeout chuẩn Senior. Nắm chắc bài này, bạn sẽ hoàn toàn tự tin trả lời mọi câu hỏi kiến trúc tích hợp Core tại ACB."
+                }
+            ]
+        },
+        # 2. PREREQ
+        {
+            "id": "prereq",
+            "kind": "prereq",
+            "title": "Ôn lại: Khái niệm hàng đợi tin nhắn, định danh tương quan và độ trễ",
+            "checks": [
+                "5000 * 60 == 300000 and 300000 * 60 == 18000000",
+                "1000 // 35 == 28 and 35 * 28 == 980"
+            ],
+            "steps": [
+                {
+                    "show": """<p><b>Ba khái niệm cốt lõi cần nhớ trước khi làm việc với IBM MQ</b>:</p>
+<table class="t">
+  <tr><th>khái niệm</th><th>ý nghĩa kỹ thuật</th><th>vai trò trong Core T24</th></tr>
+  <tr><td>Message Queue</td><td>hàng đợi lưu trữ tin nhắn trung gian</td><td>đệm tải, đảm bảo không mất bản tin khi Core bận</td></tr>
+  <tr><td>Correlation ID</td><td>chuỗi định danh duy nhất của mỗi yêu cầu</td><td>ghép cặp chính xác phản hồi với yêu cầu ban đầu</td></tr>
+  <tr><td>Connection Pool</td><td>tập hợp các kết nối mở sẵn đến Broker</td><td>tái sử dụng kết nối mạng, tránh tạo lại tốn tài nguyên</td></tr>
+</table>""",
+                    "focus": [0, 0, 0, 0],
+                    "say": "Trước tiên ta ôn lại ba khái niệm nền tảng trong truyền thông tin nhắn. Hàng đợi tin nhắn đóng vai trò vùng đệm, bảo đảm không làm mất dữ liệu khi Core Banking xử lý chậm. Định danh tương quan là chuỗi ngẫu nhiên duy nhất giúp ta ghép đúng câu trả lời của từng giao dịch. Nhóm kết nối mở sẵn giúp tái sử dụng đường truyền mạng mà không tốn công bắt tay lại."
+                },
+                {
+                    "show": """<div class="box key">Ở lưu lượng $5\,000$ lệnh mỗi giây: Mỗi phút hệ thống xử lý $5\,000 \times 60 = 300\,000$ lệnh. Nếu độ trễ là $35$ ms, mỗi kết nối gánh được $1\,000 / 35 \\approx 28$ lệnh mỗi giây.</div>""",
+                    "focus": [0, 0, 0, 0],
+                    "say": "Ta làm một phép tính nhanh về khả năng tải. Ở mức 5 nghìn lệnh mỗi giây, mỗi phút có 300 nghìn bản tin được luân chuyển. Với độ trễ 35 mi li giây, một kết nối có thể xử lý 28 lượt hỏi đáp trong một giây. Do đó ta cần cấu hình kích thước nhóm kết nối hợp lý để khai thác tối đa tài nguyên."
+                }
+            ]
+        },
+        # 3. CONCEPT
+        {
+            "id": "concept",
+            "kind": "concept",
+            "title": "Kiến trúc Giao tiếp Bất đồng bộ giữa Microservices và Core T24",
+            "steps": [
+                {
+                    "show": """<div>
+  <svg width="1500" height="380" viewBox="0 0 1500 380">
+    <g font-size="22" fill="#1f2937">
+      <text x="750" y="35" text-anchor="middle" font-weight="bold" font-size="26">Mô hình Request-Reply Bất đồng bộ qua IBM MQ và Core T24</text>
+      <rect x="50" y="70" width="300" height="240" rx="12" fill="#e0f2fe" stroke="#0284c7" stroke-width="3"/>
+      <text x="200" y="115" text-anchor="middle" font-weight="bold">1. Payment Service</text>
+      <text x="200" y="160" text-anchor="middle">Tạo lệnh chuyển tiền</text>
+      <text x="200" y="200" text-anchor="middle">Gán CorrelId duy nhất</text>
+      <text x="200" y="240" text-anchor="middle">Đăng ký Promise chờ</text>
+
+      <rect x="440" y="70" width="320" height="240" rx="12" fill="#fef3c7" stroke="#d97706" stroke-width="3"/>
+      <text x="600" y="115" text-anchor="middle" font-weight="bold">2. T24 Inbound Queue</text>
+      <text x="600" y="160" text-anchor="middle">T24.OFS.REQUEST</text>
+      <text x="600" y="200" text-anchor="middle">Hàng đợi vào IBM MQ</text>
+      <text x="600" y="240" text-anchor="middle">Lưu trữ bền vững</text>
+
+      <rect x="850" y="70" width="280" height="240" rx="12" fill="#f3e8ff" stroke="#9333ea" stroke-width="3"/>
+      <text x="990" y="115" text-anchor="middle" font-weight="bold">3. Temenos T24 Core</text>
+      <text x="990" y="160" text-anchor="middle">Tiến trình OFS Listener</text>
+      <text x="990" y="200" text-anchor="middle">Hạch toán ghi nợ ghi có</text>
+      <text x="990" y="240" text-anchor="middle">Sinh kết quả OFS Response</text>
+
+      <rect x="1210" y="70" width="250" height="240" rx="12" fill="#dcfce7" stroke="#16a34a" stroke-width="3"/>
+      <text x="1335" y="115" text-anchor="middle" font-weight="bold">4. T24 Outbound Queue</text>
+      <text x="1335" y="160" text-anchor="middle">T24.OFS.REPLY</text>
+      <text x="1335" y="200" text-anchor="middle">Consumer nhận tin</text>
+      <text x="1335" y="240" text-anchor="middle">Khớp CorrelId nhả kết quả</text>
+
+      <line x1="350" y1="150" x2="440" y2="150" stroke="#0284c7" stroke-width="4"/>
+      <line x1="760" y1="150" x2="850" y2="150" stroke="#d97706" stroke-width="4"/>
+      <line x1="990" y1="310" x2="990" y2="340" stroke="#9333ea" stroke-width="4"/>
+      <line x1="990" y1="340" x2="1335" y2="340" stroke="#9333ea" stroke-width="4"/>
+      <line x1="1335" y1="340" x2="1335" y2="310" stroke="#9333ea" stroke-width="4"/>
+    </g>
+  </svg>
+</div>""",
+                    "focus": [0, 0, 0, 0, 0],
+                    "say": "Nhìn lên sơ đồ luồng kiến trúc tích hợp. Bước một, dịch vụ thanh toán tạo bản tin OFS XML và gán một mã định danh tương quan ngẫu nhiên. Bước hai, bản tin được đẩy vào hàng đợi yêu cầu trên máy chủ IBM MQ. Bước ba, tiến trình lắng nghe của T24 bốc bản tin ra để hạch toán vào cơ sở dữ liệu sổ cái. Bước bốn, T24 đẩy kết quả vào hàng đợi trả lời với cùng mã định danh ban đầu. Cuối cùng, dịch vụ so khớp mã định danh để trả kết quả cho khách hàng."
+                }
+            ]
+        },
+        # 4. SYMBOL
+        {
+            "id": "symbol",
+            "kind": "symbol",
+            "title": "Giải mã cú pháp bản tin OFS XML trong Temenos T24",
+            "steps": [
+                {
+                    "show": """<p><b>Cấu trúc chuẩn của một chuỗi bản tin OFS XML</b>:</p>
+<div class="box code"><code>OPERATION,OPTIONS/USERNAME/PASSWORD,APPLICATION/VERSION,TRANSACTION_ID,FIELD:MV:SV=VALUE,...</code></div>
+<table class="t">
+  <tr><th>thành phần OFS</th><th>ví dụ thực tế</th><th>ý nghĩa trong ngân hàng</th></tr>
+  <tr><td>OPERATION</td><td>FUNDS.TRANSFER</td><td>nghiệp vụ trích nợ chuyển khoản</td></tr>
+  <tr><td>VERSION</td><td>FUNDS.TRANSFER,ACTR</td><td>giao diện xử lý nghiệp vụ hạch toán</td></tr>
+  <tr><td>DEBIT.ACCT.NO</td><td>0123456789</td><td>số tài khoản người chuyển tiền</td></tr>
+  <tr><td>CREDIT.ACCT.NO</td><td>9876543210</td><td>số tài khoản người thụ hưởng</td></tr>
+  <tr><td>AMOUNT</td><td>5 000 000</td><td>số tiền giao dịch chuyển khoản</td></tr>
+</table>""",
+                    "focus": [0, 0, 0, 0, 0],
+                    "say": "Bản tin OFS tuân theo cấu trúc phân cách nghiêm ngặt. Phần đầu xác định loại thao tác và tài khoản xác thực kết nối. Phần thân chứa tên ứng dụng và giao diện nghiệp vụ. Các trường dữ liệu phía sau mang số tài khoản nguồn và tài khoản đích. Nó cũng chỉ định số tiền cần trích nợ của giao dịch. Nếu thiếu một dấu phẩy hoặc sai tên trường, T24 sẽ từ chối xử lý ngay lập tức."
+                }
+            ]
+        },
+        # 5. EXAMPLE
+        {
+            "id": "example",
+            "kind": "example",
+            "title": "Tính toán kích thước hàng đợi và thời gian quay vòng lệnh",
+            "checks": [
+                "5000 * 35 == 175000 and 175000 // 1000 == 175",
+                "175 // 28 == 6 and 6 + 1 == 7",
+                "5000 * 2 == 10000"
+            ],
+            "steps": [
+                {
+                    "show": """<p><b>Bước 1 — Tính số lượng bản tin đồng thời trong hàng đợi (Little's Law)</b>:</p>
+<div class="box key">Định luật Little: $L = N \\times W$.<br/>
+Với thông lượng $N = 5\,000$ lệnh/giây, thời gian phản hồi $W = 35$ ms $= 0{,}035$ giây.<br/>
+Số bản tin trung bình đang nằm trong hàng đợi: $L = 5\,000 \\times 0{,}035 = 175$ bản tin.</div>""",
+                    "focus": [0, 0, 0],
+                    "say": "Bước một, ta tính toán số lượng bản tin đồng thời trong hàng đợi theo định luật Lít-tơn. Với lưu lượng 5 nghìn lệnh mỗi giây và thời gian xử lý là 35 mi li giây, số bản tin trung bình lưu lại trong hàng đợi là 175 bản tin. Do đó, kích thước bộ nhớ đệm tối thiểu phải chứa được 175 bản tin tại mọi thời điểm."
+                },
+                {
+                    "clear": True,
+                    "show": """<p><b>Bước 2 — Xác định số kết nối Connection Pool tối ưu</b>:</p>
+<table class="t">
+  <tr><th>chỉ số</th><th>công thức tính</th><th>kết quả</th></tr>
+  <tr><td>Khả năng tải của 1 kết nối</td><td>$1\,000 / 35$</td><td>$\\approx 28$ lệnh/giây</td></tr>
+  <tr><td>Số kết nối tối thiểu</td><td>$175 / 28$</td><td>$\\approx 7$ kết nối đồng thời</td></tr>
+  <tr><td>Hệ số dự phòng an toàn</td><td>$7 \\times 2$</td><td>$14$ kết nối cho cụm dịch vụ</td></tr>
+</table>""",
+                    "focus": [0, 0, 0],
+                    "say": "Bước hai, ta xác định số kết nối cần thiết trong nhóm kết nối. Vì một kết nối xử lý được 28 lệnh mỗi giây, ta chia 175 cho 28 được xấp xỉ 7 kết nối đồng thời. Do cần dự phòng cao điểm và tránh nghẽn luồng, ta nhân hệ số an toàn bằng hai để cấu hình 14 kết nối cho cụm dịch vụ."
+                },
+                {
+                    "clear": True,
+                    "show": """<p><b>Bước 3 — Cấu hình hàng đợi vào và hàng đợi ra</b>:</p>
+<div class="box key">Tách biệt hoàn toàn hai hàng đợi độc lập: <code>T24.OFS.REQUEST</code> (vào) và <code>T24.OFS.REPLY</code> (ra). Dung lượng tối đa: $10\,000$ bản tin, đủ chứa tải gấp đôi giờ cao điểm.</div>""",
+                    "focus": [0, 0, 0],
+                    "say": "Bước ba, ta phân tách rạch ròi hàng đợi gửi lệnh và hàng đợi nhận kết quả. Tuyệt đối không dùng chung một hàng đợi hai chiều để tránh tranh chấp đọc ghi. Cấu hình dung lượng hàng đợi lên tới 10 nghìn bản tin giúp hệ thống hấp thụ hoàn toàn xung lực tải đột biến."
+                }
+            ]
+        },
+        # 6. CHECK
+        {
+            "id": "check",
+            "kind": "check",
+            "title": "Kiểm tra xử lý tình huống Timeout của Core T24",
+            "checks": [
+                "3000 // 1000 == 3",
+                "5000000 - 0 == 5000000"
+            ],
+            "steps": [
+                {
+                    "show": """<p><b>Tình huống phỏng vấn</b>: Gửi lệnh trích nợ 5 triệu đồng qua IBM MQ nhưng sau 3 giây không nhận được phản hồi từ T24. Bạn xử lý thế nào?</p>
+<table class="t">
+  <tr><th>cách xử lý sai lầm</th><th>cách xử lý chuẩn Senior</th></tr>
+  <tr><td>Báo lỗi thất bại ngay cho khách</td><td>Chuyển trạng thái giao dịch sang IN_DOUBT (nghi vấn)</td></tr>
+  <tr><td>Tự động hoàn tiền hoặc gửi lại lệnh</td><td>Kích hoạt Worker truy vấn số dư và nhật ký T24 sau 3 giây</td></tr>
+  <tr><td>Gây lệch sổ cái hoặc trừ tiền 2 lần</td><td>Chỉ hoàn tiền khi có kết quả đối soát chính xác</td></tr>
+</table>""",
+                    "focus": [0, 0, 0],
+                    "say": "Ta kiểm tra tình huống thực tế khi máy chủ Core T24 bị quá tải dẫn tới hết thời gian chờ 3 giây. Do đối tác chưa rõ kết quả, cách làm nghiệp dư là báo lỗi thất bại ngay hoặc tự động bấm gửi lại lệnh. Sai lầm này vì thế sẽ khiến tài khoản khách hàng bị trừ tiền hai lần hoặc làm lệch sổ cái ngân hàng."
+                },
+                {
+                    "clear": True,
+                    "show": """<div class="box key"><b>Quy tắc xử lý bất biến</b>: Vì mạng bị ngắt quãng, ta chuyển trạng thái sang nghi vấn. Sau 3 giây, Worker tự động gọi truy vấn sổ phụ để kiểm tra lệnh 5 triệu đã hạch toán hay chưa. Do đó, ngân hàng bảo toàn nguyên vẹn 5 triệu đồng mà không phát sinh sai sót tài chính.</div>""",
+                    "focus": [0, 0],
+                    "say": "Vì bản tin có thể đã vào Core và được hạch toán, ta phải đánh dấu trạng thái nghi vấn. Do đối tác chưa rõ kết quả, tiến trình tự động sẽ tra cứu lại sau 3 giây để bảo toàn trọn vẹn số tiền cho khách hàng."
+                }
+            ]
+        },
+        # 7. PITFALL
+        {
+            "id": "pitfall",
+            "kind": "pitfall",
+            "title": "Ba sai lầm nghiêm trọng khi tích hợp IBM MQ và Core T24",
+            "steps": [
+                {
+                    "show": """<table class="t">
+  <tr><th>sai lầm sơ cấp</th><th>hậu quả kỹ thuật</th><th>giải pháp chuẩn Senior</th></tr>
+  <tr><td>Dùng luồng đồng bộ chờ kết quả</td><td>cạn kiệt luồng máy chủ web, sập toàn bộ cổng API</td><td>chuyển sang kiến trúc Vert.x bất đồng bộ nhả luồng tức thì</td></tr>
+  <tr><td>Không thiết lập Message Expiry</td><td>bản tin cũ ứ đọng hàng đợi, hạch toán nhầm ngày hôm sau</td><td>đặt thời gian hết hạn tin nhắn bằng 60 giây</td></tr>
+  <tr><td>Bỏ qua hàng đợi tin lỗi Poison MQ</td><td>một bản tin lỗi cú pháp làm đứng toàn bộ tiến trình đọc</td><td>cấu hình Dead Letter Queue sau 3 lần nhận thất bại</td></tr>
+</table>""",
+                    "focus": [0, 0, 0, 0],
+                    "say": "Có ba sai lầm chí mạng khiến ứng viên bị đánh rớt tại phòng phỏng vấn. Thứ nhất là dùng luồng đồng bộ chờ kết quả khiến máy chủ cạn kiệt tài nguyên khi Core xử lý chậm. Thứ hai là không đặt thời hạn hết hạn cho bản tin khiến các lệnh cũ bị hạch toán nhầm sang ngày hôm sau. Thứ ba là thiếu hàng đợi tin lỗi khiến một bản tin hỏng làm nghẽn toàn bộ đường truyền."
+                }
+            ]
+        },
+        # 8. QUIZ
+        {
+            "id": "quiz",
+            "kind": "quiz",
+            "title": "Thử thách phản xạ kiến trúc phỏng vấn ACB",
+            "checks": [
+                "1000 - 35 == 965 and 35 + 965 == 1000",
+                "5000000 * 2 == 10000000"
+            ],
+            "steps": [
+                {
+                    "pause": 15,
+                    "show": """<p><b>Câu hỏi trắc nghiệm kiến trúc</b>: Khi kết nối Core T24 qua IBM MQ, tại sao kỹ sư bắt buộc phải dùng thuộc tính <code>JMSCorrelationID</code> thay vì mở một hàng đợi riêng cho mỗi người dùng?</p>
+<ul>
+  <li><b>A</b>: Vì mở hàng triệu hàng đợi riêng lẻ sẽ làm sập bộ nhớ máy chủ IBM MQ.</li>
+  <li><b>B</b>: Vì T24 không hỗ trợ định tuyến tin nhắn qua địa chỉ IP.</li>
+  <li><b>C</b>: Vì mở hàng đợi riêng không đảm bảo bảo mật đường truyền.</li>
+  <li><b>D</b>: Vì giao thức TCP chỉ cho phép một kết nối duy nhất.</li>
+</ul>""",
+                    "focus": [0, 0, 0],
+                    "say": "Hãy cùng thử thách với một câu hỏi hóc búa thường gặp tại ACB. Khi kết nối Core T24 qua IBM MQ, tại sao ta bắt buộc phải dùng mã định danh tương quan thay vì mở hàng đợi riêng cho từng khách hàng? Bạn có 15 giây suy nghĩ trước khi nghe đáp án chuẩn xác."
+                },
+                {
+                    "clear": True,
+                    "show": """<div class="box key"><b>Đáp án chính xác là A</b>!</div>
+<p><b>Bước 1 — Phân tích chi phí tài nguyên máy chủ IBM MQ</b>:</p>
+<p>Máy chủ IBM MQ quản lý mỗi hàng đợi bằng cấu trúc cây nhớ và tệp đĩa chuyên dụng. Nếu mở riêng cho hàng triệu khách hàng, bộ nhớ RAM sẽ bị quá tải ngay lập tức.</p>""",
+                    "focus": [0, 0],
+                    "say": "Đáp án chính xác là phương án A. Bước một, việc tạo hàng triệu hàng đợi riêng biệt sẽ làm cạn kiệt bộ nhớ và gây quá tải máy chủ tin nhắn."
+                },
+                {
+                    "clear": True,
+                    "show": """<p><b>Bước 2 — Ưu thế của mã định danh tương quan JMSCorrelationID</b>:</p>
+<div class="box key">Sử dụng chung 2 hàng đợi lớn kèm <code>JMSCorrelationID</code> giúp ghép đúng kết quả trong thời gian $35$ ms mà chỉ tiêu tốn tài nguyên tối thiểu, loại bỏ nguy cơ mất $5$ triệu đồng do trừ trùng lặp.</div>""",
+                    "focus": [0, 0],
+                    "say": "Bước hai, dùng chung hai hàng đợi lớn và phân loại bằng mã định danh giúp hệ thống đạt độ trễ 35 mi li giây mà vẫn bảo toàn tài nguyên tuyệt đối. Cơ chế này loại bỏ hoàn toàn nguy cơ trừ trùng lặp tiền của khách hàng."
+                }
+            ]
+        },
+        # 9. RECAP
+        {
+            "id": "recap",
+            "kind": "recap",
+            "title": "Tổng kết chuỗi logic tích hợp Core Banking Temenos T24",
+            "steps": [
+                {
+                    "show": """<div class="chain">
+  <span>Tạo OFS XML chuẩn</span> &rarr;
+  <span>Gán CorrelId ngẫu nhiên</span> &rarr;
+  <span>Đẩy vào T24.OFS.REQUEST</span> &rarr;
+  <span>T24 hạch toán sổ cái</span> &rarr;
+  <span>Nhận tại T24.OFS.REPLY</span> &rarr;
+  <span>Xử lý In-Doubt an toàn</span>
+</div>
+<p style="margin-top: 15px;"><b>Hành trang cốt lõi để đạt mức lương 50 triệu gross tại ACB</b>: Làm chủ bản tin OFS XML, phân tách hàng đợi bất đồng bộ, kiểm soát độ trễ 35 ms và tuyệt đối không để xảy ra trừ tiền hai lần.</p>""",
+                    "focus": [0, 0, 0],
+                    "say": "Tóm lại, chuỗi logic tích hợp Core T24 gồm tạo bản tin OFS, gán mã định danh, đẩy vào hàng đợi yêu cầu và nhận kết quả an toàn. Đây chính là năng lực thực chiến giúp bạn khẳng định vị thế Senior chuyên nghiệp và tự tin trước hội đồng ACB. Mức đãi ngộ 50 triệu gross hoàn toàn xứng đáng với giá trị bạn mang lại."
+                }
+            ]
+        }
+    ]
+}
+
+with open("lessons/acb/L01_tich_hop_core_t24_ibm_mq.yaml", "w", encoding="utf-8") as f:
+    yaml.dump(lesson, f, allow_unicode=True, sort_keys=False, width=1000)
+
+print("Created lessons/acb/L01_tich_hop_core_t24_ibm_mq.yaml successfully!")

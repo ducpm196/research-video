@@ -1,0 +1,432 @@
+id: L07
+course: BNK
+series: BNK · Nền tảng Backend Ngân hàng cho người mất gốc
+title: 'Bài 7 — Kafka: phân vùng, offset, chia lại và số lần xử lý'
+voice: vi-VN-NamMinhNeural
+rate: -5%
+depth: full
+source: curriculum/bnk.yaml L07; audit/bnk/verify_bnk.py L07; Apache Kafka documentation
+  (consumer groups, delivery semantics); băm crc32 chỉ để tất định, Kafka dùng murmur2
+assumes: []
+objectives:
+- Chia phân vùng cho nhóm bộ đọc và tính số người ngồi không
+- Giải thích vì sao cùng khoá giữ đúng thứ tự
+- Dự đoán số lần xử lý theo thứ tự ghi nhớ và xử lý khi sập
+- Khử trùng ở phía xử lý để được hiệu quả đúng một lần
+asr_reviewed:
+- sentence: Quá số phân vùng thì các bộ đọc thừa ngồi không.
+  reason: 'ASR chép “Quả số phân vùng thì các bộ độc thương ngồi không?” (0.727):
+    lệch âm/thanh thuần Việt: quá/quả, đọc thừa/độc thương — NOT_VERIFIED bằng tai
+    người'
+- sentence: Kiểm phép chia dư.
+  reason: 'ASR chép “Kiểm phép chi dư.” (0.75): lệch âm/thanh thuần Việt: chia/chi
+    — NOT_VERIFIED bằng tai người'
+- sentence: Bây giờ tới phần bạn tự làm bài.
+  reason: 'ASR chép “Bây giờ tới phần bạn tự lam bay.” (0.75): lệch âm/thanh thuần
+    Việt: làm bài/lam bay — NOT_VERIFIED bằng tai người'
+- sentence: Đáp án câu hai.
+  reason: 'ASR chép “Đập án câu 2.” (0.75): lệch âm/thanh thuần Việt: đáp/đập — NOT_VERIFIED
+    bằng tai người'
+- sentence: Làm thử, khoá T K một không không một hai lần đều vào phân vùng một.
+  reason: 'ASR chép “Làm thử, khóa TK10012 lần đều vào phân vùng 1.” (0.788): lệch
+    âm/thanh thuần Việt: một/mười nghìn, không một/trăm mười — NOT_VERIFIED bằng tai
+    người'
+- sentence: Đừng hỏi Kafka có đúng một lần không.
+  reason: 'ASR chép “Đừng hỏi cắp ca có đúng một lần không?” (0.889): lệch âm/thanh
+    thuần Việt: cáp/cắp — NOT_VERIFIED bằng tai người'
+- sentence: Lỗi thứ ba, cũng của người đã đi làm, là nghe đúng một lần của Kafka rồi
+    tin mọi tác dụng phụ chỉ xảy ra một lần.
+  reason: 'ASR chép “Lỗi thứ ba, cũng của người đã đi làm là nghe đúng một lần của
+    kắp ca rồi tin mọi tác dụng phụ chỉ xảy ra một lần.” (0.964): lệch âm/thanh thuần
+    Việt: cáp/kắp — NOT_VERIFIED bằng tai người'
+scenes:
+- id: hook
+  kind: hook
+  title: Vì sao một thông điệp khi thì bị xử lý hai lần, khi thì mất hẳn?
+  steps:
+  - show: '<p>Một bộ đọc Kafka xử lý thông điệp số $2$ rồi <b>sập trước khi ghi nhớ</b>
+      rằng đã đọc. Khi chạy lại, nó đọc thông điệp số $2$ <b>lần nữa</b>.</p>
+
+      <div class="box key">Đổi thứ tự “ghi nhớ trước, xử lý sau” thì thông điệp số
+      $2$ lại <b>mất hẳn</b>.</div>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    say: Chào bạn, một bộ đọc Kafka xử lý thông điệp số hai rồi sập, trước khi kịp
+      ghi nhớ rằng đã đọc. Khi chạy lại, nó đọc thông điệp số hai lần nữa. Nếu đổi
+      thứ tự, ghi nhớ trước rồi xử lý sau, thì thông điệp số hai lại mất hẳn.
+  - show: <table class='t'><tr><th>thứ tự</th><th>thông điệp số 2 được xử lý</th><th>tên
+      gọi</th></tr><tr><td>xử lý rồi ghi nhớ</td><td>2 lần</td><td>ít nhất một lần</td></tr><tr><td>ghi
+      nhớ rồi xử lý</td><td>0 lần</td><td>nhiều nhất một lần</td></tr></table>
+    say: Bảng này là kết quả mô phỏng ở cuối bài. Xử lý rồi mới ghi nhớ thì thông
+      điệp số hai được xử lý hai lần, gọi là ít nhất một lần. Ghi nhớ rồi mới xử lý
+      thì có thể mất, gọi là nhiều nhất một lần. Hôm nay ta học cách sống chung với
+      chuyện này.
+- id: prereq
+  kind: prereq
+  title: Ôn lại ba điều sẽ dùng
+  checks:
+  - 13 == 2 * 6 + 1 and 13 % 6 == 1
+  steps:
+  - show: <table class='t'><tr><th>khái niệm</th><th>nghĩa</th><th>ví dụ</th></tr><tr><td>①
+      Nhật ký chỉ thêm</td><td>chỉ ghi nối vào cuối, không sửa dòng cũ</td><td>thông
+      điệp 0, 1, 2, 3, …</td></tr><tr><td>② Số thứ tự (offset)</td><td>vị trí của
+      mỗi thông điệp trong nhật ký</td><td>thông điệp thứ 2 có offset 2</td></tr><tr><td>③
+      Băm chia dư</td><td>biến khoá thành số rồi chia dư để chọn một nhóm</td><td>mã
+      băm 13 chia 6 dư 1 → nhóm 1</td></tr></table>
+    say: Trước hết ta ôn lại ba điều sẽ dùng. Nhật ký chỉ thêm là chỉ ghi nối vào
+      cuối, không sửa dòng cũ. Số thứ tự cho biết vị trí của mỗi thông điệp trong
+      nhật ký. Còn băm chia dư là biến khoá thành một số rồi chia dư để chọn một nhóm,
+      ví dụ mười ba chia sáu dư một thì vào nhóm một.
+  - show: $$13 = 2 \cdot 6 + 1$$
+    say: Kiểm phép chia dư. Mười ba bằng hai nhân sáu cộng một, nên mười ba chia sáu
+      dư một.
+    introduces:
+    - cdot
+- id: sym
+  kind: symbol
+  title: Giải mã vài từ hay gặp
+  steps:
+  - show: <table class='t'><tr><th>từ</th><th>nghĩa</th></tr><tr><td>topic</td><td>một
+      luồng thông điệp có tên, ví dụ giao dịch chuyển tiền</td></tr><tr><td>partition
+      (phân vùng)</td><td>một nhật ký thật của topic; topic gồm nhiều phân vùng chạy
+      song song</td></tr><tr><td>consumer group</td><td>nhóm bộ đọc cùng chia nhau
+      các phân vùng của topic</td></tr><tr><td>rebalance</td><td>chia lại phân vùng
+      khi có bộ đọc vào hoặc ra khỏi nhóm</td></tr><tr><td>commit offset</td><td>ghi
+      nhớ đã đọc tới đâu để lần sau đọc tiếp</td></tr></table>
+    say: Bảng này giải mã năm từ. Chủ đề là một luồng thông điệp có tên. Phân vùng
+      là một nhật ký thật của chủ đề, và chủ đề gồm nhiều phân vùng chạy song song.
+      Nhóm bộ đọc là các bộ đọc cùng chia nhau phân vùng. Chia lại là khi có bộ đọc
+      vào hay ra khỏi nhóm. Còn ghi nhớ vị trí là lưu lại đã đọc tới đâu.
+- id: intuition
+  kind: intuition
+  title: 'Hình dung: phân vùng, nhóm bộ đọc và chia lại'
+  steps:
+  - show: '<div><svg width="1500" height="420" viewBox="0 0 1500 420" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><rect
+      x="40" y="30" width="760" height="360" rx="12" fill="#fef3c7" stroke="#d97706"
+      stroke-width="3"/><text x="420.0" y="68" font-size="26" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">Topic có 6 phân vùng</text><rect x="70" y="100"
+      width="320" height="50" rx="10" fill="#e5e7eb" stroke="#6b7280" stroke-width="3"/><text
+      x="230.0" y="133" font-size="22" text-anchor="middle" fill="#1f2937">P0: 0 1
+      2 3 …</text><rect x="410" y="100" width="360" height="50" rx="10" fill="#e5e7eb"
+      stroke="#6b7280" stroke-width="3"/><text x="590.0" y="133" font-size="22" text-anchor="middle"
+      fill="#1f2937">P1: 0 1 2 …</text><rect x="70" y="170" width="320" height="50"
+      rx="10" fill="#e5e7eb" stroke="#6b7280" stroke-width="3"/><text x="230.0" y="203"
+      font-size="22" text-anchor="middle" fill="#1f2937">P2: 0 1 2 3 …</text><rect
+      x="410" y="170" width="360" height="50" rx="10" fill="#e5e7eb" stroke="#6b7280"
+      stroke-width="3"/><text x="590.0" y="203" font-size="22" text-anchor="middle"
+      fill="#1f2937">P3: 0 1 …</text><rect x="70" y="240" width="320" height="50"
+      rx="10" fill="#e5e7eb" stroke="#6b7280" stroke-width="3"/><text x="230.0" y="273"
+      font-size="22" text-anchor="middle" fill="#1f2937">P4: 0 1 2 …</text><rect x="410"
+      y="240" width="360" height="50" rx="10" fill="#e5e7eb" stroke="#6b7280" stroke-width="3"/><text
+      x="590.0" y="273" font-size="22" text-anchor="middle" fill="#1f2937">P5: 0 1
+      2 3 …</text><rect x="900" y="30" width="560" height="360" rx="12" fill="#dcfce7"
+      stroke="#16a34a" stroke-width="3"/><text x="1180.0" y="68" font-size="26" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">Nhóm bộ đọc: 3 người</text><rect x="940" y="100"
+      width="480" height="70" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text
+      x="1180.0" y="143" font-size="24" text-anchor="middle" fill="#1f2937">Đọc 1:
+      P0, P1</text><rect x="940" y="190" width="480" height="70" rx="10" fill="#dbeafe"
+      stroke="#2a78d6" stroke-width="3"/><text x="1180.0" y="233" font-size="24" text-anchor="middle"
+      fill="#1f2937">Đọc 2: P2, P3</text><rect x="940" y="280" width="480" height="70"
+      rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="1180.0" y="323"
+      font-size="24" text-anchor="middle" fill="#1f2937">Đọc 3: P4, P5</text></svg></div>'
+    clear: true
+    say: Hình cho thấy chủ đề có sáu phân vùng, mỗi phân vùng là một nhật ký riêng.
+      Nhóm có ba bộ đọc, mỗi bộ đọc nhận hai phân vùng. Quy tắc quan trọng là mỗi
+      phân vùng chỉ có một bộ đọc trong nhóm, nên thứ tự trong phân vùng được giữ.
+  - show: '<div><svg width="1500" height="420" viewBox="0 0 1500 420" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><rect
+      x="40" y="30" width="700" height="360" rx="12" fill="#dcfce7" stroke="#16a34a"
+      stroke-width="3"/><text x="390.0" y="68" font-size="26" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">Trước: 3 người</text><rect x="70" y="100"
+      width="640" height="60" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text
+      x="390.0" y="138" font-size="24" text-anchor="middle" fill="#1f2937">Đọc 1:
+      P0, P1</text><rect x="70" y="180" width="640" height="60" rx="10" fill="#dbeafe"
+      stroke="#2a78d6" stroke-width="3" stroke-dasharray="8 6"/><text x="390.0" y="218"
+      font-size="24" text-anchor="middle" fill="#1f2937">Đọc 2: P2, P3</text><rect
+      x="70" y="260" width="640" height="60" rx="10" fill="#dbeafe" stroke="#2a78d6"
+      stroke-width="3"/><text x="390.0" y="298" font-size="24" text-anchor="middle"
+      fill="#1f2937">Đọc 3: P4, P5</text><line x1="750" y1="210" x2="810" y2="210"
+      stroke="#dc2626" stroke-width="3.5" marker-end="url(#ah)"/><rect x="820" y="30"
+      width="640" height="360" rx="12" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text
+      x="1140.0" y="68" font-size="26" text-anchor="middle" fill="#1f2937" font-weight="bold">Sau
+      khi Đọc 2 rời nhóm</text><rect x="850" y="100" width="580" height="60" rx="10"
+      fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="1140.0" y="138" font-size="24"
+      text-anchor="middle" fill="#1f2937">Đọc 1: P0, P1, P2</text><rect x="850" y="200"
+      width="580" height="60" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text
+      x="1140.0" y="238" font-size="24" text-anchor="middle" fill="#1f2937">Đọc 3:
+      P3, P4, P5</text><text x="1140" y="320" font-size="24" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">chia lại (rebalance): mỗi người 3 phân vùng</text></svg></div>'
+    clear: true
+    say: Khi một bộ đọc rời nhóm, hệ thống chia lại. Còn hai bộ đọc, nên sáu phân
+      vùng chia thành ba cho mỗi người. Trong lúc chia lại, việc đọc có thể tạm dừng,
+      và các thông điệp chưa ghi nhớ vị trí có thể bị đọc lại.
+  - show: <div><svg width="1500" height="400" viewBox="0 0 1500 400" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><rect
+      x="60" y="70" width="320" height="80" rx="10" fill="#dbeafe" stroke="#2a78d6"
+      stroke-width="3"/><text x="220.0" y="118" font-size="24" text-anchor="middle"
+      fill="#1f2937">đọc thông điệp</text><rect x="480" y="70" width="320" height="80"
+      rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="3"/><text x="640.0" y="118"
+      font-size="24" text-anchor="middle" fill="#1f2937">xử lý</text><rect x="900"
+      y="70" width="320" height="80" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text
+      x="1060.0" y="118" font-size="24" text-anchor="middle" fill="#1f2937">ghi nhớ
+      vị trí</text><line x1="380" y1="110" x2="475" y2="110" stroke="#475569" stroke-width="3.5"
+      marker-end="url(#ah)"/><line x1="800" y1="110" x2="895" y2="110" stroke="#475569"
+      stroke-width="3.5" marker-end="url(#ah)"/><text x="750" y="210" font-size="26"
+      text-anchor="middle" fill="#dc2626" font-weight="bold">Sập giữa “xử lý” và “ghi
+      nhớ” → khởi động lại đọc lại → xử lý hai lần</text><rect x="60" y="260" width="320"
+      height="80" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text
+      x="220.0" y="308" font-size="24" text-anchor="middle" fill="#1f2937">đọc thông
+      điệp</text><rect x="480" y="260" width="320" height="80" rx="10" fill="#fef3c7"
+      stroke="#d97706" stroke-width="3"/><text x="640.0" y="308" font-size="24" text-anchor="middle"
+      fill="#1f2937">ghi nhớ vị trí</text><rect x="900" y="260" width="320" height="80"
+      rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="3"/><text x="1060.0" y="308"
+      font-size="24" text-anchor="middle" fill="#1f2937">xử lý</text><line x1="380"
+      y1="300" x2="475" y2="300" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><line
+      x1="800" y1="300" x2="895" y2="300" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><text
+      x="750" y="385" font-size="26" text-anchor="middle" fill="#dc2626" font-weight="bold">Sập
+      giữa “ghi nhớ” và “xử lý” → khởi động lại bỏ qua → mất thông điệp</text></svg></div>
+    clear: true
+    say: Hình thứ ba cho thấy hai thứ tự. Hàng trên, xử lý rồi mới ghi nhớ. Sập ở
+      giữa thì khi chạy lại sẽ đọc lại, nên xử lý hai lần. Hàng dưới, ghi nhớ rồi
+      mới xử lý. Sập ở giữa thì khi chạy lại sẽ bỏ qua, nên mất thông điệp.
+- id: formula
+  kind: formula
+  title: 'Suy ra từng bước: chia việc và số lần xử lý'
+  checks:
+  - '[alg.bnk_key_partition(k, 6) for k in (''TK-1001'', ''TK-1001'')] == [1, 1]'
+  - len(alg.bnk_assign(6, 8)[6]) + len(alg.bnk_assign(6, 8)[7]) == 0 and sum(1 for
+    g in alg.bnk_assign(6, 8) if g) == 6
+  - alg.bnk_commit_sim(5, 2, False)[2] >= 1 and alg.bnk_commit_sim(5, 2, True)[2]
+    <= 1
+  steps:
+  - show: '<p><b>Bước 1.</b> Cùng khoá băm ra cùng phân vùng, <b>miễn là số phân vùng
+      không đổi</b>, nên thông điệp cùng một tài khoản nằm cùng một phân vùng và <b>giữ
+      đúng thứ tự</b>.</p>
+
+      <span class=''note''>Làm thử: khoá TK-1001 hai lần đều vào phân vùng 1. Thêm
+      phân vùng thì khoá có thể chuyển sang phân vùng khác.</span>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    say: Bước một, vì cùng khoá băm ra cùng phân vùng, miễn là số phân vùng không
+      đổi, nên thông điệp của cùng một tài khoản nằm cùng một phân vùng và giữ đúng
+      thứ tự. Làm thử, khoá T K một không không một hai lần đều vào phân vùng một.
+      Nếu thêm phân vùng, phép chia dư đổi, và khoá có thể chuyển sang phân vùng khác.
+  - show: '<p><b>Bước 2.</b> Mỗi phân vùng chỉ một bộ đọc trong nhóm, nên số bộ đọc
+      làm việc thật sự tối đa bằng <b>số phân vùng</b>.</p>
+
+      <span class=''note''>Làm thử: $6$ phân vùng, $8$ bộ đọc → $6$ làm việc, $2$
+      ngồi không.</span>
+
+      '
+    focus:
+    - 1
+    - 2
+    say: Bước hai, vì mỗi phân vùng chỉ có một bộ đọc trong nhóm, nên số bộ đọc làm
+      việc tối đa bằng số phân vùng. Làm thử, sáu phân vùng mà tám bộ đọc thì sáu
+      người làm việc, hai người ngồi không.
+  - show: '<p><b>Bước 3.</b> Số lần xử lý một thông điệp phụ thuộc <b>thứ tự</b> giữa
+      xử lý và ghi nhớ khi sập: xử lý trước thì $\ge 1$ lần, ghi nhớ trước thì $\le
+      1$ lần.</p>
+
+      <span class=''note''>Muốn đúng một lần về hiệu quả: xử lý trước, ghi nhớ sau,
+      và để việc xử lý lũy đẳng.</span>
+
+      '
+    focus:
+    - 1
+    - 2
+    say: Bước ba, vì khi sập, thứ tự giữa xử lý và ghi nhớ quyết định kết quả, nên
+      xử lý trước thì ít nhất một lần, ghi nhớ trước thì nhiều nhất một lần. Muốn
+      hiệu quả đúng một lần, ta xử lý trước, ghi nhớ sau, và làm việc xử lý lũy đẳng.
+- id: example
+  kind: example
+  title: Ví dụ bằng số, từng phép tính
+  checks:
+  - 6 // 3 == 2 and alg.bnk_assign(6, 3) == [[0, 1], [2, 3], [4, 5]]
+  - 6 // 2 == 3 and alg.bnk_assign(6, 2) == [[0, 1, 2], [3, 4, 5]]
+  - 8 - 6 == 2
+  - alg.bnk_commit_sim(5, 2, False) == [1, 1, 2, 1, 1] and sum(alg.bnk_commit_sim(5,
+    2, False)) == 6
+  - alg.bnk_commit_sim(5, 2, True) == [1, 1, 0, 1, 1] and sum(alg.bnk_commit_sim(5,
+    2, True)) == 4
+  steps:
+  - show: '<p>Topic $6$ phân vùng, nhóm $3$ bộ đọc: chia đều.</p>
+
+      $$① \; \frac{6}{3} = \hl{2}\ \text{phân vùng mỗi người}$$
+
+      '
+    focus:
+    - 1
+    - 2
+    say: Ta tính bốn tình huống. Tình huống một, chủ đề sáu phân vùng, nhóm ba bộ
+      đọc, chia đều thì mỗi người nhận sáu chia ba, là hai phân vùng.
+  - show: '<p>Một người rời nhóm, còn $2$ người.</p>
+
+      $$② \; \frac{6}{2} = \hl{3}\ \text{phân vùng mỗi người}$$
+
+      '
+    focus:
+    - 1
+    - 2
+    say: Tình huống hai, một người rời nhóm, còn hai người. Mỗi người nhận sáu chia
+      hai, là ba phân vùng.
+  - show: '<p>Thêm người cho đủ $8$ bộ đọc.</p>
+
+      $$③ \; 8 - 6 = \hl{2}\ \text{người ngồi không}$$
+
+      '
+    focus:
+    - 1
+    - 2
+    say: Tình huống ba, thêm người cho đủ tám bộ đọc. Chỉ có sáu phân vùng nên hai
+      người ngồi không, tám trừ sáu bằng hai.
+  - show: '<p>Năm thông điệp $0..4$. Sập ở thông điệp $2$, thứ tự <b>xử lý rồi ghi
+      nhớ</b>.</p>
+
+      $$④ \; \text{số lần xử lý} = [1, 1, \hl{2}, 1, 1]\quad \text{tổng } 6$$
+
+      '
+    focus:
+    - 1
+    - 2
+    clear: true
+    say: Tình huống bốn, năm thông điệp từ không tới bốn, sập ở thông điệp hai, thứ
+      tự xử lý rồi ghi nhớ. Số lần xử lý là một, một, hai, một, một, tổng cộng sáu
+      lần cho năm thông điệp.
+  - show: '<p>Cùng tình huống nhưng <b>ghi nhớ rồi xử lý</b>.</p>
+
+      $$⑤ \; \text{số lần xử lý} = [1, 1, \hl{0}, 1, 1]\quad \text{tổng } 4$$
+
+      '
+    focus:
+    - 1
+    - 2
+    say: Tình huống năm, cùng tình huống nhưng ghi nhớ rồi mới xử lý. Số lần xử lý
+      là một, một, không, một, một, tổng bốn lần, tức là mất thông điệp số hai.
+- id: check
+  kind: check
+  title: 'Tự kiểm bằng đường khác: khử trùng ở phía xử lý'
+  checks:
+  - len(set(i for i, c in enumerate(alg.bnk_commit_sim(5, 2, False)) for _ in range(c)))
+    == 5
+  steps:
+  - show: '<p>Đường khác: giữ <b>tập các mã đã xử lý</b>. Thông điệp số $2$ đến hai
+      lần, nhưng lần hai gặp mã đã có nên bỏ qua.</p>
+
+      $$\text{số thông điệp xử lý thật} = \hlg{5}$$
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    say: Kiểm bằng đường khác. Vì thông điệp đến ít nhất một lần, nên ta giữ tập các
+      mã đã xử lý. Thông điệp số hai đến hai lần, nhưng lần hai gặp mã đã có nên bị
+      bỏ qua. Kết quả là năm thông điệp được xử lý thật, đúng mỗi thông điệp một lần.
+  - show: <table class='t'><tr><th>cách</th><th>xử lý thật mỗi thông điệp</th><th>điều
+      kiện</th></tr><tr><td>ít nhất một lần + khử trùng</td><td>đúng 1 lần (về hiệu
+      quả)</td><td>mã thông điệp duy nhất, kho mã bền; ghi mã đã xử lý và tác dụng
+      nghiệp vụ trong cùng một giao dịch cơ sở dữ liệu</td></tr><tr><td>nhiều nhất
+      một lần</td><td>0 hoặc 1 lần</td><td>chấp nhận mất</td></tr></table>
+    say: Bảng này so hai cách. Vì thông điệp đã đến ít nhất một lần, nên khử trùng
+      cho hiệu quả đúng một lần, với điều kiện mã thông điệp duy nhất và kho mã bền.
+      Mã đã xử lý và tác dụng nghiệp vụ phải được ghi trong cùng một giao dịch cơ
+      sở dữ liệu, nếu không thì sập ở giữa vẫn trùng hoặc mất. Nhiều nhất một lần
+      thì có thể mất, chỉ dùng khi chấp nhận mất.
+- id: pitfalls
+  kind: pitfall
+  title: Lỗi hay gặp, có lỗi của người đã đi làm
+  steps:
+  - show: <div class="box warn"><b>Lỗi 1 (người mới).</b> Nghĩ thêm bộ đọc là nhanh
+      hơn mãi. Quá số phân vùng, các bộ đọc thừa <b class="red">ngồi không</b>.</div>
+    say: Lỗi thứ nhất, của người mới. Nghĩ thêm bộ đọc là nhanh hơn mãi. Quá số phân
+      vùng thì các bộ đọc thừa ngồi không.
+  - show: '<div class="box warn"><b>Lỗi 2 (người đã đi làm).</b> <b class="red">Xử
+      lý quá lâu</b> trong một lần đọc. Bộ đọc bị coi là chết, nhóm chia lại, thông
+      điệp đang xử lý bị giao cho người khác và <b>xử lý hai lần</b>.
+
+      <br><span class="note">Cách chữa: gọi <code>poll()</code> lại trong hạn <code>max.poll.interval.ms</code>
+      (giảm <code>max.poll.records</code> hoặc tăng hạn), và làm việc xử lý lũy đẳng.</span></div>
+
+      '
+    say: Lỗi thứ hai, của người đã đi làm, là xử lý quá lâu trong một lần đọc. Bộ
+      đọc bị coi là chết, nhóm chia lại, thông điệp đang xử lý bị giao cho người khác
+      và xử lý hai lần. Nhịp báo còn sống chạy ở một luồng riêng, nên lỗi này là do
+      quá hạn giữa hai lần đọc. Cách chữa là đọc lại trong hạn cho phép, bằng cách
+      lấy ít thông điệp hơn mỗi lần hoặc tăng hạn, và làm việc xử lý lũy đẳng.
+  - show: '<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Nghe “đúng một lần”
+      của Kafka rồi tin mọi tác dụng phụ chỉ xảy ra một lần. Giao dịch của Kafka chỉ
+      bao trùm đọc, xử lý, ghi <b>trong Kafka</b>.
+
+      Ghi vào cơ sở dữ liệu hay gọi hệ ngoài vẫn cần khoá lũy đẳng.</div>
+
+      '
+    say: Lỗi thứ ba, cũng của người đã đi làm, là nghe đúng một lần của Kafka rồi
+      tin mọi tác dụng phụ chỉ xảy ra một lần. Giao dịch của Kafka chỉ bao trùm việc
+      đọc, xử lý và ghi bên trong Kafka. Ghi vào cơ sở dữ liệu hay gọi hệ ngoài vẫn
+      cần khoá lũy đẳng.
+- id: quiz
+  kind: quiz
+  title: Đến lượt bạn
+  checks:
+  - '[len(g) for g in alg.bnk_assign(10, 4)] == [3, 3, 2, 2]'
+  - 12 - 10 == 2 and sum(1 for g in alg.bnk_assign(10, 12) if not g) == 2
+  steps:
+  - show: '<table class=''t''><tr><th>câu</th><th>đề</th></tr><tr><td>1</td><td>10
+      phân vùng, 4 bộ đọc. Mỗi người nhận mấy phân vùng (chia khoảng liền nhau)?</td></tr><tr><td>2</td><td>10
+      phân vùng, 12 bộ đọc. Mấy người ngồi không?</td></tr><tr><td>3</td><td>Quyết
+      định: lệnh trừ tiền nên ghi nhớ vị trí trước hay sau khi xử lý?</td></tr></table>'
+    pause: 25
+    say: Bây giờ tới phần bạn tự làm bài. Câu một, mười phân vùng, bốn bộ đọc, mỗi
+      người nhận mấy phân vùng? Câu hai, mười phân vùng, mười hai bộ đọc, mấy người
+      ngồi không? Câu ba, lệnh trừ tiền nên ghi nhớ vị trí trước hay sau khi xử lý?
+      Hãy dừng video và làm ra giấy.
+  - show: '<p>Câu 1: $10 = 4 \cdot 2 + 2$, nên hai người đầu nhận $3$, hai người sau
+      nhận $2$.</p>
+
+      $$[3, 3, 2, 2]\quad 3 + 3 + 2 + 2 = \hl{10}$$
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    say: Đáp án câu một. Mười bằng bốn nhân hai cộng hai, nên hai người đầu nhận ba
+      phân vùng, hai người sau nhận hai. Ba cộng ba cộng hai cộng hai bằng mười.
+    clear: true
+  - show: $$12 - 10 = \hlg{2}\ \text{người ngồi không}$$
+    say: Đáp án câu hai. Mười hai bộ đọc trừ mười phân vùng, nên hai người ngồi không.
+  - show: <table class='t'><tr><th>lựa chọn</th><th>được</th><th>mất</th></tr><tr><td>xử
+      lý rồi ghi nhớ + khoá lũy đẳng</td><td>không mất lệnh, trùng thì bị chặn</td><td>phải
+      làm khoá lũy đẳng</td></tr><tr><td>ghi nhớ rồi xử lý</td><td>không bao giờ xử
+      lý hai lần</td><td>có thể mất lệnh trừ tiền</td></tr></table>
+    say: Đáp án câu ba. Với lệnh trừ tiền, mất lệnh nguy hiểm hơn trùng lệnh, vì trùng
+      ta chặn được bằng khoá lũy đẳng. Nên chọn xử lý rồi mới ghi nhớ, kèm khoá lũy
+      đẳng.
+    clear: true
+- id: recap
+  kind: recap
+  title: Chuỗi logic & tư duy cần mang theo
+  steps:
+  - show: <div class='chain'><span class='n'>khoá → phân vùng</span><span class='a'>→</span><span
+      class='n'>mỗi phân vùng một bộ đọc</span><span class='a'>→</span><span class='n'>sập
+      → đọc lại</span><span class='a'>→</span><span class='n'>xử lý lũy đẳng</span></div>
+    say: Tổng kết chuỗi logic. Khoá quyết định phân vùng. Mỗi phân vùng chỉ một bộ
+      đọc. Sập thì đọc lại, nên việc xử lý phải lũy đẳng.
+  - show: <div class='box key'><b>Tư duy:</b> đừng hỏi “Kafka có đúng một lần không”.
+      Hãy hỏi <b>“khi sập giữa chừng, việc của tôi chạy mấy lần, và có hại không?”</b></div>
+    say: Điều cần mang theo. Đừng hỏi Kafka có đúng một lần không. Hãy hỏi, khi sập
+      giữa chừng, việc của tôi chạy mấy lần, và có hại không.

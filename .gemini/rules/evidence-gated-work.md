@@ -1,6 +1,6 @@
 # Evidence-Gated Work Rule for Google Antigravity & Gemini runtimes
 
-Activate this rule in any Antigravity or Gemini CLI project by copying it into `.gemini/rules/evidence-gated-work.md`.
+Optional always-on rule. Copy it into the rules or context location that your runtime documents (the exact path for Antigravity and Gemini CLI is NOT_VERIFIED here; check the runtime's own documentation). The full procedures live in the skill `evidence-gated-work`.
 
 ## 5-Stage Operational Lifecycle (Mandatory Protocol)
 Whenever receiving a user request or initiating a non-trivial task, follow this exact sequence:

@@ -1331,6 +1331,27 @@ def sql_txn(setup, stmts, query, transaction=True):
         con.close()
 
 
+def sql_stmt_fail(setup, stmts, query):
+    """Mở BEGIN rồi chạy `stmts` trên sqlite3, KHÔNG gọi ROLLBACK khi lỗi (dừng ở câu lỗi đầu tiên). Cho thấy hệ quản trị
+    (SQLite, mặc định ON CONFLICT ABORT) chỉ huỷ câu lệnh lỗi: giao dịch vẫn mở, thay đổi của câu trước còn đó.
+    Trả (thông báo lỗi hoặc None, giao dịch còn mở?, kết quả `query` ngay sau đó, bên trong giao dịch)."""
+    import sqlite3
+    con = sqlite3.connect(":memory:", isolation_level=None)
+    try:
+        con.executescript(setup)
+        con.execute("BEGIN")
+        err = None
+        for st in stmts:
+            try:
+                con.execute(st)
+            except sqlite3.Error as e:
+                err = str(e)
+                break
+        return err, con.in_transaction, [tuple(r) for r in con.execute(query).fetchall()]
+    finally:
+        con.close()
+
+
 def lost_update(start, deltas):
     """Hai (hay nhiều) giao dịch cùng ĐỌC giá trị `start` trước khi bất kỳ ai ghi, mỗi giao dịch ghi đọc + delta của mình.
     Trả giá trị cuối (giao dịch ghi sau cùng thắng) và giá trị đúng nếu chạy lần lượt."""
@@ -6744,3 +6765,364 @@ def gfx_schlick_fresnel(cos_theta, F0=0.04):
 def gfx_overdraw_fragments(w, h, overdraw):
     """Số mảnh phải tô khi khung hình w × h có độ tô đè trung bình `overdraw` lần."""
     return round(w * h * overdraw)
+
+
+# ═══════════════ BNK · Nền tảng Backend Ngân hàng (mô phỏng tất định; mọi hàm có tiền tố bnk_) ═══════════════
+# Số trong bài là số minh hoạ trừ khi ghi nguồn. Bộ kiểm độc lập (cách tính KHÁC): audit/bnk/verify_bnk.py.
+import hashlib as _bnk_hashlib
+import hmac as _bnk_hmac
+import sqlite3 as _bnk_sqlite3
+import zlib as _bnk_zlib
+from decimal import Decimal as _BnkDecimal
+
+
+def bnk_reachable(refs, roots):
+    """Đối tượng còn tới được từ gốc (duyệt ngăn xếp) — phần còn lại là rác mà bộ thu gom được phép dọn."""
+    seen, stack = set(), list(roots)
+    while stack:
+        o = stack.pop()
+        if o in seen:
+            continue
+        seen.add(o)
+        stack.extend(refs.get(o, []))
+    return sorted(seen)
+
+
+def bnk_lost_update(start, deltas):
+    """Mỗi luồng: đọc số dư rồi ghi (đọc + delta). Liệt kê MỌI cách xen kẽ giữ thứ tự trong từng luồng; trả tập số dư cuối."""
+    n = len(deltas)
+    finals = set()
+    for order in set(itertools.permutations([i for i in range(n) for _ in (0, 1)])):
+        bal, reg, pc = start, [None] * n, [0] * n
+        for t in order:
+            if pc[t] == 0:
+                reg[t] = bal
+            else:
+                bal = reg[t] + deltas[t]
+            pc[t] += 1
+        finals.add(bal)
+    return sorted(finals)
+
+
+def bnk_batch_time(tasks, workers, t):
+    """Thời gian chờ khi `tasks` việc, mỗi việc chặn `t` giây, chạy bằng `workers` luồng (làm theo lô)."""
+    batches = 0
+    left = tasks
+    while left > 0:
+        left -= workers
+        batches += 1
+    return batches * t
+
+
+def bnk_spring_sim(inner_via_proxy, inner_mode, outer_fails):
+    """Giao dịch Spring thu nhỏ: ngoài = REQUIRED qua proxy; trong = audit() với REQUIRED hoặc REQUIRES_NEW, gọi qua proxy
+    hoặc gọi thẳng this. Trả (số giao dịch đã mở, các dòng đã commit)."""
+    committed, stack, begun = [], [], 0
+    stack.append([])
+    begun += 1
+    stack[-1].append("transfer")
+    if inner_via_proxy and inner_mode == "REQUIRES_NEW":
+        stack.append([])
+        begun += 1
+        stack[-1].append("audit")
+        committed.extend(stack.pop())
+    else:
+        stack[-1].append("audit")
+    if outer_fails:
+        stack.pop()
+    else:
+        committed.extend(stack.pop())
+    return begun, sorted(committed)
+
+
+def bnk_retry_sim(balance, amount, attempts, use_key):
+    """Khách gọi chuyển tiền, mọi phản hồi trừ lần cuối bị mất nên khách gọi lại. Trả số dư cuối bên máy chủ."""
+    seen = set()
+    for _ in range(attempts):
+        if use_key and "k1" in seen:
+            continue
+        seen.add("k1")
+        balance -= amount
+    return balance
+
+
+def bnk_sql_plan(with_index, where):
+    """Kế hoạch thực thi (EXPLAIN QUERY PLAN của sqlite) cho truy vấn trên bảng 5000 giao dịch."""
+    con = _bnk_sqlite3.connect(":memory:")
+    con.execute("CREATE TABLE tx(id INTEGER PRIMARY KEY, account_id INTEGER, amount INTEGER, created TEXT)")
+    con.executemany("INSERT INTO tx(account_id, amount, created) VALUES (?,?,?)",
+                    [(i % 500, i * 7 % 1000, "2026-01-%02d" % (i % 28 + 1)) for i in range(5000)])
+    if with_index:
+        con.execute("CREATE INDEX ix_acc_created ON tx(account_id, created)")
+    plan = " | ".join(r[3] for r in con.execute("EXPLAIN QUERY PLAN SELECT * FROM tx WHERE " + where))
+    con.close()
+    return plan
+
+
+def bnk_btree_levels(rows, fanout):
+    """Số tầng của cây B+ có `fanout` nhánh mỗi nút để chứa `rows` dòng (đếm bằng vòng lặp nguyên)."""
+    levels, cap = 1, fanout
+    while cap < rows:
+        cap *= fanout
+        levels += 1
+    return levels
+
+
+def bnk_lock_sim(sessions):
+    """Mỗi phiên khoá các hàng theo thứ tự rồi commit; hai phiên thay phiên nhau từng bước. Trả 'ok' hoặc 'deadlock'."""
+    held, idx = {}, [0] * len(sessions)
+    done = [False] * len(sessions)
+    while not all(done):
+        progress = False
+        for s, seq in enumerate(sessions):
+            if done[s]:
+                continue
+            if idx[s] < len(seq):
+                row = seq[idx[s]]
+                if held.get(row, s) == s:
+                    held[row] = s
+                    idx[s] += 1
+                    progress = True
+            if idx[s] == len(seq):
+                for r in [r for r, o in held.items() if o == s]:
+                    del held[r]
+                done[s] = True
+                progress = True
+        if not progress:
+            return "deadlock"
+    return "ok"
+
+
+def bnk_cache_avg(hit, t_cache, t_db):
+    """Độ trễ trung bình kiểu cache-aside: luôn hỏi bộ đệm; trượt thì hỏi thêm cơ sở dữ liệu."""
+    return hit * t_cache + (1 - hit) * (t_cache + t_db)
+
+
+def bnk_fencing_sim(use_fence):
+    """A giữ khoá hạn 10 giây (mã chặn 1), tạm dừng tới giây 12; B xin khoá lúc giây 11 (mã chặn 2) và ghi lúc 11,5;
+    A tỉnh dậy ghi lúc 12. Trả thứ tự người ghi được kho nhận."""
+    writes = [(11.5, "B", 2), (12.0, "A", 1)]
+    accepted, top = [], 0
+    for _, who, token in sorted(writes):
+        if use_fence and token < top:
+            continue
+        top = max(top, token)
+        accepted.append(who)
+    return accepted
+
+
+def bnk_assign(partitions, consumers):
+    """Chia phân vùng 0..partitions-1 cho `consumers` người đọc theo khoảng liền nhau (người đầu nhận phần dư)."""
+    base, extra = divmod(partitions, consumers)
+    out, p = [], 0
+    for c in range(consumers):
+        n = base + (1 if c < extra else 0)
+        out.append(list(range(p, p + n)))
+        p += n
+    return out
+
+
+def bnk_key_partition(key, n):
+    """Cùng khoá luôn vào cùng phân vùng (băm crc32 để tất định; Kafka thật dùng murmur2)."""
+    return _bnk_zlib.crc32(key.encode("utf-8")) % n
+
+
+def bnk_commit_sim(n_msgs, crash_at, commit_first):
+    """Đọc thông điệp 0..n-1. Sập đúng ở thông điệp crash_at, ở khe giữa xử lý và commit. Khởi động lại từ offset đã commit.
+    Trả số lần xử lý của từng thông điệp."""
+    count = [0] * n_msgs
+    committed, crashed = 0, False
+    i = committed
+    while i < n_msgs:
+        if commit_first:
+            committed = i + 1
+            if i == crash_at and not crashed:
+                crashed = True
+                i = committed
+                continue
+            count[i] += 1
+        else:
+            count[i] += 1
+            if i == crash_at and not crashed:
+                crashed = True
+                i = committed
+                continue
+            committed = i + 1
+        i += 1
+    return count
+
+
+def bnk_saga(fail_step, steps=("ghi nợ", "ghi có", "thông báo")):
+    """SAGA (mặc định 3 bước: ghi nợ, ghi có, thông báo). Bước lỗi => chạy bù cho các bước đã xong theo thứ tự ngược. Trả nhật ký."""
+    steps = list(steps)
+    log = []
+    for i, s in enumerate(steps):
+        if i == fail_step:
+            log.append("lỗi " + s)
+            for done in reversed(steps[:i]):
+                log.append("bù " + done)
+            return log
+        log.append(s)
+    return log
+
+
+def bnk_outbox_sim(crash_point, use_outbox):
+    """Ghi dữ liệu nghiệp vụ rồi báo cho hệ khác. crash_point: 'none' hoặc 'between' (sập giữa hai việc).
+    Không outbox: hai việc tách rời, sập giữa thì đã lưu nhưng KHÔNG sự kiện nào. Có outbox: hai dòng cùng một giao dịch,
+    bộ chuyển tiếp phát sự kiện sau khi khởi động lại. Trả (đã lưu, số sự kiện cuối cùng được phát)."""
+    if use_outbox:
+        return True, 1
+    return True, (1 if crash_point == "none" else 0)
+
+
+def bnk_ledger_demo(amount, fee):
+    """Chuyển `amount` kèm phí `fee` bằng bút toán kép nguyên đồng. Trả (tổng bút toán, số dư từng tài khoản)."""
+    con = _bnk_sqlite3.connect(":memory:")
+    con.execute("CREATE TABLE entry(txn INTEGER, acct TEXT, amt INTEGER)")
+    rows = [(1, "khach_A", -(amount + fee)), (1, "khach_B", amount), (1, "thu_phi", fee)]
+    con.executemany("INSERT INTO entry VALUES (?,?,?)", rows)
+    total = con.execute("SELECT SUM(amt) FROM entry").fetchone()[0]
+    bal = dict(con.execute("SELECT acct, SUM(amt) FROM entry GROUP BY acct"))
+    con.close()
+    return total, bal
+
+
+def bnk_reply_match(order):
+    """5 yêu cầu mã 0..4 (nội dung 'yc<mã>'); phản hồi 'tl<mã>' về theo thứ tự `order`.
+    Trả (số phản hồi đúng nếu ghép theo thứ tự đến, số đúng nếu ghép theo mã tương quan)."""
+    requests = {i: "yc%d" % i for i in range(5)}
+    replies = [(rid, "tl%d" % rid) for rid in order]
+    by_arrival = sum(1 for k, (rid, body) in enumerate(replies) if requests[k][2:] == body[2:])
+    by_id = sum(1 for rid, body in replies if requests[rid][2:] == body[2:])
+    return by_arrival, by_id
+
+
+def bnk_unknown_outcome(posted, query_first):
+    """Mất phản hồi: lõi ngân hàng đã hạch toán (posted) hay chưa. Trả số lần ghi nợ sau khi khách xử lý."""
+    debits = 1 if posted else 0
+    if query_first:
+        if not posted:
+            debits += 1
+    else:
+        debits += 1
+    return debits
+
+
+_BNK_FIELDS = {2: ("llvar", 19), 3: ("n", 6), 4: ("n", 12), 7: ("n", 10), 11: ("n", 6), 12: ("n", 6), 13: ("n", 4),
+               37: ("an", 12), 39: ("an", 2), 41: ("ans", 8), 49: ("n", 3)}
+
+
+def bnk_iso_pack(mti, fields):
+    """Đóng gói ISO 8583:1987 dạng chữ: MTI + bản đồ bit chính (16 chữ hex) + các trường theo thứ tự tăng dần."""
+    bits = 0
+    body = ""
+    for f in sorted(fields):
+        kind, ln = _BNK_FIELDS[f]
+        v = fields[f]
+        bits |= 1 << (64 - f)
+        if kind == "llvar":
+            body += "%02d" % len(v) + v
+        else:
+            assert len(v) == ln, (f, v)
+            body += v
+    return mti + "%016X" % bits + body
+
+
+def bnk_iso_unpack(msg):
+    """Đọc ngược bản tin: trả (MTI, {số trường: giá trị})."""
+    mti, bitmap, p = msg[:4], int(msg[4:20], 16), 20
+    out = {}
+    for f in range(2, 65):
+        if bitmap >> (64 - f) & 1:
+            kind, ln = _BNK_FIELDS[f]
+            if kind == "llvar":
+                n = int(msg[p:p + 2])
+                p += 2
+                out[f] = msg[p:p + n]
+                p += n
+            else:
+                out[f] = msg[p:p + ln]
+                p += ln
+    return mti, out
+
+
+def bnk_reconcile(bank, switch):
+    """Đối soát hai danh sách (rrn, số tiền). Trả số khớp, số chỉ có ở ngân hàng, số chỉ có ở đối tác, số lệch tiền."""
+    b, s = dict(bank), dict(switch)
+    both = set(b) & set(s)
+    return (sum(1 for k in both if b[k] == s[k]), len(set(b) - set(s)), len(set(s) - set(b)),
+            sum(1 for k in both if b[k] != s[k]))
+
+
+def bnk_pin_block0(pin, pan):
+    """Khối PIN định dạng ISO 9564-0 (chưa mã hoá): (0, độ dài PIN, PIN, F đệm) XOR (0000, 12 chữ số PAN bỏ số kiểm cuối). Dữ liệu minh hoạ."""
+    p1 = ("0%d" % len(pin) + pin).ljust(16, "F")
+    p2 = "0000" + pan[-13:-1]
+    return "%016X" % (int(p1, 16) ^ int(p2, 16))
+
+
+def bnk_luhn(pan):
+    """Kiểm tra số kiểm Luhn của số thẻ."""
+    total = 0
+    for i, ch in enumerate(reversed(pan)):
+        d = int(ch)
+        if i % 2 == 1:
+            d *= 2
+            if d > 9:
+                d -= 9
+        total += d
+    return total % 10 == 0
+
+
+def bnk_mac(key, msg):
+    """HMAC-SHA256 dạng hex (chỉ để minh hoạ phát hiện sửa bản tin; chuẩn thẻ dùng thuật toán MAC riêng)."""
+    return _bnk_hmac.new(key.encode(), msg.encode(), _bnk_hashlib.sha256).hexdigest()
+
+
+def bnk_unique_key_rows(attempts):
+    """Bảng có ràng buộc UNIQUE(idempotency_key): chèn `attempts` lần cùng khoá, trả số dòng còn lại."""
+    con = _bnk_sqlite3.connect(":memory:")
+    con.execute("CREATE TABLE pay(k TEXT UNIQUE, amt INTEGER)")
+    for _ in range(attempts):
+        try:
+            con.execute("INSERT INTO pay VALUES ('k1', 500000)")
+        except _bnk_sqlite3.IntegrityError:
+            pass
+    n = con.execute("SELECT COUNT(*) FROM pay").fetchone()[0]
+    con.close()
+    return n
+
+
+def bnk_float_vs_decimal():
+    """Mười lần cộng 0,1: số thực nhị phân lệch, Decimal và số nguyên đơn vị nhỏ thì đúng."""
+    f = 0.0
+    d = _BnkDecimal("0")
+    i = 0
+    for _ in range(10):
+        f += 0.1
+        d += _BnkDecimal("0.1")
+        i += 1
+    return f, d, i
+
+
+def bnk_ledger_after_reversal(amount, fee):
+    """Sau bút toán đảo cho giao dịch 1 (không xoá dòng cũ): trả (số dòng, tổng, số dư từng tài khoản)."""
+    con = _bnk_sqlite3.connect(":memory:")
+    con.execute("CREATE TABLE entry(txn INTEGER, acct TEXT, amt INTEGER)")
+    con.executemany("INSERT INTO entry VALUES (?,?,?)", [(1, "khach_A", -(amount + fee)), (1, "khach_B", amount), (1, "thu_phi", fee)])
+    con.execute("INSERT INTO entry SELECT 2, acct, -amt FROM entry WHERE txn = 1")
+    n = con.execute("SELECT COUNT(*) FROM entry").fetchone()[0]
+    total = con.execute("SELECT SUM(amt) FROM entry").fetchone()[0]
+    bal = dict(con.execute("SELECT acct, SUM(amt) FROM entry GROUP BY acct"))
+    con.close()
+    return n, total, bal
+
+
+def bnk_ledger_unbalanced(rows):
+    """Danh sách giao dịch có tổng bút toán khác 0 (rows: danh sách (txn, tài khoản, số tiền))."""
+    con = _bnk_sqlite3.connect(":memory:")
+    con.execute("CREATE TABLE entry(txn INTEGER, acct TEXT, amt INTEGER)")
+    con.executemany("INSERT INTO entry VALUES (?,?,?)", rows)
+    bad = [r[0] for r in con.execute("SELECT txn FROM entry GROUP BY txn HAVING SUM(amt) <> 0 ORDER BY txn")]
+    con.close()
+    return bad

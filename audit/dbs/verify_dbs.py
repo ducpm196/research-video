@@ -150,7 +150,23 @@ try:
     con.execute("COMMIT")
 except sqlite3.IntegrityError:
     con.execute("ROLLBACK")
-rec("L11a", con.execute("SELECT so_du FROM TaiKhoan ORDER BY ten").fetchall() == [(100,), (50,)], "chuyển 150 thất bại, giao dịch huỷ cả nhóm")
+rec("L11a", con.execute("SELECT so_du FROM TaiKhoan ORDER BY ten").fetchall() == [(100,), (50,)], "chuyển 150 thất bại, ứng dụng ROLLBACK → huỷ cả nhóm")
+# L11c: KHÔNG có ROLLBACK của ứng dụng → SQLite (ON CONFLICT ABORT mặc định) chỉ huỷ câu lỗi; giao dịch vẫn mở, B = 200 còn đó
+# (tài liệu SQLite “ON CONFLICT clause”; cùng kiểu: MySQL/InnoDB “InnoDB Error Handling”) — cơ sở cho câu “ứng dụng phải gọi ROLLBACK”
+con2 = sqlite3.connect(":memory:", isolation_level=None)
+con2.executescript("CREATE TABLE TaiKhoan (ten TEXT PRIMARY KEY, so_du INTEGER CHECK (so_du >= 0)); INSERT INTO TaiKhoan VALUES ('A', 100), ('B', 50);")
+con2.execute("BEGIN")
+con2.execute("UPDATE TaiKhoan SET so_du = so_du + 150 WHERE ten = 'B'")
+try:
+    con2.execute("UPDATE TaiKhoan SET so_du = so_du - 150 WHERE ten = 'A'")
+except sqlite3.IntegrityError:
+    pass
+st = (con2.in_transaction, con2.execute("SELECT ten, so_du FROM TaiKhoan ORDER BY ten").fetchall())
+rec("L11c", st == (True, [("A", 100), ("B", 200)]) and alg.sql_stmt_fail(
+    "CREATE TABLE TaiKhoan (ten TEXT PRIMARY KEY, so_du INTEGER CHECK (so_du >= 0)); INSERT INTO TaiKhoan VALUES ('A', 100), ('B', 50);",
+    ["UPDATE TaiKhoan SET so_du = so_du + 150 WHERE ten = 'B'", "UPDATE TaiKhoan SET so_du = so_du - 150 WHERE ten = 'A'"],
+    "SELECT * FROM TaiKhoan")[1:] == st, "không ROLLBACK: hệ quản trị chỉ huỷ câu lỗi, giao dịch còn mở, B = 200")
+con2.close()
 rec("L11b", alg.lost_update(100, [10, 10]) == (110, 120), "mất cập nhật 110 thay vì 120")
 
 
@@ -174,6 +190,27 @@ for code, sch, exp in (("L12a", [("T1", "R", "A"), ("T2", "W", "A"), ("T2", "R",
                        ("L12c", [("T1", "R", "A"), ("T2", "R", "A"), ("T1", "W", "A"), ("T2", "W", "A")], True)):
     e = {(ti, tj) for i, (ti, ai, xi) in enumerate(sch) for tj, aj, xj in sch[i + 1:] if ti != tj and xi == xj and "W" in (ai, aj)}
     rec(code, cyclic_kahn(e) == exp and alg.precedence_graph(sch) == (e, exp), f"đồ thị ưu tiên {sorted(e)}, chu trình = {exp} (Kahn)")
+
+
+def l12_run(order, A, B):
+    """Lỗi 3 của L12, chạy tay từng thao tác (không reduce như checks): T1 đọc A rồi ghi B = (A đọc được) + 1; T2 ghi A = 10 rồi đọc B.
+    Trả (T2 đọc B, B cuối)."""
+    t1 = t2 = None
+    for op in order:
+        if op == "R1A":
+            t1 = A
+        elif op == "W1B":
+            B = t1 + 1
+        elif op == "W2A":
+            A = 10
+        else:
+            t2 = B
+    return t2, B
+
+
+L12P = [l12_run(o, 1, b) for b in (2, 5) for o in (["R1A", "W2A", "R2B", "W1B"], ["R1A", "W1B", "W2A", "R2B"], ["W2A", "R2B", "R1A", "W1B"])]
+rec("L12d", L12P == [(2, 2), (2, 2), (2, 11), (5, 2), (2, 2), (5, 11)] and L12P[3] not in L12P[4:],
+    "lỗi 3: B = 2 tình cờ khớp T1 rồi T2; B = 5 lệch cả hai thứ tự lần lượt")
 rec("L13a", alg.strict_2pl([("T1", "W", "A"), ("T2", "W", "B"), ("T1", "W", "B"), ("T2", "W", "A")])[2] and alg.strict_2pl([("T1", "R", "A"), ("T2", "R", "A"), ("T1", "W", "A"), ("T2", "W", "A")])[2],
     "khoá hai pha: hai kịch bản bế tắc")
 

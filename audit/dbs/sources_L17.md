@@ -104,6 +104,10 @@ Tải: www.postgresql.org/docs/release/11.0/ và www.postgresql.org/about/news/p
   the default value is a constant.”
 - Thông cáo: “Removing the need for ALTER TABLE .. ADD COLUMN .. DEFAULT .. with a not NULL default to rewrite the whole table on execution,
   which provides a significant performance boost when running this command.”
+- Bổ sung 2026-11-08 (đọc kiểm): PostgreSQL 10 Documentation, ALTER TABLE, mục Notes (www.postgresql.org/docs/10/sql-altertable.html, WebFetch):
+  “If there is no DEFAULT clause, this is merely a metadata change and does not require any immediate update of the table's data; the added
+  NULL values are supplied on readout, instead.” → bài ghi “cột để rỗng, không mặc định, thì từ trước đã chỉ sửa siêu dữ liệu”, và câu
+  “trước 2018 thêm cột là dựng lại cả bảng” chỉ áp cho MySQL (nguồn [MY18]: “Up until 8.0 …, InnoDB used to add columns … by rebuilding”).
 
 ## [MY22] MySQL 8.0.29 Release Notes, 2022-04-26
 Tải: dev.mysql.com/doc/relnotes/mysql/8.0/en/news-8-0-29.html (WebFetch).

@@ -1,0 +1,391 @@
+id: L08
+course: BNK
+series: BNK · Nền tảng Backend Ngân hàng cho người mất gốc
+title: Bài 8 — SAGA và Transactional Outbox
+voice: vi-VN-NamMinhNeural
+rate: -5%
+depth: full
+source: curriculum/bnk.yaml L08; audit/bnk/verify_bnk.py L08; Garcia-Molina & Salem,
+  Sagas (1987); Richardson, Microservices Patterns (Transactional Outbox)
+assumes: []
+objectives:
+- Đếm số dòng nhật ký và thứ tự bước bù khi một bước lỗi
+- Giải thích vì sao ghi kép làm mất sự kiện
+- Mô tả cách Outbox gộp lưu và báo thành một giao dịch
+- Chọn điều phối hay phối hợp theo sự kiện
+asr_reviewed:
+- sentence: Bây giờ tới phần bạn tự làm bài.
+  reason: 'ASR chép “Bây giờ tới phần bạn tự lam bay.” (0.75): lệch âm/thanh thuần
+    Việt: làm bài/lam bay — NOT_VERIFIED bằng tai người'
+- sentence: Đáp án câu hai.
+  reason: 'ASR chép “Đập án câu 2.” (0.75): lệch âm/thanh thuần Việt: đáp/đập — NOT_VERIFIED
+    bằng tai người'
+- sentence: Câu hai, bước bù chạy theo thứ tự nào?
+  reason: 'ASR chép “Câu 2. Bước buồn chạy theo thứ tử nào” (0.778): lệch âm/thanh
+    thuần Việt: bù/buồn, tự/tử — NOT_VERIFIED bằng tai người'
+- sentence: Rồi một bộ chuyển tiếp đọc bảng Outbox và gửi sang Kafka, kể cả khi dịch
+    vụ đã sập và chạy lại.
+  reason: 'ASR chép “Rồi một bộ chuyển tiếp đọc bản Au Bốc và gửi sang Kafka kể cả
+    khi dịch vụ đã sập và chạy lại.” (0.889): lệch âm/thanh thuần Việt: bảng outbox/bản
+    au bốc — NOT_VERIFIED bằng tai người'
+- sentence: Tưởng SAGA cho tính cô lập như giao dịch thường.
+  reason: 'ASR chép “Tưởng Saga cho tính cô lập như giao dịch thương.” (0.9): lệch
+    âm/thanh thuần Việt: thường/thương — NOT_VERIFIED bằng tai người'
+- sentence: Không có Outbox thì không sự kiện nào được phát.
+  reason: 'ASR chép “Không có áo bốc thì không sự kiện nào được phát.” (0.909): lệch
+    âm/thanh thuần Việt: ao/áo — NOT_VERIFIED bằng tai người'
+- sentence: Lưu cơ sở dữ liệu rồi gửi Kafka thành hai lệnh riêng.
+  reason: 'ASR chép “Lưu cơ sở dữ liệu rồi gửi káp ca thành hai lệnh riêng.” (0.923):
+    lệch âm/thanh thuần Việt: cáp/káp — NOT_VERIFIED bằng tai người'
+- sentence: SAGA là chuỗi giao dịch cục bộ, mỗi bước có bước bù để quay lui.
+  reason: 'ASR chép “Saga là chủ giao dịch cục bộ, mỗi bước có bước bù để quay lui.”
+    (0.933): lệch âm/thanh thuần Việt: chuỗi/chủ — NOT_VERIFIED bằng tai người'
+scenes:
+- id: hook
+  kind: hook
+  title: Vì sao tiền bị trừ mà bên kia chưa nhận?
+  steps:
+  - show: '<p>Chuyển tiền gồm nhiều việc ở nhiều dịch vụ: <b>giữ hạn mức</b>, <b>ghi
+      nợ</b>, <b>ghi có</b>, rồi <b>thông báo</b>. Mỗi dịch vụ có cơ sở dữ liệu riêng,
+      không có giao dịch chung bao tất cả.</p>
+
+      <div class="box key">Nếu ghi có lỗi sau khi ghi nợ đã xong, tiền của khách <b>đã
+      bị trừ</b> mà chưa ai nhận.</div>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    say: Chào bạn, chuyển tiền gồm nhiều việc ở nhiều dịch vụ khác nhau, là giữ hạn
+      mức, ghi nợ, ghi có, rồi thông báo. Mỗi dịch vụ có cơ sở dữ liệu riêng, nên
+      không có giao dịch chung bao tất cả. Nếu ghi có lỗi sau khi ghi nợ đã xong,
+      tiền của khách đã bị trừ mà chưa ai nhận.
+  - show: <table class='t'><tr><th>tình huống</th><th>kết quả mô phỏng</th></tr><tr><td>ghi
+      có lỗi, không bù</td><td>tiền mất dấu</td></tr><tr><td>ghi có lỗi, chạy bước
+      bù</td><td>ghi nợ được hoàn lại</td></tr><tr><td>lưu xong rồi sập trước khi
+      báo, không Outbox</td><td>0 sự kiện được phát</td></tr><tr><td>có Outbox</td><td>1
+      sự kiện được phát</td></tr></table>
+    say: Bảng này là kết quả mô phỏng ở cuối bài. Ghi có lỗi mà không bù thì tiền
+      mất dấu. Có bước bù thì ghi nợ được hoàn lại. Lưu xong rồi sập trước khi báo
+      thì không có sự kiện nào được phát, còn có Outbox thì sự kiện vẫn được phát.
+- id: prereq
+  kind: prereq
+  title: Ôn lại ba điều sẽ dùng
+  checks:
+  - 500000 - 500000 == 0
+  steps:
+  - show: <table class='t'><tr><th>khái niệm</th><th>nghĩa</th><th>ví dụ</th></tr><tr><td>①
+      Giao dịch cục bộ</td><td>tất cả hoặc không gì cả, nhưng chỉ trong một cơ sở
+      dữ liệu</td><td>trừ và cộng trong cùng một bảng</td></tr><tr><td>② Dịch vụ độc
+      lập</td><td>mỗi dịch vụ sở hữu dữ liệu riêng và có thể lỗi riêng</td><td>dịch
+      vụ ghi nợ, dịch vụ ghi có</td></tr><tr><td>③ Hành động bù</td><td>việc làm ngược
+      lại để huỷ tác dụng của một việc đã xong</td><td>hoàn lại tiền đã trừ</td></tr></table>
+    say: Trước hết ta ôn lại ba điều sẽ dùng. Giao dịch cục bộ bảo đảm tất cả hoặc
+      không gì cả, nhưng chỉ trong một cơ sở dữ liệu. Dịch vụ độc lập sở hữu dữ liệu
+      riêng và có thể lỗi riêng. Hành động bù là việc làm ngược lại để huỷ tác dụng
+      của một việc đã xong, ví dụ hoàn lại tiền đã trừ.
+  - show: $$+500\,000 - 500\,000 = 0$$
+    say: Một ví dụ cho hành động bù. Trừ năm trăm nghìn rồi hoàn lại năm trăm nghìn,
+      tổng bằng không, như chưa từng trừ.
+- id: sym
+  kind: symbol
+  title: Giải mã vài từ hay gặp
+  steps:
+  - show: <table class='t'><tr><th>từ</th><th>nghĩa</th></tr><tr><td>SAGA</td><td>chuỗi
+      giao dịch cục bộ; mỗi bước có bước bù để quay lui</td></tr><tr><td>compensation
+      (bù)</td><td>bước làm ngược lại cho một bước đã xong</td></tr><tr><td>orchestration
+      / choreography</td><td>một người điều phối gọi từng bước / các dịch vụ tự phản
+      ứng với sự kiện</td></tr><tr><td>Transactional Outbox</td><td>ghi dữ liệu và
+      sự kiện vào cùng một giao dịch, rồi một bộ chuyển tiếp phát sự kiện</td></tr><tr><td>relay
+      (bộ chuyển tiếp)</td><td>tiến trình đọc bảng Outbox rồi gửi sang Kafka</td></tr></table>
+    say: Bảng này giải mã năm từ. SAGA là chuỗi giao dịch cục bộ, mỗi bước có bước
+      bù để quay lui. Bù là việc làm ngược lại cho một bước đã xong. Điều phối là
+      một người gọi từng bước, còn phối hợp theo sự kiện là các dịch vụ tự phản ứng.
+      Outbox là ghi dữ liệu và sự kiện vào cùng một giao dịch, rồi bộ chuyển tiếp
+      phát sự kiện.
+- id: intuition
+  kind: intuition
+  title: 'Hình dung: chuỗi bước và bước bù ngược chiều'
+  steps:
+  - show: '<div><svg width="1500" height="420" viewBox="0 0 1500 420" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><rect
+      x="40" y="60" width="360" height="90" rx="10" fill="#dcfce7" stroke="#16a34a"
+      stroke-width="3"/><text x="220.0" y="97" font-size="24" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">0. giữ hạn mức</text><text x="220.0" y="129"
+      font-size="24" text-anchor="middle" fill="#1f2937">xong</text><rect x="500"
+      y="60" width="360" height="90" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="3"/><text
+      x="680.0" y="97" font-size="24" text-anchor="middle" fill="#1f2937" font-weight="bold">1.
+      ghi nợ</text><text x="680.0" y="129" font-size="24" text-anchor="middle" fill="#1f2937">xong</text><rect
+      x="960" y="60" width="360" height="90" rx="10" fill="#fee2e2" stroke="#dc2626"
+      stroke-width="3"/><text x="1140.0" y="97" font-size="24" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">2. ghi có</text><text x="1140.0" y="129" font-size="24"
+      text-anchor="middle" fill="#1f2937">LỖI</text><line x1="400" y1="105" x2="495"
+      y2="105" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><line x1="860"
+      y1="105" x2="955" y2="105" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><rect
+      x="500" y="250" width="360" height="90" rx="10" fill="#fef3c7" stroke="#d97706"
+      stroke-width="3"/><text x="680.0" y="287" font-size="24" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">bù: hoàn lại ghi nợ</text><text x="680.0"
+      y="319" font-size="24" text-anchor="middle" fill="#1f2937">chạy trước</text><rect
+      x="40" y="250" width="360" height="90" rx="10" fill="#fef3c7" stroke="#d97706"
+      stroke-width="3"/><text x="220.0" y="287" font-size="24" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">bù: trả lại hạn mức</text><text x="220.0"
+      y="319" font-size="24" text-anchor="middle" fill="#1f2937">chạy sau</text><line
+      x1="960" y1="160" x2="865" y2="245" stroke="#d97706" stroke-width="3.5" marker-end="url(#ah)"/><text
+      x="912" y="192" font-size="22" text-anchor="middle" fill="#d97706">lỗi → quay
+      lui</text><line x1="500" y1="295" x2="405" y2="295" stroke="#d97706" stroke-width="3.5"
+      marker-end="url(#ah)"/><text x="1180" y="300" font-size="26" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">Bước đã xong thì bù,</text><text x="1180"
+      y="340" font-size="26" text-anchor="middle" fill="#1f2937" font-weight="bold">theo
+      thứ tự ngược lại</text></svg></div>'
+    clear: true
+    say: Hình cho thấy chuỗi ba bước. Bước không giữ hạn mức đã xong. Bước một ghi
+      nợ đã xong. Bước hai ghi có bị lỗi. Khi có lỗi, hệ thống quay lui, chạy bước
+      bù cho những bước đã xong, theo thứ tự ngược lại. Ở đây là hoàn lại ghi nợ trước,
+      rồi trả lại hạn mức.
+  - show: '<div><svg width="1500" height="440" viewBox="0 0 1500 440" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><rect
+      x="40" y="160" width="300" height="110" rx="10" fill="#dbeafe" stroke="#2a78d6"
+      stroke-width="3"/><text x="190.0" y="207" font-size="24" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">Dịch vụ</text><text x="190.0" y="239" font-size="24"
+      text-anchor="middle" fill="#1f2937">chuyển tiền</text><rect x="460" y="40" width="540"
+      height="360" rx="12" fill="#dcfce7" stroke="#16a34a" stroke-width="3"/><text
+      x="730.0" y="78" font-size="26" text-anchor="middle" fill="#1f2937" font-weight="bold">Một
+      giao dịch cơ sở dữ liệu</text><rect x="500" y="110" width="460" height="80"
+      rx="10" fill="#e5e7eb" stroke="#6b7280" stroke-width="3"/><text x="730.0" y="158"
+      font-size="24" text-anchor="middle" fill="#1f2937">bảng nghiệp vụ: lệnh chuyển</text><rect
+      x="500" y="230" width="460" height="80" rx="10" fill="#fef3c7" stroke="#d97706"
+      stroke-width="3"/><text x="730.0" y="278" font-size="24" text-anchor="middle"
+      fill="#1f2937">bảng Outbox: sự kiện</text><line x1="340" y1="215" x2="455" y2="215"
+      stroke="#2a78d6" stroke-width="3.5" marker-end="url(#ah)"/><text x="397" y="205"
+      font-size="22" text-anchor="middle" fill="#2a78d6">ghi cả hai</text><rect x="1120"
+      y="160" width="340" height="110" rx="10" fill="#f3e8ff" stroke="#9333ea" stroke-width="3"/><text
+      x="1290.0" y="207" font-size="24" text-anchor="middle" fill="#1f2937" font-weight="bold">Bộ
+      chuyển tiếp</text><text x="1290.0" y="239" font-size="24" text-anchor="middle"
+      fill="#1f2937">đọc Outbox → Kafka</text><line x1="1000" y1="270" x2="1115" y2="230"
+      stroke="#9333ea" stroke-width="3.5" marker-end="url(#ah)"/><text x="1057" y="240"
+      font-size="22" text-anchor="middle" fill="#9333ea">đọc sau</text></svg></div>'
+    clear: true
+    say: Mẫu Outbox giải quyết việc vừa lưu vừa báo. Dịch vụ ghi lệnh chuyển và ghi
+      sự kiện vào hai bảng, nhưng trong cùng một giao dịch, nên cả hai cùng thành
+      công hoặc cùng huỷ. Rồi một bộ chuyển tiếp đọc bảng Outbox và gửi sang Kafka,
+      kể cả khi dịch vụ đã sập và chạy lại.
+- id: formula
+  kind: formula
+  title: 'Suy ra từng bước: đếm bước bù và chặn mất sự kiện'
+  checks:
+  - 2 * 2 + 1 == 5
+  - all(len(alg.bnk_saga(i, ('giữ hạn mức', 'ghi nợ', 'ghi có'))) == 2 * i + 1 for
+    i in range(3))
+  - alg.bnk_outbox_sim('between', True) == (True, 1)
+  steps:
+  - show: '<p><b>Bước 1.</b> Không có giao dịch bao nhiều dịch vụ, nên mỗi bước là
+      giao dịch cục bộ riêng và <b>mỗi bước cần một bước bù</b>.</p>
+
+      <span class=''note''>Làm thử: 3 bước bù được → 3 bước bù. Thông báo đứng sau
+      ghi có, là điểm không quay lại, nên lỗi thì <b>thử lại</b>, không bù.</span>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    say: Bước một, vì không có giao dịch nào bao được nhiều dịch vụ, nên mỗi bước
+      là một giao dịch cục bộ riêng và mỗi bước cần một bước bù. Làm thử, ba bước
+      giữ hạn mức, ghi nợ, ghi có thì cần ba bước bù. Còn thông báo đứng sau ghi có,
+      là điểm không quay lại, nên nếu lỗi thì thử lại, chứ không hoàn tiền.
+  - show: '<p><b>Bước 2.</b> Nếu bước thứ $i$ lỗi (đếm từ $0$), có $i$ bước đã xong
+      cần bù. Nhật ký gồm $i$ bước xong, $1$ lỗi, $i$ bước bù: $2i + 1$ dòng.</p>
+
+      <span class=''note''>Làm thử: $i = 2$ cho $2 \cdot 2 + 1 = 5$ dòng.</span>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    say: Bước hai, vì nếu bước thứ i bị lỗi, đếm từ không, thì có i bước đã xong cần
+      bù. Nên nhật ký gồm i bước xong, một dòng lỗi, và i bước bù, tức hai i cộng
+      một dòng. Làm thử, i bằng hai cho hai nhân hai cộng một, bằng năm dòng.
+    introduces:
+    - cdot
+  - show: '<p><b>Bước 3.</b> Hai việc “lưu” và “báo” ở hai nơi khác nhau có thể sập
+      ở giữa. Outbox gộp hai việc thành <b>một giao dịch</b> nên không có “giữa”.</p>
+
+      <span class=''note''>Bộ chuyển tiếp có thể phát trùng, nên người nhận phải khử
+      trùng (khoá lũy đẳng).</span>
+
+      '
+    focus:
+    - 1
+    - 2
+    say: Bước ba, vì hai việc lưu và báo ở hai nơi khác nhau có thể sập ở giữa, nên
+      Outbox gộp hai việc thành một giao dịch, và không còn khoảng giữa. Bộ chuyển
+      tiếp có thể phát trùng, nên người nhận phải khử trùng.
+- id: example
+  kind: example
+  title: Ví dụ bằng số, từng trường hợp
+  checks:
+  - len(alg.bnk_saga(0, ('giữ hạn mức', 'ghi nợ', 'ghi có'))) == 2 * 0 + 1
+  - alg.bnk_saga(1, ('giữ hạn mức', 'ghi nợ', 'ghi có')) == ['giữ hạn mức', 'lỗi ghi
+    nợ', 'bù giữ hạn mức']
+  - len(alg.bnk_saga(2, ('giữ hạn mức', 'ghi nợ', 'ghi có'))) == 2 * 2 + 1
+  - alg.bnk_saga(2, ('giữ hạn mức', 'ghi nợ', 'ghi có')) == ['giữ hạn mức', 'ghi nợ',
+    'lỗi ghi có', 'bù ghi nợ', 'bù giữ hạn mức']
+  - alg.bnk_outbox_sim('between', False)[1] == 0 and alg.bnk_outbox_sim('between',
+    True)[1] == 1
+  steps:
+  - show: '<p>Ba bước bù được, đánh số $0, 1, 2$: giữ hạn mức, ghi nợ, ghi có.</p>
+
+      $$① \; \text{bước 0 lỗi: nhật ký} = 2 \cdot 0 + 1 = \hl{1}\ \text{dòng}$$
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    say: Ta xét ba trường hợp lỗi. Ba bước đánh số từ không, là giữ hạn mức, ghi nợ,
+      ghi có. Trường hợp một, bước không lỗi, chưa có gì để bù, nhật ký có hai nhân
+      không cộng một, bằng một dòng.
+  - show: '$$② \; \text{bước 1 lỗi: } 2 \cdot 1 + 1 = \hl{3}\ \text{dòng: giữ hạn
+      mức, lỗi ghi nợ, bù giữ hạn mức}$$'
+    say: Trường hợp hai, bước một lỗi. Có một bước đã xong cần bù, nhật ký có ba dòng,
+      là giữ hạn mức, lỗi ghi nợ, và bù giữ hạn mức, tức trả lại hạn mức.
+  - show: '$$③ \; \text{bước 2 lỗi: } 2 \cdot 2 + 1 = \hl{5}\ \text{dòng}$$'
+    say: Trường hợp ba, bước hai là ghi có bị lỗi. Có hai bước đã xong cần bù, nhật
+      ký có năm dòng.
+  - show: '<p>Thứ tự bù ở trường hợp ③:</p>
+
+      $$④ \; \text{giữ hạn mức},\ \text{ghi nợ},\ \text{lỗi ghi có},\ \hl{\text{bù
+      ghi nợ}},\ \hl{\text{bù giữ hạn mức}}$$
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    say: Bây giờ xem thứ tự bù ở trường hợp ba. Nhật ký là giữ hạn mức, ghi nợ, lỗi
+      ghi có, rồi bù ghi nợ, rồi bù giữ hạn mức. Bước nào xong sau thì được bù trước.
+  - show: '<p>Outbox: lưu xong rồi sập giữa “lưu” và “báo”.</p>
+
+      $$⑤ \; \text{không Outbox: } \hl{0}\ \text{sự kiện};\quad \text{có Outbox: }
+      \hlg{1}\ \text{sự kiện}$$
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    say: Cuối cùng, trường hợp sập giữa lưu và báo. Không có Outbox thì không sự kiện
+      nào được phát. Có Outbox thì sự kiện vẫn nằm trong bảng và được phát, tức một
+      sự kiện.
+- id: check
+  kind: check
+  title: 'Tự kiểm bằng đường khác: đếm tay theo dòng'
+  checks:
+  - 2 + 1 + 2 == 5 == len(alg.bnk_saga(2, ('giữ hạn mức', 'ghi nợ', 'ghi có')))
+  - '[len(alg.bnk_saga(i, (''giữ hạn mức'', ''ghi nợ'', ''ghi có''))) for i in range(3)]
+    == [1, 3, 5]'
+  steps:
+  - show: '<p>Đường khác: đếm tay từng dòng thay vì công thức. Với bước 2 lỗi: $2$
+      dòng “xong”, $1$ dòng “lỗi”, $2$ dòng “bù”.</p>
+
+      $$2 + 1 + 2 = \hl{5}$$
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    say: Kiểm bằng đường khác. Ta đếm tay từng dòng thay vì dùng công thức. Với bước
+      hai lỗi, có hai dòng xong, một dòng lỗi và hai dòng bù, tổng là năm, khớp công
+      thức.
+  - show: <table class='t'><tr><th>bước lỗi</th><th>đã xong</th><th>dòng bù</th><th>tổng
+      dòng nhật ký</th></tr><tr><td>0</td><td>0</td><td>0</td><td>1</td></tr><tr><td>1</td><td>1</td><td>1</td><td>3</td></tr><tr><td>2</td><td>2</td><td>2</td><td>5</td></tr></table>
+    say: Bảng này tổng hợp lại ba trường hợp. Vì số dòng bù bằng số bước đã xong,
+      nên bước lỗi càng muộn thì càng nhiều bước phải bù, và nhật ký càng dài.
+- id: pitfalls
+  kind: pitfall
+  title: Lỗi hay gặp, có lỗi của người đã đi làm
+  steps:
+  - show: <div class="box warn"><b>Lỗi 1 (người mới).</b> Tưởng SAGA cho tính <b>cô
+      lập</b> như giao dịch thường. Giữa các bước, người khác vẫn <b class="red">thấy
+      trạng thái dở dang</b>, ví dụ tiền đã trừ mà chưa cộng.</div>
+    say: Lỗi thứ nhất, của người mới. Tưởng SAGA cho tính cô lập như giao dịch thường.
+      Giữa các bước, người khác vẫn thấy trạng thái dở dang, ví dụ tiền đã trừ mà
+      chưa cộng.
+  - show: <div class="box warn"><b>Lỗi 2 (người đã đi làm).</b> <b class="red">Bước
+      bù không lũy đẳng</b>. Bước bù lỗi mạng nên được chạy lại, và hoàn tiền hai
+      lần. Bước bù phải thử lại được, và ghi dấu “đã bù”.</div>
+    say: Lỗi thứ hai, của người đã đi làm, là bước bù không lũy đẳng. Bước bù gặp
+      lỗi mạng sẽ được chạy lại, và hoàn tiền hai lần. Bước bù phải thử lại được,
+      và ghi dấu đã bù.
+  - show: '<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> <b class="red">Ghi
+      kép</b>: lưu cơ sở dữ liệu rồi gửi Kafka thành hai lệnh riêng. Sập giữa hai
+      lệnh thì mất sự kiện. Gửi trước lưu sau thì có sự kiện mà không có dữ liệu.</div>'
+    say: Lỗi thứ ba, cũng của người đã đi làm, là ghi kép. Lưu cơ sở dữ liệu rồi gửi
+      Kafka thành hai lệnh riêng. Sập giữa hai lệnh thì mất sự kiện. Gửi trước lưu
+      sau thì có sự kiện mà không có dữ liệu.
+- id: quiz
+  kind: quiz
+  title: Đến lượt bạn
+  checks:
+  - 2 * 3 + 1 == 7 == len(alg.bnk_saga(3, ['b0', 'b1', 'b2', 'b3']))
+  - alg.bnk_saga(2, ['b0', 'b1', 'b2'])[-3:] == ['lỗi b2', 'bù b1', 'bù b0']
+  steps:
+  - show: '<table class=''t''><tr><th>câu</th><th>đề</th></tr><tr><td>1</td><td>Chuỗi
+      có 4 bước (0..3), bước 3 lỗi. Nhật ký có mấy dòng?</td></tr><tr><td>2</td><td>Thứ
+      tự chạy bước bù?</td></tr><tr><td>3</td><td>Quyết định: điều phối tập trung
+      hay các dịch vụ tự phản ứng sự kiện?</td></tr></table>'
+    pause: 25
+    say: Bây giờ tới phần bạn tự làm bài. Câu một, chuỗi có bốn bước đánh số từ không
+      tới ba, bước ba lỗi, nhật ký có mấy dòng? Câu hai, bước bù chạy theo thứ tự
+      nào? Câu ba, nên điều phối tập trung hay để các dịch vụ tự phản ứng theo sự
+      kiện? Hãy dừng video và làm ra giấy.
+  - show: '<p>Câu 1: $i = 3$ bước đã xong.</p>
+
+      $$2 \cdot 3 + 1 = \hl{7}\ \text{dòng}$$
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    say: Đáp án câu một. Bước ba lỗi nghĩa là ba bước đã xong. Hai nhân ba cộng một
+      bằng bảy dòng.
+    clear: true
+  - show: '<p>Câu 2: bước nào xong sau thì được bù trước.</p>
+
+      $$\text{bù bước 2} \to \text{bù bước 1} \to \text{bù bước 0}$$
+
+      '
+    focus:
+    - 1
+    - 2
+    say: Đáp án câu hai. Bước nào xong sau thì được bù trước, nên thứ tự bù là bước
+      hai, bước một, rồi bước không.
+  - show: <table class='t'><tr><th>lựa chọn</th><th>được</th><th>mất</th></tr><tr><td>điều
+      phối tập trung</td><td>luồng rõ ràng, dễ theo dõi và gỡ lỗi</td><td>người điều
+      phối thành điểm phụ thuộc</td></tr><tr><td>tự phản ứng theo sự kiện</td><td>các
+      dịch vụ lỏng lẻo, dễ mở rộng</td><td>luồng khó thấy, khó gỡ lỗi khi nhiều bước</td></tr></table>
+    say: Đáp án câu ba là đánh đổi. Điều phối tập trung cho luồng rõ ràng, dễ theo
+      dõi, nhưng người điều phối thành điểm phụ thuộc. Tự phản ứng theo sự kiện thì
+      các dịch vụ lỏng lẻo hơn, nhưng luồng khó thấy khi có nhiều bước.
+    clear: true
+- id: recap
+  kind: recap
+  title: Chuỗi logic & tư duy cần mang theo
+  steps:
+  - show: <div class='chain'><span class='n'>không có giao dịch chung</span><span
+      class='a'>→</span><span class='n'>chuỗi bước cục bộ</span><span class='a'>→</span><span
+      class='n'>mỗi bước có bước bù</span><span class='a'>→</span><span class='n'>Outbox
+      gộp lưu và báo</span></div>
+    say: Tổng kết chuỗi logic. Không có giao dịch chung, nên ta dùng chuỗi bước cục
+      bộ. Mỗi bước có bước bù. Và Outbox gộp việc lưu với việc báo vào một giao dịch.
+  - show: <div class='box key'><b>Tư duy:</b> trong hệ phân tán, đừng hỏi “làm sao
+      để không lỗi”. Hãy hỏi <b>“khi lỗi giữa chừng, làm sao quay về trạng thái nhất
+      quán?”</b></div>
+    say: Điều cần mang theo. Trong hệ phân tán, đừng hỏi làm sao để không lỗi. Hãy
+      hỏi, khi lỗi giữa chừng, làm sao quay về trạng thái nhất quán.

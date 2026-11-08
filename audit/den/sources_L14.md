@@ -144,7 +144,10 @@ Tải: people.eecs.berkeley.edu/~matei/papers/2016/cacm_apache_spark.pdf (DOI 10
   “moderately faster”. Bài không nói “Spark nhanh gấp 100 lần” (con số hay được kể lại, không có trong hai bài đã đọc).
 - Thời gian ra đời, số máy, số người dùng của chính hệ Cloud Dataflow: [DF15] chỉ ghi “an external reimplementation for Cloud Dataflow is
   largely complete at the time of writing” → không dạy quy mô của Cloud Dataflow; không nói gì về Apache Beam (chưa đọc nguồn).
-- Nhóm thanh toán rời nền tảng: [DF15] không ghi tên nhóm, thời gian, quy mô → chỉ dạy “một nhóm … rời nền tảng để tự làm”.
+- Nhóm rời nền tảng: [DF15] §3.3.3 ghi đó là “a team that processed resource utilization statistics” (nhóm xử lý thống kê sử dụng tài
+  nguyên), KHÔNG phải nhóm thanh toán; nhóm thanh toán (“another billing team”) là nhóm gặp mốc nước trễ do tác vụ chậm. Nguồn không ghi tên
+  nhóm, thời gian, quy mô → chỉ dạy “một nhóm xử lý thống kê sử dụng tài nguyên … rời nền tảng để tự làm” (sửa 2026-11-08: bản trước gọi nhầm
+  là nhóm thanh toán).
 - Ai nghĩ ra “kiến trúc Lambda”: [DF15] không ghi → không dạy.
 - Tổng thời gian 10 lượt lặp (764 s, 73 s), thời gian thêm do mất máy (22 s), số phiên, số cửa sổ: là PHÉP TÍNH LẠI từ số của nguồn, ghi VER.
   Tổng 7 rồi 10 của một cửa sổ, đội 3 người, 100 GB, 20 lượt (dùng số đo Hình 7 của [RDD12] làm giả định), cửa sổ 5 phút, trễ 10 phút ở phần

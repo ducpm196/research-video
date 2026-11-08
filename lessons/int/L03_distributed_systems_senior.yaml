@@ -1,0 +1,381 @@
+id: L03
+course: INT
+series: Giáo trình Phỏng vấn Senior Banking ACB
+title: Chuyên đề 3 — Hệ thống Phân tán, SAGA Pattern và Tối ưu hóa Oracle 19c
+voice: vi-VN-NamMinhNeural
+rate: -5%
+depth: full
+source: interview/03_distributed_systems_senior.md; Khung chuẩn UIT DSY, DEN, EVT,
+  DBS; Oracle Database 19c Performance Tuning Guide
+assumes:
+- arith
+- approx
+objectives:
+- Hiểu rõ hạn chế của giao thức 2PC và làm chủ mô hình SAGA Orchestration trong ngân
+  hàng
+- Triển khai mẫu Transactional Outbox với CDC Debezium xử lý hiểm họa ghi kép
+- Tối ưu hóa bảng ghi Oracle 19c bằng Partitioning và phòng ngừa bế tắc khóa ORA-00060
+asr_reviewed:
+  - {sentence: "Nắm vững những vũ khí phân tán này, bạn tự tin làm chủ hạ tầng thanh toán cốt lõi và khẳng định mức đãi ngộ 50 triệu gross tại ACB.", reason: "ASR chép “Nắm vững những vũ khí phân tán này, bạn tự tin làm chủ hạ tầng thanh toán cốt lõi và khẳng định mức đại ngộ 50 triệu g-rốt tại ACB.” (0.941): lệch âm/thanh thuần Việt: đãi/đại, gơ/g — NOT_VERIFIED bằng tai người"}
+scenes:
+- id: hook
+  kind: hook
+  title: Giới hạn của giao thức cam kết hai pha ở quy mô ngân hàng cao tải
+  steps:
+  - show: '<p>Khi tích hợp nhiều hệ thống ngân hàng độc lập, giao thức cam kết hai
+      pha (2PC) giữ khóa trên các dòng dữ liệu liên quan cho tới khi mọi bên commit,
+      nên một đối tác chậm mạng khiến các giao dịch khác phải chờ.</p>
+
+      <div class="box key">Làm sao một ngân hàng như ACB có thể thanh toán hóa đơn
+      điện nước qua bên thứ ba, tự động bồi hoàn khi có lỗi mà không làm nghẽn kết
+      nối cơ sở dữ liệu?</div>'
+    focus:
+    - 0
+    - 0
+    - 0
+    say: Chào bạn, trong các hệ thống phân tán quy mô lớn, giao thức cam kết hai pha
+      truyền thống bộc lộ nhược điểm chí tử khi một đối tác bị chậm mạng. Các dòng
+      số dư liên quan bị giữ khóa, khiến giao dịch khác phải chờ và ứng dụng cạn kiệt
+      kết nối. Hôm
+      nay, ta cùng nhau giải mã mô hình điều phối giao dịch phân tán và tối ưu hóa
+      cơ sở dữ liệu lõi.
+  - show: "<table class=\"t\">\n  <tr><th>vấn đề phân tán</th><th>nguy cơ hệ thống</th><th>giải\
+      \ pháp chuẩn Kỹ sư Cấp cao</th></tr>\n  <tr><td>Giao thức cam kết hai pha (2PC)</td><td>Treo\
+      \ cứng hàng đợi kết nối khi mạng chậm</td><td>Mô hình SAGA điều phối tập trung\
+      \ với máy trạng thái</td></tr>\n  <tr><td>Hiểm họa ghi kép dữ liệu</td><td>Mất\
+      \ tính nhất quán giữa cơ sở dữ liệu và Kafka</td><td>Mẫu Transactional Outbox\
+      \ kết hợp bắt biến động dữ liệu CDC</td></tr>\n  <tr><td>Bế tắc khóa Oracle\
+      \ ngày chi lương</td><td>Xảy ra lỗi ORA-00060 làm treo cổng hạch toán</td><td>Sắp\
+      \ xếp thứ tự tài khoản trước khi khóa hàng</td></tr>\n</table>\n<p>Hôm nay,\
+      \ ta làm chủ: <b>Mô hình SAGA Orchestration</b>, <b>mẫu Transactional Outbox</b>,\
+      \ và <b>thuật toán phòng ngừa bế tắc khóa Oracle 19c</b>.</p>"
+    focus:
+    - 0
+    - 0
+    - 0
+    - 0
+    say: Hôm nay, ta cùng nhau khám phá ba giải pháp then chốt cho hệ thống phân tán.
+      Ta tìm hiểu cách tổ chức chuỗi giao dịch bù trừ để bảo đảm an toàn dòng tiền.
+      Ta nắm vững kỹ thuật truyền biến động dữ liệu qua hộp thư sự kiện. Ta cũng làm
+      chủ thuật toán phòng ngừa bế tắc khóa trong cơ sở dữ liệu.
+    clear: true
+- id: prereq
+  kind: prereq
+  title: 'Ôn lại: Định lý CAP, Mô hình ACID và Hiểm họa Ghi kép'
+  checks:
+  - 50000 * 60 == 3000000
+  - 1000 // 100 == 10
+  steps:
+  - show: "<p><b>Định lý CAP và Sự đánh đổi trong Kiến trúc Ngân hàng</b>:</p>\n<table\
+      \ class=\"t\">\n  <tr><th>thuộc tính</th><th>định nghĩa</th><th>chiến lược của\
+      \ ngân hàng</th></tr>\n  <tr><td>Tính nhất quán (Consistency)</td><td>Mọi nút\
+      \ đều nhìn thấy dữ liệu mới nhất</td><td>Bắt buộc đối với số dư tài khoản tiền\
+      \ gửi</td></tr>\n  <tr><td>Tính sẵn sàng (Availability)</td><td>Mọi yêu cầu\
+      \ đều nhận phản hồi không lỗi</td><td>Không phải tỉ lệ uptime; với số dư, ưu tiên\
+      \ nhất quán khi mạng bị phân vùng</td></tr>\n\
+      \  <tr><td>Chịu đựng phân vùng (Partition)</td><td>Hệ thống vẫn chạy khi mạng\
+      \ bị đứt đoạn</td><td>Bắt buộc trong mạng phân tán đám mây</td></tr>\n</table>"
+    focus:
+    - 0
+    - 0
+    - 0
+    say: Trước tiên ta ôn lại định lý cơ bản của hệ thống phân tán. Trong môi trường
+      tài chính, ta bắt buộc phải duy trì tính nhất quán tuyệt đối của số dư sổ cái.
+      Ngân hàng không thể chấp nhận việc dữ liệu bị sai lệch khi có sự cố phân vùng
+      mạng.
+  - show: '<div class="box key">Hiểm họa ghi kép: Nếu dịch vụ vừa ghi cơ sở dữ liệu
+      vừa phát bản tin vào Kafka mà không nằm trong cùng một giao dịch, việc một trong
+      hai bước thất bại sẽ làm hỏng tính toàn vẹn dữ liệu. Ta bắt buộc phải áp dụng
+      mẫu hộp thư sự kiện Transactional Outbox!</div>'
+    focus:
+    - 0
+    - 0
+    - 0
+    say: Hiểm họa ghi kép xảy ra khi dịch vụ vừa ghi cơ sở dữ liệu vừa gửi thông điệp
+      ra ngoài. Nếu bước gửi mạng bị lỗi, dữ liệu giữa hai bên sẽ không khớp nhau.
+      Ta giải quyết bằng mẫu hộp thư sự kiện dùng chung giao dịch.
+    clear: true
+- id: concept
+  kind: concept
+  title: Mô hình SAGA Điều phối Tập trung và Mẫu Transactional Outbox
+  steps:
+  - show: "<p><b>Luồng Điều phối SAGA Orchestration trong Thanh toán Hóa đơn</b>:</p>\n\
+      <svg viewBox=\"0 0 700 220\" style=\"width:100%;max-height:200px;\">\n  <rect\
+      \ x=\"250\" y=\"10\" width=\"200\" height=\"60\" rx=\"8\" fill=\"#e8f4fd\" stroke=\"\
+      #003366\" stroke-width=\"2\"/>\n  <text x=\"270\" y=\"45\" font-size=\"13\"\
+      \ font-weight=\"bold\" fill=\"#003366\">SAGA Điều phối Tập trung</text>\n  <rect\
+      \ x=\"30\" y=\"130\" width=\"160\" height=\"60\" rx=\"6\" fill=\"#d4edda\" stroke=\"\
+      #28a745\"/>\n  <text x=\"40\" y=\"155\" font-size=\"11\" font-weight=\"bold\"\
+      \ fill=\"#155724\">Bước 1: Trích nợ CASA</text>\n  <text x=\"40\" y=\"175\"\
+      \ font-size=\"10\" fill=\"#155724\">Bồi hoàn: Hoàn tiền CASA</text>\n  <rect x=\"\
+      270\" y=\"130\" width=\"160\" height=\"60\" rx=\"6\" fill=\"#fff3cd\" stroke=\"\
+      #ffc107\"/>\n  <text x=\"280\" y=\"155\" font-size=\"11\" font-weight=\"bold\"\
+      \ fill=\"#856404\">Bước 2: Gạch nợ đối tác</text>\n  <text x=\"280\" y=\"175\"\
+      \ font-size=\"10\" fill=\"#856404\">Đối tác báo lỗi mạng</text>\n  <rect x=\"\
+      510\" y=\"130\" width=\"160\" height=\"60\" rx=\"6\" fill=\"#d1ecf1\" stroke=\"\
+      #17a2b8\"/>\n  <text x=\"520\" y=\"155\" font-size=\"11\" font-weight=\"bold\"\
+      \ fill=\"#0c5460\">Bước 3: Gửi thông báo</text>\n  <text x=\"520\" y=\"175\"\
+      \ font-size=\"10\" fill=\"#0c5460\">Tin nhắn ứng dụng</text>\n  <path d=\"M\
+      \ 310 70 L 110 130\" stroke=\"#28a745\" stroke-width=\"2\"/>\n  <path d=\"M\
+      \ 350 70 L 350 130\" stroke=\"#ffc107\" stroke-width=\"2\"/>\n  <path d=\"M\
+      \ 390 70 L 590 130\" stroke=\"#17a2b8\" stroke-width=\"2\"/>\n</svg>"
+    focus:
+    - 0
+    - 0
+    say: Nhìn vào sơ đồ điều phối tập trung, bộ điều phối quản lý chuỗi các bước cục
+      bộ độc lập. Khi bước gọi đối tác bên ngoài bị lỗi, bộ điều phối sẽ tự động kích
+      hoạt luồng bồi hoàn ngược lại để hoàn trả tiền cho khách hàng một cách an toàn.
+  - show: '<div class="box key">Kiến trúc Hộp thư sự kiện Transactional Outbox: Dữ
+      liệu nghiệp vụ và sự kiện được ghi chung vào bảng outbox trong cùng một transaction.
+      Sau đó, công cụ CDC đọc nhật ký giao dịch của cơ sở dữ liệu (WAL / redo log)
+      để đẩy vào Kafka. Giao nhận là ít nhất một lần (at-least-once), nên consumer
+      phải idempotent.</div>'
+    focus:
+    - 0
+    - 0
+    say: Với mẫu hộp thư sự kiện, ứng dụng ghi thông tin nghiệp vụ và bản tin sự kiện
+      vào cùng một giao dịch cơ sở dữ liệu. Công cụ bắt biến động đọc nhật ký giao
+      dịch của cơ sở dữ liệu để phát bản tin, giao nhận ít nhất một lần nên bên nhận
+      phải chịu được bản tin trùng.
+    clear: true
+- id: symbol
+  kind: symbol
+  title: Quy ước Ký hiệu và Cơ chế Zero-Copy trong Apache Kafka
+  checks:
+  - 600000 // 60 == 10000
+  - 60 - 60 == 0
+  steps:
+  - show: '<p><b>Cấu hình đảm bảo Không mất tin nhắn trong Apache Kafka</b>:</p>
+
+      <div class="box key">
+
+      $$\text{Xác nhận toàn bộ bản sao: } \text{acks} = \text{all}$$
+
+      $$\text{Topic: } \text{min.insync.replicas} = 2,\ \text{replication.factor} = 3$$
+
+      $$\text{Khử trùng lặp phát tin: } \text{enable.idempotence} = \text{true}$$
+
+      </div>
+
+      <p>Khi bật chế độ phát tin lũy đẳng, mỗi producer có một định danh kèm số thứ
+      tự theo từng partition; broker bỏ bản ghi trùng do producer tự retry trong cùng
+      phiên (không chặn được việc ứng dụng tự gửi lại).</p>'
+    focus:
+    - 0
+    - 0
+    say: Theo cấu hình phổ biến, ta yêu cầu xác nhận từ mọi bản sao đồng bộ, và đặt
+      ở mức chủ đề tối thiểu hai bản sao đồng bộ. Khi bật chế độ phát tin lũy đẳng,
+      máy chủ nhận biết số thứ tự để loại bỏ bản tin trùng do chính nhà sản xuất gửi
+      lại khi lỗi mạng.
+  - show: '<p><b>Cơ chế Zero-Copy truyền dữ liệu siêu tốc ra mạng</b>:</p>
+
+      <pre><code>// Lệnh truyền trực tiếp từ bộ nhớ đệm hệ điều hành ra cổng mạng
+
+      sendfile(socket_fd, file_fd, offset, count);
+
+
+      // Bỏ qua hoàn toàn việc sao chép qua vùng nhớ ứng dụng JVM
+
+      Disk File -> OS Page Cache -> Network Socket Buffer -> Network Card
+
+
+      // Lưu ý: bật TLS client-broker thì không còn zero-copy</code></pre>'
+    focus:
+    - 0
+    - 0
+    say: Để tăng thông lượng, hệ thống sử dụng lệnh truyền trực tiếp của nhân hệ điều
+      hành. Dữ liệu từ vùng đệm tập tin được đẩy thẳng ra cổng mạng mà không sao chép
+      qua bộ nhớ ứng dụng Java, nhưng lợi ích này mất đi khi bật mã hóa đường truyền.
+    clear: true
+- id: example
+  kind: example
+  title: 'Thực hành: Phòng ngừa Bế tắc Khóa Oracle ORA-00060 Ngày Chi lương'
+  checks:
+  - 150000000000 // 10000 == 15000000
+  - 19 > 11
+  - 10000 // 1000 == 10
+  steps:
+  - show: "<p><b>Dữ liệu bài toán giả định (minh họa): chi lương một tập đoàn lớn</b>:</p>\n<ul>\n\
+      \  <li>Quy mô lô lệnh: $10\\,000$ nhân viên nhận tổng số tiền $150$ tỉ đồng.</li>\n\
+      \  <li>Hiện tượng lỗi: Xuất hiện liên tục mã lỗi bế tắc khóa Oracle ORA-00060\
+      \ vào giờ cao điểm.</li>\n  <li>Nguyên nhân: Hai tiến trình chuyển tiền đồng\
+      \ thời khóa tài khoản theo thứ tự đảo ngược nhau.</li>\n</ul>"
+    focus:
+    - 0
+    - 0
+    say: Ta xem xét một bài toán giả định, chi lương cho mười nghìn nhân viên với tổng ngân sách
+      một trăm năm mươi tỉ đồng. Vào giờ cao điểm, cơ sở dữ liệu liên tục báo lỗi
+      bế tắc khóa do hai luồng đồng thời tranh chấp tài nguyên theo thứ tự ngược chiều.
+  - show: '<p><b>Bước 1: Phân tích tệp nhật ký vết bế tắc khóa (.trc) của Oracle</b>:</p>
+
+      <div class="box pit">Tiến trình A giữ khóa tài khoản X và chờ tài khoản Y. Trong
+      khi đó tiến trình B đang giữ khóa tài khoản Y và chờ tài khoản X. Hai tiến trình
+      chờ nhau vô hạn tạo thành chu trình bế tắc khóa!</div>'
+    focus:
+    - 0
+    - 0
+    say: Bước một, khi phân tích tệp vết của cơ sở dữ liệu, ta thấy tiến trình thứ
+      nhất giữ tài khoản này và chờ tài khoản kia. Ngược lại, tiến trình thứ hai lại
+      giữ tài khoản kia và chờ tài khoản này, tạo thành vòng tròn chờ đợi bế tắc.
+    clear: true
+  - show: "<p><b>Bước 2: Áp dụng Thuật toán Khóa hàng có Thứ tự Xác định</b>:</p>\n\
+      <pre><code>-- Sắp tăng dần rồi khóa TỪNG dòng bằng câu lệnh riêng\nv_first\
+      \  := LEAST(acc_from, acc_to);\nv_second := GREATEST(acc_from, acc_to);\nSELECT\
+      \ balance INTO v_b1 FROM accounts WHERE account_no = v_first  FOR UPDATE;\nSELECT\
+      \ balance INTO v_b2 FROM accounts WHERE account_no = v_second FOR UPDATE;</code></pre>\n\
+      <div class=\"box key\">Không dựa vào <code>ORDER BY ... FOR UPDATE</code>: Oracle\
+      \ không bảo đảm khóa dòng theo thứ tự ORDER BY. Khi mọi luồng code khóa nhỏ trước,\
+      \ lớn sau, giữa các luồng đó không hình thành chu trình chờ; ORA-00060 vẫn có\
+      \ thể đến từ luồng khác hoặc FK thiếu index.</div>"
+    focus:
+    - 0
+    - 0
+    say: Bước hai, ta sắp xếp hai tài khoản tăng dần rồi khóa từng dòng bằng một câu
+      lệnh riêng, tài khoản nhỏ trước, lớn sau. Khi mọi luồng xử lý đều tuân theo
+      cùng trật tự này, giữa chúng không thể hình thành chu trình chờ đợi bế tắc.
+    clear: true
+  - show: "<p><b>Bước 3: Tối ưu hóa xử lý theo lô với Bulk Collect và Forall</b>:</p>\n\
+      <pre><code>-- 10 000 dòng, mỗi lô 1 000 dòng = 10 lô\nOPEN cur_payroll;\n\
+      LOOP\n  FETCH cur_payroll BULK COLLECT INTO l_accounts LIMIT 1000;\n  EXIT\
+      \ WHEN l_accounts.COUNT = 0;\n  FORALL i IN 1..l_accounts.COUNT\n    UPDATE\
+      \ accounts SET balance = balance + l_accounts(i).amount\n    WHERE account_no\
+      \ = l_accounts(i).acc_no;\nEND LOOP;\nCLOSE cur_payroll;</code></pre>"
+    focus:
+    - 0
+    - 0
+    say: Bước ba, kỹ sư lấy dữ liệu theo từng lô một nghìn dòng trong một vòng lặp
+      và cập nhật đồng loạt từng lô. Kỹ thuật này giảm số lần chuyển đổi ngữ cảnh từ
+      mỗi dòng một lần xuống mỗi lô một lần, còn thời gian thực tế phải đo trên dữ
+      liệu thật.
+    clear: true
+- id: check
+  kind: check
+  title: 'Tự Kiểm tra: So sánh Mô hình SAGA Tự phối hợp và Điều phối'
+  checks:
+  - 100 > 10
+  - 60 * 1000 == 60000
+  steps:
+  - show: "<p><b>Tình huống phỏng vấn Senior</b>: Trong luồng thanh toán hóa đơn gồm\
+      \ 8 dịch vụ tham gia, tại sao ngân hàng nên chọn mô hình SAGA Điều phối tập\
+      \ trung thay vì mô hình Tự phối hợp qua sự kiện?</p>\n<ul>\n  <li>(A) Mô hình\
+      \ điều phối tập trung dễ triển khai hơn và không cần cơ sở dữ liệu.</li>\n \
+      \ <li>(B) Mô hình tự phối hợp dễ rơi vào bẫy vòng lặp sự kiện và rất khó truy\
+      \ vết khi có lỗi, trong khi điều phối tập trung quản lý máy trạng thái rõ ràng\
+      \ và kiểm soát bù trừ chuẩn xác.</li>\n  <li>(C) Mô hình tự phối hợp có độ bảo\
+      \ mật cao hơn.</li>\n</ul>"
+    focus:
+    - 0
+    - 0
+    say: Mời bạn trả lời câu hỏi lựa chọn kiến trúc giao dịch phân tán. Với quy trình
+      phức tạp gồm tám bước tham gia, vì sao mô hình điều phối tập trung lại là lựa
+      chọn ưu tiên hàng đầu của các ngân hàng thương mại.
+  - show: '<p><b>Đáp án chính xác: Lựa chọn (B)</b></p>
+
+      <div class="box key">Giải thích vì: Khi quy trình có nhiều bước, mô hình tự
+      phối hợp khiến đồ thị sự kiện trở nên rối và khó kiểm soát trạng thái bồi hoàn.
+      Mô hình điều phối tập trung lưu vết máy trạng thái vào cơ sở dữ liệu và kích
+      hoạt các giao dịch bù trừ theo thứ tự ngược; mỗi bước bù trừ phải lũy đẳng
+      để chạy lại an toàn.</div>'
+    focus:
+    - 0
+    - 0
+    say: Đáp án chính xác là lựa chọn B vì khi quy trình có nhiều bước, việc để các
+      dịch vụ tự lắng nghe nhau sẽ gây hỗn loạn đồ thị sự kiện. Do đó máy điều phối
+      tập trung giúp lưu vết trạng thái và kích hoạt bù trừ chuẩn xác.
+    clear: true
+- id: pitfall
+  kind: pitfall
+  title: 'Bẫy Nguy hiểm: Thiếu Phân vùng Bảng và Quên Đánh Chỉ mục Khóa ngoại'
+  steps:
+  - show: "<div class=\"box pit\">Hai sai lầm kinh điển làm sập cơ sở dữ liệu Oracle\
+      \ vào giờ cao điểm:</div>\n<table class=\"t\" style=\"margin-top: 10px;\">\n\
+      \  <tr><th>sai lầm sơ cấp</th><th>hậu quả vận hành</th><th>giải pháp chuẩn Senior</th></tr>\n\
+      \  <tr><td>Bảng giao dịch không phân vùng</td><td>Quét toàn bảng hàng chục triệu\
+      \ dòng làm đơ I/O</td><td>Phân vùng theo khoảng ngày kết hợp lược tỉa phân vùng</td></tr>\n\
+      \  <tr><td>Thiếu chỉ mục trên cột khóa ngoại</td><td>Khóa mức bảng trên bảng\
+      \ con khi xóa dòng cha hoặc sửa khóa chính bảng cha</td><td>Luôn tạo chỉ mục trực tiếp trên mọi cột khóa ngoại</td></tr>\n\
+      </table>"
+    focus:
+    - 0
+    - 0
+    say: Hai sai lầm phổ biến là để bảng giao dịch phình to mà không phân vùng theo
+      thời gian, và quên đánh chỉ mục trên cột khóa ngoại. Khi xóa dòng ở bảng chính
+      hoặc sửa khóa chính của nó, cơ sở dữ liệu khóa cả bảng phụ trong lúc câu lệnh
+      chạy, khiến các phiên khác phải chờ và dễ sinh bế tắc.
+- id: quiz
+  kind: quiz
+  title: 'Trắc nghiệm Tính toán: Điều tra Nguyên nhân Bế tắc Khóa Oracle'
+  checks:
+  - 100 - 90 == 10
+  - 19 * 10 == 190
+  steps:
+  - show: "<p><b>Câu hỏi trắc nghiệm thực chiến</b>: Khi nhật ký ứng dụng báo lỗi\
+      \ ORA-00060, công cụ nào sau đây cho phép Kỹ sư Cấp cao xác định chính xác câu\
+      \ lệnh và dòng dữ liệu gây ra tranh chấp?</p>\n<ul>\n  <li><b>A</b>: Khởi động\
+      \ lại máy chủ cơ sở dữ liệu để xóa phiên treo.</li>\n  <li><b>B</b>: Mở tệp\
+      \ vết nhật ký trace file có đuôi chấm trc trong thư mục trace (ADR) của Oracle\
+      \ để đọc biểu đồ chu trình bế tắc khóa.</li>\n  <li><b>C</b>: Xóa bỏ toàn bộ\
+      \ các chỉ mục trên bảng giao dịch.</li>\n  <li><b>D</b>: Chuyển toàn bộ cơ sở\
+      \ dữ liệu sang bảng nhớ tạm.</li>\n</ul>"
+    focus:
+    - 0
+    - 0
+    say: Xin mời bạn chọn phương án xử lý sự cố chuẩn mực khi hệ thống gặp lỗi bế
+      tắc khóa. Bạn có 15 giây suy nghĩ trước khi nghe phân tích quy trình điều tra
+      của chuyên gia cơ sở dữ liệu.
+    pause: 15
+  - show: "<div class=\"box key\"><b>Đáp án chính xác là B</b>!</div>\n<p><b>Bước\
+      \ 1 — Quy trình điều tra sự cố chuyên nghiệp</b>:</p>\n<table class=\"t\">\n\
+      \  <tr><th>bước thực hiện</th><th>công cụ sử dụng</th><th>kết quả trích xuất</th></tr>\n\
+      \  <tr><td>1. Định vị tệp vết</td><td>Thư mục nhật ký trace directory</td><td>Tệp\
+      \ vết chứa định danh phiên làm việc và mã lỗi</td></tr>\n  <tr><td>2. Đọc đồ\
+      \ thị chu trình</td><td>Biểu đồ Deadlock Graph</td><td>Xác định chính xác hai\
+      \ câu lệnh SQL và địa chỉ dòng bị khóa</td></tr>\n</table>"
+    focus:
+    - 0
+    - 0
+    - 0
+    say: Đáp án chính xác là phương án B. Khi xảy ra bế tắc khóa, hệ quản trị tự động
+      sinh một tệp vết ghi lại toàn bộ biểu đồ tranh chấp. Kỹ sư cấp cao sẽ đọc tệp
+      này để tìm chính xác hai câu lệnh xung đột.
+    clear: true
+  - show: '<p><b>Bước 2 — Hành động khắc phục gốc rễ</b>:</p>
+
+      <div class="box key">Sau khi xác định hai câu lệnh gây xung đột, kỹ sư chuẩn
+      hóa thứ tự khóa tài khoản và bổ sung chỉ mục khóa ngoại, rồi kiểm chứng bằng
+      kiểm thử đồng thời và theo dõi tần suất lỗi, không khẳng định "hết 100%" khi
+      chưa có số đo.</div>'
+    focus:
+    - 0
+    - 0
+    say: Bước hai, sau khi đã làm rõ nguyên nhân gốc rễ, kỹ sư tiến hành chuẩn hóa
+      trật tự khóa tài nguyên và bổ sung chỉ mục cần thiết. Sau đó ta kiểm chứng bằng
+      kiểm thử đồng thời và theo dõi tần suất lỗi, thay vì khẳng định sự cố đã biến
+      mất hoàn toàn.
+    clear: true
+- id: recap
+  kind: recap
+  title: Tổng kết chuỗi logic Hệ thống Phân tán và Oracle 19c
+  steps:
+  - show: "<div class=\"chain\">\n  <span>Mô hình SAGA Orchestration quản lý giao\
+      \ dịch bồi hoàn</span> &rarr;\n  <span>Mẫu Transactional Outbox loại bỏ hiểm\
+      \ họa ghi kép</span> &rarr;\n  <span>Kafka acks=all và producer lũy đẳng giảm\
+      \ mất/trùng tin</span> &rarr;\n  <span>Khóa hàng theo thứ tự phòng ngừa\
+      \ ORA-00060</span> &rarr;\n  <span>Phân vùng Bảng và Đánh chỉ mục Khóa ngoại\
+      \ tối ưu I/O</span>\n</div>\n<table class=\"t\" style=\"margin-top: 15px;\"\
+      >\n  <tr><th>năng lực phân tán</th><th>giá trị bảo vệ tài sản số ngân hàng ACB</th></tr>\n\
+      \  <tr><td>SAGA & Outbox CDC</td><td>Nhất quán cuối cùng giữa các hệ thống,\
+      \ tự động bù trừ khi đối tác lỗi</td></tr>\n  <tr><td>Kafka Idempotent</td><td>Không\
+      \ mất tin đã xác nhận khi một broker hỏng; khử trùng do retry</td></tr>\n\
+      \  <tr><td>Tối ưu Oracle 19c</td><td>Xử lý lô theo mẻ, khóa có thứ tự, giảm\
+      \ tranh chấp sổ cái</td></tr>\n</table>\n<p style=\"margin-top:\
+      \ 15px;\"><b>Khẳng định đẳng cấp Senior tại ACB</b>: Làm chủ kiến trúc hệ thống\
+      \ phân tán, tối ưu hóa cơ sở dữ liệu huyết mạch và xứng đáng mức lương 50 triệu\
+      \ gross.</p>"
+    focus:
+    - 0
+    - 0
+    say: Tóm lại, chuỗi logic gồm điều phối giao dịch bù trừ, truyền sự kiện qua hộp
+      thư an toàn, phát tin có xác nhận đầy đủ và sắp xếp thứ tự khóa cơ sở dữ liệu. Nắm
+      vững những vũ khí phân tán này, bạn tự tin làm chủ hạ tầng thanh toán cốt lõi
+      và khẳng định mức đãi ngộ 50 triệu gross tại ACB.

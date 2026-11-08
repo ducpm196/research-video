@@ -23,6 +23,7 @@ import math
 import random
 import re
 import shutil
+import threading
 import subprocess
 import sys
 import time
@@ -893,6 +894,8 @@ TTS_STATS = {"retry": 0, "err": {}}
 
 def tts_truncated(fr, wav):
     words = len(fr["tts"].replace("-", " ").split())
+    if str(fr.get("voice", "")).startswith("piper:"):
+        return wav_seconds(wav) < MIN_SEC_PER_WORD * words
     return wav_seconds(wav) < (MIN_SEC_PER_WORD_LONG if words >= 4 else MIN_SEC_PER_WORD) * words
 
 
@@ -920,17 +923,26 @@ def _azure_synth(fr, out_wav_raw):
         out_wav_raw.write_bytes(r.read())
 
 
+_PIPER_CACHE = {}
+_PIPER_LOCK = threading.Lock()
+
+
 def _piper_synth(fr, out_wav_raw):
     from piper import PiperVoice, SynthesisConfig
     spec = fr["voice"].split(":", 1)[1]
     name, _, spk = spec.partition("#")
     model = ROOT / "tools" / "vendor" / "piper" / f"{name}.onnx"
-    v = PiperVoice.load(str(model))
+    m_key = str(model)
+    with _PIPER_LOCK:
+        if m_key not in _PIPER_CACHE:
+            _PIPER_CACHE[m_key] = PiperVoice.load(m_key)
+        v = _PIPER_CACHE[m_key]
     # tốc độ: “-5%” của edge → length_scale 1/0,95 (dài hơn 5%)
     pct = float(str(fr["rate"]).rstrip("%") or 0)
     cfg = SynthesisConfig(speaker_id=int(spk) if spk else None, length_scale=1 / (1 + pct / 100))
-    with wave.open(str(out_wav_raw), "wb") as w:
-        v.synthesize_wav(fr["tts"], w, syn_config=cfg)
+    with _PIPER_LOCK:
+        with wave.open(str(out_wav_raw), "wb") as w:
+            v.synthesize_wav(fr["tts"], w, syn_config=cfg)
 
 
 async def _tts_one(fr, sem, ff):

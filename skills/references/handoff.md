@@ -1,6 +1,6 @@
 # Durable state and handoff
 
-Keeps long or multi-session work resumable from durable artifacts alone, never from chat history. Labels follow SKILL.md section 2; records follow SKILL.md sections 3 and 4. Domain labels used here: PASS | FAIL | NOT_VERIFIED, REQUIRED | OPTIONAL, NOT_STARTED | ACTIVE, OPEN | CLOSED, SIMULATED, as registered in SKILL.md section 2. On claude.ai, with no repository, `state/` is a set of files delivered with the session's file-delivery tool and re-uploaded to resume (SKILL.md, Claude.ai runtime notes).
+Keeps long or multi-session work resumable from durable artifacts alone, never from chat history. Labels follow SKILL.md section 2; records follow SKILL.md sections 3 and 4. Domain labels used here: PASS | FAIL | NOT_VERIFIED, REQUIRED | OPTIONAL, NOT_STARTED | ACTIVE, OPEN | CLOSED, SIMULATED, as registered in SKILL.md section 2. On a chat surface with no repository, `state/` is a set of files delivered with the session's file-delivery tool and re-uploaded to resume (SKILL.md, Runtime notes).
 
 ## 5-Stage operational lifecycle (Scan -> Plan -> Execute -> Audit -> Handover)
 Whenever an agent receives a user request or task, execute this complete 5-stage lifecycle:

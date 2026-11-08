@@ -47,6 +47,8 @@ Tải: static.googleusercontent.com/media/research.google.com/en//pubs/archive/4
 - §6 (kiểm thử): “The random query generation tool and the reference implementation are used together in unit tests and in system integration tests that run continuously generating millions of random queries per day.”
 - §8: “Stabilizing the transactional NoSQL core and building a mature control plane took years of development effort, and involved addressing a myriad of extremely unlikely failure conditions that do eventually happen at scale.”
 
+- [SP12] §1 (đối chiếu trang 1 bản PDF ngày 2026-11-08): “Most other applications will probably replicate their data across 3 to 5 datacenters in one geographic region, but with relatively independent failure modes.” → đây là DỰ ĐOÁN của nhóm tác giả, không phải số đo; bài nói “bài báo dự đoán”.
+
 ## Điều KHÔNG dạy (nguồn không ghi)
 - Năm bắt đầu thiết kế Bigtable chính xác: [BT06] chỉ ghi “hai năm rưỡi” trước bài báo và “production since April 2005” → bài ghi mốc 2005 (chạy thật), không ghi năm bắt đầu.
 - Số máy thật của F1 / số mảnh MySQL: [SP12] chỉ ghi “manually sharded many ways”, “tens of terabytes” → ví dụ 4 → 5 mảnh chia theo số dư là SỐ MINH HOẠ (dùng lại con số 80% của bài 6).

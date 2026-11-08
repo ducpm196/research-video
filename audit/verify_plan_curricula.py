@@ -1877,4 +1877,52 @@ _epoch = _dt.datetime(1970, 1, 1, tzinfo=_dt.timezone.utc)
 rec("CAS:L11", _epoch + _dt.timedelta(seconds=2 ** 31 - 1) == _dt.datetime(2038, 1, 19, 3, 14, 7, tzinfo=_dt.timezone.utc)
     and (_epoch + _dt.timedelta(seconds=-2 ** 31)).date() == _dt.date(1901, 12, 13), "03:14:07 UTC 19/1/2038; quay về 13/12/1901")
 
+# ═══════════ BNK — Nền tảng Backend Ngân hàng (khoá có bài thật; bộ kiểm đầy đủ: audit/bnk/verify_bnk.py) ═══════════
+import zlib as _zl
+_acc = 0.0
+for _ in range(10):   # vòng lặp thật: sum() của Python 3.12+ bù sai số nên ra 1.0, khác phép cộng từng bước của Java
+    _acc += 0.1
+rec("BNK:L00", (6 - 3) * 100 == 300 and repr(_acc) == "0.9999999999999999", "6 đối tượng, sống 3, dọn 300 byte (số minh hoạ); 10 lần 0,1 bằng double = 0.9999999999999999")
+rec("BNK:L01", -(-10000 // 200) * 0.1 == 5.0 and 100 + 50 + 30 == 180 and math.factorial(6) // 8 == 90, "10 000/200 × 0,1 = 5 s; 100 + 50 + 30 = 180; 90 cách xen kẽ cho 3 luồng")
+rec("BNK:L02", 1 + 1 == 2, "gọi qua proxy mở 1 + 1 = 2 giao dịch, gọi thẳng 1 giao dịch (mô phỏng đầy đủ: verify_bnk L02)")
+rec("BNK:L03", 2000000 - 3 * 500000 == 500000 and 2000000 - 500000 == 1500000, "3 lần không khoá còn 500 000; có khoá còn 1 500 000")
+rec("BNK:L04", min(k for k in range(1, 30) if 100 ** k >= 10 ** 7) == 4, "10^7 dòng, mỗi nút 100 lối rẽ: 4 tầng")
+rec("BNK:L05", 2 * 2 == 4 and 3 * 2 * 1 == 6, "2 khoá: 4 cặp thứ tự (2 ngược nhau); 3 khoá: 6 thứ tự")
+rec("BNK:L06", F(1) + (1 - F(9, 10)) * 20 == 3 and F(1) + F(1, 2) * 20 == 11, "T = 1 + 0,1 × 20 = 3 ms; 1 + 0,5 × 20 = 11 ms")
+rec("BNK:L07", [6 // 3, 6 // 2] == [2, 3] and _zl.crc32(b"TK-1001") % 6 == 1, "6 phân vùng: 2 mỗi người với 3 bộ đọc, 3 với 2 bộ đọc; khoá TK-1001 vào phân vùng 1 (crc32)")
+rec("BNK:L08", [2 * i + 1 for i in range(3)] == [1, 3, 5], "SAGA bước lỗi i: 2i + 1 dòng nhật ký = 1, 3, 5")
+rec("BNK:L09", -505500 + 500000 + 5500 == 0 and 500000 + 5500 == 505500, "chuyển 500 000 phí 5 500: ba dòng tổng 0")
+rec("BNK:L10", sum(1 for q in itertools.permutations(range(5)) if all(q[i] != i for i in range(5))) == 44 and math.factorial(5) == 120, "44 trong 120 hoán vị không trùng vị trí nào")
+rec("BNK:L11", 2 ** 62 + 2 ** 61 + 2 ** 60 + 2 ** 53 == 0x7020000000000000 and 4 + 16 + 18 + 6 + 12 + 6 == 62, "bản đồ bit 7020000000000000; bản tin dài 62 ký tự")
+rec("BNK:L12", 5 + 5 - 4 == 6 and 3 + 1 + 1 + 1 == 6 and (100 + 200 + 350 + 400 + 600) - (100 + 200 + 300 + 400 + 500) == 150, "hai sổ 5 mã: 6 mã khác nhau = 3 + 1 + 1 + 1; chênh tiền 150")
+rec("BNK:L13", 0x34 ^ 0x11 == 0x25 and 0xFF ^ 0x11 == 0xEE, "khối PIN thử: 34 XOR 11 = 25, FF XOR 11 = EE → 041225EEEEEEEEEE (số thử)")
+rec("BNK:L14", (2 - 1) * 500000 == 500000 and 2000000 - 2 * 500000 == 1000000, "gửi 2 lần không khoá: trừ dư 500 000 (tình huống giả định)")
+
+# ═══════════ JVA — Lập trình Java từ con số 0 (khoá có bài thật; bộ kiểm chính: audit/jva/verify_jva.py chạy javac/java thật) ═══════════
+# Các dòng dưới chỉ tính lại bằng Python những con số giáo án nêu; ngữ nghĩa Java (chia cắt về 0, tràn int) được mô phỏng tường minh.
+def _jva_int32(v):
+    return ((v + 2 ** 31) % 2 ** 32) - 2 ** 31
+rec("JVA:L00", 2 + 3 == 5 and "Tong: " + str(2) + str(3) == "Tong: 23" and "Tong: " + str(2 + 3) == "Tong: 5" and str(2 + 3) + " dong" == "5 dong",
+    "5; Tong: 23 (nối từ trái sang phải); Tong: 5; 5 dong")
+rec("JVA:L01", 3 * 900000000 == 2700000000 and _jva_int32(3 * 900000000) == -1594967296 and 2700000000 - 2 ** 32 == -1594967296 and 2 ** 31 - 1 == 2147483647,
+    "3 × 900 000 000 tràn int thành −1 594 967 296 = 2 700 000 000 − 2^32; long giữ đúng")
+rec("JVA:L02", int(7 / 2) == 3 and 7 % 2 == 1 and 7 / 2 == 3.5 and int(-7 / 2) == -3 and math.fmod(-7, 2) == -1,
+    "7/2 = 3, 7%2 = 1, (double)7/2 = 3.5, −7/2 = −3, −7%2 = −1 (chia cắt về 0, JLS §15.17.2–3)")
+rec("JVA:L03", (500000 >= 500000) and not (500000 > 500000), "ở đúng số tiền biên, >= và > cho hai bậc khác nhau")
+rec("JVA:L04", repr(_acc) == "0.9999999999999999" and len(range(1, 12)) == 11 and len(range(1, 13)) == 12,
+    "10 lần cộng 0,1 bằng double = 0.9999999999999999; thang từ 1 với < 12 chạy 11 vòng, với <= 12 chạy 12 vòng")
+rec("JVA:L05", list(range(5)) == [0, 1, 2, 3, 4] and 5 not in range(5), "mảng dài 5 có chỉ số 0..4; chỉ số 5 vượt giới hạn")
+def _jva_tang(x, arr):   # mô phỏng truyền theo giá trị: gán lại x chỉ đổi bản sao; arr là tham chiếu nên phần tử đổi thật
+    x = x + 1
+    arr[0] = arr[0] + 1
+_jva_v, _jva_a = 5, [5]
+_jva_tang(_jva_v, _jva_a)
+rec("JVA:L06", _jva_v == 5 and _jva_a == [6], "hàm nhận số nguyên: biến gốc giữ 5; hàm nhận mảng: phần tử đổi thành 6")
+rec("JVA:L07", 100000 - 150000 < 0, "rút 150 000 từ số dư 100 000 sẽ âm nên bị từ chối")
+rec("JVA:L08", format(1234567, ",") == "1,234,567", "định dạng có dấu phân cách nghìn: 1,234,567")
+rec("JVA:L09", -128 <= 127 <= 127 and not (128 <= 127), "127 nằm trong vùng đệm −128..127 của Integer.valueOf, 128 thì không")
+rec("JVA:L10", 100000 < 150000, "rút 150 000 khi có 100 000: ném ngoại lệ số dư không đủ")
+rec("JVA:L11", ("A01", 50000) == ("A01", 50000), "hai bản ghi cùng giá trị thì bằng nhau theo giá trị")
+rec("JVA:L12", 1000000 + 2000000 + 0 == (1000000 - 300000) + (2000000) + 300000, "chuyển tiền giữa các tài khoản: tổng trước = tổng sau (bất biến)")
+
 print(f"\nTỔNG: {sum(rows)} PASS · {len(rows) - sum(rows)} FAIL")

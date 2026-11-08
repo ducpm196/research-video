@@ -120,6 +120,10 @@ Tệp ghi: “This is an edited version of an email Ingo Molnar sent to lkml on 
   sched_ext”.
 - “ABI Instability … no stability guarantees … subject to change without warning between kernel versions.”
 
+- [RTG] The Linux Kernel documentation, Real-Time group scheduling (Documentation/scheduler/sched-rt-group.rst): mặc định
+  sched_rt_period_us = 1000000, sched_rt_runtime_us = 950000 → tác vụ thời gian thực dùng tối đa 0,95 s mỗi giây, chừa 0,05 s (5%) cho
+  tác vụ thường. Dùng cho câu “vòng lặp lỗi chiếm gần hết CPU” ở phần quyết định (rà 2026-11-08; trước đó bài nói “chiếm hết”).
+
 ## Điều KHÔNG dạy (nguồn không ghi)
 - Năm hoà vào nhân chính thức và số hiệu bản của bộ lập lịch O(1): [O102] chỉ ghi thư ngày 4/1/2002 và cập nhật 18/4/2002; [KN23] ghi
   “during the development of Linux 2.5”. Bài nói “năm 2002, trong lúc phát triển nhánh 2.5”, không nói ngày ra bản.

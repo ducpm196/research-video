@@ -1,0 +1,404 @@
+id: L10
+course: BNK
+series: BNK · Nền tảng Backend Ngân hàng cho người mất gốc
+title: 'Bài 10 — Lõi ngân hàng T24: OFS, IBM MQ và mã tương quan'
+voice: vi-VN-NamMinhNeural
+rate: -5%
+depth: full
+source: 'curriculum/bnk.yaml L10; audit/bnk/verify_bnk.py L10; IBM MQ / JMS: MessageID
+  và CorrelationID (khái niệm chung); OFS: tên gọi theo Temenos, bản tin trong bài
+  là mẫu minh hoạ'
+assumes: []
+objectives:
+- Ghép phản hồi theo mã tương quan thay vì thứ tự đến
+- Tính xác suất phản hồi không trùng thứ tự gửi bằng vét cạn
+- 'Xử lý đúng khi hết giờ chờ: truy vấn trạng thái trước'
+- Tránh nhiều bản dịch vụ lấy nhầm phản hồi của nhau
+asr_reviewed:
+- sentence: Bây giờ tới phần bạn tự làm bài.
+  reason: 'ASR chép “Bây giờ tới phần bạn tự lam bay.” (0.75): lệch âm/thanh thuần
+    Việt: làm bài/lam bay — NOT_VERIFIED bằng tai người'
+- sentence: Đáp án câu hai.
+  reason: 'ASR chép “Đập án câu 2.” (0.75): lệch âm/thanh thuần Việt: đáp/đập — NOT_VERIFIED
+    bằng tai người'
+- sentence: OFS là bản tin dạng chữ để gọi chức năng của lõi từ bên ngoài.
+  reason: 'ASR chép “OSS là bản tin dạng chữ để gọi chức năng của lỗi từ bên ngoài.”
+    (0.867): lệch âm/thanh thuần Việt: ofs/oss, lõi/lỗi — NOT_VERIFIED bằng tai người'
+scenes:
+- id: hook
+  kind: hook
+  title: Vì sao phản hồi về không đúng thứ tự, và hết giờ chờ thì làm gì?
+  steps:
+  - show: '<p>Kênh số gửi $5$ lệnh sang lõi ngân hàng qua hàng đợi. Phản hồi quay
+      về <b>lộn xộn</b>: lệnh $2$ trả lời trước lệnh $0$.</p>
+
+      <div class="box key">Nếu ghép phản hồi theo <b>thứ tự đến</b>, cả $5$ lệnh nhận
+      nhầm kết quả. Phải ghép theo <b>mã tương quan</b>.</div>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    say: Chào bạn, kênh số gửi năm lệnh sang lõi ngân hàng qua hàng đợi. Phản hồi
+      quay về lộn xộn, lệnh hai được trả lời trước lệnh không. Nếu ghép phản hồi theo
+      thứ tự đến, cả năm lệnh nhận nhầm kết quả. Phải ghép theo mã tương quan.
+  - show: '<table class=''t''><tr><th>cách ghép</th><th>số phản hồi đúng (thứ tự về:
+      2, 0, 1, 4, 3)</th></tr><tr><td>theo thứ tự đến</td><td>0 trên 5</td></tr><tr><td>theo
+      mã tương quan</td><td>5 trên 5</td></tr></table>'
+    say: Bảng này là kết quả mô phỏng ở cuối bài. Ghép theo thứ tự đến thì không phản
+      hồi nào đúng. Ghép theo mã tương quan thì đúng cả năm. Hôm nay ta học thêm một
+      việc khó hơn, là khi hết giờ chờ mà không biết lõi ngân hàng đã hạch toán hay
+      chưa.
+- id: prereq
+  kind: prereq
+  title: Ôn lại ba điều sẽ dùng
+  checks:
+  - 5 * 4 * 3 * 2 * 1 == 120 == math.factorial(5)
+  steps:
+  - show: <table class='t'><tr><th>khái niệm</th><th>nghĩa</th><th>ví dụ</th></tr><tr><td>①
+      Hàng đợi</td><td>nơi xếp thông điệp, lấy theo thứ tự vào</td><td>lệnh 0, 1,
+      2 xếp hàng</td></tr><tr><td>② Thông điệp có tiêu đề</td><td>ngoài nội dung còn
+      có các nhãn như mã thông điệp</td><td>mã thông điệp M7</td></tr><tr><td>③ Yêu
+      cầu – phản hồi</td><td>bên gửi hỏi, bên nhận làm rồi trả lời</td><td>hỏi chuyển
+      tiền, trả kết quả</td></tr></table>
+    say: Trước hết ta ôn lại ba điều sẽ dùng. Hàng đợi là nơi xếp thông điệp, lấy
+      theo thứ tự vào. Thông điệp ngoài nội dung còn có các nhãn như mã thông điệp.
+      Còn yêu cầu và phản hồi là bên gửi hỏi, bên nhận làm rồi trả lời.
+  - show: $$5! = 5 \cdot 4 \cdot 3 \cdot 2 \cdot 1 = 120$$
+    say: Một phép đếm cần dùng. Năm phản hồi có thể về theo một trăm hai mươi thứ
+      tự khác nhau, vì năm nhân bốn nhân ba nhân hai nhân một bằng một trăm hai mươi.
+    introduces:
+    - cdot
+- id: sym
+  kind: symbol
+  title: Giải mã vài từ hay gặp
+  steps:
+  - show: '<table class=''t''><tr><th>từ</th><th>nghĩa</th></tr><tr><td>Temenos T24</td><td>phần
+      mềm lõi ngân hàng (nơi giữ tài khoản và sổ cái)</td></tr><tr><td>OFS</td><td>Open
+      Financial Service: bản tin dạng chữ để gọi chức năng của lõi từ bên ngoài</td></tr><tr><td>IBM
+      MQ</td><td>phần mềm hàng đợi thông điệp, chuyển bản tin giữa hệ thống</td></tr><tr><td>MessageID
+      / CorrelationID</td><td>mã của thông điệp / mã của thông điệp mà phản hồi này
+      trả lời</td></tr><tr><td>hết giờ chờ (timeout)</td><td>không nhận phản hồi trong
+      thời hạn, chưa biết kết quả</td></tr></table>'
+    say: Bảng này giải mã năm từ. T24 là phần mềm lõi ngân hàng. OFS là bản tin dạng
+      chữ để gọi chức năng của lõi từ bên ngoài. IBM MQ là phần mềm hàng đợi, chuyển
+      bản tin giữa các hệ thống. Mã thông điệp là mã của chính thông điệp, còn mã
+      tương quan là mã của thông điệp mà phản hồi này trả lời. Hết giờ chờ là khi
+      không nhận được phản hồi trong thời hạn.
+- id: intuition
+  kind: intuition
+  title: 'Hình dung: hai hàng đợi và mã tương quan'
+  steps:
+  - show: <div><svg width="1500" height="440" viewBox="0 0 1500 440" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><rect
+      x="40" y="160" width="260" height="110" rx="10" fill="#dbeafe" stroke="#2a78d6"
+      stroke-width="3"/><text x="170.0" y="207" font-size="24" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">Kênh số</text><text x="170.0" y="239" font-size="24"
+      text-anchor="middle" fill="#1f2937">gửi lệnh</text><rect x="420" y="40" width="380"
+      height="90" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text
+      x="610.0" y="93" font-size="24" text-anchor="middle" fill="#1f2937">hàng đợi
+      yêu cầu</text><rect x="420" y="300" width="380" height="90" rx="10" fill="#fef3c7"
+      stroke="#d97706" stroke-width="3"/><text x="610.0" y="353" font-size="24" text-anchor="middle"
+      fill="#1f2937">hàng đợi phản hồi</text><rect x="960" y="160" width="300" height="110"
+      rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="3"/><text x="1110.0" y="207"
+      font-size="24" text-anchor="middle" fill="#1f2937" font-weight="bold">Lõi ngân
+      hàng</text><text x="1110.0" y="239" font-size="24" text-anchor="middle" fill="#1f2937">xử
+      lý song song</text><line x1="300" y1="190" x2="415" y2="100" stroke="#2a78d6"
+      stroke-width="3.5" marker-end="url(#ah)"/><text x="357" y="135" font-size="22"
+      text-anchor="middle" fill="#2a78d6">M7</text><line x1="800" y1="95" x2="955"
+      y2="190" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><line x1="955"
+      y1="245" x2="805" y2="340" stroke="#16a34a" stroke-width="3.5" marker-end="url(#ah)"/><text
+      x="880" y="282" font-size="22" text-anchor="middle" fill="#16a34a">tương quan
+      = M7</text><line x1="415" y1="345" x2="300" y2="250" stroke="#16a34a" stroke-width="3.5"
+      marker-end="url(#ah)"/><text x="750" y="425" font-size="22" text-anchor="middle"
+      fill="#6b7280">mẫu minh hoạ, không phải cú pháp T24 thật</text></svg></div>
+    clear: true
+    say: Hình cho thấy luồng chung. Kênh số đặt lệnh vào hàng đợi yêu cầu, mang mã
+      thông điệp, ví dụ M bảy. Lõi ngân hàng lấy ra xử lý, có thể song song nhiều
+      lệnh. Phản hồi được đặt vào hàng đợi phản hồi, mang mã tương quan bằng đúng
+      M bảy. Nhờ đó kênh số biết phản hồi nào trả lời lệnh nào. Hình này là mẫu minh
+      hoạ, không phải cú pháp thật của T hai mươi tư.
+  - show: <div><svg width="1500" height="420" viewBox="0 0 1500 420" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><text
+      x="60" y="50" font-size="26" text-anchor="start" fill="#1f2937" font-weight="bold">Lệnh
+      gửi theo thứ tự:</text><rect x="60" y="80" width="160" height="60" rx="10" fill="#dbeafe"
+      stroke="#2a78d6" stroke-width="3"/><text x="140.0" y="118" font-size="24" text-anchor="middle"
+      fill="#1f2937">0</text><rect x="240" y="80" width="160" height="60" rx="10"
+      fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="320.0" y="118" font-size="24"
+      text-anchor="middle" fill="#1f2937">1</text><rect x="420" y="80" width="160"
+      height="60" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text
+      x="500.0" y="118" font-size="24" text-anchor="middle" fill="#1f2937">2</text><rect
+      x="600" y="80" width="160" height="60" rx="10" fill="#dbeafe" stroke="#2a78d6"
+      stroke-width="3"/><text x="680.0" y="118" font-size="24" text-anchor="middle"
+      fill="#1f2937">3</text><rect x="780" y="80" width="160" height="60" rx="10"
+      fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="860.0" y="118" font-size="24"
+      text-anchor="middle" fill="#1f2937">4</text><text x="60" y="220" font-size="26"
+      text-anchor="start" fill="#1f2937" font-weight="bold">Phản hồi về theo thứ tự:</text><rect
+      x="60" y="250" width="160" height="60" rx="10" fill="#fef3c7" stroke="#d97706"
+      stroke-width="3"/><text x="140.0" y="288" font-size="24" text-anchor="middle"
+      fill="#1f2937">2</text><rect x="240" y="250" width="160" height="60" rx="10"
+      fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text x="320.0" y="288" font-size="24"
+      text-anchor="middle" fill="#1f2937">0</text><rect x="420" y="250" width="160"
+      height="60" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text
+      x="500.0" y="288" font-size="24" text-anchor="middle" fill="#1f2937">1</text><rect
+      x="600" y="250" width="160" height="60" rx="10" fill="#fef3c7" stroke="#d97706"
+      stroke-width="3"/><text x="680.0" y="288" font-size="24" text-anchor="middle"
+      fill="#1f2937">4</text><rect x="780" y="250" width="160" height="60" rx="10"
+      fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text x="860.0" y="288" font-size="24"
+      text-anchor="middle" fill="#1f2937">3</text><line x1="500" y1="142" x2="140"
+      y2="246" stroke="#dc2626" stroke-width="3.5" stroke-dasharray="8 6" marker-end="url(#ah)"/><text
+      x="1200" y="150" font-size="26" text-anchor="middle" fill="#dc2626" font-weight="bold">Ghép
+      theo thứ tự đến:</text><text x="1200" y="190" font-size="24" text-anchor="middle"
+      fill="#dc2626">phản hồi 2 bị gán cho lệnh 0 (sai)</text><text x="1200" y="300"
+      font-size="26" text-anchor="middle" fill="#16a34a" font-weight="bold">Ghép theo
+      mã tương quan:</text><text x="1200" y="340" font-size="24" text-anchor="middle"
+      fill="#16a34a">phản hồi 2 → lệnh 2 (đúng)</text></svg></div>
+    clear: true
+    say: Hình thứ hai cho thấy vì sao thứ tự đến không dùng được. Lệnh gửi theo thứ
+      tự không, một, hai, ba, bốn. Phản hồi về theo thứ tự hai, không, một, bốn, ba.
+      Ghép theo thứ tự đến thì phản hồi của lệnh hai bị gán cho lệnh không, sai. Ghép
+      theo mã tương quan thì phản hồi hai về đúng lệnh hai.
+- id: formula
+  kind: formula
+  title: 'Suy ra từng bước: ghép đúng và xử lý khi hết giờ chờ'
+  checks:
+  - math.factorial(5) == 120
+  - alg.bnk_reply_match([2, 0, 1, 4, 3]) == (0, 5)
+  - alg.bnk_unknown_outcome(True, False) == 2
+  steps:
+  - show: '<p><b>Bước 1.</b> Lõi xử lý song song, nên thứ tự phản hồi <b>có thể không</b>
+      theo thứ tự gửi. $5$ phản hồi có thể về theo $120$ thứ tự.</p>
+
+      <span class=''note''>Làm thử: chỉ $1$ thứ tự trong $120$ là đúng thứ tự gửi.</span>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    say: Bước một, vì lõi xử lý song song, nên thứ tự phản hồi có thể không theo thứ
+      tự gửi. Năm phản hồi có thể về theo một trăm hai mươi thứ tự. Làm thử, chỉ một
+      thứ tự trong số đó trùng đúng thứ tự gửi.
+  - show: '<p><b>Bước 2.</b> Mỗi phản hồi mang <b>mã tương quan</b> bằng mã thông
+      điệp của lệnh. Bên gửi giữ bảng “mã → lệnh đang chờ” rồi tra theo mã.</p>
+
+      <span class=''note''>Làm thử: mọi phản hồi đều tìm ra lệnh của mình → $5$ trên
+      $5$.</span>
+
+      '
+    focus:
+    - 1
+    - 2
+    say: Bước hai, vì mỗi phản hồi mang mã tương quan bằng mã thông điệp của lệnh,
+      nên bên gửi giữ một bảng mã và lệnh đang chờ, rồi tra theo mã. Làm thử, mọi
+      phản hồi đều tìm ra lệnh của mình, năm trên năm.
+  - show: '<p><b>Bước 3.</b> Hết giờ chờ chỉ cho biết chưa có phản hồi, không cho
+      biết lõi đã hạch toán chưa. <b>Truy vấn trạng thái trước</b>, rồi mới quyết
+      định thử lại.</p>
+
+      <span class=''note''>Làm thử: đã hạch toán mà gửi lại ngay → ghi nợ $2$ lần.</span>
+
+      <p>Lưu ý: “chưa thấy” chưa chắc chắn, vì lệnh gốc có thể còn trong hàng đợi.
+      Gửi lại phải dùng <b>cùng mã tham chiếu</b> để lõi từ chối trùng, hoặc đặt hạn
+      sống (Expiry) cho bản tin.</p>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    - 3
+    say: Bước ba, vì hết giờ chờ chỉ cho biết chưa có phản hồi, chứ không cho biết
+      lõi đã hạch toán chưa, nên ta truy vấn trạng thái trước, rồi mới quyết định
+      thử lại. Làm thử, nếu đã hạch toán mà gửi lại ngay, khách bị ghi nợ hai lần.
+      Lưu ý, kết quả chưa thấy cũng chưa chắc chắn, vì lệnh gốc có thể còn nằm trong
+      hàng đợi. Vì vậy gửi lại phải dùng cùng mã tham chiếu để lõi từ chối trùng,
+      hoặc đặt hạn sống cho bản tin.
+- id: example
+  kind: example
+  title: Ví dụ bằng số, từng phép tính
+  checks:
+  - alg.bnk_reply_match([2, 0, 1, 4, 3])[0] == 0 and all(r != k for k, r in enumerate([2,
+    0, 1, 4, 3]))
+  - alg.bnk_reply_match([2, 0, 1, 4, 3])[1] == 5
+  - 1 + 1 == alg.bnk_unknown_outcome(True, False)
+  - alg.bnk_unknown_outcome(True, True) == 1
+  steps:
+  - show: '<p>Năm lệnh mã $0..4$. Phản hồi về theo thứ tự $2, 0, 1, 4, 3$.</p>
+
+      $$① \; \text{ghép theo thứ tự đến: } 0 \text{ trên } 5\ \text{đúng}$$
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    say: Ta tính hai trường hợp. Năm lệnh có mã từ không tới bốn. Phản hồi về theo
+      thứ tự hai, không, một, bốn, ba. Phép tính thứ nhất, ghép theo thứ tự đến thì
+      không phản hồi nào đúng.
+  - show: '<p>Vì sao $0$? Vị trí về thứ $k$ chứa mã $2, 0, 1, 4, 3$, và <b>không vị
+      trí nào trùng mã của nó</b> ($2 \ne 0$, $0 \ne 1$, $1 \ne 2$, $4 \ne 3$, $3
+      \ne 4$).</p>
+
+      $$② \; \text{số vị trí trùng} = \hl{0}$$
+
+      '
+    focus:
+    - 1
+    - 1
+    - 1
+    - 2
+    - 2
+    say: Phép tính thứ hai, vì sao là không. Vị trí thứ nhất chứa hai, khác không.
+      Vị trí thứ hai chứa không, khác một. Cứ thế, không vị trí nào trùng mã của nó.
+      Số vị trí trùng là không.
+  - show: '$$③ \; \text{ghép theo mã tương quan: } \hlg{5} \text{ trên } 5\ \text{đúng}$$'
+    say: Phép tính thứ ba, ghép theo mã tương quan thì cả năm đều đúng, vì mỗi phản
+      hồi tự mang mã của lệnh.
+  - show: '<p>Hết giờ chờ, lõi <b>đã</b> hạch toán, gửi lại không truy vấn.</p>
+
+      $$④ \; 1 + 1 = \hl{2}\ \text{lần ghi nợ}$$
+
+      '
+    focus:
+    - 1
+    - 2
+    say: Phép tính thứ tư, hết giờ chờ, nhưng lõi đã hạch toán, và ta gửi lại mà không
+      truy vấn. Số lần ghi nợ là một cộng một, bằng hai.
+  - show: '<p>Cùng tình huống nhưng <b>truy vấn trạng thái trước</b>: thấy đã hạch
+      toán nên không gửi lại.</p>
+
+      $$⑤ \; \text{số lần ghi nợ} = \hlg{1}$$
+
+      '
+    focus:
+    - 1
+    - 2
+    say: Phép tính thứ năm, cùng tình huống nhưng truy vấn trạng thái trước. Thấy
+      đã hạch toán nên không gửi lại, số lần ghi nợ là một.
+- id: check
+  kind: check
+  title: 'Tự kiểm bằng đường khác: đếm các thứ tự không trùng'
+  checks:
+  - sum(1 for p in __import__('itertools').permutations(range(5)) if all(p[i] != i
+    for i in range(5))) == 44
+  - round(44 / 120 * 100) == 37
+  - '[alg.bnk_unknown_outcome(a, b) for a, b in ((True, False), (True, True), (False,
+    True), (False, False))] == [2, 1, 1, 1]'
+  steps:
+  - show: '<p>Đường khác: vét cạn $120$ thứ tự, đếm những thứ tự mà <b>không</b> phản
+      hồi nào về đúng vị trí. Đáp số là $44$, và thứ tự $2, 0, 1, 4, 3$ nằm trong
+      $44$ đó.</p>
+
+      $$\text{44 trên 120} \approx \hl{37\%}$$
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    say: Kiểm bằng đường khác. Ta vét cạn một trăm hai mươi thứ tự, đếm những thứ
+      tự mà không phản hồi nào về đúng vị trí. Có bốn mươi bốn thứ tự như vậy, và
+      thứ tự của ta nằm trong đó. Bốn mươi bốn trên một trăm hai mươi là khoảng ba
+      mươi bảy phần trăm.
+  - show: <table class='t'><tr><th>tình huống</th><th>đã hạch toán?</th><th>truy vấn
+      trước?</th><th>số lần ghi nợ</th></tr><tr><td>A</td><td>có</td><td>không</td><td>2
+      (sai)</td></tr><tr><td>B</td><td>có</td><td>có</td><td>1</td></tr><tr><td>C</td><td>chưa</td><td>có</td><td>1
+      (gửi lại cùng mã tham chiếu)</td></tr><tr><td>D</td><td>chưa</td><td>không</td><td>1</td></tr></table>
+    say: Bảng này tổng hợp bốn tình huống. Chỉ tình huống A gặp lỗi ghi nợ hai lần.
+      Vì truy vấn trước cho ta biết đã hạch toán chưa, nên tình huống B và C đều đúng
+      một lần. Ở tình huống C, lần gửi lại mang cùng mã tham chiếu, để lõi từ chối
+      nếu lệnh gốc tới muộn.
+- id: pitfalls
+  kind: pitfall
+  title: Lỗi hay gặp, có lỗi của người đã đi làm
+  steps:
+  - show: <div class="box warn"><b>Lỗi 1 (người mới).</b> Giả định phản hồi về <b>đúng
+      thứ tự gửi</b>. Khi tải nhẹ có thể đúng, khi tải cao thì sai, nên lỗi chỉ hiện
+      lúc cao điểm.</div>
+    say: Lỗi thứ nhất, của người mới. Giả định phản hồi về đúng thứ tự gửi. Khi tải
+      nhẹ có thể đúng, khi tải cao thì sai, nên lỗi chỉ hiện lúc cao điểm.
+  - show: '<div class="box warn"><b>Lỗi 2 (người đã đi làm).</b> <b class="red">Hết
+      giờ chờ rồi gửi lại ngay</b>. Lõi có thể đã hạch toán, nên khách bị ghi nợ hai
+      lần.
+
+      <br><span class="note">Cách chữa: truy vấn trạng thái bằng mã tham chiếu của
+      lệnh trước khi gửi lại, và gắn khoá lũy đẳng vào lệnh.</span></div>
+
+      '
+    say: Lỗi thứ hai, của người đã đi làm, là hết giờ chờ rồi gửi lại ngay. Lõi có
+      thể đã hạch toán, nên khách bị ghi nợ hai lần. Cách chữa là truy vấn trạng thái
+      bằng mã tham chiếu của lệnh trước khi gửi lại, và gắn khoá lũy đẳng vào lệnh.
+  - show: '<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Nhiều bản của dịch
+      vụ cùng đọc <b>một hàng đợi phản hồi</b>, nên bản này lấy nhầm phản hồi của
+      bản kia.
+
+      Mỗi bản cần hàng đợi phản hồi riêng, hoặc chỉ nhận thông điệp có mã tương quan
+      của mình.</div>
+
+      '
+    say: Lỗi thứ ba, cũng của người đã đi làm, là nhiều bản của dịch vụ cùng đọc một
+      hàng đợi phản hồi, nên bản này lấy nhầm phản hồi của bản kia. Mỗi bản cần hàng
+      đợi phản hồi riêng, hoặc chỉ nhận thông điệp có mã tương quan của mình.
+- id: quiz
+  kind: quiz
+  title: Đến lượt bạn
+  checks:
+  - alg.bnk_reply_match([0, 2, 1, 3, 4])[0] == 3
+  - alg.bnk_unknown_outcome(False, True) == 1
+  steps:
+  - show: '<table class=''t''><tr><th>câu</th><th>đề</th></tr><tr><td>1</td><td>Phản
+      hồi về theo thứ tự 0, 2, 1, 3, 4. Ghép theo thứ tự đến đúng mấy lệnh?</td></tr><tr><td>2</td><td>Lõi
+      chưa hạch toán, bạn truy vấn rồi gửi lại. Ghi nợ mấy lần?</td></tr><tr><td>3</td><td>Quyết
+      định: khi hết giờ chờ với lệnh chuyển tiền, làm gì đầu tiên?</td></tr></table>'
+    pause: 25
+    say: Bây giờ tới phần bạn tự làm bài. Câu một, phản hồi về theo thứ tự không,
+      hai, một, ba, bốn, ghép theo thứ tự đến đúng mấy lệnh? Câu hai, lõi chưa hạch
+      toán, bạn truy vấn rồi gửi lại, ghi nợ mấy lần? Câu ba, khi hết giờ chờ với
+      lệnh chuyển tiền, việc đầu tiên là gì? Hãy dừng video và làm ra giấy.
+  - show: '<p>Câu 1: vị trí $0$ chứa $0$ ✓, vị trí $3$ chứa $3$ ✓, vị trí $4$ chứa
+      $4$ ✓; vị trí $1$ chứa $2$, vị trí $2$ chứa $1$.</p>
+
+      $$\hl{3}\ \text{trên } 5$$
+
+      '
+    focus:
+    - 1
+    - 1
+    - 1
+    - 2
+    - 2
+    say: Đáp án câu một. Vị trí không chứa không, đúng. Vị trí ba chứa ba, vị trí
+      bốn chứa bốn, đúng. Vị trí một và hai chứa nhầm. Vậy đúng ba trên năm.
+    clear: true
+  - show: $$\text{ghi nợ} = \hlg{1}\ \text{lần (chỉ lần gửi lại)}$$
+    say: Đáp án câu hai. Lõi chưa hạch toán nên lần đầu chưa trừ gì, và lần gửi lại
+      trừ đúng một lần.
+  - show: <table class='t'><tr><th>lựa chọn</th><th>được</th><th>mất</th></tr><tr><td>truy
+      vấn trạng thái trước, rồi mới thử lại</td><td>không ghi nợ trùng</td><td>chậm
+      hơn một vòng hỏi</td></tr><tr><td>gửi lại ngay</td><td>nhanh</td><td>có thể
+      ghi nợ hai lần</td></tr></table>
+    say: Đáp án câu ba. Việc đầu tiên là truy vấn trạng thái bằng mã tham chiếu của
+      lệnh, rồi mới quyết định thử lại. Chậm hơn một vòng hỏi, nhưng không ghi nợ
+      trùng. Gửi lại ngay thì nhanh nhưng có thể ghi nợ hai lần.
+    clear: true
+- id: recap
+  kind: recap
+  title: Chuỗi logic & tư duy cần mang theo
+  steps:
+  - show: <div class='chain'><span class='n'>lõi xử lý song song</span><span class='a'>→</span><span
+      class='n'>phản hồi lộn xộn</span><span class='a'>→</span><span class='n'>ghép
+      theo mã tương quan</span><span class='a'>→</span><span class='n'>hết giờ chờ
+      → truy vấn trước</span></div>
+    say: Tổng kết chuỗi logic. Lõi xử lý song song nên phản hồi lộn xộn. Ghép theo
+      mã tương quan. Hết giờ chờ thì truy vấn trạng thái trước khi thử lại.
+  - show: <div class='box key'><b>Tư duy:</b> “không có phản hồi” là <b>trạng thái
+      chưa biết</b>, không phải “thất bại”. Chưa biết thì đi hỏi, đừng đoán.</div>
+    say: Điều cần mang theo. Không có phản hồi là trạng thái chưa biết, không phải
+      thất bại. Chưa biết thì đi hỏi, đừng đoán.
