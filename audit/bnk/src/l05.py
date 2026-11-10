@@ -17,7 +17,7 @@ def build():
         st(table(["khái niệm", "nghĩa", "ví dụ"],
                  [["① Phiên", "một kết nối đang làm việc với cơ sở dữ liệu (cơ sở dữ liệu: phần mềm lưu bảng, hỏi bằng ngôn ngữ SQL), thường của một luồng chương trình", "phiên 1, phiên 2"],
                   ["② Giao dịch", "nhiều thao tác cùng thành công hoặc cùng huỷ; kết thúc bằng commit (chốt lưu) hoặc rollback (huỷ hết)", "trừ A rồi cộng B"],
-                  ["③ Khoá hàng", "khi một phiên sửa một hàng, hàng đó bị khoá tới khi giao dịch kết thúc", "UPDATE tài khoản A"],
+                  ["③ Khoá hàng", "khi một phiên sửa một hàng, hàng đó bị khoá tới khi giao dịch kết thúc", "UPDATE (lệnh SQL sửa hàng) tài khoản A"],
                   ["④ Chờ", "phiên khác muốn sửa hàng đang khoá thì phải đứng chờ", "phiên 2 chờ hàng A"]]),
            """Trước hết ta cần hiểu bốn điều. Phiên là một kết nối đang làm việc với cơ sở dữ liệu, tức phần mềm lưu bảng dữ liệu mà ta hỏi bằng ngôn ngữ SQL.
            Giao dịch là nhiều thao tác cùng thành công hoặc cùng huỷ, và kết thúc bằng chốt để lưu, hoặc hoàn tác để huỷ hết.
@@ -106,10 +106,10 @@ $$⑤ \\; \\text{kết quả} = \\hlg{\\text{cả hai lệnh xong lần lượt}
         st(table(["nguyên nhân ORA-00060 ngoài đời", "sắp thứ tự hàng có chữa được?", "cách chữa"],
                  [["hai phiên khoá hàng ngược thứ tự", "có", "khoá theo id tăng dần"],
                   ["khoá ngoại (cột ở bảng con trỏ tới bảng cha) không có chỉ mục: xoá hay sửa khoá chính ở bảng cha thì Oracle khoá cả bảng con", "không", "tạo chỉ mục (cấu trúc tra nhanh) cho cột khoá ngoại"],
-                  ["thiếu chỗ ITL (danh sách giao dịch đang sửa khối) trong khối dữ liệu, INITRANS thấp", "không", "tăng INITRANS cho bảng hay chỉ mục nóng"]]),
+                  ["thiếu chỗ ITL (danh sách giao dịch đang sửa khối) trong khối dữ liệu (đơn vị nhỏ nhất Oracle đọc ghi trên đĩa, chứa nhiều hàng), INITRANS thấp", "không", "tăng INITRANS cho bảng hay chỉ mục nóng"]]),
            """Bảng này nhắc rằng ngoài đời, lỗi bế tắc còn có nguyên nhân khác. Một là khoá ngoại không có chỉ mục. Khoá ngoại là cột ở bảng con trỏ tới một hàng của bảng cha, còn chỉ mục là cấu trúc giúp tra nhanh.
            Khi thiếu chỉ mục đó, xoá hay sửa khoá chính ở bảng cha làm Oracle khoá cả bảng con, nên nhiều phiên dễ chờ nhau.
-           Hai là khối dữ liệu thiếu chỗ ghi các giao dịch đang sửa nó. Sắp thứ tự hàng không chữa được hai loại này, mà phải tạo chỉ mục hoặc tăng chỗ trong khối.""",
+           Hai là khối dữ liệu, tức đơn vị nhỏ nhất Oracle đọc ghi trên đĩa và chứa nhiều hàng, thiếu chỗ ghi các giao dịch đang sửa nó. Sắp thứ tự hàng không chữa được hai loại này, mà phải tạo chỉ mục hoặc tăng chỗ trong khối.""",
            clear=True),
     ], checks=["sum(1 for p in (['A', 'B'], ['B', 'A']) for q in (['A', 'B'], ['B', 'A']) if alg.bnk_lock_sim([p, q]) == 'deadlock') == 2"])
     pit = sc("pitfalls", "pitfall", "Lỗi hay gặp, có lỗi của người đã đi làm", [

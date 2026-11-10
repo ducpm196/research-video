@@ -30,7 +30,7 @@ FIX = {
     "L01": "Không dùng double cho tiền; tổng tiền dùng long theo đơn vị đồng vì int tràn ở 2 147 483 647",
     "L02": "(double)(7 / 2) vẫn ra 3.0 vì phép chia số nguyên đã chạy trước khi ép kiểu",
     "L03": "Ranh giới bậc phí phải ghi rõ “từ” hay “trên”; kiểm ngay tại số biên",
-    "L04": "Lệch một vòng là lỗi phổ biến nhất của vòng lặp; luôn thử với 0, 1 và n phần tử",
+    "L04": "Lệch một vòng là lỗi hay gặp của vòng lặp; đếm trước số lần bằng cuối − đầu + 1 và chọn đúng dấu < hay <=",
     "L05": "Gán b = a không sao chép mảng mà cho hai tên cùng trỏ một mảng",
     "L06": "Java luôn truyền theo giá trị; với mảng và đối tượng, giá trị được truyền là tham chiếu",
     "L07": "Trường để public cho phép phá bất biến; giữ private và kiểm điều kiện trong phương thức",

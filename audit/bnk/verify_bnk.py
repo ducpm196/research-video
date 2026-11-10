@@ -115,8 +115,9 @@ con.execute("CREATE INDEX i ON tx(account_id, created)")
 p1 = plan("account_id=7")
 p2 = plan("created='2026-01-05'")
 p3 = plan("account_id+0=7")
-rec("L04", L == 4 == alg.bnk_btree_levels(10 ** 7, 100) and L + 1 == 5 and p0.startswith("SCAN") and p1.startswith("SEARCH") and p2.startswith("SCAN") and p3.startswith("SCAN"),
-    "10^7 dòng → 4 tầng; sqlite: SCAN, SEARCH, SCAN, SCAN theo chỉ mục và điều kiện")
+p4 = plan("abs(account_id)=7")  # bọc hàm trên chính cột đầu (LS1: thay ví dụ substr(created) vốn SCAN vì thiếu cột đầu)
+rec("L04", L == 4 == alg.bnk_btree_levels(10 ** 7, 100) and L + 1 == 5 and p0.startswith("SCAN") and p1.startswith("SEARCH") and p2.startswith("SCAN") and p3.startswith("SCAN") and p4.startswith("SCAN"),
+    "10^7 dòng → 4 tầng; sqlite: SCAN, SEARCH, SCAN, SCAN, SCAN theo chỉ mục và điều kiện")
 
 # ── L05: bế tắc bằng đồ thị chờ (phát hiện chu trình) thay vì mô phỏng bước ──
 def deadlock_wfg(seqs):

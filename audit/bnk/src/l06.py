@@ -76,9 +76,9 @@ def build():
            Nhờ vậy, người cũ không thể ghi đè dù khoá đã hết hạn."""),
     ])
     form = sc("formula", "formula", "Suy ra từng bước: độ trễ trung bình và an toàn của khoá", [
-        st("""<p><b>Bước 1.</b> Luôn hỏi bộ đệm: mọi lần tốn $c$. Trượt (xác suất $1 - h$) thì tốn thêm $d$ của cơ sở dữ liệu.</p>
+        st("""<p><b>Bước 1.</b> Luôn hỏi bộ đệm: mọi lần tốn $c$ (thời gian bộ đệm). Trượt (xác suất $1 - h$, với $h$ là tỉ lệ trúng) thì tốn thêm $d$ (thời gian cơ sở dữ liệu).</p>
 <span class='note'>Làm thử: $h = 0{,}9$, $c = 1$, $d = 20$: trượt $0{,}1$ lần, mỗi lần thêm $20$ ms.</span>""",
-           """Bước một, vì ta luôn hỏi bộ đệm trước, nên mọi lần đều tốn thời gian của bộ đệm. Lần nào trượt, với xác suất một trừ h, thì tốn thêm thời gian của cơ sở dữ liệu.
+           """Bước một, vì ta luôn hỏi bộ đệm trước, nên mọi lần đều tốn thời gian của bộ đệm, gọi là c. Lần nào trượt, với xác suất một trừ h, trong đó h là tỉ lệ trúng, thì tốn thêm thời gian của cơ sở dữ liệu, gọi là d.
            Làm thử với h bằng không phẩy chín, mỗi lần trượt thêm hai mươi mili giây."""),
         st("""<p><b>Bước 2.</b> Vì mọi lần tốn $c$ và chỉ phần trượt tốn thêm $d$, nên gộp lại: $T = c + (1 - h) \\cdot d$.</p>
 <span class='note'>Làm thử: $T = 1 + 0{,}1 \\cdot 20 = 3$ ms.</span>""",

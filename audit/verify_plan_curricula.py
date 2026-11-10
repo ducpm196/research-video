@@ -70,9 +70,9 @@ rec("DMS:L17", sum(1 for es in itertools.combinations(K4, 3) if is_tree(es)) == 
 rec("DMS:L18", 4 - 6 + 4 == 2 and 10 > 3 * 5 - 6, "K₄ phẳng: V − E + F = 4 − 6 + 4 = 2; K₅: E = 10 > 3V − 6 = 9 → không phẳng")
 p23 = 1 - math.prod((365 - k) / 365 for k in range(23))
 rec("DMS:L19", round(p23, 4) == 0.5073, f"nghịch lý ngày sinh: 23 người, P(trùng) = {p23:.4f}")
-rec("DMS:L20", int(2 ** (80 - 63.1)) == 122294 and 2 ** 63 == 9223372036854775808 and 2017 - 2006 == 11
+rec("DMS:L20", round(2 ** (80 - 63.1)) == 122295 and 2 ** 63 == 9223372036854775808 and 2017 - 2006 == 11
     and round(math.comb(10000, 2) / 2 ** 32, 4) == 0.0116 and 2030 - 2022 == 8,
-    "SHA-1: 2⁸⁰ / 2^63,1 = 2^16,9 ≈ 122 294 lần (> 100 000, ST17); 2⁶³ = 9 223 372 036 854 775 808 (GB17); 2017 − 2006 = 11 năm; "
+    "SHA-1: 2⁸⁰ / 2^63,1 = 2^16,9 ≈ 122 295 lần (> 100 000, ST17); 2⁶³ = 9 223 372 036 854 775 808 (GB17); 2017 − 2006 = 11 năm; "
     "C(10 000, 2) / 2³² ≈ 0,0116 cặp trùng (số minh hoạ); 2030 − 2022 = 8 năm (NI22)")
 
 # ═══════════ CS115 — bài hành trình L45 (2026-11-02; các bài L00–L44 kiểm ở audit/verify_cs115_*.py) ═══════════

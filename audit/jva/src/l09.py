@@ -296,7 +296,7 @@ Cuối bài bạn đếm được số giao dịch theo từng loại.</div>
         st('<div class="box warn"><b>Lỗi 2 (người mới).</b> Xoá phần tử ngay trong vòng lặp duyệt.</div>'
            + code_block(xoa, lines=(5, 14)) + out_block(xoa),
            """Lỗi thứ hai là xoá phần tử ngay trong vòng lặp duyệt, ở đây là bỏ tài khoản B không hai.
-           Danh sách bị đổi giữa chừng, nên ở đây bộ duyệt ném ngoại lệ sửa đổi đồng thời.
+           Danh sách bị đổi giữa chừng, nên ở đây bộ duyệt, tức phần máy dùng ngầm để đi qua từng phần tử trong vòng lặp duyệt, ném ngoại lệ sửa đổi đồng thời.
            Java chỉ cố gắng phát hiện chứ không hứa lần nào cũng ném: có khi vòng lặp dừng sớm và bỏ sót phần tử, nên đừng dựa vào ngoại lệ này."""),
         st(code_block(xoa_dung, lines=(10, 15), title="Cách sửa: duyệt theo chỉ số, từ cuối về đầu") + out_block(xoa_dung),
            """Cách sửa là duyệt theo chỉ số từ cuối về đầu, và xoá theo chỉ số.

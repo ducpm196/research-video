@@ -31,7 +31,7 @@ Trong lĩnh vực Fintech và Công ty Tài chính tiêu dùng (như Mirae Asset
      *(Trong đó: $P$ là Số tiền vay gốc, $r$ là Lãi suất tháng $= \text{Lãi suất năm} / 12$, $n$ là Số tháng vay)*.
    - **Thu nợ & Phân loại nợ (Collection & Delinquency)**:
      - Tự động trích nợ qua liên kết tài khoản ngân hàng (Auto-debit) vào ngày thanh toán (Due Date).
-     - Theo dõi số ngày quá hạn (Days Past Due - DPD) theo Thông tư 31/2024/TT-NHNN (thay Thông tư 11/2021, sửa đổi bởi Thông tư 37/2025): Nhóm 1 quá hạn dưới 10 ngày; Nhóm 2 từ 10 đến 89 ngày; Nhóm 3 từ 90 đến 179 ngày; Nhóm 4 từ 180 đến 359 ngày; Nhóm 5 từ 360 ngày (Nhóm 3–5 là nợ xấu). Nợ cơ cấu lại được phân nhóm theo quy định riêng. Cập nhật báo cáo CIC định kỳ.
+     - Theo dõi số ngày quá hạn (Days Past Due - DPD) theo Thông tư 31/2024/TT-NHNN (thay Thông tư 11/2021, sửa đổi bởi Thông tư 37/2025): Nhóm 1 quá hạn dưới 10 ngày; Nhóm 2 từ 10 đến 90 ngày; Nhóm 3 từ 91 đến 180 ngày; Nhóm 4 từ 181 đến 360 ngày; Nhóm 5 trên 360 ngày (Nhóm 3–5 là nợ xấu; nguồn thứ cấp: cafef.vn 21/07/2026, hethongphapluat.com, truy cập 2026-11-10, chưa đối chiếu được nguyên văn Điều 10). Nợ cơ cấu lại được phân nhóm theo quy định riêng. Cập nhật báo cáo CIC định kỳ.
 
 ---
 

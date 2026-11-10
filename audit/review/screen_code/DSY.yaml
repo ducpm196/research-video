@@ -1,0 +1,69 @@
+# Sổ mã trên màn hình khoá DSY (audit/review/screen_code.py).
+blocks:
+  "DSY L14 example 0 0":
+    sha: 48a554dae6ab79ea
+    kind: pseudo
+    reason: "Mã giả tiếng Việt cho người nhận thông điệp (bắt đầu giao dịch, nếu … bỏ qua, cam kết). Điều bài nói về kết quả được kiểm bằng bản Python đối chiếu src:DSY:L14_doi_chieu (sqlite, giao dịch thật)."
+    claims:
+      - "bước 2–3: dãy #42 (+100), #43 (+50), #42 (lặp) → 100, 150, bỏ qua; tổng 150"
+      - "bước 4: hỏng trước khi cam kết → chưa cộng, bảng chưa có #42, gửi lại cộng 100 lần đầu; hỏng sau cam kết, trước xác nhận → đã cộng, gửi lại bị bỏ qua"
+      - "quiz: (7,+10),(8,+5),(7,+10),(9,−3),(8,+5): không lọc trùng 27; lọc trùng theo mã 12"
+    unverified_claims:
+      - "Các kết quả trên kiểm bằng bản Python đối chiếu src:DSY:L14_doi_chieu; độ trung thực bản dịch = INFERRED (mã giả không chạy được nguyên văn)"
+sources:
+  L14_doi_chieu:
+    lang: python
+    twin_of: "DSY L14 example 0 0"
+    reason: "Dịch sát từng dòng mã giả của khối DSY L14 example 0 0 sang Python + sqlite (BEGIN/COMMIT/ROLLBACK thật); hỏng máy giả lập bằng ngoại lệ trước/sau cam kết. Độ trung thực bản dịch = INFERRED."
+    code: |
+      import sqlite3
+      class Hong(Exception):
+          pass
+      class NguoiNhan:
+          def __init__(self):
+              self.con = sqlite3.connect(":memory:", isolation_level=None)
+              self.con.executescript("CREATE TABLE tk(so_du INTEGER); INSERT INTO tk VALUES (0);"
+                                     "CREATE TABLE da_xu_ly(ma INTEGER PRIMARY KEY);")
+          def nhan(self, ma, tien, hong=None):
+              c = self.con
+              c.execute("BEGIN")                                                    # bắt đầu giao dịch
+              try:
+                  if not c.execute("SELECT 1 FROM da_xu_ly WHERE ma = ?", (ma,)).fetchone():  # nếu đã có: bỏ qua
+                      c.execute("UPDATE tk SET so_du = so_du + ?", (tien,))         # cộng vào tài khoản
+                      c.execute("INSERT INTO da_xu_ly VALUES (?)", (ma,))           # thêm vào da_xu_ly
+                  if hong == "trước cam kết":
+                      raise Hong()
+                  c.execute("COMMIT")                                               # cam kết giao dịch
+              except Hong:
+                  c.execute("ROLLBACK")
+                  raise
+              if hong == "sau cam kết":
+                  raise Hong()                                                      # chết trước khi gửi xác nhận
+              return "xác nhận"
+          def so_du(self):
+              return self.con.execute("SELECT so_du FROM tk").fetchone()[0]
+          def co(self, ma):
+              return self.con.execute("SELECT 1 FROM da_xu_ly WHERE ma = ?", (ma,)).fetchone() is not None
+      a = NguoiNhan()
+      tong = []
+      for ma, tien in [(42, 100), (43, 50), (42, 100)]:
+          a.nhan(ma, tien)
+          tong.append(a.so_du())
+      ca_hong = {}
+      for luc in ("trước cam kết", "sau cam kết"):
+          b = NguoiNhan()
+          try:
+              b.nhan(42, 100, hong=luc)
+          except Hong:
+              pass
+          truoc = (b.so_du(), b.co(42))
+          b.nhan(42, 100)                     # gửi lại sau khi khởi động
+          ca_hong[luc] = (truoc, b.so_du())
+      q = NguoiNhan()
+      for ma, tien in [(7, 10), (8, 5), (7, 10), (9, -3), (8, 5)]:
+          q.nhan(ma, tien)
+    post: |
+      assert tong == [100, 150, 150]
+      assert ca_hong["trước cam kết"] == ((0, False), 100)
+      assert ca_hong["sau cam kết"] == ((100, True), 100)
+      assert q.so_du() == 12 and sum([10, 5, 10, -3, 5]) == 27

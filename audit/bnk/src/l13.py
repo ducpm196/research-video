@@ -49,15 +49,16 @@ def build():
                box(30, 140, 240, 110, ["Người dùng", "gõ PIN"], C_BLUE, bold=True),
                box(330, 140, 300, 110, ["Thiết bị đầu cuối", "mã hoá ngay"], C_AMBER, bold=True),
                box(700, 140, 300, 110, ["HSM chặng giữa", "dịch TPK/ZPK → ZPK"], C_GRAY, size=22),
-               box(1070, 140, 380, 110, ["HSM ngân hàng phát hành", "kiểm PIN trong hộp kín"], C_GREEN, bold=True, size=22),
+               box(1070, 140, 380, 110, ["HSM ngân hàng phát hành", "(ngân hàng đã cấp thẻ)", "kiểm PIN trong hộp kín"], C_GREEN, bold=True, size=22),
                arrow(270, 195, 325, 195), arrow(630, 195, 695, 195), arrow(1000, 195, 1065, 195),
                txt(750, 300, "Mỗi chặng chỉ DỊCH khối PIN sang khoá của chặng sau; PIN rõ không ra khỏi HSM", 24, "middle", "#1f2937", True),
-               txt(750, 338, "TPK: khoá của thiết bị đầu cuối; ZPK: khoá PIN dùng chung giữa hai chặng", 22, "middle", "#475569"),
+               txt(750, 338, "TPK: khoá của thiết bị đầu cuối (máy rút tiền, máy quẹt thẻ); ZPK: khoá PIN dùng chung giữa hai chặng", 22, "middle", "#475569"),
                txt(750, 372, "Khoá làm việc được bọc bằng ZMK (khoá trao đổi) khi gửi, bằng LMK (khoá chủ của HSM) khi lưu", 22, "middle", "#475569")),
-           """Hình cho thấy hành trình của mã PIN. Người dùng gõ PIN. Thiết bị đầu cuối mã hoá ngay bằng khoá của thiết bị.
+           """Hình cho thấy hành trình của mã PIN. Người dùng gõ PIN. Thiết bị đầu cuối, tức máy rút tiền hay máy quẹt thẻ, mã hoá ngay bằng khoá của thiết bị.
+           Ngân hàng thanh toán là ngân hàng sở hữu máy quẹt thẻ mà khách vừa dùng.
            Ở mỗi chặng giữa, như ngân hàng thanh toán hay chuyển mạch, thiết bị HSM chỉ dịch khối PIN từ khoá của chặng trước sang khoá của chặng sau.
            PIN rõ không bao giờ ra khỏi HSM.
-           Cuối cùng, HSM của ngân hàng phát hành kiểm PIN trong hộp kín. Các khoá làm việc này được bọc bằng một khoá trao đổi khi gửi đi, và bằng khoá chủ của HSM khi lưu."""),
+           Cuối cùng, HSM của ngân hàng phát hành, tức ngân hàng đã cấp thẻ, kiểm PIN trong hộp kín. Các khoá làm việc này được bọc bằng một khoá trao đổi khi gửi đi, và bằng khoá chủ của HSM khi lưu."""),
         st(svg(1500, 420,
                box(40, 40, 500, 70, "PIN 1234 → 04 1234 FFFFFFFFFF", C_BLUE, size=24),
                box(40, 130, 500, 70, "PAN → 0000 + 12 số 111111111111", C_AMBER, size=24),
@@ -85,9 +86,9 @@ def build():
     ], checks=["alg.bnk_pin_block0('1234', '4111111111111111') == '041225EEEEEEEEEE'", "alg.bnk_mac('k', 'amt=500000') != alg.bnk_mac('k', 'amt=900000')",
                NEED + "(15000000, 0) and not " + NEED + "(5000000, 0)"])
     ex = sc("example", "example", "Ví dụ bằng số, từng phép tính", [
-        st("""<p>PIN thử <code>1234</code> đệm thành <code>041234FFFFFFFFFF</code>. Thẻ thử <code>4111111111111111</code>: bỏ số kiểm cuối, lấy $12$ số cuối còn lại rồi đệm.</p>
+        st("""<p>PIN thử <code>1234</code> đệm thành <code>041234FFFFFFFFFF</code> (0: mã định dạng 0; 4: PIN dài 4 chữ số; F lấp cho đủ 16 chữ số). Thẻ thử <code>4111111111111111</code>: bỏ số kiểm cuối, lấy $12$ số cuối còn lại rồi đệm.</p>
 $$① \\; \\text{PAN đệm} = \\mathtt{0000\\,111111111111}$$""",
-           """Ta tính một khối PIN với dữ liệu thử. PIN một hai ba bốn được đệm thành không bốn một hai ba bốn rồi các chữ F. Thẻ thử, bỏ số kiểm cuối, lấy mười hai số cuối còn lại rồi đệm bốn số không phía trước. Phép tính thứ nhất ra dãy PAN đã đệm."""),
+           """Ta tính một khối PIN với dữ liệu thử. PIN một hai ba bốn được đệm thành không bốn một hai ba bốn rồi các chữ F. Chữ số không đầu là mã định dạng, chữ số bốn là độ dài của PIN, còn chữ F lấp cho đủ mười sáu chữ số. Thẻ thử, bỏ số kiểm cuối, lấy mười hai số cuối còn lại rồi đệm bốn số không phía trước. Phép tính thứ nhất ra dãy PAN đã đệm."""),
         st("""<p>Hai byte đầu: $\\mathtt{04}\\ \\text{ XOR }\\ \\mathtt{00} = \\mathtt{04}$ và $\\mathtt{12}\\ \\text{ XOR }\\ \\mathtt{00} = \\mathtt{12}$.</p>
 $$② \\; \\mathtt{34} \\text{ XOR } \\mathtt{11} = \\hl{\\mathtt{25}}$$""",
            """Phép tính thứ hai, hai byte đầu XOR với không nên giữ nguyên là không bốn và một hai. Byte tiếp theo, ba bốn XOR một một, cho hai năm."""),
@@ -100,6 +101,7 @@ $$④ \\; \\text{khối PIN} = \\hlg{\\mathtt{041225EEEEEEEEEE}}$$""",
 $$⑤ \\; 8 + 8 = 16 \\le 20\\ \\text{(không)},\\quad 16 + 8 = 24 > 20\\ \\Rightarrow\\ \\hl{\\text{giao dịch thứ 3 cần}}$$""",
            """Phép tính thứ năm, ba giao dịch trong ngày, mỗi giao dịch tám triệu. Giao dịch thứ hai, cộng dồn mười sáu triệu, chưa vượt hai mươi. Giao dịch thứ ba, cộng dồn hai mươi bốn triệu, vượt hai mươi, nên giao dịch thứ ba cần sinh trắc học."""),
     ], checks=["0x34 ^ 0x11 == 0x25", "0xFF ^ 0x11 == 0xEE", "alg.bnk_pin_block0('1234', '4111111111111111') == '0412' + '25' + 'EE' * 5",
+               "('0' + str(len('1234')) + '1234').ljust(16, 'F') == '041234FFFFFFFFFF' and len('041234FFFFFFFFFF') == 16",
                "not " + NEED + "(8000000, 8000000) and " + NEED + "(8000000, 16000000)", "8 + 8 == 16 <= 20 < 16 + 8"])
     chk = sc("check", "check", "Tự kiểm bằng đường khác: Luhn, che số thẻ và MAC", [
         st("""<p>Đường khác cho ba việc: (a) số thẻ thử qua phép kiểm <b>Luhn</b>; (b) che thẻ giữ $6$ số đầu và $4$ số cuối; (c) đổi một chữ số trong bản tin thì <b>MAC khác</b>.</p>
@@ -120,8 +122,8 @@ $$\\text{(b)}\\ \\mathtt{411111}\\,******\\,\\mathtt{1111}$$
            """Lỗi thứ nhất, của người mới. Nghĩ mã hoá là đủ nên ghi cả PIN đã mã hoá vào nhật ký. PIN, kể cả đã mã hoá, không được lưu sau khi xử lý xong."""),
         st("""<div class="box warn"><b>Lỗi 2 (người đã đi làm).</b> <b class="red">Để khoá trong mã nguồn hay tệp cấu hình</b>. Ai đọc được kho mã là có khoá. Khoá phải nằm trong HSM hoặc kho khoá chuyên dụng, và xoay vòng định kỳ.</div>""",
            """Lỗi thứ hai, của người đã đi làm, là để khoá trong mã nguồn hay tệp cấu hình. Ai đọc được kho mã là có khoá. Khoá phải nằm trong HSM hoặc kho khoá chuyên dụng, và được xoay vòng định kỳ."""),
-        st("""<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Chỉ kiểm sinh trắc học ở <b>ứng dụng</b>. Kẻ tấn công gọi thẳng API sẽ bỏ qua. Máy chủ phải kiểm lại điều kiện cho mọi giao dịch, không tin cờ do ứng dụng gửi lên.</div>""",
-           """Lỗi thứ ba, cũng của người đã đi làm, là chỉ kiểm sinh trắc học ở ứng dụng. Kẻ tấn công gọi thẳng giao diện lập trình sẽ bỏ qua. Máy chủ phải kiểm lại điều kiện cho mọi giao dịch, không tin cờ do ứng dụng gửi lên."""),
+        st("""<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Chỉ kiểm sinh trắc học ở <b>ứng dụng</b>. Kẻ tấn công gọi thẳng API sẽ bỏ qua. Máy chủ phải kiểm lại điều kiện cho mọi giao dịch, không tin cờ (giá trị báo “đã xác thực”) do ứng dụng gửi lên.</div>""",
+           """Lỗi thứ ba, cũng của người đã đi làm, là chỉ kiểm sinh trắc học ở ứng dụng. Kẻ tấn công gọi thẳng giao diện lập trình sẽ bỏ qua. Máy chủ phải kiểm lại điều kiện cho mọi giao dịch, không tin cờ, tức giá trị báo đã xác thực, do ứng dụng gửi lên."""),
     ])
     quiz = sc("quiz", "quiz", "Đến lượt bạn", [
         st(table(["câu", "đề"],

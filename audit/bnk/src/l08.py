@@ -41,9 +41,9 @@ def build():
                   ["compensation (bù)", "bước làm ngược lại cho một bước đã xong"],
                   ["orchestration / choreography", "một người điều phối gọi từng bước / các dịch vụ tự phản ứng với sự kiện"],
                   ["Transactional Outbox", "ghi dữ liệu và sự kiện vào cùng một giao dịch, rồi một bộ chuyển tiếp phát sự kiện"],
-                  ["relay (bộ chuyển tiếp)", "tiến trình đọc bảng Outbox rồi gửi sang Kafka"]]),
+                  ["relay (bộ chuyển tiếp)", "chương trình chạy nền đọc bảng Outbox rồi gửi sang Kafka"]]),
            """Bảng này giải mã năm từ. SAGA là chuỗi giao dịch cục bộ, mỗi bước có bước bù để quay lui. Bù là việc làm ngược lại cho một bước đã xong.
-           Điều phối là một người gọi từng bước, còn phối hợp theo sự kiện là các dịch vụ tự phản ứng. Outbox là ghi dữ liệu và sự kiện vào cùng một giao dịch, rồi bộ chuyển tiếp phát sự kiện."""),
+           Điều phối là một người gọi từng bước, còn phối hợp theo sự kiện là các dịch vụ tự phản ứng. Outbox là ghi dữ liệu và sự kiện vào cùng một giao dịch, rồi bộ chuyển tiếp, tức một chương trình chạy nền đọc bảng Outbox, gửi sự kiện sang Kafka."""),
     ])
     intu = sc("intuition", "intuition", "Hình dung: chuỗi bước và bước bù ngược chiều", [
         st(svg(1500, 420,

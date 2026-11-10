@@ -51,7 +51,7 @@ def build():
         st(svg(1500, 420,
                txt(60, 50, "Lệnh gửi theo thứ tự:", 26, "start", "#1f2937", True),
                box(60, 80, 160, 60, "0", C_BLUE), box(240, 80, 160, 60, "1", C_BLUE), box(420, 80, 160, 60, "2", C_BLUE), box(600, 80, 160, 60, "3", C_BLUE), box(780, 80, 160, 60, "4", C_BLUE),
-               txt(60, 220, "Phản hồi về theo thứ tự:", 26, "start", "#1f2937", True),
+               txt(560, 232, "Phản hồi về theo thứ tự:", 26, "start", "#1f2937", True),
                box(60, 250, 160, 60, "2", C_AMBER), box(240, 250, 160, 60, "0", C_AMBER), box(420, 250, 160, 60, "1", C_AMBER), box(600, 250, 160, 60, "4", C_AMBER), box(780, 250, 160, 60, "3", C_AMBER),
                arrow(500, 142, 140, 246, "#dc2626", None, dash=True),
                txt(1200, 150, "Ghép theo thứ tự đến:", 26, "middle", "#dc2626", True), txt(1200, 190, "phản hồi 2 bị gán cho lệnh 0 (sai)", 24, "middle", "#dc2626"),
@@ -68,9 +68,9 @@ def build():
            """Bước hai, vì mỗi phản hồi mang mã tương quan bằng mã thông điệp của lệnh, nên bên gửi giữ một bảng mã và lệnh đang chờ, rồi tra theo mã. Làm thử, mọi phản hồi đều tìm ra lệnh của mình, năm trên năm."""),
         st("""<p><b>Bước 3.</b> Hết giờ chờ chỉ cho biết chưa có phản hồi, không cho biết lõi đã hạch toán chưa. <b>Truy vấn trạng thái trước</b>, rồi mới quyết định thử lại.</p>
 <span class='note'>Làm thử: đã hạch toán mà gửi lại ngay → ghi nợ $2$ lần.</span>
-<p>Lưu ý: “chưa thấy” chưa chắc chắn, vì lệnh gốc có thể còn trong hàng đợi. Gửi lại phải dùng <b>cùng mã tham chiếu</b> để lõi từ chối trùng, hoặc đặt hạn sống (Expiry) cho bản tin.</p>""",
+<p>Lưu ý: “chưa thấy” chưa chắc chắn, vì lệnh gốc có thể còn trong hàng đợi. Gửi lại phải dùng <b>cùng mã tham chiếu</b> (mã riêng của lệnh chuyển tiền, giữ nguyên qua mọi lần gửi) để lõi từ chối trùng, hoặc đặt hạn sống (Expiry) cho bản tin.</p>""",
            """Bước ba, vì hết giờ chờ chỉ cho biết chưa có phản hồi, chứ không cho biết lõi đã hạch toán chưa, nên ta truy vấn trạng thái trước, rồi mới quyết định thử lại. Làm thử, nếu đã hạch toán mà gửi lại ngay, khách bị ghi nợ hai lần.
-           Lưu ý, kết quả chưa thấy cũng chưa chắc chắn, vì lệnh gốc có thể còn nằm trong hàng đợi. Vì vậy gửi lại phải dùng cùng mã tham chiếu để lõi từ chối trùng, hoặc đặt hạn sống cho bản tin."""),
+           Lưu ý, kết quả chưa thấy cũng chưa chắc chắn, vì lệnh gốc có thể còn nằm trong hàng đợi. Vì vậy gửi lại phải dùng cùng mã tham chiếu, tức mã riêng của lệnh chuyển tiền được giữ nguyên qua mọi lần gửi, để lõi từ chối trùng, hoặc đặt hạn sống cho bản tin.""", clear=True),
     ], checks=["math.factorial(5) == 120", "alg.bnk_reply_match([2, 0, 1, 4, 3]) == (0, 5)", "alg.bnk_unknown_outcome(True, False) == 2"])
     ex = sc("example", "example", "Ví dụ bằng số, từng phép tính", [
         st("""<p>Năm lệnh mã $0..4$. Phản hồi về theo thứ tự $2, 0, 1, 4, 3$.</p>

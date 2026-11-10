@@ -4,7 +4,7 @@ MSG = "02007020000000000000164111111111111111000000000000500000123456"
 
 
 def build():
-    hook = sc("hook", "hook", "Vì sao một chuỗi ký tự vô nghĩa lại là một lệnh chuyển tiền?", [
+    hook = sc("hook", "hook", "Vì sao một chuỗi ký tự vô nghĩa lại là một giao dịch thẻ?", [
         st("""<p>Một bản tin ISO 8583 (chuẩn quốc tế cho bản tin giao dịch thẻ) trông như dãy số dài, ở đây thêm dấu cách cho dễ đọc:</p>
 <p><code>0200 7020000000000000 16 4111111111111111 000000 000000500000 123456</code></p>
 <div class="box key">Bên nhận biết trường nào ở đâu nhờ <b>bản đồ bit</b> nằm ngay sau mã loại bản tin.</div>""",
@@ -101,9 +101,9 @@ $$⑤ \\; \\text{số tiền đọc lại} = \\hlg{500\\,000}\\ \\text{đồng}$
 $$\\text{đóng gói} \\to \\text{đọc ngược} = \\text{dữ liệu ban đầu}\\quad \\hlg{\\text{khớp}}$$""",
            """Kiểm bằng đường khác. Vì không nên chỉ tin phép tính tay, ta đóng gói rồi đọc ngược bằng chương trình, và so với dữ liệu ban đầu. Kết quả khớp từng trường."""),
         st(table(["trường", "tên", "kiểu", "ví dụ"],
-                 [["2", "số thẻ (PAN)", "LLVAR, tối đa 19", "4111111111111111"], ["3", "mã xử lý", "6 chữ số", "000000"], ["4", "số tiền", "12 chữ số", "000000500000"],
+                 [["2", "số thẻ (PAN)", "LLVAR, tối đa 19", "4111111111111111"], ["3", "mã xử lý (loại giao dịch; 00… = mua hàng)", "6 chữ số", "000000"], ["4", "số tiền", "12 chữ số", "000000500000"],
                   ["11", "mã vết (STAN)", "6 chữ số", "123456"], ["39", "mã trả lời", "2 ký tự", "00 = chấp nhận"]]),
-           """Bảng này liệt kê vài trường hay gặp. Trường hai là số thẻ, độ dài thay đổi. Trường ba là mã xử lý, trường bốn là số tiền, trường mười một là mã vết. Trường ba mươi chín là mã trả lời, không không nghĩa là chấp nhận."""),
+           """Bảng này liệt kê vài trường hay gặp. Trường hai là số thẻ, độ dài thay đổi. Trường ba là mã xử lý, cho biết loại giao dịch, ví dụ hai chữ số đầu không không là mua hàng, trường bốn là số tiền, trường mười một là mã vết. Trường ba mươi chín là mã trả lời, không không nghĩa là chấp nhận."""),
     ], checks=["alg.bnk_iso_unpack(alg.bnk_iso_pack('0210', {3: '000000', 4: '000000500000', 11: '123456', 39: '00'})) == ('0210', {3: '000000', 4: '000000500000', 11: '123456', 39: '00'})",
                "alg.bnk_iso_pack('0210', {3: '000000', 4: '000000500000', 11: '123456', 39: '00'})[4:20] == '3020000002000000'"])
     pit = sc("pitfalls", "pitfall", "Lỗi hay gặp, có lỗi của người đã đi làm", [

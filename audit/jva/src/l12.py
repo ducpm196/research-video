@@ -177,13 +177,13 @@ def build():
                    "bọc một số <code>long</code>, nên có thể là <code>null</code>. Bản đồ chỉ chứa đối tượng nên dùng <code>Long</code>; "
                    "gán sang <code>long</code> thì máy tự lấy số ra, gặp <code>null</code> thì ném lỗi, nên phải kiểm <code>null</code> trước"],
                   ["<code>throws KhongDuTien</code>", "<code>KhongDuTien</code> kế thừa <code>Exception</code> nên là ngoại lệ <b>phải khai báo</b>: "
-                   "phương thức có thể ném nó ghi <code>throws</code>, nơi gọi buộc phải bắt bằng <code>catch</code>. "
+                   "phương thức có thể ném nó ghi <code>throws</code>, nơi gọi buộc phải bắt bằng <code>catch</code> hoặc khai <code>throws</code> để ném tiếp. "
                    "<code>IllegalArgumentException</code>, <code>IllegalStateException</code> là lỗi lúc chạy, không phải khai báo"]]),
            """Nhắc lại ba khái niệm sẽ gặp trong mã.
            Bản ghi là kiểu chỉ để chở dữ liệu, ta khai báo các thành phần một lần, và máy tự sinh phương thức lấy từng thành phần cùng cách in ra.
            Kiểu số nguyên thường luôn có một giá trị, còn lớp bọc của nó là một đối tượng chứa một số, nên có thể là giá trị rỗng.
            Bản đồ chỉ chứa đối tượng nên dùng lớp bọc, và phải kiểm giá trị rỗng trước khi lấy số ra, nếu không chương trình sẽ ném lỗi.
-           Ngoại lệ không đủ tiền thuộc loại phải khai báo, nên phương thức chuyển ghi rõ là có thể ném nó, và nơi gọi buộc phải bắt.
+           Ngoại lệ không đủ tiền thuộc loại phải khai báo, nên phương thức chuyển ghi rõ là có thể ném nó, và nơi gọi buộc phải bắt, hoặc khai báo ném tiếp.
            Hai ngoại lệ đối số sai và trạng thái sai thuộc loại lỗi lúc chạy, nên không phải khai báo.""", clear=True),
     ])
     sc_sym = sc("sym", "symbol", "Giải mã thiết kế: các phần của sổ", [

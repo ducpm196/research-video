@@ -84,7 +84,11 @@ def out_block(p, title="Kết quả chạy"):
         e = p["err"] or ("Exception … " + p["expect"].split(":", 1)[1])
         body += f'<div><span class="cm">{html.escape(e, quote=False)}</span></div>'
     if p["expect"].startswith("compile_error:"):
-        body = f'<div><span class="cm">error: {html.escape(p["expect"].split(":", 1)[1])}</span></div>'
+        if p["err"]:  # thông báo javac nhiều dòng: hiện đúng các dòng javac in (verify_jva đòi từng dòng có trong stderr)
+            body = "".join(f'<div><span class="cm">{html.escape(l, quote=False)}</span></div>'
+                           for l in p["err"].strip("\n").split("\n"))
+        else:
+            body = f'<div><span class="cm">error: {html.escape(p["expect"].split(":", 1)[1])}</span></div>'
     return f"<p><b>{title}</b></p>" + '<div class="code">' + body + "</div>"
 
 

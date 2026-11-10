@@ -351,7 +351,7 @@ Các nút thắt cũ BN-0001…BN-0016 ở Mục 5 vẫn mang trạng thái ghi 
 | ISO 8583 | 0420 là yêu cầu đảo; bitmap 64 bit nhưng dùng trường 128; VND 2 số lẻ | 0400 yêu cầu, 0420 thông báo đảo; bitmap phụ; VND 0 số lẻ (ISO 4217) |
 | ISO 9564 | công thức khối PIN sai | Format 0 / Format 1 đúng chuẩn |
 | T24 OFS | cú pháp sai thứ tự, "OFS là XML" | 5 phần phân cách dấu phẩy; XML chỉ qua adapter (graph OCB có "OFS XML") |
-| Nợ xấu | TT 11/2021; Nhóm 2 = 10–90 ngày | TT 31/2024 (từ 01/07/2024); 10–89 ngày |
+| Nợ xấu | TT 11/2021; Nhóm 2 = 10–90 ngày | TT 31/2024 (từ 01/07/2024); Nhóm 2 = 10–90 ngày. Sửa 2026-11-10 (đợt LS1): bản 10–89 trước đó lệch một ngày; nguồn thứ cấp: cafef.vn 21/07/2026, hethongphapluat.com, truy cập 2026-11-10, chưa đối chiếu được nguyên văn Điều 10 |
 | QĐ 2345 | "từ 10 triệu", "ban hành 01/07/2024", luôn gọi C06 | "trên 10 triệu"/lần hoặc tổng ngày vượt 20 triệu; ban hành 18/12/2023, hiệu lực 01/07/2024; so mẫu đã đăng ký |
 | Ký số | OTP đóng dấu thời gian; NĐ 130/2018 | TSA cấp dấu thời gian; NĐ 23/2025 |
 | Lãi, thấu chi | lãi = S×r/12; cấp hạn mức trước khi ký; trích nợ một phần "bảo vệ điểm tín dụng" | theo ngày thực tế/365 (TT 14/2017); phong tỏa → ký → cấp hạn mức; phần thiếu vẫn quá hạn |

@@ -19,10 +19,11 @@ def build():
         st(table(["khái niệm", "nghĩa", "ví dụ"],
                  [["① Mã tham chiếu", "mã định danh giao dịch, cả hai bên cùng giữ. Trong bản tin thẻ có RRN (mã tham chiếu 12 ký tự) và STAN (mã vết 6 số do bên gửi đánh); một mã một mình thường chưa đủ duy nhất, nên hệ thống thật hay ghép nhiều trường, ví dụ RRN + STAN + ngày giờ truyền + mã ngân hàng, theo đặc tả của từng mạng", "r1, r2, … (bài gộp thành một mã)"],
                   ["② Hai tập hợp", "tập A và tập B; phần chung gọi là giao", "A = {r1, r2, r3, r4, r5}"],
-                  ["③ Đếm bù trừ", "|A| + |B| − |giao| = số mã khác nhau trong cả hai", "5 + 5 − 4 = 6"]]),
+                  ["③ Đếm bù trừ", "|A| + |B| − |giao| = số mã khác nhau trong cả hai (|A|: số phần tử của A)", "5 + 5 − 4 = 6"]]),
            """Ôn ba điều. Mã tham chiếu là mã định danh giao dịch, cả hai bên cùng giữ. Trong bản tin thẻ có mã tham chiếu mười hai ký tự, và mã vết sáu chữ số do bên gửi đánh.
            Một mã một mình thường chưa đủ duy nhất, nên hệ thống thật hay ghép nhiều trường, ví dụ thêm mã vết, ngày giờ truyền và mã ngân hàng, theo đặc tả của từng mạng. Bài này gộp lại thành một mã cho gọn.
-           Hai tập hợp có phần chung gọi là giao. Còn đếm bù trừ nói rằng số mã khác nhau trong cả hai danh sách bằng tổng hai kích thước trừ đi phần chung."""),
+           Hai tập hợp có phần chung gọi là giao. Còn đếm bù trừ nói rằng số mã khác nhau trong cả hai danh sách bằng số phần tử của tập A cộng số phần tử của tập B, trừ đi số phần tử của phần chung.
+           Trên màn hình, số phần tử của tập A được viết là A nằm giữa hai gạch đứng."""),
         st("""$$5 + 5 - 4 = 6$$""",
            """Một ví dụ số. Mỗi bên có năm mã, bốn mã chung, nên tổng số mã khác nhau là năm cộng năm trừ bốn, bằng sáu."""),
     ], checks=["5 + 5 - 4 == 6", "len({'r1', 'r2', 'r3', 'r4', 'r5'} | {'r1', 'r2', 'r3', 'r4', 'r6'}) == 6"])

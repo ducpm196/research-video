@@ -36,8 +36,8 @@ public class Kieu {
     tran = prog("Tran", """
 public class Tran {
     public static void main(String[] args) {
-        int lonNhat = Integer.MAX_VALUE;
-        int nhoNhat = Integer.MIN_VALUE;
+        int lonNhat = Integer.MAX_VALUE;   // có sẵn: số lớn nhất của int
+        int nhoNhat = Integer.MIN_VALUE;   // có sẵn: số nhỏ nhất của int
         System.out.println(lonNhat);
         System.out.println(nhoNhat);
         System.out.println(lonNhat + 1);   // vượt số lớn nhất một đơn vị
@@ -170,10 +170,10 @@ public class Doan {
                '<path d="M1310,165 L1310,250 L190,250 L190,175" fill="none" stroke="#dc2626" stroke-width="3.5" '
                'stroke-dasharray="8 6" marker-end="url(#ah)"/>',
                txt(750, 238, "cộng thêm 1 vào số lớn nhất: quay vòng về số nhỏ nhất, KHÔNG báo lỗi", 24, "middle", "#dc2626", True),
-               txt(750, 305, "giống đồng hồ số ki-lô-mét: 99999 thêm 1 thành 00000", 24, "middle", "#1f2937")),
+               txt(750, 305, "giống đồng hồ ki-lô-mét quay vòng, nhưng int quay về số âm nhỏ nhất", 24, "middle", "#1f2937")),
            """Ngăn kiểu số nguyên chỉ chứa các số từ khoảng âm hai tỉ một tới khoảng dương hai tỉ một.
            Cộng một vào số lớn nhất thì kết quả không vừa ngăn, nên quay vòng về số nhỏ nhất, và máy không báo gì.
-           Giống đồng hồ ki-lô-mét của xe máy, tới năm chữ số chín thì quay về toàn số không."""),
+           Giống đồng hồ ki-lô-mét của xe máy quay vòng khi tới năm chữ số chín, chỉ khác là ngăn kiểu số nguyên quay về số âm nhỏ nhất chứ không về không."""),
     ])
     sc_form = sc("formula", "formula", "Suy ra từng bước: vì sao số lớn nhất là 2 147 483 647", [
         st("""<p><b>Bước 1.</b> Mỗi byte có 8 ô, mỗi ô chỉ là 0 hoặc 1. Kiểu <code>int</code> có 4 byte:</p>
@@ -191,7 +191,7 @@ $$2^{31} = 2\\,147\\,483\\,648 \\text{ số âm} \\qquad 2^{31} - 1 = \\hl{2\\,1
         st("""<p><b>Bước 4.</b> Cộng 1 vào số lớn nhất: kết quả đúng là $2\\,147\\,483\\,648$, nằm ngoài miền của <code>int</code>. Java không báo lỗi mà <b>quay vòng</b>: trừ đi đúng một vòng $2^{32}$ giá trị.</p>
 $$2\\,147\\,483\\,648 - 4\\,294\\,967\\,296 = \\hl{-2\\,147\\,483\\,648}$$"""
            + code_block(tran, lines=(3, 7)) + out_block(tran),
-           """Bước bốn, vượt giới hạn. Cộng một vào số lớn nhất thì kết quả đúng là hai tỉ một trăm bốn mươi bảy triệu bốn trăm tám mươi ba nghìn sáu trăm bốn mươi tám, nằm ngoài miền của kiểu số nguyên.
+           """Bước bốn, vượt giới hạn. Java có sẵn hai giá trị giữ số lớn nhất và số nhỏ nhất của kiểu số nguyên, ta in chúng rồi cộng thêm một. Cộng một vào số lớn nhất thì kết quả đúng là hai tỉ một trăm bốn mươi bảy triệu bốn trăm tám mươi ba nghìn sáu trăm bốn mươi tám, nằm ngoài miền của kiểu số nguyên.
            Theo luật của Java, máy không báo lỗi mà quay vòng, nghĩa là trừ đi đúng hai mũ ba mươi hai, tức một vòng đủ mọi giá trị.
            Kết quả là âm hai tỉ một trăm bốn mươi bảy triệu bốn trăm tám mươi ba nghìn sáu trăm bốn mươi tám, đúng số nhỏ nhất của kiểu số nguyên.
            Chạy thật, dòng cuối đúng là số đó, và không có thông báo lỗi nào."""),
@@ -245,7 +245,8 @@ $$2\\,700\\,000\\,000 > 2\\,147\\,483\\,647 \\qquad 2\\,700\\,000\\,000 - 4\\,29
            Mà không phẩy một viết trong hệ hai là số lẻ vô hạn, như một phần ba trong hệ mười, nên máy phải cắt bớt.
            Cách đúng là đổi ra đồng, một trăm cộng hai trăm ra đúng ba trăm."""),
         st('<p>Khi tiền <b>bắt buộc</b> có phần lẻ (tỉ giá, lãi suất), Java có kiểu số thập phân chính xác <code>BigDecimal</code>:</p>'
-           + code_block(thap_phan, lines=(5, 7)) + out_block(thap_phan),
+           + code_block(thap_phan, lines=(5, 7))
+           + "<span class='note'>(cần dòng <code>import java.math.BigDecimal;</code> ở đầu tệp)</span>" + out_block(thap_phan),
            """Khi tiền bắt buộc có phần lẻ, như tỉ giá, Java có sẵn một kiểu số thập phân chính xác.
            Ta tạo số từ chuỗi chữ, không từ số thực, để không mang theo sai lệch của hệ hai, rồi cộng bằng lệnh riêng, ra đúng không phẩy ba. Bài này chỉ cần biết nó tồn tại."""),
     ])
@@ -259,9 +260,9 @@ $$2\\,700\\,000\\,000 > 2\\,147\\,483\\,647 \\qquad 2\\,700\\,000\\,000 - 4\\,29
                   ["<code>x = x + 10;</code>", "15", "5", "chỉ ngăn x bị ghi đè; y không đổi"]]),
            """Đáp án, ta lập bảng giá trị sau từng lệnh. Lệnh một tạo x bằng năm. Lệnh hai chép giá trị năm sang y, chỉ là bản sao.
            Lệnh ba ghi đè mười lăm vào x, còn y vẫn là năm vì không lệnh nào ghi vào y.""", focus=[1, "1.2", "1.3", "1.4"]),
-        st("<p>Dòng in thứ ba: hai số đứng trước nên cộng trước, rồi mới nối chữ (quy tắc vế trái của bài trước):</p>"
+        st("<p>Dòng in thứ ba: hai số đứng trước nên cộng trước, rồi mới nối chữ (quy tắc dấu cộng của bài trước):</p>"
            "$$15 + 5 + \\text{\" dong\"} = 20 + \\text{\" dong\"} = \\hl{\\text{20 dong}}$$",
-           """Dòng in thứ ba dùng quy tắc vế trái của bài trước. Hai số đứng trước nên cộng thành hai mươi, rồi mới nối chữ đồng."""),
+           """Dòng in thứ ba dùng quy tắc dấu cộng của bài trước. Hai số đứng trước nên cộng thành hai mươi, rồi mới nối chữ đồng."""),
         st(out_block(quiz),
            """Chạy thật, ba dòng in ra là x bằng mười lăm, y bằng năm, và hai mươi đồng."""),
     ], checks=["5 + 10 == 15", "str(15 + 5) + ' dong' == '20 dong'"])

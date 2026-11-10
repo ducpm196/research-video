@@ -16,6 +16,20 @@ import yaml  # noqa: E402
 
 P2 = "chữ cái “p” đọc thô — probe audit/dms/probes/p2_chu_p.md: thô 7/8, đối chứng “tê” 0/8; ASR lẫn p/t, không phải TTS đọc sai; chữ hiện trên màn hình"
 HAND = {
+    # ── BNK, đợt LS1 (2026-11-10) ──
+    'Chữ số không đầu là mã định dạng, chữ số bốn là độ dài của PIN, còn chữ F lấp cho đủ mười sáu chữ số.':
+        'ASR chép “Chữ số 0 đầu là mã định dạng, chữ số 4 là độ dài của piên, còn chữ F lắp cho đủ 16 chữ số.” (0.923): “PIN” theo lexicon BNK đọc “Pin”, ASR viết “piên”, cùng âm; lấp/lắp lệch thanh; mọi chữ số khớp — NOT_VERIFIED bằng tai người',
+    # ── ACB, đợt LS1 (2026-11-10): bản chép trong out/ACB/<id>/asr_report.md sau khi dựng lại ──
+    'Mô hình SAGA là chuỗi giao dịch cục bộ, bước nào hỏng chắc chắn thì chạy bước bù trừ để hoàn tác các bước trước.':
+        'ASR chép “Mô hình Saga là chủ giao dịch cục bộ, bước nào hỏng chắc chắn thì chạy bước bù trừ để hoàn tác các bước trước.” (0.96): “SAGA” theo lexicon ACB, ASR viết “Saga” đúng; chuỗi/chủ là cặp nhầm đã gặp ở câu cũ cùng chỗ của bài (ASR “chủ giao dịch”) — NOT_VERIFIED bằng tai người',
+    'Vì mã giao dịch để trống cho Core tự sinh, trong bản tin có hai dấu phẩy đứng liền nhau.':
+        'ASR chép “Vì mã giao dịch để trống cho con tự sinh, trong bản tin có hai giấu phải đứng liền nhau.” (0.9): “Core” theo lexicon ACB (“Co”), ASR viết “con” như câu cũ của bài (“cho con tự sinh”); dấu/giấu, phẩy/phải là lệch âm thuần Việt — NOT_VERIFIED bằng tai người',
+    'Khoá Redis chỉ là lớp chặn nhanh, còn chốt chặn cuối cùng vẫn là ràng buộc duy nhất trong cơ sở dữ liệu.':
+        'ASR chép “Khóa rơi đít chỉ là lớp chặn nhanh, còn chút chặn cuối cùng vẫn là ràng buộc duy nhất trong cơ sở dữ liệu.” (0.917): “Redis” theo lexicon ACB (“Rê-đít”), ASR nghe “rơi đít”, cùng âm; chốt/chút lệch thanh — NOT_VERIFIED bằng tai người',
+    'Bước bốn, ô này vẽ ở cuối hình nhưng Core Banking đã giữ số tiền của khách trước khi bản tin được gửi đi.':
+        'ASR chép “Bước 4, ô này về ở cuối hình nhưng co banh kiên đã giữ số tiền của khách trước khi bản tin được gửi đi.” (0.92): “Core Banking” theo lexicon đọc “co banh king”, câu cũ của bài ASR cũng viết “coa banh kiên”; vẽ/về lệch thanh — NOT_VERIFIED bằng tai người',
+    'Fiber là một thư viện viết bằng một ngôn ngữ lập trình khác với ngôn ngữ ta đã học, dùng để viết dịch vụ chạy trên máy chủ.':
+        'ASR chép “Faber là một thư viện viết bằng một ngôn ngữ lập trình khác với ngôn ngữ ta đã học, dùng để viết dịch vụ chạy trên máy chủ.” (0.964): “Fiber” theo lexicon ACB, ASR viết “Faber” y như câu cũ của bài; phần còn lại khớp — NOT_VERIFIED bằng tai người',
     'Giờ ta xem một cách xen kẽ cụ thể giữa hai luồng.':
         'câu đã viết dài ra (bản 6 từ khớp 0,714); vẫn xen/xem, kẽ/kẻ, luồng/luôn: cặp nhầm âm cuối n/m, ng/n và thanh ngã/hỏi lặp ở mọi câu có “luồng” của L01, L04, L09 — NOT_VERIFIED bằng tai người',
     # ── DBS (2026-10-29): bản chép trong out/DBS/<id>/asr_report.md ──

@@ -1,0 +1,79 @@
+# Sổ mã trên màn hình khoá SEC (audit/review/screen_code.py). Chỉ ở mức phòng thủ/khái niệm.
+blocks:
+  "SEC L06 example 2 0":
+    sha: a35e34ecc6c54638
+    kind: run
+    lang: python
+    prelude: |
+      import sqlite3
+      _goc = sqlite3.connect(":memory:")
+      _goc.executescript("CREATE TABLE users(name TEXT); INSERT INTO users VALUES ('alice'), ('bob');")
+      class _GhiKetQua:          # chỉ ghi lại số dòng mỗi lần execute trả về, không đổi câu lệnh
+          def __init__(self, c): self.c, self.kq = c, []
+          def execute(self, *a):
+              cur = self.c.execute(*a)
+              self.kq.append(cur.fetchall())
+              return cur
+      con = _GhiKetQua(_goc)
+      ten = "x' OR '1'='1"
+    prelude_reason: "bước 1: chạy thật trên cơ sở dữ liệu “bảng có 2 người”, tên hợp lệ alice; bước 2: “chuỗi có dấu nháy và một điều kiện luôn đúng” (checks của cảnh dùng đúng x' OR '1'='1 và bảng alice, bob). Khối dùng con và ten mà bài cho bằng lời. Ca alice chạy lại đúng văn bản khối qua files/exec."
+    files: {khoi.txt: "SEC L06 example 2 0"}
+    claims:
+      - "bảng bước 2: chuỗi có dấu nháy + điều kiện luôn đúng → tham số hoá trả 0 dòng (không ai tên như vậy)"
+      - "bảng bước 1: alice → tham số hoá trả 1 dòng"
+      - "lời đọc bước 3: dữ liệu gửi riêng ở đối số thứ hai, không dán vào câu lệnh"
+    post: |
+      assert con.kq[-1] == []
+      ten = "alice"
+      exec(open("khoi.txt", encoding="utf-8").read())
+      assert con.kq[-1] == [("alice",)]
+      # đối chứng: cùng chuỗi mà GHÉP vào câu lệnh thì lấy ra mọi người (bảng bước 2: 2 dòng)
+      assert len(_goc.execute("SELECT name FROM users WHERE name = '" + "x' OR '1'='1" + "'").fetchall()) == 2
+    note: "Đối chứng ghép chuỗi trong post chỉ để khẳng định số 2 dòng của bảng bước 2 (bảng ghi nhận, không hiện thành mã)."
+  "SEC L12 example 0 0":
+    sha: a5235a514e2a5f0f
+    kind: pseudo
+    reason: "Bộ luật tường lửa viết bằng ký hiệu tiếng Việt (nguồn → đích, cổng : cho/chặn), không phải cú pháp của một tường lửa thật. Điều bài nói được kiểm bằng nguồn src:SEC:L12_luat, đọc đúng văn bản đã ghim của khối này."
+    claims:
+      - "bước 2: ứng dụng → csdl :5432 khớp luật 1 → cho; Internet → csdl :5432 → chặn"
+      - "bước 3: Internet → web :443 khớp luật 2 → cho; Internet → web :22 → chặn"
+      - "bước 4: máy in → csdl :5432 → chặn"
+      - "quiz câu 1: văn phòng → web :443 → cho; ứng dụng → csdl :22 → chặn"
+  "SEC L12 quiz 2 0":
+    sha: cf3ed46a01023f8b
+    kind: pseudo
+    reason: "Bộ luật tường lửa ký hiệu tiếng Việt (thêm luật 0); kiểm bằng nguồn src:SEC:L12_luat trên đúng văn bản đã ghim."
+    claims: ["Kiểm lại: trung chuyển → csdl :22 cho; văn phòng → csdl :22 vẫn chặn"]
+sources:
+  L12_luat:
+    lang: python
+    reason: "Đọc nguyên văn hai bộ luật trên màn hình, khớp luật đầu tiên từ trên xuống, không khớp luật nào → dòng (còn lại). Mọi dòng khác rỗng phải đọc được (không bỏ sót dòng)."
+    files: {vi_du.txt: "SEC L12 example 0 0", quiz.txt: "SEC L12 quiz 2 0"}
+    code: |
+      import re
+      def doc(ten_tep):
+          luat, mac_dinh = [], None
+          for dong in open(ten_tep, encoding="utf-8").read().split("\n"):
+              if not dong.strip():
+                  continue
+              m = re.match(r"^\s*\d+\.\s*(.+?)\s*→\s*(.+?),\s*cổng\s*(\d+)\s*:\s*(\S+)\s*$", dong)
+              if m:
+                  luat.append((m.group(1), m.group(2), int(m.group(3)), m.group(4)))
+                  continue
+              m = re.match(r"^\s*\(còn lại\)\s*:\s*(\S+)\s*$", dong)
+              assert m, "dòng không đọc được: " + dong
+              mac_dinh = m.group(1)
+          return luat, mac_dinh
+      def xet(bo, nguon, dich, cong):
+          luat, mac_dinh = bo
+          for s, d, p, kq in luat:
+              if s in ("*", nguon) and d == dich and p == cong:
+                  return kq
+          return mac_dinh
+      vd, qz = doc("vi_du.txt"), doc("quiz.txt")
+    post: |
+      assert [xet(vd, *r) for r in [("ứng dụng", "csdl", 5432), ("Internet", "csdl", 5432),
+              ("Internet", "web", 443), ("Internet", "web", 22), ("máy in", "csdl", 5432)]] == ["cho", "chặn", "cho", "chặn", "chặn"]
+      assert xet(vd, "văn phòng", "web", 443) == "cho" and xet(vd, "ứng dụng", "csdl", 22) == "chặn"
+      assert xet(qz, "trung chuyển", "csdl", 22) == "cho" and xet(qz, "văn phòng", "csdl", 22) == "chặn"
+      assert len(vd[0]) == 2 and len(qz[0]) == 3 and vd[1] == qz[1] == "chặn"

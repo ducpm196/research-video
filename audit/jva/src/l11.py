@@ -101,7 +101,9 @@ public class YeuHon {
     public static void main(String[] args) {
         System.out.println(new MienPhi().phi(100000));
     }
-}""", expect="compile_error:attempting to assign weaker access privileges; was public")
+}""", expect="compile_error:attempting to assign weaker access privileges; was public",
+       err="error: phi(long) in MienPhi cannot implement phi(long) in CachTinhPhi\n"
+           "  attempting to assign weaker access privileges; was public")
     quen = prog("QuenGhiDe", """
 class TaiKhoan {
     long phiThuongNien() {
@@ -217,10 +219,10 @@ public class DoanKetQua {
            Vòng lặp chỉ biết mỗi phần tử là một cách tính phí, và gọi cùng một lệnh.
            Máy ảo nhìn đối tượng thật để chọn đúng bản cài, nên hai triệu ra hai nghìn hai trăm với phí theo bậc, và mười nghìn với phí phần trăm."""),
         st(table(["", "kế thừa <code>extends</code>", "giao diện <code>implements</code>"],
-                 [["nhận được", "trường và thân phương thức của lớp cha (phần <code>private</code> vẫn chỉ lớp cha đụng được)", "chỉ lời hứa: tên và kiểu của phương thức"],
+                 [["nhận được", "trường và thân phương thức của lớp cha (phần <code>private</code> vẫn chỉ lớp cha đụng được)", "chủ yếu là lời hứa: tên và kiểu của phương thức"],
                   ["số lượng", "chỉ <b>một</b> lớp cha", "<b>nhiều</b> giao diện"],
                   ["dùng khi", "“là một” thật sự, ít tầng", "nhiều cách làm cùng một việc"]]),
-           """Kế thừa và giao diện khác nhau thế nào? Kế thừa nhận cả trường lẫn thân phương thức của lớp cha, còn giao diện chỉ cho lời hứa.
+           """Kế thừa và giao diện khác nhau thế nào? Kế thừa nhận cả trường lẫn thân phương thức của lớp cha, còn giao diện chủ yếu chỉ cho lời hứa.
            Một lớp chỉ kế thừa được một lớp cha, nhưng cài được nhiều giao diện.
            Vì vậy, khi có nhiều cách làm cùng một việc, như tính phí, hãy nghĩ tới giao diện trước.""", clear=True),
         st(svg(1500, 330,
@@ -286,7 +288,7 @@ public class DoanKetQua {
         st('<div class="box warn"><b>Lỗi 2 (người đã đi làm).</b> Không ghi <code>@Override</code>, gõ sai tên mà không ai báo.</div>'
            + code_block(quen, lines=(1, 11)) + out_block(quen),
            """Lỗi thứ hai hay gặp ở người đã đi làm. Lớp tài khoản đặc biệt muốn ghi đè phí thường niên về không, nhưng gõ sai một chữ n viết thường.
-           Không có lỗi biên dịch, vì đó là một phương thức mới hoàn toàn hợp lệ. Khách vẫn bị thu năm mươi nghìn.""", clear=True),
+           Không có lỗi biên dịch, vì đó là một phương thức mới hoàn toàn hợp lệ. Hàm chính tạo một tài khoản đặc biệt rồi gọi phí thường niên, nhưng máy chạy bản của lớp cha, nên khách vẫn bị thu năm mươi nghìn.""", clear=True),
         st(code_block(co_ghi_de, lines=(7, 11), title="Thêm @Override: trình biên dịch bắt ngay") + out_block(co_ghi_de, "Trình biên dịch báo"),
            """Thêm chú thích ghi đè, vẫn tên gõ sai đó, thì trình biên dịch báo ngay: phương thức này không ghi đè gì cả.
            Vì vậy, mọi phương thức ghi đè nên có chú thích này."""),
@@ -325,7 +327,8 @@ public class DoanKetQua {
         st(chain("giao diện: lời hứa", "nhiều lớp cài cùng lời hứa", "một vòng lặp gọi, máy chọn bản cài", "bản ghi: so theo nội dung",
                  "kiểu liệt kê: tập giá trị cố định"),
            """Tổng kết chuỗi logic. Giao diện là lời hứa, nhiều lớp cài cùng lời hứa đó.
-           Một vòng lặp gọi chung một lệnh, máy ảo chọn bản cài theo đối tượng thật."""),
+           Một vòng lặp gọi chung một lệnh, máy ảo chọn bản cài theo đối tượng thật.
+           Bản ghi so bằng nội dung, còn kiểu liệt kê là một tập giá trị cố định."""),
         st("""<div class='box key'><b>Tư duy:</b> nhiều cách làm một việc → <b>giao diện</b>, đừng xây tháp kế thừa. Mọi phương thức ghi đè
 đều gắn <code>@Override</code>. Dữ liệu chỉ để chở (giao dịch, lệnh) → <b>bản ghi</b>; trạng thái hữu hạn → <b>kiểu liệt kê</b>, không dùng chuỗi tự gõ.</div>""",
            """Điều cần mang theo. Nhiều cách làm một việc thì dùng giao diện, đừng xây tháp kế thừa. Mọi phương thức ghi đè đều gắn chú thích ghi đè.

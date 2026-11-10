@@ -26,7 +26,7 @@ public class Chao {
     public static void main(String[] args) {
         System.out.println("Chao ban!");
     }
-}""", expect="compile_error:should be declared in a file named Chao.java")
+}""", expect="compile_error:class Chao is public, should be declared in a file named Chao.java")
     thieu_cham_phay = prog("Thieu", """
 public class Thieu {
     public static void main(String[] args) {
@@ -59,9 +59,9 @@ public class DoanKetQua {
            """Chào bạn, bên trong máy tính chỉ có các số không và một. Thế mà bạn gõ một dòng chữ, bấm chạy, và màn hình in ra số dư tài khoản.
            Hôm nay ta đi hết con đường đó, từ lúc gõ mã nguồn, qua bước biên dịch, tới lúc chạy, và viết chương trình Java đầu tiên của bạn.
            Mã nguồn là các dòng lệnh bạn gõ bằng chữ, còn biên dịch là dịch cả tệp mã nguồn sang dạng máy đọc được, trước khi chạy."""),
-        st("""<p>Mọi dịch vụ ngân hàng bạn sẽ học sau này, từ chuyển khoản tới đối soát, đều bắt đầu từ đúng ba bước ấy.</p>
+        st("""<p>Mọi dịch vụ ngân hàng bạn sẽ học sau này, từ chuyển khoản tới đối soát, tức so khớp giao dịch giữa hai bên, đều bắt đầu từ đúng ba bước ấy.</p>
 <div class="box key">Hiểu ba bước này giúp bạn đọc được thông báo lỗi, thay vì sợ nó.</div>""",
-           """Mọi dịch vụ ngân hàng bạn sẽ học sau này, từ chuyển khoản tới đối soát, đều bắt đầu từ đúng ba bước ấy.
+           """Mọi dịch vụ ngân hàng bạn sẽ học sau này, từ chuyển khoản tới đối soát, tức so khớp giao dịch giữa hai bên, đều bắt đầu từ đúng ba bước ấy.
            Hiểu chúng giúp bạn đọc được thông báo lỗi, thay vì sợ nó."""),
     ])
     sc_pre = sc("prereq", "prereq", "Trước hết: ba điều về máy tính", [
@@ -121,9 +121,9 @@ Mở <b>cửa sổ dòng lệnh</b> (Windows: Command Prompt hoặc PowerShell; 
            """Trước khi bắt đầu, máy cần có bộ công cụ JDK, bản hai mươi mốt trở lên, có bản tải miễn phí, vì trong đó có sẵn trình biên dịch và máy ảo.
            Ta gõ lệnh trong cửa sổ dòng lệnh, tức một khung chữ nơi ta gõ lệnh cho máy rồi bấm phím xuống dòng để chạy.
            Làm thử, gõ lệnh hỏi phiên bản của trình biên dịch; nếu nó in ra số phiên bản thì máy đã sẵn sàng."""),
-        st("""<p><b>Bước 1. Tạo tệp.</b> Gõ mã vào tệp <code>Chao.java</code>. Tên tệp trùng tên lớp <code>public</code>, kể cả chữ hoa.</p>
+        st("""<p><b>Bước 1. Tạo tệp.</b> Gõ mã vào tệp <code>Chao.java</code>. Tên tệp trùng tên lớp <code>public</code> (công khai: mọi nơi khác đều được dùng), kể cả chữ hoa.</p>
 <span class='note'>Làm thử: lớp tên Chao thì tệp phải là Chao.java, không phải chao.java.</span>""",
-           """Bước một là tạo tệp: gõ toàn bộ đoạn mã bên trái vào một tệp tên là Chao chấm Java. Tên tệp phải trùng tên lớp, kể cả chữ hoa và chữ thường, vì luật của Java bắt lớp công khai nằm trong tệp cùng tên.
+           """Bước một là tạo tệp: gõ toàn bộ đoạn mã bên trái vào một tệp tên là Chao chấm Java. Tên tệp phải trùng tên lớp, kể cả chữ hoa và chữ thường, vì luật của Java bắt lớp công khai, tức lớp mà mọi nơi khác đều được dùng, nằm trong tệp cùng tên.
            Làm thử, lớp tên Chao viết hoa chữ đầu, thì tệp cũng phải viết hoa chữ đầu."""),
         st('<p><b>Bước 2. Biên dịch.</b></p><div class="code"><div>javac Chao.java</div></div>'
            "<span class='note'>Làm thử: không có lỗi thì không in gì, và trong thư mục xuất hiện thêm tệp Chao.class.</span>",
@@ -150,10 +150,10 @@ Mở <b>cửa sổ dòng lệnh</b> (Windows: Command Prompt hoặc PowerShell; 
            """Chạy thật chương trình, năm dòng in ra đúng như ta đoán: năm, hai cộng ba, tổng hai ba, tổng năm, và năm đồng."""),
     ], checks=["2 + 3 == 5", "'Tong: ' + str(2) + str(3) == 'Tong: 23'", "'Tong: ' + str(2 + 3) == 'Tong: 5'", "str(2 + 3) + ' dong' == '5 dong'"])
     sc_chk = sc("check", "check", "Tự kiểm bằng đường khác: đếm số dòng và kiểu của từng vế", [
-        st(table(["dòng", "vế trái lúc gặp dấu +", "loại phép +", "kết quả"],
+        st(table(["dòng", "vế trái của dấu + đầu tiên", "loại phép +", "kết quả"],
                  [["①", "số 2", "cộng số", "5"], ["③", "chuỗi \"Tong: \"", "nối chữ (cả hai lần)", "Tong: 23"],
                   ["④", "chuỗi \"Tong: \"", "ngoặc là số 5, rồi nối", "Tong: 5"], ["⑤", "số 2", "cộng số, rồi nối", "5 dong"]]),
-           """Kiểm bằng đường khác, chỉ cần nhìn vế bên trái mỗi lần gặp dấu cộng. Nếu vế trái là số và vế phải là số thì cộng số.
+           """Kiểm bằng đường khác, chỉ cần nhìn kiểu của hai vế mỗi lần gặp dấu cộng, làm từ trái sang phải. Nếu cả hai vế đều là số thì cộng số.
            Nếu một trong hai vế là chuỗi thì nối chữ. Áp quy tắc này cho từng dòng, ta ra đúng bốn kết quả như khi chạy."""),
         st("""<p>Đếm: chương trình có $5$ lệnh in nên phải có đúng $5$ dòng kết quả. Kết quả chạy có $5$ dòng ✓</p>""",
            """Thêm một phép kiểm nữa, chương trình có năm lệnh in thì phải có đúng năm dòng kết quả. Kết quả chạy có năm dòng, khớp."""),
@@ -178,7 +178,7 @@ Mở <b>cửa sổ dòng lệnh</b> (Windows: Command Prompt hoặc PowerShell; 
         st(code_block(quiz, lines=(3, 5), title="Đoán ba dòng in ra"),
            """Bây giờ tới phần bạn tự làm. Chương trình có ba lệnh in. Lệnh một nối chữ A với một rồi với hai. Lệnh hai lấy một cộng hai rồi nối chữ A.
            Lệnh ba nối chữ A với một cộng hai đặt trong ngoặc. Hãy dừng video, viết ra giấy ba dòng in ra.""", pause=20),
-        st("<p>Áp quy tắc vế trái:</p>$$\\text{\"A\"} + 1 + 2 = \\hl{\\text{A12}} \\qquad 1 + 2 + \\text{\"A\"} = \\hl{\\text{3A}} \\qquad \\text{\"A\"} + (1 + 2) = \\hl{\\text{A3}}$$",
+        st("<p>Áp quy tắc dấu cộng, từ trái sang phải:</p>$$\\text{\"A\"} + 1 + 2 = \\hl{\\text{A12}} \\qquad 1 + 2 + \\text{\"A\"} = \\hl{\\text{3A}} \\qquad \\text{\"A\"} + (1 + 2) = \\hl{\\text{A3}}$$",
            """Đáp án như sau. Dòng một, vế trái là chuỗi nên nối cả hai lần, ra A một hai. Dòng hai, hai số đứng trước nên cộng thành ba rồi nối, ra ba A.
            Dòng ba, ngoặc tính trước ra ba, rồi nối, ra A ba."""),
         st(out_block(quiz),

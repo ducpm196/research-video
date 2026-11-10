@@ -237,9 +237,10 @@ public class DoanHam {
            Hai triệu rơi vào bậc giữa nên phí là hai nghìn hai trăm. Mười triệu không nhỏ hơn mười triệu, nên phí là năm nghìn năm trăm.""",
            focus=[2, "4.1", "4.2", "4.3"]),
         st("<p><b>Bước 4. Nạp chồng:</b> cùng tên, khác danh sách tham số.</p>"
-           + code_block(nap, lines=(n2, n2 + 2)) + out_block(nap),
+           + code_block(nap, lines=(n2, n2 + 2)) + code_block(nap, lines=(n2 + 5, n2 + 6)) + out_block(nap),
            """Bước bốn, nạp chồng. Hai hàm được trùng tên nếu danh sách tham số khác nhau, và trình biên dịch chọn hàm theo số lượng và kiểu đối số.
-           Gọi thêm số lần là ba thì ra sáu nghìn sáu trăm, vì hai nghìn hai trăm nhân ba.""", focus=[1, 2, 4]),
+           Hàm chính gọi bản một tham số với hai triệu, ra hai nghìn hai trăm, rồi gọi thêm số lần là ba thì ra sáu nghìn sáu trăm, vì hai nghìn hai trăm nhân ba.""",
+           focus=[1, 2, [3, 5]]),
     ], checks=["[(0 if x < 500000 else (2200 if x < 10000000 else 5500)) for x in [300000, 2000000, 10000000]] == [0, 2200, 5500]",
                "2200 * 3 == 6600"])
     g11, g16 = ln(goi, "static long tongTru"), ln(goi, "long soDu = 5000000")
@@ -285,17 +286,17 @@ public class DoanHam {
                "[(0 if x < 500000 else (2200 if x < 10000000 else 5500)) for x in [499999, 500000, 9999999, 10000000]] == [0, 2200, 2200, 5500]"])
     sc_pit = sc("pitfalls", "pitfall", "Lỗi hay gặp, có lỗi của người đã đi làm", [
         st('<div class="box warn"><b>Lỗi 1 (người mới).</b> Dùng biến của hàm khác.</div>'
-           + code_block(pham_vi, lines=(3, 10)) + out_block(pham_vi, "Trình biên dịch báo"),
+           + code_block(pham_vi, lines=(2, 10)) + out_block(pham_vi, "Trình biên dịch báo"),
            """Lỗi thứ nhất, của người mới, là dùng biến khai bên trong một hàm khác. Biến phí chỉ sống bên trong hàm tính phí.
            Vùng mã mà một tên biến dùng được gọi là phạm vi của biến, ở đây là cặp ngoặc nhọn của hàm tính phí.
            Ra khỏi phạm vi đó, tên này không còn tồn tại, nên trình biên dịch báo không tìm thấy ký hiệu.""",
            focus=[1, 2, 2, 4]),
         st('<div class="box warn"><b>Lỗi 2 (người mới).</b> Có nhánh không trả về giá trị.</div>'
-           + code_block(thieu, lines=(3, 9)) + out_block(thieu, "Trình biên dịch báo"),
+           + code_block(thieu, lines=(2, 8)) + out_block(thieu, "Trình biên dịch báo"),
            """Lỗi thứ hai là quên lệnh trả về ở một nhánh. Hàm hứa trả về số nguyên dài, nhưng khi số tiền từ mười triệu trở lên thì không có lệnh trả về nào chạy.
            Trình biên dịch phát hiện ngay, và báo thiếu lệnh trả về.""", focus=[1, 2, 4]),
         st('<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Tưởng hàm sửa được biến số nguyên của người gọi.</div>'
-           + code_block(bo_qua, lines=(2, 4)) + code_block(bo_qua, lines=(8, 12)) + out_block(bo_qua),
+           + code_block(bo_qua, lines=(2, 5)) + code_block(bo_qua, lines=(8, 12)) + out_block(bo_qua),
            """Lỗi thứ ba gặp cả ở người đã đi làm: gọi hàm trừ phí rồi bỏ đi giá trị trả về, vì tưởng hàm đã sửa số dư.
            Hàm chỉ sửa bản sao, nên số dư vẫn là năm trăm nghìn, mà không có báo lỗi nào.
            Cách đúng là gán lại giá trị trả về, khi đó số dư mới là bốn trăm chín mươi bảy nghìn tám trăm.""",

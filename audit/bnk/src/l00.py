@@ -36,10 +36,10 @@ def build():
 <tr><td><code>new TaiKhoan()</code></td><td>tạo một đối tượng mới của lớp <code>TaiKhoan</code> trên heap</td></tr>
 <tr><td><code>tk</code></td><td>tên biến giữ tham chiếu tới đối tượng</td></tr>
 <tr><td><code>tk.soDu</code></td><td>dấu chấm: đi theo tham chiếu tới trường <code>soDu</code> của đối tượng</td></tr>
-<tr><td><code>a == b</code></td><td>so hai tham chiếu có trỏ cùng một đối tượng không</td></tr></table>""",
+<tr><td><code>a == b</code></td><td>với hai biến đối tượng: so hai tham chiếu có trỏ cùng một đối tượng không (với số như <code>int</code> thì so giá trị)</td></tr></table>""",
            """Bảng này giải mã bốn mẫu chữ hay gặp. Từ khoá tạo đối tượng sinh ra một đối tượng mới của lớp tài khoản trên vùng nhớ heap.
            Biến tài khoản giữ tham chiếu tới đối tượng đó. Dấu chấm nghĩa là đi theo tham chiếu để tới một trường bên trong.
-           Còn hai dấu bằng so xem hai tham chiếu có trỏ cùng một đối tượng hay không."""),
+           Còn với hai biến đối tượng, hai dấu bằng so xem hai tham chiếu có trỏ cùng một đối tượng hay không, còn với số nguyên thì so giá trị."""),
     ])
     sc_int = sc("intuition", "intuition", "Hình dung: ngăn xếp, heap và các mũi tên", [
         st(svg(1500, 400,
@@ -65,7 +65,7 @@ def build():
                box(340, 300, 180, 90, "D", C_GRAY, dash=True), box(620, 300, 180, 90, "E", C_GRAY, dash=True),
                box(1180, 150, 180, 90, "F", C_GRAY, dash=True),
                arrow(240, 195, 335, 195), arrow(520, 195, 615, 195), arrow(800, 195, 895, 195), arrow(520, 345, 615, 345),
-               txt(1100, 60, "xanh: còn tới được từ gốc, xám: không ai trỏ tới → rác", 26, "middle", "#1f2937", True)),
+               txt(1100, 60, "xanh: còn tới được từ gốc, xám: không có đường từ gốc → rác", 26, "middle", "#1f2937", True)),
            """Bộ thu gom rác nhìn heap như một đồ thị. Nó xuất phát từ các gốc, đi theo mọi mũi tên, và đánh dấu mọi đối tượng chạm tới.
            A, B và C tới được từ gốc nên được giữ. D, E và F không còn đường nào tới, nên là rác và sẽ bị dọn."""),
     ])
@@ -129,10 +129,10 @@ F không ai trỏ. Rác: $3$ ✓ — <b>bị trỏ tới chưa chắc còn sốn
 “cùng một đối tượng không”, nên hai chuỗi giống chữ nhưng tạo riêng vẫn cho <code>false</code>. Muốn so nội dung dùng <code>equals</code>.</div>""",
            """Lỗi thứ nhất, của người mới. Dùng hai dấu bằng để so hai chuỗi. Nó chỉ hỏi hai tham chiếu có cùng một đối tượng không.
            Hai chuỗi giống chữ nhưng tạo riêng vẫn cho kết quả là không bằng nhau. Muốn so nội dung thì gọi phương thức so sánh nội dung bằng dấu chấm."""),
-        st("""<div class="box warn"><b>Lỗi 2 (người đã đi làm).</b> <b class="red">Rò rỉ bộ nhớ</b>: bỏ dữ liệu vào một <code>static Map</code> làm bộ đệm
+        st("""<div class="box warn"><b>Lỗi 2 (người đã đi làm).</b> <b class="red">Rò rỉ bộ nhớ</b>: bỏ dữ liệu vào một <code>static Map</code> làm bộ đệm (nơi giữ sẵn dữ liệu hay dùng để lấy lại cho nhanh)
 mà không bao giờ xoá. Gốc <code>static</code> vẫn trỏ tới chúng, nên chúng vẫn “tới được” và bộ thu gom rác không dọn.
 <br><span class="note">Phép thử: theo dõi kích thước heap sau mỗi lần dọn; nếu cứ tăng thì có thứ đang bị giữ.</span></div>""",
-           """Lỗi thứ hai, của người đã đi làm, là rò rỉ bộ nhớ. Họ bỏ dữ liệu vào một bản đồ tĩnh làm bộ đệm mà không bao giờ xoá.
+           """Lỗi thứ hai, của người đã đi làm, là rò rỉ bộ nhớ. Họ bỏ dữ liệu vào một bản đồ tĩnh làm bộ đệm, tức nơi giữ sẵn dữ liệu hay dùng để lấy lại cho nhanh, mà không bao giờ xoá.
            Gốc tĩnh vẫn trỏ tới chúng, nên chúng vẫn tới được, và bộ thu gom rác không dọn. Hãy theo dõi kích thước heap sau mỗi lần dọn.
            Nếu nó cứ tăng, có thứ đang bị giữ.""", clear=True),
         st("""<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Dùng <code>double</code> cho số tiền rồi so sánh <code>==</code>. Kết quả

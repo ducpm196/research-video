@@ -1,5 +1,9 @@
-"""Hình miền chấp nhận được của bài LP (L21, L22) — toạ độ tính từ dữ liệu."""
+"""Hình miền chấp nhận được của bài LP (L21, L22) — toạ độ tính từ dữ liệu.
+Mẫu audit/cs112/src/L21_qhtt.tpl.yaml: {{FIG}} = fig(), {{FIGL}} = fig(level=True, highlight="B"); ghi mỗi hình ra một tệp một dòng
+rồi điền bằng audit/cs112/fill_tpl.py (đối chiếu 2026-11-10: hai lời gọi này cho đúng từng byte hình đang có trong bài)."""
 S, X0, Y0 = 12, 70, 410
+# Viền nền (màu nền khung #fff7e6) cho nhãn bị đường biên cắt qua: “z = 280” (đường bột) và “C(0, 24)” (đường đường) — LS1 2026-11-10.
+HALO = ' stroke="#fff7e6" stroke-width="6" paint-order="stroke"'
 
 
 def P(x, y):
@@ -25,11 +29,12 @@ def fig(level=None, highlight=None):
         (a, b), (c, d) = P(0, 28), P(56 / 3, 0)
         o.append(f'<line x1="{a}" y1="{b}" x2="{c:.0f}" y2="{d}" stroke="#d97706" stroke-width="3" stroke-dasharray="10 7"/>')
         tx, ty = P(14.5, 8.5)
-        o.append(f'<text x="{tx}" y="{ty}" font-size="20" fill="#d97706">z = 280</text>')
+        o.append(f'<text x="{tx}" y="{ty}" font-size="20" fill="#d97706"{HALO}>z = 280</text>')
     for name, (x, y), dx, dy in [("O", (0, 0), -26, 26), ("A(16, 0)", (16, 0), -10, 28), ("B(8, 16)", (8, 16), 10, -6), ("C(0, 24)", (0, 24), 8, -8)]:
         a, b = P(x, y)
         col = "#e11d48" if highlight == name[0] else "#1f2937"
         o.append(f'<circle cx="{a}" cy="{b}" r="7" fill="{col}"/>')
-        o.append(f'<text x="{a + dx}" y="{b + dy}" font-size="22" fill="{col}" font-weight="700">{name}</text>')
+        halo = HALO if name[0] == "C" else ""
+        o.append(f'<text x="{a + dx}" y="{b + dy}" font-size="22" fill="{col}" font-weight="700"{halo}>{name}</text>')
     o.append("</svg>")
     return "".join(o)

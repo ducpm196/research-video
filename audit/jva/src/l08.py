@@ -99,9 +99,9 @@ public class Rong {
         System.out.println(timTen("999").equals("An"));   // ném ngoại lệ
     }
 }""", out="false", expect="runtime_error:NullPointerException",
-        # dòng lỗi đầy đủ dài 141 ký tự, tràn khung: hiện phần đầu nguyên văn (bộ kiểm đòi nó có trong stderr);
-        # phần sau là: because the return value of "Rong.timTen(String)" is null
-        err='Exception in thread "main" java.lang.NullPointerException: Cannot invoke "String.equals(Object)"')
+        # dòng lỗi đầy đủ dài 141 ký tự, tràn khung: hiện phần đầu nguyên văn rồi " …" để người học biết dòng còn tiếp
+        # (verify_jva và screen_code coi "…" là đoạn lược); phần sau là: because the return value of "Rong.timTen(String)" is null
+        err='Exception in thread "main" java.lang.NullPointerException: Cannot invoke "String.equals(Object)" …')
     noi = prog("NoiChuoi", """
 public class NoiChuoi {
     public static void main(String[] args) {
@@ -215,7 +215,7 @@ public class DoanChuoi {
            """Bước ba, kiểm bằng độ dài. Phần trước có p ký tự, dấu chấm phẩy một ký tự, phần sau có n trừ p trừ một ký tự.
            Cộng lại bằng n, nghĩa là không mất và không thừa ký tự nào."""),
         st("<p><b>Bước 4. Chuỗi bất biến:</b> không hàm nào sửa được chuỗi cũ; kết quả nằm ở chuỗi được <b>trả về</b>.</p>"
-           + code_block(bat_bien, lines=(b4 - 1, b4 + 4)) + out_block(bat_bien),
+           + code_block(bat_bien, lines=(b4 - 1, b4 + 3)) + out_block(bat_bien),
            """Bước bốn, một tính chất quan trọng là chuỗi bất biến, nghĩa là không hàm nào sửa được nội dung của chuỗi đã tạo.
            Hàm đổi chữ hoa trả về chuỗi mới, nên biến s vẫn là chữ thường. Phép nối cũng tạo chuỗi mới, rồi biến s trỏ sang nó.""",
            focus=[1, [2, 4], [2, 4]]),
@@ -237,7 +237,7 @@ public class DoanChuoi {
            focus=[1, 3, 3]),
         st(code_block(tach, lines=(t5 + 5, t5 + 5))
            + "$$⑤ \\; 1234567 \\to \\hlg{\\text{1,234,567}}$$"
-           + "<span class='note'>Ghi rõ <code>Locale.US</code>: máy đặt vùng Việt Nam sẽ in dấu chấm, 1.234.567.</span>",
+           + "<span class='note'>Ghi rõ <code>Locale.US</code> (cần <code>import java.util.Locale;</code> ở đầu tệp): máy đặt vùng Việt Nam sẽ in dấu chấm, 1.234.567.</span>",
            """Phép tính thứ năm, hàm định dạng với mẫu phần trăm, dấu phẩy, chữ d chèn dấu phân cách hàng nghìn.
            Ta ghi rõ tham số vùng nước Mỹ, vì máy đặt vùng Việt Nam sẽ dùng dấu chấm thay cho dấu phẩy."""),
         st(out_block(tach),
@@ -248,9 +248,11 @@ public class DoanChuoi {
                "format(1234567, ',d') == '1,234,567'"])
     k4 = ln(kiem, "split")
     sc_chk = sc("check", "check", "Tự kiểm bằng đường khác: tách bằng hàm tách và đếm độ dài", [
-        st(code_block(kiem, lines=(k4, k4 + 4), title="Tệp KiemTach.java"),
-           """Ta kiểm bằng một đường khác hẳn: không dùng hàm tìm vị trí mà dùng hàm tách, vì hàm này tự cắt chuỗi tại mỗi dấu chấm phẩy và trả về một mảng chuỗi.
-           Ta kiểm số phần, so nội dung bằng hàm so nội dung, và kiểm độ dài như bước ba."""),
+        st(code_block(kiem, lines=(k4, k4 + 4), title="Tệp KiemTach.java")
+           + "<span class='note'>Chữ trong ngoặc của <code>split</code> là một mẫu đặc biệt: <code>\";\"</code> dùng thẳng được, "
+             "nhưng dấu <code>.</code> hay <code>|</code> thì không.</span>",
+           """Ta kiểm bằng một đường khác hẳn: không dùng hàm tìm vị trí mà dùng hàm tách, vì hàm này tự cắt chuỗi tại mỗi dấu chấm phẩy và trả về một mảng chuỗi. Lưu ý chữ trong ngoặc là một mẫu đặc biệt, nên dấu chấm hay dấu vạch đứng không dùng thẳng được như dấu chấm phẩy.
+           Ta kiểm số phần, so nội dung bằng hàm so nội dung, và kiểm độ dài như bước ba.""", focus=[2, 3, 2]),
         st(out_block(kiem) + "$$10 + 1 + 7 = 18 \\; \\checkmark$$",
            """Chạy thật, mảng có hai phần, phần đầu đúng số tài khoản, phần sau đổi ra đúng số tiền.
            Dòng cuối đúng, vì mười cộng một cộng bảy bằng mười tám, đúng độ dài cả dòng, nên hai cách tách cho cùng kết quả.""",
@@ -272,7 +274,7 @@ public class DoanChuoi {
            + code_block(noi, lines=(ln(noi, "for"), ln(noi, "sb.append") + 1)) + out_block(noi),
            """Lỗi thứ ba là nối chuỗi bằng dấu cộng trong vòng lặp lớn, vì mỗi lần nối, máy tạo chuỗi mới và chép lại cả chuỗi cũ.
            Với mười nghìn lần, số ký tự phải chép là năm mươi triệu không trăm linh năm nghìn, bằng n nhân n cộng một chia hai.
-           Bộ dựng chuỗi chỉ thêm vào cuối, nên công việc tăng theo n chứ không theo n bình phương, mà kết quả y hệt.""",
+           Bộ dựng chuỗi, tức một đối tượng giữ dãy ký tự sửa được, chỉ thêm vào cuối, nên công việc tăng theo n chứ không theo n bình phương, mà kết quả y hệt.""",
            focus=[[1, 2], "4.1", [2, "4.1"]]),
     ], checks=["sum(range(1, 10000 + 1)) == 10000 * (10000 + 1) // 2 == 50005000"])
     sc_quiz = sc("quiz", "quiz", "Bây giờ tới phần bạn tự làm", [

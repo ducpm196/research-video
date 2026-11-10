@@ -76,9 +76,9 @@ def build():
            Làm thử, hai nhân hai bằng bốn.""",
            introduces=["cdot"]),
         st("""<p><b>Bước 2.</b> Cách xếp bốn việc vào bốn ô, giữ thứ tự trong từng luồng, bằng số cách chọn hai ô cho luồng A.</p>
-<span class='note'>Làm thử: $\\frac{4 \\cdot 3}{2 \\cdot 1} = 6$ cách.</span>""",
+<span class='note'>Làm thử: ô đầu của A có $4$ chỗ, ô sau còn $3$, được $4 \\cdot 3$; đổi chỗ hai ô vẫn là một cách chọn nên chia $2 \\cdot 1$: $\\frac{4 \\cdot 3}{2 \\cdot 1} = 6$ cách.</span>""",
            """Bước hai, vì thứ tự trong từng luồng được giữ, nên số cách xếp bằng số cách chọn hai ô trong bốn ô cho luồng A.
-           Làm thử, bốn nhân ba chia hai nhân một bằng sáu cách."""),
+           Làm thử, ô thứ nhất của A có bốn chỗ, ô thứ hai còn ba chỗ, nhưng đổi chỗ hai ô vẫn là cùng một cách chọn, nên bốn nhân ba chia hai nhân một bằng sáu cách."""),
         st("""<p><b>Bước 3.</b> Chạy thử cả sáu cách: hai cách cho $180$, hai cách cho $130$, hai cách cho $150$.</p>
 <span class='note'>Chỉ đúng khi một luồng xong cả đọc lẫn ghi rồi luồng kia mới đọc.</span>""",
            """Bước ba, ta chạy thử cả sáu cách. Hai cách cho kết quả một trăm tám mươi, hai cách cho một trăm ba mươi, hai cách cho một trăm năm mươi.
@@ -113,7 +113,7 @@ $$50 \\cdot 0{,}1 = \\hl{5}\\ \\text{giây}$$""",
            Luồng ảo, trong mô hình lý tưởng bỏ qua chi phí CPU, chờ tất cả cùng lúc nên chỉ mất không phẩy một giây."""),
     ], checks=["alg.bnk_batch_time(10000, 200, 0.1) == 5.0", "abs(10000 / (200 / 0.1) - 5.0) < 1e-9", "alg.bnk_batch_time(10000, 10000, 0.1) == 0.1"])
     pit = sc("pitfalls", "pitfall", "Lỗi hay gặp, có lỗi của người đã đi làm", [
-        st("""<div class="box warn"><b>Lỗi 1 (người mới).</b> Nghĩ rằng <code>so += 50</code> là một việc không thể chia nhỏ. Thực ra nó là <b>đọc, cộng, ghi</b>: ba việc,
+        st("""<div class="box warn"><b>Lỗi 1 (người mới).</b> Nghĩ rằng <code>soDu += 50</code> là một việc không thể chia nhỏ. Thực ra nó là <b>đọc, cộng, ghi</b>: ba việc,
 nên luồng khác chen vào được.</div>""",
            """Lỗi thứ nhất, của người mới. Nghĩ rằng một câu lệnh cộng thêm năm mươi là một việc không chia nhỏ được.
            Thực ra nó gồm đọc, cộng và ghi, nên luồng khác chen vào được."""),
@@ -138,9 +138,9 @@ Từ Java 24 (JEP 491, một bản đề xuất tính năng chính thức của 
            """Đến lượt bạn. Câu một, ba luồng, mỗi luồng đọc rồi ghi, có bao nhiêu cách xen kẽ? Câu hai, hai nghìn yêu cầu, mỗi yêu cầu chờ không phẩy hai giây, năm mươi luồng nền, mất bao lâu?
            Câu ba, dịch vụ gọi đối tác chậm ba trăm mili giây, hàng nghìn yêu cầu cùng lúc, bạn chọn gì? Hãy dừng video và làm ra giấy.""",
            pause=25),
-        st("""<p>Xếp $6$ việc: $6 \\cdot 5 \\cdot 4 \\cdot 3 \\cdot 2 \\cdot 1 = 720$ thứ tự. Mỗi luồng giữ thứ tự hai việc, nên chia cho $2 \\cdot 2 \\cdot 2 = 8$.</p>
+        st("""<p>Xếp $6$ việc vào $6$ ô: ô đầu có $6$ cách chọn việc, ô hai $5$ cách, …: $6 \\cdot 5 \\cdot 4 \\cdot 3 \\cdot 2 \\cdot 1 = 720$ thứ tự. Hai việc của mỗi luồng có $2$ cách đứng trước sau mà chỉ $1$ cách hợp lệ (đọc trước ghi sau), nên chia cho $2 \\cdot 2 \\cdot 2 = 8$.</p>
 $$\\frac{720}{8} = \\hl{90}$$""",
-           """Đáp án câu một. Xếp sáu việc có bảy trăm hai mươi thứ tự. Vì mỗi luồng giữ thứ tự hai việc của mình, nên ta chia cho hai nhân hai nhân hai, là tám.
+           """Đáp án câu một. Xếp sáu việc vào sáu ô, ô đầu có sáu cách chọn, ô hai có năm cách, cứ thế được bảy trăm hai mươi thứ tự. Vì hai việc của mỗi luồng có hai cách đứng trước sau mà chỉ một cách hợp lệ, là đọc trước ghi sau, nên ta chia cho hai nhân hai nhân hai, là tám.
            Kết quả là chín mươi cách."""),
         st("""$$\\frac{2000}{50} \\cdot 0{,}2 = 40 \\cdot 0{,}2 = \\hlg{8}\\ \\text{giây}$$""",
            """Đáp án câu hai. Hai nghìn chia năm mươi bằng bốn mươi lượt, nhân không phẩy hai, được tám giây."""),
@@ -149,6 +149,7 @@ $$\\frac{720}{8} = \\hl{90}$$""",
                   ["luồng ảo (Java 21)", "chờ gần như miễn phí, mã vẫn viết tuần tự", "tránh chỗ gây ghim (Java 21: chờ trong synchronized; mã native); đo trước khi tin"]]),
            """Đáp án câu ba là một đánh đổi. Tăng số luồng nền thì không sửa mã nhưng tốn bộ nhớ. Luồng ảo cho phép chờ gần như miễn phí mà mã vẫn viết tuần tự, nhưng phải tránh ghim và phải đo."""),
     ], checks=["len(set(__import__('itertools').permutations([0, 0, 1, 1, 2, 2]))) == 90 == 720 // 8",
+               "6 * 5 * 4 * 3 * 2 * 1 == 720 == math.factorial(6) and 2 * 2 * 2 == 8",
                "alg.bnk_batch_time(2000, 50, 0.2) == 8.0"])
     rec = sc("recap", "recap", "Chuỗi logic & tư duy cần mang theo", [
         st(chain("đọc – ghi chen nhau", "mất cập nhật", "khoá vùng găng ngắn", "luồng ảo cho việc chờ"),

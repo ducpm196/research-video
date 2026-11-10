@@ -85,6 +85,23 @@ for line in tp.stdout.splitlines():
         bad += 1
         rows.append((c.upper(), lid, "mẫu", line))
         print(c.upper(), lid, "mẫu →", line, flush=True)
+# mã trên màn hình phải được kiểm NGUYÊN VĂN (sổ audit/review/screen_code/*.yaml, ghim sha từng khối) — `checks` gọi
+# checklib nên không bắt được mã hiển thị sai (lỗi thật SDP L02/L04/L05, JVA L00/L11 — 2026-11-10)
+for c in courses:
+    sc = subprocess.run([sys.executable, "-B", str(ROOT / "audit/review/screen_code.py"), "check", "--course", c],
+                        capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=ROOT,
+                        env={**__import__("os").environ, "PYTHONIOENCODING": "utf-8"})
+    for line in sc.stdout.splitlines():
+        if line.startswith(("FAIL", "STALE", "MISSING", "ORPHAN", "WARN")):
+            parts = line.split()
+            lid = parts[2] if len(parts) > 2 and parts[1].upper() == c.upper() else "?"
+            bad += 1
+            rows.append((c.upper(), lid, "mã màn hình", line))
+            print(c.upper(), lid, "mã màn hình →", line[:200], flush=True)
+    if sc.returncode not in (0, 1):
+        bad += 1
+        rows.append((c.upper(), "?", "mã màn hình", f"screen_code lỗi rc={sc.returncode}: {sc.stderr[-200:]}"))
+        print(c.upper(), "screen_code lỗi", sc.stderr[-300:], flush=True)
 (ROOT / "audit" / "review" / "audit_all.tsv").write_text(
     "course\tid\tstate\tproblems\n" + "\n".join("\t".join(r) for r in rows), encoding="utf-8")
 built = sum(r[2] == "đã dựng" for r in rows)

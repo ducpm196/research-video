@@ -1,3 +1,69 @@
+# HANDOVER — Cập nhật 2026-11-11: đợt LS1, hai lộ trình sẵn sàng để bắt đầu học — DONE
+
+> **Bắt đầu học**: mở [`HOC_TAP.html`](file:///D:/research-video/HOC_TAP.html) (không cần mạng). Báo cáo: [`audit/review/learn_start/report_LS1.md`](file:///D:/research-video/audit/review/learn_start/report_LS1.md). Bàn giao chi tiết: [`handover_LS1_20261110T1420Z.md`](file:///D:/research-video/audit/review/learn_start/handover_LS1_20261110T1420Z.md).
+> - **Hai lộ trình** (người dùng chọn cả hai), máy tính thứ tự theo tiên quyết:
+>   - phỏng vấn backend ngân hàng: 45 bài, 6,1 giờ (JVA → BNK → INT → ACB);
+>   - nền tảng khoa học máy tính: 74 bài, 12,9 giờ (DMS → CS112 → CS115 L00–L21, L44).
+> - **9 người đọc độc lập đọc trọn 119 bài**: 17 MUST, đã sửa hết, người điều phối kiểm diff. Các mục BLOCK (thuật ngữ chưa giảng, bước nhảy cóc) đã sửa. Sổ: `findings_LS1.md`.
+> - **Dựng lại 97 bài**: 97/97 PASS, máy nghe 0 câu chưa xem xét. `pack.py check --decode`: 119/119 bài 0 vấn đề, giải mã trọn, 1136,7 phút.
+> - **Cổng cuối**:
+>   - `audit_all` 656/656, 0 vấn đề;
+>   - verify_jva 110/110, verify_bnk 21/21, verify_cs112 FAIL 0, p2 37/0, verify_plan_curricula 545/0;
+>   - check_xref 0, check_meta 0, check_course_refs 0;
+>   - phỏng vấn 92/92 trùng byte; STATUS 656/656, 5938 phút.
+> - **Sửa thêm ngoài bài**:
+>   - nhóm nợ TT 31/2024 thành 10–90 / 91–180 / 181–360 / trên 360 ngày (interview/04, 06, MASTER_INDEX), có nguồn thứ cấp;
+>   - `preview.html` thiếu hoặc cũ ở nhiều bài, đã sinh lại; nay `pack.py` kiểm từng byte.
+> - **Còn mở** (handover §4):
+>   - BNK L13: QĐ 2345 / TT 50/2024 (NOT_VERIFIED);
+>   - nguyên văn TT 31/2024;
+>   - tai người nghe;
+>   - 537 bài ngoài hai lộ trình chưa đọc lại đợt này;
+>   - mã C và hệ thống ngoài.
+
+---
+
+# HANDOVER — Cập nhật 2026-11-10 (tối): việc 1, cổng "mã trên màn hình chạy được nguyên văn" — DONE
+
+> **Đọc trước**: [`audit/review/screen_code/report_SC1.md`](file:///D:/research-video/audit/review/screen_code/report_SC1.md). Bàn giao chi tiết: [`handover_SC1_20261110T1047Z.md`](file:///D:/research-video/audit/review/screen_code/handover_SC1_20261110T1047Z.md).
+> - **Cổng** `audit/review/screen_code.py` và sổ `audit/review/screen_code/<KHOÁ>.yaml`. Sổ ghim sha từng khối; đổi một chữ → STALE. Cổng đã nối vào `audit_all.py`.
+>   - Kết quả: 541 khối + 183 nguồn chạy thật: PASS 724 · FAIL 0 · STALE 0 · MISSING 0 · ORPHAN 0 · WARN 0.
+>   - Lỗi cấy: 30/30.
+>   - Có 122 điều bài nói mà máy không kiểm được; tất cả ghi `unverified_claims`, không gọi là đã kiểm.
+> - **Đã sửa 17 khối MUST ở 15 bài** (mã trên màn hình không chạy hoặc khác điều bài nói/máy in):
+>   - SDP L02, L03, L04, L06, L07, L08, L11, L12
+>   - PLC L11, L12; CVI L00; WEB L04; ACB L04
+>   - JVA L00, L11
+> - **Đã sửa 6 SHOULD**: ACB L04, WEB L06, ESY L01, CS112 L25, JVA L08, GFX L12.
+> - **Dựng lại 17 bài**, đều PASS, ASR chưa xem xét 0. Cổng cuối:
+>   - `audit_all` 656/656, 0 vấn đề;
+>   - verify các khoá có bài đổi 0 FAIL; check_xref 0; check_meta 0;
+>   - phỏng vấn 92/92 trùng byte; STATUS 656/656, 5927 phút.
+> - **Kiểm độc lập** (2 tác tử chỉ đọc, 304 mục sổ): không MUST, không mục nào bị né. 9 phát hiện về sổ hoặc cổng đã xử lý (cổng nay so cả dòng đầu ra). Xem `verify_AB.md`.
+> - **Còn mở**:
+>   - CB-2: không có trình biên dịch C (10 khối C chỉ kiểm cú pháp; cài clang để đóng).
+>   - CB-5: hệ thống ngoài.
+>   - 10 SHOULD cần người dùng quyết (report §5).
+>   - Lỗi nội dung không phải mã vẫn ngoài phạm vi; mẫu E đo được 2/42 bài có MUST. Việc tiếp theo: đợt "định nghĩa tại chỗ" (BN-0039), rồi mẫu F.
+
+---
+
+# HANDOVER — Cập nhật 2026-11-10 (chiều): mẫu E, chuẩn xác + độ sâu cho người mất gốc
+
+> **Đọc trước**: [`audit/review/sample_e/REPORT.md`](file:///D:/research-video/audit/review/sample_e/REPORT.md). Kết luận `PARTIAL`.
+> - **Mẫu E**: 42 bài, hạt giống 20261111, không trùng mẫu C/D. 4 tác tử chỉ đọc, tiêu chí ở `sample_e/BRIEF.md` (phần A chuẩn xác như C/D; phần B chấm P1–P7 cho người mất gốc, có xem khung hình).
+> - **Chuẩn xác**: MUST 2/42 = 4,8% (1,3–15,8%), bằng mẫu D. Hai lỗi là SDP L02 (lớp trên màn hình thiếu `nap`) và GFX L12 (0,12 m gán cho độ sâu đảo ngược). Tính lại ≈ 680 số, tất cả khớp. Có 22 SHOULD ở 17 bài; đã sửa 1, còn **21 chưa sửa**.
+> - **Độ sâu**: ĐỦ 29 · GẦN 12 · CHƯA 1 (INT L02). P1 (thuật ngữ giảng tại chỗ) trung bình 1,02/2, chỉ 9/42 bài sạch. P7 (mục tiêu chỉ được nói) 12 bài bị 1 điểm. Các mục P2–P6 trung bình ≥ 1,74.
+> - **Quét mã Python trên màn hình** (`sample_e/tools/code_scan.py`): thêm SDP L04 (class một dòng). Nguyên nhân gốc: `checks` gọi `checklib`, không chạy mã người học thấy.
+> - **Đã sửa + dựng lại**: SDP L02, SDP L04, GFX L12. Cả ba lint 0/0, render 0, verify_sdp 36/0, verify_gfx 19/19, build PASS, ASR chưa xem xét 0 (log `sample_e/rebuild_e.out`). **Chưa chạy** `audit_all` / `status_report` sau ba bài này.
+> - **Việc tiếp theo** (chờ người dùng chọn):
+>   1. Cổng "mã trên màn hình chạy nguyên văn".
+>   2. Đợt định nghĩa tại chỗ + mục tiêu được dạy thật (BN-0039 + P7) trên 572 bài, kèm 21 SHOULD.
+>   3. Thêm hình cơ chế thứ hai (495/656 bài chỉ có một hình).
+>   4. Rút mẫu F.
+
+---
+
 # HANDOVER — Cập nhật phiên 2026-11-10: dựng lại đợt C XONG, rà ASR 42/42 khoá, đọc mẫu độc lập D
 
 > **Đọc trước**: [`interview/HANDOVER_INTERVIEW.md`](file:///D:/research-video/interview/HANDOVER_INTERVIEW.md) **Mục 13**, và [`audit/review/sample_d/REPORT.md`](file:///D:/research-video/audit/review/sample_d/REPORT.md). Kết luận `PARTIAL`: kho đủ chuẩn để bắt đầu học, nhưng chưa xác nhận được "không còn lỗi".

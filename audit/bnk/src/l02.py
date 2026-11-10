@@ -18,10 +18,11 @@ def build():
         st(table(["khái niệm", "nghĩa", "ví dụ"],
                  [["① Lớp và đối tượng", "lớp là khuôn, đối tượng là bản làm ra từ khuôn; hàm viết trong lớp gọi là phương thức", "lớp TaiKhoan, đối tượng tài khoản số 1"],
                   ["② Một hàm gọi hàm khác", "phương thức A có thể gọi phương thức B của chính đối tượng đó hoặc của đối tượng khác", "chuyenTien gọi ghiVet"],
-                  ["③ Giao dịch", "một nhóm thao tác: hoặc cùng thành công, hoặc cùng huỷ", "trừ tiền và cộng tiền cùng lúc"]]),
+                  ["③ Giao dịch", "một nhóm thao tác ghi vào cơ sở dữ liệu (phần mềm lưu dữ liệu lâu dài thành các bảng, mỗi bảng nhiều dòng): hoặc cùng thành công, hoặc cùng huỷ", "trừ tiền và cộng tiền cùng lúc"]]),
            """Trước hết ta cần hiểu bốn điều. Lớp là cái khuôn, đối tượng là bản làm ra từ khuôn, và một hàm viết trong lớp gọi là phương thức.
            Một phương thức có thể gọi phương thức khác của chính đối tượng đó, hoặc của đối tượng khác, ví dụ chuyển tiền gọi ghi vết.
-           Giao dịch là nhóm thao tác mà hoặc cùng thành công, hoặc cùng bị huỷ, ví dụ trừ tiền và cộng tiền."""),
+           Cơ sở dữ liệu là phần mềm lưu dữ liệu lâu dài thành các bảng, mỗi bảng gồm nhiều dòng.
+           Giao dịch là nhóm thao tác ghi vào cơ sở dữ liệu mà hoặc cùng thành công, hoặc cùng bị huỷ, ví dụ trừ tiền và cộng tiền."""),
         st(table(["khái niệm", "nghĩa", "ví dụ"],
                  [["④ Ngoại lệ (exception)", "đối tượng báo lỗi được “ném” ra; phương thức dừng ngay, lỗi bay ngược lên người gọi tới khi có chỗ bắt (<code>try … catch</code>)", "<code>throw new RuntimeException(\"hết tiền\")</code>"],
                   ["loại không bắt buộc xử lý", "<code>RuntimeException</code> và các lớp con: Java không bắt phải khai báo hay bắt", "chia cho 0, số dư âm"],
@@ -83,18 +84,19 @@ def build():
            Đây chính là lỗi mở đầu bài."""),
     ])
     form = sc("formula", "formula", "Suy ra từng bước: khi nào có giao dịch mới?", [
-        st("""<p><b>Bước 1.</b> Người gọi từ bên ngoài luôn nhận <b>proxy</b>, nên lời gọi đầu tiên vào <code>chuyenTien()</code> đi qua proxy và mở giao dịch 1.</p>
+        st("""<p><b>Bước 1.</b> Vì lớp này có phương thức mang nhãn giao dịch, người gọi từ bên ngoài nhận <b>proxy</b>, nên lời gọi đầu tiên vào <code>chuyenTien()</code> đi qua proxy và mở giao dịch 1.</p>
 <span class='note'>Làm thử: số giao dịch đã mở = $1$.</span>""",
-           """Bước một, vì người gọi từ bên ngoài luôn nhận proxy, nên lời gọi đầu tiên vào hàm chuyển tiền đi qua proxy và mở giao dịch thứ nhất.
+           """Bước một, vì lớp dịch vụ có phương thức mang nhãn giao dịch, nên người gọi từ bên ngoài nhận proxy.
+           Lời gọi đầu tiên vào hàm chuyển tiền vì vậy đi qua proxy và mở giao dịch thứ nhất.
            Làm thử, số giao dịch đã mở bằng một."""),
         st("""<p><b>Bước 2.</b> Hàm ghi vết với chế độ <code>REQUIRES_NEW</code> chỉ mở giao dịch mới khi lời gọi <b>đi qua proxy</b>.</p>
 <span class='note'>Qua proxy: $1 + 1 = 2$ giao dịch. Gọi thẳng: vẫn $1$ giao dịch.</span>""",
            """Bước hai, vì proxy mới là nơi đọc nhãn, nên hàm ghi vết chỉ mở giao dịch mới khi lời gọi đi qua proxy.
            Làm thử, qua proxy thì một cộng một bằng hai giao dịch, còn gọi thẳng vẫn chỉ một giao dịch."""),
         st("""<p><b>Bước 3.</b> Giao dịch mới commit riêng, nên khi giao dịch ngoài hỏng, dòng ghi vết vẫn còn. Giao dịch dùng chung thì mất theo.</p>
-<p class="small">Mặc định Spring chỉ rollback khi <code>RuntimeException</code> hoặc <code>Error</code> bay ra khỏi phương thức; ngoại lệ bắt buộc xử lý thì vẫn commit, trừ khi khai báo <code>rollbackFor</code>.</p>""",
+<p class="small">Mặc định Spring chỉ rollback khi <code>RuntimeException</code> hoặc <code>Error</code> (lỗi nghiêm trọng của máy ảo, như hết bộ nhớ) bay ra khỏi phương thức; ngoại lệ bắt buộc xử lý thì vẫn commit, trừ khi khai báo <code>rollbackFor</code>.</p>""",
            """Bước ba, vì giao dịch mới commit riêng, nên khi giao dịch ngoài hỏng, dòng ghi vết vẫn còn. Còn giao dịch dùng chung thì mất theo.
-           Mặc định Spring chỉ rollback khi một ngoại lệ thời gian chạy, hoặc một lỗi hệ thống, bay ra khỏi phương thức.
+           Mặc định Spring chỉ rollback khi một ngoại lệ thời gian chạy, hoặc một lỗi nghiêm trọng của máy ảo như hết bộ nhớ, bay ra khỏi phương thức.
            Ngoại lệ loại bắt buộc xử lý thì mặc định vẫn commit, trừ khi ta khai báo thêm trong nhãn."""),
     ], checks=["alg.bnk_spring_sim(True, 'REQUIRES_NEW', True)[0] == 1 + 1", "alg.bnk_spring_sim(False, 'REQUIRES_NEW', True)[0] == 1",
                "alg.bnk_spring_sim(True, 'REQUIRES_NEW', True)[1] == ['audit']"])

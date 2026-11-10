@@ -252,9 +252,9 @@ Bạn cũng học đọc <b>dấu vết ngăn xếp</b> để tìm đúng lệnh
            Nhóm không kiểm tra, như ngoại lệ phép tính, thì không bắt buộc, và thường báo lỗi lập trình.
            Không đủ tiền là tình huống người gọi phải xử lý, nên ta xếp nó vào nhóm có kiểm tra.""", clear=True),
         st(code_block(tai_nguyen, lines=(7, 13), title="Khối thử có tài nguyên: mở ở ngoặc tròn, tự đóng khi rời khối")
-           + "<span class='note'><code>\\n</code> trong chuỗi là ký tự xuống dòng, nên <code>duLieu</code> có hai dòng; "
-             "<code>r.readLine()</code> đọc từng dòng một.</span>" + out_block(tai_nguyen),
-           """Một dạng nữa là khối thử có tài nguyên. Bộ đọc được mở trong ngoặc tròn sau từ khoá thử, và máy tự đóng nó khi rời khối, dù có lỗi hay không.
+           + "<span class='note'><code>\\n</code> là ký tự xuống dòng; <code>r.readLine()</code> đọc từng dòng. "
+             "Cần <code>import java.io.*;</code> ở đầu tệp.</span>" + out_block(tai_nguyen),
+           """Một dạng nữa là khối thử có tài nguyên, tức thứ chương trình mở ra để dùng và phải đóng lại khi xong, như một bộ đọc dữ liệu. Bộ đọc được mở trong ngoặc tròn sau từ khoá thử, và máy tự đóng nó khi rời khối, dù có lỗi hay không.
            Dấu gạch chéo ngược kèm chữ n trong chuỗi là ký tự xuống dòng, nên dữ liệu có hai dòng, và mỗi lần đọc lấy ra một dòng.
            Đọc dữ liệu có thể gặp ngoại lệ vào ra, thuộc nhóm có kiểm tra, nên phải bắt nó hoặc khai báo ném tiếp, và ở đây ta bắt."""),
     ])
@@ -268,7 +268,7 @@ Bạn cũng học đọc <b>dấu vết ngăn xếp</b> để tìm đúng lệnh
         st(code_block(chua_bat, lines=(ln(chua_bat, "TaiKhoan tk"), ln(chua_bat, "tk.rut"))) + out_block(chua_bat, "Trình biên dịch báo"),
            """Bước ba, thử gọi rút mà không bắt. Trình biên dịch từ chối, vì đây là ngoại lệ có kiểm tra.
            Nghĩa là không ai quên được trường hợp không đủ tiền."""),
-        st(code_block(rut, lines=(r_main + 2, r_main + 13), title="Bước 4. Người gọi bắt và xử lý"),
+        st(code_block(rut, lines=(r_main + 2, r_main + 12), title="Bước 4. Người gọi bắt và xử lý"),
            """Bước bốn, người gọi đặt hai lệnh rút trong khối thử. Lệnh thứ nhất rút ba mươi nghìn, thành công.
            Lệnh thứ hai bị ném ngoại lệ, nên nhảy thẳng tới khối bắt, in lời từ chối.
            Khối cuối cùng in số dư, vì nó luôn chạy."""),
@@ -292,9 +292,11 @@ Bạn cũng học đọc <b>dấu vết ngăn xếp</b> để tìm đúng lệnh
            """Chạy thật, năm dòng in ra đúng như ta theo: một, hai năm, năm kèm lời nhắn, sáu, bảy. Số ba và số bốn không xuất hiện."""),
     ], checks=["10 // 2 == 5", "len(['1', '2: 5', '5: / by zero', '6', '7']) == 5"])
     sc_chk = sc("check", "check", "Tự kiểm bằng đường khác: bỏ khối bắt, đọc dấu vết ngăn xếp", [
-        st(code_block(vet, lines=(2, 10)) + out_block(vet, "Không có khối bắt: máy ảo tự in dấu vết"),
+        st(code_block(vet, title="Tệp Vet.java, đủ 12 dòng"),
            """Kiểm phép tính thứ ba bằng đường khác: bỏ khối bắt, để máy ảo tự in dấu vết ngăn xếp.
-           Dòng đầu cho cùng loại ngoại lệ và cùng lời nhắn chia cho không, nên khớp với khối bắt ở ví dụ."""),
+           Đây là cả tệp, dòng một là dòng khai lớp, nên bạn tự đếm được số dòng."""),
+        st(out_block(vet, "Không có khối bắt: máy ảo tự in dấu vết"),
+           """Dòng đầu cho cùng loại ngoại lệ và cùng lời nhắn chia cho không, nên khớp với khối bắt ở ví dụ."""),
         st(table(["dấu vết", "đọc là", "lệnh ở đó"],
                  [["<code>at Vet.chia(Vet.java:3)</code>", "lỗi xảy ra ở dòng thứ 3, trong <code>chia</code>", "<code>return a / b;</code> với <code>b = 0</code>"],
                   ["<code>at Vet.chiaPhi(Vet.java:6)</code>", "<code>chia</code> được gọi từ dòng thứ 6", "<code>return chia(phi, 0);</code>"],

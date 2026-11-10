@@ -281,7 +281,7 @@ public class DoanTk {
     c3 = ln(chung, "private static")
     sc_pit = sc("pitfalls", "pitfall", "Lỗi hay gặp, có lỗi của người đã đi làm", [
         st('<div class="box warn"><b>Lỗi 1 (người mới).</b> Quên <code>this.</code> khi tham số trùng tên trường.</div>'
-           + code_block(quen_this, lines=(4, 6)) + out_block(quen_this)
+           + code_block(quen_this, lines=(4, 10)) + out_block(quen_this)
            + "<span class='note'><code>null</code> là <b>giá trị rỗng</b>: biến chưa trỏ tới đối tượng nào. "
              "Trường kiểu chuỗi chưa được gán thì mặc định là <code>null</code>.</span>",
            """Lỗi thứ nhất, của người mới, là quên từ khoá chỉ đối tượng này khi tham số trùng tên trường.

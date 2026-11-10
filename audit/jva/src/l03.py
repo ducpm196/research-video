@@ -128,7 +128,7 @@ public class Hang {
            focus=[2, "2.2", "2.3", "2.4"]),
         st(out_block(phi_sai, "Một chương trình tính phí cho đúng 10 000 000 đồng in ra")
            + '<div class="box key">Hôm nay: dạy máy <b>chọn</b> việc để làm theo điều kiện, và kiểm thử ở đúng <b>biên</b> của mỗi bậc.</div>',
-           """Một chương trình tính phí cho đúng mười triệu đồng lại ra hai nghìn hai trăm, tức là bậc giữa. Sai ở một ký tự duy nhất.
+           """Một chương trình tính phí cho đúng mười triệu đồng lại ra hai nghìn hai trăm, tức là bậc giữa. Lỗi nằm ở dấu so sánh đặt tại biên của bậc phí.
            Hôm nay ta học cách dạy máy chọn việc để làm theo điều kiện, và cách kiểm thử ở đúng biên của mỗi bậc.""", clear=True),
     ])
     sc_pre = sc("prereq", "prereq", "Ôn lại phép so sánh và phép logic từ bài trước", [
@@ -251,7 +251,7 @@ $$500\\,000 \\le \\text{soTien} \\;\\text{ và }\\; \\text{soTien} < 10\\,000\\,
            Lệnh trừ tiền thụt lề trông như nằm trong nhánh, nhưng thật ra luôn chạy. Kết quả là không có dòng đồng ý rút, mà số dư vẫn bị trừ thành âm bốn trăm nghìn.
            Thói quen tốt là luôn viết ngoặc nhọn, kể cả khi chỉ có một lệnh."""),
         st('<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Dùng <code>&gt;</code> khi quy định ghi “từ … trở lên”.</div>'
-           + code_block(phi_sai, lines=(3, 11)) + out_block(phi_sai),
+           + code_block(phi_sai, lines=(3, 12)) + out_block(phi_sai),
            """Lỗi thứ ba hay gặp ở người đã đi làm, là chọn sai dấu ở biên. Biểu phí ghi từ mười triệu trở lên, nhưng mã viết lớn hơn hẳn.
            Đúng mười triệu bị tính phí bậc hai. Nhánh thứ hai cũng sai biên, đúng năm trăm nghìn ra miễn phí.
            Thử với số ở giữa khoảng thì không thấy lỗi, nên luôn thử đúng các số ở biên."""),

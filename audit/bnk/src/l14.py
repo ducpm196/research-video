@@ -110,8 +110,8 @@ $$\\text{giao dịch lệch} = \\hlg{[\\ ]}$$""",
            """Bảng này là ba phép kiểm sau khi sửa, vì sửa xong mới cần chắc sổ đúng. Mỗi giao dịch cân đối thì danh sách lệch rỗng.
            Số dòng bằng bốn dòng cũ của r bảy và r bảy b, cộng hai dòng đảo, là sáu dòng, không dòng nào bị xoá.
            Còn đối soát lại thì r bảy khớp. R bảy b vẫn chỉ ngân hàng có, nhưng đã có bút toán đảo đi kèm với tổng bằng không, nên khoản lệch đó được đóng."""),
-    ], checks=["alg.bnk_ledger_unbalanced([(1, 'khach', -500000), (1, 'nhan', 500000), (2, 'khach', -500000), (2, 'nhan', 500000), (3, 'khach', 500000), (3, 'nhan', -500000)]) == []",
-               "len([(1, 'khach', -500000), (1, 'nhan', 500000), (2, 'khach', -500000), (2, 'nhan', 500000), (3, 'khach', 500000), (3, 'nhan', -500000)]) == 4 + 2 == 6",
+    ], checks=["alg.bnk_ledger_unbalanced([(1, 'khach', -500000), (1, 'nhan', 500000), (2, 'khach', -500000), (2, 'cho_tt_chuyen_mach', 500000), (3, 'khach', 500000), (3, 'cho_tt_chuyen_mach', -500000)]) == []",
+               "len([(1, 'khach', -500000), (1, 'nhan', 500000), (2, 'khach', -500000), (2, 'cho_tt_chuyen_mach', 500000), (3, 'khach', 500000), (3, 'cho_tt_chuyen_mach', -500000)]) == 4 + 2 == 6",
                "-500000 + 500000 == 0"])
     pit = sc("pitfalls", "pitfall", "Lỗi hay gặp khi kể sự cố trong phỏng vấn", [
         st("""<div class="box warn"><b>Lỗi 1.</b> <b class="red">Kể sự cố không phải của mình</b> như của mình, hoặc thêm con số không có nguồn. Người phỏng vấn đào sâu hai ba lớp là lộ. Chỉ kể điều bạn thật sự làm, và con số nào cũng phải có nguồn.</div>""",

@@ -40,7 +40,7 @@ def build():
                box(40, 160, 260, 100, ["Ứng dụng", "người gọi"], C_BLUE, bold=True),
                box(1200, 160, 260, 100, ["Máy chủ", "đã trừ tiền"], C_GREEN, bold=True),
                arrow(300, 190, 1195, 190, "#2a78d6", "1. chuyển 500 000"),
-               arrow(1195, 235, 305, 235, "#dc2626", "2. phản hồi bị mất (sai)", dash=True),
+               arrow(1195, 235, 305, 235, "#dc2626", "2. phản hồi bị mất trên đường về", dash=True),
                arrow(300, 290, 1195, 290, "#2a78d6", "3. không thấy gì nên thử lại"),
                txt(750, 380, "Người gọi không phân biệt được “chưa làm” và “đã làm nhưng mất phản hồi”", 26, "middle", "#1f2937", True)),
            """Hình cho thấy điều mấu chốt. Ứng dụng gửi lệnh chuyển. Máy chủ đã trừ tiền xong, nhưng phản hồi bị mất trên đường về. Ứng dụng không thấy gì nên thử lại.

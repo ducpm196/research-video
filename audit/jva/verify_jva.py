@@ -32,6 +32,23 @@ def norm(s):
     return "\n".join(l.rstrip() for l in s.replace("\r\n", "\n").strip("\n").split("\n"))
 
 
+def screen_lines_ok(err, out):
+    """Mỗi dòng thông báo hiện trên màn hình (p["err"]) phải khớp CẢ MỘT dòng đầu ra thật, đúng thứ tự; "…" = đoạn bị lược;
+    được bỏ tiền tố `Tệp.java:N:` của javac. (Trước 2026-11-10 so chuỗi con, nên dòng bị cắt cụt không có "…" vẫn qua —
+    JVA L08; cùng luật với audit/review/screen_code.py `_line_match`.)"""
+    import re
+    lines = [l.strip() for l in out.replace("\r\n", "\n").split("\n")]
+    pos = 0
+    for want in [l.strip() for l in err.split("\n") if l.strip()]:
+        rx = re.compile("^" + ".*".join(re.escape(x) for x in want.split("…")) + "$")
+        while pos < len(lines) and not (rx.match(lines[pos]) or rx.match(re.sub(r"^\S+\.java:\d+:\s*", "", lines[pos]))):
+            pos += 1
+        if pos == len(lines):
+            return False
+        pos += 1
+    return True
+
+
 ok = fail = 0
 seen = set()
 for p in lib.PROGRAMS:
@@ -47,8 +64,11 @@ for p in lib.PROGRAMS:
         exp = p["expect"]
         if exp.startswith("compile_error:"):
             want_s = exp.split(":", 1)[1]
-            good = c.returncode != 0 and want_s in (c.stderr + c.stdout)
-            why = f"javac rc={c.returncode}; cần thấy “{want_s}”" + ("" if good else f"; thấy: {(c.stderr or c.stdout)[:200]!r}")
+            # p["err"] (nếu có) = các dòng thông báo hiện trên màn hình; mỗi dòng phải có NGUYÊN VĂN trong đầu ra javac
+            err_lines = [l.strip() for l in p["err"].split("\n") if l.strip()]
+            good = c.returncode != 0 and want_s in (c.stderr + c.stdout) and screen_lines_ok(p["err"], c.stderr + c.stdout)
+            why = f"javac rc={c.returncode}; cần thấy “{want_s}”" + (f" + {len(err_lines)} dòng màn hình" if err_lines else "") + \
+                ("" if good else f"; thấy: {(c.stderr or c.stdout)[:300]!r}")
         elif c.returncode != 0:
             good, why = False, f"không biên dịch được: {c.stderr[:300]!r}"
         else:
@@ -57,8 +77,9 @@ for p in lib.PROGRAMS:
             got = norm(r.stdout)
             if exp.startswith("runtime_error:"):
                 exc = exp.split(":", 1)[1]
-                good = r.returncode != 0 and exc in r.stderr and got == norm(p["out"]) and (p["err"] in r.stderr)
-                why = f"dòng lỗi màn hình {'có' if p['err'] in r.stderr else 'KHÔNG có'} trong stderr; rc={r.returncode}; ngoại lệ {exc} {'có' if exc in r.stderr else 'KHÔNG có'} trong stderr; in ra {'khớp' if got == norm(p['out']) else 'LỆCH: ' + repr(got[:200])}"
+                err_ok = screen_lines_ok(p["err"], r.stderr)
+                good = r.returncode != 0 and exc in r.stderr and got == norm(p["out"]) and err_ok
+                why = f"dòng lỗi màn hình {'khớp cả dòng' if err_ok else 'KHÔNG khớp cả dòng'} trong stderr; rc={r.returncode}; ngoại lệ {exc} {'có' if exc in r.stderr else 'KHÔNG có'} trong stderr; in ra {'khớp' if got == norm(p['out']) else 'LỆCH: ' + repr(got[:200])}"
             else:
                 good = r.returncode == 0 and got == norm(p["out"])
                 why = "khớp" if good else f"rc={r.returncode}; mong {norm(p['out'])[:200]!r}; thấy {got[:200]!r}; stderr {r.stderr[:200]!r}"

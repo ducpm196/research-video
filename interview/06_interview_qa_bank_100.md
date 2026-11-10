@@ -570,8 +570,8 @@
      - Worker tiêu thụ bản tin, gọi sang B2B API của CIC để tải dữ liệu lịch sử tín dụng (khoảng thời gian theo sản phẩm báo cáo CIC đã đăng ký).
      - Tự động bóc tách 5 nhóm nợ theo Thông tư 31/2024/TT-NHNN (thay Thông tư 11/2021):
        - *Nhóm 1 (Nợ đủ tiêu chuẩn)*: Quá hạn dưới 10 ngày.
-       - *Nhóm 2 (Nợ cần chú ý)*: Quá hạn từ 10 đến 89 ngày.
-       - *Nhóm 3 (90–179 ngày), Nhóm 4 (180–359 ngày), Nhóm 5 (từ 360 ngày)*: Nợ xấu. Nợ cơ cấu lại được phân nhóm theo quy định riêng, không mặc nhiên là nợ xấu.
+       - *Nhóm 2 (Nợ cần chú ý)*: Quá hạn từ 10 đến 90 ngày.
+       - *Nhóm 3 (91–180 ngày), Nhóm 4 (181–360 ngày), Nhóm 5 (trên 360 ngày)*: Nợ xấu (nguồn thứ cấp: cafef.vn 21/07/2026, hethongphapluat.com, truy cập 2026-11-10, chưa đối chiếu được nguyên văn Điều 10). Nợ cơ cấu lại được phân nhóm theo quy định riêng, không mặc nhiên là nợ xấu.
      - Đẩy các chỉ số (Tổng dư nợ tín chấp/thế chấp, số lượng TCTD đang có quan hệ, điểm xếp hạng tín dụng CIC) vào Credit Decision Engine để tự động tính toán hạn mức phê duyệt (Underwriting Approval). Ví dụ quy tắc chính sách (minh họa): nếu có nợ nhóm 2 trở lên trong 12 tháng gần nhất $\to$ dừng phê duyệt tự động và chuyển thẩm định thủ công hoặc từ chối theo chính sách tín dụng.
   3. *Quy trình Giải ngân Tự động Idempotent*:
      - Sau khi khách hàng ký hợp đồng điện tử qua OTP/FaceID, hệ thống điều phối phát bản tin tạo khế ước vay trên Core Banking Temenos T24 (phân hệ Arrangement & Lending) và gọi Cổng NAPAS 247 chuyển tiền sang tài khoản người thụ hưởng.

@@ -18,10 +18,10 @@ def build():
                  [["① Kafka và thông điệp", "Kafka là hệ thống chuyển thông điệp: bên gửi ghi thông điệp (một gói dữ liệu báo việc gì đó) vào nhật ký, bên đọc lấy ra xử lý", "“TK-1001 vừa nạp 50 000”"],
                   ["② Nhật ký chỉ thêm", "chỉ ghi nối vào cuối, không sửa dòng cũ", "thông điệp 0, 1, 2, 3, …"],
                   ["③ Số thứ tự (offset)", "vị trí của mỗi thông điệp trong nhật ký", "thông điệp thứ 2 có offset 2"],
-                  ["④ Khoá thông điệp và băm chia dư", "khoá (key) là nhãn đi kèm thông điệp, ví dụ số tài khoản; hàm băm biến khoá thành một số (cùng khoá luôn ra cùng số), rồi chia dư để chọn nhóm", "mã băm 13 chia 6 dư 1 → nhóm 1"]]),
+                  ["④ Khoá thông điệp và băm chia dư", "khoá (key) là nhãn đi kèm thông điệp, ví dụ số tài khoản; hàm băm biến khoá thành một số (cùng khoá luôn ra cùng số), rồi chia dư để chọn ngăn (sau gọi là phân vùng)", "mã băm 13 chia 6 dư 1 → ngăn 1"]]),
            """Trước hết ta cần hiểu bốn điều. Kafka là hệ thống chuyển thông điệp. Bên gửi ghi thông điệp, tức một gói dữ liệu báo việc gì đó, vào nhật ký, còn bên đọc lấy ra xử lý.
            Nhật ký chỉ thêm là chỉ ghi nối vào cuối, không sửa dòng cũ. Số thứ tự cho biết vị trí của mỗi thông điệp trong nhật ký.
-           Khoá thông điệp là nhãn đi kèm, ví dụ số tài khoản. Hàm băm biến khoá thành một số, và cùng khoá luôn ra cùng số. Rồi ta chia dư để chọn một nhóm, ví dụ mười ba chia sáu dư một thì vào nhóm một."""),
+           Khoá thông điệp là nhãn đi kèm, ví dụ số tài khoản. Hàm băm biến khoá thành một số, và cùng khoá luôn ra cùng số. Rồi ta chia dư để chọn một ngăn, ví dụ mười ba chia sáu dư một thì vào ngăn một, mỗi ngăn sau này gọi là một phân vùng."""),
         st("""$$13 = 2 \\cdot 6 + 1$$""",
            """Kiểm phép chia dư. Mười ba bằng hai nhân sáu cộng một, nên mười ba chia sáu dư một."""),
     ], checks=["13 == 2 * 6 + 1 and 13 % 6 == 1"])
@@ -113,7 +113,7 @@ $$\\text{số thông điệp xử lý thật} = \\hlg{5}$$""",
         st("""<div class="box warn"><b>Lỗi 1 (người mới).</b> Nghĩ thêm bộ đọc là nhanh hơn mãi. Quá số phân vùng, các bộ đọc thừa <b class="red">ngồi không</b>.</div>""",
            """Lỗi thứ nhất, của người mới. Nghĩ thêm bộ đọc là nhanh hơn mãi. Quá số phân vùng thì các bộ đọc thừa ngồi không."""),
         st("""<div class="box warn"><b>Lỗi 2 (người đã đi làm).</b> <b class="red">Xử lý quá lâu</b> trong một lần đọc. Bộ đọc bị coi là chết, nhóm chia lại, thông điệp đang xử lý bị giao cho người khác và <b>xử lý hai lần</b>.
-<br><span class="note">Cách chữa: gọi <code>poll()</code> lại trong hạn <code>max.poll.interval.ms</code> (giảm <code>max.poll.records</code> hoặc tăng hạn), và làm việc xử lý lũy đẳng.</span></div>""",
+<br><span class="note">Cách chữa: gọi <code>poll()</code> (lệnh lấy thông điệp) lại trong hạn <code>max.poll.interval.ms</code> (hạn tối đa giữa hai lần lấy; giảm <code>max.poll.records</code>, số thông điệp mỗi lần lấy, hoặc tăng hạn), và làm việc xử lý lũy đẳng.</span></div>""",
            """Lỗi thứ hai, của người đã đi làm, là xử lý quá lâu trong một lần đọc. Bộ đọc bị coi là chết, nhóm chia lại, thông điệp đang xử lý bị giao cho người khác và xử lý hai lần.
            Nhịp báo còn sống chạy ở một luồng riêng, nên lỗi này là do quá hạn giữa hai lần đọc. Cách chữa là đọc lại trong hạn cho phép, bằng cách lấy ít thông điệp hơn mỗi lần hoặc tăng hạn, và làm việc xử lý lũy đẳng."""),
         st("""<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Nghe “đúng một lần” của Kafka rồi tin mọi tác dụng phụ chỉ xảy ra một lần. Giao dịch của Kafka chỉ bao trùm đọc, xử lý, ghi <b>trong Kafka</b>.
@@ -123,10 +123,10 @@ Ghi vào cơ sở dữ liệu hay gọi hệ ngoài vẫn cần khoá lũy đẳ
     ])
     quiz = sc("quiz", "quiz", "Đến lượt bạn", [
         st(table(["câu", "đề"],
-                 [["1", "10 phân vùng, 4 bộ đọc. Mỗi người nhận mấy phân vùng (chia khoảng liền nhau)?"],
+                 [["1", "10 phân vùng, 4 bộ đọc, chia khoảng liền nhau; phần dư chia cho những người đầu, mỗi người thêm một. Mỗi người nhận mấy phân vùng?"],
                   ["2", "10 phân vùng, 12 bộ đọc. Mấy người ngồi không?"],
                   ["3", "Quyết định: lệnh trừ tiền nên ghi nhớ vị trí trước hay sau khi xử lý?"]]),
-           """Đến lượt bạn. Câu một, mười phân vùng, bốn bộ đọc, mỗi người nhận mấy phân vùng? Câu hai, mười phân vùng, mười hai bộ đọc, mấy người ngồi không?
+           """Đến lượt bạn. Câu một, mười phân vùng, bốn bộ đọc, chia liền nhau và phần dư chia cho những người đầu, mỗi người thêm một, vậy mỗi người nhận mấy phân vùng? Câu hai, mười phân vùng, mười hai bộ đọc, mấy người ngồi không?
            Câu ba, lệnh trừ tiền nên ghi nhớ vị trí trước hay sau khi xử lý? Hãy dừng video và làm ra giấy.""",
            pause=25),
         st("""<p>Câu 1: $10 = 4 \\cdot 2 + 2$, nên hai người đầu nhận $3$, hai người sau nhận $2$.</p>

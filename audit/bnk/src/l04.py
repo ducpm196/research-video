@@ -45,14 +45,14 @@ def build():
     ])
     intu = sc("intuition", "intuition", "Hình dung: cây tìm kiếm nhiều tầng", [
         st(svg(1500, 420,
-               box(560, 30, 380, 80, "tầng 1 (gốc): 100 lối rẽ", C_BLUE),
+               box(560, 30, 380, 80, "tầng 1 (nút gốc): 100 lối rẽ", C_BLUE),
                box(160, 160, 380, 80, "tầng 2: 100 lối rẽ", C_BLUE), box(960, 160, 380, 80, "tầng 2: 100 lối rẽ", C_BLUE),
                box(60, 290, 330, 80, "tầng 3 (lá)", C_GREEN), box(430, 290, 330, 80, "tầng 3 (lá)", C_GREEN),
                box(800, 290, 330, 80, "tầng 3 (lá)", C_GREEN), box(1170, 290, 280, 80, "tầng 3 (lá)", C_GREEN),
                arrow(700, 112, 350, 158, "#475569"), arrow(800, 112, 1150, 158, "#475569"),
                arrow(280, 242, 225, 288, "#475569"), arrow(420, 242, 595, 288, "#475569"),
                arrow(1060, 242, 965, 288, "#475569"), arrow(1240, 242, 1310, 288, "#475569")),
-           """Hình cho thấy một cây tìm kiếm. Ở mỗi tầng có nhiều lối rẽ, đã sắp thứ tự, nên máy chọn đúng một lối rồi đi xuống tầng dưới.
+           """Hình cho thấy một cây tìm kiếm, mỗi ô trong cây gọi là một nút. Ở mỗi tầng có nhiều lối rẽ, đã sắp thứ tự, nên máy chọn đúng một lối rồi đi xuống tầng dưới.
            Đi hết các tầng là tới lá, nơi chỉ tới dòng cần tìm. Số tầng rất ít dù số dòng rất lớn."""),
         st(svg(1500, 380,
                panel(40, 30, 680, 320, "Không có chỉ mục: SCAN", C_RED),
@@ -104,14 +104,15 @@ $$① \\; 100^1 = 100 < 10\\,000\\,000$$""",
                   ["account_id = 7 AND created = '2026-01-05'", "SCAN", "SEARCH"],
                   ["created = '2026-01-05' (bỏ cột đầu)", "SCAN", "SCAN"],
                   ["account_id + 0 = 7 (bọc phép tính)", "SCAN", "SCAN"],
-                  ["substr(created, 1, 7) = '2026-01' (bọc hàm)", "SCAN", "SCAN"]]),
+                  ["abs(account_id) = 7 (bọc hàm)", "SCAN", "SCAN"]]),
            """Bảng này là kết quả hỏi thật. Hai điều kiện đầu dùng được chỉ mục. Điều kiện thứ ba bỏ cột đầu của chỉ mục nên ở đây vẫn phải quét.
            Hai điều kiện cuối bọc cột trong một phép tính hoặc hàm, nên chỉ mục cũng vô dụng."""),
     ], checks=["alg.bnk_sql_plan(False, 'account_id=7').startswith('SCAN')", "alg.bnk_sql_plan(True, 'account_id=7').startswith('SEARCH')",
                "alg.bnk_sql_plan(False, \"account_id=7 AND created='2026-01-05'\").startswith('SCAN')",
                "alg.bnk_sql_plan(True, \"account_id=7 AND created='2026-01-05'\").startswith('SEARCH')",
                "alg.bnk_sql_plan(True, \"created='2026-01-05'\").startswith('SCAN')", "alg.bnk_sql_plan(True, 'account_id+0=7').startswith('SCAN')",
-               "alg.bnk_sql_plan(True, \"substr(created,1,7)='2026-01'\").startswith('SCAN')"])
+               "alg.bnk_sql_plan(False, 'abs(account_id)=7').startswith('SCAN')",
+               "alg.bnk_sql_plan(True, 'abs(account_id)=7').startswith('SCAN')"])
     pit = sc("pitfalls", "pitfall", "Lỗi hay gặp, có lỗi của người đã đi làm", [
         st("""<div class="box warn"><b>Lỗi 1 (người mới).</b> Nghĩ “thêm chỉ mục càng nhiều càng tốt”. Mỗi chỉ mục làm <b class="red">chậm việc ghi</b>, vì mỗi lần thêm dòng phải cập nhật thêm một mục trong mỗi cây chỉ mục; sửa dòng thì chỉ khi cột thuộc chỉ mục thay đổi.</div>""",
            """Lỗi thứ nhất, của người mới. Nghĩ thêm chỉ mục càng nhiều càng tốt. Mỗi chỉ mục làm chậm việc ghi, vì mỗi lần thêm dòng phải cập nhật thêm một mục trong mỗi cây chỉ mục.
