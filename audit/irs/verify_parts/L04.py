@@ -41,3 +41,23 @@ rec("L04i", sorted(Q, key=lambda d: -Q[d]) == ["R", "Q", "P", "S"] and round(flo
     and round(float(Q["P"]), 5) == 0.01639 and round(float(Q["S"]), 5) == 0.01613, "quiz: R 0,03227 > Q 0,03200 > P 0,01639 > S 0,01613")
 rawq = {"P": 14, "Q": 9 + 0.8, "R": 8 + 0.9, "S": 0.85}
 rec("L04j", max(rawq, key=rawq.get) == "P" and round(rawq["Q"], 1) == 9.8 and round(rawq["R"], 1) == 8.9, "quiz: cộng thẳng đưa P lên đầu")
+# Phần nền (sửa 2026-11-09, đợt C — bài tự đứng được): công thức xếp hạng có bão hoà làm từng bước theo Robertson & Zaragoza 2009
+# (độ hiếm dạng cộng 1 trong lôgarit cho luôn dương, như alg.bm25_idf), tính lại bằng tay từng phần rồi so alg.bm25; cosin bằng sympy.
+import sympy as sp
+docs = [["mèo", "đen", "mèo"], ["chó", "đen"], ["mèo", "trắng", "chó", "con"]]
+avg = sp.Rational(sum(map(len, docs)), len(docs))
+idf = math.log(1 + (3 - 2 + 0.5) / (2 + 0.5))
+Kh = [sp.Rational(12, 10) * (1 - sp.Rational(3, 4) + sp.Rational(3, 4) * len(d) / avg) for d in docs]
+tfp = [sp.Rational(d.count("mèo")) * sp.Rational(22, 10) / (d.count("mèo") + Kh[i]) for i, d in enumerate(docs)]
+sc = [idf * float(t) for t in tfp]
+rec("L04k", avg == 3 and Kh[0] == sp.Rational(6, 5) and Kh[2] == sp.Rational(3, 2) and tfp[0] == sp.Rational(11, 8) and tfp[2] == sp.Rational(22, 25)
+    and round(idf, 3) == 0.47 and [round(x, 3) for x in sc] == [0.646, 0.0, 0.414]
+    and all(abs(a - b) < 1e-12 for a, b in zip(sc, alg.bm25(["mèo"], docs))),
+    "nền: độ hiếm ln 1,6 ≈ 0,470; K = 1,2 / 1,5; phần tần suất 11/8 = 1,375 và 22/25 = 0,88; điểm 0,646 / 0 / 0,414 (khớp alg.bm25)")
+sat = [sp.Rational(f) * sp.Rational(22, 10) / (f + sp.Rational(6, 5)) for f in (1, 2, 10)]
+rec("L04l", sat[0] == 1 and sat[1] == sp.Rational(11, 8) and round(float(sat[2]), 3) == 1.964
+    and sp.limit(sp.Symbol("f") * sp.Rational(22, 10) / (sp.Symbol("f") + sp.Rational(6, 5)), sp.Symbol("f"), sp.oo) == sp.Rational(11, 5),
+    "bão hoà: f = 1, 2, 10 → 1; 1,375; 1,964; giới hạn k1 + 1 = 2,2")
+cz = sp.Rational(8) / (sp.sqrt(5) * sp.sqrt(14))
+rec("L04m", round(float(cz), 3) == 0.956 and round(float(sp.sqrt(5)), 3) == 2.236 and round(float(sp.sqrt(14)), 3) == 3.742,
+    "nền cosin: 8 / (√5 · √14) ≈ 0,956")

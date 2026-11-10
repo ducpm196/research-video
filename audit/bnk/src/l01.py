@@ -13,13 +13,14 @@ def build():
            """Hôm nay ta học hai chuyện. Một là hai luồng sửa cùng một số dư thì mất khoản nạp. Hai là mười nghìn yêu cầu cùng chờ đối tác thì dịch vụ hết luồng.
            Luồng ảo của Java hai mươi mốt giải quyết chuyện thứ hai."""),
     ])
-    pre = sc("prereq", "prereq", "Ôn lại ba điều sẽ dùng", [
+    pre = sc("prereq", "prereq", "Trước hết: ba điều cần hiểu", [
         st(table(["khái niệm", "nghĩa", "ví dụ"],
-                 [["① Luồng", "một dòng việc chạy riêng trong chương trình", "mỗi yêu cầu chuyển tiền một luồng"],
+                 [["① Luồng", "một dòng việc chạy riêng trong chương trình; nhiều luồng chạy cùng lúc và dùng chung dữ liệu", "mỗi yêu cầu chuyển tiền một luồng"],
                   ["② Đọc rồi ghi", "muốn tăng số dư phải đọc số cũ, cộng, rồi ghi lại", "đọc 100, ghi 150"],
-                  ["③ Chạy xen kẽ", "CPU đổi qua lại giữa các luồng giữa chừng", "A đọc, B đọc, rồi mới ghi"]]),
-           """Ôn ba điều. Luồng là một dòng việc chạy riêng, ví dụ mỗi yêu cầu chuyển tiền có một luồng. Muốn tăng số dư phải đọc số cũ, cộng thêm, rồi ghi lại.
-           Còn CPU có thể đổi qua lại giữa các luồng ngay giữa chừng, nên A đọc, B đọc rồi mới ghi là chuyện bình thường."""),
+                  ["③ Chạy xen kẽ", "CPU (bộ xử lý chạy lệnh) đổi qua lại giữa các luồng ngay giữa chừng", "A đọc, B đọc, rồi mới ghi"]]),
+           """Ôn ba điều. Luồng là một dòng việc chạy riêng trong chương trình. Nhiều luồng chạy cùng lúc và dùng chung dữ liệu, ví dụ mỗi yêu cầu chuyển tiền có một luồng.
+           Muốn tăng số dư phải đọc số cũ, cộng thêm, rồi ghi lại.
+           Còn bộ xử lý chạy lệnh có thể đổi qua lại giữa các luồng ngay giữa chừng, nên A đọc, B đọc rồi mới ghi là chuyện bình thường."""),
         st("""$$100 + 50 + 30 = 180$$""",
            """Nếu hai việc chạy lần lượt, hết việc này rồi mới tới việc kia, thì một trăm cộng năm mươi cộng ba mươi bằng một trăm tám mươi, đúng như mong đợi.""",
            introduces=["plus"] if False else None),
@@ -28,12 +29,13 @@ def build():
         st(table(["từ", "nghĩa"],
                  [["race condition", "kết quả phụ thuộc thứ tự chạy may rủi của các luồng"],
                   ["lost update", "một lần ghi đè mất lần ghi trước"],
+                  ["vùng găng", "đoạn mã đọc rồi ghi dữ liệu dùng chung, chỉ an toàn khi mỗi lúc một luồng chạy"],
                   ["lock (khoá)", "chỉ một luồng được vào vùng găng tại một thời điểm"],
                   ["blocking I/O", "luồng đứng chờ mạng hoặc đĩa, không làm gì"],
                   ["virtual thread", "luồng ảo, rất nhẹ, do Java quản lý chứ không do hệ điều hành"],
                   ["luồng nền (platform / carrier thread)", "luồng thật của hệ điều hành; luồng ảo chạy nhờ trên nó"]]),
-           """Bảng dưới đây giải nghĩa sáu thuật ngữ mà bài sẽ dùng. Điều kiện tranh chấp là khi kết quả phụ thuộc thứ tự chạy may rủi. Mất cập nhật là khi một lần ghi đè mất lần ghi trước.
-           Khoá cho phép chỉ một luồng vào vùng găng. Chờ vào ra là khi luồng đứng đợi mạng hoặc đĩa. Luồng ảo là luồng rất nhẹ do Java quản lý.
+           """Bảng dưới đây giải nghĩa bảy thuật ngữ mà bài sẽ dùng. Điều kiện tranh chấp là khi kết quả phụ thuộc thứ tự chạy may rủi. Mất cập nhật là khi một lần ghi đè mất lần ghi trước.
+           Vùng găng là đoạn mã đọc rồi ghi dữ liệu dùng chung, chỉ an toàn khi mỗi lúc một luồng chạy. Khoá cho phép chỉ một luồng vào vùng găng. Chờ vào ra là khi luồng đứng đợi mạng hoặc đĩa. Luồng ảo là luồng rất nhẹ do Java quản lý.
            Còn luồng nền là luồng thật của hệ điều hành, và luồng ảo chạy nhờ trên nó."""),
     ])
     intu = sc("intuition", "intuition", "Hình dung: xen kẽ, khoá, và luồng ảo", [
@@ -80,6 +82,7 @@ def build():
         st("""<p><b>Bước 3.</b> Chạy thử cả sáu cách: hai cách cho $180$, hai cách cho $130$, hai cách cho $150$.</p>
 <span class='note'>Chỉ đúng khi một luồng xong cả đọc lẫn ghi rồi luồng kia mới đọc.</span>""",
            """Bước ba, ta chạy thử cả sáu cách. Hai cách cho kết quả một trăm tám mươi, hai cách cho một trăm ba mươi, hai cách cho một trăm năm mươi.
+           Kết quả chỉ đúng khi một luồng xong cả đọc lẫn ghi rồi luồng kia mới đọc.
            Vì vậy mới có lúc đúng lúc sai, và rất khó thấy khi kiểm thử."""),
     ], checks=["2 * 2 == 4", "math.comb(4, 2) == 6 == len(set(__import__('itertools').permutations([0, 0, 1, 1])))",
                "alg.bnk_lost_update(100, [50, 30]) == [130, 150, 180]"])
@@ -119,11 +122,13 @@ thì mọi luồng khác chờ $300$ ms theo. Khoá chỉ nên bao đoạn đọ
            """Lỗi thứ hai, của người đã đi làm, là giữ khoá khi gọi mạng. Nếu khoá bao cả lời gọi sang đối tác mất ba trăm mili giây,
            mọi luồng khác phải chờ ba trăm mili giây theo. Khoá chỉ nên bao đoạn đọc rồi ghi ngắn, và hãy đo thời gian giữ khoá."""),
         st("""<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Nghĩ luồng ảo làm CPU chạy nhanh hơn. Nó chỉ giúp việc <b>chờ</b>.
-Ở Java 21, chờ bên trong khối <code>synchronized</code> có thể ghim luồng ảo vào luồng nền, mất lợi ích.
-Từ Java 24 (JEP 491), <code>synchronized</code> không còn ghim; gọi mã native vẫn ghim.</div>""",
+<code>synchronized</code> là từ khoá Java bọc một khối mã bằng khoá, mỗi lúc chỉ một luồng vào.
+Ở Java 21, chờ bên trong khối <code>synchronized</code> có thể <b>ghim</b> luồng ảo vào luồng nền (luồng nền bị giữ chân), mất lợi ích.
+Từ Java 24 (JEP 491, một bản đề xuất tính năng chính thức của Java), <code>synchronized</code> không còn ghim; gọi mã native (mã máy viết ngoài Java) vẫn ghim.</div>""",
            """Lỗi thứ ba, cũng của người đã đi làm, là nghĩ luồng ảo làm CPU chạy nhanh hơn. Nó chỉ giúp những việc phải chờ.
-           Ở Java hai mươi mốt, chờ bên trong khối đồng bộ có thể ghim luồng ảo vào luồng nền, nên mất lợi ích.
-           Từ Java hai mươi tư, khối đồng bộ không còn ghim, nhưng gọi mã máy gốc vẫn ghim."""),
+           Khối đồng bộ là một từ khoá của Java, bọc một đoạn mã bằng khoá để mỗi lúc chỉ một luồng vào.
+           Ở Java hai mươi mốt, chờ bên trong khối đồng bộ có thể ghim luồng ảo vào luồng nền, tức là giữ chân luồng nền, nên mất lợi ích.
+           Từ Java hai mươi tư, khối đồng bộ không còn ghim, nhưng gọi mã máy gốc viết ngoài Java vẫn ghim."""),
     ])
     quiz = sc("quiz", "quiz", "Đến lượt bạn", [
         st(table(["câu", "đề"],
@@ -141,7 +146,7 @@ $$\\frac{720}{8} = \\hl{90}$$""",
            """Đáp án câu hai. Hai nghìn chia năm mươi bằng bốn mươi lượt, nhân không phẩy hai, được tám giây."""),
         st(table(["lựa chọn", "được", "mất"],
                  [["tăng số luồng nền lên rất lớn", "không phải sửa mã", "tốn bộ nhớ, hệ điều hành chuyển luồng nặng"],
-                  ["luồng ảo (Java 21)", "chờ gần như miễn phí, mã vẫn viết tuần tự", "tránh khoá kiểu ghim; đo trước khi tin"]]),
+                  ["luồng ảo (Java 21)", "chờ gần như miễn phí, mã vẫn viết tuần tự", "tránh chỗ gây ghim (Java 21: chờ trong synchronized; mã native); đo trước khi tin"]]),
            """Đáp án câu ba là một đánh đổi. Tăng số luồng nền thì không sửa mã nhưng tốn bộ nhớ. Luồng ảo cho phép chờ gần như miễn phí mà mã vẫn viết tuần tự, nhưng phải tránh ghim và phải đo."""),
     ], checks=["len(set(__import__('itertools').permutations([0, 0, 1, 1, 2, 2]))) == 90 == 720 // 8",
                "alg.bnk_batch_time(2000, 50, 0.2) == 8.0"])
@@ -154,7 +159,7 @@ Khoá bao ít nhất có thể; luồng ảo là cho chờ, không phải cho t�
            Khoá bao ít nhất có thể, và luồng ảo là để chờ, không phải để tính toán."""),
     ])
     return lesson("L01", "da_luong_khoa_luong_ao", "Bài 1 — Đa luồng, khoá và luồng ảo Java 21",
-                  "curriculum/bnk.yaml L01; audit/bnk/verify_bnk.py L01; JEP 444 Virtual Threads (JDK 21); Goetz et al., Java Concurrency in Practice",
+                  "curriculum/bnk.yaml L01; audit/bnk/verify_bnk.py L01; JEP 444 Virtual Threads (JDK 21: ghim khi chờ trong synchronized hoặc native); JEP 491 Synchronize Virtual Threads without Pinning (JDK 24); Goetz et al., Java Concurrency in Practice",
                   ["Liệt kê mọi cách xen kẽ của hai luồng và nhận ra mất cập nhật", "Giải thích khoá làm các luồng chạy lần lượt",
                    "Tính thời gian xử lý theo lô và so với luồng ảo", "Chọn giữa tăng luồng nền và luồng ảo"],
                   [hook, pre, sym, intu, form, ex, chk, pit, quiz, rec])

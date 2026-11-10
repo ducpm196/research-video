@@ -192,9 +192,11 @@ public class DoanKetQua {
            """Người gọi không hề biết lệnh rút đã thất bại, nên vẫn in biên lai đã rút năm trăm nghìn.
            Với ngân hàng, đó là một lỗi nghiêm trọng."""),
         st("""<div class="box key">Hôm nay: <b>ngoại lệ</b> — cách để phương thức <b>báo lỗi cho người gọi</b>, và buộc người gọi phải xử lý.
-Bạn cũng học đọc <b>dấu vết ngăn xếp</b> để tìm đúng lệnh gây lỗi.</div>""",
+Bạn cũng học đọc <b>dấu vết ngăn xếp</b> để tìm đúng lệnh gây lỗi.</div>
+<p><b>Ngăn xếp</b> (lời gọi): danh sách các hàm đang chạy dở, hàm được gọi sau cùng nằm trên cùng. <b>Dấu vết ngăn xếp</b>: bản in danh sách đó lúc lỗi xảy ra.</p>""",
            """Hôm nay ta học ngoại lệ, cách để một phương thức báo lỗi cho người gọi và buộc người gọi phải xử lý.
-           Bạn cũng sẽ đọc dấu vết ngăn xếp để tìm đúng lệnh gây lỗi."""),
+           Bạn cũng sẽ đọc dấu vết ngăn xếp để tìm đúng lệnh gây lỗi.
+           Ngăn xếp ở đây là danh sách các hàm đang chạy dở, hàm được gọi sau cùng nằm trên cùng, còn dấu vết ngăn xếp là bản in danh sách đó lúc lỗi xảy ra."""),
     ])
     sc_pre = sc("prereq", "prereq", "Ôn lại: lớp tài khoản và lỗi khi chạy", [
         st(table(["đã học", "điều dùng lại hôm nay"],
@@ -209,14 +211,14 @@ Bạn cũng học đọc <b>dấu vết ngăn xếp</b> để tìm đúng lệnh
         st(table(["viết", "nghĩa"],
                  [["<code>try { … }</code>", "<b>khối thử</b>: các lệnh có thể gặp lỗi"],
                   ["<code>catch (KhongDuTien e) { … }</code>", "<b>khối bắt</b>: chạy khi có ngoại lệ đúng loại; <code>e</code> là ngoại lệ đó"],
-                  ["<code>finally { … }</code>", "<b>khối cuối cùng</b>: luôn chạy, có lỗi hay không"],
+                  ["<code>finally { … }</code>", "<b>khối cuối cùng</b>: chạy mỗi khi rời khối thử, có lỗi hay không (chỉ bỏ lỡ khi cả chương trình bị tắt ngang, như gọi <code>System.exit</code>)"],
                   ["<code>throw new KhongDuTien(\"…\")</code>", "<b>ném</b>: tạo ngoại lệ và dừng phương thức ngay"],
                   ["<code>throws KhongDuTien</code>", "ghi trên phương thức: “có thể ném loại này”"],
                   ["<code>class KhongDuTien extends Exception</code>", "<b>kế thừa</b>: lớp mới là <b>một loại</b> <code>Exception</code> (lớp cha), nhận sẵn mọi thứ lớp cha có"],
                   ["<code>super(thongBao);</code>", "trong hàm tạo: gọi hàm tạo của lớp cha, đưa lời nhắn cho lớp cha giữ"],
                   ["<code>e.getMessage()</code>", "lấy lời nhắn lỗi đã gửi kèm"]]),
            """Bảng ký hiệu của bài. Khối thử chứa các lệnh có thể gặp lỗi. Khối bắt chạy khi có ngoại lệ đúng loại ghi trong ngoặc, và e chính là ngoại lệ đó.
-           Khối cuối cùng luôn chạy, có lỗi hay không.
+           Khối cuối cùng chạy mỗi khi rời khối thử, có lỗi hay không, chỉ trừ khi cả chương trình bị tắt ngang.
            Lệnh ném tạo một ngoại lệ và dừng phương thức ngay lập tức.
            Còn khai báo có thể ném thì ghi trên đầu phương thức, báo trước rằng nó có thể ném loại này.
            Dòng kế dùng từ khoá kế thừa: lớp mới là một loại của lớp ngoại lệ gốc, gọi là lớp cha, và nhận sẵn mọi thứ lớp cha có.
@@ -254,7 +256,7 @@ Bạn cũng học đọc <b>dấu vết ngăn xếp</b> để tìm đúng lệnh
              "<code>r.readLine()</code> đọc từng dòng một.</span>" + out_block(tai_nguyen),
            """Một dạng nữa là khối thử có tài nguyên. Bộ đọc được mở trong ngoặc tròn sau từ khoá thử, và máy tự đóng nó khi rời khối, dù có lỗi hay không.
            Dấu gạch chéo ngược kèm chữ n trong chuỗi là ký tự xuống dòng, nên dữ liệu có hai dòng, và mỗi lần đọc lấy ra một dòng.
-           Đọc dữ liệu có thể gặp ngoại lệ vào ra, thuộc nhóm có kiểm tra, nên phải có khối bắt."""),
+           Đọc dữ liệu có thể gặp ngoại lệ vào ra, thuộc nhóm có kiểm tra, nên phải bắt nó hoặc khai báo ném tiếp, và ở đây ta bắt."""),
     ])
     sc_form = sc("formula", "formula", "Suy ra từng bước: rút quá số dư thì ném ngoại lệ tự định nghĩa", [
         st(code_block(rut, lines=(1, 5), title="Bước 1. Định nghĩa loại ngoại lệ “không đủ tiền”"),
@@ -335,9 +337,9 @@ Bạn cũng học đọc <b>dấu vết ngăn xếp</b> để tìm đúng lệnh
            """Chạy thật, đúng hai dòng. Nếu bạn đoán C mười, hãy nhớ phép gán chỉ xảy ra khi hàm trả về bình thường."""),
     ], checks=["100 - 40 == 60", "90 - 60 == 30", "90 > 100 - 40"])
     sc_rec = sc("recap", "recap", "Chuỗi logic & tư duy cần mang theo", [
-        st(chain("phát hiện sai → ném ngoại lệ", "đi ngược đường gọi", "khối bắt gần nhất đúng loại", "khối cuối cùng luôn chạy"),
+        st(chain("phát hiện sai → ném ngoại lệ", "đi ngược đường gọi", "khối bắt gần nhất đúng loại", "khối cuối cùng chạy khi rời khối thử"),
            """Tổng kết chuỗi logic. Phương thức phát hiện điều sai thì ném ngoại lệ. Ngoại lệ đi ngược đường gọi,
-           tới khối bắt gần nhất đúng loại. Và khối cuối cùng luôn chạy."""),
+           tới khối bắt gần nhất đúng loại. Và khối cuối cùng chạy mỗi khi rời khối thử, có lỗi hay không."""),
         st("""<div class='box key'><b>Tư duy:</b> lỗi nghiệp vụ người gọi phải xử lý (không đủ tiền) dùng ngoại lệ <b>có kiểm tra</b> tự định nghĩa.
 Chỉ bắt loại mình xử lý được; không để khối bắt rỗng. Gặp dấu vết thì đọc <b>từ trên xuống</b>: dòng đầu là nơi lỗi xảy ra.</div>""",
            """Điều cần mang theo. Lỗi nghiệp vụ mà người gọi phải xử lý, như không đủ tiền, nên là ngoại lệ có kiểm tra tự định nghĩa.

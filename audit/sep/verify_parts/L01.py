@@ -25,3 +25,6 @@ rec("L01e", 2 * 5 * 365 * 100 == 365000 > 54805 and round(216 / 248, 2) == 0.87,
 q = math.exp(4999 * math.log1p(-1 / 43800))
 rec("L01f", 365 * 60 * 2 == 43800 and round(q, 3) == 0.892 and 4999 * math.log1p(-1 / 12) < math.log(1e-100) and round(5000 / 12) == 417,
     f"quiz: c = 43 800, duy nhất {q:.4f}; 12 nhóm, mỗi ô ≈ 417 người, duy nhất < 10⁻¹⁰⁰")
+# Thêm 2026-11-09 (đợt C): bước 3 của ví dụ nay hiện 10 000 × 0,8426 (bản cũ hiện × 0,843 ≈ 8426, mà 10 000 × 0,843 = 8430).
+rec("L01g", round(u, 4) == 0.8426 and round(10000 * 0.8426) == 8426 and round(10000 * 0.843) == 8430,
+    "ví dụ bước 3: 0,8426 × 10 000 ≈ 8426 (0,843 × 10 000 = 8430 — vì vậy hiện 4 chữ số)")

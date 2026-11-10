@@ -137,3 +137,12 @@ URL: https://dora.dev/insights/dora-metrics-history/ (curl). Kèm https://dora.d
 - Báo cáo 2020, 2022, 2024: không đọc (2022 trả 404); chặng 2024 chỉ dựa vào [DH26]. Bảng nhóm và con số của 2024: không dạy.
 - Nhân quả: các báo cáo là khảo sát; bài nói “đi cùng”, “tương quan”, “báo cáo ghi”, không nói thực hành X “gây ra” kết quả Y.
 - Đội 20 người, 40 lần triển khai, 3 lần lỗi trong tháng, mục tiêu “mọi đội tinh hoa trong năm” của quiz là SỐ MINH HOẠ.
+
+## Bổ sung khi đọc kiểm 2026-11-08 (tải lại PDF cùng URL, trích bằng pypdf; thư mục nháp, không đưa vào kho)
+- [SD16] tr. 4 và tr. 8: “Over the past five years, we’ve surveyed more than 25,000 technical professionals worldwide” → căn cứ cho
+  “hơn 25 000 người trả lời qua năm năm” ở `stage` chặng 2. [SD16] tr. 5, 14, 16 ghi “200 times” (không phải 208): bài ghi 208 là của 2019,
+  2016 cùng phép tính 1460/7 nhưng báo cáo ghi tròn 200.
+- [SD21] tr. 13: “Yes, you read correctly. This is not an editorial error.” → câu trích ở hook.
+- [SD23] tr. 12: bảng bốn nhóm 18%, 31%, 33%, 17% (cộng 99%); không tìm thấy ghi chú “rounding” trong báo cáo 2023 (tìm chữ “round”
+  toàn văn) → bài nói “báo cáo không ghi vì sao thiếu 1%, có thể do làm tròn”. Ghi chú “< 100% due to rounding” chỉ có ở [SD19] tr. 20.
+- [DH26] cập nhật 2026-01-02, không ghi ngày viết đoạn về “chỉ số thứ năm” năm 2021 → bài nói “về sau”, không nói “năm 2024”.

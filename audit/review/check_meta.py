@@ -10,7 +10,10 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.stdout.reconfigure(encoding="utf-8")
-norm = lambda s: re.sub(r"\s+", " ", re.sub(r"^Bài \d+( \([^)]*\))? — ", "", str(s))).strip()
+# INT (luyện phỏng vấn) gọi bài là “Chuyên đề N” theo bộ tài liệu interview/00–07 (“8 Chuyên đề”, “Câu 73, Chuyên đề 05”);
+# vẫn đòi số N khớp id. Thêm 2026-11-09 khi check_meta báo 8 bài INT chỉ vì tiền tố.
+PREFIX = {"INT": "Chuyên đề"}
+norm = lambda s: re.sub(r"\s+", " ", re.sub(r"^(Bài|Chuyên đề) \d+( \([^)]*\))? — ", "", str(s))).strip()
 bad = 0
 for cp in sorted((ROOT / "curriculum").glob("*.yaml")):
     cur = yaml.safe_load(cp.read_text(encoding="utf-8")) or {}
@@ -30,8 +33,9 @@ for cp in sorted((ROOT / "curriculum").glob("*.yaml")):
         y = yaml.safe_load((ROOT / sp).read_text(encoding="utf-8"))
         meta[lid] = y
         n = int(lid[1:])
-        if not re.match(rf"Bài {n}( \([^)]*\))? — ", str(y.get("title", ""))):
-            print(C, lid, "tiêu đề không bắt đầu bằng “Bài", n, "—”:", y.get("title")); bad += 1
+        pre = PREFIX.get(C, "Bài")
+        if not re.match(rf"{pre} {n}( \([^)]*\))? — ", str(y.get("title", ""))):
+            print(C, lid, f"tiêu đề không bắt đầu bằng “{pre}", n, "—”:", y.get("title")); bad += 1
         if str(y.get("course") or "CS115") != C or str(y.get("id")) != lid:
             print(C, lid, "course/id trong đặc tả:", y.get("course"), y.get("id")); bad += 1
         if norm(y.get("title")) != norm(l.get("title")):

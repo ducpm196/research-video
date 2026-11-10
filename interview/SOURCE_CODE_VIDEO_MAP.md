@@ -7,7 +7,7 @@
 
 > **Cập nhật 2026-11-08 (chiều)**: thêm khóa **JVA** 13 bài (lập trình Java từ con số 0) → 656 bài học; 300 bài của 16 khóa nền tảng đã được đọc kiểm nội dung và sửa (xem `HANDOVER_INTERVIEW.md` Mục 10).
 > **Lưu ý đo lại 2026-11-08**: có 643 video bài học (628 bài đo ngày 2026-11-07 cộng 15 bài khóa BNK thêm ngày 2026-11-08; mỗi bài một tệp mp4 và một tệp đặc tả). Thư mục `out/DEMO/` có thêm 5 video mẫu, không tính là bài học.
-> **Khoảng trống kiến thức**: đo ngày 2026-11-07 (ngoài INT/ACB không có bài về Spring Boot, PL/SQL, luồng ảo Java 21, ISO 8583, NAPAS; Redis nhắc 1 lần, T24 nhắc 2 lần). **Đã xử lý một phần ngày 2026-11-08 bằng khóa BNK** (`out/BNK/L00` đến `L14`, 115,05 phút sau lần dựng lại ngày 2026-11-08; người chưa từng lập trình học khóa JVA trước: `out/JVA/L00` đến `L12`, 106,91 phút): Java và GC, đa luồng và luồng ảo, Spring, REST và khoá lũy đẳng, SQL và chỉ mục, PL/SQL và bế tắc, Redis, Kafka, SAGA và Outbox, sổ cái, T24 và IBM MQ, ISO 8583, đối soát, bảo mật thanh toán, tình huống giả định. Còn thiếu các chủ đề ghi ở Mục 8 của `HANDOVER_INTERVIEW.md`.
+> **Khoảng trống kiến thức**: đo ngày 2026-11-07 (ngoài INT/ACB không có bài về Spring Boot, PL/SQL, luồng ảo Java 21, ISO 8583, NAPAS; Redis nhắc 1 lần, T24 nhắc 2 lần). **Đã xử lý một phần ngày 2026-11-08 bằng khóa BNK** (`out/BNK/L00` đến `L14`, 115,16 phút sau lần dựng lại ngày 2026-11-09; người chưa từng lập trình học khóa JVA trước: `out/JVA/L00` đến `L12`, 107,11 phút): Java và GC, đa luồng và luồng ảo, Spring, REST và khoá lũy đẳng, SQL và chỉ mục, PL/SQL và bế tắc, Redis, Kafka, SAGA và Outbox, sổ cái, T24 và IBM MQ, ISO 8583, đối soát, bảo mật thanh toán, tình huống giả định. Còn thiếu các chủ đề ghi ở Mục 8 của `HANDOVER_INTERVIEW.md`.
 
 ---
 

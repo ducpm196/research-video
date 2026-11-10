@@ -20,5 +20,7 @@ rec("L00e", Fraction(10 ** 6) * Fraction(1, 100) == 10000 and Fraction(2 * 10 **
     and round(float(Fraction(995, 1000) ** 200), 3) == 0.367 and Fraction(20000) * Fraction(5, 1000) == 100
     and round(float(Fraction(999, 1000) ** 100), 3) == 0.905,
     "10 000 người; quiz: 10 000 người, 0,995²⁰⁰ ≈ 0,367, phát hành 1% = 20 000 → 100 người; 0,999¹⁰⁰ ≈ 0,905")
-rec("L00f", round(0.99 ** 10, 3) == 0.904 and abs(round(0.99 ** 10, 3) ** 10 - 0.366) < 0.002,
-    "đường kiểm hai tầng: 0,99¹⁰ ≈ 0,904 rồi 0,904¹⁰ ≈ 0,366")
+# Sửa 2026-11-09 (đợt C): bản cũ hiện 0,904¹⁰ ≈ 0,366 và chấp nhận sai 0,002 — thật ra 0,904¹⁰ = 0,3645. Màn hình nay hiện
+#   0,99¹⁰ ≈ 0,9044, và 0,9044¹⁰ = 0,3661 → 0,366 đúng tới 3 chữ số (không còn dung sai).
+rec("L00f", round(float(Fraction(99, 100) ** 10), 4) == 0.9044 and round(float(Fraction(9044, 10000) ** 10), 3) == 0.366,
+    "đường kiểm hai tầng: 0,99¹⁰ ≈ 0,9044 rồi 0,9044¹⁰ ≈ 0,366 (phân số chính xác)")

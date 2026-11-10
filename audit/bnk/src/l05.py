@@ -13,24 +13,28 @@ def build():
            """Bảng này là kết quả mô phỏng ở cuối bài. Hai phiên khoá ngược thứ tự thì bế tắc. Hai phiên khoá cùng thứ tự thì chạy bình thường.
            Cách chữa nằm gọn trong một quy tắc, ta sẽ học hôm nay."""),
     ])
-    pre = sc("prereq", "prereq", "Ôn lại ba điều sẽ dùng", [
+    pre = sc("prereq", "prereq", "Trước hết: bốn điều cần hiểu", [
         st(table(["khái niệm", "nghĩa", "ví dụ"],
-                 [["① Khoá hàng", "khi một phiên sửa một hàng, hàng đó bị khoá tới khi commit hoặc rollback", "UPDATE tài khoản A"],
-                  ["② Chờ", "phiên khác muốn sửa hàng đang khoá thì phải đứng chờ", "phiên 2 chờ hàng A"],
-                  ["③ Giao dịch", "nhiều thao tác cùng thành công hoặc cùng huỷ; khoá chỉ nhả khi kết thúc giao dịch", "trừ A rồi cộng B"]]),
-           """Ôn ba điều. Khi một phiên sửa một hàng, hàng đó bị khoá cho tới khi giao dịch kết thúc. Phiên khác muốn sửa hàng đang khoá thì phải đứng chờ.
-           Và khoá chỉ được nhả khi giao dịch kết thúc, nên một giao dịch dài giữ khoá lâu."""),
+                 [["① Phiên", "một kết nối đang làm việc với cơ sở dữ liệu (cơ sở dữ liệu: phần mềm lưu bảng, hỏi bằng ngôn ngữ SQL), thường của một luồng chương trình", "phiên 1, phiên 2"],
+                  ["② Giao dịch", "nhiều thao tác cùng thành công hoặc cùng huỷ; kết thúc bằng commit (chốt lưu) hoặc rollback (huỷ hết)", "trừ A rồi cộng B"],
+                  ["③ Khoá hàng", "khi một phiên sửa một hàng, hàng đó bị khoá tới khi giao dịch kết thúc", "UPDATE tài khoản A"],
+                  ["④ Chờ", "phiên khác muốn sửa hàng đang khoá thì phải đứng chờ", "phiên 2 chờ hàng A"]]),
+           """Trước hết ta cần hiểu bốn điều. Phiên là một kết nối đang làm việc với cơ sở dữ liệu, tức phần mềm lưu bảng dữ liệu mà ta hỏi bằng ngôn ngữ SQL.
+           Giao dịch là nhiều thao tác cùng thành công hoặc cùng huỷ, và kết thúc bằng chốt để lưu, hoặc hoàn tác để huỷ hết.
+           Khi một phiên sửa một hàng, hàng đó bị khoá cho tới khi giao dịch kết thúc. Phiên khác muốn sửa hàng đang khoá thì phải đứng chờ.
+           Vì khoá chỉ được nhả khi giao dịch kết thúc, nên một giao dịch dài giữ khoá lâu."""),
         st("""$$2 \\cdot 2 = 4$$""",
            """Một phép đếm cần dùng. Hai phiên, mỗi phiên có hai cách chọn thứ tự khoá hai hàng, nên có hai nhân hai bằng bốn cặp thứ tự. Ta sẽ xem cặp nào gây bế tắc."""),
     ], checks=["2 * 2 == 4"])
     sym = sc("sym", "symbol", "Giải mã vài từ hay gặp", [
         st(table(["từ", "nghĩa"],
-                 [["deadlock (bế tắc)", "hai hay nhiều phiên chờ nhau theo vòng tròn, không ai đi tiếp được"],
+                 [["id", "mã số định danh mỗi hàng, ví dụ mã tài khoản 2, 5"],
+                  ["deadlock (bế tắc)", "hai hay nhiều phiên chờ nhau theo vòng tròn, không ai đi tiếp được"],
                   ["SELECT ... FOR UPDATE", "đọc và khoá luôn các hàng đọc được để sửa an toàn"],
                   ["ORA-00060", "mã lỗi Oracle: phát hiện bế tắc khi chờ tài nguyên"],
                   ["đồ thị chờ", "mũi tên từ phiên đang chờ tới phiên đang giữ khoá; có vòng tròn là bế tắc"],
                   ["PL/SQL", "ngôn ngữ lập trình thủ tục của Oracle, chạy ngay trong cơ sở dữ liệu"]]),
-           """Bảng này giải mã năm từ. Bế tắc là khi hai hay nhiều phiên chờ nhau theo vòng tròn, không ai đi tiếp được. Câu lệnh đọc kèm khoá cho phép đọc rồi khoá luôn các hàng để sửa an toàn.
+           """Bảng dưới đây giải thích nghĩa của sáu thuật ngữ sẽ gặp trong bài. Mã số định danh là con số riêng của mỗi hàng, ví dụ mã tài khoản hai và năm. Bế tắc là khi hai hay nhiều phiên chờ nhau theo vòng tròn, không ai đi tiếp được. Câu lệnh đọc kèm khoá cho phép đọc rồi khoá luôn các hàng để sửa an toàn.
            Mã lỗi sáu mươi là cách Oracle báo đã phát hiện bế tắc. Đồ thị chờ có mũi tên từ phiên chờ tới phiên giữ khoá, có vòng tròn là bế tắc.
            Cuối cùng, P L S Q L là ngôn ngữ thủ tục của Oracle, chạy ngay trong cơ sở dữ liệu."""),
     ])
@@ -43,15 +47,15 @@ def build():
                arrow(405, 85, 1095, 85, "#6b7280", "A đang do phiên 1 giữ"),
                txt(750, 425, "Phiên 1 chờ phiên 2, phiên 2 chờ phiên 1 → vòng tròn → bế tắc", 26, "middle", "#dc2626", True)),
            """Hình cho thấy vòng tròn chờ. Phiên một đang giữ hàng A và muốn hàng B. Phiên hai đang giữ hàng B và muốn hàng A.
-           Phiên một chờ phiên hai, phiên hai lại chờ phiên một. Không ai nhả khoá trước, nên đó là bế tắc."""),
+           Phiên một chờ phiên hai, phiên hai lại chờ phiên một. Không phiên nào chịu nhả khoá đang giữ, nên đó là bế tắc."""),
         st(svg(1500, 420,
                txt(750, 40, "Quy tắc: luôn khoá theo thứ tự id tăng dần", 28, "middle", "#1f2937", True),
-               box(60, 90, 300, 80, "Phiên 1: A=2 → B=5", C_BLUE), box(60, 220, 300, 80, "Phiên 2: A=5 → B=2", C_AMBER),
+               box(60, 90, 300, 80, ["Phiên 1: chuyển", "id 2 → id 5"], C_BLUE, size=22), box(60, 220, 300, 80, ["Phiên 2: chuyển", "id 5 → id 2"], C_AMBER, size=22),
                arrow(365, 130, 560, 130, "#475569"), arrow(365, 260, 560, 260, "#475569"),
                box(570, 90, 360, 80, "sắp lại: khoá 2 rồi 5", C_GREEN), box(570, 220, 360, 80, "sắp lại: khoá 2 rồi 5", C_GREEN),
                box(1020, 150, 420, 100, ["cả hai cùng thứ tự", "→ không có vòng tròn"], C_GREEN, bold=True),
                arrow(935, 130, 1015, 190, "#475569"), arrow(935, 260, 1015, 220, "#475569")),
-           """Cách phá vòng tròn là một quy tắc. Dù lệnh chuyển theo chiều nào, ta luôn khoá hàng có id nhỏ trước, rồi mới khoá hàng có id lớn.
+           """Cách phá vòng tròn là một quy tắc. Phiên một chuyển từ tài khoản mã hai sang mã năm, phiên hai chuyển ngược lại. Dù lệnh chuyển theo chiều nào, ta luôn khoá hàng có id nhỏ trước, rồi mới khoá hàng có id lớn.
            Khi mọi phiên cùng một thứ tự, không thể có vòng tròn chờ."""),
         st(svg(1500, 400,
                box(60, 40, 1380, 60, "DECLARE  — khai báo biến (không bắt buộc)", C_GRAY),
@@ -65,9 +69,10 @@ def build():
         st("""<p><b>Bước 1.</b> Bế tắc cần một <b>vòng tròn chờ</b>: phiên 1 chờ phiên 2, phiên 2 chờ phiên 1.</p>
 <span class='note'>Làm thử: 2 phiên, 2 mũi tên chờ khép kín.</span>""",
            """Bước một, vì bế tắc cần một vòng tròn chờ, nên ta chỉ cần ngăn vòng tròn xuất hiện. Làm thử, hai phiên chờ nhau tạo ra hai mũi tên khép kín."""),
-        st("""<p><b>Bước 2.</b> Vòng tròn xuất hiện khi hai phiên lấy hai khoá theo <b>thứ tự ngược nhau</b>. Với 2 khoá có $2 \\cdot 2 = 4$ cặp thứ tự, trong đó $2$ cặp ngược nhau.</p>
+        st("""<p><b>Bước 2.</b> Vòng tròn <b>chỉ có thể</b> xuất hiện khi hai phiên lấy hai khoá theo <b>thứ tự ngược nhau</b>, và xảy ra thật khi cả hai kịp giữ khoá đầu. Với 2 khoá có $2 \\cdot 2 = 4$ cặp thứ tự, trong đó $2$ cặp ngược nhau.</p>
 <span class='note'>Làm thử: (A,B)+(B,A) và (B,A)+(A,B) là hai cặp ngược.</span>""",
-           """Bước hai, vì phiên giữ một khoá rồi xin khoá thứ hai, nên trong mô hình hai hàng này, vòng tròn có khi hai phiên lấy hai khoá theo thứ tự ngược nhau. Với hai khoá có bốn cặp thứ tự, trong đó hai cặp ngược nhau.
+           """Bước hai, vì phiên giữ một khoá rồi xin khoá thứ hai, nên trong mô hình hai hàng này, vòng tròn chỉ có thể xuất hiện khi hai phiên lấy hai khoá theo thứ tự ngược nhau. Nó xảy ra thật khi cả hai phiên kịp giữ khoá đầu trước khi xin khoá thứ hai.
+           Với hai khoá có bốn cặp thứ tự, trong đó hai cặp ngược nhau.
            Làm thử, A rồi B kèm B rồi A là một cặp ngược, và cặp đảo lại là cặp ngược thứ hai."""),
         st("""<p><b>Bước 3.</b> Nếu mọi phiên đều khoá theo thứ tự tăng của id, mọi cặp thứ tự đều <b>giống nhau</b>, nên số cặp ngược là $0$.</p>
 <span class='note'>Làm thử: sắp lại cả hai phiên thành (2,5) và (2,5) → chạy bình thường.</span>""",
@@ -95,14 +100,15 @@ $$⑤ \\; \\text{kết quả} = \\hlg{\\text{cả hai lệnh xong lần lượt}
     chk = sc("check", "check", "Tự kiểm bằng đường khác: thử hết cặp thứ tự", [
         st("""<p>Đường khác: vì chỉ có hai khoá, ta vét cạn mọi cặp thứ tự, rồi chạy mô phỏng cho từng cặp.</p>""",
            """Kiểm bằng đường khác. Ta vét cạn mọi cặp thứ tự của hai khoá, rồi chạy mô phỏng cho từng cặp. Mô phỏng chỉ kiểm logic thứ tự khoá, còn cú pháp riêng của Oracle thì máy này không chạy được."""),
-        st(table(["phiên 1", "phiên 2", "kết quả"],
+        st(table(["phiên 1", "phiên 2", "kết quả (khi cả hai kịp giữ khoá đầu)"],
                  [["A, B", "A, B", "bình thường"], ["A, B", "B, A", "bế tắc"], ["B, A", "A, B", "bế tắc"], ["B, A", "B, A", "bình thường"]]),
-           """Bốn cặp thứ tự cho kết quả này. Vì chỉ hai cặp ngược nhau mới bế tắc, nên kết quả khớp với bước hai. Hai cặp cùng thứ tự đều chạy bình thường."""),
+           """Bốn cặp thứ tự cho kết quả này, trong trường hợp cả hai phiên kịp giữ khoá đầu. Vì chỉ hai cặp ngược nhau mới bế tắc, nên kết quả khớp với bước hai. Hai cặp cùng thứ tự đều chạy bình thường."""),
         st(table(["nguyên nhân ORA-00060 ngoài đời", "sắp thứ tự hàng có chữa được?", "cách chữa"],
                  [["hai phiên khoá hàng ngược thứ tự", "có", "khoá theo id tăng dần"],
-                  ["khoá ngoại không có chỉ mục (sửa bảng cha khoá cả bảng con)", "không", "tạo chỉ mục cho cột khoá ngoại"],
-                  ["thiếu chỗ ITL trong khối dữ liệu (INITRANS thấp)", "không", "tăng INITRANS cho bảng hay chỉ mục nóng"]]),
-           """Bảng này nhắc rằng ngoài đời, lỗi bế tắc còn có nguyên nhân khác. Một là khoá ngoại không có chỉ mục, nên khi sửa bảng cha thì cả bảng con bị khoá.
+                  ["khoá ngoại (cột ở bảng con trỏ tới bảng cha) không có chỉ mục: xoá hay sửa khoá chính ở bảng cha thì Oracle khoá cả bảng con", "không", "tạo chỉ mục (cấu trúc tra nhanh) cho cột khoá ngoại"],
+                  ["thiếu chỗ ITL (danh sách giao dịch đang sửa khối) trong khối dữ liệu, INITRANS thấp", "không", "tăng INITRANS cho bảng hay chỉ mục nóng"]]),
+           """Bảng này nhắc rằng ngoài đời, lỗi bế tắc còn có nguyên nhân khác. Một là khoá ngoại không có chỉ mục. Khoá ngoại là cột ở bảng con trỏ tới một hàng của bảng cha, còn chỉ mục là cấu trúc giúp tra nhanh.
+           Khi thiếu chỉ mục đó, xoá hay sửa khoá chính ở bảng cha làm Oracle khoá cả bảng con, nên nhiều phiên dễ chờ nhau.
            Hai là khối dữ liệu thiếu chỗ ghi các giao dịch đang sửa nó. Sắp thứ tự hàng không chữa được hai loại này, mà phải tạo chỉ mục hoặc tăng chỗ trong khối.""",
            clear=True),
     ], checks=["sum(1 for p in (['A', 'B'], ['B', 'A']) for q in (['A', 'B'], ['B', 'A']) if alg.bnk_lock_sim([p, q]) == 'deadlock') == 2"])
@@ -146,7 +152,7 @@ Gặp bế tắc: rollback cả giao dịch, thử lại có giới hạn, và s
            """Điều cần mang theo. Bế tắc là lỗi thiết kế thứ tự, không phải lỗi may rủi. Gặp bế tắc thì rollback cả giao dịch, thử lại có giới hạn, và sửa thứ tự khoá."""),
     ])
     return lesson("L05", "plsql_khoa_hang_deadlock", "Bài 5 — PL/SQL, khoá hàng và bế tắc ORA-00060",
-                  "curriculum/bnk.yaml L05; audit/bnk/verify_bnk.py L05; Oracle Database Concepts (Data Concurrency and Consistency; ORA-00060) — Oracle không chạy trên máy này, chỉ mô phỏng logic thứ tự khoá",
+                  "curriculum/bnk.yaml L05; audit/bnk/verify_bnk.py L05; Oracle Database Concepts (Data Concurrency and Consistency: phát hiện bế tắc, rollback một câu lệnh; khoá bảng con khi khoá ngoại không có chỉ mục); Oracle Database Error Messages (ORA-00060); thứ tự khoá của ORDER BY … FOR UPDATE không được bảo đảm — Oracle không chạy trên máy này, chỉ mô phỏng logic thứ tự khoá",
                   ["Vẽ đồ thị chờ và nhận ra vòng tròn gây bế tắc", "Đếm số cặp thứ tự khoá gây bế tắc",
                    "Áp quy tắc khoá theo thứ tự id tăng dần", "Xử lý đúng khi gặp ORA-00060"],
                   [hook, pre, sym, intu, form, ex, chk, pit, quiz, rec])

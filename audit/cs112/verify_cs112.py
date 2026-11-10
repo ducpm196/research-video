@@ -85,7 +85,7 @@ rec("C6b", "FIX", "“amortized” = khấu hao trên CẢ DÃY thao tác (tất
 ok = all(math.floor(math.log2(m)) == (m.bit_length() - 1) for m in range(1, 5000))
 rec("C8", "PASS" if ok else "FAIL", "cây nhị phân HOÀN CHỈNH (complete) n nút cao ⌊log₂ n⌋ cạnh; “đầy đủ” (full) không xác định chiều cao")
 
-# ── C7/C29. Build-Heap O(n): tổng số lần đổi chỗ khi sift-down ≤ n (xấu nhất là mảng tăng dần cho max-heap) ──
+# ── C7/C29. Build-Heap O(n): tổng số lần đổi chỗ khi sift-down ≤ n (mảng tăng dần là MỘT trường hợp xấu cho max-heap, không phải xấu nhất: n = 8 vét cạn có hoán vị cần 7 lần, mảng tăng dần 6 — sửa 2026-11-09, đợt C) ──
 def build_heap_swaps(a):
     a = list(a); sw = 0; N = len(a)
     for s in range(N // 2 - 1, -1, -1):
@@ -520,8 +520,10 @@ rec("T29e", "PASS" if _new == [39, 39, 40, 39, 39, 40, 39, 40] and sum(_new) == 
     and sum(_new2) == 32769 and _new2.count(32) == 1023 and _new2.count(33) == 1 and _minrun_old(32769) == 33 and 32769 // 33 == 993
     and _new == [((i + 1) * 315 >> 3) - (i * 315 >> 3) for i in range(8)] else "FAIL",
     "L29 chặng 5: 315 → 39 39 40 39 39 40 39 40 (cộng dồn phần lẻ = hiệu phần nguyên), trộn 78 79 79 79 → 157 158 → 315; 32769: cũ 993 đoạn, mới 1024")
-rec("T29f", "PASS" if math.factorial(10) == 3628800 and 2 ** 26 * 8 > 500 * 10 ** 6 and 33 * 64 == 2112 and 39 * 5 + 40 * 3 == 315 else "FAIL",
-    "L29 tự kiểm và quiz: 10! = 3 628 800; 2^26 · 8 > 500 triệu; 33·64 = 2112; 5·39 + 3·40 = 315")
+# 2026-11-09 (đọc kiểm đợt C): quiz câu 1 là hàm GỘP hai danh sách đã xếp, tổng ≤ 10 phần tử → đầu vào vét cạn là cách chia n số khác
+#   nhau vào hai danh sách (2^n cách, cộng n = 0..10 = 2047), không phải 10! hoán vị (bản cũ dùng 10!, không khớp bài toán gộp).
+rec("T29f", "PASS" if sum(2 ** n for n in range(11)) == 2047 and 2 ** 26 * 8 > 500 * 10 ** 6 and 33 * 64 == 2112 and 39 * 5 + 40 * 3 == 315 else "FAIL",
+    "L29 tự kiểm và quiz: gộp ≤ 10 phần tử: Σ 2^n (n ≤ 10) = 2047 đầu vào; 2^26 · 8 > 500 triệu; 33·64 = 2112; 5·39 + 3·40 = 315")
 
 print()
 print("tổng:", {s: sum(1 for r in rows if r[1] == s) for s in ("PASS", "FIX", "FAIL")})

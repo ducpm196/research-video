@@ -96,6 +96,12 @@ Tải: blog.cloudflare.com/details-of-the-cloudflare-outage-on-july-2-2019/ (373
   after the = the engine takes 555 steps to match! (Worse, if the x= was missing, so the string was just 20 x's, the engine would take 4,067
   steps to find the pattern doesn't match).” “.*.*=.*; … To match x=x takes 90 steps instead of 23. … Matching x= followed by 20 x's takes
   5,353 steps.” (số bước đếm bằng Perl Regexp::Debugger, theo bài viết)
+- Bổ sung, đọc lại 2026-11-09 (WebFetch, đợt C): “Everything that occurred up to the point the rules were deployed was done “correctly””
+  (căn cứ bài học sai 1: “mọi bước quy trình đều đã làm đúng thủ tục”); “Because of the sensitivity of the situation we performed both
+  negative tests … in a single city using a subset of traffic after removing our paying customers’ traffic from that location.” và “At 14:52
+  we were 100% satisfied … the WAF was re-enabled globally.” (căn cứ dòng 14:52 “bật lại sau khi thử ở một thành phố”); “Changing the
+  catastrophic example .*.*=.*; to .*?.*?=.*?; doesn’t change its run time at all. … x= followed by 20 x’s still takes 5,353 steps.” (căn cứ
+  bài học sai 4 “vẫn 5353 bước”); “And the number of steps grows very quickly.” (căn cứ “còn tăng nhanh hơn”).
 - “If the original expression is changed to .*?.*?=.*? then matching x=x takes 11 steps … But laziness isn't the total solution …
   Changing the catastrophic example .*.*=.*; to .*?.*?=.*?; doesn't change its run time at all.”
 - “The solution to this problem has been known since 1968 when Ken Thompson wrote a paper … The paper describes a mechanism for converting a

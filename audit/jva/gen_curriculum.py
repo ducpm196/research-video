@@ -21,7 +21,7 @@ EX = {
     "L07": "Hai tài khoản độc lập; rút quá số dư bị từ chối nên số dư không bao giờ âm",
     "L08": "Hai chuỗi giống chữ tạo riêng: so bằng == ra false, bằng equals ra true; định dạng 1234567 thành 1,234,567",
     "L09": "Integer so bằng ==: 127 ra true, 128 ra false (bộ nhớ đệm −128..127); đếm giao dịch theo loại bằng bản đồ",
-    "L10": "Rút quá số dư ném ngoại lệ tự định nghĩa; khối finally luôn chạy; dấu vết ngăn xếp chỉ đúng dòng gây lỗi",
+    "L10": "Rút quá số dư ném ngoại lệ tự định nghĩa; khối finally chạy cả khi có lỗi lẫn khi không; dấu vết ngăn xếp chỉ đúng dòng gây lỗi",
     "L11": "Hai cách tính phí cài cùng một giao diện chạy qua một vòng lặp; hai bản ghi cùng giá trị thì equals ra true",
     "L12": "Sổ chuyển khoản 3 tài khoản: tổng tiền trước bằng tổng sau; lỗi chép nhầm biến bị bắt ngay bởi phép kiểm bất biến",
 }

@@ -108,5 +108,19 @@ Tải: www.nist.gov/news-events/news/2022/12/nist-retires-sha-1-cryptographic-al
   và 2007 (≤ 10 giây) mà [RF11] ghi.
 - Độ phức tạp tấn công SHA-1 lý thuyết năm 2005 (2^69 hay được kể lại): không đọc được nguồn → không dạy.
 - Nội dung trang shattered.io gốc: không đọc được (tên miền đổi chủ, bản lưu 429).
-- Năm phát hành Git 2.13.0 và Git 3.0: tài liệu Git không ghi ngày → bài chỉ nói “bản 2.13.0”, “bản 3.0 sắp tới”.
+- Năm phát hành Git 3.0: tài liệu Git không ghi ngày → bài nói “Git ghi kế hoạch cho bản 3.0 (đọc ngày 2/11/2026)” (sửa đợt C, 2026-11-09: bỏ “sắp tới”).
+  Git 2.13.0: thẻ v2.13.0 do Junio C Hamano ký ngày 2017-05-09T14:26:15Z (api.github.com/repos/git/git/git/tags/074ffb61…, đọc 2026-11-09) —
+  khớp nhãn chặng “2017 → 2018” của bài.
+
+## Bổ sung đợt C (đọc 2026-11-09)
+- [NI22] (WebFetch, trang nist.gov ở trên): SHA-1 “has reached the end of its useful life” (lời các chuyên gia an ninh của NIST);
+  Chris Celi: “Modules that still use SHA-1 after 2030 will not be permitted for purchase by the federal government.” → khớp
+  “đã hết tuổi thọ hữu ích” và “sau 2030 … không được mua nữa” ở chặng 5.
+- [NP] mục 5/8/2015 (WebFetch): SHA-3 dùng được “for all applications that employ secure hash algorithms”; “SHA-256 at a minimum”
+  là cho ứng dụng “requiring interoperability” → bài nay ghi đủ điều kiện “ứng dụng cần tương thích”.
+- [GB17] thân bài (curl, tách văn bản bằng Python): “a well-funded attacker can craft a collision … For example, two insurance
+  contracts with drastically different terms.” → khớp câu “hai hợp đồng khác điều khoản” ở chặng 3.
+- [RF11] §2: “new protocol designs should not employ HMAC-MD5” — bài trước ghi rộng “thiết kế mới không dùng MD5”; nay sửa đúng phạm vi.
+- [GIT] hash-function-transition: tiêu chí “2. High quality implementations should be widely available (e.g., in OpenSSL and Apple
+  CommonCrypto).” → khớp “có sẵn trong nhiều thư viện” ở chặng 4.
 - Tốc độ băm 10⁹ lần mỗi giây, 10 000 tệp, 64 bit cho khử trùng tệp: SỐ MINH HOẠ, ghi rõ trên màn hình.

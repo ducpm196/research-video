@@ -29,8 +29,18 @@ X = np.array([0, 4, 2.])
 cUX = float(R[0] @ X / np.linalg.norm(R[0]) / np.linalg.norm(X))
 pq = (S[0, 1] * 4 + cUX * 2) / (S[0, 1] + cUX)
 rec("L06f", R[0] @ X == 12 and round(np.linalg.norm(X), 3) == 4.472 and round(cUX, 3) == 0.46 and round(pq, 2) == 3.14
-    and len(common([5, 3, 0], [0, 4, 2])) == 1 and round(np.mean([4, 5, 2]), 3) == 3.667, "quiz: 0,460; 3,14; mỗi láng giềng 1 món chung; trung bình món 3,667")
+    and len(common([5, 3, 0], [0, 4, 2])) == 1 and np.mean([4, 2]) == 3, "quiz: 0,460; 3,14; mỗi láng giềng 1 món chung; trung bình món 3")
+# Sửa 2026-11-08 (đọc kiểm đợt B): câu đố “thay W bằng X” nên bảng còn U, V, X; trung bình ốp lưng là (4 + 2) / 2 = 3 — số cũ (4 + 5 + 2) / 3
+#   còn tính điểm 5 của W đã bị thay; nếu giữ W thì W lại có 2 món chung với U (tai nghe, sạc) và đáp án “không ai dùng được” sai.
 rec("L06g", sorted({"L", "M", "N"} | {"N", "O", "P", "Q"}) == list("LMNOPQ") and sum(v == "N" for v in "LMN" + "NOPQ") == 2
     and sp.binomial(10 ** 6, 2) == 499999500000, "cùng xem: hợp L…Q, N hai lần; C(10^6, 2) = 499 999 500 000")
 rec("L06h", np.dot([1, 2], [3, 4]) == 11 and np.linalg.norm([3, 4]) == 5 and round(11 / (np.sqrt(5) * 5), 3) == 0.984 and (2 * 4 + 1) / 3 == 3,
     "ôn: 11, 5, 0,984, trung bình có trọng số 3")
+# Sửa 2026-11-09 (đợt C): màn hình nay tính từ CHÍNH các số đã làm tròn hiện ra (0,606 · 4 = 2,424; 0,344 · 5 = 1,720; 4,144 / 0,950),
+#   √34 · √32 = √1088 (tích 5,831 · 5,657 đã làm tròn cho 32,986, lệch); lỗi 3 thêm bước 4 + 0,845. Cosin = cosin của góc: cùng hướng 1, vuông góc 0.
+rec("L06i", round(0.606 * 4 + 0.344 * 5, 3) == 4.144 and round(4.144 / 0.950, 2) == 4.36 == round(pred, 2)
+    and sp.sqrt(34) * sp.sqrt(32) == sp.sqrt(1088) and round(float(sp.sqrt(1088)), 3) == 32.985 and round(5.831 * 5.657, 3) == 32.986,
+    "số hiển thị: 2,424 + 1,720 = 4,144 → 4,36; √1088 ≈ 32,985 (không dùng 5,831 · 5,657 = 32,986)")
+rec("L06j", round(0.344 * 2.333 / 0.950, 3) == 0.845 == round(float(w[1] * (5 - mu[2]) / w.sum()), 3) and round(pred_c, 2) == 4.85
+    and np.isclose(np.dot([1, 2], [2, 4]) / (np.linalg.norm([1, 2]) * np.linalg.norm([2, 4])), 1) and np.dot([1, 0], [0, 1]) == 0,
+    "lỗi 3: phần lệch gộp 0,845 → 4,85; cosin cùng hướng 1, vuông góc 0")

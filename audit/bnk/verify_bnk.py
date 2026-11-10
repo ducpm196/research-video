@@ -253,6 +253,32 @@ sw_ = {"r7": 500000}
 rec("L14", 2000000 - 2 * 500000 == 1000000 and (2000000 - 500000) - 1000000 == 500000 and [k for k in bank_ if k not in sw_] == ["r7b"]
     and 1000000 + 500000 == 1500000 and (3 - 1) * 400000 == 800000 == 3000000 - alg.bnk_retry_sim(3000000, 400000, 3, False) - 400000 and alg.bnk_unique_key_rows(2) == 1, "trừ dư 500 000; r7b chỉ ở ngân hàng; đảo về 1 500 000")
 
+# ── Đợt C (2026-11-09): số mới thêm vào bài, kiểm bằng cách khác ──
+from decimal import Decimal
+# L00: BigDecimal/Decimal tạo từ số thực nhị phân mang theo sai lệch; tạo từ chuỗi thì đúng
+rec("L00", Decimal(0.1) != Decimal("0.1") and sum([Decimal("0.1")] * 10) == Decimal("1.0"), "Decimal(0.1) lệch, Decimal('0.1') cộng 10 lần ra 1.0")
+# L04: tìm nhị phân trên 1024 phần tử — 10 lần chia đôi còn 1, tối đa 11 lần so (vét cạn mọi giá trị cần tìm)
+def _bs(a, x):
+    lo, hi, c = 0, len(a) - 1, 0
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        c += 1
+        if a[mid] == x:
+            return c
+        lo, hi = (mid + 1, hi) if a[mid] < x else (lo, mid - 1)
+    return c
+_n, _k = 1024, 0
+while _n > 1:
+    _n //= 2
+    _k += 1
+rec("L04", _k == 10 and max(_bs(list(range(1024)), x) for x in range(1024)) == 11 and plan("account_id=7 AND created='2026-01-05'").startswith("SEARCH"),
+    "1024 → 1 sau 10 lần chia đôi, tối đa 11 lần so; điều kiện hai cột dùng chỉ mục")
+# L11: cùng dãy 000000500000 với đô la Mỹ (ISO 4217: 2 chữ số lẻ) là 5 000 đô la
+rec("L11", int("000000500000") // 10 ** 2 == 5000, "000000500000 xu = 5 000 đô la")
+# L13: tổng Luhn của thẻ thử bằng tách chữ số theo vị trí
+_d = [int(c) for c in reversed(pan)]
+rec("L13", sum(_d[0::2]) == 8 and sum(2 * x for x in _d[1::2][:-1]) == 14 and 2 * _d[-1] == 8 and 8 + 14 + 8 == 30, "Luhn thẻ thử: 8 + 14 + 8 = 30")
+
 bad = [c for c, ok in R if not ok]
-print(f"\nverify_bnk: {len(R) - len(bad)}/{len(R)} PASS" + (f"; FAIL: {bad}" if bad else ""))
+print(f"\nverify_bnk:{len(R) - len(bad)}/{len(R)} PASS" + (f"; FAIL: {bad}" if bad else ""))
 sys.exit(1 if bad else 0)

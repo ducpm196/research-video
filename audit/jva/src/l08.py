@@ -33,7 +33,7 @@ public class SoSanh {
         String c = "1234";                 // viết y hệt a ngay trong mã
         System.out.println(a == b);        // so mũi tên
         System.out.println(a.equals(b));   // so nội dung
-        System.out.println(a == c);        // đúng một cách tình cờ
+        System.out.println(a == c);        // đúng: hai chuỗi hằng y hệt dùng chung
     }
 }""", out="false\ntrue\ntrue")
     bat_bien = prog("BatBien", """
@@ -136,7 +136,7 @@ public class DoanChuoi {
            Thủ phạm thường là so hai chuỗi bằng dấu bằng bằng, hoặc quên bỏ khoảng trắng thừa ở hai đầu."""),
         st("""<p>Dữ liệu ngân hàng phần lớn là <b>chữ</b>: số tài khoản, tên khách, từng dòng tệp đối soát <code>0123456789;1234567</code>.</p>
 <div class="box key">Hôm nay ta học <b>chuỗi</b>: đọc, cắt, so sánh, đổi thành số và định dạng tiền cho đúng.</div>""",
-           """Dữ liệu ngân hàng phần lớn là chữ, như số tài khoản, tên khách, hay từng dòng của tệp đối soát.
+           """Dữ liệu ngân hàng phần lớn là chữ, như số tài khoản, tên khách, hay từng dòng của tệp đối soát, tức tệp hai bên gửi nhau để so khớp giao dịch.
            Hôm nay ta học chuỗi: đọc, cắt, so sánh, đổi thành số, và định dạng tiền cho đúng."""),
     ])
     sc_pre = sc("prereq", "prereq", "Ôn lại ba điều sẽ dùng hôm nay", [
@@ -188,13 +188,14 @@ public class DoanChuoi {
                txt(1140, 130, "a == b: so MŨI TÊN → false", 26, "middle", "#dc2626", True),
                txt(1140, 200, "a.equals(b): so TỪNG KÝ TỰ → true", 26, "middle", "#16a34a", True),
                txt(1140, 270, "a == c: cùng một đối tượng → true", 24, "middle", "#6b7280"),
-               txt(1140, 310, "(chỉ vì cả hai viết y hệt trong mã)", 22, "middle", "#6b7280")),
+               txt(1140, 310, "(chỉ chuỗi hằng viết y hệt trong mã mới dùng chung)", 22, "middle", "#6b7280")),
            """Chuỗi là đối tượng, nên biến chuỗi chỉ giữ mũi tên tham chiếu, giống biến mảng.
            Dấu bằng bằng so hai mũi tên, nên hai đối tượng riêng có cùng nội dung vẫn cho kết quả sai.
            Hàm so nội dung thì so từng ký tự, nên cho kết quả đúng.
-           Biến c trỏ cùng đối tượng với a chỉ vì hai chuỗi viết y hệt trong mã, đừng dựa vào điều tình cờ này."""),
+           Biến c trỏ cùng đối tượng với a vì Java dùng chung một đối tượng cho các chuỗi hằng viết y hệt ngay trong mã.
+           Chuỗi khách gõ vào, đọc từ tệp hay ghép lúc chạy thì không được dùng chung như thế, nên đừng dựa vào điều này."""),
         st(code_block(so_sanh, lines=(3, 8), title="Tệp SoSanh.java") + out_block(so_sanh),
-           """Chạy thật để kiểm. Dấu bằng bằng giữa a và b in sai, hàm so nội dung in đúng, còn a với c in đúng một cách tình cờ.
+           """Chạy thật để kiểm. Dấu bằng bằng giữa a và b in sai, hàm so nội dung in đúng, còn a với c in đúng chỉ vì hai chuỗi hằng dùng chung.
            Quy tắc rút ra là muốn so nội dung hai chuỗi thì luôn dùng hàm so nội dung.""", focus=[4, [2, 4], 2]),
     ])
     b4 = ln(bat_bien, "toUpperCase")

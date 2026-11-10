@@ -68,7 +68,7 @@ SAY_FIX = [
     ("từ khoá where", "mệnh đề điều kiện"), ("ta dùng sqlite", "ta dùng một cơ sở dữ liệu nhỏ"),
     ("Byte đầu", "Khúc đầu"), ("Byte thứ hai", "Khúc thứ hai"), ("Byte hai", "Khúc hai"), ("Byte tiếp theo", "Khúc tiếp theo"), ("hex", "thập lục phân"),
     # câu quá ngắn bị TTS/ASR làm méo (⚠ NGẮN): ghép thêm ý, giữ nguyên nghĩa
-    ("Ôn ba điều.", "Trước hết ta ôn lại ba điều sẽ dùng."), ("Ôn năm mảnh ghép.", "Trước hết ta ôn lại năm mảnh ghép sẽ dùng."),
+    ("Ôn ba điều.", "Trước hết, ta cần hiểu ba điều sẽ dùng trong bài."), ("Ôn năm mảnh ghép.", "Trước hết, ta nhắc lại từ đầu năm mảnh ghép sẽ dùng."),
     ("Đến lượt bạn. ", "Bây giờ tới phần bạn tự làm bài. "), ("Bộ đệm có thể cũ.", "Bộ đệm có thể chứa dữ liệu đã cũ."),
     ("Dịch vụ hỏi Redis trước.", "Trước tiên, dịch vụ sẽ hỏi Redis trước."), ("Kết quả khớp từng trường.", "Kết quả đọc lại khớp từng trường một."),
     ("Bảng này giải thích chênh lệch.", "Bảng này giải thích từng nguồn chênh lệch giữa hai tổng."), ("A một khớp.", "Mã a một khớp ở cả hai sổ."),

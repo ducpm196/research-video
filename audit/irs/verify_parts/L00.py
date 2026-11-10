@@ -54,3 +54,13 @@ rC5 = F(len(set(C[:5]) & gold_C), 4)
 rrC = next(F(1, i + 1) for i, d in enumerate(C) if d in gold_C)
 rec("L00j", pC5 == F(1, 5) and rC5 == F(1, 4) and rrC == F(1, 2) and F(len(set(C[:3]) & gold_C), 3) == F(1, 3) and p_at(A, 3) == F(2, 3),
     "quiz: P@5 0,2; R@5 0,25; RR 0,5; P@3 A 0,667 > C 0,333")
+# quiz câu 3 (sửa 2026-11-09): trợ lý giọng nói chỉ nói một câu trả lời → chỉ kết quả đầu tính, P@1: A 1, C 0
+rec("L00k", p_at(A, 1) == 1 and F(len(set(C[:1]) & gold_C), 1) == 0, "P@1: A 1, C 0")
+# ôn nền (sửa 2026-11-09): bảng nhầm lẫn 1000 người dựng lại từ danh sách từng người rồi đếm
+people = [("bệnh", "báo")] * 9 + [("khoẻ", "báo")] * 99 + [("bệnh", "không")] * 1 + [("khoẻ", "không")] * 891
+bao = [p for p in people if p[1] == "báo"]
+benh = [p for p in people if p[0] == "bệnh"]
+prec = F(sum(p[0] == "bệnh" for p in bao), len(bao))
+rcl = F(sum(p[1] == "báo" for p in benh), len(benh))
+rec("L00l", len(people) == 1000 and prec == F(9, 108) and round(float(prec), 3) == 0.083 and rcl == F(9, 10),
+    "bảng nhầm lẫn: 1000 người; độ chuẩn xác 9/108 ≈ 0,083; độ phủ 9/10")

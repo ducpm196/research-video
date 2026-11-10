@@ -57,3 +57,11 @@ sunnyday.mit.edu/accidents/MCO_report.pdf: hết thời gian kết nối (không
 - Tàu cháy trong khí quyển hay văng ra không gian: báo cáo ghi “either was destroyed in the atmosphere or re-entered heliocentric space”
   → bài chỉ nói “không bao giờ trở lại”.
 - Tên nhà thầu và cơ quan chỉ ở `source`/màn hình (JPL, nhà thầu) — lời đọc nói “đội dẫn đường”, “đội vận hành tàu của nhà thầu”; không nêu tên người.
+
+## Đọc lại đợt C (2026-11-09; curl, cùng URL llis.nasa.gov, HTTP 200, 1 460 534 byte; pdftotext)
+- “Signal was not reacquired following the 21 minute predicted occultation interval.” → hook nay nói rõ tín hiệu mất là theo kế hoạch
+  (tàu đi ra sau sao Hoả khoảng 21 phút), điều bất thường là mất sớm 49 giây và không trở lại.
+- “During the weeklong timeframe between TCM-4 and MOI … the first periapse distance had decreased to the range of 150-170km” → khớp dòng
+  “tuần trước khi vào quỹ đạo”. “During the 9-month journey from Earth to Mars” → khớp “9 tháng”.
+- “The Board recognizes that mistakes occur on spacecraft projects.” → bài sửa “sai sót xảy ra ở mọi dự án” thành “ở các dự án tàu vũ trụ”.
+- “The Doppler-only solutions consistently indicated a flight path insertion closer to the planet.” → khớp.

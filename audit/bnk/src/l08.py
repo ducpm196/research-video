@@ -19,13 +19,19 @@ def build():
            """Bảng này là kết quả mô phỏng ở cuối bài. Ghi có lỗi mà không bù thì tiền mất dấu. Có bước bù thì ghi nợ được hoàn lại.
            Lưu xong rồi sập trước khi báo thì không có sự kiện nào được phát, còn có Outbox thì sự kiện vẫn được phát."""),
     ])
-    pre = sc("prereq", "prereq", "Ôn lại ba điều sẽ dùng", [
+    pre = sc("prereq", "prereq", "Trước hết: những điều cần hiểu", [
         st(table(["khái niệm", "nghĩa", "ví dụ"],
-                 [["① Giao dịch cục bộ", "tất cả hoặc không gì cả, nhưng chỉ trong một cơ sở dữ liệu", "trừ và cộng trong cùng một bảng"],
-                  ["② Dịch vụ độc lập", "mỗi dịch vụ sở hữu dữ liệu riêng và có thể lỗi riêng", "dịch vụ ghi nợ, dịch vụ ghi có"],
-                  ["③ Hành động bù", "việc làm ngược lại để huỷ tác dụng của một việc đã xong", "hoàn lại tiền đã trừ"]]),
-           """Ôn ba điều. Giao dịch cục bộ bảo đảm tất cả hoặc không gì cả, nhưng chỉ trong một cơ sở dữ liệu. Dịch vụ độc lập sở hữu dữ liệu riêng và có thể lỗi riêng.
-           Hành động bù là việc làm ngược lại để huỷ tác dụng của một việc đã xong, ví dụ hoàn lại tiền đã trừ."""),
+                 [["① Giữ hạn mức", "giữ chỗ trong số tiền khách còn được chuyển trong ngày", "hạn mức ngày còn 20 triệu, giữ 500 000"],
+                  ["② Ghi nợ / ghi có", "ghi nợ: trừ tiền ở tài khoản người gửi; ghi có: cộng tiền vào tài khoản người nhận", "A −500 000, B +500 000"],
+                  ["③ Sự kiện", "thông điệp báo một việc đã xảy ra, gửi qua hệ thống chuyển thông điệp như Kafka", "“lệnh 42 đã chuyển xong”"]]),
+           """Trước hết ta cần hiểu vài điều. Giữ hạn mức là giữ chỗ trong số tiền khách còn được chuyển trong ngày. Ghi nợ là trừ tiền ở tài khoản người gửi, còn ghi có là cộng tiền vào tài khoản người nhận.
+           Sự kiện là một thông điệp báo một việc đã xảy ra, được gửi qua một hệ thống chuyển thông điệp như Kafka, ví dụ lệnh bốn mươi hai đã chuyển xong."""),
+        st(table(["khái niệm", "nghĩa", "ví dụ"],
+                 [["④ Giao dịch cục bộ", "tất cả hoặc không gì cả, nhưng chỉ trong một cơ sở dữ liệu", "trừ và cộng trong cùng một bảng"],
+                  ["⑤ Dịch vụ độc lập", "một chương trình chạy riêng, nhận yêu cầu qua mạng, sở hữu dữ liệu riêng và có thể lỗi riêng", "dịch vụ ghi nợ, dịch vụ ghi có"],
+                  ["⑥ Hành động bù", "việc làm ngược lại để huỷ tác dụng của một việc đã xong", "hoàn lại tiền đã trừ"]]),
+           """Giao dịch cục bộ bảo đảm tất cả hoặc không gì cả, nhưng chỉ trong một cơ sở dữ liệu. Dịch vụ độc lập là một chương trình chạy riêng, nhận yêu cầu qua mạng, sở hữu dữ liệu riêng và có thể lỗi riêng.
+           Hành động bù là việc làm ngược lại để huỷ tác dụng của một việc đã xong, ví dụ hoàn lại tiền đã trừ.""", clear=True),
         st("""$$+500\\,000 - 500\\,000 = 0$$""",
            """Một ví dụ cho hành động bù. Trừ năm trăm nghìn rồi hoàn lại năm trăm nghìn, tổng bằng không, như chưa từng trừ."""),
     ], checks=["500000 - 500000 == 0"])

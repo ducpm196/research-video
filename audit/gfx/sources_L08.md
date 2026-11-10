@@ -18,3 +18,8 @@
 ## Điều KHÔNG dạy / NOT_VERIFIED
 - Không dạy các đường cong truyền của dải động cao (PQ SMPTE ST 2084 hay HLG) và không gian màu rộng (Display P3, Rec. 2020) — bài tập trung vào nguyên lý cốt lõi giữa không gian tuyến tính và mã hoá gamma chuẩn 8 bit.
 - Các ví dụ trộn hai đèn và hai điểm ảnh là SỐ MINH HOẠ để tính trực tiếp trên công thức chuẩn IEC 61966-2-1.
+
+## Đối chiếu nguồn mở (đợt C, 2026-11-09)
+- Bản chuẩn IEC 61966-2-1 không mở miễn phí. Đối chiếu bằng [GL46] OpenGL 4.6 Core Profile (Khronos, 5/5/2022, https://registry.khronos.org/OpenGL/specs/gl/glspec46.core.pdf, đọc 2026-11-09): §8.24 “sRGB Texture Color Conversion”, phương trình (8.17): cl = cs/12,92 khi cs ≤ 0,04045, cl = ((cs + 0,055)/1,055)^2,4 khi cs > 0,04045; §17.3.7 “sRGB Conversion”, phương trình (17.1): cs = 12,92·cl khi 0 < cl < 0,0031308, cs = 1,055·cl^0,41666 − 0,055 khi 0,0031308 ≤ cl < 1 — trùng hằng số bài dùng (0,41666 ≈ 1/2,4).
+- Cùng §8.24, nguyên văn: “Ideally, implementations should perform this color conversion on each sample prior to filtering … (though this post-filtering approach is inferior to converting from sRGB prior to filtering)” — ủng hộ lỗi 1 của bài (lọc và tạo mức thu nhỏ phải làm trên giá trị tuyến tính).
+- Đợt C sửa: ghi chú đoạn thẳng 12,92 nói “độ dốc hữu hạn tại c = 0” (mơ hồ) → hàm ngược (mã hoá) có độ dốc hữu hạn tại 0; thêm định nghĩa bản đồ pháp tuyến (toạ độ = 2c − 1) và bản đồ độ nhám.

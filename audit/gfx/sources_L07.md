@@ -18,3 +18,8 @@
 ## Điều KHÔNG dạy / NOT_VERIFIED
 - Không đi sâu công thức elip của lọc dị hướng (*anisotropic filtering* / EWA của Heckbert 1989) — chỉ nêu nguyên lý khi nhìn nghiêng một ô điểm ảnh chiếu lên kết cấu thành hình kéo dài chứ không vuông, để người học biết khi nào cần bật lọc theo hướng nhìn.
 - Các giá trị điểm kết cấu (10, 20, 30, 40; bàn cờ đen trắng 0 và 200) là SỐ MINH HOẠ để tính tay và kiểm chứng bằng `alg.gfx_bilinear` và `alg.gfx_mipmap_stats`.
+
+## Đối chiếu nguồn mở (đợt C, 2026-11-09)
+- [GL46] OpenGL 4.6 Core Profile (Khronos, 5/5/2022, https://registry.khronos.org/OpenGL/specs/gl/glspec46.core.pdf, đọc 2026-11-09) §8.14.3 “Mipmapping”: “A mipmap is an ordered set of arrays representing the same image; each array has a resolution lower than the previous one”, mỗi mức tăng một là “an array of half the dimensions of the previous one” — khớp số mức log₂N + 1 (1024 → 11 mức) của bài; bộ lọc LINEAR_MIPMAP_LINEAR là lọc ba tuyến.
+- Đợt C viết lại phần định lý lấy mẫu (trước đây chỉ nêu tên kèm tên khoá khác): định nghĩa lấy mẫu, điều kiện “lớn hơn hai lần tần số cao nhất”, ví dụ sọc 0, 200 lặp mỗi 2 điểm kết cấu lấy mẫu mỗi 2 điểm → mọi mẫu bằng 0 (giống mặt đen phẳng), có `checks`. Điều kiện Nyquist là kiến thức chuẩn của xử lý tín hiệu (Shannon 1949); chưa mở bản gốc trong đợt này.
+- Đợt C sửa: “tức đúng một phần ba” → xấp xỉ (349 525 / 1 048 576 = 0,333332); thêm định nghĩa lọc ba tuyến và lọc theo hướng nhìn; làm mềm “dập tắt / chữa dứt / khử sạch” sọc lấp lánh.

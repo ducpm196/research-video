@@ -90,6 +90,10 @@ chặn tải, trang kdd.org trả tệp rỗng). DOI 10.1145/3097983.3098021.
 - §7: “Training from scratch can take several days to converge to a high-quality model”. “The model validation component tests the new
   model against the production model, preventing issues like accidentally pushing partially-trained models to serving because of system
   failures.”
+- (Bổ sung 2026-11-08, đọc lại PDF bằng pdftotext.) §6.1: “This configuration supports faster request processing consistently,
+  trading off slower model-loads.” → lời đọc “đổi lại việc nạp mô hình chậm hơn”. §4.1: warm-starting “can result in models of same
+  quality as one would obtain after training for many hours in much less time and fewer resources” → “cùng chất lượng, ít tài nguyên hơn”.
+  §7 “The typical training dataset size is hundreds of billions of examples” → bài sửa “mỗi tập” thành “một tập điển hình”.
 
 ## [TH20] K. Katsiapis và cộng sự (Google), *Towards ML Engineering: A Brief History Of TensorFlow Extended (TFX)*, arXiv:2010.02013, 2020
 Tải: arxiv.org/pdf/2010.02013 (PDF 16 trang, 492 477 byte).
@@ -130,6 +134,17 @@ Tải: arxiv.org/pdf/2010.02013 (PDF 16 trang, 492 477 byte).
 - Where We Are Going (2020): “auto-detecting surprising model behavior on multidimensional slices, facilitating automatic production of Model
   Cards [67, 68] and improving our training-serving skew detection capabilities.” “we will make an effort to distinguish the battle-tested
   from the experimental aspects of our technology”.
+
+- (Đối chiếu lại 2026-11-09, đợt C: tải lại arxiv.org/pdf/2010.02013, `pdftotext`.) Backfilling, nguyên văn: “the user might need to
+  rerun the pipeline on existing artifacts but using updated versions of the components, such as rerunning the trainer on existing data
+  using a new version of the modeling code/library. Another use of backfilling is rerunning the pipeline with new versions of existing
+  data, say, to fix an error in the data.” → câu bài “chạy bù khi sửa dữ liệu hay đổi thư viện” khớp. Cũng khớp lại: “It was in
+  production for ~14 years”; “effort that is super-linear to the number of dependencies”.
+- (Đợt C) [SC15] §1 ghi “relatively fast and cheap” → bài thêm chữ “tương đối”. [TX17] §5.5 “no product teams actively requested …
+  when the component was first built” → bài viết “bài viết năm 2017 kể: khi … mới làm xong”, không gán sự việc vào năm 2017.
+  [TX17] §3 “users tend to switch off” → “thường tắt”, không “sẽ tắt”. Hai câu [SC15], [TX17] này đối chiếu theo trích dẫn đã ghi ở trên
+  (không tải lại được PDF NeurIPS trong đợt C: kết nối bị từ chối; thử lại 2026-11-10 bằng curl và WebFetch: papers.nips.cc
+  ECONNREFUSED 198.202.70.94:443 → vẫn dựa trên trích dẫn toàn văn đã ghi ở trên từ lần đọc trước).
 
 ## Điều KHÔNG dạy (nguồn không ghi)
 - Nhãn các khối trong Hình 1 của [SC15] (ảnh, không trích được chữ): không chép; bài vẽ thanh tỉ lệ 5/95 tính lại.

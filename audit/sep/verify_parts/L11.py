@@ -62,3 +62,6 @@ while rest < 100000:
 rec("L11f", month == 25 and m2 == 14 and dt.date(2026, 1, 1).replace(year=2031) == dt.date(2031, 1, 1) and 12 // 6 == 2
     and 4000 * 24 < 100000 <= 4000 * 25,
     "chặng 5: 4000 người/tháng chạm 100 000 ở tháng 25; quiz: 30 000 + 5000/tháng → 14 tháng; 1/1/2031; 2 lần cập nhật/năm")
+# Thêm 2026-11-09 (đợt C): chặng 2 nay hiện số của bộ B (4000 tổ hợp → ≈ 0,29) thay cho chữ “thấp hơn”; gộp theo mã hồ sơ chung.
+rec("L11g", round(math.exp(4999 * math.log1p(-1 / 4000)), 2) == 0.29 and 80 * 50 == 4000,
+    "chặng 2: bộ B {năm sinh, tổ} 4000 tổ hợp, 5000 người → (1 − 1/4000)^4999 ≈ 0,29 (qua log1p)")

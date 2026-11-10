@@ -13,13 +13,15 @@ def build():
            """Bảng này là kết quả mô phỏng ở cuối bài. Xử lý rồi mới ghi nhớ thì thông điệp số hai được xử lý hai lần, gọi là ít nhất một lần.
            Ghi nhớ rồi mới xử lý thì có thể mất, gọi là nhiều nhất một lần. Hôm nay ta học cách sống chung với chuyện này."""),
     ])
-    pre = sc("prereq", "prereq", "Ôn lại ba điều sẽ dùng", [
+    pre = sc("prereq", "prereq", "Trước hết: bốn điều cần hiểu", [
         st(table(["khái niệm", "nghĩa", "ví dụ"],
-                 [["① Nhật ký chỉ thêm", "chỉ ghi nối vào cuối, không sửa dòng cũ", "thông điệp 0, 1, 2, 3, …"],
-                  ["② Số thứ tự (offset)", "vị trí của mỗi thông điệp trong nhật ký", "thông điệp thứ 2 có offset 2"],
-                  ["③ Băm chia dư", "biến khoá thành số rồi chia dư để chọn một nhóm", "mã băm 13 chia 6 dư 1 → nhóm 1"]]),
-           """Ôn ba điều. Nhật ký chỉ thêm là chỉ ghi nối vào cuối, không sửa dòng cũ. Số thứ tự cho biết vị trí của mỗi thông điệp trong nhật ký.
-           Còn băm chia dư là biến khoá thành một số rồi chia dư để chọn một nhóm, ví dụ mười ba chia sáu dư một thì vào nhóm một."""),
+                 [["① Kafka và thông điệp", "Kafka là hệ thống chuyển thông điệp: bên gửi ghi thông điệp (một gói dữ liệu báo việc gì đó) vào nhật ký, bên đọc lấy ra xử lý", "“TK-1001 vừa nạp 50 000”"],
+                  ["② Nhật ký chỉ thêm", "chỉ ghi nối vào cuối, không sửa dòng cũ", "thông điệp 0, 1, 2, 3, …"],
+                  ["③ Số thứ tự (offset)", "vị trí của mỗi thông điệp trong nhật ký", "thông điệp thứ 2 có offset 2"],
+                  ["④ Khoá thông điệp và băm chia dư", "khoá (key) là nhãn đi kèm thông điệp, ví dụ số tài khoản; hàm băm biến khoá thành một số (cùng khoá luôn ra cùng số), rồi chia dư để chọn nhóm", "mã băm 13 chia 6 dư 1 → nhóm 1"]]),
+           """Trước hết ta cần hiểu bốn điều. Kafka là hệ thống chuyển thông điệp. Bên gửi ghi thông điệp, tức một gói dữ liệu báo việc gì đó, vào nhật ký, còn bên đọc lấy ra xử lý.
+           Nhật ký chỉ thêm là chỉ ghi nối vào cuối, không sửa dòng cũ. Số thứ tự cho biết vị trí của mỗi thông điệp trong nhật ký.
+           Khoá thông điệp là nhãn đi kèm, ví dụ số tài khoản. Hàm băm biến khoá thành một số, và cùng khoá luôn ra cùng số. Rồi ta chia dư để chọn một nhóm, ví dụ mười ba chia sáu dư một thì vào nhóm một."""),
         st("""$$13 = 2 \\cdot 6 + 1$$""",
            """Kiểm phép chia dư. Mười ba bằng hai nhân sáu cộng một, nên mười ba chia sáu dư một."""),
     ], checks=["13 == 2 * 6 + 1 and 13 % 6 == 1"])
@@ -85,9 +87,11 @@ $$② \\; \\frac{6}{2} = \\hl{3}\\ \\text{phân vùng mỗi người}$$""",
         st("""<p>Thêm người cho đủ $8$ bộ đọc.</p>
 $$③ \\; 8 - 6 = \\hl{2}\\ \\text{người ngồi không}$$""",
            """Tình huống ba, thêm người cho đủ tám bộ đọc. Chỉ có sáu phân vùng nên hai người ngồi không, tám trừ sáu bằng hai."""),
-        st("""<p>Năm thông điệp $0..4$. Sập ở thông điệp $2$, thứ tự <b>xử lý rồi ghi nhớ</b>.</p>
-$$④ \\; \\text{số lần xử lý} = [1, 1, \\hl{2}, 1, 1]\\quad \\text{tổng } 6$$""",
-           """Tình huống bốn, năm thông điệp từ không tới bốn, sập ở thông điệp hai, thứ tự xử lý rồi ghi nhớ. Số lần xử lý là một, một, hai, một, một, tổng cộng sáu lần cho năm thông điệp.""", clear=True),
+        st("""<p>Năm thông điệp $0..4$, ghi nhớ vị trí sau từng thông điệp. Sập ở thông điệp $2$, thứ tự <b>xử lý rồi ghi nhớ</b>.</p>
+$$④ \\; \\text{số lần xử lý} = [1, 1, \\hl{2}, 1, 1]\\quad \\text{tổng } 6$$
+<p class="small">Ghi nhớ theo lô nhiều thông điệp một lần thì còn nhiều thông điệp bị xử lý lại hơn.</p>""",
+           """Tình huống bốn, năm thông điệp từ không tới bốn, và bộ đọc ghi nhớ vị trí sau từng thông điệp. Sập ở thông điệp hai, thứ tự xử lý rồi ghi nhớ. Số lần xử lý là một, một, hai, một, một, tổng cộng sáu lần cho năm thông điệp.
+           Nếu ghi nhớ theo lô nhiều thông điệp một lần, số thông điệp bị xử lý lại còn nhiều hơn.""", clear=True),
         st("""<p>Cùng tình huống nhưng <b>ghi nhớ rồi xử lý</b>.</p>
 $$⑤ \\; \\text{số lần xử lý} = [1, 1, \\hl{0}, 1, 1]\\quad \\text{tổng } 4$$""",
            """Tình huống năm, cùng tình huống nhưng ghi nhớ rồi mới xử lý. Số lần xử lý là một, một, không, một, một, tổng bốn lần, tức là mất thông điệp số hai."""),

@@ -45,6 +45,7 @@
 
 ## Điều KHÔNG dạy (nguồn không ghi / không đọc được)
 - “Cuộc thi kết thúc năm 2017”: trang image-net.org không kết nối được (curl hết thời gian, 2026-11-03) → NOT_VERIFIED, bài không nói.
+- BN-0038 (đọc kiểm đợt C, 2026-11-09): câu cũ “bộ thử 100 000 ảnh giữ nguyên từ 2012” (ngầm tới 2017). [RU15] chỉ ghi “The dataset has not changed since 2012” và bảng 2 “ILSVRC2012-14 … 100,000” → kiểm được tới 2014. Trang image-net.org/challenges/LSVRC/2017/ thử lại 2026-11-09: ECONNREFUSED (WebFetch và curl); bộ tìm kiếm tóm tắt trang 2015–2017 là “data … remain unchanged from ILSVRC 2012” nhưng KHÔNG mở được trang gốc → NOT_VERIFIED. Bài viết mềm: “không đổi từ 2012 tới 2014 (bài tổng kết năm 2015)”; chặng 5 bước 3 và chặng 4 bước 2 ghi rõ giả định “nếu bộ thử vẫn 100 000 ảnh” / “tính trên mỗi 100 000 ảnh”.
 - “Máy giỏi hơn người”: không nói; nguồn chỉ có một người chú thích trên 1500 ảnh.
 - Tỉ lệ ~15% nhãn sai trong số ảnh còn bị chấm sai năm 2017 là PHÉP TÍNH CỦA BÀI (giả định tỉ lệ 5/1500 đúng cho cả bộ thử), đã ghi rõ trong lời đọc.
 - Chặng 2012 không kể hai thẻ đồ hoạ (đã ở PAR bài 13).

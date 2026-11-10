@@ -170,6 +170,21 @@ def build():
            """Ta ghép ba công cụ đã học. Thứ nhất, lớp giấu dữ liệu để giữ bất biến, và bản ghi để chở một lệnh chuyển.
            Thứ hai, bản đồ từ số tài khoản tới số dư, với phương thức lấy trả giá trị rỗng khi không có khoá.
            Thứ ba, ngoại lệ tự định nghĩa cho trường hợp không đủ tiền, và cách đọc dấu vết từ trên xuống."""),
+        st(table(["khái niệm", "nghĩa bằng lời thường"],
+                 [["bản ghi <code>record</code>", "kiểu chỉ để chở dữ liệu: khai báo các thành phần một lần, máy tự sinh phương thức lấy "
+                   "từng thành phần (như <code>l.tu()</code>) và cách in <code>Lenh[tu=A, den=B, tien=300000]</code>"],
+                  ["lớp bọc <code>Long</code>", "<code>long</code> là số nguyên thường, luôn có một giá trị; <code>Long</code> là một đối tượng "
+                   "bọc một số <code>long</code>, nên có thể là <code>null</code>. Bản đồ chỉ chứa đối tượng nên dùng <code>Long</code>; "
+                   "gán sang <code>long</code> thì máy tự lấy số ra, gặp <code>null</code> thì ném lỗi, nên phải kiểm <code>null</code> trước"],
+                  ["<code>throws KhongDuTien</code>", "<code>KhongDuTien</code> kế thừa <code>Exception</code> nên là ngoại lệ <b>phải khai báo</b>: "
+                   "phương thức có thể ném nó ghi <code>throws</code>, nơi gọi buộc phải bắt bằng <code>catch</code>. "
+                   "<code>IllegalArgumentException</code>, <code>IllegalStateException</code> là lỗi lúc chạy, không phải khai báo"]]),
+           """Nhắc lại ba khái niệm sẽ gặp trong mã.
+           Bản ghi là kiểu chỉ để chở dữ liệu, ta khai báo các thành phần một lần, và máy tự sinh phương thức lấy từng thành phần cùng cách in ra.
+           Kiểu số nguyên thường luôn có một giá trị, còn lớp bọc của nó là một đối tượng chứa một số, nên có thể là giá trị rỗng.
+           Bản đồ chỉ chứa đối tượng nên dùng lớp bọc, và phải kiểm giá trị rỗng trước khi lấy số ra, nếu không chương trình sẽ ném lỗi.
+           Ngoại lệ không đủ tiền thuộc loại phải khai báo, nên phương thức chuyển ghi rõ là có thể ném nó, và nơi gọi buộc phải bắt.
+           Hai ngoại lệ đối số sai và trạng thái sai thuộc loại lỗi lúc chạy, nên không phải khai báo.""", clear=True),
     ])
     sc_sym = sc("sym", "symbol", "Giải mã thiết kế: các phần của sổ", [
         st(code_block(so, lines=(ln(so, "class KhongDuTien"), ln(so, "record Lenh")), title="Hai kiểu dữ liệu đầu tệp") + table(["phần", "việc"],
@@ -199,7 +214,7 @@ def build():
         st(table(["bút toán", "thay đổi"], [["trừ bên gửi A", "$-300\\,000$"], ["cộng bên nhận B", "$+300\\,000$"],
                                             ["tổng thay đổi", "$-300\\,000 + 300\\,000 = \\hlg{0}$"]])
            + "<p>Hai quy tắc: <b>kiểm tra trước, sửa sau</b> (bị từ chối thì chưa chạm vào số dư nào), và <b>kiểm bất biến sau mỗi lệnh</b>.</p>",
-           """Một lần chuyển gồm hai bút toán: trừ bên gửi và cộng bên nhận cùng một số tiền, nên tổng thay đổi bằng không.
+           """Một lần chuyển gồm hai bút toán, tức hai dòng ghi tăng hoặc giảm số dư: trừ bên gửi và cộng bên nhận cùng một số tiền, nên tổng thay đổi bằng không.
            Từ đó có hai quy tắc. Kiểm tra trước, sửa sau, để lệnh bị từ chối không chạm vào số dư nào.
            Và kiểm bất biến sau mỗi lệnh, để lỗi lộ ra ngay tại lệnh gây ra nó.""", clear=True),
     ])
@@ -274,13 +289,31 @@ def build():
            + code_block(nuot, lines=(ln(nuot, "catch (Exception e)"), ln(nuot, "catch (Exception e)") + 2)) + out_block(nuot),
            """Lỗi thứ hai, của người đã đi làm, là sửa bằng cách thêm khối bắt mọi ngoại lệ rồi bỏ qua, cho chương trình khỏi dừng.
            Chương trình chạy hết, nhưng tổng thành bốn triệu chín trăm nghìn: gần hai triệu tự sinh ra, không ai được báo.""", clear=True),
+        st(table(["lệnh (lỗi gài vẫn còn)", "số dư sau lệnh", "in ra"],
+                 [["A → B 300 000", "A = 700 000; B = <b>số dư cũ của A</b> + 300 000 = 1 300 000", "phương thức kiểm ném, bị nuốt: không in OK"],
+                  ["B → C 1 000 000", "B có 1 300 000 nên qua kiểm tra: B = 300 000; C = 1 300 000 + 1 000 000 = 2 300 000", "bị nuốt: không in"],
+                  ["A → X 50 000", "không đổi", "SAI LENH Khong co tai khoan X"],
+                  ["C → A 200 000", "C = 2 100 000; A = 2 300 000 + 200 000 = 2 500 000", "bị nuốt: không in"]])
+           + "$$2\\,500\\,000 + 300\\,000 + 2\\,100\\,000 = \\hl{4\\,900\\,000}$$",
+           """Lần theo từng lệnh để thấy gần hai triệu từ đâu ra.
+           Lệnh một trừ A còn bảy trăm nghìn, nhưng B nhận số dư cũ của A cộng ba trăm nghìn, thành một triệu ba trăm nghìn.
+           Phương thức kiểm ném ngoại lệ, khối bắt nuốt mất, nên dòng thành công không được in.
+           Lệnh hai, B lúc này có một triệu ba trăm nghìn nên qua kiểm tra, và B còn ba trăm nghìn.
+           C nhận một triệu ba trăm nghìn cộng một triệu, thành hai triệu ba trăm nghìn, và lại bị nuốt.
+           Lệnh ba sai tài khoản nên in sai lệnh.
+           Lệnh bốn, C còn hai triệu một trăm nghìn, còn A nhận hai triệu ba trăm nghìn cộng hai trăm nghìn, thành hai triệu rưỡi.
+           Cộng ba số dư được bốn triệu chín trăm nghìn, đúng dòng chương trình in ra.""", clear=True),
         st('<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Chỉ đối soát cuối ngày, không kiểm sau mỗi lệnh.</div>'
            + out_block(cuoi, "Chạy thì máy ảo in"),
-           """Lỗi thứ ba là chỉ đối soát cuối ngày. Lệnh B sang C lẽ ra bị từ chối, vẫn chạy được vì số dư đã sai từ lệnh trước.
+           """Lỗi thứ ba là chỉ đối soát, tức so lại tổng tiền, vào cuối ngày. Lệnh B sang C lẽ ra bị từ chối, vẫn chạy được vì số dư đã sai từ lệnh trước.
            Cuối ngày mới biết lệch, và dấu vết chỉ trỏ về hàm chính, không biết lệnh nào gây ra.
            Kiểm sau mỗi lệnh thì dấu vết trỏ đúng lệnh đầu tiên, như ta vừa thấy.""", clear=True),
     ], checks=["700000 + (1000000 + 300000) + 1500000 == 3500000", "3500000 - 3000000 == 1000000 - 500000",
-               "4900000 - 3000000 == 1900000"])
+               "4900000 - 3000000 == 1900000",
+               "1000000 - 300000 == 700000 and 1000000 + 300000 == 1300000",
+               "1000000 <= 1300000 and 1300000 - 1000000 == 300000 and 1300000 + 1000000 == 2300000",
+               "2300000 - 200000 == 2100000 and 2300000 + 200000 == 2500000",
+               "2500000 + 300000 + 2100000 == 4900000"])
     sc_quiz = sc("quiz", "quiz", "Bây giờ tới phần bạn tự làm", [
         st(code_block(quiz, lines=(ln(quiz, "SoCai so = new SoCai()"), ln(quiz, "\"A\", \"C\", 1000000")), title="Sổ đã sửa, ba lệnh mới: đoán năm dòng in ra"),
            """Bây giờ tới phần bạn tự làm. Sổ đã sửa đúng, số dư đầu vẫn là một triệu, năm trăm nghìn và một triệu rưỡi.
@@ -306,10 +339,11 @@ def build():
 mỗi thao tác, và để vi phạm <b>lộ ra ngay</b> kèm dấu vết.</div>""",
            """Điều cần mang theo. Mỗi hệ thống tiền có một bất biến, ở đây là tổng không đổi.
            Hãy viết nó thành mã, kiểm sau mỗi thao tác, và để vi phạm lộ ra ngay kèm dấu vết."""),
-        st("""<p>Bạn đã đi hết khoá JVA: từ dòng in đầu tiên tới một sổ chuyển khoản có kiểm bất biến.</p>
-<div class='box key'>Khoá học tiếp theo trong chương trình là khoá BNK, bắt đầu từ bộ nhớ và bộ thu gom rác.</div>""",
-           """Bạn đã đi hết khoá học, từ dòng in đầu tiên tới một sổ chuyển khoản có kiểm bất biến.
-           Khoá học tiếp theo trong chương trình là khoá B N K, bắt đầu từ bộ nhớ và bộ thu gom rác.""", forward_ref=True),
+        st("""<p>Bạn đã đi hết mười ba bài của khoá học này: từ dòng in đầu tiên tới một sổ chuyển khoản có kiểm bất biến.</p>
+<div class='box key'>Chủ đề nên tìm hiểu tiếp: máy ảo Java cấp và thu hồi bộ nhớ cho các đối tượng thế nào (bộ thu gom rác, tức phần tự dọn đối tượng không còn ai dùng).</div>""",
+           """Bạn đã đi hết mười ba bài của khoá học này, từ dòng in đầu tiên tới một sổ chuyển khoản có kiểm bất biến.
+           Chủ đề nên tìm hiểu tiếp là máy ảo Java cấp và thu hồi bộ nhớ cho các đối tượng thế nào.
+           Trong đó có bộ thu gom rác, tức phần tự dọn những đối tượng không còn ai dùng."""),
     ])
     return lesson("L12", "so_chuyen_khoan", "Bài 12 — Tình huống chuyên gia: sổ chuyển khoản nhỏ",
                   "curriculum/jva.yaml L12; audit/jva/verify_jva.py L12 (javac/java chạy thật, kể cả dấu vết lỗi với số dòng tính từ mã); "

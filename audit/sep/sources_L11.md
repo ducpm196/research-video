@@ -117,3 +117,8 @@ Tải: https://hcc.nghean.gov.vn/laws/detail/Nghi-dinh-so-356-2025-ND-CP-cua-Chi
   “doanh nghiệp nhỏ, khởi nghiệp” (văn bản khác, chưa đọc).
 - Không dạy “số lượng lớn chủ thể” của Luật bằng con số nào khác ngoài ngưỡng 100 nghìn mà Nghị định 356 Điều 41 nêu.
 - Nghiên cứu năm 2000: không kể giai thoại về một chính trị gia cụ thể (không nêu tên cá nhân; chưa trích trong phiên).
+
+## Đọc lại đợt C (2026-11-09)
+- vanban.chinhphu.vn docid=214590 (HTTP 200): trường “Ngày ban hành 26-06-2025”, “Ngày có hiệu lực 01-01-2026” — khớp. Không mở lại các
+  bản PDF ký số (ảnh quét) và Nghị định 356/2025; giữ theo câu trích ở trên (đọc 2026-11-02).
+- GDPR, Đạo luật AI của EU: bài vẫn không dạy điều khoản nào (không có câu nào trong bài nói về hai văn bản này) — không cần đối chiếu.

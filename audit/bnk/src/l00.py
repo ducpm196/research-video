@@ -12,25 +12,32 @@ def build():
            """Một dịch vụ khác chạy tốt vài ngày, rồi báo hết bộ nhớ và sập, dù mã không có lỗi cú pháp nào.
            Cả hai lỗi đều có gốc ở một chỗ, là hiểu sai cách Java giữ dữ liệu."""),
     ])
-    sc_pre = sc("prereq", "prereq", "Ôn lại ba điều sẽ dùng", [
+    sc_pre = sc("prereq", "prereq", "Trước hết: sáu khái niệm cần hiểu", [
         st(table(["khái niệm", "nghĩa", "ví dụ"],
                  [["① Biến", "cái tên gắn với một giá trị", "<code>int a = 5</code>: tên a giữ số năm"],
-                  ["② Đối tượng", "gói dữ liệu cùng việc nó làm được", "tài khoản có số dư 100"],
-                  ["③ Tham chiếu", "cái tên trỏ tới đối tượng", "địa chỉ nhà trỏ tới ngôi nhà"]]),
-           """Trước hết ta ôn ba điều. Điều thứ nhất, biến là một cái tên gắn với một giá trị, ví dụ tên a giữ số năm.
-           Điều thứ hai, đối tượng là một gói dữ liệu kèm việc nó làm được, ví dụ một tài khoản có số dư một trăm.
-           Điều thứ ba, tham chiếu là cái tên trỏ tới đối tượng, giống địa chỉ trỏ tới ngôi nhà."""),
-        st("""<p>Một đơn vị đo bộ nhớ: $1\\,\\text{KB} = 1024$ byte, và $1\\,\\text{MB} = 1024 \\cdot 1024 = 1\\,048\\,576$ byte.</p>""",
-           """Thêm một đơn vị đo: một ki lô byte bằng một nghìn không trăm hai mươi bốn byte, và một mê ga byte là số đó nhân với chính nó.""",
+                  ["② Lớp", "bản thiết kế: nói một loại đồ vật có những dữ liệu gì, làm được việc gì", "lớp <code>TaiKhoan</code>"],
+                  ["③ Đối tượng", "một đồ vật cụ thể làm theo bản thiết kế lớp", "tài khoản có số dư 100"]]),
+           """Trước hết ta cần hiểu ba điều. Điều thứ nhất, biến là một cái tên gắn với một giá trị, ví dụ tên a giữ số năm.
+           Điều thứ hai, lớp là một bản thiết kế, nói một loại đồ vật có những dữ liệu gì và làm được việc gì, ví dụ lớp tài khoản.
+           Điều thứ ba, đối tượng là một đồ vật cụ thể làm theo bản thiết kế đó, ví dụ một tài khoản có số dư một trăm."""),
+        st(table(["khái niệm", "nghĩa", "ví dụ"],
+                 [["④ Trường", "một ô dữ liệu bên trong đối tượng", "trường <code>soDu</code> giữ 100"],
+                  ["⑤ Phương thức", "một việc đối tượng làm được, gọi bằng dấu chấm", "<code>s.equals(t)</code>: hỏi s có cùng nội dung với t không"],
+                  ["⑥ Tham chiếu", "giá trị chỉ đường tới một đối tượng; biến giữ tham chiếu chứ không giữ cả đối tượng", "tờ giấy ghi địa chỉ nhà, không phải ngôi nhà"]]),
+           """Thêm ba điều nữa. Trường là một ô dữ liệu bên trong đối tượng, ví dụ trường số dư giữ một trăm.
+           Phương thức là một việc đối tượng làm được, và ta gọi nó bằng dấu chấm, ví dụ hỏi chuỗi s có cùng nội dung với chuỗi t không.
+           Còn tham chiếu là giá trị chỉ đường tới một đối tượng, giống tờ giấy ghi địa chỉ nhà, chứ không phải chính ngôi nhà.""", clear=True),
+        st("""<p>Một đơn vị đo bộ nhớ (cách tính quen dùng cho bộ nhớ): $1\\,\\text{KB} = 1024$ byte, và $1\\,\\text{MB} = 1024 \\cdot 1024 = 1\\,048\\,576$ byte.</p>""",
+           """Thêm một đơn vị đo, theo cách tính quen dùng cho bộ nhớ: một ki lô byte bằng một nghìn không trăm hai mươi bốn byte, và một mê ga byte là số đó nhân với chính nó.""",
            introduces=["cdot"]),
     ], checks=["1024 * 1024 == 1048576"])
     sc_sym = sc("sym", "symbol", "Giải mã vài chữ trong mã Java", [
         st("""<table class='t'><tr><th>viết</th><th>nghĩa</th></tr>
-<tr><td><code>new TaiKhoan()</code></td><td>tạo một đối tượng mới trên heap</td></tr>
+<tr><td><code>new TaiKhoan()</code></td><td>tạo một đối tượng mới của lớp <code>TaiKhoan</code> trên heap</td></tr>
 <tr><td><code>tk</code></td><td>tên biến giữ tham chiếu tới đối tượng</td></tr>
 <tr><td><code>tk.soDu</code></td><td>dấu chấm: đi theo tham chiếu tới trường <code>soDu</code> của đối tượng</td></tr>
 <tr><td><code>a == b</code></td><td>so hai tham chiếu có trỏ cùng một đối tượng không</td></tr></table>""",
-           """Bảng này giải mã bốn mẫu chữ hay gặp. Từ khoá tạo đối tượng sinh ra một đối tượng mới trên vùng nhớ heap.
+           """Bảng này giải mã bốn mẫu chữ hay gặp. Từ khoá tạo đối tượng sinh ra một đối tượng mới của lớp tài khoản trên vùng nhớ heap.
            Biến tài khoản giữ tham chiếu tới đối tượng đó. Dấu chấm nghĩa là đi theo tham chiếu để tới một trường bên trong.
            Còn hai dấu bằng so xem hai tham chiếu có trỏ cùng một đối tượng hay không."""),
     ])
@@ -63,9 +70,10 @@ def build():
            A, B và C tới được từ gốc nên được giữ. D, E và F không còn đường nào tới, nên là rác và sẽ bị dọn."""),
     ])
     sc_form = sc("formula", "formula", "Suy ra từng bước: đánh dấu rồi quét", [
-        st("""<p><b>Bước 1. Chọn các gốc.</b> Gốc là những chỗ chắc chắn còn dùng: biến cục bộ đang chạy, biến <code>static</code>, luồng đang chạy.</p>
+        st("""<p><b>Bước 1. Chọn các gốc.</b> Gốc là những chỗ chắc chắn còn dùng: biến cục bộ của các hàm đang chạy, biến <code>static</code> (biến gắn với cả lớp, sống suốt chương trình), và các luồng đang chạy (luồng: một dòng việc chạy riêng).</p>
 <span class='note'>Làm thử: ở hình trước, gốc chỉ trỏ tới A, nên tập đánh dấu ban đầu là {A}.</span>""",
-           """Bước một, chọn các gốc. Gốc là những chỗ chắc chắn còn được dùng, như biến cục bộ đang chạy, biến tĩnh và các luồng.
+           """Bước một, chọn các gốc. Gốc là những chỗ chắc chắn còn được dùng, như biến cục bộ của các hàm đang chạy, biến tĩnh, và các luồng đang chạy.
+           Biến tĩnh là biến gắn với cả lớp, sống suốt chương trình. Luồng là một dòng việc chạy riêng trong chương trình.
            Làm thử với hình trước, gốc chỉ trỏ tới A, nên tập đánh dấu lúc đầu chỉ có A."""),
         st("""<p><b>Bước 2. Đi theo mũi tên.</b> Mỗi đối tượng được đánh dấu thì đánh dấu luôn mọi đối tượng nó trỏ tới, lặp đến khi hết.</p>
 <span class='note'>Làm thử: A trỏ B, B trỏ C, C không trỏ gì, nên tập là {A, B, C}.</span>""",
@@ -73,10 +81,10 @@ def build():
            Làm thử, A trỏ tới B, B trỏ tới C, C không trỏ đi đâu, nên tập đánh dấu là A, B, C."""),
         st("""<p><b>Bước 3. Quét.</b> Mọi đối tượng chưa được đánh dấu là rác, bộ nhớ của chúng được giải phóng.</p>
 <span class='note'>Làm thử: sáu đối tượng trừ ba đã đánh dấu còn ba đối tượng rác: D, E, F.</span>
-<p>Thực tế: bộ thu gom mặc định G1 không quét từng ô, mà chép đối tượng sống sang vùng mới rồi giải phóng cả vùng cũ.</p>""",
+<p>Thực tế: bộ thu gom G1 (mặc định trên máy chủ thông thường từ Java 9) thường không quét từng ô, mà chép đối tượng sống sang vùng mới rồi giải phóng cả vùng cũ.</p>""",
            """Bước ba, quét. Mọi đối tượng chưa được đánh dấu là rác, và bộ nhớ của chúng được giải phóng.
            Làm thử, vì có sáu đối tượng và đã đánh dấu ba, nên còn lại ba đối tượng rác, là D, E và F.
-           Trong thực tế, bộ thu gom mặc định của Java không quét từng ô, mà chép đối tượng sống sang vùng mới rồi giải phóng cả vùng cũ.
+           Trong thực tế, bộ thu gom mặc định của Java trên máy chủ thông thường không quét từng ô, mà chép đối tượng sống sang vùng mới rồi giải phóng cả vùng cũ.
            Ý tưởng tới được từ gốc thì vẫn như vậy."""),
     ], checks=["alg.bnk_reachable({'A': ['B'], 'B': ['C'], 'C': [], 'D': ['E'], 'E': [], 'F': []}, ['A']) == ['A', 'B', 'C']",
                "6 - 3 == 3"])
@@ -108,17 +116,19 @@ F không ai trỏ. Rác: $3$ ✓ — <b>bị trỏ tới chưa chắc còn sốn
            F không ai trỏ tới. Vậy rác là ba đối tượng, khớp với kết quả ở trên. Lưu ý, bị trỏ tới chưa chắc còn sống, phải tới được từ gốc."""),
         st(table(["cách lưu tiền", "cộng 10 lần 0,1", "đúng 1?"],
                  [["kiểu double (số thực nhị phân)", "0.9999999999999999", "không"],
-                  ["BigDecimal (số thập phân)", "1.0", "có"],
-                  ["số nguyên theo đơn vị nhỏ nhất", "10 phần mười = 1 đơn vị", "có"]]),
+                  ["BigDecimal tạo từ chuỗi <code>\"0.1\"</code> (số thập phân)", "1.0", "có"],
+                  ["số nguyên theo đơn vị nhỏ nhất: lưu 0,1 thành 1 phần mười", "1 + 1 + … = 10 phần mười = 1", "có"]]),
            """Bảng này so ba cách lưu tiền. Kiểu số thực nhị phân không biểu diễn đúng số không phẩy một, nên cộng mười lần bị lệch.
-           BigDecimal giữ số thập phân nên đúng. Cách thứ ba là lưu số nguyên theo đơn vị nhỏ nhất, cũng đúng."""),
+           BigDecimal giữ số thập phân nên đúng, với điều kiện tạo nó từ chuỗi chữ không phẩy một. Nếu tạo từ một số thực nhị phân, nó mang theo luôn sai lệch.
+           Cách thứ ba là lưu số nguyên theo đơn vị nhỏ nhất. Ở đây đơn vị là một phần mười, nên cộng mười lần số một được mười phần mười, đúng bằng một."""),
     ], checks=["alg.bnk_float_vs_decimal()[0] != 1.0", "str(alg.bnk_float_vs_decimal()[1]) == '1.0'", "alg.bnk_float_vs_decimal()[2] == 10",
+               "__import__('decimal').Decimal(0.1) != __import__('decimal').Decimal('0.1')", "sum([1] * 10) == 10",
                "len([o for o in 'ABCDEF' if o not in alg.bnk_reachable({'A': ['B'], 'B': ['C'], 'D': ['E']}, ['A'])]) == 3"])
     sc_pit = sc("pitfalls", "pitfall", "Lỗi hay gặp, có lỗi của người đã đi làm", [
         st("""<div class="box warn"><b>Lỗi 1 (người mới).</b> Dùng <code>==</code> để so hai chuỗi hay hai đối tượng. <code>==</code> chỉ hỏi
 “cùng một đối tượng không”, nên hai chuỗi giống chữ nhưng tạo riêng vẫn cho <code>false</code>. Muốn so nội dung dùng <code>equals</code>.</div>""",
            """Lỗi thứ nhất, của người mới. Dùng hai dấu bằng để so hai chuỗi. Nó chỉ hỏi hai tham chiếu có cùng một đối tượng không.
-           Hai chuỗi giống chữ nhưng tạo riêng vẫn cho kết quả sai. Muốn so nội dung thì dùng phương thức so sánh nội dung."""),
+           Hai chuỗi giống chữ nhưng tạo riêng vẫn cho kết quả là không bằng nhau. Muốn so nội dung thì gọi phương thức so sánh nội dung bằng dấu chấm."""),
         st("""<div class="box warn"><b>Lỗi 2 (người đã đi làm).</b> <b class="red">Rò rỉ bộ nhớ</b>: bỏ dữ liệu vào một <code>static Map</code> làm bộ đệm
 mà không bao giờ xoá. Gốc <code>static</code> vẫn trỏ tới chúng, nên chúng vẫn “tới được” và bộ thu gom rác không dọn.
 <br><span class="note">Phép thử: theo dõi kích thước heap sau mỗi lần dọn; nếu cứ tăng thì có thứ đang bị giữ.</span></div>""",
@@ -158,7 +168,7 @@ Với tiền: <b>không dùng double</b>; dùng số nguyên đơn vị nhỏ nh
            Hãy dùng số nguyên đơn vị nhỏ nhất, hoặc BigDecimal."""),
     ])
     return lesson("L00", "java_bo_nho_gc", "Bài 0 — Java hiện đại: bộ nhớ, đối tượng và bộ thu gom rác",
-                  "curriculum/bnk.yaml L00; audit/bnk/verify_bnk.py L00; The Java Virtual Machine Specification (Java SE 21); IEEE 754",
+                  "curriculum/bnk.yaml L00; audit/bnk/verify_bnk.py L00; The Java Virtual Machine Specification (Java SE 21); IEEE 754; JEP 248 (G1 mặc định từ JDK 9 trên máy server-class) và HotSpot GC Tuning Guide Java SE 21; Java SE 21 API BigDecimal(String) và BigDecimal(double); IEC 80000-13 (KiB = 1024 byte)",
                   ["Phân biệt dữ liệu nằm trên stack và trên heap", "Xác định đối tượng nào bị thu gom từ đồ thị tham chiếu",
                    "Nhận ra rò rỉ bộ nhớ do tham chiếu static", "Chọn kiểu dữ liệu đúng cho số tiền"],
                   [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_chk, sc_pit, sc_quiz, sc_rec])

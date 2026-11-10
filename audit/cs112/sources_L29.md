@@ -85,6 +85,17 @@ Python 3.4.4? Release date: 2015/12/20”.
   value of 49 allows for an array up to length Integer.MAX_VALUE-4, if array is filled by the worst case stack size increasing scenario.”;
   mergeCollapse có thêm `n > 1 && runLen[n-2] <= runLen[n] + runLen[n-1]`; chú thích “Thanks to Stijn de Gouw, … this is fixed”.
 
+## [JDK18] OpenJDK: JDK-8203864 (thêm 2026-11-09, đọc kiểm lần ba đợt C)
+- bugs.openjdk.org/rest/api/2/issue/JDK-8203864 (API JSON, truy cập 2026-11-09, no revision given): summary “Execution error in Java's
+  Timsort”, created 2018-05-28, resolved 2018-06-25, fixVersion 11. Mô tả (Rémi Forax, theo phân tích của C. Pivoteau): “the correction
+  implemented in the Java source code (changing Timsort stack size) is wrong”. Bình luận Doug Lea: “The papers clearly show the need for an
+  extra condition check in mergeCollapse to deal with very rare cases.” Bản vá ghi công de Gouw và cộng sự; commit ngày 2018-06-25.
+- Đọc qua công cụ tóm tắt (không phải nguyên văn đầy đủ): JDK-8072909 (2015) chỉ ghi “Stack length increased previously by JDK-8011944 was
+  insufficient for some cases” và có vấn đề liên kết “Tune test and document TimSort runs stack size increase”; bài Auger, Jugé, Nicaud,
+  Pivoteau, arXiv:1805.08612 nói Java đã giữ bản TimSort đầu và chỉ chỉnh các hằng số cỡ ngăn xếp, rồi tìm ra thêm một lỗi trong cách
+  sửa đó. → Bài giảng: năm 2015 Java chỉ nới cỡ ngăn xếp (JDK 9); phép xét 4 đoạn vào Java năm 2018 (JDK 11). Không nêu năm nào số 49
+  xuất hiện (chưa kiểm được nguồn).
+
 ## [PS21] CPython: bpo-34561 — commit 5cb4c672d8 ngày 2021-09-06 (“Switch to Munro & Wild "powersort" merge strategy”); changelog 3.11
 - docs.python.org/3.11/whatsnew/changelog.html, mục “Python 3.11.0 alpha 1, Release date: 2021-10-05”: “bpo-34561: List sorting now uses the
   merge-ordering strategy from Munro and Wild's powersort(). Unlike the former strategy, this is provably near-optimal in the entropy of the

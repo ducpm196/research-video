@@ -1,0 +1,40 @@
+# EVT — đã đọc 12/12 bài
+
+Đọc kiểm lần ba đợt C (2026-11-09) theo `audit/review/FULL_REVIEW_BRIEF_C.md`. Đọc toàn bộ `show` (cả chữ trong SVG, đối chiếu toạ độ trục với số), `say`, `checks`, quiz, `objectives` của 12 bài, `curriculum/evt.yaml`, `audit/evt/sources_L11.md`; tính lại mọi số hiện/đọc bằng Python (scratchpad). Đối chiếu: Kleppmann, *Designing Data-Intensive Applications* (2017) ch. 4, 5, 8, 11; tài liệu Apache Kafka chính thức (trang tải về kafka.apache.org/community/downloads, KIP-98, KIP-500, thông báo 2.8/3.3/3.5/3.6/3.9/4.0 — truy cập 2026-11-09, no revision given); M. Fowler, *Event Sourcing* (2005) và *CQRS* (2011); Garcia-Molina & Salem, *Sagas* (SIGMOD 1987); Confluent Schema Registry — kiểu tương thích BACKWARD/FORWARD/…_TRANSITIVE (truy cập 2026-11-09, no revision given).
+
+| Bài | Kết luận | Lỗi nội dung đã sửa (cảnh: MUST/SHOULD — lý do ngắn) | Độc lập (tham chiếu khoá khác đã thay bằng gì) | Nguồn | lint / render |
+|---|---|---|---|---|---|
+| L00 | đã sửa | hook: SHOULD — tiêu đề “sửa năm dịch vụ” trái nội dung (chỉ sửa dịch vụ đặt hàng); pitfalls Lỗi 2: SHOULD — “lược đồ” dùng trước khi định nghĩa → thêm định nghĩa | không có tham chiếu khoá khác | Fowler 2017; Hohpe & Woolf 2003 | lint: 0 FAIL, 0 WARN, 16 PASS; render: 66 khung (0 vấn đề) |
+| L01 | đã sửa | hook: SHOULD — tiêu đề “ba dịch vụ hỏng” trong khi chỉ dịch vụ thống kê hỏng, mốc thời gian “lập tức hỏng” lệch “nửa đêm” → “đêm đó phát lại và hỏng ngay”; prereq: SHOULD — “nhật ký”, “phát lại” chưa định nghĩa → thêm; Lỗi 1: SHOULD — lời đọc “mô hình đọc” (chưa học) khác màn hình “bảng đọc”; Lỗi 3: SHOULD — “kho lược đồ” chưa định nghĩa | không có | Confluent Schema Registry (BACKWARD = cập nhật người nhận trước; FORWARD = người gửi trước; *_TRANSITIVE = so mọi bản) — khớp bài | lint: 0 FAIL, 0 WARN, 21 PASS; render: 73 khung (0 vấn đề) |
+| L02 | đã sửa | prereq: SHOULD — “người tiêu thụ”, “vị trí đọc”, vì sao giao lại chưa giảng → thêm bước “giao ít nhất một lần” (máy sập trước khi lưu vị trí) và ví dụ số lũy đẳng 100 + 50 + 50 = 200 so với 150 (check mới); sym: SHOULD — “lùi dần” chưa định nghĩa | “Ở khoá Kỹ thuật dữ liệu” (phân vùng) và “Ở khoá Kiến trúc hệ thống” (lũy đẳng) → giảng lại tại chỗ, 3 bước | Kleppmann ch. 11; Hohpe & Woolf 2003 | lint: 0 FAIL, 0 WARN, 20 PASS; render: 79 khung (0 vấn đề) |
+| L03 | đã sửa | prereq: SHOULD — “băm” dùng không định nghĩa → thêm hàm băm + chia lấy dư | “Ở khoá Kỹ thuật dữ liệu” → giảng hàm băm, ví dụ 17/23/18 mod 6 (đã có checks) | Kleppmann ch. 8 (đồng hồ), ch. 11 (thứ tự trong phân vùng) | lint: 0 FAIL, 0 WARN, 20 PASS; render: 76 khung (0 vấn đề) |
+| L04 | đã sửa | Lỗi 1: SHOULD — “mã hoá mỗi người một khoá rồi huỷ khoá” nói như cách bắt buộc, “khoá” trùng nghĩa → “một cách hay dùng là mã hoá dữ liệu của mỗi người bằng một khoá mã hoá riêng” | không có | Fowler 2005 | lint: 0 FAIL, 0 WARN, 19 PASS; render: 73 khung (0 vấn đề) |
+| L05 | đã sửa | ví dụ bước 4: SHOULD — “song song theo phân vùng” không nhắc lại phân vùng; Lỗi 3: SHOULD — “lũy đẳng”, “phiên bản theo khoá” dùng lại không định nghĩa tại chỗ | không có | Fowler CQRS 2011; Kleppmann ch. 5 (đọc điều vừa ghi) | lint: 0 FAIL, 0 WARN, 19 PASS; render: 64 khung (0 vấn đề) |
+| L06 | đã sửa | prereq: SHOULD — “giao dịch cơ sở dữ liệu”, “cam kết” dùng không giảng → thêm bước chuyển 50 từ A sang B, lỗi giữa chừng huỷ cả hai (check mới); recap: SHOULD — “khoá được cả thế giới” trùng nghĩa “khoá” → “gói được mọi bước vào một giao dịch” | không có | Garcia-Molina & Salem 1987 (T1…Tj rồi Cj…C1); Richardson 2018 ch. 4 | lint: 0 FAIL, 0 WARN, 18 PASS; render: 72 khung (0 vấn đề) |
+| L07 | đã sửa | prereq: SHOULD — thời điểm xảy ra/xử lý chỉ một câu → thêm ví dụ số bấm lúc 9 tới máy chủ lúc 16: 16 − 2 = 14 > 10 loại nhầm (check mới) | “Ở khoá Hệ phân tán và dữ liệu lớn” → giảng lại tại chỗ | Kleppmann ch. 11; Akidau và cộng sự 2015 | lint: 0 FAIL, 0 WARN, 20 PASS; render: 72 khung (0 vấn đề) |
+| L08 | đã sửa | Lỗi 2: SHOULD — “nhóm đọc”, “phân vùng”, “(nhớ lỗi đổi đường của khoá)” không giảng lại → định nghĩa nhóm người tiêu thụ, phân vùng, băm chia lấy dư | không có | Kafka docs (nhóm người tiêu thụ: mỗi phân vùng giao cho một người trong nhóm) | lint: 0 FAIL, 0 WARN, 22 PASS; render: 67 khung (0 vấn đề) |
+| L09 | đã sửa | sym: SHOULD — “xử lý lô”, “xử lý luồng” chưa định nghĩa → thêm | không có | Marz & Warren 2015; Kreps 2014 | lint: 0 FAIL, 0 WARN, 17 PASS; render: 65 khung (0 vấn đề) |
+| L10 | đã sửa | Lỗi 3: **MUST** — “Trung bình 90 ms có thể giấu 1% khách chờ 20 phút” sai số học (1% × 1 200 000 ms đã kéo trung bình ≥ 12 000 ms) → ví dụ 1000 đơn: trung bình 498 ms, phân vị 99 = 20 s, định nghĩa phân vị 99 (check mới); Lỗi 4: SHOULD — “dấu vết”, “lấy mẫu” chưa định nghĩa; recap bài sau: SHOULD — lời đọc “tới khi chở hàng trăm tỉ tin” khác màn hình “tới khi bỏ ZooKeeper”, và “ra đời năm 2011” trong khi [V15] ghi 2010 | không có | W3C Trace Context 2021; Sigelman 2010; [V15] §1 | lint: 0 FAIL, 0 WARN, 19 PASS; render: 70 khung (0 vấn đề) |
+| L11 | đã sửa | stage4: **MUST** — “đề xuất số 500, tạo tháng 10/2019” sai: KIP-500 đã được thảo luận công khai trước 18/9/2019 (podcast Confluent); 30/10/2019 chỉ là ngày tạo phiếu KAFKA-9119 → “năm 2019”, phép tính 1966 ngày ghi “từ ngày mở phiếu công việc của đề xuất”; prereq: SHOULD — đa số chỉ một dòng → thêm bước vì sao cần đa số (5 nút: 3 + 3 = 6 > 5, hỏng 2/3) (check mới); bài học sai 1: bổ sung nguồn 0.11.0 (28/6/2017) vào `sources_L11.md` | “khoá hệ phân tán” (đồng thuận đa số) → “ý thứ tư là đồng thuận…” + bước giảng mới | `audit/evt/sources_L11.md` (bổ sung KIP-500, [K011]) | lint: 0 FAIL, 0 WARN, 38 PASS; render: 140 khung (0 vấn đề) |
+
+## Không sửa và vì sao
+- L03 Lỗi 1 “đồng hồ các máy luôn lệch nhau” — đúng nghĩa “luôn lệch ít nhiều” (Kleppmann ch. 8); giữ.
+- L04 ví dụ bước 3 “đang ở sự kiện 999 999” khi tài khoản có 1 triệu sự kiện — đọc được như thời điểm trước đó, phép tính đúng; giữ.
+- L08 Lỗi 2 “nhóm người tiêu thụ thông thường” — Kafka 4.x có nhóm chia sẻ (KIP-932) không theo luật một phân vùng một người; chữ “thông thường” đã bao; giữ.
+- L09 “Gọi k là số lần phát lại nhanh hơn tốc độ dữ liệu đến” — có thể hiểu nhầm “nhanh hơn k lần” = k + 1; ví dụ ngay sau dùng “nhanh gấp 5 lần”, giữ.
+- L11 bài học sai 1: giao dịch có ở bản 0.11 — trang KIP-98 không ghi số bản; mốc ghi lũy đẳng 0.11.0 (trang tải về chính thức) đã kiểm; giao dịch: chưa kiểm được trực tiếp trong ghi chú phát hành, giữ (khớp kiến thức chung), đã ghi trong `sources_L11.md`.
+- L11 ngày tạo trang KIP-500 trên wiki: chưa kiểm được nguồn → bài chỉ nói “năm 2019”.
+- Câu “Cảm ơn bạn đã theo học” / “bài cuối của khoá EVT” (L11), “bài tiếp theo của khoá” (L10) nói về chính khoá này — đúng B.3, giữ.
+- Chú thích đầu `curriculum/evt.yaml` (dòng 7–10, nhắc DSY/DEN/CLD) và `requires_ext`, `source:` (L11 “DSY bài 5”) là phần không hiện/không đọc — giữ theo B.1.
+
+## Dương tính giả của check_xref
+- Không có. Trước sửa: 10 lượt (L02 ×4, L03 ×1, L07 ×2, L11 ×2, giáo án L03 ×1) — đều là tham chiếu thật, đã thay. Tự grep “khoá/khóa”: còn lại là “khoá phân vùng”, “theo khoá”, “khoá vòi vào”, “khoá mã hoá” — đúng khái niệm, không phải khoá học; đổi thêm “khoá được cả thế giới” (L06) và mục tiêu giáo án L03 “thứ tự trong khoá” (dễ đọc nhầm khoá học) → đồng bộ theo mục tiêu bài.
+
+## Giáo án
+`curriculum/evt.yaml`: bỏ “(DSY L01)” ở L03.fix; `objectives` của cả 12 mục đồng bộ đúng với bài (trước đây mỗi mục thiếu 1 mục tiêu hoặc diễn đạt khác); L11 `example` ghi “từ ngày mở phiếu công việc của đề xuất”, thêm `fix` về mốc 2019. `title` 12/12 khớp bài. Không đổi số nào → `rec()` của EVT trong `verify_plan_curricula.py` không cần đổi.
+
+## Kết quả cuối
+- `audit/evt/verify_evt.py`: `verify_evt: 12/12 PASS`
+- `check_xref.py --course EVT`: không còn dòng EVT nào (EVT: 10 lượt ở 5 tệp → 0); dòng tổng in ra `check_xref: 26 lượt tham chiếu sang khoá khác ở 13 tệp` là của các khoá khác
+- `lv.py curriculum curriculum/evt.yaml`: `curriculum: 12 bài, 12 đã có đặc tả, 0 lỗi`
+- `scan_ctrl.py`: `hits: 8` (đều là 8 lượt `\tat` cố ý của JVA; EVT 0)

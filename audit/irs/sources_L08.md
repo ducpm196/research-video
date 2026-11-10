@@ -26,3 +26,8 @@ URL: https://arxiv.org/pdf/1310.4546
 
 ## [BA08] Baluja và cộng sự (WWW 2008)
 - "Hindsight is not 20/20: ... If the recommendation had been shown, the user might have watched it. The fact that it was not watched may simply be indicate that it was not discovered by the user."
+
+## Đọc kiểm 2026-11-09 (đợt C)
+- [HU08] (đã trích ở trên) "c_ui = 1 + α·r_ui": với r = 0, độ tin cậy 1 gắn với nhãn p_ui = 0 (“có lẽ không thích”), không phải “thích” — bài sửa ở bảng ký hiệu và bước 1 suy ra.
+- Tự kiểm: e^{3,454} = 31,6266 (≈ 31,63), không phải 31,62 → bài hiện 4 chữ số: ln 100 ≈ 4,6052, · 0,75 = 3,4539, e^{3,4539} ≈ 31,62 (verify_parts L08i, chuỗi Taylor bằng Fraction).
+- Bỏ câu “Bảng ôn ở khoá Toán…”: lũy thừa, căn bậc bốn, mũ 3/4, xác suất, phân phối, lôgarit tự nhiên được giảng lại tại chỗ.

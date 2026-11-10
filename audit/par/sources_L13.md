@@ -108,3 +108,16 @@
 - Không nói trọng số chiếm bao nhiêu trong 3 GB (bài báo không ghi kiểu số; không suy diễn phần còn lại của bộ nhớ dùng cho gì).
 - Hiệu suất 90% của [GO17] là khi đi từ 8 lên 256 thẻ, không phải từ 1 thẻ.
 - Không nêu tên cá nhân; tên hãng, tên thẻ, tên thư viện chỉ trên màn hình (lexicon_vi.PAR.yaml).
+
+## Đọc kiểm đợt C (2026-11-09) — BN-0038 “mốc năm thư viện”
+- CUDA Toolkit Archive, https://developer.nvidia.com/cuda-toolkit-archive (curl 2026-11-09, no revision given): dòng “CUDA Toolkit 1.0 (June 2007)”,
+  “CUDA Toolkit 1.1 (Dec 2007)” → mốc “năm 2007, mô hình lập trình riêng” của chặng 2 KIỂM ĐƯỢC (khớp [NI08] “Since NVIDIA released CUDA in 2007”).
+- arXiv 1802.05799 (trang abs, curl 2026-11-09): “Submitted on 15 Feb 2018”; tóm tắt gọi Horovod là “open source library … ring reduction”.
+  Mốc đầu 2017 lấy từ [HO18] (“In early 2017 Baidu published an article evangelizing … ring-allreduce”). Lời đọc trục thời gian đã viết lại cho
+  khớp hai mốc kiểm được: “Đầu năm 2017, cách gộp theo vòng được giới thiệu cho học sâu, và bài báo tháng 2 năm 2018 … mô tả thư viện mã nguồn mở”.
+  Ngày thư viện được mở mã nguồn trên kho mã (trước bài báo) KHÔNG kiểm (uber.com/blog/horovod trả 14 byte) → bài không nêu ngày đó.
+- cuDNN (Chetlur và cộng sự, arXiv 1410.0759, “Submitted on 3 Oct 2014”) mở được; bài KHÔNG nhắc cuDNN nên không thêm.
+- [KR12] papers.nips.cc đã đọc ở đợt trước (câu trích ở trên); không đổi.
+- NVIDIA CUDA Programming Guide, docs.nvidia.com/cuda/cuda-c-programming-guide (curl 2026-11-09): tiêu đề “CUDA Programming Guide 13.5”, “Last updated
+  on Oct 31, 2026”. Câu về warp/khối độc lập trong bài dẫn từ [NI08] và CUDA C++ Best Practices Guide (L08); trang con của bản 13.5 tải về không trích
+  được văn bản bằng công cụ, nên không ghi “trích nguyên văn” từ bản 13.5.

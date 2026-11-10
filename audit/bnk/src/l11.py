@@ -5,23 +5,25 @@ MSG = "02007020000000000000164111111111111111000000000000500000123456"
 
 def build():
     hook = sc("hook", "hook", "Vì sao một chuỗi ký tự vô nghĩa lại là một lệnh chuyển tiền?", [
-        st("""<p>Một bản tin ISO 8583 trông như dãy số dài:</p>
+        st("""<p>Một bản tin ISO 8583 (chuẩn quốc tế cho bản tin giao dịch thẻ) trông như dãy số dài, ở đây thêm dấu cách cho dễ đọc:</p>
 <p><code>0200 7020000000000000 16 4111111111111111 000000 000000500000 123456</code></p>
 <div class="box key">Bên nhận biết trường nào ở đâu nhờ <b>bản đồ bit</b> nằm ngay sau mã loại bản tin.</div>""",
-           """Chào bạn, một bản tin ISO tám nghìn năm trăm tám mươi ba trông như một dãy số dài vô nghĩa. Nhưng bên nhận đọc ra được số thẻ, số tiền, mã vết, nhờ bản đồ bit nằm ngay sau mã loại bản tin.
+           """Chào bạn, ISO tám nghìn năm trăm tám mươi ba là chuẩn quốc tế cho bản tin giao dịch thẻ. Một bản tin như vậy trông như một dãy số dài vô nghĩa, và trên màn hình ta thêm dấu cách cho dễ đọc. Nhưng bên nhận đọc ra được số thẻ, số tiền, mã vết, nhờ bản đồ bit nằm ngay sau mã loại bản tin.
            Hôm nay ta dựng một bản tin từ đầu, rồi đọc ngược lại."""),
         st(table(["ý hỏi", "bài này trả lời"],
                  [["làm sao biết bản tin có những trường nào", "bản đồ 64 bit, bit nào bật thì trường đó có mặt"],
                   ["làm sao biết mỗi trường dài bao nhiêu", "trường cố định thì biết trước, trường đổi độ dài thì có số báo độ dài đứng trước"]]),
            """Hôm nay ta trả lời hai câu. Làm sao biết bản tin có những trường nào, nhờ bản đồ sáu mươi bốn bit. Làm sao biết mỗi trường dài bao nhiêu, nhờ độ dài cố định hoặc số báo độ dài đứng trước.
-           Lưu ý, mỗi mạng thanh toán có đặc tả riêng, kể cả NAPAS. Bài này dạy nguyên lý chung, không phải đặc tả kết nối của riêng mạng nào."""),
+           Lưu ý, mỗi mạng thanh toán có đặc tả riêng, kể cả NAPAS, công ty chuyển mạch thẻ và thanh toán liên ngân hàng của Việt Nam. Bài này dạy nguyên lý chung, không phải đặc tả kết nối của riêng mạng nào."""),
     ])
-    pre = sc("prereq", "prereq", "Ôn lại ba điều sẽ dùng", [
+    pre = sc("prereq", "prereq", "Trước hết: bốn điều cần hiểu", [
         st(table(["khái niệm", "nghĩa", "ví dụ"],
                  [["① Nhị phân", "chỉ có hai chữ số 0 và 1, mỗi chữ số là một bit", "0111 = 7"],
-                  ["② Thập lục phân", "16 chữ số: 0–9 rồi A–F; một chữ số hex = 4 bit", "7 = 0111, 2 = 0010, A = 1010"],
-                  ["③ Lũy thừa của hai", "bit thứ k từ phải sang trái (đếm từ 0) có giá trị 2 mũ k", "2 mũ 3 = 8"]]),
-           """Ôn ba điều. Nhị phân chỉ có hai chữ số không và một, mỗi chữ số là một bit. Thập lục phân có mười sáu chữ số, từ không tới chín rồi A tới F, và mỗi chữ số tương ứng bốn bit.
+                  ["② Thập lục phân (hex)", "16 chữ số: 0–9 rồi A–F; một chữ số hex = 4 bit", "7 = 0111, 2 = 0010, A = 1010"],
+                  ["③ Byte", "nhóm 8 bit, viết bằng đúng 2 chữ số hex", "0111 0000 = 0x70 (0x: dấu báo số hex)"],
+                  ["④ Lũy thừa của hai", "bit thứ k từ phải sang trái (đếm từ 0) có giá trị 2 mũ k", "2 mũ 3 = 8"]]),
+           """Trước hết ta cần hiểu bốn điều. Nhị phân chỉ có hai chữ số không và một, mỗi chữ số là một bit. Thập lục phân có mười sáu chữ số, từ không tới chín rồi A tới F, và mỗi chữ số tương ứng bốn bit.
+           Một byte là nhóm tám bit, nên viết bằng đúng hai chữ số thập lục phân. Hai ký tự không và x đứng trước chỉ để báo đây là số thập lục phân.
            Còn bit thứ k từ phải sang, đếm từ không, có giá trị hai mũ k."""),
         st("""$$0111_2 = 0 \\cdot 8 + 1 \\cdot 4 + 1 \\cdot 2 + 1 \\cdot 1 = 7$$""",
            """Một ví dụ số. Chuỗi bit không một một một bằng không nhân tám, cộng một nhân bốn, cộng một nhân hai, cộng một nhân một, bằng bảy. Đó cũng là chữ số hex bảy."""),
@@ -32,10 +34,10 @@ def build():
                   ["bản đồ bit (bitmap)", "64 bit; bit thứ i bật (bằng 1) thì trường i có; bit 1 bật nghĩa là có bản đồ thứ hai (trường 65–128). Nhiều mạng gửi dạng nhị phân 8 byte, không phải 16 ký tự hex"],
                   ["DE (data element)", "một trường dữ liệu, đánh số 2, 3, 4, …"],
                   ["LLVAR", "trường có độ dài thay đổi: 2 chữ số báo độ dài rồi tới nội dung"],
-                  ["STAN / RRN", "DE 11 mã vết 6 số / DE 37 mã tham chiếu 12 ký tự"]]),
+                  ["STAN / RRN", "DE 11 mã vết 6 số do bên gửi đánh / DE 37 mã tham chiếu 12 ký tự"]]),
            """Bảng này giải mã năm từ. MTI là mã loại bản tin gồm bốn chữ số, không hai không không là yêu cầu tài chính, không hai một không là phản hồi. Bản đồ bit có sáu mươi bốn bit, bit thứ i bật thì trường i có mặt.
            Riêng bit một bật nghĩa là còn bản đồ thứ hai, cho các trường sáu mươi lăm tới một trăm hai mươi tám. Nhiều mạng gửi bản đồ ở dạng nhị phân tám byte, chứ không phải mười sáu ký tự.
-           D E là một trường dữ liệu, đánh số hai, ba, bốn. Còn trường độ dài thay đổi có hai chữ số báo độ dài rồi tới nội dung. Cuối cùng, STAN là trường mười một, RRN là trường ba mươi bảy."""),
+           D E là một trường dữ liệu, đánh số hai, ba, bốn. Còn trường độ dài thay đổi có hai chữ số báo độ dài rồi tới nội dung. Cuối cùng, STAN là trường mười một, mã vết sáu chữ số do bên gửi đánh. RRN là trường ba mươi bảy, mã tham chiếu mười hai ký tự."""),
     ])
     intu = sc("intuition", "intuition", "Hình dung: bản tin gồm những khúc nào", [
         st(svg(1500, 380,
@@ -105,13 +107,14 @@ $$\\text{đóng gói} \\to \\text{đọc ngược} = \\text{dữ liệu ban đ�
     ], checks=["alg.bnk_iso_unpack(alg.bnk_iso_pack('0210', {3: '000000', 4: '000000500000', 11: '123456', 39: '00'})) == ('0210', {3: '000000', 4: '000000500000', 11: '123456', 39: '00'})",
                "alg.bnk_iso_pack('0210', {3: '000000', 4: '000000500000', 11: '123456', 39: '00'})[4:20] == '3020000002000000'"])
     pit = sc("pitfalls", "pitfall", "Lỗi hay gặp, có lỗi của người đã đi làm", [
-        st("""<div class="box warn"><b>Lỗi 1 (người mới).</b> Đọc <code>000000500000</code> thành “500 nghìn” mà quên <b>đơn vị nhỏ nhất theo loại tiền</b>. Với đồng là một đồng, nhưng loại tiền có số lẻ thì cùng dãy số có nghĩa khác.</div>""",
-           """Lỗi thứ nhất, của người mới. Đọc dãy sáu chữ số không rồi năm trăm nghìn thành năm trăm nghìn mà quên đơn vị nhỏ nhất theo loại tiền. Với đồng là một đồng, nhưng loại tiền có số lẻ thì cùng dãy số có nghĩa khác."""),
+        st("""<div class="box warn"><b>Lỗi 1 (người mới).</b> Đọc <code>000000500000</code> thành “500 nghìn” mà quên <b>đơn vị nhỏ nhất theo loại tiền</b>. Với đồng là một đồng, nhưng loại tiền có số lẻ thì cùng dãy số có nghĩa khác: đô la Mỹ có 2 chữ số lẻ, nên <code>000000500000</code> là $500\\,000 / 100 = 5\\,000$ đô la.</div>""",
+           """Lỗi thứ nhất, của người mới. Đọc dãy sáu chữ số không rồi năm trăm nghìn thành năm trăm nghìn mà quên đơn vị nhỏ nhất theo loại tiền. Với đồng là một đồng, nhưng loại tiền có số lẻ thì cùng dãy số có nghĩa khác.
+           Ví dụ đô la Mỹ có hai chữ số lẻ, đơn vị nhỏ nhất là một xu, nên cùng dãy đó chỉ là năm trăm nghìn chia một trăm, bằng năm nghìn đô la."""),
         st("""<div class="box warn"><b>Lỗi 2 (người đã đi làm).</b> <b class="red">Ghi nguyên số thẻ vào nhật ký</b> khi gỡ lỗi. Số thẻ là dữ liệu nhạy cảm; nhật ký phải che, ví dụ 6 số đầu và 4 số cuối.</div>""",
            """Lỗi thứ hai, của người đã đi làm, là ghi nguyên số thẻ vào nhật ký khi gỡ lỗi. Số thẻ là dữ liệu nhạy cảm, nên nhật ký phải che, ví dụ chỉ giữ sáu số đầu và bốn số cuối."""),
         st("""<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Coi mọi đối tác dùng cùng một bảng trường. Cùng ISO 8583 nhưng <b class="red">mỗi mạng có đặc tả riêng</b>: trường nào dùng, độ dài, bảng mã ký tự. Luôn đọc đặc tả kết nối chính thức.</div>""",
            """Lỗi thứ ba, cũng của người đã đi làm, là coi mọi đối tác dùng cùng một bảng trường. Cùng chuẩn nhưng mỗi mạng có đặc tả riêng, gồm trường nào dùng, độ dài, bảng mã ký tự. Luôn đọc đặc tả kết nối chính thức."""),
-    ])
+    ], checks=["int('000000500000') / 100 == 5000"])
     quiz = sc("quiz", "quiz", "Đến lượt bạn", [
         st(table(["câu", "đề"],
                  [["1", "Bản tin chỉ có trường 3, 4, 11. Bản đồ bit là gì?"],

@@ -114,3 +114,12 @@ URL: https://aws.amazon.com/blogs/aws/welcome-to-aws-pi-day-2022/ (curl 200; `da
 - Mốc 800 triệu đối tượng là “ngay sau khi ra mắt năm 2006” theo [PI22]; ngày chính xác không ghi → bài không gán ngày.
 - Lý do người vận hành gõ sai, danh tính người vận hành: [S17] không ghi, bài không nêu.
 - Tên khách hàng (Stardust@Home, Dropbox) không dùng trong lời đọc; con số 34 PB của [B20] không dùng.
+
+## Bổ sung khi đọc kiểm 2026-11-08 (WebFetch cùng URL)
+- [S17]: “The Amazon Simple Storage Service (S3) team was debugging an issue causing the S3 billing system …” → căn cứ cho “đội đang gỡ rối
+  hệ thống tính tiền chạy chậm”. “The S3 team had planned further partitioning of the index subsystem later this year. We are reprioritizing
+  that work to begin immediately.” → bài nói “bắt đầu ngay việc chia tiếp”, không nói đã chia xong ngay.
+- [S17] chỉ ghi “refactor parts of the service into smaller cells” → bài không nói “phần lớn” đã chia ô.
+- [W20]/[B20] mô tả mô hình trước 2020 là “eventual consistency” nhưng không tách từng thao tác; tài liệu S3 trước 12/2020 (không tải lại
+  được bản lưu trữ) ghi ghi-đối-tượng-mới đã có đọc sau ghi → bài nói “chưa bảo đảm nhất quán mạnh cho mọi thao tác; Amazon gọi đó là nhất
+  quán cuối cùng”, không nói “chỉ nhất quán cuối cùng” suốt 14 năm. Chưa kiểm được nguyên văn tài liệu cũ.

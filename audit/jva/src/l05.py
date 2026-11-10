@@ -147,20 +147,20 @@ public class DoanMang {
     ])
     sc_sym = sc("sym", "symbol", "Giải mã ký hiệu của mảng", [
         st(code_block(mang, title="Tệp Mang.java"),
-           """Đây là chương trình đầu tiên có mảng. Nó khai một mảng năm số dư, rồi in số phần tử, phần tử đầu, phần tử cuối, và cả mảng."""),
+           """Đây là chương trình đầu tiên có mảng. Nó khai một mảng năm số dư, mỗi giá trị trong mảng gọi là một phần tử, rồi in số phần tử, phần tử đầu, phần tử cuối, và cả mảng."""),
         st(table(["viết", "nghĩa"],
                  [["<code>long[] soDu</code>", "biến mảng; dấu <code>[]</code> sau kiểu nghĩa là <b>nhiều</b> giá trị kiểu <code>long</code>"],
-                  ["<code>{1500000, …}</code>", "liệt kê sẵn giá trị; máy đếm được 5 phần tử"],
+                  ["<code>{1500000, …}</code>", "liệt kê sẵn giá trị; mỗi giá trị là một <b>phần tử</b>; máy đếm được 5 phần tử"],
                   ["<code>soDu[0]</code>", "phần tử có chỉ số 0, tức phần tử <b>đầu tiên</b>"],
                   ["<code>soDu[4]</code>", "phần tử <b>cuối</b>, vì chỉ số chạy từ 0 tới 5 − 1"],
-                  ["<code>soDu.length</code>", "số phần tử của mảng, <b>không</b> có ngoặc tròn"],
+                  ["<code>soDu.length</code>", "số phần tử: một con số gắn sẵn với mảng (gọi là <b>thuộc tính</b>), <b>không</b> có ngoặc tròn"],
                   ["<code>import java.util.Arrays;</code>", "mượn bộ công cụ mảng; <code>Arrays.toString</code> in cả mảng"],
                   ["<code>new long[5]</code>", "tạo mảng 5 ô mới, ô nào cũng bằng 0"]]),
            """Ngoặc vuông sau tên kiểu nghĩa là biến giữ nhiều số nguyên dài.
            Ngoặc nhọn liệt kê sẵn năm giá trị ban đầu.
            Chỉ số không là phần tử đầu tiên.
            Chỉ số bốn là phần tử cuối, vì chỉ số chạy từ không tới năm trừ một.
-           Thuộc tính độ dài cho biết số phần tử, và không có ngoặc tròn.
+           Độ dài là một con số gắn sẵn với mảng, gọi là thuộc tính, cho biết số phần tử, và không có ngoặc tròn.
            Dòng nhập ở đầu tệp mượn bộ công cụ mảng, có hàm in cả mảng.
            Từ khoá tạo mới kèm số năm tạo mảng năm ô, ô nào cũng bằng không.""", clear=True,
            focus=["1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8"]),

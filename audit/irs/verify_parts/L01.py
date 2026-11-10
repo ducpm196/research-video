@@ -45,3 +45,15 @@ Z = [2, 3, 0, 0]
 rec("L01k", round(dcg_np(Z), 3) == 3.893 and round(dcg_np(Z) / dcg_np(ideal), 3) == 0.817
     and round(dcg_np(Z[:2]) / dcg_np(ideal[:2]), 3) == 0.913 and dcg_np(X[:2]) == dcg_np(ideal[:2]) and round(dcg_np([3, 2]), 3) == 4.262,
     "quiz: Z 3,893 → 0,817; ở 2 dòng X = 1, Z 0,913")
+# sửa 2026-11-09: số hiện 5 chữ số (sympy chính xác) để phép cộng/trừ trên màn hình khớp tới chữ số cuối
+r5 = lambda e: round(float(sp.N(e, 30)), 5)
+rec("L01l", [r5(2 / sp.log(3, 2)), r5(1 / sp.log(5, 2)), r5(dX), r5(dI), r5(dI - dX)] == [1.26186, 0.43068, 4.69254, 4.76186, 0.06932]
+    and round(1.26186 + 0.43068 + 3, 5) == 4.69254 and round(4.76186 - 4.69254, 5) == 0.06932,
+    "1,26186; 0,43068; DCG 4,69254; lý tưởng 4,76186; chênh 0,06932")
+dZ = dcg_sym(Z)
+rec("L01m", r5(dZ) == 3.89279 and round(float(dZ / dI), 3) == 0.817 and round(3.893 / 4.762, 3) == 0.818,
+    "quiz: 3,89279 / 4,76186 → 0,817; chia số đã làm tròn 3,893 / 4,762 → 0,818 (lệch)")
+# ôn lôgarit cơ số 2 (sửa 2026-11-09): đếm số lần nhân đôi từ 1
+doublings = lambda x: next(n for n in range(64) if 2 ** n == x)
+rec("L01n", doublings(8) == 3 and doublings(1) == 0 and doublings(1024) == 10 and round(2 ** 1.585, 3) == 3.0
+    and round(float(sp.N(sp.log(5, 2) - 2)), 3) == 0.322, "log₂ 8 = 3, log₂ 1 = 0, log₂ 1024 = 10; 2^1,585 ≈ 3; 4 → 5 thêm 0,322")

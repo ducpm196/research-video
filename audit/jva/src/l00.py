@@ -54,20 +54,22 @@ public class DoanKetQua {
 
     sc_hook = sc("hook", "hook", "Máy chỉ hiểu số, vậy dòng chữ bạn gõ chạy thành lệnh bằng cách nào?", [
         st("""<p>Bên trong máy tính chỉ có các số $0$ và $1$. Thế mà bạn gõ một dòng chữ, bấm chạy, và màn hình in ra số dư tài khoản.</p>
-<div class="box key">Hôm nay ta đi hết con đường đó: <b>gõ mã nguồn → biên dịch → chạy</b>, và viết chương trình Java đầu tiên.</div>""",
+<div class="box key">Hôm nay ta đi hết con đường đó: <b>gõ mã nguồn → biên dịch → chạy</b>, và viết chương trình Java đầu tiên.</div>
+<span class='note'><b>Mã nguồn</b>: các dòng lệnh bạn gõ bằng chữ. <b>Biên dịch</b>: dịch cả tệp mã nguồn sang dạng máy đọc được, trước khi chạy.</span>""",
            """Chào bạn, bên trong máy tính chỉ có các số không và một. Thế mà bạn gõ một dòng chữ, bấm chạy, và màn hình in ra số dư tài khoản.
-           Hôm nay ta đi hết con đường đó, từ lúc gõ mã nguồn, qua bước biên dịch, tới lúc chạy, và viết chương trình Java đầu tiên của bạn."""),
+           Hôm nay ta đi hết con đường đó, từ lúc gõ mã nguồn, qua bước biên dịch, tới lúc chạy, và viết chương trình Java đầu tiên của bạn.
+           Mã nguồn là các dòng lệnh bạn gõ bằng chữ, còn biên dịch là dịch cả tệp mã nguồn sang dạng máy đọc được, trước khi chạy."""),
         st("""<p>Mọi dịch vụ ngân hàng bạn sẽ học sau này, từ chuyển khoản tới đối soát, đều bắt đầu từ đúng ba bước ấy.</p>
 <div class="box key">Hiểu ba bước này giúp bạn đọc được thông báo lỗi, thay vì sợ nó.</div>""",
            """Mọi dịch vụ ngân hàng bạn sẽ học sau này, từ chuyển khoản tới đối soát, đều bắt đầu từ đúng ba bước ấy.
            Hiểu chúng giúp bạn đọc được thông báo lỗi, thay vì sợ nó."""),
     ])
-    sc_pre = sc("prereq", "prereq", "Ôn lại ba điều về máy tính", [
+    sc_pre = sc("prereq", "prereq", "Trước hết: ba điều về máy tính", [
         st(table(["khái niệm", "nghĩa", "ví dụ đời thường"],
                  [["① Bộ xử lý", "làm từng lệnh rất đơn giản, rất nhanh", "người thu ngân bấm máy tính"],
                   ["② Bộ nhớ", "chỗ để giữ dữ liệu khi đang chạy", "tờ giấy nháp"],
                   ["③ Tệp", "dữ liệu được lưu trên ổ đĩa, có tên", "cuốn sổ có tên trên gáy"]]),
-           """Trước hết ta ôn lại ba điều. Điều thứ nhất, bộ xử lý làm từng lệnh rất đơn giản nhưng rất nhanh, giống người thu ngân bấm máy tính.
+           """Trước hết, ta cần hiểu ba điều về máy tính. Điều thứ nhất, bộ xử lý làm từng lệnh rất đơn giản nhưng rất nhanh, giống người thu ngân bấm máy tính.
            Điều thứ hai, bộ nhớ là chỗ giữ dữ liệu khi chương trình đang chạy, giống tờ giấy nháp.
            Điều thứ ba, tệp là dữ liệu được lưu trên ổ đĩa và có tên, giống cuốn sổ có tên ghi trên gáy."""),
         st("""<p>Một <b>chương trình</b> là danh sách lệnh viết sẵn, máy làm lần lượt <b>từ trên xuống</b>.</p>""",
@@ -78,15 +80,17 @@ public class DoanKetQua {
            """Đây là chương trình đầu tiên, nằm trong tệp tên là Chao chấm Java. Nó có sáu dòng, ta đọc từng ký hiệu một ở bảng sau.
            Đừng lo nếu chưa hiểu hết, mỗi chữ đều sẽ được giải thích."""),
         st(table(["viết", "nghĩa"],
-                 [["<code>public class Chao</code>", "khai một lớp tên Chao; tên tệp phải là <code>Chao.java</code>"],
+                 [["<code>public class Chao</code>", "khai một <b>lớp</b> tên Chao: cái hộp có tên chứa mã (mọi lệnh Java nằm trong một lớp); tên tệp phải là <code>Chao.java</code>"],
                   ["<code>{ … }</code>", "cặp ngoặc nhọn gom các lệnh thành một khối"],
-                  ["<code>public static void main(String[] args)</code>", "hàm chính: chỗ máy bắt đầu chạy"],
+                  ["<code>public static void main(String[] args)</code>", "<b>hàm</b> là một nhóm lệnh có tên; hàm tên <code>main</code> là <b>hàm chính</b>, chỗ máy bắt đầu chạy (các chữ còn lại: tạm chép nguyên)"],
                   ["<code>System.out.println(…)</code>", "in giá trị trong ngoặc ra màn hình rồi xuống dòng"],
-                  ["<code>\"Chao ban!\"</code>", "một chuỗi chữ, nằm giữa hai dấu nháy kép"],
+                  ["<code>\"Chao ban!\"</code>", "một <b>chuỗi</b> (dãy ký tự), nằm giữa hai dấu nháy kép"],
                   ["<code>;</code>", "dấu chấm phẩy kết thúc một lệnh"]]),
-           """Dòng đầu khai một lớp tên Chao, và tên tệp bắt buộc trùng với tên lớp. Cặp ngoặc nhọn gom các lệnh thành một khối.
-           Dòng thứ hai là hàm chính, chỗ máy bắt đầu chạy. Lệnh in sẽ in giá trị trong ngoặc ra màn hình rồi xuống dòng.
-           Chữ nằm giữa hai dấu nháy kép là một chuỗi. Còn dấu chấm phẩy đánh dấu hết một lệnh.""", clear=True),
+           """Dòng đầu khai một lớp tên Chao. Lớp, nói gọn, là một cái hộp có tên để chứa mã, và mọi lệnh Java phải nằm trong một lớp; tên tệp bắt buộc trùng với tên lớp.
+           Cặp ngoặc nhọn gom các lệnh thành một khối.
+           Dòng thứ hai khai một hàm, tức một nhóm lệnh có tên. Hàm này là hàm chính, chỗ máy bắt đầu chạy; các chữ khác trên dòng đó bạn tạm chép nguyên, các bài về sau sẽ giải thích từng chữ.
+           Lệnh in sẽ in giá trị trong ngoặc ra màn hình rồi xuống dòng.
+           Chữ nằm giữa hai dấu nháy kép là một chuỗi, tức một dãy ký tự. Còn dấu chấm phẩy đánh dấu hết một lệnh.""", clear=True),
     ])
     sc_int = sc("intuition", "intuition", "Hình dung: từ chữ bạn gõ tới kết quả trên màn hình", [
         st(svg(1500, 380,
@@ -100,14 +104,23 @@ public class DoanKetQua {
                txt(750, 330, "biên dịch MỘT lần, máy ảo trên mỗi hệ điều hành chạy cùng tệp .class", 24, "middle", "#1f2937", True)),
            """Hình này là cả con đường. Bên trái là tệp mã nguồn bạn gõ. Trình biên dịch đọc nó và tạo ra tệp mã bai, dạng lệnh mà người khó đọc nhưng máy ảo hiểu.
            Sau đó máy ảo Java, viết tắt JVM, nạp tệp mã bai và chạy từng lệnh, rồi kết quả hiện ra màn hình.
-           Nhờ có máy ảo, cùng một tệp mã bai chạy được trên nhiều hệ điều hành."""),
+           Máy ảo là một chương trình đóng vai một chiếc máy tính tưởng tượng: nó đọc mã bai rồi ra lệnh lại cho máy thật.
+           Nhờ có máy ảo, cùng một tệp mã bai chạy được trên nhiều hệ điều hành, tức phần mềm nền điều khiển cả chiếc máy tính."""),
         st(table(["bước", "ai làm", "bắt được lỗi gì"],
-                 [["biên dịch", "trình biên dịch <code>javac</code>", "lỗi cú pháp, sai kiểu, sai tên: <b>lỗi biên dịch</b>"],
-                  ["chạy", "máy ảo <code>java</code>", "chia cho 0, vượt chỉ số…: <b>lỗi khi chạy</b> (ngoại lệ)"]]),
-           """Hai bước này bắt hai loại lỗi khác nhau. Trình biên dịch bắt lỗi viết sai luật của ngôn ngữ, gọi là lỗi biên dịch, và khi đó không có tệp mã bai nào được tạo.
-           Còn máy ảo chỉ phát hiện một số lỗi khi đang chạy, như chia cho không. Loại này gọi là lỗi khi chạy, hay ngoại lệ."""),
+                 [["biên dịch", "trình biên dịch <code>javac</code>", "viết sai luật của ngôn ngữ (thiếu dấu <code>;</code>, sai tên, đặt chữ vào chỗ cần số): <b>lỗi biên dịch</b>"],
+                  ["chạy", "máy ảo <code>java</code>", "chia cho 0, đọc ô không tồn tại…: <b>lỗi khi chạy</b> (máy ảo <b>ném ra ngoại lệ</b>: báo lỗi rồi dừng)"]]),
+           """Hai bước này bắt hai loại lỗi khác nhau. Trình biên dịch bắt lỗi viết sai luật của ngôn ngữ, như thiếu dấu chấm phẩy hay sai tên, gọi là lỗi biên dịch, và khi đó không có tệp mã bai nào được tạo.
+           Còn máy ảo chỉ phát hiện một số lỗi khi đang chạy, như chia cho không. Loại lỗi này gọi là lỗi khi chạy, vì chỉ lúc chương trình đang chạy mới lộ ra.
+           Khi gặp nó, máy ảo ném ra một ngoại lệ, nghĩa là dừng việc đang làm và in thông báo lỗi."""),
     ])
     sc_form = sc("formula", "formula", "Suy ra từng bước: tạo, biên dịch, chạy", [
+        st("""<p><b>Chuẩn bị.</b> Cài bộ công cụ <b>JDK</b> bản 21 trở lên (có bản miễn phí, ví dụ ở jdk.java.net hoặc adoptium.net); trong đó có trình biên dịch <code>javac</code> và máy ảo <code>java</code>.
+Mở <b>cửa sổ dòng lệnh</b> (Windows: Command Prompt hoặc PowerShell; macOS, Linux: Terminal) ở thư mục chứa tệp.</p>
+<div class="code"><div>javac -version</div></div>
+<span class='note'>Làm thử: lệnh in ra số phiên bản, ví dụ javac 21.0.2, là máy đã sẵn sàng.</span>""",
+           """Trước khi bắt đầu, máy cần có bộ công cụ JDK, bản hai mươi mốt trở lên, có bản tải miễn phí, vì trong đó có sẵn trình biên dịch và máy ảo.
+           Ta gõ lệnh trong cửa sổ dòng lệnh, tức một khung chữ nơi ta gõ lệnh cho máy rồi bấm phím xuống dòng để chạy.
+           Làm thử, gõ lệnh hỏi phiên bản của trình biên dịch; nếu nó in ra số phiên bản thì máy đã sẵn sàng."""),
         st("""<p><b>Bước 1. Tạo tệp.</b> Gõ mã vào tệp <code>Chao.java</code>. Tên tệp trùng tên lớp <code>public</code>, kể cả chữ hoa.</p>
 <span class='note'>Làm thử: lớp tên Chao thì tệp phải là Chao.java, không phải chao.java.</span>""",
            """Bước một là tạo tệp: gõ toàn bộ đoạn mã bên trái vào một tệp tên là Chao chấm Java. Tên tệp phải trùng tên lớp, kể cả chữ hoa và chữ thường, vì luật của Java bắt lớp công khai nằm trong tệp cùng tên.
@@ -157,8 +170,9 @@ public class DoanKetQua {
         st('<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Tin rằng “biên dịch được là chạy đúng”.</div>'
            + code_block(chia_khong, lines=(3, 6)) + out_block(chia_khong),
            """Lỗi thứ ba, của cả người đã đi làm, là tin rằng biên dịch được thì chạy đúng. Chương trình này biên dịch không lỗi.
-           Nhưng khi chạy, nó in bắt đầu, rồi chia một trăm nghìn cho số người bằng không, và máy ảo ném ra ngoại lệ phép tính.
-           Dòng kết thúc không bao giờ được in. Trình biên dịch không biết lúc chạy số người bằng bao nhiêu."""),
+           Dòng thứ hai của nó tạo một ô nhớ có tên là số người, đặt vào số không; loại ô nhớ có tên này gọi là biến.
+           Khi chạy, chương trình in bắt đầu, rồi chia một trăm nghìn cho số người bằng không, và máy ảo ném ra ngoại lệ phép tính.
+           Dòng kết thúc không được in, vì chương trình đã dừng. Trình biên dịch không biết lúc chạy số người bằng bao nhiêu."""),
     ])
     sc_quiz = sc("quiz", "quiz", "Bây giờ tới phần bạn tự làm", [
         st(code_block(quiz, lines=(3, 5), title="Đoán ba dòng in ra"),

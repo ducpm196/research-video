@@ -81,4 +81,32 @@ rec("L03h", round(70 + 5000 / 70) == 141 and round(5000 / 159) == 31 and round(m
 rec("L03i", 1000 + 9 * 1000 + 201000 == 211000 and round(211000 / 11000) == 19, "cụm phình: 211 000, chậm ≈ 19 lần")
 rec("L03j", cost(4 * 10 ** 6, 2000, 1) == 4000 and cost(4 * 10 ** 6, 2000, 20) == 42000 and round(4e6 / 42000) == 95
     and min(m for m, r, c in s2 if r >= 0.95) == 4, "quiz: 4000; 42 000; ≈ 95 lần; m = 4")
-rec("L03k", math.log2(10 ** 6) < 20 < math.log2(10 ** 6) + 0.1, "lôgarit cơ số 2 của 1 triệu ≈ 20")
+rec("L03k", math.log2(10 ** 6) < 20 < math.log2(10 ** 6) + 0.1 and 2 ** 19 < 10 ** 6 < 2 ** 20, "lôgarit cơ số 2 của 1 triệu ≈ 20 (chia đôi ~20 lần còn 1)")
+
+
+# Phần nền (sửa 2026-11-09, đợt C — bài tự đứng được): vector nhúng 2 chiều minh hoạ và K trung bình 1 chiều làm từng vòng.
+# Tính lại bằng phân số chính xác (cosin bình phương để khỏi căn) và vòng K trung bình viết đầy đủ (gán → cập nhật → dừng khi không đổi).
+def cos2(a, b):  # bình phương cosin, chính xác
+    dot = sum(F(x) * y for x, y in zip(a, b))
+    return dot * dot / (sum(F(x) ** 2 for x in a) * sum(F(y) ** 2 for y in b)), dot
+
+
+q2, d1, d2 = (4, 3), (3, 4), (0, 5)
+rec("L03l", cos2(q2, d1) == (F(24, 25) ** 2, 24) and cos2(q2, d2) == (F(3, 5) ** 2, 15) and dist(q2, d1) == 2 and dist(q2, d2) == 20,
+    "nền: cosin(q, d1) = 24/25 = 0,96, cosin(q, d2) = 15/25 = 0,6; bình phương khoảng cách 2 và 20")
+
+
+def kmeans1d(pts, cs):
+    hist, lab_prev = [], None
+    while True:
+        lab1 = [min(range(len(cs)), key=lambda j: abs(F(p) - cs[j])) for p in pts]
+        if lab1 == lab_prev:
+            return hist
+        hist.append((lab1, cs))
+        cs = [sum(F(p) for p, l in zip(pts, lab1) if l == j) / lab1.count(j) for j in range(len(cs))]
+        lab_prev = lab1
+
+
+H = kmeans1d([1, 2, 4, 8, 9], [F(1), F(4)])
+rec("L03m", len(H) == 2 and H[0][0] == [0, 0, 1, 1, 1] and H[1][1] == [F(3, 2), 7] and H[1][0] == [0, 0, 0, 1, 1]
+    and round(float(F(7, 3)), 2) == 2.33, "nền K trung bình: vòng 1 gán {1,2}/{4,8,9} → tâm 1,5 và 7; vòng 2 điểm 4 đổi cụm → 7/3 ≈ 2,33 và 8,5; vòng 3 dừng")

@@ -23,3 +23,7 @@ URL: https://arxiv.org/pdf/1603.09320
 
 ## Không dạy
 - Số đo tốc độ cụ thể của thư viện trên phần cứng cụ thể (phụ thuộc máy); bài dùng số minh hoạ cho thời gian; số phép so tính lại được.
+
+## Phần nền giảng lại trong bài (đợt C, 2026-11-09 — bài tự đứng được, không dựa vào khoá khác)
+- K trung bình (gán vào tâm gần nhất → dời tâm về trung bình → lặp tới khi không đổi): C. D. Manning, P. Raghavan, H. Schütze, *Introduction to Information Retrieval*, CUP 2008, mục 16.4 “K-means”. Đối chiếu nội dung, không trích nguyên văn trong đợt này. Ví dụ 1 chiều (1, 2, 4, 8, 9; tâm đầu 1 và 4) là số minh hoạ, tính lại ở verify_parts/L03.py (L03m).
+- Vector nhúng học từ cặp “câu hỏi – văn bản đúng” (kéo cặp đúng lại gần, đẩy cặp sai ra xa): V. Karpukhin và cộng sự, Dense Passage Retrieval for Open-Domain Question Answering, EMNLP 2020 (arXiv 2004.04906) — đối chiếu ý, không trích nguyên văn trong đợt này. Ví dụ 2 chiều (q = (4, 3), (3, 4), (0, 5)) là số minh hoạ (L03l).

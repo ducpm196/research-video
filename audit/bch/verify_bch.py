@@ -222,9 +222,11 @@ rec("L12", hdr_year == 4_204_800 and round(hdr_year / 1e6, 1) == 4.2 and 2 * 10*
     and round(269 / 336 * 100, 2) == 80.06 and round(336 * 600 / 86400, 2) == 2.33 and days == 653
     and round(21 / 0.0026) == 8077 and round((1 - 0.0026 / 21) * 100, 3) == 99.988
     and 32 * 12 == 384 and round(13.3 / 12, 3) == 1.108 and 32 / 4096 == 0.0078125 and round(100 / 0.33) == 303
+    # trần rút sau Pectra (7/5/2025): 256 ETH mỗi kỷ nguyên (consensus-specs electra, sources_L12.md [E25]); đếm kỷ nguyên trong một ngày bằng lịch thật
+    and int(_dt.timedelta(days=1).total_seconds()) // (32 * 12) * 256 == 57_600
     and alg.chain_tps(10**6, 250, 600) == 10**6 / 250 / 600,
     "tiêu đề 4 204 800 byte/năm (đếm từng khối); trọng lượng 4·cơ sở + nhân chứng: khối cũ 4 000 000, giao dịch 700, 5714/khối; "
-    "1916/2016 khoá, 1915 thì không (101 khối không báo chặn được); 481 824 = 239·2016; 653 ngày; 8077 lần, 99,988%; 6,4 phút; 303 ngày")
+    "1916/2016 khoá, 1915 thì không (101 khối không báo chặn được); 481 824 = 239·2016; 653 ngày; 8077 lần, 99,988%; 6,4 phút; 303 ngày; trần rút sau Pectra 57 600 ETH/ngày")
 
 bad = [c for c, ok in R if not ok]
 print(f"\nverify_bch: {len(R) - len(bad)}/{len(R)} PASS" + (f"; FAIL: {bad}" if bad else ""))

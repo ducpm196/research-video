@@ -126,17 +126,20 @@ public class DoanToan {
            Phép gán tính vế phải rồi ghi đè. Còn chia số nguyên cho không là lỗi khi chạy.""", focus=[1, "1.2", "1.3", "1.4", "1.5"]),
     ])
     sc_sym = sc("sym", "symbol", "Giải mã các phép toán", [
-        st(table(["viết", "đọc là", "ghi chú"],
+        st("<p><b>Toán tử</b>: ký hiệu của một phép tính, như <code>+</code> hay <code>%</code>. "
+           "<b>Biểu thức</b>: cụm gồm số, biến và toán tử mà máy tính ra <b>một</b> giá trị, như <code>soDu + 50000</code>.</p>"
+           + table(["viết", "đọc là", "ghi chú"],
                  [["<code>+ - *</code>", "cộng, trừ, nhân", "như toán"],
                   ["<code>/</code>", "chia", "hai số nguyên thì <b>bỏ phần lẻ</b>"],
                   ["<code>%</code>", "chia lấy dư", "phần còn lại sau phép chia nguyên"],
                   ["<code>(double) x</code>", "ép kiểu", "đổi x thành số thực trước khi tính tiếp"],
                   ["<code>x += 5</code>", "cộng dồn", "viết gọn của <code>x = x + 5</code>; có cả <code>-=</code>, <code>*=</code>"],
                   ["<code>x++</code>, <code>x--</code>", "tăng một, giảm một", "viết gọn của <code>x = x + 1</code> và <code>x = x - 1</code>"]]),
-           """Bảng thứ nhất là các phép tính. Cộng, trừ, nhân giống toán, còn chia hai số nguyên thì bỏ phần lẻ.
-           Dấu phần trăm là phép chia lấy dư. Tên kiểu trong ngoặc đặt trước một số là ép kiểu, đổi số đó thành số thực.
+           """Trước hết là hai từ trong tên bài. Toán tử là ký hiệu của một phép tính, còn biểu thức là một cụm gồm số, biến và toán tử mà máy tính ra một giá trị.
+           Bảng thứ nhất là các phép tính. Cộng, trừ, nhân giống toán, còn chia hai số nguyên thì bỏ phần lẻ.
+           Dấu phần trăm là phép chia lấy dư. Tên kiểu trong ngoặc đặt trước một số là ép kiểu, đổi số đó sang kiểu ghi trong ngoặc, ở đây là số thực.
            Cộng bằng là viết gọn của cộng dồn, hai dấu cộng liền nhau là tăng thêm một, hai dấu trừ liền nhau là giảm đi một.""",
-           focus=[1, ["1.2", "1.3"], "1.4", "1.5", ["1.6", "1.7"]]),
+           focus=[1, 1, 2, ["2.2", "2.3"], "2.4", "2.5", ["2.6", "2.7"]], clear=True),
         st(table(["viết", "đọc là", "kết quả"],
                  [["<code>==</code>  <code>!=</code>", "bằng, khác", "đúng hoặc sai"],
                   ["<code>&lt;</code>  <code>&lt;=</code>  <code>&gt;</code>  <code>&gt;=</code>", "nhỏ hơn, nhỏ hơn hoặc bằng, lớn hơn, lớn hơn hoặc bằng", "đúng hoặc sai"],
@@ -212,7 +215,7 @@ $$-100\\,000 / 3 \\to \\hl{-33\\,333} \\qquad -100\\,000 - (-33\\,333) \\times 3
            """Chạy thật, năm dòng in ra là ba, một, ba phẩy năm, âm ba và âm một, đúng như ta đã tính."""),
     ], checks=["7 // 2 == 3", "7 % 2 == 1", "7 / 2 == 3.5", "int(-7 / 2) == -3", "math.fmod(-7, 2) == -1"])
     sc_chk = sc("check", "check", "Tự kiểm bằng đường khác: ghép thương và dư phải ra lại số ban đầu", [
-        st("""<p>Luật luôn đúng với số nguyên (b khác 0): <b>thương × số chia + dư = số ban đầu</b>.</p>"""
+        st("""<p>Luật luôn đúng với số nguyên (số chia khác 0): <b>thương × số chia + dư = số ban đầu</b>.</p>"""
            + table(["số ban đầu", "thương", "dư", "ghép lại"],
                    [["7", "3", "1", "3 × 2 + 1 = 7 ✓"], ["−7", "−3", "−1", "(−3) × 2 + (−1) = −7 ✓"]]),
            """Đường kiểm khác là một luật luôn đúng với số nguyên. Thương nhân số chia, cộng số dư, phải ra lại số ban đầu.
@@ -238,7 +241,7 @@ $$-100\\,000 / 3 \\to \\hl{-33\\,333} \\qquad -100\\,000 - (-33\\,333) \\times 3
         st("""<p>Phí đúng là $1\\,234\\,567 \\times 5 / 1000 = 6\\,172.835$. Phần lẻ $0.835$ đồng làm tròn thế nào là <b>quy định nghiệp vụ</b>,
 không phải thói quen của phép chia: khi cần, dùng kiểu số thập phân chính xác <code>BigDecimal</code> với cách làm tròn ghi rõ.</p>""",
            """Phí chính xác có phần lẻ tám trăm ba mươi lăm phần nghìn đồng. Làm tròn phần lẻ thế nào là quy định nghiệp vụ, không nên để phép chia tự quyết.
-           Khi cần, ta dùng kiểu số thập phân chính xác của bài trước, kèm cách làm tròn ghi rõ.""", clear=True),
+           Khi cần, ta dùng kiểu số thập phân chính xác đã gặp ở bài trước, kiểu lưu đúng từng chữ số thập phân thay vì lưu theo hệ hai, kèm cách làm tròn ghi rõ.""", clear=True),
     ], checks=["1234567 * (5 // 1000) == 0", "1234567 // 1000 * 5 == 6170", "1234567 * 5 // 1000 == 6172",
                "Fraction(1234567 * 5, 1000) == Fraction(6172835, 1000)"])
     sc_quiz = sc("quiz", "quiz", "Bây giờ tới phần bạn tự làm", [

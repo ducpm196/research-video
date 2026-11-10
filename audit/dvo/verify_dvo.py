@@ -179,7 +179,7 @@ rec("L13a", int(r16) == 208 and round(float(r16), 1) == 208.6 and round(float(r1
 pct18, pct19, pct21, pct23 = [7, 48, 37, 15], [20, 23, 44, 12], [26, 40, 28, 7], [18, 31, 33, 17]
 rec("L13b", round(pct19[0] / pct18[0], 2) == 2.86 and pct21[0] + pct21[1] == 66 and sum(pct23) == 99 and sum(pct19) == 99
     and all(0 <= v <= 15 for v in (5, 10)) and statistics.mean([0, 15]) == 7.5 and 5 < Fr(3, 40) * 100 < 10,
-    "tinh hoa 7% → 20% ≈ 2,86 lần; 26 + 40 = 66%; 2023 cộng 99% (làm tròn); 5% và 10% cùng lọt khoảng cũ 0–15% (điểm giữa 7,5)")
+    "tinh hoa 7% → 20% ≈ 2,86 lần; 26 + 40 = 66%; 2023 cộng 99% (báo cáo 2023 không ghi lý do); 5% và 10% cùng lọt khoảng cũ 0–15% (điểm giữa 7,5)")
 rec("L13c", max(builds_bisect(60, b) for b in range(60)) == 6 and max(builds_bisect(15, b) for b in range(15)) == 4
     and Fr(3, 12) == Fr(1, 4) and 15 < 25 < 64 and 12 * 30 == 360 and 20 // 2 == 10,
     "quiz: lô 60 → 6 lần dựng kiểm, lô 15 → 4; 3/12 = 25% nằm giữa 15% và 64%; chặng 1: 12 × 30 = 360, 20 lỗi → 10 (số minh hoạ)")

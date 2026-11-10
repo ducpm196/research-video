@@ -159,9 +159,11 @@ public class DoanTk {
            """Với mảng, số dư và tên chủ tài khoản nằm ở hai mảng khác nhau, và dòng mã nào cũng gán được một số âm vào ô số dư.
            Chỉ cần một lệnh gán sai trong một triệu dòng mã là có số dư âm."""),
         st("""<p>Hôm nay ta học <b>lớp</b> và <b>đối tượng</b>: gói dữ liệu cùng <b>luật</b> của nó vào một chỗ, và khoá dữ liệu lại.</p>
-<div class="box key">Luật “số dư không bao giờ âm” được viết đúng một lần, bên trong lớp tài khoản.</div>""",
+<div class="box key">Luật “số dư không bao giờ âm” được viết đúng một lần, bên trong lớp tài khoản.</div>
+<span class='note'>Một điều phải luôn đúng với dữ liệu, như “số dư ≥ 0”, người lập trình gọi là <b>bất biến</b>.</span>""",
            """Hôm nay ta học lớp và đối tượng. Ta gói dữ liệu cùng luật của nó vào một chỗ, rồi khoá dữ liệu lại.
-           Luật số dư không bao giờ âm khi đó được viết đúng một lần, bên trong lớp tài khoản."""),
+           Luật số dư không bao giờ âm khi đó được viết đúng một lần, bên trong lớp tài khoản.
+           Một điều phải luôn đúng với dữ liệu như vậy, người lập trình gọi là bất biến."""),
     ])
     sc_pre = sc("prereq", "prereq", "Ôn lại ba điều sẽ dùng hôm nay", [
         st(table(["đã học", "viết", "dùng lại hôm nay"],
@@ -239,7 +241,7 @@ public class DoanTk {
            Nếu qua được phép kiểm, số tiền rút không lớn hơn số dư, nên số dư sau khi trừ vẫn lớn hơn hoặc bằng không."""),
         st("<p><b>Bước 5. Hàm đọc số dư và hàm mô tả.</b></p>" + code_block(ngan, lines=(f31 - 4, f31 + 2)),
            """Bước năm, thêm hàm đọc số dư để bên ngoài xem được mà không sửa được, và hàm đổi ra chuỗi để in tài khoản.
-           Hàm đổi ra chuỗi phải có từ khoá công khai, vì Java quy định như vậy cho hàm này."""),
+           Hàm đổi ra chuỗi phải có từ khoá công khai, vì mọi đối tượng Java đã có sẵn một hàm cùng tên ở dạng công khai, và bản ta viết lại không được hẹp quyền hơn."""),
     ], checks=["all(s + x >= 0 for s in [0, 300000] for x in [1, 500000])",
                "all(s - x >= 0 for s in [0, 300000, 600000] for x in range(1, s + 1, 100000))"])
     m5 = ln(ngan, "an.nap(1000000)")
@@ -338,7 +340,7 @@ Rồi kiểm: mọi đường đổi dữ liệu có đi qua phép kiểm luật
                   "Java SE 21 (JLS §8.1 khai báo lớp, §8.3 trường và §8.3.1.1 trường static, §8.8 hàm tạo, §15.8.3 this, "
                   "§6.6 kiểm soát truy cập private, §6.4.1 che khuất tên, §4.12.5 giá trị mặc định null, §15.9 new; "
                   "Object.toString, Java SE 21 API); dev.java/learn",
-                  ["Khai báo lớp có trường riêng tư, hàm tạo, hàm thành viên và hàm đổi ra chuỗi",
+                  ["Khai báo lớp có trường riêng tư, hàm tạo, các hàm của đối tượng (nạp, rút) và hàm đổi ra chuỗi",
                    "Tạo nhiều đối tượng độc lập bằng từ khoá tạo mới và gọi hàm trên từng đối tượng",
                    "Giữ bất biến số dư không âm bằng cách kiểm trong hàm nạp, hàm rút",
                    "Nhận ra lỗi quên this, trường static dùng chung, trường public phá bất biến"],

@@ -13,12 +13,14 @@ def build():
            """Hôm nay ta trả lời hai câu. Vì sao thử lại là chuyện bình thường, và làm sao thử lại mà không trừ trùng.
            Đáp án là khoá lũy đẳng: cùng một khoá thì chỉ làm một lần."""),
     ])
-    pre = sc("prereq", "prereq", "Ôn lại ba điều sẽ dùng", [
+    pre = sc("prereq", "prereq", "Trước hết: bốn điều cần hiểu", [
         st(table(["khái niệm", "nghĩa", "ví dụ"],
-                 [["① Yêu cầu và phản hồi", "người gọi gửi yêu cầu, máy chủ trả phản hồi", "yêu cầu chuyển tiền, phản hồi thành công"],
-                  ["② Mã trạng thái", "số báo kết quả: 2xx thành công, 4xx lỗi người gọi, 5xx lỗi máy chủ", "200 thành công, 404 không thấy, 503 quá tải"],
-                  ["③ Hết giờ chờ", "chờ quá lâu thì người gọi bỏ cuộc, dù máy chủ có thể đã làm xong", "chờ 3 giây không thấy gì"]]),
-           """Ôn ba điều. Người gọi gửi yêu cầu, máy chủ trả phản hồi. Mã trạng thái báo kết quả, hai trăm là thành công, bốn trăm là lỗi người gọi, năm trăm là lỗi máy chủ.
+                 [["① HTTP và REST API", "HTTP là giao thức web: mỗi yêu cầu gồm một phương thức (GET, POST…) và một đường dẫn; REST API là cách một dịch vụ mở chức năng qua các đường dẫn đó", "<code>POST /transfers</code>"],
+                  ["② Yêu cầu và phản hồi", "người gọi gửi yêu cầu, máy chủ trả phản hồi", "yêu cầu chuyển tiền, phản hồi thành công"],
+                  ["③ Mã trạng thái", "số báo kết quả: 2xx thành công, 4xx lỗi người gọi, 5xx lỗi máy chủ", "200 thành công, 404 không thấy, 503 tạm không phục vụ"],
+                  ["④ Hết giờ chờ", "chờ quá lâu thì người gọi bỏ cuộc, dù máy chủ có thể đã làm xong", "chờ 3 giây không thấy gì"]]),
+           """Trước hết ta cần hiểu bốn điều. HTTP là giao thức web. Mỗi yêu cầu gồm một phương thức, như lấy hay gửi, và một đường dẫn. REST API là cách một dịch vụ mở chức năng của nó qua các đường dẫn đó.
+           Người gọi gửi yêu cầu, máy chủ trả phản hồi. Mã trạng thái báo kết quả. Các mã bắt đầu bằng chữ số hai là thành công, bắt đầu bằng bốn là lỗi người gọi, bắt đầu bằng năm là lỗi máy chủ.
            Còn hết giờ chờ nghĩa là người gọi bỏ cuộc, dù máy chủ có thể đã làm xong."""),
         st("""$$2\\,000\\,000 - 500\\,000 = 1\\,500\\,000$$""",
            """Một ví dụ số. Số dư hai triệu, trừ năm trăm nghìn còn một triệu năm trăm nghìn. Đó là kết quả đúng cho một lần chuyển."""),
@@ -55,9 +57,9 @@ def build():
            Lần hai và lần ba, máy chủ thấy khoá đã có, nên trả lại kết quả cũ mà không làm lại."""),
     ])
     form = sc("formula", "formula", "Suy ra từng bước: thử lại an toàn", [
-        st("""<p><b>Bước 1.</b> Hết giờ chờ chỉ cho biết <b>chưa nhận phản hồi</b>, không cho biết máy chủ đã làm hay chưa. Vì vậy người gọi buộc phải thử lại.</p>
+        st("""<p><b>Bước 1.</b> Hết giờ chờ chỉ cho biết <b>chưa nhận phản hồi</b>, không cho biết máy chủ đã làm hay chưa. Muốn biết kết quả, người gọi phải gửi lại hoặc hỏi lại, nên thử lại là chuyện thường xảy ra.</p>
 <span class='note'>Làm thử: 3 lần gửi, 0 phản hồi tới nơi, vẫn không biết số lần đã trừ.</span>""",
-           """Bước một, vì hết giờ chờ chỉ cho biết chưa nhận được phản hồi, chứ không cho biết máy chủ đã làm hay chưa, nên người gọi buộc phải thử lại.
+           """Bước một, vì hết giờ chờ chỉ cho biết chưa nhận được phản hồi, chứ không cho biết máy chủ đã làm hay chưa, nên muốn biết kết quả người gọi phải gửi lại hoặc hỏi lại. Thử lại vì thế là chuyện thường xảy ra.
            Làm thử, ba lần gửi mà không phản hồi nào tới nơi, người gọi vẫn không biết đã trừ mấy lần."""),
         st("""<p><b>Bước 2.</b> Người gọi sinh <b>một khoá duy nhất cho mỗi việc</b> rồi gửi kèm cả ba lần. Khoá đại diện cho <i>việc</i>, không đại diện cho <i>lần gửi</i>.</p>
 <span class='note'>Làm thử: ba lần gửi, một khoá k1.</span>""",
@@ -87,7 +89,7 @@ $$② \\; 2\\,000\\,000 - 1\\,500\\,000 = \\hl{500\\,000}\\ \\text{còn lại}$$
     chk = sc("check", "check", "Tự kiểm bằng đường khác: để cơ sở dữ liệu chặn trùng", [
         st("""<p>Đường khác: tạo bảng có ràng buộc <code>UNIQUE</code> trên khoá, rồi chèn cùng khoá ba lần. Ràng buộc cho phép <b>đúng một dòng</b> vào.</p>
 $$\\text{số dòng} = \\hl{1}$$""",
-           """Kiểm bằng đường khác. Ta tạo một bảng có ràng buộc duy nhất trên khoá rồi chèn cùng khoá ba lần. Vì cơ sở dữ liệu chỉ cho một dòng vào, số dòng cuối cùng là một.
+           """Kiểm bằng đường khác. Trong cơ sở dữ liệu, bảng là nơi lưu các dòng, và ràng buộc duy nhất là luật cấm hai dòng có cùng giá trị ở một cột. Ta tạo một bảng có ràng buộc duy nhất trên khoá rồi chèn cùng khoá ba lần. Vì cơ sở dữ liệu chỉ cho một dòng vào, số dòng cuối cùng là một.
            Cách này chặn trùng ngay cả khi hai lần thử đến cùng lúc."""),
         st(table(["phương thức", "an toàn (không đổi dữ liệu)", "lũy đẳng"],
                  [["GET", "có", "có"], ["PUT", "không", "có"], ["DELETE", "không", "có"], ["POST", "không", "không (cần khoá)"]]),
@@ -108,9 +110,9 @@ $$\\text{số dòng} = \\hl{1}$$""",
         st(table(["câu", "đề"],
                  [["1", "Số dư 1 000 000, chuyển 200 000, thử 5 lần, không khoá. Còn bao nhiêu?"],
                   ["2", "Cùng đề nhưng có khoá lũy đẳng. Còn bao nhiêu?"],
-                  ["3", "Quyết định: lưu khoá ở bộ đệm hay trong cơ sở dữ liệu cùng giao dịch trừ tiền?"]]),
+                  ["3", "Quyết định: lưu khoá ở bộ đệm (vùng lưu tạm trong bộ nhớ, đọc rất nhanh, có thể mất) hay trong cơ sở dữ liệu cùng giao dịch trừ tiền?"]]),
            """Đến lượt bạn. Câu một, số dư một triệu, chuyển hai trăm nghìn, thử năm lần, không khoá, còn bao nhiêu? Câu hai, cùng đề nhưng có khoá lũy đẳng, còn bao nhiêu?
-           Câu ba, lưu khoá ở bộ đệm hay trong cơ sở dữ liệu cùng giao dịch trừ tiền? Hãy dừng video và làm ra giấy.""",
+           Câu ba, lưu khoá ở bộ đệm, tức vùng lưu tạm trong bộ nhớ đọc rất nhanh nhưng có thể mất, hay trong cơ sở dữ liệu cùng giao dịch trừ tiền? Hãy dừng video và làm ra giấy.""",
            pause=25),
         st("""<p>Câu 1: bị trừ $5 \\cdot 200\\,000 = 1\\,000\\,000$.</p>
 $$1\\,000\\,000 - 1\\,000\\,000 = \\hl{0}$$""",

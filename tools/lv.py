@@ -1199,7 +1199,10 @@ def cmd_build(spec, skip_lint=False):
     mp4 = od / f"{spec['id']}.mp4"
     cmd = [ff, "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(concat), "-i", str(audio),
            "-vf", f"fps={FPS},format=yuv420p", "-c:v", "libx264", "-tune", "stillimage", "-crf", "20",
-           "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", "-shortest", str(mp4)]
+           "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", "-shortest",
+           # -shortest với nguồn ảnh concat vẫn ghi thừa khung đang đệm (GFX L02, 2026-11-09: hình dài hơn tiếng 0,47 s,
+           # verify FAIL); cắt cứng đúng độ dài timeline để mp4 khớp tiếng.
+           "-t", f"{total:.3f}", str(mp4)]
     subprocess.run(cmd, check=True, cwd=str(od))
     audio.unlink(missing_ok=True)  # file trung gian ~40MB, tạo lại được
     # phụ đề + chương

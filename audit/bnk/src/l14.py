@@ -16,18 +16,23 @@ def build():
            """Bảng này là lộ trình bốn bước. Một, tìm nguyên nhân, dùng hiểu biết về hết giờ chờ và thử lại. Hai, xác nhận bằng sổ, dùng đối soát. Ba, hoàn tiền đúng cách, dùng bút toán đảo.
            Bốn, ngăn lần sau, dùng khoá lũy đẳng và truy vấn trước khi thử lại."""),
     ])
-    pre = sc("prereq", "prereq", "Ôn lại những mảnh ghép sẽ dùng", [
-        st(table(["mảnh ghép", "nội dung đã học", "ví dụ số"],
-                 [["thử lại", "mất phản hồi nên người gọi thử lại", "3 lần gửi, 1 việc thật"],
-                  ["khoá lũy đẳng", "cùng khoá thì chỉ làm một lần", "UNIQUE → 1 dòng"],
-                  ["hết giờ chờ", "chưa biết kết quả, phải truy vấn", "đã hạch toán + gửi lại = ghi nợ 2 lần"],
-                  ["đối soát", "ghép hai sổ theo mã, chia bốn loại", "3 khớp, 1, 1, 1"],
-                  ["bút toán đảo", "sửa sai bằng dòng ngược dấu", "6 dòng, số dư về 0"]]),
-           """Ôn năm mảnh ghép. Thử lại vì mất phản hồi. Khoá lũy đẳng giúp cùng khoá chỉ làm một lần. Hết giờ chờ nghĩa là chưa biết kết quả, phải truy vấn.
-           Đối soát ghép hai sổ theo mã và chia bốn loại. Bút toán đảo sửa sai bằng dòng ngược dấu."""),
+    pre = sc("prereq", "prereq", "Nhắc lại từ đầu: năm mảnh ghép sẽ dùng", [
+        st(table(["mảnh ghép", "nghĩa", "ví dụ số"],
+                 [["thử lại", "phản hồi có thể mất trên mạng, nên ứng dụng (hoặc khách) gửi lại cùng một lệnh", "1 lệnh, gửi 3 lần"],
+                  ["khoá lũy đẳng", "mã duy nhất gắn với mỗi lệnh, gửi kèm mọi lần thử; máy chủ thấy khoá đã có thì không làm lại", "3 lần gửi cùng khoá → trừ 1 lần"],
+                  ["hết giờ chờ", "không nhận phản hồi kịp: chưa biết lõi ngân hàng đã hạch toán (ghi vào sổ) hay chưa, phải truy vấn", "đã hạch toán mà gửi lại → ghi nợ (trừ tiền) 2 lần"]]),
+           """Ôn năm mảnh ghép. Thử lại là khi phản hồi mất trên mạng, nên ứng dụng hoặc khách gửi lại cùng một lệnh.
+           Khoá lũy đẳng là mã duy nhất gắn với mỗi lệnh và gửi kèm mọi lần thử. Máy chủ thấy khoá đã có thì không làm lại, nên ba lần gửi cùng khoá chỉ trừ tiền một lần.
+           Hết giờ chờ nghĩa là chưa biết lõi ngân hàng đã hạch toán, tức đã ghi vào sổ hay chưa, nên phải truy vấn. Nếu đã hạch toán mà gửi lại, khách bị trừ tiền hai lần."""),
+        st(table(["mảnh ghép", "nghĩa", "ví dụ số"],
+                 [["đối soát", "đặt sổ ngân hàng cạnh sổ chuyển mạch (hệ thống ở giữa các ngân hàng), ghép theo mã giao dịch, chia bốn loại: khớp, lệch tiền, chỉ ngân hàng có, chỉ chuyển mạch có", "ngân hàng có r1, r2; chuyển mạch có r1 → r2 chỉ ngân hàng có"],
+                  ["bút toán đảo", "sổ không được xoá dòng; sửa sai bằng một dòng mới ngược dấu", "−500 000 rồi +500 000: tổng 0"]]),
+           """Đối soát là đặt sổ ngân hàng cạnh sổ của chuyển mạch, tức hệ thống ở giữa các ngân hàng, rồi ghép theo mã giao dịch và chia bốn loại. Bốn loại là khớp, lệch tiền, chỉ ngân hàng có, và chỉ chuyển mạch có.
+           Bút toán đảo là cách sửa sai mà không xoá dòng nào, bằng một dòng mới ngược dấu. Ví dụ trừ năm trăm nghìn rồi cộng năm trăm nghìn, tổng bằng không.""", clear=True),
         st("""$$2 \\cdot 500\\,000 = 1\\,000\\,000$$""",
            """Một phép tính khởi động. Hai lần trừ, mỗi lần năm trăm nghìn, tổng bị trừ một triệu. Đúng ra chỉ nên trừ năm trăm nghìn."""),
-    ], checks=["2 * 500000 == 1000000"])
+    ], checks=["2 * 500000 == 1000000", "alg.bnk_retry_sim(2000000, 500000, 3, True) == 2000000 - 500000",
+               "alg.bnk_reconcile([('r1', 1), ('r2', 1)], [('r1', 1)]) == (1, 1, 0, 0)", "-500000 + 500000 == 0"])
     sym = sc("sym", "symbol", "Giải mã khung kể sự cố: STAR", [
         st(table(["chữ", "nghĩa", "câu hỏi tự hỏi"],
                  [["S — Situation", "bối cảnh", "hệ thống nào, ai dùng, rủi ro gì"],
@@ -100,11 +105,14 @@ $$⑤ \\; 2\\,000\\,000 - 500\\,000 = \\hlg{1\\,500\\,000}\\ \\text{ngay từ đ
 $$\\text{giao dịch lệch} = \\hlg{[\\ ]}$$""",
            """Kiểm bằng đường khác. Vì sổ cái cân đối theo từng giao dịch, ta dựng sổ nhiều dòng rồi hỏi cơ sở dữ liệu. Giao dịch gốc và giao dịch đảo đều cân đối, nên không giao dịch nào lệch."""),
         st(table(["kiểm tra", "kết quả mong đợi"],
-                 [["mỗi giao dịch cân đối (tổng 0)", "danh sách lệch rỗng"], ["số dòng sau khi đảo", "dòng cũ + dòng đảo, không dòng nào bị xoá"],
-                  ["đối soát sau sửa", "mọi mã đều khớp"]]),
-           """Bảng này là ba phép kiểm sau khi sửa, vì sửa xong mới cần chắc sổ đúng. Mỗi giao dịch cân đối thì danh sách lệch rỗng. Số dòng bằng dòng cũ cộng dòng đảo, không dòng nào bị xoá. Và đối soát lại thì mọi mã đều khớp."""),
+                 [["mỗi giao dịch cân đối (tổng 0)", "danh sách lệch rỗng"], ["số dòng sau khi đảo", "4 dòng cũ (r7, r7b) + 2 dòng đảo = 6, không dòng nào bị xoá"],
+                  ["đối soát sau sửa", "r7 khớp; r7b vẫn chỉ ngân hàng có nhưng đã có bút toán đảo đi kèm, tổng 0, nên được đóng"]]),
+           """Bảng này là ba phép kiểm sau khi sửa, vì sửa xong mới cần chắc sổ đúng. Mỗi giao dịch cân đối thì danh sách lệch rỗng.
+           Số dòng bằng bốn dòng cũ của r bảy và r bảy b, cộng hai dòng đảo, là sáu dòng, không dòng nào bị xoá.
+           Còn đối soát lại thì r bảy khớp. R bảy b vẫn chỉ ngân hàng có, nhưng đã có bút toán đảo đi kèm với tổng bằng không, nên khoản lệch đó được đóng."""),
     ], checks=["alg.bnk_ledger_unbalanced([(1, 'khach', -500000), (1, 'nhan', 500000), (2, 'khach', -500000), (2, 'nhan', 500000), (3, 'khach', 500000), (3, 'nhan', -500000)]) == []",
-               "alg.bnk_ledger_after_reversal(500000, 5500)[0] == 3 + 3"])
+               "len([(1, 'khach', -500000), (1, 'nhan', 500000), (2, 'khach', -500000), (2, 'nhan', 500000), (3, 'khach', 500000), (3, 'nhan', -500000)]) == 4 + 2 == 6",
+               "-500000 + 500000 == 0"])
     pit = sc("pitfalls", "pitfall", "Lỗi hay gặp khi kể sự cố trong phỏng vấn", [
         st("""<div class="box warn"><b>Lỗi 1.</b> <b class="red">Kể sự cố không phải của mình</b> như của mình, hoặc thêm con số không có nguồn. Người phỏng vấn đào sâu hai ba lớp là lộ. Chỉ kể điều bạn thật sự làm, và con số nào cũng phải có nguồn.</div>""",
            """Lỗi thứ nhất, và nặng nhất. Kể sự cố không phải của mình như của mình, hoặc thêm con số không có nguồn. Người phỏng vấn đào sâu hai ba lớp là lộ. Chỉ kể điều bạn thật sự làm, và con số nào cũng phải có nguồn."""),

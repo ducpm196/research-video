@@ -21,6 +21,9 @@ Tải: static.googleusercontent.com/media/research.google.com/en//archive/mapred
   therefore inaccessible. Completed reduce tasks do not need to be re-executed since their output is stored in a global file system.”
   “network maintenance on a running cluster was causing groups of 80 machines at a time to become unreachable for several minutes. The
   MapReduce master simply re-executed the work done by the unreachable worker machines”.
+- §3.3 “Semantics in the Presence of Failures” (đọc lại 2026-11-09, pdftotext): “When the user-supplied map and reduce operators are
+  deterministic functions of their input values, our distributed implementation produces the same output as would have been produced by a
+  non-faulting sequential execution of the entire program.” — căn cứ cho điều kiện “hai hàm tất định” ở chặng 1.
 - §3.5: “we tend to choose M so that each individual task is roughly 16 MB to 64 MB of input data … We often perform MapReduce computations
   with M = 200,000 and R = 5,000, using 2,000 worker machines.”
 - §3.6 Backup Tasks: “a "straggler": a machine that takes an unusually long time to complete one of the last few map or reduce tasks”.
@@ -70,6 +73,8 @@ Tải: www.usenix.org/system/files/conference/nsdi12/nsdi12-final138.pdf (886 31
 - §6.1: “We ran both algorithms for 10 iterations on 100 GB datasets using 25–100 machines.” “For logistic regression, Spark 25.3× and 20.7×
   faster than Hadoop and HadoopBinMem respectively on 100 machines.” Hình 7 (nhãn số trên cột, logistic regression, 100 máy): Hadoop
   lượt đầu 80 s, các lượt sau 76 s; HadoopBinMem 139 s, 62 s; Spark 46 s, 3 s. (76 / 3 ≈ 25,3 và 62 / 3 ≈ 20,7 khớp câu chữ của §6.1.)
+- §6.1 (đọc lại 2026-11-09, pdftotext): “For the more compute-intensive k-means application, Spark still achieved speedup of 1.9× to
+  3.2×.” — căn cứ cho “k-means chỉ 1,9 tới 3,2 lần”.
 - §6.1: “we ran no-op Hadoop jobs, and saw that these at incurred least 25s of overhead”.
 - §6.3: “Figure 11 compares the running times for 10 iterations of k-means on a 75-node cluster … each iteration consisted of 400 tasks working
   on 100 GB of data. Until the end of the 5th iteration, the iteration times were about 58 seconds. In the 6th iteration, one of the machines
@@ -116,7 +121,10 @@ Tải: www.vldb.org/pvldb/vol8/p1792-Akidau.pdf (365 591 byte).
 - §3.3.1: “One particularly large log join pipeline runs in streaming mode on MillWheel by default, but has a separate FlumeJava batch
   implementation used for large scale backfills. A much nicer setup would be to have a single implementation written in a unified model”.
   “one MillWheel customer ran their streaming pipeline in weak consistency mode, with a nightly MapReduce to generate truth. They found that
-  customers stopped trusting the weakly consistent results over time”.
+  customers stopped trusting the weakly consistent results over time”. Đọc lại 2026-11-09 (pdftotext bản vldb.org): câu tiếp theo là
+  “, and as a result reimplemented their system around strong consistency so they could provide reliable, low latency results.” —
+  căn cứ cho “họ làm lại theo nhất quán mạnh” trong bài; nguồn chỉ nói “streaming pipeline” + “nightly MapReduce”, không nói “ban ngày”
+  (bài sửa 2026-11-09: “đường luồng chạy liên tục … mỗi đêm chạy lô”).
 - §3.3.3: “Lacking a principled system for updates and retractions, a team that processed resource utilization statistics ended up leaving our
   platform to build a custom solution”. “Another billing team had significant issues with watermark lags caused by stragglers in their input.”
 - §3.3.4: “For them, 100% accuracy is not required, but having a largely complete view of their data in a reasonable amount of time is.”

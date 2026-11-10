@@ -229,7 +229,9 @@ rec("L15", rounds_http(11, "per_conn") == 22 and 22 * 50 == 1100 and rounds_http
     and round(1100 / 150, 1) == 7.3 and fifo_finish([300, 10, 10]) == [300, 300, 300]
     and slow_start_rounds(100 * 500, 10 * 1460) == 3 and slow_start_rounds(500 + 99 * 20, 10 * 1460) == 1
     and 4 * 50 == 200 and rounds_http(31, "per_conn") * 80 == 4960 and rounds_http(31, "pipeline") * 80 == 240
-    and (2015 - 1999, 2022 - 2015) == (16, 7),
+    # khoảng giữa bộ chuẩn ĐẦU TIÊN của mỗi phiên bản: HTTP/1.1 đầu tiên là RFC 2068 (1/1997), không phải RFC 2616 (1999) — sửa 2026-11-08,
+    # nguồn rfc-editor.org/rfc/rfc2068.txt (truy cập 2026-11-08); 1.0 (5/1996) → 1.1 (1/1997) = 8 tháng
+    and (1997 - 1996) * 12 + 1 - 5 == 8 and (2015 - 1997, 2022 - 2015) == (18, 7),
     "trang 11 tệp: 22 / 12 / 3 vòng (1100 / 600 / 150 ms); chặn đầu hàng 300, 300, 300; tiêu đề 50 000 B: 3 vòng, nén 2480 B: 1 vòng; "
     "mất gói 4 luồng 200 ms vs 50; quiz 31 tệp 4960 → 240 ms")
 

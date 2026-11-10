@@ -76,6 +76,75 @@ UNITS = [  # (cụm âm tiết trong câu đã chuẩn hoá, giải thích) — 
     (" tâu ", "token đọc “tâu-cần” theo lexicon SAR (probe p1 8/8), ASR viết “tô cần”"),
 ]
 LETTER_WORD = {"x": "ích", "c": "xê", "d": "dê", "b": "bê", "g": "giê", "p": "pê", "t": "tê", "v": "vê", "k": "ca"}
+# ── Từ mượn / tên riêng (sửa 2026-11-09, đợt đọc kiểm C) ──
+# Trước đây mọi chỗ lệch ngoài KNOWN đều bị ghi “lệch âm/thanh thuần Việt”, kể cả Kafka, Redis, NAPAS, Temenos, Spring Boot…
+# (memory: “asr_hand_gen mislabels loanwords”). Nay: chỗ lệch có ít nhất một từ KHÔNG thể là âm tiết tiếng Việt → xếp
+# “từ mượn/tên riêng”, dẫn luật lexicon của khoá nếu có (đọc theo luật đó) hoặc ghi “đọc thô, không có luật lexicon”.
+_VOW = "aàáảãạăằắẳẵặâầấẩẫậeèéẻẽẹêềếểễệiìíỉĩịoòóỏõọôồốổỗộơờớởỡợuùúủũụưừứửữựyỳýỷỹỵ"
+_VI_SYL = re.compile(r"^(?:ngh|ng|nh|ch|gh|gi|kh|ph|qu|th|tr|[bcdđghklmnpqrstvx])?[" + _VOW + r"]{1,3}(?:ch|ng|nh|[cmnpt])?$")
+
+
+def _is_vi(word):
+    """True nếu `word` (chữ thường) có thể là một âm tiết tiếng Việt; số và chữ cái đứng riêng coi như không xét."""
+    return word.isdigit() or len(word) == 1 or bool(_VI_SYL.match(word))
+
+
+def _lexicon_rules(course):
+    import yaml as _y
+    rules = {}
+    for f in (Path("tools/registry/lexicon_vi.yaml"), Path(f"tools/registry/lexicon_vi.{course}.yaml")):
+        if f.exists():
+            data = _y.safe_load(f.read_text(encoding="utf-8")) or []
+            items = data.get("rules", data) if isinstance(data, dict) else data
+            for it in items if isinstance(items, list) else []:
+                if isinstance(it, dict) and it.get("pat") and it.get("say") is not None:
+                    key = re.sub(r"^(?:\\b)+|(?:\\b)+$", "", str(it["pat"]).lower())   # bỏ \b ở hai đầu (KHÔNG dùng strip: cắt mất chữ “b” của Bloom)
+                    rules[key] = (str(it["say"]), f.name)
+    return rules
+
+
+LEX = _lexicon_rules(C)
+
+
+def _loan_note(exp, heard, caption):
+    """Giải thích một chỗ lệch là từ mượn/tên riêng; None nếu mọi từ trong chỗ lệch đều có thể là âm tiết Việt."""
+    words = exp.split()
+    cap = caption.lower()
+    word = lambda s, t: re.search(r"(?<!\w)" + re.escape(s) + r"(?!\w)", t) is not None
+    # luật lexicon áp cho câu này: mẫu xuất hiện NGUYÊN TỪ trong câu gốc; ưu tiên mẫu dài
+    applied = sorted(((re.sub(r"[^\w\s/.-]", "", p), s, f) for p, (s, f) in LEX.items()), key=lambda x: -len(x[0]))
+    applied = [(p, s, f) for p, s, f in applied if p and len(p) > 1 and word(p, cap)]
+    for plain, say, fname in applied:
+        syl = set(re.split(r"[\s-]+", say.lower()))
+        # chỗ lệch là chính từ gốc, hoặc là các âm tiết sinh ra từ cách đọc của luật (“đít” của Rê-đít, “pát” của Na-pát)
+        if word(plain, exp) or (words and set(words) <= syl):
+            return f"“{plain}” đọc theo luật lexicon ({fname}: “{say}”), ASR viết “{heard or '∅'}”", []
+    foreign = [w for w in words if not _is_vi(w)]
+    if not foreign:
+        return None, words
+    # chỉ nêu đúng các từ không phải âm tiết Việt (trước đây kéo cả “nên” vào “nên cosin”); từ Việt còn lại trả về cho người gọi
+    vi_left = [w for w in words if w not in foreign]
+    seg = {w: _vi_segment(w) for w in foreign}
+    parts = []
+    viet = [w for w in foreign if seg[w]]
+    raw = [w for w in foreign if not seg[w]]
+    if viet:   # “cosin”, “lôgarit”: thuật ngữ đã Việt hoá, viết liền nhiều âm tiết — TTS đọc theo chính tả Việt, không phải đọc thô
+        parts.append("thuật ngữ Việt hoá viết liền " + ", ".join(f"“{w}” (= {seg[w]})" for w in viet)
+                     + f", TTS đọc theo chính tả Việt, ASR viết “{heard or '∅'}”")
+    if raw:
+        parts.append(f"từ mượn/tên riêng “{' '.join(raw)}” đọc thô (không có luật lexicon), ASR viết “{heard or '∅'}”")
+    return "; ".join(parts), vi_left
+
+
+def _vi_segment(word):
+    """Tách `word` thành ≥ 2 âm tiết tiếng Việt hợp lệ (ít mảnh nhất), trả “lô-ga-rit”; None nếu không tách được."""
+    best = {0: []}
+    for i in range(1, len(word) + 1):
+        for j in range(max(0, i - 7), i):
+            if j in best and _VI_SYL.match(word[j:i]) and (i not in best or len(best[j]) + 1 < len(best[i])):
+                best[i] = best[j] + [word[j:i]]
+    out = best.get(len(word))
+    return "-".join(out) if out and len(out) >= 2 else None
 blocks, unknown = [f"    # ── {label} ──"], []
 for d in sorted((Path("out") / C).glob("L*")):
     j = d / "asr_report.json"
@@ -119,6 +188,11 @@ for d in sorted((Path("out") / C).glob("L*")):
                     notes.append(h)
             # phần còn lại của cụm lệch (không thuộc nhóm đã biết; “giây” đi cùng đơn vị) → ghi nguyên văn cho người nghe
             rest = [w for w in toks if w not in KNOWN and w != "giây"]
+            loan, vi_left = _loan_note(" ".join(rest), heard, r["caption"]) if rest else (None, rest)
+            if loan:
+                if loan not in notes:
+                    notes.append(loan)
+                rest = vi_left
             if rest:
                 other.append(f"{exp}/{heard or '∅'}" if not hits and len(rest) == len(exp.split()) else f"{' '.join(rest)} (trong “{exp}” → “{heard}”)")
         # câu khớp cả câu nhưng bị gắn cờ vì TỪ RỦI RO cả hai mô hình nghe khác (diff rỗng) → giải thích theo both_missed

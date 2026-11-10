@@ -22,3 +22,7 @@ URL: https://icml.cc/Conferences/2015/wp-content/uploads/2015/06/icml_ranking.pd
 ## Ghi chú toán
 - Với P̄ = 1 (a chắc chắn hơn b), công thức (3) thành C = −o + ln(1 + e^{o}) = ln(1 + e^{−o}), o = s_a − s_b — đúng dạng giáo án; kiểm bằng máy ở verify_parts/L05.py.
 - “Theo danh sách” (LambdaRank, ListNet…): KHÔNG có bài báo đã đọc → chỉ dạy ý (trọng số theo thay đổi nDCG khi đổi chỗ) như một cách làm, không gán tên, năm, con số (NOT_VERIFIED).
+
+## Phần nền giảng lại trong bài (đợt C, 2026-11-09 — bài tự đứng được)
+- Entropy chéo khi đáp án đúng đã biết chắc: công thức (1) của [BU05] ở trên với P̄ = 1 còn C = −log P (câu trích nguyên văn đã có ở mục [BU05]). Bảng −ln p (p = 1; 0,9; 0,5; 0,1; 0,01 → 0; 0,105; 0,693; 2,303; 4,605), e ≈ 2,718, e² ≈ 7,389, ln 0,5 ≈ −0,693, logistic(−0,5) ≈ 0,378 là toán, tính lại ở verify_parts/L05.py (L05h, L05i).
+- Sửa làm tròn đợt C: bước 2 cũ ghi “−ln 0,622 ≈ 0,474” — tính từ số đã làm tròn được 0,4748 → 0,475; nay giữ 0,6225 (→ 0,474) và nói rõ lý do (L05j).

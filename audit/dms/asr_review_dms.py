@@ -3,6 +3,7 @@ Lý do theo nhóm đã có bằng chứng dò (audit/dms/probes/*.md); câu khô
 script in “THIẾU LÝ DO” và KHÔNG ghi — câu đó phải sửa lời đọc (câu ngắn) hoặc người nghe lại.
 Bài sinh từ mẫu (audit/dms/src/*.tpl.yaml) thì ghi vào MẪU rồi ghép lại, vì mẫu là nguồn duy nhất.
 Chạy: .venv/Scripts/python audit/dms/asr_review_dms.py L01 L02 …  (khoá khác: --course CSA L00 L01 …)"""
+import json
 import re
 import sys
 from pathlib import Path
@@ -11,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
 sys.stdout.reconfigure(encoding="utf-8")
 import lv  # noqa: E402
+import yaml  # noqa: E402
 
 P2 = "chữ cái “p” đọc thô — probe audit/dms/probes/p2_chu_p.md: thô 7/8, đối chứng “tê” 0/8; ASR lẫn p/t, không phải TTS đọc sai; chữ hiện trên màn hình"
 HAND = {
@@ -4716,6 +4718,735 @@ HAND = {
         'ASR chép “Trước vòng y bằng 1, f mới là 0 mà công thức đã cho 1, và nếu tin công thức thì khi dừng nó cho thừa n so với tổng thật.” (0.968): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
     'Trong tấn công thật, phần tràn ghi đè địa chỉ mà hàm sẽ quay về khi xong, nên máy nhảy tới các byte do kẻ tấn công đưa vào và chạy chúng như mã.':
         'ASR chép “Trong tấn công thật, phần trang ghi đề địa chỉ mà hàm sẽ quay về khi xong, nên máy nhảy tới các bay do kẻ tấn công đưa vào và chạy chúng như mã.” (0.912): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: tràn/trang, đè/đề — NOT_VERIFIED bằng tai người',
+    # ── AIF dựng lại sau rà soát đợt B (2026-11-09) ──
+    'Khi cả hai chấp nhận được, A sao dùng hàm trội không mở nhiều nút hơn, trừ chênh lệch nhỏ do cách phá hoà như ở bài 2.':
+        'ASR chép “Khi cả hai chấp nhận được, à sao dùng hàm trội không mở nhiều nút hơn, trừ chênh lệch nhỏ do cách phá hòa như ở bài 2.” (0.964): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    # ── BCH dựng lại sau rà soát đợt B (2026-11-09) ──
+    'Trên chuỗi chỉ còn vài byte mỗi giao dịch, cộng bằng chứng hay thời hạn phản đối cho cả lô.':
+        'ASR chép “Trên chuỗi chỉ còn vài bay mỗi giao dịch, cộng bằng chứng hay thời hạn phản đối cho cả lô.” (0.95): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người',
+    # ── CAS dựng lại sau rà soát đợt B (2026-11-09) ──
+    'Bước ba, nếu thiếu phép kiểm thì máy vẫn chép 65 nghìn 535 byte.':
+        'ASR chép “Bước ba, nếu thiếu phép kiểm thì máy vẫn chép 65.535 bay.” (0.95): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người',
+    'Nhưng từ ô dữ liệu tới cuối bản ghi chỉ có 20 trừ 3, tức 17 byte, nên 65 nghìn 518 byte trả về nằm ngoài bản ghi.':
+        'ASR chép “Nhưng từ ô dữ liệu tới cuối bản ghi chỉ có 20 trừ 3, tức 17 bai, nên 65.518 bai trả về nằm ngoài bản ghi.” (0.943): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người',
+    # ── CLC dựng lại sau rà soát đợt B (2026-11-09) ──
+    'Lưu trữ khối là một ổ đĩa thường gắn vào một máy ảo, sửa từng khối nhỏ với độ trễ thấp, hợp với ổ hệ điều hành và cơ sở dữ liệu tự quản.':
+        'ASR chép “Lưu trữ khối là một ổ đĩa thương gắn vào một máy ảo, sự từng khối nhỏ với độ trễ thấp, hợp với ô hệ điều hành và cơ sở dữ liệu tư quản.” (0.882): lệch âm/thanh thuần Việt: thường/thương, sửa/sự, ổ/ô, tự/tư (bản chép “tư quản”; bộ so khớp ghép nhầm cặp “tự/bốn”) — NOT_VERIFIED bằng tai người',
+    'Ở chặng bốn, trước năm 2020, kho chưa bảo đảm nhất quán mạnh cho mọi thao tác, và Amazon gọi đó là nhất quán cuối cùng.':
+        'ASR chép “Ở chặng 4, trước năm 2020, kho chưa bảo đảm nhất quán mạnh cho mọi thao tác, và Amaro gọi đó là nhất quán cuối cùng.” (0.968): Amazon đọc thô theo lexicon CLC (probe p1: thô 8/8), lần này ASR viết “Amaro” — NOT_VERIFIED bằng tai người',
+    # ── ESY dựng lại sau rà soát đợt B (2026-11-09) ──
+    'Đèn báo nguồn, bộ ổn áp, cảm biến không được tắt, mỗi thứ tốn từ vài mi-crô-am-pe tới vài mi-li-am-pe, cộng thẳng vào dòng ngủ.':
+        'ASR chép “Đen báo nguồn, bộ ổn áp, cảm biến không được tắt, mỗi thứ tốn từ vài microamper tới vài milliamper, cộng thẳng vào dòng ngủ.” (0.786): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh; lệch âm/thanh thuần Việt: đèn/đen, am pe (trong “mi crô am pe” → “microamper”), am pe (trong “mi li am pe” → “milliamper”) — NOT_VERIFIED bằng tai người',
+    'Lấy số minh hoạ, một đèn nối qua điện trở 1000 ôm ở 3 phẩy 3 vôn đã tốn khoảng 1 phẩy 3 mi-li-am-pe, gấp 130 lần dòng ngủ 10 mi-crô-am-pe.':
+        'ASR chép “Lấy số minh họa, một đè nối qua điện trở một nghìn ôm ở 3,3 vôn đã tốn khoảng 1,3 mA, gấp 130 lần dòng ngủ 10 μA.” (0.842): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh; lệch âm/thanh thuần Việt: đèn/đè, am pe (trong “mi li am pe” → “ma”), am pe (trong “mi crô am pe” → “μa”) — NOT_VERIFIED bằng tai người',
+    'Năm 2014, xe Opportunity, thiết kế cho 3 tháng, đã chạy hơn 10 năm, và nghi phạm hàng đầu của các lần đặt lại là bộ nhớ flash đã mòn.':
+        'ASR chép “Năm 2014, xe Opportunity, thiết kế cho 3 tháng, đã chạy hơn 10 năm và nghi phạm hàng đầu của các lần đặt lại là bộ nhớ Falas đã mòn.” (0.971): flash đọc thô theo lexicon ESY (probe p2: thô 6/8, dưới ngưỡng 7/8), ASR viết “Falas” — NOT_VERIFIED bằng tai người',
+    # ── GFX dựng lại sau rà soát đợt B (2026-11-09) ──
+    'Nhờ cắt ngay tại chính giữa đoạn trước khi chia cho w, toàn bộ nửa đoạn nằm gần hơn mặt gần được loại bỏ.':
+        'ASR chép “Nhờ cắt ngay tại chính giữa đoạn trước khi chia cho v két, toàn bộ nửa đoạn nằm gần hơn mặt gần được loại bỏ.” (0.96): chữ w đọc “vê kép” (luật chung), ASR viết tách chữ — NOT_VERIFIED bằng tai người',
+    # ── HCI dựng lại sau rà soát đợt B (2026-11-09) ──
+    'Bảng này giải mã năm ký hiệu thao tác cơ sở, trong đó bốn giá trị K, P, H, M lấy từ bài báo năm 1980, còn B là cách tính hay dùng về sau.':
+        'ASR chép “Bản này giải mã 5 kí hiệu thao tác cơ sở, trong đó 4 giá trị K, T, H, M lấy từ bài báo năm 1980, còn B là cách tính hay dùng về sau.” (0.925): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: bảng/bản, ký/kí — NOT_VERIFIED bằng tai người',
+    'Theo điều kiện kích thước, một nút bấm đạt khi cả chiều rộng W lẫn chiều cao H đều lớn hơn hoặc bằng ngưỡng quy định.':
+        'ASR chép “Theo điều kiện kích thức, một nút bấm đạt khi cả chiều rộng về đúc lẫn chiều cao hát đều lớn hơn hoặc bằng ngưỡng quy định.” (0.906): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: thước/thức — NOT_VERIFIED bằng tai người',
+    # ── LLM dựng lại sau rà soát đợt B (2026-11-09) ──
+    'Hôm nay ta học mã hoá cặp byte, cách học các mảnh từ từ dữ liệu mà nhiều mô hình ngôn ngữ lớn dùng để tách văn bản.':
+        'ASR chép “Hôm nay ta học mã hóa cặp bay, cách học các mảnh từ từ dữ liệu mà nhiều mô hình ngôn ngữ lớn dùng để tách văn bản.” (0.964): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người',
+    # ── MLO dựng lại sau rà soát đợt B (2026-11-09) ──
+    'Kho mã giữ mọi phiên bản mãi mãi, một tệp 5 GB sửa 10 lần có thể chiếm tới 50 GB, vì tệp dữ liệu lớn thường nén kém.':
+        'ASR chép “Kho mả giữ mọi phiên bản mãi mãi, một tẹp 5GB sửa 10 lần có thể chiếm tới 50GB vì tẹp dữ liệu lớn thường nén kém.” (0.9): lệch âm/thanh thuần Việt: mã/mả, tệp/tẹp, tệp/tẹp — NOT_VERIFIED bằng tai người',
+    # ── RBM dựng lại sau rà soát đợt B (2026-11-09) ──
+    'Do đó với bài này, mỗi bước Euler đi quá xuống một chút, và các sai lệch nhỏ cộng dồn lại.':
+        'ASR chép “Do đó với bài này, mỗi bước ơ lè đi quá xuống một chút và các sai lệch nhỏ cộng dồn lại.” (0.955): Euler đọc “Ơ-le” theo lexicon RBM (mượn probe DMS p1_ten: 8/8), ASR viết “ơ lè” (lệch thanh) — NOT_VERIFIED bằng tai người',
+    'W đổi dấu mỗi bước là dấu hiệu hệ số đã âm, tức tốc độ học đã quá 1 chia a.':
+        'ASR chép “Về đúc đổi dấu mỗi bước là dấu hiệu hệ số đà âm, tức tốc độ học đã quá một chia.” (0.857): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: đã/đà — NOT_VERIFIED bằng tai người',
+    # ── ROB dựng lại sau rà soát đợt B (2026-11-09) ──
+    'Vị trí đó có thể đã cũ tới khoảng 50 mi li giây, gồm một chu kỳ chờ và thời gian tính.':
+        'ASR chép “vị trí đó có thể đã cụ tới khoảng 50mL, go một chút kỳ chờ và thời gian tính.” (0.773): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh; lệch âm/thanh thuần Việt: cũ/cụ, gồm (trong “mi li giây gồm” → “ml go”), chu/chút — NOT_VERIFIED bằng tai người',
+    # ── TOC dựng lại sau rà soát đợt B (2026-11-09) ──
+    'Trong khoảng 1932 tới 1936, ba mô hình ra đời độc lập là máy Turing, phép tính lam-đa, và các hàm đệ quy.':
+        'ASR chép “Trong khoảng 1932-1936, ba mô hình ra đời độc lập là máy tu trinh, phép tính lam đa và các hàm đệ quy.” (0.944): Turing đọc “Tua-rinh” theo lexicon TOC (probe p1+p2: 6/8, dưới ngưỡng 7/8), ASR viết “tu trinh”; “tới” giữa hai năm ASR viết thành gạch nối “1932-1936” — NOT_VERIFIED bằng tai người',
+    'Năm 1936, Turing chứng minh một bài toán rất gần với nó là không máy nào giải được.':
+        'ASR chép “Năm 1936, Tô Trình chứng minh một bài toán rất gần với nó là không máy nào giải được.” (0.939): Turing đọc “Tua-rinh” theo lexicon TOC (probe p1+p2: 6/8, dưới ngưỡng 7/8), ASR viết “Tô Trình” — NOT_VERIFIED bằng tai người',
+    # ── WEB dựng lại sau rà soát đợt B (2026-11-09) ──
+    'Giả sử ảnh chính nặng 300 KB, đây là số minh hoạ.':
+        'ASR chép “Giả sự ảnh chính nặng 300 kilobyte, đây là số minh họa.” (0.846): KB đọc “ki-lô-byte” theo lexicon của khoá, ASR viết “kilobyte/kg”; lệch âm/thanh thuần Việt: sử/sự — NOT_VERIFIED bằng tai người',
+    'Ảnh không chặn lần vẽ đầu, nhưng phần chính chỉ hiện ra khi ảnh tải xong, nên tổng phải tải là 500 cộng 300, bằng 800 KB.':
+        'ASR chép “Ấn không chặn lần vẽ đầu, nhưng phần chính chỉ hiện ra khi ảnh tải xong nên tổng phải tải là 500 cộng 300 bằng 800 kg.” (0.933): KB đọc “ki-lô-byte” theo lexicon của khoá, ASR viết “kilobyte/kg”; lệch âm/thanh thuần Việt: ảnh/ấn — NOT_VERIFIED bằng tai người',
+    'Ô nhập sai chỉ đổi viền đỏ, trong khi khoảng 5 tới 8 phần trăm nam giới, tuỳ nhóm dân, có rối loạn sắc giác đỏ lục.':
+        'ASR chép “Ôn nhập sai chỉ đổi viện đỏ, trong khi khoảng 5 tới 8% nam giới tùy nhóm dân có trối loạn sát giác đỏ lục.” (0.852): lệch âm/thanh thuần Việt: ô/ôn (ô nhập liệu), viền/viện, rối/trối, sắc/sát — NOT_VERIFIED bằng tai người',
+    # ── ACB L02 dựng lại sau đọc mẫu độc lập (2026-11-09) ──
+    'Bước bốn, Core Banking đã giữ số tiền của khách trước khi bản tin được gửi đi.':
+        'ASR chép “Bước 4, coa banh kiên đã giữ số tiền của khách trước khi bản tin được gửi đi.” (0.889): “Core Banking” theo lexicon đọc “co banh king” (BN-0019, cùng kiểu câu cũ của bài: ASR viết “co banh kim”), lần này ASR viết “coa banh kiên” — NOT_VERIFIED bằng tai người',
+    # ── INT dựng lại sau đọc kiểm C (2026-11-09) ──
+    'SAGA là chuỗi bước mà bước nào lỗi thì chạy bước hoàn tác, Outbox là bảng hộp thư ghi sự kiện cùng lúc với dữ liệu, còn Kafka chuyển sự kiện giữa các dịch vụ.':
+        'ASR chép “Saga là chủ bước mà bước nào lỗi thì chạy bước hoàn tác, Outbox là bản hộp thư ghi sự kiện cùng lúc với dữ liệu, còn cao ca chuyển sự kiện giữa các dịch vụ.” (0.901): “kafka” đọc theo luật lexicon (lexicon_vi.INT.yaml: “Cáp-ca”), ASR viết “cao ca”; lệch âm/thanh thuần Việt: chuỗi/chủ, bảng/bản — NOT_VERIFIED bằng tai người',
+    'T24 là một phần mềm ngân hàng lõi của hãng Temenos, còn NAPAS là công ty chuyển mạch tiền giữa các ngân hàng Việt Nam.':
+        'ASR chép “T-24 là một phần mềm ngân hàng lõi của hãng Temenor, còn Napark là công ty chuyển mặt tiền giữa các ngân hàng Việt Nam.” (0.893): “temenos” đọc theo luật lexicon (lexicon_vi.INT.yaml: “Te-me-nót”), ASR viết “temenor”; “napas” đọc theo luật lexicon (lexicon_vi.INT.yaml: “Na-pát”), ASR viết “napark”; lệch âm/thanh thuần Việt: mạch/mặt — NOT_VERIFIED bằng tai người',
+    'Cổng tích hợp dùng lệnh nguyên tử của Redis, tức kiểm tra và đặt khóa trong một bước, để tạo khóa phân tán theo mã đó.':
+        'ASR chép “Cộng tích hợp dùng lệnh nguyên tử của Reddit, tức kiểm tra và đặt khóa trong một bước để tạo khóa phân tán theo mã đó.” (0.923): “redis” đọc theo luật lexicon (lexicon_vi.INT.yaml: “Rê-đít”), ASR viết “reddit”; lệch âm/thanh thuần Việt: cổng/cộng — NOT_VERIFIED bằng tai người',
+    'Bước hai, khóa Redis có thể mất khi máy chủ bộ nhớ đệm gặp sự cố, nên lớp chặn cuối cùng nằm trong cơ sở dữ liệu, là ràng buộc duy nhất trên cột mã yêu cầu.':
+        'ASR chép “Bước 2, khóa rê điếc có thể mất khi máy chủ bộ nhớ đem gặp sự cố nên lớp chặn cuối cùng nằm trong cơ sở dữ liệu là tràng buộc duy nhất trên cột mã yêu cầu.” (0.921): “redis” đọc theo luật lexicon (lexicon_vi.INT.yaml: “Rê-đít”), ASR viết “điếc”; lệch âm/thanh thuần Việt: đệm/đem, ràng/tràng — NOT_VERIFIED bằng tai người',
+    'Vì dữ liệu đi theo khối 64 byte, nên một khối chứa được 64 chia 8, bằng 8 biến số nguyên dài nằm cạnh nhau.':
+        'ASR chép “Vì dữ liệu đi theo khối 64-B, nên một khối chứa được 64-8 bằng 8 biến số nguyên dài nằm cạnh nhau.” (0.947): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: chia/∅ — NOT_VERIFIED bằng tai người',
+    'Cách sửa là đệm thêm byte trống để mỗi biến hay bị ghi nằm ở một khối riêng.':
+        'ASR chép “Các sữa là đệm thêm bay trống để mỗi biến hay bị ghi nằm ở một khối riêng.” (0.833): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: cách sửa/các sữa — NOT_VERIFIED bằng tai người',
+    'Tầng một chia một nghìn nhánh, tầng hai thành một triệu, tầng ba thành một tỉ nhánh.':
+        'ASR chép “Tần 1 chia 1.000 nhánh, tần 2 thành 1 triệu, tần 3 thành 1 tỷ nhánh.” (0.765): “tỉ” ASR viết chính tả “tỷ” (cùng âm); lệch âm/thanh thuần Việt: tầng/tần, tầng/tần, tầng/tần — NOT_VERIFIED bằng tai người',
+    'Spring Boot là bộ khung phổ biến để viết dịch vụ Java, còn lớp vỏ ủy quyền là đối tượng bọc quanh đối tượng của bạn để tự mở và đóng giao dịch.':
+        'ASR chép “Springbook là bộ khung phổ biến để viết dịch vụ Java, còn lớp vỏ ủy quyền là đối tượng bọc quanh đối tượng của bạn để tự mở và đóng giao dịch.” (0.954): “spring” đọc theo luật lexicon (lexicon_vi.INT.yaml: “S-pring”), ASR viết “springbook” — NOT_VERIFIED bằng tai người',
+    'Đáp án chính xác là lựa chọn B vì bộ lọc Bloom là một mảng bit, mỗi tài khoản bật vài bit qua vài hàm băm, nên kiểm tra chỉ cần xem vài bit đó.':
+        'ASR chép “Đáp án chính xác là lựa chọn B vì bộ lọc bơ luôn là một mãn bit. Mỗi tài khoản bật vài bit qua vài hàm băm, nên kiểm tra chỉ cần xem vài bit đó.” (0.93): “bloom” đọc theo luật lexicon (lexicon_vi.INT.yaml: “B-lum”), ASR viết “bơ luôn”; lệch âm/thanh thuần Việt: mảng/mãn — NOT_VERIFIED bằng tai người',
+    'Hiểm họa ghi kép xảy ra khi dịch vụ vừa ghi cơ sở dữ liệu vừa gửi thông điệp ra ngoài qua Kafka, là hệ thống chuyển sự kiện giữa các dịch vụ.':
+        'ASR chép “Hiểm họa ghi kép xảy ra khi dịch vụ vừa ghi cơ sở dữ liệu vừa gửi thông biệp ra ngoài qua Capca là hệ thống chuyển sự kiện giữa các dịch vụ.” (0.939): “kafka” đọc theo luật lexicon (lexicon_vi.INT.yaml: “Cáp-ca”), ASR viết “capca”; lệch âm/thanh thuần Việt: điệp/biệp — NOT_VERIFIED bằng tai người',
+    'SAGA là chuỗi giao dịch nhỏ, mỗi bước có sẵn một bước bù trừ làm ngược lại, còn gạch nợ là báo cho bên bán rằng hoá đơn đã được trả.':
+        'ASR chép “Saga là chủ giao dịch nhỏ, mỗi bước có sẵn một bước bù trừ làm ngược lại, còn gạch nợ là báo cho bên bán rằng hóa đơn đã được trả.” (0.968): lệch âm/thanh thuần Việt: chuỗi/chủ — NOT_VERIFIED bằng tai người',
+    'Công cụ bắt biến động dữ liệu, ví dụ Debezium, đọc nhật ký giao dịch của cơ sở dữ liệu để phát bản tin, và thử lại cho tới khi gửi xong.':
+        'ASR chép “Công cụ bắt biến động dữ liệu, ví dụ DBrium, đọc nhật ký giao dịch của cơ sở dữ liệu để phát bản tin và thử lại cho tới khi gửi xong.” (0.969): “debezium” đọc theo luật lexicon (lexicon_vi.INT.yaml: “Đê-bê-di-um”), ASR viết “dbrium” — NOT_VERIFIED bằng tai người',
+    'Để hiểu cấu hình trên, ta giải nghĩa vài từ, nhà sản xuất là chương trình gửi tin, còn Broker là máy chủ Kafka lưu tin.':
+        'ASR chép “Để hiểu cấu hình trên, ta giải nghĩa vai từ nhà sản xuất là chương trình gửi tin, còn Broker là máy chủ KK Lưu Tin.” (0.923): “kafka” đọc theo luật lexicon (lexicon_vi.INT.yaml: “Cáp-ca”), ASR viết “kk”; lệch âm/thanh thuần Việt: vài/vai — NOT_VERIFIED bằng tai người',
+    'Bế tắc là khi mỗi phiên giữ một khóa và chờ khóa mà phiên kia đang giữ, và mã lỗi ORA-00060 là cách Oracle báo đã phát hiện điều đó.':
+        'ASR chép “Bế tắc là khi mỗi phiên giữ một khóa và chờ khóa mà phiên kia đang giữ, và mã lỗi R.A.00060 là cách Oracle báo đã phát hiện điều đó.” (0.954): từ mượn/tên riêng “ora” đọc thô (không có luật lexicon), ASR viết “r a” — NOT_VERIFIED bằng tai người',
+    'Bước ba, kỹ sư viết bằng PL/SQL, ngôn ngữ lập trình chạy bên trong Oracle, lấy dữ liệu theo từng lô một nghìn dòng trong một vòng lặp và cập nhật đồng loạt từng lô.':
+        'ASR chép “Bước 3, kỹ sư viết bằng p lét cụ l, ngôn ngữ lập trình chạy bên trong Oracle, lấy dữ liệu theo từng lô một nghìn dòng trong một vòng lập và cập nhật đồng loạt từng lô.” (0.897): “pl/sql” đọc theo luật lexicon (lexicon_vi.INT.yaml: “P Lét Cù L”), ASR viết “cụ”; chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “oracle” đọc theo luật lexicon (lexicon_vi.INT.yaml: “O-ra-cơn”), ASR viết “oracle”; lệch âm/thanh thuần Việt: lặp/lập — NOT_VERIFIED bằng tai người',
+    'Vì sao xử lý theo lô nhanh hơn, vì câu lệnh cơ sở dữ liệu chạy ở một bộ máy khác với ngôn ngữ PL/SQL.':
+        'ASR chép “Vì sao xử lý theo lô nhanh hơn? Vì câu lệnh cơ sở dữ liệu chạy ở một bộ máy khác với ngôn ngữ PLEC cụ EL.” (0.906): “sql” đọc theo luật lexicon (lexicon_vi.INT.yaml: “ét-cu-l”), ASR viết “plec cụ el” — NOT_VERIFIED bằng tai người',
+    'Hệ thống phải hạch toán sổ cái ngân hàng lõi, rồi đóng gói bản tin gửi NAPAS, công ty chuyển mạch tiền giữa các ngân hàng.':
+        'ASR chép “Hệ thống phải hạch toán sổ cái ngân hàng loại, rồi đóng gói bản tin gửi NAPAC, công ty chuyển mạch tiền giữa các ngân hàng.” (0.923): “napas” đọc theo luật lexicon (lexicon_vi.INT.yaml: “Na-pát”), ASR viết “napac”; lệch âm/thanh thuần Việt: lõi/loại — NOT_VERIFIED bằng tai người',
+    'Bài này dùng hệ lõi T24 của hãng Temenos làm ví dụ.':
+        'ASR chép “Bài này dùng hệ lõi T24 của hãng Themenot làm ví dụ.” (0.933): “temenos” đọc theo luật lexicon (lexicon_vi.INT.yaml: “Te-me-nót”), ASR viết “themenot” — NOT_VERIFIED bằng tai người',
+    'Bản tin OFS là bản tin dạng chữ, các phần cách nhau bằng dấu phẩy, để hệ thống khác ra lệnh cho hệ lõi T24.':
+        'ASR chép “Bản tin OS X là bản tin dạng chữ các phần cách nhau bằng dấu phẩy để hệ thống khác ra lệnh cho hệ loại T24.” (0.912): “ofs” đọc theo luật lexicon (lexicon_vi.INT.yaml: “O F S”), ASR viết “os x”; lệch âm/thanh thuần Việt: lõi/loại — NOT_VERIFIED bằng tai người',
+    'ISO 8583 là chuẩn quốc tế cho bản tin giao dịch thẻ, và đặc tả của NAPAS thường được mô tả có gốc từ chuẩn này.':
+        'ASR chép “ISO 8583 là chuẩn quốc tế cho bản tin giao dịch thẻ và đặt tả của NAPAC thường được mô tả có gốc từ chuẩn này.” (0.938): “napas” đọc theo luật lexicon (lexicon_vi.INT.yaml: “Na-pát”), ASR viết “napac”; lệch âm/thanh thuần Việt: đặc/đặt — NOT_VERIFIED bằng tai người',
+    'Ở ngân hàng, một lệnh của HSM dịch khối PIN từ khóa của máy đầu cuối sang khóa vùng dùng với NAPAS, và một lệnh khác dịch giữa hai khóa vùng.':
+        'ASR chép “Ở ngân hàng, một lệnh của HSM dịch khối pin từ khóa của máy đầu cuối sang khóa vùng dùng với NAPAC và một lệnh khác dịch giữa hai khóa vùng.” (0.968): “napas” đọc theo luật lexicon (lexicon_vi.INT.yaml: “Na-pát”), ASR viết “napac” — NOT_VERIFIED bằng tai người',
+    'Số theo dõi STAN và số tham chiếu RRN mười hai ký tự là căn cứ chính để tra cứu và đối soát giao dịch giữa các ngân hàng thành viên.':
+        'ASR chép “Số theo dõi S-Thang và số tham chiếu RRN 12 ký tự là căn cứ chính để tra cứu và đối soát giao dịch giữa các ngân hàng thành viên.” (0.952): “stan” đọc theo luật lexicon (lexicon_vi.INT.yaml: “Ét-tan”), ASR viết “s thang” — NOT_VERIFIED bằng tai người',
+    'Khi một danh sách đã hết, phần còn dư của danh sách kia đều là lệch, và ta lặp lại cách này giữa NAPAS với đối tác.':
+        'ASR chép “Khi một danh sách đã hết, phần cộng dư của danh sách kia đều là lịch, và ta lặp lại cách này giữa na phát với đối tác.” (0.893): “napas” đọc theo luật lexicon (lexicon_vi.INT.yaml: “Na-pát”), ASR viết “phát”; lệch âm/thanh thuần Việt: còn/cộng, lệch/lịch — NOT_VERIFIED bằng tai người',
+    'Tra soát nghĩa là gửi yêu cầu hỏi lại trạng thái thật của giao dịch tới NAPAS hoặc ngân hàng nhận.':
+        'ASR chép “Tra xoát nghĩa là gửi yêu cầu hỏi lại trạng thái thực của giao dịch tới NAPAC hoặc ngân hàng nhận.” (0.905): “napas” đọc theo luật lexicon (lexicon_vi.INT.yaml: “Na-pát”), ASR viết “napac”; lệch âm/thanh thuần Việt: thật/thực — NOT_VERIFIED bằng tai người',
+    'Rừng cô lập, tức Isolation Forest, là nhiều cây chia dữ liệu ngẫu nhiên, và điểm bất thường bị tách riêng sau rất ít lần chia.':
+        'ASR chép “Rừng cô lập, tức isolation forest là nhiều cây chi dữ liệu ngẫu nhiên và điểm bất thường bị tách riêng sau rất ít lần chia.” (0.962): lệch âm/thanh thuần Việt: chia/chi — NOT_VERIFIED bằng tai người',
+    'Với độ tương đồng Cosine, hai véc tơ 1, 2 và 2, 3 có tích vô hướng bằng 8, chia cho căn 5 nhân căn 13 được khoảng 0 phẩy 992.':
+        'ASR chép “Với độ tương đồng cosine 2 vector 1, 2 và 2, bà có tích vô hướng bằng 8, chia cho căn 5 nhân căn 13 được khoảng 0,992.” (0.899): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: véc tơ/vector, ba/bà, không (trong “không phẩy” → “”) — NOT_VERIFIED bằng tai người',
+    'Điểm Z cho biết số tiền cách mức trung bình bao nhiêu lần độ lệch chuẩn.':
+        'ASR chép “điểm giá cho biết số tiền cách mức trung bình bao nhiêu lần độ lệch chuẩn.” (0.938): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    'Ví dụ trung bình 2 triệu, độ lệch chuẩn 1 phẩy 5 triệu, giao dịch 30 triệu thì điểm Z xấp xỉ 18 phẩy 67.':
+        'ASR chép “Ví dụ trung bình 2 triệu, độ lệch chuẩn 1,5 triệu, giao dịch 30 triệu thì điểm giá sắp xỉ 18,67.” (0.931): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: xấp (trong “z xấp” → “giá sắp”) — NOT_VERIFIED bằng tai người',
+    'Hệ thống cần thiết kế là một trung tâm điều phối thanh toán, còn cổng vào chung, gọi là API Gateway, kiểm tra từng yêu cầu rồi mới chuyển vào trong.':
+        'ASR chép “Hệ thống cần thiết kế là một trung tâm điều phối thanh toán, còn cổng vào chung, gọi là APYGY, kiểm tra từng yêu cầu rồi mới chuyển vào trong.” (0.951): “gateway” đọc theo luật lexicon (lexicon_vi.INT.yaml: “ghét-oay”), ASR viết “apygy” — NOT_VERIFIED bằng tai người',
+    # ── JVA dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Trước khi bắt đầu, máy cần có bộ công cụ JDK, bản hai mươi mốt trở lên, có bản tải miễn phí, vì trong đó có sẵn trình biên dịch và máy ảo.':
+        'ASR chép “Trước khi bắt đầu, máy cần có bộ công cụ GZK, bản 21 trở lên có bản tại miễn phí vì trong đó có sẵn trình biên dịch và máy ảo.” (0.939): “jdk” đọc theo luật lexicon (lexicon_vi.JVA.yaml: “J D K”), ASR viết “gzk”; lệch âm/thanh thuần Việt: tải/tại — NOT_VERIFIED bằng tai người',
+    # ── ACB dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Lương gross là lương trước khi trừ thuế và bảo hiểm.':
+        'ASR chép “Lương gơ đốc là lương trước khi trừ thuế và bảo hiểm.” (0.917): “gross” đọc theo luật lexicon (lexicon_vi.ACB.yaml: “gơ-rốt”), ASR viết “đốc” — NOT_VERIFIED bằng tai người',
+    'Redis là kho dữ liệu nằm trong bộ nhớ, đọc ghi rất nhanh, thường dùng để ghi nhớ mã giao dịch đã xử lý.':
+        'ASR chép “Rê đích là kho giữ liệu nằm trong bộ nhớ, độc ghi rất nhanh, thường dùng để ghi nhớ mã giao dịch đã xử lý.” (0.92): “redis” đọc theo luật lexicon (lexicon_vi.ACB.yaml: “Rê-đít”), ASR viết “đích”; lệch âm/thanh thuần Việt: đọc/độc — NOT_VERIFIED bằng tai người',
+    'Kafka ở tầng này là hệ thống lưu các sự kiện theo đúng thứ tự để nhiều dịch vụ cùng đọc.':
+        'ASR chép “CAPCA ở tầng này là hệ thống lưu các sự kiện theo đúng thứ tự để nhiều dịch vụ cung độc.” (0.857): “kafka” đọc theo luật lexicon (lexicon_vi.ACB.yaml: “Cáp-ca”), ASR viết “capca”; lệch âm/thanh thuần Việt: cùng đọc/cung độc — NOT_VERIFIED bằng tai người',
+    'Do Core chưa trả kết quả, cách làm nghiệp dư là báo lỗi thất bại ngay hoặc tự động bấm gửi lại lệnh.':
+        'ASR chép “Do còn chưa trả kết quả, cách làm nghiệp dư là báo lỗi thất bại ngay hoặc tự động bấm gửi lại lệnh.” (0.957): “core” đọc theo luật lexicon (lexicon_vi.ACB.yaml: “Co”), ASR viết “còn” — NOT_VERIFIED bằng tai người',
+    'Thứ hai là không đặt hạn sống cho bản tin khiến các lệnh cũ ứ đọng và có thể bị hạch toán muộn sang ngày hôm sau.':
+        'ASR chép “Thứ hai là không đặt hàng sống cho bản tin khiến các lệnh củ ưu động và có thể bị hạch toán muộn sang ngày hôm sau.” (0.852): lệch âm/thanh thuần Việt: hạn/hàng, cũ ứ đọng/củ ưu động — NOT_VERIFIED bằng tai người',
+    'Khi kết nối Core T24 qua IBM MQ, tại sao ta nên dùng mã định danh tương quan thay vì mở hàng đợi riêng cho từng khách hàng?':
+        'ASR chép “Khi kết nối COT-24 qua IB-MMQI, tại sao ta nên dùng mã định danh tương quan thay vì mở hàng đợi riêng cho từng khách hàng?” (0.892): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “core” đọc theo luật lexicon (lexicon_vi.ACB.yaml: “Co”), ASR viết “cot” — NOT_VERIFIED bằng tai người',
+    'NAPAS là Công ty Cổ phần Thanh toán Quốc gia Việt Nam, vận hành hệ thống chuyển mạch nối các ngân hàng với nhau.':
+        'ASR chép “NAPAC là công ty cổ phần thanh toán quốc gia Việt Nam vận hành hệ thống chuyển mạch nối các ngân hàng với nhau.” (0.958): “napas” đọc theo luật lexicon (lexicon_vi.ACB.yaml: “Na-pát”), ASR viết “napac” — NOT_VERIFIED bằng tai người',
+    'Redis là kho dữ liệu khoá giá trị nằm trong bộ nhớ, đọc ghi rất nhanh và nhiều máy chủ cùng dùng chung.':
+        'ASR chép “Reddit là kho dữ liệu khóa giá trị nằm trong bộ nhớ, đọc ghi rất nhanh và nhiều máy chủ cùng dùng chung.” (0.957): “redis” đọc theo luật lexicon (lexicon_vi.ACB.yaml: “Rê-đít”), ASR viết “reddit” — NOT_VERIFIED bằng tai người',
+    'Tóm lại, chuỗi logic cổng NAPAS gồm khử trùng lặp, giữ tiền trên hệ thống lõi và dịch mã PIN trong phần cứng.':
+        'ASR chép “Tóm lại, chuỗi lô ghét cổng NaPak gồm khử trùng lập, giữ tiền trên hệ thống lõi và dịch mã pin trong phần cứng.” (0.857): “logic” đọc theo luật lexicon (lexicon_vi.yaml: “lô-gíc”), ASR viết “ghét”; tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh; “napas” đọc theo luật lexicon (lexicon_vi.ACB.yaml: “Na-pát”), ASR viết “napak”; lệch âm/thanh thuần Việt: lặp/lập — NOT_VERIFIED bằng tai người',
+    'Còn cây-x-cu-l-đê-bê là công cụ cho phép viết câu lệnh giống SQL để xử lý trực tiếp luồng sự kiện trên Kafka.':
+        'ASR chép “Còn CaseCoolerDB là công cụ cho phép viết câu lệnh giống SQL để xử lý trực tiếp luôn sự kiện trên CapCa.” (0.776): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “kafka” đọc theo luật lexicon (lexicon_vi.ACB.yaml: “Cáp-ca”), ASR viết “capca”; lệch âm/thanh thuần Việt: bê/casecoolerdb, cây cu (trong “cây x cu l d b” → “casecoolerdb”), luồng/luôn — NOT_VERIFIED bằng tai người',
+    'Bước ba, Trung tâm thông báo phân loại mức ưu tiên và kiểm tra khóa chống gửi trùng trong Redis, kho dữ liệu nằm trong bộ nhớ.':
+        'ASR chép “Bước 3, Trung tâm thông báo phân loại mức ưu tiên và kiểm tra khóa chống gửi trùng trong Reddit, kho dữ liệu nằm trong bộ nhớ.” (0.963): “redis” đọc theo luật lexicon (lexicon_vi.ACB.yaml: “Rê-đít”), ASR viết “reddit” — NOT_VERIFIED bằng tai người',
+    'Trong công nghệ cây-x-cu-l-đê-bê, tại sao bảng hồ sơ người dùng nên được tạo dưới dạng Bảng thay vì dạng Luồng?':
+        'ASR chép “Trong công nghệ Case Cooler DB, tại sao bản hồ sơ người dùng nên được tạo dưới dạng bản thay vì dạng luôn?” (0.76): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: cây cu (trong “cây x cu l” → “case cooler”), bảng/bản, bảng/bản, luồng/luôn — NOT_VERIFIED bằng tai người',
+    'Bước hai, cây-x-cu-l-đê-bê vẫn cho nối hai luồng với nhau, nhưng phải kèm một cửa sổ thời gian, nên hồ sơ khách cập nhật từ lâu sẽ không được ghép với giao dịch mới.':
+        'ASR chép “Bước 2, cái schooler DB vẫn cho nối hai lùng với nhau, nhưng phải kè một cửa sổ thời gian, nên hồ sơ khách cập nhật từ lâu sẽ không được ghép với giao dịch mới.” (0.868): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: cây cu (trong “cây x cu l” → “cái schooler”), luồng/lùng, kèm/kè — NOT_VERIFIED bằng tai người',
+    'Fiber là một thư viện để viết dịch vụ chạy trên máy chủ, còn PostgreSQL là một hệ quản trị cơ sở dữ liệu quan hệ mã nguồn mở.':
+        'ASR chép “Faber là một thư viện để viết dịch vụ chạy trên máy chủ, còn Popre Ecular là một hệ quản trị cơ sở dữ liệu quan hệ mã nguồn mở.” (0.915): “fiber” đọc theo luật lexicon (lexicon_vi.ACB.yaml: “Pha-bơ”), ASR viết “faber”; “postgresql” đọc theo luật lexicon (lexicon_vi.ACB.yaml: “Pốt-g-rê ét-cu-l”), ASR viết “popre ecular” — NOT_VERIFIED bằng tai người',
+    'Còn người chỉ xem thì ở cả hai cách đều đọc tự do, vì PostgreSQL giữ nhiều phiên bản của một dòng nên lệnh đọc thường không bị chặn.':
+        'ASR chép “Còn người chỉ xem thì ở cả hai cách đều đọc tự do, vì POPGREA S Cooler giữ nhiều phiên bản của một dòng nên lệnh đọc thường không bị chặn.” (0.933): “postgresql” đọc theo luật lexicon (lexicon_vi.ACB.yaml: “Pốt-g-rê ét-cu-l”), ASR viết “popgrea s cooler” — NOT_VERIFIED bằng tai người',
+    'Trong Oracle, lỗi này mang mã ORA-00060.':
+        'ASR chép “Trong Oracle, lỗi này mang mã ORA00060.” (1.0): từ rủi ro ra, không, không, không, không cả hai mô hình viết khác (cách viết, không phải âm) — NOT_VERIFIED bằng tai người',
+    'Lỗi ORA không không không sáu không là sự cố bế tắc khóa kinh điển cần phòng tránh.':
+        'ASR chép “Lỗi OERA 00060 là sự cố bế tắc khóa kinh điển cần phòng tránh.” (0.788): từ mượn/tên riêng “ora không không không” đọc thô (không có luật lexicon), ASR viết “oera”; lệch âm/thanh thuần Việt: không/mươi — NOT_VERIFIED bằng tai người',
+    'Ta tránh quét cơ sở dữ liệu chính bằng cách đọc dữ liệu đã chép sang Kafka và chia theo đoạn thời gian.':
+        'ASR chép “Ta tránh quét cơ sở dữ liệu chính bằng cách đọc dữ liệu đã chép sang CAPCA và chia theo đoạn thời gian.” (0.957): “kafka” đọc theo luật lexicon (lexicon_vi.ACB.yaml: “Cáp-ca”), ASR viết “capca” — NOT_VERIFIED bằng tai người',
+    'Thủ tục lưu trữ là đoạn chương trình PL/SQL được lưu và chạy ngay bên trong cơ sở dữ liệu.':
+        'ASR chép “Thủ tục lưu trữ là đoạn chương trình P-Led cụ L được lưu và chạy ngay bên trong cơ sở dữ liệu.” (0.913): “pl/sql” đọc theo luật lexicon (lexicon_vi.ACB.yaml: “P Lét Cù L”), ASR viết “led cụ” — NOT_VERIFIED bằng tai người',
+    'Mỗi lần mã PL/SQL gọi sang bộ máy SQL là một lần chuyển ngữ cảnh tốn thời gian.':
+        'ASR chép “Mỗi lần mã P-LedQ-E-L gọi sang bộ máy S-Cooler là một lần chuyển ngữ cảnh tốn thời gian.” (0.8): “pl/sql” đọc theo luật lexicon (lexicon_vi.ACB.yaml: “P Lét Cù L”), ASR viết “ledq e”; Bayes đọc “Bay-ét” theo lexicon chung (probe 3/8, NOT_VERIFIED), ASR viết “bay X/S”; chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “sql” đọc theo luật lexicon (lexicon_vi.ACB.yaml: “ét-cu-l”), ASR viết “s cooler” — NOT_VERIFIED bằng tai người',
+    'Deepfake là video giả khuôn mặt người thật do trí tuệ nhân tạo tạo ra, còn bộ công cụ phần mềm kiểm tra độ sống giúp phân biệt người thật với ảnh hay video.':
+        'ASR chép “Dipfit là video giả khu mặt người thật do trí tuệ nhân tạo tạo ra, còn bộ công cụ phần mềm kiểm tra độ sống giúp phân biệt người thật với ảnh hay video.” (0.941): “deepfake” đọc theo luật lexicon (lexicon_vi.ACB.yaml: “đíp-phếch”), ASR viết “dipfit”; lệch âm/thanh thuần Việt: khuôn/khu — NOT_VERIFIED bằng tai người',
+    'Động cơ này chạy theo mô hình SAGA, tức một chuỗi bước giao dịch nhỏ, bước nào hỏng thì chạy bước bù trừ để hoàn tác các bước trước.':
+        'ASR chép “Động cơ này chạy theo mô hình Saga, tức một chuỗi bước giao dịch nhỏ, bước nào hỏng thì chạy bước bù trừ để hoàn tác các bước trước.” (1.0): từ rủi ro sa, ga cả hai mô hình viết khác (cách viết, không phải âm) — NOT_VERIFIED bằng tai người',
+    'Khi điều kiện tiên quyết được thỏa mãn, lệnh trừ tiền mới được phát hành sang Core Banking.':
+        'ASR chép “Khi điều kiện tiên quyết được thỏa mãn, lệnh trừ tiền mới được phát hành sang Coban King.” (0.919): lệch âm/thanh thuần Việt: co banh/coban — NOT_VERIFIED bằng tai người',
+    'ERP là phần mềm quản trị doanh nghiệp của đối tác, còn Webhook là việc máy chủ ngân hàng chủ động gọi sang máy chủ đối tác để báo tin.':
+        'ASR chép “RRP là phần mềm quản trị doanh nghiệp của đối tác. Còn webhook là việc máy chủ ngân hàng chủ động gọi sang máy chủ đối tác để báo tin.” (0.967): “erp” đọc theo luật lexicon (lexicon_vi.ACB.yaml: “E R P”), ASR viết “rrp” — NOT_VERIFIED bằng tai người',
+    'Trong kiến trúc tham chiếu, lệnh này dùng ứng dụng chuyển tiền của Core Banking Temenos T24.':
+        'ASR chép “Trong kiến trúc tham chiếu, lệnh này dùng ứng dụng chuyển tiền của co-banking Temenok T24.” (0.9): “core” đọc theo luật lexicon (lexicon_vi.ACB.yaml: “Co”), ASR viết “co”; “temenos” đọc theo luật lexicon (lexicon_vi.ACB.yaml: “Te-me-nót”), ASR viết “temenok” — NOT_VERIFIED bằng tai người',
+    'Sau khi sắp xếp, sổ cái có mã 1, 2 và 4, tệp của NAPAS có mã 1, 2, 3 và 4, còn đối tác chỉ có mã 1 và 4.':
+        'ASR chép “Sau khi sắp xếp, sổ cái có mã 1, 2 và 4, tẹp của NAPAC có mã 1, 2, 3 và 4, còn đối tác chỉ có mã 1 và 4.” (0.935): “napas” đọc theo luật lexicon (lexicon_vi.ACB.yaml: “Na-pát”), ASR viết “napac”; lệch âm/thanh thuần Việt: tệp/tẹp — NOT_VERIFIED bằng tai người',
+    'Mã 3 chỉ có ở NAPAS nên là lệnh treo ghi Có, cần hạch toán bù.':
+        'ASR chép “Mã 3 chỉ có ở Na Phát nên là lệnh treo ghi có, cần hạch toán bu.” (0.882): “napas” đọc theo luật lexicon (lexicon_vi.ACB.yaml: “Na-pát”), ASR viết “phát”; lệch âm/thanh thuần Việt: bù/bu — NOT_VERIFIED bằng tai người',
+    'Lưu ý, T24 ở đây là kiến trúc tham chiếu rút từ kinh nghiệm làm ở OCB, và Squad Lending là tên nhóm phát triển tín dụng ở đó.':
+        'ASR chép “Lưu ý, T-24 ở đây là kiến trúc tham chiếu rút từ kinh nghiệm làm ở OCB và Squawk Landing là tên nhóm phát triển tín dụng ở đó.” (0.938): “lending” đọc theo luật lexicon (lexicon_vi.ACB.yaml: “len-đinh”), ASR viết “squawk landing” — NOT_VERIFIED bằng tai người',
+    'LOS là hệ thống tiếp nhận và xét duyệt hồ sơ vay, còn Whitelist lương là danh sách khách nhận lương qua ngân hàng được ưu tiên cấp thấu chi.':
+        'ASR chép “ELO-OX là hệ thống tiếp nhận và xét duyệt hồ survey, còn wireless lương là danh sách khách nhận lương qua ngân hàng được ưu tiên cấp thấu chi.” (0.867): “los” đọc theo luật lexicon (lexicon_vi.ACB.yaml: “L O S”), ASR viết “elo ox”; “whitelist” đọc theo luật lexicon (lexicon_vi.ACB.yaml: “oai-lít”), ASR viết “wireless”; lệch âm/thanh thuần Việt: sơ vay/survey — NOT_VERIFIED bằng tai người',
+    # ── CS115 dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Tử số là 0 phẩy 9 nhân 0 phẩy 01, mẫu số là 0 phẩy 108.':
+        'ASR chép “Tự số là không phải chiến nhân 0.01, mẫu số là 0.108.” (0.743): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: tử/tự, chín (trong “phẩy chín” → “phải chiến”), không (trong “không phẩy” → “”) — NOT_VERIFIED bằng tai người',
+    'Vì vậy cả hai điểm chuyển sang cụm đầu.':
+        'ASR chép “Vì vậy, cả 2 điểm chuyển sang cũng đâu.” (0.778): lệch âm/thanh thuần Việt: cụm đầu/cũng đâu — NOT_VERIFIED bằng tai người',
+    'Công thức Bayes cho hậu nghiệm có tâm x chia 2, phương sai một nửa, tức tâm 0 phẩy 5 khi x bằng 1.':
+        'ASR chép “Công thức bay x cho hậu nghiệm có tâm ích chi 2, phương sai 1 nữa, tức tâm 0,5 khi ích bằng 1.” (0.88): Bayes đọc “Bay-ét” theo lexicon chung (probe 3/8, NOT_VERIFIED), ASR viết “bay X/S”; lệch âm/thanh thuần Việt: chia/chi, nửa/nữa — NOT_VERIFIED bằng tai người',
+    # ── CSA dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Epsilon là khoảng cách quanh số 1.':
+        'ASR chép “FC Long là khoảng cách quanh số 1.” (0.8): “epsilon” đọc theo luật lexicon (lexicon_vi.yaml: “ép-xi-lôn”), ASR viết “fc long” — NOT_VERIFIED bằng tai người',
+    'Luật De Morgan nói, không của a và b bằng không a hoặc không b, tức là nói không phải cả hai đều bằng 1 cũng là nói ít nhất một cái bằng 0.':
+        'ASR chép “Luật đơ mor gần nói, không của A và B bằng không A hoặc không B, tức là nói không phải cả 2 đều bằng 1 cũng là nói ít nhất 1 cái bằng không.” (0.971): “de morgan” đọc theo luật lexicon (lexicon_vi.CSA.yaml: “Đơ Mo-gần”), ASR viết “mor” — NOT_VERIFIED bằng tai người',
+    'Chỉ số gồm 9 bit, vì bộ nhớ đệm 32768 byte chia 64 byte được 512 bằng 2 mũ 9 dòng, nó chỉ phải nhìn vào dòng nào.':
+        'ASR chép “Chỉ số gồm 9 biết, vì bộ nhớ đệm 32.768 bai chia 64 bai được 512 bằng 2 mũ chứng dòng, nó chỉ phải nhìn vào dòng nào.” (0.902): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: bit/biết, chín/chứng — NOT_VERIFIED bằng tai người',
+    'Một khối là một đoạn 64 byte liền nhau của bộ nhớ, số khối bằng địa chỉ chia lấy phần nguyên cho 64, ví dụ địa chỉ 200 thuộc khối 3.':
+        'ASR chép “Một khối là một đoạn 64 bai liền nhau của bộ nhớ, số khối bằng địa chỉ chia lấy phần nguyên cho 64, ví dụ địa chỉ 200 thuộc khối 3.” (0.972): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người',
+    'Giá phải trả là bảng trang phẳng có 2 mũ 20 mục, mỗi mục 4 byte, tức khoảng 4 triệu byte cho mỗi tiến trình, nên máy thật dùng bảng trang nhiều tầng.':
+        'ASR chép “Giá phải trả là bản trang phẳng có 2 mũ 20 mục, mỗi mục 4 bay, tức khoảng 4 triệu bay cho mỗi tiến trình, nên máy thật dùng bản trang nhiều tân.” (0.853): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: bảng/bản, bảng/bản, tầng/tân — NOT_VERIFIED bằng tai người',
+    # ── DBS dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Cộng lại, mỗi lần đọc ngẫu nhiên mất khoảng 8 mi li giây, một số minh hoạ.':
+        'ASR chép “Tộng lại, mỗi lần độc ngẫu nhiên mất khoảng 8 mili giây một số minh họa.” (0.788): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh; lệch âm/thanh thuần Việt: cộng/tộng, đọc/độc — NOT_VERIFIED bằng tai người',
+    'Làm thử với bảng 5 triệu dòng, một số minh hoạ, mỗi trang 8 ki-lô-byte chứa 100 dòng như bài 7.':
+        'ASR chép “Làm thử với bảng 5 triệu dòng, một số minh họa, mỗi trang 8 kilobytes chiếu 100 dòng như bài 7.” (0.87): KB đọc “ki-lô-byte” theo lexicon của khoá, ASR viết “kilobyte/kg”; lệch âm/thanh thuần Việt: chứa (trong “ki lô byte chứa” → “kilobytes chiếu”) — NOT_VERIFIED bằng tai người',
+    'Dựng lại cả bảng phải ghi 50 nghìn trang, khoảng 0 phẩy 4 GB, còn thêm cột tức thì không ghi trang dữ liệu nào.':
+        'ASR chép “Dựng lại cả bản phải ghi 50.000 trang, khoảng 0.4GB, còn thêm cục tức thì không ghi trang dữ liệu nào.” (0.902): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: bảng/bản, cột/cục — NOT_VERIFIED bằng tai người',
+    # ── DMS dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Vì L là bội của p trừ 1, định lý Fermat nhỏ cho x mũ L đồng dư 1 theo mô-đun p.':
+        'ASR chép “Vì l là bội của p-1, định lý phát ma nhỏ cho ít mũ l đồng dư 1 theo mô đun p.” (0.936): “fermat” đọc theo luật lexicon (lexicon_vi.DMS.yaml: “Phéc-ma”), ASR viết “phát”; lệch âm/thanh thuần Việt: trừ/∅ — NOT_VERIFIED bằng tai người',
+    # ── OSY dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Nhưng chọn ô 1 rồi ô 3 hay chọn ô 3 rồi ô 1 vẫn là cùng một cặp, nên mỗi cặp bị đếm 2 lần.':
+        'ASR chép “Nhưng chọn O1 rồi O3 hay chọn O3 rồi O1 vẫn là cùng một cặp, nên mỗi cặp bị đếm hai lần.” (0.846): “ô” (ô lưới) ASR viết chữ “O” — NOT_VERIFIED bằng tai người',
+    'Cách một, cộng hai bộ đếm ở những dòng mà món đã đặt hoặc lấy xong, 5 với 0, 4 với 1, cho tới 0 với 5, lúc nào cũng được 5, đúng bằng số ô.':
+        'ASR chép “Cách 1, cộng 2 bộ đếm ở những dòng mà món đã đặt hoặc lấy xong, 5 với 0, 4 với 1, cho tới 0 với 5, lúc nào cũng được 5, đúng bằng số ố.” (0.972): “ô” (ô lưới) ASR viết chữ “O” — NOT_VERIFIED bằng tai người',
+    'Địa chỉ ảo là địa chỉ chương trình tự dùng, như thể nó có riêng một dải liền bắt đầu từ 0, còn địa chỉ vật lý là vị trí thật của byte đó trong bộ nhớ.':
+        'ASR chép “Địa chỉ áo là địa chỉ chương trình tự dùng, như thể nó có riêng một giải liền bắt đầu từ không, còn địa chỉ vật lý là vị trí thật của bài đó trong bộ nhớ.” (0.946): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: ảo/áo — NOT_VERIFIED bằng tai người',
+    'Bảng hai tầng chia 20 bit số trang thành 10 bit chọn mục trong thư mục và 10 bit chọn mục trong bảng con.':
+        'ASR chép “Bảng 2 tần chia 20 biết số trang thành 10 biết chọn mục trong thứ 1 và 10 biết chọn mục trong bảng con.” (0.76): lệch âm/thanh thuần Việt: tầng/tần, bit/biết, bit/biết, thư mục/thứ một, bit/biết — NOT_VERIFIED bằng tai người',
+    'Bộ đệm nhỏ mà vẫn hay trúng, vì một trang có 4096 byte, và chương trình thường đọc nhiều byte liền nhau trong cùng một trang trước khi sang trang khác.':
+        'ASR chép “Bộ đệm nhỏ mà vẫn hay trúng vì một trang có 4.096 bai và chương trình thường đọc nhiều bai liền nhau trong cùng một trang trước khi sang trang khác.” (0.946): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người',
+    'Về lý thuyết các con trỏ đủ chỉ tới tệp khoảng 4 TiB, dù hệ thống thật còn bị những giới hạn khác chặn thấp hơn.':
+        'ASR chép “Về lý thuyết các con trỏ đủ chỉ tới tệ khoảng 4TB, dù hệ thống thật còn bị những giới hạn khác chặn thấp hơn.” (0.923): “tib” đọc theo luật lexicon (lexicon_vi.OSY.yaml: “tê-ra-byte”), ASR viết “tb”; lệch âm/thanh thuần Việt: tệp/tệ — NOT_VERIFIED bằng tai người',
+    'Bốn KiB bằng 2 mũ 12, tức 4096 byte, còn MiB và TiB là 2 mũ 20 và 2 mũ 40, ở giữa còn một bậc 2 mũ 30, mỗi bậc gấp 1024 lần bậc trước.':
+        'ASR chép “4 kilobyte bằng 2 mũ 12, tức 4096 byte, còn megabyte và terabyte là 2 mũ 20 và 2 mũ 40, ở giữa còn một bật 2 mũ 30, mỗi bật cấp 1024 lần bật trước.” (0.865): “kib” đọc theo luật lexicon (lexicon_vi.OSY.yaml: “ki-lô-byte”), ASR viết “kilobyte”; MiB đọc “mê-ga-byte” (quy ước OSY/DEN: cách nói thông dụng, màn hình giữ MiB, câu nêu rõ 2 mũ 20), ASR viết “MB”; “tib” đọc theo luật lexicon (lexicon_vi.OSY.yaml: “tê-ra-byte”), ASR viết “terabyte”; lệch âm/thanh thuần Việt: bậc/bật, bậc gấp/bật cấp, bậc/bật — NOT_VERIFIED bằng tai người',
+    'Đĩa chia thành các khối 4 KiB, và mỗi tệp có một nút chỉ mục ghi kích thước, chủ sở hữu, quyền, thời gian, cùng 15 con trỏ khối.':
+        'ASR chép “để chia thành các khối 4 kilobytes và mỗi tệp có một nút chỉ một ghi kích thước, chủ sở hữu, quyền, thời gian cùng 15 con trỏ khối.” (0.9): “kib” đọc theo luật lexicon (lexicon_vi.OSY.yaml: “ki-lô-byte”), ASR viết “kilobytes”; lệch âm/thanh thuần Việt: đĩa/để, mục/một — NOT_VERIFIED bằng tai người',
+    'Mỗi con trỏ chỉ là một số dài 4 byte ghi số hiệu của một khối trên đĩa.':
+        'ASR chép “Mỗi con trỏ chỉ là một số dài bốn bay ghi số hiệu của một khối trên đĩa.” (0.944): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người',
+    'Ổ đĩa quay gồm các mặt đĩa tròn xếp chồng lên nhau, mỗi mặt có nhiều rãnh là những vòng tròn đồng tâm.':
+        'ASR chép “Hổ đĩa quay gồm các mặt đĩa tròn xếp trồng lên nhau, mỗi mặt có nhiều rảnh là những vòng tròn đồng tâm.” (0.87): lệch âm/thanh thuần Việt: ổ/hổ, chồng/trồng, rãnh/rảnh — NOT_VERIFIED bằng tai người',
+    'Mỗi tệp ghi 9 bit quyền cơ bản, chia làm ba nhóm, chủ sở hữu, nhóm, và người khác.':
+        'ASR chép “Mỗi tập ghi chính biết quyền cơ bản, chia làm ba nhóm, chủ sở hiểu, nhóm và người khác.” (0.789): lệch âm/thanh thuần Việt: tệp/tập, chín bit/chính biết, hữu/hiểu — NOT_VERIFIED bằng tai người',
+    # ── PLC dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Một ô-tô-mát hữu hạn là một cỗ máy có hữu hạn trạng thái, đọc một ký tự thì đi theo mũi tên mang ký tự đó sang trạng thái kế, như hình vừa xem.':
+        'ASR chép “Một Automat hữu hạn là một cổ máy có hữu hạn trạng thái, đọc một ký tự thì đi theo mũi tên mang ký tự đó sang trạng thái kế, như hình vừa xem.” (0.914): “ô” (ô lưới) ASR viết chữ “O”; lệch âm/thanh thuần Việt: tô mát (trong “ô tô mát” → “automat”), cỗ/cổ — NOT_VERIFIED bằng tai người',
+    'Người ta đã chứng minh mỗi biểu thức chính quy đổi được thành một ô-tô-mát hữu hạn, và ta ghép mọi mẫu lại thành một ô-tô-mát lớn.':
+        'ASR chép “Người ta đã chứng minh mỗi biểu thức chính quy đổi được thành một automatic hữu hạn và ta ghép mọi mẫu lại thành một automatic lớn.” (0.862): “ô” (ô lưới) ASR viết chữ “O”; lệch âm/thanh thuần Việt: tô mát (trong “ô tô mát” → “automatic”), tô mát (trong “ô tô mát” → “automatic”) — NOT_VERIFIED bằng tai người',
+    'Kết quả là 1065353216, dù chuẩn C không bảo đảm cách đọc này.':
+        'ASR chép “Kết quả là 106535216, dù chuẩn xe không bảo đảm cách độc này.” (0.737): “tỉ” ASR viết chính tả “tỷ” (cùng âm); lệch âm/thanh thuần Việt: không (trong “tỉ không” → “”), triệu ba trăm năm mươi ba/∅, đọc/độc — NOT_VERIFIED bằng tai người',
+    # ── SDP dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Xét một đơn nặng 2 ki-lô-gam đi 8 ki-lô-mét, với giá là số minh hoạ.':
+        'ASR chép “Xét 1 đơn nặng 2 kg đi 8 km, với giá là số minh họa.” (0.765): “ki-lô-byte” đọc tách âm tiết, ASR viết “kg” rồi chép “byte” thành “bay/ba”; gam-ma (γ) ASR viết “gamma”; đơn vị mét, ASR viết ký hiệu “m” — NOT_VERIFIED bằng tai người',
+    # ── SWF dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Máy như vậy có tên là ô-tô-mát hữu hạn đơn định, trong đó ô-tô-mát nghĩa là máy tự chạy theo luật.':
+        'ASR chép “Máy như vậy có tên là Automat Hữu Hạng Đơn Định, trong đó Automat nghĩa là máy tự chạy theo luật.” (0.783): “ô” (ô lưới) ASR viết chữ “O”; lệch âm/thanh thuần Việt: tô mát (trong “ô tô mát” → “automat”), hạn/hạng, tô mát (trong “ô tô mát” → “automat”) — NOT_VERIFIED bằng tai người',
+    'Tiếp theo, ta đếm số cách xen kẽ.':
+        'ASR chép “Tiếp theo, tà đếm số cách sen kẻ.” (0.75): lệch âm/thanh thuần Việt: ta/tà, kẽ/kẻ — NOT_VERIFIED bằng tai người',
+    'Số cách chọn k ô trong n ô gọi là tổ hợp chập k của n, bằng n giai thừa chia cho k giai thừa nhân n trừ k giai thừa.':
+        'ASR chép “Số khách chọn KO trong N, O gọi là tổ hợp chập K của N, bằng N giai thừa chi cho K giai thừa nhân N trừ K giai thừa.” (0.852): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “ô” (ô lưới) ASR viết chữ “O”; lệch âm/thanh thuần Việt: cách/khách, chia/chi — NOT_VERIFIED bằng tai người',
+    'Tiếp theo, byte là một ô nhớ nhỏ chứa một số từ 0 tới 255.':
+        'ASR chép “Tiếp theo, bay là một ô nhớ nhỏ chứa một số từ 0 tới 255.” (0.947): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người',
+    'Máy lưu chữ bằng cách gán cho mỗi chữ một mã số, mỗi chữ cái tiếng Anh nằm trong một byte, chữ A có mã 65, chữ B có mã 66.':
+        'ASR chép “Máy lưu chữ bằng cách gán cho mỗi chữ một mạ số, mỗi chữ cái tiếng Anh nằm trong một bay, chữ A có mạ 65, chữ B có mạ 66.” (0.886): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: mã/mạ, mã/mạ, mã/mạ — NOT_VERIFIED bằng tai người',
+    'Trong ngôn ngữ C, chuỗi kết thúc bằng một byte 0 để máy biết chỗ dừng, nên chuỗi 9 chữ cần 10 byte.':
+        'ASR chép “Trong ngôn ngữ C, chủ kết thúc bằng một bay không để máy biết chỗ dừng, nền chủ 9 chữ cần 10 bay.” (0.783): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: chuỗi/chủ, nên chuỗi/nền chủ — NOT_VERIFIED bằng tai người',
+    # ── TOC dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Định lý Kleene, năm 1956, nối ba cách mô tả, gồm biểu thức chính quy, máy không đơn định, và máy đơn định.':
+        'ASR chép “Định lý Collini, năm 1956, nối ba cách mô tả, gồm biểu thức chính quy, máy không đơn định và máy đơn định.” (0.966): “kleene” đọc theo luật lexicon (lexicon_vi.TOC.yaml: “Cờ-li-ni”), ASR viết “collini” — NOT_VERIFIED bằng tai người',
+    'Vì đi được cả hai chiều, hai định nghĩa cho đúng cùng một lớp NP, và phần ví dụ ngay sau làm điều này bằng số với bài toán tổng tập con.':
+        'ASR chép “Vì đi được cả hai chiều, hai định nghĩa cho đúng cùng một lớp NT và phần ví dụ ngay sau làm điều này bằng số với bài toán tổng tập con.” (0.969): “np” đọc theo luật lexicon (lexicon_vi.TOC.yaml: “en-pê”), ASR viết “nt” — NOT_VERIFIED bằng tai người',
+    # ── OSY L09 câu dãy chữ số hệ mười sáu (đợt đọc kiểm C, 2026-11-10) ──
+    'Ví dụ địa chỉ 0 0 4 0 3 A B C hệ mười sáu, ta tách nó thành 0 0 4 0 0 0 0 0 cộng 3 A B C.':
+        'ASR chép “Ví dụ địa chỉ 00403ABC hệ 16, ta tách nó thành 0040000-3ABC.” (0.737): ASR gộp dãy chữ số và chữ cái đọc rời (“không không bốn không ba A B C”) thành một số viết liền, nên bản chép ngắn hơn câu; đủ cả hai địa chỉ và từ “cộng” → “-”; không cụt: tts_speed_scan 2026-11-10 báo 0/51 874 câu < 0,22 s/từ — NOT_VERIFIED bằng tai người',
+    # ── BNK dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Thêm một đơn vị đo, theo cách tính quen dùng cho bộ nhớ: một ki lô byte bằng một nghìn không trăm hai mươi bốn byte, và một mê ga byte là số đó nhân với chính nó.':
+        'ASR chép “Thêm một đơn vị đo, theo cách tính quen dùng cho bộ nhớ, 1 kilobytes bằng 1024 bytes và 1 megabyte là số đó nhân với chính nó.” (0.861): KB đọc “ki-lô-byte” theo lexicon của khoá, ASR viết “kilobyte/kg”; byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); MB đọc “mê-ga-byte” theo lexicon của khoá, ASR viết “MB/megabyte” — NOT_VERIFIED bằng tai người',
+    'BigDecimal giữ số thập phân nên đúng, với điều kiện tạo nó từ chuỗi chữ không phẩy một.':
+        'ASR chép “Bích decimal giữ số thập phân nên đúng với điều kiện tạo nó từ chủ chữ 0,1.” (0.865): “bigdecimal” đọc theo luật lexicon (lexicon_vi.BNK.yaml: “Bích Đê-xi-mơn”), ASR viết “bích decimal”; lệch âm/thanh thuần Việt: chuỗi/chủ — NOT_VERIFIED bằng tai người',
+    'Spring Boot là cách đóng gói và chạy nhanh bộ khung đó.':
+        'ASR chép “Springbook là cách đóng gói và chạy nhanh bộ khung đó.” (0.87): “spring” đọc theo luật lexicon (lexicon_vi.BNK.yaml: “S-pring”), ASR viết “springbook” — NOT_VERIFIED bằng tai người',
+    'Tiêm phụ thuộc là Spring nối các bean với nhau, thường qua hàm khởi tạo, tức phương thức chạy lúc tạo đối tượng.':
+        'ASR chép “Tiêm phụ thuộc là spring nối các binh với nhau, thường qua hàm khởi tạo, tức phương thức chạy lúc tạo đối tượng.” (0.957): lệch âm/thanh thuần Việt: bean/binh — NOT_VERIFIED bằng tai người',
+    'REST API là cách một dịch vụ mở chức năng của nó qua các đường dẫn đó.':
+        'ASR chép “RECAPI là cách một dịch vụ mở chức năng của nó qua các đường dẫn đó.” (0.909): “rest” đọc theo luật lexicon (lexicon_vi.BNK.yaml: “Rét”), ASR viết “recapi” — NOT_VERIFIED bằng tai người',
+    'Phiên là một kết nối đang làm việc với cơ sở dữ liệu, tức phần mềm lưu bảng dữ liệu mà ta hỏi bằng ngôn ngữ SQL.':
+        'ASR chép “Phiên là một kết nối đang làm việc với cơ sở dữ liệu, tức phần mềm lưu bản dữ liệu mà ta hỏi bằng ngôn ngữ Eculer.” (0.926): “sql” đọc theo luật lexicon (lexicon_vi.BNK.yaml: “ét-cu-l”), ASR viết “eculer”; lệch âm/thanh thuần Việt: bảng/bản — NOT_VERIFIED bằng tai người',
+    'Redis là một kho tên tra cứu và giá trị chạy trong bộ nhớ, hay được dùng làm bộ đệm.':
+        'ASR chép “Reddit là một kho tên tra cứu và giá trị chạy trong bộ nhớ, hay được dùng làm bộ đệm.” (0.95): “redis” đọc theo luật lexicon (lexicon_vi.BNK.yaml: “Rê-đít”), ASR viết “reddit” — NOT_VERIFIED bằng tai người',
+    'Khoá phân tán là khoá giữ quyền dùng chung giữa nhiều máy chủ, đặt ở một nơi lưu chung như Redis.':
+        'ASR chép “Khóa phân tán là khóa giữ quyền dùng chung giữa nhiều máy chủ, đặt ở một nơi lưu chung như Reddit.” (0.952): “redis” đọc theo luật lexicon (lexicon_vi.BNK.yaml: “Rê-đít”), ASR viết “reddit” — NOT_VERIFIED bằng tai người',
+    'Kafka là hệ thống chuyển thông điệp.':
+        'ASR chép “CAPCA là hệ thống chuyển thông điệp” (0.857): “kafka” đọc theo luật lexicon (lexicon_vi.BNK.yaml: “Cáp-ca”), ASR viết “capca” — NOT_VERIFIED bằng tai người',
+    'Sự kiện là một thông điệp báo một việc đã xảy ra, được gửi qua một hệ thống chuyển thông điệp như Kafka, ví dụ lệnh bốn mươi hai đã chuyển xong.':
+        'ASR chép “Sự kiện là một thông điệp báo một việc đã xảy ra, được gửi qua một hệ thống chuyển thông điệp như CAPCA, ví dụ lệnh 42 đã chuyển xong.” (0.969): “kafka” đọc theo luật lexicon (lexicon_vi.BNK.yaml: “Cáp-ca”), ASR viết “capca” — NOT_VERIFIED bằng tai người',
+    'Lưu ý, mỗi mạng thanh toán có đặc tả riêng, kể cả NAPAS, công ty chuyển mạch thẻ và thanh toán liên ngân hàng của Việt Nam.':
+        'ASR chép “Lưu ý, mỗi mạng thanh toán có đặt tải riêng, kể cả NAPAC, công ty chuyển mạch thẻ và thanh toán liên ngân hàng của Việt Nam.” (0.889): “napas” đọc theo luật lexicon (lexicon_vi.BNK.yaml: “Na-pát”), ASR viết “napac”; lệch âm/thanh thuần Việt: đặc tả/đặt tải — NOT_VERIFIED bằng tai người',
+    'Một byte là nhóm tám bit, nên viết bằng đúng hai chữ số thập lục phân.':
+        'ASR chép “Một by là nhóm 8 bit nên viết bằng đúng 2 chữ số thập lục phân.” (0.938): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người',
+    'Cuối cùng, STAN là trường mười một, mã vết sáu chữ số do bên gửi đánh.':
+        'ASR chép “Cuối cùng, Estan là trường 11 mà vết 6 triệu số do bên gửi đánh.” (0.75): “stan” đọc theo luật lexicon (lexicon_vi.BNK.yaml: “Ét-tan”), ASR viết “estan”; lệch âm/thanh thuần Việt: mã vết/mà véc, chữ/triệu — NOT_VERIFIED bằng tai người',
+    'Ở Việt Nam, chuyển mạch đó là NAPAS, công ty chuyển mạch thẻ và thanh toán liên ngân hàng.':
+        'ASR chép “Ở Việt Nam, chuyển mặt đó là NAPAC, công ty chuyển mặt thẻ và thanh toán liên ngân hàng.” (0.842): “napas” đọc theo luật lexicon (lexicon_vi.BNK.yaml: “Na-pát”), ASR viết “napac”; lệch âm/thanh thuần Việt: mạch/mặt, mạch/mặt — NOT_VERIFIED bằng tai người',
+    # ── CAS dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Bộ nhớ là một dãy ô liền nhau, mỗi ô 1 byte, và một chương trình đặt nhiều dữ liệu khác nhau sát cạnh nhau.':
+        'ASR chép “Bộ nhớ là một dãy ô liền nhau, mỗi ô một bay và một chương trình đặt nhiều dữ liệu khác nhau sát cạnh nhau.” (0.96): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người',
+    'Ví dụ vùng A chiếm từ ô 0 tới ô 19 thì dữ liệu khác bắt đầu ngay từ ô 20.':
+        'ASR chép “Ví dụ vùng A chiếm từ O0 tới O19 thì dữ liệu khác bắt đầu ngay từ O20.” (0.87): “ô” (ô lưới) ASR viết chữ “O” — NOT_VERIFIED bằng tai người',
+    'Trước hết, ta cần bốn điều, bắt đầu từ cách máy ghi số có dấu bằng n bit, gọi là bù 2.':
+        'ASR chép “Trước hết, ta cần 4 điều, bắt đầu từ cách máy ghi số có dấu bằng nBit, gọi là bù 2.” (0.93): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: bit (trong “n bit” → “nbit”) — NOT_VERIFIED bằng tai người',
+    # ── CS112 dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Lỗi thứ nhất, ép hệ thức 2 nhân T của n chia 2, cộng n lôgarit n, vào trường hợp ba, hay trường hợp hai như bảng vừa học.':
+        'ASR chép “Lỗi thứ nhất, ép hệ thức 2 nhân tê của n chi 2, cộng n log n vào trường hợp 3 hay trường hợp 2 như bản vừa học.” (0.897): thuật ngữ Việt hoá viết liền “lôgarit” (= lô-ga-rit), TTS đọc theo chính tả Việt, ASR viết “log”; lệch âm/thanh thuần Việt: chia/chi, bảng/bản — NOT_VERIFIED bằng tai người',
+    'Chi phí do việc sắp xếp quyết định, Theta của n lôgarit n, tức số bước tăng cùng cỡ với n nhân lôgarit n.':
+        'ASR chép “Chi phí do việc sắp xếp quyết định, theta của n log n tức số bước tăng cùng cỡ với n nhân log n.” (0.88): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; thuật ngữ Việt hoá viết liền “lôgarit” (= lô-ga-rit), TTS đọc theo chính tả Việt, ASR viết “log” — NOT_VERIFIED bằng tai người',
+    'Xâu là một dãy ký tự, và xâu con chung của hai xâu là một dãy con có mặt trong cả hai, ví dụ A B C B và B D C B có chung B C B.':
+        'ASR chép “Sâu là một dãy ký tự, và sâu con chung của hai sâu là một dãy con có mặt trong cả hai, ví dụ ABCB và BGCB có chung BCB.” (0.932): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    'Tập mọi điểm thoả hết ràng buộc gọi là miền chấp nhận được, ở đây là một tứ giác có bốn đỉnh O, A, B, C.':
+        'ASR chép “Tập mọi điểm thỏa hết tràn buộc gọi là miền chấp nhận được, ở đây là một tứ giác có 4 định nhò A, B, C.” (0.885): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: ràng/tràn, đỉnh (trong “đỉnh o” → “định nhò”) — NOT_VERIFIED bằng tai người',
+    'Theo bài 1, Theta của f nghĩa là số bước tăng cùng cỡ với f, bị kẹp giữa hai hằng số nhân f, còn Omega của f nghĩa là ít nhất cỡ f.':
+        'ASR chép “Theo bài 1, teta của f nghĩa là số bước tăng cùng cỡ với f, bị kẹp giữa hai hàng số nhân f, còn omega của f nghĩa là ít nhất cỡ f.” (0.939): “theta” đọc theo luật lexicon (lexicon_vi.CS112.yaml: “tê-ta”), ASR viết “teta”; lệch âm/thanh thuần Việt: hằng/hàng — NOT_VERIFIED bằng tai người',
+    'Ví dụ n nhân n trừ 1 chia 2 nằm giữa một phần tư và một nửa của n bình phương khi n từ 2 trở lên, nên thuộc Theta của n bình phương.':
+        'ASR chép “Ví dụ n nhân n trừ 1 chi 2 nằm giữ 1 phần 4 và 1 nửa của n bình phương khi n từ 2 trở lên, nên thuộc teta của n bình phương.” (0.912): “theta” đọc theo luật lexicon (lexicon_vi.CS112.yaml: “tê-ta”), ASR viết “teta”; lệch âm/thanh thuần Việt: chia/chi, giữa/giữ — NOT_VERIFIED bằng tai người',
+    'Nó lấy ra phần tử nhỏ nhất và cập nhật trong Theta của lôgarit n, với 1000 phần tử chỉ khoảng 10 bước.':
+        'ASR chép “Nó lấy ra phần tử nhỏ nhất và cập nhật trong teta của logarith n với 1 nghìn phần tử chỉ khoảng 10 bước.” (0.958): “theta” đọc theo luật lexicon (lexicon_vi.CS112.yaml: “tê-ta”), ASR viết “teta” — NOT_VERIFIED bằng tai người',
+    'Ở bài 6, đống nhị phân là một cây luôn giữ phần tử nhỏ nhất ở gốc, lấy ra phần tử nhỏ nhất trong Theta của lôgarit n.':
+        'ASR chép “Ở bài 6, đóng nhị phân là một cây luôn giữ phần tử nhỏ nhất ở gốc, lấy ra phần tử nhỏ nhất trong teta của logarith n.” (0.929): “theta” đọc theo luật lexicon (lexicon_vi.CS112.yaml: “tê-ta”), ASR viết “teta”; lệch âm/thanh thuần Việt: đống/đóng — NOT_VERIFIED bằng tai người',
+    'Ở đây W là sức chứa, và ô hàng i cột c ghi giá trị lớn nhất khi chỉ dùng i món đầu với sức chứa c.':
+        'ASR chép “Ở đây về đúc là sức chứa và ô hàng y cột xe ghi giá trị lớn nhất khi chỉ dùng y món đầu với sức chứa xe.” (0.945): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    # ── CVI dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Trước hết, ta cần hiểu bit và byte là gì.':
+        'ASR chép “Trước hết, ta cần hiểu biết và bay là gì?” (0.8): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: bit/biết — NOT_VERIFIED bằng tai người',
+    'Nếu ảnh có thêm một cột, ta trượt bộ lọc sang phải một cột, ô mới là 2, 0, 4, 1, cho 2 trừ 1, bằng 1.':
+        'ASR chép “Nếu ảnh có thêm 1 cột, ta trực bộ lọc sang phải 1 cột, ôm mới là 2, 0, 4, 1, cho 2 trừ 1, bằng 1.” (0.926): “ô” (ô lưới) ASR viết chữ “O”; lệch âm/thanh thuần Việt: trượt/trực — NOT_VERIFIED bằng tai người',
+    'Đệm P nghĩa là thêm P hàng và P cột số 0 quanh viền ảnh, còn bước nhảy S nghĩa là mỗi lần trượt bộ lọc đi S ô.':
+        'ASR chép “Đệm P nghĩa là thêm P hàng và P cột số không quanh viện ảnh, còn bước nhảy S nghĩa là mỗi lần trượt bộ lọc đi SO.” (0.912): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “ô” (ô lưới) ASR viết chữ “O”; lệch âm/thanh thuần Việt: viền/viện — NOT_VERIFIED bằng tai người',
+    # ── DSC dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Trong từng cỡ cửa hàng, chi thêm không bán thêm, nhưng gộp cả bốn thì r khoảng 0 phẩy 978, chỉ vì cửa hàng lớn vừa chi nhiều vừa bán nhiều.':
+        'ASR chép “Trong từng cửa hàng, chi thêm không bán thêm, nhưng gột cả 4 thì error khoảng 0,978, chỉ vì cửa hàng lớn vừa chi nhiều vừa bán nhiều.” (0.896): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: cỡ/∅, gộp/gột, không (trong “không phẩy” → “”) — NOT_VERIFIED bằng tai người',
+    'Đo một tỉ lệ p trên n người thì kết quả dao động quanh tỉ lệ thật, vì một nhóm người khác sẽ cho con số hơi khác.':
+        'ASR chép “Đó 1 tỷ lệ T trên n người thì kết quả giao động quanh tỷ lệ thật vì một nhóm người khác sẽ cho con số hơi khác.” (0.857): “tỉ” ASR viết chính tả “tỷ” (cùng âm); chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: đo/đó — NOT_VERIFIED bằng tai người',
+    # ── DSY dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Tăng tốc là thời gian cũ chia thời gian mới, tức 1 chia cho tổng đó, và công thức này gọi là định luật Amdahl.':
+        'ASR chép “Tăng tốc là thời gian cũ chia thời gian mới, tức mục chia cho tổng đó và công thức này gọi là định luật am đang.” (0.923): “amdahl” đọc theo luật lexicon (lexicon_vi.DSY.yaml: “Am-đan”), ASR viết “đang”; lệch âm/thanh thuần Việt: một/mục — NOT_VERIFIED bằng tai người',
+    'Hãy tưởng tượng có m ô, và ta rút ngẫu nhiên m lần, mỗi lần một ô.':
+        'ASR chép “Hãy tưởng tượng có mO và ta trúc ngẫu nhiên m lần, mỗi lần một O.” (0.788): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “ô” (ô lưới) ASR viết chữ “O”; lệch âm/thanh thuần Việt: rút/trúc — NOT_VERIFIED bằng tai người',
+    'Đảo lại, D xấp xỉ 256 chia số nhỏ thứ 256, nhưng người ta dùng 255, tức 256 trừ 1.':
+        'ASR chép “Đảo lại, về sắp sĩ 256 chia số nhỏ thứ 256, nhưng người ta dùng 255, tức 256 trừ 1.” (0.917): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: xấp xỉ (trong “d xấp xỉ” → “về sắp sĩ”) — NOT_VERIFIED bằng tai người',
+    # ── DVO dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Dữ liệu trong máy được đếm bằng byte, mỗi chữ cái không dấu chiếm một byte.':
+        'ASR chép “Dữ liệu trong máy được đếm bằng bay, mỗi chữ cái không giấu chiếm một bay.” (0.875): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người',
+    # ── IRS dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Thử lại, e mũ 1 phẩy 099 xấp xỉ 3 phẩy 001, gần đúng bằng 3.':
+        'ASR chép “Thử lại, e-mũ 1.099 sắp xỉ 3.001 gần đúng bằng 3.” (0.732): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: xấp/sắp — NOT_VERIFIED bằng tai người',
+    'Cosin bằng tích vô hướng chia tích hai độ dài, với u và v ở trên là 8 chia 2 phẩy 236 nhân 3 phẩy 742, khoảng 0 phẩy 956.':
+        'ASR chép “Cô sinh bằng tích vô hướng chia tích 2 độ dài, với u và v ở trên là 8 chi 2 phẩy 236 nhân 3 phẩy 742, khoảng 0,956.” (0.916): thuật ngữ Việt hoá viết liền “cosin” (= co-sin), TTS đọc theo chính tả Việt, ASR viết “cô sinh”; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: chia/chi, không (trong “không phẩy” → “”) — NOT_VERIFIED bằng tai người',
+    'Hai mũi tên cùng hướng, như 1, 2, 0 và 2, 4, 0, có góc 0 độ và cosin bằng 1.':
+        'ASR chép “2 mũi tên cùng hướng như 1, 2, 0 và 2, 4, 0, có góc không độ và cô xin bằng 1.” (0.93): thuật ngữ Việt hoá viết liền “cosin” (= co-sin), TTS đọc theo chính tả Việt, ASR viết “cô xin” — NOT_VERIFIED bằng tai người',
+    'Hai mũi tên vuông góc, như 1, 0 và 0, 1, có góc 90 độ và cosin bằng 0, vì tích vô hướng bằng 0.':
+        'ASR chép “Hai mũi tên vung góc như 1, 0 và 0, 1 có góc 90 độ và cô sinh bằng 0, vị tích vô hướng bằng 0.” (0.868): thuật ngữ Việt hoá viết liền “cosin” (= co-sin), TTS đọc theo chính tả Việt, ASR viết “cô sinh”; lệch âm/thanh thuần Việt: vuông/vung, vì/vị — NOT_VERIFIED bằng tai người',
+    'Cosin càng gần 1 thì hai vector càng cùng hướng, nên ta sẽ dùng nó để đo văn bản giống câu hỏi tới đâu.':
+        'ASR chép “Cô Siên càng gần 1 thì hai vét tơ càng cùng hướng nên ta sẽ dùng nó để đo văn bản giống câu hỏi tới đâu.” (0.941): thuật ngữ Việt hoá viết liền “cosin” (= co-sin), TTS đọc theo chính tả Việt, ASR viết “cô siên” — NOT_VERIFIED bằng tai người',
+    'Công thức xếp hạng có bão hoà làm cái lợi của việc lặp từ tăng chậm dần.':
+        'ASR chép “Công thức xếp hạn có bảo hòa làm cái lợi của việc lập từ tăng chậm dân.” (0.765): lệch âm/thanh thuần Việt: hạng/hạn, bão/bảo, lặp/lập, dần/dân — NOT_VERIFIED bằng tai người',
+    'Cosin của hai vector là tích vô hướng, tức nhân từng cặp thành phần rồi cộng, chia cho tích hai độ dài, và ở đây ba vector đều dài đúng 5.':
+        'ASR chép “Cô xuyên của 2 vector là tích vô hướng, tức nhân từng cặp thành phần rồi cộng, chia cho tích 2 độ dài và ở đây 3 vector đều dài đúng 5.” (0.952): thuật ngữ Việt hoá viết liền “cosin” (= co-sin), TTS đọc theo chính tả Việt, ASR viết “cô xuyên” — NOT_VERIFIED bằng tai người',
+    'Bình phương khoảng cách là lấy hiệu từng thành phần, bình phương, rồi cộng lại, nên cosin lớn hay khoảng cách nhỏ đều nghĩa là gần.':
+        'ASR chép “Bình phương khoảng cách là lấy hiệu từng thành phần, bình phương, rồi cộng lại, nền coxin lớn hay khoảng cách nhỏ đều nghĩa là gân.” (0.885): thuật ngữ Việt hoá viết liền “cosin” (= co-sin), TTS đọc theo chính tả Việt, ASR viết “nền coxin”; lệch âm/thanh thuần Việt: nên (trong “nên cosin” → “nền coxin”), gần/gân — NOT_VERIFIED bằng tai người',
+    'Cosin của chúng là 4 nhân 3 cộng 3 nhân 4, chia 5 nhân 5, được 0 phẩy 96, còn bình phương khoảng cách chỉ là 1 cộng 1, bằng 2.':
+        'ASR chép “Cô sinh của chúng là 4 nhân 3 cộng 3 nhân 4, chia 5 nhân 5, được 0,96, còn bình phương khoảng cách chỉ là 1 cộng 1 bằng 2.” (0.955): thuật ngữ Việt hoá viết liền “cosin” (= co-sin), TTS đọc theo chính tả Việt, ASR viết “cô sinh” — NOT_VERIFIED bằng tai người',
+    'Văn bản ô tô đồ chơi có chung chữ ô tô, nhưng vector 0, 5 chỉ cho cosin 0 phẩy 6 và bình phương khoảng cách tới 20.':
+        'ASR chép “Văn bản ô tô đồ chơi có chung chữ ô tô nhưng vector 0 nằm chỉ cho cosine 0,6 và bình phương khoảng cách tới 20.” (0.931): thuật ngữ Việt hoá viết liền “cosin” (= co-sin), TTS đọc theo chính tả Việt, ASR viết “cosine”; lệch âm/thanh thuần Việt: năm/nằm — NOT_VERIFIED bằng tai người',
+    'Hệ theo vector xếp B đầu với cosin 0 phẩy 83, rồi E, A, C, thang điểm không bao giờ vượt quá 1.':
+        'ASR chép “Hệ theo vét tơ xếp bê đầu với cô sinh 0,83 rồi E, A, C thang điểm không bao giờ vượt quá mục.” (0.906): thuật ngữ Việt hoá viết liền “cosin” (= co-sin), TTS đọc theo chính tả Việt, ASR viết “cô sinh”; lệch âm/thanh thuần Việt: một/mục — NOT_VERIFIED bằng tai người',
+    'Hệ theo từ khoá thường dùng công thức xếp hạng có bão hoà.':
+        'ASR chép “Hãy theo từ khóa thường dùng công thức xếp hạn có bảo hòa.” (0.769): lệch âm/thanh thuần Việt: hệ/hãy, hạng/hạn, bão/bảo — NOT_VERIFIED bằng tai người',
+    'Điều thứ ba là cosin, hệ theo vector dùng nó để đo hai vector có cùng hướng hay không.':
+        'ASR chép “Điều thứ ba là cô sinh, hệ theo vét tơ dùng nó để đo hai vét tơ có cùng hướng hay không?” (0.93): thuật ngữ Việt hoá viết liền “cosin” (= co-sin), TTS đọc theo chính tả Việt, ASR viết “cô sinh” — NOT_VERIFIED bằng tai người',
+    'Cosin là tích vô hướng, tức nhân từng cặp thành phần rồi cộng, chia cho tích hai độ dài, mỗi độ dài là căn của tổng bình phương.':
+        'ASR chép “Cô xuyên là tích vô hướng, tức nhân từng cặp thành phần rồi cộng, chia cho tích 2 độ dài, mỗi độ dài là căn của tổng bình phương.” (0.947): thuật ngữ Việt hoá viết liền “cosin” (= co-sin), TTS đọc theo chính tả Việt, ASR viết “cô xuyên” — NOT_VERIFIED bằng tai người',
+    'Hai độ dài là căn 5, khoảng 2 phẩy 236, và căn 14, khoảng 3 phẩy 742, nên cosin xấp xỉ 0 phẩy 956.':
+        'ASR chép “2 độ dài là căn 5, khoảng 2,236 và căn 14, khoảng 3,742, nên cô xin sắp xỉ không phải 956.” (0.853): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; thuật ngữ Việt hoá viết liền “cosin” (= co-sin), TTS đọc theo chính tả Việt, ASR viết “cô xin sắp”; lệch âm/thanh thuần Việt: xấp (trong “cosin xấp” → “cô xin sắp”) — NOT_VERIFIED bằng tai người',
+    'Cosin không bao giờ vượt 1, đạt 1 khi hai vector cùng hướng hẳn, và không dưới âm 1, khi hai vector ngược hướng.':
+        'ASR chép “Cô xin không bao giờ vượt một, đạt một khi hai vét tơ cùng hướng hẳn và không dưới âm một khi hai vét tơ ngược hướng.” (0.943): thuật ngữ Việt hoá viết liền “cosin” (= co-sin), TTS đọc theo chính tả Việt, ASR viết “cô xin” — NOT_VERIFIED bằng tai người',
+    'Vector trọng số của bài 2 không có số âm nên cosin nằm từ 0 tới 1, còn vector nhúng của bài 3 có thể cho cosin âm.':
+        'ASR chép “Vét tơ trọng số của bài 2 không có số âm nên cosine nằm từ 0 tới 1, còn vét tơ nhúng của bài 3 có thể cho cosine âm.” (0.933): thuật ngữ Việt hoá viết liền “cosin” (= co-sin), TTS đọc theo chính tả Việt, ASR viết “cosine” — NOT_VERIFIED bằng tai người',
+    'Vì vậy lôgarit của 1 bằng 0, còn lôgarit của 2 xấp xỉ 0 phẩy 693 vì e mũ 0 phẩy 693 xấp xỉ 2.':
+        'ASR chép “Vì vậy, logarith của 1 bằng không, còn logarith của 2 sắp sĩ 0,693 vì emu 0,693 sắp sĩ 2.” (0.754): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: xấp xỉ không (trong “xấp xỉ không phẩy” → “sắp sĩ”), mũ không (trong “e mũ không phẩy” → “emu”), xấp xỉ/sắp sĩ — NOT_VERIFIED bằng tai người',
+    'Nếu mô hình dành xác suất p cho đáp án đúng, mất mát là âm lôgarit của p.':
+        'ASR chép “Nếu mô hình dành xác suất P cho đáp án đúng, mất mát là âm logadric của P.” (0.944): thuật ngữ Việt hoá viết liền “lôgarit” (= lô-ga-rit), TTS đọc theo chính tả Việt, ASR viết “logadric” — NOT_VERIFIED bằng tai người',
+    'Con số này đúng là cosin của góc giữa hai vector, nên hai vector cùng hướng như 1, 2 và 2, 4 được 1, còn hai vector vuông góc như 1, 0 và 0, 1 được 0.':
+        'ASR chép “Con số này đúng là cô xin của góc giữa 2 vét tơ nên 2 vét tơ cùng hướng như 1, 2 và 2, 4 được 1, còn 2 vét tơ vung góc như 1, 0 và 0, 1 được 0.” (0.938): thuật ngữ Việt hoá viết liền “cosin” (= co-sin), TTS đọc theo chính tả Việt, ASR viết “cô xin”; lệch âm/thanh thuần Việt: vuông/vung — NOT_VERIFIED bằng tai người',
+    'Bài 2 đã dùng chính số này để xếp văn bản theo câu hỏi, cosin càng gần 1 thì hai vector càng cùng hướng, bất kể dài hay ngắn.':
+        'ASR chép “Bài 2 đã dùng chính số này để xếp văn bản theo câu hỏi, cô xin càng gần 1 thì hai vét tơ càng cùng hướng, bất kể dài hay ngắn.” (0.951): thuật ngữ Việt hoá viết liền “cosin” (= co-sin), TTS đọc theo chính tả Việt, ASR viết “cô xin” — NOT_VERIFIED bằng tai người',
+    'Bài 6 cũng đã dùng tích vô hướng để tính cosin, tức độ giống nhau giữa hai người.':
+        'ASR chép “Bài 6 cũng đã dùng tích vô hướng để tính cô sinh, tức độ giống nhau giữa hai người.” (0.919): thuật ngữ Việt hoá viết liền “cosin” (= co-sin), TTS đọc theo chính tả Việt, ASR viết “cô sinh” — NOT_VERIFIED bằng tai người',
+    'Độ giống ở bài này là số minh hoạ cho sẵn, còn thực tế có thể lấy cosin của hai vector mô tả sản phẩm như ở bài 2, bằng 1 khi hai vector cùng hướng.':
+        'ASR chép “Độ giống ở bài này là số minh họa cho sẵn, còn thực tế có thể lấy cosine của hai vector mô tả sản phẩm như ở bài 2, bằng một khi hai vector cùng hướng.” (0.972): thuật ngữ Việt hoá viết liền “cosin” (= co-sin), TTS đọc theo chính tả Việt, ASR viết “cosine” — NOT_VERIFIED bằng tai người',
+    # ── MLO dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Hàm băm là một quy tắc cố định biến mọi dãy byte thành 256 bit, tức 64 ký tự mười sáu, và bài này chỉ hiện 12 ký tự đầu cho gọn.':
+        'ASR chép “Hàm Bâm là một quy tắc cố định biến mọi dãy bay thành 256 bit, tức 64 ký tự 16, và bài này chỉ hiện 12 ký tự đầu cho gọn.” (0.949): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: băm/bâm — NOT_VERIFIED bằng tai người',
+    'Mã hoá ký tự là quy tắc đổi chữ thành byte, chữ ã có thể thành 1 hay 2 byte tuỳ quy tắc.':
+        'ASR chép “Mã hóa ký tự là quy tắc đổi chữ thành bay, chữ à có thể thành 1 hay 2 bay tuy quy tắc.” (0.826): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: ã/à, tuỳ (trong “byte tuỳ” → “bay tuy”) — NOT_VERIFIED bằng tai người',
+    'Kho mã giữ mọi phiên bản mãi mãi, một tệp 5 GB có 10 phiên bản có thể chiếm tới 50 GB, vì tệp dữ liệu lớn thường nén kém.':
+        'ASR chép “Khó mã giữ mọi phiên bản mãi mãi, một tệp 5GB có 10 phiên bản có thể chiếm tới 50GB vì tệp dữ liệu lớn thường nán kém.” (0.935): lệch âm/thanh thuần Việt: kho/khó, nén/nán — NOT_VERIFIED bằng tai người',
+    'Vì e mũ 0 bằng 1, lôgarit của 1 bằng 0, nên không đổi thì bằng 0.':
+        'ASR chép “vì em mũ không bằng 1, lo ga tuyết của 1 bằng 0, nên không đổi thì bằng 0.” (0.833): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; thuật ngữ Việt hoá viết liền “lôgarit” (= lô-ga-rit), TTS đọc theo chính tả Việt, ASR viết “lo ga tuyết” — NOT_VERIFIED bằng tai người',
+    'Trước hết ta cần hiểu bit và byte, hai đơn vị đo bộ nhớ.':
+        'ASR chép “Trước hết ta cần hiểu biết và bay, hai đơn vị đo bộ nhớ.” (0.857): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: bit/biết — NOT_VERIFIED bằng tai người',
+    'Một bit là một chữ số chỉ 0 hoặc 1, đơn vị nhỏ nhất máy lưu, và 8 bit gộp thành 1 byte.':
+        'ASR chép “Một biết là một chữ số chỉ 0 hoặc 1 đơn vị nhỏ nhất máy lưu và 8 biết gột thành một bay.” (0.826): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: bit/biết, bit gộp/biết gột — NOT_VERIFIED bằng tai người',
+    # ── NET dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Khi đó Z chỉ báo vô cùng cho X, còn báo cho Y một cách bình thường, dù đường của Z đi qua X rồi vòng về chính Y.':
+        'ASR chép “Khi đó, Jack chỉ báo vô cùng cho ít, còn báo cho y một cách bình thường, dù đường của Jack đi qua ít rồi vòng về chính y.” (0.931): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    # ── RLN dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Ví dụ e mũ 2 phẩy 3 xấp xỉ 10, nên lôgarit của 10 khoảng 2 phẩy 3.':
+        'ASR chép “Ví dụ E mũ 2,3 xếp xỉ 10, nên logic của 10 khoảng 2,3.” (0.889): thuật ngữ Việt hoá viết liền “lôgarit” (= lô-ga-rit), TTS đọc theo chính tả Việt, ASR viết “logic”; lệch âm/thanh thuần Việt: xấp/xếp — NOT_VERIFIED bằng tai người',
+    'Ba tác giả đặt ra công thức này năm 2002 viết căn của 2 nhân lôgarit t chia N.':
+        'ASR chép “Ba tác giả đặt ra công thức này năm 2002 viết căng của hai nhân Logatrix T-N.” (0.894): thuật ngữ Việt hoá viết liền “lôgarit” (= lô-ga-rit), TTS đọc theo chính tả Việt, ASR viết “logatrix”; lệch âm/thanh thuần Việt: căn/căng, chia/∅ — NOT_VERIFIED bằng tai người',
+    'Tung 4 lần ra ngửa, sấp, ngửa, ngửa thì trung bình là 14 chia 4, bằng 3 phẩy 5, vẫn còn lệch.':
+        'ASR chép “Tùng 4 lần tra ngửa, sắp, ngửa, ngửa thì trung bình là 14 chi 4, bằng 3,5 vẫn còn lịch.” (0.783): lệch âm/thanh thuần Việt: tung/tùng, ra/tra, sấp/sắp, chia/chi, lệch/lịch — NOT_VERIFIED bằng tai người',
+    'Làm thử với x bằng 2, theta bằng 1, y bằng 4, độ dốc là âm 2 nhân 2, bằng âm 4.':
+        'ASR chép “Làm thử với x bằng 2, teta bằng 1, y bằng 4, độ dốc là âm 2 nhân 2, bằng âm 4.” (0.955): “theta” đọc theo luật lexicon (lexicon_vi.RLN.yaml: “tê-ta”), ASR viết “teta” — NOT_VERIFIED bằng tai người',
+    'Kiểm bằng cách nhích theta lên 1 phẩy 01, sai số giảm từ 2 xuống 1 phẩy 9602, tức khoảng âm 4 cho mỗi đơn vị.':
+        'ASR chép “Kiểm bằng cách nhất θ lên 1,01, sai số giảm từ 2 xuống 1,90602 tức khoảng âm 4 cho mỗi đơn vị.” (0.921): “theta” đọc theo luật lexicon (lexicon_vi.RLN.yaml: “tê-ta”), ASR viết “nhất θ” — NOT_VERIFIED bằng tai người',
+    'Hàm này biến mọi số thực thành một số giữa 0 và 1, nên dùng làm xác suất được, và tại theta bằng 0 nó bằng 1 chia 2, tức 0 phẩy 5.':
+        'ASR chép “Hàm này biến mọi số thực thành một số giữa 0 và 1 nên dùng làm xa xuất được và tại θ bằng không nó bằng 1 chi 2, tức 0,5.” (0.909): “theta” đọc theo luật lexicon (lexicon_vi.RLN.yaml: “tê-ta”), ASR viết “θ”; lệch âm/thanh thuần Việt: xác/xa, chia/chi — NOT_VERIFIED bằng tai người',
+    'Đạo hàm của nó bằng chính nó nhân 1 trừ nó, nên theo quy tắc vừa nêu, lôgarit của hàm chữ S có đạo hàm bằng 1 trừ hàm đó.':
+        'ASR chép “Đạo hàm của nó bằng chính nó nhân một trừ nó, nên theo quy tắc vừa nêu, Logatrix của hàm chữ S có đạo hàm bằng một trừ hàm đó.” (0.967): thuật ngữ Việt hoá viết liền “lôgarit” (= lô-ga-rit), TTS đọc theo chính tả Việt, ASR viết “logatrix” — NOT_VERIFIED bằng tai người',
+    'Làm thử ở theta bằng 0 với hành động một, gradient của pi là 0 phẩy 25, còn pi là 0 phẩy 5.':
+        'ASR chép “Làm thử ở θ bằng không với hành động 1, gradient của pi là 0,25, còn pi là 0,5.” (0.945): tê-ta theo lexicon RBM/ROB, ASR viết “theta/teta” — NOT_VERIFIED bằng tai người',
+    'Vậy gradient của J là kỳ vọng của G nhân gradient của lôgarit pi.':
+        'ASR chép “Vậy gradient của dì là kỳ vọng của dây nhân gradient của logarithpy.” (0.857): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; pi (π) ASR viết “P/π”; thuật ngữ Việt hoá viết liền “lôgarit” (= lô-ga-rit), TTS đọc theo chính tả Việt, ASR viết “logarithpy” — NOT_VERIFIED bằng tai người',
+    'Gradient lôgarit pi là đạo hàm theo theta của lôgarit xác suất, với hai hành động thì của hành động một bằng 1 trừ hàm chữ S của theta, tức 0 phẩy 5 khi theta bằng 0.':
+        'ASR chép “Gradient Logarith P là đạo hàm theo Teta của Logarith sát xuất, với hai hành động thì có hành động một bằng một trừ hàm chữ S của Teta, tức 0,5 khi Teta bằng 0.” (0.815): pi (π) ASR viết “P/π”; tê-ta theo lexicon RBM/ROB, ASR viết “theta/teta”; lệch âm/thanh thuần Việt: xác/sát, của/có — NOT_VERIFIED bằng tai người',
+    'Lôgarit của 1 bằng 0, lôgarit của 10 xấp xỉ 2 phẩy 303, và âm lôgarit của 0 phẩy 731 xấp xỉ 0 phẩy 313.':
+        'ASR chép “Logarith của 1 bằng 0, Logarith của 10 sắp sĩ 2,303 và âm Logarith của 0,731 sắp sĩ 0,313.” (0.788): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: xấp xỉ/sắp sĩ, không (trong “không phẩy” → “”), xấp xỉ không (trong “xấp xỉ không phẩy” → “sắp sĩ”) — NOT_VERIFIED bằng tai người',
+    'Công thức là w thay bằng w trừ ê-ta nhân đạo hàm, với ê-ta là tốc độ học.':
+        'ASR chép “Công thức là v kết thay bằng v kết trừ eta nhân đạo hàm, với eta là tốc độ học.” (0.909): chữ w đọc “vê kép” (luật chung), ASR viết tách chữ — NOT_VERIFIED bằng tai người',
+    'Ví dụ hàm w bình phương trừ 6w có đạo hàm 2w trừ 6.':
+        'ASR chép “Ví dụ hàm v kép bình phương trừ 6 về đúc có đạo hàm 2 về đúc trừ 6.” (0.833): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    # ── SAR dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Bit là một chữ số nhị phân, 0 hoặc 1, còn 1 byte gồm 8 bit, đủ ghi một chữ cái không dấu.':
+        'ASR chép “Biết là một chữ số nhị phân, không hoặc một, còn một bai gồm 8 biết, đủ ghi một chữ cái không giấu.” (0.87): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: bit/biết, bit/biết — NOT_VERIFIED bằng tai người',
+    'Dung lượng lưu trữ tính bằng byte, còn tốc độ đường truyền tính bằng bit mỗi giây.':
+        'ASR chép “Dung lượng lưu trữ tính bằng vai, còn tốc độ đường truyền tính bằng bit mỗi giây.” (0.941): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người',
+    'Đó là vì 2314 phẩy 8 nhân 50 KB là khoảng 115 phẩy 7 MB mỗi giây, nhân 8 để đổi sang bit.':
+        'ASR chép “Đó là vì 2.314,8 x 50 kB là khoảng 115,7 MB mỗi giây, nhần 8 để đổi sang bit.” (0.938): lệch âm/thanh thuần Việt: nhân/x, nhân/nhần — NOT_VERIFIED bằng tai người',
+    'Có 7 phẩy 3 tê-ra-byte dữ liệu, sao chép 3 bản là 21 phẩy 9 tê-ra-byte, đã gấp 3 con số thô.':
+        'ASR chép “Có 7,3 terabyte dữ liệu, sau chép 3 bản là 21,9 terabyte, đã gấp 3 con số thô.” (0.808): “tê-ra-byte” đọc tách âm tiết (đã dựng ở OSY/NET), ASR viết “TB/terabyte”; lệch âm/thanh thuần Việt: sao/sau — NOT_VERIFIED bằng tai người',
+    'Mã hoá biến dữ liệu thành dạng chỉ ai có khoá mới đọc được.':
+        'ASR chép “Mả hóa biến dữ liệu thanh vàng chị ai có khóa mới đọc được.” (0.714): lệch âm/thanh thuần Việt: mã/mả, thành dạng chỉ/thanh vàng chị — NOT_VERIFIED bằng tai người',
+    'Va chạm là khi mã vừa sinh trùng một mã đã có, và mã thứ i trùng một trong i trừ 1 mã trước với xác suất không quá i trừ 1 chia N.':
+        'ASR chép “Va chạm là khi mã vừa sinh trùng mục mã đã có và mã thứ y trùng mục trong y trường mục mã trước với sát suất không quá y trường mục chia n.” (0.794): lệch âm/thanh thuần Việt: một/mục, một/mục, trừ một/trường mục, xác/sát, trừ một/trường mục — NOT_VERIFIED bằng tai người',
+    # ── SEC dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Trước hết, ta cần hiểu cách hệ điều hành ghi quyền trên một tệp.':
+        'ASR chép “Trước hết, ta cần hiểu cách thể điều hành di quyền trên một tập.” (0.786): lệch âm/thanh thuần Việt: hệ/thể, ghi/di, tệp/tập — NOT_VERIFIED bằng tai người',
+    'Mã hoá đối xứng là hai bên dùng chung một khoá để mã và giải mã, khoá 16 byte dài 16 nhân 8 bằng 128 bit.':
+        'ASR chép “Mả hóa đối xứng là hai bên dùng chung một khóa để mã và giải mã. Khóa 16 bay dài 16 nhân 8 bằng 128 bit.” (0.938): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: mã/mả — NOT_VERIFIED bằng tai người',
+    'Với chế độ bộ đếm, lật bit nào ở bản mã là lật đúng bit đó ở bản rõ, chẳng hạn lật 2 bit của một byte biến chữ số 9 thành 5, mà người nhận không biết.':
+        'ASR chép “Với chế độ bộ đếm, lật biết nào ở bản mã là lật đúng biết đó ở bản rõ, chẳng hạn lật 2 biết của một bài biến chữ số 9 thành 5 mà người nhận không biết.” (0.895): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: bit/biết, bit/biết, bit/biết — NOT_VERIFIED bằng tai người',
+    'Cách đơn giản nhất là cộng mã các byte rồi lấy dư khi chia 256, chuyển 100 cho 61, còn chuyển 900 cho 69.':
+        'ASR chép “Cách đơn giản nhất là cộng mã các bay rồi lấy dư khi chia 256, chuyển 100 cho 61, còn chuyển 900 cho 69.” (0.971): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người',
+    'Bộ nhớ là một dãy ô, mỗi ô chứa 1 byte và có một số thứ tự gọi là địa chỉ, còn mảng là một dải ô liền nhau.':
+        'ASR chép “Bộ nhớ là một giải ô, mỗi ô chứu một bay và có một số thứ tự gọi là địa chỉ, còn mảng là một giải ô liền nhau.” (0.897): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: dãy/giải, chứa/chứu — NOT_VERIFIED bằng tai người',
+    'Mảng 16 byte đặt ở địa chỉ 100 chiếm tới ô 100 cộng 16 trừ 1, tức ô 115.':
+        'ASR chép “Mảng 16 bay đặt ở địa chỉ 109 tới ô 100 cộng 16-1, tức ô 115.” (0.885): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: chiếm/linh chín, trừ/∅ — NOT_VERIFIED bằng tai người',
+    'Vì vậy ghi 20 byte từ ô 100 sẽ tới ô 119, tràn sang 4 ô hàng xóm.':
+        'ASR chép “Vì vậy, ghi 20 bay từ ô 100 sẽ tới ô 119 tràn sang 4 ô hàng xóm.” (0.957): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người',
+    'Hệ điều hành chia bộ nhớ thành từng khúc gọi là trang, thường dài 4096 byte, mỗi trang có cờ quyền đọc, ghi và chạy.':
+        'ASR chép “Hệ điều hành chi bộ nhớ thành từng khúc gọi là trang, thường dài 4.096 bay, mỗi trang có cờ quyền đọc, ghi và chạy.” (0.935): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: chia/chi — NOT_VERIFIED bằng tai người',
+    # ── RBM dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Ở đây cos của 180 độ trừ theta 2 bằng âm cos theta 2, vì mũi tên lật sang phía bên kia thì bóng trên trục ngang đổi dấu.':
+        'ASR chép “Ở đây cô xin của 180 độ trừ teta 2 bằng âm cô xin teta 2 vì mũi tên lật sang phía bên kia thì bóng trên trục ngang đổ dấu.” (0.886): tê-ta theo lexicon RBM/ROB, ASR viết “theta/teta”; lệch âm/thanh thuần Việt: đổi/đổ — NOT_VERIFIED bằng tai người',
+    'Để so sánh, a-tan của một số t là góc nằm giữa âm 90 độ và 90 độ mà sin chia cos bằng t, và với điểm x, y thì sin chia cos chính là y chia x.':
+        'ASR chép “Để so sánh, a tan của một số t là góc nằm giữa âm 90 độ và 90 độ mà sinh chia cô sinh bằng t và với điểm í, i thì sinh chia cô sinh chính là í chia í.” (0.837): sin đọc thô, ASR viết “sinh” (gần âm); chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: i/í — NOT_VERIFIED bằng tai người',
+    'Ví dụ a-tan của 1 là 45 độ, vì sin và cos của 45 độ cùng bằng 0 phẩy 707.':
+        'ASR chép “Ví dụ A tan của một là 45 độ, vì sinh và cô sinh của 45 độ cùng bằng 0.707.” (0.893): sin đọc thô, ASR viết “sinh” (gần âm); “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: không (trong “không phẩy” → “”) — NOT_VERIFIED bằng tai người',
+    'Ví dụ u bình phương có đạo hàm 2 u, và tại u bằng 2, nhích 0 phẩy 001 cho tỉ số 4 phẩy 001, rất gần 2 nhân 2.':
+        'ASR chép “Ví dụ u bình phương có đạo hàm 2u và tại u bằng 2, nhất 0.001 cho tỷ số 4.001, rất gần 2x2.” (0.787): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; “tỉ” ASR viết chính tả “tỷ” (cùng âm); lệch âm/thanh thuần Việt: nhích không (trong “nhích không phẩy” → “nhất”), nhân/x — NOT_VERIFIED bằng tai người',
+    'Đạo hàm của sin u là cos u, thử tại u bằng 0 phẩy 5, tỉ số ra 0 phẩy 8773, sát cos của 0 phẩy 5 là 0 phẩy 8776.':
+        'ASR chép “Đạo hàm của sinh u là cô sinh u, thử tài u bằng 0,5, tỷ số ra 0,8773, sát cô sinh của 0,5 là 0,8776.” (0.889): sin đọc thô, ASR viết “sinh” (gần âm); “tỉ” ASR viết chính tả “tỷ” (cùng âm); lệch âm/thanh thuần Việt: tại/tài — NOT_VERIFIED bằng tai người',
+    'Đạo hàm của cos u là âm sin u, tỉ số ra âm 0 phẩy 4799, sát âm sin của 0 phẩy 5 là âm 0 phẩy 4794.':
+        'ASR chép “Đạo hàm của cô sinh u là âm sinh u, tỷ số ra âm 0,4799, sát âm sinh của 0,5 là âm 0,4794.” (0.902): sin đọc thô, ASR viết “sinh” (gần âm); “tỉ” ASR viết chính tả “tỷ” (cùng âm) — NOT_VERIFIED bằng tai người',
+    'Hai quy tắc của sin và cos chỉ đúng khi góc đo bằng radian, với 180 độ bằng pi radian, nên 1 độ xấp xỉ 0 phẩy 01745 radian.':
+        'ASR chép “Hai quy tác của sinh và cô sinh chỉ đúng khi góc đo bằng radian với 180 độ bằng pi radian nên 1 độ sắp xỉ 0,01745 radian.” (0.897): sin đọc thô, ASR viết “sinh” (gần âm); lệch âm/thanh thuần Việt: tắc/tác, xấp/sắp — NOT_VERIFIED bằng tai người',
+    'Theo quy tắc chuỗi vừa ôn, x phẩy bằng đạo hàm riêng của x theo theta 1 nhân theta 1 phẩy, cộng đạo hàm riêng theo theta 2 nhân theta 2 phẩy.':
+        'ASR chép “Theo quy tắc chuỗi vừa ôn, ít phải bằng đạo hàm riêng của ít theo Teta 1 nhân Teta 1 phải cộng đạo hàm riêng theo Teta 2 nhân Teta 2 phải.” (0.781): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; “theta” đọc theo luật lexicon (lexicon_vi.RBM.yaml: “tê-ta”), ASR viết “teta” — NOT_VERIFIED bằng tai người',
+    'Lấy ví dụ ô trên bên trái, x bằng L 1 cos theta 1 cộng L 2 cos của theta 1 cộng theta 2, ta giữ theta 2 đứng yên và lấy đạo hàm theo theta 1.':
+        'ASR chép “Lấy ví dụ O trên bên trái, ít bằng L1 cos teta 1 cộng L2 cos của teta 1 cộng teta 2, ta giữ teta 2 đứng yên và lấy đạo hàm theo teta 1.” (0.838): “ô” (ô lưới) ASR viết chữ “O”; “theta” đọc theo luật lexicon (lexicon_vi.RBM.yaml: “tê-ta”), ASR viết “teta” — NOT_VERIFIED bằng tai người',
+    'Đạo hàm của cos là âm sin, nên ô đó bằng âm L 1 s 1 trừ L 2 s 1 2.':
+        'ASR chép “Đạo hàm của cô sinh là âm sinh nên ô đó bằng âm L1S1 trừ L2S12.” (0.87): sin đọc thô, ASR viết “sinh” (gần âm); lệch âm/thanh thuần Việt: một/mười — NOT_VERIFIED bằng tai người',
+    'Điều thứ hai, lũy thừa là nhân lặp lại, còn mũ âm nghĩa là chia, nên e mũ âm 1 là 1 chia e.':
+        'ASR chép “Điều thứ 2, lũy thừa là nhân lập lại, còn mũ âm nghĩa là chia, nên em mũ âm 1 là mục chia.” (0.851): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: lặp/lập, một/mục — NOT_VERIFIED bằng tai người',
+    'Với hệ x phẩy bằng lambda x, trong đó lambda là một hằng số, thay bốn độ dốc vào công thức, ta thấy mỗi bước RK4 nhân x với một hệ số cố định.':
+        'ASR chép “Với hệ ích phải bằng lambda ích, trong đó lambda là 1 hàng số, thay 4 độ giúp vào công thức, ta thấy mỗi bước error ca 4 nhân ích với 1 hệ số cố định.” (0.883): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “rk4” đọc theo luật lexicon (lexicon_vi.RBM.yaml: “e rờ ca 4”), ASR viết “error”; lệch âm/thanh thuần Việt: hằng/hàng, dốc/giúp — NOT_VERIFIED bằng tai người',
+    'Nếu v là vector riêng của A với trị riêng lambda, như phần ôn đầu bài, ta thử x của t bằng e mũ lambda t nhân v.':
+        'ASR chép “Nếu ve là vét tơ riêng của A với trị riêng lambda, như phần ôn đầu bài, ta thử ích của tê bằng e mũ lambda tê nhân ve.” (0.935): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    'Nếu trị riêng lặp mà thiếu vector riêng thì có thêm số hạng t nhân e mũ lambda t, nhưng kết luận vẫn giữ, hệ ổn định khi mọi trị riêng đều có phần thực âm.':
+        'ASR chép “Nếu trị riêng lặp mà thiếu vét tơ riêng thì có thêm số hạng tây nhân e mũ lambda tê nhưng kết luận vẫn giữ, hề ổn định khi mọi trị riêng đều có phần thực âm.” (0.947): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: hệ/hề — NOT_VERIFIED bằng tai người',
+    'Với trị riêng a cộng trừ b i, e mũ lambda t bằng e mũ a t nhân một tổ hợp của cos và sin của b t, theo công thức Euler, nêu không chứng minh.':
+        'ASR chép “Với trị riêng a cộng trừ bi, e mũ lambda t bằng e mũ a t nhân một tổ hợp của cô sinh và sinh của bt, theo công thức ơ le, nèo không chứng minh.” (0.923): sin đọc thô, ASR viết “sinh” (gần âm); lệch âm/thanh thuần Việt: nêu/nèo — NOT_VERIFIED bằng tai người',
+    'Vậy hệ liên tục ổn định với mọi a dương, nhưng mô phỏng bằng Euler chỉ ổn định khi bước nhỏ hơn 2 chia a.':
+        'ASR chép “Vậy hệ liên tục ổn định với mọi a dương, nhưng mô phỏng bằng ơ le chỉ ổn định khi bước nhỏ hơn hai chia.” (0.98): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    'Ví dụ nhỏ với 4 mẫu 1, 0, âm 1, 0, tức một dao động cos, C 1 bằng 1 cộng 1, bằng 2, còn S 1 bằng 0.':
+        'ASR chép “Ví dụ nhỏ với 4 mẫu 1, 0, âm 1, 0, tức 1 giao động cô sinh C1 bằng 1 cộng 1, bằng 2, còn S1 bằng 0.” (0.967): sin đọc thô, ASR viết “sinh” (gần âm) — NOT_VERIFIED bằng tai người',
+    'Cuối cùng chốt B bằng 3, đường ngắn nhất tới B là đi vòng qua A.':
+        'ASR chép “Cuối cùng chốt b bằng 3, đường ngắn nhất tới b là đi vòng qua.” (0.968): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    'Manhattan cũng thoả, vì mỗi bước làm nó giảm nhiều nhất 1.':
+        'ASR chép “Mang hát tần cũng thỏa, vì mỗi bước làm nó giảm nhiều nhất một.” (0.929): Manhattan đọc “Man-hát-tần” theo lexicon chung, ASR viết “mang hát tân/tầng” — NOT_VERIFIED bằng tai người',
+    'Nếu độ lệch chuẩn nhỏ nhất là 0 phẩy 002 mét, tỉ số thành 10 mũ 8, vượt 2 mũ 24, khi đó nên chọn dạng căn bậc hai như máy bay năm 1972, hoặc dạng U D.':
+        'ASR chép “Nếu độ lệch chuẩn nhỏ nhất là 0,002 mét, tỷ số thành 10 mũ 8 vượt 2 mũ 24, khi đó nên chọn dạng căn bật 2 như máy bay năm 1972 hoặc dạng UV.” (0.899): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; “tỉ” ASR viết chính tả “tỷ” (cùng âm); chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: không (trong “không phẩy” → “”), bậc/bật — NOT_VERIFIED bằng tai người',
+    # ── AIF dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Bài ba, dùng quá trình quyết định Markov như ở bài 12, gồm trạng thái, hành động có xác suất chuyển, và thưởng, vì hành động không chắc thành công.':
+        'ASR chép “Bài 3, dùng quá trình quyết định macCop như ở bài 12, gồm trạng thái, hành động có xác xuất chuyển và thưởng vì hành động không chắc thành công.” (0.968): “markov” đọc theo luật lexicon (lexicon_vi.yaml: “Mác-cốp”), ASR viết “maccop” — NOT_VERIFIED bằng tai người',
+    # ── BCH dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Vì sao lại là 1 chia p?':
+        'ASR chép “Vì sao lại là một chip ấy?” (0.714): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: chia (trong “chia p” → “chip ấy”) — NOT_VERIFIED bằng tai người',
+    # ── CLC dựng lại sau đọc kiểm C (2026-11-09) ──
+    # ── CLD dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Dựng một máy ảo cho mỗi chương trình thì nặng, mỗi máy ảo thường cả GB và khởi động mất hàng chục giây, tuỳ máy.':
+        'ASR chép “Dựng một máy ảo cho mỗi chương trình thì nặng, mỗi máy ảo thường cả Gigabyte và khởi động mất hàng chục giây, tùy máy.” (0.96): GB đọc “ghi-ga-byte” theo lexicon của khoá, ASR viết “GB/gigabyte” — NOT_VERIFIED bằng tai người',
+    'Hãy đặt yêu cầu theo mức dùng đo được, chẳng hạn phân vị 90, tức mức mà 90 phần trăm số lần đo Pod dùng không vượt quá, và giới hạn cao hơn một chút.':
+        'ASR chép “Hãy đặt yêu cầu theo mức dùng đo được, chẳng hạn phân vị 90, tức mức mà 90% số lần đo pốt dùng không vượt quá và giới hạn cao hơn một chút.” (0.973): Pod đọc thô (probe CLD p1: 5/8, ASR viết pốt/phút/pút) — NOT_VERIFIED bằng tai người',
+    # ── DAN dựng lại sau đọc kiểm C (2026-11-09) ──
+    # ── DEN dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Đĩa không đọc từng ô lẻ, mà đọc theo từng đoạn liền nhau gọi là trang, ví dụ mỗi trang 4096 byte, nên muốn lấy một ô 8 byte thì cả trang chứa nó được đọc lên.':
+        'ASR chép “Đĩa không đọc từng ô lẻ, mà đọc theo từng đoạn liền nhau gọi là trang, ví dụ mỗi trang 4.096 bay, nền muốn lấy một ô 8 bay thì cả trang chứa nó được đọc lên.” (0.93): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: nên (trong “byte nên” → “bay nền”) — NOT_VERIFIED bằng tai người',
+    'Một trang 4096 byte chứa 4096 chia 8, bằng 512 ô.':
+        'ASR chép “1 trang 4.096 bài chứa 4.096 chia 8, bằng 512 ô.” (0.962): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người',
+    'Nếu cả 512 ô đều là thứ ta cần thì một lần đọc được 512 ô có ích, còn nếu chỉ 1 ô có ích thì 4088 byte còn lại bị đọc phí.':
+        'ASR chép “Nếu cả 512 ô đều là thứ ta cần thì một lần đọc được 512 ô có ít, còn nếu chỉ một ô có ít thì 4.088 bay còn lại bị đọc phí.” (0.978): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người',
+    'Đĩa đọc ghi theo trang, ví dụ mỗi trang 4096 byte, và mỗi nút của cây là một trang, chứa nhiều khoá đã sắp cùng các con trỏ xuống nút con, còn lá chứa bản ghi.':
+        'ASR chép “Để đọc ghi theo trang, ví dụ mỗi trang 4096 by và mỗi nút của cây là một trang, chứa nhiều khóa đã sắp cùng các con trỏ xuống nút con, còn lá chứa bản ghi.” (0.952): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: đĩa/để — NOT_VERIFIED bằng tai người',
+    'Lỗi thứ nhất, tưởng cây gộp theo nhật ký không khuếch đại ghi, trong khi nó vẫn ghi lại mỗi byte nhiều lần.':
+        'ASR chép “Lỗi thứ nhất, tưởng cây gột theo nhật ký không khuết đại ghi, trong khi nó vẫn ghi lại mỗi bay nhiều lần.” (0.87): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: gộp/gột, khuếch/khuết — NOT_VERIFIED bằng tai người',
+    'Ở ví dụ trên, mỗi byte bị ghi 6 lần chứ không phải 1.':
+        'ASR chép “Ở ví dụ trên, mỗi bay bị ghi 6 lần chứ không phải 1.” (0.929): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người',
+    'Tổng số byte có thể ít hơn cây B, như 6 so với 40 phẩy 96 ở ví dụ, hoặc nhiều hơn, vì cách gộp theo tầng ghi lại nhiều hơn.':
+        'ASR chép “Tổng số bài có thể ít hơn cây B, nhiều 6 so với 40,96 ở ví dụ, hoặc nhiều hơn, vì cách gột theo tần ghi lại nhiều hơn.” (0.882): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: như/nhiều, gộp/gột, tầng/tần — NOT_VERIFIED bằng tai người',
+    'Trước hết, kho cột rộng là gì.':
+        'ASR chép “Trước hết, kho cục động là gì?” (0.714): lệch âm/thanh thuần Việt: cột rộng/cục động — NOT_VERIFIED bằng tai người',
+    'Trước hết, ta cần hiểu lôgarit tự nhiên.':
+        'ASR chép “Trước hết, ta cần hiểu Logatrix tự nhiên.” (0.875): thuật ngữ Việt hoá viết liền “lôgarit” (= lô-ga-rit), TTS đọc theo chính tả Việt, ASR viết “logatrix” — NOT_VERIFIED bằng tai người',
+    'Vì vậy người ta dùng lôgarit để thưởng điểm mà không để số lớn áp đảo.':
+        'ASR chép “Vì vậy người ta dùng Logatrix để thưởng điểm mà không để số lớn áp đảo.” (0.938): thuật ngữ Việt hoá viết liền “lôgarit” (= lô-ga-rit), TTS đọc theo chính tả Việt, ASR viết “logatrix” — NOT_VERIFIED bằng tai người',
+    'Vậy là không được, vì bảng 2 GB không vừa 1 GB bộ nhớ mỗi máy, nên phải xáo trộn, hoặc lọc bớt cột và dòng của bảng nhỏ trước.':
+        'ASR chép “Vậy là không được, vì bảng 2GB không vừa 1GB bộ nhớ mỗi máy nên phải xáo trộn hoặc lọc bớt cột vài dòng của bảng nhỏ trước.” (0.967): lệch âm/thanh thuần Việt: và/vài — NOT_VERIFIED bằng tai người',
+    # ── ESY dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Trước hết, ta cần hiểu các đơn vị đo bộ nhớ, bắt đầu từ bit, một chữ số chỉ nhận 0 hoặc 1, và 8 bit gộp lại thành một byte.':
+        'ASR chép “Trước hết, ta cần hiểu các đơn vị đo bộ nhớ, bắt đầu từ bit, một chữ số chỉ nhận 0 hoặc 1 và 8 bit gột lại thành một bay.” (0.935): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: gộp/gột — NOT_VERIFIED bằng tai người',
+    'Máy tính đếm theo lũy thừa của 2, nên một ki-lô-byte là 1024 byte, nên 2 ki-lô-byte là 2048 byte.':
+        'ASR chép “Mẫy tính đến theo lũy thừa của 2 nên 1 kilobyte là 1.024 vai nên 2 kilobyte là 2.048 vai.” (0.765): KB đọc “ki-lô-byte” theo lexicon của khoá, ASR viết “kilobyte/kg”; byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: máy/mẫy, đếm/đến — NOT_VERIFIED bằng tai người',
+    'Một vi điều khiển phổ biến chỉ có 2 ki-lô-byte bộ nhớ dữ liệu, so với 16 gi-ga-byte, ít hơn tám triệu lần.':
+        'ASR chép “Một vi điều khiển phổ biến chỉ có 2 kilobytes bộ nhớ dữ liệu so với 16 GB, ít hơn 8 triệu lần.” (0.846): KB đọc “ki-lô-byte” theo lexicon của khoá, ASR viết “kilobyte/kg”; GB đọc “ghi-ga-byte” theo lexicon của khoá, ASR viết “GB/gigabyte”; lệch âm/thanh thuần Việt: gi (trong “gi ga byte” → “gb”) — NOT_VERIFIED bằng tai người',
+    'Bù lại, nó rẻ, tốn rất ít điện, khởi động gần như ngay lập tức, và chương trình nằm riêng trong 32 ki-lô-byte bộ nhớ flash.':
+        'ASR chép “Bù lại, nó rẻ, tốn rất ít điện, khởi động gần như ngay lập tức và chương trình nằm riêng trong 32 kg bộ nhớ Phlax.” (0.897): KB đọc “ki-lô-byte” theo lexicon của khoá, ASR viết “kilobyte/kg”; từ mượn/tên riêng “flash” đọc thô (không có luật lexicon), ASR viết “phlax” — NOT_VERIFIED bằng tai người',
+    'Vì 16 bằng 2 mũ 4, một chữ số hệ mười sáu đúng bằng 4 bit, và một byte 8 bit viết gọn bằng đúng hai chữ số, từ 0 0 tới F F.':
+        'ASR chép “Vì 16 bằng 2 mũ 4, 1 chữ số hệ 16 đúng bằng 4 bit và 1 bai 8 bit viết gọn bằng đúng 2 chữ số từ 00 tới FF.” (0.957): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: không/∅ — NOT_VERIFIED bằng tai người',
+    'Năm mẫu cách nhau 1 mi li giây phủ kín 5 mi li giây dội, nên khi đủ 5 mẫu liên tiếp giống nhau, ta coi phím đã hết nảy.':
+        'ASR chép “5 mẫu cách nhau 1 mili dây phụ kín 5 mili dây dội, nên khi đủ 5 mẫu liên tiếp giống nhau, ta coi phím đã hết nảy.” (0.793): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh; lệch âm/thanh thuần Việt: phủ (trong “mi li giây phủ” → “mili dây phụ”) — NOT_VERIFIED bằng tai người',
+    'Với một sóng sin dùng hết thang đo, tỉ số tín hiệu trên nhiễu lượng tử xấp xỉ 6 phẩy 02 nhân n, cộng 1 phẩy 76, tính bằng đề-xi-ben.':
+        'ASR chép “Với một sóng sinh dùng hết thang đo, tỷ số tín hiệu trên nhiễu lượng từ sắp xị 6,02n n cộng 1,76 tính bằng deciBand.” (0.758): sin đọc thô, ASR viết “sinh” (gần âm); “tỉ” ASR viết chính tả “tỷ” (cùng âm); lệch âm/thanh thuần Việt: tử xấp xỉ/từ sắp xị, nhân/n, đề xi ben/deciband — NOT_VERIFIED bằng tai người',
+    'Bit chẵn lẻ, nếu có, là một bit thêm vào để bên nhận kiểm xem số bit 1 là chẵn hay lẻ.':
+        'ASR chép “Biết chẳng lẽ, nếu có, là một biết thêm vào để bên nhận kiểm xem số biết 1 là chẳng hay lẽ.” (0.682): lệch âm/thanh thuần Việt: bit chẵn linh/biết chẳng lẽ, bit/biết, bit/biết, chẵn/chẳng, linh/lẽ — NOT_VERIFIED bằng tai người',
+    'Bộ đệm vòng là một mảng chứa các byte chờ gửi, ghi tới cuối mảng thì quay lại đầu.':
+        'ASR chép “Bộ đệm vòng là một mạng chứa các bay chờ gửi, vì tới cuối mạng thì quay lại đâu.” (0.737): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: mảng/mạng, ghi/vì, mảng/mạng, đầu/đâu — NOT_VERIFIED bằng tai người',
+    'Kiểm bằng đường khác, vì công thức lô-ga-rít rất dễ bấm nhầm, ta cho điện áp đi từng na-nô giây.':
+        'ASR chép “Kiểm bằng đường khác, vì công thức Logarith rất dễ bấm nhầm, ta cho điện app đi từng nano dây.” (0.744): “ki-lô-byte” đọc tách âm tiết, ASR viết “kg” rồi chép “byte” thành “bay/ba”; tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh; lệch âm/thanh thuần Việt: ga rít (trong “lô ga rít” → “lôgarit”), áp/app — NOT_VERIFIED bằng tai người',
+    'Phần sụn thật dài hàng trăm ki-lô-byte, nên người ta tính một bản tóm tắt ngắn của nó, gọi là giá trị băm, rồi ký lên bản tóm tắt đó.':
+        'ASR chép “Phân sụng thật dài hàng trăm kilobyte nên người ta tính một bản tóm tắt ngắn của nó gọi là giá trị bâm, rồi ký lên bản tóm tắt đó.” (0.839): KB đọc “ki-lô-byte” theo lexicon của khoá, ASR viết “kilobyte/kg”; lệch âm/thanh thuần Việt: phần sụn/phân sụng, băm/bâm — NOT_VERIFIED bằng tai người',
+    'Ở bài 14, ta luôn giữ một đường lui, hai phân vùng 400 cộng bộ nạp 32 là 832 ki-lô-byte, bản mới hỏng thì quay về bản cũ.':
+        'ASR chép “Ở bài 14, ta luôn giữ một đường lui, hai phân vùng 400 cộng bộ nạp 32 là 832 kilobytes, bản mới hỏng thì quay về bản cũ.” (0.946): KB đọc “ki-lô-byte” theo lexicon của khoá, ASR viết “kilobyte/kg” — NOT_VERIFIED bằng tai người',
+    # ── EVT dựng lại sau đọc kiểm C (2026-11-09) ──
+    # ── LLM dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Trước hết, ta cần hiểu xác suất là gì.':
+        'ASR chép “Trước hết, ta cần hiểu xa suốt là gì?” (0.778): lệch âm/thanh thuần Việt: xác suất/xa suốt — NOT_VERIFIED bằng tai người',
+    'Lý do là 2 nhân 2 nhân 2 nhân 2 bằng 16.':
+        'ASR chép “Lý do là 2 nhìn 2 nhìn 2 nhìn 2 bằng 16.” (0.769): lệch âm/thanh thuần Việt: nhân/nhìn, nhân/nhìn, nhân/nhìn — NOT_VERIFIED bằng tai người',
+    'Thứ hai, máy lưu chữ thành byte, mỗi byte là một ô nhớ nhỏ chứa một số từ 0 tới 255.':
+        'ASR chép “Thứ hai, máy lưu chữ thành bay. Mỗi bay là một ô nhớ nhỏ chiếu một số từ 0 tới 255.” (0.88): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: chứa/chiếu — NOT_VERIFIED bằng tai người',
+    'Chuẩn lưu chữ phổ biến nhất quy định mỗi chữ cần mấy byte.':
+        'ASR chép “chuẩn lưu chữ phổ biến nhất quy định mỗi chữ cần máy bay.” (0.846): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: mấy (trong “mấy byte” → “máy bay”) — NOT_VERIFIED bằng tai người',
+    'Chữ a không dấu cần 1 byte, còn chữ ô hay chữ e huyền cần 2 byte.':
+        'ASR chép “Chữ A không dấu cần một bay, còn chữ O hay chữ E huyền cần hai bay.” (0.824): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); “ô” (ô lưới) ASR viết chữ “O” — NOT_VERIFIED bằng tai người',
+    'Byte là ô nhớ nhỏ nhất, chứa một số từ 0 tới 255.':
+        'ASR chép “Bay là ô nhớ nhỏ nhất, chữ một số từ 0 tới 255.” (0.882): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: chứa/chữ — NOT_VERIFIED bằng tai người',
+    'Tốc độ đọc ghi trên màn hình là số byte đọc được mỗi giây, ở đây là 10 mũ 12 byte mỗi giây.':
+        'ASR chép “Tốc độ độc ghi trên màn hình là số bai độc được mỗi giây, ở đây là 10 mũ, 12 bai mỗi giây.” (0.833): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: đọc/độc, đọc (trong “byte đọc” → “bai độc”) — NOT_VERIFIED bằng tai người',
+    'Một mi li giây là một phần nghìn giây.':
+        'ASR chép “Một mili dây là một phần nghìn dây.” (0.706): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh — NOT_VERIFIED bằng tai người',
+    'Trước hết, ta cần lôgarit tự nhiên.':
+        'ASR chép “Trước hết, ta cần Logarets tự nhiên.” (0.857): thuật ngữ Việt hoá viết liền “lôgarit” (= lô-ga-rit), TTS đọc theo chính tả Việt, ASR viết “logarets” — NOT_VERIFIED bằng tai người',
+    'Đại lượng này đo độ lệch giữa phân phối đáp án thật và phân phối của mô hình, bằng âm tổng của xác suất thật nhân lôgarit xác suất mô hình.':
+        'ASR chép “Đại lượng này đo độ lệch giữa phân phối đáp án thật và phân phối của mô hình, bằng âm tổng của xác suất thật nhân Logatrix xác suất mô hình.” (0.968): thuật ngữ Việt hoá viết liền “lôgarit” (= lô-ga-rit), TTS đọc theo chính tả Việt, ASR viết “logatrix” — NOT_VERIFIED bằng tai người',
+    'Mười sáu byte gồm 2 byte trọng số, 2 byte độ dốc, tức mức mất mát đổi khi nhích tham số một chút, và 4 byte bản sao chính xác.':
+        'ASR chép “16 bai gồm 2 bai trọng số, 2 bai độ dốc, tức mức mất mát đổi khi nhất tham số một chút và 4 bai bản sao chính xác.” (0.833): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: nhích/nhất — NOT_VERIFIED bằng tai người',
+    'Còn 8 byte là hai số mà thuật toán nhớ cho mỗi tham số, trung bình độ dốc và trung bình bình phương độ dốc.':
+        'ASR chép “Còn 8 bai là 2 số mà thuộc toán nhớ cho mỗi tham số, Trung Bình Độ Dốc và Trung Bình Bình Phương Độ Dốc.” (0.92): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: thuật/thuộc — NOT_VERIFIED bằng tai người',
+    'Nếu ma trận B có r cột, mỗi hàng của tích B nhân A là một tổ hợp của đúng r hàng của A.':
+        'ASR chép “Nếu mà trận B có R cục, mỗi hàng của tích B nhân A là một tổ hợp của đúng R hàng qua.” (0.851): gam-ma (γ) ASR viết “gamma”; chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: cột/cục, của (trong “của a” → “qua”) — NOT_VERIFIED bằng tai người',
+    'Tổng kết lại, tinh chỉnh toàn bộ tốn khoảng 16 byte mỗi tham số, còn hạng thấp chỉ học r nhân 2 d số.':
+        'ASR chép “Tổng kết lại, tinh chỉnh toàn bộ tốn khoảng 16 bay mỗi thăm số, còn hạn thấp chỉ học R nhân 2D số.” (0.88): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: tham/thăm, hạng/hạn — NOT_VERIFIED bằng tai người',
+    'Xác suất càng gần 1 thì âm lôgarit của nó càng gần 0, xác suất càng nhỏ thì âm lôgarit càng lớn, và đó là mất mát dùng trong bài.':
+        'ASR chép “Sát suốt càng gần 1 thì âm Logatrix của nó càng gần 0, sát suốt càng nhỏ thì âm Logatrix càng lớn, và đó là mất mát dùng trong bài.” (0.8): thuật ngữ Việt hoá viết liền “lôgarit” (= lô-ga-rit), TTS đọc theo chính tả Việt, ASR viết “logatrix”; lệch âm/thanh thuần Việt: xác suất/sát suốt, xác suất/sát suốt — NOT_VERIFIED bằng tai người',
+    'Vì sao có căn?':
+        'ASR chép “Vì sao có căng?” (0.75): lệch âm/thanh thuần Việt: căn/căng — NOT_VERIFIED bằng tai người',
+    'Điều thứ hai là tổng cấp số nhân, gọi S là tổng 1 cộng alpha cộng alpha bình phương, tới alpha mũ k.':
+        'ASR chép “Điều thứ 2 là tổng cấp số nhân, gọi X là tổng 1 cộng an pha, cộng an pha bình phương, tới an pha mũ ca.” (0.816): alpha đọc thô (probe AIF p1: 7/8, bản chép “an pha / ANFA / α”) — NOT_VERIFIED bằng tai người',
+    'Nhân cả hai vế với alpha, ta được alpha cộng alpha bình phương, tới alpha mũ k cộng 1.':
+        'ASR chép “Nhân cả hai với với an pha, ta được an pha cộng an pha bình phương tới an pha mũ ca cộng 1.” (0.667): alpha đọc thô (probe AIF p1: 7/8, bản chép “an pha / ANFA / α”); lệch âm/thanh thuần Việt: vế/∅ — NOT_VERIFIED bằng tai người',
+    'Trừ hai dòng thì mọi số hạng ở giữa triệt tiêu, còn S trừ alpha S bằng 1 trừ alpha mũ k cộng 1, nên S bằng 1 trừ alpha mũ k cộng 1, chia 1 trừ alpha.':
+        'ASR chép “Trừ hai dòng thì mọi số hạn ở giữa trịt tiêu còn S trừ an pha S bằng một trừ an pha mũ ca cộng mục nên S bằng một trừ an pha mũ ca cộng mục chi một trừ an pha.” (0.725): alpha đọc thô (probe AIF p1: 7/8, bản chép “an pha / ANFA / α”); lệch âm/thanh thuần Việt: hạng/hạn, triệt/trịt, một/mục, một chia/mục chi — NOT_VERIFIED bằng tai người',
+    'Cứ thế tới alpha mũ k, và cộng lại chính là tổng cấp số nhân ở trên.':
+        'ASR chép “cứ thế tới an pha mũ ca và cộng lại chính là tổng cấp số nhân ở trên.” (0.914): alpha đọc thô (probe AIF p1: 7/8, bản chép “an pha / ANFA / α”) — NOT_VERIFIED bằng tai người',
+    'Nửa byte mỗi tham số có thể làm mô hình kém đi ở một số việc như toán hay viết mã, và mức giảm tuỳ mô hình và cách lượng tử hoá.':
+        'ASR chép “Nửa bay mỗi tham số có thể làm mô hình kém đi ở một số việc như toán hay viết mã, và mức giảm tùy mô hình và cách lượng tử hóa.” (0.969): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người',
+    # ── PAR dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Điều thứ hai là định luật Amdahl, và trước hết ta cần hiểu ý chính của nó.':
+        'ASR chép “Điều thứ hai là định luật am đang, và trước hết ta cần hiểu ý chính của nó.” (0.944): “amdahl” đọc theo luật lexicon (lexicon_vi.PAR.yaml: “Am-đan”), ASR viết “đang” — NOT_VERIFIED bằng tai người',
+    'Vì chương trình hay dùng lại dữ liệu vừa dùng và dữ liệu nằm ngay cạnh nó, gọi là tính cục bộ, bộ nhớ đệm chép cả một dòng 64 byte liền nhau, không chép từng byte.':
+        'ASR chép “Vì chương trình hay dùng lại giữ liệu vừa dùng và giữ liệu nằm ngay cạnh nó, gọi là tính cuộc bộ, bộ nhớ đem chép cả 1 dòng 64 bai liền nhau, không chép từng bay.” (0.897): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: cục/cuộc, đệm/đem — NOT_VERIFIED bằng tai người',
+    'Một dòng 64 byte chứa được 8 số loại 8 byte, nên đọc 8 số liền nhau chỉ tốn một lần chép dòng thay vì 8 lần.':
+        'ASR chép “Một dòng 64 bay chứa được 8 số loại 8 bay, nền đọc 8 số liền nhau chỉ tốn một lần chép dòng thay vị 8 lần.” (0.862): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: nên (trong “byte nên” → “bay nền”), vì/vị — NOT_VERIFIED bằng tai người',
+    'Mỗi lượt chỉ dùng x i và y i của chính nó, nên vector hoá được, mỗi phép toán mất 125 lệnh thay vì 1000, ít hơn 8 lần.':
+        'ASR chép “Mỗi lượt chỉ dùng ít y và ít y của chính nó nên vẽ tơ hóa được, mỗi phép toán mất 125 lệnh thay vì 1 nghìn, ít hơn 8 lần.” (0.943): lệch âm/thanh thuần Việt: i/x, véc/vẽ — NOT_VERIFIED bằng tai người',
+    'Phần thứ hai là dung lượng chia thông lượng, với thông lượng là số byte đường truyền chở được mỗi giây.':
+        'ASR chép “Phần thứ hai là dung lượng chia thông lượng, với thông lượng là số bay đường truyền chở được mỗi giây.” (0.952): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người',
+    'Gửi 1 GB qua đường 10 GB mỗi giây với độ trễ 1 mi li giây mất 0 phẩy 1 cộng 0 phẩy 001, bằng 0 phẩy 101 giây.':
+        'ASR chép “Gửi 1 GB qua đường 10 GB mỗi dây với độ trễ 1 mili dây mất không phải 1 cọng 0.001 bằng 0.100 Linh 1 dây.” (0.78): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: cộng không (trong “cộng không phẩy” → “cọng”), không (trong “không phẩy” → “”) — NOT_VERIFIED bằng tai người',
+    # ── SEP dựng lại sau đọc kiểm C (2026-11-09) ──
+    # ── WEB dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Điều thứ hai, một dãy ngoặc gọi là lồng đúng khi ngoặc mở sau phải đóng trước.':
+        'ASR chép “Điều thứ hai, một dãy hoặc gọi là lòng đúng khi hoặc mở sao phải đóng trước.” (0.765): lệch âm/thanh thuần Việt: ngoặc/hoặc, lồng/lòng, ngoặc/hoặc, sau/sao — NOT_VERIFIED bằng tai người',
+    'Trình duyệt tải trước liên kết, công cụ quét tự đi theo liên kết, và máy trung gian đứng giữa trình duyệt với máy chủ được phép tự gửi lại GET bất cứ lúc nào.':
+        'ASR chép “Trình duyệt tải trước liên kết, công cụ quét tự đi theo liên kết và máy trung gian đứng giữa trình duyệt với máy chủ được phép tự gửi lại ghét bất cứ lúc nào.” (0.971): GET đọc “gét” theo lexicon WEB, ASR viết “ghét” — NOT_VERIFIED bằng tai người',
+    'Mã truy cập là một chuỗi ngắn hạn gửi kèm mỗi yêu cầu API, đi cùng mã làm mới, dùng để xin mã truy cập mới khi mã cũ hết hạn.':
+        'ASR chép “Mả truy cập là một chuỗi ngắn hàng gửi kè mỗi yêu cầu API, đi cùng mả làm mới, dùng để xin mả truy cập mới khi mả cũ hết hàng.” (0.774): lệch âm/thanh thuần Việt: mã/mả, hạn/hàng, kèm/kè, mã/mả, mã/mả, mã/mả, hạn/hàng — NOT_VERIFIED bằng tai người',
+    'Khách hàng dùng điện thoại tầm trung, mạng di động yếu khoảng 200 KB mỗi giây, một số minh hoạ.':
+        'ASR chép “Khách hàng dùng điện thoại tầm trung màng di động yếu khoảng 200 kB mỗi giây một số minh họa.” (0.952): lệch âm/thanh thuần Việt: mạng/màng — NOT_VERIFIED bằng tai người',
+    'Ô nhập sai chỉ đổi viền đỏ, trong khi khoảng 4 tới 8 phần trăm nam giới, tuỳ nhóm dân, có rối loạn sắc giác đỏ lục.':
+        'ASR chép “Ôn nhập sai chỉ đổi viền đỏ, trong khi khoảng 4 tới 8% nam giới, tuyên nhóm dân, có trối loạn sát giác đỏ lụt.” (0.815): “ô” (ô lưới) ASR viết chữ “O”; lệch âm/thanh thuần Việt: tuỳ/tuyên, rối/trối, sắc/sát, lục/lụt — NOT_VERIFIED bằng tai người',
+    'Cửa sổ của TCP là lượng byte được gửi đi trước khi phải chờ xác nhận, lúc đầu nhỏ, và mỗi vòng suôn sẻ thì gấp đôi, gọi là khởi động chậm.':
+        'ASR chép “Cửa sổ của TCP là lượng bay được gửi đi trước khi phải chờ xác nhận, lúc đầu nhỏ và mỗi vòng xung sẻ thì gấp đôi, gọi là khởi động chậm.” (0.938): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: suôn/xung — NOT_VERIFIED bằng tai người',
+    'Làm thử với số minh hoạ, 100 yêu cầu, mỗi tiêu đề 500 byte, và cửa sổ đầu 10 gói, mỗi gói 1460 byte, nhân đôi mỗi vòng theo cách khởi động chậm.':
+        'ASR chép “Làm thử với số minh họa, 100 yêu cầu, mỗi tiêu đề 500 by và cửa sổ đầu 10 gói, mỗi gói 1460 by, nhận đôi mỗi vòng theo cách khởi động chậm.” (0.925): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: nhân (trong “byte nhân” → “by nhận”) — NOT_VERIFIED bằng tai người',
+    # ── AGT dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Đồ thị phụ thuộc có mỗi bước là một nút, tức một ô, và cạnh là mũi tên từ A tới B nếu B cần kết quả của A.':
+        'ASR chép “Đồ thì phụ thuộc có mỗi bước là một nút, tức một ô, và cạnh là mũi tên từ A tới B nếu B cần kết quả qua.” (0.912): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: thị/thì, của (trong “của a” → “qua”) — NOT_VERIFIED bằng tai người',
+    # ── GFX dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Điều thứ hai là hàm cạnh E, một biểu thức bậc nhất tính từ hai đỉnh của cạnh và toạ độ điểm p, cho biết p nằm ở phía nào của cạnh.':
+        'ASR chép “Điều thứ hai là hàm cạnh E, một biểu thức bật nhất tính từ hai đỉnh của cạnh và tọa độ điểm T, cho biết T nằm ở phía nào của cạnh.” (0.906): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: bậc/bật — NOT_VERIFIED bằng tai người',
+    'Ba hệ số k a, k d và k s từ 0 đến 1 là tỉ lệ ánh sáng môi trường, khuếch tán và bóng sáng mà vật liệu hắt lại.':
+        'ASR chép “Ba hệ số Ka, Kj và Ks từ 0 đến 1 là tỷ lệ ánh sáng môi trường, khuết tán và bóng sáng mà vật liệu hát lại.” (0.852): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; “tỉ” ASR viết chính tả “tỷ” (cùng âm); lệch âm/thanh thuần Việt: khuếch/khuết, hắt/hát — NOT_VERIFIED bằng tai người',
+    'Còn I a và I l lần lượt là cường độ của ánh sáng môi trường và của nguồn sáng.':
+        'ASR chép “Còn YA và YL lần lượt là cường độ của ánh sáng môi trường và của nguồn sáng.” (0.842): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: i (trong “i a” → “ya”), i (trong “i l” → “yl”) — NOT_VERIFIED bằng tai người',
+    'Biểu thức là F bằng F không cộng 1 trừ F không nhân với 1 trừ cosin góc tới mũ 5.':
+        'ASR chép “Biểu thức là f bằng f không cộng 1 trừ f không nhân với 1 trừ cô sinh góc tới mũ năm.” (0.93): thuật ngữ Việt hoá viết liền “cosin” (= co-sin), TTS đọc theo chính tả Việt, ASR viết “cô sinh” — NOT_VERIFIED bằng tai người',
+    # ── HCI dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Nhắc lại, thời gian đưa con trỏ tới một nút tăng theo lôgarit cơ số 2 của khoảng cách chia bề rộng cộng 1, nên nút càng xa và càng hẹp thì càng lâu.':
+        'ASR chép “Nhắc lại, thời gian đưa con trỏ tới một nút tăng theo logatic cơ số 2 của khoảng cách chia bề động cộng 1, nền nút càng xa và càng hẹp thì càng lâu.” (0.912): thuật ngữ Việt hoá viết liền “lôgarit” (= lô-ga-rit), TTS đọc theo chính tả Việt, ASR viết “logatic”; lệch âm/thanh thuần Việt: rộng/động, nên/nền — NOT_VERIFIED bằng tai người',
+    # ── ROB dựng lại sau đọc kiểm C (2026-11-09) ──
+    'Điều thứ hai là bước Euler, cách tính dần một đại lượng khi biết tốc độ thay đổi của nó.':
+        'ASR chép “Điều thứ 2 là bước ơ lê cách tính dần một đại lượng khi biết tốc độ thay đổi của nó.” (0.952): “euler” đọc theo luật lexicon (lexicon_vi.ROB.yaml: “Ơ-le”), ASR viết “lê” — NOT_VERIFIED bằng tai người',
+    'Lý do là mũi tên dài 1 chỉ theo hướng tê-ta có bóng trên trục x dài cô-sin tê-ta, và bóng trên trục y dài sin tê-ta.':
+        'ASR chép “Lý do là mũi tên dài một chỉ theo hướng teta có bóng trên trục ít dài cô sinh teta và bóng trên trục y dài sinh teta.” (0.78): tê-ta theo lexicon RBM/ROB, ASR viết “theta/teta”; sin đọc thô, ASR viết “sinh” (gần âm) — NOT_VERIFIED bằng tai người',
+    'Ở đây tư thế gồm vị trí x, y cùng hướng đầu xe tê-ta, còn x phẩy là tốc độ thay đổi của x mỗi giây.':
+        'ASR chép “Ở đây từ thế gồm vị trí ít, ít cùng hướng đầu xe teta, còn ít phải là tốc độ thay đổi của ít mỗi giây.” (0.83): tê-ta theo lexicon RBM/ROB, ASR viết “theta/teta”; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: bốn/từ, i/x — NOT_VERIFIED bằng tai người',
+    'Điều thứ hai, ta cần hiểu công thức Bayes, tin sau bằng tin trước nhân khả năng, rồi chuẩn hoá.':
+        'ASR chép “Điều thứ 2, ta cần hiểu công thức bay x tin sau bằng tin trước nhân khả năng rồi chuẩn hóa.” (0.952): Bayes đọc “Bay-ét” theo lexicon chung (probe 3/8, NOT_VERIFIED), ASR viết “bay X/S” — NOT_VERIFIED bằng tai người',
+    'Xem bộ lọc hạt làm việc với 4 hạt ở ô 1, 2, 4 và 5, mỗi hạt trọng số 0 phẩy 25, khi robot thấy cửa.':
+        'ASR chép “Xem bộ lọc hạt làm việc với 4 hạt ở ôm 1, 2, 4 và 5, mỗi hạt trọng số 0,25 khi robot thấy cửa.” (0.966): “ô” (ô lưới) ASR viết chữ “O” — NOT_VERIFIED bằng tai người',
+    'Hạt ở ô 2 và ô 5 đứng trước tường, nhân 0 phẩy 1 được 0 phẩy 025, chuẩn hoá còn khoảng 0 phẩy 056.':
+        'ASR chép “Hạt ở O2 và O5 đứng trước tường, nhần 0,1 được 0,02 năm, chuẩn hóa còn khoảng 0,056.” (0.836): “ô” (ô lưới) ASR viết chữ “O”; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: nhân/nhần, mươi/∅, không (trong “không phẩy” → “”) — NOT_VERIFIED bằng tai người',
+    'Đạo hàm của cos là âm sin, thử số cho khoảng âm 0 phẩy 0005, gần bằng 0, đúng là âm sin 0.':
+        'ASR chép “Đạo hàm của cô sinh là âm sinh, thử số cho khoảng âm 0.0005, gần bằng không, đúng là âm sinh không.” (0.851): sin đọc thô, ASR viết “sinh” (gần âm); “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải” — NOT_VERIFIED bằng tai người',
+    'Còn đạo hàm của s cô-sin tê-ta theo tê-ta là âm s sin tê-ta, đúng như ô hàng một cột ba.':
+        'ASR chép “Còn đạo hàm của echo sinh tê ta theo tê ta là âm s sinh tê ta, đúng như ô hàng một cột ba.” (0.857): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; sin đọc thô, ASR viết “sinh” (gần âm); lệch âm/thanh thuần Việt: cô (trong “s cô sin” → “echo sinh”) — NOT_VERIFIED bằng tai người',
+    'Điều thứ hai, lôgarit tự nhiên của a là số mũ x sao cho e mũ x bằng a, với e là hằng số khoảng 2 phẩy 718.':
+        'ASR chép “Điều thứ 2, Logatrix tự nhiên của A là số mũ ít sao cho E mũ ít bằng A, với E là hàng số khoảng 2,718.” (0.903): thuật ngữ Việt hoá viết liền “lôgarit” (= lô-ga-rit), TTS đọc theo chính tả Việt, ASR viết “logatrix”; “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: hằng/hàng — NOT_VERIFIED bằng tai người',
+    'Ô A đã đi 2 và còn ước lượng 3, tổng là 5.':
+        'ASR chép “OA đã đi 2 và còn gước lượng 3, tổng là 5.” (0.8): “ô” (ô lưới) ASR viết chữ “O”; chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: ước/gước — NOT_VERIFIED bằng tai người',
+    'Ô B mới đi 1 nhưng còn ước lượng 5, tổng là 6, nên A sao mở ô A trước.':
+        'ASR chép “OB mới đi một nhưng còn ước lượng 5, tổng là 6, nên A sao mở OA trước?” (0.842): “ô” (ô lưới) ASR viết chữ “O”; chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    'Ở đây v 0 là tốc độ hiện tại, h là chu kỳ, và ô-mê-ga cũng có một cửa sổ như vậy theo gia tốc góc tối đa.':
+        'ASR chép “Ở đây V0 là tốc độ hiện tại, H là chu kỳ và Omega cũng có một cửa sổ như vậy theo gia tốc góc tối đa.” (0.931): ô-mê-ga (ω) đọc tách âm tiết, ASR viết “omega/ω” — NOT_VERIFIED bằng tai người',
+    'Tịnh tiến nghĩa là lấy toạ độ điểm đích trừ đi toạ độ của xe, được hai hiệu số theo hai trục là d x và d y.':
+        'ASR chép “Tình tiến nghĩa là lấy tọa độ điểm đích trừ đi tọa độ của xe, được hai hiệu số theo hai trục là GX và GY.” (0.852): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: tịnh/tình, i (trong “d i” → “gy”) — NOT_VERIFIED bằng tai người',
+    # ── ACB dựng lại sau đọc mẫu D (2026-11-10) ──
+    'Kafka là một hàng đợi sự kiện, chương trình này ghi sự kiện vào, chương trình khác đọc ra theo đúng thứ tự, và sự kiện được lưu lại nên đọc lại được.':
+        'ASR chép “Cáp K là một hàng đợi sự kiện. Chương trình này ghi sự kiện vào, chương trình khác đọc ra theo đúng thứ tự và sự kiện được lưu lại nên đọc lại được.” (0.971): “kafka” đọc theo luật lexicon (lexicon_vi.ACB.yaml: “Cáp-ca”), ASR viết “k” — NOT_VERIFIED bằng tai người',
+    'Công cụ bắt thay đổi dữ liệu đọc nhật ký thay đổi của cơ sở dữ liệu, và biến mỗi dòng mới thành một sự kiện trên Kafka.':
+        'ASR chép “Công cụ bắt thay đổi dữ liệu đọc nhật ký thay đổi của cơ sở dữ liệu và biến mỗi dòng mới thành một sự kiện trên Capca.” (0.964): “kafka” đọc theo luật lexicon (lexicon_vi.ACB.yaml: “Cáp-ca”), ASR viết “capca” — NOT_VERIFIED bằng tai người',
+    'Core Banking là hệ thống lõi giữ sổ tài khoản của ngân hàng, còn NAPAS là đơn vị chuyển mạch nối các ngân hàng Việt Nam để chuyển tiền liên ngân hàng.':
+        'ASR chép “Cò Banking là hệ thống lõi giữ sổ tài khoản của ngân hàng, còn Napark là đơn vị chuyển mạch nối các ngân hàng Việt Nam để chuyển tiền liên ngân hàng.” (0.938): “core” đọc theo luật lexicon (lexicon_vi.ACB.yaml: “Co”), ASR viết “cò”; “napas” đọc theo luật lexicon (lexicon_vi.ACB.yaml: “Na-pát”), ASR viết “napark” — NOT_VERIFIED bằng tai người',
+    # ── CLD dựng lại sau đọc mẫu D (2026-11-10) ──
+    'Nhưng hình dạng dựng đứng gần công suất thì hệ nào cũng có, và định luật Little thì đúng cho mọi hệ ổn định, bất kể phân phối.':
+        'ASR chép “Nhưng hình dạng dựng đứng gần công suất thì hệ nào cũng có, và định luật liết tồ thì đúng cho mọi hệ ổn định, bất kể phân phối.” (0.947): Little đọc thô (probe CLD p1: 5/8, ASR viết “lít tồ”) — NOT_VERIFIED bằng tai người',
+    'Tổng kết lại, định luật Little đúng cho mọi hệ ổn định, tức hệ mà hàng đợi không dài mãi.':
+        'ASR chép “Tổng kết lại, định luật Licto đúng cho mọi hệ ổn định, tức hệ mà hàng đợi không dài máy.” (0.9): Little đọc thô (probe CLD p1: 5/8, ASR viết “lít tồ”); lệch âm/thanh thuần Việt: mãi/máy — NOT_VERIFIED bằng tai người',
+    # ── DEN dựng lại sau đọc mẫu D (2026-11-10) ──
+    'Băm nghĩa là dùng một hàm biến khoá của dòng thành một con số, rồi chia số đó cho M lấy phần dư để biết dòng thuộc máy nào, nên cùng khoá thì luôn về cùng một máy.':
+        'ASR chép “Băm nghĩa là dùng một hàm biến khóa của dòng thành một con số, rồi chia số đó cho em lấy phần dư để biết dòng thuộc máy nào, nên cùng khóa thi luôn về cùng một máy.” (0.947): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: thì/thi — NOT_VERIFIED bằng tai người',
+    # ── DMS dựng lại sau đọc mẫu D (2026-11-10) ──
+    'Đó là nhị thức Newton, và các hệ số của khai triển x cộng y mũ n chính là hàng n của tam giác Pascal.':
+        'ASR chép “Đó là nhị thức Newton và các hệ số của khai truyện x cộng y mũ n chính là hàng n của tam giác Pascan.” (0.923): từ mượn/tên riêng “pascal” đọc thô (không có luật lexicon), ASR viết “pascan”; lệch âm/thanh thuần Việt: triển/truyện — NOT_VERIFIED bằng tai người',
+    # ── HCI dựng lại sau đọc mẫu D (2026-11-10) ──
+    'Bài 2 chỉ ra rằng thời gian trỏ T bằng a cộng b nhân lôgarit cơ số 2 của D chia W cộng 1.':
+        'ASR chép “Bài 2 chỉ ra rằng thời gian trỏ T bằng A cộng B nhân logarithm cơ số 2 của dây chia về đúc cộng 1.” (0.898): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    'Trong đó D là khoảng cách từ con trỏ tới nút, W là bề rộng nút, còn a và b là hai hằng số đo riêng cho từng thiết bị.':
+        'ASR chép “Trong đó dê là khoảng cách từ con trỏ tới nút, V đúc là bề rộng nút, còn A và B là hai hàng số đo riêng cho từng thiết bị.” (0.918): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: hằng/hàng — NOT_VERIFIED bằng tai người',
+    # ── JVA dựng lại sau đọc mẫu D (2026-11-10) ──
+    'Lệnh bốn, C còn hai triệu một trăm nghìn, còn A nhận hai triệu ba trăm nghìn cộng hai trăm nghìn, thành hai triệu rưỡi.':
+        'ASR chép “Lệnh 4, sẽ còn 2 triệu 100 nghìn, còn A nhận 2 triệu 300 nghìn cộng 200 nghìn, thành 2 triệu rưỡi.” (0.96): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    # ── SEC dựng lại sau đọc mẫu D (2026-11-10) ──
+    'Trước hết, bit là một chữ số nhị phân, 0 hoặc 1, còn một byte gồm 8 bit, chứa một số từ 0 tới 255.':
+        'ASR chép “Trước hết, bit là một chữ số nhị phân, không hoặc một, còn một bay gồm 8 bit, chữ một số từ 0 tới 255.” (0.931): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: chứa/chữ — NOT_VERIFIED bằng tai người',
+    'Nửa thấp của một byte là 4 bit cuối của nó, một số từ 0 tới 15, còn bỏ bit đầu là đặt bit trái nhất về 0 để số luôn dương.':
+        'ASR chép “Nửa thấp của một bai là 4 bit cuối của nó, một số từ 0 tới 15, còn bỏ bit đầu là đặc bit trái nhất về không để số luân dương.” (0.909): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: đặt/đặc, luôn/luân — NOT_VERIFIED bằng tai người',
+    'Băm có khoá là một hàm trộn bí mật với dữ liệu, cho ra một dãy byte dài cố định.':
+        'ASR chép “Băm có khóa là một hàm trộn bí mật với dữ liệu, trò ra một dãy bay dài cố định.” (0.9): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: cho/trò — NOT_VERIFIED bằng tai người',
+    # ── SWF dựng lại sau đọc mẫu D (2026-11-10) ──
+    'Trong kiểu tấn công kinh điển được mô tả từ năm 1996, phần tràn ghi đè địa chỉ mà hàm sẽ quay về khi xong, nên máy nhảy tới các byte do kẻ tấn công đưa vào.':
+        'ASR chép “Trong kiểu tấn công kinh điển được mô tả từ năm 1996, phần trang ghi đại địa chỉ Mà Hàm sẽ quay về khi xong, nên máy nhảy tới các bài do kẻ tấn công đưa vào.” (0.93): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: tràn/trang, đè/đại — NOT_VERIFIED bằng tai người',
+    # ── INT dựng lại sau đọc mẫu D (2026-11-10) ──
+    'Ta tìm hiểu cách ra lệnh cho hệ lõi T24 bằng bản tin OFS, một định dạng chữ riêng của hãng Temenos.':
+        'ASR chép “Ta tìm hiểu cách tra lệnh cho hệ loại T24 bằng bản tin OFS, một định dạng chữ riêng của hãng Temenor.” (0.88): “temenos” đọc theo luật lexicon (lexicon_vi.INT.yaml: “Te-me-nót”), ASR viết “temenor”; lệch âm/thanh thuần Việt: ra/tra, lõi/loại — NOT_VERIFIED bằng tai người',
+    'Ta nắm vững bản tin chuyển mạch theo đặc tả riêng của NAPAS, thường được mô tả có gốc từ chuẩn quốc tế ISO 8583.':
+        'ASR chép “Ta nắm vững bản tin chuyển mặt theo đặt tả riêng của NAPAC, thường được mô tả có gốc tự chuẩn quốc tế ISO 8583.” (0.871): “napas” đọc theo luật lexicon (lexicon_vi.INT.yaml: “Na-pát”), ASR viết “napac”; lệch âm/thanh thuần Việt: mạch/mặt, đặc/đặt, từ/tự — NOT_VERIFIED bằng tai người',
+    'Redis là phần mềm giữ dữ liệu trong bộ nhớ, rất nhanh, để nhiều máy chủ dùng chung một chỗ ghi khóa.':
+        'ASR chép “Rê đích là phần mềm giữ giữ liệu trong bộ nhớ rất nhanh để nhiều máy chủ dùng chung một chỗ ghi khóa.” (0.957): “redis” đọc theo luật lexicon (lexicon_vi.INT.yaml: “Rê-đít”), ASR viết “đích” — NOT_VERIFIED bằng tai người',
+    # ── ESY dựng lại sau đọc mẫu D (2026-11-10) ──
+    'Giữa một byte, dây dữ liệu chỉ được đổi khi xung nhịp ở 0, nên bên nhận không nhầm bit dữ liệu với bắt đầu hay dừng.':
+        'ASR chép “Giữa một bay, giấy giữ liệu chỉ được đổi khi xuân nhịp ở không nên bên nhận không nhằm biết giữ liệu với bắt đầu hay dừng.” (0.815): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: dây (trong “byte dây” → “bay giấy”), xung/xuân, nhầm bit/nhằm biết — NOT_VERIFIED bằng tai người',
+    'Sau đó chip trả về 2 byte dữ liệu, và vi điều khiển xác nhận byte đầu.':
+        'ASR chép “Sau đó chịp trả về hai bay giữ liệu và video khiển xác nhận bay đầu.” (0.727): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: chip/chịp, vi điều/video — NOT_VERIFIED bằng tai người',
+    'Ở byte cuối, vi điều khiển cố ý không xác nhận để báo đã đọc đủ, rồi gửi dừng.':
+        'ASR chép “Ở bay cuối, vi điều khiển cô ý không xác nhận để báo đã đọc đủ, rồi gửi dưng.” (0.842): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: cố/cô, dừng/dưng — NOT_VERIFIED bằng tai người',
+    'Mỗi byte tốn 9 nhịp, kể cả nhịp xác nhận hay không xác nhận, nên 4 byte là 36 nhịp, chưa kể bắt đầu và dừng.':
+        'ASR chép “Mỗi bay tốn chính nhịp, kể cả nhịp xác nhận hay không xác nhận nên 4 bay là 36 nhịp, chưa kể bắt đầu và dưng.” (0.857): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: chín/chính, dừng/dưng — NOT_VERIFIED bằng tai người',
     # ── CSA L03 dựng lại (2026-10-29) ──
     'Giải mã dãy bit 3 E 2 0 0 0 0 0 hệ mười sáu.':
         'đọc tách từng ký tự (E36); ASR chép “3-E-2000-0016”: đủ 3, E, 2 và năm chữ số 0, rồi “16” (hệ mười sáu) — dãy ký tự khớp (audit/asr_digits.py lệch chỉ vì công cụ đổi “sáu” thành 6 mà không ghép “mười sáu”); dải/giải, dậy/dãy là nhầm gi/d của ASR',
@@ -5020,9 +5751,17 @@ for lid in args:
     if not new:
         print(lid, "0 mục mới")
         continue
-    text = p.read_text(encoding="utf-8")
-    lines = "".join(f'  - {{sentence: "{s}", reason: "{r}"}}\n' for s, r in new)
+    orig = text = p.read_text(encoding="utf-8")
     head = re.search(r"\nasr_reviewed:[ \t]*(#[^\n]*)?\n", text)  # CS115 có dòng chú thích sau khoá
+    # thụt lề theo danh sách ĐÃ CÓ: tệp do yaml.dump sinh (BNK/JVA qua gen.py) để mục ở cột 0 — chèn “  - ” vào đó làm vỡ YAML
+    # (lỗi thật 2026-11-09/10: JVA L00, ACB L02, BNK L00). Chuỗi viết bằng json.dumps = chuỗi nháy kép YAML hợp lệ, tự thoát “"” và “\”.
+    ind = "  "
+    if head:
+        nxt = re.match(r"([ \t]*)- ", text[head.end():])
+        if nxt:
+            ind = nxt.group(1)
+    q = lambda v: json.dumps(v, ensure_ascii=False)
+    lines = "".join(f"{ind}- {{sentence: {q(s)}, reason: {q(r)}}}\n" for s, r in new)
     if head:
         text = text[:head.end()] + lines + text[head.end():]
     elif "\nasr_reviewed: []\n" in text:
@@ -5031,5 +5770,13 @@ for lid in args:
     else:  # bài chưa có khoá (PAR L07–L12): thêm ngay trước `scenes:`
         assert "asr_reviewed" not in text and text.count("\nscenes:\n") == 1, "không tìm được chỗ đặt `asr_reviewed`"
         text = text.replace("\nscenes:\n", "\nasr_reviewed:\n" + lines + "scenes:\n", 1)
+    # chặn ghi nếu YAML vỡ hoặc mất mục: phải đọc lại được và có đủ mục cũ + mới
+    try:
+        got = {str(x["sentence"]).strip() for x in (yaml.safe_load(text) or {}).get("asr_reviewed") or []}
+    except yaml.YAMLError as e:
+        raise SystemExit(f"DỪNG {lid}: chèn asr_reviewed làm vỡ YAML ({e}); tệp giữ nguyên") from e
+    if not (done | {s for s, _ in new}) <= got:
+        raise SystemExit(f"DỪNG {lid}: sau khi chèn thiếu mục asr_reviewed; tệp giữ nguyên")
+    assert orig != text
     p.write_text(text, encoding="utf-8")
     print(lid, len(new), "mục →", p.relative_to(ROOT))

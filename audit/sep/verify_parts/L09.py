@@ -25,3 +25,7 @@ rec("L09e", Eq == 6 and round(float(sq), 2) == 1.67 and round(float(Eq + 2 * sq)
     and 5 < Eq, "quiz: 3, 5, 13 → E = 6, s ≈ 1,67, khoảng 2,67 … 9,33; hứa 5 < 6")
 rec("L09f", F(6 * 1 + 9 * 2, 3) == 8 and F(21, 6) == F(7, 2) and pert(3, 3, 3)[0] == 3 and pert(2, 5, 8)[1] == 1,
     "ôn nền: (6 + 18)/3 = 8; xúc xắc 21/6 = 3,5; làm thử O = M = B = 3 → 3; (8 − 2)/6 = 1")
+# Thêm 2026-11-09 (đợt C): phần ôn kỳ vọng nay giải thích bằng 600 lần tung (mỗi mặt ≈ 100 lần). Hình: thang 70 px/ngày
+#   (O = 2 ở x = 190, M = 4 ở x = 330) → B = 12 ở x = 190 + 10 × 70 = 890 (bản cũ đặt 960 = ngày 13).
+rec("L09g", F(100 * 21, 600) == F(7, 2) and 190 + (12 - 2) * 70 == 890 and 190 + (5 - 2) * 70 == 400,
+    "ôn nền: 600 lần tung, tổng ≈ 2100 → 3,5; hình: B = 12 ở x = 890, E = 5 ở x = 400")

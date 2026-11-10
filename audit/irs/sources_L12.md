@@ -15,5 +15,11 @@ verify_parts/L12.py. Khung hai tầng lấy từ nguồn đọc nguyên văn ng�
 ## [YI19] Yi và cộng sự (RecSys 2019)
 - "these systems connect billions of users to items from an extremely large corpus of content, often in the scale of millions to billions, under stringent latency requirements."
 
+## Đợt C (2026-11-09)
+- Phần ôn không còn nhắc khoá khác: tự giảng ước lượng nhanh (thời gian = số việc × thời gian mỗi việc), đổi ms ↔ giây, và phân vị 99
+  (thứ hạng gần nhất trên 100 lần đo) bằng hai bộ đo minh hoạ (1…99 và 250 → TB 52, p99 99; 95 lần 10 + 5 lần 200 → TB 19,5, p99 200).
+- Móc câu nói rõ kho 10 triệu (trước mâu thuẫn “danh mục 10 000” với cái phễu “kho 10 triệu”); thanh ngân sách vẽ đúng tỉ lệ 10 ms = 80 điểm ảnh.
+- Lời hẹn bài sau: [BA08] không ghi tổng số người dùng năm 2008 (5,4 triệu chỉ là mẫu) → đổi thành “kho hơn 45 triệu video năm 2008 tới hơn 1 tỉ người dùng năm 2016”.
+
 ## Không dạy
 - Ngân sách 100 ms, 0,05 ms mỗi ứng viên, 20 ms mạng: số minh hoạ, không gán cho công ty nào.

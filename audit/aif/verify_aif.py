@@ -127,6 +127,10 @@ rec("L03b", all(alg.puz_h1(s) <= alg.puz_h2(s) <= d for s, d in dg.items()) and 
     and round(sum(dg.values()) / len(dg), 2) == 21.97, f"BFS cài lại từ đích: h₁ ≤ h₂ ≤ h* ở mọi trạng thái; xa nhất 31 bước ({len(far)} trạng thái); h* trung bình 21,97")
 
 
+rec("L02b", all(abs(alg.puz_h1(s) - alg.puz_h1(t)) <= 1 and abs(alg.puz_h2(s) - alg.puz_h2(t)) == 1 for s in dg for t in nbrs(s)),
+    "h₁, h₂ nhất quán trên cả 181 440 trạng thái: mỗi bước h₁ đổi ≤ 1, h₂ đổi đúng 1 (AIMA 4e §3.6: nhất quán ⇒ A* không mở lại vẫn tối ưu)")
+
+
 def bstar(N, d):
     roots = np.roots([1] * (d + 1) - np.array([0] * d + [N + 1]))
     return max(r.real for r in roots if abs(r.imag) < 1e-9 and r.real > 0)

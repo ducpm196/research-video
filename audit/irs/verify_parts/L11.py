@@ -71,3 +71,11 @@ rec("L11e", h1[1:] == [(1000, 0)] * 3 and h2[1:] == [(1000, 0)] * 3 and sum(x ==
     f"{sum(x == (50, 950) for x in h3)}/200 lần chạy B thắng ngày 3 (kỳ vọng tất định của alg: thắng)")
 rec("L11f", F(7, 10) * F(9, 10) == F(63, 100) and F(3, 10) * F(8, 10) == F(24, 100) and max(F(8, 10), F(1, 10)) == F(8, 10),
     "ôn: 0,63; 0,24; max 0,8")
+# Thêm 2026-11-09 (đợt C): phần ôn nay giảng lôgarit cơ số 2 bằng ví dụ log₂ 4 = 2 → chiết khấu vị trí 3 = 1/2 (đếm số lần chia đôi).
+halvings = 0
+v = 4
+while v > 1:
+    v //= 2
+    halvings += 1
+rec("L11g", halvings == 2 and F(1, halvings) == F(1, 2) and round(1 / math.log2(3 + 1), 3) == 0.5,
+    "ôn: log₂ 4 = 2 (chia đôi 2 lần) → chiết khấu vị trí 3 = 0,5")

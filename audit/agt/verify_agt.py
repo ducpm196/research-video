@@ -38,7 +38,7 @@ def mc_chain(p, n, tries=1):
 
 rec("L00a", abs(mc_chain(0.95, 20) - 0.358) < 0.005 and abs(mc_chain(0.95, 20, 2) - 0.951) < 0.003 and abs(mc_chain(0.9, 10, 2) - 0.904) < 0.003
     and round(alg.chain_success(0.95, 20), 3) == 0.358 and round(alg.chain_with_retry(0.95, 20, 3), 3) == 0.998,
-    "Monte Carlo: 20 bước × 95% ≈ 0,358; thử lại 2 lần ≈ 0,951; 10 bước × 90%, thử lại 2 lần ≈ 0,904")
+    "Monte Carlo: 20 bước × 95% ≈ 0,358; mỗi bước làm tối đa 2 lần (thử lại 1 lần) ≈ 0,951; 10 bước × 90%, làm tối đa 2 lần ≈ 0,904")
 
 
 # ── L01: lược đồ trên dữ liệu JSON thật ──

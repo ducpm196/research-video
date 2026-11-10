@@ -17,6 +17,13 @@ Tải: arxiv.org/e-print/1412.6980v8 (2_algorithm.tex, 3_initbiascorrection.tex)
 - §3: “these moving averages are initialized as (vectors of) 0's, leading to moment estimates that are biased towards zero” … “What is left is
   the term (1−β2^t) which is caused by initializing the running average with zeros. In algorithm 1 we therefore divide by this term”.
 - §3: “it is exactly this case of small β2 where a lack of initialisation bias correction would lead to initial steps that are much larger.”
+- §6.4 “Experiment: bias-correction term” (6_experiments_durk.tex, \input ngay sau 6_experiments_jimmy.tex có 3 tiểu mục 6.1–6.3; đọc
+  2026-11-10): “Values of β2 close to 1, required for robustness to sparse gradients, results in larger initialization bias; therefore we
+  expect the bias correction term is important in such cases of slow decay, preventing an adverse effect on optimization.” và “values β2
+  close to 1 indeed lead to instabilities in training when no bias correction term was present, especially at first few epochs of the
+  training. The best results were achieved with small values of (1−β2) and bias correction”.
+  → Câu §3 viết “small β2” nhưng §6.4 cho thấy ý tác giả là (1−β2) nhỏ, tức β2 gần 1; bài nói “khi β2 gần 1, các bước đầu sẽ dài hơn nhiều”
+  = §3 (“initial steps that are much larger”) + §6.4 (“β2 close to 1”, “first few epochs”). Thí nghiệm là VAE, β2 ∈ {0,99; 0,999; 0,9999}.
 (Bài viết v_t của bài báo thành s_k theo quy ước CS115 bài 9.)
 
 ## [LH19] I. Loshchilov, F. Hutter, *Decoupled Weight Decay Regularization*, ICLR 2019, arXiv:1711.05101

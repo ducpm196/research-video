@@ -151,8 +151,9 @@ rec("L15d", abs(np.mean(_gap) - 2 * _p / _N) < 0.006 and round(2 * 800 / (281713
     f"mô phỏng: chênh MSE ngoài/trong mẫu {np.mean(_gap):.4f} ≈ 2p/N = {2 * _p / _N}; 2 × 800 / 1 408 566 ≈ 0,00114 → 0,00067 trên thước RMSE, gấp 67 lần 0,00001")
 _score = {k: 2 * pop + 1 * r for k, (pop, r) in {"A": (0.9, 3.0), "B": (0.2, 4.5)}.items()}
 rec("L15e", max(_score, key=_score.get) == "B" and max({k: v + 7 for k, v in _score.items()}.items(), key=lambda t: t[1])[0] == "B"
-    and round(math.sqrt(0.89 ** 2 + 2 * 50 / 2000) - 0.89, 3) == 0.028 and round(float(_imp("0.95", "0.90")), 2) == 5.26 and round(float(_imp("0.95", "0.89")), 2) == 6.32,
-    "xếp hạng 2 × phổ biến + dự đoán: B (4,9) trước A (4,8), cộng hằng số không đổi thứ tự; quiz 5,26% / 6,32%, lạc quan của Y ≈ 0,028")
+    and round(math.sqrt(0.89 ** 2 + 2 * 50 / 2000) - 0.89, 3) == 0.028 and round(float(_imp("0.95", "0.90")), 2) == 5.26 and round(float(_imp("0.95", "0.89")), 2) == 6.32
+    and round(float(_imp("0.95", "0.89") - _imp("0.95", "0.90")), 2) == 1.05,
+    "xếp hạng 2 × phổ biến + dự đoán: B (4,9) trước A (4,8), cộng hằng số không đổi thứ tự; quiz 5,26% / 6,32%, Y hơn X 1,05 điểm (0,01/0,95; không phải 6,32 − 5,26 = 1,06 từ số đã làm tròn), lạc quan của Y ≈ 0,028")
 
 n_ok = sum(o for _, o in R)
 print(f"\n{n_ok}/{len(R)} PASS")

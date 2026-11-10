@@ -31,3 +31,11 @@ rec("L08g", F(1000, 1990) == F(100, 199) and round(1000 / 1990 * 100, 1) == 50.3
 q = np.array([81, 1.]) ** 0.75
 rec("L08h", round(q[1] / q.sum(), 4) == 0.0357 and round(1 / 82, 4) == 0.0122 and round(1 / 3, 3) == 0.333,
     "quiz: phần của D 1/28 ≈ 0,0357 so với 1/82 ≈ 0,0122; chia đều 0,333")
+# ôn mở rộng (đợt C): lũy thừa nguyên/căn bậc bốn đếm thẳng, e và ln qua chuỗi (không dùng math.log), kiểm tra qua lôgarit 4 chữ số
+ex = lambda x: sum(F(1, math.factorial(k)) * F(x) ** k for k in range(40))
+rec("L08i", 2 * 2 * 2 == 8 and [b for b in range(1, 20) if b ** 4 == 16] == [2] and F(7) ** 0 == 1
+    and round(float(ex(1)), 3) == 2.718 and round(float(ex(F(-693, 1000))), 3) == 0.5 and round(-lnq(4), 3) == -1.386 == round(2 * -lnq(2), 3)
+    and F(100, 16) == F(25, 4) and round(math.sqrt(math.sqrt(100)) ** 3 / 8, 2) == 3.95 and round(math.sqrt(10), 3) == 3.162
+    and round(float(F(100, 101)), 2) == 0.99 and round(1 / 101, 4) == 0.0099 and F(100, 101) + F(1, 101) == 1
+    and round(lnq(100), 4) == 4.6052 and F(3, 4) * F(46052, 10000) == F(34539, 10000) and round(float(ex(F(34539, 10000))), 2) == 31.62,
+    "ôn: 2³ = 8, căn bậc bốn 16 = 2, x⁰ = 1; e ≈ 2,718, e^−0,693 ≈ 0,5, ln 0,25 ≈ −1,386; 100/16 = 6,25 vs 31,62/8 ≈ 3,95; e^3,4539 ≈ 31,62")

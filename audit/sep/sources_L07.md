@@ -44,3 +44,10 @@ Tải: https://www.acm.org/binaries/content/assets/about/acm-code-of-ethics-and-
 - Không nêu tên người hay công ty phát hiện lỗi; không mô tả cách khai thác (chỉ “đọc trộm bộ nhớ” như nguồn ghi).
 - “Giữ kín mãi thì bên sửa ít động lực vá” là lập luận của bài (giáo án `fix`), không gán cho Project Zero.
 - Không nói mọi tổ chức đều dùng 90+30; đây là chính sách của một nhóm, đọc ngày 2/11/2026.
+
+## Đọc lại đợt C (2026-11-09)
+- Trang chính sách Project Zero (HTTP 200): các câu 90+30, ví dụ ngày 47 → 77, 83 → 113, “end of the 90-day period”, ân hạn 14 ngày,
+  7 ngày khi bị khai thác, “mutually agree” — vẫn như trên.
+- heartbleed.com (HTTP 200): “our discovery of the bug on 3rd of April 2014”, “OpenSSL 1.0.1g released on 7th of April 2014”, và
+  “others independently went public with the CVE-2014-0160 identifier” → bài nay nói “**một** nhóm phát hiện” và “lỗi đã được người khác
+  tìm ra và công bố chi tiết độc lập” (trang không phải của nhóm duy nhất tìm ra lỗi).

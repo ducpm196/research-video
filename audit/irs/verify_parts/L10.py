@@ -51,5 +51,14 @@ rec("L10g", F(15, 1000) / F(1, 4) == F(6, 100) and F(40, 1000) == F(4, 100) and 
     and F(1, 100) / F(5, 100) == F(1, 5) and F(10, 100) == F(1, 10) and F(4, 100) == F(1, 25)
     and alg.irs_ips(1, 0.05, cap=4) == 4,
     "quiz: C 0,06 > D 0,04; E: 0,2 / 0,1 / 0,04")
+# Thêm 2026-11-09 (đợt C, bài tự đứng): ví dụ biến gây nhiễu ở phần ôn — nhật ký minh hoạ theo từng vị trí; tỉ lệ từng ô sinh lại
+#   từ mô hình “bấm = p_r · mức liên quan” (A 0,03; B 0,05; p5 = 0,2), và kiểm hiện tượng đảo chiều khi gộp (B thắng từng vị trí, A thắng gộp).
+cell = {("A", 1): (30, 1000), ("A", 5): (3, 500), ("B", 1): (5, 100), ("B", 5): (14, 1400)}
+rate = {k: F(c, n) for k, (c, n) in cell.items()}
+pool = {s: F(sum(cell[(s, r)][0] for r in (1, 5)), sum(cell[(s, r)][1] for r in (1, 5))) for s in "AB"}
+rec("L10i", rate[("A", 1)] == relA * P[1] and rate[("A", 5)] == relA * P[5] and rate[("B", 1)] == relB * P[1] and rate[("B", 5)] == relB * P[5]
+    and all(rate[("B", r)] > rate[("A", r)] for r in (1, 5)) and pool["A"] == F(33, 1500) and pool["B"] == F(19, 1500) and pool["A"] > pool["B"]
+    and round(float(pool["A"]), 3) == 0.022 and round(float(pool["B"]), 4) == 0.0127,
+    "biến gây nhiễu: B thắng ở vị trí 1 (0,05 > 0,03) và 5 (0,01 > 0,006), gộp lại A 0,022 > B 0,0127")
 rec("L10h", F(2, 10) * F(5, 100) == F(1, 100) and F(1, 100) / F(2, 10) == F(5, 100) and 0.24 > 0.01 > -0.07,
     "ôn 0,2·0,05 = 0,01; chia ngược 0,05; ZH19 trực tuyến −0,07% / +0,01% / +0,24%")

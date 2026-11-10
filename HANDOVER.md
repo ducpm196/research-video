@@ -1,3 +1,61 @@
+# HANDOVER — Cập nhật phiên 2026-11-10: dựng lại đợt C XONG, rà ASR 42/42 khoá, đọc mẫu độc lập D
+
+> **Đọc trước**: [`interview/HANDOVER_INTERVIEW.md`](file:///D:/research-video/interview/HANDOVER_INTERVIEW.md) **Mục 13**, và [`audit/review/sample_d/REPORT.md`](file:///D:/research-video/audit/review/sample_d/REPORT.md). Kết luận `PARTIAL`: kho đủ chuẩn để bắt đầu học, nhưng chưa xác nhận được "không còn lỗi".
+> - **Dựng lại đợt C XONG**: 591/591 bài (02:32Z). Không bài nào FAIL; NET L04 FAIL một lần rồi đã dựng lại và PASS. Các luồng dựng đã dừng bằng `rebuild_c.stop`.
+> - **Rà ASR (HAND) xong cả 42 khoá**: 0 câu chưa xem xét. Có 42 khối đợt C (286 câu) và 10 khối đợt D. Hai câu ngắn khớp thấp đã được viết lại rồi dựng lại: ROB L10 "Tịnh tiến…" (0,571 → 0,852) và ESY L08.
+> - **Mẫu độc lập D**: 42 bài mới, hạt giống 20261110, 4 tác tử chỉ đọc.
+>   - MUST 2/42 = 4,8% (1,3–15,8%); mẫu C là 11,9%. Hai lỗi là SDP L05 (mã trên màn hình không chạy được) và CS115 L21 (tiêu đề sai về xác suất có điều kiện).
+>   - 37/42 bài có SHOULD, phần lớn là thuật ngữ chưa giảng lại tại chỗ. Không có con số nào tính sai.
+>   - Đã sửa cả 58 mục và dựng lại 37 bài, 37/37 PASS (log `audit/review/rebuild_d.out`). RLN L09 và INT L04 tràn bảng ở lần dựng đầu; đã tách bước.
+> - **Cổng cuối sau đợt D** (06:18–07:08Z):
+>   - `audit_all` 656/656 bài, 0 vấn đề. Lần chạy đầu có 166 lỗi `katex_check.js` rỗng do máy thiếu RAM; chạy lại 12 khoá bị ảnh hưởng thì 0, rồi chạy lại toàn kho lúc 07:08Z cũng 0.
+>   - `STATUS.md`: 656/656 bài hoàn thiện, 5926 phút.
+>   - check_xref 0; check_meta 0; course_refs 0; scan_ctrl 8 (lượt cố ý của JVA).
+>   - Đồ thị giáo án 0 lỗi; verify_plan_curricula 545 PASS · 0 FAIL.
+>   - tts_speed_scan 54 231 câu, 0 câu bị cắt.
+>   - av_scan 661 mp4: 0 sai định dạng, không video nào lệch quá 0,5 s.
+>   - YAML 656/656 đọc được.
+> - **Video phỏng vấn**: 92/92 bản sao trùng byte. INT 60,61, ACB 62,92, BNK 125,00, JVA 112,49 phút; tổng 361,02 phút.
+> - **Công cụ mới trong kho**: `audit/review/interview_sync_video.py` (`--check`), `audit/review/interview_gen_tables.py`, `audit/review/av_scan.py`. Đã sửa `audit/dms/asr_review_dms.py` (đo thụt lề; dừng nếu YAML vỡ) và `audit/review/asr_hand_gen.py` (thuật ngữ Việt hoá viết liền).
+> - **Nguồn đã đóng**: Adam §6.4, Ouyang 2022, Touvron 2023, GAO 1992 (xem Mục 13.1.6). **Còn mở**: Sculley 2015 (đã trích từ lần đọc trước, chưa tải lại được), NeurIPS (ECONNREFUSED), BT06 §9 (DSY L15), image-net.org, sách HCI/GFX (BN-0040).
+> - **Việc tiếp theo nên làm**: đợt D chuyên về "định nghĩa tại chỗ" trên 572 bài ngoài hai mẫu (BN-0039), rồi rút mẫu E để đo lại. Ngoài ra cần người nghe các câu trong `asr_report.md` (BN-0034).
+
+---
+
+# HANDOVER — Cập nhật phiên 2026-11-09 (chiều–tối): đọc kiểm lần ba (đợt C) + bài tự đứng được
+
+> Kết luận hiện tại `PARTIAL` (đọc kiểm XONG, dựng lại video ĐANG CHẠY). Brief: `audit/review/FULL_REVIEW_BRIEF_C.md` (mục B mới: không nhắc khoá khác trong bài/giáo án, giảng lại tại chỗ). Cổng mới: `audit/review/check_xref.py`.
+> - **Đọc kiểm XONG 42/42 khoá, 656/656 bài** (báo cáo `audit/review/full_review_c/*.md`, 45 tệp; đối chiếu tệp thật với ảnh chụp scratchpad `snap/` bằng `check_reports_c.py`: khớp, chỉ 2 "đã sửa" là sửa giáo án — CS112 L10, DMS L00). 591 bài có thay đổi lời/hình → phải dựng lại. check_xref toàn kho: 0 lượt (từ 495).
+> - Quyết định người dùng BN-0041: giữ T24 ở ACB, ghi rõ "kiến trúc tham chiếu từ kinh nghiệm ở OCB" trên màn hình + lời đọc (L00, L01, L04, L07, L08); L03/L05/L06 đổi nhãn thành "Core Banking". → CLOSED.
+> - Người điều phối sửa thêm: `audit/cs112/verify_cs112.py` chú thích C7 (vét cạn n = 8: xấu nhất 7, mảng tăng dần 6); `curriculum/rbm.yaml` L09 thêm `requires: L08`; `audit/verify_plan_curricula.py` ESY:L15 (sol 1480 phút → 49,3), CLC:L05 (88/144 giờ máy), CLC:L08 (nhãn). verify_plan_curricula 525 PASS · 0 FAIL (WEB:L04 đo thời gian Node có lúc FAIL khi máy bận — chạy lại).
+> - **Dựng lại**: bốn luồng nền `bash audit/review/rebuild_daemon_c2.sh a|b|c|d` đọc `audit/review/rebuild_c.queue` (591 bài), nhận việc bằng `mkdir audit/review/rebuild_c.claims/<KHOÁ>_<id>`, ghi `rebuild_c.done`, log `rebuild_c.{a,b,c,d}.out`; dừng bằng `touch audit/review/rebuild_c.stop` (dừng sau bài đang dựng). Lưu ý: Claude Code từng "tắt" các lệnh nền vì thiếu RAM nhưng tiến trình bash vẫn sống — kiểm bằng `Get-CimInstance Win32_Process` lọc `rebuild_daemon`, đừng khởi động thêm bản trùng. Bài bị ngắt giữa chừng: thư mục nhận còn mà chưa có dòng trong `.done` → xoá thư mục nhận để dựng lại (chỉ khi chắc chắn không còn tiến trình).
+> - Cổng toàn kho sau đọc kiểm (13:27Z): check_xref 0; scan_ctrl 8 (JVA cố ý); check_meta 0; course_refs 0; 39 bộ kiểm khoá 0 FAIL; 42 giáo án 0 lỗi; tests 0 FAIL; mẫu 0 lệch. Sau đó bổ sung `rec()` cho số mới trong ví dụ giáo án (DVO L04/06/08/09/12, ESY L10, IRS L00–L13, ROB L04 — ví dụ nay ghi "hành lang vòng", SEP L00/04/10) → verify_plan_curricula **545 PASS · 0 FAIL**, đồ thị 0 ví dụ thiếu VER.
+> - **Rà ASR (quy trình HAND)**: `audit/review/asr_hand_gen.py` đã sửa lỗi xếp nhầm từ mượn/tên riêng vào "thuần Việt" (phép thử cấu trúc âm tiết Việt + tra luật lexicon của khoá, kể cả âm tiết sinh ra từ cách đọc như "đít" của Rê-đít; bỏ `strip("\\b")` từng cắt "Bloom" thành "loom"). Driver: scratchpad `hand_apply.sh <KHOÁ>` (chặn nếu khoá còn bài chưa dựng; chèn khối → `asr_review_dms.py --course` → `sync_tpl_asr` → kiểm YAML → `lv.py asr` bài có cờ → `asr_flags`). **Đã 0 câu chưa xem xét**: INT, JVA, ACB, CS115, CSA, DBS, DMS, OSY, PLC, SDP, SWF, TOC. Bẫy thụt lề 0 lại gặp ở JVA L00, ACB L02 → `sed 's/^  - {sentence: /- {sentence: /'` + `gen.py L00`; verify cả hai vẫn PASS (không STALE).
+> - Câu ngắn khớp thấp đã viết dài ra và đưa lại vào hàng: BNK L02/L05/L09 ("Bảng … giải mã … từ"), CSA L07, JVA L00 ("lỗi khi chạy"), CS112 L24/L25 ("Ôn lại vài điều"), NET L07 ("Từ S, A tạm 4…"), DSC L06 ("Cách tính r…"); mẫu `.tpl` đã đồng bộ. OSY L09 cờ THIẾU: dãy chữ số hệ mười sáu ASR viết liền; `tts_speed_scan` 2026-11-10: 51 874 câu, 0 câu < 0,22 s/từ → lý do HAND tay.
+> - Bẫy hàng dựng: luồng ghi bài vào `.done` cả khi FAIL (NET L04 FAIL lúc tác tử PAR đang sửa `curriculum/par.yaml`; đã đưa lại vào hàng). Sau cùng phải `grep "FAIL sau\|→ FAIL" audit/review/rebuild_c.*.out` và chạy `audit_all.py` (bắt bài cũ/không PASS). TTS edge bị chặn ~120 lần với 4 luồng (mỗi lần chờ 3 phút, tự dựng lại cùng giọng) — giới hạn bên ngoài.
+> - Sau khi dựng: rà ASR (quy trình HAND, nhiều câu mới), `audit_all.py`, `tts_speed_scan.py`, `status_report.py`, đồng bộ video phỏng vấn (INT/ACB/BNK/JVA), cập nhật `interview/HANDOVER_INTERVIEW.md` Mục 13 (bản ghi kiểm chứng + nút thắt).
+> - Còn chưa kiểm được nguồn (ghi trong từng báo cáo): bài báo Adam §6.4 (CS115 L45), GAO 1992 (403), Sculley 2015 PDF, Ouyang 2022 72,6%, Touvron 2023, BT06 §9 (DSY L15), image-net.org (CVI L12 nay viết "2012 tới 2014"), Hick 1952/Hyman 1953/Nielsen & Landauer 1993/Bangor 2008 (HCI), RTR4/FCG5/Whitted/Kajiya/Schlick (GFX).
+
+---
+
+# HANDOVER — Cập nhật phiên 2026-11-09: đánh giá lại chất lượng toàn kho và đọc mẫu độc lập 42 bài
+
+> **Đọc trước**: [`interview/HANDOVER_INTERVIEW.md`](file:///D:/research-video/interview/HANDOVER_INTERVIEW.md) **Mục 12**, và [`audit/review/sample_c/REPORT.md`](file:///D:/research-video/audit/review/sample_c/REPORT.md). Kết luận `PARTIAL`: không xác nhận được "không còn lỗi".
+> - Cổng kiểm máy toàn kho đều qua: 39 bộ verify 0 FAIL; lint 656 bài 0 FAIL/0 WARN; 661 mp4 đúng định dạng, hình − tiếng ≤ 0,40 s; 51 791 câu TTS không câu nào cụt; check_meta 0 sau khi sửa (trước là 18); giáo án 525 PASS.
+> - Đọc mẫu độc lập 42 bài (mỗi khóa một bài): 5/42 bài có lỗi mức MUST (11,9%, khoảng 95% là 5,2–25,0%). Đã sửa 17 bài và giáo án ACB/INT, dựng lại 17/17 PASS. Phần còn lại của kho chưa đọc lại lần ba (BN-0039).
+> - Chờ người dùng quyết định: BN-0041 (khóa ACB dựng trên kiến trúc T24 của OCB), và có đọc lại lần ba toàn kho hay không.
+
+---
+
+# HANDOVER — Cập nhật phiên 2026-11-08/09: rà soát đợt B, 23 khóa còn lại (326 bài)
+
+> **Đọc trước**: [`interview/HANDOVER_INTERVIEW.md`](file:///D:/research-video/interview/HANDOVER_INTERVIEW.md) **Mục 11**. Kết luận `PARTIAL`.
+> - Đã làm: đọc kiểm 326/326 bài (báo cáo `audit/review/full_review_b/`), 163 bài sửa (46 MUST, 227 SHOULD), dựng lại 164 bài, tất cả PASS; 23 bộ verify khóa 0 FAIL; `verify_plan_curricula` 525 PASS; `audit_all` 656/656 bài đã dựng, chỉ còn AIF L11.
+> - Sửa công cụ: `tools/lv.py` thêm `-t <timeline>` khi ghép mp4 (luồng hình dư so với tiếng làm GFX L02 FAIL); `audit/jva/verify_jva.py` nhận `JVA_RELEASE`.
+> - Nút thắt: BN-0036 đã đóng; BN-0037 đã thu hẹp (biên dịch `--release 21` qua); mở mới BN-0038 (5 nhận định chưa mở được nguồn sơ cấp); BN-0034/0035 nay gồm cả đợt B.
+
+---
+
 # HANDOVER — Cập nhật phiên 2026-11-08 (tối): khóa JVA lập trình từ con số 0 và rà soát toàn bộ 300 bài nền
 
 > **Đọc trước**: [`interview/HANDOVER_INTERVIEW.md`](file:///D:/research-video/interview/HANDOVER_INTERVIEW.md) **Mục 10**. Kết luận `PARTIAL`, đủ chuẩn để bắt đầu học từ con số 0 (JVA → BNK → INT → ACB).

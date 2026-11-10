@@ -72,7 +72,9 @@ https://www.cs.princeton.edu/courses/archive/spr08/cos333/mars.rover.pdf (curl 2
 - §1: “NASA's Mars Exploration Rovers (MER) project landed two rovers, Spirit and Opportunity, on Mars on January 4 and January 25, 2004”.
   “An anomaly occurred on the MER-A vehicle, Spirit, on Sol 18, or January 21, 2004”. “Spirit was finally restored to its normal
   operational state on Sol 32, and nominal science activities resumed on Sol 33.” Chú thích 3: “A sol is a Martian day, 24 hours 37
-  minutes long”. “The root cause of the anomaly was a design error in the software module that provides file system services. In
+  minutes long”. **Ghi chú đợt C (2026-11-09):** 24 h 37 min là ngày SAO của sao Hoả (24,6229 h); sol là ngày MẶT TRỜI, trung bình
+  24 h 39 min 35,244 s = 24,6597 h (NASA NSSDCA, Mars Fact Sheet, D. R. Williams, truy cập 2026-11-09, no revision given — giá trị
+  chuẩn, cũng là định nghĩa “sol” của các nhiệm vụ MER). Bài dùng ≈ 1480 phút, không chép số 24 h 37 min của chú thích này. “The root cause of the anomaly was a design error in the software module that provides file system services. In
   addition, two significant configuration errors detrimentally affected the overall behavior of the system”.
 - §2 (đặt lại trễ): “If the FSW determines that a reset is necessary during the FSW initialization process, the FSW delays the actual reset
   until a minimum time period has passed. This process is referred to as a "delayed reset". The intent is to allow sufficient time for

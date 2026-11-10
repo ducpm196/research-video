@@ -118,3 +118,16 @@ viết từng đoạn — năm 2019 trong bài lấy từ mã CVE-2019-1125 đư
 - Meltdown: [KO19] mục I-D phân biệt với Spectre; bài chỉ dạy Spectre.
 - Số 200 chu kỳ (“several hundred clock cycles”), 4 vi lệnh mỗi chu kỳ, đoán đúng 95%, chương trình 60 giây, tỉ lệ song song 80% / 20%:
   SỐ MINH HOẠ, ghi rõ trên màn hình.
+
+## Đọc lại đợt C (2026-11-09, curl lại cùng hai URL: gotw.ca 54 200 byte, docs.kernel.org 51 905 byte — cùng cỡ với lần đọc 2026-11-02)
+- [HS05]: “Intel is planning to ramp up a little further to 3.73GHz in early 2005 … but the clock race really is over, at least for now”
+  → 3,73 GHz là KẾ HOẠCH, không phải “thực tế”: hook bài sửa thành “kế hoạch cho đầu 2005 chỉ là 3,73 GHz”; câu trích trên màn hình
+  thêm “ít nhất là lúc này”.
+- [HS05]: “The initial Intel and AMD designs, both due in 2005” → bài sửa “Intel và AMD ra chip hai lõi năm 2005” thành “hẹn ra trong năm 2005”.
+- [HS05]: “although a hyper-threaded CPU has some extra hardware including extra registers, it still has just one cache, one integer math unit,
+  one FPU” → khớp ô “vẫn chung một bộ nhớ đệm, một bộ tính số thực”.
+- [LK]: “vulnerable kernel code … is annotated on a case by case basis to use nospec accessor macros for bounds clipping” → khớp “nhân hệ
+  điều hành cắt chỉ số về trong biên”. “individual user programs can be compiled with return trampolines for indirect branches. This protects
+  them from consuming poisoned entries in the branch target buffer” → khớp ghi chú mới về bàn nhún trả về / nhánh gián tiếp.
+- Định nghĩa “vi lệnh”, “bộ đệm sắp xếp lại”, “vi mã”, “luồng” thêm ở đợt C là định nghĩa sách giáo khoa (Patterson & Hennessy, Computer
+  Organization and Design, chương 4 về thực thi động và vi lệnh), không phải câu trích nguồn.

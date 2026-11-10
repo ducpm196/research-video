@@ -48,3 +48,18 @@ u3 = vs["d3"] / np.linalg.norm(vs["d3"])
 rec("L02h", abs(cs(q3, vs["d3"]) - 1) < 1e-12 and round(cs(q3, vs["d2"]), 3) == 0.346 and [round(x, 3) for x in u3[2:]] == [0.346, 0.938]
     and abs(float(u3 @ (q3 / np.linalg.norm(q3))) - cs(q3, vs["d3"])) < 1e-12, "quiz: d3 1, d2 0,346; chuẩn hoá (0,346; 0,938), tích = cosin")
 rec("L02i", df.get("sạc", 0) == 0, "từ “sạc” không có trong kho: df = 0 (không lấy được lôgarit)")
+# sửa 2026-11-09 — ôn nền giảng lại trong bài: e, ln; tích vô hướng, độ dài, cosin (numpy)
+u, v = np.array([1, 2, 0]), np.array([2, 3, 1])
+rec("L02j", round(float(sp.E), 3) == 2.718 and sp.log(sp.E) == 1 and round(math.exp(1.099), 3) == 3.001
+    and int(u @ v) == 8 and round(float(np.linalg.norm(u)), 3) == 2.236 and round(float(np.linalg.norm(v)), 3) == 3.742
+    and round(cs(u, v), 3) == 0.956 and abs(cs(u, 2 * u) - 1) < 1e-12 and cs(np.array([1, 0]), np.array([0, 1])) == 0,
+    "e ≈ 2,718; e^1,099 ≈ 3,001; u·v = 8; ‖u‖ 2,236; ‖v‖ 3,742; cos 0,956; cùng hướng 1; vuông góc 0")
+# lỗi 2 (làm trơn ln((N+1)/(df+1))) và lỗi 4 (bão hoà tf/(tf+1)): đếm lại theo kho
+sm = lambda t: math.log((N + 1) / (df.get(t, 0) + 1))
+sat = [sp.Rational(t, t + 1) for t in (1, 2, 5, 100)]
+rec("L02k", round(sm("sạc"), 3) == 1.386 and sm("máy") == 0 and [round(float(x), 3) for x in sat] == [0.5, 0.667, 0.833, 0.99]
+    and sat[2] / sat[0] == sp.Rational(5, 3) and round(float(sat[2] / sat[0]), 2) == 1.67,
+    "làm trơn: sạc ln 4 ≈ 1,386, máy 0; bão hoà 0,5; 0,667; 0,833; 0,990; lặp 5 lần gấp 5/3 ≈ 1,67")
+rec("L02l", [round(x, 4) for x in vs["d3"][2:]] == [0.4055, 1.0986] and round(float(np.linalg.norm(vs["d3"])), 4) == 1.171
+    and round(0.4055 / 1.1710, 3) == 0.346 and round(1.0986 / 1.1710, 3) == 0.938 and round(2 * 1.0986, 3) == 2.197,
+    "số 4 chữ số trên màn hình: 0,4055; 1,0986; ‖d3‖ 1,1710 → (0,346; 0,938); 2 · 1,0986 ≈ 2,197")

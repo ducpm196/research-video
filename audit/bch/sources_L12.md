@@ -130,6 +130,28 @@ Tải: https://ethereum.org/en/developers/docs/consensus-mechanisms/pos/ (curl, 
   attestations.” “an immediate penalty (1/4096 of the validator's effective balance, up to 0.5 ETH) on Day 1, the correlation penalty on
   Day 18, and finally, ejection from the network on Day 36.”
 
+## [E25] Pectra/Electra — thêm 2026-11-08 khi đọc kiểm (con số 0,33% của [E22] là cách tính TRƯỚC Pectra)
+Tải bằng WebFetch, truy cập 2026-11-08: https://ethereum.org/en/roadmap/pectra/ (no revision given) và
+https://raw.githubusercontent.com/ethereum/consensus-specs/master/specs/electra/beacon-chain.md (nhánh master, no revision given).
+- Pectra: “This upgrade was successfully activated on Ethereum mainnet at epoch 364032, on 07-May-2025 at 10:05 (UTC).”; EIP-7251 “raises
+  the maximum possible effective balance to 2048 ETH”.
+- Electra spec: “MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT | Gwei(2**8 * 10**9) (= 256,000,000,000)”; “MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA |
+  Gwei(2**7 * 10**9)”; “MIN_SLASHING_PENALTY_QUOTIENT_ELECTRA | uint64(2**12) (= 4,096)” (khớp “1/4096 … up to 0.5 ETH” của [E22p]:
+  2048 / 4096 = 0,5); `get_activation_exit_churn_limit` = min(MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT, get_balance_churn_limit(state)).
+- VER: 86 400 / 384 = 225 kỷ nguyên mỗi ngày; 225 · 256 = 57 600 ETH mỗi ngày là trần rút. Bài KHÔNG đổi ra phần trăm (tổng cổ phần hiện
+  tại không có nguồn đã đọc) — chỉ nói “tỉ lệ còn thấp hơn khi tổng cổ phần lớn”. Bài giữ 0,33% / 303 ngày như con số của trang chính thức,
+  ghi rõ là cách tính cũ.
+
+## [CS] ethereum/consensus-specs (nhánh master, truy cập 2026-11-09, no revision given) — thêm khi đọc kiểm lần ba (BN-0038)
+Tải bằng curl: specs/phase0/beacon-chain.md, specs/altair/beacon-chain.md, specs/bellatrix/beacon-chain.md, specs/electra/beacon-chain.md.
+- phase0: “`MIN_EPOCHS_TO_INACTIVITY_PENALTY` | `Epoch(2**2)` (= 4)”; `is_in_inactivity_leak`: “return get_finality_delay(state) > MIN_EPOCHS_TO_INACTIVITY_PENALTY”.
+- altair `get_inactivity_penalty_deltas`: “Return the inactivity penalty deltas by considering timely target participation flags and inactivity
+  scores.” — phạt mọi người xác thực `not in matching_target_indices` (không có cờ TIMELY_TARGET ở kỷ nguyên trước); `process_inactivity_updates`:
+  “Increase the inactivity score of inactive validators”. → Bị rút dần là bên KHÔNG bỏ phiếu đúng hạn cho điểm mốc của chuỗi này (vắng mặt
+  hoặc bỏ phiếu cho nhánh khác), không phải “bên bỏ phiếu ngược đa số” nói chung. Câu L12 stage5 đã sửa theo đây (BN-0038).
+- bellatrix: “`MIN_SLASHING_PENALTY_QUOTIENT_BELLATRIX` | `Uint64(2**5)` (= 32)”; electra: “`MIN_SLASHING_PENALTY_QUOTIENT_ELECTRA` | `Uint64(2**12)`
+  (= 4,096)”. → mức phạt ngày đầu 1/4096 của [E22p] là mức từ Pectra/Electra (7/5/2025); từ Hợp nhất (Bellatrix) tới đó là 1/32. Bài ghi cả hai.
+
 ## Con số tính lại (VER — `checks` của bài và audit/bch/verify_bch.py L12)
 - 80 · 6 · 24 · 365 = 4 204 800 byte ≈ 4,2 MB mỗi năm (khớp [N08]); 2 · 10⁹ byte (2 GB) chia 4 204 800 ≈ 475 năm tiêu đề.
 - Giao dịch 250 byte có 100 byte chữ ký (SỐ MINH HOẠ): trọng lượng 3 · 150 + 250 = 700; 4 000 000 / 700 ≈ 5714 giao dịch, hơn 4000 khoảng 43 %

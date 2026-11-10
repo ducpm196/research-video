@@ -2,7 +2,8 @@
 Từ vựng: ôtômat viết tay đọc từng ký tự (không dùng re). Cú pháp, kết hợp, ưu tiên: bộ phân tích `ast` của chính Python.
 Phạm vi tĩnh: chạy mã Python thật; phạm vi động: mô phỏng ngăn xếp lời gọi. Hợp nhất: thuật toán Robinson với phép hợp thế.
 Đánh dấu–quét: BFS (checklib dùng DFS). Máy ngăn xếp: so với eval của Python. Gấp hằng số: so với bộ tối ưu của trình biên dịch
-CPython (hằng số trong co_consts). JavaScript: chạy Node thật. C/C++: không có trình biên dịch trên máy → NOT_VERIFIED, ghi rõ.
+CPython (hằng số trong co_consts). JavaScript: chạy Node thật. Java: javac/java/javap thật (L05d–f, L09e, L10b; thêm 2026-11-09). C/C++: không có trình biên dịch
+trên máy → NOT_VERIFIED, ghi rõ.
 Chạy: .venv/Scripts/python audit/plc/verify_plc.py → PASS/FAIL từng dòng và tổng."""
 import ast
 import shutil
@@ -120,7 +121,47 @@ else:
     print("NOT_VERIFIED L05a — không có Node")
 rec("L05b", alg.py_add_error("3", 1) == "TypeError", "Python: \"3\" + 1 → TypeError khi chạy")
 rec("L05c", struct.unpack("<I", struct.pack("<f", 1.0))[0] == 0x3F800000 == 1065353216, "bit của 1.0f đọc như số nguyên 32 bit = 1065353216")
-print("NOT_VERIFIED L05d — Java `int x = \"3\" + 1;` lỗi biên dịch: không có javac trên máy (JLS 17 §5.2: String không gán được vào int)")
+# Java thật (JDK trên PATH, thêm 2026-11-09 đợt C): biên dịch trong thư mục tạm, đọc thông báo javac / chạy java / đọc javap.
+import tempfile  # noqa: E402
+
+javac, java, javap = shutil.which("javac"), shutil.which("java"), shutil.which("javap")
+
+
+def jrun(files, main=None, javap_cls=None):
+    """Biên dịch {tên tệp: mã}; trả (mã thoát javac, stderr javac, stdout java hoặc javap)."""
+    with tempfile.TemporaryDirectory() as d:
+        for n, s in files.items():
+            (Path(d) / n).write_text(s, encoding="utf-8")
+        c = subprocess.run([javac, *files], cwd=d, capture_output=True, text=True)
+        out = ""
+        if c.returncode == 0 and main:
+            out = subprocess.run([java, "-cp", d, main], capture_output=True, text=True).stdout
+        if c.returncode == 0 and javap_cls:
+            out = subprocess.run([javap, "-c", "-v", "-cp", d, javap_cls], capture_output=True, text=True).stdout
+        return c.returncode, c.stderr, out
+
+
+if javac and java and javap:
+    rc, err, _ = jrun({"A.java": 'public class A { public static void main(String[] a) { int x = "3" + 1; } }'})
+    rec("L05d", rc != 0 and "incompatible types: String cannot be converted to int" in err, "javac: int x = \"3\" + 1; → lỗi biên dịch (JLS §5.2)")
+    rc, _, out = jrun({"B.java": 'public class B { public static void main(String[] a) { System.out.println("3" + 1); } }'}, main="B")
+    rec("L05e", rc == 0 and out.strip() == "31", "java: \"3\" + 1 → \"31\" (đổi số thành chuỗi, JLS §15.18.1)")
+    bad = [jrun({"C.java": 'public class C { Object x = "%s" %s 2; }' % (s, op)})[1] for s, op in (("3", "*"), ("5", "-"))]
+    rec("L05f", all("bad operand types" in e for e in bad), "javac: \"3\" * 2 và \"5\" - 2 → lỗi biên dịch (không tự đổi chuỗi thành số)")
+    rc, _, out = jrun({"S.java": "import java.util.*;\npublic class S {\n static void them(List<Integer> ds){ ds.add(1); }\n"
+                       " static void ganLai(List<Integer> ds){ ds = new ArrayList<>(List.of(9)); }\n"
+                       " static void doiCho(Integer p, Integer q){ Integer t = p; p = q; q = t; }\n"
+                       " public static void main(String[] x){ List<Integer> a = new ArrayList<>(List.of(0)); them(a);\n"
+                       "  List<Integer> b = new ArrayList<>(List.of(0)); ganLai(b); Integer p = 1, q = 2; doiCho(p, q);\n"
+                       "  System.out.println(a + \" \" + b + \" \" + p + \",\" + q); } }"}, main="S")
+    rec("L09e", out.strip() == "[0, 1] [0] 1,2", f"Java chia sẻ đối tượng: sửa thấy, gán lại không, hoán đổi không → {out.strip()}")
+    rc, _, out = jrun({"M.java": "public class M {\n static int trai(int a,int b,int c,int d){ return ((a+b)+c)+d; }\n"
+                       " static int phai(int a,int b,int c,int d){ return a+(b+(c+d)); }\n}"}, javap_cls="M")
+    import re as _re  # noqa: E402
+    st = _re.findall(r"static int (\w+)\(.*?stack=(\d+)", out, _re.S)
+    rec("L10b", st == [("trai", "2"), ("phai", "4")], f"máy ảo Java: hàm khai độ cao tối đa (max_stack, JVMS §4.7.3): lệch trái 2, lệch phải 4 → {st}")
+else:
+    print("NOT_VERIFIED L05d/L05e/L05f/L09e/L10b — không có javac/java/javap trên máy")
 
 
 # ── L06: hợp nhất Robinson ──

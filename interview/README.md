@@ -4,13 +4,13 @@
 > **Mục tiêu**: hiểu chắc các chủ đề trong JD ACB (`resources/job/JD.md`) và trong CV của ứng viên, trả lời được khi bị hỏi sâu, và đề xuất mức **50,000,000 VND gross/tháng** có căn cứ. Thu nhập năm nếu đạt mức này: **700 – 850 triệu VND** = 50 triệu × (13 tháng cố định + 1–4 tháng thưởng tùy xếp loại, theo tin tuyển dụng ACB). Không tài liệu nào ở đây bảo đảm kết quả phỏng vấn hay mức lương.
 > **Mục lục và số đo video (nguồn duy nhất)**: [`MASTER_CURRICULUM_INDEX.md`](file:///D:/research-video/interview/MASTER_CURRICULUM_INDEX.md).
 > **Bản đồ toàn bộ thư viện video (`out/`)**: [`SOURCE_CODE_VIDEO_MAP.md`](file:///D:/research-video/interview/SOURCE_CODE_VIDEO_MAP.md).
-> **Trạng thái, bằng chứng kiểm chứng và việc còn mở**: [`HANDOVER_INTERVIEW.md`](file:///D:/research-video/interview/HANDOVER_INTERVIEW.md) Mục 7–10.
+> **Trạng thái, bằng chứng kiểm chứng và việc còn mở**: [`HANDOVER_INTERVIEW.md`](file:///D:/research-video/interview/HANDOVER_INTERVIEW.md) Mục 7–11.
 
 ---
 
 ## 1. XEM VIDEO CÓ ĐỦ KHÔNG?
 
-**Không, nếu chỉ xem 9 video ACB (khoảng 50 phút).** Video ACB và INT là bản tóm tắt cho người đã có nền. Người **chưa từng lập trình** học khóa **JVA** (13 bài, `out/JVA/`, mọi chương trình trong bài đã được biên dịch và chạy thật) trước, rồi khóa **BNK** (15 bài, `out/BNK/`), tự làm phần "Đến lượt bạn" ra giấy, rồi mới sang INT/ACB và ngân hàng 100 câu hỏi.
+**Không, nếu chỉ xem 9 video ACB (khoảng 63 phút).** Video ACB và INT là bản tóm tắt cho người đã có nền. Người **chưa từng lập trình** học khóa **JVA** (13 bài, `out/JVA/`, mọi chương trình trong bài đã được biên dịch và chạy thật) trước, rồi khóa **BNK** (15 bài, `out/BNK/`), tự làm phần "Đến lượt bạn" ra giấy, rồi mới sang INT/ACB và ngân hàng 100 câu hỏi.
 
 Những điều *chưa có nguồn* đã bị gỡ khỏi tài liệu (rà soát 2026-11-08): thành phần hội đồng phỏng vấn ACB, quy tắc "dưới X năm BHXH thì hạ lương", và việc ACB dùng Temenos T24 (JD không nêu hệ thống lõi của ACB).
 

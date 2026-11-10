@@ -25,6 +25,11 @@ Tải: raw.githubusercontent.com/percona/percona-toolkit/3.x/bin/pt-online-schem
 - `--chunk-size`: “type: size; default: 1000 — Number of rows to select for each chunk copied.” (giá trị khởi đầu khi tự chỉnh theo chunk-time)
 - `--max-load`: “default: Threads_running=25 — Examine SHOW GLOBAL STATUS after every chunk, and pause if any status variables are higher than
   their thresholds.”
+- Bổ sung đợt C 2026-11-09 (curl raw.githubusercontent.com/percona/percona-toolkit/3.x/bin/pt-online-schema-change, VERSION “pt-online-schema-change
+  3.7.2”): DESCRIPTION “The use of triggers means that the tool will not work if any triggers are already defined on the table.”;
+  `--preserve-triggers`: “As of MySQL 5.7.2, it is possible to define multiple triggers for a given table that have the same trigger event and
+  action time. This allows us to add the triggers needed for pt-online-schema-change even if the table already has its own triggers.” → bài ghi
+  “theo tài liệu, bảng chưa có bộ kích hoạt nào (bản mới có tuỳ chọn nới điều kiện này)”; điều kiện khoá chính ghi “hầu như luôn” theo “In most cases”.
 - ABOUT PERCONA TOOLKIT: “Percona Toolkit was forked from two projects in June, 2011: Maatkit and Aspersa.” COPYRIGHT: “This program is
   copyright 2011-2026 Percona LLC and/or its affiliates.”
 
@@ -120,7 +125,7 @@ Tải: dev.mysql.com/doc/relnotes/mysql/8.0/en/news-8-0-29.html (WebFetch).
 ## Điều KHÔNG dạy (nguồn không ghi)
 - Năm ra đời riêng của pt-online-schema-change: [PT11] chỉ ghi bộ công cụ tách ra tháng 6/2011 và bản quyền từ 2011; [GH16] ghi công cụ loại
   này có “since 2009”. Bài nói “từ 2009, và trong bộ công cụ năm 2011”, không nói tên công cụ đầu tiên hay tác giả.
-- Số dòng, kích thước bảng, thời gian thật của một lần đổi lược đồ ở GitHub hay Stripe: không có. Bảng 5 triệu dòng, 200 GB, 28 giờ chép,
+- Số dòng, kích thước bảng, thời gian thật của một lần đổi lược đồ ở GitHub hay Stripe: không có. Bảng 5 triệu dòng (cỡ ≈ 0,4 GB tính lại từ 50 000 trang 8 KB; đợt C thay “200 GB” cũ vốn mâu thuẫn với 100 dòng mỗi trang), 28 giờ chép,
   1000 tiến trình, 2 cột mỗi tháng là SỐ MINH HOẠ, ghi rõ trên màn hình.
 - Khi chạm giới hạn 64 phiên bản dòng thì MySQL làm gì: [MY22] không ghi → không dạy; chỉ dạy “theo dõi cột đếm”.
 - Phiên bản 8.0.x cụ thể của bài blog [MY18]: blog không ghi; lấy từ release notes 8.0.12.

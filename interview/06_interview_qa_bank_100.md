@@ -408,12 +408,12 @@
 ### Câu 66: Mô tả luồng bản tin kỹ thuật khi khách hàng dùng ACB One chuyển khoản 247 sang ngân hàng khác qua NAPAS.
 - **Trả lời**:
   1. App gọi API Gateway ACB $\to$ Gateway kiểm tra xác thực phiên/thiết bị; với giao dịch trên 10 triệu đồng hoặc làm tổng trong ngày vượt 20 triệu đồng thì bắt buộc xác thực sinh trắc học theo QĐ 2345/QĐ-NHNN.
-  2. Service Chuyển tiền gọi Core Banking T24 trích nợ tài khoản khách hàng ACB (giữ trạng thái `HOLD` tiền hoặc trích nợ thành công).
+  2. Service Chuyển tiền gọi core banking trích nợ tài khoản khách hàng (giữ trạng thái `HOLD` tiền hoặc trích nợ thành công). JD của ACB không nêu ACB dùng core nào; khi kể ví dụ, nói rõ T24 là hệ đã làm ở OCB.
   3. Adapter chuyển tiền đóng gói bản tin theo đặc tả kết nối NAPAS 247 (gốc ISO 8583, ví dụ **MTI 0200**; đặc tả hiện hành cần kiểm với tài liệu NAPAS) gửi qua TCP Socket sang NAPAS Switch.
   4. NAPAS Switch định tuyến bản tin sang Ngân hàng thụ hưởng (Beneficiary Bank).
   5. Ngân hàng thụ hưởng ghi có tiền vào tài khoản người nhận và trả bản tin **MTI 0210** với `Field 39 = 00` về NAPAS.
   6. NAPAS chuyển tiếp bản tin `0210` về Gateway ACB.
-  7. Gateway ACB giải mã bản tin, cập nhật trạng thái lệnh thành `COMPLETED`, giải tỏa hold tiền trên Core T24 và bắn push notification cho khách hàng qua Kafka.
+  7. Gateway ACB giải mã bản tin, cập nhật trạng thái lệnh thành `COMPLETED`, chuyển khoản hold thành trích nợ chính thức trên core banking (nếu bước 2 mới giữ hold) và bắn push notification cho khách hàng qua Kafka.
 
 ### Câu 67: Nếu gửi bản tin MTI 0200 sang NAPAS nhưng bị timeout mạng không nhận được phản hồi 0210, hệ thống phải xử lý như thế nào?
 - **Trả lời**:

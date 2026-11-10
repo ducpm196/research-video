@@ -165,7 +165,7 @@ public class DoanHam {
                   ["③ biến mảng giữ tham chiếu", "<code>long[] b = a;</code> thì <code>b</code>, <code>a</code> chung một mảng", "hàm nhận mảng"]]),
            """Trước hết ta ôn lại ba điều. Thứ nhất, hàm chính là nơi chương trình bắt đầu chạy, và bạn đã viết nó từ chương trình đầu tiên.
            Thứ hai, lệnh rẽ nhánh nếu, nếu không thì nếu, chọn một bậc phí theo số tiền.
-           Thứ ba, biến mảng chỉ giữ tham chiếu, nên hai biến có thể cùng trỏ vào một mảng.""", focus=[1, "1.2", "1.3", "1.4"]),
+           Thứ ba, biến mảng chỉ giữ tham chiếu, tức mũi tên chỉ tới dãy ô trong bộ nhớ, nên hai biến có thể cùng trỏ vào một mảng.""", focus=[1, "1.2", "1.3", "1.4"]),
     ])
     sc_sym = sc("sym", "symbol", "Giải mã ký hiệu của một hàm", [
         st(code_block(phi, lines=(p_head, p_head + 7), title="Tệp Phi.java: hàm tính phí")
@@ -173,14 +173,14 @@ public class DoanHam {
            """Đây là hàm tính phí chuyển khoản, với biểu phí là số minh hoạ. Bên dưới là ba lời gọi hàm từ hàm chính.""",
            focus=[2, 3]),
         st(table(["viết", "nghĩa"],
-                 [["<code>static</code>", "hàm thuộc về lớp, nên hàm chính gọi thẳng được"],
+                 [["<code>static</code>", "<b>tĩnh</b>: hàm thuộc về lớp (cái hộp chứa mã, ở đây là <code>Phi</code>), không cần tạo gì thêm, nên hàm chính gọi thẳng được"],
                   ["<code>long</code> trước tên", "<b>kiểu trả về</b>: hàm trả ra một số kiểu <code>long</code>"],
                   ["<code>tinhPhi</code>", "tên hàm, thường là động từ: tính, kiểm, đổi…"],
                   ["<code>(long soTien)</code>", "<b>tham số</b>: biến nhận giá trị mỗi lần hàm được gọi"],
                   ["<code>return 2200;</code>", "trả giá trị về chỗ gọi và <b>kết thúc hàm ngay</b>"],
                   ["<code>tinhPhi(2000000)</code>", "<b>lời gọi</b>; 2000000 là đối số, được chép vào <code>soTien</code>"],
                   ["<code>void</code>", "đứng chỗ kiểu trả về: hàm <b>không</b> trả giá trị nào"]]),
-           """Từ khoá tĩnh nghĩa là hàm thuộc về lớp, nên hàm chính gọi thẳng được.
+           """Từ khoá tĩnh nghĩa là hàm thuộc về lớp, tức cái hộp chứa mã mang tên Phi, không cần tạo thêm gì, nên hàm chính gọi thẳng được.
            Chữ đứng trước tên hàm là kiểu trả về, ở đây là số nguyên dài.
            Tên hàm thường là một động từ, như tính, kiểm, đổi.
            Trong ngoặc tròn là tham số, nhận giá trị mỗi lần hàm được gọi.
@@ -238,7 +238,7 @@ public class DoanHam {
            focus=[2, "4.1", "4.2", "4.3"]),
         st("<p><b>Bước 4. Nạp chồng:</b> cùng tên, khác danh sách tham số.</p>"
            + code_block(nap, lines=(n2, n2 + 2)) + out_block(nap),
-           """Bước bốn, nạp chồng. Hai hàm được trùng tên nếu danh sách tham số khác nhau, và máy chọn hàm theo số lượng và kiểu đối số.
+           """Bước bốn, nạp chồng. Hai hàm được trùng tên nếu danh sách tham số khác nhau, và trình biên dịch chọn hàm theo số lượng và kiểu đối số.
            Gọi thêm số lần là ba thì ra sáu nghìn sáu trăm, vì hai nghìn hai trăm nhân ba.""", focus=[1, 2, 4]),
     ], checks=["[(0 if x < 500000 else (2200 if x < 10000000 else 5500)) for x in [300000, 2000000, 10000000]] == [0, 2200, 5500]",
                "2200 * 3 == 6600"])
@@ -287,8 +287,9 @@ public class DoanHam {
         st('<div class="box warn"><b>Lỗi 1 (người mới).</b> Dùng biến của hàm khác.</div>'
            + code_block(pham_vi, lines=(3, 10)) + out_block(pham_vi, "Trình biên dịch báo"),
            """Lỗi thứ nhất, của người mới, là dùng biến khai bên trong một hàm khác. Biến phí chỉ sống bên trong hàm tính phí.
-           Ra khỏi cặp ngoặc nhọn của hàm đó, tên này không còn tồn tại, nên trình biên dịch báo không tìm thấy ký hiệu.""",
-           focus=[1, 2, 4]),
+           Vùng mã mà một tên biến dùng được gọi là phạm vi của biến, ở đây là cặp ngoặc nhọn của hàm tính phí.
+           Ra khỏi phạm vi đó, tên này không còn tồn tại, nên trình biên dịch báo không tìm thấy ký hiệu.""",
+           focus=[1, 2, 2, 4]),
         st('<div class="box warn"><b>Lỗi 2 (người mới).</b> Có nhánh không trả về giá trị.</div>'
            + code_block(thieu, lines=(3, 9)) + out_block(thieu, "Trình biên dịch báo"),
            """Lỗi thứ hai là quên lệnh trả về ở một nhánh. Hàm hứa trả về số nguyên dài, nhưng khi số tiền từ mười triệu trở lên thì không có lệnh trả về nào chạy.
@@ -312,7 +313,7 @@ public class DoanHam {
            Dòng thứ nhất là năm mười."""),
         st("<p>Dòng thứ hai: bản hai tham số gọi bản một tham số ba lần.</p>"
            "$$5 \\to 10 \\to 20 \\to \\hl{40}$$",
-           """Dòng thứ hai, máy chọn bản hai tham số vì có hai đối số. Vòng lặp chạy ba lần, mỗi lần gọi bản một tham số, nên năm thành mười, rồi hai mươi, rồi bốn mươi."""),
+           """Dòng thứ hai, trình biên dịch chọn bản hai tham số vì có hai đối số. Vòng lặp chạy ba lần, mỗi lần gọi bản một tham số, nên năm thành mười, rồi hai mươi, rồi bốn mươi."""),
         st(out_block(quiz),
            """Chạy thật chương trình, hai dòng in ra đúng là năm mười, và bốn mươi."""),
     ], checks=["5 * 2 == 10", "5 * 2 ** 3 == 40"])

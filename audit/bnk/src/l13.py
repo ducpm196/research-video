@@ -17,13 +17,20 @@ def build():
            """Bảng này là kế hoạch bài học. Che dữ liệu bằng cách che số thẻ và không ghi PIN. Không lộ khoá nhờ thiết bị HSM giữ khoá và mã hoá khối PIN. Phát hiện sửa bản tin bằng mã xác thực bản tin.
            Xác thực người dùng bằng sinh trắc học theo Quyết định hai nghìn ba trăm bốn mươi lăm."""),
     ])
-    pre = sc("prereq", "prereq", "Ôn lại ba điều sẽ dùng", [
+    pre = sc("prereq", "prereq", "Trước hết: những điều cần hiểu", [
         st(table(["khái niệm", "nghĩa", "ví dụ"],
-                 [["① XOR", "so từng bit: giống nhau cho 0, khác nhau cho 1; làm hai lần thì về ban đầu", "0111 XOR 0101 = 0010"],
-                  ["② Hàm băm", "biến dữ liệu thành dãy cố định; đổi một chút dữ liệu, dãy đổi hoàn toàn", "SHA-256"],
-                  ["③ Khoá bí mật", "chuỗi chỉ hai bên biết, dùng để chứng minh người gửi", "khoá K"]]),
-           """Ôn ba điều. Phép XOR so từng bit, giống nhau cho không, khác nhau cho một, và làm hai lần thì trở về ban đầu. Hàm băm biến dữ liệu thành một dãy cố định, đổi một chút dữ liệu thì dãy đổi hoàn toàn.
-           Khoá bí mật là chuỗi chỉ hai bên biết, dùng để chứng minh người gửi."""),
+                 [["① PIN", "mã số bí mật vài chữ số khách gõ khi dùng thẻ", "1234 (số thử)"],
+                  ["② Bit, hex, byte", "bit là chữ số 0 hoặc 1; một chữ số hex (thập lục phân, 0–9 rồi A–F) gồm 4 bit; một byte là 8 bit, viết bằng 2 chữ số hex", "F = 1111, byte 34 = 0011 0100"],
+                  ["③ Mã hoá và khoá mật mã", "mã hoá biến dữ liệu rõ thành dãy không đọc được; chỉ ai có khoá (một chuỗi bí mật) mới giải ra được", "khoá K"]]),
+           """Trước hết ta cần hiểu vài điều. PIN là mã số bí mật vài chữ số mà khách gõ khi dùng thẻ.
+           Bit là chữ số không hoặc một. Một chữ số thập lục phân, từ không tới chín rồi A tới F, gồm bốn bit, và một byte là tám bit, viết bằng hai chữ số thập lục phân.
+           Mã hoá là biến dữ liệu rõ thành một dãy không đọc được, và chỉ ai có khoá, tức một chuỗi bí mật, mới giải ra được. Chữ khoá ở bài này là khoá mật mã."""),
+        st(table(["khái niệm", "nghĩa", "ví dụ"],
+                 [["④ XOR", "so từng bit: giống nhau cho 0, khác nhau cho 1; làm hai lần thì về ban đầu", "0111 XOR 0101 = 0010"],
+                  ["⑤ Hàm băm", "biến dữ liệu thành dãy cố định; đổi một chút dữ liệu, dãy đổi hoàn toàn", "SHA-256"],
+                  ["⑥ Khoá bí mật dùng chung", "khoá chỉ hai bên biết, dùng để chứng minh người gửi", "khoá K"]]),
+           """Phép XOR so từng bit, giống nhau cho không, khác nhau cho một, và làm hai lần thì trở về ban đầu. Hàm băm biến dữ liệu thành một dãy cố định, đổi một chút dữ liệu thì dãy đổi hoàn toàn.
+           Khoá bí mật dùng chung là khoá chỉ hai bên biết, dùng để chứng minh người gửi.""", clear=True),
         st("""$$0111 \\text{ XOR } 0101 = 0010$$""",
            """Một ví dụ XOR. Không một một một XOR không một không một bằng không không một không. Bit nào khác nhau thì thành một."""),
     ], checks=["0b0111 ^ 0b0101 == 0b0010", "(0b0111 ^ 0b0101) ^ 0b0101 == 0b0111"])
@@ -44,8 +51,9 @@ def build():
                box(700, 140, 300, 110, ["HSM chặng giữa", "dịch TPK/ZPK → ZPK"], C_GRAY, size=22),
                box(1070, 140, 380, 110, ["HSM ngân hàng phát hành", "kiểm PIN trong hộp kín"], C_GREEN, bold=True, size=22),
                arrow(270, 195, 325, 195), arrow(630, 195, 695, 195), arrow(1000, 195, 1065, 195),
-               txt(750, 310, "Mỗi chặng chỉ DỊCH khối PIN sang khoá của chặng sau; PIN rõ không ra khỏi HSM", 24, "middle", "#1f2937", True),
-               txt(750, 350, "Khoá làm việc được bọc bằng ZMK khi trao đổi, bằng LMK khi lưu", 24, "middle", "#475569")),
+               txt(750, 300, "Mỗi chặng chỉ DỊCH khối PIN sang khoá của chặng sau; PIN rõ không ra khỏi HSM", 24, "middle", "#1f2937", True),
+               txt(750, 338, "TPK: khoá của thiết bị đầu cuối; ZPK: khoá PIN dùng chung giữa hai chặng", 22, "middle", "#475569"),
+               txt(750, 372, "Khoá làm việc được bọc bằng ZMK (khoá trao đổi) khi gửi, bằng LMK (khoá chủ của HSM) khi lưu", 22, "middle", "#475569")),
            """Hình cho thấy hành trình của mã PIN. Người dùng gõ PIN. Thiết bị đầu cuối mã hoá ngay bằng khoá của thiết bị.
            Ở mỗi chặng giữa, như ngân hàng thanh toán hay chuyển mạch, thiết bị HSM chỉ dịch khối PIN từ khoá của chặng trước sang khoá của chặng sau.
            PIN rõ không bao giờ ra khỏi HSM.
@@ -68,9 +76,10 @@ def build():
         st("""<p><b>Bước 2.</b> MAC tính từ <b>khoá bí mật và nội dung</b>. Sửa một ký tự thì MAC mới khác MAC cũ, bên nhận phát hiện ngay.</p>
 <span class='note'>Làm thử: tiền $500\\,000$ đổi thành $900\\,000$ → MAC khác.</span>""",
            """Bước hai, vì MAC được tính từ khoá bí mật và nội dung, nên sửa một ký tự thì MAC mới khác MAC cũ, và bên nhận phát hiện ngay. Làm thử, đổi tiền từ năm trăm nghìn thành chín trăm nghìn thì MAC khác hẳn."""),
-        st("""<p><b>Bước 3.</b> Theo Quyết định 2345/QĐ-NHNN (hiệu lực 01/07/2024), chuyển tiền trực tuyến <b>trên $10$ triệu đồng</b> một giao dịch, hoặc khi <b>tổng trong ngày vượt $20$ triệu đồng</b>, phải xác thực sinh trắc học.</p>
+        st("""<p><b>Bước 3.</b> Theo Quyết định 2345/QĐ-NHNN của Ngân hàng Nhà nước (ký 18/12/2023, hiệu lực 01/07/2024), chuyển tiền trực tuyến <b>trên $10$ triệu đồng</b> một giao dịch, hoặc khi <b>tổng trong ngày vượt $20$ triệu đồng</b>, phải xác thực sinh trắc học.</p>
 <span class='note'>Làm thử: $15$ triệu → cần. $5$ triệu, ngày chưa có gì → không.</span>""",
-           """Bước ba nói về Quyết định hai nghìn ba trăm bốn mươi lăm, có hiệu lực từ ngày một tháng bảy năm hai nghìn không trăm hai mươi tư.
+           """Bước ba nói về Quyết định hai nghìn ba trăm bốn mươi lăm của Ngân hàng Nhà nước, ký ngày mười tám tháng mười hai năm hai nghìn không trăm hai mươi ba.
+           Quyết định này có hiệu lực từ ngày một tháng bảy năm hai nghìn không trăm hai mươi tư.
            Theo quyết định này, chuyển tiền trực tuyến phải xác thực sinh trắc học khi một giao dịch trên mười triệu đồng.
            Khi tổng trong ngày vượt hai mươi triệu đồng cũng phải xác thực. Làm thử, mười lăm triệu thì cần, năm triệu khi ngày chưa có giao dịch nào thì không."""),
     ], checks=["alg.bnk_pin_block0('1234', '4111111111111111') == '041225EEEEEEEEEE'", "alg.bnk_mac('k', 'amt=500000') != alg.bnk_mac('k', 'amt=900000')",
@@ -94,13 +103,17 @@ $$⑤ \\; 8 + 8 = 16 \\le 20\\ \\text{(không)},\\quad 16 + 8 = 24 > 20\\ \\Righ
                "not " + NEED + "(8000000, 8000000) and " + NEED + "(8000000, 16000000)", "8 + 8 == 16 <= 20 < 16 + 8"])
     chk = sc("check", "check", "Tự kiểm bằng đường khác: Luhn, che số thẻ và MAC", [
         st("""<p>Đường khác cho ba việc: (a) số thẻ thử qua phép kiểm <b>Luhn</b>; (b) che thẻ giữ $6$ số đầu và $4$ số cuối; (c) đổi một chữ số trong bản tin thì <b>MAC khác</b>.</p>
-$$\\text{(b)}\\ \\mathtt{411111}\\,******\\,\\mathtt{1111}$$""",
+$$\\text{(b)}\\ \\mathtt{411111}\\,******\\,\\mathtt{1111}$$
+<p class="small">(a) Luhn: từ phải sang, nhân đôi mỗi chữ số thứ hai (quá 9 thì trừ 9), cộng tất cả; tổng chia hết cho 10 là hợp lệ. Thẻ thử: tám chữ số 1 giữ nguyên cho $8$, bảy chữ số 1 nhân đôi cho $14$, chữ số 4 nhân đôi cho $8$: $8 + 14 + 8 = 30$ ✓.</p>""",
            """Kiểm bằng đường khác cho ba việc. Một, số thẻ thử qua phép kiểm Luhn. Hai, che thẻ, giữ sáu số đầu và bốn số cuối. Ba, đổi một chữ số trong bản tin thì MAC khác.
-           Vì mỗi việc đều tính bằng chương trình, nên kết quả đáng tin hơn tính tay."""),
+           Phép kiểm số kiểm cuối làm thế này. Đi từ phải sang, nhân đôi mỗi chữ số thứ hai, nếu quá chín thì trừ chín, rồi cộng tất cả, và tổng chia hết cho mười là hợp lệ.
+           Với thẻ thử, tám chữ số một giữ nguyên cho tám, bảy chữ số một nhân đôi cho mười bốn, chữ số bốn nhân đôi cho tám. Tổng là ba mươi, chia hết cho mười.
+           Vì mỗi việc đều tính bằng chương trình, nên kết quả đáng tin hơn tính tay.""", clear=True),
         st(table(["bản tin", "MAC (16 ký tự đầu, khoá thử)", "bên nhận kết luận"],
                  [["amt=500000", "7625fd27947ee367", "nguyên vẹn"], ["amt=900000", "7958d294fb89b6dc", "bị sửa, từ chối"]]),
            """Bảng này cho thấy hai bản tin chỉ khác nhau ở số tiền nhưng MAC hoàn toàn khác. Vì bên nhận tính lại MAC từ khoá và nội dung, nên bản tin bị sửa không khớp và bị từ chối. Lưu ý đây là minh hoạ, chuẩn thẻ dùng thuật toán MAC riêng."""),
-    ], checks=["alg.bnk_luhn('4111111111111111') and not alg.bnk_luhn('4111111111111112')", "(lambda p: p[:6] + '*' * (len(p) - 10) + p[-4:])('4111111111111111') == '411111******1111'",
+    ], checks=["alg.bnk_luhn('4111111111111111') and not alg.bnk_luhn('4111111111111112')",
+               "sum((lambda d: d - 9 if d > 9 else d)(int(c) * (2 if i % 2 else 1)) for i, c in enumerate(reversed('4111111111111111'))) == 30 == 8 + 14 + 8", "(lambda p: p[:6] + '*' * (len(p) - 10) + p[-4:])('4111111111111111') == '411111******1111'",
                "alg.bnk_mac('k', 'amt=500000')[:16] == '7625fd27947ee367' and alg.bnk_mac('k', 'amt=900000')[:16] == '7958d294fb89b6dc'"])
     pit = sc("pitfalls", "pitfall", "Lỗi hay gặp, có lỗi của người đã đi làm", [
         st("""<div class="box warn"><b>Lỗi 1 (người mới).</b> Nghĩ “mã hoá” là đủ nên ghi cả PIN mã hoá vào nhật ký. PIN, kể cả đã mã hoá, <b class="red">không được lưu</b> sau khi xử lý xong.</div>""",
@@ -136,7 +149,7 @@ $$\\hl{\\text{giao dịch thứ 3}}$$""",
            """Điều cần mang theo. Hãy giả định kẻ xấu đứng ở mọi chỗ ở giữa, kể cả trong nhật ký và trong ứng dụng. Mỗi lớp bảo vệ phải đứng được một mình."""),
     ])
     return lesson("L13", "bao_mat_thanh_toan_pin_hsm", "Bài 13 — Bảo mật thanh toán: khối PIN, HSM, MAC và sinh trắc học",
-                  "curriculum/bnk.yaml L13; audit/bnk/verify_bnk.py L13; ISO 9564-1 (khối PIN định dạng 0); Quyết định 2345/QĐ-NHNN (CITED qua tìm kiếm web 2026-11-07, luatvietnam.vn và tapchicongthuong.vn, no revision given; ngưỡng 'trên 10 triệu/giao dịch' và 'tổng ngày vượt 20 triệu', ký 18/12/2023, hiệu lực 01/07/2024 — theo rà soát 2026-11-08, chưa đối chiếu bản PDF gốc); Thales payShield Host Command Reference (dịch khối PIN TPK/ZPK→ZPK; khoá bọc bằng ZMK/LMK); dữ liệu thẻ và PIN trong bài là dữ liệu thử",
+                  "curriculum/bnk.yaml L13; audit/bnk/verify_bnk.py L13; ISO 9564-1 (khối PIN định dạng 0); Quyết định 2345/QĐ-NHNN (CITED qua tìm kiếm web 2026-11-07, luatvietnam.vn và tapchicongthuong.vn, no revision given; ngưỡng 'trên 10 triệu/giao dịch' và 'tổng ngày vượt 20 triệu', ký 18/12/2023, hiệu lực 01/07/2024 — theo rà soát 2026-11-08, chưa đối chiếu bản PDF gốc); PCI DSS v4.0.1 Req. 3.3.1.2 (không lưu PIN / khối PIN sau cấp phép) và 3.4.1 (che PAN khi hiển thị); ISO/IEC 7812-1 (số kiểm Luhn); Thales payShield Host Command Reference (dịch khối PIN TPK/ZPK→ZPK; khoá bọc bằng ZMK/LMK); dữ liệu thẻ và PIN trong bài là dữ liệu thử",
                   ["Tính khối PIN định dạng 0 từ PIN thử và số thẻ thử", "Giải thích vì sao sửa bản tin làm MAC không khớp",
                    "Áp quy tắc sinh trắc học theo giao dịch và cộng dồn trong ngày", "Che số thẻ và không ghi PIN vào nhật ký"],
                   [hook, pre, sym, intu, form, ex, chk, pit, quiz, rec])

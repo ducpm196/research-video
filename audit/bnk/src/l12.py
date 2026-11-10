@@ -13,14 +13,15 @@ def build():
         st(table(["loại", "số giao dịch (ví dụ minh hoạ)"],
                  [["khớp hoàn toàn", "3"], ["chỉ có ở ngân hàng", "1"], ["chỉ có ở chuyển mạch", "1"], ["cùng mã nhưng lệch tiền", "1"]]),
            """Bảng này là kết quả mô phỏng ở cuối bài, với số liệu minh hoạ. Ba giao dịch khớp hoàn toàn, một giao dịch chỉ có ở ngân hàng, một chỉ có ở chuyển mạch, và một cùng mã nhưng lệch tiền.
-           Lưu ý, bài này dùng mô hình chung của chuyển mạch liên ngân hàng. Chi tiết của NAPAS nằm trong đặc tả kết nối chính thức của họ."""),
+           Lưu ý, bài này dùng mô hình chung của chuyển mạch liên ngân hàng. Ở Việt Nam, chuyển mạch đó là NAPAS, công ty chuyển mạch thẻ và thanh toán liên ngân hàng. Chi tiết của NAPAS nằm trong đặc tả kết nối chính thức của họ."""),
     ])
-    pre = sc("prereq", "prereq", "Ôn lại ba điều sẽ dùng", [
+    pre = sc("prereq", "prereq", "Trước hết: ba điều cần hiểu", [
         st(table(["khái niệm", "nghĩa", "ví dụ"],
-                 [["① Mã tham chiếu", "mã định danh giao dịch, cả hai bên cùng giữ; RRN một mình thường chưa đủ duy nhất, nên khoá ghép thật là tổ hợp RRN + STAN + ngày giờ truyền (DE 7) + mã ngân hàng", "r1, r2, … (bài gộp thành một mã)"],
+                 [["① Mã tham chiếu", "mã định danh giao dịch, cả hai bên cùng giữ. Trong bản tin thẻ có RRN (mã tham chiếu 12 ký tự) và STAN (mã vết 6 số do bên gửi đánh); một mã một mình thường chưa đủ duy nhất, nên hệ thống thật hay ghép nhiều trường, ví dụ RRN + STAN + ngày giờ truyền + mã ngân hàng, theo đặc tả của từng mạng", "r1, r2, … (bài gộp thành một mã)"],
                   ["② Hai tập hợp", "tập A và tập B; phần chung gọi là giao", "A = {r1, r2, r3, r4, r5}"],
                   ["③ Đếm bù trừ", "|A| + |B| − |giao| = số mã khác nhau trong cả hai", "5 + 5 − 4 = 6"]]),
-           """Ôn ba điều. Mã tham chiếu là mã định danh giao dịch, cả hai bên cùng giữ. Thực tế, mã tham chiếu một mình thường chưa đủ duy nhất, nên khoá ghép thật gồm cả mã vết, ngày giờ truyền và mã ngân hàng. Bài này gộp lại thành một mã cho gọn.
+           """Ôn ba điều. Mã tham chiếu là mã định danh giao dịch, cả hai bên cùng giữ. Trong bản tin thẻ có mã tham chiếu mười hai ký tự, và mã vết sáu chữ số do bên gửi đánh.
+           Một mã một mình thường chưa đủ duy nhất, nên hệ thống thật hay ghép nhiều trường, ví dụ thêm mã vết, ngày giờ truyền và mã ngân hàng, theo đặc tả của từng mạng. Bài này gộp lại thành một mã cho gọn.
            Hai tập hợp có phần chung gọi là giao. Còn đếm bù trừ nói rằng số mã khác nhau trong cả hai danh sách bằng tổng hai kích thước trừ đi phần chung."""),
         st("""$$5 + 5 - 4 = 6$$""",
            """Một ví dụ số. Mỗi bên có năm mã, bốn mã chung, nên tổng số mã khác nhau là năm cộng năm trừ bốn, bằng sáu."""),
@@ -44,10 +45,11 @@ def build():
                box(920, 150, 270, 110, ["Ngân hàng nhận", "ghi có"], C_GREEN, bold=True),
                arrow(270, 195, 315, 195), arrow(570, 195, 615, 195), arrow(870, 195, 915, 195),
                arrow(915, 240, 875, 240, "#16a34a"), arrow(615, 240, 575, 240, "#16a34a"), arrow(315, 240, 275, 240, "#16a34a"),
-               txt(1330, 150, "đi: lệnh 0200", 26, "middle", "#2a78d6", True), txt(1330, 195, "về: kết quả 0210", 26, "middle", "#16a34a", True),
+               txt(1330, 150, "đi: yêu cầu 0200", 26, "middle", "#2a78d6", True), txt(1330, 195, "về: phản hồi 0210", 26, "middle", "#16a34a", True),
                txt(750, 340, "Mỗi mũi tên có thể mất: lệnh mất, hoặc kết quả mất dù bên nhận đã ghi có", 26, "middle", "#dc2626", True),
                txt(750, 390, "→ bên gửi không biết kết quả → cần tra soát và đối soát", 26, "middle", "#1f2937")),
-           """Hình cho thấy đường đi của một lệnh chuyển nhanh. Khách bấm trên ứng dụng. Ngân hàng gửi đóng gói lệnh gửi tới chuyển mạch. Chuyển mạch chuyển tiếp tới ngân hàng nhận để ghi có. Kết quả quay ngược lại cùng đường.
+           """Hình cho thấy đường đi của một lệnh chuyển nhanh. Khách bấm trên ứng dụng. Ngân hàng gửi đóng gói lệnh, tức bản tin loại không hai không không là yêu cầu, rồi gửi tới chuyển mạch.
+           Chuyển mạch chuyển tiếp tới ngân hàng nhận để ghi có, tức cộng tiền cho người nhận. Kết quả quay ngược lại cùng đường, bằng bản tin loại không hai một không là phản hồi.
            Mỗi mũi tên đều có thể mất. Nếu kết quả mất dù bên nhận đã ghi có, bên gửi không biết kết quả, nên cần tra soát và đối soát."""),
         st(svg(1500, 440,
                panel(40, 30, 600, 380, "Sổ ngân hàng", C_BLUE),
@@ -70,9 +72,9 @@ def build():
            """Bước hai, vì mỗi mã chỉ rơi vào đúng một loại, nên ta chia bốn loại. Khớp là cả hai có và tiền bằng nhau. Lệch tiền là cả hai có nhưng tiền khác. Còn hai loại là chỉ ngân hàng có, hoặc chỉ chuyển mạch có.
            Làm thử, ba cộng một cộng một cộng một bằng sáu, đủ cả sáu mã."""),
         st("""<p><b>Bước 3.</b> Mỗi loại có <b>hành động riêng</b> (quy trình điển hình): khớp thì xong; chỉ một bên thì tra soát trạng thái thật; lệch tiền thì điều tra nguyên nhân. Việc sửa sổ luôn qua bước duyệt.</p>
-<span class='note'>Sửa sổ bằng bút toán đảo như bài trước, không xoá dòng.</span>""",
+<span class='note'>Sửa sổ bằng bút toán đảo: thêm dòng mới ngược dấu với dòng sai, không xoá dòng cũ.</span>""",
            """Bước ba, vì nguyên nhân mỗi loại khác nhau, nên mỗi loại có hành động riêng theo quy trình điển hình. Khớp thì xong. Chỉ một bên có thì tra soát trạng thái thật. Lệch tiền thì điều tra nguyên nhân.
-           Việc sửa sổ luôn qua bước duyệt, và sửa bằng bút toán đảo."""),
+           Việc sửa sổ luôn qua bước duyệt, và sửa bằng bút toán đảo, tức là thêm một dòng mới ngược dấu với dòng sai, chứ không xoá dòng cũ."""),
     ], checks=["3 + 1 + 1 + 1 == 6", "alg.bnk_reconcile(" + BANK + ", " + SWITCH + ") == (3, 1, 1, 1)"])
     ex = sc("example", "example", "Ví dụ bằng số, từng phép tính", [
         st("""<p>Sổ ngân hàng: r1 $100$, r2 $200$, r3 $300$, r4 $400$, r5 $500$. Sổ chuyển mạch: r1 $100$, r2 $200$, r3 $350$, r4 $400$, r6 $600$ <i>(số minh hoạ)</i>.</p>

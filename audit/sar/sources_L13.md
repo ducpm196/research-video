@@ -91,6 +91,18 @@ Tải: monkey.org/~marius/funsrv.pdf (curl, 163 933 byte; tiêu đề trang: “
   such effects as overall request latency is governed by the slowest component; with large request distribution—often 100s of systems—
   encountering minor garbage collection in the request path is common.”
 
+## Đọc lại 2026-11-09 (đợt C)
+- [AN14] tải lại (curl, 8 694 230 byte, pdftotext -layout): khớp lại “Miyazaki 2011 25,088 TPS”, “Miyazaki 2013 … 143,199 TPS”,
+  “200-300 requests/host”, “reduce machines to run Twitter by 10x”, “...and we liked it”, “Datacenter: Static Partitioning” + hình
+  “33% 33% 33%”, “Incremental change always wins”. Slide “Data Center Computing” có hình 33% → 75% (biểu đồ tận dụng, không có chú
+  thích số) → bài vẫn ghi 33% bận và 75% là SỐ MINH HOẠ, không trình bày như số đo.
+- [ME13] tải lại (163 933 byte): khớp “often 100s of systems”, “governed by the slowest component”, tham khảo [10] “Nov. 2010”.
+- Bài blog 2013: đọc qua bản sao hn.jakechampion.name/reader/https://blog.twitter.com/2013/new-tweets-per-second-record-and-how
+  (WebFetch, truy cập 2026-11-09, no revision given; bản sao của bên thứ ba, không phải trang gốc): “On Saturday, August 3 in Japan,
+  people watched an airing of Castle in the Sky … one-second peak of 143,199 Tweets per second”; “more than 500 million Tweets a day,
+  about 5,700 Tweets a second, on average” (khớp phép tính 500 triệu / 86 400 ≈ 5787 của bài). Câu “mỗi lần một bộ phim hoạt hình Nhật
+  được chiếu trên truyền hình” dựa vào câu này (2013) và “Miyazaki 2011” của [AN14]; tên phim, ngày không dạy.
+
 ## Điều KHÔNG dạy (nguồn không ghi hoặc chưa đọc được)
 - Mọi chi tiết riêng của bài blog 2013 “New Tweets per second record, and how!” (độ trễ, số máy, cách lưu tweet, ngày đăng chính xác):
   KHÔNG đọc được (403/429) → không dạy. Con số 143 199 tweet mỗi giây và tên chương trình truyền hình lấy từ slide [AN14] (“Miyazaki 2013”);

@@ -17,3 +17,15 @@
 - Không nêu tên cá nhân nhân viên hay giám đốc cơ quan.
 - Các con số ước lượng thời gian thao tác khi thiết kế lại (ví dụ phát bản tin đính chính soạn sẵn trong dưới 2 phút, hoặc xác suất lọt qua 3 lớp độc lập) là **SỐ MINH HOẠ** tính từ mô hình đã học ở bài 5, 8, 10.
 - Không đọc `Hawaii`, `FCC`, `WEA`, `EAS` trong `say:` — lời đọc nói “một bang hải đảo của Mỹ”, “cơ quan viễn thông Mỹ”, “hệ thống cảnh báo khẩn cấp”.
+
+## Ghi chú đọc kiểm 2026-11-08 (đọc lại [FCC18], PDF docs.fcc.gov/public/attachments/DOC-350119A1.pdf, pdftotext tr. 11–14, 23–24; xem audit/hci/sources_L00.md mục bổ sung)
+- Dòng 8:07 ở trên ghi “chọn mục gửi cảnh báo thật … bấm Yes” — báo cáo ghi rõ “the warning officer at the alert origination terminal believes that
+  this is a real emergency, not a drill” và “the employee … believed that the missile threat was real” → bài sửa thành “tin là thật, chọn mẫu
+  cảnh báo thật” (lỗi nhầm), bỏ ý “chọn nhầm dòng” và “bấm theo quán tính”.
+- Khung 8:31–8:44 của bảng FCC gồm: gọi đại diện FEMA lần hai (45 giây), Thống đốc đăng Facebook, Phó trưởng phòng viễn thông đăng nhập và
+  “creates false alert correction messages”. Không có câu “13 phút gõ tay” → bài nói “hỏi ý cơ quan liên bang rồi tự soạn bản tin đính chính”.
+- 8:12–8:13 đã ra lệnh ngừng phát lại (không thu hồi được tin đã hiện); 8:27 họp chọn mã CEM; 8:30 gọi FEMA không ai nghe; chú thích 65: FEMA
+  không cần cho phép. “Prior to the January 13, 2018, false alert, HI-EMA did not have protocols or training in place with respect to how to issue
+  a correction to an alert”.
+- Đã bỏ: “hơn 1 triệu điện thoại / người dân”, “chui xuống cống ngầm”, “kiểm tra mật khẩu tài khoản” (không có trong báo cáo đã đọc).
+- Phép tính sửa: 1/1000 → 1/2 000 000 là nhỏ đi 2000 lần (bài cũ ghi “2 triệu lần”).

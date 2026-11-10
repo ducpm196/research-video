@@ -15,3 +15,6 @@
 ## Điều KHÔNG dạy / NOT_VERIFIED
 - Không dạy chi tiết thuật toán tạo lưới thu gọn tự động bằng sai số bậc hai (Garland & Heckbert 1997, QEM) hay hệ thống cụm tam giác ảo hoá (*meshlets / Nanite*).
 - Các con số thời gian xử lý từng tầng (ví dụ: bộ xử lý trung tâm 14 ms, xử lý đỉnh 4 ms, tô mảnh 6 ms) là SỐ MINH HOẠ để thực hành chẩn đoán nút cổ chai.
+
+## Đối chiếu (đợt C, 2026-11-09)
+- Đợt C viết lại phần “định luật điểm nghẽn” (trước đây dẫn tên khoá khác): ví dụ ba công đoạn 4, 2, 6 ms, công đoạn sau chờ công đoạn trước → khung xong lúc 12, 18, 24 ms, cách nhau 6 ms = max; giảm công đoạn 2 ms không đổi gì, giảm công đoạn 6 → 4 ms thì khung ra mỗi 4 ms (có `checks`). Lập luận là mô hình dây chuyền cơ bản, tính tay được, không cần nguồn ngoài.

@@ -274,9 +274,13 @@ rec("L15a", 1 / 8 == 0.125 and _deliver(40, 60, 2, 15, False) == 117 > 110 and _
     "8 Hz → 125 ms; không kế thừa: 117 (tải 60) / 87 (tải 30); kế thừa: 57; tải tối đa còn kịp hạn 53 ms")
 rec("L15b", 18 * 3600 * 8 == 518400, "18 giờ ở 8 Hz = 518 400 chu kỳ")
 rec("L15c", 3000 + 2000 + 1000 == 6000 and 6000 // 100 == 60 and 4096 // 256 == 16 and 2 ** 13 == 8192, "mục nhiều nhất từng có 6000 = 60 × 100; 16 lần nới 256 KB; 8192 = 2^13")
-_resets = [m for m in range(1, 1477) if m % 90 in (15, 30, 0)]
-rec("L15d", round(1477 / 90 * 3, 1) == 49.2 and len(_resets) == 50 and _resets[:6] == [15, 30, 90, 105, 120, 180]
-    and round(15 * 1477 / 1440, 1) == 15.4, "mẫu 15–15–60: 49,2 lần/sol trung bình, liệt kê từ phút 0 được 50; 15 sol ≈ 15,4 ngày")
+# Sửa 2026-11-09 (đợt C): một sol (ngày mặt trời sao Hoả) = 24 h 39 min 35,244 s ≈ 1479,6 phút — NASA NSSDCA Mars Fact Sheet
+#   (Williams, “Mean solar day 24.6597 h”; “Sidereal rotation period 24.6229 h” = 24 h 37 min là ngày SAO, không phải sol).
+#   Chú thích 3 của [RN05] ghi “24 hours 37 minutes” (nhầm sang ngày sao); bài cũ chép 1477 phút → 49,2. Nay 1480 phút → 49,3.
+_resets = [m for m in range(1, 1480) if m % 90 in (15, 30, 0)]
+rec("L15d", round(1480 / 90 * 3, 1) == 49.3 and round(24 * 60 + 39 + 35.244 / 60) == 1480 and len(_resets) == 50
+    and _resets[:6] == [15, 30, 90, 105, 120, 180] and round(15 * 1480 / 1440, 1) == 15.4,
+    "mẫu 15–15–60: ≈ 49,3 lần/sol (sol ≈ 1480 phút), liệt kê từ phút 0 được 50; 15 sol ≈ 15,4 ngày")
 rec("L15e", 800 // 256 == 3 and 300 * 48 // 24 == 600 and round(600 / 8192 * 100, 1) == 7.3 and round(300 / 8192 * 100, 1) == 3.7,
     "ngưỡng 800 KB = 3 lần nới; 300 sản phẩm/ngày: 600 tệp (48 h) → 300 (24 h)")
 import datetime as _dt

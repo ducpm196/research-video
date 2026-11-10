@@ -72,3 +72,26 @@ rec("L09i", F(3, 12) == F(1, 4) and alg.irs_beta_post(1, 1, 2, 10) == (3, 9)
     and abs(float((q.beta(3, 9, 400000) > q.beta(51, 951, 400000)).mean()) - 0.983) < 0.003 and round(math.sqrt(27 / (144 * 13)), 3) == 0.120,
     "quiz: Beta(3, 9), trung bình 0,25, thắng ≈ 0,983, độ lệch chuẩn ≈ 0,120")
 rec("L09j", round(1 - 0.1 + 0.1 / 10, 2) == 0.91, "ôn: tay tốt nhất 0,91 với xác suất khám phá 0,1, 10 tay")
+# đợt C: (1) hook — chạy lại tay lượt xếp theo trung bình với random.Random(0) (cùng thứ tự rút như alg), ghi lượt nào hiện tai nghe mới
+import random
+rr, ab, seen, clk = random.Random(0), [[1, 1], [51, 951]], [], 0
+for t in range(1, 2001):
+    i = 0 if F(ab[0][0], sum(ab[0])) >= F(ab[1][0], sum(ab[1])) else 1
+    hit = rr.random() < (0.08, 0.05)[i]
+    ab[i][0 if hit else 1] += 1
+    if i == 0:
+        seen.append(t)
+        clk += hit
+rec("L09k", len(seen) == 19 and clk == 0 and seen[:18] == list(range(1, 19)) and seen[18] == 77,
+    "hook: tai nghe mới hiện 19 lần (lượt 1–18 và lượt 77), 0 lượt bấm, sau đó không hiện tới lượt 2000")
+# (2) ôn: kẻ cướp nhiều tay 3/10, 0/2, 0,5² = 0,25; (3) độ lệch chuẩn Beta bằng phương sai Fraction ab/((a+b)²(a+b+1))
+var = lambda a, b: F(a * b, (a + b) ** 2 * (a + b + 1))
+rec("L09l", F(3, 10) == F(3, 10) and F(1, 2) ** 2 == F(1, 4) and var(1, 1) == F(1, 12) and round(math.sqrt(var(1, 1)), 3) == 0.289
+    and round(math.sqrt(var(6, 6)), 3) == 0.139 and round(math.sqrt(var(51, 51)), 3) == 0.049 and round(math.sqrt(var(6, 6) / var(51, 51)), 1) == 2.8
+    and F(9, 10) + F(1, 10) * F(1, 10) == F(91, 100),
+    "ôn: 0,25 bỏ rơi tay tốt; Beta(1,1) √(1/12) ≈ 0,289; Beta(6,6) 0,139 vs Beta(51,51) 0,049 (gấp 2,8); 0,9 + 0,1/10 = 0,91")
+# (4) tự kiểm: số hiện trên màn hình là của đúng các bộ rút trong checks
+rec("L09m", round(float((np.random.default_rng(0).beta(1, 1, 200000) > np.random.default_rng(1).beta(51, 951, 200000)).mean()), 3) == 0.950
+    and round(float((np.random.default_rng(2).beta(1, 20, 200000) > np.random.default_rng(3).beta(51, 951, 200000)).mean()), 3) == 0.357
+    and abs(0.357 - p_new_beats(20, 51, 951)) < 3 * math.sqrt(0.355 * 0.645 / 200000),
+    "tự kiểm: rút 200 nghìn cặp ≈ 0,950 và ≈ 0,357 (lệch 0,355 dưới 3 sai số chuẩn)")

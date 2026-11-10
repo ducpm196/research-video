@@ -22,3 +22,9 @@ URL: https://datajobs.com/data-science-repo/Recommender-Systems-%5BNetflix%5D.pd
 ## Liên hệ khoá khác (không dạy lại)
 - Cuộc thi 2006–2009, sai số căn quân phương, lịch sử các đội: DSC bài 15.
 - SVD và cái bóng dài nhất: CS115 bài 16; bước xuống dốc theo từng mẫu (SGD): CS115 bài 9.
+
+## Đọc kiểm 2026-11-09 (đợt C)
+- [KO09] "The constant λ controls the extent of regularization and is usually determined by cross-validation." → bài sửa “bài báo chọn λ bằng kiểm định chéo” thành “λ thường được chọn bằng kiểm định chéo”.
+- [KO09] "the Netflix system achieves RMSE = 0.9514" → “hệ gợi ý sẵn có của hãng tổ chức cuộc thi” (bản cũ: “hệ gợi ý cũ của cuộc thi”); sai số căn quân phương được định nghĩa tại chỗ.
+- Lỗi 2 (người mới): p bắt đầu từ (0,1; 0,1) như `alg.irs_fit_user` (p0 mặc định), q_A giữ cố định — ghi rõ trên màn hình (nghiệm (5, 5) phụ thuộc điểm xuất phát khi λ = 0).
+- Bỏ “đi xuống dốc (khoá Toán)”: ma trận, tích vô hướng, độ dốc (nhích hữu hạn 1,1 → −3,9; 1,01 → −3,99; công thức 2(w − 3)), hai bước đi xuống dốc (1 → 1,4 → 1,72), bình phương độ dài vector được giảng lại tại chỗ (verify_parts L07j).

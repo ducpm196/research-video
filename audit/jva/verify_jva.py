@@ -20,7 +20,12 @@ for lid in want:
     importlib.import_module(lid.lower()).build()
 
 ver = subprocess.run(["javac", "-version"], capture_output=True, text=True)
-print("JDK:", (ver.stdout or ver.stderr).strip())
+# JVA_RELEASE=21 → javac --release 21: kiểm ngôn ngữ + API chuẩn đúng Java 21 (người học được dặn cài JDK 21+).
+# Máy chạy vẫn là JDK đang cài; tham số này không thay cho việc chạy trên JVM 21 thật.
+import os  # noqa: E402
+REL = os.environ.get("JVA_RELEASE", "").strip()
+JAVAC = ["javac", "-encoding", "UTF-8"] + (["--release", REL] if REL else [])
+print("JDK:", (ver.stdout or ver.stderr).strip(), f"| --release {REL}" if REL else "")
 
 
 def norm(s):
@@ -37,7 +42,7 @@ for p in lib.PROGRAMS:
     with tempfile.TemporaryDirectory() as d:
         src = Path(d) / f'{p["name"]}.java'
         src.write_text(p["code"] + "\n", encoding="utf-8")
-        c = subprocess.run(["javac", "-encoding", "UTF-8", "-d", d, str(src)], capture_output=True, text=True,
+        c = subprocess.run(JAVAC + ["-d", d, str(src)], capture_output=True, text=True,
                            encoding="utf-8", errors="replace")
         exp = p["expect"]
         if exp.startswith("compile_error:"):

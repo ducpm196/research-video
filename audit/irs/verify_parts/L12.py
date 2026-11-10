@@ -47,3 +47,9 @@ xs = sorted(list(range(1, 100)) + [250])
 rec("L12f", xs[98] == 99 and F(sum(xs), 100) == F(5200, 100) and 0.80 < 0.83 < 0.88 < 0.90 < 0.93 and round(1 - 0.88, 2) == 0.12
     and 1000 + 10 * 1000 == 11000,
     "phân vị 99 của 100 lần đo = 99, trung bình 52; bảng độ phủ minh hoạ tăng dần; 12% bị bỏ; ôn 11 000 phép")
+# Thêm 2026-11-09 (đợt C, bài tự đứng): phần ôn nay giảng đổi đơn vị và phân vị 99 bằng hai bộ đo; móc câu nói rõ kho 10 triệu
+#   (10 000 sản phẩm chỉ là một phần nghìn); bước 4 chừa 13 ms cho xếp lại; phép 0,99 mũ 10 tách “cả 10 mảnh nhanh”.
+ys = sorted([10] * 95 + [200] * 5)
+rec("L12g", F(500, 1000) == F(1, 2) and ys[98] == 200 and F(sum(ys), 100) == F(195, 10) and F(99 * 100, 2) == 4950
+    and F(10 ** 7, 10000) == 1000 and 100 - (15 + 600 * F(7, 100) + 30) == 13 and round(float(F(99, 100) ** 10), 3) == 0.904,
+    "500 ms = 0,5 giây; 95 lần 10 ms + 5 lần 200 ms: trung bình 19,5, phân vị 99 = 200; 1+…+99 = 4950; còn 13 ms; 0,99^10 ≈ 0,904")

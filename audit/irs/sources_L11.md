@@ -20,6 +20,8 @@ URL: https://www.cs.cmu.edu/~jgc/publication/The_Use_MMR_Diversity_Based_LTMIR_1
 - "the more the behavior policy chooses a sub-optimal item, the more the new policy will be biased toward choosing the same item."
 
 ## Liên hệ khoá khác
-- Trôi khái niệm, vòng phản hồi, huấn luyện lại: MLO bài 9 — chỉ ôn.
+- Trôi khái niệm, vòng phản hồi, huấn luyện lại: MLO bài 9. Đợt C (2026-11-09): phần ôn không còn nhắc khoá khác; vòng phản hồi được định nghĩa
+  lại bằng lời thường (thứ hệ hiện hôm nay quyết định dữ liệu học ngày mai), cảnh `loop` tính bằng số; lôgarit cơ số 2 giảng bằng log₂ 4 = 2.
+- [CO16] "even those embedded on other sites" → bài nay nói “kể cả video được nhúng vào những trang khác” (bản cũ “xem từ trang khác” lệch nghĩa).
 ## Không dạy
 - Định nghĩa pháp lý hay chỉ số công bằng của một tổ chức cụ thể (chưa đọc nguồn) — “công bằng” chỉ dạy ở mức phơi bày (tỉ lệ hiển thị theo nhóm), số minh hoạ.

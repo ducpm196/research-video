@@ -1,8 +1,8 @@
 # BIÊN BẢN BÀN GIAO PHỎNG VẤN & HỒ SƠ ỨNG VIÊN (INTERVIEW HANDOVER)
 ## VỊ TRÍ: KỸ SƯ PHÁT TRIỂN TÍCH HỢP CẤP CAO (SENIOR INTEGRATION ENGINEER) — NGÂN HÀNG ACB
 **Mục tiêu đãi ngộ**: **50,000,000 VND Gross/tháng** (Thu nhập năm nếu đạt mức này: 700 – 850 triệu VND = 13 tháng lương cố định + thưởng 1–4 tháng tùy xếp loại, theo tin tuyển dụng ACB; lương ACB ghi "Thương lượng")  
-**Thời điểm cập nhật**: 2026-11-08 (phiên 2026-11-07 kiểm chứng bằng chứng; sáng 2026-11-08 thêm khóa BNK 15 bài; chiều 2026-11-08 rà soát toàn bộ và sửa nội dung, kết quả ở **Mục 9**)  
-**Trạng thái hệ thống**: xem **Mục 9** (rà soát 2026-11-08, mới nhất) và Mục 7 (bản 2026-11-07, một số kết luận đã bị Mục 9 sửa lại). Các tuyên bố "hoàn tất 100% PASS" ở bản trước không còn được dùng làm bằng chứng: ngân hàng 100 câu hỏi từng chỉ có 58 câu, CV từng chứa số liệu không có nguồn. Mọi tệp được chỉ mục tại [`MASTER_CURRICULUM_INDEX.md`](file:///D:/research-video/interview/MASTER_CURRICULUM_INDEX.md).
+**Thời điểm cập nhật**: 2026-11-10. Mới nhất là **Mục 13**: đọc kiểm lần ba toàn kho, bài tự đứng được, 591 + 37 bài dựng lại, mẫu độc lập D. Các mục trước: Mục 12 (2026-11-09), Mục 11 (đợt B), Mục 10 (khóa JVA), Mục 9 (rà soát 2026-11-08).  
+**Trạng thái hệ thống**: xem **Mục 13** (mới nhất), rồi Mục 9 và Mục 7 (bản 2026-11-07, một số kết luận đã bị Mục 9 sửa lại). Các tuyên bố "hoàn tất 100% PASS" ở bản trước không còn được dùng làm bằng chứng: ngân hàng 100 câu hỏi từng chỉ có 58 câu, CV từng chứa số liệu không có nguồn. Mọi tệp được chỉ mục tại [`MASTER_CURRICULUM_INDEX.md`](file:///D:/research-video/interview/MASTER_CURRICULUM_INDEX.md).
 
 ---
 
@@ -162,7 +162,7 @@ Thêm ngày 2026-11-08 theo quyết định của người dùng "làm đủ 15 
 | BNK L13 | Bảo mật thanh toán: khối PIN, HSM, MAC và sinh trắc học | 7:52 | NamMinh | 0.947 | 9/0 | bb37b7e206ce |
 | BNK L14 | Tình huống giả định: từ triệu chứng tới thiết kế tốt hơn | 7:51 | NamMinh | 0.962 | 4/0 | 3b55de47b52c |
 
-Tổng BNK: **110.44 phút** (ffprobe, 2026-11-08 sáng); sau lần dựng lại theo rà soát toàn bộ (Mục 10) là **115,05 phút**.
+Tổng BNK: **110.44 phút** (ffprobe, 2026-11-08 sáng); sau lần dựng lại theo rà soát toàn bộ (Mục 10) là **115,05 phút**; sau đợt C (Mục 12, dựng lại BNK L09) là **115,16 phút**.
 
 Bài nào trả lời câu hỏi nào của ngân hàng 100 câu (`06_interview_qa_bank_100.md`):
 
@@ -223,7 +223,7 @@ Bảng BN-0001 → BN-0016 dưới đây là bản ghi cũ. **Đọc cùng Mục
      - Cơ sở Dữ liệu & ACID: [`out/DBS/`](file:///D:/research-video/out/DBS/).
      - Hệ phân tán & Raft/Paxos: [`out/DSY/`](file:///D:/research-video/out/DSY/).
      - Hệ điều hành & Concurrency: [`out/OSY/`](file:///D:/research-video/out/OSY/).
-   - **Bài nền cho đúng chủ đề phỏng vấn: khóa BNK (Mục 4D)**: nếu chưa từng lập trình, xem khóa JVA L00 đến L12 (106,91 phút) trước; rồi xem tuần tự BNK L00 đến L14 (115,05 phút) trước khi xem INT/ACB. Sau mỗi bài làm phần "Đến lượt bạn" ra giấy, rồi đọc các câu hỏi liên quan ở bảng Mục 4D.
+   - **Bài nền cho đúng chủ đề phỏng vấn: khóa BNK (Mục 4D)**: nếu chưa từng lập trình, xem khóa JVA L00 đến L12 (107,11 phút) trước; rồi xem tuần tự BNK L00 đến L14 (115,05 phút) trước khi xem INT/ACB. Sau mỗi bài làm phần "Đến lượt bạn" ra giấy, rồi đọc các câu hỏi liên quan ở bảng Mục 4D.
    - **Giới hạn còn lại (Mục 8)**: BNK chưa phủ HikariCP, JWT, Resilience4j, Kubernetes, gRPC, Kafka Streams/ksqlDB, Oracle Partitioning và cú pháp Java cơ bản; với các câu đó đọc đáp án trong ngân hàng câu hỏi.
 2. **Bước 2 — Nghiền ngẫm Trọn bộ 17 Video Phỏng vấn Chuyên sâu INT/ACB (93.00 phút, xem sau BNK)**:
    - Xem 8 video Khóa INT (`00_overview_roadmap.mp4` đến `07_salary_negotiation_50m_gross.mp4`) để nắm vững khung năng lực, hệ thống câu hỏi hóc búa, ma trận 38 môn học UIT AI và chiến lược đàm phán hợp đồng.
@@ -452,3 +452,240 @@ Các nút thắt cũ BN-0001…BN-0016 ở Mục 5 vẫn mang trạng thái ghi 
 1. Cài JDK 21 trở lên. Xem JVA L00 → L12, gõ lại và chạy từng chương trình, làm phần tự làm trước khi xem đáp án.
 2. Xem BNK L00 → L14, rồi INT L00 → L07 và ACB L00 → L08. Thứ tự và bảng video ở [`README.md`](file:///D:/research-video/interview/README.md) Mục 2 và [`MASTER_CURRICULUM_INDEX.md`](file:///D:/research-video/interview/MASTER_CURRICULUM_INDEX.md).
 3. Khi nghe thấy câu đọc sai hoặc gặp chỗ khó hiểu, ghi lại (bài, phút). Đó là bằng chứng để đóng BN-0034 và BN-0020.
+
+## 11. PHIÊN 2026-11-08/09: RÀ SOÁT ĐỢT B — 23 KHÓA CÒN LẠI (326 BÀI)
+
+**Kết luận: `PARTIAL`.** Cả 326 bài đã được đọc kiểm. 163 bài có sửa, đều đã dựng lại và qua các cổng kiểm máy (11.2). Phần còn mở (11.3) cần người nghe bằng tai, người học thật hoặc chuyên gia.
+
+**Yêu cầu**: "Rà soát hoàn chỉnh chuẩn xác các video nền tảng còn lại cũng dành cho người mới và người mất gốc … đảm bảo đầy đủ, chuyên nghiệp, không có lỗi và lổ hổng."
+
+**Phạm vi**: 23 khóa chưa đọc ở Mục 10: AGT, AIF, BCH, CAS, CLC, CVI, DAN, DSC, DVO, ESY, GFX, HCI, IRS, LLM, MLO, PAR, PLC, RBM, RLN, ROB, SEP, TOC, WEB. **Không thuộc phạm vi**: 330 bài đã đọc ở Mục 9–10 (15 khóa nền, BNK, JVA, INT, ACB). Riêng ACB L06 được sửa thêm một câu pháp lý.
+
+### 11.1 Việc đã làm
+1. **Đọc kiểm 326/326 bài.**
+   - Người đọc là 11 tác tử AI, làm theo `audit/review/FULL_REVIEW_BRIEF_B.md`. Hướng dẫn này chia lỗi thành mức MUST và SHOULD, yêu cầu đối chiếu sự kiện thật với `audit/<khóa>/sources_*.md`, chỉ dạy bảo mật theo hướng phòng thủ, và đặt lint/render = 0 làm cổng.
+   - Mỗi khóa có báo cáo riêng `audit/review/full_review_b/<KHÓA>.md`, mỗi bài một dòng, kết luận là "đã sửa" hoặc "không phát hiện lỗi".
+   - Số liệu (đếm bằng công cụ) như bảng dưới. Đơn vị là bài; MUST/SHOULD là số mục ghi trong bảng báo cáo, gồm cả mục người điều phối ghi thêm.
+
+   | Khóa | Bài đọc | Bài sửa | MUST/SHOULD |
+   |:--|--:|--:|:--|
+   | AGT | 13 | 7 | 6/7 |
+   | AIF | 15 | 9 | 5/6 |
+   | BCH | 13 | 6 | 1/5 |
+   | CAS | 12 | 5 | 2/3 |
+   | CLC | 13 | 6 | 1/9 |
+   | CVI | 13 | 7 | 0/8 |
+   | DAN | 13 | 2 | 1/1 |
+   | DSC | 16 | 7 | 2/8 |
+   | DVO | 14 | 7 | 3/9 |
+   | ESY | 16 | 8 | 2/13 |
+   | GFX | 14 | 13 | 4/29 |
+   | HCI | 13 | 11 | 6/38 |
+   | IRS | 14 | 5 | 1/5 |
+   | LLM | 15 | 9 | 3/10 |
+   | MLO | 15 | 11 | 1/16 |
+   | PAR | 14 | 3 | 0/3 |
+   | PLC | 14 | 7 | 1/10 |
+   | RBM | 18 | 5 | 3/5 |
+   | RLN | 14 | 7 | 0/8 |
+   | ROB | 14 | 8 | 2/11 |
+   | SEP | 12 | 5 | 0/7 |
+   | TOC | 15 | 6 | 0/7 |
+   | WEB | 16 | 9 | 2/9 |
+   | **Tổng** | **326** | **163** | **46/227** |
+
+2. **Người điều phối kiểm lại và sửa thêm** (đối chiếu nguồn web, 11.4):
+   - IRS L09: bổ sung phép tính tay (sau 18 lần không bấm, trung bình đã dưới 0,0509). Thêm chú thích vì sao mô phỏng hiện tai nghe mới ở lần 19, kèm một check mới.
+   - DSC L13: ghi rõ Luật Bảo vệ dữ liệu cá nhân 2025 và Nghị định 356/2025/NĐ-CP cùng có hiệu lực từ 1/1/2026; Nghị định 356 thay Nghị định 13/2023/NĐ-CP.
+   - ACB L06: thay căn cứ "Nghị định 13/2023/NĐ-CP" (đã bị thay thế) bằng Luật 91/2025/QH15, hiệu lực 1/1/2026.
+   - CVI L11: nguyên tắc Morgan nêu lần đầu năm 1894, bản sửa năm 1903; bài cũ ghi "từ năm 1903".
+3. **Bộ kiểm do tác tử sửa đều đã đọc lại**: `audit/bch/verify_bch.py`, `audit/dvo/verify_dvo.py`, `audit/irs/verify_parts/L06.py`, `audit/irs/verify_parts/L13.py`, `audit/web/verify_web.py`. Mỗi thay đổi có căn cứ theo đặc tả hoặc nguồn, không có chỗ nào đổi kỳ vọng chỉ để test qua.
+4. **Giáo án**:
+   - Ví dụ có số trong `curriculum/cld|dbs|dsy|net|osy|swf|clc|toc|esy.yaml` đều được dẫn tới bản ghi `(VER X:Lyy)`. `audit/verify_plan_curricula.py` có thêm khối BN-0036.
+   - Viết lại hai bản ghi cũ đã lệch bài: ESY:L09 (tập tác vụ của bài) và AGT:L01 (4 lời gọi, lược đồ đóng).
+   - Các bản ghi JVA nay kiểm đầu ra đã khai báo của chương trình, cộng phép tính lại độc lập.
+5. **JVA**: `audit/jva/verify_jva.py` nhận biến môi trường `JVA_RELEASE`, để biên dịch với `javac --release N`.
+6. **Dựng lại 164 bài**: 163 bài đợt B và ACB L06, log `audit/review/rebuild_2026-11-08b.out`.
+   - **Lỗi công cụ tìm thấy và đã sửa**: GFX L02 FAIL hai lần liền với cùng một số liệu: mp4 dài 529,50 s, timeline 528,97 s.
+   - Nguyên nhân đo được: luồng hình 529,43 s dài hơn luồng tiếng 528,96 s. Lệnh ghép `-shortest` với nguồn ảnh concat vẫn ghi thừa các khung đang nằm trong bộ đệm. GFX L03 cũng lệch 0,40 s, chỉ vừa dưới ngưỡng.
+   - Cách sửa: `tools/lv.py` (`cmd_build`) thêm `-t <timeline>` để cắt đúng độ dài; ngưỡng kiểm 0,5 s giữ nguyên.
+   - Dựng lại GFX L02: hình 528,90 s, tiếng 528,96 s, PASS.
+   - Các video đã dựng trước khi sửa vẫn có thể dư dưới 0,5 s hình tĩnh ở cuối. Phần dư này vô hại và nằm trong ngưỡng, nên không dựng lại.
+7. **Xét ASR**:
+   - 22 câu gắn cờ ở 19 bài được ghi lý do (13 khối HAND "… dựng lại sau rà soát đợt B (2026-11-09)" trong `audit/dms/asr_review_dms.py`). Sáu lý do do bộ phân loại tự sinh đã được sửa tay: Amazon, flash, Euler, Turing ×2 (dẫn probe trong `tools/registry/lexicon_vi.<KHÓA>.yaml`) và cặp so khớp sai "tự/bốn".
+   - Ba bài dựng từ mẫu (ESY L13, RBM L07, RBM L11) được đồng bộ bằng `sync_tpl_asr.py`.
+   - Không có câu ⚠ NGẮN nào. AIF L11 vẫn để mở có chủ ý, chờ tai người.
+8. **Tài liệu**: `MASTER_CURRICULUM_INDEX.md` sinh lại bảng (chỉ mã băm ACB L06 đổi; thời lượng 5:36 giữ nguyên). Bản sao `interview/video/` đã chép lại.
+
+### 11.2 Bản ghi kiểm chứng (EGW section 3; giờ UTC lấy từ `date -u` / `checked_at`)
+| ID | Tuyên bố | Phương pháp (đã chạy) | Kết quả quan sát | validity |
+|:---|:---|:---|:---|:---:|
+| C-42 | Báo cáo đọc kiểm khớp thay đổi thật | `check_reports_b.py` (scratchpad): so `lessons/<khóa>/` với bản chụp trước đợt B, đọc dòng bảng của 23 báo cáo (19:07Z) | 326 bài, 326 dòng; báo sửa 163 = tệp đổi 163; lệch 0 | VALID |
+| C-43 | Số mục MUST/SHOULD | đếm từ cột "Mục đã sửa" của 23 báo cáo bằng regex (19:07Z) | 46 MUST, 227 SHOULD | VALID |
+| C-44 | 164 bài dựng lại đạt verify | `rebuild_waveB.sh` → `audit/.build_queue_run.sh` (13:22Z–18:46Z), cộng 2 lần dựng lại GFX L02 | 164 dòng `→ PASS`, 164 bài khác nhau; GFX L02 FAIL 2 lần trước khi sửa `lv.py`, PASS ở lần dựng 01:50 giờ máy (18:50Z); giọng NamMinh; không lần nào TTS bị chặn | VALID |
+| C-45 | Sửa ghép video đúng | `ffmpeg -map 0:v / 0:a -c copy -f null -` trên `out/gfx/L02/L02.mp4`, trước và sau khi sửa | trước: hình 08:49.43, tiếng 08:48.96; sau: hình 08:48.90, tiếng 08:48.96; verify `duration=528.97s timeline=528.967s → PASS` | VALID |
+| C-46 | Câu ASR gắn cờ đã xem xét | `asr_review_dms.py --course <C> …`, `sync_tpl_asr.py`, parse YAML, `lv.py asr <tệp>` cho 19 bài | 19/19 bài "chưa xem xét 0"; `ast.parse` của `asr_review_dms.py` OK | VALID (ASR), chưa nghe bằng tai |
+| C-47 | Bộ kiểm của 23 khóa qua | `audit/<c>/verify_*.py` (19:04Z) | AGT 15, AIF 25, BCH 13, CAS 93, CLC 13, CVI 112, DAN 13, DSC 30, DVO 18, ESY 72, GFX 19, HCI 27, IRS 123, LLM 18, MLO 20, PAR 96, PLC 67, RBM 92, RLN 94, ROB 14, SEP 66, TOC 102, WEB 16 PASS; 0 FAIL. ACB không có bộ verify riêng | VALID |
+| C-48 | Ví dụ giáo án đều có bản ghi kiểm | `audit/verify_plan_curricula.py`; `audit/check_curricula_graph.py` (19:06Z) | 525 PASS · 0 FAIL; 42 lộ trình, 656 bài, 1365 cạnh, 0 tham chiếu hỏng, 0 chu trình; VER trỏ tới mã không PASS: 0; ví dụ có chữ số mà không có VER: 0 | VALID |
+| C-49 | JVA biên dịch được cho JDK 21 và 17 | `JVA_RELEASE=21|17|8 .venv/Scripts/python -B audit/jva/verify_jva.py` (19:08Z; JVM chạy là 22.0.2) | 21: 110/110; 17: 110/110; 8 (đối chứng âm): 101/110 | VALID (mức biên dịch) |
+| C-50 | Không có ký tự điều khiển ngoài ý muốn | `audit/review/scan_ctrl.py` (19:06Z) | 8 lượt, đều là `\tat` cố ý của JVA L10/L12 | VALID |
+| C-51 | Bản sao video phỏng vấn khớp | `sync_interview_video.py`, rồi `--check`; `gen_tables.py` (trước 18:54Z) | 92/92 trùng byte; tổng 317,23 phút không đổi | VALID |
+| C-52 | Toàn kho không còn bài cũ | `audit/review/audit_all.py` (xong khoảng 19:13Z, `audit_all.tsv` 02:13 giờ máy); `audit/review/status_report.py` | `656 bài, 656 đã dựng, 1 bài có vấn đề`: AIF L11, câu cố ý chờ tai người; `STATUS.md`: 655/656 bài hoàn thiện, 5602 phút | VALID |
+
+### 11.3 Nút thắt hợp đồng (EGW section 5)
+| ID | Điều chưa xác định | Công việc phụ thuộc | Bằng chứng thiếu | Hậu quả | Phép thử đóng | State |
+|:---|:---|:---|:---|:---|:---|:---:|
+| BN-0036 | 21 ví dụ giáo án có chữ số nhưng không dẫn VER | trường `example` | phép tính kiểm | số trong giáo án lệch bài | `rec()` trong `verify_plan_curricula.py` | CLOSED (C-48) |
+| BN-0037 | JVA chỉ chạy trên JDK 22 | người học cài JDK 21 | chạy trên JVM 21 | máy người học báo khác bài | biên dịch `--release 21` (đã qua, C-49); chạy `verify_jva.py` trên JVM 21 thật | OPEN (đã thu hẹp: mức biên dịch qua) |
+| BN-0034 | Phát âm lời giảng mới | nay thêm 164 video đợt B | tai người | chỗ đọc sai thuật ngữ còn sót | nghe các câu ghi trong `out/<khóa>/<bài>/asr_report.md` | OPEN |
+| BN-0035 | Đọc kiểm chỉ do tác tử AI | nay thêm 326 bài đợt B | chuyên gia người | lỗi tinh vi còn sót | chuyên gia đọc; báo lỗi khi học | OPEN (đã giảm) |
+| BN-0038 | Một số nhận định trong bài chưa có nguồn mở được: ImageNet giữ nguyên bộ thử 2012–2017 (CVI L12; image-net.org từ chối kết nối, ECONNREFUSED); KLM B = 0,1 s (HCI L05, câu đã viết mềm lại); mốc năm thư viện ở PAR L13; điểm chuẩn F0 trong GFX; câu "cổ phần bên bỏ phiếu ngược đa số bị rút dần" (BCH L12) | 5 bài trên | nguồn sơ cấp mở được | có thể sai chi tiết lịch sử hoặc kỹ thuật | mở nguồn sơ cấp, sửa bài nếu lệch | OPEN |
+| BN-0020 | Hiệu quả sư phạm với người mất gốc | lộ trình học | người học thật | chưa biết bài nào khó | học và ghi chỗ vướng | PARTIAL |
+
+### 11.4 Nguồn web đã mở trong đợt B (truy cập 2026-11-08, no revision given trừ khi ghi khác)
+- RFC 2068 (HTTP/1.1, tháng 1/1997): https://www.rfc-editor.org/rfc/rfc2068.txt (WEB)
+- Electra `MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT` = 256 ETH, có `min(...)` với giới hạn churn theo số dư: https://raw.githubusercontent.com/ethereum/consensus-specs/master/specs/electra/beacon-chain.md (nhánh `master`; nhánh `dev` trả 404) (BCH)
+- Luật Bảo vệ dữ liệu cá nhân có hiệu lực từ 1/1/2026: https://hatinh.gov.vn/vi/bai-viet/luat-bao-ve-du-lieu-ca-nhan-chinh-thuc-co-hieu-luc-thi-hanh-tu-ngay-112026 (DSC, ACB)
+- Nghị định 356/2025/NĐ-CP thay Nghị định 13/2023/NĐ-CP: https://luatvietnam.vn/dan-su/nghi-dinh-356-2025-nd-cp-quy-dinh-chi-tiet-luat-bao-ve-du-lieu-ca-nhan-422896-d1.html (DSC)
+- Morgan's Canon 1894: https://www.newworldencyclopedia.org/entry/C._Lloyd_Morgan (CVI). Trang https://journalpub.escholarship.org/uclapsych_ijcp/article/5755/galley/3510/download chỉ dùng làm đầu mối tìm kiếm.
+- image-net.org: không truy cập được (ECONNREFUSED); xem BN-0038.
+
+### 11.5 Học lại sau này
+Các khóa đợt B đều đã dựng xong: `out/<KHÓA>/Lxx/Lxx.mp4`, kèm `.srt` và `chapters.txt`. Thứ tự học và điều kiện tiên quyết theo `curriculum/<khóa>.yaml` (`requires`). Khi học, nếu gặp câu đọc sai hoặc chỗ sai kiến thức, ghi lại bài và phút; đó là bằng chứng để đóng BN-0034 và BN-0035.
+
+## 12. PHIÊN 2026-11-09: ĐÁNH GIÁ LẠI CHẤT LƯỢNG TOÀN KHO (42 KHÓA, 656 BÀI) VÀ ĐỌC MẪU ĐỘC LẬP
+
+**Yêu cầu**: "Đánh giá lại xác nhận chất lượng của giáo án, video có trong source code."
+
+**Kết luận: `PARTIAL` — không xác nhận được "không còn lỗi".** Mọi cổng kiểm máy đều qua trên toàn kho (12.2). Nhưng đọc mẫu độc lập 42 bài (mỗi khóa một bài) vẫn tìm thấy lỗi mức MUST ở 5/42 bài. Tỉ lệ này là 11,9%, khoảng Wilson 95% là 5,2–25,0%, ước tính còn khoảng 34–164 bài trong 656 bài có lỗi mức MUST trước đợt sửa này. Các lỗi trong mẫu đã được sửa và dựng lại; phần còn lại của kho chưa được đọc lại lần ba.
+
+### 12.1 Việc đã làm
+1. **Chạy lại toàn bộ cổng kiểm máy** trên 42 khóa (12.2).
+2. **Quét mới độ lệch hình–tiếng** của mọi mp4 (scratchpad `av_scan.py`), sau khi phát hiện lỗi ghép video ở Mục 11.1.6.
+3. **Đọc mẫu độc lập**: rút ngẫu nhiên 42 bài với hạt giống 20261109, giao cho 4 tác tử mới chỉ đọc, không sửa. Người điều phối kiểm lại từng mục MUST trên tệp thật. Kết quả chi tiết nằm ở `audit/review/sample_c/REPORT.md`.
+4. **Sửa lỗi trong mẫu**, 17 bài:
+   - ACB L02, AGT L00, BNK L09 (qua `audit/bnk/src/l09.py`), CLC L06, CSA L14, CVI L01, DAN L03, DSY L10.
+   - INT L00 (thống nhất `series`), INT L01 ("OFS XML" → "bản tin OFS"), INT L06.
+   - JVA L09 (qua `audit/jva/src/l09.py`), MLO L06, SAR L13, SEP L04, TOC L05 (cả mẫu `.tpl`), WEB L15.
+5. **Giáo án ACB/INT** (`curriculum/acb.yaml`, `int.yaml`) chưa từng được đồng bộ với bài sau Mục 9. Hai tệp vẫn ghi "OFS XML", "giải mã PIN Block", và các số hiệu năng như kết quả thật ("5000 lệnh/giây dưới 35 ms", "99,2%", "dưới 3 phút").
+   - Tên bài và mục tiêu nay lấy từ bài.
+   - `example` nay là tên cảnh ví dụ của bài, kèm câu "mọi số liệu hiệu năng trong bài là ví dụ minh hoạ".
+   - ACB L08 `fix` bỏ "trên Core T24".
+6. **Tài liệu nguồn** `interview/06_interview_qa_bank_100.md` Câu 66: bỏ giả định "Core Banking T24 … của ACB"; bước 7 nay là "chuyển khoản hold thành trích nợ chính thức".
+7. **`audit/review/check_meta.py`**: thêm ngoại lệ tiền tố "Chuyên đề N —" cho INT. Lý do: bộ tài liệu `interview/00–07` gọi các bài là "8 Chuyên đề". Phép kiểm vẫn đòi N khớp id. Trước khi sửa: 18 vấn đề; sau khi sửa tài liệu và giáo án: 0.
+8. **Nguồn GFX**: 7 tệp `audit/gfx/sources_L0*.md` ghi "Câu trích nguyên văn" nhưng không có URL và không đối chiếu được với sách. Nhãn nay là "NOT_VERIFIED nguyên văn".
+9. **Bẫy công cụ mới**: chạy `audit/.build_queue_run.sh` trong `while read … <<LIST` sẽ bị lệnh dựng nuốt mất stdin, nên chỉ bài đầu tiên được dựng. Cách sửa: thêm `< /dev/null`. Đợt B dùng vòng `for` nên không bị ảnh hưởng.
+10. **Thời lượng cập nhật**: INT 44,86, ACB 50,62, BNK 115,16, JVA 107,11 phút; tổng 317,74 phút. Đã sửa ở `MASTER_CURRICULUM_INDEX.md` (sinh lại), `00_overview_roadmap.md`, `SOURCE_CODE_VIDEO_MAP.md`, Mục 4D/6.
+
+### 12.2 Bản ghi kiểm chứng (EGW section 3; giờ UTC lấy từ `date -u` / `checked_at`)
+| ID | Tuyên bố | Phương pháp (đã chạy) | Kết quả quan sát | validity |
+|:---|:---|:---|:---|:---:|
+| C-53 | Bộ kiểm của mọi khóa qua | 37 `audit/<c>/verify_*.py` + `audit/verify_cs115_tex.py` + `audit/verify_cs115_l44.py` (23:47–23:51Z ngày 08); chạy lại 12 khóa có bài sửa (00:30Z) | 39/39 exit 0, 0 FAIL (CS112 38 PASS + 15 FIX theo quy ước cũ). Chạy lại sau sửa: JVA 110, BNK 17, DAN 13, DSY 33, CLC 13, AGT 15, CVI 112, MLO 20, SAR 15, SEP 66, TOC 102, WEB 16 PASS | VALID |
+| C-54 | Video đúng định dạng, hình–tiếng khớp | `av_scan.py` (scratchpad; ffmpeg `-map 0:v` / `0:a -c copy -f null`) (23:47–23:50Z) | 661 mp4 (gồm video thử ngoài 42 khóa); định dạng sai 0; hình − tiếng lớn nhất 0,40 s; có 3 video > 0,3 s (DEMO L03, GFX L03, SAR L12); container − timeline lớn nhất 0,467 s; > 0,5 s: 0 | VALID |
+| C-55 | Không có câu TTS bị cụt | `audit/review/tts_speed_scan.py` | 51 791 câu, 0 câu < 0,22 s/từ | VALID |
+| C-56 | Lint toàn kho theo bộ luật hiện hành | `audit/review/audit_built.py` (00:33Z →) | 656 bài: 0 FAIL, 0 WARN; một giọng NamMinh ở mọi khóa | VALID |
+| C-57 | Siêu dữ liệu, tham chiếu, ký tự điều khiển, đồ thị giáo án | `check_meta.py`, `check_course_refs.py`, `scan_ctrl.py`, `check_checklib_dupes.py`, `verify_plan_curricula.py`, `check_curricula_graph.py`, `lv.py curriculum` cho acb/int (00:30Z–01:05Z) | check_meta 0 (trước khi sửa: 18, toàn bộ ở INT/ACB); course_refs 0; scan_ctrl 8 (đều là `\tat` cố ý của JVA); checklib không trùng; 525 PASS · 0 FAIL; 42 lộ trình, 656 bài, 1365 cạnh, 0 tham chiếu hỏng, 0 chu trình; acb 9/9, int 8/8, 0 lỗi | VALID |
+| C-58 | Đọc mẫu độc lập 42 bài | 4 tác tử chỉ đọc; người điều phối kiểm lại (sqlite cho DAN L03; tính lại cho CSA, CLC, AGT, HCI; đối chiếu ACB L06/Mục 9 cho QĐ 2345) | 7 mục MUST ở 5 bài (ACB L02, CSA L14, DAN L03, INT L06 ×3, SAR L13); 4 bài CONFIRMED, SAR L13 PLAUSIBLE; tổng 16/42 bài có phát hiện thật; xem `audit/review/sample_c/REPORT.md` | VALID (cho mẫu) |
+| C-59 | 17 bài sửa đã dựng lại đạt verify | `rebuild_waveC.sh` → `audit/.build_queue_run.sh`, log `audit/review/rebuild_2026-11-09c.out` (00:30Z–01:01Z) | 17 dòng `→ PASS`, 0 FAIL; câu ASR mới duy nhất (ACB L02) đã ghi lý do (khối HAND "ACB L02 dựng lại sau đọc mẫu độc lập"), `lv.py asr` → 0 câu chưa xem xét; YAML parse OK sau khi sửa lỗi thụt dòng đã biết | VALID (ASR), chưa nghe bằng tai |
+| C-60 | Bản sao video phỏng vấn và bảng khớp | `sync_interview_video.py`, `--check`, `gen_tables.py` (scratchpad) | 92/92 trùng byte; 45/45 "có"; tổng 317,74 phút | VALID |
+| C-61 | Toàn kho không còn bài cũ | `audit/review/audit_all.py` (01:29–01:41Z), `status_report.py`; trước đó lần chạy 01:13Z bắt mẫu TOC L05 lệch bài → `sync_tpl_from_lesson.py TOC --write` → 0 mẫu lệch | `656 bài, 656 đã dựng, 1 bài có vấn đề`: AIF L11, câu cố ý chờ tai người; `STATUS.md`: 655/656 bài hoàn thiện, 5603 phút | VALID |
+
+### 12.3 Nút thắt hợp đồng (EGW section 5)
+| ID | Điều chưa xác định | Công việc phụ thuộc | Bằng chứng thiếu | Hậu quả | Phép thử đóng | State |
+|:---|:---|:---|:---|:---|:---|:---:|
+| BN-0039 | Tỉ lệ lỗi còn sót ngoài mẫu: ước tính 5,2–25,0% số bài có lỗi mức MUST trước đợt C (C-58) | toàn bộ 614 bài ngoài mẫu | đọc lại lần ba, hoặc mẫu lớn hơn để thu hẹp khoảng ước lượng | người học có thể gặp lỗi kiến thức | đọc lại toàn bộ (hoặc mẫu lớn hơn), sửa, dựng lại, đo lại tỉ lệ | OPEN |
+| BN-0040 | Câu "trích nguyên văn" từ sách không có URL: 7 tệp GFX, 5 tệp HCI | 12 bài | bản sách hoặc bài báo gốc | trích dẫn có thể là diễn giải hoặc sai tên mục | đối chiếu với sách, ghi số trang | OPEN |
+| BN-0041 | Khóa ACB dựng trên kiến trúc tham chiếu T24 của OCB; người học có thể hiểu nhầm rằng ACB dùng T24 | 9 bài ACB | quyết định của người dùng về cách đặt vấn đề | phỏng vấn viên có thể bắt lỗi | người dùng chọn: giữ (ghi rõ "kiến trúc tham chiếu OCB") hay viết lại trung tính | OPEN (chờ người dùng) |
+| BN-0034, 0035, 0037, 0038, 0020 | như Mục 11.3 | | | | | không đổi |
+
+**Chưa sửa trong mẫu**: ACB L02 còn một số thuật ngữ chưa giải thích cho người mới (bản đồ bit thứ hai, HSM, Redis, IN_DOUBT, EOD, PCI DSS). HCI L06 được xét là không lỗi (12.1 và REPORT.md).
+
+## 13. PHIÊN 2026-11-09/10: ĐỌC KIỂM LẦN BA TOÀN KHO (ĐỢT C), BÀI TỰ ĐỨNG ĐƯỢC, DỰNG LẠI 591 BÀI VÀ ĐỌC MẪU ĐỘC LẬP D
+
+**Yêu cầu**: "Rà soát kỹ từng chi tiết từng bước, verify evidence, xử lý contract bottleneck … các video giáo án bài học đều độc lập, không nói ngắn gọn tham chiếu đến khóa học khác, cần giảng giải kỹ càng chuyên sâu. Đảm bảo chất lượng cuối cùng để tôi bắt đầu học." Sau đó người dùng giao toàn quyền chọn hướng làm.
+
+**Kết luận: `PARTIAL`. Kho đủ chuẩn để bắt đầu học, nhưng chưa xác nhận được "không còn lỗi".**
+- Mọi cổng kiểm máy đều qua trên toàn kho 42 khóa, 656 bài (13.2).
+- Đọc mẫu độc lập D trên 42 bài mới, rút sau đợt C, cho thấy lỗi mức MUST đã giảm. Mẫu C trước đợt C có 5/42 bài lỗi MUST; mẫu D chỉ còn 2/42 (4,8%, khoảng Wilson 95% là 1,3–15,8%).
+- Mức SHOULD thì vẫn phổ biến: 37/42 bài có ít nhất một mục. Phần lớn là thuật ngữ hoặc ký hiệu chưa được giảng lại ngay tại chỗ (BN-0039).
+
+### 13.1 Việc đã làm
+1. **Đọc kiểm lần ba (đợt C) 42/42 khóa, 656/656 bài.**
+   - Brief: `audit/review/FULL_REVIEW_BRIEF_C.md`. Mục A tìm lỗi nội dung; mục B mới yêu cầu không nhắc khóa khác và giảng lại khái niệm mượn ngay trong bài.
+   - Báo cáo: `audit/review/full_review_c/*.md`, 45 tệp. Tệp thật đã được đối chiếu với ảnh chụp trước đợt bằng `check_reports_c.py` (scratchpad).
+   - 591 bài đổi lời hoặc hình. Cổng mới `audit/review/check_xref.py` hạ số tham chiếu sang khóa khác của toàn kho từ 495 xuống 0.
+2. **BN-0041 đóng theo lựa chọn của người dùng** ("Ghi rõ OCB").
+   - ACB giữ nội dung T24, nhưng màn hình và lời đọc ghi rõ đây là "kiến trúc tham chiếu từ kinh nghiệm ở OCB" (L00, L01, L04, L07, L08).
+   - L03, L05, L06 đổi nhãn thành "Core Banking". Không bài nào khẳng định ACB dùng T24; mẫu D kiểm lại ở INT L04 và ACB L05.
+3. **Dựng lại 591 bài.**
+   - 4 luồng `audit/review/rebuild_daemon_c2.sh a..d`, từ 2026-11-09T03:46Z đến 2026-11-10T02:32Z. Log ở `audit/review/rebuild_c.{a,b,c,d}.out`.
+   - 591/591 bài có dòng trong `.done`. `grep "FAIL sau\|→ FAIL"` chỉ còn NET L04; bài này FAIL lúc giáo án PAR đang được sửa, đã đưa lại vào hàng và PASS.
+   - TTS edge bị chặn khoảng 145 lần. Mỗi lần chờ 3 phút rồi tự dựng lại bằng cùng giọng NamMinh; không bài nào bị trộn giọng.
+4. **Rà ASR theo quy trình HAND cho cả 42 khóa.**
+   - Đợt C có 42 khối "<KHÓA> dựng lại sau đọc kiểm C (2026-11-09)" với 286 câu, mỗi câu ghi lý do.
+   - Câu ngắn khớp thấp được viết dài và rõ hơn, rồi dựng lại. Ví dụ ROB L10 "Tịnh tiến là trừ đi toạ độ của xe…" (khớp 0,571) thành "Tịnh tiến nghĩa là lấy toạ độ điểm đích trừ đi toạ độ của xe, được hai hiệu số theo hai trục là d x và d y." (khớp 0,852). Tương tự cho ESY L08 ở đợt D.
+   - Mọi khóa còn 0 câu chưa xem xét. Đây vẫn là đối chiếu bằng máy, chưa có tai người nghe (BN-0034).
+5. **Sửa công cụ.**
+   - `audit/dms/asr_review_dms.py`:
+     - Sửa tận gốc lỗi chèn `  - {sentence` vào danh sách viết ở cột 0, từng làm vỡ YAML BNK L00–L12.
+     - Nay đo thụt lề của danh sách có sẵn, dùng `json.dumps` để đóng ngoặc kép.
+     - `yaml.safe_load` kiểm lại trước khi ghi; nếu vỡ thì DỪNG và giữ nguyên tệp.
+   - `audit/review/asr_hand_gen.py`:
+     - Tách "thuật ngữ Việt hoá viết liền" (ví dụ “cosin” = co-sin, “lôgarit” = lô-ga-rit) khỏi "từ mượn đọc thô".
+     - Phần thuần Việt còn lại vẫn được phân loại tiếp.
+   - Chuyển từ scratchpad vào kho:
+     - `audit/review/interview_sync_video.py`: sao video INT/ACB/BNK/JVA vào `interview/video/` và kiểm sha256.
+     - `audit/review/interview_gen_tables.py`: sinh bảng trong `MASTER_CURRICULUM_INDEX.md`.
+     - `audit/review/av_scan.py`: quét độ lệch hình–tiếng của mọi mp4.
+6. **Nguồn đã đọc nguyên văn trong phiên này.**
+   - Adam §6.4: `audit/cs115/sources_L45.md`, đọc từ TeX gốc trên arXiv. Câu §3 viết "small β2" nhưng thực chất nghĩa là (1−β2) nhỏ, tức β2 gần 1, khớp với bài.
+   - Ouyang 2022: 72,6 ± 1,5% và 77,3 ± 1,3%. Touvron 2023: Bảng 2, 6,7B và 1,0T. Cả hai ở `audit/llm/sources_L06_L09.md`.
+   - GAO 1992: bản PDF chính thức đã đọc; chỉ trang sản phẩm trả 403.
+   - Còn mở: NeurIPS (papers.nips.cc từ chối kết nối, ghi trong `audit/mlo/sources_L14.md`), và sách HCI/GFX (BN-0040).
+7. **Đọc mẫu độc lập D** (`audit/review/sample_d/REPORT.md`).
+   - 42 bài, mỗi khóa một bài, không trùng mẫu C, hạt giống 20261110, rút lúc 02:51:55Z.
+   - 4 tác tử mới chỉ đọc và không xem báo cáo đợt C.
+   - Phát hiện: 2 MUST, cả hai đã kiểm lại trên tệp thật:
+     - SDP L05: khối mã trên màn hình không chạy được (`SyntaxError`, thiếu `__init__`). Nay là mã nhiều dòng, chạy thử ra 220000 và 209000.
+     - CS115 L21: tiêu đề cảnh "mỗi chỉ số là một xác suất có điều kiện", trong khi tỉ lệ đúng không có điều kiện và F1 không phải xác suất.
+   - Ngoài ra có 56 SHOULD. Không có con số nào tính sai.
+   - Đã sửa cả 58 mục (SHOULD do chính các tác tử sửa sau khi đo xong), rồi dựng lại 37 bài, 37/37 PASS. RLN L09 và INT L04 FAIL lần đầu vì bảng mới bị tràn; đã tách thành hai bước có `clear: true`.
+8. **Video phỏng vấn**: sau đợt D đã đồng bộ lại 92/92 cặp, trùng byte.
+   - Thời lượng mới: INT 60,61, ACB 62,92, BNK 125,00, JVA 112,49 phút; tổng 361,02 phút.
+   - Đã cập nhật `MASTER_CURRICULUM_INDEX.md` (sinh lại), `00_overview_roadmap.md` và `README.md` ("khoảng 63 phút").
+9. **Mục "Chưa sửa trong mẫu" của Mục 12 đã đóng.** ACB L02 nay định nghĩa đủ:
+   - HSM, Redis;
+   - bản đồ bit thứ hai ("dài thêm 64 bit, dành cho các trường từ 65");
+   - EOD ("cuối ngày, End Of Day"), PCI DSS ("bộ tiêu chuẩn bảo mật dữ liệu thẻ");
+   - IN_DOUBT (lời đọc là "nghi vấn").
+
+### 13.2 Bản ghi kiểm chứng (EGW section 3; giờ UTC lấy từ `date -u` / `checked_at`; giờ trong log dựng là giờ máy UTC+7)
+| ID | Tuyên bố | Phương pháp (đã chạy) | Kết quả quan sát | validity |
+|:---|:---|:---|:---|:---:|
+| C-62 | Hàng dựng lại đợt C xong, không bài nào FAIL | lệnh chờ đếm `rebuild_c.done` so với `rebuild_c.queue`; `grep "FAIL sau\|→ FAIL" rebuild_c.*.out` (02:32Z) | "XONG 02:32Z: 591/591"; ngoài NET L04 (đã dựng lại và PASS) không có dòng FAIL | VALID |
+| C-63 | Mọi câu ASR lệch đều có lý do | `asr_hand_gen.py` → đọc bản nháp → `hand_apply.sh`; `asr_flags.py` cho mọi khóa trong `out/` (02:40Z; lặp lại sau đợt D) | 42/42 khóa có "0 câu chưa xem xét"; 286 câu ở khối đợt C, thêm 10 khối đợt D (ACB, CLD, DEN, DMS, ESY, HCI, INT, JVA, SEC, SWF) | VALID (máy), chưa nghe bằng tai |
+| C-64 | Bài tự đứng được, siêu dữ liệu và đồ thị giáo án đúng | `check_xref.py`, `check_meta.py`, `check_course_refs.py`, `scan_ctrl.py`, `check_curricula_graph.py`, `verify_plan_curricula.py` (02:45Z; chạy lại 06:18–06:40Z) | xref 0 lượt (đầu đợt C: 495); meta 0; course_refs 0; scan_ctrl 8 lượt, đều là `\tat` cố ý của JVA L10/L12; 42 lộ trình, 656 bài, 1366 cạnh, 0 tham chiếu hỏng, 0 chu trình, 0 ví dụ thiếu VER; 545 PASS · 0 FAIL | VALID |
+| C-65 | Không câu TTS nào bị cắt | `tts_speed_scan.py` (02:50Z và sau đợt D) | 54 112 câu, rồi 54 231 câu; 0 câu dưới 0,22 s/từ | VALID |
+| C-66 | Video đúng định dạng, hình và tiếng khớp nhau | `audit/review/av_scan.py` (02:54Z; chạy lại sau đợt D) | 661 mp4 (kể cả video thử ngoài 42 khóa); 0 sai định dạng; hình − tiếng lớn nhất 0,360 s (DEMO L03, video thử); container − timeline lớn nhất 0,430 s; 0 video lệch quá 0,5 s | VALID |
+| C-67 | Toàn kho đã dựng và PASS sau đợt C | `audit_all.py` (xong 03:01Z), `status_report.py` | "656 bài, 656 đã dựng, 0 bài có vấn đề" (AIF L11 không còn bị gắn cờ); `STATUS.md` 656/656 bài hoàn thiện, 5911 phút | VALID |
+| C-68 | Lỗi còn sót sau đợt C, đo bằng mẫu độc lập | 4 tác tử chỉ đọc, 42 bài, hạt giống 20261110; người điều phối kiểm lại MUST (chạy mã SDP L05 bằng Python; đọc cảnh `metrics` CS115 L21) và xem tận nơi các sửa có tính sự kiện | MUST 2/42 = 4,8% (1,3–15,8%); bài có ít nhất một phát hiện 37/42 = 88,1% (75,0–94,8%); 0 số tính sai; xem `sample_d/REPORT.md` | VALID (cho mẫu) |
+| C-69 | 37 bài sửa sau mẫu D dựng lại đạt chuẩn | `audit/.build_queue_run.sh` tuần tự, log `audit/review/rebuild_d.out` (03:10Z–06:17Z); `hand_apply_d.sh` | 37/37 bài có `→ PASS`; 2 bài FAIL lần đầu vì tràn bảng (RLN L09, INT L04), sửa rồi PASS; lint 0 FAIL 0 WARN; các bộ kiểm khóa liên quan 0 FAIL | VALID |
+| C-70 | Toàn kho PASS sau đợt D | `audit_all.py` (06:18–06:34Z) cho "166 bài có vấn đề", toàn bộ là `katex_check.js lỗi:` rỗng ở một dải bài liền nhau từ PAR L13, đúng lúc máy thiếu RAM và Claude Code dừng lệnh nền; lint lại PLC L00, RBM L14, PAR L13 đều 0 FAIL; chạy lại `audit_all.py` cho 12 khóa đó (06:43Z, 06:46Z) | 88/88 và 91/91 bài, 0 vấn đề, cộng 490 bài đã qua ở lần chạy đầu: 656/656. Chạy lại toàn kho để có `audit_all.tsv` đầy đủ (vì chạy theo khóa sẽ ghi đè tệp này), xong 07:08Z: "656 bài, 656 đã dựng, 0 bài có vấn đề"; `status_report.py`: 656/656 bài hoàn thiện, 5926 phút | VALID |
+| C-71 | Bản sao video phỏng vấn khớp nguồn | `interview_sync_video.py`, `--check`, `interview_gen_tables.py` (sau đợt D) | 92/92 trùng byte; INT 60,61 + ACB 62,92 + BNK 125,00 + JVA 112,49 = 361,02 phút | VALID |
+| C-72 | Các nguồn trước đây chưa kiểm nay đã đọc nguyên văn | tải TeX từ arXiv e-print (Adam, Ouyang, Touvron); PDF GAO | trích dẫn kèm vị trí ở `audit/cs115/sources_L45.md` và `audit/llm/sources_L06_L09.md`; tỉ số 143 tính theo tên mô hình 7B (theo 6,7B là 149), bài nói "khoảng" nên giữ | VALID |
+
+### 13.3 Nút thắt hợp đồng (EGW section 5)
+| ID | Điều chưa xác định | Công việc phụ thuộc | Bằng chứng thiếu | Hậu quả | Phép thử đóng | State |
+|:---|:---|:---|:---|:---|:---|:---:|
+| BN-0039 | Lỗi còn sót ngoài hai mẫu. Đã đọc lại lần ba toàn kho (đợt C), và mẫu D đo được MUST 4,8% (1,3–15,8%). Mặt khác, 88% bài mẫu còn ít nhất một thuật ngữ hoặc ký hiệu chưa giảng lại tại chỗ, hoặc thiếu điều kiện | 572 bài ngoài hai mẫu (656 − 84) | đợt đọc kiểm chuyên về "định nghĩa tại chỗ"; hoặc người học báo chỗ vướng | người mất gốc có thể kẹt ở một từ chưa giải thích, khoảng 1–2 chỗ mỗi bài | đợt D trên 572 bài: mỗi thuật ngữ được định nghĩa ở lần đầu xuất hiện, thêm điều kiện; dựng lại; rút mẫu E đo lại | OPEN (đã thu hẹp: MUST giảm từ 11,9% xuống 4,8% theo điểm ước lượng; hai khoảng còn chồng nhau) |
+| BN-0040 | Câu "trích nguyên văn" từ sách không có URL | GFX L00–L06; HCI (Hick 1952, Hyman 1953, Nielsen & Landauer 1993, Bangor 2008) | sách RTR4, FCG5 và các bài báo Pineda 1988, Phong 1975, Blinn 1977, Whitted, Kajiya, Schlick; bài báo HCI | trích dẫn có thể là diễn giải | đối chiếu với sách, ghi số trang | OPEN (đã thu hẹp: HCI đã kiểm Norman 2013, Fitts 1954, MacKenzie 1992, Miller 1956, CMN80, Cowan 2001, SUS và thay các câu bịa; GFX giữ nhãn NOT_VERIFIED và thêm đối chiếu nguồn mở; xem `full_review_c/GFX.md`, `HCI.md`) |
+| BN-0041 | Cách đặt vấn đề T24 ở khóa ACB | 9 bài ACB | — | — | người dùng chọn "Ghi rõ OCB"; đã sửa và dựng lại | CLOSED |
+| BN-0038 | Nhận định chưa có nguồn sơ cấp mở được | CVI L12, HCI L05, PAR L13, GFX (F0), BCH L12 | image-net.org (ECONNREFUSED); ngày Horovod được mở mã | có thể sai chi tiết lịch sử | mở nguồn sơ cấp | OPEN (đã thu hẹp: BCH L12 sửa theo spec, MUST; HCI L05 bỏ B = 0,1 s của mô hình 1980, theo CMN80 Fig. 1 tr. 399; PAR L13 viết theo hai mốc kiểm được, CUDA 1.0 tháng 6/2007 và Horovod arXiv 15/2/2018, đề nghị đóng phần này; CVI L12 viết mềm thành "2012 tới 2014"; GFX F0 khớp BU12 §5.4, KA13 và PBR4 Bảng 9.1) |
+| BN-0034 | Phát âm của lời giảng mới | nay gồm 591 + 37 video dựng lại | tai người | chỗ đọc sai thuật ngữ còn sót | nghe các câu ghi trong `out/<khóa>/<bài>/asr_report.md` | OPEN |
+| BN-0035 | Đọc kiểm chỉ do tác tử AI làm | toàn kho | chuyên gia người | lỗi tinh vi còn sót | chuyên gia đọc; người học báo lỗi khi học | OPEN |
+| BN-0037, 0020 | như Mục 11.3 | | | | | không đổi |
+
+### 13.4 Bắt đầu học
+- Thứ tự học: JVA → BNK → INT → ACB, theo Mục 10.4. Các khóa nền xem theo `curriculum/<khóa>.yaml` (`requires`).
+- Mỗi video tự đứng được: không nhắc khóa khác, và khái niệm mượn được giảng lại tại chỗ.
+- Khi gặp một từ chưa được giải thích, một câu đọc sai, hoặc một chỗ sai kiến thức, hãy ghi lại khóa, bài, phút và câu. Danh sách đó là bằng chứng trực tiếp để đóng BN-0034, BN-0035 và BN-0039.

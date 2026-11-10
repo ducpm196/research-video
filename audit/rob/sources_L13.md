@@ -134,5 +134,5 @@ Tải: https://arxiv.org/pdf/2505.01515v1 (curl 200, 1 856 910 byte).
 - Phương pháp tính khoảng tin cậy (Poisson chính xác, phân phối beta prime) của [KU24]: bài chỉ đọc khoảng đã in trong bảng, không dạy cách tính.
 - Tên robot của đội khác, tên người: chỉ trên màn hình nguồn khi cần, không đọc.
 - Số liệu của các hãng khác, báo cáo “disengagement” của bang California: không đọc trong phiên → không dạy.
-- Tình huống quiz (10 xe giao hàng 2 m/s, cảm biến 3 m, phanh 0,8 m/s², trễ 0,25 s, tuyến 1,5 km, 2000 km thử, 1 lần mỗi 1000 km):
-  SỐ MINH HOẠ.
+- Tình huống quiz (10 xe giao hàng 2–3 m/s, cảm biến gần 4 m, camera 8 m, phanh 0,8 m/s², trễ 0,25 s, tuyến 1,5 km, 2000 km thử,
+  4 lần can thiệp, 1 sự cố mỗi 1000 km, 40% quãng phải chậm lại): SỐ MINH HOẠ. (Sửa 2026-11-09: bản trước ghi “cảm biến 3 m”, lệch bài.)

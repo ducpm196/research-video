@@ -16,16 +16,22 @@ def build():
            """Hôm nay ta trả lời ba câu. Chỉ mục là gì và vì sao nhanh. Làm sao biết truy vấn có dùng chỉ mục, bằng cách đọc kế hoạch thực thi.
            Và vì sao có chỉ mục mà vẫn chậm, thường do ta viết điều kiện làm chỉ mục vô dụng."""),
     ])
-    pre = sc("prereq", "prereq", "Ôn lại ba điều sẽ dùng", [
+    pre = sc("prereq", "prereq", "Trước hết: bốn điều cần hiểu", [
         st(table(["khái niệm", "nghĩa", "ví dụ"],
-                 [["① Bảng, dòng, cột", "bảng gồm nhiều dòng, mỗi dòng có các cột", "dòng giao dịch có cột tài khoản, số tiền, ngày"],
-                  ["② Truy vấn có điều kiện", "SELECT lấy dòng thoả điều kiện WHERE", "WHERE account_id = 7"],
-                  ["③ Tìm nhị phân", "trong danh sách đã sắp, mỗi bước loại một nửa", "1024 phần tử cần tối đa 10 bước"]]),
-           """Ôn ba điều. Bảng gồm nhiều dòng, mỗi dòng có các cột. Truy vấn lấy các dòng thoả điều kiện đặt sau từ khoá where.
-           Còn tìm nhị phân là trong một danh sách đã sắp thứ tự, mỗi bước loại bỏ một nửa, nên một nghìn không trăm hai mươi bốn phần tử cần tối đa mười bước."""),
-        st("""$$2^{10} = 1024$$""",
-           """Vì sao mười bước? Vì hai mũ mười bằng một nghìn không trăm hai mươi bốn. Mỗi bước chia đôi, nên sau mười bước chỉ còn một phần tử."""),
-    ], checks=["2 ** 10 == 1024", "(lambda n: next(k for k in range(64) if 2 ** k >= n))(1024) == 10"])
+                 [["① Cơ sở dữ liệu và SQL", "cơ sở dữ liệu là phần mềm lưu bảng dữ liệu; SQL là ngôn ngữ để hỏi và sửa nó; Oracle là một hệ cơ sở dữ liệu nhiều ngân hàng dùng", "Oracle, sqlite"],
+                  ["② Bảng, dòng, cột", "bảng gồm nhiều dòng, mỗi dòng có các cột", "dòng giao dịch có cột tài khoản, số tiền, ngày"],
+                  ["③ Truy vấn có điều kiện", "SELECT lấy dòng thoả điều kiện WHERE", "WHERE account_id = 7"],
+                  ["④ Tìm nhị phân", "trong danh sách đã sắp, mỗi bước so phần tử giữa rồi loại một nửa", "1024 phần tử: 10 lần chia đôi còn 1"]]),
+           """Trước hết ta cần hiểu bốn điều. Cơ sở dữ liệu là phần mềm lưu các bảng dữ liệu, và SQL là ngôn ngữ để hỏi và sửa nó. Oracle là một hệ cơ sở dữ liệu mà nhiều ngân hàng dùng.
+           Bảng gồm nhiều dòng, mỗi dòng có các cột. Truy vấn lấy các dòng thoả điều kiện đặt sau từ khoá where.
+           Còn tìm nhị phân là trong một danh sách đã sắp thứ tự, mỗi bước so với phần tử ở giữa rồi loại bỏ một nửa. Một nghìn không trăm hai mươi bốn phần tử, sau mười lần chia đôi chỉ còn một."""),
+        st("""$$2^{10} = 1024$$
+<p>1024 → 512 → 256 → 128 → 64 → 32 → 16 → 8 → 4 → 2 → 1: mười lần chia đôi.</p>
+<p class="small">So thêm phần tử cuối cùng đó nữa là xong: tối đa $10 + 1 = 11$ lần so.</p>""",
+           """Vì sao mười lần? Vì hai mũ mười bằng một nghìn không trăm hai mươi bốn, nên mỗi lần chia đôi, sau mười lần chỉ còn một phần tử.
+           So thêm phần tử cuối cùng đó nữa là xong, nên nhiều nhất là mười một lần so."""),
+    ], checks=["2 ** 10 == 1024", "(lambda n: next(k for k in range(64) if 2 ** k >= n))(1024) == 10",
+               "(lambda a, x: (lambda f: f(f, 0, len(a) - 1, 0))(lambda f, lo, hi, c: c if lo > hi else (c + 1 if a[(lo + hi) // 2] == x else (f(f, (lo + hi) // 2 + 1, hi, c + 1) if a[(lo + hi) // 2] < x else f(f, lo, (lo + hi) // 2 - 1, c + 1)))))(list(range(1024)), 1023) == 11"])
     sym = sc("sym", "symbol", "Giải mã vài từ hay gặp", [
         st(table(["từ", "nghĩa"],
                  [["INDEX (chỉ mục)", "cấu trúc phụ giúp tìm dòng nhanh, như mục lục của sách"],
@@ -102,6 +108,8 @@ $$① \\; 100^1 = 100 < 10\\,000\\,000$$""",
            """Bảng này là kết quả hỏi thật. Hai điều kiện đầu dùng được chỉ mục. Điều kiện thứ ba bỏ cột đầu của chỉ mục nên ở đây vẫn phải quét.
            Hai điều kiện cuối bọc cột trong một phép tính hoặc hàm, nên chỉ mục cũng vô dụng."""),
     ], checks=["alg.bnk_sql_plan(False, 'account_id=7').startswith('SCAN')", "alg.bnk_sql_plan(True, 'account_id=7').startswith('SEARCH')",
+               "alg.bnk_sql_plan(False, \"account_id=7 AND created='2026-01-05'\").startswith('SCAN')",
+               "alg.bnk_sql_plan(True, \"account_id=7 AND created='2026-01-05'\").startswith('SEARCH')",
                "alg.bnk_sql_plan(True, \"created='2026-01-05'\").startswith('SCAN')", "alg.bnk_sql_plan(True, 'account_id+0=7').startswith('SCAN')",
                "alg.bnk_sql_plan(True, \"substr(created,1,7)='2026-01'\").startswith('SCAN')"])
     pit = sc("pitfalls", "pitfall", "Lỗi hay gặp, có lỗi của người đã đi làm", [

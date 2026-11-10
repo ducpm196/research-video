@@ -89,6 +89,9 @@ Tải: arxiv.org/pdf/1207.5649 (200, 660 228 byte). Bài tổng quan (không ph�
 ## [NS07] A. Narayanan, V. Shmatikov, *Robust De-anonymization of Large Datasets (How to Break Anonymity of the Netflix Prize Dataset)*,
 arXiv cs/0610105 v2, 22/11/2007 (đăng IEEE S&P 2008)
 Tải: arxiv.org/pdf/cs/0610105 (200, 655 242 byte). Chỉ dạy ở mức khái niệm phòng thủ (dữ liệu thưa, bỏ tên chưa phải ẩn danh).
+- Lịch sử nộp (arxiv.org/abs/cs/0610105, đọc 2026-11-08): v1 18/10/2006, v2 22/11/2007 → bài ghi “bản đầu 10/2006, bản sửa 11/2007;
+  số theo bản sửa” (trước 2026-11-08 bài ghi sai “nghiên cứu công bố tháng 11/2007”).
+- [TJ09] bảng 9 (đọc lại 2026-11-08 bằng pdftotext): “Optimism of RMSE … 0.00067” ở cột p = 800, “based on RMSE = 0.8558” — khớp bước 5 chặng 4.
 - Tóm tắt: “an adversary who knows only a little bit about an individual subscriber can easily identify this subscriber's record in the
   dataset.”
 - §5: “With 8 movie ratings (of which 2 may be completely wrong) and dates that may have a 14-day error, 99% of records be uniquely

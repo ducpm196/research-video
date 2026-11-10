@@ -64,3 +64,10 @@ Tải: www.sec.gov/litigation/admin/2013/34-70694.pdf (HTTP 200, 98 373 byte; pd
   tâm triển khai và lớp phòng vệ); không mâu thuẫn với bài.
 - “Bản tóm của J. R. Varma (2013)” mà giáo án nhắc: không cần, không trích.
 - Tên/chức danh người: không nêu.
+
+## Đọc lại đợt C (2026-11-09; curl -L, www.sec.gov/files/litigation/admin/2013/34-70694.pdf, HTTP 200, 98 373 byte, 10 trang; pdftotext)
+- Lệnh KHÔNG có chữ “manual(ly)”: ¶15 chỉ ghi triển khai “in stages … on successive days” và “one of Knight's technicians did not copy the
+  new code to one of the eight SMARS computer servers … no one at Knight realized that the Power Peg code had not been removed from the eighth
+  server” → bài bỏ chữ “bằng tay” ở dòng thời gian (nay: “theo từng đợt, chép lên từng máy”), và ở bài học sai 1 bỏ “không có phép kiểm tự
+  động” (lệnh không ghi như vậy) thay bằng “không ai nhận ra máy thứ tám thiếu bản mới”.
+- ¶19: “Knight personnel generally did not review them” → bài sửa “không ai đọc” thành “nhân viên thường không đọc”.

@@ -33,3 +33,6 @@ def can_unpublish(age_h, dependents, weekly_dl, owners):
 rec("L10d", not can_unpublish(2 * 365 * 24, 12, 4000, 1) and can_unpublish(10, 0, 5000, 3) and can_unpublish(10000, 0, 299, 1)
     and not can_unpublish(10000, 0, 300, 1) and 52 * 2 == 104,
     "quiz: gói 2 năm, 12 phụ thuộc, 4000 lượt/tuần → không tự gỡ được; ca biên 299/300 lượt; 104 lần dựng/năm")
+# Thêm 2026-11-09 (đợt C): đường kiểm 39 gói nay giải thích phép dịch tầng: 3S − S = 81 − 3.
+_S = 3 + 9 + 27
+rec("L10e", 3 * _S - _S == 81 - 3 and (81 - 3) // 2 == _S == 39, "tổng 3 + 9 + 27: 3S − S = 78 → S = 39")

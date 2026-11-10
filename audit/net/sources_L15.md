@@ -99,3 +99,16 @@ Tải: https://www.rfc-editor.org/rfc/rfc9000.txt, https://www.rfc-editor.org/rf
 - Gói 1500 byte trong phép tính bộ đệm 1000 gói là GIẢ ĐỊNH (số minh hoạ); [G17] chỉ ghi “1000-packet bottleneck buffer”.
 - QUIC dùng BBR theo mặc định: RFC 9002 KHÔNG ghi (bộ điều khiển mẫu giống NewReno, cho phép chọn thuật toán khác) → không dạy.
 - Tỉ lệ lưu lượng Internet đi qua QUIC: không có nguồn đã đọc → không dạy.
+
+## Đọc kiểm lần ba (đợt C, 2026-11-09)
+- [J88] tải lại (curl + pdftotext), kiểm thêm: “opening a window of size W packets will require W/2 packets of buffer capacity at the
+  bottleneck” (§1, chú thích hình 2 — nguồn của dòng “bộ đệm 8 gói khi mở cửa sổ 16”); “The system will stabilize only if the traffic
+  sources throttle back at least as quickly as the queues are growing” (§3 — nguồn của lý do hệ số giảm). “LBL to UC Berkeley”: một phòng
+  thí nghiệm và một trường đại học → bài sửa “hai phòng thí nghiệm” thành “một phòng thí nghiệm với một trường đại học”.
+- [G17] đọc lại (WebFetch): CUBIC được gọi là “today's best loss-based congestion control”, KHÔNG phải “phổ biến nhất” → bài sửa thành
+  “mà nhóm gọi là tốt nhất lúc đó”. “improved YouTube network throughput by 4 percent on average globally” và “reducing round-trip time by
+  33 percent” khớp.
+- [B26]: bản nháp (Internet-Draft), “Intended status: Experimental” → bài nói “bản nháp, dự kiến xếp mức thử nghiệm”.
+- Chặng 4, nhập nhằng gửi lại: TCP thật không đo bừa — bỏ mẫu đo của đoạn gửi lại (thuật toán Karn, có trong danh sách bảy thuật toán của
+  [J88]) hoặc dùng tuỳ chọn dấu thời gian (RFC 7323) → bài nói “đo bừa có thể sai gấp 7 lần, nên TCP phải bỏ mẫu đo này, hoặc dùng thêm dấu
+  thời gian”; RFC 9002 §4.2 gọi đây là “retransmission ambiguity problem”.

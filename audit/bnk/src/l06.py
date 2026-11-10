@@ -3,9 +3,9 @@ from lib import *
 
 def build():
     hook = sc("hook", "hook", "Vì sao bộ đệm làm nhanh gấp nhiều lần, và vì sao khoá phân tán vẫn có thể sai?", [
-        st("""<p>Mỗi lần tra số dư mất $20$ ms ở cơ sở dữ liệu <i>(số minh hoạ)</i>. Có bộ đệm với tỉ lệ trúng $90\\%$, trung bình chỉ còn khoảng <b>3 ms</b>.</p>
+        st("""<p>Mỗi lần tra số dư mất $20$ ms ở cơ sở dữ liệu <i>(số minh hoạ)</i>. Có bộ đệm mất $1$ ms mỗi lần hỏi, với tỉ lệ trúng $90\\%$, trung bình chỉ còn khoảng <b>3 ms</b>.</p>
 <div class="box key">Nhưng một khoá phân tán có hạn <b>10 giây</b> vẫn có thể bị <b>hai người cùng giữ</b> nếu một người bị tạm dừng.</div>""",
-           """Chào bạn, giả sử mỗi lần tra số dư mất hai mươi mili giây ở cơ sở dữ liệu, đây là số minh hoạ. Có bộ đệm với tỉ lệ trúng chín mươi phần trăm, trung bình chỉ còn khoảng ba mili giây.
+           """Chào bạn, giả sử mỗi lần tra số dư mất hai mươi mili giây ở cơ sở dữ liệu, đây là số minh hoạ. Có bộ đệm mất một mili giây mỗi lần hỏi, với tỉ lệ trúng chín mươi phần trăm, trung bình chỉ còn khoảng ba mili giây.
            Nhưng một khoá phân tán có hạn mười giây vẫn có thể bị hai người cùng giữ, nếu một người bị tạm dừng."""),
         st(table(["ý hỏi", "bài này trả lời"],
                  [["bộ đệm nhanh hơn bao nhiêu", "độ trễ trung bình = tđệm + (1 − tỉ lệ trúng) × tcsdl"],
@@ -14,13 +14,20 @@ def build():
            """Hôm nay ta trả lời ba câu. Bộ đệm nhanh hơn bao nhiêu, nhờ một công thức đơn giản. Khoá có hạn sai ở đâu, khi người giữ khoá bị tạm dừng quá hạn rồi vẫn ghi.
            Và cách chữa, là mã chặn tăng dần để nơi lưu từ chối mã cũ."""),
     ])
-    pre = sc("prereq", "prereq", "Ôn lại ba điều sẽ dùng", [
+    pre = sc("prereq", "prereq", "Trước hết: những điều cần hiểu", [
         st(table(["khái niệm", "nghĩa", "ví dụ"],
-                 [["① Khoá và giá trị", "kho dữ liệu trong bộ nhớ, tra theo khoá", "khoá so_du:42 → giá trị 1500000"],
-                  ["② Hết hạn (TTL)", "mỗi mục tự biến mất sau một thời gian", "hạn 60 giây"],
-                  ["③ Độ trễ", "thời gian từ lúc hỏi tới lúc có đáp", "bộ đệm 1 ms, cơ sở dữ liệu 20 ms (số minh hoạ)"]]),
-           """Ôn ba điều. Kho dữ liệu trong bộ nhớ tra theo khoá, ví dụ khoá số dư của tài khoản bốn mươi hai trả về một triệu năm trăm nghìn. Mỗi mục có thể tự hết hạn sau một thời gian.
-           Độ trễ là thời gian từ lúc hỏi tới lúc có đáp, ví dụ minh hoạ là bộ đệm một mili giây, cơ sở dữ liệu hai mươi mili giây."""),
+                 [["① Bộ đệm (cache)", "nơi giữ tạm một bản sao dữ liệu ở chỗ đọc nhanh, để khỏi hỏi nơi gốc chậm hơn", "bản sao số dư trong bộ nhớ"],
+                  ["② Redis", "một kho “tên tra cứu → giá trị” chạy trong bộ nhớ, hay dùng làm bộ đệm", "tên <code>so_du:42</code> → giá trị 1500000"],
+                  ["③ Hai nghĩa của “khoá”", "khoá tra cứu (key): cái tên để tìm giá trị; khoá giữ quyền (lock): ai giữ thì được làm, người khác phải chờ", "key <code>so_du:42</code>; lock trên tài khoản 42"]]),
+           """Trước hết ta cần hiểu vài điều. Bộ đệm là nơi giữ tạm một bản sao dữ liệu ở chỗ đọc nhanh, để khỏi phải hỏi nơi gốc chậm hơn.
+           Redis là một kho tên tra cứu và giá trị chạy trong bộ nhớ, hay được dùng làm bộ đệm. Ví dụ tên số dư của tài khoản bốn mươi hai trả về một triệu năm trăm nghìn.
+           Chú ý chữ khoá có hai nghĩa. Khoá tra cứu là cái tên để tìm giá trị. Còn khoá giữ quyền thì ai giữ được làm việc, người khác phải chờ."""),
+        st(table(["khái niệm", "nghĩa", "ví dụ"],
+                 [["④ Khoá phân tán", "khoá giữ quyền dùng chung giữa nhiều máy chủ, đặt ở một nơi lưu chung như Redis", "hai máy chủ cùng muốn sửa tài khoản 42"],
+                  ["⑤ Hết hạn (TTL)", "mỗi mục tự biến mất sau một thời gian", "hạn 60 giây"],
+                  ["⑥ Độ trễ", "thời gian từ lúc hỏi tới lúc có đáp", "bộ đệm 1 ms, cơ sở dữ liệu 20 ms (số minh hoạ)"]]),
+           """Khoá phân tán là khoá giữ quyền dùng chung giữa nhiều máy chủ, đặt ở một nơi lưu chung như Redis. Mỗi mục trong kho có thể tự hết hạn sau một thời gian.
+           Độ trễ là thời gian từ lúc hỏi tới lúc có đáp, ví dụ minh hoạ là bộ đệm một mili giây, cơ sở dữ liệu hai mươi mili giây.""", clear=True),
         st("""$$0{,}9 + 0{,}1 = 1$$""",
            """Một phép kiểm nhỏ. Tỉ lệ trúng cộng tỉ lệ trượt luôn bằng một. Không phẩy chín cộng không phẩy một bằng một."""),
     ], checks=["abs(0.9 + 0.1 - 1) < 1e-12"])
@@ -30,11 +37,11 @@ def build():
                   ["hit / miss", "trúng bộ đệm / trượt bộ đệm"],
                   ["TTL", "thời gian sống của một mục trước khi tự xoá"],
                   ["SET key value NX PX 10000", "lệnh Redis đặt khoá chỉ khi chưa có (NX), hết hạn sau 10 000 mili giây (PX)"],
-                  ["fencing token (mã chặn)", "số tăng dần cấp kèm mỗi lần giữ khoá, nơi lưu dùng để từ chối người cũ; SET NX PX và Redlock không tự cấp, phải lấy từ bộ đếm (INCR hoặc sequence)"],
-                  ["nhả khoá", "so giá trị mình đã đặt rồi mới xoá, trong một script Lua; không DEL thẳng"]]),
+                  ["fencing token (mã chặn)", "số tăng dần cấp kèm mỗi lần giữ khoá, nơi lưu dùng để từ chối người cũ; lệnh SET NX PX (và cả thuật toán Redlock dùng nhiều máy Redis) không tự cấp, phải lấy từ một bộ đếm tăng dần"],
+                  ["nhả khoá", "so giá trị mình đã đặt rồi mới xoá, gộp thành một bước không chen được (Redis chạy một đoạn lệnh nhỏ); không xoá thẳng"]]),
            """Bảng dưới đây giải nghĩa sáu thuật ngữ mà bài sẽ dùng. Kiểu hỏi bộ đệm trước, trượt thì hỏi cơ sở dữ liệu rồi nạp vào bộ đệm. Trúng là có trong bộ đệm, trượt là không có.
            Thời gian sống là hạn tự xoá của mỗi mục. Lệnh đặt khoá có hai tuỳ chọn, chỉ đặt khi chưa có, và tự hết hạn. Mã chặn là số tăng dần để nơi lưu từ chối người giữ khoá cũ.
-           Lệnh đặt khoá không tự cấp mã chặn, nên phải lấy từ một bộ đếm tăng dần. Cuối cùng, khi nhả khoá, phải so giá trị mình đã đặt rồi mới xoá, để không xoá nhầm khoá của người khác."""),
+           Lệnh đặt khoá không tự cấp mã chặn, nên phải lấy từ một bộ đếm tăng dần. Cuối cùng, khi nhả khoá, phải so giá trị mình đã đặt rồi mới xoá, gộp thành một bước không ai chen vào được, để không xoá nhầm khoá của người khác."""),
     ])
     intu = sc("intuition", "intuition", "Hình dung: bộ đệm và khoá hết hạn", [
         st(svg(1500, 400,
@@ -51,7 +58,7 @@ def build():
         st(svg(1500, 460,
                txt(60, 50, "Giây", 24, "start", "#475569"),
                box(120, 80, 520, 70, "A giữ khoá (mã chặn 1), hạn 10 giây", C_BLUE),
-               box(640, 80, 280, 70, "A tạm dừng…", C_GRAY, dash=True),
+               box(640, 80, 280, 70, ["A tạm dừng…", "(ví dụ thu gom rác)"], C_GRAY, dash=True, size=20),
                box(740, 190, 420, 70, "giây 11: B giữ khoá (mã chặn 2)", C_AMBER),
                box(740, 290, 360, 70, "giây 11,5: B ghi", C_AMBER),
                box(1000, 80, 440, 70, "giây 12: A tỉnh dậy, vẫn ghi!", C_RED),
@@ -113,8 +120,9 @@ $$\\frac{90 \\cdot 1 + 10 \\cdot 21}{100} = \\frac{300}{100} = \\hl{3}\\ \\text{
 <br><span class="note">Cách chữa: cộng thêm một số ngẫu nhiên nhỏ vào hạn, và chỉ cho một luồng nạp lại mỗi khoá.</span></div>""",
            """Lỗi thứ hai, của người đã đi làm, là bộ đệm hết hạn cùng lúc. Hàng nghìn khoá cùng hạn sáu mươi giây, đến giờ tất cả trượt, nghìn truy vấn đổ về cơ sở dữ liệu cùng lúc.
            Cách chữa là cộng thêm một số ngẫu nhiên nhỏ vào hạn, và chỉ cho một luồng nạp lại mỗi khoá."""),
-        st("""<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Tin khoá phân tán là đủ để bảo vệ việc ghi tiền. Khoá có hạn có thể bị hai người cùng giữ. Hãy để <b>cơ sở dữ liệu</b> chặn: ràng buộc duy nhất hoặc cột phiên bản.</div>""",
-           """Lỗi thứ ba, cũng của người đã đi làm, là tin khoá phân tán là đủ để bảo vệ việc ghi tiền. Khoá có hạn có thể bị hai người cùng giữ. Hãy để cơ sở dữ liệu chặn, bằng ràng buộc duy nhất hoặc cột phiên bản."""),
+        st("""<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Tin khoá phân tán là đủ để bảo vệ việc ghi tiền. Khoá có hạn có thể bị hai người cùng giữ. Hãy để <b>cơ sở dữ liệu</b> chặn: ràng buộc duy nhất (cấm hai dòng trùng giá trị), hoặc cột phiên bản (mỗi lần sửa tăng 1; câu sửa chỉ thành công nếu phiên bản còn như lúc đọc).</div>""",
+           """Lỗi thứ ba, cũng của người đã đi làm, là tin khoá phân tán là đủ để bảo vệ việc ghi tiền. Khoá có hạn có thể bị hai người cùng giữ. Hãy để cơ sở dữ liệu chặn, bằng ràng buộc duy nhất, tức cấm hai dòng trùng giá trị.
+           Hoặc dùng cột phiên bản. Mỗi lần sửa thì phiên bản tăng một, và câu sửa chỉ thành công nếu phiên bản vẫn còn như lúc đọc."""),
     ])
     quiz = sc("quiz", "quiz", "Đến lượt bạn", [
         st(table(["câu", "đề"],

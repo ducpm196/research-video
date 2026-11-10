@@ -72,6 +72,18 @@ Tải: https://letsencrypt.org/2025/12/02/from-90-to-45
 - “Manually renewing certificates is not recommended”; “make sure your systems have sufficient monitoring in place to alert appropriately if
   certificates aren’t renewed when expected.”
 
+## Bổ sung đợt C (đọc lại 2026-11-09)
+- [A19] §5.1 (pdftotext bản PDF tải 2026-11-09): “Full automation. The system has a single issuance path, based on ACME, with no facility
+  for human operators to manually create certificates or make one-off policy exceptions.” → câu “một đường cấp duy nhất, không có lối cấp
+  tay hay làm ngoại lệ” (chặng 2, chặng 3) nay có nguồn.
+- [A19] §7.5: “Most renewals occur in the last 30 days before the validity period of a certificate expires (64%), but over a third of
+  renewals occur in the early (19%) and middle (16%) periods of first 30 days and 30–60 days, respectively.” → 64% + 19% + 16% = 99% (chặng 3).
+- [L25] (WebFetch 2026-11-09): “May 13, 2026: Let’s Encrypt will switch our tlsserver ACME profile to issue 45-day certificates. This profile
+  is opt-in and can be used by early adopters and for testing.” → mốc 13/5/2026 (chặng 4).
+- [L25]: lý do “limiting the scope of compromise, and making certificate revocation technologies more efficient”; “Changes will be deployed to
+  our staging environment approximately one month before the production dates”; khuyên dùng ACME Renewal Information (ARI) → “gợi ý gia hạn
+  của tổ chức cấp”, “môi trường thử khoảng một tháng trước” (chặng 4, câu hỏi 2).
+
 ## Nguồn ứng viên: mốc tỉ lệ trang tải qua HTTPS
 - Không đọc trực tiếp báo cáo minh bạch của Google (trang dựng bằng mã kịch bản). Dùng số do [A19] §1 trích từ đo đạc của trình duyệt Chrome:
   2015 có 55–70% lượt tải trang dùng HTTP không mã hoá; bốn năm sau, 72–95% lượt tải trang qua HTTPS. Bài ghi đúng là “theo bài báo năm 2019”.

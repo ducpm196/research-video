@@ -13,6 +13,8 @@ Tải: static.googleusercontent.com/media/research.google.com/en//pubs/archive/4
 - §4: “already-running tasks continue to run even if the Borgmaster or a task’s Borglet goes down.”
 - §4: “Borgmaster uses a combination of techniques that enable it to achieve 99.99% availability in practice … Each cell is independent of the others to minimize the chance of correlated operator errors and failure propagation.”
 - §5.2: “98% of the machines in shared Borg cells, 83% across the entire set of machines managed by Borg.” “segregating prod and non-prod work would need 20–30% more machines in the median cell to run our workload.”
+- §5.2 (đọc lại 2026-11-09 từ PDF tải về, đợt C): “That’s because prod jobs usually reserve resources to handle rare workload spikes, but don’t use these resources most of the time.” (căn cứ “điểm nghẽn” chặng 1); “we split off a user’s workload into a new cell if they consumed at least 10 TiB of memory (or 100 TiB) … we would need 2–16× as many cells, and 20–150% additional machines.” (căn cứ câu hỏi 2 của bài: tách theo người dùng/đội — KHÔNG dùng con số 20–30% của tách prod/non-prod cho trường hợp này).
+- §4 (đọc lại 2026-11-09): “Failures are the norm in large scale systems” (căn cứ “máy hỏng là chuyện hằng ngày”).
 
 ## [Q16] B. Burns, B. Grant, D. Oppenheimer, E. Brewer, J. Wilkes. *Borg, Omega, and Kubernetes — Lessons learned from three container-management systems over a decade.* ACM Queue 14(1), January–February 2016
 Tải: static.googleusercontent.com/media/research.google.com/en//pubs/archive/44843.pdf (24 trang).
@@ -34,6 +36,12 @@ Tải: static.googleusercontent.com/media/research.google.com/en//pubs/archive/4
 - “culminating in a version 1.0 release on July 21st, 2015. Alongside 1.0, Google announced that Kubernetes would be donated to … the Cloud Native Computing Foundation (CNCF).”
 - “Despite reaching 1.0, the Kubernetes project was still very challenging to use and understand.”
 - “December 2016 - Kubernetes 1.5 introduces runtime pluggability with initial CRI support”; “September 2019 — Custom Resource Definitions go GA in Kubernetes 1.16”; “August 2020 — Kubernetes 1.19 increases the support window for releases to 1 year”; “April 2021 — the Kubernetes release cadence changes from 4 releases per year to 3 releases per year”; “July 2021 — Widely used beta APIs are removed in Kubernetes 1.22”; “May 2022 — Kubernetes 1.24 sees beta APIs become disabled by default to reduce upgrade conflicts and removal of Dockershim, leading to widespread user confusion (we've since improved our communication!)”.
+
+## Đối chiếu lại đợt C (2026-11-09)
+- B15, Q16 (PDF tải từ static.googleusercontent.com) và K24 (kubernetes.io) đã mở lại; các câu trích trên khớp văn bản.
+- Omega: Q16 không ghi năm; năm 2013 là năm bài báo Omega (EuroSys 2013, tham khảo [6] của Q16) → bài ghi “quanh 2013 / bài báo năm 2013”, không nói Omega ra đời năm 2013.
+- K24: “widespread user confusion” gắn với mục 5/2022 (1.24, bỏ Dockershim); 1.22 (gỡ beta API dùng rộng rãi) được gọi là “lessons learned” → bài tách hai ý.
+- B15 §4: mỗi ô độc lập là để “minimize the chance of correlated operator errors and failure propagation” → câu hỏi 2 nói đúng lý do này.
 
 ## Điều KHÔNG dạy (nguồn không ghi)
 - Năm Borg ra đời chính xác: nguồn chỉ ghi “hơn mười năm” tính tới 2015 và “giữa những năm 2000” → bài ghi “giữa thập niên 2000”.

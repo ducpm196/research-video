@@ -18,3 +18,7 @@
 ## Điều KHÔNG dạy / NOT_VERIFIED
 - Không nêu tên cá nhân hay hãng trò chơi cụ thể nào như một sự cố riêng lẻ — bài trình bày dưới dạng tình huống chẩn đoán kỹ thuật chuẩn mực của ngành đồ hoạ thời gian thực.
 - Không đi sâu công thức bộ đệm độ sâu lôgarit (*logarithmic depth buffer*, vốn làm hỏng kiểm độ sâu sớm trên phần cứng nếu phải ghi lại độ sâu trong bộ tô mảnh).
+
+## Đối chiếu nguồn mở (đợt C, 2026-11-09)
+- N. Reed, “Depth Precision Visualized”, https://developer.nvidia.com/content/depth-precision-visualized (truy cập 2026-11-09, trang không ghi ngày; nhãn [RE15] giữ năm 2015 theo đợt trước, chưa kiểm được năm trên trang): nguyên văn “pushing the far plane all the way out to infinity doesn't have that much effect”; với độ sâu đảo ngược: “the quasi-logarithmic distribution of floating-point somewhat cancels the 1/z nonlinearity”; với dấu phẩy động chiều thuận: “most of them are uselessly bunched up at the near plane where we didn't really need more precision” — khớp sai lầm 2 và phương án 2 của bài.
+- Đợt C sửa: “tách hai lượt vẽ làm tăng gấp đôi số lệnh vẽ” (mâu thuẫn bảng cùng bài nói chỉ vật vắt qua ranh giới) → tăng số lệnh vẽ cho vật vắt qua ranh giới; lời đọc “đến năm 2012” → 2013 (bài 13 kết thúc ở Karis 2013).

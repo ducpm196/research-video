@@ -30,3 +30,5 @@ def q(inc, yrs, asset):
 rec("L03e", q(25, 2, 0) == 16 and (25 - 16) / F(2, 5) == F(45, 2) and F(9, 3) == 3 and q(25, 2, 1) == 21
     and q(35, 2, 1) == 25 and q(25, 5, 0) == 25 and round(float(F(4, 3)), 2) == 1.33 and q(25, F(10, 3), 1) == 25,
     "quiz: 16 điểm, +22,5 triệu hoặc +3 năm; có tài sản 21 → +10 triệu (35 → 25) hoặc +4/3 năm")
+# Thêm 2026-11-09 (đợt C): phần “nhắc lại từ đầu” về trọng số: 21 triệu, 3 năm → 16,5; 20 triệu, 4 năm → 18.
+rec("L03g", F(1, 2) * 21 + 2 * 3 == F(33, 2) and F(1, 2) * 20 + 2 * 4 == 18, "trọng số: +1 triệu → +0,5 điểm (16,5); +1 năm → +2 điểm (18)")

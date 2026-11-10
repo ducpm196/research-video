@@ -168,3 +168,16 @@ Tải: https://exp-platform.com/Documents/2019_KDDFabijanGupchupFuptaOmhoverVerm
 - Cơ chế thống kê của bộ lọc tỉ lệ phát hiện sai (Empirical Bayesian FDR, [KO13] §5.2) và mô hình nhị thức âm ([KO12] §3.4): không dạy.
 - “Seven Pitfalls” (KDD 2009), “A Dirty Dozen” (KDD 2017), “Seven Rules of Thumb” (KDD 2014): tải được nhưng không đọc kỹ, không dạy.
 - Website 20 000 người mỗi tuần, tỉ lệ mua 5% ở quiz, ρ = 0,7, 5 màu nút: SỐ MINH HOẠ.
+
+## Đọc lại đợt C (2026-11-09)
+Tải lại bằng curl ba tệp PDF cùng địa chỉ ở trên (200; 1 461 328 / 1 122 001 / 418 954 byte, đúng cỡ ghi lúc đầu), trích bằng `pdftotext`,
+để kiểm ba câu bài giảng dựa vào mà mục trên chưa trích:
+- [KO12] tóm tắt: “the deployment and mining of online controlled experiments at scale--thousands of experiments now--has taught us many
+  lessons” → chặng 2 “hàng nghìn thử nghiệm” (CITED).
+- [KO13] §5.1: “1. Threshold adjustments. We look for lower p-values for projects that have multiple treatments and/or iterations.” →
+  chặng 4 “hạ ngưỡng giá trị p khi có nhiều phiên bản, nhiều vòng” (CITED).
+- [GU19] §1 (Analysis): “we are really interested in detecting the long-term effect of a change”; §3 “ESTIMATING THE LONG-TERM EFFECT” →
+  chặng 5 “bài toán mở như đo hiệu ứng lâu dài” (CITED).
+- [KO13] §1/tóm tắt: “A 1% improvement to revenue equals more than $10M annually in the US” → màn hình chặng 4 nay ghi thêm “ở Mỹ”.
+- Câu hỏi 2 (5 màu nút): 1 − 0,975⁵ ≈ 11,9% là khả năng **ít nhất một** trong 5 màu đều vô dụng trông như thắng ([KO13] §5.1 “If a team
+  tries five treatments, then the 2.5% false positive rate grows to 12%”), không phải khả năng của một màu — bài đã sửa câu chữ.

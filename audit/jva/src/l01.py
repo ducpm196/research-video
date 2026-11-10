@@ -121,12 +121,12 @@ public class Doan {
         st(code_block(bien, title="Tệp Bien.java"),
            """Đây là chương trình có một biến tên số dư. Dòng thứ ba tạo biến, dòng thứ năm cộng thêm năm mươi nghìn. Ta đọc kỹ dòng tạo biến trước."""),
         st(table(["viết", "nghĩa"],
-                 [["<code>long</code>", "<b>kiểu</b>: ngăn này chứa số nguyên, cỡ 8 byte"],
-                  ["<code>soDu</code>", "<b>tên</b> biến: chữ đầu viết thường, mỗi từ sau viết hoa chữ đầu"],
+                 [["<code>long</code>", "<b>kiểu</b>: ngăn này chứa số nguyên (loại ngăn to)"],
+                  ["<code>soDu</code>", "<b>tên</b> biến; theo quy ước (không bắt buộc): chữ đầu viết thường, mỗi từ sau viết hoa chữ đầu"],
                   ["<code>=</code>", "<b>gán</b>: tính vế phải, rồi đặt kết quả vào ngăn bên trái (không phải “bằng” của toán)"],
                   ["<code>100000</code>", "giá trị đặt vào lúc tạo"],
                   ["<code>;</code>", "hết một lệnh, như ở bài trước"]]),
-           """Chữ đầu là kiểu, ở đây là kiểu số nguyên dài, nghĩa là ngăn chỉ chứa số nguyên. Tiếp theo là tên biến, chữ đầu viết thường.
+           """Chữ đầu là kiểu, ở đây là kiểu số nguyên dài, nghĩa là ngăn chỉ chứa số nguyên. Tiếp theo là tên biến, theo quy ước thì chữ đầu viết thường.
            Dấu bằng là phép gán, không phải dấu bằng của toán, vì máy tính vế phải trước rồi đặt kết quả vào ngăn bên trái.
            Sau đó là giá trị lúc tạo, và dấu chấm phẩy.""", clear=True, focus=["1.2", "1.3", "1.4", ["1.5", "1.6"]]),
         st(code_block(bien, lines=(5, 6)) + out_block(bien),
@@ -138,8 +138,9 @@ public class Doan {
                   ["<code>double</code>", "số thực, có phần lẻ", "<code>0.055</code>", "8 byte"],
                   ["<code>boolean</code>", "đúng hoặc sai", "<code>true</code>, <code>false</code>", "—"],
                   ["<code>char</code>", "một ký tự, nháy đơn", "<code>'A'</code>", "2 byte"],
-                  ["<code>String</code>", "chuỗi chữ, nháy kép", "<code>\"Nguyen Van An\"</code>", "tuỳ độ dài"]]),
-           """Đây là sáu kiểu dùng nhiều nhất. Kiểu số nguyên chiếm bốn bai, kiểu số nguyên dài chiếm tám bai.
+                  ["<code>String</code>", "chuỗi chữ, nháy kép", "<code>\"Nguyen Van An\"</code>", "tuỳ độ dài"]])
+           + "<span class='note'>1 byte = 8 ô nhớ nhỏ, mỗi ô chỉ là 0 hoặc 1.</span>",
+           """Đây là sáu kiểu dùng nhiều nhất. Kiểu số nguyên chiếm bốn bai, kiểu số nguyên dài chiếm tám bai, mà một bai là tám ô nhớ nhỏ, mỗi ô chỉ là không hoặc một.
            Kiểu số thực chứa số có phần lẻ, như lãi suất. Kiểu đúng sai chỉ có hai giá trị, đúng hoặc sai.
            Kiểu ký tự chứa một ký tự trong nháy đơn, còn kiểu chuỗi chứa cả dòng chữ trong nháy kép.""", clear=True,
            focus=[1, ["1.2", "1.3"], "1.4", "1.5", ["1.6", "1.7"]]),
@@ -187,11 +188,15 @@ $$2^{32} = \\hl{4\\,294\\,967\\,296} \\text{ giá trị khác nhau}$$""",
 $$2^{31} = 2\\,147\\,483\\,648 \\text{ số âm} \\qquad 2^{31} - 1 = \\hl{2\\,147\\,483\\,647} \\text{ là số dương lớn nhất}$$""",
            """Bước ba, chia đôi. Một nửa số giá trị dành cho số âm, nửa kia cho số không và các số dương.
            Nửa thứ hai phải nhường một chỗ cho số không, nên số dương lớn nhất là hai mũ ba mươi mốt trừ một."""),
-        st("""<p><b>Bước 4.</b> Cộng 1 vào số lớn nhất: kết quả cần 33 ô, máy chỉ giữ 32 ô nên <b>bỏ phần tràn</b>, ra số nhỏ nhất.</p>"""
+        st("""<p><b>Bước 4.</b> Cộng 1 vào số lớn nhất: kết quả đúng là $2\\,147\\,483\\,648$, nằm ngoài miền của <code>int</code>. Java không báo lỗi mà <b>quay vòng</b>: trừ đi đúng một vòng $2^{32}$ giá trị.</p>
+$$2\\,147\\,483\\,648 - 4\\,294\\,967\\,296 = \\hl{-2\\,147\\,483\\,648}$$"""
            + code_block(tran, lines=(3, 7)) + out_block(tran),
-           """Bước bốn, vượt giới hạn. Cộng một vào số lớn nhất thì kết quả cần ba mươi ba ô. Theo luật của Java, máy bỏ phần tràn, chỉ giữ ba mươi hai ô.
-           Kết quả là số nhỏ nhất của kiểu số nguyên. Chạy thật, dòng cuối đúng là số đó, và không có thông báo lỗi nào."""),
+           """Bước bốn, vượt giới hạn. Cộng một vào số lớn nhất thì kết quả đúng là hai tỉ một trăm bốn mươi bảy triệu bốn trăm tám mươi ba nghìn sáu trăm bốn mươi tám, nằm ngoài miền của kiểu số nguyên.
+           Theo luật của Java, máy không báo lỗi mà quay vòng, nghĩa là trừ đi đúng hai mũ ba mươi hai, tức một vòng đủ mọi giá trị.
+           Kết quả là âm hai tỉ một trăm bốn mươi bảy triệu bốn trăm tám mươi ba nghìn sáu trăm bốn mươi tám, đúng số nhỏ nhất của kiểu số nguyên.
+           Chạy thật, dòng cuối đúng là số đó, và không có thông báo lỗi nào."""),
     ], checks=["4 * 8 == 32", "2**32 == 4294967296", "2**31 - 1 == 2147483647",
+               "(2**31 - 1) + 1 == 2147483648", "2147483648 - 4294967296 == -2**31",
                "((2**31 - 1) + 1 + 2**31) % 2**32 - 2**31 == -2**31"])
     sc_ex = sc("example", "example", "Ví dụ: cộng ba đợt lương bằng kiểu số nguyên dài", [
         st(code_block(luong, title="Tệp Luong.java"),
@@ -232,16 +237,17 @@ $$2\\,700\\,000\\,000 > 2\\,147\\,483\\,647 \\qquad 2\\,700\\,000\\,000 - 4\\,29
         st('<div class="box warn"><b>Lỗi 2 (người đã đi làm).</b> Dùng <code>int</code> cho tổng tiền: tràn số mà không báo.</div>'
            + code_block(tran_luong, lines=(3, 5)) + out_block(tran_luong),
            """Lỗi thứ hai, gặp cả ở người đã đi làm, là dùng kiểu số nguyên cho tổng tiền. Từng khoản thì vừa, cộng lại thì vượt hai tỉ một.
-           Chương trình chạy êm, chỉ có con số sai, nên rất khó phát hiện. Tổng tiền luôn dùng kiểu số nguyên dài."""),
+           Chương trình chạy êm, chỉ có con số sai, nên rất khó phát hiện. Tổng tiền tính bằng đồng nên dùng kiểu số nguyên dài."""),
         st('<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Dùng <code>double</code> cho tiền.</div>'
            + code_block(tien_thuc, lines=(3, 8)) + out_block(tien_thuc),
            """Lỗi thứ ba là dùng kiểu số thực cho tiền. Không phẩy một cộng không phẩy hai ra một số lệch ở chữ số thứ mười bảy sau dấu phẩy.
-           Lý do là số thực lưu theo hệ hai, mà không phẩy một trong hệ hai là số lẻ vô hạn, như một phần ba trong hệ mười.
+           Lý do là số thực lưu theo hệ hai, tức chỉ dùng hai chữ số không và một.
+           Mà không phẩy một viết trong hệ hai là số lẻ vô hạn, như một phần ba trong hệ mười, nên máy phải cắt bớt.
            Cách đúng là đổi ra đồng, một trăm cộng hai trăm ra đúng ba trăm."""),
         st('<p>Khi tiền <b>bắt buộc</b> có phần lẻ (tỉ giá, lãi suất), Java có kiểu số thập phân chính xác <code>BigDecimal</code>:</p>'
            + code_block(thap_phan, lines=(5, 7)) + out_block(thap_phan),
            """Khi tiền bắt buộc có phần lẻ, như tỉ giá, Java có sẵn một kiểu số thập phân chính xác.
-           Tạo số từ chuỗi chữ rồi cộng bằng lệnh riêng, ra đúng không phẩy ba. Bài này chỉ cần biết nó tồn tại."""),
+           Ta tạo số từ chuỗi chữ, không từ số thực, để không mang theo sai lệch của hệ hai, rồi cộng bằng lệnh riêng, ra đúng không phẩy ba. Bài này chỉ cần biết nó tồn tại."""),
     ])
     sc_quiz = sc("quiz", "quiz", "Bây giờ tới phần bạn tự làm", [
         st(code_block(quiz, lines=(3, 8), title="Đoán ba dòng in ra"),
@@ -265,9 +271,9 @@ $$2\\,700\\,000\\,000 > 2\\,147\\,483\\,647 \\qquad 2\\,700\\,000\\,000 - 4\\,29
            """Tổng kết chuỗi logic. Biến là ngăn nhớ có tên, kiểu quyết định cỡ ngăn và thứ được chứa.
            Phép gán tính vế phải rồi ghi đè. Vượt cỡ ngăn thì số quay vòng mà không báo, vì vậy tiền dùng số nguyên dài theo đồng."""),
         st("""<div class='box key'><b>Tư duy:</b> trước khi khai một biến, hỏi hai câu: <b>giá trị lớn nhất</b> nó có thể đạt là bao nhiêu,
-và nó có cần <b>phần lẻ chính xác</b> không. Tổng tiền thì luôn chọn <code>long</code>, đơn vị đồng.</div>""",
+và nó có cần <b>phần lẻ chính xác</b> không. Tổng tiền tính bằng đồng (không có phần lẻ) thì chọn <code>long</code>; cần phần lẻ chính xác thì dùng <code>BigDecimal</code>.</div>""",
            """Điều cần mang theo. Trước khi khai một biến, hãy hỏi giá trị lớn nhất nó có thể đạt là bao nhiêu, và nó có cần phần lẻ chính xác không.
-           Với tổng tiền, câu trả lời luôn là kiểu số nguyên dài, đơn vị đồng."""),
+           Với tổng tiền tính bằng đồng, câu trả lời là kiểu số nguyên dài; còn khi cần phần lẻ chính xác thì dùng kiểu số thập phân chính xác."""),
     ])
     return lesson("L01", "bien_va_kieu_du_lieu", "Bài 1 — Biến và kiểu dữ liệu",
                   "curriculum/jva.yaml L01; audit/jva/verify_jva.py L01 (javac/java chạy thật); The Java Language Specification, "

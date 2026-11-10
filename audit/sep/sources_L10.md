@@ -88,3 +88,8 @@ Tải: https://docs.npmjs.com/cli/v10/configuring-npm/package-lock-json (200)
 - Số dự án bị ảnh hưởng chính xác (nguồn chỉ ghi “many thousands of projects”) và tên các công ty bị ảnh hưởng ngoài hai chuỗi
   babel, atom mà nguồn nêu — không dạy thêm.
 - Không bàn đúng sai của tranh chấp nhãn hiệu: nguồn ghi “This incident did not arise because of intellectual property law.”
+
+## Đọc lại đợt C (2026-11-09)
+- blog.npmjs.org bài 23/3/2016 (HTTP 200): “272 other packages”, “Shortly after 2:30 PM”, “within ten minutes”, “at 4:05 PM”, “2.5 hours” — khớp.
+- docs.npmjs.com/policies/unpublish (HTTP 200): “within the first 72 hours”, “less than 300 downloads over the last week”, “a single
+  owner/maintainer” — khớp chính sách hiện hành bài dùng.

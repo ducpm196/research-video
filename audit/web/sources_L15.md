@@ -21,6 +21,14 @@ Tải: https://www.rfc-editor.org/rfc/rfc2616.txt
 - §8.1.2.2: “A server MUST send its responses to those requests in the same order that the requests were received.”
 - §8.1.4: “A single-user client SHOULD NOT maintain more than 2 connections with any server or proxy.”
 
+## [R97] RFC 2068 *Hypertext Transfer Protocol -- HTTP/1.1* (Standards Track, tháng 1/1997) — thêm 2026-11-08 khi đọc kiểm
+Tải: https://www.rfc-editor.org/rfc/rfc2068.txt (truy cập 2026-11-08). Bản HTTP/1.1 ĐẦU TIÊN; RFC 2616 (1999) là bản sửa của nó.
+Bài cũ tính “1.0 → 1.1 mất 3 năm, 1.1 → 2 mất 16 năm” theo năm của RFC 2616 — sai; đúng là 8 tháng (5/1996 → 1/1997) và 18 năm (1997 → 2015).
+- §8.1.1: “HTTP implementations SHOULD implement persistent connections.”
+- §8.1.2.2: “A client that supports persistent connections MAY "pipeline" its requests”; “A server MUST send its responses to those
+  requests in the same order that the requests were received.”
+- §8.1.4: “A single-user client SHOULD maintain AT MOST 2 connections with any server or proxy.”
+
 ## [R22a] RFC 9112 *HTTP/1.1* (STD 99, tháng 6/2022)
 Tải: https://www.rfc-editor.org/rfc/rfc9112.txt
 - §9.4: “Previous revisions of HTTP gave a specific number of connections as a ceiling, but this was found to be impractical for many

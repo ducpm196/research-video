@@ -124,6 +124,20 @@ Tệp ghi: “This is an edited version of an email Ingo Molnar sent to lkml on 
   sched_rt_period_us = 1000000, sched_rt_runtime_us = 950000 → tác vụ thời gian thực dùng tối đa 0,95 s mỗi giây, chừa 0,05 s (5%) cho
   tác vụ thường. Dùng cho câu “vòng lặp lỗi chiếm gần hết CPU” ở phần quyết định (rà 2026-11-08; trước đó bài nói “chiếm hết”).
 
+## Đọc kiểm lần ba (2026-11-09, WebFetch, truy cập 2026-11-09, no revision given trừ khi ghi)
+Mở lại và khớp: [O102] (v2.6.12 sched-design.txt: thư 4/1/2002, “64-bit bitmap cache”, “4-entry 'history' ringbuffer”, KHÔNG có số 140),
+[KN23] (9/10/2007, “~70% of its code is touched”, câu “predict the future with heuristics”, nhạc bị vấp), [CFS] (“merged in Linux 2.6.23”,
+“no heuristics whatsoever”, “only one central tunable”, “instead of 140 in the previous scheduler”, ví dụ 2048/1024), [KN24] (24/1/2008,
+“more than 10% slower”, ví dụ 50%/25%, nhóm “multimedia”, “compiling”), [LWN23] (J. Corbet, 9/3/2023; bài báo 1995 Stoica & Abdel-Wahab;
+ví dụ 10 + 20 = 30 ms; “option alongside CFS”), [KN66] (29/10/2023; thay CFS; “Many of these tunables have been removed”), [KN612]
+(17/11/2024; “completes the EEVDF transition”; “first pieces of sched_ext”), [SCX] (bật/tắt bất cứ lúc nào; quay về mặc định khi lỗi,
+tác vụ treo, SysRq; SCX_OPS_SWITCH_PARTIAL; API “no stability guarantees”), [RTG] (docs.kernel.org/scheduler/sched-rt-group.html:
+1000000 / 950000 µs, “0.05s to be used by SCHED_OTHER”).
+Sửa bài theo đó: (1) số 140 mức ưu tiên lấy từ [CFS] §6 (bộ lập lịch trước CFS, tức bản 2.6), không phải từ thư 2002 (thư ghi bảng bit
+64 bit) → bài ghi “bản 2.6 có 140 mức”; (2) “viết lại khoảng 70% mã” → “sửa tới khoảng 70% mã” (nguồn: “touched”); (3) vòng đệm 4 ô là
+thiết kế trong thư 2002 [O102], bài ghi “theo thiết kế năm 2002”; (4) “không có mẹo đoán” là mô tả lúc ra đời [CFS], còn [LWN23]/[KN66]
+cho thấy về sau lại phụ thuộc mẹo và tham số chỉnh → bài ghi rõ hai thời điểm.
+
 ## Điều KHÔNG dạy (nguồn không ghi)
 - Năm hoà vào nhân chính thức và số hiệu bản của bộ lập lịch O(1): [O102] chỉ ghi thư ngày 4/1/2002 và cập nhật 18/4/2002; [KN23] ghi
   “during the development of Linux 2.5”. Bài nói “năm 2002, trong lúc phát triển nhánh 2.5”, không nói ngày ra bản.

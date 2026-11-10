@@ -5,8 +5,10 @@ title: 'Bài 2 — Spring Boot: bean, proxy và giao dịch'
 voice: vi-VN-NamMinhNeural
 rate: -5%
 depth: full
-source: curriculum/bnk.yaml L02; audit/bnk/verify_bnk.py L02; Spring Framework Reference
-  (Transaction Management, AOP proxies)
+source: 'curriculum/bnk.yaml L02; audit/bnk/verify_bnk.py L02; Spring Framework Reference
+  (Transaction Management: “In proxy mode (which is the default), only external method
+  calls coming in through the proxy are intercepted”; rollback mặc định cho RuntimeException
+  và Error; AOP proxies); Java Language Specification §11 (checked / unchecked exceptions)'
 assumes: []
 objectives:
 - Giải thích Spring tạo bean và trao proxy cho người gọi
@@ -14,10 +16,15 @@ objectives:
 - Nhận ra lỗi gọi hàm cùng lớp làm mất nhãn giao dịch
 - Chọn nơi đặt hàm ghi vết để luôn lưu được
 asr_reviewed:
-- sentence: Tiêm phụ thuộc là Spring nối các bean với nhau.
-  reason: 'ASR chép “Tim phụ thuộc là Espring nối các binh với nhau.” (0.7): lệch
-    âm/thanh thuần Việt: tiêm/tim, spring/espring, bean/binh — NOT_VERIFIED bằng tai
-    người'
+- sentence: Spring Boot là cách đóng gói và chạy nhanh bộ khung đó.
+  reason: 'ASR chép “Springbook là cách đóng gói và chạy nhanh bộ khung đó.” (0.87):
+    “spring” đọc theo luật lexicon (lexicon_vi.BNK.yaml: “S-pring”), ASR viết “springbook”
+    — NOT_VERIFIED bằng tai người'
+- sentence: Tiêm phụ thuộc là Spring nối các bean với nhau, thường qua hàm khởi tạo,
+    tức phương thức chạy lúc tạo đối tượng.
+  reason: 'ASR chép “Tiêm phụ thuộc là spring nối các binh với nhau, thường qua hàm
+    khởi tạo, tức phương thức chạy lúc tạo đối tượng.” (0.957): lệch âm/thanh thuần
+    Việt: bean/binh — NOT_VERIFIED bằng tai người'
 - sentence: Nếu chỉ làm một nửa, sổ sách lệch.
   reason: 'ASR chép “Nếu chỉ là một nửa, sổ sách lịch.” (0.75): lệch âm/thanh thuần
     Việt: làm/là, lệch/lịch — NOT_VERIFIED bằng tai người'
@@ -78,20 +85,36 @@ scenes:
       proxy, có hai giao dịch và dòng ghi vết còn lại.
 - id: prereq
   kind: prereq
-  title: Ôn lại ba điều sẽ dùng
+  title: 'Trước hết: bốn điều cần hiểu'
   checks:
   - -500000 + 500000 == 0
   steps:
   - show: '<table class=''t''><tr><th>khái niệm</th><th>nghĩa</th><th>ví dụ</th></tr><tr><td>①
-      Lớp và đối tượng</td><td>lớp là khuôn, đối tượng là bản làm ra từ khuôn</td><td>lớp
-      TaiKhoan, đối tượng tài khoản số 1</td></tr><tr><td>② Một hàm gọi hàm khác</td><td>hàm
-      A có thể gọi hàm B của đối tượng khác</td><td>chuyenTien gọi ghiVet</td></tr><tr><td>③
-      Giao dịch</td><td>một nhóm thao tác: hoặc cùng thành công, hoặc cùng huỷ</td><td>trừ
-      tiền và cộng tiền cùng lúc</td></tr></table>'
-    say: Trước hết ta ôn lại ba điều sẽ dùng. Lớp là cái khuôn, đối tượng là bản làm
-      ra từ khuôn. Một hàm có thể gọi hàm của đối tượng khác, ví dụ chuyển tiền gọi
-      ghi vết. Giao dịch là nhóm thao tác mà hoặc cùng thành công, hoặc cùng bị huỷ,
-      ví dụ trừ tiền và cộng tiền.
+      Lớp và đối tượng</td><td>lớp là khuôn, đối tượng là bản làm ra từ khuôn; hàm
+      viết trong lớp gọi là phương thức</td><td>lớp TaiKhoan, đối tượng tài khoản
+      số 1</td></tr><tr><td>② Một hàm gọi hàm khác</td><td>phương thức A có thể gọi
+      phương thức B của chính đối tượng đó hoặc của đối tượng khác</td><td>chuyenTien
+      gọi ghiVet</td></tr><tr><td>③ Giao dịch</td><td>một nhóm thao tác: hoặc cùng
+      thành công, hoặc cùng huỷ</td><td>trừ tiền và cộng tiền cùng lúc</td></tr></table>'
+    say: Trước hết ta cần hiểu bốn điều. Lớp là cái khuôn, đối tượng là bản làm ra
+      từ khuôn, và một hàm viết trong lớp gọi là phương thức. Một phương thức có thể
+      gọi phương thức khác của chính đối tượng đó, hoặc của đối tượng khác, ví dụ
+      chuyển tiền gọi ghi vết. Giao dịch là nhóm thao tác mà hoặc cùng thành công,
+      hoặc cùng bị huỷ, ví dụ trừ tiền và cộng tiền.
+  - show: '<table class=''t''><tr><th>khái niệm</th><th>nghĩa</th><th>ví dụ</th></tr><tr><td>④
+      Ngoại lệ (exception)</td><td>đối tượng báo lỗi được “ném” ra; phương thức dừng
+      ngay, lỗi bay ngược lên người gọi tới khi có chỗ bắt (<code>try … catch</code>)</td><td><code>throw
+      new RuntimeException("hết tiền")</code></td></tr><tr><td>loại không bắt buộc
+      xử lý</td><td><code>RuntimeException</code> và các lớp con: Java không bắt phải
+      khai báo hay bắt</td><td>chia cho 0, số dư âm</td></tr><tr><td>loại bắt buộc
+      xử lý (checked)</td><td>Java buộc người viết phải bắt hoặc khai báo <code>throws</code></td><td><code>IOException</code>
+      khi đọc tệp</td></tr></table>'
+    clear: true
+    say: Điều thứ tư là ngoại lệ. Ngoại lệ là một đối tượng báo lỗi được ném ra. Phương
+      thức đang chạy dừng ngay, và lỗi bay ngược lên người gọi, cho tới khi có chỗ
+      bắt nó. Java chia ngoại lệ làm hai loại. Loại thời gian chạy thì Java không
+      bắt buộc phải khai báo hay bắt, ví dụ lỗi số dư âm do ta tự ném. Loại bắt buộc
+      xử lý thì người viết phải bắt hoặc khai báo, ví dụ lỗi khi đọc tệp.
   - show: $$-500\,000 + 500\,000 = 0$$
     say: Một ví dụ số cho giao dịch. Trừ năm trăm nghìn ở một tài khoản và cộng năm
       trăm nghìn ở tài khoản kia, tổng bằng không. Nếu chỉ làm một nửa, sổ sách lệch.
@@ -99,17 +122,36 @@ scenes:
   kind: symbol
   title: Giải mã vài từ trong Spring
   steps:
+  - show: '<table class=''t''><tr><th>từ</th><th>nghĩa</th></tr><tr><td>Spring / Spring
+      Boot</td><td>bộ khung viết dịch vụ Java: lo tạo đối tượng, nối chúng, mở giao
+      dịch; Spring Boot là cách đóng gói và chạy nhanh bộ khung đó</td></tr><tr><td>nhãn
+      (annotation)</td><td>dòng bắt đầu bằng <code>@</code> đặt trên phương thức hay
+      lớp, mang lời dặn cho công cụ khác đọc, ví dụ <code>@Transactional</code></td></tr><tr><td><code>this</code></td><td>tham
+      chiếu tới chính đối tượng đang chạy phương thức; <code>this.ghiVet()</code>
+      là tự gọi mình</td></tr><tr><td>commit / rollback</td><td>chốt lưu vĩnh viễn
+      mọi thay đổi của giao dịch / huỷ mọi thay đổi đó</td></tr></table>'
+    say: Bảng này giải mã bốn từ đầu. Spring là bộ khung viết dịch vụ Java, lo tạo
+      đối tượng, nối chúng với nhau và mở giao dịch. Spring Boot là cách đóng gói
+      và chạy nhanh bộ khung đó. Nhãn là dòng bắt đầu bằng ký hiệu a còng đặt trên
+      phương thức hay lớp, mang lời dặn cho công cụ khác đọc, ví dụ nhãn giao dịch.
+      Từ khoá tự chỉ là tham chiếu tới chính đối tượng đang chạy, nên gọi qua từ khoá
+      này là đối tượng tự gọi mình. Chốt là lưu vĩnh viễn mọi thay đổi của giao dịch,
+      còn hoàn tác là huỷ mọi thay đổi đó.
   - show: <table class='t'><tr><th>từ</th><th>nghĩa</th></tr><tr><td>bean</td><td>đối
       tượng do Spring tạo và quản lý</td></tr><tr><td>IoC (đảo điều khiển)</td><td>bạn
       không tự tạo đối tượng bằng new, Spring tạo rồi trao cho bạn</td></tr><tr><td>tiêm
-      phụ thuộc</td><td>Spring nối các bean với nhau qua hàm khởi tạo</td></tr><tr><td>proxy</td><td>một
-      lớp vỏ bọc bean, chạy thêm việc trước và sau khi gọi hàm</td></tr><tr><td>REQUIRED
+      phụ thuộc</td><td>Spring nối các bean với nhau, thường qua hàm khởi tạo (phương
+      thức chạy lúc tạo đối tượng)</td></tr><tr><td>proxy</td><td>một đối tượng vỏ
+      bọc bean, chạy thêm việc trước và sau khi gọi phương thức</td></tr><tr><td>REQUIRED
       / REQUIRES_NEW</td><td>tham gia giao dịch đang có / luôn mở giao dịch mới</td></tr></table>
-    say: Bảng này giải mã năm từ. Bean là đối tượng do Spring tạo và quản lý. Đảo
-      điều khiển nghĩa là bạn không tự tạo đối tượng, Spring tạo rồi trao cho bạn.
-      Tiêm phụ thuộc là Spring nối các bean với nhau. Proxy là lớp vỏ bọc bean, chạy
-      thêm việc trước và sau lời gọi. Cuối cùng, chế độ tham gia nghĩa là dùng giao
-      dịch đang có, còn chế độ mới nghĩa là luôn mở giao dịch mới.
+    clear: true
+    say: Bảng thứ hai giải thích nghĩa của năm thuật ngữ tiếp theo. Bean là đối tượng
+      do Spring tạo và quản lý. Đảo điều khiển nghĩa là bạn không tự tạo đối tượng,
+      Spring tạo rồi trao cho bạn. Tiêm phụ thuộc là Spring nối các bean với nhau,
+      thường qua hàm khởi tạo, tức phương thức chạy lúc tạo đối tượng. Proxy là đối
+      tượng vỏ bọc bean, chạy thêm việc trước và sau lời gọi. Cuối cùng, chế độ tham
+      gia nghĩa là dùng giao dịch đang có, còn chế độ mới nghĩa là luôn mở giao dịch
+      mới.
 - id: intuition
   kind: intuition
   title: 'Hình dung: vỏ bọc proxy đứng giữa'
@@ -137,9 +179,10 @@ scenes:
       x="700" y="300" font-size="26" text-anchor="middle" fill="#1f2937" font-weight="bold">Controller
       không giữ bean thật mà giữ proxy</text></svg></div>
     clear: true
-    say: Hình cho thấy cách Spring nối các bean. bộ điều khiển muốn gọi dịch vụ chuyển
-      tiền. Nhưng thứ nó nhận được không phải bean thật, mà là một proxy vỏ bọc. Proxy
-      đứng giữa, rồi mới chuyển lời gọi tới bean thật.
+    say: Hình cho thấy cách Spring nối các bean. bộ điều khiển, tức lớp nhận yêu cầu
+      từ bên ngoài, muốn gọi dịch vụ chuyển tiền. Nhưng thứ nó nhận được không phải
+      bean thật, mà là một proxy vỏ bọc. Proxy đứng giữa, rồi mới chuyển lời gọi tới
+      bean thật.
   - show: <div><svg width="1500" height="400" viewBox="0 0 1500 400" font-family="sans-serif"><defs><marker
       id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
       refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><rect
@@ -226,17 +269,21 @@ scenes:
   - show: '<p><b>Bước 3.</b> Giao dịch mới commit riêng, nên khi giao dịch ngoài hỏng,
       dòng ghi vết vẫn còn. Giao dịch dùng chung thì mất theo.</p>
 
-      <span class=''note''>Mặc định, Spring chỉ rollback khi gặp lỗi không bắt buộc
-      xử lý (RuntimeException) hoặc Error.</span>
+      <p class="small">Mặc định Spring chỉ rollback khi <code>RuntimeException</code>
+      hoặc <code>Error</code> bay ra khỏi phương thức; ngoại lệ bắt buộc xử lý thì
+      vẫn commit, trừ khi khai báo <code>rollbackFor</code>.</p>
 
       '
     focus:
     - 1
     - 1
     - 2
+    - 2
     say: Bước ba, vì giao dịch mới chốt riêng, nên khi giao dịch ngoài hỏng, dòng
       ghi vết vẫn còn. Còn giao dịch dùng chung thì mất theo. Mặc định Spring chỉ
-      hoàn tác khi gặp lỗi thời gian chạy hoặc lỗi hệ thống.
+      hoàn tác khi một ngoại lệ thời gian chạy, hoặc một lỗi hệ thống, bay ra khỏi
+      phương thức. Ngoại lệ loại bắt buộc xử lý thì mặc định vẫn chốt, trừ khi ta
+      khai báo thêm trong nhãn.
 - id: example
   kind: example
   title: Ví dụ bằng số, từng trường hợp
@@ -332,22 +379,23 @@ scenes:
     say: Lỗi thứ nhất, của người mới. Tự tạo đối tượng dịch vụ bằng từ khoá tạo mới.
       Đối tượng đó không do Spring tạo, nên không được nối phụ thuộc và không có proxy.
   - show: '<div class="box warn"><b>Lỗi 2 (người đã đi làm).</b> <b class="red">Gọi
-      hàm có nhãn giao dịch từ trong cùng lớp</b> bằng <code>this</code>. Nhãn bị
-      bỏ qua.
+      hàm có nhãn giao dịch từ trong cùng lớp</b> bằng <code>this</code>. Ở chế độ
+      proxy (mặc định), nhãn bị bỏ qua.
 
       <br><span class="note">Cách chữa: tách hàm sang bean khác, rồi gọi qua bean
       đó.</span></div>
 
       '
     say: Lỗi thứ hai, của người đã đi làm, là gọi hàm có nhãn giao dịch từ trong cùng
-      lớp bằng cách gọi thẳng chính nó. Nhãn bị bỏ qua vì không có proxy. Cách chữa
-      là tách hàm sang bean khác rồi gọi qua bean đó.
-  - show: <div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Bắt lỗi trong hàm
-      có nhãn rồi chỉ ghi log. Proxy không thấy lỗi nào, nên <b class="red">commit
-      nửa chừng</b>.</div>
-    say: Lỗi thứ ba, cũng của người đã đi làm, là bắt lỗi ngay trong hàm có nhãn rồi
-      chỉ ghi nhật ký. Proxy không thấy lỗi nào nên cứ chốt, và dữ liệu bị lưu nửa
-      chừng.
+      lớp bằng cách gọi thẳng chính nó. Ở chế độ proxy mặc định, nhãn bị bỏ qua vì
+      lời gọi không đi qua proxy. Cách chữa là tách hàm sang bean khác rồi gọi qua
+      bean đó.
+  - show: <div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Bắt ngoại lệ bằng
+      <code>try … catch</code> ngay trong hàm có nhãn rồi chỉ ghi log. Ngoại lệ không
+      bay ra tới proxy, nên proxy <b class="red">commit nửa chừng</b>.</div>
+    say: Lỗi thứ ba, cũng của người đã đi làm, là bắt ngoại lệ ngay trong hàm có nhãn
+      rồi chỉ ghi nhật ký. Ngoại lệ không bay ra tới proxy, nên proxy không thấy lỗi
+      nào và cứ chốt, làm dữ liệu bị lưu nửa chừng.
 - id: quiz
   kind: quiz
   title: Đến lượt bạn

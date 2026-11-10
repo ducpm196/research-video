@@ -58,3 +58,15 @@ Tải: https://docs.github.com/en/repositories/managing-your-repositorys-setting
 - Giấy phép riêng cho dịch vụ mạng (AGPL…) — chưa đọc văn bản; bài chỉ nói “giấy phép khác có thể định nghĩa khác”.
 - Không dạy luật sở hữu trí tuệ Việt Nam (chưa đọc văn bản cho bài này).
 - Probe p1 (MIT, Apache, GPL) chưa có kết quả khi soạn: lời đọc dùng tên mô tả, tên chỉ trên màn hình.
+
+## Đọc lại đợt C (2026-11-09)
+- apache.org/licenses/LICENSE-2.0.txt (HTTP 200, 11 358 byte): §4(a) “give any other recipients … a copy of this License”, §4(b) “cause any
+  modified files to carry prominent notices stating that You changed the files”, §4(d) “If the Work includes a "NOTICE" text file …” và §3 câu
+  chấm dứt giấy phép bằng sáng chế khi người nhận “institute patent litigation … alleging that the Work … constitutes … patent infringement”
+  — khớp các câu trên. Bài nay ghi rõ (b) chỉ áp khi có sửa tệp, (d) chỉ khi có tệp NOTICE, và lời đọc bước 3 của ví dụ không còn
+  “chỉ cần gom 3 bản thông báo” (mẫu đợt C: SEP L04 bỏ yêu cầu riêng của Apache 2.0).
+- gnu.org/licenses/gpl-3.0.txt (HTTP 200 lần này, 35 149 byte): §0 “Mere interaction with a user through a computer network …”, §5c
+  “license the entire work, as a whole”, đoạn “aggregate”, §6 “Corresponding Source” — khớp bản SPDX đã dùng.
+- opensource.org/license/mit (HTTP 200): “The above copyright notice and this permission notice shall be included in all copies or
+  substantial portions of the Software.” — khớp. Lỗi 2 của bài nay nói “không còn thoả điều kiện của lời cho phép” thay cho “mất quyền
+  dùng” (MIT không có điều khoản chấm dứt riêng; không khẳng định hệ quả pháp lý cụ thể).

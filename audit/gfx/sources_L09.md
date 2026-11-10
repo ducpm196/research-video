@@ -21,3 +21,8 @@
 ## Điều KHÔNG dạy / NOT_VERIFIED
 - Không dạy thuật toán giao tia–tam giác Möller–Trumbore (1997) và cấu trúc cây hộp bao phân cấp (*BVH*) ở mức cài đặt chi tiết — chỉ nêu ý tưởng hộp bao ở phần mở rộng / câu hỏi quyết định để người học hiểu vì sao dò tia thực tế không thử hết mọi vật.
 - Toạ độ mặt cầu tâm $(0, 0, 5)$ bán kính $1$ và nguồn sáng là SỐ MINH HOẠ để giải phương trình bậc hai chẵn số.
+
+## Đối chiếu nguồn mở (đợt C, 2026-11-09)
+- [PBR4] https://pbr-book.org/4ed/Shapes/Spheres (truy cập 2026-11-09, no revision given), §6.2.2 “Intersection Tests”: phương trình bậc hai a·t² + b·t + c = 0 với a = d·d, b = 2(d·o), c = o·o − r² (cầu đặt ở gốc trong hệ toạ độ của vật, tức o đóng vai m = o − c của bài); nguyên văn “The closest valid t is then stored in tShapeHit” và “Due to floating-point precision limitations, this computed intersection point pHit may lie a bit to one side” của mặt thật — khớp chọn nghiệm hợp lệ nhỏ nhất và lỗi mụn bóng của bài.
+- Câu trích [WH80] ở trên ghi “trích nguyên văn” từ đợt trước; đợt C chưa mở lại bài báo (NOT_VERIFIED trong đợt này).
+- Đợt C sửa: định nghĩa “đệ quy”; ghi ε ≈ 10⁻⁴ là số minh hoạ; lời đọc “c không bằng …” (nghe như “c không bằng”) → “hằng số tự do, viết là c kèm chỉ số 0, bằng …”.

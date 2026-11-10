@@ -172,11 +172,12 @@ public class DoanKetQua {
     sc_hook = sc("hook", "hook", "Mỗi loại phí một công thức: thêm loại mới có phải sửa khắp nơi?", [
         st("""<p>Ngân hàng có phí theo bậc (biểu phí bài 3), phí theo phần trăm, rồi mai có thêm miễn phí cho khách VIP (đều là số minh hoạ). Viết tất cả vào một hàm với chuỗi
 <code>if … else if …</code> thì mỗi lần thêm loại mới lại phải sửa hàm cũ.</p>
-<div class="box key">Hôm nay: <b>giao diện</b> và <b>đa hình</b> (mỗi cách tính phí là một lớp, chạy qua <b>một</b> vòng lặp),
+<div class="box key">Hôm nay: <b>giao diện</b> và <b>đa hình</b> (cùng một lời gọi, mỗi đối tượng làm theo cách của lớp nó: mỗi cách tính phí là một lớp, chạy qua <b>một</b> vòng lặp),
 <b>bản ghi</b> cho dữ liệu giao dịch, <b>kiểu liệt kê</b> cho trạng thái.</div>""",
            """Ngân hàng có phí theo bậc như biểu phí ở bài ba, phí theo phần trăm, rồi mai lại có miễn phí cho khách đặc biệt, tất cả đều là số minh hoạ.
            Viết tất cả vào một hàm với chuỗi lệnh rẽ nhánh thì mỗi lần thêm loại mới lại phải sửa hàm cũ.
            Hôm nay ta học giao diện và đa hình, để mỗi cách tính phí là một lớp riêng, chạy qua cùng một vòng lặp.
+           Đa hình nghĩa là nhiều hình dạng: cùng một lời gọi, mỗi đối tượng làm theo cách riêng của lớp nó.
            Ta cũng học bản ghi cho dữ liệu giao dịch, và kiểu liệt kê cho trạng thái giao dịch."""),
     ])
     sc_pre = sc("prereq", "prereq", "Ôn lại: lớp, danh sách và so bằng nội dung", [
@@ -192,15 +193,16 @@ public class DoanKetQua {
         st(table(["viết", "nghĩa"],
                  [["<code>interface CachTinhPhi { long phi(long tien); }</code>", "<b>giao diện</b>: lời hứa “có phương thức này”, chưa có thân"],
                   ["<code>class PhiTheoBac implements CachTinhPhi</code>", "<b>cài</b> giao diện: phải viết đủ thân các phương thức đã hứa"],
-                  ["<code>@Override</code>", "<b>chú thích ghi đè</b>: nhờ trình biên dịch kiểm đúng là ghi đè (<code>toString</code> ở bài 7 cũng là ghi đè)"],
+                  ["<code>@Override</code>", "<b>ghi đè</b> = viết lại phương thức cùng tên, cùng tham số của lớp cha hay giao diện; trình biên dịch kiểm giúp"],
                   ["<code>class TaiKhoanVip extends TaiKhoan</code>", "<b>kế thừa</b>: lớp con nhận phương thức của lớp cha, có thể ghi đè"],
-                  ["<code>record GiaoDich(String stk, long tien) {}</code>", "<b>bản ghi</b>: lớp dữ liệu không đổi; máy tự sinh <code>stk()</code>, <code>tien()</code>, <code>equals</code>, <code>toString</code>"],
+                  ["<code>record GiaoDich(String stk, long tien) {}</code>", "<b>bản ghi</b>: lớp dữ liệu không đổi; tự sinh <code>stk()</code>, <code>tien()</code>, <code>equals</code>, <code>toString</code>"],
                   ["<code>enum TrangThai { CHO, THANH_CONG, THAT_BAI }</code>", "<b>kiểu liệt kê</b>: đúng ba giá trị cố định"]]),
            """Bảng ký hiệu của bài. Giao diện là một lời hứa: có phương thức tính phí, nhận số tiền, trả về phí, nhưng chưa có thân.
            Một lớp cài giao diện thì phải viết đủ thân cho mọi phương thức đã hứa.
+           Ghi đè nghĩa là viết lại một phương thức cùng tên, cùng tham số đã có ở lớp cha hoặc giao diện, để thay cách làm.
            Chú thích ghi đè nhờ trình biên dịch kiểm rằng phương thức đó đúng là ghi đè, và hàm đổi ra chuỗi ở bài bảy cũng là một phương thức ghi đè.
            Kế thừa cho lớp con nhận các phương thức của lớp cha, và có thể ghi đè chúng.
-           Bản ghi là lớp chỉ chứa dữ liệu không đổi, máy tự sinh phần còn lại. Kiểu liệt kê có đúng một số giá trị cố định."""),
+           Bản ghi là lớp chỉ chứa dữ liệu không đổi, trình biên dịch tự sinh phần còn lại. Kiểu liệt kê có đúng một số giá trị cố định."""),
     ])
     sc_int = sc("intuition", "intuition", "Hình dung: một lời hứa, nhiều cách làm, máy chọn theo đối tượng thật", [
         st(svg(1500, 420,

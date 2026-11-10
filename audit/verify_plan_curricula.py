@@ -606,8 +606,43 @@ def rta(tasks):
             R = Rn
         res.append(R)
     return res
-rec("ESY:L09", round(U, 2) == 0.65 and round(bound, 4) == 0.7798 and rta([(1, 4), (1, 5), (2, 10)]) == [1, 2, 4],
-    f"RMS: tác vụ (C, T) = (1, 4), (1, 5), (2, 10), U = 0,65 ≤ cận Liu–Layland 3(2^(1/3) − 1) ≈ 0,7798 → lập lịch được; thời gian đáp ứng 1, 2, 4 đều ≤ chu kỳ")
+# 2026-11-08: ví dụ giáo án đổi theo đúng bộ tác vụ của bài (lessons/esy/L09: (1,4), (2,6), (3,12) và phản ví dụ (2,4), (3,6))
+_esy9 = [(1, 4), (2, 6), (3, 12)]
+_esy9_U = sum(F(c, t) for c, t in _esy9)
+rec("ESY:L09", _esy9_U == F(10, 12) and float(_esy9_U) > round(bound, 4) == 0.7798 and rta(_esy9) == [1, 3, 10]
+    and all(r <= t for r, (_, t) in zip(rta(_esy9), _esy9)) and sum(F(c, t) for c, t in [(2, 4), (3, 6)]) == 1 and rta([(2, 4), (3, 6)])[1] > 6,
+    "RMS: (C, T) = (1, 4), (2, 6), (3, 12): U = 10/12 ≈ 0,833 > cận Liu–Layland 0,7798 (điều kiện đủ, không kết luận); thời gian đáp ứng 1, 3, 10 ≤ chu kỳ → lập lịch được; (2, 4), (3, 6): U = 1, tác vụ 2 đáp ứng 7 > 6 → trượt hạn")
+def _esy10_sim(tasks, horizon, edf):
+    """Mô phỏng từng đơn vị thời gian; ưu tiên cố định theo chu kỳ ngắn (edf=False) hoặc hạn sớm nhất (edf=True). Trả danh sách (tác vụ, hạn) bị trễ."""
+    jobs, miss = [], []
+    for t in range(horizon):
+        for i, (c, p) in enumerate(tasks):
+            if t % p == 0:
+                jobs.append([i, t + p, c])
+        for j in [j for j in jobs if j[1] <= t and j[2] > 0]:
+            miss.append((j[0], j[1])); jobs.remove(j)
+        ready = [j for j in jobs if j[2] > 0]
+        if ready:
+            run = min(ready, key=(lambda j: (j[1], j[0])) if edf else (lambda j: (tasks[j[0]][1], j[0])))
+            run[2] -= 1
+            if run[2] == 0:
+                jobs.remove(run)
+    return miss
+def _esy10_inv(mid_len, inherit):
+    """Thấp giữ khoá còn 3 đơn vị; Cao tới lúc 1 cần khoá 1 đơn vị; Trung bình tới lúc 2 chạy mid_len. Trả lúc Cao xong."""
+    low, high, mid, now = 3, 1, mid_len, 0
+    while high:
+        if now >= 1 and low == 0:
+            high -= 1
+        elif now >= 2 and mid and not (inherit and now >= 1 and low):
+            mid -= 1
+        else:
+            low -= 1
+        now += 1
+    return now
+rec("ESY:L10", sum(F(c, p) for c, p in [(2, 4), (3, 6)]) == 1 and _esy10_sim([(2, 4), (3, 6)], 12, False)[:1] == [(1, 6)]
+    and _esy10_sim([(2, 4), (3, 6)], 12, True) == [] and _esy10_inv(4, False) - 1 == 7 and _esy10_inv(4, True) - 1 == 3,
+    "(2, 4), (3, 6): U = 1; ưu tiên cố định trễ hạn ở 6, hạn sớm nhất kịp cả hai; đảo ngược ưu tiên: Cao đáp ứng 7, kế thừa ưu tiên còn 3 (mô phỏng từng đơn vị, khác cách của verify_esy)")
 rec("ESY:L08", round(math.log(0.7 / 0.3) * 1, 4) == 0.8473 and round(300e-9 / (math.log(0.7 / 0.3) * 200e-12)) == 1770 and round((3.3 - 0.4) / 3e-3) == 967,
     "I²C 400 kHz (t_r ≤ 300 ns), bus 200 pF, nguồn 3,3 V: R kéo lên trong khoảng (3,3 − 0,4)/3 mA ≈ 967 Ω tới 300 ns/(0,8473 · 200 pF) ≈ 1770 Ω")
 rec("ESY:L12", 100 > 60, "bộ giám sát hạn 100 ms, vòng chính dài nhất 60 ms: cho ăn mỗi vòng còn dư 40 ms; treo thì khởi động lại sau ≤ 100 ms")
@@ -615,10 +650,10 @@ avg = 10 * 0.01 + 0.010 * 0.99
 rec("ESY:L13", round(avg, 4) == 0.1099 and round(1000 / avg / 24) == 379,
     f"thức 1% thời gian ở 10 mA, ngủ 10 µA: dòng trung bình ≈ {avg:.4f} mA; pin 1000 mAh ≈ {1000 / avg:.0f} giờ ≈ 379 ngày (bỏ qua tự xả)")
 rec("ESY:L15", 1 / 8 == 0.125 and 40 + 60 + 2 + 15 == 117 > 110 >= 40 + 2 + 15 and 18 * 3600 * 8 == 518400 and 4096 // 256 == 16
-    and round(1477 / 90 * 3, 1) == 49.2 and round(15 * 1477 / 1440, 1) == 15.4 and 800 // 256 == 3
+    and round(1480 / 90 * 3, 1) == 49.3 and round(15 * 1480 / 1440, 1) == 15.4 and 800 // 256 == 3  # sol = 24 h 39 min 35 s ≈ 1480 phút (NASA Mars Fact Sheet); 1477 là ngày sao — sửa 2026-11-09 đợt C
     and round((__import__("datetime").date(2014, 8, 29) - __import__("datetime").date(2004, 1, 25)).days / 365.25, 1) == 10.6 and round(10.6 / 0.25) == 42 and round(6 / 7, 3) == 0.857,
     "8 Hz → 0,125 s; đảo ngược ưu tiên (mốc minh hoạ 40/60/2/15 ms): xong ở 117 > 110, kế thừa → 57; 18 h × 8 Hz = 518 400 chu kỳ (GR97); "
-    "4096/256 = 16 lần nới vùng nhớ; mẫu đặt lại 15–15–60 phút → ≈ 49,2 lần/sol (cận trên); sol 18 → 33 ≈ 15,4 ngày; ngưỡng 800 KB = 3 lần nới (RN05); "
+    "4096/256 = 16 lần nới vùng nhớ; mẫu đặt lại 15–15–60 phút, sol ≈ 1480 phút → ≈ 49,3 lần/sol (cận trên); sol 18 → 33 ≈ 15,4 ngày; ngưỡng 800 KB = 3 lần nới (RN05); "
     "Opportunity 25/1/2004 → 29/8/2014 ≈ 10,6 năm ≈ 42 × thiết kế 3 tháng; tránh dãy 7/7 → còn 6/7 ≈ 85,7% (JPL 2014–2015)")
 
 # ═══════════ CLD — Microservice, container, Kubernetes ═══════════
@@ -708,6 +743,31 @@ rec("DVO:L01", round(1 - 0.95 ** 40, 3) == 0.871 and round(1 - 0.95 ** 3, 3) == 
 rec("DVO:L02", tuple(map(int, "1.10.0".split("."))) > tuple(map(int, "1.9.3".split("."))) and "1.10.0" < "1.9.3",
     "phiên bản ngữ nghĩa: 1.10.0 mới hơn 1.9.3 khi so từng số, nhưng so chuỗi lại cho 1.10.0 < 1.9.3 — sai")
 rec("DVO:L03", round(1 - 0.995 ** 300, 3) == 0.778, "300 bài kiểm thử, mỗi bài “chập chờn” hỏng ngẫu nhiên 0,5% lần: P(cả đường ống đỏ dù mã đúng) = 1 − 0,995³⁰⁰ ≈ 0,778")
+# DVO L04/L06/L08/L12: ví dụ giáo án có chữ số được đồng bộ từ bài ở đợt đọc kiểm C (2026-11-09) → kiểm lại bằng cách tự dựng
+def _dvo_zip(mtime, data=b'print("xin chao")\n'):
+    import io as _io, zipfile as _zf
+    buf = _io.BytesIO()
+    with _zf.ZipFile(buf, "w", _zf.ZIP_STORED) as z:
+        z.writestr(_zf.ZipInfo("app.py", date_time=mtime), data)
+    return buf.getvalue()
+_za, _zb = _dvo_zip((2026, 10, 1, 9, 0, 0)), _dvo_zip((2026, 10, 2, 14, 30, 0))
+import hashlib as _hl
+rec("DVO:L04", _hl.sha256(_za).hexdigest()[:12] == "dac8a9bd655a" and _hl.sha256(_zb).hexdigest()[:12] == "9f8086ff674d"
+    and len(_za) == len(_zb) == 128 and sum(x != y for x, y in zip(_za, _zb)) == 6 and _za == _dvo_zip((2026, 10, 1, 9, 0, 0)),
+    "zip một tệp, cùng thời điểm → cùng băm dac8a9bd655a; khác thời điểm → 9f8086ff674d; hai gói 128 byte khác đúng 6 byte")
+rec("DVO:L06", 90 / 2 == 45 and 7 / 2 == 3.5, "khoá lộ ngẫu nhiên trong chu kỳ xoay T còn dùng trung bình T/2: 90 → 45 ngày, 7 → 3,5 ngày")
+_dvo_db = sqlite3.connect(":memory:")
+_dvo_db.execute("CREATE TABLE kh(id INTEGER PRIMARY KEY, ten TEXT)"); _dvo_db.execute("INSERT INTO kh(ten) VALUES ('An'), ('Binh')")
+_dvo_db.execute("ALTER TABLE kh ADD COLUMN ho_ten TEXT")                 # bước 1: thêm cột mới (bản cũ vẫn chạy)
+_dvo_db.execute("UPDATE kh SET ho_ten = ten WHERE ho_ten IS NULL")       # bước 2–3: chép dữ liệu, chép bù
+_dvo_db.execute("ALTER TABLE kh DROP COLUMN ten")                        # bước 4: bỏ cột cũ (SQLite ≥ 3.35)
+rec("DVO:L08", [r[0] for r in _dvo_db.execute("SELECT ho_ten FROM kh ORDER BY id")] == ["An", "Binh"]
+    and [c[1] for c in _dvo_db.execute("PRAGMA table_info(kh)")] == ["id", "ho_ten"],
+    "đổi tên cột ten → ho_ten bốn bước (thêm, chép, chép bù, bỏ cột cũ) trên sqlite3: dữ liệu giữ nguyên")
+_h = int(_hl.sha256(b"anh-web-1.4.3").hexdigest(), 16) % 3233
+rec("DVO:L12", 61 * 53 == 3233 and (17 * 2753) % (60 * 52) == 1 and _h == 1917 and pow(_h, 2753, 3233) == 2336 and pow(2336, 17, 3233) == 1917
+    and int(_hl.sha256(b"anh-web-1.4.3-sua").hexdigest(), 16) % 3233 == 3216 != 1917,
+    "RSA đồ chơi n = 61·53 = 3233, e = 17, d = 2753: băm mod n = 1917, chữ ký 2336, kiểm ra 1917; gói sửa băm 3216 → từ chối")
 state = {"web": 3}
 def apply(desired, cur):
     return dict(desired)
@@ -721,6 +781,7 @@ tail = binom_tail(1000, 20, 0.01)
 rec("DVO:L07", tail < 0.005, f"triển khai canary: tỉ lệ lỗi nền 1%, bản mới gặp 20 lỗi / 1000 yêu cầu; nếu bản mới tốt như cũ, P(≥ 20 lỗi) ≈ {tail:.4f} → dừng triển khai")
 rec("DVO:L09", 3 / 40 == 0.075 and round(sum([30, 90, 45]) / 3) == 55,
     "chỉ số DORA: 3 lần triển khai lỗi / 40 lần → tỉ lệ thay đổi thất bại 7,5%; thời gian khôi phục 30, 90, 45 phút → trung bình 55 phút")
+rec("DVO:L09", round(40 / 30, 2) == 1.33 and sorted([2, 5, 26, 8, 3])[2] == 5, "40 lần triển khai / 30 ngày ≈ 1,33 lần/ngày; thời gian đưa lên 2, 5, 26, 8, 3 giờ → trung vị 5 (đồng bộ ví dụ, đợt C)")
 rec("DVO:L10", round(720 / (720 + 1), 5) == 0.99861 and round(720 / (720 + 0.25), 5) == 0.99965,
     "sẵn sàng = MTBF/(MTBF + MTTR): hỏng mỗi 720 giờ, sửa 1 giờ → 99,861%; rút thời gian sửa còn 15 phút → 99,965%")
 rec("DVO:L11", 1000 * 1 * 86400 / 1e6 == 86.4 and 86.4 * 30 == 2592,
@@ -1160,8 +1221,13 @@ rec("LLM:L14", round(6 * 174.6e9 * 3e11 / 1e23, 2) == 3.14 and round(6 * 174.6e9
 rec("AGT:L00", round(0.95 ** 20, 3) == 0.358 and round(0.99 ** 20, 3) == 0.818, "0,95²⁰ ≈ 35,8%; 0,99²⁰ ≈ 81,8%")
 def _valid(args):
     return isinstance(args.get("so_tien"), int) and 0 < args["so_tien"] <= 10_000_000 and _re2.fullmatch(r"\d{10}", str(args.get("tai_khoan", ""))) is not None
-_calls = [{"so_tien": 500000, "tai_khoan": "0123456789"}, {"so_tien": -200, "tai_khoan": "0123456789"}, {"so_tien": 1000, "tai_khoan": "9876543210"}]
-rec("AGT:L01", [_valid(c) for c in _calls] == [True, False, True], "kiểm lược đồ: lời gọi số tiền âm bị từ chối")
+# 2026-11-08: theo đúng 4 lời gọi của bài (lessons/agt/L01): hợp lệ; số tiền âm; sai kiểu + tài khoản 5 số; thừa tham số ghi_chu
+_calls = [{"so_tien": 500000, "tai_khoan": "0123456789"}, {"so_tien": -200, "tai_khoan": "0123456789"},
+          {"so_tien": "1000", "tai_khoan": "98765"}, {"so_tien": 1000, "tai_khoan": "9876543210", "ghi_chu": "x"}]
+def _valid_strict(args):   # lược đồ đóng: đủ, đúng kiểu, trong miền, không thừa tham số
+    return set(args) == {"so_tien", "tai_khoan"} and type(args["so_tien"]) is int and _valid(args)
+rec("AGT:L01", [_valid_strict(c) for c in _calls] == [True, False, False, False] and _valid(_calls[3]) and not _valid_strict(_calls[3]),
+    "kiểm lược đồ 4 lời gọi: chỉ 1 hợp lệ; số tiền âm, sai kiểu/tài khoản 5 số, thừa tham số đều bị từ chối trước khi chạy")
 _dur = {"tim": 2, "docA": 3, "docB": 4, "tonghop": 2, "kiem": 1}; _dep = {"tim": [], "docA": ["tim"], "docB": ["tim"], "tonghop": ["docA", "docB"], "kiem": ["tonghop"]}
 _fin = {}
 for _k in ["tim", "docA", "docB", "tonghop", "kiem"]:
@@ -1192,6 +1258,8 @@ _npdf = lambda x, m, s: math.exp(-(x - m) ** 2 / (2 * s * s)) / (s * math.sqrt(2
 rec("ROB:L03", round(_npdf(2.1, 2, 0.1), 2) == 2.42 and round(_npdf(2.3, 2, 0.1), 3) == 0.044 and round(_npdf(2.1, 2, 0.1) / _npdf(2.3, 2, 0.1)) == 55, "mật độ 2,42 và 0,044")
 _lik = np.array([0.8 if i in (1, 4, 7) else 0.1 for i in range(10)]); _post = _lik / _lik.sum()
 rec("ROB:L04", round(_post[1], 3) == 0.258 and round(_post[0], 3) == 0.032 and round(_post[[1, 4, 7]].sum(), 3) == 0.774, "niềm tin ô cửa 0,258; ô tường 0,032")
+_post2 = np.roll(_post, 3) * _lik; _post2 = _post2 / _post2.sum()
+rec("ROB:L04", round(_post2[4], 3) == round(_post2[7], 3) == 0.427, "hành lang VÒNG 10 ô: đi đúng 3 ô rồi thấy cửa → ô 4 và ô 7 mỗi ô ≈ 0,427 (không vòng sẽ ra 0,481)")
 _th, _vd = 0.0, 1.0
 _J = np.array([[1, 0, -_vd * math.sin(_th)], [0, 1, _vd * math.cos(_th)], [0, 0, 1]])
 rec("ROB:L05", _J[0].tolist() == [1, 0, 0] and _J[1].tolist() == [0, 1, 1], "Jacobian chuyển động tại θ = 0")
@@ -1383,10 +1451,11 @@ def _iam(action, res, pols):
 _pols = [("allow", {"*"}, "bao-cao"), ("deny", {"xoá"}, "bao-cao")]
 rec("CLC:L03", [_iam(a, r, _pols) for a, r in (("đọc", "bao-cao"), ("xoá", "bao-cao"), ("ghi", "kho-khac"))] == ["cho", "từ chối", "từ chối"], "đọc cho, xoá từ chối, kho khác mặc định từ chối")
 rec("CLC:L04", math.isclose(1e7 * 1e-11, 1e-4) and round(1 / (1e7 * 1e-11)) == 10000, "10⁻⁴ đối tượng mỗi năm")
-rec("CLC:L05", round(500 / 0.10) == 5000 and round(5000 / 8760 * 100) == 57, "hoà vốn 5000 giờ ≈ 57%")
+rec("CLC:L05", round(500 / 0.10) == 5000 and round(5000 / 8760 * 100) == 57 and 6 * 10 + 2 * 14 == 88 and 6 * 24 == 144
+    and round((144 - 88) / 144 * 100, 1) == 38.9, "hoà vốn 5000 giờ ≈ 57%; co giãn 6·10 + 2·14 = 88 thay vì 144 giờ máy ≈ 38,9% ít hơn")
 rec("CLC:L06", round(1e6 * 0.2 * 0.5) == 100000, "100 000 GB-giây")
 rec("CLC:L07", 5 < 24 * 60, "RPO 5 phút so với 24 giờ")
-rec("CLC:L08", round(50 * 1024 * 0.09) == 4608, "≈ 4608 $")
+rec("CLC:L08", round(50 * 1024 * 0.09) == 4608, "50 TB = 50 · 1024 GB, 0,09 đô la/GB ≈ 4608 đô la")
 rec("CLC:L09", 10000 * 32 == 320000, "320 000 byte khoá")
 rec("CLC:L10", 2 * 1.0 == 2.0, "chủ động–chủ động: mỗi vùng gánh 100% → dung lượng ×2")
 rec("CLC:L12", (13 * 60 + 54) - (9 * 60 + 37) == 257 and divmod(257, 60) == (4, 17) and round(365 * 24 * 60 * (1 - 0.9999), 2) == 52.56
@@ -1747,16 +1816,53 @@ rec("IRS:L03", 1000 + 10 * (10 ** 6 // 1000) == 11000 and round(10 ** 6 / 11000)
 rec("IRS:L04", round(1 / 61 + 1 / 63, 5) == 0.03227 and round(1 / 62 + 1 / 61, 5) == 0.03252, "A 0,03227 < B 0,03252")
 rec("IRS:L05", round(_m.log(1 + _m.exp(-0.5)), 3) == 0.474 and round(_m.log(1 + _m.exp(0.5)), 3) == 0.974, "0,474 và 0,974")
 _U, _V = _np.array([5, 3, 0.0]), _np.array([4, 0, 4.0])
-rec("IRS:L06", float(_U @ _V) == 20 and round(float(_U @ _V / (_np.linalg.norm(_U) * _np.linalg.norm(_V))), 3) == 0.606, "cosin ≈ 0,606")
+_W6 = _np.array([1, 2, 5.0])
+_c_uv = round(float(_U @ _V / (_np.linalg.norm(_U) * _np.linalg.norm(_V))), 3)
+_c_uw = round(float(_U @ _W6 / (_np.linalg.norm(_U) * _np.linalg.norm(_W6))), 3)
+rec("IRS:L06", float(_U @ _V) == 20 and _c_uv == 0.606 and _c_uw == 0.344 and round((_c_uv * 4 + _c_uw * 5) / (_c_uv + _c_uw), 2) == 4.36,
+    "cosin(U, V) ≈ 0,606, cosin(U, W) ≈ 0,344; dự đoán (0,606·4 + 0,344·5)/0,950 ≈ 4,36 (đồng bộ ví dụ giáo án, đợt C)")
 _p, _q = _np.array([1, 2.0]), _np.array([0.5, 1.0])
 _e = 3 - float(_p @ _q)
 rec("IRS:L07", float(_p @ _q) == 2.5 and _e == 0.5 and _np.allclose(_p + 0.1 * _e * _q, [1.025, 2.05]), "dự đoán 2,5; p mới (1,025; 2,05)")
 rec("IRS:L08", round(100 ** 0.75, 1) == 31.6, "100^0,75 ≈ 31,6")
 rec("IRS:L09", _Fr(1, 2) == _Fr(1, 1 + 1) and round(51 / (51 + 951), 4) == 0.0509, "Beta(1, 1) 0,5; Beta(51, 951) 0,0509")
 rec("IRS:L10", 10 / 0.2 == 50, "50 lượt bấm điều chỉnh")
+# ── IRS: các số mới trong ví dụ giáo án sau đợt đọc kiểm C (2026-11-09), tính lại độc lập ──
+_relB = [0, 0, 0, 1, 1, 1, 0, 0, 0, 0]
+rec("IRS:L00", sum(_rel) / 5 == 0.6 and sum(_relB[:5]) / 5 == 0.4 and sum(_relB[:3]) == 0 and 1 / (_relB.index(1) + 1) == 0.25
+    and _Fr(1 + _Fr(1, 3) + 0, 3) == _Fr(4, 9) and round(4 / 9, 3) == 0.444, "R@10 = 3/5 = 0,6; hệ B: P@5 0,4, P@3 0, RR 1/4; MRR (1 + 1/3 + 0)/3 = 4/9 ≈ 0,444")
+rec("IRS:L01", round(_dcg([3, 2, 0, 1]), 5) == 4.69254 and round(_dcg([3, 2, 1, 0]), 5) == 4.76186 and round(_dcg([3, 2, 0, 1]) / _dcg([3, 2, 1, 0]), 5) == 0.98544
+    and round(4.693 / 4.762, 3) == 0.986, "DCG 4,69254 / IDCG 4,76186 = 0,98544 ≈ 0,985; chia hai số đã làm tròn ra 0,986")
+def _irs_cos(a, b):
+    na, nb = _m.sqrt(sum(x * x for x in a)), _m.sqrt(sum(x * x for x in b))
+    return 0.0 if not na or not nb else sum(x * y for x, y in zip(a, b)) / (na * nb)
+_idf = {"máy": _m.log(3 / 3), "ổ": _m.log(3 / 1), "pin": _m.log(3 / 2), "màn": _m.log(3 / 1)}
+_vec = lambda words, w: [words.count(t) * (w[t] if w else 1) for t in ("máy", "ổ", "pin", "màn")]
+_q2, _d1, _d2, _d3 = "máy pin".split(), "máy ổ máy".split(), "máy pin".split(), "máy pin màn".split()
+rec("IRS:L02", round(_idf["pin"], 3) == 0.405 and round(_irs_cos(_vec(_q2, _idf), _vec(_d2, _idf)), 3) == 1 and round(_irs_cos(_vec(_q2, _idf), _vec(_d3, _idf)), 3) == 0.346
+    and _irs_cos(_vec(_q2, _idf), _vec(_d1, _idf)) == 0 and round(_irs_cos(_vec(_q2, None), _vec(_d1, None)), 3) == 0.632,
+    "idf(pin) = ln 1,5 ≈ 0,405; cosin d2 = 1, d3 ≈ 0,346, d1 = 0; đếm thô không độ hiếm d1 ≈ 0,632")
+_g = [3, 2, 1, 0]
+rec("IRS:L05", round(_dcg(_g) - _dcg([2, 3, 1, 0]), 3) == 0.369 and round(_dcg(_g) - _dcg([3, 2, 0, 1]), 3) == 0.069,
+    "đổi chỗ vị trí 1 và 2 mất ≈ 0,369 độ lợi có chiết khấu; vị trí 3 và 4 mất ≈ 0,069")
+_pn, _qn = _p + 0.1 * _e * _q, _q + 0.1 * _e * _p
+rec("IRS:L07", _np.allclose(_qn, [0.55, 1.1]) and round(float(_pn @ _qn), 3) == 2.819 and _np.allclose(_p + 0.1 * (_e * _q - 0.1 * _p), [1.015, 2.03]),
+    "q mới (0,55; 1,1); đoán lại ≈ 2,819; thêm λ = 0,1 → p mới (1,015; 2,03)")
+rec("IRS:L08", round(1 / 101, 3) == 0.010 and round(1 / (100 ** 0.75 + 1), 3) == 0.031 and round((1 / (100 ** 0.75 + 1)) / (1 / 101)) == 3
+    and round(-_m.log(0.02), 3) == 3.912, "B được 1/101 ≈ 0,010; mũ 0,75 → 1/(31,62 + 1) ≈ 0,031, gấp ≈ 3 lần; −ln 0,02 ≈ 3,912")
+_bsd = lambda a, b: _m.sqrt(a * b / ((a + b) ** 2 * (a + b + 1)))
+rec("IRS:L09", round(_bsd(1, 1), 3) == 0.289 and round(_bsd(51, 951), 4) == 0.0069 and round(1 - 51 / 1002, 3) == 0.949,
+    "Beta(1, 1) độ lệch chuẩn ≈ 0,289; Beta(51, 951) ≈ 0,0069; P(mẫu Beta(1, 1) > mẫu Beta(51, 951)) = 1 − 51/1002 ≈ 0,949")
+rec("IRS:L13", round(4.1 / 0.2) == 20, "bỏ trọng số thời gian xem: mất mát +4,1% ≈ 20 lần mức 0,2% (số CITED CO16, chỉ tính lại tỉ số)")
+rec("IRS:L10", round(0.01 / 0.2, 2) == 0.05 > 0.03, "B 0,01/0,2 = 0,05 > A 0,03: B liên quan hơn")
+rec("IRS:L03", _cl.irs_ivf_sim()[0][:2] == (1, 0.804) and _cl.irs_ivf_sim()[2][:2] == (4, 1.0), "mô phỏng 5000 điểm: xét 1 cụm độ phủ 0,804, xét 4 cụm đạt 1")
 _mmr = lambda rel, sim, lam=0.7: lam * rel - (1 - lam) * sim
-rec("IRS:L11", round(_mmr(0.9, 0.8), 2) == 0.39 and round(_mmr(0.7, 0.1), 2) == 0.46, "X 0,39 < Y 0,46")
-rec("IRS:L12", 10 + 1000 * 0.05 + 20 == 80 and 10000 * 0.05 == 500, "80 ms; 10 000 ứng viên → 500 ms")
+_disc = [1 / _m.log2(i + 1) for i in (1, 2, 3, 4)]
+rec("IRS:L11", round(_mmr(0.9, 0.8), 2) == 0.39 and round(_mmr(0.7, 0.1), 2) == 0.46
+    and round(sum(_disc), 3) == 2.562 and round((_disc[2] + _disc[3]) / sum(_disc) * 100, 1) == 36.3,
+    "X 0,39 < Y 0,46; vị trí 3 và 4 nhận (0,5 + 0,431)/2,562 ≈ 36,3% mức được nhìn thấy (chiết khấu 1/log₂(i + 1))")
+rec("IRS:L12", 10 + 1000 * 0.05 + 20 == 80 and 10000 * 0.05 == 500 and 15 + 70 + 30 == 115 and round(70 / 1000 * 600) == 42 and 15 + 42 + 30 == 87 < 100,
+    "80 ms; 10 000 ứng viên → 500 ms; phân vị 99: 15 + 70 + 30 = 115 ms → 600 ứng viên: 15 + 42 + 30 = 87 ms")
 # L13 hành trình (con số CITED ở audit/irs/sources_L13.md; ở đây chỉ tính lại phần suy ra được)
 rec("IRS:L13", 7 * 60 * 24 == 10080 and round(12.5 / 1.1, 1) == 11.4 and 10 ** 6 * 256 * 4 == 1024000000
     and round(1 / 50, 2) == 0.02 and round(-_m.log(1 / 50), 3) == 3.912 and 0.24 > 0 > -0.07 and 90 + 5 + 5 == 100,
@@ -1820,6 +1926,10 @@ rec("SEP:L08", all(-2 <= x <= 2 for v in _opts.values() for x in v) and sum(_opt
     "X tổng 4 (lớn nhất có thể khi một bên −2) nhưng −2 cho tài xế; Y, Z tổng 3 không bên nào âm; hoà → Z")
 rec("SEP:L09", (2 + 4 * 4 + 12) / 6 == 5 and round((12 - 2) / 6, 2) == 1.67, "5 ngày; độ lệch 1,67")
 rec("SEP:L10", 1 + 272 == 273 and 3 ** 3 == 27, "kik + 272 gói; 3³ = 27")
+rec("SEP:L10", (16 * 60 + 55) - (14 * 60 + 30) == 145 and round(145 / 60, 1) == 2.4 and 3 + 3 ** 2 + 3 ** 3 == 39,
+    "14:30 → 16:55 = 145 phút ≈ 2,4 giờ (nguồn ghi 2,5 giờ); 3 + 9 + 27 = 39 gói gián tiếp (số minh hoạ)")
+rec("SEP:L00", round(0.99 ** 100, 3) == 0.366 and round(0.99 ** 100 * 100) == 37, "0,99¹⁰⁰ ≈ 0,366 — khoảng 37% khả năng không ai trong 100 người gặp lỗi")
+rec("SEP:L04", 4 + 4 * 3 == 16, "4 gói trực tiếp, mỗi gói 3 gói con → kiểm 16 gói (số minh hoạ)")
 _sw = 2 * 5 * 365 * 100
 _rev = 200e9
 rec("SEP:L11", _sw == 365000 and _sw > 54805 and round(216 / 248 * 100) == 87 and 0.05 * _rev == 10e9 > 3e9 and 3e9 / 2 == 1.5e9
@@ -1898,6 +2008,233 @@ rec("BNK:L12", 5 + 5 - 4 == 6 and 3 + 1 + 1 + 1 == 6 and (100 + 200 + 350 + 400 
 rec("BNK:L13", 0x34 ^ 0x11 == 0x25 and 0xFF ^ 0x11 == 0xEE, "khối PIN thử: 34 XOR 11 = 25, FF XOR 11 = EE → 041225EEEEEEEEEE (số thử)")
 rec("BNK:L14", (2 - 1) * 500000 == 500000 and 2000000 - 2 * 500000 == 1000000, "gửi 2 lần không khoá: trừ dư 500 000 (tình huống giả định)")
 
+# ═══════════ BN-0036 (2026-11-08): ví dụ có chữ số trong giáo án đã có bài nhưng chưa có bản ghi — mô phỏng độc lập ═══════════
+def _b36_reconcile(desired, pods, rounds=3):   # vòng điều khiển: quan sát → so → hành động; trả số Pod sau mỗi nhịp và số Pod đã tạo
+    made, seen = 0, []
+    for _ in range(rounds):
+        diff = desired - pods
+        if diff > 0:
+            pods, made = pods + diff, made + diff
+        seen.append(pods)
+    return seen, made
+_b36_seen, _b36_made = _b36_reconcile(3, 3 - 1)
+rec("CLD:L05", _b36_seen == [3, 3, 3] and _b36_made == 1 and 3 - 1 == 2 != 3,
+    "mong muốn 3 bản, một Pod chết: thực tế 2 ≠ 3 → bộ điều khiển tạo đúng 1 Pod, các nhịp sau 3 = 3 không làm gì")
+_b36_keys = [3.5, 6.0, 7.0, 7.5, 8.0, 9.0, 9.5, 2.0, 8.5]
+_b36_sorted = sorted(_b36_keys)
+import bisect as _b36_bis
+_b36_lo, _b36_hi = _b36_bis.bisect_left(_b36_sorted, 7), _b36_bis.bisect_right(_b36_sorted, 9)
+_b36_h = lambda k: int(k * 1000003) % 8   # một hàm băm bất kỳ: rải khoá, phá thứ tự
+_b36_bucket_order = [k for b in range(8) for k in sorted(_b36_keys) if _b36_h(k) == b]
+rec("DBS:L09", _b36_sorted[_b36_lo:_b36_hi] == [7.0, 7.5, 8.0, 8.5, 9.0]
+    and _b36_bucket_order != _b36_sorted and len({_b36_h(k) for k in _b36_sorted[_b36_lo:_b36_hi]}) > 1,
+    "diem BETWEEN 7 AND 9: cây B+ (dãy đã sắp) xuống lá đầu rồi đọc liền 5 khoá; băm rải 7..9 vào nhiều xô không theo thứ tự → không dùng được")
+rec("DBS:L13", has_cycle([("T1", "T2"), ("T2", "T1")]) and not has_cycle([("T1", "T2")]),
+    "T1 giữ A chờ B (T1 → T2), T2 giữ B chờ A (T2 → T1): đồ thị chờ có chu trình → bế tắc, phải huỷ một giao dịch")
+def _b36_consume(msgs, dedup):
+    done, bal = set(), 0
+    for mid, amt in msgs:
+        if dedup and mid in done:
+            continue
+        bal += amt          # cùng giao dịch với việc ghi “đã xử lý mid”
+        done.add(mid)
+    return bal
+_b36_q = [(42, 100), (42, 100), (43, 50)]   # #42 bị gửi lặp vì xác nhận mất
+rec("DSY:L14", _b36_consume(_b36_q, False) == 250 and _b36_consume(_b36_q, True) == 150,
+    "xác nhận #42 mất → gửi lặp: không khử trùng tài khoản nhận 250 nghìn; ghi “đã xử lý #42” cùng giao dịch → bỏ qua bản lặp, đúng 150 nghìn")
+def _b36_dijkstra(edges, s):   # cài đặt độc lập với tools/alg: hàng đợi ưu tiên, trả (khoảng cách, chặng kế tiếp)
+    import heapq
+    g = {}
+    for u, v, w in edges:
+        g.setdefault(u, []).append((v, w)); g.setdefault(v, []).append((u, w))
+    dist, first, pq = {s: 0}, {s: None}, [(0, s, None)]
+    while pq:
+        d, u, f = heapq.heappop(pq)
+        if d > dist.get(u, math.inf):
+            continue
+        for v, w in g[u]:
+            if d + w < dist.get(v, math.inf):
+                dist[v], first[v] = d + w, (v if u == s else f)
+                heapq.heappush(pq, (d + w, v, first[v]))
+    return {v: (first[v], dist[v]) for v in dist if v != s}
+_b36_g = [("S", "A", 4), ("S", "B", 1), ("A", "C", 1), ("A", "B", 2), ("B", "C", 5), ("B", "D", 8), ("C", "D", 3)]
+rec("NET:L07", _b36_dijkstra(_b36_g, "S") == {"A": ("B", 3), "B": ("B", 1), "C": ("B", 4), "D": ("B", 7)},
+    "bản đồ 5 đỉnh: bảng chuyển tiếp của S — mọi đích qua chặng kế B; chi phí A 3, B 1, C 4, D 7")
+def _b36_count_to_inf(inf=16):   # vòng đồng bộ: mỗi vòng B và C tính từ con số hàng xóm báo ở vòng trước
+    b, c, r, seen = 1, 2, 0, [2]
+    while not (b == inf and c == inf):
+        r += 1
+        b, c = min(inf, 1 + c), min(inf, 1 + b)   # B mất đường thẳng tới A, chỉ còn nghe C; C chỉ nghe B
+        seen += [x for x in (b, c) if x not in seen]
+    return r, seen
+_b36_r, _b36_vals = _b36_count_to_inf()
+rec("NET:L08", _b36_r == 15 and _b36_vals[:4] == [2, 3, 4, 5],
+    f"A–B–C, liên kết A–B đứt, không chặn: khoảng cách tới A tăng 2, 3, 4, … tới 16 (= vô cùng) sau {_b36_r} vòng")
+_b36_x, _b36_y = 100, 300
+_b36_syn = {"seq": _b36_x}; _b36_synack = {"seq": _b36_y, "ack": _b36_syn["seq"] + 1}; _b36_ack = {"ack": _b36_synack["seq"] + 1}
+rec("NET:L09", _b36_synack["ack"] == 101 and _b36_ack["ack"] == 301,
+    "bắt tay ba bước (RFC 9293 §3.5): SYN seq = x; SYN-ACK seq = y, ack = x + 1; ACK ack = y + 1 (SYN chiếm 1 số thứ tự) — x = 100, y = 300 → 101, 301")
+def _b36_pc(ops, n=5):   # semaphore trống/đầy của bộ đệm n ô; P chặn khi giá trị 0
+    empty, full, blocked = n, 0, 0
+    for op in ops:
+        if op == "sx":
+            if empty == 0: blocked += 1; continue
+            empty, full = empty - 1, full + 1
+        else:
+            if full == 0: blocked += 1; continue
+            empty, full = empty + 1, full - 1
+        assert empty + full == n
+    return empty, full, blocked
+rec("OSY:L05", _b36_pc([]) == (5, 0, 0) and _b36_pc(["sx"]) == (4, 1, 0) and _b36_pc(["sx"] * 6) == (0, 5, 1) and _b36_pc(["td"]) == (5, 0, 1),
+    "bộ đệm 5 ô: trống = 5, đầy = 0; sản xuất: trống − 1, đầy + 1; lần sản xuất thứ 6 bị chặn; tiêu thụ khi rỗng bị chặn")
+def _b36_dining(order):   # duyệt mọi trạng thái của 5 triết gia, mỗi người lấy 2 đũa theo order(i) rồi ăn, nhả; tìm trạng thái kẹt
+    N = 5
+    start = (tuple([None] * N), tuple([0] * N))   # chủ đũa, bước của từng người (0: chưa lấy, 1: có đũa đầu, 2: ăn xong)
+    seen, stack, dead = {start}, [start], False
+    while stack:
+        forks, pc = stack.pop()
+        nxt = []
+        for i in range(N):
+            a, b = order(i)
+            f, p = list(forks), list(pc)
+            if p[i] == 0 and f[a] is None:
+                f[a], p[i] = i, 1
+            elif p[i] == 1 and f[b] is None:
+                f[a] = f[b] = None; p[i] = 2
+            else:
+                continue
+            nxt.append((tuple(f), tuple(p)))
+        if not nxt and any(x != 2 for x in pc):
+            dead = True
+        for s in nxt:
+            if s not in seen:
+                seen.add(s); stack.append(s)
+    return dead
+rec("OSY:L06", _b36_dining(lambda i: (i, (i + 1) % 5)) and not _b36_dining(lambda i: (min(i, (i + 1) % 5), max(i, (i + 1) % 5))),
+    "5 triết gia cùng cầm đũa trái trước: tồn tại trạng thái kẹt (bế tắc); đánh số đũa, luôn cầm đũa số nhỏ trước: không trạng thái nào kẹt")
+rec("OSY:L11", 4 * 300 == 1200 > 1000 and 3 * 300 == 900 < 1000,
+    "4 tiến trình × tập làm việc 300 trang = 1200 > 1000 khung → trì trệ; tạm dừng một tiến trình → 900 < 1000")
+def _b36_bs(a, x):
+    lo, hi = 0, len(a) - 1
+    while lo <= hi:
+        m = (lo + hi) // 2
+        if a[m] == x: return m
+        if a[m] < x: lo = m + 1
+        else: hi = m - 1
+    return -1
+_b36_ok = all((lambda i: (i == -1 and x not in a) or (i >= 0 and a[i] == x))(_b36_bs(a, x))
+              for n in range(7) for a in [sorted(t) for t in itertools.combinations(range(0, 20, 2), n)] for x in range(-1, 21))
+rec("SWF:L00", _b36_ok and _b36_bs([1, 3, 5], 3) == 1 and _b36_bs([1, 3, 5], 4) == -1,
+    "tìm kiếm nhị phân: với mọi mảng đã sắp tăng (tiền điều kiện) trả i có a[i] = x, hoặc −1 khi x không có (hậu điều kiện)")
+def _b36_gcd_trace(a, b):
+    bs = [b]
+    while b:
+        a, b = b, a % b
+        bs.append(b)
+    return a, bs
+_b36_euclid = all((lambda r: r[0] == math.gcd(a, b) and all(y < x for x, y in zip(r[1], r[1][1:])) and min(r[1]) >= 0)(_b36_gcd_trace(a, b))
+                  for a in range(0, 60) for b in range(1, 60))
+rec("SWF:L02", _b36_euclid and _b36_gcd_trace(48, 18) == (6, [18, 12, 6, 0]),
+    "Euclid: b giảm thật sự sau mỗi vòng (a mod b < b) và luôn ≥ 0 → phải dừng; 48, 18 → b = 18, 12, 6, 0, ước chung 6")
+_b36_tl = {("xanh", "hết giờ"): "vàng", ("xanh", "nút"): "vàng", ("vàng", "hết giờ"): "đỏ", ("đỏ", "hết giờ"): "xanh"}
+_b36_st, _b36_path = "xanh", ["xanh"]
+for _e in ["hết giờ", "hết giờ", "hết giờ"]:
+    _b36_st = _b36_tl[(_b36_st, _e)]; _b36_path.append(_b36_st)
+rec("SWF:L08", _b36_path == ["xanh", "vàng", "đỏ", "xanh"] and "đỏ" not in {v for (s, _), v in _b36_tl.items() if s == "xanh"}
+    and len({s for s, _ in _b36_tl}) == 3,
+    "đèn 3 trạng thái: chu trình xanh → vàng → đỏ → xanh; từ xanh (hết giờ hay nút người đi bộ) chỉ sang vàng, xanh → đỏ là chuyển sai")
+_b36_fin = set()
+for _seq in interleavings(ops("A"), ops("B")):
+    _x, _reg = 0, {"A": 0, "B": 0}
+    for _t, _k in _seq:
+        if _k == "load": _reg[_t] = _x
+        elif _k == "add": _reg[_t] += 1
+        else: _x = _reg[_t]
+    _b36_fin.add(_x)
+rec("SWF:L09", _b36_fin == {2, 3, 4} and math.comb(12, 6) == 924 and has_cycle([("luồng 1", "luồng 2"), ("luồng 2", "luồng 1")]),
+    "hai luồng, mỗi luồng x++ hai lần: 924 cách xen kẽ, x cuối ∈ {2, 3, 4}; khoá A→B ở một luồng, B→A ở luồng kia → chờ vòng → bế tắc")
+def _b36_tpdf(x, v):
+    return math.gamma((v + 1) / 2) / (math.sqrt(v * math.pi) * math.gamma(v / 2)) * (1 + x * x / v) ** (-(v + 1) / 2)
+def _b36_tcdf(x, v, n=4000):   # Simpson trên [0, x]
+    h = x / n
+    s = _b36_tpdf(0, v) + _b36_tpdf(x, v) + sum((4 if i % 2 else 2) * _b36_tpdf(i * h, v) for i in range(1, n))
+    return 0.5 + s * h / 3
+_b36_lo, _b36_hi = 1.0, 4.0
+for _ in range(60):
+    _m = (_b36_lo + _b36_hi) / 2
+    _b36_lo, _b36_hi = (_m, _b36_hi) if _b36_tcdf(_m, 29) < 0.975 else (_b36_lo, _m)
+rec("SWF:L10", round(_b36_lo, 3) == 2.045 and 30 - 1 == 29,
+    f"đo ghép cặp trên 30 bộ dữ liệu: khoảng 95% của hiệu trung bình dùng t(0,975; 29 bậc tự do) = {_b36_lo:.3f} ≈ 2,045 (CS115 bài 44)")
+def _b36_merge3(base, a, b):
+    if a == b: return a
+    if a == base: return b
+    if b == base: return a
+    return "XUNG ĐỘT"
+rec("SWF:L11", _b36_merge3(1, 2, 1) == 2 and _b36_merge3(1, 1, 3) == 3 and _b36_merge3(1, 2, 3) == "XUNG ĐỘT" and _b36_merge3(1, 2, 2) == 2,
+    "hợp nhất ba chiều, tổ tiên x = 1: A đổi thành 2, B giữ 1 → lấy 2; cả hai đổi khác nhau (2 và 3) → xung đột")
+import sqlite3 as _b36_sql
+_b36_db = _b36_sql.connect(":memory:")
+_b36_db.executescript("CREATE TABLE nguoi_dung(ten TEXT, mat_khau TEXT); INSERT INTO nguoi_dung VALUES ('an', 'k1'), ('binh', 'k2');")
+_b36_in = "' OR '1'='1"
+_b36_ghep = _b36_db.execute("SELECT count(*) FROM nguoi_dung WHERE ten = 'x' AND mat_khau = '" + _b36_in + "'").fetchone()[0]
+_b36_ths = _b36_db.execute("SELECT count(*) FROM nguoi_dung WHERE ten = ? AND mat_khau = ?", ("x", _b36_in)).fetchone()[0]
+rec("SWF:L12", _b36_ghep == 2 and _b36_ths == 0,
+    "chuỗi ' OR '1'='1 ghép thẳng vào câu truy vấn (sqlite thật): điều kiện luôn đúng, trả cả 2 dòng; truy vấn tham số hoá coi nó là dữ liệu: 0 dòng")
+rec("CLC:L11", len(["cơ sở dữ liệu", "máy chủ ứng dụng", "xử lý ảnh"]) == 3 and round(3 * 730 * 0.20) == 438
+    and round(730 * 0.20 + 2 * 8 * 22 * 0.20, 1) == 216.4 and round((1 - 216.4 / 438) * 100, 1) == 50.6,
+    "ứng dụng 3 thành phần; tầng ứng dụng 3 máy × 730 giờ × 0,20 đô la = 438 → 1 máy suốt ngày + 2 máy 8 giờ × 22 ngày = 216,4 đô la/tháng (−50,6%, số minh hoạ)")
+def _b36_pump_fails(p):   # 0ᵖ1ᵖ: với MỌI cách chia xyz, |xy| ≤ p, |y| ≥ 1, bơm lên (i = 2) đều ra chuỗi ngoài ngôn ngữ
+    w = "0" * p + "1" * p
+    inL = lambda s: s == "0" * (len(s) // 2) + "1" * (len(s) // 2)
+    splits = [(w[:i], w[i:j], w[j:]) for i in range(p + 1) for j in range(i + 1, p + 1)]
+    return all(set(y) == {"0"} and not inL(x + y * 2 + z) and x + y * 2 + z == "0" * (p + len(y)) + "1" * p for x, y, z in splits)
+rec("TOC:L04", all(_b36_pump_fails(p) for p in range(1, 9)),
+    "0ᵖ1ᵖ (p = 1..8, mọi cách chia |xy| ≤ p): y luôn nằm trong khối 0 → bơm lên được 0^(p+k)1ᵖ không thuộc ngôn ngữ")
+def _b36_minimize(states, sigma, d, s0, acc):   # bỏ trạng thái không tới được, rồi tinh lọc phân hoạch (Moore)
+    reach, st = {s0}, [s0]
+    while st:
+        q = st.pop()
+        for a in sigma:
+            if d[(q, a)] not in reach:
+                reach.add(d[(q, a)]); st.append(d[(q, a)])
+    part = {q: (q in acc) for q in reach}
+    while True:
+        sig = {q: (part[q],) + tuple(part[d[(q, a)]] for a in sigma) for q in reach}
+        ids = {v: i for i, v in enumerate(sorted(set(sig.values()), key=str))}
+        new = {q: ids[sig[q]] for q in reach}
+        if len(set(new.values())) == len(set(part.values())):
+            break
+        part = new
+    groups = {}
+    for q in reach:
+        groups.setdefault(part[q], set()).add(q)
+    return set(states) - reach, sorted(sorted(g) for g in groups.values())
+_b36_d = {("s", "0"): "a", ("s", "1"): "c", ("a", "0"): "a", ("a", "1"): "b", ("b", "0"): "a", ("b", "1"): "c",
+          ("c", "0"): "a", ("c", "1"): "c", ("d", "0"): "b", ("d", "1"): "d"}
+_b36_unr, _b36_groups = _b36_minimize("sabcd", "01", _b36_d, "s", {"b"})
+def _b36_run(w):
+    q = "s"
+    for ch in w:
+        q = _b36_d[(q, ch)]
+    return q == "b"
+rec("TOC:L05", _b36_unr == {"d"} and _b36_groups == [["a"], ["b"], ["c", "s"]]
+    and all(_b36_run(w) == w.endswith("01") for n in range(9) for w in map("".join, itertools.product("01", repeat=n))),
+    "DFA “kết thúc bằng 01” của bài: 5 trạng thái, d không tới được → còn 4; s và c tương đương → gộp còn 3; máy nhận đúng mọi chuỗi ≤ 8 ký tự")
+def _b36_pda(w):   # đọc 0 thì đẩy X, đọc 1 thì lấy ra; gặp 0 sau 1 hay lấy từ ngăn rỗng là hỏng; nhận khi hết chuỗi và ngăn xếp rỗng
+    stack, seen1 = [], False
+    for ch in w:
+        if ch == "0":
+            if seen1: return False
+            stack.append("X")
+        else:
+            seen1 = True
+            if not stack: return False
+            stack.pop()
+    return not stack
+_b36_all = [w for n in range(13) for w in map("".join, itertools.product("01", repeat=n))]
+rec("TOC:L08", len(_b36_all) == 8191 and all(_b36_pda(w) == (w == "0" * (len(w) // 2) + "1" * (len(w) // 2)) for w in _b36_all),
+    "PDA đọc 0 thì đẩy, đọc 1 thì lấy, nhận khi ngăn xếp rỗng đúng lúc hết chuỗi: nhận đúng 0ⁿ1ⁿ (n ≥ 0) trên cả 8191 chuỗi dài ≤ 12")
+
 # ═══════════ JVA — Lập trình Java từ con số 0 (khoá có bài thật; bộ kiểm chính: audit/jva/verify_jva.py chạy javac/java thật) ═══════════
 # Các dòng dưới chỉ tính lại bằng Python những con số giáo án nêu; ngữ nghĩa Java (chia cắt về 0, tràn int) được mô phỏng tường minh.
 def _jva_int32(v):
@@ -1908,21 +2245,79 @@ rec("JVA:L01", 3 * 900000000 == 2700000000 and _jva_int32(3 * 900000000) == -159
     "3 × 900 000 000 tràn int thành −1 594 967 296 = 2 700 000 000 − 2^32; long giữ đúng")
 rec("JVA:L02", int(7 / 2) == 3 and 7 % 2 == 1 and 7 / 2 == 3.5 and int(-7 / 2) == -3 and math.fmod(-7, 2) == -1,
     "7/2 = 3, 7%2 = 1, (double)7/2 = 3.5, −7/2 = −3, −7%2 = −1 (chia cắt về 0, JLS §15.17.2–3)")
-rec("JVA:L03", (500000 >= 500000) and not (500000 > 500000), "ở đúng số tiền biên, >= và > cho hai bậc khác nhau")
+# Từ L03 trở đi, mỗi dòng đối chiếu ví dụ với ĐẦU RA ĐÃ KHAI của chương trình trong audit/jva/src (đầu ra đó do verify_jva.py
+# biên dịch và chạy bằng javac/java thật để xác nhận), cộng một phép tính lại độc lập bằng Python khi ví dụ có con số.
+def _jva_load():
+    import importlib
+    import io
+    import contextlib
+    from pathlib import Path
+    base = Path(__file__).resolve().parent / "jva"
+    sys.path[:0] = [str(base), str(base / "src")]
+    import lib as _jl
+    with contextlib.redirect_stdout(io.StringIO()):
+        for f in sorted((base / "src").glob("l*.py")):
+            _jl.begin(f.stem.upper())
+            importlib.import_module(f.stem).build()
+    out = {}
+    for p in _jl.PROGRAMS:   # một bài có thể có nhiều chương trình cùng tên (cùng lớp, số liệu khác) → giữ mọi biến thể
+        out.setdefault((p["lesson"], p["name"]), []).append(p)
+    return out
+_JP = _jva_load()
+def _jp(lesson, name, field="out"):
+    return _JP[(lesson, name)][-1][field]
+def _jp_any(lesson, name, value, field="out"):   # có biến thể nào của chương trình này cho đúng giá trị không
+    return any(p[field] == value for p in _JP[(lesson, name)])
+def _jva_phi(t, bug=False):   # biểu phí minh hoạ ba bậc của bài: < 500 000 → 0; < 10 000 000 → 2 200; còn lại 5 500
+    return 0 if t < 500000 else 2200 if (t <= 10000000 if bug else t < 10000000) else 5500
+rec("JVA:L03", _jva_phi(499999) == 0 and _jva_phi(500000) == 2200 and _jva_phi(10000000) == 5500 and _jva_phi(10000000, bug=True) == 2200
+    and _jp_any("L03", "Phi", "499999 -> phi 0") and _jp_any("L03", "Phi", "10000000 -> phi 5500")
+    and _jp("L03", "PhiSai") == "10000000 -> phi 2200" and _jp("L03", "KiemBien") == "false\ntrue\nfalse",
+    "biên 499 999 → 0; 500 000 → 2 200; 10 000 000 → 5 500, viết nhầm so sánh ra 2 200 (chương trình PhiSai in đúng lỗi đó)")
 rec("JVA:L04", repr(_acc) == "0.9999999999999999" and len(range(1, 12)) == 11 and len(range(1, 13)) == 12,
     "10 lần cộng 0,1 bằng double = 0.9999999999999999; thang từ 1 với < 12 chạy 11 vòng, với <= 12 chạy 12 vòng")
-rec("JVA:L05", list(range(5)) == [0, 1, 2, 3, 4] and 5 not in range(5), "mảng dài 5 có chỉ số 0..4; chỉ số 5 vượt giới hạn")
+_jva_m = [1500000, 250000, 4000000, 750000, 3200000]
+rec("JVA:L05", sum(_jva_m) == 9700000 and max(_jva_m) == 4000000 and _jva_m.index(4000000) == 2 and len(_jva_m) == 5
+    and _jp("L05", "TongMang") == "Tong: 9700000\nLon nhat: 4000000 o chi so 2"
+    and _jp("L05", "LechMot", "expect") == "runtime_error:ArrayIndexOutOfBoundsException" and "for length 5" in _jp("L05", "LechMot", "err"),
+    "mảng 5 số dư: tổng 9 700 000, lớn nhất 4 000 000 ở chỉ số 2; đọc chỉ số 5 ném ArrayIndexOutOfBoundsException (length 5)")
 def _jva_tang(x, arr):   # mô phỏng truyền theo giá trị: gán lại x chỉ đổi bản sao; arr là tham chiếu nên phần tử đổi thật
     x = x + 1
     arr[0] = arr[0] + 1
 _jva_v, _jva_a = 5, [5]
 _jva_tang(_jva_v, _jva_a)
-rec("JVA:L06", _jva_v == 5 and _jva_a == [6], "hàm nhận số nguyên: biến gốc giữ 5; hàm nhận mảng: phần tử đổi thành 6")
-rec("JVA:L07", 100000 - 150000 < 0, "rút 150 000 từ số dư 100 000 sẽ âm nên bị từ chối")
-rec("JVA:L08", format(1234567, ",") == "1,234,567", "định dạng có dấu phân cách nghìn: 1,234,567")
-rec("JVA:L09", -128 <= 127 <= 127 and not (128 <= 127), "127 nằm trong vùng đệm −128..127 của Integer.valueOf, 128 thì không")
-rec("JVA:L10", 100000 < 150000, "rút 150 000 khi có 100 000: ném ngoại lệ số dư không đủ")
-rec("JVA:L11", ("A01", 50000) == ("A01", 50000), "hai bản ghi cùng giá trị thì bằng nhau theo giá trị")
-rec("JVA:L12", 1000000 + 2000000 + 0 == (1000000 - 300000) + (2000000) + 300000, "chuyển tiền giữa các tài khoản: tổng trước = tổng sau (bất biến)")
+rec("JVA:L06", _jva_v == 5 and _jva_a == [6] and _jp("L06", "GiaTri") == "500000 600000" and "long[]" in _jp("L06", "GiaTri", "code"),
+    "hàm nhận số nguyên: biến gốc giữ nguyên; hàm nhận mảng: phần tử gốc đổi (chương trình GiaTri in 500000 600000)")
+rec("JVA:L07", 300000 - 500000 < 0 and "Tu choi rut 500000, so du 300000" in _jp("L07", "Ngan") and "Khong am: true" in _jp("L07", "KiemTk")
+    and _jp("L07", "RiengTu", "expect") == "compile_error:soDu has private access in TaiKhoan",
+    "rút 500 000 khi số dư 300 000 bị từ chối, số dư không âm; trường private không sửa được từ ngoài (lỗi biên dịch)")
+_jva_ss = _jp("L08", "SoSanh", "code")
+rec("JVA:L08", format(1234567, ",") == "1,234,567" and _jp("L08", "SoSanh").split("\n")[:2] == ["false", "true"]
+    and "==" in _jva_ss and ".equals(" in _jva_ss and "1,234,567" in _jp("L08", "TachDong"),
+    "hai chuỗi tạo riêng: == ra false, equals ra true; định dạng 1234567 thành 1,234,567")
+_jva_i = _jp("L09", "SoSanh", "code")
+rec("JVA:L09", -128 <= 127 <= 127 and not (-128 <= 128 <= 127) and _jp("L09", "SoSanh").split("\n")[:2] == ["true", "false"]
+    and "127" in _jva_i and "128" in _jva_i and _jp("L09", "Dem").startswith("NAP: 3\nRUT: 2\nCK: 1"),
+    "Integer 127 nằm trong vùng đệm −128..127 (== ra true), 128 thì không (false; JLS §5.1.7); đếm theo loại NAP 3, RUT 2, CK 1")
+_jva_vet = _jp("L10", "Vet", "code").split("\n")
+rec("JVA:L10", 70000 < 500000 and "Tu choi: Can 500000, chi co 70000" in _jp("L10", "Rut")
+    and _jp("L10", "ThuTu") == "1\n2: 5\n5: / by zero\n6\n7" and "finally" in _jp("L10", "ThuTu", "code")
+    and "at Vet.chia(Vet.java:3)" in _jp("L10", "Vet", "err") and "/" in _jva_vet[2],
+    "rút quá số dư ném ngoại lệ tự định nghĩa; finally in 6 cả khi có ngoại lệ, dòng 4 bị bỏ qua; vết ngăn xếp chỉ dòng 3 là phép chia")
+def _jva_bac(t):
+    return 0 if t < 500000 else 2200 if t < 10000000 else 5500
+def _jva_pt(t):
+    return max(1000, t * 5 // 1000)
+rec("JVA:L11", (_jva_bac(100000), _jva_bac(2000000), _jva_pt(100000), _jva_pt(2000000)) == (0, 2200, 1000, 10000)
+    and _jp("L11", "Phi") == "0 2200\n1000 10000" and "interface CachTinhPhi" in _jp("L11", "Phi", "code")
+    and _jp("L11", "BanGhi").split("\n")[1:3] == ["false", "true"],
+    "hai cách tính phí cùng giao diện qua một vòng lặp: 0 và 2 200; 1 000 và 10 000; bản ghi cùng giá trị: equals ra true")
+_jva_so = {"A": 1000000, "B": 500000, "C": 1500000}
+_jva_goc = sum(_jva_so.values())
+_jva_a, _jva_b = _jva_so["A"], _jva_so["B"]
+_jva_loi = dict(_jva_so, A=_jva_a - 300000, B=_jva_a + 300000)   # lỗi chép nhầm biến: cộng vào bên nhận từ số dư bên GỬI
+rec("JVA:L12", _jva_goc == 3000000 and 900000 + 800000 + 1300000 == _jva_goc and _jp("L12", "So").endswith("Tong 3000000")
+    and sum(_jva_loi.values()) == 3500000 and "Lech tong 3500000 != 3000000" in _jp("L12", "SoLoi", "err"),
+    "sổ 3 tài khoản: tổng 3 000 000 trước và sau; lỗi chép nhầm biến làm tổng thành 3 500 000 và bị phép kiểm bất biến bắt ngay")
 
 print(f"\nTỔNG: {sum(rows)} PASS · {len(rows) - sum(rows)} FAIL")

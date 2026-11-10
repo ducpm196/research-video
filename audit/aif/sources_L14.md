@@ -36,6 +36,12 @@ bài đã in, không phải bản do tác giả hay nhà xuất bản đăng —
 - §7.3: “the large majority of the features and weights in the Deep Blue evaluation function were created/tuned by hand”; công cụ tự động
   cho thấy “the hand-tuned weights were systematically too low”.
 - §8.1: “The book consisted of about 4000 positions”. §8.2: “a 700,000 game database”.
+- Đọc lại 2026-11-08 (cùng bản PDF oswego, pdftotext): §8.1 “The opening book in Deep Blue was created by hand, primarily by Grandmaster
+  Joel Benjamin, with assistance from Grandmasters Nick De Firmian, John Fedorowicz, and Miguel Illescas.” §8.2 “The extended book … allows
+  a large Grandmaster game database to influence and direct Deep Blue's play in the absence of opening book information … a 700,000 game
+  database”. §8.3 “The endgame databases did not play a critical role in the matches against Kasparov.” → bài giảng KHÔNG nói cơ sở dữ
+  liệu tàn cuộc là một phần của chiến thắng (đã sửa bài học sai 2, rà soát đợt B). §7.3 trọng số “systematically too low” là trọng số
+  “related to pawn shelter” (tốt che chắn vua).
 - §9: “The success of Deep Blue in the 1997 match was not the result of any one factor.” “Evaluation function tuning, both automatic and
   manual, was far from complete.”
 
@@ -107,6 +113,14 @@ theo đường dẫn, nội dung (tiêu đề, tác giả, kết quả 155/6/100
 - (a): “taking approximately 9 hours for chess, 12 hours for shogi, and 13 days for Go”; “winning 155 games and losing just six games out of
   1,000”; “Traditional chess engines – including the world computer chess champion Stockfish and IBM's ground-breaking Deep Blue – rely on
   thousands of rules and heuristics handcrafted by strong human players”.
+
+## Đọc lại 2026-11-09 (đợt C, curl + `pdftotext -layout`, cùng sha256 với các bản ở trên)
+- [AZ17] (sha256 26c43408551c22f4…): “2016 Top Chess Engine Championship (TCEC) world-champion Stockfish”; “Stockfish …, an open source
+  program that won the 2016 TCEC computer chess championship”.
+- [AZ18] bản truy cập mở (sha256 9e298fbfbcfbb50c…): “The chess match was played against the 2016 TCEC (season 9) world champion
+  Stockfish”. → câu “chương trình vô địch giải máy cờ vua năm 2016” ở cảnh mở đầu L14 khớp nguồn.
+- [AGZ17] “AlphaGo Zero used a single machine with 4 Tensor Processing Units (TPUs), while AlphaGo Lee was distributed over many machines
+  and used 48 TPUs” → bài nay nói “ít bộ tăng tốc hơn 12 lần” (bản cũ ghi “ít máy hơn 12 lần”: sai đơn vị, 12 là tỉ số TPU, không phải số máy).
 
 ## Điều KHÔNG dạy (nguồn không ghi hoặc chưa đọc)
 - Số ván hoà của trận 1000 ván 2018: nguồn chỉ ghi 155 thắng, 6 thua → 839 hoà là PHÉP TÍNH (1000 − 155 − 6), ghi rõ là tính ra.

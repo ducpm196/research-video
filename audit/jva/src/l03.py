@@ -147,11 +147,13 @@ public class Hang {
                  [["<code>if (đk) { … }</code>", "<b>nếu</b> điều kiện đúng thì làm khối trong ngoặc nhọn"],
                   ["<code>else if (đk2) { … }</code>", "<b>nếu không, mà</b> điều kiện hai đúng thì làm khối này"],
                   ["<code>else { … }</code>", "<b>nếu không</b> (mọi điều kiện trên đều sai) thì làm khối này"],
-                  ["<code>switch (x) { case A -&gt; …; default -&gt; …; }</code>", "<b>chọn theo trường hợp</b>: x bằng A thì làm việc sau mũi tên"],
-                  ["<code>đk ? a : b</code>", "<b>ba ngôi</b>: điều kiện đúng thì lấy a, sai thì lấy b"]]),
+                  ["<code>switch (x) { case A -&gt; …; default -&gt; …; }</code>", "<b>chọn theo trường hợp</b>: x bằng A thì làm việc sau mũi tên; <code>default</code>: không trường hợp nào khớp thì làm việc này"],
+                  ["<code>đk ? a : b</code>", "<b>ba ngôi</b> (ba phần: điều kiện, a, b): điều kiện đúng thì lấy a, sai thì lấy b"]])
+           + "<span class='note'>đk = điều kiện: một biểu thức cho kết quả đúng hoặc sai.</span>",
            """Bảng này là năm cách viết của hôm nay. Lệnh rẽ nhánh nếu: điều kiện trong ngoặc tròn đúng thì làm khối trong ngoặc nhọn.
            Nhánh nếu không, mà, thêm một điều kiện nữa. Nhánh nếu không cuối cùng nhận mọi trường hợp còn lại.
-           Lệnh chọn theo trường hợp so một giá trị với từng trường hợp. Toán tử ba ngôi chọn một trong hai giá trị.""",
+           Lệnh chọn theo trường hợp so một giá trị với từng trường hợp, và nhánh mặc định nhận mọi giá trị không khớp trường hợp nào.
+           Toán tử ba ngôi, gọi vậy vì có ba phần là điều kiện và hai giá trị, chọn một trong hai giá trị đó.""",
            focus=[1, "1.2", "1.3", "1.4", "1.5", "1.6"]),
         st(code_block(rut, lines=(3, 10)) + out_block(rut),
            """Ví dụ rút tiền. Số dư ba trăm nghìn, muốn rút năm trăm nghìn. Điều kiện số tiền nhỏ hơn hoặc bằng số dư là sai,
@@ -246,7 +248,7 @@ $$500\\,000 \\le \\text{soTien} \\;\\text{ và }\\; \\text{soTien} < 10\\,000\\,
         st('<div class="box warn"><b>Lỗi 2 (người mới).</b> Bỏ ngoặc nhọn rồi thêm lệnh thứ hai.</div>'
            + code_block(thieu_ngoac, lines=(3, 8)) + out_block(thieu_ngoac),
            """Lỗi thứ hai là bỏ ngoặc nhọn. Không có ngoặc nhọn thì nhánh nếu chỉ gồm đúng một lệnh ngay sau nó.
-           Lệnh trừ tiền thụt lề trông như nằm trong nhánh, nhưng thật ra luôn chạy. Kết quả là từ chối rút mà số dư vẫn bị trừ thành âm.
+           Lệnh trừ tiền thụt lề trông như nằm trong nhánh, nhưng thật ra luôn chạy. Kết quả là không có dòng đồng ý rút, mà số dư vẫn bị trừ thành âm bốn trăm nghìn.
            Thói quen tốt là luôn viết ngoặc nhọn, kể cả khi chỉ có một lệnh."""),
         st('<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Dùng <code>&gt;</code> khi quy định ghi “từ … trở lên”.</div>'
            + code_block(phi_sai, lines=(3, 11)) + out_block(phi_sai),

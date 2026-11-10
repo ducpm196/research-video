@@ -8,8 +8,8 @@
 ## 1. ĐÁNH GIÁ THỰC TẾ: LIỆU XEM VIDEO CÓ ĐỦ ĐỂ ĐẬU SENIOR BANKING 50M GROSS?
 
 ### 1.1. Câu trả lời trung thực và khách quan
-**KHÔNG ĐỦ NẾU CHỈ XEM 9 VIDEO ACB (khoảng 50 phút).**  
-Nếu một người mới bắt đầu hoặc người mất gốc chỉ xem 9 video tại `D:\research-video\out\ACB` (tổng 50,50 phút, đo bằng ffprobe 2026-11-08 sau khi dựng lại) rồi bước vào phòng phỏng vấn, rủi ro trượt ở vòng kỹ thuật rất cao: các video này là bản tóm tắt, không phải bài nền. Người chưa từng lập trình học khóa **JVA** (13 bài, 106,91 phút) trước, rồi khóa **BNK** (15 bài, 115,05 phút), rồi mới xem INT/ACB.
+**KHÔNG ĐỦ NẾU CHỈ XEM 9 VIDEO ACB (khoảng 63 phút).**  
+Nếu một người mới bắt đầu hoặc người mất gốc chỉ xem 9 video tại `D:\research-video\out\ACB` (tổng 62,92 phút, đo bằng ffprobe 2026-11-10 sau lần dựng lại gần nhất) rồi bước vào phòng phỏng vấn, rủi ro trượt ở vòng kỹ thuật rất cao: các video này là bản tóm tắt, không phải bài nền. Người chưa từng lập trình học khóa **JVA** (13 bài, 106,91 phút) trước, rồi khóa **BNK** (15 bài, 115,05 phút), rồi mới xem INT/ACB.
 
 ### 1.2. Ba rào cản chí mạng khiến việc học vẹt video thất bại:
 1. **Bản chất của chuỗi video ACB (L00 đến L08)**:

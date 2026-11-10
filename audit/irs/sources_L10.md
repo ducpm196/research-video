@@ -24,4 +24,13 @@ URL: https://arxiv.org/pdf/1608.04468
 - "live A/B results are not always correlated with offline experiments."
 
 ## Liên hệ khoá khác
-- Biến gây nhiễu, nghịch lý Simpson: DSC bài 7; thử nghiệm hai nhóm: DSC bài 8, DAN — không dạy lại.
+- Biến gây nhiễu, nghịch lý Simpson: DSC bài 7; thử nghiệm hai nhóm: DSC bài 8, DAN.
+- Đợt C (2026-11-09): bài nay TỰ GIẢNG lại, không nhắc khoá khác: xác suất, độc lập, kỳ vọng (phần ôn ①); biến gây nhiễu bằng một nhật ký
+  minh hoạ theo vị trí có đảo chiều khi gộp (B thắng từng vị trí, A thắng gộp: 0,022 so với 0,0127 — kiểm ở verify_parts/L10.py L10i;
+  không gọi tên “Simpson” trong lời đọc); thử nghiệm hai nhóm (chia ngẫu nhiên, đối chứng/thử) ở đầu cảnh `online`; độ lệch chuẩn, thiên lệch
+  ở cảnh `check`; đặc trưng, tháp nông ở cảnh `online`.
+
+## Đọc lại 2026-11-09 (đợt C, pdftotext bản `daiwk.github.io/assets/youtube-multitask.pdf`)
+- [ZH19] mục 5.4.3: "Besides position bias, there are many other types of biases. Some of these biases may be unknown and unpredictable" (khớp câu “ngoài vị trí còn nhiều thiên lệch khác, có cái chưa biết”).
+- [ZH19] Bảng 2 chỉ ghi "Engagement Metric": Input Feature −0.07% / Adversarial Loss +0.01% / Shallow Tower +0.24%; bài báo không ghi rõ chữ “relative” —
+  bài giảng đọc là thay đổi so với hệ gốc trong thử nghiệm (cách đọc thông thường), không nêu con số tuyệt đối.

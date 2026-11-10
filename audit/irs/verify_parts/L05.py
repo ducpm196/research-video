@@ -61,3 +61,11 @@ for _ in range(50):
     g = -1 / (1 + exp_t(sa - sb))  # đạo hàm theo sa của ln(1 + e^−(sa − sb))
     sa, sb = sa - 0.5 * g, sb + 0.5 * g
 rec("L05g", sa > sb and pl(sa - sb) < pl(0), "mô phỏng: 50 bước kéo a lên trên b, mất mát giảm dưới ln 2")
+# Phần nền (sửa 2026-11-09, đợt C — bài tự đứng được): hàm mũ, lôgarit, logistic, entropy chéo làm lại bằng Taylor + chia đôi.
+rec("L05h", round(exp_t(1), 3) == 2.718 and round(exp_t(2), 3) == 7.389 and round(exp_t(0.693), 3) == 2.0 and round(ln_t(0.5), 3) == -0.693
+    and round(1 / (1 + exp_t(0.5)), 3) == 0.378 and round(1 / (1 + 1.649), 3) == 0.378,
+    "nền: e ≈ 2,718; e² ≈ 7,389; e^0,693 ≈ 2; ln 0,5 ≈ −0,693; logistic(−0,5) ≈ 0,378")
+rec("L05i", [round(-ln_t(p), 3) for p in (0.9, 0.5, 0.1, 0.01)] == [0.105, 0.693, 2.303, 4.605] and abs(ln_t(1)) < 1e-9,
+    "nền entropy chéo: −ln p = 0; 0,105; 0,693; 2,303; 4,605 cho p = 1; 0,9; 0,5; 0,1; 0,01")
+rec("L05j", round(-ln_t(0.6225), 3) == 0.474 and round(-ln_t(0.622), 3) == 0.475,
+    "bước 2: giữ 0,6225 cho 0,474; dùng 0,622 đã làm tròn cho 0,475 (lý do giữ thêm chữ số)")

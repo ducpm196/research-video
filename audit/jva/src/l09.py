@@ -156,17 +156,19 @@ public class DoanKetQua {
            """Mảng số dư bạn đã học có năm ô, độ dài cố định. Nhưng số giao dịch trong ngày thì không ai biết trước.
            Còn khi khách đưa số tài khoản, ta muốn tra ra số dư ngay."""),
         st("""<div class="box key">Hôm nay: <b>danh sách</b> lớn dần theo dữ liệu, và <b>bản đồ khoá–giá trị</b> tra số dư theo số tài khoản.
-Cuối bài bạn đếm được số giao dịch theo từng loại.</div>""",
+Cuối bài bạn đếm được số giao dịch theo từng loại.</div>
+<span class='note'><b>Khoá</b>: thứ dùng để tra (số tài khoản). <b>Giá trị</b>: thứ tra ra được (số dư).</span>""",
            """Hôm nay ta học hai công cụ cho hai việc đó: danh sách lớn dần, và bản đồ khoá–giá trị.
+           Trong bản đồ, khoá là thứ ta dùng để tra, như số tài khoản, còn giá trị là thứ tra ra được, như số dư.
            Cuối bài, bạn đếm được giao dịch theo từng loại."""),
     ])
     sc_pre = sc("prereq", "prereq", "Ôn lại: mảng, đối tượng và vòng lặp cộng dồn", [
         st(table(["đã học", "điều cần nhớ hôm nay"],
                  [["① Mảng", "chỉ số chạy từ <code>0</code> tới <code>n − 1</code>; độ dài cố định; vượt chỉ số là lỗi khi chạy"],
-                  ["② Lớp và đối tượng", "<code>new</code> tạo đối tượng; gọi phương thức bằng dấu chấm, như <code>tk.nap(500000)</code>"],
+                  ["② Lớp và đối tượng", "lớp là bản thiết kế; <code>new</code> tạo một đối tượng theo lớp; gọi phương thức (hàm gắn với đối tượng) bằng dấu chấm, như <code>tk.nap(500000)</code>"],
                   ["③ Vòng lặp cộng dồn", "biến tổng bắt đầu từ <code>0</code>, mỗi vòng cộng thêm một phần tử"]]),
            """Ta ôn ba điều. Thứ nhất, mảng có chỉ số từ không tới n trừ một, độ dài cố định.
-           Thứ hai, từ khoá tạo mới sinh ra đối tượng, và ta gọi phương thức bằng dấu chấm.
+           Thứ hai, lớp là bản thiết kế, từ khoá tạo mới sinh ra một đối tượng theo bản thiết kế đó, và ta gọi phương thức, tức hàm gắn với đối tượng, bằng dấu chấm.
            Thứ ba, vòng lặp cộng dồn bắt đầu tổng bằng không, mỗi vòng cộng thêm một phần tử."""),
         st("""<p>Danh sách và bản đồ <b>cũng là lớp</b>, có sẵn trong thư viện của Java (gói <code>java.util</code>). Ta chỉ cần tạo đối tượng rồi gọi phương thức.</p>""",
            """Tin vui là danh sách và bản đồ cũng chỉ là lớp có sẵn trong thư viện, nên bạn đã biết cách dùng: tạo đối tượng, rồi gọi phương thức."""),
@@ -177,12 +179,12 @@ Cuối bài bạn đếm được số giao dịch theo từng loại.</div>""",
         st(table(["viết", "nghĩa"],
                  [["<code>import java.util.ArrayList;</code>", "dòng đầu tệp: mượn lớp danh sách từ thư viện"],
                   ["<code>ArrayList&lt;Long&gt;</code>", "danh sách mà mỗi phần tử là một số <code>Long</code>; kiểu nằm trong ngoặc nhọn"],
-                  ["<code>new ArrayList&lt;&gt;()</code>", "tạo danh sách rỗng; ngoặc nhọn trống: máy tự suy ra kiểu"],
+                  ["<code>new ArrayList&lt;&gt;()</code>", "tạo danh sách rỗng; ngoặc nhọn trống: trình biên dịch tự suy ra kiểu"],
                   ["<code>gd.add(500000L)</code>", "thêm vào <b>cuối</b>; chữ <code>L</code> nói đây là số kiểu <code>long</code>"],
                   ["<code>gd.get(0)</code>, <code>gd.size()</code>", "lấy phần tử ở chỉ số 0; số phần tử hiện có"],
                   ["<code>for (long x : gd)</code>", "vòng lặp duyệt: lần lượt gán từng phần tử cho <code>x</code>; dùng được cả với mảng"]]),
            """Dòng nhập mượn lớp danh sách từ thư viện. Kiểu trong ngoặc nhọn nói mỗi phần tử là số nguyên dài.
-           Ngoặc nhọn trống khi tạo mới nghĩa là máy tự suy ra kiểu.
+           Ngoặc nhọn trống khi tạo mới nghĩa là trình biên dịch tự suy ra kiểu.
            Phương thức thêm đặt phần tử vào cuối, chữ L nói con số thuộc kiểu dài.
            Phương thức lấy nhận chỉ số, phương thức kích thước đếm phần tử.
            Vòng lặp duyệt gán lần lượt từng phần tử cho biến x, và dùng được cả với mảng.""", clear=True),
@@ -229,7 +231,7 @@ Cuối bài bạn đếm được số giao dịch theo từng loại.</div>""",
                txt(750, 270, "danh sách và bản đồ chỉ chứa đối tượng, nên kiểu trong ngoặc nhọn viết hoa: Long, Integer", 24, "middle", "#1f2937", True)),
            """Một chi tiết quan trọng: danh sách và bản đồ chỉ chứa đối tượng, không chứa số trần.
            Thêm một số kiểu dài thì máy tự bọc nó vào đối tượng, gọi là đóng hộp, hay hộp hoá. Lấy ra để tính thì máy tự mở hộp.
-           Vì thế kiểu trong ngoặc nhọn là lớp bọc, viết hoa chữ đầu."""),
+           Vì thế khi chứa số, kiểu trong ngoặc nhọn là lớp bọc, viết hoa chữ đầu."""),
         st(table(["", "mảng", "danh sách", "bản đồ"],
                  [["độ dài", "cố định khi tạo", "lớn dần khi thêm", "lớn dần khi đặt khoá mới"],
                   ["tìm phần tử theo", "chỉ số <code>a[i]</code>", "chỉ số <code>get(i)</code>", "khoá <code>get(k)</code>"],
@@ -292,9 +294,10 @@ Cuối bài bạn đếm được số giao dịch theo từng loại.</div>""",
            """Lỗi thứ nhất, của người mới, là viết kiểu số trần trong ngoặc nhọn.
            Trình biên dịch báo kiểu không mong đợi, vì danh sách chỉ chứa đối tượng. Sửa bằng lớp bọc, chữ đầu viết hoa."""),
         st('<div class="box warn"><b>Lỗi 2 (người mới).</b> Xoá phần tử ngay trong vòng lặp duyệt.</div>'
-           + code_block(xoa, lines=(10, 14)) + out_block(xoa),
+           + code_block(xoa, lines=(5, 14)) + out_block(xoa),
            """Lỗi thứ hai là xoá phần tử ngay trong vòng lặp duyệt, ở đây là bỏ tài khoản B không hai.
-           Danh sách bị đổi giữa chừng, nên bộ duyệt ném ngoại lệ sửa đổi đồng thời."""),
+           Danh sách bị đổi giữa chừng, nên ở đây bộ duyệt ném ngoại lệ sửa đổi đồng thời.
+           Java chỉ cố gắng phát hiện chứ không hứa lần nào cũng ném: có khi vòng lặp dừng sớm và bỏ sót phần tử, nên đừng dựa vào ngoại lệ này."""),
         st(code_block(xoa_dung, lines=(10, 15), title="Cách sửa: duyệt theo chỉ số, từ cuối về đầu") + out_block(xoa_dung),
            """Cách sửa là duyệt theo chỉ số từ cuối về đầu, và xoá theo chỉ số.
            Xoá một ô chỉ làm dịch các ô phía sau, mà các ô đó đã đi qua rồi, nên không bỏ sót ai."""),
@@ -327,10 +330,10 @@ Ngoài khoảng đó, máy ảo mặc định tạo đối tượng mới, nên 
         st(chain("mảng: độ dài cố định", "danh sách: thêm dần, chỉ số 0…size − 1", "bản đồ: khoá → giá trị",
                  "lấy hoặc mặc định để đếm"),
            """Tổng kết chuỗi logic. Mảng có độ dài cố định, còn danh sách thêm dần, chỉ số từ không tới kích thước trừ một.
-           Bản đồ tra giá trị theo khoá, và lấy hoặc mặc định giúp đếm tần suất gọn gàng."""),
-        st("""<div class='box key'><b>Tư duy:</b> kiểu trong ngoặc nhọn là <b>lớp bọc</b> (<code>Long</code>, <code>Integer</code>), nên so bằng
+           Bản đồ tra giá trị theo khoá, và lấy hoặc mặc định giúp đếm tần suất, tức mỗi loại xuất hiện bao nhiêu lần, một cách gọn gàng."""),
+        st("""<div class='box key'><b>Tư duy:</b> kiểu trong ngoặc nhọn luôn là kiểu đối tượng; với số là <b>lớp bọc</b> (<code>Long</code>, <code>Integer</code>), nên so bằng
 <code>equals</code>, không bằng <code>==</code>. Khoá không có thì <code>get</code> ra <code>null</code>. Không xoá phần tử trong vòng lặp duyệt.</div>""",
-           """Điều cần mang theo. Kiểu trong ngoặc nhọn là lớp bọc, nên so bằng nội dung, không so địa chỉ.
+           """Điều cần mang theo. Kiểu trong ngoặc nhọn luôn là đối tượng, với số là lớp bọc, nên so bằng nội dung, không so địa chỉ.
            Thiếu khoá thì phương thức lấy trả giá trị rỗng. Và đừng xoá phần tử trong vòng lặp duyệt."""),
     ])
     return lesson("L09", "danh_sach_va_ban_do", "Bài 9 — Danh sách và bản đồ",

@@ -60,6 +60,12 @@ Tải: https://cwiki.apache.org/confluence/display/KAFKA/KIP-500%3A+Replace+ZooK
 - Bridge Release: “When upgrading from an earlier release to a post-ZK release, the upgrade must be done in two steps: first, you must upgrade to the bridge release, and then you must upgrade to the post-ZK release.”
 - Rejected Alternatives (Pluggable Consensus): “Supporting multiple metadata storage options would inevitably decrease the amount of testing we could give to each configuration.”
 
+- Bổ sung đợt C (2026-11-09): KIP-500 đã được thảo luận công khai TRƯỚC tháng 10/2019 — tập podcast Confluent “KIP-500: Apache Kafka Without ZooKeeper ft. Colin McCabe and Jason Gustafson”, ngày đăng “September 18, 2019” (buzzsprout.com/186154/1720903, truy cập 2026-11-09, no revision given). Vì vậy bài chỉ ghi “đề xuất số 500, năm 2019”; mốc 30/10/2019 là ngày tạo **phiếu KAFKA-9119**, và phép tính 1966 ngày ghi rõ “từ ngày mở phiếu công việc của đề xuất”. Ngày tạo trang KIP trên wiki: chưa kiểm được nguồn.
+
+## [K011] Apache Kafka 0.11.0 — ghi lũy đẳng, giao dịch (bài học sai 1 của L11)
+- Trang tải về chính thức kafka.apache.org/community/downloads (truy cập 2026-11-09, no revision given): mục 0.11.0.0 “Released June 28, 2017”; mục 1.0.0: “Since release 0.11.0, the idempotent producer …”.
+- KIP-98 *Exactly Once Delivery and Transactional Messaging* (cwiki, truy cập 2026-11-09): “Current state: Adopted”; “Note that idempotence must be enabled in order to use transactions.” Trang KIP không ghi số bản phát hành của giao dịch → bản 0.11 cho giao dịch: chưa kiểm được trực tiếp trong ghi chú phát hành (giữ vì khớp mốc ghi lũy đẳng 0.11.0 và kiến thức chung).
+
 ## [B28] Apache Kafka blog (lưu trữ), *What’s New in Apache Kafka 2.8.0*, 19/4/2021 (blogsarchive.apache.org/kafka/entry/what-s-new-in-apache5)
 - “This release offers an early access version of KIP-500, which allows you to run Kafka brokers without Apache ZooKeeper, instead depending on an internal Raft implementation.”
 - “The implementation is not yet feature complete and should not be used in production, but it is possible to start new clusters without ZooKeeper and go through basic produce and consume use cases.”

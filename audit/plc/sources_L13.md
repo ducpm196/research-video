@@ -142,3 +142,18 @@ chuyển hướng 301 tới https://blog.google/security/rust-in-android-move-fa
 - “Hàng trăm lỗ hổng đã được ngăn” [AN22] là ước lượng của nguồn; phép nhân 1,5 triệu dòng × 1 lỗ hổng mỗi nghìn dòng = 1500 trong bài
   chỉ là CẬN TRÊN theo mật độ lịch sử (không phải mọi dòng là mã gốc mới thay cho C/C++), ghi rõ trên màn hình.
 - NSA/CISA (2022, 2023): không đọc trong phiên này, không dạy (chỉ [AN24] trích một câu của báo cáo CISA — không dùng).
+
+## Đọc lại đợt C (2026-11-09, curl + bỏ thẻ HTML; tệp tạm trong scratchpad `review_c/PLC/web/`)
+Kiểm các câu bài L13 dựa vào nhưng mục trên chưa trích:
+- [AQ19]: ngữ cảnh của 90%: “Here’s a look at high severity vulnerabilities by component and cause from 2018: … Use-after-free (UAF),
+  integer overflows, and out of bounds (OOB) reads/writes comprise 90% of vulnerabilities” → khớp “lỗ hổng mức cao năm 2018”.
+- [AN22]: “Unsafe was actively helpful in this situation because the extra attention on this code allowed us to discover a possible race
+  condition and guard against it.” → khớp “soát kỹ hai chỗ đó đã tìm ra một khả năng tranh chấp”.
+- [AN24]: “currently 24% in 2024, well below the 70% industry norm”; “Despite the majority of code still being unsafe (but, crucially,
+  getting progressively older)”; nghiên cứu “published in 2022 in Usenix Security” (chú thích 2: “How Long Do Vulnerabilities Live in the
+  Code? …” USENIX Security 22); chú thích 3: “Vulnerability reports were unusually high that year … the absolute number increased slightly.”
+- [AN25]: “we assigned it the identifier CVE-2025-48530”; “key takeaways from our postmortem”; “we did discover a gap in our crash
+  reporting: it failed to clearly show that the crash was a result of an overflow … This has been fixed” (bài nay viết “báo cáo khi
+  chương trình sập”, không viết “báo cáo lỗi”); “Operating system development requires unsafe code … (for example, for FFI and interacting
+  with hardware), so simply banning unsafe code is not workable”; “the volume of new Rust code now rivals that of C++” (biểu đồ chỉ tính mã
+  hệ thống do Google viết).

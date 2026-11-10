@@ -186,7 +186,7 @@ public class BoQua {
            Sau đó quay lại hỏi điều kiện. Khi điều kiện sai, máy ra khỏi vòng lặp và chạy lệnh tiếp theo."""),
         st(code_block(vuot, lines=(3, 13)),
            """Mẫu cộng dồn ta sẽ làm ở ví dụ lãi, còn đây là mẫu đếm. Ta giả lập tám lệnh chuyển tiền, số tiền lệnh thứ i tính bằng phép chia lấy dư, vì chưa học cách lưu nhiều số.
-           Lệnh nào không vượt hạn mức năm triệu thì lệnh bỏ qua nhảy sang lệnh sau. Lệnh vượt thì biến đếm tăng một."""),
+           Hạn mức ở đây là số tiền tối đa cho một lệnh, năm triệu đồng, số minh hoạ. Lệnh nào không vượt hạn mức thì lệnh bỏ qua nhảy sang lệnh sau, còn lệnh vượt thì biến đếm tăng một."""),
         st(table(["lệnh i", "1", "2", "3", "4", "5", "6", "7", "8"],
                  [["i × 7 % 10 (triệu)", "7", "4", "1", "8", "5", "2", "9", "6"],
                   ["vượt 5 triệu?", "<b>có</b>", "không", "không", "<b>có</b>", "không (bằng)", "không", "<b>có</b>", "<b>có</b>"]])
@@ -238,7 +238,7 @@ $$11 - 1 + 1 = \\hl{11} \\text{ lần, thiếu một tháng}$$""",
 $$100\\,000\\,000 \\times 1.005^{12} \\approx 106\\,167\\,781.19$$""" + code_block(kiem_lai, lines=(3, 4))
            + "<span class='note'><code>Math.pow(a, n)</code> là lệnh có sẵn của Java, tính a mũ n, ra số thực; "
              "<code>(long)</code> ép về số nguyên dài, bỏ phần lẻ.</span>" + out_block(kiem_lai),
-           """Đường kiểm khác là công thức lãi kép. Nếu không làm tròn, mỗi tháng số dư được nhân với một phẩy không không năm, nên mười hai tháng là nhân mười hai lần.
+           """Đường kiểm khác là công thức lãi kép, tức lãi được nhập vào gốc để tháng sau sinh lãi tiếp. Nếu không làm tròn, mỗi tháng số dư được nhân với một phẩy không không năm, nên mười hai tháng là nhân mười hai lần.
            Java có sẵn lệnh tính lũy thừa, ép về số nguyên dài để dễ đọc, và chương trình in ra số trên màn hình."""),
         st("""<p>Chênh lệch: $106\\,167\\,781 - 106\\,167\\,776 = \\hl{5}$ đồng. Hợp lý, vì mỗi tháng phép chia nguyên bỏ <b>dưới 1 đồng</b>,
 12 tháng bỏ chưa tới 13 đồng (kể cả phần lãi của số tiền bị bỏ).</p>""",

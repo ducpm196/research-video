@@ -12,12 +12,12 @@ def build():
                   ["sổ cái bút toán, chỉ thêm", "xem từng dòng", "tổng mỗi giao dịch phải bằng 0"]]),
            """Bảng này so hai cách lưu. Một cột số dư sửa trực tiếp thì không tìm được lỗi và không có gì để cộng lại kiểm tra. Sổ cái chỉ thêm thì xem được từng dòng, và kiểm cân đối bằng cách cộng tổng mỗi giao dịch."""),
     ])
-    pre = sc("prereq", "prereq", "Ôn lại ba điều sẽ dùng", [
+    pre = sc("prereq", "prereq", "Trước hết: ba điều cần hiểu", [
         st(table(["khái niệm", "nghĩa", "ví dụ"],
-                 [["① Số nguyên đồng", "tiền Việt Nam không có phần lẻ, lưu bằng số nguyên", "500 000 đồng = 500000"],
+                 [["① Số nguyên đồng", "trong thanh toán, đồng Việt Nam không dùng phần lẻ (ISO 4217 ghi VND có 0 chữ số thập phân), nên lưu bằng số nguyên", "500 000 đồng = 500000"],
                   ["② Số có dấu", "dương là tiền vào, âm là tiền ra khỏi tài khoản", "−505 500 và +500 000"],
                   ["③ Tổng một nhóm", "cộng mọi số trong nhóm", "−100 + 60 + 40 = 0"]]),
-           """Ôn ba điều. Tiền Việt Nam không có phần lẻ nên ta lưu bằng số nguyên. Số có dấu cho biết hướng, dương là tiền vào, âm là tiền ra khỏi tài khoản. Tổng một nhóm là cộng mọi số trong nhóm.
+           """Ôn ba điều. Trong thanh toán, đồng Việt Nam không dùng phần lẻ, nên ta lưu bằng số nguyên. Số có dấu cho biết hướng, dương là tiền vào, âm là tiền ra khỏi tài khoản. Tổng một nhóm là cộng mọi số trong nhóm.
            Lưu ý, kế toán dùng cách gọi nợ và có theo quy ước riêng, còn bài này dùng số có dấu cho dễ thấy."""),
         st("""$$-100 + 60 + 40 = 0$$""",
            """Một ví dụ số. Âm một trăm cộng sáu mươi cộng bốn mươi bằng không. Đó là một giao dịch cân đối."""),
@@ -25,11 +25,13 @@ def build():
     sym = sc("sym", "symbol", "Giải mã vài từ hay gặp", [
         st(table(["từ", "nghĩa"],
                  [["bút toán", "một dòng trong sổ cái: tài khoản nào, bao nhiêu tiền, hướng nào"],
+                  ["bút toán kép", "mỗi giao dịch ghi ít nhất hai dòng ở hai tài khoản: tiền rời chỗ này thì phải tới chỗ khác"],
                   ["sổ cái (ledger)", "tập mọi bút toán, chỉ thêm, không sửa, không xoá"],
                   ["cân đối", "tổng mọi bút toán của một giao dịch bằng 0"],
                   ["bút toán đảo", "dòng mới làm ngược một dòng cũ để sửa sai, không xoá dòng cũ"],
                   ["số dư", "về nguyên tắc bằng tổng các bút toán của tài khoản; số dư lưu sẵn phải khớp tổng đó"]]),
-           """Bảng này giải mã năm từ. Bút toán là một dòng cho biết tài khoản nào, bao nhiêu tiền, hướng nào. Sổ cái là tập mọi bút toán, chỉ thêm, không sửa, không xoá.
+           """Bảng dưới đây giải thích nghĩa của sáu thuật ngữ sẽ gặp trong bài. Bút toán là một dòng cho biết tài khoản nào, bao nhiêu tiền, hướng nào. Bút toán kép nghĩa là mỗi giao dịch ghi ít nhất hai dòng ở hai tài khoản, vì tiền rời chỗ này thì phải tới chỗ khác.
+           Sổ cái là tập mọi bút toán, chỉ thêm, không sửa, không xoá.
            Cân đối là tổng bút toán của một giao dịch bằng không. Bút toán đảo là dòng mới làm ngược dòng cũ để sửa sai. Số dư bằng tổng các bút toán của tài khoản."""),
     ])
     intu = sc("intuition", "intuition", "Hình dung: tiền đi từ đâu tới đâu, tổng luôn bằng không", [
@@ -86,8 +88,10 @@ $$⑤ \\; \\text{số dư A} = -505\\,500 + 505\\,500 = \\hl{0}$$""",
                "alg.bnk_ledger_after_reversal(500000, 5500)[0] == 3 + 3 and alg.bnk_ledger_after_reversal(500000, 5500)[2]['khach_A'] == 0"])
     chk = sc("check", "check", "Tự kiểm bằng đường khác: để cơ sở dữ liệu tìm giao dịch lệch", [
         st("""<p>Đường khác: vì mọi dòng nằm trong một bảng, ta hỏi cơ sở dữ liệu: giao dịch nào có tổng khác $0$? Ta cố ý sửa một dòng của giao dịch 1.</p>
+<div class="box code"><code>SELECT txn FROM entry GROUP BY txn HAVING SUM(amt) &lt;&gt; 0;</code></div>
+<p class="small">Bảng <code>entry</code> (bút toán) có cột <code>txn</code> (mã giao dịch) và <code>amt</code> (số tiền có dấu). <code>GROUP BY txn</code>: gom các dòng cùng mã giao dịch thành một nhóm. <code>HAVING SUM(amt) &lt;&gt; 0</code>: chỉ giữ nhóm có tổng khác 0.</p>
 $$\\text{giao dịch lệch} = \\hl{[1]}$$""",
-           """Kiểm bằng đường khác. Vì mọi dòng nằm trong một bảng, ta hỏi cơ sở dữ liệu giao dịch nào có tổng khác không. Ta cố ý sửa một dòng của giao dịch một, và cơ sở dữ liệu chỉ đúng giao dịch một là lệch."""),
+           """Kiểm bằng đường khác. Vì mọi dòng nằm trong một bảng, ta hỏi cơ sở dữ liệu giao dịch nào có tổng khác không. Bảng bút toán có cột mã giao dịch và cột số tiền có dấu. Câu truy vấn gom các dòng cùng mã giao dịch thành một nhóm, rồi chỉ giữ những nhóm có tổng khác không. Ta cố ý sửa một dòng của giao dịch một, và cơ sở dữ liệu chỉ đúng giao dịch một là lệch."""),
         st(table(["giao dịch", "các dòng", "tổng", "kết luận"],
                  [["1 (đã sửa lén)", "−100, +90", "−10", "lệch, phải điều tra"], ["2", "−5, +5", "0", "cân đối"]]),
            """Bảng này cho thấy kết quả. Vì giao dịch một có tổng âm mười, nên nó lệch và cần điều tra. Giao dịch hai tổng bằng không, nên cân đối. Chỉ cần một câu truy vấn tổng nhóm là thấy."""),
@@ -95,8 +99,8 @@ $$\\text{giao dịch lệch} = \\hl{[1]}$$""",
     pit = sc("pitfalls", "pitfall", "Lỗi hay gặp, có lỗi của người đã đi làm", [
         st("""<div class="box warn"><b>Lỗi 1 (người mới).</b> Lưu số dư là một cột rồi <b class="red">cộng trừ trực tiếp</b>. Hai giao dịch cùng lúc có thể ghi đè nhau, và không còn dấu vết để tìm lỗi.</div>""",
            """Lỗi thứ nhất, của người mới. Lưu số dư là một cột rồi cộng trừ trực tiếp. Hai giao dịch cùng lúc có thể ghi đè nhau, và không còn dấu vết để tìm lỗi."""),
-        st("""<div class="box warn"><b>Lỗi 2 (người đã đi làm).</b> <b class="red">Xoá hay sửa dòng cũ</b> khi phát hiện sai, cho “gọn”. Từ đó sổ không còn bằng chứng, kiểm toán không dựng lại được. Chỉ thêm bút toán đảo.</div>""",
-           """Lỗi thứ hai, của người đã đi làm, là xoá hay sửa dòng cũ khi phát hiện sai, cho gọn. Từ đó sổ không còn bằng chứng, kiểm toán không dựng lại được. Hãy chỉ thêm bút toán đảo."""),
+        st("""<div class="box warn"><b>Lỗi 2 (người đã đi làm).</b> <b class="red">Xoá hay sửa dòng cũ</b> khi phát hiện sai, cho “gọn”. Từ đó sổ không còn bằng chứng, kiểm toán (người kiểm tra sổ sách độc lập) không dựng lại được. Chỉ thêm bút toán đảo.</div>""",
+           """Lỗi thứ hai, của người đã đi làm, là xoá hay sửa dòng cũ khi phát hiện sai, cho gọn. Từ đó sổ không còn bằng chứng, và kiểm toán, tức người kiểm tra sổ sách độc lập, không dựng lại được. Hãy chỉ thêm bút toán đảo."""),
         st("""<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Tính phí theo phần trăm bằng số thực rồi làm tròn tuỳ ý. Lệch một đồng mỗi giao dịch, nhân với hàng triệu giao dịch. Cần <b>quy tắc làm tròn viết rõ</b>, tính bằng số nguyên.</div>""",
            """Lỗi thứ ba, cũng của người đã đi làm, là tính phí theo phần trăm bằng số thực rồi làm tròn tuỳ ý. Lệch một đồng mỗi giao dịch, nhân với hàng triệu giao dịch thì thành số lớn.
            Cần quy tắc làm tròn viết rõ, và tính bằng số nguyên."""),

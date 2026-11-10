@@ -40,3 +40,15 @@ p2r = [a + eta * (e2 * b - lam * a) for a, b in zip(p2, q2)]
 rec("L07h", e2 == 1 and p2n == [F(21, 10), F(11, 10)] and q2n == [F(6, 5), F(11, 10)] and sum(a * b for a, b in zip(p2n, q2n)) == F(373, 100)
     and p2r == [F(52, 25), F(109, 100)], "quiz: (2,1; 1,1), (1,2; 1,1), đoán lại 3,73; có lam-đa (2,08; 1,09)")
 rec("L07i", 1 * 0.5 + 2 * 1 == 2.5 and 1 - 0.1 * 2 * (1 - 3) == 1.4 and (3 - 2.5) ** 2 == 0.25, "ôn: 2,5; w 1 → 1,4; 0,25")
+# ôn mở rộng (đợt C): bảng 3 × 4 có 5 ô điểm; độ dốc đo bằng nhích hữu hạn (Fraction) và đạo hàm sympy; hai bước đi xuống dốc
+f = lambda v: (v - 3) ** 2
+w = sp.symbols("w")
+d = sp.diff((w - 3) ** 2, w)
+w1 = F(1) - F(1, 10) * d.subs(w, 1)
+w2 = w1 - F(1, 10) * d.subs(w, sp.Rational(7, 5))
+rec("L07j", 3 * 4 == 12 and sum(c != "–" for c in "5–3––4––2––5") == 5
+    and f(F(11, 10)) == F(361, 100) and (f(F(11, 10)) - 4) / F(1, 10) == F(-39, 10) and f(F(101, 100)) == F(39601, 10000)
+    and (f(F(101, 100)) - 4) / F(1, 100) == F(-399, 100) and d.subs(w, 1) == -4 and w1 == F(7, 5) and f(F(7, 5)) == F(64, 25)
+    and d.subs(w, sp.Rational(7, 5)) == sp.Rational(-16, 5) and w2 == sp.Rational(43, 25) and f(F(43, 25)) == F(1024, 625)
+    and float(F(1024, 625)) == 1.6384 and (3 - F(7, 2)) ** 2 == F(1, 4) and (3 - 4) ** 2 == 1 and 1 ** 2 + 2 ** 2 == 5,
+    "ôn: 12 ô, 5 có điểm; f(1,1) 3,61 → −3,9; f(1,01) 3,9601 → −3,99; đạo hàm −4; w 1,4 (f 2,56) → 1,72 (f 1,6384); ‖(1, 2)‖² = 5")
