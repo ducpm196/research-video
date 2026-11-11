@@ -1,0 +1,128 @@
+# Sổ mã trên màn hình BNX L13 (gộp vào audit/review/screen_code/BNX.yaml bằng audit/bnx/screen_try.py --merge).
+# Dockerfile và YAML không chạy được trên máy (không có cụm Kubernetes, không có máy chạy GitLab) → `other` + read_check.
+# Dockerfile được kiểm thật bằng `docker build --check` (nguồn L13_df_good, L13_df_bad; cần Docker 28 và mạng để đọc siêu dữ liệu ảnh nền).
+# YAML được phân tích thật bằng pyyaml và mô phỏng ở audit/bnx/ver/l13.py (hai đường: theo vòng ở checklib, liệt kê trạng thái ở ver).
+blocks:
+  "BNX L13 formula 0 0":
+    sha: 2ecaf4c8ddde0433
+    kind: other
+    lang: dockerfile
+    reason: "Dockerfile hai giai đoạn cho dịch vụ Java; không dựng thật vì cần dự án Maven và tải phụ thuộc từ mạng."
+    read_check: >-
+      (1) Chạy thật `docker build --check` trên đúng văn bản khối (nguồn src:BNX:L13_df_good): "Check complete, no warnings found."
+      — BuildKit đọc được siêu dữ liệu cả hai ảnh nền, nên hai thẻ ghim maven:3.9.9-eclipse-temurin-21 và
+      eclipse-temurin:21.0.5_11-jre có thật trên Docker Hub (cũng kiểm bằng `docker manifest inspect`, OBSERVED 2026-11-11).
+      (2) Thứ tự: COPY pom.xml → RUN dependency:go-offline đứng trước COPY src, đúng ý "tệp phụ thuộc trước, mã sau";
+      theo docs.docker.com/build/cache (đọc 2026-11-11): "Once a layer changes, then all downstream layers need to be rebuilt as well".
+      (3) Không có thẻ latest; COPY --from=build chỉ lấy jar; USER 10001 không phải root; ENTRYPOINT dạng JSON.
+    unverified_claims:
+      - "mvn dependency:go-offline tải đủ phụ thuộc để bước package chạy không cần mạng — không dựng thật (không có pom.xml); đây là cách dùng phổ biến, không kiểm"
+      - "tên tệp target/chuyen-tien.jar giả định pom.xml đặt finalName chuyen-tien"
+  "BNX L13 formula 2 0":
+    sha: 062febe9234f44d3
+    kind: other
+    lang: yaml
+    reason: "Phần đầu (dòng 1–9) của .gitlab-ci.yml và ghi chú rút gọn; không có máy chạy GitLab."
+    read_check: >-
+      yaml.safe_load phân tích được khối này và cả tệp CI_YML (audit/bnx/src/l13.py, hai khung ghép lại); audit/bnx/ver/l13.py
+      kiểm stages == [build, test, package, deploy], mỗi job có stage nằm trong stages, biến IMG ghép CI_REGISTRY_IMAGE với
+      CI_COMMIT_SHORT_SHA. Ngữ nghĩa theo docs.gitlab.com/ci/yaml (mục stages, đọc 2026-11-11): "Jobs in the same stage run in
+      parallel", "If any job fails, the pipeline is marked as failed and jobs in later stages do not start";
+      docs.gitlab.com/ci/variables/predefined_variables: CI_COMMIT_SHORT_SHA = "The first eight characters of CI_COMMIT_SHA".
+    unverified_claims:
+      - "chưa chạy trên GitLab thật; job build/test cần ảnh có Maven (không khai image:) — bản rút gọn, màn hình có ghi chú"
+  "BNX L13 formula 3 0":
+    sha: a492fbfcc33377b9
+    kind: other
+    lang: yaml
+    reason: "Dòng 10–16 của .gitlab-ci.yml: job package (đăng nhập kho ảnh, dựng, đẩy ảnh)."
+    read_check: >-
+      yaml.safe_load phân tích được khối này và cả CI_YML; dòng tiếp nối thụt lề là chuỗi thường gấp dòng, ver/l13.py kiểm
+      script[0] == 'echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin', đúng
+      nguyên chữ ví dụ của docs.gitlab.com/user/packages/container_registry/build_and_push_images (đọc 2026-11-11).
+      CI_REGISTRY_USER/CI_REGISTRY_PASSWORD theo Predefined CI/CD variables: "The username/password to push containers to the
+      project's GitLab container registry", mật khẩu "valid only as long as the job is running". ver mô phỏng đường ống từ YAML thật:
+      test hỏng → package, deploy không chạy; package hỏng → deploy không chạy (khớp alg.bnx_pipeline).
+    unverified_claims:
+      - "job package cần image docker và dịch vụ docker:dind (ví dụ của GitLab dùng docker:24.0.5-cli và docker:24.0.5-dind) — bản rút gọn, màn hình có ghi chú; không chạy thật trên GitLab"
+  "BNX L13 formula 4 0":
+    sha: f6450e801cdd4fc2
+    kind: other
+    lang: yaml
+    reason: "Dòng 17–21 của .gitlab-ci.yml: job deploy."
+    read_check: >-
+      yaml.safe_load phân tích được; kubectl set image / rollout status đúng cú pháp theo kubernetes.io Deployments (ví dụ
+      "kubectl set image deployment/nginx-deployment nginx=nginx:1.16.1"); ver kiểm job deploy ở stage deploy và dùng $IMG.
+    unverified_claims:
+      - "job deploy cần image có kubectl và quyền vào cụm — bản rút gọn, màn hình có ghi chú; không chạy thật"
+  "BNX L13 formula 5 0":
+    sha: f74c671454b01133
+    kind: other
+    lang: yaml
+    reason: "Phần đầu (dòng 1–11) của Deployment Kubernetes; không có cụm để kubectl apply (kubectl dry-run phía máy khách cũng cần máy chủ API)."
+    read_check: >-
+      yaml.safe_load phân tích được khối này và cả DEPLOY_YML; ver/l13.py đọc replicas 4, strategy RollingUpdate,
+      maxUnavailable 1, maxSurge 1 từ YAML thật, kiểm tên trường theo apps/v1 DeploymentSpec (kubernetes.io Deployments, đọc
+      2026-11-11: maxUnavailable "rounding down", maxSurge "rounding up", mặc định 25%) rồi mô phỏng bộ điều khiển theo mã nguồn
+      rolling.go / deployment_util.go: ≥ 3 sẵn sàng, ≤ 5 Pod, 2 đợt chờ sẵn sàng.
+  "BNX L13 formula 6 0":
+    sha: b59b7753638f76e7
+    kind: other
+    lang: yaml
+    reason: "Phần sau (dòng 12–23) của Deployment: selector, template, ảnh, phép kiểm sẵn sàng."
+    read_check: >-
+      yaml.safe_load phân tích được; ver/l13.py kiểm selector.matchLabels khớp template.metadata.labels, thẻ ảnh 0eac7e6a =
+      8 ký tự đầu mã commit gộp của bài 0 (git thật, alg.bnx_git_demo; lời nói rõ chỉ MƯỢN làm ví dụ vì kho bài 0 không dựng ra
+      dịch vụ Java), readinessProbe.httpGet port 8080 trùng containerPort.
+    unverified_claims:
+      - "ứng dụng có đường dẫn /ready trả 200 khi đã sẵn sàng — giả định của bài, không có ứng dụng thật"
+  "BNX L13 check 0 0":
+    sha: ba58980f92732566
+    kind: run
+    lang: python
+    claims:
+      - "có hai mươi bốn trạng thái, sẵn sàng thấp nhất là ba, nhiều nhất năm bản chạy, trạng thái thay xong hết là tới được"
+    expect_stdout: |
+      24 3 5 True
+  "BNX L13 check 0 1":
+    sha: e5cc69a71df5a951
+    kind: output
+    of: "BNX L13 check 0 0"
+    reason: "Đầu ra thật của khối liệt kê trạng thái."
+  "BNX L13 pitfalls 0 0":
+    sha: 8e11345f97c65f3a
+    kind: other
+    lang: dockerfile
+    reason: "Dockerfile SAI có chủ ý (thẻ latest, mật khẩu trong ENV) để minh hoạ Lỗi 1 và Lỗi 2."
+    read_check: >-
+      Chạy thật `docker build --check` trên đúng văn bản khối (nguồn src:BNX:L13_df_bad): đúng 1 cảnh báo
+      SecretsUsedInArgOrEnv ở dòng ENV DB_PASSWORD; thẻ latest KHÔNG bị cảnh báo — đúng điều bài nói.
+  "BNX L13 pitfalls 1 0":
+    sha: ec00367312a07a35
+    kind: output
+    of: "src:BNX:L13_df_bad"
+    reason: "Đầu ra thật của docker build --check trên Dockerfile sai (lược URL và câu dài bằng …)."
+sources:
+  L13_df_good:
+    lang: bash
+    reason: "Kiểm thật Dockerfile của bài (khối BNX L13 formula 0 0) bằng bộ kiểm tích hợp của BuildKit."
+    files: {Dockerfile: "BNX L13 formula 0 0"}
+    code: |
+      docker build --check . 2>&1 | tail -1
+    expect_stdout: |
+      Check complete, no warnings found.
+    timeout: 240
+  L13_df_bad:
+    lang: bash
+    reason: "Kiểm thật Dockerfile sai (khối BNX L13 pitfalls 0 0): chỉ báo mật khẩu trong ENV, không báo thẻ latest."
+    files: {Dockerfile: "BNX L13 pitfalls 0 0"}
+    code: |
+      docker build --check . 2>&1 | grep -A3 'Check complete'
+      docker build --check . 2>&1 | grep '>>>'
+    expect_stdout: |
+      Check complete, 1 warning has been found!
+
+      WARNING: SecretsUsedInArgOrEnv - https://docs.docker.com/go/dockerfile/rule/secrets-used-in-arg-or-env/
+      Do not use ARG or ENV instructions for sensitive data (ENV "DB_PASSWORD")
+         2 | >>> ENV DB_PASSWORD=MatKhau123
+    timeout: 240

@@ -1,0 +1,681 @@
+id: L14
+course: BNX
+series: BNX · Backend ngân hàng mở rộng theo JD
+title: 'Bài 14 — DDD, cổng API và Open API ngân hàng: ranh giới, cửa vào và chia sẻ
+  dữ liệu có đồng ý'
+voice: vi-VN-NamMinhNeural
+rate: -5%
+depth: full
+source: 'curriculum/bnx.yaml L14; audit/bnx/verify_bnx.py L14; Evans, Domain-Driven
+  Design (2003), qua M. Fowler, bliki BoundedContext (15/01/2014), DDD_Aggregate (23/04/2013),
+  DomainDrivenDesign (22/04/2020); C. Richardson, microservices.io Pattern: API Gateway;
+  AWS API Gateway Developer Guide “Throttle requests” (thùng token, 429); Thông tư
+  64/2024/TT-NHNN (31/12/2024, hiệu lực 01/3/2025) qua Tạp chí Ngân hàng (24/02/2025)
+  và sbv.gov.vn (14/11/2025) [TT64] [TT64b] [DDD] [AGW] — đọc 2026-11-11; giới hạn
+  5/giây, sức chứa 10 và hạn mức 100/50 triệu là số minh hoạ'
+assumes: []
+objectives:
+- Chia hệ thống ngân hàng thành ngữ cảnh giới hạn
+- Nhận ra một khái niệm mang nghĩa khác nhau ở hai ngữ cảnh
+- 'Liệt kê việc cổng API làm: xác thực, giới hạn tốc độ, định tuyến, nhật ký'
+- Mô tả Open API ngân hàng theo Thông tư 64/2024/TT-NHNN
+asr_reviewed:
+  - {sentence: "Bây giờ tới phần bạn tự làm bài.", reason: "ASR chép “Bây giờ tới phần bạn tự lam bay.” (0.75): lệch âm/thanh thuần Việt: làm bài/lam bay — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Đáp án câu hai.", reason: "ASR chép “Đập án câu 2.” (0.75): lệch âm/thanh thuần Việt: đáp/đập — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Giờ ta cho máy tính lại bằng Python.", reason: "ASR chép “Giờ ta cho máy tính lại bằng phai thông.” (0.824): “python” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Pai-thon”), ASR viết “phai thông” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Mã chỉ có quyền đọc tài khoản mà gọi API ghi thanh toán thì bị từ chối với mã bốn trăm linh ba.", reason: "ASR chép “Mãi chỉ có quyền đọc tài khoản mà gọi AP IG Thanh Toán thì bị từ chối với mả 403.” (0.857): lệch âm/thanh thuần Việt: mã/mãi, i ghi/ig, mã/mả — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Lỗi thứ nhất, của người mới, là tưởng thiết kế hướng miền bắt buộc tách thành nhiều Microservice.", reason: "ASR chép “Lỗi thứ nhất của người mới là tưởng thiết kế hướng miền bắt buộc tách thành nhiều micro servix.” (0.919): “microservice” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “mai-c-rô-xơ-vít”), ASR viết “micro servix” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Hai dịch vụ riêng thì triển khai và co giãn độc lập, nhưng giao dịch vượt hai dịch vụ phải dùng SAGA hay Outbox, thêm lời gọi mạng và thêm chỗ hỏng.", reason: "ASR chép “Hai dịch vụ riêng thì triển khai và có giãn độc lập, nhưng giao dịch vượt hai dịch vụ phải dùng Saga hay Outbox, thêm lời gọi mạng và thêm chỗ hỏng.” (0.969): lệch âm/thanh thuần Việt: co/có — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Thùng Token chứa tối đa b thẻ và mỗi giây thêm r thẻ, mỗi yêu cầu lấy một thẻ, hết thẻ thì bị từ chối.", reason: "ASR chép “Thùng token chứa tối đa B thẻ và mỗi dây thêm R thẻ, mỗi yêu cầu lấy một thẻ, hết thẻ thì bị từ chối.” (1.0): từ rủi ro ken cả hai mô hình viết khác (cách viết, không phải âm) — NOT_VERIFIED bằng tai người"}
+scenes:
+- id: hook
+  kind: hook
+  title: 'Cửa vào của ngân hàng: 30 yêu cầu cùng một lúc'
+  checks:
+  - alg.bnx_l14_bucket(5, 10, [0] * 30) == 10
+  - 30 - alg.bnx_l14_bucket(5, 10, [0] * 30) == 20
+  - alg.bnx_l14_bucket(5, 10, alg.bnx_l14_spread(30)) == 14
+  steps:
+  - show: '<p>Từ $01/3/2025$, ngân hàng mở API cho <b>bên thứ ba</b> theo Thông tư
+      64/2024/TT-NHNN. Một ứng dụng bên thứ ba gửi $30$ yêu cầu <b>cùng một lúc</b>.</p>
+
+      <div class="box key">Cổng API cho mỗi bên $5$ yêu cầu/giây, sức chứa $10$ <i>(số
+      minh hoạ)</i>: nhận $10$, từ chối $20$. Nếu $30$ yêu cầu <b>rải đều trong 1
+      giây</b> thì nhận $14$.</div>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    - 2
+    - 2
+    say: Chào bạn, từ ngày một tháng ba năm hai nghìn không trăm hai mươi lăm, ngân
+      hàng mở API cho bên thứ ba theo Thông tư sáu mươi tư của Ngân hàng Nhà nước.
+      Một ứng dụng bên thứ ba gửi ba mươi yêu cầu cùng một lúc. Giả sử cổng API cho
+      mỗi bên năm yêu cầu mỗi giây, sức chứa mười, là số minh hoạ. Khi đó cổng nhận
+      mười và từ chối hai mươi. Nếu ba mươi yêu cầu đó rải đều trong một giây thì
+      cổng nhận mười bốn. Cuối bài, bạn sẽ tự tính ra hai con số này.
+  - show: '<table class=''t''><tr><th>câu hỏi</th><th>bài này trả lời bằng</th></tr><tr><td>chia
+      hệ thống ngân hàng ở đâu</td><td>ngữ cảnh giới hạn: mỗi nghĩa của một chữ có
+      chỗ riêng</td></tr><tr><td>ai đứng ở cửa vào</td><td>cổng API: xác thực, giới
+      hạn tốc độ, định tuyến, nhật ký</td></tr><tr><td>bên thứ ba được lấy dữ liệu
+      gì</td><td>Open API theo Thông tư 64: hợp đồng và sự đồng ý của khách</td></tr></table>'
+    say: Hôm nay ta trả lời ba câu. Hệ thống ngân hàng nên chia ở đâu, thì dùng ngữ
+      cảnh giới hạn, mỗi nghĩa của một chữ có chỗ riêng. Ai đứng ở cửa vào, thì là
+      cổng API, lo xác thực, giới hạn tốc độ, định tuyến và nhật ký. Bên thứ ba được
+      lấy dữ liệu gì, thì theo Thông tư sáu mươi tư, cần hợp đồng với ngân hàng và
+      sự đồng ý của khách.
+- id: prereq
+  kind: prereq
+  title: 'Trước hết: bốn điều cần hiểu'
+  checks:
+  - alg.bnx_l14_bucket(5, 10, [0] * 11) == 10
+  - 5 * Fraction(1, 30) == Fraction(5, 30) == Fraction(1, 6)
+  steps:
+  - show: '<table class=''t''><tr><th>khái niệm</th><th>nghĩa</th><th>ví dụ</th></tr><tr><td>①
+      dịch vụ và REST API</td><td>mỗi dịch vụ là một chương trình riêng, mở chức năng
+      qua đường dẫn HTTP</td><td><code>POST /transfers</code> ở dịch vụ Thanh toán</td></tr><tr><td>②
+      mã truy cập và phạm vi quyền</td><td>mã ghi người gọi được làm gì; sai phạm
+      vi thì bị từ chối</td><td>mã <code>accounts:read</code> gọi API cần <code>payments:write</code>
+      → 403</td></tr><tr><td>③ mã trạng thái 429</td><td>“quá nhiều yêu cầu”: người
+      gọi phải chậm lại rồi thử sau</td><td>yêu cầu thứ 11 gửi cùng lúc → 429</td></tr></table>'
+    say: Trước hết ta cần hiểu bốn điều. Thứ nhất, mỗi dịch vụ là một chương trình
+      riêng, mở chức năng của nó qua các đường dẫn HTTP, ví dụ đường dẫn chuyển tiền
+      ở dịch vụ Thanh toán. Thứ hai, ở bài 4 ta đã thấy mã truy cập ghi rõ người gọi
+      được làm gì. Mã chỉ có quyền đọc tài khoản mà gọi API ghi thanh toán thì bị
+      từ chối với mã bốn trăm linh ba. Thứ ba, mã trạng thái bốn trăm hai mươi chín
+      nghĩa là quá nhiều yêu cầu, người gọi phải chậm lại rồi thử sau.
+  - show: '<p>④ Phân số giữ đúng thời gian: $\frac{1}{30}$ giây không viết gọn được
+      thành số thập phân hữu hạn.</p>
+
+      $$5 \cdot \frac{1}{30} = \frac{5}{30} = \frac{1}{6}$$
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    say: Thứ tư là phân số. Một phần ba mươi giây không viết gọn được thành số thập
+      phân hữu hạn, nên ta giữ dạng phân số để không lệch. Ví dụ, năm nhân một phần
+      ba mươi bằng năm phần ba mươi, rút gọn còn một phần sáu.
+    introduces:
+    - cdot
+- id: sym
+  kind: symbol
+  title: Giải mã các từ của bài
+  steps:
+  - show: <table class='t'><tr><th>từ</th><th>nghĩa</th></tr><tr><td>ngữ cảnh giới
+      hạn <i>(bounded context)</i></td><td>vùng mà mỗi từ có đúng một nghĩa; DDD chia
+      mô hình lớn thành nhiều vùng như vậy (Evans, <i>Domain-Driven Design</i>, 2003)</td></tr><tr><td>ngôn
+      ngữ chung <i>(ubiquitous language)</i></td><td>người nghiệp vụ và lập trình
+      viên dùng cùng một bộ từ, và chính các từ đó có trong mã</td></tr><tr><td>aggregate,
+      gốc <i>(root)</i></td><td>cụm đối tượng được coi là một khối; bên ngoài chỉ
+      chạm vào gốc; một giao dịch không vượt ranh giới cụm</td></tr><tr><td>bất biến</td><td>điều
+      luôn đúng sau mọi thao tác, ví dụ số dư không âm</td></tr></table>
+    say: Bảng này giải mã bốn từ của thiết kế hướng miền, theo cuốn sách năm hai nghìn
+      không trăm linh ba cùng tên. Ngữ cảnh giới hạn là vùng mà mỗi từ có đúng một
+      nghĩa, và mô hình lớn được chia thành nhiều vùng như vậy. Ngôn ngữ chung là
+      người nghiệp vụ và lập trình viên dùng cùng một bộ từ, và chính các từ đó có
+      trong mã. Cụm thực thể là nhóm đối tượng coi như một khối, bên ngoài chỉ chạm
+      vào gốc, và một giao dịch không vượt ranh giới cụm. Bất biến là điều luôn đúng
+      sau mọi thao tác, ví dụ số dư không âm.
+  - show: <table class='t'><tr><th>từ</th><th>nghĩa</th></tr><tr><td>cổng API <i>(API
+      gateway)</i></td><td>cửa vào duy nhất cho mọi người gọi từ bên ngoài, đứng trước
+      các dịch vụ</td></tr><tr><td>thùng token <i>(token bucket)</i></td><td>thùng
+      chứa tối đa $b$ thẻ, mỗi giây thêm $r$ thẻ; mỗi yêu cầu lấy 1 thẻ, hết thẻ thì
+      từ chối</td></tr><tr><td>mã tương quan <i>(correlation ID)</i></td><td>một mã
+      gắn vào yêu cầu ở cổng và chuyển qua mọi dịch vụ, để lần theo một yêu cầu trong
+      nhật ký</td></tr><tr><td>Open API, bên thứ ba</td><td>API ngân hàng cung cấp
+      cho tổ chức khác có hợp đồng với ngân hàng</td></tr></table>
+    clear: true
+    say: Bảng thứ hai là từ của cửa vào. Cổng API là cửa vào duy nhất cho mọi người
+      gọi từ bên ngoài, đứng trước các dịch vụ. Thùng Token chứa tối đa b thẻ và mỗi
+      giây thêm r thẻ, mỗi yêu cầu lấy một thẻ, hết thẻ thì bị từ chối. Mã tương quan
+      được gắn vào yêu cầu ở cổng rồi chuyển qua mọi dịch vụ, để lần theo đúng một
+      yêu cầu trong nhật ký. Còn API mở là các API ngân hàng cung cấp cho bên thứ
+      ba, tức tổ chức khác có hợp đồng với ngân hàng.
+- id: intuition
+  kind: intuition
+  title: 'Hình dung: ranh giới, cửa vào và luồng đồng ý'
+  steps:
+  - show: '<div><svg width="1500" height="460" viewBox="0 0 1500 460" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><rect
+      x="20" y="20" width="470" height="340" rx="12" fill="#dbeafe" stroke="#2a78d6"
+      stroke-width="3"/><text x="255.0" y="58" font-size="26" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">Tài khoản</text><rect x="45" y="90" width="420"
+      height="110" rx="10" fill="#e5e7eb" stroke="#6b7280" stroke-width="3"/><text
+      x="255.0" y="137" font-size="24" text-anchor="middle" fill="#1f2937">khách hàng
+      =</text><text x="255.0" y="169" font-size="24" text-anchor="middle" fill="#1f2937">chủ
+      tài khoản</text><rect x="45" y="225" width="420" height="110" rx="10" fill="#dcfce7"
+      stroke="#16a34a" stroke-width="3"/><text x="255.0" y="272" font-size="24" text-anchor="middle"
+      fill="#1f2937">aggregate Tài khoản:</text><text x="255.0" y="304" font-size="24"
+      text-anchor="middle" fill="#1f2937">số dư không âm</text><rect x="515" y="20"
+      width="470" height="340" rx="12" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text
+      x="750.0" y="58" font-size="26" text-anchor="middle" fill="#1f2937" font-weight="bold">Thanh
+      toán</text><rect x="540" y="90" width="420" height="110" rx="10" fill="#e5e7eb"
+      stroke="#6b7280" stroke-width="3"/><text x="750.0" y="137" font-size="24" text-anchor="middle"
+      fill="#1f2937">khách hàng =</text><text x="750.0" y="169" font-size="24" text-anchor="middle"
+      fill="#1f2937">người ra lệnh chuyển</text><rect x="540" y="225" width="420"
+      height="110" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text
+      x="750.0" y="272" font-size="24" text-anchor="middle" fill="#1f2937">hạn mức
+      =</text><text x="750.0" y="304" font-size="24" text-anchor="middle" fill="#1f2937">100
+      triệu đồng/ngày</text><rect x="1010" y="20" width="470" height="340" rx="12"
+      fill="#f3e8ff" stroke="#9333ea" stroke-width="3"/><text x="1245.0" y="58" font-size="26"
+      text-anchor="middle" fill="#1f2937" font-weight="bold">Tín dụng</text><rect
+      x="1035" y="90" width="420" height="110" rx="10" fill="#e5e7eb" stroke="#6b7280"
+      stroke-width="3"/><text x="1245.0" y="137" font-size="24" text-anchor="middle"
+      fill="#1f2937">khách hàng =</text><text x="1245.0" y="169" font-size="24" text-anchor="middle"
+      fill="#1f2937">người vay được chấm điểm</text><rect x="1035" y="225" width="420"
+      height="110" rx="10" fill="#f3e8ff" stroke="#9333ea" stroke-width="3"/><text
+      x="1245.0" y="272" font-size="24" text-anchor="middle" fill="#1f2937">hạn mức
+      =</text><text x="1245.0" y="304" font-size="24" text-anchor="middle" fill="#1f2937">50
+      triệu đồng được duyệt</text><text x="750" y="405" font-size="26" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">cùng chữ, khác nghĩa: mỗi ngữ cảnh một mô
+      hình, gọi nhau qua API</text><text x="750" y="445" font-size="22" text-anchor="middle"
+      fill="#6b7280">(hạn mức là số minh hoạ)</text></svg></div>'
+    clear: true
+    say: Hình đầu chia hệ thống ngân hàng thành ba ngữ cảnh. Ở Tài khoản, khách hàng
+      là chủ tài khoản, và cụm thực thể Tài khoản giữ bất biến số dư không âm. Ở Thanh
+      toán, khách hàng là người ra lệnh chuyển, còn hạn mức là số tiền được chuyển
+      mỗi ngày, ví dụ một trăm triệu đồng. Ở Tín dụng, khách hàng là người vay được
+      chấm điểm, và hạn mức là khoản vay được duyệt, ví dụ năm mươi triệu đồng. Hai
+      hạn mức này là số minh hoạ. Cùng một chữ mà khác nghĩa, nên mỗi ngữ cảnh giữ
+      mô hình riêng và gọi nhau qua API.
+  - show: '<div><svg width="1500" height="490" viewBox="0 0 1500 490" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><rect
+      x="20" y="170" width="250" height="110" rx="10" fill="#dbeafe" stroke="#2a78d6"
+      stroke-width="3"/><text x="145.0" y="217" font-size="24" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">ứng dụng,</text><text x="145.0" y="249" font-size="24"
+      text-anchor="middle" fill="#1f2937">bên thứ ba</text><rect x="340" y="20" width="620"
+      height="400" rx="12" fill="#e5e7eb" stroke="#6b7280" stroke-width="3"/><text
+      x="650.0" y="58" font-size="26" text-anchor="middle" fill="#1f2937" font-weight="bold">Cổng
+      API</text><rect x="365" y="80" width="570" height="70" rx="10" fill="#dcfce7"
+      stroke="#16a34a" stroke-width="3"/><text x="650.0" y="123" font-size="24" text-anchor="middle"
+      fill="#1f2937">1. xác thực mã truy cập</text><rect x="365" y="165" width="570"
+      height="70" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text
+      x="650.0" y="208" font-size="24" text-anchor="middle" fill="#1f2937">2. giới
+      hạn tốc độ: 5/giây, sức chứa 10</text><rect x="365" y="250" width="570" height="70"
+      rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="650.0" y="293"
+      font-size="24" text-anchor="middle" fill="#1f2937">3. định tuyến theo đường
+      dẫn</text><rect x="365" y="335" width="570" height="70" rx="10" fill="#f3e8ff"
+      stroke="#9333ea" stroke-width="3"/><text x="650.0" y="378" font-size="24" text-anchor="middle"
+      fill="#1f2937">4. nhật ký; mã tương quan gắn trước khi chuyển</text><rect x="1060"
+      y="40" width="420" height="100" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text
+      x="1270.0" y="82" font-size="24" text-anchor="middle" fill="#1f2937">Tài khoản</text><text
+      x="1270.0" y="114" font-size="24" text-anchor="middle" fill="#1f2937">vẫn kiểm
+      quyền</text><rect x="1060" y="180" width="420" height="100" rx="10" fill="#fef3c7"
+      stroke="#d97706" stroke-width="3"/><text x="1270.0" y="222" font-size="24" text-anchor="middle"
+      fill="#1f2937">Thanh toán</text><text x="1270.0" y="254" font-size="24" text-anchor="middle"
+      fill="#1f2937">vẫn kiểm quyền</text><rect x="1060" y="320" width="420" height="100"
+      rx="10" fill="#f3e8ff" stroke="#9333ea" stroke-width="3"/><text x="1270.0" y="362"
+      font-size="24" text-anchor="middle" fill="#1f2937">Tín dụng</text><text x="1270.0"
+      y="394" font-size="24" text-anchor="middle" fill="#1f2937">vẫn kiểm quyền</text><line
+      x1="270" y1="205" x2="335" y2="205" stroke="#2a78d6" stroke-width="3.5" marker-end="url(#ah)"/><line
+      x1="335" y1="255" x2="275" y2="255" stroke="#dc2626" stroke-width="3.5" stroke-dasharray="8
+      6" marker-end="url(#ah)"/><text x="170" y="330" font-size="22" text-anchor="middle"
+      fill="#dc2626">quá giới hạn</text><text x="170" y="358" font-size="22" text-anchor="middle"
+      fill="#dc2626">→ 429</text><line x1="960" y1="285" x2="1055" y2="90" stroke="#475569"
+      stroke-width="3.5" marker-end="url(#ah)"/><line x1="960" y1="285" x2="1055"
+      y2="230" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><line x1="960"
+      y1="285" x2="1055" y2="370" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><text
+      x="750" y="470" font-size="26" text-anchor="middle" fill="#1f2937" font-weight="bold">cổng
+      làm việc chung một lần; dịch vụ vẫn tự kiểm phạm vi quyền</text></svg></div>'
+    clear: true
+    say: Hình thứ hai là cửa vào. Mọi yêu cầu từ ứng dụng hay bên thứ ba đi qua cổng
+      API trước. Cổng làm bốn việc, thứ tự cụ thể tuỳ cấu hình. Đó là xác thực mã
+      truy cập, giới hạn tốc độ năm yêu cầu mỗi giây với sức chứa mười, định tuyến
+      theo đường dẫn, và ghi nhật ký. Mã tương quan được gắn trước khi chuyển yêu
+      cầu đi, để dịch vụ phía sau nhận được nó. Yêu cầu quá giới hạn bị trả về mã
+      bốn trăm hai mươi chín ngay ở cổng, nên không làm tốn sức các dịch vụ phía sau.
+      Nhưng mỗi dịch vụ vẫn tự kiểm phạm vi quyền. Cổng thường chỉ kiểm mã hợp lệ
+      và phạm vi thô theo đường dẫn, không biết luật nghiệp vụ của từng dịch vụ.
+  - show: '<div><svg width="1500" height="470" viewBox="0 0 1500 470" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><rect
+      x="20" y="60" width="260" height="110" rx="10" fill="#dbeafe" stroke="#2a78d6"
+      stroke-width="3"/><text x="150.0" y="107" font-size="24" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">Khách hàng</text><text x="150.0" y="139" font-size="24"
+      text-anchor="middle" fill="#1f2937">chủ dữ liệu</text><rect x="680" y="60" width="330"
+      height="110" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text
+      x="845.0" y="107" font-size="24" text-anchor="middle" fill="#1f2937" font-weight="bold">Bên
+      thứ ba</text><text x="845.0" y="139" font-size="24" text-anchor="middle" fill="#1f2937">có
+      hợp đồng (Điều 8)</text><rect x="1180" y="40" width="300" height="300" rx="10"
+      fill="#dcfce7" stroke="#16a34a" stroke-width="3"/><text x="1330.0" y="134" font-size="24"
+      text-anchor="middle" fill="#1f2937" font-weight="bold">Ngân hàng</text><text
+      x="1330.0" y="166" font-size="24" text-anchor="middle" fill="#1f2937">cổng Open
+      API</text><text x="1330.0" y="198" font-size="24" text-anchor="middle" fill="#1f2937">chỉ
+      trả dữ liệu</text><text x="1330.0" y="230" font-size="24" text-anchor="middle"
+      fill="#1f2937">khách đã đồng ý,</text><text x="1330.0" y="262" font-size="24"
+      text-anchor="middle" fill="#1f2937">đúng phạm vi</text><line x1="280" y1="115"
+      x2="675" y2="115" stroke="#2a78d6" stroke-width="3.5" marker-end="url(#ah)"/><text
+      x="477" y="105" font-size="22" text-anchor="middle" fill="#2a78d6">1. đồng ý
+      rõ ràng, tự nguyện</text><line x1="1010" y1="115" x2="1175" y2="115" stroke="#d97706"
+      stroke-width="3.5" marker-end="url(#ah)"/><text x="1092" y="105" font-size="20"
+      text-anchor="middle" fill="#d97706">2. gọi Open API</text><line x1="150" y1="170"
+      x2="150" y2="290" stroke="#475569" stroke-width="3.5" stroke-dasharray="8 6"
+      marker-end="url(#ah)"/><line x1="150" y1="300" x2="1175" y2="300" stroke="#9333ea"
+      stroke-width="3.5" stroke-dasharray="8 6" marker-end="url(#ah)"/><text x="662"
+      y="290" font-size="22" text-anchor="middle" fill="#9333ea">3. tra cứu, rút lại
+      sự đồng ý (Điều 11)</text><text x="750" y="400" font-size="26" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">Thông tư 64/2024/TT-NHNN: ban hành 31/12/2024,
+      hiệu lực 01/3/2025</text><text x="750" y="440" font-size="24" text-anchor="middle"
+      fill="#1f2937">danh mục Open API cơ bản ở Phụ lục 01</text></svg></div>'
+    clear: true
+    say: Hình thứ ba là luồng của API mở theo Thông tư sáu mươi tư, ban hành ngày
+      ba mươi mốt tháng mười hai năm hai nghìn không trăm hai mươi tư. Bước một, khách
+      hàng là chủ dữ liệu, đồng ý một cách rõ ràng, tự nguyện. Bước hai, bên thứ ba
+      đã ký hợp đồng với ngân hàng mới được gọi API mở. Ngân hàng chỉ trả dữ liệu
+      khách đã đồng ý, đúng phạm vi đã thoả thuận. Bước ba, khách có thể tra cứu dữ
+      liệu đã đồng ý chia sẻ và rút lại sự đồng ý. Danh mục API mở cơ bản nằm ở Phụ
+      lục một của thông tư, và thông tư có hiệu lực từ ngày một tháng ba năm hai nghìn
+      không trăm hai mươi lăm.
+  - show: <table class='t'><tr><th>điều thông tư ghi</th><th>nội dung</th></tr><tr><td>Open
+      API</td><td>tập hợp các API ngân hàng cung cấp cho bên thứ ba trực tiếp kết
+      nối, xử lý dữ liệu</td></tr><tr><td>Điều 8</td><td>ngân hàng phải ký hợp đồng
+      với bên thứ ba về triển khai Open API; cam kết dùng dữ liệu đúng phạm vi, mục
+      đích</td></tr><tr><td>Điều 11</td><td>khách tra cứu được dữ liệu đã đồng ý cho
+      bên thứ ba xử lý, rút lại được sự đồng ý; thời hạn truy vấn sau khi khách đồng
+      ý không quá 180 ngày</td></tr><tr><td>nguồn</td><td>Tạp chí Ngân hàng 24/02/2025;
+      trang NHNN 14/11/2025 (trích Thông tư 64/2024/TT-NHNN)</td></tr></table>
+    clear: true
+    say: Bảng này ghi những điều thông tư nói, theo bài của Tạp chí Ngân hàng và trang
+      tin của Ngân hàng Nhà nước. API mở là tập hợp các API ngân hàng cung cấp cho
+      bên thứ ba trực tiếp kết nối và xử lý dữ liệu. Điều tám buộc ngân hàng ký hợp
+      đồng với bên thứ ba, trong đó bên thứ ba cam kết dùng dữ liệu đúng phạm vi và
+      mục đích. Điều mười một cho khách tra cứu và rút lại sự đồng ý, và thời hạn
+      được truy vấn thông tin sau khi khách đồng ý không quá một trăm tám mươi ngày.
+      Hai bài báo đó dẫn lại văn bản, nên khi làm việc thật bạn hãy đọc nguyên văn
+      thông tư.
+- id: formula
+  kind: formula
+  title: 'Suy ra từng bước: ranh giới, bất biến, rồi thùng token'
+  checks:
+  - 80 + 30 == 110 > 100
+  - alg.bnx_l14_debit(300000, 500000) == (300000, False)
+  - alg.bnx_l14_debit(300000, 200000) == (100000, True)
+  - 5 * Fraction(1, 30) == Fraction(1, 6)
+  - alg.bnx_l14_bucket_trace(5, 10, alg.bnx_l14_spread(30))[1][1] == 9 + Fraction(1,
+    6) == Fraction(55, 6)
+  steps:
+  - show: '<p><b>Bước 1.</b> Vì “hạn mức” ở Thanh toán và ở Tín dụng theo hai luật
+      khác nhau, nên mỗi nghĩa nằm trong ngữ cảnh của nó, không dùng chung một cột.</p>
+
+      <span class=''note''>Làm thử (số minh hoạ, đơn vị triệu đồng): hôm nay đã chuyển
+      80, chuyển thêm 30; hạn mức vay 50 không liên quan.</span>
+
+      $$80 + 30 = 110 > 100 \;\to\; \text{Thanh toán từ chối}$$
+
+      '
+    focus:
+    - 1
+    - 2
+    - 3
+    say: Bước một, vì chữ hạn mức ở Thanh toán và ở Tín dụng theo hai luật khác nhau,
+      nên mỗi nghĩa nằm trong ngữ cảnh của nó, không dùng chung một cột. Làm thử với
+      số minh hoạ, hôm nay khách đã chuyển tám mươi triệu, muốn chuyển thêm ba mươi
+      triệu. Tám mươi cộng ba mươi là một trăm mười, vượt một trăm, nên Thanh toán
+      từ chối, còn hạn mức vay năm mươi triệu không liên quan.
+  - show: '<p><b>Bước 2.</b> Mọi thay đổi số dư đi qua <b>gốc</b> aggregate Tài khoản,
+      nên bất biến “số dư không âm” chỉ phải kiểm ở <b>một</b> chỗ.</p>
+
+      <span class=''note''>Làm thử: số dư $300\,000$, ghi nợ $500\,000$ → từ chối,
+      giữ $300\,000$; ghi nợ $200\,000$ → $300\,000 - 200\,000 = 100\,000$.</span>
+
+      '
+    focus:
+    - 1
+    - 2
+    - 2
+    say: Bước hai, mọi thay đổi số dư đi qua gốc của cụm Tài khoản, nên bất biến số
+      dư không âm chỉ phải kiểm ở một chỗ. Làm thử, số dư ba trăm nghìn, ghi nợ năm
+      trăm nghìn thì bị từ chối và số dư giữ ba trăm nghìn. Ghi nợ hai trăm nghìn
+      thì được, còn một trăm nghìn.
+  - show: '<p><b>Bước 3.</b> Ở cổng, mỗi yêu cầu cần $1$ thẻ. Thùng thêm $r = 5$ thẻ
+      mỗi giây và chứa tối đa $b = 10$: sức chứa cho dồn ngắn, tốc độ giữ trung bình.</p>
+
+      <span class=''note''>Làm thử: sau $\frac{1}{30}$ giây thùng thêm $5 \cdot \frac{1}{30}
+      = \frac{1}{6}$ thẻ.</span>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    clear: true
+    say: Bước ba, ở cổng mỗi yêu cầu cần một thẻ. Thùng thêm r bằng năm thẻ mỗi giây
+      và chứa tối đa b bằng mười, vì sức chứa cho phép dồn ngắn hạn, còn tốc độ giữ
+      mức trung bình. Làm thử, sau một phần ba mươi giây thùng thêm năm nhân một phần
+      ba mươi, tức một phần sáu thẻ.
+  - show: '<p><b>Bước 4.</b> Trước mỗi yêu cầu: số thẻ $=$ thẻ còn $+ \, r \cdot$
+      thời gian đã trôi, nhưng không quá $b$. Có ít nhất $1$ thẻ thì nhận và trừ $1$.</p>
+
+      <span class=''note''>Làm thử: còn $9$ thẻ, sau $\frac{1}{30}$ giây: $9 + \frac{1}{6}
+      = \frac{55}{6}$, vẫn dưới $10$ nên giữ nguyên.</span>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    say: Bước bốn, trước mỗi yêu cầu, số thẻ bằng thẻ còn lại cộng r nhân thời gian
+      đã trôi, nhưng không quá b, vì thùng đầy thì thẻ thêm bị tràn ra ngoài. Có ít
+      nhất một thẻ thì nhận yêu cầu và trừ một thẻ. Làm thử, còn chín thẻ, sau một
+      phần ba mươi giây được chín cộng một phần sáu, là năm mươi lăm phần sáu, vẫn
+      dưới mười nên giữ nguyên.
+- id: example
+  kind: example
+  title: 'Ví dụ: 30 yêu cầu qua cổng, từng phép tính'
+  checks:
+  - alg.bnx_l14_bucket(5, 10, [0] * 30) == 10
+  - 30 - alg.bnx_l14_bucket(5, 10, [0] * 30) == 20
+  - 1 - Fraction(1, 6) == Fraction(5, 6)
+  - alg.bnx_l14_bucket_trace(5, 10, alg.bnx_l14_spread(30))[10][1] == 10 - 10 * Fraction(5,
+    6) == Fraction(5, 3)
+  - alg.bnx_l14_accepted_idx(5, 10, alg.bnx_l14_spread(30))[:11] == list(range(11))
+  - alg.bnx_l14_accepted_idx(5, 10, alg.bnx_l14_spread(30))[11:] == [12, 18, 24]
+  - alg.bnx_l14_bucket_trace(5, 10, alg.bnx_l14_spread(30))[10][1] - 1 == Fraction(2,
+    3)
+  - Fraction(2, 3) + 2 * Fraction(1, 6) == 1 == 6 * Fraction(1, 6) == 6 * Fraction(1,
+    30) * 5
+  - Fraction(6, 30) == Fraction(1, 5)
+  - alg.bnx_l14_bucket_trace(5, 10, alg.bnx_l14_spread(30))[11][1] == Fraction(5,
+    6) < 1
+  - alg.bnx_l14_bucket(5, 10, alg.bnx_l14_spread(30)) == 11 + 3 == 14
+  - 30 - alg.bnx_l14_bucket(5, 10, alg.bnx_l14_spread(30)) == 16
+  steps:
+  - show: '<p>Cổng $r = 5$ thẻ/giây, $b = 10$. Thùng bắt đầu <b>đầy</b> $10$ thẻ.
+      Trường hợp A: $30$ yêu cầu đến <b>cùng lúc</b>, thời gian trôi bằng $0$ nên
+      không thêm thẻ.</p>
+
+      $$① \; \text{nhận} = \hl{10}$$
+
+      '
+    focus:
+    - 1
+    - 1
+    - 1
+    - 2
+    say: Ta tính từng bước. Cổng có r bằng năm thẻ mỗi giây và b bằng mười, và thùng
+      bắt đầu đầy mười thẻ. Trường hợp thứ nhất, ba mươi yêu cầu đến cùng lúc, thời
+      gian trôi bằng không nên không thêm thẻ nào. Phép tính thứ nhất, mười thẻ đầu
+      tiên cho mười yêu cầu, nên nhận mười.
+  - show: $$② \; 30 - 10 = \hl{20}\ \text{bị từ chối (429)}$$
+    say: Phép tính thứ hai, dùng lại số mười ở trên. Ba mươi trừ mười bằng hai mươi
+      yêu cầu bị từ chối với mã bốn trăm hai mươi chín.
+  - show: '<p>Trường hợp B: $30$ yêu cầu <b>rải đều</b> trong $1$ giây, ở thời điểm
+      $0, \frac{1}{30}, \frac{2}{30}, \dots, \frac{29}{30}$.</p>
+
+      $$③ \; 1 - \frac{1}{6} = \hl{\frac{5}{6}}\ \text{thẻ mất đi sau mỗi yêu cầu
+      được nhận}$$
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    introduces:
+    - dots
+    say: Trường hợp thứ hai, ba mươi yêu cầu rải đều trong một giây, ở thời điểm không,
+      một phần ba mươi, hai phần ba mươi, và cứ thế tới hai mươi chín phần ba mươi
+      giây. Dấu ba chấm nghĩa là cứ thế tiếp tục. Phép tính thứ ba, mỗi yêu cầu lấy
+      một thẻ mà giữa hai yêu cầu chỉ thêm một phần sáu thẻ, nên mỗi lần nhận, thùng
+      mất đi năm phần sáu thẻ.
+  - show: '<p>Dùng lại $\frac{5}{6}$: trước yêu cầu thứ $11$ (thời điểm $\frac{10}{30}$)
+      đã nhận $10$ yêu cầu.</p>
+
+      $$④ \; 10 - 10 \cdot \frac{5}{6} = \hl{\frac{5}{3}} \geq 1 \ \text{nên nhận
+      đủ } 11 \text{ yêu cầu đầu}$$
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    introduces:
+    - geq
+    clear: true
+    say: Phép tính thứ tư dùng lại năm phần sáu. Trước yêu cầu thứ mười một, ở thời
+      điểm mười phần ba mươi giây, cổng đã nhận mười yêu cầu. Số thẻ còn mười trừ
+      mười nhân năm phần sáu, bằng năm phần ba, vẫn lớn hơn hoặc bằng một, nên mười
+      một yêu cầu đầu đều được nhận.
+  - show: '<p>Sau yêu cầu thứ 11, thùng còn 2/3 thẻ. Mỗi khoảng thêm 1/6 thẻ, nên
+      thêm 2 khoảng là đủ 1 thẻ: nhận ở 12/30 giây.</p>
+
+      <p>Sau đó thùng về 0, cứ 6 khoảng (1/5 giây) mới đủ 1 thẻ: nhận ở 18/30 và 24/30
+      giây.</p>
+
+      $$⑤ \; 11 + 3 = \hlg{14}\ \text{nhận}, \quad 30 - 14 = 16\ \text{từ chối}$$
+
+      '
+    focus:
+    - 3
+    - 1
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Phép tính thứ năm. Sau yêu cầu thứ mười một, thùng còn hai phần ba thẻ. Mỗi
+      khoảng thêm một phần sáu thẻ, nên chỉ cần thêm hai khoảng là đủ một thẻ, và
+      cổng nhận yêu cầu ở mười hai phần ba mươi giây. Sau đó thùng về không, nên cứ
+      sáu khoảng, tức một phần năm giây, mới đủ một thẻ, và cổng nhận ở mười tám và
+      hai mươi tư phần ba mươi giây. Tổng là mười một cộng ba bằng mười bốn được nhận,
+      còn mười sáu bị từ chối.
+  - show: '<p><b>Mô phỏng cổng bằng Python, dùng phân số</b></p><div class="code"><div>from
+      fractions import Fraction as F</div><div>def cong(rate, cap, times):          #
+      cổng: tốc độ, sức chứa</div><div>    tok, last, ok = F(cap), F(0), 0  # thùng
+      đầy lúc đầu</div><div>    for t in times:</div><div>        tok = min(F(cap),
+      tok + (t - last) * rate)</div><div>        last = t</div><div>        if tok
+      &gt;= 1:                 # còn ít nhất 1 thẻ</div><div>            tok, ok =
+      tok - 1, ok + 1</div><div>    return ok</div><div>print(cong(5, 10, [F(0)] *
+      30))                    # cùng lúc</div><div>print(cong(5, 10, [F(i, 30) for
+      i in range(30)]))  # rải đều</div></div>'
+    focus:
+    - 1
+    - 2
+    - 2
+    - 2
+    - 2
+    - 2
+    clear: true
+    say: Giờ ta cho máy tính lại bằng Python. Câu lệnh đầu nạp kiểu phân số, để một
+      phần ba mươi giây được giữ đúng, không lệch như số thực. Hàm cong, tức là cổng,
+      nhận tốc độ, sức chứa và danh sách thời điểm, rồi bắt đầu với thùng đầy. Với
+      mỗi thời điểm, thùng được cộng tốc độ nhân thời gian đã trôi, nhưng không quá
+      sức chứa. Còn ít nhất một thẻ thì trừ một thẻ và đếm thêm một yêu cầu được nhận.
+      Hai câu lệnh cuối chạy hai trường hợp, cùng lúc và rải đều.
+  - show: '<p>Bằng tay: cùng lúc nhận $10$ (phép ①), rải đều nhận $14$ (phép ⑤).</p><p><b>Kết
+      quả chạy thật</b></p><div class="code"><div>10</div><div>14</div></div>'
+    focus:
+    - 1
+    - 3
+    clear: true
+    say: Bằng tay, ta đã tính cùng lúc nhận mười ở phép tính thứ nhất, và rải đều
+      nhận mười bốn ở phép tính thứ năm. Kết quả chạy thật in ra mười rồi mười bốn,
+      khớp cả hai.
+- id: check
+  kind: check
+  title: 'Tự kiểm bằng đường khác: cận trên của cổng'
+  checks:
+  - alg.bnx_l14_bound(5, 10, 0) == alg.bnx_l14_bucket(5, 10, [0] * 30) == 10
+  - 10 + 5 * Fraction(29, 30) == Fraction(89, 6)
+  - round(float(Fraction(89, 6)), 1) == 14.8
+  - alg.bnx_l14_bound(5, 10, Fraction(29, 30)) == alg.bnx_l14_bucket(5, 10, alg.bnx_l14_spread(30))
+    == 14
+  - len(alg.bnx_l14_accepted_idx(5, 10, alg.bnx_l14_spread(30))) == 11 + 3
+  - alg.bnx_l14_days('31/12/2024', '01/03/2025') == 1 + 31 + 28 == 60
+  steps:
+  - show: '<p>Đường khác: trong khoảng thời gian $T$, cổng phát ra nhiều nhất $b +
+      r \cdot T$ thẻ, nên số yêu cầu nhận được không vượt quá số đó.</p>
+
+      $$\text{A: } 10 + 5 \cdot 0 = \hl{10} \qquad \text{B: } 10 + 5 \cdot \frac{29}{30}
+      = \frac{89}{6} \approx 14{,}8 \;\to\; \text{nhiều nhất } \hlg{14}$$
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    - 2
+    say: Kiểm bằng đường khác, không cần mô phỏng. Trong khoảng thời gian T, cổng
+      phát ra nhiều nhất b cộng r nhân T thẻ, nên số yêu cầu được nhận không vượt
+      quá số đó. Trường hợp cùng lúc, T bằng không, cận trên là mười, đúng bằng kết
+      quả mô phỏng. Trường hợp rải đều, T là hai mươi chín phần ba mươi giây, cận
+      trên là tám mươi chín phần sáu, xấp xỉ mười bốn phẩy tám. Không nhận được nửa
+      yêu cầu, nên nhiều nhất mười bốn, cũng khớp.
+  - show: '<table class=''t''><tr><th>kiểm</th><th>cách tính khác</th><th>kết quả</th></tr><tr><td>số
+      yêu cầu nhận ở B</td><td>đếm thời điểm: 0 tới 10/30 là 11, thêm 12/30, 18/30,
+      24/30</td><td>11 + 3 = 14</td></tr><tr><td>ngày ban hành tới ngày hiệu lực</td><td>1
+      ngày cuối tháng 12, 31 ngày tháng 1, 28 ngày tháng 2</td><td>1 + 31 + 28 = 60
+      ngày</td></tr></table>'
+    clear: true
+    say: Bảng này kiểm thêm hai điều bằng cách đếm, vì đếm thẳng là một đường độc
+      lập với công thức. Đếm thời điểm được nhận, từ không tới mười phần ba mươi là
+      mười một, thêm ba thời điểm sau, tổng mười bốn. Từ ngày ban hành tới ngày hiệu
+      lực của thông tư, ta đếm một ngày cuối tháng mười hai, ba mươi mốt ngày tháng
+      một và hai mươi tám ngày tháng hai, tổng sáu mươi ngày.
+- id: pitfalls
+  kind: pitfall
+  title: Lỗi hay gặp, có lỗi của người đã đi làm
+  steps:
+  - show: <div class="box warn"><b>Lỗi 1 (người mới).</b> Tưởng DDD <b class="red">bắt
+      buộc</b> tách thành nhiều microservice. DDD vẽ ranh giới trước; ranh giới đó
+      có thể là <b>mô-đun trong một ứng dụng</b>, cách triển khai tính sau.</div>
+    say: Lỗi thứ nhất, của người mới, là tưởng thiết kế hướng miền bắt buộc tách thành
+      nhiều Microservice. Thiết kế hướng miền vẽ ranh giới trước. Ranh giới đó có
+      thể chỉ là các mô-đun trong một ứng dụng, còn cách triển khai thì tính sau,
+      khi đã có lý do.
+  - show: '<div class="box warn"><b>Lỗi 2 (người đã đi làm).</b> Cổng đã kiểm mã nên
+      dịch vụ <b class="red">bỏ kiểm quyền</b>. Nếu cổng không được cấu hình kiểm
+      phạm vi, mã <code>accounts:read</code> hợp lệ vẫn qua cổng; khi đó nếu dịch
+      vụ Thanh toán không tự kiểm phạm vi <code>payments:write</code>, lệnh chuyển
+      tiền sẽ chạy.
+
+      <br><span class="note">Phép thử bắt lỗi: gọi thẳng dịch vụ bằng mã sai phạm
+      vi, phải nhận 403.</span></div>
+
+      '
+    say: Lỗi thứ hai, của người đã đi làm, là nghĩ cổng đã kiểm mã nên dịch vụ bỏ
+      kiểm quyền. Nếu cổng không được cấu hình kiểm phạm vi, mã chỉ có quyền đọc tài
+      khoản vẫn hợp lệ nên vẫn qua cổng. Nếu dịch vụ Thanh toán không tự kiểm phạm
+      vi ghi thanh toán, lệnh chuyển tiền sẽ chạy. Phép thử bắt lỗi là gọi thẳng dịch
+      vụ bằng mã sai phạm vi, và phải nhận mã bốn trăm linh ba.
+  - show: '<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Bên thứ ba đã có
+      thông tin kết nối là <b class="red">trả mọi dữ liệu</b>. Theo Thông tư 64, cần
+      hợp đồng với bên thứ ba <b>và</b> sự đồng ý của khách, chỉ trả đúng phạm vi
+      đã đồng ý; khách rút lại thì dừng.
+
+      <br><span class="note">Phép thử bắt lỗi: khách rút lại sự đồng ý, lần gọi kế
+      tiếp phải bị từ chối.</span></div>
+
+      '
+    say: Lỗi thứ ba, cũng của người đã đi làm, là thấy bên thứ ba có thông tin kết
+      nối thì trả mọi dữ liệu. Theo Thông tư sáu mươi tư, cần hợp đồng với bên thứ
+      ba và sự đồng ý của khách. Ngân hàng chỉ trả đúng phạm vi khách đã đồng ý, và
+      khách rút lại thì phải dừng. Phép thử bắt lỗi là cho khách rút lại sự đồng ý,
+      rồi lần gọi kế tiếp phải bị từ chối.
+- id: quiz
+  kind: quiz
+  title: Đến lượt bạn
+  checks:
+  - alg.bnx_l14_bucket(5, 10, [0] * 40) == 10
+  - 40 - alg.bnx_l14_bucket(5, 10, [0] * 40) == 30
+  - 2 * Fraction(1, 4) == Fraction(1, 2) == 1 - Fraction(1, 2)
+  - alg.bnx_l14_bucket_trace(2, 3, alg.bnx_l14_spread(6, Fraction(3, 2)))[4][1] ==
+    3 - 4 * Fraction(1, 2) == 1
+  - alg.bnx_l14_bucket_trace(2, 3, alg.bnx_l14_spread(6, Fraction(3, 2)))[5][1] ==
+    Fraction(1, 2)
+  - alg.bnx_l14_bucket(2, 3, alg.bnx_l14_spread(6, Fraction(3, 2))) == 5 == alg.bnx_l14_bound(2,
+    3, Fraction(5, 4))
+  - 3 + 2 * Fraction(5, 4) == Fraction(11, 2)
+  steps:
+  - show: '<table class=''t''><tr><th>câu</th><th>đề</th></tr><tr><td>1</td><td>Cổng
+      5 thẻ/giây, sức chứa 10. 40 yêu cầu đến cùng lúc: nhận bao nhiêu, từ chối bao
+      nhiêu?</td></tr><tr><td>2</td><td>Cổng 2 thẻ/giây, sức chứa 3. 6 yêu cầu cách
+      nhau 1/4 giây (0, 1/4, …, 5/4): nhận bao nhiêu?</td></tr><tr><td>3</td><td>Quyết
+      định: đội 5 người, một cơ sở dữ liệu Oracle. Tách Tài khoản và Thanh toán thành
+      hai dịch vụ ngay, hay một ứng dụng có hai mô-đun ranh giới rõ?</td></tr></table>'
+    pause: 25
+    say: Bây giờ tới phần bạn tự làm bài. Câu một, cổng năm thẻ mỗi giây, sức chứa
+      mười, bốn mươi yêu cầu đến cùng lúc, nhận bao nhiêu và từ chối bao nhiêu? Câu
+      hai, cổng hai thẻ mỗi giây, sức chứa ba, sáu yêu cầu cách nhau một phần tư giây,
+      nhận bao nhiêu? Câu ba là một quyết định. Đội năm người dùng một cơ sở dữ liệu
+      Oracle, nên tách Tài khoản và Thanh toán thành hai dịch vụ ngay, hay giữ một
+      ứng dụng có hai mô-đun ranh giới rõ? Hãy dừng video và làm ra giấy.
+  - show: '<p>Câu 1: cùng lúc nên không thêm thẻ, chỉ có $10$ thẻ ban đầu.</p>
+
+      $$\text{nhận } \hl{10}, \quad 40 - 10 = \hl{30}\ \text{từ chối}$$
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    say: Đáp án câu một. Các yêu cầu đến cùng lúc nên không thêm thẻ, chỉ có mười
+      thẻ ban đầu. Vậy nhận mười, và bốn mươi trừ mười bằng ba mươi yêu cầu bị từ
+      chối.
+    clear: true
+  - show: '<p>Câu 2: mỗi khoảng thêm $2 \cdot \frac{1}{4} = \frac{1}{2}$ thẻ, mỗi
+      lần nhận mất $1 - \frac{1}{2} = \frac{1}{2}$. Trước yêu cầu thứ $5$: $3 - 4
+      \cdot \frac{1}{2} = 1$ nên nhận; yêu cầu thứ $6$ chỉ có $\frac{1}{2}$ thẻ.</p>
+
+      $$\text{nhận } \hlg{5}, \quad \text{cận trên } 3 + 2 \cdot \frac{5}{4} = 5{,}5$$
+
+      '
+    focus:
+    - 1
+    - 1
+    - 1
+    - 1
+    - 2
+    - 2
+    say: Đáp án câu hai. Mỗi khoảng một phần tư giây thêm hai nhân một phần tư, bằng
+      nửa thẻ, nên mỗi lần nhận thùng mất nửa thẻ. Trước yêu cầu thứ năm còn ba trừ
+      bốn nhân một nửa, bằng một thẻ, nên vẫn nhận. Yêu cầu thứ sáu chỉ có nửa thẻ
+      nên bị từ chối. Vậy nhận năm. Kiểm bằng cận trên, ba cộng hai nhân năm phần
+      tư bằng năm phẩy năm, nên nhiều nhất là năm, khớp.
+  - show: '<table class=''t''><tr><th>lựa chọn</th><th>được</th><th>mất</th><th>đổi
+      khi</th></tr><tr><td>một ứng dụng, hai mô-đun</td><td>chuyển tiền và ghi sổ
+      trong một giao dịch, một lần chốt; triển khai một lần</td><td>phải giữ kỷ luật:
+      mô-đun này không đọc bảng của mô-đun kia</td><td>hai phần cần nhịp phát hành
+      hoặc mức tải khác hẳn nhau (đo được)</td></tr><tr><td>hai dịch vụ riêng</td><td>triển
+      khai, co giãn độc lập</td><td>giao dịch vượt hai dịch vụ phải dùng SAGA, Outbox;
+      thêm lời gọi mạng, thêm chỗ hỏng</td><td>đội nhỏ, chưa đo thấy nghẽn: chưa cần</td></tr></table>'
+    say: Đáp án câu ba là một đánh đổi. Một ứng dụng hai mô-đun thì chuyển tiền và
+      ghi sổ nằm trong một giao dịch, một lần chốt, triển khai một lần. Đổi lại phải
+      giữ kỷ luật, mô-đun này không đọc bảng của mô-đun kia. Hai dịch vụ riêng thì
+      triển khai và co giãn độc lập, nhưng giao dịch vượt hai dịch vụ phải dùng SAGA
+      hay Outbox, thêm lời gọi mạng và thêm chỗ hỏng. Với đội năm người chưa đo thấy
+      nghẽn, hai mô-đun là đủ. Nên đổi sang hai dịch vụ khi đo được hai phần cần nhịp
+      phát hành hoặc mức tải khác hẳn nhau.
+    clear: true
+- id: recap
+  kind: recap
+  title: Chuỗi logic & tư duy cần mang theo
+  steps:
+  - show: '<div class=''chain''><span class=''n''>một chữ, nhiều nghĩa</span><span
+      class=''a''>→</span><span class=''n''>ngữ cảnh giới hạn</span><span class=''a''>→</span><span
+      class=''n''>gốc aggregate giữ bất biến</span><span class=''a''>→</span><span
+      class=''n''>cổng: xác thực, giới hạn, định tuyến, nhật ký</span><span class=''a''>→</span><span
+      class=''n''>dịch vụ vẫn kiểm quyền</span><span class=''a''>→</span><span class=''n''>Open
+      API: hợp đồng + đồng ý</span></div>'
+    say: Tổng kết chuỗi logic. Một chữ có nhiều nghĩa, nên ta chia thành ngữ cảnh
+      giới hạn, và trong mỗi ngữ cảnh, gốc của cụm thực thể giữ bất biến. Ở cửa vào,
+      cổng xác thực, giới hạn tốc độ, định tuyến và ghi nhật ký, nhưng dịch vụ vẫn
+      tự kiểm quyền. Với bên thứ ba, API mở cần hợp đồng và sự đồng ý của khách.
+  - show: <div class='box key'><b>Tư duy:</b> vẽ ranh giới theo <b>nghĩa của từ</b>
+      trước khi chọn công nghệ; mỗi lớp bảo vệ (cổng, dịch vụ, cơ sở dữ liệu) tự kiểm
+      phần của nó, không lớp nào tin lớp trước đã kiểm hộ.</div>
+    say: Điều cần mang theo. Hãy vẽ ranh giới theo nghĩa của từ trước khi chọn công
+      nghệ. Mỗi lớp bảo vệ, gồm cổng, dịch vụ và cơ sở dữ liệu, tự kiểm phần của nó,
+      không lớp nào tin lớp trước đã kiểm hộ.
+  - show: '<p class=''note''>Bài sau (bài cuối khoá): ghép mọi mảnh đã học thành một
+      dự án mẫu API chuyển khoản đúng như tin tuyển dụng đòi hỏi.</p>'
+    forward_ref: true
+    say: Ở bài sau, bài cuối của khoá, ta ghép mọi mảnh đã học thành một dự án mẫu
+      API chuyển khoản. Bài đó có ước lượng tải và ngân sách thời gian cho từng phần,
+      đúng như tin tuyển dụng đòi hỏi.

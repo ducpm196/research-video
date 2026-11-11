@@ -2320,4 +2320,205 @@ rec("JVA:L12", _jva_goc == 3000000 and 900000 + 800000 + 1300000 == _jva_goc and
     and sum(_jva_loi.values()) == 3500000 and "Lech tong 3500000 != 3000000" in _jp("L12", "SoLoi", "err"),
     "sổ 3 tài khoản: tổng 3 000 000 trước và sau; lỗi chép nhầm biến làm tổng thành 3 500 000 và bị phép kiểm bất biến bắt ngay")
 
+
+# ── BNX · Backend ngân hàng mở rộng theo JD (đợt LF1, 2026-11-11): mỗi ví dụ của curriculum/bnx.yaml, tính lại ở đây ──
+import base64 as _bx_b64, hashlib as _bx_hl, hmac as _bx_hm, json as _bx_js, datetime as _bx_dt
+
+
+def _bx_u(b):
+    return _bx_b64.urlsafe_b64encode(b).rstrip(b"=").decode()
+
+
+def _bx_ud(t):
+    return _bx_b64.urlsafe_b64decode(t + "=" * (-len(t) % 4))
+
+
+def _bx_git_conflict():
+    import subprocess, tempfile, os
+    d = tempfile.mkdtemp(prefix="bnx_l00_")
+    env = dict(os.environ, GIT_AUTHOR_NAME="a", GIT_AUTHOR_EMAIL="a@x", GIT_COMMITTER_NAME="a", GIT_COMMITTER_EMAIL="a@x",
+               GIT_AUTHOR_DATE="2026-01-01T00:00:00Z", GIT_COMMITTER_DATE="2026-01-01T00:00:00Z", GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
+
+    def g(*a):
+        return subprocess.run(["git", *a], cwd=d, env=env, capture_output=True, text=True)
+
+    def w(t):
+        with open(os.path.join(d, "phi.txt"), "w", newline="\n") as f:
+            f.write(t)
+    g("init", "-q", "-b", "main"); w("phi=5500\n"); g("add", "."); g("commit", "-qm", "goc")
+    g("switch", "-qc", "tang"); w("phi=6600\n"); g("commit", "-qam", "tang")
+    g("switch", "-q", "main"); w("phi=4400\n"); g("commit", "-qam", "giam")
+    m = g("merge", "tang")
+    with open(os.path.join(d, "phi.txt")) as f:
+        txt = f.read()
+    marks = [ln for ln in txt.splitlines() if ln.startswith(("<<<<<<<", "=======", ">>>>>>>"))]
+    w("phi=5500\n"); g("commit", "-qam", "gop")
+    parents = g("log", "-1", "--format=%P").stdout.split()
+    h = g("log", "-1", "--format=%H").stdout.strip()
+    return m.returncode != 0 and "CONFLICT" in m.stdout, len(marks), len(parents), len(h), all(c in "0123456789abcdef" for c in h)
+
+
+_bx0 = _bx_git_conflict()
+rec("BNX:L00", _bx0 == (True, 3, 2, 40, True), f"git thật: gộp xung đột, 3 dấu mốc, commit gộp 2 cha, mã 40 ký tự thập lục phân {_bx0}")
+
+
+def _bx_l01(req):
+    e = []
+    for f in ("fromAccount", "toAccount"):
+        v = req.get(f)
+        if v is None:
+            e.append(f + " thiếu")
+        elif not (isinstance(v, str) and v.isdigit() and 10 <= len(v) <= 19):
+            e.append(f + " sai dạng")
+    a = req.get("amount")
+    if not (isinstance(a, int) and not isinstance(a, bool) and a >= 1):
+        e.append("amount < 1 hoặc không nguyên")
+    return e
+
+
+_bx1 = [_bx_l01({"fromAccount": "0123456789", "toAccount": "9876543210", "amount": 500000}),
+        _bx_l01({"fromAccount": "0123456789", "toAccount": "9876543210", "amount": 0}),
+        _bx_l01({"fromAccount": "0123456789", "amount": 500000})]
+rec("BNX:L01", [len(x) for x in _bx1] == [0, 1, 1] and "amount" in _bx1[1][0] and "toAccount" in _bx1[2][0],
+    f"lược đồ chuyển khoản: 1 hợp lệ, 1 sai số tiền, 1 thiếu tài khoản nhận {_bx1}")
+
+
+def _bx_var(n):
+    o = []
+    while True:
+        b, n = n & 0x7F, n >> 7
+        o.append(b | (0x80 if n else 0))
+        if not n:
+            return bytes(o)
+
+
+_bx2 = bytes([(1 << 3) | 0]) + _bx_var(150)
+rec("BNX:L02", _bx2.hex() == "089601" and len(_bx_js.dumps({"id": 150}, separators=(",", ":"))) == 10
+    and [800 * k > 2000 for k in (1, 2, 3)] == [False, False, True],
+    "trường 1 = 150 → 08 96 01; JSON 10 byte; 800/1600/2400 ms so với hạn 2000 ms: dịch vụ thứ 3 hết giờ")
+_bx3h = b'{"typ":"JWT",\r\n "alg":"HS256"}'
+_bx3p = b'{"iss":"joe",\r\n "exp":1300819380,\r\n "http://example.com/is_root":true}'
+_bx3k = _bx_ud("AyM1SysPpbyDfgZld3umj1qzKObwVMkoqQ-EstJQLr_T-1qS0gZH75aKtMN3Yj0iPS4hcgUuTwjAzZr1Z9CAow")
+_bx3s = (_bx_u(_bx3h) + "." + _bx_u(_bx3p)).encode()
+_bx3sig = _bx_u(_bx_hm.new(_bx3k, _bx3s, _bx_hl.sha256).digest())
+_bx3bad = _bx_u(_bx_hm.new(_bx3k, _bx3s[:-1] + b"R", _bx_hl.sha256).digest())
+rec("BNX:L03", _bx3sig == "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk" and _bx3bad != _bx3sig
+    and _bx_dt.datetime.fromtimestamp(1300819380, _bx_dt.timezone.utc).year == 2011,
+    "RFC 7515 A.1: chữ ký khớp; sửa một ký tự phần thân đổi chữ ký; exp 1300819380 là năm 2011")
+
+
+def _bx_l04(scopes, aud, need, me, age, ttl=300, skew=60):
+    if aud != me or age >= ttl + skew:   # RFC 7519 §4.1.4: “on or after” exp → không nhận (người đọc độc lập LF1)
+        return 401
+    return 200 if need in scopes else 403
+
+
+rec("BNX:L04", (_bx_l04({"accounts:read"}, "api-a", "payments:write", "api-a", 10), _bx_l04({"payments:write"}, "api-a", "payments:write", "api-b", 10),
+                _bx_l04({"payments:write"}, "api-a", "payments:write", "api-a", 359), _bx_l04({"payments:write"}, "api-a", "payments:write", "api-a", 360))
+    == (403, 401, 200, 401), "thiếu phạm vi → 403; sai người nhận → 401; hạn 300 s + lệch 60 s: giây 359 còn nhận, từ giây 360 từ chối (RFC 7519 §4.1.4)")
+rec("BNX:L05", True, "mTLS chạy thật bằng openssl + Python ssl: kiểm ở audit/bnx/verify_bnx.py L05 (giáo án không có con số)")
+
+
+def _bx_tx(acc, src, dst, amt):
+    a = dict(acc)
+    if a[src] < amt:
+        return dict(acc), "lỗi số dư"
+    a[src] -= amt
+    a[dst] += amt
+    return a, "ok"
+
+
+_bx6 = {"A": 300000, "B": 1000000}
+_bx6a, _bx6m = _bx_tx(_bx6, "A", "B", 500000)
+_bx6b, _bx6n = _bx_tx(_bx6, "A", "B", 200000)
+rec("BNX:L06", _bx6m == "lỗi số dư" and sum(_bx6a.values()) == 1300000 and _bx6n == "ok" and sum(_bx6b.values()) == 1300000 and _bx6b["A"] == 100000,
+    "chuyển 500 000 từ 300 000: lỗi, tổng 1 300 000; chuyển 200 000: ok, tổng 1 300 000 (chạy thật Oracle/SQL Server: verify_bnx L06)")
+rec("BNX:L07", sum(1 for m in range(1, 13) if m == 3) == 1, "12 phân vùng theo tháng, lọc một tháng → 1 phân vùng (kế hoạch thật trên Oracle: verify_bnx L07)")
+rec("BNX:L08", 3 * (1 + 1) == 6 and sum(1 for h in range(12) if h % 3 == h % 4) == 3 and F(3, 12) == F(1, 4),
+    "3 mảnh chính × (1 + 1 bản sao) = 6; mod 3 → mod 4: trên chu kỳ 12 giá trị băm chỉ 3 giữ mảnh = 25%")
+
+
+def _bx_cas():
+    doc, log = {"v": 100, "cas": 7}, []
+    for who, read_cas, newv in (("P1", 7, 150), ("P2", 7, 130)):
+        if doc["cas"] == read_cas:
+            doc = {"v": newv, "cas": doc["cas"] + 1}
+            log.append((who, "ok"))
+        else:
+            log.append((who, "từ chối"))
+            doc = {"v": doc["v"] + 30, "cas": doc["cas"] + 1}
+            log.append((who, "đọc lại rồi ghi"))
+    return doc, log
+
+
+_bx9d, _bx9l = _bx_cas()
+rec("BNX:L09", _bx9l == [("P1", "ok"), ("P2", "từ chối"), ("P2", "đọc lại rồi ghi")] and _bx9d["v"] == 180,
+    "CAS: P1 cộng 50 ghi được, P2 cộng 30 bị từ chối, đọc lại rồi ghi: 100 + 50 + 30 = 180, không mất cập nhật (số minh hoạ)")
+_bx10 = [("A", 1), ("B", 1), ("A", 2), ("C", 1), ("B", 2), ("A", 3), ("C", 2), ("B", 3)]
+
+
+def _bx_compact(log):
+    last = {}
+    for i, (k, v) in enumerate(log):
+        last[k] = (i, v)
+    return sorted((i, k, v) for k, (i, v) in last.items() if v is not None)
+
+
+def _bx_topic(pat, key):
+    p, k = pat.split("."), key.split(".")
+
+    def m(i, j):
+        if i == len(p):
+            return j == len(k)
+        if p[i] == "#":
+            return any(m(i + 1, t) for t in range(j, len(k) + 1))
+        return j < len(k) and (p[i] == "*" or p[i] == k[j]) and m(i + 1, j + 1)
+    return m(0, 0)
+
+
+rec("BNX:L10", len(_bx10) == 8 and len(_bx_compact(_bx10)) == 3 and len(_bx_compact(_bx10 + [("C", None)])) == 2
+    and [_bx_topic(x, "payment.vn.napas") for x in ("payment.*.napas", "payment.#", "payment.*")] == [True, True, False],
+    "8 bản ghi 3 khoá → 3; thêm bia mộ cho C → 2; payment.vn.napas khớp payment.*.napas, payment.#, không khớp payment.*")
+
+
+def _bx_iban(s):
+    r = s[4:] + s[:4]
+    return int("".join(str(int(c, 36)) for c in r)) % 97
+
+
+rec("BNX:L11", _bx_iban("GB82WEST12345698765432") == 1 and 1000 * 25400 == 25400000 and 1000 - 15 == 985,
+    "IBAN mẫu mod 97 = 1; 1 000 USD × 25 400 = 25 400 000 đồng (tỉ giá minh hoạ); SHA trừ 15 USD → 985 USD")
+rec("BNX:L12", sum([500000, 1200000, 300000]) == 2000000 and -2000000 + 2000000 == 0,
+    "ba ví cộng 2 000 000 → tài khoản đảm bảo ≥ 2 000 000; nạp 2 000 000: nợ tài khoản khách, có tài khoản đảm bảo, tổng 0")
+
+
+def _bx_pipe(fail):
+    ran = []
+    for st in ("build", "test", "package", "deploy"):
+        ran.append(st)
+        if st == fail:
+            break
+    return ran
+
+
+rec("BNX:L13", _bx_pipe("test") == ["build", "test"] and (4 - 1, 4 + 1) == (3, 5),
+    "test hỏng: package, deploy không chạy; 4 bản, thiếu tối đa 1, thừa tối đa 1 → ≥ 3 sẵn sàng, ≤ 5 Pod")
+
+
+def _bx_bucket(rate, cap, times):
+    tok, last, ok = F(cap), F(0), 0
+    for t in times:
+        tok = min(F(cap), tok + (t - last) * rate)
+        last = t
+        if tok >= 1:
+            tok -= 1
+            ok += 1
+    return ok
+
+
+rec("BNX:L14", _bx_bucket(5, 10, [F(0)] * 30) == 10 and _bx_bucket(5, 10, [F(i, 30) for i in range(30)]) == 14,
+    "thùng 5/s, sức chứa 10: 30 yêu cầu cùng lúc nhận 10; rải đều trong 1 giây (0, 1/30, …, 29/30) nhận 14")
+rec("BNX:L15", round(1000000 / 86400, 1) == 11.6 and round(10 * 1000000 / 86400) == 116 and 300 - 10 - 5 - 20 - 40 == 225,
+    "10^6/86 400 ≈ 11,6/s; cao điểm ×10 ≈ 116/s; ngân sách 300 − 10 − 5 − 20 − 40 = 225 ms (số minh hoạ)")
+
 print(f"\nTỔNG: {sum(rows)} PASS · {len(rows) - sum(rows)} FAIL")

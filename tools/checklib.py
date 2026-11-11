@@ -7126,3 +7126,21 @@ def bnk_ledger_unbalanced(rows):
     bad = [r[0] for r in con.execute("SELECT txn FROM entry GROUP BY txn HAVING SUM(amt) <> 0 ORDER BY txn")]
     con.close()
     return bad
+
+
+# ─────────────── BNX (đợt LF1, 2026-11-11): hàm tham chiếu của từng bài ở tools/checklib_bnx/lNN.py ───────────────
+# Tách mỗi bài một tệp để soạn song song không giẫm lên nhau. Mọi tên phải bắt đầu bằng "bnx_"; trùng tên giữa hai tệp → lỗi ngay.
+def _load_bnx():
+    import pathlib as _pl
+    d = _pl.Path(__file__).resolve().parent / "checklib_bnx"
+    for f in sorted(d.glob("l*.py")):
+        ns = {"__name__": f"checklib_bnx.{f.stem}", "__file__": str(f)}
+        exec(compile(f.read_text(encoding="utf-8"), str(f), "exec"), ns)
+        for k, v in ns.items():
+            if k.startswith("bnx_"):
+                if k in globals():
+                    raise RuntimeError(f"checklib_bnx: tên {k} trùng (tệp {f.name})")
+                globals()[k] = v
+
+
+_load_bnx()

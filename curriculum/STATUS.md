@@ -1,9 +1,9 @@
 # Hiện trạng sản xuất (SINH TỰ ĐỘNG — không sửa tay)
 
-Sinh bởi `audit/review/status_report.py` từ `audit/review/audit_all.tsv` (chạy lúc 2026-11-10T18:46Z) và `out/*/*/build_report.json`.
+Sinh bởi `audit/review/status_report.py` từ `audit/review/audit_all.tsv` (chạy lúc 2026-11-11T04:25Z) và `out/*/*/build_report.json`.
 “Hoàn thiện” = đã dựng, lint 0 FAIL 0 WARN, video khớp dấu băm đặc tả và lời đọc hiện tại, đúng một giọng, ASR 0 câu chưa xem xét.
 
-**Tổng:** 656 bài trong 42 lộ trình · 656 có đặc tả · **656 hoàn thiện** · 5938 phút video hoàn thiện.
+**Tổng:** 672 bài trong 43 lộ trình · 672 có đặc tả · **672 hoàn thiện** · 6152 phút video hoàn thiện.
 
 | Khoá | Tên | Bài | Đặc tả | Hoàn thiện | Phút | Bộ kiểm độc lập | Còn lại |
 |---|---|---|---|---|---|---|---|
@@ -12,6 +12,7 @@ Sinh bởi `audit/review/status_report.py` từ `audit/review/audit_all.tsv` (ch
 | AIF | Nền tảng trí tuệ nhân tạo | 15 | 15 | 15 | 108.2 | verify_aif.py 26/26 PASS | — |
 | BCH | Blockchain và sổ cái phân tán | 13 | 13 | 13 | 116.1 | verify_bch.py 13/13 PASS | — |
 | BNK | Nền tảng Backend Ngân hàng cho người mất gốc | 15 | 15 | 15 | 126.4 | verify_bnk.py 21/21 PASS | — |
+| BNX | Backend ngân hàng mở rộng theo JD | 16 | 16 | 16 | 213.7 | verify_bnx.py 280/280 PASS | — |
 | CAS | Tình huống chuyên gia | 12 | 12 | 12 | 133.7 | verify_cas.py 93/93 PASS | — |
 | CLC | Điện toán đám mây | 13 | 13 | 13 | 93.1 | verify_clc.py 13/13 PASS | — |
 | CLD | Hệ thống hướng dịch vụ | 16 | 16 | 16 | 126.5 | verify_cld.py 20/20 PASS | — |

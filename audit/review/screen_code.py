@@ -50,10 +50,10 @@ from html.parser import HTMLParser
 import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-REGDIR = ROOT / "audit" / "review" / "screen_code"
+REGDIR = pathlib.Path(os.environ["SC_REGDIR"]) if os.environ.get("SC_REGDIR") else ROOT / "audit" / "review" / "screen_code"   # SC_REGDIR: thử sổ nháp (audit/bnx/screen_try.py)
 KINDS = {"run", "syntax", "fragment", "pseudo", "output", "other"}
 NEED_REASON = {"fragment", "pseudo", "output", "other"}
-RUN_LANGS = {"python", "sqlite", "java", "node", "bash", "go"}
+RUN_LANGS = {"python", "sqlite", "java", "node", "bash", "go", "oracle", "mssql"}   # oracle/mssql: Docker, audit/bnx/dbrun.py (đợt LF1)
 SYNTAX_LANGS = RUN_LANGS | {"c"}
 CLAIM_KEYS = ("post", "expect_stdout", "expect_compile_error", "expect_stderr_contains", "expect_exception")
 SYS_PY = shutil.which("python") or sys.executable   # python hệ thống có pycparser 3.00 (venv không có)
@@ -445,6 +445,24 @@ class Gate:
                     rc, so, se = _run([shutil.which("bash"), "-n", "khoi.sh"], cwd=d)
                     return (rc == 0), ("bash -n" if rc == 0 else se.strip()[:200]), "", ""
                 return self._judge(*_run([shutil.which("bash"), "khoi.sh"], cwd=d, timeout=to), e)
+            if lang in ("oracle", "mssql"):
+                # Chạy NGUYÊN VĂN trên Oracle AI Database 26ai Free / SQL Server 2022 trong Docker (audit/bnx/dbrun.py).
+                # Không có container → FAIL "NOT_VERIFIED" (không bao giờ PASS lặng lẽ).
+                sys.path.insert(0, str(ROOT / "audit" / "bnx"))
+                import dbrun
+                try:
+                    ok_o, ok_m = dbrun.ready()
+                except Exception as ex:
+                    return False, f"NOT_VERIFIED: không gọi được Docker ({type(ex).__name__})", "", ""
+                if not (ok_o if lang == "oracle" else ok_m):
+                    return False, f"NOT_VERIFIED: container {lang} chưa chạy (docker start bnx-ora bnx-mss)", "", ""
+                if kind == "syntax":
+                    return False, f"{lang}: chỉ hỗ trợ kind run", "", ""
+                out = dbrun.ora(src) if lang == "oracle" else dbrun.mss(src, db=e.get("db"))
+                err = "\n".join(ln for ln in out.splitlines() if re.match(r"\s*(ORA-|PLS-|SP2-|Msg \d+)", ln))
+                if err and not e.get("expect_stderr_contains") and not e.get("allow_errors"):
+                    return False, f"{lang} báo lỗi: {err.splitlines()[0][:200]}", out, err
+                return self._judge(0, out, err, e)
             if lang == "go":
                 gsrc = e["go_wrap"].replace("{CODE}", src) if e.get("go_wrap") else src
                 (dp / "main.go").write_text(gsrc + "\n", encoding="utf-8")

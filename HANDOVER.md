@@ -1,3 +1,15 @@
+# HANDOVER — Cập nhật 2026-11-11 (sau LS1): đợt LF1, trang học trọn lộ trình 0 → senior + khoá BNX theo JD — DONE
+
+> **Bắt đầu học**: mở [`HOC_TAP.html`](file:///D:/research-video/HOC_TAP.html) (không cần mạng). Bàn giao: [`audit/review/learn_full/handover_LF1_20261111T0500Z.md`](file:///D:/research-video/audit/review/learn_full/handover_LF1_20261111T0500Z.md). Báo cáo: `report_LF1.md`. Đồ thị chứng cứ: `knowledge-graph_LF1_20261111T0500Z.md`.
+> - **Trang học thay LS1**: một dãy **11 chặng, 672 bài, 102,5 giờ** (JVA → BNK → BNX → INT/ACB là đường nhanh phỏng vấn; rồi toán và thuật toán, máy tính/HĐH/mạng, kỹ nghệ phần mềm/CSDL, hệ phân tán, AI/ML, chuyên gia, chuyên ngành). Máy kiểm mọi bài cần học trước đứng trước. Có tự kiểm kèm khung hình, ôn ngắt quãng 1-3-7-14-30-60-120 ngày, ghi chú, sao lưu tiến độ, bảng đối chiếu JD → bài. Liên kết chết 0.
+> - **Khoá mới BNX (16 bài, 213,7 phút)** lấp khoảng trống JD đã đo (0/656 bài nói JWT, OIDC, OpenAPI, gRPC, Elasticsearch, Couchbase, SWIFT, ví/thuế điện tử, RabbitMQ, DDD, Git): mã chạy thật trên git, openssl, Oracle 26ai Free, SQL Server 2022, Kafka 3.9.0 trong Docker.
+> - **Kiểm độc lập**: 5 người đọc, 11 MUST sửa hết. Lỗi tự gây (giáo án, VER, tham chiếu chéo "khoá trước") đã bị cổng bắt và sửa; bảng LE-1…LE-6 ở đồ thị chứng cứ.
+> - **Cổng cuối** (`audit/review/learn_full/final_gates.sh`): `audit_all` 672/672 · screen_code 712 khối 903 PASS · verify_bnx 280/280 · verify_jva 110/110 · verify_bnk 21/21 · check_xref 0 · pack.py check 672 bài 0 vấn đề · video phỏng vấn 92/92 trùng byte. `scan_ctrl` mốc mới 59 (8 JVA + 51 TAB đầu ra thật của BNX, đã phân loại).
+> - **Còn mở**: tai người nghe; sản phẩm không chạy thật (Elasticsearch, Couchbase, RabbitMQ, Kubernetes, GitLab runner…); pháp lý chỉ nguồn thứ cấp (TT 40/2024 Điều 26, TT 41/2025, TT 64/2024 Phụ lục 01, TT 19/2021); 537 bài ngoài hai lộ trình LS1 chưa đọc lại. Cổng của BNX cần `docker start bnx-ora bnx-mss`.
+> - **Chưa commit**: chờ người dùng.
+
+---
+
 # HANDOVER — Cập nhật 2026-11-11: đợt LS1, hai lộ trình sẵn sàng để bắt đầu học — DONE
 
 > **Bắt đầu học**: mở [`HOC_TAP.html`](file:///D:/research-video/HOC_TAP.html) (không cần mạng). Báo cáo: [`audit/review/learn_start/report_LS1.md`](file:///D:/research-video/audit/review/learn_start/report_LS1.md). Bàn giao chi tiết: [`handover_LS1_20261110T1420Z.md`](file:///D:/research-video/audit/review/learn_start/handover_LS1_20261110T1420Z.md).

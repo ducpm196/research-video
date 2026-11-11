@@ -1,0 +1,796 @@
+id: L07
+course: BNX
+series: BNX · Backend ngân hàng mở rộng theo JD
+title: 'Bài 7 — Oracle cho khối lượng lớn: phân vùng, JSON, hàng đợi, bộ nhớ cột và
+  phân mảnh'
+voice: vi-VN-NamMinhNeural
+rate: -5%
+depth: full
+source: 'curriculum/bnx.yaml L07; audit/bnx/verify_bnx.py L07; Oracle Database 23
+  (docs.oracle.com, trang đọc 2026-11-11): VLDB and Partitioning Guide (interval partitioning,
+  partition pruning), Reference (Logical Database Limits, INMEMORY_SIZE), JSON Developer''s
+  Guide (IS JSON, JSON_VALUE), PL/SQL Packages DBMS_AQADM/DBMS_AQ và AQ types (visibility
+  ON_COMMIT), In-Memory Guide, Licensing Information (Free), Globally Distributed
+  Database Guide'
+assumes: []
+objectives:
+- Phân vùng bảng giao dịch theo tháng và đọc kế hoạch cắt tỉa phân vùng
+- Lưu và truy vấn dữ liệu JSON trong Oracle
+- Gửi và nhận thông điệp bằng hàng đợi trong cơ sở dữ liệu
+- Nêu khi nào cần bộ nhớ cột và phân mảnh
+asr_reviewed:
+- sentence: Xoá dữ liệu cũ hết hạn lưu cũng phải xoá từng dòng.
+  reason: 'ASR chép “Xóa giữ liệu cụ hết hàng lưu cũng phải xóa tinh dông.” (0.667):
+    lệch âm/thanh thuần Việt: cũ/cụ, hạn/hàng, từng dòng/tinh dông — NOT_VERIFIED
+    bằng tai người'
+- sentence: Một khách xin sao kê tháng ba.
+  reason: 'ASR chép “Một khách xin sau kề tháng 3.” (0.714): lệch âm/thanh thuần Việt:
+    sao kê/sau kề — NOT_VERIFIED bằng tai người'
+- sentence: Bây giờ tới phần bạn tự làm bài.
+  reason: 'ASR chép “Bây giờ tới phần bạn tự lam bay.” (0.75): lệch âm/thanh thuần
+    Việt: làm bài/lam bay — NOT_VERIFIED bằng tai người'
+- sentence: Đáp án câu hai.
+  reason: 'ASR chép “Đập án câu 2.” (0.75): lệch âm/thanh thuần Việt: đáp/đập — NOT_VERIFIED
+    bằng tai người'
+- sentence: Bù lại, Kafka lưu lâu và cho đọc lại.
+  reason: 'ASR chép “Bù lại, cắp ca lưu lâu và cho độc lại.” (0.8): “kafka” đọc theo
+    luật lexicon (lexicon_vi.BNX.yaml: “Cáp-ca”), ASR viết “cắp”; lệch âm/thanh thuần
+    Việt: đọc/độc — NOT_VERIFIED bằng tai người'
+- sentence: Ràng buộc kiểm tra chỉ nhận chuỗi có dạng JSON, mặc định ở chế độ lỏng,
+    nên chuỗi hỏng không lọt vào bảng.
+  reason: 'ASR chép “Rang buộc kiểm tra chỉ nhận chuỗi có dạng dây sân, mặc định ở
+    chế độ lỏng, nền chuỗi hỏng không lọt vào bảng.” (0.875): “json” đọc theo luật
+    lexicon (lexicon_vi.BNX.yaml: “Giây-sơn”), ASR viết “sân”; lệch âm/thanh thuần
+    Việt: ràng/rang, nên/nền — NOT_VERIFIED bằng tai người'
+- sentence: Với Kafka, ghi cơ sở dữ liệu và gửi thông điệp là hai việc riêng, nên
+    cần thêm một cách giữ nhất quán.
+  reason: 'ASR chép “Với CAPCA, di cơ sở giữ liệu và gửi thông điệp là hai việc riêng,
+    nên cần thêm một cách giữ nhất quán.” (0.913): “kafka” đọc theo luật lexicon (lexicon_vi.BNX.yaml:
+    “Cáp-ca”), ASR viết “capca di” — NOT_VERIFIED bằng tai người'
+- sentence: Nó chung giao dịch với dữ liệu, hoàn tác thì thông điệp cũng mất, điều
+    Kafka không làm được.
+  reason: 'ASR chép “Nó chung giao dịch với dữ liệu, hoàn tác thì thông điệp cũng
+    mất, điều CAPCA không làm được.” (0.947): “kafka” đọc theo luật lexicon (lexicon_vi.BNX.yaml:
+    “Cáp-ca”), ASR viết “capca” — NOT_VERIFIED bằng tai người'
+- sentence: Còn Kafka lưu thông điệp theo chủ đề, người đọc tự giữ vị trí đọc nên
+    có thể đọc lại.
+  reason: 'ASR chép “Còn các ca lưu thông điệp theo chủ đề, người đọc tự giữ vị trí
+    đọc nên có thể đọc lại.” (0.952): “kafka” đọc theo luật lexicon (lexicon_vi.BNX.yaml:
+    “Cáp-ca”), ASR viết “các” — NOT_VERIFIED bằng tai người'
+scenes:
+- id: hook
+  kind: hook
+  title: Sao kê một tháng mà phải đọc cả năm giao dịch
+  checks:
+  - alg.bnx_l07_partitions(alg.bnx_l07_load(3650)) == 12
+  steps:
+  - show: '<p>Bảng giao dịch thẻ của một ngân hàng thêm hàng trăm triệu dòng mỗi năm
+      (số minh hoạ). Khách xin sao kê <b>tháng 3</b>.</p>
+
+      <div class="box warn">Nếu bảng là một khối liền, máy có thể phải quét cả <b>12
+      tháng</b> để lấy ra 1 tháng. Xoá dữ liệu cũ hết hạn lưu cũng phải xoá từng dòng.</div>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    say: Chào bạn, bảng giao dịch thẻ của một ngân hàng có thể thêm hàng trăm triệu
+      dòng mỗi năm, đây là số minh hoạ. Một khách xin sao kê tháng ba. Nếu bảng là
+      một khối liền, máy có thể phải quét cả mười hai tháng chỉ để lấy ra một tháng.
+      Xoá dữ liệu cũ hết hạn lưu cũng phải xoá từng dòng.
+  - show: <table class='t'><tr><th>câu hỏi</th><th>bài này trả lời</th></tr><tr><td>chỉ
+      đọc đúng tháng cần</td><td>phân vùng bảng theo tháng, đọc kế hoạch thực thi</td></tr><tr><td>dữ
+      liệu mỗi kênh một kiểu</td><td>lưu và truy vấn JSON ngay trong Oracle</td></tr><tr><td>báo
+      cho hệ khác sau khi ghi</td><td>hàng đợi trong cơ sở dữ liệu, chung giao dịch
+      với dữ liệu</td></tr><tr><td>khi nào cần hơn nữa</td><td>bộ nhớ cột cho báo
+      cáo, phân mảnh khi một máy không đủ</td></tr></table>
+    say: Hôm nay ta trả lời bốn câu hỏi. Làm sao chỉ đọc đúng tháng cần, bằng cách
+      phân vùng bảng theo tháng và đọc kế hoạch thực thi. Dữ liệu mỗi kênh một kiểu
+      thì lưu ra sao, bằng dữ liệu dạng JSON ngay trong Oracle. Báo cho hệ khác sau
+      khi ghi thế nào, bằng hàng đợi nằm trong cơ sở dữ liệu. Và khi nào cần bộ nhớ
+      cột hay phân mảnh.
+- id: prereq
+  kind: prereq
+  title: 'Trước hết: bốn điều cần hiểu'
+  checks:
+  - alg.bnx_l07_days('2025-01-01', '2026-01-01') * 10 == len(alg.bnx_l07_load(3650))
+  - alg.bnx_l07_count(alg.bnx_l07_load(3650), '2025-03-01', '2025-04-01') == alg.bnx_l07_month_days(2025,
+    3) * 10 == 310
+  steps:
+  - show: '<table class=''t''><tr><th>khái niệm</th><th>nghĩa</th><th>ví dụ</th></tr><tr><td>①
+      Quét toàn bảng và chỉ mục</td><td>không có đường tắt thì đọc từng dòng; chỉ
+      mục cây B đi thẳng tới dòng cần</td><td>tìm một mã giao dịch: chỉ mục; đếm cả
+      tháng: thường phải quét</td></tr><tr><td>② Kế hoạch thực thi</td><td>bản kế
+      hoạch máy chọn để chạy câu lệnh: đọc bảng nào, theo cách nào</td><td>đọc toàn
+      bảng giao dịch</td></tr><tr><td>③ Giao dịch</td><td>chốt thì mọi thay đổi cùng
+      ở lại, hoàn tác thì cùng mất</td><td>thủ tục chuyển tiền ở bài 6</td></tr><tr><td>④
+      Kafka</td><td>nơi lưu thông điệp theo chủ đề; người đọc tự giữ vị trí đọc, có
+      thể đọc lại; “phân vùng” của Kafka là phần của chủ đề, khác phân vùng bảng</td><td>dịch
+      vụ thông báo đọc chủ đề giao dịch</td></tr></table>'
+    say: Trước hết ta cần hiểu bốn điều. Khi không có đường tắt, máy đọc từng dòng,
+      gọi là quét toàn bảng. Chỉ mục cây B thì đi thẳng tới dòng cần mà không phải
+      đọc hết các dòng. Kế hoạch thực thi là bản kế hoạch máy chọn để chạy một câu
+      lệnh, đọc bảng nào và đọc theo cách nào. Giao dịch thì chốt là mọi thay đổi
+      cùng ở lại, hoàn tác là cùng mất, đúng như thủ tục chuyển tiền ở bài sáu. Còn
+      Kafka lưu thông điệp theo chủ đề, người đọc tự giữ vị trí đọc nên có thể đọc
+      lại. Kafka cũng gọi các phần của chủ đề là phân vùng, nhưng đó khác với phân
+      vùng bảng trong bài này.
+  - show: '<p>Dữ liệu mẫu của bài: năm 2025, mỗi ngày 10 giao dịch.</p>
+
+      $$365 \cdot 10 = \hl{3\,650}\ \text{dòng}, \qquad 31 \cdot 10 = \hl{310}\ \text{dòng
+      của tháng 3}$$
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    clear: true
+    say: Một ví dụ số làm dữ liệu mẫu cho cả bài. Năm hai nghìn không trăm hai mươi
+      lăm có ba trăm sáu mươi lăm ngày, mỗi ngày mười giao dịch, nên có ba nghìn sáu
+      trăm năm mươi dòng. Dấu chấm ở giữa là phép nhân. Tháng ba có ba mươi mốt ngày,
+      nên có ba trăm mười dòng.
+    introduces:
+    - cdot
+- id: sym
+  kind: symbol
+  title: Giải mã từ khoá
+  checks:
+  - alg.bnx_l07_prune('2025-03-01', '2025-04-01') == (3, 3)
+  steps:
+  - show: <table class='t'><tr><th>trên màn hình</th><th>nghĩa</th></tr><tr><td><code>PARTITION
+      BY RANGE (ngay)</code></td><td>chia bảng thành phân vùng theo khoảng giá trị
+      của cột ngày (khoá phân vùng)</td></tr><tr><td><code>INTERVAL (NUMTOYMINTERVAL(1,
+      'MONTH'))</code></td><td>mỗi phân vùng dài 1 tháng; có dữ liệu vượt mốc thì
+      Oracle tự tạo phân vùng mới</td></tr><tr><td><code>EXPLAIN PLAN FOR</code> …
+      <code>DBMS_XPLAN.DISPLAY</code></td><td>ghi kế hoạch thực thi mà không chạy
+      câu lệnh, rồi in ra</td></tr><tr><td><code>PARTITION RANGE SINGLE</code> / <code>ALL</code></td><td>chỉ
+      đọc một phân vùng / đọc mọi phân vùng</td></tr><tr><td><code>Pstart</code>,
+      <code>Pstop</code></td><td>phân vùng đầu và cuối sẽ đọc (đánh số từ 1)</td></tr></table>
+    say: Bảng này giải mã từ khoá về phân vùng. Dòng đầu chia bảng thành các phân
+      vùng theo khoảng giá trị của cột ngày, cột đó gọi là khoá phân vùng. Dòng thứ
+      hai nói mỗi phân vùng dài một tháng, có dữ liệu vượt mốc cuối thì Oracle tự
+      tạo phân vùng mới. Lệnh xem kế hoạch ghi lại cách máy sẽ chạy câu lệnh mà không
+      chạy nó, rồi một hàm in kế hoạch ra. Trong kế hoạch, chữ đơn nghĩa là chỉ đọc
+      một phân vùng, chữ tất cả nghĩa là đọc mọi phân vùng. Hai cột cuối cho biết
+      phân vùng đầu và cuối sẽ đọc.
+  - show: '<table class=''t''><tr><th>trên màn hình</th><th>nghĩa</th></tr><tr><td><code>CHECK
+      (chi_tiet IS JSON)</code></td><td>chỉ nhận chuỗi có dạng JSON; mặc định chế
+      độ lỏng (nhận cả tên trường không có nháy kép); muốn đúng chuẩn chặt: <code>IS
+      JSON (STRICT)</code></td></tr><tr><td><code>JSON_VALUE(chi_tiet, ''&#36;.kenh'')</code></td><td>lấy
+      một giá trị đơn trong JSON; <code>&#36;</code> là gốc, <code>.kenh</code> là
+      trường kenh</td></tr><tr><td><code>DBMS_AQ.ENQUEUE</code> / <code>DEQUEUE</code></td><td>gói
+      DBMS_AQ (nhóm thủ tục có sẵn, gọi bằng tên gói chấm tên thủ tục): gửi vào /
+      nhận ra khỏi hàng đợi</td></tr><tr><td><code>INMEMORY</code></td><td>đánh dấu
+      bảng được nạp thêm một bản dạng cột vào bộ nhớ</td></tr></table>'
+    clear: true
+    say: Bảng thứ hai giải mã các từ khoá còn lại. Ràng buộc kiểm tra chỉ nhận chuỗi
+      có dạng JSON, và mặc định ở chế độ lỏng. Muốn đúng chuẩn chặt thì thêm chữ chặt
+      trong ngoặc, như trên màn hình. Hàm lấy giá trị lấy ra một giá trị đơn, trong
+      đường dẫn thì ký hiệu đô la là gốc, chấm kênh là trường kênh. Gói là một nhóm
+      thủ tục có sẵn, gọi bằng tên gói, dấu chấm, rồi tên thủ tục. Hai thủ tục của
+      gói hàng đợi dùng để gửi thông điệp vào và nhận thông điệp ra. Từ khoá cuối
+      đánh dấu bảng được nạp thêm một bản dạng cột vào bộ nhớ.
+- id: intuition
+  kind: intuition
+  title: 'Hình dung: đọc một ngăn thay vì cả tủ, và gửi thư trong cùng giao dịch'
+  checks:
+  - alg.bnx_l07_count(alg.bnx_l07_load(3650), '2025-03-01', '2025-04-01') == 310
+  - alg.bnx_l07_partitions(alg.bnx_l07_load(3650)) == 12
+  - alg.bnx_l07_queue([('enq', 101), ('rollback',), ('enq', 102), ('commit',)]) ==
+    ([], 2 - 1)
+  steps:
+  - show: '<div><svg width="1500" height="470" viewBox="0 0 1500 470" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><text
+      x="750" y="50" font-size="26" text-anchor="middle" fill="#16a34a" font-weight="bold">Truy
+      vấn tháng 3: chỉ mở ngăn T3 (310 dòng)</text><rect x="40" y="120" width="105"
+      height="90" rx="10" fill="#e5e7eb" stroke="#6b7280" stroke-width="3"/><text
+      x="92.5" y="158" font-size="22" text-anchor="middle" fill="#1f2937">T1</text><text
+      x="92.5" y="188" font-size="22" text-anchor="middle" fill="#1f2937"></text><rect
+      x="160" y="120" width="105" height="90" rx="10" fill="#e5e7eb" stroke="#6b7280"
+      stroke-width="3"/><text x="212.5" y="158" font-size="22" text-anchor="middle"
+      fill="#1f2937">T2</text><text x="212.5" y="188" font-size="22" text-anchor="middle"
+      fill="#1f2937"></text><rect x="280" y="120" width="105" height="90" rx="10"
+      fill="#dcfce7" stroke="#16a34a" stroke-width="3"/><text x="332.5" y="158" font-size="22"
+      text-anchor="middle" fill="#1f2937" font-weight="bold">T3</text><text x="332.5"
+      y="188" font-size="22" text-anchor="middle" fill="#1f2937">310</text><rect x="400"
+      y="120" width="105" height="90" rx="10" fill="#e5e7eb" stroke="#6b7280" stroke-width="3"/><text
+      x="452.5" y="158" font-size="22" text-anchor="middle" fill="#1f2937">T4</text><text
+      x="452.5" y="188" font-size="22" text-anchor="middle" fill="#1f2937"></text><rect
+      x="520" y="120" width="105" height="90" rx="10" fill="#e5e7eb" stroke="#6b7280"
+      stroke-width="3"/><text x="572.5" y="158" font-size="22" text-anchor="middle"
+      fill="#1f2937">T5</text><text x="572.5" y="188" font-size="22" text-anchor="middle"
+      fill="#1f2937"></text><rect x="640" y="120" width="105" height="90" rx="10"
+      fill="#e5e7eb" stroke="#6b7280" stroke-width="3"/><text x="692.5" y="158" font-size="22"
+      text-anchor="middle" fill="#1f2937">T6</text><text x="692.5" y="188" font-size="22"
+      text-anchor="middle" fill="#1f2937"></text><rect x="760" y="120" width="105"
+      height="90" rx="10" fill="#e5e7eb" stroke="#6b7280" stroke-width="3"/><text
+      x="812.5" y="158" font-size="22" text-anchor="middle" fill="#1f2937">T7</text><text
+      x="812.5" y="188" font-size="22" text-anchor="middle" fill="#1f2937"></text><rect
+      x="880" y="120" width="105" height="90" rx="10" fill="#e5e7eb" stroke="#6b7280"
+      stroke-width="3"/><text x="932.5" y="158" font-size="22" text-anchor="middle"
+      fill="#1f2937">T8</text><text x="932.5" y="188" font-size="22" text-anchor="middle"
+      fill="#1f2937"></text><rect x="1000" y="120" width="105" height="90" rx="10"
+      fill="#e5e7eb" stroke="#6b7280" stroke-width="3"/><text x="1052.5" y="158" font-size="22"
+      text-anchor="middle" fill="#1f2937">T9</text><text x="1052.5" y="188" font-size="22"
+      text-anchor="middle" fill="#1f2937"></text><rect x="1120" y="120" width="105"
+      height="90" rx="10" fill="#e5e7eb" stroke="#6b7280" stroke-width="3"/><text
+      x="1172.5" y="158" font-size="22" text-anchor="middle" fill="#1f2937">T10</text><text
+      x="1172.5" y="188" font-size="22" text-anchor="middle" fill="#1f2937"></text><rect
+      x="1240" y="120" width="105" height="90" rx="10" fill="#e5e7eb" stroke="#6b7280"
+      stroke-width="3"/><text x="1292.5" y="158" font-size="22" text-anchor="middle"
+      fill="#1f2937">T11</text><text x="1292.5" y="188" font-size="22" text-anchor="middle"
+      fill="#1f2937"></text><rect x="1360" y="120" width="105" height="90" rx="10"
+      fill="#e5e7eb" stroke="#6b7280" stroke-width="3"/><text x="1412.5" y="158" font-size="22"
+      text-anchor="middle" fill="#1f2937">T12</text><text x="1412.5" y="188" font-size="22"
+      text-anchor="middle" fill="#1f2937"></text><line x1="332" y1="80" x2="332" y2="115"
+      stroke="#16a34a" stroke-width="3.5" marker-end="url(#ah)"/><text x="750" y="280"
+      font-size="26" text-anchor="middle" fill="#d97706" font-weight="bold">Không
+      lọc theo ngày, không có chỉ mục: mở cả 12 ngăn (3 650 dòng)</text><rect x="40"
+      y="330" width="105" height="70" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text
+      x="92.5" y="373" font-size="22" text-anchor="middle" fill="#1f2937">T1</text><rect
+      x="160" y="330" width="105" height="70" rx="10" fill="#fef3c7" stroke="#d97706"
+      stroke-width="3"/><text x="212.5" y="373" font-size="22" text-anchor="middle"
+      fill="#1f2937">T2</text><rect x="280" y="330" width="105" height="70" rx="10"
+      fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text x="332.5" y="373" font-size="22"
+      text-anchor="middle" fill="#1f2937">T3</text><rect x="400" y="330" width="105"
+      height="70" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text
+      x="452.5" y="373" font-size="22" text-anchor="middle" fill="#1f2937">T4</text><rect
+      x="520" y="330" width="105" height="70" rx="10" fill="#fef3c7" stroke="#d97706"
+      stroke-width="3"/><text x="572.5" y="373" font-size="22" text-anchor="middle"
+      fill="#1f2937">T5</text><rect x="640" y="330" width="105" height="70" rx="10"
+      fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text x="692.5" y="373" font-size="22"
+      text-anchor="middle" fill="#1f2937">T6</text><rect x="760" y="330" width="105"
+      height="70" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text
+      x="812.5" y="373" font-size="22" text-anchor="middle" fill="#1f2937">T7</text><rect
+      x="880" y="330" width="105" height="70" rx="10" fill="#fef3c7" stroke="#d97706"
+      stroke-width="3"/><text x="932.5" y="373" font-size="22" text-anchor="middle"
+      fill="#1f2937">T8</text><rect x="1000" y="330" width="105" height="70" rx="10"
+      fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text x="1052.5" y="373" font-size="22"
+      text-anchor="middle" fill="#1f2937">T9</text><rect x="1120" y="330" width="105"
+      height="70" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text
+      x="1172.5" y="373" font-size="22" text-anchor="middle" fill="#1f2937">T10</text><rect
+      x="1240" y="330" width="105" height="70" rx="10" fill="#fef3c7" stroke="#d97706"
+      stroke-width="3"/><text x="1292.5" y="373" font-size="22" text-anchor="middle"
+      fill="#1f2937">T11</text><rect x="1360" y="330" width="105" height="70" rx="10"
+      fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text x="1412.5" y="373" font-size="22"
+      text-anchor="middle" fill="#1f2937">T12</text></svg></div>'
+    clear: true
+    say: Hình dung bảng phân vùng như một tủ mười hai ngăn, mỗi ngăn là một tháng.
+      Truy vấn tháng ba chỉ cần mở ngăn thứ ba, có ba trăm mười dòng. Vì máy biết
+      ngăn nào chứa ngày nào, nó bỏ qua mười một ngăn kia, việc này gọi là cắt tỉa
+      phân vùng. Còn truy vấn không lọc theo ngày thì không biết ngăn nào chứa kết
+      quả. Nếu không có chỉ mục riêng trên cột lọc, máy phải mở cả mười hai ngăn,
+      ba nghìn sáu trăm năm mươi dòng.
+  - show: '<div><svg width="1500" height="470" viewBox="0 0 1500 470" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><rect
+      x="30" y="20" width="820" height="430" rx="12" fill="#dcfce7" stroke="#16a34a"
+      stroke-width="3"/><text x="440.0" y="56" font-size="24" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">Hàng đợi trong cơ sở dữ liệu: một giao dịch</text><rect
+      x="70" y="110" width="360" height="90" rx="10" fill="#dbeafe" stroke="#2a78d6"
+      stroke-width="3"/><text x="250.0" y="148" font-size="22" text-anchor="middle"
+      fill="#1f2937">ghi giao dịch</text><text x="250.0" y="178" font-size="22" text-anchor="middle"
+      fill="#1f2937">vào bảng</text><rect x="460" y="110" width="360" height="90"
+      rx="10" fill="#f3e8ff" stroke="#9333ea" stroke-width="3"/><text x="640.0" y="148"
+      font-size="22" text-anchor="middle" fill="#1f2937">gửi thông điệp</text><text
+      x="640.0" y="178" font-size="22" text-anchor="middle" fill="#1f2937">vào hàng
+      đợi</text><rect x="70" y="260" width="360" height="80" rx="10" fill="#dcfce7"
+      stroke="#16a34a" stroke-width="3"/><text x="250.0" y="308" font-size="22" text-anchor="middle"
+      fill="#1f2937">chốt: cả hai ở lại</text><rect x="460" y="260" width="360" height="80"
+      rx="10" fill="#fee2e2" stroke="#dc2626" stroke-width="3"/><text x="640.0" y="308"
+      font-size="22" text-anchor="middle" fill="#1f2937">hoàn tác: cả hai mất</text><line
+      x1="250" y1="205" x2="250" y2="255" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><line
+      x1="640" y1="205" x2="640" y2="255" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><text
+      x="440" y="400" font-size="22" text-anchor="middle" fill="#16a34a" font-weight="bold">mặc
+      định: không có thông điệp “ma” cho giao dịch đã huỷ</text><rect x="900" y="20"
+      width="570" height="430" rx="12" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text
+      x="1185.0" y="56" font-size="24" text-anchor="middle" fill="#1f2937" font-weight="bold">Kafka:
+      hệ riêng bên ngoài</text><rect x="940" y="110" width="490" height="90" rx="10"
+      fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text x="1185.0" y="148" font-size="22"
+      text-anchor="middle" fill="#1f2937">ghi cơ sở dữ liệu và gửi Kafka</text><text
+      x="1185.0" y="178" font-size="22" text-anchor="middle" fill="#1f2937">là hai
+      việc riêng</text><rect x="940" y="260" width="490" height="80" rx="10" fill="#e5e7eb"
+      stroke="#6b7280" stroke-width="3"/><text x="1185.0" y="308" font-size="22" text-anchor="middle"
+      fill="#1f2937">cần thêm cách giữ nhất quán</text><line x1="1185" y1="205" x2="1185"
+      y2="255" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><text x="1185"
+      y="400" font-size="22" text-anchor="middle" fill="#d97706" font-weight="bold">bù
+      lại: lưu lâu, đọc lại được</text></svg></div>'
+    clear: true
+    say: Hình thứ hai so hai cách báo cho hệ khác. Với hàng đợi trong cơ sở dữ liệu,
+      ghi giao dịch và gửi thông điệp nằm trong cùng một giao dịch. Ở chế độ mặc định,
+      chốt thì cả hai ở lại, hoàn tác thì cả hai mất, nên không có thông điệp cho
+      một giao dịch đã bị huỷ. Với Kafka, ghi cơ sở dữ liệu và gửi thông điệp là hai
+      việc riêng, nên cần thêm một cách giữ nhất quán. Bù lại, Kafka lưu lâu và cho
+      đọc lại.
+- id: formula
+  kind: formula
+  title: 'Suy ra từng bước: phân vùng, JSON, hàng đợi, bộ nhớ cột, phân mảnh'
+  checks:
+  - alg.bnx_l07_position('2025-03-15') == 3
+  - alg.bnx_l07_partitions(alg.bnx_l07_load(3650)) == 1 + 11
+  - alg.bnx_l07_prune('2025-03-01', '2025-04-01') == (3, 3)
+  - 'alg.bnx_l07_json_ids({1: ''{"kenh":"app","so_tien":500000}'', 2: ''{"kenh":"atm","so_tien":2000000}'',
+    3: ''{"kenh":"app"''}, ''so_tien'', 1000000) == ([1, 2], [2])'
+  - alg.bnx_l07_queue([('enq', 101), ('rollback',), ('enq', 102), ('commit',)])[1]
+    == 1
+  - alg.bnx_l07_queue([('enq', 101), ('rollback',), ('enq', 102), ('commit',), ('deq',),
+    ('commit',)]) == ([102], 0)
+  - alg.bnx_l07_shard(7, 3) == 1
+  steps:
+  - show: '<p><b>Bước 1. Chọn khoá phân vùng là ngày</b>, vì sao kê, đối soát, xoá
+      dữ liệu hết hạn đều theo khoảng ngày.</p><div class="code"><div>DROP TABLE IF
+      EXISTS bnx_l07_gd;</div><div>CREATE TABLE bnx_l07_gd (</div><div>  id      NUMBER,</div><div>  ngay    DATE,</div><div>  so_tien
+      NUMBER)</div><div>PARTITION BY RANGE (ngay)</div><div>INTERVAL (NUMTOYMINTERVAL(1,
+      ''MONTH''))</div><div>(PARTITION p_2025_01 VALUES LESS THAN (DATE ''2025-02-01''));</div></div><p
+      class=''note''>Làm thử: ngày 15/3/2025 ≥ 1/2/2025 nên không vào phân vùng đầu;
+      nó vào phân vùng tháng 3, vị trí 3. Xoá cả tháng: <code>ALTER TABLE … DROP PARTITION
+      FOR (…)</code>.</p>'
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    - 3
+    say: Bước một, chọn khoá phân vùng. Vì sao kê, đối soát và xoá dữ liệu hết hạn
+      đều làm theo khoảng ngày, nên ta chia theo cột ngày, mỗi phân vùng một tháng.
+      Ta chỉ khai phân vùng đầu, chứa các ngày trước mùng một tháng hai, còn các tháng
+      sau để Oracle tự tạo. Hết hạn lưu thì bỏ cả phân vùng của tháng đó bằng một
+      lệnh, thay vì xoá từng dòng. Làm thử, ngày mười lăm tháng ba không nhỏ hơn mùng
+      một tháng hai, nên nó rơi vào phân vùng tháng ba, ở vị trí thứ ba.
+  - show: '<p><b>Bước 2. Nạp một năm dữ liệu</b>: Oracle tự tạo 11 phân vùng cho tháng
+      2 tới tháng 12.</p><div class="code"><div>INSERT INTO bnx_l07_gd</div><div>SELECT
+      ROWNUM, DATE ''2025-01-01'' + TRUNC((ROWNUM - 1) / 10),</div><div>       (MOD(ROWNUM,
+      100) + 1) * 100000</div><div>FROM dual CONNECT BY ROWNUM &lt;= 3650;</div><div>COMMIT;</div><div>SELECT
+      COUNT(*) AS so_dong FROM bnx_l07_gd;</div><div>SELECT COUNT(*) AS so_phan_vung
+      FROM user_tab_partitions</div><div> WHERE table_name = ''BNX_L07_GD'';</div></div>'
+    focus:
+    - 1
+    - 1
+    - 1
+    - 2
+    - 2
+    clear: true
+    say: Bước hai, nạp ba nghìn sáu trăm năm mươi dòng, mỗi ngày mười dòng, số tiền
+      thay đổi theo từng dòng. Vì dữ liệu vượt mốc của phân vùng đầu, Oracle tự tạo
+      thêm phân vùng. Câu chọn dữ liệu sinh ra ba nghìn sáu trăm năm mươi dòng đánh
+      số từ một. Vì số thứ tự trừ một rồi chia mười, bỏ phần lẻ, nên cứ mười dòng
+      liền nhau có cùng một ngày. Hai câu cuối đếm số dòng và số phân vùng.
+  - show: "<p><b>Kết quả chạy thật</b></p><div class=\"code\"><div>   SO_DONG</div><div>----------</div><div>\
+      \      3650</div><div>SO_PHAN_VUNG</div><div>------------</div><div>\t  12</div></div><p\
+      \ class='note'>Làm thử: 1 phân vùng khai sẵn + 11 phân vùng tự tạo = 12.</p>"
+    focus:
+    - 1
+    - 2
+    clear: true
+    say: Làm thử, vì năm có mười hai tháng, một phân vùng khai sẵn cộng mười một phân
+      vùng tự tạo là mười hai. Đầu ra thật in ba nghìn sáu trăm năm mươi dòng và mười
+      hai phân vùng, khớp với phép tính.
+  - show: '<p><b>Bước 3. Hỏi máy định đọc mấy phân vùng</b>, không cần chạy thật câu
+      lệnh.</p><div class="code"><div>EXPLAIN PLAN FOR</div><div>SELECT COUNT(*) FROM
+      bnx_l07_gd</div><div> WHERE ngay &gt;= DATE ''2025-03-01'' AND ngay &lt; DATE
+      ''2025-04-01'';</div><div>SELECT * FROM TABLE(</div><div>  DBMS_XPLAN.DISPLAY(NULL,
+      NULL, ''BASIC +PARTITION''));</div></div><p class=''note''>Làm thử: điều kiện
+      từ 1/3 tới trước 1/4 nằm gọn trong phân vùng 3, nên chờ Pstart = Pstop = 3.
+      Ngày truyền qua biến gắn: Pstart, Pstop ghi KEY (chọn lúc chạy).</p>'
+    focus:
+    - 1
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Bước ba, muốn biết máy định đọc mấy phân vùng mà không phải chạy câu lệnh,
+      ta dùng lệnh xem kế hoạch rồi in kế hoạch ra. Điều kiện viết thẳng trên cột
+      ngày, từ mùng một tháng ba tới trước mùng một tháng tư. Làm thử, khoảng này
+      nằm gọn trong phân vùng thứ ba, nên ta chờ phân vùng đầu và cuối đều là ba.
+      Nếu ngày được truyền qua biến gắn, tức chỗ giữ chỗ có giá trị truyền riêng,
+      thì kế hoạch không ghi số phân vùng, vì phân vùng chỉ được chọn lúc chạy.
+  - show: <p><b>Bước 4. Phần thay đổi theo kênh lưu dạng JSON</b>, có ràng buộc <code>IS
+      JSON</code> chặn chuỗi hỏng.</p><div class="code"><div>DROP TABLE IF EXISTS
+      bnx_l07_js;</div><div>CREATE TABLE bnx_l07_js (</div><div>  id       NUMBER
+      PRIMARY KEY,</div><div>  chi_tiet VARCHAR2(400)</div><div>           CONSTRAINT
+      bnx_l07_isj CHECK (chi_tiet IS JSON));</div><div>INSERT INTO bnx_l07_js VALUES
+      (1, '{"kenh":"app","so_tien":500000}');</div><div>INSERT INTO bnx_l07_js VALUES
+      (2, '{"kenh":"atm","so_tien":2000000}');</div><div>COMMIT;</div></div>
+    focus:
+    - 1
+    - 1
+    - 1
+    - 2
+    - 2
+    clear: true
+    say: Bước bốn, mỗi kênh có thông tin riêng, máy rút tiền có mã máy, ứng dụng có
+      mã thiết bị. Vì không muốn thêm cột mỗi khi có kênh mới, ta lưu phần đó ở dạng
+      JSON. Ràng buộc kiểm tra chỉ nhận chuỗi có dạng JSON, mặc định ở chế độ lỏng,
+      nên chuỗi hỏng không lọt vào bảng. Từ bản hai mươi mốt, Oracle khuyên dùng kiểu
+      cột JSON riêng; cột chữ kèm ràng buộc thì chạy được cả trên bản cũ. Hai dòng
+      mẫu là năm trăm nghìn qua ứng dụng và hai triệu qua máy rút tiền.
+  - show: "<p><b>Bước 5. Thử chèn chuỗi hỏng, rồi lọc theo một trường bên trong.</b></p><div\
+      \ class=\"code\"><div>INSERT INTO bnx_l07_js VALUES (3, '{\"kenh\":\"app\"');</div><div>SELECT\
+      \ id,</div><div>       JSON_VALUE(chi_tiet, '<span>&#36;</span>.kenh' RETURNING\
+      \ VARCHAR2(10)) AS kenh</div><div>FROM bnx_l07_js</div><div>WHERE JSON_VALUE(chi_tiet,\
+      \ '<span>&#36;</span>.so_tien' RETURNING NUMBER) &gt; 1000000;</div></div><p><b>Kết\
+      \ quả chạy thật</b></p><div class=\"code\"><div>ORA-02290: check constraint\
+      \ (BNX.BNX_L07_ISJ) violated</div><div>\tID KENH</div><div>---------- ----------</div><div>\t\
+      \ 2 atm</div></div>"
+    focus:
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Bước năm, chèn một chuỗi thiếu dấu đóng ngoặc, ràng buộc từ chối ngay. Rồi
+      ta lọc các dòng có số tiền bên trong lớn hơn một triệu, và lấy ra trường kênh.
+      Làm thử, năm trăm nghìn không lớn hơn một triệu, hai triệu thì lớn hơn, nên
+      chỉ còn dòng hai, kênh máy rút tiền, khớp đầu ra thật.
+  - show: '<p><b>Bước 6. Tạo hàng đợi trong cơ sở dữ liệu</b>: kiểu thông điệp, bảng
+      hàng đợi, hàng đợi, rồi bật nó.</p><div class="code"><div>CREATE TYPE bnx_l07_msg
+      AS OBJECT (ma_gd NUMBER, so_tien NUMBER);</div><div>/</div><div>BEGIN</div><div>  DBMS_AQADM.CREATE_QUEUE_TABLE(''bnx_l07_qt'',
+      ''bnx_l07_msg'');</div><div>  DBMS_AQADM.CREATE_QUEUE(''bnx_l07_q'', ''bnx_l07_qt'');</div><div>  DBMS_AQADM.START_QUEUE(''bnx_l07_q'');</div><div>END;</div><div>/</div></div>'
+    focus:
+    - 1
+    - 1
+    - 1
+    - 2
+    - 2
+    clear: true
+    say: Bước sáu, tạo hàng đợi ngay trong cơ sở dữ liệu. Vì hàng đợi phải biết mỗi
+      thông điệp chứa gì, nên trước hết khai kiểu thông điệp gồm mã giao dịch và số
+      tiền. Rồi tạo bảng hàng đợi để chứa thông điệp, tạo hàng đợi trên bảng đó, và
+      bật hàng đợi để gửi nhận được. Đây là hàng đợi kiểu cổ điển. Với thông điệp
+      cần lưu bền ở tải lớn, bản hai mươi ba của Oracle khuyên dùng hàng đợi sự kiện
+      giao dịch.
+  - show: '<p><b>Bước 7. Gửi trong giao dịch</b>: gửi 101 rồi hoàn tác, gửi 102 rồi
+      chốt.</p><div class="code"><div>DECLARE</div><div>  eo  DBMS_AQ.ENQUEUE_OPTIONS_T;</div><div>  mp  DBMS_AQ.MESSAGE_PROPERTIES_T;</div><div>  id  RAW(16);</div><div>BEGIN</div><div>  DBMS_AQ.ENQUEUE(''bnx_l07_q'',
+      eo, mp, bnx_l07_msg(101, 500000), id);</div><div>  ROLLBACK;</div><div>  DBMS_AQ.ENQUEUE(''bnx_l07_q'',
+      eo, mp, bnx_l07_msg(102, 200000), id);</div><div>  COMMIT;</div><div>END;</div><div>/</div><div>SELECT
+      COUNT(*) AS so_thong_diep FROM bnx_l07_qt;</div></div>'
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    clear: true
+    say: Bước bảy, gửi thông điệp một trăm linh một rồi hoàn tác, sau đó gửi một trăm
+      linh hai rồi chốt. Vì việc gửi mặc định là một phần của giao dịch đang chạy,
+      nên hoàn tác thì thông điệp đầu biến mất. Năm đối số của lệnh gửi là tên hàng
+      đợi, tuỳ chọn gửi, thuộc tính thông điệp, nội dung, và biến nhận lại mã thông
+      điệp. Câu cuối đếm số thông điệp trong bảng hàng đợi.
+  - show: "<p><b>Kết quả chạy thật</b></p><div class=\"code\"><div>SO_THONG_DIEP</div><div>-------------</div><div>\t\
+      \    1</div></div><p class='note'>Làm thử: 2 lần gửi − 1 lần bị hoàn tác = 1\
+      \ thông điệp.</p>"
+    clear: true
+    say: Làm thử, vì lần gửi đầu đã bị hoàn tác, hai lần gửi trừ một còn một thông
+      điệp, khớp với đầu ra thật.
+  - show: '<p><b>Bước 8. Nhận rồi chốt.</b></p><div class="code"><div>DECLARE</div><div>  dq  DBMS_AQ.DEQUEUE_OPTIONS_T;</div><div>  mp  DBMS_AQ.MESSAGE_PROPERTIES_T;</div><div>  m   bnx_l07_msg;</div><div>  id  RAW(16);</div><div>BEGIN</div><div>  dq.wait
+      := DBMS_AQ.NO_WAIT;</div><div>  DBMS_AQ.DEQUEUE(''bnx_l07_q'', dq, mp, m, id);</div><div>  DBMS_OUTPUT.PUT_LINE(''nhan:
+      '' || m.ma_gd || '' '' || m.so_tien);</div><div>  COMMIT;</div><div>END;</div><div>/</div></div>'
+    focus:
+    - 1
+    - 2
+    clear: true
+    say: Bước tám, nhận một thông điệp, in ra rồi chốt. Vì không muốn treo khi hàng
+      đợi trống, ta đặt chế độ không chờ.
+  - show: '<p><b>Kết quả chạy thật</b></p><div class="code"><div>nhan: 102 200000</div></div><p
+      class=''note''>Sau khi chốt, đếm lại bảng hàng đợi được 0: thông điệp đã nhận
+      rời khỏi hàng đợi.</p>'
+    focus:
+    - 1
+    - 2
+    clear: true
+    say: Máy nhận đúng thông điệp một trăm linh hai, hai trăm nghìn. Vì việc nhận
+      cũng nằm trong giao dịch, nên chỉ sau khi chốt thông điệp mới rời hàng đợi,
+      và đếm lại thì còn không.
+  - show: '<p><b>Bước 9. Bộ nhớ cột</b>: báo cáo cộng một cột trên hàng triệu dòng
+      thì đọc theo cột thường nhanh hơn. Kiểm trên máy của bài:</p><div class="code"><div>SELECT
+      value AS inmemory_size FROM v<span>&#36;</span>parameter</div><div> WHERE name
+      = ''inmemory_size'';</div><div>ALTER TABLE bnx_l07_gd INMEMORY;</div><div>SELECT
+      def_inmemory FROM user_part_tables</div><div> WHERE table_name = ''BNX_L07_GD'';</div></div><p><b>Kết
+      quả chạy thật</b></p><div class="code"><div>INMEMORY_SIZE</div><div>--------------------…</div><div>0</div><div>DEF_INME</div><div>--------</div><div>ENABLED</div></div>'
+    focus:
+    - 1
+    - 2
+    - 3
+    - 4
+    clear: true
+    say: Bước chín là bộ nhớ cột. Báo cáo thường cộng một cột trên hàng triệu dòng,
+      nên đọc dữ liệu xếp theo cột thường ít việc hơn đọc từng dòng đầy đủ. Trên máy
+      của bài, kích thước vùng nhớ cột đang là không. Ta vẫn đánh dấu bảng được, nhưng
+      vì vùng nhớ bằng không nên chưa có gì được nạp, và bài không đo được tốc độ.
+  - show: '<div><svg width="1500" height="430" viewBox="0 0 1500 430" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><rect
+      x="560" y="20" width="380" height="80" rx="10" fill="#f3e8ff" stroke="#9333ea"
+      stroke-width="3"/><text x="750.0" y="53" font-size="22" text-anchor="middle"
+      fill="#1f2937">bộ định tuyến</text><text x="750.0" y="83" font-size="22" text-anchor="middle"
+      fill="#1f2937">theo khoá phân mảnh</text><rect x="60" y="230" width="380" height="110"
+      rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="250.0" y="263"
+      font-size="22" text-anchor="middle" fill="#1f2937">Mảnh 0</text><text x="250.0"
+      y="293" font-size="22" text-anchor="middle" fill="#1f2937">một cơ sở dữ liệu
+      riêng</text><text x="250.0" y="323" font-size="22" text-anchor="middle" fill="#1f2937">tài
+      khoản 3, 6, 9…</text><rect x="560" y="230" width="380" height="110" rx="10"
+      fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="750.0" y="263" font-size="22"
+      text-anchor="middle" fill="#1f2937">Mảnh 1</text><text x="750.0" y="293" font-size="22"
+      text-anchor="middle" fill="#1f2937">một cơ sở dữ liệu riêng</text><text x="750.0"
+      y="323" font-size="22" text-anchor="middle" fill="#1f2937">tài khoản 4, 7, 10…</text><rect
+      x="1060" y="230" width="380" height="110" rx="10" fill="#dbeafe" stroke="#2a78d6"
+      stroke-width="3"/><text x="1250.0" y="263" font-size="22" text-anchor="middle"
+      fill="#1f2937">Mảnh 2</text><text x="1250.0" y="293" font-size="22" text-anchor="middle"
+      fill="#1f2937">một cơ sở dữ liệu riêng</text><text x="1250.0" y="323" font-size="22"
+      text-anchor="middle" fill="#1f2937">tài khoản 5, 8, 11…</text><line x1="650"
+      y1="105" x2="250" y2="225" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><line
+      x1="750" y1="105" x2="750" y2="225" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><line
+      x1="850" y1="105" x2="1250" y2="225" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><text
+      x="750" y="400" font-size="24" text-anchor="middle" fill="#1f2937" font-weight="bold">quy
+      tắc minh hoạ: mảnh = mã tài khoản chia lấy dư cho 3</text></svg></div>'
+    clear: true
+    say: Bước mười là phân mảnh, khi một cơ sở dữ liệu không đủ sức. Dữ liệu được
+      chia theo khoá phân mảnh, như mã tài khoản, ra nhiều cơ sở dữ liệu độc lập,
+      mỗi cái gọi là một mảnh. Bộ định tuyến nhìn khoá để đưa yêu cầu tới đúng mảnh.
+      Ở đây dùng quy tắc minh hoạ, lấy mã tài khoản chia lấy dư cho ba, ví dụ tài
+      khoản bảy vào mảnh một.
+- id: example
+  kind: example
+  title: 'Ví dụ chạy thật: cắt tỉa phân vùng, từng phép tính'
+  checks:
+  - len(alg.bnx_l07_load(3650)) == 365 * 10
+  - alg.bnx_l07_partitions(alg.bnx_l07_load(3650)) == 12
+  - alg.bnx_l07_count(alg.bnx_l07_load(3650), '2025-03-01', '2025-04-01') == 310
+  - alg.bnx_l07_prune('2025-03-01', '2025-04-01') == (3, 3)
+  - round(100 * alg.bnx_l07_count(alg.bnx_l07_load(3650), '2025-03-01', '2025-04-01')
+    / len(alg.bnx_l07_load(3650)), 1) == 8.5
+  - round(len(alg.bnx_l07_load(3650)) / alg.bnx_l07_count(alg.bnx_l07_load(3650),
+    '2025-03-01', '2025-04-01'), 1) == 11.8
+  - alg.bnx_l07_max_partitions() == 1048575
+  steps:
+  - show: '$$① \; 365 \cdot 10 = \hl{3\,650}\ \text{dòng}$$
+
+      $$② \; 1 + 11 = \hl{12}\ \text{phân vùng}$$
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    say: Ta tính và so với máy. Phép tính thứ nhất, ba trăm sáu mươi lăm ngày nhân
+      mười, bằng ba nghìn sáu trăm năm mươi dòng, khớp số dòng thật ở bước hai. Phép
+      tính thứ hai, một phân vùng khai sẵn cộng mười một phân vùng tự tạo, bằng mười
+      hai.
+  - show: "$$③ \\; 31 \\cdot 10 = \\hl{310}\\ \\text{dòng của tháng 3, nằm trong phân\
+      \ vùng 3}$$<p><b>Kết quả chạy thật</b></p><div class=\"code\"><div>--------------------------------------------------------------</div><div>|\
+      \ Id  | Operation\t\t| Name\t     | Pstart| Pstop |</div><div>--------------------------------------------------------------</div><div>|\
+      \   0 | SELECT STATEMENT\t|\t     |\t     |\t     |</div><div>|   1 |  SORT\
+      \ AGGREGATE \t|\t     |\t     |\t     |</div><div>|   2 |   PARTITION RANGE\
+      \ SINGLE|\t     |\t   3 |\t   3 |</div><div>|   3 |    TABLE ACCESS FULL\t|\
+      \ BNX_L07_GD |\t   3 |\t   3 |</div><div>--------------------------------------------------------------</div></div>"
+    focus:
+    - 1
+    - 2
+    clear: true
+    say: Phép tính thứ ba, tháng ba có ba mươi mốt ngày nhân mười, bằng ba trăm mười
+      dòng, tất cả nằm trong phân vùng thứ ba. Kế hoạch thật ghi đọc đơn một phân
+      vùng, phân vùng đầu và cuối đều là ba, đúng như ta chờ.
+  - show: $$④ \; \frac{310}{3\,650} \approx \hlg{8{,}5\%}\ \text{số dòng phải đọc}$$
+    say: Phép tính thứ tư dùng lại hai số trên. Ba trăm mười chia ba nghìn sáu trăm
+      năm mươi, xấp xỉ tám phẩy năm phần trăm. Nhờ cắt tỉa, máy chỉ đọc chừng ấy số
+      dòng.
+  - show: "<p>Truy vấn không lọc theo ngày (tìm giao dịch trên 5 000 000):</p><div\
+      \ class=\"code\"><div>EXPLAIN PLAN FOR</div><div>SELECT COUNT(*) FROM bnx_l07_gd\
+      \ WHERE so_tien &gt; 5000000;</div><div>SELECT * FROM TABLE(</div><div>  DBMS_XPLAN.DISPLAY(NULL,\
+      \ NULL, 'BASIC +PARTITION'));</div></div><p><b>Kết quả chạy thật</b></p><div\
+      \ class=\"code\"><div>-----------------------------------------------------------</div><div>|\
+      \ Id  | Operation\t     | Name\t  | Pstart| Pstop |</div><div>-----------------------------------------------------------</div><div>|\
+      \   0 | SELECT STATEMENT     |\t\t  |\t  |\t  |</div><div>|   1 |  SORT AGGREGATE\
+      \      |\t\t  |\t  |\t  |</div><div>|   2 |   PARTITION RANGE ALL|\t\t  |\t\
+      1 |1048575|</div><div>|   3 |    TABLE ACCESS FULL | BNX_L07_GD |\t1 |1048575|</div><div>-----------------------------------------------------------</div></div>"
+    focus:
+    - 1
+    - 2
+    - 3
+    - 4
+    clear: true
+    say: Giờ thử một truy vấn không lọc theo ngày, tìm giao dịch trên năm triệu. Kế
+      hoạch thật ghi đọc tất cả, từ phân vùng một. Cột cuối là một triệu không trăm
+      bốn mươi tám nghìn năm trăm bảy mươi lăm, đúng bằng số phân vùng tối đa một
+      bảng được có. Vì bảng tự thêm phân vùng theo tháng, máy chưa biết trước sẽ có
+      bao nhiêu tháng.
+  - show: '$$⑤ \; \frac{3\,650}{310} \approx \hl{11{,}8}\ \text{lần nhiều dòng hơn}$$
+
+      <p class=''note''>$1\,048\,575 = 1024 \cdot 1024 - 1$: giới hạn số phân vùng
+      của một bảng Oracle.</p>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    clear: true
+    say: Phép tính thứ năm, không lọc theo ngày thì phải đọc cả ba nghìn sáu trăm
+      năm mươi dòng. Chia cho ba trăm mười, ta được xấp xỉ mười một phẩy tám lần nhiều
+      dòng hơn. Con số lớn ở cột cuối bằng một nghìn không trăm hai mươi bốn nhân
+      một nghìn không trăm hai mươi bốn, trừ một.
+- id: check
+  kind: check
+  title: 'Tự kiểm bằng đường khác: đếm thẳng trong phân vùng'
+  checks:
+  - alg.bnx_l07_count(alg.bnx_l07_load(3650), '2025-03-01', '2025-04-01') == alg.bnx_l07_month_days(2025,
+    3) * 10
+  steps:
+  - show: '<p>Đường khác: đếm theo điều kiện ngày, rồi đếm thẳng trong phân vùng chứa
+      ngày 15/3 (không có điều kiện nào).</p><div class="code"><div>SELECT COUNT(*)
+      AS loc_ngay FROM bnx_l07_gd</div><div> WHERE ngay &gt;= DATE ''2025-03-01''
+      AND ngay &lt; DATE ''2025-04-01'';</div><div>SELECT COUNT(*) AS trong_pv FROM
+      bnx_l07_gd</div><div> PARTITION FOR (DATE ''2025-03-15'');</div></div><p><b>Kết
+      quả chạy thật</b></p><div class="code"><div>  LOC_NGAY</div><div>----------</div><div>       310</div><div>  TRONG_PV</div><div>----------</div><div>       310</div></div>'
+    focus:
+    - 1
+    - 1
+    - 2
+    - 3
+    - 4
+    say: Kiểm bằng đường khác. Câu đầu đếm theo điều kiện ngày như trước. Câu sau
+      không có điều kiện nào, chỉ đếm thẳng mọi dòng trong phân vùng chứa ngày mười
+      lăm tháng ba. Cả hai đều ra ba trăm mười, khớp với phép tính thứ ba. Vậy phân
+      vùng thứ ba chứa đúng và đủ tháng ba, nên đọc riêng nó là đủ.
+  - show: <table class='t'><tr><th>điều bài nói</th><th>kiểm thế nào</th></tr><tr><td>phân
+      vùng, kế hoạch, JSON, hàng đợi</td><td>chạy thật trên Oracle bản miễn phí trong
+      bài, đầu ra dán nguyên</td></tr><tr><td>bộ nhớ cột</td><td>chỉ thấy vùng nhớ
+      cột = 0 và thuộc tính đã bật; <b>chưa đo</b> tốc độ</td></tr><tr><td>phân mảnh</td><td>chỉ
+      ở mức khái niệm, theo hướng dẫn của Oracle; cần nhiều cơ sở dữ liệu, bài <b>không
+      chạy</b></td></tr></table>
+    clear: true
+    say: Bảng này nói rõ điều gì đã kiểm. Phân vùng, kế hoạch thực thi, dữ liệu dạng
+      JSON và hàng đợi đều chạy thật trên Oracle bản miễn phí, đầu ra dán nguyên.
+      Bộ nhớ cột thì ta chỉ thấy vùng nhớ bằng không và thuộc tính đã bật, chưa đo
+      tốc độ. Phân mảnh cần nhiều cơ sở dữ liệu, nên bài chỉ dạy ở mức khái niệm.
+- id: pitfalls
+  kind: pitfall
+  title: Lỗi hay gặp, có lỗi của người đã đi làm
+  checks:
+  - alg.bnx_l07_shard(4, 3) == alg.bnx_l07_shard(7, 3) == 1
+  - alg.bnx_l07_shard(5, 3) == 2
+  - alg.bnx_l07_queue([('enq', 102), ('commit',), ('deq',), ('commit',)])[1] == 0
+  steps:
+  - show: "<div class=\"box warn\"><b>Lỗi 1 (người đã đi làm): bọc cột phân vùng trong\
+      \ hàm.</b> Cùng ý “tháng 3”, viết bằng <code>TRUNC</code>:</div><div class=\"\
+      code\"><div>EXPLAIN PLAN FOR</div><div>SELECT COUNT(*) FROM bnx_l07_gd</div><div>\
+      \ WHERE TRUNC(ngay, 'MM') = DATE '2025-03-01';</div><div>SELECT * FROM TABLE(</div><div>\
+      \  DBMS_XPLAN.DISPLAY(NULL, NULL, 'BASIC +PARTITION'));</div></div><p><b>Kết\
+      \ quả chạy thật</b></p><div class=\"code\"><div>…</div><div>|   2 |   PARTITION\
+      \ RANGE ALL|\t\t  |\t1 |1048575|</div><div>|   3 |    TABLE ACCESS FULL | BNX_L07_GD\
+      \ |\t1 |1048575|</div></div>"
+    focus:
+    - 1
+    - 2
+    - 3
+    - 4
+    say: Lỗi thứ nhất, của người đã đi làm, là bọc cột phân vùng trong một hàm. Câu
+      này cũng hỏi tháng ba, nhưng cắt ngày về đầu tháng rồi mới so. Kế hoạch thật
+      ghi đọc tất cả phân vùng, vì máy không cắt tỉa được khi cột bị biến đổi. Cách
+      chữa là viết điều kiện khoảng trên cột gốc, như ở bước ba.
+  - show: '<table class=''t''><tr><th></th><th>hàng đợi trong Oracle</th><th>Kafka</th></tr><tr><td>chung
+      giao dịch với dữ liệu</td><td>có: hoàn tác thì thông điệp cũng mất (bước 7)</td><td>không:
+      hệ riêng</td></tr><tr><td>sau khi nhận và chốt</td><td>mặc định (thời gian lưu
+      giữ 0): thông điệp rời hàng đợi, đếm lại được 0 (bước 8)</td><td>vẫn lưu; người
+      đọc tự giữ vị trí, đọc lại được</td></tr><tr><td>tải đặt lên đâu</td><td>chính
+      cơ sở dữ liệu giao dịch</td><td>cụm máy riêng</td></tr></table>'
+    clear: true
+    say: Lỗi thứ hai là coi hàng đợi trong cơ sở dữ liệu giống hệt Kafka. Nó chung
+      giao dịch với dữ liệu, hoàn tác thì thông điệp cũng mất, điều Kafka không làm
+      được. Nhưng ở cấu hình mặc định, thời gian lưu giữ bằng không, thông điệp đã
+      nhận và chốt thì rời hàng đợi, không đọc lại như Kafka. Và mọi tải gửi nhận
+      đặt lên chính cơ sở dữ liệu giao dịch.
+  - show: '<div class="box warn"><b>Lỗi 3 (người đã đi làm): coi phân mảnh như một
+      cơ sở dữ liệu lớn.</b> Mỗi mảnh là một cơ sở dữ liệu riêng.</div><table class=''t''><tr><th>lệnh</th><th>mảnh
+      (mã mod 3, minh hoạ)</th><th>hệ quả</th></tr><tr><td>chuyển từ tài khoản 4 sang
+      7</td><td>1 và 1</td><td>một mảnh: giao dịch trong một cơ sở dữ liệu</td></tr><tr><td>chuyển
+      từ tài khoản 4 sang 5</td><td>1 và 2</td><td>xuyên mảnh: hai cơ sở dữ liệu phải
+      cùng chốt, đắt hơn</td></tr><tr><td>tổng tiền mọi tài khoản</td><td>không có
+      khoá</td><td>bộ điều phối hỏi mọi mảnh, chậm hơn đi thẳng theo khoá</td></tr></table>'
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    clear: true
+    say: Lỗi thứ ba, của người đã đi làm, là coi phân mảnh như một cơ sở dữ liệu lớn.
+      Chuyển từ tài khoản bốn sang bảy, cả hai đều ở mảnh một, nên là giao dịch trong
+      một cơ sở dữ liệu. Chuyển từ bốn sang năm thì xuyên hai mảnh, hai cơ sở dữ liệu
+      phải cùng chốt, đắt hơn nhiều. Còn câu hỏi không có khoá phân mảnh, như tổng
+      tiền mọi tài khoản, phải qua bộ điều phối hỏi mọi mảnh, chậm hơn đi thẳng theo
+      khoá.
+- id: quiz
+  kind: quiz
+  title: Đến lượt bạn
+  checks:
+  - alg.bnx_l07_prune('2025-03-15', '2025-05-15') == (3, 5)
+  - alg.bnx_l07_days('2025-03-15', '2025-05-15') == 17 + 30 + 14 == 61
+  - alg.bnx_l07_count(alg.bnx_l07_load(3650), '2025-03-15', '2025-05-15') == 610
+  - (alg.bnx_l07_shard(7, 3), alg.bnx_l07_shard(10, 3), alg.bnx_l07_shard(8, 3)) ==
+    (1, 1, 2)
+  steps:
+  - show: '<table class=''t''><tr><th>câu</th><th>đề</th></tr><tr><td>1</td><td>Cùng
+      bảng của bài. Truy vấn <code>ngay &gt;= DATE ''2025-03-15'' AND ngay &lt; DATE
+      ''2025-05-15''</code>: đọc những phân vùng nào, đếm được bao nhiêu dòng?</td></tr><tr><td>2</td><td>Ba
+      mảnh, mảnh = mã tài khoản chia lấy dư cho 3 (minh hoạ). Lệnh chuyển 7 → 10 và
+      7 → 8: lệnh nào xuyên mảnh?</td></tr><tr><td>3</td><td>Quyết định: gửi thông
+      báo “đã chuyển tiền” bằng hàng đợi trong Oracle hay bằng Kafka?</td></tr></table>'
+    pause: 25
+    say: Bây giờ tới phần bạn tự làm bài. Câu một, cùng bảng của bài, truy vấn từ
+      ngày mười lăm tháng ba tới trước ngày mười lăm tháng năm. Máy đọc những phân
+      vùng nào, và đếm được bao nhiêu dòng? Câu hai, ba mảnh, mảnh bằng mã tài khoản
+      chia lấy dư cho ba. Lệnh chuyển từ bảy sang mười và từ bảy sang tám, lệnh nào
+      xuyên mảnh? Câu ba là một quyết định. Gửi thông báo đã chuyển tiền bằng hàng
+      đợi trong Oracle hay bằng Kafka? Hãy dừng video và làm ra giấy.
+  - show: '<p>Câu 1: khoảng chạm tháng 3, 4, 5 → phân vùng 3 tới 5 (kế hoạch thật:
+      <code>PARTITION RANGE ITERATOR</code> = đọc lần lượt một dãy phân vùng liền
+      nhau, Pstart 3, Pstop 5).</p>
+
+      $$17 + 30 + 14 = 61\ \text{ngày}, \qquad 61 \cdot 10 = \hl{610}\ \text{dòng}$$
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    say: Đáp án câu một. Khoảng này chạm tháng ba, tháng tư và tháng năm, nên máy
+      đọc lần lượt một dãy phân vùng liền nhau, từ phân vùng ba tới phân vùng năm,
+      kế hoạch thật ghi đúng như vậy. Số ngày là mười bảy ngày cuối tháng ba, cộng
+      ba mươi ngày tháng tư, cộng mười bốn ngày đầu tháng năm, bằng sáu mươi mốt.
+      Nhân mười được sáu trăm mười dòng.
+    clear: true
+  - show: '<p>Câu 2: 7 mod 3 = 1, 10 mod 3 = 1, 8 mod 3 = 2.</p>
+
+      <div class=''box key''>7 → 10 cùng mảnh 1; <b>7 → 8 xuyên mảnh</b> (mảnh 1 và
+      mảnh 2).</div>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    say: Đáp án câu hai. Bảy chia ba dư một, mười chia ba dư một, tám chia ba dư hai.
+      Vậy chuyển từ bảy sang mười nằm gọn trong mảnh một, còn chuyển từ bảy sang tám
+      là xuyên mảnh.
+  - show: '<table class=''t''><tr><th>lựa chọn</th><th>được</th><th>mất</th></tr><tr><td>hàng
+      đợi trong Oracle</td><td>cùng giao dịch với lệnh chuyển: không gửi nhầm cho
+      lệnh đã huỷ, không cần thêm cơ chế</td><td>tải đặt lên cơ sở dữ liệu giao dịch;
+      mặc định nhận xong là mất (muốn giữ phải đặt thời gian lưu giữ)</td></tr><tr><td>Kafka</td><td>lưu
+      lâu, nhiều dịch vụ cùng đọc, đọc lại được, chịu tải lớn</td><td>ghi và gửi là
+      hai việc riêng: cần mẫu hộp thư đi hoặc cách tương tự để không lệch</td></tr></table>'
+    say: Đáp án câu ba, tuỳ nhu cầu. Hàng đợi trong Oracle đi cùng giao dịch của lệnh
+      chuyển, nên không gửi nhầm thông báo cho lệnh đã huỷ, và không cần thêm cơ chế
+      nào. Đổi lại, tải đặt lên chính cơ sở dữ liệu giao dịch, và ở cấu hình mặc định
+      thì thông điệp nhận xong là mất. Kafka lưu lâu, nhiều dịch vụ cùng đọc và đọc
+      lại được. Nhưng ghi và gửi là hai việc riêng, nên cần mẫu hộp thư đi, tức ghi
+      sự kiện vào một bảng cùng giao dịch rồi gửi sau, hoặc cách tương tự, để hai
+      bên không lệch.
+    clear: true
+- id: recap
+  kind: recap
+  title: Chuỗi logic & tư duy cần mang theo
+  steps:
+  - show: <div class='chain'><span class='n'>lọc theo ngày</span><span class='a'>→</span><span
+      class='n'>phân vùng theo tháng</span><span class='a'>→</span><span class='n'>kế
+      hoạch ghi một phân vùng</span><span class='a'>→</span><span class='n'>hàng đợi
+      chung giao dịch</span><span class='a'>→</span><span class='n'>bộ nhớ cột, phân
+      mảnh khi đo thấy cần</span></div>
+    say: Tổng kết chuỗi logic. Truy vấn ngân hàng thường lọc theo ngày, nên ta phân
+      vùng theo tháng, và đọc kế hoạch để chắc máy chỉ mở một phân vùng. Thông báo
+      cho hệ khác có thể đi qua hàng đợi chung giao dịch với dữ liệu. Bộ nhớ cột và
+      phân mảnh chỉ dùng khi đã đo thấy cần.
+  - show: <div class='box key'><b>Tư duy:</b> đừng đoán máy đọc gì, hãy hỏi kế hoạch
+      thực thi. Một tính năng mới chỉ đáng dùng khi bạn chỉ ra được con số nó cải
+      thiện.</div>
+    say: Điều cần mang theo. Đừng đoán máy sẽ đọc gì, hãy hỏi kế hoạch thực thi. Một
+      tính năng mới chỉ đáng dùng khi bạn chỉ ra được con số mà nó cải thiện.
+  - show: '<p class="note">Bài sau: tìm kiếm toàn văn phân tán, chia dữ liệu thành
+      nhiều mảnh có bản sao, và vì sao dữ liệu vừa ghi chưa tìm thấy ngay.</p>'
+    forward_ref: true
+    say: Ở bài sau, ta gặp lại ý chia dữ liệu thành nhiều mảnh, lần này trong một
+      hệ tìm kiếm toàn văn, có bản sao, và xem vì sao dữ liệu vừa ghi chưa tìm thấy
+      ngay.

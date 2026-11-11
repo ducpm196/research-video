@@ -51,7 +51,7 @@ ALIASES = {"thuật toán": "CS112", "toán cho khoa học máy tính": "CS115",
            "kỹ thuật dữ liệu": "DEN", "trình biên dịch": "PLC", "ngôn ngữ lập trình": "PLC", "kiến trúc hệ thống": "SAR",
            "đồ hoạ": "GFX", "thị giác máy tính": "CVI", "học tăng cường": "RLN", "mô hình ngôn ngữ lớn": "LLM",
            "trí tuệ nhân tạo": "AIF", "điện toán đám mây": "CLC", "đám mây": "CLC", "hệ thống nhúng": "ESY", "nhúng": "ESY",
-           "backend ngân hàng": "BNK", "ngân hàng": "BNK", "devops": "DVO", "mlops": "MLO", "blockchain": "BCH",
+           "backend ngân hàng": "BNK", "hệ thống ngân hàng": "BNK", "ngân hàng": "BNK", "devops": "DVO", "mlops": "MLO", "blockchain": "BCH",
            "tương tác người": "HCI", "truy hồi thông tin": "IRS", "song song": "PAR", "tính toán song song": "PAR",
            "kiến trúc hướng sự kiện": "EVT", "ứng dụng web": "WEB", "web": "WEB", "hệ thống hướng dịch vụ": "CLD",
            "kỹ thuật lập trình": "SDP", "mẫu thiết kế": "SDP", "phần mềm đúng đắn": "SWF", "tình huống chuyên gia": "CAS",
@@ -88,6 +88,9 @@ def strings(node, path=()):
         yield path, node
 
 
+AMBIG = {"CAS", "INT"}  # mã khoá trùng thuật ngữ kỹ thuật; cần "khoá/bài" đứng trước hoặc "Lxx" theo sau mới tính
+
+
 def find(s, me):
     out = []
     for m in code_rx.finditer(s):
@@ -101,6 +104,9 @@ def find(s, me):
             continue  # SEC = Uỷ ban Chứng khoán Mỹ (CAS)
         if c == "ACB" and not re.search(r"[Kk]h(?:oá|óa)\s*(?:học\s*)?$", s[max(0, m.start() - 12):m.start()]):
             continue
+        if c in AMBIG and not (re.search(r"(?:[Kk]h(?:oá|óa)\s*(?:học\s*)?|[Bb]ài\s*)$", s[max(0, m.start() - 14):m.start()])
+                               or re.match(re.escape(c) + r"\s*L\d\d", s[m.start():m.start() + 10])):
+            continue  # CAS = Compare-And-Swap (BNX L09), INT = kiểu số nguyên SQL (BNX L06): thuật ngữ kỹ thuật trùng mã khoá
         out.append((m.start(), "mã " + c))
     for m in kh_rx.finditer(s):
         tail = m.group(1).strip().lower()

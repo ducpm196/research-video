@@ -1,0 +1,656 @@
+id: L05
+course: BNX
+series: BNX · Backend ngân hàng mở rộng theo JD
+title: 'Bài 5 — mTLS: hai bên cùng trình chứng chỉ khi các dịch vụ gọi nhau'
+voice: vi-VN-NamMinhNeural
+rate: -5%
+depth: full
+source: curriculum/bnx.yaml L05; audit/bnx/verify_bnx.py L05 (chạy thật openssl 3.5.5
+  + Python 3.13 ssl, 2026-11-11); RFC 8446 mục 4.4.2.4, 4.4.3 (2018); Python 3.13
+  tài liệu mô-đun ssl (create_default_context, CERT_REQUIRED; đọc 2026-11-11)
+assumes: []
+objectives:
+- Phân biệt TLS một chiều và hai chiều
+- 'Kiểm một chứng chỉ khách: chuỗi tin cậy, hạn dùng, tên'
+- Đọc lỗi bắt tay khi thiếu hoặc sai chứng chỉ
+- Lên kế hoạch xoay vòng chứng chỉ trước khi hết hạn
+asr_reviewed:
+  - {sentence: "Bước C tạo hai khách sai, khách lạ do ca hai ký.", reason: "ASR chép “Bước xe tạo 2 khắp sai, khắp lại do ca 2 ký.” (0.75): lệch âm/thanh thuần Việt: khách/khắp, khách lạ/khắp lại — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bây giờ tới phần bạn tự làm bài.", reason: "ASR chép “Bây giờ tới phần bạn tự lam bay.” (0.75): lệch âm/thanh thuần Việt: làm bài/lam bay — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Xoay ngày nào, còn bao nhiêu ngày dự phòng?", reason: "ASR chép “Xoay ngày nào, còn bao nhiêu ngày giữ phóng?” (0.778): lệch âm/thanh thuần Việt: dự phòng/giữ phóng — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Cờ ký chứng chỉ là bắt buộc, vì thiếu nó thì Python ba chấm mười ba từ chối nơi cấp ngay.", reason: "ASR chép “Cờ ký chính chỉ là bắt buộc, vì thiếu nó thì phai thòng 3.13 từ chối nơi cấp ngay.” (0.857): “python” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Pai-thon”), ASR viết “phai thòng”; lệch âm/thanh thuần Việt: chứng/chính, chấm/∅ — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Máy chủ kiểm những gì, ta sẽ chạy thật bằng công cụ dòng lệnh và Python.", reason: "ASR chép “Máy chủ kiểm những gì, ta sẽ chạy thật bằng công cụ dòng lệnh và phai thông.” (0.909): “python” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Pai-thon”), ASR viết “phai thông” — NOT_VERIFIED bằng tai người"}
+scenes:
+- id: hook
+  kind: hook
+  title: Hai giờ sáng, mọi lệnh gọi sổ cái bị từ chối
+  checks:
+  - alg.bnx_add_days('2026-03-01', 90) == '2026-05-30'
+  steps:
+  - show: '<p>Dịch vụ thanh toán gọi API sổ cái trong mạng nội bộ. Hai câu hỏi người
+      vận hành hay gặp (số minh hoạ):</p>
+
+      <div class="box key">① Một máy lạ cắm vào mạng nội bộ có gọi được API sổ cái
+      không, nếu API chỉ tin “ở trong mạng là người nhà”?<br>
+
+      ② Chứng chỉ của dịch vụ hạn 90 ngày, cấp 1/3/2026. Ngày 30/5/2026 không ai nhớ
+      đổi: chuyện gì xảy ra?</div>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    - 2
+    say: Chào bạn, dịch vụ thanh toán gọi giao diện lập trình của sổ cái trong mạng
+      nội bộ. Người vận hành hay gặp hai câu hỏi, với số minh hoạ. Một, một máy lạ
+      cắm vào mạng nội bộ có gọi được sổ cái không, nếu sổ cái chỉ tin rằng ở trong
+      mạng là người nhà? Hai, chứng chỉ của dịch vụ hạn chín mươi ngày, cấp ngày một
+      tháng ba. Đến ngày ba mươi tháng năm không ai nhớ đổi, chuyện gì xảy ra?
+  - show: '<table class=''t''><tr><th>câu hỏi</th><th>bài này trả lời</th></tr><tr><td>máy
+      chủ biết người gọi là ai bằng cách nào</td><td>mTLS: máy chủ đòi chứng chỉ của
+      khách và tự kiểm</td></tr><tr><td>kiểm những gì</td><td>chuỗi tin cậy, hạn dùng,
+      tên; chạy thật bằng openssl và Python</td></tr><tr><td>tránh sự cố hết hạn thế
+      nào</td><td>theo dõi ngày hết hạn, xoay vòng trước, không tắt kiểm</td></tr></table>'
+    focus:
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    say: Hôm nay ta trả lời ba câu, máy chủ biết người gọi là ai bằng cách nào, câu
+      trả lời là M T L S, hai bên cùng trình chứng chỉ. Máy chủ kiểm những gì, ta
+      sẽ chạy thật bằng công cụ dòng lệnh và Python. Và làm sao tránh sự cố hết hạn.
+- id: prereq
+  kind: prereq
+  title: 'Trước hết: bốn điều cần hiểu'
+  checks:
+  - alg.bnx_add_days('2026-03-01', 90) == '2026-05-30'
+  - alg.bnx_days_between('2026-03-01', '2026-05-30') == 31 + 30 + 29 == 90
+  steps:
+  - show: '<table class=''t''><tr><th>khái niệm</th><th>nghĩa</th><th>ví dụ</th></tr><tr><td>①
+      khoá riêng, khoá công khai</td><td>khoá riêng dùng để ký, giữ kín; khoá công
+      khai dùng để kiểm chữ ký, ai cũng có</td><td><code>thanh_toan.key</code> giữ
+      kín, <code>.crt</code> gửi đi</td></tr><tr><td>② chứng chỉ</td><td>tên + khoá
+      công khai + hạn dùng, có chữ ký của <b>nơi cấp</b> (CA)</td><td>CN=thanh_toan,
+      do ca1 ký, hạn 90 ngày</td></tr><tr><td>③ chuỗi tin cậy</td><td>tin nơi cấp
+      thì tin chứng chỉ nơi đó ký, nếu còn hạn và đúng tên; thường có nơi cấp <b>trung
+      gian</b>: gốc → trung gian → lá, bên trình chứng chỉ gửi kèm chứng chỉ trung
+      gian</td><td>tin ca1 thì tin <code>may_chu.crt</code> (ở bài này không có trung
+      gian)</td></tr><tr><td>④ TLS một chiều</td><td>lớp bọc kết nối: dữ liệu được
+      mã hoá, và khách kiểm chứng chỉ máy chủ (tên, hạn, nơi cấp) để biết chắc nói
+      với đúng máy chủ; máy chủ <b>không biết</b> khách là ai</td><td>trình duyệt
+      mở trang ngân hàng</td></tr></table>'
+    focus:
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.4'
+    - '1.5'
+    - '1.5'
+    say: Trước hết ta cần hiểu bốn điều, thứ nhất, khoá riêng dùng để ký và phải giữ
+      kín, còn khoá công khai dùng để kiểm chữ ký, ai cũng có. Thứ hai, chứng chỉ
+      gồm tên, khoá công khai và hạn dùng, có chữ ký của nơi cấp. Thứ ba, chuỗi tin
+      cậy nghĩa là tin nơi cấp thì tin chứng chỉ nơi đó ký, nếu chứng chỉ còn hạn
+      và đúng tên. Thực tế thường có nơi cấp trung gian đứng giữa nơi cấp gốc và chứng
+      chỉ lá, và bên trình chứng chỉ phải gửi kèm chứng chỉ trung gian. Thứ tư, mã
+      hoá đường truyền là lớp bọc kết nối, để dữ liệu được mã hoá và khách biết chắc
+      mình đang nói với đúng máy chủ. Ở kiểu một chiều, chỉ khách kiểm chứng chỉ máy
+      chủ, còn máy chủ không biết khách là ai.
+  - show: '<p>Làm thử: chứng chỉ cấp ngày 1/3/2026, hạn 90 ngày.</p>
+
+      $$31 + 30 + 29 = 90 \;\Rightarrow\; \text{hết hạn ngày } \hl{30/5/2026}$$
+
+      '
+    focus:
+    - 1
+    - 2
+    clear: true
+    say: Làm thử, chứng chỉ cấp ngày một tháng ba, hạn chín mươi ngày. Tháng ba còn
+      ba mươi mốt ngày, tháng tư ba mươi ngày, cộng hai mươi chín ngày của tháng năm
+      là đủ chín mươi, nên hết hạn ngày ba mươi tháng năm.
+    introduces:
+    - implies
+- id: sym
+  kind: symbol
+  title: Giải mã các từ trên chứng chỉ
+  steps:
+  - show: '<table class=''t''><tr><th>từ trên màn hình</th><th>nghĩa</th></tr><tr><td>CA
+      (nơi cấp)</td><td>bên ký chứng chỉ; ở đây tự dựng hai nơi cấp ca1, ca2</td></tr><tr><td>CN,
+      subjectAltName</td><td>tên trong chứng chỉ: <code>CN=thanh_toan</code>; máy
+      chủ ghi tên miền ở <code>DNS:localhost</code></td></tr><tr><td>notBefore, notAfter</td><td>hạn
+      dùng: từ ngày nào tới ngày nào</td></tr><tr><td>keyUsage=keyCertSign</td><td>chứng
+      chỉ này được phép <b>ký chứng chỉ khác</b> (chỉ nơi cấp mới có); nơi cấp còn
+      cần <code>basicConstraints=CA:TRUE</code>, lệnh <code>req -x509</code> tự thêm</td></tr><tr><td>basicConstraints=CA:FALSE</td><td>chứng
+      chỉ lá: không được làm nơi cấp</td></tr><tr><td>CERT_REQUIRED</td><td>máy chủ
+      <b>bắt buộc</b> khách trình chứng chỉ hợp lệ</td></tr></table>'
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.5'
+    - '1.6'
+    - '1.7'
+    say: Bảng này giải mã các từ trên chứng chỉ. Nơi cấp là bên ký chứng chỉ, hôm
+      nay ta tự dựng hai nơi cấp. Tên trong chứng chỉ ghi ở trường tên chung, còn
+      máy chủ ghi tên miền ở trường tên thay thế. Hai trường thời điểm cho biết hạn
+      dùng từ ngày nào tới ngày nào. Cờ ký chứng chỉ cho phép ký chứng chỉ khác, chỉ
+      nơi cấp mới có, cùng cờ là nơi cấp mà lệnh tạo chứng chỉ tự ký tự thêm vào.
+      Cờ không phải nơi cấp đánh dấu chứng chỉ lá. Cuối cùng, chế độ bắt buộc nghĩa
+      là máy chủ đòi khách trình chứng chỉ hợp lệ.
+- id: intuition
+  kind: intuition
+  title: 'Hình dung: thêm một chiều kiểm'
+  steps:
+  - show: '<div><svg width="1500" height="470" viewBox="0 0 1500 470" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><rect
+      x="20" y="15" width="700" height="440" rx="12" fill="#e5e7eb" stroke="#6b7280"
+      stroke-width="3"/><text x="370.0" y="53" font-size="26" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">TLS một chiều</text><rect x="50" y="90" width="230"
+      height="90" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text
+      x="165.0" y="144" font-size="26" text-anchor="middle" fill="#1f2937" font-weight="bold">Khách</text><rect
+      x="460" y="90" width="230" height="90" rx="10" fill="#dcfce7" stroke="#16a34a"
+      stroke-width="3"/><text x="575.0" y="144" font-size="26" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">Máy chủ</text><line x1="455" y1="230" x2="285"
+      y2="230" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><text x="370"
+      y="215" font-size="22" text-anchor="middle" fill="#1f2937">chứng chỉ máy chủ</text><text
+      x="165" y="300" font-size="22" text-anchor="middle" fill="#1f2937" font-weight="bold">khách
+      kiểm:</text><text x="165" y="334" font-size="22" text-anchor="middle" fill="#1f2937">tên,
+      hạn, nơi cấp</text><text x="575" y="300" font-size="22" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">máy chủ:</text><text x="575" y="334" font-size="22"
+      text-anchor="middle" fill="#dc2626">không biết khách</text><rect x="780" y="15"
+      width="700" height="440" rx="12" fill="#f3e8ff" stroke="#9333ea" stroke-width="3"/><text
+      x="1130.0" y="53" font-size="26" text-anchor="middle" fill="#1f2937" font-weight="bold">mTLS
+      (hai chiều)</text><rect x="810" y="90" width="230" height="90" rx="10" fill="#dbeafe"
+      stroke="#2a78d6" stroke-width="3"/><text x="925.0" y="144" font-size="26" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">Khách</text><rect x="1220" y="90" width="230"
+      height="90" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="3"/><text
+      x="1335.0" y="144" font-size="26" text-anchor="middle" fill="#1f2937" font-weight="bold">Máy
+      chủ</text><line x1="1215" y1="220" x2="1045" y2="220" stroke="#475569" stroke-width="3.5"
+      marker-end="url(#ah)"/><text x="1130" y="205" font-size="20" text-anchor="middle"
+      fill="#1f2937">chứng chỉ máy chủ + xin chứng chỉ</text><line x1="1045" y1="285"
+      x2="1215" y2="285" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><text
+      x="1130" y="270" font-size="20" text-anchor="middle" fill="#1f2937">chứng chỉ
+      khách + chữ ký</text><text x="925" y="360" font-size="22" text-anchor="middle"
+      fill="#1f2937">khách kiểm máy chủ</text><text x="1335" y="360" font-size="22"
+      text-anchor="middle" fill="#16a34a" font-weight="bold">máy chủ kiểm khách</text><text
+      x="1130" y="420" font-size="20" text-anchor="middle" fill="#1f2937">chữ ký bằng
+      khoá riêng: chép tệp .crt thôi là không đủ</text></svg></div>'
+    clear: true
+    say: Bên trái là mã hoá đường truyền một chiều. Máy chủ gửi chứng chỉ, khách kiểm
+      tên, hạn và nơi cấp, còn máy chủ không biết khách là ai. Bên phải là M T L S,
+      máy chủ gửi chứng chỉ của mình và xin chứng chỉ của khách. Khách gửi lại chứng
+      chỉ, kèm một chữ ký làm bằng khoá riêng. Vì có chữ ký đó, kẻ chỉ chép được tệp
+      chứng chỉ mà không có khoá riêng thì vẫn không qua được.
+  - show: '<div><svg width="1500" height="470" viewBox="0 0 1500 470" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><rect
+      x="20" y="180" width="210" height="100" rx="10" fill="#dbeafe" stroke="#2a78d6"
+      stroke-width="3"/><text x="125.0" y="222" font-size="24" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">khách</text><text x="125.0" y="254" font-size="24"
+      text-anchor="middle" fill="#1f2937">kết nối</text><rect x="300" y="40" width="330"
+      height="90" rx="10" fill="#e5e7eb" stroke="#6b7280" stroke-width="3"/><text
+      x="465.0" y="93" font-size="24" text-anchor="middle" fill="#1f2937">① có chứng
+      chỉ?</text><rect x="300" y="190" width="330" height="90" rx="10" fill="#f3e8ff"
+      stroke="#9333ea" stroke-width="3"/><text x="465.0" y="243" font-size="24" text-anchor="middle"
+      fill="#1f2937">② do ca1 ký?</text><rect x="300" y="340" width="330" height="90"
+      rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text x="465.0" y="393"
+      font-size="24" text-anchor="middle" fill="#1f2937">③ còn hạn?</text><rect x="730"
+      y="340" width="330" height="90" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text
+      x="895.0" y="378" font-size="22" text-anchor="middle" fill="#1f2937">④ tên được
+      phép?</text><text x="895.0" y="408" font-size="22" text-anchor="middle" fill="#1f2937">(ứng
+      dụng tự kiểm)</text><rect x="1150" y="340" width="320" height="90" rx="10" fill="#dcfce7"
+      stroke="#16a34a" stroke-width="3"/><text x="1310.0" y="394" font-size="26" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">phục vụ</text><text x="660" y="92" font-size="20"
+      text-anchor="start" fill="#dc2626">không: PEER_DID_NOT_RETURN_A_CERTIFICATE</text><text
+      x="660" y="242" font-size="20" text-anchor="start" fill="#dc2626">không: unable
+      to get local issuer certificate</text><text x="465" y="458" font-size="20" text-anchor="middle"
+      fill="#dc2626">không: certificate has expired</text><line x1="230" y1="210"
+      x2="295" y2="100" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><line
+      x1="465" y1="135" x2="465" y2="185" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><line
+      x1="465" y1="285" x2="465" y2="335" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><line
+      x1="635" y1="385" x2="725" y2="385" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><line
+      x1="1065" y1="385" x2="1145" y2="385" stroke="#16a34a" stroke-width="3.5" marker-end="url(#ah)"/></svg></div>'
+    clear: true
+    say: Máy chủ kiểm khách qua các cửa, một, khách có trình chứng chỉ không. Hai,
+      chứng chỉ có do nơi cấp mình tin ký không. Ba, còn trong hạn không, ba cửa này
+      do thư viện mật mã làm, và mỗi cửa hỏng có một thông báo riêng, ghi bằng chữ
+      đỏ. Cửa bốn, tên khách có được gọi API này không, là việc của ứng dụng.
+- id: formula
+  kind: formula
+  title: 'Suy ra từng bước: máy chủ biết khách là ai'
+  checks:
+  - alg.bnx_l05_cases(__import__('datetime').datetime.now())[2] == 'expired'
+  - alg.bnx_rotate_day(90) == 60
+  - 90 - alg.bnx_rotate_day(90) == 30
+  steps:
+  - show: '<p><b>Bước 1.</b> TLS một chiều chỉ chứng minh <b>máy chủ</b> là ai. Ai
+      vào được mạng nội bộ cũng mở được kết nối tới sổ cái.</p>
+
+      <span class=''note''>Làm thử: máy lạ gọi bằng kênh một chiều → máy chủ không
+      có gì để từ chối.</span>
+
+      '
+    focus:
+    - 1
+    - 2
+    clear: true
+    say: Bước một, vì mã hoá đường truyền một chiều chỉ chứng minh máy chủ là ai,
+      nên ai vào được mạng nội bộ cũng mở được kết nối tới sổ cái. Làm thử, một máy
+      lạ gọi bằng kênh một chiều, máy chủ không có căn cứ gì để từ chối.
+  - show: '<p><b>Bước 2.</b> Máy chủ <b>xin</b> chứng chỉ khách. Khách gửi chứng chỉ
+      và một <b>chữ ký</b> bằng khoá riêng trên cuộc <b>bắt tay</b>, tức vài thông
+      điệp đầu hai bên trao đổi để trình chứng chỉ và thống nhất khoá trước khi gửi
+      dữ liệu (RFC 8446 mục 4.4.3).
+
+      <br><span class=''note''>Làm thử: tệp .crt có thể lộ; tệp .key không rời máy,
+      nên kẻ chép .crt vẫn không ký được.</span></p>
+
+      '
+    say: Bước hai, máy chủ xin chứng chỉ của khách. Bắt tay là vài thông điệp đầu
+      hai bên trao đổi để trình chứng chỉ và thống nhất khoá, trước khi gửi dữ liệu.
+      Khách gửi chứng chỉ, kèm một chữ ký trên cuộc bắt tay làm bằng khoá riêng, nên
+      máy chủ biết khách thật sự giữ khoá. Làm thử, tệp chứng chỉ của dịch vụ thanh
+      toán có thể lộ vì nó công khai, nhưng tệp khoá riêng không rời máy, nên kẻ chép
+      tệp chứng chỉ vẫn không ký được.
+  - show: '<p><b>Bước 3.</b> Máy chủ kiểm <b>chuỗi tin cậy</b> (do ca1 ký) và <b>hạn
+      dùng</b> (notBefore ≤ bây giờ ≤ notAfter). Ứng dụng kiểm thêm <b>tên</b>.</p>
+
+      $$\text{het\_han: notAfter } = 1/4/2025, \text{ sớm hơn hôm nay} \;\Rightarrow\;
+      \hl{\text{hỏng}}$$
+
+      '
+    focus:
+    - 1
+    - - 1
+      - 2
+    clear: true
+    say: Bước ba, máy chủ kiểm chuỗi tin cậy, tức chứng chỉ có do nơi cấp một ký không,
+      và kiểm hạn dùng. Ứng dụng kiểm thêm tên của khách, làm thử, chứng chỉ khách
+      cũ hết hạn ngày một tháng tư năm hai nghìn hai mươi lăm, sớm hơn hôm nay, nên
+      hỏng.
+  - show: '<p><b>Bước 4.</b> Ở TLS 1.3, khách gửi chứng chỉ <b>sau</b> thông điệp
+      kết thúc của máy chủ, nên phía khách thấy bắt tay đã xong rồi máy chủ mới kiểm.
+
+      Lỗi chứng chỉ khách vì vậy hiện ra ở <b>lần đọc đầu tiên</b> (quan sát khi chạy
+      thật).</p>
+
+      '
+    say: Bước bốn, một chi tiết làm nhiều người bối rối. Ở mã hoá đường truyền phiên
+      bản một chấm ba, khách gửi chứng chỉ sau thông điệp kết thúc của máy chủ. Nên
+      phía khách tưởng bắt tay đã xong, rồi máy chủ mới kiểm. Vì vậy lỗi chứng chỉ
+      khách hiện ra ở lần đọc đầu tiên, như ta sẽ thấy khi chạy thật.
+  - show: '<p><b>Bước 5.</b> Chứng chỉ hết hạn là sự cố <b>có lịch hẹn trước</b>:
+      xoay vòng khi đã dùng 2/3 thời hạn (số minh hoạ).</p>
+
+      $$90 \cdot \frac{2}{3} = \hl{60} \text{ ngày}; \quad 90 - 60 = \hlg{30} \text{
+      ngày dự phòng}$$
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    clear: true
+    say: Bước năm, vì ngày hết hạn biết trước, sự cố hết hạn là sự cố có lịch hẹn.
+      Ta xoay vòng khi đã dùng hai phần ba thời hạn, theo số minh hoạ. Làm thử, chín
+      mươi nhân hai phần ba là sáu mươi ngày, còn ba mươi ngày dự phòng nếu lần xoay
+      đầu trục trặc.
+    introduces:
+    - cdot
+- id: example
+  kind: example
+  title: Ví dụ chạy thật, từng ca
+  checks:
+  - alg.bnx_l05_cases(__import__('datetime').datetime.now()) == ['none', 'ca', 'expired',
+    'ok']
+  - alg.bnx_l05_server_reason['ca'] == 'unable to get local issuer certificate'
+  - alg.bnx_days_between('2025-01-01', '2025-04-01') == 31 + 28 + 31 == 90
+  steps:
+  - show: '<p><b>Bước A: hai nơi cấp tự ký (openssl 3.5, Git Bash)</b></p><div class="code"><div>export
+      MSYS_NO_PATHCONV=1      # chỉ cần trên Git Bash (Windows)</div><div># hai nơi
+      cấp (CA) tự ký, được phép ký chứng chỉ khác</div><div>openssl req -x509 -newkey
+      ed25519 -noenc -subj /CN=ca1 -days 365 \</div><div>  -addext keyUsage=critical,keyCertSign
+      \</div><div>  -keyout ca1.key -out ca1.crt</div><div>openssl req -x509 -newkey
+      ed25519 -noenc -subj /CN=ca2 -days 365 \</div><div>  -addext keyUsage=critical,keyCertSign
+      \</div><div>  -keyout ca2.key -out ca2.crt</div></div>'
+    focus:
+    - - '2.3'
+      - '2.6'
+    - '2.1'
+    - - '2.4'
+      - '2.7'
+    clear: true
+    say: Ta làm thật, bước A tạo hai nơi cấp tự ký, ca một và ca hai, mỗi nơi một
+      cặp khoá và một chứng chỉ hạn ba trăm sáu mươi lăm ngày. Dòng đầu chỉ cần khi
+      chạy cửa sổ lệnh này trên máy văn phòng, như chú thích ghi, để đường dẫn bắt
+      đầu bằng dấu gạch chéo không bị tự đổi. Cờ ký chứng chỉ là bắt buộc, vì thiếu
+      nó thì Python ba chấm mười ba từ chối nơi cấp ngay.
+  - show: '<p><b>Bước B: chứng chỉ máy chủ và khách đúng, do ca1 ký</b></p><div class="code"><div>#
+      máy chủ (tên localhost) và khách đúng, cùng do ca1 ký</div><div>openssl req
+      -x509 -newkey ed25519 -noenc -subj /CN=localhost \</div><div>  -addext basicConstraints=CA:FALSE
+      -CA ca1.crt -CAkey ca1.key \</div><div>  -addext subjectAltName=DNS:localhost
+      -days 90 \</div><div>  -keyout may_chu.key -out may_chu.crt</div><div>openssl
+      req -x509 -newkey ed25519 -noenc -subj /CN=thanh_toan \</div><div>  -addext
+      basicConstraints=CA:FALSE -CA ca1.crt -CAkey ca1.key \</div><div>  -days 90
+      -keyout thanh_toan.key -out thanh_toan.crt</div></div>'
+    focus:
+    - '2.1'
+    - - '2.2'
+      - '2.3'
+      - '2.4'
+      - '2.5'
+    - - '2.6'
+      - '2.7'
+      - '2.8'
+    clear: true
+    say: Bước B cho ca một ký hai chứng chỉ lá hạn chín mươi ngày. Một cho máy chủ,
+      mang tên máy cục bộ. Một cho dịch vụ thanh toán, là khách đúng.
+  - show: '<p><b>Bước C: hai khách sai, rồi tự kiểm bằng openssl verify</b></p><div
+      class="code"><div># khách lạ: do ca2 ký; khách cũ: hạn dùng đã qua</div><div>openssl
+      req -x509 -newkey ed25519 -noenc -subj /CN=la_mat \</div><div>  -addext basicConstraints=CA:FALSE
+      -CA ca2.crt -CAkey ca2.key \</div><div>  -days 90 -keyout la_mat.key -out la_mat.crt</div><div>openssl
+      req -x509 -newkey ed25519 -noenc -subj /CN=het_han \</div><div>  -addext basicConstraints=CA:FALSE
+      -CA ca1.crt -CAkey ca1.key \</div><div>  -not_before 20250101000000Z -not_after
+      20250401000000Z \</div><div>  -keyout het_han.key -out het_han.crt</div><div>openssl
+      verify -CAfile ca1.crt thanh_toan.crt la_mat.crt het_han.crt</div></div>'
+    focus:
+    - - '2.1'
+      - '2.2'
+      - '2.3'
+      - '2.4'
+    - - '2.5'
+      - '2.6'
+      - '2.7'
+      - '2.8'
+    - '2.9'
+    clear: true
+    say: Bước C tạo hai khách sai, khách lạ do ca hai ký. Khách cũ do ca một ký nhưng
+      hạn dùng từ một tháng một tới một tháng tư năm hai nghìn hai mươi lăm. Dòng
+      cuối kiểm ba chứng chỉ khách với nơi cấp ca một, ta sẽ đọc kết quả ở phần tự
+      kiểm.
+  - show: '<p><b>Máy chủ Python: bắt buộc chứng chỉ khách</b></p><div class="code"><div>import
+      socket, ssl</div><div>from threading import Thread, Event</div><div>mc = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)</div><div>mc.load_cert_chain("may_chu.crt",
+      "may_chu.key")</div><div>mc.load_verify_locations("ca1.crt")     # chỉ tin nơi
+      cấp ca1</div><div>mc.verify_mode = ssl.CERT_REQUIRED      # bắt buộc chứng chỉ
+      khách</div><div>nghe = socket.create_server(("127.0.0.1", 0))  # cổng ngẫu nhiên</div></div>'
+    focus:
+    - '2.1'
+    - - '2.3'
+      - '2.4'
+      - '2.5'
+      - '2.6'
+    - '2.7'
+    clear: true
+    say: Giờ dựng máy chủ bằng thư viện chuẩn của Python. Máy chủ nạp chứng chỉ và
+      khoá của mình, chỉ tin nơi cấp ca một, và đặt chế độ bắt buộc chứng chỉ khách.
+      Nó nghe ở một cổng ngẫu nhiên trên chính máy này.
+  - show: '<p><b>Mỗi kết nối: bắt tay, chào theo tên, hoặc ghi lý do (mã minh hoạ
+      CHƯA kiểm tên: cửa ④ để trống)</b></p><div class="code"><div>def phuc_vu(loi,
+      xong):</div><div>    c, _ = nghe.accept()</div><div>    t = mc.wrap_socket(c,
+      server_side=True,</div><div>                       do_handshake_on_connect=False)</div><div>    try:</div><div>        t.do_handshake()</div><div>        ten
+      = dict(x[0] for x in t.getpeercert()["subject"])</div><div>        t.sendall(("chào
+      " + ten["commonName"]).encode())</div><div>    except ssl.SSLError as e:</div><div>        loi.append(getattr(e,
+      "verify_message", e.reason))</div><div>    xong.wait(); t.close()      # đợi
+      khách đọc xong mới đóng</div></div>'
+    focus:
+    - - '2.2'
+      - '2.3'
+      - '2.4'
+      - '2.6'
+      - '2.7'
+      - '2.8'
+      - '2.9'
+      - '2.10'
+    - '2.11'
+    clear: true
+    say: Mỗi kết nối, máy chủ bắt tay, nếu được, nó đọc tên chung trong chứng chỉ
+      khách và gửi lời chào theo tên đó, nếu hỏng, nó ghi lại lý do. Dòng cuối đợi
+      khách đọc xong mới đóng, để khách kịp nhận thông báo lỗi, còn cửa bốn vẫn để
+      trống vì mã chỉ đọc tên để chào, chưa so với danh sách được phép.
+  - show: '<p><b>Khách: thử với một chứng chỉ (hoặc không có)</b></p><div class="code"><div>def
+      thu(ten):</div><div>    loi, xong = [], Event()</div><div>    th = Thread(target=phuc_vu,
+      args=(loi, xong)); th.start()</div><div>    kh = ssl.create_default_context(cafile="ca1.crt")</div><div>    if
+      ten: kh.load_cert_chain(ten + ".crt", ten + ".key")</div><div>    try:</div><div>        with
+      socket.create_connection(nghe.getsockname()) as s, \</div><div>             kh.wrap_socket(s,
+      server_hostname="localhost") as t:</div><div>            kq = t.recv(64).decode()   #
+      TLS 1.3: lỗi tới ở lần đọc</div><div>    except ssl.SSLError as e: kq = e.reason</div><div>    xong.set();
+      th.join()</div><div>    print(f"{ten}\n  khách: {kq}\n  máy chủ: {loi}")</div></div>'
+    focus:
+    - - '2.2'
+      - '2.3'
+    - - '2.4'
+      - '2.5'
+    - - '2.6'
+      - '2.7'
+      - '2.8'
+      - '2.9'
+      - '2.10'
+      - '2.12'
+    clear: true
+    say: Hàm thử mở một luồng phục vụ, rồi làm khách. Khách tin ca một để kiểm máy
+      chủ, và nạp chứng chỉ của mình nếu có. Khách đọc lời chào, hoặc bắt lỗi, cuối
+      cùng in ra điều khách thấy và điều máy chủ ghi.
+  - show: <p><b>Bốn lần thử</b></p><div class="code"><div>for ten in [None, "la_mat",
+      "het_han", "thanh_toan"]:</div><div>    thu(ten)</div></div>
+    clear: true
+    say: 'Ta thử bốn lần: không có chứng chỉ, khách lạ, khách cũ, và khách đúng.'
+  - show: '<p><b>Kết quả chạy thật</b></p><div class="code"><div>None</div><div>  khách:
+      TLSV13_ALERT_CERTIFICATE_REQUIRED</div><div>  máy chủ: [''PEER_DID_NOT_RETURN_A_CERTIFICATE'']</div><div>la_mat</div><div>  khách:
+      TLSV1_ALERT_UNKNOWN_CA</div><div>  máy chủ: [''unable to get local issuer certificate'']</div><div>het_han</div><div>  khách:
+      SSLV3_ALERT_CERTIFICATE_EXPIRED</div><div>  máy chủ: [''certificate has expired'']</div><div>thanh_toan</div><div>  khách:
+      chào thanh_toan</div><div>  máy chủ: []</div></div>'
+    focus:
+    - - '2.1'
+      - '2.2'
+      - '2.3'
+    - - '2.4'
+      - '2.5'
+      - '2.6'
+    - - '2.7'
+      - '2.8'
+      - '2.9'
+    - - '2.10'
+      - '2.11'
+      - '2.12'
+    clear: true
+    say: Kết quả chạy thật, không có chứng chỉ thì máy chủ báo khách không trình chứng
+      chỉ. Khách lạ thì máy chủ không tìm được nơi cấp mình tin. Khách cũ thì chứng
+      chỉ đã hết hạn. Khách đúng thì nhận được lời chào theo đúng tên.
+  - show: '<p>Đếm theo các cửa ở hình trước:</p>
+
+      $$① \text{ không chứng chỉ} \to \hl{\text{cửa ①}}; \quad ② \text{ la\_mat} \to
+      \hl{\text{cửa ②}}; \quad ③ \text{ het\_han} \to \hl{\text{cửa ③}}$$
+
+      $$④ \text{ thanh\_toan} \to \hlg{\text{qua cả ba}}; \quad ⑤ \; 31 + 28 + 31
+      = 90 \text{ ngày hạn của het\_han, đã qua}$$
+
+      '
+    focus:
+    - - 1
+      - 2
+    - 3
+    clear: true
+    say: Đối chiếu với các cửa, ca một hỏng ở cửa một, ca hai hỏng ở cửa hai, ca ba
+      hỏng ở cửa ba, còn ca bốn qua cả ba cửa. Phép tính thứ năm, hạn của khách cũ
+      từ một tháng một tới một tháng tư là ba mươi mốt cộng hai mươi tám cộng ba mươi
+      mốt, bằng chín mươi ngày, và đã qua lâu.
+- id: check
+  kind: check
+  title: 'Tự kiểm bằng đường khác: openssl verify'
+  checks:
+  - alg.bnx_l05_server_reason['expired'] == 'certificate has expired'
+  - alg.bnx_l05_cases(__import__('datetime').datetime.now())[3] == 'ok'
+  steps:
+  - show: '<p><b>Kết quả thật của dòng openssl verify ở bước C (bỏ bớt hai dòng tên
+      CN=…)</b></p><div class="code"><div>thanh_toan.crt: OK</div><div>error 20 at
+      0 depth lookup: unable to get local issuer certificate</div><div>error la_mat.crt:
+      verification failed</div><div>error 10 at 0 depth lookup: certificate has expired</div><div>error
+      het_han.crt: verification failed</div></div>'
+    focus:
+    - 0
+    - 0
+    - - '2.1'
+      - '2.2'
+      - '2.3'
+    - - '2.4'
+      - '2.5'
+    clear: true
+    say: Bây giờ ta kiểm lại kết luận bằng một đường hoàn toàn khác. Vì công cụ dòng
+      lệnh mật mã dùng một bản thư viện khác với bản Python dùng, nó cho một ý kiến
+      độc lập khi kiểm từng chứng chỉ khách, không qua bắt tay. Khách đúng được báo
+      đạt, khách lạ báo lỗi hai mươi, không tìm được nơi cấp. Khách cũ báo lỗi mười,
+      chứng chỉ đã hết hạn.
+  - show: '<table class=''t''><tr><th>khách</th><th>Python bắt tay thật (máy chủ ghi)</th><th>openssl
+      verify</th></tr><tr><td>thanh_toan</td><td>chào thanh_toan</td><td>OK</td></tr><tr><td>la_mat</td><td>unable
+      to get local issuer certificate</td><td>error 20: unable to get local issuer
+      certificate</td></tr><tr><td>het_han</td><td>certificate has expired</td><td>error
+      10: certificate has expired</td></tr></table>'
+    clear: true
+    say: Bảng này đặt hai đường cạnh nhau, bắt tay thật bằng Python và lệnh kiểm riêng
+      cho cùng kết luận ở cả ba khách, nên ta tin các cửa kiểm hoạt động đúng.
+- id: pitfalls
+  kind: pitfall
+  title: Lỗi hay gặp, có lỗi của người đã đi làm
+  checks:
+  - alg.bnx_l05_cases(__import__('datetime').datetime.now()).count('ok') == 1
+  - 90 - alg.bnx_rotate_day(90) == 30
+  steps:
+  - show: '<div class="box warn"><b>Lỗi 1 (người mới).</b> Gặp lỗi chứng chỉ thì <b
+      class="red">tắt kiểm</b> “để chạy tạm” (<code>CERT_NONE</code>, <code>verify=False</code>).
+
+      Khi đó cả ba khách sai ở trên đều vào được, và “tạm” thường thành mãi mãi.
+
+      <br><span class="note">Cách chữa: đọc thông báo lỗi như ở ví dụ, sửa đúng chứng
+      chỉ hoặc nơi cấp.</span></div>
+
+      '
+    clear: true
+    say: Lỗi thứ nhất, của người mới, gặp lỗi chứng chỉ thì tắt kiểm để chạy tạm.
+      Khi đó cả ba khách sai ở trên đều vào được, và cái tạm thường thành mãi mãi.
+      Cách chữa là đọc thông báo lỗi như ta vừa làm, rồi sửa đúng chứng chỉ hoặc nơi
+      cấp.
+  - show: '<div class="box warn"><b>Lỗi 2 (người đã đi làm).</b> Coi mTLS là <b class="red">phân
+      quyền</b>. Chứng chỉ chỉ nói “đây là máy <code>thanh_toan</code>”, không nói
+      khách hàng nào, được làm gì.
+
+      <br><span class="note">Cách chữa: mTLS xác thực máy; quyền theo người dùng vẫn
+      đi bằng mã truy cập có phạm vi (OAuth 2.0), và ứng dụng tự kiểm tên ở cửa ④.</span></div>
+
+      '
+    clear: true
+    say: Lỗi thứ hai, của người đã đi làm, là coi M T L S là phân quyền. Chứng chỉ
+      chỉ nói đây là máy của dịch vụ thanh toán, không nói khách hàng nào, được làm
+      việc gì. Cách chữa là dùng M T L S để xác thực máy, còn quyền theo người dùng
+      vẫn đi bằng mã truy cập có phạm vi như ở bài bốn, và ứng dụng tự kiểm tên.
+  - show: '<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> <b class="red">Quên
+      ngày hết hạn</b>: hai giờ sáng, mọi lệnh gọi trả lỗi như khách <code>het_han</code>.
+      Hoặc <b class="red">đổi nơi cấp cùng lúc cho mọi máy</b>: lỗi như khách <code>la_mat</code>
+      (unable to get local issuer certificate).
+
+      <br><span class="note">Cách chữa: cảnh báo trước 30 ngày, xoay vòng tự động;
+      khi đổi nơi cấp, máy chủ tin <b>cả cũ lẫn mới</b> tới khi mọi khách đã đổi.</span></div>
+
+      '
+    clear: true
+    say: Lỗi thứ ba, cũng của người đã đi làm, có hai dạng. Quên ngày hết hạn thì
+      hai giờ sáng mọi lệnh gọi trả lỗi như khách cũ ở ví dụ. Còn đổi nơi cấp cùng
+      lúc cho mọi máy thì lỗi giống khách lạ, máy chủ không tìm được nơi cấp mình
+      tin. Cách chữa là cảnh báo trước ba mươi ngày và xoay vòng tự động. Khi đổi
+      nơi cấp, máy chủ tin cả nơi cấp cũ lẫn mới, cho tới khi mọi khách đã đổi xong.
+- id: quiz
+  kind: quiz
+  title: Đến lượt bạn
+  checks:
+  - alg.bnx_rotate_day(90) == 60
+  - alg.bnx_add_days('2026-03-01', 60) == '2026-04-30'
+  - alg.bnx_add_days('2026-03-01', 90) == '2026-05-30'
+  - alg.bnx_leak_window(365, 10) == 355
+  - alg.bnx_leak_window(30, 10) == 20
+  - alg.bnx_rotate_day(30) == 20
+  - alg.bnx_rotations_per_year(30) == 18
+  - alg.bnx_rotations_per_year(365) == 1
+  steps:
+  - show: '<table class=''t''><tr><th>câu</th><th>đề</th></tr><tr><td>1</td><td>Chứng
+      chỉ khách cấp 1/3/2026, hạn 90 ngày, xoay vòng khi đã dùng 2/3 thời hạn. Xoay
+      ngày nào? Còn bao nhiêu ngày dự phòng?</td></tr><tr><td>2</td><td>Nhật ký máy
+      chủ ghi <code>unable to get local issuer certificate</code>. Nguyên nhân khả
+      dĩ nhất là gì, sửa ở đâu?</td></tr><tr><td>3</td><td>Quyết định (số minh hoạ):
+      chứng chỉ khách hạn 365 ngày đổi bằng tay, hay hạn 30 ngày đổi tự động? Giả
+      sử khoá riêng lộ ở ngày 10.</td></tr></table>'
+    pause: 25
+    say: Bây giờ tới phần bạn tự làm bài. Câu một, chứng chỉ cấp ngày một tháng ba,
+      hạn chín mươi ngày, xoay khi đã dùng hai phần ba thời hạn. Xoay ngày nào, còn
+      bao nhiêu ngày dự phòng? Câu hai, nhật ký máy chủ ghi không tìm được nơi cấp.
+      Nguyên nhân khả dĩ nhất là gì, sửa ở đâu? Câu ba, chọn chứng chỉ hạn một năm
+      đổi bằng tay, hay hạn ba mươi ngày đổi tự động, khi khoá riêng lộ ở ngày thứ
+      mười? Hãy dừng video lại và làm từng câu ra giấy trước khi xem đáp án.
+  - show: '<p>Câu 1: dùng 2/3 của 90 ngày.</p>
+
+      $$90 \cdot \frac{2}{3} = 60 \Rightarrow 1/3/2026 + 60 = \hlg{30/4/2026}; \quad
+      90 - 60 = \hlg{30} \text{ ngày}$$
+
+      '
+    focus:
+    - - 1
+    - 2
+    say: Đáp án câu một, hai phần ba của chín mươi là sáu mươi ngày, nên xoay vào
+      ngày ba mươi tháng tư. Còn chín mươi trừ sáu mươi, bằng ba mươi ngày dự phòng
+      trước ngày hết hạn ba mươi tháng năm.
+    clear: true
+  - show: '<p>Câu 2: giống khách <code>la_mat</code>: chứng chỉ khách do nơi cấp mà
+      máy chủ <b>không tin</b> ký (hoặc khách quên gửi chứng chỉ trung gian).
+
+      <br><span class=''note''>Sửa: cấp lại từ đúng nơi cấp, hoặc thêm nơi cấp hợp
+      lệ vào danh sách tin. Không tắt kiểm.</span></p>
+
+      '
+    clear: true
+    say: Đáp án câu hai, giống khách lạ ở ví dụ, chứng chỉ khách do một nơi cấp mà
+      máy chủ không tin ký, hoặc khách quên gửi chứng chỉ trung gian. Cách sửa là
+      cấp lại từ đúng nơi cấp, hoặc thêm nơi cấp đó vào danh sách tin nếu nó hợp lệ,
+      chứ không tắt kiểm.
+  - show: '<table class=''t''><tr><th>lựa chọn</th><th>được</th><th>mất</th></tr><tr><td>hạn
+      365 ngày, đổi bằng tay</td><td>mỗi năm đổi 1 lần</td><td>khoá lộ ở ngày 10:
+      kẻ gian còn dùng 365 − 10 = 355 ngày; đổi bằng tay dễ quên</td></tr><tr><td>hạn
+      30 ngày, đổi tự động</td><td>khoá lộ ở ngày 10: chỉ còn 30 − 10 = 20 ngày; quen
+      đổi nên ít sự cố</td><td>xoay ở ngày 20 (2/3 của 30 ngày), nên đổi 365 : 20
+      ≈ 18 lần mỗi năm (lấy phần nguyên); cần hệ thống cấp tự động</td></tr></table>'
+    focus:
+    - '1.2'
+    - '1.3'
+    say: Đáp án câu ba, hạn một năm đổi bằng tay thì mỗi năm đổi một lần, nhưng khoá
+      lộ ở ngày mười cho kẻ gian ba trăm năm mươi lăm ngày, và đổi bằng tay dễ quên.
+      Hạn ba mươi ngày đổi tự động chỉ để hở hai mươi ngày, đổi lại vì xoay ở ngày
+      hai mươi, mỗi năm phải đổi mười tám lần và cần hệ thống cấp tự động.
+    clear: true
+- id: recap
+  kind: recap
+  title: Chuỗi logic & tư duy cần mang theo
+  steps:
+  - show: <div class='chain'><span class='n'>máy chủ xin chứng chỉ khách</span><span
+      class='a'>→</span><span class='n'>khách ký bằng khoá riêng</span><span class='a'>→</span><span
+      class='n'>kiểm nơi cấp, hạn</span><span class='a'>→</span><span class='n'>ứng
+      dụng kiểm tên</span><span class='a'>→</span><span class='n'>xoay vòng trước
+      hạn</span></div>
+    say: Tổng kết chuỗi logic, máy chủ xin chứng chỉ của khách, khách chứng minh giữ
+      khoá riêng bằng một chữ ký. Thư viện kiểm nơi cấp và hạn dùng, ứng dụng kiểm
+      tên, và người vận hành xoay vòng chứng chỉ trước khi hết hạn.
+  - show: '<div class=''box key''><b>Tư duy:</b> mTLS trả lời “máy nào đang gọi”,
+      mã truy cập trả lời “được làm gì, thay mặt ai”. Cần cả hai.
+
+      Mỗi thông báo lỗi ở ví dụ chỉ về một cửa (riêng “unable to get local issuer
+      certificate” có hai nguyên nhân, như câu 2): đọc nó trước khi sửa.</div>
+
+      '
+    say: Điều cần mang theo, M T L S trả lời câu hỏi máy nào đang gọi, còn mã truy
+      cập trả lời được làm gì và thay mặt ai, nên cần cả hai. Mỗi thông báo lỗi ở
+      ví dụ chỉ về một cửa, nên hãy đọc nó trước khi sửa, và nhớ có thông báo mang
+      hai nguyên nhân như câu hai.
+  - show: '<p>Bài sau: viết thủ tục chuyển tiền chạy ngay trong cơ sở dữ liệu Oracle
+      và SQL Server.</p>'
+    forward_ref: true
+    say: Ở bài sáu, ta chuyển sang cơ sở dữ liệu. Ta viết thủ tục lưu trữ chuyển tiền
+      chạy ngay trong Oracle và một hệ cơ sở dữ liệu phổ biến khác, có tham số, giao
+      dịch và bắt lỗi.
