@@ -258,8 +258,8 @@ $$\\text{nhận } \\hlg{5}, \\quad \\text{cận trên } 3 + 2 \\cdot \\frac{5}{4
            Ở cửa vào, cổng xác thực, giới hạn tốc độ, định tuyến và ghi nhật ký, nhưng dịch vụ vẫn tự kiểm quyền. Với bên thứ ba, API mở cần hợp đồng và sự đồng ý của khách."""),
         st("""<div class='box key'><b>Tư duy:</b> vẽ ranh giới theo <b>nghĩa của từ</b> trước khi chọn công nghệ; mỗi lớp bảo vệ (cổng, dịch vụ, cơ sở dữ liệu) tự kiểm phần của nó, không lớp nào tin lớp trước đã kiểm hộ.</div>""",
            """Điều cần mang theo. Hãy vẽ ranh giới theo nghĩa của từ trước khi chọn công nghệ. Mỗi lớp bảo vệ, gồm cổng, dịch vụ và cơ sở dữ liệu, tự kiểm phần của nó, không lớp nào tin lớp trước đã kiểm hộ."""),
-        st("""<p class='note'>Bài sau (bài cuối khoá): ghép mọi mảnh đã học thành một dự án mẫu API chuyển khoản đúng như tin tuyển dụng đòi hỏi.</p>""",
-           """Ở bài sau, bài cuối của khoá, ta ghép mọi mảnh đã học thành một dự án mẫu API chuyển khoản. Bài đó có ước lượng tải và ngân sách thời gian cho từng phần, đúng như tin tuyển dụng đòi hỏi.""",
+        st("""<p class='note'>Bài sau (bài tổng hợp): ghép mọi mảnh đã học thành một dự án mẫu API chuyển khoản đúng như tin tuyển dụng đòi hỏi.</p>""",
+           """Ở bài sau, bài tổng hợp, ta ghép mọi mảnh đã học thành một dự án mẫu API chuyển khoản. Bài đó có ước lượng tải và ngân sách thời gian cho từng phần, đúng như tin tuyển dụng đòi hỏi.""",
            forward_ref=True),
     ])
     return lesson("L14", "ddd_cong_api_open_api", "Bài 14 — DDD, cổng API và Open API ngân hàng: ranh giới, cửa vào và chia sẻ dữ liệu có đồng ý",

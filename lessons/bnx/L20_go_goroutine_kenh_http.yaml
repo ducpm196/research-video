@@ -1,0 +1,1098 @@
+id: L20
+course: BNX
+series: BNX · Backend ngân hàng mở rộng theo JD
+title: 'Bài 20 — Go cho backend: goroutine, kênh, tranh chấp dữ liệu và một dịch vụ
+  HTTP nhỏ'
+voice: vi-VN-NamMinhNeural
+rate: -5%
+depth: full
+source: 'curriculum/bnx.yaml L20; audit/bnx/verify_bnx.py L20; audit/bnx/sources_l20.md:
+  tài liệu chính thức của Go (đặc tả ngôn ngữ, gói sync, bài về trình phát hiện tranh
+  chấp, Effective Go, Go FAQ, blog về map và về bộ định tuyến Go 1.22) và tài liệu
+  Fiber (đọc 2026-11-12); mã chạy thật go1.25.5 windows/amd64, Fiber v2.52.16'
+assumes: []
+objectives:
+- Đọc và chạy một chương trình Go có hàm, cấu trúc và xử lý lỗi bằng giá trị trả về
+- Chạy nhiều goroutine và gom kết quả bằng nhóm chờ
+- Truyền dữ liệu qua kênh có đệm và không đệm, nói lúc nào bên gửi bị chặn
+- Viết một dịch vụ HTTP nhỏ và nói bộ khung Fiber thêm gì lên trên
+asr_reviewed:
+  - {sentence: "Bây giờ tới phần bạn tự làm bài.", reason: "ASR chép “Bây giờ tới phần bạn tự lam bay.” (0.75): lệch âm/thanh thuần Việt: làm bài/lam bay — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Nên tải tăng thì số luồng kẹt tăng theo.", reason: "ASR chép “nên tại tăng thì số lùng kẹt tăng theo.” (0.778): lệch âm/thanh thuần Việt: tải/tại, luồng/lùng — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Nó đặt tiêu đề cho biết thân là JSON, rồi ghi thân gồm một trường trạng thái cho biết dịch vụ đang ổn.", reason: "ASR chép “Nó đặt tiêu đề cho biết thân là dây sân, rồi ghi thân gồm một trường trạng thái cho biết dịch vụ đang ổn.” (0.958): “json” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Giây-sơn”), ASR viết “sân” — NOT_VERIFIED bằng tai người"}
+scenes:
+- id: hook
+  kind: hook
+  title: 'Một nghìn yêu cầu cùng cộng một bộ đếm: ra 1000 hay ít hơn?'
+  checks:
+  - alg.bnx_l20_locked(1000) == 1000
+  - alg.bnx_l20_range(1000) == (1, 1000)
+  steps:
+  - show: '<p>Dịch vụ ngân hàng đếm số yêu cầu đã xử lý. <b>Một nghìn</b> yêu cầu
+      tới cùng lúc, mỗi yêu cầu cộng 1 vào <b>một bộ đếm chung</b> (số minh hoạ).</p>
+
+      <div class="box key">Kỳ vọng: $1000 \cdot 1 = 1000$. Bỏ khoá, chạy thật thì
+      bộ đếm <b>thường thấp hơn 1000</b> và mỗi lần chạy một khác.
+
+      Vì sao, và chữa thế nào?</div>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    - 2
+    say: Chào bạn, hãy tưởng tượng dịch vụ của ngân hàng đếm số yêu cầu đã xử lý.
+      Một nghìn yêu cầu tới cùng lúc, mỗi yêu cầu cộng một vào một bộ đếm chung, với
+      số minh hoạ. Ta kỳ vọng bộ đếm ra đúng một nghìn. Nhưng nếu bỏ khoá, chạy thật
+      thì kết quả thường thấp hơn, và mỗi lần chạy một khác. Vậy vì sao, và chữa thế
+      nào?
+    introduces:
+    - cdot
+  - show: '<p>Ngôn ngữ trên màn hình: <b>Go (Golang)</b>, kèm bộ khung web <b>Fiber
+      (Go)</b> (hai dòng trên CV).</p><table class=''t''><tr><th>câu hỏi</th><th>bài
+      này trả lời</th></tr><tr><td>chạy nhiều việc cùng lúc rồi chờ xong hết</td><td><b>luồng
+      nhẹ</b> (goroutine) và <b>nhóm chờ</b> (WaitGroup)</td></tr><tr><td>hai việc
+      cùng ghi một biến thì sao</td><td><b>tranh chấp dữ liệu</b>; khoá (Mutex); trình
+      phát hiện tranh chấp (<code>-race</code>)</td></tr><tr><td>truyền dữ liệu giữa
+      các việc</td><td><b>kênh</b> (channel) không đệm và có đệm</td></tr><tr><td>dựng
+      dịch vụ HTTP</td><td>gói chuẩn <code>net/http</code>, rồi bộ khung <b>Fiber</b>
+      thêm gì</td></tr></table>'
+    focus:
+    - 1
+    - '2.2'
+    - '2.3'
+    - '2.4'
+    - '2.5'
+    say: Ngôn ngữ ta dùng hôm nay là ngôn ngữ thứ hai trên hồ sơ, tên hiện trên màn
+      hình, cùng một bộ khung web. Câu một, làm sao chạy nhiều việc cùng lúc rồi chờ
+      xong hết, bằng luồng nhẹ và nhóm chờ. Câu hai, hai việc cùng ghi một biến thì
+      sao, và khoá cùng trình phát hiện tranh chấp giúp thế nào. Câu ba, truyền dữ
+      liệu giữa các việc bằng kênh có đệm và không đệm. Câu bốn, dựng dịch vụ HTTP
+      bằng gói chuẩn, rồi xem bộ khung web thêm được gì.
+- id: prereq
+  kind: prereq
+  title: 'Trước hết: bốn điều cần hiểu'
+  checks:
+  - alg.bnx_l20_interleave(['A', 'B', 'A', 'B']) == 1
+  - alg.bnx_l20_interleave(['A', 'A', 'B', 'B']) == 2
+  - alg.bnx_l20_lost(['A', 'B', 'A', 'B']) == 1
+  - alg.bnx_l20_rut(500, 200) == (300, None)
+  - alg.bnx_l20_route('GET', '/suc-khoe')[0] == 200
+  steps:
+  - show: '<table class=''t''><tr><th>khái niệm</th><th>nghĩa</th><th>ví dụ</th></tr><tr><td>①
+      biến dùng chung</td><td>một ô nhớ mà nhiều việc cùng đọc và ghi được</td><td>bộ
+      đếm = 0; hai việc cùng cộng 1</td></tr><tr><td>② đọc rồi ghi</td><td>câu lệnh
+      tăng một gồm <b>hai bước</b>: đọc giá trị, rồi ghi giá trị cộng 1</td><td>đọc
+      0, rồi ghi 1</td></tr><tr><td>③ hàm trả nhiều giá trị</td><td>một hàm trả cả
+      kết quả lẫn lỗi; lỗi rỗng (nil) nghĩa là không có lỗi</td><td>rút 200 từ số
+      dư 500 trả (300, không lỗi)</td></tr><tr><td>④ yêu cầu và trả lời HTTP</td><td>yêu
+      cầu có phương thức và đường dẫn; trả lời có mã trạng thái và thân</td><td>GET
+      /suc-khoe trả mã 200</td></tr></table>'
+    focus:
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.5'
+    say: Trước hết ta cần hiểu bốn điều, thứ nhất, biến dùng chung là một ô nhớ mà
+      nhiều việc cùng đọc và ghi được. Thứ hai, câu lệnh tăng một thật ra gồm hai
+      bước, đọc giá trị rồi ghi giá trị cộng một. Thứ ba, một hàm có thể trả về cả
+      kết quả lẫn lỗi, và lỗi rỗng nghĩa là không có lỗi. Thứ tư, yêu cầu HTTP có
+      phương thức và đường dẫn, còn trả lời có mã trạng thái và thân.
+  - show: '<p>Làm thử: hai việc A và B cùng cộng 1 vào bộ đếm đang là 0, xen kẽ từng
+      bước.</p>
+
+      $$A \text{ đọc } 0, \; B \text{ đọc } 0, \; A \text{ ghi } 1, \; B \text{ ghi
+      } 1 \;\Rightarrow\; \hl{1} \text{ thay vì } 2$$
+
+      <span class=''note''>Nếu A làm trọn rồi mới tới B: đọc 0, ghi 1, đọc 1, ghi
+      2, ra 2.</span>
+
+      '
+    focus:
+    - - 1
+    - 2
+    - 3
+    say: Làm thử ngay, hai việc A và B cùng cộng một vào bộ đếm đang là không, và
+      chúng xen kẽ từng bước. A đọc không, B cũng đọc không, rồi A ghi một, B ghi
+      một, nên bộ đếm chỉ là một thay vì hai. Còn nếu A làm trọn rồi mới tới B thì
+      ra hai, vì B đọc được số một.
+    introduces:
+    - implies
+- id: sym
+  kind: symbol
+  title: Giải mã các tên trên màn hình
+  checks:
+  - alg.bnx_l20_wg(1000, 1000) == 0
+  - alg.bnx_l20_accept(3, 4) == (3, 4)
+  steps:
+  - show: '<table class=''t''><tr><th>tên trong Go</th><th>nghĩa</th></tr><tr><td>go
+      f()</td><td>chạy hàm f ở một <b>luồng nhẹ</b> (goroutine) riêng; chương trình
+      không chờ nó</td></tr><tr><td>sync.WaitGroup</td><td><b>nhóm chờ</b>: <code>Add</code>
+      cộng số việc, <code>Done</code> trừ một, <code>Wait</code> chờ tới khi về 0</td></tr><tr><td>sync.Mutex</td><td><b>khoá</b>:
+      giữa <code>Lock</code> và <code>Unlock</code> một lúc chỉ một luồng nhẹ được
+      vào</td></tr><tr><td>chan int</td><td><b>kênh</b> truyền số nguyên; <code>make(chan
+      int, 3)</code> có đệm 3, <code>make(chan int)</code> không đệm</td></tr><tr><td>ch
+      &lt;- v  và  &lt;-ch</td><td>gửi v vào kênh; nhận một giá trị từ kênh</td></tr><tr><td>error,
+      nil</td><td>lỗi là một <b>giá trị</b> được trả về; <code>nil</code> nghĩa là
+      không có lỗi</td></tr><tr><td>go run -race</td><td>chạy kèm <b>trình phát hiện
+      tranh chấp dữ liệu</b></td></tr><tr><td>net/http, Fiber</td><td>gói chuẩn dựng
+      dịch vụ HTTP; bộ khung web thêm cách viết tuyến</td></tr></table>'
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.5'
+    - '1.6'
+    - '1.7'
+    - '1.8'
+    - '1.9'
+    say: 'Bảng này giải mã các tên trên màn hình. Lệnh đầu chạy một hàm ở luồng nhẹ
+      riêng, và chương trình chính không chờ nó. Nhóm chờ có ba lệnh: cộng số việc,
+      trừ một khi việc xong, và chờ tới khi số việc về không. Khoá cho phép một lúc
+      chỉ một luồng nhẹ nằm giữa lệnh khoá và lệnh mở. Kênh truyền một loại giá trị,
+      con số trong ngoặc là sức chứa của đệm, còn không có số thì là không đệm. Hai
+      mũi tên là gửi vào kênh và nhận từ kênh. Lỗi là một giá trị được trả về, và
+      giá trị rỗng nghĩa là không có lỗi. Cờ phát hiện tranh chấp chạy kèm một trình
+      bắt hai luồng cùng truy cập một biến mà không phối hợp. Cuối cùng, gói chuẩn
+      dựng dịch vụ HTTP, còn bộ khung web thêm cách viết tuyến gọn hơn.'
+- id: intuition
+  kind: intuition
+  title: 'Hình dung: xen kẽ đọc-ghi, kênh và dịch vụ HTTP'
+  checks:
+  - alg.bnx_l20_interleave(['A', 'B', 'A', 'B']) == 1
+  - alg.bnx_l20_interleave(['A', 'A', 'B', 'B']) == 2
+  - alg.bnx_l20_accept(3, 4) == (3, 4)
+  - alg.bnx_l20_route('GET', '/suc-khoe')[0] == 200
+  - alg.bnx_l20_fiber_route('/tai-khoan/001')[0] == 200
+  steps:
+  - show: '<div><svg width="1500" height="440" viewBox="0 0 1500 440" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><text
+      x="750" y="34" font-size="26" text-anchor="middle" fill="#1f2937" font-weight="bold">Hai
+      luồng nhẹ A, B cùng cộng 1 vào bộ đếm đang là 0</text><text x="200" y="108"
+      font-size="22" text-anchor="end" fill="#1f2937">không khoá</text><rect x="220"
+      y="70" width="250" height="60" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text
+      x="345.0" y="108" font-size="22" text-anchor="middle" fill="#1f2937">A đọc 0</text><rect
+      x="490" y="70" width="250" height="60" rx="10" fill="#dcfce7" stroke="#16a34a"
+      stroke-width="3"/><text x="615.0" y="108" font-size="22" text-anchor="middle"
+      fill="#1f2937">B đọc 0</text><rect x="760" y="70" width="250" height="60" rx="10"
+      fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="885.0" y="108" font-size="22"
+      text-anchor="middle" fill="#1f2937">A ghi 1</text><rect x="1030" y="70" width="250"
+      height="60" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="3"/><text
+      x="1155.0" y="108" font-size="22" text-anchor="middle" fill="#1f2937">B ghi
+      1</text><text x="1300" y="108" font-size="26" text-anchor="start" fill="#dc2626"
+      font-weight="bold">→ bộ đếm = 1</text><text x="200" y="228" font-size="22" text-anchor="end"
+      fill="#1f2937">có khoá</text><rect x="220" y="190" width="250" height="60" rx="10"
+      fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="345.0" y="228" font-size="22"
+      text-anchor="middle" fill="#1f2937">A đọc 0</text><rect x="490" y="190" width="250"
+      height="60" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text
+      x="615.0" y="228" font-size="22" text-anchor="middle" fill="#1f2937">A ghi 1</text><rect
+      x="760" y="190" width="250" height="60" rx="10" fill="#dcfce7" stroke="#16a34a"
+      stroke-width="3"/><text x="885.0" y="228" font-size="22" text-anchor="middle"
+      fill="#1f2937">B đọc 1</text><rect x="1030" y="190" width="250" height="60"
+      rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="3"/><text x="1155.0" y="228"
+      font-size="22" text-anchor="middle" fill="#1f2937">B ghi 2</text><text x="1300"
+      y="228" font-size="26" text-anchor="start" fill="#16a34a" font-weight="bold">→
+      bộ đếm = 2</text><text x="750" y="330" font-size="24" text-anchor="middle" fill="#1f2937"
+      font-weight="bold">Không khoá: B đọc 0 khi A chưa ghi, nên một lần cộng bị mất</text><text
+      x="750" y="380" font-size="24" text-anchor="middle" fill="#1f2937" font-weight="bold">Có
+      khoá: A đọc và ghi trọn vẹn rồi B mới vào, nên không lần nào bị mất</text></svg></div>'
+    clear: true
+    say: 'Hình này cho thấy vì sao bộ đếm sai. Hàng trên không có khoá: A đọc không,
+      B cũng đọc không vì A chưa ghi, rồi cả hai ghi một, nên mất một lần cộng. Hàng
+      dưới có khoá: A đọc và ghi trọn vẹn, rồi B mới đọc số một và ghi hai, nên không
+      mất lần nào.'
+  - show: '<div><svg width="1500" height="520" viewBox="0 0 1500 520" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><text
+      x="750" y="34" font-size="26" text-anchor="middle" fill="#1f2937" font-weight="bold">Kênh
+      không đệm và kênh có đệm 3</text><text x="60" y="100" font-size="22" text-anchor="start"
+      fill="#1f2937" font-weight="bold">không đệm</text><rect x="60" y="120" width="200"
+      height="70" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text
+      x="160.0" y="163" font-size="22" text-anchor="middle" fill="#1f2937">bên gửi</text><line
+      x1="260" y1="155" x2="520" y2="155" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><text
+      x="390" y="145" font-size="22" text-anchor="middle" fill="#475569">gặp nhau</text><rect
+      x="520" y="120" width="200" height="70" rx="10" fill="#dcfce7" stroke="#16a34a"
+      stroke-width="3"/><text x="620.0" y="163" font-size="22" text-anchor="middle"
+      fill="#1f2937">bên nhận</text><text x="760" y="163" font-size="24" text-anchor="start"
+      fill="#1f2937">gửi chỉ xong khi có bên nhận sẵn sàng</text><text x="60" y="270"
+      font-size="22" text-anchor="start" fill="#1f2937" font-weight="bold">có đệm
+      3</text><rect x="60" y="290" width="200" height="70" rx="10" fill="#dbeafe"
+      stroke="#2a78d6" stroke-width="3"/><text x="160.0" y="333" font-size="22" text-anchor="middle"
+      fill="#1f2937">bên gửi</text><line x1="260" y1="325" x2="340" y2="325" stroke="#475569"
+      stroke-width="3.5" marker-end="url(#ah)"/><rect x="340" y="290" width="110"
+      height="70" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text
+      x="395.0" y="333" font-size="24" text-anchor="middle" fill="#1f2937" font-weight="bold">1</text><rect
+      x="460" y="290" width="110" height="70" rx="10" fill="#fef3c7" stroke="#d97706"
+      stroke-width="3"/><text x="515.0" y="333" font-size="24" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">2</text><rect x="580" y="290" width="110"
+      height="70" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text
+      x="635.0" y="333" font-size="24" text-anchor="middle" fill="#1f2937" font-weight="bold">3</text><line
+      x1="690" y1="325" x2="770" y2="325" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><rect
+      x="770" y="290" width="200" height="70" rx="10" fill="#dcfce7" stroke="#16a34a"
+      stroke-width="3"/><text x="870.0" y="333" font-size="22" text-anchor="middle"
+      fill="#1f2937">bên nhận</text><rect x="60" y="400" width="200" height="70" rx="10"
+      fill="#fee2e2" stroke="#dc2626" stroke-width="3"/><text x="160.0" y="443" font-size="22"
+      text-anchor="middle" fill="#1f2937">giá trị 4</text><text x="300" y="443" font-size="24"
+      text-anchor="start" fill="#dc2626" font-weight="bold">đệm đầy: phải chờ bên
+      nhận lấy bớt</text><text x="750" y="505" font-size="24" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">Không đệm: gửi chờ bên nhận. Có đệm n: gửi
+      chờ khi đã đầy n giá trị</text></svg></div>'
+    clear: true
+    say: Hình thứ hai là kênh, với kênh không đệm, bên gửi chỉ xong khi có bên nhận
+      sẵn sàng, nên hai bên phải gặp nhau. Với kênh có đệm ba, ba giá trị đầu vào
+      đệm ngay mà không chờ ai. Giá trị thứ bốn thấy đệm đầy, nên phải chờ bên nhận
+      lấy bớt một giá trị.
+  - show: '<div><svg width="1500" height="470" viewBox="0 0 1500 470" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><text
+      x="750" y="34" font-size="26" text-anchor="middle" fill="#1f2937" font-weight="bold">Một
+      dịch vụ HTTP nhỏ và bộ khung web đứng trên</text><rect x="40" y="70" width="260"
+      height="90" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text
+      x="170.0" y="108" font-size="22" text-anchor="middle" fill="#1f2937">khách</text><text
+      x="170.0" y="138" font-size="22" text-anchor="middle" fill="#1f2937">GET /suc-khoe</text><line
+      x1="300" y1="115" x2="400" y2="115" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><rect
+      x="400" y="70" width="300" height="90" rx="10" fill="#fef3c7" stroke="#d97706"
+      stroke-width="3"/><text x="550.0" y="108" font-size="22" text-anchor="middle"
+      fill="#1f2937">bộ định tuyến</text><text x="550.0" y="138" font-size="22" text-anchor="middle"
+      fill="#1f2937">tìm tuyến khớp</text><line x1="700" y1="115" x2="800" y2="115"
+      stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><rect x="800" y="70"
+      width="260" height="90" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="3"/><text
+      x="930.0" y="108" font-size="22" text-anchor="middle" fill="#1f2937">hàm xử
+      lý</text><text x="930.0" y="138" font-size="22" text-anchor="middle" fill="#1f2937">sucKhoe</text><line
+      x1="1060" y1="115" x2="1130" y2="115" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><rect
+      x="1130" y="70" width="330" height="90" rx="10" fill="#f3e8ff" stroke="#9333ea"
+      stroke-width="3"/><text x="1295.0" y="108" font-size="22" text-anchor="middle"
+      fill="#1f2937">mã 200</text><text x="1295.0" y="138" font-size="22" text-anchor="middle"
+      fill="#1f2937">thân JSON</text><rect x="40" y="210" width="1420" height="200"
+      rx="12" fill="#e5e7eb" stroke="#6b7280" stroke-width="3"/><text x="750.0" y="248"
+      font-size="26" text-anchor="middle" fill="#1f2937" font-weight="bold">Bộ khung
+      web (Fiber) đứng trên cùng</text><rect x="70" y="270" width="420" height="110"
+      rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="280.0" y="318"
+      font-size="22" text-anchor="middle" fill="#1f2937">tuyến có tham số</text><text
+      x="280.0" y="348" font-size="22" text-anchor="middle" fill="#1f2937">/tai-khoan/:so</text><rect
+      x="540" y="270" width="420" height="110" rx="10" fill="#dcfce7" stroke="#16a34a"
+      stroke-width="3"/><text x="750.0" y="318" font-size="22" text-anchor="middle"
+      fill="#1f2937">trả JSON gọn</text><text x="750.0" y="348" font-size="22" text-anchor="middle"
+      fill="#1f2937">c.JSON(...)</text><rect x="1010" y="270" width="420" height="110"
+      rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text x="1220.0" y="318"
+      font-size="22" text-anchor="middle" fill="#1f2937">dựng trên fasthttp</text><text
+      x="1220.0" y="348" font-size="22" text-anchor="middle" fill="#1f2937">(nhà phát
+      triển Fiber nêu)</text><text x="750" y="450" font-size="24" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">Cùng một chuyện: yêu cầu đi vào, tìm tuyến,
+      hàm xử lý trả lời đi ra</text></svg></div>'
+    clear: true
+    say: 'Hình thứ ba là một dịch vụ HTTP nhỏ. Khách gửi phương thức đọc cùng đường
+      dẫn, bộ định tuyến tìm tuyến khớp rồi gọi hàm xử lý. Hàm xử lý ghi mã hai trăm
+      và thân JSON. Bộ khung web đứng trên cùng, cho viết tuyến có tham số và trả
+      JSON gọn hơn. Nhưng bên dưới vẫn là cùng một chuyện: yêu cầu đi vào, tìm tuyến,
+      và hàm xử lý trả lời đi ra.'
+- id: formula
+  kind: formula
+  title: 'Suy ra từng bước: từ luồng nhẹ tới dịch vụ HTTP'
+  checks:
+  - alg.bnx_l20_wg(3, 2) == 1 and alg.bnx_l20_wg(1000, 1000) == 0
+  - alg.bnx_l20_range(3) == (1, 3)
+  - alg.bnx_l20_locked(1000) == 1000
+  - alg.bnx_l20_race_exit() == 66
+  - alg.bnx_l20_accept(2, 3) == (2, 3)
+  - alg.bnx_l20_rut(500, 200) == (300, None)
+  - alg.bnx_l20_rut(300, 400) == (300, 'không đủ số dư')
+  - alg.bnx_l20_route('GET', '/suc-khoe')[0] == 200 and alg.bnx_l20_route('POST',
+    '/suc-khoe')[0] == 405 and alg.bnx_l20_route('GET', '/khong-co')[0] == 404
+  - alg.bnx_l20_fiber_route('/suc-khoe')[0] == 200
+  steps:
+  - show: '<p><b>Bước 1.</b> Lệnh <code>go f()</code> chạy <code>f</code> ở luồng
+      nhẹ riêng rồi trở về ngay, nên hàm chính có thể kết thúc <b>trước</b> các việc.
+
+      Vì vậy ta dùng nhóm chờ: <code>Add(1)</code> trước mỗi việc, <code>Done()</code>
+      khi việc xong, <code>Wait()</code> chờ tới khi số việc về 0.</p>
+
+      <p>Làm thử: 3 lần Add, 2 lần Done.</p>
+
+      $$3 - 2 = \hl{1} \neq 0 \;\Rightarrow\; \text{Wait vẫn chờ}; \qquad 1000 - 1000
+      = 0 \;\Rightarrow\; \text{Wait trở về}$$
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: 'Bước một, lệnh chạy ở luồng nhẹ trở về ngay, nên hàm chính có thể kết thúc
+      trước các việc. Vì vậy ta dùng nhóm chờ: cộng một trước mỗi việc, trừ một khi
+      việc xong, rồi chờ tới khi số việc về không. Làm thử, ba lần cộng và hai lần
+      trừ còn dư một, nên lệnh chờ vẫn chờ. Một nghìn lần cộng và một nghìn lần trừ
+      thì về không, lệnh chờ mới trở về.'
+  - show: '<p><b>Bước 2.</b> Hai luồng nhẹ cùng ghi một biến mà không phối hợp là
+      <b>tranh chấp dữ liệu</b>.
+
+      Vì tăng một gồm đọc rồi ghi, nên một lần cộng có thể bị ghi đè, và bộ đếm cuối
+      nằm giữa 1 và số luồng.</p>
+
+      <p>Làm thử: 3 luồng cùng cộng 1 vào 0, không khoá.</p>
+
+      $$\text{nhỏ nhất } \hl{1}, \quad \text{lớn nhất } 3; \qquad \text{chỉ khi xen
+      kẽ vừa vặn mới ra } 3$$
+
+      '
+    focus:
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Bước hai, hai luồng nhẹ cùng ghi một biến mà không phối hợp gọi là tranh
+      chấp dữ liệu. Vì tăng một gồm đọc rồi ghi, nên một lần cộng có thể bị ghi đè,
+      và bộ đếm cuối nằm giữa một và số luồng. Làm thử với ba luồng cùng cộng một
+      vào không, kết quả nhỏ nhất là một, lớn nhất là ba.
+  - show: '<p><b>Bước 3.</b> Khoá biến đọc-rồi-ghi thành một khối: giữa <code>Lock</code>
+      và <code>Unlock</code> một lúc chỉ một luồng nhẹ, nên không lần cộng nào bị
+      mất.</p>
+
+      <p>Làm thử: 1000 luồng nhẹ, mỗi luồng cộng 1 trong khoá.</p>
+
+      $$1000 \cdot 1 = \hlg{1000} \quad \text{(mọi lần chạy)}$$
+
+      <span class=''note''>Đổi lại, các luồng xếp hàng qua khoá, nên đoạn nằm trong
+      khoá càng ngắn càng tốt.</span>
+
+      '
+    focus:
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Bước ba, khoá làm cho đọc rồi ghi thành một khối, vì giữa lệnh khoá và lệnh
+      mở một lúc chỉ một luồng nhẹ được vào, nên không lần cộng nào bị mất. Làm thử
+      với một nghìn luồng, mỗi luồng cộng một trong khoá, thì ra đúng một nghìn ở
+      mọi lần chạy. Đổi lại, các luồng xếp hàng qua khoá, nên đoạn nằm trong khoá
+      càng ngắn càng tốt.
+  - show: '<p><b>Bước 4.</b> Trình phát hiện tranh chấp: chạy <code>go run -race</code>.
+      Nó báo khi hai luồng nhẹ truy cập cùng một biến, ít nhất một lần là ghi, mà
+      không phối hợp.
+
+      Nó chỉ thấy tranh chấp trên đường mã <b>đã chạy</b>, và làm chương trình chậm
+      hơn.</p>
+
+      <div class="box key">Khi thấy tranh chấp, nó in cảnh báo rồi thoát với mã <b>66</b>
+      (mặc định). Một lần in đúng kết quả chưa chứng minh là không có tranh chấp.</div>
+
+      <span class=''note''>Trên máy chạy bài này (Windows), cờ <code>-race</code>
+      cần bật cgo và có trình biên dịch C (gcc); máy khác có thể khác.</span>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 1
+    - 2
+    - 2
+    - 3
+    clear: true
+    say: Bước bốn, trình phát hiện tranh chấp bật bằng cờ phát hiện khi chạy chương
+      trình. Nó báo khi hai luồng nhẹ truy cập cùng một biến, ít nhất một lần là ghi,
+      mà không phối hợp. Nó chỉ thấy tranh chấp trên đường mã đã chạy, và làm chương
+      trình chậm hơn. Khi thấy, nó in cảnh báo rồi thoát với mã sáu mươi sáu. Một
+      lần in đúng kết quả chưa chứng minh là không có tranh chấp, nên hãy chạy kiểm
+      thử kèm cờ này. Trên máy chạy bài này, cờ ấy cần bật cầu nối với mã C và có
+      trình biên dịch C, còn máy khác có thể khác.
+  - show: '<p><b>Bước 5.</b> Kênh truyền giá trị giữa các luồng nhẹ. <b>Không đệm</b>:
+      bên gửi chờ tới khi có bên nhận. <b>Có đệm n</b>: gửi xong ngay nếu đệm chưa
+      đầy, đầy thì chờ.</p>
+
+      <p>Làm thử: đệm 2, gửi liền 3 giá trị, chưa ai nhận.</p>
+
+      $$2 \text{ giá trị vào đệm}; \qquad 2 + 1 = \hl{3} \text{: giá trị thứ 3 phải
+      chờ}$$
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: 'Bước năm, kênh truyền giá trị giữa các luồng nhẹ. Kênh không đệm thì bên
+      gửi chờ tới khi có bên nhận. Kênh có đệm thì gửi xong ngay nếu đệm chưa đầy,
+      còn đầy thì phải chờ. Làm thử với đệm hai, gửi liền ba giá trị mà chưa ai nhận:
+      hai giá trị vào đệm, nên giá trị thứ ba phải chờ.'
+  - show: '<p><b>Bước 6.</b> Cách báo lỗi thông thường: hàm trả <b>thêm một giá trị
+      lỗi</b>, bên gọi phải tự kiểm. Lỗi rỗng là thành công. Bỏ qua lỗi thì chương
+      trình chạy tiếp với giá trị không.</p>
+
+      <p>Làm thử: tài khoản 500, rút 200 rồi rút 400.</p>
+
+      $$500 - 200 = 300; \qquad 400 > 300 \;\Rightarrow\; \text{lỗi, số dư vẫn } \hl{300}$$
+
+      '
+    focus:
+    - 1
+    - - 1
+      - 2
+    - 2
+    - 3
+    clear: true
+    say: Bước sáu, cách báo lỗi thông thường của ngôn ngữ này là hàm trả thêm một
+      giá trị lỗi, và bên gọi phải tự kiểm. Lỗi rỗng nghĩa là thành công, bỏ qua lỗi
+      thì chương trình chạy tiếp với giá trị không. Làm thử, tài khoản năm trăm, rút
+      hai trăm còn ba trăm. Rút bốn trăm thì bốn trăm lớn hơn ba trăm, nên có lỗi
+      và số dư vẫn là ba trăm.
+  - show: <p><b>Bước 7.</b> Dịch vụ HTTP nhỏ đăng ký tuyến <code>GET /suc-khoe</code>
+      với một hàm xử lý. Gói chuẩn tự trả 405 khi sai phương thức và 404 khi không
+      có đường dẫn. Mẫu tuyến có phương thức như <code>GET /suc-khoe</code> cần Go
+      từ phiên bản 1.22.</p><table class='t'><tr><th>yêu cầu</th><th>mã</th><th>thân</th></tr><tr><td>GET
+      /suc-khoe</td><td>200</td><td><code>{"trang_thai":"ok"}</code></td></tr><tr><td>POST
+      /suc-khoe</td><td>405</td><td>Method Not Allowed</td></tr><tr><td>GET /khong-co</td><td>404</td><td>404
+      page not found</td></tr></table>
+    focus:
+    - 1
+    - '2.2'
+    - '2.3'
+    - '2.4'
+    clear: true
+    say: Bước bảy, dịch vụ HTTP nhỏ đăng ký một tuyến, đọc đường dẫn kiểm sức khoẻ,
+      với một hàm xử lý. Đúng tuyến thì hàm xử lý trả mã hai trăm và thân JSON. Cùng
+      đường dẫn nhưng sai phương thức thì gói chuẩn tự trả bốn trăm linh năm, vì tuyến
+      chỉ đăng ký cho phương thức đọc. Đường dẫn không đăng ký thì nhận bốn trăm linh
+      bốn, vì không tuyến nào khớp, và mẫu tuyến có phương thức cần Go từ phiên bản
+      một phẩy hai mươi hai.
+  - show: '<table class=''t''><tr><th>việc</th><th>gói chuẩn net/http</th><th>bộ khung
+      Fiber</th></tr><tr><td>đăng ký tuyến</td><td><code>mux.HandleFunc("GET /suc-khoe",
+      f)</code></td><td><code>app.Get("/suc-khoe", f)</code></td></tr><tr><td>tham
+      số trong đường dẫn</td><td>(bài không so sánh)</td><td><code>/tai-khoan/:so</code>,
+      đọc bằng <code>c.Params("so")</code></td></tr><tr><td>trả JSON</td><td>tự đặt
+      tiêu đề và ghi thân (chương trình trên)</td><td><code>c.JSON(fiber.Map{…})</code></td></tr><tr><td>nền
+      bên dưới</td><td>thư viện chuẩn</td><td>dựng trên <b>fasthttp</b> (nhà phát
+      triển Fiber nêu)</td></tr></table><div class="box warn">Bài dùng Fiber <b>v2.52.16</b>;
+      nhà phát triển ghi ở bản v2: không còn được bảo trì tích cực. Để chạy thử: <code>go
+      mod init vidu</code>, rồi <code>go get github.com/gofiber/fiber/v2@v2.52.16</code>.</div>'
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.5'
+    - 2
+    - 2
+    clear: true
+    say: Bước tám, bộ khung web thêm gì lên trên gói chuẩn? Đăng ký tuyến thì cả hai
+      đều gọn. Bộ khung cho viết tham số ngay trong đường dẫn và đọc bằng một lệnh.
+      Nó cũng có lệnh trả JSON gọn, trong khi với gói chuẩn ta tự đặt tiêu đề và ghi
+      thân. Bên dưới, nó dựng trên một thư viện HTTP khác, theo lời nhà phát triển
+      của nó. Lưu ý, bản dùng trong bài là bản hai, mà nhà phát triển ghi ở bản hai
+      là không còn được bảo trì tích cực, nên dự án mới cần cân nhắc phiên bản. Để
+      chạy thử, cần khởi tạo một mô-đun rồi tải thư viện đúng bản đó bằng lệnh của
+      Go.
+- id: example
+  kind: example
+  title: Ví dụ chạy thật bằng Go, từng phép tính
+  checks:
+  - alg.bnx_l20_rut(500, 200) == (300, None) and alg.bnx_l20_rut(300, 400)[0] == 300
+  - alg.bnx_l20_locked(1000) == 1000 and alg.bnx_l20_wg(1000, 1000) == 0
+  - alg.bnx_l20_lost(['A', 'B', 'A', 'B']) == 1 and alg.bnx_l20_race_exit() == 66
+  - alg.bnx_l20_chan(3, [('g', 1), ('g', 2), ('g', 3), ('g', 4), ('n',), ('g', 4)])
+    == [('xong', 1), ('xong', 2), ('xong', 3), ('chờ',), ('nhận', 1), ('xong', 3)]
+  - alg.bnx_l20_chan(0, [('g', 1)]) == [('chờ',)]
+  - alg.bnx_l20_accept(3, 4) == (3, 4)
+  - alg.bnx_l20_route('GET', '/suc-khoe') == (200, '{"trang_thai":"ok"}')
+  - alg.bnx_l20_route('POST', '/suc-khoe')[0] == 405 and alg.bnx_l20_route('GET',
+    '/khong-co')[0] == 404
+  - alg.bnx_l20_fiber_route('/tai-khoan/001') == (200, '{"so":"001"}')
+  steps:
+  - show: '<p><b>main.go (trích): cấu trúc tài khoản và hàm trả lỗi</b></p><div class="code"><div>type
+      TaiKhoan struct {</div><div>  So   string</div><div>  SoDu int</div><div>}</div><div>
+      </div><div>func rut(tk TaiKhoan, tien int) (TaiKhoan, error) {</div><div>  if
+      tien &gt; tk.SoDu {</div><div>    return tk, errors.New("không đủ số dư")</div><div>  }</div><div>  tk.SoDu
+      -= tien</div><div>  return tk, nil</div><div>}</div></div>'
+    focus:
+    - 0
+    - - '2.1'
+      - '2.2'
+      - '2.3'
+    - '2.6'
+    - - '2.7'
+      - '2.8'
+    - - '2.10'
+      - '2.11'
+    clear: true
+    say: 'Ta chạy thật bằng ngôn ngữ thứ hai trên hồ sơ. Chương trình đầu có một cấu
+      trúc tài khoản gồm số tài khoản và số dư. Hàm rút nhận tài khoản và số tiền,
+      rồi trả về hai giá trị: tài khoản mới và một lỗi. Nếu số tiền lớn hơn số dư,
+      nó trả tài khoản cũ cùng một lỗi. Nếu đủ, nó trừ tiền và trả lỗi rỗng.'
+  - show: '<p><b>main.go (tiếp): rút 200 rồi rút 400</b></p><div class="code"><div>func
+      main() {</div><div>  tk := TaiKhoan{So: "001", SoDu: 500}</div><div>  for _,
+      tien := range []int{200, 400} {</div><div>    moi, err := rut(tk, tien)</div><div>    if
+      err != nil {</div><div>      fmt.Println("rút", tien, "lỗi:", err, "- số dư
+      vẫn", tk.SoDu)</div><div>      continue</div><div>    }</div><div>    tk = moi</div><div>    fmt.Println("rút",
+      tien, "xong, còn", tk.SoDu)</div><div>  }</div><div>}</div></div>'
+    focus:
+    - - '2.2'
+      - '2.3'
+    - '2.4'
+    - - '2.5'
+      - '2.6'
+      - '2.7'
+      - '2.8'
+    - - '2.9'
+      - '2.10'
+    clear: true
+    say: Hàm chính tạo tài khoản có số dư năm trăm, rồi lần lượt rút hai trăm và bốn
+      trăm. Mỗi lần rút, ta nhận hai giá trị về là tài khoản mới và lỗi. Nếu lỗi khác
+      rỗng thì in lỗi cùng số dư cũ, rồi bỏ qua sang lần sau. Chỉ khi không có lỗi
+      ta mới nhận tài khoản mới và in số dư còn lại.
+  - show: '<p><b>Kết quả chạy thật</b></p><div class="code"><div>rút 200 xong, còn
+      300</div><div>rút 400 lỗi: không đủ số dư - số dư vẫn 300</div></div>
+
+      $$① \; 500 - 200 = 300; \qquad 400 > 300 \;\Rightarrow\; \text{lỗi, số dư vẫn
+      } \hl{300}$$
+
+      '
+    focus:
+    - '2.1'
+    - '2.2'
+    - 3
+    clear: true
+    say: 'Kết quả chạy thật: lần rút hai trăm xong và còn ba trăm. Lần rút bốn trăm
+      báo không đủ số dư, và số dư vẫn là ba trăm. Phép tính thứ nhất: năm trăm trừ
+      hai trăm là ba trăm, rồi bốn trăm lớn hơn ba trăm nên có lỗi, và số dư không
+      đổi.'
+  - show: '<p><b>main.go (trích): một nghìn luồng nhẹ cùng cộng, có khoá</b></p><div
+      class="code"><div>func main() {</div><div>  var nhom sync.WaitGroup</div><div>  var
+      khoa sync.Mutex</div><div>  dem := 0</div><div>  for i := 0; i &lt; 1000; i++
+      {</div><div>    nhom.Add(1)</div><div>    go func() {</div><div>      defer
+      nhom.Done()</div><div>      khoa.Lock()</div><div>      dem++</div><div>      khoa.Unlock()</div><div>    }()</div></div>'
+    focus:
+    - 0
+    - - '2.2'
+      - '2.3'
+      - '2.4'
+    - - '2.5'
+      - '2.6'
+      - '2.7'
+    - - '2.8'
+      - '2.9'
+      - '2.10'
+      - '2.11'
+    clear: true
+    say: Chương trình thứ hai là bộ đếm ở đầu bài. Hàm chính khai một nhóm chờ, một
+      khoá và bộ đếm bằng không. Vòng lặp chạy một nghìn lần; mỗi vòng cộng một vào
+      nhóm chờ rồi chạy một luồng nhẹ. Luồng nhẹ khoá, tăng bộ đếm, rồi mở khoá, và
+      lệnh hoãn bảo đảm việc báo xong chạy khi luồng nhẹ kết thúc.
+  - show: '<p><b>main.go (tiếp): chờ cả nhóm rồi in</b></p><div class="code"><div>  }</div><div>  nhom.Wait()</div><div>  fmt.Println("bộ
+      đếm:", dem)</div><div>}</div></div><p><b>Kết quả chạy thật</b></p><div class="code"><div>bộ
+      đếm: 1000</div></div>
+
+      $$② \; 1000 \cdot 1 = \hlg{1000}; \qquad 1000 \text{ lần Add} - 1000 \text{
+      lần Done} = 0$$
+
+      '
+    focus:
+    - - '2.2'
+      - '2.3'
+    - '4.1'
+    - 5
+    clear: true
+    say: 'Sau vòng lặp, hàm chính gọi lệnh chờ để đợi tới khi cả một nghìn luồng nhẹ
+      báo xong, rồi mới in bộ đếm. Kết quả chạy thật in bộ đếm đúng một nghìn. Phép
+      tính thứ hai: một nghìn luồng, mỗi luồng cộng một trong khoá, nên bộ đếm là
+      một nghìn, và một nghìn lần cộng trừ một nghìn lần trừ là không, nên lệnh chờ
+      trở về.'
+  - show: '<p><b>Bỏ khoá và mở khoá: trong luồng nhẹ chỉ còn dem++</b></p><div class="code"><div>  for
+      i := 0; i &lt; 1000; i++ {</div><div>    nhom.Add(1)</div><div>    go func()
+      {</div><div>      defer nhom.Done()</div><div>      dem++</div><div>    }()</div><div>  }</div></div><p><b>Chạy
+      kèm trình phát hiện, lọc lấy hai dòng cần xem</b></p><div class="code"><div>go
+      run -race main.go 2&gt;&amp;1 | grep -E "DATA RACE|exit status" | uniq</div></div>'
+    focus:
+    - '2.5'
+    - '4.1'
+    clear: true
+    say: Giờ ta bỏ hai lệnh khoá và mở khoá, nên trong luồng nhẹ chỉ còn lệnh tăng
+      bộ đếm. Rồi ta chạy chương trình này với cờ phát hiện tranh chấp, và lọc lấy
+      hai dòng cần xem.
+  - show: '<p><b>Kết quả chạy thật</b></p><div class="code"><div>WARNING: DATA RACE</div><div>exit
+      status 66</div></div>
+
+      $$③ \; \text{một cặp xen kẽ: } 2 - 1 = \hl{1} \text{ lần cộng bị mất}; \qquad
+      \text{kết quả} = 1000 - \text{số lần mất} \le 1000$$
+
+      '
+    focus:
+    - '2.1'
+    - 2
+    - 3
+    clear: true
+    say: 'Kết quả chạy thật: trình phát hiện in cảnh báo tranh chấp dữ liệu, rồi chương
+      trình thoát với mã sáu mươi sáu. Khi ta chạy chương trình này nhiều lần mà không
+      có cờ, bộ đếm thường thấp hơn một nghìn và mỗi lần một khác, nhưng thỉnh thoảng
+      vẫn ra đủ một nghìn. Phép tính thứ ba: một cặp xen kẽ làm mất một lần cộng,
+      nên kết quả là một nghìn trừ số lần mất, và không bao giờ vượt một nghìn.'
+  - show: '<p><b>main.go (trích): thử gửi vào kênh, không chịu treo</b></p><div class="code"><div>func
+      thuGui(ch chan int, v int) {</div><div>  select {</div><div>  case ch &lt;-
+      v:</div><div>    fmt.Println("gửi", v, "xong, đang chứa", len(ch))</div><div>  default:</div><div>    fmt.Println("gửi",
+      v, "phải chờ bên nhận")</div><div>  }</div><div>}</div></div>'
+    focus:
+    - - '2.1'
+      - '2.2'
+    - - '2.3'
+      - '2.4'
+    - - '2.5'
+      - '2.6'
+    clear: true
+    say: Chương trình thứ ba là kênh, hàm này thử gửi một giá trị vào kênh, và dùng
+      câu lệnh chọn để không bị treo. Nếu gửi được ngay thì nhánh đầu in gửi xong
+      và số giá trị đang chứa. Nếu không thì nhánh mặc định in rằng lệnh gửi phải
+      chờ bên nhận, vì lệnh gửi bình thường lúc đó sẽ bị chặn.
+  - show: '<p><b>main.go (tiếp): kênh đệm 3 gửi 4 giá trị, rồi kênh không đệm</b></p><div
+      class="code"><div>func main() {</div><div>  ch := make(chan int, 3)</div><div>  for
+      v := 1; v &lt;= 4; v++ {</div><div>    thuGui(ch, v)</div><div>  }</div><div>  fmt.Println("nhận",
+      &lt;-ch)</div><div>  thuGui(ch, 4)</div><div>  khong := make(chan int)</div><div>  thuGui(khong,
+      1)</div><div>}</div></div>'
+    focus:
+    - - '2.2'
+      - '2.3'
+      - '2.4'
+      - '2.5'
+    - - '2.6'
+      - '2.7'
+    - - '2.8'
+      - '2.9'
+    clear: true
+    say: Hàm chính tạo kênh có đệm ba, rồi thử gửi bốn giá trị liền nhau mà chưa ai
+      nhận. Sau đó nó nhận một giá trị ra, và thử gửi lại giá trị bốn. Cuối cùng nó
+      tạo một kênh không đệm, và thử gửi một giá trị khi chưa có bên nhận nào.
+  - show: '<p><b>Kết quả chạy thật</b></p><div class="code"><div>gửi 1 xong, đang
+      chứa 1</div><div>gửi 2 xong, đang chứa 2</div><div>gửi 3 xong, đang chứa 3</div><div>gửi
+      4 phải chờ bên nhận</div><div>nhận 1</div><div>gửi 4 xong, đang chứa 3</div><div>gửi
+      1 phải chờ bên nhận</div></div>
+
+      $$④ \; 3 + 1 = \hl{4}: \text{ giá trị thứ 4 phải chờ}; \qquad 3 - 1 = 2 \text{
+      đang chứa} \;\Rightarrow\; 2 + 1 = 3 \text{, gửi 4 được}$$
+
+      '
+    focus:
+    - - '2.1'
+      - '2.2'
+      - '2.3'
+    - '2.4'
+    - - '2.5'
+      - '2.6'
+    - '2.7'
+    - 3
+    clear: true
+    say: 'Kết quả chạy thật: ba giá trị đầu vào đệm ngay, đệm chứa dần một, hai, ba.
+      Giá trị thứ bốn thấy đệm đầy nên phải chờ bên nhận. Sau khi nhận ra giá trị
+      một, đệm còn hai giá trị, nên lần gửi bốn thứ hai xong và đệm lại chứa ba. Với
+      kênh không đệm mà chưa có bên nhận, ngay giá trị đầu tiên đã phải chờ. Phép
+      tính thứ tư: đệm ba nhận ba giá trị, nên giá trị thứ ba cộng một, tức thứ bốn,
+      là giá trị phải chờ.'
+  - show: '<p><b>main.go (trích): hàm xử lý và đăng ký tuyến</b></p><div class="code"><div>func
+      sucKhoe(w http.ResponseWriter, r *http.Request) {</div><div>  w.Header().Set("Content-Type",
+      "application/json")</div><div>  fmt.Fprint(w, `{"trang_thai":"ok"}`)</div><div>}</div><div>
+      </div><div>func main() {</div><div>  mux := http.NewServeMux()</div><div>  mux.HandleFunc("GET
+      /suc-khoe", sucKhoe)</div></div>'
+    focus:
+    - 0
+    - '2.1'
+    - - '2.2'
+      - '2.3'
+    - - '2.6'
+      - '2.7'
+      - '2.8'
+    clear: true
+    say: Chương trình thứ tư là dịch vụ HTTP nhỏ bằng gói chuẩn. Hàm xử lý nhận nơi
+      ghi trả lời và yêu cầu. Nó đặt tiêu đề cho biết thân là JSON, rồi ghi thân gồm
+      một trường trạng thái cho biết dịch vụ đang ổn. Trong hàm chính, ta tạo bộ định
+      tuyến và đăng ký tuyến đọc, đường dẫn kiểm sức khoẻ, với hàm xử lý này.
+  - show: '<p><b>main.go (tiếp): mở cổng, chạy máy chủ, gọi ba yêu cầu</b></p><div
+      class="code"><div>  ln, err := net.Listen("tcp", "127.0.0.1:0")</div><div>  if
+      err != nil {</div><div>    fmt.Println("không mở được cổng:", err)</div><div>    return</div><div>  }</div><div>  go
+      http.Serve(ln, mux)</div><div>  goc := "http://" + ln.Addr().String()</div><div>  goi(goc,
+      "GET", "/suc-khoe")</div><div>  goi(goc, "POST", "/suc-khoe")</div><div>  goi(goc,
+      "GET", "/khong-co")</div><div>}</div></div>'
+    focus:
+    - - '2.1'
+      - '2.2'
+      - '2.3'
+      - '2.4'
+      - '2.5'
+    - '2.6'
+    - - '2.8'
+      - '2.9'
+      - '2.10'
+    - 0
+    clear: true
+    say: 'Tiếp theo ta mở một cổng trên máy này, để hệ điều hành tự chọn, và kiểm
+      lỗi nếu không mở được. Rồi một luồng nhẹ chạy máy chủ trên cổng đó. Ba dòng
+      cuối gọi ba yêu cầu: đọc đúng tuyến, gửi sai phương thức, và gọi một đường dẫn
+      không có. Hàm gọi là một máy khách nhỏ, ta không đọc từng dòng của nó ở đây.'
+  - show: '<p><b>Kết quả chạy thật</b></p><div class="code"><div>GET /suc-khoe 200
+      {"trang_thai":"ok"}</div><div>POST /suc-khoe 405 Method Not Allowed</div><div>GET
+      /khong-co 404 404 page not found</div></div>
+
+      $$⑤ \; \text{GET /suc-khoe} \Rightarrow \hl{200} \text{ và thân JSON}; \quad
+      \text{POST} \Rightarrow 405; \quad \text{GET /khong-co} \Rightarrow 404$$
+
+      '
+    focus:
+    - '2.1'
+    - - '2.2'
+      - '2.3'
+    - 3
+    clear: true
+    say: 'Kết quả chạy thật: đọc đúng tuyến cho mã hai trăm và thân JSON có trường
+      trạng thái cho biết dịch vụ đang ổn. Gửi sai phương thức nhận bốn trăm linh
+      năm, còn đường dẫn lạ nhận bốn trăm linh bốn. Phép tính thứ năm: tuyến kiểm
+      sức khoẻ trả mã hai trăm, hai trường hợp còn lại do gói chuẩn tự trả lời.'
+  - show: '<p><b>main.go của Fiber v2.52.16 (trích): hai tuyến</b></p><div class="code"><div>  "github.com/gofiber/fiber/v2"</div><div>)</div><div>
+      </div><div>func main() {</div><div>  app := fiber.New(fiber.Config{DisableStartupMessage:
+      true})</div><div>  app.Get("/suc-khoe", func(c *fiber.Ctx) error {</div><div>    return
+      c.JSON(fiber.Map{"trang_thai": "ok"})</div><div>  })</div><div>  app.Get("/tai-khoan/:so",
+      func(c *fiber.Ctx) error {</div><div>    return c.JSON(fiber.Map{"so": c.Params("so")})</div><div>  })</div></div>'
+    focus:
+    - '2.1'
+    - - '2.6'
+      - '2.7'
+    - - '2.9'
+      - '2.10'
+    clear: true
+    say: Chương trình thứ năm làm cùng việc bằng bộ khung web, nhập từ một thư viện
+      ngoài, tên hiện trên màn hình. Đăng ký tuyến chỉ một lệnh, và hàm xử lý trả
+      JSON bằng một lệnh, không phải tự đặt tiêu đề. Tuyến thứ hai có một ô tham số
+      đặt tên trong đường dẫn, và hàm xử lý đọc nó bằng đúng tên đó.
+  - show: <p><b>Kết quả chạy thật</b></p><div class="code"><div>/suc-khoe 200 {"trang_thai":"ok"}</div><div>/tai-khoan/001
+      200 {"so":"001"}</div></div>
+    focus:
+    - '2.1'
+    - '2.2'
+    clear: true
+    say: 'Kết quả chạy thật: tuyến kiểm sức khoẻ cũng trả mã hai trăm với cùng thân
+      JSON. Đường dẫn tài khoản không không một cho ra phần cuối của đường dẫn, và
+      trả lại nó trong thân.'
+- id: check
+  kind: check
+  title: 'Tự kiểm bằng đường khác: nguyên tử và kênh, không dùng khoá'
+  checks:
+  - alg.bnx_l20_locked(1000) == 1000 and alg.bnx_l20_locked(1000, 1) == 1000 * 1
+  - alg.bnx_l20_wg(1000, 1000) == 0
+  - alg.bnx_l20_range(1000)[1] == 1000
+  steps:
+  - show: '<p><b>main.go: đếm bằng bộ đếm nguyên tử và bằng kênh</b></p><div class="code"><div>func
+      main() {</div><div>  var nhom sync.WaitGroup</div><div>  var a atomic.Int64</div><div>  ch
+      := make(chan int, 1000)</div><div>  for i := 0; i &lt; 1000; i++ {</div><div>    nhom.Add(1)</div><div>    go
+      func() {</div><div>      defer nhom.Done()</div><div>      a.Add(1)</div><div>      ch
+      &lt;- 1</div><div>    }()</div><div>  }</div></div>'
+    focus:
+    - 0
+    - - '2.3'
+      - '2.9'
+    - - '2.4'
+      - '2.10'
+    clear: true
+    say: 'Ta kiểm bằng hai đường khác, đều không dùng khoá. Đường thứ nhất là bộ đếm
+      nguyên tử, một kiểu bộ đếm riêng cho nhiều luồng; bài này không đi sâu cách
+      nó chạy bên trong. Đường thứ hai là kênh có đệm một nghìn: mỗi luồng nhẹ gửi
+      số một vào kênh, nên các luồng không chung một biến.'
+  - show: '<p><b>main.go (tiếp): cộng các số trong kênh bằng một luồng</b></p><div
+      class="code"><div>  nhom.Wait()</div><div>  close(ch)</div><div>  tong := 0</div><div>  for
+      v := range ch {</div><div>    tong += v</div><div>  }</div><div>  fmt.Println("atomic:",
+      a.Load(), "- qua kênh:", tong)</div><div>}</div></div><p><b>Chạy kèm cờ phát
+      hiện tranh chấp</b></p><div class="code"><div>go run -race main.go</div></div>'
+    focus:
+    - - '2.1'
+      - '2.2'
+      - '2.3'
+      - '2.4'
+      - '2.5'
+      - '2.6'
+    - - '2.7'
+      - '4.1'
+    clear: true
+    say: Chờ nhóm xong, ta đóng kênh rồi cộng mọi số trong kênh bằng một vòng lặp
+      chạy ở một luồng duy nhất. Sau đó in cả hai kết quả, và ta chạy kèm cờ phát
+      hiện tranh chấp, vì kết quả đúng chưa đủ để yên tâm.
+  - show: '<p><b>Kết quả chạy thật</b></p><div class="code"><div>atomic: 1000 - qua
+      kênh: 1000</div></div><table class=''t''><tr><th>đường</th><th>cách làm</th><th>kết
+      quả</th></tr><tr><td>công thức</td><td>$1000 \cdot 1$</td><td>1000</td></tr><tr><td>có
+      khoá (chạy thật)</td><td>Lock và Unlock quanh dem++</td><td>1000</td></tr><tr><td>nguyên
+      tử (chạy thật)</td><td>bộ đếm atomic</td><td>1000</td></tr><tr><td>qua kênh
+      (chạy thật)</td><td>cộng các số gửi vào kênh</td><td>1000</td></tr></table>'
+    focus:
+    - '2.1'
+    - '3.2'
+    - '3.5'
+    clear: true
+    say: 'Kết quả chạy thật: cả hai đường đều ra một nghìn, và trình phát hiện không
+      báo gì. Bảng đặt các đường cạnh nhau: công thức, khoá, bộ đếm nguyên tử và kênh,
+      đều ra một nghìn. Vì bốn đường độc lập cùng cho một kết quả, và đường không
+      khoá không bị báo tranh chấp, ta tin bộ đếm có khoá là đúng.'
+- id: pitfalls
+  kind: pitfall
+  title: Lỗi hay gặp, theo từng giai đoạn của hệ thống
+  checks:
+  - alg.bnx_l20_atoi('12a') == (0, True)
+  - alg.bnx_l20_leak(1000, True) == 1 and alg.bnx_l20_leak(1000, False) == 1001
+  - alg.bnx_l20_leak(1000, False) == 1 + 1000
+  steps:
+  - show: '<div class="box warn"><b>Lỗi 1 (người mới, lúc mới dựng).</b> Bỏ qua lỗi
+      bằng dấu gạch dưới: <code>so, _ := strconv.Atoi(...)</code>.
+
+      Chuỗi không phải số thì <b class="red">so = 0</b> và chương trình chạy tiếp
+      với dữ liệu sai, không ai báo.
+
+      <br><span class="note">Cách chữa: nhận lỗi vào một biến, kiểm lỗi khác rỗng
+      rồi xử lý hoặc trả lên trên.</span></div>
+
+      '
+    clear: true
+    say: Lỗi thứ nhất, của người mới lúc mới dựng, là bỏ qua lỗi bằng dấu gạch dưới.
+      Khi chuỗi không phải số, hàm đổi chuỗi thành số trả về không, và chương trình
+      chạy tiếp với dữ liệu sai mà không ai báo. Cách chữa là nhận lỗi vào một biến
+      rồi kiểm.
+  - show: '<p><b>main.go (trích): đổi chuỗi 12a thành số, hai cách</b></p><div class="code"><div>func
+      main() {</div><div>  so, _ := strconv.Atoi("12a")</div><div>  fmt.Println("bỏ
+      qua lỗi, số đọc được:", so)</div><div>  so, err := strconv.Atoi("12a")</div><div>  fmt.Println("kiểm
+      lỗi:", so, err)</div><div>}</div></div><p><b>Kết quả chạy thật</b></p><div class="code"><div>bỏ
+      qua lỗi, số đọc được: 0</div><div>kiểm lỗi: 0 strconv.Atoi: parsing "12a": invalid
+      syntax</div></div>'
+    focus:
+    - 0
+    - - '2.2'
+      - '2.4'
+    - '4.1'
+    - '4.2'
+    clear: true
+    say: 'Chương trình nhỏ này đổi chuỗi một hai a thành số hai lần. Lần đầu ta vứt
+      lỗi, lần sau ta giữ lỗi để in. Kết quả chạy thật: lần đầu in số không, và không
+      ai biết có chuyện. Lần sau cũng số không, nhưng kèm lỗi nói rõ chuỗi này không
+      phải số.'
+  - show: '<div class="box warn"><b>Lỗi 2 (người đã đi làm, lúc tải tăng).</b> Mỗi
+      yêu cầu sinh một luồng nhẹ gửi kết quả vào kênh <b>không đệm</b>.
+
+      Yêu cầu hết hạn, bên nhận đã bỏ đi: luồng nhẹ <b class="red">kẹt mãi</b>. Luồng
+      nhẹ rẻ (ngăn xếp nhỏ, nhà phát triển Go nêu) nhưng không miễn phí: tải tăng
+      thì số luồng kẹt tăng theo.
+
+      <br><span class="note">Cách chữa: cho bên gửi luôn có đường thoát, ví dụ kênh
+      có đệm 1 để gửi xong rồi kết thúc.</span></div>
+
+      '
+    clear: true
+    say: Lỗi thứ hai, của người đã đi làm, lộ ra lúc tải tăng. Mỗi yêu cầu sinh một
+      luồng nhẹ để gửi kết quả vào kênh không đệm. Khi yêu cầu hết hạn thì bên nhận
+      đã bỏ đi, và luồng nhẹ kẹt mãi. Luồng nhẹ rẻ, mỗi cái chỉ giữ một ngăn xếp nhỏ
+      theo nhà phát triển ngôn ngữ, nhưng không miễn phí. Nên tải tăng thì số luồng
+      kẹt tăng theo. Cách chữa là cho bên gửi luôn có đường thoát, ví dụ kênh có đệm
+      một.
+  - show: '<p><b>main.go (trích): một nghìn yêu cầu, bên nhận đã bỏ đi</b></p><div
+      class="code"><div>func thu(dem int) int {</div><div>  for i := 0; i &lt; 1000;
+      i++ {</div><div>    kq := make(chan int, dem)</div><div>    go func() { kq &lt;-
+      i }() // bên nhận đã bỏ đi, không ai nhận</div><div>  }</div><div>  time.Sleep(200
+      * time.Millisecond)</div><div>  return runtime.NumGoroutine()</div><div>}</div></div>'
+    focus:
+    - 0
+    - - '2.2'
+      - '2.3'
+      - '2.4'
+      - '2.5'
+    - - '2.6'
+      - '2.7'
+    clear: true
+    say: Chương trình này mô phỏng điều đó. Với mỗi yêu cầu trong một nghìn yêu cầu,
+      hàm tạo một kênh có sức chứa do ta chọn, rồi chạy một luồng nhẹ gửi một giá
+      trị vào kênh, mà không ai nhận. Sau hai trăm mili giây, hàm đếm số luồng nhẹ
+      còn sống.
+  - show: '<p><b>main.go (tiếp): thử kênh đệm 1, rồi kênh không đệm</b></p><div class="code"><div>func
+      main() {</div><div>  fmt.Println("kênh đệm 1, còn sống:", thu(1))</div><div>  fmt.Println("kênh
+      không đệm, còn sống:", thu(0))</div><div>}</div></div><p><b>Kết quả chạy thật</b></p><div
+      class="code"><div>kênh đệm 1, còn sống: 1</div><div>kênh không đệm, còn sống:
+      1001</div></div>'
+    focus:
+    - - '2.2'
+      - '2.3'
+    - '4.1'
+    - '4.2'
+    clear: true
+    say: 'Hàm chính thử hai lần, trước với kênh đệm một, rồi với kênh không đệm. Kết
+      quả chạy thật: kênh đệm một còn sống một luồng, chính là hàm chính, vì mọi luồng
+      gửi đã xong. Kênh không đệm còn sống một nghìn không trăm linh một luồng, tức
+      một nghìn luồng nhẹ kẹt cộng với hàm chính.'
+  - show: '<div class="box warn"><b>Lỗi 3 (người đã đi làm, lúc vận hành lâu dài).</b>
+      Hai luồng nhẹ cùng ghi một <b>bảng tra</b> (map) dùng chung mà không khoá:
+
+      nhà phát triển Go nói <b class="red">không xác định chuyện gì xảy ra</b>. Kiểm
+      thử đạt, chạy ổn nhiều tháng, rồi hỏng khi một đường mã hiếm gặp được chạy;
+      trình phát hiện chỉ thấy đường <b>đã chạy</b>.
+
+      <br><span class="note">Cách chữa: khoá bảo vệ bảng tra (nhà phát triển Go nêu
+      khoá đọc-ghi là một cách phổ biến) và luôn chạy kiểm thử kèm <code>-race</code>.
+      Kênh để truyền giá trị, không thay được khoá cho trạng thái dùng chung.</span></div>
+
+      '
+    clear: true
+    say: Lỗi thứ ba, của người đã đi làm, lộ ra lúc vận hành lâu dài. Hai luồng nhẹ
+      cùng ghi một bảng tra dùng chung mà không khoá, và nhà phát triển ngôn ngữ nói
+      là không xác định chuyện gì sẽ xảy ra. Kiểm thử vẫn đạt, hệ thống chạy ổn nhiều
+      tháng, rồi hỏng khi một đường mã hiếm được chạy, mà trình phát hiện chỉ thấy
+      đường đã chạy. Cách chữa là thêm khoá, nhà phát triển ngôn ngữ nêu khoá đọc
+      ghi là một cách phổ biến, và luôn chạy kiểm thử kèm cờ phát hiện tranh chấp.
+      Kênh dùng để truyền giá trị giữa các luồng nhẹ, nhưng không thay được khoá cho
+      trạng thái dùng chung.
+  - show: '<div class="box warn"><b>Lỗi 4 (người đã đi làm, lúc tải tăng, dùng Fiber).</b>
+      Giữ lại giá trị đọc từ <code>c</code> (như <code>c.Params</code> hay thân yêu
+      cầu) sau khi hàm xử lý trả về, hoặc đưa nó sang một luồng nhẹ khác. Fiber v2
+      <b class="red">dùng lại vùng nhớ</b> giữa các yêu cầu: giá trị cũ có thể thành
+      dữ liệu của yêu cầu khác.
+
+      <br><span class="note">Cách chữa: sao chép ngay trong hàm xử lý (hàm copy, hoặc
+      CopyString của gofiber/utils), hoặc bật cấu hình <code>Immutable</code>, đổi
+      lại chậm hơn. Nhà phát triển Fiber ghi ở trang v2.x: chỉ dùng giá trị của ngữ
+      cảnh trong hàm xử lý, không giữ tham chiếu.</span></div>
+
+      '
+    clear: true
+    say: Lỗi thứ tư, của người đã đi làm, lộ ra lúc tải tăng khi dùng bộ khung web.
+      Giá trị đọc từ ngữ cảnh yêu cầu, như tham số hay thân yêu cầu, được bộ khung
+      dùng lại cho yêu cầu khác. Nếu ta giữ nó lại sau khi hàm xử lý xong, hoặc đưa
+      sang luồng nhẹ khác, nó có thể đổi thành dữ liệu của yêu cầu khác. Cách chữa
+      là sao chép ngay trong hàm xử lý, hoặc bật cấu hình làm giá trị bất biến, đổi
+      lại chậm hơn. Điều này theo trang hướng dẫn của chính nhóm làm bộ khung, bản
+      hai.
+- id: quiz
+  kind: quiz
+  title: Đến lượt bạn
+  checks:
+  - alg.bnx_l20_accept(5, 8) == (5, 6)
+  - alg.bnx_l20_range(3) == (1, 3)
+  - alg.bnx_l20_interleave(['A', 'A', 'B', 'B', 'C', 'C']) == 3
+  - alg.bnx_l20_thru(2, 50) == 40
+  - (50 - alg.bnx_l20_thru(2, 50)) * 60 == 600
+  - alg.bnx_l20_wait(20, alg.bnx_l20_thru(2, 50)) == 0.5
+  steps:
+  - show: '<table class=''t''><tr><th>câu</th><th>đề</th></tr><tr><td>1</td><td>Kênh
+      có đệm 5, gửi liền 8 giá trị, chưa ai nhận. Mấy giá trị vào được, và giá trị
+      thứ mấy phải chờ?</td></tr><tr><td>2</td><td>3 luồng nhẹ, mỗi luồng cộng 1 vào
+      bộ đếm 0, không khoá (đọc rồi ghi). Bộ đếm cuối nhỏ nhất và lớn nhất là bao
+      nhiêu? Một lần chạy ra đúng 3 có chứng minh không có tranh chấp không?</td></tr><tr><td>3</td><td>Quyết
+      định (số minh hoạ): 2 luồng nhẹ làm việc, mỗi việc 50 ms, tới 50 việc/giây.
+      Chọn: mỗi yêu cầu một luồng nhẹ mới không giới hạn, kênh đệm 20 và bên gửi chờ
+      khi đầy, hay kênh đệm 20 và bên gửi bị từ chối khi đầy?</td></tr></table>'
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - 0
+    pause: 25
+    say: Bây giờ tới phần bạn tự làm bài. Câu một, kênh có đệm năm, gửi liền tám giá
+      trị mà chưa ai nhận, thì mấy giá trị vào được và giá trị thứ mấy phải chờ? Câu
+      hai, ba luồng nhẹ cùng cộng một vào bộ đếm không, không khoá, thì kết quả nhỏ
+      nhất và lớn nhất là bao nhiêu, và một lần ra đúng ba có chứng minh gì không?
+      Câu ba, hai luồng nhẹ làm việc, mỗi việc năm mươi mili giây, mà mỗi giây tới
+      năm mươi việc, bạn chọn trong ba cách xử lý trên màn hình cách nào? Hãy dừng
+      video lại và làm từng câu ra giấy trước khi xem đáp án.
+  - show: '<p>Câu 1: đệm 5 nhận 5 giá trị, giá trị kế tiếp phải chờ.</p>
+
+      $$5 \text{ giá trị vào được}; \qquad 5 + 1 = \hlg{6} \text{: bên gửi bị chặn
+      ở giá trị thứ 6}$$
+
+      '
+    focus:
+    - - 1
+    - 2
+    say: Đáp án câu một, đệm năm nhận được năm giá trị. Bên gửi bị chặn ngay ở giá
+      trị thứ sáu, nên các giá trị thứ bảy và thứ tám còn chưa được gửi.
+    clear: true
+  - show: '<p>Câu 2: xen kẽ xấu nhất làm mất 2 lần cộng.</p>
+
+      $$\text{nhỏ nhất } \hlg{1}, \quad \text{lớn nhất } \hlg{3}; \qquad \text{ra
+      đúng } 3 \text{ chỉ là một cách xen kẽ trong số nhiều cách}$$
+
+      '
+    focus:
+    - - 1
+    - 2
+    say: Đáp án câu hai, ba luồng cùng đọc không rồi ghi một, kết quả nhỏ nhất là
+      một, lớn nhất là ba. Một lần ra đúng ba không chứng minh gì, vì đó chỉ là một
+      trong nhiều cách xen kẽ có thể xảy ra, nên vẫn cần chạy trình phát hiện tranh
+      chấp.
+  - show: '<table class=''t''><tr><th>lựa chọn</th><th>được</th><th>mất</th></tr><tr><td>mỗi
+      yêu cầu một luồng nhẹ mới, không giới hạn</td><td>không yêu cầu nào bị từ chối
+      ngay</td><td>làm được $2 \cdot 1000 : 50 = 40$ việc/giây, tới 50: dư 10 việc/giây,
+      sau 60 giây có 600 việc dở, mỗi việc giữ một luồng nhẹ</td></tr><tr><td>kênh
+      đệm 20, bên gửi chờ khi đầy</td><td>việc được nhận chờ nhiều nhất $20 : 40 =
+      0{,}5$ giây; số việc dở có trần</td><td>bên gửi bị chặn, độ trễ lan ngược ra
+      các yêu cầu tới</td></tr><tr><td>kênh đệm 20, đầy thì từ chối</td><td>bên gọi
+      biết ngay để thử lại sau; bộ nhớ có trần</td><td>khoảng 10 việc/giây bị từ chối</td></tr></table>'
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.4'
+    say: Đáp án câu ba, hai luồng làm bốn mươi việc mỗi giây, mà mỗi giây tới năm
+      mươi, nên mỗi giây dư mười việc. Nếu mỗi yêu cầu một luồng nhẹ mới không giới
+      hạn, sau một phút có sáu trăm việc dở, và mỗi việc giữ một luồng nhẹ. Kênh đệm
+      hai mươi cho việc chờ tối đa nửa giây, nhưng nếu bên gửi chờ khi đầy thì độ
+      trễ lan ngược ra các yêu cầu tới. Đầy thì từ chối làm khoảng mười việc mỗi giây
+      bị từ chối, đổi lại bên gọi biết ngay. Với giao dịch ngân hàng, thường chọn
+      giới hạn rồi từ chối sớm, vì khách không chờ lâu được.
+    clear: true
+- id: recap
+  kind: recap
+  title: Chuỗi logic & tư duy cần mang theo
+  checks:
+  - alg.bnx_l20_locked(1000) == 1000
+  - alg.bnx_l20_accept(3, 4) == (3, 4)
+  steps:
+  - show: '<div class=''chain''><span class=''n''>luồng nhẹ + nhóm chờ</span><span
+      class=''a''>→</span><span class=''n''>chung một biến thì khoá</span><span class=''a''>→</span><span
+      class=''n''>kênh: gửi chờ khi đệm đầy</span><span class=''a''>→</span><span
+      class=''n''>lỗi là giá trị phải kiểm</span><span class=''a''>→</span><span class=''n''>dịch
+      vụ HTTP: tuyến → hàm xử lý</span></div>'
+    say: Tổng kết chuỗi logic, luồng nhẹ chạy việc cùng lúc, và nhóm chờ cho hàm chính
+      đợi xong. Hai luồng nhẹ cùng ghi một biến thì cần khoá, và trình phát hiện tranh
+      chấp giúp bắt lỗi. Kênh truyền giá trị, và bên gửi chờ khi đệm đầy. Lỗi là giá
+      trị phải kiểm, còn dịch vụ HTTP là tuyến nối với hàm xử lý.
+  - show: '<div class=''box key''><b>Tư duy:</b> rẻ không có nghĩa là miễn phí, và
+      chạy đúng một lần không có nghĩa là đúng.
+
+      Với mỗi luồng nhẹ hãy hỏi: nó kết thúc ra sao, nó chạm biến dùng chung nào,
+      và lỗi của nó đi đâu.</div>
+
+      '
+    say: Điều cần mang theo, rẻ không có nghĩa là miễn phí, và chạy đúng một lần không
+      có nghĩa là đúng. Với mỗi luồng nhẹ, hãy hỏi nó kết thúc ra sao, nó chạm biến
+      dùng chung nào, và lỗi của nó đi đâu.
+  - show: '<table class=''t''><tr><th>Nếu bị hỏi về dòng này trên CV</th><th>ý trả
+      lời</th></tr><tr><td>Luồng nhẹ (goroutine) khác luồng hệ điều hành thế nào,
+      có miễn phí không?</td><td>rẻ hơn: ngăn xếp nhỏ, nhà phát triển Go nêu chỉ vài
+      kilô-byte, và nhiều luồng nhẹ chạy chung trên ít luồng hệ điều hành (việc nào
+      chặn thì bộ lập lịch của Go chuyển việc khác); nhưng không miễn phí, và vẫn
+      rò rỉ nếu bên gửi không có đường thoát</td></tr><tr><td>Kênh có đệm và không
+      đệm khác nhau thế nào, khi nào bên gửi bị chặn?</td><td>không đệm: gửi chờ tới
+      khi có bên nhận; đệm n: gửi chờ khi đã đầy n giá trị. Trạng thái dùng chung
+      thì cần khoá</td></tr><tr><td>Fiber thêm gì so với net/http, và lỗi được xử
+      lý ra sao?</td><td>bộ khung dựng trên fasthttp: tuyến có tham số, trả JSON gọn;
+      giá trị lấy từ ngữ cảnh chỉ dùng trong hàm xử lý. Lỗi là giá trị trả về, nên
+      phải kiểm trước khi chạy tiếp</td></tr></table>'
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    clear: true
+    say: Nếu người phỏng vấn hỏi về dòng ngôn ngữ thứ hai và bộ khung web trên hồ
+      sơ, đây là ba câu hay gặp. Luồng nhẹ khác luồng hệ điều hành ở chỗ rẻ hơn và
+      chạy chung trên ít luồng hệ điều hành, nhưng không miễn phí và vẫn rò rỉ được.
+      Kênh không đệm bắt bên gửi chờ bên nhận, còn kênh có đệm chỉ bắt chờ khi đã
+      đầy. Bộ khung web dựng trên một thư viện khác, thêm tuyến có tham số, giá trị
+      từ ngữ cảnh chỉ dùng trong hàm xử lý, còn lỗi luôn là giá trị phải kiểm.
+  - show: '<p>Bài sau: hệ thống cho vay số, một hồ sơ vay đi qua <b>chấm điểm, thẩm
+      định, ký số</b> và chống gian lận thế nào.</p>'
+    forward_ref: true
+    say: Ở bài hai mươi mốt, ta đi qua vòng đời một hồ sơ vay số, từ chấm điểm và
+      thẩm định tới ký số và chống gian lận.

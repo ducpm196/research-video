@@ -77,12 +77,13 @@ def build():
         st("""<p><b>Bước 2.</b> MAC tính từ <b>khoá bí mật và nội dung</b>. Sửa một ký tự thì MAC mới khác MAC cũ, bên nhận phát hiện ngay.</p>
 <span class='note'>Làm thử: tiền $500\\,000$ đổi thành $900\\,000$ → MAC khác.</span>""",
            """Bước hai, vì MAC được tính từ khoá bí mật và nội dung, nên sửa một ký tự thì MAC mới khác MAC cũ, và bên nhận phát hiện ngay. Làm thử, đổi tiền từ năm trăm nghìn thành chín trăm nghìn thì MAC khác hẳn."""),
-        st("""<p><b>Bước 3.</b> Theo Quyết định 2345/QĐ-NHNN của Ngân hàng Nhà nước (ký 18/12/2023, hiệu lực 01/07/2024), chuyển tiền trực tuyến <b>trên $10$ triệu đồng</b> một giao dịch, hoặc khi <b>tổng trong ngày vượt $20$ triệu đồng</b>, phải xác thực sinh trắc học.</p>
+        st("""<p><b>Bước 3.</b> Theo Quyết định 2345/QĐ-NHNN của Ngân hàng Nhà nước (ký 18/12/2023, hiệu lực 01/07/2024), chuyển tiền trực tuyến <b>trên $10$ triệu đồng</b> một giao dịch, hoặc khi <b>tổng trong ngày vượt $20$ triệu đồng</b>, phải xác thực sinh trắc học. Từ 01/01/2025 quy tắc nằm trong Thông tư 50/2024 (Phụ lục 01, 02), sửa bởi Thông tư 77/2025 (01/03/2026), ngưỡng cá nhân vẫn $10$ và $20$ triệu; tổng cộng dồn tính lại từ $0$ sau mỗi lần xác thực.</p>
 <span class='note'>Làm thử: $15$ triệu → cần. $5$ triệu, ngày chưa có gì → không.</span>""",
            """Bước ba nói về Quyết định hai nghìn ba trăm bốn mươi lăm của Ngân hàng Nhà nước, ký ngày mười tám tháng mười hai năm hai nghìn không trăm hai mươi ba.
            Quyết định này có hiệu lực từ ngày một tháng bảy năm hai nghìn không trăm hai mươi tư.
            Theo quyết định này, chuyển tiền trực tuyến phải xác thực sinh trắc học khi một giao dịch trên mười triệu đồng.
-           Khi tổng trong ngày vượt hai mươi triệu đồng cũng phải xác thực. Làm thử, mười lăm triệu thì cần, năm triệu khi ngày chưa có giao dịch nào thì không."""),
+           Khi tổng trong ngày vượt hai mươi triệu đồng cũng phải xác thực. Từ đầu năm hai nghìn không trăm hai mươi lăm, quy tắc này nằm trong Thông tư năm mươi năm hai nghìn không trăm hai mươi tư.
+           Theo thông tư ấy, tổng cộng dồn được tính lại từ không sau mỗi lần đã xác thực sinh trắc học. Làm thử, mười lăm triệu thì cần, năm triệu khi ngày chưa có giao dịch nào thì không."""),
     ], checks=["alg.bnk_pin_block0('1234', '4111111111111111') == '041225EEEEEEEEEE'", "alg.bnk_mac('k', 'amt=500000') != alg.bnk_mac('k', 'amt=900000')",
                NEED + "(15000000, 0) and not " + NEED + "(5000000, 0)"])
     ex = sc("example", "example", "Ví dụ bằng số, từng phép tính", [

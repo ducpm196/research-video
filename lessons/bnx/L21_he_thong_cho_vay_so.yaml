@@ -1,0 +1,875 @@
+id: L21
+course: BNX
+series: BNX · Backend ngân hàng mở rộng theo JD
+title: 'Bài 21 — Hệ thống cho vay số: khởi tạo, chấm điểm, thẩm định, ký số và chống
+  gian lận'
+voice: vi-VN-NamMinhNeural
+rate: -5%
+depth: full
+source: 'curriculum/bnx.yaml L21; audit/bnx/verify_bnx.py L21; audit/bnx/sources_l21.md
+  [TT31] Thông tư 31/2024/TT-NHNN Điều 10 (nhóm nợ theo số ngày quá hạn; Công báo
+  số 825+826 ngày 21-7-2024, người điều phối đối chiếu 2026-11-11); ký số: chỉ dạy
+  cơ chế “chữ ký trên mã băm của nội dung” (chạy thật bằng openssl 3.5.5, hashlib),
+  không trích điều khoản Luật Giao dịch điện tử 2023; định dạng trường TRƯỜNG:MV:SV=GIÁ
+  TRỊ theo bài ACB L01 trong kho, bản tin là mẫu minh hoạ; mọi ngưỡng, trọng số, số
+  tiền là số minh hoạ'
+assumes: []
+objectives:
+- Mô tả các trạng thái của một hồ sơ vay từ lúc nộp tới lúc giải ngân và phân biệt
+  hệ khởi tạo với hệ quản lý khoản vay
+- Tính tỉ lệ nghĩa vụ trả nợ trên thu nhập và áp một thẻ điểm đơn giản
+- Giải thích ký số một hợp đồng bằng mã băm và vì sao sửa một ký tự là lộ
+- 'Nêu hai lớp chống gian lận hồ sơ: xác thực hai yếu tố và dấu vân tay thiết bị'
+- Đọc một trường đa trị trong bản tin gửi lõi ngân hàng
+asr_reviewed:
+  - {sentence: "Bây giờ tới phần bạn tự làm bài.", reason: "ASR chép “Bây giờ tới phần bạn tự lam bay.” (0.75): lệch âm/thanh thuần Việt: làm bài/lam bay — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Đáp án câu hai.", reason: "ASR chép “Đập án câu 2.” (0.75): lệch âm/thanh thuần Việt: đáp/đập — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Hỏi hai hệ khác nhau ở đâu, thì trả lời LOS lo từ lúc nộp tới giải ngân, LMS lo khoản vay sau giải ngân.", reason: "ASR chép “Hỏi hai hệ khác nhau ở đâu thì trả lời LROXL từ lúc nộp tới giải ngân, LMXL khoảng vai sau giải ngân.” (0.792): “los” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “L O S”), ASR viết “lroxl”; “lms” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “L M S”), ASR viết “lmxl khoảng vai” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Ta viết bảng nhóm nợ thành một hàm Python, dò lần lượt từng mốc trần là chín, chín mươi, một trăm tám mươi và ba trăm sáu mươi ngày.", reason: "ASR chép “Ta viết bản nhóm nợ thành một hàm pai thông do lần lượt từng móc trần là 9, 90, 180 và 360 ngày.” (0.867): lệch âm/thanh thuần Việt: bảng/bản, thon dò/thông do, mốc/móc — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bước một, ta viết máy trạng thái của hồ sơ bằng Python.", reason: "ASR chép “Bước 1, ta viết máy trạng thái của hồ sơ bằng pi thông.” (0.88): “python” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Pai-thon”), ASR viết “pi thông” — NOT_VERIFIED bằng tai người"}
+  - {sentence: "LOS là hệ khởi tạo khoản vay, lo từ lúc nhận hồ sơ tới lúc giải ngân.", reason: "ASR chép “L or S là hệ khởi tạo khoản vay, lo từ lúc nhận hồ sơ tới lúc giải ngân.” (0.889): “los” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “L O S”), ASR viết “l or s” — NOT_VERIFIED bằng tai người"}
+scenes:
+- id: hook
+  kind: hook
+  title: '21 giờ, một hồ sơ vay nộp qua ứng dụng: máy quyết định thế nào?'
+  checks:
+  - alg.bnx_dti(20_000_000, 4_000_000, 5_000_000) == 45
+  - alg.bnx_loan_path_ok(['NOP', 'CHAM_DIEM', 'THAM_DINH', 'DUYET', 'DA_KY', 'GIAI_NGAN'])
+    == (True, -1)
+  steps:
+  - show: '<p>21 giờ, một khách nộp hồ sơ vay trên ứng dụng. Thu nhập <b>20 triệu</b>
+      đồng mỗi tháng, đang trả nợ cũ <b>4 triệu</b> mỗi tháng, khoản vay mới sẽ phải
+      trả <b>5 triệu</b> mỗi tháng.</p>
+
+      <div class="box key">Không có nhân viên nào thức. Hệ thống dựa vào đâu để <b>duyệt
+      hay từ chối</b>, khách <b>ký hợp đồng</b> thế nào khi không có giấy, và làm
+      sao biết hồ sơ này không phải của kẻ gian?</div>
+
+      <span class=''note''>(mọi ngưỡng, trọng số và số tiền trong bài là số minh hoạ,
+      không phải chính sách của tổ chức nào)</span>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    - 3
+    say: Chào bạn, hai mươi mốt giờ, một khách nộp hồ sơ vay trên ứng dụng. Thu nhập
+      hai mươi triệu đồng mỗi tháng, đang trả nợ cũ bốn triệu, khoản vay mới sẽ phải
+      trả năm triệu mỗi tháng. Lúc đó không có nhân viên nào thức, vậy hệ thống dựa
+      vào đâu để duyệt hay từ chối? Khách ký hợp đồng thế nào khi không có giấy, và
+      làm sao biết hồ sơ không phải của kẻ gian? Mọi ngưỡng, trọng số và số tiền trong
+      bài là số minh hoạ, không phải chính sách của tổ chức nào.
+  - show: '<table class=''t''><tr><th>câu hỏi</th><th>phần trả lời trong bài</th></tr><tr><td>hồ
+      sơ đi qua những trạng thái nào</td><td>máy trạng thái: nộp, chấm điểm, thẩm
+      định, duyệt, ký, giải ngân</td></tr><tr><td>duyệt dựa vào đâu</td><td>tỉ lệ
+      nghĩa vụ trả nợ trên thu nhập và thẻ điểm</td></tr><tr><td>ký không giấy thế
+      nào</td><td>băm hợp đồng rồi ký lên mã băm; lưu tệp đã ký vào kho hồ sơ</td></tr><tr><td>chặn
+      kẻ gian bằng gì</td><td>xác thực hai yếu tố và dấu vân tay thiết bị</td></tr><tr><td>gửi
+      dữ liệu sang lõi ngân hàng ra sao</td><td>bản tin có trường đa trị</td></tr></table>'
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.5'
+    - '1.6'
+    say: Bài này trả lời năm câu hỏi. Hồ sơ đi qua những trạng thái nào. Hệ thống
+      duyệt dựa vào đâu. Ký không giấy thế nào. Chặn kẻ gian bằng gì. Và dữ liệu được
+      gửi sang lõi ngân hàng ra sao.
+- id: prereq
+  kind: prereq
+  title: 'Trước hết: bốn điều cần hiểu'
+  checks:
+  - alg.bnx_dti(20, 4, 5) == 45 and 9 * 100 == 45 * 20
+  - len(alg.bnx_sha256_hex('a')) == 64 and len(alg.bnx_sha256_hex('a' * 1000)) ==
+    64
+  - alg.bnx_loan_path_ok(['NOP', 'GIAI_NGAN']) == (False, 0)
+  steps:
+  - show: '<table class=''t''><tr><th>khái niệm</th><th>nghĩa</th><th>ví dụ</th></tr><tr><td>①
+      Phần trăm</td><td>tỉ số nhân với 100</td><td>9 trên 20 là 45%</td></tr><tr><td>②
+      Máy trạng thái</td><td>một vật chỉ ở một trạng thái tại một lúc, và chỉ được
+      đi theo các bước cho phép</td><td>đèn giao thông: xanh → vàng → đỏ, không có
+      xanh → đỏ</td></tr><tr><td>③ Hàm băm</td><td>biến một chuỗi dài bất kỳ thành
+      một mã có độ dài cố định; đổi một ký tự thì mã đổi gần như toàn bộ</td><td>SHA-256
+      luôn cho 64 ký tự thập lục phân</td></tr><tr><td>④ Cặp khoá</td><td>khoá riêng
+      giữ kín để ký; khoá công khai phát cho mọi người để kiểm</td><td>ký bằng khoá
+      riêng, ai có khoá công khai cũng kiểm được</td></tr></table>'
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.5'
+    say: Trước hết ta cần hiểu bốn điều. Phần trăm là tỉ số nhân với một trăm, ví
+      dụ chín trên hai mươi là bốn mươi lăm phần trăm. Máy trạng thái là một vật chỉ
+      ở một trạng thái tại một lúc, và chỉ được đi theo các bước cho phép, giống đèn
+      giao thông. Hàm băm biến một chuỗi dài bất kỳ thành một mã có độ dài cố định,
+      và đổi một ký tự thì mã đổi gần như toàn bộ. Cặp khoá gồm khoá riêng giữ kín
+      để ký, và khoá công khai phát cho mọi người để kiểm.
+  - show: $$\frac{9}{20} = 0{,}45 = 45\%$$
+    say: Một ví dụ số cho phần trăm. Chín chia hai mươi bằng không phẩy bốn mươi lăm,
+      tức là bốn mươi lăm phần trăm. Ta sẽ gặp lại đúng con số này khi thẩm định hồ
+      sơ.
+- id: sym
+  kind: symbol
+  title: Giải mã từ ngữ và nhóm nợ
+  checks:
+  - '[alg.bnx_debt_group(n) for n in (0, 9, 10, 90, 91, 180, 181, 360, 361)] == [1,
+    1, 2, 2, 3, 3, 4, 4, 5]'
+  - alg.bnx_debt_group(9) == 1 and alg.bnx_debt_group(10) == 2 and alg.bnx_debt_group(91)
+    == 3
+  steps:
+  - show: '<table class=''t''><tr><th>từ</th><th>nghĩa</th></tr><tr><td>LOS (Loan
+      Origination System)</td><td>hệ khởi tạo khoản vay: nhận hồ sơ, chấm điểm, thẩm
+      định, duyệt, ký, tới lúc giải ngân</td></tr><tr><td>LMS (Loan Management System)</td><td>hệ
+      quản lý khoản vay: sau giải ngân, giữ lịch trả nợ, thu nợ, theo dõi quá hạn,
+      tất toán</td></tr><tr><td>DTI (debt-to-income)</td><td>tỉ lệ nghĩa vụ trả nợ
+      hằng tháng trên thu nhập hằng tháng</td></tr><tr><td>thẻ điểm (scorecard)</td><td>bảng
+      đổi từng đặc trưng của khách thành điểm rồi cộng lại</td></tr><tr><td>thẩm định
+      (underwriting), bộ máy quyết định</td><td>áp các luật theo thứ tự để ra: duyệt,
+      từ chối, hoặc chuyển người xét</td></tr><tr><td>Cloud CA, ECM</td><td>ký số
+      từ xa: khoá riêng nằm ở nơi cấp chứng thư (CA); chứng thư số gắn khoá công khai
+      với một chủ thể và do CA ký (RFC 5280); ECM là kho lưu hồ sơ và văn bản</td></tr><tr><td>2FA,
+      device fingerprint</td><td>xác thực hai yếu tố; dấu vân tay thiết bị: mã rút
+      ra từ các thuộc tính của máy</td></tr></table>'
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.5'
+    - '1.6'
+    - '1.7'
+    - '1.8'
+    say: Bảng này giải mã các từ của bài. LOS là hệ khởi tạo khoản vay, lo từ lúc
+      nhận hồ sơ tới lúc giải ngân. LMS là hệ quản lý khoản vay, lo phần sau giải
+      ngân như lịch trả nợ, thu nợ và theo dõi quá hạn. DTI là tỉ lệ nghĩa vụ trả
+      nợ hằng tháng trên thu nhập hằng tháng. Thẻ điểm là bảng đổi từng đặc trưng
+      của khách thành điểm rồi cộng lại. Thẩm định là áp các luật theo thứ tự để ra
+      quyết định duyệt, từ chối, hoặc chuyển cho người xét. Ký số từ xa nghĩa là khoá
+      riêng nằm ở nơi cấp chứng thư, chứng thư gắn khoá công khai với một người, còn
+      ECM là kho lưu hồ sơ và văn bản. Cuối cùng là xác thực hai yếu tố, và dấu vân
+      tay thiết bị, tức một mã rút ra từ các thuộc tính của máy.
+  - show: <table class='t'><tr><th>nhóm nợ</th><th>số ngày quá hạn</th></tr><tr><td>nhóm
+      1</td><td>dưới 10 ngày (kể cả đang trong hạn)</td></tr><tr><td>nhóm 2</td><td>từ
+      10 đến 90 ngày</td></tr><tr><td>nhóm 3</td><td>từ 91 đến 180 ngày</td></tr><tr><td>nhóm
+      4</td><td>từ 181 đến 360 ngày</td></tr><tr><td>nhóm 5</td><td>trên 360 ngày</td></tr></table><p
+      class='small'>Thông tư 31/2024/TT-NHNN, Điều 10, phần tính theo số ngày quá
+      hạn; văn bản còn các điều kiện khác, đọc nguyên văn thông tư trước khi áp dụng.</p>
+    focus:
+    - 1
+    - '1.2'
+    - '1.4'
+    - 2
+    clear: true
+    say: Lịch sử trả nợ của khách được tóm thành nhóm nợ. Theo Thông tư ba mươi mốt
+      năm hai nghìn không trăm hai mươi tư, nhóm một là quá hạn dưới mười ngày, nhóm
+      hai từ mười đến chín mươi ngày. Nhóm ba từ chín mươi mốt đến một trăm tám mươi
+      ngày, nhóm bốn từ một trăm tám mươi mốt đến ba trăm sáu mươi ngày, nhóm năm
+      trên ba trăm sáu mươi ngày. Đây là phần tính theo số ngày quá hạn, văn bản còn
+      các điều kiện khác nên phải đọc nguyên văn thông tư trước khi áp dụng.
+  - show: '<p><b>Bảng nhóm nợ viết thành hàm: dò từng mốc trần</b></p><div class="code"><div>def
+      nhom_no(ngay):      # Thông tư 31/2024/TT-NHNN, Điều 10</div><div>    for nhom,
+      tran in ((1, 9), (2, 90), (3, 180), (4, 360)):</div><div>        if ngay &lt;=
+      tran:</div><div>            return nhom</div><div>    return 5</div><div>print([nhom_no(n)
+      for n in (0, 9, 10, 90, 91, 180, 181, 360, 361)])</div></div><p><b>Kết quả chạy
+      thật</b></p><div class="code"><div>[1, 1, 2, 2, 3, 3, 4, 4, 5]</div></div>'
+    focus:
+    - '2.2'
+    - '4.1'
+    clear: true
+    say: Ta viết bảng nhóm nợ thành một hàm Python, dò lần lượt từng mốc trần là chín,
+      chín mươi, một trăm tám mươi và ba trăm sáu mươi ngày. Kết quả chạy thật cho
+      thấy ngày thứ chín còn ở nhóm một, ngày thứ mười sang nhóm hai, ngày chín mươi
+      mốt sang nhóm ba.
+- id: intuition
+  kind: intuition
+  title: 'Hình dung: đường đi của hồ sơ, và chữ ký trên mã băm'
+  steps:
+  - show: '<div><svg width="1500" height="470" viewBox="0 0 1500 470" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><rect
+      x="20" y="20" width="950" height="400" rx="12" fill="#dbeafe" stroke="#2a78d6"
+      stroke-width="3"/><text x="495.0" y="58" font-size="26" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">LOS: hệ khởi tạo khoản vay</text><rect x="40"
+      y="110" width="135" height="90" rx="10" fill="#e5e7eb" stroke="#6b7280" stroke-width="3"/><text
+      x="107.5" y="148" font-size="20" text-anchor="middle" fill="#1f2937" font-weight="bold">NOP</text><text
+      x="107.5" y="176" font-size="20" text-anchor="middle" fill="#1f2937">nộp</text><rect
+      x="195" y="110" width="135" height="90" rx="10" fill="#e5e7eb" stroke="#6b7280"
+      stroke-width="3"/><text x="262.5" y="148" font-size="20" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">CHAM_DIEM</text><text x="262.5" y="176" font-size="20"
+      text-anchor="middle" fill="#1f2937">chấm điểm</text><rect x="350" y="110" width="135"
+      height="90" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text
+      x="417.5" y="148" font-size="20" text-anchor="middle" fill="#1f2937" font-weight="bold">THAM_DINH</text><text
+      x="417.5" y="176" font-size="20" text-anchor="middle" fill="#1f2937">thẩm định</text><rect
+      x="505" y="110" width="135" height="90" rx="10" fill="#dcfce7" stroke="#16a34a"
+      stroke-width="3"/><text x="572.5" y="148" font-size="20" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">DUYET</text><text x="572.5" y="176" font-size="20"
+      text-anchor="middle" fill="#1f2937">duyệt</text><rect x="660" y="110" width="135"
+      height="90" rx="10" fill="#f3e8ff" stroke="#9333ea" stroke-width="3"/><text
+      x="727.5" y="148" font-size="20" text-anchor="middle" fill="#1f2937" font-weight="bold">DA_KY</text><text
+      x="727.5" y="176" font-size="20" text-anchor="middle" fill="#1f2937">đã ký</text><rect
+      x="815" y="110" width="140" height="90" rx="10" fill="#dcfce7" stroke="#16a34a"
+      stroke-width="3"/><text x="885.0" y="148" font-size="20" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">GIAI_NGAN</text><text x="885.0" y="176" font-size="20"
+      text-anchor="middle" fill="#1f2937">giải ngân</text><line x1="175" y1="155"
+      x2="192" y2="155" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><line
+      x1="330" y1="155" x2="347" y2="155" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><line
+      x1="485" y1="155" x2="502" y2="155" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><line
+      x1="640" y1="155" x2="657" y2="155" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><line
+      x1="795" y1="155" x2="812" y2="155" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><rect
+      x="272" y="290" width="215" height="80" rx="10" fill="#fee2e2" stroke="#dc2626"
+      stroke-width="3"/><text x="379.5" y="323" font-size="20" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">TU_CHOI</text><text x="379.5" y="351" font-size="20"
+      text-anchor="middle" fill="#1f2937">từ chối</text><line x1="262" y1="203" x2="330"
+      y2="285" stroke="#dc2626" stroke-width="3.5" marker-end="url(#ah)"/><line x1="417"
+      y1="203" x2="400" y2="285" stroke="#dc2626" stroke-width="3.5" marker-end="url(#ah)"/><rect
+      x="540" y="290" width="190" height="80" rx="10" fill="#fef3c7" stroke="#d97706"
+      stroke-width="3"/><text x="635.0" y="323" font-size="20" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">XET_TAY</text><text x="635.0" y="351" font-size="20"
+      text-anchor="middle" fill="#1f2937">xét tay</text><line x1="470" y1="203" x2="560"
+      y2="287" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><line x1="620"
+      y1="287" x2="590" y2="203" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><line
+      x1="540" y1="330" x2="490" y2="330" stroke="#dc2626" stroke-width="3.5" marker-end="url(#ah)"/><text
+      x="845" y="320" font-size="20" text-anchor="middle" fill="#dc2626" font-weight="bold">không
+      có đường tắt</text><text x="845" y="352" font-size="20" text-anchor="middle"
+      fill="#dc2626" font-weight="bold">DUYET → GIAI_NGAN</text><rect x="1030" y="20"
+      width="450" height="400" rx="12" fill="#dcfce7" stroke="#16a34a" stroke-width="3"/><text
+      x="1255.0" y="58" font-size="26" text-anchor="middle" fill="#1f2937" font-weight="bold">LMS:
+      hệ quản lý khoản vay</text><rect x="1060" y="90" width="390" height="65" rx="10"
+      fill="#e5e7eb" stroke="#6b7280" stroke-width="3"/><text x="1255.0" y="130" font-size="22"
+      text-anchor="middle" fill="#1f2937">lịch trả nợ từng kỳ</text><rect x="1060"
+      y="170" width="390" height="65" rx="10" fill="#e5e7eb" stroke="#6b7280" stroke-width="3"/><text
+      x="1255.0" y="210" font-size="22" text-anchor="middle" fill="#1f2937">thu nợ,
+      ghi nhận đã trả</text><rect x="1060" y="250" width="390" height="65" rx="10"
+      fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text x="1255.0" y="290" font-size="22"
+      text-anchor="middle" fill="#1f2937">quá hạn → nhóm nợ</text><rect x="1060" y="330"
+      width="390" height="65" rx="10" fill="#e5e7eb" stroke="#6b7280" stroke-width="3"/><text
+      x="1255.0" y="370" font-size="22" text-anchor="middle" fill="#1f2937">tất toán</text><line
+      x1="958" y1="155" x2="1025" y2="155" stroke="#16a34a" stroke-width="3.5" marker-end="url(#ah)"/><text
+      x="750" y="455" font-size="24" text-anchor="middle" fill="#1f2937" font-weight="bold">Trước
+      giải ngân là việc của LOS; sau giải ngân là việc của LMS</text></svg></div>'
+    clear: true
+    say: 'Hình này là đường đi của một hồ sơ vay. Bên trái là LOS, hồ sơ đi qua sáu
+      trạng thái: nộp, chấm điểm, thẩm định, duyệt, đã ký và giải ngân. Từ chấm điểm
+      hoặc thẩm định, hồ sơ có thể rẽ xuống từ chối, và từ thẩm định còn rẽ sang xét
+      tay, nơi người xét duyệt hoặc từ chối. Không có đường tắt từ duyệt thẳng tới
+      giải ngân, vì chưa ký thì chưa có hợp đồng. Bên phải là LMS, nhận khoản vay
+      sau khi giải ngân, giữ lịch trả nợ, thu nợ, theo dõi quá hạn để xếp nhóm nợ,
+      rồi tất toán.'
+  - show: '<div><svg width="1500" height="480" viewBox="0 0 1500 480" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><rect
+      x="20" y="20" width="700" height="370" rx="12" fill="#dbeafe" stroke="#2a78d6"
+      stroke-width="3"/><text x="370.0" y="58" font-size="26" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">Lúc ký</text><rect x="50" y="90" width="190"
+      height="110" rx="10" fill="#e5e7eb" stroke="#6b7280" stroke-width="3"/><text
+      x="145.0" y="138" font-size="22" text-anchor="middle" fill="#1f2937" font-weight="bold">hợp
+      đồng</text><text x="145.0" y="168" font-size="22" text-anchor="middle" fill="#1f2937">(tệp)</text><rect
+      x="285" y="90" width="190" height="110" rx="10" fill="#fef3c7" stroke="#d97706"
+      stroke-width="3"/><text x="380.0" y="123" font-size="22" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">băm</text><text x="380.0" y="153" font-size="22"
+      text-anchor="middle" fill="#1f2937">SHA-256</text><text x="380.0" y="183" font-size="22"
+      text-anchor="middle" fill="#1f2937">→ mã băm</text><rect x="520" y="90" width="180"
+      height="110" rx="10" fill="#f3e8ff" stroke="#9333ea" stroke-width="3"/><text
+      x="610.0" y="123" font-size="22" text-anchor="middle" fill="#1f2937" font-weight="bold">ký
+      bằng</text><text x="610.0" y="153" font-size="22" text-anchor="middle" fill="#1f2937">khoá
+      riêng</text><text x="610.0" y="183" font-size="22" text-anchor="middle" fill="#1f2937">→
+      chữ ký</text><line x1="240" y1="145" x2="280" y2="145" stroke="#475569" stroke-width="3.5"
+      marker-end="url(#ah)"/><line x1="475" y1="145" x2="515" y2="145" stroke="#475569"
+      stroke-width="3.5" marker-end="url(#ah)"/><text x="370" y="260" font-size="21"
+      text-anchor="middle" fill="#1f2937">Ký số từ xa: khoá riêng nằm ở nơi cấp chứng
+      thư,</text><text x="370" y="292" font-size="21" text-anchor="middle" fill="#1f2937">người
+      ký xác nhận từng lần ký (ví dụ bằng mã OTP)</text><text x="370" y="345" font-size="21"
+      text-anchor="middle" fill="#9333ea" font-weight="bold">chữ ký gắn với mã băm
+      của NỘI DUNG, không gắn tên tệp</text><rect x="780" y="20" width="700" height="370"
+      rx="12" fill="#dcfce7" stroke="#16a34a" stroke-width="3"/><text x="1130.0" y="58"
+      font-size="26" text-anchor="middle" fill="#1f2937" font-weight="bold">Lúc kiểm</text><rect
+      x="810" y="90" width="200" height="110" rx="10" fill="#fef3c7" stroke="#d97706"
+      stroke-width="3"/><text x="910.0" y="138" font-size="22" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">tệp nhận được</text><text x="910.0" y="168"
+      font-size="22" text-anchor="middle" fill="#1f2937">→ băm lại</text><rect x="810"
+      y="240" width="200" height="110" rx="10" fill="#f3e8ff" stroke="#9333ea" stroke-width="3"/><text
+      x="910.0" y="288" font-size="22" text-anchor="middle" fill="#1f2937" font-weight="bold">chữ
+      ký +</text><text x="910.0" y="318" font-size="22" text-anchor="middle" fill="#1f2937">khoá
+      công khai</text><rect x="1090" y="165" width="150" height="110" rx="10" fill="#e5e7eb"
+      stroke="#6b7280" stroke-width="3"/><text x="1165.0" y="213" font-size="22" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">so</text><text x="1165.0" y="243" font-size="22"
+      text-anchor="middle" fill="#1f2937">khớp?</text><line x1="1010" y1="150" x2="1085"
+      y2="200" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><line x1="1010"
+      y1="290" x2="1085" y2="245" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><rect
+      x="1300" y="100" width="165" height="80" rx="10" fill="#dcfce7" stroke="#16a34a"
+      stroke-width="3"/><text x="1382.5" y="147" font-size="20" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">khớp: hợp lệ</text><rect x="1300" y="260"
+      width="165" height="80" rx="10" fill="#fee2e2" stroke="#dc2626" stroke-width="3"/><text
+      x="1382.5" y="307" font-size="20" text-anchor="middle" fill="#1f2937" font-weight="bold">lệch:
+      đã bị sửa</text><line x1="1240" y1="200" x2="1295" y2="150" stroke="#16a34a"
+      stroke-width="3.5" marker-end="url(#ah)"/><line x1="1240" y1="240" x2="1295"
+      y2="290" stroke="#dc2626" stroke-width="3.5" marker-end="url(#ah)"/><text x="750"
+      y="440" font-size="24" text-anchor="middle" fill="#1f2937" font-weight="bold">Kho
+      hồ sơ (ECM) lưu ba thứ: đúng tệp đã ký, chữ ký, mã băm</text></svg></div>'
+    clear: true
+    say: Hình thứ hai là cơ chế ký số. Lúc ký, hợp đồng được băm thành một mã băm,
+      rồi khoá riêng ký lên mã băm đó để tạo chữ ký. Với ký số từ xa, khoá riêng nằm
+      ở nơi cấp chứng thư, và người ký xác nhận từng lần ký, ví dụ bằng mã OTP. Lúc
+      kiểm, người nhận băm lại tệp mình nhận được, rồi dùng khoá công khai để so với
+      chữ ký. Khớp thì hợp lệ, lệch thì nội dung đã bị sửa. Vì vậy chữ ký gắn với
+      nội dung đã băm, không gắn với tên tệp, và kho hồ sơ phải lưu đúng tệp đã ký
+      cùng chữ ký và mã băm.
+- id: formula
+  kind: formula
+  title: 'Suy ra từng bước: trạng thái, thẩm định, ký, chống gian lận, gửi lõi'
+  checks:
+  - alg.bnx_loan_path_ok(['NOP', 'CHAM_DIEM', 'THAM_DINH', 'DUYET', 'DA_KY', 'GIAI_NGAN'])
+    == (True, -1)
+  - alg.bnx_loan_path_ok(['DUYET', 'GIAI_NGAN']) == (False, 0)
+  - alg.bnx_dti(20_000_000, 4_000_000, 5_000_000) == 45 and alg.bnx_dti_pass(20_000_000,
+    4_000_000, 5_000_000, 50)
+  - alg.bnx_scorecard(20_000_000, 1, 36) == (35, 25, 20, 80)
+  - alg.bnx_scorecard(10_000_000, 2, 12) == (20, 0, 10, 30)
+  - alg.bnx_underwrite(20_000_000, 4_000_000, 5_000_000, 1, 36) == 'DUYET'
+  - alg.bnx_sha256_hex('Hop dong vay 50000000 dong, ky han 12 thang\n')[:16] == '662097aa0554ed46'
+  - alg.bnx_sha256_hex('Hop dong vay 50000000 dong, ky han 12 thang\n'.replace('50000000',
+    '60000000'))[:16] == '93938eab15e6cccc'
+  - alg.bnx_hex_diff(alg.bnx_sha256_hex('Hop dong vay 50000000 dong, ky han 12 thang\n'),
+    alg.bnx_sha256_hex('Hop dong vay 50000000 dong, ky han 12 thang\n'.replace('50000000',
+    '60000000'))) == 60
+  - 'alg.bnx_device_fp({''he'': ''Android 14'', ''man'': ''1080x2400'', ''mui'': ''UTC+7''})
+    == ''f7286011deef'' and alg.bnx_device_fp(dict({''he'': ''Android 14'', ''man'':
+    ''1080x2400'', ''mui'': ''UTC+7''}, man=''1170x2532'')) == ''3b0dc756fcb5'''
+  - 'sorted(alg.bnx_fp_counts([(''HS1'', ''CCCD 001'', {''he'': ''Android 14'', ''man'':
+    ''1080x2400'', ''mui'': ''UTC+7''}), (''HS2'', ''CCCD 002'', {''he'': ''Android
+    14'', ''man'': ''1080x2400'', ''mui'': ''UTC+7''}), (''HS3'', ''CCCD 003'', {''he'':
+    ''Android 14'', ''man'': ''1080x2400'', ''mui'': ''UTC+7''}), (''HS4'', ''CCCD
+    004'', dict({''he'': ''Android 14'', ''man'': ''1080x2400'', ''mui'': ''UTC+7''},
+    man=''1170x2532''))]).values()) == [1, 3]'
+  - 'alg.bnx_ofs_fields(''UNG.DUNG.MAU,/I/PROCESS,NGUOI.DUNG/******/CN001,HS001,DIEN.THOAI:1:1=0901000111,DIEN.THOAI:2:1=0902000222,DIA.CHI:1:1=12
+    Le Loi,DIA.CHI:1:2=Quan 1'')[''DIEN.THOAI''] == {(1, 1): ''0901000111'', (2, 1):
+    ''0902000222''}'
+  - alg.bnx_ofs_fields('UNG.DUNG.MAU,/I/PROCESS,NGUOI.DUNG/******/CN001,HS001,DIEN.THOAI:1:1=0901000111,DIEN.THOAI:2:1=0902000222,DIA.CHI:1:1=12
+    Le Loi,DIA.CHI:1:2=Quan 1')['DIA.CHI'][(1, 2)] == 'Quan 1'
+  steps:
+  - show: '<p><b>Bước 1. Máy trạng thái của hồ sơ: bảng các bước được phép</b></p><div
+      class="code"><div>BUOC = {"NOP": ["CHAM_DIEM"], "CHAM_DIEM": ["THAM_DINH", "TU_CHOI"],</div><div>        "THAM_DINH":
+      ["DUYET", "TU_CHOI", "XET_TAY"],</div><div>        "XET_TAY": ["DUYET", "TU_CHOI"],
+      "DUYET": ["DA_KY"],</div><div>        "DA_KY": ["GIAI_NGAN"], "GIAI_NGAN": [],
+      "TU_CHOI": []}</div><div>def chuyen(tu, den):</div><div>    if den not in BUOC[tu]:</div><div>        raise
+      ValueError(f"không được đi {tu} -&gt; {den}")</div><div>    return den</div></div>'
+    focus:
+    - 1
+    - '2.1'
+    - '2.6'
+    say: Bước một, ta viết máy trạng thái của hồ sơ bằng Python. Bảng này ghi từ mỗi
+      trạng thái được đi tới những trạng thái nào. Hàm chuyển kiểm bước đi có nằm
+      trong bảng không, vì nếu không kiểm thì một lỗi lập trình có thể giải ngân hồ
+      sơ chưa ký.
+  - show: '<div class="code"><div>tt = "NOP"</div><div>for den in ["CHAM_DIEM", "THAM_DINH",
+      "DUYET", "DA_KY", "GIAI_NGAN"]:</div><div>    tt = chuyen(tt, den)</div><div>print("hồ
+      sơ tới", tt)</div><div>try:</div><div>    chuyen("DUYET", "GIAI_NGAN")</div><div>except
+      ValueError as loi:</div><div>    print("chặn:", loi)</div></div><p><b>Làm thử
+      — kết quả chạy thật</b></p><div class="code"><div>hồ sơ tới GIAI_NGAN</div><div>chặn:
+      không được đi DUYET -&gt; GIAI_NGAN</div></div>'
+    focus:
+    - '1.1'
+    - '1.5'
+    - '3.2'
+    clear: true
+    say: Làm thử, ta cho hồ sơ đi đúng năm bước, và máy in hồ sơ tới trạng thái giải
+      ngân. Rồi ta thử nhảy từ duyệt thẳng sang giải ngân. Máy chặn lại, vì bước đó
+      không có trong bảng.
+  - show: '<p><b>Bước 2.</b> Tỉ lệ nghĩa vụ trả nợ trên thu nhập (DTI). Vì khoản vay
+      mới làm tăng số tiền phải trả mỗi tháng, ta cộng nó vào nợ đang trả rồi mới
+      chia:</p>
+
+      $$\text{DTI} = \frac{\text{đang trả} + \text{khoản mới}}{\text{thu nhập}} \cdot
+      100\%$$
+
+      <span class=''note''>Làm thử: (4 + 5) / 20 = 45%. Ngưỡng minh hoạ 50%: 45% không
+      vượt nên qua. Ngưỡng là chính sách của từng tổ chức, không phải hằng số.</span>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    - 3
+    - 3
+    clear: true
+    say: Bước hai là tỉ lệ nghĩa vụ trả nợ trên thu nhập. Vì khoản vay mới làm tăng
+      số tiền phải trả mỗi tháng, nên ta cộng nó vào nợ đang trả rồi mới chia cho
+      thu nhập. Công thức là nợ đang trả cộng khoản mới, chia thu nhập, nhân một trăm
+      phần trăm. Làm thử, bốn cộng năm là chín, chín chia hai mươi là bốn mươi lăm
+      phần trăm, không vượt ngưỡng minh hoạ năm mươi phần trăm nên qua. Ngưỡng này
+      là chính sách của từng tổ chức, không phải hằng số.
+    introduces:
+    - cdot
+  - show: '<table class=''t''><tr><th>Bước 3: thẻ điểm (trọng số minh hoạ)</th><th>điều
+      kiện</th><th>điểm</th></tr><tr><td>thu nhập</td><td>từ 15 triệu trở lên / thấp
+      hơn</td><td>35 / 20</td></tr><tr><td>lịch sử trả nợ</td><td>nhóm 1 / nhóm khác</td><td>25
+      / 0</td></tr><tr><td>thời gian làm việc</td><td>từ 24 tháng / ngắn hơn</td><td>20
+      / 10</td></tr><tr><td>tổng của khách trong ví dụ</td><td>20 triệu, nhóm 1, 36
+      tháng</td><td>35 + 25 + 20 = 80</td></tr></table><span class=''note''>Ngưỡng
+      duyệt minh hoạ: 70 điểm. 80 không thấp hơn 70 nên qua.</span>'
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.5'
+    - 2
+    clear: true
+    say: Bước ba là thẻ điểm, với trọng số minh hoạ. Thu nhập từ mười lăm triệu trở
+      lên được ba mươi lăm điểm, thấp hơn được hai mươi. Lịch sử trả nợ ở nhóm một
+      được hai mươi lăm điểm, nhóm khác không điểm. Làm việc từ hai mươi bốn tháng
+      được hai mươi điểm, ngắn hơn được mười. Khách trong ví dụ có ba mươi lăm cộng
+      hai mươi lăm cộng hai mươi, bằng tám mươi điểm. Vì tám mươi không thấp hơn ngưỡng
+      duyệt minh hoạ bảy mươi, nên qua.
+  - show: '<p><b>Bước 4. Bộ máy quyết định: luật loại trước, rồi tỉ lệ, rồi điểm</b></p><div
+      class="code"><div>NGUONG_DTI, NGUONG_DIEM = 50, 70     # số minh hoạ</div><div>def
+      tham_dinh(thu_nhap, dang_tra, khoan_moi, nhom, thang):</div><div>    no = dang_tra
+      + khoan_moi</div><div>    diem = ((35 if thu_nhap &gt;= 15_000_000 else 20)</div><div>            +
+      (25 if nhom == 1 else 0) + (20 if thang &gt;= 24 else 10))</div><div>    if
+      nhom &gt;= 2:</div><div>        kq = "XET_TAY"</div><div>    elif no * 100 &gt;
+      NGUONG_DTI * thu_nhap or diem &lt; NGUONG_DIEM:</div><div>        kq = "TU_CHOI"</div><div>    else:</div><div>        kq
+      = "DUYET"</div><div>    return no * 100 / thu_nhap, diem, kq</div></div>'
+    focus:
+    - 1
+    - 1
+    - '2.6'
+    - '2.8'
+    - '2.8'
+    clear: true
+    say: Bước bốn ghép lại thành bộ máy quyết định. Thứ tự luật quan trọng, vì luật
+      loại phải chạy trước mọi phép tính điểm. Ở đây, nhóm nợ từ hai trở lên thì chuyển
+      cho người xét. Tiếp theo, tỉ lệ vượt ngưỡng hoặc điểm dưới ngưỡng thì từ chối,
+      còn lại là duyệt. Phép so tỉ lệ dùng nhân chéo thay cho chia rồi làm tròn, vì
+      làm tròn có thể cho qua một hồ sơ vừa vượt ngưỡng.
+  - show: '<p><b>Bước 5. Băm hợp đồng, rồi đổi đúng một ký tự (5 thành 6)</b></p><div
+      class="code"><div>import hashlib</div><div>hd = "Hop dong vay 50000000 dong,
+      ky han 12 thang\n"</div><div>sua = hd.replace("50000000", "60000000")</div><div>a
+      = hashlib.sha256(hd.encode()).hexdigest()</div><div>b = hashlib.sha256(sua.encode()).hexdigest()</div><div>print(a[:16],
+      "dài", len(a))</div><div>print(b[:16], "dài", len(b))</div><div>print("số vị
+      trí khác nhau:", sum(x != y for x, y in zip(a, b)))</div></div><p><b>Kết quả
+      chạy thật</b></p><div class="code"><div>662097aa0554ed46 dài 64</div><div>93938eab15e6cccc
+      dài 64</div><div>số vị trí khác nhau: 60</div></div>'
+    focus:
+    - 1
+    - '2.2'
+    - '2.3'
+    - '4.3'
+    - '4.3'
+    clear: true
+    say: Bước năm là băm hợp đồng. Chuỗi hợp đồng mẫu viết không dấu cho gọn, ghi
+      khoản vay năm mươi triệu. Ta đổi đúng một ký tự, số năm thành số sáu, rồi băm
+      cả hai bản. Kết quả chạy thật cho hai mã cùng dài sáu mươi tư ký tự, nhưng khác
+      nhau ở sáu mươi trên sáu mươi tư vị trí. Vì vậy sửa một ký tự là lộ ngay.
+  - show: <p><b>Bước 6. Ký và kiểm bằng cặp khoá (openssl; chỉ minh hoạ phần toán,
+      không có chứng thư)</b></p><div class="code"><div>printf 'Hop dong vay 50000000
+      dong, ky han 12 thang\n' &gt; hd.txt</div><div>openssl genrsa -out rieng.pem
+      2048 2&gt;/dev/null</div><div>openssl rsa -in rieng.pem -pubout -out cong.pem
+      2&gt;/dev/null</div><div>openssl dgst -sha256 -sign rieng.pem -out hd.sig hd.txt</div><div>openssl
+      dgst -sha256 -verify cong.pem -signature hd.sig hd.txt</div><div>sed 's/50000000/60000000/'
+      hd.txt &gt; hd_sua.txt</div><div>openssl dgst -sha256 -verify cong.pem -signature
+      hd.sig hd_sua.txt</div><div>cp hd.txt ten_khac.txt</div><div>openssl dgst -sha256
+      -verify cong.pem -signature hd.sig ten_khac.txt</div></div><p><b>Kết quả chạy
+      thật</b></p><div class="code"><div>Verified OK</div><div>Verification failure</div><div>Verified
+      OK</div></div>
+    focus:
+    - 1
+    - '2.4'
+    - '4.1'
+    - '4.2'
+    - '4.3'
+    - '4.3'
+    clear: true
+    say: Bước sáu, ta ký thật bằng công cụ dòng lệnh. Ba lệnh đầu tạo tệp hợp đồng
+      và một cặp khoá, rồi khoá riêng ký lên mã băm của tệp. Lần kiểm thứ nhất trên
+      tệp gốc báo hợp lệ. Lần thứ hai trên tệp đã sửa một ký tự báo thất bại, vì mã
+      băm mới không còn khớp chữ ký. Lần thứ ba kiểm một bản sao mang tên khác mà
+      nội dung y nguyên, và vẫn hợp lệ. Đó là vì chữ ký gắn với nội dung đã băm, không
+      gắn với tên tệp, và ví dụ này chỉ minh hoạ phần toán, không có chứng thư.
+  - show: '<p><b>Bước 7. Dấu vân tay thiết bị: đếm số giấy tờ khác nhau trên một máy</b></p><div
+      class="code"><div>import hashlib</div><div>def dau_van_tay(may):</div><div>    chuoi
+      = "|".join(may[k] for k in sorted(may))</div><div>    return hashlib.sha256(chuoi.encode()).hexdigest()[:12]</div><div>may_a
+      = {"he": "Android 14", "man": "1080x2400", "mui": "UTC+7"}</div><div>may_b =
+      dict(may_a, man="1170x2532")</div><div>ho_so = [("HS1", "CCCD 001", may_a),
+      ("HS2", "CCCD 002", may_a),</div><div>         ("HS3", "CCCD 003", may_a), ("HS4",
+      "CCCD 004", may_b)]</div><div>dem = {}</div><div>for ma, giay_to, may in ho_so:</div><div>    dem.setdefault(dau_van_tay(may),
+      set()).add(giay_to)</div><div>print({k: len(v) for k, v in dem.items()})</div></div>'
+    focus:
+    - 1
+    - 1
+    - '2.2'
+    - '2.10'
+    clear: true
+    say: 'Bước bảy là chống gian lận hồ sơ, gồm hai lớp. Lớp một là xác thực hai yếu
+      tố: ngoài mật khẩu là thứ khách biết, còn cần mã OTP gửi tới thứ khách có. Lớp
+      hai là dấu vân tay thiết bị, vì kẻ gian hay nộp nhiều hồ sơ từ cùng một máy.
+      Chương trình băm các thuộc tính của máy thành một mã ngắn, rồi đếm số giấy tờ
+      khác nhau nộp từ cùng một mã.'
+  - show: '<p><b>Bước 7 (tiếp). Bốn hồ sơ, hai máy</b></p><div class="code"><div>ho_so
+      = [("HS1", "CCCD 001", may_a), ("HS2", "CCCD 002", may_a),</div><div>         ("HS3",
+      "CCCD 003", may_a), ("HS4", "CCCD 004", may_b)]</div><div>dem = {}</div><div>for
+      ma, giay_to, may in ho_so:</div><div>    dem.setdefault(dau_van_tay(may), set()).add(giay_to)</div><div>print({k:
+      len(v) for k, v in dem.items()})</div></div><p><b>Kết quả chạy thật</b></p><div
+      class="code"><div>{''f7286011deef'': 3, ''3b0dc756fcb5'': 1}</div></div><div
+      class=''box key''>Một mã có 3 giấy tờ khác nhau → gắn cờ, chuyển người xét (ngưỡng
+      3 là số minh hoạ). Hai máy cùng đời có thể trùng mã: dấu vân tay là <b>tín hiệu
+      rủi ro, không phải danh tính</b>.</div>'
+    focus:
+    - '2.1'
+    - '4.1'
+    - 5
+    clear: true
+    say: Đây là phần cuối của chương trình, với bốn hồ sơ nộp từ hai máy. Kết quả
+      chạy thật cho thấy một máy nộp hồ sơ cho ba căn cước khác nhau, nên hệ thống
+      gắn cờ để người xét, với ngưỡng ba là số minh hoạ. Nhưng hai máy cùng đời có
+      thể trùng mã, nên dấu vân tay chỉ là tín hiệu rủi ro, không phải danh tính.
+  - show: '<p><b>Bước 8. Trường đa trị trong bản tin gửi lõi (mẫu minh hoạ, tên trường
+      giả định)</b></p><div class="code"><div>ofs = ("UNG.DUNG.MAU,/I/PROCESS,NGUOI.DUNG/******/CN001,HS001,"</div><div>       "DIEN.THOAI:1:1=0901000111,DIEN.THOAI:2:1=0902000222,"</div><div>       "DIA.CHI:1:1=12
+      Le Loi,DIA.CHI:1:2=Quan 1")</div></div><table class=''t''><tr><th>phần</th><th>nghĩa</th></tr><tr><td>DIEN.THOAI:1:1
+      và DIEN.THOAI:2:1</td><td>trường điện thoại có hai giá trị: giá trị thứ 1 và
+      giá trị thứ 2</td></tr><tr><td>DIA.CHI:1:1 và DIA.CHI:1:2</td><td>giá trị thứ
+      1 của địa chỉ gồm hai phần con: phần 1 và phần 2</td></tr></table>'
+    focus:
+    - 1
+    - '2.2'
+    - '2.2'
+    - 1
+    - '3.2'
+    clear: true
+    say: Bước tám, khi cần ghi vào lõi ngân hàng T24, ví dụ lúc giải ngân, hồ sơ được
+      gửi bằng bản tin OFS. Một trường có thể mang nhiều giá trị, nên mỗi giá trị
+      kèm hai số vị trí. Số thứ nhất là thứ tự giá trị, số thứ hai là thứ tự phần
+      con bên trong giá trị đó. Đây là mẫu minh hoạ, tên trường là giả định. Trường
+      điện thoại có hai giá trị, còn giá trị thứ nhất của địa chỉ gồm hai phần con.
+  - show: '<div class="code"><div>ofs = ("UNG.DUNG.MAU,/I/PROCESS,NGUOI.DUNG/******/CN001,HS001,"</div><div>       "DIEN.THOAI:1:1=0901000111,DIEN.THOAI:2:1=0902000222,"</div><div>       "DIA.CHI:1:1=12
+      Le Loi,DIA.CHI:1:2=Quan 1")</div><div>truong = {}</div><div>for phan in ofs.split(",")[4:]:</div><div>    toa_do,
+      gia_tri = phan.split("=", 1)</div><div>    ten, mv, sv = toa_do.split(":")</div><div>    truong.setdefault(ten,
+      {})[(int(mv), int(sv))] = gia_tri</div><div>print(truong["DIEN.THOAI"])</div><div>print(len({mv
+      for mv, sv in truong["DIEN.THOAI"]}), "số điện thoại")</div><div>print(truong["DIA.CHI"][(1,
+      2)])</div></div><p><b>Bước 8 (tiếp) — kết quả chạy thật: tách bản tin thành
+      từng trường</b></p><div class="code"><div>{(1, 1): ''0901000111'', (2, 1): ''0902000222''}</div><div>2
+      số điện thoại</div><div>Quan 1</div></div>'
+    focus:
+    - '1.5'
+    - '3.1'
+    clear: true
+    say: Chương trình bỏ bốn phần đầu của bản tin, rồi tách từng phần còn lại theo
+      dấu phẩy, dấu bằng và dấu hai chấm, và gom theo tên trường. Kết quả chạy thật
+      cho hai số điện thoại ở hai vị trí, và phần con thứ hai của địa chỉ.
+- id: example
+  kind: example
+  title: Ví dụ một hồ sơ, từng phép tính
+  checks:
+  - 4 + 5 == 9 and alg.bnx_dti(20, 4, 5) == 45
+  - alg.bnx_dti_pass(20_000_000, 4_000_000, 5_000_000, 50) is True
+  - alg.bnx_scorecard(20_000_000, 1, 36)[3] == 80 and 80 >= 70
+  - alg.bnx_underwrite(20_000_000, 4_000_000, 5_000_000, 1, 36) == 'DUYET'
+  - alg.bnx_max_new_payment(20_000_000, 4_000_000, 50) == 6_000_000
+  - alg.bnx_sha256_hex('Hop dong vay 50000000 dong, ky han 12 thang\n').startswith('662097aa')
+    and alg.bnx_sha256_hex('Hop dong vay 50000000 dong, ky han 12 thang\n'.replace('5',
+    '6', 1)).startswith('93938eab')
+  steps:
+  - show: '<p>Thu nhập <b>20 triệu</b>, đang trả <b>4 triệu</b> mỗi tháng, khoản mới
+      trả <b>5 triệu</b> mỗi tháng; nhóm nợ 1; làm việc 36 tháng. <span class=''note''>(mọi
+      ngưỡng, trọng số và số tiền trong bài là số minh hoạ, không phải chính sách
+      của tổ chức nào)</span></p>
+
+      $$① \; \text{nghĩa vụ mỗi tháng} = 4 + 5 = \hl{9} \text{ triệu}$$
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    say: Ta làm trọn một hồ sơ. Thu nhập hai mươi triệu, đang trả bốn triệu mỗi tháng,
+      khoản mới trả năm triệu mỗi tháng, nhóm nợ một, làm việc ba mươi sáu tháng.
+      Phép tính thứ nhất, nghĩa vụ trả nợ mỗi tháng bằng bốn cộng năm, bằng chín triệu.
+  - show: '<p>Dùng lại 9 triệu ở phép ①.</p>
+
+      $$② \; \text{DTI} = \frac{9}{20} = \hl{45\%} \leq 50\% \;\Rightarrow\; \text{qua}$$
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    say: Phép tính thứ hai dùng lại chín triệu. Tỉ lệ nghĩa vụ trên thu nhập bằng
+      chín chia hai mươi, bằng bốn mươi lăm phần trăm. Vì bốn mươi lăm không vượt
+      ngưỡng minh hoạ năm mươi phần trăm, nên qua.
+    introduces:
+    - implies
+  - show: $$③ \; \text{điểm} = 35 + 25 + 20 = \hl{80} \geq 70 \;\Rightarrow\; \text{qua}$$
+    say: Phép tính thứ ba là thẻ điểm. Ba mươi lăm cộng hai mươi lăm cộng hai mươi,
+      bằng tám mươi điểm. Vì tám mươi không thấp hơn ngưỡng duyệt minh hoạ bảy mươi,
+      nên qua.
+  - show: '<p>Nhóm nợ 1, phép ② qua, phép ③ qua.</p>
+
+      $$④ \; \text{quyết định} = \hlg{\text{DUYET}};\quad \text{khoản trả mới tối
+      đa} = 50\% \cdot 20 - 4 = \hl{6} \text{ triệu}$$
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    clear: true
+    say: Phép tính thứ tư ghép ba kết quả. Nhóm nợ một nên không bị luật loại, tỉ
+      lệ qua, điểm qua, vậy quyết định là duyệt. Ta cũng biết khách còn chỗ tới đâu.
+      Năm mươi phần trăm của hai mươi triệu là mười triệu, trừ bốn triệu đang trả,
+      còn tối đa sáu triệu cho khoản mới.
+  - show: '<p>Hồ sơ đã duyệt thì sang bước ký: băm hợp đồng mẫu ghi 50 000 000 đồng.</p>
+
+      $$⑤ \; \text{mã băm ban đầu: } \texttt{662097aa…};\quad \text{đổi 5 thành 6:
+      } \texttt{93938eab…} \;\Rightarrow\; \hl{\text{chữ ký không còn khớp}}$$
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    say: Phép tính thứ năm, hồ sơ đã duyệt thì sang bước ký. Mã băm của hợp đồng gốc
+      và của bản bị đổi một ký tự khác hẳn nhau, như hai dãy đang hiện. Chữ ký đã
+      tạo trên mã băm gốc, nên với bản bị sửa thì chữ ký không còn khớp.
+- id: check
+  kind: check
+  title: 'Tự kiểm bằng đường khác: để máy quyết định, rồi thử hai hồ sơ lân cận'
+  checks:
+  - 9 * 100 <= 50 * 20 and alg.bnx_dti_pass(20, 4, 5, 50)
+  - alg.bnx_underwrite(20_000_000, 4_000_000, 7_000_000, 1, 36) == 'TU_CHOI' and alg.bnx_dti(20,
+    4, 7) == 55
+  - alg.bnx_underwrite(20_000_000, 4_000_000, 5_000_000, 2, 36) == 'XET_TAY' and alg.bnx_scorecard(20_000_000,
+    2, 36)[3] == 55
+  - alg.bnx_max_new_payment(20_000_000, 4_000_000, 50) - 5_000_000 == 1_000_000
+  - max(alg.bnx_scorecard(i, g, m)[3] for i in (10_000_000, 20_000_000) for g in (1,
+    2) for m in (12, 36)) == 80
+  steps:
+  - show: <p><b>Gọi bộ máy quyết định ở bước 4 với ba hồ sơ</b></p><div class="code"><div>print(tham_dinh(20_000_000,
+      4_000_000, 5_000_000, 1, 36))</div><div>print(tham_dinh(20_000_000, 4_000_000,
+      7_000_000, 1, 36))</div><div>print(tham_dinh(20_000_000, 4_000_000, 5_000_000,
+      2, 36))</div></div><p><b>Kết quả chạy thật</b></p><div class="code"><div>(45.0,
+      80, 'DUYET')</div><div>(55.0, 80, 'TU_CHOI')</div><div>(45.0, 55, 'XET_TAY')</div></div>
+    focus:
+    - 1
+    - 1
+    - '4.1'
+    - '4.2'
+    - '4.3'
+    say: Kiểm bằng đường khác. Thay vì tin phép tính tay, ta gọi bộ máy quyết định
+      ở bước bốn với ba hồ sơ. Hồ sơ thứ nhất là ví dụ vừa làm, máy in bốn mươi lăm
+      phần trăm, tám mươi điểm, duyệt, khớp với tính tay. Hồ sơ thứ hai có khoản mới
+      bảy triệu, tỉ lệ lên năm mươi lăm phần trăm nên bị từ chối. Hồ sơ thứ ba ở nhóm
+      nợ hai nên chuyển cho người xét, dù tỉ lệ vẫn là bốn mươi lăm phần trăm.
+  - show: '<table class=''t''><tr><th>cách kiểm</th><th>phép tính</th><th>kết luận</th></tr><tr><td>nhân
+      chéo, không chia</td><td>9 × 100 = 900 không lớn hơn 50 × 20 = 1000</td><td>tỉ
+      lệ qua</td></tr><tr><td>tính ngược từ khoản tối đa</td><td>6 − 5 = 1 triệu còn
+      dư</td><td>khoản mới 5 triệu nằm trong giới hạn</td></tr><tr><td>điểm bị mất
+      so với tối đa</td><td>80 − 80 = 0</td><td>khách đạt mức cao nhất của cả ba đặc
+      trưng</td></tr><tr><td>bản sao hợp đồng mang tên khác</td><td>kiểm chữ ký: hợp
+      lệ</td><td>chữ ký theo nội dung, không theo tên tệp</td></tr></table>'
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.5'
+    clear: true
+    say: Bảng này kiểm thêm bằng bốn đường. Nhân chéo thì chín nhân một trăm là chín
+      trăm, không lớn hơn năm mươi nhân hai mươi là một nghìn, nên tỉ lệ qua. Tính
+      ngược thì khoản tối đa sáu triệu trừ khoản mới năm triệu còn dư một triệu. Về
+      điểm, tám mươi là mức cao nhất của thẻ, khách không mất điểm nào. Còn bản sao
+      hợp đồng mang tên khác vẫn kiểm chữ ký hợp lệ, vì chữ ký theo nội dung chứ không
+      theo tên tệp.
+- id: pitfalls
+  kind: pitfall
+  title: Lỗi hay gặp, có lỗi của người đã đi làm
+  checks:
+  - float(alg.bnx_dti(20_000_000, 4_000_000, 6_190_000)) == 50.95
+  - (4_000_000 + 6_190_000) * 100 // 20_000_000 == 50 and not alg.bnx_dti_pass(20_000_000,
+    4_000_000, 6_190_000, 50)
+  - 10_190_000 * 100 == 1_019_000_000 and 50 * 20_000_000 == 1_000_000_000
+  - alg.bnx_sha256_hex('Hop dong  vay') != alg.bnx_sha256_hex('Hop dong vay')
+  - 'alg.bnx_device_fp({''he'': ''Android 14'', ''man'': ''1080x2400'', ''mui'': ''UTC+7''})
+    == alg.bnx_device_fp(dict({''he'': ''Android 14'', ''man'': ''1080x2400'', ''mui'':
+    ''UTC+7''}))'
+  steps:
+  - show: '<div class="box warn"><b>Lỗi 1 (người mới).</b> Coi ngưỡng 50% và 70 điểm
+      là hằng số của nghề, và nghĩ chữ ký gắn với <b>tên tệp</b>.
+
+      <br><span class="note">Đúng: ngưỡng là chính sách của từng tổ chức, đặt thành
+      cấu hình. Chữ ký gắn với nội dung đã băm: đổi tên tệp không sao, đổi một ký
+      tự nội dung là lộ.</span></div>
+
+      '
+    say: Lỗi thứ nhất, của người mới, là coi ngưỡng năm mươi phần trăm và bảy mươi
+      điểm là hằng số của nghề, và nghĩ chữ ký gắn với tên tệp. Thật ra ngưỡng là
+      chính sách của từng tổ chức, nên đặt thành cấu hình. Còn chữ ký gắn với nội
+      dung đã băm, đổi tên tệp không sao, đổi một ký tự nội dung là lộ.
+  - show: '<div class="box warn"><b>Lỗi 2 (người đã đi làm, lúc mới dựng).</b> Tính
+      tỉ lệ bằng phép chia lấy phần nguyên rồi mới so ngưỡng. Thu nhập 20 000 000,
+      đang trả 4 000 000, khoản mới 6 190 000:</div>
+
+      $$\frac{10\,190\,000}{20\,000\,000} = 50{,}95\% \;\text{bị cắt còn}\; 50\% \;\Rightarrow\;
+      \text{qua sai}$$
+
+      <span class="note">Cách chữa: so bằng nhân chéo trên số nguyên, 1 019 000 000
+      lớn hơn 1 000 000 000 nên vượt; viết ca kiểm ngay tại biên.</span>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Lỗi thứ hai, của người đã đi làm, hay gặp lúc mới dựng hệ thống. Đó là tính
+      tỉ lệ bằng phép chia lấy phần nguyên rồi mới so với ngưỡng. Với khoản mới sáu
+      triệu một trăm chín mươi nghìn, tỉ lệ thật là năm mươi phẩy chín mươi lăm phần
+      trăm, nhưng bị cắt còn năm mươi, nên hồ sơ qua sai. Cách chữa là so bằng nhân
+      chéo trên số nguyên, và viết ca kiểm ngay tại biên của ngưỡng.
+  - show: '<div class="box warn"><b>Lỗi 3 (người đã đi làm, lúc vận hành lâu dài).</b>
+      Kho hồ sơ chỉ lưu dữ liệu hợp đồng, khi cần thì <b>sinh lại tệp</b> từ mẫu.
+      Một năm sau mẫu đổi một dấu cách: tệp sinh lại có mã băm khác, chữ ký cũ không
+      còn kiểm được.
+
+      <br><span class="note">Cách chữa: lưu đúng tệp đã ký, chữ ký và mã băm; việc
+      đồng bộ sang kho chỉ xong khi băm lại tệp trong kho ra đúng mã đã ký.</span></div>
+
+      <div class="box warn"><b>Cùng loại, lúc tải tăng.</b> Chặn cứng mọi hồ sơ trùng
+      dấu vân tay thiết bị: nhiều khách dùng cùng đời máy bị từ chối oan. Dấu vân
+      tay là tín hiệu rủi ro, không phải danh tính.</div>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 1
+    - 1
+    - 2
+    - 2
+    clear: true
+    say: Lỗi thứ ba, cũng của người đã đi làm, lộ ra khi vận hành lâu dài. Kho hồ
+      sơ chỉ lưu dữ liệu hợp đồng, khi cần thì sinh lại tệp từ mẫu. Một năm sau mẫu
+      đổi một dấu cách, tệp sinh lại có mã băm khác, nên chữ ký cũ không còn kiểm
+      được. Cách chữa là lưu đúng tệp đã ký cùng chữ ký và mã băm, và chỉ coi là đồng
+      bộ xong khi băm lại tệp trong kho ra đúng mã đã ký. Một lỗi cùng loại lộ ra
+      lúc tải tăng, là chặn cứng mọi hồ sơ trùng dấu vân tay thiết bị. Nhiều khách
+      dùng cùng đời máy sẽ bị từ chối oan, vì dấu vân tay chỉ là tín hiệu rủi ro,
+      không phải danh tính.
+- id: quiz
+  kind: quiz
+  title: Đến lượt bạn
+  checks:
+  - alg.bnx_dti(30, 6, 10) * 3 == 160 and not alg.bnx_dti_pass(30, 6, 10, 50)
+  - round(float(alg.bnx_dti(30, 6, 10)), 1) == 53.3
+  - alg.bnx_max_new_payment(30_000_000, 6_000_000, 50) == 9_000_000
+  - alg.bnx_debt_group(95) == 3
+  - alg.bnx_scorecard(12_000_000, 1, 12) == (20, 25, 10, 55) and alg.bnx_underwrite(12_000_000,
+    0, 1_000_000, 1, 12) == 'TU_CHOI'
+  steps:
+  - show: '<table class=''t''><tr><th>câu</th><th>đề (dùng ngưỡng và thẻ điểm minh
+      hoạ của bài)</th></tr><tr><td>1</td><td>Thu nhập 30 triệu, đang trả 6 triệu,
+      khoản mới trả 10 triệu mỗi tháng. Tỉ lệ là bao nhiêu, có qua ngưỡng 50% không?
+      Khoản trả mới tối đa là bao nhiêu?</td></tr><tr><td>2</td><td>Khách quá hạn
+      95 ngày thuộc nhóm nợ mấy? Một khách khác thu nhập 12 triệu, nhóm 1, làm việc
+      12 tháng được bao nhiêu điểm, có đạt 70 không?</td></tr><tr><td>3</td><td>Quyết
+      định: trong một ngày, ba hồ sơ với ba căn cước khác nhau cùng một dấu vân tay
+      thiết bị. Từ chối tự động cả ba, hay chuyển người xét kèm xác thực thêm?</td></tr></table>'
+    pause: 25
+    say: Bây giờ tới phần bạn tự làm bài. Câu một, thu nhập ba mươi triệu, đang trả
+      sáu triệu, khoản mới trả mười triệu mỗi tháng. Tỉ lệ là bao nhiêu, có qua ngưỡng
+      năm mươi phần trăm không, và khoản trả mới tối đa là bao nhiêu? Câu hai, khách
+      quá hạn chín mươi lăm ngày thuộc nhóm nợ mấy? Một khách khác thu nhập mười hai
+      triệu, nhóm một, làm việc mười hai tháng được bao nhiêu điểm, có đạt bảy mươi
+      không? Câu ba, trong một ngày có ba hồ sơ với ba căn cước khác nhau cùng một
+      dấu vân tay thiết bị. Nên từ chối tự động cả ba, hay chuyển người xét kèm xác
+      thực thêm? Hãy dừng video và làm ra giấy.
+  - show: $$\frac{6 + 10}{30} = \frac{16}{30} \approx 53{,}3\% > 50\% \;\Rightarrow\;
+      \hl{\text{không qua}};\quad 50\% \cdot 30 - 6 = \hlg{9} \text{ triệu}$$
+    say: Đáp án câu một. Sáu cộng mười là mười sáu, mười sáu chia ba mươi xấp xỉ năm
+      mươi ba phẩy ba phần trăm, lớn hơn năm mươi phần trăm nên không qua. Khoản trả
+      mới tối đa là năm mươi phần trăm của ba mươi triệu, tức mười lăm triệu, trừ
+      sáu triệu đang trả, còn chín triệu.
+    clear: true
+  - show: $$91 \leq 95 \leq 180 \;\Rightarrow\; \hl{\text{nhóm 3}};\quad 20 + 25 +
+      10 = \hl{55} < 70 \;\Rightarrow\; \text{không đạt}$$
+    say: Đáp án câu hai. Chín mươi lăm ngày nằm trong khoảng từ chín mươi mốt đến
+      một trăm tám mươi, nên là nhóm ba. Khách thứ hai được hai mươi cộng hai mươi
+      lăm cộng mười, bằng năm mươi lăm điểm, thấp hơn bảy mươi nên không đạt.
+  - show: <table class='t'><tr><th>lựa chọn</th><th>được</th><th>mất</th></tr><tr><td>chuyển
+      người xét, kèm xác thực thêm</td><td>không từ chối oan gia đình hay cửa hàng
+      dùng chung một máy; vẫn chặn được kẻ gian vì thiếu yếu tố thứ hai</td><td>chậm
+      hơn, tốn công người xét</td></tr><tr><td>từ chối tự động cả ba</td><td>nhanh,
+      không tốn người</td><td>từ chối oan khách thật; kẻ gian chỉ cần đổi máy là qua</td></tr></table>
+    say: Đáp án câu ba. Dấu vân tay thiết bị là tín hiệu rủi ro, không phải danh tính,
+      nên không đủ để kết luận. Chuyển người xét kèm xác thực thêm thì không từ chối
+      oan một gia đình hay cửa hàng dùng chung máy, mà vẫn chặn được kẻ gian. Đổi
+      lại chậm hơn và tốn công người xét. Từ chối tự động thì nhanh, nhưng từ chối
+      oan khách thật, còn kẻ gian chỉ cần đổi máy. Vì vậy nên chuyển người xét.
+    clear: true
+- id: recap
+  kind: recap
+  title: Chuỗi logic, góc phỏng vấn & tư duy cần mang theo
+  checks:
+  - alg.bnx_underwrite(20_000_000, 4_000_000, 5_000_000, 2, 36) == 'XET_TAY'
+  - alg.bnx_loan_path_ok(['DUYET', 'DA_KY', 'GIAI_NGAN'])[0]
+  steps:
+  - show: '<div class=''chain''><span class=''n''>hồ sơ: máy trạng thái, không đường
+      tắt</span><span class=''a''>→</span><span class=''n''>thẩm định: luật loại →
+      tỉ lệ → thẻ điểm</span><span class=''a''>→</span><span class=''n''>ký: chữ ký
+      trên mã băm của nội dung</span><span class=''a''>→</span><span class=''n''>kho
+      hồ sơ: lưu đúng tệp đã ký</span><span class=''a''>→</span><span class=''n''>gian
+      lận: hai yếu tố + tín hiệu thiết bị</span><span class=''a''>→</span><span class=''n''>gửi
+      lõi: trường đa trị có vị trí</span></div>'
+    focus:
+    - 0
+    - '1.1'
+    - '1.3'
+    - '1.5'
+    - '1.9'
+    - '1.11'
+    say: Tổng kết chuỗi logic. Hồ sơ vay là một máy trạng thái không có đường tắt.
+      Thẩm định chạy luật loại trước, rồi tỉ lệ nghĩa vụ trên thu nhập, rồi thẻ điểm.
+      Chữ ký số nằm trên mã băm của nội dung, nên kho hồ sơ phải lưu đúng tệp đã ký.
+      Chống gian lận dùng xác thực hai yếu tố cùng tín hiệu từ thiết bị. Còn dữ liệu
+      gửi sang lõi đi trong các trường đa trị có vị trí.
+  - show: '<table class=''t''><tr><th>Nếu bị hỏi về dòng này trên CV</th><th>ý trả
+      lời một dòng</th></tr><tr><td>LOS khác LMS ở đâu?</td><td>LOS lo hồ sơ từ lúc
+      nộp tới giải ngân; LMS lo khoản vay sau giải ngân: lịch trả, thu nợ, quá hạn,
+      tất toán</td></tr><tr><td>Bộ máy quyết định thẩm định chạy theo thứ tự nào?</td><td>luật
+      loại trước (ví dụ nhóm nợ), rồi tỉ lệ nghĩa vụ trên thu nhập, rồi thẻ điểm;
+      ngưỡng là cấu hình theo chính sách</td></tr><tr><td>Ký số không giấy rồi đồng
+      bộ kho hồ sơ: lưu gì, kiểm gì?</td><td>lưu đúng tệp đã ký, chữ ký, mã băm; băm
+      lại tệp trong kho phải ra đúng mã đã ký</td></tr></table><span class=''note''>Trả
+      lời bằng cơ chế; không nêu ngưỡng hay số liệu của tổ chức thật.</span>'
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - 2
+    clear: true
+    say: Đây là ba câu người phỏng vấn hay hỏi về các dòng này trên hồ sơ xin việc.
+      Hỏi hai hệ khác nhau ở đâu, thì trả lời LOS lo từ lúc nộp tới giải ngân, LMS
+      lo khoản vay sau giải ngân. Hỏi bộ máy quyết định chạy theo thứ tự nào, thì
+      trả lời luật loại trước, rồi tỉ lệ nghĩa vụ trên thu nhập, rồi thẻ điểm, với
+      ngưỡng là cấu hình. Hỏi ký không giấy rồi đồng bộ kho hồ sơ, thì trả lời lưu
+      đúng tệp đã ký, chữ ký và mã băm, rồi băm lại để kiểm. Hãy trả lời bằng cơ chế,
+      không nêu ngưỡng hay số liệu của tổ chức thật.
+  - show: '<div class=''box key''><b>Tư duy:</b> với mỗi quyết định tự động, hỏi ba
+      điều: luật nào chạy trước, con số nào là <b>chính sách</b> (đổi được), và bằng
+      chứng nào được <b>lưu lại</b> để sau này kiểm.</div>'
+    clear: true
+    say: 'Điều cần mang theo. Với mỗi quyết định tự động, hãy hỏi ba điều: luật nào
+      chạy trước, con số nào là chính sách có thể đổi, và bằng chứng nào được lưu
+      lại để sau này kiểm.'
+  - show: '<p class=''small''>Bài sau: một hệ quản trị nội dung trang web, với kho
+      nội dung dạng cây gồm nút và thuộc tính, và cách phân giải đường dẫn thành trang.</p>'
+    forward_ref: true
+    say: Ở bài sau, ta học một hệ quản trị nội dung trang web, nơi mỗi trang nằm trong
+      một kho nội dung dạng cây gồm nút và thuộc tính, và cách phân giải đường dẫn
+      thành trang.

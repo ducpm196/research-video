@@ -1,3 +1,13 @@
+# HANDOVER — Cập nhật 2026-11-12: đợt LF2 XONG (đọc chốt chặng 6–11 + phủ CV) — phiên bản học đã chốt
+
+> **Phiên mới đọc theo thứ tự**: [`audit/review/learn_final/handover_LF2_20261112T1620Z.md`](file:///D:/research-video/audit/review/learn_final/handover_LF2_20261112T1620Z.md) (bàn giao cuối) → [`report_LF2.md`](file:///D:/research-video/audit/review/learn_final/report_LF2.md) (báo cáo ngắn, đánh giá chất lượng) → [`knowledge-graph_LF2_20261112T1620Z.md`](file:///D:/research-video/audit/review/learn_final/knowledge-graph_LF2_20261112T1620Z.md) (chứng cứ LF2-01…17) → `audit/review/learn_final/STATE.md`.
+> - **Học ngay**: mở [`HOC_TAP.html`](file:///D:/research-video/HOC_TAP.html): 680 bài, 11 chặng, 105,2 giờ video, liên kết chết 0. Chặng 3 có BNX 24 bài (L16–L23 theo CV).
+> - **Số đo (cổng cuối `logs/gates_post.out`, 2026-11-12T16:18Z)**: đọc độc lập 537/537 bài chặng 6–11, MUST đã sửa; 226 bài dựng lại 226/226 PASS; verify_bnx 493/493; verify_plan_curricula 570/0; screen_code FAIL 0 STALE 0; check_xref/meta/course_refs 0; `pack.py check` 680 bài 0 vấn đề; `audit_all` 680/680 0 vấn đề; interview 92/92; ASR 0 câu chưa xem xét.
+> - **Còn mở (nói thẳng)**: tai người nghe (mọi lý do ASR `NOT_VERIFIED`); Elasticsearch, Couchbase, RabbitMQ, Kubernetes, GitLab runner, AEM chỉ mô phỏng, không có trình biên dịch C; TT 77/2025 chỉ qua bản hợp nhất, TT 46/2024/TT-BTC chưa đọc; jar/venv của `audit/bnx/deps/` bị `.gitignore` (README có lệnh tải + sha256); hiệu quả học thật chưa đo.
+> - **Chưa commit git**: chờ người dùng yêu cầu.
+> - Quy trình sửa một bài và các bẫy: `handover_LF2_20261112T1620Z.md` §5 và §7. Cổng cuối chạy lại: `docker start bnx-ora bnx-mss` rồi `bash audit/review/learn_full/final_gates.sh > audit/review/learn_final/logs/gates_post.out 2>&1`.
+---
+
 # HANDOVER — Cập nhật 2026-11-11 (sau LS1): đợt LF1, trang học trọn lộ trình 0 → senior + khoá BNX theo JD — DONE
 
 > **Bắt đầu học**: mở [`HOC_TAP.html`](file:///D:/research-video/HOC_TAP.html) (không cần mạng). Bàn giao: [`audit/review/learn_full/handover_LF1_20261111T0500Z.md`](file:///D:/research-video/audit/review/learn_full/handover_LF1_20261111T0500Z.md). Báo cáo: `report_LF1.md`. Đồ thị chứng cứ: `knowledge-graph_LF1_20261111T0500Z.md`.

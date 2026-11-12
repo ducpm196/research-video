@@ -516,6 +516,9 @@ rec("DSC:L15", int(0.9525 * 0.9 * 10000) == 8572 and round((0.9514 - 0.8712) / 0
     "hành trình Netflix Prize: 0,9525 × 0,9 → 0,8572; 8,43% (2007); 10,06% (2009), hoà 0,856704 / 0,856714; lạc quan 2 × 800 / 1 408 566 ≈ 0,00114 → 0,00067, gấp 67 lần; thêm ≈ 2,6% sau 0,88")
 
 # ═══════════ DSY — Hệ phân tán và dữ liệu lớn ═══════════
+_amd = 1 / ((1 - F(9, 10)) + F(9, 10) / 10)
+rec("DSY:L00", round(float(_amd), 2) == 5.26 and 1 / (1 - F(9, 10)) == 10 and round(150 / 0.5) == 300,
+    "Amdahl p=0,9, N=10: 1/(0,1 + 0,9/10) = 5,26; giới hạn 1/(1−p) = 10; tỉ lệ 150 ms / 0,5 ms = 300 lần (hai mốc độ trễ lấy từ bảng độ trễ công bố, mức CITED — không tự đo được)")
 # Lamport: P1: a(1) send→ P2: b(1 local) then receive → max(1,1)+1 = 2
 L_a = 1; L_b = 1; L_recv = max(L_b, L_a) + 1
 rec("DSY:L01", L_recv == 2, "đồng hồ Lamport: P1 gửi ở thời điểm 1, P2 đã có sự kiện thời điểm 1 → nhận ở max(1, 1) + 1 = 2")
@@ -2520,5 +2523,89 @@ rec("BNX:L14", _bx_bucket(5, 10, [F(0)] * 30) == 10 and _bx_bucket(5, 10, [F(i, 
     "thùng 5/s, sức chứa 10: 30 yêu cầu cùng lúc nhận 10; rải đều trong 1 giây (0, 1/30, …, 29/30) nhận 14")
 rec("BNX:L15", round(1000000 / 86400, 1) == 11.6 and round(10 * 1000000 / 86400) == 116 and 300 - 10 - 5 - 20 - 40 == 225,
     "10^6/86 400 ≈ 11,6/s; cao điểm ×10 ≈ 116/s; ngân sách 300 − 10 − 5 − 20 − 40 = 225 ms (số minh hoạ)")
+
+# ═══════════ BNX L16–L23 — phần mở rộng theo CV (mô phỏng/tính độc lập; phần chạy thật nằm ở audit/bnx/verify_bnx.py) ═══════════
+# L16: lịch bể luồng (xếp tham lam), chia đôi tới ngưỡng, tổng 1..10^6
+_free = [0] * 4
+for _ in range(10):
+    _i = _free.index(min(_free)); _free[_i] += 100
+_leaves = []
+_stack = [(1, 1000000)]
+while _stack:
+    _lo, _hi = _stack.pop()
+    if _hi - _lo + 1 <= 10000:
+        _leaves.append((_lo, _hi))
+    else:
+        _mid = (_lo + _hi) // 2
+        _stack += [(_lo, _mid), (_mid + 1, _hi)]
+rec("BNX:L16", 200 + 300 + 400 == 900 and max(200, 300, 400) == 400 and max(_free) == 300
+    and len(_leaves) == 128 and sum(h - l + 1 for l, h in _leaves) == 1000000 and sum((h * (h + 1) - (l - 1) * l) // 2 for l, h in _leaves) == 500000500000,
+    "tuần tự 900 ms, song song chờ max = 400 ms; bể 4 luồng × 10 việc 100 ms (xếp tham lam) xong ở 300 ms; chia đôi 1..10^6 tới ≤ 10 000 phần tử → 128 lá, tổng 500 000 500 000")
+# L17: quyết định 401/403/200 và chia xoay vòng trên hai bản khoẻ
+def _bx17_status(token_ok, authorities, need):
+    if not token_ok:
+        return 401
+    return 200 if need in authorities else 403
+_rr = {"b1": 0, "b2": 0}
+_healthy = ["b1", "b2"]
+for _k in range(100):
+    _rr[_healthy[_k % len(_healthy)]] += 1
+rec("BNX:L17", [_bx17_status(False, [], "x"), _bx17_status(True, [], "x"), _bx17_status(True, ["x"], "x")] == [401, 403, 200] and _rr == {"b1": 50, "b2": 50},
+    "401 = chưa xác thực, 403 = đã xác thực nhưng thiếu quyền, 200 = đủ quyền; 100 yêu cầu xoay vòng trên 2 bản khoẻ → 50 + 50 (mã trạng thái thật do Spring Security 7.1.2 trả: verify_bnx L17)")
+# L18: phí ba nhánh, bốn ca, một ca biên trượt khi mã sai, thiệt hại minh hoạ
+def _bx18_fee(x, bug=False):
+    if x < 500000:
+        return 0
+    if x < 10000000 or (bug and x <= 10000000):
+        return 5000
+    return 5500
+_bx18_cases = [(200000, 0), (2000000, 5000), (50000000, 5500), (10000000, 5500)]
+_bx18_pass = sum(_bx18_fee(a, bug=True) == w for a, w in _bx18_cases)
+rec("BNX:L18", len({0 if a < 500000 else (1 if a < 10000000 else 2) for a, _ in _bx18_cases}) == 3 and _bx18_pass == 3 and len(_bx18_cases) - _bx18_pass == 1
+    and _bx18_fee(10000000, bug=True) == 5000 and 5500 - 5000 == 500 and 20000 * 500 == 10000000 and all(_bx18_fee(a) == w for a, w in _bx18_cases),
+    "phí 3 nhánh cần ≥ 3 ca; 4 ca với mã lỗi biên (≤ 10 000 000): 3 đạt, 1 trượt (mong đợi 5500, nhận 5000); mã đúng đạt cả 4; thiếu 500 đồng × 20 000 giao dịch = 10 000 000 (số minh hoạ)")
+# L19: CRC16/XMODEM tính từng bit, khe băm, ba nút, khoảng thời gian khử trùng
+def _bx19_crc(data):
+    crc = 0
+    for byte in data:
+        crc ^= byte << 8
+        for _ in range(8):
+            crc = ((crc << 1) ^ 0x1021) & 0xFFFF if crc & 0x8000 else (crc << 1) & 0xFFFF
+    return crc
+_bx19_ranges = [(0, 5460), (5461, 10922), (10923, 16383)]
+_bx19_slot = _bx19_crc(b"foo") % 16384
+rec("BNX:L19", _bx19_crc(b"123456789") == 0x31C3 and _bx19_slot == 12182
+    and [h - l + 1 for l, h in _bx19_ranges] == [5461, 5462, 5461] and sum(h - l + 1 for l, h in _bx19_ranges) == 16384
+    and [i for i, (l, h) in enumerate(_bx19_ranges, 1) if l <= _bx19_slot <= h] == [3]
+    and (30 < 60) and not (61 < 60) and 300 - 60 == 240,
+    "CRC16/XMODEM (kiểm 123456789 = 0x31C3) của foo mod 16384 = 12182 → nút thứ ba; ba dải 0–5460, 5461–10922, 10923–16383 phủ đủ 16384 khe; hạn 60 s: giây 30 bị từ chối, giây 61 được nhận; danh sách đen = 300 − 60 = 240 s (hành vi Redis thật: verify_bnx L19)")
+# L20: 1000 goroutine, kênh đệm 3 (mô phỏng), mã trạng thái
+_bx20_buf = []
+_bx20_blocked = False
+for _v in range(4):
+    if len(_bx20_buf) < 3:
+        _bx20_buf.append(_v)
+    else:
+        _bx20_blocked = True
+rec("BNX:L20", 1000 * 1 == 1000 and len(_bx20_buf) == 3 and _bx20_blocked,
+    "1000 lần tăng mỗi lần 1 = 1000 khi có khoá; kênh đệm 3 nhận 3 giá trị không chặn, giá trị thứ 4 phải chờ (mô phỏng); kết quả bỏ khoá + mã 200 + JSON chạy thật go1.25.5: verify_bnx L20, mức OBSERVED")
+# L21: tỉ lệ nghĩa vụ trên thu nhập, thẻ điểm, băm thay đổi
+import hashlib as _hl
+_dti = F(4 + 5, 20)
+_h1 = _hl.sha256("Hợp đồng vay 100 triệu".encode()).hexdigest()
+_h2 = _hl.sha256("Hợp đồng vay 900 triệu".encode()).hexdigest()
+rec("BNX:L21", _dti == F(9, 20) and float(_dti) * 100 == 45.0 and _dti < F(1, 2) and 35 + 25 + 20 == 80 and 80 >= 70 and _h1 != _h2 and len(_h1) == 64,
+    "(4 + 5)/20 = 45% < 50% (ngưỡng minh hoạ); 35 + 25 + 20 = 80 ≥ 70; đổi một ký tự thì SHA-256 khác (64 hex) (số minh hoạ)")
+# L22: Sling tách đường dẫn → nút → resourceType → tệp dựng; vòng đời OSGi
+_bx22_url = "/content/site/vi/home.html"
+_bx22_path, _bx22_ext = _bx22_url.rsplit(".", 1)
+_bx22_repo = {"/content/site/vi/home": {"sling:resourceType": "site/components/page"}}
+_bx22_script = _bx22_repo[_bx22_path]["sling:resourceType"].split("/")[-1] + "." + _bx22_ext
+_bx22_states = ["INSTALLED", "RESOLVED", "ACTIVE"]
+rec("BNX:L22", _bx22_ext == "html" and _bx22_path == "/content/site/vi/home" and _bx22_script == "page.html" and _bx22_states.index("ACTIVE") == 2,
+    "/content/site/vi/home.html → phần mở rộng html, nút /content/site/vi/home, resourceType site/components/page → page.html; gói OSGi INSTALLED → RESOLVED → ACTIVE (mô phỏng theo tài liệu; phần chạy thật là biên dịch lớp Sling Model với jar thật: verify_bnx L22)")
+# L23: số điểm bị gắn nhãn −1 với tỉ lệ nhiễm 1% trên 1010 điểm (percentile trên 1009 điểm thường → 10,09 → 11)
+rec("BNX:L23", math.ceil(0.01 * 1009) == 11 and 1000 + 10 == 1010 and 11 - 10 == 1,
+    "tỉ lệ nhiễm 1%: 1% của 1009 = 10,09 → 11 nhãn −1 = 10 điểm lạ + 1 giao dịch thường oan; 1000 + 10 = 1010 điểm (kết quả huấn luyện/ONNX 1010/1010 chạy thật: verify_bnx L23)")
 
 print(f"\nTỔNG: {sum(rows)} PASS · {len(rows) - sum(rows)} FAIL")

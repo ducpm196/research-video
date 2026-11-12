@@ -42,7 +42,7 @@ def build():
     hook = sc("hook", "hook", "Tình huống: hai tuần, một tin tuyển dụng, một dự án mẫu", [
         st("""<p><b>Tình huống giả định, số minh hoạ.</b> Tin tuyển dụng kỹ sư phần mềm ghi: <i>“thiết kế API backend xử lý hàng triệu giao dịch mỗi ngày”</i>, đặc tả API bằng Swagger, thủ tục lưu trữ Oracle/MS SQL, Kafka, Redis; điểm cộng Git, Docker.</p>
 <div class="box key">Bạn có hai tuần để dựng dự án mẫu. Người phỏng vấn hỏi: “$1\\,000\\,000$ giao dịch mỗi ngày là bao nhiêu mỗi giây? Mỗi lệnh chuyển được bao nhiêu mili giây?”</div>""",
-           """Chào bạn, đây là bài cuối của khoá, một tình huống giả định với số minh hoạ. Một tin tuyển dụng kỹ sư phần mềm ghi rằng ứng viên sẽ thiết kế API phía máy chủ xử lý hàng triệu giao dịch mỗi ngày.
+           """Chào bạn, đây là bài tổng hợp của phần nền, một tình huống giả định với số minh hoạ. Một tin tuyển dụng kỹ sư phần mềm ghi rằng ứng viên sẽ thiết kế API phía máy chủ xử lý hàng triệu giao dịch mỗi ngày.
            Tin đó còn đòi đặc tả API bằng Swagger, thủ tục lưu trữ trên Oracle, Kafka và Redis, cộng điểm cho Docker.
            Bạn có hai tuần để dựng một dự án mẫu. Người phỏng vấn hỏi, một triệu giao dịch mỗi ngày là bao nhiêu mỗi giây, và mỗi lệnh chuyển được bao nhiêu mili giây?"""),
         st(table(["bước", "việc", "kết quả của bài"],
@@ -251,8 +251,8 @@ $$250 - 77 = \\hlg{173}\\ \\text{ms}$$""",
            Mỗi thành phần phải trả lời một yêu cầu. Sau đó đo trên dự án của chính mình, và kể đúng số đo, đúng nơi đo."""),
         st("""<div class='box key'><b>Tư duy chuyên gia:</b> mỗi thành phần phải trả lời một yêu cầu; mỗi con số phải nói rõ đo ở đâu; <b>đo trước khi tối ưu</b>.</div>""",
            """Điều cần mang theo là tư duy của chuyên gia. Mỗi thành phần phải trả lời một yêu cầu, mỗi con số phải nói rõ đo ở đâu, và luôn đo trước khi tối ưu."""),
-        st("""<p class='note'>Đây là bài cuối của khoá BNX. Chặng tiếp theo trong chương trình: ôn phỏng vấn, kể dự án mẫu này bằng số đo thật của bạn.</p>""",
-           """Đây là bài cuối của khoá. Chặng tiếp theo trong chương trình học là ôn phỏng vấn, nơi bạn kể dự án mẫu này bằng số đo thật của chính mình, và chúc bạn làm tốt."""),
+        st("""<p class='note'>Đây là bài tổng hợp của phần nền. Phần còn lại của khoá đi sâu thêm từng công nghệ khác; sau đó là ôn phỏng vấn, kể dự án mẫu này bằng số đo thật của bạn.</p>""",
+           """Đây là bài tổng hợp của phần nền. Phần còn lại của khoá đi sâu thêm từng công nghệ khác, rồi đến chặng ôn phỏng vấn, nơi bạn kể dự án mẫu này bằng số đo thật của mình."""),
     ], checks=["alg.bnx_l15_round(" + TPS + ", 1) == Fraction('11.6')", "alg.bnx_l15_round(" + PEAK + ") == 116", "alg.bnx_l15_left(300, [10, 5, 20, 40]) == 225"])
     return lesson("L15", "tinh_huong_du_an_mau", "Bài 15 — Tình huống chuyên gia: dựng dự án mẫu API chuyển khoản đúng như JD đòi hỏi",
                   "curriculum/bnx.yaml L15; audit/bnx/verify_bnx.py L15; tình huống giả định loại quyết định nghề nghiệp, mọi độ trễ, hệ số cao điểm và tải là "

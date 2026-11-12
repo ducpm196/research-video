@@ -1,0 +1,1179 @@
+id: L17
+course: BNX
+series: BNX · Backend ngân hàng mở rộng theo JD
+title: 'Bài 17 — Spring Security và Spring Cloud: chuỗi bộ lọc, cổng và khám phá dịch
+  vụ'
+voice: vi-VN-NamMinhNeural
+rate: -5%
+depth: full
+source: 'curriculum/bnx.yaml L17; audit/bnx/verify_bnx.py L17; audit/bnx/sources_l17.md:
+  hướng dẫn Spring Security 7.1.2 (Architecture, OAuth2 Resource Server, CSRF), Spring
+  Cloud Gateway 5.0.4, Spring Cloud Commons 5.0.4 (LoadBalancer), Spring Cloud Consul
+  5.0.4, Spring Cloud Config 5.0.6 (đọc 2026-11-11); Spring Security 7.1.2 chạy thật
+  trên Temurin JDK 21.0.13; phần chia tải là mô phỏng'
+assumes: []
+objectives:
+- Lần theo một yêu cầu qua chuỗi bộ lọc bảo mật và nói bộ lọc nào trả 401, bộ lọc
+  nào trả 403
+- Cấu hình một dịch vụ kiểm mã truy cập như máy chủ tài nguyên
+- Giải thích vai trò của cổng, cấu hình tập trung và sổ đăng ký dịch vụ trong Spring
+  Cloud
+- Tính cách cổng chia tải khi một bản dịch vụ trượt kiểm sức khoẻ
+asr_reviewed:
+  - {sentence: "Bây giờ tới phần bạn tự làm bài.", reason: "ASR chép “Bây giờ tới phần bạn tự lam bay.” (0.75): lệch âm/thanh thuần Việt: làm bài/lam bay — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Bước hai, trạm đọc mã chỉ lo xác thực.", reason: "ASR chép “Bước 2. Trạm độc mã chỉ lo sát thực” (0.778): lệch âm/thanh thuần Việt: đọc/độc, xác/sát — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Mã giả ghi quyền hạn mức nhưng ký bằng khoá của kẻ gian, còn mã cũ ký đúng khoá nhưng hạn dùng đã qua.", reason: "ASR chép “Mã giả ghi quyền hàng mức nhân ký bằng khóa của kẻ gian, còn mã của ký đúng khóa nhân hàng dùng đã qua” (0.792): lệch âm/thanh thuần Việt: hạn/hàng, nhưng/nhân, cũ/của, nhưng hạn/nhân hàng — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Hàm có nhãn khai một đối tượng cho Spring giữ, chính là chuỗi bộ lọc.", reason: "ASR chép “Hàm có nhãn khai một đối tượng cho spring giữ, chính là chuỗi bộ lọc.” (1.0): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người"}
+scenes:
+- id: hook
+  kind: hook
+  title: 'Ba yêu cầu tới cùng một địa chỉ: 401, 403 và 200'
+  checks:
+  - alg.bnx_l17_status('GET', None, 'han_muc') == 401
+  - 'alg.bnx_l17_status(''GET'', {''sig'': True, ''expired'': False, ''scopes'': [''so_du'']},
+    ''han_muc'') == 403'
+  - 'alg.bnx_l17_status(''GET'', {''sig'': True, ''expired'': False, ''scopes'': [''so_du'',
+    ''han_muc'']}, ''han_muc'') == 200'
+  - alg.bnx_l17_round_robin([True, False, True], 100) == [50, 0, 50]
+  - sum([True, False, True]) == 3 - 1 == 2
+  steps:
+  - show: '<p>Dịch vụ hạn mức của một ngân hàng nhận <b>ba yêu cầu</b> tới cùng một
+      địa chỉ <code>/han-muc</code>:</p>
+
+      <div class="box key">Yêu cầu không mang mã truy cập: bị chặn, nhận <b>401</b>.
+      Yêu cầu có mã hợp lệ nhưng thiếu quyền: nhận <b>403</b>.
+
+      Yêu cầu đủ quyền: nhận <b>200</b>.<br>Ai chặn, chặn ở đâu, và vì sao hai lần
+      từ chối lại mang hai con số khác nhau?</div>
+
+      '
+    focus:
+    - 1
+    - 2
+    - 2
+    say: Chào bạn, dịch vụ hạn mức của một ngân hàng nhận ba yêu cầu tới cùng một
+      địa chỉ. Yêu cầu không mang mã truy cập bị chặn và nhận mã bốn trăm lẻ một,
+      còn yêu cầu có mã hợp lệ nhưng thiếu quyền thì nhận bốn trăm lẻ ba. Chỉ yêu
+      cầu đủ quyền mới nhận mã hai trăm, vậy ai chặn, chặn ở đâu, và vì sao hai lần
+      từ chối mang hai con số khác nhau?
+  - show: '<p>Dịch vụ ấy chạy <b>ba bản</b> giống nhau. Một bản <b>trượt kiểm sức
+      khoẻ</b>.</p>
+
+      $$100 \text{ yêu cầu chia xoay vòng cho } 3 - 1 = 2 \text{ bản còn lại}: \quad
+      100 : 2 = \hl{50} \text{ yêu cầu mỗi bản}$$
+
+      <span class=''note''>Điều kiện: sổ chỉ trả các bản khoẻ, hoặc bộ chia tải tự
+      lọc. Mặc định không đủ; bước 7 ở phần suy ra nói rõ cách bật.</span>
+
+      '
+    focus:
+    - 1
+    - 2
+    - 3
+    say: Dịch vụ ấy chạy ba bản giống nhau, và một bản vừa trượt kiểm sức khoẻ. Một
+      trăm yêu cầu khi đó được chia xoay vòng cho hai bản còn lại, nên mỗi bản nhận
+      năm mươi yêu cầu, vì bản hỏng không được giao việc. Điều này chỉ đúng khi sổ
+      chỉ trả các bản khoẻ hoặc bộ chia tải tự lọc, mà mặc định chưa đủ, bước bảy
+      sẽ nói rõ cách bật.
+  - show: '<table class=''t''><tr><th>câu hỏi</th><th>bài này trả lời</th></tr><tr><td>ai
+      chặn yêu cầu</td><td><b>chuỗi bộ lọc</b> của Spring Security: nhiều trạm nối
+      tiếp đứng trước dịch vụ</td></tr><tr><td>dịch vụ kiểm mã truy cập thế nào</td><td>cấu
+      hình nó thành <b>máy chủ tài nguyên</b>: kiểm chữ ký, hạn, rồi quyền</td></tr><tr><td>ai
+      biết bản nào còn sống</td><td><b>Spring Cloud</b>: cổng, sổ đăng ký dịch vụ
+      có kiểm sức khoẻ, cấu hình tập trung</td></tr></table>'
+    focus:
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    clear: true
+    say: Hôm nay ta trả lời ba câu, ai chặn yêu cầu, đó là chuỗi bộ lọc bảo mật của
+      Spring, gồm nhiều trạm nối tiếp đứng trước dịch vụ. Dịch vụ kiểm mã truy cập
+      thế nào, đó là khi ta cấu hình nó thành một máy chủ tài nguyên. Và ai biết bản
+      nào còn sống để chia việc, đó là cổng và sổ đăng ký dịch vụ của Spring Cloud.
+- id: prereq
+  kind: prereq
+  title: 'Trước hết: năm điều cần hiểu'
+  checks:
+  - alg.bnx_l17_authorities('so_du han_muc') == ['SCOPE_so_du', 'SCOPE_han_muc']
+  - alg.bnx_l17_round_robin([True, False, True], 100) == [50, 0, 50]
+  - alg.bnx_l17_round_robin([True, True, True], 100) == [34, 33, 33]
+  - sum(alg.bnx_l17_round_robin([True] * 3, 100)) == 100
+  steps:
+  - show: '<table class=''t''><tr><th>khái niệm</th><th>nghĩa</th><th>ví dụ</th></tr><tr><td>①
+      mã truy cập</td><td>chuỗi có <b>chữ ký</b> do máy chủ cấp mã phát; mang hạn
+      dùng và <b>phạm vi quyền</b> (scope)</td><td>scope <code>so_du han_muc</code>:
+      2 quyền, cách nhau một dấu cách</td></tr><tr><td>② mã trạng thái</td><td>con
+      số máy chủ trả về cho mỗi yêu cầu</td><td>200: xong; 401: chưa xác thực; 403:
+      bị cấm</td></tr><tr><td>③ bean</td><td>đối tượng do Spring tạo và giữ; ta khai
+      bằng nhãn <code>@Bean</code></td><td>một bean giữ luật bảo mật, một bean kiểm
+      chữ ký</td></tr><tr><td>④ bản dịch vụ</td><td>một tiến trình đang chạy của cùng
+      một dịch vụ; nhiều bản để chịu tải và chịu lỗi</td><td>3 bản, 1 bản hỏng: còn
+      3 − 1 = 2 bản phục vụ</td></tr><tr><td>⑤ xác thực và phân quyền</td><td>xác
+      thực: biết người gọi là ai; phân quyền: xét người đó có được làm việc này không</td><td>mã
+      hỏng là lỗi xác thực; mã tốt mà thiếu quyền là lỗi phân quyền</td></tr></table>'
+    focus:
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.5'
+    - '1.6'
+    say: 'Trước hết ta cần hiểu năm điều, thứ nhất, mã truy cập là một chuỗi có chữ
+      ký do máy chủ cấp mã phát ra, mang hạn dùng và phạm vi quyền. Thứ hai, mã trạng
+      thái là con số máy chủ trả về cho mỗi yêu cầu: hai trăm là xong, bốn trăm lẻ
+      một là chưa xác thực, bốn trăm lẻ ba là bị cấm. Thứ ba, Spring tự tạo và giữ
+      các đối tượng cho ta, và ta khai chúng bằng một nhãn đặt trên hàm. Thứ tư, bản
+      dịch vụ là một tiến trình đang chạy của cùng một dịch vụ, người ta chạy nhiều
+      bản để chịu tải và chịu lỗi. Thứ năm, xác thực là biết người gọi là ai, còn
+      phân quyền là xét người đó có được làm việc này hay không.'
+  - show: '<p>Làm thử: 3 bản đăng ký, 1 bản hỏng, 100 yêu cầu chia đều.</p>
+
+      $$3 - 1 = 2 \text{ bản}; \qquad 100 : 2 = \hl{50} \text{ yêu cầu mỗi bản}; \qquad
+      \text{còn đủ 3 bản thì } 100 = 34 + 33 + 33$$
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    say: Làm thử ngay với ba bản đăng ký, một bản hỏng. Còn hai bản, nên một trăm
+      yêu cầu chia đều thì mỗi bản nhận năm mươi. Nếu còn đủ ba bản thì một trăm không
+      chia hết cho ba, nên bản đầu nhận ba mươi tư, hai bản sau nhận ba mươi ba.
+- id: sym
+  kind: symbol
+  title: Giải mã các tên trên màn hình
+  checks:
+  - alg.bnx_l17_authorities('han_muc') == ['SCOPE_han_muc']
+  steps:
+  - show: '<table class=''t''><tr><th>tên trong Spring Security</th><th>nghĩa</th></tr><tr><td>Filter</td><td><b>bộ
+      lọc</b>, một trạm: nhận yêu cầu, làm một việc, rồi chuyển tiếp hoặc trả lời
+      luôn</td></tr><tr><td>SecurityFilterChain</td><td><b>chuỗi bộ lọc bảo mật</b>:
+      danh sách trạm có thứ tự mà yêu cầu phải đi qua</td></tr><tr><td>BearerTokenAuthenticationFilter</td><td><b>trạm
+      đọc mã</b>: lấy mã truy cập trong yêu cầu và kiểm nó</td></tr><tr><td>AuthorizationFilter</td><td><b>trạm
+      kiểm quyền</b>: so quyền của người gọi với luật của đường dẫn</td></tr><tr><td>ExceptionTranslationFilter</td><td><b>trạm
+      dịch lỗi</b>: đổi lỗi của trạm kiểm quyền thành 401 hoặc 403</td></tr><tr><td>SCOPE_han_muc</td><td>quyền
+      sinh từ phạm vi <code>han_muc</code> trong mã; tiền tố <code>SCOPE_</code> do
+      Spring thêm</td></tr></table>'
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.5'
+    - '1.6'
+    - '1.7'
+    say: 'Bảng này giải mã các tên của phần bảo mật. Bộ lọc là một trạm: nó nhận yêu
+      cầu, làm một việc, rồi chuyển tiếp hoặc trả lời luôn. Chuỗi bộ lọc bảo mật là
+      danh sách trạm có thứ tự mà mọi yêu cầu phải đi qua. Trạm đọc mã có nhiệm vụ
+      lấy mã truy cập trong yêu cầu và kiểm nó. Trạm kiểm quyền thì so quyền của người
+      gọi với luật của đường dẫn. Trạm dịch lỗi đổi lỗi của trạm kiểm quyền thành
+      mã bốn trăm lẻ một hoặc bốn trăm lẻ ba. Dòng cuối là tên một quyền, do Spring
+      ghép một tiền tố cố định với phạm vi quyền ghi trong mã.'
+  - show: '<table class=''t''><tr><th>tên trong Spring Cloud</th><th>nghĩa</th></tr><tr><td>Spring
+      Cloud Gateway</td><td><b>cổng</b>: cửa vào chung, nhận yêu cầu rồi chuyển tới
+      đúng dịch vụ</td></tr><tr><td>Consul</td><td><b>sổ đăng ký dịch vụ</b>: mỗi
+      bản tự ghi tên, địa chỉ; sổ kiểm sức khoẻ từng bản</td></tr><tr><td><code>lb://ten-dich-vu</code></td><td>địa
+      chỉ theo <b>tên</b>: cổng tra sổ lấy các bản rồi chia tải (load balance)</td></tr><tr><td>Spring
+      Cloud Config</td><td><b>cấu hình tập trung</b>: một máy chủ giữ cấu hình cho
+      mọi dịch vụ</td></tr></table>'
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.5'
+    clear: true
+    say: Bảng thứ hai là các tên của Spring Cloud. Cổng là cửa vào chung, nhận yêu
+      cầu rồi chuyển tới đúng dịch vụ. Sổ đăng ký dịch vụ là nơi mỗi bản tự ghi tên
+      và địa chỉ của mình, và sổ kiểm sức khoẻ từng bản. Địa chỉ ở hàng thứ ba không
+      ghi máy nào cả mà ghi tên dịch vụ, nên cổng phải tra sổ lấy các bản rồi chia
+      tải. Cuối cùng, cấu hình tập trung là một máy chủ giữ cấu hình cho mọi dịch
+      vụ.
+- id: intuition
+  kind: intuition
+  title: 'Hình dung: chuỗi trạm trước dịch vụ, và cổng trước các bản'
+  checks:
+  - alg.bnx_l17_chain_len() == 14
+  - alg.bnx_l17_pos('CsrfFilter') == 5
+  - alg.bnx_l17_pos('BearerTokenAuthenticationFilter') == 8
+  - alg.bnx_l17_pos('TramQuanSat') == 9
+  - alg.bnx_l17_pos('ExceptionTranslationFilter') == 13
+  - alg.bnx_l17_pos('AuthorizationFilter') == 14
+  - alg.bnx_l17_trace('GET', None, 'han_muc') == (401, 'ExceptionTranslationFilter',
+    True, False)
+  - 'alg.bnx_l17_trace(''GET'', {''sig'': False, ''expired'': False, ''scopes'': [''han_muc'']},
+    ''han_muc'') == (401, ''BearerTokenAuthenticationFilter'', False, False)'
+  - 'alg.bnx_l17_trace(''GET'', {''sig'': True, ''expired'': True, ''scopes'': [''han_muc'']},
+    ''han_muc'')[:2] == (401, ''BearerTokenAuthenticationFilter'')'
+  - 'alg.bnx_l17_trace(''GET'', {''sig'': True, ''expired'': False, ''scopes'': [''so_du'']},
+    ''han_muc'') == (403, ''ExceptionTranslationFilter'', True, False)'
+  - 'alg.bnx_l17_trace(''GET'', {''sig'': True, ''expired'': False, ''scopes'': [''so_du'',
+    ''han_muc'']}, ''han_muc'') == (200, None, True, True)'
+  - alg.bnx_l17_round_robin([True, False, True], 100) == [50, 0, 50]
+  steps:
+  - show: '<div><svg width="1500" height="500" viewBox="0 0 1500 500" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><text
+      x="750" y="40" font-size="26" text-anchor="middle" fill="#1f2937" font-weight="bold">14
+      trạm của chuỗi bộ lọc đứng trước dịch vụ (thứ tự in ra từ lần chạy thật)</text><rect
+      x="40" y="80" width="90" height="70" rx="10" fill="#e5e7eb" stroke="#6b7280"
+      stroke-width="3"/><text x="85.0" y="124" font-size="26" text-anchor="middle"
+      fill="#1f2937">1</text><rect x="140" y="80" width="90" height="70" rx="10" fill="#e5e7eb"
+      stroke="#6b7280" stroke-width="3"/><text x="185.0" y="124" font-size="26" text-anchor="middle"
+      fill="#1f2937">2</text><rect x="240" y="80" width="90" height="70" rx="10" fill="#e5e7eb"
+      stroke="#6b7280" stroke-width="3"/><text x="285.0" y="124" font-size="26" text-anchor="middle"
+      fill="#1f2937">3</text><rect x="340" y="80" width="90" height="70" rx="10" fill="#e5e7eb"
+      stroke="#6b7280" stroke-width="3"/><text x="385.0" y="124" font-size="26" text-anchor="middle"
+      fill="#1f2937">4</text><rect x="540" y="80" width="90" height="70" rx="10" fill="#e5e7eb"
+      stroke="#6b7280" stroke-width="3"/><text x="585.0" y="124" font-size="26" text-anchor="middle"
+      fill="#1f2937">6</text><rect x="640" y="80" width="90" height="70" rx="10" fill="#e5e7eb"
+      stroke="#6b7280" stroke-width="3"/><text x="685.0" y="124" font-size="26" text-anchor="middle"
+      fill="#1f2937">7</text><rect x="940" y="80" width="90" height="70" rx="10" fill="#e5e7eb"
+      stroke="#6b7280" stroke-width="3"/><text x="985.0" y="124" font-size="26" text-anchor="middle"
+      fill="#1f2937">10</text><rect x="1040" y="80" width="90" height="70" rx="10"
+      fill="#e5e7eb" stroke="#6b7280" stroke-width="3"/><text x="1085.0" y="124" font-size="26"
+      text-anchor="middle" fill="#1f2937">11</text><rect x="1140" y="80" width="90"
+      height="70" rx="10" fill="#e5e7eb" stroke="#6b7280" stroke-width="3"/><text
+      x="1185.0" y="124" font-size="26" text-anchor="middle" fill="#1f2937">12</text><rect
+      x="440" y="80" width="90" height="70" rx="10" fill="#fef3c7" stroke="#d97706"
+      stroke-width="3"/><text x="485.0" y="124" font-size="26" text-anchor="middle"
+      fill="#1f2937">5</text><rect x="740" y="80" width="90" height="70" rx="10" fill="#dbeafe"
+      stroke="#2a78d6" stroke-width="3"/><text x="785.0" y="124" font-size="26" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">8</text><rect x="840" y="80" width="90" height="70"
+      rx="10" fill="#e5e7eb" stroke="#6b7280" stroke-width="3"/><text x="885.0" y="124"
+      font-size="26" text-anchor="middle" fill="#1f2937">9</text><rect x="1240" y="80"
+      width="90" height="70" rx="10" fill="#f3e8ff" stroke="#9333ea" stroke-width="3"/><text
+      x="1285.0" y="124" font-size="26" text-anchor="middle" fill="#1f2937" font-weight="bold">13</text><rect
+      x="1340" y="80" width="90" height="70" rx="10" fill="#dcfce7" stroke="#16a34a"
+      stroke-width="3"/><text x="1385.0" y="124" font-size="26" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">14</text><text x="485" y="185" font-size="20"
+      text-anchor="middle" fill="#1f2937">chống giả mạo</text><text x="785" y="185"
+      font-size="20" text-anchor="middle" fill="#1f2937">đọc mã</text><text x="885"
+      y="185" font-size="20" text-anchor="middle" fill="#1f2937">quan sát</text><text
+      x="1285" y="185" font-size="20" text-anchor="middle" fill="#1f2937">dịch lỗi</text><text
+      x="1385" y="185" font-size="20" text-anchor="middle" fill="#1f2937">kiểm quyền</text><line
+      x1="1385" y1="215" x2="1385" y2="262" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><rect
+      x="1270" y="265" width="200" height="60" rx="10" fill="#dcfce7" stroke="#16a34a"
+      stroke-width="3"/><text x="1370.0" y="303" font-size="24" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">dịch vụ</text><text x="60" y="270" font-size="24"
+      text-anchor="start" fill="#dc2626">không mang mã: qua trạm 8, trạm 14 ném lỗi,
+      trạm 13 trả 401</text><text x="60" y="320" font-size="24" text-anchor="start"
+      fill="#dc2626">mã hỏng (sai chữ ký, hết hạn): trạm 8 trả 401 ngay, không đi
+      tiếp</text><text x="60" y="370" font-size="24" text-anchor="start" fill="#d97706">mã
+      tốt, thiếu quyền: trạm 14 ném lỗi, trạm 13 trả 403</text><text x="60" y="420"
+      font-size="24" text-anchor="start" fill="#16a34a">mã tốt, đủ quyền: qua cả 14
+      trạm, tới dịch vụ, 200</text><text x="750" y="475" font-size="24" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">Xác thực (trạm 8) đứng trước phân quyền (trạm
+      14): phải biết ai gọi rồi mới xét cho hay không</text></svg></div>'
+    clear: true
+    say: Hình này là mười bốn trạm của chuỗi bộ lọc, đứng trước dịch vụ. Yêu cầu đi
+      từ trạm một sang phải, qua hết mới tới dịch vụ. Yêu cầu không mang mã vẫn qua
+      được trạm đọc mã số tám, nhưng trạm kiểm quyền số mười bốn ném lỗi, và trạm
+      dịch lỗi số mười ba trả bốn trăm lẻ một. Mã hỏng, tức sai chữ ký hoặc hết hạn,
+      thì chính trạm tám trả bốn trăm lẻ một ngay, không đi tiếp. Mã tốt nhưng thiếu
+      quyền thì trạm mười bốn ném lỗi, và lần này trạm mười ba trả bốn trăm lẻ ba,
+      vì đã biết người gọi là ai. Trạm xác thực đứng trước trạm phân quyền, vì phải
+      biết ai gọi rồi mới xét cho hay không.
+  - show: '<div><svg width="1500" height="520" viewBox="0 0 1500 520" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><text
+      x="750" y="40" font-size="26" text-anchor="middle" fill="#1f2937" font-weight="bold">Spring
+      Cloud: cổng tra sổ đăng ký rồi chia tải cho các bản khoẻ</text><rect x="40"
+      y="230" width="220" height="70" rx="10" fill="#e5e7eb" stroke="#6b7280" stroke-width="3"/><text
+      x="150.0" y="258" font-size="22" text-anchor="middle" fill="#1f2937">ứng dụng</text><text
+      x="150.0" y="288" font-size="22" text-anchor="middle" fill="#1f2937">khách</text><rect
+      x="420" y="220" width="280" height="90" rx="10" fill="#dbeafe" stroke="#2a78d6"
+      stroke-width="3"/><text x="560.0" y="258" font-size="22" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">cổng</text><text x="560.0" y="288" font-size="22"
+      text-anchor="middle" fill="#1f2937">Spring Cloud Gateway</text><line x1="265"
+      y1="265" x2="415" y2="265" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><text
+      x="340" y="255" font-size="20" text-anchor="middle" fill="#475569">100 yêu cầu</text><rect
+      x="400" y="70" width="320" height="80" rx="10" fill="#f3e8ff" stroke="#9333ea"
+      stroke-width="3"/><text x="560.0" y="103" font-size="22" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">sổ đăng ký dịch vụ</text><text x="560.0" y="133"
+      font-size="22" text-anchor="middle" fill="#1f2937">Consul</text><line x1="560"
+      y1="216" x2="560" y2="156" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><text
+      x="575" y="192" font-size="20" text-anchor="start" fill="#1f2937">tra sổ</text><rect
+      x="1080" y="80" width="360" height="70" rx="10" fill="#dcfce7" stroke="#16a34a"
+      stroke-width="3"/><text x="1260.0" y="123" font-size="22" text-anchor="middle"
+      fill="#1f2937">bản 1: khoẻ, nhận 50</text><rect x="1080" y="230" width="360"
+      height="70" rx="10" fill="#fee2e2" stroke="#dc2626" stroke-width="3"/><text
+      x="1260.0" y="273" font-size="22" text-anchor="middle" fill="#1f2937">bản 2:
+      trượt, nhận 0</text><rect x="1080" y="380" width="360" height="70" rx="10" fill="#dcfce7"
+      stroke="#16a34a" stroke-width="3"/><text x="1260.0" y="423" font-size="22" text-anchor="middle"
+      fill="#1f2937">bản 3: khoẻ, nhận 50</text><line x1="705" y1="245" x2="1075"
+      y2="125" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><line x1="705"
+      y1="285" x2="1075" y2="410" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><line
+      x1="725" y1="95" x2="1075" y2="95" stroke="#9333ea" stroke-width="3.5" stroke-dasharray="8
+      6" marker-end="url(#ah)"/><text x="900" y="85" font-size="20" text-anchor="middle"
+      fill="#9333ea">kiểm sức khoẻ định kỳ</text><rect x="400" y="400" width="320"
+      height="80" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text
+      x="560.0" y="433" font-size="22" text-anchor="middle" fill="#1f2937" font-weight="bold">máy
+      chủ cấu hình</text><text x="560.0" y="463" font-size="22" text-anchor="middle"
+      fill="#1f2937">Spring Cloud Config</text><line x1="560" y1="396" x2="560" y2="316"
+      stroke="#d97706" stroke-width="3.5" stroke-dasharray="8 6" marker-end="url(#ah)"/><text
+      x="575" y="365" font-size="20" text-anchor="start" fill="#1f2937">cấu hình</text><text
+      x="900" y="500" font-size="24" text-anchor="middle" fill="#1f2937" font-weight="bold">Nếu
+      sổ chỉ trả bản khoẻ: bản 2 trượt bị loại, 100 : 2 = 50 mỗi bản</text></svg></div>'
+    clear: true
+    say: Hình thứ hai là phần Spring Cloud, ứng dụng khách chỉ biết một địa chỉ, là
+      cổng. Cổng không nhớ sẵn địa chỉ các bản, mà tra sổ đăng ký dịch vụ, nơi mỗi
+      bản đã tự ghi tên lúc khởi động. Sổ định kỳ kiểm sức khoẻ từng bản. Khi sổ được
+      dặn chỉ trả các bản khoẻ, hoặc bộ chia tải tự lọc, bản hai trượt thì bị loại
+      khỏi danh sách. Vì chỉ còn hai bản khoẻ, một trăm yêu cầu được chia xoay vòng,
+      mỗi bản năm mươi. Ở phía dưới, máy chủ cấu hình giữ cấu hình chung, và mỗi dịch
+      vụ hỏi nó lúc khởi động.
+- id: formula
+  kind: formula
+  title: 'Suy ra từng bước: từ một trạm tới cả hệ thống'
+  checks:
+  - alg.bnx_l17_pos('BearerTokenAuthenticationFilter') == 8 < alg.bnx_l17_pos('AuthorizationFilter')
+    == 14
+  - alg.bnx_l17_pos('ExceptionTranslationFilter') == 13
+  - 'alg.bnx_l17_trace(''GET'', None, ''han_muc'')[2] is True and alg.bnx_l17_trace(''GET'',
+    {''sig'': False, ''expired'': False, ''scopes'': [''han_muc'']}, ''han_muc'')[2]
+    is False'
+  - 'alg.bnx_l17_status(''GET'', {''sig'': False, ''expired'': False, ''scopes'':
+    [''han_muc'']}, ''han_muc'') == 401 and alg.bnx_l17_status(''GET'', {''sig'':
+    True, ''expired'': True, ''scopes'': [''han_muc'']}, ''han_muc'') == 401'
+  - 'alg.bnx_l17_status(''GET'', None, ''han_muc'') == 401 and alg.bnx_l17_status(''GET'',
+    {''sig'': True, ''expired'': False, ''scopes'': [''so_du'']}, ''han_muc'') ==
+    403'
+  - len(alg.bnx_l17_authorities('so_du han_muc')) == 2
+  - alg.bnx_l17_round_robin([True, True], 6) == [3, 3]
+  - '[i % 2 for i in range(6)] == [0, 1, 0, 1, 0, 1]'
+  steps:
+  - show: '<p><b>Bước 1.</b> Bảo mật có nhiều việc khác nhau: đọc mã, kiểm quyền,
+      đổi lỗi thành câu trả lời. Gộp vào một chỗ thì khó thay từng phần,
+
+      nên Spring Security chia thành <b>chuỗi trạm có thứ tự</b>. Thứ tự là luật:
+      trạm xác thực phải đứng <b>trước</b> trạm phân quyền.</p>
+
+      <p>Làm thử: trạm đọc mã ở vị trí 8, trạm kiểm quyền ở vị trí 14.</p>
+
+      $$8 < 14 \;\Rightarrow\; \text{khi tới trạm kiểm quyền, đã biết người gọi là
+      ai (hoặc biết là vô danh)}$$
+
+      '
+    focus:
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Bước một, bảo mật có nhiều việc khác nhau, nên Spring chia chúng thành một
+      chuỗi trạm có thứ tự, để thay được từng phần. Thứ tự là luật, vì trạm xác thực
+      phải đứng trước trạm phân quyền. Làm thử, trạm đọc mã ở vị trí tám, trạm kiểm
+      quyền ở vị trí mười bốn, nên khi tới trạm kiểm quyền thì đã biết người gọi là
+      ai.
+    introduces:
+    - implies
+  - show: '<p><b>Bước 2.</b> Trạm đọc mã chỉ lo <b>xác thực</b>. Có mã thì kiểm chữ
+      ký và hạn dùng; hỏng thì trả <b>401</b> ngay, vì không thể tin một chữ nào trong
+      mã.
+
+      Không có mã thì trạm cho đi tiếp như một <b>khách vô danh</b>, vì có thể đường
+      dẫn ấy không đòi gì.</p><table class=''t''><tr><th>yêu cầu</th><th>trạm đọc
+      mã (số 8)</th><th>đi tiếp?</th></tr><tr><td>không mang mã</td><td>không có gì
+      để kiểm</td><td>có, với tư cách vô danh</td></tr><tr><td>mã sai chữ ký hoặc
+      hết hạn</td><td>trả <b>401</b></td><td>không</td></tr><tr><td>mã tốt</td><td>ghi
+      nhận người gọi và các quyền</td><td>có</td></tr></table>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 1
+    - 2
+    clear: true
+    say: 'Bước hai, trạm đọc mã chỉ lo xác thực. Có mã thì nó kiểm chữ ký và hạn dùng,
+      hỏng thì trả bốn trăm lẻ một ngay, vì không thể tin một chữ nào trong mã. Không
+      có mã thì trạm cho đi tiếp như một khách vô danh, vì có thể đường dẫn ấy không
+      đòi gì. Bảng làm thử ba trường hợp: không mang mã thì đi tiếp, mã hỏng thì dừng
+      ở đây, mã tốt thì đi tiếp cùng các quyền của nó.'
+  - show: '<p><b>Bước 3.</b> Trạm kiểm quyền (số 14) chỉ biết <b>ném lỗi từ chối</b>.
+      Trạm dịch lỗi (số 13) bọc ngoài nó, bắt lỗi ấy và hỏi một câu: người gọi đã
+      được xác thực chưa?</p><table class=''t''><tr><th>người gọi</th><th>trạm dịch
+      lỗi trả</th><th>nghĩa</th></tr><tr><td>vô danh (chưa xác thực)</td><td><b>401</b></td><td>chưa
+      biết bạn là ai: hãy mang mã tới</td></tr><tr><td>đã xác thực, thiếu quyền</td><td><b>403</b></td><td>biết
+      rồi nhưng không cho: mang lại mã ấy cũng vô ích</td></tr></table>'
+    focus:
+    - 1
+    - 1
+    - '2.2'
+    - '2.3'
+    clear: true
+    say: Bước ba, trạm kiểm quyền chỉ biết ném lỗi từ chối. Trạm dịch lỗi bọc ngoài
+      nó, bắt lỗi ấy, rồi hỏi người gọi đã được xác thực chưa. Nếu là khách vô danh
+      thì trả bốn trăm lẻ một, nghĩa là chưa biết bạn là ai, hãy mang mã tới. Nếu
+      đã xác thực mà thiếu quyền thì trả bốn trăm lẻ ba, nghĩa là biết rồi nhưng không
+      cho, nên gửi lại đúng mã ấy cũng vô ích.
+  - show: '<p><b>Bước 4.</b> Dịch vụ tự kiểm mã, không hỏi lại máy chủ cấp mã mỗi
+      lần, nên nó cần <b>khoá để kiểm chữ ký</b>. Khai địa chỉ máy chủ cấp mã,
+
+      dịch vụ sẽ tự lấy khoá công khai ở đó. Dịch vụ như thế gọi là <b>máy chủ tài
+      nguyên</b>.</p><p><b>application.yml (chép từ hướng dẫn của Spring Security,
+      không chạy trên máy này)</b></p><div class="code"><div>spring:</div><div>  security:</div><div>    oauth2:</div><div>      resourceserver:</div><div>        jwt:</div><div>          issuer-uri:
+      https://idp.example.com/issuer</div></div><p>Làm thử: mã ghi scope <code>so_du
+      han_muc</code> thì người gọi có 2 quyền: <code>SCOPE_so_du</code> và <code>SCOPE_han_muc</code>.</p><p
+      style=''margin-top:18px''><span class=''note''>Mặc định dịch vụ kiểm nơi cấp
+      (iss) và hạn (exp, nbf); đối tượng nhận (aud) phải khai thêm. Theo hướng dẫn
+      chính thức, việc tìm khoá chỉ làm ở yêu cầu đầu tiên có mã, nên khởi động không
+      bị buộc vào máy chủ cấp mã.</span></p>
+
+      '
+    focus:
+    - 1
+    - '3.6'
+    - 1
+    - 4
+    - 5
+    clear: true
+    say: Bước bốn, dịch vụ tự kiểm mã chứ không hỏi lại máy chủ cấp mã mỗi lần, nên
+      nó cần khoá để kiểm chữ ký. Trong tệp cấu hình này, dòng cuối khai địa chỉ máy
+      chủ cấp mã, và dịch vụ sẽ tự lấy khoá công khai ở đó. Một dịch vụ tự kiểm mã
+      như thế được gọi là máy chủ tài nguyên. Làm thử, mã ghi hai phạm vi quyền thì
+      người gọi có hai quyền, mỗi quyền là tiền tố cố định ghép với một phạm vi. Mặc
+      định dịch vụ chỉ kiểm nơi cấp và hạn dùng của mã, còn đối tượng nhận mã phải
+      khai thêm, và việc tìm khoá chỉ làm ở yêu cầu đầu tiên có mã.
+  - show: '<p><b>Bước 5.</b> Địa chỉ các bản thay đổi liên tục (thêm bản, bản chết),
+      nên không ghi cứng vào cổng. Cổng ghi <b>tên dịch vụ</b>, rồi tra sổ đăng ký
+      lấy các bản đang khoẻ.</p><p><b>application.yml của cổng (chép từ hướng dẫn
+      của Spring Cloud Gateway, không chạy trên máy này)</b></p><div class="code"><div>spring:</div><div>  cloud:</div><div>    gateway:</div><div>      server:</div><div>        webflux:</div><div>          routes:</div><div>          -
+      id: myRoute</div><div>            uri: lb://service</div><div>            predicates:</div><div>            -
+      Path=/service/**</div></div>'
+    focus:
+    - 1
+    - 1
+    - - '3.8'
+      - '3.10'
+    clear: true
+    say: Bước năm, địa chỉ các bản thay đổi liên tục, nên ta không ghi cứng vào cổng.
+      Cổng ghi tên dịch vụ, rồi tra sổ đăng ký lấy các bản đang khoẻ. Trong cấu hình
+      của cổng, dòng địa chỉ bắt đầu bằng hai chữ cái viết tắt của chia tải, theo
+      sau là tên dịch vụ, còn dòng cuối là mẫu đường dẫn.
+  - show: '<p><b>Chia xoay vòng:</b> yêu cầu thứ $i$ giao cho bản thứ $i$ chia lấy
+      dư cho số bản khoẻ. Làm thử với 2 bản khoẻ: yêu cầu 0, 2, 4 về bản đầu, yêu
+      cầu 1, 3, 5 về bản sau.</p>
+
+      $$6 \text{ yêu cầu}, 2 \text{ bản khoẻ}: \quad 6 : 2 = \hl{3} \text{ yêu cầu
+      mỗi bản}$$
+
+      '
+    focus:
+    - 1
+    - 2
+    clear: true
+    say: Chia xoay vòng nghĩa là yêu cầu thứ i giao cho bản thứ i chia lấy dư cho
+      số bản khoẻ. Làm thử với hai bản khoẻ, các yêu cầu số chẵn về bản đầu, các yêu
+      cầu số lẻ về bản sau, nên sáu yêu cầu chia ra mỗi bản ba.
+  - show: '<table class=''t''><tr><th>mảnh của Spring Cloud</th><th>giữ gì</th><th>vì
+      sao cần</th></tr><tr><td>cổng</td><td>luật định tuyến: đường dẫn nào về dịch
+      vụ nào</td><td>khách chỉ cần biết một địa chỉ</td></tr><tr><td>sổ đăng ký dịch
+      vụ</td><td>tên, địa chỉ và sức khoẻ của từng bản</td><td>bản thêm vào hay chết
+      đi, không ai phải sửa cấu hình</td></tr><tr><td>cấu hình tập trung</td><td>cấu
+      hình của mọi dịch vụ ở một nơi</td><td>đổi một chỗ, không sửa từng bản</td></tr></table>'
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    clear: true
+    say: Bước sáu, ghép ba mảnh của Spring Cloud. Cổng giữ luật định tuyến, vì khách
+      chỉ cần biết một địa chỉ. Sổ đăng ký giữ tên, địa chỉ và sức khoẻ của từng bản,
+      vì thế bản thêm vào hay chết đi thì không ai phải sửa cấu hình. Cấu hình tập
+      trung giữ cấu hình của mọi dịch vụ ở một nơi, để đổi một chỗ thay vì sửa từng
+      bản.
+  - show: '<p><b>Bước 7.</b> Bản trượt kiểm sức khoẻ không tự biến mất khỏi danh sách
+      của cổng: tuỳ cấu hình. Số liệu mặc định lấy từ hướng dẫn chính thức:</p><table
+      class=''t''><tr><th>cơ chế</th><th>mặc định</th><th>ghi chú</th></tr><tr><td>Consul
+      kiểm HTTP tới <code>/actuator/health</code>, hỏng thì đánh dấu critical</td><td>bật,
+      mỗi 10 giây</td><td>Consul làm, trước khi bộ chia tải thấy gì</td></tr><tr><td>truy
+      vấn sổ chỉ lấy bản đạt: <code>spring.cloud.consul.discovery.query-passing</code></td><td>false
+      (tắt)</td><td>tắt thì truy vấn không đòi chỉ trả bản đạt; bài không dựng Consul
+      nên không đo</td></tr><tr><td>bộ chia tải tự kiểm thêm: <code>spring.cloud.loadbalancer.configurations=health-check</code></td><td>tắt;
+      chu kỳ 25 giây khi bật</td><td>hướng dẫn nói với sổ đăng ký thật thường không
+      cần</td></tr><tr><td>bộ đệm danh sách bản của bộ chia tải: <code>spring.cloud.loadbalancer.cache.ttl</code></td><td>35
+      giây</td><td>danh sách cũ còn dùng tới khi hết hạn đệm</td></tr></table>'
+    focus:
+    - 1
+    - 1
+    - 1
+    - 2
+    - 2
+    clear: true
+    say: Bước bảy, bản trượt kiểm sức khoẻ không tự biến mất khỏi danh sách của cổng,
+      mà tuỳ cấu hình, với số mặc định lấy từ hướng dẫn chính thức. Sổ đăng ký tự
+      kiểm mỗi mười giây và đánh dấu bản hỏng, nhưng việc truy vấn sổ chỉ lấy bản
+      đạt kiểm thì mặc định đang tắt, tên gốc hiện trên màn hình. Bộ chia tải cũng
+      có chế độ tự kiểm thêm, mặc định tắt, chu kỳ hai mươi lăm giây khi bật, và hướng
+      dẫn nói với sổ đăng ký thật thì thường không cần. Danh sách các bản còn được
+      đệm ba mươi lăm giây. Vì bài không dựng sổ đăng ký thật nên không đo được bản
+      hỏng ở lại bao lâu, chỉ tính cận trên ở câu ba.
+- id: example
+  kind: example
+  title: Ví dụ chạy thật Spring Security, từng phép tính
+  checks:
+  - alg.bnx_l17_chain_len() == 14 and alg.bnx_l17_pos('CsrfFilter') == 5
+  - alg.bnx_l17_pos('BearerTokenAuthenticationFilter') == 8 and alg.bnx_l17_pos('TramQuanSat')
+    == 9
+  - alg.bnx_l17_pos('ExceptionTranslationFilter') == 13 and alg.bnx_l17_pos('AuthorizationFilter')
+    == 14
+  - alg.bnx_l17_trace('GET', None, 'han_muc') == (401, 'ExceptionTranslationFilter',
+    True, False)
+  - 'alg.bnx_l17_trace(''GET'', {''sig'': False, ''expired'': False, ''scopes'': [''han_muc'']},
+    ''han_muc'') == (401, ''BearerTokenAuthenticationFilter'', False, False)'
+  - 'alg.bnx_l17_trace(''GET'', {''sig'': True, ''expired'': True, ''scopes'': [''han_muc'']},
+    ''han_muc'') == (401, ''BearerTokenAuthenticationFilter'', False, False)'
+  - 'alg.bnx_l17_trace(''GET'', {''sig'': True, ''expired'': False, ''scopes'': [''so_du'']},
+    ''han_muc'') == (403, ''ExceptionTranslationFilter'', True, False)'
+  - 'alg.bnx_l17_trace(''GET'', {''sig'': True, ''expired'': False, ''scopes'': [''so_du'',
+    ''han_muc'']}, ''han_muc'') == (200, None, True, True)'
+  - alg.bnx_l17_round_robin([True, True, True], 100) == [34, 33, 33]
+  - alg.bnx_l17_round_robin([True, False, True], 100) == [50, 0, 50]
+  steps:
+  - show: '<p><b>CauHinh.java (trích): luật bảo mật của dịch vụ hạn mức</b></p><div
+      class="code"><div>@Configuration</div><div>@EnableWebSecurity</div><div>public
+      class CauHinh {</div><div>  static final String KHOA = "khoa-bi-mat-chi-de-hoc-dai-32-byte!!";</div><div>  @Bean</div><div>  SecurityFilterChain
+      chuoi(HttpSecurity http) throws Exception {</div><div>    http.authorizeHttpRequests(q
+      -&gt; q</div><div>        .requestMatchers("/han-muc").hasAuthority("SCOPE_han_muc")</div><div>        .anyRequest().authenticated());</div><div>    http.oauth2ResourceServer(m
+      -&gt; m.jwt(Customizer.withDefaults()));</div></div>'
+    focus:
+    - 0
+    - - '2.1'
+      - '2.2'
+    - '2.4'
+    - - '2.5'
+      - '2.6'
+    - - '2.7'
+      - '2.8'
+      - '2.9'
+    - '2.10'
+    clear: true
+    say: Ta chạy thật bộ khung bảo mật của Spring, bản bảy chấm một. Hai nhãn đầu
+      báo cho Spring rằng lớp này là cấu hình bảo mật. Khoá bí mật ở đây chỉ để học,
+      dùng cho việc ký và kiểm mã. Hàm có nhãn khai một đối tượng cho Spring giữ,
+      chính là chuỗi bộ lọc. Luật thứ nhất nói đường dẫn hạn mức đòi đúng quyền hạn
+      mức, luật thứ hai nói mọi đường dẫn khác chỉ cần đã xác thực. Lệnh cuối biến
+      dịch vụ thành máy chủ tài nguyên, tức là thêm trạm đọc mã truy cập vào chuỗi.
+  - show: '<p><b>CauHinh.java (tiếp): trạm quan sát và bộ kiểm chữ ký</b></p><div
+      class="code"><div>    http.addFilterAfter(new TramQuanSat(),</div><div>        BearerTokenAuthenticationFilter.class);</div><div>    return
+      http.build();</div><div>  }</div><div>  @Bean</div><div>  JwtDecoder giaiMa()
+      {                // kiểm chữ ký bằng khoá chung</div><div>    var khoa = new
+      SecretKeySpec(KHOA.getBytes(UTF_8), "HmacSHA256");</div><div>    return NimbusJwtDecoder.withSecretKey(khoa).build();</div><div>  }</div></div>'
+    focus:
+    - - '2.1'
+      - '2.2'
+    - - '2.5'
+      - '2.6'
+    - - '2.7'
+      - '2.8'
+    clear: true
+    say: Hai dòng đầu chèn một trạm của riêng ta vào ngay sau trạm đọc mã, để quan
+      sát yêu cầu nào đi qua được trạm ấy. Hàm thứ hai khai bộ kiểm chữ ký cho Spring
+      giữ, cũng bằng một nhãn đặt trên hàm. Nó dùng chính khoá bí mật ở trên, nên
+      mã ký bằng khoá khác sẽ bị loại.
+  - show: '<p><b>CauHinh.java (hết): trạm quan sát chỉ in một câu rồi chuyển tiếp</b></p><div
+      class="code"><div>  static class TramQuanSat implements Filter {   // trạm quan
+      sát</div><div>    public void doFilter(ServletRequest q, ServletResponse d,</div><div>        FilterChain
+      c) throws IOException, ServletException {</div><div>      System.out.println("  qua
+      trạm quan sát");</div><div>      c.doFilter(q, d);</div><div>    }</div><div>  }</div></div>'
+    focus:
+    - - '2.1'
+      - '2.4'
+      - '2.5'
+    - 0
+    clear: true
+    say: 'Trạm quan sát rất đơn giản: mỗi khi có yêu cầu tới, nó in một câu báo đã
+      qua trạm, rồi chuyển yêu cầu cho trạm kế tiếp. Nhờ vậy, yêu cầu nào không in
+      câu này thì đã bị chặn từ trạm đọc mã trở về trước.'
+  - show: '<p><b>ChayThu.java (trích): gửi một yêu cầu qua chuỗi và in kết quả</b></p><div
+      class="code"><div>  static void thu(String ten, String pt, String ma) throws
+      Exception {</div><div>    System.out.println(ten);</div><div>    var q = new
+      MockHttpServletRequest(pt, "/han-muc");</div><div>    if (ma != null) q.addHeader("Authorization",
+      "Bearer " + ma);</div><div>    var d = new MockHttpServletResponse();</div><div>    chuoi.doFilter(q,
+      d,</div><div>        (x, y) -&gt; System.out.println("  tới dịch vụ"));</div><div>    System.out.println("  mã
+      trạng thái " + d.getStatus());</div><div>    String h = d.getHeader("WWW-Authenticate");</div><div>    if
+      (h != null) System.out.println("  " + h);</div><div>  }</div></div>'
+    focus:
+    - '2.1'
+    - - '2.2'
+      - '2.3'
+    - '2.4'
+    - - '2.5'
+      - '2.6'
+      - '2.7'
+    - - '2.8'
+      - '2.9'
+      - '2.10'
+    clear: true
+    say: Chương trình chạy thử có một hàm gửi yêu cầu. Nó in tên ca, rồi tạo một yêu
+      cầu tới đường dẫn hạn mức, không cần máy chủ thật. Nếu ca ấy có mã thì mã được
+      gắn vào đầu mục xác thực của yêu cầu. Sau đó yêu cầu được đẩy qua chuỗi bộ lọc,
+      và nếu lọt tới cuối chuỗi thì chương trình in rằng đã tới dịch vụ. Ba lệnh cuối
+      in mã trạng thái, và đầu mục thách thức xác thực nếu có.
+  - show: '<p><b>ChayThu.java (tiếp): dựng Spring rồi in chuỗi bộ lọc</b></p><div
+      class="code"><div>    var ctx = new AnnotationConfigWebApplicationContext();</div><div>    ctx.setServletContext(new
+      MockServletContext());</div><div>    ctx.register(CauHinh.class);</div><div>    ctx.refresh();</div><div>    chuoi
+      = ctx.getBean("springSecurityFilterChain", Filter.class);</div><div>    int
+      i = 0;</div><div>    for (Filter f : ((FilterChainProxy) chuoi).getFilters("/han-muc"))</div><div>      System.out.println(++i
+      + " " + f.getClass().getSimpleName());</div></div>'
+    focus:
+    - - '2.1'
+      - '2.2'
+      - '2.3'
+      - '2.4'
+      - '2.5'
+    - - '2.6'
+      - '2.7'
+      - '2.8'
+    clear: true
+    say: Hàm chính dựng Spring với lớp cấu hình vừa viết, rồi xin Spring đối tượng
+      chuỗi bộ lọc. Vòng lặp in ra tên từng trạm mà một yêu cầu tới đường dẫn hạn
+      mức sẽ đi qua, kèm số thứ tự.
+  - show: '<p><b>ChayThu.java (tiếp): bốn mã thử và năm ca</b></p><div class="code"><div>    String
+      k = CauHinh.KHOA, han = ",\"exp\":4102444800}";</div><div>    String an = ky("{\"scope\":\"so_du\""
+      + han, k);</div><div>    String binh = ky("{\"scope\":\"so_du han_muc\"" + han,
+      k);</div><div>    String gia = ky("{\"scope\":\"han_muc\"" + han,</div><div>        "khoa-cua-ke-gian-cung-dai-32-byte!!!");</div><div>    String
+      cu = ky("{\"scope\":\"han_muc\",\"exp\":1700000000}", k);</div><div>    thu("A.
+      không mang mã", "GET", null);</div><div>    thu("B. mã ký bằng khoá khác", "GET",
+      gia);</div><div>    thu("C. mã thật, thiếu quyền", "GET", an);</div><div>    thu("D.
+      mã thật, đủ quyền", "GET", binh);</div><div>    thu("E. mã thật, đã hết hạn",
+      "GET", cu);</div></div>'
+    focus:
+    - '2.1'
+    - - '2.2'
+      - '2.3'
+    - - '2.4'
+      - '2.5'
+      - '2.6'
+    - - '2.7'
+      - '2.8'
+      - '2.9'
+      - '2.10'
+      - '2.11'
+    clear: true
+    say: 'Tiếp theo ta tự ký bốn mã bằng hàm băm có khoá. Mã của An chỉ có quyền số
+      dư, mã của Bình có cả quyền số dư và quyền hạn mức. Mã giả ghi quyền hạn mức
+      nhưng ký bằng khoá của kẻ gian, còn mã cũ ký đúng khoá nhưng hạn dùng đã qua.
+      Năm lệnh cuối gửi năm ca: không mang mã, mã giả, mã thiếu quyền, mã đủ quyền,
+      và mã hết hạn.'
+  - show: <p><b>Biên dịch và chạy (thư viện Spring nằm trong thư mục lib)</b></p><div
+      class="code"><div>javac -encoding UTF-8 -cp "lib/*" -d out CauHinh.java ChayThu.java</div><div>java
+      -Dstdout.encoding=UTF-8 -cp "out;lib/*" ChayThu</div></div><p><b>Kết quả chạy
+      thật (lược bớt bằng dấu …)</b></p><div class="code"><div>1 DisableEncodeUrlFilter</div><div>…</div><div>5
+      CsrfFilter</div><div>…</div><div>8 BearerTokenAuthenticationFilter</div><div>9
+      TramQuanSat</div><div>…</div><div>12 AnonymousAuthenticationFilter</div><div>13
+      ExceptionTranslationFilter</div><div>14 AuthorizationFilter</div></div>
+    focus:
+    - 2
+    - 4
+    - - '4.3'
+      - '4.5'
+      - '4.6'
+    - - '4.9'
+      - '4.10'
+    clear: true
+    say: Hai lệnh này biên dịch rồi chạy chương trình, với các thư viện của Spring
+      nằm trong một thư mục. Kết quả chạy thật trước hết in ra chuỗi bộ lọc, gồm mười
+      bốn trạm. Trạm chống giả mạo yêu cầu ở vị trí năm, trạm đọc mã ở vị trí tám,
+      và trạm quan sát của ta nằm ngay sau nó, ở vị trí chín. Trạm dịch lỗi ở vị trí
+      mười ba, bọc lấy trạm kiểm quyền ở vị trí cuối cùng.
+  - show: '<p><b>Kết quả chạy thật</b></p><div class="code"><div>A. không mang mã</div><div>  qua
+      trạm quan sát</div><div>  mã trạng thái 401</div><div>  Bearer resource_metadata=…</div></div>
+
+      $$① \; \text{không mã} \Rightarrow \text{qua trạm 8, tới trạm 9}; \; \text{trạm
+      14 từ chối, trạm 13 thấy vô danh} \Rightarrow \hl{401}$$
+
+      '
+    focus:
+    - '2.1'
+    - '2.2'
+    - - 3
+      - '2.3'
+    - '2.4'
+    clear: true
+    say: Phép tính thứ nhất, ca không mang mã. Câu quan sát có in ra, nghĩa là yêu
+      cầu đã qua trạm đọc mã. Nó bị trạm kiểm quyền từ chối, và vì người gọi còn vô
+      danh nên trạm dịch lỗi trả bốn trăm lẻ một. Hàng cuối là đầu mục thách thức,
+      báo cho bên gọi rằng nơi này đòi mã truy cập.
+  - show: '<p><b>Kết quả chạy thật</b></p><div class="code"><div>B. mã ký bằng khoá
+      khác</div><div>  mã trạng thái 401</div><div>  Bearer error="invalid_token",
+      …Invalid signature…</div></div><p><b>Ca mã hết hạn</b></p><div class="code"><div>E.
+      mã thật, đã hết hạn</div><div>  mã trạng thái 401</div><div>  Bearer error="invalid_token",
+      …Jwt expired at 2023-11-14T22:13:20Z…</div></div>
+
+      $$② \; \text{mã hỏng} \Rightarrow \text{dừng ở trạm 8, không tới trạm 9} \Rightarrow
+      \hl{401}$$
+
+      '
+    focus:
+    - '2.1'
+    - 5
+    - - '2.2'
+      - '2.3'
+    - 4
+    clear: true
+    say: Phép tính thứ hai, ca mã ký bằng khoá khác. Lần này không có câu quan sát,
+      nghĩa là yêu cầu dừng ngay ở trạm đọc mã. Mã trạng thái vẫn là bốn trăm lẻ một
+      như phép một, nhưng trạm trả lời thì khác, và đầu mục ghi rõ lý do là chữ ký
+      không hợp lệ. Ca mã hết hạn cũng dừng ở trạm đọc mã với bốn trăm lẻ một, kèm
+      đúng thời điểm mã đã hết hạn.
+  - show: '<p><b>Kết quả chạy thật</b></p><div class="code"><div>C. mã thật, thiếu
+      quyền</div><div>  qua trạm quan sát</div><div>  mã trạng thái 403</div><div>  Bearer
+      error="insufficient_scope", …</div></div>
+
+      $$③ \; \text{mã tốt, thiếu quyền} \Rightarrow \text{tới trạm 9}; \; \text{trạm
+      14 từ chối, trạm 13 thấy đã xác thực} \Rightarrow \hl{403}$$
+
+      '
+    focus:
+    - '2.1'
+    - '2.2'
+    - - 3
+      - '2.3'
+    - '2.4'
+    clear: true
+    say: Phép tính thứ ba, mã của An là mã thật nhưng chỉ có quyền số dư. Câu quan
+      sát có in, vì mã qua được trạm đọc mã. Trạm kiểm quyền từ chối giống phép một,
+      nhưng lần này người gọi đã được xác thực, nên trạm dịch lỗi trả bốn trăm lẻ
+      ba. Đầu mục thách thức ghi lý do là phạm vi quyền không đủ cho yêu cầu này.
+  - show: '<p><b>Kết quả chạy thật</b></p><div class="code"><div>D. mã thật, đủ quyền</div><div>  qua
+      trạm quan sát</div><div>  tới dịch vụ</div><div>  mã trạng thái 200</div></div>
+
+      $$④ \; \text{mã tốt, đủ quyền} \Rightarrow \text{qua cả 14 trạm} \Rightarrow
+      \hlg{200}$$
+
+      '
+    focus:
+    - '2.1'
+    - - '2.2'
+      - '2.3'
+    - '2.4'
+    - 3
+    clear: true
+    say: Phép tính thứ tư, mã của Bình có quyền hạn mức. Yêu cầu qua trạm quan sát,
+      qua trạm kiểm quyền, rồi tới dịch vụ. Mã trạng thái là hai trăm, nên không trạm
+      nào chặn yêu cầu này. Vậy cùng một địa chỉ cho ba kết quả, bốn trăm lẻ một,
+      bốn trăm lẻ ba và hai trăm, đúng như đề bài.
+  - show: <p><b>ChiaTai.java (trích) — MÔ PHỎNG bằng Java thuần, không phải Spring
+      Cloud</b></p><div class="code"><div>public class ChiaTai {   // MÔ PHỎNG, không
+      phải Spring Cloud</div><div>  record Ban(String ten, boolean khoe) { }</div><div>  static
+      Map&lt;String, Integer&gt; chia(List&lt;Ban&gt; so, int n) {</div><div>    List&lt;Ban&gt;
+      song = so.stream().filter(Ban::khoe).toList();</div><div>    Map&lt;String,
+      Integer&gt; dem = new TreeMap&lt;&gt;();</div><div>    for (int i = 0; i &lt;
+      n; i++) {</div><div>      Ban b = song.get(i % song.size());   // xoay vòng</div><div>      dem.merge(b.ten(),
+      1, Integer::sum);</div><div>    }</div><div>    return dem;</div><div>  }</div></div>
+    focus:
+    - 0
+    - - '2.2'
+      - '2.3'
+      - '2.4'
+    - - '2.6'
+      - '2.7'
+      - '2.8'
+      - '2.9'
+    clear: true
+    say: Phần chia tải thì máy này không dựng cổng và sổ đăng ký thật, nên ta dùng
+      một mô phỏng nhỏ bằng Java thuần. Mỗi bản có một tên và một cờ sức khoẻ, và
+      hàm chia trước hết lọc ra các bản khoẻ. Vòng lặp giao yêu cầu thứ i cho bản
+      thứ i chia lấy dư cho số bản khoẻ, rồi đếm số yêu cầu mỗi bản nhận.
+  - show: '<p><b>ChiaTai.java (tiếp): ba bản khoẻ, rồi bản 2 trượt</b></p><div class="code"><div>  public
+      static void main(String[] a) {</div><div>    List&lt;Ban&gt; so = List.of(new
+      Ban("bản 1", true),</div><div>        new Ban("bản 2", true), new Ban("bản 3",
+      true));</div><div>    System.out.println("ba bản khoẻ: " + chia(so, 100));</div><div>    so
+      = List.of(new Ban("bản 1", true),</div><div>        new Ban("bản 2", false),
+      new Ban("bản 3", true));</div><div>    System.out.println("bản 2 trượt: " +
+      chia(so, 100));</div><div>  }</div></div><p><b>Kết quả chạy thật của mô phỏng</b></p><div
+      class="code"><div>ba bản khoẻ: {bản 1=34, bản 2=33, bản 3=33}</div><div>bản
+      2 trượt: {bản 1=50, bản 3=50}</div></div>
+
+      $$⑤ \; 3 - 1 = 2 \text{ bản khoẻ}; \quad 100 : 2 = \hlg{50} \text{ mỗi bản}$$
+
+      '
+    focus:
+    - 2
+    - - '2.2'
+      - '2.3'
+      - '2.4'
+      - '4.1'
+    - - '2.5'
+      - '2.6'
+      - '2.7'
+      - '4.2'
+    - 5
+    clear: true
+    say: 'Hàm chính thử hai lần với một trăm yêu cầu. Khi cả ba bản khoẻ, bản một
+      nhận ba mươi tư, hai bản kia nhận ba mươi ba. Khi bản hai trượt kiểm sức khoẻ,
+      nó biến khỏi kết quả, còn bản một và bản ba mỗi bản nhận năm mươi. Đó là phép
+      tính thứ năm: ba bản trừ một bản trượt còn hai, và một trăm chia hai là năm
+      mươi yêu cầu mỗi bản.'
+- id: check
+  kind: check
+  title: 'Tự kiểm bằng đường khác: bảng quyết định viết tay'
+  checks:
+  - '[alg.bnx_l17_status(''GET'', t, ''han_muc'') for t in (None, {''sig'': False,
+    ''expired'': False, ''scopes'': [''han_muc'']}, {''sig'': True, ''expired'': False,
+    ''scopes'': [''so_du'']}, {''sig'': True, ''expired'': False, ''scopes'': [''so_du'',
+    ''han_muc'']}, {''sig'': True, ''expired'': True, ''scopes'': [''han_muc'']})]
+    == [401, 401, 403, 200, 401]'
+  - 100 // 2 == 50 and [len(range(i, 100, 3)) for i in range(3)] == alg.bnx_l17_round_robin([True]
+    * 3, 100) == [34, 33, 33]
+  - alg.bnx_l17_round_robin([True, False, True], 100) == [50, 0, 50]
+  - alg.bnx_l17_pos('ExceptionTranslationFilter') == 13 and alg.bnx_l17_pos('BearerTokenAuthenticationFilter')
+    == 8
+  steps:
+  - show: '<p><b>Bảng quyết định bằng Python, không dùng Spring</b></p><div class="code"><div>def
+      kiem(ma, quyen_can):</div><div>    if ma is None:</div><div>        return 401                     #
+      chưa biết bạn là ai</div><div>    if not ma["chu_ky_dung"] or ma["het_han"]:</div><div>        return
+      401                     # mã không tin được</div><div>    if quyen_can not in
+      ma["quyen"]:</div><div>        return 403                     # biết rồi nhưng
+      không cho</div><div>    return 200</div></div>'
+    focus:
+    - 0
+    - - '2.2'
+      - '2.3'
+    - - '2.4'
+      - '2.5'
+    - - '2.6'
+      - '2.7'
+      - '2.8'
+    clear: true
+    say: 'Ta kiểm bằng một đường khác hẳn, không dùng Spring: tự viết bảng quyết định
+      thành một hàm ngắn. Không có mã thì trả bốn trăm lẻ một, vì chưa biết bạn là
+      ai. Có mã mà chữ ký sai hoặc đã hết hạn thì cũng bốn trăm lẻ một, vì mã không
+      tin được. Mã tin được mà thiếu quyền cần có thì bốn trăm lẻ ba, còn lại là hai
+      trăm.'
+  - show: '<p><b>(tiếp) năm ca như chương trình Java, và phép chia tải</b></p><div
+      class="code"><div>an = {"chu_ky_dung": True, "het_han": False, "quyen": ["so_du"]}</div><div>binh
+      = dict(an, quyen=["so_du", "han_muc"])</div><div>gia, cu = dict(binh, chu_ky_dung=False),
+      dict(binh, het_han=True)</div><div>print([kiem(m, "han_muc") for m in (None,
+      gia, an, binh, cu)])</div><div>print(100 // 2, [len(range(i, 100, 3)) for i
+      in range(3)])</div></div><p><b>Kết quả chạy thật</b></p><div class="code"><div>[401,
+      401, 403, 200, 401]</div><div>50 [34, 33, 33]</div></div>'
+    focus:
+    - - '2.1'
+      - '2.2'
+      - '2.3'
+      - '2.4'
+    - '2.5'
+    - 4
+    clear: true
+    say: 'Phần tiếp theo mô tả lại bốn mã như trong chương trình Java, rồi hỏi hàm
+      năm ca theo đúng thứ tự cũ. Lệnh cuối tính phép chia tải bằng cách đếm: một
+      trăm chia hai, và số yêu cầu mỗi bản nhận khi đủ ba bản. Kết quả chạy thật cho
+      năm mã trạng thái, rồi năm mươi và bộ ba ba mươi tư, ba mươi ba, ba mươi ba.'
+  - show: '<table class=''t''><tr><th>ca</th><th>Spring Security chạy thật</th><th>bảng
+      quyết định</th><th>trạm trả lời</th></tr><tr><td>không mang mã</td><td>401</td><td>401</td><td>trạm
+      dịch lỗi (13)</td></tr><tr><td>mã ký bằng khoá khác</td><td>401</td><td>401</td><td>trạm
+      đọc mã (8)</td></tr><tr><td>mã thật, thiếu quyền</td><td>403</td><td>403</td><td>trạm
+      dịch lỗi (13)</td></tr><tr><td>mã thật, đủ quyền</td><td>200</td><td>200</td><td>không
+      trạm nào chặn</td></tr><tr><td>mã thật, đã hết hạn</td><td>401</td><td>401</td><td>trạm
+      đọc mã (8)</td></tr><tr><td>100 yêu cầu, 2 bản khoẻ</td><td>—</td><td>50 mỗi
+      bản</td><td>mô phỏng Java: 50 và 50</td></tr></table>'
+    focus:
+    - 0
+    - 0
+    - '1.7'
+    - 0
+    clear: true
+    say: Bảng này đặt hai đường cạnh nhau, cả năm ca, bộ khung của Spring chạy thật
+      và bảng quyết định viết tay cho cùng một mã trạng thái. Cột cuối nhắc trạm nào
+      trả lời, lấy từ câu quan sát của lần chạy thật. Phép chia tải cũng khớp giữa
+      phép đếm và mô phỏng. Vì hai đường độc lập cho cùng kết quả, ta tin cách hiểu
+      của mình về chuỗi bộ lọc.
+- id: pitfalls
+  kind: pitfall
+  title: Lỗi hay gặp, theo từng giai đoạn của hệ thống
+  checks:
+  - 'alg.bnx_l17_status(''GET'', None, ''han_muc'') == 401 and alg.bnx_l17_status(''GET'',
+    {''sig'': True, ''expired'': False, ''scopes'': [''so_du'']}, ''han_muc'') ==
+    403'
+  - alg.bnx_l17_trace('POST', None, 'han_muc') == (403, 'CsrfFilter', False, False)
+  - 'alg.bnx_l17_trace(''POST'', {''sig'': True, ''expired'': False, ''scopes'': [''so_du'',
+    ''han_muc'']}, ''han_muc'') == (200, None, True, True)'
+  - alg.bnx_l17_pos('CsrfFilter') == 5 < alg.bnx_l17_pos('BearerTokenAuthenticationFilter')
+    == 8
+  steps:
+  - show: '<div class="box warn"><b>Lỗi 1 (người mới).</b> Coi 401 và 403 là một,
+      hoặc trả <b class="red">403 cho mọi lần từ chối</b>.
+
+      401 là <b>chưa biết bạn là ai</b>: bên gọi nên lấy mã mới rồi thử lại. 403 là
+      <b>biết rồi nhưng không cho</b>: thử lại với đúng mã ấy vẫn 403.
+
+      <br><span class="note">Trả sai mã thì ứng dụng khách hoặc xin mã mới mãi, hoặc
+      không bao giờ xin lại.</span></div>
+
+      '
+    clear: true
+    say: Lỗi thứ nhất, của người mới, là coi bốn trăm lẻ một và bốn trăm lẻ ba là
+      một. Bốn trăm lẻ một là chưa biết bạn là ai, nên bên gọi cần lấy mã mới rồi
+      thử lại. Bốn trăm lẻ ba là biết rồi nhưng không cho, nên thử lại với đúng mã
+      ấy thì vẫn bị cấm. Trả sai con số thì ứng dụng khách hoặc xin mã mới mãi, hoặc
+      không bao giờ xin lại.
+  - show: '<p><b>ChayThu.java (hết): hai ca gửi lệnh ghi POST</b></p><div class="code"><div>    thu("F.
+      lệnh POST, không mang mã", "POST", null);</div><div>    thu("G. lệnh POST, đủ
+      quyền", "POST", binh);</div></div><p><b>Kết quả chạy thật</b></p><div class="code"><div>F.
+      lệnh POST, không mang mã</div><div>  mã trạng thái 403</div><div>G. lệnh POST,
+      đủ quyền</div><div>  qua trạm quan sát</div><div>  tới dịch vụ</div><div>  mã
+      trạng thái 200</div></div>'
+    focus:
+    - 0
+    - 2
+    - - '4.1'
+      - '4.2'
+    - - '4.3'
+      - '4.4'
+      - '4.5'
+      - '4.6'
+    clear: true
+    say: 'Lỗi thứ hai lộ ra ngay lúc mới dựng. Hai ca cuối của chương trình gửi lệnh
+      ghi thay cho lệnh đọc. Kết quả chạy thật: lệnh ghi không mang mã nhận bốn trăm
+      lẻ ba chứ không phải bốn trăm lẻ một, và không hề qua trạm quan sát. Còn lệnh
+      ghi mang mã đủ quyền thì qua hết chuỗi và nhận hai trăm.'
+  - show: '<div class="box warn"><b>Lỗi 2 (người đã đi làm, lúc mới dựng).</b> Thấy
+      lệnh POST không mang mã nhận <b class="red">403</b> rồi đi tìm lỗi phân quyền.
+
+      Thủ phạm là trạm <b>chống giả mạo yêu cầu</b> (CsrfFilter) ở vị trí 5, đứng
+      <b>trước</b> trạm đọc mã ở vị trí 8, và mặc định bật cho các lệnh ghi.
+
+      <br><span class="note">Hướng dẫn của Spring Security: dịch vụ nền không phục
+      vụ trình duyệt có thể tắt lớp này, và nên cân nhắc trước khi tắt. Bài học chung:
+      cùng một con số 403, phải hỏi <b>trạm nào</b> trả.</span>
+
+      <br><span class="note">Quan sát chạy thật ở bộ kiểm, với cấu hình này: lệnh
+      POST mang mã ký sai nhận 401 chứ không phải 403, nên yêu cầu có đầu mục mã không
+      bị trạm chống giả mạo chặn. Hướng dẫn chính thức đã đọc không giải thích cơ
+      chế, nên bài không khẳng định lý do.</span></div>
+
+      '
+    clear: true
+    say: 'Đó là lỗi thứ hai, của người đã đi làm: thấy lệnh ghi không mang mã nhận
+      bốn trăm lẻ ba rồi đi tìm lỗi phân quyền. Thủ phạm là trạm chống giả mạo yêu
+      cầu ở vị trí năm, đứng trước trạm đọc mã ở vị trí tám, và mặc định bật cho các
+      lệnh ghi. Theo hướng dẫn chính thức của Spring, dịch vụ nền không phục vụ trình
+      duyệt có thể tắt lớp này, và nên cân nhắc trước khi tắt. Chạy thật với cấu hình
+      này, lệnh ghi mang mã ký sai nhận bốn trăm lẻ một chứ không phải bốn trăm lẻ
+      ba. Vậy yêu cầu có mã không bị trạm này chặn, còn lý do thì hướng dẫn không
+      nêu. Bài học chung là cùng một con số bốn trăm lẻ ba, ta phải hỏi trạm nào đã
+      trả nó.'
+  - show: '<div class="box warn"><b>Lỗi 3 (người đã đi làm, lúc hệ thống lớn dần).</b>
+      <b class="red">Chỉ kiểm quyền ở cổng</b>, các dịch vụ phía sau tin mọi yêu cầu
+      tới mình.
+
+      Lúc đầu chỉ có một đường vào nên ổn. Hệ thống lớn dần, dịch vụ gọi thẳng nhau
+      trong mạng nội bộ, không qua cổng: trên đường ấy không còn lần kiểm quyền nào.
+
+      <br><span class="note">Cách chữa: cổng kiểm thô (có mã, mã còn hạn), còn <b>mỗi
+      dịch vụ là một máy chủ tài nguyên</b>, tự kiểm chữ ký và quyền như ví dụ vừa
+      chạy.</span></div>
+
+      '
+    clear: true
+    say: 'Lỗi thứ ba, của người đã đi làm, lộ ra khi hệ thống lớn dần: chỉ kiểm quyền
+      ở cổng, còn các dịch vụ phía sau tin mọi yêu cầu tới mình. Lúc đầu chỉ có một
+      đường vào nên mọi thứ ổn. Về sau các dịch vụ gọi thẳng nhau trong mạng nội bộ
+      mà không qua cổng, nên trên đường ấy không có lần kiểm quyền nào. Cách chữa
+      là cổng chỉ kiểm thô, còn mỗi dịch vụ là một máy chủ tài nguyên, tự kiểm chữ
+      ký và quyền như ví dụ vừa chạy.'
+  - show: '<div class="box warn"><b>Lỗi 4 (người đã đi làm, lúc vận hành lâu dài).</b>
+      Để <b class="red">mật khẩu dạng chữ thường</b> trong kho cấu hình tập trung.
+
+      Kho ấy thường là một kho mã nguồn: ai đọc được kho, đọc được lịch sử, là đọc
+      được mật khẩu, kể cả mật khẩu đã đổi từ năm trước.</div><p><b>Tệp cấu hình trong
+      kho (chép từ hướng dẫn của Spring Cloud Config, không chạy trên máy này)</b></p><div
+      class="code"><div>spring:</div><div>  datasource:</div><div>    username: dbuser</div><div>    password:
+      ''{cipher}FKSAJDFGYOS8F7GLHAKERGFHLSAJ''</div></div><p style=''margin-top:18px''><span
+      class=''note''>Giá trị bắt đầu bằng <code>{cipher}</code> là bản đã mã hoá;
+      máy chủ cấu hình giải mã rồi mới gửi cho dịch vụ qua HTTP. Việc còn lại: đổi
+      mật khẩu đã lộ trong lịch sử kho; giữ kín khoá giải mã (máy chủ cần khoá đối
+      xứng hoặc cặp khoá); bảo vệ đường truyền, vì giá trị đã giải mã đi qua mạng.</span></p>
+
+      '
+    focus:
+    - 1
+    - 1
+    - '3.4'
+    - 4
+    - 4
+    - 4
+    clear: true
+    say: 'Lỗi thứ tư, cũng của người đã đi làm, lộ ra khi vận hành lâu dài: để mật
+      khẩu dạng chữ thường trong kho cấu hình tập trung. Kho ấy thường là một kho
+      mã nguồn, nên ai đọc được lịch sử của kho là đọc được mật khẩu, kể cả mật khẩu
+      đã đổi từ năm trước. Cách chữa có sẵn trong Spring Cloud: giá trị mật khẩu trong
+      tệp này bắt đầu bằng một nhãn báo đây là bản đã mã hoá. Máy chủ cấu hình giải
+      mã giá trị ấy rồi mới gửi cho dịch vụ, nên trong kho không còn mật khẩu đọc
+      được. Nhưng việc chưa xong, vì mật khẩu đã lộ trong lịch sử kho thì phải đổi
+      ngay. Khoá giải mã nằm ở máy chủ cấu hình, nên khoá ấy giờ là bí mật cần giữ
+      kín, và giá trị đã giải mã đi qua mạng tới dịch vụ nên đường truyền phải được
+      bảo vệ.'
+- id: quiz
+  kind: quiz
+  title: Đến lượt bạn
+  checks:
+  - 'alg.bnx_l17_status(''GET'', {''sig'': True, ''expired'': False, ''scopes'': [''so_du'']},
+    None) == 200'
+  - 'alg.bnx_l17_trace(''GET'', {''sig'': True, ''expired'': False, ''scopes'': [''so_du'']},
+    ''han_muc'')[:2] == (403, ''ExceptionTranslationFilter'') and alg.bnx_l17_pos(''ExceptionTranslationFilter'')
+    == 13'
+  - alg.bnx_l17_round_robin([True, False, True, True], 90) == [30, 0, 30, 30]
+  - alg.bnx_l17_round_robin([True, False, False, True], 90) == [45, 0, 0, 45] and
+    45 / 30 == 1.5
+  - alg.bnx_l17_stale_window(10, 35) == 45 and alg.bnx_l17_lost(100, 3, 45) == 1500
+  - alg.bnx_l17_stale_window(2, 35) == 37 and alg.bnx_l17_lost(100, 3, 37) == 1233
+    and -(-100 * 37 // 3) == 1234
+  - alg.bnx_l17_stale_window(10, 35) - alg.bnx_l17_stale_window(2, 35) == 8 and 10
+    // 2 == 5
+  steps:
+  - show: '<table class=''t''><tr><th>câu</th><th>đề</th></tr><tr><td>1</td><td>Luật
+      như trong bài: <code>/han-muc</code> đòi quyền <code>SCOPE_han_muc</code>, đường
+      dẫn khác chỉ cần đã xác thực. Mã thật, còn hạn, scope <code>so_du</code>. Lệnh
+      đọc tới <code>/so-du</code> nhận mã nào? Tới <code>/han-muc</code> nhận mã nào,
+      do trạm số mấy trả?</td></tr><tr><td>2</td><td>Một dịch vụ đăng ký 4 bản, 1
+      bản trượt kiểm sức khoẻ. 90 yêu cầu chia xoay vòng thì mỗi bản khoẻ nhận bao
+      nhiêu? Nếu trượt 2 bản thì sao?</td></tr><tr><td>3</td><td>Quyết định (số minh
+      hoạ): 3 bản, 100 yêu cầu mỗi giây chia đều. Một bản chết hẳn. Sổ kiểm sức khoẻ
+      mỗi 10 giây, giả định đã bật tuỳ chọn chỉ lấy bản đạt kiểm (query-passing);
+      bên gọi giữ danh sách bản trong bộ đệm 35 giây. Chọn: giữ nguyên, giảm chu kỳ
+      kiểm xuống 2 giây, hay giữ nguyên và cho thử lại sang bản khác?</td></tr></table>'
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - 0
+    pause: 25
+    say: Bây giờ tới phần bạn tự làm bài. Câu một, với luật như trong bài, một mã
+      thật chỉ có quyền số dư gửi lệnh đọc tới hai đường dẫn thì nhận những mã trạng
+      thái nào? Câu hai, bốn bản đăng ký, một bản trượt kiểm sức khoẻ, chín mươi yêu
+      cầu chia xoay vòng thì mỗi bản khoẻ nhận bao nhiêu? Câu ba, một bản chết hẳn,
+      sổ kiểm mỗi mười giây, đã bật lọc bản đạt kiểm, danh sách cũ giữ ba mươi lăm
+      giây, bạn chọn cách nào trong ba cách trên màn hình? Hãy tạm dừng lại và làm
+      từng câu ra giấy trước khi xem đáp án.
+  - show: '<p>Câu 1: mã thật nên qua trạm đọc mã (số 8); phần còn lại do luật của
+      từng đường dẫn quyết định.</p>
+
+      $$\text{/so-du: chỉ cần đã xác thực} \Rightarrow \hlg{200}; \qquad \text{/han-muc:
+      thiếu quyền} \Rightarrow \hlg{403} \text{, do trạm dịch lỗi số 13 trả}$$
+
+      '
+    focus:
+    - - 1
+    - 2
+    - 2
+    say: Đáp án câu một, mã thật nên qua được trạm đọc mã. Đường dẫn số dư chỉ cần
+      đã xác thực, nên nhận hai trăm. Đường dẫn hạn mức đòi quyền mà mã không có,
+      nên trạm kiểm quyền từ chối, và trạm dịch lỗi số mười ba trả bốn trăm lẻ ba.
+    clear: true
+  - show: '<p>Câu 2: chỉ các bản khoẻ được chia việc.</p>
+
+      $$4 - 1 = 3 \text{ bản}: \; 90 : 3 = \hlg{30} \text{ mỗi bản}; \qquad 4 - 2
+      = 2 \text{ bản}: \; 90 : 2 = \hlg{45} \text{ mỗi bản}$$
+
+      '
+    focus:
+    - - 1
+    - 2
+    say: Đáp án câu hai, trượt một bản thì còn ba bản khoẻ, chín mươi chia ba là ba
+      mươi yêu cầu mỗi bản. Trượt hai bản thì còn hai, mỗi bản nhận bốn mươi lăm,
+      tức là tải trên mỗi bản còn sống tăng lên gấp rưỡi.
+  - show: '<table class=''t''><tr><th>lựa chọn</th><th>được</th><th>mất</th></tr><tr><td>giữ
+      nguyên: kiểm 10 giây, đệm 35 giây</td><td>không phải làm gì</td><td>bản chết
+      còn nhận việc tới 10 + 35 = 45 giây: khoảng 100 × 45 : 3 = 1500 yêu cầu lỗi</td></tr><tr><td>giảm
+      chu kỳ kiểm xuống 2 giây</td><td>phát hiện sớm hơn 8 giây</td><td>vẫn tới 2
+      + 35 = 37 giây, khoảng 1234 yêu cầu lỗi (cận trên); số lần kiểm tăng 5 lần</td></tr><tr><td>giữ
+      nguyên, lỗi kết nối thì thử lại sang bản khác</td><td>yêu cầu rơi vào bản chết
+      được cứu ngay</td><td>chỉ an toàn với lệnh đọc; lệnh ghi phải có khoá lũy đẳng,
+      kẻo xử lý hai lần</td></tr></table>'
+    focus:
+    - 0
+    - '1.2'
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.4'
+    say: Đáp án câu ba, tính bằng cận trên và với giả định đã bật tuỳ chọn chỉ lấy
+      bản đạt kiểm. Giữ nguyên thì bản chết còn nhận việc tới bốn mươi lăm giây, vì
+      mười giây chờ lần kiểm kế cộng ba mươi lăm giây bộ đệm. Mỗi giây một phần ba
+      trong một trăm yêu cầu rơi vào bản ấy, nên có khoảng một nghìn năm trăm yêu
+      cầu lỗi. Giảm chu kỳ kiểm xuống hai giây chỉ bớt được tám giây, vẫn còn khoảng
+      một nghìn hai trăm ba mươi tư yêu cầu lỗi, vì bộ đệm mới là phần lớn. Cho thử
+      lại sang bản khác thì cứu được yêu cầu ngay, nhưng chỉ an toàn với lệnh đọc,
+      còn lệnh ghi phải có khoá lũy đẳng kẻo xử lý hai lần. Một lập luận hợp lý là
+      chọn cách ba cho lệnh đọc và lệnh có khoá lũy đẳng, rồi mới xét rút ngắn bộ
+      đệm.
+    clear: true
+- id: recap
+  kind: recap
+  title: Chuỗi logic & tư duy cần mang theo
+  checks:
+  - 'alg.bnx_l17_status(''GET'', None, ''han_muc'') == 401 and alg.bnx_l17_status(''GET'',
+    {''sig'': True, ''expired'': False, ''scopes'': [''so_du'']}, ''han_muc'') ==
+    403'
+  - alg.bnx_l17_round_robin([True, False, True], 100) == [50, 0, 50]
+  steps:
+  - show: '<div class=''chain''><span class=''n''>chuỗi trạm có thứ tự</span><span
+      class=''a''>→</span><span class=''n''>trạm đọc mã: mã hỏng thì 401</span><span
+      class=''a''>→</span><span class=''n''>trạm kiểm quyền + trạm dịch lỗi: 401 hoặc
+      403</span><span class=''a''>→</span><span class=''n''>mỗi dịch vụ tự kiểm mã</span><span
+      class=''a''>→</span><span class=''n''>cổng tra sổ, chia cho bản khoẻ</span></div>'
+    say: Tổng kết chuỗi lập luận, yêu cầu đi qua một chuỗi trạm có thứ tự, trong đó
+      trạm đọc mã trả bốn trăm lẻ một khi mã hỏng. Trạm kiểm quyền từ chối, còn trạm
+      dịch lỗi chọn bốn trăm lẻ một cho khách vô danh và bốn trăm lẻ ba cho người
+      đã xác thực. Mỗi dịch vụ tự kiểm mã như một máy chủ tài nguyên, còn cổng tra
+      sổ đăng ký rồi chia việc cho các bản khoẻ.
+  - show: '<div class=''box key''><b>Tư duy:</b> 401 là chưa biết bạn là ai, 403 là
+      biết rồi nhưng không cho. Gặp một lần từ chối, đừng chỉ nhìn con số:
+
+      hãy hỏi <b>trạm nào</b> trả nó. Và đừng tin một lớp kiểm duy nhất: cổng kiểm
+      thô, từng dịch vụ kiểm lại.</div>
+
+      '
+    say: Điều cần mang theo, bốn trăm lẻ một là chưa biết bạn là ai, bốn trăm lẻ ba
+      là biết rồi nhưng không cho. Gặp một lần từ chối, đừng chỉ nhìn con số mà hãy
+      hỏi trạm nào đã trả nó. Và đừng tin một lớp kiểm duy nhất, vì cổng chỉ kiểm
+      thô, còn từng dịch vụ phải kiểm lại.
+  - show: '<table class=''t''><tr><th>Nếu bị hỏi về dòng này trên CV</th><th>ý trả
+      lời</th></tr><tr><td>Spring Security: một yêu cầu đi qua những gì, 401 khác
+      403 ở đâu?</td><td>chuỗi bộ lọc có thứ tự; trạm đọc mã trả 401 khi mã hỏng;
+      trạm kiểm quyền từ chối, trạm dịch lỗi trả 401 nếu còn vô danh, 403 nếu đã xác
+      thực</td></tr><tr><td>Spring Security OAuth2: dịch vụ kiểm mã truy cập thế nào?</td><td>là
+      máy chủ tài nguyên: kiểm chữ ký bằng khoá của máy chủ cấp mã, kiểm hạn, đổi
+      scope thành quyền <code>SCOPE_…</code>; từng dịch vụ tự kiểm, không chỉ cổng</td></tr><tr><td>Spring
+      Cloud và Consul để làm gì?</td><td>sổ đăng ký giữ các bản và kiểm sức khoẻ;
+      cổng ghi tên dịch vụ, tra sổ rồi chia xoay vòng, và chỉ gặp bản khoẻ khi đã
+      bật lọc theo kiểm sức khoẻ; cấu hình tập trung, mật khẩu phải mã hoá</td></tr></table>'
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    clear: true
+    say: 'Nếu người phỏng vấn hỏi về các dòng bảo mật và Spring Cloud trên hồ sơ,
+      đây là ba câu hay gặp. Một yêu cầu đi qua những gì: qua chuỗi bộ lọc có thứ
+      tự, và ta nói được trạm nào trả bốn trăm lẻ một, trạm nào trả bốn trăm lẻ ba.
+      Dịch vụ kiểm mã thế nào: nó là máy chủ tài nguyên, kiểm chữ ký, kiểm hạn, rồi
+      đổi phạm vi quyền thành quyền, và từng dịch vụ tự kiểm. Sổ đăng ký và cổng để
+      làm gì: sổ giữ các bản và kiểm sức khoẻ, cổng tra sổ rồi chia xoay vòng, chỉ
+      gặp bản khoẻ khi đã bật lọc, còn mật khẩu phải mã hoá.'
+  - show: '<table class=''t''><tr><th>Câu hỏi tiếp theo hay gặp</th><th>ý trả lời
+      (theo hướng dẫn chính thức)</th></tr><tr><td>Cổng có tự loại bản hỏng không?</td><td>Consul
+      kiểm mỗi 10 giây, hỏng thì đánh dấu critical; lọc bản hỏng cần bật <code>query-passing</code>
+      (mặc định false) hoặc bộ kiểm của bộ chia tải (mặc định tắt)</td></tr><tr><td>Máy
+      chủ tài nguyên kiểm những gì mặc định?</td><td>nơi cấp (iss), hạn (exp, nbf);
+      đối tượng nhận (aud) phải khai thêm</td></tr><tr><td>Khởi động có cần máy chủ
+      cấp mã chạy không?</td><td>không: việc tìm khoá làm ở yêu cầu đầu tiên có mã</td></tr><tr><td>Khi
+      nào tắt chống giả mạo yêu cầu?</td><td>dịch vụ nền không phục vụ trình duyệt
+      có thể tắt, sau khi cân nhắc</td></tr></table>'
+    clear: true
+    say: Còn bốn câu hỏi tiếp theo hay gặp, trả lời theo hướng dẫn chính thức. Sổ
+      đăng ký kiểm sức khoẻ mỗi mười giây và đánh dấu bản hỏng, nhưng lọc bản hỏng
+      khỏi danh sách phải bật tuỳ chọn riêng, mặc định đang tắt. Máy chủ tài nguyên
+      mặc định kiểm nơi cấp và hạn dùng của mã, còn đối tượng nhận mã phải khai thêm.
+      Việc tìm khoá làm ở yêu cầu đầu tiên có mã, nên khởi động dịch vụ không bị buộc
+      vào máy chủ cấp mã. Cuối cùng, dịch vụ nền không phục vụ trình duyệt có thể
+      tắt lớp chống giả mạo yêu cầu, nhưng hãy cân nhắc trước khi tắt.
+  - show: '<p>Bài sau: kiểm thử Java, viết <b>ca kiểm</b> cho từng nhánh của một hàm
+      và thay phần phụ thuộc bên ngoài bằng <b>đối tượng giả</b>.</p>'
+    forward_ref: true
+    say: Ở bài mười tám, ta viết ca kiểm tự động cho từng nhánh của một hàm, và thay
+      phần phụ thuộc bên ngoài bằng đối tượng giả.

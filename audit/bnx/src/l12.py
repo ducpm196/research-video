@@ -99,13 +99,13 @@ def build():
            focus=[0, "1.2", "1.3", "1.4", "1.5", "1.6", "1.7"]),
         st(table(["văn bản", "điều bài dùng"],
                  [["Nghị định 52/2024/NĐ-CP (hiệu lực 01/7/2024)", "tổng số dư tài khoản đảm bảo thanh toán <b>không thấp hơn</b> tổng số dư các ví đã phát hành; chỉ cho dùng ví có liên kết tài khoản thanh toán hoặc thẻ ghi nợ của chính khách"],
-                  ["Thông tư 40/2024/TT-NHNN", f"tổng giao dịch qua các ví cá nhân của một khách tại một tổ chức tối đa 100 triệu đồng/tháng {NOTE_TT40} <span class='note'>(loại giao dịch tính vào hạn mức: xem văn bản)</span>"],
-                  ["Thông tư 41/2025/TT-NHNN (hiệu lực 05/11/2025)", "nâng tới 300 triệu đồng/tháng cho <b>một số</b> giao dịch thanh toán qua ví cá nhân"],
+                  ["Thông tư 40/2024/TT-NHNN", f"tổng giao dịch qua các ví cá nhân của một khách tại một tổ chức tối đa 100 triệu đồng/tháng {NOTE_TT40} <span class='note'>(tính chuyển tiền và thanh toán; không tính rút về tài khoản liên kết của chính mình)</span>"],
+                  ["Thông tư 41/2025/TT-NHNN (hiệu lực 05/11/2025)", "cho phép <b>thêm</b> một hạn mức riêng, không quá 300 triệu đồng/tháng, cho <b>một số</b> khoản thanh toán thiết yếu (dịch vụ công, điện, nước, học phí, viện phí…)"],
                   ["Thông tư 19/2021/TT-BTC", "nộp thuế điện tử: mã định danh khoản phải nộp; ngân hàng tạo số tham chiếu, chuyển cùng số tiền sang ngân hàng nơi Kho bạc mở tài khoản"],
                   ["Luật Quản lý thuế 38/2019/QH14, Điều 58", "nộp không bằng tiền mặt: ngày đã nộp thuế là ngày ngân hàng trích tiền từ tài khoản người nộp và được ghi nhận trên chứng từ nộp tiền thuế"]]),
            """Năm văn bản này là căn cứ của bài. Nghị định năm mươi hai năm hai nghìn không trăm hai mươi tư nói tổng số dư tài khoản đảm bảo không thấp hơn tổng số dư các ví. Nghị định này cũng chỉ cho dùng ví có liên kết tài khoản của chính khách.
            Theo Thông tư bốn mươi năm hai nghìn không trăm hai mươi tư, tổng giao dịch qua các ví cá nhân của một khách tại một tổ chức tối đa một trăm triệu đồng một tháng.
-           Đây là văn bản hiện hành, cần kiểm lại trước khi áp dụng, kể cả loại giao dịch nào được tính vào hạn mức. Thông tư bốn mươi mốt năm hai nghìn không trăm hai mươi lăm nâng tới ba trăm triệu cho một số giao dịch thanh toán.
+           Hạn mức này tính chuyển tiền và thanh toán, không tính tiền rút về tài khoản liên kết của chính mình. Thông tư bốn mươi mốt năm hai nghìn không trăm hai mươi lăm cho phép thêm một hạn mức riêng, không quá ba trăm triệu, cho một số khoản thanh toán thiết yếu.
            Thông tư mười chín năm hai nghìn không trăm hai mươi mốt quy định cách nộp thuế điện tử, có mã định danh khoản phải nộp và số tham chiếu.
            Luật Quản lý thuế năm hai nghìn không trăm mười chín, Điều năm mươi tám, quy định ngày đã nộp thuế khi nộp không bằng tiền mặt.
            Đó là ngày ngân hàng trích tiền từ tài khoản người nộp và được ghi trên chứng từ nộp tiền thuế.""",
@@ -241,9 +241,9 @@ $$2\\,000\\,000 + 1\\,000\\,000 = 3\\,000\\,000 \\;>\\; 2\\,000\\,000 \\;\\Right
            Tổng ví thành hai triệu cộng một triệu, bằng ba triệu, lớn hơn tài khoản đảm bảo hai triệu, nên thiếu một triệu.
            Đối soát cuối ngày bắt được lỗi này. Cách chữa là chỉ cộng ví khi có xác nhận, và hỏi lại trạng thái của lệnh bị hết giờ chờ.""",
            focus=[1, 1, 2, 3, 3], clear=True),
-        st(f"""<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Viết cứng <code>100_000_000</code> trong mã. Khi Thông tư 41/2025 nâng tới 300 triệu cho <b>một số</b> giao dịch thanh toán, hệ thống từ chối sai, hoặc sửa vội thành 300 triệu cho mọi loại.
+        st(f"""<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Viết cứng <code>100_000_000</code> trong mã. Khi Thông tư 41/2025 cho thêm hạn mức riêng tới 300 triệu cho <b>một số</b> khoản thanh toán thiết yếu, hệ thống từ chối sai, hoặc sửa vội thành 300 triệu cho mọi loại.
 <br><span class="note">Cách chữa: hạn mức là cấu hình gắn văn bản, ngày hiệu lực và loại giao dịch {NOTE_TT40}.</span></div>""",
-           """Lỗi thứ ba, cũng của người đã đi làm, là viết cứng một trăm triệu trong mã. Thông tư bốn mươi mốt năm hai nghìn không trăm hai mươi lăm nâng tới ba trăm triệu cho một số giao dịch thanh toán. Khi đó hệ thống từ chối sai, hoặc bị sửa vội thành ba trăm triệu cho mọi loại.
+           """Lỗi thứ ba, cũng của người đã đi làm, là viết cứng một trăm triệu trong mã. Thông tư bốn mươi mốt năm hai nghìn không trăm hai mươi lăm cho thêm hạn mức riêng tới ba trăm triệu cho một số khoản thanh toán thiết yếu. Khi đó hệ thống từ chối sai, hoặc bị sửa vội thành ba trăm triệu cho mọi loại.
            Cách chữa là để hạn mức thành cấu hình gắn với văn bản, ngày hiệu lực và loại giao dịch, và luôn kiểm lại văn bản hiện hành.""",
            clear=True),
     ], checks=["alg.bnx_invariant(2000000, [2000000 + 1000000]) == (False, 3000000, -1000000)",

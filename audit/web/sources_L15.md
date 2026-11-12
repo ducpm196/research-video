@@ -38,6 +38,14 @@ Tải: https://www.rfc-editor.org/rfc/rfc9112.txt
   server-side processing and/or transfers very large content would block subsequent requests on the same connection. However, each connection
   consumes server resources.”
 
+## [R14] RFC 7230 *HTTP/1.1: Message Syntax and Routing* (Standards Track, tháng 6/2014) — thêm 2026-11-11 khi đọc chốt LF2
+Tải: https://www.rfc-editor.org/rfc/rfc7230.txt (truy cập 2026-11-11, curl + grep nguyên văn, dòng 3044–3051). Bản sửa HTTP/1.1 năm 2014;
+RFC 9112 (2022) thay nó và chép lại nguyên đoạn dưới. Bài cũ ghi “năm 2022 bỏ con số cố định” — sai năm; giới hạn 2 kết nối đã bỏ từ 2014.
+- §6.4: “A client ought to limit the number of simultaneous open connections that it maintains to a given server.”
+- §6.4: “Previous revisions of HTTP gave a specific number of connections as a ceiling, but this was found to be impractical for many
+  applications. As a result, this specification does not mandate a particular maximum number of connections but, instead, encourages clients
+  to be conservative when opening multiple connections.”
+
 ## [R15] RFC 7540 *HTTP/2* (tháng 5/2015) và RFC 7541 *HPACK: Header Compression for HTTP/2* (tháng 5/2015)
 Tải: https://www.rfc-editor.org/rfc/rfc7540.txt, https://www.rfc-editor.org/rfc/rfc7541.txt
 - RFC 7540 §1: “HTTP/1.0 allowed only one request to be outstanding at a time on a given TCP connection. HTTP/1.1 added request pipelining,

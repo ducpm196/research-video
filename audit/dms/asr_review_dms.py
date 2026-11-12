@@ -292,6 +292,8 @@ HAND = {
     'Lớp đổi sang độ C nhận cảm biến cũ và giữ nó bên trong.':
         'ASR chép “Lớp đổi sang độ sẽ nhận…”: chữ C đọc tên chữ cái “xê”, ASR viết thành “sẽ” (tên chữ cái kiểu Việt, như x → “ích”); phần còn lại khớp (0,929) — NOT_VERIFIED bằng tai người',
     # ── CLD L00–L14 (2026-10-30) ──
+    'Xoá container là mất luôn mọi tệp nó đã ghi thêm, nên dữ liệu cần giữ phải nằm ở ổ lưu trữ gắn ngoài hoặc cơ sở dữ liệu.':
+        'ASR chép “Xóa cân thaner là mất luôn mọi tạch nó đã ghi thêm…” (0.915): container đọc thô (probe CLD p1: 5/8, ASR viết “cần tên nơi”/“cân thaner”); lệch âm/thanh thuần Việt: tệp/tạch (cùng từ “tệp” các câu khác ASR chép đúng, vd “hệ tệp”) — NOT_VERIFIED bằng tai người',
     'Một vòng khứ hồi mạng trong cùng trung tâm dữ liệu mất khoảng 500 mi-crô giây, tức 500 nghìn na-nô giây.':
         'ASR chép “Một vòng khứ hồi mạng trong cùng trung tâm dữ liệu mất khoảng 500 micro dây, tức 500 nghìn nano dây.” (0.792): tiền tố đơn vị mi-li/mi-crô/na-nô đọc tách âm tiết, ASR viết gộp “mili/micro/nano” hoặc lệch thanh — NOT_VERIFIED bằng tai người',
     'Câu một, một trang gọi nối tiếp 4 dịch vụ, mỗi vòng khứ hồi 500 mi-crô giây.':
@@ -5812,6 +5814,168 @@ HAND = {
         'ASR chép “Đập án câu 2.” (0.75): lệch âm/thanh thuần Việt: đáp/đập — NOT_VERIFIED bằng tai người',
     'Outbox cộng Kafka cho nhiều dịch vụ cùng nghe, đọc lại được lịch sử, nhưng thêm một cụm phải vận hành.':
         'ASR chép “Au bốc cộng cáp ca cho nhiều dịch vụ cùng nghe, đọc lại được lịch sử, nhưng thêm một cùng phải vận hành.” (0.913): “outbox” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Ao-bốc”), ASR viết “au”; lệch âm/thanh thuần Việt: cụm/cùng — NOT_VERIFIED bằng tai người',
+    # ── BNX L16–L23 (2026-11-12) ──
+    'Số dư mất hai trăm mili giây, hạn mức mất ba trăm, điểm tín dụng mất bốn trăm mili giây.':
+        'ASR chép “Số dư mất 200 mg, hàng mức mất 300, điểm tiến dụng mất 400 mg.” (0.737): “mili” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “mi-li”), ASR viết “mg hàng”; “mili” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “mi-li”), ASR viết “mg”; lệch âm/thanh thuần Việt: tín/tiến — NOT_VERIFIED bằng tai người',
+    'Hỏi lần lượt thì khách chờ chín trăm mili giây, còn hỏi cùng lúc rồi chờ cả ba thì chỉ khoảng bốn trăm.':
+        'ASR chép “Hỏi lần lượt thì khách chờ 900 ms, còn hỏi cùng lúc rồi chờ cả 3 thì chỉ khoảng 400.” (0.933): “mili” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “mi-li”), ASR viết “ms” — NOT_VERIFIED bằng tai người',
+    'Vậy năm trăm mili giây kia biến đi đâu, và khi nghìn khách cùng mở thì chuyện gì xảy ra?':
+        'ASR chép “Vậy 500mL giây kỳ biến đi đâu, và khi nghìn khách cùng mở thì chuyện gì xảy ra?” (0.9): “mili” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “mi-li”), ASR viết “ml”; lệch âm/thanh thuần Việt: kia/kỳ — NOT_VERIFIED bằng tai người',
+    'Tên thứ tư là bể chia để trị, có lệnh đẩy việc con vào hàng việc và lệnh chờ kết quả của việc con.':
+        'ASR chép “Tình thứ 4 là bể chi đẩy trị, có lệnh đẩy vịt con vào hàng việc và lệnh chờ kết quả của vịt con.” (0.792): lệch âm/thanh thuần Việt: tên/tình, chia để/chi đẩy, việc/vịt, việc/vịt — NOT_VERIFIED bằng tai người',
+    'Sau một trăm mili giây, bốn luồng rảnh và lấy tiếp việc năm tới việc tám.':
+        'ASR chép “sau 100 ms, 4 luận rảnh và lấy tiếp Việt Nam tới Việt Tám.” (0.645): “mili” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “mi-li”), ASR viết “ms”; lệch âm/thanh thuần Việt: luồng/luận, việc năm/việt nam, việc/việt — NOT_VERIFIED bằng tai người',
+    'Việc gốc chia đôi, mỗi nửa lại chia đôi, bảy lần như thế.':
+        'ASR chép “Vịt gốc chi đôi, mỗi nửa lại chi đôi, 7 lần như thế.” (0.769): lệch âm/thanh thuần Việt: việc/vịt, chia/chi, chia/chi — NOT_VERIFIED bằng tai người',
+    'Phép tính thứ nhất, ba lượt, mỗi lượt một trăm mili giây, nên mười việc xong sau khoảng ba trăm mili giây.':
+        'ASR chép “Phép tính thứ nhất, 3 lượt, mỗi lượt 100 ms, nên 10 việc xong sau khoảng 300 ms.” (0.857): “mili” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “mi-li”), ASR viết “ms” — NOT_VERIFIED bằng tai người',
+    'Hai dòng kế tạo bể bốn luồng, với hàng đợi chỉ có hai chỗ.':
+        'ASR chép “2 dòng kế tạo bệ bốn luôn với hàng đời chỉ có 2 chỗ.” (0.786): lệch âm/thanh thuần Việt: bể/bệ, luồng/luôn, đợi/đời — NOT_VERIFIED bằng tai người',
+    'Hàm chính tạo một bể ba luồng riêng cho việc chờ vào ra.':
+        'ASR chép “Hàm chính tạo 173 luôn riêng cho việc chờ vào ra.” (0.786): lệch âm/thanh thuần Việt: bể/trăm bảy mươi, luồng/luôn — NOT_VERIFIED bằng tai người',
+    'Bốn dòng in cho biết thứ tự xong, số khả dụng, điểm, và thời gian chờ có dưới chín trăm mili giây hay không.':
+        'ASR chép “4 dòng in cho biết thứ tự xong, số khả dụng, điểm và thời gian chờ có dưới 900 ms hay không.” (0.936): “mili” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “mi-li”), ASR viết “ms” — NOT_VERIFIED bằng tai người',
+    'Khả dụng là tám trăm, điểm là bảy trăm, và thời gian chờ đúng là dưới chín trăm mili giây.':
+        'ASR chép “Khả dụng là 800, điểm là 700 và thời gian chờ đúng là dưới 900mg.” (0.923): “mili” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “mi-li”), ASR viết “mg” — NOT_VERIFIED bằng tai người',
+    'Lệnh đẩy đưa nửa trái vào hàng việc, để luồng nào rảnh thì lấy.':
+        'ASR chép “Lần đấy đưa nửa trái vào hàng việc để lùng nào rảnh thì lấy.” (0.786): lệch âm/thanh thuần Việt: lệnh đẩy/lần đấy, luồng/lùng — NOT_VERIFIED bằng tai người',
+    'Số lượt của bể bốn luồng khớp giữa chương trình và phép chia làm tròn lên.':
+        'ASR chép “số lược của 74 lùng khấp giữa chương trình và phép chia làm tròn lên.” (0.727): lệch âm/thanh thuần Việt: lượt/lược, bể/bảy mươi, luồng khớp/lùng khấp — NOT_VERIFIED bằng tai người',
+    'Bây giờ tới phần bạn tự làm bài.':
+        'ASR chép “Bây giờ tới phần bạn tự lam bay.” (0.75): lệch âm/thanh thuần Việt: làm bài/lam bay — NOT_VERIFIED bằng tai người',
+    'Đáp án câu hai, gọi lần lượt thì cộng cả bốn, được một nghìn mili giây.':
+        'ASR chép “Đáp án câu 2, gọi lần lượt thì cộng cả 4, được 1000 ms.” (0.903): “mili” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “mi-li”), ASR viết “ms” — NOT_VERIFIED bằng tai người',
+    'Bước hai, trạm đọc mã chỉ lo xác thực.':
+        'ASR chép “Bước 2. Trạm độc mã chỉ lo sát thực” (0.778): lệch âm/thanh thuần Việt: đọc/độc, xác/sát — NOT_VERIFIED bằng tai người',
+    'Hàm có nhãn khai một đối tượng cho Spring giữ, chính là chuỗi bộ lọc.':
+        'ASR chép “Hàm có nhãn khai một đối tượng cho spring giữ, chính là chuỗi bộ lọc.” (1.0): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    'Mã giả ghi quyền hạn mức nhưng ký bằng khoá của kẻ gian, còn mã cũ ký đúng khoá nhưng hạn dùng đã qua.':
+        'ASR chép “Mã giả ghi quyền hàng mức nhân ký bằng khóa của kẻ gian, còn mã của ký đúng khóa nhân hàng dùng đã qua” (0.792): lệch âm/thanh thuần Việt: hạn/hàng, nhưng/nhân, cũ/của, nhưng hạn/nhân hàng — NOT_VERIFIED bằng tai người',
+    'Bây giờ tới phần bạn tự làm bài.':
+        'ASR chép “Bây giờ tới phần bạn tự lam bay.” (0.75): lệch âm/thanh thuần Việt: làm bài/lam bay — NOT_VERIFIED bằng tai người',
+    'Hàm chuyển tính phí, rồi gọi cổng với số tiền cộng phí.':
+        'ASR chép “Hạm chuyện tính phí rồi gọi cổng với số tiền cổng phí.” (0.75): lệch âm/thanh thuần Việt: hàm chuyển/hạm chuyện, cộng/cổng — NOT_VERIFIED bằng tai người',
+    'Bây giờ tới phần bạn tự làm bài.':
+        'ASR chép “Bây giờ tới phần bạn tự lam bay.” (0.75): lệch âm/thanh thuần Việt: làm bài/lam bay — NOT_VERIFIED bằng tai người',
+    'Ở bài mười chín, ta sang Redis nâng cao, gồm cụm nhiều nút, khoá có hạn và cách khử trùng yêu cầu gửi lại.':
+        'ASR chép “Ở bài 19, ta sang reddit nâng cao, gồm cùng nhiều nút, khóa có hạn và cách khử trùng yêu cầu gửi lại.” (0.917): “redis” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Rê-đít”), ASR viết “reddit”; lệch âm/thanh thuần Việt: cụm/cùng — NOT_VERIFIED bằng tai người',
+    'Có bốn kỹ thuật dùng Redis để chặn chuyện này: cụm nhiều nút, khoá có hạn, khử trùng theo mã giao dịch, và danh sách đen mã truy cập.':
+        'ASR chép “Có 4 kỹ thuật dùng Reddit để chặn chuyện này, cũng nhiều nút, khóa có hạn, khử trùng theo mã giao dịch và danh sách đen mã truy cập.” (0.931): “redis” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Rê-đít”), ASR viết “reddit”; lệch âm/thanh thuần Việt: cụm/cũng — NOT_VERIFIED bằng tai người',
+    'Trước hết ta cần hiểu năm điều, thứ nhất, Redis là một kho khoá và giá trị chạy trong bộ nhớ, mỗi lệnh chạy trọn vẹn, không lệnh nào chen vào giữa.':
+        'ASR chép “Trước hết ta cần hiểu 5 điều. Thứ nhất, Reddit là một kho khóa và giá trị chạy trong bộ nhớ, mỗi lệnh chạy trọn vẹn, không lệnh nào chen vào giữa.” (0.969): “redis” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Rê-đít”), ASR viết “reddit” — NOT_VERIFIED bằng tai người',
+    'Thứ hai, mỗi mục có thể kèm một hạn sống tính bằng giây, hết hạn thì Redis tự xoá mục đó.':
+        'ASR chép “Thứ 2, mỗi mục có thể kèm 1 hàng sống tính bằng dây. Hết hàng thì ra đích tự xóa 1 đó.” (0.791): “redis” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Rê-đít”), ASR viết “ra đích”; lệch âm/thanh thuần Việt: hạn/hàng, hạn/hàng, mục/một — NOT_VERIFIED bằng tai người',
+    'Thứ tư, phép băm kiểm lỗi mười sáu bit đổi một chuỗi byte thành một số từ không tới sáu mươi lăm nghìn năm trăm ba mươi lăm, cùng chuỗi luôn ra cùng số.':
+        'ASR chép “Thứ 4, phép băm kiểm lỗi 16 biết đổi một chuỗi bay thành một số từ 0 tới 65.535 cùng chuỗi lung ra cùng số.” (0.912): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: bit/biết, luôn/lung — NOT_VERIFIED bằng tai người',
+    'Cụm Redis chia không gian khoá thành mười sáu nghìn ba trăm tám mươi tư khe băm.':
+        'ASR chép “Cũng Reddit chia không gian khóa thành 16.384 khe băm.” (0.882): “redis” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Rê-đít”), ASR viết “cũng reddit” — NOT_VERIFIED bằng tai người',
+    'Lệnh thứ hai hỏi Redis xem một khoá thuộc khe số mấy.':
+        'ASR chép “Lần thứ 2 hỏi Reddit xem 1 khóa thuộc khe số mấy.” (0.833): “redis” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Rê-đít”), ASR viết “reddit”; lệch âm/thanh thuần Việt: lệnh/lần — NOT_VERIFIED bằng tai người',
+    'Lệnh đặt có hai tuỳ chọn: chỉ đặt khi khoá chưa có, và kèm hạn sống tính bằng giây, đặt được thì trả chữ ô kê, không được thì trả rỗng.':
+        'ASR chép “Lệnh đặt có hai tùy chọn, chỉ đặt khi khóa chưa có và kèm hạng sóng tính bằng dây, đặt được thì trả chữ OK, không được thì trả rỏng.” (0.852): “ô” (ô lưới) ASR viết chữ “O”; lệch âm/thanh thuần Việt: hạn sống/hạng sóng, kê (trong “ô kê” → “ok”), rỗng/rỏng — NOT_VERIFIED bằng tai người',
+    'Trước hết ta tự tính khe băm bằng Python, chưa cần tới Redis.':
+        'ASR chép “Trước hết ta tự tính khe băm bằng thai thông chưa cần tới Rê Đích.” (0.8): “python” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Pai-thon”), ASR viết “thai thông”; “redis” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Rê-đít”), ASR viết “đích” — NOT_VERIFIED bằng tai người',
+    'Hàm ở trên là phép băm kiểm lỗi mười sáu bit, đi qua từng byte và từng bit của khoá.':
+        'ASR chép “Hàm ở trên là phép băm kiểm lỗi 16 bit, đi qua từng bay và từng bit của khóa.” (0.95): byte đọc thô, ASR viết “bay/bai/vai” (probe CSA p1: “bay” 8/8) — NOT_VERIFIED bằng tai người',
+    'Kết quả chạy thật, chuỗi thử chuẩn ra ba một C ba ở hệ mười sáu, đúng con số ghi trong đặc tả cụm Redis, nên hàm băm của ta đúng.':
+        'ASR chép “Kết quả chạy thật, chuổi thử chuẩn ra 31C3 ở hệ 16, đúng còn số ghi trong đặc tả cùng Reddit, nên hàm băm của ta đúng.” (0.857): “redis” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Rê-đít”), ASR viết “cùng reddit”; lệch âm/thanh thuần Việt: chuỗi/chuổi, con/còn — NOT_VERIFIED bằng tai người',
+    'Đây là bản thu nhỏ để học: ba tiến trình Redis chạy chung một hộp chứa, ở ba cổng, còn cụm vận hành thật đặt mỗi nút trên một máy riêng.':
+        'ASR chép “Đây là bản thu nhỏ để học. Ba tiến trình Reddit chạy chung một hộp chứa. Ở ba cổng, con cũng vận hành thật đặt mỗi nút trên một máy riêng.” (0.903): “redis” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Rê-đít”), ASR viết “reddit”; lệch âm/thanh thuần Việt: còn cụm/con cũng — NOT_VERIFIED bằng tai người',
+    'Ta hỏi Redis thật bốn lệnh, lệnh một hỏi khe của khoá mẫu.':
+        'ASR chép “Ta hỏi Riddick thật bốn lệnh, lệnh một hỏi khe của khóa mẫu.” (0.923): “redis” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Rê-đít”), ASR viết “riddick” — NOT_VERIFIED bằng tai người',
+    'Kết quả chạy thật, Redis trả đúng khe mười hai nghìn một trăm tám mươi hai, khớp con số ta tự tính.':
+        'ASR chép “Kết quả chạy thật, Reddit trả đúng khe 12.182, khớp còn số ta tự tính.” (0.909): “redis” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Rê-đít”), ASR viết “reddit”; lệch âm/thanh thuần Việt: con/còn — NOT_VERIFIED bằng tai người',
+    'Để thấy giây ba mươi và giây sáu mươi mốt mà không phải ngồi chờ, ta dùng một mô phỏng nhỏ bằng Python với đồng hồ giả, đây không phải Redis thật.':
+        'ASR chép “Để thấy dây 30 và dây 61 mà không phải ngồi chờ, ta dùng một mô phỏng nhỏ bằng python với đồng hồ giả, đây không phải trơi đích thật.” (0.954): “redis” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Rê-đít”), ASR viết “trơi đích” — NOT_VERIFIED bằng tai người',
+    'Hàm đặt từ chối khi khoá còn sống, ngược lại thì ghi hạn mới và trả chữ ô kê.':
+        'ASR chép “Hàm đặt từ chối khi khóa còn sống, ngược lại thì ghi hạn mới và trả chữ OK.” (0.919): “ô” (ô lưới) ASR viết chữ “O”; lệch âm/thanh thuần Việt: kê (trong “ô kê” → “ok”) — NOT_VERIFIED bằng tai người',
+    'Mô phỏng có thể sai, nên ta kiểm phép tính thứ tư bằng Redis thật, với hạn thu nhỏ từ sáu mươi giây xuống hai giây.':
+        'ASR chép “Mô phỏng có thể sai nên ta kiểm phép tính thứ tư bằng Reddit thật với hạn thu nhỏ từ 60 giây xuống 2 giây.” (0.962): “redis” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Rê-đít”), ASR viết “reddit” — NOT_VERIFIED bằng tai người',
+    'Lần gửi lại ở giây một nhận trả lời rỗng, vì mục còn trong hạn.':
+        'ASR chép “lần gửi lại ở giây một nhận trả lời rổng vì một con trông hạn.” (0.733): lệch âm/thanh thuần Việt: rỗng/rổng, mục còn trong/một con trông — NOT_VERIFIED bằng tai người',
+    'Redis thật cư xử đúng như mô phỏng, chỉ khác tỉ lệ thời gian.':
+        'ASR chép “Về điết thật cư xử đúng như mô phỏng, chỉ khác tỷ lệ thời gian.” (0.828): “redis” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Rê-đít”), ASR viết “về điết”; “tỉ” ASR viết chính tả “tỷ” (cùng âm) — NOT_VERIFIED bằng tai người',
+    'Lệnh đầu đặt hai khoá tài khoản trong một lệnh, nên Redis phải xét khe của cả hai.':
+        'ASR chép “Lệnh đầu đặt hai khóa tài khoản trong một lệnh, nền Reddit phải xét khe của cả hai.” (0.889): “redis” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Rê-đít”), ASR viết “nền reddit” — NOT_VERIFIED bằng tai người',
+    'Bảng này đặt hai đường cạnh nhau, cột giữa là số ta tự tính bằng Python, cột phải là số Redis thật trả về.':
+        'ASR chép “Bảng này đặt hai đường cạnh nhau, cục giữa là số ta tự tính bằng Python, cục phải là số Reddit thật trả về.” (0.875): “redis” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Rê-đít”), ASR viết “reddit”; lệch âm/thanh thuần Việt: cột/cục, cột/cục — NOT_VERIFIED bằng tai người',
+    'Lỗi thứ ba là của người đã đi làm, lộ ra khi vận hành lâu dài: tin rằng khoá Redis có hạn là loại trừ tuyệt đối.':
+        'ASR chép “Lỗi thứ ba là của người đã đi làm, lộ ra khi vận hành lâu dài, tin rằng khóa trê đít có hạn là loại trừ tuyệt đối.” (0.964): “redis” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Rê-đít”), ASR viết “trê” — NOT_VERIFIED bằng tai người',
+    'Cách chữa là chừa chỗ, theo dõi số khoá bị đẩy, và quyết định trước khi Redis lỗi hay đầy thì từ chối hay cho qua.':
+        'ASR chép “Cách chữa là chừa chỗ, theo dõi số khóa bị đẩy và quyết định trước khi reddit lỗi hay đầy thì từ chối hay cho qua.” (0.962): “redis” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Rê-đít”), ASR viết “reddit” — NOT_VERIFIED bằng tai người',
+    'Bài hướng dẫn khoá phân tán của nhóm làm Redis còn nêu mã hàng rào tăng dần, kiểm ở nơi ghi, còn bài chọn ràng buộc ở cơ sở dữ liệu.':
+        'ASR chép “Bài hướng dẫn khóa phân tán của nhóm làm Reddit còn nêu mã hàng rào tăng dần, kiểm ở nơi ghi, còn bài chọn ràng buộc ở cơ sở dữ liệu.” (0.968): “redis” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Rê-đít”), ASR viết “reddit” — NOT_VERIFIED bằng tai người',
+    'Bây giờ tới phần bạn tự làm bài.':
+        'ASR chép “Bây giờ tới phần bạn tự lam bay.” (0.75): lệch âm/thanh thuần Việt: làm bài/lam bay — NOT_VERIFIED bằng tai người',
+    'Câu ba, để chống giải ngân hai lần, bạn chọn chỉ khoá Redis, chỉ ràng buộc ở cơ sở dữ liệu, hay cả hai?':
+        'ASR chép “Câu 3, để chống giải ngân 2 lần, bạn chọn chỉ khóa trê điết, chỉ ràng buộc ở cơ sở dữ liệu, hay cả 2.” (0.939): “redis” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Rê-đít”), ASR viết “trê điết” — NOT_VERIFIED bằng tai người',
+    'Đáp án câu ba, chỉ khoá Redis thì nhanh và chặn sớm, nhưng tiến trình dừng quá hạn, hoặc nút chính hỏng trước khi bản sao kịp nhận khoá, thì vẫn giải ngân hai lần.':
+        'ASR chép “Đáp án câu 3, chỉ khóa reddit thì nhanh và chặn sớm, nhưng tiến trình dừng quá hạn, hoặc nút chính hỏng trước khi bạn sao kịp nhận khóa thì vẫn giải ngân 2 lần.” (0.943): “redis” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Rê-đít”), ASR viết “reddit”; lệch âm/thanh thuần Việt: bản/bạn — NOT_VERIFIED bằng tai người',
+    'Dùng cả hai thì khoá chặn sớm, cơ sở dữ liệu bảo đảm đúng, đổi lại thêm một hệ phải vận hành, và phải quyết định làm gì khi Redis hỏng.':
+        'ASR chép “Dùng cả hai thì khóa chặn sớm, cơ sở dữ liệu bảo đảm đúng, đổi lại thêm một hệ phải vận hành và phải quyết định làm gì khi reddit hỏng.” (0.968): “redis” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Rê-đít”), ASR viết “reddit” — NOT_VERIFIED bằng tai người',
+    'Điều cần mang theo, mọi thứ có hạn trong Redis chỉ nhớ trong đúng khoảng hạn đó.':
+        'ASR chép “Điều cần mang theo, mọi thứ có hạn trong reddit chỉ nhớ trong đúng khoảng hạn đó.” (0.941): “redis” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Rê-đít”), ASR viết “reddit” — NOT_VERIFIED bằng tai người',
+    'Nó đặt tiêu đề cho biết thân là JSON, rồi ghi thân gồm một trường trạng thái cho biết dịch vụ đang ổn.':
+        'ASR chép “Nó đặt tiêu đề cho biết thân là dây sân, rồi ghi thân gồm một trường trạng thái cho biết dịch vụ đang ổn.” (0.958): “json” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Giây-sơn”), ASR viết “sân” — NOT_VERIFIED bằng tai người',
+    'Nên tải tăng thì số luồng kẹt tăng theo.':
+        'ASR chép “nên tại tăng thì số lùng kẹt tăng theo.” (0.778): lệch âm/thanh thuần Việt: tải/tại, luồng/lùng — NOT_VERIFIED bằng tai người',
+    'Bây giờ tới phần bạn tự làm bài.':
+        'ASR chép “Bây giờ tới phần bạn tự lam bay.” (0.75): lệch âm/thanh thuần Việt: làm bài/lam bay — NOT_VERIFIED bằng tai người',
+    'LOS là hệ khởi tạo khoản vay, lo từ lúc nhận hồ sơ tới lúc giải ngân.':
+        'ASR chép “L or S là hệ khởi tạo khoản vay, lo từ lúc nhận hồ sơ tới lúc giải ngân.” (0.889): “los” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “L O S”), ASR viết “l or s” — NOT_VERIFIED bằng tai người',
+    'Ta viết bảng nhóm nợ thành một hàm Python, dò lần lượt từng mốc trần là chín, chín mươi, một trăm tám mươi và ba trăm sáu mươi ngày.':
+        'ASR chép “Ta viết bản nhóm nợ thành một hàm pai thông do lần lượt từng móc trần là 9, 90, 180 và 360 ngày.” (0.867): lệch âm/thanh thuần Việt: bảng/bản, thon dò/thông do, mốc/móc — NOT_VERIFIED bằng tai người',
+    'Bước một, ta viết máy trạng thái của hồ sơ bằng Python.':
+        'ASR chép “Bước 1, ta viết máy trạng thái của hồ sơ bằng pi thông.” (0.88): “python” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Pai-thon”), ASR viết “pi thông” — NOT_VERIFIED bằng tai người',
+    'Bây giờ tới phần bạn tự làm bài.':
+        'ASR chép “Bây giờ tới phần bạn tự lam bay.” (0.75): lệch âm/thanh thuần Việt: làm bài/lam bay — NOT_VERIFIED bằng tai người',
+    'Đáp án câu hai.':
+        'ASR chép “Đập án câu 2.” (0.75): lệch âm/thanh thuần Việt: đáp/đập — NOT_VERIFIED bằng tai người',
+    'Hỏi hai hệ khác nhau ở đâu, thì trả lời LOS lo từ lúc nộp tới giải ngân, LMS lo khoản vay sau giải ngân.':
+        'ASR chép “Hỏi hai hệ khác nhau ở đâu thì trả lời LROXL từ lúc nộp tới giải ngân, LMXL khoảng vai sau giải ngân.” (0.792): “los” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “L O S”), ASR viết “lroxl”; “lms” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “L M S”), ASR viết “lmxl khoảng vai” — NOT_VERIFIED bằng tai người',
+    'Bước một, ta mô phỏng kho nội dung bằng một từ điển Python lồng nhau, vì kho thật cũng là một cây.':
+        'ASR chép “Bước 1, ta mô phỏng khó nội dung bằng một từ điển phai thon lồng nhau, vì khó thật cũng là một cây.” (0.87): “python” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Pai-thon”), ASR viết “phai”; lệch âm/thanh thuần Việt: kho/khó, kho/khó — NOT_VERIFIED bằng tai người',
+    'Bây giờ tới phần bạn tự làm bài.':
+        'ASR chép “Bây giờ tới phần bạn tự lam bay.” (0.75): lệch âm/thanh thuần Việt: làm bài/lam bay — NOT_VERIFIED bằng tai người',
+    'Đáp án câu hai.':
+        'ASR chép “Đập án câu 2.” (0.75): lệch âm/thanh thuần Việt: đáp/đập — NOT_VERIFIED bằng tai người',
+    'Ở bài sau, ta huấn luyện một rừng cô lập để tìm giao dịch lạ, rồi xuất mô hình và chấm điểm giao dịch bằng ONNX Runtime.':
+        'ASR chép “Ở bài sau, ta huấn luyện một đường cô lập để tìm giao dịch lạ, đôi xuất mô hình và chấm điểm giao dịch bằng ONNX.” (0.906): “runtime” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “răn-tai”), ASR viết “∅”; lệch âm/thanh thuần Việt: rừng/đường, rồi/đôi — NOT_VERIFIED bằng tai người',
+    'Cuối cùng, ONNX là định dạng tệp mô hình, còn ONNX Runtime là thư viện đọc tệp ấy và chạy mô hình.':
+        'ASR chép “Cuối cùng, ONNX là định dạng tẹp mô hình, còn ONNX răng tai là thư viện đọc tẹp ấy và chạy mô hình.” (0.897): “runtime” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “răn-tai”), ASR viết “răng”; lệch âm/thanh thuần Việt: tệp/tẹp, tệp/tẹp — NOT_VERIFIED bằng tai người',
+    'Phiên bản bộ phép toán của ONNX gọi là bản phép toán, mỗi miền có bản riêng, và bộ chuyển với thư viện chạy phải hiểu cùng một bản.':
+        'ASR chép “Phiên bản bộ phép toán của NNX gọi là bản phép toán, mỗi miền có bản riêng và bộ chuyển với thư viện chạy phải hiểu cùng một bản.” (0.984): chữ cái đứng riêng đọc tên kiểu Việt, ASR viết khác — NOT_VERIFIED bằng tai người',
+    'Ở môi trường chạy, ONNX Runtime đọc tệp, rồi phiên chạy cho ra nhãn và điểm.':
+        'ASR chép “Ở môi trường chạy, ONNX răng tai độc tẹp, rồi phiên chạy cho ra nhãn và điểm.” (0.85): “runtime” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “răn-tai”), ASR viết “răng”; lệch âm/thanh thuần Việt: đọc tệp/độc tẹp — NOT_VERIFIED bằng tai người',
+    'Ta viết lại hai công thức thành hai hàm Python.':
+        'ASR chép “Ta viết lại 2 công thức thành 2 hàm 2 thông.” (0.857): “python” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Pai-thon”), ASR viết “hai thông” — NOT_VERIFIED bằng tai người',
+    'Nhóm lạ có điểm âm không phẩy tám bốn bốn tám, quy ra độ sâu chỉ hai phẩy bốn chín.':
+        'ASR chép “Nhóm là có điểm âm 0,8448, quỳ ra đồ sâu chỉ 2,49.” (0.773): lệch âm/thanh thuần Việt: lạ/là, quy/quỳ, độ/đồ — NOT_VERIFIED bằng tai người',
+    'Bước sáu, ta xuất mô hình sang ONNX bằng bộ chuyển, ghi ra một tệp, rồi nạp tệp vào ONNX Runtime.':
+        'ASR chép “Bước 6, ta xuất mô hình sang ONNX bằng bộ chuyển, ghi ra một tệp, đôi nạp tệp vào ONNX trang tai.” (0.929): “runtime” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “răn-tai”), ASR viết “trang”; lệch âm/thanh thuần Việt: rồi/đôi — NOT_VERIFIED bằng tai người',
+    'Bây giờ tới phần bạn tự làm bài.':
+        'ASR chép “Bây giờ tới phần bạn tự lam bay.” (0.75): lệch âm/thanh thuần Việt: làm bài/lam bay — NOT_VERIFIED bằng tai người',
+    'Điểm quyết định bằng âm không phẩy bảy không bảy một cộng không phẩy bảy ba năm ba, bằng dương không phẩy không hai tám hai.':
+        'ASR chép “Điểm quyết định bằng âm 0.707 1 cộng 0.753 bằng dương 0.0282.” (0.72): “phẩy” của số thập phân, ASR viết dấu phẩy hoặc “phải”; lệch âm/thanh thuần Việt: không (trong “không phẩy” → “”), không/trăm linh, không (trong “không phẩy” → “”), ba/trăm, không (trong “phẩy không” → “”) — NOT_VERIFIED bằng tai người',
+    'Đáp án câu hai.':
+        'ASR chép “Đập án câu 2.” (0.75): lệch âm/thanh thuần Việt: đáp/đập — NOT_VERIFIED bằng tai người',
+    'Tỉ lệ nhiễm cho ra ngưỡng, ngưỡng cho ra nhãn một hoặc âm một.':
+        'ASR chép “Tỷ lệ nhiễm cho ra ngưỡng, ngưỡng cho ra nhãn mục hoặc âm mục.” (0.786): “tỉ” ASR viết chính tả “tỷ” (cùng âm); lệch âm/thanh thuần Việt: một/mục, một/mục — NOT_VERIFIED bằng tai người',
+    'Mô hình được xuất sang ONNX và chạy bằng ONNX Runtime, rồi ta so nhãn và điểm trên toàn tập.':
+        'ASR chép “Mô hình được xuất sang O-N-N-X và chạy bằng O-N-N-X răng tai, đổi ta sao nhãn và điểm trên toàn tập.” (0.889): “runtime” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “răn-tai”), ASR viết “răng”; lệch âm/thanh thuần Việt: rồi/đổi, so/sao — NOT_VERIFIED bằng tai người',
+    'Hỏi Isolation Forest hoạt động thế nào, thì trả lời cắt ngẫu nhiên nhiều lần, điểm lạ bị cô lập sau ít lần cắt hơn nên điểm gần âm một.':
+        'ASR chép “Hỏi Isolation Forex hoạt động thế nào thì trả lời cắt nẫu nhiên nhiều lần, điểm lạ bị cô lập sau ít lần cắt hơn nên điểm gần âm mộc.” (0.9): “forest” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “pho-rét”), ASR viết “forex”; lệch âm/thanh thuần Việt: ngẫu/nẫu, một/mộc — NOT_VERIFIED bằng tai người',
+    'Hỏi gọi từ Java được không, thì trả lời ONNX Runtime có thư viện cho Java, nhưng bài này chưa chạy thử mã Java.':
+        'ASR chép “Hỏi gọi từ Java được không thì trả lời ONNX-Tai có thư viện cho Java, nhưng bài này chưa chạy thử mã Java.” (0.958): “runtime” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “răn-tai”), ASR viết “tai” — NOT_VERIFIED bằng tai người',
+    # ── AIF rebuild LF2 (2026-11-12) ──
+    'Với alpha beta, thứ tự tốt, độ sâu 8 cần khoảng 1 triệu 620 nghìn lá, vừa đủ, còn độ sâu 9, lẻ, thì 30 mũ 5 cộng 30 mũ 4 trừ 1, hơn 25 triệu.':
+        'ASR chép “Với Anfa Beta, thứ tự tốt, độ sâu 8 cần khoảng 1.620.000 lá, vừa đủ, còn độ sâu chín, lẻ, thì 30 mũ 5 cộng 30 mũ 4.1, hơn 25 triệu.” (0.943): beta đọc “bê-ta”, ASR viết “bê/beta”; alpha đọc thô (probe AIF p1: 7/8, bản chép “an pha / ANFA / α”); ASR bỏ chữ “trừ” trong “mũ 4 trừ 1” (chép “4.1”; tts_speed_scan 0 câu cụt, âm thanh dựng nguyên câu từ văn bản) — NOT_VERIFIED bằng tai người',
+    # ── BCH rebuild LF2 (2026-11-12) ──
+    'Bước một, dựng một khoá đồ chơi, chỉ để thấy cơ chế, vì khoá thật của kiểu ký này dài hàng nghìn bit, còn chuỗi khối thật dùng chữ ký đường cong elip với khoá 256 bit.':
+        'ASR chép “Bước một, dựng một khóa đồ chơi, chỉ để thấy cơ chế, vì khóa thật của kiểu ký này dài hàng nghìn bit, còn chuỗi khối thật dùng chữ ký đường cong ELIPP với khóa 256 bit.” (0.976): thuật ngữ Việt hoá viết liền “elip” (= e-lip), TTS đọc theo chính tả Việt, ASR viết “elipp” — NOT_VERIFIED bằng tai người',
+    # ── RBM rebuild LF2 (2026-11-12) ──
+    'Nếu quay theta 1 trước rồi mới dời L 1, khâu 1 vẫn nằm ngang, đầu khâu không quay theo.':
+        'ASR chép “Nếu quay Teta một trước trồi mới dời L1, khâu 1 vẫn nằm ngang, đầu khâu không quay theo.” (0.9): “theta” đọc theo luật lexicon (lexicon_vi.RBM.yaml: “tê-ta”), ASR viết “teta”; lệch âm/thanh thuần Việt: rồi/trồi — NOT_VERIFIED bằng tai người',
     # ── CSA L03 dựng lại (2026-10-29) ──
     'Giải mã dãy bit 3 E 2 0 0 0 0 0 hệ mười sáu.':
         'đọc tách từng ký tự (E36); ASR chép “3-E-2000-0016”: đủ 3, E, 2 và năm chữ số 0, rồi “16” (hệ mười sáu) — dãy ký tự khớp (audit/asr_digits.py lệch chỉ vì công cụ đổi “sáu” thành 6 mà không ghép “mười sáu”); dải/giải, dậy/dãy là nhầm gi/d của ASR',

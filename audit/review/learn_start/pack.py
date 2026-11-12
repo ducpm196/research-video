@@ -62,8 +62,8 @@ STAGES = [
      "Gõ, biên dịch, chạy chương trình đầu tiên; biến, rẽ nhánh, vòng lặp, mảng, hàm, lớp, chuỗi, danh sách, ngoại lệ, giao diện; kết thúc bằng sổ chuyển khoản nhỏ."),
     ("S02", "Chặng 2 · Nền tảng backend ngân hàng", "MASTER cấp 1A (bắt buộc, học trước INT/ACB)", ["BNK"],
      "Bộ nhớ và luồng của Java, Spring Boot, REST và khoá lũy đẳng, SQL và PL/SQL, Redis, Kafka, SAGA, sổ cái bút toán kép, T24, ISO 8583, đối soát, PIN/HSM."),
-    ("S03", "Chặng 3 · Kỹ năng backend theo JD ngân hàng", "Mở rộng cấp 1A — lấp khoảng trống JD (MASTER Mục 8)", ["BNX"],
-     "Những chủ đề JD nêu mà kho chưa có bài: Git, OpenAPI, gRPC, JWT và OAuth, mTLS, thủ tục lưu trữ Oracle và SQL Server, Oracle cho khối lượng lớn, Elasticsearch, Couchbase, Kafka nâng cao và RabbitMQ, thanh toán quốc tế và ngoại tệ, ví điện tử và thuế điện tử, triển khai, DDD và Open API."),
+    ("S03", "Chặng 3 · Kỹ năng backend theo JD và CV", "Mở rộng cấp 1A — lấp khoảng trống JD và CV (MASTER Mục 8)", ["BNX"],
+     "Những chủ đề JD và CV nêu mà kho chưa có bài: Git, OpenAPI, gRPC, JWT và OAuth, mTLS, thủ tục lưu trữ Oracle và SQL Server, Oracle cho khối lượng lớn, Elasticsearch, Couchbase, Kafka nâng cao và RabbitMQ, thanh toán quốc tế và ngoại tệ, ví điện tử và thuế điện tử, triển khai, DDD và Open API; rồi các bài theo CV: đa luồng Java nâng cao, Spring Security và Spring Cloud, JUnit 5 và Mockito, Redis nâng cao, Go, hệ thống cho vay số, Adobe Experience Manager, scikit-learn và ONNX Runtime."),
     ("S04", "Chặng 4 · Ôn phỏng vấn và tích hợp ngân hàng", "MASTER cấp 3–4 (INT, ACB)", ["INT", "ACB"],
      "Ôn tập theo bộ 100 câu hỏi, đàm phán lương, rồi các tình huống tích hợp T24, NAPAS, ksqlDB, chi lương, sinh trắc học, đối soát ba bên, tín dụng."),
     ("S05", "Chặng 5 · Toán rời rạc, thuật toán, toán cho học máy", "MASTER cấp 0 · ROADMAP T0–T1", ["DMS", "CS112", "CS115:L00-L21", "CS115:L44"],
@@ -107,6 +107,16 @@ JD_MAP = [
     ("Thiết kế hệ thống thanh toán, xử lý lỗi phân tán", "chuẩn bị phỏng vấn", ["BNK:L14", "SAR:L12", "DSY:L13", "BNX:L15"]),
     ("Agile/Scrum, làm việc nhóm, đọc tài liệu tiếng Anh", "kỹ năng mềm", ["DVO:L00", "DVO:L09", "SEP:L00"]),
     ("Ứng dụng AI (lợi thế của bằng Cử nhân AI)", "lợi thế riêng của ứng viên", ["INT:L05", "AIF:L00", "LLM:L12", "MLO:L06", "MLO:L08"]),
+    # Đối chiếu CV (resources/job/PHAM-MINH-DUC-SENIOR-INTEGRATION-CV.md): mỗi dòng CV phải có bài dạy đủ để bị hỏi là trả lời được (đợt LF2, 2026-11-12).
+    ("CV — Java đa luồng nâng cao: ExecutorService, CompletableFuture, ForkJoinPool", "hồ sơ CV", ["INT:L01", "BNX:L16"]),
+    ("CV — Spring Security, Spring Security OAuth2, Spring Cloud, Consul", "hồ sơ CV", ["BNX:L04", "BNX:L17"]),
+    ("CV — kiểm thử tự động: JUnit 5, Mockito", "hồ sơ CV", ["BNX:L18"]),
+    ("CV — Redis Cluster, khoá SET NX EX, khử trùng theo mã giao dịch, danh sách đen JWT", "hồ sơ CV", ["BNK:L06", "BNX:L19", "BNX:L03"]),
+    ("CV — Go (Golang), Fiber", "hồ sơ CV", ["BNX:L20"]),
+    ("CV — hệ thống cho vay: LOS/LMS, chấm điểm tín dụng, thẩm định, ký số + ECM, 2FA, dấu vân tay thiết bị, trường đa trị T24", "hồ sơ CV", ["BNX:L21", "ACB:L04", "ACB:L08"]),
+    ("CV — Adobe Experience Manager: OSGi, Sling Models, HTL, JCR", "hồ sơ CV", ["BNX:L22"]),
+    ("CV — Scikit-Learn, ONNX Runtime, Isolation Forest (dự án học tập)", "hồ sơ CV", ["BNX:L23", "INT:L05", "CS115:L37"]),
+    ("CV — CQRS, DLQ, Kafka, saga, outbox (tích hợp ngân hàng)", "hồ sơ CV", ["EVT:L02", "EVT:L04", "EVT:L05", "BNX:L10", "CLD:L14"]),
 ]
 
 
@@ -619,8 +629,8 @@ Chặng 5 có thể học song song từ ngày đầu. Mỗi bài nằm đúng m
 Tổng {len(ready)} bài có video ({tot_h:.1f} giờ){f", {len(seq) - len(ready)} bài đang soạn" if len(seq) > len(ready) else ""}.</p>
 <table class="map"><thead><tr><th>Chặng</th><th>Khoá (số bài)</th><th>Bài có video</th><th>Giờ</th><th>Tiến độ</th></tr></thead><tbody>{"".join(mp)}</tbody></table>
 
-<h3 id="jd">Đối chiếu yêu cầu tuyển dụng (JD) với bài học</h3>
-<p class="mute">Nguồn: <code>resources/job/JD.md</code>, gồm tin Software Engineer trên acbjobs.com.vn và các tin Backend, Lead. Bấm mã bài để nhảy tới bài.</p>
+<h3 id="jd">Đối chiếu yêu cầu tuyển dụng (JD) và hồ sơ (CV) với bài học</h3>
+<p class="mute">Nguồn: <code>resources/job/JD.md</code> (tin Software Engineer trên acbjobs.com.vn và các tin Backend, Lead) và <code>resources/job/PHAM-MINH-DUC-SENIOR-INTEGRATION-CV.md</code> (các dòng bắt đầu bằng “CV”). Bấm mã bài để nhảy tới bài.</p>
 <table class="jd"><thead><tr><th>Yêu cầu</th><th>Mức</th><th>Bài</th></tr></thead><tbody>{"".join(jr)}</tbody></table>
 
 <h3>Tìm bài</h3>

@@ -192,11 +192,11 @@ def b321(c):  # noqa: E302
     return [len(c) >= 3, len(set(m for m, _, _ in c)) >= 2, sum(w != "tại chỗ" for _, w, _ in c) >= 1, sum(bool(r) for _, _, r in c) >= 1]
 plans = [[("đĩa", "tại chỗ", False), ("đĩa", "tại chỗ", False)],
          [("đĩa", "tại chỗ", False), ("đĩa", "tại chỗ", False), ("đám mây", "vùng khác", False)],
-         [("đĩa", "tại chỗ", False), ("băng", "kho khác", False), ("đám mây", "vùng khác", True)],
+         [("đĩa", "tại chỗ", False), ("băng", "kho khác", True), ("đám mây", "vùng khác", True)],
          [("đĩa", "tại chỗ", False), ("đám mây", "vùng khác", False), ("đám mây", "vùng khác 2", False)]]
 rec("L14a", [b321(p) for p in plans] == [[False] * 4, [True, True, True, False], [True] * 4, [True, True, True, False]]
     and [alg.backup_321(p)[0] for p in plans] == [False, False, True, False] and [len(alg.backup_321(p)[1]) for p in plans] == [4, 1, 0, 1],
-    "2 bản cùng đĩa: thiếu 4; có đám mây ghi đè được: thiếu 1; đĩa + băng + đám mây khoá ghi: đạt")
+    "2 bản cùng đĩa: thiếu 4; có đám mây ghi đè được: thiếu 1; đĩa + băng ngoại tuyến + đám mây khoá ghi (2 bản không ghi đè được): đạt")
 
 # ── L15: hành trình HTTPS (nguồn: audit/sec/sources_L15.md) — chỉ khái niệm phòng thủ ──
 import datetime as _dt  # noqa: E402
