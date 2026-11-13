@@ -24,7 +24,7 @@ import l05 as src  # noqa: E402
 CASES = [None, "la_mat", "het_han", "thanh_toan"]
 
 
-def handshake(d, ten, max12=False):
+def handshake(d, ten, max12=False, allow=None):
     """Bắt tay bằng mã RIÊNG của bộ kiểm (không dùng khối trên màn hình). Trả (lý do máy chủ, kết quả khách)."""
     mc = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
     mc.load_cert_chain(str(d / "may_chu.crt"), str(d / "may_chu.key"))
@@ -38,8 +38,13 @@ def handshake(d, ten, max12=False):
         t = mc.wrap_socket(c, server_side=True, do_handshake_on_connect=False)
         try:
             t.do_handshake()
-            res["srv"] = "ok:" + dict(x[0] for x in t.getpeercert()["subject"])["commonName"]
-            t.sendall(b"ok")
+            nm = dict(x[0] for x in t.getpeercert()["subject"])["commonName"]
+            if allow is not None and nm not in allow:       # cửa ④ của bộ kiểm (mã riêng)
+                res["srv"] = "tên không được phép"
+                t.sendall(b"no")
+            else:
+                res["srv"] = "ok:" + nm
+                t.sendall(b"ok")
         except ssl.SSLError as e:
             res["srv"] = getattr(e, "verify_message", None) or e.reason
         done.wait(10)
@@ -121,9 +126,16 @@ def run(rec):
             and "Certificate Sign" in x509(ossl, d / "ca1.crt", "-ext", "keyUsage")
             and "CA:TRUE" in x509(ossl, d / "ca1.crt", "-ext", "basicConstraints"),
             "thanh_toan hạn 90 ngày, CA:FALSE; máy chủ có DNS:localhost; ca1 có keyUsage Certificate Sign và CA:TRUE (req -x509 tự thêm)")
-        # bài nói rõ: mã minh hoạ chưa kiểm tên (cửa ④ để trống) — một chứng chỉ khác do ca1 ký cũng được chào
-        rec("L05", handshake(d, "may_chu")[0] == "ok:localhost",
-            "cửa ④ để trống đúng như bài nói: dùng may_chu.crt (do ca1 ký) làm chứng chỉ khách vẫn qua, máy chủ chào “localhost”")
+        # cửa ④ (ca thứ năm): ke_toan do ca1 ký, còn hạn, qua ba cửa của thư viện; chỉ ứng dụng kiểm tên mới chặn được
+        ke = x509(ossl, d / "ke_toan.crt", "-issuer", "-startdate", "-enddate")
+        rv = subprocess.run([ossl, "verify", "-CAfile", "ca1.crt", "ke_toan.crt"], cwd=d, capture_output=True, text=True)
+        rec("L05", rv.stdout.strip() == "ke_toan.crt: OK" and "CN=ca1" in ke
+            and handshake(d, "ke_toan")[0] == "ok:ke_toan"
+            and handshake(d, "ke_toan", allow={"thanh_toan"}) == ("tên không được phép", "no")
+            and handshake(d, "thanh_toan", allow={"thanh_toan"}) == ("ok:thanh_toan", "ok"),
+            "ke_toan: openssl verify OK (chuỗi + hạn đúng); không có cửa ④ thì được chào; có danh sách tên được phép thì bị từ chối, thanh_toan vẫn qua")
+        rec("L05", handshake(d, "may_chu")[0] == "ok:localhost" and handshake(d, "may_chu", allow={"thanh_toan"})[0] == "tên không được phép",
+            "thêm: không có cửa ④ thì chứng chỉ máy chủ do ca1 ký cũng làm khách được; có cửa ④ thì bị chặn")
         # nơi cấp thiếu keyUsage → Python 3.13 (kiểm nghiêm) từ chối
         sub = ["-subj", "/CN=ca3"]
         subprocess.run([ossl, "req", "-x509", "-newkey", "ed25519", "-noenc", *sub, "-days", "30", "-keyout", "ca3.key", "-out", "ca3.crt"], cwd=d, capture_output=True)
@@ -172,5 +184,5 @@ def run(rec):
         "câu 3: hở 355 / 20 ngày; xoay ở 2/3 thời hạn: 30 ngày → mỗi 20 ngày → 18 lần/năm; 365 ngày → 1 lần/năm (mô phỏng đếm)")
     blocks = (src.SH_CA, src.SH_SERVER, src.SH_BAD, src.PY_CTX, src.PY_SERVE, src.PY_CLIENT, src.PY_RUN)
     m = max(len(l) for c in blocks for l in c.strip("\n").split("\n"))
-    rec("L05", m <= 70 and all(len(c.strip("\n").split("\n")) <= 12 for c in blocks) and not any("$" in c for c in blocks),
-        f"khối mã ≤ 12 dòng, dòng dài nhất {m} ký tự, không có dấu $ (KaTeX)")
+    rec("L05", m <= 70 and all(len(c.strip("\n").split("\n")) <= 15 for c in blocks) and not any("$" in c for c in blocks),
+        f"khối mã ≤ 15 dòng, dòng dài nhất {m} ký tự, không có dấu $ (KaTeX)")

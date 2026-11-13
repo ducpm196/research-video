@@ -30,3 +30,9 @@ https://arxiv.org/pdf/1411.1792
   từng điểm ảnh; con số 120 và 60 không phải của bài báo.
 - Tổng số tham số của mạng 18 lớp KHÔNG có trong [H15] (bảng 1 chỉ ghi FLOPs) → bài không nêu; chỉ tính tham số của một lớp.
 - Chữ số bảy đoạn là mô hình đơn giản do bài tự dựng (không phải bộ dữ liệu chữ viết tay nào).
+
+## [I15] S. Ioffe, C. Szegedy, “Batch Normalization: Accelerating Deep Network Training by Reducing Internal Covariate Shift”, arXiv:1502.03167 (2015) — đọc lại nguồn 2026-11-13 (curl + pypdf), mẫu F CVI L07 SHOULD “hệ số tự do”
+| Mục | Câu trích nguyên văn | Dùng ở |
+|---|---|---|
+| 3.2 | “Note that, since we normalize Wu+b, the bias b can be ignored since its effect will be canceled by the subsequent mean subtraction (the role of the bias is subsumed by β in Alg.1).” | ví dụ 1 bước 2: mạng có chuẩn hoá theo lô sau tích chập thì bỏ hệ số tự do → 3·3·512·512 = 2 359 296 (không cộng 512) |
+| [H15] 3.4 (đọc lại 2026-11-13) | “We adopt batch normalization (BN) [16] right after each convolution and before activation, following [16].” (mạng có lối tắt chuẩn hoá theo lô sau mỗi tích chập) | cùng chỗ |

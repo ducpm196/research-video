@@ -1,4 +1,5 @@
 from lib import *
+from labkit import write_lab, practice_steps, practice_scene
 
 
 def ln(p, s):
@@ -132,7 +133,7 @@ class TaiKhoan {
 
 class TaiKhoanVip extends TaiKhoan {
     @Override
-    long phiThuongnien() {                // vẫn gõ sai, nhưng có chú thích
+    long phiThuongnien() {                // vẫn gõ sai, nhưng có nhãn
         return 0;
     }
 }
@@ -168,6 +169,89 @@ public class DoanKetQua {
     }
 }""", out="1500\ntrue\nfalse")
 
+    nhan_mot_ham = prog("NhanMotHam", """
+@FunctionalInterface
+interface CachTinhPhi {
+    long phi(long tien);
+    long thue(long tien);
+}
+
+public class NhanMotHam {
+    public static void main(String[] args) {
+        System.out.println("xong");
+    }
+}""", expect="compile_error:Unexpected @FunctionalInterface annotation",
+        err="NhanMotHam.java:1: error: Unexpected @FunctionalInterface annotation\n@FunctionalInterface\n^\n"
+            "  CachTinhPhi is not a functional interface\n"
+            "    multiple non-overriding abstract methods found in interface CachTinhPhi\n1 error")
+    lai_lab = prog("LaiSuatLab", """
+interface LaiSuat {
+    long lai(long goc);
+}
+
+class LaiCoDinh implements LaiSuat {
+    @Override
+    public long lai(long goc) {
+        return goc * 4 / 1000;                       // 0,4% (số minh hoạ)
+    }
+}
+
+class LaiBac implements LaiSuat {
+    @Override
+    public long lai(long goc) {
+        return goc < 50000000 ? goc * 3 / 1000 : goc * 5 / 1000;   // hai bậc (số minh hoạ)
+    }
+}
+
+record KyHan(String ten, int thang) {}
+
+enum LoaiThe { THUONG, VANG }
+
+public class LaiSuatLab {
+    static long hanMuc(LoaiThe t) {
+        return switch (t) {
+            case THUONG -> 20000000;
+            case VANG -> 100000000;
+        };
+    }
+
+    public static void main(String[] args) {
+        LaiSuat[] ds = { new LaiCoDinh(), new LaiBac() };
+        for (LaiSuat l : ds) {
+            System.out.println(l.lai(10000000) + " " + l.lai(80000000));
+        }
+        KyHan a = new KyHan("6T", 6);
+        KyHan b = new KyHan("6T", 6);
+        System.out.println(a.equals(b) + " " + (a == b));
+        System.out.println("Han muc VANG: " + hanMuc(LoaiThe.VANG));
+    }
+}""", out="40000 320000\n30000 400000\ntrue false\nHan muc VANG: 100000000")
+    write_lab("JVA", "L11", """# Lab JVA L11 — Hai cách tính lãi, một bản ghi, một kiểu liệt kê
+
+Trong Git Bash, viết `LaiSuatLab` (tệp `LaiSuatLab.java`, số liệu là số minh hoạ), nhiều lớp trong một tệp, chỉ `LaiSuatLab` là `public`:
+
+1. `interface LaiSuat { long lai(long goc); }`.
+2. `LaiCoDinh implements LaiSuat`: lãi `goc * 4 / 1000`. `LaiBac implements LaiSuat`: dưới **50 000 000** lãi `goc * 3 / 1000`, từ 50 000 000 lãi `goc * 5 / 1000`. Mỗi phương thức ghi đè có nhãn `@Override` và là `public`.
+3. `record KyHan(String ten, int thang) {}` và `enum LoaiThe { THUONG, VANG }`; hàm `static long hanMuc(LoaiThe t)` dùng `return switch`: THUONG 20 000 000, VANG 100 000 000.
+4. Hàm chính: mảng `LaiSuat[]` chứa hai cách tính, **một** vòng lặp in `l.lai(10000000) + " " + l.lai(80000000)`; rồi `a.equals(b) + " " + (a == b)` cho hai `KyHan("6T", 6)` tạo riêng; rồi `Han muc VANG: …`.
+
+Chạy: `javac LaiSuatLab.java && java LaiSuatLab`. Chấm: `bash labs/cham.sh JVA L11 LaiSuatLab.java`.
+""", "java", lai_lab["code"], lai_lab["out"])
+    sc_lab = practice_scene(sc, "Tự làm: hai cách tính lãi", practice_steps(
+        st, "JVA", "L11",
+        """<p><b>Đề</b>: viết <code>LaiSuatLab.java</code> (số minh hoạ), chỉ <code>LaiSuatLab</code> là <code>public</code>.</p>
+<ol><li><code>interface LaiSuat</code> có <code>lai(long goc)</code>; <code>LaiCoDinh</code> (<code>goc * 4 / 1000</code>) và <code>LaiBac</code> (dưới 50 000 000: <code>* 3 / 1000</code>; từ đó: <code>* 5 / 1000</code>), có nhãn <code>@Override</code></li>
+<li><code>record KyHan(String ten, int thang)</code>; <code>enum LoaiThe { THUONG, VANG }</code> và hàm <code>hanMuc</code> bằng <code>return switch</code></li>
+<li>Một vòng lặp qua mảng <code>LaiSuat[]</code> in lãi của 10 000 000 và 80 000 000; in <code>equals</code> và <code>==</code> của hai bản ghi; in hạn mức VANG</li></ol>""",
+        """Bây giờ tới phần bạn tự làm trên máy. Viết một giao diện tính lãi, và hai lớp cài nó: lãi cố định bốn phần nghìn, và lãi hai bậc theo số tiền gốc. Mỗi phương thức ghi đè có nhãn ghi đè.
+        Thêm một bản ghi kỳ hạn và một kiểu liệt kê loại thẻ, với hàm trả hạn mức bằng lệnh chọn như một giá trị. Hàm chính dùng một vòng lặp qua mảng hai cách tính, rồi so hai bản ghi bằng nội dung và bằng địa chỉ, và in hạn mức.
+        Hãy dừng video và tự viết, đừng chép lại ví dụ.""",
+        lai_lab["out"], "LaiSuatLab.java",
+        """<div class="box key"><b>Nếu kẹt:</b> mỗi lớp cài viết <code>@Override public long lai(long goc)</code>; mảng <code>LaiSuat[] ds = { new LaiCoDinh(), new LaiBac() };</code> rồi <code>for (LaiSuat l : ds)</code>; hàm <code>hanMuc</code> là <code>return switch (t) { case THUONG -&gt; …; case VANG -&gt; …; };</code>.
+Lời giải nằm ở <code>labs/JVA/L11/loi_giai.java</code> — chỉ mở sau khi bạn đã thử.</div>""",
+        """Nếu kẹt, mỗi lớp cài viết nhãn ghi đè rồi phương thức công khai. Mảng kiểu giao diện chứa hai đối tượng, và vòng lặp duyệt gọi cùng một lệnh. Hàm hạn mức dùng lệnh chọn trả về, mỗi nhánh một giá trị.
+        Lời giải nằm trong thư mục thực hành của bài, chỉ mở sau khi bạn đã tự thử.""", pause=60), "JVA", "L11")
+
     p_main = ln(phi, "public class Phi")
     p_bac, p_pt = ln(phi, "class PhiTheoBac"), ln(phi, "class PhiPhanTram")
     q_main = ln(quiz, "Phi[] ds")
@@ -195,16 +279,19 @@ public class DoanKetQua {
         st(table(["viết", "nghĩa"],
                  [["<code>interface CachTinhPhi { long phi(long tien); }</code>", "<b>giao diện</b>: lời hứa “có phương thức này”, chưa có thân"],
                   ["<code>class PhiTheoBac implements CachTinhPhi</code>", "<b>cài</b> giao diện: phải viết đủ thân các phương thức đã hứa"],
-                  ["<code>@Override</code>", "<b>ghi đè</b> = viết lại phương thức cùng tên, cùng tham số của lớp cha hay giao diện; trình biên dịch kiểm giúp"],
-                  ["<code>class TaiKhoanVip extends TaiKhoan</code>", "<b>kế thừa</b>: lớp con nhận phương thức của lớp cha, có thể ghi đè"],
-                  ["<code>record GiaoDich(String stk, long tien) {}</code>", "<b>bản ghi</b>: lớp dữ liệu không đổi; tự sinh <code>stk()</code>, <code>tien()</code>, <code>equals</code>, <code>toString</code>"],
-                  ["<code>enum TrangThai { CHO, THANH_CONG, THAT_BAI }</code>", "<b>kiểu liệt kê</b>: đúng ba giá trị cố định"]]),
+                  ["<code>@Override</code>", "<b>nhãn (annotation)</b> đặt trước phương thức để trình biên dịch kiểm giúp: nó có đúng là <b>ghi đè</b> (viết lại phương thức cùng tên, cùng tham số của lớp cha hay giao diện) không"]]),
            """Bảng ký hiệu của bài. Giao diện là một lời hứa: có phương thức tính phí, nhận số tiền, trả về phí, nhưng chưa có thân.
            Một lớp cài giao diện thì phải viết đủ thân cho mọi phương thức đã hứa.
            Ghi đè nghĩa là viết lại một phương thức cùng tên, cùng tham số đã có ở lớp cha hoặc giao diện, để thay cách làm.
-           Chú thích ghi đè nhờ trình biên dịch kiểm rằng phương thức đó đúng là ghi đè, và hàm đổi ra chuỗi ở bài bảy cũng là một phương thức ghi đè.
-           Kế thừa cho lớp con nhận các phương thức của lớp cha, và có thể ghi đè chúng.
-           Bản ghi là lớp chỉ chứa dữ liệu không đổi, trình biên dịch tự sinh phần còn lại. Kiểu liệt kê có đúng một số giá trị cố định."""),
+           Nhãn ghi đè là một nhãn đặt trước phương thức, nhờ trình biên dịch kiểm giúp rằng nó đúng là ghi đè, và hàm đổi ra chuỗi ở bài bảy cũng là một phương thức ghi đè.""",
+           focus=[1, "1.2", "1.3", "1.4", "1.4"]),
+        st(table(["viết", "nghĩa"],
+                 [["<code>class TaiKhoanVip extends TaiKhoan</code>", "<b>kế thừa</b>: lớp con nhận phương thức của lớp cha, có thể ghi đè"],
+                  ["<code>record GiaoDich(String stk, long tien) {}</code>", "<b>bản ghi</b>: lớp dữ liệu không đổi; tự sinh <code>stk()</code>, <code>tien()</code>, <code>equals</code>, <code>toString</code>"],
+                  ["<code>enum TrangThai { CHO, THANH_CONG, THAT_BAI }</code>", "<b>kiểu liệt kê</b>: đúng ba giá trị cố định"]]),
+           """Kế thừa cho lớp con nhận các phương thức của lớp cha, và có thể ghi đè chúng.
+           Bản ghi là lớp chỉ chứa dữ liệu không đổi, trình biên dịch tự sinh phần còn lại. Kiểu liệt kê có đúng một số giá trị cố định.""",
+           clear=True, focus=["1.2", "1.3", "1.4"]),
     ])
     sc_int = sc("intuition", "intuition", "Hình dung: một lời hứa, nhiều cách làm, máy chọn theo đối tượng thật", [
         st(svg(1500, 420,
@@ -268,6 +355,18 @@ public class DoanKetQua {
         st(out_block(ban_ghi),
            """Chạy thật, năm dòng in ra khớp đúng năm phép tính."""),
     ], checks=["500000 + 2200 == 502200"])
+    sc_nhan = sc("nhan", "example", "Ví dụ: đọc các nhãn đặt trước lớp và phương thức", [
+        st(table(["nhãn (annotation)", "ai đọc nhãn", "để làm gì"],
+                 [["<code>@Override</code>", "trình biên dịch", "kiểm giúp: có đúng là ghi đè không (đã học)"],
+                  ["<code>@FunctionalInterface</code>", "trình biên dịch", "kiểm giúp: giao diện này chỉ có <b>một</b> phương thức cần cài"],
+                  ["<code>@Test</code> (JUnit), <code>@Service</code>, <code>@Transactional</code> (Spring)", "khung phần mềm, lúc chạy", "báo cho khung biết cách đối xử với lớp hay phương thức này"]]),
+           """Nhãn mà ta mới gặp ở phần ghi đè không đứng một mình. Nhãn là một dòng chữ bắt đầu bằng dấu a còng, đặt trước lớp hay phương thức, và bản thân nó không làm gì cả.
+           Có một bên đọc nhãn rồi mới hành động. Với hai nhãn đầu, bên đọc là trình biên dịch. Với các nhãn ở hàng cuối, bên đọc là khung phần mềm, lúc chương trình chạy, và ta sẽ gặp chúng khi học các khung đó. Bài này không dạy chi tiết.""",
+           focus=[1, 1, 1, ["1.2", "1.3"], "1.4", 1]),
+        st(code_block(nhan_mot_ham, lines=(1, 5)) + out_block(nhan_mot_ham, "Trình biên dịch báo"),
+           """Để thấy nhãn đang được kiểm thật, ta đặt nhãn này lên giao diện có hai phương thức. Trình biên dịch từ chối ngay, vì giao diện này không phải loại chỉ có một phương thức cần cài.
+           Nhãn không đổi cách chương trình chạy, nó chỉ buộc bên đọc kiểm một điều ta đã hứa.""", clear=True),
+    ], checks=["len(['@Override', '@FunctionalInterface', '@Test']) == 3"])
     sc_chk = sc("check", "check", "Tự kiểm bằng đường khác: so tay từng thành phần, và so với lớp thường", [
         st(code_block(kiem, lines=(ln(kiem, "GiaoDich a"), ln(kiem, "x.equals"))) + out_block(kiem),
            """Kiểm phép tính thứ ba bằng đường khác: so tay từng thành phần. Số tiền so bằng dấu bằng bằng được, vì là số trần.
@@ -280,6 +379,17 @@ public class DoanKetQua {
            Phí phần trăm của một trăm nghìn là năm trăm, nhỏ hơn mức tối thiểu nên thành một nghìn.
            Của hai triệu là mười nghìn, không dưới mức tối thiểu. Cả bốn số khớp với hai dòng in ở bước bốn.""", clear=True),
     ], checks=["100000 * 5 // 1000 < 1000", "2000000 * 5 // 1000 >= 1000", "(0 if 100000 < 500000 else 2200) == 0"])
+    sc_scale = sc("quymo", "concept", "Khi số loại phí tăng: sửa bao nhiêu chỗ cho mỗi loại mới?", [
+        st(table(["số loại phí", "chuỗi rẽ nhánh: chỗ phải sửa (20 nơi tính phí)", "giao diện: lớp mới + dòng đăng ký"],
+                 [["3 (hiện có)", "0", "0"], ["10 (thêm 7)", "7 × 20 = 140", "7 lớp"], ["50 (thêm 47)", "47 × 20 = 940", "47 lớp"]]),
+           """Giả sử hệ thống có hai mươi nơi tính phí, số minh hoạ, và hiện có ba loại phí. Nếu mỗi nơi là một chuỗi rẽ nhánh, thêm một loại là sửa cả hai mươi nơi.
+           Thêm bảy loại là một trăm bốn mươi chỗ sửa, thêm bốn mươi bảy loại là chín trăm bốn mươi chỗ. Với giao diện, mỗi loại mới chỉ là một lớp mới và một dòng đăng ký, các nơi tính phí giữ nguyên.""",
+           focus=[1, "1.2", ["1.3", "1.4"], ["1.3", "1.4"]]),
+        st("""<div class="box key"><b>Điều người làm nghề rút ra.</b> Chi phí <b>thêm</b> một loại mới tăng theo số nơi dùng nếu mã rải rác; giao diện đưa nó về <b>một</b> điểm mở rộng.
+Mỗi chỗ phải sửa là một chỗ có thể sót. Vì thế quy tắc “mở để thêm, đóng để sửa”: thêm loại mới bằng mã mới, không động vào mã đã chạy đúng.</div>""",
+           """Chi phí thêm một loại mới tăng theo số nơi dùng, nếu mã rải rác khắp nơi. Giao diện đưa nó về một điểm mở rộng.
+           Mỗi chỗ phải sửa là một chỗ có thể sót. Vì thế người làm nghề theo quy tắc: thêm loại mới bằng mã mới, không động vào mã đã chạy đúng.""", clear=True),
+    ], checks=["(10 - 3) * 20 == 140", "(50 - 3) * 20 == 940", "10 - 3 == 7", "50 - 3 == 47"])
     sc_pit = sc("pitfalls", "pitfall", "Lỗi hay gặp, có lỗi của người đã đi làm", [
         st('<div class="box warn"><b>Lỗi 1 (người mới).</b> Cài phương thức của giao diện mà quên <code>public</code>.</div>'
            + code_block(yeu_hon, lines=(5, 9)) + out_block(yeu_hon, "Trình biên dịch báo"),
@@ -290,8 +400,8 @@ public class DoanKetQua {
            """Lỗi thứ hai hay gặp ở người đã đi làm. Lớp tài khoản đặc biệt muốn ghi đè phí thường niên về không, nhưng gõ sai một chữ n viết thường.
            Không có lỗi biên dịch, vì đó là một phương thức mới hoàn toàn hợp lệ. Hàm chính tạo một tài khoản đặc biệt rồi gọi phí thường niên, nhưng máy chạy bản của lớp cha, nên khách vẫn bị thu năm mươi nghìn.""", clear=True),
         st(code_block(co_ghi_de, lines=(7, 11), title="Thêm @Override: trình biên dịch bắt ngay") + out_block(co_ghi_de, "Trình biên dịch báo"),
-           """Thêm chú thích ghi đè, vẫn tên gõ sai đó, thì trình biên dịch báo ngay: phương thức này không ghi đè gì cả.
-           Vì vậy, mọi phương thức ghi đè nên có chú thích này."""),
+           """Thêm nhãn ghi đè, vẫn tên gõ sai đó, thì trình biên dịch báo ngay: phương thức này không ghi đè gì cả.
+           Vì vậy, mọi phương thức ghi đè nên có nhãn này."""),
         st('<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Kế thừa nhiều tầng thay vì dùng giao diện.</div>'
            + svg(1500, 300,
                  box(20, 40, 300, 70, "TaiKhoan", C_GRAY, 22, bold=True), arrow(325, 75, 380, 75),
@@ -331,7 +441,7 @@ public class DoanKetQua {
            Bản ghi so bằng nội dung, còn kiểu liệt kê là một tập giá trị cố định."""),
         st("""<div class='box key'><b>Tư duy:</b> nhiều cách làm một việc → <b>giao diện</b>, đừng xây tháp kế thừa. Mọi phương thức ghi đè
 đều gắn <code>@Override</code>. Dữ liệu chỉ để chở (giao dịch, lệnh) → <b>bản ghi</b>; trạng thái hữu hạn → <b>kiểu liệt kê</b>, không dùng chuỗi tự gõ.</div>""",
-           """Điều cần mang theo. Nhiều cách làm một việc thì dùng giao diện, đừng xây tháp kế thừa. Mọi phương thức ghi đè đều gắn chú thích ghi đè.
+           """Điều cần mang theo. Nhiều cách làm một việc thì dùng giao diện, đừng xây tháp kế thừa. Mọi phương thức ghi đè đều gắn nhãn ghi đè.
            Dữ liệu chỉ để chở như giao dịch thì dùng bản ghi, còn trạng thái hữu hạn thì dùng kiểu liệt kê thay vì chuỗi tự gõ."""),
     ])
     return lesson("L11", "giao_dien_ban_ghi_liet_ke", "Bài 11 — Kế thừa, giao diện, đa hình; bản ghi và kiểu liệt kê",
@@ -340,5 +450,9 @@ public class DoanKetQua {
                   "§9.6.4.4 @Override, §8.9 kiểu liệt kê, §8.10 bản ghi và equals/toString sinh tự động, §15.28.1 switch biểu thức phải đủ trường hợp); "
                   "Java SE 21 API: java.lang.Record (equals so từng thành phần; định dạng toString không đặc tả, kết quả chạy thật trên JDK); dev.java/learn",
                   ["Viết giao diện và hai lớp cài nó, chạy qua một vòng lặp (đa hình)", "Dùng kế thừa và chú thích ghi đè đúng cách",
-                   "Khai bản ghi, so bằng nội dung", "Khai kiểu liệt kê và chọn theo trường hợp"],
-                  [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_chk, sc_pit, sc_quiz, sc_rec])
+                   "Khai bản ghi, so bằng nội dung", "Khai kiểu liệt kê và chọn theo trường hợp",
+                   "Đọc các nhãn (annotation) đặt trước lớp và phương thức: nhãn do trình biên dịch kiểm và nhãn của khung phần mềm",
+                   "Dự đoán số chỗ phải sửa khi thêm loại phí mới, với chuỗi rẽ nhánh rải rác và với giao diện",
+                   "Viết giao diện lãi suất với hai lớp cài, một bản ghi và một kiểu liệt kê, chạy qua một vòng lặp"],
+                  [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_nhan, sc_chk, sc_scale, sc_pit, sc_quiz, sc_lab, sc_rec],
+                  covers=[(1, "formula"), (2, "pitfalls"), (3, "example"), (4, "example"), (5, "nhan"), (6, "quymo"), (7, "practice")])

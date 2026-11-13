@@ -1,4 +1,5 @@
 from lib import *
+from labkit import write_lab, practice_steps, practice_scene
 
 
 def ln(p, s):
@@ -147,6 +148,69 @@ public class DoanHam {
     }
 }""", out="5 10\n40")
 
+    sot = prog("SotChoSua", """
+public class SotChoSua {
+    public static void main(String[] args) {
+        int[] choSua = {1, 10, 100};                           // số chỗ chép cùng một đoạn
+        for (int i = 0; i < choSua.length; i++) {
+            long dung = (long) (Math.pow(0.98, choSua[i]) * 1000);   // mỗi chỗ sửa đúng với xác suất 98%
+            System.out.println(choSua[i] + " cho: sua dung het " + dung + "/1000");
+        }
+    }
+}""", out="1 cho: sua dung het 980/1000\n10 cho: sua dung het 817/1000\n100 cho: sua dung het 132/1000")
+    rut = prog("RutATM", """
+public class RutATM {
+    static long tinhPhiRut(long soTien) {                // phí rút (số minh hoạ)
+        if (soTien < 2000000) {
+            return 1100;
+        }
+        return 3300;
+    }
+
+    static long conLai(long soDu, long soTien) {         // gọi lồng hàm tính phí
+        return soDu - soTien - tinhPhiRut(soTien);
+    }
+
+    static void nap(long[] tk, long soTien) {            // nhận mảng: đổi được ô
+        tk[0] = tk[0] + soTien;
+    }
+
+    public static void main(String[] args) {
+        System.out.println("Phi rut 1500000: " + tinhPhiRut(1500000));
+        System.out.println("Phi rut 2000000: " + tinhPhiRut(2000000));
+        System.out.println("Con lai: " + conLai(10000000, 2000000));
+        long[] tk = {10000000};
+        nap(tk, 500000);
+        System.out.println("Sau nap: " + tk[0]);
+    }
+}""", out="Phi rut 1500000: 1100\nPhi rut 2000000: 3300\nCon lai: 7996700\nSau nap: 10500000")
+    write_lab("JVA", "L06", """# Lab JVA L06 — Ba hàm cho máy rút tiền
+
+Trong Git Bash, viết `RutATM` (tệp `RutATM.java`, số liệu là số minh hoạ). Mỗi hàm là `static`, đặt trong lớp `RutATM`:
+
+1. `static long tinhPhiRut(long soTien)`: dưới **2 000 000** thì phí **1 100**, từ 2 000 000 trở lên phí **3 300**.
+2. `static long conLai(long soDu, long soTien)`: **gọi `tinhPhiRut`** và trả về `soDu - soTien - phí`.
+3. `static void nap(long[] tk, long soTien)`: cộng `soTien` vào ô `tk[0]` (hàm không trả gì).
+4. Hàm chính in đúng bốn dòng: `Phi rut 1500000: …`, `Phi rut 2000000: …`, `Con lai: …` (số dư đầu 10 000 000, rút 2 000 000), `Sau nap: …` (mảng `{10000000}`, nạp 500 000).
+
+Chạy: `javac RutATM.java && java RutATM`. Chấm: `bash labs/cham.sh JVA L06 RutATM.java`.
+""", "java", rut["code"], rut["out"])
+    sc_lab = practice_scene(sc, "Tự làm: ba hàm cho máy rút tiền", practice_steps(
+        st, "JVA", "L06",
+        """<p><b>Đề</b>: viết <code>RutATM.java</code> với ba hàm <code>static</code> (số minh hoạ):</p>
+<ol><li><code>tinhPhiRut(long soTien)</code>: dưới 2 000 000 phí 1 100; từ 2 000 000 phí 3 300</li>
+<li><code>conLai(long soDu, long soTien)</code>: gọi hàm trên, trả về <code>soDu - soTien - phí</code></li>
+<li><code>nap(long[] tk, long soTien)</code>: cộng vào <code>tk[0]</code>, không trả gì</li></ol>
+<p class="note">Hàm chính in bốn dòng: hai phí, <code>Con lai</code> (10 000 000, rút 2 000 000), <code>Sau nap</code> (nạp 500 000).</p>""",
+        """Bây giờ tới phần bạn tự làm trên máy. Viết ba hàm cho máy rút tiền. Hàm thứ nhất tính phí rút: dưới hai triệu thì một nghìn một trăm, từ hai triệu thì ba nghìn ba trăm.
+        Hàm thứ hai trả về số dư còn lại sau khi rút, và gọi lồng hàm tính phí. Hàm thứ ba nhận một mảng và cộng tiền nạp vào ô đầu, không trả gì.
+        Hàm chính gọi cả ba và in bốn dòng. Hãy dừng video và tự viết, đừng chép lại ví dụ.""",
+        rut["out"], "RutATM.java",
+        """<div class="box key"><b>Nếu kẹt:</b> hàm thứ ba có kiểu trả về <code>void</code> và sửa <code>tk[0] = tk[0] + soTien;</code> — mảng dùng chung nên người gọi thấy ô đổi. Hàm thứ hai là <code>return soDu - soTien - tinhPhiRut(soTien);</code>.
+Lời giải nằm ở <code>labs/JVA/L06/loi_giai.java</code> — chỉ mở sau khi bạn đã thử.</div>""",
+        """Nếu kẹt, hàm thứ ba có kiểu trả về rỗng và sửa ô đầu của mảng, vì mảng dùng chung nên người gọi thấy ô đổi. Hàm thứ hai trả về số dư trừ số tiền trừ lời gọi hàm tính phí.
+        Lời giải nằm trong thư mục thực hành của bài, chỉ mở sau khi bạn đã tự thử.""", pause=60), "JVA", "L06")
+
     p_head, p_main = ln(phi, "static long tinhPhi"), ln(phi, "tinhPhi(300000)")
     sc_hook = sc("hook", "hook", "Biểu phí đổi, phải sửa ở bao nhiêu chỗ?", [
         st("""<p>Phép tính phí chuyển khoản xuất hiện ở ứng dụng điện thoại, ở quầy giao dịch, ở báo cáo cuối ngày… Mỗi chỗ chép lại cùng một đoạn rẽ nhánh.</p>
@@ -268,6 +332,20 @@ public class DoanHam {
     ], checks=["(0 if 2000000 < 500000 else (2200 if 2000000 < 10000000 else 5500)) == 2200",
                "2000000 + 2200 == 2002200", "5000000 - 2002200 == 2997800"])
     k5 = ln(kiem, "long[] thu")
+    sc_scale = sc("quymo", "concept", "Khi đoạn mã bị chép ra nhiều chỗ, sửa đúng hết khó dần", [
+        st(code_block(sot, lines=(3, 8)),
+           """Giả sử mỗi lần sửa một chỗ chép, ta sửa đúng với xác suất chín mươi tám phần trăm, số minh hoạ. Câu hỏi là xác suất sửa đúng hết khi đoạn mã bị chép ở một, mười, hoặc một trăm chỗ.
+           Chương trình tính chín mươi tám phần trăm lũy thừa số chỗ, rồi in theo phần nghìn."""),
+        st(table(["số chỗ chép", "xác suất sửa đúng hết"], [["1", "980 / 1000"], ["10", "817 / 1000"], ["100", "132 / 1000"]]) + out_block(sot),
+           """Một chỗ thì còn chín mươi tám phần trăm. Mười chỗ chỉ còn khoảng tám mươi hai phần trăm, tức cứ năm lần đổi biểu phí thì gần một lần sót.
+           Một trăm chỗ chỉ còn khoảng mười ba phần trăm: gần như chắc chắn sót ít nhất một chỗ.""",
+           clear=True, focus=[1, "1.2", "1.3"]),
+        st("""<div class="box key"><b>Điều người làm nghề rút ra.</b> Số chỗ phải sửa tăng theo quy mô, còn xác suất sửa đúng hết giảm rất nhanh.
+Viết <b>một hàm</b> cho mỗi quy tắc nghiệp vụ, gọi ở mọi nơi, và có <b>bộ thử ở biên</b> cho hàm đó: đổi biểu phí chỉ là một chỗ sửa và một lần chạy bộ thử.</div>""",
+           """Số chỗ phải sửa tăng theo quy mô, còn xác suất sửa đúng hết giảm rất nhanh. Người làm nghề viết một hàm cho mỗi quy tắc nghiệp vụ, gọi ở mọi nơi, và có bộ thử ở biên cho hàm đó.
+           Khi đó đổi biểu phí chỉ là một chỗ sửa và một lần chạy bộ thử.""", clear=True),
+    ], checks=["int(0.98**1 * 1000) == 980", "int(0.98**10 * 1000) == 817", "int(0.98**100 * 1000) == 132",
+               "0.98**10 < 0.82 and 0.98**100 < 0.14"])
     sc_chk = sc("check", "check", "Tự kiểm bằng đường khác: trừ từng khoản và thử ở biên", [
         st("<p>Đường khác cho ví dụ: trừ <b>từng khoản</b> thay vì trừ tổng.</p>"
            "$$5000000 - 2000000 - 2200 = 2997800 \\; \\checkmark$$",
@@ -333,7 +411,10 @@ hoặc vừa tính, vừa in, vừa sửa dữ liệu là dấu hiệu nên tác
                   "Java SE 21 (JLS §8.4 khai báo phương thức, §8.4.7 thân và missing return, §8.4.9 nạp chồng, "
                   "§15.12.4 gọi phương thức: đối số được chép vào tham số, §6.3 phạm vi biến); dev.java/learn; biểu phí là số minh hoạ",
                   ["Khai báo hàm tĩnh có tham số, kiểu trả về và lệnh trả về; gọi hàm, kể cả gọi lồng",
-                   "Giải thích truyền theo giá trị: hàm không đổi được biến số nguyên của người gọi nhưng đổi được ô của mảng",
+                   "Nêu cách truyền theo giá trị: hàm không đổi được biến số nguyên của người gọi nhưng đổi được ô của mảng",
                    "Viết hai hàm nạp chồng và biết máy chọn hàm nào",
-                   "Nhận ra lỗi phạm vi biến, thiếu lệnh trả về, bỏ quên giá trị trả về"],
-                  [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_chk, sc_pit, sc_quiz, sc_rec])
+                   "Nhận ra lỗi phạm vi biến, thiếu lệnh trả về, bỏ quên giá trị trả về",
+                   "Dự đoán xác suất sửa đúng hết khi một đoạn mã bị chép ở một, mười, một trăm chỗ",
+                   "Viết ba hàm cho máy rút tiền: tính phí, trừ phí bằng cách gọi lồng, và nạp tiền vào mảng"],
+                  [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_chk, sc_scale, sc_pit, sc_quiz, sc_lab, sc_rec],
+                  covers=[(1, "sym"), (2, "intuition"), (3, "formula"), (4, "pitfalls"), (5, "quymo"), (6, "practice")])

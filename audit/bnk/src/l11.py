@@ -1,9 +1,38 @@
 from lib import *
+from labkit import write_lab, practice_steps, practice_scene
 
 MSG = "02007020000000000000164111111111111111000000000000500000123456"
 
 
 def build():
+    iso_dung = prog("IsoDung", """
+truong = {2: "4111111111111111", 3: "000000", 4: "000000500000", 11: "123456"}
+bit = 0
+for so in truong:
+    bit |= 1 << (64 - so)                     # bật bit thứ so của bản đồ
+bando = "%016X" % bit                         # 64 bit viết bằng 16 chữ số hex
+print(bando)
+tin = "0200" + bando + "16" + truong[2] + truong[3] + truong[4] + truong[11]
+print(tin)
+print(len(tin))""", out="""7020000000000000
+02007020000000000000164111111111111111000000000000500000123456
+62""", lang="python")
+    iso_doc = prog("IsoDoc", """
+tin = "02007020000000000000164111111111111111000000000000500000123456"
+bando = int(tin[4:20], 16)                    # đọc 16 chữ số hex sau MTI
+print([k for k in range(1, 65) if bando >> (64 - k) & 1])
+vi_tri = 20
+dai = int(tin[vi_tri:vi_tri + 2])             # trường 2 có hai chữ số báo độ dài
+print(tin[vi_tri + 2:vi_tri + 2 + dai])""", out="""[2, 3, 4, 11]
+4111111111111111""", lang="python")
+    lab_iso = prog("IsoLab", """
+truong = {3: "000000", 4: "000000250000", 11: "000042", 39: "00"}
+bit = 0
+for so in truong:
+    bit |= 1 << (64 - so)
+print("%016X" % bit)
+print(len("0210" + "%016X" % bit + "".join(truong[k] for k in sorted(truong))))""", out="""3020000002000000
+46""", lang="python")
     hook = sc("hook", "hook", "Vì sao một chuỗi ký tự vô nghĩa lại là một giao dịch thẻ?", [
         st("""<p>Một bản tin ISO 8583 (chuẩn quốc tế cho bản tin giao dịch thẻ) trông như dãy số dài, ở đây thêm dấu cách cho dễ đọc:</p>
 <p><code>0200 7020000000000000 16 4111111111111111 000000 000000500000 123456</code></p>
@@ -141,8 +170,68 @@ $$\\hl{\\mathtt{3020000000000000}}$$""",
         st("""<div class='box key'><b>Tư duy:</b> bản tin nhị phân hay chữ đều là <b>hợp đồng giữa hai bên</b>. Luôn dựng rồi đọc ngược để kiểm, và đọc kỹ đặc tả của đối tác.</div>""",
            """Điều cần mang theo. Bản tin là hợp đồng giữa hai bên. Luôn dựng rồi đọc ngược để kiểm, và đọc kỹ đặc tả của đối tác."""),
     ])
+    # ── AF2: P1 Python tối thiểu, Python chạy thật dựng/đọc bản tin, quy mô, tự làm ──
+    add_steps([pre], "prereq", [
+        st(table(["thêm ba điều để đọc mã", "nghĩa", "ví dụ"],
+                 [["⑤ Phép dịch bit", "<code>1 &lt;&lt; n</code>: số có đúng một bit 1 ở vị trí n (tính từ phải, từ 0); <code>x &gt;&gt; n</code>: dời n bit sang phải; <code>x | y</code> bật bit; <code>&amp;</code> giữ bit chung", "<code>1 &lt;&lt; 3</code> = 8"],
+                  ["⑥ Từ điển và vòng lặp", "<code>{khoá: giá trị}</code> là bảng tra; <code>for k in d:</code> duyệt từng khoá; <code>s[a:b]</code> cắt chuỗi từ vị trí a tới trước b", "<code>\"abcdef\"[1:4]</code> = <code>\"bcd\"</code>"],
+                  ["⑦ In hex", "<code>\"%016X\" % x</code>: viết số x bằng 16 chữ số hex, chữ in hoa, thêm 0 ở đầu cho đủ; <code>int(chuỗi, 16)</code> đọc ngược", "<code>\"%04X\" % 255</code> = <code>\"00FF\"</code>"]]),
+           """Thêm ba điều để đọc mã bằng một ngôn ngữ lập trình khác. Phép dịch bit sang trái tạo số có đúng một bit một ở vị trí cho trước. Phép dịch sang phải dời các bit, phép hoặc bật bit, và phép và giữ các bit chung.
+           Từ điển là bảng tra theo khoá. Cắt chuỗi lấy một đoạn từ vị trí đầu tới trước vị trí cuối. Và định dạng thập lục phân viết một số bằng số chữ số hex cho trước, thêm không ở đầu cho đủ, còn lệnh đọc ngược chuyển chuỗi hex về số.""", clear=True),
+    ], at=1)
+    pre["title"] = "Trước hết: bảy điều cần hiểu"
+    run = sc("chay_that", "example", "Chạy thật: dựng và đọc một bản tin ISO 8583", [
+        st(code_block(iso_dung, lines=(1, 6), title="Dựng bản đồ bit từ các trường 2, 3, 4, 11"),
+           """Ta dựng một bản tin thật bằng chương trình ngắn. Từ điển giữ bốn trường có mặt là số thẻ, mã xử lý, số tiền và số theo dõi. Với mỗi trường, ta bật bit tương ứng trong một số sáu mươi bốn bit, bằng cách dịch một sang trái sáu mươi tư trừ số trường.
+           Rồi ta viết số đó bằng mười sáu chữ số thập lục phân, gọi là bản đồ bit."""),
+        st(code_block(iso_dung, lines=(7, 9), title="Ghép bản tin: mã loại, bản đồ, rồi các trường") + out_block(iso_dung),
+           """Bản tin ghép mã loại không hai không không, bản đồ bit, rồi các trường theo thứ tự tăng dần. Trường số thẻ dài biến đổi nên có hai chữ số báo độ dài là mười sáu đứng trước.
+           Khi chạy thật, bản đồ bit là bảy không hai không rồi toàn số không, đúng như phép tính tay. Bản tin dài sáu mươi hai ký tự.""", clear=True),
+        st(code_block(iso_doc, title="Đọc ngược bản tin đó") + out_block(iso_doc),
+           """Bây giờ đọc ngược. Ta đọc mười sáu chữ số sau mã loại, rồi liệt kê các bit đang bật. Khi chạy thật, được hai, ba, bốn và mười một, đúng bốn trường đã dựng.
+           Rồi ta đọc hai chữ số báo độ dài ở vị trí hai mươi, và cắt đúng số thẻ ra. Vòng đi vòng về cho lại dữ liệu ban đầu.""", clear=True),
+    ])
+    scale = sc("quy_mo", "example", "Quy mô: mỗi giao dịch vài chục byte, nhân lên thành hàng trăm megabyte mỗi giây", [
+        st("""<p>Mỗi giao dịch gồm một yêu cầu $62$ byte và một phản hồi $46$ byte, dạng chữ như bài: $108$ byte. Dạng nhị phân (hai chữ số hex gộp thành một byte) khoảng một nửa <i>(số minh hoạ)</i>.</p>"""
+           + table(["tải", "giao dịch mỗi giây", "băng thông dạng chữ", "dạng nhị phân (≈ nửa)", "nhật ký dạng chữ mỗi ngày"],
+                   [["×1", "100", "10,8 KB mỗi giây", "5,4 KB mỗi giây", "933 MB"],
+                    ["×100", "10 000", "1,08 MB mỗi giây", "0,54 MB mỗi giây", "<b>93,3 GB</b>"],
+                    ["×10 000", "1 000 000", "<b>108 MB mỗi giây</b>", "54 MB mỗi giây", "<b>9,33 TB</b>"]]),
+           """Mỗi giao dịch gồm một yêu cầu sáu mươi hai byte và một phản hồi bốn mươi sáu byte, tổng một trăm linh tám byte ở dạng chữ. Dạng nhị phân gộp hai chữ số hex thành một byte, nên khoảng một nửa. Đây là số minh hoạ.
+           Với một trăm giao dịch mỗi giây, băng thông chỉ mười phẩy tám ki lô byte mỗi giây. Tải tăng một trăm lần là hơn một mê ga byte mỗi giây. Tải tăng mười nghìn lần là một trăm linh tám mê ga byte mỗi giây, và nhật ký dạng chữ mỗi ngày lên tới chín phẩy ba nghìn tỉ byte.""", clear=True),
+        st("""<div class="box warn"><b>Giải pháp cũ gãy ở đâu.</b> Ghi nguyên bản tin dạng chữ vào nhật ký, kể cả số thẻ: ở ×1 là 933 MB mỗi ngày, dễ xử lý; ở ×10 000 là 9,33 TB mỗi ngày, không ai đọc nổi, và mỗi dòng còn chứa số thẻ, vi phạm quy tắc che số thẻ.</div>
+<div class="box key"><b>Đánh đổi:</b> dạng nhị phân gọn hơn nhưng khó đọc khi gỡ lỗi; nhật ký chỉ nên ghi trường cần thiết, <b>che số thẻ</b> (ví dụ chỉ giữ 6 số đầu và 4 số cuối), lấy mẫu khi tải cao, và nén hay xoay vòng theo ngày.</div>""",
+           """Câu hỏi là giải pháp cũ sẽ gãy ở chỗ nào khi tải tăng lên. Ghi nguyên bản tin dạng chữ vào nhật ký, kể cả số thẻ. Ở tải gốc là chín trăm ba mươi ba mê ga byte mỗi ngày, dễ xử lý. Ở tải gấp mười nghìn lần là chín phẩy ba nghìn tỉ byte mỗi ngày, không ai đọc nổi, và mỗi dòng còn chứa số thẻ, vi phạm quy tắc che số thẻ.
+           Đánh đổi là dạng nhị phân gọn hơn nhưng khó đọc khi gỡ lỗi. Nhật ký chỉ nên ghi trường cần thiết, che số thẻ, lấy mẫu khi tải cao, và nén hay xoay vòng theo ngày.""", clear=True),
+    ], checks=["62 + 46 == 108", "108 * 100 == 10_800", "108 * 10_000 == 1_080_000", "108 * 1_000_000 == 108_000_000", "10_800 * 86_400 == 933_120_000",
+               "round(1_080_000 * 86_400 / 10**9, 1) == 93.3", "round(108_000_000 * 86_400 / 10**12, 2) == 9.33"])
+    write_lab("BNK", "L11", """# Lab BNK L11 — Bản tin phản hồi 0210
+
+Một bản tin phản hồi `0210` có bốn trường: `3` = `"000000"`, `4` = `"000000250000"`, `11` = `"000042"`, `39` = `"00"` (mã phản hồi). Mọi trường có độ dài cố định.
+
+Viết chương trình `iso_lab.py` (Python), gồm hai việc:
+1. Dựng **bản đồ bit** 64 bit bằng cách bật bit `1 << (64 - số trường)` cho từng trường rồi in dạng `"%016X"`.
+2. In **độ dài** của cả bản tin: mã loại `0210` (4 ký tự) + bản đồ (16 ký tự) + các trường nối theo thứ tự tăng dần.
+
+Chạy: `python iso_lab.py`. Chấm: `bash labs/cham.sh BNK L11 iso_lab.py`.
+""", "py", lab_iso["code"], lab_iso["out"])
+    lab = practice_scene(sc, "Tự làm: bản đồ bit và độ dài của phản hồi 0210", practice_steps(
+        st, "BNK", "L11",
+        """<p><b>Đề</b>: phản hồi <code>0210</code> có trường <code>3</code>=<code>"000000"</code>, <code>4</code>=<code>"000000250000"</code>, <code>11</code>=<code>"000042"</code>, <code>39</code>=<code>"00"</code>. Viết <code>iso_lab.py</code>:</p>
+<ol><li>dựng bản đồ bit (bật <code>1 &lt;&lt; (64 - số trường)</code>), in <code>"%016X"</code></li>
+<li>in độ dài cả bản tin: 4 + 16 + các trường nối theo thứ tự tăng dần</li></ol>""",
+        """Bây giờ tới phần bạn tự làm. Một phản hồi không hai một không có bốn trường: ba, bốn, mười một và ba mươi chín, tất cả có độ dài cố định. Hãy viết chương trình dựng bản đồ bit bằng cách bật bit cho từng trường, in nó bằng mười sáu chữ số thập lục phân.
+        Rồi in độ dài của cả bản tin, gồm mã loại, bản đồ và các trường theo thứ tự tăng dần. Hãy dừng video, tự viết và chạy, đừng chép lại ví dụ.""",
+        lab_iso["out"], "iso_lab.py",
+        """<div class="box key"><b>Nếu kẹt:</b> mô theo ví dụ: <code>bit |= 1 &lt;&lt; (64 - so)</code> trong vòng <code>for so in truong</code>; độ dài là <code>len("0210" + "%016X" % bit + "".join(truong[k] for k in sorted(truong)))</code>.
+Lời giải ở <code>labs/BNK/L11/loi_giai.py</code> — chỉ mở sau khi bạn đã thử.</div>""",
+        """Nếu kẹt, làm theo ví dụ vừa xem: bật bit cho từng trường trong vòng lặp, rồi in bản đồ bằng mười sáu chữ số thập lục phân. Độ dài là độ dài của chuỗi nối mã loại, bản đồ và các trường theo thứ tự tăng dần. Lời giải đầy đủ nằm trong thư mục thực hành của bài, chỉ mở sau khi bạn đã tự thử.""", pause=150), "BNK", "L11")
     return lesson("L11", "iso_8583_ban_do_bit", "Bài 11 — ISO 8583: bản đồ bit và cấu trúc bản tin",
-                  "curriculum/bnk.yaml L11; audit/bnk/verify_bnk.py L11; ISO 8583:1987 (định nghĩa trường 2, 3, 4, 7, 11, 12, 13, 37, 39, 41, 49), ISO 4217 (đơn vị nhỏ nhất của VND là 0); đặc tả của từng mạng, kể cả NAPAS, có thể khác",
+                  "curriculum/bnk.yaml L11; audit/bnk/verify_bnk.py L11; audit/review/screen_code/BNK.yaml (mã chạy thật bằng Python 3.13); ISO 8583:1987 (định nghĩa trường 2, 3, 4, 7, 11, 12, 13, 37, 39, 41, 49), ISO 4217 (đơn vị nhỏ nhất của VND là 0); đặc tả của từng mạng, kể cả NAPAS, có thể khác; kích thước bản tin và băng thông trong bảng quy mô là số minh hoạ",
                   ["Dựng bản đồ bit từ danh sách trường có mặt", "Tính độ dài một bản tin gồm trường cố định và trường LLVAR",
-                   "Đọc ngược một bản tin thành các trường", "Che số thẻ khi ghi nhật ký"],
-                  [hook, pre, sym, intu, form, ex, chk, pit, quiz, rec])
+                   "Đọc ngược một bản tin thành các trường", "Che số thẻ khi ghi nhật ký",
+                   "Chạy chương trình dựng và đọc một bản tin ISO 8583 để thấy bản đồ bit và độ dài thật",
+                   "Tính băng thông và dung lượng nhật ký khi tải tăng ×100, ×10 000",
+                   "Viết chương trình dựng bản đồ bit và tính độ dài của một phản hồi 0210"],
+                  [hook, pre, sym, intu, form, ex, run, chk, pit, quiz, scale, lab, rec],
+                  covers=[(1, "formula"), (2, "example"), (3, "chay_that"), (4, "pitfalls"), (5, "chay_that"), (6, "quy_mo"), (7, "practice")])

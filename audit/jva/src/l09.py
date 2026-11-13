@@ -1,4 +1,5 @@
 from lib import *
+from labkit import write_lab, practice_steps, practice_scene
 
 
 def build():
@@ -150,6 +151,110 @@ public class DoanKetQua {
     }
 }""", out="3 300\n2 0\n1")
 
+    tra_cuu = prog("TraCuuTk", """
+import java.util.HashMap;
+
+public class TraCuuTk {
+    public static void main(String[] args) {
+        HashMap<String, Long> soDu = new HashMap<>();
+        soDu.put("A01", 2000000L);
+        soDu.put("B02", 500000L);
+        String[] hoi = {"B02", "Z99", "A01"};           // ba lượt khách hỏi số dư
+        for (String k : hoi) {
+            if (soDu.containsKey(k)) {                  // có khoá này không?
+                System.out.println(k + ": " + soDu.get(k));
+            } else {
+                System.out.println(k + ": khong co");
+            }
+        }
+    }
+}""", out="B02: 500000\nZ99: khong co\nA01: 2000000")
+    lam_da = prog("MuiTen", """
+import java.util.ArrayList;
+
+public class MuiTen {
+    public static void main(String[] args) {
+        ArrayList<Long> gd = new ArrayList<>();
+        gd.add(300000L);
+        gd.add(-50000L);
+        gd.add(1200000L);
+        gd.add(450000L);
+        gd.forEach(x -> System.out.println("GD " + x));    // với mỗi x: in ra
+        gd.sort((a, b) -> Long.compare(b, a));             // số lớn đứng trước
+        System.out.println(gd);
+    }
+}""", out="GD 300000\nGD -50000\nGD 1200000\nGD 450000\n[1200000, 450000, 300000, -50000]")
+    quet_ds = prog("QuetDanhSach", """
+import java.util.ArrayList;
+
+public class QuetDanhSach {
+    public static void main(String[] args) {
+        int[] co = {1000, 1000000};                      // số tài khoản: x1, x1000
+        for (int k = 0; k < co.length; k++) {
+            ArrayList<Long> ds = new ArrayList<>();
+            for (int i = 0; i < co[k]; i++) {
+                ds.add(1000000L + i);
+            }
+            long can = ds.get(ds.size() - 1);            // tài khoản nằm ở cuối
+            int buoc = 0;
+            for (int i = 0; i < ds.size(); i++) {
+                buoc++;
+                if (ds.get(i) == can) {
+                    break;
+                }
+            }
+            System.out.println(co[k] + " tai khoan: " + buoc + " buoc");
+        }
+    }
+}""", out="1000 tai khoan: 1000 buoc\n1000000 tai khoan: 1000000 buoc")
+    thong_ke = prog("ThongKe", """
+import java.util.ArrayList;
+import java.util.HashMap;
+
+public class ThongKe {
+    public static void main(String[] args) {
+        String[] loai = {"CK", "NAP", "CK", "RUT", "CK", "NAP", "CK"};
+        HashMap<String, Integer> dem = new HashMap<>();
+        for (String t : loai) {
+            dem.put(t, dem.getOrDefault(t, 0) + 1);       // lấy số cũ, cộng một, đặt lại
+        }
+        ArrayList<Long> tien = new ArrayList<>();
+        tien.add(300000L);
+        tien.add(900000L);
+        tien.add(120000L);
+        tien.add(450000L);
+        tien.sort((a, b) -> Long.compare(b, a));          // lớn trước
+        System.out.println("So giao dich: " + loai.length);
+        System.out.println("CK: " + dem.get("CK"));
+        System.out.println("NAP: " + dem.get("NAP"));
+        System.out.println("RUT: " + dem.get("RUT"));
+        System.out.println("Lon truoc: " + tien);
+    }
+}""", out="So giao dich: 7\nCK: 4\nNAP: 2\nRUT: 1\nLon truoc: [900000, 450000, 300000, 120000]")
+    write_lab("JVA", "L09", """# Lab JVA L09 — Thống kê giao dịch
+
+Trong Git Bash, viết `ThongKe` (tệp `ThongKe.java`, số liệu là số minh hoạ). Nhớ `import java.util.ArrayList;` và `import java.util.HashMap;`.
+
+1. Mảng loại giao dịch `{"CK", "NAP", "CK", "RUT", "CK", "NAP", "CK"}`. Đếm số lần mỗi loại bằng `HashMap<String, Integer>` và `getOrDefault`.
+2. Danh sách `ArrayList<Long>` gồm `300000, 900000, 120000, 450000`. Sắp **giảm dần** bằng `tien.sort((a, b) -> Long.compare(b, a));`.
+3. In đúng năm dòng: `So giao dich: …` (độ dài mảng), `CK: …`, `NAP: …`, `RUT: …`, `Lon truoc: [...]` (in thẳng danh sách).
+
+Chạy: `javac ThongKe.java && java ThongKe`. Chấm: `bash labs/cham.sh JVA L09 ThongKe.java`.
+""", "java", thong_ke["code"], thong_ke["out"])
+    sc_lab = practice_scene(sc, "Tự làm: thống kê giao dịch", practice_steps(
+        st, "JVA", "L09",
+        """<p><b>Đề</b>: viết <code>ThongKe.java</code> (số minh hoạ).</p>
+<ol><li>Mảng loại <code>{"CK","NAP","CK","RUT","CK","NAP","CK"}</code>; đếm mỗi loại bằng <code>HashMap&lt;String, Integer&gt;</code> và <code>getOrDefault</code></li>
+<li>Danh sách <code>ArrayList&lt;Long&gt;</code>: 300000, 900000, 120000, 450000; sắp <b>giảm dần</b> bằng <code>sort((a, b) -&gt; Long.compare(b, a))</code></li>
+<li>In năm dòng: <code>So giao dich</code>, <code>CK</code>, <code>NAP</code>, <code>RUT</code>, <code>Lon truoc</code></li></ol>""",
+        """Bây giờ tới phần bạn tự làm trên máy. Cho một mảng bảy loại giao dịch. Dùng bản đồ và phương thức lấy hoặc mặc định để đếm số lần của từng loại.
+        Rồi cho một danh sách bốn số tiền, sắp giảm dần bằng hàm nhỏ viết bằng mũi tên. In năm dòng gồm số giao dịch, ba số đếm, và danh sách đã sắp. Hãy dừng video và tự viết, đừng chép lại ví dụ.""",
+        thong_ke["out"], "ThongKe.java",
+        """<div class="box key"><b>Nếu kẹt:</b> trong vòng lặp duyệt: <code>dem.put(t, dem.getOrDefault(t, 0) + 1);</code>. Sắp giảm dần: <code>tien.sort((a, b) -&gt; Long.compare(b, a));</code> — đảo <code>a</code> và <code>b</code> so với sắp tăng.
+Lời giải nằm ở <code>labs/JVA/L09/loi_giai.java</code> — chỉ mở sau khi bạn đã thử.</div>""",
+        """Nếu kẹt, trong vòng lặp duyệt, đặt lại khoá bằng số cũ lấy hoặc mặc định cộng một. Sắp giảm dần bằng cách viết hàm so sánh với hai tham số đảo chỗ cho nhau so với sắp tăng.
+        Lời giải nằm trong thư mục thực hành của bài, chỉ mở sau khi bạn đã tự thử.""", pause=60), "JVA", "L09")
+
     sc_hook = sc("hook", "hook", "Số giao dịch trong ngày không biết trước, mảng cố định có đủ không?", [
         st("""<p>Mảng số dư ở bài 5 có đúng $5$ ô, tạo xong là <b>không đổi độ dài</b>. Nhưng hôm nay có bao nhiêu giao dịch? Không ai biết trước.</p>
 <p>Khách đưa số tài khoản <code>"A01"</code>, ta muốn tra ra số dư ngay, không dò từng ô.</p>""",
@@ -178,12 +283,12 @@ Cuối bài bạn đếm được số giao dịch theo từng loại.</div>
            """Chương trình đầu tiên tạo một danh sách giao dịch, thêm ba số tiền, rồi cộng tổng. Ta đọc từng ký hiệu ở bảng sau."""),
         st(table(["viết", "nghĩa"],
                  [["<code>import java.util.ArrayList;</code>", "dòng đầu tệp: mượn lớp danh sách từ thư viện"],
-                  ["<code>ArrayList&lt;Long&gt;</code>", "danh sách mà mỗi phần tử là một số <code>Long</code>; kiểu nằm trong ngoặc nhọn"],
+                  ["<code>ArrayList&lt;Long&gt;</code>", "danh sách mà mỗi phần tử là một số <code>Long</code>; cặp ngoặc nhọn <code>&lt;…&gt;</code> gọi là <b>kiểu tổng quát</b>: một khuôn dùng chung, kiểu phần tử điền vào trong"],
                   ["<code>new ArrayList&lt;&gt;()</code>", "tạo danh sách rỗng; ngoặc nhọn trống: trình biên dịch tự suy ra kiểu"],
                   ["<code>gd.add(500000L)</code>", "thêm vào <b>cuối</b>; chữ <code>L</code> nói đây là số kiểu <code>long</code>"],
                   ["<code>gd.get(0)</code>, <code>gd.size()</code>", "lấy phần tử ở chỉ số 0; số phần tử hiện có"],
                   ["<code>for (long x : gd)</code>", "vòng lặp duyệt: lần lượt gán từng phần tử cho <code>x</code>; dùng được cả với mảng"]]),
-           """Dòng nhập mượn lớp danh sách từ thư viện. Kiểu trong ngoặc nhọn nói mỗi phần tử là số nguyên dài.
+           """Dòng nhập mượn lớp danh sách từ thư viện. Cặp ngoặc nhọn quanh kiểu gọi là kiểu tổng quát, một khuôn dùng chung cho nhiều kiểu phần tử, và kiểu ở trong nói mỗi phần tử là số nguyên dài.
            Ngoặc nhọn trống khi tạo mới nghĩa là trình biên dịch tự suy ra kiểu.
            Phương thức thêm đặt phần tử vào cuối, chữ L nói con số thuộc kiểu dài.
            Phương thức lấy nhận chỉ số, phương thức kích thước đếm phần tử.
@@ -279,6 +384,21 @@ Cuối bài bạn đếm được số giao dịch theo từng loại.</div>
            """Chạy thật chương trình, bốn dòng in ra khớp năm phép tính: một triệu bảy trăm nghìn, năm trăm nghìn, không, và hai tài khoản."""),
     ], checks=["2000000 - 300000 == 1700000", "len({'A01': 1, 'B02': 2}) == 2",
                "{'A01': 1700000, 'B02': 500000}.get('C03', 0) == 0"])
+    sc_tra = sc("tracuu", "example", "Ví dụ: khách hỏi số dư, có khoá thì trả, không có thì báo", [
+        st(code_block(tra_cuu, lines=(5, 15)) + out_block(tra_cuu),
+           """Ví dụ tra cứu: bản đồ có hai tài khoản, và ba khách lần lượt hỏi. Với mỗi số tài khoản, phương thức hỏi có khoá không cho đúng hoặc sai.
+           Đúng thì in số dư lấy theo khoá, sai thì báo không có, thay vì để nhận giá trị rỗng. Chạy thật, khoá B không hai ra năm trăm nghìn, khoá Z chín chín báo không có, khoá A không một ra hai triệu.""",
+           focus=[["1.2", "1.3"], "1.6", ["1.7", "1.9"], 3]),
+    ], checks=["{'A01': 2000000, 'B02': 500000}.get('B02') == 500000", "'Z99' not in {'A01': 2000000, 'B02': 500000}"])
+    sc_lam = sc("muiten", "example", "Ví dụ: hàm nhỏ viết bằng mũi tên và sắp xếp bằng bộ so sánh", [
+        st(code_block(lam_da, lines=(5, 12)) + out_block(lam_da)
+           + "<span class='note'>Hàm nhỏ viết bằng mũi tên gọi là <b>lambda</b>; bộ so sánh gọi là <b>Comparator</b>.</span>",
+           """Đây là hai chỗ bạn sẽ gặp rất nhiều trong mã thật, chỉ cần đọc hiểu. Thứ nhất, hàm nhỏ không tên viết bằng mũi tên: nhận x, rồi làm biểu thức sau mũi tên.
+           Phương thức duyệt gọi nó cho từng phần tử, nên in bốn dòng theo thứ tự đã thêm. Thứ hai, phương thức sắp xếp nhận một bộ so sánh, ta viết nó cũng bằng mũi tên với hai tham số a và b.
+           Hàm so sánh hai số dài trả về âm nếu a đứng trước, bằng không nếu bằng nhau, dương nếu a đứng sau. Ta đảo a và b nên số lớn đứng trước, và danh sách in ra giảm dần.""",
+           focus=[1, "1.6", "1.6", "1.7", "1.7", 3]),
+    ], checks=["sorted([300000, -50000, 1200000, 450000], reverse=True) == [1200000, 450000, 300000, -50000]",
+               "(450000 > 300000) - (450000 < 300000) == 1"])
     sc_chk = sc("check", "check", "Tự kiểm bằng đường khác: đi theo chỉ số, và cộng các số đếm", [
         st(code_block(kiem, lines=(5, 13), title="Cùng danh sách, cộng theo chỉ số") + out_block(kiem),
            """Kiểm tổng bằng đường khác: thay vòng lặp duyệt bằng vòng lặp đếm theo chỉ số, từ không tới kích thước trừ một.
@@ -288,6 +408,22 @@ Cuối bài bạn đếm được số giao dịch theo từng loại.</div>
            """Kiểm phép đếm: mỗi giao dịch được đếm đúng một lần, nên tổng các số đếm phải bằng số phần tử.
            Ba cộng hai cộng một bằng sáu, và mảng có đúng sáu phần tử, khớp.""", clear=True),
     ], checks=["500000 - 200000 + 1500000 == 1800000", "3 + 2 + 1 == len(['NAP', 'RUT', 'NAP', 'CK', 'NAP', 'RUT'])"])
+    sc_scale = sc("quymo", "concept", "Khi số tài khoản tăng gấp nghìn lần: tra bằng danh sách hay bằng bản đồ?", [
+        st(code_block(quet_ds, lines=(5, 19)),
+           """Ta tìm tài khoản nằm ở cuối danh sách, bằng cách duyệt từng phần tử, với hai cỡ. Chương trình đếm số bước chứ không đo giờ."""),
+        st(out_block(quet_ds),
+           """Một nghìn tài khoản mất một nghìn bước, một triệu tài khoản mất một triệu bước: tăng đúng theo số tài khoản.""", clear=True),
+        st(table(["số tài khoản", "danh sách: số so sánh mỗi lượt tra (tối đa)", "bản đồ: mỗi lượt tra (trung bình)"],
+                 [["1 000", "1 000", "khoảng 1"], ["1 000 000", "1 000 000", "khoảng 1"]])
+           + "<span class='note'>Phần mô tả lớp <code>HashMap</code> trong Java SE 21 nói phép lấy và đặt có thời gian gần như không đổi khi hàm băm phân tán tốt.</span>",
+           """Tra bằng bản đồ khác hẳn. Theo phần mô tả lớp này trong Java, phép lấy và đặt có thời gian gần như không đổi khi các khoá phân tán đều. Nên mỗi lượt tra tốn cỡ một bước, dù có một nghìn hay một triệu tài khoản.
+           Nếu mỗi giây có một nghìn lượt tra trên một triệu tài khoản, danh sách phải làm đến một nghìn triệu phép so sánh mỗi giây, số minh hoạ, còn bản đồ làm cỡ một nghìn bước.""",
+           clear=True),
+        st("""<div class="box key"><b>Điều người làm nghề rút ra.</b> Chọn cấu trúc dữ liệu theo <b>thao tác chính</b> và <b>quy mô dự kiến</b>: tra theo khoá thì bản đồ, giữ thứ tự thêm vào thì danh sách.
+Với năm tài khoản chọn nào cũng được; với một triệu tài khoản, chọn sai là hệ thống chậm đi hàng triệu lần ở mỗi lượt tra. Cơ sở dữ liệu lưu thêm <b>chỉ mục</b> cũng vì lý do này.</div>""",
+           """Người làm nghề chọn cấu trúc dữ liệu theo thao tác chính và quy mô dự kiến: tra theo khoá thì dùng bản đồ, cần giữ thứ tự thêm vào thì dùng danh sách.
+           Với năm tài khoản chọn nào cũng được, nhưng với một triệu tài khoản, chọn sai làm mỗi lượt tra chậm đi hàng triệu lần. Cơ sở dữ liệu lưu thêm chỉ mục cũng vì lý do này.""", clear=True),
+    ], checks=["1000 * 1000000 == 1000000000", "1000000 // 1000 == 1000"])
     sc_pit = sc("pitfalls", "pitfall", "Lỗi hay gặp, có lỗi của người đã đi làm", [
         st('<div class="box warn"><b>Lỗi 1 (người mới).</b> Viết kiểu số trần trong ngoặc nhọn.</div>'
            + code_block(kieu_tran, lines=(5, 5)) + out_block(kieu_tran, "Trình biên dịch báo"),
@@ -341,5 +477,10 @@ Ngoài khoảng đó, máy ảo mặc định tạo đối tượng mới, nên 
                   "(§5.1.7 đóng hộp, §5.1.8 mở hộp, §14.14.2 vòng lặp duyệt); Java SE 21 API: java.util.ArrayList (bộ duyệt fail-fast, "
                   "ConcurrentModificationException), java.util.HashMap, java.util.Map.getOrDefault, java.lang.Integer.valueOf (luôn đệm −128..127); dev.java/learn",
                   ["Tạo danh sách, thêm, lấy theo chỉ số, duyệt và cộng tổng", "Dùng bản đồ khoá–giá trị để tra số dư theo số tài khoản",
-                   "Đếm tần suất bằng lấy hoặc mặc định", "Giải thích hộp hoá và vì sao lớp bọc phải so bằng equals"],
-                  [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_chk, sc_pit, sc_quiz, sc_rec])
+                   "Đếm tần suất bằng lấy hoặc mặc định", "Nêu hộp hoá và vì sao lớp bọc phải so bằng equals",
+                   "Tra cứu theo khoá bằng bản đồ, có khoá thì trả số dư, không có thì báo",
+                   "Đọc hiểu hàm nhỏ viết bằng mũi tên và sắp xếp danh sách bằng bộ so sánh",
+                   "Dự đoán số bước mỗi lượt tra khi số tài khoản tăng gấp nghìn lần, với danh sách và với bản đồ",
+                   "Viết chương trình thống kê giao dịch: đếm theo loại bằng bản đồ và sắp danh sách số tiền giảm dần"],
+                  [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_tra, sc_lam, sc_chk, sc_scale, sc_pit, sc_quiz, sc_lab, sc_rec],
+                  covers=[(1, "example"), (2, "example"), (3, "formula"), (4, "pitfalls"), (5, "tracuu"), (6, "muiten"), (7, "quymo"), (8, "practice")])

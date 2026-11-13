@@ -1,7 +1,68 @@
 from lib import *
+from labkit import write_lab, practice_steps, practice_scene
 
 
 def build():
+    tq = prog("TuongQuan", """
+import java.util.*;
+public class TuongQuan {
+    public static void main(String[] args) {
+        Map<String, String> cho = new HashMap<>();             // mã thông điệp -> yêu cầu đang chờ
+        for (int i = 0; i < 5; i++) cho.put("M" + i, "chuyen " + (i + 1) * 100);
+        String[] ve = { "M2 chuyen 300", "M0 chuyen 100", "M1 chuyen 200", "M4 chuyen 500", "M3 chuyen 400" };
+        int theoThuTu = 0, theoMa = 0;                         // mỗi phản hồi: mã tương quan, rồi việc đã làm
+        for (int k = 0; k < ve.length; k++) {
+            String ma = ve[k].substring(0, 2), viec = ve[k].substring(3);
+            if (cho.get("M" + k).equals(viec)) theoThuTu++;    // ghép theo thứ tự đến: phản hồi k cho yêu cầu k
+            if (cho.get(ma).equals(viec)) theoMa++;            // ghép theo mã tương quan
+        }
+        System.out.println("ghep theo thu tu: " + theoThuTu + "/5 dung");
+        System.out.println("ghep theo ma: " + theoMa + "/5 dung");
+    }
+}""", out="""ghep theo thu tu: 0/5 dung
+ghep theo ma: 5/5 dung""")
+    het_gio = prog("HetGio", """
+public class HetGio {
+    static int soLanGhiNo(boolean daHachToan, boolean hoiTruoc) {
+        int n = daHachToan ? 1 : 0;           // phản hồi bị mất, nhưng lõi có thể đã ghi nợ rồi
+        if (hoiTruoc) {
+            if (!daHachToan) n++;             // hỏi trạng thái: chỉ gửi lại khi chưa hạch toán
+        } else {
+            n++;                              // gửi lại ngay, không hỏi
+        }
+        return n;
+    }
+    public static void main(String[] args) {
+        System.out.println("da hach toan, gui lai ngay:  " + soLanGhiNo(true, false));
+        System.out.println("da hach toan, hoi truoc:     " + soLanGhiNo(true, true));
+        System.out.println("chua hach toan, hoi truoc:   " + soLanGhiNo(false, true));
+        System.out.println("chua hach toan, gui lai ngay: " + soLanGhiNo(false, false));
+    }
+}""", out="""da hach toan, gui lai ngay:  2
+da hach toan, hoi truoc:     1
+chua hach toan, hoi truoc:   1
+chua hach toan, gui lai ngay: 1""")
+    lab_tq = prog("GhepPhanHoi", """
+import java.util.*;
+public class GhepPhanHoi {
+    public static void main(String[] args) {
+        Map<String, String> cho = new HashMap<>();
+        for (int i = 0; i < 6; i++) cho.put("M" + i, "chuyen " + (i + 1) * 100);
+        String[] ve = { "M3", "M5", "M0", "M1", "M4", "M2" };    // mã tương quan, theo thứ tự phản hồi về
+        int dung = 0;
+        for (int k = 0; k < ve.length; k++) {
+            System.out.println("phan hoi " + k + ": " + ve[k] + " -> " + cho.get(ve[k]));
+            if (ve[k].equals("M" + k)) dung++;
+        }
+        System.out.println("dung neu ghep theo thu tu: " + dung + "/6");
+    }
+}""", out="""phan hoi 0: M3 -> chuyen 400
+phan hoi 1: M5 -> chuyen 600
+phan hoi 2: M0 -> chuyen 100
+phan hoi 3: M1 -> chuyen 200
+phan hoi 4: M4 -> chuyen 500
+phan hoi 5: M2 -> chuyen 300
+dung neu ghep theo thu tu: 1/6""")
     hook = sc("hook", "hook", "Vì sao phản hồi về không đúng thứ tự, và hết giờ chờ thì làm gì?", [
         st("""<p>Kênh số gửi $5$ lệnh sang lõi ngân hàng qua hàng đợi. Phản hồi quay về <b>lộn xộn</b>: lệnh $2$ trả lời trước lệnh $0$.</p>
 <div class="box key">Nếu ghép phản hồi theo <b>thứ tự đến</b>, cả $5$ lệnh nhận nhầm kết quả. Phải ghép theo <b>mã tương quan</b>.</div>""",
@@ -138,8 +199,61 @@ $$\\hl{3}\\ \\text{trên } 5$$""",
         st("""<div class='box key'><b>Tư duy:</b> “không có phản hồi” là <b>trạng thái chưa biết</b>, không phải “thất bại”. Chưa biết thì đi hỏi, đừng đoán.</div>""",
            """Điều cần mang theo. Không có phản hồi là trạng thái chưa biết, không phải thất bại. Chưa biết thì đi hỏi, đừng đoán."""),
     ])
+    # ── AF2: mô phỏng ghép phản hồi và hết giờ chờ bằng Java (T24, IBM MQ không chạy trên máy), quy mô, tự làm ──
+    run = sc("chay_that", "example", "Chạy thật: ghép phản hồi theo mã tương quan (mô phỏng bằng Java)", [
+        st(code_block(tq, lines=(4, 12), title="TuongQuan.java (phần chính): ghép theo thứ tự đến và ghép theo mã"),
+           """Lõi ngân hàng T24 và IBM MQ không chạy trên máy này, nên ta mô phỏng cơ chế bằng Java. Một bản đồ nhớ các yêu cầu đang chờ, khoá là mã thông điệp. Năm phản hồi về lộn xộn, mỗi phản hồi mang mã tương quan và việc đã làm.
+           Với từng phản hồi ta thử hai cách ghép. Cách một coi phản hồi thứ k là của yêu cầu thứ k. Cách hai tra bản đồ bằng mã tương quan."""),
+        st(out_block(tq),
+           """Khi chạy thật, ghép theo thứ tự đến đúng không phản hồi nào trên năm, vì thứ tự về đã bị xáo hết. Ghép theo mã đúng cả năm. Đây là lý do phản hồi phải mang mã tương quan, và ta tra theo mã chứ không theo thứ tự.""", clear=True),
+        st(code_block(het_gio, lines=(2, 10), title="HetGio.java (phần 1): phản hồi bị mất, số lần ghi nợ cuối cùng"),
+           """Bây giờ là hết giờ chờ. Phản hồi bị mất, nhưng lõi có thể đã ghi nợ rồi hoặc chưa. Nếu gửi lại ngay thì ta cộng thêm một lần ghi nợ. Nếu hỏi trạng thái trước thì chỉ gửi lại khi lõi chưa hạch toán.""", clear=True),
+        st(code_block(het_gio, lines=(11, 15), title="Phần 2: bốn tình huống") + out_block(het_gio),
+           """Khi chạy thật, đã hạch toán rồi mà gửi lại ngay thì ghi nợ hai lần, khách bị trừ gấp đôi. Hỏi trạng thái trước thì mọi trường hợp đều đúng một lần. Vậy khi hết giờ chờ, phải truy vấn trạng thái trước khi thử lại.""", clear=True),
+    ])
+    scale = sc("quy_mo", "example", "Quy mô: ghép theo thứ tự chỉ đúng nhờ may, hết giờ chờ thành chuyện hằng ngày", [
+        st("""<p>Với $n$ phản hồi đang bay và thứ tự về <b>ngẫu nhiên</b>, số phản hồi mà cách ghép theo thứ tự đến ghép đúng có kỳ vọng bằng $1$, bất kể $n$ lớn thế nào; vậy số ghép sai kỳ vọng là $n - 1$. Giả sử $0{,}1\\%$ lệnh hết giờ chờ <i>(số minh hoạ)</i>:</p>"""
+           + table(["tải", "phản hồi đang bay n", "ghép theo thứ tự: sai kỳ vọng", "lệnh hết giờ chờ mỗi ngày"],
+                   [["×1", "5", "4", "100 (trên 100 000 lệnh)"],
+                    ["×100", "500", "<b>499</b>", "10 000 (trên 10 triệu lệnh)"],
+                    ["×10 000", "50 000", "<b>49 999</b>", "<b>1 000 000</b> (trên 1 tỉ lệnh)"]]),
+           """Với n phản hồi đang bay và thứ tự về ngẫu nhiên, cách ghép theo thứ tự đến chỉ ghép đúng một phản hồi trung bình, bất kể n lớn thế nào. Vậy số ghép sai trung bình là n trừ một. Giả sử một phần nghìn số lệnh hết giờ chờ, đây là số minh hoạ.
+           Với năm phản hồi đang bay, sai trung bình bốn. Tải tăng một trăm lần thì sai bốn trăm chín mươi chín. Tải tăng mười nghìn lần thì sai gần năm mươi nghìn. Số lệnh hết giờ chờ mỗi ngày đi từ một trăm lên một triệu.""", clear=True),
+        st("""<div class="box warn"><b>Giải pháp cũ gãy ở đâu.</b> Ghép theo thứ tự đến chỉ “chạy được” khi n nhỏ và thứ tự giữ nguyên; ở tải lớn gần như luôn sai. Gửi lại ngay khi hết giờ chờ, nhân với 1 triệu lệnh mỗi ngày, là trừ trùng hàng loạt.</div>
+<div class="box key"><b>Đánh đổi:</b> mã tương quan phải <b>duy nhất</b> và bảng chờ trong bộ nhớ phải dọn khi hết hạn; hỏi trạng thái cho mỗi lệnh hết giờ chờ thêm tải (cỡ 0,1% lượng lệnh), và khi nhiều bản dịch vụ cùng đọc một hàng đợi phản hồi thì phải dùng hàng đợi riêng hoặc lọc theo mã, kẻo lấy nhầm phản hồi của nhau.</div>""",
+           """Câu hỏi là giải pháp cũ sẽ gãy ở chỗ nào khi tải tăng lên. Ghép theo thứ tự đến chỉ chạy được khi n nhỏ và thứ tự giữ nguyên, ở tải lớn gần như luôn sai. Gửi lại ngay khi hết giờ chờ, nhân với một triệu lệnh mỗi ngày, là trừ trùng hàng loạt.
+           Đánh đổi là mã tương quan phải duy nhất và bảng chờ trong bộ nhớ phải dọn khi hết hạn. Hỏi trạng thái cho mỗi lệnh hết giờ chờ thêm tải cỡ một phần nghìn lượng lệnh. Khi nhiều bản dịch vụ cùng đọc một hàng đợi phản hồi, phải dùng hàng đợi riêng hoặc lọc theo mã, kẻo lấy nhầm phản hồi của nhau.""", clear=True),
+    ], checks=["5 - 1 == 4", "500 - 1 == 499", "50000 - 1 == 49999", "100000 * 0.001 == 100", "round(10_000_000 * 0.001) == 10000",
+               "round(1_000_000_000 * 0.001) == 1_000_000"])
+    write_lab("BNK", "L10", """# Lab BNK L10 — Sáu phản hồi lộn xộn
+
+Sáu yêu cầu có mã thông điệp `M0 … M5`, yêu cầu `Mi` có nội dung `chuyen <(i+1)*100>` (`M0` → `chuyen 100`, …, `M5` → `chuyen 600`). Sáu phản hồi về theo thứ tự mã tương quan: `M3, M5, M0, M1, M4, M2`.
+
+Viết chương trình `GhepPhanHoi` (tệp `GhepPhanHoi.java`):
+1. Một `Map<String, String>` từ mã thông điệp sang nội dung yêu cầu.
+2. Với phản hồi thứ `k` (từ 0), in `phan hoi <k>: <mã> -> <yêu cầu tra được theo mã>`.
+3. Đếm số phản hồi mà việc **ghép theo thứ tự đến** (coi phản hồi `k` là của `M<k>`) sẽ đúng, rồi in `dung neu ghep theo thu tu: <số>/6`.
+
+Chạy: `javac GhepPhanHoi.java && java GhepPhanHoi`. Chấm: `bash labs/cham.sh BNK L10 GhepPhanHoi.java`.
+""", "java", lab_tq["code"], lab_tq["out"])
+    lab = practice_scene(sc, "Tự làm: sáu phản hồi lộn xộn", practice_steps(
+        st, "BNK", "L10",
+        """<p><b>Đề</b>: yêu cầu <code>Mi</code> là <code>chuyen (i+1)*100</code>; phản hồi về theo mã <code>M3 M5 M0 M1 M4 M2</code>. Viết <code>GhepPhanHoi.java</code>:</p>
+<ol><li>bản đồ mã → yêu cầu</li>
+<li>mỗi phản hồi in <code>phan hoi 0: M3 -&gt; chuyen 400</code></li>
+<li>dòng cuối: số phản hồi đúng nếu ghép theo <b>thứ tự đến</b></li></ol>""",
+        """Bây giờ tới phần bạn tự làm. Sáu yêu cầu mang mã từ M không tới M năm, nội dung là chuyển một trăm, hai trăm, cho tới sáu trăm. Sáu phản hồi về theo thứ tự mã M ba, M năm, M không, M một, M bốn, M hai.
+        Hãy viết chương trình in cho mỗi phản hồi yêu cầu mà mã của nó chỉ tới, rồi đếm xem nếu ghép theo thứ tự đến thì đúng mấy phản hồi. Hãy dừng video, tự viết và chạy, đừng chép lại ví dụ.""",
+        lab_tq["out"], "GhepPhanHoi.java",
+        """<div class="box key"><b>Nếu kẹt:</b> nạp bản đồ bằng vòng <code>for</code>: <code>cho.put("M" + i, "chuyen " + (i + 1) * 100);</code>. Với phản hồi thứ <code>k</code>, tra <code>cho.get(ve[k])</code>; ghép theo thứ tự đúng khi <code>ve[k].equals("M" + k)</code>.
+Lời giải ở <code>labs/BNK/L10/loi_giai.java</code> — chỉ mở sau khi bạn đã thử.</div>""",
+        """Nếu kẹt, nạp bản đồ bằng một vòng lặp, rồi với mỗi phản hồi tra bản đồ bằng chính mã của nó. Ghép theo thứ tự đến chỉ đúng khi mã của phản hồi thứ k đúng bằng M cộng k. Lời giải đầy đủ nằm trong thư mục thực hành của bài, chỉ mở sau khi bạn đã tự thử.""", pause=150), "BNK", "L10")
     return lesson("L10", "t24_ofs_ibm_mq_tuong_quan", "Bài 10 — Lõi ngân hàng T24: OFS, IBM MQ và mã tương quan",
-                  "curriculum/bnk.yaml L10; audit/bnk/verify_bnk.py L10; IBM MQ / JMS: MessageID và CorrelationID (khái niệm chung); OFS: tên gọi theo Temenos, bản tin trong bài là mẫu minh hoạ",
+                  "curriculum/bnk.yaml L10; audit/bnk/verify_bnk.py L10; audit/review/screen_code/BNK.yaml (mô phỏng bằng Java 21; T24 và IBM MQ không chạy trên máy: chỉ mô phỏng logic, không kiểm cú pháp sản phẩm); IBM MQ / JMS: MessageID và CorrelationID (khái niệm chung); OFS: tên gọi theo Temenos, bản tin trong bài là mẫu minh hoạ; kỳ vọng số điểm cố định của một hoán vị ngẫu nhiên bằng 1 (tổ hợp)",
                   ["Ghép phản hồi theo mã tương quan thay vì thứ tự đến", "Tính xác suất phản hồi không trùng thứ tự gửi bằng vét cạn",
-                   "Xử lý đúng khi hết giờ chờ: truy vấn trạng thái trước", "Tránh nhiều bản dịch vụ lấy nhầm phản hồi của nhau"],
-                  [hook, pre, sym, intu, form, ex, chk, pit, quiz, rec])
+                   "Xử lý đúng khi hết giờ chờ: truy vấn trạng thái trước", "Tránh nhiều bản dịch vụ lấy nhầm phản hồi của nhau",
+                   "Chạy mô phỏng ghép phản hồi và hết giờ chờ để thấy số đúng và số lần ghi nợ",
+                   "Tính số ghép sai kỳ vọng và số lệnh hết giờ chờ khi tải tăng ×100, ×10 000",
+                   "Viết chương trình ghép phản hồi lộn xộn theo mã tương quan"],
+                  [hook, pre, sym, intu, form, ex, run, chk, pit, quiz, scale, lab, rec],
+                  covers=[(1, "chay_that"), (2, "check"), (3, "chay_that"), (4, "quy_mo"), (5, "chay_that"), (6, "quy_mo"), (7, "practice")])

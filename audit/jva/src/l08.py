@@ -1,4 +1,5 @@
 from lib import *
+from labkit import write_lab, practice_steps, practice_scene
 
 
 def ln(p, s):
@@ -129,6 +130,93 @@ public class DoanChuoi {
     }
 }""", out="13 9\nT45\n7")
 
+    doc_tep = prog("DocTep", """
+import java.nio.file.Files;
+import java.nio.file.Path;
+
+public class DocTep {
+    public static void main(String[] args) throws Exception {
+        Path tep = Path.of("doi_soat.txt");                 // tên tệp, nằm ở thư mục đang đứng
+        String[] dong = new String[2];                      // mảng chuỗi 2 ô, ô nào cũng null
+        dong[0] = "0123456789;1234567";
+        dong[1] = "0987654321;250000";
+        Files.writeString(tep, String.join("\\n", dong) + "\\n");   // ghi cả nội dung ra tệp, UTF-8
+        String noiDung = Files.readString(tep);             // đọc cả tệp thành một chuỗi
+        String[] doc = noiDung.split("\\n");                 // tách thành từng dòng
+        long tong = 0;
+        for (int i = 0; i < doc.length; i++) {
+            tong += Long.parseLong(doc[i].split(";")[1]);
+        }
+        System.out.println(doc.length + " dong, tong " + tong);
+    }
+}""", out="2 dong, tong 1484567")
+    dung_luong = prog("DungLuong", """
+import java.nio.file.Files;
+import java.nio.file.Path;
+
+public class DungLuong {
+    public static void main(String[] args) throws Exception {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < 1000; i++) {
+            sb.append("0123456789;1234567\\n");              // 18 ký tự + 1 ký tự xuống dòng
+        }
+        Path tep = Path.of("lon.txt");
+        Files.writeString(tep, sb.toString());
+        System.out.println(Files.size(tep) + " byte cho 1000 dong");
+    }
+}""", out="19000 byte cho 1000 dong")
+    doi_soat_lab = prog("DoiSoat", """
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Locale;
+
+public class DoiSoat {
+    public static void main(String[] args) throws Exception {
+        Path tep = Path.of("lenh.txt");
+        Files.writeString(tep, "A001;1200000\\nA002;350000\\nA003;2000000\\nA004;75000\\n");
+        String[] dong = Files.readString(tep).split("\\n");
+        long tong = 0;
+        int lon = 0;                                        // số lệnh trên 1 triệu
+        for (int i = 0; i < dong.length; i++) {
+            long soTien = Long.parseLong(dong[i].split(";")[1]);
+            tong += soTien;
+            if (soTien > 1000000) {
+                lon++;
+            }
+        }
+        System.out.println(dong.length + " dong");
+        System.out.println("Tong: " + String.format(Locale.US, "%,d", tong));
+        System.out.println("Tren 1 trieu: " + lon);
+        for (int i = 0; i < dong.length; i++) {
+            String[] phan = dong[i].split(";");
+            System.out.println(phan[0] + " | " + String.format(Locale.US, "%,d", Long.parseLong(phan[1])) + " dong");
+        }
+    }
+}""", out="4 dong\nTong: 3,625,000\nTren 1 trieu: 2\nA001 | 1,200,000 dong\nA002 | 350,000 dong\nA003 | 2,000,000 dong\nA004 | 75,000 dong")
+    write_lab("JVA", "L08", """# Lab JVA L08 — Đối soát một tệp lệnh
+
+Trong Git Bash, viết `DoiSoat` (tệp `DoiSoat.java`, số liệu là số minh hoạ). Hàm chính khai `throws Exception` (như bài mẫu `DocTep`) và dùng `java.nio.file.Files`, `Path`, `java.util.Locale`.
+
+1. Ghi tệp `lenh.txt` bằng `Files.writeString(Path.of("lenh.txt"), …)` gồm **4 dòng**, mỗi dòng kết thúc bằng `\\n`: `A001;1200000`, `A002;350000`, `A003;2000000`, `A004;75000`.
+2. Đọc lại bằng `Files.readString`, tách dòng bằng `split("\\n")`; mỗi dòng tách tiếp bằng `split(";")` rồi `Long.parseLong` phần số tiền.
+3. In: `<số dòng> dong`; `Tong: <tổng, định dạng 3,625,000>`; `Tren 1 trieu: <số lệnh lớn hơn 1000000>`; rồi từng dòng `A001 | 1,200,000 dong`. Định dạng bằng `String.format(Locale.US, "%,d", …)`.
+
+Chạy: `javac DoiSoat.java && java DoiSoat`. Chấm: `bash labs/cham.sh JVA L08 DoiSoat.java`.
+""", "java", doi_soat_lab["code"], doi_soat_lab["out"])
+    sc_lab = practice_scene(sc, "Tự làm: đối soát một tệp lệnh", practice_steps(
+        st, "JVA", "L08",
+        """<p><b>Đề</b>: viết <code>DoiSoat.java</code> (số minh hoạ), hàm chính khai <code>throws Exception</code>.</p>
+<ol><li>Ghi <code>lenh.txt</code> bằng <code>Files.writeString</code>, 4 dòng: <code>A001;1200000</code>, <code>A002;350000</code>, <code>A003;2000000</code>, <code>A004;75000</code></li>
+<li>Đọc lại bằng <code>Files.readString</code>, tách dòng, tách <code>;</code>, đổi số bằng <code>Long.parseLong</code></li>
+<li>In số dòng, tổng, số lệnh trên 1 triệu, rồi từng dòng với dấu phẩy ngăn nghìn (<code>Locale.US</code>)</li></ol>""",
+        """Bây giờ tới phần bạn tự làm trên máy. Ghi một tệp bốn dòng, mỗi dòng gồm mã lệnh, dấu chấm phẩy và số tiền. Sau đó đọc lại tệp, tách từng dòng, và đổi phần số tiền thành số.
+        In số dòng, tổng số tiền có dấu phẩy ngăn hàng nghìn, số lệnh trên một triệu, rồi từng dòng đã định dạng. Hãy dừng video và tự viết, đừng chép lại ví dụ.""",
+        doi_soat_lab["out"], "DoiSoat.java",
+        """<div class="box key"><b>Nếu kẹt:</b> <code>Files.readString(tep).split("\\n")</code> cho mảng dòng; mỗi dòng <code>dong[i].split(";")[1]</code> là phần số tiền; đếm bằng <code>if (soTien &gt; 1000000)</code>.
+Lời giải nằm ở <code>labs/JVA/L08/loi_giai.java</code> — chỉ mở sau khi bạn đã thử.</div>""",
+        """Nếu kẹt, đọc cả tệp bằng lệnh đọc chuỗi rồi tách theo dấu xuống dòng ra một mảng. Mỗi dòng tách tiếp theo dấu chấm phẩy, phần tử thứ hai là số tiền. Đếm lệnh lớn bằng lệnh rẽ nhánh so với một triệu.
+        Lời giải nằm trong thư mục thực hành của bài, chỉ mở sau khi bạn đã tự thử.""", pause=60), "JVA", "L08")
+
     sc_hook = sc("hook", "hook", "Hai số tài khoản giống hệt nhau, máy vẫn bảo khác?", [
         st("""<p>Khách gõ số tài khoản <code>0123456789</code>, hệ thống tra đúng số đó trong danh sách… và báo <b>không tìm thấy</b>.</p>
 <div class="box warn">Lỗi thật hay gặp: so hai chuỗi bằng <code>==</code>, hoặc quên bỏ khoảng trắng thừa ở hai đầu.</div>""",
@@ -247,6 +335,17 @@ public class DoanChuoi {
                "'0123456789;1234567'[11:] == '1234567'", "'1234567' + str(1) == '12345671' and int('1234567') + 1 == 1234568",
                "format(1234567, ',d') == '1,234,567'"])
     k4 = ln(kiem, "split")
+    sc_tep = sc("tep", "example", "Ví dụ: ghi rồi đọc lại một tệp văn bản", [
+        st(code_block(doc_tep, lines=(5, 10)),
+           """Dữ liệu thật nằm trong tệp, nên ta học ghi và đọc tệp chữ. Đường dẫn của tệp là một đối tượng tạo từ tên tệp, nằm ở thư mục đang đứng.
+           Mảng chuỗi tạo bằng từ khoá tạo mới kèm số ô, mỗi ô lúc đầu là giá trị rỗng, rồi ta gán hai dòng đối soát. Hàm nối ghép các dòng bằng ký tự xuống dòng.
+           Hàm ghi chuỗi ra tệp, với bảng mã thông dụng cho tiếng Việt có dấu. Dòng khai ở hàm chính nói rằng thao tác với tệp có thể gặp lỗi, và ta chưa xử lý ở đây.""",
+           focus=[1, "1.2", ["1.3", "1.4", "1.5"], "1.6", "1.6", "1.1"], forward_ref=True),
+        st(code_block(doc_tep, lines=(11, 17)) + out_block(doc_tep),
+           """Hàm đọc chuỗi lấy cả nội dung tệp. Ta tách theo ký tự xuống dòng ra mảng các dòng, rồi tách tiếp từng dòng ở dấu chấm phẩy và đổi phần số tiền thành số.
+           Chạy thật, ta được hai dòng. Tổng là một triệu bốn trăm tám mươi bốn nghìn năm trăm sáu mươi bảy, đúng bằng hai số tiền cộng lại.""",
+           clear=True, focus=["1.1", ["1.2", "1.4", "1.5"], "3.1", "3.1"]),
+    ], checks=["1234567 + 250000 == 1484567"])
     sc_chk = sc("check", "check", "Tự kiểm bằng đường khác: tách bằng hàm tách và đếm độ dài", [
         st(code_block(kiem, lines=(k4, k4 + 4), title="Tệp KiemTach.java")
            + "<span class='note'>Chữ trong ngoặc của <code>split</code> là một mẫu đặc biệt: <code>\";\"</code> dùng thẳng được, "
@@ -258,6 +357,20 @@ public class DoanChuoi {
            Dòng cuối đúng, vì mười cộng một cộng bảy bằng mười tám, đúng độ dài cả dòng, nên hai cách tách cho cùng kết quả.""",
            focus=[["2.1", "2.2", "2.3"], ["2.4", 3]]),
     ], checks=["'0123456789;1234567'.split(';') == ['0123456789', '1234567']", "10 + 1 + 7 == len('0123456789;1234567')"])
+    sc_scale = sc("quymo", "concept", "Khi tệp đối soát lớn dần: đọc cả tệp một lần còn ổn không?", [
+        st(code_block(dung_luong, lines=(5, 11)) + out_block(dung_luong),
+           """Ta đo thử bằng một tệp một nghìn dòng, mỗi dòng như dòng đối soát, mười tám ký tự cộng một ký tự xuống dòng. Chương trình ghi tệp rồi hỏi kích thước.
+           Kết quả là mười chín nghìn byte, tức đúng mười chín byte mỗi dòng."""),
+        st(table(["số dòng", "kích thước tệp (byte)", "cỡ"],
+                 [["1 000", "19 000", "19 KB"], ["1 000 000", "19 000 000", "19 MB"], ["100 000 000", "1 900 000 000", "1,9 GB"]]),
+           """Nhân lên cho các quy mô khác. Một triệu dòng là mười chín triệu byte. Một trăm triệu dòng là một tỉ chín trăm triệu byte, gần hai tỉ.
+           Hàm đọc cả tệp giữ toàn bộ nội dung trong bộ nhớ cùng lúc, nên với tệp cỡ hàng tỉ byte nó dễ làm hết bộ nhớ.""",
+           clear=True, focus=[1, "1.3", "1.4", 1]),
+        st("""<div class="box key"><b>Điều người làm nghề rút ra.</b> Đọc cả tệp một lần chỉ hợp với tệp <b>nhỏ</b>. Tệp đối soát cuối ngày có thể hàng trăm triệu dòng:
+phải đọc <b>từng dòng</b> hoặc từng phần, xử lý xong dòng nào bỏ dòng ấy. Java có cách đọc từng dòng; điểm cần nhớ là hỏi trước: tệp lớn nhất có thể bao nhiêu?</div>""",
+           """Đọc cả tệp một lần chỉ hợp với tệp nhỏ. Tệp đối soát cuối ngày có thể có hàng trăm triệu dòng, nên phải đọc từng dòng hoặc từng phần, xử lý xong dòng nào thì bỏ dòng ấy.
+           Java có cách đọc từng dòng. Điều cần nhớ là hỏi trước, tệp lớn nhất có thể có cỡ bao nhiêu.""", clear=True),
+    ], checks=["19 * 1000 == 19000", "19 * 10**6 == 19000000", "19 * 10**8 == 1900000000", "len('0123456789;1234567') + 1 == 19"])
     sc_pit = sc("pitfalls", "pitfall", "Lỗi hay gặp, có lỗi của người đã đi làm", [
         st('<div class="box warn"><b>Lỗi 1 (người mới).</b> Gọi hàm của chuỗi mà không gán lại kết quả.</div>'
            + code_block(quen_gan, lines=(3, 7)) + out_block(quen_gan),
@@ -314,7 +427,11 @@ public class DoanChuoi {
                   "java.lang.StringBuilder, java.lang.Long.parseLong, java.util.Formatter (cờ ',' theo Locale), Java SE 21 API; "
                   "JEP 358 thông báo NullPointerException chi tiết; dev.java/learn",
                   ["Dùng length, charAt, indexOf, substring, trim, split trên chuỗi, với chỉ số từ 0",
-                   "Giải thích vì sao == so tham chiếu còn equals so nội dung",
+                   "Nêu vì sao == so tham chiếu còn equals so nội dung",
                    "Tách dòng “số tài khoản;số tiền”, đổi phần số bằng Long.parseLong và định dạng 1,234,567",
-                   "Tránh lỗi quên gán lại chuỗi, gọi hàm trên giá trị rỗng, nối chuỗi trong vòng lặp lớn"],
-                  [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_chk, sc_pit, sc_quiz, sc_rec])
+                   "Tránh lỗi quên gán lại chuỗi, gọi hàm trên giá trị rỗng, nối chuỗi trong vòng lặp lớn",
+                   "Ghi rồi đọc lại một tệp văn bản bằng Files.writeString và Files.readString, rồi tách từng dòng",
+                   "Dự đoán kích thước tệp đối soát ở một nghìn, một triệu, một trăm triệu dòng và khi nào không nên đọc cả tệp",
+                   "Viết chương trình đối soát: ghi tệp bốn dòng, đọc lại, cộng tổng, đếm lệnh lớn và in có định dạng"],
+                  [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_tep, sc_chk, sc_scale, sc_pit, sc_quiz, sc_lab, sc_rec],
+                  covers=[(1, "sym"), (2, "intuition"), (3, "example"), (4, "pitfalls"), (5, "tep"), (6, "quymo"), (7, "practice")])

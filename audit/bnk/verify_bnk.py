@@ -280,6 +280,56 @@ rec("L11", int("000000500000") // 10 ** 2 == 5000, "000000500000 xu = 5 000 đô
 _d = [int(c) for c in reversed(pan)]
 rec("L13", sum(_d[0::2]) == 8 and sum(2 * x for x in _d[1::2][:-1]) == 14 and 2 * _d[-1] == 8 and 8 + 14 + 8 == 30, "Luhn thẻ thử: 8 + 14 + 8 = 30")
 
+# ── AF2 (2026-11-13): số ở cảnh "quy mô" (×1, ×100, ×10 000) tính lại bằng vòng lặp/Fraction, độc lập với `checks` của bài ──
+from fractions import Fraction as _F
+_S = lambda n: _F(n)
+# L00: heap 4·1024³ byte, rò 1024 byte mỗi yêu cầu; 10, 1000, 100 000 yêu cầu/giây
+_heap = 4 * 1024 ** 3
+_t = [_heap / (r * 1024) for r in (10, 1000, 100000)]
+rec("L00", [round(x) for x in _t] == [419430, 4194, 42] and round(_t[0] / 86400, 1) == 4.9 and round(_t[1] / 60) == 70, "đầy heap sau 419 430 s (4,9 ngày), 4 194 s (70 phút), 42 s")
+# L01: 200 luồng, chờ 0,1 s; 1 MB ngăn xếp; 1 KB luồng ảo
+_n = [10 ** 4, 10 ** 6, 10 ** 8]
+rec("L01", [_F(n, 200) / 10 for n in _n] == [5, 500, 50000] and [n // 1000 for n in _n] == [10, 1000, 100000] and round(500 / 60, 1) == 8.3 and round(50000 / 3600, 1) == 13.9,
+    "5 s, 500 s (8,3 phút), 50 000 s (13,9 giờ); bộ nhớ ngăn xếp 10 GB, 1 TB, 100 TB (MB)")
+# L02: hộp kết nối T·(C−1)+1 với C = 2
+rec("L02", [T * (2 - 1) + 1 for T in (5, 500, 50000)] == [6, 501, 50001], "kết nối tối thiểu 6, 501, 50 001")
+# L03: thiệt hại và bảng khoá
+rec("L03", [int(N * _F(1, 1000)) for N in (10 ** 5, 10 ** 7, 10 ** 9)] == [100, 10000, 1000000] and [int(N * _F(1, 1000)) * 500000 for N in (10 ** 5, 10 ** 7, 10 ** 9)] == [5 * 10 ** 7, 5 * 10 ** 9, 5 * 10 ** 11]
+    and [N * 64 for N in (10 ** 5, 10 ** 7, 10 ** 9)] == [6400000, 640000000, 64000000000], "100/10 000/1 000 000 lệnh trừ trùng; 50 triệu, 5 tỉ, 500 tỉ đồng; bảng khoá 6,4 MB, 640 MB, 64 GB")
+# L04: số tầng (100 lối rẽ) và thời gian quét 10^6 dòng/giây
+def _lv(n):
+    k, c = 0, 1
+    while c < n:
+        c, k = c * 100, k + 1
+    return k
+rec("L04", [_lv(n) for n in (10 ** 5, 10 ** 7, 10 ** 9)] == [3, 4, 5] and [n / 10 ** 6 for n in (10 ** 5, 10 ** 7, 10 ** 9)] == [0.1, 10.0, 1000.0], "3, 4, 5 tầng; quét 0,1 s, 10 s, 1000 s")
+# L05: số cặp phiên T(T−1)/2 và kỳ vọng cặp ngược (p = 1/10000)
+_pairs = [sum(range(T)) for T in (10, 1000, 100000)]
+rec("L05", _pairs == [45, 499500, 4999950000] and [round(p / 10000, 4) for p in _pairs] == [0.0045, 49.95, 499995.0], "45, 499 500, 4 999 950 000 cặp; kỳ vọng 0,0045, ≈50, ≈500 000")
+# L06: kết nối bận = tần suất × 0,02 (Little)
+rec("L06", [_F(r) * _F(2, 100) for r in (100, 10000, 1000000)] == [2, 200, 20000] and [_F(r) * _F(2, 100) * _F(1, 10) for r in (100, 10000, 1000000)] == [_F(1, 5), 20, 2000]
+    and [_F(r) * _F(2, 100) * _F(1, 100) for r in (100, 10000, 1000000)] == [_F(1, 50), 2, 200], "2/200/20 000 không đệm; 0,2/20/2 000 trúng 90%; 0,02/2/200 trúng 99%")
+# L07: tồn đọng sau 1 giờ nếu chỉ 4 phân vùng (4 000/s)
+rec("L07", [(r - 4000) * 3600 for r in (5000, 500000, 50000000)] == [3600000, 1785600000, 179985600000] and [r // 1000 for r in (5000, 500000, 50000000)] == [5, 500, 50000], "tồn đọng 3,6 triệu; 1,7856 tỉ; 179,9856 tỉ; phân vùng 5, 500, 50 000")
+# L08: hộp thư đi và bộ chuyển tiếp
+rec("L08", [N * 200 for N in (10 ** 5, 10 ** 7, 10 ** 9)] == [20 * 10 ** 6, 2 * 10 ** 9, 2 * 10 ** 11] and [round(N / 86400, 1) for N in (10 ** 5, 10 ** 7)] == [1.2, 115.7] and -(-round(10 ** 9 / 86400) // 1000) == 12,
+    "hộp thư đi 20 MB, 2 GB, 200 GB; 1,2 và 116 sự kiện/s; 12 bộ chuyển tiếp")
+# L09: dòng thu phí mỗi năm và thời gian cộng lại
+rec("L09", [N * 365 for N in (10 ** 5, 10 ** 7, 10 ** 9)] == [36500000, 3650000000, 365000000000] and round(365 * 10 ** 9 / 10 ** 6 / 86400, 1) == 4.2 and round(3650000000 / 10 ** 6 / 3600, 1) == 1.0,
+    "36,5 triệu / 3,65 tỉ / 365 tỉ dòng; 36,5 s, 1 giờ, 4,2 ngày")
+# L10: n−1 ghép sai kỳ vọng — kiểm bằng vét cạn cho n = 5 (đúng kỳ vọng 1 điểm cố định)
+_perm_fixed = sum(sum(1 for i, v in enumerate(p) if i == v) for p in itertools.permutations(range(5)))
+rec("L10", _F(_perm_fixed, 120) == 1 and [n - 1 for n in (5, 500, 50000)] == [4, 499, 49999], "kỳ vọng điểm cố định hoán vị n=5 là 1 (vét cạn 120); sai kỳ vọng 4, 499, 49 999")
+# L11: băng thông (62 + 46 = 108 byte mỗi giao dịch)
+rec("L11", 62 + 46 == 108 and [108 * r * 86400 for r in (100, 10000, 1000000)] == [933120000, 93312000000, 9331200000000], "108 byte; nhật ký 933 MB, 93,3 GB, 9,33 TB mỗi ngày")
+# L12: so từng cặp N² / 10^8 và bảng tra N / 10^7
+rec("L12", [_F(N * N, 10 ** 8) for N in (10 ** 5, 10 ** 7)] == [100, 10 ** 6] and round(float(_F(10 ** 18, 10 ** 8)) / (365.25 * 86400)) == 317 and [N * 100 for N in (10 ** 5, 10 ** 7, 10 ** 9)] == [10 ** 7, 10 ** 9, 10 ** 11],
+    "100 s; 10^6 s (11,6 ngày); 317 năm; bộ nhớ 10 MB, 1 GB, 100 GB")
+# L13: HSM 1000 thao tác/s, mỗi giao dịch 2 thao tác
+rec("L13", [-(-(2 * r) // 1000) for r in (100, 10000, 1000000)] == [1, 20, 2000], "HSM tối thiểu 1, 20, 2 000")
+# L14: vụ trừ trùng và người xử lý tay (10 phút mỗi vụ, 8 giờ mỗi người)
+rec("L14", [N // 10000 for N in (10 ** 5, 10 ** 7, 10 ** 9)] == [10, 1000, 100000] and [round(v * 10 / 60 / 8, 1) for v in (10, 1000, 100000)] == [0.2, 20.8, 2083.3], "10, 1 000, 100 000 vụ; 0,2, 21, 2 083 người")
+
 bad = [c for c, ok in R if not ok]
 print(f"\nverify_bnk:{len(R) - len(bad)}/{len(R)} PASS" + (f"; FAIL: {bad}" if bad else ""))
 sys.exit(1 if bad else 0)

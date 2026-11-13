@@ -1,9 +1,45 @@
 from lib import *
+from labkit import write_lab, practice_steps, practice_scene
 
 NEED = "(lambda amt, day: amt > 10000000 or day + amt > 20000000)"
 
 
 def build():
+    pin_block = prog("KhoiPin", """
+pin, pan = "1234", "4111111111111111"
+a = "041234FFFFFFFFFF"                        # PIN đã đệm: 0, độ dài 4, PIN, rồi chữ F
+b = "0000" + pan[-13:-1]                      # 12 số cuối của thẻ (bỏ số kiểm cuối), đệm 4 số 0
+khoi = "".join("%X" % (int(x, 16) ^ int(y, 16)) for x, y in zip(a, b))   # XOR từng cặp chữ số hex
+print(khoi)""", out="041225EEEEEEEEEE", lang="python")
+    che_mac = prog("CheVaMac", """
+import hmac, hashlib
+pan = "4111111111111111"
+print(pan[:6] + "*" * 6 + pan[-4:])           # che số thẻ: giữ 6 số đầu và 4 số cuối
+def mac(nd):
+    return hmac.new(b"k", nd.encode(), hashlib.sha256).hexdigest()[:16]
+print(mac("amt=500000"))
+print(mac("amt=900000"))
+print(mac("amt=500000") == mac("amt=900000"))""", out="""411111******1111
+7625fd27947ee367
+7958d294fb89b6dc
+False""", lang="python")
+    lab_lu = prog("LuhnLab", """
+def luhn(so):
+    tong = 0
+    for i, c in enumerate(reversed(so)):
+        d = int(c)
+        if i % 2 == 1:
+            d = d * 2
+            if d > 9:
+                d = d - 9
+        tong = tong + d
+    return tong % 10 == 0
+the = "5500005555555559"
+print(luhn(the))
+print(luhn(the[:-1] + "8"))
+print(the[:6] + "*" * 6 + the[-4:])""", out="""True
+False
+550000******5559""", lang="python")
     hook = sc("hook", "hook", "Vì sao số thẻ phải được che, còn PIN không bao giờ xuất hiện nguyên văn?", [
         st("""<p>Một lập trình viên ghi nhật ký để gỡ lỗi: có cả số thẻ và PIN. Nhật ký được sao lưu, nhiều người đọc được, và <b>rò rỉ</b> chỉ cần một người xấu.</p>
 <div class="box key">Bảo mật thanh toán dựa trên bốn ý: <b>che dữ liệu</b>, <b>không lộ khoá</b>, <b>phát hiện sửa bản tin</b>, <b>xác thực người dùng</b>.</div>""",
@@ -13,9 +49,9 @@ def build():
                  [["che dữ liệu", "che số thẻ, không ghi PIN", "tự viết hàm che"],
                   ["không lộ khoá", "HSM giữ khoá, mã hoá khối PIN", "tính khối PIN"],
                   ["phát hiện sửa bản tin", "mã xác thực bản tin (MAC)", "đổi 1 chữ số, MAC đổi"],
-                  ["xác thực người dùng", "sinh trắc học theo Quyết định 2345", "tính khi nào bắt buộc"]]),
+                  ["xác thực người dùng", "sinh trắc học theo Thông tư 50/2024 (sửa đổi bởi Thông tư 77/2025)", "tính khi nào bắt buộc"]]),
            """Bảng này là kế hoạch bài học. Che dữ liệu bằng cách che số thẻ và không ghi PIN. Không lộ khoá nhờ thiết bị HSM giữ khoá và mã hoá khối PIN. Phát hiện sửa bản tin bằng mã xác thực bản tin.
-           Xác thực người dùng bằng sinh trắc học theo Quyết định hai nghìn ba trăm bốn mươi lăm."""),
+           Xác thực người dùng bằng sinh trắc học theo Thông tư năm mươi năm hai nghìn không trăm hai mươi tư. Thông tư này đã được sửa đổi bởi Thông tư bảy mươi bảy năm hai nghìn không trăm hai mươi lăm."""),
     ])
     pre = sc("prereq", "prereq", "Trước hết: những điều cần hiểu", [
         st(table(["khái niệm", "nghĩa", "ví dụ"],
@@ -77,13 +113,10 @@ def build():
         st("""<p><b>Bước 2.</b> MAC tính từ <b>khoá bí mật và nội dung</b>. Sửa một ký tự thì MAC mới khác MAC cũ, bên nhận phát hiện ngay.</p>
 <span class='note'>Làm thử: tiền $500\\,000$ đổi thành $900\\,000$ → MAC khác.</span>""",
            """Bước hai, vì MAC được tính từ khoá bí mật và nội dung, nên sửa một ký tự thì MAC mới khác MAC cũ, và bên nhận phát hiện ngay. Làm thử, đổi tiền từ năm trăm nghìn thành chín trăm nghìn thì MAC khác hẳn."""),
-        st("""<p><b>Bước 3.</b> Theo Quyết định 2345/QĐ-NHNN của Ngân hàng Nhà nước (ký 18/12/2023, hiệu lực 01/07/2024), chuyển tiền trực tuyến <b>trên $10$ triệu đồng</b> một giao dịch, hoặc khi <b>tổng trong ngày vượt $20$ triệu đồng</b>, phải xác thực sinh trắc học. Từ 01/01/2025 quy tắc nằm trong Thông tư 50/2024 (Phụ lục 01, 02), sửa bởi Thông tư 77/2025 (01/03/2026), ngưỡng cá nhân vẫn $10$ và $20$ triệu; tổng cộng dồn tính lại từ $0$ sau mỗi lần xác thực.</p>
+        st("""<p><b>Bước 3.</b> Theo Thông tư 50/2024/TT-NHNN (sửa đổi bởi Thông tư 77/2025/TT-NHNN, hiệu lực 01/03/2026), chuyển tiền trực tuyến của cá nhân <b>trên $10$ triệu đồng</b> một giao dịch, hoặc khi <b>tổng trong ngày vượt $20$ triệu đồng</b>, phải xác thực sinh trắc học (Phụ lục 01). Tổng cộng dồn tính lại từ $0$ sau mỗi lần xác thực.</p>
 <span class='note'>Làm thử: $15$ triệu → cần. $5$ triệu, ngày chưa có gì → không.</span>""",
-           """Bước ba nói về Quyết định hai nghìn ba trăm bốn mươi lăm của Ngân hàng Nhà nước, ký ngày mười tám tháng mười hai năm hai nghìn không trăm hai mươi ba.
-           Quyết định này có hiệu lực từ ngày một tháng bảy năm hai nghìn không trăm hai mươi tư.
-           Theo quyết định này, chuyển tiền trực tuyến phải xác thực sinh trắc học khi một giao dịch trên mười triệu đồng.
-           Khi tổng trong ngày vượt hai mươi triệu đồng cũng phải xác thực. Từ đầu năm hai nghìn không trăm hai mươi lăm, quy tắc này nằm trong Thông tư năm mươi năm hai nghìn không trăm hai mươi tư.
-           Theo thông tư ấy, tổng cộng dồn được tính lại từ không sau mỗi lần đã xác thực sinh trắc học. Làm thử, mười lăm triệu thì cần, năm triệu khi ngày chưa có giao dịch nào thì không."""),
+           """Bước ba nói về quy tắc xác thực sinh trắc học. Theo Thông tư năm mươi năm hai nghìn không trăm hai mươi tư, chuyển tiền trực tuyến của cá nhân phải xác thực sinh trắc học khi một giao dịch trên mười triệu đồng. Thông tư ấy được sửa đổi bởi Thông tư bảy mươi bảy năm hai nghìn không trăm hai mươi lăm. Bản sửa đổi có hiệu lực từ ngày một tháng ba năm hai nghìn không trăm hai mươi sáu.
+           Khi tổng trong ngày vượt hai mươi triệu đồng cũng phải xác thực. Theo thông tư ấy, tổng cộng dồn được tính lại từ không sau mỗi lần đã xác thực sinh trắc học. Làm thử, mười lăm triệu thì cần, năm triệu khi ngày chưa có giao dịch nào thì không."""),
     ], checks=["alg.bnk_pin_block0('1234', '4111111111111111') == '041225EEEEEEEEEE'", "alg.bnk_mac('k', 'amt=500000') != alg.bnk_mac('k', 'amt=900000')",
                NEED + "(15000000, 0) and not " + NEED + "(5000000, 0)"])
     ex = sc("example", "example", "Ví dụ bằng số, từng phép tính", [
@@ -151,8 +184,67 @@ $$\\hl{\\text{giao dịch thứ 3}}$$""",
         st("""<div class='box key'><b>Tư duy:</b> giả định kẻ xấu đứng ở <b>mọi chỗ ở giữa</b>, kể cả trong nhật ký và trong ứng dụng. Mỗi lớp bảo vệ phải đứng được một mình.</div>""",
            """Điều cần mang theo. Hãy giả định kẻ xấu đứng ở mọi chỗ ở giữa, kể cả trong nhật ký và trong ứng dụng. Mỗi lớp bảo vệ phải đứng được một mình."""),
     ])
+    # ── AF2: P1 Python tối thiểu, mã chạy thật (khối PIN, che số thẻ, MAC), quy mô HSM, tự làm ──
+    add_steps([pre], "prereq", [
+        st(table(["thêm ba điều để đọc mã", "nghĩa", "ví dụ"],
+                 [["⑦ Cắt chuỗi từ cuối", "<code>s[-4:]</code> là 4 ký tự cuối; <code>s[:6]</code> là 6 ký tự đầu; <code>s[-13:-1]</code> là 12 ký tự trước ký tự cuối", "<code>\"41111\"[-2:]</code> = <code>\"11\"</code>"],
+                  ["⑧ XOR từng cặp", "<code>int(x, 16)</code> đọc chữ số hex; <code>^</code> là XOR; <code>\"%X\" % n</code> viết lại bằng chữ số hex; <code>zip(a, b)</code> ghép cặp từng vị trí", "<code>\"%X\" % (0x4 ^ 0x1)</code> = <code>\"5\"</code>"],
+                  ["⑨ MAC bằng thư viện chuẩn", "<code>hmac.new(khoá, nội_dung, hashlib.sha256).hexdigest()</code> cho dãy chữ số hex; ta lấy 16 ký tự đầu", "khoá thử <code>b\"k\"</code>"]]),
+           """Thêm ba điều để đọc mã bằng một ngôn ngữ lập trình khác. Cắt chuỗi từ cuối cho phép lấy mấy ký tự cuối, hoặc mấy ký tự đầu. Phép XOR từng cặp đọc từng chữ số thập lục phân, XOR chúng, rồi viết lại, ghép cặp theo từng vị trí.
+           Cuối cùng, mã xác thực bản tin có sẵn trong thư viện chuẩn, cho ra một dãy chữ số thập lục phân, và ta lấy mười sáu ký tự đầu.""", clear=True),
+    ], at=1)
+    pre["title"] = "Trước hết: chín điều cần hiểu"
+    run = sc("chay_that", "example", "Chạy thật: khối PIN, che số thẻ và MAC bằng chương trình ngắn", [
+        st(code_block(pin_block, title="Tính khối PIN định dạng 0 từ PIN thử và số thẻ thử"),
+           """Ta tính khối PIN bằng chương trình ngắn, với dữ liệu thử. Biến thứ nhất là PIN đã đệm thành không bốn một hai ba bốn rồi các chữ F. Biến thứ hai là mười hai số cuối của thẻ, bỏ số kiểm cuối, đệm bốn số không phía trước.
+           Dòng bốn đọc từng cặp chữ số hex của hai dãy, XOR chúng, và viết lại."""),
+        st(out_block(pin_block),
+           """Khi chạy thật, khối PIN là không bốn một hai hai năm rồi các chữ E, đúng như phép tính tay. Bên nào có khoá và số thẻ thì XOR lại để lấy PIN. Người không có thì chỉ thấy dãy này.""", clear=True),
+        st(code_block(che_mac, title="Che số thẻ và tính MAC của hai bản tin chỉ khác số tiền") + out_block(che_mac),
+           """Đoạn này che số thẻ, giữ sáu số đầu và bốn số cuối. Rồi nó tính mã xác thực bản tin của hai nội dung chỉ khác số tiền, và so sánh.
+           Khi chạy thật, số thẻ hiện bốn một một một một một, sáu dấu sao, một một một một. Hai mã xác thực khác hẳn nhau, nên so sánh cho kết quả sai, và bên nhận phát hiện ra bản tin bị sửa.""", clear=True),
+    ])
+    scale = sc("quy_mo", "example", "Quy mô: mỗi giao dịch cần phép tính khoá, thiết bị HSM phải nhân lên", [
+        st("""<p>Mỗi giao dịch cần $2$ thao tác với khoá bí mật (dịch khối PIN và tính MAC). Giả sử một thiết bị HSM làm $1\\,000$ thao tác mỗi giây <i>(số minh hoạ)</i>:</p>"""
+           + table(["tải", "giao dịch mỗi giây", "thao tác khoá mỗi giây", "HSM tối thiểu"],
+                   [["×1", "100", "200", "1"],
+                    ["×100", "10 000", "20 000", "<b>20</b>"],
+                    ["×10 000", "1 000 000", "2 000 000", "<b>2 000</b>"]]),
+           """Mỗi giao dịch cần hai thao tác với khoá bí mật, là dịch khối PIN và tính mã xác thực bản tin. Giả sử một thiết bị giữ khoá làm một nghìn thao tác mỗi giây. Đây là số minh hoạ.
+           Với một trăm giao dịch mỗi giây cần hai trăm thao tác, một thiết bị là đủ. Tải tăng một trăm lần cần hai mươi thiết bị. Tải tăng mười nghìn lần cần hai nghìn thiết bị.""", clear=True),
+        st("""<div class="box warn"><b>Giải pháp cũ gãy ở đâu.</b> Mọi thao tác khoá đều đi qua HSM: ở ×1 một thiết bị là đủ; ở ×10 000 phải mua và vận hành 2 000 thiết bị, và mỗi thiết bị là một điểm cần bảo vệ, sao lưu, đổi khoá.</div>
+<div class="box key"><b>Đánh đổi:</b> chỉ để khoá gốc và khâu dịch khối PIN trong HSM; MAC bản tin có thể dùng khoá phiên ngắn hạn sinh từ khoá gốc rồi tính ở máy thường (đúng cách làm tuỳ chuẩn của từng mạng); gom lô để giảm vòng đi về. Mỗi cách giảm tải cho HSM cũng mở thêm một chỗ phải bảo vệ khoá.</div>""",
+           """Câu hỏi là giải pháp cũ sẽ gãy ở chỗ nào khi tải tăng lên. Mọi thao tác khoá đều đi qua thiết bị giữ khoá. Ở tải gốc một thiết bị là đủ, nhưng ở tải gấp mười nghìn lần phải mua và vận hành hai nghìn thiết bị, và mỗi thiết bị là một điểm cần bảo vệ, sao lưu, đổi khoá.
+           Đánh đổi là chỉ để khoá gốc và khâu dịch khối PIN trong thiết bị. Còn mã xác thực bản tin có thể dùng khoá phiên ngắn hạn, sinh từ khoá gốc, rồi tính ở máy thường, tuỳ chuẩn của từng mạng. Gom lô để giảm vòng đi về. Mỗi cách giảm tải cho thiết bị cũng mở thêm một chỗ phải bảo vệ khoá.""", clear=True),
+    ], checks=["100 * 2 == 200", "10_000 * 2 == 20_000", "1_000_000 * 2 == 2_000_000", "-(-200 // 1000) == 1", "-(-20_000 // 1000) == 20",
+               "-(-2_000_000 // 1000) == 2000"])
+    write_lab("BNK", "L13", """# Lab BNK L13 — Phép kiểm Luhn cho số thẻ thử
+
+Phép kiểm Luhn: đi từ **phải sang trái**, chữ số ở vị trí 0 (cuối) giữ nguyên, chữ số ở vị trí 1, 3, 5, … **nhân đôi** (kết quả quá 9 thì trừ 9); cộng tất cả; **tổng chia hết cho 10** thì hợp lệ.
+
+Viết chương trình `luhn_lab.py` (Python):
+1. Hàm `luhn(so)` trả `True` hoặc `False` theo phép kiểm trên.
+2. Với thẻ thử `the = "5500005555555559"`: in `luhn(the)`, rồi in `luhn` của số đó khi đổi chữ số cuối thành `8`, rồi in số thẻ đã che (giữ 6 số đầu, 4 số cuối, 6 dấu `*` ở giữa).
+
+Kết quả đúng ba dòng: `True`, `False`, `550000******5559`. Chạy: `python luhn_lab.py`. Chấm: `bash labs/cham.sh BNK L13 luhn_lab.py`.
+""", "py", lab_lu["code"], lab_lu["out"])
+    lab = practice_scene(sc, "Tự làm: phép kiểm Luhn và che số thẻ", practice_steps(
+        st, "BNK", "L13",
+        """<p><b>Đề</b>: Luhn: từ phải sang, nhân đôi chữ số ở vị trí 1, 3, 5, … (quá 9 thì trừ 9), cộng hết, chia hết cho 10 là hợp lệ. Viết <code>luhn_lab.py</code>:</p>
+<ol><li>hàm <code>luhn(so)</code> trả <code>True</code>/<code>False</code></li>
+<li>thẻ thử <code>5500005555555559</code>: in <code>luhn</code> của nó; in <code>luhn</code> khi đổi chữ số cuối thành 8; in số thẻ đã che</li></ol>""",
+        """Bây giờ tới phần bạn tự làm. Phép kiểm số kiểm cuối đi từ phải sang trái, nhân đôi chữ số ở vị trí một, ba, năm, và cứ thế, quá chín thì trừ chín, rồi cộng tất cả. Tổng chia hết cho mười thì số thẻ hợp lệ.
+        Hãy viết hàm kiểm này, thử với số thẻ thử, thử lại khi đổi chữ số cuối thành tám, và in số thẻ đã che. Hãy dừng video, tự viết và chạy, đừng chép lại ví dụ.""",
+        lab_lu["out"], "luhn_lab.py",
+        """<div class="box key"><b>Nếu kẹt:</b> duyệt <code>for i, c in enumerate(reversed(so))</code> (<code>enumerate</code> đánh số vị trí từ 0); nếu <code>i % 2 == 1</code> thì nhân đôi, quá 9 thì trừ 9; cộng dồn; trả <code>tong % 10 == 0</code>.
+Lời giải ở <code>labs/BNK/L13/loi_giai.py</code> — chỉ mở sau khi bạn đã thử.</div>""",
+        """Nếu kẹt, duyệt các chữ số từ phải sang kèm vị trí. Vị trí lẻ thì nhân đôi, nếu quá chín thì trừ chín. Cộng dồn, rồi trả về việc tổng có chia hết cho mười không. Lời giải đầy đủ nằm trong thư mục thực hành của bài, chỉ mở sau khi bạn đã tự thử.""", pause=180), "BNK", "L13")
     return lesson("L13", "bao_mat_thanh_toan_pin_hsm", "Bài 13 — Bảo mật thanh toán: khối PIN, HSM, MAC và sinh trắc học",
-                  "curriculum/bnk.yaml L13; audit/bnk/verify_bnk.py L13; ISO 9564-1 (khối PIN định dạng 0); Quyết định 2345/QĐ-NHNN (CITED qua tìm kiếm web 2026-11-07, luatvietnam.vn và tapchicongthuong.vn, no revision given; ngưỡng 'trên 10 triệu/giao dịch' và 'tổng ngày vượt 20 triệu', ký 18/12/2023, hiệu lực 01/07/2024 — theo rà soát 2026-11-08, chưa đối chiếu bản PDF gốc); PCI DSS v4.0.1 Req. 3.3.1.2 (không lưu PIN / khối PIN sau cấp phép) và 3.4.1 (che PAN khi hiển thị); ISO/IEC 7812-1 (số kiểm Luhn); Thales payShield Host Command Reference (dịch khối PIN TPK/ZPK→ZPK; khoá bọc bằng ZMK/LMK); dữ liệu thẻ và PIN trong bài là dữ liệu thử",
+                  "curriculum/bnk.yaml L13; audit/bnk/verify_bnk.py L13; audit/review/screen_code/BNK.yaml (mã chạy thật bằng Python 3.13: khối PIN, che số thẻ, HMAC-SHA256, Luhn); ISO 9564-1 (khối PIN định dạng 0); Thông tư 50/2024/TT-NHNN về an toàn hệ thống thanh toán, sinh trắc học (Phụ lục 01; audit/legal/registry.yaml: đã đọc bản gốc Công báo 1279+1280, 30-11-2024), SỬA ĐỔI bởi Thông tư 77/2025/TT-NHNN hiệu lực 01/3/2026 (bản hợp nhất 25/VBHN-NHNN); ngưỡng cá nhân 'trên 10 triệu/giao dịch' và 'tổng ngày vượt 20 triệu'; PCI DSS v4.0.1 Req. 3.3.1.2 (không lưu PIN / khối PIN sau cấp phép) và 3.4.1 (che PAN khi hiển thị); ISO/IEC 7812-1 (số kiểm Luhn); Thales payShield Host Command Reference (dịch khối PIN TPK/ZPK→ZPK; khoá bọc bằng ZMK/LMK); dữ liệu thẻ, PIN và khoá trong bài là dữ liệu thử; thông lượng HSM trong bảng quy mô là số minh hoạ",
                   ["Tính khối PIN định dạng 0 từ PIN thử và số thẻ thử", "Giải thích vì sao sửa bản tin làm MAC không khớp",
-                   "Áp quy tắc sinh trắc học theo giao dịch và cộng dồn trong ngày", "Che số thẻ và không ghi PIN vào nhật ký"],
-                  [hook, pre, sym, intu, form, ex, chk, pit, quiz, rec])
+                   "Áp quy tắc sinh trắc học theo giao dịch và cộng dồn trong ngày", "Che số thẻ và không ghi PIN vào nhật ký",
+                   "Chạy chương trình tính khối PIN, che số thẻ và MAC để thấy kết quả thật",
+                   "Tính số thiết bị HSM tối thiểu khi tải tăng ×100, ×10 000",
+                   "Viết hàm kiểm Luhn và hàm che số thẻ"],
+                  [hook, pre, sym, intu, form, ex, run, chk, pit, quiz, scale, lab, rec],
+                  covers=[(1, "example"), (2, "formula"), (3, "formula"), (4, "check"), (5, "chay_that"), (6, "quy_mo"), (7, "practice")])

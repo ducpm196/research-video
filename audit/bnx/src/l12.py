@@ -101,15 +101,18 @@ def build():
                  [["Nghị định 52/2024/NĐ-CP (hiệu lực 01/7/2024)", "tổng số dư tài khoản đảm bảo thanh toán <b>không thấp hơn</b> tổng số dư các ví đã phát hành; chỉ cho dùng ví có liên kết tài khoản thanh toán hoặc thẻ ghi nợ của chính khách"],
                   ["Thông tư 40/2024/TT-NHNN", f"tổng giao dịch qua các ví cá nhân của một khách tại một tổ chức tối đa 100 triệu đồng/tháng {NOTE_TT40} <span class='note'>(tính chuyển tiền và thanh toán; không tính rút về tài khoản liên kết của chính mình)</span>"],
                   ["Thông tư 41/2025/TT-NHNN (hiệu lực 05/11/2025)", "cho phép <b>thêm</b> một hạn mức riêng, không quá 300 triệu đồng/tháng, cho <b>một số</b> khoản thanh toán thiết yếu (dịch vụ công, điện, nước, học phí, viện phí…)"],
-                  ["Thông tư 19/2021/TT-BTC", "nộp thuế điện tử: mã định danh khoản phải nộp; ngân hàng tạo số tham chiếu, chuyển cùng số tiền sang ngân hàng nơi Kho bạc mở tài khoản"],
-                  ["Luật Quản lý thuế 38/2019/QH14, Điều 58", "nộp không bằng tiền mặt: ngày đã nộp thuế là ngày ngân hàng trích tiền từ tài khoản người nộp và được ghi nhận trên chứng từ nộp tiền thuế"]]),
+                  ], ),
            """Năm văn bản này là căn cứ của bài. Nghị định năm mươi hai năm hai nghìn không trăm hai mươi tư nói tổng số dư tài khoản đảm bảo không thấp hơn tổng số dư các ví. Nghị định này cũng chỉ cho dùng ví có liên kết tài khoản của chính khách.
            Theo Thông tư bốn mươi năm hai nghìn không trăm hai mươi tư, tổng giao dịch qua các ví cá nhân của một khách tại một tổ chức tối đa một trăm triệu đồng một tháng.
-           Hạn mức này tính chuyển tiền và thanh toán, không tính tiền rút về tài khoản liên kết của chính mình. Thông tư bốn mươi mốt năm hai nghìn không trăm hai mươi lăm cho phép thêm một hạn mức riêng, không quá ba trăm triệu, cho một số khoản thanh toán thiết yếu.
-           Thông tư mười chín năm hai nghìn không trăm hai mươi mốt quy định cách nộp thuế điện tử, có mã định danh khoản phải nộp và số tham chiếu.
-           Luật Quản lý thuế năm hai nghìn không trăm mười chín, Điều năm mươi tám, quy định ngày đã nộp thuế khi nộp không bằng tiền mặt.
-           Đó là ngày ngân hàng trích tiền từ tài khoản người nộp và được ghi trên chứng từ nộp tiền thuế.""",
-           focus=[0, "1.2", "1.2", "1.3", "1.3", "1.4", "1.5", "1.6", "1.6"], clear=True),
+           Hạn mức này tính chuyển tiền và thanh toán, không tính tiền rút về tài khoản liên kết của chính mình. Thông tư bốn mươi mốt năm hai nghìn không trăm hai mươi lăm cho phép thêm một hạn mức riêng, không quá ba trăm triệu, cho một số khoản thanh toán thiết yếu.""",
+           focus=[0, "1.2", "1.2", "1.3", "1.3", "1.4"], clear=True),
+        st(table(["văn bản", "điều bài dùng"],
+                 [["Thông tư 19/2021/TT-BTC <span class='note'>(đã sửa đổi, cần kiểm lại)</span>", "nộp thuế điện tử: mã định danh khoản phải nộp; ngân hàng tạo số tham chiếu, chuyển cùng số tiền sang ngân hàng nơi Kho bạc mở tài khoản"],
+                  ["Luật Quản lý thuế 108/2025/QH15, Điều 14 <span class='note'>(thay luật cũ)</span>", "nộp điện tử: ngày nộp thuế là ngày ngân hàng trích tiền từ tài khoản người nộp, ghi trên chứng từ nộp tiền thuế"]]),
+           """Thông tư mười chín năm hai nghìn không trăm hai mươi mốt quy định cách nộp thuế điện tử, có mã định danh khoản phải nộp và số tham chiếu.
+           Luật Quản lý thuế năm hai nghìn không trăm hai mươi lăm, Điều mười bốn khoản năm, thay luật cũ từ ngày một tháng bảy năm hai nghìn không trăm hai mươi sáu.
+           Theo đó, khi nộp điện tử, ngày nộp thuế là ngày ngân hàng trích tiền từ tài khoản người nộp và được ghi trên chứng từ nộp tiền thuế.""",
+           focus=["1.2", "1.3", "1.3"], clear=True),
     ], checks=["[x[1] for x in alg.bnx_monthly_limit([100_000_000, 1], 100_000_000)] == [True, False]",
                "[x[1] for x in alg.bnx_monthly_limit([100_000_000, 1], 300_000_000)] == [True, True]",
                "300_000_000 // 100_000_000 == 3"])
@@ -140,7 +143,7 @@ def build():
                txt(905, 130, "tiền + số tham chiếu", 20, "middle", "#475569"),
                arrow(1070, 300, 760, 300, "#dc2626", dash=True),
                txt(915, 345, "đối soát theo số tham chiếu", 22, "middle", "#dc2626", True),
-               txt(750, 410, "Ngày đã nộp thuế = ngày ngân hàng trích tiền, ghi trên chứng từ (Luật Quản lý thuế, Điều 58)", 22, "middle", "#1f2937", True),
+               txt(750, 410, "Ngày đã nộp thuế = ngày ngân hàng trích tiền, ghi trên chứng từ (Luật Quản lý thuế 2025, Điều 14)", 22, "middle", "#1f2937", True),
                txt(750, 448, "Chứng từ chưa sang phía Kho bạc thì ngân hàng CHƯA xong việc: phải tra soát, xử lý", 22, "middle", "#dc2626", True)),
            """Hình thứ hai là luồng nộp thuế điện tử. Người nộp chọn khoản phải nộp trên cổng thuế, mỗi khoản có một mã định danh.
            Ngân hàng trích nợ tài khoản của người nộp và tạo số tham chiếu cho chứng từ. Rồi ngân hàng chuyển số tiền cùng số tham chiếu sang ngân hàng nơi Kho bạc mở tài khoản.
@@ -287,7 +290,7 @@ $$2\\,000\\,000 + 1\\,000\\,000 = 3\\,000\\,000 \\;>\\; 2\\,000\\,000 \\;\\Right
     return lesson("L12", "vi_dien_tu_thue_dien_tu", "Bài 12 — Ví điện tử và nộp thuế điện tử: tiền thật nằm ở đâu, bút toán và đối soát",
                   "curriculum/bnx.yaml L12; audit/bnx/verify_bnx.py L12; audit/bnx/sources.md [ND52] Nghị định 52/2024/NĐ-CP (15/5/2024, hiệu lực 01/7/2024), "
                   "[TT40] Thông tư 40/2024/TT-NHNN (nguồn thứ cấp, chưa đọc nguyên văn: ghi kiểm lại trên màn hình), [TT41] Thông tư 41/2025/TT-NHNN (05/11/2025), "
-                  "[TT19] Thông tư 19/2021/TT-BTC, [LQLT58] Luật Quản lý thuế 38/2019/QH14 Điều 58 (ngày đã nộp thuế); số tiền, nhãn R1–R3 là minh hoạ; cấu trúc số tham chiếu không dạy (nguồn không nêu)",
+                  "[TT19] Thông tư 19/2021/TT-BTC (đã sửa đổi bởi 46/2024/TT-BTC, cần kiểm lại văn bản hiện hành từ 01/7/2026), [LQLT14] Luật Quản lý thuế 108/2025/QH15 Điều 14 khoản 5 (ngày nộp thuế; thay Luật 38/2019/QH14 Điều 58 hết hiệu lực 30/6/2026; nguồn toàn văn thứ cấp expertis.vn đọc 2026-11-12, chưa mở bản Công báo); số tiền, nhãn R1–R3 là minh hoạ; cấu trúc số tham chiếu không dạy (nguồn không nêu)",
                   ["Ghi bút toán nạp, rút, chuyển giữa ví và tài khoản ngân hàng", "Kiểm bất biến: tài khoản đảm bảo thanh toán không thấp hơn tổng số dư ví",
                    "Kiểm hạn mức giao dịch ví theo tháng", "Mô tả luồng nộp thuế điện tử qua ngân hàng và đối soát theo số tham chiếu"],
                   [hook, pre, sym, intu, form, ex, chk, pit, quiz, rec])

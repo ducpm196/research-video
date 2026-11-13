@@ -73,6 +73,15 @@ blocks:
       - "bước 3: r1 = 55; số lệnh đã chạy = 3 + 10 × 3 = 33"
     unverified_claims:
       - "bước 3: “tập lệnh tách so sánh và nhảy thành hai lệnh (như x86) sẽ tốn 4 lệnh mỗi vòng” — không có máy x86 ảo để chạy; đọc theo hiểu biết (cmp + jle), chưa đối chiếu Intel SDM trong phiên"
+  "CSA L07 loadstore 1 0":
+    sha: 4aff68d0faf7297f
+    kind: other
+    lang: asm
+    reason: "hợp ngữ của máy ảo nhỏ trong bài, sáu lệnh vòng lặp như example 0 0 cộng ba lệnh li/sw/lw ở cuối; ngữ nghĩa kiểm bằng src:CSA:L07_ldst (đọc NGUYÊN VĂN khối qua files rồi chạy)"
+    read_check: "Đã đọc: sw rs, độ_dời(rb) lưu thanh ghi rs vào ô nhớ rb + độ_dời; lw rd, độ_dời(rb) nạp ô nhớ vào rd — cách viết RISC-V (The RISC-V Instruction Set Manual Vol. I Unprivileged ISA, bản 20191213, chưa mở lại trong phiên này); tên thanh ghi r1–r5 là của máy ảo trong bài. Chạy thật: src:CSA:L07_ldst."
+    claims:
+      - "ghi chú: r5 = 55; số lệnh đã chạy = 33 + 3 = 36"
+      - "lời đọc: lệnh lưu chép r1 (đang bằng 55) vào ô nhớ có địa chỉ r4 + 0; lệnh nạp chép ô nhớ đó sang r5"
   "CSA L09 prereq 0 0":
     sha: 4d90c9906566f76e
     kind: other
@@ -215,6 +224,52 @@ sources:
       assert reg["r1"] == 55 and count == 33 == 3 + 10 * 3
       print(reg["r1"], count)
     expect_stdout: "55 33"
+  L07_ldst:
+    lang: python
+    reason: "máy ảo nhỏ đọc NGUYÊN VĂN khối CSA L07 loadstore 1 0 (prog.s): li, add, addi, ble như L07_vm, thêm sw rs, k(rb) (ô nhớ[rb + k] = rs) và lw rd, k(rb) (rd = ô nhớ[rb + k])"
+    files: {prog.s: "CSA L07 loadstore 1 0"}
+    code: |
+      import re
+      prog, labels = [], {}
+      for raw in open("prog.s", encoding="utf-8").read().split("\n"):
+          line = raw.split("#")[0].strip()
+          if not line:
+              continue
+          m = re.match(r"^(\w+):\s*(.*)$", line)
+          if m:
+              labels[m.group(1)] = len(prog)
+              line = m.group(2)
+          op, rest = line.split(None, 1)
+          prog.append((op, [a.strip() for a in rest.split(",")]))
+      reg, mem, pc, count = {}, {}, 0, 0
+      val = lambda a: reg.get(a, 0) if a.startswith("r") else int(a)
+      def addr(a):
+          k, b = re.match(r"^(-?\d+)\((r\d+)\)$", a).groups()
+          return reg[b] + int(k)
+      while pc < len(prog):
+          op, a = prog[pc]
+          count += 1
+          pc += 1
+          if op == "li":
+              reg[a[0]] = int(a[1])
+          elif op == "add":
+              reg[a[0]] = val(a[1]) + val(a[2])
+          elif op == "addi":
+              reg[a[0]] = val(a[1]) + int(a[2])
+          elif op == "ble":
+              if val(a[0]) <= val(a[1]):
+                  pc = labels[a[2]]
+          elif op == "sw":
+              mem[addr(a[1])] = reg[a[0]]
+          elif op == "lw":
+              reg[a[0]] = mem[addr(a[1])]
+          else:
+              raise SystemExit("lệnh lạ " + op)
+      assert [op for op, _ in prog][-3:] == ["li", "sw", "lw"] and len(prog) == 9
+      assert mem == {100: 55} and reg["r1"] == 55 and reg["r4"] == 100 and reg["r5"] == 55
+      assert count == 36 == 33 + 3
+      print(reg["r5"], count)
+    expect_stdout: "55 36"
   L09_pipe:
     lang: python
     reason: "đọc NGUYÊN VĂN hai khối CSA L09 (files), chạy ngữ nghĩa lw/add trên thanh ghi + bộ nhớ nhỏ, và tính thời gian theo mô hình đường ống 5 tầng IF ID EX MEM WB mà bài nêu (lệnh k vào IF ở chu kỳ k + 1; có chuyển tiếp: kết quả lw dùng được ở EX sau MEM; không chuyển tiếp: ID của lệnh dùng ≥ WB của lệnh ghi, vì ghi nửa đầu/đọc nửa sau chu kỳ)"

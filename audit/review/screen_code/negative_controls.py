@@ -9,6 +9,14 @@ sys.stdout.reconfigure(encoding="utf-8")
 import screen_code as sc  # noqa: E402
 
 TA = "class TaiKhoan:\n    def __init__(self, so_du=0):\n        self._so_du = so_du\n    def rut(self, x):\n        self._so_du -= x"
+SESS = {"_source": True, "lang": "bash", "profile": "fnd", "session": [{"cmd": "echo hi", "out": "hi"}]}
+SESS2 = {"_source": True, "lang": "bash", "profile": "fnd",
+         "session": [{"cmd": "echo aa", "out": "aa"}, {"cmd": "echo bb", "out": "bb"}]}
+SESS3 = {"_source": True, "lang": "bash", "profile": "fnd", "fs": {"a.txt": "dong 1\ndong 2\ndong 3\n"},
+         "session": [{"cmd": "cat a.txt | wc -l", "out": "3"}]}
+JARGS = {"_source": True, "lang": "java", "java_class": "Main", "args": "rut 250000", "stdin": "7\n",
+         "code": "public class Main { public static void main(String[] a) { "
+                 "System.out.println(a[0] + \" \" + a[1] + \" n=\" + new java.util.Scanner(System.in).nextInt()); } }"}
 CASES = [
     # (tên, {khoá: văn bản}, {khoá: mục (không cần sha — tự điền)}, khoá cần xét, kết luận mong đợi)
     ("python cú pháp: class một dòng (SDP L04 cũ)", {"K": "class CaPhe:   def gia(self): return 30"},
@@ -74,14 +82,52 @@ CASES = [
      {"K": dict(kind="run", lang="java", expect_compile_error="';' expected")}, "K", True),
     ("java chạy ra khác bài nói", {"K": "public class Main { public static void main(String[] a) { System.out.println(7 / 2); } }"},
      {"K": dict(kind="run", lang="java", expect_stdout="3.5")}, "K", False),
+    # ── phiên dòng lệnh (FND/JV2): nguồn `session` chạy Git Bash THẬT, khối terminal là fragment within phiên ──
+    ("phiên: đầu ra khớp (dương)", {}, {"src:T:s": SESS}, "src:T:s", True),
+    ("phiên: màn hình ghi sai đầu ra", {},
+     {"src:T:s": dict(SESS, session=[{"cmd": "echo hi", "out": "ho"}])}, "src:T:s", False),
+    ("phiên: tệp dựng sẵn được đọc thật (dương)", {},
+     {"src:T:s": dict(SESS, fs={"a.txt": "xin chao\n"}, session=[{"cmd": "cat a.txt", "out": "xin chao"}])}, "src:T:s", True),
+    ("phiên: cd được giữ giữa các bước (dương)", {},
+     {"src:T:s": dict(SESS, fs={"d/a.txt": "x\n"}, session=[{"cmd": "cd d", "out": ""}, {"cmd": "pwd", "out": "/c/Users/ban/d"}])},
+     "src:T:s", True),
+    ("phiên: khối terminal là dãy liên tiếp của phiên (dương)", {"F": "$ echo bb\nbb"},
+     {"F": dict(kind="fragment", within="src:T:s2", reason="r"), "src:T:s2": SESS2}, "F", True),
+    ("phiên: khối terminal có đầu ra khác phiên thật", {"F": "$ echo bb\nbc"},
+     {"F": dict(kind="fragment", within="src:T:s2", reason="r"), "src:T:s2": SESS2}, "F", False),
+    ("phiên: khối terminal đảo thứ tự lệnh", {"F": "$ echo bb\nbb\n$ echo aa\naa"},
+     {"F": dict(kind="fragment", within="src:T:s2", reason="r"), "src:T:s2": SESS2}, "F", False),
+    ("phiên: khối chỉ-lệnh (ẩn đầu ra) đúng thứ tự (dương)", {"F": "$ echo aa\n$ echo bb"},
+     {"F": dict(kind="fragment", within="src:T:s2", cmds_only=True, reason="r"), "src:T:s2": SESS2}, "F", True),
+    ("phiên: khối chỉ-lệnh sai thứ tự", {"F": "$ echo bb\n$ echo aa"},
+     {"F": dict(kind="fragment", within="src:T:s2", cmds_only=True, reason="r"), "src:T:s2": SESS2}, "F", False),
+    ("phiên: khối chỉ-lệnh nhưng khai không cmds_only (đầu ra chen giữa)", {"F": "$ echo aa\n$ echo bb"},
+     {"F": dict(kind="fragment", within="src:T:s2", reason="r"), "src:T:s2": SESS2}, "F", False),
+    ("phiên: khối là nội dung tệp dựng sẵn (dương)", {"F": "dong 2\ndong 3"},
+     {"F": dict(kind="fragment", within="src:T:s3#a.txt", reason="r"), "src:T:s3": SESS3}, "F", True),
+    ("phiên: khối khác nội dung tệp dựng sẵn", {"F": "dong 2\ndong 9"},
+     {"F": dict(kind="fragment", within="src:T:s3#a.txt", reason="r"), "src:T:s3": SESS3}, "F", False),
+    ("phiên: tệp không có trong fs", {"F": "x"},
+     {"F": dict(kind="fragment", within="src:T:s3#khong_co.txt", reason="r"), "src:T:s3": SESS3}, "F", False),
+    ("phiên: output of phiên, dòng sai", {"O": "aa\nzz"},
+     {"O": dict(kind="output", of="src:T:s2", reason="r"), "src:T:s2": SESS2}, "O", False),
+    ("phiên: output of phiên (dương)", {"O": "aa\nbb"},
+     {"O": dict(kind="output", of="src:T:s2", reason="r"), "src:T:s2": SESS2}, "O", True),
+    ("phiên: retries không che lỗi thật (sai cả lần thử)", {},
+     {"src:T:s": dict(SESS, session=[{"cmd": "echo hi", "out": "ho"}], retries=3)}, "src:T:s", False),
+    ("phiên: retries cho bước không tất định (dương, xác suất lọt 2^-40)", {},
+     {"src:T:s": dict(SESS, session=[{"cmd": "echo $((RANDOM % 2))", "out": "0"}], retries=40)}, "src:T:s", True),
+    ("java args + stdin được truyền thật (dương)", {},
+     {"src:T:j": dict(JARGS, expect_stdout="rut 250000 n=7")}, "src:T:j", True),
+    ("java args sai kết quả", {},
+     {"src:T:j": dict(JARGS, expect_stdout="rut 1 n=7")}, "src:T:j", False),
 ]
-
-
 def main():
     bad = 0
     for name, blocks, reg, key, want in CASES:
         for k, e in reg.items():
-            e["sha"] = sc.digest(blocks[k])
+            if k in blocks:
+                e["sha"] = sc.digest(blocks[k])
         ok, msg, _, _ = sc.Gate(blocks, reg).check(key)
         # ca âm chỉ tính ĐÚNG khi FAIL vì lỗi thật, không vì môi trường thiếu công cụ (NOT_VERIFIED)
         good = ok == want and not msg.startswith("NOT_VERIFIED")

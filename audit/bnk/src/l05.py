@@ -1,7 +1,76 @@
 from lib import *
+from labkit import write_lab, practice_steps, practice_scene
 
 
 def build():
+    ora = prog("KhoaTheoThuTu", """
+SET HEADING OFF
+SET PAGESIZE 0
+BEGIN EXECUTE IMMEDIATE 'DROP TABLE bnk_tk'; EXCEPTION WHEN OTHERS THEN NULL; END;
+/
+CREATE TABLE bnk_tk (id NUMBER PRIMARY KEY, so_du NUMBER);
+INSERT INTO bnk_tk VALUES (2, 1000000);
+INSERT INTO bnk_tk VALUES (5, 500000);
+COMMIT;
+DECLARE
+  v_nho NUMBER;
+  v_lon NUMBER;
+BEGIN
+  SELECT so_du INTO v_nho FROM bnk_tk WHERE id = 2 FOR UPDATE;   -- khoá id nhỏ trước
+  SELECT so_du INTO v_lon FROM bnk_tk WHERE id = 5 FOR UPDATE;   -- rồi mới tới id lớn
+  UPDATE bnk_tk SET so_du = so_du - 300000 WHERE id = 2;
+  UPDATE bnk_tk SET so_du = so_du + 300000 WHERE id = 5;
+  COMMIT;
+  DBMS_OUTPUT.PUT_LINE('xong, tong truoc = ' || (v_nho + v_lon));
+END;
+/
+SELECT id || ' ' || so_du FROM bnk_tk ORDER BY id;""", out="""xong, tong truoc = 1500000
+2 700000
+5 800000""", lang="oracle")
+    be_tac = prog("BeTac", """
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+public class BeTac {
+    static boolean lam(Lock dau, Lock sau) {
+        dau.lock();                                   // khoá hàng thứ nhất
+        try {
+            Thread.sleep(200);                        // để luồng kia kịp khoá hàng của nó
+            boolean duoc = sau.tryLock(500, TimeUnit.MILLISECONDS);   // xin hàng thứ hai, chờ tối đa 0,5 giây
+            if (duoc) sau.unlock();
+            return duoc;
+        } catch (InterruptedException e) {
+            return false;
+        } finally { dau.unlock(); }
+    }
+    static String thu(Lock x1, Lock y1, Lock x2, Lock y2) throws Exception {
+        boolean[] ok = new boolean[2];
+        Thread t1 = new Thread(() -> ok[0] = lam(x1, y1));
+        Thread t2 = new Thread(() -> ok[1] = lam(x2, y2));
+        t1.start(); t2.start(); t1.join(); t2.join();
+        return ok[0] && ok[1] ? "xong" : "be tac";
+    }
+    public static void main(String[] args) throws Exception {
+        Lock a = new ReentrantLock(), b = new ReentrantLock();
+        System.out.println("A roi B  va  B roi A: " + thu(a, b, b, a));
+        System.out.println("A roi B  va  A roi B: " + thu(a, b, a, b));
+    }
+}""", out="""A roi B  va  B roi A: be tac
+A roi B  va  A roi B: xong""")
+    lab_tk = prog("ThuTuKhoa", """
+public class ThuTuKhoa {
+    public static void main(String[] args) {
+        int[][] lenh = { {4, 9}, {9, 4}, {7, 4}, {4, 7} };
+        for (int[] l : lenh) {
+            int dau = Math.min(l[0], l[1]);
+            int sau = Math.max(l[0], l[1]);
+            System.out.println(l[0] + " -> " + l[1] + ": khoa " + dau + " roi " + sau);
+        }
+    }
+}""", out="""4 -> 9: khoa 4 roi 9
+9 -> 4: khoa 4 roi 9
+7 -> 4: khoa 4 roi 7
+4 -> 7: khoa 4 roi 7""")
     hook = sc("hook", "hook", "Vì sao hai lệnh chuyển tiền ngược chiều lại làm nhau treo?", [
         st("""<p>Lệnh 1 chuyển từ tài khoản A sang B. Lệnh 2 chuyển từ B sang A, cùng lúc. Mỗi lệnh <b>khoá hàng của mình trước</b> rồi chờ hàng của lệnh kia.</p>
 <div class="box key">Cả hai chờ nhau mãi. Oracle phát hiện và trả lỗi <b>ORA-00060</b> cho một trong hai.</div>""",
@@ -151,8 +220,65 @@ $$\\text{khoá } 4 \\text{ trước, rồi khoá } 9$$""",
 Gặp bế tắc: rollback cả giao dịch, thử lại có giới hạn, và sửa thứ tự khoá.</div>""",
            """Điều cần mang theo. Bế tắc là lỗi thiết kế thứ tự, không phải lỗi may rủi. Gặp bế tắc thì rollback cả giao dịch, thử lại có giới hạn, và sửa thứ tự khoá."""),
     ])
+    # ── AF2: PL/SQL chạy thật trên Oracle, mô phỏng bế tắc bằng Java, quy mô, tự làm ──
+    run = sc("chay_that", "example", "Chạy thật: khoá hàng theo thứ tự trên Oracle, và mô phỏng bế tắc", [
+        st(code_block(ora, lines=(9, 19), title="PL/SQL chạy thật trên Oracle 26ai Free (Docker): khoá id nhỏ trước"),
+           """Trước hết là mã chạy thật trên Oracle. Khối này khai hai biến, rồi khoá hàng có mã hai, và sau đó mới khoá hàng có mã năm, tức là luôn khoá mã nhỏ trước.
+           Sau khi giữ cả hai hàng, nó trừ ba trăm nghìn ở hàng thứ nhất, cộng ba trăm nghìn ở hàng thứ hai, chốt lưu, và in tổng trước khi chuyển."""),
+        st(out_block(ora),
+           """Khi chạy thật, tổng trước khi chuyển là một triệu rưỡi. Hàng hai còn bảy trăm nghìn, hàng năm có tám trăm nghìn, tổng vẫn một triệu rưỡi, nên không mất đồng nào.
+           Một phiên khác cũng khoá theo thứ tự mã tăng dần thì không thể tạo vòng chờ với phiên này.""", clear=True),
+        st(code_block(be_tac, lines=(5, 15), title="Mô phỏng bế tắc bằng Java (phần 1): mỗi luồng khoá hàng đầu rồi xin hàng sau"),
+           """Oracle tự phát hiện vòng chờ, nên để thấy bế tắc ta mô phỏng bằng Java, với mỗi hàng là một khoá. Mỗi luồng giữ hàng thứ nhất, ngủ một chút để luồng kia kịp giữ hàng của nó, rồi xin hàng thứ hai, chờ tối đa nửa giây.
+           Nếu hết giờ mà chưa xin được, ta coi là bế tắc.""", clear=True),
+        st(code_block(be_tac, lines=(16, 26), title="Phần 2: thử hai thứ tự khoá"),
+           """Phần này chạy hai luồng, và trả về xong hay bế tắc. Ta thử hai trường hợp. Hai luồng khoá ngược thứ tự, và hai luồng khoá cùng thứ tự.""", clear=True),
+        st(out_block(be_tac),
+           """Khi chạy thật, khoá ngược thứ tự thì bế tắc, vì mỗi luồng giữ hàng mà luồng kia cần. Khoá cùng thứ tự thì xong, vì luồng thứ hai không giữ được hàng đầu tiên nên chưa giữ gì cả, và đợi luồng thứ nhất làm xong.
+           Mô phỏng này dùng hết giờ chờ, còn Oracle trả lỗi không không không sáu không cho một phiên.""", clear=True),
+    ])
+    scale = sc("quy_mo", "example", "Quy mô: cặp phiên tăng bình phương, bế tắc từ hiếm thành liên tục", [
+        st("""<p>Gọi $T$ là số phiên chạy cùng lúc. Số cặp phiên là $\\frac{T \\cdot (T - 1)}{2}$. Giả sử mỗi cặp có xác suất $0{,}0001$ khoá ngược thứ tự nhau <i>(số minh hoạ)</i>; số cặp gây bế tắc kỳ vọng là số cặp nhân $0{,}0001$.</p>"""
+           + table(["tải", "phiên cùng lúc T", "số cặp phiên", "cặp ngược thứ tự kỳ vọng"],
+                   [["×1", "10", "45", "0,0045 (hiếm)"],
+                    ["×100", "1 000", "499 500", "<b>≈ 50</b>"],
+                    ["×10 000", "100 000", "4 999 950 000", "<b>≈ 500 000</b>"]]),
+           """Gọi T là số phiên chạy cùng lúc, thì số cặp phiên là T nhân T trừ một, chia hai. Giả sử mỗi cặp có xác suất một phần mười nghìn khoá ngược thứ tự nhau, đây là số minh hoạ.
+           Với mười phiên có bốn mươi lăm cặp, nên kỳ vọng chỉ không phẩy không không bốn năm cặp ngược thứ tự, rất hiếm. Tải tăng một trăm lần, số cặp lên gần năm trăm nghìn, và kỳ vọng khoảng năm mươi cặp.
+           Tải tăng mười nghìn lần, kỳ vọng khoảng năm trăm nghìn cặp.""", clear=True),
+        st("""<div class="box warn"><b>Giải pháp cũ gãy ở đâu.</b> Dựa vào “bế tắc hiếm, để cơ sở dữ liệu phát hiện rồi thử lại”: ở ×1 hiếm tới mức không ai thấy, ở ×100 xảy ra vài chục lần mỗi lượt, ở ×10 000 liên tục; mỗi lần có một phiên bị huỷ rồi thử lại, càng thử càng thêm phiên chờ.</div>
+<div class="box key"><b>Quy tắc khoá theo thứ tự mã tăng dần</b> xoá hẳn vòng chờ ở mọi tải. <b>Đánh đổi:</b> phải biết trước mọi hàng cần khoá để sắp thứ tự; khi chỉ biết dần trong lúc chạy thì vẫn cần hết giờ chờ và thử lại có giới hạn.</div>""",
+           """Giải pháp cũ là dựa vào việc bế tắc hiếm, để cơ sở dữ liệu phát hiện rồi thử lại. Ở tải gốc nó hiếm tới mức không ai thấy. Ở tải gấp trăm lần, nó xảy ra vài chục lần mỗi lượt, và ở tải gấp mười nghìn lần là liên tục.
+           Mỗi lần có một phiên bị huỷ rồi thử lại, càng thử càng thêm phiên chờ. Quy tắc khoá theo thứ tự mã tăng dần xoá hẳn vòng chờ ở mọi tải.
+           Đánh đổi là phải biết trước mọi hàng cần khoá để sắp thứ tự. Khi chỉ biết dần trong lúc chạy thì vẫn cần hết giờ chờ và thử lại có giới hạn.""", clear=True),
+    ], checks=["10 * 9 // 2 == 45", "round(45 * 0.0001, 4) == 0.0045", "1000 * 999 // 2 == 499500", "round(499500 * 0.0001) == 50",
+               "100000 * 99999 // 2 == 4_999_950_000", "round(4_999_950_000 * 0.0001) == 499995"])
+    write_lab("BNK", "L05", """# Lab BNK L05 — Thứ tự khoá cho bốn lệnh chuyển
+
+Quy tắc chống bế tắc: **luôn khoá hàng có mã nhỏ hơn trước**, dù lệnh chuyển đi từ đâu tới đâu.
+
+Viết chương trình `ThuTuKhoa` (tệp `ThuTuKhoa.java`). Có bốn lệnh chuyển `(từ, tới)`: `(4, 9) (9, 4) (7, 4) (4, 7)`. Với mỗi lệnh, tính mã khoá trước (nhỏ hơn) và mã khoá sau (lớn hơn) bằng `Math.min` và `Math.max`, rồi in một dòng đúng dạng:
+
+`4 -> 9: khoa 4 roi 9`
+
+Chạy: `javac ThuTuKhoa.java && java ThuTuKhoa`. Chấm: `bash labs/cham.sh BNK L05 ThuTuKhoa.java`.
+""", "java", lab_tk["code"], lab_tk["out"])
+    lab = practice_scene(sc, "Tự làm: thứ tự khoá cho bốn lệnh chuyển", practice_steps(
+        st, "BNK", "L05",
+        """<p><b>Đề</b>: quy tắc <b>khoá mã nhỏ trước</b>. Bốn lệnh chuyển <code>(từ, tới)</code>: <code>(4,9) (9,4) (7,4) (4,7)</code>. Viết <code>ThuTuKhoa.java</code>:</p>
+<ol><li>duyệt bốn lệnh</li><li>mỗi lệnh tính mã nhỏ hơn bằng <code>Math.min</code>, mã lớn hơn bằng <code>Math.max</code></li>
+<li>in một dòng <code>4 -&gt; 9: khoa 4 roi 9</code></li></ol>""",
+        """Bây giờ tới phần bạn tự làm. Quy tắc là luôn khoá hàng có mã nhỏ hơn trước. Có bốn lệnh chuyển, từ bốn tới chín, từ chín tới bốn, từ bảy tới bốn, và từ bốn tới bảy.
+        Hãy viết chương trình duyệt từng lệnh, dùng hàm lấy số nhỏ hơn và số lớn hơn để tìm thứ tự khoá, rồi in mỗi lệnh một dòng. Hãy dừng video, tự viết và chạy, đừng chép lại ví dụ.""",
+        lab_tk["out"], "ThuTuKhoa.java",
+        """<div class="box key"><b>Nếu kẹt:</b> khai <code>int[][] lenh = { {4, 9}, {9, 4}, {7, 4}, {4, 7} };</code>, duyệt bằng <code>for (int[] l : lenh)</code>, rồi
+<code>int dau = Math.min(l[0], l[1]);</code> và <code>int sau = Math.max(l[0], l[1]);</code>. Lời giải ở <code>labs/BNK/L05/loi_giai.java</code> — chỉ mở sau khi bạn đã thử.</div>""",
+        """Nếu kẹt, khai một mảng gồm bốn cặp số, duyệt từng cặp, rồi lấy số nhỏ hơn làm khoá trước và số lớn hơn làm khoá sau. Lời giải đầy đủ nằm trong thư mục thực hành của bài, chỉ mở sau khi bạn đã tự thử.""", pause=120), "BNK", "L05")
     return lesson("L05", "plsql_khoa_hang_deadlock", "Bài 5 — PL/SQL, khoá hàng và bế tắc ORA-00060",
-                  "curriculum/bnk.yaml L05; audit/bnk/verify_bnk.py L05; Oracle Database Concepts (Data Concurrency and Consistency: phát hiện bế tắc, rollback một câu lệnh; khoá bảng con khi khoá ngoại không có chỉ mục); Oracle Database Error Messages (ORA-00060); thứ tự khoá của ORDER BY … FOR UPDATE không được bảo đảm — Oracle không chạy trên máy này, chỉ mô phỏng logic thứ tự khoá",
-                  ["Vẽ đồ thị chờ và nhận ra vòng tròn gây bế tắc", "Đếm số cặp thứ tự khoá gây bế tắc",
-                   "Áp quy tắc khoá theo thứ tự id tăng dần", "Xử lý đúng khi gặp ORA-00060"],
-                  [hook, pre, sym, intu, form, ex, chk, pit, quiz, rec])
+                  "curriculum/bnk.yaml L05; audit/bnk/verify_bnk.py L05; audit/review/screen_code/BNK.yaml (PL/SQL chạy thật trên Oracle AI Database 26ai Free 23.26 trong Docker bnx-ora; mô phỏng bế tắc bằng ReentrantLock.tryLock, JDK 21); Oracle Database Concepts (Data Concurrency and Consistency: phát hiện bế tắc, rollback một câu lệnh; khoá bảng con khi khoá ngoại không có chỉ mục); Oracle Database Error Messages (ORA-00060); thứ tự khoá của ORDER BY … FOR UPDATE không được bảo đảm; số cặp phiên T(T−1)/2 (tổ hợp)",
+                  ["Nhận ra vòng tròn chờ gây bế tắc trên đồ thị chờ", "Đếm số cặp thứ tự khoá gây bế tắc",
+                   "Áp quy tắc khoá theo thứ tự id tăng dần", "Xử lý đúng khi gặp ORA-00060",
+                   "Chạy PL/SQL khoá hàng theo thứ tự trên Oracle và chạy mô phỏng bế tắc",
+                   "Tính số cặp phiên và số cặp ngược thứ tự kỳ vọng khi tải tăng ×100 và ×10 000"],
+                  [hook, pre, sym, intu, form, ex, run, chk, pit, quiz, scale, lab, rec],
+                  covers=[(1, "intuition"), (2, "check"), (3, "practice"), (4, "pitfalls"), (5, "chay_that"), (6, "quy_mo")])

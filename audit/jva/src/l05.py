@@ -1,4 +1,5 @@
 from lib import *
+from labkit import write_lab, practice_steps, practice_scene
 
 
 def ln(p, s):
@@ -126,6 +127,78 @@ public class DoanMang {
     }
 }""", out="5 6\n1 3")
 
+    tra_cuu = prog("TraCuu", """
+public class TraCuu {
+    public static void main(String[] args) {
+        int[] co = {5, 5000, 5000000};                   // số tài khoản: x1, x1000, x1 000 000
+        for (int k = 0; k < co.length; k++) {
+            long[] tk = new long[co[k]];
+            for (int i = 0; i < tk.length; i++) {
+                tk[i] = 1000000L + i;                    // số tài khoản tăng dần
+            }
+            long can = tk[tk.length - 1];                // tìm tài khoản nằm ở cuối
+            int buoc = 0;
+            for (int i = 0; i < tk.length; i++) {
+                buoc++;
+                if (tk[i] == can) {
+                    break;
+                }
+            }
+            System.out.println(co[k] + " tai khoan: " + buoc + " buoc");
+        }
+    }
+}""", out="5 tai khoan: 5 buoc\n5000 tai khoan: 5000 buoc\n5000000 tai khoan: 5000000 buoc")
+    sau_tk = prog("SauTaiKhoan", """
+import java.util.Arrays;
+
+public class SauTaiKhoan {
+    public static void main(String[] args) {
+        long[] soDu = {820000, 150000, 2400000, 150000, 3600000, 90000};
+        long tong = 0;
+        int nhoNhat = 0;                             // chỉ số của số dư nhỏ nhất
+        int dem = 0;                                 // số tài khoản dưới 200000
+        for (int i = 0; i < soDu.length; i++) {
+            tong += soDu[i];
+            if (soDu[i] < soDu[nhoNhat]) {
+                nhoNhat = i;
+            }
+            if (soDu[i] < 200000) {
+                dem++;
+            }
+        }
+        System.out.println("Tong: " + tong);
+        System.out.println("Nho nhat: " + soDu[nhoNhat] + " o chi so " + nhoNhat);
+        System.out.println("So tai khoan duoi 200000: " + dem);
+        long[] banSao = Arrays.copyOf(soDu, soDu.length);
+        Arrays.sort(banSao);
+        System.out.println(Arrays.toString(banSao));
+        System.out.println("Goc: " + Arrays.toString(soDu));
+    }
+}""", out="Tong: 7210000\nNho nhat: 90000 o chi so 5\nSo tai khoan duoi 200000: 3\n[90000, 150000, 150000, 820000, 2400000, 3600000]\nGoc: [820000, 150000, 2400000, 150000, 3600000, 90000]")
+    write_lab("JVA", "L05", """# Lab JVA L05 — Sáu tài khoản
+
+Trong Git Bash, viết `SauTaiKhoan` (tệp `SauTaiKhoan.java`, số liệu là số minh hoạ). Mảng `long[] soDu = {820000, 150000, 2400000, 150000, 3600000, 90000};` (nhớ `import java.util.Arrays;`).
+
+1. Một vòng lặp duyệt mảng: cộng `tong`; tìm **chỉ số** của số dư **nhỏ nhất** (so với `soDu[nhoNhat]`); đếm số tài khoản có số dư **dưới 200000**. In `Tong: …`, `Nho nhat: … o chi so …`, `So tai khoan duoi 200000: …`.
+2. Chép mảng bằng `Arrays.copyOf`, sắp **bản sao** tăng dần, in bằng `Arrays.toString`.
+3. In mảng gốc dạng `Goc: [...]` để chứng tỏ nó **không đổi**.
+
+Chạy: `javac SauTaiKhoan.java && java SauTaiKhoan`. Chấm: `bash labs/cham.sh JVA L05 SauTaiKhoan.java`.
+""", "java", sau_tk["code"], sau_tk["out"])
+    sc_lab = practice_scene(sc, "Tự làm: sáu tài khoản", practice_steps(
+        st, "JVA", "L05",
+        """<p><b>Đề</b>: viết <code>SauTaiKhoan.java</code> (số minh hoạ), mảng <code>long[] soDu = {820000, 150000, 2400000, 150000, 3600000, 90000};</code></p>
+<ol><li>Một vòng lặp duyệt mảng: tổng; <b>chỉ số</b> số dư nhỏ nhất; số tài khoản dưới 200000</li>
+<li>Chép bằng <code>Arrays.copyOf</code>, sắp <b>bản sao</b>, in bằng <code>Arrays.toString</code></li>
+<li>In mảng gốc <code>Goc: […]</code> để thấy nó không đổi</li></ol>""",
+        """Bây giờ tới phần bạn tự làm trên máy. Cho mảng sáu số dư. Dùng một vòng lặp duyệt mảng để tính tổng, tìm chỉ số của số dư nhỏ nhất, và đếm các tài khoản dưới hai trăm nghìn.
+        Sau đó chép mảng ra bản sao, sắp bản sao tăng dần và in nó. Cuối cùng in mảng gốc để chứng tỏ nó không đổi. Hãy dừng video và tự viết, đừng chép lại ví dụ.""",
+        sau_tk["out"], "SauTaiKhoan.java",
+        """<div class="box key"><b>Nếu kẹt:</b> khởi đầu <code>nhoNhat = 0</code>, trong vòng lặp nếu <code>soDu[i] &lt; soDu[nhoNhat]</code> thì <code>nhoNhat = i</code>; điều kiện lặp <code>i &lt; soDu.length</code>.
+Lời giải nằm ở <code>labs/JVA/L05/loi_giai.java</code> — chỉ mở sau khi bạn đã thử.</div>""",
+        """Nếu kẹt, cho biến vị trí nhỏ nhất bắt đầu bằng không, và trong vòng lặp, nếu phần tử hiện tại nhỏ hơn phần tử ở vị trí đó thì ghi lại chỉ số. Điều kiện lặp là nhỏ hơn độ dài, không có dấu bằng.
+        Lời giải nằm trong thư mục thực hành của bài, chỉ mở sau khi bạn đã tự thử.""", pause=60), "JVA", "L05")
+
     sc_hook = sc("hook", "hook", "Năm tài khoản, năm nghìn tài khoản: viết bao nhiêu biến?", [
         st("""<p>Ngân hàng nhỏ của bạn có $5$ tài khoản. Người quản lý hỏi: <b>tổng số dư</b> là bao nhiêu, tài khoản nào <b>nhiều tiền nhất</b>?</p>
 <div class="box warn">Với những gì đã học, bạn phải khai năm biến <code>soDu1</code> … <code>soDu5</code> và viết năm lệnh cộng. Năm nghìn tài khoản thì không viết nổi.</div>""",
@@ -243,6 +316,22 @@ public class DoanMang {
                "max([1500000, 250000, 4000000, 750000, 3200000]) == 4000000",
                "[1500000, 250000, 4000000, 750000, 3200000].index(4000000) == 2"])
     k6, k10 = ln(kiem, "copyOf"), ln(kiem, "int i =")
+    sc_scale = sc("quymo", "concept", "Khi số tài khoản tăng gấp nghìn, gấp triệu lần: duyệt từng ô còn nhanh không?", [
+        st(code_block(tra_cuu, lines=(3, 18)),
+           """Ta thử tìm một tài khoản nằm ở ô cuối, bằng cách duyệt từng ô, với ba cỡ mảng khác nhau. Chương trình đếm số bước, tức số lần so sánh, chứ không đo giờ, để kết quả không phụ thuộc máy.""",
+           ),
+        st(table(["số tài khoản", "số bước tìm ở ô cuối", "so với mảng năm ô"],
+                 [["5", "5", "×1"], ["5 000", "5 000", "×1 000"], ["5 000 000", "5 000 000", "×1 000 000"]]) + out_block(tra_cuu),
+           """Số bước tăng đúng bằng số tài khoản. Gấp một nghìn lần tài khoản thì gấp một nghìn lần số bước, gấp một triệu lần thì gấp một triệu lần.
+           Với năm tài khoản thì chẳng ai để ý, nhưng với năm triệu tài khoản thì mỗi lần tra cứu là năm triệu phép so sánh.""",
+           clear=True, focus=[1, ["1.3", "1.4"], ["1.2", "1.4"]]),
+        st("""<div class="box key"><b>Điều người làm nghề rút ra.</b> Duyệt từng ô có giá <b>tỉ lệ với số ô</b>. Nếu mỗi giây có 1 000 lượt tra cứu trên 5 000 000 tài khoản,
+trung bình mỗi lượt xem một nửa mảng: $1\\,000 \\times 2\\,500\\,000 = 2\\,500\\,000\\,000$ phép so sánh mỗi giây (số minh hoạ).
+Mảng $10\\,000\\,000$ số <code>long</code> cũng chiếm $8 \\times 10\\,000\\,000 = 80\\,000\\,000$ byte. Đó là lý do hệ thống lớn dùng cấu trúc tra cứu riêng và chỉ mục của cơ sở dữ liệu.</div>""",
+           """Duyệt từng ô có giá tỉ lệ với số ô. Nếu mỗi giây có một nghìn lượt tra cứu trên năm triệu tài khoản, mỗi lượt trung bình xem một nửa mảng, tức hai tỉ rưỡi phép so sánh mỗi giây, số minh hoạ.
+           Mảng mười triệu số nguyên dài còn chiếm tám mươi triệu bai bộ nhớ. Đó là lý do hệ thống lớn dùng cấu trúc tra cứu riêng và chỉ mục của cơ sở dữ liệu.""", clear=True),
+    ], checks=["5000000 // 5000 == 1000", "5000 // 5 == 1000", "1000 * 2500000 == 2500000000", "5000000 // 2 == 2500000",
+               "8 * 10000000 == 80000000"])
     sc_chk = sc("check", "check", "Tự kiểm bằng đường khác: sắp xếp bản sao và cộng ngược", [
         st(code_block(kiem, lines=(k6, k6 + 2), title="Tệp KiemMang.java"),
            """Ta kiểm bằng một đường khác hẳn. Chép mảng ra bản sao bằng hàm chép của bộ công cụ mảng, rồi sắp xếp bản sao,
@@ -308,5 +397,8 @@ Muốn sửa thử mà không đụng dữ liệu thật thì <b>chép</b> bằn
                   ["Tạo mảng, đọc và gán phần tử theo chỉ số từ 0 tới length − 1",
                    "Duyệt mảng bằng vòng lặp đếm để tính tổng, tìm lớn nhất và vị trí",
                    "Dùng Arrays.toString, Arrays.sort, Arrays.copyOf",
-                   "Giải thích vì sao gán một biến mảng cho biến khác không tạo bản sao"],
-                  [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_chk, sc_pit, sc_quiz, sc_rec])
+                   "Nêu vì sao gán một biến mảng cho biến khác không tạo bản sao",
+                   "Dự đoán số bước tra cứu từng ô khi số tài khoản tăng gấp nghìn và gấp triệu lần",
+                   "Viết chương trình duyệt mảng số dư: tổng, chỉ số nhỏ nhất, đếm theo điều kiện, in bản sao đã sắp"],
+                  [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_chk, sc_scale, sc_pit, sc_quiz, sc_lab, sc_rec],
+                  covers=[(1, "formula"), (2, "example"), (3, "formula"), (4, "pitfalls"), (5, "quymo"), (6, "practice")])

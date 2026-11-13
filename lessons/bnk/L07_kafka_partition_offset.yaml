@@ -5,14 +5,36 @@ title: 'Bài 7 — Kafka: phân vùng, offset, chia lại và số lần xử l�
 voice: vi-VN-NamMinhNeural
 rate: -5%
 depth: full
-source: curriculum/bnk.yaml L07; audit/bnk/verify_bnk.py L07; Apache Kafka documentation
-  (consumer groups, delivery semantics); băm crc32 chỉ để tất định, Kafka dùng murmur2
+af2: true
+covers:
+- objective: 1
+  scene: chay_that
+- objective: 2
+  scene: intuition
+- objective: 3
+  scene: example
+- objective: 4
+  scene: check
+- objective: 5
+  scene: chay_that
+- objective: 6
+  scene: quy_mo
+- objective: 7
+  scene: practice
+source: 'curriculum/bnk.yaml L07; audit/bnk/verify_bnk.py L07; audit/review/screen_code/BNK.yaml
+  (mô phỏng bằng Java 21, Kafka thật không chạy trong bài: chỉ mô phỏng logic); Apache
+  Kafka documentation (consumer groups, delivery semantics, số phân vùng chỉ tăng,
+  không giảm; đổi số phân vùng đổi ánh xạ khoá → phân vùng); băm crc32 chỉ để tất
+  định, Kafka dùng murmur2'
 assumes: []
 objectives:
 - Chia phân vùng cho nhóm bộ đọc và tính số người ngồi không
-- Giải thích vì sao cùng khoá giữ đúng thứ tự
+- Nêu vì sao cùng khoá giữ đúng thứ tự
 - Dự đoán số lần xử lý theo thứ tự ghi nhớ và xử lý khi sập
 - Khử trùng ở phía xử lý để được hiệu quả đúng một lần
+- Chạy mô phỏng chia phân vùng và thứ tự ghi nhớ để thấy số lần xử lý
+- Tính số phân vùng tối thiểu và khối thông điệp tồn đọng khi tải tăng ×100, ×10 000
+- Viết chương trình chia phân vùng cho nhóm bộ đọc và đếm người ngồi không
 asr_reviewed:
 - sentence: Kafka là hệ thống chuyển thông điệp.
   reason: 'ASR chép “CAPCA là hệ thống chuyển thông điệp” (0.857): “kafka” đọc theo
@@ -71,7 +93,7 @@ scenes:
       chuyện này.
 - id: prereq
   kind: prereq
-  title: 'Trước hết: bốn điều cần hiểu'
+  title: 'Trước hết: sáu điều cần hiểu'
   checks:
   - 13 == 2 * 6 + 1 and 13 % 6 == 1
   steps:
@@ -92,6 +114,18 @@ scenes:
       là nhãn đi kèm, ví dụ số tài khoản. Hàm băm biến khoá thành một số, và cùng
       khoá luôn ra cùng số. Rồi ta chia dư để chọn một ngăn, ví dụ mười ba chia sáu
       dư một thì vào ngăn một, mỗi ngăn sau này gọi là một phân vùng.
+  - show: <table class='t'><tr><th>thêm hai điều</th><th>nghĩa</th><th>ví dụ</th></tr><tr><td>⑤
+      Nhịp báo còn sống (heartbeat)</td><td>tín hiệu gửi đều đặn để nhóm biết một
+      bộ đọc chưa chết; ngừng gửi quá hạn thì bị coi là chết và nhóm chia lại việc</td><td>mỗi
+      3 giây một nhịp</td></tr><tr><td>⑥ Tác dụng phụ</td><td>việc làm thay đổi thứ
+      ở bên ngoài chương trình, như ghi cơ sở dữ liệu, gửi thư, gọi hệ khác; khác
+      với việc chỉ tính toán rồi bỏ</td><td>trừ tiền trong cơ sở dữ liệu</td></tr></table>
+    clear: true
+    say: Thêm hai điều nữa. Nhịp báo còn sống là tín hiệu gửi đều đặn để nhóm biết
+      một bộ đọc chưa chết. Nếu ngừng gửi quá hạn, bộ đọc bị coi là chết và nhóm chia
+      lại việc. Tác dụng phụ là việc làm thay đổi thứ ở bên ngoài chương trình, như
+      ghi cơ sở dữ liệu, gửi thư hay gọi hệ khác, khác với việc chỉ tính toán rồi
+      bỏ kết quả.
   - show: $$13 = 2 \cdot 6 + 1$$
     say: Kiểm phép chia dư. Mười ba bằng hai nhân sáu cộng một, nên mười ba chia sáu
       dư một.
@@ -333,6 +367,87 @@ scenes:
     - 2
     say: Tình huống năm, cùng tình huống nhưng ghi nhớ rồi mới xử lý. Số lần xử lý
       là một, một, không, một, một, tổng bốn lần, tức là mất thông điệp số hai.
+- id: chay_that
+  kind: example
+  title: 'Chạy thật: chia phân vùng và thứ tự ghi nhớ (mô phỏng bằng Java)'
+  steps:
+  - show: '<p><b>ChiaPhanVung.java (phần chính): 10 phân vùng cho 4 bộ đọc</b></p><div
+      class="code"><div><span class="kw">int</span> phanVung = 10, bo = 4, p = 0;</div><div><span
+      class="kw">for</span> (<span class="kw">int</span> b = 0; b &lt; bo; b++) {</div><div>    <span
+      class="kw">int</span> so = phanVung / bo + (b &lt; phanVung % bo ? 1 : 0);   <span
+      class="cm">// chia đều, phần dư chia cho các bộ đầu</span></div><div>    StringBuilder
+      sb = <span class="kw">new</span> StringBuilder("bo doc " + b + ":");</div><div>    <span
+      class="kw">for</span> (<span class="kw">int</span> k = 0; k &lt; so; k++) sb.append("
+      P").append(p++);</div><div>    System.out.println(sb);</div><div>}</div></div>'
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    say: Kafka thật cần cài riêng, nên ta mô phỏng cơ chế bằng Java. Đoạn này chia
+      mười phân vùng cho bốn bộ đọc. Mỗi bộ được số phân vùng bằng mười chia nguyên
+      cho bốn, tức hai, và các bộ đầu nhận thêm một nếu còn dư. Mười chia bốn dư hai,
+      nên hai bộ đầu nhận ba phân vùng, hai bộ sau nhận hai.
+  - show: '<p><b>Kết quả chạy thật</b></p><div class="code"><div>bo doc 0: P0 P1 P2</div><div>bo
+      doc 1: P3 P4 P5</div><div>bo doc 2: P6 P7</div><div>bo doc 3: P8 P9</div></div>'
+    focus:
+    - 1
+    - 2
+    clear: true
+    say: 'Khi chạy thật, bộ đọc không và một nhận ba phân vùng, bộ hai và ba nhận
+      hai. Đúng với phép tính tay: ba cộng ba cộng hai cộng hai bằng mười, không phân
+      vùng nào bị thiếu hay trùng.'
+  - show: '<p><b>GhiNho.java (phần 1): thông điệp 2 làm bộ đọc sập đúng một lần</b></p><div
+      class="code"><div><span class="kw">static</span> <span class="kw">int</span>[]
+      chay(<span class="kw">boolean</span> ghiNhoTruoc) {</div><div>    <span class="kw">int</span>[]
+      dem = <span class="kw">new</span> <span class="kw">int</span>[5];                 <span
+      class="cm">// số lần xử lý mỗi thông điệp 0..4</span></div><div>    <span class="kw">int</span>
+      viTri = 0;                          <span class="cm">// vị trí đã ghi nhớ</span></div><div>    <span
+      class="kw">boolean</span> daSap = <span class="kw">false</span>;</div><div>    <span
+      class="kw">while</span> (viTri &lt; 5) {</div><div>        <span class="kw">int</span>
+      m = viTri;</div><div>        <span class="kw">if</span> (ghiNhoTruoc) {</div><div>            viTri
+      = m + 1;                  <span class="cm">// ghi nhớ trước</span></div><div>            <span
+      class="kw">if</span> (m == 2 &amp;&amp; !daSap) { daSap = <span class="kw">true</span>;
+      <span class="kw">continue</span>; }   <span class="cm">// sập: chưa kịp xử lý</span></div><div>            dem[m]++;</div></div>'
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    clear: true
+    say: Bây giờ là thứ tự ghi nhớ và xử lý. Hàm này xử lý năm thông điệp và đếm số
+      lần mỗi thông điệp được xử lý. Nếu ghi nhớ trước, thì sập ở thông điệp hai khi
+      vị trí đã lưu nhưng chưa xử lý. Lần khởi động lại sau đó bắt đầu sau thông điệp
+      hai, nên thông điệp hai bị mất.
+  - show: '<p><b>Phần 2: xử lý trước, ghi nhớ sau, rồi so hai cách</b></p><div class="code"><div>        }
+      <span class="kw">else</span> {</div><div>            dem[m]++;                       <span
+      class="cm">// xử lý trước</span></div><div>            <span class="kw">if</span>
+      (m == 2 &amp;&amp; !daSap) { daSap = <span class="kw">true</span>; <span class="kw">continue</span>;
+      }   <span class="cm">// sập: chưa kịp ghi nhớ</span></div><div>            viTri
+      = m + 1;</div><div>        }</div><div>    }</div><div>    <span class="kw">return</span>
+      dem;</div><div>}</div><div><span class="kw">public</span> <span class="kw">static</span>
+      <span class="kw">void</span> main(String[] args) {</div><div>    System.out.println("ghi
+      nho truoc: " + Arrays.toString(chay(<span class="kw">true</span>)));</div><div>    System.out.println("xu
+      ly truoc:   " + Arrays.toString(chay(<span class="kw">false</span>)));</div></div>'
+    focus:
+    - 1
+    - 1
+    - 2
+    clear: true
+    say: Nếu xử lý trước rồi ghi nhớ sau, thì sập ở thông điệp hai khi đã xử lý nhưng
+      chưa lưu vị trí. Lần khởi động lại đọc lại từ thông điệp hai, nên nó bị xử lý
+      hai lần. Hàm chính in số lần xử lý của năm thông điệp cho cả hai cách.
+  - show: '<p><b>Kết quả chạy thật</b></p><div class="code"><div>ghi nho truoc: [1,
+      1, 0, 1, 1]</div><div>xu ly truoc:   [1, 1, 2, 1, 1]</div></div>'
+    focus:
+    - 1
+    - 1
+    - 2
+    clear: true
+    say: 'Khi chạy thật, ghi nhớ trước cho số lần là một, một, không, một, một: thông
+      điệp hai bị mất. Xử lý trước cho một, một, hai, một, một: thông điệp hai bị
+      xử lý hai lần. Vì thế người làm nghề chọn xử lý trước, ghi nhớ sau, rồi khử
+      trùng ở phía xử lý, thay vì chấp nhận mất tiền.'
 - id: check
   kind: check
   title: 'Tự kiểm bằng đường khác: khử trùng ở phía xử lý'
@@ -439,6 +554,118 @@ scenes:
       ta chặn được bằng khoá lũy đẳng. Nên chọn xử lý rồi mới ghi nhớ, kèm khoá lũy
       đẳng.
     clear: true
+- id: quy_mo
+  kind: example
+  title: 'Quy mô: một phân vùng, một bộ đọc, và khối việc tồn đọng'
+  checks:
+  - 5000 / 1000 == 5
+  - 500000 / 1000 == 500
+  - 50000000 / 1000 == 50000
+  - (5000 - 4000) * 3600 == 3_600_000
+  - (500_000 - 4000) * 3600 == 1_785_600_000
+  - (50_000_000 - 4000) * 3600 == 179_985_600_000
+  steps:
+  - show: '<p>Mỗi phân vùng được <b>một</b> bộ đọc trong nhóm xử lý, với tốc độ $1\,000$
+      thông điệp mỗi giây <i>(số minh hoạ)</i>. Số phân vùng tối thiểu bằng tải chia
+      tốc độ một bộ đọc. Nếu chỉ có $4$ phân vùng, thông điệp xử lý được $4\,000$
+      mỗi giây, phần còn lại đọng lại sau một giờ ($3\,600$ giây):</p><table class=''t''><tr><th>tải</th><th>thông
+      điệp mỗi giây</th><th>phân vùng tối thiểu</th><th>chỉ 4 phân vùng: tồn đọng
+      sau 1 giờ</th></tr><tr><td>×1</td><td>5 000</td><td>5</td><td>3 600 000</td></tr><tr><td>×100</td><td>500
+      000</td><td>500</td><td><b>≈ 1,79 tỉ</b></td></tr><tr><td>×10 000</td><td>50
+      000 000</td><td>50 000</td><td><b>≈ 180 tỉ</b></td></tr></table>'
+    focus:
+    - 1
+    - 1
+    - 1
+    - 2
+    - 2
+    - 2
+    clear: true
+    say: Mỗi phân vùng được một bộ đọc trong nhóm xử lý, với tốc độ một nghìn thông
+      điệp mỗi giây, đây là số minh hoạ. Số phân vùng tối thiểu bằng tải chia tốc
+      độ của một bộ đọc. Với năm nghìn thông điệp mỗi giây, cần năm phân vùng. Nếu
+      chỉ có bốn, mỗi giờ đọng lại ba triệu sáu trăm nghìn thông điệp. Tải tăng một
+      trăm lần cần năm trăm phân vùng, và bốn phân vùng đọng hơn một phẩy bảy chín
+      tỉ thông điệp. Tải tăng mười nghìn lần cần năm mươi nghìn phân vùng.
+  - show: '<div class="box warn"><b>Giải pháp cũ gãy ở đâu.</b> Thêm bộ đọc mà không
+      thêm phân vùng không giúp gì: bộ đọc thừa ngồi không. Thêm phân vùng thì <b>cùng
+      khoá có thể sang phân vùng khác</b> (băm chia dư cho số mới), nên thứ tự theo
+      khoá bị phá lúc chuyển.
+
+      Số phân vùng lại <b>không giảm được</b> về sau.</div>
+
+      <div class="box key"><b>Đánh đổi:</b> chọn số phân vùng dư vừa phải ngay từ
+      đầu, theo tải dự kiến vài năm. Nhiều phân vùng quá thì mỗi lần chia lại lâu
+      hơn và tốn thêm tệp mở; ít quá thì nghẽn như bảng trên.</div>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 1
+    - 2
+    - 2
+    - 2
+    clear: true
+    say: Câu hỏi là giải pháp cũ sẽ gãy ở chỗ nào khi tải tăng lên. Thêm bộ đọc mà
+      không thêm phân vùng không giúp gì, vì bộ đọc thừa ngồi không. Thêm phân vùng
+      thì cùng một khoá có thể sang phân vùng khác, vì băm chia dư theo số phân vùng
+      mới, nên thứ tự theo khoá bị phá lúc chuyển. Số phân vùng cũng không giảm được
+      về sau. Đánh đổi là chọn số phân vùng dư vừa phải ngay từ đầu, theo tải dự kiến
+      vài năm. Nhiều quá thì mỗi lần chia lại lâu hơn và tốn thêm tệp mở, còn ít quá
+      thì nghẽn như bảng trên.
+- id: practice
+  kind: practice
+  title: 'Tự làm: bảy phân vùng, chín bộ đọc'
+  steps:
+  - show: '<p><b>Đề</b>: 7 phân vùng, 9 bộ đọc; mỗi bộ nhận <code>7 / 9</code> phân
+      vùng, bộ có số nhỏ hơn <code>7 % 9</code> nhận thêm một. Viết <code>NguoiNgoiKhong.java</code>:</p>
+
+      <ol><li>mỗi bộ đọc in <code>bo doc 0: P0</code> …; bộ không nhận gì in <code>ngoi
+      khong</code></li>
+
+      <li>dòng cuối <code>so nguoi ngoi khong: …</code></li></ol>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 1
+    - 2
+    - 2
+    - 2
+    pause: 150
+    say: Bây giờ tới phần bạn tự làm. Một chủ đề có bảy phân vùng, một nhóm có chín
+      bộ đọc. Mỗi bộ nhận bảy chia nguyên cho chín phân vùng, và bộ có số thứ tự nhỏ
+      hơn phần dư nhận thêm một. Phân vùng được phát liên tiếp từ không. Hãy in cho
+      mỗi bộ đọc một dòng, bộ không nhận gì thì ghi ngồi không, và dòng cuối là số
+      người ngồi không. Hãy dừng video, tự viết và chạy, đừng chép lại ví dụ.
+  - show: '<p><b>Kết quả mong đợi</b></p><div class="code"><div>bo doc 0: P0</div><div>bo
+      doc 1: P1</div><div>bo doc 2: P2</div><div>bo doc 3: P3</div><div>bo doc 4:
+      P4</div><div>bo doc 5: P5</div><div>bo doc 6: P6</div><div>bo doc 7: ngoi khong</div><div>bo
+      doc 8: ngoi khong</div><div>so nguoi ngoi khong: 2</div></div><p class="note">Chấm
+      bằng Git Bash: <code>bash labs/cham.sh BNK L07 NguoiNgoiKhong.java</code> —
+      in <b>ĐÚNG</b> khi trùng.</p>'
+    focus:
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Đây là kết quả mong đợi. Bạn chạy chương trình của mình rồi so từng dòng.
+      Nếu muốn chấm bằng máy, dùng lệnh ở dưới màn hình; lệnh in chữ ĐÚNG khi đầu
+      ra trùng, hoặc chỉ ra dòng nào khác.
+  - show: '<div class="box key"><b>Nếu kẹt:</b> mô theo <code>ChiaPhanVung</code>:
+      <code>int so = phanVung / bo + (b &lt; phanVung % bo ? 1 : 0);</code>. Nếu <code>so
+      == 0</code> thì thêm chữ <code>ngoi khong</code> và tăng biến đếm.
+
+      Lời giải ở <code>labs/BNK/L07/loi_giai.java</code> — chỉ mở sau khi bạn đã thử.</div>
+
+      '
+    say: Nếu kẹt, làm theo mẫu chia phân vùng vừa xem. Nếu số phân vùng của một bộ
+      bằng không thì ghi ngồi không và tăng biến đếm. Lời giải đầy đủ nằm trong thư
+      mục thực hành của bài, chỉ mở sau khi bạn đã tự thử.
+    clear: true
+  lab: labs/BNK/L07
 - id: recap
   kind: recap
   title: Chuỗi logic & tư duy cần mang theo

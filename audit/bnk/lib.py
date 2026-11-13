@@ -1,15 +1,86 @@
 """Thư viện dựng đặc tả bài BNK từ dữ liệu Python (tránh sửa YAML bằng tay). Mỗi bài: audit/bnk/src/lXX.py có hàm build().
 Chạy: .venv/Scripts/python audit/bnk/gen.py [L01 …]  → ghi lessons/bnk/Lxx_<slug>.yaml (YAML do yaml.dump sinh, an toàn với \\ và $)."""
+import html
 import re
 import sys
+import textwrap
 from pathlib import Path
 
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import lv  # noqa: E402
 
 SERIES = "BNK · Nền tảng Backend Ngân hàng cho người mất gốc"
+
+# ── chương trình khai bằng dữ liệu (AF2): mã hiện trên màn hình CHẠY THẬT ─────────────────────────────────────────────────
+# prog(...) khai một chương trình đầy đủ + đầu ra mong đợi; code_block(p)/out_block(p) dựng khối màn hình từ đúng mã đó.
+# audit/bnk/screen_gen.py sinh sổ audit/review/screen_code/BNK.yaml từ PROGRAMS: mỗi chương trình là một NGUỒN chạy thật
+# (screen_code.py check --course BNK), mỗi khối trên màn hình là đoạn (fragment) của nguồn hoặc đầu ra (output) của nguồn.
+PROGRAMS = []
+_CURRENT = {"lesson": None}
+
+
+def begin(lesson_id):
+    _CURRENT["lesson"] = lesson_id
+
+
+def prog(name, code, out="", lang="java", extra=None):
+    """name: tên lớp công khai (java) hoặc tên nguồn. lang: java | python | sqlite | bash | oracle | mssql.
+    extra: trường thêm cho nguồn trong sổ (files, timeout, java_wrap, prelude…)."""
+    p = {"name": name, "code": code.strip("\n"), "out": out.strip("\n"), "lang": lang, "extra": extra or {},
+         "lesson": _CURRENT["lesson"]}
+    PROGRAMS.append(p)
+    return p
+
+
+_KW = {
+    "java": r"public|private|protected|class|static|void|int|long|double|boolean|char|byte|new|return|if|else|for|while|do|"
+            r"switch|case|break|continue|try|catch|finally|throw|throws|final|this|null|true|false|var|record|interface|"
+            r"implements|extends|import|synchronized|volatile",
+    "python": r"def|class|return|if|elif|else|for|while|in|import|from|as|with|try|except|finally|raise|lambda|None|True|False|not|and|or|pass",
+    "sqlite": r"SELECT|FROM|WHERE|CREATE|TABLE|INDEX|INSERT|INTO|VALUES|UPDATE|SET|DELETE|ORDER|BY|GROUP|PRIMARY|KEY|UNIQUE|ON|AND|OR|"
+              r"NOT|NULL|EXPLAIN|QUERY|PLAN|INTEGER|TEXT|COUNT|SUM|DROP|BEGIN|COMMIT|ROLLBACK|LIMIT|AS|JOIN|DISTINCT",
+    "bash": r"if|then|fi|do|done|for|while|echo|kill|sleep",
+}
+_KW["oracle"] = _KW["mssql"] = _KW["sqlite"]
+_CMT = {"java": "//", "python": "#", "sqlite": "--", "oracle": "--", "mssql": "--", "bash": "#"}
+
+
+def _hl(line, lang="java"):
+    """Tô từ khoá; chú thích tô xám. Không tô trong chuỗi "…" hay '…'."""
+    mark = _CMT.get(lang, "//")
+    code, cm = line, ""
+    m = re.search(re.escape(mark), line)
+    if m and line[:m.start()].count('"') % 2 == 0 and line[:m.start()].count("'") % 2 == 0:
+        code, cm = line[:m.start()], line[m.start():]
+    flags = re.I if lang in ("sqlite", "oracle", "mssql") else 0
+    rx = re.compile(r"\b(" + _KW.get(lang, _KW["java"]) + r")\b", flags)
+    parts = re.split(r'("(?:[^"\\]|\\.)*"|\'[^\']*\')', code)
+    for i in range(0, len(parts), 2):
+        parts[i] = rx.sub(r'<span class="kw">\1</span>', html.escape(parts[i], quote=False))
+    for i in range(1, len(parts), 2):
+        parts[i] = html.escape(parts[i], quote=False)
+    out = "".join(parts)
+    if cm:
+        out += f'<span class="cm">{html.escape(cm, quote=False)}</span>'
+    return out
+
+
+def code_block(p, lines=None, title=None):
+    """Khối mã của chương trình p (cả tệp, hoặc các dòng lines=(đầu, cuối) tính từ 1, gồm cả hai đầu). Khung ≤ 12 dòng."""
+    src = p["code"].split("\n")
+    if lines:
+        src = textwrap.dedent("\n".join(src[lines[0] - 1:lines[1]])).split("\n")
+    assert len(src) <= 14, f"khối mã {p['name']} dài {len(src)} dòng (> 14)"
+    t = f"<p><b>{title}</b></p>" if title else ""
+    return t + '<div class="code">' + "".join(f"<div>{_hl(l, p['lang']) if l.strip() else ' '}</div>" for l in src) + "</div>"
+
+
+def out_block(p, title="Kết quả chạy thật"):
+    body = "".join(f"<div>{html.escape(l, quote=False) or ' '}</div>" for l in (p["out"].split("\n") if p["out"] else []))
+    return f"<p><b>{title}</b></p>" + '<div class="code">' + body + "</div>"
 
 C_BLUE = ("#dbeafe", "#2a78d6")
 C_GREEN = ("#dcfce7", "#16a34a")
@@ -155,11 +226,27 @@ def _auto_introduce(scenes):
                     done = True
 
 
-def lesson(id, slug, title, source, objectives, scenes, assumes=None, rate="-5%"):
+def add_steps(scenes, scene_id, steps, at=None):
+    """Chèn thêm step vào cảnh có sẵn (cuối cảnh, hoặc vị trí at)."""
+    for s_ in scenes:
+        if s_["id"] == scene_id:
+            if at is None:
+                s_["steps"].extend(steps)
+            else:
+                s_["steps"][at:at] = steps
+            return
+    raise KeyError(scene_id)
+
+
+def lesson(id, slug, title, source, objectives, scenes, assumes=None, rate="-5%", covers=None):
     _auto_introduce(scenes)
+    for sc_ in scenes:  # cảnh Tự làm: gợi ý thay kết quả mong đợi (cả hai chung một bảng thì tràn khung)
+        if sc_.get("kind") == "practice" and len(sc_["steps"]) >= 3:
+            sc_["steps"][-1]["clear"] = True
+    af2 = {"af2": True, "covers": [{"objective": o, "scene": s_} for o, s_ in covers]} if covers else {}
     return slug, {
         "id": id, "course": "BNK", "series": SERIES, "title": title, "voice": "vi-VN-NamMinhNeural", "rate": rate,
-        "depth": "full", "source": source, "assumes": assumes or [], "objectives": objectives, "asr_reviewed": [],
+        "depth": "full", **af2, "source": source, "assumes": assumes or [], "objectives": objectives, "asr_reviewed": [],
         "scenes": scenes,
     }
 

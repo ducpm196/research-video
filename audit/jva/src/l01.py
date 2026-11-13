@@ -1,4 +1,5 @@
 from lib import *
+from labkit import write_lab, practice_steps, practice_scene
 
 
 def build():
@@ -95,6 +96,64 @@ public class Doan {
         System.out.println(x + y + " dong");
     }
 }""", out="x = 15\ny = 5\n20 dong")
+
+    quy_mo = prog("QuyMo", """
+public class QuyMo {
+    public static void main(String[] args) {
+        int moiLenh = 1000000;              // một triệu đồng mỗi lệnh (số minh hoạ)
+        int lo1 = 100;                      // lô 100 lệnh
+        int lo2 = 2147;
+        int lo3 = 2148;
+        int lo4 = 10000;
+        System.out.println(moiLenh * lo1);
+        System.out.println(moiLenh * lo2);
+        System.out.println(moiLenh * lo3);
+        System.out.println(moiLenh * lo4);
+    }
+}""", out="100000000\n2147000000\n-2146967296\n1410065408")
+    so_du = prog("SoDu", """
+public class SoDu {
+    public static void main(String[] args) {
+        long soDu = 1500000;                        // số dư đầu (số minh hoạ)
+        long chuyen = 250000;                       // mỗi lệnh chuyển
+        long phi = 2200;                            // phí mỗi lệnh (số minh hoạ)
+        long tongChuyen = 3 * chuyen;
+        long tongPhi = 3 * phi;
+        soDu = soDu - tongChuyen - tongPhi;         // tính vế phải rồi ghi đè
+        System.out.println("Tong chuyen: " + tongChuyen);
+        System.out.println("Tong phi: " + tongPhi);
+        System.out.println("So du con lai: " + soDu);
+        int dot = 800000000;
+        int sai = dot + dot + dot;                  // cất trong int
+        long dot2 = 800000000L;
+        long dung = dot2 + dot2 + dot2;             // cất trong long
+        System.out.println("Int: " + sai);
+        System.out.println("Long: " + dung);
+    }
+}""", out="Tong chuyen: 750000\nTong phi: 6600\nSo du con lai: 743400\nInt: -1894967296\nLong: 2400000000")
+    write_lab("JVA", "L01", """# Lab JVA L01 — Số dư sau ba lệnh chuyển
+
+Trong Git Bash, đứng trong thư mục làm việc của bạn. Viết chương trình `SoDu` (tệp `SoDu.java`), số liệu là số minh hoạ:
+
+1. Dùng ba biến `long`: số dư đầu **1 500 000**, mỗi lệnh chuyển **250 000**, phí mỗi lệnh **2 200**. Tính `tongChuyen` và `tongPhi` cho **ba lệnh**, rồi **gán lại** `soDu = soDu - tongChuyen - tongPhi`. In ba dòng: `Tong chuyen: …`, `Tong phi: …`, `So du con lai: …`.
+2. Cộng ba lần **800 000 000** hai cách: bằng biến `int` (in `Int: …`) và bằng biến `long` (in `Long: …`). Đoán trước kết quả `int`, rồi kiểm bằng `jshell`: gõ `800000000 + 800000000 + 800000000`.
+
+Chạy: `javac SoDu.java && java SoDu`. Chấm: `bash labs/cham.sh JVA L01 SoDu.java`.
+""", "java", so_du["code"], so_du["out"])
+    sc_lab = practice_scene(sc, "Tự làm: số dư sau ba lệnh chuyển", practice_steps(
+        st, "JVA", "L01",
+        """<p><b>Đề</b>: viết <code>SoDu.java</code>, số liệu là số minh hoạ.</p>
+<ol><li>Ba biến <code>long</code>: số dư đầu 1 500 000; mỗi lệnh chuyển 250 000; phí mỗi lệnh 2 200. Tính tổng chuyển và tổng phí cho <b>3 lệnh</b>, gán lại <code>soDu</code>, in ba dòng</li>
+<li>Cộng ba lần 800 000 000 bằng <code>int</code> (in <code>Int: …</code>) và bằng <code>long</code> (in <code>Long: …</code>)</li></ol>
+<p class="note">Đoán kết quả <code>int</code> trước, rồi kiểm bằng <code>jshell</code>.</p>""",
+        """Bây giờ tới phần bạn tự làm trên máy. Viết chương trình với ba biến số nguyên dài: số dư đầu một triệu rưỡi, mỗi lệnh chuyển hai trăm năm mươi nghìn, phí mỗi lệnh hai nghìn hai trăm.
+        Tính tổng chuyển và tổng phí cho ba lệnh, gán lại số dư, rồi in ba dòng. Sau đó cộng ba lần tám trăm triệu hai cách, bằng kiểu số nguyên và bằng kiểu số nguyên dài, và in cả hai.
+        Hãy đoán trước kết quả kiểu số nguyên, kiểm bằng công cụ gõ từng dòng, rồi dừng video và tự viết, đừng chép lại ví dụ.""",
+        so_du["out"], "SoDu.java",
+        """<div class="box key"><b>Nếu kẹt:</b> <code>long tongChuyen = 3 * chuyen;</code>, rồi <code>soDu = soDu - tongChuyen - tongPhi;</code>. Với phần hai, nhớ viết chữ <code>L</code> sau số khi cất vào <code>long</code>.
+Lời giải nằm ở <code>labs/JVA/L01/loi_giai.java</code> — chỉ mở sau khi bạn đã thử.</div>""",
+        """Nếu kẹt, tính tổng chuyển bằng ba nhân với số tiền một lệnh, rồi gán lại số dư bằng số dư trừ tổng chuyển trừ tổng phí. Với phần hai, nhớ viết chữ L sau số khi cất vào kiểu số nguyên dài.
+        Lời giải nằm trong thư mục thực hành của bài, chỉ mở sau khi bạn đã tự thử.""", pause=60), "JVA", "L01")
 
     sc_hook = sc("hook", "hook", "Ba đợt lương chín trăm triệu, vì sao tổng lại âm?", [
         st(out_block(tran_luong, "Một chương trình cộng ba đợt lương, mỗi đợt 900 triệu đồng, in ra"),
@@ -218,6 +277,30 @@ $$2\\,147\\,483\\,648 - 4\\,294\\,967\\,296 = \\hl{-2\\,147\\,483\\,648}$$"""
            """Chạy thật chương trình, ba dòng in ra đúng ba con số ta vừa tính tay."""),
     ], checks=["900000000 + 900000000 == 1800000000", "1800000000 + 900000000 == 2700000000",
                "3 * 5500 == 16500", "2700000000 + 16500 == 2700016500"])
+    sc_jsh = sc("jshell", "example", "Ví dụ: thử từng dòng Java, tự đoán rồi kiểm", [
+        st("""<p>JDK có sẵn công cụ gõ từng dòng, tên <code>jshell</code>: gõ một dòng Java, bấm xuống dòng, thấy giá trị ngay.</p>
+<div class="code"><div>jshell&gt; int soLenh = 100</div><div>soLenh ==&gt; 100</div><div>jshell&gt; soLenh * 3</div><div>&#36;2 ==&gt; 300</div><div>jshell&gt; long lon = 3000000000L</div><div>lon ==&gt; 3000000000</div><div>jshell&gt; 1 + 2 + "A"</div><div>&#36;4 ==&gt; "3A"</div></div>
+<span class='note'>Vào: gõ <code>jshell</code> trong Git Bash. Thoát: <code>/exit</code>. Dấu <code>==&gt;</code> đọc là “có giá trị”; <code>&#36;2</code> là tên máy tự đặt cho kết quả chưa có tên.</span>""",
+           """Bây giờ ta có thêm một cách thử: công cụ gõ từng dòng, đi kèm bộ công cụ JDK. Bạn gõ một dòng Java rồi bấm phím xuống dòng, máy chạy ngay và in giá trị, không cần tạo tệp hay biên dịch riêng.
+           Dấu mũi tên đôi đọc là có giá trị. Khi dòng gõ vào là một biểu thức chưa có tên, máy tự đặt cho kết quả một tên bắt đầu bằng dấu đô la.
+           Ở đây, ba nhân với biến cho ba trăm, và một cộng hai rồi nối chữ A cho chuỗi ba A. Gõ lệnh thoát khi xong.""",
+           focus=[1, "2.1", "2.2", "2.4", ["2.3", "2.4"], 3]),
+        st(table(["gõ vào công cụ", "bạn đoán"],
+                 [["<code>int s = 2000000000 + 2000000000</code>", "?"],
+                  ["<code>long t = 2000000000L + 2000000000L</code>", "?"],
+                  ["<code>0.1 + 0.2</code>", "?"]]),
+           """Đây là cách học nhanh nhất: tự đoán rồi mới kiểm. Với mỗi dòng, hãy đoán máy in gì rồi mới gõ thử. Dòng một cộng hai lần hai tỉ trong kiểu số nguyên.
+           Dòng hai làm đúng phép đó trong kiểu số nguyên dài. Dòng ba là không phẩy một cộng không phẩy hai. Hãy dừng video, đoán, rồi gõ thử trên máy.""",
+           pause=20, clear=True, focus=[1, 1, "1.2", "1.3", "1.4", 1]),
+        st(table(["gõ vào công cụ", "máy in", "vì sao"],
+                 [["<code>int s = 2000000000 + 2000000000</code>", "<code>s ==&gt; -294967296</code>", "4 000 000 000 vượt <code>int</code>, bị trừ một vòng 4 294 967 296"],
+                  ["<code>long t = 2000000000L + 2000000000L</code>", "<code>t ==&gt; 4000000000</code>", "<code>long</code> chứa thoải mái"],
+                  ["<code>0.1 + 0.2</code>", "<code>0.30000000000000004</code>", "số thực lưu theo hệ hai, phải cắt bớt"]]),
+           """Kết quả thật. Dòng một ra một số âm, vì bốn tỉ vượt giới hạn nên bị trừ đi một vòng hai mũ ba mươi hai. Dòng hai ra đúng bốn tỉ, vì ngăn kiểu số nguyên dài chứa thoải mái.
+           Dòng ba ra số có đuôi lệch như ta đã thấy. Từ nay, mỗi khi nghi ngờ một dòng Java, hãy thử nó ở đây trước khi đưa vào chương trình.""",
+           clear=True, focus=[1, "1.2", "1.3", "1.4", 1]),
+    ], checks=["2000000000 + 2000000000 - 2**32 == -294967296", "2000000000 + 2000000000 == 4000000000",
+               "0.1 + 0.2 == 0.30000000000000004", "2**32 == 4294967296", "4000000000 > 2**31 - 1"])
     sc_chk = sc("check", "check", "Tự kiểm bằng đường khác: nhân thay cộng, đoán trước số âm", [
         st("""<p>Đường khác 1: ba đợt bằng nhau thì <b>nhân</b> thay vì cộng ba lần:</p>
 $$3 \\times 900\\,000\\,000 = 2\\,700\\,000\\,000 \\; ✓$$""",
@@ -229,6 +312,27 @@ $$2\\,700\\,000\\,000 > 2\\,147\\,483\\,647 \\qquad 2\\,700\\,000\\,000 - 4\\,29
            Phép trừ này cho đúng con số âm mà máy đã in, đến từng chữ số."""),
     ], checks=["3 * 900000000 == 2700000000", "2700000000 > 2147483647",
                "2700000000 - 2**32 == -1594967296", "(3 * 900000000 + 2**31) % 2**32 - 2**31 == -1594967296"])
+    sc_scale = sc("quymo", "concept", "Khi lô lệnh lớn dần, kiểu int hỏng ở đâu?", [
+        st(code_block(quy_mo, lines=(3, 11)),
+           """Giả sử mỗi lệnh chuyển một triệu đồng, số minh hoạ, và ta lấy tổng của cả lô bằng phép nhân trong kiểu số nguyên. Ta thử bốn lô cỡ khác nhau.
+           Một trăm lệnh, hai nghìn một trăm bốn mươi bảy lệnh, hai nghìn một trăm bốn mươi tám lệnh, và mười nghìn lệnh."""),
+        st(table(["lô", "tổng đúng (đồng)", "máy in", "kết luận"],
+                 [["100 lệnh", "100 000 000", "100000000", "đúng"],
+                  ["2 147 lệnh", "2 147 000 000", "2147000000", "đúng, sát giới hạn 2 147 483 647"],
+                  ["2 148 lệnh", "2 148 000 000", "-2146967296", "<b>sai</b>, ra số âm"],
+                  ["10 000 lệnh", "10 000 000 000", "1410065408", "<b>sai nhưng dương</b>, trông hợp lý"]])
+           + out_block(quy_mo),
+           """Lô một trăm lệnh đúng, và lô hai nghìn một trăm bốn mươi bảy lệnh vẫn đúng, sát giới hạn. Thêm đúng một lệnh nữa, lô hai nghìn một trăm bốn mươi tám ra số âm.
+           Nguy hiểm hơn, lô mười nghìn lệnh ra khoảng một tỉ bốn trăm triệu, một số dương trông hợp lý nhưng sai, vì mười tỉ bị trừ đi hai vòng.""",
+           clear=True, focus=[["1.2", "1.3"], "1.4", "1.5"]),
+        st("""<div class="box key"><b>Điều người làm nghề rút ra.</b> Thử bằng lô nhỏ (100 lệnh) <b>không bao giờ bắt được</b> lỗi này: nó chỉ lộ khi hệ thống lớn lên.
+Việc cần làm: đoán trước giá trị lớn nhất, thử đúng <b>sát giới hạn</b> và vượt một đơn vị, và chọn <code>long</code> cho tiền: nó chứa tới 9 223 372 036 854 775 807, đủ cho hơn 9 nghìn tỉ lệnh một triệu đồng (số minh hoạ).</div>""",
+           """Thử bằng lô nhỏ không bao giờ bắt được lỗi này, vì nó chỉ lộ khi hệ thống lớn lên. Người làm nghề đoán trước giá trị lớn nhất, và thử đúng sát giới hạn rồi vượt thêm một đơn vị.
+           Họ chọn kiểu số nguyên dài cho tiền, vì nó chứa được hơn chín tỉ tỉ, đủ cho hơn chín nghìn tỉ lệnh một triệu đồng.""", clear=True),
+    ], checks=["1000000 * 100 == 100000000", "1000000 * 2147 == 2147000000", "1000000 * 2147 <= 2**31 - 1",
+               "1000000 * 2148 > 2**31 - 1", "((1000000 * 2148 + 2**31) % 2**32) - 2**31 == -2146967296",
+               "((10**10 + 2**31) % 2**32) - 2**31 == 1410065408", "2**63 - 1 == 9223372036854775807",
+               "(2**63 - 1) // 10**6 == 9223372036854"])
     sc_pit = sc("pitfalls", "pitfall", "Lỗi hay gặp, có lỗi của người đã đi làm", [
         st('<div class="box warn"><b>Lỗi 1 (người mới).</b> Đặt một chuỗi chữ vào ngăn kiểu số.</div>'
            + code_block(gan_sai, lines=(3, 3)) + out_block(gan_sai, "Trình biên dịch báo"),
@@ -284,5 +388,9 @@ và nó có cần <b>phần lẻ chính xác</b> không. Tổng tiền tính b�
                   ["Khai báo và gán biến, đọc đúng phép gán là tính vế phải rồi ghi đè",
                    "Chọn đúng kiểu trong sáu kiểu số nguyên, số nguyên dài, số thực, đúng sai, ký tự, chuỗi",
                    "Suy ra giới hạn của kiểu số nguyên và giải thích hiện tượng tràn số",
-                   "Tính tổng tiền bằng kiểu số nguyên dài theo đồng, biết vì sao không dùng số thực"],
-                  [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_chk, sc_pit, sc_quiz, sc_rec])
+                   "Tính tổng tiền bằng kiểu số nguyên dài theo đồng, biết vì sao không dùng số thực",
+                   "Chạy từng dòng Java bằng công cụ gõ từng dòng, tự đoán kết quả rồi kiểm",
+                   "Dự đoán lô lệnh cỡ nào làm kiểu số nguyên tràn, và vì sao thử bằng lô nhỏ không bắt được",
+                   "Viết chương trình có biến số nguyên dài, phép gán lại và so sánh hai kiểu"],
+                  [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_jsh, sc_chk, sc_scale, sc_pit, sc_quiz, sc_lab, sc_rec],
+                  covers=[(1, "sym"), (2, "example"), (3, "formula"), (4, "example"), (5, "jshell"), (6, "quymo"), (7, "practice")])

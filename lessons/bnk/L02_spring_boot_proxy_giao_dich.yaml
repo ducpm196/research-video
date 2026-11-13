@@ -5,26 +5,44 @@ title: 'Bài 2 — Spring Boot: bean, proxy và giao dịch'
 voice: vi-VN-NamMinhNeural
 rate: -5%
 depth: full
-source: 'curriculum/bnk.yaml L02; audit/bnk/verify_bnk.py L02; Spring Framework Reference
-  (Transaction Management: “In proxy mode (which is the default), only external method
-  calls coming in through the proxy are intercepted”; rollback mặc định cho RuntimeException
-  và Error; AOP proxies); Java Language Specification §11 (checked / unchecked exceptions)'
+af2: true
+covers:
+- objective: 1
+  scene: intuition
+- objective: 2
+  scene: chay_that
+- objective: 3
+  scene: pitfalls
+- objective: 4
+  scene: example
+- objective: 5
+  scene: quy_mo
+- objective: 6
+  scene: practice
+source: 'curriculum/bnk.yaml L02; audit/bnk/verify_bnk.py L02; audit/review/screen_code/BNK.yaml
+  (mã chạy thật bằng JDK 21: java.lang.reflect.Proxy mô phỏng cơ chế proxy, Spring
+  thật dùng JDK dynamic proxy hoặc CGLIB); Spring Framework Reference (Transaction
+  Management: “In proxy mode (which is the default), only external method calls coming
+  in through the proxy are intercepted”; rollback mặc định cho RuntimeException và
+  Error; AOP proxies; Proxying Mechanisms); Java Language Specification §11 (checked
+  / unchecked exceptions); HikariCP README (maximumPoolSize mặc định 10, connectionTimeout
+  mặc định 30 000 ms) và wiki About Pool Sizing (pool size = Tn × (Cm − 1) + 1); Spring
+  Boot dùng HikariCP làm hộp kết nối mặc định'
 assumes: []
 objectives:
-- Giải thích Spring tạo bean và trao proxy cho người gọi
+- Nêu cách Spring tạo bean và trao proxy cho người gọi
 - Dự đoán số giao dịch được mở khi gọi qua proxy hoặc gọi thẳng
 - Nhận ra lỗi gọi hàm cùng lớp làm mất nhãn giao dịch
 - Chọn nơi đặt hàm ghi vết để luôn lưu được
+- Tính số kết nối cơ sở dữ liệu tối thiểu khi giao dịch lồng nhau và tải tăng ×100,
+  ×10 000
+- Viết phần đếm giao dịch của một proxy và dự đoán số đếm qua ba lời gọi
 asr_reviewed:
+- {sentence: "Proxy được tạo ngay lúc chạy, và nó đứng giữa người gọi với đối tượng thật.", reason: "ASR chép “Pheroxy được tạo ngay lúc chạy và nó đứng giữa người gọi với đối tượng thật.” (0.938): “proxy” đọc theo luật lexicon (lexicon_vi.BNK.yaml: “pờ-rốc-xi”), ASR viết “pheroxy” — NOT_VERIFIED bằng tai người"}
 - sentence: Spring Boot là cách đóng gói và chạy nhanh bộ khung đó.
   reason: 'ASR chép “Springbook là cách đóng gói và chạy nhanh bộ khung đó.” (0.87):
     “spring” đọc theo luật lexicon (lexicon_vi.BNK.yaml: “S-pring”), ASR viết “springbook”
     — NOT_VERIFIED bằng tai người'
-- sentence: Tiêm phụ thuộc là Spring nối các bean với nhau, thường qua hàm khởi tạo,
-    tức phương thức chạy lúc tạo đối tượng.
-  reason: 'ASR chép “Tiêm phụ thuộc là spring nối các binh với nhau, thường qua hàm
-    khởi tạo, tức phương thức chạy lúc tạo đối tượng.” (0.957): lệch âm/thanh thuần
-    Việt: bean/binh — NOT_VERIFIED bằng tai người'
 - sentence: Nếu chỉ làm một nửa, sổ sách lệch.
   reason: 'ASR chép “Nếu chỉ là một nửa, sổ sách lịch.” (0.75): lệch âm/thanh thuần
     Việt: làm/là, lệch/lịch — NOT_VERIFIED bằng tai người'
@@ -128,10 +146,10 @@ scenes:
       Boot</td><td>bộ khung viết dịch vụ Java: lo tạo đối tượng, nối chúng, mở giao
       dịch; Spring Boot là cách đóng gói và chạy nhanh bộ khung đó</td></tr><tr><td>nhãn
       (annotation)</td><td>dòng bắt đầu bằng <code>@</code> đặt trên phương thức hay
-      lớp, mang lời dặn cho công cụ khác đọc, ví dụ <code>@Transactional</code></td></tr><tr><td><code>this</code></td><td>tham
-      chiếu tới chính đối tượng đang chạy phương thức; <code>this.ghiVet()</code>
-      là tự gọi mình</td></tr><tr><td>commit / rollback</td><td>chốt lưu vĩnh viễn
-      mọi thay đổi của giao dịch / huỷ mọi thay đổi đó</td></tr></table>'
+      lớp, mang lời dặn cho công cụ khác đọc, ví dụ <code>@Transactional</code></td></tr><tr><td>từ
+      khoá <code>this</code></td><td>tham chiếu tới chính đối tượng đang chạy phương
+      thức; <code>this.ghiVet()</code> là tự gọi mình</td></tr><tr><td>commit / rollback</td><td>chốt
+      lưu vĩnh viễn mọi thay đổi của giao dịch / huỷ mọi thay đổi đó</td></tr></table>'
     say: Bảng này giải mã bốn từ đầu. Spring là bộ khung viết dịch vụ Java, lo tạo
       đối tượng, nối chúng với nhau và mở giao dịch. Spring Boot là cách đóng gói
       và chạy nhanh bộ khung đó. Nhãn là dòng bắt đầu bằng ký hiệu a còng đặt trên
@@ -142,18 +160,17 @@ scenes:
   - show: <table class='t'><tr><th>từ</th><th>nghĩa</th></tr><tr><td>bean</td><td>đối
       tượng do Spring tạo và quản lý</td></tr><tr><td>IoC (đảo điều khiển)</td><td>bạn
       không tự tạo đối tượng bằng new, Spring tạo rồi trao cho bạn</td></tr><tr><td>tiêm
-      phụ thuộc</td><td>Spring nối các bean với nhau, thường qua hàm khởi tạo (phương
-      thức chạy lúc tạo đối tượng)</td></tr><tr><td>proxy</td><td>một đối tượng vỏ
-      bọc bean, chạy thêm việc trước và sau khi gọi phương thức</td></tr><tr><td>REQUIRED
+      phụ thuộc</td><td>Spring nối các bean với nhau, thường qua hàm tạo (phương thức
+      chạy lúc tạo đối tượng)</td></tr><tr><td>proxy</td><td>một đối tượng vỏ bọc
+      bean, chạy thêm việc trước và sau khi gọi phương thức</td></tr><tr><td>REQUIRED
       / REQUIRES_NEW</td><td>tham gia giao dịch đang có / luôn mở giao dịch mới</td></tr></table>
     clear: true
     say: Bảng thứ hai giải thích nghĩa của năm thuật ngữ tiếp theo. Bean là đối tượng
       do Spring tạo và quản lý. Đảo điều khiển nghĩa là bạn không tự tạo đối tượng,
       Spring tạo rồi trao cho bạn. Tiêm phụ thuộc là Spring nối các bean với nhau,
-      thường qua hàm khởi tạo, tức phương thức chạy lúc tạo đối tượng. Proxy là đối
-      tượng vỏ bọc bean, chạy thêm việc trước và sau lời gọi. Cuối cùng, chế độ tham
-      gia nghĩa là dùng giao dịch đang có, còn chế độ mới nghĩa là luôn mở giao dịch
-      mới.
+      thường qua hàm tạo, tức phương thức chạy lúc tạo đối tượng. Proxy là đối tượng
+      vỏ bọc bean, chạy thêm việc trước và sau lời gọi. Cuối cùng, chế độ tham gia
+      nghĩa là dùng giao dịch đang có, còn chế độ mới nghĩa là luôn mở giao dịch mới.
 - id: intuition
   kind: intuition
   title: 'Hình dung: vỏ bọc proxy đứng giữa'
@@ -348,6 +365,68 @@ scenes:
     - 2
     say: Trường hợp C, mọi việc thành công. Phép tính thứ năm, cả hai dòng đều chốt,
       nên còn hai dòng.
+- id: chay_that
+  kind: example
+  title: 'Chạy thật: tự dựng một proxy đếm giao dịch'
+  steps:
+  - show: '<p><b>Tệp ProxyGiaoDich.java (phần 1): giao diện và lớp thật</b></p><div
+      class="code"><div><span class="kw">interface</span> Dich { <span class="kw">void</span>
+      chuyenTien(); <span class="kw">void</span> ghiVet(); }</div><div><span class="kw">static</span>
+      <span class="kw">int</span> moGiaoDich = 0;</div><div><span class="kw">static</span>
+      <span class="kw">class</span> DichThat <span class="kw">implements</span> Dich
+      {</div><div>    <span class="kw">public</span> <span class="kw">void</span>
+      chuyenTien() { ghiVet(); }      <span class="cm">// gọi thẳng: this.ghiVet(),
+      không qua proxy</span></div><div>    <span class="kw">public</span> <span class="kw">void</span>
+      ghiVet() { System.out.println("  ghiVet chay"); }</div><div>}</div></div>'
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    say: Ta mô phỏng cơ chế proxy bằng thư viện chuẩn của Java, vì Spring thật dùng
+      đúng cơ chế này. Giao diện là danh sách tên hàm mà lớp hứa có, ở đây là hai
+      hàm chuyển tiền và ghi vết. Lớp thật cài đặt hai hàm đó. Hàm chuyển tiền gọi
+      hàm ghi vết bằng cách gọi thẳng chính nó.
+  - show: '<p><b>Phần 2: proxy đứng giữa, tạo ngay lúc chạy</b></p><div class="code"><div>Dich
+      that = <span class="kw">new</span> DichThat();</div><div>Dich proxy = (Dich)
+      Proxy.newProxyInstance(Dich.<span class="kw">class</span>.getClassLoader(),
+      <span class="kw">new</span> Class&lt;?&gt;[] { Dich.<span class="kw">class</span>
+      },</div><div>    (p, m, a) -&gt; {</div><div>        moGiaoDich++;                       <span
+      class="cm">// proxy mở giao dịch trước khi vào hàm thật</span></div><div>        System.out.println("proxy
+      mo giao dich cho " + m.getName());</div><div>        <span class="kw">return</span>
+      m.invoke(that, a);</div><div>    });</div><div>proxy.chuyenTien();</div></div>'
+    focus:
+    - 1
+    - 1
+    - 2
+    clear: true
+    say: Proxy được tạo ngay lúc chạy, và nó đứng giữa người gọi với đối tượng thật.
+      Đoạn có mũi tên là việc proxy làm mỗi khi có ai gọi một hàm của nó. Việc đó
+      tăng biến đếm, tức là mở một giao dịch, in tên hàm được gọi, rồi mới gọi hàm
+      thật.
+  - show: '<p><b>Phần 3: gọi qua proxy, đếm giao dịch</b></p><div class="code"><div>    System.out.println("so
+      giao dich: " + moGiaoDich);</div><div>    proxy.ghiVet();</div><div>    System.out.println("so
+      giao dich: " + moGiaoDich);</div><div>}</div></div>'
+    focus:
+    - 1
+    - 2
+    clear: true
+    say: Ta gọi hàm chuyển tiền qua proxy và in số giao dịch. Rồi ta gọi hàm ghi vết
+      cũng qua proxy, và in lại số giao dịch.
+  - show: '<p><b>Kết quả chạy thật</b></p><div class="code"><div>proxy mo giao dich
+      cho chuyenTien</div><div>  ghiVet chay</div><div>so giao dich: 1</div><div>proxy
+      mo giao dich cho ghiVet</div><div>  ghiVet chay</div><div>so giao dich: 2</div></div>'
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    clear: true
+    say: Khi chạy thật, gọi chuyển tiền qua proxy thì proxy mở một giao dịch, rồi
+      hàm thật chạy và tự gọi ghi vết. Lời gọi bên trong đi thẳng, không qua proxy,
+      nên không mở thêm, số giao dịch vẫn là một. Khi ta gọi ghi vết qua proxy, giao
+      dịch thứ hai mới được mở. Đây chính là lỗi gọi trong cùng lớp làm mất nhãn giao
+      dịch.
 - id: check
   kind: check
   title: 'Tự kiểm bằng đường khác: đếm lần đi qua proxy'
@@ -446,6 +525,124 @@ scenes:
       được lưu dù giao dịch chính hỏng, đổi lại tốn thêm một giao dịch. Để cùng lớp
       thì ít mã nhưng nhãn bị bỏ qua.
     clear: true
+- id: quy_mo
+  kind: example
+  title: 'Quy mô: giao dịch lồng nhau làm cạn kết nối khi tải tăng'
+  checks:
+  - 5 * (2 - 1) + 1 == 6
+  - 500 * (2 - 1) + 1 == 501
+  - 50000 * (2 - 1) + 1 == 50001
+  - 6 <= 10 < 501
+  steps:
+  - show: '<p>Mỗi giao dịch giữ một <b>kết nối</b> (đường nối từ dịch vụ tới cơ sở
+      dữ liệu) trong lúc chạy. Giao dịch ngoài giữ một, hàm ghi vết chế độ mới giữ
+      thêm một: tối đa $C = 2$ kết nối cho mỗi yêu cầu.
+
+      Gọi $T$ là số yêu cầu chạy cùng lúc. Để không bị kẹt, hộp kết nối cần ít nhất
+      $T \cdot (C - 1) + 1$ kết nối.</p><table class=''t''><tr><th>tải</th><th>yêu
+      cầu cùng lúc T</th><th>kết nối tối thiểu</th><th>hộp mặc định 10 kết nối</th></tr><tr><td>×1</td><td>5</td><td>5
+      × 1 + 1 = 6</td><td>đủ</td></tr><tr><td>×100</td><td>500</td><td>500 × 1 + 1
+      = 501</td><td><b>thiếu</b>: kẹt</td></tr><tr><td>×10 000</td><td>50 000</td><td>50
+      000 × 1 + 1 = 50 001</td><td><b>thiếu</b>, và vượt giới hạn của cơ sở dữ liệu</td></tr></table>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 1
+    - 2
+    - 2
+    - 2
+    clear: true
+    say: Mỗi giao dịch giữ một kết nối tới cơ sở dữ liệu trong lúc chạy. Giao dịch
+      ngoài giữ một, hàm ghi vết với chế độ mới giữ thêm một, nên mỗi yêu cầu tối
+      đa hai kết nối. Để không bị kẹt, hộp kết nối cần ít nhất số yêu cầu cùng lúc
+      nhân với một, cộng một. Với năm yêu cầu cùng lúc thì cần sáu, hộp mười kết nối
+      là đủ. Tải tăng một trăm lần, năm trăm yêu cầu cùng lúc cần năm trăm linh một
+      kết nối, hộp mười kết nối bị kẹt. Tải tăng mười nghìn lần cần hơn năm mươi nghìn,
+      vượt cả giới hạn của cơ sở dữ liệu.
+    introduces:
+    - cdot
+  - show: '<div class="box warn"><b>Vì sao kẹt.</b> Mười yêu cầu cùng giữ kết nối
+      thứ nhất, rồi cả mười cùng xin kết nối thứ hai: hộp hết, không yêu cầu nào tiến
+      được, tới khi quá thời gian chờ (mặc định HikariCP là 30 giây).
+
+      <b>Giải pháp cũ gãy:</b> tăng hộp kết nối lên 501 hay 50 001 tốn bộ nhớ và làm
+      cơ sở dữ liệu quá tải.</div>
+
+      <div class="box key"><b>Đánh đổi:</b> không lồng chế độ mới ở đường nóng; ghi
+      vết bằng cách khác (ghi sau, hàng đợi); hoặc giới hạn số yêu cầu cùng lúc nhỏ
+      hơn hộp. Mỗi cách đổi lấy một chút chậm trễ hay phức tạp.</div>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 1
+    - 2
+    - 2
+    - 2
+    clear: true
+    say: Hãy xem vì sao các yêu cầu bị kẹt chờ nhau. Mười yêu cầu cùng giữ kết nối
+      thứ nhất, rồi cả mười cùng xin kết nối thứ hai, nhưng hộp đã hết, nên không
+      yêu cầu nào tiến được, tới khi quá thời gian chờ. Mặc định của thư viện kết
+      nối phổ biến này là ba mươi giây. Giải pháp cũ gãy, vì tăng hộp lên năm trăm
+      hay năm mươi nghìn kết nối tốn bộ nhớ và làm cơ sở dữ liệu quá tải. Đánh đổi
+      là không lồng chế độ mới ở đường chạy nóng, ghi vết bằng cách khác, hoặc giới
+      hạn số yêu cầu cùng lúc nhỏ hơn hộp. Mỗi cách đổi lấy một chút chậm trễ hay
+      phức tạp.
+- id: practice
+  kind: practice
+  title: 'Tự làm: đếm giao dịch của ba lời gọi'
+  steps:
+  - show: '<p><b>Đề</b>: dịch vụ có <code>chuyenKhoan</code>, <code>tinhPhi</code>,
+      <code>thongBao</code>; <code>chuyenKhoan</code> tự gọi hai hàm kia bằng <code>this</code>.</p>
+
+      <ol><li>Chép khung trong <code>de.md</code>, điền <code>moGiaoDich++</code>
+      vào proxy</li>
+
+      <li>Gọi qua proxy cả ba hàm, mỗi lần in <code>sau &lt;tên hàm&gt;: &lt;số&gt;</code></li>
+
+      <li><b>Dự đoán</b> ba số trước khi chạy</li></ol>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 1
+    - 2
+    - 2
+    pause: 120
+    say: Bây giờ tới phần bạn tự làm. Dịch vụ có ba hàm, và hàm chuyển khoản tự gọi
+      hai hàm còn lại bằng cách gọi thẳng chính nó. Hãy chép khung trong thư mục thực
+      hành, điền câu lệnh tăng biến đếm vào proxy, rồi gọi qua proxy cả ba hàm và
+      in số giao dịch sau mỗi lần. Trước khi chạy, hãy dự đoán ba con số. Hãy dừng
+      video, tự làm, đừng chép lại ví dụ.
+  - show: '<p><b>Kết quả mong đợi</b></p><div class="code"><div>sau chuyenKhoan: 1</div><div>sau
+      tinhPhi: 2</div><div>sau thongBao: 3</div></div><p class="note">Chấm bằng Git
+      Bash: <code>bash labs/cham.sh BNK L02 ChuyenKhoanProxy.java</code> — in <b>ĐÚNG</b>
+      khi trùng.</p>'
+    focus:
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Đây là kết quả mong đợi. Bạn chạy chương trình của mình rồi so từng dòng.
+      Nếu muốn chấm bằng máy, dùng lệnh ở dưới màn hình; lệnh in chữ ĐÚNG khi đầu
+      ra trùng, hoặc chỉ ra dòng nào khác.
+  - show: '<div class="box key"><b>Nếu kẹt:</b> chỉ lời gọi <b>qua proxy</b> mới tăng
+      biến đếm. Lời <code>tinhPhi(); thongBao();</code> bên trong <code>chuyenKhoan</code>
+      đi thẳng nên không tăng.
+
+      Khung đầy đủ ở <code>labs/BNK/L02/de.md</code>, lời giải ở <code>labs/BNK/L02/loi_giai.java</code>
+      — chỉ mở sau khi bạn đã thử.</div>
+
+      '
+    say: Nếu kẹt, nhớ rằng chỉ lời gọi qua proxy mới tăng biến đếm. Hai lời gọi bên
+      trong hàm chuyển khoản đi thẳng nên không tăng. Khung đầy đủ nằm trong tệp đề,
+      lời giải nằm trong thư mục thực hành, chỉ mở sau khi bạn đã tự thử.
+    clear: true
+  lab: labs/BNK/L02
 - id: recap
   kind: recap
   title: Chuỗi logic & tư duy cần mang theo

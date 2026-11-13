@@ -16,7 +16,7 @@ openssl req -x509 -newkey ed25519 -noenc -subj /CN=ca2 -days 365 \\
 """
 
 SH_SERVER = """
-# máy chủ (tên localhost) và khách đúng, cùng do ca1 ký
+# máy chủ (tên localhost) và hai khách, cùng do ca1 ký
 openssl req -x509 -newkey ed25519 -noenc -subj /CN=localhost \\
   -addext basicConstraints=CA:FALSE -CA ca1.crt -CAkey ca1.key \\
   -addext subjectAltName=DNS:localhost -days 90 \\
@@ -24,6 +24,9 @@ openssl req -x509 -newkey ed25519 -noenc -subj /CN=localhost \\
 openssl req -x509 -newkey ed25519 -noenc -subj /CN=thanh_toan \\
   -addext basicConstraints=CA:FALSE -CA ca1.crt -CAkey ca1.key \\
   -days 90 -keyout thanh_toan.key -out thanh_toan.crt
+openssl req -x509 -newkey ed25519 -noenc -subj /CN=ke_toan \\
+  -addext basicConstraints=CA:FALSE -CA ca1.crt -CAkey ca1.key \\
+  -days 90 -keyout ke_toan.key -out ke_toan.crt
 """
 
 SH_BAD = """
@@ -46,6 +49,7 @@ mc.load_cert_chain("may_chu.crt", "may_chu.key")
 mc.load_verify_locations("ca1.crt")     # chỉ tin nơi cấp ca1
 mc.verify_mode = ssl.CERT_REQUIRED      # bắt buộc chứng chỉ khách
 nghe = socket.create_server(("127.0.0.1", 0))  # cổng ngẫu nhiên
+DUOC_PHEP = {"thanh_toan"}   # tên được gọi API này
 '''
 
 PY_SERVE = r'''
@@ -56,7 +60,11 @@ def phuc_vu(loi, xong):
     try:
         t.do_handshake()
         ten = dict(x[0] for x in t.getpeercert()["subject"])
-        t.sendall(("chào " + ten["commonName"]).encode())
+        if ten["commonName"] in DUOC_PHEP:    # cửa ④: kiểm tên
+            t.sendall(("chào " + ten["commonName"]).encode())
+        else:
+            loi.append("tên không được phép")
+            t.sendall("từ chối".encode())
     except ssl.SSLError as e:
         loi.append(getattr(e, "verify_message", e.reason))
     xong.wait(); t.close()      # đợi khách đọc xong mới đóng
@@ -78,7 +86,7 @@ def thu(ten):
 '''
 
 PY_RUN = r'''
-for ten in [None, "la_mat", "het_han", "thanh_toan"]:
+for ten in [None, "la_mat", "het_han", "ke_toan", "thanh_toan"]:
     thu(ten)
 '''
 
@@ -100,6 +108,9 @@ la_mat
 het_han
   khách: SSLV3_ALERT_CERTIFICATE_EXPIRED
   máy chủ: ['certificate has expired']
+ke_toan
+  khách: từ chối
+  máy chủ: ['tên không được phép']
 thanh_toan
   khách: chào thanh_toan
   máy chủ: []
@@ -278,39 +289,42 @@ $$90 \\cdot \\frac{2}{3} = \\hl{60} \\text{ ngày}; \\quad 90 - 60 = \\hlg{30} \
     ex = sc("example", "example", "Ví dụ chạy thật, từng ca", [
         st(code(SH_CA, "Bước A: hai nơi cấp tự ký (openssl 3.5, Git Bash)"),
            """Ta làm thật. Bước A tạo hai nơi cấp tự ký, ca một và ca hai, mỗi nơi một cặp khoá và một chứng chỉ hạn ba trăm sáu mươi lăm ngày.
-           Dòng đầu chỉ cần khi chạy cửa sổ lệnh này trên máy văn phòng, như chú thích ghi, để đường dẫn bắt đầu bằng dấu gạch chéo không bị tự đổi.
+           Dòng đầu chỉ cần khi chạy cửa sổ lệnh này trên đúng hệ điều hành ghi trong ngoặc ở chú thích, để đường dẫn bắt đầu bằng dấu gạch chéo không bị tự đổi.
            Cờ ký chứng chỉ là bắt buộc, vì thiếu nó thì Python ba chấm mười ba từ chối nơi cấp ngay.""",
            focus=[0, ["2.3", "2.6"], "2.1", ["2.4", "2.7"]], clear=True),
         st(code(SH_SERVER, "Bước B: chứng chỉ máy chủ và khách đúng, do ca1 ký"),
-           """Bước B cho ca một ký hai chứng chỉ lá hạn chín mươi ngày. Một cho máy chủ, mang tên máy cục bộ. Một cho dịch vụ thanh toán, là khách đúng.""",
-           focus=["2.1", ["2.2", "2.3", "2.4", "2.5"], ["2.6", "2.7", "2.8"]], clear=True),
+           """Bước B cho ca một ký ba chứng chỉ lá hạn chín mươi ngày. Một cho máy chủ, mang tên máy cục bộ. Một cho dịch vụ thanh toán, là khách đúng.
+           Một cho kế toán, cũng do ca một ký và còn hạn, nhưng ta sẽ không cho kế toán gọi sổ cái.""",
+           focus=["2.1", ["2.2", "2.3", "2.4", "2.5"], ["2.6", "2.7", "2.8"], ["2.9", "2.10", "2.11"]], clear=True),
         st(code(SH_BAD, "Bước C: hai khách sai, rồi tự kiểm bằng openssl verify"),
            """Bước C tạo hai khách sai. Khách lạ do ca hai ký. Khách cũ do ca một ký nhưng hạn dùng từ một tháng một tới một tháng tư năm hai nghìn hai mươi lăm.
            Dòng cuối kiểm ba chứng chỉ khách với nơi cấp ca một, ta sẽ đọc kết quả ở phần tự kiểm.""",
            focus=["2.1", ["2.2", "2.3", "2.4"], ["2.5", "2.6", "2.7", "2.8"], "2.9"], clear=True),
         st(code(PY_CTX, "Máy chủ Python: bắt buộc chứng chỉ khách"),
            """Giờ dựng máy chủ bằng thư viện chuẩn của Python. Máy chủ nạp chứng chỉ và khoá của mình, chỉ tin nơi cấp ca một, và đặt chế độ bắt buộc chứng chỉ khách.
-           Nó nghe ở một cổng ngẫu nhiên trên chính máy này.""", focus=["2.1", ["2.3", "2.4", "2.5", "2.6"], "2.7"], clear=True),
-        st(code(PY_SERVE, "Mỗi kết nối: bắt tay, chào theo tên, hoặc ghi lý do (mã minh hoạ CHƯA kiểm tên: cửa ④ để trống)"),
-           """Mỗi kết nối, máy chủ bắt tay. Nếu được, nó đọc tên chung trong chứng chỉ khách và gửi lời chào theo tên đó.
-           Nếu hỏng, nó ghi lại lý do. Dòng cuối đợi khách đọc xong mới đóng, để khách kịp nhận thông báo lỗi, còn cửa bốn vẫn để trống vì mã chỉ đọc tên để chào, chưa so với danh sách được phép.""",
-           focus=[["2.2", "2.3", "2.4", "2.6"], ["2.7", "2.8"], ["2.9", "2.10"], "2.11"], clear=True),
+           Nó nghe ở một cổng ngẫu nhiên trên chính máy này. Dòng cuối là danh sách tên được gọi sổ cái, hiện chỉ có dịch vụ thanh toán.""", focus=["2.1", ["2.3", "2.4", "2.5", "2.6"], "2.7", "2.8"], clear=True),
+        st(code(PY_SERVE, "Mỗi kết nối: bắt tay, kiểm tên ở cửa ④, chào hoặc từ chối, hoặc ghi lý do"),
+           """Mỗi kết nối, máy chủ bắt tay. Nếu được, nó đọc tên chung trong chứng chỉ khách, đó là cửa bốn.
+           Tên nằm trong danh sách được phép thì gửi lời chào theo tên đó, còn không thì ghi lại lý do và gửi lời từ chối.
+           Nếu bắt tay hỏng, nó ghi lại lý do của thư viện. Dòng cuối đợi khách đọc xong mới đóng, để khách kịp nhận thông báo lỗi.""",
+           focus=[["2.2", "2.3", "2.4", "2.6"], "2.7", ["2.8", "2.9", "2.10", "2.11", "2.12"], ["2.13", "2.14"], "2.15"], clear=True),
         st(code(PY_CLIENT, "Khách: thử với một chứng chỉ (hoặc không có)"),
            """Hàm thử mở một luồng phục vụ, rồi làm khách. Khách tin ca một để kiểm máy chủ, và nạp chứng chỉ của mình nếu có.
            Khách đọc lời chào, hoặc bắt lỗi. Cuối cùng in ra điều khách thấy và điều máy chủ ghi.""",
            focus=[["2.2", "2.3"], ["2.4", "2.5"], ["2.6", "2.7", "2.8", "2.9", "2.10"], "2.12"], clear=True),
         st(code(PY_RUN, "Bốn lần thử"),
-           """Ta thử bốn lần: không có chứng chỉ, khách lạ, khách cũ, và khách đúng.""", clear=True),
+           """Ta thử năm lần: không có chứng chỉ, khách lạ, khách cũ, kế toán, và khách đúng.""", clear=True),
         st(out(OUT_TLS),
            """Kết quả chạy thật. Không có chứng chỉ thì máy chủ báo khách không trình chứng chỉ. Khách lạ thì máy chủ không tìm được nơi cấp mình tin.
-           Khách cũ thì chứng chỉ đã hết hạn. Khách đúng thì nhận được lời chào theo đúng tên.""",
-           focus=[0, ["2.1", "2.2", "2.3"], ["2.4", "2.5", "2.6"], ["2.7", "2.8", "2.9"], ["2.10", "2.11", "2.12"]], clear=True),
+           Khách cũ thì chứng chỉ đã hết hạn. Kế toán qua cả ba cửa của thư viện, nhưng tên không nằm trong danh sách nên bị từ chối ở cửa bốn. Khách đúng thì nhận được lời chào theo đúng tên.""",
+           focus=[0, ["2.1", "2.2", "2.3"], ["2.4", "2.5", "2.6"], ["2.7", "2.8", "2.9"], ["2.10", "2.11", "2.12"], ["2.13", "2.14", "2.15"]], clear=True),
         st("""<p>Đếm theo các cửa ở hình trước:</p>
 $$① \\text{ không chứng chỉ} \\to \\hl{\\text{cửa ①}}; \\quad ② \\text{ la\\_mat} \\to \\hl{\\text{cửa ②}}; \\quad ③ \\text{ het\\_han} \\to \\hl{\\text{cửa ③}}$$
-$$④ \\text{ thanh\\_toan} \\to \\hlg{\\text{qua cả ba}}; \\quad ⑤ \\; 31 + 28 + 31 = 90 \\text{ ngày hạn của het\\_han, đã qua}$$""",
-           """Đối chiếu với các cửa. Ca một hỏng ở cửa một, ca hai hỏng ở cửa hai, ca ba hỏng ở cửa ba, còn ca bốn qua cả ba cửa.
-           Phép tính thứ năm, hạn của khách cũ từ một tháng một tới một tháng tư là ba mươi mốt cộng hai mươi tám cộng ba mươi mốt, bằng chín mươi ngày, và đã qua lâu.""",
-           focus=[1, 2, 3], clear=True),
+$$④ \\text{ ke\\_toan} \\to \\hl{\\text{cửa ④, ứng dụng từ chối}}; \\quad ⑤ \\text{ thanh\\_toan} \\to \\hlg{\\text{qua cả bốn}}$$
+$$⑥ \\; 31 + 28 + 31 = 90 \\text{ ngày hạn của het\\_han, đã qua}$$""",
+           """Đối chiếu với các cửa. Ca một hỏng ở cửa một, ca hai hỏng ở cửa hai, ca ba hỏng ở cửa ba, ca bốn là kế toán hỏng ở cửa bốn, còn ca năm qua cả bốn cửa.
+           Phép tính thứ sáu, hạn của khách cũ từ một tháng một tới một tháng tư là ba mươi mốt cộng hai mươi tám cộng ba mươi mốt, bằng chín mươi ngày, và đã qua lâu.""",
+           focus=[1, [2, 3], 3], clear=True),
     ], checks=["alg.bnx_l05_cases(" + N + ") == ['none', 'ca', 'expired', 'ok']",
                "alg.bnx_l05_server_reason['ca'] == 'unable to get local issuer certificate'",
                "alg.bnx_days_between('2025-01-01', '2025-04-01') == 31 + 28 + 31 == 90"])
@@ -349,10 +363,10 @@ Khi đó cả ba khách sai ở trên đều vào được, và “tạm” thư
         st(table(["câu", "đề"],
                  [["1", "Chứng chỉ khách cấp 1/3/2026, hạn 90 ngày, xoay vòng khi đã dùng 2/3 thời hạn. Xoay ngày nào? Còn bao nhiêu ngày dự phòng?"],
                   ["2", "Nhật ký máy chủ ghi <code>unable to get local issuer certificate</code>. Nguyên nhân khả dĩ nhất là gì, sửa ở đâu?"],
-                  ["3", "Quyết định (số minh hoạ): chứng chỉ khách hạn 365 ngày đổi bằng tay, hay hạn 30 ngày đổi tự động? Giả sử khoá riêng lộ ở ngày 10."]]),
+                  ["3", "Quyết định (số minh hoạ): chứng chỉ khách hạn 365 ngày đổi bằng tay, hay hạn 30 ngày đổi tự động? Giả sử khoá riêng lộ ở ngày 10 và không ai phát hiện hay thu hồi chứng chỉ sớm."]]),
            """Đến lượt bạn. Câu một, chứng chỉ cấp ngày một tháng ba, hạn chín mươi ngày, xoay khi đã dùng hai phần ba thời hạn. Xoay ngày nào, còn bao nhiêu ngày dự phòng?
            Câu hai, nhật ký máy chủ ghi không tìm được nơi cấp. Nguyên nhân khả dĩ nhất là gì, sửa ở đâu?
-           Câu ba, chọn chứng chỉ hạn một năm đổi bằng tay, hay hạn ba mươi ngày đổi tự động, khi khoá riêng lộ ở ngày thứ mười? Hãy dừng video lại và làm từng câu ra giấy trước khi xem đáp án.""",
+           Câu ba, chọn chứng chỉ hạn một năm đổi bằng tay, hay hạn ba mươi ngày đổi tự động, khi khoá riêng lộ ở ngày thứ mười và không ai phát hiện hay thu hồi chứng chỉ sớm? Hãy dừng video lại và làm từng câu ra giấy trước khi xem đáp án.""",
            pause=25),
         st("""<p>Câu 1: dùng 2/3 của 90 ngày.</p>
 $$90 \\cdot \\frac{2}{3} = 60 \\Rightarrow 1/3/2026 + 60 = \\hlg{30/4/2026}; \\quad 90 - 60 = \\hlg{30} \\text{ ngày}$$""",
@@ -362,11 +376,15 @@ $$90 \\cdot \\frac{2}{3} = 60 \\Rightarrow 1/3/2026 + 60 = \\hlg{30/4/2026}; \\q
            """Đáp án câu hai. Giống khách lạ ở ví dụ, chứng chỉ khách do một nơi cấp mà máy chủ không tin ký, hoặc khách quên gửi chứng chỉ trung gian.
            Cách sửa là cấp lại từ đúng nơi cấp, hoặc thêm nơi cấp đó vào danh sách tin nếu nó hợp lệ, chứ không tắt kiểm.""", clear=True),
         st(table(["lựa chọn", "được", "mất"],
-                 [["hạn 365 ngày, đổi bằng tay", "mỗi năm đổi 1 lần", "khoá lộ ở ngày 10: kẻ gian còn dùng 365 − 10 = 355 ngày; đổi bằng tay dễ quên"],
-                  ["hạn 30 ngày, đổi tự động", "khoá lộ ở ngày 10: chỉ còn 30 − 10 = 20 ngày; quen đổi nên ít sự cố", "xoay ở ngày 20 (2/3 của 30 ngày), nên đổi 365 : 20 ≈ 18 lần mỗi năm (lấy phần nguyên); cần hệ thống cấp tự động"]]),
+                 [["hạn 365 ngày, đổi bằng tay", "mỗi năm đổi 1 lần", "khoá lộ ở ngày 10 (không thu hồi): kẻ gian còn dùng 365 − 10 = 355 ngày; đổi bằng tay dễ quên"],
+                  ["hạn 30 ngày, đổi tự động", "khoá lộ ở ngày 10 (không thu hồi): chỉ còn 30 − 10 = 20 ngày; quen đổi nên ít sự cố", "xoay ở ngày 20 (2/3 của 30 ngày), nên đổi 365 : 20 ≈ 18 lần mỗi năm (lấy phần nguyên); cần hệ thống cấp tự động"]])
+           + "<div class='box key'><b>Chốt:</b> chọn hạn 30 ngày, đổi tự động: khoảng hở 20 ngày thay vì 355. Cái giá là phải có hệ thống cấp tự động và theo dõi; chưa có thì dựng nó trước, không lùi về hạn một năm đổi tay. Nếu thu hồi được ngay khi phát hiện, khoảng hở nhỏ hơn, nhưng hạn ngắn vẫn là lớp phòng thêm.</div>",
            """Đáp án câu ba. Hạn một năm đổi bằng tay thì mỗi năm đổi một lần, nhưng khoá lộ ở ngày mười cho kẻ gian ba trăm năm mươi lăm ngày, và đổi bằng tay dễ quên.
-           Hạn ba mươi ngày đổi tự động chỉ để hở hai mươi ngày, đổi lại vì xoay ở ngày hai mươi, mỗi năm phải đổi mười tám lần và cần hệ thống cấp tự động.""",
-           focus=[0, "1.2", "1.3"]),
+           Hạn ba mươi ngày đổi tự động chỉ để hở hai mươi ngày, đổi lại vì xoay ở ngày hai mươi, mỗi năm phải đổi mười tám lần và cần hệ thống cấp tự động.
+           Chốt lại, chọn hạn ba mươi ngày đổi tự động, vì khoảng hở là hai mươi ngày thay vì ba trăm năm mươi lăm ngày.
+           Cái giá là phải có hệ thống cấp tự động và theo dõi, nếu chưa có thì dựng nó trước, chứ không lùi về hạn một năm đổi tay.
+           Nếu thu hồi được ngay khi phát hiện, khoảng hở nhỏ hơn, nhưng hạn ngắn vẫn là lớp phòng thêm.""",
+           focus=[0, "1.2", "1.3", 2, 2, 2]),
     ], checks=["alg.bnx_rotate_day(90) == 60", "alg.bnx_add_days('2026-03-01', 60) == '2026-04-30'",
                "alg.bnx_add_days('2026-03-01', 90) == '2026-05-30'", "alg.bnx_leak_window(365, 10) == 355",
                "alg.bnx_leak_window(30, 10) == 20", "alg.bnx_rotate_day(30) == 20", "alg.bnx_rotations_per_year(30) == 18", "alg.bnx_rotations_per_year(365) == 1"])

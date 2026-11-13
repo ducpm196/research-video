@@ -45,7 +45,7 @@ CACHE = OUT / "_cache" / "tts"
 FPS = 30
 SR = 24000
 KINDS = {"hook", "prereq", "intuition", "symbol", "concept", "formula", "example", "check",
-         "pitfall", "quiz", "recap", "mindset"}
+         "pitfall", "quiz", "recap", "mindset", "practice"}
 REQUIRED_KINDS = {"hook", "symbol", "example", "pitfall", "quiz", "recap"}
 MATH_RE = re.compile(r"\$\$(.+?)\$\$|\$(.+?)\$", re.S)
 # Khoá step mà lint/render/player thật sự đọc (E34): khoá khác bị bỏ qua lặng lẽ nên phải báo
@@ -595,6 +595,7 @@ def lint(spec, quiet=False):
             if "$" in re.sub(r"<[^>]+>", "", svg):
                 r.err(f"{sc.get('id', si)}.{ki}", "E51 có công thức $…$ trong <svg> — KaTeX không vẽ trong hình, sẽ hiện nguyên dấu $")
     lint_depth(spec, r)
+    lint_af2(spec, r)
     lint_profile_rules(spec, r, prof)
     # E30: ghi chú xem xét ASR cho câu không còn trong bài — ghi chú cũ che mất việc phải nghe lại câu mới
     caps = {s.strip() for _, _, _, st in iter_steps(spec) for s in sentences(st.get("say") or "")}
@@ -602,6 +603,76 @@ def lint(spec, quiet=False):
         if str(x.get("sentence", "")).strip() not in caps:
             r.warn("asr_reviewed", f"E30 câu đã xem xét không còn trong bài: “{str(x.get('sentence'))[:60]}…” — xoá mục này")
     return r
+
+
+AF2_DO_VERBS = ("viết", "tính", "dựng", "chạy", "cài", "kiểm", "chọn", "thiết kế", "vẽ", "đo", "cấu hình", "tạo", "sửa", "gỡ",
+                "áp dụng", "đọc", "so sánh", "đếm", "xác định", "triển khai", "chứng minh", "giải", "lập")
+AF2_DO_SCENES = {"example", "check", "practice", "formula"}
+LAB_FILES = ("de.md", "mong_doi.txt")
+LAB_SOLUTIONS = ("loi_giai.py", "loi_giai.java", "loi_giai.sql", "loi_giai.sh", "loi_giai.md")
+
+
+def lab_dir(spec, sc):
+    p = str(sc.get("lab") or "").strip().strip("/")
+    return (ROOT / p) if p else None
+
+
+def lint_af2(spec, r):
+    """E51/E53 (bài khai `af2: true`, plan AF2 2026-11-13): mục tiêu nào cũng có cảnh dạy nó, và có cảnh `practice` (Tự làm)
+    trỏ tới thư mục lab chạy được. Lỗi thật mẫu F: AGT L04, DVO L03, ROB L10, SEC L11, CLC L10, CSA L07, BNX L05 hứa mục tiêu bài không dạy;
+    35/38 bài không giao việc tự làm. Bài chưa khai `af2` không bị đòi (tránh 680 cảnh báo giả); `audit/review/af2_status.py` đếm tiến độ."""
+    if not spec.get("af2"):
+        return
+    scenes = spec.get("scenes") or []
+    ids = {sc.get("id"): sc for sc in scenes}
+    objs = spec.get("objectives") or []
+    covers = spec.get("covers")
+    if not isinstance(covers, list) or not covers:
+        r.err("covers", "E51 bài `af2: true` thiếu `covers: [{objective: n, scene: <id>}]` — mỗi mục tiêu phải trỏ tới cảnh dạy nó")
+    else:
+        seen = set()
+        for c in covers:
+            n, sid = c.get("objective"), c.get("scene")
+            if not isinstance(n, int) or not 1 <= n <= len(objs):
+                r.err("covers", f"E51 `objective: {n}` ngoài phạm vi 1..{len(objs)}")
+                continue
+            sc = ids.get(sid)
+            if sc is None:
+                r.err("covers", f"E51 mục tiêu {n} trỏ tới cảnh `{sid}` không có trong bài")
+                continue
+            seen.add(n)
+            text = str(objs[n - 1]).strip().lower()
+            if text.startswith(AF2_DO_VERBS) and sc.get("kind") not in AF2_DO_SCENES:
+                r.err("covers", f"E51 mục tiêu {n} “{str(objs[n - 1])[:60]}” là kỹ năng LÀM nhưng cảnh `{sid}` là `{sc.get('kind')}` — "
+                                "cần cảnh ví dụ làm mẫu, kiểm tra lại hoặc tự làm")
+        miss = sorted(set(range(1, len(objs) + 1)) - seen)
+        if miss:
+            r.err("covers", f"E51 mục tiêu {miss} chưa có cảnh dạy trong `covers`")
+    prs = [sc for sc in scenes if sc.get("kind") == "practice"]
+    if not prs:
+        r.err("practice", "E53 bài `af2: true` thiếu phân cảnh `practice` (Tự làm) — người học phải có việc cụ thể tự làm và kết quả để đối chiếu")
+    for sc in prs:
+        where = f"{sc.get('id')}"
+        d = lab_dir(spec, sc)
+        if d is None or not d.is_dir():
+            r.err(where, f"E53 cảnh practice thiếu `lab:` hoặc thư mục `{sc.get('lab')}` không có")
+            continue
+        miss = [f for f in LAB_FILES if not (d / f).is_file()]
+        if miss or not any((d / f).is_file() for f in LAB_SOLUTIONS):
+            r.err(where, f"E53 thư mục lab thiếu {miss or ''} {'' if any((d / f).is_file() for f in LAB_SOLUTIONS) else 'loi_giai.* (py/java/sql/sh/md)'}")
+            continue
+        screen = " ".join(re.sub(r"<[^>]+>", " ", str(st.get("show", ""))) for st in sc.get("steps") or [])
+        screen = re.sub(r"&lt;", "<", re.sub(r"&gt;", ">", re.sub(r"&amp;", "&", screen)))
+        screen = re.sub(r"\s+", " ", screen)
+        for line in (d / "mong_doi.txt").read_text(encoding="utf-8").splitlines():
+            want = re.sub(r"\s+", " ", line).strip()
+            if want and want not in screen:
+                r.err(where, f"E53 kết quả mong đợi “{want[:50]}” (mong_doi.txt) không hiện trên màn hình của cảnh — người học không có gì để đối chiếu")
+                break
+        if not any(st.get("pause") for st in sc.get("steps") or []):
+            r.err(where, "E53 cảnh practice cần một step `pause` trước khi hiện kết quả mong đợi — để người học làm trước")
+    if not (r.errors and any(e.startswith(("covers", "practice")) or "E51" in e or "E53" in e for e in r.errors)):
+        r.ok("E51/E53 mục tiêu đều có cảnh dạy; có cảnh Tự làm với lab chạy được")
 
 
 VISUAL_RE = re.compile(r"<svg|<table|class=[\"']chain[\"']|\$\$|<pre|class=[\"']code[\"']")

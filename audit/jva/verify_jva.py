@@ -51,7 +51,7 @@ def screen_lines_ok(err, out):
 
 ok = fail = 0
 seen = set()
-for p in lib.PROGRAMS:
+for p in lib.PROGRAMS + lib.PROGRAMS_IO:
     key = (p["lesson"], p["name"], p["code"])
     if key in seen:
         continue
@@ -59,7 +59,8 @@ for p in lib.PROGRAMS:
     with tempfile.TemporaryDirectory() as d:
         src = Path(d) / f'{p["name"]}.java'
         src.write_text(p["code"] + "\n", encoding="utf-8")
-        c = subprocess.run(JAVAC + ["-d", d, str(src)], capture_output=True, text=True,
+        # chạy trong thư mục tạm với tên tệp tương đối: javac in `Thieu.java:3: error: …` đúng như người học thấy trong Git Bash
+        c = subprocess.run(JAVAC + ["-d", d, src.name], capture_output=True, text=True, cwd=d,
                            encoding="utf-8", errors="replace")
         exp = p["expect"]
         if exp.startswith("compile_error:"):
@@ -73,7 +74,8 @@ for p in lib.PROGRAMS:
             good, why = False, f"không biên dịch được: {c.stderr[:300]!r}"
         else:
             r = subprocess.run(["java", "-Dstdout.encoding=UTF-8", "-Dstderr.encoding=UTF-8", "-cp", d, p["name"]],
-                               capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+                               capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
+                               input=p.get("stdin"), cwd=d)   # cwd=d: tệp chương trình tạo ra nằm trong thư mục tạm
             got = norm(r.stdout)
             if exp.startswith("runtime_error:"):
                 exc = exp.split(":", 1)[1]

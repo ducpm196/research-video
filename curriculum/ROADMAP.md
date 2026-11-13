@@ -32,7 +32,10 @@ Sáu nguyên tắc không đổi:
    - một tên chuỗi, một giọng cho mỗi khoá (`check_meta.py`);
    - bản đồ khoá ở bài 0 liệt kê đủ mọi bài (lint E37).
 
-## 2. Kiến trúc chương trình: 8 tầng, 38 khoá, 575 bài (OBSERVED, đếm từ `curriculum/*.yaml`)
+## 2. Kiến trúc chương trình: 8 tầng + tầng nền thực hành (T−1), 45 khoá, 701 bài (đếm từ `curriculum/*.yaml` lúc 2026-11-13; số tầng T0–T7 dưới đây là số lúc 2026-10-31, số khoá/bài hiện tại ở `STATUS.md`)
+
+**T−1 · Nền thực hành và lập trình (thêm đợt AF2, 2026-11-13)**: **FND** Nền thực hành: dòng lệnh, tệp, dữ liệu, HTTP, SQL, Git (11) · **JVA** Java từ con số 0 (13) · **JV2** Java trung cấp: dự án nhiều tệp, dữ liệu, hàm, luồng, kiểm thử (10) — đứng TRƯỚC mọi khoá khác trong dãy học; mọi bài có cảnh **Tự làm** (lab chạy được: `labs/`). Vì sao: mẫu F đo thấy người mất gốc hụt nền từ BNK L02 và kẹt khi thực hành ở BNX L00 (`audit/review/sample_f/REPORT.md` mục 4).
+
 
 | Tầng | Khoá (số bài) | Vai trò |
 |---|---|---|

@@ -1,0 +1,14 @@
+CREATE TABLE sodu (tk TEXT PRIMARY KEY, so_du INTEGER);
+CREATE TABLE outbox (id INTEGER PRIMARY KEY, su_kien TEXT, da_gui INTEGER DEFAULT 0);
+INSERT INTO sodu VALUES ('B', 3000000);
+COMMIT;
+BEGIN;
+UPDATE sodu SET so_du = so_du - 700000 WHERE tk = 'B';
+INSERT INTO outbox (su_kien) VALUES ('lenh 77 da tru 700000');
+COMMIT;
+BEGIN;
+UPDATE sodu SET so_du = so_du - 900000 WHERE tk = 'B';
+INSERT INTO outbox (su_kien) VALUES ('lenh 78 da tru 900000');
+ROLLBACK;
+SELECT so_du FROM sodu;
+SELECT su_kien, da_gui FROM outbox;

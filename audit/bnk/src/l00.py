@@ -1,7 +1,79 @@
 from lib import *
+from labkit import write_lab, practice_steps, practice_scene
 
 
 def build():
+    giu_ref = prog("GiuThamChieu", """
+import java.lang.ref.WeakReference;
+public class GiuThamChieu {
+    public static void main(String[] args) {
+        Object tk = new byte[1_000_000];                       // một đối tượng gần 1 MB trên heap
+        WeakReference<Object> yeu = new WeakReference<>(tk);   // tham chiếu yếu: chỉ để hỏi, không giữ sống
+        System.out.println("con tham chieu: " + (yeu.get() != null));
+        tk = null;                                             // bỏ tham chiếu mạnh cuối cùng
+        System.gc();                                           // xin máy dọn rác
+        System.out.println("sau khi bo: " + (yeu.get() != null));
+    }
+}""", out="""con tham chieu: true
+sau khi bo: false""")
+    ro_ri = prog("RoRi", """
+import java.util.*;
+public class RoRi {
+    static final Map<Integer, byte[]> BO_DEM = new HashMap<>();   // biến static: một gốc
+    static long dungMB() {
+        System.gc();
+        Runtime rt = Runtime.getRuntime();
+        return (rt.totalMemory() - rt.freeMemory()) / 1_000_000;   // heap đang dùng, đơn vị MB
+    }
+    public static void main(String[] args) {
+        for (int i = 1; i <= 5; i++) BO_DEM.put(i, new byte[1_000_000]);
+        System.out.println("giu 5 doi tuong, heap >= 5 MB? " + (dungMB() >= 5));
+        BO_DEM.clear();
+        System.out.println("sau khi xoa, heap >= 5 MB? " + (dungMB() >= 5));
+    }
+}""", out="""giu 5 doi tuong, heap >= 5 MB? true
+sau khi xoa, heap >= 5 MB? false""")
+    cong_tien = prog("CongTien", """
+import java.math.BigDecimal;
+public class CongTien {
+    public static void main(String[] args) {
+        double a = 0;
+        BigDecimal b = BigDecimal.ZERO;
+        long c = 0;
+        for (int i = 0; i < 10; i++) {
+            a += 0.1;                           // số thực nhị phân
+            b = b.add(new BigDecimal("0.1"));   // số thập phân, tạo từ chuỗi
+            c += 1;                             // số nguyên: đơn vị một phần mười
+        }
+        System.out.println(a + " | " + b + " | " + c + " phan muoi");
+    }
+}""", out="0.9999999999999999 | 1.0 | 10 phan muoi")
+    so_sanh = prog("SoSanh", """
+public class SoSanh {
+    public static void main(String[] args) {
+        String s = new String("abc");
+        String t = new String("abc");
+        System.out.println(s == t);        // cùng một đối tượng?
+        System.out.println(s.equals(t));   // cùng nội dung?
+    }
+}""", out="""false
+true""")
+    phi_lech = prog("PhiLech", """
+public class PhiLech {
+    public static void main(String[] args) {
+        double tong = 0;
+        long phanMuoi = 0;
+        for (int i = 0; i < 20; i++) {
+            tong += 0.3;
+            phanMuoi += 3;
+        }
+        System.out.println("double: " + tong);
+        System.out.println("so nguyen: " + phanMuoi + " phan muoi");
+        System.out.println("bang 6? " + (tong == 6.0));
+    }
+}""", out="""double: 5.999999999999998
+so nguyen: 60 phan muoi
+bang 6? false""")
     sc_hook = sc("hook", "hook", "Vì sao một con số tiền lại lệch, và vì sao dịch vụ sập sau vài ngày?", [
         st("""<p>Cộng mười lần số $0{,}1$ bằng kiểu số thực của Java, máy in ra <b>0.9999999999999999</b>, không phải $1$.</p>
 <div class="box key">Hôm nay ta trả lời ba câu: <b>đối tượng nằm ở đâu</b> trong bộ nhớ, <b>ai dọn rác</b>, và <b>tiền nên lưu bằng kiểu gì</b>.</div>""",
@@ -167,8 +239,93 @@ Với tiền: <b>không dùng double</b>; dùng số nguyên đơn vị nhỏ nh
            """Điều cần mang theo. Rò rỉ bộ nhớ không phải là quên dọn, mà là vẫn còn người trỏ tới. Còn với tiền, không dùng số thực nhị phân.
            Hãy dùng số nguyên đơn vị nhỏ nhất, hoặc BigDecimal."""),
     ])
+    # ── AF2: mã chạy thật, quy mô, tự làm ──
+    add_steps([sc_pre], "prereq", [
+        st(table(["thêm ba thứ dùng trong mã", "nghĩa", "ví dụ"],
+                 [["⑦ Mảng byte", "dãy ô nhớ liền nhau, mỗi ô một byte", "<code>new byte[1_000_000]</code>: một triệu ô, gần 1 MB"],
+                  ["⑧ Bản đồ (Map)", "bảng tra: đưa khoá vào thì lấy ra giá trị", "<code>map.put(1, x)</code>: cất x dưới khoá 1"],
+                  ["⑨ Tham chiếu yếu", "dây buộc lỏng: trỏ tới đối tượng nhưng <b>không giữ nó sống</b>", "<code>WeakReference</code>: hỏi <code>get()</code> còn đối tượng hay đã bị dọn"]]),
+           """Thêm ba thứ sẽ xuất hiện trong mã. Mảng byte là dãy ô nhớ liền nhau, mỗi ô một byte, ví dụ một triệu ô là gần một mê ga byte.
+           Bản đồ là bảng tra, đưa khoá vào thì lấy ra giá trị. Tham chiếu yếu là dây buộc lỏng, nó trỏ tới đối tượng nhưng không giữ đối tượng sống, chỉ dùng để hỏi xem đối tượng còn hay đã bị dọn.""",
+           clear=True),
+    ], at=2)
+    sc_pre["title"] = "Trước hết: chín khái niệm cần hiểu"
+    sc_run = sc("chay_that", "example", "Chạy thật: tham chiếu mạnh, tham chiếu yếu và gốc static", [
+        st(code_block(giu_ref, lines=(4, 9), title="Tệp GiuThamChieu.java (phần chính)"),
+           """Ta chạy thật một chương trình ngắn. Dòng đầu tạo một đối tượng gần một mê ga byte, và biến thứ nhất giữ tham chiếu tới nó.
+           Dòng thứ hai buộc thêm một tham chiếu yếu, chỉ để hỏi đối tượng còn hay không. Rồi ta gán tham chiếu mạnh bằng rỗng và xin máy dọn rác."""),
+        st(out_block(giu_ref),
+           """Kết quả in thật có hai dòng. Dòng đầu là còn, vì biến vẫn trỏ tới đối tượng. Dòng sau là không còn, vì hết tham chiếu mạnh thì đối tượng thành rác và máy đã dọn nó.
+           Theo đặc tả, lệnh xin dọn chỉ là gợi ý, nhưng ở cách chạy mặc định của máy ảo Java trên máy này, nó được thực hiện.""", clear=True),
+        st(code_block(ro_ri, lines=(3, 13), title="Tệp RoRi.java (phần chính)"),
+           """Bây giờ tới gốc tĩnh. Biến tĩnh bản đồ là một gốc, nên mọi mảng nó giữ đều còn tới được. Đối tượng Runtime cho biết bộ nhớ của chương trình, gồm tổng bộ nhớ đã xin và phần còn trống.
+           Hàm đo gọi dọn rác rồi lấy hiệu hai số đó, ra số mê ga byte heap đang dùng. Ta bỏ năm mảng, mỗi mảng một mê ga byte, vào bản đồ và đo. Sau đó xoá bản đồ và đo lại.""", clear=True),
+        st(out_block(ro_ri),
+           """Khi bản đồ còn giữ năm mảng, heap đang dùng từ năm mê ga byte trở lên, kết quả là đúng. Xoá bản đồ rồi, năm mảng thành rác và bị dọn, nên heap không còn tới năm mê ga byte.
+           Vậy rác còn nằm trong bản đồ tĩnh thì không bị dọn. Đó chính là rò rỉ bộ nhớ.""", clear=True),
+    ])
+    add_steps([sc_chk], "check", [
+        st(code_block(cong_tien, lines=(4, 12), title="Tệp CongTien.java (phần chính)"),
+           """Đây là chương trình cộng bằng ba cách. Biến thứ nhất là số thực nhị phân, biến thứ hai là số thập phân tạo từ chuỗi, biến thứ ba là số nguyên đếm theo phần mười.
+           Mỗi vòng cộng một phần mười vào cả ba, tổng cộng mười vòng.""", clear=True),
+        st(out_block(cong_tien),
+           """Chạy thật, ba kết quả khác nhau đúng như bảng vừa nói. Số thực nhị phân cho không phẩy chín chín chín và nhiều chữ chín, vì nó không biểu diễn đúng không phẩy một, nên hai cách còn lại cho đúng một.""", clear=True),
+    ])
+    add_steps([sc_pit], "pitfalls", [
+        st(code_block(so_sanh, lines=(3, 6), title="Chạy thật: hai chuỗi cùng chữ") + out_block(so_sanh),
+           """Chạy thật hai chuỗi cùng chữ a b c, nhưng được tạo riêng bằng từ khoá tạo mới. Phép so hai dấu bằng cho kết quả sai, vì đó là hai đối tượng khác nhau.
+           Phương thức so nội dung cho kết quả đúng.""", clear=True),
+    ], at=1)
+    sc_scale = sc("quy_mo", "example", "Quy mô: rò rỉ nhỏ, tải lớn", [
+        st("""<p>Giả sử mỗi yêu cầu bỏ lại $1$ KB (1024 byte) trong bản đồ tĩnh, và heap của dịch vụ là $4$ GB $= 4 \\cdot 1024^3$ byte <i>(số minh hoạ)</i>.</p>
+$$\\text{thời gian đầy} = \\frac{4 \\cdot 1024^3}{\\text{yêu cầu mỗi giây} \\cdot 1024}\\ \\text{giây}$$
+""" + table(["tải", "yêu cầu mỗi giây", "rò rỉ mỗi giây", "đầy heap sau"],
+            [["×1", "10", "10 240 byte", "≈ 419 430 giây ≈ <b>4,9 ngày</b>"],
+             ["×100", "1 000", "1 024 000 byte", "≈ 4 194 giây ≈ <b>70 phút</b>"],
+             ["×10 000", "100 000", "102 400 000 byte", "≈ <b>42 giây</b>"]]),
+           """Giả sử mỗi yêu cầu bỏ lại một ki lô byte trong bản đồ tĩnh, và heap của dịch vụ là bốn nghìn không trăm chín mươi sáu mê ga byte. Đây là số minh hoạ.
+           Thời gian đầy bằng tổng heap chia cho tốc độ rò rỉ mỗi giây. Với mười yêu cầu mỗi giây, heap đầy sau khoảng bốn phẩy chín ngày.
+           Tải tăng một trăm lần, còn khoảng bảy mươi phút. Tải tăng mười nghìn lần, chỉ còn khoảng bốn mươi hai giây.""", clear=True),
+        st("""<div class="box warn"><b>Giải pháp cũ gãy ở đâu.</b> Khởi động lại dịch vụ mỗi đêm đủ ở tải ×1 vì 4,9 ngày dài hơn một ngày. Ở ×100 phải khởi động lại mỗi giờ, ở ×10 000 thì sập
+trước khi kịp khởi động lại. <b>Tăng heap gấp đôi</b> chỉ kéo dài gấp đôi thời gian, không đổi bản chất.</div>
+<div class="box key"><b>Sửa gốc:</b> giới hạn bộ đệm, ví dụ tối đa $10\\,000$ mục, tức tối đa $10\\,240\\,000$ byte (khoảng 10 MB) dù tải bao nhiêu.
+<b>Đánh đổi:</b> mục bị đuổi đi thì lần sau phải tra lại từ nguồn gốc, chậm hơn.</div>""",
+           """Giải pháp cũ là khởi động lại dịch vụ mỗi đêm. Nó đủ ở tải gốc vì bốn phẩy chín ngày dài hơn một ngày. Ở tải gấp trăm lần phải khởi động lại mỗi giờ, và ở tải gấp mười nghìn lần dịch vụ sập trước khi kịp khởi động lại.
+           Tăng heap gấp đôi chỉ kéo dài gấp đôi thời gian, không đổi bản chất. Cách sửa gốc là giới hạn bộ đệm, ví dụ tối đa mười nghìn mục, tức khoảng mười mê ga byte dù tải bao nhiêu.
+           Đánh đổi là mục bị đuổi đi thì lần sau phải tra lại từ nguồn gốc, chậm hơn.""", clear=True),
+    ], checks=["round(4 * 1024**3 / 10240) == 419430", "round(419430 / 86400, 1) == 4.9", "10 * 1024 == 10240",
+               "1000 * 1024 == 1024000", "round(4 * 1024**3 / 1024000) == 4194", "round(4194 / 60) == 70",
+               "100000 * 1024 == 102400000", "round(4 * 1024**3 / 102400000) == 42", "10000 * 1024 == 10240000"])
+    write_lab("BNK", "L00", """# Lab BNK L00 — Phí 0,3 bị cộng hai mươi lần
+
+Một khoản phí **0,3** (đơn vị bất kỳ, số minh hoạ) bị cộng **20 lần** vào một tổng.
+
+Viết chương trình `PhiLech` (tệp `PhiLech.java`):
+1. Một biến `double` cộng `0.3` hai mươi lần; một biến `long` cộng `3` (đơn vị: một phần mười) hai mươi lần.
+2. In đúng ba dòng:
+   - `double: <tổng double>`
+   - `so nguyen: <tổng long> phan muoi`
+   - `bang 6? <kết quả so sánh tổng double == 6.0>`
+
+Chạy: `javac PhiLech.java && java PhiLech`. Chấm: `bash labs/cham.sh BNK L00 PhiLech.java`.
+""", "java", phi_lech["code"], phi_lech["out"])
+    sc_lab = practice_scene(sc, "Tự làm: phí 0,3 cộng hai mươi lần", practice_steps(
+        st, "BNK", "L00",
+        """<p><b>Đề</b>: một khoản phí 0,3 bị cộng 20 lần. Viết <code>PhiLech.java</code>:</p>
+<ol><li>biến <code>double</code> cộng <code>0.3</code> hai mươi lần; biến <code>long</code> cộng <code>3</code> (một phần mười) hai mươi lần</li>
+<li>in ba dòng: <code>double: …</code>, <code>so nguyen: … phan muoi</code>, <code>bang 6? …</code> (so <code>tong == 6.0</code>)</li></ol>
+<p class="note">Chạy: <code>javac PhiLech.java &amp;&amp; java PhiLech</code>.</p>""",
+        """Bây giờ tới phần bạn tự làm. Một khoản phí không phẩy ba bị cộng hai mươi lần. Hãy viết chương trình cộng nó hai mươi lần bằng số thực nhị phân, và cộng số ba, tức ba phần mười, hai mươi lần bằng số nguyên.
+        In ba dòng như trên màn hình: tổng số thực, tổng số nguyên, và kết quả so sánh tổng số thực với sáu. Hãy dừng video, tự viết và chạy, đừng chép lại ví dụ.""",
+        phi_lech["out"], "PhiLech.java",
+        """<div class="box key"><b>Nếu kẹt:</b> khai <code>double tong = 0;</code> và <code>long phanMuoi = 0;</code>, rồi vòng lặp 20 lần: <code>tong += 0.3;</code> và <code>phanMuoi += 3;</code>.
+Lời giải ở <code>labs/BNK/L00/loi_giai.java</code> — chỉ mở sau khi bạn đã thử.</div>""",
+        """Nếu kẹt, khai một biến số thực và một biến số nguyên dài, bắt đầu bằng không. Trong vòng lặp hai mươi lần, cộng không phẩy ba vào biến thứ nhất và cộng ba vào biến thứ hai.
+        Lời giải đầy đủ nằm trong thư mục thực hành của bài, chỉ mở sau khi bạn đã tự thử.""", pause=90), "BNK", "L00")
+    scenes = [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_run, sc_chk, sc_pit, sc_quiz, sc_scale, sc_lab, sc_rec]
     return lesson("L00", "java_bo_nho_gc", "Bài 0 — Java hiện đại: bộ nhớ, đối tượng và bộ thu gom rác",
-                  "curriculum/bnk.yaml L00; audit/bnk/verify_bnk.py L00; The Java Virtual Machine Specification (Java SE 21); IEEE 754; JEP 248 (G1 mặc định từ JDK 9 trên máy server-class) và HotSpot GC Tuning Guide Java SE 21; Java SE 21 API BigDecimal(String) và BigDecimal(double); IEC 80000-13 (KiB = 1024 byte)",
+                  "curriculum/bnk.yaml L00; audit/bnk/verify_bnk.py L00; audit/review/screen_code/BNK.yaml (mã chạy thật bằng JDK 21); The Java Virtual Machine Specification (Java SE 21); IEEE 754; JEP 248 (G1 mặc định từ JDK 9 trên máy server-class) và HotSpot GC Tuning Guide Java SE 21; Java SE 21 API: BigDecimal(String) và BigDecimal(double), java.lang.ref.WeakReference, Runtime.totalMemory/freeMemory, System.gc (chỉ là gợi ý); IEC 80000-13 (KiB = 1024 byte)",
                   ["Phân biệt dữ liệu nằm trên stack và trên heap", "Xác định đối tượng nào bị thu gom từ đồ thị tham chiếu",
-                   "Nhận ra rò rỉ bộ nhớ do tham chiếu static", "Chọn kiểu dữ liệu đúng cho số tiền"],
-                  [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_chk, sc_pit, sc_quiz, sc_rec])
+                   "Nhận ra rò rỉ bộ nhớ do tham chiếu static và chạy thật để thấy nó", "Tính sau bao lâu rò rỉ làm đầy heap khi tải tăng ×100 và ×10 000",
+                   "Chọn kiểu dữ liệu đúng cho số tiền"],
+                  scenes, covers=[(1, "intuition"), (2, "example"), (3, "chay_that"), (4, "quy_mo"), (5, "practice")])

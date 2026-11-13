@@ -1,4 +1,5 @@
 from lib import *
+from labkit import write_lab, practice_steps, practice_scene
 
 # Sổ chuyển khoản nhỏ: ghép lớp (bất biến), bản ghi, bản đồ, danh sách, ngoại lệ. Các biến thể (đúng, lỗi cố ý, sửa sai cách)
 # được ghép từ cùng các mảnh dưới đây, nên số dòng trong dấu vết lỗi được TÍNH từ mã (lnc) chứ không gõ tay.
@@ -143,6 +144,86 @@ def build():
                 out="TU CHOI B chi co 500000\nSAI LENH So tien phai duong\nOK Lenh[tu=A, den=C, tien=1000000]\n"
                     "A=0 B=500000 C=2500000\nTong 3000000")
 
+    lab_code = (TYPES + SO_CAI + """
+public class SoCaiLab {
+    public static void main(String[] args) {
+        SoCai so = new SoCai();
+        so.mo("P", 2000000);
+        so.mo("Q", 800000);
+        so.mo("R", 1200000);
+        System.out.println("Mo xong: tong " + so.tong());
+        ArrayList<Lenh> ds = new ArrayList<>();
+        ds.add(new Lenh("P", "Q", 500000));
+        ds.add(new Lenh("Q", "R", 2000000));
+        ds.add(new Lenh("P", "Z", 10000));
+        ds.add(new Lenh("R", "P", 700000));
+        for (Lenh l : ds) {
+            try {
+                so.chuyen(l);
+                System.out.println("OK " + l);
+            } catch (KhongDuTien e) {
+                System.out.println("TU CHOI " + e.getMessage());
+            } catch (IllegalArgumentException e) {
+                System.out.println("SAI LENH " + e.getMessage());
+            }
+        }
+        System.out.println("P=" + so.lay("P") + " Q=" + so.lay("Q") + " R=" + so.lay("R"));
+        System.out.println("Cuoi ngay: tong " + so.tong());
+    }
+}""").strip("\n")
+    lab_so = prog("SoCaiLab", lab_code, out="Mo xong: tong 4000000\nOK Lenh[tu=P, den=Q, tien=500000]\nTU CHOI Q chi co 1300000\n"
+                  "SAI LENH Khong co tai khoan Z\nOK Lenh[tu=R, den=P, tien=700000]\nP=2200000 Q=1300000 R=500000\nCuoi ngay: tong 4000000")
+    quy_mo_so = prog("QuyMoSo", """
+import java.util.HashMap;
+
+public class QuyMoSo {
+    public static void main(String[] args) {
+        int[] n = {3, 1000, 10000};                       // số tài khoản
+        int[] m = {4, 1000, 10000};                       // số lệnh chuyển
+        for (int k = 0; k < n.length; k++) {
+            HashMap<Integer, Long> soDu = new HashMap<>();
+            for (int i = 0; i < n[k]; i++) {
+                soDu.put(i, 1000000L);
+            }
+            long buoc = 0;                                // số lần cộng trong các lần kiểm tổng
+            for (int j = 0; j < m[k]; j++) {
+                long t = 0;
+                for (long x : soDu.values()) {            // kiểm bất biến: cộng lại mọi số dư
+                    t += x;
+                    buoc++;
+                }
+            }
+            System.out.println("N=" + n[k] + " M=" + m[k] + ": " + buoc + " buoc");
+        }
+    }
+}""", out="N=3 M=4: 12 buoc\nN=1000 M=1000: 1000000 buoc\nN=10000 M=10000: 100000000 buoc")
+    write_lab("JVA", "L12", """# Lab JVA L12 — Dựng sổ chuyển khoản qua ba mốc
+
+Trong Git Bash, thư mục làm việc của bạn, tệp `SoCaiLab.java`. Số liệu là số minh hoạ: ba tài khoản **P = 2 000 000**, **Q = 800 000**, **R = 1 200 000** (tổng gốc 4 000 000).
+
+**Mốc 1 — sổ và tổng.** Lớp `SoCai` giữ `HashMap<String, Long> soDu` và `tongGoc`; hàm `mo(stk, tien)` đặt số dư và cộng `tongGoc`; hàm `tong()` cộng mọi số dư; hàm `lay(stk)` ném `IllegalArgumentException` nếu không có khoá. Hàm chính mở P, Q, R và in `Mo xong: tong 4000000`.
+
+**Mốc 2 — chuyển có kiểm tra trước.** Bản ghi `record Lenh(String tu, String den, long tien) {}` và `class KhongDuTien extends Exception`. Hàm `chuyen(Lenh l) throws KhongDuTien`: lấy số dư hai bên, ném `IllegalArgumentException("So tien phai duong")` nếu tiền không dương, ném `KhongDuTien(tu + " chi co " + a)` nếu tiền lớn hơn số dư bên gửi; **chỉ sau đó** mới trừ bên gửi và cộng bên nhận.
+
+**Mốc 3 — kiểm bất biến sau mỗi lệnh.** Hàm `kiem()` ném `IllegalStateException("Lech tong …")` khi `tong() != tongGoc`; `chuyen` gọi `kiem()` cuối cùng. Hàm chính duyệt bốn lệnh: P→Q 500000, Q→R 2000000, P→Z 10000, R→P 700000; mỗi lệnh trong `try`, bắt `KhongDuTien` (in `TU CHOI …`) và `IllegalArgumentException` (in `SAI LENH …`), thành công in `OK ` + lệnh. Cuối cùng in ba số dư và `Cuoi ngay: tong …`.
+
+Chạy từng mốc để thấy kết quả tăng dần. Chấm bản hoàn chỉnh: `bash labs/cham.sh JVA L12 SoCaiLab.java`.
+""", "java", lab_so["code"], lab_so["out"])
+    sc_lab = practice_scene(sc, "Tự làm: dựng sổ chuyển khoản qua ba mốc", practice_steps(
+        st, "JVA", "L12",
+        """<p><b>Đề</b>: tệp <code>SoCaiLab.java</code>, ba tài khoản P 2 000 000, Q 800 000, R 1 200 000 (số minh hoạ). Dựng <b>dần</b>:</p>
+<ol><li><b>Mốc 1</b>: <code>SoCai</code> với bản đồ, <code>mo</code>, <code>tong</code>, <code>lay</code> → in <code>Mo xong: tong 4000000</code></li>
+<li><b>Mốc 2</b>: bản ghi <code>Lenh</code>, <code>KhongDuTien</code>, hàm <code>chuyen</code> <b>kiểm tra trước, sửa sau</b></li>
+<li><b>Mốc 3</b>: <code>kiem()</code> sau mỗi lệnh; chạy bốn lệnh P→Q 500000, Q→R 2000000, P→Z 10000, R→P 700000</li></ol>""",
+        """Bây giờ tới phần bạn tự làm trên máy, và đây là phần lớn nhất của khoá. Bạn dựng dần sổ chuyển khoản qua ba mốc, chạy thử sau từng mốc.
+        Mốc một, sổ cái với bản đồ số dư, mở ba tài khoản và in tổng bốn triệu. Mốc hai, bản ghi lệnh, ngoại lệ không đủ tiền, và hàm chuyển kiểm tra trước, sửa sau.
+        Mốc ba, kiểm bất biến sau mỗi lệnh, rồi chạy bốn lệnh gồm một lệnh hợp lệ, một lệnh quá số dư, một lệnh sai tài khoản và một lệnh hợp lệ nữa. Hãy dừng video và tự dựng, đừng chép lại ví dụ.""",
+        lab_so["out"], "SoCaiLab.java",
+        """<div class="box key"><b>Nếu kẹt:</b> làm <b>từng mốc</b>, chạy được mới sang mốc sau. Trong <code>chuyen</code>: lấy <code>a</code>, <code>b</code> bằng <code>lay</code>, ném lỗi nếu có, rồi mới <code>put</code> hai lần và gọi <code>kiem()</code>. Hai nhánh <code>catch</code> theo thứ tự trong đề.
+Lời giải nằm ở <code>labs/JVA/L12/loi_giai.java</code> — chỉ mở sau khi bạn đã thử.</div>""",
+        """Nếu kẹt, hãy làm từng mốc, chạy được mới sang mốc sau. Trong hàm chuyển, lấy số dư hai bên, ném lỗi nếu cần, rồi mới đặt hai số dư mới và gọi hàm kiểm. Hai khối bắt theo đúng thứ tự trong đề.
+        Lời giải nằm trong thư mục thực hành của bài, chỉ mở sau khi bạn đã tự thử.""", pause=90), "JVA", "L12")
+
     l_cls = ln(so, "class SoCai")
     l_tong = ln(so, "long tong()")
     l_lay_end = ln(so, "return v;") + 1
@@ -257,6 +338,19 @@ def build():
            Bản ghi lệnh tự in đủ thành phần, nên nhật ký đọc được ngay."""),
     ], checks=["1000000 - 300000 == 700000", "500000 + 300000 == 800000", "1000000 > 800000",
                "1500000 - 200000 == 1300000", "700000 + 200000 == 900000", "900000 + 800000 + 1300000 == 3000000"])
+    nlines = len(so["code"].split("\n"))
+    seg = [(1, l_cls - 1), (l_cls, l_tong - 1), (l_tong, l_lay_end), (l_ch, l_tru - 1), (l_tru, l_kiem_end + 1),
+           (l_main - 2, l_for - 1), (l_for, nlines)]
+    tep_say = ["""Đây là toàn bộ tệp, chia thành bảy phần để bạn gõ lại. Phần một là hai kiểu dữ liệu và các dòng nhập ở đầu tệp.""",
+               """Phần hai mở đầu lớp sổ cái, với bản đồ số dư, tổng gốc và phương thức mở tài khoản.""",
+               """Phần ba là phương thức cộng tổng và phương thức lấy số dư an toàn.""",
+               """Phần bốn là nửa đầu của phương thức chuyển: kiểm tra trước, chưa sửa gì.""",
+               """Phần năm là nửa sau: sửa hai số dư, rồi phương thức kiểm bất biến.""",
+               """Phần sáu là hàm chính, mở ba tài khoản và nạp bốn lệnh vào danh sách.""",
+               """Phần bảy là vòng lặp chạy từng lệnh trong khối thử, rồi in ba số dư và tổng."""]
+    sc_tep = sc("tep", "example", "Toàn bộ tệp So.java, từng phần, để bạn gõ lại", [
+        st(code_block(so, lines=a_b, title=f"Tệp So.java, phần {i + 1} trên 7"), tep_say[i])
+        for i, a_b in enumerate(seg)])
     sc_chk = sc("check", "check", "Tự kiểm bằng đường khác: dòng tiền ròng của từng tài khoản", [
         st(table(["tài khoản", "đầu ngày", "tiền vào − tiền ra", "cuối ngày"],
                  [["A", "1 000 000", "$-300\\,000 + 200\\,000 = -100\\,000$", "900 000"],
@@ -269,6 +363,30 @@ def build():
            Tổng các dòng ròng bằng không, nghĩa là tổng tiền không đổi, đúng bất biến."""),
     ], checks=["-300000 + 200000 == -100000", "1000000 - 100000 == 900000", "500000 + 300000 == 800000",
                "1500000 - 200000 == 1300000", "-100000 + 300000 - 200000 == 0"])
+    sc_scale = sc("quymo", "concept", "Khi số tài khoản và số lệnh tăng gấp nghìn lần: kiểm tổng sau mỗi lệnh còn rẻ không?", [
+        st(code_block(quy_mo_so, lines=(7, 19)),
+           """Kiểm bất biến sau mỗi lệnh có giá của nó: mỗi lần phải cộng lại mọi số dư. Ta đếm số lần cộng với ba quy mô, chương trình thật chạy cả ba.""",
+           clear=True),
+        st(out_block(quy_mo_so),
+           """Ba tài khoản bốn lệnh là mười hai lần cộng. Một nghìn tài khoản một nghìn lệnh là một triệu lần. Mười nghìn tài khoản mười nghìn lệnh là một trăm triệu lần.""",
+           clear=True),
+        st(table(["tài khoản N", "lệnh M", "số lần cộng = N × M", "thời gian nếu 10 nano giây mỗi lần (số minh hoạ)"],
+                 [["3", "4", "12", "gần như không"], ["1 000", "1 000", "1 000 000", "10 mili giây"],
+                  ["10 000", "10 000", "100 000 000", "1 giây"],
+                  ["1 000 000", "1 000 000", "1 000 000 000 000", "10 000 giây ≈ 2,8 giờ"]]),
+           """Từ một nghìn lên một triệu, cả tài khoản lẫn lệnh đều gấp một nghìn lần, nhưng chi phí gấp một triệu lần, vì hai con số nhân với nhau.
+           Nếu mỗi lần cộng mất mười phần tỉ giây, số minh hoạ, thì một triệu tài khoản và một triệu lệnh cần gần ba giờ chỉ để kiểm tổng, mỗi ngày.""",
+           clear=True),
+        st("""<div class="box key"><b>Điều người làm nghề rút ra.</b> Ba điều đổi khi sổ lớn lên.
+<b>① Kiểm gia tăng:</b> mỗi lệnh chuyển chỉ cần kiểm <b>tổng thay đổi của chính lệnh đó bằng 0</b> (một phép tính), còn kiểm đầy đủ toàn bộ chạy <b>định kỳ</b>.
+<b>② Tra cứu:</b> bản đồ tra một tài khoản trong cỡ một bước, danh sách phải duyệt tới N bước.
+<b>③ Bộ nhớ:</b> dữ liệu nằm trong biến thì <b>mất khi tắt chương trình</b>, và nhiều chương trình không dùng chung được. Vì thế hệ thống thật lưu vào <b>cơ sở dữ liệu</b>: lưu bền, có giao dịch (làm trọn hoặc hoàn tác), có chỉ mục để tra nhanh, và cho nhiều người dùng cùng lúc.</div>""",
+           """Ba điều đổi khi sổ lớn lên. Một, kiểm gia tăng: mỗi lệnh chuyển chỉ cần kiểm rằng tổng thay đổi của chính lệnh đó bằng không, là một phép tính, còn kiểm đầy đủ toàn bộ thì chạy định kỳ.
+           Hai, bản đồ tra một tài khoản trong cỡ một bước, còn danh sách phải duyệt tới N bước.
+           Ba, dữ liệu nằm trong biến thì mất khi tắt chương trình, và nhiều chương trình không dùng chung được. Vì thế hệ thống thật lưu vào cơ sở dữ liệu, bền, có giao dịch làm trọn hoặc hoàn tác, có chỉ mục, và cho nhiều người cùng dùng.""",
+           clear=True),
+    ], checks=["3 * 4 == 12", "1000 * 1000 == 10**6", "10**4 * 10**4 == 10**8", "10**6 * 10**6 == 10**12",
+               "10**12 * 10 // 10**9 == 10000", "round(10000 / 3600, 1) == 2.8", "(10**6 * 10**6) // (1000 * 1000) == 10**6"])
     sc_pit = sc("pitfalls", "pitfall", "Lỗi cố ý, đọc dấu vết, và hai cách sửa sai của người đã đi làm", [
         st('<div class="box warn"><b>Lỗi 1 (gài cố ý).</b> Chép dòng trừ sang dòng cộng, quên đổi <code>a</code> thành <code>b</code>.</div>'
            + code_block(so_loi, lines=(l_bug - 1, l_bug)) + out_block(so_loi, "Chạy thì máy ảo in"),
@@ -352,6 +470,10 @@ mỗi thao tác, và để vi phạm <b>lộ ra ngay</b> kèm dấu vết.</div>
                   "java.lang.IllegalArgumentException, java.lang.Throwable (dấu vết ngăn xếp); dev.java/learn. Mọi số tiền là số minh hoạ.",
                   ["Ghép lớp, bản ghi, bản đồ, danh sách và ngoại lệ thành một sổ chuyển khoản",
                    "Áp dụng kiểm tra trước, sửa sau và kiểm bất biến tổng tiền sau mỗi lệnh",
-                   "Đọc dấu vết lỗi, phân biệt nơi phát hiện với nơi sai, sửa tận gốc",
-                   "Nhận ra hai cách sửa sai: nuốt ngoại lệ và chỉ đối soát cuối ngày"],
-                  [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_chk, sc_pit, sc_quiz, sc_rec])
+                   "Phân biệt nơi phát hiện với nơi sai khi đọc dấu vết lỗi, và sửa tận gốc",
+                   "Nhận ra hai cách sửa sai: nuốt ngoại lệ và chỉ đối soát cuối ngày",
+                   "Theo dõi toàn bộ tệp sổ cái hoàn chỉnh, từng phần, và gõ lại được",
+                   "Dự đoán chi phí kiểm toàn bộ sau mỗi lệnh khi số tài khoản và số lệnh tăng gấp nghìn lần, và vì sao cần cơ sở dữ liệu",
+                   "Dựng sổ chuyển khoản qua ba mốc: sổ và tổng, chuyển có kiểm tra trước, kiểm bất biến sau mỗi lệnh"],
+                  [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_tep, sc_chk, sc_scale, sc_pit, sc_quiz, sc_lab, sc_rec],
+                  covers=[(1, "formula"), (2, "example"), (3, "pitfalls"), (4, "pitfalls"), (5, "tep"), (6, "quymo"), (7, "practice")])

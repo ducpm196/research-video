@@ -1,4 +1,5 @@
 from lib import *
+from labkit import write_lab, practice_steps, practice_scene
 
 PHI = """
 public class Phi {
@@ -118,6 +119,76 @@ public class Hang {
     }
 }""", out="Bac\nUu tien")
 
+    phi_args = prog("PhiArgs", """
+public class PhiArgs {
+    public static void main(String[] args) {
+        long soTien = args.length > 0 ? Long.parseLong(args[0]) : 500000;   // có chữ gõ thêm thì dùng nó
+        long phi;
+        if (soTien < 500000) {
+            phi = 0;
+        } else if (soTien < 10000000) {
+            phi = 2200;
+        } else {
+            phi = 5500;
+        }
+        System.out.println(soTien + " -> phi " + phi);
+    }
+}""", out="500000 -> phi 2200")
+    rut_nhap = prog("RutNhap", """
+import java.util.Scanner;
+public class RutNhap {
+    public static void main(String[] args) {
+        Scanner in = new Scanner(System.in);        // công cụ đọc, nối với bàn phím
+        long soDu = in.nextLong();                  // số thứ nhất: số dư
+        long soTien = in.nextLong();                // số thứ hai: số tiền muốn rút
+        if (soTien <= soDu) {
+            System.out.println("Da rut, con " + (soDu - soTien));
+        } else {
+            System.out.println("Khong du tien");
+        }
+    }
+}""", out="Khong du tien", stdin="300000 500000")
+    bac_lai = prog("BacLai", """
+public class BacLai {
+    public static void main(String[] args) {
+        long soTien = args.length > 0 ? Long.parseLong(args[0]) : 10000000;   // số tiền gửi (số minh hoạ)
+        long suat;                                  // lãi suất theo phần nghìn mỗi tháng (số minh hoạ)
+        if (soTien < 10000000) {
+            suat = 3;
+        } else if (soTien < 100000000) {
+            suat = 4;
+        } else {
+            suat = 5;
+        }
+        System.out.println(soTien + " -> suat " + suat + ", lai thang: " + soTien * suat / 1000);
+    }
+}""", out="10000000 -> suat 4, lai thang: 40000")
+    write_lab("JVA", "L03", """# Lab JVA L03 — Lãi theo bậc tiền gửi
+
+Trong Git Bash, viết `BacLai` (tệp `BacLai.java`), số liệu là số minh hoạ:
+
+1. Số tiền gửi `soTien` lấy từ dòng lệnh nếu có, không thì mặc định **10 000 000**: `args.length > 0 ? Long.parseLong(args[0]) : 10000000`.
+2. Lãi suất theo phần nghìn mỗi tháng: dưới **10 000 000** là **3**; từ 10 000 000 tới dưới **100 000 000** là **4**; từ 100 000 000 trở lên là **5**. Chuỗi `if … else if … else`.
+3. In một dòng: `<soTien> -> suat <suat>, lai thang: <soTien * suat / 1000>`.
+4. Chạy không đối số (phải ra dòng ở `mong_doi.txt`), rồi thử đúng ba số ở biên: `java BacLai 9999999` → `9999999 -> suat 3, lai thang: 29999`; `java BacLai 100000000` → `100000000 -> suat 5, lai thang: 500000`.
+
+Chạy: `javac BacLai.java && java BacLai`. Chấm: `bash labs/cham.sh JVA L03 BacLai.java` (chấm khi không đối số).
+""", "java", bac_lai["code"], bac_lai["out"])
+    sc_lab = practice_scene(sc, "Tự làm: lãi theo bậc tiền gửi", practice_steps(
+        st, "JVA", "L03",
+        """<p><b>Đề</b>: viết <code>BacLai.java</code> (số minh hoạ).</p>
+<ol><li><code>soTien</code> lấy từ <code>args[0]</code> nếu có, không thì mặc định 10 000 000</li>
+<li>Lãi suất (phần nghìn mỗi tháng): dưới 10 000 000 là 3; từ 10 000 000 tới dưới 100 000 000 là 4; từ 100 000 000 trở lên là 5</li>
+<li>In <code>… -&gt; suat …, lai thang: …</code> (lãi = <code>soTien * suat / 1000</code>)</li>
+<li>Chạy thử đúng ba số ở biên: 9 999 999, 10 000 000, 100 000 000</li></ol>""",
+        """Bây giờ tới phần bạn tự làm trên máy. Viết chương trình tính lãi tháng theo ba bậc tiền gửi. Số tiền lấy từ chữ gõ thêm nếu có, không thì mặc định mười triệu.
+        Dưới mười triệu thì lãi suất ba phần nghìn, từ mười triệu tới dưới một trăm triệu thì bốn phần nghìn, từ một trăm triệu trở lên thì năm phần nghìn.
+        In số tiền, lãi suất và lãi tháng. Sau đó chạy thử đúng ba số nằm ở biên. Hãy dừng video và tự viết, đừng chép lại ví dụ.""",
+        bac_lai["out"], "BacLai.java",
+        """<div class="box key"><b>Nếu kẹt:</b> nhánh đầu <code>soTien &lt; 10000000</code>, nhánh hai <code>soTien &lt; 100000000</code>, còn lại là nhánh cuối; thử <code>java BacLai 9999999</code> phải ra suất 3, <code>java BacLai 100000000</code> phải ra suất 5.
+Lời giải nằm ở <code>labs/JVA/L03/loi_giai.java</code> — chỉ mở sau khi bạn đã thử.</div>""",
+        """Nếu kẹt, nhánh đầu so với mười triệu, nhánh hai so với một trăm triệu, và nhánh cuối nhận phần còn lại. Số chín triệu chín trăm chín mươi chín nghìn chín trăm chín mươi chín phải ra suất ba, còn đúng một trăm triệu phải ra suất năm.
+        Lời giải nằm trong thư mục thực hành của bài, chỉ mở sau khi bạn đã tự thử.""", pause=60), "JVA", "L03")
     bieu_phi = table(["số tiền chuyển", "phí (số minh hoạ)"],
                      [["dưới 500 000 đồng", "0 đồng"], ["từ 500 000 đến dưới 10 000 000 đồng", "2 200 đồng"],
                       ["từ 10 000 000 đồng trở lên", "5 500 đồng"]])
@@ -228,6 +299,35 @@ $$500\\,000 \\le \\text{soTien} \\;\\text{ và }\\; \\text{soTien} < 10\\,000\\,
            """Đặt cạnh biểu phí, cả ba số ở biên đều ra đúng bậc. Đây là lý do ta thử ở biên, vì lỗi dấu hay nằm đúng ở đó.""", clear=True),
     ], checks=["499999 < 500000", "(500000 < 500000) == False", "500000 < 10000000",
                "(10**7 < 500000) == False", "(10**7 < 10**7) == False"])
+    sc_nhap = sc("nhap", "example", "Ví dụ: nhận số tiền từ dòng lệnh và từ bàn phím, không sửa mã", [
+        st(code_block(phi_args, lines=(3, 3)) + table(["viết", "nghĩa"],
+                 [["<code>args</code>", "danh sách chữ gõ thêm sau tên lớp khi chạy"],
+                  ["<code>args.length</code>", "có bao nhiêu chữ gõ thêm"],
+                  ["<code>args[0]</code>", "chữ đầu tiên (máy đếm vị trí từ 0)"],
+                  ["<code>Long.parseLong(x)</code>", "đổi chuỗi x thành số nguyên dài"]]),
+           """Đến giờ, mỗi lần thử một số tiền khác ta phải sửa mã. Có cách tốt hơn là nhận số tiền từ danh sách chữ gõ thêm, đã gặp ở bài đầu.
+           Độ dài của danh sách cho biết có mấy chữ. Phần tử đầu tiên có vị trí không, vì máy đếm từ không, bài mảng sẽ nói kỹ hơn.
+           Lệnh đổi chuỗi thành số nguyên dài biến chữ năm trăm nghìn thành một số. Toán tử ba ngôi chọn: có chữ gõ thêm thì dùng nó, không thì dùng giá trị mặc định năm trăm nghìn.""",
+           focus=[1, "2.2", "2.3", "2.4", "2.5", "1.1"], forward_ref=True),
+        st('<div class="code"><div>javac PhiArgs.java</div><div>java PhiArgs 499999</div><div>java PhiArgs 500000</div><div>java PhiArgs 10000000</div><div>java PhiArgs</div></div>'
+           '<p><b>Kết quả chạy</b></p><div class="code"><div>499999 -&gt; phi 0</div><div>500000 -&gt; phi 2200</div><div>10000000 -&gt; phi 5500</div><div>500000 -&gt; phi 2200</div></div>',
+           """Biên dịch một lần, rồi chạy bốn lần với bốn số khác nhau, không sửa mã. Ba số đầu nằm đúng ở biên, cho ba bậc đúng như biểu phí.
+           Lần cuối không gõ thêm chữ nào, nên chương trình dùng giá trị mặc định, ra bậc hai.""",
+           clear=True, focus=[1, ["1.2", "1.3", "1.4"], "1.5"]),
+        st(code_block(rut_nhap, lines=(1, 6)) + table(["viết", "nghĩa"],
+                 [["<code>import java.util.Scanner;</code>", "lấy về công cụ đọc có sẵn trong kho <code>java.util</code>"],
+                  ["<code>new Scanner(System.in)</code>", "tạo mới một công cụ đọc nối với <b>đầu vào chuẩn</b> (bàn phím)"],
+                  ["<code>in.nextLong()</code>", "đọc số nguyên dài kế tiếp"]]),
+           """Cách thứ hai là đọc từ bàn phím. Dòng đầu lấy về công cụ đọc, có sẵn trong một kho công cụ của Java. Dòng thứ tư tạo mới một công cụ đọc nối với đầu vào chuẩn, tức bàn phím.
+           Mỗi lệnh đọc số nguyên dài lấy một số kế tiếp, ta gọi hai lần, cho số dư rồi số tiền muốn rút. Phần rẽ nhánh còn lại giống ví dụ rút tiền.""",
+           clear=True, focus=[1, ["1.1", "2.2"], ["1.4", "2.3"], ["1.5", "1.6", "2.4"], 1]),
+        st('<div class="code"><div>javac RutNhap.java</div><div>echo "300000 500000" | java RutNhap</div><div>echo "800000 500000" | java RutNhap</div></div>'
+           '<p><b>Kết quả chạy</b></p><div class="code"><div>Khong du tien</div><div>Da rut, con 300000</div></div>',
+           """Ta không gõ bằng tay mà đưa số vào bằng ống. Lệnh in chữ in hai số ra, và dấu gạch đứng nối kết quả của lệnh trước làm đầu vào cho lệnh sau, thay cho bàn phím.
+           Số dư ba trăm nghìn mà rút năm trăm nghìn thì báo không đủ tiền. Số dư tám trăm nghìn thì rút được, còn lại ba trăm nghìn.""",
+           clear=True, focus=[1, ["1.2", "1.3"], "3.1", "3.2"]),
+    ], checks=["499999 < 500000", "500000 < 500000 or 500000 < 10000000", "10**7 >= 500000", "300000 <= 500000", "800000 - 500000 == 300000",
+               "(500000 if True else 0) == 500000"])
     sc_chk = sc("check", "check", "Tự kiểm bằng đường khác: ba điều kiện độc lập, đúng một cái đúng", [
         st(code_block(kiem, lines=(3, 6)) + out_block(kiem),
            """Đường kiểm khác không dựa vào thứ tự nhánh. Ta viết đủ điều kiện của từng bậc, mỗi bậc một phép so sánh riêng, theo đúng câu chữ của biểu phí.
@@ -240,6 +340,21 @@ $$500\\,000 \\le \\text{soTien} \\;\\text{ và }\\; \\text{soTien} < 10\\,000\\,
     ], checks=["[x < 500000 for x in (499999, 500000, 10**7)] == [True, False, False]",
                "[500000 <= x < 10**7 for x in (499999, 500000, 10**7)] == [False, True, False]",
                "[x >= 10**7 for x in (499999, 500000, 10**7)] == [False, False, True]"])
+    sc_scale = sc("quymo", "concept", "Khi biểu phí và quy định lớn dần, thử bao nhiêu cho đủ?", [
+        st(table(["số bậc phí", "số biên", "ca thử tối thiểu (3 mỗi biên)"],
+                 [["3", "2", "6"], ["10", "9", "27"], ["100", "99", "297"]]),
+           """Biểu phí càng nhiều bậc thì càng nhiều biên. Mỗi biên cần thử ba số: sát dưới, đúng biên và sát trên. Ba bậc có hai biên, nên sáu ca thử.
+           Mười bậc có chín biên, hai mươi bảy ca. Một trăm bậc có chín mươi chín biên, gần ba trăm ca, và chuỗi nếu dài cả trăm nhánh rất khó đọc.""",
+           focus=[1, 1, "1.2", "1.3", "1.4"]),
+        st(table(["số điều kiện đúng/sai độc lập", "số tổ hợp = 2 mũ n"],
+                 [["3", "8"], ["10", "1 024"], ["20", "1 048 576"]]),
+           """Còn khi quy định có nhiều điều kiện độc lập, số tổ hợp gấp đôi với mỗi điều kiện thêm vào. Ba điều kiện cho tám tổ hợp, mười điều kiện cho một nghìn không trăm hai mươi bốn,
+           hai mươi điều kiện cho hơn một triệu tổ hợp. Không ai thử hết được.""",
+           clear=True, focus=[1, ["1.2", "1.3", "1.4"], 1]),
+        st("""<div class="box key"><b>Điều người làm nghề rút ra.</b> Không thử mọi tổ hợp: thử <b>ở biên</b> và thử <b>từng điều kiện riêng</b>.
+Khi số bậc lớn, đưa biểu phí thành <b>bảng dữ liệu</b>: thêm một bậc là thêm một dòng dữ liệu, không thêm một nhánh mã.</div>""",
+           """Người làm nghề không thử mọi tổ hợp. Họ thử ở biên và thử từng điều kiện riêng. Khi số bậc lớn, họ đưa biểu phí thành bảng dữ liệu, thêm một bậc là thêm một dòng dữ liệu chứ không thêm nhánh mã.""", clear=True),
+    ], checks=["3 * (3 - 1) == 6", "3 * (10 - 1) == 27", "3 * (100 - 1) == 297", "2**3 == 8", "2**10 == 1024", "2**20 == 1048576"])
     sc_pit = sc("pitfalls", "pitfall", "Lỗi hay gặp, có lỗi của người đã đi làm", [
         st('<div class="box warn"><b>Lỗi 1 (người mới).</b> Viết một dấu bằng trong điều kiện.</div>'
            + code_block(gan_nham, lines=(4, 4)) + out_block(gan_nham, "Trình biên dịch báo"),
@@ -286,5 +401,9 @@ viết ra từng biên và thử đúng số ở biên. Luôn viết ngoặc nh�
                   ["Viết chuỗi nếu, nếu không, mà, nếu không và đoán đúng nhánh nào chạy",
                    "Đổi câu chữ của quy định thành dấu so sánh đúng ở biên, kể cả điều kiện ghép",
                    "Dùng lệnh chọn theo trường hợp dạng mũi tên và toán tử ba ngôi",
-                   "Kiểm thử ở biên và nhận ra ba lỗi: một dấu bằng, thiếu ngoặc nhọn, sai dấu biên"],
-                  [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_chk, sc_pit, sc_quiz, sc_rec])
+                   "Kiểm thử ở biên và nhận ra ba lỗi: một dấu bằng, thiếu ngoặc nhọn, sai dấu biên",
+                   "Chạy chương trình với số tiền nhập từ dòng lệnh và từ bàn phím, không phải sửa mã",
+                   "Dự đoán số ca thử ở biên và số tổ hợp điều kiện khi quy định lớn dần",
+                   "Viết chương trình tính lãi theo bậc và chạy thử đúng ba số ở biên"],
+                  [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_nhap, sc_chk, sc_scale, sc_pit, sc_quiz, sc_lab, sc_rec],
+                  covers=[(1, "example"), (2, "formula"), (3, "sym"), (4, "check"), (5, "nhap"), (6, "quymo"), (7, "practice")])

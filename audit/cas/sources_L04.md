@@ -6,6 +6,7 @@ Cùng nguồn với ESY L15 (`audit/esy/sources_L15.md`) — đã đối chiếu
 
 ## [GR97] Trưởng nhóm phần mềm bay của tàu, *What really happened on Mars? — Authoritative Account*, thư 15/12/1997
 Tải: www.cs.unc.edu/~anderson/teach/comp790/papers/mars_pathfinder_long_version.html (HTTP 200, 20 931 byte; bản chép thư gốc).
+- Ngày thư (đọc lại nguồn 2026-11-13): tiêu đề thư ghi nguyên văn “Sent: Monday, December 15, 1997 10:28 AM” → thư 15/12/1997 (CITED).
 - “A single CPU controls the spacecraft.” “The hardware which we used to interface to the 1553 bus … was inherited from the Cassini
   spacecraft. This hardware came with a specific paradigm for its usage : the software will schedule activity at an 8 Hz rate.”
   Sơ đồ chu kỳ: “|< ------------- .125 seconds ------------------------>|”.
@@ -45,6 +46,7 @@ Tải: www.cs.unc.edu/~anderson/teach/comp790/papers/mars_pathfinder_long_versio
 
 ## [MJ97] M. Jones, *What Happened on Mars?*, thư 5/12/1997 (kể lại bài nói ở hội nghị)
 Tải: www.cs.cmu.edu/afs/cs/user/raj/www/mars.html (HTTP 200, 8 859 byte).
+- Ngày thư (đọc lại nguồn 2026-11-13): tiêu đề thư ghi nguyên văn “Sent: Friday, December 05, 1997 4:15 AM” → thư 5/12/1997 (CITED, mẫu F CAS L04 SHOULD đã kiểm).
 - “after its July 4th, 1997 landing on the Martian surface … But a few days into the mission, not long after Pathfinder started gathering
   meteorological data, the spacecraft began experiencing total system resets”.
 - Các chi tiết bị [GR97] đính chính, bài nêu như ví dụ “tin bản kể lại”: “a watchdog timer would go off” (theo [GR97]: tác vụ lập lịch

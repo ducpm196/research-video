@@ -1,0 +1,661 @@
+id: L05
+course: JV2
+series: JV2 · Java trung cấp
+title: 'Bài 5 — Luồng: tranh chấp dữ liệu, khoá và nhóm luồng'
+voice: vi-VN-NamMinhNeural
+rate: -5%
+depth: full
+af2: true
+covers:
+- objective: 1
+  scene: intuition
+- objective: 2
+  scene: example
+- objective: 3
+  scene: example
+- objective: 4
+  scene: pitfalls
+- objective: 5
+  scene: scale
+- objective: 6
+  scene: practice
+source: 'curriculum/jv2.yaml L05; audit/jv2/verify_jv2.py L05 (javac/java chạy thật,
+  JDK 21; hàng rào CyclicBarrier ép xen kẽ; ThreadMXBean.findDeadlockedThreads); The
+  Java Language Specification, Java SE 21: §17.4 (mô hình bộ nhớ), §14.19 (synchronized),
+  §17.1; java.util.concurrent (Java SE 21 API: ExecutorService, Future.get ném ExecutionException,
+  ConcurrentHashMap.merge, atomic); Little, J. D. C. (1961), A Proof for the Queuing
+  Formula L = λW, Operations Research 9(3); java launcher -Xss (JDK 21 tools: ngăn
+  xếp luồng mặc định 1 MB trên Linux x64); dev.java/learn'
+assumes: []
+objectives:
+- Mô tả vì sao hai luồng cùng cộng vào một biến thì mất cập nhật
+- Đo tranh chấp dữ liệu và sửa bằng khoá hoặc phép nguyên tử
+- Dùng nhóm luồng và phiếu hẹn để chạy nhiều việc và gom kết quả
+- Nhận ra bế tắc khi khoá hai thứ và sửa bằng thứ tự khoá chung
+- Nhận ra số luồng cần tăng theo tốc độ nhân thời gian xử lý, và khi nào thêm luồng
+  không còn giúp ích
+- Viết chương trình bốn luồng đo tranh chấp và sửa đúng
+asr_reviewed:
+  - {sentence: "Ta liệt kê các cách xen kẽ.", reason: "ASR chép “Ta liệt kê các cách xem kẻ.” (0.714): lệch âm/thanh thuần Việt: xen kẽ/xem kẻ — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Vậy hai cách sửa không làm mất hay thừa lần cộng nào.", reason: "ASR chép “Vậy hai các sữa không làm mức hay thừa lần cộng nào.” (0.75): lệch âm/thanh thuần Việt: cách sửa/các sữa, mất/mức — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Ai cùng sửa nó.", reason: "ASR chép “Ai cùng sử nó?” (0.75): lệch âm/thanh thuần Việt: sửa/sử — NOT_VERIFIED bằng tai người"}
+  - {sentence: "Mỗi luồng giữ riêng chừng một megabyte ngăn xếp, nên năm mươi nghìn luồng cần cỡ năm mươi gigabyte, vượt quá bộ nhớ của hầu hết máy.", reason: "ASR chép “Mỗi luồng giữ riêng chừng 1MB ngăn xếp nên 50.000 luồng cần cỡ 50GB, vượt quá bộ nhớ của hầu hết máy.” (0.926): “megabyte” đọc theo luật lexicon (lexicon_vi.JV2.yaml: “mê-ga-bai”), ASR viết “mb”; “gigabyte” đọc theo luật lexicon (lexicon_vi.JV2.yaml: “ghi-ga-bai”), ASR viết “gb” — NOT_VERIFIED bằng tai người"}
+scenes:
+- id: hook
+  kind: hook
+  title: 'Hai khách cùng nạp tiền một giây: số dư mất một khoản'
+  steps:
+  - show: '<div><svg width="1500" height="330" viewBox="0 0 1500 330" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><rect
+      x="20" y="40" width="330" height="90" rx="10" fill="#dbeafe" stroke="#2a78d6"
+      stroke-width="3"/><text x="185.0" y="77" font-size="26" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">luồng A: nạp 50</text><text x="185.0" y="111"
+      font-size="26" text-anchor="middle" fill="#1f2937">đọc: 100</text><rect x="20"
+      y="200" width="330" height="90" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text
+      x="185.0" y="237" font-size="26" text-anchor="middle" fill="#1f2937" font-weight="bold">luồng
+      B: nạp 30</text><text x="185.0" y="271" font-size="26" text-anchor="middle"
+      fill="#1f2937">đọc: 100</text><line x1="355" y1="85" x2="560" y2="160" stroke="#2a78d6"
+      stroke-width="3.5" marker-end="url(#ah)"/><line x1="355" y1="245" x2="560" y2="190"
+      stroke="#d97706" stroke-width="3.5" marker-end="url(#ah)"/><rect x="565" y="110"
+      width="330" height="100" rx="10" fill="#e5e7eb" stroke="#6b7280" stroke-width="3"/><text
+      x="730.0" y="152" font-size="26" text-anchor="middle" fill="#1f2937">số dư =
+      100</text><text x="730.0" y="186" font-size="26" text-anchor="middle" fill="#1f2937">(cả
+      hai đều thấy)</text><line x1="900" y1="160" x2="1000" y2="85" stroke="#2a78d6"
+      stroke-width="3.5" marker-end="url(#ah)"/><text x="950" y="112" font-size="22"
+      text-anchor="middle" fill="#2a78d6">A ghi 150</text><line x1="900" y1="160"
+      x2="1000" y2="245" stroke="#d97706" stroke-width="3.5" marker-end="url(#ah)"/><text
+      x="950" y="192" font-size="22" text-anchor="middle" fill="#d97706">B ghi 130</text><rect
+      x="1005" y="40" width="470" height="90" rx="10" fill="#fee2e2" stroke="#dc2626"
+      stroke-width="3"/><text x="1240.0" y="94" font-size="26" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">kết quả 130 hoặc 150</text><text x="1240"
+      y="270" font-size="26" text-anchor="middle" fill="#dc2626" font-weight="bold">đáng
+      ra phải là 180: mất 30 hoặc 50</text></svg></div>'
+    clear: true
+    say: Số dư một trăm. Khách A nạp năm mươi, khách B nạp ba mươi, cùng một giây.
+      Mỗi luồng đọc số dư, cộng, rồi ghi lại. Nếu cả hai cùng đọc một trăm trước khi
+      ai kịp ghi, thì người ghi sau đè lên người ghi trước. Kết quả là một trăm ba
+      mươi hoặc một trăm năm mươi, trong khi đúng ra là một trăm tám mươi. Một khoản
+      tiền biến mất và không có lỗi nào được báo.
+  - show: '<div class="box key">Hôm nay: <b>luồng</b>. Cách chạy nhiều việc cùng lúc,
+      <b>vì sao</b> nó làm hỏng dữ liệu, ba cách sửa (<b>khoá</b>, phép <b>nguyên
+      tử</b>, <b>nhóm luồng</b>),
+
+      và một bẫy chỉ xảy ra khi tải tăng: <b>bế tắc</b>. Kèm câu hỏi quy mô: cần bao
+      nhiêu luồng để phục vụ gấp một trăm lần số yêu cầu?</div>
+
+      '
+    clear: true
+    say: Hôm nay ta học luồng, cách chạy nhiều việc cùng lúc, vì sao nó làm hỏng dữ
+      liệu, và ba cách sửa là khoá, phép nguyên tử và nhóm luồng. Cuối cùng là một
+      bẫy chỉ xảy ra khi tải tăng, gọi là bế tắc. Kèm câu hỏi quy mô, cần bao nhiêu
+      luồng để phục vụ gấp một trăm lần số yêu cầu.
+- id: prereq
+  kind: prereq
+  title: 'Ôn lại: biến, vòng lặp, hàm ngắn, ngoại lệ'
+  steps:
+  - show: '<table class=''t''><tr><th>điều đã biết</th><th>nhắc lại</th></tr><tr><td>①
+      cộng vào biến</td><td><code>dem++</code> trông là một bước, nhưng máy làm ba:
+      <b>đọc</b> giá trị, <b>cộng</b> một, <b>ghi</b> lại</td></tr><tr><td>② hàm ngắn</td><td><code>()
+      -&gt; { … }</code> là một việc viết gọn; có thể đưa cho hàm khác chạy</td></tr><tr><td>③
+      ngoại lệ</td><td>lỗi dừng luồng đang chạy; <code>try … catch</code> bắt lại
+      ở nơi gọi</td></tr><tr><td>④ trạng thái chung</td><td>một biến <code>static</code>
+      chỉ có <b>một bản</b>, mọi nơi trong chương trình cùng thấy và cùng sửa</td></tr></table>'
+    focus:
+    - 1
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.5'
+    - '1.5'
+    say: Ta ôn lại bốn điều. Lệnh tăng một trông là một bước, nhưng máy làm ba bước,
+      đọc, cộng và ghi. Hàm ngắn là một việc viết gọn và có thể đưa cho nơi khác chạy.
+      Ngoại lệ làm dừng việc đang chạy và có thể bắt lại. Biến dùng chung chỉ có một
+      bản, mọi nơi cùng thấy và cùng sửa. Ba bước của lệnh tăng và biến dùng chung
+      chính là gốc của lỗi hôm nay.
+- id: sym
+  kind: symbol
+  title: Giải mã tám thứ của luồng
+  steps:
+  - show: '<table class=''t''><tr><th>viết</th><th>nghĩa</th></tr><tr><td>luồng (<code>Thread</code>)</td><td>một
+      <b>đường chạy</b> riêng trong cùng chương trình; nhiều luồng chạy xen kẽ hoặc
+      song song, <b>dùng chung bộ nhớ</b></td></tr><tr><td><code>t.start()</code>
+      / <code>t.join()</code></td><td>mở luồng chạy / <b>đợi</b> luồng đó kết thúc;
+      gọi <code>t.run()</code> thì <b>không</b> mở luồng mới</td></tr><tr><td>tranh
+      chấp dữ liệu (race)</td><td>kết quả <b>phụ thuộc thứ tự xen kẽ</b> của các luồng,
+      nên khác nhau giữa các lần chạy</td></tr><tr><td><code>synchronized (khoa) {
+      … }</code></td><td><b>khoá</b>: tại một thời điểm chỉ <b>một</b> luồng được
+      vào khối; luồng khác chờ ngoài cửa</td></tr><tr><td><code>AtomicInteger</code></td><td>số
+      nguyên có phép tăng <b>nguyên tử</b>: đọc–cộng–ghi xảy ra trọn vẹn như một bước</td></tr><tr><td><code>ExecutorService</code></td><td><b>nhóm
+      luồng</b> có sẵn; <code>submit(việc)</code> giao việc, trả về <code>Future</code></td></tr><tr><td><code>Future&lt;T&gt;</code></td><td><b>phiếu
+      hẹn</b>: <code>get()</code> đợi và lấy kết quả (hoặc ném lại lỗi của việc)</td></tr><tr><td><code>ConcurrentHashMap</code></td><td>bản
+      đồ an toàn cho nhiều luồng; <code>merge(khoá, 1, Integer::sum)</code> cộng nguyên
+      tử</td></tr></table>'
+    focus:
+    - 1
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.5'
+    - '1.6'
+    - '1.7'
+    - '1.8'
+    - '1.9'
+    say: Bảng này có tám thứ. Luồng là một đường chạy riêng trong cùng chương trình,
+      các luồng dùng chung bộ nhớ. Hàm mở luồng khác với hàm đợi luồng, và gọi hàm
+      chạy trực tiếp thì không mở luồng nào. Tranh chấp dữ liệu là khi kết quả phụ
+      thuộc thứ tự xen kẽ. Khoá chỉ cho một luồng vào khối tại một thời điểm. Số nguyên
+      nguyên tử làm trọn vẹn cả ba bước đọc, cộng, ghi như một bước. Nhóm luồng có
+      sẵn, giao việc thì nhận về một phiếu hẹn. Lấy phiếu hẹn thì đợi và nhận kết
+      quả. Và bản đồ an toàn cho nhiều luồng có hàm cộng nguyên tử.
+- id: intuition
+  kind: intuition
+  title: 'Hình dung: sáu cách xen kẽ, và khoá biến chúng thành hai'
+  steps:
+  - show: '<div><svg width="1500" height="330" viewBox="0 0 1500 330" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><text
+      x="140" y="70" font-size="28" text-anchor="middle" fill="#2a78d6" font-weight="bold">luồng
+      A</text><text x="140" y="200" font-size="28" text-anchor="middle" fill="#d97706"
+      font-weight="bold">luồng B</text><rect x="260" y="40" width="280" height="60"
+      rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="400.0" y="78"
+      font-size="24" text-anchor="middle" fill="#1f2937">đọc: 100</text><rect x="560"
+      y="40" width="280" height="60" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text
+      x="700.0" y="78" font-size="24" text-anchor="middle" fill="#1f2937">ghi: 100+50</text><rect
+      x="260" y="170" width="280" height="60" rx="10" fill="#fef3c7" stroke="#d97706"
+      stroke-width="3"/><text x="400.0" y="208" font-size="24" text-anchor="middle"
+      fill="#1f2937">đọc: 100</text><rect x="860" y="170" width="280" height="60"
+      rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text x="1000.0" y="208"
+      font-size="24" text-anchor="middle" fill="#1f2937">ghi: 100+30</text><line x1="200"
+      y1="290" x2="1300" y2="290" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><text
+      x="1380" y="296" font-size="24" text-anchor="middle" fill="#475569">thời gian</text><text
+      x="560" y="140" font-size="24" text-anchor="middle" fill="#dc2626" font-weight="bold">cả
+      hai đọc 100 trước khi ai ghi</text><text x="1200" y="70" font-size="24" text-anchor="middle"
+      fill="#dc2626" font-weight="bold">ghi 150, rồi bị B ghi đè 130</text></svg></div>'
+    clear: true
+    say: Trước hết là hình. Hai đường thời gian của hai luồng. Cả hai cùng đọc một
+      trăm trước khi ai kịp ghi. Luồng A ghi một trăm năm mươi, rồi luồng B ghi một
+      trăm ba mươi, đè lên kết quả của A. Khoản năm mươi biến mất.
+  - show: <div class="code"><div><span class="kw">static</span> Thread nap(<span class="kw">int</span>
+      tien) {</div><div>    <span class="kw">return</span> <span class="kw">new</span>
+      Thread(() -&gt; {</div><div>        <span class="kw">try</span> {</div><div>            <span
+      class="kw">int</span> doc = soDu;                               <span class="cm">//
+      1. đọc số dư</span></div><div>            hang.await();                                 <span
+      class="cm">// đợi luồng kia cũng đã đọc</span></div><div>            soDu =
+      doc + tien;                            <span class="cm">// 2. ghi số dư mới</span></div><div>        }
+      <span class="kw">catch</span> (Exception e) {</div><div>            <span class="kw">throw</span>
+      <span class="kw">new</span> RuntimeException(e);</div><div>        }</div><div>    });</div><div>}</div></div>
+    clear: true
+    say: Ta tái hiện lỗi mà không phụ thuộc may rủi. Mỗi luồng đọc số dư, rồi chờ
+      ở một hàng rào cho tới khi luồng kia cũng đã đọc, rồi mới ghi số dư mới. Hàng
+      rào ép cả hai cùng thấy một trăm trước khi ai kịp ghi.
+  - show: '<p><b>Kết quả chạy</b></p><div class="code"><div>130 hoac 150: true</div><div>180
+      (dung): false</div></div><p class=''note''>Không có lần chạy nào cho 180. Kết
+      quả 130 hay 150 tuỳ luồng nào ghi sau; <b>tiền của luồng ghi trước bị mất</b>.</p>'
+    focus:
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Kết quả thật. Số dư luôn là một trăm ba mươi hoặc một trăm năm mươi, không
+      bao giờ một trăm tám mươi. Luồng ghi sau đè lên luồng ghi trước, nên khoản của
+      luồng ghi trước biến mất.
+  - show: '<table class=''t''><tr><th>thứ tự xen kẽ</th><th>A đọc</th><th>B đọc</th><th>A
+      ghi</th><th>B ghi</th><th>kết quả</th></tr><tr><td>A trọn, rồi B trọn</td><td>100</td><td>150</td><td>150</td><td>180</td><td><b>180</b>
+      đúng</td></tr><tr><td>B trọn, rồi A trọn</td><td>130</td><td>100</td><td>180</td><td>130</td><td><b>180</b>
+      đúng</td></tr><tr><td>cả hai đọc trước, A ghi sau</td><td>100</td><td>100</td><td>150</td><td>130</td><td><b>150</b>
+      mất 30</td></tr><tr><td>cả hai đọc trước, B ghi sau</td><td>100</td><td>100</td><td>150</td><td>130</td><td><b>130</b>
+      mất 50</td></tr></table><p class=''note''>Hai hàng đầu: hai luồng nối đuôi nhau
+      (có khoá). Hai hàng sau: xen kẽ làm mất tiền.</p>'
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    clear: true
+    say: Ta liệt kê các cách xen kẽ. Nếu hai luồng nối đuôi nhau, luồng này xong rồi
+      luồng kia mới bắt đầu, thì kết quả luôn là một trăm tám mươi, đúng. Nếu cả hai
+      cùng đọc trước khi ai ghi, thì kết quả là một trăm năm mươi hoặc một trăm ba
+      mươi tuỳ ai ghi sau, và sai. Khoá làm cho chỉ còn hai cách nối đuôi, loại bỏ
+      mọi cách xen kẽ.
+- id: formula
+  kind: formula
+  title: 'Suy ra từng bước: vì sao khoá và phép nguyên tử sửa được'
+  checks:
+  - 2 * 1000000 == 2000000
+  steps:
+  - show: '<p><b>Bước 1.</b> <code>dem++</code> là ba bước máy: <code>t = dem</code>;
+      <code>t = t + 1</code>; <code>dem = t</code>.</p><p>Hai luồng có thể cùng làm
+      bước 1 trước khi ai làm bước 3 &rarr; <b>một lần cộng bị mất</b>.</p>'
+    focus:
+    - 1
+    - 1
+    - 2
+    clear: true
+    say: Bước một, tách lệnh tăng ra. Máy đọc giá trị vào ô tạm, cộng một vào ô tạm,
+      rồi ghi ô tạm trở lại. Nếu hai luồng cùng đọc trước khi ai ghi, thì cả hai cùng
+      ghi lại cùng một giá trị, nên một lần cộng bị mất.
+  - show: '<p><b>Bước 2.</b> Khối <code>synchronized (khoa)</code> bắt ba bước phải
+      <b>chạy trọn</b> trước khi luồng khác vào:</p><p>luồng A: [đọc, cộng, ghi] &rarr;
+      luồng B: [đọc, cộng, ghi]</p>'
+    focus:
+    - 1
+    - 1
+    - 2
+    clear: true
+    say: Bước hai, đặt ba bước vào một khối có khoá. Vì chỉ một luồng được vào khối
+      tại một thời điểm, nên ba bước của luồng này phải chạy trọn trước khi luồng
+      kia bắt đầu. Ta chỉ còn các cách nối đuôi, không còn xen kẽ.
+  - show: '<p><b>Bước 3.</b> Phép nguyên tử làm cùng việc <b>không cần khoá</b>: phần
+      cứng có lệnh <b>so sánh rồi đổi</b> trong một bước.</p><p><code>nguyenTu.incrementAndGet()</code>
+      &rarr; luôn đúng; thường nhanh hơn khoá khi chỉ có <b>một ô</b> cần bảo vệ.</p>'
+    focus:
+    - 1
+    - 1
+    - 2
+    clear: true
+    say: Bước ba, phép nguyên tử. Phần cứng có sẵn lệnh so sánh rồi đổi trong một
+      bước, nên số nguyên nguyên tử làm cả ba việc đọc, cộng, ghi mà không cần khoá.
+      Khi chỉ có một ô cần bảo vệ, cách này thường nhanh hơn khoá.
+  - show: '<p><b>Bước 4.</b> Thử bằng số: 2 luồng, mỗi luồng cộng 1 000 000 lần:</p>$$\text{đúng}
+      = 2 \times 1\,000\,000 = \hl{2\,000\,000}$$<p>Không khoá: mỗi lần xen kẽ làm
+      mất ít nhất 1, nên thực tế <b>nhỏ hơn</b> (thường chỉ còn một phần nhỏ).</p>'
+    focus:
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Bước bốn, thử bằng số. Hai luồng, mỗi luồng cộng một triệu lần, thì kết quả
+      đúng là hai triệu. Khi không khoá, mỗi lần xen kẽ làm mất ít nhất một lần cộng,
+      nên kết quả thực tế nhỏ hơn hai triệu, và thường nhỏ hơn rất nhiều.
+- id: example
+  kind: example
+  title: 'Ví dụ: đo tranh chấp, sửa bằng khoá, rồi giao việc cho nhóm luồng'
+  checks:
+  - 3000 + 3000 + 4000 + 5000 + 6000 == 21000
+  - 3000 + (3000000 - 2000000) // 1000 == 4000
+  - 3000 + (5000000 - 2000000) // 1000 == 6000
+  - len([1, 3, 5]) == 3
+  - len([2, 4]) == 2
+  steps:
+  - show: '<div class="code"><div>Runnable viec = () -&gt; {</div><div>    <span class="kw">for</span>
+      (<span class="kw">int</span> i = 0; i &lt; 1000000; i++) {</div><div>        dem++;                                        <span
+      class="cm">// đọc, cộng, ghi: ba bước</span></div><div>    }</div><div>};</div><div>Thread
+      a = <span class="kw">new</span> Thread(viec), b = <span class="kw">new</span>
+      Thread(viec);</div><div>a.start();</div><div>b.start();</div><div>a.join();</div><div>b.join();</div></div>'
+    clear: true
+    say: Ta đo thật. Hai luồng, mỗi luồng cộng một triệu lần vào cùng một biến. Đúng
+      ra phải ra hai triệu.
+  - show: '<p><b>① Đúng là</b> $2 \times 1\,000\,000 = 2\,000\,000$.</p><p><b>② Thực
+      tế (không khoá)</b> luôn nhỏ hơn, giá trị đổi mỗi lần chạy.</p><p><b>Kết quả
+      chạy</b></p><div class="code"><div>mong doi 2000000; thuc te nho hon: true</div></div>'
+    focus:
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Phép làm thứ nhất, đúng ra phải là hai triệu. Phép thứ hai, chạy thật thì
+      kết quả nhỏ hơn hai triệu và đổi mỗi lần chạy, nên chương trình chỉ in ra việc
+      nó nhỏ hơn. Một kết quả đổi theo từng lần chạy là dấu hiệu rõ ràng của tranh
+      chấp dữ liệu.
+  - show: '<div class="code"><div>Runnable viec = () -&gt; {</div><div>    <span class="kw">for</span>
+      (<span class="kw">int</span> i = 0; i &lt; 1000000; i++) {</div><div>        <span
+      class="kw">synchronized</span> (khoa) {                         <span class="cm">//
+      chỉ một luồng vào khối này</span></div><div>            dem++;</div><div>        }</div><div>        nguyenTu.incrementAndGet();                   <span
+      class="cm">// phép cộng nguyên tử</span></div><div>    }</div><div>};</div></div><p><b>Kết
+      quả chạy</b></p><div class="code"><div>synchronized: 2000000</div><div>nguyen
+      tu: 2000000</div></div>'
+    focus:
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Phép làm thứ ba, sửa bằng hai cách. Đặt phép tăng trong khối có khoá, hoặc
+      dùng số nguyên nguyên tử. Cả hai đều cho đúng hai triệu, mọi lần chạy.
+  - show: '<div class="code"><div>ExecutorService nhom = Executors.newFixedThreadPool(4);       <span
+      class="cm">// 4 luồng làm việc</span></div><div>Map&lt;String, Integer&gt; dem
+      = <span class="kw">new</span> ConcurrentHashMap&lt;&gt;();</div><div>List&lt;Future&lt;Long&gt;&gt;
+      hen = <span class="kw">new</span> ArrayList&lt;&gt;();</div><div><span class="kw">for</span>
+      (<span class="kw">int</span> i = 1; i &lt;= 5; i++) {</div><div>    <span class="kw">long</span>
+      tien = i * 1000000L;</div><div>    String loai = (i % 2 == 0) ? "chan" : "le";</div><div>    hen.add(nhom.submit(()
+      -&gt; {</div><div>        dem.merge(loai, 1, Integer::sum);                     <span
+      class="cm">// cộng an toàn cho nhiều luồng</span></div><div>        <span class="kw">return</span>
+      phi(tien);</div><div>    }));</div><div>}</div></div>'
+    clear: true
+    say: Phép làm thứ tư, giao việc cho nhóm luồng. Nhóm có bốn luồng, ta giao năm
+      việc, mỗi việc tính phí của một số tiền và ghi lại việc loại chẵn hay lẻ vào
+      bản đồ an toàn. Mỗi lần giao việc ta nhận về một phiếu hẹn.
+  - show: '$$③ \; \text{phí} (1, 2, 3, 4, 5 \text{ triệu}) = 3\,000 + 3\,000 + 4\,000
+      + 5\,000 + 6\,000 = \hl{21\,000}$$$$④ \; \text{lẻ} = 3 \; (1, 3, 5), \quad \text{chẵn}
+      = 2 \; (2, 4)$$<div class="code"><div><span class="kw">for</span> (Future&lt;Long&gt;
+      f : hen) {</div><div>    tong += f.get();                                          <span
+      class="cm">// đợi kết quả từng việc</span></div><div>}</div><div>nhom.shutdown();</div><div>System.out.println("tong
+      phi: " + tong);</div><div>System.out.println(<span class="kw">new</span> TreeMap&lt;&gt;(dem));</div></div><p><b>Kết
+      quả chạy</b></p><div class="code"><div>tong phi: 21000</div><div>{chan=2, le=3}</div></div>'
+    focus:
+    - 1
+    - 2
+    - 3
+    - 4
+    clear: true
+    say: Phép thứ ba, tính tay các phí. Một triệu và hai triệu đều là ba nghìn, ba
+      triệu là bốn nghìn, bốn triệu là năm nghìn, năm triệu là sáu nghìn, cộng lại
+      hai mươi mốt nghìn. Phép thứ tư, ba việc lẻ và hai việc chẵn. Chạy thật, in
+      ra đúng hai mươi mốt nghìn và bản đồ hai chẵn ba lẻ, dù các việc chạy xen kẽ
+      trên bốn luồng.
+- id: check
+  kind: check
+  title: 'Tự kiểm bằng đường khác: tính tuần tự một luồng'
+  checks:
+  - 3000 + 3000 + 4000 + 5000 + 6000 == 21000
+  - 100 + 100 == 200
+  - 90 + 110 == 200
+  steps:
+  - show: '<p>Tính lại bằng <b>một luồng</b>, không có gì xen kẽ: tổng phí = <code>3000
+      + 3000 + 4000 + 5000 + 6000</code> = <b>21 000</b> ✓ khớp với nhóm luồng.</p><p>Và
+      bộ đếm: một luồng cộng 2 000 000 lần cho đúng <b>2 000 000</b>, bằng kết quả
+      của khoá và của phép nguyên tử.</p>'
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    say: Cách kiểm khác là tính lại bằng một luồng, nơi không có gì xen kẽ, nên kết
+      quả tuần tự là chuẩn so sánh. Tổng phí tính tuần tự là hai mươi mốt nghìn, khớp
+      với nhóm luồng. Một luồng cộng hai triệu lần cho đúng hai triệu, bằng kết quả
+      của khoá và phép nguyên tử. Vậy hai cách sửa không làm mất hay thừa lần cộng
+      nào.
+  - show: '<p>Kiểm tính chất bất biến: sau mọi chuyển tiền, <b>tổng tiền không đổi</b>.
+      A + B = 100 + 100 = <b>200</b> trước và sau khi chuyển 10 từ A sang B (A = 90,
+      B = 110): 90 + 110 = 200 ✓</p>'
+    clear: true
+    say: Cách kiểm thứ hai là tính chất bất biến của ngân hàng. Sau mọi lần chuyển
+      tiền, tổng tiền không đổi. Hai tài khoản mỗi bên một trăm, chuyển mười từ A
+      sang B, còn chín mươi và một trăm mười, tổng vẫn hai trăm. Ta sẽ dùng chính
+      tính chất này để bắt lỗi tiếp theo.
+- id: scale
+  kind: concept
+  title: 'Khi số yêu cầu tăng một trăm lần, mười nghìn lần: bao nhiêu luồng?'
+  checks:
+  - 400 // 10 * 50 == 2000
+  - 400 // 100 * 50 == 200
+  - 100 * 0.05 == 5
+  - 10000 * 0.05 == 500
+  - 1000000 * 0.05 == 50000
+  - 50000 * 1 // 1000 == 50
+  steps:
+  - show: '<div class="code"><div>        <span class="kw">long</span> lyThuyet =
+      400L / n * 50;                        <span class="cm">// 400 việc / n luồng,
+      mỗi lượt 50 ms</span></div><div>        <span class="kw">long</span> ms = chay(n,
+      400);</div><div>        <span class="kw">boolean</span> gan = ms &gt;= lyThuyet
+      &amp;&amp; ms &lt; lyThuyet * 3 / 2 + 100;</div><div>        System.out.println(n
+      + " luong: ly thuyet " + lyThuyet + " ms, do gan dung: " + gan);</div><div>    }</div><div>}</div></div><p><b>Kết
+      quả chạy</b></p><div class="code"><div>10 luong: ly thuyet 2000 ms, do gan dung:
+      true</div><div>100 luong: ly thuyet 200 ms, do gan dung: true</div></div>'
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    - 3
+    clear: true
+    say: Ta đo thật. Bốn trăm việc, mỗi việc chờ năm mươi mili giây, như chờ cơ sở
+      dữ liệu. Nhóm mười luồng làm bốn mươi lượt, mỗi lượt năm mươi mili giây, cần
+      hai nghìn mili giây. Nhóm một trăm luồng chỉ cần bốn lượt, hai trăm mili giây.
+      Đo thật khớp lý thuyết, nên ta dùng được công thức để dự đoán.
+  - show: '<table class=''t''><tr><th>yêu cầu mỗi giây</th><th>100</th><th>10 000</th><th>1
+      000 000</th></tr><tr><td>số luồng cần = tốc độ × thời gian một việc (0,05 giây)</td><td>5</td><td><b>500</b></td><td><b>50
+      000</b></td></tr><tr><td>bộ nhớ riêng cho ngăn xếp (≈ 1 megabyte một luồng,
+      mặc định thường gặp)</td><td>≈ 5 MB</td><td>≈ 500 MB</td><td><b>≈ 50 GB</b></td></tr></table><p
+      class=''note''>Công thức: số việc đang chạy = tốc độ đến × thời gian xử lý (định
+      luật Little). 1 MB mỗi luồng là mặc định thường gặp trên máy 64 bit, tuỳ hệ
+      điều hành.</p>'
+    focus:
+    - 1
+    - 1
+    - 1
+    - 2
+    - 2
+    - 2
+    clear: true
+    say: Giờ nhân quy mô. Số luồng cần bằng tốc độ yêu cầu nhân thời gian xử lý một
+      việc, đây là một định luật của lý thuyết xếp hàng. Một trăm yêu cầu mỗi giây
+      cần năm luồng. Mười nghìn yêu cầu mỗi giây cần năm trăm luồng. Một triệu yêu
+      cầu mỗi giây cần năm mươi nghìn luồng. Mỗi luồng giữ riêng chừng một megabyte
+      ngăn xếp, nên năm mươi nghìn luồng cần cỡ năm mươi gigabyte, vượt quá bộ nhớ
+      của hầu hết máy.
+  - show: '<div class="box warn"><b>Đánh đổi của người làm nghề:</b> thêm luồng chỉ
+      giúp khi việc <b>chờ</b> (mạng, cơ sở dữ liệu). Việc <b>tính toán</b> thuần
+      thì quá số lõi CPU không nhanh hơn.
+
+      Khoá thì ngược lại: <b>nhiều luồng tranh một khoá thì xếp hàng</b>, quá nhiều
+      luồng làm chậm đi. Giải pháp khi tải quá lớn là luồng nhẹ, hàng đợi và chia
+      nhỏ khoá; mỗi cách có giá riêng.</div>
+
+      '
+    clear: true
+    say: Đánh đổi của người làm nghề. Thêm luồng chỉ giúp khi việc phải chờ, như mạng
+      hay cơ sở dữ liệu. Việc tính toán thuần thì quá số lõi của bộ xử lý không nhanh
+      hơn. Khoá thì ngược lại, nhiều luồng tranh một khoá thì phải xếp hàng, quá nhiều
+      luồng làm chương trình chậm đi. Khi tải quá lớn, người ta dùng luồng nhẹ, hàng
+      đợi và chia nhỏ khoá, mỗi cách có giá riêng.
+- id: pitfalls
+  kind: pitfall
+  title: Lỗi hay gặp, có lỗi của người đã đi làm
+  steps:
+  - show: '<div class="box warn"><b>Lỗi 1 (người mới).</b> Gọi <code>run()</code>
+      thay cho <code>start()</code>: không có luồng mới.</div><div class="code"><div>Runnable
+      viec = () -&gt; System.out.println("chay trong: " + Thread.currentThread().getName());</div><div>Thread
+      a = <span class="kw">new</span> Thread(viec, "nhan-vien");</div><div>a.run();                                                  <span
+      class="cm">// gọi như hàm thường</span></div><div>Thread b = <span class="kw">new</span>
+      Thread(viec, "nhan-vien");</div><div>b.start();                                                <span
+      class="cm">// mở luồng mới thật sự</span></div><div>b.join();</div></div><p><b>Kết
+      quả chạy</b></p><div class="code"><div>chay trong: main</div><div>chay trong:
+      nhan-vien</div></div>'
+    focus:
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Lỗi thứ nhất là gọi hàm chạy thay vì hàm mở luồng. Hàm chạy chỉ là một hàm
+      thường, nên việc được làm ngay trong luồng chính, không ai chạy song song. Hàm
+      mở luồng mới tạo ra luồng thật, in tên luồng nhân viên.
+  - show: '<div class="box warn"><b>Lỗi 2 (người mới).</b> Lỗi trong nhóm luồng bị
+      giấu cho tới khi lấy kết quả.</div><div class="code"><div>Future&lt;Long&gt;
+      hen = nhom.submit(() -&gt; {</div><div>    <span class="kw">if</span> (<span
+      class="kw">true</span>) {</div><div>        <span class="kw">throw</span> <span
+      class="kw">new</span> IllegalArgumentException("so tien am");</div><div>    }</div><div>    <span
+      class="kw">return</span> 1L;</div><div>});</div></div><div class="code"><div>System.out.println(hen.get());                        <span
+      class="cm">// lỗi chỉ lộ ra ở đây</span></div></div><p><b>Kết quả chạy</b></p><div
+      class="code"><div>da giao viec, chua thay loi gi</div><div><span class="cm">…ExecutionException:
+      java.lang.IllegalArgumentException: so tien am</span></div></div>'
+    focus:
+    - 1
+    - 2
+    - 3
+    - 4
+    clear: true
+    say: Lỗi thứ hai là lỗi bị giấu. Việc giao cho nhóm luồng nổ ngoại lệ, nhưng không
+      ai thấy, chương trình in rằng đã giao việc. Lỗi chỉ lộ ra khi lấy kết quả từ
+      phiếu hẹn, được bọc trong một ngoại lệ khác. Nếu không bao giờ lấy kết quả thì
+      lỗi mất tăm.
+  - show: '<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Bế tắc: chuyển A&rarr;B
+      và B&rarr;A cùng lúc, mỗi luồng giữ một khoá và chờ khoá kia.</div><div class="code"><div><span
+      class="kw">synchronized</span> (tu) {                                       <span
+      class="cm">// khoá tài khoản nguồn trước</span></div><div>    hang.await();                                         <span
+      class="cm">// (ép hai luồng cùng ở đây)</span></div><div>    <span class="kw">synchronized</span>
+      (den) {                                  <span class="cm">// rồi mới khoá tài
+      khoản đích</span></div><div>        tu.soDu -= tien;</div><div>        den.soDu
+      += tien;</div><div>    }</div></div>'
+    focus:
+    - 1
+    - 1
+    - 1
+    - 2
+    - 2
+    clear: true
+    say: Lỗi thứ ba hay gặp ở người đã đi làm. Chuyển tiền cần khoá cả hai tài khoản.
+      Luồng một khoá A rồi chờ B, luồng hai khoá B rồi chờ A. Mỗi bên giữ thứ bên
+      kia cần và chờ thứ bên kia đang giữ, nên không ai đi tiếp được. Đó là bế tắc.
+  - show: '<p><b>Kết quả chạy</b></p><div class="code"><div>so luong bi ket: 2</div></div><div
+      class="box key"><b>Cách sửa:</b> luôn khoá theo <b>một thứ tự chung</b>, ví
+      dụ mã nhỏ trước.</div>'
+    focus:
+    - 1
+    - 2
+    clear: true
+    say: Bộ công cụ đếm được hai luồng bị kẹt. Cách sửa là luôn khoá theo một thứ
+      tự chung, ví dụ mã tài khoản nhỏ trước.
+  - show: '<div class="code"><div>    TaiKhoan sau = tu.ma &lt; den.ma ? den : tu;</div><div>    <span
+      class="kw">synchronized</span> (truoc) {</div><div>        <span class="kw">synchronized</span>
+      (sau) {</div><div>            tu.soDu -= tien;</div><div>            den.soDu
+      += tien;</div><div>        }</div><div>    }</div><div>}</div><div> </div><div><span
+      class="kw">public</span> <span class="kw">static</span> <span class="kw">void</span>
+      main(String[] args) <span class="kw">throws</span> Exception {</div></div><p><b>Kết
+      quả chạy</b></p><div class="code"><div>xong; tong tien = 200, A = 110, B = 90</div></div>'
+    focus:
+    - 1
+    - 2
+    clear: true
+    say: Khi mọi luồng cùng đi theo một chiều thì không tạo được vòng chờ. Chạy lại,
+      cả hai chuyển tiền đều xong, và tổng tiền vẫn là hai trăm, đúng tính chất bất
+      biến.
+- id: quiz
+  kind: quiz
+  title: Bây giờ tới phần bạn tự làm
+  checks:
+  - 3 * 500 == 1500
+  steps:
+  - show: '<p><b>Đề.</b> Ba luồng, mỗi luồng chạy <code>for (int i = 0; i &lt; 500;
+      i++) dem++;</code> trên biến <code>static int dem = 0</code> (không khoá).</p>
+
+      <ol><li>Giá trị <b>đúng</b> của <code>dem</code> nếu không có tranh chấp?</li>
+
+      <li>Khi có tranh chấp, <code>dem</code> có thể ra <b>1 501</b> không? Có thể
+      ra <b>1 200</b> không?</li></ol>
+
+      <p><b>Chọn A hay B?</b> Cần cộng dồn <b>một</b> bộ đếm từ 8 luồng. A: <code>synchronized</code>.
+      B: <code>AtomicLong</code>. Và nếu phải cập nhật <b>hai biến liên quan nhau</b>
+      (số dư A và số dư B) thì sao? Vì sao?</p>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    - 3
+    - 3
+    pause: 30
+    say: Bây giờ tới phần bạn tự làm. Ba luồng, mỗi luồng cộng năm trăm lần vào một
+      biến không khoá. Hãy nói giá trị đúng nếu không có tranh chấp. Và khi có tranh
+      chấp thì giá trị có thể ra một nghìn năm trăm lẻ một không, có thể ra một nghìn
+      hai trăm không. Rồi chọn giữa khoá và số nguyên nguyên tử để cộng dồn một bộ
+      đếm từ tám luồng, và nếu phải cập nhật hai biến liên quan nhau thì sao. Hãy
+      dừng video và tự làm.
+  - show: '<table class=''t''><tr><th>câu</th><th>đáp án</th><th>vì sao</th></tr><tr><td>1</td><td><b>1
+      500</b></td><td>3 × 500</td></tr><tr><td>2</td><td>1 501: <b>không</b>; 1 200:
+      <b>có thể</b></td><td>mỗi lần ghi chỉ cộng đúng 1 vào giá trị đã đọc nên tối
+      đa 1 500; xen kẽ chỉ làm <b>mất</b> lần cộng</td></tr><tr><td>3</td><td>một
+      bộ đếm: <b>B</b>; hai biến liên quan: <b>A (khoá)</b></td><td>phép nguyên tử
+      chỉ bảo vệ <b>từng ô</b>; hai biến cần cùng thay đổi phải nằm trong <b>một khối
+      có khoá</b></td></tr></table>'
+    focus:
+    - 1
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    say: Đáp án câu một, giá trị đúng là ba nhân năm trăm, bằng một nghìn năm trăm.
+      Câu hai, một nghìn năm trăm lẻ một thì không bao giờ có, vì mỗi lần ghi chỉ
+      cộng đúng một, còn một nghìn hai trăm thì có thể, vì xen kẽ chỉ làm mất các
+      lần cộng. Câu ba, một bộ đếm thì chọn số nguyên tử. Hai biến liên quan nhau
+      thì chọn khoá, vì phép nguyên tử chỉ bảo vệ từng ô, còn hai biến cùng đổi phải
+      nằm trong một khối có khoá.
+    clear: true
+  - show: <div class="box key"><b>Quy tắc:</b> bảo vệ <b>một ô</b> &rarr; phép nguyên
+      tử; bảo vệ <b>một nhóm giá trị phải đổi cùng lúc</b> &rarr; khoá. Và luôn khoá
+      theo <b>cùng một thứ tự</b>.</div>
+    say: Quy tắc rút ra. Bảo vệ một ô thì dùng phép nguyên tử. Bảo vệ một nhóm giá
+      trị phải đổi cùng lúc thì dùng khoá. Và luôn khoá theo cùng một thứ tự.
+- id: practice
+  kind: practice
+  title: 'Tự làm: bốn luồng cùng cộng, đo và sửa'
+  steps:
+  - show: '<p><b>Đề</b>: <b>4 luồng</b>, mỗi luồng <b>250 000</b> vòng, ba biến đếm.</p>
+
+      <ol><li><code>thuong++</code> không bảo vệ; <code>dongBo++</code> trong <code>synchronized</code>;
+      <code>nguyenTu.incrementAndGet()</code>.</li>
+
+      <li><code>start()</code> cả bốn luồng, rồi <code>join()</code> cả bốn.</li>
+
+      <li>In ba dòng: <code>thuong &lt; 1000000</code>, <code>dongBo</code>, <code>nguyenTu</code>.</li></ol>
+
+      <p class="note">Giá trị thật của <code>thuong</code> đổi mỗi lần chạy; chỉ in
+      kết quả so sánh. Tệp <code>DemSaiDung.java</code>.</p>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    - 3
+    - 3
+    pause: 240
+    say: Bây giờ tới phần bạn tự làm trên máy. Bốn luồng, mỗi luồng lặp hai trăm năm
+      mươi nghìn vòng, và mỗi vòng tăng ba biến. Một biến thường không bảo vệ, một
+      biến tăng trong khối đồng bộ, và một biến nguyên tử. Mở cả bốn luồng rồi đợi
+      cả bốn xong. In ba dòng, dòng đầu chỉ in kết quả so sánh vì giá trị thật đổi
+      mỗi lần chạy. Hãy dừng video và tự viết, đừng chép lại ví dụ.
+  - show: '<p><b>Kết quả mong đợi</b></p><div class="code"><div>Khong dong bo: dem
+      &lt; 1000000 -&gt; true</div><div>Dong bo: 1000000</div><div>Nguyen tu: 1000000</div></div><p
+      class="note">Chấm bằng Git Bash: <code>bash labs/cham.sh JV2 L05 DemSaiDung.java</code>
+      — in <b>ĐÚNG</b> khi trùng.</p>'
+    focus:
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Đây là kết quả mong đợi. Bạn chạy chương trình của mình rồi so từng dòng.
+      Nếu muốn chấm bằng máy, dùng lệnh ở dưới màn hình; lệnh in chữ ĐÚNG khi đầu
+      ra trùng, hoặc chỉ ra dòng nào khác.
+  - show: '<div class="box key"><b>Nếu kẹt:</b> <code>Thread[] ds = new Thread[4];</code>
+      rồi vòng <code>for</code> tạo và <code>start()</code>; vòng <code>for</code>
+      thứ hai <code>join()</code>.
+
+      Khối đồng bộ: <code>synchronized (khoa) { dongBo++; }</code>. Lời giải: <code>labs/JV2/L05/loi_giai.java</code>
+      — chỉ mở sau khi đã thử.</div>
+
+      '
+    say: Nếu kẹt, tạo mảng bốn luồng, một vòng để mở và một vòng để đợi. Biến đồng
+      bộ tăng bên trong khối đồng bộ với một đối tượng khoá dùng chung. Biến nguyên
+      tử dùng hàm tăng và lấy. Lời giải đầy đủ nằm trong thư mục thực hành của bài,
+      chỉ mở sau khi bạn đã tự thử.
+  lab: labs/JV2/L05
+- id: recap
+  kind: recap
+  title: Chuỗi logic & tư duy cần mang theo
+  steps:
+  - show: '<div class=''chain''><span class=''n''>dem++ = đọc, cộng, ghi</span><span
+      class=''a''>→</span><span class=''n''>xen kẽ thì mất cập nhật</span><span class=''a''>→</span><span
+      class=''n''>khoá: chạy trọn rồi nhường</span><span class=''a''>→</span><span
+      class=''n''>nguyên tử: một ô</span><span class=''a''>→</span><span class=''n''>nhóm
+      luồng + phiếu hẹn</span><span class=''a''>→</span><span class=''n''>khoá theo
+      thứ tự chung</span><span class=''a''>→</span><span class=''n''>luồng cần = tốc
+      độ × thời gian</span></div>'
+    say: Tổng kết chuỗi logic. Lệnh tăng gồm ba bước đọc, cộng, ghi. Các luồng xen
+      kẽ thì mất cập nhật. Khoá bắt một khối chạy trọn rồi mới nhường. Phép nguyên
+      tử bảo vệ một ô. Nhóm luồng giao việc và trả phiếu hẹn. Luôn khoá theo thứ tự
+      chung để tránh bế tắc. Và số luồng cần bằng tốc độ nhân thời gian xử lý.
+  - show: '<div class=''box key''><b>Tư duy:</b> với mọi dữ liệu dùng chung, hỏi bốn
+      câu: <b>ai</b> cùng sửa nó, có <b>bất biến</b> nào cần giữ sau mỗi thao tác
+      (tổng tiền),
+
+      cần khoá <b>mấy thứ</b> và theo thứ tự nào, và khi tải tăng <b>một trăm lần</b>
+      thì nó xếp hàng ở đâu.</div>
+
+      '
+    say: Điều cần mang theo. Với mọi dữ liệu dùng chung, hãy hỏi bốn câu. Ai cùng
+      sửa nó. Có bất biến nào cần giữ sau mỗi thao tác, ví dụ tổng tiền. Cần khoá
+      mấy thứ và theo thứ tự nào. Và khi tải tăng gấp một trăm lần thì nó xếp hàng
+      ở đâu.

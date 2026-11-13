@@ -1,7 +1,37 @@
 from lib import *
+from labkit import write_lab, practice_steps, practice_scene
 
 
 def build():
+    tao = prog("TaoBang", """
+CREATE TABLE tx (id INTEGER PRIMARY KEY, tk INTEGER);
+WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 5000)
+INSERT INTO tx (tk) SELECT i % 500 FROM n;
+SELECT COUNT(*) FROM tx;""", out="5000", lang="sqlite")
+    ke_hoach = prog("KeHoach", """
+CREATE TABLE tx (id INTEGER PRIMARY KEY, tk INTEGER);
+WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 5000)
+INSERT INTO tx (tk) SELECT i % 500 FROM n;
+EXPLAIN QUERY PLAN SELECT * FROM tx WHERE tk = 7;
+CREATE INDEX i_tk ON tx (tk);
+EXPLAIN QUERY PLAN SELECT * FROM tx WHERE tk = 7;
+EXPLAIN QUERY PLAN SELECT * FROM tx WHERE tk + 0 = 7;""", out="""2|0|216|SCAN tx
+2|0|56|SEARCH tx USING COVERING INDEX i_tk (tk=?)
+2|0|216|SCAN tx""", lang="sqlite")
+    lab_sql = prog("SaoKe", """
+CREATE TABLE gd (id INTEGER PRIMARY KEY, tk INTEGER, so_tien INTEGER);
+INSERT INTO gd (tk, so_tien) VALUES (11, 900000), (12, -200000), (11, -150000), (13, 400000),
+                                   (12, 600000), (11, 250000), (13, -100000);
+CREATE INDEX i_gd_tk ON gd (tk);
+SELECT id, so_tien FROM gd WHERE tk = 11 ORDER BY id;
+SELECT COUNT(*) FROM gd WHERE so_tien < 0;
+SELECT tk, SUM(so_tien) FROM gd GROUP BY tk ORDER BY tk;""", out="""1|900000
+3|-150000
+6|250000
+3
+11|1000000
+12|400000
+13|300000""", lang="sqlite")
     hook = sc("hook", "hook", "Vì sao tra cứu sao kê chậm khi bảng đã có hàng triệu dòng?", [
         st("""<p>Bảng giao dịch có $10\\,000\\,000$ dòng <i>(số minh hoạ)</i>. Tra các giao dịch của <b>một</b> tài khoản mà đọc cả mười triệu dòng thì quá lãng phí.</p>
 <div class="box key">Có chỉ mục, máy chỉ đi qua khoảng <b>4 tầng</b> của một cây tìm kiếm rồi tới thẳng dòng cần
@@ -150,8 +180,80 @@ $$L = \\hl{3}$$""",
         st("""<div class='box key'><b>Tư duy:</b> đừng đoán, hãy <b>đọc kế hoạch thực thi</b>. Thấy SCAN trên bảng lớn là dấu hiệu cần xem lại điều kiện và chỉ mục.</div>""",
            """Điều cần mang theo. Đừng đoán, hãy đọc kế hoạch thực thi. Thấy quét toàn bảng trên bảng lớn là dấu hiệu cần xem lại điều kiện và chỉ mục."""),
     ])
+    # ── AF2: P1 câu lệnh SQL, mã chạy thật (sqlite), quy mô, tự làm ──
+    add_steps([pre], "prereq", [
+        st(table(["thêm ba điều", "nghĩa", "ví dụ"],
+                 [["⑤ Câu lệnh SQL", "<code>CREATE TABLE</code> tạo bảng; <code>INSERT INTO … VALUES</code> thêm dòng; <code>SELECT … FROM … WHERE</code> lấy dòng thoả điều kiện; <code>COUNT(*)</code> đếm dòng, <code>SUM(cột)</code> cộng; <code>GROUP BY</code> gom nhóm; <code>ORDER BY</code> sắp xếp", "<code>SELECT COUNT(*) FROM tx;</code>"],
+                  ["⑥ Khoá chính", "cột định danh duy nhất mỗi dòng; <code>INTEGER PRIMARY KEY</code> tự đánh số", "cột <code>id</code>"],
+                  ["⑦ sqlite", "cơ sở dữ liệu nhỏ chạy ngay trong chương trình, dùng để thực hành; chạy tệp SQL bằng <code>python labs/sqlrun.py tệp.sql</code> hoặc <code>sqlite3</code>", "bảng <code>tx</code> trong bộ nhớ"]]),
+           """Thêm ba điều nữa. Các câu lệnh SQL cơ bản: tạo bảng, thêm dòng, lấy dòng thoả điều kiện, đếm dòng, cộng một cột, gom nhóm và sắp xếp. Khoá chính là cột định danh duy nhất mỗi dòng, và cột kiểu số nguyên khoá chính tự đánh số.
+           Cuối cùng, ta dùng một cơ sở dữ liệu nhỏ chạy ngay trong chương trình để thực hành, và chạy tệp SQL bằng lệnh có sẵn trong thư mục thực hành.""", clear=True),
+    ], at=1)
+    pre["title"] = "Trước hết: bảy điều cần hiểu"
+    run = sc("chay_that", "example", "Chạy thật: đọc kế hoạch quét và tìm qua chỉ mục", [
+        st(code_block(tao, title="Dựng bảng tx 5000 dòng (sqlite)"),
+           """Ta dựng một bảng thật. Dòng thứ hai là cách sinh năm nghìn số liên tiếp: số sau bằng số trước cộng một, cho tới năm nghìn. Dòng thứ ba chèn năm nghìn dòng,
+           cột tài khoản là phần dư của số đó khi chia cho năm trăm, tức là có năm trăm tài khoản, mỗi tài khoản mười dòng. Lệnh cuối đếm số dòng."""),
+        st(out_block(tao),
+           """Khi chạy thật, lệnh đếm cho ra năm nghìn dòng, đúng như đã chèn.""", clear=True),
+        st(code_block(ke_hoach, lines=(4, 7), title="Hỏi kế hoạch: trước chỉ mục, sau chỉ mục, và khi bọc cột vào phép tính"),
+           """Bây giờ ta hỏi kế hoạch bằng lệnh xem kế hoạch truy vấn. Lần thứ nhất, chưa có chỉ mục, ta tìm tài khoản số bảy. Rồi ta tạo chỉ mục trên cột tài khoản và hỏi lại.
+           Lần cuối, ta viết điều kiện tương đương, là tài khoản cộng không bằng bảy, và hỏi một lần nữa.""", clear=True),
+        st(code_block(ke_hoach, lines=(4, 7), title="Hỏi kế hoạch (như trên)") + out_block(ke_hoach, "Kế hoạch máy in ra (cột mô tả)")
+           + "<p class=\"note\">Bản sqlite cũ hơn 3.36 ghi <code>SCAN TABLE tx</code>. Máy in thêm ba cột số đứng trước, ta chỉ đọc cột cuối. Chữ <code>COVERING</code>: chỉ mục đã chứa đủ cột cần lấy.</p>",
+           """Khi chạy thật, lần đầu máy quét cả bảng. Sau khi có chỉ mục, máy tìm qua chỉ mục theo cột tài khoản, tới thẳng các dòng cần.
+           Còn khi cột bị bọc trong phép cộng không, máy quay lại quét cả bảng, vì chỉ mục theo cột tài khoản không dùng được khi ta đổi chính cột đó. Hai điều kiện cùng nghĩa, nhưng chi phí rất khác.""", clear=True),
+    ])
+    scale = sc("quy_mo", "example", "Quy mô: số dòng tăng ×100 và ×10 000, quét gãy từ đâu?", [
+        st("""<p>Giả sử máy quét được $10^6$ dòng mỗi giây, mỗi lối rẽ của cây chỉ mục là $100$, mỗi dòng chỉ mục chiếm $16$ byte <i>(số minh hoạ)</i>.</p>"""
+           + table(["tải", "số dòng", "quét toàn bảng", "tầng chỉ mục", "dung lượng chỉ mục"],
+                   [["×1", "100 000", "0,1 giây", "3", "1,6 MB"],
+                    ["×100", "10 000 000", "<b>10 giây</b>", "4", "160 MB"],
+                    ["×10 000", "1 000 000 000", "<b>1000 giây ≈ 16,7 phút</b>", "5", "<b>16 GB</b>"]]),
+           """Giả sử máy quét được một triệu dòng mỗi giây, mỗi lối rẽ của cây chỉ mục là một trăm, mỗi dòng chỉ mục chiếm mười sáu byte. Đây là số minh hoạ.
+           Với một trăm nghìn dòng, quét toàn bảng mất một phần mười giây, và chỉ mục có ba tầng. Tải tăng một trăm lần, quét mất mười giây, trong khi chỉ mục chỉ thêm một tầng.
+           Tải tăng mười nghìn lần, quét mất hơn mười sáu phút, còn chỉ mục mới năm tầng.""", clear=True),
+        st("""<div class="box warn"><b>Giải pháp cũ gãy ở đâu.</b> Quét toàn bảng tăng <b>tỉ lệ thuận</b> với số dòng (×10 000 dòng thì ×10 000 thời gian); chỉ mục tăng theo <b>số tầng</b>, chỉ 3 → 5.
+Nhưng chỉ mục cũng gãy: ở ×10 000 nó nặng cỡ 16 GB, có thể không còn nằm vừa bộ nhớ của máy, nên mỗi tầng thành một lần đọc đĩa.</div>
+<div class="box key"><b>Đánh đổi:</b> mỗi chỉ mục làm mỗi lần <b>ghi</b> chậm hơn (phải cập nhật cả cây) và tốn chỗ. Chỉ lập chỉ mục cho cột hay lọc; ở quy mô cực lớn thì chia bảng thành nhiều phần hoặc nhiều máy.</div>""",
+           """Câu hỏi là giải pháp cũ sẽ gãy ở chỗ nào khi tải tăng lên. Quét toàn bảng tăng tỉ lệ thuận với số dòng, còn chỉ mục chỉ tăng theo số tầng, từ ba lên năm. Nhưng chỉ mục cũng gãy. Ở tải gấp mười nghìn lần nó nặng cỡ mười sáu nghìn mê ga byte, có thể không vừa bộ nhớ của máy.
+           Khi đó mỗi tầng thành một lần đọc đĩa. Đánh đổi là mỗi chỉ mục làm mỗi lần ghi chậm hơn, vì phải cập nhật cả cây, và tốn chỗ. Hãy chỉ lập chỉ mục cho cột hay dùng để lọc.
+           Ở quy mô cực lớn thì phải chia bảng thành nhiều phần hoặc nhiều máy.""", clear=True),
+    ], checks=["10**5 / 10**6 == 0.1", "10**7 / 10**6 == 10.0", "10**9 / 10**6 == 1000.0", "round(1000 / 60, 1) == 16.7",
+               "alg.bnk_btree_levels(10**5, 100) == 3", "alg.bnk_btree_levels(10**7, 100) == 4", "alg.bnk_btree_levels(10**9, 100) == 5",
+               "10**5 * 16 == 1_600_000", "10**7 * 16 == 160_000_000", "10**9 * 16 == 16_000_000_000"])
+    write_lab("BNK", "L04", """# Lab BNK L04 — Sao kê ba tài khoản
+
+Viết tệp `sao_ke.sql` (chạy bằng `python labs/sqlrun.py sao_ke.sql`, hoặc `sqlite3 :memory: < sao_ke.sql` nếu máy có `sqlite3`), gồm theo thứ tự:
+
+1. `CREATE TABLE gd` với ba cột: `id INTEGER PRIMARY KEY`, `tk INTEGER`, `so_tien INTEGER`.
+2. `INSERT INTO gd (tk, so_tien) VALUES` bảy dòng `(tk, so_tien)`: `(11, 900000) (12, -200000) (11, -150000) (13, 400000) (12, 600000) (11, 250000) (13, -100000)`.
+3. `CREATE INDEX i_gd_tk ON gd (tk);`
+4. Ba câu `SELECT`:
+   - `id` và `so_tien` của tài khoản 11, `ORDER BY id`;
+   - đếm số dòng có `so_tien < 0`;
+   - `tk` và `SUM(so_tien)` theo từng tài khoản, `GROUP BY tk`, `ORDER BY tk`.
+
+Chấm: `bash labs/cham.sh BNK L04 sao_ke.sql`.
+""", "sql", lab_sql["code"], lab_sql["out"])
+    lab = practice_scene(sc, "Tự làm: sao kê ba tài khoản", practice_steps(
+        st, "BNK", "L04",
+        """<p><b>Đề</b>: viết <code>sao_ke.sql</code> (đề đầy đủ ở <code>labs/BNK/L04/de.md</code>):</p>
+<ol><li>bảng <code>gd(id, tk, so_tien)</code>, 7 dòng <code>(tk, so_tien)</code>: <code>(11,900000) (12,-200000) (11,-150000) (13,400000) (12,600000) (11,250000) (13,-100000)</code></li>
+<li>chỉ mục trên <code>tk</code></li>
+<li>ba <code>SELECT</code>: dòng của tk 11; số dòng âm; tổng theo tk</li></ol>""",
+        """Bây giờ tới phần bạn tự làm. Hãy viết một tệp SQL: tạo bảng giao dịch với ba cột, thêm bảy dòng như trên màn hình, và tạo chỉ mục trên cột tài khoản.
+        Rồi viết ba câu lấy dữ liệu: các dòng của tài khoản mười một theo thứ tự mã, số dòng có số tiền âm, và tổng tiền theo từng tài khoản. Hãy dừng video, tự viết và chạy, đừng chép lại ví dụ.""",
+        lab_sql["out"], "sao_ke.sql",
+        """<div class="box key"><b>Nếu kẹt:</b> câu thứ nhất <code>SELECT id, so_tien FROM gd WHERE tk = 11 ORDER BY id;</code>; câu thứ hai <code>SELECT COUNT(*) FROM gd WHERE so_tien &lt; 0;</code>;
+câu thứ ba <code>SELECT tk, SUM(so_tien) FROM gd GROUP BY tk ORDER BY tk;</code>. Lời giải ở <code>labs/BNK/L04/loi_giai.sql</code> — chỉ mở sau khi bạn đã thử.</div>""",
+        """Nếu kẹt, câu thứ nhất lọc theo tài khoản mười một rồi sắp theo mã. Câu thứ hai đếm các dòng có số tiền nhỏ hơn không. Câu thứ ba cộng số tiền, gom theo tài khoản và sắp theo tài khoản.
+        Lời giải đầy đủ nằm trong thư mục thực hành của bài, chỉ mở sau khi bạn đã tự thử.""", pause=150), "BNK", "L04")
     return lesson("L04", "sql_chi_muc_ke_hoach", "Bài 4 — SQL, chỉ mục và kế hoạch thực thi",
-                  "curriculum/bnk.yaml L04; audit/bnk/verify_bnk.py L04; SQLite EXPLAIN QUERY PLAN documentation; Oracle EXPLAIN PLAN (khái niệm tương đương, không chạy trên máy này)",
+                  "curriculum/bnk.yaml L04; audit/bnk/verify_bnk.py L04; audit/review/screen_code/BNK.yaml (SQL chạy thật bằng sqlite 3.49); SQLite EXPLAIN QUERY PLAN documentation (SCAN / SEARCH … USING INDEX; bản trước 3.36 ghi SCAN TABLE); SQLite WITH RECURSIVE; Oracle EXPLAIN PLAN (khái niệm tương đương, không chạy trên máy này)",
                   ["Tính số tầng của cây chỉ mục theo số dòng và số lối rẽ", "Đọc kế hoạch thực thi để biết truy vấn quét hay tìm qua chỉ mục",
-                   "Nhận ra điều kiện làm chỉ mục vô dụng", "Cân nhắc lợi hại khi thêm chỉ mục"],
-                  [hook, pre, sym, intu, form, ex, chk, pit, quiz, rec])
+                   "Nhận ra điều kiện làm chỉ mục vô dụng", "Cân nhắc lợi hại khi thêm chỉ mục",
+                   "Tính thời gian quét, số tầng và dung lượng chỉ mục khi số dòng tăng ×100 và ×10 000",
+                   "Viết câu SQL tạo bảng, thêm dòng, lọc, đếm, gom nhóm và tạo chỉ mục"],
+                  [hook, pre, sym, intu, form, ex, run, chk, pit, quiz, scale, lab, rec],
+                  covers=[(1, "formula"), (2, "chay_that"), (3, "pitfalls"), (4, "quy_mo"), (5, "quy_mo"), (6, "practice")])

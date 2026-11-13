@@ -1,7 +1,73 @@
 from lib import *
+from labkit import write_lab, practice_steps, practice_scene
 
 
 def build():
+    chia = prog("ChiaPhanVung", """
+public class ChiaPhanVung {
+    public static void main(String[] args) {
+        int phanVung = 10, bo = 4, p = 0;
+        for (int b = 0; b < bo; b++) {
+            int so = phanVung / bo + (b < phanVung % bo ? 1 : 0);   // chia đều, phần dư chia cho các bộ đầu
+            StringBuilder sb = new StringBuilder("bo doc " + b + ":");
+            for (int k = 0; k < so; k++) sb.append(" P").append(p++);
+            System.out.println(sb);
+        }
+    }
+}""", out="""bo doc 0: P0 P1 P2
+bo doc 1: P3 P4 P5
+bo doc 2: P6 P7
+bo doc 3: P8 P9""")
+    ghi_nho = prog("GhiNho", """
+import java.util.Arrays;
+public class GhiNho {
+    static int[] chay(boolean ghiNhoTruoc) {
+        int[] dem = new int[5];                 // số lần xử lý mỗi thông điệp 0..4
+        int viTri = 0;                          // vị trí đã ghi nhớ
+        boolean daSap = false;
+        while (viTri < 5) {
+            int m = viTri;
+            if (ghiNhoTruoc) {
+                viTri = m + 1;                  // ghi nhớ trước
+                if (m == 2 && !daSap) { daSap = true; continue; }   // sập: chưa kịp xử lý
+                dem[m]++;
+            } else {
+                dem[m]++;                       // xử lý trước
+                if (m == 2 && !daSap) { daSap = true; continue; }   // sập: chưa kịp ghi nhớ
+                viTri = m + 1;
+            }
+        }
+        return dem;
+    }
+    public static void main(String[] args) {
+        System.out.println("ghi nho truoc: " + Arrays.toString(chay(true)));
+        System.out.println("xu ly truoc:   " + Arrays.toString(chay(false)));
+    }
+}""", out="""ghi nho truoc: [1, 1, 0, 1, 1]
+xu ly truoc:   [1, 1, 2, 1, 1]""")
+    lab_nk = prog("NguoiNgoiKhong", """
+public class NguoiNgoiKhong {
+    public static void main(String[] args) {
+        int phanVung = 7, bo = 9, p = 0, khong = 0;
+        for (int b = 0; b < bo; b++) {
+            int so = phanVung / bo + (b < phanVung % bo ? 1 : 0);
+            StringBuilder sb = new StringBuilder("bo doc " + b + ":");
+            if (so == 0) { sb.append(" ngoi khong"); khong++; }
+            for (int k = 0; k < so; k++) sb.append(" P").append(p++);
+            System.out.println(sb);
+        }
+        System.out.println("so nguoi ngoi khong: " + khong);
+    }
+}""", out="""bo doc 0: P0
+bo doc 1: P1
+bo doc 2: P2
+bo doc 3: P3
+bo doc 4: P4
+bo doc 5: P5
+bo doc 6: P6
+bo doc 7: ngoi khong
+bo doc 8: ngoi khong
+so nguoi ngoi khong: 2""")
     hook = sc("hook", "hook", "Vì sao một thông điệp khi thì bị xử lý hai lần, khi thì mất hẳn?", [
         st("""<p>Một bộ đọc Kafka xử lý thông điệp số $2$ rồi <b>sập trước khi ghi nhớ</b> rằng đã đọc. Khi chạy lại, nó đọc thông điệp số $2$ <b>lần nữa</b>.</p>
 <div class="box key">Đổi thứ tự “ghi nhớ trước, xử lý sau” thì thông điệp số $2$ lại <b>mất hẳn</b>.</div>""",
@@ -145,8 +211,74 @@ $$[3, 3, 2, 2]\\quad 3 + 3 + 2 + 2 = \\hl{10}$$""",
         st("""<div class='box key'><b>Tư duy:</b> đừng hỏi “Kafka có đúng một lần không”. Hãy hỏi <b>“khi sập giữa chừng, việc của tôi chạy mấy lần, và có hại không?”</b></div>""",
            """Điều cần mang theo. Đừng hỏi Kafka có đúng một lần không. Hãy hỏi, khi sập giữa chừng, việc của tôi chạy mấy lần, và có hại không."""),
     ])
+    # ── AF2: P1 nhịp báo còn sống và tác dụng phụ, mô phỏng Kafka bằng Java (chia phân vùng, thứ tự ghi nhớ), quy mô, tự làm ──
+    add_steps([pre], "prereq", [
+        st(table(["thêm hai điều", "nghĩa", "ví dụ"],
+                 [["⑤ Nhịp báo còn sống (heartbeat)", "tín hiệu gửi đều đặn để nhóm biết một bộ đọc chưa chết; ngừng gửi quá hạn thì bị coi là chết và nhóm chia lại việc", "mỗi 3 giây một nhịp"],
+                  ["⑥ Tác dụng phụ", "việc làm thay đổi thứ ở bên ngoài chương trình, như ghi cơ sở dữ liệu, gửi thư, gọi hệ khác; khác với việc chỉ tính toán rồi bỏ", "trừ tiền trong cơ sở dữ liệu"]]),
+           """Thêm hai điều nữa. Nhịp báo còn sống là tín hiệu gửi đều đặn để nhóm biết một bộ đọc chưa chết. Nếu ngừng gửi quá hạn, bộ đọc bị coi là chết và nhóm chia lại việc.
+           Tác dụng phụ là việc làm thay đổi thứ ở bên ngoài chương trình, như ghi cơ sở dữ liệu, gửi thư hay gọi hệ khác, khác với việc chỉ tính toán rồi bỏ kết quả.""", clear=True),
+    ], at=1)
+    pre["title"] = "Trước hết: sáu điều cần hiểu"
+    run = sc("chay_that", "example", "Chạy thật: chia phân vùng và thứ tự ghi nhớ (mô phỏng bằng Java)", [
+        st(code_block(chia, lines=(3, 9), title="ChiaPhanVung.java (phần chính): 10 phân vùng cho 4 bộ đọc"),
+           """Kafka thật cần cài riêng, nên ta mô phỏng cơ chế bằng Java. Đoạn này chia mười phân vùng cho bốn bộ đọc. Mỗi bộ được số phân vùng bằng mười chia nguyên cho bốn, tức hai, và các bộ đầu nhận thêm một nếu còn dư.
+           Mười chia bốn dư hai, nên hai bộ đầu nhận ba phân vùng, hai bộ sau nhận hai."""),
+        st(out_block(chia),
+           """Khi chạy thật, bộ đọc không và một nhận ba phân vùng, bộ hai và ba nhận hai. Đúng với phép tính tay: ba cộng ba cộng hai cộng hai bằng mười, không phân vùng nào bị thiếu hay trùng.""", clear=True),
+        st(code_block(ghi_nho, lines=(3, 12), title="GhiNho.java (phần 1): thông điệp 2 làm bộ đọc sập đúng một lần"),
+           """Bây giờ là thứ tự ghi nhớ và xử lý. Hàm này xử lý năm thông điệp và đếm số lần mỗi thông điệp được xử lý. Nếu ghi nhớ trước, thì sập ở thông điệp hai khi vị trí đã lưu nhưng chưa xử lý.
+           Lần khởi động lại sau đó bắt đầu sau thông điệp hai, nên thông điệp hai bị mất.""", clear=True),
+        st(code_block(ghi_nho, lines=(13, 23), title="Phần 2: xử lý trước, ghi nhớ sau, rồi so hai cách"),
+           """Nếu xử lý trước rồi ghi nhớ sau, thì sập ở thông điệp hai khi đã xử lý nhưng chưa lưu vị trí. Lần khởi động lại đọc lại từ thông điệp hai, nên nó bị xử lý hai lần.
+           Hàm chính in số lần xử lý của năm thông điệp cho cả hai cách.""", clear=True),
+        st(out_block(ghi_nho),
+           """Khi chạy thật, ghi nhớ trước cho số lần là một, một, không, một, một: thông điệp hai bị mất. Xử lý trước cho một, một, hai, một, một: thông điệp hai bị xử lý hai lần.
+           Vì thế người làm nghề chọn xử lý trước, ghi nhớ sau, rồi khử trùng ở phía xử lý, thay vì chấp nhận mất tiền.""", clear=True),
+    ])
+    scale = sc("quy_mo", "example", "Quy mô: một phân vùng, một bộ đọc, và khối việc tồn đọng", [
+        st("""<p>Mỗi phân vùng được <b>một</b> bộ đọc trong nhóm xử lý, với tốc độ $1\\,000$ thông điệp mỗi giây <i>(số minh hoạ)</i>. Số phân vùng tối thiểu bằng tải chia tốc độ một bộ đọc. Nếu chỉ có $4$ phân vùng, thông điệp xử lý được $4\\,000$ mỗi giây, phần còn lại đọng lại sau một giờ ($3\\,600$ giây):</p>"""
+           + table(["tải", "thông điệp mỗi giây", "phân vùng tối thiểu", "chỉ 4 phân vùng: tồn đọng sau 1 giờ"],
+                   [["×1", "5 000", "5", "3 600 000"],
+                    ["×100", "500 000", "500", "<b>≈ 1,79 tỉ</b>"],
+                    ["×10 000", "50 000 000", "50 000", "<b>≈ 180 tỉ</b>"]]),
+           """Mỗi phân vùng được một bộ đọc trong nhóm xử lý, với tốc độ một nghìn thông điệp mỗi giây, đây là số minh hoạ. Số phân vùng tối thiểu bằng tải chia tốc độ của một bộ đọc.
+           Với năm nghìn thông điệp mỗi giây, cần năm phân vùng. Nếu chỉ có bốn, mỗi giờ đọng lại ba triệu sáu trăm nghìn thông điệp. Tải tăng một trăm lần cần năm trăm phân vùng, và bốn phân vùng đọng hơn một phẩy bảy chín tỉ thông điệp.
+           Tải tăng mười nghìn lần cần năm mươi nghìn phân vùng.""", clear=True),
+        st("""<div class="box warn"><b>Giải pháp cũ gãy ở đâu.</b> Thêm bộ đọc mà không thêm phân vùng không giúp gì: bộ đọc thừa ngồi không. Thêm phân vùng thì <b>cùng khoá có thể sang phân vùng khác</b> (băm chia dư cho số mới), nên thứ tự theo khoá bị phá lúc chuyển.
+Số phân vùng lại <b>không giảm được</b> về sau.</div>
+<div class="box key"><b>Đánh đổi:</b> chọn số phân vùng dư vừa phải ngay từ đầu, theo tải dự kiến vài năm. Nhiều phân vùng quá thì mỗi lần chia lại lâu hơn và tốn thêm tệp mở; ít quá thì nghẽn như bảng trên.</div>""",
+           """Câu hỏi là giải pháp cũ sẽ gãy ở chỗ nào khi tải tăng lên. Thêm bộ đọc mà không thêm phân vùng không giúp gì, vì bộ đọc thừa ngồi không. Thêm phân vùng thì cùng một khoá có thể sang phân vùng khác, vì băm chia dư theo số phân vùng mới, nên thứ tự theo khoá bị phá lúc chuyển.
+           Số phân vùng cũng không giảm được về sau. Đánh đổi là chọn số phân vùng dư vừa phải ngay từ đầu, theo tải dự kiến vài năm. Nhiều quá thì mỗi lần chia lại lâu hơn và tốn thêm tệp mở, còn ít quá thì nghẽn như bảng trên.""", clear=True),
+    ], checks=["5000 / 1000 == 5", "500000 / 1000 == 500", "50000000 / 1000 == 50000", "(5000 - 4000) * 3600 == 3_600_000",
+               "(500_000 - 4000) * 3600 == 1_785_600_000", "(50_000_000 - 4000) * 3600 == 179_985_600_000"])
+    write_lab("BNK", "L07", """# Lab BNK L07 — Bảy phân vùng, chín bộ đọc
+
+Một chủ đề có **7 phân vùng** `P0 … P6`, một nhóm có **9 bộ đọc** `0 … 8`. Chia đều: mỗi bộ nhận `phanVung / bo` phân vùng, và **bộ có số thứ tự nhỏ hơn `phanVung % bo`** nhận thêm một; phân vùng phát liên tiếp từ `P0`.
+
+Viết chương trình `NguoiNgoiKhong` (tệp `NguoiNgoiKhong.java`):
+1. Với mỗi bộ đọc in một dòng `bo doc <số>:` rồi danh sách phân vùng (mỗi cái ` P<số>`), hoặc ` ngoi khong` nếu bộ không nhận phân vùng nào.
+2. Dòng cuối: `so nguoi ngoi khong: <số>`.
+
+Chạy: `javac NguoiNgoiKhong.java && java NguoiNgoiKhong`. Chấm: `bash labs/cham.sh BNK L07 NguoiNgoiKhong.java`.
+""", "java", lab_nk["code"], lab_nk["out"])
+    lab = practice_scene(sc, "Tự làm: bảy phân vùng, chín bộ đọc", practice_steps(
+        st, "BNK", "L07",
+        """<p><b>Đề</b>: 7 phân vùng, 9 bộ đọc; mỗi bộ nhận <code>7 / 9</code> phân vùng, bộ có số nhỏ hơn <code>7 % 9</code> nhận thêm một. Viết <code>NguoiNgoiKhong.java</code>:</p>
+<ol><li>mỗi bộ đọc in <code>bo doc 0: P0</code> …; bộ không nhận gì in <code>ngoi khong</code></li>
+<li>dòng cuối <code>so nguoi ngoi khong: …</code></li></ol>""",
+        """Bây giờ tới phần bạn tự làm. Một chủ đề có bảy phân vùng, một nhóm có chín bộ đọc. Mỗi bộ nhận bảy chia nguyên cho chín phân vùng, và bộ có số thứ tự nhỏ hơn phần dư nhận thêm một. Phân vùng được phát liên tiếp từ không.
+        Hãy in cho mỗi bộ đọc một dòng, bộ không nhận gì thì ghi ngồi không, và dòng cuối là số người ngồi không. Hãy dừng video, tự viết và chạy, đừng chép lại ví dụ.""",
+        lab_nk["out"], "NguoiNgoiKhong.java",
+        """<div class="box key"><b>Nếu kẹt:</b> mô theo <code>ChiaPhanVung</code>: <code>int so = phanVung / bo + (b &lt; phanVung % bo ? 1 : 0);</code>. Nếu <code>so == 0</code> thì thêm chữ <code>ngoi khong</code> và tăng biến đếm.
+Lời giải ở <code>labs/BNK/L07/loi_giai.java</code> — chỉ mở sau khi bạn đã thử.</div>""",
+        """Nếu kẹt, làm theo mẫu chia phân vùng vừa xem. Nếu số phân vùng của một bộ bằng không thì ghi ngồi không và tăng biến đếm. Lời giải đầy đủ nằm trong thư mục thực hành của bài, chỉ mở sau khi bạn đã tự thử.""", pause=150), "BNK", "L07")
     return lesson("L07", "kafka_partition_offset", "Bài 7 — Kafka: phân vùng, offset, chia lại và số lần xử lý",
-                  "curriculum/bnk.yaml L07; audit/bnk/verify_bnk.py L07; Apache Kafka documentation (consumer groups, delivery semantics); băm crc32 chỉ để tất định, Kafka dùng murmur2",
-                  ["Chia phân vùng cho nhóm bộ đọc và tính số người ngồi không", "Giải thích vì sao cùng khoá giữ đúng thứ tự",
-                   "Dự đoán số lần xử lý theo thứ tự ghi nhớ và xử lý khi sập", "Khử trùng ở phía xử lý để được hiệu quả đúng một lần"],
-                  [hook, pre, sym, intu, form, ex, chk, pit, quiz, rec])
+                  "curriculum/bnk.yaml L07; audit/bnk/verify_bnk.py L07; audit/review/screen_code/BNK.yaml (mô phỏng bằng Java 21, Kafka thật không chạy trong bài: chỉ mô phỏng logic); Apache Kafka documentation (consumer groups, delivery semantics, số phân vùng chỉ tăng, không giảm; đổi số phân vùng đổi ánh xạ khoá → phân vùng); băm crc32 chỉ để tất định, Kafka dùng murmur2",
+                  ["Chia phân vùng cho nhóm bộ đọc và tính số người ngồi không", "Nêu vì sao cùng khoá giữ đúng thứ tự",
+                   "Dự đoán số lần xử lý theo thứ tự ghi nhớ và xử lý khi sập", "Khử trùng ở phía xử lý để được hiệu quả đúng một lần",
+                   "Chạy mô phỏng chia phân vùng và thứ tự ghi nhớ để thấy số lần xử lý",
+                   "Tính số phân vùng tối thiểu và khối thông điệp tồn đọng khi tải tăng ×100, ×10 000",
+                   "Viết chương trình chia phân vùng cho nhóm bộ đọc và đếm người ngồi không"],
+                  [hook, pre, sym, intu, form, ex, run, chk, pit, quiz, scale, lab, rec],
+                  covers=[(1, "chay_that"), (2, "intuition"), (3, "example"), (4, "check"), (5, "chay_that"), (6, "quy_mo"), (7, "practice")])

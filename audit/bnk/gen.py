@@ -16,6 +16,7 @@ for lid in want:
         print("chưa có", f.name)
         continue
     m = importlib.import_module(lid.lower())
+    lib.begin(lid)
     slug, spec = m.build()
     out = ROOT / "lessons" / "bnk" / f"{lid}_{slug}.yaml"
     # giữ asr_reviewed đã có (xem xét ASR ghi thẳng vào YAML) khi sinh lại

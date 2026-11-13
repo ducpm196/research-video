@@ -1,0 +1,663 @@
+id: L03
+course: JV2
+series: JV2 · Java trung cấp
+title: 'Bài 3 — Hàm là giá trị: hàm ngắn và đường ống Stream'
+voice: vi-VN-NamMinhNeural
+rate: -5%
+depth: full
+af2: true
+covers:
+- objective: 1
+  scene: example
+- objective: 2
+  scene: intuition
+- objective: 3
+  scene: example
+- objective: 4
+  scene: scale
+- objective: 5
+  scene: practice
+source: 'curriculum/jv2.yaml L03; audit/jv2/verify_jv2.py L03 (javac/java chạy thật,
+  JDK 21; -Xmx32m cho phép đo bộ nhớ); The Java Language Specification, Java SE 21:
+  §15.27 (biểu thức lambda), §15.13 (tham chiếu phương thức), §15.27.2 (biến cục bộ
+  phải effectively final: §4.12.4); java.util.stream (Java SE 21 API: đường ống lười,
+  bước cuối, một lần dùng), Collectors.toMap (khoá trùng ném IllegalStateException),
+  Files.lines (đọc lười); dev.java/learn'
+assumes: []
+objectives:
+- Đọc hàm ngắn, giao diện hàm và tham chiếu hàm
+- Mô tả đường ống chạy theo từng phần tử và chỉ chạy khi có bước cuối
+- Viết đường ống lọc, biến đổi và gom nhóm, đối chiếu với vòng lặp
+- Nhận ra khi nào đường ống giữ được bộ nhớ nhỏ và khi nào không
+- Tính thống kê tám giao dịch bằng đường ống và kiểm lại bằng vòng lặp
+asr_reviewed:
+  - {sentence: "Cuối cùng chọn giữa đọc hết tệp ba mươi gigabyte vào bộ nhớ rồi mới tạo đường ống, và tạo đường ống trực tiếp từ tệp, và nói vì sao.", reason: "ASR chép “cuối cùng chọn giữa đọc hết tệp 30GB vào bộ nhớ rồi mới tạo đường ống và tạo đường ống trực tiếp từ tệp và nói vì sao.” (0.967): “gigabyte” đọc theo luật lexicon (lexicon_vi.JV2.yaml: “ghi-ga-bai”), ASR viết “gb” — NOT_VERIFIED bằng tai người"}
+scenes:
+- id: hook
+  kind: hook
+  title: Mười dòng vòng lặp, hay một dòng nói điều mình muốn?
+  steps:
+  - show: '<div class="code"><div><span class="kw">long</span> lon = 0;</div><div>Map&lt;String,
+      Long&gt; tong = <span class="kw">new</span> TreeMap&lt;&gt;();</div><div><span
+      class="kw">for</span> (GiaoDich g : ds) {</div><div>    <span class="kw">if</span>
+      (g.soTien() &gt;= 1000000) {</div><div>        lon += g.soTien();</div><div>    }</div><div>    tong.put(g.loai(),
+      tong.getOrDefault(g.loai(), 0L) + g.soTien());</div><div>}</div></div><p><b>Kết
+      quả chạy</b></p><div class="code"><div>4700000</div><div>{chuyen=1550000, nap=4400000,
+      rut=1500000}</div></div>'
+    focus:
+    - 1
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Ở bài trước, ta thống kê giao dịch bằng vòng lặp. Vòng lặp nói máy phải làm
+      thế nào, mở một biến tổng, duyệt từng phần tử, kiểm điều kiện, cộng dồn. Mười
+      dòng, ba chỗ dễ lỗi, và đọc xong vẫn phải đoán mục đích. Kết quả là tổng các
+      giao dịch từ một triệu trở lên, và tổng theo từng loại.
+  - show: <div class="code"><div><span class="kw">long</span> lon = ds.stream().filter(g
+      -&gt; g.soTien() &gt;= 1000000).mapToLong(GiaoDich::soTien).sum();</div><div>Map&lt;String,
+      Long&gt; tong = ds.stream().collect(</div><div>        Collectors.groupingBy(GiaoDich::loai,
+      TreeMap::<span class="kw">new</span>, Collectors.summingLong(GiaoDich::soTien)));</div></div>
+    clear: true
+    say: Cùng việc đó, cách kể mục đích gọn hơn nhiều. Lọc ra giao dịch từ một triệu,
+      đổi sang số tiền, cộng lại. Gom các giao dịch theo loại rồi cộng tiền của từng
+      loại. Dòng nào nói đúng điều mình muốn, và đây là đường ống, kiểu viết thống
+      trị trong mã Java hiện đại.
+  - show: '<div class="box key">Hôm nay: <b>hàm là một giá trị</b> có thể truyền đi
+      (hàm ngắn không tên, tham chiếu hàm), và <b>đường ống Stream</b> lọc, biến đổi,
+      gom nhóm.
+
+      Kèm câu hỏi của người làm nghề: đường ống chạy <b>khi nào</b>, và với tệp lớn
+      gấp một nghìn lần thì còn chạy nổi không?</div>
+
+      '
+    clear: true
+    say: Hôm nay ta học hàm là một giá trị có thể truyền đi, và đường ống để lọc,
+      biến đổi, gom nhóm. Kèm câu hỏi của người làm nghề, đường ống chạy khi nào,
+      và với tệp lớn gấp một nghìn lần thì còn chạy nổi không.
+- id: prereq
+  kind: prereq
+  title: 'Ôn lại: giao diện, bộ so sánh và bản đồ'
+  steps:
+  - show: <table class='t'><tr><th>điều đã biết</th><th>nhắc lại</th></tr><tr><td>①
+      giao diện</td><td>một giao diện đòi các hàm; lớp cài hết thì dùng được, ví dụ
+      bộ so sánh có <code>compare(a, b)</code></td></tr><tr><td>② bản ghi</td><td><code>record
+      GiaoDich(int ma, String loai, long soTien)</code> có sẵn <code>loai()</code>,
+      <code>soTien()</code></td></tr><tr><td>③ bản đồ</td><td><code>TreeMap</code>
+      giữ khoá theo thứ tự; <code>getOrDefault</code> cộng dồn theo khoá</td></tr><tr><td>④
+      đọc từng dòng</td><td>mở tệp trong khối có tài nguyên và chỉ giữ một dòng mỗi
+      lúc</td></tr></table>
+    focus:
+    - 1
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.5'
+    say: Ta ôn lại bốn điều. Giao diện đòi một số hàm, lớp cài đủ thì dùng được, như
+      bộ so sánh đòi hàm so sánh. Bản ghi tự có các hàm đọc theo tên trường. Bản đồ
+      có thứ tự giữ khoá theo thứ tự chữ cái, và hàm lấy mặc định giúp cộng dồn. Cuối
+      cùng, tệp lớn phải đọc từng dòng trong khối có tài nguyên, mỗi lúc chỉ giữ một
+      dòng.
+- id: sym
+  kind: symbol
+  title: Giải mã tám ký hiệu của hàm ngắn và đường ống
+  checks:
+  - 2500000 > 1000000
+  - not (800000 > 1000000)
+  - 2500000 // 1000 == 2500
+  steps:
+  - show: '<table class=''t''><tr><th>viết</th><th>nghĩa</th></tr><tr><td><code>so
+      -&gt; so &gt; 1000000</code></td><td><b>hàm ngắn không tên</b>: bên trái mũi
+      tên là tham số, bên phải là kết quả trả về</td></tr><tr><td><code>Predicate&lt;Long&gt;</code></td><td>giao
+      diện của hàm nhận một giá trị, trả <b>đúng/sai</b>; gọi bằng <code>.test(x)</code></td></tr><tr><td><code>Function&lt;A,
+      B&gt;</code></td><td>giao diện của hàm nhận <code>A</code>, trả <code>B</code>;
+      gọi bằng <code>.apply(x)</code></td></tr><tr><td><code>GiaoDich::soTien</code></td><td><b>tham
+      chiếu hàm</b>: cách viết tắt của <code>g -&gt; g.soTien()</code></td></tr><tr><td><code>ds.stream()</code></td><td>mở
+      một <b>đường ống</b> (Stream) đi qua từng phần tử của danh sách</td></tr><tr><td><code>filter</code>
+      / <code>map</code></td><td>bước giữa: giữ phần tử thoả điều kiện / đổi mỗi phần
+      tử thành giá trị khác</td></tr><tr><td><code>sum</code> / <code>collect</code>
+      / <code>toList</code></td><td>bước <b>cuối</b>: lấy kết quả ra; không có bước
+      cuối thì đường ống <b>không chạy</b></td></tr><tr><td><code>groupingBy(khoá,
+      …)</code></td><td>gom các phần tử cùng khoá vào một nhóm, rồi tính tiếp trong
+      từng nhóm</td></tr></table>'
+    focus:
+    - 1
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.5'
+    - '1.6'
+    - '1.7'
+    - '1.8'
+    say: Bảng này có tám thứ. Hàm ngắn không tên có tham số bên trái mũi tên và kết
+      quả bên phải. Hai giao diện hay dùng nhất là hàm trả đúng sai, và hàm biến đổi
+      từ kiểu này sang kiểu kia. Tham chiếu hàm là cách viết tắt của hàm ngắn chỉ
+      gọi một hàm có sẵn. Mở đường ống từ danh sách. Bước giữa như lọc và biến đổi
+      chỉ khai báo việc cần làm. Bước cuối mới lấy kết quả, và nếu không có bước cuối
+      thì đường ống không chạy. Cuối cùng là gom nhóm theo khoá.
+  - show: <div class="code"><div>Predicate&lt;Long&gt; lon = so -&gt; so &gt; 1000000;      <span
+      class="cm">// nhận một số, trả đúng hoặc sai</span></div><div>Function&lt;Long,
+      Long&gt; phi = so -&gt; so / 1000;    <span class="cm">// nhận số tiền, trả
+      phí</span></div><div>System.out.println(lon.test(2500000L));</div><div>System.out.println(lon.test(800000L));</div><div>System.out.println(phi.apply(2500000L));</div></div><p><b>Kết
+      quả chạy</b></p><div class="code"><div>true</div><div>false</div><div>2500</div></div>
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    - 3
+    clear: true
+    say: Ta thử ngay. Hàm thứ nhất nhận một số, trả đúng nếu lớn hơn một triệu. Hàm
+      thứ hai nhận số tiền, chia một nghìn để ra phí. Hai triệu rưỡi thì đúng, tám
+      trăm nghìn thì sai, và phí của hai triệu rưỡi là hai nghìn năm trăm. Cả hai
+      hàm đều là giá trị nằm trong một biến, ta có thể truyền chúng cho hàm khác.
+- id: intuition
+  kind: intuition
+  title: 'Hình dung: băng chuyền, mỗi phần tử đi hết các trạm'
+  steps:
+  - show: <div><svg width="1500" height="330" viewBox="0 0 1500 330" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><rect
+      x="20" y="120" width="220" height="90" rx="10" fill="#e5e7eb" stroke="#6b7280"
+      stroke-width="3"/><text x="130.0" y="157" font-size="24" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">danh sách</text><text x="130.0" y="189" font-size="24"
+      text-anchor="middle" fill="#1f2937">8 giao dịch</text><line x1="245" y1="165"
+      x2="330" y2="165" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><rect
+      x="335" y="120" width="240" height="90" rx="10" fill="#dbeafe" stroke="#2a78d6"
+      stroke-width="3"/><text x="455.0" y="157" font-size="24" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">filter</text><text x="455.0" y="189" font-size="24"
+      text-anchor="middle" fill="#1f2937">soTien ≥ 1 triệu</text><line x1="580" y1="165"
+      x2="665" y2="165" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><rect
+      x="670" y="120" width="240" height="90" rx="10" fill="#dbeafe" stroke="#2a78d6"
+      stroke-width="3"/><text x="790.0" y="157" font-size="24" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">mapToLong</text><text x="790.0" y="189" font-size="24"
+      text-anchor="middle" fill="#1f2937">lấy số tiền</text><line x1="915" y1="165"
+      x2="1000" y2="165" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><rect
+      x="1005" y="120" width="220" height="90" rx="10" fill="#dcfce7" stroke="#16a34a"
+      stroke-width="3"/><text x="1115.0" y="157" font-size="24" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">sum</text><text x="1115.0" y="189" font-size="24"
+      text-anchor="middle" fill="#1f2937">BƯỚC CUỐI</text><line x1="1230" y1="165"
+      x2="1300" y2="165" stroke="#16a34a" stroke-width="3.5" marker-end="url(#ah)"/><rect
+      x="1305" y="120" width="180" height="90" rx="10" fill="#fef3c7" stroke="#d97706"
+      stroke-width="3"/><text x="1395.0" y="157" font-size="24" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">4 700 000</text><text x="1395.0" y="189" font-size="24"
+      text-anchor="middle" fill="#1f2937">kết quả</text><text x="750" y="60" font-size="28"
+      text-anchor="middle" fill="#1f2937" font-weight="bold">mỗi phần tử đi hết các
+      trạm rồi mới tới phần tử sau</text><text x="750" y="290" font-size="26" text-anchor="middle"
+      fill="#dc2626" font-weight="bold">không có trạm cuối thì băng chuyền không chạy</text></svg></div>
+    clear: true
+    say: Hình dung đường ống như một băng chuyền. Phần tử đi qua trạm lọc, rồi trạm
+      biến đổi, rồi tới trạm cuối để lấy kết quả. Điều quan trọng là mỗi phần tử đi
+      hết các trạm rồi mới tới phần tử sau, chứ không phải trạm một xử lý hết rồi
+      mới sang trạm hai. Và nếu không có trạm cuối thì băng chuyền không bao giờ chạy.
+  - show: <div class="code"><div>Stream&lt;Integer&gt; s = List.of(1, 2, 3, 4).stream()</div><div>        .filter(x
+      -&gt; { System.out.println("loc " + x); <span class="kw">return</span> x % 2
+      == 0; })</div><div>        .map(x -&gt; { System.out.println("nhan " + x); <span
+      class="kw">return</span> x * 10; });</div><div>System.out.println("chua chay
+      gi");</div><div>System.out.println(s.toList());</div></div>
+    clear: true
+    say: Ta kiểm tra bằng cách cho mỗi trạm in một dòng. Danh sách một, hai, ba, bốn.
+      Trạm lọc giữ số chẵn, trạm biến đổi nhân mười. Ta in ra dòng chưa chạy gì trước
+      khi gọi bước cuối, để xem đường ống thực sự bắt đầu lúc nào.
+  - show: '<p><b>Kết quả chạy</b></p><div class="code"><div>chua chay gi</div><div>loc
+      1</div><div>loc 2</div><div>nhan 2</div><div>loc 3</div><div>loc 4</div><div>nhan
+      4</div><div>[20, 40]</div></div><p class=''note''>Dòng "chua chay gi" in <b>trước</b>
+      mọi dòng "loc"; rồi từng phần tử đi hết các trạm: 1 bị loại ngay, 2 đi tiếp
+      tới "nhan".</p>'
+    focus:
+    - 1
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Kết quả thật. Dòng chưa chạy gì xuất hiện trước tiên, nghĩa là hai trạm đầu
+      chỉ khai báo. Khi gọi bước cuối, phần tử một vào trạm lọc và bị loại, phần tử
+      hai qua lọc rồi qua trạm biến đổi, rồi mới tới phần tử ba. Kết quả cuối là hai
+      mươi và bốn mươi.
+- id: formula
+  kind: formula
+  title: 'Suy ra từng bước: từ vòng lặp sang đường ống'
+  checks:
+  - 2000000 + 1500000 + 900000 == 4400000
+  steps:
+  - show: '<div class="code"><div><span class="kw">long</span> lon = 0;</div><div>Map&lt;String,
+      Long&gt; tong = <span class="kw">new</span> TreeMap&lt;&gt;();</div><div><span
+      class="kw">for</span> (GiaoDich g : ds) {</div><div>    <span class="kw">if</span>
+      (g.soTien() &gt;= 1000000) {</div><div>        lon += g.soTien();</div><div>    }</div><div>    tong.put(g.loai(),
+      tong.getOrDefault(g.loai(), 0L) + g.soTien());</div><div>}</div></div><p><b>Bước
+      1.</b> Tách vòng lặp thành các <b>việc rời nhau</b>: lọc (<code>if</code>),
+      lấy tiền, cộng (<code>lon +=</code>).</p>'
+    focus:
+    - 1
+    - 1
+    - 2
+    clear: true
+    say: Bước một, nhìn vào vòng lặp và tách thành những việc rời nhau. Lệnh rẽ nhánh
+      là việc lọc, lấy số tiền là việc biến đổi, phép cộng dồn là việc gom lại thành
+      một số. Ba việc lẫn trong một khối nên ta khó thấy từng việc.
+  - show: '<p><b>Bước 2.</b> Mỗi việc thành một trạm, nối bằng dấu chấm:</p>
+
+      <p><code>if (g.soTien() &gt;= 1000000)</code> &rarr; <code>.filter(g -&gt; g.soTien()
+      &gt;= 1000000)</code></p>
+
+      <p><code>lon += g.soTien()</code> &rarr; <code>.mapToLong(GiaoDich::soTien).sum()</code></p>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Bước hai, mỗi việc thành một trạm. Điều kiện của lệnh rẽ nhánh trở thành
+      hàm ngắn đưa cho trạm lọc. Phép cộng dồn trở thành trạm lấy số tiền rồi trạm
+      cộng. Biến tổng và vòng lặp biến mất, vì đường ống tự lo.
+  - show: '<p><b>Bước 3.</b> Gom nhóm: <code>groupingBy(khoá, bộ-gom-trong-nhóm)</code>.
+      Với khoá = loại, bộ gom = <code>summingLong(soTien)</code>:</p>
+
+      <p><code>tong.put(loai, tong.getOrDefault(loai, 0L) + soTien)</code> &harr;
+      <code>groupingBy(GiaoDich::loai, …, summingLong(GiaoDich::soTien))</code></p>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    clear: true
+    say: Bước ba, gom nhóm. Dòng cộng dồn theo khoá bằng bản đồ chính là việc mà hàm
+      gom nhóm làm thay. Khoá là loại giao dịch, còn cách gom trong nhóm là cộng số
+      tiền. Hai cách viết cho cùng một kết quả.
+  - show: '<p><b>Bước 4.</b> Thử bằng số với <b>nap</b>: ba dòng <code>2 000 000</code>,
+      <code>1 500 000</code>, <code>900 000</code>:</p>
+
+      $$\text{nap} = 2\,000\,000 + 1\,500\,000 + 900\,000 = \hl{4\,400\,000}$$
+
+      <p>Đúng bằng giá trị <code>nap=4400000</code> trong kết quả ✓</p>
+
+      '
+    focus:
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Bước bốn, thử bằng số với loại nạp. Có ba giao dịch nạp, hai triệu, một triệu
+      rưỡi và chín trăm nghìn. Cộng lại được bốn triệu bốn trăm nghìn, nên đúng bằng
+      giá trị mà đường ống sẽ in ra cho loại nạp.
+- id: example
+  kind: example
+  title: 'Ví dụ: tám giao dịch, ba câu hỏi, hai cách viết'
+  checks:
+  - 2000000 + 1200000 + 1500000 == 4700000
+  - 500000 + 300000 + 700000 == 1500000
+  - 1200000 + 350000 == 1550000
+  - 1500000 + 4400000 + 1550000 == 7450000
+  - 500000 + 2000000 + 300000 + 1200000 + 1500000 + 700000 + 350000 + 900000 == 7450000
+  steps:
+  - show: '<div class="code"><div>List&lt;GiaoDich&gt; ds = List.of(</div><div>        <span
+      class="kw">new</span> GiaoDich(1, "rut", 500000), <span class="kw">new</span>
+      GiaoDich(2, "nap", 2000000),</div><div>        <span class="kw">new</span> GiaoDich(3,
+      "rut", 300000), <span class="kw">new</span> GiaoDich(4, "chuyen", 1200000),</div><div>        <span
+      class="kw">new</span> GiaoDich(5, "nap", 1500000), <span class="kw">new</span>
+      GiaoDich(6, "rut", 700000),</div><div>        <span class="kw">new</span> GiaoDich(7,
+      "chuyen", 350000), <span class="kw">new</span> GiaoDich(8, "nap", 900000));</div></div><p
+      class=''note''>Tám giao dịch: rút, nạp, rút, chuyển, nạp, rút, chuyển, nạp.</p>'
+    focus:
+    - 1
+    - 1
+    - 2
+    clear: true
+    say: 'Ta làm trọn vẹn một ví dụ với tám giao dịch gồm ba loại. Ba câu hỏi: tổng
+      các giao dịch từ một triệu trở lên, tổng theo loại, và danh sách các loại. Ta
+      tính tay trước.'
+  - show: '$$① \; \text{từ 1 triệu}: 2\,000\,000 + 1\,200\,000 + 1\,500\,000 = \hl{4\,700\,000}$$<p>(900
+      000 và các số nhỏ hơn bị loại.)</p>'
+    focus:
+    - 1
+    - 1
+    - 2
+    clear: true
+    say: Phép tính thứ nhất, các giao dịch từ một triệu trở lên là hai triệu, một
+      triệu hai trăm nghìn và một triệu rưỡi. Cộng lại được bốn triệu bảy trăm nghìn.
+      Giao dịch chín trăm nghìn không đủ nên bị loại.
+  - show: '$$② \; \text{rut}: 500\,000 + 300\,000 + 700\,000 = \hl{1\,500\,000}$$$$③
+      \; \text{nap}: 2\,000\,000 + 1\,500\,000 + 900\,000 = \hl{4\,400\,000}$$$$④
+      \; \text{chuyen}: 1\,200\,000 + 350\,000 = \hl{1\,550\,000}$$'
+    focus:
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Phép tính thứ hai, loại rút cộng lại được một triệu rưỡi. Phép thứ ba, loại
+      nạp được bốn triệu bốn trăm nghìn. Phép thứ tư, loại chuyển được một triệu năm
+      trăm năm mươi nghìn.
+  - show: $$⑤ \; \text{tổng theo loại} = 1\,500\,000 + 4\,400\,000 + 1\,550\,000 =
+      \hl{7\,450\,000}$$<p>= tổng cả tám giao dịch ✓ (không nhóm nào mất hay bị tính
+      hai lần)</p>
+    focus:
+    - 1
+    - 2
+    clear: true
+    say: Phép thứ năm, cộng ba tổng theo loại được bảy triệu bốn trăm năm mươi nghìn,
+      đúng bằng tổng của cả tám giao dịch. Nghĩa là không nhóm nào bị mất, cũng không
+      giao dịch nào bị tính hai lần.
+  - show: <div class="code"><div><span class="kw">long</span> lon = ds.stream().filter(g
+      -&gt; g.soTien() &gt;= 1000000).mapToLong(GiaoDich::soTien).sum();</div><div>Map&lt;String,
+      Long&gt; tong = ds.stream().collect(</div><div>        Collectors.groupingBy(GiaoDich::loai,
+      TreeMap::<span class="kw">new</span>, Collectors.summingLong(GiaoDich::soTien)));</div><div>System.out.println(lon);</div><div>System.out.println(tong);</div><div>System.out.println(ds.stream().map(GiaoDich::loai).distinct().sorted().toList());</div></div><p><b>Kết
+      quả chạy</b></p><div class="code"><div>4700000</div><div>{chuyen=1550000, nap=4400000,
+      rut=1500000}</div><div>[chuyen, nap, rut]</div></div>
+    focus:
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Chạy thật bằng đường ống, ba dòng in ra khớp với ba phép tính tay. Tổng từ
+      một triệu là bốn triệu bảy trăm nghìn, tổng theo loại đúng như đã cộng, và danh
+      sách các loại theo thứ tự chữ cái. Bản vòng lặp cho đúng hai dòng đầu y hệt.
+- id: check
+  kind: check
+  title: 'Tự kiểm bằng đường khác: so hai cách viết'
+  checks:
+  - 4700000 <= 7450000
+  - 1550000 + 4400000 + 1500000 == 7450000
+  steps:
+  - show: <p><b>Kết quả chạy</b></p><div class="code"><div>4700000</div><div>{chuyen=1550000,
+      nap=4400000, rut=1500000}</div></div><p class='note'>Bản vòng lặp <code>ThongKeVong</code>
+      in <b>y hệt</b> hai dòng đầu của bản đường ống. Hai cách viết khác nhau hoàn
+      toàn, nên đây là một phép đối chứng độc lập.</p>
+    focus:
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Cách kiểm thứ nhất là viết cùng bài toán theo cách cũ rồi so. Bản vòng lặp
+      in đúng hai dòng giống bản đường ống, bốn triệu bảy trăm nghìn và tổng theo
+      loại. Hai cách viết hoàn toàn khác nhau mà ra cùng kết quả, nên ta có thêm lòng
+      tin.
+  - show: '<p>Kiểm tính chất: tổng theo ba nhóm phải <b>bằng</b> tổng cả danh sách;
+      tổng từ 1 triệu trở lên <b>không vượt</b> tổng cả danh sách:</p>
+
+      $$4\,700\,000 \le 7\,450\,000 \quad\text{và}\quad 1\,550\,000 + 4\,400\,000
+      + 1\,500\,000 = 7\,450\,000$$
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    clear: true
+    say: Cách kiểm thứ hai là kiểm tính chất. Tổng của ba nhóm phải bằng tổng cả danh
+      sách. Và vì tổng các giao dịch lớn là một phần của tất cả, nên nó không thể
+      vượt tổng tất cả. Cả hai đều đúng với số liệu của ta.
+- id: scale
+  kind: concept
+  title: 'Khi dữ liệu lớn gấp một nghìn lần: đường ống lười cứu bộ nhớ'
+  checks:
+  - 1000 * 64 == 64000
+  - 1000000 * 64 == 64000000
+  - 1000000000 // 1000 == 1000000
+  - sum((i % 7 + 1) * 1000 for i in range(1, 1000001)) == 3999998000
+  steps:
+  - show: '<div class="code"><div><span class="kw">long</span>[] dem = {0};                                  <span
+      class="cm">// mảng một ô: đếm số phần tử đã duyệt</span></div><div>IntStream.rangeClosed(1,
+      1000000)</div><div>        .peek(i -&gt; dem[0]++)</div><div>        .filter(i
+      -&gt; i % 10 == 0)</div><div>        .findFirst();                              <span
+      class="cm">// dừng ngay khi thấy phần tử đầu</span></div><div>System.out.println("da
+      duyet " + dem[0] + " phan tu");</div></div><p><b>Kết quả chạy</b></p><div class="code"><div>da
+      duyet 10 phan tu</div></div>'
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    - 3
+    clear: true
+    say: Điều đầu tiên là đường ống lười. Ta tìm phần tử đầu tiên chia hết cho mười
+      trong một triệu số. Ta đếm số phần tử thực sự được duyệt bằng cách chèn một
+      trạm đếm. Kết quả là chỉ mười phần tử, vì đường ống dừng ngay khi tìm được.
+      Vòng lặp viết vụng có thể duyệt cả một triệu.
+  - show: <p><b>Cùng một tệp một triệu dòng, bộ nhớ chỉ 32 megabyte</b></p><div class="code"><div><span
+      class="cm"><span>&#36;</span> </span>java TaoFile 1000000</div><div>da ghi 1000000
+      dong</div><div><span class="cm"><span>&#36;</span> </span>java -Xmx32m DocHet</div><div>het
+      bo nho</div><div><span class="cm"><span>&#36;</span> </span>java -Xmx32m ThongKeLon</div><div>{chuyen=1333332000,
+      nap=1333334000, rut=1333332000}</div></div>
+    focus:
+    - 1
+    - 1
+    - 1
+    - 2
+    - 2
+    clear: true
+    say: Điều thứ hai là kết hợp với đọc từng dòng. Ta tạo tệp một triệu dòng. Cách
+      đọc hết rồi mới tạo đường ống thì hết bộ nhớ, như bài trước. Còn cách tạo đường
+      ống trực tiếp từ tệp, mỗi lúc chỉ giữ một dòng, thì chạy xong, gom được ba nhóm.
+      Tổng của ba nhóm vẫn đúng bằng tổng cả tệp, và không tốn thêm bộ nhớ vì số nhóm
+      chỉ là ba.
+  - show: '<table class=''t''><tr><th>số dòng</th><th>1 000</th><th>1 000 000</th><th>1
+      000 000 000</th></tr><tr><td>bộ nhớ khi giữ mọi dòng rồi mới tạo đường ống</td><td>≈
+      64 nghìn byte</td><td>≈ 64 triệu byte</td><td><b>≈ 64 tỉ byte</b></td></tr><tr><td>bộ
+      nhớ khi đường ống đọc lười từ tệp</td><td>≈ một dòng</td><td>≈ một dòng</td><td>≈
+      một dòng</td></tr><tr><td>thời gian đọc (tỉ lệ)</td><td>×1</td><td>×1 000</td><td><b>×1
+      000 000</b></td></tr></table><p class=''note''>Đánh đổi: đường ống lười chỉ
+      đi <b>một chiều, một lần</b>; cần duyệt lại thì phải đọc lại tệp. Thời gian
+      vẫn tăng theo số dòng; chỉ bộ nhớ là không đổi.</p>'
+    focus:
+    - 1
+    - 1
+    - 1
+    - 2
+    - 2
+    clear: true
+    say: Tóm lại theo quy mô. Giữ mọi dòng thì bộ nhớ tăng theo số dòng và gãy ở khoảng
+      một triệu với giới hạn nhỏ. Đọc lười thì bộ nhớ gần như không đổi. Nhưng thời
+      gian vẫn tăng đều theo số dòng, một tỉ dòng vẫn tốn gấp một triệu lần một nghìn
+      dòng. Đánh đổi là đường ống lười chỉ đi một chiều, một lần.
+- id: pitfalls
+  kind: pitfall
+  title: Lỗi hay gặp, có lỗi của người đã đi làm
+  steps:
+  - show: '<div class="box warn"><b>Lỗi 1 (người mới).</b> Hàm ngắn muốn sửa biến
+      bên ngoài.</div><div class="code"><div><span class="kw">long</span> tong = 0;</div><div><span
+      class="kw">for</span> (<span class="kw">int</span> x : List.of(1, 2, 3)) {</div><div>    Runnable
+      r = () -&gt; System.out.println(tong + x);</div><div>    tong += x;</div><div>}</div></div><p><b>Kết
+      quả chạy</b></p><div class="code"><div><span class="cm">error: local variables
+      referenced from a lambda expression must be final or effectively final</span></div><div><span
+      class="cm">            Runnable r = () -&gt; System.out.println(tong + x);…</span></div><div><span
+      class="cm">                                                  ^</span></div></div>'
+    focus:
+    - 1
+    - 2
+    - 3
+    - 4
+    clear: true
+    say: Lỗi thứ nhất là hàm ngắn muốn sửa biến bên ngoài. Hàm ngắn chỉ được đọc biến
+      cục bộ mà không đổi sau khi gán, vì hàm có thể chạy muộn, ở luồng khác, khi
+      biến đã không còn. Biến tổng ở đây bị cộng thêm sau đó, nên trình biên dịch
+      từ chối. Muốn gom kết quả thì dùng bước cuối của đường ống, đừng cộng vào biến
+      ngoài.
+  - show: '<div class="box warn"><b>Lỗi 2 (người mới).</b> Dùng lại một đường ống
+      đã chạy.</div><div class="code"><div>Stream&lt;Integer&gt; s = List.of(1, 2,
+      3).stream();</div><div>System.out.println(s.count());</div><div>System.out.println(s.count());                     <span
+      class="cm">// dùng lại đường ống đã chạy</span></div></div><p><b>Kết quả chạy</b></p><div
+      class="code"><div>3</div><div><span class="cm">Exception in thread "main" java.lang.IllegalStateException:
+      stream has already been …</span></div></div>'
+    focus:
+    - 1
+    - 2
+    - 3
+    - 4
+    clear: true
+    say: Lỗi thứ hai là dùng lại một đường ống đã chạy. Mỗi đường ống chỉ chạy một
+      lần. Lần đếm đầu cho ra ba, lần thứ hai nổ ngoại lệ báo đường ống đã dùng. Cách
+      sửa là mở đường ống mới từ danh sách mỗi lần cần.
+  - show: '<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Gom thành bản đồ
+      khi khoá có thể trùng.</div><div class="code"><div>List&lt;GiaoDich&gt; ds =
+      List.of(<span class="kw">new</span> GiaoDich(1, "nap", 2000000),</div><div>        <span
+      class="kw">new</span> GiaoDich(2, "rut", 500000), <span class="kw">new</span>
+      GiaoDich(3, "nap", 1500000));</div><div>Map&lt;String, Long&gt; m = ds.stream().collect(</div><div>        Collectors.toMap(GiaoDich::loai,
+      GiaoDich::soTien));       <span class="cm">// hai dòng cùng loại nap</span></div></div><p><b>Kết
+      quả chạy</b></p><div class="code"><div><span class="cm">Exception in thread
+      "main" java.lang.IllegalStateException: Duplicate key nap (…)</span></div></div>'
+    focus:
+    - 1
+    - 2
+    - 3
+    - 4
+    clear: true
+    say: Lỗi thứ ba hay gặp ở người đã đi làm. Gom danh sách thành bản đồ với khoá
+      là loại giao dịch. Khi dữ liệu thử chỉ có khoá khác nhau thì chạy ngon. Đến
+      ngày dữ liệu thật có hai dòng cùng loại, ngoại lệ khoá trùng làm cả đường ống
+      nổ.
+  - show: <div class="box key"><b>Cách sửa:</b> đưa thêm hàm hợp nhất hai giá trị
+      cùng khoá (ở đây <code>Long::sum</code>).</div><div class="code"><div>Map&lt;String,
+      Long&gt; m = ds.stream().collect(</div><div>        Collectors.toMap(GiaoDich::loai,
+      GiaoDich::soTien, Long::sum, TreeMap::<span class="kw">new</span>));</div></div><p><b>Kết
+      quả chạy</b></p><div class="code"><div>{nap=3500000, rut=500000}</div></div>
+    focus:
+    - 1
+    - 3
+    clear: true
+    say: Cách sửa là thêm hàm hợp nhất cho hai giá trị cùng khoá, ở đây là phép cộng.
+      Hai dòng nạp được cộng lại thành ba triệu năm trăm nghìn, và không còn nổ khi
+      dữ liệu có khoá trùng.
+- id: quiz
+  kind: quiz
+  title: Bây giờ tới phần bạn tự làm
+  checks:
+  - 1500000 + 3000000 + 900000 == 5400000
+  - sum(x for x in [400000, 1500000, 250000, 3000000, 900000] if x >= 900000) == 5400000
+  steps:
+  - show: '<p><b>Đề.</b> Danh sách các số tiền: <code>[400000, 1500000, 250000, 3000000,
+      900000]</code>.</p>
+
+      <ol><li>Giá trị của <code>.stream().filter(x -&gt; x &gt;= 900000).mapToLong(x
+      -&gt; x).sum()</code>?</li>
+
+      <li>Đoạn <code>ds.stream().filter(...).map(...);</code> (không có bước cuối)
+      in gì, làm gì?</li></ol>
+
+      <p><b>Chọn A hay B?</b> Cần tổng tiền từ một tệp 30 GB. A: <code>Files.readAllLines(p).stream()…</code>.
+      B: <code>Files.lines(p)…</code> trong khối có tài nguyên. Vì sao?</p>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    - 3
+    - 3
+    pause: 25
+    say: Bây giờ tới phần bạn tự làm. Có năm số tiền. Hãy tính tổng các số từ chín
+      trăm nghìn trở lên. Rồi nói đoạn đường ống không có bước cuối thì in ra gì và
+      làm gì. Cuối cùng chọn giữa đọc hết tệp ba mươi gigabyte vào bộ nhớ rồi mới
+      tạo đường ống, và tạo đường ống trực tiếp từ tệp, và nói vì sao. Hãy dừng video
+      và tự làm.
+  - show: <table class='t'><tr><th>câu</th><th>đáp án</th><th>vì sao</th></tr><tr><td>1</td><td><code>1500000
+      + 3000000 + 900000 = 5400000</code></td><td>chỉ giữ các số ≥ 900000; 400000
+      và 250000 bị loại</td></tr><tr><td>2</td><td>không in gì, không làm gì</td><td>thiếu
+      bước cuối nên đường ống <b>không chạy</b></td></tr><tr><td>3</td><td><b>B</b></td><td>A
+      giữ mọi dòng (≈ 64 byte × số dòng ≫ bộ nhớ); B đọc lười, mỗi lúc một dòng</td></tr></table>
+    focus:
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    say: Đáp án câu một, giữ các số từ chín trăm nghìn trở lên là một triệu rưỡi,
+      ba triệu và chín trăm nghìn, cộng lại được năm triệu bốn trăm nghìn. Câu hai,
+      không có bước cuối thì đường ống không chạy, nên không in gì và không làm gì.
+      Câu ba chọn phương án B, vì phương án A giữ mọi dòng trong bộ nhớ, còn B đọc
+      lười từng dòng.
+    clear: true
+  - show: <div class="box key"><b>Quy tắc:</b> đường ống tiện và dễ đọc, nhưng chỉ
+      <b>lười</b> khi nguồn lười. Nguồn đã nằm hết trong bộ nhớ thì đường ống không
+      cứu được bộ nhớ.</div>
+    say: Quy tắc rút ra. Đường ống tiện và dễ đọc, nhưng chỉ lười khi nguồn của nó
+      lười. Nếu nguồn đã nằm hết trong bộ nhớ thì đường ống không cứu được bộ nhớ.
+- id: practice
+  kind: practice
+  title: 'Tự làm: thống kê tám giao dịch bằng Stream'
+  steps:
+  - show: '<p><b>Đề</b>: tám giao dịch (số liệu trong <code>de.md</code>), làm bốn
+      việc.</p>
+
+      <ol><li>Stream: tổng tiền loại <code>rut</code> mà <code>soTien &gt;= 500000</code>.</li>
+
+      <li><code>groupingBy</code> + <code>counting()</code>: số giao dịch theo loại
+      (<code>TreeMap</code>).</li>
+
+      <li><code>groupingBy</code> + <code>summingLong</code>: tổng tiền theo loại.</li>
+
+      <li>Vòng <code>for</code> + <code>merge</code>: cùng tổng đó; in <code>true</code>
+      nếu <code>equals</code>.</li></ol>
+
+      <p class="note">Tệp <code>ThongKeStream.java</code>; bốn dòng in theo mẫu ở
+      <code>de.md</code>.</p>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    - 3
+    - 3
+    pause: 180
+    say: Bây giờ tới phần bạn tự làm trên máy. Có tám giao dịch cho trong đề bài.
+      Hãy dùng đường ống để tính tổng tiền các giao dịch rút từ năm trăm nghìn trở
+      lên, rồi đếm số giao dịch theo loại và tính tổng tiền theo loại bằng hàm gom
+      nhóm. Sau đó tự viết vòng lặp tính tổng theo loại và kiểm hai bản đồ có bằng
+      nhau không. In bốn dòng theo mẫu. Hãy dừng video và tự viết, đừng chép lại ví
+      dụ.
+  - show: '<p><b>Kết quả mong đợi</b></p><div class="code"><div>Rut tu 500000: 1700000</div><div>Dem:
+      {chuyen=2, nap=3, rut=3}</div><div>Tong: {chuyen=2300000, nap=3850000, rut=2150000}</div><div>Khop
+      vong lap: true</div></div><p class="note">Chấm bằng Git Bash: <code>bash labs/cham.sh
+      JV2 L03 ThongKeStream.java</code> — in <b>ĐÚNG</b> khi trùng.</p>'
+    focus:
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Đây là kết quả mong đợi. Bạn chạy chương trình của mình rồi so từng dòng.
+      Nếu muốn chấm bằng máy, dùng lệnh ở dưới màn hình; lệnh in chữ ĐÚNG khi đầu
+      ra trùng, hoặc chỉ ra dòng nào khác.
+  - show: '<div class="box key"><b>Nếu kẹt:</b> <code>ds.stream().filter(g -&gt; …
+      ).mapToLong(GiaoDich::soTien).sum()</code>. Gom nhóm: <code>Collectors.groupingBy(GiaoDich::loai,
+      TreeMap::new, Collectors.counting())</code>.
+
+      Vòng lặp: <code>m.merge(g.loai(), g.soTien(), Long::sum)</code>. Lời giải: <code>labs/JV2/L03/loi_giai.java</code>
+      — chỉ mở sau khi đã thử.</div>
+
+      '
+    say: Nếu kẹt, đường ống đầu tiên là lọc, đổi sang số nguyên dài, rồi cộng. Gom
+      nhóm dùng hàm gom nhóm theo loại, với bản đồ có thứ tự và hàm đếm hoặc hàm cộng.
+      Trong vòng lặp, dùng hàm trộn của bản đồ với phép cộng. Lời giải đầy đủ nằm
+      trong thư mục thực hành của bài, chỉ mở sau khi bạn đã tự thử.
+  lab: labs/JV2/L03
+- id: recap
+  kind: recap
+  title: Chuỗi logic & tư duy cần mang theo
+  steps:
+  - show: '<div class=''chain''><span class=''n''>hàm là giá trị: x -> …</span><span
+      class=''a''>→</span><span class=''n''>tham chiếu hàm: Lop::ham</span><span class=''a''>→</span><span
+      class=''n''>đường ống: nguồn → bước giữa → bước cuối</span><span class=''a''>→</span><span
+      class=''n''>bước cuối mới chạy</span><span class=''a''>→</span><span class=''n''>mỗi
+      phần tử đi hết các trạm</span><span class=''a''>→</span><span class=''n''>nguồn
+      lười thì đường ống lười</span></div>'
+    say: Tổng kết chuỗi logic. Hàm là một giá trị, viết gọn bằng mũi tên. Tham chiếu
+      hàm là cách viết tắt. Đường ống gồm nguồn, các bước giữa và bước cuối. Chỉ bước
+      cuối mới làm đường ống chạy. Mỗi phần tử đi hết các trạm rồi mới tới phần tử
+      sau. Và đường ống chỉ lười khi nguồn của nó lười.
+  - show: '<div class=''box key''><b>Tư duy:</b> khi viết đường ống, hỏi: <b>nguồn</b>
+      nằm hết trong bộ nhớ không, <b>khoá</b> có thể trùng không, đường ống có <b>bước
+      cuối</b> không,
+
+      và hàm ngắn có đang <b>sửa biến bên ngoài</b> không. Vòng lặp vẫn tốt khi cần
+      kiểm soát từng bước.</div>
+
+      '
+    say: Điều cần mang theo. Khi viết đường ống, hãy hỏi bốn câu. Nguồn có nằm hết
+      trong bộ nhớ không. Khoá có thể trùng không. Đường ống có bước cuối không. Và
+      hàm ngắn có đang sửa biến bên ngoài không. Vòng lặp vẫn tốt khi cần kiểm soát
+      từng bước.

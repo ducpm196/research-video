@@ -68,7 +68,7 @@ def main():
         ex, ver = EX[old]
         block = {"id": lid, "title": title, "spec": f"lessons/bnk/{f.name}", "requires": [prev] if prev else []}
         if lid == "L00":  # 2026-11-08: người mất gốc học khoá JVA (lập trình Java từ con số 0) trước BNK
-            block["requires_ext"] = ["JVA:L12"]
+            block["requires_ext"] = ["JVA:L12", "JV2:L09"]
         block.update({"objectives": sp["objectives"], "example": f"{ex} (VER BNK:{lid})", "fix": [FIX[old]]})
         out.append(yaml.dump([block], allow_unicode=True, sort_keys=False, width=1000).rstrip("\n"))
         prev = lid

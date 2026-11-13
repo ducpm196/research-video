@@ -2,7 +2,7 @@
 Chạy: .venv/Scripts/python audit/jva/gen.py [L01 …]  → ghi lessons/jva/Lxx_<slug>.yaml (YAML do yaml.dump sinh).
 
 Khác BNK: mọi chương trình Java hiện trên màn hình được khai bằng prog(...) — mã nguồn ĐẦY ĐỦ, kết quả in ra mong đợi.
-audit/jva/verify_jva.py gom mọi prog đã khai, biên dịch bằng javac và chạy bằng java thật (JDK 22 trên máy), so từng dòng in ra.
+audit/jva/verify_jva.py gom mọi prog đã khai, biên dịch bằng javac và chạy bằng java thật (JDK 21 trên máy), so từng dòng in ra.
 Vì vậy: không gõ mã hay kết quả trực tiếp vào chuỗi show; luôn dùng code_block(p) và out_block(p)."""
 import html
 import textwrap
@@ -13,6 +13,7 @@ from pathlib import Path
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import lv  # noqa: E402
 
 COURSE = "JVA"
@@ -27,17 +28,18 @@ C_PURPLE = ("#f3e8ff", "#9333ea")
 
 # ── chương trình Java khai bằng dữ liệu, để bộ kiểm chạy thật ─────────────────────────────────────────────────────────────
 PROGRAMS = []  # mỗi phần tử: dict(name, code, out, expect, lesson)
+PROGRAMS_IO = []  # chương trình ĐỌC bàn phím (stdin): verify_jva chạy với `stdin`; gen-jva/screen_code không thấy (không chạy được stdin)
 _CURRENT = {"lesson": None}
 
 
-def prog(name, code, out="", expect="run", note="", err=""):
+def prog(name, code, out="", expect="run", note="", err="", stdin=None):
     """Khai một chương trình. name = tên lớp công khai (tệp name.java). code = mã nguồn đầy đủ (thụt lề 4 dấu cách).
     out = các dòng in ra mong đợi (chuỗi, mỗi dòng một dòng). expect: "run" (chạy bình thường, so out);
     "compile_error:<chuỗi con>" (javac phải báo lỗi chứa chuỗi con); "runtime_error:<tên ngoại lệ>" (chạy rồi ném ngoại lệ đó;
     out là phần in ra TRƯỚC khi ném). err = dòng báo lỗi hiện trên màn hình; bộ kiểm đòi nó có NGUYÊN VĂN trong stderr."""
     p = {"name": name, "code": code.strip("\n"), "out": out.strip("\n"), "expect": expect, "note": note,
-         "lesson": _CURRENT["lesson"], "err": err}
-    PROGRAMS.append(p)
+         "lesson": _CURRENT["lesson"], "err": err, "stdin": stdin}
+    (PROGRAMS if stdin is None else PROGRAMS_IO).append(p)
     return p
 
 
@@ -229,11 +231,12 @@ def say_violations(spec):
     return bad
 
 
-def lesson(id, slug, title, source, objectives, scenes, assumes=None, rate="-5%"):
+def lesson(id, slug, title, source, objectives, scenes, assumes=None, rate="-5%", covers=None):
     _auto_introduce(scenes)
+    af2 = {"af2": True, "covers": [{"objective": o, "scene": s_} for o, s_ in covers]} if covers else {}
     return slug, {
         "id": id, "course": COURSE, "series": SERIES, "title": title, "voice": "vi-VN-NamMinhNeural", "rate": rate,
-        "depth": "full", "source": source, "assumes": assumes or [], "objectives": objectives, "asr_reviewed": [],
+        "depth": "full", **af2, "source": source, "assumes": assumes or [], "objectives": objectives, "asr_reviewed": [],
         "scenes": scenes,
     }
 

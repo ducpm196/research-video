@@ -5,17 +5,35 @@ title: Bài 5 — PL/SQL, khoá hàng và bế tắc ORA-00060
 voice: vi-VN-NamMinhNeural
 rate: -5%
 depth: full
-source: 'curriculum/bnk.yaml L05; audit/bnk/verify_bnk.py L05; Oracle Database Concepts
-  (Data Concurrency and Consistency: phát hiện bế tắc, rollback một câu lệnh; khoá
-  bảng con khi khoá ngoại không có chỉ mục); Oracle Database Error Messages (ORA-00060);
-  thứ tự khoá của ORDER BY … FOR UPDATE không được bảo đảm — Oracle không chạy trên
-  máy này, chỉ mô phỏng logic thứ tự khoá'
+af2: true
+covers:
+- objective: 1
+  scene: intuition
+- objective: 2
+  scene: check
+- objective: 3
+  scene: practice
+- objective: 4
+  scene: pitfalls
+- objective: 5
+  scene: chay_that
+- objective: 6
+  scene: quy_mo
+source: 'curriculum/bnk.yaml L05; audit/bnk/verify_bnk.py L05; audit/review/screen_code/BNK.yaml
+  (PL/SQL chạy thật trên Oracle AI Database 26ai Free 23.26 trong Docker bnx-ora;
+  mô phỏng bế tắc bằng ReentrantLock.tryLock, JDK 21); Oracle Database Concepts (Data
+  Concurrency and Consistency: phát hiện bế tắc, rollback một câu lệnh; khoá bảng
+  con khi khoá ngoại không có chỉ mục); Oracle Database Error Messages (ORA-00060);
+  thứ tự khoá của ORDER BY … FOR UPDATE không được bảo đảm; số cặp phiên T(T−1)/2
+  (tổ hợp)'
 assumes: []
 objectives:
-- Vẽ đồ thị chờ và nhận ra vòng tròn gây bế tắc
+- Nhận ra vòng tròn chờ gây bế tắc trên đồ thị chờ
 - Đếm số cặp thứ tự khoá gây bế tắc
 - Áp quy tắc khoá theo thứ tự id tăng dần
 - Xử lý đúng khi gặp ORA-00060
+- Chạy PL/SQL khoá hàng theo thứ tự trên Oracle và chạy mô phỏng bế tắc
+- Tính số cặp phiên và số cặp ngược thứ tự kỳ vọng khi tải tăng ×100 và ×10 000
 asr_reviewed:
 - sentence: Phiên là một kết nối đang làm việc với cơ sở dữ liệu, tức phần mềm lưu
     bảng dữ liệu mà ta hỏi bằng ngôn ngữ SQL.
@@ -317,6 +335,94 @@ scenes:
     - 2
     say: Bước thứ năm, phiên một khoá hàng năm, trừ và cộng, rồi chốt và nhả cả hai
       khoá. Phiên hai mới vào, nên cả hai lệnh xong lần lượt.
+- id: chay_that
+  kind: example
+  title: 'Chạy thật: khoá hàng theo thứ tự trên Oracle, và mô phỏng bế tắc'
+  steps:
+  - show: '<p><b>PL/SQL chạy thật trên Oracle 26ai Free (Docker): khoá id nhỏ trước</b></p><div
+      class="code"><div>DECLARE</div><div>  v_nho NUMBER;</div><div>  v_lon NUMBER;</div><div><span
+      class="kw">BEGIN</span></div><div>  <span class="kw">SELECT</span> so_du <span
+      class="kw">INTO</span> v_nho <span class="kw">FROM</span> bnk_tk <span class="kw">WHERE</span>
+      id = 2 FOR <span class="kw">UPDATE</span>;   <span class="cm">-- khoá id nhỏ
+      trước</span></div><div>  <span class="kw">SELECT</span> so_du <span class="kw">INTO</span>
+      v_lon <span class="kw">FROM</span> bnk_tk <span class="kw">WHERE</span> id =
+      5 FOR <span class="kw">UPDATE</span>;   <span class="cm">-- rồi mới tới id lớn</span></div><div>  <span
+      class="kw">UPDATE</span> bnk_tk <span class="kw">SET</span> so_du = so_du -
+      300000 <span class="kw">WHERE</span> id = 2;</div><div>  <span class="kw">UPDATE</span>
+      bnk_tk <span class="kw">SET</span> so_du = so_du + 300000 <span class="kw">WHERE</span>
+      id = 5;</div><div>  <span class="kw">COMMIT</span>;</div><div>  DBMS_OUTPUT.PUT_LINE(''xong,
+      tong truoc = '' || (v_nho + v_lon));</div><div>END;</div></div>'
+    focus:
+    - 1
+    - 1
+    - 2
+    say: Trước hết là mã chạy thật trên Oracle. Khối này khai hai biến, rồi khoá hàng
+      có mã hai, và sau đó mới khoá hàng có mã năm, tức là luôn khoá mã nhỏ trước.
+      Sau khi giữ cả hai hàng, nó trừ ba trăm nghìn ở hàng thứ nhất, cộng ba trăm
+      nghìn ở hàng thứ hai, chốt lưu, và in tổng trước khi chuyển.
+  - show: <p><b>Kết quả chạy thật</b></p><div class="code"><div>xong, tong truoc =
+      1500000</div><div>2 700000</div><div>5 800000</div></div>
+    focus:
+    - 1
+    - 1
+    - 2
+    clear: true
+    say: Khi chạy thật, tổng trước khi chuyển là một triệu rưỡi. Hàng hai còn bảy
+      trăm nghìn, hàng năm có tám trăm nghìn, tổng vẫn một triệu rưỡi, nên không mất
+      đồng nào. Một phiên khác cũng khoá theo thứ tự mã tăng dần thì không thể tạo
+      vòng chờ với phiên này.
+  - show: '<p><b>Mô phỏng bế tắc bằng Java (phần 1): mỗi luồng khoá hàng đầu rồi xin
+      hàng sau</b></p><div class="code"><div><span class="kw">static</span> <span
+      class="kw">boolean</span> lam(Lock dau, Lock sau) {</div><div>    dau.lock();                                   <span
+      class="cm">// khoá hàng thứ nhất</span></div><div>    <span class="kw">try</span>
+      {</div><div>        Thread.sleep(200);                        <span class="cm">//
+      để luồng kia kịp khoá hàng của nó</span></div><div>        <span class="kw">boolean</span>
+      duoc = sau.tryLock(500, TimeUnit.MILLISECONDS);   <span class="cm">// xin hàng
+      thứ hai, chờ tối đa 0,5 giây</span></div><div>        <span class="kw">if</span>
+      (duoc) sau.unlock();</div><div>        <span class="kw">return</span> duoc;</div><div>    }
+      <span class="kw">catch</span> (InterruptedException e) {</div><div>        <span
+      class="kw">return</span> <span class="kw">false</span>;</div><div>    } <span
+      class="kw">finally</span> { dau.unlock(); }</div><div>}</div></div>'
+    focus:
+    - 1
+    - 1
+    - 2
+    clear: true
+    say: Oracle tự phát hiện vòng chờ, nên để thấy bế tắc ta mô phỏng bằng Java, với
+      mỗi hàng là một khoá. Mỗi luồng giữ hàng thứ nhất, ngủ một chút để luồng kia
+      kịp giữ hàng của nó, rồi xin hàng thứ hai, chờ tối đa nửa giây. Nếu hết giờ
+      mà chưa xin được, ta coi là bế tắc.
+  - show: '<p><b>Phần 2: thử hai thứ tự khoá</b></p><div class="code"><div><span class="kw">static</span>
+      String thu(Lock x1, Lock y1, Lock x2, Lock y2) <span class="kw">throws</span>
+      Exception {</div><div>    <span class="kw">boolean</span>[] ok = <span class="kw">new</span>
+      <span class="kw">boolean</span>[2];</div><div>    Thread t1 = <span class="kw">new</span>
+      Thread(() -&gt; ok[0] = lam(x1, y1));</div><div>    Thread t2 = <span class="kw">new</span>
+      Thread(() -&gt; ok[1] = lam(x2, y2));</div><div>    t1.start(); t2.start();
+      t1.join(); t2.join();</div><div>    <span class="kw">return</span> ok[0] &amp;&amp;
+      ok[1] ? "xong" : "be tac";</div><div>}</div><div><span class="kw">public</span>
+      <span class="kw">static</span> <span class="kw">void</span> main(String[] args)
+      <span class="kw">throws</span> Exception {</div><div>    Lock a = <span class="kw">new</span>
+      ReentrantLock(), b = <span class="kw">new</span> ReentrantLock();</div><div>    System.out.println("A
+      roi B  va  B roi A: " + thu(a, b, b, a));</div><div>    System.out.println("A
+      roi B  va  A roi B: " + thu(a, b, a, b));</div></div>'
+    focus:
+    - 1
+    - 1
+    - 2
+    clear: true
+    say: Phần này chạy hai luồng, và trả về xong hay bế tắc. Ta thử hai trường hợp.
+      Hai luồng khoá ngược thứ tự, và hai luồng khoá cùng thứ tự.
+  - show: '<p><b>Kết quả chạy thật</b></p><div class="code"><div>A roi B  va  B roi
+      A: be tac</div><div>A roi B  va  A roi B: xong</div></div>'
+    focus:
+    - 1
+    - 1
+    - 2
+    clear: true
+    say: Khi chạy thật, khoá ngược thứ tự thì bế tắc, vì mỗi luồng giữ hàng mà luồng
+      kia cần. Khoá cùng thứ tự thì xong, vì luồng thứ hai không giữ được hàng đầu
+      tiên nên chưa giữ gì cả, và đợi luồng thứ nhất làm xong. Mô phỏng này dùng hết
+      giờ chờ, còn Oracle trả lỗi không không không sáu không cho một phiên.
 - id: check
   kind: check
   title: 'Tự kiểm bằng đường khác: thử hết cặp thứ tự'
@@ -436,6 +542,115 @@ scenes:
       mọi khoá cần lấy. Giới hạn chờ rồi thử lại đơn giản và bắt được mọi trường hợp,
       nhưng bế tắc vẫn xảy ra. Hệ thống thật thường dùng cả hai.
     clear: true
+- id: quy_mo
+  kind: example
+  title: 'Quy mô: cặp phiên tăng bình phương, bế tắc từ hiếm thành liên tục'
+  checks:
+  - 10 * 9 // 2 == 45
+  - round(45 * 0.0001, 4) == 0.0045
+  - 1000 * 999 // 2 == 499500
+  - round(499500 * 0.0001) == 50
+  - 100000 * 99999 // 2 == 4_999_950_000
+  - round(4_999_950_000 * 0.0001) == 499995
+  steps:
+  - show: <p>Gọi $T$ là số phiên chạy cùng lúc. Số cặp phiên là $\frac{T \cdot (T
+      - 1)}{2}$. Giả sử mỗi cặp có xác suất $0{,}0001$ khoá ngược thứ tự nhau <i>(số
+      minh hoạ)</i>; số cặp gây bế tắc kỳ vọng là số cặp nhân $0{,}0001$.</p><table
+      class='t'><tr><th>tải</th><th>phiên cùng lúc T</th><th>số cặp phiên</th><th>cặp
+      ngược thứ tự kỳ vọng</th></tr><tr><td>×1</td><td>10</td><td>45</td><td>0,0045
+      (hiếm)</td></tr><tr><td>×100</td><td>1 000</td><td>499 500</td><td><b>≈ 50</b></td></tr><tr><td>×10
+      000</td><td>100 000</td><td>4 999 950 000</td><td><b>≈ 500 000</b></td></tr></table>
+    focus:
+    - 1
+    - 1
+    - 1
+    - 2
+    - 2
+    clear: true
+    say: Gọi T là số phiên chạy cùng lúc, thì số cặp phiên là T nhân T trừ một, chia
+      hai. Giả sử mỗi cặp có xác suất một phần mười nghìn khoá ngược thứ tự nhau,
+      đây là số minh hoạ. Với mười phiên có bốn mươi lăm cặp, nên kỳ vọng chỉ không
+      phẩy không không bốn năm cặp ngược thứ tự, rất hiếm. Tải tăng một trăm lần,
+      số cặp lên gần năm trăm nghìn, và kỳ vọng khoảng năm mươi cặp. Tải tăng mười
+      nghìn lần, kỳ vọng khoảng năm trăm nghìn cặp.
+  - show: '<div class="box warn"><b>Giải pháp cũ gãy ở đâu.</b> Dựa vào “bế tắc hiếm,
+      để cơ sở dữ liệu phát hiện rồi thử lại”: ở ×1 hiếm tới mức không ai thấy, ở
+      ×100 xảy ra vài chục lần mỗi lượt, ở ×10 000 liên tục; mỗi lần có một phiên
+      bị huỷ rồi thử lại, càng thử càng thêm phiên chờ.</div>
+
+      <div class="box key"><b>Quy tắc khoá theo thứ tự mã tăng dần</b> xoá hẳn vòng
+      chờ ở mọi tải. <b>Đánh đổi:</b> phải biết trước mọi hàng cần khoá để sắp thứ
+      tự; khi chỉ biết dần trong lúc chạy thì vẫn cần hết giờ chờ và thử lại có giới
+      hạn.</div>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 1
+    - 1
+    - 2
+    - 2
+    - 2
+    clear: true
+    say: Giải pháp cũ là dựa vào việc bế tắc hiếm, để cơ sở dữ liệu phát hiện rồi
+      thử lại. Ở tải gốc nó hiếm tới mức không ai thấy. Ở tải gấp trăm lần, nó xảy
+      ra vài chục lần mỗi lượt, và ở tải gấp mười nghìn lần là liên tục. Mỗi lần có
+      một phiên bị huỷ rồi thử lại, càng thử càng thêm phiên chờ. Quy tắc khoá theo
+      thứ tự mã tăng dần xoá hẳn vòng chờ ở mọi tải. Đánh đổi là phải biết trước mọi
+      hàng cần khoá để sắp thứ tự. Khi chỉ biết dần trong lúc chạy thì vẫn cần hết
+      giờ chờ và thử lại có giới hạn.
+- id: practice
+  kind: practice
+  title: 'Tự làm: thứ tự khoá cho bốn lệnh chuyển'
+  steps:
+  - show: '<p><b>Đề</b>: quy tắc <b>khoá mã nhỏ trước</b>. Bốn lệnh chuyển <code>(từ,
+      tới)</code>: <code>(4,9) (9,4) (7,4) (4,7)</code>. Viết <code>ThuTuKhoa.java</code>:</p>
+
+      <ol><li>duyệt bốn lệnh</li><li>mỗi lệnh tính mã nhỏ hơn bằng <code>Math.min</code>,
+      mã lớn hơn bằng <code>Math.max</code></li>
+
+      <li>in một dòng <code>4 -&gt; 9: khoa 4 roi 9</code></li></ol>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 1
+    - 2
+    - 2
+    pause: 120
+    say: Bây giờ tới phần bạn tự làm. Quy tắc là luôn khoá hàng có mã nhỏ hơn trước.
+      Có bốn lệnh chuyển, từ bốn tới chín, từ chín tới bốn, từ bảy tới bốn, và từ
+      bốn tới bảy. Hãy viết chương trình duyệt từng lệnh, dùng hàm lấy số nhỏ hơn
+      và số lớn hơn để tìm thứ tự khoá, rồi in mỗi lệnh một dòng. Hãy dừng video,
+      tự viết và chạy, đừng chép lại ví dụ.
+  - show: '<p><b>Kết quả mong đợi</b></p><div class="code"><div>4 -&gt; 9: khoa 4
+      roi 9</div><div>9 -&gt; 4: khoa 4 roi 9</div><div>7 -&gt; 4: khoa 4 roi 7</div><div>4
+      -&gt; 7: khoa 4 roi 7</div></div><p class="note">Chấm bằng Git Bash: <code>bash
+      labs/cham.sh BNK L05 ThuTuKhoa.java</code> — in <b>ĐÚNG</b> khi trùng.</p>'
+    focus:
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Đây là kết quả mong đợi. Bạn chạy chương trình của mình rồi so từng dòng.
+      Nếu muốn chấm bằng máy, dùng lệnh ở dưới màn hình; lệnh in chữ ĐÚNG khi đầu
+      ra trùng, hoặc chỉ ra dòng nào khác.
+  - show: '<div class="box key"><b>Nếu kẹt:</b> khai <code>int[][] lenh = { {4, 9},
+      {9, 4}, {7, 4}, {4, 7} };</code>, duyệt bằng <code>for (int[] l : lenh)</code>,
+      rồi
+
+      <code>int dau = Math.min(l[0], l[1]);</code> và <code>int sau = Math.max(l[0],
+      l[1]);</code>. Lời giải ở <code>labs/BNK/L05/loi_giai.java</code> — chỉ mở sau
+      khi bạn đã thử.</div>
+
+      '
+    say: Nếu kẹt, khai một mảng gồm bốn cặp số, duyệt từng cặp, rồi lấy số nhỏ hơn
+      làm khoá trước và số lớn hơn làm khoá sau. Lời giải đầy đủ nằm trong thư mục
+      thực hành của bài, chỉ mở sau khi bạn đã tự thử.
+    clear: true
+  lab: labs/BNK/L05
 - id: recap
   kind: recap
   title: Chuỗi logic & tư duy cần mang theo

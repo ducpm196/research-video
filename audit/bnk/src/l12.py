@@ -1,10 +1,31 @@
 from lib import *
+from labkit import write_lab, practice_steps, practice_scene
 
 BANK = "[('r1', 100), ('r2', 200), ('r3', 300), ('r4', 400), ('r5', 500)]"
 SWITCH = "[('r1', 100), ('r2', 200), ('r3', 350), ('r4', 400), ('r6', 600)]"
 
 
 def build():
+    doi_soat = prog("DoiSoat", """
+ngan_hang = {"r1": 100, "r2": 200, "r3": 300, "r4": 400, "r5": 500}
+chuyen_mach = {"r1": 100, "r2": 200, "r3": 350, "r4": 400, "r6": 600}
+khop = [m for m in ngan_hang if m in chuyen_mach and ngan_hang[m] == chuyen_mach[m]]
+lech = [m for m in ngan_hang if m in chuyen_mach and ngan_hang[m] != chuyen_mach[m]]
+chi_nh = [m for m in ngan_hang if m not in chuyen_mach]
+chi_cm = [m for m in chuyen_mach if m not in ngan_hang]
+print(len(khop), len(lech), len(chi_nh), len(chi_cm))
+print(sum(chuyen_mach.values()) - sum(ngan_hang.values()))""", out="""3 1 1 1
+150""", lang="python")
+    lab_ds = prog("DoiSoatLab", """
+ngan_hang = {"a1": 150, "a2": 250, "a3": 350, "a4": 450, "a5": 550, "a6": 650}
+chuyen_mach = {"a1": 150, "a2": 250, "a3": 300, "a4": 450, "a7": 700, "a8": 50}
+khop = [m for m in ngan_hang if m in chuyen_mach and ngan_hang[m] == chuyen_mach[m]]
+lech = [m for m in ngan_hang if m in chuyen_mach and ngan_hang[m] != chuyen_mach[m]]
+chi_nh = [m for m in ngan_hang if m not in chuyen_mach]
+chi_cm = [m for m in chuyen_mach if m not in ngan_hang]
+print("khop", len(khop), "- lech tien", len(lech), "- chi ngan hang", len(chi_nh), "- chi chuyen mach", len(chi_cm))
+print("chenh tien:", sum(chuyen_mach.values()) - sum(ngan_hang.values()))""", out="""khop 3 - lech tien 1 - chi ngan hang 2 - chi chuyen mach 2
+chenh tien: -500""", lang="python")
     hook = sc("hook", "hook", "Vì sao cuối ngày sổ ngân hàng và sổ chuyển mạch lệch nhau?", [
         st("""<p>Cuối ngày, ngân hàng có $5$ giao dịch, chuyển mạch cũng có $5$. Nhưng hai danh sách <b>không giống nhau</b>: có giao dịch chỉ một bên có, và có giao dịch hai bên ghi <b>số tiền khác nhau</b>.</p>
 <div class="box key">Việc <b>đối soát</b> tìm ra chúng, theo từng loại, rồi mỗi loại có cách xử lý riêng.</div>""",
@@ -136,8 +157,70 @@ $$\\text{khớp } 1,\\ \\text{lệch } 1,\\ \\text{chỉ A } 1,\\ \\text{chỉ B
         st("""<div class='box key'><b>Tư duy:</b> đối soát không phải việc cuối ngày cho xong, mà là <b>lưới an toàn</b> bắt mọi trường hợp “chưa biết” mà hệ thống thời gian thực để lọt.</div>""",
            """Điều cần mang theo. Đối soát không phải việc cuối ngày cho xong, mà là lưới an toàn, bắt mọi trường hợp chưa biết mà hệ thống thời gian thực để lọt."""),
     ])
+    # ── AF2: P1 Python tối thiểu, đối soát chạy thật bằng Python, quy mô, tự làm ──
+    add_steps([pre], "prereq", [
+        st(table(["thêm ba điều để đọc mã", "nghĩa", "ví dụ"],
+                 [["④ Từ điển", "<code>{khoá: giá trị}</code> là bảng tra; <code>d[k]</code> lấy giá trị; <code>k in d</code> hỏi khoá có trong d không; <code>d.values()</code> là mọi giá trị", "<code>{\"r1\": 100}</code>"],
+                  ["⑤ Danh sách lọc", "<code>[m for m in d if điều_kiện]</code> là danh sách các m trong d thoả điều kiện", "<code>[m for m in d if d[m] &gt; 150]</code>"],
+                  ["⑥ Đếm và cộng", "<code>len(x)</code> số phần tử; <code>sum(x)</code> tổng", "<code>sum(d.values())</code>"]]),
+           """Thêm ba điều để đọc mã bằng một ngôn ngữ lập trình khác. Từ điển là bảng tra theo khoá, có thể lấy giá trị, hỏi khoá có trong bảng không, và lấy mọi giá trị. Danh sách lọc là danh sách các phần tử thoả một điều kiện.
+           Còn hai hàm có sẵn, một hàm đếm số phần tử và một hàm cộng tổng.""", clear=True),
+    ], at=1)
+    pre["title"] = "Trước hết: sáu điều cần hiểu"
+    run = sc("chay_that", "example", "Chạy thật: đối soát hai sổ bằng chương trình ngắn", [
+        st(code_block(doi_soat, lines=(1, 6), title="Phân loại hai sổ theo mã tham chiếu"),
+           """Ta đối soát thật bằng một chương trình ngắn. Hai từ điển là sổ ngân hàng và sổ chuyển mạch, mỗi mã tham chiếu đi với một số tiền. Bốn danh sách lọc cho bốn loại.
+           Khớp là mã có ở cả hai sổ và cùng tiền. Lệch tiền là có ở cả hai nhưng khác tiền. Chỉ ngân hàng là mã không có ở chuyển mạch. Chỉ chuyển mạch là mã không có ở ngân hàng."""),
+        st(code_block(doi_soat, lines=(7, 8), title="Đếm từng loại, và chênh lệch tổng tiền") + out_block(doi_soat),
+           """Khi chạy thật, được ba khớp, một lệch tiền, một chỉ ở ngân hàng, một chỉ ở chuyển mạch. Ba cộng một cộng một cộng một bằng sáu, đúng số mã khác nhau. Chênh lệch tổng tiền là một trăm năm mươi, đúng với phép tính tay.""", clear=True),
+    ])
+    scale = sc("quy_mo", "example", "Quy mô: so từng cặp gãy trước, bảng tra gãy sau", [
+        st("""<p>Mỗi bên có $N$ giao dịch mỗi ngày. Cách ngây thơ so <b>từng cặp</b> ($N \\cdot N$ phép so, giả sử $10^8$ phép so mỗi giây); cách bảng tra mất $N$ phép tra ($10^7$ mỗi giây) và giữ cả bảng trong bộ nhớ ($100$ byte mỗi mục) <i>(số minh hoạ)</i>:</p>"""
+           + table(["tải", "N", "so từng cặp", "bảng tra: thời gian", "bảng tra: bộ nhớ"],
+                   [["×1", "100 000", "100 giây", "0,01 giây", "10 MB"],
+                    ["×100", "10 000 000", "<b>≈ 11,6 ngày</b>", "1 giây", "<b>1 GB</b>"],
+                    ["×10 000", "1 000 000 000", "<b>≈ 317 năm</b>", "100 giây", "<b>100 GB</b>"]]),
+           """Mỗi bên có N giao dịch mỗi ngày. Cách ngây thơ so từng cặp cần N nhân N phép so, giả sử một trăm triệu phép mỗi giây. Cách bảng tra cần N phép tra, và giữ cả bảng trong bộ nhớ. Đây là số minh hoạ.
+           Với một trăm nghìn giao dịch, so từng cặp mất một trăm giây. Tải tăng một trăm lần mất hơn mười một ngày, và tải tăng mười nghìn lần mất khoảng ba trăm mười bảy năm. Bảng tra thì chỉ một trăm giây, nhưng cần khoảng một trăm nghìn mê ga byte bộ nhớ.""", clear=True),
+        st("""<div class="box warn"><b>Giải pháp cũ gãy ở đâu.</b> So từng cặp gãy ngay từ ×100. Bảng tra nhanh, nhưng ở ×10 000 cần cỡ 100 GB bộ nhớ nên cũng gãy trên một máy.</div>
+<div class="box key"><b>Đánh đổi:</b> chia việc theo mã băm hoặc theo ngày và ngân hàng thành nhiều phần nhỏ vừa bộ nhớ rồi đối soát từng phần song song; hoặc sắp xếp hai sổ theo mã rồi trộn từng dòng (chỉ cần đọc tuần tự, ít bộ nhớ nhưng tốn thời gian sắp xếp).</div>""",
+           """Câu hỏi là giải pháp cũ sẽ gãy ở chỗ nào khi tải tăng lên. So từng cặp gãy ngay từ tải gấp trăm lần. Bảng tra nhanh, nhưng ở tải gấp mười nghìn lần cần cỡ một trăm nghìn mê ga byte bộ nhớ, nên cũng gãy trên một máy.
+           Đánh đổi là chia việc theo mã băm, hoặc theo ngày và ngân hàng, thành nhiều phần nhỏ vừa bộ nhớ, rồi đối soát từng phần song song. Hoặc sắp xếp hai sổ theo mã rồi trộn từng dòng, chỉ cần đọc tuần tự, ít bộ nhớ nhưng tốn thời gian sắp xếp.""", clear=True),
+    ], checks=["100000 * 100000 / 10**8 == 100.0", "round(10_000_000 ** 2 / 10**8 / 86400, 1) == 11.6", "round(1_000_000_000 ** 2 / 10**8 / (365.25 * 86400)) == 317",
+               "100000 / 10**7 == 0.01", "10_000_000 / 10**7 == 1.0", "1_000_000_000 / 10**7 == 100.0",
+               "100000 * 100 == 10_000_000", "10_000_000 * 100 == 1_000_000_000", "1_000_000_000 * 100 == 100_000_000_000"])
+    write_lab("BNK", "L12", """# Lab BNK L12 — Đối soát sáu mã
+
+Hai sổ (số tiền là số minh hoạ):
+- ngân hàng: `a1=150, a2=250, a3=350, a4=450, a5=550, a6=650`
+- chuyển mạch: `a1=150, a2=250, a3=300, a4=450, a7=700, a8=50`
+
+Viết chương trình `doi_soat.py` (Python): dùng hai từ điển, phân loại bốn loại (khớp; lệch tiền; chỉ ngân hàng; chỉ chuyển mạch) rồi in đúng hai dòng:
+
+```
+khop 3 - lech tien 1 - chi ngan hang 2 - chi chuyen mach 2
+chenh tien: -500
+```
+
+(`chenh tien` = tổng tiền chuyển mạch trừ tổng tiền ngân hàng.) Chạy: `python doi_soat.py`. Chấm: `bash labs/cham.sh BNK L12 doi_soat.py`.
+""", "py", lab_ds["code"], lab_ds["out"])
+    lab = practice_scene(sc, "Tự làm: đối soát sáu mã", practice_steps(
+        st, "BNK", "L12",
+        """<p><b>Đề</b>: ngân hàng <code>a1=150 a2=250 a3=350 a4=450 a5=550 a6=650</code>; chuyển mạch <code>a1=150 a2=250 a3=300 a4=450 a7=700 a8=50</code>. Viết <code>doi_soat.py</code>:</p>
+<ol><li>hai từ điển; phân loại khớp, lệch tiền, chỉ ngân hàng, chỉ chuyển mạch</li>
+<li>in số lượng từng loại, rồi chênh tiền (chuyển mạch trừ ngân hàng)</li></ol>""",
+        """Bây giờ tới phần bạn tự làm. Sổ ngân hàng có sáu mã từ a một tới a sáu, sổ chuyển mạch có sáu mã gồm a một, a hai, a ba, a bốn, a bảy và a tám, số tiền như trên màn hình. Hãy viết chương trình dùng hai từ điển, phân loại thành bốn loại.
+        Rồi in số lượng từng loại, và chênh lệch tổng tiền, lấy chuyển mạch trừ ngân hàng. Hãy dừng video, tự viết và chạy, đừng chép lại ví dụ.""",
+        lab_ds["out"], "doi_soat.py",
+        """<div class="box key"><b>Nếu kẹt:</b> mô theo ví dụ: bốn danh sách lọc <code>[m for m in ngan_hang if …]</code>; chênh tiền là <code>sum(chuyen_mach.values()) - sum(ngan_hang.values())</code>.
+Lời giải ở <code>labs/BNK/L12/loi_giai.py</code> — chỉ mở sau khi bạn đã thử.</div>""",
+        """Nếu kẹt, làm theo ví dụ vừa xem: bốn danh sách lọc cho bốn loại, rồi đếm bằng hàm đếm số phần tử. Chênh tiền là tổng tiền chuyển mạch trừ tổng tiền ngân hàng. Lời giải đầy đủ nằm trong thư mục thực hành của bài, chỉ mở sau khi bạn đã tự thử.""", pause=150), "BNK", "L12")
     return lesson("L12", "napas_247_doi_soat", "Bài 12 — Chuyển mạch liên ngân hàng và đối soát hai bên",
-                  "curriculum/bnk.yaml L12; audit/bnk/verify_bnk.py L12; mô hình chung của chuyển mạch liên ngân hàng; chi tiết NAPAS theo đặc tả kết nối chính thức của NAPAS (không có trong kho)",
-                  ["Vẽ đường đi của một lệnh chuyển nhanh và chỉ ra chỗ có thể mất dấu", "Phân loại hai danh sách giao dịch thành bốn loại theo mã tham chiếu",
-                   "Kiểm lại bằng đếm bù trừ và tổng tiền", "Nêu hành động đầu tiên cho từng loại lệch"],
-                  [hook, pre, sym, intu, form, ex, chk, pit, quiz, rec])
+                  "curriculum/bnk.yaml L12; audit/bnk/verify_bnk.py L12; audit/review/screen_code/BNK.yaml (mã chạy thật bằng Python 3.13); mô hình chung của chuyển mạch liên ngân hàng; chi tiết NAPAS theo đặc tả kết nối chính thức của NAPAS (không có trong kho); số phép so và bộ nhớ trong bảng quy mô là số minh hoạ",
+                  ["Nêu đường đi của một lệnh chuyển nhanh và chỗ có thể mất dấu", "Phân loại hai danh sách giao dịch thành bốn loại theo mã tham chiếu",
+                   "Kiểm lại bằng đếm bù trừ và tổng tiền", "Nêu hành động đầu tiên cho từng loại lệch",
+                   "Chạy chương trình phân loại hai sổ để thấy số từng loại và chênh lệch tiền",
+                   "Tính thời gian và bộ nhớ của hai cách đối soát khi tải tăng ×100, ×10 000",
+                   "Viết chương trình đối soát hai sổ bằng hai từ điển"],
+                  [hook, pre, sym, intu, form, ex, run, chk, pit, quiz, scale, lab, rec],
+                  covers=[(1, "intuition"), (2, "formula"), (3, "check"), (4, "example"), (5, "chay_that"), (6, "quy_mo"), (7, "practice")])

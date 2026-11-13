@@ -1,4 +1,5 @@
 from lib import *
+from labkit import write_lab, practice_steps, practice_scene
 
 
 def ln(p, s):
@@ -149,6 +150,84 @@ public class DoanTk {
     }
 }""", out="Tu choi rut 400000, so du 300000\nTu choi nap -100\nCuc: 200000 dong")
 
+    vi_code = """class Vi {
+    private String ten;
+    private long tien;                       // bất biến: tien luôn >= 0
+
+    Vi(String ten) {                         // hàm tạo: ví mới, tiền 0
+        this.ten = ten;
+        this.tien = 0;
+    }
+
+    void them(long soTien) {
+        if (soTien > 0) {
+            tien += soTien;
+        }
+    }
+
+    boolean chi(long soTien) {
+        if (soTien <= 0 || soTien > tien) {
+            System.out.println("Tu choi chi " + soTien + ", con " + tien);
+            return false;
+        }
+        tien -= soTien;
+        return true;
+    }
+
+    long layTien() {
+        return tien;
+    }
+
+    public String toString() {
+        return ten + ": " + tien + " dong";
+    }
+}
+"""
+    quan_ly = prog("QuanLyVi", vi_code + """
+public class QuanLyVi {
+    public static void main(String[] args) {
+        Vi lan = new Vi("Lan");
+        Vi minh = new Vi("Minh");
+        lan.them(800000);
+        lan.chi(250000);
+        lan.chi(900000);                     // quá số tiền đang có: bị từ chối
+        minh.them(50000);
+        minh.chi(50000);
+        System.out.println(lan);
+        System.out.println(minh);
+        System.out.println("Tong: " + (lan.layTien() + minh.layTien()));
+    }
+}""", out="Tu choi chi 900000, con 550000\nLan: 550000 dong\nMinh: 0 dong\nTong: 550000")
+    write_lab("JVA", "L07", """# Lab JVA L07 — Lớp Vi (ví tiền)
+
+Trong Git Bash, viết tệp `QuanLyVi.java` (số liệu là số minh hoạ) gồm **hai lớp** trong cùng một tệp: lớp `Vi` (không `public`) và lớp `public class QuanLyVi` có hàm chính.
+
+Lớp `Vi`:
+- trường `private String ten;` và `private long tien;` (bất biến: `tien` không bao giờ âm);
+- **hàm tạo** `Vi(String ten)`: đặt `ten`, `tien = 0` (dùng `this.`);
+- `void them(long soTien)`: chỉ cộng khi `soTien > 0`;
+- `boolean chi(long soTien)`: nếu `soTien <= 0` hoặc `soTien > tien` thì in `Tu choi chi <soTien>, con <tien>` và trả `false`; ngược lại trừ và trả `true`;
+- `long layTien()` và `toString()` trả `ten + ": " + tien + " dong"`.
+
+Hàm chính: tạo `lan` và `minh`; `lan.them(800000)`, `lan.chi(250000)`, `lan.chi(900000)`; `minh.them(50000)`, `minh.chi(50000)`; in `lan`, in `minh`, rồi `Tong: …` (tổng hai `layTien()`).
+
+Chạy: `javac QuanLyVi.java && java QuanLyVi`. Chấm: `bash labs/cham.sh JVA L07 QuanLyVi.java`.
+""", "java", quan_ly["code"], quan_ly["out"])
+    sc_lab = practice_scene(sc, "Tự làm: lớp ví tiền", practice_steps(
+        st, "JVA", "L07",
+        """<p><b>Đề</b>: tệp <code>QuanLyVi.java</code> có lớp <code>Vi</code> và lớp công khai <code>QuanLyVi</code> (số minh hoạ).</p>
+<ol><li><code>Vi</code>: trường <code>private</code> <code>ten</code>, <code>tien</code>; <b>hàm tạo</b> <code>Vi(String ten)</code> dùng <code>this.</code>; <code>them</code>, <code>chi</code> (từ chối khi chi quá), <code>layTien</code>, <code>toString</code></li>
+<li>Hàm chính: ví <code>lan</code> thêm 800000, chi 250000, chi 900000; ví <code>minh</code> thêm 50000, chi 50000</li>
+<li>In hai ví, rồi <code>Tong: …</code></li></ol>""",
+        """Bây giờ tới phần bạn tự làm trên máy. Viết lớp ví tiền, với tên và số tiền là hai trường riêng tư. Hàm tạo đặt tên và số tiền bằng không, dùng từ khoá chỉ chính đối tượng này.
+        Hàm thêm chỉ cộng số dương. Hàm chi từ chối khi chi quá số tiền đang có, in dòng từ chối và trả về sai. Hàm chính tạo hai ví cho Lan và Minh, làm năm thao tác, in hai ví và in tổng.
+        Hãy dừng video và tự viết, đừng chép lại ví dụ.""",
+        quan_ly["out"], "QuanLyVi.java",
+        """<div class="box key"><b>Nếu kẹt:</b> hàm tạo <code>Vi(String ten) { this.ten = ten; this.tien = 0; }</code>; hàm <code>chi</code> kiểm <code>soTien &lt;= 0 || soTien &gt; tien</code> <b>trước</b> khi trừ.
+Lời giải nằm ở <code>labs/JVA/L07/loi_giai.java</code> — chỉ mở sau khi bạn đã thử.</div>""",
+        """Nếu kẹt, hàm tạo gán tên bằng từ khoá chỉ chính đối tượng này và đặt số tiền bằng không. Hàm chi kiểm số tiền không dương hoặc lớn hơn số đang có trước khi trừ, và chỉ trừ khi qua được phép kiểm.
+        Lời giải nằm trong thư mục thực hành của bài, chỉ mở sau khi bạn đã tự thử.""", pause=60), "JVA", "L07")
+
     f2, f5 = ln(ngan, "private String chu"), ln(ngan, "TaiKhoan(String chu)")
     f10, f18 = ln(ngan, "void nap"), ln(ngan, "boolean rut")
     f31 = ln(ngan, "public String toString")
@@ -186,7 +265,7 @@ public class DoanTk {
                  [["<code>class TaiKhoan { … }</code>", "<b>lớp</b>: bản thiết kế gồm dữ liệu và hành vi"],
                   ["<code>private long soDu;</code>", "<b>trường</b>: mỗi đối tượng có một bản riêng; <code>private</code> = chỉ mã trong lớp được đụng vào"],
                   ["<code>TaiKhoan(String chu)</code>", "<b>hàm tạo</b>: trùng tên lớp, không có kiểu trả về, chạy khi <code>new</code>"],
-                  ["<code>this.chu = chu;</code>", "<code>this</code> là chính đối tượng này: trường <code>this.chu</code> nhận tham số <code>chu</code>"],
+                  ["<code>this.chu = chu;</code>", "<b>từ khoá <code>this</code></b>: chính đối tượng này; trường <code>this.chu</code> nhận tham số <code>chu</code>"],
                   ["<code>new TaiKhoan(\"An\")</code>", "tạo một <b>đối tượng</b> mới, trả về tham chiếu tới nó"],
                   ["<code>an.nap(1000000)</code>", "gọi hàm của <b>đúng</b> đối tượng <code>an</code>; không có <code>static</code>"],
                   ["<code>public String toString()</code>", "trả về dòng chữ mô tả; lệnh in tự gọi khi in một đối tượng"]]),
@@ -266,6 +345,18 @@ public class DoanTk {
     ], checks=["0 + 1000000 == 1000000", "0 + 300000 == 300000", "400000 <= 1000000 and 1000000 - 400000 == 600000",
                "500000 > 300000"])
     k5 = ln(kiem, "long vao = 0")
+    sc_scale = sc("quymo", "concept", "Khi hệ thống lớn dần, ai có thể phá luật số dư không âm?", [
+        st(table(["quy mô mã", "số dòng đụng tới số dư (giả định 1%)", "trường <code>public</code>: phải rà", "trường <code>private</code>: phải rà"],
+                 [["1 000 dòng", "10", "10 chỗ", "2 hàm (nạp, rút)"],
+                  ["100 000 dòng", "1 000", "1 000 chỗ", "2 hàm (nạp, rút)"],
+                  ["1 000 000 dòng", "10 000", "10 000 chỗ", "2 hàm (nạp, rút)"]]),
+           """Giả sử trong mọi hệ thống, cứ một trăm dòng mã thì có một dòng đụng tới số dư, đây là số minh hoạ. Hệ thống một nghìn dòng có mười dòng như vậy, một trăm nghìn dòng có một nghìn dòng, và một triệu dòng có mười nghìn dòng.
+           Nếu trường số dư công khai, mỗi dòng ấy đều có thể phá luật, nên muốn bảo vệ luật phải rà từng dòng. Nếu trường riêng tư, chỉ cần rà hai hàm nạp và rút, dù hệ thống lớn tới đâu.""",
+           focus=[1, ["1.2", "1.3", "1.4"], ["1.2", "1.3", "1.4"], ["1.2", "1.3", "1.4"]]),
+        st("""<div class="box key"><b>Điều người làm nghề rút ra.</b> Công khai trường thì chi phí bảo vệ luật <b>tăng theo quy mô mã</b>; khoá trường thì chi phí gần như <b>cố định</b>.
+Vì thế khoá dữ liệu và chỉ mở vài hàm có kiểm luật là quyết định từ ngày đầu, vì đổi sau khi mã đã lớn rất đắt.</div>""",
+           """Công khai trường thì chi phí bảo vệ luật tăng theo quy mô mã, còn khoá trường thì chi phí gần như cố định. Vì thế khoá dữ liệu và chỉ mở vài hàm có kiểm luật là quyết định từ ngày đầu, vì đổi sau khi mã đã lớn rất đắt.""", clear=True),
+    ], checks=["1000 // 100 == 10", "100000 // 100 == 1000", "1000000 // 100 == 10000"])
     sc_chk = sc("check", "check", "Tự kiểm bằng đường khác: tiền vào trừ tiền ra bằng tổng số dư", [
         st("<p>Đường khác: không nhìn từng tài khoản, chỉ ghi sổ <b>tiền vào</b> và <b>tiền ra</b> thành công.</p>"
            "$$(1000000 + 300000) - 400000 = 900000 = 600000 + 300000$$",
@@ -343,5 +434,8 @@ Rồi kiểm: mọi đường đổi dữ liệu có đi qua phép kiểm luật
                   ["Khai báo lớp có trường riêng tư, hàm tạo, các hàm của đối tượng (nạp, rút) và hàm đổi ra chuỗi",
                    "Tạo nhiều đối tượng độc lập bằng từ khoá tạo mới và gọi hàm trên từng đối tượng",
                    "Giữ bất biến số dư không âm bằng cách kiểm trong hàm nạp, hàm rút",
-                   "Nhận ra lỗi quên this, trường static dùng chung, trường public phá bất biến"],
-                  [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_chk, sc_pit, sc_quiz, sc_rec])
+                   "Nhận ra lỗi quên this, trường static dùng chung, trường public phá bất biến",
+                   "Dự đoán số chỗ phải rà để bảo vệ luật khi mã lớn dần, với trường public và trường private",
+                   "Viết lớp ví tiền có trường riêng tư, hàm tạo và hàm kiểm luật, rồi dùng hai đối tượng"],
+                  [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_chk, sc_scale, sc_pit, sc_quiz, sc_lab, sc_rec],
+                  covers=[(1, "formula"), (2, "example"), (3, "formula"), (4, "pitfalls"), (5, "quymo"), (6, "practice")])

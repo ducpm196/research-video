@@ -1,0 +1,669 @@
+id: L04
+course: JV2
+series: JV2 · Java trung cấp
+title: 'Bài 4 — Nhãn và phản chiếu: bộ chứa tiêm phụ thuộc cỡ nhỏ'
+voice: vi-VN-NamMinhNeural
+rate: -5%
+depth: full
+af2: true
+covers:
+- objective: 1
+  scene: pitfalls
+- objective: 2
+  scene: example
+- objective: 3
+  scene: intuition
+- objective: 4
+  scene: scale
+- objective: 5
+  scene: practice
+source: 'curriculum/jv2.yaml L04; audit/jv2/verify_jv2.py L04 (javac/java/javap chạy
+  thật, JDK 21); The Java Language Specification, Java SE 21: §9.6 (kiểu chú thích),
+  §9.6.4.2 (@Retention), §9.6.4.4 (@Override); java.lang.reflect và java.lang.Class
+  (Java SE 21 API: getDeclaredFields, isAnnotationPresent); javap (JDK 21 tools: RuntimeVisibleAnnotations
+  / RuntimeInvisibleAnnotations); Spring Framework Reference, mục IoC container, circular
+  dependencies (docs.spring.io); dev.java/learn'
+assumes: []
+objectives:
+- Mô tả nhãn là dữ liệu gắn vào mã mà chương trình khác đọc, và vì sao phải khai thời
+  hạn giữ
+- Đọc nhãn tự định nghĩa bằng phản chiếu và dựng bộ chứa tiêm phụ thuộc cỡ nhỏ
+- 'Nêu cách Spring tự thấy và nối các thành phần: cùng cơ chế với bộ chứa cỡ nhỏ'
+- Nhận ra vòng phụ thuộc và cái giá khi một thành phần được dùng chung cho mọi yêu
+  cầu
+- Viết bộ chứa tiêm phụ thuộc cho ba lớp của kho hàng và chạy thử
+asr_reviewed:
+  - {sentence: "Bước hai, kiểm nhãn.", reason: "ASR chép “Bước 2. Kiểm nhẳn” (0.75): lệch âm/thanh thuần Việt: nhãn/nhẳn — NOT_VERIFIED bằng tai người"}
+scenes:
+- id: hook
+  kind: hook
+  title: Chỉ một dòng nhãn, vì sao chương trình tự đổi hành vi?
+  steps:
+  - show: '<div class="box key"><p>Bạn sẽ gặp mã như thế này trong mọi dự án Java
+      ở ngân hàng:</p>
+
+      <div class="code"><div><span class="kw">@Service</span></div><div><span class="kw">public</span>
+      <span class="kw">class</span> ChuyenTien {</div>
+
+      <div>    <span class="kw">@Autowired</span> KhoDuLieu kho;</div><div>    <span
+      class="kw">@Transactional</span></div><div>    <span class="kw">public</span>
+      <span class="kw">void</span> chuyen(...) { ... }</div><div>}</div></div>
+
+      <p>Không có dòng nào tạo <code>KhoDuLieu</code>, không có dòng nào mở giao dịch.
+      Ai làm?</p></div>
+
+      '
+    clear: true
+    say: Trong mọi dự án Java ở ngân hàng, bạn sẽ gặp mã như thế này. Một lớp dịch
+      vụ, một trường kho dữ liệu, một hàm chuyển tiền, và vài dòng nhãn có dấu a còng.
+      Không dòng nào tạo ra kho dữ liệu, không dòng nào mở giao dịch. Vậy ai làm những
+      việc đó. Câu trả lời là một chương trình khác đọc các nhãn đó lúc chạy.
+  - show: '<div class="box key">Hôm nay: <b>nhãn (annotation)</b> là dữ liệu gắn vào
+      mã; <b>phản chiếu</b> là cách chương trình đọc chính mã của nó lúc chạy.
+
+      Ta tự viết một <b>bộ chứa tiêm phụ thuộc</b> cỡ nhỏ: cùng cơ chế với Spring,
+      chưa tới năm mươi dòng. Rồi hỏi quy mô: một triệu yêu cầu thì tạo bao nhiêu
+      đối tượng?</div>
+
+      '
+    clear: true
+    say: Hôm nay ta học nhãn, là dữ liệu gắn vào mã, và phản chiếu, là cách chương
+      trình đọc chính mã của nó lúc chạy. Ta tự viết một bộ chứa tiêm phụ thuộc cỡ
+      nhỏ, cùng cơ chế với Spring, chưa tới năm mươi dòng. Rồi hỏi quy mô, một triệu
+      yêu cầu thì tạo ra bao nhiêu đối tượng.
+- id: prereq
+  kind: prereq
+  title: 'Ôn lại: lớp lồng nhau, giao diện, bản đồ, ngoại lệ'
+  steps:
+  - show: '<table class=''t''><tr><th>điều đã biết</th><th>nhắc lại</th></tr><tr><td>①
+      lớp lồng</td><td><code>static class A {}</code> viết ngay trong lớp khác; <code>A.class</code>
+      là đối tượng mô tả lớp <code>A</code></td></tr><tr><td>② <code>@Override</code></td><td>nhãn
+      đã gặp: báo rằng hàm này ghi đè hàm của giao diện hay lớp cha</td></tr><tr><td>③
+      bản đồ</td><td><code>Map&lt;K, V&gt;</code> với <code>containsKey</code>, <code>get</code>,
+      <code>put</code></td></tr><tr><td>④ ngoại lệ</td><td>ném bằng <code>throw new
+      …</code>; hàm có thể khai <code>throws Exception</code></td></tr></table>'
+    focus:
+    - 1
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.5'
+    - 1
+    say: Ta ôn lại bốn điều. Lớp có thể viết lồng trong lớp khác, và mỗi lớp có một
+      đối tượng mô tả riêng, viết bằng tên lớp rồi chấm thêm một chữ. Nhãn ghi đè
+      mà ta đã gặp báo rằng hàm này ghi đè hàm của giao diện. Bản đồ có hàm kiểm khoá,
+      lấy và bỏ vào. Và ngoại lệ ném bằng một lệnh, hàm có thể khai báo ném ngoại
+      lệ. Bài này dùng cả bốn.
+- id: sym
+  kind: symbol
+  title: Giải mã tám từ của nhãn và phản chiếu
+  steps:
+  - show: '<table class=''t''><tr><th>viết</th><th>nghĩa</th></tr><tr><td><code>@Tên</code></td><td><b>nhãn</b>
+      (annotation): ghi chú có cấu trúc gắn lên lớp, hàm, trường; <b>tự nó không làm
+      gì</b></td></tr><tr><td><code>@interface NghiepVu { … }</code></td><td>cách
+      <b>tự định nghĩa</b> một nhãn; <code>String ten();</code> là một tham số của
+      nhãn</td></tr><tr><td><code>@Retention(RetentionPolicy.RUNTIME)</code></td><td>nhãn
+      của nhãn: <b>giữ đến lúc chạy</b>; không ghi thì nhãn bị bỏ khi nạp lớp</td></tr><tr><td><code>X.class</code></td><td>đối
+      tượng <b>mô tả</b> lớp <code>X</code>: tên, trường, hàm, nhãn</td></tr><tr><td><code>getDeclaredFields()</code></td><td>phản
+      chiếu: lấy mảng các <b>trường</b> khai báo trong lớp</td></tr><tr><td><code>f.isAnnotationPresent(X.class)</code></td><td>trường
+      (hay lớp, hàm) <code>f</code> có gắn nhãn <code>X</code> không?</td></tr><tr><td><code>newInstance()</code>,
+      <code>f.set(o, v)</code></td><td>tạo đối tượng và gán giá trị cho trường <b>bằng
+      tên lúc chạy</b>, không viết <code>new</code> hay dấu chấm</td></tr><tr><td>tiêm
+      phụ thuộc</td><td>đối tượng <b>không tự tạo</b> thứ nó cần; thứ khác tạo và
+      <b>trao</b> cho nó</td></tr></table>'
+    focus:
+    - 1
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.5'
+    - '1.6'
+    - '1.7'
+    say: Bảng này có tám thứ. Nhãn là ghi chú có cấu trúc gắn lên lớp, hàm hay trường,
+      và tự nó không làm gì cả. Ta có thể tự định nghĩa nhãn, với các tham số. Nhãn
+      của nhãn quy định thời hạn giữ, nếu không ghi thì nhãn bị bỏ khi nạp lớp. Đối
+      tượng mô tả lớp cho ta tên, trường, hàm và nhãn. Phản chiếu cho phép lấy danh
+      sách trường, hỏi một trường có nhãn nào không, tạo đối tượng và gán giá trị
+      cho trường bằng tên lúc chạy. Cuối cùng, tiêm phụ thuộc nghĩa là đối tượng không
+      tự tạo thứ nó cần, mà được trao cho.
+  - show: <div class="code"><div><span class="kw">@Retention</span>(RetentionPolicy.RUNTIME)</div><div><span
+      class="kw">@interface</span> NghiepVu {</div><div>    String ten();</div><div>    <span
+      class="kw">int</span> uuTien() <span class="kw">default</span> 5;</div><div>}</div></div><div
+      class="code"><div><span class="kw">static</span> <span class="kw">class</span>
+      DichVu {</div><div>    <span class="kw">@NghiepVu</span>(ten = "chuyen tien",
+      uuTien = 1)</div><div>    <span class="kw">public</span> <span class="kw">void</span>
+      chuyen() {}</div><div> </div><div>    <span class="kw">@NghiepVu</span>(ten
+      = "tra cuu")</div><div>    <span class="kw">public</span> <span class="kw">void</span>
+      tra() {}</div><div> </div><div>    <span class="kw">public</span> <span class="kw">void</span>
+      khac() {}</div><div>}</div></div>
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    clear: true
+    say: Ta thử nhãn tự định nghĩa. Nhãn nghiệp vụ có tên và độ ưu tiên, độ ưu tiên
+      mặc định là năm. Hai hàm được gắn nhãn, một hàm không gắn. Nhãn chỉ là dữ liệu
+      nằm cạnh mã, hàm vẫn chạy như bình thường.
+  - show: '<div class="code"><div>    Method[] ds = DichVu.<span class="kw">class</span>.getDeclaredMethods();</div><div>    Arrays.sort(ds,
+      Comparator.comparing(Method::getName));       <span class="cm">// thứ tự gốc
+      không xác định</span></div><div>    <span class="kw">for</span> (Method m :
+      ds) {</div><div>        NghiepVu nv = m.getAnnotation(NghiepVu.<span class="kw">class</span>);</div><div>        String
+      t = (nv == <span class="kw">null</span>) ? "khong co nhan"</div><div>                :
+      nv.ten() + " (uu tien " + nv.uuTien() + ")";</div><div>        System.out.println(m.getName()
+      + ": " + t);</div><div>    }</div><div>}</div></div><p><b>Kết quả chạy</b></p><div
+      class="code"><div>chuyen: chuyen tien (uu tien 1)</div><div>khac: khong co nhan</div><div>tra:
+      tra cuu (uu tien 5)</div></div>'
+    focus:
+    - 1
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Phản chiếu cho ta danh sách các hàm của lớp dịch vụ. Với mỗi hàm, ta hỏi
+      có nhãn nghiệp vụ không. Có thì in tên và độ ưu tiên, không thì in là không
+      có nhãn. Độ ưu tiên của hàm tra cứu là năm, lấy từ giá trị mặc định.
+- id: intuition
+  kind: intuition
+  title: 'Hình dung: thợ đọc nhãn và hai thời điểm'
+  steps:
+  - show: <div><svg width="1500" height="330" viewBox="0 0 1500 330" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><rect
+      x="20" y="80" width="330" height="170" rx="10" fill="#dbeafe" stroke="#2a78d6"
+      stroke-width="3"/><text x="185.0" y="140" font-size="26" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">mã nguồn</text><text x="185.0" y="174" font-size="26"
+      text-anchor="middle" fill="#1f2937">@ThanhPhan</text><text x="185.0" y="208"
+      font-size="26" text-anchor="middle" fill="#1f2937">class KhoDuLieu</text><line
+      x1="355" y1="165" x2="450" y2="165" stroke="#2a78d6" stroke-width="3.5" marker-end="url(#ah)"/><text
+      x="402" y="155" font-size="22" text-anchor="middle" fill="#2a78d6">biên dịch</text><rect
+      x="455" y="80" width="330" height="170" rx="10" fill="#e5e7eb" stroke="#6b7280"
+      stroke-width="3"/><text x="620.0" y="140" font-size="26" text-anchor="middle"
+      fill="#1f2937">.class (còn nhãn</text><text x="620.0" y="174" font-size="26"
+      text-anchor="middle" fill="#1f2937">nếu RUNTIME)</text><text x="620.0" y="208"
+      font-size="26" text-anchor="middle" fill="#1f2937"></text><line x1="790" y1="165"
+      x2="885" y2="165" stroke="#16a34a" stroke-width="3.5" marker-end="url(#ah)"/><text
+      x="837" y="155" font-size="22" text-anchor="middle" fill="#16a34a">nạp lúc chạy</text><rect
+      x="890" y="50" width="590" height="230" rx="10" fill="#dcfce7" stroke="#16a34a"
+      stroke-width="3"/><text x="1185.0" y="124" font-size="25" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">bộ chứa (chương trình khác)</text><text x="1185.0"
+      y="157" font-size="25" text-anchor="middle" fill="#1f2937">đọc nhãn bằng phản
+      chiếu:</text><text x="1185.0" y="190" font-size="25" text-anchor="middle" fill="#1f2937">thấy
+      @ThanhPhan → tạo đối tượng</text><text x="1185.0" y="223" font-size="25" text-anchor="middle"
+      fill="#1f2937">thấy @Tiem → trao đối tượng vào trường</text></svg></div>
+    clear: true
+    say: Hình dung nhãn như tờ giấy dán trên hộp hàng, còn bộ chứa là người thợ đọc
+      giấy rồi mới xử lý. Mã nguồn có nhãn được biên dịch ra tệp lớp. Nếu nhãn được
+      giữ đến lúc chạy, thì khi nạp lớp, một chương trình khác, chính là bộ chứa,
+      đọc nhãn bằng phản chiếu. Thấy nhãn thành phần thì tạo đối tượng, thấy nhãn
+      tiêm thì trao đối tượng vào trường. Cả Spring cũng làm đúng như vậy.
+  - show: <div class="code"><div><span class="kw">@Retention</span>(RetentionPolicy.RUNTIME)
+      <span class="kw">@interface</span> ThanhPhan {}</div><div><span class="kw">@Retention</span>(RetentionPolicy.RUNTIME)
+      <span class="kw">@interface</span> Tiem {}</div><div><span class="kw">@interface</span>
+      KhongGiu {}</div><div> </div><div><span class="kw">@ThanhPhan</span> <span class="kw">static</span>
+      <span class="kw">class</span> KhoDuLieu { <span class="kw">long</span> soDu(String
+      tk) { <span class="kw">return</span> 1000000; } }</div><div><span class="kw">@ThanhPhan</span>
+      <span class="kw">static</span> <span class="kw">class</span> DichVuPhi { <span
+      class="kw">long</span> phi(<span class="kw">long</span> t) { <span class="kw">return</span>
+      t / 1000; } }</div><div><span class="kw">@ThanhPhan</span> <span class="kw">@KhongGiu</span>
+      <span class="kw">static</span> <span class="kw">class</span> ChuyenTien {</div><div>    <span
+      class="kw">@Tiem</span> KhoDuLieu kho;</div><div>    <span class="kw">@Tiem</span>
+      DichVuPhi dvPhi;</div><div>    String chuyen(<span class="kw">long</span> t)
+      { <span class="kw">return</span> "so du " + kho.soDu("A") + ", phi " + dvPhi.phi(t);
+      }</div><div>}</div></div>
+    clear: true
+    say: Đây là bộ chứa của ta, phần đầu. Hai nhãn giữ đến lúc chạy. Ba lớp, ghi nhãn
+      thành phần. Lớp chuyển tiền cần hai thứ, kho dữ liệu và dịch vụ phí, mỗi thứ
+      có nhãn tiêm. Lớp chuyển tiền không tự tạo hai thứ này, và cũng không có dòng
+      tạo mới nào cho chúng.
+  - show: '<div class="code"><div><span class="kw">static</span> Object lay(Class&lt;?&gt;
+      loai) <span class="kw">throws</span> Exception {</div><div>    <span class="kw">if</span>
+      (hop.containsKey(loai)) {</div><div>        <span class="kw">return</span> hop.get(loai);</div><div>    }</div><div>    <span
+      class="kw">if</span> (!loai.isAnnotationPresent(ThanhPhan.<span class="kw">class</span>))
+      {</div><div>        <span class="kw">throw</span> <span class="kw">new</span>
+      IllegalArgumentException("khong phai thanh phan: " + loai.getSimpleName());</div><div>    }</div></div>'
+    clear: true
+    say: Đây là phần chính, hàm lấy đối tượng. Nếu trong hộp đã có thì trả lại ngay.
+      Nếu lớp không có nhãn thành phần thì từ chối.
+  - show: '<div class="code"><div>    Object o = loai.getDeclaredConstructor().newInstance();</div><div>    hop.put(loai,
+      o);</div><div>    <span class="kw">for</span> (Field f : loai.getDeclaredFields())
+      {</div><div>        <span class="kw">if</span> (f.isAnnotationPresent(Tiem.<span
+      class="kw">class</span>)) {</div><div>            f.setAccessible(<span class="kw">true</span>);</div><div>            f.set(o,
+      lay(f.getType()));</div><div>        }</div><div>    }</div><div>    <span class="kw">return</span>
+      o;</div><div>}</div></div>'
+    clear: true
+    say: Còn lại thì tạo đối tượng bằng phản chiếu, bỏ vào hộp, rồi duyệt các trường.
+      Trường nào có nhãn tiêm thì lấy đối tượng của kiểu trường đó, lại bằng chính
+      hàm này, mở quyền truy cập rồi gán vào.
+- id: formula
+  kind: formula
+  title: 'Suy ra từng bước: bộ chứa lấy một đối tượng thế nào'
+  checks:
+  - 1 + 2 == 3
+  steps:
+  - show: '<p><b>Bước 1.</b> <b>Hỏi hộp trước.</b> <code>hop.containsKey(loai)</code>
+      đúng &rarr; trả đối tượng cũ.</p><p>Vì sao: để <b>mỗi lớp chỉ có một bản</b>
+      (singleton); lần sau lấy lại đúng đối tượng đó.</p>'
+    focus:
+    - 1
+    - 1
+    - 2
+    clear: true
+    say: Bước một, hỏi hộp trước. Nếu lớp đã có đối tượng trong hộp thì trả lại luôn.
+      Vì làm vậy mỗi lớp chỉ có một bản, và những lần sau ai xin cũng nhận đúng đối
+      tượng ấy.
+  - show: '<p><b>Bước 2.</b> <b>Kiểm nhãn.</b> Không có <code>@ThanhPhan</code> &rarr;
+      từ chối.</p><p>Vì sao: bộ chứa chỉ quản lý thứ được <b>đánh dấu</b>; lấy nhầm
+      lớp lạ phải báo lỗi to rõ.</p>'
+    focus:
+    - 1
+    - 1
+    - 2
+    clear: true
+    say: Bước hai, kiểm nhãn. Lớp không có nhãn thành phần thì bị từ chối. Vì bộ chứa
+      chỉ quản lý những gì được đánh dấu, và lấy nhầm một lớp lạ thì phải báo lỗi
+      rõ ràng.
+  - show: '<p><b>Bước 3.</b> <b>Tạo rồi bỏ vào hộp TRƯỚC khi tiêm.</b></p><p><code>Object
+      o = …newInstance();</code> <code>hop.put(loai, o);</code></p><p>Vì sao thứ tự
+      này: nếu hai lớp cần nhau, lúc tiêm lần ngược lại sẽ <b>thấy đối tượng đang
+      dở</b> trong hộp thay vì tạo mãi.</p>'
+    focus:
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Bước ba, tạo rồi bỏ vào hộp trước khi tiêm. Thứ tự này quan trọng. Nếu hai
+      lớp cần nhau, lúc tiêm lần ngược lại sẽ thấy đối tượng đang dựng dở trong hộp,
+      thay vì tạo mãi không dừng.
+  - show: '<p><b>Bước 4.</b> <b>Tiêm.</b> Mỗi trường có <code>@Tiem</code>: lấy đối
+      tượng của kiểu trường bằng <b>chính hàm này</b>, rồi <code>f.set(o, …)</code>.</p><p>Thử
+      với <code>ChuyenTien</code>: 2 trường &rarr; 2 lần gọi lại &rarr; hộp có 1 +
+      2 = <b>3</b> đối tượng ✓</p><table class=''t''><tr><th>lần gọi</th><th>thêm
+      vào hộp</th><th>hộp có</th></tr><tr><td>lay(ChuyenTien)</td><td>ChuyenTien</td><td>1</td></tr><tr><td>  lay(KhoDuLieu)</td><td>KhoDuLieu</td><td>2</td></tr><tr><td>  lay(DichVuPhi)</td><td>DichVuPhi</td><td><b>3</b></td></tr></table>'
+    focus:
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Bước bốn là bước tiêm đối tượng vào các trường. Với mỗi trường có nhãn tiêm,
+      ta lấy đối tượng của kiểu trường bằng chính hàm này, rồi gán vào. Thử với lớp
+      chuyển tiền, có hai trường, nên hai lần gọi lại, và hộp có một cộng hai bằng
+      ba đối tượng.
+- id: example
+  kind: example
+  title: 'Ví dụ: lấy ChuyenTien, từng bước một'
+  checks:
+  - 5000000 // 1000 == 5000
+  - 1 + 2 == 3
+  steps:
+  - show: '<p><b>① Hộp rỗng.</b> <code>lay(ChuyenTien)</code>: chưa có trong hộp;
+      có <code>@ThanhPhan</code> ✓ &rarr; tạo, bỏ vào hộp.</p><table class=''t''><tr><th>hộp
+      sau bước này</th><th>kích thước</th></tr><tr><td>ChuyenTien</td><td><b>1</b></td></tr></table>'
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    clear: true
+    say: Phép làm thứ nhất. Lúc đầu hộp đang trống, chưa có đối tượng nào. Ta xin
+      lớp chuyển tiền, chưa có trong hộp, có nhãn thành phần, nên tạo ra và bỏ vào
+      hộp. Hộp có một đối tượng.
+  - show: <p><b>② Trường thứ nhất</b> <code>kho</code> có <code>@Tiem</code> &rarr;
+      <code>lay(KhoDuLieu)</code> &rarr; tạo, bỏ vào hộp, gán.</p><p><b>③ Trường thứ
+      hai</b> <code>dvPhi</code> có <code>@Tiem</code> &rarr; <code>lay(DichVuPhi)</code>
+      &rarr; tạo, bỏ vào hộp, gán.</p><table class='t'><tr><th>hộp sau bước này</th><th>kích
+      thước</th></tr><tr><td>ChuyenTien, KhoDuLieu, DichVuPhi</td><td><b>3</b></td></tr></table>
+    focus:
+    - 1
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Phép làm thứ hai và ba. Trường đầu tiên có nhãn tiêm, nên bộ chứa lấy kho
+      dữ liệu, tạo, bỏ vào hộp rồi gán vào trường. Trường thứ hai cũng vậy với dịch
+      vụ phí. Hộp giờ có ba đối tượng.
+  - show: '$$④ \; \text{phí} = 5\,000\,000 / 1\,000 = \hl{5\,000}$$<p>Hàm <code>chuyen(5
+      000 000)</code> in: <code>so du 1000000, phi 5000</code> ✓ (số dư 1 000 000
+      là số minh hoạ của kho).</p>'
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    clear: true
+    say: Phép làm thứ tư, gọi hàm chuyển với năm triệu. Phí là năm triệu chia một
+      nghìn, bằng năm nghìn. Số dư một triệu là số minh hoạ mà kho trả về. Kết quả
+      ta kỳ vọng in ra là số dư một triệu và phí năm nghìn.
+  - show: $$⑤ \; \text{xin } \texttt{KhoDuLieu} \text{ lần nữa} \Rightarrow \text{trả
+      đúng đối tượng cũ, hộp vẫn } \hl{3}$$<div class="code"><div>ChuyenTien c = (ChuyenTien)
+      lay(ChuyenTien.<span class="kw">class</span>);</div><div>System.out.println(c.chuyen(5000000));</div><div>System.out.println(c.kho
+      == lay(KhoDuLieu.<span class="kw">class</span>));</div><div>System.out.println(hop.size());</div><div>System.out.println(ChuyenTien.<span
+      class="kw">class</span>.isAnnotationPresent(KhongGiu.<span class="kw">class</span>));</div></div><p><b>Kết
+      quả chạy</b></p><div class="code"><div>so du 1000000, phi 5000</div><div>true</div><div>3</div><div>false</div></div>
+    focus:
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Phép làm thứ năm, xin kho dữ liệu lần nữa thì nhận lại đúng đối tượng cũ,
+      hộp vẫn là ba. Chạy thật, bốn dòng in ra khớp. Số dư và phí như tính tay, hai
+      tham chiếu là một đối tượng, hộp có ba, và lớp chuyển tiền không có nhãn không
+      giữ, nên nhãn đó không đọc được lúc chạy.
+    introduces:
+    - implies
+- id: check
+  kind: check
+  title: 'Tự kiểm bằng đường khác: nhìn vào tệp lớp bằng công cụ javap'
+  checks:
+  - 1 + 2 == 3
+  steps:
+  - show: <p><b>Lệnh javap in nội dung tệp lớp; lọc các dòng nhãn mức lớp</b></p><div
+      class="code"><div><span class="cm"><span>&#36;</span> </span>javap -v -p 'MiniDi<span>&#36;</span>ChuyenTien'
+      | grep -E '^Runtime|^    MiniDi'</div><div>RuntimeVisibleAnnotations:</div><div>    MiniDi<span>&#36;</span>ThanhPhan</div><div>RuntimeInvisibleAnnotations:</div><div>    MiniDi<span>&#36;</span>KhongGiu</div></div><p
+      class='note'>Nhãn có <code>RUNTIME</code> nằm ở mục <b>Visible</b> (đọc được
+      lúc chạy); nhãn không khai thời hạn nằm ở mục <b>Invisible</b> (có trong tệp,
+      nhưng phản chiếu không thấy).</p>
+    focus:
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Cách kiểm khác là không tin chương trình, mà nhìn thẳng vào tệp lớp bằng
+      lệnh của bộ công cụ. Lọc các dòng nhãn mức lớp, ta thấy nhãn thành phần nằm
+      ở mục nhìn thấy được lúc chạy, còn nhãn không giữ nằm ở mục không nhìn thấy.
+      Điều đó khớp với dòng cuối cùng của chương trình, vì dòng ấy in ra sai cho nhãn
+      không giữ.
+  - show: '<p>Kiểm đếm: hộp có <b>3</b> đối tượng = số lớp có <code>@ThanhPhan</code>
+      ta đã xin (<code>ChuyenTien</code>) + số trường <code>@Tiem</code> của nó (2)
+      = 1 + 2.</p>'
+    clear: true
+    say: Ta kiểm thêm bằng cách đếm. Ba đối tượng trong hộp bằng số lớp ta xin trực
+      tiếp là một, cộng số trường có nhãn tiêm của nó là hai, nên con số này khớp.
+- id: scale
+  kind: concept
+  title: 'Khi một triệu yêu cầu đi qua: dùng chung hay tạo mới mỗi lần?'
+  checks:
+  - 3 * 1000 == 3000
+  - 3 * 1000000 == 3000000
+  steps:
+  - show: '<div class="code"><div><span class="kw">static</span> Object lay(Class&lt;?&gt;
+      loai, <span class="kw">boolean</span> chung) <span class="kw">throws</span>
+      Exception {</div><div>    <span class="kw">if</span> (chung &amp;&amp; hop.containsKey(loai))
+      {</div><div>        <span class="kw">return</span> hop.get(loai);                             <span
+      class="cm">// dùng lại: một bản cho mọi yêu cầu</span></div><div>    }</div><div>    Object
+      o = loai.getDeclaredConstructor().newInstance();</div><div>    hop.put(loai,
+      o);</div></div><div class="code"><div><span class="kw">for</span> (<span class="kw">int</span>
+      n : soYeuCau) {</div><div>    <span class="kw">for</span> (<span class="kw">boolean</span>
+      chung : <span class="kw">new</span> <span class="kw">boolean</span>[]{<span
+      class="kw">true</span>, <span class="kw">false</span>}) {</div><div>        soDoiTuong
+      = 0;</div><div>        hop.clear();</div><div>        <span class="kw">for</span>
+      (<span class="kw">int</span> i = 0; i &lt; n; i++) {</div><div>            lay(Chuyen.<span
+      class="kw">class</span>, chung);</div><div>        }</div><div>        String
+      cach = chung ? " dung chung: " : " moi lan: ";</div><div>        System.out.println("yeu
+      cau " + n + cach + soDoiTuong + " doi tuong");</div><div>    }</div></div>'
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    clear: true
+    say: Bây giờ là chuyện quy mô. Ta thêm một công tắc vào bộ chứa, dùng chung thì
+      lần sau lấy lại đối tượng cũ, còn không thì tạo mới cho mỗi yêu cầu. Mỗi yêu
+      cầu cần ba đối tượng. Ta đếm số lần hàm tạo được gọi khi có một nghìn yêu cầu,
+      rồi một triệu yêu cầu.
+  - show: '<p><b>Kết quả chạy</b></p><div class="code"><div>yeu cau 1000 dung chung:
+      3 doi tuong</div><div>yeu cau 1000 moi lan: 3000 doi tuong</div><div>yeu cau
+      1000000 dung chung: 3 doi tuong</div><div>yeu cau 1000000 moi lan: 3000000 doi
+      tuong</div></div><table class=''t''><tr><th>số yêu cầu</th><th>dùng chung</th><th>tạo
+      mới mỗi lần</th></tr><tr><td>1 000</td><td>3</td><td>3 000</td></tr><tr><td>1
+      000 000</td><td>3</td><td><b>3 000 000</b></td></tr></table>'
+    focus:
+    - 1
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Kết quả thật. Dùng chung thì lúc nào cũng chỉ có ba đối tượng, dù một nghìn
+      hay một triệu yêu cầu. Tạo mới mỗi lần thì ba nghìn, rồi ba triệu đối tượng,
+      tăng đúng theo số yêu cầu, mỗi đối tượng lại cần bộ thu gom rác dọn. Đây là
+      lý do Spring mặc định dùng chung một bản cho mỗi thành phần.
+  - show: '<div class="box warn"><b>Đánh đổi:</b> một bản dùng chung cho mọi yêu cầu
+      nghĩa là mọi yêu cầu cùng <b>sửa chung</b> các trường của nó.
+
+      Ở máy chủ, các yêu cầu chạy <b>đồng thời</b>, nên thành phần dùng chung phải
+      <b>không có trạng thái thay đổi</b>, hoặc phải khoá. Ta sẽ thấy lỗi này ở bài
+      về luồng.</div>
+
+      '
+    forward_ref: true
+    say: Nhưng có đánh đổi. Một bản dùng chung cho mọi yêu cầu nghĩa là mọi yêu cầu
+      cùng sửa chung các trường của nó. Ở máy chủ, các yêu cầu chạy đồng thời, nên
+      thành phần dùng chung phải không có trạng thái thay đổi, hoặc phải có khoá.
+      Ta sẽ thấy lỗi này ở bài về luồng.
+- id: pitfalls
+  kind: pitfall
+  title: Lỗi hay gặp, có lỗi của người đã đi làm
+  steps:
+  - show: '<div class="box warn"><b>Lỗi 1 (người mới).</b> Gõ sai tên hàm mà không
+      có <code>@Override</code> thì im lặng; có thì được báo ngay.</div><div class="code"><div><span
+      class="kw">static</span> <span class="kw">class</span> PhiThuong <span class="kw">implements</span>
+      Phi {</div><div>    <span class="kw">@Override</span></div><div>    <span class="kw">public</span>
+      <span class="kw">long</span> tinhh(<span class="kw">long</span> soTien) {                      <span
+      class="cm">// gõ thừa chữ h</span></div><div>        <span class="kw">return</span>
+      soTien / 1000;</div><div>    }</div><div>}</div></div><p><b>Kết quả chạy</b></p><div
+      class="code"><div><span class="cm">error: PhiThuong is not abstract and does
+      not override abstract method tinh(long) in Phi</span></div><div><span class="cm">    static
+      class PhiThuong implements Phi {</span></div><div><span class="cm">           ^</span></div><div><span
+      class="cm">error: method does not override or implement a method from a supertype</span></div><div><span
+      class="cm">        @Override</span></div><div><span class="cm">        ^</span></div></div>'
+    focus:
+    - 1
+    - 1
+    - 2
+    - 3
+    - 4
+    clear: true
+    say: Lỗi thứ nhất là gõ thừa một chữ trong tên hàm. Nhãn ghi đè là một nhãn mà
+      trình biên dịch đọc ngay lúc biên dịch. Nó nói tôi chắc chắn hàm này ghi đè
+      một hàm cha, và trình biên dịch kiểm lời hứa đó. Hứa sai thì báo lỗi. Không
+      có nhãn này, ta sẽ có một hàm mới tinh, hàm cũ vẫn trống, và chương trình chạy
+      sai mà không báo gì.
+  - show: '<div class="box warn"><b>Lỗi 2 (người mới).</b> Quên khai thời hạn giữ
+      nhãn.</div><div class="code"><div><span class="kw">@interface</span> KhongGiu
+      {}                                    <span class="cm">// quên thời hạn giữ</span></div><div>
+      </div><div><span class="kw">@Giu</span> <span class="kw">@KhongGiu</span></div><div><span
+      class="kw">static</span> <span class="kw">class</span> A {}</div><div> </div><div><span
+      class="kw">public</span> <span class="kw">static</span> <span class="kw">void</span>
+      main(String[] args) {</div><div>    System.out.println("giu: " + A.<span class="kw">class</span>.isAnnotationPresent(Giu.<span
+      class="kw">class</span>));</div><div>    System.out.println("khong giu: " +
+      A.<span class="kw">class</span>.isAnnotationPresent(KhongGiu.<span class="kw">class</span>));</div></div><p><b>Kết
+      quả chạy</b></p><div class="code"><div>giu: true</div><div>khong giu: false</div></div>'
+    focus:
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Lỗi thứ hai là quên khai thời hạn giữ nhãn. Nhãn không khai thì có trong
+      tệp lớp nhưng bị bỏ khi nạp, nên phản chiếu hỏi thì nhận câu trả lời là không
+      có. Bộ chứa của ta sẽ lặng lẽ bỏ qua mọi thành phần, nên không có lỗi nào, chỉ
+      là không có gì xảy ra.
+  - show: '<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Hai lớp cần nhau
+      khi tạo qua hàm tạo: vòng phụ thuộc.</div><div class="code"><div><span class="kw">static</span>
+      <span class="kw">class</span> A { A(B b) {} }</div><div><span class="kw">static</span>
+      <span class="kw">class</span> B { B(A a) {} }                              <span
+      class="cm">// A cần B, B cần A</span></div></div>'
+    focus:
+    - 1
+    - 1
+    - 2
+    clear: true
+    say: Lỗi thứ ba hay gặp ở người đã đi làm là vòng phụ thuộc. Lớp A cần B ngay
+      trong hàm tạo, lớp B cần A. Muốn tạo A thì phải có B, muốn tạo B thì phải có
+      A, và không có đối tượng nào để dở dang cất vào hộp, vì hàm tạo chưa chạy xong.
+  - show: <div class="code"><div><span class="kw">static</span> Object tao(Class&lt;?&gt;
+      loai) <span class="kw">throws</span> Exception {</div><div>    <span class="kw">if</span>
+      (!dangTao.add(loai)) {</div><div>        <span class="kw">throw</span> <span
+      class="kw">new</span> IllegalStateException("vong phu thuoc tai " + loai.getSimpleName());</div><div>    }</div><div>    Constructor&lt;?&gt;
+      ham = loai.getDeclaredConstructors()[0];</div><div>    Object[] doiSo = <span
+      class="kw">new</span> Object[ham.getParameterCount()];</div><div>    <span class="kw">for</span>
+      (<span class="kw">int</span> i = 0; i &lt; doiSo.length; i++) {</div><div>        doiSo[i]
+      = tao(ham.getParameterTypes()[i]);</div><div>    }</div></div>
+    clear: true
+    say: Bộ chứa cần một tập ghi những lớp đang tạo. Vào hàm tạo lớp nào thì thêm
+      lớp đó vào tập, nếu đã có sẵn nghĩa là ta đang đi vòng, thì ném lỗi. Tạo xong
+      các tham số thì mới bỏ lớp ra khỏi tập.
+  - show: '<p><b>Kết quả chạy</b></p><div class="code"><div>vong phu thuoc tai A</div></div><p
+      class=''note''>Cách giải: đổi một phía sang tiêm vào trường (như bộ chứa của
+      ta, đối tượng dở dang đã nằm trong hộp), hoặc tốt hơn <b>tách một lớp thứ ba</b>
+      để xoá vòng. Spring cũng báo lỗi tương tự khi tạo qua hàm tạo.</p>'
+    focus:
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Kết quả thật, bộ chứa phát hiện vòng và dừng, thay vì chạy mãi. Cách giải
+      là đổi một phía sang tiêm vào trường, hoặc tốt hơn là tách ra một lớp thứ ba
+      để xoá vòng. Vòng phụ thuộc thường là dấu hiệu thiết kế lẫn lộn trách nhiệm.
+- id: quiz
+  kind: quiz
+  title: Bây giờ tới phần bạn tự làm
+  checks:
+  - 1 + 2 == 3
+  - len({'A', 'B', 'C'}) == 3
+  steps:
+  - show: '<p><b>Đề.</b> Bộ chứa trong bài với ba lớp <code>A</code>, <code>B</code>,
+      <code>C</code> đều có <code>@ThanhPhan</code>. <code>A</code> có hai trường
+      <code>@Tiem B b</code>, <code>@Tiem C c</code>; <code>B</code> có một trường
+      <code>@Tiem C c</code>; <code>C</code> không có trường nào.</p>
+
+      <ol><li>Sau <code>lay(A.class)</code>, <code>hop</code> có mấy đối tượng? Thứ
+      tự các lớp được <b>tạo</b>?</li>
+
+      <li>Nếu <code>@Tiem</code> bị quên <code>@Retention(RUNTIME)</code> thì <code>hop.size()</code>
+      bằng mấy?</li></ol>
+
+      <p><b>Chọn A hay B?</b> Thành phần giữ <b>số dư tạm</b> của từng khách. A: một
+      bản dùng chung. B: một bản cho mỗi yêu cầu. Vì sao?</p>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 1
+    - 2
+    - 2
+    - 3
+    - 3
+    pause: 30
+    say: Bây giờ tới phần bạn tự làm. Ba lớp A, B, C đều có nhãn thành phần. A cần
+      B và C, B cần C, C không cần gì. Hãy tính sau khi lấy A thì hộp có mấy đối tượng,
+      và thứ tự tạo. Rồi nếu nhãn tiêm bị quên khai thời hạn giữ thì hộp có mấy đối
+      tượng. Cuối cùng chọn giữa một bản dùng chung và một bản cho mỗi yêu cầu cho
+      thành phần giữ số dư tạm của từng khách, và giải thích. Hãy dừng video và tự
+      làm.
+  - show: '<table class=''t''><tr><th>câu</th><th>đáp án</th><th>vì sao</th></tr><tr><td>1</td><td><b>3</b>;
+      thứ tự tạo: A, rồi B, rồi C</td><td>A vào hộp trước; tiêm <code>b</code> &rarr;
+      tạo B; B tiêm <code>c</code> &rarr; tạo C; sau đó tiêm <code>c</code> của A:
+      C đã có, dùng lại</td></tr><tr><td>2</td><td><b>1</b></td><td>nhãn tiêm không
+      được giữ nên không trường nào được tiêm; chỉ có A</td></tr><tr><td>3</td><td><b>B</b>:
+      mỗi yêu cầu một bản</td><td>bản dùng chung bị mọi yêu cầu đồng thời ghi đè số
+      dư tạm lẫn nhau</td></tr></table>'
+    focus:
+    - 1
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.4'
+    say: Đáp án câu một, hộp có ba đối tượng, và thứ tự tạo là A, rồi B, rồi C. A
+      vào hộp trước, tiêm trường b thì tạo B, B tiêm trường c thì tạo C. Khi tiêm
+      trường c của A thì C đã có sẵn nên dùng lại. Câu hai, nhãn tiêm không được giữ
+      thì không trường nào được tiêm, hộp chỉ có A, tức là một. Câu ba chọn phương
+      án B, vì bản dùng chung bị mọi yêu cầu đồng thời ghi đè số dư tạm lên nhau.
+    clear: true
+  - show: <div class="box key"><b>Quy tắc:</b> thành phần dùng chung phải <b>không
+      giữ trạng thái riêng của từng yêu cầu</b>. Cần trạng thái riêng thì truyền qua
+      tham số, hoặc tạo bản riêng cho mỗi yêu cầu.</div>
+    say: Quy tắc rút ra. Thành phần dùng chung không được giữ trạng thái riêng của
+      từng yêu cầu. Cần trạng thái riêng thì truyền qua tham số, hoặc tạo bản riêng
+      cho mỗi yêu cầu.
+- id: practice
+  kind: practice
+  title: 'Tự làm: bộ chứa tiêm phụ thuộc cho kho hàng'
+  steps:
+  - show: '<p><b>Đề</b>: tự viết <b>bộ chứa</b> cỡ nhỏ, ba lớp có sẵn trong <code>de.md</code>.</p>
+
+      <ol><li>Hai nhãn <code>@ThanhPhan</code>, <code>@Tiem</code> với <code>@Retention(RUNTIME)</code>.</li>
+
+      <li><code>lay(Class)</code>: có trong <code>hop</code> thì trả; chưa thì tạo,
+      <b>bỏ vào hop trước</b>, rồi tiêm các trường <code>@Tiem</code>.</li>
+
+      <li><code>main</code>: lấy <code>DonHang</code>, in ba dòng.</li></ol>
+
+      <p class="note">Tệp <code>MiniDiKho.java</code>; mã ba lớp có sẵn ở <code>labs/JV2/L04/de.md</code>.</p>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    - 3
+    - 3
+    pause: 240
+    say: Bây giờ tới phần bạn tự làm trên máy. Hãy tự viết một bộ chứa tiêm phụ thuộc
+      nhỏ cho ba lớp có sẵn trong đề bài. Viết hai nhãn giữ đến lúc chạy. Viết hàm
+      lấy đối tượng, nếu đã có thì trả lại, nếu chưa thì tạo, bỏ vào hộp trước, rồi
+      tiêm các trường có nhãn. Cuối cùng lấy đơn hàng và in ba dòng. Hãy dừng video
+      và tự viết, đừng chép lại ví dụ.
+  - show: '<p><b>Kết quả mong đợi</b></p><div class="code"><div>Tong gia tri kho:
+      540000</div><div>Cung mot BangGia: true</div><div>So thanh phan: 3</div></div><p
+      class="note">Chấm bằng Git Bash: <code>bash labs/cham.sh JV2 L04 MiniDiKho.java</code>
+      — in <b>ĐÚNG</b> khi trùng.</p>'
+    focus:
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Đây là kết quả mong đợi. Bạn chạy chương trình của mình rồi so từng dòng.
+      Nếu muốn chấm bằng máy, dùng lệnh ở dưới màn hình; lệnh in chữ ĐÚNG khi đầu
+      ra trùng, hoặc chỉ ra dòng nào khác.
+  - show: '<div class="box key"><b>Nếu kẹt:</b> <code>for (Field f : loai.getDeclaredFields())
+      if (f.isAnnotationPresent(Tiem.class)) { f.setAccessible(true); f.set(o, lay(f.getType()));
+      }</code>.
+
+      Nhớ <code>hop.put(loai, o)</code> <b>trước</b> vòng lặp trường. Lời giải: <code>labs/JV2/L04/loi_giai.java</code>
+      — chỉ mở sau khi đã thử.</div>
+
+      '
+    say: Nếu kẹt, duyệt các trường khai báo của lớp. Trường nào có nhãn tiêm thì mở
+      quyền truy cập rồi gán bằng cách lấy đối tượng của kiểu trường. Nhớ bỏ đối tượng
+      vào hộp trước khi duyệt trường. Lời giải đầy đủ nằm trong thư mục thực hành
+      của bài, chỉ mở sau khi bạn đã tự thử.
+  lab: labs/JV2/L04
+- id: recap
+  kind: recap
+  title: Chuỗi logic & tư duy cần mang theo
+  steps:
+  - show: '<div class=''chain''><span class=''n''>nhãn = dữ liệu gắn vào mã</span><span
+      class=''a''>→</span><span class=''n''>RUNTIME: giữ đến lúc chạy</span><span
+      class=''a''>→</span><span class=''n''>phản chiếu đọc nhãn, tạo, gán</span><span
+      class=''a''>→</span><span class=''n''>hộp: một bản mỗi lớp</span><span class=''a''>→</span><span
+      class=''n''>bỏ vào hộp trước khi tiêm</span><span class=''a''>→</span><span
+      class=''n''>dùng chung thì không giữ trạng thái riêng</span></div>'
+    say: Tổng kết chuỗi logic. Nhãn là dữ liệu gắn vào mã, tự nó không làm gì. Muốn
+      đọc được lúc chạy phải khai thời hạn giữ. Phản chiếu đọc nhãn, tạo đối tượng
+      và gán trường. Hộp giữ một bản cho mỗi lớp. Bỏ vào hộp trước khi tiêm để tránh
+      tạo mãi. Và thành phần dùng chung thì không được giữ trạng thái riêng của từng
+      yêu cầu.
+  - show: '<div class=''box key''><b>Tư duy:</b> khi thấy một nhãn như <code>@Service</code>
+      hay <code>@Transactional</code>, hỏi ba câu: <b>ai đọc</b> nhãn này (lúc biên
+      dịch hay lúc chạy),
+
+      nó <b>quản lý bao nhiêu bản</b> của đối tượng, và có <b>vòng phụ thuộc</b> hay
+      trạng thái chung nào bị giấu sau nhãn không.</div>
+
+      '
+    say: Điều cần mang theo. Khi thấy một nhãn như nhãn dịch vụ hay nhãn giao dịch,
+      hãy hỏi ba câu. Ai đọc nhãn này, lúc biên dịch hay lúc chạy. Nó quản lý bao
+      nhiêu bản của đối tượng. Và có vòng phụ thuộc hay trạng thái chung nào bị giấu
+      sau nhãn không.

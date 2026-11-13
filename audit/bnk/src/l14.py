@@ -1,10 +1,34 @@
 from lib import *
+from labkit import write_lab, practice_steps, practice_scene
 
 BANK = "[('r7', 500000), ('r7b', 500000)]"
 SW = "[('r7', 500000)]"
 
 
 def build():
+    sua = prog("SuaSaiTruHaiLan", """
+CREATE TABLE ngan_hang (ma TEXT, tk TEXT, tien INTEGER);
+CREATE TABLE chuyen_mach (ma TEXT, tien INTEGER);
+INSERT INTO ngan_hang VALUES ('r7', 'A', -500000), ('r7b', 'A', -500000);
+INSERT INTO chuyen_mach VALUES ('r7', 500000);
+SELECT ma FROM ngan_hang WHERE ma NOT IN (SELECT ma FROM chuyen_mach);
+SELECT 2000000 + SUM(tien) FROM ngan_hang;
+INSERT INTO ngan_hang SELECT 'dao-' || ma, tk, -tien FROM ngan_hang WHERE ma = 'r7b';
+SELECT 2000000 + SUM(tien) FROM ngan_hang;""", out="""r7b
+1000000
+1500000""", lang="sqlite")
+    lab_sua = prog("SuaSaiLab", """
+CREATE TABLE ngan_hang (ma TEXT, tk TEXT, tien INTEGER);
+CREATE TABLE chuyen_mach (ma TEXT, tien INTEGER);
+INSERT INTO ngan_hang VALUES ('r8', 'A', -800000), ('r8b', 'A', -800000), ('r8c', 'A', -800000);
+INSERT INTO chuyen_mach VALUES ('r8', 800000);
+SELECT ma FROM ngan_hang WHERE ma NOT IN (SELECT ma FROM chuyen_mach) ORDER BY ma;
+SELECT 3000000 + SUM(tien) FROM ngan_hang;
+INSERT INTO ngan_hang SELECT 'dao-' || ma, tk, -tien FROM ngan_hang WHERE ma NOT IN (SELECT ma FROM chuyen_mach);
+SELECT 3000000 + SUM(tien) FROM ngan_hang;""", out="""r8b
+r8c
+600000
+2200000""", lang="sqlite")
     hook = sc("hook", "hook", "Tình huống giả định: khách bị trừ hai lần cho một lệnh chuyển", [
         st("""<p><b>Tình huống giả định, số minh hoạ, không phải sự cố có thật.</b> Khách chuyển $500\\,000$ đồng. Ứng dụng báo lỗi mạng, khách bấm lại. Sao kê hiện <b>hai</b> khoản trừ.</p>
 <div class="box key">Bài này dùng mọi thứ đã học để <b>tìm nguyên nhân, sửa cho khách, và ngăn lần sau</b>. Cuối bài là khung để bạn kể sự cố <b>thật</b> của mình.</div>""",
@@ -146,8 +170,66 @@ S: [hệ thống, rủi ro] &nbsp; T: [phần bạn chịu trách nhiệm]<br>A:
         st("""<div class='box key'><b>Tư duy:</b> kỹ sư cấp cao không chỉ sửa lỗi. Họ <b>giải thích cơ chế</b>, <b>chứng minh bằng dữ liệu</b>, và <b>làm cho lỗi đó không thể lặp lại</b>. Hãy kể đúng việc mình đã làm.</div>""",
            """Điều cần mang theo. Kỹ sư cấp cao không chỉ sửa lỗi. Họ giải thích cơ chế, chứng minh bằng dữ liệu, và làm cho lỗi đó không thể lặp lại. Hãy kể đúng việc mình đã làm."""),
     ])
+    # ── AF2: P1 SQL tối thiểu, SQL chạy thật trên sqlite (đối soát, đảo, kiểm số dư), quy mô, tự làm ──
+    add_steps([pre], "prereq", [
+        st(table(["thêm một điều để đọc mã", "nghĩa", "ví dụ"],
+                 [["SQL dùng trong bài", "<code>x NOT IN (SELECT …)</code>: x không nằm trong kết quả của truy vấn con; <code>INSERT INTO t SELECT …</code>: chèn mọi dòng mà truy vấn trả về; <code>'dao-' || ma</code>: nối hai chuỗi; <code>SUM(cột)</code>: cộng", "<code>'dao-' || 'r7b'</code> = <code>dao-r7b</code>"]]),
+           """Thêm một điều để đọc mã SQL trong bài. Điều kiện không nằm trong cho biết một giá trị không có trong kết quả của một truy vấn con. Lệnh chèn kèm truy vấn chèn mọi dòng mà truy vấn trả về. Hai gạch đứng nối hai chuỗi. Và hàm cộng là hàm tính tổng, nó cộng mọi giá trị của một cột lại với nhau.""",
+           clear=True),
+    ], at=1)
+    pre["title"] = "Nhắc lại từ đầu: các mảnh ghép sẽ dùng"
+    run = sc("chay_that", "example", "Chạy thật: tìm lệnh trừ trùng, đảo bút toán, kiểm số dư (sqlite)", [
+        st(code_block(sua, lines=(1, 4), title="Dựng hai sổ: ngân hàng ghi hai lần trừ, chuyển mạch chỉ ghi một"),
+           """Ta dựng lại tình huống bằng SQL. Sổ ngân hàng của khách A có hai dòng trừ năm trăm nghìn, mã r bảy và r bảy b. Sổ chuyển mạch chỉ có một dòng, mã r bảy. Số dư đầu của A là hai triệu."""),
+        st(code_block(sua, lines=(5, 8), title="Tìm dòng chỉ ngân hàng có, kiểm số dư, đảo, kiểm lại") + out_block(sua),
+           """Câu thứ nhất tìm các mã có ở sổ ngân hàng mà không có ở sổ chuyển mạch. Câu thứ hai tính số dư bằng số dư đầu cộng tổng các dòng. Lệnh chèn thêm một dòng đảo, ngược dấu, cho mã r bảy b, không xoá dòng nào. Câu cuối tính lại số dư.
+           Khi chạy thật, mã thừa là r bảy b. Số dư trước khi sửa là một triệu, bị trừ dư năm trăm nghìn. Sau khi đảo, số dư là một triệu năm trăm nghìn, đúng bằng hai triệu trừ năm trăm nghìn.""", clear=True),
+    ])
+    scale = sc("quy_mo", "example", "Quy mô: vụ trừ trùng nhỏ thành hàng nghìn người làm mỗi ngày nếu xử lý tay", [
+        st("""<p>Giả sử $0{,}01\\%$ lệnh bị trừ trùng, và mỗi vụ cần $10$ phút xử lý tay (đối soát, đảo bút toán, báo khách) <i>(số minh hoạ)</i>; một người làm $8$ giờ mỗi ngày:</p>"""
+           + table(["tải", "lệnh mỗi ngày", "vụ trừ trùng", "thời gian xử lý tay", "số người cần"],
+                   [["×1", "100 000", "10", "100 phút", "≈ 0,2"],
+                    ["×100", "10 000 000", "1 000", "≈ 167 giờ", "<b>≈ 21</b>"],
+                    ["×10 000", "1 000 000 000", "100 000", "≈ 16 667 giờ", "<b>≈ 2 083</b>"]]),
+           """Giả sử một phần mười nghìn số lệnh bị trừ trùng, và mỗi vụ cần mười phút xử lý tay, gồm đối soát, đảo bút toán và báo khách. Mỗi người làm tám giờ mỗi ngày. Đây là số minh hoạ.
+           Với một trăm nghìn lệnh mỗi ngày, có mười vụ, chỉ một trăm phút, chưa đến một người. Tải tăng một trăm lần thì một nghìn vụ, cần khoảng hai mươi mốt người. Tải tăng mười nghìn lần thì một trăm nghìn vụ, cần khoảng hai nghìn người, mỗi ngày.""", clear=True),
+        st("""<div class="box warn"><b>Giải pháp cũ gãy ở đâu.</b> Sửa từng vụ bằng tay: ở ×1 chỉ một người làm thêm, ở ×100 cần cả một nhóm, ở ×10 000 là một nhà máy; và càng nhiều người sửa tay càng dễ thêm lỗi.</div>
+<div class="box key"><b>Đánh đổi:</b> phòng hơn chữa (khoá lũy đẳng, truy vấn trước khi thử lại kéo số vụ về gần 0); với vụ còn lại thì tự động hoá đối soát và đảo bút toán, nhưng đặt ngưỡng, bước duyệt và nhật ký kiểm toán để máy không tự hoàn nhầm.</div>""",
+           """Câu hỏi là giải pháp cũ sẽ gãy ở chỗ nào khi tải tăng lên. Sửa từng vụ bằng tay thì ở tải gốc chỉ cần một người làm thêm. Ở tải gấp trăm lần cần cả một nhóm, và ở tải gấp mười nghìn lần là một nhà máy. Càng nhiều người sửa tay càng dễ thêm lỗi.
+           Đánh đổi là phòng hơn chữa, vì khoá lũy đẳng và truy vấn trước khi thử lại kéo số vụ về gần không. Với các vụ còn lại thì tự động hoá đối soát và đảo bút toán, nhưng phải đặt ngưỡng, bước duyệt và nhật ký kiểm toán để máy không tự hoàn nhầm.""", clear=True),
+    ], checks=["100000 * 0.0001 == 10", "round(10_000_000 * 0.0001) == 1000", "round(1_000_000_000 * 0.0001) == 100_000",
+               "10 * 10 == 100", "round(1000 * 10 / 60) == 167", "round(100000 * 10 / 60) == 16667",
+               "round(1000 * 10 / 60 / 8) == 21", "round(100000 * 10 / 60 / 8) == 2083", "round(10 * 10 / 60 / 8, 1) == 0.2"])
+    write_lab("BNK", "L14", """# Lab BNK L14 — Ba lần gửi, một lần ghi chuyển mạch
+
+Khách A có số dư đầu **3 000 000**. Sổ ngân hàng ghi **ba** dòng trừ 800 000 (mã `r8`, `r8b`, `r8c`); sổ chuyển mạch chỉ ghi một dòng, mã `r8`.
+
+Viết tệp `sua_sai.sql` (chạy bằng `python labs/sqlrun.py sua_sai.sql`, hoặc `sqlite3 :memory: < sua_sai.sql`):
+1. Tạo hai bảng `ngan_hang (ma TEXT, tk TEXT, tien INTEGER)` và `chuyen_mach (ma TEXT, tien INTEGER)`; chèn các dòng nói trên (ngân hàng: `-800000` mỗi dòng, tài khoản `'A'`; chuyển mạch: `('r8', 800000)`).
+2. `SELECT` các mã có ở ngân hàng mà không có ở chuyển mạch, `ORDER BY ma`.
+3. `SELECT 3000000 + SUM(tien) FROM ngan_hang;` (số dư trước khi sửa).
+4. `INSERT INTO ngan_hang SELECT 'dao-' || ma, tk, -tien …` cho **đúng các mã thừa** (dùng lại điều kiện `NOT IN` ở bước 2).
+5. Lại `SELECT 3000000 + SUM(tien) FROM ngan_hang;` (số dư sau khi sửa).
+
+Chấm: `bash labs/cham.sh BNK L14 sua_sai.sql`.
+""", "sql", lab_sua["code"], lab_sua["out"])
+    lab = practice_scene(sc, "Tự làm: ba lần gửi, một lần ghi chuyển mạch", practice_steps(
+        st, "BNK", "L14",
+        """<p><b>Đề</b>: số dư đầu 3 000 000; ngân hàng trừ 800 000 ba lần (<code>r8</code>, <code>r8b</code>, <code>r8c</code>), chuyển mạch chỉ có <code>r8</code>. Viết <code>sua_sai.sql</code>:</p>
+<ol><li>hai bảng và dữ liệu (chi tiết ở <code>de.md</code>)</li><li>tìm mã thừa; số dư trước khi sửa</li>
+<li>đảo <b>đúng các mã thừa</b> bằng <code>INSERT … SELECT</code>; số dư sau khi sửa</li></ol>""",
+        """Bây giờ tới phần bạn tự làm. Khách tên A có số dư ba triệu đồng. Sổ ngân hàng trừ tám trăm nghìn ba lần, mã r tám, r tám b và r tám c, còn sổ chuyển mạch chỉ có mã r tám. Hãy viết một tệp SQL dựng hai bảng và dữ liệu đó.
+        Rồi tìm các mã thừa, tính số dư trước khi sửa, đảo đúng các mã thừa bằng lệnh chèn kèm truy vấn, và tính lại số dư. Hãy dừng video, tự viết và chạy, đừng chép lại ví dụ.""",
+        lab_sua["out"], "sua_sai.sql",
+        """<div class="box key"><b>Nếu kẹt:</b> mô theo ví dụ; điều kiện mã thừa là <code>ma NOT IN (SELECT ma FROM chuyen_mach)</code>, dùng cho cả câu tìm lẫn lệnh chèn đảo.
+Lời giải ở <code>labs/BNK/L14/loi_giai.sql</code> — chỉ mở sau khi bạn đã thử.</div>""",
+        """Nếu kẹt, làm theo ví dụ vừa xem. Điều kiện mã thừa là mã không nằm trong sổ chuyển mạch, và ta dùng đúng điều kiện đó cho cả câu tìm lẫn lệnh chèn dòng đảo. Lời giải đầy đủ nằm trong thư mục thực hành của bài, chỉ mở sau khi bạn đã tự thử.""", pause=180), "BNK", "L14")
     return lesson("L14", "tinh_huong_tru_tien_hai_lan", "Bài 14 — Tình huống giả định: từ triệu chứng tới thiết kế tốt hơn",
-                  "curriculum/bnk.yaml L14; audit/bnk/verify_bnk.py L14; tình huống giả định, số liệu minh hoạ do người soạn đặt ra (không phải sự cố có thật); dùng lại các hàm kiểm của các bài trước",
+                  "curriculum/bnk.yaml L14; audit/bnk/verify_bnk.py L14; audit/review/screen_code/BNK.yaml (SQL chạy thật trên sqlite 3.49); tình huống giả định, số liệu minh hoạ do người soạn đặt ra (không phải sự cố có thật); dùng lại các hàm kiểm của các bài trước; tỉ lệ trừ trùng và thời gian xử lý tay trong bảng quy mô là số minh hoạ",
                   ["Đi từ triệu chứng tới nguyên nhân, bằng chứng, cách sửa và cách ngăn", "Tính số tiền trừ dư và phân loại lệch bằng đối soát",
-                   "Sửa sai bằng bút toán đảo", "Kể một sự cố thật theo khung STAR, trung thực và có số liệu có nguồn"],
-                  [hook, pre, sym, intu, form, ex, chk, pit, quiz, rec])
+                   "Sửa sai bằng bút toán đảo", "Kể một sự cố thật theo khung STAR, trung thực và có số liệu có nguồn",
+                   "Chạy SQL tìm lệnh trừ trùng, đảo bút toán và kiểm số dư để thấy kết quả",
+                   "Tính số vụ trừ trùng và nhân lực xử lý tay khi tải tăng ×100, ×10 000",
+                   "Viết SQL tìm các mã thừa, đảo chúng và kiểm số dư"],
+                  [hook, pre, sym, intu, form, ex, run, chk, pit, quiz, scale, lab, rec],
+                  covers=[(1, "formula"), (2, "example"), (3, "chay_that"), (4, "pitfalls"), (5, "chay_that"), (6, "quy_mo"), (7, "practice")])

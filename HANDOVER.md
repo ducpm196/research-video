@@ -1,3 +1,23 @@
+# HANDOVER — Cập nhật 2026-11-13: đợt AF2 (thực hiện kế hoạch) — PARTIAL: 49/701 bài đạt chuẩn "Tự làm"; trang học mới; AF3 còn lại
+
+> **Phiên mới đọc theo thứ tự**: [`audit/review/audit_final/handover_AF2_20261113T0400Z.md`](file:///D:/research-video/audit/review/audit_final/handover_AF2_20261113T0400Z.md) → [`plan_AF3_next.md`](file:///D:/research-video/audit/review/audit_final/plan_AF3_next.md) (việc còn lại, thứ tự ưu tiên: PYT → BNX → INT/ACB → chặng 5 → 6–8 → 9–11 + MLP → dự án chặng → E52/E55 → pháp lý → mẫu G) → [`STATE.md`](file:///D:/research-video/audit/review/audit_final/STATE.md) → `knowledge-graph_AF2_*.md`.
+> - **Bắt đầu học**: mở [`HOC_TAP.html`](file:///D:/research-video/HOC_TAP.html) (thiết kế lại): 701 bài, 113,4 giờ, 11 chặng. Chặng 1 = **FND (11) → JVA (13) → JV2 (10)**, 34 bài, 8,3 giờ. Chuẩn bị máy: `labs/ENV.md`, `bash labs/check_env.sh`. Mỗi bài AF2 có cảnh **Tự làm** + `labs/<KHOÁ>/<Lxx>/` chấm bằng `bash labs/cham.sh`.
+> - **Đã làm**: cổng mới (E51/E53 trong lint, `lab_gate`, `arith_scan`, `check_next_refs`, `check_legal` + sổ `audit/legal/registry.yaml`); khoá mới FND, JV2; nâng JVA, BNK (49 bài, 12,0 giờ, lab 49/49 PASS); sửa 26 bài theo mẫu F; xếp dãy học không lệch "Bài sau" (551 lời hẹn, 0 lệch); `.dim` tương phản 2,2 → 4,8:1; dọn 16 bàn giao cũ vào `archive/`; README viết lại.
+> - **Cổng cuối** (`audit/review/audit_final/logs/gates_af2.out`): verify fnd 70/70, jv2 85/85, jva 143/143, bnk 36/36, bnx 494/494; `pack.py check` 701 bài 0 vấn đề; ASR 0 câu chưa xem xét; screen_code FAIL 2 = BNX L19 chập chờn lần chạy lạnh (chạy lại: 0 FAIL).
+> - **Còn mở (nói thẳng)**: 652 bài chưa có Tự làm; chưa có khoá PYT (Python từ đầu) — BNX dùng Python ở 18 bài; tai người chưa nghe; 6 văn bản pháp lý `CHUA_KIEM` + chưa mở Công báo; BNK L06/L07/L10 là mô phỏng; chưa đo lại bằng người đọc độc lập (mẫu G) nên chưa gọi "final".
+> - **Chưa commit git**: chờ người dùng.
+---
+
+# HANDOVER — (lịch sử) 2026-11-13: đợt rà AF1 (chỉ rà, không sửa) — CHƯA đạt bản final; kế hoạch AF2 đã viết
+
+> **Phiên mới đọc theo thứ tự**: [`audit/review/audit_final/handover_AF1_20261112T1810Z.md`](file:///D:/research-video/audit/review/audit_final/handover_AF1_20261112T1810Z.md) → [`plan_AF1_20261112T1810Z.md`](file:///D:/research-video/audit/review/audit_final/plan_AF1_20261112T1810Z.md) (kế hoạch AF2, 8 gói việc, 6 quyết định, 8 contract bottleneck) → [`audit/review/sample_f/REPORT.md`](file:///D:/research-video/audit/review/sample_f/REPORT.md) → `knowledge-graph_AF1_20261112T1810Z.md`.
+> - **Cổng chạy lại phiên này đều sạch**: xref/meta/course_refs 0; đồ thị lộ trình 0 lỗi; VER 570/0; lint tự kiểm 0 FAIL; `pack.py check` 680 bài 0 vấn đề. Các cổng nặng (`audit_all`, `screen_code`, `verify_<khoá>`) chưa chạy lại, vẫn là số của LF2.
+> - **Mẫu F (38 bài, đọc độc lập)**: MUST 3/38 (AGT L04, DVO L03: giáo án hứa điều bài không dạy; BNX L12: Luật Quản lý thuế 38/2019 có vẻ đã bị thay, chờ văn bản gốc); 37 SHOULD ở 28 bài; thuật ngữ giảng đủ tại chỗ chỉ 7/38 bài; có việc tự làm kèm kết quả đối chiếu chỉ 2/38 bài.
+> - **Đường đi người mất gốc**: JVA theo được trọn; hụt nền từ BNK L02 (Spring, CSDL, HTTP chưa dạy); kẹt khi thực hành ở BNX L00 (bash, cài Git, Python). Sau JVA L00 không bài nào giao việc tự gõ; không có bài tập, không có dự án; 532/680 bài không có khối mã; không có khoá Python, Java trung cấp, học máy thực hành.
+> - **Môi trường trôi**: JDK trên PATH là 21.0.13 (LF2 ghi 22.0.2); `gcc 16.2.0` đã có (LF2 ghi không có trình biên dịch C).
+> - **Chưa commit** các tệp AF1 (chờ người dùng).
+---
+
 # HANDOVER — Cập nhật 2026-11-12: đợt LF2 XONG (đọc chốt chặng 6–11 + phủ CV) — phiên bản học đã chốt
 
 > **Phiên mới đọc theo thứ tự**: [`audit/review/learn_final/handover_LF2_20261112T1620Z.md`](file:///D:/research-video/audit/review/learn_final/handover_LF2_20261112T1620Z.md) (bàn giao cuối) → [`report_LF2.md`](file:///D:/research-video/audit/review/learn_final/report_LF2.md) (báo cáo ngắn, đánh giá chất lượng) → [`knowledge-graph_LF2_20261112T1620Z.md`](file:///D:/research-video/audit/review/learn_final/knowledge-graph_LF2_20261112T1620Z.md) (chứng cứ LF2-01…17) → `audit/review/learn_final/STATE.md`.
@@ -163,7 +183,7 @@
 
 # HANDOVER — Cập nhật phiên 2026-11-07 13:30 (Rà soát Toàn diện & Tiếp thu Phản hồi của Sếp Phan Anh Tuấn: Chuẩn hóa CV Minh bạch IC vs Team, Khóa chặt 16 Nút thắt BN-0001 → BN-0016)
 
-> **Báo cáo bàn giao mới nhất**: Vui lòng đọc file [handover_acb_2026-11-07_1330.md](file:///D:/research-video/handover_acb_2026-11-07_1330.md) và [HANDOVER_INTERVIEW.md](file:///D:/research-video/interview/HANDOVER_INTERVIEW.md) để xem chi tiết đầy đủ về:
+> **Báo cáo bàn giao mới nhất**: Vui lòng đọc file [handover_acb_2026-11-07_1330.md](file:///D:/research-video/archive/handovers/handover_acb_2026-11-07_1330.md) và [HANDOVER_INTERVIEW.md](file:///D:/research-video/interview/HANDOVER_INTERVIEW.md) để xem chi tiết đầy đủ về:
 > - **Tiếp thu phản hồi từ Sếp Phan Anh Tuấn (Phó phòng Ứng dụng Tích hợp OCB)**: Cấu trúc lại CV phân định minh bạch 2 tầng: *Direct Module Ownership & Implementation* (chủ lực code thấu chi sổ tiết kiệm 2 pha, thấu chi lương, Cloud CA, CIC B2B, Redis Mutex, Partial Debit, Deadlock Oracle) vs *Squad & Cross-Team Collaboration* (Core T24 MQ adapter, NAPAS switch, Confluent ksqlDB).
 > - **CV chuẩn ATS 2 trang A4 (100% VERIFIED)**: PyMuPDF biên dịch sạch sẽ, Trang 1 dư 78.80 pt, Trang 2 dư 128.69 pt, scale 1.0, 0 overflow, 0 cắt chữ. Tệp: [`resources/job/PHAM-MINH-DUC-SENIOR-INTEGRATION-CV.pdf`](file:///D:/research-video/resources/job/PHAM-MINH-DUC-SENIOR-INTEGRATION-CV.pdf).
 > - **Bảo toàn 100% độ sâu kiến thức (Senior Mastery)**: Toàn bộ 8 chuyên đề INT, 9 chuyên đề ACB, 100 câu hỏi phỏng vấn thực chiến và 17 video bài giảng 1080p giữ nguyên vẹn chiều sâu kỹ thuật từ cấp độ byte ISO 8583 đến T24 OFS XML và thuật toán Two-Pointer Merge.
@@ -173,7 +193,7 @@
 
 # HANDOVER — Cập nhật phiên 2026-11-07 09:50 (Rà soát Toàn diện & Phê duyệt Cuối cùng: 100% Sẵn sàng Nộp CV Review, Bộ 17 Video 1080p & Lộ trình 5 Cấp độ Senior Banking)
 
-> **Báo cáo bàn giao mới nhất**: Vui lòng đọc file [handover_acb_2026-11-07_0950.md](file:///D:/research-video/handover_acb_2026-11-07_0950.md) và [HANDOVER_INTERVIEW.md](file:///D:/research-video/interview/HANDOVER_INTERVIEW.md) để xem chi tiết đầy đủ về:
+> **Báo cáo bàn giao mới nhất**: Vui lòng đọc file [handover_acb_2026-11-07_0950.md](file:///D:/research-video/archive/handovers/handover_acb_2026-11-07_0950.md) và [HANDOVER_INTERVIEW.md](file:///D:/research-video/interview/HANDOVER_INTERVIEW.md) để xem chi tiết đầy đủ về:
 > - **Báo cáo kiểm định toàn diện**: [`AUDIT_REPORT_SENIOR_BANKING_CV_AND_ROADMAP.md`](file:///C:/Users/AI_Worker/.gemini/antigravity-cli/brain/9c339a7e-3c43-4d23-8376-ad64e63876f6/AUDIT_REPORT_SENIOR_BANKING_CV_AND_ROADMAP.md).
 > - **Bằng chứng thực nghiệm (EVIDENCE Ground Truth)** từ `resources/job/hub-system-graph.md`: Phân tích sâu sắc dịch vụ hạt nhân Retail Lending & Overdraft Integration Gateway (OMNI-BFF) (106 API catalog entries, 34 tuyến APIC, 17 microservices trực tiếp, 23 DB repos) bao quát 6 trụ cột tín dụng bán lẻ (Cầm cố sổ tiết kiệm Core T24 Term Deposits, Cầm cố sổ có bên thứ ba bảo lãnh, Thấu chi lương tín chấp theo lô, Vay trên hạn mức thẻ tín dụng & mở thẻ ảo, Ký số Cloud CA FPT E-Sign & Face Auth QĐ 2345, Cổng CIC B2B và Auto-Debit trích nợ từng phần Partial Debit trên Core T24).
 > - **Bảng xử lý 15 nút thắt hợp đồng (Contract Bottlenecks BN-0001 → BN-0015 100% CLOSED)**.
@@ -185,7 +205,7 @@
 
 # HANDOVER — Cập nhật phiên 2026-11-07 01:45 (Khóa ACB Tích hợp Ngân hàng: Squad Lending, Overdraft & Interbank Integration Hoàn tất)
 
-> **Báo cáo bàn giao mới nhất**: Vui lòng đọc file [handover_acb_2026-11-07_0120.md](file:///D:/research-video/handover_acb_2026-11-07_0120.md) và [HANDOVER_INTERVIEW.md](file:///D:/research-video/interview/HANDOVER_INTERVIEW.md) để xem chi tiết đầy đủ về:
+> **Báo cáo bàn giao mới nhất**: Vui lòng đọc file [handover_acb_2026-11-07_0120.md](file:///D:/research-video/archive/handovers/handover_acb_2026-11-07_0120.md) và [HANDOVER_INTERVIEW.md](file:///D:/research-video/interview/HANDOVER_INTERVIEW.md) để xem chi tiết đầy đủ về:
 > - **Bằng chứng thực nghiệm (EVIDENCE Ground Truth)** từ `resources/job/hub-system-graph.md`: Phân tích sâu sắc và toàn diện dịch vụ hạt nhân Retail Lending & Overdraft Integration Gateway (OMNI-BFF) (106 API catalog entries, 34 tuyến APIC, 17 microservices trực tiếp) bao quát 6 trụ cột tín dụng bán lẻ (Thấu chi cầm cố Core T24 Term Deposits, Cầm cố sổ có bên thứ ba bảo lãnh, Thấu chi lương tín chấp doanh nghiệp, Vay trên hạn mức thẻ tín dụng & mở thẻ ảo, Ký số Cloud CA FPT E-Sign & Face Auth QĐ 2345, Cổng CIC B2B và Auto-Debit trích nợ từng phần Partial Debit trên Core T24).
 > - **Bảng xử lý 15 nút thắt hợp đồng (Contract Bottlenecks BN-0001 → BN-0015 100% CLOSED)**.
 > - **CV chuẩn ATS**: Đúng **chính xác 2 trang A4**, DOB: 20/09/1996, Focus: *Core Lending, Overdraft & Interbank Integration*, References: Mr. Phan Anh Tuấn (Phó phòng Ứng dụng Tích Hợp OCB) & Mr. Quan Quốc Bảo (Head of Application Management - ACB). Đã đồng bộ Bộ 3 Dự án Tiêu biểu (Squad Lending Platform, NAPAS 247 Switch, AI & QĐ 2345 Gateway) khớp nối 100% không lỗ hổng kiến thức với 3 video L08, L02, L06 và bộ câu hỏi phỏng vấn thực chiến.
@@ -196,19 +216,19 @@
 
 # HANDOVER — Cập nhật phiên 2026-11-07 01:20 (Khóa ACB Tích hợp Ngân hàng: Squad Lending, CIC & 9/9 Video Hoàn tất)
 
-> **Báo cáo bàn giao mới nhất**: Vui lòng đọc file [handover_acb_2026-11-07_0050.md](file:///D:/research-video/handover_acb_2026-11-07_0050.md) và [HANDOVER_INTERVIEW.md](file:///D:/research-video/interview/HANDOVER_INTERVIEW.md) để xem chi tiết đầy đủ về bằng chứng thực nghiệm (EVIDENCE), bảng xử lý 14 nút thắt hợp đồng (Contract Bottlenecks BN-0001 → BN-0014 100% CLOSED), CV chuẩn ATS (đúng 2 trang A4, DOB: 20/09/1996, Focus: Core Lending, CIC & Interbank Integration, References: Mr. Phan Anh Tuấn (Phó phòng Ứng dụng Tích Hợp OCB) & Mr. Quan Quốc Bảo (ACB)), bộ giáo trình 9 chuyên đề chuyên sâu, 100 câu hỏi phỏng vấn thực chiến (bổ sung Câu 81, 82 về Squad Lending, CIC B2B, Auto-Debit CASA & Partial Debit), kịch bản đàm phán 3 vòng mức lương 50,000,000 VND Gross, và **trọn bộ 9 video bài giảng chuẩn phát thanh 1080p (L00–L08) đã kiểm chứng thực nghiệm 100% PASS (38.4 phút video, 0 lỗi)**.
+> **Báo cáo bàn giao mới nhất**: Vui lòng đọc file [handover_acb_2026-11-07_0050.md](file:///D:/research-video/archive/handovers/handover_acb_2026-11-07_0050.md) và [HANDOVER_INTERVIEW.md](file:///D:/research-video/interview/HANDOVER_INTERVIEW.md) để xem chi tiết đầy đủ về bằng chứng thực nghiệm (EVIDENCE), bảng xử lý 14 nút thắt hợp đồng (Contract Bottlenecks BN-0001 → BN-0014 100% CLOSED), CV chuẩn ATS (đúng 2 trang A4, DOB: 20/09/1996, Focus: Core Lending, CIC & Interbank Integration, References: Mr. Phan Anh Tuấn (Phó phòng Ứng dụng Tích Hợp OCB) & Mr. Quan Quốc Bảo (ACB)), bộ giáo trình 9 chuyên đề chuyên sâu, 100 câu hỏi phỏng vấn thực chiến (bổ sung Câu 81, 82 về Squad Lending, CIC B2B, Auto-Debit CASA & Partial Debit), kịch bản đàm phán 3 vòng mức lương 50,000,000 VND Gross, và **trọn bộ 9 video bài giảng chuẩn phát thanh 1080p (L00–L08) đã kiểm chứng thực nghiệm 100% PASS (38.4 phút video, 0 lỗi)**.
 
 ---
 
 # HANDOVER — Cập nhật phiên 2026-11-07 00:10 (Khóa ACB Tích hợp Ngân hàng)
 
-> **Báo cáo phiên trước**: Vui lòng đọc file [handover_acb_2026-11-07_0010.md](file:///D:/research-video/handover_acb_2026-11-07_0010.md) để xem chi tiết về đợt bàn giao mở rộng L04–L06.
+> **Báo cáo phiên trước**: Vui lòng đọc file [handover_acb_2026-11-07_0010.md](file:///D:/research-video/archive/handovers/handover_acb_2026-11-07_0010.md) để xem chi tiết về đợt bàn giao mở rộng L04–L06.
 
 ---
 
 # HANDOVER — Cập nhật phiên 2026-11-05 03:20
 
-> **Báo cáo phiên trước**: Vui lòng đọc file [handover_2026-11-05_0320.md](file:///D:/research-video/handover_2026-11-05_0320.md) để xem chi tiết về cột mốc lịch sử **CÁN ĐÍCH 100% TOÀN DỰ ÁN — 38 KHOÁ HỌC, 611/611 BÀI ĐÃ DỰNG THÀNH CÔNG (5,259 phút video ~87.65 giờ, 48,191 câu thoại sạch, 0 lỗi giật cụt, hoàn tất 14/14 bài khoá IRS L00–L13)**.
+> **Báo cáo phiên trước**: Vui lòng đọc file [handover_2026-11-05_0320.md](file:///D:/research-video/archive/handovers/handover_2026-11-05_0320.md) để xem chi tiết về cột mốc lịch sử **CÁN ĐÍCH 100% TOÀN DỰ ÁN — 38 KHOÁ HỌC, 611/611 BÀI ĐÃ DỰNG THÀNH CÔNG (5,259 phút video ~87.65 giờ, 48,191 câu thoại sạch, 0 lỗi giật cụt, hoàn tất 14/14 bài khoá IRS L00–L13)**.
 
 ---
 

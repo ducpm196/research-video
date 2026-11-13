@@ -1,4 +1,5 @@
 from lib import *
+from labkit import write_lab, practice_steps, practice_scene
 
 
 def build():
@@ -105,6 +106,57 @@ public class DoanToan {
         System.out.println(a > 10 && a % 2 == 0);
     }
 }""", out="3 2\n3.4\nfalse")
+
+    mat_le = prog("MatLe", """
+public class MatLe {
+    public static void main(String[] args) {
+        long soTien = 1234567;                  // mọi lệnh cùng số tiền (số minh hoạ)
+        long du = soTien * 5 % 1000;            // phần lẻ bị bỏ, tính theo phần nghìn đồng
+        System.out.println("Moi lenh mat: " + du + " phan nghin dong");
+        System.out.println("1000 lenh: " + du * 1000 / 1000 + " dong");
+        System.out.println("1000000 lenh: " + du * 1000000 / 1000 + " dong");
+        System.out.println("1 nam: " + du * 1000000 * 365 / 1000 + " dong");
+    }
+}""", out="Moi lenh mat: 835 phan nghin dong\n1000 lenh: 835 dong\n1000000 lenh: 835000 dong\n1 nam: 304775000 dong")
+    chia_hd = prog("ChiaHoaDon", """
+public class ChiaHoaDon {
+    public static void main(String[] args) {
+        long tong = 2500000;                        // hoá đơn chia đều (số minh hoạ)
+        int soNguoi = 7;
+        System.out.println("Moi nguoi: " + tong / soNguoi);
+        System.out.println("Du: " + tong % soNguoi);
+        long soTien = 987654;
+        System.out.println("Phi dung: " + soTien * 3 / 1000);          // phí 0,3%: nhân trước, chia sau
+        System.out.println("Phi chia truoc: " + soTien / 1000 * 3);    // chia trước: mất phần lẻ
+        int soNguoi2 = 0;
+        boolean chiaDuoc = soNguoi2 != 0 && tong / soNguoi2 > 100000;  // phép kiểm đứng trước
+        System.out.println("Chia duoc: " + chiaDuoc);
+    }
+}""", out="Moi nguoi: 357142\nDu: 6\nPhi dung: 2962\nPhi chia truoc: 2961\nChia duoc: false")
+    write_lab("JVA", "L02", """# Lab JVA L02 — Chia hoá đơn và tính phí
+
+Trong Git Bash, viết `ChiaHoaDon` (tệp `ChiaHoaDon.java`), số liệu là số minh hoạ. Dùng biến `long` cho tiền:
+
+1. Hoá đơn **2 500 000** đồng chia đều cho **7** người: in `Moi nguoi: …` (thương) và `Du: …` (số dư).
+2. Số tiền **987 654** đồng, phí **0,3%** (tức `* 3 / 1000`): in `Phi dung: …` (nhân trước, chia sau) và `Phi chia truoc: …` (viết `soTien / 1000 * 3`). Hai số khác nhau mấy đồng?
+3. Có `soNguoi2 = 0`. Đặt phép kiểm **trước** phép chia bằng `&&` để chương trình không báo lỗi: `chiaDuoc = soNguoi2 != 0 && tong / soNguoi2 > 100000`; in `Chia duoc: …`.
+
+Trước khi viết, thử từng phép trong `jshell`. Chạy: `javac ChiaHoaDon.java && java ChiaHoaDon`. Chấm: `bash labs/cham.sh JVA L02 ChiaHoaDon.java`.
+""", "java", chia_hd["code"], chia_hd["out"])
+    sc_lab = practice_scene(sc, "Tự làm: chia hoá đơn và tính phí", practice_steps(
+        st, "JVA", "L02",
+        """<p><b>Đề</b>: viết <code>ChiaHoaDon.java</code>, tiền dùng <code>long</code> (số minh hoạ).</p>
+<ol><li>Hoá đơn 2 500 000 đồng chia đều cho 7 người: in <code>Moi nguoi: …</code> và <code>Du: …</code></li>
+<li>Số tiền 987 654, phí 0,3%: in <code>Phi dung: …</code> (nhân trước) và <code>Phi chia truoc: …</code> (chia trước)</li>
+<li>Với số người bằng 0, đặt phép kiểm trước phép chia bằng <code>&amp;&amp;</code>: in <code>Chia duoc: …</code></li></ol>""",
+        """Bây giờ tới phần bạn tự làm trên máy. Chia một hoá đơn hai triệu rưỡi đồng đều cho bảy người, và in thương rồi số dư.
+        Sau đó tính phí không phẩy ba phần trăm của chín trăm tám mươi bảy nghìn sáu trăm năm mươi tư đồng hai cách, nhân trước và chia trước, rồi so hai kết quả.
+        Cuối cùng, với số người bằng không, đặt phép kiểm trước phép chia để chương trình không dừng vì lỗi. Hãy kiểm từng phép bằng công cụ gõ từng dòng, rồi dừng video và tự viết.""",
+        chia_hd["out"], "ChiaHoaDon.java",
+        """<div class="box key"><b>Nếu kẹt:</b> phí đúng là <code>soTien * 3 / 1000</code>; phép kiểm viết <code>soNguoi2 != 0 &amp;&amp; tong / soNguoi2 &gt; 100000</code> — vế trái sai nên vế phải không được tính.
+Lời giải nằm ở <code>labs/JVA/L02/loi_giai.java</code> — chỉ mở sau khi bạn đã thử.</div>""",
+        """Nếu kẹt, phí đúng là số tiền nhân ba rồi chia một nghìn. Phép kiểm đặt số người khác không ở vế trái của phép và, nên khi vế trái sai thì phép chia không bao giờ được tính.
+        Lời giải nằm trong thư mục thực hành của bài, chỉ mở sau khi bạn đã tự thử.""", pause=60), "JVA", "L02")
 
     sc_hook = sc("hook", "hook", "Bảy chia hai, vì sao Java trả lời là ba?", [
         st(code_block(bay, lines=(3, 4)) + out_block(bay),
@@ -214,6 +266,23 @@ $$-100\\,000 / 3 \\to \\hl{-33\\,333} \\qquad -100\\,000 - (-33\\,333) \\times 3
         st(out_block(chia_nam),
            """Chạy thật, năm dòng in ra là ba, một, ba phẩy năm, âm ba và âm một, đúng như ta đã tính."""),
     ], checks=["7 // 2 == 3", "7 % 2 == 1", "7 / 2 == 3.5", "int(-7 / 2) == -3", "math.fmod(-7, 2) == -1"])
+    sc_jsh = sc("jshell", "example", "Ví dụ: tự đoán rồi kiểm từng dòng với công cụ gõ từng dòng", [
+        st(table(["gõ vào công cụ", "bạn đoán"],
+                 [["<code>10 / 4</code>", "?"], ["<code>-10 / 4</code>", "?"], ["<code>-10 % 4</code>", "?"],
+                  ["<code>(double) 10 / 4</code>", "?"], ["<code>true || 1 / 0 &gt; 1</code>", "?"]]),
+           """Ta dùng lại công cụ gõ từng dòng để kiểm điều mình đoán. Với mỗi dòng, hãy đoán giá trị trước. Bốn dòng đầu thử chia nguyên, chia số âm, chia lấy dư số âm và ép kiểu.
+           Dòng cuối đặt một phép chia cho không sau phép hoặc, trong khi vế trái đã đúng. Hãy dừng video, đoán, rồi gõ thử.""",
+           pause=20, focus=[1, 1, ["1.2", "1.3", "1.4", "1.5"], "1.6", 1]),
+        st(table(["gõ vào công cụ", "máy in", "vì sao"],
+                 [["<code>10 / 4</code>", "<code>2</code>", "hai số nguyên: bỏ phần lẻ"],
+                  ["<code>-10 / 4</code>", "<code>-2</code>", "làm tròn về phía 0, không phải −3"],
+                  ["<code>-10 % 4</code>", "<code>-2</code>", "−10 − (−2) × 4 = −2: dư mang dấu số bị chia"],
+                  ["<code>(double) 10 / 4</code>", "<code>2.5</code>", "ép trước, chia số thực"],
+                  ["<code>true || 1 / 0 &gt; 1</code>", "<code>true</code>", "vế trái đúng nên không tính <code>1 / 0</code>"]]),
+           """Kết quả thật. Mười chia bốn ra hai, bỏ phần lẻ. Âm mười chia bốn ra âm hai, làm tròn về phía không. Âm mười chia lấy dư bốn ra âm hai, vì số dư mang dấu số bị chia.
+           Ép kiểu trước rồi chia ra hai phẩy năm. Dòng cuối ra đúng, vì vế trái đã đúng nên phép chia cho không không bao giờ được tính.""",
+           clear=True, focus=[1, "1.2", "1.3", "1.4", "1.5", "1.6"]),
+    ], checks=["10 // 4 == 2", "int(-10 / 4) == -2", "math.fmod(-10, 4) == -2", "-10 - (-2) * 4 == -2", "10 / 4 == 2.5"])
     sc_chk = sc("check", "check", "Tự kiểm bằng đường khác: ghép thương và dư phải ra lại số ban đầu", [
         st("""<p>Luật luôn đúng với số nguyên (số chia khác 0): <b>thương × số chia + dư = số ban đầu</b>.</p>"""
            + table(["số ban đầu", "thương", "dư", "ghép lại"],
@@ -224,6 +293,24 @@ $$-100\\,000 / 3 \\to \\hl{-33\\,333} \\qquad -100\\,000 - (-33\\,333) \\times 3
            """Ta cũng nhờ Java tự ghép lại, và nó in ra đúng bảy và âm bảy.
            Nếu ai đó nghĩ âm bảy chia hai ra âm bốn thì ghép lại sẽ không khớp, nghĩa là luật này bắt được hiểu sai."""),
     ], checks=["(7 // 2) * 2 + 7 % 2 == 7", "int(-7 / 2) * 2 + math.fmod(-7, 2) == -7", "(-4) * 2 + math.fmod(-7, 2) != -7"])
+    sc_scale = sc("quymo", "concept", "Khi số lệnh tăng, phần lẻ bị bỏ thành tiền thật", [
+        st(code_block(mat_le, lines=(3, 8)),
+           """Phí chính xác của một lệnh ở ví dụ trước có phần lẻ tám trăm ba mươi lăm phần nghìn đồng, và cách nhân trước chia sau bỏ phần lẻ ấy.
+           Giả sử mọi lệnh cùng số tiền, số minh hoạ, ta tính khoản bị bỏ khi số lệnh tăng dần."""),
+        st(table(["số lệnh", "khoản bị bỏ (đồng)", "nhìn từ bên ngoài"],
+                 [["1", "0,835", "không ai để ý"], ["1 000", "835", "một khoản nhỏ"],
+                  ["1 000 000 (một ngày)", "835 000", "đã thấy trong đối soát"],
+                  ["1 000 000 × 365 ngày", "304 775 000", "gần 305 triệu đồng một năm"]])
+           + out_block(mat_le),
+           """Một lệnh mất chưa tới một đồng, không ai để ý. Một nghìn lệnh mất tám trăm ba mươi lăm đồng. Một triệu lệnh mỗi ngày mất tám trăm ba mươi lăm nghìn đồng.
+           Nhân ba trăm sáu mươi lăm ngày, gần ba trăm lẻ năm triệu đồng một năm.""",
+           clear=True, focus=["1.2", "1.3", "1.4", "1.5"]),
+        st("""<div class="box key"><b>Điều người làm nghề rút ra.</b> Với số dương, phần lẻ bị bỏ luôn là <b>mất</b>, lệch về một phía nên nhiều lệnh không tự bù trừ.
+Hai hệ thống làm tròn khác nhau sẽ báo chênh lệch khi đối soát. Vì vậy: ghi <b>quy tắc làm tròn</b> rõ ràng, dùng kiểu số thập phân chính xác hoặc đơn vị nhỏ hơn đồng khi cần, và kiểm tổng.</div>""",
+           """Với số dương, phần lẻ bị bỏ luôn là mất, lệch về một phía nên nhiều lệnh không tự bù trừ. Hai hệ thống làm tròn khác nhau sẽ báo chênh lệch khi đối soát.
+           Vì vậy người làm nghề ghi rõ quy tắc làm tròn, dùng kiểu số thập phân chính xác hoặc đơn vị nhỏ hơn đồng khi cần, và kiểm tổng.""", clear=True),
+    ], checks=["1234567 * 5 % 1000 == 835", "835 * 1000 // 1000 == 835", "835 * 1000000 // 1000 == 835000",
+               "835 * 1000000 * 365 // 1000 == 304775000", "835 / 1000 == 0.835"])
     sc_pit = sc("pitfalls", "pitfall", "Lỗi hay gặp, có lỗi của người đã đi làm", [
         st('<div class="box warn"><b>Lỗi 1 (người mới).</b> Đặt phép chia ở vế trái, phép kiểm ở vế phải.</div>'
            + code_block(nguoc, lines=(5, 5)) + out_block(nguoc),
@@ -276,5 +363,9 @@ và phần lẻ bị bỏ đi thì <b>ai chịu</b>. Với tiền: nhân trướ
                   ["Tính đúng phép chia nguyên và chia lấy dư, kể cả với số âm",
                    "Ép kiểu đúng chỗ để giữ phần lẻ, và biết thứ tự tính của biểu thức",
                    "Dùng phép so sánh và phép logic, đặt phép kiểm trước nhờ ngắn mạch",
-                   "Tính phí phần trăm bằng số nguyên theo thứ tự nhân trước, chia sau"],
-                  [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_chk, sc_pit, sc_quiz, sc_rec])
+                   "Tính phí phần trăm bằng số nguyên theo thứ tự nhân trước, chia sau",
+                   "Chạy từng dòng bằng công cụ gõ từng dòng để kiểm điều mình đoán về chia, dư và ngắn mạch",
+                   "Dự đoán khoản tiền bị bỏ khi phần lẻ của mỗi lệnh nhân với số lệnh mỗi ngày và mỗi năm",
+                   "Viết chương trình chia hoá đơn, tính phí theo hai thứ tự và đặt phép kiểm trước phép chia"],
+                  [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_jsh, sc_chk, sc_scale, sc_pit, sc_quiz, sc_lab, sc_rec],
+                  covers=[(1, "example"), (2, "example"), (3, "intuition"), (4, "practice"), (5, "jshell"), (6, "quymo"), (7, "practice")])

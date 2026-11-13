@@ -44,7 +44,7 @@ FIX = {
 HEAD = """# Giáo án Khoá JVA · Lập trình Java từ con số 0 (13 bài, 2026-11-08)
 # Căn cứ phạm vi: rà soát 2026-11-08 (interview/HANDOVER_INTERVIEW.md Mục 10) — thư viện không có khoá lập trình nhập môn; người học mất gốc
 #   vào thẳng BNK L00 (bộ nhớ Java) sẽ hụt. Khoá này dạy lập trình Java từ đầu và đứng trước BNK.
-# Bộ kiểm độc lập: audit/jva/verify_jva.py biên dịch và chạy THẬT (javac/java, JDK 22 trên máy) mọi chương trình trong bài, so từng dòng in ra.
+# Bộ kiểm độc lập: audit/jva/verify_jva.py biên dịch và chạy THẬT (javac/java, JDK 21.0.13 trên máy) mọi chương trình trong bài, so từng dòng in ra.
 # Nguồn: The Java Language Specification (Java SE 21), Javadoc Java SE 21, dev.java/learn; mục cụ thể ghi trong `source` của từng bài.
 course: JVA
 profile: stem
@@ -62,6 +62,7 @@ def main():
         lid = sp["id"]
         title = re.sub(r"^Bài \d+ — ", "", sp["title"])
         block = {"id": lid, "title": title, "spec": f"lessons/jva/{f.name}", "requires": [prev] if prev else [],
+                 **({"requires_ext": ["FND:L10"]} if lid == "L00" else {}),
                  "objectives": sp["objectives"], "example": f"{EX[lid]} (VER JVA:{lid})", "fix": [FIX[lid]]}
         out.append(yaml.dump([block], allow_unicode=True, sort_keys=False, width=1000).rstrip("\n"))
         prev = lid

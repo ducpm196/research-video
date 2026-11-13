@@ -1,4 +1,5 @@
 from lib import *
+from labkit import write_lab, practice_steps, practice_scene
 
 
 def build():
@@ -128,6 +129,87 @@ public class BoQua {
     }
 }""", out="tong = 19")
 
+    tiet_kiem = prog("TietKiem", """
+public class TietKiem {
+    public static void main(String[] args) {
+        long soDu = 50000000;                       // gửi 50 triệu đồng (số minh hoạ)
+        int thangVuot = 0;                          // 0 nghĩa là chưa tháng nào vượt
+        for (int thang = 1; thang <= 6; thang++) {
+            long lai = soDu * 6 / 1000;             // 0,6% mỗi tháng
+            soDu += lai;
+            System.out.println("Thang " + thang + ": lai " + lai + ", so du " + soDu);
+            if (thangVuot == 0 && soDu > 51000000) {
+                thangVuot = thang;                  // chỉ ghi nhận lần đầu
+            }
+        }
+        System.out.println("Thang dau tien vuot 51 trieu: " + thangVuot);
+    }
+}""", out="Thang 1: lai 300000, so du 50300000\nThang 2: lai 301800, so du 50601800\nThang 3: lai 303610, so du 50905410\n"
+          "Thang 4: lai 305432, so du 51210842\nThang 5: lai 307265, so du 51518107\nThang 6: lai 309108, so du 51827215\n"
+          "Thang dau tien vuot 51 trieu: 4")
+    tong_args = prog("TongArgs", """
+public class TongArgs {
+    public static void main(String[] args) {
+        long tong = 0;
+        for (int i = 0; i < args.length; i++) {     // đi qua từng chữ gõ thêm
+            tong += Long.parseLong(args[i]);
+        }
+        System.out.println(args.length + " lenh, tong " + tong);
+    }
+}""", out="0 lenh, tong 0")
+    tong_nhap = prog("TongNhap", """
+import java.util.Scanner;
+public class TongNhap {
+    public static void main(String[] args) {
+        Scanner in = new Scanner(System.in);
+        long tong = 0;
+        int dem = 0;
+        while (in.hasNextLong()) {                  // còn số để đọc thì lặp
+            long soTien = in.nextLong();
+            tong += soTien;
+            dem++;
+        }
+        System.out.println(dem + " lenh, tong " + tong);
+    }
+}""", out="4 lenh, tong 5000000", stdin="1200000 800000 500000 2500000")
+    lai_dai = prog("LaiDai", """
+public class LaiDai {
+    public static void main(String[] args) {
+        long soDu = 100000000;                          // 100 triệu đồng (số minh hoạ)
+        for (int thang = 1; thang <= 360; thang++) {    // 30 năm
+            soDu += soDu * 5 / 1000;                    // 0,5% mỗi tháng, bỏ phần lẻ
+            if (thang == 12 || thang == 120 || thang == 360) {
+                long ct = (long) (100000000 * Math.pow(1.005, thang));   // công thức
+                System.out.println(thang + ": " + soDu + ", ct " + ct + ", lech " + (ct - soDu));
+            }
+        }
+    }
+}""", out="12: 106167776, ct 106167781, lech 5\n120: 181939592, ct 181939673, lech 81\n360: 602257012, ct 602257521, lech 509")
+    write_lab("JVA", "L04", """# Lab JVA L04 — Tiết kiệm sáu tháng
+
+Gửi **50 000 000 đồng**, lãi **0,6% mỗi tháng** (số minh hoạ), lãi nhập vào gốc mỗi tháng. Tính bằng số nguyên theo đồng: `lai = soDu * 6 / 1000`.
+
+Viết chương trình `TietKiem` (tệp `TietKiem.java`):
+1. Dùng một vòng lặp đếm chạy 6 tháng. Mỗi tháng in một dòng đúng dạng `Thang 1: lai 300000, so du 50300000`.
+2. Sau vòng lặp in một dòng `Thang dau tien vuot 51 trieu: <số tháng>`. Gợi ý: một biến nhớ tháng đầu tiên số dư vượt 51 000 000, chỉ gán khi biến còn bằng 0.
+
+Chạy: `javac TietKiem.java && java TietKiem`. Chấm: `bash labs/cham.sh JVA L04 TietKiem.java`.
+""", "java", tiet_kiem["code"], tiet_kiem["out"])
+    sc_lab = practice_scene(sc, "Tự làm: tiết kiệm sáu tháng", practice_steps(
+        st, "JVA", "L04",
+        """<p><b>Đề</b>: gửi 50 000 000 đồng, lãi 0,6% mỗi tháng, lãi nhập vào gốc.</p>
+<ol><li>Vòng lặp đếm chạy <b>6 tháng</b>; mỗi tháng in <code>Thang 1: lai 300000, so du 50300000</code></li>
+<li>Sau vòng lặp in <code>Thang dau tien vuot 51 trieu: …</code></li></ol>
+<p class="note">Lãi tính bằng số nguyên: <code>soDu * 6 / 1000</code>. Tệp tên <code>TietKiem.java</code>.</p>""",
+        """Bây giờ tới phần bạn tự làm trên máy. Gửi năm mươi triệu đồng, lãi không phẩy sáu phần trăm mỗi tháng, lãi nhập vào gốc.
+        Viết chương trình dùng vòng lặp đếm sáu tháng, mỗi tháng in lãi và số dư. Sau vòng lặp in ra tháng đầu tiên số dư vượt năm mươi mốt triệu.
+        Lãi tính bằng số nguyên, nhân sáu rồi chia một nghìn. Hãy dừng video, mở trình soạn mã và tự viết, đừng chép lại ví dụ.""",
+        tiet_kiem["out"], "TietKiem.java",
+        """<div class="box key"><b>Nếu kẹt:</b> dùng biến <code>thangVuot</code> bắt đầu bằng 0; trong vòng lặp, nếu nó còn bằng 0 <b>và</b> số dư đã vượt 51 triệu thì gán nó bằng số tháng hiện tại.
+Lời giải đầy đủ nằm ở <code>labs/JVA/L04/loi_giai.java</code> — chỉ mở sau khi bạn đã thử.</div>""",
+        """Nếu kẹt, dùng một biến nhớ tháng đầu tiên vượt, bắt đầu bằng không. Trong vòng lặp, khi biến này còn bằng không và số dư đã vượt năm mươi mốt triệu, gán nó bằng số tháng hiện tại.
+        Lời giải đầy đủ nằm trong thư mục thực hành của bài, chỉ mở sau khi bạn đã tự thử.""", pause=90), "JVA", "L04")
+
     sc_hook = sc("hook", "hook", "Mười hai tháng lãi, phải viết mười hai lần?", [
         st(code_block(lai_tay, lines=(3, 7), title="Tính lãi ba tháng bằng tay") + out_block(lai_tay),
            """Muốn tính lãi cộng dồn ba tháng, ta viết ba dòng giống hệt nhau. Mười hai tháng thì mười hai dòng.
@@ -233,6 +315,27 @@ $$11 - 1 + 1 = \\hl{11} \\text{ lần, thiếu một tháng}$$""",
            """Chạy thật, sáu dòng in ra khớp với từng phép tính tay, kể cả tháng ba đã bỏ nửa đồng.""", clear=True),
     ], checks=["100000000 * 5 // 1000 == 500000", "100500000 * 5 // 1000 == 502500", "101002500 * 5 // 1000 == 505012",
                "11 - 4 + 1 == 8", "105639579 * 5 // 1000 == 528197", "105639579 + 528197 == 106167776"])
+    sc_nhap = sc("nhap", "example", "Ví dụ: lặp qua dữ liệu do người dùng đưa vào", [
+        st(code_block(tong_args, lines=(3, 6)),
+           """Ở bài đầu ta thấy danh sách chữ gõ thêm sau tên lớp. Giờ vòng lặp đếm cho ta đi qua từng chữ trong danh sách đó.
+           Biến đếm chạy từ không, và điều kiện là nhỏ hơn hẳn độ dài danh sách, nên số vòng đúng bằng độ dài, hợp với công thức cuối trừ đầu cộng một.
+           Mỗi vòng lấy chữ ở vị trí i, đổi thành số nguyên dài rồi cộng dồn.""",
+           focus=[1, "1.2", "1.2", "1.3"]),
+        st('<div class="code"><div>javac TongArgs.java</div><div>java TongArgs 7000000 4000000 9000000</div><div>java TongArgs 1500000 2500000</div><div>java TongArgs</div></div>'
+           '<p><b>Kết quả chạy</b></p><div class="code"><div>3 lenh, tong 20000000</div><div>2 lenh, tong 4000000</div><div>0 lenh, tong 0</div></div>',
+           """Biên dịch một lần rồi chạy ba lần. Ba chữ gõ thêm cho ba lệnh, tổng hai mươi triệu. Hai chữ cho hai lệnh, tổng bốn triệu.
+           Không chữ nào thì vòng lặp chạy không lần nào và tổng bằng không, vì điều kiện sai ngay từ đầu.""",
+           clear=True, focus=[1, ["1.2", "3.1"], ["1.3", "3.2"], ["1.4", "3.3"]]),
+        st(code_block(tong_nhap, lines=(4, 12)),
+           """Cách thứ hai là đọc từ đầu vào cho tới hết. Lệnh hỏi còn số nào kế tiếp để đọc không cho đúng hoặc sai, nên ta đặt nó làm điều kiện của vòng lặp trong khi.
+           Còn số thì đọc, cộng dồn và đếm. Hết số thì điều kiện sai và vòng lặp tự dừng, nên ta không cần biết trước có bao nhiêu số.""",
+           clear=True, focus=["1.4", "1.4", ["1.5", "1.6", "1.7"], "1.4"]),
+        st('<div class="code"><div>javac TongNhap.java</div><div>echo "1200000 800000 500000 2500000" | java TongNhap</div></div>'
+           '<p><b>Kết quả chạy</b></p><div class="code"><div>4 lenh, tong 5000000</div></div>',
+           """Ta đưa bốn số vào bằng ống, như ở bài rẽ nhánh. Vòng lặp chạy đúng bốn lần rồi dừng khi hết số, in bốn lệnh và tổng năm triệu.""",
+           clear=True),
+    ], checks=["3 == len(['7000000', '4000000', '9000000'])", "7000000 + 4000000 + 9000000 == 20000000",
+               "1500000 + 2500000 == 4000000", "1200000 + 800000 + 500000 + 2500000 == 5000000", "len(range(0, 3)) == 3 - 0 + 1 - 1"])
     sc_chk = sc("check", "check", "Tự kiểm bằng đường khác: công thức lãi kép", [
         st("""<p>Không làm tròn thì mỗi tháng số dư nhân với $1.005$, nên 12 tháng là nhân 12 lần:</p>
 $$100\\,000\\,000 \\times 1.005^{12} \\approx 106\\,167\\,781.19$$""" + code_block(kiem_lai, lines=(3, 4))
@@ -247,6 +350,25 @@ $$100\\,000\\,000 \\times 1.005^{12} \\approx 106\\,167\\,781.19$$""" + code_blo
     ], checks=["abs(100000000 * 1.005**12 - 106167781.19) < 0.01",
                "__import__('functools').reduce(lambda s, _: s + s * 5 // 1000, range(12), 100000000) == 106167776",
                "int(100000000 * 1.005**12) - 106167776 == 5", "(1.005**12 - 1) / 0.005 < 13"])
+    sc_scale = sc("quymo", "concept", "Khi vòng lặp chạy qua nhiều kỳ, phần lẻ bị bỏ cộng dồn", [
+        st(code_block(lai_dai, lines=(3, 10)),
+           """Ta cho vòng lặp chạy ba trăm sáu mươi tháng, tức ba mươi năm, với cách bỏ phần lẻ từng tháng như ở ví dụ. Rồi so với công thức lãi kép ở ba mốc, mười hai tháng, một trăm hai mươi tháng và ba trăm sáu mươi tháng."""),
+        st(out_block(lai_dai),
+           """Chạy thật, chương trình in ba dòng, mỗi dòng gồm số dư bỏ phần lẻ, số theo công thức, và độ lệch.""", clear=True),
+        st(table(["tháng", "số dư (bỏ phần lẻ)", "công thức", "lệch (đồng)"],
+                 [["12", "106 167 776", "106 167 781", "5"], ["120", "181 939 592", "181 939 673", "81"],
+                  ["360", "602 257 012", "602 257 521", "509"]]),
+           """Sau mười hai tháng, lệch năm đồng. Thời gian gấp mười lần mà lệch lên tám mươi mốt đồng, gấp hơn mười sáu lần.
+           Sau ba mươi năm lệch năm trăm lẻ chín đồng, gấp hơn một trăm lần mốc đầu.""",
+           clear=True, focus=["1.2", "1.3", "1.4"]),
+        st("""<div class="box key"><b>Điều người làm nghề rút ra.</b> Phần lẻ bỏ đi mỗi vòng không triệt tiêu mà <b>cộng dồn</b>, lại còn mất cả lãi sinh ra từ phần đó, nên độ lệch tăng nhanh hơn thời gian.
+Với tiền thật: quyết định cách làm tròn từng kỳ, ghi vào hợp đồng, và đối chiếu với công thức ở các mốc quan trọng.</div>""",
+           """Phần lẻ bỏ đi mỗi vòng không triệt tiêu mà cộng dồn, lại còn mất cả lãi sinh ra từ phần đó, nên độ lệch tăng nhanh hơn thời gian.
+           Với tiền thật, người làm nghề quyết định cách làm tròn từng kỳ, ghi vào hợp đồng, và đối chiếu với công thức ở các mốc quan trọng.""", clear=True),
+    ], checks=["__import__('functools').reduce(lambda s, _: s + s * 5 // 1000, range(120), 100000000) == 181939592",
+               "__import__('functools').reduce(lambda s, _: s + s * 5 // 1000, range(360), 100000000) == 602257012",
+               "int(100000000 * 1.005**120) == 181939673", "int(100000000 * 1.005**360) == 602257521",
+               "181939673 - 181939592 == 81", "602257521 - 602257012 == 509", "81 / 5 > 16", "509 / 5 > 100", "360 / 12 == 30"])
     sc_pit = sc("pitfalls", "pitfall", "Lỗi hay gặp, có lỗi của người đã đi làm", [
         st('<div class="box warn"><b>Lỗi 1 (người mới).</b> Lệch một: <code>&lt;</code> thay cho <code>&lt;=</code>.</div>'
            + code_block(dem_thang, lines=(3, 11)) + out_block(dem_thang),
@@ -293,5 +415,8 @@ và biến cộng dồn có phải số nguyên tính theo đồng không.</div>
                   ["Viết vòng lặp trong khi, vòng lặp đếm, vòng lặp làm rồi mới kiểm, và chọn đúng loại",
                    "Đếm trước số lần chạy bằng cuối trừ đầu cộng một, tránh lỗi lệch một",
                    "Dùng hai mẫu cộng dồn và đếm, cùng lệnh thoát và lệnh bỏ qua",
-                   "Tính lãi cộng dồn bằng số nguyên theo đồng và kiểm lại bằng công thức lãi kép"],
-                  [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_chk, sc_pit, sc_quiz, sc_rec])
+                   "Tính lãi cộng dồn bằng số nguyên theo đồng và kiểm lại bằng công thức lãi kép",
+                   "Chạy chương trình lặp qua dữ liệu người dùng đưa vào, từ chữ gõ thêm và từ đầu vào, tới hết dữ liệu",
+                   "Dự đoán độ lệch khi phần lẻ bị bỏ cộng dồn qua mười hai, một trăm hai mươi và ba trăm sáu mươi tháng"],
+                  [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_nhap, sc_chk, sc_scale, sc_pit, sc_quiz, sc_lab, sc_rec],
+                  covers=[(1, "practice"), (2, "example"), (3, "quiz"), (4, "check"), (5, "nhap"), (6, "quymo")])
