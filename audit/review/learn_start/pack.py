@@ -59,12 +59,12 @@ def load_cur():
 # ───────────────────────── các chặng ─────────────────────────
 # (khoá, tên, cấp độ trong MASTER_INDEX / ROADMAP, mục tiêu, lời giới thiệu). Khoá chưa có giáo án (vd BNX trước khi lập) tự bỏ qua.
 STAGES = [
-    ("S01", "Chặng 1 · Nền thực hành và lập trình Java từ con số 0", "MASTER cấp 0A (bắt buộc với người chưa từng lập trình)", ["FND", "JVA", "JV2"],
+    ("S01", "Chặng 1 · Nền thực hành, Java và Python từ con số 0", "MASTER cấp 0A (bắt buộc với người chưa từng lập trình)", ["FND", "JVA", "JV2", "PYT"],
      "Dòng lệnh, tệp, dữ liệu, HTTP, SQL và Git để có chỗ đứng thực hành; rồi Java từ chương trình đầu tiên tới dự án nhiều tệp: biến, rẽ nhánh, vòng lặp, mảng, hàm, lớp, chuỗi, danh sách, ngoại lệ, giao diện, luồng, kiểm thử; kết thúc bằng sổ chuyển khoản nhỏ."),
     ("S02", "Chặng 2 · Nền tảng backend ngân hàng", "MASTER cấp 1A (bắt buộc, học trước INT/ACB)", ["BNK"],
      "Bộ nhớ và luồng của Java, Spring Boot, REST và khoá lũy đẳng, SQL và PL/SQL, Redis, Kafka, SAGA, sổ cái bút toán kép, T24, ISO 8583, đối soát, PIN/HSM."),
     ("S03", "Chặng 3 · Kỹ năng backend theo JD và CV", "Mở rộng cấp 1A — lấp khoảng trống JD và CV (MASTER Mục 8)", ["BNX"],
-     "Những chủ đề JD và CV nêu mà kho chưa có bài: Git, OpenAPI, gRPC, JWT và OAuth, mTLS, thủ tục lưu trữ Oracle và SQL Server, Oracle cho khối lượng lớn, Elasticsearch, Couchbase, Kafka nâng cao và RabbitMQ, thanh toán quốc tế và ngoại tệ, ví điện tử và thuế điện tử, triển khai, DDD và Open API; rồi các bài theo CV: đa luồng Java nâng cao, Spring Security và Spring Cloud, JUnit 5 và Mockito, Redis nâng cao, Go, hệ thống cho vay số, Adobe Experience Manager, scikit-learn và ONNX Runtime."),
+     "Những chủ đề JD và CV nêu mà kho chưa có bài: Git, OpenAPI, gRPC, JWT và OAuth, mTLS, thủ tục lưu trữ Oracle và SQL Server, Oracle cho khối lượng lớn, Elasticsearch, Couchbase, Kafka nâng cao và RabbitMQ, thanh toán quốc tế và ngoại tệ, ví điện tử và thuế điện tử, triển khai, DDD và Open API; rồi các bài theo CV: đa luồng Java nâng cao, Spring Security và Spring Cloud, JUnit 5 và Mockito, Redis nâng cao, Go, hệ thống cho vay số, Adobe Experience Manager, scikit-learn và ONNX Runtime; rồi các bài theo JD mới: JPA/Hibernate và Spring Data, giao dịch Spring và AOP, Maven/Gradle/Jenkins, SOAP và SFTP, so sánh cơ sở dữ liệu, CQRS và Event Sourcing, chịu lỗi và cổng API, quan sát hệ thống (ELK, Prometheus, Grafana), GitOps và bí mật, hệ cũ Servlet/JSP/Tomcat, phê duyệt tín dụng, vận hành SLA/OLA và tài liệu thiết kế, phỏng vấn thiết kế hệ thống."),
     ("S04", "Chặng 4 · Ôn phỏng vấn và tích hợp ngân hàng", "MASTER cấp 3–4 (INT, ACB)", ["INT", "ACB"],
      "Ôn tập theo bộ 100 câu hỏi, đàm phán lương, rồi các tình huống tích hợp T24, NAPAS, ksqlDB, chi lương, sinh trắc học, đối soát ba bên, tín dụng."),
     ("S05", "Chặng 5 · Toán rời rạc, thuật toán, toán cho học máy", "MASTER cấp 0 · ROADMAP T0–T1", ["DMS", "CS112", "CS115:L00-L21", "CS115:L44"],
@@ -90,9 +90,9 @@ JD_MAP = [
     ("Thiết kế REST API, đặc tả bằng Swagger/OpenAPI", "bắt buộc", ["BNK:L03", "WEB:L06", "SDP:L14", "BNX:L01"]),
     ("gRPC", "kiến thức backend", ["BNX:L02"]),
     ("Giải thuật, tối ưu mã và hệ thống", "bắt buộc", ["CS112:L00-L07", "CS112:L12", "CS112:L18", "CS112:L23", "CS112:L24"]),
-    ("Stored Procedure Oracle và MS SQL", "bắt buộc ≥ 3 năm", ["BNK:L05", "BNX:L06"]),
-    ("Oracle: SQL, chỉ mục, kế hoạch thực thi, khoá, bế tắc", "lợi thế lớn", ["BNK:L04", "BNK:L05", "DBS:L08", "DBS:L10", "DBS:L13", "DBS:L15"]),
-    ("Tính năng Oracle mới: Sharding, Queue, In-Memory, JSON", "mô tả công việc", ["BNX:L07"]),
+    ("Stored Procedure Oracle và MS SQL", "bắt buộc ≥ 3 năm", ["BNK:L05", "BNX:L06", "BNX:L37"]),
+    ("Oracle: SQL, chỉ mục, kế hoạch thực thi, khoá, bế tắc", "lợi thế lớn", ["BNK:L04", "BNK:L05", "BNX:L06", "BNX:L07", "DBS:L08", "DBS:L10", "DBS:L13", "DBS:L15"]),
+    ("Tính năng Oracle mới: Sharding, Queue, In-Memory, JSON", "mô tả công việc", ["BNX:L07", "BNX:L38"]),
     ("PostgreSQL, Couchbase, Elasticsearch", "kiến thức backend", ["DBS:L16", "DEN:L03", "DEN:L07", "BNX:L08", "BNX:L09"]),
     ("Queue: Kafka, RabbitMQ, ActiveMQ", "kiến thức backend", ["BNK:L07", "DSY:L14", "EVT:L00-L03", "DEN:L08", "BNX:L10"]),
     ("Cache Redis", "kiến thức backend", ["BNK:L06", "SAR:L04"]),
@@ -118,6 +118,20 @@ JD_MAP = [
     ("CV — Adobe Experience Manager: OSGi, Sling Models, HTL, JCR", "hồ sơ CV", ["BNX:L22"]),
     ("CV — Scikit-Learn, ONNX Runtime, Isolation Forest (dự án học tập)", "hồ sơ CV", ["BNX:L23", "INT:L05", "CS115:L37"]),
     ("CV — CQRS, DLQ, Kafka, saga, outbox (tích hợp ngân hàng)", "hồ sơ CV", ["EVT:L02", "EVT:L04", "EVT:L05", "BNX:L10", "CLD:L14"]),
+    # Đối chiếu JD mới (phần cuối resources/job/JD.md, cập nhật 2026-11-13): mỗi nhóm yêu cầu có bài dạy (BNX L24–L36).
+    ("JD mới — JPA/Hibernate, Spring Data, tối ưu truy vấn qua ORM", "mô tả công việc", ["BNX:L24"]),
+    ("JD mới — Spring: quản lý giao dịch, AOP chuyên sâu", "mô tả công việc", ["BNK:L02", "BNX:L25"]),
+    ("JD mới — Maven, Gradle, Jenkins", "mô tả công việc", ["BNX:L26"]),
+    ("JD mới — REST/SOAP, SFTP (tích hợp hệ cũ, tệp lô)", "mô tả công việc", ["BNX:L01", "BNX:L27"]),
+    ("JD mới — MongoDB, MySQL, PostgreSQL bên cạnh Oracle và SQL Server", "mô tả công việc", ["BNX:L28", "BNX:L06", "BNX:L07", "BNX:L37"]),
+    ("JD mới — CQRS, Event Sourcing", "mô tả công việc", ["EVT:L02", "BNX:L29"]),
+    ("JD mới — Circuit Breaker, API Gateway, cân bằng tải", "mô tả công việc", ["BNX:L30", "BNX:L14", "CLD:L04"]),
+    ("JD mới — ELK, Prometheus, Grafana (nhật ký, giám sát)", "mô tả công việc", ["BNX:L31", "CLD:L11", "DVO:L11"]),
+    ("JD mới — GitOps (Git, ArgoCD, Vault), AWS cho backend", "mô tả công việc", ["BNX:L32"]),
+    ("JD mới — nhóm hệ cũ: JSP/Servlet, Tomcat, JBoss", "mô tả công việc", ["BNX:L33"]),
+    ("JD mới — hệ thống phê duyệt tín dụng cá nhân và doanh nghiệp, truy vấn lịch sử tín dụng", "mô tả công việc", ["BNX:L34", "BNX:L21", "ACB:L08"]),
+    ("JD mới — hỗ trợ mức 3 theo SLA/OLA, ticket Production, tài liệu thiết kế, kịch bản kiểm thử", "mô tả công việc", ["BNX:L35"]),
+    ("JD mới — vòng phỏng vấn thiết kế hệ thống, đọc tài liệu kỹ thuật tiếng Anh", "chuẩn bị phỏng vấn", ["BNX:L36", "BNK:L14", "SAR:L12"]),
 ]
 
 

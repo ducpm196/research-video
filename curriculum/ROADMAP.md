@@ -32,7 +32,7 @@ Sáu nguyên tắc không đổi:
    - một tên chuỗi, một giọng cho mỗi khoá (`check_meta.py`);
    - bản đồ khoá ở bài 0 liệt kê đủ mọi bài (lint E37).
 
-## 2. Kiến trúc chương trình: 8 tầng + tầng nền thực hành (T−1), 45 khoá, 701 bài (đếm từ `curriculum/*.yaml` lúc 2026-11-13; số tầng T0–T7 dưới đây là số lúc 2026-10-31, số khoá/bài hiện tại ở `STATUS.md`)
+## 2. Kiến trúc chương trình: 8 tầng + tầng nền thực hành (T−1), 45 khoá, 701 bài (đếm từ `curriculum/*.yaml` lúc 2026-11-13; số bài từng tầng trong bảng dưới là số lúc 2026-10-31, số hiện tại ở `STATUS.md`)
 
 **T−1 · Nền thực hành và lập trình (thêm đợt AF2, 2026-11-13)**: **FND** Nền thực hành: dòng lệnh, tệp, dữ liệu, HTTP, SQL, Git (11) · **JVA** Java từ con số 0 (13) · **JV2** Java trung cấp: dự án nhiều tệp, dữ liệu, hàm, luồng, kiểm thử (10) — đứng TRƯỚC mọi khoá khác trong dãy học; mọi bài có cảnh **Tự làm** (lab chạy được: `labs/`). Vì sao: mẫu F đo thấy người mất gốc hụt nền từ BNK L02 và kẹt khi thực hành ở BNX L00 (`audit/review/sample_f/REPORT.md` mục 4).
 
@@ -59,38 +59,16 @@ Sáu nguyên tắc không đổi:
 
 Mã khoá đồ hoạ là **GFX** chứ không phải GIT (tên lĩnh vực trong CS2023), để người học không lẫn với công cụ Git của DVO.
 
-## 3. Hiện trạng (OBSERVED — tóm tắt lúc 2026-10-31T01:25Z; chi tiết từng khoá ở [`STATUS.md`](STATUS.md))
+## 3. Hiện trạng (số sinh tự động ở [`STATUS.md`](STATUS.md); phần này chỉ ghi điều STATUS không nói)
 
-| Tầng | Bài | Có đặc tả | Hoàn thiện | Phút hoàn thiện | Khoá đã hoàn thiện trọn |
-|---|---|---|---|---|---|
-| T0 · Toán nền | 82 | 82 | 82 | 571 | DMS, CS115, RBM |
-| T1 · KHMT lõi | 115 | 102 | 102 | 556 | CS112, TOC, PLC, CSA, OSY, NET |
-| T2 · Kỹ nghệ phần mềm | 83 | 71 | 71 | 268 | SWF, SDP, DVO, SAR, WEB |
-| T3 · Dữ liệu | 97 | 84 | 84 | 342 | DBS, DAN, DSC, DSY, DEN, EVT |
-| T4 · Trí tuệ nhân tạo | 79 | 54 | 54 | 228 | AIF, LLM, AGT, MLO |
-| T5 · Hạ tầng và an toàn | 55 | 55 | 55 | 226 | CLD, CLC, SEC, BCH |
-| T6 · Hệ vật lý và đồ hoạ | 41 | 28 | 28 | 121 | ESY, ROB |
-| T7 · Nghề nghiệp và tình huống | 23 | 0 | 0 | 0 | — |
-| **Tổng** | **575** | **476** | **476** | **2312** | |
-
-Số phút mỗi tầng được làm tròn riêng, nên cộng các tầng có thể lệch tổng 1–2 phút; tổng lấy từ STATUS.md.
-
-- **“Hoàn thiện”** nghĩa là đủ năm điều:
-  - đã dựng;
-  - lint 0 FAIL, 0 WARN theo bộ luật hiện hành;
-  - video khớp dấu băm của đặc tả và lời đọc hiện tại;
-  - đúng một giọng;
-  - máy nghe không còn câu nào chưa xem xét.
-- **Mọi bài đã có đặc tả đều hoàn thiện** (476/476, 30 khoá). 99 bài còn lại thuộc 8 khoá chốt ngày 2026-10-30, mới ở mức giáo án, chưa có đặc tả: PAR 13, HCI 12, IRS 13, RLN và CVI 25, GFX 13, SEP và CAS 23 (xem §8.1).
-- **Hoàn thiện ≠ đủ sâu cho người mất gốc.** Rà sư phạm 2026-10-31 (`audit/review/PEDAGOGY_REVIEW.md`, `pedagogy_scan.py`): theo chuẩn
-  độ sâu E39, toàn kho có 6 bài ĐỦ, 30 GẦN, 440 MỎNG; 19 khoá dựng đợt 2026-10-28…30 là bản nén (khoảng 4,5 phút, 1 step số, 0 hình).
-  Kế hoạch nâng độ sâu ở §8.1 mục 2. Bài mẫu đạt chuẩn: LLM L05 (viết lại), CLD L15 (bài hành trình).
-- **Kiểm cuối (2026-10-31T01:25Z):** `audit_all` 476 bài, 0 vấn đề; `tts_speed_scan` 22 338 câu, 0 câu nghi cụt; `tests/test_lint.py` 0 FAIL; mọi bài đúng một giọng (vi-VN-NamMinhNeural), chưa bài nào phải dùng giọng dự phòng.
-- **Tốc độ dựng** (từ 2026-10-30, `audit/review/production_log.tsv`): trung vị khoảng 2–3 phút mỗi bài mới — máy nghe chạy GPU, edge-tts tự đọc lại câu hỏng trước khi báo chặn. Trước đó 10,7 phút (bình thường) đến 26 phút (edge-tts bị chặn).
-- **Bộ kiểm của toàn bộ giáo án:**
-  - `verify_plan_curricula.py`: 439/439 PASS;
-  - `check_curricula_graph.py`: 38 lộ trình, 575 bài, không tham chiếu hỏng, không chu trình;
-  - `tests/test_lint.py`: 0 FAIL, chứng minh lint bắt được từng lỗi E1–E40.
+- **Hoàn thiện** nghĩa là đủ năm điều: đã dựng; lint 0 FAIL 0 WARN; video khớp dấu băm của đặc tả và lời đọc hiện tại; đúng một giọng; máy nghe không còn câu nào chưa xem xét. Theo `STATUS.md`: mọi bài đã có đặc tả đều hoàn thiện.
+- **Hoàn thiện ≠ đủ để học và làm được.** Ba lớp chuẩn, đo bằng cổng riêng:
+  1. **Nghe hiểu** (chuẩn E39 `depth: full`: ôn nền, hình cơ chế, làm từng bước, tự kiểm): toàn kho.
+  2. **Làm được** (chuẩn AF2: `af2: true`, mục tiêu có cảnh dạy E51, cảnh **Tự làm** có lab chạy được E53, thuật ngữ giảng tại chỗ E52, một thuật ngữ một cách viết E55, cảnh quy mô): đo bằng `audit/review/af2_cover.py` theo chặng học; chặng nào đạt 100% và qua đọc độc lập mới được nhãn "ĐÃ CHỐT" trên `HOC_TAP.html`.
+  3. **Chính xác** (cổng máy: `verify_<khoá>`, `screen_code`, `arith_scan`, `check_legal`, `lab_gate`; cộng người đọc độc lập theo mẫu C–G): máy bắt được số sai, mã không chạy, mục tiêu không dạy; không bắt được lỗi kiến thức thuần chữ — chỉ người đọc bắt (mẫu F: MUST 3/38).
+- **Còn mở** (không thuộc cổng máy): tai người nghe phát âm; sản phẩm chỉ mô phỏng (xem bảng quyết định CB-AF3-7 ở `audit/review/audit_final/plan_AF3_*.md`); văn bản pháp lý chưa đối chiếu bản gốc (`audit/legal/registry.yaml`, mục `CHUA_KIEM`).
+- **Kế hoạch hiện hành**: `audit/review/audit_final/plan_AF3_20261113T1240Z.md`; trạng thái từng việc: `audit/review/audit_final/STATE.md`.
+- Bộ kiểm của toàn bộ giáo án: `verify_plan_curricula.py` (mọi ví dụ có mã VER PASS), `check_curricula_graph.py` (tham chiếu hỏng 0, chu trình 0), `tests/test_lint.py` và `tests/test_e52.py` (lint bắt được từng lỗi cài sẵn).
 
 ## 4. Lộ trình theo nghề (thứ tự từng bài: [`TRACKS.md`](TRACKS.md))
 

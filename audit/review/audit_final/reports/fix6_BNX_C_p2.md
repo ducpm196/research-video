@@ -1,0 +1,34 @@
+# fix6 BNX_C nhánh C2 (L29–L31) — 2026-11-16
+
+## TIẾN ĐỘ
+- [x] L29 xong (lint 0/0, render 117 khung 0 vấn đề, 2299 từ, ver 24/24, screen_fast PASS 24/0/0/0/0)
+- [x] L30 xong (lint 0/0, render 133 khung 0 vấn đề, 2299 từ, ver 22/22, screen_fast PASS 29/0/0/0/0)
+- [x] L31 xong (lint 0/0, render 133 khung 0 vấn đề, 2298 từ, ver 16/17 PASS + 1 SKIP docker, screen_keep chưa khớp 0, sha-only sạch)
+
+Khuôn: `audit/bnx/libj.py` (`jstep`, `nowrap`; không sửa). Hàng bảng riêng khai bằng bộ ba trong `lNN.py`. Nguồn sửa: `audit/bnx/src/l29.py`, `l30.py`, sinh bằng `gen.py`.
+
+## L29 (CQRS, kho sự kiện)
+- Mục chưa giảng → 0 (bảng jstep đứng TRƯỚC khối mã): `sqlite3.connect(":memory:")`, `executescript("""…""")`, `CREATE TABLE … INTEGER PRIMARY KEY AUTOINCREMENT`, `INSERT OR REPLACE`/`DROP TRIGGER`/chuỗi băm (formula, trước bước 1; có `introduces: bnx_ma_bam`); `def ghi`, `INSERT INTO … VALUES (?, ?, ?)`, `UPDATE … SET … WHERE`, `DELETE FROM … WHERE`, `try/except`, `SELECT COUNT(*)`, `.fetchone()[0]` (hai bảng trước KhoSuKien); `loai, tien = su_kien`, `a if đk else b`, `def … return`, `sum(1 for _ in SU_KIEN)`, enumerate, f-string (trước PhatLai); `from functools import reduce`, `reduce`, `kho.append`, `#` (trước BuChu); `su_kien = []`/`.append`, từ điển `doc["001"] += …` (hai hàng thêm vào bảng trước DocTre); `CREATE TABLE tk`, `INSERT INTO tk VALUES`, `for loai, tien in […]`, `dau = 1 if … else -1`, `UPDATE tk SET so_du = so_du + ?` (trước BangSoDu); `executemany(… ((i % 2, i % 97 + 1) for i in range(1000000)))`, `SELECT … WHERE seq <= ?` + vòng lặp tách hai biến, `so_du, dem = 0, 0`/`return so_du, dem`/`for n in (…)` (trước QuyMoPhat).
+- SHOULD quymo#2: nhãn bảng "TÍNH TỪ CÔNG THỨC n mod k (không đo kho thật)" và lời đọc nói rõ hai dòng sau không đo kho thật.
+- Lời đọc 2294 → 2299 (thêm ~560 từ bảng, cắt ~555 ở hook/prereq/sym/intuition/formula/example/pitfalls/quiz/recap/practice). `asr_reviewed` 2 → 1.
+- Cổng: lint 0/0; render 117 khung 0 vấn đề (xem khung 23, 27, 45, 56, 80); verify_bnx L29 24/24; screen_keep (16 khối, chưa khớp 0) + screen_fast PASS 24, FAIL/STALE/MISSING/ORPHAN 0.
+- Mục chưa giảng ước còn lại: 0.
+
+## L30 (chịu lỗi: cầu dao, cân bằng tải)
+- Mục chưa giảng → 0 (bảng trước khối mã): ThuLai — chữ ký hàm `static String chay(int hong, int toiDa, int goc)`/`return`, `for (int lan = 1; …; lan++)`, `int cho = 0`/`+=`/`if (…) return …;`, nối chuỗi `"…" + lan + "…"`; CauDao — `enum T {…}`/`T t = T.DONG`/`t == T.MO`, `boolean choPhep(long ms)`/`void ghi(…)`/`return false`, `static final int NGUONG = 3;`/trường `hong`, `else if`/`++hong >= NGUONG`; CanBang (hai bảng, hai khối) — `int[] dur = {…}`, `long[][] ketThuc = new long[2][8]`, `10L`, hai vòng lồng nhau đếm cuộc đang chạy, ternary lồng `int s = it ? (dang[1] < dang[0] ? 1 : 0) : i % 2;`, `ketThuc[s][soCuoc[s]++] = …`, `Math.max`; main — `int[] v = chay(false), l = chay(true);`; QuyMo — `for (int n : new int[] {100, 10000})`, `new CauDao()`, `10000L`, `!`, `continue`, `that++`, `4 * n`; R4j (ba bảng) — `import io.github…*`, `var cfg = …custom() … .build()`, `CircuitBreaker.of`, `Duration.ofMillis`, `main … throws Exception`, `getEventPublisher().onStateTransition(e -> …)`, `for (int i = 1; …)`, `executeRunnable(() -> { throw new IllegalStateException("hong"); })`, `catch (…)` hai loại, `Thread.sleep(1100)`, `executeRunnable(() -> { })`, `getState()`.
+- SHOULD: `CanBang` hiện ĐỦ hàm `chay` (hai khối) và `main` (có kết quả in) — trước đây dừng ở `ketThuc[s][soCuoc[s]++] = …`; `QuyMo` hiện đủ 16 dòng (hai khối) thay cho 3 dòng "trích"; `ThuLai.chay` hiện đủ 11 dòng (có `}` đóng hàm); thêm bước tính tay `3 + 9 = 12` cuộc (3 cuộc hỏng đầu mở cầu dao lúc 200 ms; thử ở 1200, 2200, …, 9200 ms = 9 cuộc; n = 10 000 mở lúc 2 ms, thử ở 1002 … 9002) trước khi chạy; pitfalls#1 bỏ khối trích 3 dòng, thay bảng 100 → 400 / 10 000 → 40 000 / có cầu dao 12.
+- Giữ nguyên số đã kiểm đúng: 400, 40 000, 12; nhật ký cầu dao 7 gọi thật + 2 chặn; quiz 750, 1550, 4/2, 5000, 1750, ≤25 yêu cầu/giây, 95%; Resilience4j 2.3.0 chạy thật bằng jar ở `audit/bnx/deps/l30`.
+- Lời đọc 2285 → 2299 (thêm ~720 từ bảng/khối, cắt ~700). `asr_reviewed` 16 → 3 (nhiều câu đổi chữ để cắt lời; cần ASR lại các câu mới).
+- Cổng: lint 0/0; render 133 khung 0 vấn đề (xem khung 27/40/54/72/87/95; tách bước 2 thành mã + công thức vì khung 11 dòng tràn); verify_bnx L30 22/22 PASS (chạy Java và Resilience4j thật); screen_keep (19 khối, chưa khớp 0) + screen_fast PASS 29, 0/0/0/0.
+- Mục chưa giảng ước còn lại: 0.
+
+## L31 (quan sát: nhật ký, chỉ mục đảo, Prometheus)
+- Mục chưa giảng → 0 (bảng trước khối mã): NhatKy — `import json`/`json.dumps(…, separators=…)`, `for d in nhat_ky`, `gio = iter(range(1000, 2000, 7))`/`next`, `nhat_ky = []`/`append`, `a1 = [d for d in … if …]`, `" > ".join(… for d in a1)`, `a1[-1][…] - a1[0][…]`; ChiMuc — danh sách sinh sẵn có `if … else …` và `i % 5`, `enumerate(dong)` tách cặp, `setdefault(…, []).append(i)`, `set(…)`, `[i for i in a if i in b]` (khối nay hiện từ dòng 1 để thấy `for n in …`); XuatChiSo (hai bảng) — `Integer.parseInt(a[0])`, `String[] duong = {…}`, `int[][] so = {{…}}`, `StringBuilder`/`append`/`
+`, hai vòng `for` lồng nhau, `\"` trong chuỗi, `if (nguoi == 0) … else for …`; `cat > rules.yml <<'EOF'`, YAML `groups/rules/alert/expr: |/for/labels`; test.yml — `rule_files`, `evaluation_interval`, `tests`, `input_series`, `series`, `values: '0+995x12'`, `promql_expr_test`/`expr`/`eval_time`/`exp_samples`, `alert_rule_test`/`exp_alerts: []`/`exp_labels`; "container" giải ngay ở hàng `--rm`; prom.yml — `global`/`scrape_interval`, `scrape_configs`, `job_name`, `fallback_scrape_protocol`, `static_configs`/`targets`; hàm hỏi — biểu thức `sed` đầy đủ, `[ "$(q up)" = 1 ] && break`, `L='…'`/`$(q "$L")`/`"$L/sum(…)"`; đo chuỗi — `for n in 0 100 10000`, `> m$n`, `grep -vc '^#'`, `wc -c < m$n`. "ArgoCD" bỏ khỏi recap#2 (chưa giảng).
+- Không đổi chữ khối docker (ChayTest, ChayMay): chỉ thêm bảng đứng trước.
+- Lời đọc 2297 → 2298 (thêm ~730 từ bảng, cắt ~730). `asr_reviewed` 4 → 2. Phục hồi cụm "mục tiêu độ sẵn sàng" để `ver/l31.py` (kiểm SLO được giải nghĩa) PASS.
+- Cổng: lint 0/0; render 133 khung 0 vấn đề (xem khung 29, 64, 83); `verify_bnx.py L31` với PATH bỏ thư mục Docker: 16/17 PASS, 1 SKIP (phần docker); `screen_keep.py L31`: 25 khối, chưa khớp 0; KHÔNG chạy `screen_fast` (có nguồn docker): thay bằng kiểm chỉ đọc (MISSING/STALE theo sha + chạy `Gate.check` cho khối không docker): PASS 18, FAIL/STALE/MISSING/ORPHAN 0, 14 mục nguồn docker bỏ qua (chữ khối không đổi).
+- Mục chưa giảng ước còn lại: 0.
+
+## Tổng kết nhánh C2
+Bài đổi (requeue): L29, L30, L31. Mục chưa giảng ước còn lại: 0 / 0 / 0. Không sửa `libj.py`, `lib2.py`, `lib.py`, sổ chung; không chạy `screen_try --merge`, docker, build, tts, asr, git. `asr_reviewed` giảm (L29 2→1, L30 16→3, L31 4→2) vì các câu bị đổi chữ khi cắt lời: cần ASR lại câu mới.

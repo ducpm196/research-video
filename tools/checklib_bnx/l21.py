@@ -93,3 +93,28 @@ def bnx_fp_counts(apps):
     for _, doc, dev in apps:
         seen.setdefault(bnx_device_fp(dev), set()).add(doc)
     return {k: len(v) for k, v in seen.items()}
+
+
+# ── Quy mô (AF2, nhánh B): luật “từ 3 giấy tờ khác nhau trên cùng một dấu vân tay thì gắn cờ” khi số hồ sơ tăng ──
+_L21_HE = ["Android 13", "Android 14", "iOS 17", "iOS 18"]
+_L21_MAN = ["720x1600", "1080x2400", "1170x2532", "1290x2796", "1440x3200", "1080x1920"]
+
+
+def bnx_l21_fp_of(i):
+    """Dấu vân tay của hồ sơ thứ i trong quần thể minh hoạ: 4 hệ điều hành × 6 cỡ màn hình = 24 tổ hợp, chọn theo SHA-256 của "hs<i>"."""
+    h = int(hashlib.sha256(f"hs{i}".encode()).hexdigest(), 16)
+    return bnx_device_fp({"he": _L21_HE[h % 4], "man": _L21_MAN[h // 4 % 6], "mui": "UTC+7"})
+
+
+def bnx_l21_scale(n, nguong=3):
+    """(số mã khác nhau, số hồ sơ bị gắn cờ) với n hồ sơ, mỗi hồ sơ một giấy tờ khác nhau; gắn cờ nếu mã có ≥ nguong giấy tờ."""
+    dem = {}
+    for i in range(n):
+        k = bnx_l21_fp_of(i)
+        dem[k] = dem.get(k, 0) + 1
+    return len(dem), sum(c for c in dem.values() if c >= nguong)
+
+
+def bnx_l21_reviewers(flagged, per_person):
+    """Số người xét tối thiểu một ngày: làm tròn lên."""
+    return -(-flagged // per_person)

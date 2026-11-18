@@ -224,11 +224,12 @@ Lời giải đầy đủ nằm ở <code>labs/JVA/L04/loi_giai.java</code> — 
                  [["① điều kiện", "<code>thang &lt;= 12</code> cho đúng hoặc sai"],
                   ["② rẽ nhánh", "<code>if</code>: điều kiện đúng mới làm khối trong ngoặc nhọn"],
                   ["③ cộng dồn, tăng một", "<code>soDu += lai;</code> và <code>thang++;</code>"],
-                  ["④ chia nguyên", "<code>soDu * 5 / 1000</code>: nhân trước, chia sau, bỏ phần lẻ đồng"]]),
+                  ["④ chia nguyên", "<code>soDu * 5 / 1000</code>: nhân trước, chia sau, bỏ phần lẻ đồng"],
+                  ["⑤ <code>import</code>, <code>new</code>", "<code>import</code>: lấy về một lớp có sẵn của Java; <code>new</code>: làm ra một vật mới từ lớp đó"]]),
            """Ta ôn lại bốn điều. Phép so sánh cho kết quả đúng hoặc sai. Lệnh rẽ nhánh nếu chỉ làm khối khi điều kiện đúng.
            Cộng bằng là cộng dồn, hai dấu cộng là tăng thêm một. Và tính phần trăm bằng số nguyên thì nhân trước, chia sau.
-           Vòng lặp chỉ là lệnh rẽ nhánh được hỏi lại nhiều lần.""",
-           focus=[1, "1.2", "1.3", "1.4", "1.5", 1]),
+           Dòng nhập lấy về một lớp có sẵn, còn từ khoá tạo mới làm ra một vật từ lớp đó. Vòng lặp chỉ là lệnh rẽ nhánh được hỏi lại nhiều lần.""",
+           focus=[1, "1.2", "1.3", "1.4", "1.5", "1.6", 1]),
     ])
     sc_sym = sc("sym", "symbol", "Giải mã ba kiểu vòng lặp và hai lệnh điều khiển", [
         st(table(["viết", "nghĩa"],
@@ -316,20 +317,24 @@ $$11 - 1 + 1 = \\hl{11} \\text{ lần, thiếu một tháng}$$""",
     ], checks=["100000000 * 5 // 1000 == 500000", "100500000 * 5 // 1000 == 502500", "101002500 * 5 // 1000 == 505012",
                "11 - 4 + 1 == 8", "105639579 * 5 // 1000 == 528197", "105639579 + 528197 == 106167776"])
     sc_nhap = sc("nhap", "example", "Ví dụ: lặp qua dữ liệu do người dùng đưa vào", [
-        st(code_block(tong_args, lines=(3, 6)),
+        st(code_block(tong_args),
            """Ở bài đầu ta thấy danh sách chữ gõ thêm sau tên lớp. Giờ vòng lặp đếm cho ta đi qua từng chữ trong danh sách đó.
            Biến đếm chạy từ không, và điều kiện là nhỏ hơn hẳn độ dài danh sách, nên số vòng đúng bằng độ dài, hợp với công thức cuối trừ đầu cộng một.
            Mỗi vòng lấy chữ ở vị trí i, đổi thành số nguyên dài rồi cộng dồn.""",
-           focus=[1, "1.2", "1.2", "1.3"]),
+           focus=[1, "1.4", "1.4", "1.5"]),
         st('<div class="code"><div>javac TongArgs.java</div><div>java TongArgs 7000000 4000000 9000000</div><div>java TongArgs 1500000 2500000</div><div>java TongArgs</div></div>'
            '<p><b>Kết quả chạy</b></p><div class="code"><div>3 lenh, tong 20000000</div><div>2 lenh, tong 4000000</div><div>0 lenh, tong 0</div></div>',
            """Biên dịch một lần rồi chạy ba lần. Ba chữ gõ thêm cho ba lệnh, tổng hai mươi triệu. Hai chữ cho hai lệnh, tổng bốn triệu.
            Không chữ nào thì vòng lặp chạy không lần nào và tổng bằng không, vì điều kiện sai ngay từ đầu.""",
            clear=True, focus=[1, ["1.2", "3.1"], ["1.3", "3.2"], ["1.4", "3.3"]]),
-        st(code_block(tong_nhap, lines=(4, 12)),
-           """Cách thứ hai là đọc từ đầu vào cho tới hết. Lệnh hỏi còn số nào kế tiếp để đọc không cho đúng hoặc sai, nên ta đặt nó làm điều kiện của vòng lặp trong khi.
+        st(code_block(tong_nhap, lines=(1, 6), title="Tệp TongNhap.java, phần chuẩn bị"),
+           """Cách thứ hai là đọc từ đầu vào cho tới hết. Đầu tệp là dòng nhập và khung lớp, rồi tới công cụ đọc nối với bàn phím, như ở bài rẽ nhánh.
+           Hai biến còn lại là tổng cộng dồn và biến đếm số lệnh, cùng bắt đầu từ không.""",
+           clear=True),
+        st(code_block(tong_nhap, lines=(7, 14), title="Vòng lặp đọc cho tới hết dữ liệu"),
+           """Lệnh hỏi còn số nào kế tiếp để đọc không cho đúng hoặc sai, nên ta đặt nó làm điều kiện của vòng lặp trong khi.
            Còn số thì đọc, cộng dồn và đếm. Hết số thì điều kiện sai và vòng lặp tự dừng, nên ta không cần biết trước có bao nhiêu số.""",
-           clear=True, focus=["1.4", "1.4", ["1.5", "1.6", "1.7"], "1.4"]),
+           clear=True),
         st('<div class="code"><div>javac TongNhap.java</div><div>echo "1200000 800000 500000 2500000" | java TongNhap</div></div>'
            '<p><b>Kết quả chạy</b></p><div class="code"><div>4 lenh, tong 5000000</div></div>',
            """Ta đưa bốn số vào bằng ống, như ở bài rẽ nhánh. Vòng lặp chạy đúng bốn lần rồi dừng khi hết số, in bốn lệnh và tổng năm triệu.""",
@@ -375,7 +380,7 @@ Với tiền thật: quyết định cách làm tròn từng kỳ, ghi vào hợ
            """Lỗi thứ nhất là lệch một lần. Hai vòng lặp chỉ khác nhau một dấu bằng. Dấu nhỏ hơn hẳn dừng trước tháng mười hai, chạy mười một lần.
            Dấu nhỏ hơn hoặc bằng chạy đủ mười hai lần. Cách tránh là dùng công thức cuối trừ đầu cộng một để đếm trước số lần."""),
         st('<div class="box warn"><b>Lỗi 2 (người mới).</b> Quên tăng biến đếm: vòng lặp không bao giờ dừng.</div>'
-           + code_block(quen_tang, lines=(3, 11)) + out_block(quen_tang),
+           + code_block(quen_tang, lines=(3, 12)) + out_block(quen_tang),
            """Lỗi thứ hai là quên tăng biến đếm trong vòng lặp trong khi. Tháng mãi bằng một, điều kiện mãi đúng, nên vòng lặp không bao giờ dừng.
            Chương trình mẫu có thêm bộ đếm an toàn, tới vòng thứ một nghìn thì dùng lệnh thoát, để ta thấy tháng vẫn bằng một.
            Trước khi chạy, hãy chỉ ra dòng nào làm điều kiện tiến dần tới sai."""),
@@ -419,4 +424,5 @@ và biến cộng dồn có phải số nguyên tính theo đồng không.</div>
                    "Chạy chương trình lặp qua dữ liệu người dùng đưa vào, từ chữ gõ thêm và từ đầu vào, tới hết dữ liệu",
                    "Dự đoán độ lệch khi phần lẻ bị bỏ cộng dồn qua mười hai, một trăm hai mươi và ba trăm sáu mươi tháng"],
                   [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_nhap, sc_chk, sc_scale, sc_pit, sc_quiz, sc_lab, sc_rec],
+                  assumes=["jva_import", "jva_new"],
                   covers=[(1, "practice"), (2, "example"), (3, "quiz"), (4, "check"), (5, "nhap"), (6, "quymo")])

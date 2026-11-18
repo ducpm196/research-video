@@ -132,6 +132,20 @@ public class CatDuoi {
     }
 }""", out="2\n3\nfalse 3")
 
+    prog("ThuTuBang", r"""
+import java.util.HashMap;
+import java.util.Map;
+
+public class ThuTuBang {
+    public static void main(String[] args) {
+        Map<String, Long> tong = new HashMap<>();
+        tong.put("rut", 1500000L);
+        tong.put("nap", 3500000L);
+        tong.put("chuyen", 1200000L);
+        System.out.println(tong.keySet());
+    }
+}""", out="[rut, chuyen, nap]", note="khẳng định ghi trong cảnh example: duyệt thẳng khoá HashMap in rut, chuyen, nap (JDK 21)")
+
     lon = project("DuLieuLon", {
         "TaoFile.java": r"""
 import java.io.BufferedWriter;
@@ -160,7 +174,7 @@ import java.util.List;
 public class DocHet {
     public static void main(String[] args) throws IOException {
         try {
-            List<String> dong = Files.readAllLines(Path.of("lon.csv"));    // giữ MỌI dòng trong bộ nhớ
+            List<String> dong = Files.readAllLines(Path.of("lon.csv"));    // giữ MỌI dòng
             System.out.println("doc xong " + dong.size() + " dong");
         } catch (OutOfMemoryError e) {
             System.out.println("het bo nho");
@@ -260,6 +274,8 @@ ma,loai,so_tien
 2. Đọc lại tệp đó bằng `try (BufferedReader …)`, bỏ dòng tiêu đề, cộng theo từng loại và đếm số giao dịch (kiểu `long` cho tiền).
 3. In ba dòng theo thứ tự `nap`, `rut`, `chuyen` đúng dạng `nap: 2 giao dich, tong 4250000`, rồi một dòng `Tong tat ca: <tổng>`.
 
+Dòng `import` cần dùng (đặt trên đầu tệp): `java.io.BufferedReader`, `java.io.IOException`, `java.nio.file.Files`, `java.nio.file.Path`, `java.util.HashMap`, `java.util.Map`. Hàm `main` khai `throws IOException`.
+
 Chạy: `javac TongTheoLoai.java && java TongTheoLoai`. Chấm: `bash labs/cham.sh JV2 L01 TongTheoLoai.java`.
 """, "java", lab["code"], lab["out"])
     sc_lab = practice_scene(sc, "Tự làm: tổng giao dịch theo loại", practice_steps(
@@ -268,7 +284,7 @@ Chạy: `javac TongTheoLoai.java && java TongTheoLoai`. Chấm: `bash labs/cham.
 <ol><li>Ghi <code>giao_dich.csv</code> bằng <code>Files.writeString</code> (tiêu đề + 7 dòng như trong <code>de.md</code>).</li>
 <li>Đọc lại bằng <code>try (BufferedReader …)</code>, bỏ dòng tiêu đề, cộng và đếm theo loại.</li>
 <li>In theo thứ tự <code>nap</code>, <code>rut</code>, <code>chuyen</code>, rồi <code>Tong tat ca: …</code></li></ol>
-<p class="note">Tiền dùng <code>long</code>. Tệp tên <code>TongTheoLoai.java</code>; dữ liệu 7 dòng ở <code>labs/JV2/L01/de.md</code>.</p>""",
+<p class="note">Tiền dùng <code>long</code>. Tệp tên <code>TongTheoLoai.java</code>; dữ liệu 7 dòng và danh sách <code>import</code> cần dùng ở <code>labs/JV2/L01/de.md</code>.</p>""",
         """Bây giờ tới phần bạn tự làm trên máy. Chương trình tự ghi ra một tệp bảng bảy dòng, lấy dữ liệu từ đề bài, rồi đọc lại bằng khối thử có tài nguyên. Bỏ dòng tiêu đề, cộng tiền và đếm số giao dịch theo từng loại.
         In ba loại theo đúng thứ tự nạp, rút, chuyển, rồi in tổng tất cả. Tiền dùng kiểu số nguyên dài. Hãy dừng video và tự viết, đừng chép lại ví dụ.""",
         lab["out"], "TongTheoLoai.java",
@@ -288,8 +304,8 @@ Cộng bằng <code>getOrDefault</code>. Lời giải: <code>labs/JV2/L01/loi_gi
                box(1145, 80, 300, 80, ["tệp trên đĩa", "một triệu dòng"], C_BLUE, 24),
                txt(1000, 230, "ba cửa vào, một chương trình không phải sửa", 26, "middle", "#16a34a", True)),
            """Ở bài trước, số tiền nằm cứng trong mã, muốn đổi phải sửa và biên dịch lại. Chương trình thật nhận dữ liệu từ bên ngoài, qua ba cửa. Tham số khi gõ lệnh, bàn phím hoặc đầu ra của lệnh khác, và tệp trên đĩa.
-           Một ngân hàng nhận cả triệu giao dịch mỗi ngày thì chỉ có thể đi qua cửa thứ ba."""),
-        st("""<div class="box key">Hôm nay: <b>nhập dữ liệu</b>. Đọc <b>tham số</b> và <b>bàn phím</b>, ghi và đọc <b>tệp văn bản</b> chuẩn mã hoá tiếng Việt,
+           Một ngân hàng nhận cả triệu giao dịch mỗi ngày thì thường phải dùng cửa thứ ba là tệp, bên cạnh vài đường nâng cao hơn."""),
+        st("""<div class="box key">Hôm nay: <b>nhập dữ liệu</b>. Đọc <b>tham số</b> và <b>bàn phím</b>, ghi và đọc <b>tệp văn bản</b>,
 tự động <b>đóng tài nguyên</b>, và câu hỏi của người làm nghề: đọc một tệp lớn gấp một nghìn lần thì còn chạy được không?</div>""",
            """Hôm nay ta học nhập dữ liệu. Đọc tham số và bàn phím, ghi và đọc tệp văn bản, tự động đóng tài nguyên sau khi dùng.
            Rồi câu hỏi của người làm nghề: đọc một tệp lớn gấp một nghìn lần thì chương trình còn chạy nổi không."""),
@@ -364,8 +380,13 @@ $$\\text{rut} = 0 + 500\\,000 = 500\\,000 ,\\quad \\text{nap} = 0 + 2\\,000\\,00
            Mỗi loại có một tổng riêng, không lẫn vào nhau.""", clear=True),
     ], checks=["0 + 500000 == 500000", "0 + 2000000 == 2000000"])
     sc_ex = sc("example", "example", "Ví dụ: sáu giao dịch, ba loại, từng phép cộng", [
-        st(code_block(doc_csv, lines=(10, 12)) + "<p class='note'>Dữ liệu ghi ra <code>gd.csv</code>: tiêu đề và sáu dòng; chương trình đầy đủ ở các khung sau.</p>",
-           """Ta làm trọn vẹn một ví dụ. Chương trình tự ghi ra sáu giao dịch gồm rút, nạp, rút, chuyển, nạp, rút, rồi đọc lại và cộng theo loại. Ta sẽ tự cộng bằng tay rồi so với chương trình."""),
+        st(code_block(doc_csv, lines=(1, 9), title="① Đầu chương trình DocCsv: nạp tên và khung"),
+           """Ta làm trọn vẹn một ví dụ, và xem chương trình từ dòng đầu tiên. Sáu dòng nạp tên lấy các lớp có sẵn của bộ công cụ: bộ đọc có đệm, ngoại lệ vào ra, công cụ làm việc với tệp, đường dẫn và hai loại bản đồ.
+           Hàm chính khai báo có thể ném ngoại lệ vào ra, vì thao tác tệp có thể lỗi bất cứ lúc nào."""),
+        st(code_block(doc_csv, lines=(10, 14), title="② Ghi dữ liệu ra tệp và dựng hai bản đồ")
+           + "<p class='note'>Dữ liệu ghi ra <code>gd.csv</code>: tiêu đề và sáu dòng. Hai bản đồ cùng khoá là chữ loại giao dịch: một giữ tổng tiền (<code>Long</code>), một giữ số lần (<code>Integer</code>).</p>",
+           """Tiếp theo, chương trình tự ghi ra sáu giao dịch gồm rút, nạp, rút, chuyển, nạp, rút. Rồi nó dựng hai bản đồ có cùng khoá là loại giao dịch, một bản giữ tổng tiền, một bản giữ số lần. Sau đó đọc lại tệp và cộng theo loại.
+           Ta sẽ tự cộng bằng tay rồi so với chương trình.""", clear=True),
         st("$$① \\; \\text{rut}: 500\\,000 + 300\\,000 + 700\\,000 = \\hl{1\\,500\\,000} \\;(3 \\text{ dòng})$$"
            "$$② \\; \\text{nap}: 2\\,000\\,000 + 1\\,500\\,000 = \\hl{3\\,500\\,000} \\;(2 \\text{ dòng})$$",
            """Phép cộng thứ nhất, loại rút có ba dòng, năm trăm nghìn cộng ba trăm nghìn cộng bảy trăm nghìn, bằng một triệu năm trăm nghìn.
@@ -375,10 +396,15 @@ $$\\text{rut} = 0 + 500\\,000 = 500\\,000 ,\\quad \\text{nap} = 0 + 2\\,000\\,00
            "$$⑤ \\; \\text{tổng tiền} = 1\\,500\\,000 + 3\\,500\\,000 + 1\\,200\\,000 = \\hl{6\\,200\\,000}$$",
            """Phép thứ ba, loại chuyển chỉ có một dòng, một triệu hai trăm nghìn. Phép thứ tư, tổng số dòng là ba cộng hai cộng một bằng sáu, đúng bằng số giao dịch.
            Phép thứ năm, cộng ba tổng lại được sáu triệu hai trăm nghìn, và cũng bằng cộng cả sáu số tiền gốc."""),
+        st(code_block(doc_csv, lines=(25, 29), title="Phần in kết quả")
+           + "<p class='note'>Duyệt một <b>mảng cố định</b> gồm ba loại để thứ tự in luôn là nạp, rút, chuyển. Nếu duyệt thẳng các khoá của <code>HashMap</code> thì thứ tự không được bảo đảm (máy thật in rút, chuyển, nạp).</p>",
+           """Còn phần in. Ta duyệt qua một mảng cố định gồm ba loại, nên thứ tự in luôn là nạp, rút, chuyển. Nếu duyệt thẳng các khoá của bản đồ băm thì thứ tự không được bảo đảm, và trên máy thử nó in rút, chuyển rồi nạp.""", clear=True),
         st(out_block(doc_csv),
            """Chạy thật, ba dòng in ra khớp với các phép cộng tay. Loại nạp hai giao dịch ba triệu năm trăm nghìn, loại rút ba giao dịch một triệu năm trăm nghìn, loại chuyển một giao dịch một triệu hai trăm nghìn.""", clear=True),
-        st(code_block(ban_phim, lines=(5, 11)) + term_block(pipe, 2, 3),
-           """Cuối cùng là cửa bàn phím. Chương trình đọc số giao dịch, rồi đọc đúng chừng ấy số tiền. Ta không gõ tay mà dùng lệnh in rồi nối bằng dấu gạch đứng, ba số cộng lại được sáu mươi nghìn.""", clear=True),
+        st(code_block(ban_phim, lines=(1, 11), title="Cửa bàn phím: đọc từ đầu vào chuẩn") + term_block(pipe, 2, 3)
+           + "<p class='note'><code>printf</code> in chuỗi ra đầu ra chuẩn; <code>\\n</code> trong chuỗi là xuống dòng; dấu <code>|</code> đưa đầu ra ấy vào đầu vào của <code>java BanPhim</code>.</p>",
+           """Cuối cùng là cửa bàn phím, nay với đủ dòng nạp tên và khung. Chương trình đọc số giao dịch, rồi đọc đúng chừng ấy số tiền. Ta không gõ tay mà dùng lệnh in chuỗi có sẵn hai dòng, nối bằng dấu gạch đứng vào chương trình.
+           Ba số cộng lại được sáu mươi nghìn.""", clear=True),
     ], checks=["500000 + 300000 + 700000 == 1500000", "2000000 + 1500000 == 3500000", "3 + 2 + 1 == 6",
                "1500000 + 3500000 + 1200000 == 6200000", "500000 + 2000000 + 300000 + 1200000 + 1500000 + 700000 == 6200000",
                "10000 + 20000 + 30000 == 60000"])
@@ -398,8 +424,16 @@ $$500\\,000 + 2\\,000\\,000 + 300\\,000 + 1\\,200\\,000 + 1\\,500\\,000 + 700\\,
            + "<p class='note'>Con số 64 byte là ước lượng cho dòng ~15 ký tự (đối tượng chuỗi, mảng ký tự, ô tham chiếu); đo thật ở khung sau.</p>",
            """Bây giờ là chuyện quy mô. Nếu đọc cả tệp rồi giữ mọi dòng trong bộ nhớ, thì bộ nhớ tăng theo số dòng. Mỗi dòng ngắn chiếm chừng sáu mươi bốn byte, con số này là ước lượng.
            Một nghìn dòng là sáu mươi bốn nghìn byte, chẳng đáng kể. Một triệu dòng là sáu mươi bốn triệu byte. Một tỉ dòng là sáu mươi bốn tỉ byte, không máy nào chứa nổi. Còn nếu chỉ giữ một dòng mỗi lúc thì bộ nhớ gần như không đổi."""),
-        st(term_block(lon, 1, 3, title="Một nghìn dòng: đọc hết vẫn ổn, dù chỉ cho 32 megabyte"),
-           """Ta đo thật. Tạo tệp một nghìn dòng, rồi chạy chương trình đọc hết với bộ nhớ tối đa ba mươi hai megabyte. Chạy trơn tru, đọc xong một nghìn không trăm linh một dòng, kể cả dòng tiêu đề.""", clear=True),
+        st(pcode(lon, "TaoFile.java", lines=(6, 17), title="Chương trình tạo tệp thử TaoFile"),
+           """Trước khi đo, ta cần tệp thử. Chương trình này nhận số dòng ở tham số, mở tệp để ghi, ghi dòng tiêu đề, rồi mỗi dòng là một giao dịch rút có số tiền từ một đến bảy nghìn. Mọi dòng nạp tên cần có đều ghi bên dưới.""", clear=True),
+        st(pcode(lon, "DocHet.java", lines=(6, 15), title="Cách A: đọc hết vào danh sách (DocHet)")
+           + "<p class='note'><code>OutOfMemoryError</code> là lỗi máy ảo ném khi hết bộ nhớ.</p>",
+           """Cách thứ nhất đọc hết tệp vào một danh sách, rồi in số dòng. Nếu máy ảo hết bộ nhớ, nó ném một lỗi riêng, và ta bắt lỗi đó để in ra dòng thông báo ngắn.""", clear=True),
+        st(term_block(lon, 1, 3, title="Một nghìn dòng: đọc hết vẫn ổn, dù chỉ cho 32 megabyte")
+           + "<p class='note'><code>-Xmx32m</code> đặt bộ nhớ tối đa mà máy ảo được dùng là 32 megabyte.</p>",
+           """Ta đo thật. Tạo tệp một nghìn dòng, rồi chạy chương trình đọc hết với bộ nhớ tối đa ba mươi hai megabyte, đặt bằng một cờ ghi ngay trên màn hình. Chạy trơn tru, đọc xong một nghìn không trăm linh một dòng, kể cả dòng tiêu đề.""", clear=True),
+        st(pcode(lon, "TongDong.java", lines=(6, 18), title=""),
+           """Cách thứ hai đọc từng dòng. Mỗi vòng chỉ giữ đúng một chuỗi, lấy ô thứ ba của nó, đổi thành số rồi cộng vào tổng kiểu số nguyên dài. Dòng đã cộng xong thì không còn ai giữ nữa.""", clear=True),
         st(term_block(lon, 3, 6, title="Một triệu dòng: đọc hết thì hết bộ nhớ, đọc từng dòng thì xong"),
            """Giờ ta tạo một tệp có tới một triệu dòng để thử sức. Đọc hết vào bộ nhớ với cùng giới hạn ba mươi hai megabyte thì chương trình báo hết bộ nhớ. Đọc từng dòng, mỗi lúc chỉ giữ một dòng, thì xong và cho tổng gần bốn tỉ, lớn hơn cả phạm vi của số nguyên thường, nên bắt buộc dùng số nguyên dài.
            Đánh đổi: đọc từng dòng không cho phép nhảy tới dòng bất kỳ hay đọc lại, nhưng trả bằng bộ nhớ không đổi.""", clear=True),
@@ -436,9 +470,9 @@ $$500\\,000 + 2\\,000\\,000 + 300\\,000 + 1\\,200\\,000 + 1\\,500\\,000 + 700\\,
            Còn so sánh sai tên cột thì nghi ký tự vô hình ở đầu, hãy in độ dài của chuỗi để thấy.""",
            focus=["1.2", "1.3", "1.4"]),
         st("""<p>Tính số: giả sử mỗi bản ghi dài 20 byte, tệp 2 GB có $2\\,000\\,000\\,000 / 20 = 10^8$ dòng. Giữ hết:</p>
-$$10^8 \\times 64 = \\hl{6{,}4 \\times 10^9} \\text{ byte} \\approx 6{,}4 \\text{ GB} > 4 \\text{ GB}$$""",
+$$10^8 \\times 64 = \\hl{6{,}4 \\times 10^9} \\text{ byte} \\approx 6{,}4 \\text{ GB} > 4 \\text{ GB}$$<p class="note">64 byte mỗi dòng là ước lượng, nên chỉ kết luận: nhiều khả năng hết bộ nhớ.</p>""",
            """Ta tính cho chắc. Giả sử mỗi dòng hai mươi byte, tệp hai gigabyte có một trăm triệu dòng. Giữ hết thì cần một trăm triệu nhân sáu mươi bốn, bằng sáu phẩy bốn gigabyte, lớn hơn bốn gigabyte mà máy có.
-           Vậy phương án A chắc chắn hết bộ nhớ, còn phương án B thì không.""", clear=True),
+           Vậy phương án A nhiều khả năng hết bộ nhớ, còn phương án B thì không.""", clear=True),
     ], checks=["2 * 10**9 // 20 == 10**8", "10**8 * 64 == 6400000000", "10**8 * 64 > 4 * 10**9"])
     sc_rec = sc("recap", "recap", "Chuỗi logic & tư duy cần mang theo", [
         st(chain("ba cửa vào: tham số, đầu vào chuẩn, tệp", "đổi chữ thành số: parseLong", "mở – dùng – đóng", "cắt dòng, cộng dồn theo loại",

@@ -27,7 +27,14 @@ case "$F" in
     ( cd "$W" && javac -encoding UTF-8 "$CLS.java" 2>"$W/_err" && java -Dfile.encoding=UTF-8 "$CLS" >"$W/_out" 2>>"$W/_err" ) || { echo "LỖI khi biên dịch/chạy:"; cat "$W/_err"; exit 1; } ;;
   *.py)
     PY=$(pick_python) || { echo "không tìm thấy Python 3 (cài từ python.org, tick Add to PATH)"; exit 2; }
-    ( cd "$W" && PYTHONIOENCODING=utf-8 "$PY" "$ABS" >"$W/_out" 2>"$W/_err" ) || { echo "LỖI khi chạy:"; cat "$W/_err"; exit 1; } ;;
+    # Thư viện ngoài (numpy, pandas, matplotlib, pytest): người học dùng môi trường ảo của họ (đã kích hoạt nên `python` là của venv);
+    # máy kiểm của kho dùng labs/.venv-pyt khi python hệ thống thiếu thư viện (cài bằng: pip install -r labs/requirements-py.txt).
+    if grep -qE '^[[:space:]]*(import|from)[[:space:]]+(numpy|pandas|matplotlib|pytest)' "$ABS"; then
+      for V in "$HERE/.venv-pyt/Scripts/python.exe" "$HERE/.venv-pyt/bin/python"; do
+        if [ -x "$V" ] && ! "$PY" -c "import numpy, pandas, matplotlib" >/dev/null 2>&1; then PY="$V"; break; fi
+      done
+    fi
+    ( cd "$W" && PYTHONIOENCODING=utf-8 MPLBACKEND=Agg "$PY" "$ABS" >"$W/_out" 2>"$W/_err" ) || { echo "LỖI khi chạy:"; cat "$W/_err"; exit 1; } ;;
   *.sql)
     if command -v sqlite3 >/dev/null 2>&1; then
       ( cd "$W" && sqlite3 :memory: <"$ABS" >"$W/_out" 2>"$W/_err" ) || { echo "LỖI khi chạy:"; cat "$W/_err"; exit 1; }

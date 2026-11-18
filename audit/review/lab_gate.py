@@ -39,7 +39,7 @@ def cham(k, l, path):
 refs = referenced()
 npass = nfail = 0
 rows = []
-for kd in sorted(p for p in LABS.iterdir() if p.is_dir()):
+for kd in sorted(p for p in LABS.iterdir() if p.is_dir() and not p.name.startswith('.')):  # bỏ .venv-pyt (môi trường Python của máy kiểm)
     if want and kd.name.upper() not in want:
         continue
     for ld in sorted(p for p in kd.iterdir() if p.is_dir()):
@@ -92,7 +92,7 @@ for kd in sorted(p for p in LABS.iterdir() if p.is_dir()):
             npass += 1
 for r in rows:
     print(r)
-orph = sorted(set(refs) - {f"labs/{k.name}/{l.name}" for k in LABS.iterdir() if k.is_dir() for l in k.iterdir() if l.is_dir()})
+orph = sorted(set(refs) - {f"labs/{k.name}/{l.name}" for k in LABS.iterdir() if k.is_dir() and not k.name.startswith('.') for l in k.iterdir() if l.is_dir()})
 for o in orph:
     print(f"FAIL {o}: bài {refs[o]} trỏ tới thư mục lab không tồn tại")
     nfail += 1

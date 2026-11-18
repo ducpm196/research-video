@@ -1,6 +1,6 @@
 # Lab FND L03 — Thống kê giao dịch bằng ống
 
-Tạo `thong_ke.sh`. **Dòng đầu chép nguyên** (tạo dữ liệu giả `gd.csv`; `<<'EOF'` nhập nhiều dòng, bài sau giải thích):
+Tạo `thong_ke.sh`. **Dòng đầu chép nguyên** (tạo dữ liệu giả `gd.csv`; `<<'EOF'` là khối chữ nhúng, đã học ở bài 2):
 
 ```bash
 cat > gd.csv <<'EOF'

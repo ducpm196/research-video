@@ -70,11 +70,13 @@ def code_lines(text):
     return "".join(f"<div>{_hl(l) if l.strip() else ' '}</div>" for l in text.split("\n"))
 
 
-def code_block(p, lines=None, title=None):
-    """Khối mã của chương trình p (cả tệp, hoặc chỉ các dòng lines=(đầu, cuối) tính từ 1, gồm cả hai đầu)."""
+def code_block(p, lines=None, title=None, keep_indent=False):
+    """Khối mã của chương trình p (cả tệp, hoặc chỉ các dòng lines=(đầu, cuối) tính từ 1, gồm cả hai đầu).
+    keep_indent=True: giữ nguyên thụt lề của tệp (dùng khi hiện từng phần của MỘT tệp để người học gõ lại)."""
     src = p["code"].split("\n")
     if lines:
-        src = textwrap.dedent("\n".join(src[lines[0] - 1:lines[1]])).split("\n")
+        part = "\n".join(src[lines[0] - 1:lines[1]])
+        src = (part if keep_indent else textwrap.dedent(part)).split("\n")
     t = f'<p><b>{title}</b></p>' if title else ""
     return t + '<div class="code">' + code_lines("\n".join(src)) + "</div>"
 

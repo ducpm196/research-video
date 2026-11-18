@@ -1,0 +1,41 @@
+# fix_S01_FND — sửa khoá FND (11 bài) theo `reports/S01_FND.md` — 2026-11-13
+
+Nguồn sửa: `audit/fnd/src/l00..l10.py`, `audit/fnd/lib.py`, `audit/fnd/assets/may_chu_l07.py` → `gen.py` (không sửa YAML sinh ra bằng tay). Không chạy build/tts/asr/audit_all/git/docker. Cả 11 bài đã đổi lời đọc hoặc hình nên mọi bài FND đều STALE: người điều phối dựng lại cả khoá một lần.
+
+## Bản `sqlite3` đã dùng để kiểm
+`sqlite3.exe` 3.46.0 (2024-05-23, 64-bit) mượn từ `C:\Program Files\NVIDIA Corporation\Nsight Systems 2025.1.3\host-windows-x64\`, chép vào scratchpad (`…\scratchpad\sqlbin\`), đặt vào PATH chỉ trong phiên chạy; KHÔNG chép vào kho, không tải gì từ mạng. Mọi số "thật" dưới đây là chạy bằng bản này, không qua `audit/fnd/shim`. Người điều phối cần chạy lại `verify_fnd.py`, `lab_gate.py FND`, `screen_code.py check --course FND` bằng sqlite3 chính thức (máy kiểm hiện vẫn chưa có).
+
+## 5 MUST (kiểm lại bằng cách chạy thật trước khi sửa; cả 5 đều đúng như báo cáo)
+| # | Bài | Kiểm lại | Sửa |
+|---|---|---|---|
+| 1 | L05 | `chao.sh` hỏng in `bat dau` ra stdout trước dòng lỗi (phân tích mã + `cham.sh` coi stdout); lời giải cũ bỏ bước 1 nên không lộ | Đề (cảnh `practice`, `de.md`) bắt thêm `> /dev/null` sau mỗi lệnh đọc lỗi ở bước 1 và giải thích vì sao; `loi_giai.sh` giờ CÓ bước 1 (3 dòng `... > /dev/null`) nên `lab_gate` chạy đúng đường người học đi |
+| 2 | L08 | Nguồn đã có hàng `(4,'Dung',NULL)` trong phiên kiểm nhưng màn hình cắt mất lệnh `INSERT` (bước 2) nên bảng trông chỉ 3 hàng | Hiện lệnh `INSERT … NULL` ở cả hai cảnh (`check`, `pitfalls`), chữ và lời đọc nói rõ "bảng thành 4 hàng, đúng một hàng NULL" |
+| 3 | L10 | sqlite3 3.46.0: `.import --csv` vào `t.db` CHƯA có bảng → COUNT 10 (cột tự tạo kiểu TEXT, dòng đầu thành tên cột); vào bảng ĐÃ `CREATE TABLE` → 11. Màn hình cũ ẩn dòng `CREATE TABLE` | Cảnh `check` thành hai trường hợp (thêm phiên `PhienTuTao`: chưa có bảng → 10; có bảng → hiện đủ `CREATE TABLE`, `.import`, COUNT 11, `wc -l` 10, và vì sao cần `--skip 1`); cảnh `pitfalls` lỗi 2 hiện đủ `CREATE TABLE` |
+| 4 | L09 | Git 2.53 trong HOME rỗng: `git init` → `master`; `git commit` đầu → "Author identity unknown" (đã chạy lại) | Bước 0 trong `formula`: `git config --global user.name/user.email` (một lần, lệnh in lại để kiểm; nói cả cách cục bộ bỏ `--global`); `git init -b main` ở ví dụ ① kèm giải thích (bỏ cờ thì có thể ra tên khác); lab `de.md` nêu `Author identity unknown` |
+| 5 | L00, L08, L10 | `kiem.sh` cũ in "✔ sql" nhờ mô-đun Python | sqlite3 CLI BẮT BUỘC: `kiem.sh` kiểm `command -v sqlite3` (6 dòng: bash git javac java python sqlite3); L00 dạy cài (tải `sqlite-tools-win-x64` từ sqlite.org, chép `sqlite3.exe` vào thư mục `bin` trong thư mục cá nhân, mở lại Git Bash, `sqlite3 --version`); `/etc/profile.d/env.sh` của Git for Windows đặt `$HOME/bin` vào PATH — đã kiểm bằng `bash -l` với HOME giả; `labs/check_env.sh` đổi gợi ý; bỏ mọi nhắc `sqlrun.py` ở L00/L08/L10 và hai dòng thay thế trong `loi_giai.sh` L10 |
+
+## SHOULD (16/16 đã sửa)
+L00+L01..L04 "tạo/lưu/chạy tệp lệnh": L00 thêm 2 step (cài sqlite3; tạo `kiem.sh` bằng trình soạn mã, lưu ở thư mục gốc bộ khoá, "Open Git Bash here", `bash kiem.sh`) + 1 step giải mã `for/if/>/dev/null/$ten`; L01 prereq thêm "⑤ tệp lệnh", thêm mô tả `mkdir -p/touch/cd` ở bài tập. · L01 quiz hiện lại cây (khung đầu cảnh quiz), chữ lệnh trong SVG dùng phông đơn cách (`lib.txt(mono=True)`) hết "Is"; ghi chú `ls` có `/` chỉ khi gõ trực tiếp. · L02 SVG nhãn "sau: MỘT tệp, đổi tên" dời vào giữa khung. · L03 hiện đủ tệp 12 giao dịch ở hook và ở quiz; giảng `seq`. · L04 `set -e` có ngoại lệ (điều kiện `if`, vế trái `&&`/`||`, không phải lệnh cuối của ống). · L05 "ễ = 7 877, e1 bb 85" ("Nguyễn"). · L06 `python -c`, `json.load`, `for … sum` và `json.tool` giảng tại chỗ; heredoc nhắc (dạy ở L02). · L07 `&`, `$!`, `kill`, `sleep` bỏ khỏi "ôn lại" và giảng ở `sym` (step mới); SVG ô máy chủ gọn; máy chủ video và lab là CÙNG một tệp `may_chu.py` (gộp `/chao`, `/tai_khoan/42`, `/nap` vào máy chủ video), lab `de.md` nói rõ. · L08 quiz hiện đủ 7 hàng `giao_dich` (và thêm step hiện bảng ở `formula`); lỗi 3 hiện lệnh KHÔNG giao dịch thật (phiên mới `PhienKhongGD`: trừ ở An, "máy sập", tổng còn 1 900 000). · L10 hiện `giaodich.csv` (11 dòng) ở đầu `example` và `sinh.awk` (3 dòng) ở `scale`.
+
+## P1 (thuật ngữ tại chỗ) — các mục "Cần biết trước" của báo cáo
+L00: bản ghi, ổ cơ=HDD / ổ thể rắn=SSD, PATH, tạo-lưu tệp, mở Git Bash, ✔ (chép-dán). L01: tệp lệnh (nhắc L00), mkdir/touch. L02: biến, `-f`, đệ quy, find/sort, KHỐI CHỮ NHÚNG (phép ⑥, `introduces: fnd_heredoc`). L03: heredoc (assumes), seq. L04: `tr`, `hash -r`, `chmod +x`, `$PWD`, `#!`, `.bashrc`, for/if (L00). L05: nhị phân (đổi 259 từng bước, 3 step thay vì 1), thập lục phân, trình biên dịch, cp1252, iconv, od, Unicode. L06: heredoc, `python -c`, generator/sum, json.tool. L07: chạy nền/`$!`/kill/sleep (`introduces: fnd_nen`), luồng, mã chống lặp. L08: dấu nhắc `>`, bất biến, sqlite3 (L00). L09: git config, nhánh mặc định, `HEAD~1:`, mã băm. L10: CASE WHEN, `.import`, sqlite3, sinh.awk, giaodich.csv.
+Sổ E52 (`tools/registry/symbols.FND.yaml`): `fnd_heredoc` (introduces ở L02 example ⑥; `assumes` ở L03, L05, L06, L10), `fnd_nen` (introduces ở L07 sym). Điểm P1 dự kiến: 2 ở 11/11 bài (≥ 10/11); P8 = 2 ở 11/11 (L05 đã sửa; lab_gate chạy cả bước 1). NOT_VERIFIED: điểm do người đọc độc lập chấm lại.
+
+## Mục tiêu giáo án
+L00: mục tiêu "Cài các công cụ… kể cả sqlite3" + mục tiêu mới "Tạo, lưu và chạy một tệp lệnh…" (covers → `practice`). L02: mục tiêu mới "Ghi nhiều dòng vào một tệp bằng khối chữ nhúng" (covers → `example`). `curriculum/fnd.yaml` đồng bộ (objectives + chú thích sqlite3 ở đầu tệp); `lv.py curriculum`: 11 bài, 0 lỗi.
+
+## Cổng (số thật, sqlite3 3.46.0)
+- `verify_fnd.py`: **76/76 PASS** (trước 70; thêm PhienTuTao, PhienKhongGD, PhienCauHinh, PhienNhieuDong, PhienImport… ; máy chủ L07 dùng tệp gộp).
+- `lv.py lint` từng bài: **0 FAIL, 0 WARN** ở cả 11 bài (E51/E52/E53/E55 gồm trong đó). `lv.py render`: **0 vấn đề** ở cả 11 bài (L03 hook ban đầu tràn → bỏ đoạn chữ dưới khối mã, đã sạch).
+- `audit/review/lab_gate.py FND`: **11 PASS · 0 FAIL**.
+- `screen_code.py gen-fnd` (193 khối, chưa khớp 0) + `check --course FND`: **PASS 280 · FAIL 0 · STALE 0 · MISSING 0 · ORPHAN 0**. Sổ FND.yaml sinh lại bằng `gen-fnd` (bản cũ để ở scratchpad `FND_screen_code_before.yaml`).
+- `lv.py curriculum curriculum/fnd.yaml`: 0 lỗi · `check_curricula_graph.py`: 46 lộ trình, 0 tham chiếu hỏng, 0 chu trình · `check_xref.py`: 0 · `check_meta.py`: 5 vấn đề, tất cả của PYT, 0 của FND · `check_course_refs.py fnd`: 0 vấn đề · `arith_scan.py`: 226 phép tính, 0 FAIL · `tests/test_e52.py`: 0 FAIL.
+- `check_next_refs.py` (và `check_course_refs.py` không đối số) KHÔNG chạy xong: `pack.stages` dừng ở `assert … PYT:L00…L09 không có chỗ trong dãy` (PYT chưa vào STAGES của `learn_start/pack.py`, việc của luồng PYT, không phải FND). FND không có lời hẹn "Bài sau (bài N)" nào (grep 0), nên chưa thể vi phạm; chạy lại sau khi PYT vào STAGES.
+- Khung PNG đã xem (≥ 3 mỗi bài đổi nhiều): L00 (cài sqlite3, tạo tệp, giải mã kiem.sh), L08 (NULL có INSERT), L10 (`.import` chưa có bảng → 10), L05 (nhị phân → thập lục phân), L09 (bước 0 git config), L02 (khối chữ nhúng), L03 (hook đủ 12 dòng). Phát hiện khi xem: không có chữ đè/tràn.
+
+## Không sửa / ghi chú
+- `labs/cham.sh` (dùng chung với JV2/JVA, đang sửa bởi người khác) vẫn có nhánh dự phòng `sqlrun.py` cho `.sql` khi máy không có sqlite3; không đụng. Hợp đồng FND (bắt buộc CLI) nằm ở `kiem.sh` + de.md + check_env.sh. `audit/fnd/runner.py` vẫn tự thêm shim vào PATH khi máy kiểm thiếu sqlite3 (chỉ để chạy được `verify_fnd`); khi có sqlite3 chính thức thì không dùng shim.
+- `labs/ENV.md` không sửa (đã ghi sqlite3 là thành phần chuẩn của FND).
+- 4 câu `say` mới ngắn hơn 8 từ đã nối dài (0 câu < 8 từ trong số câu mới/đổi: script so với `git HEAD`).
+- Việc người điều phối: dựng lại 11 bài FND (TTS cho câu mới/đổi, ASR, `asr_reviewed` của câu đã đổi được gen giữ lại chỉ khi câu còn nguyên); chạy lại ba cổng có sqlite3 bằng bản chính thức.
+- Điểm CHƯA kiểm được: ví dụ "Open Git Bash here / Show more options" và Visual Studio Code (ghi theo hiểu biết, không thể thử trên máy này); tên tệp `sqlite-tools-win-x64-….zip` ghi theo lệnh của người điều phối, chưa mở lại trang sqlite.org (không tải mạng).

@@ -29,11 +29,11 @@ chenh tien: -500""", lang="python")
     hook = sc("hook", "hook", "Vì sao cuối ngày sổ ngân hàng và sổ chuyển mạch lệch nhau?", [
         st("""<p>Cuối ngày, ngân hàng có $5$ giao dịch, chuyển mạch cũng có $5$. Nhưng hai danh sách <b>không giống nhau</b>: có giao dịch chỉ một bên có, và có giao dịch hai bên ghi <b>số tiền khác nhau</b>.</p>
 <div class="box key">Việc <b>đối soát</b> tìm ra chúng, theo từng loại, rồi mỗi loại có cách xử lý riêng.</div>""",
-           """Chào bạn, cuối ngày, ngân hàng có năm giao dịch, chuyển mạch cũng có năm. Nhưng hai danh sách không giống nhau. Có giao dịch chỉ một bên có, và có giao dịch hai bên ghi số tiền khác nhau.
-           Đối soát tìm ra chúng, theo từng loại, rồi mỗi loại có cách xử lý riêng."""),
+           """Chào bạn, cuối ngày, ngân hàng có năm giao dịch, chuyển mạch, tức hệ thống ở giữa chuyển lệnh giữa các ngân hàng, cũng có năm. Nhưng hai danh sách không giống nhau. Có giao dịch chỉ một bên có, và có giao dịch hai bên ghi số tiền khác nhau.
+           Đối soát, tức so hai danh sách với nhau, tìm ra chúng theo từng loại, rồi mỗi loại có cách xử lý riêng."""),
         st(table(["loại", "số giao dịch (ví dụ minh hoạ)"],
                  [["khớp hoàn toàn", "3"], ["chỉ có ở ngân hàng", "1"], ["chỉ có ở chuyển mạch", "1"], ["cùng mã nhưng lệch tiền", "1"]]),
-           """Bảng này là kết quả mô phỏng ở cuối bài, với số liệu minh hoạ. Ba giao dịch khớp hoàn toàn, một giao dịch chỉ có ở ngân hàng, một chỉ có ở chuyển mạch, và một cùng mã nhưng lệch tiền.
+           """Bảng này là kết quả mô phỏng, ta sẽ thấy ở phần chạy thật, với số liệu minh hoạ. Ba giao dịch khớp hoàn toàn, một giao dịch chỉ có ở ngân hàng, một chỉ có ở chuyển mạch, và một cùng mã nhưng lệch tiền.
            Lưu ý, bài này dùng mô hình chung của chuyển mạch liên ngân hàng. Ở Việt Nam, chuyển mạch đó là NAPAS, công ty chuyển mạch thẻ và thanh toán liên ngân hàng. Chi tiết của NAPAS nằm trong đặc tả kết nối chính thức của họ."""),
     ])
     pre = sc("prereq", "prereq", "Trước hết: ba điều cần hiểu", [
@@ -58,6 +58,13 @@ chenh tien: -500""", lang="python")
                   ["bản tin huỷ (reversal)", "bản tin đảo một giao dịch đã hạch toán khi cần"]]),
            """Bảng dưới đây giải nghĩa sáu thuật ngữ mà bài sẽ dùng. Chuyển mạch là hệ thống ở giữa, nhận lệnh từ ngân hàng gửi rồi chuyển tới ngân hàng nhận. Ngân hàng gửi khởi tạo lệnh, ngân hàng nhận có tài khoản thụ hưởng.
            Đối soát là so cả hai danh sách theo mã để tìm chỗ lệch. Còn tra soát là hỏi trạng thái hoặc khiếu nại cho từng giao dịch cụ thể. Hết giờ chờ là khi chưa nhận được kết quả, trạng thái thật phải tra cứu. Bản tin huỷ là bản tin đảo một giao dịch đã hạch toán."""),
+        st(table(["từ", "nghĩa"],
+                 [["hạch toán", "ghi khoản tiền vào sổ cái (sổ ghi mọi khoản tiền vào ra), tức là trừ hay cộng tiền thật sự"],
+                  ["ghi nợ / ghi có", "ghi nợ: trừ tiền ở tài khoản người gửi; ghi có: cộng tiền vào tài khoản người nhận"],
+                  ["lõi + cổng", "lõi ngân hàng: hệ thống trung tâm giữ tài khoản và sổ cái; cổng: phần nhận lệnh từ ứng dụng rồi đưa vào lõi và nối ra chuyển mạch"],
+                  ["mã băm", "hàm biến một mã thành một số cố định; dùng để chia việc đều ra nhiều phần"]]),
+           """Bốn từ nữa, trước hết hạch toán là ghi khoản tiền vào sổ cái, tức trừ hay cộng tiền thật sự. Ghi nợ là trừ tiền ở tài khoản người gửi, ghi có là cộng tiền vào tài khoản người nhận.
+           Lõi ngân hàng là hệ thống trung tâm giữ tài khoản và sổ cái, còn cổng nhận lệnh từ ứng dụng rồi đưa vào lõi và nối ra chuyển mạch. Mã băm là hàm biến một mã thành một số cố định, dùng để chia việc đều ra nhiều phần.""", clear=True),
     ])
     intu = sc("intuition", "intuition", "Hình dung: đường đi của một lệnh chuyển nhanh và chỗ có thể mất dấu", [
         st(svg(1500, 440,
@@ -93,10 +100,10 @@ chenh tien: -500""", lang="python")
 <span class='note'>Làm thử: $3 + 1 + 1 + 1 = 6$, đủ cả sáu mã, không mã nào thuộc hai loại.</span>""",
            """Bước hai, vì mỗi mã chỉ rơi vào đúng một loại, nên ta chia bốn loại. Khớp là cả hai có và tiền bằng nhau. Lệch tiền là cả hai có nhưng tiền khác. Còn hai loại là chỉ ngân hàng có, hoặc chỉ chuyển mạch có.
            Làm thử, ba cộng một cộng một cộng một bằng sáu, đủ cả sáu mã."""),
-        st("""<p><b>Bước 3.</b> Mỗi loại có <b>hành động riêng</b> (quy trình điển hình): khớp thì xong; chỉ một bên thì tra soát trạng thái thật; lệch tiền thì điều tra nguyên nhân. Việc sửa sổ luôn qua bước duyệt.</p>
+        st("""<p><b>Bước 3.</b> Mỗi loại có <b>hành động riêng</b> (quy trình điển hình): khớp thì xong; chỉ một bên thì tra soát trạng thái thật; lệch tiền thì điều tra nguyên nhân. Việc sửa sổ phải qua bước duyệt.</p>
 <span class='note'>Sửa sổ bằng bút toán đảo: thêm dòng mới ngược dấu với dòng sai, không xoá dòng cũ.</span>""",
            """Bước ba, vì nguyên nhân mỗi loại khác nhau, nên mỗi loại có hành động riêng theo quy trình điển hình. Khớp thì xong. Chỉ một bên có thì tra soát trạng thái thật. Lệch tiền thì điều tra nguyên nhân.
-           Việc sửa sổ luôn qua bước duyệt, và sửa bằng bút toán đảo, tức là thêm một dòng mới ngược dấu với dòng sai, chứ không xoá dòng cũ."""),
+           Việc sửa sổ phải qua bước duyệt, và sửa bằng bút toán đảo, tức là thêm một dòng mới ngược dấu với dòng sai, chứ không xoá dòng cũ."""),
     ], checks=["3 + 1 + 1 + 1 == 6", "alg.bnk_reconcile(" + BANK + ", " + SWITCH + ") == (3, 1, 1, 1)"])
     ex = sc("example", "example", "Ví dụ bằng số, từng phép tính", [
         st("""<p>Sổ ngân hàng: r1 $100$, r2 $200$, r3 $300$, r4 $400$, r5 $500$. Sổ chuyển mạch: r1 $100$, r2 $200$, r3 $350$, r4 $400$, r6 $600$ <i>(số minh hoạ)</i>.</p>
@@ -121,7 +128,7 @@ $$1650 - 1500 = \\hl{150}\\ \\text{chênh lệch}$$""",
            """Kiểm bằng đường khác. Vì mỗi giao dịch đều có tiền, ta cộng tổng tiền của mỗi sổ. Ngân hàng là một nghìn năm trăm. Chuyển mạch là một nghìn sáu trăm năm mươi. Chênh lệch là một trăm năm mươi."""),
         st(table(["nguồn chênh lệch", "số tiền", "giải thích"],
                  [["r3 lệch tiền", "+50", "350 − 300"], ["r6 chỉ chuyển mạch", "+600", "ngân hàng thiếu"], ["r5 chỉ ngân hàng", "−500", "chuyển mạch thiếu"], ["tổng", "+150", "50 + 600 − 500"]]),
-           """Bảng này giải thích chênh lệch. Vì mỗi mã góp một phần, nên r ba lệch cộng năm mươi. R sáu chỉ có ở chuyển mạch, cộng sáu trăm. R năm chỉ có ở ngân hàng, trừ năm trăm. Cộng lại được một trăm năm mươi, khớp với hiệu hai tổng."""),
+           """Bảng này giải thích chênh lệch. Vì mỗi mã góp một phần, nên r ba lệch cộng năm mươi. R sáu chỉ có ở chuyển mạch, cộng sáu trăm. R năm chỉ có ở ngân hàng, trừ năm trăm. Cộng lại được một trăm năm mươi, khớp với hiệu hai tổng. Lưu ý, hai lệch ngược nhau có thể bù nhau làm tổng khớp, nên kiểm tổng không đủ, vẫn phải đối soát từng mã."""),
     ], checks=["sum(v for _, v in " + SWITCH + ") - sum(v for _, v in " + BANK + ") == 150", "50 + 600 - 500 == 150"])
     pit = sc("pitfalls", "pitfall", "Lỗi hay gặp, có lỗi của người đã đi làm", [
         st("""<div class="box warn"><b>Lỗi 1 (người mới).</b> Ghép hai sổ theo <b>số tiền</b>. Hai giao dịch khác nhau cùng số tiền sẽ ghép nhầm. Phải ghép theo mã tham chiếu.</div>""",
@@ -161,10 +168,10 @@ $$\\text{khớp } 1,\\ \\text{lệch } 1,\\ \\text{chỉ A } 1,\\ \\text{chỉ B
     add_steps([pre], "prereq", [
         st(table(["thêm ba điều để đọc mã", "nghĩa", "ví dụ"],
                  [["④ Từ điển", "<code>{khoá: giá trị}</code> là bảng tra; <code>d[k]</code> lấy giá trị; <code>k in d</code> hỏi khoá có trong d không; <code>d.values()</code> là mọi giá trị", "<code>{\"r1\": 100}</code>"],
-                  ["⑤ Danh sách lọc", "<code>[m for m in d if điều_kiện]</code> là danh sách các m trong d thoả điều kiện", "<code>[m for m in d if d[m] &gt; 150]</code>"],
-                  ["⑥ Đếm và cộng", "<code>len(x)</code> số phần tử; <code>sum(x)</code> tổng", "<code>sum(d.values())</code>"]]),
+                  ["⑤ Danh sách lọc", "<code>[m for m in d if điều_kiện]</code> là danh sách các m trong d thoả điều kiện; trong điều kiện: <code>and</code> là cả hai cùng đúng, <code>not in</code> là không có trong, <code>==</code> là bằng, <code>!=</code> là khác", "<code>[m for m in d if d[m] &gt; 150]</code>"],
+                  ["⑥ Đếm, cộng và in", "<code>len(x)</code> số phần tử; <code>sum(x)</code> tổng; <code>print(a, b, c)</code> in nhiều giá trị trên một dòng, cách nhau một dấu cách", "<code>sum(d.values())</code>"]]),
            """Thêm ba điều để đọc mã bằng một ngôn ngữ lập trình khác. Từ điển là bảng tra theo khoá, có thể lấy giá trị, hỏi khoá có trong bảng không, và lấy mọi giá trị. Danh sách lọc là danh sách các phần tử thoả một điều kiện.
-           Còn hai hàm có sẵn, một hàm đếm số phần tử và một hàm cộng tổng.""", clear=True),
+           Trong điều kiện, hai chữ và nghĩa là cả hai cùng đúng, chữ không có trong nghĩa là vắng mặt, hai dấu bằng là bằng nhau, còn dấu chấm than kèm dấu bằng là khác nhau. Có hai hàm có sẵn, một hàm đếm số phần tử và một hàm cộng tổng. Lệnh in nhiều giá trị đặt chúng trên một dòng, cách nhau một dấu cách.""", clear=True),
     ], at=1)
     pre["title"] = "Trước hết: sáu điều cần hiểu"
     run = sc("chay_that", "example", "Chạy thật: đối soát hai sổ bằng chương trình ngắn", [
@@ -172,20 +179,20 @@ $$\\text{khớp } 1,\\ \\text{lệch } 1,\\ \\text{chỉ A } 1,\\ \\text{chỉ B
            """Ta đối soát thật bằng một chương trình ngắn. Hai từ điển là sổ ngân hàng và sổ chuyển mạch, mỗi mã tham chiếu đi với một số tiền. Bốn danh sách lọc cho bốn loại.
            Khớp là mã có ở cả hai sổ và cùng tiền. Lệch tiền là có ở cả hai nhưng khác tiền. Chỉ ngân hàng là mã không có ở chuyển mạch. Chỉ chuyển mạch là mã không có ở ngân hàng."""),
         st(code_block(doi_soat, lines=(7, 8), title="Đếm từng loại, và chênh lệch tổng tiền") + out_block(doi_soat),
-           """Khi chạy thật, được ba khớp, một lệch tiền, một chỉ ở ngân hàng, một chỉ ở chuyển mạch. Ba cộng một cộng một cộng một bằng sáu, đúng số mã khác nhau. Chênh lệch tổng tiền là một trăm năm mươi, đúng với phép tính tay.""", clear=True),
+           """Khi chạy thật, được ba khớp, một lệch tiền, một chỉ ở ngân hàng, một chỉ ở chuyển mạch. Ba cộng một cộng một cộng một bằng sáu, đúng số mã khác nhau. Chênh lệch tổng tiền là một trăm năm mươi, đúng với phép tính tay.""", clear=True, focus=[4, 4, 4]),
     ])
     scale = sc("quy_mo", "example", "Quy mô: so từng cặp gãy trước, bảng tra gãy sau", [
-        st("""<p>Mỗi bên có $N$ giao dịch mỗi ngày. Cách ngây thơ so <b>từng cặp</b> ($N \\cdot N$ phép so, giả sử $10^8$ phép so mỗi giây); cách bảng tra mất $N$ phép tra ($10^7$ mỗi giây) và giữ cả bảng trong bộ nhớ ($100$ byte mỗi mục) <i>(số minh hoạ)</i>:</p>"""
+        st("""<p>Mỗi bên có $N$ giao dịch mỗi ngày (tải ×100 nghĩa là $N$ nhân 100). Cách ngây thơ so <b>từng cặp</b> ($N \\cdot N$ phép so, giả sử $10^8$ phép so mỗi giây); cách bảng tra mất $N$ phép tra ($10^7$ mỗi giây) và giữ cả bảng trong bộ nhớ ($100$ byte mỗi mục; 1 MB ≈ một triệu byte, 1 GB ≈ một nghìn MB) <i>(số minh hoạ)</i>:</p>"""
            + table(["tải", "N", "so từng cặp", "bảng tra: thời gian", "bảng tra: bộ nhớ"],
                    [["×1", "100 000", "100 giây", "0,01 giây", "10 MB"],
                     ["×100", "10 000 000", "<b>≈ 11,6 ngày</b>", "1 giây", "<b>1 GB</b>"],
                     ["×10 000", "1 000 000 000", "<b>≈ 317 năm</b>", "100 giây", "<b>100 GB</b>"]]),
-           """Mỗi bên có N giao dịch mỗi ngày. Cách ngây thơ so từng cặp cần N nhân N phép so, giả sử một trăm triệu phép mỗi giây. Cách bảng tra cần N phép tra, và giữ cả bảng trong bộ nhớ. Đây là số minh hoạ.
+           """Mỗi bên có N giao dịch mỗi ngày, và tải tăng một trăm lần nghĩa là N nhân một trăm. Cách ngây thơ so từng cặp, lần lượt từng cặp một, cần N nhân N phép so, giả sử một trăm triệu phép mỗi giây. Cách bảng tra cần N phép tra, và giữ cả bảng trong bộ nhớ. Đây là số minh hoạ.
            Với một trăm nghìn giao dịch, so từng cặp mất một trăm giây. Tải tăng một trăm lần mất hơn mười một ngày, và tải tăng mười nghìn lần mất khoảng ba trăm mười bảy năm. Bảng tra thì chỉ một trăm giây, nhưng cần khoảng một trăm nghìn mê ga byte bộ nhớ.""", clear=True),
-        st("""<div class="box warn"><b>Giải pháp cũ gãy ở đâu.</b> So từng cặp gãy ngay từ ×100. Bảng tra nhanh, nhưng ở ×10 000 cần cỡ 100 GB bộ nhớ nên cũng gãy trên một máy.</div>
+        st("""<div class="box warn"><b>Giải pháp cũ gãy ở đâu.</b> So từng cặp gãy ngay từ ×100. Bảng tra nhanh, nhưng ở ×10 000 cần cỡ 100 GB bộ nhớ (với giả định 100 byte mỗi mục), vượt bộ nhớ của máy thường, nên phải chia phần.</div>
 <div class="box key"><b>Đánh đổi:</b> chia việc theo mã băm hoặc theo ngày và ngân hàng thành nhiều phần nhỏ vừa bộ nhớ rồi đối soát từng phần song song; hoặc sắp xếp hai sổ theo mã rồi trộn từng dòng (chỉ cần đọc tuần tự, ít bộ nhớ nhưng tốn thời gian sắp xếp).</div>""",
-           """Câu hỏi là giải pháp cũ sẽ gãy ở chỗ nào khi tải tăng lên. So từng cặp gãy ngay từ tải gấp trăm lần. Bảng tra nhanh, nhưng ở tải gấp mười nghìn lần cần cỡ một trăm nghìn mê ga byte bộ nhớ, nên cũng gãy trên một máy.
-           Đánh đổi là chia việc theo mã băm, hoặc theo ngày và ngân hàng, thành nhiều phần nhỏ vừa bộ nhớ, rồi đối soát từng phần song song. Hoặc sắp xếp hai sổ theo mã rồi trộn từng dòng, chỉ cần đọc tuần tự, ít bộ nhớ nhưng tốn thời gian sắp xếp.""", clear=True),
+           """Câu hỏi là giải pháp cũ sẽ gãy ở chỗ nào khi tải tăng lên. So từng cặp gãy ngay từ tải gấp trăm lần. Bảng tra nhanh, nhưng ở tải gấp mười nghìn lần cần cỡ một trăm nghìn mê ga byte bộ nhớ, giả định mỗi mục một trăm byte. Con số đó vượt bộ nhớ của máy thường, nên phải chia phần.
+           Đánh đổi là chia việc theo mã băm, hoặc theo ngày và ngân hàng, thành nhiều phần nhỏ vừa bộ nhớ, rồi đối soát từng phần song song, tức cùng lúc nhiều phần. Hoặc sắp xếp hai sổ theo mã rồi trộn từng dòng, chỉ cần đọc tuần tự, ít bộ nhớ nhưng tốn thời gian sắp xếp.""", clear=True),
     ], checks=["100000 * 100000 / 10**8 == 100.0", "round(10_000_000 ** 2 / 10**8 / 86400, 1) == 11.6", "round(1_000_000_000 ** 2 / 10**8 / (365.25 * 86400)) == 317",
                "100000 / 10**7 == 0.01", "10_000_000 / 10**7 == 1.0", "1_000_000_000 / 10**7 == 100.0",
                "100000 * 100 == 10_000_000", "10_000_000 * 100 == 1_000_000_000", "1_000_000_000 * 100 == 100_000_000_000"])
@@ -202,7 +209,9 @@ khop 3 - lech tien 1 - chi ngan hang 2 - chi chuyen mach 2
 chenh tien: -500
 ```
 
-(`chenh tien` = tổng tiền chuyển mạch trừ tổng tiền ngân hàng.) Chạy: `python doi_soat.py`. Chấm: `bash labs/cham.sh BNK L12 doi_soat.py`.
+(`chenh tien` = tổng tiền chuyển mạch trừ tổng tiền ngân hàng.) Mẹo in: `print("khop", 3, "-", "lech tien", 1)` in `khop 3 - lech tien 1`; các giá trị cách nhau một dấu cách.
+
+Chạy: `python doi_soat.py`. Chấm: `bash labs/cham.sh BNK L12 doi_soat.py`.
 """, "py", lab_ds["code"], lab_ds["out"])
     lab = practice_scene(sc, "Tự làm: đối soát sáu mã", practice_steps(
         st, "BNK", "L12",
@@ -223,4 +232,4 @@ Lời giải ở <code>labs/BNK/L12/loi_giai.py</code> — chỉ mở sau khi b�
                    "Tính thời gian và bộ nhớ của hai cách đối soát khi tải tăng ×100, ×10 000",
                    "Viết chương trình đối soát hai sổ bằng hai từ điển"],
                   [hook, pre, sym, intu, form, ex, run, chk, pit, quiz, scale, lab, rec],
-                  covers=[(1, "intuition"), (2, "formula"), (3, "check"), (4, "example"), (5, "chay_that"), (6, "quy_mo"), (7, "practice")])
+                  covers=[(1, "intuition"), (2, "formula"), (3, "check"), (4, "formula"), (5, "chay_that"), (6, "quy_mo"), (7, "practice")], assumes=['bnk_doi_soat', 'bnk_hach_toan', 'bnk_ghi_no_co', 'bnk_loi_ngan_hang'])

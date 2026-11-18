@@ -45,3 +45,10 @@ def bnx_scopes(s):
 def bnx_token_requests_per_hour(n_api, ttl):
     """Mỗi mã riêng một API, hạn ttl giây: số lần xin mã mỗi giờ."""
     return n_api * (3600 // ttl)
+
+
+def bnx_token_issues(n_clients, ttl=300, som=30, gio=3600):
+    """Số lần xin mã trong `gio` giây khi mỗi máy khách giữ mã và xin lại khi còn `som` giây; máy khách i bắt đầu lệch i % (ttl - som).
+    Công thức đóng (đường khác với vòng lặp của bài): máy khách có độ lệch o xin ⌊(gio − 1 − o)/(ttl − som)⌋ + 1 lần."""
+    step = ttl - som
+    return sum((gio - 1 - (i % step)) // step + 1 for i in range(n_clients))

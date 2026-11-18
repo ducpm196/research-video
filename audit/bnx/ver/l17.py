@@ -267,3 +267,39 @@ def run(rec):
     # ── kiểm ngược thứ tự: mã hỏng dừng ở trạm đọc mã ──
     rec("L17", alg.bnx_l17_pos("BearerTokenAuthenticationFilter") < alg.bnx_l17_pos("TramQuanSat") < alg.bnx_l17_pos("AuthorizationFilter")
         and not cases["B"]["obs"] and cases["C"]["obs"], "trạm 8 < trạm 9 < trạm 14; mã hỏng không tới trạm 9, mã tốt tới trạm 9 (quan sát thật)")
+
+    # ── AF2 (WP4 2026-11-14): cảnh quy mô (mô phỏng CuaSoLoi) + lab ──────────────────────────────
+    import lib2
+    p = lib2.find("L17", "CuaSoLoi")
+    rc, so, se = p.execute()
+    rec("L17", rc == 0 and so.strip("\n") == p.out, f"CuaSoLoi.java chạy lại cho đúng đầu ra đã hiện (rc={rc})")
+    got = [(int(r), int(n)) for r, n in re.findall(r"^(\d+) yeu cau/giay, 45 giay: (\d+) loi$", p.out, re.M)]
+    rates = (100, 10000, 1000000)
+    rec("L17", [g[0] for g in got] == list(rates) and [g[1] for g in got] == [alg.bnx_l17_lost(r, 3, 45) for r in rates] == [1500, 150000, 15000000],
+        "mô phỏng ở 100, 10 000, 1 000 000 yêu cầu/giây (×1, ×100, ×10 000): 1 500; 150 000; 15 000 000 yêu cầu rơi vào bản chết trong 45 giây")
+    # đường khác: đếm bằng vòng lặp Python (chỉ ở cỡ nhỏ) và công thức
+    def dem(rate, giay, so_ban):
+        n = 0
+        for i in range(rate * giay):
+            if i % so_ban == 0:
+                n += 1
+        return n
+    rec("L17", dem(100, 45, 3) == 1500 and dem(10000, 45, 3) == 150000 and 1000000 * 45 // 3 == 15000000 and 10 + 35 == 45,
+        "Python đếm lại từng yêu cầu (100 và 10 000/giây) và công thức rate · 45 : 3; 45 = 10 giây chờ kiểm + 35 giây bộ đệm")
+    lab = ROOT / "labs" / "BNX" / "L17"
+    want = (lab / "mong_doi.txt").read_text(encoding="utf-8").strip()
+    r = subprocess.run([lib2._bash(), str(ROOT / "labs" / "cham.sh"), "BNX", "L17", str(lab / "loi_giai.py")], capture_output=True, text=True, encoding="utf-8", cwd=ROOT)
+    rec("L17", r.returncode == 0 and r.stdout.strip() == "ĐÚNG", f"lab: loi_giai.py chấm bằng labs/cham.sh → {r.stdout.strip()[:60]!r}")
+    # đường khác cho lab: dùng hàm của bảng quyết định mô hình (alg) và đếm tay
+    stt = []
+    for ma, duong in ((None, "so"), ("gia", "so"), ("cu", "ct"), ("an", "so"), ("an", "ct"), ("binh", "ct")):
+        if ma in (None, "gia", "cu"):
+            stt.append(401)
+        elif duong == "ct" and ma == "an":
+            stt.append(403)
+        else:
+            stt.append(200)
+    kh = ["b1", "b3", "b4"]
+    cnt = {k: sum(1 for i in range(250) if kh[i % 3] == k) for k in kh}
+    rec("L17", want == "\n".join(f"ca {i}: {s}" for i, s in enumerate(stt, 1)) + "\n" + " ".join(f"{k}={v}" for k, v in cnt.items()) and sum(cnt.values()) == 250,
+        "lab: 6 ca [401, 401, 401, 200, 403, 200] và 250 yêu cầu cho 3 bản khoẻ → 84, 83, 83 — tính lại bằng đường khác")

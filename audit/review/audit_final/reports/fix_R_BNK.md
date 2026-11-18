@@ -1,0 +1,55 @@
+# fix_R_BNK — sửa khoá BNK (15 bài L00–L14) theo R_BNK.md — 2026-11-14
+
+Nguồn sửa: `audit/bnk/src/l00..l14.py` (+ `audit/bnk/lib.py`: nhãn mũi tên có viền trắng, tham số `intro` để gắn `introduces` E52; `audit/bnk/verify_bnk.py`: thêm 18 kiểm → 44/44 PASS). Không chạy build/tts/asr/audit_all/git. Các tệp phụ đã sửa: `tools/registry/symbols.BNK.yaml` (28 mục `term:`), `audit/legal/registry.yaml` (TT 50/2024, 77/2025), `curriculum/bnk.yaml` + `audit/bnk/gen_curriculum.py` (ví dụ L05, L13), `labs/BNK/L03/may_chu/*` (mới), `labs/BNK/{L03,L06,L08,L10}/de.md`, `audit/review/screen_code/BNK.yaml` (sinh lại bằng `audit/bnk/screen_gen.py`: 100 khối, 0 chưa khớp).
+
+## MUST (6/6 đã sửa; mỗi cái kiểm lại bằng chạy thật trước khi sửa)
+1. **L06** `quy_mo` step 2: 10^6×0,02 = 20 000 kết nối; trúng 99,9% → 20, muốn 10 cần **99,95%**. Sửa màn hình + lời đọc; kiểm trong verify (Fraction) và kiểm chữ trong YAML.
+2. **L09** `quy_mo` step 1: lời đọc "bốn ngày rưỡi" → "bốn phẩy hai ngày" (4,2245); step 2 cũng "bốn phẩy hai ngày". verify chặn "ngày rưỡi".
+3. **L13**: sửa `formula` bước 1, `chay_that` step 2, hình khối PIN, quiz và giáo án: `041225EEEEEEEEEE` là khối PIN **rõ**; chương trình `KhoiPin` nay in thêm dòng XOR lại với số thẻ → `041234FFFFFFFFFF` (chạy thật, ledger PASS): chỉ cần số thẻ, không cần khoá; vì thế phải mã hoá bằng khoá (TDES/AES) trong HSM. Thêm câu quiz 3 về điều này. Câu sai "Người không có thì chỉ thấy dãy này" đã bị loại, verify chặn tái phát.
+4. **L05**: THỬ THẬT bằng `audit/bnx/dbrun.py`: `SELECT banner FROM v$version` → "Oracle AI Database 26ai Free Release 23.26.3.0.0"; chạy lại nguyên khối PL/SQL của bài trên `bnx-ora` ra đúng `xong, tong truoc = 1500000 / 2 700000 / 5 800000` (không chạm container khác). Sự thật: **PL/SQL chạy thật trên Oracle (Docker)**, chỉ bế tắc là mô phỏng bằng Java. Thống nhất: `check` step 1 (bỏ "máy này không chạy được"), `chay_that` (giữ "chạy thật", thêm phần dựng bảng + SELECT cuối để tái hiện số), `curriculum/bnk.yaml` example, lời đọc `check`; L04 bỏ câu "Máy này không có Oracle" và nguồn tương ứng.
+5. **L08**: `COMMIT;` ngay sau `INSERT` lỗi ở sqlite3 CLI ("no transaction is active"). Nay mọi giao dịch (kể cả đặt số dư đầu) dùng `BEGIN; … COMMIT;` rõ ràng: kiểm trên `sqlite3.exe` 3.46.0 mượn tạm trong scratchpad (CLI) và trên `labs/sqlrun.py` (Python sqlite 3.49): cùng đầu ra `2300000 / lenh 77 da tru 700000|0`. Sửa `chay_that` (3 chương trình SQL), practice step 3, `de.md`, "Nếu kẹt". verify kiểm cả chế độ tự chốt lẫn giao dịch ngầm và việc COMMIT khi không có giao dịch báo lỗi.
+6. **L14** `check`: thêm bước hiện **sổ 6 dòng** (3 giao dịch × 2 dòng, tổng mỗi giao dịch 0) và giảng "cân đối" tại chỗ, có câu cầu nối "ở phần chạy thật rút mỗi lệnh thành một dòng cho gọn"; giảng 4 dòng cũ (hai lệnh, mỗi lệnh 2 dòng) + 2 dòng đảo = 6.
+
+## SHOULD (≈ 38 mục đã sửa; mục không sửa ở cuối)
+- **L01** `MatCapNhat` không tất định (9/30 true; thử lại với 10^7 vòng vẫn 4/40 true vì JIT) → viết lại bằng giấc ngủ ép xen kẽ: A đọc 100 ngủ 100 ms, B đọc 100 ngủ 200 ms ⇒ in **130 mọi lần**; `CoKhoa` ⇒ **180** mọi lần; "ba việc/hai việc" thống nhất (gộp cộng vào ghi); thêm bảng 6 thứ tự xen kẽ; sửa hình xen kẽ (mũi tên B, trục thời gian).
+- **L00** `RoRi` phụ thuộc bộ dọn: thử đo hiệu (không ổn định trên Serial/ZGC) nên giữ phép đo, thêm ghi chú trên màn hình + lời đọc "đúng với bộ dọn mặc định, máy một bộ xử lý có thể khác"; "MB" ghi rõ 1 MB = 10^6 byte trong mã, GB định nghĩa; nhãn "tham chiếu" có viền trắng (không bị viền panel cắt).
+- **L02** "Spring thật dùng đúng cơ chế này" → "cùng ý tưởng: proxy chuẩn Java hoặc lớp con CGLIB; Spring Boot mặc định chọn lớp con"; thêm "(số minh hoạ)", PostgreSQL mặc định 100 kết nối làm mốc, giải thích "+1", `(p, m, a)`, "hộp kết nối", "đường chạy nóng", "ghi vết".
+- **L03** "mỗi khoá" → "mỗi yêu cầu in một dòng (4 dòng)" ở video + de.md; `MayChu.java` đủ import/khung lớp trên màn hình (2 khung); lab thêm `labs/BNK/L03/may_chu/{MayChu.java,thu_curl.sh,ket_qua_curl.txt}` + hướng dẫn chạy máy chủ + curl (phần không chấm; nguồn chạy thật vẫn qua ledger: 6 dòng curl PASS).
+- **L04** hình cây ghi "rút gọn: 3 tầng, 2 nhánh; thật cần 4 tầng, 100 nhánh"; "5 lần đọc (nút+dòng) vs 10 000 000 lần đọc dòng, quét thật đọc theo khối" ghi chú đơn vị; định nghĩa nút/lối rẽ, chỉ mục nhiều cột, byte, bộ nhớ vs đĩa.
+- **L05** hình đồ thị chờ vẽ lại đúng quy ước (hai mũi tên khép vòng, nhãn không bị cắt); PL/SQL có CREATE TABLE/INSERT/SELECT cuối; giả định "số hàng nóng giữ nguyên" + giải thích T(T−1)/2 + định nghĩa "kỳ vọng"; mã BeTac đủ import/class/`}` (3 khung); "ORDER BY … FOR UPDATE" hạ xuống "không nên giả định" (nguồn ghi chưa kiểm thực nghiệm); INITRANS, Docker, INTO/DBMS_OUTPUT, lock/tryLock được giảng tại chỗ.
+- **L06** "hộp" → "nhóm kết nối"; số ⑦⑧ trước ④⑤⑥ đánh lại; nhãn "nơi lưu" → "kho dữ liệu được ghi" (Redis không kiểm mã chặn; nói ai cấp mã); thu gom rác giảng tại chỗ; mã đủ import/class (BoDem, MaChan 2 khung); mũi tên không xuyên chữ "20 ms"; nhãn viền trắng.
+- **L07** "TK-1001 → phân vùng 1" ghi chú trên màn hình + lời: băm minh hoạ crc32, **Kafka thật (murmur2) cho phân vùng 2** (tự cài murmur2, khớp 4 vector chuẩn Kafka, verify); định nghĩa "lũy đẳng", "giao dịch cơ sở dữ liệu"; bỏ "tệp mở"; ChiaPhanVung/GhiNho đủ khung lớp và `}` (3 khung).
+- **L08** nhãn `hook` "kết quả mô phỏng ở cuối bài" → "thấy ở phần chạy thật cuối bài" + thêm cảnh chạy thật "ghi kép: lưu số dư rồi sập, 0 sự kiện" (sqlite) và câu nối cho dòng "không bù"; giảng ghi nợ/ghi có, cô lập, lũy đẳng tại chỗ; hướng dẫn chạy tệp .sql trên màn hình; nhãn "lỗi → quay lui" có viền.
+- **L09** "(như bài trước)" → giảng tại chỗ "điểm nghẽn khoá/dòng nóng" + trỏ đúng bài 5; "cộng trừ trực tiếp" thêm điều kiện (đọc ra, tính ở ứng dụng, ghi đè; UPDATE … SET x = x − y được khoá hàng); ISO 4217 giải thích; khung SQL tách hai.
+- **L10** "mọi trường hợp đều đúng một lần" → "trong mô hình này … ngoài đời cần cùng mã tham chiếu"; thêm phạm vi "không dạy cú pháp OFS/IBM MQ thật"; kỳ vọng (suy ra n·1/n = 1), 44 thứ tự có ví dụ đếm tay với 3 lệnh, phản hồi đang bay, nhiều bản dịch vụ, lõi ngân hàng, hạch toán giảng tại chỗ; mã TuongQuan/HetGio đủ khung; de.md ghi `public class`.
+- **L11** nêu PCI DSS (Req. 3.4.1) trên màn hình + `source`, ví dụ che `411111******1111`; "0x30/0x20" trong quiz dùng chữ đứng; PAN, bảng mã ký tự, xoay vòng giảng tại chỗ; lời đọc cắt ~85 từ.
+- **L12** "gãy trên một máy" → "vượt bộ nhớ máy thường (giả định 100 byte/mục)"; thêm bước sym giảng hạch toán, ghi nợ/có, lõi + cổng, mã băm; ghi chú hai lệch bù nhau làm tổng khớp; `covers` mục tiêu 4 trỏ `formula`.
+- **L13** thêm yếu tố thứ hai (OTP/token) và phạm vi chuyển tiền cho chủ tài khoản khác; mốc ngày tách: TT 50/2024 hiệu lực 01/01/2025, TT 77/2025 hiệu lực 01/03/2026, phần thay Phụ lục áp dụng với cá nhân từ 01/07/2026, **ghi CHƯA KIỂM bản Công báo (nguồn thứ cấp)** trên màn hình + lời; `source` và `audit/legal/registry.yaml`: tên TT 50/2024 = "an toàn, bảo mật cho việc cung cấp dịch vụ trực tuyến trong ngành Ngân hàng" (không phải "an toàn hệ thống thanh toán"); PCI 3.3.1.2 → 3.3.1.3; mã `a` tính từ `pin` (không gõ cứng); sinh trắc học, khoá gốc/phiên, gom lô, xoay vòng, ngân hàng thanh toán giảng tại chỗ; lời đọc cắt và `pause` thực hành 180→120 s.
+- **L14** `NOT IN` + NULL trả rỗng (dạy đúng, nêu `NOT EXISTS`; verify chạy sqlite), chạy lại sau đảo liệt kê cả dòng đảo → cột đánh dấu; quy ước dấu (ngân hàng âm, chuyển mạch dương, so độ lớn); "từ chối r7b là trùng" → "trùng nội dung" + nguyên nhân/biện pháp thứ 4 (xử lý bản tin từ chối); lõi, giám sát, nhật ký kiểm toán, CREATE/INSERT giảng tại chỗ; `pause` thực hành 180→150.
+- Nhãn SVG bị cắt (L00, L01, L03, L05, L06, L08, L10): `lib.arrow()` nay vẽ nhãn có viền trắng cách nét 12 px; kèm sửa bố cục riêng L01, L05, L06, L08.
+- Thời lượng: L11 từ 961 s (16:01) → ước ~15:30; L13 từ 981 s (16:21) → ước ~15:20 (lời đọc 2 246 từ, dừng 150 s); L14 ước ~15:45 (2 175 từ, dừng 180 s). Mọi bài lời đọc ≤ 2 300 từ (max 2 295: L00, L01).
+
+## P1 (E52, E55)
+28 thuật ngữ trong `tools/registry/symbols.BNK.yaml`: heap, máy ảo Java, đối soát, hệ điều hành, lõi CPU, ghi vết, hộp kết nối, lũy đẳng, lối rẽ, chỉ mục nhiều cột, Docker, INITRANS, kỳ vọng, ghi nợ/ghi có, cô lập, cân đối, điểm nghẽn khoá, lõi ngân hàng, hạch toán, PAN, PCI DSS, bảng mã ký tự, xoay vòng, sinh trắc học, khoá gốc/khoá phiên, gom lô. `introduces` đặt đúng step giảng (tham số `intro` của `lesson()`), `assumes` ở các bài sau. Cổng E52 đã bắt thật nhiều chỗ dùng-trước-giảng (L02 "máy ảo", L10 "lõi ngân hàng/hạch toán", L12/L14…) và đều đã sửa bằng giảng tại chỗ/`assumes`. Mọi mục "Cần biết trước" của Phụ lục A–D đã được giảng bằng một câu lời thường (+ ví dụ nhỏ) tại lần đầu, hoặc bỏ khỏi bài; L12 (0) và L13 (0) đã sửa. **P1 = 2 dự kiến: 15/15 (ít nhất 14/15); thực tế do người đọc độc lập chấm lại.** E55: 0 lỗi.
+
+## Cổng (số thật)
+| cổng | kết quả |
+|---|---|
+| `lv.py lint` 15 bài | 0 FAIL, 0 WARN (15/15) |
+| `lv.py render` 15 bài | 0 vấn đề (15/15) — nhiều lần phát hiện/sửa: nhãn viền-đè, tràn ngang (chú thích mã dài), tràn dọc |
+| `verify_bnk.py` | 44/44 PASS (thêm 18 kiểm cho MUST/SHOULD, gồm murmur2, sqlite hai chế độ, NOT IN/NULL, chặn chữ sai trong YAML) |
+| `lab_gate.py BNK` | 15 PASS · 0 FAIL |
+| `screen_code.py check --course BNK` | 100 khối — PASS 148 · FAIL 0 · STALE 0 · MISSING 0 · ORPHAN 0 · WARN 0 (gồm PL/SQL chạy thật trên Oracle 26ai Free) |
+| `lv.py curriculum curriculum/bnk.yaml` | 15 bài, 15 có đặc tả, 0 lỗi |
+| `check_curricula_graph.py` | 0 tham chiếu hỏng, 0 chu trình; VER 0 lỗi |
+| `tests/test_e52.py` | 0 FAIL |
+| `check_legal.py` | 0 FAIL (22 văn bản trong sổ) |
+
+## Mục không sửa và lý do
+- L04 lab không bắt `EXPLAIN` và L05 lab không tái tạo bế tắc: đầu ra `EXPLAIN QUERY PLAN` đổi theo phiên bản sqlite (cột số, "SCAN TABLE" trước 3.36) nên không chấm tự động ổn định; bế tắc thật cần hai phiên đồng thời Oracle, không có trong `cham.sh`. Mục tiêu 2–3 (L04), 4 (L05) vẫn chỉ xem; ghi vào đề xuất cho vòng sau.
+- Mục tiêu giáo án chỉ nói/không có phép đo: L00 m.1 (stack/heap), L02 m.1, L10 m.2 và m.4, L11 m.4 (nay có ví dụ che trên màn hình nhưng lab vẫn không đo), L13 m.1–2 (nay có câu quiz khối PIN, không có lab): giữ nguyên vì `covers` đã trỏ cảnh dạy; không thêm lab mới để khỏi vượt giới hạn thời lượng.
+- L06 định luật Little chỉ phát biểu, thiếu eviction/vô hiệu bộ đệm; L07 thiếu phía gửi/khoá lệch/lag; L14 khoá lũy đẳng chưa nói UNIQUE/đồng thời/khác nội dung/thời hạn: là nội dung P6 "senior" mới, vượt phạm vi sửa lỗi; ghi nhận.
+- L12–L14 nửa dưới khung hơi trống: đặc điểm bố cục chung của bộ sinh, không phải lỗi.
+- `Idempotency-Key` (dự thảo IETF) và "chỉ gửi cùng khoá khác nội dung phải từ chối": giữ, PLAUSIBLE theo báo cáo, bài không khẳng định là RFC.
+- Ngày hiệu lực TT 77/2025 (đặc biệt 01/07/2026 cho Điều 10) và ngưỡng 10/20 triệu: chưa mở được Công báo/bản gốc trong phiên này; đã ghi CHƯA KIỂM trên màn hình, lời đọc và `registry.yaml` thay vì khẳng định.
+- Chưa dựng lại video (`build/tts/asr`), nên thời lượng mp4 chỉ là ước lượng theo số từ; người điều phối dựng một lần rồi đo.

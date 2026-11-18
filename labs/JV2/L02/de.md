@@ -11,4 +11,6 @@ Tự viết chương trình `SapXepGiaoDich` (tệp `SapXepGiaoDich.java`):
 
 Chú ý hai giao dịch `1` và `7` có cùng loại và cùng số tiền: `List.sort` là sắp xếp **ổn định**, nên chúng giữ nguyên thứ tự ban đầu.
 
+Dòng `import` cần dùng: `java.util.ArrayList`, `java.util.Comparator`, `java.util.List`.
+
 Chạy: `javac SapXepGiaoDich.java && java SapXepGiaoDich`. Chấm: `bash labs/cham.sh JV2 L02 SapXepGiaoDich.java`.

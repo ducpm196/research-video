@@ -207,11 +207,13 @@ Lời giải nằm ở <code>labs/JVA/L03/loi_giai.java</code> — chỉ mở sa
                  [["① so sánh", "<code>&lt;</code> <code>&lt;=</code> <code>&gt;</code> <code>&gt;=</code> <code>==</code> <code>!=</code> cho kết quả đúng hoặc sai"],
                   ["② <code>&amp;&amp;</code>, <code>||</code>", "và, hoặc; dừng sớm khi đã biết kết quả"],
                   ["③ kiểu đúng sai", "<code>boolean</code>: biến chỉ giữ đúng hoặc sai"],
-                  ["④ chương trình", "đến giờ mọi lệnh đều chạy, lần lượt từ trên xuống"]]),
+                  ["④ chương trình", "đến giờ mọi lệnh đều chạy, lần lượt từ trên xuống"],
+                  ["⑤ <code>import</code>, <code>new</code>", "<code>import</code>: lấy về một lớp có sẵn của Java; <code>new</code>: làm ra một vật mới từ lớp đó (<code>new BigDecimal(\"0.1\")</code> ở bài 1)"]]),
            """Ta ôn lại từ bài trước. Phép so sánh như nhỏ hơn, lớn hơn hoặc bằng, cho kết quả đúng hoặc sai.
            Phép và, phép hoặc ghép các điều kiện, và dừng sớm khi đã biết kết quả. Kiểu đúng sai giữ đúng một trong hai giá trị đó.
-           Và đến giờ, mọi lệnh đều chạy lần lượt từ trên xuống. Hôm nay ta cho máy bỏ qua một số lệnh.""",
-           focus=[1, "1.2", "1.3", "1.4", "1.5", "1.5"]),
+           Và đến giờ, mọi lệnh đều chạy lần lượt từ trên xuống.
+           Ngoài ra, dòng nhập lấy về một lớp có sẵn của Java, còn từ khoá tạo mới làm ra một vật từ lớp đó, như số thập phân chính xác ở bài một. Hôm nay ta cho máy bỏ qua một số lệnh.""",
+           focus=[1, "1.2", "1.3", "1.4", "1.5", "1.6", "1.5"]),
     ])
     sc_sym = sc("sym", "symbol", "Giải mã lệnh rẽ nhánh", [
         st(table(["viết", "nghĩa"],
@@ -280,8 +282,10 @@ $$500\\,000 \\le \\text{soTien} \\;\\text{ và }\\; \\text{soTien} < 10\\,000\\,
     ], checks=["(500000 < 500000) == False", "(10000000 > 10000000) == False and 10000000 >= 10**7", "499999 < 500000",
                "all((x < 500000) + (500000 <= x < 10000000) + (x >= 10000000) == 1 for x in [0, 499999, 500000, 9999999, 10000000, 10**12])"])
     sc_ex = sc("example", "example", "Ví dụ: thử ba số tiền nằm đúng ở biên", [
-        st(code_block(p2, lines=(3, 12), title="Tệp Phi.java (dòng đầu đổi số tiền để thử)"),
-           """Đây là chương trình tính phí đầy đủ. Ta thử ba số tiền nằm đúng ở biên, bằng cách đổi số ở dòng đầu rồi chạy lại. Có năm phép so sánh, ta đi từng phép."""),
+        st(code_block(p2, lines=(3, 12), title="Tệp Phi.java (dòng đầu đổi số tiền để thử)")
+           + "<p class='note'>Dòng <code>long phi;</code> khai biến chưa đặt giá trị; mọi nhánh đều gán nó, nên máy chắc chắn <code>phi</code> đã có giá trị trước khi in.</p>",
+           """Đây là chương trình tính phí đầy đủ. Dòng khai biến phí chưa đặt giá trị, nhưng mọi nhánh bên dưới đều gán nó, nên máy chắc chắn biến đã có giá trị trước khi in.
+           Ta thử ba số tiền nằm đúng ở biên, bằng cách đổi số ở dòng đầu rồi chạy lại. Có năm phép so sánh, ta đi từng phép."""),
         st("<p><b>Thử 499 999 đồng.</b></p>$$① \\; 499\\,999 < 500\\,000 \\;\\to\\; \\text{đúng} \\;\\to\\; \\hl{\\text{phí } 0}$$" + out_block(p1),
            """Thử bốn trăm chín mươi chín nghìn chín trăm chín mươi chín đồng. Phép so sánh thứ nhất, số này nhỏ hơn năm trăm nghìn, đúng.
            Máy làm khối bậc một, phí bằng không, và bỏ qua mọi nhánh sau."""),
@@ -406,4 +410,5 @@ viết ra từng biên và thử đúng số ở biên. Luôn viết ngoặc nh�
                    "Dự đoán số ca thử ở biên và số tổ hợp điều kiện khi quy định lớn dần",
                    "Viết chương trình tính lãi theo bậc và chạy thử đúng ba số ở biên"],
                   [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_nhap, sc_chk, sc_scale, sc_pit, sc_quiz, sc_lab, sc_rec],
+                  assumes=["jva_import", "jva_new"],
                   covers=[(1, "example"), (2, "formula"), (3, "sym"), (4, "check"), (5, "nhap"), (6, "quymo"), (7, "practice")])

@@ -68,14 +68,13 @@ SELECT phan_hoi FROM khoa_luy_dang WHERE khoa = 'abc';""", out="""1
 so du 1500000""", lang="sqlite")
     hook = sc("hook", "hook", "Vì sao một lần bấm chuyển tiền lại bị trừ ba lần?", [
         st("""<p>Khách bấm chuyển $500\\,000$ đồng. Mạng chập chờn nên ứng dụng không nhận được phản hồi và <b>tự thử lại</b> hai lần nữa.</p>
-<div class="box key">Máy chủ nhận đủ <b>ba</b> yêu cầu. Nếu không phòng bị, tài khoản bị trừ <b>ba lần</b>.</div>""",
+<div class="box key">Máy chủ (chương trình đứng chờ nhận việc từ ứng dụng) nhận đủ <b>ba</b> yêu cầu. Nếu không phòng bị, tài khoản bị trừ <b>ba lần</b>.</div>""",
            """Chào bạn, khách bấm chuyển năm trăm nghìn đồng. Mạng chập chờn nên ứng dụng không nhận được phản hồi và tự thử lại thêm hai lần.
-           Máy chủ nhận đủ ba yêu cầu, và nếu không phòng bị, tài khoản bị trừ ba lần."""),
+           Máy chủ, tức chương trình đứng chờ nhận việc từ ứng dụng, nhận đủ ba yêu cầu, và nếu không phòng bị, tài khoản bị trừ ba lần."""),
         st(table(["ý hỏi", "bài này trả lời"],
                  [["vì sao thử lại là bình thường", "mạng có thể mất phản hồi, người gọi không biết việc đã xong chưa"],
                   ["làm sao thử lại mà không trừ trùng", "khoá lũy đẳng: cùng khoá thì chỉ làm một lần"]]),
-           """Hôm nay ta trả lời hai câu. Vì sao thử lại là chuyện bình thường, và làm sao thử lại mà không trừ trùng.
-           Đáp án là khoá lũy đẳng: cùng một khoá thì chỉ làm một lần."""),
+           """Hôm nay ta trả lời hai câu: vì sao thử lại là chuyện bình thường, và làm sao thử lại mà không trừ trùng, nhờ khoá lũy đẳng: cùng một khoá thì chỉ làm một lần."""),
     ])
     pre = sc("prereq", "prereq", "Trước hết: bốn điều cần hiểu", [
         st(table(["khái niệm", "nghĩa", "ví dụ"],
@@ -83,11 +82,11 @@ so du 1500000""", lang="sqlite")
                   ["② Yêu cầu và phản hồi", "người gọi gửi yêu cầu, máy chủ trả phản hồi", "yêu cầu chuyển tiền, phản hồi thành công"],
                   ["③ Mã trạng thái", "số báo kết quả: 2xx thành công, 4xx lỗi người gọi, 5xx lỗi máy chủ", "200 thành công, 404 không thấy, 503 tạm không phục vụ"],
                   ["④ Hết giờ chờ", "chờ quá lâu thì người gọi bỏ cuộc, dù máy chủ có thể đã làm xong", "chờ 3 giây không thấy gì"]]),
-           """Trước hết ta cần hiểu bốn điều. HTTP là giao thức web. Mỗi yêu cầu gồm một phương thức, như lấy hay gửi, và một đường dẫn. REST API là cách một dịch vụ mở chức năng của nó qua các đường dẫn đó.
-           Người gọi gửi yêu cầu, máy chủ trả phản hồi. Mã trạng thái báo kết quả. Các mã bắt đầu bằng chữ số hai là thành công, bắt đầu bằng bốn là lỗi người gọi, bắt đầu bằng năm là lỗi máy chủ.
+           """Trước hết ta cần hiểu bốn điều. HTTP là giao thức web, tức bộ luật để hai máy nói chuyện với nhau. Mỗi yêu cầu gồm một phương thức, như lấy hay gửi, và một đường dẫn. REST API là cách một dịch vụ mở chức năng của nó qua các đường dẫn đó.
+            Mã trạng thái báo kết quả. Các mã bắt đầu bằng chữ số hai là thành công, bắt đầu bằng bốn là lỗi người gọi, bắt đầu bằng năm là lỗi máy chủ.
            Còn hết giờ chờ nghĩa là người gọi bỏ cuộc, dù máy chủ có thể đã làm xong."""),
         st("""$$2\\,000\\,000 - 500\\,000 = 1\\,500\\,000$$""",
-           """Một ví dụ số. Số dư hai triệu, trừ năm trăm nghìn còn một triệu năm trăm nghìn. Đó là kết quả đúng cho một lần chuyển."""),
+           """Một ví dụ số. Số dư hai triệu, trừ năm trăm nghìn còn một triệu năm trăm nghìn. """),
     ], checks=["2000000 - 500000 == 1500000"])
     sym = sc("sym", "symbol", "Giải mã vài từ hay gặp", [
         st(table(["từ", "nghĩa"],
@@ -107,7 +106,7 @@ so du 1500000""", lang="sqlite")
                arrow(1195, 235, 305, 235, "#dc2626", "2. phản hồi bị mất trên đường về", dash=True),
                arrow(300, 290, 1195, 290, "#2a78d6", "3. không thấy gì nên thử lại"),
                txt(750, 380, "Người gọi không phân biệt được “chưa làm” và “đã làm nhưng mất phản hồi”", 26, "middle", "#1f2937", True)),
-           """Hình cho thấy điều mấu chốt. Ứng dụng gửi lệnh chuyển. Máy chủ đã trừ tiền xong, nhưng phản hồi bị mất trên đường về. Ứng dụng không thấy gì nên thử lại.
+           """ Ứng dụng gửi lệnh chuyển. Máy chủ đã trừ tiền xong, nhưng phản hồi bị mất trên đường về. Ứng dụng không thấy gì nên thử lại.
            Người gọi không thể phân biệt hai trường hợp, là chưa làm, và đã làm nhưng mất phản hồi."""),
         st(svg(1500, 440,
                box(40, 160, 240, 100, ["Ứng dụng", "khoá k1"], C_BLUE, bold=True),
@@ -116,7 +115,7 @@ so du 1500000""", lang="sqlite")
                box(520, 300, 420, 100, "lần 3: đã có k1 → trả kết quả cũ", C_AMBER),
                box(1120, 160, 340, 100, ["bảng khoá", "k1 → kết quả"], C_PURPLE, bold=True),
                arrow(280, 190, 515, 90, "#2a78d6"), arrow(280, 210, 515, 220, "#2a78d6"), arrow(280, 235, 515, 345, "#2a78d6"),
-               arrow(945, 90, 1115, 190, "#9333ea", "ghi"), arrow(945, 220, 1115, 220, "#9333ea", "tra")),
+               arrow(945, 90, 1115, 190, "#9333ea", "ghi"), arrow(1115, 215, 945, 215, "#9333ea", "tra"), arrow(1115, 245, 945, 345, "#9333ea")),
            """Có khoá lũy đẳng thì khác. Mỗi lần thử đều mang cùng khoá k một. Lần một, máy chủ chưa thấy khoá nên làm việc và ghi khoá cùng kết quả vào bảng.
            Lần hai và lần ba, máy chủ thấy khoá đã có, nên trả lại kết quả cũ mà không làm lại."""),
     ])
@@ -137,7 +136,7 @@ so du 1500000""", lang="sqlite")
     ex = sc("example", "example", "Ví dụ bằng số, từng phép tính", [
         st("""<p>Số dư đầu $2\\,000\\,000$, mỗi lần chuyển $500\\,000$, thử tổng cộng $3$ lần.</p>
 $$① \\; \\text{không khoá: } 3 \\cdot 500\\,000 = \\hl{1\\,500\\,000}\\ \\text{đã trừ}$$""",
-           """Ta tính cả hai trường hợp. Số dư đầu hai triệu, mỗi lần chuyển năm trăm nghìn, thử ba lần. Phép tính thứ nhất, không có khoá, bị trừ ba nhân năm trăm nghìn, là một triệu năm trăm nghìn."""),
+           """ Số dư đầu hai triệu, mỗi lần chuyển năm trăm nghìn, thử ba lần. Phép tính thứ nhất, không có khoá, bị trừ ba nhân năm trăm nghìn, là một triệu năm trăm nghìn."""),
         st("""<p>Dùng lại $1\\,500\\,000$ ở phép ①.</p>
 $$② \\; 2\\,000\\,000 - 1\\,500\\,000 = \\hl{500\\,000}\\ \\text{còn lại}$$""",
            """Phép tính thứ hai, số dư còn hai triệu trừ một triệu năm trăm nghìn, bằng năm trăm nghìn."""),
@@ -151,13 +150,13 @@ $$② \\; 2\\,000\\,000 - 1\\,500\\,000 = \\hl{500\\,000}\\ \\text{còn lại}$$
                "alg.bnk_retry_sim(2000000, 500000, 3, True) == 1500000",
                "alg.bnk_retry_sim(2000000, 500000, 3, True) - alg.bnk_retry_sim(2000000, 500000, 3, False) == 1000000"])
     chk = sc("check", "check", "Tự kiểm bằng đường khác: để cơ sở dữ liệu chặn trùng", [
-        st("""<p>Đường khác: tạo bảng có ràng buộc <code>UNIQUE</code> trên khoá, rồi chèn cùng khoá ba lần. Ràng buộc cho phép <b>đúng một dòng</b> vào.</p>
+        st("""<p>Đường khác: tạo bảng có khoá chính <code>PRIMARY KEY</code>, một loại ràng buộc duy nhất, trên cột khoá, rồi chèn cùng khoá ba lần. Ràng buộc cho phép <b>đúng một dòng</b> vào.</p>
 $$\\text{số dòng} = \\hl{1}$$""",
-           """Kiểm bằng đường khác. Trong cơ sở dữ liệu, bảng là nơi lưu các dòng, và ràng buộc duy nhất là luật cấm hai dòng có cùng giá trị ở một cột. Ta tạo một bảng có ràng buộc duy nhất trên khoá rồi chèn cùng khoá ba lần. Vì cơ sở dữ liệu chỉ cho một dòng vào, số dòng cuối cùng là một.
-           Cách này chặn trùng ngay cả khi hai lần thử đến cùng lúc."""),
+           """Kiểm bằng đường khác. Trong cơ sở dữ liệu, bảng là nơi lưu các dòng, và ràng buộc duy nhất là luật cấm hai dòng có cùng giá trị ở một cột. Ta tạo một bảng có khoá chính, một loại ràng buộc duy nhất, trên cột khoá rồi chèn cùng khoá ba lần. Vì cơ sở dữ liệu chỉ cho một dòng vào, số dòng cuối cùng là một.
+           """),
         st(table(["phương thức", "an toàn (không đổi dữ liệu)", "lũy đẳng"],
                  [["GET", "có", "có"], ["PUT", "không", "có"], ["DELETE", "không", "có"], ["POST", "không", "không (cần khoá)"]]),
-           """Bảng này tổng hợp các phương thức. Đọc là an toàn và lũy đẳng. Ghi đè và xoá thay đổi dữ liệu nhưng lũy đẳng. Còn P O S T không lũy đẳng, nên cần khoá nếu muốn thử lại an toàn."""),
+           """ Đọc là an toàn và lũy đẳng. Ghi đè và xoá thay đổi dữ liệu nhưng lũy đẳng. Còn P O S T không lũy đẳng, nên cần khoá nếu muốn thử lại an toàn."""),
     ], checks=["alg.bnk_unique_key_rows(3) == 1", "alg.bnk_unique_key_rows(1) == 1"])
     pit = sc("pitfalls", "pitfall", "Lỗi hay gặp, có lỗi của người đã đi làm", [
         st("""<div class="box warn"><b>Lỗi 1 (người mới).</b> Cho rằng gọi lại cho an toàn. Với việc thay đổi tiền, gọi lại <b class="red">không</b> an toàn nếu không có khoá.</div>""",
@@ -168,7 +167,7 @@ $$\\text{số dòng} = \\hl{1}$$""",
            Cách chữa là dùng ràng buộc duy nhất, để cơ sở dữ liệu quyết định."""),
         st("""<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Dùng lại cùng khoá cho yêu cầu <b>khác nội dung</b>. Máy chủ phải từ chối thay vì trả kết quả cũ. Khoá cũng cần hạn lưu đủ dài hơn thời gian thử lại.</div>""",
            """Lỗi thứ ba, cũng của người đã đi làm, là dùng lại cùng khoá cho một yêu cầu khác nội dung. Máy chủ phải từ chối thay vì trả kết quả cũ.
-           Khoá cũng cần được lưu lâu hơn thời gian người gọi còn thử lại."""),
+           """),
     ])
     quiz = sc("quiz", "quiz", "Đến lượt bạn", [
         st(table(["câu", "đề"],
@@ -188,8 +187,7 @@ $$1\\,000\\,000 - 200\\,000 = \\hlg{800\\,000}$$""",
                  [["khoá trong cơ sở dữ liệu, cùng giao dịch", "khoá và việc trừ tiền cùng thành công hoặc cùng huỷ", "tốn thêm một lần ghi"],
                   ["khoá chỉ ở bộ đệm", "nhanh", "không cùng giao dịch với việc trừ: khoá có thể hết hạn, mất khi chuyển dự phòng, hoặc ghi xong mà việc trừ bị huỷ"]]),
            """Đáp án câu ba. Lưu khoá trong cơ sở dữ liệu cùng giao dịch thì khoá và việc trừ tiền cùng thành công hoặc cùng huỷ, đổi lại tốn thêm một lần ghi.
-           Chỉ lưu ở bộ đệm thì nhanh, nhưng khoá không cùng giao dịch với việc trừ tiền. Khoá có thể hết hạn, mất khi chuyển sang máy dự phòng,
-           hoặc ghi xong mà việc trừ lại bị huỷ."""),
+           Chỉ lưu ở bộ đệm thì nhanh, nhưng khoá không cùng giao dịch với việc trừ tiền. """),
     ], checks=["alg.bnk_retry_sim(1000000, 200000, 5, False) == 0", "alg.bnk_retry_sim(1000000, 200000, 5, True) == 800000"])
     rec = sc("recap", "recap", "Chuỗi logic & tư duy cần mang theo", [
         st(chain("mất phản hồi", "người gọi thử lại", "cùng một khoá", "máy chủ chỉ làm một lần"),
@@ -201,7 +199,7 @@ Thiết kế mọi việc thay đổi tiền sao cho <b>thử lại không gây 
     # ── AF2: P1 curl/tiêu đề/cổng, mã chạy thật (máy chủ + curl, SQL), quy mô, tự làm ──
     add_steps([pre], "prereq", [
         st(table(["thêm ba điều", "nghĩa", "ví dụ"],
-                 [["⑤ curl", "công cụ dòng lệnh gửi một yêu cầu HTTP tới một địa chỉ rồi in phản hồi; cờ <code>-s</code> im lặng, <code>-X POST</code> chọn phương thức, <code>-H</code> thêm tiêu đề, <code>-w \"\\n\"</code> in thêm xuống dòng cuối", "<code>curl -s -X POST địa_chỉ</code>"],
+                 [["⑤ curl", "công cụ dòng lệnh gửi một yêu cầu HTTP tới một địa chỉ rồi in phản hồi; cờ <code style='white-space:nowrap'>-s</code> im lặng, <code style='white-space:nowrap'>-X POST</code> chọn phương thức, <code style='white-space:nowrap'>-H</code> thêm tiêu đề, <code>-w \"\\n\"</code> in thêm xuống dòng cuối", "<code>curl -s -X POST địa_chỉ</code>"],
                   ["⑥ Tiêu đề (header)", "dòng chữ kèm theo yêu cầu, dạng <code>Tên: giá trị</code>", "<code>Idempotency-Key: abc</code>"],
                   ["⑦ localhost và cổng", "<code>localhost</code> là chính máy này; <b>cổng</b> là số cửa mà chương trình lắng nghe yêu cầu", "<code>localhost:8099</code>"]]),
            """Thêm ba điều nữa. Công cụ dòng lệnh để gọi địa chỉ web gửi một yêu cầu tới một địa chỉ rồi in phản hồi. Mỗi cờ lệnh của nó có một việc, như im lặng, chọn phương thức, thêm tiêu đề, hay in thêm dòng trống cuối.
@@ -209,22 +207,34 @@ Thiết kế mọi việc thay đổi tiền sao cho <b>thử lại không gây 
     ], at=1)
     pre["title"] = "Trước hết: bảy điều cần hiểu"
     run = sc("chay_that", "example", "Chạy thật: máy chủ nhỏ và sáu lần gọi", [
-        st(code_block(may_chu, lines=(6, 12), title="Tệp MayChu.java (phần 1): hai số dư và bảng nhớ khoá"),
-           """Ta dựng một máy chủ nhỏ bằng thư viện có sẵn của Java. Hai biến là hai số dư thử, mỗi số hai triệu. Bản đồ này ghi nhớ khoá nào đã xử lý, kèm phản hồi đã trả.
+        *jsteps([("sig", "<code>static void tra(HttpExchange ex, String s) throws IOException</code>: không trả gì, nhận <code>ex</code> và <code>s</code>",
+                "hàm trả, không trả gì, nhận yêu cầu và chuỗi cần gửi, được ném lỗi vào ra."),
+               ("call", "<code>sendResponseHeaders(200, s.length())</code>: mã 200, độ dài chuỗi; <code>create(…(8099), 0)</code>: cổng 8099, hàng chờ mặc định",
+                "gửi mã hai trăm cùng độ dài chuỗi, và tạo máy chủ ở cổng tám nghìn không trăm chín mươi chín, đối số cuối là số không, nghĩa là hàng chờ mặc định."),
+               ("write", "gọi trên <code>ex.getResponseBody()</code>: ghi các byte của <code>s</code> ra luồng phản hồi", None),
+               ("cmt", "<code>// hai số dư thử</code>", None),
+               ("concat", "<code>\"so du \" + (a -= 500_000)</code>", None)]),
+        st(code_block(may_chu, lines=(1, 12), title="Tệp MayChu.java (phần 1): nhập thư viện, hai số dư, hàm trả"),
+           """Ta dựng một máy chủ nhỏ bằng thư viện có sẵn của Java, nên mấy dòng đầu nhập thư viện máy chủ. Hai biến là hai số dư thử, mỗi số hai triệu. Bản đồ từ chữ sang chữ này ghi nhớ khoá nào đã xử lý, kèm phản hồi đã trả.
            Hàm trả viết phản hồi về cho người gọi."""),
-        st(code_block(may_chu, lines=(14, 18), title="Phần 2: hai đường dẫn"),
-           """Máy chủ lắng nghe ở cổng tám nghìn không trăm chín mươi chín. Đường dẫn thứ nhất không kiểm khoá, nên mỗi lần được gọi là trừ năm trăm nghìn rồi trả số dư.
-           Đường dẫn thứ hai lấy khoá từ tiêu đề. Nếu khoá chưa có thì trừ tiền, lưu phản hồi và trả. Nếu khoá đã có thì trả lại đúng phản hồi cũ.""", clear=True),
+        st(code_block(may_chu, lines=(13, 20), title="Phần 2: hàm main với hai đường dẫn"),
+           """Máy chủ lắng nghe ở cổng tám nghìn không trăm chín mươi chín. Mỗi đường dẫn nhận một mũi tên, nghĩa là khi có yêu cầu tới đường dẫn này, làm việc sau mũi tên, và biến yêu cầu là chính yêu cầu đang xử lý.
+           Đường dẫn thứ nhất không kiểm khoá, nên mỗi lần gọi là trừ năm trăm nghìn rồi trả số dư; phép trừ gán vừa đổi số dư vừa cho ra số dư mới để trả.
+           Đường dẫn thứ hai lấy khoá từ tiêu đề: khoá chưa có thì trừ tiền, lưu phản hồi và trả, khoá đã có thì trả lại đúng phản hồi cũ.""", clear=True),
         st(code_block(curl_thu, lines=(5, 10), title="Cửa sổ lệnh thứ hai (máy chủ chạy ở cửa sổ thứ nhất bằng java MayChu.java)"),
-           """Ở cửa sổ lệnh thứ hai, ta gửi sáu yêu cầu. Ba yêu cầu đầu đi tới đường dẫn không khoá. Ba yêu cầu sau đi tới đường dẫn có khoá, và cùng mang một khoá giống nhau, giống như ứng dụng thử lại.""", clear=True),
+           """Ở cửa sổ lệnh thứ nhất, ta chạy máy chủ bằng lệnh Java đưa thẳng tên tệp nguồn, không cần dịch trước. Rồi ta mở cửa sổ lệnh thứ hai và gửi sáu yêu cầu. Ba yêu cầu đầu đi tới đường dẫn không khoá. Ba yêu cầu sau đi tới đường dẫn có khoá, và cùng mang một khoá giống nhau, giống như ứng dụng thử lại.""", clear=True),
         st(out_block(curl_thu),
            """Khi chạy thật, không khoá thì cả ba lần đều bị trừ, số dư còn năm trăm nghìn, tức là bị trừ oan hai lần. Có khoá thì lần đầu trừ, hai lần sau nhận lại đúng phản hồi cũ, số dư vẫn một triệu năm trăm nghìn.
            Máy chủ mẫu này xử lý lần lượt từng yêu cầu. Hai yêu cầu cùng khoá đến cùng lúc cần thêm một cơ chế chặn, như ràng buộc duy nhất ở bước sau.""", clear=True),
     ])
     add_steps([chk], "check", [
+        *jsteps([("pk", "<code>khoa TEXT PRIMARY KEY, phan_hoi TEXT</code> — hai cột chữ, khoá không được trùng", "khoá không được trùng, nên chèn lại cùng khoá thì không thêm dòng."),
+               ("ignore", "<code>INSERT OR IGNORE INTO khoa_luy_dang VALUES ('abc', …)</code>", None),
+               ("count", "<code>SELECT COUNT(*) FROM khoa_luy_dang;</code>", "đếm số dòng của bảng."),
+               ("selwhere", "<code>SELECT phan_hoi FROM khoa_luy_dang WHERE khoa = 'abc'</code>", "lọc theo khoá, nên chỉ lấy dòng của khoá a b c.")]),
         st(code_block(sql_khoa, title="Chạy thật: bảng khoá, chèn cùng khoá ba lần (sqlite)"),
-           """Máy chủ thật không giữ khoá trong bộ nhớ, vì khởi động lại là mất, nên lưu vào bảng. Lệnh tạo bảng khai cột khoá là khoá chính, nghĩa là cơ sở dữ liệu không cho hai dòng trùng giá trị ở cột này.
-           Lệnh chèn thêm một dòng. Với cách bỏ qua nếu trùng của cơ sở dữ liệu nhỏ này, lần chèn trùng bị bỏ qua. Ta chèn cùng một khoá ba lần.""", clear=True),
+           """Máy chủ thật không giữ khoá trong bộ nhớ, vì khởi động lại là mất, nên lưu vào bảng, bằng SQL, ngôn ngữ để hỏi cơ sở dữ liệu. Ta chèn cùng một khoá ba lần.
+           """, clear=True),
         st(out_block(sql_khoa),
            """Khi chạy thật, lệnh đếm cho ra một, và dòng còn lại mang phản hồi của lần chèn đầu. Vì khoá chính từ chối khoá trùng, nên ngay cả hai yêu cầu cùng khoá đến cùng lúc, cơ sở dữ liệu chỉ cho một cái vào.
            Cách bỏ qua nếu trùng là riêng của cơ sở dữ liệu này, cơ sở khác dùng cách bắt lỗi trùng khoá.""", clear=True),
@@ -232,7 +242,7 @@ Thiết kế mọi việc thay đổi tiền sao cho <b>thử lại không gây 
     scale = sc("quy_mo", "example", "Quy mô: thử lại nhỏ, thiệt hại lớn khi tải tăng", [
         st("""<p>Mỗi ngày có $N$ lệnh chuyển $500\\,000$ đồng. Giả sử $0{,}1\\%$ lệnh mất phản hồi và ứng dụng thử lại một lần (số minh hoạ). Không có khoá thì mỗi lần như vậy trừ oan một lần:
 $$\\text{thiệt hại} = N \\cdot 0{,}001 \\cdot 500\\,000\\ \\text{đồng}$$</p>"""
-           + table(["tải", "lệnh mỗi ngày $N$", "lệnh bị trừ trùng", "thiệt hại mỗi ngày", "bảng khoá (64 byte mỗi khoá)"],
+           + table(["tải", "lệnh mỗi ngày $N$", "lệnh bị trừ trùng", "thiệt hại mỗi ngày", "bảng khoá (64 byte mỗi dòng: khoá + phản hồi)"],
                    [["×1", "100 000", "100", "50 000 000 đồng", "6,4 MB"],
                     ["×100", "10 000 000", "10 000", "<b>5 tỉ đồng</b>", "640 MB"],
                     ["×10 000", "1 000 000 000", "1 000 000", "<b>500 tỉ đồng</b>", "<b>64 GB</b>"]]),
@@ -240,32 +250,44 @@ $$\\text{thiệt hại} = N \\cdot 0{,}001 \\cdot 500\\,000\\ \\text{đồng}$$<
            Không có khoá thì mỗi lần như vậy trừ oan một lần. Ở một trăm nghìn lệnh mỗi ngày, có một trăm lệnh trừ trùng, năm mươi triệu đồng. Tải tăng một trăm lần thì thiệt hại năm tỉ đồng mỗi ngày.
            Tải tăng mười nghìn lần thì thiệt hại năm trăm tỉ đồng mỗi ngày.""", clear=True),
         st("""<div class="box warn"><b>Giải pháp cũ gãy ở đâu.</b> Nhân viên đối soát và hoàn tiền thủ công: ở ×1 là 100 lệnh mỗi ngày, làm được; ở ×100 là 10 000 lệnh; ở ×10 000 là 1 triệu lệnh mỗi ngày, không ai làm nổi.
-<b>Khoá lũy đẳng</b> giải được, nhưng bảng khoá phình theo: 6,4 MB, 640 MB, 64 GB mỗi ngày (mỗi khoá 64 byte, số minh hoạ).</div>
+<b>Khoá lũy đẳng</b> giải được, nhưng bảng khoá phình theo: 6,4 MB, 640 MB, 64 GB mỗi ngày (mỗi dòng gồm khoá và phản hồi 64 byte, số minh hoạ).</div>
 <div class="box key"><b>Đánh đổi:</b> cho khoá <b>hết hạn</b> (ví dụ sau 24 giờ) và chia bảng theo ngày để dọn nhanh. Giữ ngắn thì nhẹ bảng, nhưng ứng dụng thử lại muộn hơn thời hạn sẽ bị trừ trùng; giữ dài thì tốn chỗ.</div>""",
-           """Giải pháp cũ là nhân viên đối soát rồi hoàn tiền thủ công. Ở tải gốc là một trăm lệnh mỗi ngày, làm được. Ở tải gấp trăm lần là mười nghìn lệnh, và ở tải gấp mười nghìn lần là một triệu lệnh mỗi ngày, không ai làm nổi.
-           Khoá lũy đẳng giải được chuyện này, nhưng bảng khoá phình theo. Nếu mỗi khoá chiếm sáu mươi bốn byte, bảng tăng từ sáu phẩy bốn mê ga byte tới sáu mươi bốn nghìn mê ga byte mỗi ngày.
-           Đánh đổi là cho khoá hết hạn, ví dụ sau hai mươi bốn giờ, và chia bảng theo ngày để dọn nhanh. Giữ ngắn thì nhẹ bảng nhưng ứng dụng thử lại muộn hơn thời hạn sẽ bị trừ trùng, còn giữ dài thì tốn chỗ.""", clear=True),
+           """Giải pháp cũ là nhân viên đối soát, tức người so sổ của hai bên để tìm lệnh lệch, rồi hoàn tiền thủ công. Một trăm lệnh mỗi ngày thì làm được, mười nghìn thì khó, một triệu lệnh thì không ai làm nổi.
+           Khoá lũy đẳng giải được chuyện này, nhưng bảng khoá phình theo. Nếu mỗi dòng, gồm khoá và phản hồi, chiếm sáu mươi bốn byte, bảng tăng từ sáu phẩy bốn mê ga byte tới sáu mươi bốn nghìn mê ga byte mỗi ngày.
+           Đánh đổi là cho khoá hết hạn, ví dụ sau hai mươi bốn giờ, và chia bảng theo ngày để dọn nhanh. Giữ ngắn thì nhẹ bảng nhưng thử lại muộn hơn thời hạn sẽ bị trừ trùng, giữ dài thì tốn chỗ.""", clear=True),
     ], checks=["100000 * 0.001 == 100", "100 * 500000 == 50_000_000", "10_000_000 * 0.001 == 10000", "10000 * 500000 == 5_000_000_000",
                "1_000_000_000 * 0.001 == 1_000_000", "1_000_000 * 500000 == 500_000_000_000", "100000 * 64 == 6_400_000",
                "10_000_000 * 64 == 640_000_000", "1_000_000_000 * 64 == 64_000_000_000"])
-    write_lab("BNK", "L03", """# Lab BNK L03 — Bốn yêu cầu, hai khoá
+    d_lab = write_lab("BNK", "L03", """# Lab BNK L03 — Bốn yêu cầu, hai khoá
 
 Số dư đầu **3 000 000**; mỗi yêu cầu chuyển **trừ 700 000**. Bốn yêu cầu đến theo thứ tự với khoá lũy đẳng `k1`, `k1`, `k2`, `k1` (hai lần thử lại cùng khoá `k1`).
 
 Viết chương trình `XuLyTrung` (tệp `XuLyTrung.java`):
 1. Hàm `static long chuyen(String khoa)`: nếu `khoa` chưa xử lý thì trừ 700 000 vào số dư và nhớ **phản hồi** (số dư sau khi trừ); nếu đã xử lý thì **trả lại đúng phản hồi đã nhớ**, không trừ nữa. (Gợi ý: `Map<String, Long>` và `computeIfAbsent`.)
-2. Với từng khoá trong dãy, in một dòng đúng dạng `k1 -> 2300000`.
+2. Với từng yêu cầu trong dãy (bốn yêu cầu nên in đúng bốn dòng, khoá `k1` xuất hiện ba lần), in một dòng đúng dạng `k1 -> 2300000`.
 
 Chạy: `javac XuLyTrung.java && java XuLyTrung`. Chấm: `bash labs/cham.sh BNK L03 XuLyTrung.java`.
+
+## Phần thêm (không chấm): máy chủ nhỏ và `curl`
+Thư mục `may_chu/` có sẵn tệp `MayChu.java` đầy đủ (đúng như trong video) và `thu_curl.sh` (sáu lệnh `curl`). Cần JDK 21 và `curl`.
+1. Cửa sổ lệnh thứ nhất: `cd may_chu` rồi `java MayChu.java` (máy chủ chạy nền, lắng nghe cổng 8099; dừng bằng Ctrl+C).
+2. Cửa sổ lệnh thứ hai: `cd may_chu` rồi `bash thu_curl.sh`. Kết quả phải giống `may_chu/ket_qua_curl.txt`: ba lần không khoá trừ ba lần, ba lần cùng khoá chỉ trừ một lần.
+3. Thử đổi: gửi hai lần tới `/chuyen-co-khoa` với **hai khoá khác nhau** (`Idempotency-Key: x1`, `x2`) và đoán số dư trước khi chạy.
 """, "java", xu_ly["code"], xu_ly["out"])
+    (d_lab / "may_chu").mkdir(exist_ok=True)
+    NL = chr(10)
+    (d_lab / "may_chu" / "MayChu.java").write_text(may_chu["code"] + NL, encoding="utf-8", newline=NL)
+    curl_lines = [l for l in curl_thu["code"].splitlines() if l.startswith("curl -s -w")]
+    (d_lab / "may_chu" / "thu_curl.sh").write_text(NL.join(["#!/usr/bin/env bash", "# Chạy sau khi máy chủ đã chạy ở cửa sổ khác (java MayChu.java)."] + curl_lines) + NL, encoding="utf-8", newline=NL)
+    (d_lab / "may_chu" / "ket_qua_curl.txt").write_text(curl_thu["out"] + NL, encoding="utf-8", newline=NL)
     lab = practice_scene(sc, "Tự làm: bốn yêu cầu, hai khoá", practice_steps(
         st, "BNK", "L03",
         """<p><b>Đề</b>: số dư 3 000 000, mỗi yêu cầu trừ 700 000. Bốn yêu cầu mang khoá <code>k1</code>, <code>k1</code>, <code>k2</code>, <code>k1</code>. Viết <code>XuLyTrung.java</code>:</p>
 <ol><li>hàm <code>chuyen(String khoa)</code>: khoá mới thì trừ và nhớ phản hồi (số dư sau trừ); khoá cũ thì trả lại phản hồi đã nhớ</li>
-<li>mỗi khoá in một dòng <code>k1 -&gt; 2300000</code></li></ol>
-<p class="note">Chạy: <code>javac XuLyTrung.java &amp;&amp; java XuLyTrung</code>.</p>""",
+<li>mỗi yêu cầu in một dòng <code>k1 -&gt; 2300000</code> (bốn yêu cầu, bốn dòng, khoá <code>k1</code> lặp lại)</li></ol>
+<p class="note">Chạy: <code>javac XuLyTrung.java &amp;&amp; java XuLyTrung</code>. Phần thêm, không chấm: máy chủ nhỏ và <code>curl</code> trong thư mục <code>may_chu</code> của lab.</p>""",
         """Bây giờ tới phần bạn tự làm. Số dư ba triệu, mỗi yêu cầu trừ bảy trăm nghìn. Bốn yêu cầu đến với khoá k một, k một, k hai, rồi lại k một. Hãy viết hàm xử lý: khoá mới thì trừ tiền và nhớ phản hồi, khoá đã có thì trả lại phản hồi cũ mà không trừ nữa.
-        Mỗi khoá in một dòng, gồm khoá, mũi tên, và phản hồi. Hãy dừng video, tự viết và chạy, đừng chép lại ví dụ.""",
+         Hãy dừng video, tự viết và chạy. Nếu còn sức, làm phần thêm trong thư mục thực hành.""",
         xu_ly["out"], "XuLyTrung.java",
         """<div class="box key"><b>Nếu kẹt:</b> dùng <code>Map&lt;String, Long&gt; daXuLy</code> và <code>return daXuLy.computeIfAbsent(khoa, k -&gt; soDu -= 700_000);</code>
 (<code>computeIfAbsent</code>: khoá chưa có thì chạy phần sau mũi tên, lưu rồi trả; có rồi thì trả luôn giá trị cũ).
@@ -280,4 +302,4 @@ Lời giải ở <code>labs/BNK/L03/loi_giai.java</code> — chỉ mở sau khi 
                    "Tính thiệt hại và dung lượng bảng khoá khi tải tăng ×100 và ×10 000",
                    "Viết hàm xử lý yêu cầu chặn trùng bằng khoá lũy đẳng"],
                   [hook, pre, sym, intu, form, ex, run, chk, pit, quiz, scale, lab, rec],
-                  covers=[(1, "intuition"), (2, "example"), (3, "check"), (4, "sym"), (5, "chay_that"), (6, "quy_mo"), (7, "practice")])
+                  covers=[(1, "intuition"), (2, "example"), (3, "check"), (4, "sym"), (5, "chay_that"), (6, "quy_mo"), (7, "practice")], intro={('hook', 1): ['bnk_luy_dang']}, assumes=['bnk_doi_soat'])

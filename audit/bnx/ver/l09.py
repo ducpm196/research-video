@@ -131,6 +131,35 @@ def run(rec):
     rec(L, alg.bnx_ttl_after_mutation(1800, False) == 0 and alg.bnx_ttl_after_mutation(1800, True) == 1800
         and alg.bnx_ttl_after_mutation(1800, False, True) == 1800, "ghi không đặt hạn sống → 0; đặt lại hoặc preserve_expiry → giữ")
 
+    # (2e) WP4: cảnh quy mô — chạy lại không đệm mọi chương trình; đếm tổng lần ghi bằng CasStore kiểu khác (vòng thử lại tổng quát)
+    import lib2
+    lib2.verify_programs(rec, L)
+
+    def writes(n):
+        s, att, left = CasStore(0, 1), 0, list(range(n))
+        while left:
+            snaps = {p: s.state for p in left}
+            nxt = []
+            for p in left:
+                v0, ver0 = snaps[p]
+                att += 1
+                if not s.compare_and_set(ver0, v0 + 1):
+                    nxt.append(p)
+            left = nxt
+        return att, s.state[0]
+    got = [writes(n) for n in (2, 20, 200)]
+    rec(L, got == [(3, 2), (21 * 10, 20), (200 * 201 // 2, 200)] and [g[0] for g in got] == [alg.bnx_l09_cas_writes(n) for n in (2, 20, 200)]
+        and [l.split()[3] for l in l09.P_SCALE.out.splitlines()] == ["3", "210", "20100"],
+        "CasStore kiểu khác: 2, 20, 200 tiến trình tranh chấp hoàn toàn → 3, 210, 20 100 lần ghi, điểm cuối = n (không mất cập nhật); khớp màn hình và alg")
+    rec(L, [alg.bnx_l09_lock_wait_ms(n, 1) for n in (2, 20, 200)] == [2, 20, 200], "khoá bi quan: n người, giữ 1 ms → người cuối chờ n ms")
+    lab = ROOT / "labs" / "BNX" / "L09"
+    p_ = subprocess.run([sys.executable, "-X", "utf8", "-I", str(lab / "loi_giai.py")], capture_output=True, text=True, encoding="utf-8")
+    rec(L, p_.returncode == 0 and p_.stdout.strip() == (lab / "mong_doi.txt").read_text(encoding="utf-8").strip(), "lab L09: loi_giai.py cho đúng mong_doi.txt")
+    h_ = crc32_bitwise(b"session::s77")
+    r_ = (h_ >> 16) & 0x7FFF
+    q_, _ = story(300, 4, (("P1", 20), ("P2", -50)), True)
+    rec(L, f"thung ao (1024): {r_ & 1023} | (128): {r_ & 127}" in p_.stdout and q_ == (270, 6), "lab: thùng ảo bằng CRC32 từng bit + phép AND; 300 + 20 - 50 = 270, CAS 6 (CasStore kiểu khác)")
+
     # (3) bài sinh ra
     cur = next(x for x in yaml.safe_load((ROOT / "curriculum" / "bnx.yaml").read_text(encoding="utf-8"))["lessons"] if x["id"] == L)
     spec = yaml.safe_load(next((ROOT / "lessons" / "bnx").glob(f"{L}_*.yaml")).read_text(encoding="utf-8"))

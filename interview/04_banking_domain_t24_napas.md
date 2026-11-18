@@ -1,7 +1,9 @@
 # CHUYÊN ĐỀ 4: NGHIỆP VỤ NGÂN HÀNG LÕI, TEMENOS T24 & CỔNG NAPAS 247
 
 > **Mục tiêu**: Nắm vững nghiệp vụ ngân hàng cốt lõi và các phân hệ tích hợp huyết mạch.  
-> **Căn cứ thực nghiệm**: Phân tích chuyên sâu từ kiến trúc Core Banking T24 OFS Adapter, NAPAS Interbank Switch Gateway, Online Deposit Contract Marketplace, và Billing Orchestration Engine theo chuẩn tuyển dụng ACB 2026.
+> **Căn cứ thực nghiệm**: Phân tích chuyên sâu từ kiến trúc Core Banking T24 OFS Adapter, NAPAS Interbank Switch Gateway, Online Deposit Contract Marketplace, và Billing Orchestration Engine theo chuẩn tuyển dụng ACB 2026.  
+> **Liên hệ với video**: bài INT L04 chỉ còn OFS + IBM MQ + ISO 8583 + PIN/HSM + mã phản hồi 68 (mục 2–3 dưới đây). Phần tín dụng bán lẻ (mục 1.1, 1.2: LTV, DTI, CIC, trích nợ từng phần) và đối soát cuối ngày (mục 8.3) nay thuộc bài **INT L08 "Tín dụng bán lẻ và đối soát cuối ngày"** (`lessons/int/L08_tin_dung_ban_le_va_doi_soat_cuoi_ngay.yaml`, bài cuối của khoá INT).  
+> **Lưu ý pháp lý (thống nhất với ACB L06, kiểm lại 2026-11-14)**: xác thực sinh trắc học dẫn theo TT 50/2024/TT-NHNN, sửa đổi bởi TT 77/2025/TT-NHNN; **QĐ 2345/QĐ-NHNN chưa đọc nguyên văn, chưa rõ còn áp dụng**, không dẫn số điều và không coi là căn cứ hiện hành. Nhóm nợ theo TT 31/2024/TT-NHNN **đã bị TT 37/2025/TT-NHNN sửa đổi theo nguồn thứ cấp: cần đối chiếu bản hợp nhất**.
 
 ---
 
@@ -31,7 +33,7 @@ Trong lĩnh vực Fintech và Công ty Tài chính tiêu dùng (như Mirae Asset
      *(Trong đó: $P$ là Số tiền vay gốc, $r$ là Lãi suất tháng $= \text{Lãi suất năm} / 12$, $n$ là Số tháng vay)*.
    - **Thu nợ & Phân loại nợ (Collection & Delinquency)**:
      - Tự động trích nợ qua liên kết tài khoản ngân hàng (Auto-debit) vào ngày thanh toán (Due Date).
-     - Theo dõi số ngày quá hạn (Days Past Due - DPD) theo Thông tư 31/2024/TT-NHNN (thay Thông tư 11/2021, sửa đổi bởi Thông tư 37/2025): Nhóm 1 quá hạn dưới 10 ngày; Nhóm 2 từ 10 đến 90 ngày; Nhóm 3 từ 91 đến 180 ngày; Nhóm 4 từ 181 đến 360 ngày; Nhóm 5 trên 360 ngày (Nhóm 3–5 là nợ xấu; nguồn thứ cấp: cafef.vn 21/07/2026, hethongphapluat.com, truy cập 2026-11-10, chưa đối chiếu được nguyên văn Điều 10). Nợ cơ cấu lại được phân nhóm theo quy định riêng. Cập nhật báo cáo CIC định kỳ.
+     - Theo dõi số ngày quá hạn (Days Past Due - DPD) theo Thông tư 31/2024/TT-NHNN (thay Thông tư 11/2021; theo nguồn thứ cấp đã bị Thông tư 37/2025/TT-NHNN ngày 31/10/2025 sửa đổi, cần đối chiếu bản hợp nhất trước khi dẫn): Nhóm 1 quá hạn dưới 10 ngày; Nhóm 2 từ 10 đến 90 ngày; Nhóm 3 từ 91 đến 180 ngày; Nhóm 4 từ 181 đến 360 ngày; Nhóm 5 trên 360 ngày (Nhóm 3–5 là nợ xấu; nguồn thứ cấp: cafef.vn 21/07/2026, hethongphapluat.com, truy cập 2026-11-10, chưa đối chiếu được nguyên văn Điều 10). Nợ cơ cấu lại được phân nhóm theo quy định riêng. Cập nhật báo cáo CIC định kỳ.
 
 ---
 
@@ -67,13 +69,13 @@ Tại các ngân hàng thương mại hiện đại, bài toán Tích hợp Tín
   - Kết nối dịch vụ Quản trị Thẻ (CMS) và Loan Origination System (LOS) Adapter, tự động đồng bộ hạn mức với Hệ thống Quản trị Thẻ và Core T24.
   - Quản lý phương án vay, ma trận lãi suất và phí chuyển đổi trả góp theo kỳ hạn.
 
-### 5. Ký số Hợp đồng Tín dụng Đám mây (Cloud CA) & Sinh trắc học QĐ 2345
+### 5. Ký số Hợp đồng Tín dụng Đám mây (Cloud CA) & Xác thực Sinh trắc học
 - **Tích hợp Cloud CA E-Sign Gateway**: Khách hàng không cần ra quầy hay dùng USB Token. Hệ thống tích hợp dịch vụ ký số từ xa (Remote Signing / Cloud CA) để tạo chứng thư số cá nhân trên đám mây.
-- **Bảo mật kép**: Kết hợp quét khuôn mặt sống (Liveness) và mã OTP để xác thực người ký theo chính sách ngân hàng, rồi mới kích hoạt khóa ký tại nhà cung cấp dịch vụ ký số; dấu thời gian do dịch vụ cấp dấu thời gian (TSA) cấp, không phải do OTP. Căn cứ pháp lý: Luật Giao dịch điện tử 2023 và Nghị định 23/2025/NĐ-CP về chữ ký điện tử và dịch vụ tin cậy (thay Nghị định 130/2018, hiệu lực 10/04/2025). (QĐ 2345 điều chỉnh giao dịch thanh toán trực tuyến, không điều chỉnh việc ký hợp đồng.)
+- **Bảo mật kép**: Kết hợp quét khuôn mặt sống (Liveness) và mã OTP để xác thực người ký theo chính sách ngân hàng, rồi mới kích hoạt khóa ký tại nhà cung cấp dịch vụ ký số; dấu thời gian do dịch vụ cấp dấu thời gian (TSA) cấp, không phải do OTP. Căn cứ pháp lý: Luật Giao dịch điện tử 2023 và Nghị định 23/2025/NĐ-CP về chữ ký điện tử và dịch vụ tin cậy (thay Nghị định 130/2018, hiệu lực 10/04/2025). (Quy định xác thực sinh trắc học của NHNN điều chỉnh giao dịch thanh toán trực tuyến, không điều chỉnh việc ký hợp đồng; QĐ 2345 chưa đọc nguyên văn nên không dẫn làm căn cứ.)
 - **Lưu trữ Kho văn bản số ECM**: Hợp đồng PDF sau khi ký số được tự động mã hóa và đồng bộ sang Kho lưu trữ Văn bản Doanh nghiệp (Enterprise Content Management - ECM).
 
 ### 6. Cổng CIC B2B, Mô hình Chấm điểm & Giải ngân Idempotent
-- Tích hợp kênh truyền mTLS/VPN với Cổng CIC NHNN, phân loại 5 nhóm nợ (Thông tư 31/2024/TT-NHNN, thay Thông tư 11/2021), kiểm soát trần DTI theo chính sách tín dụng (ví dụ minh họa: 45%).
+- Tích hợp kênh truyền mTLS/VPN với Cổng CIC NHNN, phân loại 5 nhóm nợ (Thông tư 31/2024/TT-NHNN, thay Thông tư 11/2021; đã bị TT 37/2025 sửa đổi theo nguồn thứ cấp, cần đối chiếu bản hợp nhất), kiểm soát trần DTI theo chính sách tín dụng (ví dụ minh họa: 45%).
 - Kích hoạt giải ngân tự động qua NAPAS 247 được bảo vệ bởi khóa phân tán Redis Mutex (`disbursement:lock:{app_id}`) với TTL 300 giây và cơ chế bù trừ SAGA Compensation.
 - Tự động trích nợ từng phần (Partial Debit) vào ngày đến hạn thanh toán từ tài khoản CASA, đồng bộ trạng thái hợp đồng trên Core T24.
 
@@ -158,8 +160,8 @@ Muốn dùng các trường 102, 103, 128 thì bắt buộc có Secondary Bitmap
 - **Message Type Identifier (MTI)**:
   - `0200`: Financial Transaction Request (Yêu cầu chuyển tiền từ Ngân hàng chuyển sang NAPAS).
   - `0210`: Financial Transaction Response (NAPAS phản hồi kết quả chuyển tiền).
-  - `0400`: Reversal Request (Yêu cầu đảo giao dịch).
-  - `0420`: Reversal Advice (Thông báo đảo giao dịch, ví dụ khi timeout; gửi lặp `0421` đến khi nhận `0430`).
+  - `0400`: Reversal Request (yêu cầu đảo giao dịch).
+  - `0420`: Reversal Advice (thông báo đảo giao dịch; gửi lặp `0421` đến khi nhận `0430`). Theo đặc tả ISO 8583 gốc, 0400 là yêu cầu đảo, 0420 là thông báo đảo; cách NAPAS 247 dùng hai loại này khi timeout **cần kiểm với tài liệu NAPAS** (PLAUSIBLE, chưa có nguồn). Đảo giao dịch là hoàn tiền, nên với mã 68 (nghi vấn) không đảo ngay mà tra soát trạng thái trước.
   - `0430`: Reversal Advice Response (Phản hồi thông báo đảo).
   - Cơ chế đảo/tra soát cụ thể của NAPAS 247 **cần kiểm với tài liệu NAPAS**.
 - **Các trường dữ liệu quan trọng nhất (Data Elements)**:
@@ -171,7 +173,7 @@ Muốn dùng các trường 102, 103, 128 thì bắt buộc có Secondary Bitmap
     - `00`: Giao dịch thành công (Approved).
     - `05`: Từ chối giao dịch (Do not honor).
     - `51`: Không đủ số dư (Insufficient funds).
-    - `68`: Giao dịch timeout / Chờ đối soát (Response received too late).
+    - `68`: theo ISO 8583 gốc là "response received too late" (phản hồi về quá muộn); việc NAPAS dùng 68 như "giao dịch nghi vấn, chờ tra soát" là cách gọi phổ biến, **ý nghĩa theo đặc tả NAPAS cần kiểm**. Xử lý: giữ trạng thái chờ đối soát, không hoàn tiền hay trừ tiền lần hai, rồi tra soát.
   - **Field 102 & 103**: Số tài khoản nguồn và số tài khoản đích.
   - **Field 128 (MAC - Message Authentication Code)**: Mã xác thực bảo vệ toàn vẹn bản tin (cần Secondary Bitmap; nếu chỉ có Primary Bitmap thì MAC nằm ở Field 64).
 
@@ -334,7 +336,7 @@ EMIT CHANGES;
 
 ---
 
-## 7. KIẾN TRÚC SAO KÊ TÀI KHOẢN CAO TẢI, CHI LƯƠNG THEO LÔ & SINH TRẮC HỌC QĐ 2345
+## 7. KIẾN TRÚC SAO KÊ TÀI KHOẢN CAO TẢI, CHI LƯƠNG THEO LÔ & XÁC THỰC SINH TRẮC HỌC
 
 ### 7.1. Xử lý Sao kê Tài khoản khối lượng lớn với Kafka Streams Divide-and-Conquer
 - **Thách thức**: Doanh nghiệp lớn yêu cầu xuất sao kê hàng triệu giao dịch mỗi tháng. Nếu query trực tiếp vào Core T24 hay ODS bằng SQL `BETWEEN date1 AND date2`, cơ sở dữ liệu sẽ bị nghẽn I/O và treo các tiến trình giao dịch trực tuyến.
@@ -352,8 +354,9 @@ EMIT CHANGES;
      - *Liên ngân hàng*: Đẩy sang Cổng NAPAS 247 Interbank Gateway (hoặc kênh xử lý theo lô như ACH, tùy sản phẩm); định dạng bản tin cần kiểm với tài liệu NAPAS.
   4. *Batch Completion Consumer*: Theo dõi trạng thái từng lệnh con qua Redis bitset hoặc cơ sở dữ liệu. Khi toàn bộ 10,000 lệnh hoàn tất (thành công hoặc thất bại), tự động kích hoạt thông báo tổng kết cho kế toán trưởng doanh nghiệp.
 
-### 7.3. Cổng Xác thực Sinh trắc học QĐ 2345 (National Biometric & VNeID Gateway)
-- **Quyết định 2345/QĐ-NHNN** (ban hành 18/12/2023, hiệu lực 01/07/2024):
+### 7.3. Cổng Xác thực Sinh trắc học (National Biometric & VNeID Gateway)
+- **Căn cứ**: TT 50/2024/TT-NHNN, sửa đổi bởi TT 77/2025/TT-NHNN (ngưỡng và điều kiện cụ thể: cần đối chiếu bản hợp nhất; không nêu số điều). **QĐ 2345/QĐ-NHNN** (tài liệu phỏng vấn đã lưu ghi ban hành 18/12/2023, hiệu lực 01/07/2024) **chưa đọc nguyên văn, chưa rõ còn áp dụng**: không dùng làm căn cứ hiện hành.
+- **Mô tả theo các nguồn thứ cấp (cần kiểm)**:
   - Giao dịch chuyển tiền trực tuyến trên 10 triệu VND/lần, hoặc giao dịch làm tổng giá trị trong ngày vượt 20 triệu VND, phải xác thực sinh trắc học; dữ liệu sinh trắc học được so khớp với dữ liệu đã thu thập và kiểm tra khớp với chip CCCD, hoặc qua tài khoản VNeID (chi tiết các giao dịch tiếp theo trong ngày: cần đối chiếu văn bản gốc).
 - **Kiến trúc tích hợp an toàn**:
   - *Mobile SDK*: Bắt khuôn mặt người dùng (Liveness Detection - chống video giả mạo / deepfake) và trích xuất dữ liệu khuôn mặt đã mã hóa.

@@ -89,9 +89,11 @@ def raw_block(lines, title=None):
 
 
 # ── hình vẽ ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
-def txt(x, y, s, size=24, anchor="middle", fill="#1f2937", bold=False):
+def txt(x, y, s, size=24, anchor="middle", fill="#1f2937", bold=False, mono=False):
+    """mono=True: phông đơn cách cho chữ là lệnh (phông sans làm chữ l trong ls giống chữ I hoa)."""
     w = ' font-weight="bold"' if bold else ""
-    return f'<text x="{x}" y="{y}" font-size="{size}" text-anchor="{anchor}" fill="{fill}"{w}>{s}</text>'
+    f = " font-family=\"Consolas, 'DejaVu Sans Mono', monospace\"" if mono else ""
+    return f'<text x="{x}" y="{y}" font-size="{size}" text-anchor="{anchor}" fill="{fill}"{w}{f}>{s}</text>'
 
 
 def pr_steps(*a, **k):
@@ -174,7 +176,14 @@ def fix_say(t):
     return _ID_RE.sub("mã", t)
 
 
+NOTE_STYLE = "style='color:#111827'"  # ghi chú gần màu chữ chính: khối đã qua bị mờ (.blk.past opacity .62), vòng 6 đo #868c94 trên #fff7e6 = 3,18:1 với #475569; #111827 qua mờ còn ≥ 4,5:1. Chỉ áp cho FND, không đổi player.css dùng chung
+_LONGOPT = re.compile(r"<code>([^<]*--[^<]*)</code>")
+
+
 def st(show, say, focus=None, introduces=None, pause=None, clear=None, forward_ref=None, notation_note=None):
+    show = show.replace("class='note'", "class='note' " + NOTE_STYLE).replace('class="note"', 'class="note" ' + NOTE_STYLE)
+    # tuỳ chọn dài (--show-current, --format=%s…) không gãy dòng giữa chừng (vòng 6)
+    show = _LONGOPT.sub(lambda m: '<code style="white-space:nowrap">' + m.group(1) + "</code>" if len(m.group(1)) <= 40 else m.group(0), show)
     d = {"show": show.strip("\n") + "\n" if "\n" in show else show}
     if ("<svg" in show or 'class="code"' in show) and clear is None:
         clear = True  # hình hay khối mã chiếm nhiều chỗ: thay khung trước
@@ -217,7 +226,14 @@ def sc(id, kind, title, steps, checks=None):
 
 def table(head, rows, cls="t"):
     h = "".join(f"<th>{c}</th>" for c in head)
-    body = "".join("<tr>" + "".join(f"<td>{c}</td>" for c in r) + "</tr>" for r in rows)
+    def td(i, c):
+        # cột 1 chỉ có mã ngắn (vd `cp a b`, `set -e`, `A && B`): không gãy dòng giữa mã (vòng 5: cột hẹp làm gãy "set -" / "e")
+        plain = re.sub(r"<[^>]+>", "", c)
+        if i == 0 and c.startswith("<code>") and len(plain) <= 48:
+            return f"<td style='white-space:nowrap'>{c}</td>"
+        return f"<td>{c}</td>"
+
+    body = "".join("<tr>" + "".join(td(i, c) for i, c in enumerate(r)) + "</tr>" for r in rows)
     return f"<table class='{cls}'><tr>{h}</tr>{body}</table>"
 
 
@@ -259,6 +275,9 @@ def say_violations(spec):
 
 def lesson(id, slug, title, source, objectives, scenes, assumes=None, rate="-5%", covers=None):
     _auto_introduce(scenes)
+    # thuật ngữ then chốt của khoá FND, giảng ở bài đầu tiên cần nó (symbols.FND.yaml, E52): bài sau chỉ khai `assumes`
+    n_ = int(id[1:])
+    assumes = list(assumes or []) + [t_ for t_, first_ in (("fnd_bash", 1), ("fnd_stderr", 5), ("fnd_as", 9)) if n_ >= first_]
     af2 = {"af2": True, "covers": [{"objective": o, "scene": s_} for o, s_ in covers]} if covers else {}
     return slug, {
         "id": id, "course": COURSE, "series": SERIES, "title": title, "voice": "vi-VN-NamMinhNeural", "rate": rate,

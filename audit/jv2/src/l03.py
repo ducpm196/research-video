@@ -290,6 +290,8 @@ Tong: {…}
 Khop vong lap: true
 ```
 
+Dòng `import` cần dùng: `java.util.List`, `java.util.Map`, `java.util.TreeMap`, `java.util.stream.Collectors`.
+
 Chạy: `javac ThongKeStream.java && java ThongKeStream`. Chấm: `bash labs/cham.sh JV2 L03 ThongKeStream.java`.
 """, "java", lab["code"], lab["out"])
     sc_lab = practice_scene(sc, "Tự làm: thống kê tám giao dịch bằng Stream", practice_steps(
@@ -310,10 +312,14 @@ Vòng lặp: <code>m.merge(g.loai(), g.soTien(), Long::sum)</code>. Lời giải
 
     sc_hook = sc("hook", "hook", "Mười dòng vòng lặp, hay một dòng nói điều mình muốn?", [
         st(code_block(vong, lines=(14, 21)) + out_block(vong),
-           """Ở bài trước, ta thống kê giao dịch bằng vòng lặp. Vòng lặp nói máy phải làm thế nào, mở một biến tổng, duyệt từng phần tử, kiểm điều kiện, cộng dồn. Mười dòng, ba chỗ dễ lỗi, và đọc xong vẫn phải đoán mục đích.
+           """Ở bài một, ta thống kê giao dịch bằng vòng lặp. Vòng lặp nói máy phải làm thế nào, mở một biến tổng, duyệt từng phần tử, kiểm điều kiện, cộng dồn. Mười dòng, ba chỗ dễ lỗi, và đọc xong vẫn phải đoán mục đích.
            Kết quả là tổng các giao dịch từ một triệu trở lên, và tổng theo từng loại."""),
-        st(code_block(thong_ke, lines=(15, 17)),
-           """Cùng việc đó, cách kể mục đích gọn hơn nhiều. Lọc ra giao dịch từ một triệu, đổi sang số tiền, cộng lại. Gom các giao dịch theo loại rồi cộng tiền của từng loại. Dòng nào nói đúng điều mình muốn, và đây là đường ống, kiểu viết thống trị trong mã Java hiện đại.""", clear=True),
+        st(code_block(thong_ke, lines=(15, 17))
+           + "<p class='note'><code>TreeMap::new</code> đọc là \"tạo một <code>TreeMap</code> mới\" (viết tắt của <code>() -&gt; new TreeMap&lt;&gt;()</code>): <b>nơi chứa</b> kết quả, giữ các loại theo thứ tự chữ cái. "
+             "Ba tham số của <code>groupingBy</code>: <b>khoá để gom</b>, <b>nơi chứa</b>, <b>cách tính trong mỗi nhóm</b>.</p>",
+           """Cùng việc đó, cách kể mục đích gọn hơn nhiều. Lọc ra giao dịch từ một triệu, đổi sang số tiền, cộng lại. Gom các giao dịch theo loại rồi cộng tiền của từng loại. Đây là đường ống, kiểu viết thống trị trong mã Java hiện đại.
+           Ở dòng gom nhóm, cách viết có hai dấu hai chấm cùng chữ tạo mới nghĩa là tạo một bản đồ có thứ tự mới để chứa kết quả. Vậy hàm gom nhóm nhận ba thứ, khoá để gom, nơi chứa kết quả, và cách tính trong mỗi nhóm.""",
+           introduces=["jv2_ctor_ref"], clear=True),
         st("""<div class="box key">Hôm nay: <b>hàm là một giá trị</b> có thể truyền đi (hàm ngắn không tên, tham chiếu hàm), và <b>đường ống Stream</b> lọc, biến đổi, gom nhóm.
 Kèm câu hỏi của người làm nghề: đường ống chạy <b>khi nào</b>, và với tệp lớn gấp một nghìn lần thì còn chạy nổi không?</div>""",
            """Hôm nay ta học hàm là một giá trị có thể truyền đi, và đường ống để lọc, biến đổi, gom nhóm. Kèm câu hỏi của người làm nghề, đường ống chạy khi nào, và với tệp lớn gấp một nghìn lần thì còn chạy nổi không.""", clear=True),
@@ -333,17 +339,18 @@ Kèm câu hỏi của người làm nghề: đường ống chạy <b>khi nào</
                  [["<code>so -&gt; so &gt; 1000000</code>", "<b>hàm ngắn không tên</b>: bên trái mũi tên là tham số, bên phải là kết quả trả về"],
                   ["<code>Predicate&lt;Long&gt;</code>", "giao diện của hàm nhận một giá trị, trả <b>đúng/sai</b>; gọi bằng <code>.test(x)</code>"],
                   ["<code>Function&lt;A, B&gt;</code>", "giao diện của hàm nhận <code>A</code>, trả <code>B</code>; gọi bằng <code>.apply(x)</code>"],
-                  ["<code>GiaoDich::soTien</code>", "<b>tham chiếu hàm</b>: cách viết tắt của <code>g -&gt; g.soTien()</code>"],
+                  ["<code>GiaoDich::soTien</code>", "<b>tham chiếu hàm</b>: cách viết tắt của <code>g -&gt; g.soTien()</code>; dạng <code>TreeMap::new</code> là tham chiếu tới <b>hàm tạo</b>, nghĩa là \"tạo mới\""],
                   ["<code>ds.stream()</code>", "mở một <b>đường ống</b> (Stream) đi qua từng phần tử của danh sách"],
                   ["<code>filter</code> / <code>map</code>", "bước giữa: giữ phần tử thoả điều kiện / đổi mỗi phần tử thành giá trị khác"],
                   ["<code>sum</code> / <code>collect</code> / <code>toList</code>", "bước <b>cuối</b>: lấy kết quả ra; không có bước cuối thì đường ống <b>không chạy</b>"],
-                  ["<code>groupingBy(khoá, …)</code>", "gom các phần tử cùng khoá vào một nhóm, rồi tính tiếp trong từng nhóm"]]),
-           """Bảng này có tám thứ. Hàm ngắn không tên có tham số bên trái mũi tên và kết quả bên phải. Hai giao diện hay dùng nhất là hàm trả đúng sai, và hàm biến đổi từ kiểu này sang kiểu kia. Tham chiếu hàm là cách viết tắt của hàm ngắn chỉ gọi một hàm có sẵn.
-           Mở đường ống từ danh sách. Bước giữa như lọc và biến đổi chỉ khai báo việc cần làm. Bước cuối mới lấy kết quả, và nếu không có bước cuối thì đường ống không chạy. Cuối cùng là gom nhóm theo khoá.""",
+                  ["<code>groupingBy(khoá, …)</code>", "gom các phần tử cùng khoá vào một nhóm, rồi tính tiếp trong từng nhóm; tham số <b>giữa</b> (có thể bỏ) là nơi chứa, ví dụ <code>TreeMap::new</code>"]]),
+           """Bảng này có tám thứ. Hàm ngắn không tên có tham số bên trái mũi tên và kết quả bên phải. Hai giao diện hay dùng nhất là hàm trả đúng sai, và hàm biến đổi từ kiểu này sang kiểu kia. Tham chiếu hàm là cách viết tắt của hàm ngắn chỉ gọi một hàm có sẵn, còn đuôi tạo mới là tham chiếu tới hàm tạo.
+           Mở đường ống từ danh sách. Bước giữa như lọc và biến đổi chỉ khai báo việc cần làm. Bước cuối mới lấy kết quả, và nếu không có bước cuối thì đường ống không chạy. Cuối cùng là gom nhóm theo khoá, trong đó tham số giữa, có thể bỏ, là nơi chứa kết quả.""",
            focus=[1, "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8"]),
-        st(code_block(ham, lines=(6, 10)) + out_block(ham),
-           """Ta thử ngay. Hàm thứ nhất nhận một số, trả đúng nếu lớn hơn một triệu. Hàm thứ hai nhận số tiền, chia một nghìn để ra phí. Hai triệu rưỡi thì đúng, tám trăm nghìn thì sai, và phí của hai triệu rưỡi là hai nghìn năm trăm.
-           Cả hai hàm đều là giá trị nằm trong một biến, ta có thể truyền chúng cho hàm khác.""", clear=True),
+        st(code_block(ham, lines=(1, 10), title="Hai hàm ngắn nằm trong hai biến"),
+           """Ta thử ngay, với đầy đủ hai dòng nạp tên và khung chương trình. Hàm thứ nhất nhận một số, trả đúng nếu lớn hơn một triệu. Hàm thứ hai nhận số tiền, chia một nghìn để ra phí. Cả hai hàm đều là giá trị nằm trong một biến, ta có thể truyền chúng cho hàm khác.""", clear=True),
+        st(out_block(ham),
+           """Kết quả thật. Hai triệu rưỡi thì đúng, tám trăm nghìn thì sai, và phí của hai triệu rưỡi là hai nghìn năm trăm.""", clear=True),
     ], checks=["2500000 > 1000000", "not (800000 > 1000000)", "2500000 // 1000 == 2500"])
     sc_int = sc("intuition", "intuition", "Hình dung: băng chuyền, mỗi phần tử đi hết các trạm", [
         st(svg(1500, 330,
@@ -352,15 +359,20 @@ Kèm câu hỏi của người làm nghề: đường ống chạy <b>khi nào</
                box(670, 120, 240, 90, ["mapToLong", "lấy số tiền"], C_BLUE, 24, bold=True), arrow(915, 165, 1000, 165, "#475569"),
                box(1005, 120, 220, 90, ["sum", "BƯỚC CUỐI"], C_GREEN, 24, bold=True), arrow(1230, 165, 1300, 165, "#16a34a"),
                box(1305, 120, 180, 90, ["4 700 000", "kết quả"], C_AMBER, 24, bold=True),
-               txt(750, 60, "mỗi phần tử đi hết các trạm rồi mới tới phần tử sau", 28, "middle", "#1f2937", True),
+               txt(750, 60, "mỗi phần tử đi hết các trạm lọc, đổi rồi mới tới phần tử sau", 28, "middle", "#1f2937", True),
                txt(750, 290, "không có trạm cuối thì băng chuyền không chạy", 26, "middle", "#dc2626", True)),
            """Hình dung đường ống như một băng chuyền. Phần tử đi qua trạm lọc, rồi trạm biến đổi, rồi tới trạm cuối để lấy kết quả. Điều quan trọng là mỗi phần tử đi hết các trạm rồi mới tới phần tử sau, chứ không phải trạm một xử lý hết rồi mới sang trạm hai.
            Và nếu không có trạm cuối thì băng chuyền không bao giờ chạy."""),
-        st(code_block(luoi, lines=(6, 10)),
+        st(code_block(luoi, lines=(1, 12)),
            """Ta kiểm tra bằng cách cho mỗi trạm in một dòng. Danh sách một, hai, ba, bốn. Trạm lọc giữ số chẵn, trạm biến đổi nhân mười. Ta in ra dòng chưa chạy gì trước khi gọi bước cuối, để xem đường ống thực sự bắt đầu lúc nào.""", clear=True),
         st(out_block(luoi) + "<p class='note'>Dòng \"chua chay gi\" in <b>trước</b> mọi dòng \"loc\"; rồi từng phần tử đi hết các trạm: 1 bị loại ngay, 2 đi tiếp tới \"nhan\".</p>",
            """Kết quả thật. Dòng chưa chạy gì xuất hiện trước tiên, nghĩa là hai trạm đầu chỉ khai báo. Khi gọi bước cuối, phần tử một vào trạm lọc và bị loại, phần tử hai qua lọc rồi qua trạm biến đổi, rồi mới tới phần tử ba.
            Kết quả cuối là hai mươi và bốn mươi.""", clear=True),
+        st(table(["bước", "cách chạy", "ví dụ"],
+                 [["<code>filter</code>, <code>map</code>", "mỗi phần tử đi tiếp ngay, không đợi ai", "bước vừa chạy ở trên"],
+                  ["<code>sorted</code>, <code>distinct</code>", "<b>phải gom hết</b> phần tử trước rồi mới trả đi (bước có trạng thái)", "xếp thì phải thấy mọi phần tử; bỏ trùng thì phải nhớ những gì đã gặp"]])
+           + "<p class='note'>Vì thế câu \"mỗi phần tử đi hết các trạm rồi mới tới phần tử sau\" đúng với bước lọc và đổi; bước có trạng thái chặn băng chuyền lại, chờ đủ phần tử.</p>",
+           """Có một ngoại lệ cần nhớ. Bước lọc và bước đổi cho từng phần tử đi tiếp ngay. Nhưng bước sắp xếp phải thấy mọi phần tử trước khi trả phần tử đầu, còn bước bỏ trùng phải nhớ những gì đã gặp. Hai bước có trạng thái ấy chặn băng chuyền lại, chờ đủ phần tử rồi mới tiếp tục.""", clear=True),
     ])
     sc_form = sc("formula", "formula", "Suy ra từng bước: từ vòng lặp sang đường ống", [
         st(code_block(vong, lines=(14, 21)) + "<p><b>Bước 1.</b> Tách vòng lặp thành các <b>việc rời nhau</b>: lọc (<code>if</code>), lấy tiền, cộng (<code>lon +=</code>).</p>",
@@ -378,8 +390,10 @@ $$\\text{nap} = 2\\,000\\,000 + 1\\,500\\,000 + 900\\,000 = \\hl{4\\,400\\,000}$
            """Bước bốn, thử bằng số với loại nạp. Có ba giao dịch nạp, hai triệu, một triệu rưỡi và chín trăm nghìn. Cộng lại được bốn triệu bốn trăm nghìn, nên đúng bằng giá trị mà đường ống sẽ in ra cho loại nạp.""", clear=True),
     ], checks=["2000000 + 1500000 + 900000 == 4400000"])
     sc_ex = sc("example", "example", "Ví dụ: tám giao dịch, ba câu hỏi, hai cách viết", [
+        st(code_block(thong_ke, lines=(1, 9), title="Đầu chương trình ThongKe"),
+           """Ta làm trọn vẹn một ví dụ, và xem chương trình từ dòng đầu. Bốn dòng nạp tên lấy danh sách, bản đồ, bản đồ có thứ tự và bộ gom của đường ống. Bản ghi giao dịch khai ngay trong lớp.""", clear=True),
         st(code_block(thong_ke, lines=(10, 14)) + "<p class='note'>Tám giao dịch: rút, nạp, rút, chuyển, nạp, rút, chuyển, nạp.</p>",
-           """Ta làm trọn vẹn một ví dụ với tám giao dịch gồm ba loại. Ba câu hỏi: tổng các giao dịch từ một triệu trở lên, tổng theo loại, và danh sách các loại. Ta tính tay trước.""", clear=True),
+           """Dữ liệu là tám giao dịch gồm ba loại. Ba câu hỏi: tổng các giao dịch từ một triệu trở lên, tổng theo loại, và danh sách các loại. Ta tính tay trước.""", clear=True),
         st("$$① \\; \\text{từ 1 triệu}: 2\\,000\\,000 + 1\\,200\\,000 + 1\\,500\\,000 = \\hl{4\\,700\\,000}$$"
            "<p>(900 000 và các số nhỏ hơn bị loại.)</p>",
            """Phép tính thứ nhất, các giao dịch từ một triệu trở lên là hai triệu, một triệu hai trăm nghìn và một triệu rưỡi. Cộng lại được bốn triệu bảy trăm nghìn. Giao dịch chín trăm nghìn không đủ nên bị loại.""", clear=True),
@@ -404,11 +418,20 @@ $$4\\,700\\,000 \\le 7\\,450\\,000 \\quad\\text{và}\\quad 1\\,550\\,000 + 4\\,4
            """Cách kiểm thứ hai là kiểm tính chất. Tổng của ba nhóm phải bằng tổng cả danh sách. Và vì tổng các giao dịch lớn là một phần của tất cả, nên nó không thể vượt tổng tất cả. Cả hai đều đúng với số liệu của ta.""", clear=True),
     ], checks=["4700000 <= 7450000", "1550000 + 4400000 + 1500000 == 7450000"])
     sc_scale = sc("scale", "concept", "Khi dữ liệu lớn gấp một nghìn lần: đường ống lười cứu bộ nhớ", [
-        st(code_block(ngan_mach, lines=(5, 10)) + out_block(ngan_mach),
-           """Điều đầu tiên là đường ống lười. Ta tìm phần tử đầu tiên chia hết cho mười trong một triệu số. Ta đếm số phần tử thực sự được duyệt bằng cách chèn một trạm đếm. Kết quả là chỉ mười phần tử, vì đường ống dừng ngay khi tìm được.
-           Vòng lặp viết vụng có thể duyệt cả một triệu.""", clear=True),
+        st(code_block(ngan_mach, lines=(1, 12))
+           + "<p class='note'><code>peek</code>: trạm chỉ nhìn qua từng phần tử, không đổi nó. <code>findFirst</code>: lấy phần tử đầu tiên thoả điều kiện (trả về một giá trị có thể rỗng, tên <code>OptionalInt</code>); ta bỏ nó đi vì chỉ muốn đếm.</p>",
+           """Điều đầu tiên là đường ống lười. Ta tìm phần tử đầu tiên chia hết cho mười trong một triệu số. Ta đếm số phần tử thực sự được duyệt bằng cách chèn một trạm chỉ nhìn qua từng phần tử. Bước cuối ở đây là lấy phần tử đầu tiên, và ta bỏ kết quả đi vì chỉ muốn đếm.""", clear=True),
+        st(out_block(ngan_mach),
+           """Kết quả là chỉ mười phần tử được duyệt, vì đường ống dừng ngay khi tìm được. Vòng lặp viết vụng có thể duyệt cả một triệu.""", clear=True),
+        st(pcode(lon, "TaoFile.java", lines=(6, 18), title=""),
+           """Để đo tệp lớn, ta cần tệp thử. Chương trình này giống bài một, nhưng cột loại xoay vòng theo số dòng chia lấy dư ba, nên ba loại có số dòng gần bằng nhau. Số tiền vẫn từ một đến bảy nghìn.""", clear=True),
+        st(pcode(lon, "DocHet.java", lines=(6, 15), title="Cách A: đọc hết vào danh sách rồi mới tạo đường ống (DocHet)"),
+           """Cách thứ nhất đọc hết tệp vào danh sách rồi mới tạo đường ống từ danh sách đó. Nguồn của đường ống đã nằm trọn trong bộ nhớ, nên lười ở các bước sau cũng không cứu được bộ nhớ.""", clear=True),
+        st(pcode(lon, "ThongKeLon.java", lines=(9, 18), title="")
+           + "<p class='note'><code>Files.lines</code> mở tệp và giữ nó mở, nên luồng dòng phải đặt trong khối có tài nguyên để được đóng.</p>",
+           """Cách thứ hai tạo đường ống thẳng từ tệp bằng hàm đọc lười từng dòng. Hàm này giữ tệp mở, nên luồng dòng phải nằm trong khối có tài nguyên để đóng lại khi xong. Rồi ta bỏ dòng tiêu đề, cắt mỗi dòng bằng dấu phẩy và gom tổng tiền theo loại.""", clear=True),
         st(term_block(lon, 1, 4, title="Cùng một tệp một triệu dòng, bộ nhớ chỉ 32 megabyte"),
-           """Điều thứ hai là kết hợp với đọc từng dòng. Ta tạo tệp một triệu dòng. Cách đọc hết rồi mới tạo đường ống thì hết bộ nhớ, như bài trước. Còn cách tạo đường ống trực tiếp từ tệp, mỗi lúc chỉ giữ một dòng, thì chạy xong, gom được ba nhóm.
+           """Điều thứ hai là kết hợp với đọc từng dòng. Ta tạo tệp một triệu dòng. Cách đọc hết rồi mới tạo đường ống thì hết bộ nhớ, như ở bài một. Còn cách tạo đường ống trực tiếp từ tệp, mỗi lúc chỉ giữ một dòng, thì chạy xong, gom được ba nhóm.
            Tổng của ba nhóm vẫn đúng bằng tổng cả tệp, và không tốn thêm bộ nhớ vì số nhóm chỉ là ba.""", clear=True),
         st(table(["số dòng", "1 000", "1 000 000", "1 000 000 000"],
                  [["bộ nhớ khi giữ mọi dòng rồi mới tạo đường ống", "≈ 64 nghìn byte", "≈ 64 triệu byte", "<b>≈ 64 tỉ byte</b>"],
@@ -421,18 +444,20 @@ $$4\\,700\\,000 \\le 7\\,450\\,000 \\quad\\text{và}\\quad 1\\,550\\,000 + 4\\,4
                f"sum((i % 7 + 1) * 1000 for i in range(1, 1000001)) == {sum(_tong.values())}"])
     sc_pit = sc("pitfalls", "pitfall", "Lỗi hay gặp, có lỗi của người đã đi làm", [
         st('<div class="box warn"><b>Lỗi 1 (người mới).</b> Hàm ngắn muốn sửa biến bên ngoài.</div>'
-           + code_block(cap_bien, lines=(5, 9)) + out_block(cap_bien),
-           """Lỗi thứ nhất là hàm ngắn muốn sửa biến bên ngoài. Hàm ngắn chỉ được đọc biến cục bộ mà không đổi sau khi gán, vì hàm có thể chạy muộn, ở luồng khác, khi biến đã không còn. Biến tổng ở đây bị cộng thêm sau đó, nên trình biên dịch từ chối.
-           Muốn gom kết quả thì dùng bước cuối của đường ống, đừng cộng vào biến ngoài."""),
+           + code_block(cap_bien, lines=(1, 11))
+           + "<p class='note'><code>Runnable</code>: giao diện của hàm không nhận gì và không trả gì. <b>Effectively final</b>: biến chỉ được gán một lần, sau đó không đổi.</p>",
+           """Lỗi thứ nhất là hàm ngắn muốn sửa biến bên ngoài. Ở đây hàm ngắn thuộc kiểu hàm không nhận gì và không trả gì, và nó đọc biến tổng. Hàm ngắn chỉ được đọc biến cục bộ mà không đổi sau khi gán, vì hàm có thể chạy muộn, ở luồng khác, khi biến đã không còn."""),
+        st(out_block(cap_bien),
+           """Biến tổng bị cộng thêm sau đó, nên trình biên dịch từ chối. Muốn gom kết quả thì dùng bước cuối của đường ống, đừng cộng vào biến ngoài.""", clear=True),
         st('<div class="box warn"><b>Lỗi 2 (người mới).</b> Dùng lại một đường ống đã chạy.</div>'
            + code_block(dung_hai, lines=(6, 8)) + out_block(dung_hai),
            """Lỗi thứ hai là dùng lại một đường ống đã chạy. Mỗi đường ống chỉ chạy một lần. Lần đếm đầu cho ra ba, lần thứ hai nổ ngoại lệ báo đường ống đã dùng. Cách sửa là mở đường ống mới từ danh sách mỗi lần cần.""", clear=True),
         st('<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Gom thành bản đồ khi khoá có thể trùng.</div>'
            + code_block(trung_khoa, lines=(9, 12)) + out_block(trung_khoa),
            """Lỗi thứ ba hay gặp ở người đã đi làm. Gom danh sách thành bản đồ với khoá là loại giao dịch. Khi dữ liệu thử chỉ có khoá khác nhau thì chạy ngon. Đến ngày dữ liệu thật có hai dòng cùng loại, ngoại lệ khoá trùng làm cả đường ống nổ.""", clear=True),
-        st('<div class="box key"><b>Cách sửa:</b> đưa thêm hàm hợp nhất hai giá trị cùng khoá (ở đây <code>Long::sum</code>).</div>'
+        st('<div class="box key"><b>Cách sửa:</b> đưa thêm hàm hợp nhất hai giá trị cùng khoá (ở đây <code>Long::sum</code>, tham số thứ <b>ba</b>); tham số thứ <b>bốn</b> <code>TreeMap::new</code> là nơi chứa, như ở bước gom nhóm.</div>'
            + code_block(sua_khoa, lines=(12, 13)) + out_block(sua_khoa),
-           """Cách sửa là thêm hàm hợp nhất cho hai giá trị cùng khoá, ở đây là phép cộng. Hai dòng nạp được cộng lại thành ba triệu năm trăm nghìn, và không còn nổ khi dữ liệu có khoá trùng.""", clear=True),
+           """Cách sửa là thêm hàm hợp nhất cho hai giá trị cùng khoá, ở đây là phép cộng ở tham số thứ ba, còn tham số thứ tư là nơi chứa như ở bước gom nhóm. Hai dòng nạp được cộng lại thành ba triệu năm trăm nghìn, và không còn nổ khi dữ liệu có khoá trùng.""", clear=True),
     ])
     sc_quiz = sc("quiz", "quiz", "Bây giờ tới phần bạn tự làm", [
         st("""<p><b>Đề.</b> Danh sách các số tiền: <code>[400000, 1500000, 250000, 3000000, 900000]</code>.</p>
@@ -453,13 +478,14 @@ $$4\\,700\\,000 \\le 7\\,450\\,000 \\quad\\text{và}\\quad 1\\,550\\,000 + 4\\,4
     ], checks=["1500000 + 3000000 + 900000 == 5400000", "sum(x for x in [400000, 1500000, 250000, 3000000, 900000] if x >= 900000) == 5400000"])
     sc_rec = sc("recap", "recap", "Chuỗi logic & tư duy cần mang theo", [
         st(chain("hàm là giá trị: x -> …", "tham chiếu hàm: Lop::ham", "đường ống: nguồn → bước giữa → bước cuối", "bước cuối mới chạy",
-                 "mỗi phần tử đi hết các trạm", "nguồn lười thì đường ống lười"),
+                 "mỗi phần tử đi hết các trạm (trừ bước gom như sorted)", "nguồn lười thì đường ống lười"),
            """Tổng kết chuỗi logic. Hàm là một giá trị, viết gọn bằng mũi tên. Tham chiếu hàm là cách viết tắt. Đường ống gồm nguồn, các bước giữa và bước cuối. Chỉ bước cuối mới làm đường ống chạy.
-           Mỗi phần tử đi hết các trạm rồi mới tới phần tử sau. Và đường ống chỉ lười khi nguồn của nó lười."""),
+           Mỗi phần tử đi hết các trạm rồi mới tới phần tử sau, trừ các bước phải gom đủ như sắp xếp. Và đường ống chỉ lười khi nguồn của nó lười."""),
         st("""<div class='box key'><b>Tư duy:</b> khi viết đường ống, hỏi: <b>nguồn</b> nằm hết trong bộ nhớ không, <b>khoá</b> có thể trùng không, đường ống có <b>bước cuối</b> không,
 và hàm ngắn có đang <b>sửa biến bên ngoài</b> không. Vòng lặp vẫn tốt khi cần kiểm soát từng bước.</div>""",
            """Điều cần mang theo. Khi viết đường ống, hãy hỏi bốn câu. Nguồn có nằm hết trong bộ nhớ không. Khoá có thể trùng không. Đường ống có bước cuối không. Và hàm ngắn có đang sửa biến bên ngoài không. Vòng lặp vẫn tốt khi cần kiểm soát từng bước."""),
     ])
+    sc_pit["steps"][0]["introduces"] = ["jv2_eff_final"]
     return lesson("L03", "ham_la_gia_tri_stream", "Bài 3 — Hàm là giá trị: hàm ngắn và đường ống Stream",
                   "curriculum/jv2.yaml L03; audit/jv2/verify_jv2.py L03 (javac/java chạy thật, JDK 21; -Xmx32m cho phép đo bộ nhớ); "
                   "The Java Language Specification, Java SE 21: §15.27 (biểu thức lambda), §15.13 (tham chiếu phương thức), §15.27.2 (biến cục bộ phải effectively final: §4.12.4); "

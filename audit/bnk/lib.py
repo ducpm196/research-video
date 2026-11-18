@@ -40,7 +40,7 @@ _KW = {
             r"switch|case|break|continue|try|catch|finally|throw|throws|final|this|null|true|false|var|record|interface|"
             r"implements|extends|import|synchronized|volatile",
     "python": r"def|class|return|if|elif|else|for|while|in|import|from|as|with|try|except|finally|raise|lambda|None|True|False|not|and|or|pass",
-    "sqlite": r"SELECT|FROM|WHERE|CREATE|TABLE|INDEX|INSERT|INTO|VALUES|UPDATE|SET|DELETE|ORDER|BY|GROUP|PRIMARY|KEY|UNIQUE|ON|AND|OR|"
+    "sqlite": r"SELECT|FROM|WHERE|CREATE|TABLE|INDEX|INSERT|INTO|VALUES|UPDATE|SET|DELETE|ORDER|BY|GROUP|PRIMARY|KEY|UNIQUE|ON|AND|OR|RECURSIVE|WITH|DEFAULT|UNION|ALL|HAVING|IGNORE|"
               r"NOT|NULL|EXPLAIN|QUERY|PLAN|INTEGER|TEXT|COUNT|SUM|DROP|BEGIN|COMMIT|ROLLBACK|LIMIT|AS|JOIN|DISTINCT",
     "bash": r"if|then|fi|do|done|for|while|echo|kill|sleep",
 }
@@ -90,9 +90,11 @@ C_GRAY = ("#e5e7eb", "#6b7280")
 C_PURPLE = ("#f3e8ff", "#9333ea")
 
 
-def txt(x, y, s, size=24, anchor="middle", fill="#1f2937", bold=False):
+def txt(x, y, s, size=24, anchor="middle", fill="#1f2937", bold=False, halo=False):
+    """halo=True: viền trắng quanh chữ (paint-order) để nét/mũi tên chạy ngang không cắt chữ."""
     w = ' font-weight="bold"' if bold else ""
-    return f'<text x="{x}" y="{y}" font-size="{size}" text-anchor="{anchor}" fill="{fill}"{w}>{s}</text>'
+    h = ' stroke="#ffffff" stroke-width="8" stroke-linejoin="round" paint-order="stroke"' if halo else ""
+    return f'<text x="{x}" y="{y}" font-size="{size}" text-anchor="{anchor}" fill="{fill}"{w}{h}>{s}</text>'
 
 
 def box(x, y, w, h, label, col=C_BLUE, size=24, bold=False, dash=False):
@@ -118,8 +120,8 @@ def arrow(x1, y1, x2, y2, color="#475569", label=None, size=22, dash=False):
     d = ' stroke-dasharray="8 6"' if dash else ""
     out = (f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="{color}" stroke-width="3.5"{d} '
            f'marker-end="url(#ah)"/>')
-    if label:
-        out += txt((x1 + x2) // 2, (y1 + y2) // 2 - 10, label, size, "middle", color)
+    if label:  # nhãn nằm trên nét, có viền trắng để nét không cắt chữ
+        out += txt((x1 + x2) // 2, (y1 + y2) // 2 - 12, label, size, "middle", color, halo=True)
     return out
 
 
@@ -168,6 +170,10 @@ def st(show, say, focus=None, introduces=None, pause=None, clear=None, forward_r
         sents, units = lv.sentences(" ".join(say.split())), lv.html_units(d["show"])
         if len(units) >= 2 and len(sents) >= 2:
             focus = [1 + (j * len(units)) // len(sents) for j in range(len(sents))]
+            if _CURRENT["lesson"] in ("L12", "L13"):  # R7: khung nhấn không bọc tiêu đề "Kết quả chạy thật" mà bọc khối kết quả ngay sau nó
+                def _is_title(u):
+                    return u["tag"] == "p" and len(u["kids"]) == 1 and u["kids"][0]["tag"] == "b"
+                focus = [f + 1 if f < len(units) and _is_title(units[f - 1]) and units[f]["tag"] == "div" else f for f in focus]
     if focus is not None:
         d["focus"] = focus
     if introduces:
@@ -200,8 +206,159 @@ def sc(id, kind, title, steps, checks=None):
 
 def table(head, rows, cls="t"):
     h = "".join(f"<th>{c}</th>" for c in head)
-    body = "".join("<tr>" + "".join(f"<td>{c}</td>" for c in r) + "</tr>" for r in rows)
+    def _c(c):  # ô tải "×10 000": không ngắt dòng giữa các nhóm số
+        return f'<span style="white-space:nowrap">{c}</span>' if isinstance(c, str) and c.startswith("×") and "<" not in c else c
+    body = "".join("<tr>" + "".join(f"<td>{_c(c)}</td>" for c in r) + "</tr>" for r in rows)
     return f"<table class='{cls}'><tr>{h}</tr>{body}</table>"
+
+
+# ── bảng "cách đọc cú pháp Java" dùng chung (R4: bài tự đứng được, nhắc lại một dòng ở mỗi bài dùng lại) ─────────────────────
+# Một khuôn duy nhất: cột "viết trong mã | đọc là | ví dụ". jstep([(khoá, ví_dụ_html, ví_dụ_lời_đọc), …]) dựng một step.
+JHEAD = ["viết trong mã", "đọc là", "ví dụ"]
+JROW = {
+    "sig": ("<code>public static kiểu tên(kiểu a, kiểu b)</code>",
+            "khai một hàm: <b>kiểu trả về</b> (<code>void</code> là không trả gì), <b>tên</b>, rồi <b>tham số</b> trong ngoặc tròn, mỗi tham số là kiểu rồi tên; <code>static</code>: thuộc cả lớp; <code>public</code>: nơi khác gọi được",
+            "Khai một hàm gồm kiểu giá trị trả về, rỗng nghĩa là không trả gì, rồi tên hàm, rồi các tham số trong ngoặc tròn, mỗi tham số là kiểu rồi tên. "
+            "Chữ tĩnh nghĩa là hàm thuộc cả lớp, chữ công khai nghĩa là nơi khác gọi được."),
+    "final": ("<code>static final Kiểu TÊN = …;</code>",
+              "biến dùng chung cho cả lớp; <code>final</code>: gán giá trị một lần rồi không đổi nữa",
+              "Chữ cuối cùng nghĩa là gán giá trị một lần rồi không đổi nữa, còn chữ tĩnh nghĩa là biến dùng chung cho cả lớp."),
+    "default": ("<code>tên KIỂU DEFAULT giá_trị</code>",
+                "cột có giá trị mặc định: dòng mới thêm mà không ghi cột này thì tự mang giá trị đó",
+                "Chữ mặc định sau kiểu cột nghĩa là dòng mới thêm mà không ghi cột này thì tự mang giá trị đó."),
+    "count": ("<code>SELECT COUNT(*) FROM bảng;</code>",
+              "đếm số dòng của bảng",
+              "Lệnh chọn đếm cho biết số dòng hiện có của một bảng."),
+    "call": ("<code>hàm(a, b)</code>, <code>s.length()</code>",
+             "gọi một hàm: các giá trị trong ngoặc tròn là đối số; <code>s.length()</code> cho số ký tự của chuỗi s",
+             "Gọi một hàm thì các giá trị trong ngoặc tròn là đối số, và chấm độ dài kèm ngoặc tròn cho số ký tự của chuỗi."),
+    "strmul": ("<code>\"x\" * n</code>",
+               "nhân chuỗi: lặp chuỗi n lần, nối liền nhau",
+               "Nhân một chuỗi với một số nghĩa là lặp chuỗi đó chừng ấy lần, nối liền nhau."),
+    "encode": ("<code>chuỗi.encode()</code>",
+               "đổi chuỗi chữ thành dãy byte, vì hàm mã xác thực chỉ nhận byte",
+               "Lệnh mã hoá chuỗi đổi chữ thành dãy byte, vì hàm mã xác thực chỉ nhận byte."),
+    "sorted": ("<code>sorted(từ_điển)</code>",
+               "danh sách các khoá của từ điển, xếp từ nhỏ đến lớn",
+               "Hàm sắp xếp trả về các khoá của từ điển, xếp từ nhỏ đến lớn."),
+    "runtime": ("<code>Runtime rt = Runtime.getRuntime();</code>", "<code>Runtime</code>: đối tượng đại diện chương trình đang chạy; <code>totalMemory() − freeMemory()</code> = bộ nhớ đang dùng",
+                "Đối tượng Runtime đại diện chương trình đang chạy, và tổng bộ nhớ đã xin trừ phần còn trống là bộ nhớ đang dùng."),
+    "try": ("<code>try { … } catch (Lỗi e) { }</code>", "thử chạy khối; nếu bị ngắt giữa chừng thì vào <code>catch</code>; để trống vì ta không cần xử lý",
+            "Khối thử chạy phần việc, nếu bị ngắt giữa chừng thì nhảy vào khối bắt, ở đây để trống vì ta không cần xử lý."),
+    "pk": ("<code>CREATE TABLE t (khoa TEXT PRIMARY KEY, …)</code>", "khai bảng; cột <code>PRIMARY KEY</code> không cho hai dòng trùng giá trị",
+           "Lệnh tạo bảng khai các cột, và cột khoá chính không cho hai dòng trùng giá trị."),
+    "ignore": ("<code>INSERT OR IGNORE INTO t VALUES (…)</code>", "thêm dòng; nếu trùng khoá thì bỏ qua, không báo lỗi",
+               "Lệnh thêm dòng bỏ qua nếu trùng khoá, không báo lỗi."),
+    "selwhere": ("<code>SELECT cột FROM t WHERE khoa = 'abc'</code>", "lấy cột của những dòng có khoá bằng <code>'abc'</code>",
+                 "Lệnh chọn lấy cột của những dòng có khoá bằng giá trị đã cho."),
+    "txn": ("<code>BEGIN; … COMMIT;</code>", "mở giao dịch; chốt lưu mọi thay đổi bên trong cùng lúc",
+            "Lệnh bắt đầu mở giao dịch, lệnh chốt lưu mọi thay đổi bên trong cùng lúc."),
+    "rollback": ("<code>ROLLBACK;</code>", "huỷ mọi thay đổi của giao dịch đang mở", "Lệnh huỷ bỏ mọi thay đổi của giao dịch đang mở."),
+    "update": ("<code>UPDATE t SET c = c - 500000 WHERE tk = 'A'</code>", "sửa cột c của những dòng thoả điều kiện: trừ 500 000 ở số dư của A",
+               "Lệnh cập nhật sửa một cột của những dòng thoả điều kiện, ở đây trừ năm trăm nghìn ở số dư của A."),
+    "insertcols": ("<code>INSERT INTO outbox (su_kien) VALUES (…)</code>", "thêm dòng chỉ ghi cột <code>su_kien</code>; cột còn lại lấy giá trị mặc định",
+                   "Lệnh thêm dòng này chỉ ghi cột sự kiện, cột còn lại lấy giá trị mặc định."),
+    "diamond": ("<code>new ArrayList&lt;&gt;()</code>", "<code>&lt;&gt;</code> để trống: Java tự điền kiểu theo vế trái",
+                "Cặp ngoặc nhọn để trống nghĩa là Java tự điền kiểu theo vế trái."),
+    "inc1": ("<code>x++</code>", "tăng x thêm 1", "Hai dấu cộng sau tên biến tăng biến thêm một."),
+    "dec": ("<code>j--</code>, <code>j &gt;= 0</code>", "<code>j--</code>: giảm j đi 1; <code>&gt;=</code>: lớn hơn hoặc bằng",
+            "Hai dấu trừ giảm biến đi một, và dấu lớn hơn hoặc bằng so sánh hai giá trị."),
+    "concat": ("<code>\"chữ\" + giá_trị</code>", "dấu <code>+</code> giữa chữ và một giá trị nối chúng thành một chuỗi",
+               "Dấu cộng giữa chữ và một giá trị nối chúng thành một chuỗi."),
+    "cmp": ("<code>&lt;=</code>, <code>&gt;=</code>, <code>==</code>, <code>!=</code>", "nhỏ hơn hoặc bằng; lớn hơn hoặc bằng; bằng nhau; khác nhau",
+            "Các dấu so sánh gồm nhỏ hơn hoặc bằng, lớn hơn hoặc bằng, bằng nhau, và khác nhau."),
+    "modulo": ("<code>a / b</code>, <code>a % b</code>", "với số nguyên: <code>/</code> chia lấy phần nguyên; <code>%</code> lấy phần dư",
+               "Với số nguyên, dấu chia lấy phần nguyên, còn dấu phần trăm lấy phần dư."),
+    "inssel": ("<code>INSERT INTO t SELECT …</code>", "chèn mọi dòng mà truy vấn trả về; <code>-tien</code> đổi dấu số tiền",
+               "Lệnh chèn kèm truy vấn thêm mọi dòng mà truy vấn trả về, ở đây đổi dấu số tiền."),
+    "map": ("<code>cho.put(k, v)</code>, <code>cho.get(k)</code>, <code>a.equals(b)</code>", "<code>put</code> cất giá trị v dưới khoá k; <code>get</code> lấy giá trị theo khoá; <code>equals</code> so nội dung hai chuỗi",
+            "Lệnh cất đặt giá trị dưới một khoá, lệnh lấy trả giá trị theo khoá, và lệnh so bằng so nội dung hai chuỗi."),
+    "arrinit": ("<code>String[] ve = { \"…\", \"…\" };</code>", "khai mảng chuỗi và điền sẵn các phần tử trong cặp ngoặc nhọn",
+                "Cặp ngoặc nhọn sau dấu bằng điền sẵn các phần tử của mảng."),
+    "pyidx": ("<code>d[k]</code>", "lấy giá trị của khoá k trong từ điển d; <code>truong[2]</code> là giá trị của khoá 2",
+              "Ngoặc vuông kèm khoá lấy giá trị của khoá đó trong từ điển."),
+    "pycmt": ("<code># chú thích</code>", "chú thích Python: máy bỏ qua phần sau dấu thăng", "Dấu thăng mở đầu một chú thích Python, máy bỏ qua."),
+    "pyassign": ("<code>a, b = x, y</code>", "gán hai biến một lúc: a nhận x, b nhận y", "Gán song song đặt hai biến cùng lúc: biến đầu nhận giá trị đầu, biến sau nhận giá trị sau."),
+    "pygen": ("<code>\"\".join(… for x, y in zip(a, b))</code>", "với mỗi cặp x, y ghép từ hai dãy, tính một mảnh chữ; <code>join</code> nối mọi mảnh lại",
+              "Biểu thức sinh tính một mảnh chữ cho mỗi cặp ghép từ hai dãy, rồi lệnh nối ghép mọi mảnh thành một chuỗi."),
+    "pybytes": ("<code>b\"k\"</code>", "chữ <code>b</code> trước dấu nháy: chuỗi byte, không phải chuỗi chữ", "Chữ b trước dấu nháy báo đây là chuỗi byte, không phải chuỗi chữ."),
+    "nano": ("<code>System.nanoTime()</code>, <code>/ 1_000_000</code>", "<code>nanoTime</code>: đồng hồ chính xác tính bằng nano giây; chia 1 triệu ra mili giây",
+             "Đồng hồ nano giây rất chính xác, và chia cho một triệu thì ra mili giây."),
+    "thread": ("<code>t.start(); t.join();</code>", "<code>start</code>: cho luồng t chạy; <code>join</code>: chờ luồng t chạy xong",
+               "Lệnh bắt đầu cho luồng chạy, còn lệnh chờ xong chờ luồng đó chạy xong."),
+    "sb": ("<code>sb.append(x)</code>", "<code>StringBuilder</code>: hộp chữ nối được; <code>append</code> thêm x vào cuối",
+           "Hộp chữ nối được dựng dòng in dần, và lệnh thêm đưa mảnh mới vào cuối."),
+    "base": ("<code>System.out.println(x)</code>, <code>return</code>, <code>//</code>, <code>import</code>, <code>\"a\" + x</code>", "in x ra màn hình; trả giá trị về; chú thích; nhập lớp có sẵn; nối chữ",
+             "In giá trị ra màn hình, trả về đưa giá trị cho nơi gọi, hai gạch chéo mở chú thích, dòng nhập lấy lớp có sẵn, và dấu cộng nối chữ."),
+    "pyeq": ("<code>==</code>, <code>#</code>", "<code>==</code>: so hai giá trị có bằng nhau không; <code>#</code>: chú thích, máy bỏ qua",
+             "Hai dấu bằng so hai giá trị có bằng nhau không, và dấu thăng mở một chú thích."),
+    "pyeq1": ("<code>==</code>", "so hai giá trị có bằng nhau không", "Hai dấu bằng so hai giá trị có bằng nhau không."),
+    "throws": ("<code>… throws Lỗi {</code>",
+               "lời báo: hàm này có thể ném lỗi loại đó; hàm không tự xử lý mà chuyển lỗi lên cho nơi gọi xử lý",
+               "Lời báo ném lỗi nghĩa là hàm có thể ném lỗi loại đó, và không tự xử lý mà chuyển lỗi lên cho nơi gọi xử lý."),
+    "main": ("<code>public static void main(String[] args)</code>",
+             "hàm chính: chương trình bắt đầu chạy từ đây; <code>args</code> là mảng chuỗi gõ thêm sau lệnh chạy, bài này không dùng",
+             "Hàm chính là nơi chương trình bắt đầu chạy, và tham số mảng chuỗi chứa các chữ gõ thêm sau lệnh chạy, bài này không dùng."),
+    "cmt": ("<code>// chú thích</code>", "chú thích: máy bỏ qua, chỉ để người đọc hiểu mã",
+            "Hai gạch chéo mở đầu một chú thích, máy bỏ qua, chỉ để người đọc hiểu mã."),
+    "incr": ("<code>x++</code>, <code>x += 5</code>", "<code>x++</code>: tăng x thêm 1; <code>x += 5</code>: tăng x thêm 5",
+             "Hai dấu cộng tăng biến thêm một, còn cộng bằng tăng biến thêm đúng số đứng sau."),
+    "for": ("<code>for (int i = 0; i &lt; n; i++) { … }</code>", "vòng lặp: i bắt đầu từ 0, còn i &lt; n thì làm khối, mỗi vòng tăng i thêm 1",
+            "Vòng lặp có ba phần trong ngoặc: điểm bắt đầu, điều kiện để chạy tiếp, và bước tăng sau mỗi vòng."),
+    "if": ("<code>if (điều_kiện) { … } else { … }</code>", "nếu điều kiện đúng thì làm khối đầu, không thì làm khối sau <code>else</code>",
+           "Nếu điều kiện đúng thì làm khối thứ nhất, nếu không thì làm khối còn lại."),
+    "ret": ("<code>return giá_trị;</code>", "trả giá trị về cho nơi gọi hàm, và hàm kết thúc",
+            "Lệnh trả về đưa một giá trị cho nơi gọi hàm và kết thúc hàm."),
+    "arr": ("<code>int[] dem = new int[5];</code>", "khai mảng <code>dem</code> gồm 5 số nguyên, ban đầu đều 0; ô đầu là <code>dem[0]</code>",
+            "Khai một mảng năm số nguyên, ban đầu đều bằng không, và chỉ số bắt đầu từ không."),
+    "null": ("<code>null</code>, <code>&lt;&gt;</code>", "<code>null</code>: không trỏ tới đối tượng nào; <code>&lt;&gt;</code> để trống: Java tự điền kiểu",
+             "Rỗng nghĩa là biến không trỏ tới đối tượng nào, còn cặp ngoặc nhọn để trống nghĩa là Java tự suy ra kiểu."),
+    "write": ("<code>….write(s.getBytes())</code>", "lấy luồng ghi phản hồi của yêu cầu, rồi ghi các byte của chuỗi <code>s</code> vào đó",
+              "Dòng này lấy luồng ghi phản hồi của yêu cầu rồi ghi các byte của chuỗi vào đó."),
+    "sqltype": ("<code>TEXT</code>, <code>INTEGER</code>", "kiểu cột: <code>TEXT</code> chứa chữ, <code>INTEGER</code> chứa số nguyên",
+                "Kiểu cột chữ chứa chuỗi chữ, kiểu cột số nguyên chứa số nguyên."),
+    "values": ("<code>VALUES (…), (…)</code>", "mỗi cặp ngoặc là một dòng mới; nhiều cặp thì một lệnh thêm nhiều dòng",
+               "Mỗi cặp ngoặc sau từ khoá giá trị là một dòng mới, nhiều cặp thì một lệnh thêm nhiều dòng."),
+    "sqlcmt": ("<code>-- chú thích</code>", "chú thích SQL: máy bỏ qua phần sau hai gạch ngang",
+               "Hai gạch ngang mở đầu một chú thích trong SQL, máy bỏ qua."),
+    "recursive": ("<code>WITH RECURSIVE n(i) AS (…)</code>", "lặp tự tham chiếu: <code>AS (…)</code> đặt cho bảng tạm tên <code>n</code>; bắt đầu từ 1, <code>UNION ALL</code> nối thêm <code>i + 1</code> mỗi vòng cho tới 5000",
+                  "Truy vấn lặp tự tham chiếu dựng bảng tạm, bắt đầu từ một. Chữ nối tất cả thêm số kế tiếp mỗi vòng cho tới năm nghìn, và chữ là đặt tên cho bảng tạm."),
+    "cast": ("<code>(Kiểu) giá_trị</code>",
+             "ép kiểu: bảo máy coi giá trị đứng sau là kiểu ghi trong ngoặc tròn",
+             "Ép kiểu là bảo máy coi giá trị đứng sau thuộc kiểu ghi trong ngoặc tròn đứng trước nó."),
+    "idx": ("<code>a[i]</code>, <code>a.length</code>",
+            "<code>a[i]</code>: ô thứ i của mảng a, ô đầu là <code>a[0]</code>; <code>a.length</code>: số ô của mảng, không có ngoặc tròn",
+            "Chỉ số trong ngoặc vuông chọn một ô của mảng, ô đầu có chỉ số không, và chấm độ dài cho biết số ô của mảng."),
+    "inc": ("<code>p++</code>",
+            "đưa ra giá trị hiện tại của p rồi mới tăng p thêm 1",
+            "Hai dấu cộng sau tên biến nghĩa là đưa ra giá trị hiện tại rồi mới tăng biến thêm một."),
+}
+
+
+def jstep(items, intro="", clear=True):
+    """items: [(khoá trong JROW, ví dụ HTML, ví dụ lời đọc)]. Trả về một step: bảng 'viết trong mã → đọc là → ví dụ'."""
+    def _vd(t):  # dấu ";" của mã không được dính ":" / ";" của lời giải
+        return t.replace("</code>: ", "</code> — ").replace("</code>; ", "</code> | ")
+    rows = [[JROW[k][0], JROW[k][1], _vd(vd)] for k, vd, _ in items]
+    say = (intro + " " if intro else "") + " ".join(f"{JROW[k][2]} Ví dụ, {vs}" if vs else JROW[k][2] for k, _, vs in items)
+    return st(table(JHEAD, rows), say, clear=clear)
+
+
+def jsteps(items, intro="", max_rows=3, max_chars=520):
+    """Như jstep nhưng tự tách thành nhiều step (mỗi bảng ≤ max_rows hàng và ≤ max_chars ký tự chữ) để không TRÀN khung."""
+    def _len(it):
+        k, vd, _ = it
+        return len(re.sub(r"<[^>]+>", "", JROW[k][0] + JROW[k][1] + vd))
+    chunks, cur, n = [], [], 0
+    for it in items:
+        if cur and (len(cur) >= max_rows or n + _len(it) > max_chars):
+            chunks.append(cur)
+            cur, n = [], 0
+        cur.append(it)
+        n += _len(it)
+    if cur:
+        chunks.append(cur)
+    return [jstep(c, intro if i == 0 else "") for i, c in enumerate(chunks)]
 
 
 def chain(*nodes):
@@ -238,8 +395,17 @@ def add_steps(scenes, scene_id, steps, at=None):
     raise KeyError(scene_id)
 
 
-def lesson(id, slug, title, source, objectives, scenes, assumes=None, rate="-5%", covers=None):
+def lesson(id, slug, title, source, objectives, scenes, assumes=None, rate="-5%", covers=None, intro=None):
+    """intro: {(id_cảnh, chỉ_số_step): [id_thuật_ngữ]} — gắn `introduces` (E52) vào step giảng thuật ngữ (id trong tools/registry/symbols.BNK.yaml)."""
     _auto_introduce(scenes)
+    for (sid, si), ids in (intro or {}).items():
+        sc_ = next(s_ for s_ in scenes if s_["id"] == sid)
+        st_ = sc_["steps"][si]
+        st_["introduces"] = list(st_.get("introduces") or []) + list(ids)
+    for sc_ in scenes:  # bước ngay sau bảng cách đọc (jstep) phải xoá bảng, nếu không nội dung dồn lên bảng và TRÀN khung
+        for a_, b_ in zip(sc_["steps"], sc_["steps"][1:]):
+            if a_["show"].startswith("<table class='t'><tr><th>" + JHEAD[0]):
+                b_["clear"] = True
     for sc_ in scenes:  # cảnh Tự làm: gợi ý thay kết quả mong đợi (cả hai chung một bảng thì tràn khung)
         if sc_.get("kind") == "practice" and len(sc_["steps"]) >= 3:
             sc_["steps"][-1]["clear"] = True

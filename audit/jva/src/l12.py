@@ -46,6 +46,9 @@ class SoCai {
         if (l.tien() <= 0) {
             throw new IllegalArgumentException("So tien phai duong");
         }
+        if (l.tu().equals(l.den())) {
+            throw new IllegalArgumentException("Khong chuyen cho chinh minh");
+        }
         if (l.tien() > a) {
             throw new KhongDuTien(l.tu() + " chi co " + a);
         }
@@ -60,6 +63,12 @@ class SoCai {
         }
     }
 }
+"""
+
+# phiên bản thiếu phép chặn "chuyển cho chính mình" (để cho thấy hậu quả khi quên)
+GUARD = """        if (l.tu().equals(l.den())) {
+            throw new IllegalArgumentException("Khong chuyen cho chinh minh");
+        }
 """
 
 MO = """
@@ -144,6 +153,13 @@ def build():
                 out="TU CHOI B chi co 500000\nSAI LENH So tien phai duong\nOK Lenh[tu=A, den=C, tien=1000000]\n"
                     "A=0 B=500000 C=2500000\nTong 3000000")
 
+    c_tu = ledger("TuChuyen", so_cai=SO_CAI.replace(GUARD, ""), lenh="""
+        ds.add(new Lenh("A", "A", 100000));""")
+    tu_chuyen = prog("TuChuyen", c_tu, out="", expect="runtime_error:IllegalStateException",
+                     err='Exception in thread "main" java.lang.IllegalStateException: Lech tong 3100000 != 3000000\n'
+                         f'\tat SoCai.kiem(TuChuyen.java:{lnc(c_tu, "throw new IllegalStateException")})\n'
+                         f'\tat SoCai.chuyen(TuChuyen.java:{lnc(c_tu, "kiem();")})\n'
+                         f'\tat TuChuyen.main(TuChuyen.java:{lnc(c_tu, "so.chuyen(l);")})')
     lab_code = (TYPES + SO_CAI + """
 public class SoCaiLab {
     public static void main(String[] args) {
@@ -197,23 +213,59 @@ public class QuyMoSo {
         }
     }
 }""", out="N=3 M=4: 12 buoc\nN=1000 M=1000: 1000000 buoc\nN=10000 M=10000: 100000000 buoc")
+    moc_head = """
+        SoCai so = new SoCai();
+        so.mo("P", 2000000);
+        so.mo("Q", 800000);
+        so.mo("R", 1200000);
+        System.out.println("Mo xong: tong " + so.tong());"""
+    moc1 = prog("SoCaiMoc1", TYPES + SO_CAI + """
+public class SoCaiMoc1 {
+    public static void main(String[] args) {""" + moc_head + """
+    }
+}""", out="Mo xong: tong 4000000")
+    moc2 = prog("SoCaiMoc2", TYPES + SO_CAI + """
+public class SoCaiMoc2 {
+    public static void main(String[] args) throws Exception {""" + moc_head + """
+        so.chuyen(new Lenh("P", "Q", 500000));
+        System.out.println("P=" + so.lay("P") + " Q=" + so.lay("Q"));
+        try {
+            so.chuyen(new Lenh("Q", "R", 2000000));
+        } catch (KhongDuTien e) {
+            System.out.println("TU CHOI " + e.getMessage());
+        }
+    }
+}""", out="Mo xong: tong 4000000\nP=1500000 Q=1300000\nTU CHOI Q chi co 1300000")
     write_lab("JVA", "L12", """# Lab JVA L12 — Dựng sổ chuyển khoản qua ba mốc
 
 Trong Git Bash, thư mục làm việc của bạn, tệp `SoCaiLab.java`. Số liệu là số minh hoạ: ba tài khoản **P = 2 000 000**, **Q = 800 000**, **R = 1 200 000** (tổng gốc 4 000 000).
 
 **Mốc 1 — sổ và tổng.** Lớp `SoCai` giữ `HashMap<String, Long> soDu` và `tongGoc`; hàm `mo(stk, tien)` đặt số dư và cộng `tongGoc`; hàm `tong()` cộng mọi số dư; hàm `lay(stk)` ném `IllegalArgumentException` nếu không có khoá. Hàm chính mở P, Q, R và in `Mo xong: tong 4000000`.
 
-**Mốc 2 — chuyển có kiểm tra trước.** Bản ghi `record Lenh(String tu, String den, long tien) {}` và `class KhongDuTien extends Exception`. Hàm `chuyen(Lenh l) throws KhongDuTien`: lấy số dư hai bên, ném `IllegalArgumentException("So tien phai duong")` nếu tiền không dương, ném `KhongDuTien(tu + " chi co " + a)` nếu tiền lớn hơn số dư bên gửi; **chỉ sau đó** mới trừ bên gửi và cộng bên nhận.
+**Mốc 2 — chuyển có kiểm tra trước.** Bản ghi `record Lenh(String tu, String den, long tien) {}` và `class KhongDuTien extends Exception`. Hàm `chuyen(Lenh l) throws KhongDuTien`: lấy số dư hai bên, ném `IllegalArgumentException("So tien phai duong")` nếu tiền không dương, ném `IllegalArgumentException("Khong chuyen cho chinh minh")` nếu bên gửi và bên nhận là một (`l.tu().equals(l.den())`), ném `KhongDuTien(tu + " chi co " + a)` nếu tiền lớn hơn số dư bên gửi; **chỉ sau đó** mới trừ bên gửi và cộng bên nhận.
 
 **Mốc 3 — kiểm bất biến sau mỗi lệnh.** Hàm `kiem()` ném `IllegalStateException("Lech tong …")` khi `tong() != tongGoc`; `chuyen` gọi `kiem()` cuối cùng. Hàm chính duyệt bốn lệnh: P→Q 500000, Q→R 2000000, P→Z 10000, R→P 700000; mỗi lệnh trong `try`, bắt `KhongDuTien` (in `TU CHOI …`) và `IllegalArgumentException` (in `SAI LENH …`), thành công in `OK ` + lệnh. Cuối cùng in ba số dư và `Cuoi ngay: tong …`.
 
-Chạy từng mốc để thấy kết quả tăng dần. Chấm bản hoàn chỉnh: `bash labs/cham.sh JVA L12 SoCaiLab.java`.
+**Kết quả trung gian để tự đối chiếu** (chạy từng mốc, đừng đợi tới cuối):
+
+- Sau mốc 1, hàm chính chỉ có bước mở ba tài khoản, in đúng một dòng: `Mo xong: tong 4000000`.
+- Sau mốc 2, hàm chính khai `throws Exception`, thêm hai thử nghiệm: gọi `chuyen` với lệnh P → Q 500000 rồi in `"P=" + so.lay("P") + " Q=" + so.lay("Q")`; kế đó gọi `chuyen` với lệnh Q → R 2000000 trong `try`, bắt `KhongDuTien` và in `"TU CHOI " + e.getMessage()`. Ra đúng ba dòng:
+
+```
+Mo xong: tong 4000000
+P=1500000 Q=1300000
+TU CHOI Q chi co 1300000
+```
+
+- Sau mốc 3, bạn bỏ hai thử nghiệm của mốc 2 và có đầu ra hoàn chỉnh trong `mong_doi.txt`.
+
+Chấm bản hoàn chỉnh: `bash labs/cham.sh JVA L12 SoCaiLab.java`.
 """, "java", lab_so["code"], lab_so["out"])
     sc_lab = practice_scene(sc, "Tự làm: dựng sổ chuyển khoản qua ba mốc", practice_steps(
         st, "JVA", "L12",
         """<p><b>Đề</b>: tệp <code>SoCaiLab.java</code>, ba tài khoản P 2 000 000, Q 800 000, R 1 200 000 (số minh hoạ). Dựng <b>dần</b>:</p>
 <ol><li><b>Mốc 1</b>: <code>SoCai</code> với bản đồ, <code>mo</code>, <code>tong</code>, <code>lay</code> → in <code>Mo xong: tong 4000000</code></li>
-<li><b>Mốc 2</b>: bản ghi <code>Lenh</code>, <code>KhongDuTien</code>, hàm <code>chuyen</code> <b>kiểm tra trước, sửa sau</b></li>
+<li><b>Mốc 2</b>: bản ghi <code>Lenh</code>, <code>KhongDuTien</code>, hàm <code>chuyen</code> <b>kiểm tra trước, sửa sau</b>; kết quả trung gian của mốc 1 và 2 ghi trong <code>de.md</code></li>
 <li><b>Mốc 3</b>: <code>kiem()</code> sau mỗi lệnh; chạy bốn lệnh P→Q 500000, Q→R 2000000, P→Z 10000, R→P 700000</li></ol>""",
         """Bây giờ tới phần bạn tự làm trên máy, và đây là phần lớn nhất của khoá. Bạn dựng dần sổ chuyển khoản qua ba mốc, chạy thử sau từng mốc.
         Mốc một, sổ cái với bản đồ số dư, mở ba tài khoản và in tổng bốn triệu. Mốc hai, bản ghi lệnh, ngoại lệ không đủ tiền, và hàm chuyển kiểm tra trước, sửa sau.
@@ -243,14 +295,16 @@ Lời giải nằm ở <code>labs/JVA/L12/loi_giai.java</code> — chỉ mở sa
            """Ta đi trọn một vòng như người làm thật: viết sổ, chạy bốn lệnh, kiểm bất biến tổng tiền.
            Rồi ta gài một lỗi đời thường, đọc dấu vết để tìm ra nó, và sửa tận gốc."""),
     ])
-    sc_pre = sc("prereq", "prereq", "Ôn lại: ba công cụ sẽ ghép với nhau", [
+    sc_pre = sc("prereq", "prereq", "Ôn lại: các công cụ sẽ ghép với nhau", [
         st(table(["đã học", "dùng vào sổ thế nào"],
                  [["① Lớp giữ bất biến; bản ghi", "lớp <code>SoCai</code> giấu số dư, chỉ cho sửa qua <code>chuyen</code>; lệnh chuyển là một bản ghi"],
                   ["② Bản đồ khoá → giá trị", "số tài khoản → số dư; <code>get</code> ra <code>null</code> khi không có khoá"],
-                  ["③ Ngoại lệ và dấu vết", "không đủ tiền thì ném <code>KhongDuTien</code>; dấu vết đọc từ trên xuống"]]),
-           """Ta ghép ba công cụ đã học. Thứ nhất, lớp giấu dữ liệu để giữ bất biến, và bản ghi để chở một lệnh chuyển.
+                  ["③ Ngoại lệ và dấu vết", "không đủ tiền thì ném <code>KhongDuTien</code>; dấu vết đọc từ trên xuống"],
+                  ["④ <code>import</code>, <code>new</code>, <code>HashMap</code>", "lấy về một lớp có sẵn; làm ra một đối tượng mới; <code>HashMap</code> là lớp bản đồ ở bài 9"]]),
+           """Ta ghép bốn công cụ đã học. Thứ nhất, lớp giấu dữ liệu để giữ bất biến, và bản ghi để chở một lệnh chuyển.
            Thứ hai, bản đồ từ số tài khoản tới số dư, với phương thức lấy trả giá trị rỗng khi không có khoá.
-           Thứ ba, ngoại lệ tự định nghĩa cho trường hợp không đủ tiền, và cách đọc dấu vết từ trên xuống."""),
+           Thứ ba, ngoại lệ tự định nghĩa cho trường hợp không đủ tiền, và cách đọc dấu vết từ trên xuống.
+           Thứ tư, dòng nhập lấy về một lớp có sẵn, từ khoá tạo mới làm ra đối tượng, và lớp bản đồ là loại ta học ở bài chín."""),
         st(table(["khái niệm", "nghĩa bằng lời thường"],
                  [["bản ghi <code>record</code>", "kiểu chỉ để chở dữ liệu: khai báo các thành phần một lần, máy tự sinh phương thức lấy "
                    "từng thành phần (như <code>l.tu()</code>) và cách in <code>Lenh[tu=A, den=B, tien=300000]</code>"],
@@ -309,11 +363,14 @@ Lời giải nằm ở <code>labs/JVA/L12/loi_giai.java</code> — chỉ mở sa
            Phương thức lấy dùng lớp bọc, vì bản đồ trả giá trị rỗng khi không có khoá, và khi đó ta ném ngoại lệ đối số."""),
         st(code_block(so, lines=(l_ch, l_tru - 1), title="Bước 3. Chuyển: kiểm tra trước"),
            """Bước ba, phương thức chuyển kiểm tra trước. Lấy số dư hai bên, nên tài khoản không có sẽ bị ném ngay.
-           Số tiền phải dương, và không được vượt số dư bên gửi, nếu không thì ném ngoại lệ không đủ tiền.
-           Đến đây chưa có số dư nào bị sửa."""),
-        st(code_block(so, lines=(l_tru, l_kiem_end), title="Bước 4. Sửa sau, rồi kiểm bất biến"),
+           Số tiền phải dương, bên gửi và bên nhận không được là một, và số tiền không được vượt số dư bên gửi, nếu không thì ném ngoại lệ.
+           Chặn chuyển cho chính mình là cần thiết, vì trừ rồi cộng đè lên cùng một số dư sẽ làm tiền tự sinh ra. Đến đây chưa có số dư nào bị sửa."""),
+        st(code_block(so, lines=(l_tru, l_kiem_end), title="Bước 4. Sửa sau, rồi kiểm bất biến")
+           + "<p class='note'>Lưu ý: <code>kiem()</code> chỉ báo lỗi <b>sau khi</b> hai số dư đã bị sửa; sổ này không tự hoàn tác.</p>",
            """Bước bốn, qua hết kiểm tra mới sửa: trừ bên gửi, cộng bên nhận.
-           Ngay sau đó gọi phương thức kiểm. Nếu tổng khác tổng gốc thì ném ngoại lệ trạng thái sai, vì bất biến đã vỡ."""),
+           Ngay sau đó gọi phương thức kiểm. Nếu tổng khác tổng gốc thì ném ngoại lệ trạng thái sai, vì bất biến đã vỡ.
+           Lưu ý là phương thức kiểm chỉ báo lỗi sau khi hai số dư đã bị sửa, nên sổ này không tự hoàn tác.
+           Hệ thống thật phải hoàn tác hai bút toán, nhờ giao dịch của cơ sở dữ liệu."""),
         st(code_block(so, lines=(l_for, l_for + 9), title="Bước 5. Chạy danh sách lệnh"),
            """Bước năm, hàm chính duyệt danh sách lệnh. Mỗi lệnh đặt trong khối thử.
            Không đủ tiền thì in từ chối, lệnh sai thì in sai lệnh. Lỗi trạng thái thì không bắt, vì đó là lỗi lập trình phải lộ ra."""),
@@ -339,17 +396,21 @@ Lời giải nằm ở <code>labs/JVA/L12/loi_giai.java</code> — chỉ mở sa
     ], checks=["1000000 - 300000 == 700000", "500000 + 300000 == 800000", "1000000 > 800000",
                "1500000 - 200000 == 1300000", "700000 + 200000 == 900000", "900000 + 800000 + 1300000 == 3000000"])
     nlines = len(so["code"].split("\n"))
-    seg = [(1, l_cls - 1), (l_cls, l_tong - 1), (l_tong, l_lay_end), (l_ch, l_tru - 1), (l_tru, l_kiem_end + 1),
+    # Các phần nối liền nhau PHẢI ghép đúng tệp: phần nào kết thúc bằng dòng trống thì dòng trống nằm trong phần đó (verify_l12_screen kiểm).
+    seg = [(1, l_cls - 1), (l_cls, l_tong - 1), (l_tong, l_tong + 7), (l_tong + 8, l_lay_end + 1), (l_ch, l_tru - 1), (l_tru, l_kiem_end + 2),
            (l_main - 2, l_for - 1), (l_for, nlines)]
-    tep_say = ["""Đây là toàn bộ tệp, chia thành bảy phần để bạn gõ lại. Phần một là hai kiểu dữ liệu và các dòng nhập ở đầu tệp.""",
+    tep_say = ["""Đây là toàn bộ tệp, chia thành tám phần để bạn gõ lại. Phần một là hai kiểu dữ liệu và các dòng nhập ở đầu tệp.
+               Các phần một, hai, ba, bốn và sáu kết thúc bằng một dòng trống, hãy giữ nó, vì dòng trống cũng được đếm khi báo số dòng của lỗi.""",
                """Phần hai mở đầu lớp sổ cái, với bản đồ số dư, tổng gốc và phương thức mở tài khoản.""",
-               """Phần ba là phương thức cộng tổng và phương thức lấy số dư an toàn.""",
-               """Phần bốn là nửa đầu của phương thức chuyển: kiểm tra trước, chưa sửa gì.""",
-               """Phần năm là nửa sau: sửa hai số dư, rồi phương thức kiểm bất biến.""",
-               """Phần sáu là hàm chính, mở ba tài khoản và nạp bốn lệnh vào danh sách.""",
-               """Phần bảy là vòng lặp chạy từng lệnh trong khối thử, rồi in ba số dư và tổng."""]
+               """Phần ba là phương thức cộng tổng các số dư.""",
+               """Phần bốn là phương thức lấy số dư an toàn, ném lỗi khi không có tài khoản.""",
+               """Phần năm là nửa đầu của phương thức chuyển: kiểm tra trước, chưa sửa gì.""",
+               """Phần sáu là nửa sau: sửa hai số dư, rồi phương thức kiểm bất biến.""",
+               """Phần bảy là hàm chính, mở ba tài khoản và nạp bốn lệnh vào danh sách.""",
+               """Phần tám là vòng lặp chạy từng lệnh trong khối thử, rồi in ba số dư và tổng."""]
     sc_tep = sc("tep", "example", "Toàn bộ tệp So.java, từng phần, để bạn gõ lại", [
-        st(code_block(so, lines=a_b, title=f"Tệp So.java, phần {i + 1} trên 7"), tep_say[i])
+        st(code_block(so, lines=a_b, title=f"Tệp So.java, phần {i + 1} trên 8" + (" (dòng cuối là dòng trống, giữ nó)" if i in (0, 1, 2, 3, 5) else ""),
+                      keep_indent=True), tep_say[i])
         for i, a_b in enumerate(seg)])
     sc_chk = sc("check", "check", "Tự kiểm bằng đường khác: dòng tiền ròng của từng tài khoản", [
         st(table(["tài khoản", "đầu ngày", "tiền vào − tiền ra", "cuối ngày"],
@@ -370,7 +431,7 @@ Lời giải nằm ở <code>labs/JVA/L12/loi_giai.java</code> — chỉ mở sa
         st(out_block(quy_mo_so),
            """Ba tài khoản bốn lệnh là mười hai lần cộng. Một nghìn tài khoản một nghìn lệnh là một triệu lần. Mười nghìn tài khoản mười nghìn lệnh là một trăm triệu lần.""",
            clear=True),
-        st(table(["tài khoản N", "lệnh M", "số lần cộng = N × M", "thời gian nếu 10 nano giây mỗi lần (số minh hoạ)"],
+        st(table(["tài khoản N", "lệnh M", "số lần cộng = N × M", "thời gian nếu mỗi lần mất 10 nano giây = 10 phần tỉ giây (số minh hoạ)"],
                  [["3", "4", "12", "gần như không"], ["1 000", "1 000", "1 000 000", "10 mili giây"],
                   ["10 000", "10 000", "100 000 000", "1 giây"],
                   ["1 000 000", "1 000 000", "1 000 000 000 000", "10 000 giây ≈ 2,8 giờ"]]),
@@ -389,9 +450,12 @@ Lời giải nằm ở <code>labs/JVA/L12/loi_giai.java</code> — chỉ mở sa
                "10**12 * 10 // 10**9 == 10000", "round(10000 / 3600, 1) == 2.8", "(10**6 * 10**6) // (1000 * 1000) == 10**6"])
     sc_pit = sc("pitfalls", "pitfall", "Lỗi cố ý, đọc dấu vết, và hai cách sửa sai của người đã đi làm", [
         st('<div class="box warn"><b>Lỗi 1 (gài cố ý).</b> Chép dòng trừ sang dòng cộng, quên đổi <code>a</code> thành <code>b</code>.</div>'
-           + code_block(so_loi, lines=(l_bug - 1, l_bug)) + out_block(so_loi, "Chạy thì máy ảo in"),
+           + code_block(so_loi, lines=(l_bug - 1, l_bug)) + out_block(so_loi, "Chạy thì máy ảo in")
+           + "<p class='note'>Muốn thử: gõ đủ tám phần thành So.java (giữ cả dòng trống), sao thành SoLoi.java, đổi tên lớp <code>So</code> "
+             "thành <code>SoLoi</code>, đổi <code>b + l.tien()</code> thành <code>a + l.tien()</code>. Số dòng đếm cả dòng trống; dấu vết hiện đúng các số dòng này.</p>",
            """Lỗi thứ nhất do ta gài cố ý, và rất đời thường: chép dòng trừ sang dòng cộng, quên đổi chữ a thành chữ b.
-           Chương trình dừng ngay ở lệnh đầu tiên, với ngoại lệ trạng thái sai: tổng ba triệu rưỡi khác ba triệu."""),
+           Chương trình dừng ngay ở lệnh đầu tiên, với ngoại lệ trạng thái sai: tổng ba triệu rưỡi khác ba triệu.
+           Gõ đủ tám phần thành một tệp, giữ cả dòng trống, rồi sửa theo chữ nhỏ trên màn hình, thì dấu vết hiện đúng các số dòng này."""),
         st(table(["đọc", "dấu vết nói gì", "suy ra"],
                  [["dòng đầu", "lệch tổng: 3 500 000 thay vì 3 000 000", "thừa $500\\,000 = 1\\,000\\,000 - 500\\,000$: số dư cũ của A trừ của B"],
                   ["<code>at SoCai.kiem</code>", "phương thức kiểm phát hiện", "đây chỉ là nơi <b>phát hiện</b>"],
@@ -422,16 +486,29 @@ Lời giải nằm ở <code>labs/JVA/L12/loi_giai.java</code> — chỉ mở sa
            Lệnh bốn, C còn hai triệu một trăm nghìn, còn A nhận hai triệu ba trăm nghìn cộng hai trăm nghìn, thành hai triệu rưỡi.
            Cộng ba số dư được bốn triệu chín trăm nghìn, đúng dòng chương trình in ra.""", clear=True),
         st('<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Chỉ đối soát cuối ngày, không kiểm sau mỗi lệnh.</div>'
-           + out_block(cuoi, "Chạy thì máy ảo in"),
+           + out_block(cuoi, "Chạy thì máy ảo in")
+           + "<p class='note'>Muốn thử: từ So.java chạy đúng, sao thành CuoiNgay.java, đổi tên lớp thành <code>CuoiNgay</code>, "
+             "<b>giữ lỗi gài</b> (đổi <code>b + l.tien()</code> thành <code>a + l.tien()</code>), bỏ dòng <code>kiem();</code> trong <code>chuyen</code>, "
+             "thêm <code>so.kiem();</code> ngay sau dòng in <code>Tong</code>, cuối hàm chính.</p>",
            """Lỗi thứ ba là chỉ đối soát, tức so lại tổng tiền, vào cuối ngày. Lệnh B sang C lẽ ra bị từ chối, vẫn chạy được vì số dư đã sai từ lệnh trước.
            Cuối ngày mới biết lệch, và dấu vết chỉ trỏ về hàm chính, không biết lệnh nào gây ra.
-           Kiểm sau mỗi lệnh thì dấu vết trỏ đúng lệnh đầu tiên, như ta vừa thấy.""", clear=True),
+           Kiểm sau mỗi lệnh thì dấu vết trỏ đúng lệnh đầu tiên, như ta vừa thấy.
+           Muốn thử, hãy sao tệp sổ chạy đúng thành bản đối soát cuối ngày theo chữ nhỏ ở dưới, và nhớ giữ lỗi gài cũ.""", clear=True),
+        st('<div class="box warn"><b>Lỗi 4 (người đã đi làm).</b> Quên chặn lệnh chuyển cho chính mình.</div>'
+           + code_block(tu_chuyen, lines=(ln(tu_chuyen, "new Lenh(\"A\", \"A\""), ln(tu_chuyen, "new Lenh(\"A\", \"A\""))) + out_block(tu_chuyen, "Chạy thì máy ảo in")
+           + "<p class='note'>Muốn thử: từ So.java chạy đúng (giữ <code>b + l.tien()</code>), sao thành TuChuyen.java, đổi tên lớp thành <code>TuChuyen</code>, "
+             "bỏ ba dòng chặn <code>l.tu().equals(l.den())</code> khỏi <code>chuyen</code>, thay bốn dòng <code>ds.add</code> bằng đúng một dòng A → A.</p>",
+           """Lỗi thứ tư là quên chặn lệnh chuyển cho chính mình. Lệnh từ A sang A vượt qua mọi phép kiểm tra trước, vì A có đủ tiền.
+           Rồi hai dòng sửa chạy lần lượt: trừ A còn chín trăm nghìn, nhưng bên nhận lại cộng đè lên số dư cũ, nên A thành một triệu một trăm nghìn.
+           Tổng tăng một trăm nghìn, tiền tự sinh ra, và phương thức kiểm ném ngoại lệ. Nhưng ngoại lệ đến sau khi sổ đã bị sửa, nên sổ vẫn sai, và đó là lý do ta chặn từ trước.
+           Muốn thử, hãy sao tệp sổ chạy đúng thành bản thiếu phép chặn theo chữ nhỏ ở dưới, và chỉ nạp một lệnh.""", clear=True),
     ], checks=["700000 + (1000000 + 300000) + 1500000 == 3500000", "3500000 - 3000000 == 1000000 - 500000",
                "4900000 - 3000000 == 1900000",
                "1000000 - 300000 == 700000 and 1000000 + 300000 == 1300000",
                "1000000 <= 1300000 and 1300000 - 1000000 == 300000 and 1300000 + 1000000 == 2300000",
                "2300000 - 200000 == 2100000 and 2300000 + 200000 == 2500000",
-               "2500000 + 300000 + 2100000 == 4900000"])
+               "2500000 + 300000 + 2100000 == 4900000",
+               "1000000 + 100000 == 1100000", "1100000 + 500000 + 1500000 == 3100000", "1100000 + 500000 + 1500000 - 3000000 == 100000"])
     sc_quiz = sc("quiz", "quiz", "Bây giờ tới phần bạn tự làm", [
         st(code_block(quiz, lines=(ln(quiz, "SoCai so = new SoCai()"), ln(quiz, "\"A\", \"C\", 1000000")), title="Sổ đã sửa, ba lệnh mới: đoán năm dòng in ra"),
            """Bây giờ tới phần bạn tự làm. Sổ đã sửa đúng, số dư đầu vẫn là một triệu, năm trăm nghìn và một triệu rưỡi.
@@ -469,11 +546,12 @@ mỗi thao tác, và để vi phạm <b>lộ ra ngay</b> kèm dấu vết.</div>
                   "§5.1.8 mở hộp); Java SE 21 API: java.util.HashMap (get trả null khi không có khoá, values), java.lang.IllegalStateException, "
                   "java.lang.IllegalArgumentException, java.lang.Throwable (dấu vết ngăn xếp); dev.java/learn. Mọi số tiền là số minh hoạ.",
                   ["Ghép lớp, bản ghi, bản đồ, danh sách và ngoại lệ thành một sổ chuyển khoản",
-                   "Áp dụng kiểm tra trước, sửa sau và kiểm bất biến tổng tiền sau mỗi lệnh",
+                   "Áp dụng kiểm tra trước, sửa sau (kể cả chặn chuyển cho chính mình) và kiểm bất biến tổng tiền sau mỗi lệnh",
                    "Phân biệt nơi phát hiện với nơi sai khi đọc dấu vết lỗi, và sửa tận gốc",
                    "Nhận ra hai cách sửa sai: nuốt ngoại lệ và chỉ đối soát cuối ngày",
                    "Theo dõi toàn bộ tệp sổ cái hoàn chỉnh, từng phần, và gõ lại được",
                    "Dự đoán chi phí kiểm toàn bộ sau mỗi lệnh khi số tài khoản và số lệnh tăng gấp nghìn lần, và vì sao cần cơ sở dữ liệu",
                    "Dựng sổ chuyển khoản qua ba mốc: sổ và tổng, chuyển có kiểm tra trước, kiểm bất biến sau mỗi lệnh"],
                   [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_tep, sc_chk, sc_scale, sc_pit, sc_quiz, sc_lab, sc_rec],
+                  assumes=["jva_import", "jva_new", "jva_throws", "jva_hashmap"],
                   covers=[(1, "formula"), (2, "example"), (3, "pitfalls"), (4, "pitfalls"), (5, "tep"), (6, "quymo"), (7, "practice")])

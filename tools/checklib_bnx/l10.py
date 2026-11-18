@@ -45,3 +45,16 @@ def bnx_backward_ok(new, old):
 
 def bnx_ms_to_hours(ms):
     return ms / 3_600_000
+
+
+def bnx_l10_compacted(n, so_khoa):
+    """Cảnh quy mô: nhật ký n bản ghi xoay vòng trên so_khoa khoá → sau nén còn đúng min(n, so_khoa) bản ghi (mỗi khoá một bản cuối)."""
+    last = {}
+    for i in range(n):
+        last[i % so_khoa] = i
+    return len(last)
+
+
+def bnx_l10_read_ms(so_ban_ghi, ms_moi_ban_ghi):
+    """Thời gian đọc lại (số minh hoạ): mỗi bản ghi ms_moi_ban_ghi mili giây."""
+    return round(so_ban_ghi * ms_moi_ban_ghi, 6)

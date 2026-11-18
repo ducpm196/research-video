@@ -60,3 +60,14 @@ def bnx_l14_debit(balance, amount):
     if amount <= 0 or amount > balance:
         return balance, False
     return balance - amount, True
+
+
+# ── Nâng AF2 (WP4, 2026-11-14): quy mô nhiều bên cùng gọi ──
+def bnx_l14_drain_s(so_yeu_cau, suc_chiu_moi_giay):
+    """Thời gian (giây) để phía sau xử lý hết số yêu cầu đã qua cổng, nếu chịu suc_chiu_moi_giay yêu cầu mỗi giây (số minh hoạ)."""
+    return so_yeu_cau / suc_chiu_moi_giay
+
+
+def bnx_l14_sustained(so_ben, rate):
+    """Tải duy trì tối đa vào phía sau khi mỗi bên được giới hạn rate yêu cầu/giây: so_ben × rate."""
+    return so_ben * rate

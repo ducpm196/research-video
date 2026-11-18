@@ -154,12 +154,12 @@ def build():
     chinh = project("NganHang", {
         "src/bank/App.java": APP, "src/bank/model/TaiKhoan.java": TAI_KHOAN, "src/bank/service/PhiChuyen.java": PHI_CHUYEN,
     }, [
-        ('find src -name "*.java" | sort', "src/bank/App.java\nsrc/bank/model/TaiKhoan.java\nsrc/bank/service/PhiChuyen.java"),
+        ('find src -name "*.java" | LC_ALL=C sort', "src/bank/App.java\nsrc/bank/model/TaiKhoan.java\nsrc/bank/service/PhiChuyen.java"),
         ("javac -d out src/bank/model/TaiKhoan.java src/bank/service/PhiChuyen.java src/bank/App.java", ""),
-        ('find out -name "*.class" | sort', "out/bank/App.class\nout/bank/model/TaiKhoan.class\nout/bank/service/PhiChuyen.class"),
+        ('find out -name "*.class" | LC_ALL=C sort', "out/bank/App.class\nout/bank/model/TaiKhoan.class\nout/bank/service/PhiChuyen.class"),
         ("java -cp out bank.App", "Phi: 6000\nSo du con: 4994000"),
         ("jar --create --file bank.jar --main-class bank.App -C out .", ""),
-        ("jar tf bank.jar | sort", "META-INF/\nMETA-INF/MANIFEST.MF\nbank/\nbank/App.class\nbank/model/\nbank/model/TaiKhoan.class\n"
+        ("jar tf bank.jar | LC_ALL=C sort", "META-INF/\nMETA-INF/MANIFEST.MF\nbank/\nbank/App.class\nbank/model/\nbank/model/TaiKhoan.class\n"
                                    "bank/service/\nbank/service/PhiChuyen.class"),
         ("java -jar bank.jar", "Phi: 6000\nSo du con: 4994000"),
     ])
@@ -218,6 +218,8 @@ Dựng dự án nhỏ trong một thư mục tạm, **tự gõ** hai tệp (khô
 
 Biên dịch ra thư mục `out` bằng `javac -d out …`, chạy `java -cp out shop.Main`. Đóng gói `cuahang.jar` với `--main-class shop.Main`, chạy `java -jar cuahang.jar`.
 
+Dòng `import` cần dùng: chỉ `import shop.kho.Hang;` trong `Main.java` (không cần gói nào của JDK). Lệnh cần có: `javac`, `java`, `jar` (đã có trong JDK 21).
+
 Đầu ra của **cả hai lần chạy** gộp lại thành bốn dòng. Lab này chấm bằng một tệp `.sh` gom mọi lệnh của bạn:
 `bash labs/cham.sh JV2 L00 lenh.sh` (tệp `lenh.sh` tạo hai tệp Java bằng `cat > … <<'EOF'`, rồi `javac`, `java`, `jar`).
 """, "sh", lab_sh, LAB_OUT)
@@ -257,11 +259,12 @@ Biên dịch ra thư mục `out` bằng `javac -d out …`, chạy `java -cp out
                   ["<code>javac -d out …</code>", "cờ <code>-d</code>: đặt các tệp <code>.class</code> vào thư mục đích <code>out</code>"],
                   ["<code>java -cp out bank.App</code>", "cờ <code>-cp</code>: <b>đường dẫn tìm lớp</b> là thư mục <code>out</code>; rồi tên đầy đủ của lớp"],
                   ["<code>jar</code>", "lệnh gom nhiều tệp <code>.class</code> thành <b>một tệp</b> đuôi <code>.jar</code>"],
-                  ["<code>public</code> / không ghi / <code>private</code>", "ba mức truy cập: ai cũng thấy / chỉ cùng gói / chỉ cùng lớp"]]),
+                  ["<code>public</code> / không ghi / <code>private</code>",
+                   "ba mức truy cập ta dùng: ai cũng thấy / chỉ cùng gói / chỉ cùng lớp (Java còn mức thứ tư <code>protected</code>: cùng gói và lớp con; bài này chưa dùng)"]]),
            """Bảng này có sáu thứ. Dòng khai báo gói luôn đứng đầu tệp và nói lớp thuộc gói nào. Lệnh nạp tên cho phép viết tên ngắn thay cho tên đầy đủ.
            Cờ d của lệnh biên dịch đặt các tệp lớp vào thư mục đích. Cờ cờ-pê của lệnh chạy cho biết thư mục để tìm lớp, kèm tên đầy đủ của lớp cần chạy.
-           Lệnh đóng gói gom nhiều tệp lớp thành một tệp. Cuối cùng là ba mức truy cập, ai cũng thấy, chỉ cùng gói thấy, hoặc chỉ cùng lớp thấy.""",
-           focus=[1, "1.2", "1.3", "1.4", "1.5", "1.6", "1.7"]),
+           Lệnh đóng gói gom nhiều tệp lớp thành một tệp. Cuối cùng là ba mức truy cập, ai cũng thấy, chỉ cùng gói thấy, hoặc chỉ cùng lớp thấy. Java còn mức thứ tư dành cho lớp con, bài này chưa cần tới nó.""",
+           focus=[1, "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.7"]),
         st(pcode(chinh, "src/bank/App.java", lines=(1, 8), title="Tệp src/bank/App.java (đoạn đầu)"),
            """Đây là đầu tệp thật của ví dụ hôm nay. Dòng một khai báo gói ngân hàng. Hai dòng nạp tên lấy lớp tài khoản từ gói con mô hình, và lớp tính phí từ gói con dịch vụ.
            Dấu chấm trong tên gói tách các tầng, giống dấu gạch chéo tách thư mục."""),
@@ -313,7 +316,7 @@ Biên dịch ra thư mục `out` bằng `javac -d out …`, chạy `java -cp out
     ])
     sc_ex = sc("example", "example", "Ví dụ: dựng, biên dịch, chạy và đóng gói dự án ba tệp", [
         st(term_block(chinh, 0, 1, title="① Ba tệp nguồn đã viết xong") + "<p class='note'>Ba tệp ở ba thư mục: <code>bank</code>, <code>bank/model</code>, <code>bank/service</code>.</p>",
-           """Phép làm thứ nhất, liệt kê ba tệp nguồn. Ta dùng lệnh liệt kê kèm sắp xếp để thứ tự luôn giống nhau trên mọi máy.
+           """Phép làm thứ nhất, liệt kê ba tệp nguồn. Ta nối thêm lệnh sắp xếp, và đặt kiểu ngôn ngữ của nó là chữ C để thứ tự theo mã ký tự, nên giống nhau trên mọi máy.
            Thấy đúng ba tệp, mỗi tệp nằm ở thư mục khớp với dòng khai báo gói của nó."""),
         st(term_block(chinh, 1, 3, title="② Biên dịch ra out, rồi xem thư mục out"),
            """Phép làm thứ hai, biên dịch. Ta đưa cho trình biên dịch cả ba tệp và cờ d. Lệnh không in gì, nghĩa là không có lỗi.
@@ -324,8 +327,15 @@ Biên dịch ra thư mục `out` bằng `javac -d out …`, chạy `java -cp out
            Phép làm thứ tư, tài khoản có mười triệu bị rút năm triệu cộng sáu nghìn phí, còn bốn triệu chín trăm chín mươi tư nghìn đồng.""", clear=True),
         st(term_block(chinh, 3, 4, title="⑤ Chạy bằng đường dẫn tìm lớp") ,
            """Phép làm thứ năm, chạy chương trình với cờ cờ-pê trỏ vào thư mục đích. Hai dòng in ra khớp đúng với hai phép tính tay: phí là sáu nghìn, số dư còn bốn triệu chín trăm chín mươi tư nghìn.""", clear=True),
+        st("<p><b>⑥ Đọc lệnh đóng gói từng phần:</b></p>"
+           + table(["phần của lệnh", "nghĩa"],
+                   [["<code>--create --file bank.jar</code>", "tạo tệp đóng gói tên <code>bank.jar</code>"],
+                    ["<code>--main-class bank.App</code>", "ghi tên lớp chạy đầu tiên vào tệp mô tả <code>META-INF/MANIFEST.MF</code> trong gói"],
+                    ["<code>-C out .</code>", "<b>đổi sang thư mục <code>out</code></b> rồi lấy mọi thứ trong đó (dấu chấm là thư mục hiện tại)"]]),
+           """Trước khi chạy, ta đọc lệnh đóng gói từng phần. Hai cờ đầu tạo ra tệp đóng gói có tên cho trước. Cờ tên lớp chính ghi lớp chạy đầu tiên vào một tệp mô tả nhỏ nằm bên trong gói.
+           Cờ chữ C hoa bảo lệnh đổi sang thư mục đích rồi lấy mọi thứ trong đó, dấu chấm nghĩa là thư mục hiện tại. Nhờ vậy bên trong gói không có chữ out ở đầu đường dẫn.""", clear=True),
         st(term_block(chinh, 4, 7, title="⑥ Đóng gói và chạy từ một tệp"),
-           """Cuối cùng là đóng gói. Lệnh đóng gói gom thư mục đích thành một tệp, và ghi sẵn tên lớp chạy đầu tiên.
+           """Cuối cùng là đóng gói thật. Lệnh đóng gói gom thư mục đích thành một tệp, và ghi sẵn tên lớp chạy đầu tiên.
            Danh sách bên trong có thêm thư mục mô tả, còn lại giống hệt thư mục đích. Khi chạy chỉ cần một lệnh, đưa tên tệp đóng gói, và ra cùng hai dòng kết quả.""", clear=True),
     ], checks=["3000 + (5000000 - 2000000) // 1000 == 6000", "10000000 - (5000000 + 6000) == 4994000", "5000000 - 2000000 == 3000000"])
     sc_chk = sc("check", "check", "Tự kiểm bằng đường khác: đếm lớp và so hai cách chạy", [
@@ -339,15 +349,19 @@ $$3\\,000 + 3\\,000\\,000 \\times 0{,}001 = \\hl{6\\,000}$$""",
            Trùng với kết quả của chương trình, vậy cả công thức và mã đều đúng.""", clear=True),
     ], checks=["3000 + 3000000 * 0.001 == 6000", "len(['App', 'TaiKhoan', 'PhiChuyen']) == 3"])
     sc_scale = sc("scale", "concept", "Khi dự án lớn gấp một trăm lần: tên trùng và đường dẫn dài", [
-        st(pcode(trung, "src/nganhang/TaiKhoan.java", lines=(1, 6), title="nganhang/TaiKhoan.java") + term_block(trung, 0, 2, title="Hai lớp cùng tên, hai gói"),
+        st(pcode(trung, "src/nganhang/TaiKhoan.java", lines=(1, 6), title="nganhang/TaiKhoan.java") + term_block(trung, 0, 2, title="Hai lớp cùng tên, hai gói")
+           + "<p class='note'><code>TrungTen.java</code> không có dòng khai báo gói: nó thuộc <b>gói mặc định</b> (không tên), chỉ nên dùng cho ví dụ nhỏ.</p>",
            """Khi dự án to ra, trước hết là chuyện tên trùng. Đây là hai lớp cùng tên tài khoản, nhưng ở hai gói khác nhau. Dùng tên đầy đủ thì chúng sống chung được, chạy ra hai dòng khác nhau.
+           Lớp chạy thử không có dòng khai báo gói, nên nó nằm ở gói mặc định không tên, chỉ hợp với ví dụ nhỏ như vậy.
            Với ba trăm lớp, số cặp có thể trùng tên ngắn là ba trăm nhân hai trăm chín mươi chín chia hai, gần bốn mươi lăm nghìn cặp, mà gói chia nhỏ chuyện đó."""),
         st(table(["số thư viện ngoài", "3", "30", "300"],
                  [["độ dài đường dẫn tìm lớp (số minh hoạ: mỗi tệp 40 ký tự)", "120", "1 200", "<b>12 000</b>"],
-                  ["so với giới hạn 8 191 ký tự của dòng lệnh <code>cmd.exe</code>", "vừa", "vừa", "<b>vượt</b>"]])
-           + "<p class='note'>Cách rút gọn: <code>java -cp \"lib/*\" bank.App</code> — dấu <code>*</code> lấy mọi tệp <code>.jar</code> trong <code>lib</code>.</p>",
+                  ["so với giới hạn 8 191 ký tự của dòng lệnh <code>cmd.exe</code> (cửa sổ lệnh cũ của Windows)", "vừa", "vừa", "<b>vượt</b>"]])
+           + "<p class='note'>Cách rút gọn: <code>java -cp \"lib/*\" bank.App</code> — dấu <code>*</code> lấy mọi tệp <code>.jar</code> trong <code>lib</code>.</p>"
+           + "<p class='note'>Khi liệt kê tay nhiều tệp, ngăn chúng bằng <code>;</code> trên Windows, <code>:</code> trên Linux và macOS. Về lâu dài, công cụ xây dựng như Maven hoặc Gradle tự giữ danh sách.</p>",
            """Thứ hai là đường dẫn tìm lớp dài ra. Mỗi thư viện ngoài là một tệp đóng gói phải liệt kê trong đường dẫn. Giả sử mỗi tệp chiếm bốn mươi ký tự, ba thư viện cần một trăm hai mươi ký tự, nhưng ba trăm thư viện cần mười hai nghìn.
-           Quá giới hạn tám nghìn một trăm chín mươi mốt ký tự của dòng lệnh. Giải pháp là dùng dấu sao, và về lâu dài là công cụ xây dựng tự quản lý danh sách, điều bạn sẽ gặp ở dự án thật.""", clear=True),
+           Quá giới hạn tám nghìn một trăm chín mươi mốt ký tự của cửa sổ lệnh cũ của hệ điều hành này. Giải pháp là dùng dấu sao, và về lâu dài là công cụ xây dựng tự quản lý danh sách, điều bạn sẽ gặp ở dự án thật.
+           Còn khi tự liệt kê nhiều tệp, dấu ngăn cách là chấm phẩy hoặc hai chấm, tuỳ hệ điều hành.""", clear=True),
         st(term_block(loi_chay, 3, 6, title="Dấu sao lấy mọi tệp đóng gói trong thư mục lib"),
            """Ta thử dấu sao thật. Bỏ tệp đóng gói vào thư mục thư viện rồi chạy chỉ với đường dẫn thư viện gạch chéo sao, chương trình vẫn chạy đúng.
            Đánh đổi của người làm nghề: gói và thư mục giúp quy mô lớn, nhưng đòi kỷ luật đặt tên và công cụ quản lý thư viện.""", clear=True),
@@ -411,6 +425,8 @@ trong đường dẫn tìm lớp không, và lớp đứng đó có được ph�
            """Điều cần mang theo. Khi chương trình không chạy, hãy hỏi ba câu. Tên đầy đủ của lớp là gì. Tệp lớp có nằm đúng thư mục trong đường dẫn tìm lớp không.
            Và lớp đứng đó có được phép nhìn thấy thứ nó đang gọi hay không."""),
     ])
+    sc_sym["steps"][0]["introduces"] = ["jv2_protected"]
+    sc_scale["steps"][0]["introduces"] = ["jv2_default_pkg"]
     return lesson("L00", "du_an_nhieu_tep", "Bài 0 — Dự án nhiều tệp: gói, biên dịch ra thư mục, tệp đóng gói",
                   "curriculum/jv2.yaml L00; audit/jv2/verify_jv2.py L00 (javac/java/jar chạy thật, JDK 21); The Java Language Specification, "
                   "Java SE 21: §7.4 (khai báo gói), §7.5 (nhập khẩu tên: single-type và on-demand, §6.4.1), §6.6 (kiểm soát truy cập); "

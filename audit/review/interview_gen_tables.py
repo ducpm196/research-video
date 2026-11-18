@@ -9,7 +9,8 @@ import io, contextlib
 with contextlib.redirect_stdout(io.StringIO()):
     import lv
 INT = ["00_overview_roadmap", "01_foundation_cs_java", "02_backend_microservices", "03_distributed_systems_senior",
-       "04_banking_domain_t24_napas", "05_uit_ai_banking_multiplier", "06_interview_qa_bank_100", "07_salary_negotiation_50m_gross"]
+       "04_banking_domain_t24_napas", "05_uit_ai_banking_multiplier", "06_interview_qa_bank_100", "07_salary_negotiation_50m_gross",
+       "08_tin_dung_ban_le_doi_soat"]
 F = "file:///D:/research-video/"
 def dur(p):
     return float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(p)],

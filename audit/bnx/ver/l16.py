@@ -209,3 +209,45 @@ def run(rec):
     consts = [getattr(src, c) for c in src.JAVA_CLASS]
     lines = [l for c in consts for l in c.strip("\n").split("\n")]
     rec("L16", max(map(len, lines)) <= 70, f"dòng mã dài nhất {max(map(len, lines))} ký tự (≤ 70)")
+
+    # ── AF2 (WP4 2026-11-14): cảnh quy mô + lab ─────────────────────────────────────────────
+    import lib2
+    import re
+    p = lib2.find("L16", "HangQuyMo")
+    if not (shutil.which("javac") and shutil.which("java")):
+        rec("L16", None, "thiếu javac/java (NOT_VERIFIED: HangQuyMo và lab)")
+    else:
+        rc, so, se = p.execute()
+        rec("L16", rc == 0 and so.strip("\n") == p.out, f"HangQuyMo.java chạy lại cho đúng đầu ra đã hiện (rc={rc})")
+        got = [(int(n), cho, int(q), int(t)) for n, cho, q, t in re.findall(r"^(\d+) viec, hang (vo han|2 cho): trong hang (\d+), tu choi (\d+)$", p.out, re.M)]
+        sizes = (10, 1000, 100000)
+        rec("L16", [g[0] for g in got if g[1] == "vo han"] == list(sizes), "đo thật ở ba cỡ 10, 1 000, 100 000 việc (×1, ×100, ×10 000)")
+        rec("L16", all((q, t) == (alg.bnx_l16_backlog(n, 4), 0) for n, cho, q, t in got if cho == "vo han"),
+            "hàng không giới hạn: việc nằm chờ = N − 4 (6, 996, 99 996), không từ chối việc nào")
+        rec("L16", all((q, t) == (2, alg.bnx_l16_rejected(n, 4, 2)) for n, cho, q, t in got if cho == "2 cho"),
+            "hàng 2 chỗ: luôn đúng 2 việc chờ, từ chối N − 6 (4, 994, 99 994)")
+        # đường khác: mô phỏng từng việc (đếm dần), không công thức
+        def sim(n, cap):
+            run_, queue, rej = 0, 0, 0
+            for _ in range(n):
+                if run_ < 4:
+                    run_ += 1
+                elif cap is None or queue < cap:
+                    queue += 1
+                else:
+                    rej += 1
+            return queue, rej
+        rec("L16", all(sim(n, None) == (alg.bnx_l16_backlog(n, 4), 0) and sim(n, 2) == (2, alg.bnx_l16_rejected(n, 4, 2)) for n in sizes),
+            "mô phỏng từng việc (bể 4 luồng, hàng vô hạn hoặc 2 chỗ) khớp mô hình và đầu ra thật")
+        last = [alg.bnx_l16_last_start_ms(n, 4, 100) for n in sizes]
+        rec("L16", last == [200, 24900, 2499900] and round(last[2] / 60000) == 42 and last[1] // 1000 == 24,
+            f"việc cuối bắt đầu sau 2, 249, 24 999 lượt × 100 ms = {last} ms (≈ 25 giây và ≈ 42 phút) — số minh hoạ 100 ms mỗi việc")
+        # lab: loi_giai.java qua labs/cham.sh, và tính lại bằng đường khác
+        lab = ROOT / "labs" / "BNX" / "L16"
+        want = (lab / "mong_doi.txt").read_text(encoding="utf-8").strip()
+        bash = lib2._bash()
+        r = subprocess.run([bash, str(ROOT / "labs" / "cham.sh"), "BNX", "L16", str(lab / "loi_giai.java")], capture_output=True, text=True, encoding="utf-8", cwd=ROOT)
+        rec("L16", r.returncode == 0 and r.stdout.strip() == "ĐÚNG", f"lab: loi_giai.java chấm bằng labs/cham.sh → {r.stdout.strip()[:60]!r}")
+        la, _s = leaves_by_size(100000, 5000)
+        mine = f"so luong: 3\ntrong hang doi: 5\nnhan {3 + 5}, tu choi {14 - 3 - 5}\nso luot cho 14 viec: {math.ceil(14 / 3)}\nso viec la: {la}"
+        rec("L16", want == mine and la == 32 == 2 ** 5 == alg.bnx_fj_leaves(1, 100000, 5000), "lab: 3 luồng + 5 chỗ nhận 8 từ chối 6, 5 lượt, 32 việc lá — tính lại bằng đường khác")

@@ -1,0 +1,33 @@
+# fix6 BNX_C nhánh C3 (L32, L33, L34) — 2026-11-16
+
+## TIẾN ĐỘ
+- [x] L32 xong  - [x] L33 xong  - [x] L34 xong
+Nguồn sửa: `audit/bnx/src/l32.py, l33.py, l34.py` (thêm `from libj import jstep`; không sửa libj/lib2/lib), `audit/bnx/ver/l32.py, l33.py, l34.py` (thêm 1 kiểm mỗi bài), sinh bằng `gen.py`; sổ qua `screen_keep.py`. Không docker/dbrun/build/tts/asr/git. Chữ mọi chương trình `prog(...)` KHÔNG đổi (giữ sha, giữ đệm progcache); chỉ đổi cách hiện (khoảng dòng, tách step).
+Lưu ý môi trường: `screen_fast`/`verify_bnx` của L33 cần Git bash đứng trước WSL bash trong PATH (`C:\Program Files\Git\bin` đầu PATH), nếu không các nguồn bash in `NOT_VERIFIED: thieu jar Tomcat` (lỗi đường dẫn `/d/...`, không phải lỗi bài).
+
+## L32 (GitOps, Vault, AWS)
+- Mục chưa giảng → 0 (bảng `jstep` đứng TRƯỚC mã, step sau bảng `clear: true`, ≤ 4 hàng): `json.loads` (hàng mới ở bảng đầu); `for ten, ch in mm.items()`, `cum.get(ten) != ch and (moi or tu_chua or ten not in cum)`, `("sua " if ten in cum else "tao ") + ten`, `viec.append`, `dict(ch)` (bảng trước Bước 2); `sorted(set(cum) - set(mm))`, `if prune:`, `del cum[ten]` (bảng trước Bước 3); YAML Argo `apiVersion/kind/metadata {…}/spec/project: default` gộp một hàng đầu bảng khai báo; `>/dev/null`, `$(…)` trong echo (hàng 4 bảng Vault); `vault policy write chi-doc - >/dev/null <<'P' … P` (`-` đọc stdin, here-doc), `T=$(vault token create … -field=token)`, `VAULT_TOKEN=$T vault kv get …` và `doc() {…}`, `2>&1 | grep -o … | head -1` (bảng trước chính sách); `fnmatch.fnmatch(viec, c["viec"])`, danh sách từ điển quy tắc, danh sách sinh sẵn có `and`, `"Deny" in khop`, `def … return` (hai bảng trước Bước 5); `cum["thanh-toan"]["ban"] = 9`, `buoc(4, …, tu_chua=True)`, `git revert --no-edit HEAD` (bảng trước kịch bản chạy thật); `git rm -q` (câu ngay trên khối); `git log --reverse --name-status --format=%s`, `.split("\n")`, `if dong:`, `.replace("\t", " ")` (bảng trước vòng in lịch sử).
+- SHOULD (3): hiện lệnh ghi thử `ghi() {…}`, `sleep 6` và `echo` đọc lại (step mới `show_from("ghi() {", 8)`, nhãn "kết quả ở phần ví dụ"); hiện đủ phần cuối `DoiChieu.py`: `git rm`…`buoc(8…)` (4 dòng, trước kết quả bước 7–8) và vòng `for dong in git("log", "--reverse", "--name-status", "--format=%s")…print` (3 dòng, step riêng ngay trước kết quả; tách vì gộp với 10 dòng kết quả thì tràn khung — render báo khung 87).
+- Lời đọc 2287 → 2294 (cắt hook, prereq, sym, intuition, formula, ví dụ, quymo, pitfalls, quiz, practice, recap để bù ~12 bảng mới). `asr_reviewed` 5 → 2 (câu bị đổi chữ).
+- Cổng: lint 0/0 (31 phép); render 133 khung 0 vấn đề (xem khung 46, 54, 62); `screen_keep L32`: 20 khối chưa khớp 0; `screen_fast` bản bỏ docker (`scratchpad/sfast_nodocker.py`, bỏ `src:BNX:L32_ChayVault` và 4 khối của nó, sha khớp): PASS 21, SKIP 4, FAIL/STALE/MISSING/ORPHAN 0; `verify_bnx L32` với PATH bỏ Docker: 15 PASS + 1 SKIP (phần chạy Vault trong ảnh Docker; kết quả Vault lấy từ đệm, chữ lệnh không đổi), thêm kiểm mới: màn hình hiện `ghi() {`, `sleep 6`, `git rm`, đủ lệnh `git log --reverse --name-status --format=%s` đúng chữ chương trình.
+- Mục chưa giảng ước còn lại: 0 (còn lại về mặt chữ: dòng harness `cat > in.sh <<'EOF'`, `tar cf - … | docker run …`, không hiện trên màn hình).
+- Không làm: không chạy Vault trong Docker (cấm); nhãn nguồn Vault/AWS giữ nguyên (NOT_VERIFIED/đối chiếu `sources_l32.md`).
+
+## L33 (Servlet, JSP, Tomcat)
+- Mục chưa giảng → 0: `int soYeuCau = 0` (trường), `@Override protected void doGet(HttpServletRequest q, HttpServletResponse r)`, `throws IOException`, `r.setContentType`, `r.getWriter().print` (bảng trước Bước 1); `cat > war/WEB-INF/web.xml <<'EOF' … EOF`, thẻ `<servlet>/<servlet-name>/<servlet-class>/<servlet-mapping>/<url-pattern>/<web-app>` (bảng trước Bước 3), here-doc nhắc lại ở hàng 4 bảng JSP; `sed -i` + `javac … 2>&1 | head -1` (bảng mới trước Bước 6, bỏ ô chữ xám nhạt cũ, sửa tràn khung 39–41); `public static void main(String[] a) throws Exception`, `Files.createTempDirectory`, `Path.of(a[0]).toAbsolutePath()`, `a[1].isEmpty() ? "" : "/" + a[1]` (bảng trước May.java 1/2); `for (int i = 2; i < a.length; i++)` (trước May.java 2/2); `javac -d`, `jar tf … | sort`, `2>/dev/null` (bảng lệnh); Tai.java tách 4 khối (13–21, 22–32, 33–43, 44–51 — trước đây thiếu dòng `static AtomicInteger…` và `class Tai`) mỗi khối có bảng: `AtomicInteger dang…, toiDa…` (+ `introduces bnx_atomic_coll`), ép kiểu `((AbstractProtocol<?>) …).setMaxThreads(4)`; lớp ẩn danh `new HttpServlet() {…}`, `accumulateAndGet(dang.incrementAndGet(), Math::max)`, `try { Thread.sleep(100); } catch (InterruptedException e) { }`, `Tomcat.addServlet/addServletMappingDecoded`; `for (int n : new int[] {4, 40, 200})`, `List<CompletableFuture<?>> ds`, `sendAsync`, `d.join()`, `var`, `System.nanoTime()`; `1_000_000`, `(n + 3) / 4 * 100L` (làm tròn lên, ví dụ 40 → 10 lượt → 1000 ms).
+- Giữ nguyên số đã kiểm (bốn trăm yêu cầu mỗi giây, 4/40/200 → tối đa 4, 5 000 ms).
+- Lời đọc 2292 → 2296. `asr_reviewed` 19 → 9.
+- Cổng: lint 0/0 (26); render 132 khung 0 vấn đề (xem khung 39–41 sau khi sửa, 78, 92); `screen_keep L33`: 19 khối chưa khớp 0; `screen_fast L33` (Git bash đầu PATH): PASS 27, FAIL/STALE/MISSING/ORPHAN 0 (Tomcat 10.1.61 chạy thật); `verify_bnx L33`: 15/15 PASS (thêm kiểm Tai.java bốn khối ≤ 12 dòng, nối đủ 39 dòng thân lớp).
+- Mục chưa giảng ước còn lại: 0.
+
+## L34 (phê duyệt tín dụng)
+- Mục chưa giảng → 0: SQL nền một bảng 4 hàng trước Bước 1: `INSERT INTO ho_so VALUES (…)`, `SELECT … FROM … WHERE`, `UPDATE … SET … WHERE`, `COUNT(*)`/`MAX(…)`; `SELECT 1 … AND …` và `kq = "cho phep" if ok else "tu choi"` (bảng trước Bước 6); `CREATE TABLE ls`, `CREATE INDEX ix ON ls (khach)`, `EXPLAIN QUERY PLAN … .fetchone()[3]`, `kh.split()[0]` (bảng trước khối 2/2 của QuyMoTraCuu); `sql += " AND tt = 'CHO_DUYET'"` (ghi chú trong ô Lỗi 2); `NIST` giải nghĩa tại chỗ ("viện tiêu chuẩn và công nghệ của Mỹ"); "tài sản bảo đảm" giải nghĩa ở bảng và lời.
+- SHOULD: Lỗi 2 và kết quả: nhãn "MÔ PHỎNG: hai lần ghi nối tiếp trên một kết nối, không phải hai người thật" (ô cảnh báo + tiêu đề khung kết quả + lời đọc).
+- Pháp lý: giữ nguyên "Lưu ý pháp lý" (không trích điều khoản), trích NIST giữ nguyên, nhãn nguồn `sources_l34.md` như cũ.
+- Lời đọc 2289 → 2280. `asr_reviewed` 6 → 5.
+- Cổng: lint 0/0 (31); render 130 khung 0 vấn đề (xem khung 46); `screen_keep L34`: 20 khối chưa khớp 0; `screen_fast L34`: PASS 27, 0 FAIL/STALE/MISSING/ORPHAN; `verify_bnx L34`: 44/44 PASS (thêm kiểm bảng SQL nền và nhãn MÔ PHỎNG).
+- Mục chưa giảng ước còn lại: 0.
+
+## Chung
+- `tests/test_e52.py`: 0 FAIL. Không chạy `screen_try --merge`, curriculum, lab_gate, arith_scan (việc của người điều phối). Lab của ba bài không đổi.
+- Bài đổi → CẦN DỰNG LẠI: L32, L33, L34.

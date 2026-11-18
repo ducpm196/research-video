@@ -20,6 +20,13 @@ record KyHan(String ten, int thang) {}
 
 enum LoaiThe { THUONG, VANG }
 
+class LaiUuDai extends LaiCoDinh {
+    @Override
+    public long lai(long goc) {
+        return super.lai(goc) / 2;                   // ưu đãi: một nửa lãi cố định
+    }
+}
+
 public class LaiSuatLab {
     static long hanMuc(LoaiThe t) {
         return switch (t) {
@@ -33,6 +40,7 @@ public class LaiSuatLab {
         for (LaiSuat l : ds) {
             System.out.println(l.lai(10000000) + " " + l.lai(80000000));
         }
+        System.out.println("Uu dai: " + new LaiUuDai().lai(10000000));
         KyHan a = new KyHan("6T", 6);
         KyHan b = new KyHan("6T", 6);
         System.out.println(a.equals(b) + " " + (a == b));

@@ -320,7 +320,8 @@ Lời giải nằm ở <code>labs/JVA/L07/loi_giai.java</code> — chỉ mở sa
            Nếu qua được phép kiểm, số tiền rút không lớn hơn số dư, nên số dư sau khi trừ vẫn lớn hơn hoặc bằng không."""),
         st("<p><b>Bước 5. Hàm đọc số dư và hàm mô tả.</b></p>" + code_block(ngan, lines=(f31 - 4, f31 + 2)),
            """Bước năm, thêm hàm đọc số dư để bên ngoài xem được mà không sửa được, và hàm đổi ra chuỗi để in tài khoản.
-           Hàm đổi ra chuỗi phải có từ khoá công khai, vì mọi đối tượng Java đã có sẵn một hàm cùng tên ở dạng công khai, và bản ta viết lại không được hẹp quyền hơn."""),
+           Hàm đổi ra chuỗi phải có từ khoá công khai, vì lệnh in nằm ngoài lớp của ta và phải gọi được hàm này từ bên ngoài.
+           Vì sao luật bắt đúng chữ công khai ấy, ta sẽ học kỹ ở bài mười một."""),
     ], checks=["all(s + x >= 0 for s in [0, 300000] for x in [1, 500000])",
                "all(s - x >= 0 for s in [0, 300000, 600000] for x in range(1, s + 1, 100000))"])
     m5 = ln(ngan, "an.nap(1000000)")
@@ -438,4 +439,5 @@ Rồi kiểm: mọi đường đổi dữ liệu có đi qua phép kiểm luật
                    "Dự đoán số chỗ phải rà để bảo vệ luật khi mã lớn dần, với trường public và trường private",
                    "Viết lớp ví tiền có trường riêng tư, hàm tạo và hàm kiểm luật, rồi dùng hai đối tượng"],
                   [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_chk, sc_scale, sc_pit, sc_quiz, sc_lab, sc_rec],
+                  assumes=["jva_new"],
                   covers=[(1, "formula"), (2, "example"), (3, "formula"), (4, "pitfalls"), (5, "quymo"), (6, "practice")])

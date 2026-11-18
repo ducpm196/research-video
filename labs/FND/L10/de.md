@@ -21,4 +21,14 @@ Rồi viết:
 2. **Kiểm độc lập**: tính số dư bằng `awk -F,` từ `gd.csv`, so với số dư của SQL, in `tong khop: <số>` hoặc `LECH: <a> <b>`.
 3. **git**: `git init -q -b main repo`, chép `bao_cao.txt` và `gd.csv` vào `repo`, đặt `user.name`/`user.email` cục bộ, chốt với lời nhắn `bao cao thang 1`, in `git log --format=%s`.
 
-Kết quả đúng sáu dòng như `mong_doi.txt`. Chạy `bash so_tay.sh`; chấm: `bash labs/cham.sh FND L10 so_tay.sh`. Cần sqlite3, awk, git (Git Bash có awk và git; sqlite3 theo bài đầu tiên). Máy kiểm của kho chưa cài sqlite3 nên `loi_giai.sh` có hai dòng thay thế bằng `labs/sqlrun.py`; bạn đã cài sqlite3 thì không cần chúng.
+Kết quả đúng sáu dòng như `mong_doi.txt`. Chạy `bash so_tay.sh`; chấm: `bash labs/cham.sh FND L10 so_tay.sh`. Cần `sqlite3` (cài ở bài đầu tiên; kiểm bằng `sqlite3 --version`), `awk` và `git` (Git Bash có sẵn hai lệnh sau). Chương trình `sqlite3` là bắt buộc. Nếu máy thiếu nó mà lời giải của bạn không kiểm trước, `bash labs/cham.sh` **không** báo thiếu `sqlite3`: nó chỉ báo `KHÁC` (kèm dòng `LECH: …`), vì thông báo `command not found` bị nuốt. Vì vậy chạy `sqlite3 --version` trước khi làm; tệp lời giải mẫu kiểm `command -v sqlite3` ngay trước phần SQL và in `thieu sqlite3, cai theo bai L00` thay vì in nhầm `LECH:`.
+
+## Phụ lục: tệp `sinh.awk` (dùng ở cảnh "Khi dữ liệu lớn gấp 1 000 lần" của video)
+
+Để chạy lại cảnh quy mô, lưu nội dung dưới đây thành `sinh.awk` ở thư mục chứa `so_tay.sh`, rồi `mkdir big && cd big` và `seq 1 10000 | awk -f ../sinh.awk > giaodich.csv`. Bài thực hành không cần tệp này.
+
+```awk
+BEGIN { print "ngay,tk,loai,so_tien" }
+{ printf "2026-01-%02d,A0%d,%s,%d\n", $1 % 28 + 1, $1 % 3 + 1,
+    ($1 % 4 == 0 ? "rut" : "nap"), 1000 * ($1 % 50 + 1) }
+```

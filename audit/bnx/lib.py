@@ -155,11 +155,12 @@ def _auto_introduce(scenes):
                     done = True
 
 
-def lesson(id, slug, title, source, objectives, scenes, assumes=None, rate="-5%"):
+def lesson(id, slug, title, source, objectives, scenes, assumes=None, rate="-5%", covers=None):
     _auto_introduce(scenes)
+    af2 = {"af2": True, "covers": [{"objective": o, "scene": s_} for o, s_ in covers]} if covers else {}
     return slug, {
         "id": id, "course": "BNX", "series": SERIES, "title": title, "voice": "vi-VN-NamMinhNeural", "rate": rate,
-        "depth": "full", "source": source, "assumes": assumes or [], "objectives": objectives, "asr_reviewed": [],
+        "depth": "full", **af2, "source": source, "assumes": assumes or [], "objectives": objectives, "asr_reviewed": [],
         "scenes": scenes,
     }
 

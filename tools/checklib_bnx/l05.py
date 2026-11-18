@@ -50,3 +50,8 @@ def bnx_rotations_per_year(validity_days, days_per_year=365):
 def bnx_leak_window(validity_days, leak_day):
     """Khoá riêng lộ ở ngày leak_day, không thu hồi: chứng chỉ còn dùng được bao nhiêu ngày."""
     return max(0, validity_days - leak_day)
+
+
+def bnx_l05_rotations_fleet(n_services, validity_days, days_per_year=365):
+    """Số lần đổi chứng chỉ trong một năm của cả đội dịch vụ: mỗi dịch vụ đổi days_per_year // (hạn × 2 // 3) lần (công thức đóng)."""
+    return n_services * bnx_rotations_per_year(validity_days, days_per_year)

@@ -12,9 +12,9 @@ Mục tiêu: DMS, CS112, CS115:L00-L21, CS115:L44 · **74 bài** · ✓ 74
 
 ## Kỹ sư AI / học máy
 
-Mục tiêu: CS115, AIF, DSC, MLO, CVI, RLN, PAR:L00-L02, PAR:L11-L12, SEP, CAS:L10 · **246 bài** · ✓ 245
+Mục tiêu: CS115, AIF, DSC, MLO, CVI, RLN, PAR:L00-L02, PAR:L11-L12, SEP, CAS:L10 · **247 bài** · ✓ 247
 
-**DMS** (L00–L07, L09–L10, L16–L19) → **CS112** (L00–L08, L12, L14, L16, L18, L24) → **CS115** → **RBM** (L00–L01, L03, L07, L09–L10, L15–L16) → **CSA** (L00–L11, L13–L16) → **OSY** (L00–L04, L08–L09, L12, L14) → **NET** (L00–L02, L09, L12) → **PAR** (L00–L03, L05–L08, L10–L13) → **SWF** (L00–L01, L03–L04, L06, L11–L12) → **DBS** (L00–L02) → **DSC** → **DSY** (L00) → **AIF** → **LLM** (L00–L01, L03–L06, L08–L09) → **RLN** → **CVI** → **DVO** (L00–L01, L03–L04, L07) → **MLO** → **CLD** (L00–L03, L05, L08, L10) → **ESY** (L00, L09) → **ROB** (L00, L11) → **SEP** → **CAS** (L00, L10)
+**DMS** (L00–L07, L09–L10, L16–L19) → **CS112** (L00–L08, L12, L14, L16, L18, L24) → **CS115** → **RBM** (L00–L01, L03, L07–L10, L15–L16) → **CSA** (L00–L11, L13–L16) → **OSY** (L00–L04, L08–L09, L12, L14) → **NET** (L00–L02, L09, L12) → **PAR** (L00–L03, L05–L08, L10–L13) → **SWF** (L00–L01, L03–L04, L06, L11–L12) → **DBS** (L00–L02) → **DSC** → **DSY** (L00) → **AIF** → **LLM** (L00–L01, L03–L06, L08–L09) → **RLN** → **CVI** → **DVO** (L00–L01, L03–L04, L07) → **MLO** → **CLD** (L00–L03, L05, L08, L10) → **ESY** (L00, L09) → **ROB** (L00, L11) → **SEP** → **CAS** (L00, L10)
 
 ## Kỹ sư mô hình ngôn ngữ lớn và AI agent
 
@@ -66,9 +66,9 @@ Mục tiêu: ESY, RBM, ROB, CVI:L03, CVI:L05-L06, CAS:L01-L04 · **140 bài** ·
 
 ## Đồ hoạ máy tính và thị giác máy tính
 
-Mục tiêu: GFX, CVI, PAR:L06-L09 · **146 bài** · ✓ 146
+Mục tiêu: GFX, CVI, PAR:L06-L09 · **147 bài** · ✓ 147
 
-**DMS** (L00–L03, L05–L07, L09–L10, L19) → **CS112** (L00–L01, L03–L06, L08, L12) → **CS115** (L00–L09, L12–L15, L17–L23, L34, L44) → **RBM** (L00–L01, L03, L07, L09–L10, L14, L16) → **CSA** (L00–L11, L13, L15–L16) → **OSY** (L00–L04) → **NET** (L00–L02, L09, L12) → **PAR** (L00–L03, L05–L13) → **SWF** (L00, L11) → **DBS** (L00–L02) → **DSC** (L00–L10, L14) → **DSY** (L00) → **CVI** → **DVO** (L00) → **MLO** (L00–L02, L05–L06, L08) → **CLD** (L00, L03, L10) → **ESY** (L00, L09) → **ROB** (L00, L11) → **GFX**
+**DMS** (L00–L03, L05–L07, L09–L10, L19) → **CS112** (L00–L01, L03–L06, L08, L12) → **CS115** (L00–L09, L12–L15, L17–L23, L34, L44) → **RBM** (L00–L01, L03, L07–L10, L14, L16) → **CSA** (L00–L11, L13, L15–L16) → **OSY** (L00–L04) → **NET** (L00–L02, L09, L12) → **PAR** (L00–L03, L05–L13) → **SWF** (L00, L11) → **DBS** (L00–L02) → **DSC** (L00–L10, L14) → **DSY** (L00) → **CVI** → **DVO** (L00) → **MLO** (L00–L02, L05–L06, L08) → **CLD** (L00, L03, L10) → **ESY** (L00, L09) → **ROB** (L00, L11) → **GFX**
 
 ## Khoa học máy tính lõi (nghiên cứu, học lên cao)
 

@@ -271,16 +271,18 @@ Cuối bài bạn đếm được số giao dịch theo từng loại.</div>
         st(table(["đã học", "điều cần nhớ hôm nay"],
                  [["① Mảng", "chỉ số chạy từ <code>0</code> tới <code>n − 1</code>; độ dài cố định; vượt chỉ số là lỗi khi chạy"],
                   ["② Lớp và đối tượng", "lớp là bản thiết kế; <code>new</code> tạo một đối tượng theo lớp; gọi phương thức (hàm gắn với đối tượng) bằng dấu chấm, như <code>tk.nap(500000)</code>"],
-                  ["③ Vòng lặp cộng dồn", "biến tổng bắt đầu từ <code>0</code>, mỗi vòng cộng thêm một phần tử"]]),
-           """Ta ôn ba điều. Thứ nhất, mảng có chỉ số từ không tới n trừ một, độ dài cố định.
+                  ["③ Vòng lặp cộng dồn", "biến tổng bắt đầu từ <code>0</code>, mỗi vòng cộng thêm một phần tử"],
+                  ["④ <code>import</code>", "dòng đầu tệp lấy về một lớp có sẵn của Java, như <code>java.math.BigDecimal</code> ở bài 1"]]),
+           """Ta ôn bốn điều. Thứ nhất, mảng có chỉ số từ không tới n trừ một, độ dài cố định.
            Thứ hai, lớp là bản thiết kế, từ khoá tạo mới sinh ra một đối tượng theo bản thiết kế đó, và ta gọi phương thức, tức hàm gắn với đối tượng, bằng dấu chấm.
-           Thứ ba, vòng lặp cộng dồn bắt đầu tổng bằng không, mỗi vòng cộng thêm một phần tử."""),
+           Thứ ba, vòng lặp cộng dồn bắt đầu tổng bằng không, mỗi vòng cộng thêm một phần tử.
+           Thứ tư, dòng nhập ở đầu tệp lấy về một lớp có sẵn của Java, và hôm nay các lớp có sẵn đó là danh sách và bản đồ."""),
         st("""<p>Danh sách và bản đồ <b>cũng là lớp</b>, có sẵn trong thư viện của Java (gói <code>java.util</code>). Ta chỉ cần tạo đối tượng rồi gọi phương thức.</p>""",
            """Tin vui là danh sách và bản đồ cũng chỉ là lớp có sẵn trong thư viện, nên bạn đã biết cách dùng: tạo đối tượng, rồi gọi phương thức."""),
     ])
     sc_sym = sc("sym", "symbol", "Giải mã ký hiệu: danh sách, bản đồ và kiểu trong ngoặc nhọn", [
-        st(code_block(tong, lines=(5, 15), title="Phần thân hàm chính của Tong.java"),
-           """Chương trình đầu tiên tạo một danh sách giao dịch, thêm ba số tiền, rồi cộng tổng. Ta đọc từng ký hiệu ở bảng sau."""),
+        st(code_block(tong, lines=(1, 1), title="Đầu tệp Tong.java") + code_block(tong, lines=(5, 15), title="Thân hàm chính"),
+           """Chương trình đầu tiên có một dòng nhập ở đầu tệp, rồi tạo một danh sách giao dịch, thêm ba số tiền, và cộng tổng. Ta đọc từng ký hiệu ở bảng sau."""),
         st(table(["viết", "nghĩa"],
                  [["<code>import java.util.ArrayList;</code>", "dòng đầu tệp: mượn lớp danh sách từ thư viện"],
                   ["<code>ArrayList&lt;Long&gt;</code>", "danh sách mà mỗi phần tử là một số <code>Long</code>; cặp ngoặc nhọn <code>&lt;…&gt;</code> gọi là <b>kiểu tổng quát</b>: một khuôn dùng chung, kiểu phần tử điền vào trong"],
@@ -294,16 +296,18 @@ Cuối bài bạn đếm được số giao dịch theo từng loại.</div>
            Phương thức lấy nhận chỉ số, phương thức kích thước đếm phần tử.
            Vòng lặp duyệt gán lần lượt từng phần tử cho biến x, và dùng được cả với mảng.""", clear=True),
         st(table(["viết", "nghĩa"],
-                 [["<code>HashMap&lt;String, Long&gt;</code>", "bản đồ: khoá là chuỗi (số tài khoản), giá trị là số dư"],
+                 [["<code>import java.util.HashMap;</code>", "mượn lớp bản đồ, cùng nhóm <code>java.util</code> với danh sách"],
+                  ["<code>HashMap&lt;String, Long&gt;</code>", "bản đồ: khoá là chuỗi (số tài khoản), giá trị là số dư"],
                   ["<code>m.put(k, v)</code>", "đặt giá trị <code>v</code> cho khoá <code>k</code>; khoá đã có thì <b>ghi đè</b>"],
                   ["<code>m.get(k)</code>", "lấy giá trị của khoá <code>k</code>; không có khoá thì ra <code>null</code>"],
                   ["<code>m.getOrDefault(k, 0L)</code>", "như <code>get</code>, nhưng không có khoá thì ra giá trị mặc định"],
                   ["<code>m.size()</code>, <code>m.values()</code>", "số khoá; tất cả giá trị, để duyệt"]]),
-           """Bảng thứ hai là bản đồ, với hai kiểu trong ngoặc nhọn: khoá là chuỗi, giá trị là số dư.
+           """Bảng thứ hai là bản đồ. Dòng nhập đầu tiên mượn lớp bản đồ, cùng nhóm với danh sách.
+           Bản đồ có hai kiểu trong ngoặc nhọn: khoá là chuỗi, giá trị là số dư.
            Phương thức đặt gắn giá trị cho khoá, khoá đã có thì ghi đè.
            Phương thức lấy trả giá trị của khoá, không có khoá thì trả giá trị rỗng.
            Lấy hoặc mặc định thì trả con số mặc định khi không có khoá.
-           Còn lại là đếm số khoá, và lấy mọi giá trị để duyệt.""", clear=True),
+           Còn lại là đếm số khoá, và lấy mọi giá trị để duyệt.""", clear=True, introduces=["jva_hashmap"]),
         st(out_block(tong),
            """Chạy thật chương trình đầu tiên: ba giao dịch, phần tử đầu là năm trăm nghìn.
            Tổng là năm trăm nghìn, trừ hai trăm nghìn, cộng một triệu rưỡi, ra một triệu tám trăm nghìn.""", clear=True),
@@ -341,9 +345,11 @@ Cuối bài bạn đếm được số giao dịch theo từng loại.</div>
                  [["độ dài", "cố định khi tạo", "lớn dần khi thêm", "lớn dần khi đặt khoá mới"],
                   ["tìm phần tử theo", "chỉ số <code>a[i]</code>", "chỉ số <code>get(i)</code>", "khoá <code>get(k)</code>"],
                   ["không có thì", "lỗi khi chạy", "lỗi khi chạy", "ra <code>null</code> (hoặc mặc định)"],
-                  ["chứa số trần <code>long</code>?", "được", "không, dùng <code>Long</code>", "không, dùng <code>Long</code>"]]),
+                  ["chứa số trần <code>long</code>?", "được", "không, dùng <code>Long</code>", "không, dùng <code>Long</code>"],
+                  ["thứ tự khi duyệt", "theo chỉ số", "đúng thứ tự thêm vào", "<b>không bảo đảm</b> thứ tự nào"]]),
            """Bảng này so ba cách giữ nhiều giá trị. Mảng cố định độ dài, danh sách và bản đồ lớn dần.
-           Sai chỉ số thì báo lỗi khi chạy, còn thiếu khoá thì bản đồ trả giá trị rỗng hoặc mặc định."""),
+           Sai chỉ số thì báo lỗi khi chạy, còn thiếu khoá thì bản đồ trả giá trị rỗng hoặc mặc định.
+           Về thứ tự khi duyệt, danh sách giữ đúng thứ tự thêm vào, còn bản đồ không hứa thứ tự nào, nên đừng dựa vào thứ tự in ra của nó."""),
     ])
     sc_form = sc("formula", "formula", "Suy ra từng bước: đếm số giao dịch theo loại", [
         st(code_block(dem, lines=(5, 6), title="Bước 1. Có dữ liệu và một bản đồ rỗng"),
@@ -415,8 +421,10 @@ Cuối bài bạn đếm được số giao dịch theo từng loại.</div>
            """Một nghìn tài khoản mất một nghìn bước, một triệu tài khoản mất một triệu bước: tăng đúng theo số tài khoản.""", clear=True),
         st(table(["số tài khoản", "danh sách: số so sánh mỗi lượt tra (tối đa)", "bản đồ: mỗi lượt tra (trung bình)"],
                  [["1 000", "1 000", "khoảng 1"], ["1 000 000", "1 000 000", "khoảng 1"]])
-           + "<span class='note'>Phần mô tả lớp <code>HashMap</code> trong Java SE 21 nói phép lấy và đặt có thời gian gần như không đổi khi hàm băm phân tán tốt.</span>",
-           """Tra bằng bản đồ khác hẳn. Theo phần mô tả lớp này trong Java, phép lấy và đặt có thời gian gần như không đổi khi các khoá phân tán đều. Nên mỗi lượt tra tốn cỡ một bước, dù có một nghìn hay một triệu tài khoản.
+           + "<p class='note'>Bản đồ cất mỗi khoá vào một ngăn, số thứ tự ngăn tính ra từ chính khoá bằng <b>hàm băm</b>; tra thì tính lại số ngăn rồi mở thẳng ngăn đó. Con số “khoảng 1” lấy từ mô tả lớp <code>HashMap</code> trong Java SE 21, không đo trong bài.</p>",
+           """Tra bằng bản đồ khác hẳn. Bản đồ cất mỗi khoá vào một ngăn, số thứ tự ngăn được tính ra từ chính khoá bằng một công thức gọi là hàm băm. Khi tra, máy tính lại số ngăn rồi mở thẳng ngăn đó, nên không phải duyệt từng phần tử.
+           Theo phần mô tả lớp này trong Java, phép lấy và đặt có thời gian gần như không đổi khi các khoá phân tán đều.
+           Nên mỗi lượt tra tốn cỡ một bước, dù có một nghìn hay một triệu tài khoản.
            Nếu mỗi giây có một nghìn lượt tra trên một triệu tài khoản, danh sách phải làm đến một nghìn triệu phép so sánh mỗi giây, số minh hoạ, còn bản đồ làm cỡ một nghìn bước.""",
            clear=True),
         st("""<div class="box key"><b>Điều người làm nghề rút ra.</b> Chọn cấu trúc dữ liệu theo <b>thao tác chính</b> và <b>quy mô dự kiến</b>: tra theo khoá thì bản đồ, giữ thứ tự thêm vào thì danh sách.
@@ -483,4 +491,5 @@ Ngoài khoảng đó, máy ảo mặc định tạo đối tượng mới, nên 
                    "Dự đoán số bước mỗi lượt tra khi số tài khoản tăng gấp nghìn lần, với danh sách và với bản đồ",
                    "Viết chương trình thống kê giao dịch: đếm theo loại bằng bản đồ và sắp danh sách số tiền giảm dần"],
                   [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_tra, sc_lam, sc_chk, sc_scale, sc_pit, sc_quiz, sc_lab, sc_rec],
+                  assumes=["jva_import", "jva_new"],
                   covers=[(1, "example"), (2, "example"), (3, "formula"), (4, "pitfalls"), (5, "tracuu"), (6, "muiten"), (7, "quymo"), (8, "practice")])

@@ -1,0 +1,812 @@
+id: L29
+course: BNX
+series: BNX · Backend ngân hàng mở rộng theo JD
+title: 'Bài 29 — CQRS và Event Sourcing cho sổ tiền: kho sự kiện, phát lại và bản
+  chụp'
+voice: vi-VN-NamMinhNeural
+rate: -5%
+depth: full
+af2: true
+covers:
+- objective: 1
+  scene: example
+- objective: 2
+  scene: formula
+- objective: 3
+  scene: example
+- objective: 4
+  scene: example
+- objective: 5
+  scene: check
+- objective: 6
+  scene: quymo
+- objective: 7
+  scene: practice
+source: 'curriculum/bnx.yaml L29; audit/bnx/verify_bnx.py L29; audit/bnx/sources_l29.md:
+  không có số liệu sản phẩm ngoài; mã Python 3 + sqlite3 chạy thật; mọi số đo là đếm
+  sự kiện (tất định); khái niệm CQRS/Event Sourcing do bài tự cài đặt và nói rõ là
+  mô hình của bài'
+assumes: []
+objectives:
+- Giải thích vì sao kho sự kiện chỉ thêm và chặn sửa, xoá bằng trigger của cơ sở dữ
+  liệu
+- Dựng lại số dư bằng cách phát lại sự kiện từ đầu
+- Sửa một sự kiện sai bằng sự kiện bù thay vì sửa kho
+- Chỉ ra vì sao mô hình đọc có thể trả số cũ và nói khi nào chấp nhận được
+- So sánh bảng số dư sửa tại chỗ với kho sự kiện về câu hỏi kiểm toán
+- Đếm số sự kiện phải đọc khi kho lớn gấp 1 000 lần, có và không có bản chụp
+- Viết hàm phát lại có bản chụp và sự kiện bù
+asr_reviewed:
+- {sentence: "Mã dựng kho dùng ba chỗ mới nên ta giải trước.", reason: "ASR chép “Mãi dừng khó dùng 3 chỗ mới nên ta giải trước” (0.727): lệch âm/thanh thuần Việt: mã dựng kho/mãi dừng khó — NOT_VERIFIED bằng tai người"}
+- {sentence: "Bản chụp giữ chi phí dưới một nghìn.", reason: "ASR chép “Bản trục giữ chi phí dưới một niên.” (0.75): lệch âm/thanh thuần Việt: chụp/trục, nghìn/niên — NOT_VERIFIED bằng tai người"}
+- {sentence: "Ta chạy thật bằng Python và cơ sở dữ liệu nhỏ trong bộ nhớ.", reason: "ASR chép “Ta chạy thật bằng thai thôn và cơ sở dữ liệu nhỏ trong bộ nhớ.” (0.897): “python” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Pai-thon”), ASR viết “thai thôn” — NOT_VERIFIED bằng tai người"}
+- sentence: Hai loại sự kiện là nạp thì cộng và rút thì trừ.
+  reason: 'ASR chép “2 loại sự kiến là nạp thi cộng và rút thi trư.” (0.667): lệch
+    âm/thanh thuần Việt: kiện/kiến, thì/thi, thì trừ/thi trư — NOT_VERIFIED bằng tai
+    người'
+scenes:
+- id: hook
+  kind: hook
+  title: 'Số dư 630: bảng chỉ nhớ con số, kho sự kiện nhớ cả đường đi'
+  checks:
+  - alg.bnx_l29_replay([('NAP', 1000), ('RUT', 300), ('NAP', 50), ('RUT', 120)]) ==
+    630
+  steps:
+  - show: '<p>Hai cách giữ số dư của một tài khoản qua bốn giao dịch: nạp 1000, rút
+      300, nạp 50, rút 120.</p>
+
+      <div class="box key">Cách 1 (một bảng số dư, mỗi giao dịch <b>sửa</b> con số):
+      còn <b>630</b>, nhưng không ai trả lời được &laquo;630 đến từ đâu&raquo;. Cách
+      2 (<b>kho sự kiện chỉ thêm</b>): cũng <b>630</b> và còn đủ bốn sự kiện.
+
+      Sự kiện nhập sai thì sửa ra sao khi kho cấm sửa? Và 10⁶ sự kiện thì dựng lại
+      số dư mất bao nhiêu lần đọc?</div>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    say: 'Chào bạn, hai cách giữ số dư qua bốn giao dịch: nạp một nghìn, rút ba trăm,
+      nạp năm mươi, rút một trăm hai mươi. Cách một là bảng số dư mà mỗi giao dịch
+      sửa con số, còn sáu trăm ba mươi nhưng không ai biết nó từ đâu. Cách hai là
+      kho sự kiện chỉ thêm, cũng ra sáu trăm ba mươi và còn đủ bốn sự kiện. Sự kiện
+      sai thì sửa ra sao khi kho cấm sửa, và một triệu sự kiện thì mất bao nhiêu lần
+      đọc?'
+- id: prereq
+  kind: prereq
+  title: 'Trước hết: sáu điều cần hiểu'
+  checks:
+  - 1000 - 300 + 50 - 120 == 630
+  steps:
+  - show: '<table class=''t''><tr><th>khái niệm</th><th>nghĩa</th><th>ví dụ</th></tr><tr><td>①
+      sự kiện (event)</td><td>ghi lại <b>điều đã xảy ra</b>, thì quá khứ, không đổi
+      được</td><td><code>NAP 1000</code> trên tài khoản 001</td></tr><tr><td>② số
+      dư là suy ra</td><td>số dư không phải dữ liệu gốc: nó là <b>tổng</b> của các
+      sự kiện</td><td>1000 − 300 + 50 − 120 = 630</td></tr><tr><td>③ chỉ thêm (append-only)</td><td>chỉ
+      ghi thêm vào cuối, không sửa, không xoá</td><td>như sổ cái có bút mực</td></tr><tr><td>④
+      trigger</td><td>đoạn lệnh cơ sở dữ liệu tự chạy trước hoặc sau một lệnh ghi</td><td>chặn
+      <code>UPDATE</code> và <code>DELETE</code></td></tr><tr><td>⑤ bản chiếu (projection)</td><td>bảng
+      tóm tắt <b>dựng từ sự kiện</b> để đọc nhanh; có thể xoá và dựng lại</td><td>bảng
+      số dư theo tài khoản</td></tr><tr><td>⑥ <b>CQRS</b> và <b>Event Sourcing</b></td><td>CQRS
+      (Command Query Responsibility Segregation): tách mô hình <b>ghi</b> khỏi mô
+      hình <b>đọc</b>. Event Sourcing: lưu <b>chuỗi sự kiện</b> làm nguồn sự thật,
+      không lưu con số cuối</td><td>bài này làm cả hai: kho sự kiện để ghi, bảng số
+      dư để đọc</td></tr></table>'
+    focus:
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.5'
+    - '1.6'
+    - '1.7'
+    introduces:
+    - bnx_cqrs
+    - bnx_event_sourcing
+    say: Trước hết ta cần hiểu sáu điều, sự kiện ghi lại điều đã xảy ra và không đổi
+      được. Số dư là tổng các sự kiện, không phải dữ liệu gốc. Chỉ thêm nghĩa là chỉ
+      ghi vào cuối, không sửa, không xoá. Đoạn lệnh tự chạy là đoạn lệnh của cơ sở
+      dữ liệu chạy quanh một lệnh ghi. Bản chiếu là bảng tóm tắt dựng từ sự kiện để
+      đọc nhanh, và dựng lại được. Hai tên viết tắt trên màn hình là tách mô hình
+      ghi khỏi mô hình đọc, và lưu chuỗi sự kiện làm nguồn sự thật.
+- id: sym
+  kind: symbol
+  title: Giải mã các tên trên màn hình
+  checks:
+  - alg.bnx_l29_replay([('NAP', 5), ('RUT', 2)]) == 3
+  steps:
+  - show: '<table class=''t''><tr><th>tên</th><th>nghĩa</th></tr><tr><td><code>NAP</code>,
+      <code>RUT</code></td><td>hai loại sự kiện: nạp thì cộng, rút thì trừ</td></tr><tr><td><code>seq</code></td><td>số
+      thứ tự tăng dần của sự kiện trong kho: thứ tự là một phần của sự thật</td></tr><tr><td><code>CREATE
+      TRIGGER … BEFORE UPDATE ON su_kien BEGIN … END</code></td><td>đoạn tự chạy trước
+      mỗi lệnh sửa của bảng; bên trong, <code>RAISE(ABORT, …)</code> huỷ lệnh đang
+      chạy và báo lỗi</td></tr><tr><td>phát lại (replay)</td><td>đọc sự kiện từ đầu
+      và áp dụng lần lượt để dựng trạng thái</td></tr><tr><td>bản chụp (snapshot)</td><td>số
+      dư đã dựng tại một vị trí; lần sau chỉ phát lại phần sau nó</td></tr><tr><td>sự
+      kiện bù</td><td>sự kiện mới đảo ngược tác dụng của một sự kiện sai, thay vì
+      sửa nó</td></tr></table>'
+    focus:
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.5'
+    - '1.6'
+    - '1.7'
+    say: Hai loại sự kiện là nạp thì cộng và rút thì trừ. Số thứ tự tăng dần cho biết
+      thứ tự, một phần của sự thật. Đoạn lệnh tự chạy trước mỗi lệnh sửa, và lệnh
+      huỷ bên trong dừng lệnh đang chạy rồi báo lỗi. Phát lại là áp dụng sự kiện từ
+      đầu để dựng trạng thái. Bản chụp là số dư đã dựng tại một vị trí, để chỉ phát
+      lại phần sau nó. Sự kiện bù đảo ngược tác dụng của một sự kiện sai, thay vì
+      sửa nó.
+- id: intuition
+  kind: intuition
+  title: 'Hình dung: tách ghi và đọc, và bản chụp'
+  checks:
+  - alg.bnx_l29_events_to_read(2500, 0) == 2500 and alg.bnx_l29_events_to_read(2500,
+    1000) == 500
+  - alg.bnx_l29_events_to_read(2500500, 1000) == 500
+  steps:
+  - show: '<div><svg width="1500" height="500" viewBox="0 0 1500 500" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><text
+      x="750" y="40" font-size="26" text-anchor="middle" fill="#1f2937" font-weight="bold">Tách
+      ghi và đọc: phía ghi chỉ thêm sự kiện, phía đọc giữ bản chiếu</text><rect x="40"
+      y="150" width="240" height="100" rx="10" fill="#e5e7eb" stroke="#6b7280" stroke-width="3"/><text
+      x="160.0" y="193" font-size="22" text-anchor="middle" fill="#1f2937" font-weight="bold">lệnh
+      ghi</text><text x="160.0" y="223" font-size="22" text-anchor="middle" fill="#1f2937">nạp
+      / rút</text><rect x="360" y="120" width="360" height="160" rx="10" fill="#dbeafe"
+      stroke="#2a78d6" stroke-width="3"/><text x="540.0" y="163" font-size="22" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">kho sự kiện</text><text x="540.0" y="193"
+      font-size="22" text-anchor="middle" fill="#1f2937">chỉ thêm, có số thứ tự</text><text
+      x="540.0" y="223" font-size="22" text-anchor="middle" fill="#1f2937">NAP 1000,
+      RUT 300</text><text x="540.0" y="253" font-size="22" text-anchor="middle" fill="#1f2937">NAP
+      50, RUT 120</text><rect x="820" y="150" width="280" height="100" rx="10" fill="#fef3c7"
+      stroke="#d97706" stroke-width="3"/><text x="960.0" y="193" font-size="22" text-anchor="middle"
+      fill="#1f2937">bộ chiếu</text><text x="960.0" y="223" font-size="22" text-anchor="middle"
+      fill="#1f2937">đọc sự kiện mới, cập nhật</text><rect x="1200" y="120" width="260"
+      height="160" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="3"/><text
+      x="1330.0" y="178" font-size="22" text-anchor="middle" fill="#1f2937" font-weight="bold">mô
+      hình đọc</text><text x="1330.0" y="208" font-size="22" text-anchor="middle"
+      fill="#1f2937">bảng số dư: 630</text><text x="1330.0" y="238" font-size="22"
+      text-anchor="middle" fill="#1f2937">truy vấn nhanh</text><line x1="285" y1="200"
+      x2="355" y2="200" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><line
+      x1="725" y1="200" x2="815" y2="200" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><text
+      x="770" y="150" font-size="20" text-anchor="middle" fill="#1f2937">theo</text><text
+      x="770" y="174" font-size="20" text-anchor="middle" fill="#1f2937">thứ tự</text><line
+      x1="1105" y1="200" x2="1195" y2="200" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><rect
+      x="360" y="350" width="740" height="80" rx="10" fill="#f3e8ff" stroke="#9333ea"
+      stroke-width="3"/><text x="730.0" y="398" font-size="22" text-anchor="middle"
+      fill="#1f2937">kho là nguồn sự thật: mô hình đọc hỏng thì xoá và chiếu lại từ
+      đầu</text><text x="750" y="470" font-size="24" text-anchor="middle" fill="#1f2937"
+      font-weight="bold">Đánh đổi: đọc có thể trễ so với ghi (chấp nhận được khi nào,
+      xem phần ví dụ)</text></svg></div>'
+    clear: true
+    say: Hình này tách ghi và đọc, lệnh ghi chỉ thêm sự kiện vào kho, kho có số thứ
+      tự và không sửa được. Bộ chiếu đọc sự kiện mới theo thứ tự rồi cập nhật bảng
+      số dư cho truy vấn nhanh. Kho là nguồn sự thật, nên mô hình đọc hỏng thì chiếu
+      lại từ đầu. Đánh đổi là phía đọc có thể trễ.
+  - show: '<div><svg width="1500" height="460" viewBox="0 0 1500 460" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><text
+      x="750" y="40" font-size="26" text-anchor="middle" fill="#1f2937" font-weight="bold">Bản
+      chụp: dựng số dư tại sự kiện 2 500 500 mà không đọc từ đầu</text><rect x="40"
+      y="120" width="1420" height="70" rx="10" fill="#e5e7eb" stroke="#6b7280" stroke-width="3"/><text
+      x="750.0" y="163" font-size="22" text-anchor="middle" fill="#1f2937">sự kiện
+      1 … 1 000 … 2 000 … 2 500 000 (bản chụp) … 2 500 500</text><rect x="40" y="230"
+      width="640" height="80" rx="10" fill="#fee2e2" stroke="#dc2626" stroke-width="3"/><text
+      x="360.0" y="278" font-size="22" text-anchor="middle" fill="#1f2937" font-weight="bold">không
+      bản chụp: đọc 2 500 500 sự kiện</text><rect x="760" y="230" width="700" height="80"
+      rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="3"/><text x="1110.0" y="278"
+      font-size="22" text-anchor="middle" fill="#1f2937" font-weight="bold">có bản
+      chụp mỗi 1 000: nạp bản chụp rồi đọc 500 sự kiện</text><text x="750" y="380"
+      font-size="24" text-anchor="middle" fill="#1f2937" font-weight="bold">số lần
+      đọc có bản chụp: n mod 1 000 (tối đa 999), không tăng theo cỡ kho</text></svg></div>'
+    clear: true
+    say: Hình thứ hai là bản chụp, để biết số dư tại sự kiện hai triệu năm trăm nghìn
+      năm trăm mà không đọc từ đầu. Không có bản chụp thì phải đọc hết. Có bản chụp
+      mỗi một nghìn sự kiện thì nạp bản chụp gần nhất rồi chỉ đọc năm trăm, tối đa
+      chín trăm chín mươi chín.
+- id: formula
+  kind: formula
+  title: 'Suy ra từng bước: từ sự kiện tới số dư'
+  checks:
+  - alg.bnx_l29_replay([('NAP', 1000), ('RUT', 300), ('NAP', 50), ('RUT', 120)]) ==
+    630
+  - alg.bnx_l29_replay([('NAP', 1000), ('RUT', 300), ('NAP', 50), ('RUT', 120), ('RUT',
+    500)]) == 130
+  - alg.bnx_l29_replay([('NAP', 1000), ('RUT', 300), ('NAP', 50), ('RUT', 120), ('RUT',
+    500), ('NAP', 500), ('RUT', 50)]) == 580
+  - 2500500 % 1000 == 500
+  steps:
+  - show: '<table class=''t''><tr><th>viết trong mã</th><th>đọc là</th><th>ví dụ</th></tr><tr><td><code>sqlite3.connect(":memory:")</code>,
+      <code>db.executescript("""…""")</code></td><td>mở một cơ sở dữ liệu nhỏ nằm
+      trong bộ nhớ, tắt chương trình là mất; <code>executescript</code> chạy nhiều
+      lệnh SQL (câu lệnh nói với cơ sở dữ liệu) viết giữa ba dấu nháy kép</td><td>kho
+      tạm, không để lại tệp</td></tr><tr><td><code>CREATE TABLE su_kien (seq INTEGER
+      PRIMARY KEY AUTOINCREMENT, tk TEXT, …)</code></td><td>tạo bảng: mỗi cột là tên
+      rồi kiểu (<code>INTEGER</code> số nguyên, <code>TEXT</code> chữ); <code>PRIMARY
+      KEY AUTOINCREMENT</code>: cột không trùng, tự tăng 1, 2, 3 ở mỗi dòng mới</td><td>dòng
+      đầu có <code>seq</code> = 1</td></tr><tr><td><code>INSERT OR REPLACE</code>,
+      <code>DROP TRIGGER</code>, chuỗi băm</td><td><code>INSERT OR REPLACE</code>:
+      ghi đè dòng cùng <code>seq</code>; <code>DROP TRIGGER</code>: gỡ đoạn tự chạy;
+      chuỗi băm: mỗi sự kiện kèm mã băm có cả mã băm sự kiện trước, nên sửa lén một
+      sự kiện làm đứt chuỗi</td><td></td></tr></table>'
+    introduces:
+    - bnx_ma_bam
+    clear: true
+    say: 'Mã dựng kho dùng ba chỗ mới nên ta giải trước. Mở cơ sở dữ liệu nhỏ trong
+      bộ nhớ rồi chạy một loạt lệnh viết giữa ba dấu nháy kép. Tạo bảng gồm các cột,
+      mỗi cột có tên và kiểu, và cột khoá chính tự tăng một ở mỗi dòng mới. Ba chỗ
+      hở của việc chặn: ghi đè, gỡ đoạn tự chạy, và chuỗi băm là cách phát hiện sửa
+      lén.'
+  - show: '<p><b>Bước 1.</b> Muốn mọi con số có thể giải thích, ta ghi <b>điều đã
+      xảy ra</b> thay vì ghi con số. Mỗi giao dịch là một dòng thêm vào cuối kho,
+      với số thứ tự tăng dần.</p><p><b>KhoSuKien.py (trích): bảng sự kiện và hai trigger
+      chặn sửa, xoá</b></p><div class="code"><div>db = sqlite3.connect(":memory:")</div><div>db.executescript("""</div><div>CREATE
+      TABLE su_kien (seq INTEGER PRIMARY KEY AUTOINCREMENT, tk TEXT, loai TEXT, tien
+      INTEGER);</div><div>CREATE TRIGGER khong_sua BEFORE UPDATE ON su_kien</div><div>BEGIN
+      SELECT RAISE(ABORT, ''kho su kien chi them, khong sua''); END;</div><div>CREATE
+      TRIGGER khong_xoa BEFORE DELETE ON su_kien</div><div>BEGIN SELECT RAISE(ABORT,
+      ''kho su kien chi them, khong xoa''); END;</div><div>""")</div></div><p class="note"><b>Giới
+      hạn:</b> hai trigger chỉ chặn lệnh <code>UPDATE</code> và <code>DELETE</code>
+      thông thường. <code>INSERT OR REPLACE</code> vẫn ghi đè sự kiện cùng <code>seq</code>
+      (đo trên SQLite 3.49), còn <code>DROP TRIGGER</code> và <code>DROP TABLE</code>
+      vẫn chạy. Nên cần thêm quyền tối thiểu và chuỗi băm nối các sự kiện để phát
+      hiện sửa lén.</p>'
+    focus:
+    - 1
+    - 3
+    clear: true
+    say: 'Bước một: để con số giải thích được, ta ghi điều đã xảy ra thay vì ghi con
+      số, mỗi giao dịch là một dòng thêm vào cuối kho. Hai đoạn lệnh tự chạy chặn
+      lệnh sửa và xoá thông thường, nhưng lệnh ghi đè hay gỡ vẫn lách được, nên cần
+      thêm quyền tối thiểu và chuỗi băm.'
+  - show: '<p><b>Bước 2. Số dư là kết quả phát lại.</b> Bắt đầu từ 0, áp dụng từng
+      sự kiện theo thứ tự: nạp cộng, rút trừ. Cùng kho thì luôn ra cùng số dư.</p>$$0
+      + 1000 = 1000;\;\; 1000 - 300 = 700;\;\; 700 + 50 = 750;\;\; 750 - 120 = \hl{630}$$'
+    focus:
+    - 1
+    - 2
+    clear: true
+    say: 'Bước hai, số dư là kết quả phát lại: bắt đầu từ không, áp dụng từng sự kiện
+      theo thứ tự, nạp cộng, rút trừ. Cùng một kho thì ra cùng một số dư, và số dư
+      cuối là sáu trăm ba mươi.'
+  - show: <p><b>Bước 3. Tách ghi và đọc.</b> Truy vấn &laquo;số dư?&raquo; mà phát
+      lại cả kho mỗi lần thì chậm. Nên phía ghi chỉ thêm sự kiện, còn một <b>bộ chiếu</b>
+      đọc sự kiện mới và cập nhật <b>bản chiếu</b> (bảng số dư) cho truy vấn nhanh.
+      Bản chiếu chạy <b>sau</b> kho nên có thể <b>trễ</b>.</p>
+    clear: true
+    say: Bước ba tách ghi và đọc, phát lại cả kho mỗi lần hỏi thì chậm, nên phía ghi
+      chỉ thêm sự kiện, còn bộ chiếu cập nhật bảng số dư cho truy vấn nhanh. Bản chiếu
+      chạy sau kho nên có thể trễ.
+  - show: <p><b>Bước 4. Sự kiện sai thì bù.</b> Không sửa được, nên thêm sự kiện <b>đảo
+      ngược</b> rồi thêm sự kiện đúng. Lịch sử giữ nguyên cả cái sai lẫn cách sửa,
+      nên kiểm toán thấy hết.</p>$$630 - 500 = 130 \;\Rightarrow\; 130 + 500 = 630
+      \;\Rightarrow\; 630 - 50 = \hl{580}$$
+    focus:
+    - 1
+    - 2
+    clear: true
+    say: 'Bước bốn, sự kiện sai thì bù: không sửa được nên ta thêm sự kiện đảo ngược
+      rồi sự kiện đúng. Lịch sử giữ cả cái sai lẫn cách sửa, và số dư đúng là năm
+      trăm tám mươi.'
+    introduces:
+    - implies
+  - show: '<p><b>Bước 5. Bản chụp.</b> Phát lại từ đầu tốn thời gian tỉ lệ với số
+      sự kiện. Cứ mỗi <b>k</b> sự kiện, lưu số dư tại đó. Dựng số dư tại sự kiện thứ
+      <b>n</b>: nạp bản chụp gần nhất, đọc phần dư.</p>$$\text{số lần đọc} = \text{(n
+      chia lấy dư cho k)} \quad (k = 1000,\; n = 2\,500\,500 \Rightarrow \hl{500})$$'
+    focus:
+    - - 1
+    - 2
+    clear: true
+    say: 'Bước năm là bản chụp, phát lại từ đầu tốn thời gian tỉ lệ với số sự kiện,
+      nên cứ mỗi k sự kiện ta lưu số dư. Dựng số dư tại sự kiện thứ n thì nạp bản
+      chụp gần nhất rồi đọc phần dư, tức n chia lấy dư cho k: với k bằng một nghìn,
+      chỉ đọc năm trăm.'
+- id: example
+  kind: example
+  title: Ví dụ chạy thật, từng phép tính
+  checks:
+  - alg.bnx_l29_replay([('NAP', 1000), ('RUT', 300), ('NAP', 50)]) == 750 and alg.bnx_l29_replay([('NAP',
+    1000), ('RUT', 300)]) == 700
+  - alg.bnx_l29_replay([('NAP', 1000), ('RUT', 300), ('NAP', 50), ('RUT', 120), ('RUT',
+    500), ('NAP', 500), ('RUT', 50)]) == 580
+  steps:
+  - show: '<table class=''t''><tr><th>viết trong mã</th><th>đọc là</th><th>ví dụ</th></tr><tr><td><code>def
+      ghi(tk, loai, tien):</code>, <code>ghi("001", "NAP", 1000)</code></td><td>khai
+      hàm <code>ghi</code> nhận ba đối số; dòng sau gọi nó với ba giá trị cụ thể</td><td>mỗi
+      lần gọi thêm một sự kiện</td></tr><tr><td><code>INSERT INTO su_kien (tk, loai,
+      tien) VALUES (?, ?, ?)</code></td><td>thêm một dòng vào bảng; mỗi <code>?</code>
+      là chỗ giữ, bộ ngoặc theo sau điền giá trị vào đúng thứ tự</td><td><code>(''001'',
+      ''NAP'', 1000)</code></td></tr><tr><td><code>UPDATE su_kien SET tien = 900 WHERE
+      seq = 2</code>, <code>DELETE FROM su_kien WHERE seq = 2</code></td><td><code>UPDATE
+      … SET … WHERE</code>: sửa cột của các dòng thoả điều kiện; <code>DELETE FROM
+      … WHERE</code>: xoá các dòng thoả điều kiện</td><td>cả hai nhắm dòng có <code>seq</code>
+      bằng 2</td></tr></table>'
+    clear: true
+    say: Trước khi đọc mã, ta giải các lệnh viết trong đó. Hàm ghi nhận ba đối số,
+      và dòng sau gọi nó với ba giá trị cụ thể. Lệnh thêm một dòng, mỗi dấu hỏi là
+      chỗ giữ được điền theo thứ tự. Một lệnh sửa cột của dòng thoả điều kiện, một
+      lệnh xoá dòng thoả điều kiện.
+  - show: '<table class=''t''><tr><th>viết trong mã</th><th>đọc là</th><th>ví dụ</th></tr><tr><td><code>try:
+      … except sqlite3.DatabaseError as e:</code></td><td>chạy thử lệnh; cơ sở dữ
+      liệu báo lỗi thì nhảy sang <code>except</code>, biến <code>e</code> giữ thông
+      báo</td><td>in <code>kho su kien chi them, khong sua</code></td></tr><tr><td><code>SELECT
+      COUNT(*) FROM su_kien</code>, <code>.fetchone()[0]</code></td><td><code>COUNT(*)</code>
+      đếm số dòng; <code>fetchone()</code> lấy dòng kết quả đầu, <code>[0]</code>
+      lấy cột đầu của dòng đó</td><td>dòng <code>(3,)</code> cho <code>3</code></td></tr></table>'
+    clear: true
+    say: Khối thử chạy lệnh, nếu cơ sở dữ liệu báo lỗi thì nhảy sang phần bắt lỗi,
+      nơi biến giữ thông báo. Lệnh đếm số dòng, rồi lấy dòng kết quả đầu và cột đầu
+      của nó.
+  - show: '<p><b>KhoSuKien.py (trích): ghi ba sự kiện rồi thử sửa và xoá</b></p><div
+      class="code"><div>def ghi(tk, loai, tien):</div><div>    db.execute("INSERT
+      INTO su_kien (tk, loai, tien) VALUES (?, ?, ?)", (tk, loai, tien))</div><div>ghi("001",
+      "NAP", 1000)</div><div>ghi("001", "RUT", 300)</div><div>ghi("001", "NAP", 50)</div><div>try:</div><div>    db.execute("UPDATE
+      su_kien SET tien = 900 WHERE seq = 2")</div><div>except sqlite3.DatabaseError
+      as e:</div><div>    print("sua su kien:", e)</div><div>try:</div><div>    db.execute("DELETE
+      FROM su_kien WHERE seq = 2")</div><div>except sqlite3.DatabaseError as e:</div><div>    print("xoa
+      su kien:", e)</div><div>print("so su kien:", db.execute("SELECT COUNT(*) FROM
+      su_kien").fetchone()[0])</div></div>'
+    focus:
+    - 1
+    - 2
+    clear: true
+    say: Ta chạy thật bằng Python và cơ sở dữ liệu nhỏ trong bộ nhớ. Chương trình
+      ghi ba sự kiện, rồi thử sửa số tiền của sự kiện thứ hai và thử xoá nó.
+  - show: '<p><b>Kết quả chạy thật</b></p><div class="code"><div>sua su kien: kho
+      su kien chi them, khong sua</div><div>xoa su kien: kho su kien chi them, khong
+      xoa</div><div>so su kien: 3</div></div>$$① \; \text{sửa} \Rightarrow \text{bị
+      chặn}; \;\; \text{xoá} \Rightarrow \text{bị chặn}; \;\; \text{kho còn } \hlg{3}
+      \text{ sự kiện}$$'
+    focus:
+    - 1
+    - 2
+    clear: true
+    say: 'Phép tính thứ nhất, kết quả thật: lệnh sửa và lệnh xoá đều bị đoạn lệnh
+      tự chạy huỷ, kho vẫn còn ba sự kiện. Lệnh ghi đè hay gỡ đoạn lệnh thì vẫn lách
+      được.'
+  - show: '<table class=''t''><tr><th>viết trong mã</th><th>đọc là</th><th>ví dụ</th></tr><tr><td><code>loai,
+      tien = su_kien</code>, <code>so_du + tien if loai == "NAP" else so_du - tien</code></td><td>gán
+      hai biến một lúc từ một cặp; <code>a if đk else b</code> cho a nếu điều kiện
+      đúng, ngược lại cho b; <code>def</code> … <code>return</code>: hàm trả giá trị
+      về chỗ gọi</td><td><code>("NAP", 1000)</code> thì <code>loai</code> là NAP,
+      <code>tien</code> là 1000</td></tr><tr><td><code>for i, sk in enumerate(SU_KIEN,
+      1):</code></td><td>lặp qua danh sách, kèm số thứ tự bắt đầu từ 1</td><td><code>1
+      (''NAP'', 1000)</code>, rồi <code>2 (''RUT'', 300)</code></td></tr><tr><td><code>f"sau
+      su kien {i}: {so_du}"</code></td><td>chuỗi có chữ <code>f</code> đứng trước:
+      mỗi <code>{…}</code> được thay bằng giá trị</td><td><code>sau su kien 2: 700</code></td></tr><tr><td><code>sum(1
+      for _ in SU_KIEN)</code></td><td>cộng một cho mỗi phần tử của danh sách, tức
+      đếm số phần tử; <code>_</code> là tên bỏ đi, không dùng giá trị</td><td>4 sự
+      kiện cho <code>4</code></td></tr></table>'
+    clear: true
+    say: Đây là cách đọc phần phát lại, tách một cặp thành hai biến, rồi chọn cộng
+      hoặc trừ theo điều kiện, và hàm trả kết quả về chỗ gọi. Vòng lặp kèm số thứ
+      tự bắt đầu từ một. Chuỗi có chữ f thay mỗi cặp ngoặc nhọn bằng giá trị. Cộng
+      một cho mỗi phần tử tức là đếm, và gạch dưới là tên bỏ đi.
+  - show: '<p><b>PhatLai.py: phát lại bốn sự kiện từ số dư 0</b></p><div class="code"><div>SU_KIEN
+      = [("NAP", 1000), ("RUT", 300), ("NAP", 50), ("RUT", 120)]</div><div> </div><div>def
+      ap_dung(so_du, su_kien):</div><div>    loai, tien = su_kien</div><div>    return
+      so_du + tien if loai == "NAP" else so_du - tien</div><div> </div><div>so_du
+      = 0</div><div>for i, sk in enumerate(SU_KIEN, 1):</div><div>    so_du = ap_dung(so_du,
+      sk)</div><div>    print(f"sau su kien {i}: {so_du}")</div><div>print("phat lai
+      tu dau:", sum(1 for _ in SU_KIEN), "su kien -&gt;", so_du)</div></div>'
+    clear: true
+    say: 'Phép tính thứ hai là phát lại: lặp qua bốn sự kiện, áp dụng từng cái vào
+      số dư và in số dư sau mỗi sự kiện.'
+  - show: '<p><b>Kết quả chạy thật</b></p><div class="code"><div>sau su kien 1: 1000</div><div>sau
+      su kien 2: 700</div><div>sau su kien 3: 750</div><div>sau su kien 4: 630</div><div>phat
+      lai tu dau: 4 su kien -&gt; 630</div></div>$$② \; 1000 \to 700 \to 750 \to \hl{630};
+      \quad 4 \text{ sự kiện đọc}$$'
+    clear: true
+    say: Kết quả thật là một nghìn, bảy trăm, bảy trăm năm mươi, rồi sáu trăm ba mươi,
+      đọc từ bốn sự kiện và có đủ vết để giải thích từng bước.
+  - show: <table class='t'><tr><th>viết trong mã</th><th>đọc là</th><th>ví dụ</th></tr><tr><td><code>from
+      functools import reduce</code>, <code>reduce(ap_dung, kho, 0)</code></td><td>nạp
+      hàm <code>reduce</code>; nó bắt đầu từ 0, đưa từng sự kiện của <code>kho</code>
+      qua <code>ap_dung</code> cùng kết quả trước, ra một số</td><td><code>0</code>
+      → <code>1000</code> → <code>700</code></td></tr><tr><td><code>kho.append(sai)</code>,
+      <code># ghi nhầm</code></td><td><code>append</code> thêm một phần tử vào cuối
+      danh sách; từ <code>#</code> tới hết dòng là ghi chú, máy bỏ qua</td><td>kho
+      có thêm một sự kiện ở cuối</td></tr></table>
+    clear: true
+    say: Hàm rút gọn bắt đầu từ không, đưa từng sự kiện qua hàm áp dụng cùng kết quả
+      trước, ra một số. Lệnh thêm một phần tử vào cuối danh sách, và dấu thăng mở
+      đầu ghi chú mà máy bỏ qua.
+  - show: '<p><b>BuChu.py (trích): ghi nhầm rút 500, rồi bù, rồi ghi sự kiện đúng</b></p><div
+      class="code"><div>kho = [("NAP", 1000), ("RUT", 300), ("NAP", 50), ("RUT", 120)]</div><div>sai
+      = ("RUT", 500)       # ghi nhầm, đáng ra 50</div><div>kho.append(sai)</div><div>print("sau
+      su kien sai:", reduce(ap_dung, kho, 0))</div><div>kho.append(("NAP", 500))  #
+      sự kiện bù</div><div>kho.append(("RUT", 50))   # sự kiện đúng</div><div>print("sau
+      khi bu:", reduce(ap_dung, kho, 0), "|", len(kho), "su kien")</div></div>'
+    focus:
+    - 1
+    - 2
+    clear: true
+    say: 'Phép tính thứ ba là sự kiện bù: ghi nhầm rút năm trăm, đáng ra rút năm mươi.
+      Không sửa mà thêm sự kiện nạp năm trăm để đảo ngược, rồi sự kiện rút năm mươi
+      đúng.'
+  - show: '<p><b>Kết quả chạy thật</b></p><div class="code"><div>sau su kien sai:
+      130</div><div>sau khi bu: 580 | 7 su kien</div></div>$$③ \; 630 - 500 = 130;
+      \;\; 130 + 500 - 50 = \hlg{580}; \;\; \text{kho } 7 \text{ sự kiện, không sửa
+      cái nào}$$'
+    clear: true
+    say: 'Kết quả thật: sau sự kiện sai số dư là một trăm ba mươi, sau khi bù và ghi
+      lại là năm trăm tám mươi, và kho có bảy sự kiện không sự kiện nào bị sửa.'
+  - show: '<table class=''t''><tr><th>viết trong mã</th><th>nghĩa</th><th>ví dụ nhỏ</th></tr><tr><td><code>global
+      da_xu_ly</code></td><td>cho phép hàm gán lại biến nằm ngoài hàm; thiếu dòng
+      này, Python tạo biến mới chỉ trong hàm và biến ngoài đứng yên</td><td><code>da_xu_ly
+      += 1</code> làm tăng biến ngoài</td></tr><tr><td><code>while da_xu_ly &lt; len(su_kien)
+      and toi_da &gt; 0:</code></td><td>lặp khi cả hai điều kiện còn đúng: còn sự
+      kiện chưa chiếu và còn lượt</td><td>chiếu 2 trong 3 sự kiện thì dừng</td></tr><tr><td><code>su_kien
+      = []</code>, <code>su_kien.append((loai, tien))</code></td><td>danh sách rỗng,
+      rồi thêm vào cuối một cặp</td><td>kho ban đầu rỗng</td></tr><tr><td><code>doc
+      = {"001": 0}</code>, <code>doc["001"] += tien</code></td><td>từ điển: khoá <code>"001"</code>
+      có giá trị 0; <code>+=</code> cộng thêm vào giá trị đó</td><td>tài khoản 001
+      bắt đầu từ 0</td></tr></table>'
+    clear: true
+    say: Hàm chiếu sửa một biến nằm ngoài hàm, nên có dòng khai báo toàn cục; thiếu
+      nó thì biến ngoài đứng yên. Vòng lặp chạy khi còn sự kiện chưa chiếu và còn
+      lượt. Kho là danh sách thêm vào cuối, mô hình đọc là từ điển khoá tài khoản.
+  - show: '<p><b>DocTre.py (trích): bộ chiếu xử lý tối đa một số sự kiện mỗi lần</b></p><div
+      class="code"><div>def chieu(toi_da):</div><div>    global da_xu_ly</div><div>    while
+      da_xu_ly &lt; len(su_kien) and toi_da &gt; 0:</div><div>        loai, tien =
+      su_kien[da_xu_ly]</div><div>        doc["001"] += tien if loai == "NAP" else
+      -tien</div><div>        da_xu_ly += 1</div><div>        toi_da -= 1</div></div>'
+    clear: true
+    say: 'Phép tính thứ tư là đọc trễ: ghi ba sự kiện, cho bộ chiếu chạy hai, rồi
+      đọc mô hình đọc.'
+  - show: '<p><b>Kết quả chạy thật</b></p><div class="code"><div>doc sau khi chieu
+      2/3 su kien: 700 (da xu ly 2 / 3 )</div><div>doc sau khi chieu het: 750 (da
+      xu ly 3 / 3 )</div></div>$$④ \; \text{mới chiếu } 2/3 \Rightarrow \hl{700};
+      \quad \text{chiếu hết} \Rightarrow \hlg{750}$$'
+    focus:
+    - 1
+    - 3
+    clear: true
+    say: 'Kết quả thật: mới chiếu hai trên ba sự kiện, mô hình đọc trả bảy trăm, một
+      số cũ; chiếu hết thì trả bảy trăm năm mươi. Chấp nhận được khi chịu số cũ vài
+      giây, không khi cần số dư chính xác.'
+- id: check
+  kind: check
+  title: 'Tự kiểm bằng đường khác: bảng số dư tự cập nhật'
+  checks:
+  - alg.bnx_l29_replay([('NAP', 1000), ('RUT', 300), ('NAP', 50), ('RUT', 120)]) ==
+    1000 - 300 + 50 - 120 == 630
+  steps:
+  - show: '<table class=''t''><tr><th>viết trong mã</th><th>đọc là</th><th>ví dụ</th></tr><tr><td><code>CREATE
+      TABLE tk (so TEXT PRIMARY KEY, so_du INTEGER)</code>, <code>INSERT INTO tk VALUES
+      (''001'', 0)</code></td><td>bảng hai cột: số tài khoản (không trùng) và số dư;
+      lệnh thêm không liệt kê cột thì điền giá trị theo thứ tự cột</td><td>tài khoản
+      001 bắt đầu từ 0</td></tr><tr><td><code>for loai, tien in [("NAP", 1000), …]:</code>,
+      <code>dau = 1 if loai == "NAP" else -1</code></td><td>mỗi vòng tách một cặp
+      thành hai biến; dấu là 1 nếu nạp, −1 nếu rút</td><td>rút 300 cho <code>dau *
+      tien</code> = −300</td></tr><tr><td><code>UPDATE tk SET so_du = so_du + ? WHERE
+      so = ''001''</code></td><td>sửa số dư của tài khoản 001 thành giá trị cũ cộng
+      thêm; giá trị cũ bị ghi đè</td><td>1000, rồi 700…</td></tr></table>'
+    clear: true
+    say: Bảng có hai cột, và lệnh thêm không nêu tên cột thì điền giá trị theo thứ
+      tự các cột. Mỗi vòng tách một cặp thành hai biến, và dấu là một nếu nạp, âm
+      một nếu rút. Lệnh sửa số dư thành giá trị cũ cộng thêm, và giá trị cũ bị ghi
+      đè.
+  - show: '<p><b>BangSoDu.py (trích): cách cũ, mỗi giao dịch SỬA con số trong một
+      bảng</b></p><div class="code"><div>db = sqlite3.connect(":memory:")</div><div>db.execute("CREATE
+      TABLE tk (so TEXT PRIMARY KEY, so_du INTEGER)")</div><div>db.execute("INSERT
+      INTO tk VALUES (''001'', 0)")</div><div>for loai, tien in [("NAP", 1000), ("RUT",
+      300), ("NAP", 50), ("RUT", 120)]:</div><div>    dau = 1 if loai == "NAP" else
+      -1</div><div>    db.execute("UPDATE tk SET so_du = so_du + ? WHERE so = ''001''",
+      (dau * tien,))</div><div>print("bang so du:", db.execute("SELECT so_du FROM
+      tk").fetchone()[0], "- khong the biet 630 den tu dau")</div></div>'
+    clear: true
+    say: 'Ta kiểm bằng đường khác hẳn: cách cũ chỉ có một bảng số dư, mỗi giao dịch
+      sửa chính con số đó, nên bảng chỉ còn con số mới nhất.'
+  - show: '<p><b>Kết quả chạy thật</b></p><div class="code"><div>bang so du: 630 -
+      khong the biet 630 den tu dau</div></div><table class=''t''><tr><th>cách</th><th>số
+      dư</th><th>trả lời được ''vì sao 630''?</th><th>sửa được giao dịch sai?</th></tr><tr><td>bảng
+      số dư (sửa tại chỗ)</td><td>630</td><td>không: chỉ còn con số cuối</td><td>chỉ
+      bằng cách sửa đè, mất dấu vết</td></tr><tr><td>kho sự kiện</td><td>630</td><td>có:
+      bốn sự kiện</td><td>bằng sự kiện bù, còn dấu vết</td></tr></table>'
+    focus:
+    - 1
+    - 2
+    clear: true
+    say: 'Cả hai cách cùng ra sáu trăm ba mươi. Khác biệt nằm ở câu hỏi kiểm toán:
+      bảng số dư không biết vì sao, còn kho sự kiện trả lời được và sửa sai bằng sự
+      kiện bù.'
+- id: quymo
+  kind: example
+  title: 'Khi kho lớn dần: bao nhiêu lần đọc để dựng số dư?'
+  checks:
+  - alg.bnx_l29_events_to_read(1000000, 0) == 1000000 and 1000000 // 1000 == 1000
+  - alg.bnx_l29_events_to_read(2500500, 1000) == alg.bnx_l29_events_to_read(2500,
+    1000) == 500
+  steps:
+  - show: <table class='t'><tr><th>viết trong mã</th><th>đọc là</th><th>ví dụ</th></tr><tr><td><code>db.executemany("INSERT
+      …", ((i % 2, i % 97 + 1) for i in range(1000000)))</code></td><td>chạy một lệnh
+      thêm cho mỗi bộ trong dãy; dãy sinh ra từng bộ <code>(i % 2, i % 97 + 1)</code>
+      cho <code>i</code> từ 0 tới 999999 (<code>%</code> là phần dư)</td><td><code>i
+      = 5</code> cho <code>(1, 6)</code></td></tr><tr><td><code>for loai, tien in
+      db.execute("SELECT loai, tien FROM sk WHERE seq &lt;= ?", (toi,)):</code></td><td><code>SELECT
+      … FROM … WHERE</code> lấy các dòng thoả điều kiện; <code>(toi,)</code> điền
+      vào chỗ giữ; vòng lặp nhận từng dòng, tách thành hai biến</td><td><code>toi
+      = 1000</code> lấy 1000 dòng đầu</td></tr><tr><td><code>so_du, dem = 0, 0</code>,
+      <code>return so_du, dem</code>, <code>for n in (1000, 1000000):</code></td><td>gán
+      hai biến cùng bằng 0; hàm trả hai giá trị; vòng lặp thử hai cỡ</td><td></td></tr></table>
+    clear: true
+    say: Mã đo quy mô có ba chỗ cần đọc trước. Chạy một lệnh thêm cho mỗi bộ giá trị
+      trong dãy sinh sẵn, với i chạy từ không tới chín trăm chín mươi chín nghìn chín
+      trăm chín mươi chín. Lệnh lấy các dòng thoả điều kiện, và vòng lặp nhận từng
+      dòng, tách thành hai biến. Gán hai biến cùng bằng không, hàm trả hai giá trị,
+      và vòng lặp thử hai cỡ.
+  - show: '<p><b>QuyMoPhat.py (trích): sinh một triệu sự kiện, rồi dựng số dư từ n
+      sự kiện đầu</b></p><div class="code"><div>db.execute("CREATE TABLE sk (seq INTEGER
+      PRIMARY KEY, loai INTEGER, tien INTEGER)")</div><div>db.executemany("INSERT
+      INTO sk (loai, tien) VALUES (?, ?)",</div><div>               ((i % 2, i % 97
+      + 1) for i in range(1000000)))</div><div>def dung_lai(toi):</div><div>    so_du,
+      dem = 0, 0</div><div>    for loai, tien in db.execute("SELECT loai, tien FROM
+      sk WHERE seq &lt;= ?", (toi,)):</div><div>        so_du += tien if loai == 0
+      else -tien</div><div>        dem += 1</div><div>    return so_du, dem</div><div>for
+      n in (1000, 1000000):</div><div>    so_du, dem = dung_lai(n)</div><div>    print(f"{n}
+      su kien: da doc {dem} su kien, so du {so_du}")</div></div><p class="note">Dữ
+      liệu sinh: số thứ tự chẵn là nạp, lẻ là rút, số tiền là <code>i % 97 + 1</code>
+      (số minh hoạ).</p>'
+    focus:
+    - - 1
+    - 2
+    clear: true
+    say: Đây là số đo thật, chương trình sinh một triệu sự kiện, rồi hàm dựng lại
+      đọc n sự kiện đầu và cộng trừ ra số dư. Ta thử với một nghìn sự kiện, rồi một
+      triệu, gấp một nghìn lần.
+  - show: '<p><b>Kết quả chạy thật</b></p><div class="code"><div>1000 su kien: da
+      doc 1000 su kien, so du -15</div><div>1000000 su kien: da doc 1000000 su kien,
+      so du 35</div></div><p class="note">Số dư âm là bình thường: dữ liệu sinh minh
+      hoạ không chặn rút quá số dư.</p><p><b>TÍNH TỪ CÔNG THỨC n mod k (không đo kho
+      thật): số lần đọc khi có và không có bản chụp</b></p><div class="code"><div>2500
+      su kien: khong ban chup doc 2500, chup moi 1000 su kien doc 500</div><div>2500500
+      su kien: khong ban chup doc 2500500, chup moi 1000 su kien doc 500</div></div>$$10^3
+      \to 10^6 \;(\times 1000): \; \text{đọc } 1\,000 \to 1\,000\,000; \quad \text{có
+      bản chụp: } 500 \to 500$$'
+    focus:
+    - 1
+    - 3
+    - 5
+    clear: true
+    say: 'Kết quả đo thật là đọc đúng một nghìn rồi đúng một triệu sự kiện, nên chi
+      phí dựng lại tăng theo cỡ kho. Hai dòng sau không đo kho thật mà tính từ công
+      thức chia lấy dư: với bản chụp mỗi một nghìn sự kiện, hai cỡ kho đều chỉ đọc
+      năm trăm. Bản chụp giữ chi phí dưới một nghìn.'
+  - show: '<table class=''t''><tr><th>cách</th><th>chi phí dựng số dư</th><th>đánh
+      đổi</th><th>chọn khi</th></tr><tr><td>phát lại từ đầu</td><td>tỉ lệ với số sự
+      kiện: 10³ → 10⁶ lần đọc</td><td>đơn giản, không dữ liệu phụ</td><td>tài khoản
+      ít giao dịch, kiểm toán một lần</td></tr><tr><td>bản chụp mỗi k sự kiện</td><td>tối
+      đa k − 1 lần đọc</td><td>lưu thêm bản chụp; phải dựng lại khi đổi quy tắc áp
+      dụng</td><td>tài khoản nhiều giao dịch</td></tr><tr><td>bản chiếu chạy liên
+      tục</td><td>một lần đọc dòng đã dựng</td><td>đọc trễ; thêm thành phần phải giám
+      sát</td><td>truy vấn số dư rất nhiều</td></tr></table>'
+    focus:
+    - 0
+    - - '1.2'
+      - '1.3'
+    - '1.4'
+    clear: true
+    say: Phát lại từ đầu đơn giản nhưng chi phí tỉ lệ với số sự kiện. Bản chụp giới
+      hạn chi phí dưới k, đổi lại phải lưu thêm. Bản chiếu truy vấn nhanh nhất, đổi
+      lại đọc có thể trễ.
+- id: pitfalls
+  kind: pitfall
+  title: Lỗi hay gặp, theo từng giai đoạn của hệ thống
+  checks:
+  - alg.bnx_l29_replay([('NAP', 1000), ('RUT', 300)]) == 700
+  - alg.bnx_l29_events_to_read(999999, 1000) == 999
+  steps:
+  - show: '<div class="box warn"><b>Lỗi 1 (người mới).</b> Dùng kho sự kiện nhưng
+      <b class="red">vẫn cho sửa và xoá</b> &laquo;cho tiện&raquo;. Chạy thật: trigger
+      chặn cả hai lệnh thông thường (<code>INSERT OR REPLACE</code> và gỡ trigger
+      vẫn lách được, nên vẫn cần phân quyền). Một kho sửa được thì không còn là bằng
+      chứng: kiểm toán mất giá trị.</div><p><b>Kết quả chạy thật</b></p><div class="code"><div>sua
+      su kien: kho su kien chi them, khong sua</div><div>xoa su kien: kho su kien
+      chi them, khong xoa</div><div>so su kien: 3</div></div>'
+    focus:
+    - 1
+    - 3
+    clear: true
+    say: Lỗi thứ nhất là dùng kho sự kiện nhưng vẫn cho sửa và xoá cho tiện. Đoạn
+      lệnh tự chạy chặn lệnh thông thường, nhưng lệnh ghi đè hay gỡ nó vẫn lách được
+      nên cần phân quyền.
+  - show: '<div class="box warn"><b>Lỗi 2 (người đã đi làm, lúc mới dựng).</b> Đọc
+      <b class="red">mô hình đọc ngay sau khi ghi</b> và tin nó đã cập nhật. Chạy
+      thật: mới chiếu 2 trên 3 sự kiện thì đọc ra 700 chứ không phải 750.
+
+      Cách chữa: khi cần chắc chắn (kiểm số dư trước khi rút), đọc từ kho hoặc kiểm
+      vị trí đã chiếu; còn màn hình hiển thị thì chấp nhận trễ.</div>
+
+      '
+    clear: true
+    say: 'Lỗi thứ hai: đọc mô hình đọc ngay sau khi ghi và tin nó đã cập nhật. Mới
+      chiếu hai trên ba sự kiện thì đọc ra bảy trăm chứ không phải bảy trăm năm mươi.
+      Khi cần chắc chắn, như trước khi rút, hãy đọc từ kho.'
+  - show: '<div class="box warn"><b>Lỗi 3 (người đã đi làm, lúc tải tăng).</b> <b
+      class="red">Phát lại từ đầu</b> cho mỗi lần hỏi số dư. Ở 10³ sự kiện thấy nhanh;
+      ở 10⁶ là đọc 1 000 000 sự kiện mỗi lần. Chữa: bản chụp (đọc tối đa 999 sự kiện)
+      hoặc bản chiếu chạy liên tục.</div>'
+    clear: true
+    say: 'Lỗi thứ ba: phát lại từ đầu cho mỗi lần hỏi số dư. Ở một nghìn sự kiện thấy
+      nhanh, ở một triệu là đọc một triệu sự kiện mỗi lần, chữa bằng bản chụp hoặc
+      bản chiếu.'
+  - show: '<div class="box warn"><b>Lỗi 4 (người đã đi làm, lúc vận hành lâu dài).</b>
+      <b class="red">Đổi quy tắc áp dụng sự kiện</b> (ví dụ cách tính phí) mà bản
+      chụp cũ vẫn dùng quy tắc cũ: số dư dựng từ bản chụp khác số dư phát lại từ đầu.
+
+      Cách chữa: gắn <b>phiên bản quy tắc</b> vào bản chụp, đổi quy tắc thì bỏ bản
+      chụp cũ và dựng lại; thêm ca kiểm so hai đường.</div>
+
+      '
+    clear: true
+    say: 'Lỗi thứ tư: đổi quy tắc mà bản chụp cũ vẫn dùng quy tắc cũ, nên số dư từ
+      bản chụp khác số dư phát lại từ đầu. Chữa bằng cách gắn phiên bản quy tắc vào
+      bản chụp.'
+- id: quiz
+  kind: quiz
+  title: Đến lượt bạn
+  checks:
+  - alg.bnx_l29_replay([('NAP', 800), ('RUT', 150), ('RUT', 90), ('NAP', 40)]) ==
+    600
+  - alg.bnx_l29_replay([('NAP', 800), ('RUT', 150), ('RUT', 90), ('NAP', 40), ('NAP',
+    150), ('RUT', 15)]) == 735
+  - 7300000 % 5000 == 0
+  steps:
+  - show: '<table class=''t''><tr><th>câu</th><th>đề</th></tr><tr><td>1</td><td>Kho:
+      <code>NAP 800</code>, <code>RUT 150</code>, <code>RUT 90</code>, <code>NAP 40</code>.
+      Số dư? Nếu sự kiện <code>RUT 150</code> hoá ra là <code>RUT 15</code>, viết
+      các sự kiện bù và số dư đúng.</td></tr><tr><td>2</td><td>Kho có 7 300 000 sự
+      kiện, bản chụp mỗi 5 000. Dựng số dư tại sự kiện cuối phải đọc bao nhiêu sự
+      kiện? Không bản chụp thì sao?</td></tr><tr><td>3</td><td>Quyết định (số minh
+      hoạ): màn hình tổng quan hiển thị số dư mỗi giây cho 100 000 khách; lệnh rút
+      cần số dư chính xác. Chọn: phát lại, bản chiếu, hay lai? Vì sao?</td></tr></table>'
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - 0
+    pause: 30
+    say: 'Đến lượt bạn, ba câu làm ra giấy. Câu một, tính số dư của kho bốn sự kiện,
+      rồi viết sự kiện bù nếu rút một trăm năm mươi hoá ra là rút mười lăm. Câu hai,
+      kho có bảy triệu ba trăm nghìn sự kiện, bản chụp mỗi năm nghìn: dựng số dư tại
+      sự kiện cuối phải đọc bao nhiêu, và không có bản chụp thì sao? Câu ba, số dư
+      cho một trăm nghìn khách mà lệnh rút cần số chính xác: chọn phát lại, bản chiếu
+      hay lai? Hãy dừng lại làm rồi xem đáp án.'
+  - show: '<p>Câu 1: kho <code>NAP 800</code>, <code>RUT 150</code>, <code>RUT 90</code>,
+      <code>NAP 40</code>; phát lại, rồi bù bằng sự kiện đảo ngược, rồi sự kiện đúng
+      <code>RUT 15</code>.</p>
+
+      $$800 - 150 - 90 + 40 = \hlg{600}; \quad \text{bù: } \text{NAP } 150, \text{
+      RUT } 15 \Rightarrow 600 + 150 - 15 = \hlg{735}$$
+
+      '
+    focus:
+    - 1
+    - 2
+    say: 'Đáp án câu một: phát lại ra sáu trăm. Để sửa, thêm sự kiện nạp một trăm
+      năm mươi để đảo ngược rồi sự kiện rút mười lăm cho đúng, ra sáu trăm cộng một
+      trăm năm mươi trừ mười lăm, bằng bảy trăm ba mươi lăm.'
+    clear: true
+  - show: '<p>Câu 2: số lần đọc = n chia lấy dư cho k; không bản chụp thì đọc hết.</p>
+
+      $$7\,300\,000 : 5000 = 1460 \text{ dư } \hlg{0} \text{ (dùng đúng bản chụp cuối)};
+      \quad \text{không bản chụp: } \hlg{7\,300\,000}$$
+
+      '
+    focus:
+    - 1
+    - 2
+    say: Đáp án câu hai, bảy triệu ba trăm nghìn chia hết cho năm nghìn, nên sự kiện
+      cuối trùng đúng một bản chụp và không phải đọc sự kiện nào thêm. Không có bản
+      chụp thì phải đọc cả bảy triệu ba trăm nghìn sự kiện.
+  - show: '<table class=''t''><tr><th>lựa chọn</th><th>được</th><th>mất</th></tr><tr><td>phát
+      lại mỗi lần hỏi</td><td>luôn chính xác, đơn giản</td><td>mỗi lần hỏi phát lại
+      hàng nghìn sự kiện, 100 000 khách hỏi mỗi giây: quá tải kho</td></tr><tr><td>bản
+      chiếu chạy liên tục</td><td>đọc nhanh, nhẹ cho kho</td><td>có thể trễ: lệnh
+      rút dựa trên số cũ có thể cho rút quá số dư</td></tr><tr><td>lai: bản chiếu
+      cho màn hình, kiểm chính xác tại kho (hoặc theo vị trí đã chiếu) cho lệnh rút</td><td>màn
+      hình nhanh, lệnh rút an toàn</td><td>hai đường phải giữ cùng quy tắc; thêm ca
+      kiểm so hai đường</td></tr></table>'
+    say: 'Đáp án câu ba: phát lại mỗi lần hỏi thì chính xác nhưng quá tải kho. Bản
+      chiếu nhanh nhưng có thể trễ, nên lệnh rút dựa trên số cũ có thể rút quá số
+      dư. Cách lai dùng bản chiếu cho màn hình và kiểm tại kho cho lệnh rút, đổi lại
+      hai đường phải giữ cùng quy tắc.'
+    clear: true
+- id: practice
+  kind: practice
+  title: 'Tự làm: phát lại, bản chụp và sự kiện bù'
+  steps:
+  - show: '<p><b>Đề</b>: kho: <code>NAP 500</code>, <code>RUT 100</code>, <code>NAP
+      200</code>, <code>RUT 50</code>, <code>NAP 25</code>, <code>RUT 75</code>. Viết
+      <code>mau.py</code>:</p>
+
+      <ol><li>hàm <code>phat_lai(kho, tu, so_du)</code>; in số dư phát lại hết và
+      số sự kiện đọc</li><li>bản chụp sau 4 sự kiện đầu; phát lại phần còn lại từ
+      bản chụp</li><li>coi <code>RUT 300</code> là ghi nhầm: thêm <code>RUT 300</code>
+      rồi sự kiện bù <code>NAP 300</code>, in số dư</li></ol>
+
+      <p class="note">Số liệu khác ví dụ trong bài; định dạng 4 dòng in ra nằm trong
+      <code>de.md</code>.</p>
+
+      '
+    focus:
+    - 1
+    - - 2
+      - 3
+    pause: 150
+    say: 'Tới phần bạn tự làm: với kho sáu sự kiện cho trước, viết hàm phát lại. Dùng
+      bản chụp sau bốn sự kiện đầu để chỉ đọc hai sự kiện còn lại, rồi thêm một sự
+      kiện rút ghi nhầm cùng sự kiện bù, hãy dừng video và tự viết.'
+  - show: '<p><b>Kết quả mong đợi</b></p><div class="code"><div>phat lai het: 500
+      (doc 6 su kien)</div><div>ban chup tai su kien 4 : 550</div><div>phat lai tu
+      ban chup: 500 (doc 2 su kien)</div><div>sau khi bu su kien rut nham: 500</div></div><p
+      class="note">Chấm bằng Git Bash: <code>bash labs/cham.sh BNX L29 mau.py</code>
+      — in <b>ĐÚNG</b> khi trùng.</p>'
+    focus:
+    - - 1
+      - 2
+    - 3
+    clear: true
+    say: Đây là kết quả mong đợi, bạn chạy chương trình của mình rồi so từng dòng.
+      Nếu muốn chấm bằng máy, dùng lệnh ở dưới màn hình; lệnh in chữ ĐÚNG khi đầu
+      ra trùng, hoặc chỉ ra dòng nào khác.
+  - show: '<div class="box key"><b>Nếu kẹt:</b> hàm phát lại là vòng lặp qua <code>kho[tu:]</code>,
+      mỗi sự kiện cộng hoặc trừ vào <code>so_du</code>. Bản chụp là kết quả của <code>phat_lai(kho[:4])</code>;
+      phát lại tiếp từ vị trí 4 với số dư đó.
+
+      Lời giải đầy đủ ở <code>labs/BNX/L29/loi_giai.py</code> — chỉ mở sau khi bạn
+      đã thử.</div>
+
+      '
+    say: Nếu kẹt, hàm phát lại là vòng lặp qua phần kho từ vị trí cho trước, mỗi sự
+      kiện cộng hoặc trừ vào số dư. Bản chụp là kết quả phát lại bốn sự kiện đầu.
+      Lời giải nằm trong thư mục thực hành, chỉ mở sau khi đã tự thử.
+  lab: labs/BNX/L29
+- id: recap
+  kind: recap
+  title: Chuỗi logic & tư duy cần mang theo
+  checks:
+  - alg.bnx_l29_replay([('NAP', 1000), ('RUT', 300), ('NAP', 50), ('RUT', 120)]) ==
+    630
+  steps:
+  - show: <div class='chain'><span class='n'>ghi điều đã xảy ra</span><span class='a'>→</span><span
+      class='n'>số dư = phát lại</span><span class='a'>→</span><span class='n'>tách
+      ghi / đọc → bản chiếu</span><span class='a'>→</span><span class='n'>sai thì
+      bù, không sửa</span><span class='a'>→</span><span class='n'>bản chụp giới hạn
+      chi phí</span></div>
+    say: Ta ghi điều đã xảy ra, và số dư là kết quả phát lại. Tách ghi và đọc cho
+      bản chiếu nhanh nhưng có thể trễ. Sự kiện sai thì bù chứ không sửa, và bản chụp
+      giới hạn chi phí khi kho lớn.
+  - show: '<div class=''box key''><b>Tư duy:</b> con số là <b>kết quả</b>, không phải
+      <b>sự thật gốc</b>; sự thật gốc là những gì đã xảy ra, theo thứ tự. Đổi lấy
+      lịch sử đầy đủ, ta trả bằng độ phức tạp: đọc trễ, bản chụp, phiên bản quy tắc.
+
+      Không phải hệ nào cũng cần: dùng cho nơi kiểm toán và truy vết quan trọng, như
+      sổ tiền.</div>
+
+      '
+    say: Con số là kết quả, sự thật gốc là điều đã xảy ra theo thứ tự. Đổi lấy lịch
+      sử đầy đủ, ta trả bằng độ phức tạp, nên chỉ dùng ở nơi kiểm toán quan trọng
+      như sổ tiền.
+  - show: '<table class=''t''><tr><th>Nếu bị hỏi về dòng này trên CV</th><th>ý trả
+      lời</th></tr><tr><td>CQRS và Event Sourcing: khác gì, khi nào dùng?</td><td>CQRS
+      tách mô hình ghi và đọc; Event Sourcing lưu sự kiện làm nguồn sự thật, số dư
+      là suy ra; dùng cho sổ tiền cần kiểm toán, không bắt buộc cho mọi hệ</td></tr><tr><td>Sự
+      kiện sai thì sửa thế nào?</td><td>không sửa kho: thêm sự kiện bù đảo ngược rồi
+      sự kiện đúng; lịch sử còn đủ vết</td></tr><tr><td>Kho lớn dần thì sao, đọc trễ
+      thì sao?</td><td>bản chụp mỗi k sự kiện (đọc tối đa k − 1); bản chiếu chạy liên
+      tục đọc trễ nên lệnh quan trọng đọc từ kho hoặc kiểm vị trí đã chiếu</td></tr></table>'
+    clear: true
+    say: 'Người phỏng vấn thường hỏi ba câu: tách ghi đọc khác lưu sự kiện ra sao,
+      sự kiện sai sửa thế nào, kho lớn dần thì làm gì, câu trả lời nằm sẵn trên bảng.'
+  - show: '<p>Bài sau: <b>chịu lỗi bằng mã Java</b>: hết giờ, thử lại, cầu dao, và
+      cổng API cùng cân bằng tải.</p>'
+    forward_ref: true
+    say: 'Ở bài ba mươi, ta tự viết bằng Java các kỹ thuật chịu lỗi: hết giờ, thử
+      lại có lùi, cầu dao, cùng cổng API và cân bằng tải.'

@@ -90,3 +90,17 @@ def bnx_balanced_by_ccy(entries):
 def bnx_float_demo():
     """Hai lỗi số thực: 0.1 + 0.2 và round(2.675, 2); so với Decimal làm tròn nửa lên."""
     return 0.1 + 0.2, round(2.675, 2), Decimal("2.675").quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def bnx_l11_float_sum(n):
+    """Cảnh quy mô: cộng 0,10 n lần bằng số thực dấu phẩy động (vòng lặp thuần, không dùng sum() vì sum() của Python 3.12+ bù sai số)."""
+    f = 0.0
+    for _ in range(n):
+        f += 0.10
+    return f
+
+
+def bnx_l11_fixed_fee_pct(so_tien, phi_co_dinh):
+    """Phần trăm phí cố định trên số tiền, chuỗi số thập phân chính xác (không đuôi 0)."""
+    from decimal import Decimal
+    return format(Decimal(phi_co_dinh) * 100 / Decimal(so_tien), "f")

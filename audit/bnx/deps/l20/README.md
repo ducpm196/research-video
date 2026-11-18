@@ -10,7 +10,7 @@ Thiếu `go` hoặc thiếu gcc (cho `-race`): bộ kiểm `audit/bnx/ver/l20.py
 |---|---|---|
 | `fiber/go.mod` | `01a2aa78f9711a184ed2b0e29bd19afcc661c1c010fe70807179664413aec433` | yêu cầu `github.com/gofiber/fiber/v2 v2.52.16` |
 | `fiber/go.sum` | `7565b879f87b8a075982fcc5b1e9fbf731ea7f7498491933cb57c0d28bd5267a` | các băm `h1:` do Go tính (cơ sở dữ liệu tổng kiểm của Go) |
-| `fiber/main.go` | `de8f50c4fb712c9256784a78680b07598fbb8c0d1b74ecd0f40e7cae9dd48a28` | chương trình hiện trên màn hình (hằng `G_FIBER` ở `audit/bnx/src/l20.py`; `ver/l20.py` so nguyên văn) |
+| `fiber/main.go` | `fbc1ccc6846ab3619fc9acd861ffc4929a24f5575017df72da87e50e46c78d5e` | chương trình hiện trên màn hình (hằng `G_FIBER` ở `audit/bnx/src/l20.py`; `ver/l20.py` so nguyên văn) |
 
 Tệp zip của mô-đun trong bộ nhớ đệm mô-đun Go (`go env GOMODCACHE`, thư mục `cache/download/…/@v/`), sha256 tính 2026-11-12:
 

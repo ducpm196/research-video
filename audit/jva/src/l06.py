@@ -232,10 +232,11 @@ Lời giải nằm ở <code>labs/JVA/L06/loi_giai.java</code> — chỉ mở sa
            Thứ ba, biến mảng chỉ giữ tham chiếu, tức mũi tên chỉ tới dãy ô trong bộ nhớ, nên hai biến có thể cùng trỏ vào một mảng.""", focus=[1, "1.2", "1.3", "1.4"]),
     ])
     sc_sym = sc("sym", "symbol", "Giải mã ký hiệu của một hàm", [
-        st(code_block(phi, lines=(p_head, p_head + 7), title="Tệp Phi.java: hàm tính phí")
-           + code_block(phi, lines=(p_main, p_main + 2)),
-           """Đây là hàm tính phí chuyển khoản, với biểu phí là số minh hoạ. Bên dưới là ba lời gọi hàm từ hàm chính.""",
-           focus=[2, 3]),
+        st(code_block(phi, lines=(1, p_head + 7), title="Tệp Phi.java, phần 1: lớp Phi và hàm tính phí"),
+           """Đây là cả tệp Phi chấm Java, chia làm hai phần. Dòng đầu khai lớp Phi, và hàm tính phí chuyển khoản nằm bên trong lớp đó, với biểu phí là số minh hoạ."""),
+        st(code_block(phi, lines=(p_head + 9, phi["code"].count(chr(10)) + 1), title="Tệp Phi.java, phần 2: hàm chính nằm cạnh hàm tính phí"),
+           """Hàm chính cũng nằm trong cùng lớp, đứng cạnh hàm tính phí chứ không nằm bên trong nó. Nó gọi hàm tính phí ba lần, và dấu ngoặc nhọn cuối cùng đóng lớp.""",
+           clear=True),
         st(table(["viết", "nghĩa"],
                  [["<code>static</code>", "<b>tĩnh</b>: hàm thuộc về lớp (cái hộp chứa mã, ở đây là <code>Phi</code>), không cần tạo gì thêm, nên hàm chính gọi thẳng được"],
                   ["<code>long</code> trước tên", "<b>kiểu trả về</b>: hàm trả ra một số kiểu <code>long</code>"],
@@ -333,7 +334,7 @@ Lời giải nằm ở <code>labs/JVA/L06/loi_giai.java</code> — chỉ mở sa
                "2000000 + 2200 == 2002200", "5000000 - 2002200 == 2997800"])
     k5 = ln(kiem, "long[] thu")
     sc_scale = sc("quymo", "concept", "Khi đoạn mã bị chép ra nhiều chỗ, sửa đúng hết khó dần", [
-        st(code_block(sot, lines=(3, 8)),
+        st(code_block(sot),
            """Giả sử mỗi lần sửa một chỗ chép, ta sửa đúng với xác suất chín mươi tám phần trăm, số minh hoạ. Câu hỏi là xác suất sửa đúng hết khi đoạn mã bị chép ở một, mười, hoặc một trăm chỗ.
            Chương trình tính chín mươi tám phần trăm lũy thừa số chỗ, rồi in theo phần nghìn."""),
         st(table(["số chỗ chép", "xác suất sửa đúng hết"], [["1", "980 / 1000"], ["10", "817 / 1000"], ["100", "132 / 1000"]]) + out_block(sot),

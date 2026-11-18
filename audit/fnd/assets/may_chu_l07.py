@@ -2,7 +2,7 @@ import sys
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-TRANG = {"/": "xin chao", "/so_du": "1500000", "/het_han": '{"loi": "het han"}'}
+TRANG = {"/": "xin chao", "/so_du": "1500000", "/het_han": '{"loi": "het han"}', "/chao": "xin chao tu lab", "/tai_khoan/42": "so du 750000"}
 
 
 class Xu(BaseHTTPRequestHandler):
@@ -33,7 +33,7 @@ class Xu(BaseHTTPRequestHandler):
     def do_POST(self):
         n = int(self.headers.get("Content-Length", 0))
         nd = self.rfile.read(n).decode()
-        if self.path == "/chuyen":
+        if self.path in ("/chuyen", "/nap"):
             self.tra(201, "Created", "da nhan: " + nd)
         else:
             self.tra(404, "Not Found", "khong thay")

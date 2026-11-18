@@ -41,3 +41,8 @@ def bnx_l23_expected_flags(n, contamination):
     idx = contamination * (n - 1)
     k = math.floor(idx)
     return k + 1 if idx - k > 1e-9 else k
+
+
+def bnx_l23_reviewers(flagged, per_person):
+    """Số người xét tối thiểu một ngày (làm tròn lên) cho `flagged` ca, mỗi người xét `per_person` ca (số minh hoạ)."""
+    return -(-flagged // per_person)

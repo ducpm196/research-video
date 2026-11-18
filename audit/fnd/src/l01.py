@@ -95,10 +95,11 @@ def build():
                  [["① tệp", "dữ liệu có tên, ví dụ <code>meo.png</code> (đuôi <code>.png</code> cho biết loại)"],
                   ["② thư mục", "ngăn chứa tệp <b>và cả thư mục khác</b>, ví dụ <code>anh</code> chứa hai ảnh"],
                   ["③ cây thư mục", "thư mục nằm trong thư mục, vẽ thành cây lộn ngược; gốc ở trên, lá là tệp"],
-                  ["④ Explorer", "chương trình duyệt thư mục của Windows, địa chỉ viết <code>C:\\Users\\ban\\anh</code>"]]),
-           """Ta ôn lại bốn điều. Tệp là dữ liệu có tên, phần đuôi sau dấu chấm cho biết loại tệp. Thư mục là ngăn chứa tệp và cả thư mục khác.
-           Thư mục nằm trong thư mục tạo thành cây lộn ngược, gốc ở trên, lá là tệp. Và trình duyệt thư mục của hệ điều hành là chương trình bạn đã dùng hằng ngày.""",
-           focus=[1, "1.2", "1.3", "1.4", "1.5"]),
+                  ["④ Explorer", "chương trình duyệt thư mục của Windows, địa chỉ viết <code>C:\\Users\\ban\\anh</code>"],
+                  ["⑤ tệp lệnh", "tệp <code>.sh</code> soạn bằng trình soạn mã; mở Git Bash tại thư mục chứa nó rồi gõ <code>bash tên.sh</code> (bài 0 đã làm với <code>kiem.sh</code>)"]]),
+           """Ta ôn lại năm điều đã biết trước khi vào bài. Tệp là dữ liệu có tên, phần đuôi sau dấu chấm cho biết loại tệp. Thư mục là ngăn chứa tệp và cả thư mục khác.
+           Thư mục nằm trong thư mục tạo thành cây lộn ngược, gốc ở trên, lá là tệp. Trình duyệt thư mục của hệ điều hành là chương trình bạn đã dùng hằng ngày. Và tệp lệnh là tệp bạn soạn bằng trình soạn mã, rồi chạy bằng lệnh chạy, như tệp kiểm ở bài đầu.""",
+           focus=[1, "1.2", "1.3", "1.4", "1.5", "1.6"]),
     ])
     sc_sym = sc("sym", "symbol", "Giải mã dấu nhắc, ba lệnh đầu tiên và các dấu của đường dẫn", [
         st(table(["viết", "đọc là", "nghĩa"],
@@ -128,14 +129,14 @@ def build():
     ])
     sc_int = sc("intuition", "intuition", "Hình dung: cây thư mục và chỗ bạn đang đứng", [
         st(cay(0, txt(1100, 120, "đang đứng: thư mục nhà", 30, "middle", "#d97706", True)
-               + txt(1100, 165, "pwd → /c/Users/ban", 28, "middle", "#1f2937")
-               + txt(1100, 230, "ls hiện: anh/  hoc/  tai_ve/", 28, "middle", "#1f2937")),
+               + txt(1100, 165, "pwd → /c/Users/ban", 28, "middle", "#1f2937", mono=True)
+               + txt(1100, 230, "ls hiện: anh/  hoc/  tai_ve/", 28, "middle", "#1f2937", mono=True)),
            """Hình này là cây thư mục của một thư mục nhà tên là ban. Ô màu cam là chỗ bạn đang đứng, lúc mở cửa sổ lệnh thì đó là thư mục nhà.
            Lệnh in vị trí cho ra đường dẫn từ gốc xuống chỗ đứng. Lệnh liệt kê chỉ cho thấy những gì nằm ngay dưới chỗ đứng, tức ba thư mục con, chưa thấy các tệp ở sâu hơn."""),
-        st(cay(6, txt(1100, 120, "sau: cd hoc  rồi  cd nen", 28, "middle", "#d97706", True)
+        st(cay(6, txt(1100, 120, "sau: cd hoc  rồi  cd nen", 28, "middle", "#d97706", True, mono=True)
                + txt(1100, 170, "đường dẫn = đi từ gốc xuống,", 26, "middle", "#1f2937")
                + txt(1100, 205, "mỗi cấp cách nhau một dấu /", 26, "middle", "#1f2937")
-               + txt(1100, 260, "/c/Users/ban/hoc/nen", 28, "middle", "#d97706", True)),
+               + txt(1100, 260, "/c/Users/ban/hoc/nen", 28, "middle", "#d97706", True, mono=True)),
            """Sau khi đi vào hoc rồi vào nen, chỗ đứng chuyển xuống ô cam mới. Đường dẫn của nó là chuỗi các thư mục đi từ gốc xuống, mỗi cấp cách nhau một dấu gạch chéo.
            Đọc đường dẫn từ trái sang phải giống như đi theo cây từ trên xuống dưới."""),
     ])
@@ -148,6 +149,8 @@ def build():
 <p class="note">Làm thử: đứng ở <code>ban</code>, <code>cd hoc</code> tới <code>ban/hoc</code>; đứng ở <code>anh</code> thì <code>cd hoc</code> báo lỗi vì không có <code>hoc</code> ở đó ✓</p>""",
            """Bước hai, đường dẫn tương đối. Nó không bắt đầu bằng dấu gạch chéo, nên đếm từ chỗ đang đứng. Vì vậy cùng một chữ, ở hai chỗ đứng khác nhau, trỏ hai nơi khác nhau.
            Làm thử, đứng ở thư mục nhà thì đi vào hoc được, nhưng đứng ở thư mục anh thì báo lỗi, vì ở đó không có hoc."""),
+        st("""<div class="box key"><b>Độ sâu</b> của một chỗ = số thư mục đếm từ gốc <code>/</code> tới chỗ đó. Ví dụ: <code>/c</code> sâu $1$, <code>/c/Users</code> sâu $2$, <code>/c/Users/ban</code> sâu $3$, <code>/c/Users/ban/hoc</code> sâu $4$, <code>/c/Users/ban/hoc/nen</code> sâu $5$.</div>""",
+           """Trước bước ba, một khái niệm nhỏ là độ sâu. Độ sâu của một chỗ là số thư mục đếm từ gốc tới chỗ đó, nên chỗ càng xa gốc càng sâu. Chữ c sâu một, thư mục người dùng sâu hai, thư mục nhà sâu ba, rồi hoc sâu bốn và nen sâu năm.""", clear=True),
         st("""<p><b>Bước 3. Lùi bằng <code>..</code>.</b> Mỗi <code>..</code> lùi một cấp, nên số lần lùi bằng hiệu độ sâu:</p>
 $$\\text{số lần lùi} = \\text{độ sâu chỗ đứng} - \\text{độ sâu của thư mục chung}$$
 <p class="note">Làm thử: từ <code>/c/Users/ban/hoc/nen</code> (độ sâu 5) tới <code>anh</code> cần lùi tới <code>ban</code> (độ sâu 3): lùi $5 - 3 = 2$ lần, nên <code>../../anh</code> ✓</p>""",
@@ -157,9 +160,9 @@ $$\\text{số lần lùi} = \\text{độ sâu chỗ đứng} - \\text{độ sâu
     ], checks=["5 - 3 == 2", "len('c/Users/ban/hoc/nen'.split('/')) == 5", "len('c/Users/ban'.split('/')) == 3"])
     sc_ex = sc("example", "example", "Ví dụ: đi một vòng trong thư mục nhà, năm phép đi", [
         st(term_block(phien, 0, 4, title="① Đứng ở nhà, nhìn quanh")
-           + "<p class='note'>Dấu <code>/</code> sau tên là của Git Bash: đánh dấu đây là <b>thư mục</b>. Máy bạn có thể có thêm tệp ẩn.</p>",
+           + "<p class='note'>Dấu <code>/</code> sau tên là của Git Bash: đánh dấu đây là <b>thư mục</b>. Dấu này chỉ hiện khi bạn gõ lệnh trực tiếp trong cửa sổ; khi <code>ls</code> chạy trong một tệp lệnh (như bài thực hành) thì <b>không</b> có. Máy bạn có thể có thêm tệp ẩn.</p>",
            """Phép thứ nhất, nhìn quanh. Lệnh in vị trí cho ra đường dẫn đi từ ổ C, qua thư mục người dùng, tới ban, tức bạn đang ở thư mục nhà. Lệnh liệt kê cho ba thư mục.
-           Cờ a hiện thêm tệp ẩn bắt đầu bằng dấu chấm, và cả hai mục đặc biệt là một dấu chấm và hai dấu chấm. Cửa sổ lệnh thêm dấu gạch chéo sau tên để đánh dấu đó là thư mục.""",
+           Cờ a hiện thêm tệp ẩn bắt đầu bằng dấu chấm, và cả hai mục đặc biệt là một dấu chấm và hai dấu chấm. Cửa sổ lệnh thêm dấu gạch chéo sau tên để đánh dấu đó là thư mục. Dấu này chỉ hiện khi bạn gõ trực tiếp trong cửa sổ, còn khi lệnh chạy trong một tệp lệnh thì không có, nên bài thực hành không có dấu gạch chéo.""",
            ),
         st(term_block(phien, 4, 8, title="② Đi xuống hai cấp: hoc rồi nen")
            + "<p>Mỗi lệnh đổi thư mục <b>im lặng</b> khi thành công; muốn thấy chỗ đứng, hỏi vị trí.</p>",
@@ -204,8 +207,8 @@ $$\\text{số lần lùi} = \\text{độ sâu chỗ đứng} - \\text{độ sâu
     sc_pit = sc("pitfalls", "pitfall", "Lỗi hay gặp, có lỗi của người đã đi làm", [
         st('<div class="box warn"><b>Lỗi 1 (người mới).</b> Tên thư mục có <b>khoảng trắng</b>: máy hiểu là hai tham số.</div>'
            + term_block(loi, 0, 4)
-           + "<p>Bọc tên trong dấu nháy: <code>'Tai lieu'</code>. Tốt hơn: đặt tên không dấu, không khoảng trắng, ví dụ <code>tai_lieu</code>.</p>",
-           """Lỗi thứ nhất, của người mới, là tên thư mục có khoảng trắng. Máy hiểu Tai và lieu là hai tham số, nên báo có quá nhiều tham số.
+           + "<p><code>mkdir</code> tạo một thư mục mới, <code>cd</code> đi vào thư mục. Bọc tên trong dấu nháy: <code>'Tai lieu'</code>. Tốt hơn: đặt tên không dấu, không khoảng trắng, ví dụ <code>tai_lieu</code>.</p>",
+           """Lỗi thứ nhất, của người mới, là tên thư mục có khoảng trắng. Lệnh tạo thư mục dựng một thư mục mới, còn lệnh đổi thư mục đi vào nó. Máy hiểu Tai và lieu là hai tham số, nên báo có quá nhiều tham số.
            Cách chữa là bọc tên trong dấu nháy. Cách tốt hơn là đặt tên không dấu, không khoảng trắng, ví dụ nối bằng dấu gạch dưới."""),
         st('<div class="box warn"><b>Lỗi 2 (người mới).</b> Chép đường dẫn Windows có <code>\\</code> vào Git Bash.</div>'
            + term_block(loi, 4, 6)
@@ -214,15 +217,20 @@ $$\\text{số lần lùi} = \\text{độ sâu chỗ đứng} - \\text{độ sâu
            Vì vậy các chữ bị dính lại thành một tên lạ, và máy báo không có. Hãy đổi sang gạch chéo xuôi, ổ C viết là gạch chéo c."""),
         st('<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Máy Windows chấp nhận <code>HOC</code> thay <code>hoc</code>; máy chủ Linux thì không.</div>'
            + term_block(loi, 6, 8)
-           + "<p>Hệ tệp Windows thường <b>không phân biệt</b> hoa thường; Linux <b>có phân biệt</b>. Lệnh chạy tốt ở máy bạn có thể hỏng khi đưa lên máy chủ.</p>",
+           + "<p><b>Hệ tệp</b> là cách hệ điều hành đặt tên và sắp xếp tệp trên ổ đĩa. Hệ tệp Windows thường <b>không phân biệt</b> hoa thường; Linux <b>có phân biệt</b> (<code>HOC</code> và <code>hoc</code> là hai tên khác nhau). "
+             "<b>Máy chủ</b> là máy chạy sẵn để nhiều người hay chương trình hỏi qua mạng; <b>Linux</b> là hệ điều hành thường chạy trên máy chủ. Lệnh chạy tốt ở máy bạn có thể hỏng khi đưa lên máy chủ.</p>",
            """Lỗi thứ ba, của cả người đã đi làm, là gõ hoa thường tuỳ tiện. Trên máy của bạn, gõ chữ hoa thay cho chữ thường vẫn vào được, nên bạn không nhận ra sai.
-           Nhiều máy chủ phân biệt chữ hoa và chữ thường, và sẽ báo không có thư mục đó. Vì vậy hãy luôn gõ đúng hoa thường như tên thật, ngay từ trên máy bạn."""),
+           Hệ tệp là cách hệ điều hành đặt tên và sắp xếp tệp trên ổ đĩa. Nhiều máy chủ chạy một hệ điều hành khác máy bạn, nơi chữ hoa và chữ thường là hai tên khác nhau, nên sẽ báo không có thư mục đó.
+           Máy chủ là một máy chạy sẵn để nhiều người hay chương trình hỏi qua mạng. Vì vậy hãy luôn gõ đúng hoa thường như tên thật, ngay từ trên máy bạn."""),
     ])
     sc_quiz = sc("quiz", "quiz", "Bây giờ tới phần bạn tự làm", [
-        st("""<p><b>Đề.</b> Cây ở sơ đồ trên; bạn đang đứng ở <code>/c/Users/ban/hoc/toan</code>. Gõ lần lượt các lệnh dưới đây, ghi lại vị trí sau mỗi lệnh.</p>
+        st(cay(9, txt(1100, 120, "bạn đang đứng ở ô cam: toan", 30, "middle", "#d97706", True)
+               + txt(1100, 170, "/c/Users/ban/hoc/toan", 28, "middle", "#1f2937", mono=True)),
+           """Trước khi làm, hãy nhìn lại cây thư mục của bài. Ô màu cam là thư mục toan, chỗ bạn đang đứng, nằm trong hoc, nằm trong ban."""),
+        st("""<p><b>Đề.</b> Bạn đang đứng ở <code>/c/Users/ban/hoc/toan</code> (cây ở sơ đồ vừa rồi). Gõ lần lượt các lệnh dưới đây, ghi lại vị trí sau mỗi lệnh.</p>
 <ol><li><code>cd ..</code></li><li><code>cd nen</code></li><li><code>cd ../../anh</code></li><li><code>cd</code></li><li><code>cd hoc/toan</code></li></ol>
 <p><b>Quyết định:</b> bạn gửi tệp lệnh cho bạn cùng lớp tên khác. Trong đó nên viết <code>cd /c/Users/ban/anh</code> hay <code>cd ../../anh</code>? Vì sao?</p>""",
-           """Bây giờ tới phần bạn tự làm. Bạn đang đứng ở thư mục toan, nằm trong hoc, nằm trong ban. Gõ lần lượt năm lệnh đổi thư mục trên màn hình, và ghi lại vị trí sau mỗi lệnh.
+           """Bây giờ tới phần bạn tự làm. Gõ lần lượt năm lệnh đổi thư mục trên màn hình, và ghi lại vị trí sau mỗi lệnh.
            Sau đó là một quyết định. Bạn gửi tệp lệnh cho bạn cùng lớp có tên khác, nên viết đường dẫn tuyệt đối tới anh hay đường dẫn tương đối, và vì sao. Hãy dừng video và làm.""", pause=60),
         st(table(["lệnh", "vị trí sau lệnh", "lý do"],
                  [["① <code>cd ..</code>", "<code>/c/Users/ban/hoc</code>", "lùi một cấp từ toan"],
@@ -248,10 +256,13 @@ $$\\text{số lần lùi} = \\text{độ sâu chỗ đứng} - \\text{độ sâu
 <ol><li>Đang đứng ở <code>b</code>: in nội dung <code>b</code>.</li>
 <li>Chỉ dùng <b>đường tương đối</b> tới <code>ho_so</code>, in nội dung.</li>
 <li>Từ <code>ho_so</code> tới <code>a</code>, in nội dung.</li>
-<li>In nội dung thư mục <b>cha</b> của <code>a</code> (không cần đi tới đó).</li></ol>""",
-        """Bây giờ tới phần bạn tự làm. Tạo một tệp lệnh, bắt đầu bằng đoạn dựng cây trên màn hình, chép nguyên, bạn chưa cần hiểu các lệnh đó. Rồi viết các lệnh của bạn.
+<li>In nội dung thư mục <b>cha</b> của <code>a</code> (không cần đi tới đó).</li></ol>
+<p class="note">Đoạn dựng cây: <code>mkdir -p</code> tạo thư mục (cả thư mục cha còn thiếu), <code>touch</code> tạo tệp trống, <code>cd</code> đi vào <code>b</code>.
+Chạy ngay trên cửa sổ lệnh, <code>ls</code> xếp tên thành <b>cột</b>; viết <code>ls -1</code> (số một) để mỗi tên một dòng như kết quả mong đợi. Máy chấm coi cả hai cách là ĐÚNG.</p>""",
+        """Bây giờ tới phần bạn tự làm. Tạo một tệp lệnh, bắt đầu bằng đoạn dựng cây trên màn hình, chép nguyên. Đoạn đó tạo thư mục, tạo tệp trống rồi đi vào thư mục b, ta sẽ học kỹ các lệnh ấy sau. Rồi viết các lệnh của bạn.
         Đang đứng ở thư mục b, hãy liệt kê nội dung của nó. Chỉ dùng đường dẫn tương đối để tới thư mục ho sơ và liệt kê. Từ đó tới thư mục a và liệt kê.
-        Cuối cùng liệt kê thư mục cha của a mà không cần đi tới đó. Hãy dừng video và làm.""",
+        Cuối cùng liệt kê thư mục cha của a mà không cần đi tới đó. Chạy ngay trên cửa sổ lệnh, lệnh liệt kê xếp tên thành cột; thêm cờ số một để mỗi tên một dòng như kết quả mong đợi, còn máy chấm coi cả hai cách là đúng.
+        Hãy dừng video và làm.""",
         LAB_OUT, "di.sh",
         """<div class="box key"><b>Nếu kẹt:</b> từ <code>b</code> tới <code>ho_so</code> phải lùi hai cấp: <code>cd ../../ho_so</code>. Từ <code>ho_so</code> tới <code>a</code>: lùi một cấp, xuống <code>kho/a</code>.
 Cha của <code>a</code> là <code>..</code> nên <code>ls ..</code>. Lời giải ở <code>labs/FND/L01/loi_giai.sh</code>.</div>""",
@@ -259,7 +270,7 @@ Cha của <code>a</code> là <code>..</code> nên <code>ls ..</code>. Lời gi�
         Lời giải nằm trong thư mục thực hành, chỉ mở sau khi đã thử.""", pause=150), "FND", "L01")
     write_lab("FND", "L01", f"""# Lab FND L01 — Đi theo cây thư mục
 
-Tạo `di.sh`. Bắt đầu bằng đoạn dựng cây này (chép nguyên; `mkdir` và `touch` học ở bài sau):
+Tạo `di.sh` (soạn bằng trình soạn mã, lưu ở thư mục gốc của bộ khoá, mở Git Bash tại đó như bài 0). Bắt đầu bằng đoạn dựng cây này, chép nguyên: `mkdir -p` tạo thư mục (cả thư mục cha còn thiếu), `touch` tạo tệp trống, `cd` đi vào `b`; các lệnh đó học kỹ ở bài sau:
 
 ```bash
 {SETUP}
@@ -271,7 +282,7 @@ Rồi viết các lệnh, **chỉ dùng `cd` với đường dẫn tương đố
 3. từ `ho_so` tới `a`, in nội dung;
 4. in nội dung thư mục **cha** của `a` (một lệnh `ls`, không `cd`).
 
-Chạy `bash di.sh`; chấm: `bash labs/cham.sh FND L01 di.sh`. Khác bài giảng: số tệp, tên thư mục.
+Chạy `bash di.sh`; chấm: `bash labs/cham.sh FND L01 di.sh`. Khác bài giảng: số tệp, tên thư mục. Chạy ngay trên cửa sổ lệnh, `ls` xếp tên thành cột (`y.txt  z.txt`); viết `ls -1` (số một) nếu muốn mỗi tên một dòng như `mong_doi.txt`. Máy chấm coi cả hai cách là ĐÚNG.
 """, "sh", SETUP + "\n" + LAB_BODY, LAB_OUT)
     sc_rec = sc("recap", "recap", "Chuỗi logic và tư duy cần mang theo", [
         st(chain("dấu nhắc: máy chờ lệnh", "pwd: đang đứng ở đâu", "ls: trong đây có gì", "cd: đi sang chỗ khác",

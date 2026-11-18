@@ -87,7 +87,7 @@ public class DoanKetQua {
            Mã nguồn là các dòng lệnh bạn gõ bằng chữ, còn biên dịch là dịch cả tệp mã nguồn sang dạng máy đọc được, trước khi chạy.
            Mọi dịch vụ ngân hàng sau này, từ chuyển khoản tới đối soát, đều bắt đầu từ ba bước ấy, và hiểu chúng giúp bạn đọc được thông báo lỗi thay vì sợ nó."""),
     ])
-    sc_pre = sc("prereq", "prereq", "Trước hết: ba điều về máy tính", [
+    sc_pre = sc("prereq", "prereq", "Trước hết: bốn điều về máy tính", [
         st(table(["khái niệm", "nghĩa", "ví dụ đời thường"],
                  [["① Bộ xử lý", "làm từng lệnh rất đơn giản, rất nhanh", "người thu ngân bấm máy tính"],
                   ["② Bộ nhớ", "chỗ để giữ dữ liệu khi đang chạy", "tờ giấy nháp"],
@@ -98,7 +98,7 @@ public class DoanKetQua {
            Điều thứ ba, tệp là dữ liệu được lưu trên ổ đĩa và có tên, giống cuốn sổ có tên ghi trên gáy.
            Điều thứ tư, thư mục là ngăn chứa tệp, giống ngăn tủ đựng sổ. Khi ta gõ lệnh cho máy, ta luôn đứng ở một thư mục nào đó, và lệnh chỉ thấy các tệp nằm ngay trong thư mục ấy."""),
         st("""<p>Một <b>chương trình</b> là danh sách lệnh viết sẵn, máy làm lần lượt <b>từ trên xuống</b>.</p>""",
-           """Ghép ba điều lại, một chương trình là danh sách lệnh viết sẵn, và máy làm lần lượt từ trên xuống dưới."""),
+           """Ghép bốn điều lại, một chương trình là danh sách lệnh viết sẵn, và máy làm lần lượt từ trên xuống dưới."""),
     ])
     sc_sym = sc("sym", "symbol", "Giải mã các ký hiệu trong chương trình đầu tiên", [
         st(code_block(hello, title="Tệp Chao.java"),
@@ -159,10 +159,13 @@ public class DoanKetQua {
         st("""<p><b>Chuẩn bị.</b> Cài bộ công cụ <b>JDK</b> bản 21 trở lên (có bản miễn phí, ví dụ ở jdk.java.net hoặc adoptium.net); trong đó có trình biên dịch <code>javac</code> và máy ảo <code>java</code>.
 Mở <b>Git Bash</b>: cửa sổ lệnh đi kèm Git for Windows (macOS, Linux: Terminal). Cả khoá chỉ dùng cửa sổ này.</p>
 <div class="code"><div>javac -version</div></div>
-<span class='note'>Làm thử: lệnh in ra số phiên bản, ví dụ javac 21.0.2, là máy đã sẵn sàng.</span>""",
+<span class='note'>Làm thử: lệnh in ra số phiên bản, ví dụ javac 21.0.2, là máy đã sẵn sàng.</span>
+<div class="box warn">Báo <code>command not found</code>: thư mục của JDK chưa nằm trong danh sách nơi máy tìm lệnh (<b>PATH</b>). Cài lại JDK, chọn thêm vào PATH, rồi mở cửa sổ lệnh mới.</div>""",
            """Trước khi bắt đầu, máy cần có bộ công cụ JDK, bản hai mươi mốt trở lên, có bản tải miễn phí, vì trong đó có sẵn trình biên dịch và máy ảo.
            Ta gõ lệnh trong cửa sổ lệnh, tức một khung chữ nơi ta gõ lệnh cho máy rồi bấm phím xuống dòng. Cả khoá chỉ dùng loại cửa sổ này, tên trên màn hình, để lệnh chạy giống nhau trên mọi máy.
-           Làm thử, gõ lệnh hỏi phiên bản của trình biên dịch; nó in ra số phiên bản là máy đã sẵn sàng."""),
+           Làm thử, gõ lệnh hỏi phiên bản của trình biên dịch; nó in ra số phiên bản là máy đã sẵn sàng.
+           Nếu máy báo không tìm thấy lệnh, thư mục của bộ công cụ chưa nằm trong danh sách nơi máy tìm lệnh.
+           Khi đó hãy cài lại, chọn thêm vào danh sách đó, rồi mở một cửa sổ lệnh mới."""),
         st("""<p><b>Bước 0. Đứng vào một thư mục làm việc.</b></p>
 <div class="code"><div>mkdir -p ~/hoc/jva</div><div>cd ~/hoc/jva</div><div>pwd</div><div>ls</div></div>
 <span class='note'>Làm thử: <code>pwd</code> in đường dẫn bạn đang đứng, ví dụ /c/Users/ban/hoc/jva; <code>ls</code> chưa in gì vì thư mục còn trống.</span>""",
@@ -255,9 +258,12 @@ Lỗi biên dịch thì rẻ nhất: <b>0</b> lệnh bị chạy, sửa ngay t�
            """Lỗi thứ hai, cũng của người mới, là biên dịch khi đang đứng sai thư mục. Lệnh đổi thư mục kèm dấu ngã đưa ta về thư mục nhà, nơi chưa có tệp Chao.
            Khi đó trình biên dịch báo không tìm thấy tệp, vì nó chỉ nhìn thư mục đang đứng. Cách sửa là hỏi lại vị trí bằng lệnh in vị trí, rồi đi vào đúng thư mục chứa tệp."""),
         st('<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Tin rằng “biên dịch được là chạy đúng”.</div>'
-           + code_block(chia_khong, lines=(3, 6)) + out_block(chia_khong),
+           + code_block(chia_khong, lines=(3, 6))
+           + "<span class='note'><code>int</code>: <b>kiểu số nguyên</b>, ô nhớ này chỉ chứa số nguyên. "
+             "<code>soNguoi</code>: tên ô. <code>= 0</code>: đặt số 0 vào ô.</span>" + out_block(chia_khong),
            """Lỗi thứ ba, của cả người đã đi làm, là tin rằng biên dịch được thì chạy đúng. Chương trình này biên dịch không lỗi.
            Nó tạo một ô nhớ có tên là số người, đặt vào số không; loại ô nhớ có tên này gọi là biến.
+           Chữ đứng đầu dòng là kiểu số nguyên, nghĩa là ô chỉ chứa số nguyên.
            Khi chạy, nó in bắt đầu, rồi chia một trăm nghìn cho số không, và máy ảo ném ra ngoại lệ phép tính. Dòng kết thúc không được in vì chương trình đã dừng."""),
     ])
     sc_quiz = sc("quiz", "quiz", "Bây giờ tới phần bạn tự làm", [

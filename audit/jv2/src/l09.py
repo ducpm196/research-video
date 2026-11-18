@@ -135,7 +135,8 @@ public class BaoCao {
 
     public static Map<String, Long> theoThang(List<GiaoDich> ds) {
         return ds.stream().collect(Collectors.groupingBy(
-                g -> g.ngay().toString().substring(0, 7), TreeMap::new, Collectors.summingLong(GiaoDich::dau)));
+                g -> g.ngay().toString().substring(0, 7), TreeMap::new,
+                Collectors.summingLong(GiaoDich::dau)));
     }
 
     public static long tong(List<GiaoDich> ds, String loai) {
@@ -173,7 +174,8 @@ public class App {
     public static void main(String[] args) throws Exception {
         List<GiaoDich> ds = new ArrayList<>();
         int loi = DocSoCai.duyet(Path.of(args[0]), ds::add);
-        System.out.println("Doc " + (ds.size() + loi) + " dong: " + ds.size() + " hop le, " + loi + " loi");
+        System.out.println("Doc " + (ds.size() + loi) + " dong: " + ds.size()
+                + " hop le, " + loi + " loi");
         Map<String, Long> soDu = BaoCao.soDu(ds);
         soDu.forEach((tk, tien) -> System.out.println("Tai khoan " + tk + ": " + tien));
         long tong = soDu.values().stream().mapToLong(Long::longValue).sum();
@@ -212,8 +214,10 @@ public class AppSong {
         Path p = Path.of(args[0]);
         Map<String, Long> song;
         try (Stream<String> dong = Files.lines(p)) {
-            song = dong.skip(1).parallel().map(d -> d.split(",")).collect(Collectors.groupingByConcurrent(
-                    f -> f[2], Collectors.summingLong(f -> f[3].equals("nap") ? Long.parseLong(f[4]) : -Long.parseLong(f[4]))));
+            song = dong.skip(1).parallel().map(d -> d.split(","))
+                    .collect(Collectors.groupingByConcurrent(f -> f[2],
+                            Collectors.summingLong(f -> f[3].equals("nap")
+                                    ? Long.parseLong(f[4]) : -Long.parseLong(f[4]))));
         }
         TongHop t = new TongHop();
         DocSoCai.duyet(p, t::them);
@@ -284,8 +288,8 @@ public class TaoSoCai {
         try (BufferedWriter w = Files.newBufferedWriter(Path.of("lon.csv"))) {
             w.write("ma,ngay,tai_khoan,loai,so_tien\n");
             for (int i = 1; i <= n; i++) {
-                w.write(i + ",2026-01-05,A" + String.format("%02d", i % 100) + "," + (i % 3 == 0 ? "rut" : "nap")
-                        + "," + (i % 7 + 1) * 1000 + "\n");
+                w.write(i + ",2026-01-05,A" + String.format("%02d", i % 100) + ","
+                        + (i % 3 == 0 ? "rut" : "nap") + "," + (i % 7 + 1) * 1000 + "\n");
             }
         }
         System.out.println("da ghi " + n + " dong");
@@ -408,6 +412,8 @@ Yêu cầu:
 
 Kết quả mong đợi (sáu dòng): hai dòng `Bo qua`, ba dòng số dư, một dòng `Tong`. Tự tính tay trước: B01 = 4 000 000 − 900 000.
 
+Dòng `import` cần dùng: `java.io.BufferedReader`, `java.io.IOException`, `java.nio.file.Files`, `java.nio.file.Path`, `java.util.Map`, `java.util.TreeMap`. Hàm `main` khai `throws IOException`.
+
 Chạy: `javac SoCaiNho.java && java SoCaiNho`. Chấm: `bash labs/cham.sh JV2 L09 SoCaiNho.java`.
 """, "java", lab["code"], lab["out"])
     sc_lab = practice_scene(sc, "Tự làm: sổ cái nhỏ có dòng lỗi", pr_steps(
@@ -417,8 +423,8 @@ Chạy: `javac SoCaiNho.java && java SoCaiNho`. Chấm: `bash labs/cham.sh JV2 L
 <li>Dòng lỗi: in <code>Bo qua dong …: …</code> rồi đọc tiếp; dòng đúng: cộng vào <code>TreeMap</code>.</li>
 <li>In số dư từng tài khoản và <code>Tong … khop true</code> (bất biến: tổng số dư = nạp − rút).</li></ol>
 <p class="note">Tệp <code>SoCaiNho.java</code>; mọi dữ liệu đã ghi trong <code>labs/JV2/L09/de.md</code>.</p>""",
-        """Bây giờ tới phần bạn tự làm trên máy. Đề bài cho một sổ cái bảy dòng, hai dòng bị lỗi. Hãy đọc từng dòng, bỏ tiêu đề, đếm số dòng của tệp, và viết hàm phân tích dòng, ném ngoại lệ khi số tiền không phải số hoặc loại sai. Dòng lỗi thì in ra và đọc tiếp, không dừng.
-        Dòng đúng thì cộng vào bản đồ có thứ tự. Cuối cùng in số dư từng tài khoản, và dòng tổng kèm kết quả kiểm bất biến. Hãy dừng video và tự viết, đừng chép lại ví dụ.""",
+        """Bây giờ tới phần bạn tự làm trên máy. Đề cho một sổ cái bảy dòng, hai dòng bị lỗi. Hãy đọc từng dòng, bỏ tiêu đề, đếm số dòng của tệp, và viết hàm phân tích ném ngoại lệ khi số tiền không phải số hoặc loại sai. Dòng lỗi thì in ra rồi đọc tiếp, dòng đúng thì cộng vào bản đồ có thứ tự.
+        Cuối cùng in số dư từng tài khoản và dòng tổng kèm kiểm bất biến. Hãy dừng video và tự viết, đừng chép lại ví dụ.""",
         lab["out"], "SoCaiNho.java",
         """<div class="box key"><b>Nếu kẹt:</b> bắt <code>IllegalArgumentException</code> <b>quanh</b> lời gọi <code>phanTich</code> trong vòng <code>while</code>, không bao cả vòng. Số dòng bắt đầu từ 1 ở tiêu đề: tăng <code>so</code> ở đầu mỗi vòng.
 Lời giải: <code>labs/JV2/L09/loi_giai.java</code> — chỉ mở sau khi đã thử.</div>""",
@@ -432,25 +438,25 @@ Lời giải: <code>labs/JV2/L09/loi_giai.java</code> — chỉ mở sau khi đ�
                box(810, 90, 300, 110, ["gom theo", "tài khoản, tháng"], C_GREEN, 26, bold=True), arrow(1115, 145, 1200, 145, "#475569"),
                box(1205, 90, 275, 110, ["báo cáo", "+ kiểm bất biến"], C_AMBER, 26, bold=True),
                txt(750, 260, "chín bài đã học ghép lại thành một chương trình có thật", 28, "middle", "#1f2937", True)),
-           """Cuối ngày, ngân hàng có một tệp sổ cái cả triệu dòng. Cần một báo cáo số dư theo tài khoản và theo tháng. Báo cáo phải đúng, dòng lỗi phải được ghi lại chứ không làm hỏng cả báo cáo, và chương trình phải chạy được dù tệp lớn.
-           Đây là lúc ghép mọi thứ đã học thành một dự án nhiều tệp có thật."""),
-        st("""<div class="box key">Hôm nay: <b>dự án tình huống</b>. Dự án nhiều gói; đọc tệp từng dòng; bản ghi và đường ống; kiểm thử; nhật ký cảnh báo; <b>bất biến tổng số dư = tổng nạp − tổng rút</b>;
+           """Cuối ngày, ngân hàng có một tệp sổ cái cả triệu dòng, cần báo cáo số dư theo tài khoản và theo tháng. Báo cáo phải đúng, dòng lỗi phải được ghi lại chứ không làm hỏng báo cáo, và chương trình phải chạy được dù tệp lớn.
+           Đây là lúc ghép mọi thứ đã học thành một dự án thật."""),
+        st("""<div class="box key">Hôm nay: <b>dự án tình huống</b>. Dự án nhiều tệp trong một gói; đọc tệp từng dòng; bản ghi và đường ống; kiểm thử; nhật ký cảnh báo; <b>bất biến tổng số dư = tổng nạp − tổng rút</b>;
 và câu hỏi cuối: <b>khi tệp lớn gấp một nghìn lần</b>, thiết kế nào còn sống?</div>""",
-           """Hôm nay ta làm một dự án tình huống. Dự án nhiều gói, đọc tệp từng dòng, bản ghi và đường ống, kiểm thử, nhật ký cảnh báo, và một bất biến, tổng số dư bằng tổng nạp trừ tổng rút. Câu hỏi cuối cùng là khi tệp lớn gấp một nghìn lần thì thiết kế nào còn sống.""", clear=True),
+           """Hôm nay ta làm dự án tình huống, ghép nhiều tệp trong một gói. Có thêm một bất biến, tổng số dư bằng tổng nạp trừ tổng rút. Câu hỏi cuối là khi tệp lớn gấp một nghìn lần thì thiết kế nào còn sống.""", clear=True),
     ])
     sc_pre = sc("prereq", "prereq", "Ôn lại: chín bài trước, mỗi bài một mảnh", [
         st(table(["mảnh", "bài", "dùng ở đâu trong dự án"],
-                 [["gói, <code>javac -d</code>, <code>-cp</code>", "bài 0", "ba thư mục, một lệnh biên dịch"],
+                 [["gói, <code>javac -d</code>, <code>-cp</code>", "bài 0", "một gói, thư mục khớp tên gói, một lệnh biên dịch cả gói"],
                   ["đọc từng dòng, <code>try (…)</code>", "bài 1", "<code>DocSoCai</code>"],
                   ["bộ so sánh, bản đồ có thứ tự", "bài 2", "<code>TreeMap</code> cho báo cáo xếp theo tài khoản"],
                   ["đường ống, <code>groupingBy</code>", "bài 3", "<code>BaoCao</code>"],
-                  ["nhãn và phản chiếu", "bài 4", "<code>@Override</code>, nhãn tự định nghĩa"],
+                  ["nhãn và phản chiếu", "bài 4", "chưa cần ở dự án nhỏ này"],
                   ["khoá, nhóm luồng, bản đồ an toàn", "bài 5", "gom song song"],
                   ["ca kiểm ở biên", "bài 6", "<code>KiemTra</code>"],
                   ["nhật ký có mức, dấu vết", "bài 7", "<code>NhatKy</code>, cảnh báo dòng lỗi"],
                   ["tiền là số nguyên đồng", "bài 8", "<code>long</code> cho mọi số tiền"]]),
-           """Ta ôn lại các mảnh sẽ ghép. Gói và lệnh biên dịch từ bài không. Đọc từng dòng trong khối có tài nguyên từ bài một. Bản đồ có thứ tự từ bài hai. Đường ống và gom nhóm từ bài ba. Nhãn và phản chiếu từ bài bốn. Bản đồ an toàn cho nhiều luồng từ bài năm. Ca kiểm ở biên từ bài sáu.
-           Nhật ký có mức độ từ bài bảy. Và tiền là số nguyên theo đồng từ các bài trước.""",
+           """Ta ôn lại các mảnh sẽ ghép. Gói và lệnh biên dịch từ bài không. Đọc từng dòng từ bài một. Bản đồ có thứ tự từ bài hai. Đường ống từ bài ba. Nhãn và phản chiếu từ bài bốn, chưa cần ở đây. Bản đồ an toàn cho nhiều luồng từ bài năm.
+           Ca kiểm ở biên từ bài sáu. Nhật ký có mức từ bài bảy. Và tiền là số nguyên theo đồng.""",
            focus=[1, "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10"]),
     ])
     sc_sym = sc("sym", "symbol", "Giải mã sáu thuật ngữ của bài toán sổ cái", [
@@ -461,102 +467,147 @@ và câu hỏi cuối: <b>khi tệp lớn gấp một nghìn lần</b>, thiết 
                   ["dòng lỗi", "dòng không qua kiểm tra; <b>ghi lại và đếm</b>, không bỏ lặng lẽ, không làm dừng cả chương trình"],
                   ["đọc theo dòng (streaming)", "xử lý từng dòng rồi quên nó: bộ nhớ <b>không đổi</b> theo kích thước tệp"],
                   ["bộ gom (accumulator)", "đối tượng cộng dồn kết quả khi từng dòng đi qua (<code>TongHop</code>)"]]),
-           """Bảng này giải mã sáu thuật ngữ của bài toán sổ cái. Sổ cái là danh sách mọi giao dịch theo thứ tự, số dư chỉ là kết quả cộng dồn. Bất biến là điều luôn đúng sau mỗi thao tác, ở đây là tổng số dư bằng tổng nạp trừ tổng rút. Đối chiếu là so hai cách đếm độc lập cùng một thứ.
-           Dòng lỗi phải được ghi lại và đếm, không bỏ lặng lẽ. Đọc theo dòng là xử lý từng dòng rồi quên, nên bộ nhớ không đổi. Và bộ gom là đối tượng cộng dồn kết quả khi từng dòng đi qua.""",
-           focus=[1, "1.2", "1.3", "1.4", "1.5", "1.6", "1.7"]),
+           """Bảng có sáu thuật ngữ, trước hết sổ cái là danh sách mọi giao dịch, số dư là kết quả cộng dồn. Bất biến là điều luôn đúng sau mỗi thao tác, ở đây là tổng số dư bằng tổng nạp trừ tổng rút. Đối chiếu là so hai cách đếm độc lập cùng một thứ.
+           Dòng lỗi phải được ghi lại và đếm, không bỏ lặng lẽ. Đọc theo dòng là xử lý từng dòng rồi quên, nên bộ nhớ không đổi. Bộ gom cộng dồn kết quả khi từng dòng đi qua.""",
+           focus=["1.2", "1.3", "1.4", "1.5", "1.6", "1.7"]),
     ])
     sc_int = sc("intuition", "intuition", "Hình dung: cây dự án và dòng chảy dữ liệu", [
-        st(svg(1500, 420,
+        st(svg(1500, 440,
                *tree_parts([(0, "src/soc", "d"), (1, "GiaoDich.java", "f"), (1, "DocSoCai.java", "f"), (1, "NhatKy.java", "f"), (1, "BaoCao.java", "f"),
-                            (1, "TongHop.java", "f"), (1, "App.java", "f"), (1, "KiemTra.java", "f")], 10, 10, 60, 48, 22, hi={1}),
-               arrow(430, 90, 700, 90, "#2a78d6"), txt(820, 85, "bản ghi bất biến + phanTich", 24, "start"),
-               arrow(430, 140, 700, 140, "#2a78d6"), txt(820, 135, "đọc từng dòng, gọi phanTich, báo lỗi", 24, "start"),
-               arrow(430, 190, 700, 190, "#2a78d6"), txt(820, 185, "cảnh báo có mức, in ngay", 24, "start"),
-               arrow(430, 240, 700, 240, "#2a78d6"), txt(820, 235, "đường ống gom nhóm", 24, "start"),
-               arrow(430, 290, 700, 290, "#2a78d6"), txt(820, 285, "bộ gom cho đọc theo dòng", 24, "start"),
-               arrow(430, 340, 700, 340, "#2a78d6"), txt(820, 335, "ghép lại và in báo cáo", 24, "start"),
-               arrow(430, 390, 700, 390, "#16a34a"), txt(820, 385, "kiểm thử các ca biên", 24, "start", "#16a34a", True)),
-           """Hình dung dự án như một cây thư mục và một dòng chảy. Một gói, bảy tệp, mỗi tệp một việc. Bản ghi bất biến biết cách phân tích một dòng. Bộ đọc đọc từng dòng và gọi bản ghi. Nhật ký in cảnh báo có mức. Lớp báo cáo dùng đường ống để gom nhóm.
-           Bộ gom dành cho đọc theo dòng. Lớp chính ghép các phần lại. Và lớp kiểm thử canh các ca biên. Mỗi mảnh nhỏ nên dễ kiểm và dễ thay."""),
+                            (1, "TongHop.java", "f"), (1, "App.java", "f"), (1, "AppDong.java", "f"), (1, "AppSong.java", "f"),
+                            (1, "KiemTra.java", "f"), (1, "ThuTieuDe.java", "f")], 10, 10, 60, 36, 20, hi={1}),
+               *[x for i, (lab_, col_) in enumerate([("bản ghi bất biến + phanTich", "#2a78d6"), ("đọc từng dòng, gọi phanTich, báo lỗi", "#2a78d6"),
+                                                    ("cảnh báo có mức, in ngay", "#2a78d6"), ("đường ống gom nhóm", "#2a78d6"),
+                                                    ("bộ gom cho đọc theo dòng", "#2a78d6"), ("bản giữ danh sách: ghép và in báo cáo", "#2a78d6"),
+                                                    ("bản đọc theo dòng, dùng bộ gom", "#2a78d6"), ("bản song song", "#2a78d6"),
+                                                    ("kiểm thử các ca biên", "#16a34a"), ("thử quên bỏ dòng tiêu đề", "#d97706")])
+                 for x in (arrow(430, 10 + (i + 1) * 36 + 19, 700, 10 + (i + 1) * 36 + 19, col_),
+                           txt(720, 10 + (i + 1) * 36 + 26, lab_, 22, "start", col_ if col_ != "#2a78d6" else "#1f2937", col_ != "#2a78d6"))],
+               txt(1500 - 20, 425, "ngoài gói: TaoSoCai.java tạo tệp thử một triệu dòng", 22, "end", "#475569", True)),
+           """Hình dung dự án như một cây thư mục: một gói, mười tệp, mỗi tệp một việc. Bản ghi phân tích một dòng, bộ đọc đọc từng dòng, nhật ký in cảnh báo, lớp báo cáo gom nhóm.
+           Ba lớp chính là ba bản chạy khác nhau, lớp kiểm thử canh các ca biên, ngoài gói còn chương trình tạo tệp thử."""),
         st(pcode(du_an, "src/soc/GiaoDich.java", lines=(7, 16), title="GiaoDich.java: phanTich (đoạn đầu)"),
-           """Đây là trái tim của bộ đọc, hàm phân tích một dòng. Cắt dòng, giữ cả ô rỗng ở cuối. Nếu số cột không đủ thì ném lỗi rõ ràng. Số tiền đổi sang số nguyên dài, hỏng thì bọc lại thành một thông báo dễ hiểu.""", clear=True),
+           """Đây là trái tim của bộ đọc, hàm phân tích một dòng. Nó cắt dòng giữ cả ô rỗng, ném lỗi rõ ràng nếu thiếu cột, và đổi số tiền sang số nguyên dài, hỏng thì bọc thành thông báo dễ hiểu.""", clear=True),
         st(pcode(du_an, "src/soc/GiaoDich.java", lines=(18, 23), title="GiaoDich.java: phanTich (đoạn sau)"),
-           """Rồi hai kiểm tra nghiệp vụ. Số tiền phải dương, và loại chỉ là nạp hoặc rút. Mỗi kiểm tra ném một thông báo riêng, nói rõ giá trị sai. Nhờ vậy nhật ký sau này chỉ ra được đúng dòng nào sai vì lý do gì.""", clear=True),
+           """Rồi hai kiểm tra nghiệp vụ, số tiền phải dương và loại chỉ là nạp hoặc rút. Mỗi kiểm tra ném thông báo riêng nói rõ giá trị sai, nên nhật ký chỉ ra đúng dòng nào sai vì lý do gì.""", clear=True),
+        st(pcode(du_an, "src/soc/GiaoDich.java", lines=(24, 33), title="GiaoDich.java: đổi ngày, và hàm cho dấu"),
+           """Đoạn cuối đổi ngày chữ thành ngày lịch, hỏng thì ném lỗi riêng. Hàm cho dấu trả số dương với nạp và số âm với rút.""", clear=True),
+        st(pcode(du_an, "src/soc/DocSoCai.java", lines=(10, 18), title="DocSoCai.java: bộ đọc (đoạn đầu)")
+           + "<p class='note'><code>Consumer&lt;GiaoDich&gt;</code>: kiểu của <b>một hàm nhận một giao dịch và không trả gì</b> (gọi bằng <code>khiDoc.accept(g)</code>). Bộ đọc gọi hàm này cho mỗi giao dịch đọc được.</p>",
+           """Bộ đọc nhận một đường dẫn và một hàm nhận mỗi giao dịch, kiểu hàm nhận một giá trị mà không trả gì. Nó mở tệp, bỏ dòng tiêu đề, và đếm số dòng từ một ở tiêu đề.""",
+           introduces=["jv2_consumer"], clear=True),
+        st(pcode(du_an, "src/soc/DocSoCai.java", lines=(19, 28), title="DocSoCai.java: bộ đọc (đoạn sau)"),
+           """Mỗi dòng được phân tích rồi đưa cho hàm nhận. Dòng sai thì đếm lỗi, ghi cảnh báo kèm số dòng, rồi đọc tiếp. Cuối cùng trả về số dòng lỗi.""", clear=True),
+        st(pcode(du_an, "src/soc/NhatKy.java", lines=(17, 24), title="NhatKy.java: người ghi, nơi nhận, khối khởi tạo", note=False)
+           + "<p class='note'><code>static { … }</code>: <b>khối khởi tạo tĩnh</b>, chạy <b>đúng một lần</b> khi lớp được nạp lần đầu; ở đây nó cấu hình người ghi và nơi nhận.</p>",
+           """Nhật ký ở đây là bài bảy đóng gói vào một lớp, với sáu dòng nạp tên và lớp định dạng giống hệt. Khối có chữ tĩnh chạy đúng một lần khi lớp được nạp lần đầu, nên người ghi và nơi nhận chỉ tạo một lần.""",
+           introduces=["jv2_static_init"], clear=True),
+        st(pcode(du_an, "src/soc/NhatKy.java", lines=(26, 29), title="NhatKy.java: hàm cảnh báo", note=False),
+           """Hàm cảnh báo ghi một dòng rồi đẩy ngay ra màn hình.""", clear=True),
+        st(pcode(du_an, "src/soc/BaoCao.java", lines=(9, 18)),
+           """Lớp báo cáo dùng đường ống. Hàm đầu gom số dư theo tài khoản. Hàm thứ hai gom theo tháng, lấy bảy ký tự đầu của ngày.""", clear=True),
+        st(pcode(du_an, "src/soc/BaoCao.java", lines=(20, 22)),
+           """Hàm thứ ba cộng số tiền theo loại giao dịch, để lấy tổng nạp và tổng rút.""", clear=True),
+        st(pcode(du_an, "src/soc/TongHop.java", lines=(6, 18), title="TongHop.java: bộ gom cộng dồn khi đọc"),
+           """Bộ gom giữ số dư theo tài khoản và hai tổng nạp, rút, cộng ngay khi mỗi giao dịch đi qua, không cần giữ danh sách.""", clear=True),
+        st(pcode(du_an, "src/soc/App.java", lines=(10, 17), title="App.java: bản giữ danh sách (đoạn đầu)")
+           + "<p class='note'><code>ds::add</code>: tham chiếu hàm <b>gắn với đối tượng</b> <code>ds</code>, viết tắt của <code>g -&gt; ds.add(g)</code>: mỗi giao dịch đọc được sẽ được thêm vào danh sách <code>ds</code>.</p>",
+           """Bản đầu giữ mọi giao dịch trong một danh sách. Hai dấu hai chấm sau tên danh sách là tham chiếu hàm gắn với đối tượng, viết tắt của hàm ngắn thêm giao dịch vừa đọc vào danh sách đó. Rồi nó in số dòng đọc, hợp lệ, lỗi, và gom số dư theo tài khoản.""",
+           introduces=["jv2_bound_ref"], clear=True),
+        st(pcode(du_an, "src/soc/App.java", lines=(18, 22), title="App.java: in số dư, kiểm bất biến, theo tháng"),
+           """Sau đó nó in tổng số dư, tính độc lập tổng nạp và tổng rút, rồi in hai vế của bất biến.""", clear=True),
+        st(pcode(du_an, "src/soc/AppDong.java", lines=(6, 13), title="AppDong.java: bản đọc theo dòng")
+           + "<p class='note'><code>t::them</code>: cùng cách viết, nhưng mỗi giao dịch được đưa vào hàm <code>them</code> của bộ gom <code>t</code>.</p>",
+           """Bản đọc theo dòng dùng cùng cách viết đó, đưa mỗi giao dịch vào hàm thêm của bộ gom, nên giao dịch được cộng ngay và không nằm trong danh sách nào.""", clear=True),
     ])
     sc_form = sc("formula", "formula", "Suy ra từng bước: vì sao thiết kế như vậy", [
         st("<p><b>Bước 1.</b> Tiền là <b>số nguyên đồng</b> (<code>long</code>), <code>nap</code> mang dấu <b>+</b>, <code>rut</code> mang dấu <b>−</b>:</p>"
            "<p><code>số dư = tổng của (dấu × số tiền)</code></p><p>Vì sao: cộng số nguyên <b>giao hoán và kết hợp</b>, nên thứ tự dòng hay cách gom nhóm không đổi kết quả.</p>",
            """Bước một, tiền là số nguyên đồng, nạp mang dấu cộng, rút mang dấu trừ. Số dư là tổng các số có dấu. Vì phép cộng số nguyên giao hoán và kết hợp, nên thứ tự các dòng hay cách gom nhóm không làm đổi kết quả.""", clear=True),
         st("<p><b>Bước 2.</b> Bất biến: <b>tổng các số dư = tổng nạp − tổng rút</b>.</p>"
-           "<p>Vì sao: mỗi dòng hợp lệ đóng góp <b>đúng một lần</b> vào một số dư và vào một trong hai tổng; nếu một dòng bị tính hai lần hay bị rơi, hai vế <b>lệch nhau</b>.</p>",
-           """Bước hai, bất biến. Tổng các số dư phải bằng tổng nạp trừ tổng rút. Vì mỗi dòng hợp lệ đóng góp đúng một lần vào một số dư và vào một trong hai tổng, nên nếu có dòng bị tính hai lần hoặc bị rơi thì hai vế lệch nhau.""", clear=True),
-        st("<p><b>Bước 3.</b> Bất biến <b>không bắt được</b> dòng bị bỏ đi (bỏ dòng nào cũng khớp). Cần <b>đối chiếu số dòng</b>:</p>"
+           "<p>Vì sao: mỗi dòng hợp lệ đóng góp <b>đúng một lần</b> vào một số dư và vào một trong hai tổng; nếu phần gom nhóm tính một dòng <b>hai lần</b> hoặc làm <b>rơi</b> một dòng ở một vế mà không ở vế kia, hai vế <b>lệch nhau</b>.</p>"
+           "<p class='note'>Bất biến kiểm <b>phần gom và cộng dồn</b>, không kiểm dữ liệu đầu vào.</p>",
+           """Bước hai, bất biến: tổng các số dư phải bằng tổng nạp trừ tổng rút. Mỗi dòng hợp lệ đóng góp đúng một lần vào một số dư và một trong hai tổng. Nên nếu phần gom tính một dòng hai lần, hoặc làm rơi nó ở một vế, thì hai vế lệch nhau. Bất biến kiểm phần gom, không kiểm dữ liệu đầu vào.""", clear=True),
+        st("<p><b>Bước 3.</b> Bất biến <b>không bắt được</b> dòng bị loại <b>trước khi</b> vào cả hai vế (bỏ dòng nào ở đầu vào, hai vế vẫn khớp). Cần <b>đối chiếu số dòng</b>:</p>"
            "<p><code>đọc = hợp lệ + lỗi</code> và <code>đọc = số dòng của tệp − 1</code> (trừ tiêu đề).</p>",
-           """Bước ba, bất biến không bắt được dòng bị bỏ đi, vì bỏ dòng nào hai vế cũng vẫn khớp. Vì vậy cần đối chiếu số dòng, đọc bằng hợp lệ cộng lỗi, và bằng số dòng của tệp trừ tiêu đề.""", clear=True),
+           """Bước ba, bất biến không bắt được dòng bị loại trước khi vào cả hai vế, vì bỏ dòng nào ở đầu vào thì hai vế cũng vẫn khớp. Vì vậy cần đối chiếu số dòng, đọc bằng hợp lệ cộng lỗi, và bằng số dòng của tệp trừ tiêu đề.""", clear=True),
         st("<p><b>Bước 4.</b> Thử bằng số với 3 dòng: nạp A 100; rút A 30; nạp B 50:</p>"
            + table(["tính", "giá trị"], [["số dư A", "100 − 30 = <b>70</b>"], ["số dư B", "<b>50</b>"], ["tổng số dư", "70 + 50 = <b>120</b>"],
                                          ["nạp − rút", "(100 + 50) − 30 = <b>120</b> ✓"], ["đọc = hợp lệ + lỗi", "3 = 3 + 0 ✓"]]),
-           """Bước bốn, thử bằng số với ba dòng, vì ví dụ nhỏ cho phép kiểm bằng mắt. Số dư của A là một trăm trừ ba mươi bằng bảy mươi. Số dư của B là năm mươi. Tổng số dư một trăm hai mươi. Nạp trừ rút là một trăm năm mươi trừ ba mươi, cũng một trăm hai mươi. Và số dòng đọc là ba, bằng ba hợp lệ cộng không lỗi.""", clear=True),
+           """Bước bốn, thử bằng số với ba dòng. Số dư của A là một trăm trừ ba mươi bằng bảy mươi, số dư của B là năm mươi, nên tổng số dư là một trăm hai mươi. Nạp trừ rút là một trăm năm mươi trừ ba mươi, cũng một trăm hai mươi. Số dòng đọc là ba, bằng ba hợp lệ cộng không lỗi.""", clear=True),
     ], checks=["100 - 30 == 70", "70 + 50 == 120", "(100 + 50) - 30 == 120", "3 == 3 + 0"])
     sc_ex = sc("example", "example", "Ví dụ: biên dịch, kiểm thử, chạy trên tệp sạch rồi tệp có hai dòng lỗi", [
+        st(pcode(du_an, "src/soc/KiemTra.java", lines=(6, 16), title="KiemTra.java: hàm khẳng định đếm ca đạt, ca hỏng"),
+           """Bộ kiểm thử có hai biến đếm số ca đạt và hỏng, và một hàm khẳng định in từng ca.""", clear=True),
+        st(pcode(du_an, "src/soc/KiemTra.java", lines=(18, 25), title="KiemTra.java: dòng xấu phải bị chặn"),
+           """Hàm thứ hai trả đúng khi dòng xấu bị chặn, tức là việc phân tích ném đúng loại ngoại lệ.""", clear=True),
+        st(pcode(du_an, "src/soc/KiemTra.java", lines=(27, 38), title="KiemTra.java: bảy ca kiểm"),
+           """Hàm chính phân tích hai dòng tốt rồi đưa bảy ca vào kiểm, gồm dòng tốt, dòng xấu, số tiền âm và số dư của tài khoản A không một.""", clear=True),
         st(term_block(du_an, 0, 2, title="Biên dịch cả dự án; chạy kiểm thử"),
            """Phép làm thứ nhất, biên dịch cả gói bằng một lệnh, rồi chạy bộ kiểm thử trước khi tin bất kỳ con số nào. Bảy ca đều đạt, gồm ca số tiền âm và ca thiếu cột.""", clear=True),
         st("$$① \\; \\text{A01}: 5\\,000\\,000 - 1\\,200\\,000 + 2\\,500\\,000 = \\hl{6\\,300\\,000}$$"
            "$$② \\; \\text{A02}: 3\\,000\\,000 - 500\\,000 + 1\\,000\\,000 = \\hl{3\\,500\\,000}$$"
            "$$③ \\; \\text{A03}: 800\\,000 - 300\\,000 = \\hl{500\\,000}$$",
-           """Phép làm thứ nhất tới thứ ba, ta tự cộng số dư từng tài khoản trước. Tài khoản A không một là năm triệu trừ một triệu hai cộng hai triệu rưỡi, bằng sáu triệu ba trăm nghìn. A không hai là ba triệu, trừ năm trăm nghìn, cộng một triệu, bằng ba triệu rưỡi. A không ba là tám trăm nghìn trừ ba trăm nghìn, bằng năm trăm nghìn.""", clear=True),
+           """Phép thứ nhất tới thứ ba, ta tự cộng số dư từng tài khoản. Tài khoản A không một là năm triệu trừ một triệu hai cộng hai triệu rưỡi, bằng sáu triệu ba trăm nghìn. A không hai là ba triệu, trừ năm trăm nghìn, cộng một triệu, bằng ba triệu rưỡi. A không ba là tám trăm nghìn trừ ba trăm nghìn, bằng năm trăm nghìn.""", clear=True),
         st("$$④ \\; 6\\,300\\,000 + 3\\,500\\,000 + 500\\,000 = \\hl{10\\,300\\,000}$$"
            "$$⑤ \\; \\text{nạp} = 12\\,300\\,000, \\; \\text{rút} = 2\\,000\\,000 \\Rightarrow 12\\,300\\,000 - 2\\,000\\,000 = \\hl{10\\,300\\,000}$$",
-           """Phép thứ tư, tổng số dư là mười triệu ba trăm nghìn. Phép thứ năm, tổng nạp là mười hai triệu ba trăm nghìn, tổng rút là hai triệu, hiệu cũng là mười triệu ba trăm nghìn. Bất biến thoả, ta kỳ vọng chương trình in đúng như vậy.""", clear=True),
+           """Phép thứ tư, tổng số dư là mười triệu ba trăm nghìn. Phép thứ năm, tổng nạp là mười hai triệu ba trăm nghìn, tổng rút là hai triệu, hiệu cũng là mười triệu ba trăm nghìn.""", clear=True),
         st(term_block(du_an, 2, 3, title="Chạy trên tệp sạch"),
            """Chạy thật, tám dòng đều hợp lệ, số dư từng tài khoản khớp với phép tính tay, và dòng kiểm tra báo khớp. Dòng cuối là số ròng theo tháng, tổng ba tháng cũng là mười triệu ba trăm nghìn.""", clear=True),
         st(term_block(du_an, 3, 4, title="Tệp có hai dòng lỗi (số tiền abc, loại doi)"),
-           """Giờ chạy trên tệp có hai dòng lỗi. Nhật ký cảnh báo nói rõ dòng nào, vì lý do gì. Báo cáo vẫn chạy trên sáu dòng còn lại, và dòng đầu của báo cáo nói đã đọc tám dòng, sáu hợp lệ, hai lỗi. Báo cáo không bị hỏng chỉ vì vài dòng xấu, nhưng cũng không giấu chuyện đó.""", clear=True),
+           """Giờ chạy trên tệp có hai dòng lỗi. Nhật ký cảnh báo nói rõ dòng nào, vì lý do gì. Báo cáo vẫn chạy trên sáu dòng còn lại, và dòng đầu nói đã đọc tám dòng, sáu hợp lệ, hai lỗi: không hỏng, cũng không giấu lỗi.""", clear=True),
     ], checks=["5000000 - 1200000 + 2500000 == 6300000", "3000000 - 500000 + 1000000 == 3500000", "800000 - 300000 == 500000",
                "6300000 + 3500000 + 500000 == 10300000", "5000000 + 3000000 + 800000 + 2500000 + 1000000 == 12300000",
                "1200000 + 500000 + 300000 == 2000000", "12300000 - 2000000 == 10300000"])
     sc_chk = sc("check", "check", "Tự kiểm bằng đường khác: đếm dòng bằng lệnh của hệ điều hành", [
         st(term_block(du_an, 4, 5, title="Đếm số dòng dữ liệu của tệp có lỗi, không tính tiêu đề")
+           + "<p class='note'><code>tail -n +2</code>: in từ <b>dòng thứ 2</b> trở đi, tức bỏ tiêu đề; <code>|</code> nối sang <code>wc -l</code> để đếm số dòng.</p>"
            + "<p>Đối chiếu: <b>8</b> dòng dữ liệu = <b>6</b> hợp lệ + <b>2</b> lỗi (đúng như dòng đầu của báo cáo) ✓</p>",
-           """Cách kiểm khác là một công cụ hoàn toàn khác. Lệnh đếm dòng cho biết tệp có tám dòng dữ liệu không tính tiêu đề. Chương trình báo đọc tám dòng, gồm sáu hợp lệ và hai lỗi. Hai cách đếm độc lập khớp nhau, nên không dòng nào bị rơi mà không ai biết.""", clear=True),
+           """Cách kiểm khác dùng công cụ khác hẳn. Một lệnh in từ dòng thứ hai trở đi để bỏ tiêu đề, rồi lệnh đếm dòng đếm phần còn lại, ra tám dòng dữ liệu. Chương trình báo đọc tám dòng, gồm sáu hợp lệ và hai lỗi. Hai cách đếm độc lập khớp nhau, nên không dòng nào bị rơi mà không ai biết.""",
+           introduces=["jv2_tail"], clear=True),
         st("<p>Kiểm bất biến cho tệp lỗi: sáu dòng hợp lệ, nạp 12 300 000 và rút 300 000 (dòng rút <code>abc</code> bị loại, dòng <code>doi</code> bị loại).</p>"
            "$$7\\,500\\,000 + 4\\,000\\,000 + 500\\,000 = 12\\,000\\,000 = 12\\,300\\,000 - 300\\,000 \\; ✓$$",
-           """Kiểm thêm bất biến cho tệp có lỗi. Chỉ sáu dòng hợp lệ được tính, nạp mười hai triệu ba trăm nghìn và rút ba trăm nghìn. Tổng số dư mười hai triệu đúng bằng hiệu đó. Bất biến thoả, nhưng nhớ rằng nó thoả với mọi tập dòng hợp lệ, nên vẫn cần đếm dòng.""", clear=True),
+           """Kiểm thêm bất biến cho tệp có lỗi. Chỉ sáu dòng hợp lệ được tính, nạp mười hai triệu ba trăm nghìn và rút ba trăm nghìn. Tổng số dư mười hai triệu đúng bằng hiệu đó. Bất biến thoả với mọi tập dòng hợp lệ, nên vẫn cần đếm dòng.""", clear=True),
     ], checks=["6 + 2 == 8", "7500000 + 4000000 + 500000 == 12000000", "12300000 - 300000 == 12000000"])
     sc_scale = sc("scale", "concept", "Khi sổ cái lớn gấp một nghìn lần: bản nào còn sống?", [
+        st(pcode(du_an, "TaoSoCai.java", lines=(7, 17))
+           + """<p class="note"><code>String.format("%02d", 7)</code> ra <code>07</code>: số nguyên <b>rộng 2 chữ số</b>, thiếu thì thêm số <b>0</b> ở đầu. Nên tài khoản là <code>A07</code>, <code>A42</code>.</p>""",
+           """Để thử quy mô, ta cần một sổ cái lớn. Chương trình này nhận số dòng ở tham số, với một trăm tài khoản, cứ ba dòng có một dòng rút. Mẫu định dạng ở tên tài khoản đệm số không vào đầu cho đủ hai chữ số, nên bảy thành không bảy.""",
+           introduces=["jv2_fmt02d"], clear=True),
         st(term_block(du_an, 6, 8, title="Một triệu dòng, bộ nhớ tối đa 32 megabyte: bản giữ danh sách")
-           + "<p class='note'><code>App</code> giữ mọi <code>GiaoDich</code> trong một danh sách rồi mới tạo đường ống.</p>",
-           """Ta thử quy mô thật. Tạo sổ cái một triệu dòng. Bản dự án chạy tốt trên tám dòng, giữ mọi giao dịch trong một danh sách, thì hết bộ nhớ với giới hạn ba mươi hai megabyte. Mỗi bản ghi cùng ba chuỗi và một ngày tốn hàng trăm byte, nên một triệu dòng vượt xa giới hạn.""", clear=True),
+           + "<p class='note'><code>App</code> giữ mọi <code>GiaoDich</code> trong một danh sách rồi mới tạo đường ống. <code>OutOfMemoryError</code>: lỗi khi máy ảo hết bộ nhớ.</p>",
+           """Ta thử quy mô thật với sổ cái một triệu dòng. Bản giữ mọi giao dịch trong một danh sách chạy tốt trên tám dòng. Nhưng với giới hạn ba mươi hai megabyte thì hết bộ nhớ, vì mỗi bản ghi cùng ba chuỗi và một ngày tốn hàng trăm byte.""", clear=True),
+        st(pcode(du_an, "src/soc/AppSong.java", lines=(10, 21)),
+           """Bản song song gọi chia dòng cho nhiều luồng cùng xử lý, và gom bằng bộ gom an toàn cho nhiều luồng. Rồi nó đọc lại bằng bản tuần tự và so hai bản đồ có bằng nhau không.""", clear=True),
         st(term_block(du_an, 8, 11, title="Bản đọc theo dòng (32 MB) và bản song song (64 MB rồi 128 MB)")
            + "<p class='note'>Tổng số dư khớp bất biến. Song song giữ nhiều dòng cùng lúc nên cần nhiều bộ nhớ hơn đọc theo dòng.</p>",
-           """Bản đọc theo dòng chỉ giữ một dòng và một bản đồ một trăm tài khoản, nên chạy xong và vẫn thoả bất biến. Bản song song chia các dòng cho nhiều luồng, dùng bộ gom an toàn cho nhiều luồng, và cho kết quả đúng bằng bản tuần tự. Nhưng nó giữ nhiều dòng cùng lúc, nên với sáu mươi bốn megabyte vẫn hết bộ nhớ, và phải có một trăm hai mươi tám megabyte mới chạy. Nếu thay bộ gom bằng bản đồ thường thì đây chính là lỗi tranh chấp của bài về luồng.""", clear=True),
+           """Bản đọc theo dòng chỉ giữ một dòng và một bản đồ một trăm tài khoản, nên chạy xong và thoả bất biến. Bản song song cho kết quả đúng bằng bản tuần tự nhờ bộ gom an toàn. Nhưng nó giữ nhiều dòng cùng lúc, nên với sáu mươi bốn megabyte vẫn hết bộ nhớ và cần một trăm hai mươi tám mới chạy. Thay bộ gom bằng bản đồ thường thì đó là lỗi tranh chấp của bài về luồng.""", clear=True),
         st(table(["số dòng", "1 000", "1 000 000", "1 000 000 000"],
                  [["bộ nhớ khi giữ danh sách giao dịch (≥ 200 byte mỗi dòng, ước lượng)", "≥ 200 KB", "<b>≥ 200 MB</b>", "<b>≥ 200 GB</b>"],
                   ["bộ nhớ khi đọc theo dòng (một dòng + bản đồ tài khoản)", "gần như nhau", "gần như nhau", "gần như nhau"],
                   ["thời gian đọc (tỉ lệ so với 1 000 dòng)", "×1", "×1 000", "<b>×1 000 000</b>"]])
            + "<p class='note'>Đánh đổi: đọc theo dòng cho báo cáo <b>một lượt</b>; cần truy vấn nhiều kiểu thì phải đọc lại, hoặc đưa dữ liệu vào cơ sở dữ liệu có chỉ mục. Song song giúp việc <b>tính toán</b>; việc <b>đọc đĩa</b> bị giới hạn bởi tốc độ đĩa.</p>",
-           """Tóm lại theo quy mô. Giữ danh sách thì bộ nhớ tăng theo số dòng, hai trăm megabyte cho một triệu dòng và hai trăm gigabyte cho một tỉ dòng. Đọc theo dòng thì bộ nhớ gần như không đổi, nhưng thời gian vẫn tăng đều theo số dòng. Đánh đổi là báo cáo chỉ một lượt, cần truy vấn nhiều kiểu thì phải dùng cơ sở dữ liệu có chỉ mục.
-           Và song song chỉ giúp phần tính toán, còn đọc đĩa bị giới hạn bởi tốc độ đĩa.""", clear=True),
+           """Giữ danh sách thì bộ nhớ tăng theo số dòng, hai trăm megabyte cho một triệu dòng. Đọc theo dòng thì bộ nhớ gần như không đổi, nhưng thời gian vẫn tăng đều. Đánh đổi là báo cáo chỉ một lượt, cần truy vấn nhiều kiểu thì dùng cơ sở dữ liệu có chỉ mục, và song song chỉ giúp phần tính toán, không giúp đọc đĩa.""", clear=True),
     ], checks=["1000 * 200 == 200000", "1000000 * 200 == 200000000", "1000000000 * 200 == 200000000000", f"sum((-1 if i % 3 == 0 else 1) * (i % 7 + 1) * 1000 for i in range(1, 1000001)) == {TONG_LON}"])
     sc_pit = sc("pitfalls", "pitfall", "Lỗi hay gặp, có lỗi của người đã đi làm", [
         st('<div class="box warn"><b>Lỗi 1 (người mới).</b> Quên bỏ dòng tiêu đề: nó bị coi là một giao dịch.</div>'
-           + term_block(du_an, 5, 6),
+           + pcode(du_an, "src/soc/ThuTieuDe.java", lines=(3, 11)) + term_block(du_an, 5, 6),
            """Lỗi thứ nhất là quên bỏ dòng tiêu đề. Dòng chữ tên các cột bị đưa vào hàm phân tích như một giao dịch, và cột tiền chứa chữ so tiền gạch dưới. Nó báo lỗi rõ ràng, nhưng nếu ta nuốt lỗi thì mất một dòng và không ai để ý."""),
         st('<div class="box warn"><b>Lỗi 2 (người đã đi làm).</b> Bỏ dòng lỗi lặng lẽ: bất biến vẫn khớp, báo cáo vẫn trông đúng.</div>'
            + "<p>Báo cáo trên tệp lỗi vẫn in <b>(khop)</b> dù mất 2 dòng. Chỉ có <b>đối chiếu số dòng</b> (8 = 6 + 2) và <b>nhật ký cảnh báo</b> mới phát hiện được.</p>"
            + "<p>Quy tắc: mỗi dòng bị loại phải để lại <b>dấu vết</b> (nhật ký) và <b>con số</b> (đếm), và con số đó phải đối chiếu được với nguồn.</p>",
-           """Lỗi thứ hai hay gặp ở người đã đi làm. Bỏ dòng lỗi một cách lặng lẽ, và bất biến vẫn khớp, báo cáo vẫn trông đúng. Báo cáo trên tệp lỗi vẫn báo khớp dù mất hai dòng. Chỉ đối chiếu số dòng và nhật ký cảnh báo mới phát hiện được. Mỗi dòng bị loại phải để lại dấu vết và một con số có thể đối chiếu với nguồn.""", clear=True),
+           """Lỗi thứ hai hay gặp ở người đã đi làm. Bỏ dòng lỗi lặng lẽ, bất biến vẫn khớp và báo cáo vẫn trông đúng, dù mất hai dòng. Chỉ đối chiếu số dòng và nhật ký cảnh báo mới phát hiện được. Mỗi dòng bị loại phải để lại dấu vết và một con số đối chiếu được với nguồn.""", clear=True),
         st('<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Thiếu một ca kiểm: dòng giao dịch số tiền âm lọt vào sổ cái.</div>'
            + term_block(du_an, 11, 13, title="Gỡ kiểm tra tiền dương rồi chạy lại bộ kiểm thử"),
-           """Lỗi thứ ba cũng của người đã đi làm. Một kiểm tra nghiệp vụ, số tiền phải dương, nằm lặng lẽ trong hàm phân tích. Ta thử gỡ nó đi rồi chạy lại bộ kiểm thử. Đúng một ca báo hỏng, là ca số tiền âm. Nếu ta chưa từng viết ca đó thì kiểm tra có thể bị xoá mà mọi cổng vẫn xanh, và nạp âm sẽ lẳng lặng thành rút.""", clear=True),
+           """Lỗi thứ ba cũng của người đã đi làm. Kiểm tra số tiền phải dương nằm lặng lẽ trong hàm phân tích. Ta gỡ nó đi rồi chạy lại bộ kiểm thử, và đúng một ca báo hỏng, là ca số tiền âm. Nếu chưa từng viết ca đó thì kiểm tra có thể bị xoá mà mọi cổng vẫn xanh, và nạp âm sẽ lẳng lặng thành rút.""", clear=True),
     ])
     sc_quiz = sc("quiz", "quiz", "Bây giờ tới phần bạn tự làm", [
         st("""<p><b>Đề.</b> Sổ cái 5 dòng (<code>tai_khoan,loai,so_tien</code>): <code>X,nap,900</code>; <code>Y,nap,400</code>; <code>X,rut,250</code>; <code>Y,rut,xx</code>; <code>X,nap,100</code>.</p>
 <ol><li>Số dư X, Y sau khi bỏ dòng lỗi? Tổng số dư? Bất biến <code>nap − rut</code> có khớp không?</li>
 <li>Đối chiếu số dòng: đọc = hợp lệ + lỗi = ?</li></ol>
 <p><b>Chọn A hay B?</b> Báo cáo cho tệp 50 GB trên máy 8 GB. A: <code>List</code> rồi <code>stream()</code>. B: bộ gom cộng dồn khi đọc từng dòng. Muốn thêm <code>parallel()</code> thì bộ gom cần điều kiện gì?</p>""",
-           """Bây giờ tới phần bạn tự làm. Sổ cái năm dòng, một dòng lỗi. Hãy tính số dư hai tài khoản sau khi bỏ dòng lỗi, tổng số dư, và bất biến có khớp không. Rồi đối chiếu số dòng.
-           Cuối cùng chọn giữa danh sách rồi đường ống, và bộ gom cộng dồn khi đọc từng dòng, cho tệp năm mươi gigabyte trên máy tám gigabyte. Và muốn thêm song song thì bộ gom cần điều kiện gì. Hãy dừng video và tự làm.""", pause=30),
+           """Bây giờ tới phần bạn tự làm. Sổ cái năm dòng, một dòng lỗi. Hãy tính số dư hai tài khoản sau khi bỏ dòng lỗi, tổng số dư, bất biến có khớp không, và đối chiếu số dòng.
+           Rồi chọn giữa danh sách với đường ống, hoặc bộ gom cộng dồn khi đọc từng dòng, cho tệp năm mươi gigabyte trên máy tám gigabyte. Và nói bộ gom cần điều kiện gì để chạy song song. Hãy dừng video và tự làm.""", pause=30),
         st(table(["câu", "đáp án", "vì sao"],
                  [["1", "X = 900 − 250 + 100 = <b>750</b>; Y = <b>400</b>; tổng <b>1 150</b>; nạp 1 400 − rút 250 = <b>1 150</b> ✓", "dòng <code>Y,rut,xx</code> bị loại; bất biến thoả"],
                   ["2", "<b>5 = 4 hợp lệ + 1 lỗi</b>", "bất biến không thấy dòng bị loại; đối chiếu số dòng mới thấy"],
@@ -565,26 +616,27 @@ và câu hỏi cuối: <b>khi tệp lớn gấp một nghìn lần</b>, thiết 
            Câu ba chọn phương án B, vì danh sách cần nhiều hơn tám gigabyte, còn bộ gom giữ bộ nhớ không đổi. Muốn song song thì bộ gom phải an toàn cho nhiều luồng.""",
            focus=[1, "1.2", "1.3", "1.4", "1.4", "1.4"]),
         st("""<div class="box key"><b>Quy tắc:</b> mỗi dòng bị loại phải <b>có dấu vết và có số đếm</b>; hai cách đếm độc lập phải <b>khớp</b>; tệp lớn thì <b>đọc theo dòng</b>; song song chỉ khi <b>bộ gom an toàn</b>.</div>""",
-           """Quy tắc rút ra. Mỗi dòng bị loại phải có dấu vết và có số đếm. Hai cách đếm độc lập phải khớp. Tệp lớn thì đọc theo dòng. Và song song chỉ khi bộ gom an toàn cho nhiều luồng."""),
+           """Quy tắc rút ra. Mỗi dòng bị loại phải có dấu vết và số đếm. Hai cách đếm độc lập phải khớp. Tệp lớn thì đọc theo dòng, và song song chỉ khi bộ gom an toàn."""),
     ], checks=["900 - 250 + 100 == 750", "750 + 400 == 1150", "(900 + 400 + 100) - 250 == 1150", "5 == 4 + 1"])
     sc_rec = sc("recap", "recap", "Chuỗi logic & tư duy cần mang theo", [
         st(chain("gói nhỏ, mỗi tệp một việc", "phân tích + kiểm từng dòng", "dòng lỗi: nhật ký + đếm", "bất biến: tổng số dư = nạp − rút",
                  "đối chiếu số dòng", "tệp lớn: đọc theo dòng", "song song cần bộ gom an toàn"),
-           """Tổng kết chuỗi logic. Chia gói nhỏ, mỗi tệp một việc. Phân tích và kiểm từng dòng. Dòng lỗi thì ghi nhật ký và đếm. Kiểm bất biến tổng số dư bằng nạp trừ rút. Đối chiếu số dòng bằng một cách đếm độc lập.
-           Tệp lớn thì đọc theo dòng. Và song song cần bộ gom an toàn cho nhiều luồng."""),
+           """Tổng kết chuỗi logic. Chia gói nhỏ, mỗi tệp một việc, phân tích và kiểm từng dòng. Dòng lỗi thì ghi nhật ký và đếm, rồi kiểm bất biến và đối chiếu số dòng.
+           Tệp lớn thì đọc theo dòng, và song song cần bộ gom an toàn cho nhiều luồng."""),
         st("""<div class='box key'><b>Tư duy:</b> một báo cáo đúng không chỉ là <b>số đúng</b>, mà là số đúng <b>kèm bằng chứng</b>: kiểm thử đã chạy, dòng lỗi đã đếm, bất biến đã thoả,
 và biết rõ <b>ở quy mô nào</b> thiết kế này sẽ gãy.</div>""",
-           """Điều cần mang theo. Một báo cáo đúng không chỉ là số đúng, mà là số đúng kèm bằng chứng. Kiểm thử đã chạy, dòng lỗi đã đếm, bất biến đã thoả, và biết rõ ở quy mô nào thiết kế này sẽ gãy. Để chạy một chương trình như vậy nhiều tháng, bước tiếp theo là hiểu bộ nhớ và bộ thu gom rác của máy ảo.""", forward_ref=True),
+           """Điều cần mang theo. Một báo cáo đúng không chỉ là số đúng, mà là số đúng kèm bằng chứng. Kiểm thử đã chạy, dòng lỗi đã đếm, bất biến đã thoả, và biết rõ ở quy mô nào thiết kế này sẽ gãy. Để chạy như vậy nhiều tháng, bước tiếp theo là hiểu bộ nhớ và bộ thu gom rác của máy ảo.""", forward_ref=True),
     ])
     return lesson("L09", "du_an_so_cai", "Bài 9 — Dự án tình huống: sổ cái tệp CSV tới báo cáo",
-                  "curriculum/jv2.yaml L09; audit/jv2/verify_jv2.py L09 (javac/java chạy thật, JDK 21; dự án nhiều gói, -Xmx32m cho phép đo bộ nhớ); "
+                  "curriculum/jv2.yaml L09; audit/jv2/verify_jv2.py L09 (javac/java chạy thật, JDK 21; dự án một gói nhiều tệp, -Xmx32m cho phép đo bộ nhớ); "
                   "java.util.stream.Collectors.groupingByConcurrent (Java SE 21 API: gom song song an toàn); java.util.logging; "
                   "java.nio.file.Files.lines (đọc lười); RFC 4180 (CSV); "
                   "Pacioli, L. (1494), Summa de arithmetica (nguyên lý bút toán kép: tổng ghi nợ bằng tổng ghi có); dev.java/learn",
-                  ["Dựng dự án nhiều gói gồm bản ghi, bộ đọc, báo cáo, nhật ký và kiểm thử, rồi biên dịch và chạy bằng lệnh",
+                  ["Dựng dự án nhiều tệp trong một gói gồm bản ghi, bộ đọc, báo cáo, nhật ký và kiểm thử, rồi biên dịch và chạy bằng lệnh",
                    "Tính số dư theo tài khoản và kiểm bất biến tổng số dư bằng tổng nạp trừ tổng rút",
                    "Nêu cách đối chiếu số dòng và nhật ký để không bỏ lặng lẽ dòng lỗi",
                    "Nhận ra bản giữ danh sách gãy ở một triệu dòng, bản đọc theo dòng sống, song song cần bộ gom an toàn",
                    "Viết chương trình sổ cái nhỏ bỏ qua dòng lỗi, in số dư và kiểm bất biến"],
                   [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_chk, sc_scale, sc_pit, sc_quiz, sc_lab, sc_rec],
+                  assumes=["jv2_handler", "jv2_ctor_ref"],
                   covers=[(1, "example"), (2, "example"), (3, "check"), (4, "scale"), (5, "practice")])

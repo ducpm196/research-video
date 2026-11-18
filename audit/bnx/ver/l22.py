@@ -106,7 +106,42 @@ def parse_manifest(text):
     return {k: v.strip() for k, v in (l.split(":", 1) for l in lines)}
 
 
+def extra(rec):
+    """AF2 (nhánh B): quy mô đo thật ở 10, 1 000, 100 000 trang; lab chạy lại qua labs/cham.sh; mọi chương trình prog() chạy lại nguyên văn."""
+    import lib2
+    C = "L22"
+    labdir = ROOT / "labs" / "BNX" / "L22"
+    lib2.verify_programs(rec, C)
+    out = next(p for p in lib2.PROGRAMS if p.key == "L22_QuyMo").out
+    shown = {int(a): (int(b), int(c), int(d)) for a, b, c, d in re.findall(r"^(\d+) trang: duyet (\d+) nut, khop (\d+) \| chi muc doc (\d+) nut$", out, re.M)}
+
+    def cay(n):
+        """Đường khác: dựng cây dạng các nút (đường dẫn → thuộc tính) rồi đếm bằng vòng lặp trên đường dẫn."""
+        nodes = {"/": {}, "/content": {}, "/content/site": {}, "/content/site/vi": {}}
+        for i in range(n):
+            nodes[f"/content/site/vi/t{i}"] = {"sling:resourceType": "site/components/page" if i % 100 == 0 else "site/components/tin"}
+        khop = [p for p, pr in nodes.items() if pr.get("sling:resourceType") == "site/components/page"]
+        return len(nodes), len(khop), len(khop)
+    mine = {n: cay(n) for n in (10, 1000, 100000)}
+    rec(C, shown == mine == {10: (14, 1, 1), 1000: (1004, 10, 10), 100000: (100004, 1000, 1000)}, f"quy mô: chạy thật = dựng lại bằng đường khác = bảng {mine}")
+    rec(C, all(alg.bnx_l22_scale(n) == mine[n] for n in mine), "alg.bnx_l22_scale khớp ở 10, 1 000, 100 000 trang")
+    rec(C, len("/content/site/vi/home".strip("/").split("/")) == 4 == alg.bnx_l22_depth("/content/site/vi/home"),
+        "tra một đường dẫn: 4 bước (số cấp), không phụ thuộc kích thước kho")
+    exp = (labdir / "mong_doi.txt").read_text(encoding="utf-8").strip()
+    rec(C, exp == next(p for p in lib2.PROGRAMS if p.key == "L22_LabL22").out, "mong_doi.txt = đầu ra thật của lời giải lab")
+    rec(C, exp.splitlines() == ["the.html -> /apps/bank/components/card/card.html", "the.print.html -> /apps/bank/components/card/print.html",
+                                "vay.html -> /libs/bank/components/loan/loan.html", "vay.print.html -> /libs/bank/components/loan/loan.html",
+                                "thieu.html -> KHONG CO TAI NGUYEN"], "lab: năm dòng khớp tính tay (apps trước libs; bộ chọn trước tên kiểu; không nút thì KHONG CO TAI NGUYEN)")
+    bash = shutil.which("bash")
+    if bash:
+        r = subprocess.run([bash, str(ROOT / "labs" / "cham.sh"), "BNX", "L22", str(labdir / "loi_giai.py")], capture_output=True, text=True, encoding="utf-8", timeout=120, cwd=str(ROOT))
+        rec(C, r.stdout.strip() == "ĐÚNG", f"labs/cham.sh BNX L22 loi_giai.py: {r.stdout.strip()[:60]}")
+    else:
+        rec(C, None, "thiếu bash: không chạy cham.sh")
+
+
 def run(rec):
+    extra(rec)
     # ── 1. Chạy nguyên văn các khối Python trên màn hình
     o, ns = run_py(src.KHO_PY, src.KHO_RUN)
     rec("L22", same(o, src.KHO_OUT) and ns["nut"]("/content/site/vi/home.html") is None,

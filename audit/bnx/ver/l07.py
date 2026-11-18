@@ -1,16 +1,7 @@
 """Kiểm độc lập BNX L07 — chạy THẬT các hằng mã của audit/bnx/src/l07.py trên Oracle (bnx-ora, Oracle AI Database 26ai Free 23.26.3),
 đọc con số và kế hoạch thực thi bằng biểu thức chính quy, đếm từng phân vùng bằng PARTITION FOR (đường khác), rồi so với alg.bnx_l07_*.
-
-Quyền hàng đợi: người dùng bnx (vai trò DB_DEVELOPER_ROLE) KHÔNG gọi được DBMS_AQADM (PLS-00201). Đã cấp ngày 2026-11-11 bằng SYSTEM:
-    docker exec -i bnx-ora sqlplus -s system/Bnx_Pass_2026@//localhost/FREEPDB1 <<'SQL'
-    GRANT AQ_ADMINISTRATOR_ROLE TO bnx;
-    GRANT AQ_USER_ROLE TO bnx;
-    GRANT EXECUTE ON DBMS_AQ TO bnx;
-    GRANT EXECUTE ON DBMS_AQADM TO bnx;
-    SQL
-Dựng lại container thì phải cấp lại (bộ kiểm báo FAIL kèm lệnh trên nếu thiếu quyền).
-Bộ nhớ cột: INMEMORY_SIZE = 0 trên bản này; bật cần đặt tham số rồi khởi động lại instance (Oracle In-Memory Guide) — instance dùng chung với
-các bài khác nên KHÔNG làm; bài chỉ khẳng định điều quan sát được (0, thuộc tính ENABLED). Phân mảnh: không chạy (cần nhiều cơ sở dữ liệu)."""
+Hàng đợi, bộ nhớ cột và phân mảnh đã chuyển sang bài L38 (audit/bnx/ver/l38.py).
+"""
 import pathlib
 import re
 import sys
@@ -21,8 +12,6 @@ sys.path.insert(0, str(ROOT / "audit" / "bnx" / "src"))
 sys.path.insert(0, str(ROOT / "tools"))
 import checklib as alg  # noqa: E402
 import l07 as L  # noqa: E402
-
-GRANTS = ("GRANT AQ_ADMINISTRATOR_ROLE TO bnx; GRANT AQ_USER_ROLE TO bnx; GRANT EXECUTE ON DBMS_AQ TO bnx; GRANT EXECUTE ON DBMS_AQADM TO bnx;")
 
 
 def _ints(out):
@@ -110,38 +99,61 @@ SELECT COUNT(*) FROM user_tab_partitions WHERE table_name = 'BNX_L07_GD';""")
     rec("L07", "ORA-02290: check constraint (BNX.BNX_L07_ISJ) violated" in o and 3 not in ok_ids, "Oracle: IS JSON từ chối chuỗi hỏng (alg: json.loads lỗi)")
     rec("L07", rows == [("2", "atm")] and hit == [2], f"Oracle: JSON_VALUE lọc so_tien > 1 000 000 → {rows} = alg [2]")
 
-    # 5. Hàng đợi
-    roles = ora("SELECT role FROM session_roles WHERE role LIKE 'AQ%';")
-    if "AQ_ADMINISTRATOR_ROLE" not in roles:
-        rec("L07", False, "bnx thiếu quyền hàng đợi — cấp bằng SYSTEM: " + GRANTS)
-        return
-    o = ora(L.AQ_CLEAN + L.AQ_SETUP + L.AQ_ENQ + L.AQ_DEQ + "SELECT COUNT(*) AS so_thong_diep FROM bnx_l07_qt;")
-    got, left = alg.bnx_l07_queue([("enq", 101), ("rollback",), ("enq", 102), ("commit",), ("deq",), ("commit",)])
-    rec("L07", "ORA-" not in o and "PLS-" not in o, "Oracle: tạo hàng đợi, gửi, nhận không lỗi")
-    rec("L07", _ints(o)[:1] == [alg.bnx_l07_queue([("enq", 101), ("rollback",), ("enq", 102), ("commit",)])[1]] == [1],
-        f"Oracle: gửi 101 rồi hoàn tác, gửi 102 rồi chốt → còn {_ints(o)[:1]} = alg 1")
-    rec("L07", "nhan: 102 200000" in o and got == [102], "Oracle: nhận đúng 102, 200 000 (alg: [102])")
-    rec("L07", _ints(o)[-1:] == [left] == [0], f"Oracle: sau khi nhận và chốt còn {_ints(o)[-1:]} = 0")
-    o = ora("""SELECT retention FROM user_queues WHERE name = 'BNX_L07_Q';
-DECLARE eo DBMS_AQ.ENQUEUE_OPTIONS_T; mp DBMS_AQ.MESSAGE_PROPERTIES_T; id RAW(16);
-BEGIN eo.visibility := DBMS_AQ.IMMEDIATE; DBMS_AQ.ENQUEUE('bnx_l07_q', eo, mp, bnx_l07_msg(103, 1), id); ROLLBACK; END;
-/
-SELECT COUNT(*) FROM bnx_l07_qt;""")
-    rec("L07", _ints(o) == [0, 1], f"Oracle: thời gian lưu giữ mặc định 0; visibility IMMEDIATE rồi hoàn tác vẫn còn thông điệp {_ints(o)} = [0, 1] (vì thế bài ghi “mặc định”)")
-    vis = ora("SET SERVEROUTPUT ON\nDECLARE eo DBMS_AQ.ENQUEUE_OPTIONS_T; BEGIN DBMS_OUTPUT.PUT_LINE(CASE eo.visibility WHEN DBMS_AQ.ON_COMMIT "
-              "THEN 'ON_COMMIT' ELSE 'KHAC' END); END;\n/")
-    rec("L07", "ON_COMMIT" in vis, "Oracle: ENQUEUE_OPTIONS_T mặc định visibility = ON_COMMIT (gửi là một phần của giao dịch)")
+    # 5. Mẹo sinh dòng, mốc ngày và câu đố 2 (tháng 2: 10 ngày × 10 dòng, đọc đúng phân vùng 2)
+    o = ora(L.ROWNUM_DEMO)
+    rec("L07", _ints(o) == [1, 2, 3], f"Oracle: SELECT ROWNUM FROM dual CONNECT BY ROWNUM <= 3 → {_ints(o)} = [1, 2, 3]")
+    qz2 = ("EXPLAIN PLAN FOR\nSELECT COUNT(*) FROM bnx_l07_gd\n WHERE ngay >= DATE '2025-02-10' AND ngay < DATE '2025-02-20';\n"
+           "SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY(NULL, NULL, 'BASIC +PARTITION'));\n"
+           "SELECT COUNT(*) FROM bnx_l07_gd WHERE ngay >= DATE '2025-02-10' AND ngay < DATE '2025-02-20';")
+    o = ora(qz2)
+    p = _plan(o)
+    rec("L07", p and p[0] == ("SINGLE",) + alg.bnx_l07_prune("2025-02-10", "2025-02-20") == ("SINGLE", 2, 2),
+        f"Oracle (câu đố 2): kế hoạch thật {p[:1]} = PARTITION RANGE SINGLE 2..2")
+    rec("L07", _ints(o)[-1:] == [alg.bnx_l07_count(dates, "2025-02-10", "2025-02-20")] == [100], f"Oracle (câu đố 2): đếm thật {_ints(o)[-1:]} = 100")
 
-    # 6. Bộ nhớ cột (chỉ điều quan sát được)
-    o = ora(L.PART_DDL + L.IM_CHECK)
-    rec("L07", re.search(r"^0\s*$", o, re.M) is not None and "ENABLED" in o, "Oracle: INMEMORY_SIZE = 0, ALTER TABLE … INMEMORY → DEF_INMEMORY ENABLED")
+    # 6. IS JSON lỏng / chặt trên ba chuỗi (lỗi 2), và bỏ phân vùng tự chốt (lỗi 3)
+    cases = ["{\"a\":1}", "{a:1}", "{\"a\":1"]
+    q = "".join(f"SELECT CASE WHEN '{c}' IS JSON THEN 'L:Y' ELSE 'L:N' END || CASE WHEN '{c}' IS JSON (STRICT) THEN 'S:Y' ELSE 'S:N' END AS r FROM dual;\n" for c in cases)
+    rs = re.findall(r"^(L:[YN]S:[YN])\s*$", ora(q), re.M)
+    rec("L07", rs == ["L:YS:Y", "L:YS:N", "L:NS:N"], f"Oracle: IS JSON lỏng/chặt trên chuỗi chuẩn, tên không nháy kép, chuỗi thiếu ngoặc → {rs}")
+    o = ora(L.PART_DDL + L.PART_LOAD + L.DROP_PART)
+    rec("L07", _ints(o)[-1:] == [len(dates) - alg.bnx_l07_count(dates, "2025-01-01", "2025-02-01")] == [3340],
+        f"Oracle: bỏ phân vùng tháng 1 rồi ROLLBACK vẫn còn {_ints(o)[-1:]} = 3 340 dòng (lệnh tự chốt; mất 310)")
+    ora(L.PART_DDL + L.PART_LOAD)
+    rec("L07", L.DOCKER_RUN.count("gvenzl/oracle-free:23-slim") == 1 and "1521:1521" in L.DOCKER_RUN and "FREEPDB1" in L.DOCKER_RUN,
+        "khối docker của bước làm thêm dùng đúng ảnh gvenzl/oracle-free:23-slim, cổng 1521, dịch vụ FREEPDB1 (như dbrun.py)")
 
-    # 7. Chia mảnh minh hoạ (không phải cách của Oracle; bài ghi “minh hoạ”)
-    rec("L07", [alg.bnx_l07_shard(a, 3) for a in (4, 5, 7, 8, 10)] == [a - 3 * (a // 3) for a in (4, 5, 7, 8, 10)] == [1, 2, 1, 2, 1],
-        "chia mảnh minh hoạ: 4, 5, 7, 8, 10 → mảnh 1, 2, 1, 2, 1")
-
-    # 8. Sổ mã: nguồn dọn hàng đợi trùng hằng
-    import yaml
-    reg = yaml.safe_load((ROOT / "audit" / "bnx" / "screen" / "l07.yaml").read_text(encoding="utf-8"))
-    rec("L07", (reg.get("sources") or {}).get("L07_aq_clean", {}).get("code", "").strip("\n") == L.AQ_CLEAN.strip("\n"),
-        "sổ screen/l07.yaml: nguồn L07_aq_clean trùng hằng AQ_CLEAN")
+    # ── AF2 (WP4): quy mô trên Oracle thật và lab sqlite ──
+    import datetime as _dt
+    import subprocess
+    import dbrun as _db
+    o = _db.ora(L.ORA_SCALE)
+    nums = _ints(o)
+    # đường khác: đếm bằng vòng lặp thuần trên danh sách ngày dựng từ công thức của bài
+    days = [_dt.date(2025, 1, 1) + _dt.timedelta(days=(r - 1) // 1000) for r in range(1, 365001)]
+    n_year, n_mar = len(days), sum(1 for d in days if d.year == 2025 and d.month == 3)
+    rec("L07", nums[:2] == [n_year, n_mar] == [365000, 31000] and nums[:2] == [len(alg.bnx_l07_load(365000, per_day=1000)),
+        alg.bnx_l07_month_rows(1000, 3)], f"Oracle thật: nạp 365 000 dòng → cả năm {nums[0]}, phân vùng tháng 3 {nums[1]} = đếm bằng vòng lặp Python")
+    rec("L07", [alg.bnx_l07_month_rows(p, 3) for p in (10, 1000, 100000)] == [310, 31000, 3100000]
+        and [p * 365 for p in (10, 1000, 100000)] == [3650, 365000, 36500000] and 31 / 365 == 310 / 3650 == 31000 / 365000,
+        "ba mức quy mô: 310 / 31 000 / 3 100 000 dòng của tháng 3 (đã đo ở 3 650 và 365 000; mức 36 500 000 tính theo tỉ lệ 31/365)")
+    clean = [x.strip() for x in L.ORA_SCALE_OUT.strip().split("\n")]
+    rec("L07", [x.strip() for x in o.strip().split("\n") if x.strip()] == clean, "đầu ra hiện trên màn hình = đầu ra thật của sqlplus (từng dòng)")
+    lab = ROOT / "labs" / "BNX" / "L07"
+    r = subprocess.run([sys.executable, "-I", "-X", "utf8", "-B", str(lab / "loi_giai.py")], capture_output=True, text=True, encoding="utf-8")
+    # mô hình thuần: kiểm JSON bằng thư viện json của Python (đường khác với json_valid của sqlite)
+    import json
+    DONG = [(1, '{"kenh":"atm","may":"A7","tien":500000}'), (2, '{"kenh":"app","thiet_bi":"d9","tien":200000}'), (3, '{"kenh":"atm","may":"B2"'),
+            (4, '{"kenh":"app","thiet_bi":"d1","tien":900000}'), (5, '{"kenh":"atm","may":"A7","tien":300000}')]
+    ok, bad = [], []
+    for i, js in DONG:
+        try:
+            ok.append(json.loads(js))
+        except ValueError:
+            bad.append(i)
+    want = [f"dong {i}: tu choi (JSON hong)" for i in bad] + [
+        f"tong tien kenh atm: {sum(d['tien'] for d in ok if d['kenh'] == 'atm')}",
+        f"so giao dich kenh app: {sum(1 for d in ok if d['kenh'] == 'app')}",
+        f"may A7: {sum(1 for d in ok if d.get('may') == 'A7')} giao dich"]
+    rec("L07", r.returncode == 0 and r.stdout.strip() == (lab / "mong_doi.txt").read_text(encoding="utf-8").strip() == "\n".join(want),
+        "lab: lời giải sqlite chạy lại = mong_doi = mô hình thuần json.loads (dòng 3 bị từ chối; 800000 / 2 / 2)")

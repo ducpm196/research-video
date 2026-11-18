@@ -1,13 +1,11 @@
-"""Kiểm độc lập BNX L06 — chạy THẬT các hằng mã của audit/bnx/src/l06.py trên Oracle (bnx-ora) và SQL Server (bnx-mss), đọc con số
+"""Kiểm độc lập BNX L06 (sau khi tách T-SQL/JDBC sang L37) — chạy THẬT các hằng mã của audit/bnx/src/l06.py trên Oracle (bnx-ora), đọc con số
 từ đầu ra bằng biểu thức chính quy, rồi so với alg.bnx_l06_* (mô hình thuần Python). Thêm: bế tắc thật giữa hai phiên Oracle khi khoá
-theo chiều chuyển và không bế tắc khi khoá theo mã tăng dần; khoảng mã của RAISE_APPLICATION_ERROR; mặc định XACT_ABORT; javac mã Java.
-Không chạy được Docker → rec(..., None) (SKIP, cổng FAIL)."""
+theo chiều chuyển và không bế tắc khi khoá theo mã tăng dần; khoảng mã của RAISE_APPLICATION_ERROR; banner phiên bản. SQL Server, XACT_ABORT,
+chèn mã, Java: xem audit/bnx/ver/l37.py. Không chạy được Docker → rec(..., None) (SKIP, cổng FAIL)."""
 import pathlib
 import re
-import shutil
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 
@@ -38,10 +36,10 @@ def run(rec):
     except Exception as ex:  # noqa: BLE001
         rec("L06", None, f"không gọi được Docker: {type(ex).__name__}")
         return
-    if not ok_o or not ok_m:
-        rec("L06", None, f"container chưa chạy: oracle={ok_o}, mssql={ok_m}")
+    if not ok_o:
+        rec("L06", None, f"container Oracle chưa chạy: oracle={ok_o}")
         return
-    ora, mss = dbrun.ora, dbrun.mss
+    ora = dbrun.ora
 
     # 1. Oracle: thủ tục biên dịch được, rồi 500 000 (lỗi) và 200 000 (thành công) trong CÙNG một phiên
     o = ora(L.ORA_SETUP + L.ORA_PROC + "SELECT status FROM user_objects WHERE object_name = 'BNX_L06_CHUYEN_TIEN';")
@@ -118,69 +116,60 @@ DROP TABLE bnx_l06_log;"""
         "Oracle: thủ tục khoá LEAST trước → phiên 2 chỉ chờ, chạy xong OK, không ORA-00060 (alg: thứ tự (1, 2))")
     ora("DROP PROCEDURE IF EXISTS bnx_l06_naive;")
 
-    # 5. SQL Server: cùng hai lời gọi
-    base = L.MSS_DB + L.MSS_SETUP + L.MSS_PROC
-    m = mss(base + L.MSS_CALL_500 + "\nGO\n" + L.MSS_CALL_200)
-    t = _ints(m)
-    rec("L06", "Msg 50001" in m and "So du khong du" in m, "SQL Server: chuyển 500 000 → THROW 50001")
-    rec("L06", t[:1] == [1300000] and t[-1:] == [1300000], f"SQL Server: tổng sau lỗi và sau khi chuyển 200 000 thật {t[:1]}, {t[-1:]} = 1 300 000")
-    rec("L06", re.search(r"^OK\s*$", m, re.M) is not None and _bal(m) == {"A": b200[1], "B": b200[2]},
-        f"SQL Server: @status = OK, số dư thật {_bal(m)} = alg")
-
-    m = mss(base + """DECLARE @st VARCHAR(20);
-EXEC dbo.chuyen_tien 1, 2, -100000, @st OUTPUT;
-GO
-SELECT SUM(so_du) FROM dbo.tk;""")
-    rec("L06", "Msg 50002" in m and _ints(m)[-1:] == [1300000], "SQL Server: chuyển −100 000 → THROW 50002, tổng 1 300 000")
-    catch = """SET XACT_ABORT OFF;
-BEGIN TRAN;
-BEGIN TRY
-  UPDATE dbo.tk SET so_du = so_du + 500000 WHERE id = 2;
-  UPDATE dbo.tk SET so_du = so_du - 500000 WHERE id = 1;
-END TRY
-BEGIN CATCH
-  PRINT 'bat loi';
-END CATCH
-IF @@TRANCOUNT > 0 COMMIT;
-GO
-SELECT SUM(so_du) FROM dbo.tk;"""
-    m = mss(L.MSS_DB + L.MSS_SETUP + catch)
-    rec("L06", "bat loi" in m and _ints(m)[-1:] == [1800000], "SQL Server: CATCH không ROLLBACK rồi chốt → tổng 1 800 000 (vì thế hình ghi “CATCH có ROLLBACK”)")
-
-    # 6. SQL Server: mặc định XACT_ABORT OFF và hệ quả
-    m = mss("SELECT CASE WHEN (@@OPTIONS & 16384) = 16384 THEN 'xact_on' ELSE 'xact_off' END;")
-    rec("L06", "xact_off" in m, "SQL Server: phiên sqlcmd mới có XACT_ABORT OFF (bit 16384 của @@OPTIONS)")
-    m1, m2 = mss(L.MSS_DB + L.MSS_SETUP + L.MSS_PARTIAL), mss(L.MSS_DB + L.MSS_SETUP + L.MSS_FIXED)
-    rec("L06", "Msg 547" in m1 and _ints(m1)[-1:] == [alg.bnx_l06_total(alg.bnx_l06_batch(B0, MOVE, False))] == [1800000],
-        f"SQL Server: XACT_ABORT OFF → tổng thật {_ints(m1)[-1:]} = alg 1 800 000")
-    rec("L06", "Msg 547" in m2 and _ints(m2)[-1:] == [alg.bnx_l06_total(alg.bnx_l06_batch(B0, MOVE, True))] == [1300000],
-        f"SQL Server: XACT_ABORT ON → tổng thật {_ints(m2)[-1:]} = alg 1 300 000")
-
-    # 7. SQL Server: chèn mã
-    i1, i2 = mss(L.MSS_DB + L.MSS_SETUP + L.MSS_INJ_BAD), mss(L.MSS_DB + L.MSS_SETUP + L.MSS_INJ_GOOD)
-    n1 = len(re.findall(r"^[AB] \d+$", i1, re.M))
-    n2 = len(re.findall(r"^[AB] \d+$", i2, re.M))
-    rec("L06", n1 == alg.bnx_l06_inject_rows("X' OR '1'='1", False) == 2, f"SQL Server: ghép chuỗi trả {n1} dòng = alg (SQLite) 2")
-    rec("L06", n2 == alg.bnx_l06_inject_rows("X' OR '1'='1", True) == 0 and "(0 rows affected)" in i2, f"SQL Server: sp_executesql có tham số trả {n2} dòng = 0")
-
-    # 8. Sổ mã: nguồn trong audit/bnx/screen/l06.yaml trùng hằng đang hiện
+    # 8. Sổ mã: nguồn thủ tục Oracle trong audit/bnx/screen/l06.yaml trùng hằng đang hiện
     import yaml
     reg = yaml.safe_load((ROOT / "audit" / "bnx" / "screen" / "l06.yaml").read_text(encoding="utf-8"))
     srcs = reg.get("sources") or {}
-    same = (srcs.get("L06_ora_proc", {}).get("code", "").strip("\n") == L.ORA_PROC.strip("\n")
-            and srcs.get("L06_mss_proc", {}).get("code", "").strip("\n") == L.MSS_PROC.strip("\n")
-            and srcs.get("L06_mss_base", {}).get("code", "").strip("\n") == (L.MSS_DB + L.MSS_SETUP).strip("\n"))
-    rec("L06", same, "sổ screen/l06.yaml: nguồn thủ tục Oracle, T-SQL, dữ liệu SQL Server trùng từng ký tự với hằng của src/l06.py")
+    same = srcs.get("L06_ora_proc", {}).get("code", "").strip("\n") == L.ORA_PROC.strip("\n")
+    rec("L06", same, "sổ screen/l06.yaml: nguồn thủ tục Oracle trùng từng ký tự với hằng của src/l06.py")
 
-    # 9. Java: biên dịch đúng mã đang hiện (chạy cần trình điều khiển ojdbc — NOT_VERIFIED ở cổng, xem báo cáo)
-    if not shutil.which("javac"):
-        rec("L06", None, "không có javac")
-        return
-    with tempfile.TemporaryDirectory() as d:
-        src = ("import java.sql.*;\npublic class Main {\n  public static void main(String[] args) throws Exception {\n"
-               "    String url = \"jdbc:oracle:thin:@//localhost:1521/FREEPDB1\", user = \"bnx\", pass = \"bnx_pass\";\n"
-               + L.JAVA_CALL + "\n  }\n}\n")
-        pathlib.Path(d, "Main.java").write_text(src, encoding="utf-8")
-        r = subprocess.run(["javac", "-encoding", "UTF-8", "-d", d, str(pathlib.Path(d, "Main.java"))], capture_output=True, text=True)
-        rec("L06", r.returncode == 0 and "registerOutParameter(4, Types.VARCHAR)" in L.JAVA_CALL and "{call bnx_l06_chuyen_tien(?, ?, ?, ?)}" in L.JAVA_CALL,
-            "Java: mã CallableStatement trên màn hình biên dịch được bằng javac (chỉ java.sql của JDK)")
+    # 8b. Phiên bản Oracle đúng như bài nói (Free 23, banner 26ai Free 23.26.3)
+    o = ora("SELECT banner FROM v$version WHERE ROWNUM = 1;")
+    rec("L06", "26ai Free" in o and "23.26.3" in o, f"Oracle: banner thật chứa '26ai Free' và '23.26.3' ({o.strip().splitlines()[-1][:60] if o.strip() else ''})")
+
+    # 8c. Mô hình Python (cảnh check) trùng đầu ra Oracle: 500 000 bị từ chối, 200 000 → A 100 000, B 1 200 000
+    mo = L.PY_MODEL.out.split("\n")
+    rec("L06", mo[0] == "500000 loi {1: 300000, 2: 1000000} 1300000" and mo[1] == "200000 OK {1: 100000, 2: 1200000} 1300000"
+        and alg.bnx_l06_transfer(B0, 1, 2, 500000)[0] is False, "mô hình Python thuần cho cùng kết quả như Oracle (cảnh check)")
+
+    # ── AF2 (WP4): quy mô và lab (sqlite/Python, không cần Docker) ──
+    import lib2
+    lib2.verify_programs(rec, "L06")
+    import sqlite3
+
+    def count_wrapped(n):
+        """Đường khác: bọc hàm execute (không dùng set_trace_callback), chạy n lệnh chuyển theo đúng năm câu."""
+        cx = sqlite3.connect(":memory:", isolation_level=None)
+        cx.execute("CREATE TABLE tk (id INT, so_du INT)")
+        cx.execute("INSERT INTO tk VALUES (1, 99999999), (2, 0)")
+        calls = [0]
+
+        def ex(sql):
+            calls[0] += 1
+            return cx.execute(sql)
+        for _ in range(n):
+            ex("BEGIN"); ex("SELECT so_du FROM tk WHERE id = 1")
+            ex("UPDATE tk SET so_du = so_du - 1 WHERE id = 1"); ex("UPDATE tk SET so_du = so_du + 1 WHERE id = 2"); ex("COMMIT")
+        return calls[0], cx.execute("SELECT so_du FROM tk ORDER BY id").fetchall()
+    got = [count_wrapped(n) for n in (10, 1000)]
+    rec("L06", [g[0] for g in got] == [50, 5000] == [alg.bnx_l06_statements(10), alg.bnx_l06_statements(1000)]
+        and got[1][1] == [(99999999 - 1000,), (1000,)], f"đếm bằng hàm bọc: 10 → {got[0][0]}, 1000 → {got[1][0]} câu; số dư đúng sau 1000 lệnh chuyển")
+    outp = L.Q6.out.split("\n")
+    rec("L06", [int(x.split()[2]) for x in outp] == [50, 5000, 500000] == [alg.bnx_l06_statements(n) for n in (10, 1000, 100000)],
+        "đầu ra thật của khối quy mô: 50, 5000, 500000 câu (= 5 × số lệnh chuyển)")
+    # lab: mô hình thuần dict (cộng nhận trước, trừ gửi, không âm), so với lời giải chạy thật
+    lab = ROOT / "labs" / "BNX" / "L06"
+    bal, lines = {1: 500, 2: 400, 3: 300}, []
+    for a, b, t in [(1, 2, 300), (2, 3, 900), (3, 1, 50), (1, 3, 250)]:
+        nb = dict(bal)
+        nb[b] += t
+        nb[a] -= t
+        if nb[a] < 0:
+            lines.append(f"chuyen {a}->{b} {t}: loi so du khong du")
+        else:
+            bal = nb
+            lines.append(f"chuyen {a}->{b} {t}: OK")
+    lines.append(f"tong tien: {sum(bal.values())}")
+    r = subprocess.run([sys.executable, "-I", "-X", "utf8", "-B", str(lab / "loi_giai.py")], capture_output=True, text=True, encoding="utf-8")
+    rec("L06", r.returncode == 0 and r.stdout.strip() == (lab / "mong_doi.txt").read_text(encoding="utf-8").strip() == "\n".join(lines) and sum(bal.values()) == 1200,
+        "lab: lời giải sqlite chạy lại = mong_doi = mô hình dict (một lệnh bị hoàn tác, tổng 1200 giữ nguyên)")

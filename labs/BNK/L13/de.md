@@ -4,6 +4,7 @@ Phép kiểm Luhn: đi từ **phải sang trái**, chữ số ở vị trí 0 (c
 
 Viết chương trình `luhn_lab.py` (Python):
 1. Hàm `luhn(so)` trả `True` hoặc `False` theo phép kiểm trên.
-2. Với thẻ thử `the = "5500005555555559"`: in `luhn(the)`, rồi in `luhn` của số đó khi đổi chữ số cuối thành `8`, rồi in số thẻ đã che (giữ 6 số đầu, 4 số cuối, 6 dấu `*` ở giữa).
+2. Hàm `che(so)` trả số thẻ đã che: giữ 6 số đầu, 4 số cuối, 6 dấu `*` ở giữa (gợi ý: `so[:6]`, `so[-4:]`).
+3. Với thẻ thử `the = "5500005555555559"`: in `luhn(the)`, rồi in `luhn` của số đó khi đổi chữ số cuối thành `8`, rồi in `che(the)`.
 
 Kết quả đúng ba dòng: `True`, `False`, `550000******5559`. Chạy: `python luhn_lab.py`. Chấm: `bash labs/cham.sh BNK L13 luhn_lab.py`.

@@ -11,11 +11,13 @@ Method: sha256 over, for each regular file sorted bytewise by its POSIX
 relative path in UTF-8: the bytes of the relative path, 0x00, the file
 contents, 0x00. No file is excluded and no line endings are normalized.
 
-A symbolic link, any other non-regular file, or a name that is not valid
-UTF-8 is never followed or hashed, and an entry that cannot be listed or
-read is never skipped silently. A directory that contains one has no
-valid digest: the script prints the findings to stderr and exits 2.
-The root argument itself may be a symbolic link to a directory.
+A symbolic link, a Windows junction (mount point), any other non-regular
+file, or a name that is not valid UTF-8 is never followed or hashed, and an
+entry that cannot be listed or read is never skipped silently. A directory
+that contains one has no valid digest: the script prints the findings to
+stderr and exits 2. The root argument itself may be a symbolic link to a
+directory. Only the mount-point reparse tag counts as a junction; other
+reparse points (for example cloud placeholders) are read like ordinary entries.
 
 Exit codes: 0 digest printed | 2 no valid digest | 3 not a directory.
 """
@@ -25,6 +27,7 @@ import stat
 import sys
 
 sys.dont_write_bytecode = True  # a stray __pycache__ would change the digest
+MOUNT_POINT_TAG = 0xA0000003  # IO_REPARSE_TAG_MOUNT_POINT: a Windows junction
 
 
 def compute(root):
@@ -36,6 +39,7 @@ def compute(root):
         findings.append((rel, "cannot be listed: %s" % err.strerror))
 
     for dirpath, dirnames, filenames in os.walk(root, onerror=walk_error, followlinks=False):
+        junctions = set()
         for name in list(dirnames) + list(filenames):
             full = os.path.join(dirpath, name)
             rel = os.path.relpath(full, root).replace(os.sep, "/")
@@ -46,9 +50,14 @@ def compute(root):
                 findings.append((rel_b.decode("utf-8", "replace"), "name is not valid UTF-8"))
                 continue
             try:
-                mode = os.lstat(full).st_mode
+                st = os.lstat(full)
             except OSError as err:
                 findings.append((rel, "cannot be inspected: %s" % err.strerror))
+                continue
+            mode = st.st_mode
+            if getattr(st, "st_reparse_tag", 0) == MOUNT_POINT_TAG:
+                findings.append((rel, "junction (mount point)"))
+                junctions.add(name)  # never walk into it
                 continue
             if name in dirnames:
                 if stat.S_ISLNK(mode):
@@ -58,6 +67,7 @@ def compute(root):
                 hashed.append((rel_b, full))
             else:
                 findings.append((rel, "symbolic link" if stat.S_ISLNK(mode) else "not a regular file"))
+        dirnames[:] = [d for d in dirnames if d not in junctions]
     if findings:
         return None, hashed, findings
     hashed.sort(key=lambda item: item[0])

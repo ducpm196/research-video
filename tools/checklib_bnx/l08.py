@@ -62,3 +62,13 @@ def bnx_refresh_sim(writes, searches, interval=1.0):
         last_refresh = (t // interval) * interval
         out.append(sum(1 for tw, _ in writes if tw < last_refresh))
     return out
+
+
+def bnx_l08_postings(n):
+    """Cảnh quy mô: cứ 1000 mô tả có một mô tả chứa chữ napas (i = 0, 1000, …) → số dòng của danh sách chữ đó."""
+    return sum(1 for i in range(n) if i % 1000 == 0)
+
+
+def bnx_l08_moved(n):
+    """Số bản ghi tx0…tx(n-1) đổi mảnh khi số mảnh chính đổi 3 → 4 (băm minh hoạ CRC32)."""
+    return sum(zlib.crc32(f"tx{i}".encode()) % 3 != zlib.crc32(f"tx{i}".encode()) % 4 for i in range(n))

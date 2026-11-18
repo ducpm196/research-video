@@ -1,4 +1,4 @@
-"""BNX L07 — mô hình thuần Python: phân vùng theo tháng và cắt tỉa phân vùng, lọc JSON, hàng đợi có giao dịch, chia mảnh minh hoạ.
+"""BNX L07 — mô hình thuần Python: phân vùng theo tháng và cắt tỉa phân vùng, lọc JSON (hàng đợi, chia mảnh đã chuyển sang l38.py).
 Không gọi cơ sở dữ liệu. Bộ kiểm audit/bnx/ver/l07.py chạy THẬT trên Oracle (bnx-ora) rồi so với các hàm này."""
 import calendar as _cal
 import datetime as _dt
@@ -71,28 +71,6 @@ def bnx_l07_json_ids(docs, field, threshold):
     return ok, hit
 
 
-def bnx_l07_queue(ops):
-    """Hàng đợi có giao dịch: ('enq', x) gửi tạm, ('deq',) nhận tạm phần tử đầu, ('commit',) chốt, ('rollback',) huỷ mọi việc chưa chốt.
-    Trả (các thông điệp đã nhận và chốt, số thông điệp còn trong hàng đợi)."""
-    q, pend_enq, pend_deq, got = [], [], [], []
-    for op in ops:
-        if op[0] == "enq":
-            pend_enq.append(op[1])
-        elif op[0] == "deq":
-            avail = [x for x in q if x not in pend_deq]
-            if avail:
-                pend_deq.append(avail[0])
-        elif op[0] == "commit":
-            q += pend_enq
-            for x in pend_deq:
-                q.remove(x)
-                got.append(x)
-            pend_enq, pend_deq = [], []
-        elif op[0] == "rollback":
-            pend_enq, pend_deq = [], []
-    return got, len(q)
-
-
-def bnx_l07_shard(acc, n):
-    """Quy tắc chia mảnh MINH HOẠ của bài: mảnh = mã tài khoản chia lấy dư cho n (không phải cách Oracle chia)."""
-    return acc % n
+def bnx_l07_month_rows(per_day, month, year=2025):
+    """Số dòng của một tháng khi mỗi ngày nạp per_day dòng (công thức đóng): số ngày của tháng × per_day."""
+    return bnx_l07_month_days(year, month) * per_day

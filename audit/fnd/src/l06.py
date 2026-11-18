@@ -86,14 +86,15 @@ def build():
         ("head -n 1 a10k.csv", "1,Le Hoa,39000"), ("head -n 1 a10k.json", '{"ma":1,"khach":"Le Hoa","tong":39000}'),
     ])
     quiz = cmd("PhienQuiz", [
-        ("python -c \"import json; d = json.load(open('tk.json')); print(d['cac_the'][2]['han_muc'])\"", "30000000"),
-        ("python -c \"import json; d = json.load(open('tk.json')); print(sum(t['han_muc'] for t in d['cac_the']))\"", "60000000"),
+        ("python -c \"import json; d = json.load(open('tk.json'))\nprint(d['cac_the'][2]['han_muc'])\"", "30000000"),
+        ("python -c \"import json; d = json.load(open('tk.json'))\nprint(sum(t['han_muc'] for t in d['cac_the']))\"", "60000000"),
     ], files={"tk.json": '{"chu": "Pham Nam", "cac_the": [\n  {"loai": "ghi_no", "han_muc": 10000000},\n  {"loai": "tin_dung", "han_muc": 20000000},\n  {"loai": "tra_truoc", "han_muc": 30000000}\n]}\n'})
 
     sc_hook = sc("hook", "hook", "Thiếu một dấu phẩy, cả tệp bị từ chối: hai hệ thống nói chuyện bằng chữ", [
         st(term_block(loi, 1, 2, title="Máy đối tác nhận tệp JSON thiếu một dấu phẩy")
-           + file_block(loi, "loi_phay.json", title="Tệp loi_phay.json"),
-           """Chào bạn, hai hệ thống ngân hàng gửi dữ liệu cho nhau bằng tệp chữ. Chỉ cần thiếu một dấu phẩy giữa hai khoá, máy nhận từ chối cả tệp, và báo dòng hai, cột hai, vị trí thứ mười.
+           + file_block(loi, "loi_phay.json", title="Tệp loi_phay.json")
+           + "<p class='note'><code>python -m json.tool tệp</code> chạy bộ kiểm cú pháp JSON có sẵn của Python: tệp đúng thì in lại cho đẹp, tệp sai thì báo dòng và cột. <b>Cú pháp</b> là luật viết đúng của một dạng chữ (như chính tả); <b>bộ kiểm</b> là chương trình kiểm tra tệp có theo đúng luật không.</p>",
+           """Chào bạn, hai hệ thống ngân hàng gửi dữ liệu cho nhau bằng tệp chữ. Lệnh trên màn hình chạy bộ kiểm cú pháp JSON có sẵn của Python, một ngôn ngữ lập trình. Cú pháp là luật viết đúng của một dạng chữ, như chính tả, còn bộ kiểm là chương trình xem tệp có theo đúng luật không. Chỉ cần thiếu một dấu phẩy giữa hai khoá, máy nhận từ chối cả tệp, và báo dòng hai, cột hai, vị trí thứ mười.
            Chữ có cấu trúc nghĩa là mỗi dấu đều có nhiệm vụ, và hôm nay ta học ba dạng phổ biến nhất."""),
         st("""<div class="box key">Hôm nay ta trả lời ba câu hỏi:
 <ol><li><b>CSV, JSON, YAML</b> khác nhau thế nào, và mỗi dạng hợp việc gì?</li>
@@ -117,37 +118,38 @@ def build():
                  [["<b>CSV</b>", "<code>ten,sl,gia</code> rồi <code>but,3,5000</code>", "bảng bằng chữ: <b>mỗi dòng một hàng</b>, cột cách nhau bằng dấu phẩy; dòng đầu thường là <b>tên cột</b>"],
                   ["<b>JSON</b>", "<code>{\"ten\": \"but\", \"sl\": 3}</code>", "<code>{ }</code> là một <b>đối tượng</b> gồm cặp <b>khoá: giá trị</b>; khoá luôn trong nháy kép; ngăn cặp bằng dấu phẩy"],
                   ["", "<code>[1, 2, 3]</code>", "<code>[ ]</code> là một <b>mảng</b>: danh sách có thứ tự, vị trí đếm từ <b>0</b>"],
-                  ["", "<code>\"abc\"  42  true  null</code>", "bốn kiểu giá trị: chữ (nháy kép), số, đúng/sai viết thường, rỗng"]]),
+                  ["", "<code>\"abc\"  42  true  null</code>", "một giá trị là một trong sáu kiểu: bốn kiểu đơn giản (chữ trong nháy kép, số, đúng/sai viết thường, rỗng), hoặc chính một <b>đối tượng</b>, hoặc một <b>mảng</b> (lồng nhau)"]]),
            """Bảng này giải mã dạng bảng và JSON. Dạng bảng thì mỗi dòng là một hàng, các cột cách nhau bằng dấu phẩy, dòng đầu thường là tên cột. JSON dùng ngoặc nhọn cho một đối tượng gồm các cặp khoá và giá trị, khoá luôn nằm trong nháy kép.
-           Ngoặc vuông là một mảng, tức danh sách có thứ tự, vị trí đếm từ không. Và giá trị có bốn kiểu, chữ trong nháy kép, số, đúng hoặc sai viết thường, và rỗng.""",
+           Ngoặc vuông là một mảng, tức danh sách có thứ tự, vị trí đếm từ không. Và một giá trị có sáu kiểu, bốn kiểu đơn giản là chữ trong nháy kép, số, đúng hoặc sai viết thường, và rỗng, cộng với chính một đối tượng hoặc một mảng lồng bên trong.""",
            focus=[1, "1.2", "1.3", "1.4", "1.5"]),
         st(table(["viết", "nghĩa"],
                  [["<code>khoa: gia_tri</code>", "một cặp khoá và giá trị; <b>có khoảng trắng sau dấu hai chấm</b>"],
                   ["thụt lề", "YAML dùng <b>dấu cách</b> đầu dòng để lồng nhau (không dùng phím Tab); cùng cấp thì cùng độ thụt"],
-                  ["<code>- ten: but</code>", "dấu gạch đầu dòng bắt đầu <b>một phần tử</b> của danh sách"],
+                  ["<code>- ten: but</code>", "dấu gạch đầu dòng bắt đầu <b>một phần tử</b> của danh sách; viết gọn trên một dòng bằng ngoặc vuông, như <code>[but, vo]</code> (giống mảng JSON)"],
                   ["<code># ghi chú</code>", "chú thích: máy bỏ qua (JSON <b>không</b> có chú thích)"]]),
            """Bảng thứ hai là YAML, dạng viết cho người đọc. Một cặp khoá và giá trị cách nhau bằng dấu hai chấm kèm khoảng trắng. Cấu trúc lồng nhau thể hiện bằng thụt lề dấu cách, không dùng phím nhảy cột, cùng cấp thì cùng độ thụt.
-           Dấu gạch đầu dòng bắt đầu một phần tử của danh sách. Và dấu thăng bắt đầu chú thích, mà JSON không có.""",
+           Dấu gạch đầu dòng bắt đầu một phần tử của danh sách, và cũng viết gọn được trên một dòng bằng ngoặc vuông. Và dấu thăng bắt đầu chú thích, mà JSON không có.""",
            focus=[1, "1.2", "1.3", "1.4", "1.5"], clear=True),
     ])
     sc_int = sc("intuition", "intuition", "Hình dung: cùng một đơn hàng, ba cách viết", [
         st(svg(1500, 560,
-               panel(10, 10, 440, 530, "CSV: bảng", C_GREEN),
+               panel(10, 10, 440, 530, "CSV: bảng (rút gọn)", C_GREEN),
                txt(230, 110, "ten,sl,gia", 28, "middle", "#1f2937", True), txt(230, 160, "but,3,5000", 28, "middle", "#1f2937"), txt(230, 210, "vo,2,12000", 28, "middle", "#1f2937"),
                txt(230, 300, "mỗi dòng = một hàng", 24, "middle", "#16a34a", True), txt(230, 345, "ngắn gọn, mọi hàng cùng cột", 22, "middle", "#1f2937"),
                txt(230, 395, "không có kiểu, không lồng nhau", 22, "middle", "#dc2626"),
-               panel(480, 10, 520, 530, "JSON: máy đọc", C_BLUE),
+               panel(480, 10, 520, 530, "JSON: máy đọc (rút gọn)", C_BLUE),
                txt(740, 100, "{ \"ma\": 7,", 24, "middle", "#1f2937"), txt(740, 135, "\"hang\": [", 24, "middle", "#1f2937"),
                txt(740, 170, "{\"ten\": \"but\", \"sl\": 3},", 24, "middle", "#1f2937"), txt(740, 205, "{\"ten\": \"vo\", \"sl\": 2} ] }", 24, "middle", "#1f2937"),
                txt(740, 300, "đối tượng { } và mảng [ ]", 24, "middle", "#2a78d6", True), txt(740, 345, "lồng nhau tự do, có kiểu", 22, "middle", "#1f2937"),
-               txt(740, 395, "mọi ngôn ngữ đều có sẵn bộ đọc", 22, "middle", "#1f2937"),
-               panel(1030, 10, 460, 530, "YAML: người đọc", C_AMBER),
+               txt(740, 395, "hầu hết ngôn ngữ có thư viện đọc JSON", 22, "middle", "#1f2937"),
+               panel(1030, 10, 460, 530, "YAML: người đọc (rút gọn)", C_AMBER),
                txt(1100, 100, "ma: 7", 24, "start", "#1f2937"), txt(1100, 135, "hang:", 24, "start", "#1f2937"),
                txt(1140, 170, "- ten: but", 24, "start", "#1f2937"), txt(1163, 205, "sl: 3", 24, "start", "#1f2937"),
                txt(1260, 300, "thụt lề thay ngoặc", 24, "middle", "#d97706", True), txt(1260, 345, "có chú thích, dễ viết tay", 22, "middle", "#1f2937"),
-               txt(1260, 395, "sai một dấu cách là sai nghĩa", 22, "middle", "#dc2626")),
-           """Hình này là cùng một đơn hàng viết ba cách. Dạng bảng chỉ có hàng và cột, ngắn gọn, nhưng không có kiểu và không lồng nhau được. JSON dùng ngoặc nhọn và ngoặc vuông, lồng nhau tự do, và mọi ngôn ngữ lập trình đều có sẵn bộ đọc.
-           YAML dùng thụt lề thay cho ngoặc, có chú thích, dễ viết tay, nhưng sai một dấu cách là sai nghĩa. Ba dạng chứa cùng thông tin, chỉ khác cách trình bày."""),
+               txt(1260, 395, "sai một dấu cách là sai nghĩa", 22, "middle", "#dc2626"))
+           + "<p class='note'><b>Bộ đọc</b> là chương trình đổi chữ trong tệp thành dữ liệu mà ngôn ngữ lập trình dùng được: nạp <code>{\"sl\": 3}</code> thì được khoá <code>sl</code> mang số $3$.</p>",
+           """Hình này là cùng một đơn hàng viết ba cách. Dạng bảng chỉ có hàng và cột, ngắn gọn, nhưng không có kiểu và không lồng nhau được. JSON dùng ngoặc nhọn và ngoặc vuông, lồng nhau tự do, và hầu hết ngôn ngữ lập trình phổ biến có thư viện đọc, có ngôn ngữ dùng sẵn, có ngôn ngữ phải thêm. Bộ đọc là chương trình đổi chữ trong tệp thành dữ liệu mà ngôn ngữ ấy dùng được.
+           YAML dùng thụt lề thay cho ngoặc, có chú thích, dễ viết tay, nhưng sai một dấu cách là sai nghĩa. Hình vẽ rút gọn vài trường, nhưng ba dạng chứa cùng thông tin, chỉ khác cách trình bày."""),
     ])
     sc_form = sc("formula", "formula", "Suy ra từng bước: đường đi tới một giá trị nằm sâu", [
         st(file_block(cmd("Mau", [("true", "")], files=F), "don.json", title="Tệp don.json")
@@ -164,16 +166,20 @@ $$\\text{hang} \\to [1] \\to \\text{gia} \\;\\Rightarrow\\; \\hl{12000}$$""",
         st(file_block(cmd("Mau2", [("true", "")], files=F), "don.csv", title="① Dạng bảng: tệp don.csv") + term_block(csv_, 0, 1, title="Lấy cột sl (số lượng)"),
            """Phép làm thứ nhất, dạng bảng. Dòng đầu là tên cột, hai dòng sau là hai mặt hàng. Lệnh cắt cột thứ hai lấy cột số lượng, và kết quả có cả tên cột. Muốn bỏ tên cột, ta dùng lệnh bỏ dòng đầu đã học."""),
         st(term_block(js, 0, 1, title="② JSON: giá của mặt hàng thứ hai")
-           + "<p>Đường đi <code>d['hang'][1]['gia']</code> ra $12000$, đúng như tính ở bước 3.</p>",
-           """Phép làm thứ hai, đọc JSON bằng một dòng lệnh của ngôn ngữ thứ hai. Đường đi là khoá hang, vị trí một, khoá gia. Màn hình ra mười hai nghìn, đúng như ta tính ở bước ba."""),
+           + "<p>Đường đi <code>d['hang'][1]['gia']</code> ra $12000$, đúng như tính ở bước 3.</p>"
+           + "<p class='note'><code>python -c \"…\"</code> chạy một đoạn mã Python ngắn ngay trong cửa sổ lệnh. <code>import json</code> nạp bộ đọc JSON; "
+             "<code>json.load(open('don.json'))</code> mở tệp và đổi chữ JSON thành dữ liệu <code>d</code>; <code>print(…)</code> in kết quả. Dấu <code>;</code> nối các câu lệnh Python trên một dòng, chạy lần lượt từ trái sang phải.</p>",
+           """Phép làm thứ hai, đọc JSON bằng một dòng lệnh của Python. Cờ c cho phép chạy một đoạn mã ngắn ngay trong cửa sổ lệnh. Dòng nhập nạp bộ đọc JSON, hàm nạp mở tệp và đổi chữ JSON thành dữ liệu, và hàm in in kết quả. Dấu chấm phẩy nối các câu lệnh trên một dòng, chạy lần lượt từ trái sang phải.
+           Đường đi là khoá hang, vị trí một, khoá gia. Màn hình ra mười hai nghìn, đúng như ta tính ở bước ba."""),
         st(file_block(cmd("Mau4", [("true", "")], files=F), "tong.py", title="③ Tệp tong.py: số mặt hàng và tổng tiền") + term_block(js, 1, 2)
-           + "<p>Tổng $= 3 \\times 5000 + 2 \\times 12000 = 15000 + 24000 = \\hl{39000}$ ✓</p>",
-           """Phép làm thứ ba, tính trên dữ liệu. Có hai mặt hàng, và tổng tiền là ba nhân năm nghìn cộng hai nhân mười hai nghìn, bằng mười lăm nghìn cộng hai mươi tư nghìn, tức ba mươi chín nghìn. Máy tính ra cùng con số."""),
+           + "<p>Tổng $= 3 \\times 5000 + 2 \\times 12000 = 15000 + 24000 = \\hl{39000}$ ✓</p>"
+           + "<p class='note'><code>for h in hang</code> lần lượt lấy từng mặt hàng làm <code>h</code>; <code>sum(…)</code> cộng các giá trị <code>h[\"sl\"] * h[\"gia\"]</code> (số lượng nhân giá) của mọi mặt hàng; <code>len(hang)</code> là số phần tử của mảng <code>hang</code>; <code>print(a, b)</code> in hai giá trị cách nhau một dấu cách.</p>",
+           """Phép làm thứ ba, tính trên dữ liệu. Chương trình lần lượt lấy từng mặt hàng, nhân số lượng với giá rồi cộng lại, đếm số phần tử của mảng bằng hàm đếm, và in hai giá trị cách nhau một dấu cách. Có hai mặt hàng, và tổng tiền là ba nhân năm nghìn cộng hai nhân mười hai nghìn, bằng mười lăm nghìn cộng hai mươi tư nghìn, tức ba mươi chín nghìn. Máy tính ra cùng con số."""),
         st(file_block(cmd("Mau3", [("true", "")], files=F), "don.yaml", title="④ YAML: cùng nội dung, thụt lề thay ngoặc")
            + "<p>Hai dấu cách đầu dòng nghĩa là <b>nằm trong</b> khoá <code>hang</code>; dấu <code>-</code> mở phần tử mới; <code>sl</code> và <code>gia</code> thẳng cột với <code>ten</code> nên cùng một phần tử.</p>",
            """Phép làm thứ tư, cùng đơn hàng viết bằng YAML. Hai dấu cách đầu dòng nghĩa là nằm trong khoá hang. Dấu gạch đầu dòng mở một phần tử mới. Số lượng và giá thẳng cột với tên, nên thuộc cùng một phần tử.
            Đọc bằng mắt, giá của mặt hàng thứ hai vẫn là mười hai nghìn."""),
-        st(term_block(loi, 0, 1, title="⑤ Lỗi cú pháp JSON: nháy đơn thay nháy kép")
+        st(file_block(loi, "loi_nhay.json", title="⑤ Lỗi cú pháp JSON: nháy đơn thay nháy kép (tệp loi_nhay.json)") + term_block(loi, 0, 1)
            + "<p>Thông báo nói: <b>cần tên khoá trong nháy kép</b>, ở dòng 1, cột 2 (đúng chỗ dấu <code>'</code>).</p>".replace("dòng 1", "dòng thứ 1"),
            """Phép làm thứ năm, một lỗi cú pháp thật. Tệp dùng nháy đơn thay cho nháy kép. Thông báo nói cần tên khoá trong nháy kép, ở dòng một, cột hai, đúng chỗ dấu nháy đơn."""),
     ], checks=["3 * 5000 + 2 * 12000 == 39000", "15000 + 24000 == 39000",
@@ -188,13 +194,18 @@ $$\\text{hang} \\to [1] \\to \\text{gia} \\;\\Rightarrow\\; \\hl{12000}$$""",
     ], checks=["__import__('json').loads(\"\"\"" + DON + "\"\"\") == __import__('yaml').safe_load(\"\"\"" + DON_YAML + "\"\"\")",
                "__import__('json').loads(\"\"\"" + DON + "\"\"\")['hang'].__len__() == 2"])
     sc_scale = sc("scale", "example", "Khi số bản ghi nhân lên: JSON lặp khoá nên to hơn CSV", [
-        st(term_block(quymo, 10, 12, title="Một bản ghi giống nhau, hai cách viết"),
-           """Ta sinh cùng một bản ghi giả bằng hai cách. Dạng bảng chỉ có giá trị, còn JSON lặp lại tên khoá ở mỗi bản ghi. Ở đây ta lặp bản ghi ấy nhiều lần bằng lệnh in dãy số nối với lệnh thay chữ, rồi đo dung lượng."""),
+        st(term_block(quymo, 6, 10, title="Sinh 10 000 bản ghi giả theo hai cách, rồi đếm byte")
+           + "<p class='note'><code>seq 1 10000</code> in các số 1 tới 10000, mỗi số một dòng. <code>sed 's/.*/…/'</code> thay <b>cả dòng</b> (<code>.*</code> khớp cả dòng) bằng chữ mới; trong chữ mới, <code>&amp;</code> là <b>chính phần vừa khớp</b>, nên dòng <code>1</code> thành <code>1,Le Hoa,39000</code>. Lệnh <code>wc -c</code> đếm byte.</p>",
+           """Ta sinh cùng một bản ghi giả bằng hai cách. Lệnh in dãy số in các số từ một tới mười nghìn, mỗi số một dòng. Lệnh thay chữ thay cả dòng bằng chữ mới, trong đó dấu và là chính phần vừa khớp, nên dòng một thành bản ghi đầy đủ.
+           Dạng bảng chỉ có giá trị, còn JSON lặp lại tên khoá ở mỗi bản ghi. Ở đây ta lặp bản ghi ấy mười nghìn lần, rồi đo dung lượng bằng lệnh đếm byte."""),
+        st(term_block(quymo, 10, 12, title="Một bản ghi giống nhau, hai cách viết")
+           + "<p class='note'><code>head -n 1 tệp</code> in <b>dòng đầu</b> của tệp.</p>",
+           """Lệnh xem đầu tệp với số một in dòng đầu của hai tệp. Dòng đầu của hai tệp cho thấy cùng một bản ghi viết theo hai cách. Dạng bảng chỉ có giá trị, còn JSON mang cả tên khoá, và đó là lý do JSON to hơn."""),
         st(table(["số bản ghi", "CSV (byte)", "JSON mỗi dòng một bản ghi (byte)", "tỉ lệ JSON / CSV"],
                  [["×1: 1", "15", "39", "2,6"], ["×100: 100", "1 592", "3 992", "2,5"], ["×10 000: 10 000", "178 894", "418 894", "2,3"]])
            + "<div class='box key'><b>Đánh đổi:</b> JSON to hơn gấp hơn hai lần vì lặp khoá, nhưng tự mô tả và lồng nhau được; CSV gọn nhưng người nhận phải biết sẵn ý nghĩa từng cột. "
              "Hàng chục triệu bản ghi: ưu tiên dạng gọn hoặc dạng nén, và đọc <b>từng dòng</b> thay vì nạp cả tệp.</div>",
-           """Bảng này là dung lượng đo được. Một bản ghi bảng chỉ mười lăm byte, JSON ba mươi chín byte. Một nghìn lần nhiều hơn cũng thế, JSON luôn to hơn gấp hơn hai lần, vì lặp tên khoá ở mỗi bản ghi.
+           """Bảng này là dung lượng đo được. Một bản ghi bảng chỉ mười lăm byte, JSON ba mươi chín byte. Nhân lên một trăm lần rồi mười nghìn lần cũng thế, JSON luôn to hơn gấp hơn hai lần, vì lặp tên khoá ở mỗi bản ghi.
            Người làm nghề phải cân đối. JSON tự mô tả và lồng nhau được, bảng thì gọn nhưng người nhận phải biết ý nghĩa từng cột. Với hàng chục triệu bản ghi, hãy ưu tiên dạng gọn, và đọc từng dòng thay vì nạp cả tệp.""", clear=True),
     ], checks=["round(39 / 15, 1) == 2.6", "round(3992 / 1592, 1) == 2.5", "round(418894 / 178894, 1) == 2.3", "10000 // 100 == 100"])
     sc_pit = sc("pitfalls", "pitfall", "Lỗi hay gặp, có lỗi của người đã đi làm", [
@@ -202,35 +213,38 @@ $$\\text{hang} \\to [1] \\to \\text{gia} \\;\\Rightarrow\\; \\hl{12000}$$""",
            + term_block(loi) + "<p>Phép thử: <b>chạy bộ kiểm cú pháp</b> trước khi gửi; đọc dòng, cột trong thông báo. JSON không cho nháy đơn, không cho chú thích, không cho dấu phẩy thừa ở cuối.</p>",
            """Lỗi thứ nhất, của người mới, là JSON khắt khe. Dùng nháy đơn hay thiếu dấu phẩy giữa hai cặp đều bị từ chối, kèm dòng và cột. Phép thử là chạy bộ kiểm cú pháp trước khi gửi, và đọc dòng, cột trong thông báo.
            JSON cũng không cho chú thích."""),
-        st('<div class="box warn"><b>Lỗi 2 (người mới).</b> YAML hiểu giá trị theo cách nó <b>đoán</b>: <code>co: no</code> thành <b>đúng/sai</b>, không phải chữ “no”.</div>'
-           + table(["bạn viết", "một số bộ đọc YAML hiểu là"], [["<code>co: no</code>", "giá trị sai (false), không phải chữ <code>no</code>"], ["<code>ma: 007</code>", "số, có thể mất hai số 0 đầu"], ["<code>ma: \"007\"</code>", "chữ <code>007</code> nguyên vẹn"]])
+        st('<div class="box warn"><b>Lỗi 2 (người mới).</b> YAML hiểu giá trị theo cách nó <b>đoán</b>: <code>co: no</code> có thể thành <b>đúng/sai</b>, không phải chữ “no”.</div>'
+           + table(["bạn viết", "bộ đọc theo YAML 1.1 (như PyYAML của Python) hiểu là"], [["<code>co: no</code>", "giá trị sai (false), không phải chữ <code>no</code>; bản YAML 1.2 mới hơn coi <code>no</code> là chữ"], ["<code>ma: 007</code>", "số, có thể mất hai số 0 đầu"], ["<code>ma: \"007\"</code>", "chữ <code>007</code> nguyên vẹn"]])
            + "<p>Cách tránh: đặt <b>nháy kép</b> quanh giá trị là chữ. Phép thử: nạp tệp vào bộ đọc và in kiểu từng giá trị.</p>",
-           """Lỗi thứ hai, cũng của người mới, là YAML đoán kiểu của giá trị. Viết no có thể thành giá trị sai, không phải chữ no. Viết số có hai số không đầu có thể mất các số không. Cách tránh là đặt nháy kép quanh giá trị là chữ.
+           """Lỗi thứ hai, cũng của người mới, là YAML đoán kiểu của giá trị. Với bộ đọc theo bản một chấm một của YAML, như thư viện phổ biến của Python, viết no thành giá trị sai, không phải chữ no; bản mới hơn thì giữ là chữ. Viết số có hai số không đầu có thể mất các số không. Cách tránh là đặt nháy kép quanh giá trị là chữ.
            Phép thử là nạp tệp vào bộ đọc và in kiểu từng giá trị."""),
         st('<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Cắt cột CSV bằng <code>cut -d,</code> khi ô có dấu phẩy bên trong.</div>'
-           + term_block(cut) + "<p>Ô <code>\"Nguyen, An\"</code> bị cắt làm hai: cột 2 chỉ còn <code>\"Nguyen</code>. CSV thật cần bộ đọc biết nháy kép; <code>cut</code> thì không.</p>",
-           """Lỗi thứ ba, của cả người đã đi làm, là cắt cột bằng lệnh cắt khi ô có dấu phẩy bên trong. Ở đây tên có dấu phẩy được bọc trong nháy kép, nhưng lệnh cắt không biết, nên chỉ lấy được nửa tên. Kết quả sai mà không báo lỗi.
+           + file_block(cut, "kh_ngoac.csv", title="Tệp kh_ngoac.csv (cột 2 có ô chứa dấu phẩy)"),
+           """Lỗi thứ ba, của cả người đã đi làm, là cắt cột bằng lệnh cắt khi ô có dấu phẩy bên trong, như tên có dấu phẩy trong tệp đang hiện trên màn hình."""),
+        st(term_block(cut) + "<p>Ô <code>\"Nguyen, An\"</code> bị cắt làm hai: cột 2 chỉ còn <code>\"Nguyen</code>. CSV thật cần bộ đọc biết nháy kép; <code>cut</code> thì không.</p>",
+           """Ở đây tên có dấu phẩy được bọc trong nháy kép, nhưng lệnh cắt không biết, nên chỉ lấy được nửa tên. Kết quả sai mà không báo lỗi.
            Tệp bảng thật cần bộ đọc của ngôn ngữ lập trình, biết xử lý nháy kép."""),
     ])
     sc_quiz = sc("quiz", "quiz", "Bây giờ tới phần bạn tự làm", [
         st(file_block(quiz, "tk.json", title="Tệp tk.json (số minh hoạ)")
-           + "<p><b>Đề.</b> (1) Hạn mức của thẻ <b>thứ ba</b> là bao nhiêu? Viết đường đi. (2) Tổng hạn mức các thẻ? <b>Chọn</b>: gửi 10 triệu bản ghi dạng này cho đối tác, bạn chọn CSV hay JSON, và vì sao?</p>",
+           + "<p><b>Đề.</b> (1) Hạn mức của thẻ <b>thứ ba</b> là bao nhiêu? Viết đường đi. (2) Tổng hạn mức các thẻ? <b>Chọn</b>: gửi 10 triệu bản ghi dạng này (mỗi chủ thẻ có danh sách thẻ <b>lồng</b>, độ dài khác nhau) cho đối tác, bạn chọn CSV hay JSON, và vì sao?</p>",
            """Bây giờ tới phần bạn tự làm. Tệp có tên chủ thẻ và ba thẻ, mỗi thẻ có một hạn mức. Câu một, hạn mức của thẻ thứ ba là bao nhiêu, và viết đường đi. Câu hai, tổng hạn mức các thẻ. Câu ba là một quyết định,
-           gửi mười triệu bản ghi dạng này cho đối tác thì chọn dạng bảng hay JSON, và vì sao. Hãy dừng video và làm.""", pause=60),
+           gửi mười triệu bản ghi dạng này, mỗi chủ thẻ có danh sách thẻ lồng bên trong, cho đối tác thì chọn dạng bảng hay JSON, và vì sao. Hãy dừng video và làm.""", pause=60),
         st(term_block(quiz)
+           + "<p class='note'>Dòng bắt đầu bằng <code>&gt;</code> do cửa sổ lệnh in vì nháy kép chưa đóng; đừng gõ dấu đó.</p>"
            + table(["câu", "đáp án", "lý do"],
                    [["1", "<code>cac_the</code> → <code>[2]</code> → <code>han_muc</code> = <b>30 000 000</b>", "thẻ thứ ba có vị trí $3 - 1 = 2$"],
                     ["2", "$10 + 20 + 30 = \\hl{60}$ triệu = <b>60 000 000</b>", "cộng ba hạn mức"]]),
-           """Đáp án câu một, đường đi là khoá các thẻ, vị trí hai, khoá hạn mức, ra ba mươi triệu, vì thẻ thứ ba có vị trí ba trừ một bằng hai. Câu hai, mười cộng hai mươi cộng ba mươi bằng sáu mươi triệu. Máy chạy thật cho cùng kết quả."""),
-        st("<div class='box key'><b>Quyết định:</b> với $10$ triệu bản ghi đồng dạng, chọn <b>CSV</b> (hoặc JSON mỗi dòng một bản ghi, nén): chênh $\\approx 2{,}3\\times$ dung lượng (bảng đo ở bước trước). "
-           "Chọn JSON khi bản ghi <b>lồng nhau</b> hoặc bên nhận cần tự hiểu cấu trúc. Dù chọn gì, thỏa thuận trước <b>bảng mã UTF-8</b> và <b>cách xuống dòng</b>.</div>",
-           """Về quyết định, với mười triệu bản ghi đồng dạng, nên chọn dạng bảng, hoặc JSON mỗi dòng một bản ghi rồi nén, vì chênh khoảng hai phẩy ba lần dung lượng. Chọn JSON khi bản ghi lồng nhau hoặc bên nhận cần tự hiểu cấu trúc.
-           Dù chọn gì, hãy thoả thuận trước bảng mã và cách xuống dòng.""", clear=True),
+           """Dòng bắt đầu bằng dấu lớn hơn do cửa sổ lệnh tự in vì dấu nháy kép chưa đóng, bạn không gõ dấu đó. Đáp án câu một, đường đi là khoá các thẻ, vị trí hai, khoá hạn mức, ra ba mươi triệu, vì thẻ thứ ba có vị trí ba trừ một bằng hai. Câu hai, mười cộng hai mươi cộng ba mươi bằng sáu mươi triệu. Máy chạy thật cho cùng kết quả."""),
+        st("<div class='box key'><b>Quyết định:</b> bản ghi này có mảng <b>lồng nhau</b> (<code>cac_the</code> dài ngắn khác nhau) nên chọn <b>JSON mỗi dòng một bản ghi</b> (có thể nén): CSV không lồng được, muốn dùng CSV phải <b>làm phẳng</b> trước (mỗi thẻ một dòng, lặp tên chủ thẻ). Giá phải trả: JSON to hơn bảng phẳng khoảng $2{,}3\\times$ (bảng đo ở bước trước). "
+           "CSV chỉ hợp khi bản ghi phẳng, đồng dạng, và bên nhận biết sẵn ý nghĩa từng cột. Dù chọn gì, thỏa thuận trước <b>bảng mã UTF-8</b> và <b>cách xuống dòng</b>.</div>",
+           """Về quyết định, bản ghi này có danh sách thẻ lồng bên trong, nên chọn JSON mỗi dòng một bản ghi, có thể nén. Dạng bảng không lồng được, muốn dùng nó phải làm phẳng trước, mỗi thẻ một dòng và lặp tên chủ thẻ.
+           Giá phải trả là JSON to hơn bảng phẳng khoảng hai phẩy ba lần. Dạng bảng chỉ hợp khi bản ghi phẳng, đồng dạng. Dù chọn gì, hãy thoả thuận trước bảng mã và cách xuống dòng.""", clear=True),
     ], checks=["10 + 20 + 30 == 60", "3 - 1 == 2", "round(418894 / 178894, 1) == 2.3"])
     sc_prac = practice_scene(sc, "Tự làm: viết tay một tệp JSON và đọc một tệp YAML", pr_steps(
         st, "FND", "L06",
         """<p><b>Đề</b>: tạo <code>doc_ghi.sh</code>.</p>
-<ol><li>Bằng <code>cat &gt; don.json &lt;&lt;'EOF'</code>, <b>viết tay</b> JSON đơn <code>21</code>, khách <code>Tran Mai</code>, đã trả <code>false</code>, 3 mặt hàng: <code>ao</code> 4 × 90000, <code>non</code> 1 × 45000, <code>tat</code> 6 × 8000.</li>
+<ol><li>Bằng <code>cat &gt; don.json &lt;&lt;'EOF'</code> (khối chữ nhúng, bài 2), <b>viết tay</b> JSON đơn <code>21</code>, khách <code>Tran Mai</code>, đã trả <code>false</code>, 3 mặt hàng: <code>ao</code> 4 × 90000, <code>non</code> 1 × 45000, <code>tat</code> 6 × 8000.</li>
 <li>Tạo <code>doc.py</code> (chép từ <code>de.md</code>) rồi <code>python doc.py</code>: in <b>số mặt hàng</b> và <b>tổng tiền</b>.</li>
 <li>Đọc YAML trong <code>de.md</code>, in bốn số: cổng máy chủ; số tên miền; tổng hai cổng; số lần thử lại.</li></ol>""",
         """Bây giờ tới phần bạn tự làm. Tạo một tệp lệnh. Viết tay một tệp JSON cho đơn hai mươi mốt, khách Trần Mai, chưa trả. Có ba mặt hàng, áo bốn cái giá chín mươi nghìn, nón một cái giá bốn mươi lăm nghìn, tất sáu đôi giá tám nghìn.
@@ -244,7 +258,7 @@ Tổng tiền $= 4 \\times 90000 + 45000 + 6 \\times 8000 = 453000$. Lời giả
 
 Tạo `doc_ghi.sh`:
 
-1. **Viết tay** tệp `don.json` bằng `cat > don.json <<'EOF' … EOF`: đơn `ma` 21, `khach` `Tran Mai`, `da_tra` `false` (viết thường), `hang` là mảng 3 phần tử, mỗi phần tử có `ten`, `sl`, `gia`: `ao` 4 × 90000, `non` 1 × 45000, `tat` 6 × 8000.
+1. **Viết tay** tệp `don.json` bằng `cat > don.json <<'EOF' … EOF` (khối chữ nhúng, đã học ở bài 2): đơn `ma` 21, `khach` `Tran Mai`, `da_tra` `false` (viết thường), `hang` là mảng 3 phần tử, mỗi phần tử có `ten`, `sl`, `gia`: `ao` 4 × 90000, `non` 1 × 45000, `tat` 6 × 8000.
 2. Tạo `doc.py` (chép nguyên; đọc JSON bằng Python, in số mặt hàng và tổng tiền) rồi chạy `python doc.py`:
 
 ```python
@@ -255,7 +269,7 @@ tong = sum(h["sl"] * h["gia"] for h in hang)
 print(len(hang), tong)
 ```
 
-3. Đọc YAML dưới đây **bằng mắt**, rồi dùng `echo` in bốn số (mỗi số một dòng): (a) cổng của `may_chu`; (b) số tên miền trong `ten_mien`; (c) tổng hai cổng (`may_chu` + `co_so_du_lieu`); (d) `thu_lai`.
+3. Đọc YAML dưới đây **bằng mắt** (`[a, b]` là danh sách viết gọn trên một dòng, các mục ngăn bằng dấu phẩy), rồi dùng `echo` in bốn số (mỗi số một dòng): (a) cổng của `may_chu`; (b) số tên miền trong `ten_mien`; (c) tổng hai cổng (`may_chu` + `co_so_du_lieu`); (d) `thu_lai`.
 
 ```yaml
 """ + YAML_LAB + """```
@@ -274,7 +288,7 @@ Chạy `bash doc_ghi.sh`; chấm: `bash labs/cham.sh FND L06 doc_ghi.sh`. Cần 
     ])
     return lesson("L06", "du_lieu_co_cau_truc", "Bài 6 — Dữ liệu có cấu trúc: CSV, JSON và YAML",
                   "curriculum/fnd.yaml L06; audit/fnd/verify_fnd.py L06 (Git Bash + Python: json.tool, json.load, cut, sed, wc chạy thật); "
-                  "RFC 8259 (JSON); RFC 4180 (CSV); YAML 1.2 specification (yaml.org); Python docs: json (json.tool), "
+                  "RFC 8259 (JSON); RFC 4180 (CSV); YAML 1.2 specification (yaml.org; bản 1.1 coi yes/no/on/off là đúng/sai, bản 1.2 chỉ true/false); Python docs: json (json.tool), "
                   "PyYAML safe_load (YAML 1.1: no → false; dùng trong checks, không hiện trên màn hình); dung lượng 15/39, 1 592/3 992, 178 894/418 894 byte đo bằng verify_fnd",
                   ["Đọc cùng một đơn hàng ở ba dạng CSV, JSON, YAML và chỉ ra hàng, cột, khoá, giá trị, mảng",
                    "Tính đường đi tới một giá trị nằm sâu: khoá, vị trí đếm từ 0, khoá",
@@ -283,4 +297,4 @@ Chạy `bash doc_ghi.sh`; chấm: `bash labs/cham.sh FND L06 doc_ghi.sh`. Cần 
                    "Chỉ ra ba lỗi hay gặp: JSON khắt khe, YAML đoán kiểu, cắt cột CSV khi ô có dấu phẩy",
                    "Viết tay một tệp JSON hợp lệ và đọc các giá trị trong một tệp YAML"],
                   [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_chk, sc_scale, sc_pit, sc_quiz, sc_prac, sc_rec],
-                  covers=[(1, "example"), (2, "formula"), (3, "check"), (4, "scale"), (5, "pitfalls"), (6, "practice")])
+                  assumes=["fnd_heredoc"], covers=[(1, "example"), (2, "formula"), (3, "check"), (4, "scale"), (5, "pitfalls"), (6, "practice")])

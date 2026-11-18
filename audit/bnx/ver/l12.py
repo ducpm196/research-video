@@ -98,3 +98,41 @@ def run(rec):
     rec(C, rc == 0 and so == L.REPLAY_OUT, f"chạy REPLAY_PY: {so}")
     rec(C, all(len(l) <= 70 for t in (L.LIMIT_PY, L.TAX_PY, L.REPLAY_PY) for l in t.split("\n"))
         and all(len(t.split("\n")) <= 12 for t in (L.LIMIT_PY, L.TAX_PY, L.REPLAY_PY)), "mọi khối mã ≤ 12 dòng, dòng ≤ 70 ký tự")
+    # ── nâng AF2 (WP4): chạy lại mọi chương trình trên màn hình, quy mô đo thật, lab chấm bằng cham.sh ──
+    import os
+    import re
+    import lib2
+    lib2.verify_programs(rec, "L12")
+    rec(C, all(len(l) <= 70 for p in lib2.PROGRAMS if p.lesson == "L12" for l in p.code.split("\n")), "mọi chương trình trên màn hình: dòng ≤ 70 ký tự")
+
+    def scan_while(n):   # đường khác: con trỏ while thay vì for lồng
+        dem, i = 0, 0
+        while i < n:
+            j = 0
+            while True:
+                dem += 1
+                if j == i:
+                    break
+                j += 1
+            i += 1
+        return dem
+    out = next(p for p in lib2.PROGRAMS if p.key == "L12_Scale").out
+    got = {int(a): (int(b), int(c)) for a, b, c in re.findall(r"^n = (\d+) danh sach (?:\(tinh\) )?(\d+) bang tra (\d+)$", out, re.M)}
+    rec(C, sorted(got) == [100, 10_000, 1_000_000], "đầu ra thật của Scale có đủ ba cỡ 100, 10 000, 1 000 000")
+    rec(C, got[100][0] == scan_while(100) == alg.bnx_l12_scan_cmp(100) == 5050 and got[10_000][0] == scan_while(10_000) == alg.bnx_l12_scan_cmp(10_000) == 50_005_000,
+        "số phép so sánh đo thật (vòng lặp lồng) = đếm bằng con trỏ while = n(n+1)/2: 5 050 và 50 005 000")
+    rec(C, got[1_000_000][0] == alg.bnx_l12_scan_cmp(1_000_000) == 500_000_500_000 == sum(range(1, 1_000_001)), "mức 1 000 000: n(n+1)/2 = tổng 1..n = 500 000 500 000 (chỉ tính, bài nói rõ)")
+    rec(C, all(got[n][1] == alg.bnx_l12_lookup_cmp(n) == n for n in got), "bảng tra: đúng n lần tra ở cả ba cỡ (đo thật)")
+    rec(C, alg.bnx_l12_time_s(5050, 50) == 0.0002525 and alg.bnx_l12_time_s(50_005_000, 50) == 2.50025 and round(alg.bnx_l12_time_s(500_000_500_000, 50) / 3600, 2) == 6.94
+        and alg.bnx_l12_time_s(1_000_000, 50) == 0.05, "thời gian minh hoạ 50 ns/phép: 0,25 ms; 2,5 giây; 25 000 giây (≈ 6,94 giờ); bảng tra 0,05 giây")
+    # lab: chấm bằng labs/cham.sh (đường người học dùng) và đối chiếu mô hình
+    r = subprocess.run([lib2._bash(), "labs/cham.sh", "BNX", "L12", "labs/BNX/L12/loi_giai.py"], cwd=ROOT, capture_output=True, text=True, encoding="utf-8",
+                       timeout=120)
+    rec(C, r.returncode == 0 and "ĐÚNG" in r.stdout, f"lab loi_giai.py chấm bằng cham.sh: {r.stdout.strip()[:60]}")
+    exp = (ROOT / "labs" / "BNX" / "L12" / "mong_doi.txt").read_text(encoding="utf-8").strip().split("\n")
+    w, tot, esc, ok = alg.bnx_l12_lab()
+    rec(C, exp[0] == "tu choi rut Y 2000000" and exp[1] == "vi " + " ".join(str(w[k]) for k in "XYZ") and exp[2] == f"tong vi {tot} dam bao {esc} dat {ok}",
+        "mong_doi.txt khớp mô hình alg.bnx_l12_lab: lệnh rút 2 000 000 của ví Y bị từ chối, tổng ví 3 350 000, đạt")
+    rec(C, exp[3:] == ["chap nhan 20000000 da dung 20000000", "chap nhan 25000000 da dung 45000000", "tu choi 10000000 da dung 45000000", "chap nhan 5000000 da dung 50000000"]
+        and [x[1] for x in alg.bnx_monthly_limit([20_000_000, 25_000_000, 10_000_000, 5_000_000], 50_000_000)] == [True, True, False, True],
+        "lab: hạn mức 50 triệu, giao dịch vừa bằng hạn mức (5 triệu, tổng 50 triệu) vẫn được nhận")

@@ -1,103 +1,153 @@
-# CHUYÊN ĐỀ 7: CHIẾN LƯỢC & KỊCH BẢN ĐÀM PHÁN MỨC LƯƠNG 50,000,000 VND GROSS TẠI ACB
+# CHUYÊN ĐỀ 7: CHIẾN LƯỢC ĐÀM PHÁN LƯƠNG — HỎI KHUNG, TÍNH TỔNG ĐÃI NGỘ VÀ ĐỐI ĐÁP BA VÒNG
 
-> **Mục tiêu**: Đề xuất và bảo vệ có căn cứ mức đãi ngộ **50,000,000 VND Gross/tháng** (không có kịch bản nào bảo đảm chắc chắn kết quả; thu nhập năm nếu đạt mức này: **700,000,000 – 850,000,000 VND** = 50 triệu × (13 tháng cố định + 1–4 tháng thưởng tùy xếp loại theo tin tuyển dụng ACB trên acbjobs.com.vn); mức lương cụ thể ACB ghi "Thương lượng", nên 50M là mục tiêu đề xuất, không phải mức đã công bố) tại Ngân hàng TMCP Á Châu (ACB).  
-> **Định vị Ứng viên**: Phạm Minh Đức — Chuyên viên chính Ứng dụng Tích hợp tại OCB (10/2023 – nay), Squad Lending; trực tiếp làm các luồng tín dụng tích hợp Core T24; phối hợp với đội Switch (NAPAS 247) và đội Nền tảng Dữ liệu (Kafka/ksqlDB); Cử nhân AI UIT **dự kiến tốt nghiệp 11/2026**.
-> **Lưu ý về JD**: tin Software Engineer của ACB yêu cầu "tốt nghiệp đại học ngành CNTT hoặc liên quan" và "ít nhất 3 năm Stored Procedure". Phải nói thật mốc tốt nghiệp dự kiến; không nói "đã có bằng". JD không nêu ACB dùng Temenos T24, nên không khẳng định ACB dùng T24 (xem Mục 5).
-
----
-
-## 1. CĂN CỨ TÀI CHÍNH & MA TRẬN ĐỊNH LƯỢNG GIÁ TRỊ (ROI JUSTIFICATION)
-
-Để vượt qua định kiến về thời gian công tác (3+ năm kinh nghiệm) và mức trần thông thường của HR, ứng viên phải dịch chuyển cuộc đối thoại từ **"Thời gian làm việc"** sang **"Lợi tức đầu tư (ROI) & Giá trị bảo vệ tài sản ngân hàng"**:
-
-```
-[Lương gross 50M/tháng × 12] = 600M VND/năm (chưa gồm tháng 13, thưởng và phần BHXH công ty đóng)
-                     VS
-[Giá trị mang lại của Senior Integration Engineer — chỉ nêu bằng chứng THẬT]:
-1. Giảm rủi ro sự cố ở tầng tích hợp (timeout, trùng giao dịch, lệch đối soát): nêu 1 sự cố thật đã xử lý và kết quả đo được.
-2. Rút ngắn thời gian hòa nhập: đã làm việc với Core T24 (OFS XML qua IBM MQ), Oracle, Kafka, Redis trong môi trường ngân hàng.
-3. Xử lý lỗi gốc rễ ở tầng database (ví dụ deadlock ORA-00060): nêu phương pháp đã dùng, số liệu trước/sau nếu có.
-4. Năng lực nền tảng AI (UIT) để hiểu và đánh giá các bài toán phát hiện bất thường.
-```
-
-> **Nguyên tắc trung thực**: các con số tiền tiết kiệm hoặc SLA không có số đo thật thì **không nói**. Người phỏng vấn dễ hỏi "đo bằng cách nào?". Nếu có số thật (ví dụ thời gian xử lý trước/sau), hãy ghi nguồn đo ngay cạnh con số.
+> **Tên tệp giữ nguyên (`07_salary_negotiation_50m_gross.md`) vì các đường dẫn khác trỏ tới; nội dung đã đổi theo bài INT L07 (`lessons/int/L07_salary_negotiation_50m_gross.yaml`).** Tài liệu này **không đưa ra mức lương mục tiêu nào**: tin tuyển dụng ACB ghi lương "Thương lượng", còn các con số lương trên mạng chênh nhau nhiều và thường không có nguồn. Mọi số tiền dưới đây là **số minh hoạ để tập tính**, không phải mức lương của ngân hàng nào.
+>
+> **Nguồn có thật**: tin tuyển dụng ACB (đọc 2026-11) ghi mức lương "Thương lượng", lương tháng 13 cố định, thưởng cuối năm 1–4 tháng lương tuỳ xếp loại. Một tin tuyển dụng khác ghi tăng lương hai lần mỗi năm và thưởng tháng 13 (không có xác nhận chính thức).
+>
+> **Định vị ứng viên**: Chuyên viên chính Ứng dụng Tích hợp tại OCB (10/2023 – nay), Squad Lending; Cử nhân AI UIT **dự kiến tốt nghiệp 11/2026**; không nói "đã có bằng".
+>
+> **Lưu ý về JD**: tin Software Engineer của ACB yêu cầu "tốt nghiệp đại học ngành CNTT hoặc liên quan" và "ít nhất 3 năm Stored Procedure". JD không nêu ACB dùng Temenos T24, nên không khẳng định ACB dùng T24.
 
 ---
 
-## 2. KỊCH BẢN ĐÀM PHÁN 3 VÒNG CHI TIẾT (THREE-ROUND SCRIPTS)
+## 1. NGUYÊN TẮC: HỎI KHUNG TRƯỚC, NÊU SỐ SAU
 
-### VÒNG 1: HR SÀNG LỌC ĐẦU VÀO (INITIAL HR SCREENING)
+Đa số ứng viên bị động chấp nhận mức nhà tuyển dụng đưa ra, hoặc nêu một con số theo cảm tính. Hai việc cần làm:
 
-**Tình huống thường gặp**: HR hỏi: *"Hiện tại mức thu nhập của bạn bên OCB là bao nhiêu và kỳ vọng của bạn khi sang ACB là bao nhiêu?"*
+1. **Hỏi khung lương và cấu trúc thu nhập của vị trí trước** khi nêu bất kỳ con số nào.
+2. **Chuyển cuộc đối thoại từ "thời gian làm việc" sang giá trị có bằng chứng** (một sự cố thật đã xử lý, kèm số đo thật hoặc nói rõ chưa đo).
 
-**Chiến thuật**: **Nói đúng tổng thu nhập hiện tại (Total Compensation), không tự hạ giá, rồi chuyển trọng tâm sang mức kỳ vọng và căn cứ của nó.**
+Lương **gross** là lương ghi trong hợp đồng, trước khi trừ thuế thu nhập cá nhân và phần bảo hiểm bắt buộc của người lao động; số thực nhận (net) thấp hơn.
 
-- **Lời thoại mẫu**:
-  > *"Dạ chào chị, tại OCB hiện tại tôi đang đảm nhiệm vị trí Chuyên viên chính Ứng dụng Tích hợp. Tổng thu nhập hiện tại của tôi (bao gồm lương cơ bản, phụ cấp và thưởng) là **[điền con số THẬT theo bảng lương]**.* *(Không khai cao hơn thực tế: ngân hàng có thể xác minh qua bảng lương và lịch sử bảo hiểm xã hội.)*  
-  > *Khi tìm hiểu về chiến lược mở rộng ngân hàng số thế hệ mới của ACB, tôi thấy đây là cơ hội tuyệt vời để mình đóng góp trực tiếp năng lực chuyên sâu về Core T24 OFS, Cổng chuyển mạch NAPAS và Streaming ksqlDB. Với trách nhiệm của một Kỹ sư Cấp cao ở tầng tích hợp thanh toán, tôi kỳ vọng mức đãi ngộ tại ACB là **50,000,000 VND Gross/tháng** (cộng các chế độ thưởng theo quy định của ngân hàng). Tôi đã làm việc trực tiếp với các bài toán tích hợp ngân hàng nên rút ngắn được thời gian hòa nhập; tôi sẵn sàng trao đổi cụ thể để anh/chị đánh giá."*
+| Không nên | Nên |
+|:---|:---|
+| Nêu ngay một con số khi chưa biết khung lương | Hỏi khung lương và cấu trúc thu nhập, rồi nêu **khoảng** kỳ vọng sau khi biết khung |
+| Chỉ nói về số năm làm việc | Chứng minh giá trị bằng một sự cố thật đã xử lý, kèm số đo thật hoặc nói rõ chưa đo |
+| Bị ép vì chưa nhận bằng đại học | Nói đúng mốc dự kiến 11/2026, nêu kinh nghiệm thực từ 01/2019 |
 
----
-
-### VÒNG 2: PHỎNG VẤN KỸ THUẬT VỚI SOLUTION ARCHITECT & GIÁM ĐỐC CNTT
-
-**Tình huống thường gặp**: Hội đồng kỹ thuật đánh giá cao chuyên môn nhưng Giám đốc CNTT hỏi: *"Với mức lương 50 triệu gross, ACB kỳ vọng bạn không chỉ viết code mà phải dẫn dắt kiến trúc và chịu trách nhiệm khi có sự cố. Bạn tự tin mình làm tốt hơn các ứng viên có 6-8 năm kinh nghiệm khác ở điểm nào?"*
-
-**Chiến thuật**: **Chứng minh "Unfair Advantage" — Sự kết hợp độc nhất giữa Thực chiến Lõi ngân hàng (OCB) và Nền tảng Giải thuật/AI (UIT).**
-
-- **Lời thoại mẫu**:
-  > *"Em rất cảm ơn câu hỏi rất thực tế của anh. Điểm khác biệt lớn nhất giữa em và một lập trình viên backend thông thường nằm ở 3 yếu tố:*  
-  > *1. **Kinh nghiệm thực chiến không cần đào tạo**: Em đã làm việc trực tiếp ở tầng tích hợp Core T24 (bản tin OFS qua IBM MQ, do adapter của phòng Tích hợp đảm nhận phần kết nối), và phối hợp với đội Switch về luồng NAPAS 247 tại OCB. Em hiểu cách phân loại kết quả "thành công / thất bại / chưa rõ (timeout)" và cách tra soát trước khi đảo giao dịch, cơ chế chống trừ tiền kép bằng khoá lũy đẳng, và nguyên lý HSM *dịch* (translate) khối PIN giữa các khoá mà không để lộ PIN rõ. Khi về ACB, em cần thời gian làm quen hệ thống lõi và quy trình của ACB, nhưng nền nghiệp vụ này giúp em đóng góp sớm.*  
-  > *2. **Năng lực giải quyết gốc rễ các bài toán cao tải**: Em không chỉ xử lý ở tầng ứng dụng mà tối ưu hóa đến tận tầng database. Em trực tiếp xử lý lỗi Deadlock ORA-00060 trong module của squad: đọc tệp trace để tìm hai câu lệnh xung đột, rồi buộc mọi luồng khóa tài khoản theo cùng một thứ tự (khóa từng tài khoản theo mã tăng dần), kèm index cho cột khóa ngoại. (Chuẩn bị sẵn số đo trước/sau nếu có; không có thì nói định tính.)*  
-  > *3. **Tư duy đón đầu từ nền tảng Cử nhân AI tại UIT**: Em đã tự thực hành ở mức nguyên mẫu học tập các mô hình phát hiện bất thường (như Isolation Forest xuất ra ONNX Runtime) và hiểu cách tích hợp chúng vào luồng thanh toán, cũng như yêu cầu xác thực sinh trắc học của Quyết định 2345/QĐ-NHNN.*  
-  > *Với 3 năng lực này, em tin mình có thể tạo ra giá trị tương xứng với mức đãi ngộ và sẵn sàng được đánh giá bằng mục tiêu cụ thể."*
+> **Nguyên tắc trung thực**: số tiền tiết kiệm, %SLA, TPS không có số đo thật thì **không nói**. Có số thật thì ghi nguồn đo ngay cạnh con số.
 
 ---
 
-### VÒNG 3: ĐÀM PHÁN OFFER VỚI TRƯỞNG PHÒNG NHÂN SỰ (FINAL CLOSING)
+## 2. TỔNG ĐÃI NGỘ NĂM: CÔNG THỨC VÀ NHỮNG CÂU CẦN HỎI
 
-**Tình huống thường gặp**: HR gửi Offer: *"ACB rất ấn tượng với năng lực của bạn, tuy nhiên theo khung lương nội bộ cho số năm kinh nghiệm của bạn (3 năm), ngân hàng chỉ có thể đề xuất mức 42,000,000 VND Gross. Bạn thấy thế nào?"*
+Tổng đãi ngộ = mọi khoản nhận trong một năm, không chỉ lương hàng tháng.
 
-**Chiến thuật**: **Áp dụng kỹ thuật "Firm Counter-Offer with Value Anchor" (Đưa ra mức đối ứng kiên định, nhấn mạnh cam kết cống hiến và đề xuất cấu trúc linh hoạt).**
-
-- **Bước 1: Bày tỏ sự trân trọng và đồng cảm**:
-  > *"Em rất cảm ơn chị và Ban Lãnh đạo ACB đã đánh giá cao năng lực của em và gửi lời mời hợp tác. Em thực sự rất hào hứng với tầm nhìn công nghệ của ngân hàng."*
-- **Bước 2: Phản biện dựa trên tính chất công việc thay vì số năm kinh nghiệm**:
-  > *"Tuy nhiên, về con số 42 triệu, em xin phép được chia sẻ thẳng thắn: Trong lĩnh vực tích hợp hệ thống ngân hàng huyết mạch (Core T24, NAPAS, Payment Gateway), giá trị của một kỹ sư không được đo bằng số năm ngồi ở văn phòng, mà đo bằng **quy mô hệ thống đã từng làm chủ và mức độ rủi ro có thể giải quyết**.  
-  > Em hy vọng qua buổi phỏng vấn kỹ thuật, hội đồng đã thấy được độ sâu chuyên môn của em, và em sẵn sàng nhận trách nhiệm tương xứng với mức đãi ngộ."*
-- **Bước 3: Đưa ra đề xuất chốt hạ (Closing Deal)**:
-  > *"Mục tiêu của em khi gia nhập ACB là cống hiến lâu dài và tạo ra sự đột phá. Để em hoàn toàn an tâm và dốc 100% tâm huyết, em mong muốn Ban Nhân sự xem xét phê duyệt ngoại lệ mức **50,000,000 VND Gross/tháng**.  
-  > Nếu chính sách ngặt nghèo về lương cơ bản, em sẵn sàng đề xuất cấu trúc: **46,000,000 VND Lương cứng + 4,000,000 VND Phụ cấp trách nhiệm/kỹ thuật cao tải**, hoặc giữ 50,000,000 VND Gross đi kèm mục tiêu cụ thể cho thời gian thử việc do quản lý trực tiếp đặt (chỉ nhận các mục tiêu nằm trong phạm vi công việc của vị trí). Em tin đây là sự đầu tư đôi bên cùng có lợi."*
-- *Lưu ý*: tách lương cứng thành "lương + phụ cấp" làm thay đổi cách tính BHXH, thưởng và tháng 13; hỏi HR cách tính trước khi đề xuất. Thử việc tối đa 60 ngày với công việc cần trình độ cao đẳng trở lên (Điều 25 Bộ luật Lao động 2019), không phải 6 tháng.
-
----
-
-## 3. BẢNG PHÒNG THỦ CÁC CÂU ÉP GIÁ CỦA TUYỂN DỤNG (OBJECTION HANDLING)
-
-| Đòn ép giá của HR | Phân tích tâm lý HR | Cách đáp trả thông minh và giữ vững mức 50M |
+| Thành phần | Ý nghĩa | Câu cần hỏi nhà tuyển dụng |
 |:---|:---|:---|
-| *"Thị trường năm nay các ngân hàng đều thắt chặt ngân sách tuyển dụng."* | HR tạo áp lực tâm lý khan hiếm cơ hội. | *"Em hiểu ngân hàng đang tối ưu chi phí. Chính vì vậy việc tuyển một Senior có thể làm được việc ngay lập tức, không tốn chi phí sai sót hay chi phí đào tạo lại là giải pháp tiết kiệm ngân sách hiệu quả nhất cho ACB."* |
-| *"Bạn chưa nhận bằng đại học (UIT dự kiến 11/2026), liệu có quá sớm để nhận mức 50M?"* | HR vin vào bằng cấp để ép giá. | *"Em đi làm phần mềm từ 01/2019: Sutrix (2019–2021), freelance (2022), Grooo làm dự án cho Mirae Asset Finance (2022–2023) và OCB (10/2023 – nay). Bằng Cử nhân AI tại UIT là phần em học thêm song song khi đi làm, dự kiến tốt nghiệp 11/2026; em có thể gửi xác nhận của trường khi có."* |
-| *"Nếu bạn nhận mức 45M, ngân hàng sẽ bù đắp bằng các kỳ thưởng cuối năm rất cao."* | HR dịch chuyển rủi ro sang ứng viên (thưởng không cam kết). | *"Em rất trân trọng chế độ thưởng của ACB. Tuy nhiên, mức lương cứng 50M là thước đo cam kết trách nhiệm và sự công nhận năng lực thực tế. Em mong muốn đạt được mức lương cứng này để tập trung trọn vẹn vào các bài toán kỹ thuật lớn."* |
+| Lương cứng **L** | lương gross ghi trong hợp đồng mỗi tháng | khung lương của vị trí là bao nhiêu, gồm những khoản nào |
+| Tháng 13 | thêm một tháng lương mỗi năm | cố định hay có điều kiện (tin ACB ghi cố định) |
+| Thưởng **k** | k tháng lương, tuỳ xếp loại (tin ACB ghi 1–4 tháng) | tính trên lương cứng hay tổng thu nhập; điều kiện xếp loại |
+| Phụ cấp **P** | khoản cộng thêm mỗi tháng | có tính vào bảo hiểm và thưởng không |
+
+$$T = L \times (13 + k) + 12 \times P \qquad (\text{đơn vị: triệu đồng})$$
+
+Công thức giả định thưởng và tháng 13 tính trên lương cứng L, còn phụ cấp P không được tính vào thưởng; mỗi nơi tính khác nhau nên **phải hỏi**. Tách phụ cấp có thể đổi cách tính BHXH, thưởng và tháng 13.
+
+**Ví dụ (số minh hoạ)**: L = 34, k = 2, P = 2: T = 34 × 15 + 12 × 2 = **534 triệu**.
+
+**Bốn câu nên hỏi nhà tuyển dụng (không câu nào cần nêu số)**:
+1. Khung lương của vị trí này là bao nhiêu, gồm những khoản nào?
+2. Tháng 13 và thưởng tính thế nào: trên lương cứng hay tổng thu nhập, điều kiện xếp loại ra sao?
+3. Lương được xem xét tăng bao lâu một lần?
+4. Thời gian thử việc bao lâu, mức lương thử việc tính thế nào? (luật lao động giới hạn thời gian thử việc: cần kiểm lại văn bản hiện hành, không nêu số ngày theo trí nhớ)
 
 ---
 
-## 4. DANH MỤC CÁC PHÚC LỢI NGOÀI LƯƠNG CẦN ĐỐI SOÁT (ADDITIONAL PERKS)
-Khi ký hợp đồng tại ACB, ngoài mức lương 50,000,000 VND Gross, cần kiểm tra kỹ:
-*Chỉ mục 1 có nguồn (tin tuyển dụng ACB). Các mục 2–4 là **câu cần hỏi HR**, không phải thông tin đã xác minh về ACB.*
-1. **Tháng lương thứ 13 & Thưởng cuối năm**: tin tuyển dụng ghi lương tháng 13 cố định và thưởng 1–4 tháng lương tùy xếp loại. Hỏi: thưởng tính trên lương cứng hay tổng thu nhập, điều kiện xếp loại.
-2. **Bảo hiểm sức khỏe**: hỏi gói áp dụng cho cấp chức danh, phạm vi nội trú/ngoại trú/nha khoa, người thân.
+## 3. KỊCH BẢN ĐỐI ĐÁP BA VÒNG (GIẢ ĐỊNH ĐỂ LUYỆN TẬP; QUY TRÌNH THẬT HỎI NHÀ TUYỂN DỤNG)
+
+| Vòng | Việc của bạn | Điều tránh |
+|:---|:---|:---|
+| 1. Nhà tuyển dụng sàng lọc | Khai đúng tổng thu nhập thật; hỏi khung lương và cấu trúc thu nhập; nêu khoảng kỳ vọng sau khi biết khung | Nêu con số trước khi biết khung |
+| 2. Hội đồng kỹ thuật | Chứng minh giá trị bằng một sự cố thật đã xử lý; nói đúng phần mình làm và phần của cả nhóm | Khoe số liệu không có nguồn |
+| 3. Chốt đãi ngộ | So đề nghị bằng tổng đãi ngộ T; hỏi điều kiện thưởng; chuẩn bị phương án thay thế | Đồng ý ngay hoặc từ chối gay gắt |
+
+### Vòng 1: nhà tuyển dụng sàng lọc
+
+**Tình huống**: HR hỏi *"Hiện tại tổng thu nhập của bạn là bao nhiêu và kỳ vọng của bạn là bao nhiêu?"*
+
+**Lời thoại mẫu** (con số điền theo bảng lương thật của bạn):
+> *"Tổng thu nhập hiện tại của tôi, gồm lương cứng, phụ cấp và thưởng, là **[điền số THẬT theo bảng lương]**. Trước khi nêu kỳ vọng, tôi xin hỏi khung lương và cấu trúc thu nhập của vị trí này (lương cứng, tháng 13, thưởng và điều kiện, phụ cấp, kỳ xem xét tăng lương) để tôi nêu một khoảng có căn cứ."*
+
+Không khai cao hơn thực tế: ngân hàng có thể xác minh qua bảng lương và lịch sử bảo hiểm xã hội. Mốc công tác phải khớp sổ BHXH.
+
+### Vòng 2: hội đồng kỹ thuật
+
+**Chiến thuật**: chứng minh giá trị bằng **một sự cố thật** theo khung bối cảnh, hành động, kết quả; nói đúng phần mình làm và phần của cả nhóm; có số đo thật thì nêu kèm nguồn đo, chưa đo thì nói rõ "chưa đo". Ví dụ khung (điền việc thật của bạn): xử lý lỗi bế tắc ORA-00060 bằng cách đọc tệp vết để tìm hai câu lệnh xung đột, rồi buộc mọi luồng khoá tài khoản theo cùng thứ tự (mã tăng dần), kèm chỉ mục cho cột khoá ngoại; nêu số đo trước/sau nếu có.
+
+Không khẳng định: "em vận hành NAPAS/HSM" (cổng và HSM do đội Switch vận hành); "ACB dùng T24" (JD không nêu hệ lõi).
+
+### Vòng 3: chốt đãi ngộ
+
+**Tình huống**: nhà tuyển dụng nói *"Khung chính sách của vị trí này thấp hơn mức bạn mong."*
+
+1. Cảm ơn, bày tỏ sự quan tâm.
+2. **Hỏi rõ cấu trúc** (lương cứng, tháng 13, thưởng và điều kiện, phụ cấp, kỳ tăng lương), rồi **tính tổng đãi ngộ T của hai phương án** trước khi trả lời. Không cần trả lời ngay trong cuộc gọi.
+3. So với phương án thay thế tốt nhất của bạn (BATNA: việc bạn sẽ làm nếu thương lượng đổ vỡ, ví dụ một lời mời khác hoặc ở lại chỗ cũ) rồi mới quyết định.
+
+*Không kịch bản nào bảo đảm kết quả: tin tuyển dụng ghi lương "Thương lượng".* Tách lương cứng thành "lương + phụ cấp" làm thay đổi cách tính BHXH, thưởng và tháng 13; hỏi HR cách tính trước khi đề xuất.
+
+---
+
+## 4. SO HAI ĐỀ NGHỊ BẰNG TỔNG ĐÃI NGỘ (SỐ MINH HOẠ, KHỚP LAB `labs/INT/L07`)
+
+Cả hai đề nghị có tháng 13 cố định và k = 2; phụ cấp không được tính vào thưởng.
+
+| | L | P | T = L × 15 + 12 × P |
+|:---|---:|---:|---:|
+| Offer A | 38 | 0 | 570 triệu |
+| Offer B | 34 | 2 | 534 triệu |
+
+A hơn B **36 triệu**. Phụ cấp B cần để bằng A: (570 − 34 × 15) / 12 = **5 triệu/tháng**.
+
+**Tổng đãi ngộ khi thưởng chưa chắc (số minh hoạ)**: L = 32, P = 2, tháng 13 cố định, thưởng 1–4 tháng: T từ 32 × 14 + 24 = **472** đến 32 × 17 + 24 = **568 triệu**. Không nói "cố định 544": thưởng phụ thuộc xếp loại.
+
+---
+
+## 5. BA ĐÒN ÉP GIÁ THƯỜNG GẶP VÀ LỜI ĐÁP TRUNG THỰC
+
+| Đòn ép giá | Tâm lý nhà tuyển dụng | Cách đáp trung thực |
+|:---|:---|:---|
+| *"Thị trường năm nay các ngân hàng đều thắt chặt ngân sách tuyển dụng."* | Tạo áp lực khan hiếm cơ hội | *"Em hiểu ngân hàng đang tối ưu chi phí. Chính vì vậy, tuyển một kỹ sư làm được việc sớm, giảm chi phí sai sót và đào tạo lại, là cách dùng ngân sách hiệu quả."* |
+| *"Bạn chưa nhận bằng đại học (UIT dự kiến 11/2026), liệu có quá sớm cho mức lương cấp cao?"* | Vin vào bằng cấp để ép | *"Em đi làm phần mềm từ 01/2019: Sutrix (2019–2021), freelance (2022), Grooo làm dự án cho Mirae Asset Finance (2022–2023) và OCB (10/2023 – nay). Bằng Cử nhân AI tại UIT em học song song, dự kiến tốt nghiệp 11/2026; em có thể gửi xác nhận của trường khi có."* |
+| *"Lương cứng thấp hơn một chút, nhưng cuối năm thưởng rất cao."* | Chuyển rủi ro sang ứng viên (thưởng không cam kết) | *"Em xin so sánh tổng đãi ngộ cả năm của hai phương án, và cần biết thưởng được bảo đảm hay phụ thuộc xếp loại."* |
+
+**Thử bằng số cho đòn 3 (số minh hoạ, triệu đồng)**: đề nghị L = 36, mong muốn L = 40.
+
+| k (tháng thưởng) | 36 × (13 + k) | 40 × (13 + k) | chênh mỗi năm |
+|---:|---:|---:|---:|
+| 1 | 504 | 560 | 56 |
+| 2 | 540 | 600 | 60 |
+| 3 | 576 | 640 | 64 |
+| 4 | 612 | 680 | 68 |
+
+Thưởng tính bằng số tháng lương, nên lương cứng thấp kéo cả thưởng xuống: mức thưởng nào phương án 36 cũng thua.
+
+**Theo thời gian (số minh hoạ)**: chốt lương cứng thấp hơn 4 triệu ngay từ đầu, k = 2, lương tăng 8% mỗi năm trên mức hiện tại: phần mất đi tích luỹ **60** triệu sau 1 năm, **194,8** triệu sau 3 năm, **352** triệu sau 5 năm. Giả định tăng lương theo phần trăm; thực tế phải hỏi cách tăng lương. Đánh đổi: đòi quá cao có thể mất lời mời, nên cần phương án thay thế.
+
+**Bẫy ở vòng sơ loại**: chỉ khai lương cơ bản, bỏ phụ cấp và thưởng thật → dễ bị neo mức đề xuất theo con số thấp đó. Khai đúng tổng thu nhập thật.
+
+---
+
+## 6. DANH MỤC PHÚC LỢI NGOÀI LƯƠNG CẦN ĐỐI SOÁT
+
+*Mục 1 có nguồn (tin tuyển dụng ACB). Các mục 2–4 là **câu cần hỏi HR**, không phải thông tin đã xác minh về ACB.*
+1. **Tháng lương thứ 13 & thưởng cuối năm**: tin tuyển dụng ghi tháng 13 cố định và thưởng 1–4 tháng lương tuỳ xếp loại. Hỏi: thưởng tính trên lương cứng hay tổng thu nhập, điều kiện xếp loại.
+2. **Bảo hiểm sức khoẻ**: hỏi gói áp dụng cho cấp chức danh, phạm vi nội trú/ngoại trú/nha khoa, người thân.
 3. **Thiết bị & chế độ làm việc**: hỏi máy cấp phát, chính sách làm việc từ xa/linh hoạt.
 4. **Đào tạo & chứng chỉ**: hỏi ngân sách đào tạo, chứng chỉ được tài trợ và cam kết thời gian làm việc đi kèm.
 
 ---
 
-## 5. NHỮNG ĐIỀU KHÔNG ĐƯỢC KHẲNG ĐỊNH KHI ĐÀM PHÁN (RÀ SOÁT 2026-11-08)
+## 7. NHỮNG ĐIỀU KHÔNG ĐƯỢC KHẲNG ĐỊNH KHI ĐÀM PHÁN
 
 | Không nói | Lý do | Nói thay bằng |
 |:---|:---|:---|
+| Một con số lương như thể đã có khung thị trường | Lương ACB ghi "Thương lượng"; con số trên mạng không có nguồn | "Em muốn hiểu khung lương và cấu trúc thu nhập của vị trí trước khi nêu khoảng kỳ vọng" |
+| "Chắc chắn đạt mức em đề xuất" | Không kịch bản nào bảo đảm kết quả | "Em muốn so tổng đãi ngộ của các phương án" |
 | "Em đã tốt nghiệp UIT" / "mới tốt nghiệp" | Ứng viên xác nhận chưa nhận bằng; CV ghi *expected November 2026* | "Em dự kiến tốt nghiệp 11/2026" |
-| "ACB dùng T24, em giải quyết ngay bài toán T24 của ACB" | JD ACB không nêu hệ thống lõi; chưa có nguồn | "Em có kinh nghiệm tích hợp với Core T24 tại OCB; cách tư duy tích hợp lõi (bản tin, tương quan, đảo giao dịch, đối soát) dùng được với hệ thống lõi khác" |
+| "ACB dùng T24, em giải quyết ngay bài toán T24 của ACB" | JD ACB không nêu hệ thống lõi | "Em có kinh nghiệm tích hợp với Core T24 tại OCB; cách tư duy tích hợp lõi (bản tin, tương quan, đảo giao dịch, đối soát) dùng được với hệ thống lõi khác" |
 | "Em vận hành NAPAS / HSM" | Cổng, socket và HSM do đội Switch vận hành | "Em tích hợp luồng giải ngân/thu nợ với cổng NAPAS của đội Switch" |
 | Số tiền tiết kiệm, %SLA, TPS do mình tạo ra | Không có số đo của ứng viên (BN-0017, BN-0021) | Chỉ nêu số đo thật có nguồn; không có thì nói định tính |
-| "Chắc chắn đạt 50M" | Lương ACB ghi "Thương lượng"; khung thị trường trong `resources/job/JD.md` chỉ là ước tính | "Mức kỳ vọng của em là 50M gross; em muốn hiểu khung của vị trí" |
-| "Người tham chiếu ở ACB sẽ bảo lãnh cho em" | Người tham chiếu chỉ xác nhận điều họ biết; nói thay họ dễ bị coi là gây áp lực | Nêu rõ quan hệ quen biết; để ACB tự liên hệ |
+| Khai tổng thu nhập hiện tại cao hơn thực tế | Ngân hàng có thể xác minh qua bảng lương, sổ BHXH | Khai đúng số thật |
+| "Người tham chiếu ở ACB sẽ bảo lãnh cho em" | Người tham chiếu chỉ xác nhận điều họ biết | Nêu rõ quan hệ quen biết; để ACB tự liên hệ |

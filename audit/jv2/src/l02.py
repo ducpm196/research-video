@@ -58,7 +58,8 @@ public class LonNhat {
     public static void main(String[] args) {
         System.out.println(lon(3, 7));
         System.out.println(lon("abc", "abd"));
-        System.out.println("chuyen".compareTo("nap") + " " + "nap".compareTo("nap") + " " + "rut".compareTo("nap"));
+        System.out.println("chuyen".compareTo("nap") + " "
+                + "nap".compareTo("nap") + " " + "rut".compareTo("nap"));
     }
 }""", out="7\nabd\n-11 0 4")
     sap_xep = prog("SapXep", r"""
@@ -197,6 +198,8 @@ Tự viết chương trình `SapXepGiaoDich` (tệp `SapXepGiaoDich.java`):
 
 Chú ý hai giao dịch `1` và `7` có cùng loại và cùng số tiền: `List.sort` là sắp xếp **ổn định**, nên chúng giữ nguyên thứ tự ban đầu.
 
+Dòng `import` cần dùng: `java.util.ArrayList`, `java.util.Comparator`, `java.util.List`.
+
 Chạy: `javac SapXepGiaoDich.java && java SapXepGiaoDich`. Chấm: `bash labs/cham.sh JV2 L02 SapXepGiaoDich.java`.
 """, "java", lab["code"], lab["out"])
     sc_lab = practice_scene(sc, "Tự làm: sắp xếp giao dịch theo hai khoá", practice_steps(
@@ -215,8 +218,8 @@ Lời giải: <code>labs/JV2/L02/loi_giai.java</code> — chỉ mở sau khi đ�
         Lời giải đầy đủ nằm trong thư mục thực hành của bài, chỉ mở sau khi bạn đã tự thử.""", pause=150), "JV2", "L02")
 
     sc_hook = sc("hook", "hook", "Hộp nhận mọi thứ, và lỗi chỉ lộ ra lúc đã chạy", [
-        st(code_block(hop_cu, lines=(9, 12)) + out_block(hop_cu),
-           """Hãy tưởng tượng một chiếc hộp cho phép bỏ vào bất cứ thứ gì. Ta lỡ bỏ chuỗi chữ năm trăm nghìn vào, rồi lấy ra và ép thành số nguyên dài. Trình biên dịch im lặng, chương trình chạy, và nó nổ ở đúng dòng đó, có thể là ở máy chủ đang phục vụ khách.
+        st(code_block(hop_cu, lines=(2, 6), title="Hộp cũ: nhận và trả kiểu Object") + code_block(hop_cu, lines=(9, 11)) + out_block(hop_cu),
+           """Hãy tưởng tượng một chiếc hộp cho phép bỏ vào bất cứ thứ gì: nó cất và trả về kiểu gốc của mọi đối tượng. Ta lỡ bỏ chuỗi chữ năm trăm nghìn vào, rồi lấy ra và ép thành số nguyên dài. Trình biên dịch im lặng, chương trình chạy, và nó nổ ở đúng dòng đó, có thể là ở máy chủ đang phục vụ khách.
            Lỗi sai kiểu mà chỉ lộ ra khi chạy là loại lỗi đắt nhất."""),
         st("""<div class="box key">Hôm nay: <b>kiểu tổng quát</b>, cho phép một hộp ghi rõ <b>nó chứa kiểu gì</b> để trình biên dịch bắt lỗi sớm.
 Rồi hai cách <b>sắp xếp</b> một danh sách: thứ tự tự nhiên của lớp, và bộ so sánh do người gọi chọn; kèm câu hỏi quy mô: sắp xếp một triệu phần tử tốn bao nhiêu lần so sánh.</div>""",
@@ -274,9 +277,13 @@ Rồi hai cách <b>sắp xếp</b> một danh sách: thứ tự tự nhiên củ
            Giao dịch có thể xếp theo loại, theo tiền, theo ngày, nên ta dùng bộ so sánh.""", clear=True),
     ])
     sc_form = sc("formula", "formula", "Suy ra từng bước: bộ so sánh hai khoá", [
-        st(code_block(lon_nhat, lines=(2, 4)) + out_block(lon_nhat),
-           """Bước một, hiểu hàm so sánh. Hai số cho ra bảy là lớn hơn. Hai chuỗi so theo thứ tự từ điển, nên chuỗi a b c đứng trước a b d. Với chuyển và nạp, chữ c đứng trước chữ n, nên kết quả là số âm, và chính xác là âm mười một.
-           Chỉ dấu của kết quả mới quan trọng, không phải độ lớn."""),
+        st(code_block(lon_nhat, lines=(2, 4), title="Hàm chọn phần tử lớn hơn trong hai phần tử so sánh được"),
+           """Bước một, hiểu hàm so sánh. Hàm này nhận hai giá trị cùng kiểu và trả về giá trị lớn hơn. Vì kiểu được ràng buộc là so sánh được, nó hỏi hàm so sánh của kiểu đó. Nếu kết quả không âm thì giữ giá trị thứ nhất, ngược lại lấy giá trị kia."""),
+        st(code_block(lon_nhat, lines=(6, 11), title="Ba lời gọi trong hàm chính"),
+           """Hàm chính có ba lời gọi, cho ba dòng kết quả. Lời gọi thứ nhất chọn số lớn hơn trong ba và bảy. Lời gọi thứ hai chọn chuỗi lớn hơn. Lời gọi thứ ba so ba cặp chuỗi bằng hàm so sánh, nên in ba kết quả trên cùng một dòng.""", clear=True),
+        st(out_block(lon_nhat),
+           """Kết quả thật. Hai số cho ra bảy là lớn hơn. Hai chuỗi so theo thứ tự từ điển, nên chuỗi a b c đứng trước a b d. Dòng cuối, chuyển với nạp, chữ c đứng trước chữ n, nên ra số âm, chính xác là âm mười một.
+           Nạp với chính nó ra không, và rút với nạp ra bốn. Chỉ dấu của kết quả mới quan trọng, không phải độ lớn.""", clear=True),
         st("""<p><b>Bước 2.</b> Muốn xếp theo <b>hai khoá</b>: so khoá 1; nếu <b>khác 0</b> thì có đáp án ngay; nếu <b>bằng 0</b> mới so khoá 2.</p>
 <p><code>c = a.loai().compareTo(b.loai());</code></p><p><code>if (c != 0) return c;</code></p><p><code>return …khoá 2…;</code></p>""",
            """Bước hai, ghép hai khoá. Vì khoá thứ hai chỉ có ý nghĩa khi hai phần tử ngang nhau ở khoá thứ nhất, nên ta so khoá một trước. Nếu khác không thì có đáp án ngay. Chỉ khi bằng không mới sang khoá hai.""", clear=True),
@@ -305,25 +312,47 @@ Rồi hai cách <b>sắp xếp</b> một danh sách: thứ tự tự nhiên củ
     ], checks=["ord('c') < ord('n') < ord('r')", "2000000 > 1500000", "700000 > 500000 > 300000",
                "[g[0] for g in sorted([(1,'rut',500000),(2,'nap',2000000),(3,'rut',300000),(4,'chuyen',1200000),(5,'nap',1500000),(6,'rut',700000)], key=lambda g: (g[1], -g[2]))] == [4, 2, 5, 6, 1, 3]"])
     sc_chk = sc("check", "check", "Tự kiểm bằng đường khác: sắp xếp bằng công cụ dòng lệnh", [
-        st("""<p>Cùng dữ liệu, xếp bằng lệnh <code>sort</code> của hệ điều hành: khoá 1 là cột 2 (chữ), khoá 2 là cột 3 (số, giảm dần):</p>
-<p><code>sort -t, -k2,2 -k3,3nr</code> cho thứ tự mã: <b>4, 2, 5, 6, 1, 3</b> ✓ trùng với chương trình Java.</p>
+        st("""<p>Cùng dữ liệu, mỗi dòng viết dạng <code>mã,loại,tiền</code> (ví dụ <code>2,nap,2000000</code>), xếp bằng lệnh <code>sort</code> của hệ điều hành:</p>
+<p><code>sort -t, -k2,2 -k3,3nr</code></p>"""
+           + table(["cờ", "nghĩa"],
+                   [["<code>-t,</code>", "các cột cách nhau bằng <b>dấu phẩy</b>"],
+                    ["<code>-k2,2</code>", "<b>khoá 1</b>: cột 2 (chữ), tăng dần"],
+                    ["<code>-k3,3nr</code>", "<b>khoá 2</b>: cột 3; <code>n</code> so như <b>số</b>, <code>r</code> <b>đảo ngược</b> nên giảm dần"]]),
+           """Cách kiểm khác là dùng lệnh sắp xếp của hệ điều hành trên cùng dữ liệu, mỗi dòng gồm mã, loại, tiền, cách nhau bằng dấu phẩy. Lệnh này có ba cờ mà ta cần đọc từng cái. Cờ thứ nhất cho biết các cột cách nhau bằng dấu phẩy.
+           Cờ thứ hai chọn cột hai, là cột chữ, làm khoá một, tăng dần. Cờ thứ ba chọn cột ba làm khoá hai, chữ n bảo so như số, chữ r đảo ngược nên số giảm dần.""",
+           clear=True),
+        st("""<p><code>sort -t, -k2,2 -k3,3nr</code> cho thứ tự mã: <b>4, 2, 5, 6, 1, 3</b> ✓ trùng với chương trình Java.</p>
 <p>Kiểm thêm tính chất: sau khi xếp, mỗi cặp liền nhau <code>(x, y)</code> thoả <code>compare(x, y) ≤ 0</code>; có 6 phần tử nên có <b>5</b> cặp liền nhau.</p>""",
-           """Cách kiểm khác là dùng lệnh sắp xếp của hệ điều hành trên cùng dữ liệu, khoá một là cột chữ, khoá hai là cột số giảm dần. Nó cho thứ tự mã bốn, hai, năm, sáu, một, ba, trùng với chương trình Java.
-           Ta cũng kiểm tính chất, sau khi xếp thì mỗi cặp liền nhau phải thoả so sánh nhỏ hơn hoặc bằng không. Sáu phần tử có đúng năm cặp liền nhau."""),
+           """Lệnh ấy cho thứ tự mã bốn, hai, năm, sáu, một, ba, trùng với chương trình Java. Ta cũng kiểm tính chất, sau khi xếp thì mỗi cặp liền nhau phải thoả so sánh nhỏ hơn hoặc bằng không. Sáu phần tử có đúng năm cặp liền nhau.""",
+           clear=True),
     ], checks=["6 - 1 == 5"])
     sc_scale = sc("scale", "concept", "Khi danh sách lớn gấp một nghìn: số lần so sánh tăng thế nào?", [
+        st("""<div class="box key"><b>log₂ n</b> (lôgarit cơ số hai của n) = số lần phải <b>nhân đôi</b>, bắt đầu từ 1, để tới n.</div>"""
+           + table(["nhân đôi từ 1", "số lần nhân đôi", "viết"],
+                   [["1 → 2 → 4 → 8 → 16", "4", "log₂ 16 = 4"],
+                    ["1 → 2 → 4 → … → 1 024", "10", "log₂ 1 024 = 10"],
+                    ["… → 1 048 576 (xấp xỉ một triệu)", "20", "log₂ 1 000 000 ≈ 20"]]),
+           """Trước khi xem bảng đo, ta cần một ký hiệu mới. Lôgarit cơ số hai của n là số lần phải nhân đôi, bắt đầu từ một, để tới n. Nhân đôi bốn lần ra mười sáu, nên lôgarit cơ số hai của mười sáu bằng bốn.
+           Nhân đôi mười lần ra một nghìn không trăm hai mươi tư, nên lôgarit cơ số hai của số đó bằng mười. Một triệu chỉ cần chừng hai mươi lần nhân đôi, nên lôgarit cơ số hai của một triệu xấp xỉ hai mươi.""",
+           introduces=["jv2_log2"], clear=True),
         st(table(["số phần tử n", "1 000", "100 000", "1 000 000"],
                  [["so sánh khi dữ liệu xáo trộn (đo thật)", "8 683", "1 534 624", "<b>18 640 873</b>"],
                   ["xấp xỉ n × log₂ n", "9 966", "1 660 964", "19 931 569"],
                   ["xếp lại danh sách đã xếp sẵn (đo thật)", "999", "99 999", "<b>999 999</b>"]]),
            """Bây giờ là chuyện quy mô. Ta đếm số lần gọi hàm so sánh khi xếp danh sách số ngẫu nhiên. Với một nghìn phần tử là gần chín nghìn lần. Với một triệu phần tử, lớn gấp một nghìn lần, là mười tám triệu sáu trăm nghìn lần.
-           Tăng một nghìn lần số phần tử mà số lần so sánh tăng hơn hai nghìn lần, vì nó theo n nhân lôgarit của n. Con số đo được sát với công thức."""),
-        st(code_block(dem_ss, lines=(17, 27)),
-           """Mã đo là chương trình này, ta đếm bằng cách cho bộ so sánh tăng một biến mỗi lần được gọi. Hạt giống số ngẫu nhiên cố định, nên ai chạy cũng ra đúng những con số trên bảng.""", clear=True),
+           Tăng một nghìn lần số phần tử mà số lần so sánh tăng hơn hai nghìn lần, vì nó theo n nhân lôgarit cơ số hai của n. Con số đo được sát với công thức.""", clear=True),
+        st(code_block(dem_ss, lines=(1, 13), title="Mã đo, phần 1: bộ so sánh biết đếm"),
+           """Mã đo gồm hai phần. Phần một là bộ so sánh biết đếm, mỗi lần được gọi nó tăng một biến lên một rồi so hai số như thường. Bốn dòng nạp tên đầu tệp lấy danh sách, bộ so sánh và bộ sinh số ngẫu nhiên.""", clear=True),
+        st(code_block(dem_ss, lines=(15, 22), title="Mã đo, phần 2a: sinh dữ liệu")
+           + "<p class='note'><code>new Random(42)</code>: bộ sinh số ngẫu nhiên với <b>hạt giống</b> 42, nên mọi lần chạy ra cùng một dãy số.</p>",
+           """Phần hai, với mỗi cỡ n, ta sinh n số ngẫu nhiên. Hạt giống số ngẫu nhiên cố định, nên ai chạy cũng ra đúng những con số trên bảng.""", clear=True),
+        st(code_block(dem_ss, lines=(23, 28), title="Mã đo, phần 2b: xếp hai lần rồi in"),
+           """Rồi xếp danh sách một lần bằng bộ so sánh biết đếm, xếp lại lần hai khi đã sẵn thứ tự, và in hai số đếm cùng công thức n nhân lôgarit.""", clear=True),
         st(out_block(dem_ss) + "<p class='note'>Đánh đổi: bộ so sánh càng đắt (so nhiều khoá, so chuỗi dài) thì nhân với 18 triệu lần càng đau; danh sách đã gần xếp sẵn thì rẻ hơn rất nhiều.</p>",
            """Điều thú vị là hàng cuối. Xếp lại một danh sách đã xếp sẵn chỉ tốn gần đúng n lần so sánh, vì thuật toán nhận ra các đoạn đã đúng thứ tự. Người làm nghề dùng điều này, ví dụ giữ dữ liệu luôn đã xếp để lần sau gần như miễn phí.
            Còn bộ so sánh nhân với hàng chục triệu lần gọi, nên nó phải rẻ và phải nhất quán.""", clear=True),
-    ], checks=["round(1000 * __import__('math').log2(1000)) == 9966", "round(100000 * __import__('math').log2(100000)) == 1660964",
+    ], checks=["2 ** 4 == 16", "2 ** 10 == 1024", "2 ** 20 == 1048576", "round(__import__('math').log2(1000000)) == 20",
+               "round(1000 * __import__('math').log2(1000)) == 9966", "round(100000 * __import__('math').log2(100000)) == 1660964",
                "round(1000000 * __import__('math').log2(1000000)) == 19931569", "18640873 / 8683 > 2000", "1000 - 1 == 999"])
     sc_pit = sc("pitfalls", "pitfall", "Lỗi hay gặp, có lỗi của người đã đi làm", [
         st('<div class="box warn"><b>Lỗi 1 (người mới).</b> Tin rằng danh sách các Long cũng là danh sách các Object.</div>'
@@ -368,6 +397,7 @@ Nhiều thứ tự tuỳ ngữ cảnh, hay lớp không thuộc quyền bạn s�
 Với mọi bộ so sánh, hỏi: <b>có nhất quán</b> không (a trước b thì b không trước a), <b>có tràn</b> không, và nó sẽ bị gọi <b>bao nhiêu triệu lần</b>.</div>""",
            """Điều cần mang theo. Hãy đưa lỗi về càng sớm càng tốt, lúc biên dịch hơn lúc chạy thật. Với mọi bộ so sánh, hỏi ba câu. Nó có nhất quán không, có bị tràn không, và sẽ bị gọi bao nhiêu triệu lần."""),
     ])
+    sc_chk["steps"][0]["introduces"] = ["jv2_sort_flags"]
     return lesson("L02", "kieu_tong_quat_so_sanh", "Bài 2 — Kiểu tổng quát và sắp xếp: hộp, thứ tự tự nhiên, bộ so sánh",
                   "curriculum/jv2.yaml L02; audit/jv2/verify_jv2.py L02 (javac/java chạy thật, JDK 21; số lần so sánh đo bằng Random(42)); "
                   "The Java Language Specification, Java SE 21: §4.5 (kiểu có tham số), §8.1.2 (lớp tổng quát), §4.10.2 (List<Long> không phải List<Object>), "

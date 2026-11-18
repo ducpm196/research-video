@@ -16,6 +16,9 @@ cat > chao.sh <<'EOF'
 echo "bat dau"
 ech "xin chao"
 EOF
+javac Tong.java > /dev/null
+python tinh.py > /dev/null
+bash chao.sh > /dev/null
 sed -i 's/int b = 250$/int b = 250;/' Tong.java
 sed -i 's/soluong/so_luong/' tinh.py
 sed -i 's/^ech /echo /' chao.sh

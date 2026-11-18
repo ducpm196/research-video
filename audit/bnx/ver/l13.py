@@ -107,7 +107,56 @@ def pct(v, D, up):
     return v
 
 
+def run_wp4(rec):
+    """Nâng AF2 (WP4): chạy lại chương trình mô phỏng quy mô trên màn hình, đối chiếu bộ điều khiển mô phỏng theo mã nguồn Kubernetes
+    trên lưới, và chấm lab bằng labs/cham.sh (đường người học dùng)."""
+    import lib2
+    lib2.verify_programs(rec, "L13")
+    rec("L13", all(len(l) <= 70 for p in lib2.PROGRAMS if p.lesson == "L13" for l in p.code.split("\n")), "chương trình quy mô: dòng ≤ 70 ký tự")
+    out = next(p for p in lib2.PROGRAMS if p.key == "L13_Dot").out
+    rows = [tuple(int(x) for x in ln.split()) for ln in out.split("\n")]
+    # đường khác cho từng dòng: bộ điều khiển mô phỏng theo mã nguồn (checklib.bnx_rolling_summary), đợt = ceil(D/(mu+ms)) trên lưới
+    ok = all(alg.bnx_rolling_summary(D_, mu_, ms_) == (dot, lo, hi) for D_, mu_, ms_, dot, lo, hi in rows)
+    rec("L13", ok and len(rows) == 7, "mô phỏng trên màn hình = bộ điều khiển mô phỏng theo mã nguồn Kubernetes ở 7 cấu hình (4, 40, 400 bản)")
+    rec("L13", [r[3] for r in rows[:3]] == [2, 20, 200] and [r[3] for r in rows[3:6]] == [2, 2, 2] and rows[6][3:] == (10, 400, 440),
+        "thiếu 1 thừa 1: 2, 20, 200 đợt; mặc định 25%: 2 đợt ở 4, 40, 400 bản; (0, 40) ở 400 bản: 10 đợt")
+    grid_bad = []
+    for D_ in range(1, 61):
+        for mu_ in range(0, 7):
+            for ms_ in range(0, 7):
+                if mu_ + ms_ == 0 or mu_ >= D_:
+                    continue
+                if alg.bnx_rolling_summary(D_, mu_, ms_)[0] != -(-D_ // (mu_ + ms_)) or alg.bnx_l13_dot(D_, mu_, ms_) != -(-D_ // (mu_ + ms_)):
+                    grid_bad.append((D_, mu_, ms_))
+    rec("L13", not grid_bad, f"số đợt của bộ điều khiển mô phỏng = ceil(D/(thiếu+thừa)) trên lưới D ≤ 60, thiếu/thừa ≤ 6 (lệch: {grid_bad[:3]})")
+    rec("L13", [alg.bnx_l13_phut(alg.bnx_l13_dot(D_, 1, 1), 30) for D_ in (4, 40, 400)] == [1.0, 10.0, 100.0]
+        and alg.bnx_l13_phut(alg.bnx_l13_dot(400, "25%", "25%"), 30) == 1.0 and alg.bnx_l13_phut(alg.bnx_l13_dot(400, 0, 40), 30) == 5.0,
+        "thời gian minh hoạ 30 giây/đợt: 1, 10, 100 phút; mặc định 25%: 1 phút; (0, 40): 5 phút")
+    r = subprocess.run([lib2._bash(), "labs/cham.sh", "BNX", "L13", "labs/BNX/L13/loi_giai.py"], cwd=ROOT, capture_output=True, text=True,
+                       encoding="utf-8", timeout=120)
+    rec("L13", r.returncode == 0 and "ĐÚNG" in r.stdout, f"lab loi_giai.py chấm bằng cham.sh: {r.stdout.strip()[:60]}")
+    exp = (ROOT / "labs" / "BNX" / "L13" / "mong_doi.txt").read_text(encoding="utf-8").strip().split("\n")
+    a1, a2, a3, a4, a5 = alg.bnx_l13_lab()
+    rec("L13", exp[0] == f"sua src/Dao.java: lop {' '.join(map(str, a1[0]))} - {a1[1]} giay" and exp[1] == f"sua pom.xml: lop {' '.join(map(str, a2[0]))} - {a2[1]} giay"
+        and exp[2] == f"sai thu tu, sua src/Dao.java: {a3[1]} giay" and exp[3] == f"D=12 thieu 1 thua 2: {a4[0]} dot, toi thieu {a4[1]} toi da {a4[2]}"
+        and exp[4] == f"D=10 25%/25%: {a5[0]} dot, toi thieu {a5[1]} toi da {a5[2]}",
+        "mong_doi.txt của lab khớp mô hình alg.bnx_l13_lab (27 và 108 giây; 4 đợt 11/14; 2 đợt 8/13)")
+    # đường khác cho lớp phải dựng lại: khoá đệm băm nối tiếp (như phần đệm Dockerfile của bộ kiểm này), đếm lớp đổi khoá
+    tot = [("FROM", [], 5), ("WORKDIR", [], 1), ("COPY pom.xml", ["pom.xml"], 1), ("RUN tai", [], 80), ("COPY src", ["src/Dao.java", "src/Main.java"], 2), ("RUN dong", [], 25)]
+
+    def keys(files):
+        k, out_ = "", []
+        for ten, dv, _ in tot:
+            k = hashlib.sha256((k + ten + "".join(sorted(files.get(f, f) for f in dv))).encode()).hexdigest()
+            out_.append(k)
+        return out_
+    base, edited = keys({}), keys({"src/Dao.java": "doi"})
+    rec("L13", [i + 1 for i in range(6) if base[i] != edited[i]] == a1[0] == [5, 6] and sum(t[2] for t in tot[4:]) == 27 == a1[1],
+        "khoá đệm băm nối tiếp: sửa src/Dao.java đổi khoá lớp 5 và 6, 27 giây (= alg)")
+
+
 def run(rec):
+    run_wp4(rec)
     # ── Deployment: đọc YAML thật ──
     dep = yaml.safe_load(l13.DEPLOY_YML)
     sp = dep["spec"]

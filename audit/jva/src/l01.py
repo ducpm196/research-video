@@ -248,12 +248,15 @@ $$2^{31} = 2\\,147\\,483\\,648 \\text{ số âm} \\qquad 2^{31} - 1 = \\hl{2\\,1
            """Bước ba, chia đôi. Một nửa số giá trị dành cho số âm, nửa kia cho số không và các số dương.
            Nửa thứ hai phải nhường một chỗ cho số không, nên số dương lớn nhất là hai mũ ba mươi mốt trừ một."""),
         st("""<p><b>Bước 4.</b> Cộng 1 vào số lớn nhất: kết quả đúng là $2\\,147\\,483\\,648$, nằm ngoài miền của <code>int</code>. Java không báo lỗi mà <b>quay vòng</b>: trừ đi đúng một vòng $2^{32}$ giá trị.</p>
-$$2\\,147\\,483\\,648 - 4\\,294\\,967\\,296 = \\hl{-2\\,147\\,483\\,648}$$"""
-           + code_block(tran, lines=(3, 7)) + out_block(tran),
-           """Bước bốn, vượt giới hạn. Java có sẵn hai giá trị giữ số lớn nhất và số nhỏ nhất của kiểu số nguyên, ta in chúng rồi cộng thêm một. Cộng một vào số lớn nhất thì kết quả đúng là hai tỉ một trăm bốn mươi bảy triệu bốn trăm tám mươi ba nghìn sáu trăm bốn mươi tám, nằm ngoài miền của kiểu số nguyên.
+$$2\\,147\\,483\\,648 - 4\\,294\\,967\\,296 = \\hl{-2\\,147\\,483\\,648}$$""",
+           """Bước bốn, vượt giới hạn. Cộng một vào số lớn nhất thì kết quả đúng là hai tỉ một trăm bốn mươi bảy triệu bốn trăm tám mươi ba nghìn sáu trăm bốn mươi tám, nằm ngoài miền của kiểu số nguyên.
            Theo luật của Java, máy không báo lỗi mà quay vòng, nghĩa là trừ đi đúng hai mũ ba mươi hai, tức một vòng đủ mọi giá trị.
-           Kết quả là âm hai tỉ một trăm bốn mươi bảy triệu bốn trăm tám mươi ba nghìn sáu trăm bốn mươi tám, đúng số nhỏ nhất của kiểu số nguyên.
-           Chạy thật, dòng cuối đúng là số đó, và không có thông báo lỗi nào."""),
+           Kết quả là âm hai tỉ một trăm bốn mươi bảy triệu bốn trăm tám mươi ba nghìn sáu trăm bốn mươi tám, đúng số nhỏ nhất của kiểu số nguyên."""),
+        st(code_block(tran, lines=(3, 7)) + out_block(tran)
+           + "<p class='note'><code>Integer.MAX_VALUE</code>: tên do Java đặt sẵn, đọc là “giá trị lớn nhất của kiểu <code>int</code>”. Chữ trước dấu chấm (<code>Integer</code>) là nơi chứa, chữ sau (<code>MAX_VALUE</code>) là tên giá trị.</p>",
+           """Giờ ta kiểm bằng máy, vì chạy thật thì chắc chắn hơn. Java có sẵn hai giá trị giữ số lớn nhất và số nhỏ nhất của kiểu số nguyên, gọi bằng một tên, dấu chấm, rồi tên giá trị. Chữ trước dấu chấm là nơi chứa, chữ sau dấu chấm là tên của giá trị đó.
+           Ta in cả hai rồi cộng thêm một vào số lớn nhất. Chạy thật, dòng cuối đúng là số nhỏ nhất, và không có thông báo lỗi nào.""",
+           clear=True),
     ], checks=["4 * 8 == 32", "2**32 == 4294967296", "2**31 - 1 == 2147483647",
                "(2**31 - 1) + 1 == 2147483648", "2147483648 - 4294967296 == -2**31",
                "((2**31 - 1) + 1 + 2**31) % 2**32 - 2**31 == -2**31"])
@@ -349,10 +352,18 @@ Việc cần làm: đoán trước giá trị lớn nhất, thử đúng <b>sát
            Mà không phẩy một viết trong hệ hai là số lẻ vô hạn, như một phần ba trong hệ mười, nên máy phải cắt bớt.
            Cách đúng là đổi ra đồng, một trăm cộng hai trăm ra đúng ba trăm."""),
         st('<p>Khi tiền <b>bắt buộc</b> có phần lẻ (tỉ giá, lãi suất), Java có kiểu số thập phân chính xác <code>BigDecimal</code>:</p>'
-           + code_block(thap_phan, lines=(5, 7))
-           + "<span class='note'>(cần dòng <code>import java.math.BigDecimal;</code> ở đầu tệp)</span>" + out_block(thap_phan),
-           """Khi tiền bắt buộc có phần lẻ, như tỉ giá, Java có sẵn một kiểu số thập phân chính xác.
-           Ta tạo số từ chuỗi chữ, không từ số thực, để không mang theo sai lệch của hệ hai, rồi cộng bằng lệnh riêng, ra đúng không phẩy ba. Bài này chỉ cần biết nó tồn tại."""),
+           + code_block(thap_phan) + out_block(thap_phan),
+           """Khi tiền bắt buộc có phần lẻ, như tỉ giá, Java có sẵn một kiểu số thập phân chính xác. Đây là cả tệp, và dòng đầu tệp là dòng nhập, ta giải mã nó ở bảng kế tiếp.
+           Ta tạo số từ chuỗi chữ, không từ số thực, để không mang theo sai lệch của hệ hai, rồi cộng bằng lệnh riêng, ra đúng không phẩy ba. Bài này chỉ cần biết nó tồn tại.""",
+           introduces=["jva_import", "jva_new"]),
+        st(table(["viết", "nghĩa"],
+                 [["<code>import java.math.BigDecimal;</code>", "<b>nhập</b> (<code>import</code>): lấy về một lớp có sẵn của Java để dùng; <code>java.math</code> là nhóm chứa nó. Thiếu dòng này, máy báo không tìm thấy <code>BigDecimal</code>"],
+                  ["<code>new BigDecimal(\"0.1\")</code>", "<b>tạo mới</b> (<code>new</code>): làm ra một số thập phân chính xác từ chuỗi <code>\"0.1\"</code>, không từ số thực"],
+                  ["<code>a.add(b)</code>", "<b>dấu chấm</b> gọi một lệnh gắn với vật đứng trước nó: <code>a.add(b)</code> là “lấy a, cộng b”, cùng cách viết như <code>System.out.println</code> ở bài đầu"]]),
+           """Dòng nhập lấy về một lớp có sẵn của Java để dùng, ở đây là lớp số thập phân chính xác nằm trong nhóm có tên là toán Java. Thiếu dòng này thì máy báo không tìm thấy tên kiểu.
+           Từ khoá tạo mới làm ra một số thập phân chính xác từ chuỗi chữ không phẩy một.
+           Dấu chấm gọi một lệnh gắn với vật đứng trước nó, nên a chấm cộng b nghĩa là lấy a, cộng b, cùng cách viết như lệnh in ở bài đầu.""",
+           clear=True),
     ])
     sc_quiz = sc("quiz", "quiz", "Bây giờ tới phần bạn tự làm", [
         st(code_block(quiz, lines=(3, 8), title="Đoán ba dòng in ra"),

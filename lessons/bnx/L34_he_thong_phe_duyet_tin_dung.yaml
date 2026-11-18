@@ -1,0 +1,899 @@
+id: L34
+course: BNX
+series: BNX · Backend ngân hàng mở rộng theo JD
+title: 'Bài 34 — Phê duyệt tín dụng: máy trạng thái, quyền duyệt và tra lịch sử có
+  đồng ý'
+voice: vi-VN-NamMinhNeural
+rate: -5%
+depth: full
+af2: true
+covers:
+- objective: 1
+  scene: example
+- objective: 2
+  scene: example
+- objective: 3
+  scene: formula
+- objective: 4
+  scene: example
+- objective: 5
+  scene: check
+- objective: 6
+  scene: quymo
+- objective: 7
+  scene: practice
+source: 'curriculum/bnx.yaml L34; audit/bnx/verify_bnx.py L34; audit/bnx/sources_l34.md:
+  SQLite (EXPLAIN QUERY PLAN, Query Planning), NIST CSRC Glossary (Separation of Duty)
+  (đọc 2026-11-14); mã Python 3 + sqlite3 chạy thật; mọi bậc duyệt, nhóm nợ, số tiền
+  là số minh hoạ; bài không dạy chấm điểm của ngân hàng nào và không trích điều khoản
+  pháp luật'
+assumes:
+- bnx_explain
+objectives:
+- Chạy máy trạng thái hồ sơ vay từ khởi tạo tới giải ngân và chặn chuyển trạng thái
+  không hợp lệ
+- Xác định người có quyền duyệt theo tổng dư nợ của khách và tách người tạo khỏi người
+  duyệt
+- So sánh hồ sơ vay cá nhân với hồ sơ doanh nghiệp về bậc duyệt, nguồn trả nợ và dư
+  nợ cần gộp
+- Chạy tra cứu lịch sử tín dụng chỉ khi có đồng ý còn hạn đúng mục đích và ghi nhật
+  ký mọi lần tra
+- Kiểm nhật ký chuyển trạng thái bằng cách dựng lại trạng thái cuối và đếm cạnh sai
+- Đo số dòng phải đọc khi tra lịch sử có và không có chỉ mục ở 1 000 và 1 000 000
+  dòng
+- Viết hàm chọn người duyệt, hàm chặn chuyển trạng thái và hàm tra cứu có đồng ý trên
+  số liệu mới
+asr_reviewed:
+- {sentence: "Câu ba: bảng lịch sử hai triệu dòng, chọn chỉ mục, kho đọc hay bộ đệm, và vì sao?", reason: "ASR chép “Câu 3, bản lịch sử 2 triệu dòng, chọn chỉ mục, khó đọc hay bộ đệm và vi sáo.” (0.789): lệch âm/thanh thuần Việt: bảng/bản, kho/khó, vì sao/vi sáo — NOT_VERIFIED bằng tai người"}
+- sentence: Chỉ mục là bảng phụ giúp tìm dòng mà không đọc cả bảng.
+  reason: 'ASR chép “Chỉ một là bản phụ giúp tìm dòng mà không đọc cả bản.” (0.769):
+    lệch âm/thanh thuần Việt: mục/một, bảng/bản, bảng/bản — NOT_VERIFIED bằng tai
+    người'
+- sentence: Vòng lặp đi từ bậc thấp lên, gặp bậc đủ trần thì dừng.
+  reason: 'ASR chép “Vòng lập đi từ bậc thấp lên, gặp bậc đủ Trần Thi Dương.” (0.769):
+    lệch âm/thanh thuần Việt: lặp/lập, thì dừng/thi dương — NOT_VERIFIED bằng tai
+    người'
+- sentence: Bây giờ tới phần bạn tự làm bài.
+  reason: 'ASR chép “Bây giờ tới phần bạn tự lam bay.” (0.75): lệch âm/thanh thuần
+    Việt: làm bài/lam bay — NOT_VERIFIED bằng tai người'
+- sentence: 'Bảng một nghìn dòng: không chỉ mục đọc cả một nghìn, có chỉ mục đọc năm
+    dòng.'
+  reason: 'ASR chép “Bảng một nghìn dòng, không chỉ một độc cả một nghìn, có chỉ một
+    độc năm dòng.” (0.765): lệch âm/thanh thuần Việt: mục đọc/một độc, mục đọc/một
+    độc — NOT_VERIFIED bằng tai người'
+- sentence: Các câu lệnh trong hàm viết bằng SQL, ngôn ngữ để hỏi và ghi bảng, ví
+    dụ câu lấy cột trạng thái của hồ sơ số một.
+  reason: 'ASR chép “Các câu lệnh trong hàm viết bằng Echulur ngôn ngữ để hỏi và ghi
+    bản, ví dụ câu lấy Cục Trạng Thái của Hồ Sơ số 1.” (0.889): “sql” đọc theo luật
+    lexicon (lexicon_vi.BNX.yaml: “ét-cu-l”), ASR viết “echulur”; lệch âm/thanh thuần
+    Việt: bảng/bản, cột/cục — NOT_VERIFIED bằng tai người'
+scenes:
+- id: hook
+  kind: hook
+  title: 'Hồ sơ 270 triệu chia thành ba hồ sơ 90 triệu: ai được duyệt?'
+  checks:
+  - alg.bnx_l34_nguoi_duyet('CN', 0, 90) == (90, 'chuyen vien')
+  - alg.bnx_l34_nguoi_duyet('CN', 180, 90) == (270, 'truong phong')
+  steps:
+  - show: '<p>Một khách xin vay <b>270 triệu đồng</b> (số minh hoạ). Quy tắc minh
+      hoạ: không quá 100 triệu thì <b>chuyên viên</b> duyệt được; trên 100 đến 500
+      triệu cần <b>trưởng phòng</b>.
+
+      Khách chia thành <b>ba hồ sơ 90 triệu</b>: xét riêng, cả ba lọt qua chuyên viên.</p>
+
+      <div class="box key">Hệ thống phải chặn việc này thế nào? Khi nào được tra lịch
+      sử tín dụng của khách? Và với <b>một triệu dòng</b> lịch sử, mỗi lần tra đọc
+      bao nhiêu dòng?</div>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    say: Chào bạn, một khách xin vay hai trăm bảy mươi triệu đồng, số minh hoạ. Chuyên
+      viên duyệt khoản không quá một trăm triệu, trên đó cần trưởng phòng. Khách chia
+      thành ba hồ sơ chín mươi triệu nên cả ba lọt qua chuyên viên. Hệ thống chặn
+      việc này thế nào, và với một triệu dòng lịch sử thì mỗi lần tra đọc bao nhiêu
+      dòng?
+  - show: '<table class=''t''><tr><th>câu hỏi</th><th>bài này trả lời</th></tr><tr><td>hồ
+      sơ đi qua những bước nào</td><td>một <b>máy trạng thái</b>: bảng liệt kê các
+      bước chuyển được phép; bước lạ bị chặn</td></tr><tr><td>ai có quyền duyệt</td><td>theo
+      <b>tổng dư nợ</b> của khách (cũ + mới), và người duyệt khác người tạo</td></tr><tr><td>tra
+      lịch sử tín dụng cần gì</td><td><b>đồng ý</b> của khách: đúng mục đích, còn
+      hạn, chưa thu hồi; mọi lần tra có nhật ký</td></tr><tr><td>lịch sử lớn dần thì
+      sao</td><td><b>chỉ mục</b> giữ số dòng đọc không đổi khi bảng lớn gấp nghìn
+      lần</td></tr></table>'
+    clear: true
+    say: 'Bài này trả lời bốn câu: hồ sơ đi qua các bước nào, ai có quyền duyệt, tra
+      lịch sử cần gì, và chỉ mục giúp gì khi lịch sử lớn dần.'
+- id: prereq
+  kind: prereq
+  title: 'Trước hết: năm điều cần hiểu'
+  checks:
+  - 180 + 90 == 270
+  steps:
+  - show: '<table class=''t''><tr><th>khái niệm</th><th>nghĩa</th><th>ví dụ</th></tr><tr><td>①
+      hồ sơ vay</td><td>bộ thông tin một khách xin vay; đi qua nhiều bước, mỗi bước
+      có người hoặc hệ thống phụ trách</td><td>khởi tạo → thẩm định → chấm điểm →
+      duyệt → giải ngân</td></tr><tr><td>② trạng thái</td><td>nhãn cho biết hồ sơ
+      đang ở bước nào; <b>chuyển trạng thái</b> là đổi nhãn</td><td><code>THAM_DINH</code>
+      đổi thành <code>CHAM_DIEM</code></td></tr><tr><td>③ dư nợ</td><td>số tiền khách
+      còn nợ; hạn mức duyệt tính trên dư nợ cộng khoản mới</td><td>đang nợ 180, xin
+      thêm 90 → 270</td></tr><tr><td>④ lịch sử tín dụng</td><td>bản ghi vay và trả
+      của khách; tóm thành <b>nhóm nợ</b> (bài dùng thang 1–5, số lớn là xấu hơn:
+      số minh hoạ)</td><td>nhóm cao nhất trong 12 tháng</td></tr><tr><td>⑤ chỉ mục</td><td>bảng
+      phụ giúp tìm dòng theo một cột mà không đọc cả bảng</td><td>tìm theo mã khách</td></tr></table>'
+    say: Trước hết ta cần hiểu năm điều, hồ sơ vay đi qua nhiều bước, và trạng thái
+      là nhãn cho biết hồ sơ ở bước nào. Hạn mức duyệt tính trên dư nợ cộng khoản
+      mới. Lịch sử tín dụng tóm thành nhóm nợ, số lớn là xấu hơn. Chỉ mục là bảng
+      phụ giúp tìm dòng mà không đọc cả bảng.
+- id: sym
+  kind: symbol
+  title: Giải mã các tên trên màn hình
+  checks:
+  - alg.bnx_l34_hop_le('THAM_DINH', 'CHAM_DIEM')
+  steps:
+  - show: '<table class=''t''><tr><th>tên</th><th>nghĩa</th></tr><tr><td><code>cho_phep</code></td><td>bảng
+      các cặp (từ, đến) được phép chuyển: <b>luật</b> của máy trạng thái</td></tr><tr><td><code>ho_so</code></td><td>mỗi
+      dòng một hồ sơ: <code>id</code>, <code>loai</code> (<code>CN</code> cá nhân
+      hay <code>DN</code> doanh nghiệp), <code>tt</code> (trạng thái hiện tại)</td></tr><tr><td><code>lich_su</code></td><td>nhật
+      ký chuyển trạng thái: hồ sơ nào, từ đâu, đến đâu, ai làm</td></tr><tr><td><code>ls</code></td><td>lịch
+      sử vay của khách: <code>khach</code>, <code>thang</code>, <code>nhom</code>
+      (nhóm nợ)</td></tr><tr><td><code>dong_y</code></td><td>đồng ý của khách: <code>muc_dich</code>
+      (để làm gì), <code>het_han</code> (ngày hết), <code>thu_hoi</code> (1 là đã
+      rút lại)</td></tr><tr><td><code>nhat_ky</code></td><td>ghi mọi lần tra lịch
+      sử: ai, khách nào, mục đích, ngày, kết quả</td></tr><tr><td><code>SCAN</code>,
+      <code>SEARCH</code></td><td>kế hoạch của cơ sở dữ liệu: quét cả bảng, hay tìm
+      một phần của bảng qua chỉ mục</td></tr></table>'
+    say: Bảng này giải mã các tên trên màn hình. Bảng cho phép chứa luật của máy trạng
+      thái, bảng hồ sơ có loại cá nhân hoặc doanh nghiệp và trạng thái hiện tại, bảng
+      lịch sử ghi từng lần chuyển. Bảng đồng ý ghi mục đích, ngày hết hạn và cờ thu
+      hồi. Hai chữ quét và tìm là kế hoạch của cơ sở dữ liệu.
+- id: intuition
+  kind: intuition
+  title: 'Hình dung: máy trạng thái và đường tra cứu có đồng ý'
+  checks:
+  - alg.bnx_l34_hop_le('CHO_DUYET', 'DA_DUYET') and not alg.bnx_l34_hop_le('KHOI_TAO',
+    'GIAI_NGAN')
+  steps:
+  - show: '<div><svg width="1500" height="470" viewBox="0 0 1500 470" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><text
+      x="750" y="34" font-size="26" text-anchor="middle" fill="#1f2937" font-weight="bold">Máy
+      trạng thái hồ sơ vay: chỉ đi theo mũi tên có trong bảng</text><path d="M130,120
+      L130,78 L1355,78 L1355,120" fill="none" stroke="#dc2626" stroke-width="3.5"
+      stroke-dasharray="8 6" marker-end="url(#ah)"/><text x="750" y="68" font-size="22"
+      text-anchor="middle" fill="#dc2626" font-weight="bold">nhảy cóc thẳng tới giải
+      ngân: không có trong bảng, bị chặn</text><rect x="40" y="120" width="180" height="76"
+      rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="130.0" y="151"
+      font-size="22" text-anchor="middle" fill="#1f2937" font-weight="bold">KHOI_TAO</text><text
+      x="130.0" y="181" font-size="22" text-anchor="middle" fill="#1f2937">khởi tạo</text><rect
+      x="285" y="120" width="180" height="76" rx="10" fill="#dbeafe" stroke="#2a78d6"
+      stroke-width="3"/><text x="375.0" y="151" font-size="22" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">THAM_DINH</text><text x="375.0" y="181" font-size="22"
+      text-anchor="middle" fill="#1f2937">thẩm định</text><rect x="530" y="120" width="180"
+      height="76" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text
+      x="620.0" y="151" font-size="22" text-anchor="middle" fill="#1f2937" font-weight="bold">CHAM_DIEM</text><text
+      x="620.0" y="181" font-size="22" text-anchor="middle" fill="#1f2937">chấm điểm</text><rect
+      x="775" y="120" width="180" height="76" rx="10" fill="#fef3c7" stroke="#d97706"
+      stroke-width="3"/><text x="865.0" y="151" font-size="22" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">CHO_DUYET</text><text x="865.0" y="181" font-size="22"
+      text-anchor="middle" fill="#1f2937">chờ duyệt</text><rect x="1020" y="120" width="180"
+      height="76" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="3"/><text
+      x="1110.0" y="151" font-size="22" text-anchor="middle" fill="#1f2937" font-weight="bold">DA_DUYET</text><text
+      x="1110.0" y="181" font-size="22" text-anchor="middle" fill="#1f2937">đã duyệt</text><rect
+      x="1265" y="120" width="190" height="76" rx="10" fill="#dcfce7" stroke="#16a34a"
+      stroke-width="3"/><text x="1360.0" y="151" font-size="22" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">GIAI_NGAN</text><text x="1360.0" y="181" font-size="22"
+      text-anchor="middle" fill="#1f2937">giải ngân</text><line x1="225" y1="158"
+      x2="280" y2="158" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><line
+      x1="470" y1="158" x2="525" y2="158" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><line
+      x1="715" y1="158" x2="770" y2="158" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><line
+      x1="960" y1="158" x2="1015" y2="158" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><line
+      x1="1205" y1="158" x2="1260" y2="158" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><rect
+      x="530" y="300" width="190" height="76" rx="10" fill="#fee2e2" stroke="#dc2626"
+      stroke-width="3"/><text x="625.0" y="331" font-size="22" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">TU_CHOI</text><text x="625.0" y="361" font-size="22"
+      text-anchor="middle" fill="#1f2937">từ chối</text><line x1="400" y1="200" x2="540"
+      y2="296" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><line x1="860"
+      y1="200" x2="715" y2="296" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><text
+      x="750" y="430" font-size="24" text-anchor="middle" fill="#1f2937" font-weight="bold">mỗi
+      mũi tên đi qua ghi một dòng vào nhật ký: hồ sơ, từ, đến, ai làm</text></svg></div>'
+    clear: true
+    say: Hình này là máy trạng thái của hồ sơ vay. Hồ sơ chỉ đi theo các mũi tên có
+      trong bảng, và nhảy cóc thẳng tới giải ngân không có trong bảng nên bị chặn.
+      Mỗi mũi tên đi qua ghi một dòng nhật ký.
+  - show: '<div><svg width="1500" height="470" viewBox="0 0 1500 470" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><text
+      x="750" y="40" font-size="26" text-anchor="middle" fill="#1f2937" font-weight="bold">Tra
+      lịch sử tín dụng: kiểm đồng ý trước, ghi nhật ký luôn luôn</text><rect x="40"
+      y="170" width="270" height="120" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text
+      x="175.0" y="208" font-size="22" text-anchor="middle" fill="#1f2937" font-weight="bold">phiếu
+      tra cứu</text><text x="175.0" y="238" font-size="22" text-anchor="middle" fill="#1f2937">ai,
+      khách nào,</text><text x="175.0" y="268" font-size="22" text-anchor="middle"
+      fill="#1f2937">mục đích, ngày</text><rect x="380" y="150" width="430" height="160"
+      rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="3"/><text x="595.0" y="208"
+      font-size="22" text-anchor="middle" fill="#1f2937" font-weight="bold">kiểm đồng
+      ý</text><text x="595.0" y="238" font-size="22" text-anchor="middle" fill="#1f2937">đúng
+      khách, đúng mục đích,</text><text x="595.0" y="268" font-size="22" text-anchor="middle"
+      fill="#1f2937">còn hạn, chưa thu hồi</text><rect x="900" y="80" width="300"
+      height="100" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="3"/><text
+      x="1050.0" y="123" font-size="22" text-anchor="middle" fill="#1f2937" font-weight="bold">đọc
+      lịch sử</text><text x="1050.0" y="153" font-size="22" text-anchor="middle" fill="#1f2937">trả
+      nhóm cao nhất thôi</text><rect x="900" y="280" width="300" height="100" rx="10"
+      fill="#fee2e2" stroke="#dc2626" stroke-width="3"/><text x="1050.0" y="323" font-size="22"
+      text-anchor="middle" fill="#1f2937" font-weight="bold">từ chối</text><text x="1050.0"
+      y="353" font-size="22" text-anchor="middle" fill="#1f2937">không trả dữ liệu</text><rect
+      x="1260" y="170" width="210" height="120" rx="10" fill="#f3e8ff" stroke="#9333ea"
+      stroke-width="3"/><text x="1365.0" y="223" font-size="22" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">ghi nhật ký</text><text x="1365.0" y="253"
+      font-size="22" text-anchor="middle" fill="#1f2937">cả khi từ chối</text><line
+      x1="315" y1="230" x2="375" y2="230" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><line
+      x1="815" y1="200" x2="895" y2="140" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><line
+      x1="815" y1="260" x2="895" y2="320" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><text
+      x="835" y="150" font-size="22" text-anchor="middle" fill="#16a34a" font-weight="bold">đủ</text><text
+      x="850" y="345" font-size="22" text-anchor="middle" fill="#dc2626" font-weight="bold">thiếu</text><line
+      x1="1205" y1="130" x2="1290" y2="165" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><line
+      x1="1205" y1="330" x2="1290" y2="295" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><text
+      x="750" y="440" font-size="24" text-anchor="middle" fill="#1f2937" font-weight="bold">chỉ
+      trả phần cần cho mục đích (nhóm cao nhất), không trả mọi dòng lịch sử</text></svg></div>'
+    clear: true
+    say: 'Hình thứ hai là đường tra lịch sử tín dụng. Bước kiểm đồng ý hỏi bốn điều:
+      đúng khách, đúng mục đích, còn hạn, chưa thu hồi. Đủ bốn thì chỉ trả nhóm cao
+      nhất, thiếu một thì từ chối, và cả hai nhánh đều ghi nhật ký.'
+- id: formula
+  kind: formula
+  title: 'Suy ra từng bước: từ hồ sơ tới quyền duyệt và đồng ý'
+  checks:
+  - alg.bnx_l34_nguoi_duyet('CN', 180, 90) == (270, 'truong phong')
+  - alg.bnx_l34_duoc_duyet('an', 'chi', 'truong phong', 'truong phong') and not alg.bnx_l34_duoc_duyet('an',
+    'an', 'truong phong', 'truong phong')
+  steps:
+  - show: '<p><b>Cách đọc mã Python của bài này</b> (mỗi dòng: viết gì, nghĩa gì,
+      ví dụ nhỏ):</p><table class=''t''><tr><th>viết trong mã</th><th>nghĩa</th><th>ví
+      dụ nhỏ</th></tr><tr><td><code>?</code> trong câu SQL</td><td>chỗ giữ chỗ: giá
+      trị truyền riêng ở tham số sau, đúng thứ tự</td><td><code>WHERE id = ?</code>
+      với <code>(1,)</code> thành <code>WHERE id = 1</code></td></tr><tr><td><code>(hs,)</code></td><td>bộ
+      giá trị; một phần tử thì phải có dấu phẩy</td><td><code>(7,)</code> là bộ một
+      số</td></tr><tr><td><code>.fetchone()[0]</code></td><td>lấy dòng kết quả đầu
+      (một bộ), rồi <code>[0]</code> lấy giá trị đầu của bộ; không có dòng thì <code>None</code></td><td>dòng
+      <code>(5,)</code> cho <code>5</code></td></tr><tr><td><code>executemany</code></td><td>chạy
+      một câu SQL cho từng bộ trong danh sách</td><td>7 bộ thì thêm 7 dòng</td></tr><tr><td><code>f"{tu}
+      -&gt; {den}"</code></td><td>chuỗi f: chỗ trong ngoặc nhọn được thay bằng giá
+      trị biến</td><td><code>tu</code> là <code>A</code> thì ra <code>A -&gt; B</code></td></tr></table>'
+    focus:
+    - 0
+    - '2.2'
+    - '2.4'
+    - '2.6'
+    clear: true
+    say: Trước khi đọc mã, ta cần vài mẫu cú pháp. Dấu hỏi trong câu SQL là chỗ giữ
+      chỗ, giá trị truyền riêng ở sau, và bộ một phần tử phải có dấu phẩy. Lấy một
+      dòng trả về một bộ, nên thêm chỉ số không để lấy giá trị đầu. Chuỗi f thay chỗ
+      trong ngoặc nhọn bằng giá trị biến.
+  - show: '<table class=''t''><tr><th>viết trong mã</th><th>đọc là</th></tr><tr><td><code>INSERT
+      INTO ho_so VALUES (1, ''CN'', ''KHOI_TAO'')</code></td><td>thêm một dòng vào
+      bảng <code>ho_so</code>; các giá trị theo đúng thứ tự cột</td></tr><tr><td><code>SELECT
+      tt FROM ho_so WHERE id = ?</code></td><td>lấy cột <code>tt</code> từ bảng <code>ho_so</code>,
+      chỉ ở các dòng thoả điều kiện sau <code>WHERE</code></td></tr><tr><td><code>UPDATE
+      ho_so SET tt = ? WHERE id = ?</code></td><td>đổi giá trị cột <code>tt</code>
+      ở các dòng thoả điều kiện sau <code>WHERE</code></td></tr><tr><td><code>SELECT
+      COUNT(*) FROM lich_su</code>, <code>MAX(nhom)</code></td><td><code>COUNT(*)</code>:
+      đếm số dòng; <code>MAX(cột)</code>: giá trị lớn nhất của cột</td></tr></table>'
+    clear: true
+    say: Mã dùng bốn kiểu câu SQL, nên ta đọc trước. Thêm một dòng vào bảng, giá trị
+      theo thứ tự cột. Lấy một cột, chỉ ở các dòng thoả điều kiện. Đổi giá trị một
+      cột ở các dòng thoả điều kiện. Hàm đếm cho số dòng, hàm lớn nhất cho giá trị
+      lớn nhất.
+  - show: '<p><b>Bước 1. Luật là một bảng, không nằm rải rác trong mã.</b> Ta liệt
+      kê mọi cặp (từ, đến) được phép vào bảng <code>cho_phep</code>. Cặp nào không
+      có thì bị chặn.</p><p><b>MayTrangThai.py (trích): bảy cạnh được phép</b></p><div
+      class="code"><div>CANH = [("KHOI_TAO", "THAM_DINH"), ("THAM_DINH", "CHAM_DIEM"),</div><div>        ("THAM_DINH",
+      "TU_CHOI"), ("CHAM_DIEM", "CHO_DUYET"),</div><div>        ("CHO_DUYET", "DA_DUYET"),
+      ("CHO_DUYET", "TU_CHOI"),</div><div>        ("DA_DUYET", "GIAI_NGAN")]</div><div>db.executemany("INSERT
+      INTO cho_phep VALUES (?, ?)", CANH)</div><div>db.execute("INSERT INTO ho_so
+      VALUES (1, ''CN'', ''KHOI_TAO'')")</div><div> </div></div>'
+    focus:
+    - 1
+    - 2
+    clear: true
+    say: 'Bước một: luật là một bảng, không rải rác trong mã, nên thêm một bước chỉ
+      là thêm một dòng, và cặp không có trong bảng thì bị chặn. Bài không dạy cách
+      chấm điểm của ngân hàng nào, nên chấm điểm chỉ là một nhãn.'
+  - show: '<p><b>Bước 2. Đọc nhãn, kiểm luật, rồi mới đổi và ghi nhật ký.</b> <b>SQL</b>
+      là ngôn ngữ hỏi và ghi bảng: <code>SELECT tt FROM ho_so WHERE id = 1</code>
+      lấy cột <code>tt</code> của hồ sơ 1.</p><p><b>MayTrangThai.py (trích): hàm chuyển</b></p><div
+      class="code"><div>def chuyen(hs, den, nguoi):</div><div>    sql = "SELECT tt
+      FROM ho_so WHERE id = ?"</div><div>    tu = db.execute(sql, (hs,)).fetchone()[0]</div><div>    sql
+      = "SELECT 1 FROM cho_phep WHERE tu = ? AND den = ?"</div><div>    if not db.execute(sql,
+      (tu, den)).fetchone():</div><div>        print(f"{tu} -&gt; {den}: tu choi")</div><div>        return</div><div>    db.execute("UPDATE
+      ho_so SET tt = ? WHERE id = ?", (den, hs))</div><div>    db.execute("INSERT
+      INTO lich_su VALUES (?, ?, ?, ?)",</div><div>               (hs, tu, den, nguoi))</div><div>    print(f"{tu}
+      -&gt; {den}: {nguoi} ghi nhan")</div></div>'
+    focus:
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: 'Bước hai: hàm đọc nhãn hiện tại, kiểm luật, rồi mới đổi nhãn và ghi nhật
+      ký. Các câu lệnh trong hàm viết bằng SQL, ngôn ngữ để hỏi và ghi bảng, ví dụ
+      câu lấy cột trạng thái của hồ sơ số một. Cặp không có luật thì in từ chối và
+      dừng, nên nhật ký chỉ chứa bước hợp lệ.'
+  - show: '<p><b>Bước 3a. Bậc duyệt là dữ liệu.</b> <code>CN</code> là cá nhân, <code>DN</code>
+      là doanh nghiệp. Mỗi cặp là <code>(trần, vai trò)</code>: tổng không vượt trần
+      thì cần vai trò đó; <code>None</code> là không giới hạn. <code>HANG</code> cho
+      mỗi vai trò một số để so cao thấp.</p><p><b>PhanQuyen.py (trích): bậc và hạng</b></p><div
+      class="code"><div>BAC = {"CN": [(100, "chuyen vien"), (500, "truong phong"),</div><div>              (None,
+      "hoi dong")],</div><div>       "DN": [(2000, "truong phong"), (10000, "giam
+      doc khoi"),</div><div>              (None, "hoi dong")]}</div><div>HANG = {"chuyen
+      vien": 1, "truong phong": 2,</div><div>        "giam doc khoi": 3, "hoi dong":
+      4}</div><div> </div><div> </div></div>'
+    focus:
+    - - 1
+      - 2
+    - 3
+    clear: true
+    say: Bậc duyệt là dữ liệu, có hai nhóm, cá nhân và doanh nghiệp, mỗi cặp gồm trần
+      và vai trò cần, còn không có trần nghĩa là không giới hạn. Bảng hạng cho mỗi
+      vai trò một số để so cao thấp.
+  - show: <p><b>Bước 3. Quyền duyệt theo bậc, tính trên TỔNG.</b> Hạn mức duyệt =
+      dư nợ hiện có + khoản mới, không phải riêng khoản mới. Vòng <code>for</code>
+      đi từ bậc thấp lên; gặp bậc đầu tiên mà tổng không vượt trần thì trả vai trò
+      của bậc đó.</p><p><b>PhanQuyen.py (trích)</b></p><div class="code"><div>def
+      can_ai(loai, du_no, moi):</div><div>    tong = du_no + moi</div><div>    for
+      tran, vai in BAC[loai]:</div><div>        if tran is None or tong &lt;= tran:</div><div>            return
+      tong, vai</div><div> </div></div>$$\text{tổng} = 180 + 90 = \hl{270} \Rightarrow
+      \text{trưởng phòng}$$
+    focus:
+    - 1
+    - 2
+    - 3
+    - 4
+    clear: true
+    say: 'Bước ba: quyền duyệt theo bậc, tính trên tổng. Hạn mức là dư nợ hiện có
+      cộng khoản mới, vì chỉ nhìn khoản mới thì khách chia nhỏ hồ sơ là lách được.
+      Vòng lặp đi từ bậc thấp lên, gặp bậc đủ trần thì dừng. Nợ một trăm tám mươi
+      triệu, xin thêm chín mươi, tổng hai trăm bảy mươi, rơi vào bậc trưởng phòng.'
+    introduces:
+    - implies
+  - show: '<p><b>Bước 4. Hồ sơ doanh nghiệp khác cá nhân</b> (mô hình minh hoạ của
+      bài):</p><table class=''t''><tr><th>điểm</th><th>cá nhân</th><th>doanh nghiệp</th></tr><tr><td>bậc
+      1 (số minh hoạ)</td><td>≤ 100 triệu: chuyên viên</td><td>≤ 2 000 triệu: trưởng
+      phòng</td></tr><tr><td>bậc 2</td><td>≤ 500 triệu: trưởng phòng</td><td>≤ 10
+      000 triệu: giám đốc khối (người phụ trách một khối kinh doanh)</td></tr><tr><td>bậc
+      3</td><td>trên 500: hội đồng (nhiều người cùng quyết)</td><td>trên 10 000: hội
+      đồng</td></tr><tr><td>nguồn trả nợ cần thẩm định</td><td>thu nhập, nghĩa vụ
+      trả nợ hiện có</td><td>dòng tiền, báo cáo tài chính, tài sản bảo đảm (tài sản
+      bên vay dùng để bảo đảm khoản vay)</td></tr><tr><td>dư nợ cần gộp</td><td>của
+      một khách</td><td>của cả <b>nhóm bên liên quan</b> (các công ty có quan hệ sở
+      hữu hoặc điều hành với nhau)</td></tr></table>'
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    introduces:
+    - bnx_nhom_ben_lien_quan
+    clear: true
+    say: 'Bước bốn: hồ sơ doanh nghiệp khác cá nhân, theo mô hình minh hoạ. Bậc duyệt
+      cao hơn vì số tiền lớn hơn, bậc hai do giám đốc khối, người phụ trách một khối
+      kinh doanh, và trên đó là hội đồng. Cá nhân nhìn thu nhập, doanh nghiệp nhìn
+      dòng tiền, báo cáo tài chính và tài sản bảo đảm, tức tài sản dùng để bảo đảm
+      khoản vay. Dư nợ gộp cả nhóm bên liên quan, tức các công ty có quan hệ sở hữu
+      hoặc điều hành với nhau.'
+  - show: <p><b>Bước 5. Tách người tạo khỏi người duyệt.</b> Theo bảng thuật ngữ của
+      <b>NIST</b> (viện tiêu chuẩn và công nghệ của Mỹ), tách nhiệm vụ là nguyên tắc
+      &laquo;no user should be given enough privileges to misuse the system on their
+      own&raquo;.</p><p><b>PhanQuyen.py (trích)</b></p><div class="code"><div>def
+      duoc_duyet(tao, duyet, vai_duyet, can):</div><div>    if tao == duyet:</div><div>        return
+      "tu choi (tu duyet)"</div><div>    if HANG[vai_duyet] &lt; HANG[can]:</div><div>        return
+      "tu choi (thieu quyen)"</div><div>    return "dong y"</div></div>
+    focus:
+    - 1
+    - 1
+    - - 2
+      - 3
+    clear: true
+    say: 'Bước năm: tách người tạo khỏi người duyệt. Theo bảng thuật ngữ của một viện
+      tiêu chuẩn của Mỹ, không ai được cấp đủ quyền để tự lạm dụng hệ thống. Hàm kiểm
+      hai điều: người duyệt khác người tạo, và hạng vai trò đủ cao, thiếu một thì
+      từ chối.'
+  - show: '<table class=''t''><tr><th>viết trong mã</th><th>đọc là</th></tr><tr><td><code>SELECT
+      1 FROM dong_y WHERE khach = ? AND muc_dich = ? AND het_han &gt;= ? AND thu_hoi
+      = 0</code></td><td><code>AND</code> nối các điều kiện: dòng phải thoả cả bốn;
+      <code>SELECT 1</code> chỉ cần biết có dòng nào hay không</td></tr><tr><td><code>kq
+      = "cho phep" if ok else "tu choi"</code></td><td>biểu thức điều kiện: <code>kq</code>
+      là <code>cho phep</code> nếu <code>ok</code> có dòng, ngược lại <code>tu choi</code></td></tr></table>'
+    clear: true
+    say: Hàm tra cứu có hai chỗ mới, chữ nối đòi dòng thoả cả bốn điều kiện. Chọn
+      kết quả theo có dòng khớp hay không.
+  - show: '<p><b>Bước 6. Tra lịch sử: kiểm đồng ý, ghi nhật ký cả khi từ chối.</b></p><div
+      class="code"><div>def tra_cuu(nguoi, khach, muc_dich, ngay):</div><div>    sql
+      = ("SELECT 1 FROM dong_y WHERE khach = ? AND muc_dich = ? "</div><div>           "AND
+      het_han &gt;= ? AND thu_hoi = 0")</div><div>    ok = db.execute(sql, (khach,
+      muc_dich, ngay)).fetchone()</div><div>    kq = "cho phep" if ok else "tu choi"</div><div>    db.execute("INSERT
+      INTO nhat_ky VALUES (?, ?, ?, ?, ?)",</div><div>               (nguoi, khach,
+      muc_dich, ngay, kq))</div><div>    if not ok:</div><div>        return kq, None</div><div>    sql
+      = "SELECT MAX(nhom) FROM ls WHERE khach = ?"</div><div>    return kq, db.execute(sql,
+      (khach,)).fetchone()[0]</div><div> </div></div>'
+    focus:
+    - - 1
+    - 2
+    clear: true
+    say: 'Bước sáu: tra lịch sử, bốn điều kiện đồng ý nằm trong một câu truy vấn,
+      và dù đủ hay thiếu đều ghi nhật ký, vì lần bị từ chối cũng là bằng chứng. Khi
+      đủ, hàm chỉ trả nhóm cao nhất.'
+  - show: <div class="box key"><b>Lưu ý pháp lý.</b> Luật về dữ liệu cá nhân và về
+      tín dụng có yêu cầu riêng. Bài không trích điều khoản; bạn đọc văn bản hiện
+      hành trước khi áp dụng.</div>
+    clear: true
+    say: 'Lưu ý cuối: luật về dữ liệu cá nhân và về tín dụng có yêu cầu riêng. Bài
+      không trích điều khoản, nên bạn đọc văn bản hiện hành trước khi áp dụng.'
+- id: example
+  kind: example
+  title: Ví dụ chạy thật, từng phép tính
+  checks:
+  - alg.bnx_l34_nguoi_duyet('CN', 0, 300) == (300, 'truong phong') and alg.bnx_l34_nguoi_duyet('DN',
+    0, 3000) == (3000, 'giam doc khoi')
+  - alg.bnx_l34_nguoi_duyet('CN', 90, 90) == (180, 'truong phong') and alg.bnx_l34_nguoi_duyet('CN',
+    180, 90)[0] == 270
+  - 7 == 5 + 2 and 5 == 1 + 4
+  steps:
+  - show: '<p><b>MayTrangThai.py (trích): bảy lần thử chuyển</b></p><div class="code"><div>chuyen(1,
+      "GIAI_NGAN", "an")</div><div>chuyen(1, "THAM_DINH", "an")</div><div>chuyen(1,
+      "CHAM_DIEM", "binh")</div><div>chuyen(1, "CHO_DUYET", "he_thong")</div><div>chuyen(1,
+      "DA_DUYET", "chi")</div><div>chuyen(1, "KHOI_TAO", "chi")</div><div>chuyen(1,
+      "GIAI_NGAN", "he_thong")</div><div>n = db.execute("SELECT COUNT(*) FROM lich_su").fetchone()[0]</div><div>tt
+      = db.execute("SELECT tt FROM ho_so").fetchone()[0]</div><div>print("nhat ky:",
+      n, "dong; trang thai cuoi:", tt)</div></div>'
+    focus:
+    - 1
+    - 2
+    clear: true
+    say: Phép tính thứ nhất là chạy máy trạng thái với bảy lần thử chuyển. Lần đầu
+      nhảy cóc từ khởi tạo tới giải ngân, và các lần sau đi đúng đường, trừ một lần
+      quay lui từ đã duyệt về khởi tạo.
+  - show: '<p><b>Kết quả chạy thật</b></p><div class="code"><div>KHOI_TAO -&gt; GIAI_NGAN:
+      tu choi</div><div>KHOI_TAO -&gt; THAM_DINH: an ghi nhan</div><div>THAM_DINH
+      -&gt; CHAM_DIEM: binh ghi nhan</div><div>CHAM_DIEM -&gt; CHO_DUYET: he_thong
+      ghi nhan</div><div>CHO_DUYET -&gt; DA_DUYET: chi ghi nhan</div><div>DA_DUYET
+      -&gt; KHOI_TAO: tu choi</div><div>DA_DUYET -&gt; GIAI_NGAN: he_thong ghi nhan</div><div>nhat
+      ky: 5 dong; trang thai cuoi: GIAI_NGAN</div></div>$$① \; 7 \text{ lần thử} =
+      \hl{5} \text{ hợp lệ} + \hl{2} \text{ bị chặn}$$'
+    focus:
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: 'Kết quả thật: nhảy cóc và quay lui đều bị từ chối. Năm lần còn lại hợp lệ
+      nên nhật ký có năm dòng, và hồ sơ kết thúc ở giải ngân. Ở bước này ta chưa kiểm
+      ai có quyền.'
+  - show: '<p><b>Kết quả chạy thật</b></p><div class="code"><div>CN xin 80: tong 80
+      -&gt; chuyen vien</div><div>CN xin 300: tong 300 -&gt; truong phong</div><div>CN
+      xin 900: tong 900 -&gt; hoi dong</div><div>DN xin 3000: tong 3000 -&gt; giam
+      doc khoi</div><div>ho so 90: rieng le chuyen vien; theo tong 90 -&gt; chuyen
+      vien</div><div>ho so 90: rieng le chuyen vien; theo tong 180 -&gt; truong phong</div><div>ho
+      so 90: rieng le chuyen vien; theo tong 270 -&gt; truong phong</div><div>an tao,
+      an duyet: tu choi (tu duyet)</div><div>an tao, binh duyet (chuyen vien): tu
+      choi (thieu quyen)</div><div>an tao, chi duyet (truong phong): dong y</div></div>$$②
+      \; 90 + 90 + 90 = \hl{270}: \; \text{từng hồ sơ } 90 \to \text{chuyên viên;
+      theo tổng} \to \hl{\text{trưởng phòng}}$$'
+    focus:
+    - 1
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: 'Phép tính thứ hai là quyền duyệt, chạy thật. Cá nhân xin tám mươi, ba trăm
+      hoặc chín trăm triệu rơi vào ba bậc khác nhau, còn doanh nghiệp ba nghìn triệu
+      vượt trần hai nghìn của bậc một nên cần giám đốc khối. Ba hồ sơ chín mươi triệu:
+      xét riêng thì đều tới chuyên viên, theo tổng thì hồ sơ thứ hai và thứ ba cần
+      trưởng phòng. Tự duyệt và thiếu quyền bị từ chối.'
+  - show: '<p><b>LichSuTinDung.py (trích): năm ca tra cứu và đếm nhật ký</b></p><div
+      class="code"><div>CA = [("an", "K1", "tham dinh", "2026-03-10"),</div><div>      ("an",
+      "K2", "tham dinh", "2026-03-10"),</div><div>      ("an", "K3", "tham dinh",
+      "2026-03-10"),</div><div>      ("an", "K4", "tham dinh", "2026-03-10"),</div><div>      ("an",
+      "K1", "tiep thi", "2026-03-10")]</div><div>for nguoi, khach, md, ngay in CA:</div><div>    kq,
+      nhom = tra_cuu(nguoi, khach, md, ngay)</div><div>    print(f"{khach} {md}: {kq},
+      nhom cao nhat {nhom}")</div><div>sql = "SELECT kq, COUNT(*) FROM nhat_ky GROUP
+      BY kq ORDER BY kq"</div><div>for kq, dem in db.execute(sql):</div><div>    print("nhat
+      ky", kq + ":", dem)</div></div><p><code>GROUP BY kq</code> gom các dòng cùng
+      giá trị cột <code>kq</code> thành một nhóm; <code>COUNT(*)</code> đếm dòng mỗi
+      nhóm; <code>ORDER BY kq</code> xếp theo <code>kq</code>.</p>'
+    focus:
+    - 1
+    - 1
+    - 2
+    clear: true
+    say: Phép tính thứ ba là năm ca tra lịch sử trong cùng một ngày. Khách một có
+      đồng ý còn hạn, khách hai không có, khách ba hết hạn, khách bốn đã thu hồi,
+      và ca cuối là khách một nhưng sai mục đích. Câu cuối gom nhật ký theo kết quả,
+      đếm mỗi nhóm rồi xếp theo tên.
+  - show: '<p><b>Kết quả chạy thật</b></p><div class="code"><div>K1 tham dinh: cho
+      phep, nhom cao nhat 2</div><div>K2 tham dinh: tu choi, nhom cao nhat None</div><div>K3
+      tham dinh: tu choi, nhom cao nhat None</div><div>K4 tham dinh: tu choi, nhom
+      cao nhat None</div><div>K1 tiep thi: tu choi, nhom cao nhat None</div><div>nhat
+      ky cho phep: 1</div><div>nhat ky tu choi: 4</div></div>$$③ \; \text{5 ca tra:
+      } \hl{1} \text{ cho phép, } \hl{4} \text{ từ chối; nhật ký ghi đủ } 5$$'
+    focus:
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Chỉ khách một được trả nhóm cao nhất là hai. Bốn ca còn lại bị từ chối, dù
+      khách hai có nhóm năm trong dữ liệu. Nhật ký đếm một lần cho phép và bốn lần
+      từ chối, khớp năm ca.
+- id: check
+  kind: check
+  title: 'Tự kiểm bằng đường khác: dựng lại trạng thái từ nhật ký'
+  checks:
+  - alg.bnx_l34_hop_le('DA_DUYET', 'GIAI_NGAN')
+  steps:
+  - show: '<table class=''t''><tr><th>viết trong mã</th><th>nghĩa</th><th>ví dụ nhỏ</th></tr><tr><td><code>sum(1
+      for x in log if …)</code></td><td>đếm các phần tử thoả điều kiện: mỗi phần tử
+      đúng cộng 1</td><td><code>sum(1 for x in [3, 8, 9] if x &gt; 5)</code> cho <code>2</code></td></tr><tr><td><code>log[1:]</code></td><td>danh
+      sách bỏ phần tử đầu</td><td><code>[1, 2, 3][1:]</code> là <code>[2, 3]</code></td></tr><tr><td><code>zip(log,
+      log[1:])</code></td><td>ghép mỗi dòng với dòng kế tiếp</td><td><code>zip([1,
+      2, 3], [2, 3])</code> cho <code>(1, 2)</code>, <code>(2, 3)</code></td></tr><tr><td><code>DUOC.get(tu,
+      set())</code></td><td>tra từ điển; không có khoá thì trả tập rỗng</td><td><code>{''a'':
+      1}.get(''b'', 0)</code> cho <code>0</code></td></tr></table>'
+    focus:
+    - 0
+    - '1.2'
+    - '1.4'
+    - '1.5'
+    clear: true
+    say: Hàm kiểm dùng vài cách viết mới mà ta cần đọc trước. Hàm tổng cộng một cho
+      mỗi phần tử đúng điều kiện, tức là phép đếm. Hàm ghép đôi đưa mỗi dòng nhật
+      ký đi cùng dòng kế tiếp. Hàm tra từ điển có giá trị mặc định khi thiếu khoá.
+  - show: '<p><b>KiemNhatKy.py: kiểm bằng từ điển, không dùng bảng</b></p><div class="code"><div>def
+      canh_sai(log):</div><div>    return sum(1 for tu, den in log if den not in DUOC.get(tu,
+      set()))</div><div> </div><div> </div><div>def cho_dut(log):</div><div>    return
+      sum(1 for a, b in zip(log, log[1:]) if a[1] != b[0])</div><div> </div><div>
+      </div></div>'
+    focus:
+    - 1
+    - 1
+    - 2
+    clear: true
+    say: 'Ta kiểm bằng đường khác: dựng lại từ chính nhật ký năm dòng, không hỏi cơ
+      sở dữ liệu. Hàm thứ nhất đếm cạnh sai theo từ điển luật. Hàm thứ hai đếm chỗ
+      đứt, tức dòng sau không bắt đầu từ nơi dòng trước kết thúc.'
+  - show: '<p><b>Kết quả chạy thật</b></p><div class="code"><div>canh sai trong nhat
+      ky: 0</div><div>cho dut: 0 ; trang thai dung lai: GIAI_NGAN</div><div>xoa dong
+      3: 1 cho dut</div></div><table class=''t''><tr><th>cách</th><th>kết luận</th></tr><tr><td>bảng
+      luật trong cơ sở dữ liệu</td><td>5 chuyển hợp lệ, 2 bị chặn</td></tr><tr><td>từ
+      điển luật + dựng lại từ nhật ký</td><td>0 cạnh sai, 0 chỗ đứt, kết thúc GIAI_NGAN</td></tr><tr><td>xoá
+      thử một dòng</td><td>1 chỗ đứt: nhật ký bị sửa là lộ</td></tr></table>'
+    focus:
+    - '3.3'
+    - '3.4'
+    clear: true
+    say: 'Kết quả khớp: không cạnh sai, không chỗ đứt, dựng lại ra giải ngân. Xoá
+      thử dòng thứ ba thì có một chỗ đứt, nên ai sửa nhật ký là bị lộ.'
+- id: quymo
+  kind: example
+  title: 'Khi lịch sử lớn dần: số dòng phải đọc mỗi lần tra'
+  checks:
+  - alg.bnx_l34_doc(1000, False) == 1000 and alg.bnx_l34_doc(1000000, False) == 1000000
+  - alg.bnx_l34_doc(1000, True) == 5 == alg.bnx_l34_doc(1000000, True)
+  - 1000 * 10 ** 6 == 10 ** 9
+  steps:
+  - show: '<table class=''t''><tr><th>viết trong mã</th><th>nghĩa</th><th>ví dụ nhỏ</th></tr><tr><td><code>global
+      dem</code></td><td>cho hàm sửa biến <code>dem</code> nằm ngoài hàm, thay vì
+      tạo biến mới</td><td>mỗi lần gọi <code>tick()</code>, <code>dem</code> tăng
+      1</td></tr><tr><td><code>create_function("tick", 0, tick)</code></td><td>đăng
+      ký hàm Python để câu SQL gọi được <code>tick()</code></td><td>mỗi dòng SQL đọc
+      là một lần gọi</td></tr><tr><td><code>i // 5</code>, <code>i % 5</code></td><td>chia
+      lấy phần nguyên, chia lấy phần dư</td><td><code>7 // 5</code> là 1, <code>7
+      % 5</code> là 2</td></tr><tr><td><code>(… for i in range(n))</code></td><td>sinh
+      lần lượt n bộ giá trị, i chạy từ 0</td><td><code>i // 5</code> là mã khách:
+      mỗi khách đúng 5 dòng</td></tr></table>'
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    clear: true
+    say: Bài đo này dùng vài cách viết mới. Từ khoá khai báo biến ngoài cho phép hàm
+      sửa biến nằm ngoài hàm. Ta đăng ký hàm Python để câu SQL gọi, mỗi dòng đọc là
+      một lần gọi. Chia lấy phần nguyên và phần dư cho ra mã khách và tháng, nên mỗi
+      khách có đúng năm dòng.
+  - show: '<p>Đo bằng hàm <code>tick()</code>: cơ sở dữ liệu gọi nó mỗi lần đọc một
+      dòng của bảng <code>ls</code>.</p><p><b>QuyMoTraCuu.py (1/2): hàm đếm dòng đọc
+      và câu hỏi</b></p><div class="code"><div>import sqlite3</div><div>dem = 0</div><div>def
+      tick():</div><div>    global dem</div><div>    dem += 1</div><div>    return
+      1</div><div>SQL = "SELECT COUNT(*) FROM ls WHERE tick() AND khach = 7"</div><div>for
+      n in (1000, 1000000):</div><div>    db = sqlite3.connect(":memory:")</div><div>    db.create_function("tick",
+      0, tick)</div></div>'
+    focus:
+    - - 1
+      - 2
+    - 3
+    clear: true
+    say: Đây là số đo thật, hàm đếm được gắn vào câu SQL, nên cơ sở dữ liệu gọi nó
+      mỗi lần đọc một dòng. Câu hỏi là đếm các dòng của khách bảy.
+  - show: '<table class=''t''><tr><th>viết trong mã</th><th>đọc là</th></tr><tr><td><code>CREATE
+      TABLE ls (khach INT, thang INT, nhom INT)</code></td><td>tạo bảng <code>ls</code>
+      với ba cột, mỗi cột có kiểu số nguyên</td></tr><tr><td><code>CREATE INDEX ix
+      ON ls (khach)</code></td><td>tạo <b>chỉ mục</b> tên <code>ix</code> trên cột
+      <code>khach</code>: bảng phụ để tìm dòng theo khách mà không đọc cả bảng</td></tr><tr><td><code>EXPLAIN
+      QUERY PLAN … .fetchone()[3]</code></td><td>hỏi kế hoạch thực hiện câu SQL thay
+      vì chạy nó; <code>[3]</code> lấy cột thứ tư của dòng kế hoạch, là câu mô tả</td></tr><tr><td><code>kh.split()[0]</code></td><td>cắt
+      chuỗi <code>kh</code> ở khoảng trắng; <code>[0]</code> lấy từ đầu: <code>SCAN</code>
+      (quét cả bảng) hoặc <code>SEARCH</code> (tìm qua chỉ mục)</td></tr></table>'
+    clear: true
+    say: 'Mã đo có bốn chỗ mới, tạo bảng với ba cột số nguyên. Tạo chỉ mục trên cột
+      khách để tìm dòng nhanh. Hỏi kế hoạch thực hiện, và chỉ số ba lấy câu mô tả.
+      Cắt chuỗi ở khoảng trắng, lấy từ đầu: quét hoặc tìm.'
+  - show: '<p>Mỗi khách có 5 dòng. Chạy hai lần: chưa có, rồi có <b>chỉ mục</b> theo
+      cột <code>khach</code>; <code>EXPLAIN QUERY PLAN</code> hỏi kế hoạch của cơ
+      sở dữ liệu.</p><p><b>QuyMoTraCuu.py (2/2): bảng 1 000 và 1 000 000 dòng; thêm
+      chỉ mục</b></p><div class="code"><div>    db.execute("CREATE TABLE ls (khach
+      INT, thang INT, nhom INT)")</div><div>    db.executemany("INSERT INTO ls VALUES
+      (?, ?, ?)",</div><div>                   ((i // 5, i % 5, i % 3) for i in range(n)))</div><div>    kq
+      = []</div><div>    for co_chi_muc in (False, True):</div><div>        if co_chi_muc:</div><div>            db.execute("CREATE
+      INDEX ix ON ls (khach)")</div><div>        kh = db.execute("EXPLAIN QUERY PLAN
+      " + SQL).fetchone()[3]</div><div>        dem = 0</div><div>        db.execute(SQL).fetchone()</div><div>        kq.append(f"{kh.split()[0]}
+      doc {dem}")</div><div>    print(f"{n} dong: khong chi muc {kq[0]}; co chi muc
+      {kq[1]}")</div></div>'
+    focus:
+    - - 1
+      - 2
+    - 3
+    clear: true
+    say: 'Mỗi khách có năm dòng, ta chạy câu hỏi hai lần: chưa có chỉ mục, rồi có
+      chỉ mục theo cột khách. Kế hoạch của cơ sở dữ liệu cho biết nó quét cả bảng
+      hay tìm qua chỉ mục.'
+  - show: '<p><b>Kết quả chạy thật</b></p><div class="code"><div>1000 dong: khong
+      chi muc SCAN doc 1000; co chi muc SEARCH doc 5</div><div>1000000 dong: khong
+      chi muc SCAN doc 1000000; co chi muc SEARCH doc 5</div></div>$$10^3 \to 10^6
+      \text{ dòng: không chỉ mục } \hl{1\,000} \to \hl{1\,000\,000}; \; \text{có chỉ
+      mục } \hl{5} \to \hl{5}$$'
+    focus:
+    - 1
+    - 2
+    clear: true
+    say: 'Bảng một nghìn dòng: không chỉ mục đọc cả một nghìn, có chỉ mục đọc năm
+      dòng. Bảng một triệu dòng, gấp một nghìn lần: không chỉ mục đọc cả một triệu,
+      có chỉ mục vẫn năm dòng.'
+  - show: '<table class=''t''><tr><th>lựa chọn</th><th>được</th><th>mất</th></tr><tr><td>không
+      chỉ mục</td><td>đơn giản, ghi nhanh</td><td>1 000 hồ sơ mỗi ngày × 10⁶ dòng
+      = 10⁹ dòng đọc mỗi ngày</td></tr><tr><td>chỉ mục theo mã khách</td><td>mỗi lần
+      tra đọc 5 dòng, gần như không đổi theo cỡ bảng</td><td>tốn chỗ và làm ghi chậm
+      hơn một chút</td></tr><tr><td>lưu kết quả tra trong <b>bộ đệm</b> (nơi giữ sẵn
+      kết quả đã tra)</td><td>nhanh hơn nữa</td><td>khách thu hồi đồng ý mà bộ đệm
+      vẫn trả: <b>vi phạm đồng ý</b></td></tr></table>'
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    clear: true
+    say: Bảng này là lựa chọn của người làm nghề. Không chỉ mục thì một nghìn hồ sơ
+      mỗi ngày đọc một tỉ dòng. Chỉ mục giữ năm dòng mỗi lần, đổi lại tốn chỗ. Bộ
+      đệm giữ sẵn kết quả đã tra, nhưng khách thu hồi đồng ý mà bộ đệm vẫn trả thì
+      vi phạm đồng ý.
+- id: pitfalls
+  kind: pitfall
+  title: Lỗi hay gặp, theo từng giai đoạn của hệ thống
+  checks:
+  - alg.bnx_l34_nguoi_duyet('CN', 90, 90)[1] == 'truong phong'
+  - alg.bnx_l34_doc(1000000, False) == 10 ** 6
+  steps:
+  - show: '<div class="box warn"><b>Lỗi 1 (người mới).</b> Xét quyền <b class="red">từng
+      hồ sơ riêng lẻ</b>: ba hồ sơ 90 triệu đều lọt qua chuyên viên. Phải tính trên
+      <b>tổng dư nợ</b>: hồ sơ thứ hai đã cần trưởng phòng.</div>'
+    clear: true
+    say: Lỗi thứ nhất, của người mới, là xét quyền từng hồ sơ riêng lẻ, nên ba hồ
+      sơ chín mươi triệu đều lọt qua chuyên viên, phải tính trên tổng dư nợ.
+  - show: '<div class="box warn"><b>Lỗi 2 (người đã đi làm, lúc mới dựng).</b> Hai
+      người cùng thấy <code>CHO_DUYET</code> rồi cùng ghi <b class="red">không điều
+      kiện</b>: cả hai &laquo;thành công&raquo;, nhật ký ghi hai lần duyệt. Ghi kèm
+      điều kiện trạng thái cũ: chỉ một người thành công (bài <b>mô phỏng</b> bằng
+      hai lần ghi nối tiếp). <code>sql += …</code> nối thêm vế điều kiện vào cuối
+      câu SQL.</div><p><b>HaiNguoiCungDuyet.py (trích): thêm điều kiện nối vào câu
+      SQL</b></p><div class="code"><div>        sql = "UPDATE ho_so SET tt = ''DA_DUYET''
+      WHERE id = 1"</div><div>        if co_dieu_kien:</div><div>            sql +=
+      " AND tt = ''CHO_DUYET''"</div><div>        ok = db.execute(sql).rowcount</div><div>        kq.append(ai
+      + (" thanh cong" if ok else " bi tu choi"))</div></div>'
+    focus:
+    - 1
+    - 2
+    clear: true
+    say: 'Lỗi thứ hai, của người đã đi làm, lộ ra lúc mới dựng: hai người cùng thấy
+      hồ sơ chờ duyệt rồi cùng ghi không điều kiện, nên cả hai thành công. Bản có
+      điều kiện nối thêm vế đòi trạng thái cũ vẫn là chờ duyệt, và số dòng bị đổi
+      cho biết ai thắng.'
+  - show: '<p><b>Kết quả chạy thật — MÔ PHỎNG: hai lần ghi nối tiếp trên một kết nối,
+      không phải hai người thật</b></p><div class="code"><div>khong dieu kien: an
+      thanh cong, binh thanh cong</div><div>co dieu kien: an thanh cong, binh bi tu
+      choi</div></div><p><code>rowcount</code> là số dòng câu lệnh vừa đổi: 1 là thành
+      công, 0 là điều kiện không còn đúng nên người đến sau bị từ chối.</p>'
+    focus:
+    - 1
+    - 2
+    clear: true
+    say: Đây là mô phỏng hai lần ghi nối tiếp. Bản không điều kiện cho cả hai thành
+      công, còn bản có điều kiện chỉ người đầu thành công, vì lúc người sau ghi, trạng
+      thái đã đổi.
+  - show: '<div class="box warn"><b>Lỗi 3 (người đã đi làm, lúc tải tăng).</b> Tra
+      lịch sử theo khách mà <b class="red">không có chỉ mục</b>: nhỏ thì chạy tốt,
+      rồi 10⁶ dòng và 1 000 hồ sơ mỗi ngày thành 10⁹ dòng đọc. Chạy thật: không chỉ
+      mục đọc 1 000 000 dòng, có chỉ mục đọc 5.</div>'
+    clear: true
+    say: 'Lỗi thứ ba, lộ ra khi tải tăng: tra lịch sử theo khách mà không có chỉ mục.
+      Nhỏ thì chạy tốt, rồi một triệu dòng với một nghìn hồ sơ mỗi ngày thành một
+      tỉ dòng đọc.'
+  - show: '<div class="box warn"><b>Lỗi 4 (người đã đi làm, lúc vận hành lâu dài).</b>
+      Nhật ký <b class="red">chỉ ghi lần thành công</b>, hoặc ghi cả nội dung lịch
+      sử vào nhật ký. Cần ghi cả lần bị từ chối (ai thử tra khách không đồng ý?) và
+      <b>không</b> ghi nội dung nhạy cảm, chỉ ghi ai, khách nào, mục đích, ngày, kết
+      quả.</div><p><b>Kết quả chạy thật (trích)</b></p><div class="code"><div>nhat
+      ky cho phep: 1</div><div>nhat ky tu choi: 4</div></div>'
+    focus:
+    - 1
+    - 2
+    clear: true
+    say: 'Lỗi thứ tư, lộ ra khi vận hành lâu dài: nhật ký chỉ ghi lần thành công,
+      hoặc ghi cả nội dung lịch sử. Cần ghi cả lần bị từ chối, và chỉ ghi ai, khách
+      nào, mục đích, ngày và kết quả.'
+- id: quiz
+  kind: quiz
+  title: Đến lượt bạn
+  checks:
+  - alg.bnx_l34_nguoi_duyet('CN', 350, 200) == (550, 'hoi dong')
+  - alg.bnx_l34_con_han('2026-03-31', '2026-03-31') and not alg.bnx_l34_con_han('2026-03-31',
+    '2026-04-01')
+  - alg.bnx_l34_nguoi_duyet('CN', 0, 200)[1] == 'truong phong'
+  steps:
+  - show: '<table class=''t''><tr><th>câu</th><th>đề</th></tr><tr><td>1</td><td>Bậc
+      cá nhân: ≤ 100 chuyên viên, ≤ 500 trưởng phòng, trên 500 hội đồng (triệu đồng).
+      Khách đang nợ 350, xin thêm 200. Ai duyệt? Nếu chỉ xét 200 thì ai, và sai ở
+      đâu?</td></tr><tr><td>2</td><td>Đồng ý của khách hết hạn ngày 2026-03-31, chưa
+      thu hồi, đúng mục đích. Tra cứu ngày 2026-03-31 và ngày 2026-04-01: kết quả
+      mỗi ngày? Điều kiện so sánh là <code>het_han >= ngay</code>.</td></tr><tr><td>3</td><td>Bảng
+      lịch sử 2 triệu dòng, mỗi lần duyệt tra theo khách. Chọn: thêm chỉ mục theo
+      mã khách, hay sao chép sang <b>kho đọc</b> (bản sao chỉ để đọc, đặt ở máy khác),
+      hay lưu kết quả tra trong bộ đệm một ngày? Vì sao?</td></tr></table>'
+    introduces:
+    - bnx_kho_doc
+    pause: 40
+    say: 'Bây giờ tới phần bạn tự làm bài. Câu một: khách nợ ba trăm năm mươi, xin
+      thêm hai trăm, ai duyệt, và nếu chỉ xét hai trăm thì sai ở đâu? Câu hai: đồng
+      ý hết hạn ngày ba mươi mốt tháng ba, tra cứu ngày đó và ngày mồng một tháng
+      tư cho kết quả gì? Câu ba: bảng lịch sử hai triệu dòng, chọn chỉ mục, kho đọc
+      hay bộ đệm, và vì sao? Hãy dừng lại làm ra giấy.'
+  - show: '<p>Câu 1: tổng = dư nợ + khoản mới.</p>
+
+      $$350 + 200 = \hlg{550} > 500 \Rightarrow \text{hội đồng}; \quad \text{chỉ xét
+      } 200 \to \text{trưởng phòng: } \hlg{\text{sai bậc}}$$
+
+      '
+    focus:
+    - - 1
+    - 2
+    say: Đáp án câu một, tổng là ba trăm năm mươi cộng hai trăm, bằng năm trăm năm
+      mươi, lớn hơn năm trăm, nên cần hội đồng. Nếu chỉ xét hai trăm thì ra trưởng
+      phòng, sai bậc vì bỏ qua dư nợ cũ.
+    clear: true
+  - show: '<p>Câu 2: so sánh chuỗi ngày theo thứ tự chữ cái; &laquo;lớn hơn hoặc bằng&raquo;
+      nên ngày hết hạn vẫn còn hiệu lực.</p>
+
+      $$\text{03-31}: 2026\text{-}03\text{-}31 \ge 2026\text{-}03\text{-}31 \Rightarrow
+      \hlg{\text{cho phép}}; \quad \text{04-01}: 2026\text{-}03\text{-}31 < 2026\text{-}04\text{-}01
+      \Rightarrow \hlg{\text{từ chối}}$$
+
+      '
+    focus:
+    - - 1
+    - 2
+    say: Đáp án câu hai, ngày ba mươi mốt tháng ba bằng ngày hết hạn, điều kiện lớn
+      hơn hoặc bằng đúng, nên cho phép. Ngày mồng một tháng tư lớn hơn ngày hết hạn
+      nên từ chối.
+  - show: '<table class=''t''><tr><th>lựa chọn</th><th>được</th><th>mất</th></tr><tr><td>chỉ
+      mục theo mã khách</td><td>mỗi lần đọc vài dòng; luôn đúng dữ liệu hiện tại và
+      đồng ý hiện tại</td><td>tốn chỗ, ghi chậm hơn một chút</td></tr><tr><td>sao
+      chép sang kho đọc</td><td>tách tải đọc khỏi bảng chính</td><td>nhân đôi dữ liệu
+      nhạy cảm; bản sao chậm nên có thể trả dữ liệu khi đồng ý đã thu hồi</td></tr><tr><td>bộ
+      đệm một ngày</td><td>nhanh nhất</td><td>khách thu hồi giữa ngày mà vẫn trả dữ
+      liệu: vi phạm đồng ý</td></tr></table>'
+    say: Đáp án câu ba, chỉ mục cho mỗi lần đọc vài dòng và luôn đúng đồng ý hiện
+      tại, đổi lại tốn chỗ. Kho đọc nhân đôi dữ liệu nhạy cảm, và bản sao chậm có
+      thể trả dữ liệu khi đồng ý đã thu hồi. Bộ đệm nhanh nhất nhưng thu hồi giữa
+      ngày mà vẫn trả là vi phạm, hợp lý là chọn chỉ mục.
+    clear: true
+- id: practice
+  kind: practice
+  title: 'Tự làm: bậc duyệt, máy trạng thái và tra cứu có đồng ý'
+  steps:
+  - show: '<p><b>Đề</b> (số minh hoạ, triệu đồng): bậc ≤ 50 chuyên viên, ≤ 200 trưởng
+      phòng, trên 200 hội đồng. Hồ sơ A: nợ 120, xin 100; hồ sơ B: nợ 0, xin 40. Cạnh
+      được phép: <code>KHOI_TAO→THAM_DINH</code>, <code>THAM_DINH→DUYET</code>, <code>THAM_DINH→TU_CHOI</code>.
+      Khách K9 đồng ý <code>tham dinh</code> tới <code>2026-06-30</code>. Viết <code>mau.py</code>
+      in 5 dòng:</p>
+
+      <ol><li>vai trò cần cho A và B, theo tổng dư nợ</li><li>chuyển <code>THAM_DINH
+      → KHOI_TAO</code> có được không</li><li>tra cứu K9 ngày <code>2026-05-31</code>
+      và <code>2026-07-01</code></li></ol>
+
+      <p class="note">Định dạng năm dòng in ra nằm trong <code>de.md</code>.</p>
+
+      '
+    focus:
+    - 1
+    - 1
+    - - 2
+      - 3
+    pause: 150
+    say: Bây giờ tới phần bạn tự làm trên máy, với số liệu mới. Tính vai trò cần của
+      hồ sơ A và B theo tổng dư nợ. Kiểm xem chuyển từ thẩm định về khởi tạo có được
+      không, rồi tra cứu khách K chín ở hai ngày, hãy dừng video và tự viết.
+  - show: '<p><b>Kết quả mong đợi</b></p><div class="code"><div>ho so A: tong 220
+      -&gt; hoi dong</div><div>ho so B: tong 40 -&gt; chuyen vien</div><div>THAM_DINH
+      -&gt; KHOI_TAO: tu choi</div><div>K9 tham dinh 2026-05-31: cho phep</div><div>K9
+      tham dinh 2026-07-01: tu choi (het han)</div></div><p class="note">Chấm bằng
+      Git Bash: <code>bash labs/cham.sh BNX L34 mau.py</code> — in <b>ĐÚNG</b> khi
+      trùng.</p>'
+    focus:
+    - - 1
+      - 2
+    - 3
+    clear: true
+    say: Đây là kết quả mong đợi, bạn chạy chương trình của mình rồi so từng dòng.
+      Nếu muốn chấm bằng máy, dùng lệnh ở dưới màn hình; lệnh in chữ ĐÚNG khi đầu
+      ra trùng, hoặc chỉ ra dòng nào khác.
+  - show: '<div class="box key"><b>Nếu kẹt:</b> tổng = dư nợ + khoản mới, rồi duyệt
+      từ bậc thấp lên cao tới khi tổng không vượt trần. Cạnh có trong tập hợp thì
+      cho phép. Đồng ý còn hạn khi <code>het_han</code> không nhỏ hơn ngày tra.
+
+      Lời giải đầy đủ ở <code>labs/BNX/L34/loi_giai.py</code> — chỉ mở sau khi bạn
+      đã thử.</div>
+
+      '
+    say: Nếu kẹt, tổng bằng dư nợ cộng khoản mới, rồi đi từ bậc thấp lên tới khi tổng
+      không vượt trần. Lời giải nằm trong thư mục thực hành, chỉ mở sau khi đã thử.
+    clear: true
+  lab: labs/BNX/L34
+- id: recap
+  kind: recap
+  title: Chuỗi logic & tư duy cần mang theo
+  checks:
+  - alg.bnx_l34_hop_le('KHOI_TAO', 'THAM_DINH')
+  steps:
+  - show: <div class='chain'><span class='n'>luật là một bảng cạnh</span><span class='a'>→</span><span
+      class='n'>mỗi chuyển ghi nhật ký</span><span class='a'>→</span><span class='n'>quyền
+      theo tổng dư nợ</span><span class='a'>→</span><span class='n'>đồng ý trước,
+      nhật ký luôn</span><span class='a'>→</span><span class='n'>chỉ mục giữ chi phí</span></div>
+    say: 'Tổng kết: luật là một bảng cạnh được phép, và mỗi lần chuyển ghi một dòng
+      nhật ký. Quyền duyệt tính theo tổng dư nợ, tra lịch sử kiểm đồng ý trước, và
+      chỉ mục giữ chi phí tra không đổi.'
+  - show: '<div class=''box key''><b>Tư duy:</b> hệ thống phê duyệt là <b>bằng chứng
+      có kiểm soát</b>: ai làm gì, lúc nào, theo luật nào, có đồng ý của ai. Mọi điều
+      đó phải <b>kiểm được sau này</b>, không chỉ chạy đúng hôm nay.</div>'
+    say: 'Điều cần mang theo, hệ thống phê duyệt là bằng chứng có kiểm soát: ai làm
+      gì, lúc nào, theo luật nào, có đồng ý của ai, và phải kiểm được sau này.'
+  - show: '<table class=''t''><tr><th>Nếu bị hỏi về dòng này trên CV</th><th>ý trả
+      lời</th></tr><tr><td>Thiết kế luồng phê duyệt tín dụng thế nào?</td><td>máy
+      trạng thái: bảng cạnh được phép, chuyển ngoài bảng bị chặn, mỗi chuyển ghi nhật
+      ký; ghi kèm điều kiện trạng thái cũ để hai người không cùng duyệt</td></tr><tr><td>Phân
+      quyền duyệt theo hạn mức?</td><td>bậc theo tổng dư nợ cũ + mới (chặn chia nhỏ
+      hồ sơ), người duyệt khác người tạo, doanh nghiệp gộp cả nhóm bên liên quan</td></tr><tr><td>Truy
+      vấn lịch sử tín dụng cần gì?</td><td>đồng ý đúng mục đích, còn hạn, chưa thu
+      hồi; trả phần cần thiết; nhật ký cả lần từ chối; chỉ mục theo mã khách</td></tr></table>'
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    clear: true
+    say: Về dòng phê duyệt tín dụng, đây là ba câu hay gặp. Luồng phê duyệt là máy
+      trạng thái có nhật ký và ghi kèm điều kiện trạng thái cũ. Phân quyền theo tổng
+      dư nợ để chặn chia nhỏ hồ sơ. Tra lịch sử cần đồng ý đúng mục đích.
+  - show: '<p>Tiếp theo: <b>vận hành và bản thiết kế</b>, rồi <b>phỏng vấn thiết kế
+      hệ thống</b>.</p>'
+    forward_ref: true
+    say: Ở bài ba mươi lăm ta học vận hành và bản thiết kế, rồi ở bài ba mươi sáu
+      ta tập phỏng vấn thiết kế hệ thống.

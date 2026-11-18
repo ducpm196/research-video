@@ -22,7 +22,41 @@ def round_half_up_int(num, den, nd=0):
     return s if nd == 0 else (s[:-nd] or "0") + "." + s[-nd:].rjust(nd, "0")
 
 
+def run_wp4(rec):
+    """Nâng AF2 (WP4): chạy lại chương trình quy mô, kiểm số đếm bằng đường khác (phép nhân Little, đếm cửa sổ trượt), chấm lab bằng cham.sh."""
+    import math
+    import os
+    import re
+    import lib2
+    lib2.verify_programs(rec, "L15")
+    rec("L15", all(len(l) <= 70 for p in lib2.PROGRAMS if p.lesson == "L15" for l in p.code.split("\n")), "chương trình trên màn hình: dòng ≤ 70 ký tự")
+    out = next(p for p in lib2.PROGRAMS if p.key == "L15_CungLuc").out
+    rows = [(int(a), float(b), int(c)) for a, b, c in re.findall(r"^(\d+) ([\d.]+) (\d+)$", out, re.M)]
+
+    def dem_cua_so(tps, w_us=40_000):
+        """Đường khác: tại mỗi thời điểm đến, đếm số lệnh đã đến trong cửa sổ (t − w, t] bằng bisect trên danh sách thời điểm."""
+        import bisect
+        vao = [i * 1_000_000 // tps for i in range(tps // 5)]
+        return max(i + 1 - bisect.bisect_right(vao, t - w_us) for i, t in enumerate(vao))
+    rec("L15", [r[0] for r in rows] == [116, 11574, 1157407] and all(r[2] == dem_cua_so(r[0]) for r in rows),
+        "số lệnh chồng nhau đếm thật = đếm bằng cửa sổ trượt (bisect): 5, 463, 46 297")
+    rec("L15", all(abs(r[1] - float(alg.bnx_l15_inflight(r[0], 40))) < 0.006 for r in rows) and all(math.ceil(r[1]) == r[2] for r in rows),
+        "phép nhân Little (4,64; 462,96; 46 296,28) khớp alg và số đếm bằng làm tròn lên")
+    rec("L15", [round(alg.bnx_l15_tps(d, 10)) for d in (1_000_000, 100_000_000, 10_000_000_000)] == [r[0] for r in rows],
+        "cao điểm 116, 11 574, 1 157 407 = tải trung bình của 1e6, 1e8, 1e10 giao dịch/ngày × 10")
+    rec("L15", alg.bnx_l15_pool_tps(50, 40) == 1250 and 11574 - 1250 == 10324 and 1157407 - 1250 == 1156157 and 50 / 0.04 == 1250,
+        "bể 50 kết nối, 40 ms mỗi lệnh chịu 1 250 giao dịch/giây; hàng chờ dài thêm 10 324 và 1 156 157 lệnh mỗi giây")
+    r = subprocess.run([lib2._bash(), "labs/cham.sh", "BNX", "L15", "labs/BNX/L15/loi_giai.py"], cwd=ROOT, capture_output=True, text=True, encoding="utf-8", timeout=120)
+    rec("L15", r.returncode == 0 and "ĐÚNG" in r.stdout, f"lab loi_giai.py chấm bằng cham.sh: {r.stdout.strip()[:60]}")
+    exp = (ROOT / "labs" / "BNX" / "L15" / "mong_doi.txt").read_text(encoding="utf-8").strip().split("\n")
+    tb, cao = 5_000_000 / 86400, 6 * 5_000_000 / 86400
+    rec("L15", exp == [f"trung binh {round(tb, 1)} giao dich/giay", f"cao diem {round(cao)} giao dich/giay", f"con du {400 - (12 + 6 + 25 + 120 + 3)} ms",
+                       f"cung luc o Oracle {round(cao * 0.12, 1)}", f"be 30 ket noi: khong du - can it nhat {math.ceil(cao * 0.12)}"]
+        and alg.bnx_l15_left(400, [12, 6, 25, 120, 3]) == 234, "mong_doi.txt của lab: 57,9; 347; dư 234 ms; 41,7 cùng lúc; cần ít nhất 42 kết nối")
+
+
 def run(rec):
+    run_wp4(rec)
     # số giây trong ngày: đếm bằng vòng lặp
     sec = sum(1 for _h in range(24) for _m in range(60) for _s in range(60))
     rec("L15", sec == 86400 == 1 / alg.bnx_l15_tps(1), f"giây mỗi ngày đếm từng giây: {sec}")
@@ -41,16 +75,18 @@ def run(rec):
     rec("L15", 10 + 5 + 20 + 40 + 225 == 300 and 75 * 4 == 300, "cộng ngược = 300; 75 là 25% của 300")
     rec("L15", [(1400 * x * 2 + 300) // 600 for x in (10, 5, 20, 40, 225)] == [47, 23, 93, 187, 1050],
         "độ rộng các đoạn trong hình (1400 px cho 300 ms, làm tròn)")
-    # ⑤ định luật Little — mô phỏng: lệnh đến đều 116/giây, mỗi lệnh ở 40 ms; đếm số lệnh đang ở trong chặng, lấy trung bình theo thời gian
-    # đơn vị thời gian 1/(116·1000) giây để mọi mốc là số nguyên: lệnh k đến lúc k·1000, ở lại 40·116 đơn vị
-    # lấy trung bình trong cửa sổ ổn định [1 giây, 9 giây) để bỏ hiệu ứng lúc bắt đầu và lúc cắt
-    w0, w1 = 116 * 1000 * 1, 116 * 1000 * 9
-    stay, total = 40 * 116, 0
-    for k in range(116 * 10):
-        start = k * 1000
-        total += max(0, min(start + stay, w1) - max(start, w0))
-    avg = total / (w1 - w0)
-    rec("L15", abs(avg - 4.64) < 1e-9 and alg.bnx_l15_inflight(116, 40) * 100 == 464, f"⑤ mô phỏng: trung bình {avg} lệnh cùng lúc ở Oracle")
+    # ⑤ định luật Little — mô phỏng: lệnh đến đều với tải cao điểm CHƯA làm tròn 10·10^6/86 400 = 115,74/giây, mỗi lệnh ở 40 ms;
+    # đếm số lệnh đang ở trong chặng, lấy trung bình theo thời gian trong cửa sổ ổn định [1 giây, 9 giây) (bỏ hiệu ứng lúc bắt đầu và lúc cắt)
+    from fractions import Fraction as Fr
+    w0, w1, stay, total = Fr(1), Fr(9), Fr(40, 1000), Fr(0)
+    for k in range(1200):
+        start = Fr(k * 86400, 10 * 10**6)  # lệnh k đến lúc k / 115,74 giây
+        total += max(Fr(0), min(start + stay, w1) - max(start, w0))
+    avg = float(total / (w1 - w0))
+    little = alg.bnx_l15_inflight(alg.bnx_l15_tps(10**6, 10), 40)
+    rec("L15", abs(avg - 4.6296) < 0.01 and str(alg.bnx_l15_round(little, 2)) == "4.63" and round(float(little)) == 5,
+        f"⑤ mô phỏng: trung bình {avg:.4f} lệnh cùng lúc ở Oracle (tải chưa làm tròn); Little 115,74·0,040 ≈ 4,63")
+    rec("L15", alg.bnx_l15_inflight(116, 40) * 100 == 464, "quymo: tải đã làm tròn 116·0,040 = 4,64 (khác 4,63 chỉ do làm tròn)")
     rec("L15", alg.bnx_l15_inflight(10, 100) == 1 and alg.bnx_l15_tps(86400, 10) == 10 and alg.bnx_l15_left(100, [30, 50]) == 20,
         "làm thử của các bước: 10·0,1 = 1; 1·10 = 10; 100 − 80 = 20")
     # chạy thật đúng chuỗi mã trên màn hình

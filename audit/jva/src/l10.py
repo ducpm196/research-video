@@ -310,23 +310,26 @@ Bạn cũng học đọc <b>dấu vết ngăn xếp</b> để tìm đúng lệnh
         st(table(["đã học", "điều dùng lại hôm nay"],
                  [["① Lớp tài khoản", "trường <code>private</code> số dư, hàm tạo, phương thức rút giữ bất biến “số dư không âm”"],
                   ["② Lỗi khi chạy", "chia cho 0 hay vượt chỉ số mảng: máy ảo ném <b>ngoại lệ</b>, chương trình dừng"],
-                  ["③ Gọi lồng hàm", "hàm chính gọi hàm A, hàm A gọi hàm B; xong B mới quay về A"]]),
-           """Ta ôn ba điều. Thứ nhất, lớp tài khoản có trường số dư riêng, và phương thức rút giữ bất biến số dư không âm.
+                  ["③ Gọi lồng hàm", "hàm chính gọi hàm A, hàm A gọi hàm B; xong B mới quay về A"],
+                  ["④ <code>import</code>, <code>new</code>, <code>throws</code>", "lấy về một lớp có sẵn; làm ra một đối tượng mới; <code>throws Exception</code> ở hàm chính báo hàm này có thể gặp lỗi (ví dụ khi làm việc với tệp)"]]),
+           """Ta ôn bốn điều. Thứ nhất, lớp tài khoản có trường số dư riêng, và phương thức rút giữ bất biến số dư không âm.
            Thứ hai, khi chia cho không hay vượt chỉ số mảng, máy ảo ném ra ngoại lệ và chương trình dừng.
-           Thứ ba, hàm có thể gọi lồng nhau: hàm chính gọi hàm A, hàm A gọi hàm B, xong B mới quay về A."""),
+           Thứ ba, hàm có thể gọi lồng nhau: hàm chính gọi hàm A, hàm A gọi hàm B, xong B mới quay về A.
+           Thứ tư, dòng nhập lấy về một lớp có sẵn, và từ khoá tạo mới làm ra một đối tượng.
+           Chữ ném ở đầu hàm báo rằng hàm này có thể gặp lỗi, như khi làm việc với tệp."""),
     ])
     sc_sym = sc("sym", "symbol", "Giải mã ký hiệu: thử, bắt, cuối cùng, ném", [
         st(table(["viết", "nghĩa"],
                  [["<code>try { … }</code>", "<b>khối thử</b>: các lệnh có thể gặp lỗi"],
                   ["<code>catch (KhongDuTien e) { … }</code>", "<b>khối bắt</b>: chạy khi có ngoại lệ đúng loại; <code>e</code> là ngoại lệ đó"],
-                  ["<code>finally { … }</code>", "<b>khối cuối cùng</b>: chạy mỗi khi rời khối thử, có lỗi hay không (chỉ bỏ lỡ khi cả chương trình bị tắt ngang, như gọi <code>System.exit</code>)"],
+                  ["<code>finally { … }</code>", "<b>khối cuối cùng</b>: chạy mỗi khi rời khối thử, có lỗi hay không (chỉ bỏ lỡ khi cả chương trình bị tắt ngang, như <code>System.exit(0)</code>)"],
                   ["<code>throw new KhongDuTien(\"…\")</code>", "<b>ném</b>: tạo ngoại lệ và dừng phương thức ngay"],
                   ["<code>throws KhongDuTien</code>", "ghi trên phương thức: “có thể ném loại này”"],
                   ["<code>class KhongDuTien extends Exception</code>", "<b>kế thừa</b>: lớp mới là <b>một loại</b> <code>Exception</code> (lớp cha), nhận sẵn mọi thứ lớp cha có"],
                   ["<code>super(thongBao);</code>", "trong hàm tạo: gọi hàm tạo của lớp cha, đưa lời nhắn cho lớp cha giữ"],
                   ["<code>e.getMessage()</code>", "lấy lời nhắn lỗi đã gửi kèm"]]),
            """Bảng ký hiệu của bài. Khối thử chứa các lệnh có thể gặp lỗi. Khối bắt chạy khi có ngoại lệ đúng loại ghi trong ngoặc, và e chính là ngoại lệ đó.
-           Khối cuối cùng chạy mỗi khi rời khối thử, có lỗi hay không, chỉ trừ khi cả chương trình bị tắt ngang.
+           Khối cuối cùng chạy mỗi khi rời khối thử, có lỗi hay không, chỉ trừ khi cả chương trình bị tắt ngang, như bằng một lệnh thoát dừng ngay chương trình.
            Lệnh ném tạo một ngoại lệ và dừng phương thức ngay lập tức.
            Còn khai báo có thể ném thì ghi trên đầu phương thức, báo trước rằng nó có thể ném loại này.
            Dòng kế dùng từ khoá kế thừa: lớp mới là một loại của lớp ngoại lệ gốc, gọi là lớp cha, và nhận sẵn mọi thứ lớp cha có.
@@ -359,12 +362,19 @@ Bạn cũng học đọc <b>dấu vết ngăn xếp</b> để tìm đúng lệnh
            Với nhóm này, trình biên dịch bắt buộc người gọi phải bắt, hoặc khai báo có thể ném tiếp.
            Nhóm không kiểm tra, như ngoại lệ phép tính, thì không bắt buộc, và thường báo lỗi lập trình.
            Không đủ tiền là tình huống người gọi phải xử lý, nên ta xếp nó vào nhóm có kiểm tra.""", clear=True),
-        st(code_block(tai_nguyen, lines=(7, 13), title="Khối thử có tài nguyên: mở ở ngoặc tròn, tự đóng khi rời khối")
-           + "<span class='note'><code>\\n</code> là ký tự xuống dòng; <code>r.readLine()</code> đọc từng dòng. "
-             "Cần <code>import java.io.*;</code> ở đầu tệp.</span>" + out_block(tai_nguyen),
+        st(code_block(tai_nguyen, lines=(1, 3), title="Khối thử có tài nguyên: ba dòng nhập đầu tệp") + code_block(tai_nguyen, lines=(5, 15)),
            """Một dạng nữa là khối thử có tài nguyên, tức thứ chương trình mở ra để dùng và phải đóng lại khi xong, như một bộ đọc dữ liệu. Bộ đọc được mở trong ngoặc tròn sau từ khoá thử, và máy tự đóng nó khi rời khối, dù có lỗi hay không.
-           Dấu gạch chéo ngược kèm chữ n trong chuỗi là ký tự xuống dòng, nên dữ liệu có hai dòng, và mỗi lần đọc lấy ra một dòng.
-           Đọc dữ liệu có thể gặp ngoại lệ vào ra, thuộc nhóm có kiểm tra, nên phải bắt nó hoặc khai báo ném tiếp, và ở đây ta bắt."""),
+           Dấu gạch chéo ngược kèm chữ n trong chuỗi là ký tự xuống dòng, nên dữ liệu có hai dòng, và mỗi lần đọc lấy ra một dòng.""",
+           clear=True),
+        st(table(["viết", "nghĩa"],
+                 [["<code>BufferedReader</code>", "bộ đọc chữ theo từng dòng; <code>r.readLine()</code> lấy ra một dòng"],
+                  ["<code>StringReader</code>", "nguồn chữ lấy từ một chuỗi, thay cho tệp để ví dụ tự chạy được"],
+                  ["<code>IOException</code>", "ngoại lệ lỗi vào–ra; thuộc nhóm <b>có kiểm tra</b>, nên phải bắt hoặc khai <code>throws</code>"]])
+           + out_block(tai_nguyen),
+           """Ba dòng nhập đầu tệp lấy về ba lớp có sẵn: bộ đọc chữ theo từng dòng, nguồn chữ lấy từ một chuỗi thay cho tệp để ví dụ tự chạy được, và ngoại lệ vào ra.
+           Đọc dữ liệu có thể gặp ngoại lệ vào ra, thuộc nhóm có kiểm tra, nên phải bắt nó hoặc khai báo ném tiếp, và ở đây ta bắt.
+           Chạy thật, hai lần đọc lấy ra đúng hai dòng của dữ liệu.""",
+           clear=True),
     ])
     sc_form = sc("formula", "formula", "Suy ra từng bước: rút quá số dư thì ném ngoại lệ tự định nghĩa", [
         st(code_block(rut, lines=(1, 5), title="Bước 1. Định nghĩa loại ngoại lệ “không đủ tiền”"),
@@ -385,7 +395,9 @@ Bạn cũng học đọc <b>dấu vết ngăn xếp</b> để tìm đúng lệnh
            Dòng không chạy đúng là không xuất hiện."""),
     ], checks=["100000 - 30000 == 70000", "500000 > 70000"])
     sc_ex = sc("example", "example", "Ví dụ: thứ tự in của thử, bắt, cuối cùng — từng bước", [
-        st(code_block(thu_tu, lines=(6, 16), title="Tệp ThuTu.java, phần thân hàm chính"),
+        st(code_block(thu_tu, lines=(2, 4), title="Tệp ThuTu.java, hàm chia"),
+           """Trước hết là hàm chia, nhận hai số nguyên và trả về thương của chúng. Chia cho không thì máy ném ngoại lệ phép tính, như bài đầu đã thấy."""),
+        st(code_block(thu_tu, lines=(5, 16), title="Tệp ThuTu.java, hàm chính"),
            """Ví dụ này có bảy lệnh in, đánh số từ một tới bảy. Ta theo máy ảo qua năm bước, rồi đoán những số nào được in."""),
         st(code_block(thu_tu, lines=(6, 8)) + "$$① \\; \\text{in } 1 \\qquad ② \\; 10 / 2 = \\hl{5} \\to \\text{in “2: 5”}$$",
            """Bước một, in số một, vì lệnh nằm trước khối thử. Bước hai, mười chia hai bằng năm, nên in hai, năm."""),
@@ -414,12 +426,15 @@ Bạn cũng học đọc <b>dấu vết ngăn xếp</b> để tìm đúng lệnh
                box(1300, 140, 180, 110, ["in kết quả"], C_BLUE, 24, True)),
            """Luồng là một dãy việc chạy cùng lúc với các dãy việc khác trong cùng một chương trình. Hàm chính khởi động hai luồng, mỗi luồng cộng một nửa dãy số, và hai luồng chạy song song.
            Sau đó hàm chính đợi cả hai làm xong, rồi mới in kết quả."""),
-        st(code_block(hai_luong, lines=(3, 14)) + out_block(hai_luong),
+        st(code_block(hai_luong, lines=(1, 9)),
            """Mỗi luồng nhận việc cần làm, viết bằng hàm nhỏ mũi tên như ở bài danh sách. Luồng một cộng từ một tới một nghìn vào ô không, luồng hai cộng từ một nghìn không trăm linh một tới hai nghìn vào ô một.
-           Hai luồng ghi vào hai ô khác nhau, nên không đụng nhau. Lệnh khởi động cho luồng chạy ngay, và hàm chính không đợi.
-           Lệnh đợi bắt hàm chính chờ luồng đó xong, và vì việc chờ có thể bị ngắt nên hàm chính phải khai báo lỗi, như khi làm việc với tệp.
+           Hai luồng ghi vào hai ô khác nhau, nên không đụng nhau.
+           Dòng khai ở hàm chính báo rằng việc chờ luồng có thể bị ngắt, nên hàm chính phải khai báo có thể gặp lỗi, như khi làm việc với tệp.""",
+           clear=True, focus=[["1.4", "1.7"], ["1.5", "1.8"], ["1.5", "1.8"], "1.2"]),
+        st(code_block(hai_luong, lines=(10, 16)) + out_block(hai_luong),
+           """Lệnh khởi động cho luồng chạy ngay, và hàm chính không đợi. Lệnh đợi bắt hàm chính chờ luồng đó xong.
            Kết quả là năm trăm nghìn năm trăm, một triệu năm trăm nghìn năm trăm, và tổng hai triệu không trăm linh một nghìn, đúng bằng tổng từ một tới hai nghìn.""",
-           clear=True, focus=[["1.2", "1.5"], ["1.3", "1.6"], "1.1", ["1.8", "1.9"], ["1.10", "1.11"], 3][:5] + [3]),
+           clear=True, focus=[["1.1", "1.2"], ["1.3", "1.4"], ["1.5", "3"]]),
         st("""<div class="box key"><b>Điều cần nhớ.</b> Hai luồng chạy cùng lúc nên <b>thứ tự xen kẽ giữa chúng không đoán trước được</b>, mỗi lần chạy có thể khác.
 Ở đây an toàn vì mỗi luồng ghi vào ô <b>riêng</b>, và hàm chính chỉ đọc sau khi đã đợi. Hai luồng cùng sửa <b>một</b> biến thì kết quả có thể sai: đó là chủ đề của khoá sau.</div>""",
            """Điều cần nhớ là hai luồng chạy cùng lúc, nên thứ tự xen kẽ giữa chúng không đoán trước được, mỗi lần chạy có thể khác. Ở đây an toàn vì mỗi luồng ghi vào ô riêng, và hàm chính chỉ đọc sau khi đã đợi.
@@ -440,7 +455,10 @@ Bạn cũng học đọc <b>dấu vết ngăn xếp</b> để tìm đúng lệnh
            Dòng cuối là hàm chính, nơi mọi thứ bắt đầu. Ba dòng ứng với ba lần gọi lồng, nên khớp với mã.""", clear=True),
     ], checks=["len(['main', 'chiaPhi', 'chia']) == 3"])
     qa = ln(quy_mo, "int[] lo")
+    qr = ln(quy_mo, "static void rut")
     sc_scale = sc("quymo", "concept", "Khi số lệnh tăng, một lỗi bị nuốt thành cả nghìn khách bị báo sai", [
+        st(code_block(quy_mo, lines=(qr, qr + 4), title="Hàm rút của ví dụ: chỉ kiểm, ném khi tiền vượt số dư"),
+           """Trước hết là hàm rút của ví dụ này. Nó chỉ kiểm: nếu số tiền lớn hơn số dư thì ném ngoại lệ không đủ tiền, còn không thì không làm gì."""),
         st(code_block(quy_mo, lines=(qa, qa + 14)),
            """Giả sử cứ một nghìn lệnh rút thì có một lệnh rút quá số dư, số minh hoạ, và khối bắt rỗng nuốt lỗi như ở phần lỗi thường gặp. Ta đếm số lệnh lỗi bị nuốt khi số lệnh mỗi ngày lớn dần.""",
            clear=True),
@@ -466,8 +484,10 @@ báo người dùng, <b>ghi nhật ký</b> kèm mã lỗi, và <b>đếm</b> đ�
            """Lỗi thứ hai, của người đã đi làm, là khối bắt rỗng, định để sau tính.
            Lỗi bị nuốt mất: biên lai ghi đã rút năm trăm nghìn, nhưng số dư vẫn là một trăm nghìn. Khách được báo thành công dù tiền không hề rút.""", clear=True),
         st('<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Bắt <code>Exception</code> quá rộng.</div>'
+           + code_block(rong, lines=(ln(rong, "static long phiMoiLan"), ln(rong, "static long phiMoiLan") + 2))
            + code_block(rong, lines=(ln(rong, "TaiKhoan tk"), ln(rong, "vui long"))) + out_block(rong),
-           """Lỗi thứ ba là bắt loại ngoại lệ gốc, quá rộng. Ở đây lỗi thật là chia cho không, một lỗi lập trình.
+           """Lỗi thứ ba là bắt loại ngoại lệ gốc, quá rộng. Hàm tính phí mỗi lần bằng phí chia cho số lần, mà số lần ở đây là không.
+           Nên lỗi thật là chia cho không, một lỗi lập trình.
            Nhưng khối bắt rộng nuốt luôn nó và báo khách không đủ tiền, dù tài khoản còn một trăm nghìn.""", clear=True),
         st("""<div class="box key">Cách sửa lỗi 2 và 3: chỉ bắt <b>đúng loại</b> mình xử lý được (<code>KhongDuTien</code>), và trong khối bắt
 <b>làm việc thật</b>: báo người dùng, ghi nhật ký, không in biên lai. Lỗi lập trình cứ để lộ ra, kèm dấu vết, để sửa tận gốc.</div>""",
@@ -509,4 +529,5 @@ Chỉ bắt loại mình xử lý được; không để khối bắt rỗng. G�
                    "Dự đoán số khách bị báo sai mỗi ngày khi khối bắt rỗng nuốt lỗi ở một nghìn, một trăm nghìn, một triệu lệnh",
                    "Viết loại ngoại lệ vượt hạn mức, hàm rút ném khi vượt, rồi bắt và in tổng trong khối cuối cùng"],
                   [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_luong, sc_chk, sc_scale, sc_pit, sc_quiz, sc_lab, sc_rec],
+                  assumes=["jva_import", "jva_new", "jva_throws"],
                   covers=[(1, "example"), (2, "formula"), (3, "intuition"), (4, "check"), (5, "luong"), (6, "quymo"), (7, "practice")])

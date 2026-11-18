@@ -28,7 +28,35 @@ def bucket_int(rate, cap, n, ticks_per_sec, simultaneous=False):
     return got, idx
 
 
+def run_wp4(rec):
+    """Nâng AF2 (WP4): chạy lại mọi chương trình trên màn hình, tính lại quy mô nhiều bên bằng SỐ NGUYÊN (đường khác), chấm lab bằng cham.sh."""
+    import re
+    import lib2
+    lib2.verify_programs(rec, "L14")
+    rec("L14", all(len(l) <= 70 for p in lib2.PROGRAMS if p.lesson == "L14" for l in p.code.split("\n")), "chương trình trên màn hình: dòng ≤ 70 ký tự")
+    out = next(p for p in lib2.PROGRAMS if p.key == "L14_Quymo").out
+    rows = {int(a): (int(b), int(c), int(d)) for a, b, c, d in re.findall(r"^(\d+) (\d+) (\d+) (\d+)$", out, re.M)}
+    g_dong, _ = bucket_int(5, 10, 30, 30, simultaneous=True)
+    g_rai, _ = bucket_int(5, 10, 30, 30)
+    rec("L14", sorted(rows) == [1, 100, 10_000] and all(rows[n] == (n * g_dong, n * g_rai, 30 * n - n * g_dong) for n in rows)
+        and (g_dong, g_rai) == (10, 14), "Quymo (đo thật, phân số) = n × kết quả của mô phỏng SỐ NGUYÊN (10 và 14 mỗi bên) ở 1, 100, 10 000 bên")
+    rec("L14", [alg.bnx_l14_drain_s(rows[n][0], 2000) for n in (1, 100, 10_000)] == [10 / 2000, 100_000 / 2000 / 100, 50.0]
+        and [alg.bnx_l14_sustained(n, 5) for n in (1, 100, 10_000)] == [5, 500, 50_000],
+        "thời gian xử lý hết (5 ms, 0,5 giây, 50 giây ở 2 000 yêu cầu/giây) và tải duy trì 5, 500, 50 000 mỗi giây")
+    # lab: số nguyên (nhịp 1/10 giây, rate 4, cap 6) và cham.sh
+    a_, _ = bucket_int(4, 6, 20, 10, simultaneous=True)
+    b_, _ = bucket_int(4, 6, 20, 10)
+    rec("L14", (a_, b_) == (6, 13) == (alg.bnx_l14_bucket(4, 6, [0] * 20), alg.bnx_l14_bucket(4, 6, alg.bnx_l14_spread(20, 2)))
+        and alg.bnx_l14_bound(4, 6, Fraction(19, 10)) == 13, "lab: số nguyên cho 6 (cùng lúc) và 13 (rải đều) = phân số; cận trên 13")
+    r = subprocess.run([lib2._bash(), "labs/cham.sh", "BNX", "L14", "labs/BNX/L14/loi_giai.py"], cwd=ROOT, capture_output=True, text=True, encoding="utf-8", timeout=120)
+    rec("L14", r.returncode == 0 and "ĐÚNG" in r.stdout, f"lab loi_giai.py chấm bằng cham.sh: {r.stdout.strip()[:60]}")
+    exp = (ROOT / "labs" / "BNX" / "L14" / "mong_doi.txt").read_text(encoding="utf-8").strip().split("\n")
+    rec("L14", exp == ["dong 20 yeu cau: nhan 6 tu choi 14", "rai deu: nhan 13 can tren 13", "50 ben dong: 300 qua cong, 700 tu choi",
+                       "hang cho 2.5 giay neu hau phuong chiu 120 yeu cau/giay"] and 300 / 120 == 2.5, "mong_doi.txt của lab: 6/14, 13/13, 300/700, 2,5 giây")
+
+
 def run(rec):
+    run_wp4(rec)
     # 1) 30 yêu cầu cùng lúc
     g0, _ = bucket_int(5, 10, 30, 30, simultaneous=True)
     rec("L14", g0 == 10 == alg.bnx_l14_bucket(5, 10, [0] * 30), f"cùng lúc: số nguyên {g0}, checklib {alg.bnx_l14_bucket(5, 10, [0] * 30)} → nhận 10")

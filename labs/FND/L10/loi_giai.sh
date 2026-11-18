@@ -9,8 +9,7 @@ ngay,loai,so_tien
 12,di_lai,45000
 15,luong,3000000
 EOF
-# may kiem chua cai sqlite3: dung ban thay the cua kho (hoc vien da cai sqlite3 thi bo qua hai dong nay)
-command -v sqlite3 > /dev/null 2>&1 || sqlite3() { cat > q.sql; python "$(dirname "$0")/../../sqlrun.py" q.sql; }
+command -v sqlite3 > /dev/null || { echo "thieu sqlite3, cai theo bai L00"; exit 1; }
 {
   echo "CREATE TABLE gd (ngay TEXT, loai TEXT, so_tien INTEGER);"
   tail -n +2 gd.csv | sed "s/\(.*\),\(.*\),\(.*\)/INSERT INTO gd VALUES ('\1', '\2', \3);/"

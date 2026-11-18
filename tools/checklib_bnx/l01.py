@@ -90,3 +90,8 @@ def bnx_oas_old_valid_after(new_required, reqs=None):
 def bnx_oas_match(s, pattern="^[0-9]{10,19}$"):
     """Chuỗi có khớp mẫu số tài khoản của lược đồ không (re.search, như JSON Schema: mẫu không tự neo, nên ^…$ là cần)."""
     return isinstance(s, str) and _re.search(_ecma(pattern), s) is not None
+
+
+def bnx_l01_blocked(n):
+    """Số yêu cầu sai trong lô n (cứ 50 yêu cầu có 1 số tiền 0; cứ 80 yêu cầu có 1 thiếu tài khoản nhận) — đếm từng yêu cầu, bị chặn ở cửa kiểm lược đồ."""
+    return sum(1 for i in range(1, n + 1) if i % 50 == 0 or i % 80 == 0)

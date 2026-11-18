@@ -17,4 +17,6 @@ Dao han la: MONDAY
 
 (`Dao han la` là `getDayOfWeek()` của ngày đáo hạn.) Tự tính tay trước: số ngày từ 15 tháng 1 tới 15 tháng 4 là 31 + 28 + 31 = 90, cộng 5 ngày nữa.
 
+Dòng `import` cần dùng: `java.math.BigDecimal`, `java.math.RoundingMode`, `java.time.LocalDate`, `java.time.temporal.ChronoUnit`.
+
 Chạy: `javac LaiTheoNgay.java && java LaiTheoNgay`. Chấm: `bash labs/cham.sh JV2 L08 LaiTheoNgay.java`.

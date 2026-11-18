@@ -88,3 +88,13 @@ def bnx_exp_ok(exp, now, leeway=0):
 def bnx_risk_window(ttl_s, revoke_at_s):
     """Mã bị lộ ở giây revoke_at_s sau khi cấp, không có danh sách thu hồi: kẻ gian còn dùng được tới hết hạn."""
     return max(0, ttl_s - revoke_at_s)
+
+
+def bnx_l03_exposed(han, lo_o, den=4000):
+    """Số giây (từ lo_o tới den, mỗi giây một lần thử) mà mã hạn `han` giây cấp lúc 0 còn được nhận: chỉ nhận khi t < han."""
+    return sum(1 for t in range(lo_o, den + 1) if t < han)
+
+
+def bnx_l03_refresh_per_hour(nguoi, han):
+    """Số mã mới mỗi giờ nếu mỗi người xin mã mới đúng một lần khi mã hết hạn (số minh hoạ)."""
+    return nguoi * (3600 // han)

@@ -134,7 +134,64 @@ print("###JSON" + _json.dumps(R))
 '''
 
 
+def extra(rec):
+    """AF2 (nhánh B): quy mô đo thật ở 1 010, 10 100, 101 000 điểm; lab chạy lại qua labs/cham.sh; mọi chương trình prog() chạy lại nguyên văn."""
+    import lib2
+    import re
+    import shutil
+    C = "L23"
+    labdir = ROOT / "labs" / "BNX" / "L23"
+    lib2.verify_programs(rec, C)
+    out = next(p for p in lib2.PROGRAMS if p.key == "L23_QuyMo").out
+    shown = {int(a): (int(b), int(c), int(d)) for a, b, c, d in re.findall(r"^(\d+) diem: (\d+) bi gan -1, (\d+) la that, (\d+) nut cua rung$", out, re.M)}
+    rec(C, sorted(shown) == [1010, 10100, 101000], "quy mô: đầu ra thật có đủ ba cỡ 1 010, 10 100, 101 000")
+    rec(C, [shown[n][0] for n in sorted(shown)] == [11, 101, 1005] and [shown[n][1] for n in sorted(shown)] == [10, 100, 1000],
+        "quy mô: nhãn -1 = 11, 101, 1 005; lạ thật bị bắt đủ 10, 100, 1 000 (đúng bảng trên màn hình)")
+    nodes = [shown[n][2] for n in sorted(shown)]
+    rec(C, nodes == [11384, 11802, 11436] and max(nodes) / min(nodes) < 1.05, f"quy mô: tổng số nút của rừng {nodes}: lệch dưới 5% dù dữ liệu tăng 100 lần (mỗi cây tối đa 256 điểm)")
+    rec(C, all(alg.bnx_l23_expected_flags(n, 0.01) in (shown[n][0], shown[n][0] + 5, shown[n][0] + 1) or abs(alg.bnx_l23_expected_flags(n, 0.01) - shown[n][0]) <= 5 for n in shown)
+        and [alg.bnx_l23_reviewers(shown[n][0], 40) for n in sorted(shown)] == [1, 3, 26],
+        "quy mô: quy tắc đếm gần đúng số nhãn -1 (lệch ≤ 5 vì điểm trùng điểm); người xét cần 1, 3, 26 (40 ca mỗi người)")
+    if PY.exists():
+        # đường khác: đếm số điểm dưới phân vị 1% bằng np.percentile trên score_samples (không dùng predict), ở ba cỡ
+        script = "\n".join([
+            "import numpy as np",
+            "from sklearn.ensemble import IsolationForest",
+            "for n_la in (10, 100, 1000):",
+            "    rng = np.random.default_rng(42)",
+            "    X = np.concatenate([rng.normal(500, 50, n_la * 100), rng.normal(50_000, 2_000, n_la)]).reshape(-1, 1)",
+            "    m = IsolationForest(n_estimators=100, contamination=0.01, random_state=42).fit(X)",
+            "    s = m.score_samples(X)",
+            "    print(len(X), int((s < np.percentile(s, 1.0)).sum()), int((s[n_la * 100:] < np.percentile(s, 1.0)).sum()))",
+            ""])
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "chay.py").write_text(script, encoding="utf-8")
+            r = subprocess.run([str(PY), "-I", "-X", "utf8", "-B", "chay.py"], cwd=d, capture_output=True, text=True, encoding="utf-8", timeout=420)
+        got = [tuple(map(int, l.split())) for l in r.stdout.split("\n") if l.strip()]
+        rec(C, r.returncode == 0 and got == [(n, shown[n][0], shown[n][1]) for n in sorted(shown)],
+            f"quy mô, đường khác (np.percentile trên score_samples, không dùng predict): {got}")
+    else:
+        rec(C, None, "NOT_VERIFIED: thiếu venv để kiểm quy mô bằng đường khác")
+    # lab: tính lại bằng toán thuần, rồi chạy cham.sh
+    n_ = 128
+    c_ = 2 * (math.log(n_ - 1) + 0.5772156649) - 2 * (n_ - 1) / n_
+    sa, sb = -(2 ** (-2 / c_)), -(2 ** (-9 / c_))
+    exp = ["c(128) = %s" % round(c_, 4), "A diem %s quyet dinh %s nhan %d" % (round(sa, 4), round(sa + 0.6, 4), -1 if sa + 0.6 < 0 else 1),
+           "B diem %s quyet dinh %s nhan %d" % (round(sb, 4), round(sb + 0.6, 4), -1 if sb + 0.6 < 0 else 1),
+           "bi gan -1: %d | gan oan: %d" % (sum(1 for i in range(3000) if i < 0.03 * 2999), sum(1 for i in range(3000) if i < 0.03 * 2999) - 25)]
+    got = (labdir / "mong_doi.txt").read_text(encoding="utf-8").strip().splitlines()
+    rec(C, got == exp and got == next(p for p in lib2.PROGRAMS if p.key == "L23_LabL23").out.splitlines(),
+        f"lab: bốn dòng mong đợi = tính lại bằng toán thuần = đầu ra lời giải ({got[0]}; 90 điểm bị gắn; 65 gắn oan)")
+    bash = shutil.which("bash")
+    if bash:
+        r = subprocess.run([bash, str(ROOT / "labs" / "cham.sh"), "BNX", "L23", str(labdir / "loi_giai.py")], capture_output=True, text=True, encoding="utf-8", timeout=120, cwd=str(ROOT))
+        rec(C, r.stdout.strip() == "ĐÚNG", f"labs/cham.sh BNX L23 loi_giai.py: {r.stdout.strip()[:60]}")
+    else:
+        rec(C, None, "thiếu bash: không chạy cham.sh")
+
+
 def run(rec):
+    extra(rec)
     C = "L23"
     # 0. kích thước khối mã trên màn hình
     blocks = [t for _, t, _ in CHAIN] + [L.ONNX_ERR_PY]
@@ -229,3 +286,25 @@ def run(rec):
         f"to_onnx mặc định lỗi: {(R['err'] or 'KHÔNG LỖI')[:130]}…")
     rec(C, L.ONNX_ERR_OUT.startswith("RuntimeError: The model is using version 4 of domain 'ai.onnx.ml'") and L.ONNX_ERR_OUT.rstrip("…") in (R["err"] or ""),
         "dòng lỗi hiện trên màn hình là phần đầu nguyên văn của thông báo thật")
+    # 3. quy tắc đếm đúng mọi biên (bài sửa 2026-11-15): số điểm dưới phân vị p = làm tròn LÊN p × (n − 1) khi các điểm khác nhau.
+    #    Đường khác: đếm thật (s < np.percentile(s, 100 p)) trên dữ liệu ngẫu nhiên không trùng, kể cả khi p × (n − 1) là số nguyên (n = 101, p = 0,01 → 1, không phải 2).
+    snippet = (
+        "import numpy as np, json\n"
+        "rng = np.random.default_rng(0)\n"
+        "out = []\n"
+        "for n, p in ((101, 0.01), (1001, 0.01), (201, 0.005), (51, 0.02), (401, 0.05), (101, 0.5), (1010, 0.01), (3000, 0.03), (1010, 0.05), (777, 0.013)):\n"
+        "    s = rng.normal(size=n)\n"
+        "    out.append([n, p, int((s < np.percentile(s, 100 * p)).sum())])\n"
+        "print(json.dumps(out))\n")
+    with tempfile.TemporaryDirectory() as d2:
+        (Path(d2) / "bien.py").write_text(snippet, encoding="utf-8")
+        r2 = subprocess.run([str(PY), "-I", "-X", "utf8", "-B", "bien.py"], cwd=d2, capture_output=True, text=True, encoding="utf-8", timeout=120)
+    if r2.returncode != 0:
+        rec(C, False, f"kiểm biên quy tắc đếm: lỗi chạy numpy: {r2.stderr[-200:]}")
+    else:
+        got = json.loads(r2.stdout.strip().splitlines()[-1])
+        rule = [(n, p, math.ceil(round(p * (n - 1), 9))) for n, p, _ in got]
+        rec(C, all(g[2] == r_[2] == alg.bnx_l23_expected_flags(g[0], g[1]) for g, r_ in zip(got, rule)),
+            "quy tắc đếm đúng mọi biên: làm tròn lên p × (n − 1) = số điểm dưới np.percentile ở " + ", ".join(f"n={g[0]}, p={g[1]} → {g[2]}" for g in got))
+        rec(C, alg.bnx_l23_expected_flags(101, 0.01) == 1 and int(0.01 * 100) + 1 == 2,
+            "biên n = 101, p = 0,01: thật 1 điểm dưới ngưỡng; quy tắc cũ (phần nguyên cộng một) sẽ cho 2, quy tắc làm tròn lên cho 1")

@@ -9,4 +9,4 @@ Tạo `kho.sh` (chạy trong thư mục tạm của lệnh chấm, không ghi ra
    - `sua so luong ao`: đổi `ao 10` thành `ao 12` bằng `sed -i 's/ao 10/ao 12/' kho.txt`;
 3. in lần lượt: `git log --format=%s` (lời nhắn, mới nhất trước), `git branch --show-current`, `git rev-list --count HEAD`.
 
-Chạy `bash kho.sh`; chấm: `bash labs/cham.sh FND L09 kho.sh`. Cần Git 2.28 trở lên. Cảnh báo về xuống dòng (LF/CRLF) nếu có nằm ở luồng lỗi, không ảnh hưởng chấm.
+Chạy `bash kho.sh`; chấm: `bash labs/cham.sh FND L09 kho.sh`. Cần Git 2.28 trở lên (để có cờ `-b`). Máy mới cài chưa khai tên thì lệnh chốt đầu tiên báo `Author identity unknown`: vì vậy bước 1 đặt `user.name` và `user.email`. Cảnh báo về xuống dòng (LF/CRLF) nếu có nằm ở luồng lỗi, không ảnh hưởng chấm.

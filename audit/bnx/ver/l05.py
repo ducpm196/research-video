@@ -186,3 +186,48 @@ def run(rec):
     m = max(len(l) for c in blocks for l in c.strip("\n").split("\n"))
     rec("L05", m <= 70 and all(len(c.strip("\n").split("\n")) <= 15 for c in blocks) and not any("$" in c for c in blocks),
         f"khối mã ≤ 15 dòng, dòng dài nhất {m} ký tự, không có dấu $ (KaTeX)")
+    # ── AF2 (WP4): quy mô và lab ──
+    import os
+    env = dict(os.environ, PYTHONIOENCODING="utf-8")
+
+    def run_py(code):
+        with tempfile.TemporaryDirectory() as dd:
+            Path(dd, "k.py").write_text(code, encoding="utf-8")
+            r = subprocess.run([sys.executable, "-I", "-X", "utf8", "-B", "k.py"], cwd=dd, capture_output=True, text=True, encoding="utf-8", env=env)
+            return r.returncode, r.stdout
+    rc, so = run_py(src.PY_SCALE.strip("\n") + "\n")
+    rec("L05", rc == 0 and so.strip() == src.OUT_SCALE.strip(), "khối quy mô chạy nguyên văn = màn hình (10, 1000, 100000 dịch vụ)")
+
+    def sim_day_by_day(n, valid, days=365):
+        """Đường khác: duyệt TỪNG NGÀY; mỗi chứng chỉ có ngày cấp riêng 'tuổi' đếm từ 0, xoay khi tuổi = 2/3 hạn (tuổi về 0), đếm số lần xoay."""
+        age, cnt = [0] * n, 0
+        step = valid * 2 // 3
+        for _ in range(days):
+            for i in range(n):
+                age[i] += 1
+                if age[i] == step:
+                    age[i], cnt = 0, cnt + 1
+        return cnt
+    got = {(n, v): sim_day_by_day(n, v) for n in (10, 1000) for v in (365, 30)}
+    want = {(10, 365): 10, (10, 30): 180, (1000, 365): 1000, (1000, 30): 18000}
+    rec("L05", got == want and all(alg.bnx_l05_rotations_fleet(n, v) == w for (n, v), w in want.items()),
+        f"duyệt từng ngày (đồng hồ tuổi từng chứng chỉ) khớp công thức đóng: {got}")
+    rec("L05", alg.bnx_l05_rotations_fleet(100000, 30) == 1800000 == int(src.OUT_SCALE.split("\n")[-2].split()[-1]) and round(1800000 / 365) == 4932,
+        "100 000 dịch vụ hạn 30 ngày: 1 800 000 lần đổi, gần 4 932 lần mỗi ngày")
+    # ổn định lâu dài: đổi mỗi 243 ngày (2/3 của 365) → 365/243 ≈ 1,5 lần/năm; trong 365 ngày đầu (đếm từ chứng chỉ mới) chỉ 1 lần
+    xs = [d for d in range(1, 3651) if d % (365 * 2 // 3) == 0]
+    rec("L05", 365 * 2 // 3 == 243 and 1.50 < 365 / 243 < 1.51 and len([d for d in xs if d <= 365]) == 1 and len(xs) == 15,
+        "hạn 365 ngày: trong 365 ngày đầu 1 lần, ổn định 365/243 ≈ 1,5 lần mỗi năm (15 lần trong 10 năm)")
+    lab = ROOT / "labs" / "BNX" / "L05"
+    rc, so = run_py((lab / "loi_giai.py").read_text(encoding="utf-8"))
+    exp = (lab / "mong_doi.txt").read_text(encoding="utf-8").strip()
+    today = dt.date(2026, 6, 15)
+    rows = []
+    for name, cap, han in (("so_cai", "2026-04-20", 60), ("bao_cao", "2026-01-10", 365), ("doi_soat", "2026-05-01", 30)):
+        c0 = dt.date.fromisoformat(cap)
+        x, h = alg.bnx_add_days(cap, alg.bnx_rotate_day(han)), alg.bnx_add_days(cap, han)   # công thức của checklib (đường khác với timedelta)
+        hd = dt.date.fromisoformat(h)
+        tt = "da het han" if today > hd else (f"can xoay, con {(hd - today).days} ngay" if today >= dt.date.fromisoformat(x) else "chua den han xoay")
+        rows.append(f"{name}: xoay {x}, het han {h}: {tt}")
+    rows.append(f"So chung chi can xu ly: {sum(1 for r in rows if not r.endswith('chua den han xoay'))}")
+    rec("L05", rc == 0 and so.strip() == exp == "\n".join(rows), "lab: lời giải chạy lại = mong_doi = tính bằng bnx_add_days (2 chứng chỉ phải xử lý)")

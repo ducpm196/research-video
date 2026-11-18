@@ -7,3 +7,6 @@ Viết chương trình `iso_lab.py` (Python), gồm hai việc:
 2. In **độ dài** của cả bản tin: mã loại `0210` (4 ký tự) + bản đồ (16 ký tự) + các trường nối theo thứ tự tăng dần.
 
 Chạy: `python iso_lab.py`. Chấm: `bash labs/cham.sh BNK L11 iso_lab.py`.
+
+## Phần thêm (không chấm): che số thẻ
+Viết hàm `che(pan)` trả về 6 số đầu, 6 dấu `*`, rồi 4 số cuối: `che("4111111111111111")` phải ra `411111******1111`. Gợi ý: cắt chuỗi `pan[:6]` và `pan[-4:]`, và nhân dấu `*` với số lần cần.

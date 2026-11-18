@@ -156,3 +156,30 @@ def run(rec):
         rec("L01", a == b == want, f"{what}: mô phỏng {a}, checklib {b}, bài nói {want}")
     rec("L01", alg.bnx_oas_old_valid_after(["purpose"]) == sum(1 for r in reqs if not _hand_check(r, schema) and not _hand_check(r, s_purpose)) == 0,
         "bước 6: thêm purpose bắt buộc → 0 yêu cầu cũ hợp lệ còn hợp lệ")
+
+    # 9. cảnh quy mô: chạy NGUYÊN VĂN khối SCALE_PY sau VALIDATE_PY (đúng như sổ: hàm kiem + A, B đã có), so đầu ra hiện trên màn hình
+    full = src.VALIDATE_PY + chr(10) + src.SCALE_PY
+    p3 = subprocess.run([sys.executable, "-I", "-X", "utf8", "-B", "-c", full], capture_output=True, text=True, encoding="utf-8", timeout=300)
+    o3 = p3.stdout.strip().splitlines()
+    rec("L01", p3.returncode == 0 and o3[-2:] == src.SCALE_OUT.splitlines(),
+        f"chạy thật SCALE_PY nguyên văn: {o3[-2:]}")
+    # đường khác: đếm bằng vòng lặp thuần rồi so công thức sàn n/50 + n/80 − n/400 và checklib
+    def dem(n):
+        return sum(1 for i in range(1, n + 1) if i % 50 == 0 or i % 80 == 0)
+    rec("L01", [dem(n) for n in (1000, 100000)] == [30, 3000] == [alg.bnx_l01_blocked(n) for n in (1000, 100000)]
+        and 100000 // 50 + 100000 // 80 - 100000 // 400 == 3000 and 1000 // 50 + 1000 // 80 - 1000 // 400 == 30,
+        "số yêu cầu bị chặn: 30 ở 1 000 và 3 000 ở 100 000 (đếm tay, công thức sàn, checklib)")
+    # đối tác: P đối tác cũ gửi yêu cầu cũ lên hợp đồng mới có purpose bắt buộc → mỗi đối tác nhận 400 (chạy hàm trên màn hình)
+    code_p = src.VALIDATE_PY.split(chr(10) + "A, B = ")[0] + chr(10) + (
+        "A, B = '0123456789', '9876543210'" + chr(10)
+        + "def moi(req):" + chr(10) + "    return kiem(req) + ([] if req.get('purpose') else ['purpose: thieu'])" + chr(10)
+        + "for p in (5, 50, 500):" + chr(10)
+        + "    print(p, sum(1 for _ in range(p) if moi({'fromAccount': A, 'toAccount': B, 'amount': 500000})))" + chr(10))
+    p4 = subprocess.run([sys.executable, "-I", "-X", "utf8", "-B", "-c", code_p], capture_output=True, text=True, encoding="utf-8", timeout=60)
+    rec("L01", p4.returncode == 0 and p4.stdout.strip().splitlines() == ["5 5", "50 50", "500 500"],
+        f"hợp đồng mới đòi purpose: 5, 50, 500 đối tác cũ → 5, 50, 500 yêu cầu bị 400 ({p4.stdout.split()})")
+    # 10. lab labs/BNX/L01: lời giải chạy thật cho đúng mong_doi.txt
+    lab = ROOT / "labs" / "BNX" / "L01"
+    p5 = subprocess.run([sys.executable, "-I", "-X", "utf8", "-B", str(lab / "loi_giai.py")], capture_output=True, text=True, encoding="utf-8", timeout=60)
+    rec("L01", p5.returncode == 0 and p5.stdout.strip() == src.LAB_OUT.strip() == (lab / "mong_doi.txt").read_text(encoding="utf-8").strip(),
+        "lab L01: lời giải chạy thật cho đúng mong_doi.txt (5 yêu cầu: 201 rồi bốn 400)")

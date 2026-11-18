@@ -8,7 +8,9 @@ def luhn(so):
                 d = d - 9
         tong = tong + d
     return tong % 10 == 0
+def che(so):
+    return so[:6] + "*" * 6 + so[-4:]
 the = "5500005555555559"
 print(luhn(the))
 print(luhn(the[:-1] + "8"))
-print(the[:6] + "*" * 6 + the[-4:])
+print(che(the))

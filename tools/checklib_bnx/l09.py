@@ -64,3 +64,18 @@ def bnx_ttl_after_mutation(ttl, set_expiry_again, preserve_expiry=False):
 def bnx_clock_add(h, m, s, seconds):
     t = h * 3600 + m * 60 + s + seconds
     return t // 3600 % 24, t % 3600 // 60, t % 60
+
+
+def bnx_l09_cas_writes(n):
+    """Cảnh quy mô: n tiến trình cùng đọc rồi cùng ghi; mỗi vòng đúng một ghi khớp CAS, còn lại bị từ chối và thử lại ở vòng sau.
+    Tổng số lần ghi = n + (n-1) + … + 1."""
+    con, tong = n, 0
+    while con:
+        tong += con
+        con -= 1
+    return tong
+
+
+def bnx_l09_lock_wait_ms(n, giu_ms):
+    """Khoá bi quan: n người lần lượt giữ khoá giữ_ms mỗi người; người cuối chờ n·giữ_ms (kể cả thời gian tự giữ)."""
+    return n * giu_ms

@@ -167,3 +167,33 @@ def run(rec):
     lines = [l for c in (src.PY_DATA, src.PY_SIGN, src.PY_READ, src.PY_CHECK, src.PY_CASES, src.SH_OPENSSL) for l in c.strip("\n").split("\n")]
     rec("L03", max(map(len, lines)) <= 70 and all(len(c.strip("\n").split("\n")) <= 12 for c in (src.PY_DATA, src.PY_SIGN, src.PY_READ, src.PY_CHECK, src.PY_CASES, src.SH_OPENSSL)),
         f"khối mã ≤ 12 dòng, dòng dài nhất {max(map(len, lines))} ký tự (≤ 70)")
+
+    # (cảnh quy mô) chạy NGUYÊN VĂN SCALE_PY sau các khối dữ liệu, ký, kiểm; so đầu ra màn hình
+    rc, so = run_py("\n".join(x.strip("\n") for x in (src.PY_DATA, src.PY_SIGN, src.PY_CHECK, src.SCALE_PY)) + "\n")
+    rec("L03", rc == 0 and screen_matches(src.SCALE_OUT, so), "khối đo SCALE_PY chạy thật nguyên văn; màn hình khớp")
+    # đường khác: mô phỏng mỗi giây bằng HMAC tự dựng (RFC 2104) và base64url tự dựng; mã hạn `han` cấp lúc 0, kẻ gian thử mỗi giây từ 60 tới 4000
+    KEYSCALE = unb64u("AyM1SysPpbyDfgZld3umj1qzKObwVMkoqQ-EstJQLr_T-1qS0gZH75aKtMN3Yj0iPS4hcgUuTwjAzZr1Z9CAow")
+    HDR = b'{"typ":"JWT",\r\n "alg":"HS256"}'
+
+    def sim(han):
+        body = b'{"iss":"joe","aud":"api-a","exp":%d}' % han
+        vao = b64u(HDR) + "." + b64u(body)
+        sig = b64u(hmac256(KEYSCALE, vao.encode()))
+        ok = 0
+        for t in range(60, 4001):
+            d, tt, s = (vao + "." + sig).split(".")
+            if b64u(hmac256(KEYSCALE, (d + "." + tt).encode())) == s and t < json.loads(unb64u(tt))["exp"]:
+                ok += 1
+        return ok
+    rec("L03", [sim(300), sim(3600)] == [240, 3540] == [alg.bnx_l03_exposed(h, 60) for h in (300, 3600)]
+        and 3540 / 240 > 14 and [u * 12 for u in (1000, 1000000)] == [alg.bnx_l03_refresh_per_hour(u, 300) for u in (1000, 1000000)] == [12000, 12000000]
+        and 1000000 * (3600 // 3600) == 1000000,
+        "mô phỏng từng giây bằng HMAC tự dựng: kẻ gian dùng được 240 và 3 540 lần (gấp hơn 14 lần); mã mới mỗi giờ 12 000 / 12 000 000 so với 1 000 / 1 000 000")
+    # lab labs/BNX/L03: lời giải chạy thật; chữ ký tính lại bằng HMAC tự dựng
+    lab = ROOT / "labs" / "BNX" / "L03"
+    p = subprocess.run([sys.executable, "-I", "-X", "utf8", "-B", str(lab / "loi_giai.py")], capture_output=True, text=True, encoding="utf-8", timeout=60)
+    vao = b64u(b'{"alg":"HS256","typ":"JWT"}') + "." + b64u(b'{"sub":"u42","aud":"app-b","exp":2000}')
+    want_sig = b64u(hmac256(b"khoa-lab-l03", vao.encode()))
+    rec("L03", p.returncode == 0 and p.stdout.strip() == src.LAB_OUT.strip() == (lab / "mong_doi.txt").read_text(encoding="utf-8").strip()
+        and p.stdout.split("\n")[0] == want_sig and p.stdout.split("\n")[1:5] == ["nhan", "het han", "chu ky sai", "sai nguoi nhan"],
+        "lab L03: lời giải chạy thật; chữ ký = HMAC tự dựng; nhận / hết hạn / chữ ký sai / sai người nhận")

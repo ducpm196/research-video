@@ -2,7 +2,7 @@
 ## SOURCE CODE VIDEO LIBRARY & COMPREHENSIVE LEARNING ROADMAP
 
 > **Tổng quan kho tài nguyên**: Kho mã nguồn `D:\research-video` hiện sở hữu **643 video bài học Full HD 1080p** (cộng 5 video mẫu `out/DEMO/`, tổng 648 tệp mp4; đo 2026-11-08) (kèm phụ đề Tiếng Việt `.srt`, mục lục phân đoạn `chapters.txt`, báo cáo kiểm định chất lượng âm thanh `asr_report.md` và giao diện xem trước `preview.html`).  
-> **Mục tiêu**: Hướng dẫn người học (từ người mới bắt đầu từ con số 0, người mất gốc, đến kỹ sư đang chuẩn bị phỏng vấn Senior Banking 50M gross) cách tra cứu, định vị và mở xem trực tiếp từng video ngay trong cây thư mục `out/`.
+> **Mục tiêu**: Hướng dẫn người học (từ người mới bắt đầu từ con số 0, người mất gốc, đến kỹ sư đang chuẩn bị phỏng vấn Senior Banking) cách tra cứu, định vị và mở xem trực tiếp từng video ngay trong cây thư mục `out/`.
 
 
 > **Cập nhật 2026-11-08 (chiều)**: thêm khóa **JVA** 13 bài (lập trình Java từ con số 0) → 656 bài học; 300 bài của 16 khóa nền tảng đã được đọc kiểm nội dung và sửa (xem `HANDOVER_INTERVIEW.md` Mục 10).
@@ -35,9 +35,9 @@ D:\research-video\
 
 ---
 
-## 2. LỘ TRÌNH 6 TẦNG NĂNG LỰC TỪ CON SỐ 0 ĐẾN SENIOR BANKING 50M GROSS
+## 2. LỘ TRÌNH 6 TẦNG NĂNG LỰC TỪ CON SỐ 0 ĐẾN SENIOR BANKING
 
-Để một người mới bắt đầu hoặc người mất gốc có thể làm chủ hoàn toàn kiến thức và tự tin deal mức lương **50,000,000 VND Gross/tháng** tại ACB, hãy học theo thứ tự 6 tầng dưới đây:
+Để một người mới bắt đầu hoặc người mất gốc có thể làm chủ hoàn toàn kiến thức và tự tin đàm phán thu nhập có căn cứ (hỏi khung lương, so tổng đãi ngộ; không có mức lương mục tiêu nào được coi là sự thật), hãy học theo thứ tự 6 tầng dưới đây:
 
 ```mermaid
 flowchart TD
@@ -46,7 +46,7 @@ flowchart TD
     T2["Tầng 2: Kỹ nghệ Backend & Cơ sở Dữ liệu (DBS 18 bài · SWF 14 bài · SDP 18 bài)"]
     T3["Tầng 3: Hệ Phân Tán, Kafka & Đám mây (DSY 16 bài · EVT 12 bài · SAR 14 bài · SEC 16 bài)"]
     T4["Tầng 4: Nền AI tùy chọn (AIF 15 bài · LLM 15 bài · MLO 15 bài · IRS 14 bài · CVI 13 bài)"]
-    T5["Tầng 5: Luyện thi Senior Banking & Thực chiến ACB (INT 8 bài · ACB 9 bài · Deal 50M)"]
+    T5["Tầng 5: Luyện thi Senior Banking & Thực chiến ACB (INT 9 bài · ACB 9 bài · Đàm phán có căn cứ)"]
 
     T0 --> T1 --> T2 --> T3 --> T4 --> T5
 ```
@@ -116,26 +116,27 @@ flowchart TD
 | **LLM** | Mô hình Ngôn ngữ Lớn (LLM) | 15 videos | [`D:/research-video/out/LLM/`](file:///D:/research-video/out/LLM/) | n-gram, BPE, vector nhúng và cosin, Transformer giải mã, huấn luyện trước, sinh văn bản, LoRA, căn chỉnh, đánh giá, RAG |
 | **MLO** | Vận hành Học máy (MLOps) | 15 videos | [`D:/research-video/out/MLO/`](file:///D:/research-video/out/MLO/) | Vòng đời mô hình, tái lập, kho đặc trưng, phục vụ mô hình và độ trễ, phát hành an toàn, giám sát trôi dữ liệu, hiệu chuẩn, lượng tử hoá (chưa có bài riêng về ONNX Runtime) |
 | **IRS** | Truy hồi Thông tin & Gợi ý | 14 videos | [`D:/research-video/out/IRS/`](file:///D:/research-video/out/IRS/) | Đo chất lượng truy hồi, TF-IDF và cosin, truy hồi dày và ANN, truy hồi lai, học xếp hạng, hệ gợi ý (ứng dụng vào đối soát là ý tưởng của chuyên đề INT 05, không có bài riêng) |
-| **CVI** | Thị giác Máy tính | 13 videos | [`D:/research-video/out/CVI/`](file:///D:/research-video/out/CVI/) | Ảnh số, tích chập, hiệu chuẩn camera, đặc trưng và RANSAC, mạng tích chập, phát hiện và phân đoạn đối tượng, độ bền khi dịch chuyển miền (chưa có bài nhận diện khuôn mặt/liveness hay QĐ 2345: xem BNK L13) |
+| **CVI** | Thị giác Máy tính | 13 videos | [`D:/research-video/out/CVI/`](file:///D:/research-video/out/CVI/) | Ảnh số, tích chập, hiệu chuẩn camera, đặc trưng và RANSAC, mạng tích chập, phát hiện và phân đoạn đối tượng, độ bền khi dịch chuyển miền (chưa có bài nhận diện khuôn mặt/liveness hay quy định sinh trắc học NHNN: xem BNK L13) |
 
 ---
 
 ### TẦNG 5: KHÓA LUYỆN THI SENIOR BANKING (INT) & THỰC CHIẾN ACB (ACB)
-*Mục tiêu: Trực tiếp chinh phục phòng phỏng vấn ACB, gỡ nút thắt hợp đồng và chốt deal lương 50M gross.*
+*Mục tiêu: Trực tiếp chinh phục phòng phỏng vấn ACB, gỡ nút thắt hợp đồng và đàm phán thu nhập có căn cứ.*
 
-#### Khóa INT: Khung Năng lực Phỏng vấn & Lợi thế AI (8 bài Full HD)
+#### Khóa INT: Khung Năng lực Phỏng vấn & Lợi thế AI (9 bài Full HD đã dựng)
 - Lưu trữ tại: [`D:/research-video/out/INT/`](file:///D:/research-video/out/INT/) và [`D:/research-video/interview/video/`](file:///D:/research-video/interview/video/)
 
 | Mã bài | Video MP4 | Giáo án Markdown | Trọng tâm chuyên sâu |
 |:---:|:---|:---|:---|
-| **`INT:L00`** | [`00_overview_roadmap.mp4`](file:///D:/research-video/interview/video/00_overview_roadmap.mp4) | [`00_overview_roadmap.md`](file:///D:/research-video/interview/00_overview_roadmap.md) | Khung Năng lực Phỏng vấn: Từ Con số 0 đến Deal 50M Gross |
+| **`INT:L00`** | [`00_overview_roadmap.mp4`](file:///D:/research-video/interview/video/00_overview_roadmap.mp4) | [`00_overview_roadmap.md`](file:///D:/research-video/interview/00_overview_roadmap.md) | Khung Năng lực Phỏng vấn: Từ Con số 0 đến Kỹ sư Backend Ngân hàng Cấp cao |
 | **`INT:L01`** | [`01_foundation_cs_java.mp4`](file:///D:/research-video/interview/video/01_foundation_cs_java.mp4) | [`01_foundation_cs_java.md`](file:///D:/research-video/interview/01_foundation_cs_java.md) | Khoa học Máy tính, Java 21, JVM Memory Model & Virtual Threads |
 | **`INT:L02`** | [`02_backend_microservices.mp4`](file:///D:/research-video/interview/video/02_backend_microservices.mp4) | [`02_backend_microservices.md`](file:///D:/research-video/interview/02_backend_microservices.md) | Kỹ nghệ Microservices, Spring Boot 3, REST RFC 9457 (thay RFC 7807) & Redis |
 | **`INT:L03`** | [`03_distributed_systems_senior.mp4`](file:///D:/research-video/interview/video/03_distributed_systems_senior.mp4) | [`03_distributed_systems_senior.md`](file:///D:/research-video/interview/03_distributed_systems_senior.md) | Hệ Phân Tán, SAGA Orchestration, Kafka EOS & Oracle 19c Tuning |
 | **`INT:L04`** | [`04_banking_domain_t24_napas.mp4`](file:///D:/research-video/interview/video/04_banking_domain_t24_napas.mp4) | [`04_banking_domain_t24_napas.md`](file:///D:/research-video/interview/04_banking_domain_t24_napas.md) | Nghiệp vụ Core T24, Chuyển mạch NAPAS 247 & 6 Trụ cột Squad Lending |
 | **`INT:L05`** | [`05_uit_ai_banking_multiplier.mp4`](file:///D:/research-video/interview/video/05_uit_ai_banking_multiplier.mp4) | [`05_uit_ai_banking_multiplier.md`](file:///D:/research-video/interview/05_uit_ai_banking_multiplier.md) | Biến Văn bằng Cử nhân UIT AI thành Bộ nhân Năng lực Ngân hàng |
 | **`INT:L06`** | [`06_interview_qa_bank_100.mp4`](file:///D:/research-video/interview/video/06_interview_qa_bank_100.mp4) | [`06_interview_qa_bank_100.md`](file:///D:/research-video/interview/06_interview_qa_bank_100.md) | 100 câu hỏi phỏng vấn và khung kể sự cố STAR |
-| **`INT:L07`** | [`07_salary_negotiation_50m_gross.mp4`](file:///D:/research-video/interview/video/07_salary_negotiation_50m_gross.mp4) | [`07_salary_negotiation_50m_gross.md`](file:///D:/research-video/interview/07_salary_negotiation_50m_gross.md) | Đàm phán lương: đề xuất 50M gross có căn cứ và trung thực |
+| **`INT:L07`** | [`07_salary_negotiation_50m_gross.mp4`](file:///D:/research-video/interview/video/07_salary_negotiation_50m_gross.mp4) | [`07_salary_negotiation_50m_gross.md`](file:///D:/research-video/interview/07_salary_negotiation_50m_gross.md) | Đàm phán lương: hỏi khung, tính tổng đãi ngộ T = L × (13 + k) + 12 × P (số minh hoạ), đối đáp ba vòng, trung thực |
+| **`INT:L08`** | [`08_tin_dung_ban_le_doi_soat.mp4`](file:///D:/research-video/interview/video/08_tin_dung_ban_le_doi_soat.mp4) | [`08_tin_dung_ban_le_doi_soat.md`](file:///D:/research-video/interview/08_tin_dung_ban_le_doi_soat.md) | Tín dụng bán lẻ (LTV, DTI, CIC, trích nợ từng phần) và đối soát cuối ngày bằng sắp xếp cộng hai con trỏ; bài cuối khoá INT, tách ra từ L04 |
 
 #### Khóa ACB: Tinh hoa Kỹ thuật Tích hợp Ngân hàng ACB (9 bài Full HD)
 - Lưu trữ tại: [`D:/research-video/out/ACB/`](file:///D:/research-video/out/ACB/) và [`D:/research-video/interview/video/`](file:///D:/research-video/interview/video/)
@@ -148,7 +149,7 @@ flowchart TD
 | **`ACB:L03`** | [`L03.mp4`](file:///D:/research-video/interview/video/L03.mp4) | [`L03_streaming_ksqldb_notification_hub.yaml`](file:///D:/research-video/lessons/acb/L03_streaming_ksqldb_notification_hub.yaml) | Kiến trúc Streaming với ksqlDB và Kafka: Omnichannel Notification Hub |
 | **`ACB:L04`** | [`L04.mp4`](file:///D:/research-video/interview/video/L04.mp4) | [`L04_san_chuyen_nhuong_hop_dong_tien_gui.yaml`](file:///D:/research-video/lessons/acb/L04_san_chuyen_nhuong_hop_dong_tien_gui.yaml) | Sàn Chuyển nhượng Hợp đồng Tiền gửi: Khóa Lạc quan & Sổ cái T24 |
 | **`ACB:L05`** | [`L05.mp4`](file:///D:/research-video/interview/video/L05.mp4) | [`L05_cong_chi_luong_va_sao_ke_divide_conquer.yaml`](file:///D:/research-video/lessons/acb/L05_cong_chi_luong_va_sao_ke_divide_conquer.yaml) | Cổng Chi lương Doanh nghiệp theo lô & Sao kê Divide-and-Conquer |
-| **`ACB:L06`** | [`L06.mp4`](file:///D:/research-video/interview/video/L06.mp4) | [`L06_sinh_trac_hoc_qd2345_va_bao_mat_ngan_hang.yaml`](file:///D:/research-video/lessons/acb/L06_sinh_trac_hoc_qd2345_va_bao_mat_ngan_hang.yaml) | Xác thực Sinh trắc học Quyết định 2345 & Bảo mật Ngân hàng Mở |
+| **`ACB:L06`** | [`L06.mp4`](file:///D:/research-video/interview/video/L06.mp4) | [`L06_sinh_trac_hoc_qd2345_va_bao_mat_ngan_hang.yaml`](file:///D:/research-video/lessons/acb/L06_sinh_trac_hoc_qd2345_va_bao_mat_ngan_hang.yaml) | Xác thực Sinh trắc học (TT 50/2024 sửa bởi TT 77/2025; QĐ 2345 chưa đọc nguyên văn) & Bảo mật Ngân hàng Mở |
 | **`ACB:L07`** | [`L07.mp4`](file:///D:/research-video/interview/video/L07.mp4) | [`L07_tai_khoan_dinh_danh_va_doi_soat_ba_ben.yaml`](file:///D:/research-video/lessons/acb/L07_tai_khoan_dinh_danh_va_doi_soat_ba_ben.yaml) | Thu hộ qua Tài khoản Định danh (Virtual Account) & Đối soát 3 bên EOD |
 | **`ACB:L08`** | [`L08.mp4`](file:///D:/research-video/interview/video/L08.mp4) | [`L08_squad_lending_tich_hop_cic_giai_ngan.yaml`](file:///D:/research-video/lessons/acb/L08_squad_lending_tich_hop_cic_giai_ngan.yaml) | Tín dụng Squad Lending: Thấu chi Sổ tiết kiệm, Lương & Cổng CIC |
 

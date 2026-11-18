@@ -4,6 +4,7 @@ rồi lấy offset lớn nhất, khớp mẫu sàn bằng biểu thức chính q
 đủ 9 bản ghi (đoạn đang ghi không nén), sau khi cuộn đoạn và bộ dọn chạy thì còn đúng KAFKA_OUT. Container do tệp này tạo thì tự dừng."""
 import json
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -21,7 +22,22 @@ import l10  # noqa: E402
 
 NAME, IMAGE, K = "bnx-kafka", "apache/kafka:3.9.0", "/opt/kafka/bin/"
 BS = ["--bootstrap-server", "localhost:9092"]
-RECORDS = "A:100\nB:200\nA:150\nC:50\nB:180\nA:120\nC:75\nB:260\nC:NULL\n"
+
+
+def cmd_tokens(text, script):
+    """Tách lệnh HIỂN THỊ trên màn hình (hằng KAFKA_*_CMD của bài): trả (đối số trước script, đối số sau script) của dòng có `script`."""
+    joined = text.replace("\\\n", " ")
+    line = next(l for l in joined.split("\n") if script in l)
+    toks = shlex.split(line)
+    i = next(k for k, t in enumerate(toks) if t.endswith(script))
+    return toks[:i], toks[i + 1:]
+
+
+def with_topic(args, topic):
+    """Thay tên chủ đề sau --topic bằng tên chủ đề duy nhất của lần kiểm."""
+    out = list(args)
+    out[out.index("--topic") + 1] = topic
+    return out
 
 
 def run_py(code):
@@ -72,9 +88,8 @@ def avro_read(reader_fields, old_record):
 
 
 def kafka_lines(topic):
-    rc, so, _ = dk(K + "kafka-console-consumer.sh", *BS, "--topic", topic, "--partition", "0", "--offset", "earliest",
-                   "--property", "print.key=true", "--property", "print.offset=true", "--property", "null.literal=TOMBSTONE",
-                   "--timeout-ms", "8000")
+    _, cargs = cmd_tokens(l10.KAFKA_CONSUME_CMD, "kafka-console-consumer.sh")   # lệnh hiển thị trên màn hình
+    rc, so, _ = dk(K + "kafka-console-consumer.sh", *with_topic(cargs, topic))
     return [l for l in so.strip().split("\n") if l.startswith("Offset:")]
 
 
@@ -97,23 +112,23 @@ def kafka_real(rec, L):
                 break
             time.sleep(2)
         topic = f"bnx-l10-ver-{int(time.time())}"
-        rc, _, er = dk(K + "kafka-topics.sh", *BS, "--create", "--topic", topic, "--partitions", "1",
-                       "--config", "cleanup.policy=compact", "--config", "segment.ms=1000",
-                       "--config", "min.cleanable.dirty.ratio=0.01", "--config", "delete.retention.ms=60000",
-                       "--config", "min.compaction.lag.ms=0")
+        # lệnh HIỂN THỊ trên màn hình: tạo chủ đề, ghi bản ghi (các cờ lấy từ chính hằng KAFKA_*_CMD, chỉ đổi tên chủ đề thành tên duy nhất)
+        pre, targs = cmd_tokens(l10.KAFKA_TOPIC_CMD, "kafka-topics.sh")
+        rc, _, er = dk(K + "kafka-topics.sh", *with_topic(targs, topic))
         if rc != 0:
             rec(L, False, "tạo chủ đề nén thất bại: " + er.strip()[:160])
             return
         cfg = dk(K + "kafka-configs.sh", *BS, "--entity-type", "topics", "--entity-name", topic, "--describe")[1]
-        dk(K + "kafka-console-producer.sh", *BS, "--topic", topic, "--property", "parse.key=true", "--property", "key.separator=:",
-           "--property", "null.marker=NULL", inp=RECORDS)
+        ppre, pargs = cmd_tokens(l10.KAFKA_PRODUCE_CMD, "kafka-console-producer.sh")
+        records = ppre[ppre.index("printf") + 2:ppre.index("|")]
+        dk(K + "kafka-console-producer.sh", *with_topic(pargs, topic), inp="\n".join(records) + "\n")
         first = kafka_lines(topic)
-        want_first = [f"Offset:{i}\t{k}\t{v}" for i, (k, v) in enumerate(x.split(":") for x in RECORDS.strip().split("\n"))]
+        want_first = [f"Offset:{i}\t{k}\t{v}" for i, (k, v) in enumerate(x.split(":") for x in records)]
         want_first[-1] = "Offset:8\tC\tTOMBSTONE"
         rec(L, "cleanup.policy=compact" in cfg and first == want_first,
             f"Kafka 3.9.0 thật: chủ đề cleanup.policy=compact; đọc ngay sau khi ghi thấy đủ {len(first)}/9 bản ghi, offset 0..8 (đoạn đang ghi chưa nén)")
         time.sleep(2.5)  # > segment.ms: lần ghi sau cuộn đoạn
-        dk(K + "kafka-console-producer.sh", *BS, "--topic", topic, "--property", "parse.key=true", "--property", "key.separator=:", inp="Z:1\n")
+        dk(K + "kafka-console-producer.sh", *with_topic(pargs, topic), inp="Z:1\n")
         want = l10.KAFKA_OUT.strip().split("\n")
         seen, t0 = [], time.time()
         while time.time() - t0 < 150:
@@ -190,7 +205,36 @@ def run(rec):
         and alg.bnx_backward_ok({"account": False, "amount": False, "fee": False}, {"account": False, "amount": False}) == (False, ["fee"]),
         "lược đồ Avro v2 đọc được bản ghi cũ (channel = APP mặc định); v3 thêm fee không mặc định thì không đọc được")
 
-    # (3) Kafka thật
+    # (2d) WP4: cảnh quy mô — chạy lại không đệm mọi chương trình; hàm match hiển thị đối chiếu 9 ví dụ RabbitMQ; đếm lại nén bằng đường khác
+    import lib2
+    lib2.verify_programs(rec, L)
+    ns = {}
+    exec(l10.TOPIC_PY.split("for pat in")[0], ns)
+    rec(L, all(sorted({qq for qq, p in bind if ns["match"](p, k)}) == w for k, w in tut.items()),
+        "hàm match HIỂN THỊ trên màn hình (TOPIC_PY) khớp đủ 9 ví dụ của RabbitMQ tutorial 5")
+    for n_, line in zip((1000, 100000, 1000000), l10.P_SCALE.out.splitlines()[2:]):
+        ks = {}
+        for i in range(n_):
+            ks["TK%d" % (i % 100)] = i
+        rec(L, line.split()[-1] == str(len(ks)) == "100" == str(alg.bnx_l10_compacted(n_, 100)) and line.split()[8] == str(n_),
+            f"{n_} bản ghi, 100 tài khoản: sau nén còn {len(ks)} (nhóm theo khoá), đọc lại không nén {n_}")
+    rec(L, [alg.bnx_l10_read_ms(n_, 0.001) for n_ in (1000, 100000, 1000000)] == [1.0, 100.0, 1000.0] and alg.bnx_l10_read_ms(100, 0.001) == 0.1,
+        "1 µs mỗi bản ghi (số minh hoạ): 1 ms, 100 ms, 1 s so với 0,1 ms")
+    lab = ROOT / "labs" / "BNX" / "L10"
+    p_ = subprocess.run([sys.executable, "-X", "utf8", "-I", str(lab / "loi_giai.py")], capture_output=True, text=True, encoding="utf-8")
+    lg = [("M", 10), ("N", 20), ("M", 15), ("P", 5), ("N", None), ("M", 12), ("Q", 7), ("P", 9)]
+    cg = compact_group(lg, True)
+    fmt = lambda ds: " ".join(f"{o}:{k}:{'-' if v is None else v}" for o, k, v in ds)
+    want_lab = ["con bia mo: " + fmt(cg), "het han bia mo: " + fmt(compact_group(lg, False))]
+    want_lab += [f"payment.eu.sepa.eur voi {m}: " + ("co" if rmatch(m, "payment.eu.sepa.eur") else "khong") for m in ("payment.*.sepa", "payment.#.eur", "*.eu.#")]
+    rec(L, p_.returncode == 0 and p_.stdout.strip().split("\n") == want_lab == (lab / "mong_doi.txt").read_text(encoding="utf-8").strip().split("\n"),
+        "lab L10: loi_giai.py = mong_doi.txt = tính lại bằng nhóm theo khoá + regex dịch từ mẫu")
+
+    # (3) Kafka thật — lệnh hiển thị trên màn hình
+    cmds = (l10.KAFKA_TOPIC_CMD, l10.KAFKA_PRODUCE_CMD, l10.KAFKA_CONSUME_CMD)
+    rec(L, l10.KAFKA_TOPIC_CMD.split("\n")[0].split() == ["docker", "run", "-d", "--name", NAME, IMAGE]
+        and all(len(c.split("\n")) <= 12 and all(len(x) <= 70 for x in c.split("\n")) for c in cmds),
+        "lệnh dựng Kafka hiển thị = ảnh/container của ver (apache/kafka:3.9.0, bnx-kafka); mỗi khối lệnh ≤ 12 dòng, dòng ≤ 70 ký tự")
     kafka_real(rec, L)
 
     # (4) bài sinh ra

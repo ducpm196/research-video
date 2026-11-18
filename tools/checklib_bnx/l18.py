@@ -54,3 +54,29 @@ def bnx_jt_before_cutoff(hour, minute, cutoff_hour=22):
 def bnx_jt_suite_ms(n_fake, n_real, fake_ms=10, real_ms=2000):
     """Thời gian chạy bộ ca kiểm (mili giây, số minh hoạ): ca dùng đối tượng giả và ca gọi cổng thử thật."""
     return n_fake * fake_ms + n_real * real_ms
+
+
+# ── AF2 (WP4 2026-11-14): cảnh quy mô — bảng phí k mốc, bộ ca giữa khoảng và bộ ca sát mốc ──
+def bnx_l18_cases_mid(k):
+    """Bộ ca giữa khoảng: mỗi khoảng một ca, k mốc cắt thành k + 1 khoảng."""
+    return k + 1
+
+
+def bnx_l18_cases_edge(k):
+    """Bộ ca sát mốc: mỗi mốc hai ca (đúng mốc và sát dưới) cộng một ca ở khoảng đầu."""
+    return 2 * k + 1
+
+
+def bnx_l18_survivors_mid(k):
+    """Lỗi nhầm dấu ở một mốc chỉ khác kết quả đúng tại đúng mốc đó: bộ ca giữa khoảng không bắt được lỗi nào."""
+    return k
+
+
+def bnx_l18_survivors_edge(k):
+    """Bộ ca có đúng mốc thì bắt hết mọi lỗi nhầm dấu."""
+    return 0
+
+
+def bnx_l18_suite_ms(n_cases, ms_per_case):
+    """Thời gian chạy lần lượt (số minh hoạ)."""
+    return n_cases * ms_per_case

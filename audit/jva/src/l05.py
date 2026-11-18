@@ -209,14 +209,16 @@ Lời giải nằm ở <code>labs/JVA/L05/loi_giai.java</code> — chỉ mở sa
            """Hôm nay ta học mảng, tức là một tên giữ cả một dãy giá trị cùng kiểu, mỗi ô có một số thứ tự gọi là chỉ số.
            Ghép mảng với vòng lặp đếm, năm hay năm nghìn tài khoản đều dùng cùng một đoạn mã."""),
     ])
-    sc_pre = sc("prereq", "prereq", "Ôn lại ba điều sẽ dùng hôm nay", [
+    sc_pre = sc("prereq", "prereq", "Ôn lại bốn điều sẽ dùng hôm nay", [
         st(table(["đã học", "viết", "dùng lại hôm nay"],
                  [["① biến kiểu số nguyên dài, tiền tính bằng đồng", "<code>long tong = 0;</code>", "giữ tổng số dư"],
                   ["② vòng lặp đếm", "<code>for (int i = 0; i &lt; 5; i++)</code>", "i lần lượt là 0, 1, 2, 3, 4"],
-                  ["③ rẽ nhánh nếu và cộng dồn", "<code>if (x &gt; lon)</code>, <code>tong += x;</code>", "tìm số lớn nhất, cộng tổng"]]),
-           """Trước hết ta ôn lại ba điều. Thứ nhất, tiền được giữ trong biến kiểu số nguyên dài, tính theo đơn vị đồng.
+                  ["③ rẽ nhánh nếu và cộng dồn", "<code>if (x &gt; lon)</code>, <code>tong += x;</code>", "tìm số lớn nhất, cộng tổng"],
+                  ["④ <code>import</code> và <code>new</code>", "<code>import java.util.Arrays;</code> lấy về một lớp có sẵn; <code>new</code> làm ra một vật mới", "mượn bộ công cụ mảng, tạo mảng mới"]]),
+           """Trước hết ta ôn lại bốn điều. Thứ nhất, tiền được giữ trong biến kiểu số nguyên dài, tính theo đơn vị đồng.
            Thứ hai, vòng lặp đếm từ không, chạy khi biến đếm còn nhỏ hơn năm, nên chạy đúng năm lần với không, một, hai, ba, bốn.
-           Thứ ba, lệnh rẽ nhánh nếu so sánh hai số, còn phép cộng dồn cộng thêm từng giá trị vào tổng.""", focus=[1, "1.2", "1.3", "1.4"]),
+           Thứ ba, lệnh rẽ nhánh nếu so sánh hai số, còn phép cộng dồn cộng thêm từng giá trị vào tổng.
+           Thứ tư, dòng nhập lấy về một lớp có sẵn của Java, và từ khoá tạo mới làm ra một vật mới từ lớp đó.""", focus=[1, "1.2", "1.3", "1.4", "1.5"]),
     ])
     sc_sym = sc("sym", "symbol", "Giải mã ký hiệu của mảng", [
         st(code_block(mang, title="Tệp Mang.java"),
@@ -309,8 +311,9 @@ Lời giải nằm ở <code>labs/JVA/L05/loi_giai.java</code> — chỉ mở sa
            + "$$⑤ \\; i = 4: \\; \\text{tong} = 6500000 + 3200000 = \\hlg{9700000}$$",
            """Phép tính thứ tư, tổng thành sáu triệu năm trăm nghìn. Phép tính thứ năm, tổng thành chín triệu bảy trăm nghìn,
            và ba triệu hai trăm nghìn không lớn hơn bốn triệu nên lớn nhất giữ nguyên."""),
-        st(out_block(tong),
-           """Chạy thật, hai dòng in ra đúng như ta tính tay: tổng chín triệu bảy trăm nghìn, lớn nhất bốn triệu ở chỉ số hai."""),
+        st(code_block(tong, lines=(t7 + 7, t7 + 8)) + out_block(tong),
+           """Hai lệnh in cuối của chương trình in tổng, rồi in số lớn nhất kèm chỉ số của nó.
+           Chạy thật, hai dòng in ra đúng như ta tính tay: tổng chín triệu bảy trăm nghìn, lớn nhất bốn triệu ở chỉ số hai."""),
     ], checks=["sum([1500000, 250000]) == 1750000", "1750000 + 4000000 == 5750000",
                "5750000 + 750000 + 3200000 == 9700000 == sum([1500000, 250000, 4000000, 750000, 3200000])",
                "max([1500000, 250000, 4000000, 750000, 3200000]) == 4000000",
@@ -327,16 +330,17 @@ Lời giải nằm ở <code>labs/JVA/L05/loi_giai.java</code> — chỉ mở sa
            clear=True, focus=[1, ["1.3", "1.4"], ["1.2", "1.4"]]),
         st("""<div class="box key"><b>Điều người làm nghề rút ra.</b> Duyệt từng ô có giá <b>tỉ lệ với số ô</b>. Nếu mỗi giây có 1 000 lượt tra cứu trên 5 000 000 tài khoản,
 trung bình mỗi lượt xem một nửa mảng: $1\\,000 \\times 2\\,500\\,000 = 2\\,500\\,000\\,000$ phép so sánh mỗi giây (số minh hoạ).
-Mảng $10\\,000\\,000$ số <code>long</code> cũng chiếm $8 \\times 10\\,000\\,000 = 80\\,000\\,000$ byte. Đó là lý do hệ thống lớn dùng cấu trúc tra cứu riêng và chỉ mục của cơ sở dữ liệu.</div>""",
+Mảng $10\\,000\\,000$ số <code>long</code> cũng chiếm $8 \\times 10\\,000\\,000 = 80\\,000\\,000$ byte. Đó là lý do hệ thống lớn dùng cấu trúc tra cứu riêng và <b>chỉ mục</b> của cơ sở dữ liệu: một bảng tra dựng sẵn, như mục lục của cuốn sách.</div>""",
            """Duyệt từng ô có giá tỉ lệ với số ô. Nếu mỗi giây có một nghìn lượt tra cứu trên năm triệu tài khoản, mỗi lượt trung bình xem một nửa mảng, tức hai tỉ rưỡi phép so sánh mỗi giây, số minh hoạ.
-           Mảng mười triệu số nguyên dài còn chiếm tám mươi triệu bai bộ nhớ. Đó là lý do hệ thống lớn dùng cấu trúc tra cứu riêng và chỉ mục của cơ sở dữ liệu.""", clear=True),
+           Mảng mười triệu số nguyên dài còn chiếm tám mươi triệu bai bộ nhớ. Đó là lý do hệ thống lớn dùng cấu trúc tra cứu riêng và chỉ mục của cơ sở dữ liệu.
+           Chỉ mục là một bảng tra dựng sẵn, giống mục lục của cuốn sách, giúp tìm nhanh mà không phải duyệt từng ô.""", clear=True),
     ], checks=["5000000 // 5000 == 1000", "5000 // 5 == 1000", "1000 * 2500000 == 2500000000", "5000000 // 2 == 2500000",
                "8 * 10000000 == 80000000"])
     sc_chk = sc("check", "check", "Tự kiểm bằng đường khác: sắp xếp bản sao và cộng ngược", [
         st(code_block(kiem, lines=(k6, k6 + 2), title="Tệp KiemMang.java"),
            """Ta kiểm bằng một đường khác hẳn. Chép mảng ra bản sao bằng hàm chép của bộ công cụ mảng, rồi sắp xếp bản sao,
            vì vị trí ban đầu của mảng gốc còn cần dùng. Sau khi sắp tăng dần, số lớn nhất phải nằm ở ô cuối."""),
-        st(code_block(kiem, lines=(k10, k10 + 5)),
+        st(code_block(kiem, lines=(k10 - 1, k10 + 5)),
            """Rồi ta cộng ngược từ ô cuối về ô đầu, bằng vòng lặp chạy khi chỉ số còn lớn hơn hoặc bằng không.
            Phép cộng không phụ thuộc thứ tự, nên tổng này phải trùng tổng lúc trước."""),
         st(out_block(kiem) + table(["", "vòng lặp đếm, mảng gốc", "sắp bản sao, cộng ngược"],
@@ -401,4 +405,5 @@ Muốn sửa thử mà không đụng dữ liệu thật thì <b>chép</b> bằn
                    "Dự đoán số bước tra cứu từng ô khi số tài khoản tăng gấp nghìn và gấp triệu lần",
                    "Viết chương trình duyệt mảng số dư: tổng, chỉ số nhỏ nhất, đếm theo điều kiện, in bản sao đã sắp"],
                   [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_chk, sc_scale, sc_pit, sc_quiz, sc_lab, sc_rec],
+                  assumes=["jva_import", "jva_new"],
                   covers=[(1, "formula"), (2, "example"), (3, "formula"), (4, "pitfalls"), (5, "quymo"), (6, "practice")])

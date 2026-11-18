@@ -110,3 +110,8 @@ def bnx_l20_thru(workers, ms_per_job):
 def bnx_l20_wait(cap, per_sec):
     """Thời gian chờ nhiều nhất (giây) của việc xếp cuối trong kênh đệm `cap` khi xử lý `per_sec` việc mỗi giây."""
     return cap / per_sec
+
+
+def bnx_l20_trieu(n, nghin_byte):
+    """Quy mô (AF2, nhánh B): n luồng nhẹ cùng chờ, mỗi luồng giữ `nghin_byte` nghìn byte ngăn xếp (số đo thật ở audit/bnx/ver/l20.py, làm tròn xuống nghìn byte): tổng triệu byte."""
+    return n * nghin_byte // 1000

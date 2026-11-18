@@ -84,6 +84,26 @@ def run(rec):
         and Fraction(keep56, 300) == Fraction(1, 6) == alg.bnx_keep_cycle(5, 6)[2] and round(100 * keep56 / 300) == 17,
         "đố: 5·(1+2) = 15; 23 mod 5 = 3, mod 6 = 5; giữ mảnh 5→6 = 1/6 ≈ 17%")
 
+    # (2f) WP4: cảnh quy mô — chạy lại không đệm mọi chương trình, đếm lại bằng đường khác (binascii, quét thô)
+    import lib2
+    lib2.verify_programs(rec, L)
+    out_rt = [l.split() for l in l08.P_QM_ROUTE.out.splitlines()]
+    for (n_, line) in zip((1200, 120000, 1200000), out_rt):
+        moved = sum(1 for i in range(n_) if binascii.crc32(f"tx{i}".encode()) % 3 != binascii.crc32(f"tx{i}".encode()) % 4)
+        rec(L, int(line[8]) == moved == alg.bnx_l08_moved(n_), f"{n_} bản ghi: đổi 3→4 mảnh = {moved} (binascii.crc32) = đầu ra màn hình = alg")
+    out_sr = [l.split() for l in l08.P_QM_SEARCH.out.splitlines()]
+    for (n_, line) in zip((1200, 120000, 1200000), out_sr):
+        post = len(range(0, n_, 1000))
+        rec(L, int(line[-2]) == post == alg.bnx_l08_postings(n_) and int(line[5]) == n_, f"{n_} mô tả: quét {n_}, danh sách napas {post} dòng")
+    # lab: lời giải chạy thật, so với mong_doi (độc lập với cham.sh) và dòng nào cũng hiện trên màn hình
+    lab = ROOT / "labs" / "BNX" / "L08"
+    p_ = subprocess.run([sys.executable, "-X", "utf8", "-I", str(lab / "loi_giai.py")], capture_output=True, text=True, encoding="utf-8")
+    rec(L, p_.returncode == 0 and p_.stdout.strip() == (lab / "mong_doi.txt").read_text(encoding="utf-8").strip(), "lab L08: loi_giai.py cho đúng mong_doi.txt")
+    docs2 = {"a1": "rut tien atm", "a2": "chuyen tien the", "a3": "chuyen khoan napas", "a4": "nap tien the"}
+    both = [d for d, t in docs2.items() if "chuyen" in t.split() and "the" in t.split()]
+    keep46 = len([h for h in range(12) if h - 4 * (h // 4) == h - 6 * (h // 6)])
+    rec(L, both == ["a2"] and [h % 5 for h in (29, 41, 50)] == [4, 1, 0] and keep46 == 4, "lab: chuyen∧the = [a2]; 29,41,50 mod 5 = 4,1,0; 4→6 giữ 4/12 (tính lại bằng phép trừ)")
+
     # (3) bài sinh ra: tiêu đề, mục tiêu nguyên văn giáo án; số trong ví dụ giáo án có trên màn hình
     cur = next(x for x in yaml.safe_load((ROOT / "curriculum" / "bnx.yaml").read_text(encoding="utf-8"))["lessons"] if x["id"] == L)
     spec = yaml.safe_load(next((ROOT / "lessons" / "bnx").glob(f"{L}_*.yaml")).read_text(encoding="utf-8"))

@@ -76,6 +76,15 @@ public class KiemTach {
         System.out.println(phan[0].length() + 1 + phan[1].length() == dong.length());
     }
 }""" % DONG, out="2\ntrue\ntrue\ntrue")
+    tach_cham = prog("TachCham", r"""
+public class TachCham {
+    public static void main(String[] args) {
+        String gia = "1.234";
+        System.out.println(gia.split(".").length);       // dấu . là mẫu: khớp MỌI ký tự
+        System.out.println(gia.split("\\.").length);     // \\. nghĩa là đúng dấu chấm
+        System.out.println(gia.split("\\.")[1]);
+    }
+}""", out="0\n2\n234")
     quen_gan = prog("QuenGan", """
 public class QuenGan {
     public static void main(String[] args) {
@@ -195,7 +204,9 @@ public class DoiSoat {
 }""", out="4 dong\nTong: 3,625,000\nTren 1 trieu: 2\nA001 | 1,200,000 dong\nA002 | 350,000 dong\nA003 | 2,000,000 dong\nA004 | 75,000 dong")
     write_lab("JVA", "L08", """# Lab JVA L08 — Đối soát một tệp lệnh
 
-Trong Git Bash, viết `DoiSoat` (tệp `DoiSoat.java`, số liệu là số minh hoạ). Hàm chính khai `throws Exception` (như bài mẫu `DocTep`) và dùng `java.nio.file.Files`, `Path`, `java.util.Locale`.
+Trong Git Bash, viết `DoiSoat` (tệp `DoiSoat.java`, số liệu là số minh hoạ). Hàm chính khai `throws Exception` (như ví dụ ghi rồi đọc tệp `DocTep.java` trong video).
+
+Đầu tệp cần ba dòng nhập: `import java.nio.file.Files;`, `import java.nio.file.Path;`, `import java.util.Locale;`.
 
 1. Ghi tệp `lenh.txt` bằng `Files.writeString(Path.of("lenh.txt"), …)` gồm **4 dòng**, mỗi dòng kết thúc bằng `\\n`: `A001;1200000`, `A002;350000`, `A003;2000000`, `A004;75000`.
 2. Đọc lại bằng `Files.readString`, tách dòng bằng `split("\\n")`; mỗi dòng tách tiếp bằng `split(";")` rồi `Long.parseLong` phần số tiền.
@@ -208,9 +219,10 @@ Chạy: `javac DoiSoat.java && java DoiSoat`. Chấm: `bash labs/cham.sh JVA L08
         """<p><b>Đề</b>: viết <code>DoiSoat.java</code> (số minh hoạ), hàm chính khai <code>throws Exception</code>.</p>
 <ol><li>Ghi <code>lenh.txt</code> bằng <code>Files.writeString</code>, 4 dòng: <code>A001;1200000</code>, <code>A002;350000</code>, <code>A003;2000000</code>, <code>A004;75000</code></li>
 <li>Đọc lại bằng <code>Files.readString</code>, tách dòng, tách <code>;</code>, đổi số bằng <code>Long.parseLong</code></li>
-<li>In số dòng, tổng, số lệnh trên 1 triệu, rồi từng dòng với dấu phẩy ngăn nghìn (<code>Locale.US</code>)</li></ol>""",
+<li>In số dòng, tổng, số lệnh trên 1 triệu, rồi từng dòng với dấu phẩy ngăn nghìn (<code>Locale.US</code>)</li></ol>
+<p class="note">Đầu tệp: <code>import java.nio.file.Files;</code> <code>import java.nio.file.Path;</code> <code>import java.util.Locale;</code></p>""",
         """Bây giờ tới phần bạn tự làm trên máy. Ghi một tệp bốn dòng, mỗi dòng gồm mã lệnh, dấu chấm phẩy và số tiền. Sau đó đọc lại tệp, tách từng dòng, và đổi phần số tiền thành số.
-        In số dòng, tổng số tiền có dấu phẩy ngăn hàng nghìn, số lệnh trên một triệu, rồi từng dòng đã định dạng. Hãy dừng video và tự viết, đừng chép lại ví dụ.""",
+        In số dòng, tổng số tiền có dấu phẩy ngăn hàng nghìn, số lệnh trên một triệu, rồi từng dòng đã định dạng. Nhớ ba dòng nhập ở đầu tệp, như trong ví dụ ghi và đọc tệp. Hãy dừng video và tự viết, đừng chép lại ví dụ.""",
         doi_soat_lab["out"], "DoiSoat.java",
         """<div class="box key"><b>Nếu kẹt:</b> <code>Files.readString(tep).split("\\n")</code> cho mảng dòng; mỗi dòng <code>dong[i].split(";")[1]</code> là phần số tiền; đếm bằng <code>if (soTien &gt; 1000000)</code>.
 Lời giải nằm ở <code>labs/JVA/L08/loi_giai.java</code> — chỉ mở sau khi bạn đã thử.</div>""",
@@ -227,18 +239,20 @@ Lời giải nằm ở <code>labs/JVA/L08/loi_giai.java</code> — chỉ mở sa
            """Dữ liệu ngân hàng phần lớn là chữ, như số tài khoản, tên khách, hay từng dòng của tệp đối soát, tức tệp hai bên gửi nhau để so khớp giao dịch.
            Hôm nay ta học chuỗi: đọc, cắt, so sánh, đổi thành số, và định dạng tiền cho đúng."""),
     ])
-    sc_pre = sc("prereq", "prereq", "Ôn lại ba điều sẽ dùng hôm nay", [
+    sc_pre = sc("prereq", "prereq", "Ôn lại bốn điều sẽ dùng hôm nay", [
         st(table(["đã học", "viết", "dùng lại hôm nay"],
                  [["① mảng: chỉ số từ 0 tới length − 1", "<code>a[0]</code>, <code>a.length</code>", "ký tự trong chuỗi cũng đánh chỉ số từ 0"],
                   ["② đối tượng và tham chiếu, gọi hàm qua dấu chấm", "<code>an.nap(1000000)</code>", "chuỗi là đối tượng: <code>ten.length()</code>"],
-                  ["③ dấu <code>+</code> với chuỗi là nối chữ", "<code>\"A\" + 1 + 2</code> ra <code>A12</code>", "phân biệt chuỗi số với số"]]),
-           """Trước hết ta ôn lại ba điều. Thứ nhất, phần tử của mảng đánh chỉ số từ không tới độ dài trừ một.
+                  ["③ dấu <code>+</code> với chuỗi là nối chữ", "<code>\"A\" + 1 + 2</code> ra <code>A12</code>", "phân biệt chuỗi số với số"],
+                  ["④ <code>import</code> và <code>new</code>", "<code>import</code> lấy về một lớp có sẵn của Java; <code>new</code> làm ra một đối tượng mới", "<code>Locale</code>, <code>Path</code>, <code>new String[2]</code>"]]),
+           """Trước hết ta ôn lại bốn điều. Thứ nhất, phần tử của mảng đánh chỉ số từ không tới độ dài trừ một.
            Thứ hai, đối tượng được giữ qua tham chiếu, và ta gọi hàm của nó qua dấu chấm.
-           Thứ ba, dấu cộng có một vế là chuỗi thì nối chữ, làm từ trái sang phải.""", focus=[1, "1.2", "1.3", "1.4"]),
+           Thứ ba, dấu cộng có một vế là chuỗi thì nối chữ, làm từ trái sang phải.
+           Thứ tư, dòng nhập lấy về một lớp có sẵn của Java, còn từ khoá tạo mới làm ra một đối tượng mới.""", focus=[1, "1.2", "1.3", "1.4", "1.5"]),
     ])
     sc_sym = sc("sym", "symbol", "Giải mã các hàm hay dùng của chuỗi", [
         st(code_block(chuoi, lines=(3, 9), title="Tệp Chuoi.java"),
-           """Chuỗi trong Java là một đối tượng, nên ta gọi hàm của nó qua dấu chấm. Chương trình này thử sáu hàm trên tên Nguyễn Văn An."""),
+           """Chuỗi trong Java là một đối tượng, nên ta gọi hàm của nó qua dấu chấm. Chương trình này thử sáu hàm trên tên Nguyen Van An, viết không dấu như trong mã."""),
         st(table(["viết", "nghĩa", "kết quả"],
                  [["<code>ten.length()</code>", "số ký tự; chuỗi <b>có</b> ngoặc tròn, mảng thì không", "13"],
                   ["<code>ten.charAt(0)</code>", "ký tự ở chỉ số 0, đếm từ 0 như mảng", "N"],
@@ -336,36 +350,51 @@ Lời giải nằm ở <code>labs/JVA/L08/loi_giai.java</code> — chỉ mở sa
                "format(1234567, ',d') == '1,234,567'"])
     k4 = ln(kiem, "split")
     sc_tep = sc("tep", "example", "Ví dụ: ghi rồi đọc lại một tệp văn bản", [
-        st(code_block(doc_tep, lines=(5, 10)),
-           """Dữ liệu thật nằm trong tệp, nên ta học ghi và đọc tệp chữ. Đường dẫn của tệp là một đối tượng tạo từ tên tệp, nằm ở thư mục đang đứng.
+        st(code_block(doc_tep, lines=(1, 10), title="Tệp DocTep.java, phần ghi tệp")
+           + "<p class='note'><code>throws Exception</code>: hàm này có thể gặp lỗi khi làm việc với tệp, tạm giao cho máy ảo xử lý (bài ngoại lệ sẽ nói kỹ).</p>",
+           """Dữ liệu thật nằm trong tệp, nên ta học ghi và đọc tệp chữ. Hai dòng nhập đầu tệp lấy về hai công cụ có sẵn của Java: một để làm việc với tệp, một để chỉ đường tới tệp.
+           Đường dẫn của tệp là một đối tượng tạo từ tên tệp, nằm ở thư mục đang đứng.
            Mảng chuỗi tạo bằng từ khoá tạo mới kèm số ô, mỗi ô lúc đầu là giá trị rỗng, rồi ta gán hai dòng đối soát. Hàm nối ghép các dòng bằng ký tự xuống dòng.
-           Hàm ghi chuỗi ra tệp, với bảng mã thông dụng cho tiếng Việt có dấu. Dòng khai ở hàm chính nói rằng thao tác với tệp có thể gặp lỗi, và ta chưa xử lý ở đây.""",
-           focus=[1, "1.2", ["1.3", "1.4", "1.5"], "1.6", "1.6", "1.1"], forward_ref=True),
-        st(code_block(doc_tep, lines=(11, 17)) + out_block(doc_tep),
+           Hàm ghi chuỗi ra tệp, với bảng mã thông dụng cho tiếng Việt có dấu.
+           Chữ ném ở cuối dòng hàm chính báo rằng hàm này có thể gặp lỗi khi làm việc với tệp, và ta tạm giao lỗi đó cho máy ảo.""",
+           focus=[1, ["2.1", "2.2"], "2.6", ["2.7", "2.8", "2.9"], "2.10", "2.10", "2.5"], forward_ref=True, introduces=["jva_throws"]),
+        st(code_block(doc_tep, lines=(11, 19)) + out_block(doc_tep),
            """Hàm đọc chuỗi lấy cả nội dung tệp. Ta tách theo ký tự xuống dòng ra mảng các dòng, rồi tách tiếp từng dòng ở dấu chấm phẩy và đổi phần số tiền thành số.
            Chạy thật, ta được hai dòng. Tổng là một triệu bốn trăm tám mươi bốn nghìn năm trăm sáu mươi bảy, đúng bằng hai số tiền cộng lại.""",
            clear=True, focus=["1.1", ["1.2", "1.4", "1.5"], "3.1", "3.1"]),
     ], checks=["1234567 + 250000 == 1484567"])
     sc_chk = sc("check", "check", "Tự kiểm bằng đường khác: tách bằng hàm tách và đếm độ dài", [
         st(code_block(kiem, lines=(k4, k4 + 4), title="Tệp KiemTach.java")
-           + "<span class='note'>Chữ trong ngoặc của <code>split</code> là một mẫu đặc biệt: <code>\";\"</code> dùng thẳng được, "
-             "nhưng dấu <code>.</code> hay <code>|</code> thì không.</span>",
-           """Ta kiểm bằng một đường khác hẳn: không dùng hàm tìm vị trí mà dùng hàm tách, vì hàm này tự cắt chuỗi tại mỗi dấu chấm phẩy và trả về một mảng chuỗi. Lưu ý chữ trong ngoặc là một mẫu đặc biệt, nên dấu chấm hay dấu vạch đứng không dùng thẳng được như dấu chấm phẩy.
+           + "<span class='note'>Chữ trong ngoặc của <code>split</code> là một <b>mẫu</b>: <code>\";\"</code> dùng thẳng được; "
+             "các dấu khác xem ở bước cuối.</span>",
+           """Ta kiểm bằng một đường khác hẳn: không dùng hàm tìm vị trí mà dùng hàm tách, vì hàm này tự cắt chuỗi tại mỗi dấu chấm phẩy và trả về một mảng chuỗi. Chữ trong ngoặc của hàm tách là một mẫu, và dấu chấm phẩy dùng thẳng được; mẫu là gì thì ta giải thích ở bước cuối của phần này.
            Ta kiểm số phần, so nội dung bằng hàm so nội dung, và kiểm độ dài như bước ba.""", focus=[2, 3, 2]),
         st(out_block(kiem) + "$$10 + 1 + 7 = 18 \\; \\checkmark$$",
            """Chạy thật, mảng có hai phần, phần đầu đúng số tài khoản, phần sau đổi ra đúng số tiền.
            Dòng cuối đúng, vì mười cộng một cộng bảy bằng mười tám, đúng độ dài cả dòng, nên hai cách tách cho cùng kết quả.""",
            focus=[["2.1", "2.2", "2.3"], ["2.4", 3]]),
-    ], checks=["'0123456789;1234567'.split(';') == ['0123456789', '1234567']", "10 + 1 + 7 == len('0123456789;1234567')"])
+        st(code_block(tach_cham) + out_block(tach_cham)
+           + r"<p class='note'><b>Biểu thức chính quy</b> (mẫu): chữ trong ngoặc của <code>split</code> được đọc như một mẫu. Trong mẫu, <code>.</code> nghĩa là “một ký tự bất kỳ”; muốn đúng dấu chấm phải viết <code>\\.</code>.</p>",
+           """Còn một chi tiết về hàm tách. Chữ trong ngoặc của nó không đọc như chữ thường mà như một mẫu, gọi là biểu thức chính quy, trong đó dấu chấm nghĩa là một ký tự bất kỳ.
+           Vì vậy viết thẳng dấu chấm thì mọi ký tự đều là chỗ cắt, và ta được mảng rỗng. Viết hai gạch chéo ngược trước dấu chấm thì mới cắt đúng ở dấu chấm, ra hai phần, phần sau là hai ba bốn.""",
+           clear=True),
+    ], checks=["'0123456789;1234567'.split(';') == ['0123456789', '1234567']", "10 + 1 + 7 == len('0123456789;1234567')",
+               "all(x == '' for x in __import__('re').split('.', '1.234'))", "__import__('re').split(r'\\.', '1.234') == ['1', '234']"])
     sc_scale = sc("quymo", "concept", "Khi tệp đối soát lớn dần: đọc cả tệp một lần còn ổn không?", [
-        st(code_block(dung_luong, lines=(5, 11)) + out_block(dung_luong),
-           """Ta đo thử bằng một tệp một nghìn dòng, mỗi dòng như dòng đối soát, mười tám ký tự cộng một ký tự xuống dòng. Chương trình ghi tệp rồi hỏi kích thước.
-           Kết quả là mười chín nghìn byte, tức đúng mười chín byte mỗi dòng."""),
+        st(code_block(dung_luong, lines=(1, 9), title="Tệp DungLuong.java, phần dựng nội dung"),
+           """Ta đo thử bằng một tệp một nghìn dòng. Vòng lặp thêm vào bộ dựng chuỗi một nghìn dòng giống dòng đối soát, mỗi dòng mười tám ký tự cộng một ký tự xuống dòng."""),
+        st(code_block(dung_luong, lines=(10, 14), title="Phần ghi tệp rồi hỏi kích thước") + out_block(dung_luong)
+           + "<p class='note'><code>Files.size(tep)</code>: kích thước tệp, tính bằng byte.</p>",
+           """Chương trình ghi tệp rồi hỏi kích thước bằng một lệnh có sẵn của bộ công cụ tệp, tính bằng byte.
+           Kết quả là mười chín nghìn byte, tức đúng mười chín byte mỗi dòng.""",
+           clear=True),
         st(table(["số dòng", "kích thước tệp (byte)", "cỡ"],
-                 [["1 000", "19 000", "19 KB"], ["1 000 000", "19 000 000", "19 MB"], ["100 000 000", "1 900 000 000", "1,9 GB"]]),
+                 [["1 000", "19 000", "19 KB"], ["1 000 000", "19 000 000", "19 MB"], ["100 000 000", "1 900 000 000", "1,9 GB"]])
+           + "<p class='note'>KB, MB, GB: một nghìn, một triệu, một tỉ byte (làm tròn theo nghìn).</p>",
            """Nhân lên cho các quy mô khác. Một triệu dòng là mười chín triệu byte. Một trăm triệu dòng là một tỉ chín trăm triệu byte, gần hai tỉ.
+           Các chữ viết tắt ở cột cuối là cách gọi gọn: ki lô bai là một nghìn bai, mê ga bai là một triệu bai, gi ga bai là một tỉ bai, ở đây làm tròn theo nghìn.
            Hàm đọc cả tệp giữ toàn bộ nội dung trong bộ nhớ cùng lúc, nên với tệp cỡ hàng tỉ byte nó dễ làm hết bộ nhớ.""",
-           clear=True, focus=[1, "1.3", "1.4", 1]),
+           clear=True, focus=[1, "1.3", "1.4", 1, 1]),
         st("""<div class="box key"><b>Điều người làm nghề rút ra.</b> Đọc cả tệp một lần chỉ hợp với tệp <b>nhỏ</b>. Tệp đối soát cuối ngày có thể hàng trăm triệu dòng:
 phải đọc <b>từng dòng</b> hoặc từng phần, xử lý xong dòng nào bỏ dòng ấy. Java có cách đọc từng dòng; điểm cần nhớ là hỏi trước: tệp lớn nhất có thể bao nhiêu?</div>""",
            """Đọc cả tệp một lần chỉ hợp với tệp nhỏ. Tệp đối soát cuối ngày có thể có hàng trăm triệu dòng, nên phải đọc từng dòng hoặc từng phần, xử lý xong dòng nào thì bỏ dòng ấy.
@@ -378,17 +407,19 @@ phải đọc <b>từng dòng</b> hoặc từng phần, xử lý xong dòng nào
            Vì chuỗi bất biến, hàm trả về chuỗi mới rồi chuỗi ấy bị bỏ đi, nên dòng in đầu vẫn còn khoảng trắng.
            Phải gán lại kết quả thì mới được chuỗi sạch.""", focus=[1, [2, "4.1"], "4.2"]),
         st('<div class="box warn"><b>Lỗi 2 (người đã đi làm).</b> Gọi hàm trên giá trị rỗng <code>null</code>, tức biến không trỏ tới chuỗi nào (khác chuỗi không có ký tự <code>""</code>).</div>'
-           + code_block(rong, lines=(ln(rong, '"An".equals'), ln(rong, '"An".equals') + 1)) + out_block(rong),
-           """Lỗi thứ hai gặp cả ở người đã đi làm: hàm tra tên trả về giá trị rỗng khi không tìm thấy, nghĩa là không trỏ tới chuỗi nào.
-           Gọi hàm so nội dung trên giá trị rỗng thì máy ảo ném ngoại lệ con trỏ rỗng, báo rằng không gọi được hàm so nội dung.
+           + code_block(rong, lines=(2, 7)),
+           """Lỗi thứ hai gặp cả ở người đã đi làm: hàm tra tên trả về giá trị rỗng khi không tìm thấy, nghĩa là không trỏ tới chuỗi nào."""),
+        st(code_block(rong, lines=(9, 11)) + out_block(rong),
+           """Gọi hàm so nội dung trên giá trị rỗng thì máy ảo ném ngoại lệ con trỏ rỗng, báo rằng không gọi được hàm so nội dung.
            Cách an toàn là đặt chuỗi hằng đứng trước, vì nó không bao giờ rỗng, nên dòng đầu in sai chứ không ném lỗi.""",
-           focus=[1, [2, "4.2"], [2, "4.1"]]),
+           clear=True, focus=[["1.3", "3.2"], ["1.2", "3.1"]]),
         st('<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Nối chuỗi bằng <code>+</code> trong vòng lặp lớn.</div>'
-           + code_block(noi, lines=(ln(noi, "for"), ln(noi, "sb.append") + 1)) + out_block(noi),
+           + code_block(noi, lines=(3, 9)),
            """Lỗi thứ ba là nối chuỗi bằng dấu cộng trong vòng lặp lớn, vì mỗi lần nối, máy tạo chuỗi mới và chép lại cả chuỗi cũ.
-           Với mười nghìn lần, số ký tự phải chép là năm mươi triệu không trăm linh năm nghìn, bằng n nhân n cộng một chia hai.
-           Bộ dựng chuỗi, tức một đối tượng giữ dãy ký tự sửa được, chỉ thêm vào cuối, nên công việc tăng theo n chứ không theo n bình phương, mà kết quả y hệt.""",
-           focus=[[1, 2], "4.1", [2, "4.1"]]),
+           Với mười nghìn lần, số ký tự phải chép là năm mươi triệu không trăm linh năm nghìn, bằng n nhân n cộng một chia hai."""),
+        st(code_block(noi, lines=(10, 12)) + out_block(noi),
+           """Bộ dựng chuỗi, tức một đối tượng giữ dãy ký tự sửa được, chỉ thêm vào cuối, nên công việc tăng theo n chứ không theo n bình phương, mà kết quả y hệt.""",
+           clear=True),
     ], checks=["sum(range(1, 10000 + 1)) == 10000 * (10000 + 1) // 2 == 50005000"])
     sc_quiz = sc("quiz", "quiz", "Bây giờ tới phần bạn tự làm", [
         st(code_block(quiz, lines=(3, 8), title="Đoán ba dòng in ra"),
@@ -434,4 +465,5 @@ phải đọc <b>từng dòng</b> hoặc từng phần, xử lý xong dòng nào
                    "Dự đoán kích thước tệp đối soát ở một nghìn, một triệu, một trăm triệu dòng và khi nào không nên đọc cả tệp",
                    "Viết chương trình đối soát: ghi tệp bốn dòng, đọc lại, cộng tổng, đếm lệnh lớn và in có định dạng"],
                   [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_tep, sc_chk, sc_scale, sc_pit, sc_quiz, sc_lab, sc_rec],
+                  assumes=["jva_import", "jva_new"],
                   covers=[(1, "sym"), (2, "intuition"), (3, "example"), (4, "pitfalls"), (5, "tep"), (6, "quymo"), (7, "practice")])

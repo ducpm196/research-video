@@ -29,7 +29,7 @@ def bnx_rolling_waves(replicas, max_unavailable, max_surge):
     hi = replicas + bnx_k8s_abs(max_surge, replicas, True)
     old, ready, start = replicas, 0, 0
     rows, trace = [], [(old, ready, start)]
-    for _ in range(100):
+    for _ in range(1000):
         while True:
             total = old + ready + start
             up = min(hi - total, replicas - (ready + start))
@@ -93,3 +93,30 @@ def bnx_build_seconds(steps, changed, cost):
 def bnx_short_sha(full):
     """CI_COMMIT_SHORT_SHA: tám ký tự đầu của CI_COMMIT_SHA (tài liệu biến định sẵn của GitLab)."""
     return full[:8]
+
+
+# ── Nâng AF2 (WP4, 2026-11-14): quy mô cập nhật cuốn chiếu và lab ──
+def bnx_l13_dot(replicas, max_unavailable, max_surge):
+    """Số đợt chờ sẵn sàng theo công thức: mỗi đợt thay tối đa (thiếu + thừa) bản, nên số đợt = ceil(D / (mu + ms));
+    mu làm tròn xuống, ms làm tròn lên khi viết bằng phần trăm. Kiểm độc lập với bộ điều khiển mô phỏng ở ver/l13.py."""
+    mu = bnx_k8s_abs(max_unavailable, replicas, False)
+    ms = bnx_k8s_abs(max_surge, replicas, True)
+    return -(-replicas // (mu + ms))
+
+
+def bnx_l13_phut(dot, giay_moi_dot):
+    """Thời gian cập nhật (phút) nếu mỗi đợt chờ giay_moi_dot giây (số minh hoạ)."""
+    return dot * giay_moi_dot / 60
+
+
+def bnx_l13_lab():
+    """Lab L13: (lớp phải dựng lại, giây) cho từng lần sửa; số đợt, tối thiểu, tối đa cho hai cấu hình."""
+    tot = [("FROM", set(), 5), ("WORKDIR", set(), 1), ("COPY pom.xml", {"pom.xml"}, 1), ("RUN tai phu thuoc", set(), 80),
+           ("COPY src", {"src/Dao.java", "src/Main.java"}, 2), ("RUN dong goi", set(), 25)]
+    xau = [("FROM", set(), 5), ("COPY . .", {"pom.xml", "src/Dao.java", "src/Main.java"}, 3), ("RUN tai va dong goi", set(), 105)]
+
+    def lai(lop, sua):
+        ds = bnx_cache_rebuilt([(a, b) for a, b, c in lop], {sua})
+        return ds, sum(lop[i - 1][2] for i in ds)
+    return (lai(tot, "src/Dao.java"), lai(tot, "pom.xml"), lai(xau, "src/Dao.java"),
+            (bnx_rolling_summary(12, 1, 2)), (bnx_rolling_summary(10, "25%", "25%")))

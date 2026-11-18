@@ -2,8 +2,9 @@
 
 Optional always-on rule. Copy it into the rules or context location that your runtime documents (the exact path for Antigravity and Gemini CLI is NOT_VERIFIED here; check the runtime's own documentation). The full procedures live in the skill `evidence-gated-work`.
 
-## 5-Stage Operational Lifecycle (Mandatory Protocol)
-Whenever receiving a user request or initiating a non-trivial task, follow this exact sequence:
+## Working tiers and the 5-stage lifecycle
+Working tiers (EGW section 8): `direct` for trivial requests, `inline` for work that starts and ends in one session, `full` (the 5-stage lifecycle with its files) for work across sessions or agents, handoffs, audits, release checks, a workspace that already holds handover.md or state/, or on request.
+For tier `full`, follow this exact sequence:
 1. **Stage 1 (Deep Scan & Knowledge Graph)**: Perform a deep scan of the workspace, files, and dependencies. Synthesize the initial knowledge graph file `knowledge-graph_<ref>_<ts>.md` (and maintain `state/knowledge-graph.md`). Graph nodes include observations (`O-xxxx`), citations (`S-xxxx`), claims (`C-xxxx`), contract bottlenecks (`BN-xxxx`), and artifacts (`A-xxxx`) arranged in an explicit Mermaid DAG (`flowchart TD`).
 2. **Stage 2 (Precise Reasoning & Execution Plan)**: Reason with precision from the knowledge graph and generate `plan_<ref>_<ts>.md`. Specify matching Reference Code and Timestamp, Task Objectives, Committed Scope & Exclusions, Ordered Work Packages with acceptance criteria (REQUIRED/OPTIONAL), Contract Bottlenecks register (7 mandatory fields), and Evidence verification plan.
 3. **Stage 3 (Strict Execution per Plan)**: Execute sequentially per plan. Gather direct empirical evidence (OBSERVED/CITED) for every material action. Resolve and close open contract bottlenecks through their resolution tests before dependent actions; never build on open bottlenecks without marking conditional.

@@ -122,3 +122,37 @@ def run(rec):
     blocks = (src.PY_RS, src.PY_CASES, src.PY_COUNT, src.HTTP_TOKEN, src.JSON_TOKEN)
     m = max(len(l) for c in blocks for l in c.strip("\n").split("\n"))
     rec("L04", m <= 70 and all(len(c.strip("\n").split("\n")) <= 12 for c in blocks), f"khối mã ≤ 12 dòng, dòng dài nhất {m} ký tự")
+    # ── AF2 (WP4): quy mô và lab ──
+    rc, so = run_py(src.PY_SIM.strip("\n") + "\n")
+    rec("L04", rc == 0 and so.strip() == src.OUT_SIM.strip(), "khối quy mô chạy nguyên văn = màn hình (10, 1000, 100000 máy khách)")
+
+    def sim_per_second(n, ttl=300, som=30, gio=3600):
+        """Đường khác: duyệt TỪNG GIÂY, mỗi máy khách giữ hạn của mã đang có, xin mã khi còn <= som giây."""
+        exp = [None] * n
+        off = [i % (ttl - som) for i in range(n)]
+        dem = 0
+        for t in range(gio):
+            for i in range(n):
+                if t < off[i]:
+                    continue
+                if exp[i] is None or exp[i] - t <= som:
+                    exp[i] = t + ttl
+                    dem += 1
+        return dem
+    got = [sim_per_second(n) for n in (10, 1000)]
+    rec("L04", got == [140, 13360] == [alg.bnx_token_issues(10), alg.bnx_token_issues(1000)], f"duyệt từng giây (mỗi giây xét hạn từng máy): 10 → {got[0]}, 1000 → {got[1]}")
+    rec("L04", alg.bnx_token_issues(100000) == 1333390 == int(src.OUT_SIM.split("\n")[-2].split()[2]) and 100000 * 3600 == 360000000,
+        "100 000 máy khách: công thức đóng khớp số trên màn hình; hỏi lại mỗi yêu cầu 360 000 000")
+    rec("L04", 95 < 13360 / 140 < 96 and 9520 < 1333390 / 140 < 9530 and 3600 // 300 == 12 and -(-3600 // 270) == 14,
+        "tỉ lệ xin mã so với mười máy: 95,4 lần và 9 524 lần (không phải 100 và 10 000); quiz 12 lần là bỏ qua xin sớm, mô phỏng xin sớm cho 14")
+    lab = ROOT / "labs" / "BNX" / "L04"
+    rc, so = run_py((lab / "loi_giai.py").read_text(encoding="utf-8"))
+    exp = (lab / "mong_doi.txt").read_text(encoding="utf-8").strip()
+    # lab tính lại bằng đường khác: duyệt từng giây một giờ, TTL 120, xin lại khi còn 20 giây; giây cuối còn nhận tìm bằng máy chủ tài nguyên
+    exp_t, cnt = None, 0
+    for t in range(3600):
+        if exp_t is None or exp_t - t <= 20:
+            exp_t, cnt = t + 120, cnt + 1
+    last = max(g for g in range(2000) if alg.bnx_rs_check({"aud": "x", "exp": 120, "scope": "s"}, "s", "x", g, skew=30) == 200)
+    rec("L04", rc == 0 and so.strip() == exp == f"Mot ma chung: {cnt} lan xin ma\nMoi API mot ma: {4 * cnt} lan xin ma\nGiay cuoi cung ma con duoc nhan: {last}"
+        and (cnt, last) == (36, 149), f"lab: lời giải chạy lại = mong_doi; duyệt từng giây cho {cnt} lần xin, 4 API {4 * cnt}, giây cuối {last}")

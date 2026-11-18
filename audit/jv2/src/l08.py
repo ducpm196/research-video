@@ -75,7 +75,8 @@ import java.math.RoundingMode;
 public class LamTron {
     static String dong(String s) {
         BigDecimal x = new BigDecimal(s);
-        return s + ": HALF_UP " + x.setScale(0, RoundingMode.HALF_UP) + ", HALF_EVEN " + x.setScale(0, RoundingMode.HALF_EVEN)
+        return s + ": HALF_UP " + x.setScale(0, RoundingMode.HALF_UP)
+                + ", HALF_EVEN " + x.setScale(0, RoundingMode.HALF_EVEN)
                 + ", DOWN " + x.setScale(0, RoundingMode.DOWN);
     }
 
@@ -119,6 +120,30 @@ public class DinhDang {
     }
 }""", out="1,234,567.89\n1.234.567,89\nparseDouble: that bai\n1234.5")
 
+    prog("ChanHet", r"""
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+
+public class ChanHet {
+    public static void main(String[] args) {
+        BigDecimal dung = BigDecimal.ZERO, chan = BigDecimal.ZERO;
+        for (int i = 0; i < 1000; i++) {
+            BigDecimal v = new BigDecimal(2 * i).add(new BigDecimal("0.5"));   // phần nguyên luôn chẵn
+            dung = dung.add(v);
+            chan = chan.add(v.setScale(0, RoundingMode.HALF_EVEN));
+        }
+        System.out.println("lech HALF_EVEN " + chan.subtract(dung));
+    }
+}""", out="lech HALF_EVEN -500.0", note="khẳng định cảnh scale: HALF_EVEN không tổng quát; phần nguyên toàn chẵn thì luôn lệch -0,5 mỗi giao dịch")
+    prog("ChiaKhongHet", r"""
+import java.math.BigDecimal;
+
+public class ChiaKhongHet {
+    public static void main(String[] args) {
+        System.out.println(BigDecimal.ONE.divide(new BigDecimal("3")));
+    }
+}""", out="", expect="runtime_error:ArithmeticException", err="Exception in thread \"main\" java.lang.ArithmeticException: Non-terminating decimal expansion; no exact representable decimal result.",
+         note="khẳng định cảnh formula: divide không kèm số chữ số ném ArithmeticException khi không chia hết")
     lab = prog("LaiTheoNgay", r"""
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -158,6 +183,8 @@ Dao han la: MONDAY
 
 (`Dao han la` là `getDayOfWeek()` của ngày đáo hạn.) Tự tính tay trước: số ngày từ 15 tháng 1 tới 15 tháng 4 là 31 + 28 + 31 = 90, cộng 5 ngày nữa.
 
+Dòng `import` cần dùng: `java.math.BigDecimal`, `java.math.RoundingMode`, `java.time.LocalDate`, `java.time.temporal.ChronoUnit`.
+
 Chạy: `javac LaiTheoNgay.java && java LaiTheoNgay`. Chấm: `bash labs/cham.sh JV2 L08 LaiTheoNgay.java`.
 """, "java", lab["code"], lab["out"])
     sc_lab = practice_scene(sc, "Tự làm: lãi theo ngày cho khoản gửi 120 triệu", pr_steps(
@@ -174,7 +201,7 @@ Thứ trong tuần: <code>den.getDayOfWeek()</code>. Lời giải: <code>labs/JV
         """Nếu kẹt, nhân gốc với lãi suất rồi với số ngày, rồi chia cho ba trăm sáu mươi lăm với không chữ số thập phân và kiểu làm tròn nửa lên. Thứ trong tuần lấy từ ngày đáo hạn.
         Lời giải đầy đủ nằm trong thư mục thực hành của bài, chỉ mở sau khi bạn đã tự thử.""", pause=180), "JV2", "L08")
 
-    sc_hook = sc("hook", "hook", "Ba triệu giao dịch nửa đồng: cuối ngày lệch một triệu rưỡi đồng", [
+    sc_hook = sc("hook", "hook", "Một triệu giao dịch nửa đồng: cuối ngày lệch năm trăm nghìn đồng", [
         st(svg(1500, 300,
                box(20, 90, 340, 110, ["phí 2,5 đồng", "làm tròn → 3 đồng"], C_AMBER, 26, bold=True), arrow(365, 145, 470, 145, "#475569"),
                box(475, 90, 340, 110, ["lặp 1 000 000 lần", "mỗi lần thừa 0,5"], C_BLUE, 26, bold=True), arrow(820, 145, 925, 145, "#475569"),
@@ -199,15 +226,15 @@ Rồi bài toán lãi theo ngày, và câu hỏi quy mô: sai lệch làm tròn 
     sc_sym = sc("sym", "symbol", "Giải mã bảy thứ của ngày giờ và tiền", [
         st(table(["viết", "nghĩa"],
                  [["<code>LocalDate</code>", "<b>ngày lịch</b> (năm-tháng-ngày), không có giờ, không có múi giờ"],
-                  ["<code>Instant</code>", "<b>một điểm duy nhất</b> trên trục thời gian, tính theo UTC; mọi nơi trên thế giới cùng đồng ý đó là lúc nào"],
+                  ["<code>Instant</code>", "<b>một điểm duy nhất</b> trên trục thời gian, tính theo <b>UTC</b> (giờ quốc tế, múi giờ lệch 0); mọi nơi trên thế giới cùng đồng ý đó là lúc nào. Viết dạng <code>2026-03-08T07:30:00Z</code>: chữ <code>T</code> ngăn ngày với giờ, chữ <code>Z</code> ở cuối nghĩa là UTC"],
                   ["<code>ZonedDateTime</code>", "<b>cách một nơi cụ thể đọc</b> một điểm thời gian: ngày, giờ và độ lệch múi giờ"],
-                  ["<code>Duration</code> / <code>Period</code>", "khoảng thời gian <b>theo giờ-giây</b> / <b>theo ngày-tháng-năm lịch</b>"],
+                  ["<code>Duration</code> / <code>Period</code>", "khoảng thời gian <b>theo giờ-giây</b> / <b>theo ngày-tháng-năm lịch</b>; in ra dạng viết tắt: <code>PT23H</code> = 23 giờ, <code>P3M</code> = 3 tháng (<code>P</code> mở đầu một khoảng, <code>T</code> ngăn phần giờ, <code>H</code> giờ, <code>M</code> tháng)"],
                   ["<code>BigDecimal</code>", "số thập phân <b>chính xác</b>, dùng cho tiền; tạo từ <b>chuỗi</b>, không tạo từ số thực"],
                   ["<code>RoundingMode</code>", "quy tắc làm tròn: <code>HALF_UP</code> (5 thì lên), <code>HALF_EVEN</code> (5 thì về số chẵn), <code>DOWN</code> (bỏ phần lẻ)"],
                   ["<code>Locale</code>", "vùng ngôn ngữ: quy định dấu ngăn nghìn, dấu thập phân khi <b>in và đọc số</b>"]]),
-           """Bảng này có bảy thứ. Ngày lịch chỉ có năm, tháng, ngày. Điểm thời gian là một điểm duy nhất trên trục thời gian, mọi nơi cùng đồng ý đó là lúc nào. Ngày giờ có múi giờ là cách một nơi cụ thể đọc điểm đó.
-           Khoảng thời gian có hai loại, theo giờ và giây, hoặc theo ngày, tháng, năm lịch. Số thập phân chính xác dùng cho tiền, và phải tạo từ chuỗi. Kiểu làm tròn quy định năm thì làm gì. Cuối cùng vùng ngôn ngữ quy định dấu ngăn nghìn và dấu thập phân khi in và đọc số.""",
-           focus=[1, "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8"]),
+           """Bảng này có bảy thứ. Ngày lịch chỉ có năm, tháng, ngày. Điểm thời gian là một điểm duy nhất trên trục thời gian, tính theo giờ quốc tế gọi tắt là U T C, nên mọi nơi cùng đồng ý đó là lúc nào. Ta viết nó với chữ T ngăn ngày và giờ, và chữ Z ở cuối nghĩa là giờ quốc tế. Ngày giờ có múi giờ là cách một nơi cụ thể đọc điểm đó.
+           Khoảng thời gian có hai loại, theo giờ và giây, hoặc theo ngày, tháng, năm lịch. Khi in ra, chữ P mở đầu một khoảng, chữ T ngăn phần giờ, nên P T hai mươi ba H là hai mươi ba giờ, còn P ba M là ba tháng. Số thập phân chính xác dùng cho tiền, và phải tạo từ chuỗi. Kiểu làm tròn quy định năm thì làm gì. Cuối cùng vùng ngôn ngữ quy định dấu ngăn nghìn và dấu thập phân khi in và đọc số.""",
+           focus=[1, "1.2", "1.3", "1.3", "1.4", "1.5", "1.5", "1.6", "1.7", "1.8"]),
     ])
     sc_int = sc("intuition", "intuition", "Hình dung: một điểm thời gian, nhiều cách đọc", [
         st(svg(1500, 380,
@@ -219,40 +246,48 @@ Rồi bài toán lãi theo ngày, và câu hỏi quy mô: sai lệch làm tròn 
                arrow(700, 205, 340, 255, "#2a78d6"), arrow(780, 205, 1170, 255, "#16a34a")),
            """Hình dung một điểm thời gian là một khoảnh khắc duy nhất, chấm đỏ trên trục. Thành phố Hồ Chí Minh đọc nó là mười bốn giờ ba mươi. Một thành phố bên Bắc Mỹ đọc cùng khoảnh khắc đó là ba giờ ba mươi sáng, trong múi giờ mùa hè. Khoảnh khắc không đổi, chỉ cách đọc khác nhau.
            Vì thế hệ thống nên lưu điểm thời gian, và chỉ đổi sang giờ địa phương khi hiển thị."""),
-        st(code_block(gio, lines=(8, 10)),
-           """Đây là đoạn mã thật. Ta tạo một điểm thời gian từ chuỗi, rồi hỏi hai múi giờ đọc nó thế nào.""", clear=True),
-        st(code_block(gio, lines=(11, 15)) + out_block(part(gio, 2, 4)),
-           """Một chi tiết nữa. Thành phố bên Bắc Mỹ này chuyển sang giờ mùa hè vào đúng ngày tám tháng ba, nên ngày đó chỉ có hai mươi ba giờ. Ngày một tháng mười một lùi giờ nên có hai mươi lăm giờ. Hãy nhớ, một ngày không phải lúc nào cũng dài hai mươi bốn giờ.""", clear=True),
+        st(code_block(gio, lines=(8, 10))
+           + "<p class='note'><code>\"Asia/Ho_Chi_Minh\"</code>: <b>tên múi giờ</b> theo danh mục quốc tế (IANA), dạng <code>châu lục/thành phố</code>. Dùng tên này thay cho <code>UTC+7</code> vì luật giờ mùa hè đổi theo từng nơi và từng năm.</p>",
+           """Đây là đoạn mã thật. Ta tạo một điểm thời gian từ chuỗi, rồi hỏi hai múi giờ đọc nó thế nào. Mỗi múi giờ có tên dạng châu lục, gạch chéo, thành phố, theo danh mục quốc tế, vì luật giờ mùa hè đổi theo từng nơi.""", clear=True),
+        st(code_block(gio, lines=(11, 15)) + out_block(part(gio, 2, 4))
+           + "<p class='note'><code>ZonedDateTime.of(năm, tháng, ngày, giờ, phút, giây, nano giây, múi giờ)</code>: bốn số 0 liền nhau là giờ, phút, giây và nano giây, tức nửa đêm. Kết quả <code>PT23H</code>: 23 giờ.</p>",
+           """Một chi tiết nữa. Ta dựng nửa đêm của hai ngày, bằng năm, tháng, ngày rồi bốn số không cho giờ, phút, giây và phần nhỏ hơn giây. Thành phố bên Bắc Mỹ này chuyển sang giờ mùa hè vào đúng ngày tám tháng ba, nên ngày đó chỉ có hai mươi ba giờ. Ngày một tháng mười một lùi giờ nên có hai mươi lăm giờ, và kết quả in ra dạng P T hai mươi ba H. Hãy nhớ, một ngày không phải lúc nào cũng dài hai mươi bốn giờ.""", clear=True),
     ])
     sc_form = sc("formula", "formula", "Suy ra từng bước: công thức lãi theo ngày và vì sao dùng số thập phân chính xác", [
-        st("<p><b>Bước 1.</b> Lãi đơn theo ngày: <b>lãi = gốc × lãi suất năm × số ngày / 365</b>.</p><p>Vì lãi suất là <b>mỗi năm</b>, nên phần của năm là <code>số ngày / 365</code>.</p>",
-           """Bước một, công thức lãi đơn theo ngày. Vì lãi suất tính cho cả năm, nên phần của năm mà khoản gửi tồn tại là số ngày chia ba trăm sáu mươi lăm. Nhân phần đó với gốc và lãi suất ta được lãi.""", clear=True),
+        st("<p><b>Bước 1.</b> Lãi đơn theo ngày: <b>lãi = gốc × lãi suất năm × số ngày / 365</b>.</p><p>Vì lãi suất là <b>mỗi năm</b>, nên phần của năm là <code>số ngày / 365</code>.</p>"
+           "<p class='note'>Đây là quy ước <b>số ngày thực tế / 365</b>. Ngân hàng còn dùng quy ước khác (thực tế / 360, hoặc 30 / 360); hợp đồng nói quy ước nào thì dùng quy ước đó.</p>",
+           """Bước một, công thức lãi đơn theo ngày. Vì lãi suất tính cho cả năm, nên phần của năm mà khoản gửi tồn tại là số ngày chia ba trăm sáu mươi lăm. Nhân phần đó với gốc và lãi suất ta được lãi. Đây là một quy ước đếm ngày, và hợp đồng thật có thể chọn quy ước khác.""", clear=True),
         st("<p><b>Bước 2.</b> Số ngày <b>do máy đếm</b>: <code>ChronoUnit.DAYS.between(gui, den)</code>.</p>"
            "<p>Vì sao không tự cộng: tháng dài ngắn khác nhau, năm nhuận thêm một ngày; máy biết lịch, ta dễ sai.</p>",
            """Bước hai, số ngày để máy đếm. Vì tháng dài ngắn khác nhau và năm nhuận có thêm một ngày, nên tự cộng tay rất dễ sai, còn máy biết lịch.""", clear=True),
         st("<p><b>Bước 3.</b> Tính bằng <b>số thập phân chính xác</b>, nhân hết rồi <b>chia sau cùng một lần</b>:</p>"
            "<p><code>gốc × lãi suất × ngày</code> (chính xác) rồi <code>÷ 365</code>, làm tròn <b>một lần</b>.</p>"
-           "<p>Vì sao chia cuối: mỗi lần làm tròn ở giữa chừng đều thêm sai số.</p>",
-           """Bước ba, nhân hết rồi chia ở cuối cùng, làm tròn đúng một lần. Vì mỗi lần làm tròn ở giữa chừng đều thêm một chút sai số, nên làm tròn càng muộn càng tốt.""", clear=True),
+           "<p>Vì sao chia cuối: mỗi lần làm tròn ở giữa chừng đều thêm sai số.</p>"
+           "<p class='note'>Lệnh <code>divide</code> chỉ nhận số chia thì <b>ném lỗi</b> khi kết quả không hữu hạn (như 1 chia 3); vì vậy ta luôn nêu số chữ số thập phân và kiểu làm tròn.</p>",
+           """Bước ba, nhân hết rồi chia ở cuối cùng, làm tròn đúng một lần. Vì mỗi lần làm tròn ở giữa chừng đều thêm một chút sai số, nên làm tròn càng muộn càng tốt. Khi chia, ta luôn nêu số chữ số thập phân và kiểu làm tròn, vì chia không kèm hai thứ đó sẽ ném lỗi nếu kết quả không hữu hạn.""", clear=True),
         st("<p><b>Bước 4.</b> Thử bằng số nguyên làm đường khác: nhân lãi suất <code>0,072</code> thành <code>72 / 1000</code>:</p>"
-           "$$\\frac{100\\,000\\,000 \\times 72 \\times 89}{1\\,000 \\times 365} = \\frac{640\\,800\\,000\\,000}{365\\,000} \\approx 1\\,755\\,616{,}43 \\to \\hl{1\\,755\\,616}$$",
-           """Bước bốn, thử bằng số nguyên. Vì lãi suất bảy phẩy hai phần trăm là bảy mươi hai phần nghìn, nên ta nhân tử số với bảy mươi hai và mẫu số với một nghìn. Tử số là sáu trăm bốn mươi tỉ tám trăm triệu, mẫu số là ba trăm sáu mươi lăm nghìn. Kết quả một triệu bảy trăm năm mươi lăm nghìn sáu trăm mười sáu phẩy bốn ba, làm tròn về một triệu bảy trăm năm mươi lăm nghìn sáu trăm mười sáu.""", clear=True),
-    ], checks=["100000000 * 72 * 89 == 640800000000", "1000 * 365 == 365000", "round(640800000000 / 365000) == 1755616", "int(640800000000 / 365000 * 100) == 175561643"])
+           "$$\\frac{100\\,000\\,000 \\times 72 \\times 89}{1\\,000 \\times 365} = \\frac{640\\,800\\,000\\,000}{365\\,000} \\approx 1\\,755\\,616{,}44 \\to \\hl{1\\,755\\,616}$$",
+           """Bước bốn, thử bằng số nguyên. Vì lãi suất bảy phẩy hai phần trăm là bảy mươi hai phần nghìn, nên ta nhân tử số với bảy mươi hai và mẫu số với một nghìn. Tử số là sáu trăm bốn mươi tỉ tám trăm triệu, mẫu số là ba trăm sáu mươi lăm nghìn. Kết quả một triệu bảy trăm năm mươi lăm nghìn sáu trăm mười sáu phẩy bốn bốn, làm tròn về một triệu bảy trăm năm mươi lăm nghìn sáu trăm mười sáu.""", clear=True),
+    ], checks=["100000000 * 72 * 89 == 640800000000", "1000 * 365 == 365000", "round(640800000000 / 365000) == 1755616", "round(640800000000 / 365000, 2) == 1755616.44"])
     sc_ex = sc("example", "example", "Ví dụ: lãi 89 ngày, từng bước, chạy thật", [
-        st(code_block(ngay, lines=(7, 11)) + out_block(part(ngay, 0, 2)),
+        st(code_block(ngay, lines=(7, 10)) + out_block(part(ngay, 0, 2)),
            """Phép làm thứ nhất, đếm ngày. Từ mười tháng hai tới mười tháng năm có tám mươi chín ngày. Cùng khoảng đó theo lịch là ba tháng. Hai cách đo khác nhau, và ta cần cách đếm ngày cho lãi.""", clear=True),
         st("$$① \\; 28 + 31 + 30 = \\hl{89} \\text{ ngày}$$"
            "<p>(10/2 → 10/3: 28 ngày; → 10/4: 31 ngày; → 10/5: 30 ngày.)</p>",
            """Phép làm thứ hai, kiểm bằng tay. Từ mười tháng hai tới mười tháng ba là hai mươi tám ngày, tới mười tháng tư là ba mươi mốt, tới mười tháng năm là ba mươi. Cộng lại tám mươi chín, khớp với máy.""", clear=True),
-        st(code_block(lai_ngay, lines=(6, 12)) + out_block(lai_ngay),
-           """Phép làm thứ ba, tính lãi. Tích gốc, lãi suất và số ngày là sáu trăm bốn mươi triệu tám trăm nghìn, vẫn chính xác, có ba chữ số thập phân vì lãi suất có ba chữ số. Chia ba trăm sáu mươi lăm, làm tròn nửa lên về đồng, được một triệu bảy trăm năm mươi lăm nghìn sáu trăm mười sáu.""", clear=True),
+        st(code_block(lai_ngay, lines=(6, 12)),
+           """Phép làm thứ ba, tính lãi. Gốc và lãi suất tạo từ chuỗi. Ta nhân gốc, lãi suất và số ngày trước, rồi chia ba trăm sáu mươi lăm, làm tròn nửa lên về đồng.""", clear=True),
+        st(out_block(lai_ngay),
+           """Tích gốc, lãi suất và số ngày là sáu trăm bốn mươi triệu tám trăm nghìn, vẫn chính xác, có ba chữ số thập phân vì lãi suất có ba chữ số. Chia ba trăm sáu mươi lăm, làm tròn nửa lên về đồng, được một triệu bảy trăm năm mươi lăm nghìn sáu trăm mười sáu.""", clear=True),
         st("$$② \\; 100\\,000\\,000 \\times 0{,}072 \\times 89 = \\hl{640\\,800\\,000}$$"
-           "$$③ \\; 640\\,800\\,000 / 365 \\approx 1\\,755\\,616{,}43 \\to \\hl{1\\,755\\,616}$$"
+           "$$③ \\; 640\\,800\\,000 / 365 \\approx 1\\,755\\,616{,}44 \\to \\hl{1\\,755\\,616}$$"
            "$$④ \\; 100\\,000\\,000 + 1\\,755\\,616 = \\hl{101\\,755\\,616}$$",
-           """Phép làm thứ tư, năm và sáu, kiểm bằng tay ba bước. Tích là sáu trăm bốn mươi triệu tám trăm nghìn. Chia ba trăm sáu mươi lăm được một triệu bảy trăm năm mươi lăm nghìn sáu trăm mười sáu phẩy bốn ba. Cộng với gốc được một trăm linh một triệu bảy trăm năm mươi lăm nghìn sáu trăm mười sáu. Khớp với chương trình.""", clear=True),
-        st(code_block(lam_tron, lines=(24, 26)) + out_block(part(lam_tron, 0, 3)),
-           """Phép làm thứ năm, ba cách làm tròn. Hai rưỡi: nửa lên cho ba, nửa về số chẵn cho hai, bỏ phần lẻ cho hai. Ba rưỡi: nửa lên cho bốn, nửa về số chẵn cũng bốn, bỏ phần lẻ cho ba. Số âm hai rưỡi: nửa lên cho âm ba, bỏ phần lẻ cho âm hai. Cùng một con số, kiểu làm tròn khác nhau cho kết quả khác nhau.""", clear=True),
-    ], checks=["28 + 31 + 30 == 89", "100000000 * 72 // 1000 * 89 == 640800000", "round(640800000 / 365) == 1755616", "100000000 + 1755616 == 101755616"])
+           """Phép làm thứ tư, năm và sáu, kiểm bằng tay ba bước. Tích là sáu trăm bốn mươi triệu tám trăm nghìn. Chia ba trăm sáu mươi lăm được một triệu bảy trăm năm mươi lăm nghìn sáu trăm mười sáu phẩy bốn bốn. Cộng với gốc được một trăm linh một triệu bảy trăm năm mươi lăm nghìn sáu trăm mười sáu. Khớp với chương trình.""", clear=True),
+        st(code_block(lam_tron, lines=(5, 10)),
+           """Phép làm thứ năm, ba cách làm tròn. Hàm in một dòng cho một số, theo ba kiểu làm tròn liền nhau: nửa lên, nửa về số chẵn và bỏ phần lẻ.""", clear=True),
+        st(code_block(lam_tron, lines=(24, 27)) + out_block(part(lam_tron, 0, 3)),
+           """Hàm chính gọi nó cho ba số, hai rưỡi, ba rưỡi và âm hai rưỡi. Kết quả thật. Hai rưỡi: nửa lên cho ba, nửa về số chẵn cho hai, bỏ phần lẻ cho hai. Ba rưỡi: nửa lên cho bốn, nửa về số chẵn cũng bốn, bỏ phần lẻ cho ba. Số âm hai rưỡi: nửa lên cho âm ba, bỏ phần lẻ cho âm hai. Cùng một con số, kiểu làm tròn khác nhau cho kết quả khác nhau.""", clear=True),
+    ], checks=["28 + 31 + 30 == 89", "100000000 * 72 // 1000 * 89 == 640800000", "round(640800000 / 365) == 1755616", "round(640800000 / 365, 2) == 1755616.44", "100000000 + 1755616 == 101755616"])
     sc_chk = sc("check", "check", "Tự kiểm bằng đường khác: cùng phép tính bằng số nguyên", [
         st("<p>Đường khác: tính bằng <b>số nguyên</b>, làm tròn nửa lên bằng cách <b>cộng nửa mẫu số</b> rồi chia nguyên:</p>"
            "$$\\frac{640\\,800\\,000 \\times 1\\,000 + 365\\,000 / 2}{365\\,000} \\;\\Rightarrow\\; (640\\,800\\,000\\,000 + 182\\,500) / 365\\,000 = \\hl{1\\,755\\,616}$$"
@@ -262,14 +297,14 @@ Rồi bài toán lãi theo ngày, và câu hỏi quy mô: sai lệch làm tròn 
            """Kiểm thêm lý do không dùng số thực cho tiền. Số thực cho ra không phẩy ba mươi chữ số lệch. Số thập phân chính xác tạo từ chuỗi cho đúng không phẩy ba. Và nếu tạo từ số thực thì ta nhận luôn sai số, như dòng thứ ba. Chỉ khi tạo từ chuỗi chữ số, hoặc dùng hàm tạo từ biểu diễn chữ của số thực, mới sạch.""", clear=True),
     ], checks=["(640800000 * 1000 + 365000 // 2) // 365000 == 1755616", "365000 // 2 == 182500", "640800000 * 1000 == 640800000000"])
     sc_scale = sc("scale", "concept", "Khi số giao dịch tăng một nghìn lần: sai lệch làm tròn cộng dồn", [
-        st(code_block(lam_tron, lines=(11, 21)),
+        st(code_block(lam_tron, lines=(12, 22)) + code_block(lam_tron, lines=(28, 29)),
            """Ta đo sai lệch cộng dồn. Mỗi giao dịch có phần lẻ đúng nửa đồng, ta so tổng đúng với tổng sau khi làm tròn bằng hai cách, nửa lên và nửa về số chẵn. Đây là trường hợp xấu nhất, nhưng nó có thật, ví dụ khi chia đôi một số lẻ.""", clear=True),
         st(table(["số giao dịch", "1 000", "1 000 000", "1 000 000 000"],
                  [["lệch khi luôn làm tròn nửa lên (đo thật tới 1 triệu)", "500", "<b>500 000</b>", "<b>500 000 000</b> (tính)"],
-                  ["lệch khi làm tròn nửa về số chẵn (đo thật)", "0", "0", "0"]])
-           + "<p class='note'>Mỗi giao dịch thừa 0,5 đồng, nên lệch = 0,5 × số giao dịch. Với phần lẻ ngẫu nhiên, nửa lên lệch ít hơn; ngưỡng thật do quy định kế toán của đơn vị, không phải do ngôn ngữ lập trình.</p>",
-           """Kết quả thật. Một nghìn giao dịch thì lệch năm trăm đồng. Một triệu giao dịch thì lệch năm trăm nghìn đồng. Một tỉ giao dịch thì lệch năm trăm triệu đồng, đây là con số tính từ quy luật. Làm tròn nửa về số chẵn thì phần thừa và phần thiếu triệt tiêu, nên không lệch.
-           Đánh đổi, kiểu nửa về số chẵn cân bằng hơn nhưng khó giải thích với khách hàng. Quy tắc cuối cùng do quy định kế toán quyết định, và phải thống nhất một kiểu cho toàn hệ thống.""", clear=True),
+                  ["lệch khi làm tròn nửa về số chẵn (đo thật, phần nguyên chẵn lẻ xen kẽ đều)", "0", "0", "0"]])
+           + "<p class='note'>Mỗi giao dịch thừa 0,5 đồng, nên lệch = 0,5 × số giao dịch. Nửa về số chẵn chỉ triệt tiêu khi phần nguyên chẵn lẻ đều nhau: nếu mọi phần nguyên đều chẵn thì nó luôn đi xuống, lệch −0,5 mỗi giao dịch (đã đo: −500 với 1 000 giao dịch). Với phần lẻ ngẫu nhiên, nửa lên lệch ít hơn; ngưỡng thật do quy định kế toán của đơn vị, không phải do ngôn ngữ lập trình.</p>",
+           """Kết quả thật. Một nghìn giao dịch thì lệch năm trăm đồng. Một triệu giao dịch thì lệch năm trăm nghìn đồng. Một tỉ giao dịch thì lệch năm trăm triệu đồng, đây là con số tính từ quy luật. Với dữ liệu thử này, phần nguyên lần lượt chẵn rồi lẻ, nên kiểu nửa về số chẵn lúc lên lúc xuống và phần thừa, phần thiếu triệt tiêu, nên không lệch.
+           Đánh đổi, kiểu nửa về số chẵn cân bằng hơn nhưng khó giải thích với khách hàng, và nó không cứu được mọi dữ liệu. Quy tắc cuối cùng do quy định kế toán quyết định, và phải thống nhất một kiểu cho toàn hệ thống.""", clear=True),
     ], checks=["1000 // 2 == 500", "1000000 // 2 == 500000", "1000000000 // 2 == 500000000"])
     sc_pit = sc("pitfalls", "pitfall", "Lỗi hay gặp, có lỗi của người đã đi làm", [
         st('<div class="box warn"><b>Lỗi 1 (người mới).</b> Cộng 30 ngày thay vì cộng 1 tháng.</div>'
@@ -279,7 +314,7 @@ Rồi bài toán lãi theo ngày, và câu hỏi quy mô: sai lệch làm tròn 
            + out_block(tien_double).replace("<div>0.30000000000000004</div>", "").replace("<div>0.3</div><div>0.1000", "<div>0.1000"),
            """Lỗi thứ hai là tạo số thập phân chính xác từ một số thực. Con số không phẩy một khi đã là số thực thì đã lệch, và hàm tạo lấy nguyên sai số đó, ra một dãy dài chữ số. Hãy tạo từ chuỗi, hoặc dùng hàm tạo từ biểu diễn chữ.""", clear=True),
         st('<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Định dạng và đọc số theo vùng mặc định của máy.</div>'
-           + code_block(dinh_dang, lines=(7, 9)) + out_block(part(dinh_dang, 0, 2)),
+           + code_block(dinh_dang, lines=(6, 9)) + out_block(part(dinh_dang, 0, 2)),
            """Lỗi thứ ba hay gặp ở người đã đi làm. In số theo vùng ngôn ngữ thì dấu ngăn nghìn và dấu thập phân đổi chỗ cho nhau. Mã chạy đúng trên máy của bạn, rồi sai trên máy chủ đặt ở vùng khác, hoặc ngược lại.""", clear=True),
         st(code_block(dinh_dang, lines=(10, 15)) + out_block(part(dinh_dang, 2, 4)),
            """Hàm đọc số thông thường luôn dùng dấu chấm thập phân, nên chuỗi kiểu Việt Nam làm nó thất bại. Bộ đọc theo vùng ngôn ngữ thì hiểu đúng. Hãy chỉ rõ vùng ngôn ngữ ở mọi chỗ in và đọc.""", clear=True),
@@ -310,6 +345,8 @@ Rồi bài toán lãi theo ngày, và câu hỏi quy mô: sai lệch làm tròn 
 và máy khác có <b>vùng ngôn ngữ khác</b> thì còn đúng không.</div>""",
            """Điều cần mang theo. Với mọi con số tiền hay mốc thời gian, hãy hỏi bốn câu. Nó thuộc múi giờ nào. Ai quyết định kiểu làm tròn. Sai lệch nhỏ này nhân với số giao dịch thành bao nhiêu. Và máy khác có vùng ngôn ngữ khác thì còn đúng không."""),
     ])
+    sc_sym["steps"][0]["introduces"] = ["jv2_utc", "jv2_iso_dur"]
+    sc_int["steps"][1]["introduces"] = ["jv2_iana"]
     return lesson("L08", "thoi_gian_va_tien", "Bài 8 — Thời gian và tiền: java.time, BigDecimal, làm tròn, vùng ngôn ngữ",
                   "curriculum/jv2.yaml L08; audit/jv2/verify_jv2.py L08 (javac/java chạy thật, JDK 21; dữ liệu múi giờ của JDK); "
                   "java.time (Java SE 21 API: Instant, ZonedDateTime, Duration, Period, ChronoUnit.DAYS.between); "

@@ -18,4 +18,6 @@ ma,loai,so_tien
 2. Đọc lại tệp đó bằng `try (BufferedReader …)`, bỏ dòng tiêu đề, cộng theo từng loại và đếm số giao dịch (kiểu `long` cho tiền).
 3. In ba dòng theo thứ tự `nap`, `rut`, `chuyen` đúng dạng `nap: 2 giao dich, tong 4250000`, rồi một dòng `Tong tat ca: <tổng>`.
 
+Dòng `import` cần dùng (đặt trên đầu tệp): `java.io.BufferedReader`, `java.io.IOException`, `java.nio.file.Files`, `java.nio.file.Path`, `java.util.HashMap`, `java.util.Map`. Hàm `main` khai `throws IOException`.
+
 Chạy: `javac TongTheoLoai.java && java TongTheoLoai`. Chấm: `bash labs/cham.sh JV2 L01 TongTheoLoai.java`.

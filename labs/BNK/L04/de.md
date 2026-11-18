@@ -11,3 +11,6 @@ Viết tệp `sao_ke.sql` (chạy bằng `python labs/sqlrun.py sao_ke.sql`, ho�
    - `tk` và `SUM(so_tien)` theo từng tài khoản, `GROUP BY tk`, `ORDER BY tk`.
 
 Chấm: `bash labs/cham.sh BNK L04 sao_ke.sql`.
+
+## Phần thêm (không chấm): đọc kế hoạch
+Tạo một tệp khác `ke_hoach.sql` (bảng `gd` như trên, nhưng tạo nhiều dòng hơn nếu muốn). Thêm `EXPLAIN QUERY PLAN SELECT id, so_tien FROM gd WHERE tk = 11;` **trước** `CREATE INDEX`, rồi một lần nữa **sau** nó. Ghi lại chữ SCAN hay SEARCH ở mỗi lần, rồi thử viết `WHERE tk + 0 = 11` và xem chữ nào hiện ra. Đoán trước khi chạy.

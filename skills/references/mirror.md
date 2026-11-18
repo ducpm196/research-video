@@ -1,6 +1,7 @@
 ## 2. Evidence
-- Label every material claim: OBSERVED (ran/read in this session; a result from an earlier session is CITED with its date or re-checked), CITED (specific source and revision; if none, retrieval date plus `no revision given`, date-bound, re-fetch before reuse in a later session), INFERRED (reasoned, not checked).
+- Label every material claim: OBSERVED (ran/read in this session; a record from an earlier session supports a claim only as CITED with its ID and date while its revision and dependency digests still recompute equal, otherwise re-check), CITED (specific source and revision; if none, retrieval date plus `no revision given`, date-bound, re-fetch before reuse in a later session), INFERRED (reasoned, not checked).
 - Only OBSERVED or CITED can support a completion claim. Wording that a claim was verified, checked or recomputed needs an OBSERVED or CITED record from this session; otherwise label it INFERRED. Never infer that a file, skill, tool, dependency or platform exists from documentation; check. Unobservable means NOT_VERIFIED. Never fabricate sources, versions, commands or results.
+- A search-result list or summary is a lead, not a source: open the page and cite it; a claim that rests only on a summary stays INFERRED.
 
 ## 3. Closed label sets (no others)
 - Capability: EXISTS | PARTIAL | MISSING | CONFLICTING | NOT_VERIFIED
@@ -13,8 +14,8 @@
 
 ## 4. Records and digest
 - Every material result gets a record: claim_id | claim | basis | spec evidence | impl evidence | method | observed | artifact revision | runtime | dependencies (path + digest) | validity | checked_at. Fill fields only from this session's tool calls and output: method as run, observed as printed (non-zero exits included), checked_at from a clock reading; otherwise write `not recorded`; a record missing its method or observation is not OBSERVED.
-- Revision of a multi-file artifact is `dir-digest-v1`: sha256 over, for each regular file sorted bytewise by POSIX relative path in UTF-8, the relpath bytes, 0x00, the file bytes, 0x00; no exclusions and no line-ending normalization; a symlink, any other non-regular file, an unreadable entry or a non-UTF-8 name means no valid digest (NOT_VERIFIED). Store 64 hex digits; reports may show 16. Never digest SKILL.md alone.
-- When a dependency changes, mark STALE only records that depend on it. STALE or NOT_VERIFIED never supports DONE. Keep semantic and rendering verification separate.
+- Revision of a multi-file artifact is `dir-digest-v1`: sha256 over, for each regular file sorted bytewise by POSIX relative path in UTF-8, the relpath bytes, 0x00, the file bytes, 0x00; no exclusions and no line-ending normalization; a symlink, a junction, any other non-regular file, an unreadable entry or a non-UTF-8 name means no valid digest (NOT_VERIFIED). Store 64 hex digits; reports may show 16. Never digest SKILL.md alone.
+- When a dependency changes, mark STALE the records that depend on it, then every record that lists a record no longer VALID, transitively. STALE or NOT_VERIFIED never supports DONE. Keep semantic and rendering verification separate.
 
 ## 5. Contract bottleneck
 An unresolved or unverified interface, assumption or decision that other work depends on. Record: ID | undefined or unverified | dependent work | missing evidence | consequence | resolution test | state (OPEN, or CLOSED with evidence ID). Mark every dependent result conditional while open; close only by running the test and recording evidence.

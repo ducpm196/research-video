@@ -7,6 +7,8 @@ Viết `MiniDiKho` (tệp `MiniDiKho.java`) gồm **ba phần do bạn tự vi�
    tạo bằng `loai.getDeclaredConstructor().newInstance()`, **bỏ vào `hop` trước**, rồi với mỗi trường có nhãn `@Tiem` thì `setAccessible(true)` và gán `lay(kiểu của trường)`.
 3. `main`: lấy `DonHang` từ bộ chứa rồi in ba dòng (bên dưới).
 
+Dòng `import` cần dùng (đặt trên đầu tệp): `java.lang.annotation.Retention`, `java.lang.annotation.RetentionPolicy`, `java.lang.reflect.Field`, `java.util.HashMap`, `java.util.Map`. `Class<?>` là kiểu "mô tả của một lớp nào đó" (dấu `?` nghĩa là chưa biết lớp cụ thể).
+
 Ba lớp có sẵn (chép nguyên vào tệp, ngay trong `MiniDiKho`):
 
 ```java

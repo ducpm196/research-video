@@ -8,7 +8,7 @@ R = 28
 PAL = ["#bfdbfe", "#fde68a", "#fecaca"]          # màu 1, 2, 3 (xanh, vàng, đỏ nhạt)
 
 
-def svg(pos, edges, w, h, fill=None, faces=None):
+def svg(pos, edges, w, h, fill=None, faces=None, nums=None):
     out = [f'<svg width="{w}" height="{h}" viewBox="0 0 {w} {h}">']
     for u, v in edges:
         (x1, y1), (x2, y2) = pos[u], pos[v]
@@ -19,7 +19,22 @@ def svg(pos, edges, w, h, fill=None, faces=None):
         f = PAL[fill[x]] if fill else "#eff6ff"
         out.append(f'<circle cx="{cx:.0f}" cy="{cy:.0f}" r="{R}" fill="{f}" stroke="#2563eb" stroke-width="4"/>'
                    f'<text x="{cx:.0f}" y="{cy + 10:.0f}" font-size="26" text-anchor="middle">{x}</text>')
+        if nums:
+            out.append(f'<text x="{cx:.0f}" y="{cy + 54:.0f}" font-size="22" text-anchor="middle" fill="#374151">{nums[x]}</text>')
     return "".join(out + ["</svg>"])
+
+
+def crown(n, order):
+    """đồ thị vương miện n cặp: a_i kề b_j khi i ≠ j; tô tham lam theo `order` (màu nhỏ nhất chưa bị đỉnh kề đã tô dùng).
+    Trả (svg, bảng màu) — dùng cho cảnh quymo của L18 (hình vẽ cho n = 3, tay lần được)."""
+    edges = [(f"a{i}", f"b{j}") for i in range(n) for j in range(n) if i != j]
+    pos = {}
+    for i in range(n):
+        pos[f"a{i}"] = (110, 60 + 100 * i)
+        pos[f"b{i}"] = (330, 60 + 100 * i)
+    c = greedy(edges, order)
+    nums = {v: f"màu {k}" for v, k in c.items()}
+    return svg(pos, edges, 440, 60 + 100 * (n - 1) + 90, fill=c, nums=nums), c
 
 
 def greedy(edges, order):

@@ -1,4 +1,10 @@
-from lib import *
+import lib2
+from lib2 import *
+from spoken_b import _spoken
+from libj import jstep, nowrap
+from labkit import write_lab, practice_scene
+
+lib2.begin("L23")
 
 # ── Mã hiện trên màn hình (chạy NGUYÊN VĂN ở audit/bnx/ver/l23.py với venv audit/bnx/deps/l23/venv, và ở cổng screen_code) ──
 DATA_PY = """import numpy as np
@@ -118,25 +124,74 @@ p = mo_hinh.predict(thang_sau)
 print("thường mà bị gắn -1:", (p == -1).sum(), "trên 1000")"""
 DRIFT_OUT = "thường mà bị gắn -1: 977 trên 1000"
 
-NOTE_ILL = "<span class='note'>(số minh hoạ: dữ liệu sinh ngẫu nhiên, hạt giống cố định, không phải của tổ chức nào)</span>"
+NOTE_ILL = "<span class='note'>(số minh hoạ: dữ liệu sinh ngẫu nhiên; hạt giống là số khởi đầu của bộ sinh số ngẫu nhiên, đặt cố định thì chạy lại ra y hệt, không phải dữ liệu của tổ chức nào)</span>"
+
+
+
+# ── AF2 (nhánh B): cảnh quy mô + lab. Chương trình quy mô chạy THẬT lúc import (đệm ở audit/bnx/progcache/L23.json), bằng .venv + sys.path vào
+#    audit/bnx/deps/l23/venv (như nguồn L23_venv của sổ); hai dòng đầu là đoạn nối thư viện, KHÔNG hiện trên màn hình ──
+QUYMO = prog("QuyMo", r'''
+import sys
+sys.path.insert(0, "D:/research-video/audit/bnx/deps/l23/venv/Lib/site-packages")
+import numpy as np
+from sklearn.ensemble import IsolationForest
+for n_la in (10, 100, 1000):
+    rng = np.random.default_rng(42)
+    thuong = rng.normal(500, 50, n_la * 100)
+    la = rng.normal(50_000, 2_000, n_la)
+    X = np.concatenate([thuong, la]).reshape(-1, 1)
+    mm = IsolationForest(n_estimators=100, contamination=0.01,
+                         random_state=42).fit(X)
+    p = mm.predict(X)
+    nut = sum(t.tree_.node_count for t in mm.estimators_)
+    print(len(X), "diem:", (p == -1).sum(), "bi gan -1,",
+          (p[len(thuong):] == -1).sum(), "la that,", nut, "nut cua rung")
+''', lang="python", timeout=400,
+    claims=["rừng cô lập tỉ lệ nhiễm 1% trên 1 010, 10 100, 101 000 điểm: gắn 11, 101, 1 005 nhãn -1, bắt đủ 10, 100, 1 000 điểm lạ; tổng số nút của rừng quanh 11 400 ở cả ba cỡ"])
+
+LAB_PY = r'''
+import math
+n = 128
+c = 2 * (math.log(n - 1) + 0.5772156649) - 2 * (n - 1) / n
+offset = -0.6
+print("c(128) =", round(c, 4))
+for ten, h in (("A", 2), ("B", 9)):
+    diem = -2 ** (-h / c)
+    qd = diem - offset
+    print(ten, "diem", round(diem, 4), "quyet dinh", round(qd, 4), "nhan", -1 if qd < 0 else 1)
+so = math.ceil(0.03 * (3000 - 1))
+print("bi gan -1:", so, "| gan oan:", so - 25)
+'''
+LAB = prog("LabL23", LAB_PY, lang="python", kind="run")
+LAB_DE = """# Lab BNX L23 — Điểm bất thường, nhãn và số điểm bị gắn (Python thuần, không cần cài thư viện học máy)
+
+Số liệu là số minh hoạ, khác ví dụ trong bài. Một rừng cô lập huấn luyện mỗi cây trên `n = 128` điểm. Viết `mau.py` (chỉ dùng `import math`) để tính:
+
+1. **Mức tham chiếu** `c(n) = 2·(ln(n−1) + γ) − 2·(n−1)/n` với `γ = 0.5772156649` (`math.log` là lôgarit tự nhiên). In `c(128) = <số làm tròn 4 chữ số>`.
+2. Hai điểm A và B có **độ sâu trung bình** `h` lần lượt là 2 và 9. Điểm bất thường `s = −2^(−h / c)` (dấu âm như thư viện). Ngưỡng `offset = −0.6`; **điểm quyết định** = `s − offset`; nhãn là `−1` nếu điểm quyết định âm, ngược lại `1`.
+3. Tập có `N = 3000` giao dịch, tỉ lệ nhiễm `p = 0.03`. Theo quy tắc đếm của bài (đúng khi các điểm khác nhau), số điểm bị gắn `−1` là `p·(N−1)` làm tròn lên (`math.ceil`). Thật sự lạ chỉ có 25 điểm: tính số điểm thường bị gắn oan.
+
+In đúng bốn dòng (làm tròn bằng `round(x, 4)`):
+
+```
+c(128) = <số>
+A diem <số> quyet dinh <số> nhan <1 hoặc -1>
+B diem <số> quyet dinh <số> nhan <1 hoặc -1>
+bi gan -1: <số> | gan oan: <số>
+```
+
+Chạy: `python mau.py`. Chấm: `bash labs/cham.sh BNX L23 mau.py`.
+"""
 
 
 def build():
+    write_lab("BNX", "L23", LAB_DE, "py", LAB_PY, LAB.out)
     hook = sc("hook", "hook", "Sáng thứ hai: 1010 giao dịch, chưa ai gán nhãn, máy chỉ ra giao dịch lạ thế nào?", [
         st(f"""<p>Mỗi sáng, bộ phận rủi ro nhận <b>1010</b> giao dịch chuyển tiền của hôm qua: <b>1000</b> giao dịch quanh <b>500 nghìn</b> đồng và <b>10</b> giao dịch ở mức <b>50 triệu</b> đồng.</p>
-<div class="box key">Không giao dịch nào có nhãn “gian lận” hay “bình thường”. Làm sao để máy <b>chỉ ra giao dịch lạ</b> cho người xét, mà không cần ai gán nhãn trước? Và mô hình huấn luyện bằng Python chạy ra sao khi đem đi vận hành?</div>
-{NOTE_ILL}""",
-           """Chào bạn, mỗi sáng bộ phận rủi ro nhận một nghìn không trăm mười giao dịch chuyển tiền của hôm qua. Một nghìn giao dịch quanh năm trăm nghìn đồng, và mười giao dịch ở mức năm mươi triệu đồng.
-           Không giao dịch nào có nhãn gian lận hay bình thường. Làm sao để máy chỉ ra giao dịch lạ cho người xét, mà không cần ai gán nhãn trước?
-           Và mô hình huấn luyện bằng Python chạy ra sao khi đem đi vận hành? Mọi số liệu trong bài là số minh hoạ, dữ liệu sinh ngẫu nhiên với hạt giống cố định.""",
-           focus=[1, 1, 2, 2, 2, 3]),
-        st(table(["câu hỏi", "phần trả lời trong bài"],
-                 [["vì sao điểm lạ nổi lên mà không cần nhãn", "cắt ngẫu nhiên: điểm lạ bị cô lập sau ít lần cắt"],
-                  ["huấn luyện và đọc kết quả thế nào", "rừng cô lập trong thư viện học máy: nhãn 1 và âm 1"],
-                  ["đem sang môi trường vận hành ra sao", "xuất tệp ONNX, chạy bằng ONNX Runtime, so với mô hình trong Python"],
-                  ["mô hình KHÔNG làm được gì", "không biết gian lận; tỉ lệ nhiễm là giả định; chưa đo độ trễ; dữ liệu mẫu chỉ có một cột"]]),
-           """Bài này trả lời bốn câu hỏi. Vì sao điểm lạ nổi lên mà không cần nhãn. Huấn luyện và đọc kết quả thế nào. Đem sang môi trường vận hành ra sao.
-           Và điều quan trọng nhất, mô hình không làm được gì.""", clear=True),
+<div class="box key">Không giao dịch nào có nhãn “gian lận” hay “bình thường”. Làm sao để máy <b>chỉ ra giao dịch lạ</b> cho người xét mà không cần ai gán nhãn trước? Và khi số giao dịch tăng gấp trăm lần, người xét có theo kịp không?</div>
+<p>{NOTE_ILL}</p>""",
+           """Chào bạn, mỗi sáng bộ phận rủi ro nhận một nghìn không trăm mười giao dịch chuyển tiền của hôm qua. Một nghìn giao dịch quanh năm trăm nghìn, mười giao dịch ở mức năm mươi triệu. Không giao dịch nào có nhãn, vậy làm sao để máy chỉ ra giao dịch lạ mà không cần ai gán nhãn trước? Và khi số giao dịch tăng gấp trăm lần thì người xét có theo kịp không? Mọi số liệu trong bài là số minh hoạ.""",
+           focus=[1, 2, 2, 3]),
     ], checks=["1000 + 10 == 1010",
                "alg.bnx_l23_expected_flags(1010, 0.01) == 11"])
 
@@ -144,16 +199,10 @@ def build():
         st(table(["khái niệm", "nghĩa", "ví dụ"],
                  [["① Trung bình và độ lệch chuẩn", "trung bình là mức ở giữa; độ lệch chuẩn cho biết các giá trị tản ra quanh nó bao xa; dữ liệu bài rải hình chuông (phân phối chuẩn)", "quanh 500 nghìn, độ lệch chuẩn 50 nghìn: hầu hết nằm trong khoảng 400 tới 600"],
                   ["② Cắt đôi một dãy số", "chọn một điểm cắt rồi chia dãy thành nửa nhỏ hơn và nửa lớn hơn", "cắt dãy 1, 2, 3, 10 tại 5: nửa trái 1, 2, 3; nửa phải 10"],
-                  ["③ Phân vị", "mức mà một tỉ lệ cho trước của các giá trị nằm dưới nó; số giá trị dưới ngưỡng: phần nguyên của p × (n−1), cộng một", "1% của 1010 giá trị: 11 giá trị dưới ngưỡng (tính ở bước sau)"],
-                  ["④ Mô hình và nhãn", "mô hình: bản ghi cách tính điểm, học từ dữ liệu; nhãn thật: đáp án do người gán (ta không có); nhãn của mô hình: 1 (thường) hoặc âm 1 (lạ)", "mô hình không nói “gian lận”, chỉ nói “lạ”"]]),
-           """Trước hết ta cần hiểu bốn điều. Trung bình là mức ở giữa, còn độ lệch chuẩn cho biết các giá trị tản ra quanh nó bao xa. Dữ liệu của bài rải theo hình chuông quanh trung bình, gọi là phân phối chuẩn.
-           Cắt đôi một dãy số là chọn một điểm cắt rồi chia dãy thành nửa nhỏ hơn và nửa lớn hơn.
-           Phân vị là mức mà một tỉ lệ cho trước của các giá trị nằm dưới nó. Quy tắc đếm của bài: với n giá trị và tỉ lệ p, số giá trị dưới ngưỡng là phần nguyên của p nhân n trừ một, rồi cộng một.
-           Mô hình là bản ghi cách tính điểm, học từ dữ liệu bằng bước huấn luyện. Nhãn thật là đáp án do người gán, ta không có. Nhãn của mô hình là kết quả máy trả ra, một cho điểm thường, hoặc âm một cho điểm lạ. Mô hình không nói gian lận, chỉ nói lạ."""),
-        st("""$$p \\cdot (n-1) = 0{,}01 \\cdot (1010 - 1) = 10{,}09 \\text{ nên phần nguyên là } 10, \\text{ cộng một } = \\hl{11}$$
-<span class='note'>Điều kiện của quy tắc: p × (n−1) không tròn và các giá trị không trùng nhau. Làm thử: dãy 1, 2, 3, 10 cắt tại 5 thì 10 đứng một mình ở nửa phải sau đúng một lần cắt; còn 1, 2, 3 cần thêm cắt nữa mới tách rời nhau.</span>""",
-           """Một ví dụ số cho phân vị. Với một phần trăm của một nghìn không trăm mười giá trị, ta nhân không phẩy không một với một nghìn không trăm lẻ chín, được mười phẩy không chín. Phần nguyên là mười, cộng một thì có mười một giá trị dưới ngưỡng, và ta sẽ gặp lại quy tắc này khi đặt ngưỡng.
-           Làm thử với dãy một, hai, ba, mười. Cắt tại năm thì số mười đứng một mình sau đúng một lần cắt, còn một, hai, ba cần thêm lần cắt nữa mới tách rời nhau.""", clear=True),
+                  ["③ Phân vị", "mức mà một tỉ lệ cho trước của các giá trị nằm dưới nó; số giá trị dưới ngưỡng ở phân vị p: p × (n−1) làm tròn lên (khi p × (n−1) đã là số nguyên thì giữ nguyên), nếu mọi điểm khác nhau; điểm trùng nhau thì số thật có thể thấp hơn", "1% của 1010 giá trị: 0,01 × 1009 = 10,09, làm tròn lên: 11 giá trị dưới ngưỡng; 1% của 101 giá trị: 0,01 × 100 = 1 đúng: 1 giá trị"],
+                  ["④ Mô hình và nhãn", "mô hình: bản ghi cách tính điểm, học từ dữ liệu; nhãn của mô hình: 1 (thường) hoặc âm 1 (lạ)", "mô hình không nói “gian lận”, chỉ nói “lạ”"]]),
+           """Trước hết ta cần hiểu bốn điều. Trung bình là mức ở giữa, độ lệch chuẩn cho biết giá trị tản ra quanh nó bao xa, và dữ liệu rải hình chuông là phân phối chuẩn. Cắt đôi một dãy số là chọn một điểm cắt rồi chia thành nửa nhỏ và nửa lớn. Phân vị là mức mà một tỉ lệ các giá trị nằm dưới nó, và số điểm dưới ngưỡng là p nhân n trừ một, làm tròn lên. Mô hình là bản ghi cách tính điểm học từ dữ liệu, nhãn của nó là một cho điểm thường hoặc âm một cho điểm lạ.""",
+           focus=[0, "1.2", "1.3", "1.4", "1.5"], introduces=["bnx_do_lech_chuan", "bnx_phan_phoi_chuan"]),
     ], checks=["alg.bnx_l23_expected_flags(1010, 0.01) == 11 and int(0.01 * (1010 - 1)) + 1 == 11 and round(0.01 * 1009, 2) == 10.09",
                "[x for x in (1, 2, 3, 10) if x <= 5] == [1, 2, 3] and [x for x in (1, 2, 3, 10) if x > 5] == [10]"])
 
@@ -165,25 +214,22 @@ def build():
                   ["fit, predict", "huấn luyện trên dữ liệu; gắn nhãn 1 hoặc -1 cho từng điểm"],
                   ["score_samples, offset_, decision_function", "điểm bất thường (càng âm càng lạ); ngưỡng; điểm trừ ngưỡng, âm thì nhãn -1"],
                   ["ONNX, ONNX Runtime", "định dạng tệp mô hình; thư viện đọc tệp ấy và chạy mô hình"]]),
-           """Bảng này giải mã các từ của bài. Rừng cô lập là rừng gồm nhiều cây cắt ngẫu nhiên, điểm càng nhanh bị cô lập càng lạ. Số cây là số cây trong rừng.
-           Tỉ lệ nhiễm là tỉ lệ điểm lạ mà ta đặt giả định cho dữ liệu huấn luyện, dùng để chọn ngưỡng. Số thực phải thuộc khoảng từ không tới không phẩy năm, và nếu không đặt thì giá trị mặc định là tự động.
-           Hàm huấn luyện học từ dữ liệu, hàm dự đoán gắn nhãn một hoặc âm một.
-           Hàm tính điểm cho điểm bất thường, càng âm càng lạ. Điểm trừ ngưỡng là điểm quyết định, âm thì nhãn âm một.
-           Cuối cùng, ONNX là định dạng tệp mô hình, còn ONNX Runtime là thư viện đọc tệp ấy và chạy mô hình."""),
-        st(table(["từ (tên trên màn hình)", "nghĩa"],
-                 [["opset, miền (domain)", "opset là số phiên bản của bộ phép toán ONNX; mỗi miền có phiên bản riêng, miền ai.onnx.ml chứa phép toán cây của học máy; bộ chuyển và thư viện chạy phải hiểu cùng phiên bản"],
-                  ["InferenceSession, run", "phiên chạy: nạp tệp một lần, rồi gọi run nhiều lần trên dữ liệu số thực 32 bit"]]),
-           """Hai từ nữa dùng khi xuất và chạy ONNX. Phiên bản bộ phép toán của ONNX gọi là bản phép toán, mỗi miền có bản riêng, và bộ chuyển với thư viện chạy phải hiểu cùng một bản.
-           Phiên chạy nạp tệp một lần rồi gọi chạy nhiều lần trên dữ liệu số thực ba mươi hai bit.""", clear=True),
+           """Bảng này giải mã các từ của bài. Rừng cô lập là rừng nhiều cây cắt ngẫu nhiên, điểm càng nhanh bị cô lập càng lạ. Tỉ lệ nhiễm là tỉ lệ điểm lạ ta đặt giả định để chọn ngưỡng. ONNX là định dạng tệp mô hình, còn ONNX Runtime là thư viện chạy tệp ấy.""",
+           focus=[["1.2", "1.3"], "1.4", ["1.5", "1.6"], "1.7"], introduces=["bnx_ti_le_nhiem", "bnx_onnx"]),
         st(table(["ký hiệu", "nghĩa"],
                  [["h(x)", "số lần cắt cần để cô lập điểm x trong một cây (độ sâu)"],
                   ["E[h(x)]", "độ sâu trung bình của x trên cả rừng"],
                   ["c(n)", "độ sâu trung bình để cô lập một điểm trong cây n điểm; dùng để chuẩn hoá"],
                   ["s(x, n)", "điểm bất thường 2 mũ của (−E[h(x)] / c(n)); s = 0,5 khi độ sâu bằng c(n); s lớn hơn 0,5 nghĩa là độ sâu nhỏ hơn c(n), càng gần 1 càng lạ"]])
            + "<p class='small'>Thư viện học máy trả về điểm mang dấu âm, tức là âm s: càng âm càng lạ. Điểm thường trong bài này có s = 0,4475.</p>",
-           """Bốn ký hiệu của công thức. H của x là số lần cắt cần để cô lập điểm x trong một cây, gọi là độ sâu. E của h là độ sâu trung bình của x trên cả rừng.
-           C của n là độ sâu trung bình để cô lập một điểm trong cây n điểm, dùng để chuẩn hoá. S là điểm bất thường, bằng hai mũ của âm E trên c: bằng không phẩy năm khi độ sâu đúng bằng c, và càng gần một thì càng lạ.
-           Thư viện học máy trả về điểm mang dấu âm, nên càng âm càng lạ, và điểm thường trong bài này có s bằng không phẩy bốn bốn bảy năm.""", clear=True),
+           """Bốn ký hiệu của công thức. H của x là số lần cắt để cô lập điểm x, gọi là độ sâu, và E của h là độ sâu trung bình trên cả rừng. C của n là mức chuẩn hoá, còn s là điểm bất thường, bằng không phẩy năm khi độ sâu đúng bằng c và càng gần một thì càng lạ.""",
+           focus=[1, "1.2", "1.4", "2"], clear=True),
+        st(table(["chữ trong mã Python", "nghĩa"],
+                 [["<code>np.random.default_rng(42)</code>, <code>.normal(tâm, lệch, n)</code>", "bộ sinh số ngẫu nhiên cố định theo hạt giống 42 / sinh n số hình chuông quanh tâm"],
+                  ["<code>np.concatenate</code>, <code>.reshape(-1, 1)</code>, <code>.ravel()</code>", "nối hai mảng / xếp thành một cột / trải lại thành một hàng"],
+                  ["<code>float32</code>, <code>tree_.node_count</code>", "số thực 32 bit (làm tròn thô hơn) / số nút của một cây"],
+                  ["<code>target_opset</code>, <code>InferenceSession</code>, <code>math.log2</code>", "phiên bản bộ phép toán của ONNX / phiên chạy một mô hình ONNX / lôgarit cơ số 2: 2 mũ mấy ra số đó"]]),
+           """Bảng cuối giải mã vài chữ trong mã Python sẽ gặp: bộ sinh số, cách xếp mảng, số thực ba mươi hai bit và lôgarit cơ số hai.""", clear=True, introduces=["bnx_numpy_rng"]),
     ], checks=["alg.bnx_l23_score(0, 256) == -1.0",
                "alg.bnx_l23_score(alg.bnx_l23_c(256), 256) == -0.5"])
 
@@ -204,9 +250,7 @@ def build():
                panel(20, 340, 1460, 125, "Số lần cắt trung bình để cô lập một điểm (200 lần thử, chạy thật ở bước 2)", C_GREEN, size=22),
                box(60, 392, round(15.775 * 60), 54, "điểm thường: 15,8 lần cắt", C_BLUE, size=22, bold=True),
                box(1100, 392, round(5.075 * 60), 54, "điểm lạ: 5,1 lần", C_RED, size=22, bold=True)),
-           """Hình này cho thấy vì sao điểm lạ nổi lên. Mỗi lần cắt chọn ngẫu nhiên một điểm giữa giá trị nhỏ nhất và lớn nhất của các điểm còn lại.
-           Bên trái là một nghìn giao dịch thường dày đặc, bên phải là mười giao dịch lạ ở xa. Giữa hai nhóm là khoảng trống rất rộng, nên lần cắt đầu rơi vào đó với xác suất khoảng chín mươi bốn phần trăm, và khi ấy tách cả nhóm lạ ra.
-           Vì vậy điểm lạ cần ít lần cắt hơn nhiều: khoảng năm lần, so với khoảng mười sáu lần cho điểm thường."""),
+           """Mỗi lần cắt chọn ngẫu nhiên một điểm giữa giá trị nhỏ nhất và lớn nhất của các điểm còn lại. Giữa hai nhóm có khoảng trống rộng, nên lần cắt đầu rơi vào đó với xác suất khoảng chín mươi bốn phần trăm và tách cả nhóm lạ ra. Vì vậy điểm lạ cần khoảng năm lần cắt, điểm thường khoảng mười sáu."""),
         st(svg(1500, 520,
                panel(20, 20, 1460, 330, "Từ huấn luyện tới chấm điểm", C_BLUE),
                box(50, 120, 220, 110, ["dữ liệu X", "1010 × 1"], C_GRAY, size=22, bold=True),
@@ -220,80 +264,80 @@ def build():
                txt(1350, 325, "→ nhãn 1 / -1 và điểm", 22, "middle", "#16a34a", True),
                panel(20, 370, 1460, 135, "Điều mô hình KHÔNG làm được", C_RED, size=22),
                txt(750, 436, "không biết đó có phải gian lận; tỉ lệ nhiễm là giả định của ta;", 22, "middle", "#1f2937", True),
-               txt(750, 474, "chưa nói gì về độ trễ khi vận hành thật; dữ liệu mẫu chỉ có MỘT cột (số tiền)", 22, "middle", "#1f2937", True)),
-           """Hình thứ hai là đường đi từ huấn luyện tới chấm điểm. Dữ liệu vào rừng cô lập, hàm huấn luyện dựng một trăm cây.
-           Bộ chuyển sang ONNX xuất mô hình thành một tệp. Ở môi trường chạy, ONNX Runtime đọc tệp, rồi phiên chạy cho ra nhãn và điểm.
-           Dải đỏ ở cuối nhắc bốn điều mô hình chưa làm được. Một, không biết đó có phải gian lận. Hai, tỉ lệ nhiễm là giả định của ta.
-           Ba, chưa nói gì về độ trễ khi vận hành thật. Bốn, dữ liệu mẫu chỉ có một cột là số tiền."""),
+               txt(750, 474, "chưa nói gì về độ trễ (thời gian chờ một lần chạy) khi vận hành; dữ liệu mẫu chỉ có MỘT cột (số tiền)", 22, "middle", "#1f2937", True)),
+           """Hình thứ hai là đường đi từ huấn luyện tới chấm điểm: rừng cô lập, bộ chuyển xuất tệp, rồi ONNX Runtime đọc tệp và cho nhãn cùng điểm. Dải đỏ nhắc bốn điều mô hình chưa làm được, từ việc không biết có phải gian lận tới việc chưa đo độ trễ."""),
     ], checks=["round(100 * (48541 - 659) / (51512 - 318)) == 94",
                "round(15.775 * 60) == 946 and round(5.075 * 60) == 304"])
 
     form = sc("formula", "formula", "Suy ra từng bước: dữ liệu, cắt, điểm, huấn luyện, ngưỡng, xuất ONNX", [
         st(code(DATA_PY, "Bước 1. Sinh dữ liệu với hạt giống cố định"),
-           """Bước một, ta sinh dữ liệu bằng thư viện số học, và cố định hạt giống nên chạy lại luôn ra y nguyên. Một nghìn giao dịch thường quanh năm trăm nghìn, độ lệch chuẩn cỡ năm mươi.
-           Mười giao dịch lạ quanh năm mươi nghìn nghìn đồng, tức năm mươi triệu, độ lệch chuẩn cỡ hai nghìn. Bốn dòng in ở cuối cho biết hình dạng, trung bình, nhỏ nhất và lớn nhất của từng nhóm.""",
-           focus=["2.2", "2.3", "2.4", "2.6"]),
+           """Bước một, ta sinh dữ liệu bằng thư viện số học, hạt giống cố định nên chạy lại luôn ra y nguyên. Một nghìn giao dịch thường quanh năm trăm nghìn, mười giao dịch lạ quanh năm mươi triệu.""",
+           focus=["2.2", "2.3"]),
         st(code(DATA_PY, lines=(6, 9)) + out(DATA_OUT),
-           """Kết quả chạy thật: một nghìn không trăm mười dòng, một cột. Giao dịch thường nằm từ khoảng ba trăm mười tám tới sáu trăm năm mươi chín.
-           Giao dịch lạ nằm từ khoảng bốn mươi tám nghìn tới năm mươi mốt nghìn. Hai nhóm tách xa nhau, nên ta kỳ vọng điểm lạ dễ bị cô lập.""",
-           focus=["3.1", "3.3", "3.4", 3], clear=True),
+           """Kết quả chạy thật: một nghìn không trăm mười dòng. Giao dịch thường từ ba trăm tới sáu trăm năm mươi, giao dịch lạ từ bốn mươi tám nghìn tới năm mươi mốt nghìn, nên hai nhóm tách xa.""",
+           focus=["3.1", "3.3"], clear=True),
+        st(table(["viết trong mã", "nghĩa"],
+                 [["<code>d[d &lt;= c]</code>", "lọc bằng điều kiện: giữ các phần tử của <code>d</code> nhỏ hơn hoặc bằng <code>c</code>"],
+                  ["<code>A if đk else B</code>", "chọn <code>A</code> nếu <code>đk</code> đúng, ngược lại chọn <code>B</code>: ở đây chọn nửa nào của <code>d</code> để giữ"],
+                  ["<code>rng.uniform(d.min(), d.max())</code>, <code>while len(d) &gt; 1</code>", "số ngẫu nhiên đều giữa nhỏ nhất và lớn nhất của <code>d</code> / lặp tới khi <code>d</code> chỉ còn một phần tử"]]),
+           """Hàm cắt dùng vài chỗ mới nên ta giải trước. Điều kiện trong ngoặc vuông giữ các phần tử thoả nó, và dòng chọn nửa cần giữ.""", clear=True),
         st(code(CUT_PY, "Bước 2. Tự cắt: đếm số lần cắt để cô lập một điểm")
            + "<p class='small'>Hàm này chỉ để minh hoạ: nếu dãy có các giá trị trùng nhau thì vòng lặp không bao giờ dừng, còn thư viện có độ sâu tối đa.</p>",
-           """Bước hai, ta tự viết phép cắt ngẫu nhiên. Hàm nhận một điểm cần cô lập và dãy các điểm còn lại.
-           Mỗi vòng, nó chọn một điểm cắt ngẫu nhiên giữa giá trị nhỏ nhất và lớn nhất, rồi giữ lại nửa chứa điểm đang xét.
-           Vì mỗi lần cắt loại đi một nửa không chứa điểm, nên đếm số vòng cho tới khi chỉ còn một điểm chính là độ sâu của điểm đó.
-           Hàm này chỉ để minh hoạ, vì nếu dãy có các giá trị trùng nhau thì vòng lặp không bao giờ dừng, còn thư viện có độ sâu tối đa.""",
+           """Bước hai, ta tự viết phép cắt ngẫu nhiên: mỗi vòng chọn một điểm cắt giữa giá trị nhỏ nhất và lớn nhất rồi giữ nửa chứa điểm đang xét. Nên số vòng cho tới khi còn một điểm là độ sâu.""",
            clear=True),
+        jstep([("pfor", "<code>for i in (0, 1000):</code> chạy hai lần, i bằng 0 rồi 1000: điểm đầu là giao dịch thường, điểm thứ 1000 là giao dịch lạ", ""),
+               (("<code>[so_lan_cat(d[i], d, rng2) for _ in range(200)]</code>", "danh sách sinh sẵn chạy 200 lần: <code>range(200)</code> là các số 0 tới 199; <code>_</code> là tên bỏ đi vì ta không dùng số vòng; gom 200 kết quả vào <code>cat</code>", "Danh sách sinh sẵn lặp hai trăm lần, gạch dưới là tên bỏ đi vì ta không dùng số vòng, và gom hai trăm kết quả vào một danh sách."), "", "")]),
         st(code(CUT_RUN) + out(CUT_OUT, "Làm thử — kết quả chạy thật"),
-           """Làm thử, ta cô lập hai điểm, mỗi điểm hai trăm lần, vì một lần chạy ngẫu nhiên chưa đủ tin. Điểm thứ nhất là một giao dịch thường, khoảng năm trăm mười lăm nghìn.
-           Điểm thứ hai là một giao dịch lạ, khoảng bốn mươi chín nghìn tám trăm tám mươi mốt. Kết quả chạy thật: điểm thường cần trung bình mười lăm phẩy tám lần cắt, điểm lạ chỉ năm phẩy không bảy lần.""",
+           """Làm thử, ta cô lập hai điểm, mỗi điểm hai trăm lần vì một lần chưa đủ tin. Điểm thường cần trung bình mười lăm phẩy tám lần cắt, điểm lạ chỉ năm phẩy không bảy lần.""",
            clear=True),
         st("""<p><b>Bước 3.</b> Độ sâu trung bình c(n) và điểm bất thường. Vì cây có thể sâu hay nông tuỳ số điểm, ta chia độ sâu cho một mức tham chiếu để điểm không phụ thuộc cỡ mẫu:</p>
 $$c(n) = 2\\,(\\ln(n-1) + \\gamma) - \\frac{2\\,(n-1)}{n}, \\qquad s(x,n) = 2^{-E[h(x)]\\,/\\,c(n)}$$
-<span class='note'>γ ≈ 0,5772 là hằng số Euler–Mascheroni. Mỗi cây của thư viện huấn luyện trên tối đa 256 điểm, nên mức tham chiếu là c(256).</span>""",
-           """Bước ba là độ sâu trung bình và điểm bất thường. Vì cây có thể sâu hay nông tuỳ số điểm, ta chia độ sâu cho một mức tham chiếu, để điểm không phụ thuộc cỡ mẫu.
-           Mức tham chiếu c của n bằng hai lần tổng của lốc tự nhiên n trừ một và một hằng số cỡ không phẩy năm bảy bảy, trừ đi hai nhân n trừ một chia n.
-           Điểm s bằng hai mũ âm độ sâu trung bình chia c. Mỗi cây của thư viện huấn luyện trên tối đa hai trăm năm mươi sáu điểm, nên mức tham chiếu là c của hai trăm năm mươi sáu.""",
+<span class='note'>ln là lôgarit tự nhiên (Python: <code>math.log</code>, ví dụ ln(e) = 1); γ ≈ 0,5772 là hằng số Euler–Mascheroni. c(n) là độ sâu trung bình của một cây cô lập n điểm, thư viện dùng đúng công thức này. Mỗi cây học tối đa 256 điểm, nên mức tham chiếu là c(256).</span>""",
+           """Bước ba là mức tham chiếu c của n, độ sâu trung bình của một cây n điểm, dùng lôgarit tự nhiên, và điểm bất thường s. Vì cây sâu nông tuỳ số điểm, nên ta chia độ sâu cho c để điểm không phụ thuộc cỡ mẫu, và mỗi cây học tối đa hai trăm năm mươi sáu điểm.""",
            clear=True, introduces=["gamma", "log"]),
+        jstep([("pdef", "<code>def c(n):</code> nhận n, trả độ sâu tham chiếu; <code>def diem(h, n):</code> nhận độ sâu h và n, trả điểm", ""),
+               (("<code>-2 ** (-h / c(n))</code>", "<code>**</code> là lũy thừa: <code>2 ** x</code> là 2 mũ x; dấu trừ đứng đầu được tính sau cùng, nên kết quả là âm của 2 mũ x", "Hai dấu sao là lũy thừa, và dấu trừ đứng đầu được tính sau cùng nên kết quả là số âm."), "<code>-2 ** 3</code> ra <code>-8</code>", "")]),
         st(code(AVG_PY, "Bước 3 (tiếp). Viết lại bằng Python"),
-           """Ta viết lại hai công thức thành hai hàm Python. Hàm c cho mức tham chiếu theo số điểm n.
-           Hàm điểm nhận độ sâu trung bình, và đặt dấu âm như thư viện học máy.""",
-           focus=[2, "2.3", "2.5"], clear=True),
+           """Ta viết hai công thức thành hai hàm Python, vì như vậy thử được bằng số, rồi hàm điểm đặt dấu âm như thư viện học máy.""",
+           focus=[2, "2.3"], clear=True),
         st(code(AVG_PY, lines=(6, 9)) + out(AVG_OUT),
-           """Kết quả chạy thật: c của hai trăm năm mươi sáu bằng mười phẩy hai bốn bốn tám. Điểm có độ sâu bằng đúng mức tham chiếu là âm không phẩy năm, vì hai mũ âm một là một phần hai.
-           Độ sâu bằng một nửa mức tham chiếu cho âm không phẩy bảy không bảy một. Độ sâu chỉ bằng một lần cắt cho âm không phẩy chín ba bốn sáu.
-           Độ sâu càng nhỏ thì điểm càng gần âm một, tức càng lạ.""",
-           focus=["3.1", "3.2", "3.3", "3.4", 3], clear=True),
-        st(code(TRAIN_PY, "Bước 4. Huấn luyện rừng cô lập: 100 cây, tỉ lệ nhiễm 1%"),
-           """Bước bốn, ta huấn luyện rừng cô lập bằng thư viện học máy, với một trăm cây và tỉ lệ nhiễm một phần trăm. Hạt giống cố định nên chạy lại luôn ra y nguyên.
-           Hàm huấn luyện học từ dữ liệu, rồi hàm dự đoán gắn nhãn cho chính dữ liệu huấn luyện.""",
-           focus=["2.2", "2.3", "2.5"], clear=True),
+           """Kết quả chạy thật: c của hai trăm năm mươi sáu bằng mười phẩy hai bốn bốn tám, nên độ sâu càng nhỏ thì điểm càng gần âm một.""",
+           focus=["3.1", 3], clear=True),
+        st(table(["viết trong mã", "nghĩa"],
+                 [["<code>a[1000:]</code>, <code>a[:1000]</code>", "cắt lát: từ phần tử thứ 1000 trở đi (máy đếm từ 0) / 1000 phần tử đầu"],
+                  ["<code>(nhan == -1).sum()</code>", "so từng phần tử với −1 ra dãy đúng hoặc sai; <code>sum</code> đếm số chỗ đúng"]]),
+           """Mã huấn luyện in số điểm gắn nhãn, nên ta giải trước hai ký hiệu. Dấu hai chấm trong ngoặc vuông cắt phần cuối hoặc phần đầu dãy, nên tách được hai nhóm. So với âm một rồi cộng lại là đếm số điểm gắn âm một.""", clear=True),
+        st(code(TRAIN_PY, "Bước 4. Huấn luyện rừng cô lập: 100 cây, tỉ lệ nhiễm 1%")
+           + "<p class='small'>Cài: <code>pip install scikit-learn==1.9.1 skl2onnx==1.20.0 onnxruntime==1.31.1</code> (bài chạy Python 3.13, numpy 2.5.4; <code>gói==số</code> là cài đúng phiên bản đó). Số nút và lỗi ONNX ở bước sau phụ thuộc phiên bản. <code>random_state</code>: hạt giống của rừng, đặt cố định để chạy lại ra y hệt.</p>",
+           """Bước bốn, ta huấn luyện rừng cô lập bằng thư viện học máy, với một trăm cây và tỉ lệ nhiễm một phần trăm. Rồi ta dự đoán nhãn cho chính dữ liệu huấn luyện, vì muốn biết máy gắn nhãn thế nào.""",
+           focus=["2.2", "2.5"], clear=True),
         st(code(TRAIN_PY, lines=(6, 9)) + out(TRAIN_OUT),
-           """Kết quả chạy thật: cả mười điểm lạ đều nhận nhãn âm một. Nhưng tổng số nhãn âm một là mười một, nghĩa là có một giao dịch thường bị gắn lạ.
-           Ngưỡng bằng âm không phẩy bảy ba năm ba.""",
+           """Kết quả chạy thật: cả mười điểm lạ nhận nhãn âm một, nhưng tổng là mười một nhãn, nghĩa là một giao dịch thường bị gắn oan.""",
            focus=["3.1", "3.2", "3.4"], clear=True),
         st(f"""<p><b>Bước 5.</b> Vì sao ra đúng ngưỡng ấy. Tỉ lệ nhiễm 1% nghĩa là: lấy điểm của chính dữ liệu huấn luyện, đặt ngưỡng ở phân vị 1% thấp nhất. Điểm nào thấp hơn ngưỡng nhận nhãn -1:</p>
 $$\\text{{quyết định}} = \\text{{điểm}} - \\text{{offset\\_}}, \\qquad \\text{{quyết định}} < 0 \\;\\Rightarrow\\; \\text{{nhãn}} = \\hl{{-1}}$$
-<span class='note'>Theo quy tắc đếm: 0,01 × 1009 = 10,09, phần nguyên 10, cộng một là 11 điểm nằm dưới ngưỡng, dù thật sự lạ chỉ có 10: ngưỡng do ta đặt, không do mô hình tìm ra.</span>""",
-           """Bước năm là vì sao ra đúng ngưỡng ấy. Tỉ lệ nhiễm một phần trăm nghĩa là ta lấy điểm của chính dữ liệu huấn luyện, rồi đặt ngưỡng ở phân vị một phần trăm thấp nhất.
-           Điểm quyết định bằng điểm trừ ngưỡng. Điểm quyết định âm thì nhãn là âm một.
-           Theo quy tắc đếm, không phẩy không một nhân một nghìn không trăm lẻ chín bằng mười phẩy không chín.
-           Phần nguyên mười, cộng một là mười một điểm nằm dưới ngưỡng, dù thật sự lạ chỉ có mười. Ngưỡng do ta đặt, không do mô hình tự tìm ra.""",
+<span class='note'>Theo quy tắc đếm (đúng khi các điểm khác nhau): 0,01 × 1009 = 10,09, làm tròn lên là 11 điểm nằm dưới ngưỡng, dù thật sự lạ chỉ có 10: ngưỡng do ta đặt, không do mô hình tìm ra.</span>""",
+           """Bước năm là vì sao ra đúng ngưỡng ấy. Tỉ lệ nhiễm một phần trăm nghĩa là đặt ngưỡng ở phân vị một phần trăm thấp nhất của điểm trên dữ liệu huấn luyện. Theo quy tắc đếm, mười phẩy không chín làm tròn lên thành mười một điểm dưới ngưỡng dù lạ thật chỉ có mười, vì ngưỡng do ta đặt.""",
            clear=True),
-        st(code(SCORE_PY, "Bước 5 (tiếp). Điểm trung bình của hai nhóm, quy ra độ sâu") + out(SCORE_OUT),
-           """Ta lấy điểm bất thường của từng giao dịch, tính trung bình cho hai nhóm, rồi quy về độ sâu vì độ sâu dễ hình dung hơn. Kết quả chạy thật: nhóm thường có điểm trung bình âm không phẩy bốn bốn bảy năm, quy ra độ sâu khoảng mười một phẩy tám tám.
-           Nhóm lạ có điểm âm không phẩy tám bốn bốn tám, quy ra độ sâu chỉ hai phẩy bốn chín. Điểm của nhóm lạ nằm dưới ngưỡng, điểm của nhóm thường nằm trên ngưỡng.""",
-           focus=["2.1", "4.1", "4.2", 4], clear=True),
+        st(code(SCORE_PY, "Bước 5 (tiếp). Điểm trung bình của hai nhóm, quy ra độ sâu") + out(SCORE_OUT)
+           + "<p class='small'>11,88 khác 15,8 ở hình trước vì hai thước đo: 15,8 là số lần cắt riêng một điểm, không giới hạn độ sâu, trên cả 1 010 điểm; 11,88 quy từ điểm trung bình của nhóm trong rừng, mỗi cây chỉ học tối đa 256 điểm và cắt cụt độ sâu. <code>max_samples_</code>: số điểm mỗi cây học.</p>",
+           """Ta lấy điểm trung bình của hai nhóm rồi quy về độ sâu. Nhóm thường có điểm âm không phẩy bốn bốn bảy năm, độ sâu khoảng mười một phẩy tám tám, còn nhóm lạ chỉ hai phẩy bốn chín. Số này khác mười lăm phẩy tám ở hình trước vì hai thước đo khác nhau.""",
+           focus=["2.1", "4.1", "4.2"], clear=True),
+        st(table(["viết trong mã", "nghĩa"],
+                 [["<code>open(\"rung.onnx\", \"wb\").write(…)</code>", "ghi chuỗi byte vào tệp (<code>wb</code>: ghi nhị phân)"],
+                  ["<code>phien.get_inputs()[0].name</code>", "tên ô nhập đầu tiên của mô hình"],
+                  ["<code>nhan_onnx, diem_onnx = phien.run(None, {ten: x32})</code>", "chạy mô hình (<code>None</code>: lấy mọi đầu ra), đưa dữ liệu vào ô nhập tên <code>ten</code>; gán hai kết quả cho hai biến"]]),
+           """Phần ONNX có ba chỗ mới nên ta giải trước. Lệnh ghi byte ra tệp, lệnh lấy tên ô nhập, và lệnh chạy trả hai kết quả.""", clear=True),
+        jstep([("pimp", "<code>from skl2onnx import to_onnx</code>, <code>import onnxruntime as rt</code>: lấy thư viện về, gọi <code>onnxruntime</code> là <code>rt</code>", ""),
+               ("pf", "<code>f\"sai khác điểm lớn nhất: {lech:.1e}\"</code>: <code>.1e</code> in dạng khoa học, ví dụ <code>1.8e-07</code> là 1,8 nhân mười mũ âm bảy", ""),
+               (("<code>abs(a - b).max()</code>", "hiệu từng cặp, lấy giá trị tuyệt đối rồi chọn số lớn nhất", "Hiệu từng cặp, lấy giá trị tuyệt đối, rồi chọn số lớn nhất, tức sai khác nhiều nhất."), "", "")]),
         st(code(ONNX_PY, "Bước 6. Xuất sang ONNX, chạy bằng ONNX Runtime, so với mô hình trong Python")
-           + "<p class='small'>Đầu ra thứ hai của tệp ONNX là điểm quyết định (điểm trừ ngưỡng), nên ta so nó với decision_function.</p>",
-           """Bước sáu, ta xuất mô hình sang ONNX bằng bộ chuyển, ghi ra một tệp, rồi nạp tệp vào ONNX Runtime.
-           Dữ liệu đưa vào là số thực ba mươi hai bit, vì mô hình ONNX này nhận kiểu đó. Rồi ta chạy mô hình trên cả một nghìn không trăm mười điểm, và nhận hai đầu ra: nhãn, và điểm quyết định tức điểm trừ ngưỡng.""",
-           focus=["2.4", "2.3", "3"], clear=True),
+           + "<p class='small'>Đầu ra thứ hai của tệp ONNX là điểm quyết định (điểm trừ ngưỡng), nên ta so nó với decision_function. target_opset: phiên bản bộ phép toán (opset) của từng miền.</p>",
+           """Bước sáu, ta xuất mô hình sang ONNX, ghi ra một tệp rồi nạp vào ONNX Runtime. Ta khai phiên bản bộ phép toán, vì bộ chuyển và thư viện chạy phải hiểu cùng một bản.""",
+           focus=["2.4", "2.3"], clear=True),
         st(code(ONNX_PY, lines=(10, 12)) + out(ONNX_OUT),
-           """Ta so kết quả với mô hình trong Python. Kết quả chạy thật: cả một nghìn không trăm mười nhãn đều giống nhau.
-           Điểm quyết định sai khác nhau nhiều nhất chỉ cỡ một phẩy tám nhân mười mũ âm bảy, vì số thực ba mươi hai bit làm tròn thô hơn số thực sáu mươi bốn bit.
-           Nên trên dữ liệu khác, điểm sát ngưỡng vẫn có thể bị lật nhãn.""",
-           focus=["1.1", "3.1", "3.2", "3.2"], clear=True),
+           """Kết quả chạy thật: một nghìn không trăm mười nhãn đều giống mô hình trong Python, điểm quyết định sai khác nhiều nhất cỡ mười mũ âm bảy. Số thực ba mươi hai bit làm tròn thô hơn, nên điểm sát ngưỡng vẫn có thể bị lật nhãn.""",
+           focus=["1.1", "3.1", "3.2"], clear=True),
     ], checks=["round(alg.bnx_l23_c(256), 4) == 10.2448",
                "round(alg.bnx_l23_score(alg.bnx_l23_c(256) / 2, 256), 4) == -0.7071",
                "round(alg.bnx_l23_score(1, 256), 4) == -0.9346 and alg.bnx_l23_score(alg.bnx_l23_c(256), 256) == -0.5",
@@ -304,100 +348,81 @@ $$\\text{{quyết định}} = \\text{{điểm}} - \\text{{offset\\_}}, \\qquad \
     ex = sc("example", "example", "Ví dụ rừng cô lập trên 1010 giao dịch, từng phép tính", [
         st(f"""<p>1000 giao dịch thường quanh 500 nghìn đồng, 10 giao dịch lạ 50 triệu đồng; rừng 100 cây, tỉ lệ nhiễm 1%; mỗi cây huấn luyện trên tối đa 256 điểm. {NOTE_ILL}</p>
 $$① \\; c(256) = 2\\,(\\ln 255 + 0{{,}}57722) - \\frac{{2 \\cdot 255}}{{256}} = 12{{,}}2370 - 1{{,}}9922 = \\hl{{10{{,}}2448}}$$""",
-           """Ta làm trọn một ví dụ. Một nghìn giao dịch thường quanh năm trăm nghìn đồng, mười giao dịch lạ năm mươi triệu đồng, rừng một trăm cây, tỉ lệ nhiễm một phần trăm.
-           Mỗi cây huấn luyện trên tối đa hai trăm năm mươi sáu điểm. Phép tính thứ nhất, mức tham chiếu c của hai trăm năm mươi sáu bằng mười hai phẩy hai ba bảy không trừ một phẩy chín chín hai hai, bằng mười phẩy hai bốn bốn tám."""),
+           """Ta làm trọn một ví dụ, rừng một trăm cây. Phép tính thứ nhất, c của hai trăm năm mươi sáu bằng mười hai phẩy hai ba bảy không trừ một phẩy chín chín hai hai, bằng mười phẩy hai bốn bốn tám."""),
         st("""<p>Dùng lại c(256) = 10,2448 ở phép ①. Nhóm lạ có điểm trung bình −0,8448.</p>
 $$② \\; \\text{độ sâu} = -c \\cdot \\log_2(0{,}8448) = 10{,}2448 \\cdot 0{,}2433 = \\hl{2{,}49} \\text{ lần cắt}$$""",
-           """Phép tính thứ hai dùng lại mười phẩy hai bốn bốn tám. Nhóm lạ có điểm trung bình âm không phẩy tám bốn bốn tám.
-           Độ sâu quy đổi bằng âm c nhân lốc hai của không phẩy tám bốn bốn tám. Đó là mười phẩy hai bốn bốn tám nhân không phẩy hai bốn ba ba, khoảng hai phẩy bốn chín lần cắt.""", introduces=["sub"]),
+           """Phép tính thứ hai, nhóm lạ có điểm trung bình âm không phẩy tám bốn bốn tám, nên độ sâu quy đổi khoảng hai phẩy bốn chín lần cắt.""", introduces=["sub"]),
         st("""<p>Nhóm thường có điểm trung bình −0,4475.</p>
 $$③ \\; \\text{độ sâu} = -10{,}2448 \\cdot \\log_2(0{,}4475) = 10{,}2448 \\cdot 1{,}1600 = \\hl{11{,}88} \\text{ lần cắt}$$""",
-           """Phép tính thứ ba, cho nhóm thường có điểm trung bình âm không phẩy bốn bốn bảy năm. Cũng dùng mười phẩy hai bốn bốn tám, độ sâu bằng mười phẩy hai bốn bốn tám nhân một phẩy một sáu không không, khoảng mười một phẩy tám tám lần cắt.
-           Điểm thường cần nhiều lần cắt hơn điểm lạ khoảng bốn phẩy tám lần."""),
+           """Phép tính thứ ba, nhóm thường có độ sâu khoảng mười một phẩy tám tám, nhiều hơn điểm lạ khoảng bốn phẩy tám lần."""),
         st("""<p>Ngưỡng của rừng: offset_ = −0,7353 (phân vị 1%). Dùng điểm ở ② và ③.</p>
 $$④ \\; \\text{lạ: } -0{,}8448 + 0{,}7353 = \\hl{-0{,}1095} < 0 \\Rightarrow -1;\\quad \\text{thường: } -0{,}4475 + 0{,}7353 = \\hlg{+0{,}2878} \\Rightarrow 1$$
 <span class='note'>Toàn tập: 11 điểm dưới ngưỡng = 10 điểm lạ + 1 điểm thường bị gắn oan.</span>""",
-           """Phép tính thứ tư, đặt ngưỡng. Ngưỡng của rừng là âm không phẩy bảy ba năm ba, ở phân vị một phần trăm. Với điểm ở phép hai và phép ba, nhóm lạ có điểm quyết định âm không phẩy một không chín năm, nhỏ hơn không nên nhãn âm một.
-           Nhóm thường có điểm quyết định dương không phẩy hai tám bảy tám nên nhãn một. Trên toàn tập có mười một điểm dưới ngưỡng, gồm mười điểm lạ và một điểm thường bị gắn oan.""",
+           """Phép tính thứ tư, với ngưỡng âm không phẩy bảy ba năm ba, nhóm lạ có điểm quyết định âm nên nhãn âm một, còn nhóm thường dương nên nhãn một.""",
            clear=True),
         st("""<p>Xuất ONNX, chạy trên cả 1010 điểm.</p>
 $$⑤ \\; \\text{cùng nhãn với mô hình Python: } \\hlg{1010 / 1010}; \\quad \\text{sai khác điểm lớn nhất} = \\hl{1{,}8 \\cdot 10^{-7}}$$""",
-           """Phép tính thứ năm, xuất mô hình sang ONNX và chạy trên cả một nghìn không trăm mười điểm. Kết quả chạy thật: một nghìn không trăm mười trên một nghìn không trăm mười nhãn giống mô hình trong Python.
-           Điểm quyết định sai khác nhau nhiều nhất chỉ cỡ một phẩy tám nhân mười mũ âm bảy."""),
+           """Phép tính thứ năm, xuất ONNX rồi chạy trên cả một nghìn không trăm mười điểm cho một nghìn không trăm mười nhãn giống mô hình trong Python.""",
+           ),
     ], checks=["round(2 * (__import__('math').log(255) + 0.57722) - 2 * 255 / 256, 4) == 10.2448",
                "round(alg.bnx_l23_depth_from_score(-0.8448, 256), 2) == 2.49",
                "round(alg.bnx_l23_depth_from_score(-0.4475, 256), 2) == 11.88 and round(11.88 / 2.49, 1) == 4.8",
                "round(alg.bnx_l23_decision(-0.8448, -0.7353), 4) == -0.1095 and round(alg.bnx_l23_decision(-0.4475, -0.7353), 4) == 0.2878",
                "alg.bnx_l23_expected_flags(1010, 0.01) == 10 + 1"])
 
-    chk = sc("check", "check", "Tự kiểm bằng đường khác: danh tính điểm, năm hạt giống và tay cắt", [
+    chk = sc("check", "check", "Tự kiểm bằng đường khác: danh tính điểm và năm hạt giống", [
         st(code(CHECK_ID_PY, "Kiểm 1. decision_function đúng bằng score_samples trừ offset_") + out(CHECK_ID_OUT),
-           """Kiểm bằng đường khác. Thư viện định nghĩa điểm quyết định bằng điểm bất thường trừ ngưỡng. Vì vậy ta tính hai vế riêng rồi so.
-           Kết quả chạy thật: hai vế sai khác nhau không, và điểm quyết định âm trùng khít với nhãn âm một trên mọi điểm.""",
-           focus=[1, "2.2", "2.3", "4.1"]),
+           """Kiểm bằng đường khác: thư viện định nghĩa điểm quyết định bằng điểm bất thường trừ ngưỡng, nên ta tính hai vế riêng. Kết quả chạy thật: hai vế sai khác không, và điểm âm trùng khít nhãn âm một.""",
+           focus=[1, "4.1"]),
         st(code(CHECK_SEED_PY, "Kiểm 2. Đổi hạt giống: kết quả có đổi không?") + out(CHECK_SEED_OUT),
-           """Kiểm hai, ta đổi hạt giống năm lần, từ không tới bốn. Mỗi dòng in hạt giống, số điểm lạ thật bị gắn âm một, và tổng số gắn âm một.
-           Kết quả chạy thật: năm lần đều bắt đủ mười điểm lạ và gắn tổng cộng mười một điểm. Vì dữ liệu tách xa như thế này, kết quả không phụ thuộc vào một hạt giống may mắn; dữ liệu khó hơn thì chưa chắc.""",
-           focus=[1, "2.5", "4.1", 4], clear=True),
-        st(table(["cách kiểm", "phép tính", "kết luận"],
-                 [["độ sâu: tay và máy", "tự cắt: 5,1 lần (lạ) so với 15,8 lần (thường); thư viện: 2,49 và 11,88 sau khi quy đổi", "cùng thứ tự: lạ nông hơn thường; số khác nhau vì thư viện dùng mẫu con tối đa 256 điểm, dừng ở độ sâu 8 rồi cộng c của số điểm còn ở lá"],
-                  ["ngưỡng theo phân vị", "phần nguyên của 0,01 × 1009 = 10,09 là 10, cộng một: 11 điểm dưới ngưỡng", "khớp 11 điểm gắn -1"],
-                  ["sai khác điểm ONNX", "1,8 × 10⁻⁷ so với khoảng cách điểm sát ngưỡng nhất tới ngưỡng, cỡ 3 × 10⁻⁴", "bé hơn hơn một nghìn lần: không lật nhãn nào (chỉ trên 1010 điểm này)"],
-                  ["tệp chạy một mình", "nạp tệp ONNX trong một tiến trình mới đã chặn nhập thư viện học máy (mã không hiện ở đây; bộ kiểm ghi ở audit/bnx/ver/l23.py)", "chạy được: tệp chứa cây và ngưỡng"]]),
-           """Bảng này kiểm thêm bằng bốn đường. Về độ sâu, tay cắt cho năm lần so với mười sáu lần, thư viện quy đổi ra hai phẩy bốn chín và mười một phẩy tám tám, cùng thứ tự: điểm lạ nông hơn.
-           Số tuyệt đối khác vì thư viện chỉ dùng mẫu con hai trăm năm mươi sáu điểm, dừng ở độ sâu tám, rồi cộng mức tham chiếu của số điểm còn lại ở lá.
-           Về ngưỡng, phần nguyên của mười phẩy không chín là mười, cộng một thành mười một điểm dưới ngưỡng, khớp với mười một nhãn âm một.
-           Về điểm sai khác, một phẩy tám nhân mười mũ âm bảy bé hơn khoảng cách từ điểm sát ngưỡng nhất tới ngưỡng, cỡ ba nhân mười mũ âm bốn.
-           Nên trên một nghìn không trăm mười điểm này không nhãn nào bị lật.
-           Cuối cùng, trong một tiến trình mới đã chặn thư viện học máy, tệp ONNX vẫn chạy, vì tệp đã chứa cây và ngưỡng.""",
-           focus=[0, "1.2", "1.2", "1.3", "1.4", "1.4", "1.5"], clear=True),
-        st(table(["cách đánh giá khi KHÔNG có nhãn thật", "làm gì"],
-                 [["lưu ý trước", "mười trên mười điểm lạ chỉ nói được vì ta tự dựng dữ liệu nên biết đáp án; dữ liệu thật không có đáp án"],
-                  ["người xét duyệt mẫu", "lấy các điểm bị gắn -1 (nhất là điểm thấp nhất), cho người xét đánh dấu đúng hay sai, rồi tính tỉ lệ đúng"],
-                  ["tiêm điểm lạ giả", "thêm vài giao dịch lạ do ta tự tạo vào dữ liệu thử, xem rừng có bắt không"],
-                  ["theo dõi theo thời gian", "so phân bố điểm và tỉ lệ nhãn -1 hôm nay với lúc huấn luyện"]])
-           + "<span class='note'>Đây là các cách thường dùng, không phải kết quả đo của bài.</span>",
-           """Còn khi không có nhãn thật thì sao. Mười trên mười điểm lạ chỉ nói được vì ta tự dựng dữ liệu nên biết đáp án, còn dữ liệu thật không có đáp án.
-           Cách thứ nhất là cho người xét duyệt mẫu các điểm bị gắn âm một, rồi tính tỉ lệ đúng. Cách thứ hai là tiêm vài giao dịch lạ do ta tự tạo, xem rừng có bắt không.
-           Cách thứ ba là theo dõi phân bố điểm và tỉ lệ nhãn âm một theo thời gian. Đây là các cách thường dùng, không phải kết quả đo của bài.""",
-           clear=True),
+           """Kiểm hai, đổi hạt giống năm lần từ không tới bốn: lần nào cũng bắt đủ mười điểm lạ và gắn tổng cộng mười một điểm. Dữ liệu tách xa nên kết quả không phụ thuộc hạt giống.""",
+           focus=["2.5", "4.1"], clear=True),
     ], checks=["alg.bnx_l23_expected_flags(1010, 0.01) == 11 and int(0.01 * (1010 - 1)) + 1 == 11",
-               "round(alg.bnx_l23_depth_from_score(-0.8448, 256), 2) < round(alg.bnx_l23_depth_from_score(-0.4475, 256), 2)",
-               "round(3e-4 / 1.8e-7) > 1000"])
+               "round(alg.bnx_l23_depth_from_score(-0.8448, 256), 2) < round(alg.bnx_l23_depth_from_score(-0.4475, 256), 2)"])
+
+    quymo = sc("quymo", "example", "Khi giao dịch tăng ×10 và ×100: mô hình và người xét thay đổi ra sao", [
+        st(QUYMO.show(lines=(3, 9), title="QuyMo.py (trích): dữ liệu ở ba cỡ, vẫn 1% là điểm lạ"),
+           """Ta đo khi giao dịch tăng dần, ở ba cỡ là một nghìn không trăm mười, mười nghìn một trăm và một trăm lẻ một nghìn, vẫn một phần trăm là lạ.""",
+           clear=True),
+        st(QUYMO.show(lines=(10, 15), title="QuyMo.py (tiếp): huấn luyện lại, đếm nhãn âm một và số nút của rừng") + QUYMO.out_html(),
+           """Mỗi lần ta huấn luyện lại rừng, đếm số nhãn âm một, số điểm lạ thật bị bắt và tổng số nút. Kết quả chạy thật: nhãn âm một tăng theo cỡ dữ liệu, còn số nút giữ quanh mười một nghìn bốn trăm.""",
+           focus=["1.1", "2.1", "2.2", "2.3"], clear=True),
+        st(table(["số giao dịch N", "gắn nhãn −1", "điểm lạ thật bị bắt", "tổng số nút của rừng", "người xét cần mỗi ngày (40 ca mỗi người, số minh hoạ)"],
+                 [[nowrap("1 010 (×1)"), "11", "10 / 10", "11 384", "1"],
+                  [nowrap("10 100 (×10)"), "101", "100 / 100", "11 802", "3"],
+                  [nowrap("101 000 (×100)"), "1 005", "1 000 / 1 000", "11 436", "26"]])
+           + "<p class='small'>Ở 101 000 điểm quy tắc đếm cho 1 010 nhưng chạy thật ra 1 005: chỉ có 3 613 giá trị khác nhau trên 101 000 điểm, nên nhiều điểm trùng đúng ở ngưỡng và quy tắc không còn chính xác.</p>",
+           """Bảng cho thấy hai cách tăng khác nhau. Mô hình không to lên vì mỗi cây chỉ học tối đa hai trăm năm mươi sáu điểm, nhưng số giao dịch bị gắn tăng theo tỉ lệ. Nếu mỗi người xét bốn mươi ca một ngày thì cần hai mươi sáu người.""",
+           focus=[0, "1.2", "1.3"], clear=True),
+        st(table(["cách", "được", "mất"],
+                 [["hạ tỉ lệ nhiễm", "ít ca hơn cho người xét", "bỏ sót điểm lạ thật nếu đặt quá thấp (ở trên, 0,001 chỉ bắt 2 trên 10)"],
+                  ["xếp ca theo điểm, xét ca đáng ngờ nhất trước", "người xét xem đúng ca cần xem", "cần quy trình và hàng đợi; ca ở cuối có thể không bao giờ được xem"],
+                  ["chặn tự động mọi nhãn −1", "nhanh, không tốn người", "chặn oan khách thật, như lương lớn hợp lệ"]]),
+           """Người làm nghề phải chọn khi quy mô tăng. Hạ tỉ lệ nhiễm thì ít ca hơn nhưng bỏ sót. Xếp ca theo điểm thì cần thêm quy trình. Chặn tự động thì nhanh, nhưng chặn oan khách thật.""",
+           focus=["1.2", "1.3", "1.4"], clear=True),
+    ], checks=["alg.bnx_l23_expected_flags(1010, 0.01) == 11 and alg.bnx_l23_expected_flags(10100, 0.01) == 101",
+               "abs(1005 - alg.bnx_l23_expected_flags(101000, 0.01)) <= 5",
+               "[alg.bnx_l23_reviewers(f, 40) for f in (11, 101, 1005)] == [1, 3, 26]",
+               "10100 // 1010 == 10 and 101000 // 1010 == 100"])
 
     pit = sc("pitfalls", "pitfall", "Điều mô hình KHÔNG làm được, và lỗi theo từng giai đoạn", [
         st("""<div class="box warn"><b>Lỗi 1 (người mới).</b> Tin rằng nhãn -1 là “gian lận”, và tỉ lệ nhiễm là điều mô hình tự tìm ra. Đổi tỉ lệ nhiễm, số điểm bị gắn đổi theo, còn lạ thật vẫn là 10: đặt thấp thì bỏ sót, đặt cao thì gắn oan.</div>""" + code(LIMIT_PY) + out(LIMIT_OUT),
-           """Lỗi thứ nhất, của người mới, là tin rằng nhãn âm một nghĩa là gian lận, và tỉ lệ nhiễm là điều mô hình tự tìm ra. Ta thử ba tỉ lệ nhiễm, và thêm giá trị mặc định là tự động.
-           Kết quả chạy thật: với không phẩy không không một, rừng chỉ gắn hai điểm, tức bỏ sót tám điểm lạ. Với một phần trăm gắn mười một điểm. Với năm phần trăm gắn năm mươi mốt điểm, trong đó vẫn chỉ mười điểm lạ thật.
-           Nếu không đặt gì, ngưỡng cố định ở âm không phẩy năm và rừng gắn một trăm ba mươi bảy điểm.
-           Vậy số điểm bị gắn do ta đặt, không do dữ liệu tự nói: đặt thấp thì bỏ sót, đặt cao thì gắn oan.""",
-           focus=[1, "2.1", "4.1", "4.2", "4.3", "4.4", 4]),
+           """Lỗi thứ nhất, của người mới, là tin rằng nhãn âm một nghĩa là gian lận và tỉ lệ nhiễm do mô hình tự tìm ra. Đổi tỉ lệ nhiễm thì số điểm bị gắn đổi theo, còn lạ thật vẫn là mười.""",
+           focus=[1, 4], clear=True),
         st(code(LIMIT2_PY, "Hai điểm mô hình trả lời sai điều ta cần") + out(LIMIT2_OUT)
            + "<div class='box key'>Số tiền 520 nghìn trông như người thường nên nhãn 1: <b>kẻ gian tiêu nhỏ không bị thấy</b>. Số tiền 50 triệu lạ nên nhãn -1 (vì rừng đã thấy nhóm này hiếm): <b>lương hợp lệ vẫn bị gắn</b>. Lạ không đồng nghĩa gian lận: cần người xét lại.</div>",
-           """Ta thử thêm hai điểm. Một kẻ gian chuyển số tiền năm trăm hai mươi nghìn, trông như người thường, nên nhãn là một: mô hình không thấy kẻ gian tiêu nhỏ.
-           Một công ty trả lương hợp lệ năm mươi triệu, nên nhãn là âm một, dù không có gì sai, vì rừng đã thấy nhóm năm mươi triệu là hiếm. Lạ không đồng nghĩa với gian lận, nên mọi nhãn âm một cần người xét lại.""",
-           focus=[1, "2.1", "4.1", 5], clear=True),
-        st("""<div class="box warn"><b>Lỗi 2 (người đã đi làm, lúc mới dựng).</b> Xuất ONNX mà không khai phiên bản miền <code>ai.onnx.ml</code>, hoặc xuất xong chỉ thử vài điểm mẫu rồi cho chạy. Thư viện xuất của máy này dừng ngay với một lỗi:</div>"""
+           """Hai điểm thêm vào cho thấy giới hạn: kẻ gian chuyển năm trăm hai mươi nghìn trông như người thường nên không bị thấy, còn lương hợp lệ năm mươi triệu bị gắn âm một.""",
+           focus=["2.1", "4.1"], clear=True),
+        st("""<div class="box warn"><b>Lỗi 2 (người đã đi làm, lúc mới dựng).</b> Xuất ONNX mà không khai phiên bản miền (nhóm phép toán) <code>ai.onnx.ml</code>, tức các phép toán học máy cổ điển, hoặc xuất xong chỉ thử vài điểm mẫu rồi cho chạy. Thư viện xuất của máy này dừng ngay với một lỗi:</div>"""
            + code(ONNX_ERR_PY) + out(ONNX_ERR_OUT, "Thông báo lỗi thật (dòng cuối của vết lỗi, lược bớt)")
            + """<p class="small">Cách chữa: khai target_opset như bước 6 (ở đây ai.onnx.ml bản 3), ghi lại bản của ba thư viện lúc xuất (học máy, bộ chuyển, ONNX Runtime), rồi so nhãn VÀ điểm trên TOÀN BỘ dữ liệu, nhất là các điểm sát ngưỡng, không chỉ vài mẫu.</p>""",
-           """Lỗi thứ hai, của người đã đi làm, gặp lúc mới dựng. Xuất ONNX mà không khai phiên bản của miền học máy, hoặc xuất xong chỉ thử vài điểm mẫu rồi cho chạy.
-           Trên máy này, thư viện xuất dừng ngay với một lỗi, nói mô hình dùng bản bốn của miền học máy trong ONNX, mà thư viện chưa hỗ trợ.
-           Cách chữa là khai phiên bản đích như bước sáu, ghi lại bản của ba thư viện lúc xuất, rồi so cả nhãn lẫn điểm trên toàn bộ dữ liệu, nhất là các điểm sát ngưỡng.""",
-           focus=[1, "2.1", "4.1", 5], clear=True),
+           """Lỗi thứ hai, của người đã đi làm, là xuất ONNX mà không khai phiên bản miền học máy, và thư viện dừng ngay với một lỗi. Cách chữa là khai phiên bản đích và so cả nhãn lẫn điểm trên toàn bộ dữ liệu.""",
+           focus=[1, 4], clear=True),
         st(code(DRIFT_PY, "Lỗi 3 (vận hành lâu dài): tháng sau mức chi tiêu thường đổi") + out(DRIFT_OUT)
            + """<p class="small">Vì sao: mức 1500 nghìn nằm trong khoảng trống giữa hai nhóm cũ, nên bị cô lập rất nhanh.</p>
-<p class="small">Cách chữa: theo dõi tỉ lệ nhãn -1 và phân bố điểm mỗi ngày, so với lúc huấn luyện (tỉ lệ 1% chỉ đáng so khi dữ liệu giống lúc huấn luyện, vì 1% vốn là giả định); huấn luyện lại theo lịch.</p>""",
-           """Lỗi thứ ba lộ ra khi vận hành lâu dài, là trôi dữ liệu. Một tháng sau, mức chi tiêu thường tăng lên quanh một triệu rưỡi, nhưng mô hình vẫn là bản huấn luyện cũ.
-           Kết quả chạy thật: chín trăm bảy mươi bảy trên một nghìn giao dịch thường bị gắn âm một, nên hộp thư người xét ngập.
-           Mức một triệu rưỡi nằm trong khoảng trống giữa hai nhóm cũ, nên bị cô lập rất nhanh.
-           Cách chữa là theo dõi tỉ lệ nhãn âm một và phân bố điểm mỗi ngày, so với lúc huấn luyện, và huấn luyện lại theo lịch. Tỉ lệ một phần trăm chỉ đáng so khi dữ liệu giống lúc huấn luyện, vì một phần trăm vốn là giả định.""",
-           focus=[1, "2.2", "4.1", 5, 6, 6], clear=True),
-        st("""<div class="box warn"><b>Lỗi 4 (lúc tải tăng).</b> Nạp lại tệp ONNX cho từng yêu cầu, hoặc tin vì “chạy ngon trên máy cá nhân”: số đo trên máy cá nhân chưa nói gì về <b>độ trễ</b> khi vận hành thật.</div>
-<p class="small">Cách đo: nạp tệp một lần lúc khởi động; bỏ vài lần chạy đầu; rồi đo nhiều lần với dữ liệu và số luồng như vận hành; báo phân vị 50, 95, 99 chứ không chỉ trung bình. Số đo chỉ đúng cho máy đã đo.</p>""",
-           """Lỗi thứ tư gặp lúc tải tăng: nạp lại tệp cho từng yêu cầu, hoặc tin vì chạy ngon trên máy cá nhân. Tạo phiên chạy thường tốn kém, nên cần nạp tệp một lần lúc khởi động.
-           Số đo trên máy cá nhân chưa nói gì về độ trễ khi vận hành thật, vì tải, số luồng và máy đều khác.
-           Cách đo là bỏ vài lần chạy đầu, rồi đo nhiều lần với dữ liệu giống thật. Hãy báo phân vị năm mươi, chín mươi lăm và chín mươi chín chứ không chỉ trung bình, và nhớ rằng số đo chỉ đúng cho máy đã đo.""",
-           focus=[1, 1, 1, 2, 2], clear=True),
+<p class="small">Cách chữa: theo dõi tỉ lệ nhãn -1 và phân bố điểm mỗi ngày, so với lúc huấn luyện (tỉ lệ 1% chỉ đáng so khi dữ liệu giống lúc huấn luyện, vì 1% vốn là giả định); huấn luyện lại theo lịch. Chạy ngon trên máy cá nhân chưa nói gì về <b>độ trễ</b> (thời gian chờ một lần chạy) khi vận hành thật: nạp tệp một lần lúc khởi động, đo nhiều lần, báo phân vị 95 và 99.</p>""",
+           """Lỗi thứ ba lộ ra khi vận hành lâu: tháng sau mức chi tiêu đổi, và chín trăm bảy mươi bảy trên một nghìn giao dịch thường bị gắn âm một. Hãy theo dõi tỉ lệ nhãn âm một mỗi ngày và huấn luyện lại theo lịch.""",
+           focus=[1, 1, 2, 3], clear=True),
     ], checks=["alg.bnx_l23_expected_flags(1010, 0.001) == 2 and alg.bnx_l23_expected_flags(1010, 0.01) == 11 and alg.bnx_l23_expected_flags(1010, 0.05) == 51",
                "alg.bnx_l23_expected_flags(1010, 0.05) - 10 == 41",
                "alg.bnx_l23_expected_flags(1010, 0.05) == int(0.05 * (1010 - 1)) + 1 and 10 - 2 == 8",
@@ -408,67 +433,62 @@ $$⑤ \\; \\text{cùng nhãn với mô hình Python: } \\hlg{1010 / 1010}; \\qua
                  [["1", "Một điểm có độ sâu trung bình bằng một nửa c(256). Điểm bất thường (dấu âm kiểu thư viện) là bao nhiêu? Điểm quyết định là bao nhiêu, nhãn là gì?"],
                   ["2", "Đặt tỉ lệ nhiễm 2% cho 1010 điểm. Theo quy tắc đếm ở phần phân vị, bao nhiêu điểm bị gắn -1? Nếu thật sự lạ chỉ có 10, bao nhiêu điểm thường bị gắn oan?"],
                   ["3", "Quyết định: giao dịch bị gắn -1. Chặn tự động hay chuyển người xét? Cho biết được và mất."]]),
-           """Đến lượt bạn. Câu một, một điểm có độ sâu trung bình bằng một nửa mức tham chiếu c của hai trăm năm mươi sáu. Điểm bất thường là bao nhiêu, điểm quyết định là bao nhiêu, nhãn là gì?
-           Câu hai, đặt tỉ lệ nhiễm hai phần trăm cho một nghìn không trăm mười điểm. Theo quy tắc đếm ở phần phân vị, bao nhiêu điểm bị gắn âm một, và nếu thật sự lạ chỉ có mười thì bao nhiêu điểm thường bị gắn oan?
-           Câu ba, giao dịch bị gắn âm một: chặn tự động hay chuyển người xét? Hãy nêu cái được và cái mất. Hãy dừng video và làm ra giấy.""",
-           pause=25),
+           """Đến lượt bạn. Câu một, điểm có độ sâu trung bình bằng một nửa c của hai trăm năm mươi sáu thì điểm bất thường, điểm quyết định và nhãn là gì? Câu hai, đặt tỉ lệ nhiễm hai phần trăm cho một nghìn không trăm mười điểm thì bao nhiêu điểm bị gắn âm một và bao nhiêu bị gắn oan? Câu ba, giao dịch bị gắn âm một thì chặn tự động hay chuyển người xét? Hãy dừng video và làm ra giấy.""",
+           focus=[0, "1.2", "1.3", "1.4"], pause=25),
         st("""$$2^{-1/2} \\approx 0{,}7071 \\;\\Rightarrow\\; \\text{điểm} = -0{,}7071;\\quad -0{,}7071 + 0{,}7353 = \\hl{+0{,}0282} \\geq 0 \\;\\Rightarrow\\; \\text{nhãn } \\hlg{1}$$""",
-           """Đáp án câu một. Độ sâu bằng một nửa mức tham chiếu thì số mũ là âm một phần hai. Hai mũ âm một phần hai xấp xỉ không phẩy bảy không bảy một, nên điểm là âm không phẩy bảy không bảy một.
-           Điểm quyết định bằng âm không phẩy bảy không bảy một cộng không phẩy bảy ba năm ba, bằng dương không phẩy không hai tám hai. Không âm nên nhãn là một, vừa đủ nằm trong vùng thường."""),
-        st("""$$0{,}02 \\cdot (1010 - 1) = 20{,}18 \\;\\Rightarrow\\; 20 + 1 = \\hl{21} \\text{ điểm bị gắn};\\quad 21 - 10 = \\hlg{11} \\text{ điểm thường bị gắn oan}$$""",
-           """Đáp án câu hai. Ngưỡng là phân vị hai phần trăm, vị trí hai mươi phẩy mười tám trong dãy đã sắp, phần nguyên là hai mươi, cộng một nên có hai mươi mốt điểm nằm dưới ngưỡng. Kết quả chạy thật cũng cho hai mươi mốt.
-           Nếu thật sự lạ chỉ có mười thì mười một điểm thường bị gắn oan."""),
+           """Đáp án câu một: số mũ là âm một phần hai nên điểm là âm không phẩy bảy không bảy một. Điểm quyết định là dương không phẩy không hai tám hai, không âm nên nhãn là một."""),
+        st("""$$0{,}02 \\cdot (1010 - 1) = 20{,}18 \\;\\Rightarrow\\; \\text{làm tròn lên } \\hl{21} \\text{ điểm bị gắn};\\quad 21 - 10 = \\hlg{11} \\text{ điểm thường bị gắn oan}$$""",
+           """Đáp án câu hai: hai phần trăm của một nghìn không trăm lẻ chín là hai mươi phẩy mười tám, làm tròn lên thành hai mươi mốt điểm bị gắn, và mười một điểm thường bị gắn oan."""),
         st(table(["lựa chọn", "được", "mất"],
                  [["chuyển người xét", "giao dịch hợp lệ lớn, như lương 50 triệu, không bị chặn oan; kẻ gian vẫn bị giữ lại để xem", "chậm hơn, tốn công; tỉ lệ nhiễm cao thì hộp thư ngập"],
                   ["giữ lại và yêu cầu xác thực thêm", "đỡ chặn oan, người xét chỉ nhận ca còn nghi", "thêm một bước cho khách; cần có kênh xác thực"],
                   ["chặn tự động mọi nhãn -1", "nhanh, không tốn người", "chặn oan khách thật; không sửa được sai sót của giả định tỉ lệ nhiễm"]]),
-           """Đáp án câu ba. Nhãn âm một chỉ nói giao dịch lạ, không nói gian lận, nên chuyển người xét.
-           Chuyển người xét thì không chặn oan giao dịch hợp lệ lớn như lương năm mươi triệu, mà vẫn giữ lại giao dịch đáng ngờ để xem. Đổi lại chậm hơn, tốn công, và nếu tỉ lệ nhiễm đặt cao thì hộp thư ngập.
-           Còn có mức giữa là giữ lại và yêu cầu xác thực thêm, đỡ chặn oan mà người xét chỉ nhận ca còn nghi, đổi lại khách phải qua thêm một bước.
-           Chặn tự động thì nhanh, nhưng chặn oan khách thật, và không có ai sửa sai cho giả định về tỉ lệ nhiễm."""),
+           """Đáp án câu ba: nhãn âm một chỉ nói giao dịch lạ, không nói gian lận, nên chuyển người xét, đổi lại chậm hơn. Chặn tự động thì nhanh nhưng chặn oan khách thật.""",
+           focus=["1.2", "1.3", "1.4"]),
     ], checks=["round(alg.bnx_l23_score(alg.bnx_l23_c(256) / 2, 256), 4) == -0.7071",
                "round(alg.bnx_l23_decision(-0.7071, -0.7353), 4) == 0.0282 and alg.bnx_l23_label(-0.7071, -0.7353) == 1",
                "alg.bnx_l23_expected_flags(1010, 0.02) == 21 and int(0.02 * (1010 - 1)) + 1 == 21 and 21 - 10 == 11"])
 
+    lab_pr = practice_scene(sc, "Tự làm: mức tham chiếu, điểm, nhãn và số điểm bị gắn", practice_steps2(
+        st, "BNX", "L23",
+        """<p><b>Đề</b>: viết <code>mau.py</code> (chỉ <code>import math</code>), mỗi cây học trên <code>n = 128</code> điểm:</p>
+<ol><li>mức tham chiếu <code>c(128)</code> theo công thức bước 3, <code>γ = 0.5772156649</code></li><li>hai điểm A, B có độ sâu trung bình 2 và 9: điểm bất thường <code>s = −2^(−h/c)</code>; ngưỡng <code>offset = −0.6</code>; điểm quyết định; nhãn</li><li>3000 giao dịch, tỉ lệ nhiễm 3%: số điểm bị gắn −1 theo quy tắc đếm; lạ thật chỉ 25 nên bao nhiêu điểm thường bị gắn oan</li></ol>
+<p class="note">Khuôn bốn dòng in nằm ở <code>de.md</code>; số liệu khác ví dụ trong bài.</p>""",
+        """Bây giờ tới phần bạn tự làm, chỉ cần Python thuần. Hãy tính mức tham chiếu, rồi điểm bất thường, điểm quyết định và nhãn của hai điểm có độ sâu hai và chín. Sau đó đếm điểm bị gắn âm một và điểm thường bị gắn oan, với ba nghìn giao dịch, tỉ lệ nhiễm ba phần trăm và lạ thật hai mươi lăm. Hãy dừng video và tự viết.""",
+        LAB.out, "mau.py",
+        """<div class="box key"><b>Nếu kẹt:</b> <code>c = 2 * (math.log(n - 1) + 0.5772156649) - 2 * (n - 1) / n</code>; <code>diem = -2 ** (-h / c)</code>; nhãn −1 nếu <code>diem - offset &lt; 0</code>; số điểm gắn: <code>math.ceil(p * (N - 1))</code>.
+Lời giải ở <code>labs/BNX/L23/loi_giai.py</code> — chỉ mở sau khi đã thử.</div>""",
+        """Nếu kẹt, nhãn là âm một nếu điểm trừ ngưỡng âm, và số điểm gắn là p nhân N trừ một, làm tròn lên. Lời giải chỉ mở sau khi đã thử.""", pause=120), "BNX", "L23")
+
     rec = sc("recap", "recap", "Chuỗi logic, góc phỏng vấn & tư duy cần mang theo", [
         st(chain("điểm lạ bị cô lập sau ít lần cắt", "điểm = 2 mũ âm độ sâu / c(n)", "tỉ lệ nhiễm → ngưỡng → nhãn 1 / -1", "xuất ONNX, chạy ONNX Runtime", "so nhãn và điểm trên toàn tập", "lạ ≠ gian lận: người xét"),
-           """Tổng kết chuỗi logic. Điểm lạ bị cô lập sau ít lần cắt. Điểm bất thường là hai mũ âm độ sâu chia mức tham chiếu.
-           Tỉ lệ nhiễm cho ra ngưỡng, ngưỡng cho ra nhãn một hoặc âm một. Mô hình được xuất sang ONNX và chạy bằng ONNX Runtime, rồi ta so nhãn và điểm trên toàn tập.
-           Cuối cùng, lạ không có nghĩa là gian lận, nên cần người xét.""",
+           """Tổng kết: điểm lạ bị cô lập sau ít lần cắt, tỉ lệ nhiễm cho ra ngưỡng rồi nhãn, và mô hình ONNX được so nhãn lẫn điểm trên toàn tập. Lạ không có nghĩa là gian lận.""",
            focus=[0, "1.1", "1.3", "1.5", "1.7", "1.9"]),
         st(table(["Nếu bị hỏi về dòng này trên CV", "ý trả lời một dòng"],
                  [["Isolation Forest hoạt động thế nào?", "cắt ngẫu nhiên nhiều lần; điểm lạ bị cô lập sau ít lần cắt hơn nên có độ sâu trung bình nhỏ, điểm gần âm 1"],
                   ["Tỉ lệ nhiễm (contamination) là gì, ai quyết định nhãn -1?", "giả định của người đặt, dùng chọn ngưỡng theo phân vị; mặc định 'auto' thì ngưỡng cố định −0,5"],
-                  ["Vì sao xuất ONNX, và kiểm gì sau khi xuất?", "tệp ONNX chạy không cần mã Python; tệp đóng gói của thư viện học máy không nạp được qua bản khác; ghi lại bản thư viện, so nhãn và điểm trên toàn tập"]]),
-           """Đây là năm câu người phỏng vấn hay hỏi về dòng này trên hồ sơ xin việc, và ta xem ba câu đầu. Hỏi Isolation Forest hoạt động thế nào, thì trả lời cắt ngẫu nhiên nhiều lần, điểm lạ bị cô lập sau ít lần cắt hơn nên điểm gần âm một.
-           Hỏi tỉ lệ nhiễm là gì và ai quyết định nhãn âm một, thì trả lời đó là giả định của người đặt, dùng để chọn ngưỡng theo phân vị.
-           Nếu để mặc định thì ngưỡng cố định ở âm không phẩy năm.
-           Hỏi vì sao xuất ONNX và kiểm gì, thì trả lời tệp ONNX chạy không cần mã Python lẫn thư viện học máy.
-           Tệp đóng gói của thư viện học máy không hỗ trợ nạp qua bản khác, nên ghi lại bản các thư viện và so nhãn lẫn điểm trên toàn tập.""",
-           focus=[0, "1.2", "1.3", "1.3", "1.4", "1.4"], clear=True),
-        st(table(["Nếu bị hỏi về dòng này trên CV (tiếp)", "ý trả lời một dòng"],
-                 [["Không có nhãn thật thì đánh giá và theo dõi ra sao?", "bài biết đáp án vì tự dựng dữ liệu; thật thì cho người xét duyệt mẫu, tiêm điểm lạ giả, theo dõi phân bố điểm và tỉ lệ nhãn -1 theo thời gian"],
-                  ["Đo độ trễ thế nào, và gọi mô hình từ Java được không?", "nạp tệp một lần, bỏ vài lần đầu, đo nhiều lần, báo phân vị 95 và 99; số đo chỉ đúng cho máy đã đo; ONNX Runtime có thư viện Java, bài này chưa chạy thử mã Java"]])
+                  ["Vì sao xuất ONNX, và kiểm gì sau khi xuất?", "tệp ONNX chạy không cần mã Python; ghi lại bản thư viện, so nhãn và điểm trên toàn tập"]])
            + "<span class='note'>Trả lời bằng cơ chế; không nêu số liệu của tổ chức thật, không nói đã làm ở quy mô nào.</span>",
-           """Hai câu còn lại nói về đánh giá và vận hành. Hỏi khi không có nhãn thật thì đánh giá ra sao, thì trả lời bài biết đáp án vì tự dựng dữ liệu.
-           Còn thật thì cho người xét duyệt mẫu, tiêm điểm lạ giả và theo dõi phân bố điểm theo thời gian.
-           Hỏi đo độ trễ thế nào, thì trả lời nạp tệp một lần, đo nhiều lần, báo phân vị chín mươi lăm và chín mươi chín, và nhớ số đo chỉ đúng cho máy đã đo.
-           Hỏi gọi từ Java được không, thì trả lời ONNX Runtime có thư viện cho Java, nhưng bài này chưa chạy thử mã Java.
-           Hãy trả lời bằng cơ chế, không nêu số liệu của tổ chức thật.""",
-           focus=[0, "1.2", "1.2", "1.3", "1.3", 2], clear=True),
-        st("""<div class='box key'><b>Tư duy:</b> với mỗi mô hình phát hiện bất thường, hỏi ba điều: con số nào là <b>giả định của ta</b> (tỉ lệ nhiễm), kết quả nào cần <b>người xét lại</b> (lạ chưa phải gian lận), và vận hành thật <b>đã được đo</b> chưa (độ trễ, trôi dữ liệu).</div>""",
-           """Điều cần mang theo. Với mỗi mô hình phát hiện bất thường, hãy hỏi ba điều: con số nào là giả định của ta, kết quả nào cần người xét lại, và vận hành thật đã được đo chưa.""",
-           clear=True),
+           """Người phỏng vấn hay hỏi: rừng cô lập hoạt động thế nào, tỉ lệ nhiễm là gì, và vì sao xuất ONNX rồi kiểm gì. Hãy trả lời bằng cơ chế, không nêu số liệu thật.""",
+           focus=[1, 1], clear=True),
+        st("""<div class='box key'><b>Tư duy:</b> với mỗi mô hình phát hiện bất thường, hỏi ba điều: con số nào là <b>giả định của ta</b> (tỉ lệ nhiễm), kết quả nào cần <b>người xét lại</b> (lạ chưa phải gian lận), và khi giao dịch tăng gấp trăm lần thì người xét và độ trễ ra sao.</div>
+<p class='small'>Bài sau (Bài 24): JPA/Hibernate và Spring Data — thực thể, ngữ cảnh bền vững và vấn đề N+1.</p>""",
+           """Điều cần mang theo: với mỗi mô hình phát hiện bất thường, hỏi con số nào là giả định, kết quả nào cần người xét lại. Ở bài hai mươi bốn, ta học cách chương trình Java đọc ghi cơ sở dữ liệu qua thực thể.""",
+           clear=True, forward_ref=True),
     ], checks=["alg.bnx_l23_label(alg.bnx_l23_score(alg.bnx_l23_c(256) / 2, 256), -0.7353) == 1",
                "alg.bnx_l23_expected_flags(1010, 0.01) == 11"])
+    scenes = _spoken([hook, pre, sym, intu, form, ex, chk, quymo, pit, quiz, lab_pr, rec])
     return lesson("L23", "scikit_learn_onnx_rung_co_lap",
                   "Bài 23 — Từ scikit-learn tới ONNX Runtime: rừng cô lập cho phát hiện bất thường",
                   "curriculum/bnx.yaml L23; audit/bnx/verify_bnx.py L23; audit/bnx/sources_l23.md [SKIF] scikit-learn 1.9.1 IsolationForest "
                   "(tài liệu và mã nguồn, đọc 2026-11-12), [SKOD] hướng dẫn phát hiện ngoại lai scikit-learn, [ORTP] ONNX Runtime Python, "
                   "[S2O] sklearn-onnx 1.20.0, [SKPERS] lưu và nạp mô hình scikit-learn, [ORTJ] ONNX Runtime với Java, [ORTAPI] ONNX Runtime Python (khai nhà cung cấp thực thi); chạy thật bằng scikit-learn 1.9.1, skl2onnx 1.20.0, onnxruntime 1.31.1, numpy 2.5.4 "
-                  "(audit/bnx/deps/l23/README.md); dữ liệu sinh với hạt giống cố định; mọi số liệu là số minh hoạ",
+                  "(audit/bnx/deps/l23/README.md); dữ liệu sinh với hạt giống cố định; mọi số liệu là số minh hoạ; quy mô: huấn luyện lại rừng ở 1 010, 10 100, 101 000 điểm (audit/bnx/progcache/L23.json); lab: Python thuần chạy thật",
                   ["Giải thích vì sao điểm lạ bị cô lập sau ít lần cắt hơn điểm thường",
                    "Huấn luyện một rừng cô lập bằng scikit-learn và đọc nhãn 1, âm 1",
                    "Xuất mô hình sang ONNX và chạy bằng ONNX Runtime, so kết quả với mô hình scikit-learn",
-                   "Nêu giới hạn của nguyên mẫu học thuật so với hệ thống vận hành thật"],
-                  [hook, pre, sym, intu, form, ex, chk, pit, quiz, rec])
+                   "Nêu giới hạn của nguyên mẫu học thuật so với hệ thống vận hành thật",
+                   "So sánh số nhãn âm một, số nút của rừng và số người xét khi giao dịch tăng từ 1 010 lên 10 100 và 101 000",
+                   "Tính mức tham chiếu, điểm bất thường, nhãn và số điểm bị gắn của một rừng khác bằng mã Python"],
+                  scenes,
+                  covers=[(1, "example"), (2, "formula"), (3, "formula"), (4, "pitfalls"), (5, "quymo"), (6, "practice")])

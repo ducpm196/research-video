@@ -124,10 +124,24 @@ def run(rec):
     R.w("a.txt", "1\n"); R.g("add", "."); R.g("commit", "-qm", "a1")
     R.w("a.txt", "2\n"); R.g("commit", "-qam", "a2")
     R.g("switch", "-q", "main")
+    # điều kiện của đề: main có commit mà X (them) chưa có → không tua nhanh được
+    ff_ok = R.g("merge-base", "--is-ancestor", "main", "them").returncode == 1
     R.g("merge", "-q", "--no-edit", "them")
     cnt2 = int(R.g("rev-list", "--count", "HEAD").stdout)
     np2 = len(R.g("rev-list", "--parents", "-n", "1", "HEAD").stdout.split()) - 1
-    rec("L00", cnt2 == 4 + 2 + 1 == 7 and np2 == 2, f"câu 2: sau gộp {cnt2} commit, commit mới {np2} cha")
+    rec("L00", cnt2 == 4 + 2 + 1 == 7 and np2 == 2 and ff_ok, f"câu 2: sau gộp {cnt2} commit, commit mới {np2} cha (main không là tổ tiên của X)")
+    # ghi chú trên màn hình: nếu main không có commit mới thì tua nhanh → 4 + 2 = 6 commit, 1 cha
+    R2 = Repo()
+    for k in range(4):
+        R2.w("p.txt", f"{k}\n"); R2.g("add", "."); R2.g("commit", "-qm", f"c{k}")
+    R2.g("switch", "-qc", "x2")
+    R2.w("a.txt", "1\n"); R2.g("add", "."); R2.g("commit", "-qm", "a1")
+    R2.w("a.txt", "2\n"); R2.g("commit", "-qam", "a2")
+    R2.g("switch", "-q", "main")
+    R2.g("merge", "-q", "--no-edit", "x2")
+    cnt3 = int(R2.g("rev-list", "--count", "HEAD").stdout)
+    np3 = len(R2.g("rev-list", "--parents", "-n", "1", "HEAD").stdout.split()) - 1
+    rec("L00", cnt3 == 4 + 2 == 6 and np3 == 1, f"tua nhanh (main không có commit mới): {cnt3} commit, commit mới {np3} cha")
 
     # (4) Lỗi 3: ép đẩy lên nhánh chung làm mất commit đồng nghiệp; --force-with-lease từ chối
     srv = tempfile.mkdtemp(prefix="bnx_l00srv_")
@@ -162,3 +176,30 @@ def run(rec):
 
     # số trong bài
     rec("L00", (4400 - 5500, 6600 - 5500, 6600 - 4400) == (-1100, 1100, 2200), "hiệu phí: âm 1100, 1100, 2200")
+
+    # (5) cảnh quy mô: chạy NGUYÊN VĂN khối GIT_SCALE (thay N), git thật ở N = 2, 10, 50; biến thể mỗi người một tệp
+    got = {}
+    for n in (2, 10, 50):
+        rc, so, se = bash(l00.GIT_SCALE_ENV, l00.GIT_SCALE.replace("N=10", f"N={n}"))
+        got[n] = (rc, so.strip())
+    rec("L00", got[10] == (0, l00.GIT_SCALE_OUT.strip()),
+        "khối GIT_SCALE nguyên văn (N=10) in đúng đầu ra hiện trên màn hình")
+    rec("L00", all(got[n] == (0, f"{n} nhanh cung sua mot dong: {alg.bnx_l00_conflicts(n)} xung dot") for n in (2, 10, 50))
+        and [alg.bnx_l00_conflicts(n) for n in (2, 10, 50)] == [1, 9, 49],
+        f"git thật: số xung đột ở N = 2, 10, 50 là {[got[n][1].split(': ')[1] for n in (2, 10, 50)]} = N − 1")
+    alt = l00.GIT_SCALE.replace('echo "phi=$i" > phi.txt && git commit -q -am "n$i"', 'echo "phi=$i" > f$i.txt && git add f$i.txt && git commit -q -m "n$i"')
+    alt_out = {}
+    for n in (2, 10, 50):
+        rc, so, se = bash(l00.GIT_SCALE_ENV, alt.replace("N=10", f"N={n}"))
+        alt_out[n] = (rc, so.strip())
+    rec("L00", alt != l00.GIT_SCALE and all(alt_out[n] == (0, f"{n} nhanh cung sua mot dong: 0 xung dot") for n in (2, 10, 50))
+        and [alg.bnx_l00_conflicts_split(n) for n in (2, 10, 50)] == [0, 0, 0],
+        "biến thể mỗi người sửa tệp riêng: git thật cho 0 xung đột ở N = 2, 10, 50 (cột thứ ba của bảng quy mô)")
+    rec("L00", [alg.bnx_l00_minutes(alg.bnx_l00_conflicts(n), 3) for n in (2, 10, 50)] == [3, 27, 147] and 2.4 < 147 / 60 < 2.5,
+        "147 phút ≈ 2,5 giờ (2,45)")
+
+    # (6) lab labs/BNX/L00: lời giải chạy thật cho đúng mong_doi.txt (số lần chốt 5, 2 cha)
+    sol = (ROOT / "labs" / "BNX" / "L00" / "loi_giai.sh").read_text(encoding="utf-8")
+    rc, so, se = bash(sol)
+    rec("L00", rc == 0 and so.strip() == l00.LAB_OUT.strip() == (ROOT / "labs" / "BNX" / "L00" / "mong_doi.txt").read_text(encoding="utf-8").strip(),
+        "lab L00: lời giải chạy thật cho lai=8, 5 commit, 2 cha")

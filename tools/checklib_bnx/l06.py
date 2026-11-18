@@ -63,3 +63,8 @@ def bnx_l06_inject_rows(user_input, param):
     else:
         rows = c.execute("SELECT ten, so_du FROM tk WHERE ten = '" + user_input + "'").fetchall()
     return len(rows)
+
+
+def bnx_l06_statements(n_transfers, per_transfer=5):
+    """Logic ở ứng dụng: mỗi lệnh chuyển gửi BEGIN, SELECT số dư, 2 UPDATE, COMMIT = 5 câu tới cơ sở dữ liệu."""
+    return n_transfers * per_transfer

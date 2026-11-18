@@ -86,3 +86,31 @@ def bnx_reachable(parents, start):
             seen.add(c)
             st.extend(parents.get(c, []))
     return len(seen)
+
+
+def bnx_l00_conflicts(n):
+    """Mô hình: n nhánh cùng sửa MỘT dòng, gộp lần lượt vào nhánh chính. Nhánh đầu gộp được (tua nhanh); mỗi nhánh sau đụng dòng đã đổi nên xung đột: n − 1."""
+    main_line, rows = None, 0
+    for i in range(1, n + 1):
+        if main_line is None:
+            main_line = i          # nhánh chính vẫn ở bản gốc → lấy bản của nhánh
+        else:
+            rows += 1              # nhánh chính đã đổi dòng, nhánh này đổi khác → xung đột (người quyết, hủy gộp)
+    return rows
+
+
+def bnx_l00_conflicts_split(n):
+    """Mô hình: n nhánh, mỗi nhánh sửa tệp RIÊNG của mình (f1.txt, f2.txt…). Nhánh chính chưa đổi tệp đó nên gộp tự xong: 0 xung đột."""
+    changed, rows = set(), 0
+    for i in range(1, n + 1):
+        name = f"f{i}.txt"
+        if name in changed:
+            rows += 1
+        else:
+            changed.add(name)
+    return rows
+
+
+def bnx_l00_minutes(conflicts, per):
+    """Tổng phút người giải xung đột (số minh hoạ per phút mỗi lần)."""
+    return conflicts * per

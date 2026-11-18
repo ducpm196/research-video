@@ -1,0 +1,18 @@
+# BRIEF_FIX_R4 — sửa theo báo cáo đọc độc lập vòng 4 (chuẩn P1 chặt) — 2026-11-16
+
+Đọc TOÀN BỘ `BRIEF_WP4.md` và `BRIEF_WP5.md` (cùng thư mục) trước: quy trình, quy tắc AF2, cổng, cấm kỵ. Rồi đọc báo cáo reader được giao (`reports/R4_*.md`) — đó là danh sách việc.
+Chuẩn đo lại sau khi bạn sửa: MUST 0; **P1 = 2 (0 mục chưa giảng) ở ≥ 90% bài**; P8 = 2 ở 100%. Định nghĩa P1 chặt: `BRIEF_R4.md`.
+
+## Cách làm (đã chứng minh ở BNX/PYT)
+1. Mục chưa giảng KHÔNG sửa bằng cách xoá nội dung có giá trị. Hai cách, dùng theo từng mục:
+   a. GIẢNG TẠI CHỖ ở lần xuất hiện đầu tiên: thêm vào cảnh (hoặc cảnh liền trước) một bảng "viết trong mã → đọc là → ví dụ" (hoặc một câu `say` + dòng `show`) cho đúng các ký hiệu/lệnh/đối số của khối mã đó; đưa thuật ngữ vào `introduces` + sổ `tools/registry/symbols.<KHOÁ>.yaml` (chỉ mục của khoá bạn).
+   b. ĐỔI MÃ sang dạng đã học (đơn giản hơn) khi cú pháp lạ không phải điều bài cần dạy; hoặc chuyển phần mã nặng sang `de.md` và chỉ giữ kết quả/ý trên màn hình, nếu đó không phải đường chính.
+2. Mỗi bài phải TỰ ĐỨNG: không "như đã học ở khoá/bài trước" (cấm), nhưng được nhắc lại một dòng cách đọc ở bài này. Lời giảng cho từng ký hiệu nằm trong CHÍNH bài.
+3. Chân trang/dòng chấm bài (`bash labs/cham.sh …`) và mọi lệnh bash xuất hiện trên màn hình cũng là "mục": giảng một lần ngay tại chỗ nó xuất hiện đầu tiên trong bài (một câu là đủ: "lệnh này chạy tệp chấm; in ĐÚNG nếu kết quả khớp").
+4. Sửa luôn mọi SHOULD trong báo cáo (tuyệt đối sai → có điều kiện; vế/phía; "ký tự" → "byte"…), và thuật ngữ dùng trước khi định nghĩa.
+5. Giữ lời đọc ≤ 2 300 từ mỗi bài (cắt ý ít giá trị nếu thêm lời giảng làm vượt), mỗi `say` 4–38 từ (≥ 8 cho TTS), không Latin/English trong lời đọc (lexicon), số không có khoảng cách nhóm, "byte" viết đủ chữ, số thập phân đọc "phẩy".
+6. Không đổi số bài/id/thứ tự; không đổi `requires_ext`/`course` trừ khi báo cáo yêu cầu; sổ dùng chung chỉ THÊM mục riêng.
+7. Nguồn sinh: FND sửa `audit/fnd/src/lNN.py` rồi `gen.py` (không sửa YAML sinh ra); DMS sửa script vá `audit/dms/af2/lNN.py` (và `.tpl.yaml` cho hình) VÀ bài (sửa cả hai để không sinh lại lỗi); CS112 sửa `audit/cs112/src/*.tpl.yaml` + `regen_*.py`/`fill_tpl.py` cho bài hình, bài khác sửa YAML trực tiếp; CS115/INT/ACB sửa YAML trực tiếp. Không dùng sed/`python -c`/heredoc cho văn bản có dấu `\` — dùng Edit/Write.
+8. Cổng tối thiểu trước khi báo xong: `tools/lv.py lint` (0 FAIL, 0 WARN) cho từng bài đổi; `tools/lv.py curriculum curriculum/<khoá>.yaml`; `tests/test_e52.py`; verify riêng của khoá (verify_fnd/dms…); `audit/review/screen_code.py check --course <KHOÁ>` (khối mới: dùng quy trình stub/điền đã có; KHÔNG sửa sổ bằng script — chỉ dùng công cụ chính thức hoặc Edit từng mục); `audit/review/lab_gate.py <KHOÁ>`; `audit/review/arith_scan.py`; chạy lại lab bằng `labs/cham.sh`.
+9. KHÔNG chạy build/tts/asr/audit_all/git/docker (người điều phối dựng lại). NGOẠI LỆ BẮT BUỘC (rút từ DMS L01: bảng mới làm TRÀN khung → build dừng "render FAIL"): với mỗi bài bạn đổi mà KHÔNG nằm trong hàng dựng (`rebuild.queue` trừ `rebuild.done`), chạy `.venv/Scripts/python -B tools/lv.py render lessons/<khoá>/<bài>.yaml` (chỉ render khung) và sửa mọi `[FAIL]` (tràn bảng/chữ đè: tách step, `clear: true`, rút ngắn bảng) tới 0, rồi xem ≥ 3 khung PNG mới ở bài có bảng/hình mới. Cuối: liệt kê bài đã đổi (để requeue) và, với mỗi bài, SỐ mục chưa giảng bạn ước còn lại (phải = 0 cho ≥ 90% bài).
+10. Báo cáo: `reports/<tên được giao>`; tin nhắn cuối ≤ 30 dòng; ghi tiến độ vào đầu báo cáo sau mỗi 3 bài; tối đa ~12 bài mỗi phiên. Bị ngắt (giới hạn dùng): người điều phối tiếp bằng SendMessage.

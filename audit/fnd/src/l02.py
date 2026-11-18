@@ -23,7 +23,7 @@ quan 3"""
 
 def build():
     hook = cmd("PhienHook", [
-        ("mkdir bc && cd bc", ""), ("touch a.txt b.txt c.png", ""), ("ls", "a.txt  b.txt  c.png"),
+        ("mkdir bc", ""), ("cd bc", ""), ("touch a.txt b.txt c.png", ""), ("ls", "a.txt  b.txt  c.png"),
         ("rm *.txt", ""), ("ls", "c.png"),
         ("touch a.txt b.txt", ""), ("rm * .txt", "rm: cannot remove '.txt': No such file or directory"), ("ls", ""),
     ])
@@ -51,7 +51,10 @@ def build():
         ("touch t{1..300}.txt", ""), ("ls *.txt | wc -l", "300"),
         ("touch t{1..3000}.txt", ""), ("ls *.txt | wc -l", "3000"),
     ])
-    dir_rong = cmd("PhienDirRong", [("DIR=", ""), ('echo "$DIR/"', "/")])
+    dir_rong = cmd("PhienDirRong", [("DIR=", ""), ('echo "$DIR"/', "/")])
+    nhieu = cmd("PhienNhieuDong", [
+        ("cat > ghi_chu.txt <<'EOF'\nao 5\nquan 3\nEOF", ""), ("cat ghi_chu.txt", "ao 5\nquan 3"),
+    ])
     quiz = cmd("PhienQuiz", [
         ("touch bao_cao_1.txt bao_cao_2.txt bao_cao_10.txt anh_1.png ghi_chu.txt", ""),
         ("echo bao_cao_?.txt", "bao_cao_1.txt bao_cao_2.txt"),
@@ -60,15 +63,15 @@ def build():
         ("echo *_1.*", "anh_1.png bao_cao_1.txt"),
     ])
 
-    sc_hook = sc("hook", "hook", "Một dấu cách thừa xoá sạch cả thư mục, và không có thùng rác", [
-        st(term_block(hook, 0, 5, title="Xoá đúng: chỉ các tệp .txt")
+    sc_hook = sc("hook", "hook", "Một dấu cách thừa xoá sạch mọi tệp trong thư mục, và không có thùng rác", [
+        st(term_block(hook, 0, 6, title="Xoá đúng: chỉ các tệp .txt")
            + "<p>Lệnh xoá <code>rm *.txt</code> bỏ hai tệp <code>.txt</code>; ảnh còn nguyên.</p>",
            """Chào bạn, hãy xem một thao tác xoá an toàn trước. Thư mục có ba tệp. Lệnh xoá mẫu sao chấm t x t chỉ bỏ hai tệp văn bản, còn lại tệp ảnh.
            Chú ý là không có hộp hỏi lại, và cũng không có thùng rác."""),
-        st(term_block(hook, 5, 8, title="Xoá sai: thêm MỘT dấu cách")
-           + "<div class='box warn'>Dấu cách làm <code>* .txt</code> thành <b>hai</b> mẫu: <code>*</code> khớp <b>mọi</b> tệp. Thư mục trống rỗng.</div>",
-           """Bây giờ ta tạo lại hai tệp và gõ sai một dấu cách, sao cách chấm t x t. Máy hiểu đó là hai mẫu riêng. Mẫu sao khớp mọi tệp, nên cả thư mục bị xoá sạch.
-           Dòng báo lỗi chỉ nói về mẫu thứ hai, còn việc xoá đã xảy ra. Thư mục sau đó trống rỗng, và không thể lấy lại."""),
+        st(term_block(hook, 6, 9, title="Xoá sai: thêm MỘT dấu cách")
+           + "<div class='box warn'>Dấu cách làm <code>* .txt</code> thành <b>hai</b> mẫu: <code>*</code> khớp <b>mọi</b> tệp (trừ tệp ẩn). Thư mục không còn tệp thường nào.</div>",
+           """Bây giờ ta tạo lại hai tệp và gõ sai một dấu cách, sao cách chấm t x t. Máy hiểu đó là hai mẫu riêng. Mẫu sao khớp mọi tệp, nên mọi tệp trong thư mục bị xoá sạch.
+           Dòng báo lỗi chỉ nói về mẫu thứ hai, còn việc xoá đã xảy ra. Thư mục sau đó không còn tệp thường nào, và không thể lấy lại."""),
         st("""<div class="box key">Hôm nay ta trả lời ba câu hỏi:
 <ol><li>Tạo, ghi, đọc, chép, đổi tên, xoá tệp bằng lệnh: mỗi lệnh làm gì?</li>
 <li>Dấu <code>&gt;</code> và <code>&gt;&gt;</code> khác nhau thế nào?</li>
@@ -86,7 +89,7 @@ def build():
            Hai dấu chấm là thư mục cha. Và tên tệp nên không dấu, không khoảng trắng, nối bằng dấu gạch dưới.""",
            focus=[1, "1.2", "1.3", "1.4", "1.5"]),
     ])
-    sc_sym = sc("sym", "symbol", "Giải mã tám lệnh và ba dấu", [
+    sc_sym = sc("sym", "symbol", "Giải mã bảy lệnh và bốn dấu", [
         st(table(["lệnh", "đọc là", "nghĩa"],
                  [["<code>mkdir -p a/b</code>", "lệnh tạo thư mục", "tạo thư mục; cờ <code>-p</code> tạo luôn các thư mục cha còn thiếu"],
                   ["<code>touch f.txt</code>", "lệnh tạo tệp rỗng", "tạo tệp không có nội dung (nếu đã có thì chỉ đổi giờ sửa)"],
@@ -98,18 +101,18 @@ def build():
         st(table(["lệnh", "đọc là", "nghĩa"],
                  [["<code>cp a b</code>", "lệnh chép", "chép tệp <code>a</code> thành <code>b</code>; <code>a</code> vẫn còn"],
                   ["<code>mv a b</code>", "lệnh di chuyển", "đổi tên hoặc chuyển <code>a</code> sang <code>b</code>; <code>a</code> không còn"],
-                  ["<code>rm a</code>", "lệnh xoá", "xoá <b>ngay</b>, không thùng rác; thư mục cần cờ <code>-r</code>"]]),
+                  ["<code>rm a</code>", "lệnh xoá", "xoá <b>ngay</b>, không thùng rác; thư mục cần cờ <code>-r</code> (<b>đệ quy</b>: xoá thư mục cùng mọi thứ bên trong, từng cấp một)"]]),
            """Ba lệnh tiếp theo. Lệnh chép làm ra tệp thứ hai, tệp đầu vẫn còn. Lệnh di chuyển đổi tên hoặc chuyển chỗ, tệp cũ không còn.
-           Lệnh xoá bỏ ngay, không qua thùng rác, và muốn xoá thư mục thì cần cờ r.""",
+           Lệnh xoá bỏ ngay, không qua thùng rác, và muốn xoá thư mục thì cần cờ r, nghĩa là xoá đệ quy, cả thư mục cùng mọi thứ bên trong, từng cấp một.""",
            focus=[1, "1.2", "1.3", "1.4"], clear=True),
         st(table(["viết", "nghĩa"],
                  [["<code>&gt;</code>", "<b>chuyển hướng</b>: đưa đầu ra vào tệp, <b>ghi đè</b> cả tệp"],
                   ["<code>&gt;&gt;</code>", "đưa đầu ra vào cuối tệp, <b>nối thêm</b>"],
-                  ["<code>*</code>", "<b>ký tự đại diện</b>: khớp mọi chuỗi (kể cả rỗng), ví dụ <code>*.txt</code>"],
+                  ["<code>*</code>", "<b>ký tự đại diện</b>: khớp mọi chuỗi (kể cả rỗng) trừ tên bắt đầu bằng dấu chấm (tệp ẩn), ví dụ <code>*.txt</code>"],
                   ["<code>?</code>", "khớp <b>đúng một</b> ký tự bất kỳ, ví dụ <code>?.png</code>"]]),
-           """Ba dấu cuối. Một dấu lớn hơn chuyển hướng đầu ra vào tệp và ghi đè cả tệp. Hai dấu lớn hơn nối thêm vào cuối tệp.
-           Dấu sao là ký tự đại diện, khớp mọi chuỗi. Dấu hỏi khớp đúng một ký tự bất kỳ.""",
-           focus=[1, "1.2", "1.3", "1.4", "1.5"], clear=True),
+           """Bốn dấu cuối, trước hết là một dấu lớn hơn, chuyển hướng đầu ra vào tệp và ghi đè cả tệp. Hai dấu lớn hơn nối thêm vào cuối tệp.
+           Dấu sao là ký tự đại diện, khớp mọi chuỗi, trừ những tên bắt đầu bằng dấu chấm, tức tệp ẩn. Dấu hỏi khớp đúng một ký tự bất kỳ.""",
+           focus=["1.2", "1.3", "1.4", "1.5"], clear=True),
     ])
     sc_int = sc("intuition", "intuition", "Hình dung: chép, di chuyển, xoá làm cây thay đổi thế nào", [
         st(svg(1500, 470,
@@ -123,7 +126,7 @@ def build():
                box(540, 90, 150, 60, "a.txt", C_GRAY),
                arrow(700, 120, 770, 120, "#d97706"),
                box(780, 100, 160, 60, "b.txt", C_AMBER),
-               txt(860, 210, "sau: MỘT tệp, đổi tên", 24, "middle", "#d97706", True),
+               txt(745, 210, "sau: MỘT tệp, đổi tên", 24, "middle", "#d97706", True),
                txt(745, 340, "a.txt không còn", 22, "middle", "#1f2937"),
                panel(1010, 10, 480, 440, "rm a.txt", C_RED),
                box(1040, 90, 150, 60, "a.txt", C_GRAY),
@@ -133,15 +136,17 @@ def build():
                txt(1250, 340, "không có nút hoàn tác", 22, "middle", "#1f2937")),
            """Hình này so ba lệnh. Lệnh chép làm ra thêm một tệp, nên sau đó có hai tệp nội dung giống nhau. Lệnh di chuyển chỉ đổi tên, nên sau đó vẫn một tệp, và tên cũ không còn.
            Lệnh xoá thì tệp biến mất ngay, không qua thùng rác, và không có nút hoàn tác. Vì vậy với lệnh xoá, hãy kiểm tra kỹ trước khi bấm phím xuống dòng."""),
-        st(svg(1500, 330,
-               box(20, 40, 380, 110, ["tệp ghi.txt", "dong 1", "dong 2"], C_GRAY, bold=True),
-               txt(210, 190, "đang có 2 dòng", 22, "middle", "#6b7280"),
-               arrow(410, 70, 560, 70, "#d97706", "echo &gt; (ghi đè)"),
-               box(570, 40, 380, 110, ["tệp ghi.txt", "dòng mới", "(cũ mất)"], C_AMBER, bold=True),
-               arrow(410, 130, 560, 250, "#16a34a", "echo &gt;&gt; (nối)"),
-               box(570, 200, 380, 110, ["tệp ghi.txt", "dong 1", "dong 2", "dòng mới"], C_GREEN, bold=True),
-               txt(1200, 100, "một dấu &gt;: bắt đầu lại từ trống", 24, "middle", "#d97706", True),
-               txt(1200, 260, "hai dấu &gt;&gt;: viết tiếp phía dưới", 24, "middle", "#16a34a", True)),
+        st(svg(1500, 420,
+               box(20, 130, 380, 140, ["tệp ghi.txt", "dong 1", "dong 2"], C_GRAY, bold=True),
+               txt(210, 310, "đang có 2 dòng", 22, "middle", "#6b7280"),
+               '<path d="M404,200 L470,200 L470,85 L690,85" fill="none" stroke="#d97706" stroke-width="3.5" marker-end="url(#ah)"/>',
+               txt(580, 68, "echo &gt; (ghi đè)", 22, "middle", "#d97706"),
+               '<path d="M470,200 L470,300 L690,300" fill="none" stroke="#16a34a" stroke-width="3.5" marker-end="url(#ah)"/>',
+               txt(580, 283, "echo &gt;&gt; (nối)", 22, "middle", "#16a34a"),
+               box(700, 20, 380, 140, ["tệp ghi.txt", "dòng mới", "(cũ mất)"], C_AMBER, bold=True),
+               box(700, 220, 380, 180, ["tệp ghi.txt", "dong 1", "dong 2", "dòng mới"], C_GREEN, bold=True),
+               txt(1290, 100, "một dấu &gt;: bắt đầu lại từ trống", 24, "middle", "#d97706", True),
+               txt(1290, 320, "hai dấu &gt;&gt;: viết tiếp phía dưới", 24, "middle", "#16a34a", True)),
            """Hình thứ hai so một dấu lớn hơn với hai dấu lớn hơn. Tệp đang có hai dòng. Một dấu bắt đầu lại từ trống, nên hai dòng cũ mất và chỉ còn dòng mới.
            Hai dấu viết tiếp phía dưới, nên hai dòng cũ vẫn còn và thêm dòng mới ở cuối."""),
     ])
@@ -150,9 +155,9 @@ def build():
            + "<p>Vì <code>echo</code> chỉ in lại các tham số, nó cho ta thấy <b>máy đã đổi mẫu thành gì</b> trước khi lệnh chạy.</p>",
            """Bước một, thử với tệp có thật. Vì lệnh in chữ chỉ in lại các tham số, nó cho ta thấy máy đã đổi mẫu thành những gì, trước khi lệnh chạy.
            Mẫu sao chấm t x t được đổi thành hai tên tệp là a chấm t x t và b chấm t x t."""),
-        st(term_block(sao, 2, 4, title="Bước 2. Dấu sao một mình khớp mọi tệp")
-           + "<p>Nên <code>rm *</code> thành <code>rm a.txt b.txt c.png</code>: lệnh xoá <b>không hề thấy dấu sao</b>, chỉ thấy danh sách tên.</p>",
-           """Bước hai, dấu sao đứng một mình khớp mọi tệp. Vì vậy lệnh xoá với dấu sao thành lệnh xoá với cả ba tên tệp. Lệnh xoá không hề thấy dấu sao, nó chỉ thấy danh sách tên đã được mở ra."""),
+        st(term_block(sao, 2, 4, title="Bước 2. Dấu sao một mình khớp mọi tệp, trừ tệp ẩn")
+           + "<p>Nên <code>rm *</code> thành <code>rm a.txt b.txt c.png</code>: lệnh xoá <b>không hề thấy dấu sao</b>, chỉ thấy danh sách tên. Tệp ẩn (tên bắt đầu bằng dấu chấm) <b>không</b> bị dấu sao chạm tới.</p>",
+           """Bước hai, dấu sao đứng một mình khớp mọi tệp. Vì vậy lệnh xoá với dấu sao thành lệnh xoá với cả ba tên tệp. Lệnh xoá không hề thấy dấu sao, nó chỉ thấy danh sách tên đã được mở ra. Riêng tệp ẩn, tên bắt đầu bằng dấu chấm, dấu sao bỏ qua, nên chúng không bị xoá theo."""),
         st(term_block(sao, 3, 4, title="Bước 3. Dấu cách chia mẫu thành hai")
            + "<p>Vì dấu cách ngăn tham số, <code>* .txt</code> là hai tham số: <code>*</code> mở thành <b>mọi tên</b>, cộng thêm chữ <code>.txt</code>.</p>",
            """Bước ba, dấu cách chia mẫu thành hai tham số. Vì dấu cách ngăn các tham số, sao cách chấm t x t là hai mẫu. Mẫu sao mở thành mọi tên, và còn thêm chữ chấm t x t đứng riêng.
@@ -162,7 +167,7 @@ def build():
            """Bước bốn, dấu hỏi. Vì dấu hỏi khớp đúng một ký tự, nên mẫu hỏi chấm p n g khớp c chấm p n g. Hai dấu hỏi thì cần hai ký tự, không có tệp nào khớp.
            Khi mẫu không khớp tệp nào, máy giữ nguyên chữ của mẫu, và đó cũng là một dấu hiệu bạn gõ sai.""", clear=True),
     ], checks=["len('a.txt b.txt'.split()) == 2", "len('a.txt b.txt c.png .txt'.split()) == 4", "len('c.png') - len('.png') == 1"])
-    sc_ex = sc("example", "example", "Ví dụ: dựng, ghi, chép, đổi tên, xoá: năm phép làm", [
+    sc_ex = sc("example", "example", "Ví dụ: dựng, ghi, chép, đổi tên, xoá, ghi nhiều dòng: sáu phép làm", [
         st(term_block(tep, 0, 4, title="① Dựng cây du_an")
            + "<p><code>mkdir -p</code> tạo hai thư mục cùng lúc; <code>touch</code> tạo tệp rỗng <code>main.txt</code>; <code>ls -R</code> liệt kê cả thư mục con.</p>",
            """Phép thứ nhất, dựng cây. Lệnh tạo thư mục tạo hai thư mục một lúc, nguồn và sao lưu. Ta đi vào du án, tạo tệp rỗng main trong nguồn, rồi liệt kê cả các thư mục con bằng cờ chữ r hoa.
@@ -180,15 +185,22 @@ def build():
            + "<p>Thư mục cần cờ <code>-r</code> (xoá cả nội dung bên trong). Xoá tệp rồi, <code>ls</code> thấy thư mục trống.</p>",
            """Phép thứ năm, xoá. Xoá tệp ghi chú thì thư mục sao lưu trống. Lệnh xoá không có cờ từ chối xoá thư mục, và báo đó là một thư mục.
            Thêm cờ r thì xoá cả thư mục cùng mọi thứ bên trong, và thư mục nguồn biến mất. Chỉ còn lại sao lưu.""", clear=True),
-    ], checks=["len(['dong 1', 'dong 2']) == 2", "len(['ghi de']) == 1"])
+        st(term_block(nhieu, title="⑥ Ghi NHIỀU dòng một lần: khối chữ nhúng")
+           + "<p><code>&lt;&lt;'EOF'</code> mở một <b>khối chữ nhúng</b>: mọi dòng cho tới dòng chỉ có <code>EOF</code> được gửi làm đầu vào cho lệnh. "
+             "Dấu <code>&gt;</code> ở đầu các dòng giữa là do cửa sổ lệnh in ra, đừng gõ. Nháy quanh <code>EOF</code>: máy <b>không</b> thay biến bên trong (<b>biến</b> là cái tên mang một giá trị, như <code>DIR=du_an</code>; phần lỗi hay gặp sẽ dùng lại).</p>"
+           + "<p>Cách này dựng cả tệp nhiều dòng trong tệp lệnh; đề thực hành của khoá cũng dùng nó.</p>",
+           """Phép thứ sáu, ghi nhiều dòng vào tệp một lần. Hai dấu nhỏ hơn cùng chữ kết thúc đặt trong nháy mở ra một khối chữ nhúng. Mọi dòng cho tới dòng chỉ có chữ kết thúc đó được gửi làm đầu vào cho lệnh in nội dung, mà đầu ra đã chuyển vào tệp.
+           Dấu lớn hơn ở đầu các dòng giữa do cửa sổ lệnh tự in, bạn không gõ. Nháy quanh chữ kết thúc nghĩa là máy không thay biến bên trong, mà biến là một cái tên mang một giá trị, ví dụ tên một thư mục. Cách này dựng cả tệp nhiều dòng trong tệp lệnh, và đề thực hành của khoá cũng dùng nó.""",
+           introduces=["fnd_heredoc"], clear=True),
+    ], checks=["len(['dong 1', 'dong 2']) == 2", "len(['ghi de']) == 1", "len(['ao 5', 'quan 3']) == 2"])
     sc_chk = sc("check", "check", "Tự kiểm bằng đường khác: đếm bằng hai cách", [
         st(term_block(kiem, 1, 5, title="Cách 1: đếm bằng ls, ống | và wc -l")
            + "<p>Dấu <code>|</code> (ống) chuyển đầu ra của lệnh bên trái làm đầu vào cho lệnh bên phải; <code>wc -l</code> <b>đếm dòng</b>.</p>",
            """Đường kiểm khác là đếm. Ta tạo năm tệp, rồi dùng dấu ống để chuyển danh sách của lệnh liệt kê cho lệnh đếm dòng. Dấu ống chuyển đầu ra của lệnh bên trái làm đầu vào cho lệnh bên phải.
-           Ta được năm. Sau khi xoá hai tệp thì còn ba, vì năm trừ hai bằng ba.""", forward_ref=True),
+           Ta được năm tệp, và sau khi xoá hai tệp thì còn ba, vì năm trừ hai bằng ba.""", forward_ref=True),
         st(term_block(kiem, 5, 6, title="Cách 2: đếm bằng một lệnh khác (find)")
-           + "<p>$5 - 2 = \\hl{3}$ và hai cách đếm cùng ra $3$ ✓</p>",
-           """Cách thứ hai, dùng một lệnh khác để tìm các tệp rồi đếm. Kết quả vẫn là ba. Hai cách đếm khác nhau cùng ra ba, và khớp với phép trừ năm trừ hai, nên ta tin việc xoá đã làm đúng hai tệp.""", clear=True),
+           + "<p><code>find . -type f</code> tìm mọi <b>tệp</b> (loại <code>f</code>) từ thư mục hiện tại trở xuống, mỗi tệp một dòng. $5 - 2 = \\hl{3}$ và hai cách đếm cùng ra $3$ ✓</p>",
+           """Cách thứ hai, dùng lệnh tìm để liệt kê mọi tệp từ thư mục hiện tại trở xuống, mỗi tệp một dòng, rồi đếm. Kết quả vẫn là ba. Hai cách đếm khác nhau cùng ra ba, và khớp với phép trừ năm trừ hai, nên ta tin việc xoá đã làm đúng hai tệp.""", clear=True),
     ], checks=["5 - 2 == 3"])
     sc_scale = sc("scale", "concept", "Khi số tệp nhân lên: một lệnh xoá hay chép chạm tới bao nhiêu tệp?", [
         st(term_block(quymo, 1, 7, title="Cùng mẫu *.txt, ba quy mô")
@@ -215,9 +227,11 @@ def build():
            Trước khi chạy, hãy tự hỏi mình muốn thay hay muốn thêm. Muốn thêm thì phải hai dấu."""),
         st('<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Biến rỗng trong lệnh xoá: <code>rm -rf "<span>&#36;</span>DIR"/*</code>.</div>'
            + term_block(dir_rong)
-           + "<p>Biến <code>DIR</code> chưa đặt, nên <code>\"<span>&#36;</span>DIR/\"</code> thành <code>/</code>, tức <b>gốc</b> của cả hệ thống. Lệnh xoá sẽ nhắm vào gốc.</p>",
-           """Lỗi thứ ba, của cả người đã đi làm, là dùng biến trong lệnh xoá mà biến đó rỗng. Ở đây biến chưa có giá trị, nên đường dẫn có biến cộng dấu gạch chéo chỉ còn lại đúng dấu gạch chéo, tức gốc của cả hệ thống.
-           Một lệnh xoá đệ quy nhắm vào đó sẽ phá cả máy. Hãy luôn kiểm tra biến không rỗng, và in thử đường dẫn trước khi xoá."""),
+           + "<p><b>Biến</b> là một cái tên mang giá trị: <code>DIR=du_an</code> đặt, <code><span>&#36;</span>DIR</code> đọc; chưa đặt thì rỗng. "
+             "Ở đây <code>DIR</code> chưa đặt, nên <code>\"<span>&#36;</span>DIR\"/</code> thành <code>/</code>, tức <b>gốc</b> của cả hệ thống, và <code>\"<span>&#36;</span>DIR\"/*</code> mở ra <code>/*</code>: <b>mọi mục ngay dưới gốc</b>. "
+             "Cờ <code>-r</code> xoá đệ quy, cờ <code>-f</code> ép xoá không hỏi: lệnh sẽ nhắm vào các mục đó.</p>",
+           """Lỗi thứ ba, của cả người đã đi làm, là dùng biến trong lệnh xoá mà biến đó rỗng. Biến là một cái tên mang giá trị, đặt bằng dấu bằng và đọc bằng dấu đô la. Ở đây biến chưa có giá trị, nên đường dẫn có biến cộng dấu gạch chéo chỉ còn lại đúng dấu gạch chéo, tức gốc của cả hệ thống, và dấu sao khớp mọi mục ngay dưới gốc.
+           Một lệnh xoá đệ quy, thêm cờ ép xoá không hỏi, nhắm vào đó sẽ phá cả máy. Hãy luôn kiểm tra biến không rỗng, và in thử đường dẫn trước khi xoá."""),
     ])
     sc_quiz = sc("quiz", "quiz", "Bây giờ tới phần bạn tự làm", [
         st("""<p><b>Đề.</b> Thư mục có năm tệp: <code>bao_cao_1.txt</code>, <code>bao_cao_2.txt</code>, <code>bao_cao_10.txt</code>, <code>anh_1.png</code>, <code>ghi_chu.txt</code>. Máy xếp tên theo chữ cái.</p>
@@ -245,10 +259,11 @@ def build():
 <li>Trong <code>kho</code>: tạo <code>ao.txt</code>, <code>quan.txt</code>, <code>non.txt</code>.</li>
 <li><code>bao_cao/tong.txt</code>: dòng <code>ao 5</code> (dùng <code>&gt;</code>) rồi <code>quan 3</code> (dùng <code>&gt;&gt;</code>).</li>
 <li>Chép <code>ao.txt</code> thành <code>ao_sao.txt</code>; đổi tên <code>non.txt</code> thành <code>mu.txt</code>; xoá <code>quan.txt</code>.</li>
-<li>In <code>find cua_hang | sort</code>, rồi <code>cat</code> tệp tổng.</li></ol>""",
+<li>In <code>find cua_hang | sort</code>, rồi <code>cat</code> tệp tổng.</li></ol>
+<p class="note"><code>find thư_mục</code> in mọi tệp và thư mục bên dưới, mỗi dòng một tên; <code>sort</code> xếp các dòng theo chữ cái.</p>""",
         """Bây giờ tới phần bạn tự làm. Viết một tệp lệnh làm tuần tự. Tạo thư mục cửa hàng với hai thư mục con là kho và báo cáo. Trong kho tạo ba tệp áo, quần, nón.
         Ghi hai dòng vào tệp tổng, dòng đầu bằng một dấu, dòng sau bằng hai dấu. Chép tệp áo, đổi tên tệp nón, xoá tệp quần. Cuối cùng in cây bằng lệnh tìm, nối với lệnh xếp, rồi in nội dung tệp tổng.
-        Lệnh xếp chỉ để các dòng theo thứ tự chữ cái. Hãy dừng video và làm.""",
+        Lệnh tìm in mọi tệp và thư mục bên dưới, mỗi dòng một tên, còn lệnh xếp chỉ để các dòng theo thứ tự chữ cái. Hãy dừng video và làm.""",
         LAB_OUT, "dung.sh",
         """<div class="box key"><b>Nếu kẹt:</b> đọc đề từng dòng một, mỗi dòng là một lệnh. Tạo tệp dùng <code>touch</code> với đường dẫn đầy đủ, ví dụ <code>cua_hang/kho/ao.txt</code>.
 Dòng đầu của tổng dùng một <code>&gt;</code>, dòng sau hai <code>&gt;&gt;</code>. Lời giải ở <code>labs/FND/L02/loi_giai.sh</code>.</div>""",
@@ -284,6 +299,7 @@ Chạy `bash dung.sh`; chấm: `bash labs/cham.sh FND L02 dung.sh`. Khác bài g
                    "Dựng, ghi, chép, đổi tên và xoá trong một cây thư mục bằng đúng lệnh",
                    "Đếm số tệp bị chạm tới bằng hai cách khác nhau",
                    "Chỉ ra ba lỗi hay gặp: dấu cách thừa, ghi đè nhầm, biến rỗng trong lệnh xoá",
+                   "Ghi nhiều dòng vào một tệp bằng khối chữ nhúng",
                    "Viết tệp lệnh dựng một cây cửa hàng và in cây bằng lệnh tìm"],
                   [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_chk, sc_scale, sc_pit, sc_quiz, sc_prac, sc_rec],
-                  covers=[(1, "sym"), (2, "intuition"), (3, "formula"), (4, "example"), (5, "check"), (6, "pitfalls"), (7, "practice")])
+                  covers=[(1, "sym"), (2, "intuition"), (3, "formula"), (4, "example"), (5, "check"), (6, "pitfalls"), (7, "example"), (8, "practice")])

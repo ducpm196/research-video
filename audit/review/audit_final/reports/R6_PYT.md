@@ -1,0 +1,23 @@
+# R6 PYT (vòng 6, đọc độc lập bản dựng sau lần sửa thứ hai, P1 chặt): 14/14 bài — ghi lại bởi người điều phối từ tin nhắn của reader (abc2d1ced384eaac7)
+
+## 1. Tóm tắt
+MUST 0 (14/14). P1=2: 9/14 chắc+vừa (L00, L01, L02, L03, L04, L07, L08, L09, L12); 6/14 tính cả yếu (L00, L02, L03, L04, L08, L09). 16 mục: 0 chắc, 6 vừa, 10 yếu. P8=2 14/14; P9=2 14/14; spec khớp 14/14; SRT khớp 14/14; lab ĐÚNG 14/14 (L08 `pip install` cần mạng: chỉ đọc); `checks` 174/174; ~155 khối mã/REPL chạy khớp. Mất gốc ĐỦ 14/14 (chắc+vừa); nếu tính cả yếu L06, L10, L13 thành GẦN (P1=0). SHOULD 4.
+LƯU Ý ĐO LƯỜNG (CB-P1-CODE): vòng 5 reader khác ghi 13/14 chắc+vừa cho cùng khoá (chỉ 1 mục vừa L09; mục B đều xếp 'yếu'); vòng 6 reader này xếp 6 mục loại B là 'vừa' (L05 iterdir, L06 thấu chi, L10 `if h["so_tien"]:`, L11 mở gói bộ, L13 groupby, L13 assert). Hai lần đo CHÊNH ±4 bài trên cùng nội dung (các sửa vòng 8 thật sự đã sửa L09 và thêm nhiều hàng). Kết luận: ranh giới 'vừa'/'yếu' không tái lập được giữa người đọc → không dùng một lần đọc để 'chốt' ở ngưỡng 90%; cần chuẩn đo cơ giới/hai tầng (xem handover CB-P1-CODE).
+
+## 2. SHOULD
+| Bài | Cảnh | Trích | Vấn đề | Đề xuất | Tin cậy |
+|---|---|---|---|---|---|
+| L04 | sym step 2 (bảng ký tự mẫu) | "`.` … ký tự bất kỳ" | trong `re`, `.` mặc định không khớp "\n" | thêm "(trừ xuống dòng)" | CONFIRMED |
+| L08 | quiz step 1 (bảng đáp án câu 2; khung 00122) | `đặt dòng in vào if __name__ == "__main__":; khi bị nạp` | dấu `;` thừa sau dấu `:` | bỏ `;` | CONFIRMED |
+| L12 | example step 2 (bảng ca biên; khung 00060) | "Ca “ngay sau” cách ngưỡng 1 000"; lời đọc: "ngay trước, đúng tại và ngay sau, cách ngưỡng một nghìn đồng" | chỉ đúng với hai ngưỡng sau; hàng ngưỡng 50 000 có 49 999 và 50 001 cách 1 đồng; cột "ca trước" luôn cách 1 đồng | nói "ca ngay sau của hai ngưỡng sau cách 1 000" | CONFIRMED |
+| L12 | example step 4 (đột biến; khung 00068) | "mỗi dấu <, > đổi hai cách; một trong bốn hằng 50000, 1100, 11000, 1000 dịch lên hoặc xuống 1): 18 cách" | người học nhẩm 3 dấu × 2 + 4 hằng × 2 = 14, không ra 18; 18 đúng nếu đếm sáu chỗ có hằng (1100 và 11000 mỗi giá trị xuất hiện hai lần) | đổi thành "sáu chỗ có hằng số" | CONFIRMED |
+Tái kiểm L12 bằng mã (`mut.py`): ba cách định nghĩa đổi dấu cho cùng kết quả; tổng 18, 4 không đổi kết quả, 14 làm hàm sai, 7 ca bắt 12 (hai chỗ lọt: hằng 1100 lùi 1 và 11000 tăng 1), thêm 1 099 999 và 11 001 000 → 14/14; khớp lời bài.
+Sửa vòng 8 đạt: L09 hàng `(a > 1000).sum()` sạch; L11 có trục + hình 1 000 điểm thật (hexbin 707 ô, ô lớn nhất 1 119, `get_ylim` [0, 3150], y mặc định 117,45–173,55); L12 nhất quán 11 001 000 (SVG, bảng, quiz); L04 "≈ 15 giờ"; nbsp L12/L13 không ngắt số ("50 000", "25 GB").
+
+## 3. Mục chưa giảng (16: 0 chắc, 6 vừa, 10 yếu)
+Vừa: L05 example step 2 `print([p.name for p in thu_muc.iterdir()])` (B, danh sách suy ra L03); L06 practice step 0 `TaiKhoan("B07", 2000000, thau_chi=500000)` — "thấu chi" định nghĩa ngay step 1, SAU điểm dùng (M); L10 check step 0 `if h["so_tien"]:` (B; chuỗi rỗng coi là sai, L01 pitfall 2); L11 formula step 5 `for ten, kenh in (("A", kenh_a), ("B", kenh_b)):` … `dat, tong = kenh[loai]` (B mở gói bộ, L03; "ta chạy và đọc kết quả thật ở bước kế"); L13 formula step 4 `khoi.groupby("loai")["so_tien"].sum()` (B, L10); L13 example step 8 `def test_hai_dong(): assert chay("…") == 150` (B, L12).
+Yếu: L01 formula step 1 `print("Giao dich", tien, "thuoc muc", muc)` (B L00); L06 example step 0 `return f"TaiKhoan({self.ma}, {self.so_du})"` (B f-string), pitfalls step 2 `self.lich_su.append(tien)` (B); L07 formula step 2 `raise SoDuKhongDu(f"thieu {tien - so_du}")` (B f-string); L10 check step 0 `with open("gd.csv", encoding="utf-8", newline="") as f:` (B L05), example step 1 `(gd["ngay"].max() - gd["ngay"].min()).days` (A/M); L11 example step 0, formula step 0/2/7 `ax.lines[0].get_ydata()`, `ax.get_ylim()`, `ax.get_yscale()` (A); L12 check step 0 `max(500, 1100)`, `min(11000, 11000)` (B/M; `max` giảng ở pitfalls step 3, `min` ở L02), practice step 2 "dòng tổng kết là dòng cuối của stdout" (A); L13 example step 1, 7 `csv.DictReader`, `newline=""`, `p.write_text(noi_dung, encoding="utf-8")` (B L05).
+Cả hai số theo bài: chắc+vừa — L05, L06, L10, L11, L13 = 1; tính cả yếu — L01, L05, L07, L11, L12 = 1; L06, L10, L13 = 0.
+
+## 4. Người học kẹt ở đâu
+L05 example step 2 `[p.name for p in thu_muc.iterdir()]`; L06 practice step 0 ("thấu chi" xuất hiện trước định nghĩa một step); L10 check step 0 `if h["so_tien"]:` (vì sao ô trống bị bỏ); L11 formula step 5/6 (Bước 4 gộp: mã 11 dòng không được đọc, chỉ có kết quả ở bước sau); L12 check step 0 `max(500, 1100)` trước khi giảng `max`, và đột biến "18" không tự dựng lại được; L13 formula step 4 `khoi.groupby(...)`; các bài còn lại không kẹt.

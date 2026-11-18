@@ -6,13 +6,13 @@ Mọi cảnh **Tự làm** và mọi thư mục `labs/<KHOÁ>/<Lxx>/` được v
 |---|---|---|---|
 | Hệ điều hành | Windows 10/11 (macOS, Linux cũng chạy được) | — | — |
 | Cửa sổ lệnh | **Git Bash** (đi kèm Git for Windows) — dùng cho MỌI lệnh trong khoá, không dùng PowerShell hay Command Prompt | FND | `bash --version` |
-| Git | 2.40 trở lên | FND | `git --version` |
-| JDK | Temurin 21 (LTS) | JVA | `javac -version`, `java -version` |
-| Python | 3.11 trở lên (kho kiểm trên 3.13) | PYT | `python --version` |
-| sqlite3 | 3.40 trở lên | FND | `sqlite3 --version` |
+| Git | 2.40 trở lên (mức thấp nhất mà lab cần và `kiem.sh`/`check_env.sh` kiểm: 2.28) | FND | `git --version` |
+| JDK | Temurin 21 (LTS); kiểm: 21 trở lên | JVA | `javac -version`, `java -version` |
+| Python | 3.11 trở lên (kho kiểm trên 3.13); lối tắt Microsoft Store chưa cài Python KHÔNG tính | PYT | `python --version` |
+| sqlite3 | 3.40 trở lên (mức thấp nhất mà lab cần và công cụ kiểm: 3.32, vì `.import --skip`) | FND | `sqlite3 --version` |
 | Docker Desktop | bản mới (tuỳ chọn, chỉ từ chặng 7) | chặng 7–8 | `docker --version` |
 
-Kiểm nhanh: `bash labs/check_env.sh` — in từng dòng ✔ hoặc ✘ kèm cách khắc phục.
+Kiểm nhanh: `bash labs/check_env.sh` — chạy thật lệnh hỏi phiên bản của từng công cụ, in từng dòng ✔ hoặc ✘ kèm cách khắc phục; so với mức thấp nhất ở trên.
 
 ## Cách làm một lab
 1. Mở Git Bash trong thư mục kho (hoặc thư mục bạn tải về), `cd labs/<KHOÁ>/<Lxx>`.

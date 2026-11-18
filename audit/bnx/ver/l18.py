@@ -169,3 +169,49 @@ def run(rec):
         rc, so, se = sh(d, src.SH_MOCK)
         rec("L18", rc == 1 and count(so, "failed") == 2 and "Wanted 2 times" in so and "But was 1 time" in so and "2005000L" in so,
             "kiểm ngược: đòi times(2) → trượt 'Wanted 2 times … But was 1 time'; đòi sai số tiền 2 000 000 → trượt (lời gọi thật là 2005000L)")
+
+    # ── AF2 (WP4 2026-11-14): cảnh quy mô (BoCa: đột biến nhầm dấu) + lab ──────────────────────────
+    import lib2
+    p = lib2.find("L18", "BoCa")
+    rc, so, se = p.execute()
+    rec("L18", rc == 0 and so.strip("\n") == p.out, f"BoCa.java chạy lại cho đúng đầu ra đã hiện (rc={rc})")
+    got = {int(k): (int(a), int(b), int(c), int(d)) for k, a, b, c, d in re.findall(
+        r"^(\d+) moc: giua khoang (\d+) ca, lot (\d+); sat moc (\d+) ca, lot (\d+)$", p.out, re.M)}
+    ks = (2, 200, 2000)
+    rec("L18", sorted(got) == list(ks) and all(got[k] == (alg.bnx_l18_cases_mid(k), alg.bnx_l18_survivors_mid(k), alg.bnx_l18_cases_edge(k),
+                                                           alg.bnx_l18_survivors_edge(k)) for k in ks),
+        "đo thật ở k = 2, 200, 2 000 mốc (×1, ×100, ×1000): bộ giữa khoảng k + 1 ca bỏ lọt k lỗi; bộ sát mốc 2k + 1 ca bỏ lọt 0")
+
+    def mutants_survive(k, tests):
+        """Đường khác: phí viết tay bằng quét tuyến tính mốc; đột biến = nhầm >= thành > ở mốc i; đếm lỗi không ca nào bắt."""
+        moc = [(i + 1) * 10 for i in range(k)]
+
+        def phi(x, i_loi):
+            n = 0
+            for j, m in enumerate(moc):
+                n += (x > m) if j == i_loi else (x >= m)
+            return n
+        return sum(1 for i in range(k) if all(phi(x, i) == phi(x, -1) for x in tests))
+    k = 12
+    mid = [i * 10 + 5 for i in range(k + 1)]
+    edge = [m for i in range(k) for m in ((i + 1) * 10, (i + 1) * 10 - 1)] + [5]
+    rec("L18", (len(mid), mutants_survive(k, mid), len(edge), mutants_survive(k, edge)) == (13, 12, 25, 0),
+        "Python quét tuyến tính (k = 12): giữa khoảng 13 ca bỏ lọt 12 lỗi, sát mốc 25 ca bỏ lọt 0 — cùng quy luật với k = 2, 200, 2000")
+    ms = [alg.bnx_l18_suite_ms(alg.bnx_l18_cases_edge(k), 10) for k in ks]
+    rec("L18", ms == [50, 4010, 40010] and alg.bnx_l18_suite_ms(4001, 2000) == 8_002_000 and 8_002_000 / 3_600_000 > 2,
+        f"thời gian (số minh hoạ): 5, 401, 4 001 ca × 10 ms = {ms} ms; 4 001 ca × 2 000 ms = 8 002 giây > 2 giờ")
+    lab = ROOT / "labs" / "BNX" / "L18"
+    want = (lab / "mong_doi.txt").read_text(encoding="utf-8").strip()
+    r = subprocess.run([lib2._bash(), str(ROOT / "labs" / "cham.sh"), "BNX", "L18", str(lab / "loi_giai.java")], capture_output=True, text=True, encoding="utf-8", cwd=ROOT)
+    rec("L18", r.returncode == 0 and r.stdout.strip() == "ĐÚNG", f"lab: loi_giai.java chấm bằng labs/cham.sh → {r.stdout.strip()[:60]!r}")
+
+    def phi_de(x):
+        return 0 if x < 2_000_000 else (3_000 if x < 20_000_000 else 4_000)
+
+    def phi_ma(x):
+        return 0 if x < 2_000_000 else (3_000 if x <= 20_000_000 else 4_000)
+    ca = (1_999_999, 2_000_000, 19_999_999, 20_000_000, 30_000_000)
+    exp = [f"ca {x}: mong doi {phi_de(x)}, nhan {phi_ma(x)}, {'DAT' if phi_de(x) == phi_ma(x) else 'TRUOT'}" for x in ca]
+    bad = sum(1 for x in ca if phi_de(x) != phi_ma(x))
+    exp += [f"tong: {len(ca) - bad} dat, {bad} truot", f"cong goi 1 lan, so tien {12_000_000 + phi_ma(12_000_000)}", "true", "false"]
+    rec("L18", want == "\n".join(exp) and bad == 1, "lab: 5 ca (4 đạt, 1 trượt ở đúng mốc 20 000 000), cổng giả nhận 12 003 000 một lần, đồng hồ 16:59 → true, 17:00 → false — tính lại bằng đường khác")

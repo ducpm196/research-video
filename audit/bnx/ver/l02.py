@@ -142,3 +142,30 @@ def run(rec):
     rec("L02", int("10010110", 2) == 0x96 == 150 and (1 << 3, 150 >> 7, 150 & 127, 22 | 128) == (8, 1, 22, 150)
         and alg.bnx_pb_key(2, 2) == 18 and len(alg.bnx_pb_varint(5)) == 1 and len(alg.bnx_pb_varint(150)) == 2,
         "ôn nền: 1001 0110 = 0x96 = 150; 1<<3 = 8; 150>>7 = 1; 150&127 = 22; khoá trường 2 kiểu 2 = 18")
+
+    # 5. cảnh quy mô: chạy NGUYÊN VĂN SCALE_PY sau ENCODE_PY (hàm varint, field, json đã có), so đầu ra hiện trên màn hình
+    rc, o = _run_py(src.ENCODE_PY + chr(10) + src.SCALE_PY)
+    rec("L02", rc == 0 and o.splitlines()[-2:] == src.SCALE_OUT.splitlines(), f"chạy thật SCALE_PY nguyên văn: {o.splitlines()[-2:]}")
+    # đường khác: protobuf thật (google.protobuf) tuần tự hoá n bản tin Transfer; JSON bằng json.dumps; so với checklib
+    def sizes_real(n):
+        pb = js = 0
+        for i in range(1, n + 1):
+            t = "%010d" % i
+            pb += len(V1(id=i, to_account=t, amount=i * 1000, fee=5500).SerializeToString())
+            js += len(json.dumps({"id": i, "to_account": t, "amount": i * 1000, "fee": 5500}, separators=(",", ":")).encode())
+        return pb, js
+    s1, s2 = sizes_real(1000), sizes_real(100000)
+    rec("L02", s1 == (21857, 62786) == alg.bnx_l02_sizes(1000) and s2 == (2381377, 6677790) == alg.bnx_l02_sizes(100000),
+        f"protobuf thật: {s1} byte ở 1 000 và {s2} byte ở 100 000 bản tin = checklib = đầu ra trên màn hình")
+    rec("L02", round(s1[0] / 1000, 1) == 21.9 and round(s1[1] / 1000, 1) == 62.8 and round(s2[0] / 100000, 1) == 23.8 and round(s2[1] / 100000, 1) == 66.8
+        and 2.8 <= s1[1] / s1[0] < 2.9 and 2.8 <= s2[1] / s2[0] < 2.9 and round((s2[1] - s2[0]) / 100000 * 1000000 / 1e6) == 43,
+        "trung bình 21,9/62,8 và 23,8/66,8 byte; tỉ lệ chữ/nhị phân ≈ 2,8; 1 triệu bản tin ≈ 24 MB so 67 MB, chênh ≈ 43 MB")
+    # 6. lab labs/BNX/L02: lời giải chạy thật; so với protobuf thật (trường 1 = 20, 6 = 70000, 7 = chuỗi ATM01 → trường 7 kiểu string trong .proto lab)
+    lab = ROOT / "labs" / "BNX" / "L02"
+    p = subprocess.run([sys.executable, "-I", "-X", "utf8", "-B", str(lab / "loi_giai.py")], capture_output=True, text=True, encoding="utf-8", timeout=60)
+    lab_proto = 'syntax = "proto3";\nmessage Lab {\n  int64 a = 1;\n  int64 b = 6;\n  string c = 7;\n}\n'
+    L, _, _, _ = _msg_class("lab", lab_proto)
+    real = L(a=20, b=70000, c="ATM01").SerializeToString()
+    rec("L02", p.returncode == 0 and p.stdout.strip() == src.LAB_OUT.strip() == (lab / "mong_doi.txt").read_text(encoding="utf-8").strip()
+        and real.hex(" ") == "08 14 30 f0 a2 04 3a 05 41 54 4d 30 31" and len(real) == 13,
+        f"lab L02: lời giải chạy thật = protobuf thật ({real.hex(' ')}, {len(real)} byte) = mong_doi.txt")

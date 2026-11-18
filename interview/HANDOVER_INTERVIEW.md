@@ -1,6 +1,6 @@
 # BIÊN BẢN BÀN GIAO PHỎNG VẤN & HỒ SƠ ỨNG VIÊN (INTERVIEW HANDOVER)
 ## VỊ TRÍ: KỸ SƯ PHÁT TRIỂN TÍCH HỢP CẤP CAO (SENIOR INTEGRATION ENGINEER) — NGÂN HÀNG ACB
-**Mục tiêu đãi ngộ**: **50,000,000 VND Gross/tháng** (Thu nhập năm nếu đạt mức này: 700 – 850 triệu VND = 13 tháng lương cố định + thưởng 1–4 tháng tùy xếp loại, theo tin tuyển dụng ACB; lương ACB ghi "Thương lượng")  
+**Đãi ngộ**: không có mức lương mục tiêu nào được coi là sự thật (tin tuyển dụng ACB ghi lương "Thương lượng", tháng 13 cố định, thưởng 1–4 tháng tùy xếp loại). Hỏi khung lương trước, so đề nghị bằng tổng đãi ngộ T = L × (13 + k) + 12 × P với số minh hoạ (xem `07_salary_negotiation_50m_gross.md`, tên tệp giữ nguyên, nội dung đã đổi 2026-11-14).  
 **Thời điểm cập nhật**: 2026-11-10. Mới nhất là **Mục 13**: đọc kiểm lần ba toàn kho, bài tự đứng được, 591 + 37 bài dựng lại, mẫu độc lập D. Các mục trước: Mục 12 (2026-11-09), Mục 11 (đợt B), Mục 10 (khóa JVA), Mục 9 (rà soát 2026-11-08).  
 **Trạng thái hệ thống**: xem **Mục 13** (mới nhất), rồi Mục 9 và Mục 7 (bản 2026-11-07, một số kết luận đã bị Mục 9 sửa lại). Các tuyên bố "hoàn tất 100% PASS" ở bản trước không còn được dùng làm bằng chứng: ngân hàng 100 câu hỏi từng chỉ có 58 câu, CV từng chứa số liệu không có nguồn. Mọi tệp được chỉ mục tại [`MASTER_CURRICULUM_INDEX.md`](file:///D:/research-video/interview/MASTER_CURRICULUM_INDEX.md).
 
@@ -33,16 +33,16 @@
   - Adobe Certified Expert – AEM Sites Developer (2020).
   - *Khóa đào tạo (không phải chứng chỉ, ứng viên xác nhận)*: Oracle Database 19c PL/SQL Tuning; Kafka & Distributed Systems.
 - **Người tham chiếu chuyên môn (Professional References)**:
-  - **Mr. Phan Anh Tuấn** – Deputy Head of Integration Applications tại *Ngân hàng TMCP Phương Đông (OCB)*.  
-    *Vai trò*: Quản lý trực tiếp tại OCB, có thể xác nhận vai trò và phạm vi công việc thật của ứng viên. Nội dung nhận xét là của anh Tuấn; tài liệu này không viết sẵn lời của người tham chiếu.
-  - **Mr. Quan Quốc Bảo** – Giám đốc Quản lý Ứng dụng (Head of Application Management) tại *Ngân hàng TMCP Á Châu (ACB)* (Mối quan hệ quen biết qua mạng lưới chuyên môn công nghệ ngân hàng).  
-    *Vai trò*: Người tham chiếu chuyên môn (quen qua trao đổi chuyên môn, không phải quan hệ công việc trực tiếp). **Chỉ ghi tên khi anh Bảo đã đồng ý**; ứng viên không nói thay nhận xét của anh, không trình bày anh như "người bảo chứng nội bộ" (dễ bị hiểu là gây áp lực hoặc xung đột lợi ích).
+  - **Quản lý trực tiếp** – Phó phòng Ứng dụng Tích hợp tại *Ngân hàng TMCP Phương Đông (OCB)* (tên người thật ghi ở CV của ứng viên, không lặp lại ở đây).  
+    *Vai trò*: Quản lý trực tiếp tại OCB, có thể xác nhận vai trò và phạm vi công việc thật của ứng viên. Nội dung nhận xét là của người đó; tài liệu này không viết sẵn lời của người tham chiếu.
+  - **Một người quen ở ACB** – Giám đốc Quản lý Ứng dụng (Head of Application Management) tại *Ngân hàng TMCP Á Châu (ACB)* (Mối quan hệ quen biết qua mạng lưới chuyên môn công nghệ ngân hàng).  
+    *Vai trò*: Người tham chiếu chuyên môn (quen qua trao đổi chuyên môn, không phải quan hệ công việc trực tiếp). **Chỉ ghi tên khi người đó đã đồng ý**; ứng viên không nói thay nhận xét của họ, không trình bày anh như "người bảo chứng nội bộ" (dễ bị hiểu là gây áp lực hoặc xung đột lợi ích).
 
 ---
 
 ## 2. RÀ SOÁT & TIẾP THU Ý KIẾN ĐÓNG GÓP TỪ ANH TUẤN (PHÓ PHÒNG OCB)
 
-### 2.1. Lời dặn dò nguyên văn từ Anh Tuấn
+### 2.1. Lời dặn dò nguyên văn từ quản lý trực tiếp
 > *"Anh có góp ý là em ghi khá nhiều tech stack lớn và phức tạp, domain nghiệp vụ ngân hàng nhưng chưa ghi rõ đây là kết quả do em phụ trách hay em chỉ là thành viên tham gia vào 1 phần trong đó. Cẩn thận việc này không thôi người phỏng vấn hiểu nhầm em level expert và họ lấy 1 vấn đề cụ thể và hỏi sâu vào thì sẽ khó cho em. Theo anh mình thì những gì mình nắm chắc và contribute chính để khi có bị hỏi xoáy thì mình vẫn trả lời được. Tránh người ta đọc CV và đã có suy nghĩ em đang nói vượt quá khả năng, vì chỉ 3 năm ở NH em ko đủ expertise ở phạm vi rộng như vậy. Ghi những gì mình nắm thật chắc và nếu ghi nhiều thì cần làm rõ cái gì mình làm cái gì là thành quả của cả team. Tránh người ta dựa trên đó hỏi khó em. Ghi ít nhưng người ta hỏi tới đâu em trả lời rõ ràng, thuyết phục vẫn tốt hơn thì nhiều mà mình ko trả lời được."*
 
 ### 2.2. Phân tích Bản chất & Chiến lược Chuyển hóa
@@ -56,19 +56,19 @@
    - **Tác động tâm lý đối với Nhà tuyển dụng**:
      - Nhà tuyển dụng thấy một kỹ sư có thái độ **rất khiêm tốn, trung thực, tôn trọng công sức của đồng nghiệp và tổ chức**.
      - Khi hỏi vào bất kỳ chi tiết kỹ thuật nào mà ứng viên ghi, ứng viên trả lời gãy gọn, rành mạch từ thiết kế logic đến từng dòng lệnh và cách xử lý sự cố thực tế.
-     - Điều này tạo ra sự **tin cậy tuyệt đối (High Trust & High Credibility)**, gây thiện cảm sâu sắc và thuyết phục Hội đồng cấp Senior 50M Gross.
+     - Điều này tạo ra sự **tin cậy tuyệt đối (High Trust & High Credibility)**, gây thiện cảm sâu sắc và thuyết phục Hội đồng cấp Senior.
 
 ### 2.3. Bảng Ma trận Phân định Trách nhiệm Thực chiến (IC vs Team Scope)
 
 | Phân hệ / Công nghệ | Trách nhiệm Trực tiếp của Ứng viên (Individual Contribution - IC) | Phạm vi Hạ tầng / Thành quả của Cả Team (Team / Shared Platform) |
 |:---|:---|:---|
-| **Squad Lending & Thấu chi Số** | **Trực tiếp thiết kế & viết code**: Luồng thấu chi cầm cố sổ tiết kiệm phong tỏa 2 pha trên Core T24, tính lãi Spread, Thấu chi lương, tích hợp ký số Cloud CA (FPT E-Sign) kết hợp xác thực khuôn mặt QĐ 2345, và cổng CIC B2B tra cứu tự động. | Phối hợp với đội ngũ Business Analyst (BA) nghiệp vụ tín dụng, Khối Quản trị Rủi ro (Credit Risk), và đội Quản trị Tài liệu ECM của ngân hàng. |
+| **Squad Lending & Thấu chi Số** | **Trực tiếp thiết kế & viết code**: Luồng thấu chi cầm cố sổ tiết kiệm phong tỏa 2 pha trên Core T24, tính lãi Spread, Thấu chi lương, tích hợp ký số Cloud CA (FPT E-Sign) kết hợp xác thực khuôn mặt (sinh trắc học theo quy định của NHNN), và cổng CIC B2B tra cứu tự động. | Phối hợp với đội ngũ Business Analyst (BA) nghiệp vụ tín dụng, Khối Quản trị Rủi ro (Credit Risk), và đội Quản trị Tài liệu ECM của ngân hàng. |
 | **Khóa Idempotency & Thu nợ CASA** | **Trực tiếp triển khai**: Thuật toán khóa phân tán Redis Mutex (`SET loan:disb:{app_id} 1 NX EX 300`), máy trạng thái SAGA chống giải ngân kép, và engine quét thu nợ từng phần Partial Debit từ tài khoản CASA ngày đến hạn. | Sử dụng cụm Redis Cluster và cơ sở hạ tầng mạng do Khối Vận hành CNTT (IT Operations) duy trì. |
 | **Cơ sở dữ liệu Oracle 19c & Deadlock** | **Trực tiếp tối ưu hóa**: Phân tích file trace `.trc`, thêm index cho cột khóa ngoại và index composite (`ONLINE`), viết lại Stored Procedure để khóa từng tài khoản theo thứ tự tăng dần bằng câu lệnh riêng (Oracle không bảo đảm khóa theo `ORDER BY … FOR UPDATE`), giảm mạnh lỗi `ORA-00060` (nêu số đo thật nếu có). | Hệ thống phần cứng máy chủ Exadata/Oracle 19c RAC và chính sách backup do đội ngũ Quản trị Database (DBA Team) vận hành. |
-| **Core Banking Temenos T24 OFS XML** | **Làm chủ tầng tích hợp ứng dụng**: Soạn thảo và bóc tách bản tin OFS XML multi-value (`OfsDataField`), quản lý `JMSCorrelationID` cho mô hình Request-Reply, ánh xạ mã lỗi nghiệp vụ T24 và kích hoạt luồng bù trừ SAGA khi timeout. | Khung adapter T24 Vert.x & IBM MQ tập trung do Phòng Ứng dụng Tích hợp (sếp Tuấn và các Solution Architect kỳ cựu) xây dựng và quản trị chung. |
+| **Core Banking Temenos T24 OFS XML** | **Làm chủ tầng tích hợp ứng dụng**: Soạn thảo và bóc tách bản tin OFS XML multi-value (`OfsDataField`), quản lý `JMSCorrelationID` cho mô hình Request-Reply, ánh xạ mã lỗi nghiệp vụ T24 và kích hoạt luồng bù trừ SAGA khi timeout. | Khung adapter T24 Vert.x & IBM MQ tập trung do Phòng Ứng dụng Tích hợp (quản lý phòng và các Solution Architect kỳ cựu) xây dựng và quản trị chung. |
 | **Chuyển mạch NAPAS 247 (ISO 8583)** | **Tích hợp thanh toán giải ngân/thu nợ**: Phát bản tin thanh toán liên ngân hàng từ dịch vụ Lending, khử trùng lặp giao dịch bằng Redis (`transId` TTL 60s), xử lý kịch bản đối soát EOD và rollback khi NAPAS timeout. | Cổng kết nối TCP Socket vật lý và thiết bị mã hóa phần cứng HSM (ZMK/ZPK translation) do Đội Chuyển mạch Thẻ & Thanh toán (Switch Team) phụ trách. |
 | **Streaming & Confluent ksqlDB** | **Phát triển UDF & Consumer**: Viết custom UDFs trên ksqlDB để phân tích luồng biến động số dư, phát triển consumer định tuyến thông báo đa kênh (OTT App Push, SMS Brandname, Email) với hàng đợi ưu tiên và DLQ. | Quản trị cụm Confluent Kafka, Schema Registry và phân quyền ACLs do Đội Nền tảng Dữ liệu (Data Platform Team) đảm nhiệm. |
-| **Bảo mật Sinh trắc học QĐ 2345 & AI** | **Tích hợp kiểm soát giao dịch**: Tích hợp luồng xác thực khuôn mặt (Liveness) theo QĐ 2345 vào luồng cho vay. Nguyên mẫu phát hiện bất thường ONNX Runtime (Isolation Forest) là **dự án học thuật UIT**, không phải hệ thống production OCB. | Đường truyền mạng kênh thuê riêng chuyên dụng kết nối sang Bộ Công an C06 và hợp đồng dịch vụ VNeID cấp ngân hàng. |
+| **Bảo mật Sinh trắc học & AI** | **Tích hợp kiểm soát giao dịch**: Tích hợp luồng xác thực khuôn mặt (Liveness) theo quy định xác thực sinh trắc học của NHNN (TT 50/2024/TT-NHNN, sửa đổi bởi TT 77/2025/TT-NHNN; QĐ 2345 chưa đọc nguyên văn, chưa rõ còn áp dụng) vào luồng cho vay. Nguyên mẫu phát hiện bất thường ONNX Runtime (Isolation Forest) là **dự án học thuật UIT**, không phải hệ thống production OCB. | Đường truyền mạng kênh thuê riêng chuyên dụng kết nối sang Bộ Công an C06 và hợp đồng dịch vụ VNeID cấp ngân hàng. |
 
 ### 2.4. Kịch bản Đối đáp Mẫu Thực chiến trước Hội đồng Phỏng vấn ACB
 
@@ -78,9 +78,9 @@
 - **Mẫu trả lời chuẩn mực (Bản lĩnh, trung thực, khiêm tốn, thuyết phục)**:
   > *"Dạ em cảm ơn anh/chị đã hỏi một câu hỏi rất thực tế và thẳng thắn. Em cũng muốn chia sẻ hết sức chân thành: Tại một ngân hàng thương mại lớn như OCB, các hệ sinh thái như Chuyển mạch NAPAS hay Core Banking T24 là công sức xây dựng của cả Khối CNTT và các anh kiến trúc sư tiền bối qua nhiều năm. Em không bao giờ dám nhận là một mình em làm nên tất cả những điều đó.*  
   >  
-  > *Trong 3 năm qua tại phòng Tích hợp của sếp Phan Anh Tuấn, vai trò cụ thể của em là **Kỹ sư Tích hợp Chủ lực trong Squad Lending**:*  
+  > *Trong 3 năm qua tại phòng Tích hợp của OCB, vai trò cụ thể của em là **Kỹ sư Tích hợp Chủ lực trong Squad Lending**:*  
   > 1. ***Những gì em trực tiếp làm chủ và chịu trách nhiệm từng dòng mã***:  
-  >    - *Em trực tiếp thiết kế và phát triển các microservices nghiệp vụ của Squad: từ luồng thấu chi cầm cố sổ tiết kiệm phong tỏa 2 pha trên Core T24, thấu chi lương, đến tích hợp Cổng ký số đám mây FPT E-Sign kết hợp sinh trắc học khuôn mặt QĐ 2345 và Cổng tra cứu CIC B2B tự động.*  
+  >    - *Em trực tiếp thiết kế và phát triển các microservices nghiệp vụ của Squad: từ luồng thấu chi cầm cố sổ tiết kiệm phong tỏa 2 pha trên Core T24, thấu chi lương, đến tích hợp Cổng ký số đám mây FPT E-Sign kết hợp sinh trắc học khuôn mặt và Cổng tra cứu CIC B2B tự động.*  
   >    - *Về xử lý kỹ thuật chuyên sâu, em trực tiếp cài đặt thuật toán khóa phân tán Redis Mutex chống giải ngân kép, xây dựng cơ chế thu nợ từng phần Partial Debit từ CASA, và trực tiếp điều tra trace log để sửa lỗi Deadlock Oracle `ORA-00060` bằng thuật toán khóa hàng có thứ tự xác định.*  
   > 2. ***Những gì em phối hợp với các đội hạ tầng dùng chung***:  
   >    - *Với Core T24: Phòng Tích hợp đã có sẵn khung adapter qua IBM MQ; nhiệm vụ của em là làm chủ cấu trúc bản tin OFS XML, bóc tách các trường multi-value, duy trì `JMSCorrelationID` và xử lý các kịch bản timeout bồi hoàn SAGA khi Core bị nghẽn.*  
@@ -104,7 +104,7 @@ Nhằm tuân thủ cam kết bảo mật thông tin ngân hàng và chuyên nghi
 | `po-batch-transfer` / `po-batch-transfer-router` | **Corporate Batch Payroll & Fund Transfer Gateway (Transactional Outbox)** |
 | `mcs-kstream-ipn-statement-devide-conquer` | **Real-Time Account Statement Hub (Kafka Streams Divide-and-Conquer)** |
 | `mcs-ksqldb` / `mcs-ksqldb-udf` | **Confluent ksqlDB Event Streaming Backbone (Custom UDFs)** |
-| `bio-authentication-service` / `face-authen` | **National Biometric Facial Authentication Gateway (Decision 2345 / QĐ 2345)** |
+| `bio-authentication-service` / `face-authen` | **National Biometric Facial Authentication Gateway** (tên hệ thống theo bản đồ đã lưu; QĐ 2345 chưa đọc nguyên văn, không coi là căn cứ hiện hành) |
 | `ob-virtual-account` / `virtual-account` | **Dynamic Virtual Account (VA) Corporate Cash Collection Engine** |
 | `odb.retail.lending-integration-service` | **Omnichannel Retail Lending & Overdraft Integration Gateway (OMNI-BFF)** |
 | `AZ.ACCOUNT` / `account-locked-events` | **Core Banking Term Deposit Accounts & Collateral Hold/Lien Events** |
@@ -121,7 +121,7 @@ Nhằm tuân thủ cam kết bảo mật thông tin ngân hàng và chuyên nghi
    - Đã biên dịch qua PyMuPDF (`python resources/job/build_cv_pdf.py`).
    - File ảnh chân dung: [`resources/job/avatar.jpg`](file:///D:/research-video/resources/job/avatar.jpg) (Kích thước 768x1024, tỷ lệ chuẩn 3:4, nhúng góc phải Header với viền navy `#003366`).
    - Kết quả xác thực: **Chính xác 2 trang A4**, khoảng đệm Trang 1 dư **60.84 pt**, Trang 2 dư **184.06 pt** (đo lại 2026-11-07, sau khi bỏ dòng Training), scale 1.0, 0 overflow, 0 cắt chữ.
-   - Nội dung đã được tinh chỉnh theo góp ý của anh Tuấn: phân định rõ *Direct Module Ownership & Implementation* vs *Squad & Cross-Team Collaboration*.
+   - Nội dung đã được tinh chỉnh theo góp ý của quản lý trực tiếp: phân định rõ *Direct Module Ownership & Implementation* vs *Squad & Cross-Team Collaboration*.
    - **Tái tích hợp mảng AI Ứng dụng & Bộ nhân Năng lực Ngân hàng (Applied AI & Banking ML)**: Khóa chặt dòng năng lực `Python, PyTorch, Scikit-Learn, ONNX Runtime, Isolation Forest (Fraud & Anomaly Detection), Semantic Vector Search` vào bảng Core Technical, tạo điểm khác biệt (AI Multiplier) ở mức học thuật, ghi rõ là dự án UIT, không phải hệ thống production của OCB (xem Mục 7, BN-0022).
 2. [`resources/job/PHAM-MINH-DUC-SENIOR-INTEGRATION-CV.md`](file:///D:/research-video/resources/job/PHAM-MINH-DUC-SENIOR-INTEGRATION-CV.md):
    - Bản nguồn Markdown đồng bộ từng dòng với bản PDF (đã nhúng ảnh chân dung).
@@ -129,17 +129,19 @@ Nhằm tuân thủ cam kết bảo mật thông tin ngân hàng và chuyên nghi
    - Mã nguồn Python PyMuPDF biên dịch CV tự động, kiểm soát chặt chẽ toạ độ vật lý và cỡ chữ.
 
 ### B. Trọn bộ 8 Chuyên đề Giáo trình Chuyên sâu Phỏng vấn Tích hợp Ngân hàng (`interview/`)
-1. [`00_overview_roadmap.md`](file:///D:/research-video/interview/00_overview_roadmap.md): Khung Năng lực Tổng thể & Lộ trình Senior Banking 50M Gross.
+1. [`00_overview_roadmap.md`](file:///D:/research-video/interview/00_overview_roadmap.md): Khung Năng lực Tổng thể & Lộ trình Senior Banking.
 2. [`01_foundation_cs_java.md`](file:///D:/research-video/interview/01_foundation_cs_java.md): Nền tảng CS, Java Core 17/21, Concurrency, Virtual Threads, Memory Model, Garbage Collection.
 3. [`02_backend_microservices.md`](file:///D:/research-video/interview/02_backend_microservices.md): Spring Boot 3, Spring Cloud, RESTful API, gRPC, Docker, K8s, GitOps CI/CD.
 4. [`03_distributed_systems_senior.md`](file:///D:/research-video/interview/03_distributed_systems_senior.md): SAGA Pattern, Transactional Outbox, Kafka EDA, Redis Cluster/Redlock, Deterministic Row Locking PL/SQL.
-5. [`04_banking_domain_t24_napas.md`](file:///D:/research-video/interview/04_banking_domain_t24_napas.md): Temenos T24 OFS XML qua IBM MQ, NAPAS 247 ISO 8583 TCP Sockets, Hardware Security Module (HSM), Sàn chuyển nhượng hợp đồng tiền gửi, Confluent ksqlDB Streaming Hub, Statement Hub Divide-and-Conquer, Batch Payroll, Sinh trắc học QĐ 2345.
+5. [`04_banking_domain_t24_napas.md`](file:///D:/research-video/interview/04_banking_domain_t24_napas.md): Temenos T24 OFS XML qua IBM MQ, NAPAS 247 ISO 8583 TCP Sockets, Hardware Security Module (HSM), Sàn chuyển nhượng hợp đồng tiền gửi, Confluent ksqlDB Streaming Hub, Statement Hub Divide-and-Conquer, Batch Payroll, xác thực sinh trắc học. (Từ 2026-11-14 video INT L04 chỉ còn OFS + IBM MQ + ISO 8583 + PIN/HSM + mã 68; tín dụng bán lẻ và đối soát cuối ngày chuyển sang bài INT L08 mới ở cuối khoá.)
 6. [`05_uit_ai_banking_multiplier.md`](file:///D:/research-video/interview/05_uit_ai_banking_multiplier.md): Ma trận 38 môn học UIT AI ứng dụng vào kiến trúc ngân hàng (Anomaly Detection ONNX < 5ms, Smart Routing Thompson Sampling, Semantic Reconciliation Cosine Embeddings, AIOps).
-7. [`06_interview_qa_bank_100.md`](file:///D:/research-video/interview/06_interview_qa_bank_100.md): **100 câu hỏi & đáp án phỏng vấn ngân hàng thực chiến** (Đã đồng bộ Câu 76 về phản hồi và đạo đức nghề nghiệp của sếp Phan Anh Tuấn, Câu 97 bảo vệ mức đãi ngộ 50M).
-8. [`07_salary_negotiation_50m_gross.md`](file:///D:/research-video/interview/07_salary_negotiation_50m_gross.md): **Kịch bản đàm phán 3 vòng chốt deal chắc chắn mức lương 50,000,000 VND Gross/tháng** dựa trên ma trận hoàn vốn đầu tư ROI, phòng thủ đòn ép giá của HR, và cấu trúc đãi ngộ tối ưu.
+7. [`06_interview_qa_bank_100.md`](file:///D:/research-video/interview/06_interview_qa_bank_100.md): **100 câu hỏi & đáp án phỏng vấn ngân hàng thực chiến** (Đã đồng bộ Câu 76 về người tham chiếu, không nêu tên người thật, và Câu 97 về đàm phán đãi ngộ, không nêu con số lương).
+8. [`07_salary_negotiation_50m_gross.md`](file:///D:/research-video/interview/07_salary_negotiation_50m_gross.md): **Kịch bản đàm phán 3 vòng**: hỏi khung lương, công thức tổng đãi ngộ T = L × (13 + k) + 12 × P (số minh hoạ), đáp ba đòn ép giá bằng lời trung thực, khai đúng tổng thu nhập thật; không có kịch bản nào bảo đảm kết quả.
 
 ### C. Trọn bộ 17 Video Bài giảng 1080p (`interview/video/`, nguồn `out/INT/` và `out/ACB/`)
 **Dựng lại toàn bộ 17 bài ngày 2026-11-08** sau khi sửa nội dung (Mục 9). Thời lượng, giọng, mã băm và trạng thái "đặc tả khớp video" của từng bài **chỉ ghi ở** [`MASTER_CURRICULUM_INDEX.md`](file:///D:/research-video/interview/MASTER_CURRICULUM_INDEX.md) Mục 4–5 (sinh bằng script, đo ffprobe). Tổng sau khi dựng lại: INT **44,77** phút + ACB **50,50** phút = **95,27 phút**. Giọng NamMinh cả 17 bài. Bảng cũ ngày 2026-11-07 (INT 42,86 + ACB 50,14) không còn đúng.
+
+*Cập nhật 2026-11-18*: bài INT L08 (`08_tin_dung_ban_le_doi_soat.mp4`, giọng NamMinh, dựng 1050,4 giây) đã được thêm vào gói; nay khoá INT có 9 video và cả gói INT/ACB có 18 video, với giáo án mới `08_tin_dung_ban_le_doi_soat.md`. Các con số 17 video và INT 44,77 phút ở đoạn trên là số đo ngày 2026-11-08; số hiện hành xem bảng ở `MASTER_CURRICULUM_INDEX.md`.
 
 ### D. Khóa BNK: Nền tảng Backend Ngân hàng cho người mất gốc (15 bài, `out/BNK/`, lộ trình `curriculum/bnk.yaml`)
 Thêm ngày 2026-11-08 theo quyết định của người dùng "làm đủ 15 bài" (phương án (a) ở Mục 8 bản trước). Mỗi bài `depth: full`: ôn nền, hình cơ chế (SVG), ba bước suy ra có làm thử bằng số, năm phép tính từng bước, tự kiểm bằng đường khác, ba lỗi (có lỗi của người đã đi làm), câu hỏi tự kiểm có đáp án từng bước, chuỗi logic. Số đo dưới đây sinh từ `build_report.json`, `asr_report.json` và `ffprobe` (script `video_table_bnk.py`), 2026-11-08. Giọng NamMinh cả 15 bài.
@@ -181,7 +183,7 @@ Bài nào trả lời câu hỏi nào của ngân hàng 100 câu (`06_interview_
 | L10 T24, OFS, IBM MQ, mã tương quan | 52, 67, 68 |
 | L11 ISO 8583: bản đồ bit | 66, 67 |
 | L12 Chuyển mạch và đối soát hai bên | 66, 67, 70, 78 |
-| L13 Bảo mật thanh toán: khối PIN, HSM, MAC, QĐ 2345 | 79, 80 |
+| L13 Bảo mật thanh toán: khối PIN, HSM, MAC, xác thực sinh trắc học | 79, 80 |
 | L14 Tình huống giả định (khung kể sự cố STAR) | 93 |
 
 Giới hạn trung thực: số liệu trong bài là số minh hoạ trừ khi ghi nguồn; Oracle, Redis, Kafka, Spring, T24, IBM MQ không chạy trên máy này nên mô phỏng chỉ kiểm logic; L14 là tình huống **giả định**, không phải sự cố có thật của ứng viên.
@@ -199,23 +201,23 @@ Bảng BN-0001 → BN-0016 dưới đây là bản ghi cũ. **Đọc cùng Mục
 | **BN-0003** | Điểm nghẽn bồi hoàn SAGA khi đối tác thanh toán sập | Lưu máy trạng thái SAGA vào PostgreSQL, hàng đợi lỗi DLQ Kafka và cơ chế bồi hoàn tự động | `interview/03_distributed_systems_senior.md` | **CLOSED** |
 | **BN-0004** | Tranh chấp chuyển nhượng hợp đồng tiền gửi (bán 1 sổ cho 2 người) | Khóa Lạc quan `UPDATE ... WHERE last_access = $5` trên PostgreSQL + Ánh xạ mã lỗi T24 `04\|05\|999\|1014-1018` chuyển trạng thái `HOLD/REVERT` | `lessons/acb/L04_san_chuyen_nhuong_hop_dong_tien_gui.yaml` & `L04.mp4` | **CLOSED** |
 | **BN-0005** | Deadlock Oracle Stored Procedure (ORA-00060) ngày trả lương | Thuật toán khóa hàng có thứ tự xác định (`ORDER BY account_no ASC FOR UPDATE`) + `BULK COLLECT` & `FORALL` | `lessons/acb/L05_cong_chi_luong_va_sao_ke_divide_conquer.yaml` & `L05.mp4` | **CLOSED** |
-| **BN-0006** | Định kiến 3 năm kinh nghiệm so với mức lương trần Senior 50M Gross | Chiến lược đàm phán 3 vòng theo công thức ROI, định vị Chuyên viên chính OCB gánh team ngay ngày đầu tiên, bảo vệ mức sàn 50M | `interview/07_salary_negotiation_50m_gross.md` | **CLOSED** |
+| **BN-0006** | Định kiến 3 năm kinh nghiệm so với khung chức danh của vị trí | Chiến lược đàm phán 3 vòng: hỏi khung lương trước, so tổng đãi ngộ bằng công thức T (số minh hoạ), chứng minh giá trị bằng sự cố thật (cập nhật 2026-11-14: không còn mức lương mục tiêu 50M) | `interview/07_salary_negotiation_50m_gross.md` | **CLOSED** |
 | **BN-0007** | Bằng Cử nhân AI tại UIT có bị đánh giá là lệch pha với Backend? | Chứng minh giá trị cấp số nhân (AI Multiplier): Phát hiện gian lận ONNX < 5ms, Định tuyến MAB Thompson Sampling, Đối soát ngữ nghĩa Vector Embeddings | `interview/05_uit_ai_banking_multiplier.md` | **CLOSED** |
 | **BN-0008** | Truy vấn sao kê tài khoản lớn gây nghẽn I/O Core | Phân đoạn khoảng thời gian thành 4 tuần song song qua Kafka Streams Divide-and-Conquer trên read-replica | `lessons/acb/L05_cong_chi_luong_va_sao_ke_divide_conquer.yaml` & `L05.mp4` | **CLOSED** |
-| **BN-0009** | Độ trễ cổng sinh trắc học QĐ 2345 và rủi ro bị bypass | SDK Liveness Detection 3D + mTLS C06 VNeID + Đặt xác thực làm Điều kiện tiên quyết (Pre-condition) trong SAGA | `lessons/acb/L06_sinh_trac_hoc_qd2345_va_bao_mat_ngan_hang.yaml` & `L06.mp4` | **CLOSED** |
+| **BN-0009** | Độ trễ cổng sinh trắc học và rủi ro bị bypass | SDK Liveness Detection 3D + mTLS C06 VNeID + Đặt xác thực làm Điều kiện tiên quyết (Pre-condition) trong SAGA | `lessons/acb/L06_sinh_trac_hoc_qd2345_va_bao_mat_ngan_hang.yaml` & `L06.mp4` (căn cứ pháp lý đã đổi 2026-11-14 theo TT 50/2024 sửa bởi TT 77/2025; QĐ 2345 chưa đọc nguyên văn) | **CLOSED** |
 | **BN-0010** | Thiếu tài liệu kịch bản đàm phán lương thực chiến | Biên soạn hoàn chỉnh chuyên đề 7 đàm phán 3 vòng, xử lý triệt để đòn ép giá của HR | `interview/07_salary_negotiation_50m_gross.md` | **CLOSED** |
 | **BN-0011** | Thiếu giáo án & video bài giảng L04, L05, L06 | Soạn thảo 3 file YAML chuẩn stem full, lint 0 FAIL 0 WARN, render video 1080p, verify 100% PASS | `L04.mp4`, `L05.mp4`, `L06.mp4` trong `interview/video/` | **CLOSED** |
-| **BN-0012** | Chuẩn hóa thông tin người tham chiếu: Phan Anh Tuấn (Phó phòng OCB) & Quan Quốc Bảo (GĐ Quản lý Ứng dụng ACB) | Đồng bộ chính xác chức danh Head of Application Management của anh Bảo tại ACB và Phó phòng của sếp Tuấn trên CV PDF, CV.md, Câu 76 Q&A | `build_cv_pdf.py` (2 trang PASS), `CV.pdf`, `06_interview_qa_bank_100.md` | **CLOSED** |
+| **BN-0012** | Chuẩn hóa thông tin người tham chiếu (quản lý trực tiếp tại OCB; một người quen ở ACB; từ 2026-11-14 tên người thật không còn trong Câu 76 và tài liệu này) | Đồng bộ chức danh trên CV PDF, CV.md, Câu 76 Q&A | `build_cv_pdf.py` (2 trang PASS), `CV.pdf`, `06_interview_qa_bank_100.md` | **CLOSED** |
 | **BN-0013** | Nghẽn xử lý Thu hộ Virtual Account & Đối soát 3 bên EOD | Radix Tree prefix matching + Webhook Idempotent HMAC + Thuật toán Two-Pointer Merge O(N) | `lessons/acb/L07_tai_khoan_dinh_danh_va_doi_soat_ba_ben.yaml` & `L07.mp4` | **CLOSED** |
 | **BN-0014** | Rủi ro Giải ngân trùng lặp (Double Disbursement) và nợ xấu do Cache CIC quá hạn | Khóa phân tán Redis Mutex (`disbursement:lock:{app_id}`) TTL 300s + TTL cache CIC tối đa 15 ngày + SAGA Compensation khi NAPAS timeout | `lessons/acb/L08_squad_lending_tich_hop_cic_giai_ngan.yaml` & `L08.mp4` | **CLOSED** |
 | **BN-0015** | Toàn cảnh Hệ sinh thái Squad Lending & Tích hợp Ngân hàng lõi (không chỉ CIC) | Kết nối 106 resources, 34 tuyến APIC, 17 microservices trực tiếp; phong tỏa Core T24 Term Deposits, hạch toán cấp hạn mức thấu chi & tất toán tự động | Cập nhật CV 2 trang A4, Section 1.2 trong `04_banking_domain_t24_napas.md`, bổ sung liên hoàn Câu 81–90 trong `06_interview_qa_bank_100.md` | **CLOSED** |
-| **BN-0016** | Rủi ro CV bị đánh giá là "nói vượt quá khả năng" (Feedback Anh Tuấn) | Cấu trúc lại CV phân định minh bạch 2 tầng: *Direct Module Ownership & Implementation* (chủ lực code thấu chi sổ tiết kiệm 2 pha, thấu chi lương, Cloud CA, CIC B2B, Redis Mutex, Partial Debit, Deadlock Oracle) vs *Squad & Cross-Team Collaboration* (Core T24 MQ adapter, NAPAS switch, Confluent ksqlDB); chuẩn bị kịch bản đối đáp khiêm tốn, trung thực nhưng hiểu biết sâu sắc | `build_cv_pdf.py` (scale 1.0, 2 trang PASS), `CV.md`, Mục 2 `HANDOVER_INTERVIEW.md`, Câu 76 & 97 trong `06_interview_qa_bank_100.md` | **CLOSED** |
+| **BN-0016** | Rủi ro CV bị đánh giá là "nói vượt quá khả năng" (feedback của quản lý trực tiếp) | Cấu trúc lại CV phân định minh bạch 2 tầng: *Direct Module Ownership & Implementation* (chủ lực code thấu chi sổ tiết kiệm 2 pha, thấu chi lương, Cloud CA, CIC B2B, Redis Mutex, Partial Debit, Deadlock Oracle) vs *Squad & Cross-Team Collaboration* (Core T24 MQ adapter, NAPAS switch, Confluent ksqlDB); chuẩn bị kịch bản đối đáp khiêm tốn, trung thực nhưng hiểu biết sâu sắc | `build_cv_pdf.py` (scale 1.0, 2 trang PASS), `CV.md`, Mục 2 `HANDOVER_INTERVIEW.md`, Câu 76 & 97 trong `06_interview_qa_bank_100.md` | **CLOSED** |
 
 ---
 
 ## 6. HƯỚNG DẪN ÔN LUYỆN & PHỎNG VẤN THỰC CHIẾN TẠI ACB
 
-Để tối đa hóa tỷ lệ đỗ và chốt chắc chắn mức lương 50,000,000 VND Gross, ứng viên Phạm Minh Đức nên thực hiện lộ trình ôn luyện 4 bước:
+Để tối đa hóa tỷ lệ đỗ và đàm phán thu nhập có căn cứ, ứng viên Phạm Minh Đức nên thực hiện lộ trình ôn luyện 4 bước:
 
 1. **Bước 1 — Nền tảng Khoa học Máy tính (Dành cho người mới / Mất gốc)**:
    - Tra cứu và xem các bài giảng cốt lõi trong kho 643 video bài học tại [`SOURCE_CODE_VIDEO_MAP.md`](file:///D:/research-video/interview/SOURCE_CODE_VIDEO_MAP.md):
@@ -225,9 +227,9 @@ Bảng BN-0001 → BN-0016 dưới đây là bản ghi cũ. **Đọc cùng Mục
      - Hệ điều hành & Concurrency: [`out/OSY/`](file:///D:/research-video/out/OSY/).
    - **Bài nền cho đúng chủ đề phỏng vấn: khóa BNK (Mục 4D)**: nếu chưa từng lập trình, xem khóa JVA L00 đến L12 (107,11 phút) trước; rồi xem tuần tự BNK L00 đến L14 (115,05 phút) trước khi xem INT/ACB. Sau mỗi bài làm phần "Đến lượt bạn" ra giấy, rồi đọc các câu hỏi liên quan ở bảng Mục 4D.
    - **Giới hạn còn lại (Mục 8)**: BNK chưa phủ HikariCP, JWT, Resilience4j, Kubernetes, gRPC, Kafka Streams/ksqlDB, Oracle Partitioning và cú pháp Java cơ bản; với các câu đó đọc đáp án trong ngân hàng câu hỏi.
-2. **Bước 2 — Nghiền ngẫm Trọn bộ 17 Video Phỏng vấn Chuyên sâu INT/ACB (93.00 phút, xem sau BNK)**:
-   - Xem 8 video Khóa INT (`00_overview_roadmap.mp4` đến `07_salary_negotiation_50m_gross.mp4`) để nắm vững khung năng lực, hệ thống câu hỏi hóc búa, ma trận 38 môn học UIT AI và chiến lược đàm phán hợp đồng.
-   - Xem 9 video Khóa ACB (`L00.mp4` đến `L08.mp4`) để nắm tổng quan nghiệp vụ thực chiến (mỗi bài 5–6 phút, chưa phải bài học nền từ con số 0): T24 OFS XML qua IBM MQ, NAPAS 247 ISO 8583, ksqlDB Notification Hub, Sàn tiền gửi Optimistic Lock, Chi lương lô lớn, Sinh trắc học QĐ 2345, Virtual Account đối soát 3 bên EOD, và Squad Lending tự động hóa CIC.
+2. **Bước 2 — Nghiền ngẫm Trọn bộ 18 Video Phỏng vấn Chuyên sâu INT/ACB (thời lượng từng bài ở `MASTER_CURRICULUM_INDEX.md`, xem sau BNK)**:
+   - Xem 9 video Khóa INT (`00_overview_roadmap.mp4` đến `08_tin_dung_ban_le_doi_soat.mp4`; bài INT L08 "Tín dụng bán lẻ và đối soát cuối ngày" là bài cuối khoá, đã dựng, giáo án `08_tin_dung_ban_le_doi_soat.md`) để nắm vững khung năng lực, hệ thống câu hỏi hóc búa, ma trận 38 môn học UIT AI, chiến lược đàm phán hợp đồng, và tín dụng bán lẻ cùng đối soát cuối ngày.
+   - Xem 9 video Khóa ACB (`L00.mp4` đến `L08.mp4`) để nắm tổng quan nghiệp vụ thực chiến (mỗi bài 5–6 phút, chưa phải bài học nền từ con số 0): T24 OFS XML qua IBM MQ, NAPAS 247 ISO 8583, ksqlDB Notification Hub, Sàn tiền gửi Optimistic Lock, Chi lương lô lớn, Sinh trắc học, Virtual Account đối soát 3 bên EOD, và Squad Lending tự động hóa CIC.
    - Bật phụ đề tiếng Việt chuẩn (`.srt`) và theo dõi các phân đoạn chương (`chapters.txt`).
 3. **Bước 3 — Ôn luyện 100 Câu hỏi Đáp án Thực chiến**:
    - Đọc kỹ file [`06_interview_qa_bank_100.md`](file:///D:/research-video/interview/06_interview_qa_bank_100.md), đặc biệt chú trọng các câu hỏi về:
@@ -235,13 +237,13 @@ Bảng BN-0001 → BN-0016 dưới đây là bản ghi cũ. **Đọc cùng Mục
      - NAPAS 247 ISO 8583, Socket TCP, PIN Block HSM, Khử trùng lặp Redis (Câu 66, 67, 80; khóa phân tán Redis: Câu 35).
      - Sàn chuyển nhượng hợp đồng tiền gửi & Khóa Lạc quan `last_access` (Câu 60, 69).
      - Chi lương theo lô Outbox & Deadlock Oracle ORA-00060 (Câu 42, 45, 63, 75, 93).
-     - Sinh trắc học QĐ 2345, Liveness 3D & Pre-condition SAGA (Câu 79, 86, 94).
+     - Sinh trắc học theo quy định NHNN, Liveness 3D & Pre-condition SAGA (Câu 79, 86, 94).
      - Cổng CIC B2B, Thấu chi sổ tiết kiệm, Lương và Vay trả góp thẻ (Câu 81 – 90).
-     - Mối quan hệ tham chiếu với sếp Phan Anh Tuấn (OCB) và anh Quan Quốc Bảo (GĐ Quản lý Ứng dụng ACB) (Câu 76).
+     - Người tham chiếu: quản lý trực tiếp tại OCB và một người quen ở ACB; không ghi tên người thật, chỉ khai khi họ đã đồng ý (Câu 76).
      - Chiến lược bảo vệ hồ sơ Cử nhân AI tại UIT (Câu 73, Chuyên đề 05).
      - Phân định rõ ràng vai trò cá nhân vs team để gây thiện cảm tuyệt đối (Mục 2 `HANDOVER_INTERVIEW.md`, Câu 76, Câu 97).
 4. **Bước 4 — Luyện tập Kịch bản Đàm phán Lương (Vòng 3 Offer)**:
-   - Thực hành nhuần nhuyễn các mẫu đối đáp trong [`07_salary_negotiation_50m_gross.md`](file:///D:/research-video/interview/07_salary_negotiation_50m_gross.md) để tự tin giữ vững mức trần 50M Gross khi làm việc với Trưởng phòng Tuyển dụng ACB. Người tham chiếu chỉ xác nhận những gì họ biết; không dựa vào đó để đòi mức lương. Dùng bằng chứng năng lực thật của mình để thương lượng gói thu nhập năm 700M – 850M VNĐ (13 tháng cố định + thưởng 1–4 tháng theo tin tuyển dụng ACB; mức cụ thể do ACB thương lượng).
+   - Thực hành nhuần nhuyễn các mẫu đối đáp trong [`07_salary_negotiation_50m_gross.md`](file:///D:/research-video/interview/07_salary_negotiation_50m_gross.md) để hỏi khung lương và so tổng đãi ngộ có căn cứ khi làm việc với Trưởng phòng Tuyển dụng ACB (không nêu mức lương mục tiêu). Người tham chiếu chỉ xác nhận những gì họ biết; không dựa vào đó để đòi mức lương. Dùng bằng chứng năng lực thật của mình để thương lượng gói thu nhập năm 700M – 850M VNĐ (13 tháng cố định + thưởng 1–4 tháng theo tin tuyển dụng ACB; mức cụ thể do ACB thương lượng).
 
 ---
 
@@ -352,10 +354,10 @@ Các nút thắt cũ BN-0001…BN-0016 ở Mục 5 vẫn mang trạng thái ghi 
 | ISO 9564 | công thức khối PIN sai | Format 0 / Format 1 đúng chuẩn |
 | T24 OFS | cú pháp sai thứ tự, "OFS là XML" | 5 phần phân cách dấu phẩy; XML chỉ qua adapter (graph OCB có "OFS XML") |
 | Nợ xấu | TT 11/2021; Nhóm 2 = 10–90 ngày | TT 31/2024 (từ 01/07/2024); Nhóm 2 = 10–90 ngày. Sửa 2026-11-10 (đợt LS1): bản 10–89 trước đó lệch một ngày; nguồn thứ cấp: cafef.vn 21/07/2026, hethongphapluat.com, truy cập 2026-11-10, chưa đối chiếu được nguyên văn Điều 10 |
-| QĐ 2345 | "từ 10 triệu", "ban hành 01/07/2024", luôn gọi C06 | "trên 10 triệu"/lần hoặc tổng ngày vượt 20 triệu; ban hành 18/12/2023, hiệu lực 01/07/2024; so mẫu đã đăng ký |
+| QĐ 2345 | "từ 10 triệu", "ban hành 01/07/2024", luôn gọi C06 | "trên 10 triệu"/lần hoặc tổng ngày vượt 20 triệu; ban hành 18/12/2023, hiệu lực 01/07/2024; so mẫu đã đăng ký (bản ghi 2026-11-08; cập nhật 2026-11-14: QĐ 2345 chưa đọc nguyên văn, chưa rõ còn áp dụng; dẫn TT 50/2024 sửa bởi TT 77/2025) |
 | Ký số | OTP đóng dấu thời gian; NĐ 130/2018 | TSA cấp dấu thời gian; NĐ 23/2025 |
 | Lãi, thấu chi | lãi = S×r/12; cấp hạn mức trước khi ký; trích nợ một phần "bảo vệ điểm tín dụng" | theo ngày thực tế/365 (TT 14/2017); phong tỏa → ký → cấp hạn mức; phần thiếu vẫn quá hạn |
-| Lương | 13–15 tháng; 750 triệu; thử việc 6 tháng | 13 + 1–4 tháng = 700–850 triệu; tối đa 60 ngày (Điều 25 BLLĐ 2019) |
+| Lương | 13–15 tháng; 750 triệu; thử việc 6 tháng | 13 + 1–4 tháng lương theo tin tuyển dụng (cập nhật 2026-11-14: không nêu tổng số tiền, vì không còn mức lương mục tiêu); thử việc: kiểm lại văn bản hiện hành (Điều 25 BLLĐ 2019), không nêu số ngày theo trí nhớ |
 
 ### 9.2 Bản ghi kiểm chứng (EGW section 3; chạy 2026-11-08, giờ UTC từ `date -u` / `checked_at`)
 | ID | Tuyên bố | Phương pháp (đã chạy) | Kết quả quan sát | validity |
@@ -388,7 +390,7 @@ Các nút thắt cũ BN-0001…BN-0016 ở Mục 5 vẫn mang trạng thái ghi 
 | BN-0026 | Hành vi thật của Oracle/Redis/Kafka/T24/IBM MQ | BNK, INT, ACB | hệ thật | khẳng định sản phẩm chưa chạy thử | chạy thử trên hệ thật | OPEN |
 | BN-0028 | Tên môn học UIT và con số "38 môn" | `05_…md` Mục 2 | bảng điểm UIT | nói sai tên môn trước hội đồng | ứng viên đối chiếu bảng điểm, sửa bảng | OPEN |
 | BN-0029 | ACB dùng hệ thống lõi nào; đặc tả NAPAS 247 hiện hành (ISO 8583 hay ISO 20022) | INT L04, ACB L01/L02, Câu 66–68 | tài liệu NAPAS / hỏi ACB | nói chắc điều chưa biết | hỏi trong vòng phỏng vấn; không khẳng định | OPEN |
-| BN-0030 | Người tham chiếu đã đồng ý chưa (đặc biệt anh Quan Quốc Bảo, ACB) | CV mục References, Câu 76 | xác nhận của người tham chiếu | rủi ro uy tín, xung đột lợi ích | ứng viên xin phép trước khi nộp CV | OPEN |
+| BN-0030 | Người tham chiếu đã đồng ý chưa (đặc biệt người quen ở ACB) | CV mục References, Câu 76 | xác nhận của người tham chiếu | rủi ro uy tín, xung đột lợi ích | ứng viên xin phép trước khi nộp CV | OPEN |
 | BN-0031 | JD yêu cầu tốt nghiệp đại học; bằng UIT dự kiến 11/2026 | hồ sơ ứng tuyển | xác nhận của trường | bị loại ở vòng hồ sơ | chuẩn bị giấy xác nhận sinh viên/lịch tốt nghiệp; hỏi HR | OPEN |
 | BN-0032 | Chủ đề JD chưa có bài (MS SQL, Couchbase, Elasticsearch, Swagger, gRPC, SWIFT, ngoại tệ, thuế điện tử) | ôn tập | — | hổng kiến thức nếu bị hỏi | `MASTER_CURRICULUM_INDEX.md` Mục 8; tự học hoặc làm "BNK 2" | OPEN |
 
@@ -398,7 +400,7 @@ Các nút thắt cũ BN-0001…BN-0016 ở Mục 5 vẫn mang trạng thái ghi 
 
 ### 9.5 Bắt đầu luyện học từ đâu
 1. Đọc [`README.md`](file:///D:/research-video/interview/README.md) Mục 2–3 (thứ tự học, quy tắc trung thực).
-2. Xem BNK L00 → L14, rồi INT L00 → L07, ACB L00 → L08 (bảng ở [`MASTER_CURRICULUM_INDEX.md`](file:///D:/research-video/interview/MASTER_CURRICULUM_INDEX.md)).
+2. Xem BNK L00 → L14, rồi INT L00 → L08, ACB L00 → L08 (bảng ở [`MASTER_CURRICULUM_INDEX.md`](file:///D:/research-video/interview/MASTER_CURRICULUM_INDEX.md)).
 3. Trước khi nộp CV: đóng BN-0030 (xin phép người tham chiếu), BN-0031 (giấy xác nhận UIT), BN-0021/0022 (số thật, repo AI), BN-0028 (tên môn UIT).
 
 ## 10. PHIÊN 2026-11-08 (TỐI): KHÓA JVA TỪ CON SỐ 0 VÀ RÀ SOÁT TOÀN BỘ CÁC KHÓA NỀN
@@ -450,7 +452,7 @@ Các nút thắt cũ BN-0001…BN-0016 ở Mục 5 vẫn mang trạng thái ghi 
 
 ### 10.4 Bắt đầu học từ con số 0
 1. Cài JDK 21 trở lên. Xem JVA L00 → L12, gõ lại và chạy từng chương trình, làm phần tự làm trước khi xem đáp án.
-2. Xem BNK L00 → L14, rồi INT L00 → L07 và ACB L00 → L08. Thứ tự và bảng video ở [`README.md`](file:///D:/research-video/interview/README.md) Mục 2 và [`MASTER_CURRICULUM_INDEX.md`](file:///D:/research-video/interview/MASTER_CURRICULUM_INDEX.md).
+2. Xem BNK L00 → L14, rồi INT L00 → L08 và ACB L00 → L08. Thứ tự và bảng video ở [`README.md`](file:///D:/research-video/interview/README.md) Mục 2 và [`MASTER_CURRICULUM_INDEX.md`](file:///D:/research-video/interview/MASTER_CURRICULUM_INDEX.md).
 3. Khi nghe thấy câu đọc sai hoặc gặp chỗ khó hiểu, ghi lại (bài, phút). Đó là bằng chứng để đóng BN-0034 và BN-0020.
 
 ## 11. PHIÊN 2026-11-08/09: RÀ SOÁT ĐỢT B — 23 KHÓA CÒN LẠI (326 BÀI)

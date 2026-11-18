@@ -2435,7 +2435,7 @@ _bx6 = {"A": 300000, "B": 1000000}
 _bx6a, _bx6m = _bx_tx(_bx6, "A", "B", 500000)
 _bx6b, _bx6n = _bx_tx(_bx6, "A", "B", 200000)
 rec("BNX:L06", _bx6m == "lỗi số dư" and sum(_bx6a.values()) == 1300000 and _bx6n == "ok" and sum(_bx6b.values()) == 1300000 and _bx6b["A"] == 100000,
-    "chuyển 500 000 từ 300 000: lỗi, tổng 1 300 000; chuyển 200 000: ok, tổng 1 300 000 (chạy thật Oracle/SQL Server: verify_bnx L06)")
+    "chuyển 500 000 từ 300 000: lỗi, tổng 1 300 000; chuyển 200 000: ok, tổng 1 300 000 (chạy thật Oracle: verify_bnx L06; SQL Server: verify_bnx L37)")
 rec("BNX:L07", sum(1 for m in range(1, 13) if m == 3) == 1, "12 phân vùng theo tháng, lọc một tháng → 1 phân vùng (kế hoạch thật trên Oracle: verify_bnx L07)")
 rec("BNX:L08", 3 * (1 + 1) == 6 and sum(1 for h in range(12) if h % 3 == h % 4) == 3 and F(3, 12) == F(1, 4),
     "3 mảnh chính × (1 + 1 bản sao) = 6; mod 3 → mod 4: trên chu kỳ 12 giá trị băm chỉ 3 giữ mảnh = 25%")
@@ -2607,5 +2607,83 @@ rec("BNX:L22", _bx22_ext == "html" and _bx22_path == "/content/site/vi/home" and
 # L23: số điểm bị gắn nhãn −1 với tỉ lệ nhiễm 1% trên 1010 điểm (percentile trên 1009 điểm thường → 10,09 → 11)
 rec("BNX:L23", math.ceil(0.01 * 1009) == 11 and 1000 + 10 == 1010 and 11 - 10 == 1,
     "tỉ lệ nhiễm 1%: 1% của 1009 = 10,09 → 11 nhãn −1 = 10 điểm lạ + 1 giao dịch thường oan; 1000 + 10 = 1010 điểm (kết quả huấn luyện/ONNX 1010/1010 chạy thật: verify_bnx L23)")
+# L24: số câu SQL một cộng N, số dòng phép nối, số đối tượng ngữ cảnh giữ (chạy thật: audit/bnx/verify_bnx.py L24)
+_bx24 = [1 + n for n in (50, 5, 500, 50000)]
+rec("BNX:L24", _bx24 == [51, 6, 501, 50001] and 500 + 500 * 2 == 1500 and 1000 + 500 == 1500,
+    "1 + N câu: N = 50 → 51; 5, 500, 50 000 → 6, 501, 50 001; nối kèm tải 1 câu; 500 khách + 500 × 2 tài khoản = 1 500 đối tượng (Hibernate/H2 chạy thật: verify_bnx L24)")
+# L25: số dư/nhật ký bốn ca, mức cô lập đọc lại, bể kết nối (chạy thật: audit/bnx/verify_bnx.py L25)
+_bx25 = [(1000 if _r else 1000 - 100) for _r in (True, True, False, True)]
+rec("BNX:L25", _bx25 == [1000, 1000, 900, 1000] and 1000 + 50 == 1050 and [(3 + 1), (6 + 1), (40 + 1)] == [4, 7, 41] and sum(1 for _ in range(3)) == 3,
+    "1000 − 100 chỉ còn 900 khi giao dịch chốt (lỗi kiểm tra mặc định); REQUIRES_NEW nhật ký 1 dòng; READ_COMMITTED 1000 → 1050; bể = luồng + 1: 4, 7, 41 (Spring/H2 chạy thật: verify_bnx L25)")
+# L26: số máy dựng = ceil(lượt/giờ × phút/lượt ÷ 60), luật gần nhất thắng (chạy thật Maven: audit/bnx/verify_bnx.py L26)
+_bx26 = [-(-b * 10 // 60) for b in (4, 400, 40000)]
+rec("BNX:L26", _bx26 == [1, 67, 6667] and [len(_p) for _p in (["resources", "compile", "testResources", "testCompile", "test", "jar"],)] == [6],
+    "4, 400, 40 000 lượt × 10 phút ÷ 60 làm tròn lên = 1, 67, 6 667 máy; 6 pha của mvn package; lang3 3.9 (gần nhất) thắng 3.12.0 (Maven thật: verify_bnx L26)")
+# L27: tỉ lệ độ nặng, số khối 64 KiB, số dòng đối soát (chạy thật JDK/Python: audit/bnx/verify_bnx.py L27)
+rec("BNX:L27", round(246 / 20, 1) == 12.3 and -(-24000 // 65536) == 1 and -(-24000000 // 65536) == 367 and 1000 * 24 == 24000 and 10**6 * 24 == 24000000,
+    "246 : 20 = 12,3 lần; 24 000 byte = 1 khối, 24 000 000 byte = 367 khối 64 KiB; mất 100 dòng của 1 000 → 900 ≠ 1 000 (JDK 21 + Python chạy thật: verify_bnx L27)")
+# L29: số dư phát lại, sự kiện bù, số sự kiện đọc với bản chụp (chạy thật Python + sqlite: audit/bnx/verify_bnx.py L29)
+_bx29 = 1000 - 300 + 50 - 120
+rec("BNX:L29", _bx29 == 630 and _bx29 - 500 == 130 and _bx29 - 500 + 500 - 50 == 580 and 2500 % 1000 == 500 and 2500500 % 1000 == 500,
+    "1000 − 300 + 50 − 120 = 630; sai rút 500 → 130; bù nạp 500, rút 50 → 580; n mod 1 000 = 500 ở n = 2 500 và 2 500 500 (Python + sqlite chạy thật: verify_bnx L29)")
+# L28: dòng bị loại n − 1 khi quét tuần tự, 0 khi có chỉ mục; rút có điều kiện (chạy thật Docker: audit/bnx/verify_bnx.py L28)
+_bx28 = [n - 1 for n in (1000, 100000, 1000000)]
+rec("BNX:L28", _bx28 == [999, 99999, 999999] and (1000 >= 600 and 1000 - 600 == 400 and not 400 >= 600) and 600 + 600 - (1000 - 400) == 600,
+    "quét tuần tự loại n − 1 = 999, 99 999, 999 999 dòng; 1000 − 600 = 400 rồi 400 < 600 nên từ chối; đọc rồi ghi chi 1200, trừ 600, mất 600 (PostgreSQL, MongoDB, MySQL, Oracle, SQL Server chạy thật: verify_bnx L28)")
+# L30: tổng chờ thử lại, khuếch đại tải, tải lên dịch vụ hỏng có cầu dao (chạy thật Java + Resilience4j: audit/bnx/verify_bnx.py L30)
+rec("BNX:L30", 100 + 200 == 300 and 100 + 200 + 400 == 700 and 100 * (1 + 3) == 400 and 10000 * (1 + 3) == 40000 and 3 + 9 * 1 == 12 and 9 - 2 == 7,
+    "chờ 100 + 200 = 300, 100 + 200 + 400 = 700 ms; 100 × 4 = 400 và 10 000 × 4 = 40 000 cuộc gọi; cầu dao: 3 hỏng + 9 lần thử mỗi giây = 12 cuộc gọi thật trong 10 giây; 9 lần gọi = 7 thật + 2 chặn (Java và Resilience4j chạy thật: verify_bnx L30)")
+# L31: tốc độ đốt, số chuỗi theo nhãn, chỉ mục đảo (chạy thật Python/Java/Prometheus: audit/bnx/verify_bnx.py L31)
+from fractions import Fraction as _F31
+_bx31 = _F31(5, 1000) / (1 - _F31(999, 1000))
+rec("BNX:L31", _bx31 == 5 and _F31(30) / _bx31 == 6 and _F31(30, 980 + 20 + 4990 + 10) == _F31(5, 1000) and [4 + 1, 4 * 100 + 1, 4 * 10000 + 1] == [5, 401, 40001],
+    "(5/1000)/(1/1000) = 5; 30 : 5 = 6 ngày; 30/6000 = 0,005; 4 × (0, 100, 10 000) + 1 = 5, 401, 40 001 chuỗi (Fraction, Prometheus 3.16.0 thật: verify_bnx L31)")
+# L32: cửa sổ lộ, số lần gọi git (chạy thật Python + git + Vault: audit/bnx/verify_bnx.py L32)
+from fractions import Fraction as _F32
+rec("BNX:L32", 90 * 24 == 2160 and _F32(720) / _F32(1, 4) == 2880 and [10 + 1, 200 + 1, 10000 + 1] == [11, 201, 10001],
+    "90 × 24 = 2 160 giờ; 720 : 0,25 = 2 880 lần; 1 + n lần gọi git = 11, 201, 10 001 (Fraction, git và Vault chạy thật: verify_bnx L32)")
+# L33: lượt xử lý và thông lượng của bể luồng (Tomcat nhúng chạy thật: audit/bnx/verify_bnx.py L33)
+import math as _m33
+rec("BNX:L33", [_m33.ceil(n / 4) * 100 for n in (4, 40, 200)] == [100, 1000, 5000] and 200 / 0.5 == 400 and 8 / 0.25 == 32 and _m33.ceil(40 / 8) * 0.25 == 1.25,
+    "⌈n/4⌉ × 100 ms = 100, 1 000, 5 000; 200 : 0,5 = 400; 8 : 0,25 = 32; ⌈40/8⌉ × 0,25 = 1,25 (Tomcat nhúng 10.1.61 chạy thật: verify_bnx L33)")
+# L34: quyền duyệt theo tổng dư nợ, máy trạng thái, số dòng đọc (Python + sqlite chạy thật: audit/bnx/verify_bnx.py L34)
+_bt34 = [(100, 'chuyen vien'), (500, 'truong phong'), (None, 'hoi dong')]
+_vai34 = lambda t: next(v for c, v in _bt34 if c is None or t <= c)
+rec("BNX:L34", [_vai34(90), _vai34(180), _vai34(270), _vai34(550)] == ['chuyen vien', 'truong phong', 'truong phong', 'hoi dong'] and 90 + 90 + 90 == 270 and 7 == 5 + 2 and 1000 * 10 ** 6 == 10 ** 9,
+    "ba hồ sơ 90: theo tổng 90, 180, 270 → chuyên viên, trưởng phòng, trưởng phòng; 550 → hội đồng; 7 lần thử = 5 hợp lệ + 2 bị chặn; 1 000 hồ sơ × 10^6 dòng = 10^9 (Python + sqlite chạy thật: verify_bnx L34)")
+# L35: ngân sách ngừng, chuỗi nối tiếp, phần vượt (chạy thật Python + Fraction: audit/bnx/verify_bnx.py L35)
+from fractions import Fraction as _F35
+_bx35 = [float(43200 * (1 - _F35(m) / 100)) for m in ('99', '99.9', '99.95', '99.99')]
+rec("BNX:L35", _bx35 == [432.0, 43.2, 21.6, 4.32] and 12 + 30 + 5 == 47 and round(47 - 43.2, 1) == 3.8 and round(float(_F35(9995, 10000) * _F35(999, 1000) ** 2) * 100, 4) == 99.7502 and round(float(_F35(999, 1000) ** 100) * 100, 4) == 90.4792,
+    "43 200 × (100 − 99,9) : 100 = 43,2; 12 + 30 + 5 = 47 > 43,2 vượt 3,8; 0,9995 × 0,999 × 0,999 = 0,997502; 0,999^100 = 0,904792 (Fraction, Python chạy thật: verify_bnx L35)")
+# L36: ước lượng ×1/×100/×10 000, khoá lũy đẳng, đối soát (Python thuần chạy thật: audit/bnx/verify_bnx.py L36)
+_gd36 = [100000 * 2 * _h for _h in (1, 100, 10000)]
+rec("BNX:L36", _gd36 == [200000, 20000000, 2000000000] and [round(_g / 86400 * 10) for _g in _gd36] == [23, 2315, 231481] and [-(-_g / 86400 * 10 // 2000) for _g in _gd36] == [1, 2, 116]
+    and 1000 - 2 * 300 == 400 and 1000 - 300 == 700 and 1000 // 500 == 2 and 100000 // 500 == 200,
+    "200 000 : 86 400 × 10 = 23 giao dịch mỗi giây ở đỉnh (×1), 2 315 (×100), 231 481 (×10 000) → 1, 2, 116 nút; gửi hai lần: 1000 − 600 = 400 (không khoá) và 1000 − 300 = 700 (có khoá); 1 000 lệnh lệch 2, 100 000 lệnh lệch 200 (Python chạy thật: verify_bnx L36)")
+
+# ═══════════ INT — Phỏng vấn Tích hợp Ngân hàng: L04 (T24/NAPAS) và L08 (tín dụng bán lẻ + đối soát), WP4 2026-11-14 (mã chạy thật: audit/int/verify_int.py) ═══════════
+import math as _mi
+_pin_i = int("045821FFFFFFFFFF", 16) ^ int("0000" + "5412345678901234"[-13:-1], 16)
+rec("INT:L04", sum(1 << (64 - b) for b in (3, 7, 11, 41)) == 0x2220000000800000 and f"{_pin_i:016X}" == "045802BA9876FEDC"
+    and [10**6 // t for t in (100, 1000, 10000)] == [10000, 1000, 100] and [t * 2 for t in (100, 1000, 10000)] == [200, 2000, 20000] and 10**6 // 4000 == 250 < 300 and 4000 * 1.5 == 6000,
+    "bản đồ bit {3,7,11,41} = 2220000000800000; khối PIN 5821 + thẻ …1234 = 045802BA9876FEDC; STAN quay lại sau 10^6/t = 10 000, 1 000, 100 giây; 4 000 gd/s → 250 giây < khoá 300 giây; tin chờ 200, 2 000, 20 000, 6 000 (Python chạy thật: verify_int L04)")
+_eod_i = lambda n: (n * n / 1e9 / 3600, (3 * n * _mi.ceil(_mi.log2(n)) + 2 * (n + n)) / 1e9)
+rec("INT:L08", 240 * 70 // 100 == 168 and 9 / 36 == 0.25 and 12 - 7.5 == 4.5 and 150 * 80 // 100 == 120 and round((6 + 4.5) / 25 * 100) == 42 and round(4.5 - 2.7, 1) == 1.8
+    and _mi.ceil(_mi.log2(2 * 10**6)) == 21 and round(_eod_i(2 * 10**6)[0], 1) == 1.1 and round(_eod_i(2 * 10**6)[1], 2) == 0.13
+    and [(round(_eod_i(n)[0], 1), round(_eod_i(n)[1], 2)) for n in (3 * 10**6, 3 * 10**7, 3 * 10**8)] == [(2.5, 0.21), (250.0, 2.37), (25000.0, 27.3)] and 350 > 300 and 2 * 120 == 240 < 300,
+    "LTV 240 × 0,7 = 168; DTI 9/36 = 25%; thu từng phần 12 − 7,5 = 4,5; đối soát 2 triệu gd: lồng nhau 1,1 giờ, sắp xếp + hai con trỏ 0,13 giây; ×1/×10/×100 = 2,5/250/25 000 giờ vs 0,21/2,37/27,3 giây; khoá 300 giây hết trước giây 350 (Python chạy thật: verify_int L08)")
+# L37: T-SQL, XACT_ABORT, chèn mã, JDBC (chạy thật SQL Server và Oracle qua JDBC: audit/bnx/verify_bnx.py L37)
+_bx37a = _bx_tx({"A": 300000, "B": 1000000}, "A", "B", 500000)
+_bx37b = _bx_tx({"A": 300000, "B": 1000000}, "A", "B", 200000)
+rec("BNX:L37", _bx37a[1] == "lỗi số dư" and sum(_bx37a[0].values()) == 1300000 and _bx37b[1] == "ok" and _bx37b[0]["A"] == 100000 and _bx37b[0]["B"] == 1200000
+    and 1300000 + 500000 == 1800000 and [2 * 100 ** _k for _k in range(3)] == [2, 200, 20000],
+    "chuyển 500 000 từ 300 000: lỗi, tổng 1 300 000; chuyển 200 000: A 100 000, B 1 200 000; XACT_ABORT tắt: 1 300 000 + 500 000 = 1 800 000; chèn mã lộ 2, 200, 20 000 dòng (chạy thật SQL Server + JDBC: verify_bnx L37)")
+# L38: hàng đợi Oracle, bộ nhớ cột (mô hình đếm ô), phân mảnh (Oracle thật + Python thuần: audit/bnx/verify_bnx.py L38)
+rec("BNX:L38", 2 - 1 == 1 and 1 - 1 == 0 and [8 * _n38 for _n38 in (1000, 100000)] == [8000, 800000]
+    and sum(1 for _a38 in range(60) for _b38 in range(60) if _a38 != _b38 and _a38 % 3 != _b38 % 3) == 2400
+    and sum(1 for _a38 in range(60) for _b38 in range(60) if _a38 != _b38 and _a38 % 30 != _b38 % 30) == 3480
+    and sum(1 for _a38 in range(1000) if _a38 % 3 != _a38 % 4) == 748,
+    "gửi 2 − hoàn tác 1 = 1 thông điệp, nhận 1 − 1 = 0; 8 cột: 8 000 và 800 000 ô theo hàng; 60 tài khoản: 3 mảnh 2 400, 30 mảnh 3 480 lệnh xuyên mảnh; 3 → 4 mảnh đổi 748/1 000 (Oracle thật + Python: verify_bnx L38)")
 
 print(f"\nTỔNG: {sum(rows)} PASS · {len(rows) - sum(rows)} FAIL")

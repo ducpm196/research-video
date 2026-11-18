@@ -14,10 +14,11 @@ sys.path.insert(0, str(ROOT / "audit" / "jva" / "src"))
 sys.stdout.reconfigure(encoding="utf-8")
 import lib  # noqa: E402
 
+SPECS = {}
 want = [a.upper() for a in sys.argv[1:]] or sorted(p.stem.upper() for p in (ROOT / "audit/jva/src").glob("l*.py"))
 for lid in want:
     lib.begin(lid)
-    importlib.import_module(lid.lower()).build()
+    SPECS[lid] = importlib.import_module(lid.lower()).build()[1]
 
 ver = subprocess.run(["javac", "-version"], capture_output=True, text=True)
 # JVA_RELEASE=21 → javac --release 21: kiểm ngôn ngữ + API chuẩn đúng Java 21 (người học được dặn cài JDK 21+).
@@ -88,6 +89,14 @@ for p in lib.PROGRAMS + lib.PROGRAMS_IO:
     ok += good
     fail += not good
     print(f"{'PASS' if good else 'FAIL'} {p['lesson']} {p['name']}: {why}")
+
+
+if "L12" in want:   # ghép nguyên văn các phần trên màn hình thành So.java, áp chỉnh sửa trong chữ nhỏ, chạy thật, so dấu vết
+    import verify_l12_screen  # noqa: E402
+    for good, why in verify_l12_screen.check(SPECS["L12"], lib.PROGRAMS, JAVAC):
+        ok += good
+        fail += not good
+        print(f"{'PASS' if good else 'FAIL'} L12 ghép-màn-hình: {why}")
 print(f"verify_jva: {ok}/{ok + fail} PASS")
 print("checked_at=" + datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
 sys.exit(1 if fail else 0)

@@ -1,9 +1,9 @@
 # Hiện trạng sản xuất (SINH TỰ ĐỘNG — không sửa tay)
 
-Sinh bởi `audit/review/status_report.py` từ `audit/review/audit_all.tsv` (chạy lúc 2026-11-13T03:39Z) và `out/*/*/build_report.json`.
+Sinh bởi `audit/review/status_report.py` từ `audit/review/audit_all.tsv` (chạy lúc 2026-11-13T17:23Z) và `out/*/*/build_report.json`.
 “Hoàn thiện” = đã dựng, lint 0 FAIL 0 WARN, video khớp dấu băm đặc tả và lời đọc hiện tại, đúng một giọng, ASR 0 câu chưa xem xét.
 
-**Tổng:** 701 bài trong 45 lộ trình · 701 có đặc tả · **700 hoàn thiện** · 6788 phút video hoàn thiện.
+**Tổng:** 722 bài trong 46 lộ trình · 722 có đặc tả · **672 hoàn thiện** · 6387 phút video hoàn thiện.
 
 | Khoá | Tên | Bài | Đặc tả | Hoàn thiện | Phút | Bộ kiểm độc lập | Còn lại |
 |---|---|---|---|---|---|---|---|
@@ -12,7 +12,7 @@ Sinh bởi `audit/review/status_report.py` từ `audit/review/audit_all.tsv` (ch
 | AIF | Nền tảng trí tuệ nhân tạo | 15 | 15 | 15 | 109.9 | verify_aif.py 26/26 PASS | — |
 | BCH | Blockchain và sổ cái phân tán | 13 | 13 | 13 | 116.6 | verify_bch.py 13/13 PASS | — |
 | BNK | Nền tảng Backend Ngân hàng cho người mất gốc | 15 | 15 | 15 | 220.6 | verify_bnk.py 36/36 PASS | — |
-| BNX | Backend ngân hàng mở rộng theo JD | 24 | 24 | 24 | 366.3 | verify_bnx.py 494/494 PASS | — |
+| BNX | Backend ngân hàng mở rộng theo JD | 31 | 31 | 24 | 366.3 | verify_bnx.py quá giờ | 7 bài: L24: MISSING BNX L24 practice 1 0 sha=558aec11df80c5ed; L25: MISSING BNX L25 practice 1 0 sha=d5601f15844ec4d0; L26: lỗi: chưa có trong audit_all.tsv … |
 | CAS | Tình huống chuyên gia | 12 | 12 | 12 | 133.8 | verify_cas.py 93/93 PASS | — |
 | CLC | Điện toán đám mây | 13 | 13 | 13 | 94.0 | verify_clc.py 13/13 PASS | — |
 | CLD | Hệ thống hướng dịch vụ | 16 | 16 | 16 | 126.8 | verify_cld.py 20/20 PASS | — |
@@ -29,19 +29,20 @@ Sinh bởi `audit/review/status_report.py` từ `audit/review/audit_all.tsv` (ch
 | DVO | DevOps: tích hợp, triển khai liên tục và vận hành | 14 | 14 | 14 | 116.8 | verify_dvo.py 18/18 PASS | — |
 | ESY | Hệ thống nhúng và thời gian thực | 16 | 16 | 16 | 149.7 | verify_esy.py 72/72 PASS | — |
 | EVT | Kiến trúc hướng sự kiện | 12 | 12 | 12 | 99.6 | verify_evt.py 12/12 PASS | — |
-| FND | Nền thực hành: dòng lệnh, tệp, dữ liệu, HTTP, SQL, Git | 11 | 11 | 10 | 165.2 | verify_fnd.py 70/70 PASS | 1 bài: L03: WARN [WARN] recap.1: E24 câu về “bài sau” không nhắc cụm nào trong tên |
+| FND | Nền thực hành: dòng lệnh, tệp, dữ liệu, HTTP, SQL, Git | 11 | 11 | 0 | 0.0 | verify_fnd.py 76/76 PASS | 11 bài: L00: FAIL    FND L00 practice 1 0 [output/-] of src:FND:LAB_L00 không PASS:; L01: STALE đặc tả đổi sau lần dựng; L02: STALE đặc tả đổi sau lần dựng … |
 | GFX | Đồ hoạ máy tính | 14 | 14 | 14 | 130.2 | verify_gfx.py 19/19 PASS | — |
 | HCI | Tương tác người–máy | 13 | 13 | 13 | 113.6 | verify_hci.py 27/27 PASS | — |
 | INT | Giáo trình Phỏng vấn Senior Banking ACB | 8 | 8 | 8 | 61.5 | phép kiểm `checks` trong từng bài (lint) | — |
 | IRS | Truy hồi thông tin và hệ gợi ý | 14 | 14 | 14 | 191.2 | verify_irs.py 150/150 PASS | — |
-| JV2 | Java trung cấp | 10 | 10 | 10 | 152.7 | verify_jv2.py 85/85 PASS | — |
-| JVA | Lập trình Java từ con số 0 | 13 | 13 | 13 | 167.7 | verify_jva.py 143/143 PASS | — |
+| JV2 | Java trung cấp | 10 | 10 | 5 | 84.7 | verify_jv2.py 88/88 PASS | 5 bài: L00: STALE đặc tả đổi sau lần dựng; L01: FAIL [FAIL] formula.0: ký tự “·” (dấu nhân dạng chấm giữa) xuất hiện t; L02: FAIL [FAIL] example.0: ký tự “·” (dấu nhân dạng chấm giữa) xuất hiện t … |
+| JVA | Lập trình Java từ con số 0 | 13 | 13 | 0 | 0.0 | verify_jva.py 146/146 PASS | 13 bài: L00: STALE đặc tả đổi sau lần dựng; L01: STALE đặc tả đổi sau lần dựng; L02: STALE đặc tả đổi sau lần dựng … |
 | LLM | Mô hình ngôn ngữ lớn | 15 | 15 | 15 | 112.7 | verify_llm.py 18/18 PASS | — |
 | MLO | MLOps: đưa mô hình học máy vào vận hành | 15 | 15 | 15 | 124.5 | verify_mlo.py 20/20 PASS | — |
 | NET | Mạng máy tính | 16 | 16 | 16 | 145.1 | verify_net.py 89/89 PASS | — |
 | OSY | Hệ điều hành | 16 | 16 | 16 | 152.5 | phép kiểm `checks` trong từng bài (lint) | — |
 | PAR | Tính toán song song và GPU | 14 | 14 | 14 | 148.6 | verify_par.py 96/96 PASS | — |
 | PLC | Ngôn ngữ lập trình và trình biên dịch | 14 | 14 | 14 | 117.6 | verify_plc.py 72/72 PASS | — |
+| PYT | Python từ con số 0 | 14 | 14 | 0 | 0.0 | verify_pyt.py 183/183 PASS | 14 bài: L00: MISSING PYT L00 practice 1 0 sha=633c42d4a887cfff; L01: MISSING PYT L01 practice 1 0 sha=1f19305c097dfbf1; L02: MISSING PYT L02 practice 1 0 sha=a76b5f9f92887291 … |
 | RBM | Toán cho robot và hệ động lực | 18 | 18 | 18 | 190.0 | verify_rbm.py 92/92 PASS | — |
 | RLN | Học tăng cường | 14 | 14 | 14 | 156.8 | verify_rln.py 94/94 PASS | — |
 | ROB | Robot tự hành | 14 | 14 | 14 | 134.8 | verify_rob.py 14/14 PASS | — |

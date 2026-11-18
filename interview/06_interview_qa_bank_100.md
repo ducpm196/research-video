@@ -1,6 +1,6 @@
 # CHUYÊN ĐỀ 6: BỘ 100 CÂU HỎI - ĐÁP PHỎNG VẤN THỰC CHIẾN DEV TÍCH HỢP SENIOR ACB
 
-> **Mục tiêu**: Cung cấp phản xạ tự nhiên trước mọi câu hỏi hóc búa nhất của Hội đồng Kỹ thuật và Lãnh đạo Khối CNTT ACB, bảo vệ vững chắc mức lương 50,000,000 VND Gross.  
+> **Mục tiêu**: Cung cấp phản xạ tự nhiên trước mọi câu hỏi hóc búa nhất của Hội đồng Kỹ thuật và Lãnh đạo Khối CNTT ACB, đàm phán thu nhập có căn cứ (hỏi khung lương, so tổng đãi ngộ; xem Chuyên đề 7). Mọi số tiền trong bộ câu hỏi là số minh hoạ, không phải mức lương của ngân hàng nào.  
 > **Cấu trúc 5 phần**:
 > - Phần 1: Khoa học máy tính lõi, Java 21, JVM & Đa luồng (Câu 1 – 20)
 > - Phần 2: Kỹ nghệ Microservices, Spring Boot, REST & Redis (Câu 21 – 40)
@@ -407,7 +407,7 @@
 
 ### Câu 66: Mô tả luồng bản tin kỹ thuật khi khách hàng dùng ACB One chuyển khoản 247 sang ngân hàng khác qua NAPAS.
 - **Trả lời**:
-  1. App gọi API Gateway ACB $\to$ Gateway kiểm tra xác thực phiên/thiết bị; với giao dịch trên 10 triệu đồng hoặc làm tổng trong ngày vượt 20 triệu đồng thì bắt buộc xác thực sinh trắc học theo QĐ 2345/QĐ-NHNN.
+  1. App gọi API Gateway ACB $\to$ Gateway kiểm tra xác thực phiên/thiết bị; với giao dịch trên 10 triệu đồng hoặc làm tổng trong ngày vượt 20 triệu đồng thì bắt buộc xác thực sinh trắc học theo quy định an toàn thanh toán của NHNN (TT 50/2024/TT-NHNN, sửa đổi bởi TT 77/2025/TT-NHNN; ngưỡng cụ thể cần đối chiếu bản hợp nhất. QĐ 2345/QĐ-NHNN chưa đọc nguyên văn, chưa rõ còn áp dụng, nên không dẫn làm căn cứ).
   2. Service Chuyển tiền gọi core banking trích nợ tài khoản khách hàng (giữ trạng thái `HOLD` tiền hoặc trích nợ thành công). JD của ACB không nêu ACB dùng core nào; khi kể ví dụ, nói rõ T24 là hệ đã làm ở OCB.
   3. Adapter chuyển tiền đóng gói bản tin theo đặc tả kết nối NAPAS 247 (gốc ISO 8583, ví dụ **MTI 0200**; đặc tả hiện hành cần kiểm với tài liệu NAPAS) gửi qua TCP Socket sang NAPAS Switch.
   4. NAPAS Switch định tuyến bản tin sang Ngân hàng thụ hưởng (Beneficiary Bank).
@@ -505,13 +505,13 @@
      - Router Worker phân loại luồng: Tài khoản nội bộ đi thẳng vào Core T24 adapter; tài khoản liên ngân hàng đi qua Cổng chuyển mạch NAPAS (247 hoặc kênh xử lý theo lô, tùy sản phẩm).
      - Cơ chế Idempotent Worker và Batch Completion Consumer đối soát trạng thái từng lệnh, cập nhật tiến độ theo thời gian thực về Dashboard doanh nghiệp.
 
-### Câu 76: Nếu ACB tiến hành liên hệ tham chiếu (Reference Check) với anh Phan Anh Tuấn (Phó phòng Ứng dụng Tích Hợp tại OCB - sếp trực tiếp) và anh Quan Quốc Bảo (Giám đốc Quản lý Ứng dụng tại ACB - người quen qua mạng lưới chuyên môn), họ sẽ nhận xét như thế nào về chuyên môn và thái độ làm việc của bạn?
-- **Trả lời**: *(Nguyên tắc: ứng viên chỉ nói mình đã xin phép người tham chiếu; không bao giờ nói thay họ sẽ nhận xét gì.)*
-  - **Với anh Phan Anh Tuấn (Phó phòng Ứng dụng Tích Hợp tại OCB - Quản lý trực tiếp / Sếp của tôi)**:
-    - Tôi đã xin phép anh Tuấn (quản lý trực tiếp của tôi tại OCB) làm người tham chiếu. Anh có thể xác nhận vai trò và phạm vi công việc thực tế của tôi trong Squad Lending. Tôi không suy đoán thay anh về nội dung nhận xét.
+### Câu 76: Nếu ACB tiến hành liên hệ tham chiếu (Reference Check) với quản lý trực tiếp của bạn tại OCB và với một người quen trong mạng lưới chuyên môn ở ACB, họ sẽ nhận xét như thế nào về chuyên môn và thái độ làm việc của bạn?
+- **Trả lời**: *(Nguyên tắc: ứng viên chỉ nói mình đã xin phép người tham chiếu; không bao giờ nói thay họ sẽ nhận xét gì. Tên người tham chiếu không đưa vào tài liệu này; chỉ khai khi họ đã đồng ý.)*
+  - **Với quản lý trực tiếp tại OCB**:
+    - Tôi đã xin phép quản lý trực tiếp của tôi tại OCB làm người tham chiếu. Anh có thể xác nhận vai trò và phạm vi công việc thực tế của tôi trong Squad Lending. Tôi không suy đoán thay anh về nội dung nhận xét.
     - Về phần việc của mình, tôi chỉ tự trình bày những gì tôi trực tiếp làm, và tách riêng phần phối hợp với các đội hạ tầng dùng chung (Core T24 qua IBM MQ, NAPAS 247, cụm Kafka/ksqlDB). Việc đánh giá là của người tham chiếu.
-  - **Với anh Quan Quốc Bảo**:
-    - [Chỉ nêu nếu anh Bảo đã đồng ý làm người tham chiếu.] Tôi đã xin phép anh Bảo; anh biết tôi qua trao đổi chuyên môn, không phải qua quan hệ công việc trực tiếp. Tôi không suy đoán nội dung anh sẽ nhận xét.
+  - **Với người quen trong mạng lưới chuyên môn ở ACB**:
+    - [Chỉ nêu nếu người đó đã đồng ý làm người tham chiếu.] Tôi đã xin phép; người đó biết tôi qua trao đổi chuyên môn, không phải qua quan hệ công việc trực tiếp. Tôi không suy đoán nội dung họ sẽ nhận xét.
 
 ### Câu 77: Trình bày kiến trúc Hệ thống Thu hộ Tự động qua Tài khoản Định danh (Virtual Account - VA) và cơ chế Webhook Idempotency khi đối tác gửi yêu cầu gạch nợ.
 - **Trả lời**:
@@ -540,9 +540,9 @@
      - Không dùng lặp lồng $O(N \times M)$ hoặc câu lệnh `JOIN` trực tiếp trên bảng DB hàng chục triệu dòng.
      - Sử dụng giải thuật **Two-Pointer trên tập dữ liệu đã sắp xếp (Sorted Two-Pointer Merge)**: Sắp xếp các tập giao dịch theo `transaction_reference_id` ($O(N \log N)$), sau đó dùng 2 hoặc 3 con trỏ chạy tịnh tiến song song một lượt duy nhất ($O(N)$). Thời gian thực tế phụ thuộc phần cứng và khối lượng, phải đo; không nêu con số nếu không có số đo.
 
-### Câu 79: Khi tích hợp xác thực sinh trắc học theo Quyết định 2345/QĐ-NHNN, làm sao xử lý sự cố sập kết nối mTLS sang hệ thống xác thực của Bộ Công an (C06/VNeID) mà không làm tắc nghẽn giao dịch?
+### Câu 79: Khi tích hợp xác thực sinh trắc học theo quy định của NHNN (TT 50/2024/TT-NHNN, sửa đổi bởi TT 77/2025/TT-NHNN), làm sao xử lý sự cố sập kết nối mTLS sang hệ thống xác thực của Bộ Công an (C06/VNeID) mà không làm tắc nghẽn giao dịch?
 - **Trả lời**:
-  1. *Hiểu đúng luồng chính*: Theo QĐ 2345, ngân hàng so khớp sinh trắc học của khách với dữ liệu đã thu thập và kiểm tra khớp với chip CCCD (hoặc qua VNeID) lúc đăng ký. Vì vậy mỗi giao dịch thường so khớp với mẫu đã lưu tại ngân hàng; kết nối C06 chủ yếu cần ở bước đăng ký/đối chiếu.
+  1. *Hiểu đúng luồng chính*: Theo cách mô tả phổ biến của quy định xác thực sinh trắc học (QĐ 2345 chỉ là tên người ta hay nhắc, chưa đọc nguyên văn; cần đối chiếu TT 50/2024 đã sửa đổi), ngân hàng so khớp sinh trắc học của khách với dữ liệu đã thu thập và kiểm tra khớp với chip CCCD (hoặc qua VNeID) lúc đăng ký. Vì vậy mỗi giao dịch thường so khớp với mẫu đã lưu tại ngân hàng; kết nối C06 chủ yếu cần ở bước đăng ký/đối chiếu.
   2. *Thiết kế Fallback & Circuit Breaker cho bước đăng ký*:
      - Tích hợp Circuit Breaker (Resilience4j) với ngưỡng timeout và tỷ lệ lỗi cấu hình được (ví dụ minh họa: 2000ms, 50% lỗi trong 10 giây) $\to$ Chuyển sang `OPEN`, cho khách đăng ký lại sau, không chặn các giao dịch đã có mẫu hợp lệ.
   3. *Quy trình Dự phòng*:
@@ -626,13 +626,13 @@
      - Hệ thống tính toán chính xác số ngày sử dụng thực tế, lãi tích lũy đến ngày hiện tại, và phí trả nợ trước hạn (nếu có).
      - Khi trích nợ tất toán thành công từ CASA, hệ thống gọi quy trình đổi hướng đáo hạn và giải chấp trên Core T24, giải tỏa phong tỏa toàn bộ số dư sổ tiết kiệm về trạng thái bình thường.
 
-### Câu 86: Thiết kế và vận hành Cổng Ký số Hợp đồng Tín dụng Đám mây (Cloud CA) tích hợp Sinh trắc học Quyết định 2345/QĐ-NHNN và Kho lưu trữ Văn bản Số Doanh nghiệp (ECM). Làm sao bảo đảm tính toàn vẹn, chống chối bỏ (Non-repudiation) và đạt SLA thời gian ký?
+### Câu 86: Thiết kế và vận hành Cổng Ký số Hợp đồng Tín dụng Đám mây (Cloud CA) tích hợp xác thực sinh trắc học và Kho lưu trữ Văn bản Số Doanh nghiệp (ECM). Làm sao bảo đảm tính toàn vẹn, chống chối bỏ (Non-repudiation) và đạt SLA thời gian ký?
 - **Trả lời**:
   1. *Kiến trúc Tích hợp Ký số Từ xa (Remote Signing Architecture)*:
      - Khách hàng không cần dùng USB Token vật lý. Khi hồ sơ vay được duyệt, Retail Lending Integration Gateway gọi cổng ký số Cloud CA để tạo yêu cầu cấp chứng thư số cá nhân theo chuẩn chữ ký số công cộng.
      - Sinh file PDF hợp đồng tín dụng chuẩn hóa từ template, nhúng các trường siêu dữ liệu (Metadata) và vị trí con dấu số (Signature Placeholder).
   2. *Bảo mật kép và căn cứ pháp lý*:
-     - Căn cứ: Luật Giao dịch điện tử 2023 và Nghị định 23/2025/NĐ-CP về chữ ký điện tử và dịch vụ tin cậy (thay Nghị định 130/2018, hiệu lực 10/04/2025). QĐ 2345/QĐ-NHNN điều chỉnh giao dịch thanh toán trực tuyến, không phải căn cứ cho việc ký hợp đồng.
+     - Căn cứ: Luật Giao dịch điện tử 2023 và Nghị định 23/2025/NĐ-CP về chữ ký điện tử và dịch vụ tin cậy (thay Nghị định 130/2018, hiệu lực 10/04/2025). Quy định xác thực sinh trắc học của NHNN điều chỉnh giao dịch thanh toán trực tuyến, không phải căn cứ cho việc ký hợp đồng.
      - Hệ thống xác thực người ký bằng Face Match với dữ liệu sinh trắc học đã đăng ký (đã đối chiếu chip CCCD) và Liveness Detection, theo chính sách ngân hàng.
      - Sau đó hệ thống gửi OTP để khách ủy quyền ký. Khóa bí mật trong HSM của nhà cung cấp dịch vụ ký số từ xa được kích hoạt để ký hợp đồng; dấu thời gian do dịch vụ cấp dấu thời gian (TSA) cấp, không phải do OTP. [chuẩn dấu thời gian cụ thể: chỉ giữ nếu có bằng chứng]
   3. *Đồng bộ lưu trữ kho ECM*:
@@ -684,7 +684,7 @@
 
 ---
 
-## PHẦN 5: ỨNG DỤNG AI, THIẾT KẾ HỆ THỐNG & ĐÀM PHÁN LƯƠNG 50M (CÂU 91 – 100)
+## PHẦN 5: ỨNG DỤNG AI, THIẾT KẾ HỆ THỐNG & ĐÀM PHÁN LƯƠNG (CÂU 91 – 100)
 
 ### Câu 91: Bạn thiết kế một Payment Hub phục vụ tải cao (mục tiêu thiết kế ví dụ: 10,000 TPS) cho ACB như thế nào?
 - **Trả lời**: (Vẽ sơ đồ kiến trúc 4 tầng):
@@ -707,7 +707,7 @@
   - *Bài học*: Luôn khóa theo thứ tự xác định, đánh index khóa ngoại, và có kịch bản kiểm thử đồng thời trước khi lên production.
 
 ### Câu 94: Làm thế nào bạn cân bằng giữa yêu cầu bảo mật khắt khe của ngân hàng và trải nghiệm mượt mà của người dùng?
-- **Trả lời**: Áp dụng nguyên tắc **Risk-Based Authentication (Xác thực theo mức độ rủi ro)**. Với các giao dịch giá trị nhỏ (< 10 triệu) đến người nhận quen thuộc và vị trí địa lý quen thuộc, hệ thống cho phép xác thực mượt qua mã PIN hoặc FaceID nhẹ. Ngoài ra, xác thực sinh trắc học là **bắt buộc theo QĐ 2345** (không phụ thuộc điểm AI) khi chuyển trên 10 triệu/lần, khi tổng trong ngày vượt 20 triệu, và khi đăng nhập/giao dịch lần đầu trên thiết bị mới; điểm rủi ro cao (IP lạ, giờ bất thường) có thể kích hoạt thêm bước xác thực. Sinh trắc học được so khớp với mẫu đã đăng ký (đã đối chiếu chip CCCD/VNeID).
+- **Trả lời**: Áp dụng nguyên tắc **Risk-Based Authentication (Xác thực theo mức độ rủi ro)**. Với các giao dịch giá trị nhỏ (< 10 triệu) đến người nhận quen thuộc và vị trí địa lý quen thuộc, hệ thống cho phép xác thực mượt qua mã PIN hoặc FaceID nhẹ. Ngoài ra, xác thực sinh trắc học là **bắt buộc theo quy định của NHNN** (TT 50/2024 đã sửa đổi; ngưỡng cần đối chiếu bản hợp nhất; không phụ thuộc điểm AI) khi chuyển trên 10 triệu/lần, khi tổng trong ngày vượt 20 triệu, và khi đăng nhập/giao dịch lần đầu trên thiết bị mới; điểm rủi ro cao (IP lạ, giờ bất thường) có thể kích hoạt thêm bước xác thực. Sinh trắc học được so khớp với mẫu đã đăng ký (đã đối chiếu chip CCCD/VNeID).
 
 ### Câu 95: Nếu kiến trúc sư của ACB đề xuất dùng Microservices nhưng bạn thấy bài toán đó chỉ cần Modular Monolith, bạn sẽ phản biện ra sao?
 - **Trả lời**: Tôi sẽ phản biện dựa trên phân tích chi phí - lợi ích (Trade-off Analysis):
@@ -717,16 +717,16 @@
 ### Câu 96: Tại sao bạn ứng tuyển vào ACB mà không tiếp tục ở lại OCB?
 - **Trả lời**: 3 năm tại OCB là quãng thời gian quý giá giúp tôi phát triển từ một kỹ sư backend thành Chuyên viên chính, trực tiếp làm các luồng tích hợp tín dụng của Squad Lending và phối hợp với các đội vận hành Core T24, NAPAS, Payment Hub. Tôi chọn ACB vì ACB là ngân hàng thương mại cổ phần bán lẻ hàng đầu Việt Nam với văn hóa quản trị rủi ro chặt chẽ và đang dẫn đầu trong làn sóng chuyển đổi số số hóa toàn diện. Đây là môi trường lý tưởng để tôi đóng góp năng lực tích hợp hệ thống phân tán và áp dụng kiến thức AI tôi đang học (đang học Cử nhân AI tại UIT, dự kiến tốt nghiệp 11/2026) vào các bài toán quy mô lớn hơn.
 
-### Câu 97: Bạn có 3 năm làm việc ở OCB và đang học Cử nhân AI tại UIT (dự kiến tốt nghiệp 11/2026). Khung lương 3 năm thường chỉ ở mức Middle (35–40M). Tại sao ACB nên trả cho bạn 50M Gross?
-- **Trả lời**: (Sử dụng kịch bản đàm phán 3 trụ cột):
+### Câu 97: Bạn có 3 năm làm việc ở OCB và đang học Cử nhân AI tại UIT (dự kiến tốt nghiệp 11/2026). Nhà tuyển dụng nói khung chức danh theo số năm kinh nghiệm của vị trí thấp hơn mức bạn mong. Bạn đáp thế nào để đề nghị một mức đãi ngộ có căn cứ?
+- **Trả lời**: (Sử dụng kịch bản đàm phán 3 trụ cột; không nêu con số lương khi chưa biết khung và chưa có nguồn, xem Chuyên đề 7):
   > *"Em hiểu khung chức danh theo số năm kinh nghiệm là chuẩn mực quản trị chung. Tuy nhiên, giá trị mà ACB nhận được từ em không được đo bằng số tháng ngồi tại văn phòng, mà bằng **tốc độ giải quyết vấn đề và năng lực tạo ra giá trị ngay từ ngày đầu tiên**:"*
   > 1. *Tại OCB, chức danh của em là **Chuyên viên chính (Senior Integration Application Specialist)** trong Squad Lending, trực tiếp làm các luồng tích hợp nghiệp vụ: Thấu chi cầm cố sổ tiết kiệm phong tỏa 2 pha trên Core T24, Thấu chi lương, Tích hợp ký số Cloud CA kết hợp xác thực khuôn mặt, và cổng CIC B2B [chỉ giữ nếu có bằng chứng]. Đồng thời, em phối hợp với các đội hạ tầng của phòng (đội sở hữu kết nối Core T24 qua IBM MQ và chuyển mạch NAPAS 247) khi xử lý các bài toán hạch toán phân tán và deadlock Oracle.*
   > 2. *Em đang học Cử nhân AI tại UIT, dự kiến tốt nghiệp 11/2026, song song với công việc. Chương trình bổ sung cho em tư duy giải thuật và nền tảng về phát hiện bất thường; dự án AI của em là dự án học tập/cá nhân, không phải hệ thống production.*
-  > 3. *Với mức lương 50M Gross, ACB có ngay một Kỹ sư Tích hợp cấp Senior có thể độc lập gánh vác các dự án trọng điểm mà không tốn thời gian hay chi phí đào tạo lại. Em tin rằng đây là khoản đầu tư mang lại ROI cao và an toàn cho ngân hàng.*
+  > 3. *Em xin phép được hỏi khung lương và cấu trúc thu nhập của vị trí (lương cứng, tháng 13, thưởng và điều kiện, phụ cấp, kỳ tăng lương), rồi so sánh tổng đãi ngộ cả năm của các phương án trước khi nêu một khoảng kỳ vọng. Em chỉ nêu những điều em có thể chứng minh bằng công việc thật đã làm.*
 
 ### Câu 98: Nếu được nhận vào ACB, kế hoạch 90 ngày đầu tiên của bạn là gì?
 - **Trả lời**:
-  - **30 ngày đầu**: Tìm hiểu toàn diện kiến trúc hiện tại của ACB, tài liệu tích hợp API, môi trường CI/CD, chuẩn mực mã nguồn và các quy định bảo mật PCI-DSS/QĐ 2345. Nắm rõ quy trình phối hợp giữa Khối CNTT và các Khối Nghiệp vụ.
+  - **30 ngày đầu**: Tìm hiểu toàn diện kiến trúc hiện tại của ACB, tài liệu tích hợp API, môi trường CI/CD, chuẩn mực mã nguồn và các quy định bảo mật PCI-DSS và quy định xác thực sinh trắc học của NHNN. Nắm rõ quy trình phối hợp giữa Khối CNTT và các Khối Nghiệp vụ.
   - **60 ngày tiếp theo**: Trực tiếp nhận bàn giao và tham gia phát triển một module tích hợp cụ thể (ví dụ kết nối đối tác mới hoặc tối ưu hóa adapter Core). Đưa ra các cải tiến về hiệu năng (tối ưu hóa index Oracle hoặc tinh chỉnh Kafka consumer).
   - **90 ngày**: Độc lập dẫn dắt thiết kế kỹ thuật cho các tính năng tích hợp mới, chia sẻ kinh nghiệm xử lý sự cố T24/NAPAS và tổ chức workshop nội bộ về ứng dụng AI trong tối ưu hóa luồng thanh toán cho các đồng nghiệp.
 
@@ -737,7 +737,7 @@
   3. Dự báo trước được các điểm lỗi tiềm ẩn (Failure modes: nghẽn MQ, timeout mạng, deadlock DB) trước khi chúng kịp xảy ra trên môi trường Production.
   4. Có khả năng kết nối mượt mà giữa Ngôn ngữ Nghiệp vụ của Giám đốc Khối Kinh doanh với Ngôn ngữ Kỹ thuật của hệ thống máy tính.
 
-### Câu 100: Bạn cam kết gì với ACB nếu đạt được mức đãi ngộ 50 triệu gross kỳ vọng?
+### Câu 100: Bạn cam kết gì với ACB nếu hai bên thống nhất được mức đãi ngộ phù hợp?
 - **Trả lời**: Em cam kết cống hiến 100% tâm huyết và năng lực kỹ thuật:
   - Đáp ứng SLA/SLO được giao cho các phân hệ tích hợp em phụ trách (mức cụ thể theo cam kết của ngân hàng, không tự đặt con số).
   - Thiết kế có kiểm soát (idempotency, đối soát, kiểm thử đồng thời) để giảm thiểu rủi ro thất thoát tài chính và trừ tiền kép, và xử lý minh bạch khi có sự cố.

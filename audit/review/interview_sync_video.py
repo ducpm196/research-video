@@ -4,7 +4,8 @@ import hashlib, shutil, sys
 from pathlib import Path
 ROOT = Path("D:/research-video"); V = ROOT / "interview/video"
 INT = ["00_overview_roadmap", "01_foundation_cs_java", "02_backend_microservices", "03_distributed_systems_senior",
-       "04_banking_domain_t24_napas", "05_uit_ai_banking_multiplier", "06_interview_qa_bank_100", "07_salary_negotiation_50m_gross"]
+       "04_banking_domain_t24_napas", "05_uit_ai_banking_multiplier", "06_interview_qa_bank_100", "07_salary_negotiation_50m_gross",
+       "08_tin_dung_ban_le_doi_soat"]
 def sha(p): return hashlib.sha256(p.read_bytes()).hexdigest()
 pairs = []
 for i, n in enumerate(INT):

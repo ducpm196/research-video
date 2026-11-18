@@ -25,3 +25,9 @@ def bnx_l15_left(budget, parts):
 def bnx_l15_inflight(rate_per_s, ms):
     """Số việc đang xử lý cùng lúc = tốc độ đến × thời gian mỗi việc (định luật Little), thời gian tính bằng ms."""
     return _F(rate_per_s) * _F(ms, 1000)
+
+
+# ── Nâng AF2 (WP4, 2026-11-14): quy mô và bể kết nối ──
+def bnx_l15_pool_tps(connections, ms_per_job):
+    """Bể `connections` kết nối, mỗi lệnh giữ một kết nối ms_per_job ms: chịu tối đa connections × 1000 / ms_per_job lệnh mỗi giây."""
+    return _F(connections * 1000, ms_per_job)

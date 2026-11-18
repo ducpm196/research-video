@@ -6,6 +6,7 @@
   thu nhỏ 2 giây (gửi ở giây 0, 1, 3) và PTTL thật của SET … EX 60 / EX 240 / EX 300 nằm trong (hạn − 1 giây, hạn].
 Thiếu Docker hoặc ảnh → SKIP (cổng FAIL, NOT_VERIFIED), không PASS lặng lẽ."""
 import random
+import re
 import shutil
 import subprocess
 import sys
@@ -168,6 +169,14 @@ def redis_real(rec):
         rec(L, o == ["OK", "(integer) 0", "(integer) 0", "(integer) 1", "(integer) 1", "(integer) 0", "OK", "(integer) 1", "(integer) 0"]
             and alg.bnx_l19_lock_story(300, 320) == (2, 0) and alg.bnx_l19_lock_story(300, 320, owner_check=False) == (2, 1),
             "nhả khoá trên Redis thật: sai mã chủ khoá → 0 (cả DELEX IFEQ và đoạn kịch bản so-rồi-xoá), đúng mã → 1; DEL thẳng xoá khoá của máy khác (lỗi 1)")
+        # AF2 (WP4 2026-11-14): cảnh quy mô — 3 000 khoá về từng nút của cụm thật, so với số đếm trên màn hình (PhanBo.py)
+        for tag, want in ((False, [994, 994, 1012]), (True, [0, 0, 3000])):
+            flush()
+            cli([f"SET {'dedup:{tx}:' if tag else 'dedup:TX'}{i} 1" for i in range(3000)], timeout=300)
+            sizes = [int(cli(["DBSIZE"], port=p, cluster=False)[0].split()[-1]) for p in (7000, 7001, 7002)]
+            rec(L, sizes == want == alg.bnx_l19_node_counts(3000, tag),
+                f"Redis thật: nạp 3 000 khoá {'chung thẻ băm {tx}' if tag else 'dedup:TX0…TX2999'} → DBSIZE từng nút {sizes} = số đếm trên màn hình = mô hình")
+        flush()
     finally:
         subprocess.run(["docker", "rm", "-f", NAME], capture_output=True)
 
@@ -240,5 +249,32 @@ def run(rec):
     rec(L, all(x in shows for x in need) and "EX 60" in shows and "EX 240" in shows and "EX 300" in shows,
         "mọi con số của ví dụ giáo án có trên màn hình: 16384, 12182, ba dải khe, nút thứ ba, hạn 60 giây, giây 30, giây 61, 240 giây")
     kinds = [sc_["kind"] for sc_ in spec["scenes"]]
-    rec(L, kinds == ["hook", "prereq", "symbol", "intuition", "formula", "example", "check", "pitfall", "quiz", "recap"]
-        and "Nếu bị hỏi về dòng này trên CV" in shows, "đủ 10 cảnh đúng thứ tự; có bảng “Nếu bị hỏi về dòng này trên CV”")
+    rec(L, kinds == ["hook", "prereq", "symbol", "intuition", "formula", "example", "check", "example", "pitfall", "quiz", "practice", "recap"]
+        and "Nếu bị hỏi về dòng này trên CV" in shows, "đủ 12 cảnh (10 cảnh chuẩn + quy mô + tự làm) đúng thứ tự; có bảng “Nếu bị hỏi về dòng này trên CV”")
+    # ── AF2 (WP4 2026-11-14): cảnh quy mô (PhanBo.py chạy thật bằng Python) + lab ─────────────────────
+    import binascii
+    import lib2
+    p = lib2.find(L, "PhanBo")
+    rc, so, se = p.execute()
+    rec(L, rc == 0 and so.strip(chr(10)) == p.out, f"PhanBo.py chạy lại cho đúng đầu ra đã hiện (rc={rc})")
+    got = re.findall(r"^(\d+) khoa, nut 1-2-3: \[(\d+), (\d+), (\d+)\] \| chung the bam: \[(\d+), (\d+), (\d+)\]$", p.out, re.M)
+    rows = [(int(g[0]), [int(x) for x in g[1:4]], [int(x) for x in g[4:7]]) for g in got]
+    rec(L, [r[0] for r in rows] == [3000, 300000] and all(sum(r[1]) == r[0] and r[2] == [0, 0, r[0]] for r in rows)
+        and rows[0][1] == [994, 994, 1012] and rows[1][1] == [100008, 99949, 100043]
+        and max(rows[1][1]) - min(rows[1][1]) < 0.002 * 300000,
+        "đo thật ở 3 000 và 300 000 khoá (×1, ×100): chia gần đều ba nút (lệch < 0,2%); chung thẻ băm thì một nút giữ hết")
+    rec(L, all(binascii.crc_hqx(k.encode(), 0) == alg.bnx_l19_crc16(k) for k in ("foo", "hello", "123456789", "dedup:TX1001", "acc:1")),
+        "binascii.crc_hqx (dùng ở PhanBo.py và lab) cho cùng CRC16 với hàm tự viết và mô hình alg")
+    rec(L, [alg.bnx_l19_live_dedup(r, 60) for r in (100, 10000, 1000000)] == [6000, 600000, 60000000]
+        and sum(1 for _ in range(100 * 60)) == 6000, "số mục khử trùng sống cùng lúc = tốc độ × 60 giây: 6 000; 600 000; 60 000 000 (mô hình, đếm tay ở cỡ nhỏ)")
+    lab = ROOT / "labs" / "BNX" / "L19"
+    want = (lab / "mong_doi.txt").read_text(encoding="utf-8").strip()
+    r = subprocess.run([lib2._bash(), str(ROOT / "labs" / "cham.sh"), "BNX", "L19", str(lab / "loi_giai.py")], capture_output=True, text=True, encoding="utf-8", cwd=ROOT)
+    rec(L, r.returncode == 0 and r.stdout.strip() == "ĐÚNG", f"lab: loi_giai.py chấm bằng labs/cham.sh → {r.stdout.strip()[:60]!r}")
+    exp = []
+    for k in ("loan:disb:B7", "dedup:TX9", "{acc}:5", "{acc}:6"):
+        sl = alg.bnx_l19_slot(k)
+        exp.append(f"{k} -> khe {sl}, nut {sl // 4096 + 1}")
+    exp += [f"giay {t} {x}" for t, x in zip((0, 45, 90, 91), alg.bnx_l19_set_nx_ex([0, 45, 90, 91], 90))] + ["han danh sach den: 360"]
+    rec(L, want == chr(10).join(exp) and alg.bnx_l19_slot("{acc}:5") == alg.bnx_l19_slot("{acc}:6") == 12007,
+        "lab: 4 khoá → khe/nút (cụm 4 nút), khử trùng hạn 90 ở giây 0/45/90/91 = OK/None/OK/None, hạn danh sách đen 1000 − 640 = 360 — tính lại bằng alg (CRC16 tự viết)")

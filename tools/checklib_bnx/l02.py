@@ -84,3 +84,13 @@ def bnx_deadline_chain(budget_ms, costs_ms, propagate=True):
 def bnx_deadline_wasted(budget_ms, costs_ms):
     """Khi mỗi dịch vụ đặt lại hạn: số ms chuỗi còn chạy sau lúc người gọi đầu đã bỏ cuộc (0 nếu kịp)."""
     return max(0, sum(costs_ms) - budget_ms)
+
+
+def bnx_l02_sizes(n):
+    """Tổng byte của n bản tin chuyển khoản (id=i, to_account 10 chữ số, amount=i*1000, fee=5500): nhị phân (checklib) và JSON gọn (json.dumps)."""
+    pb = js = 0
+    for i in range(1, n + 1):
+        t = "%010d" % i
+        pb += len(bnx_pb_field(1, 0, i) + bnx_pb_field(2, 2, t) + bnx_pb_field(3, 0, i * 1000) + bnx_pb_field(4, 0, 5500))
+        js += bnx_json_len({"id": i, "to_account": t, "amount": i * 1000, "fee": 5500})
+    return pb, js

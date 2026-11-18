@@ -9,4 +9,14 @@ Viết chương trình `PhiLech` (tệp `PhiLech.java`):
    - `so nguyen: <tổng long> phan muoi`
    - `bang 6? <kết quả so sánh tổng double == 6.0>`
 
+Cần JDK 21: mở cửa sổ gõ lệnh (Git Bash), gõ `java -version` phải thấy số 21. Khung tệp `PhiLech.java` (viết bài vào chỗ `...`):
+
+```java
+public class PhiLech {
+    public static void main(String[] args) {
+        // ... khai hai biến, vòng lặp for (int i = 0; i < 20; i++), in ba dòng bằng System.out.println
+    }
+}
+```
+
 Chạy: `javac PhiLech.java && java PhiLech`. Chấm: `bash labs/cham.sh BNK L00 PhiLech.java`.

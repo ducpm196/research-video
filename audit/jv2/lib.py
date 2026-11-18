@@ -71,13 +71,45 @@ def term_block(p, a=None, b=None, title=None, hide_out=False):
     return t + '<div class="code">' + body + "</div>"
 
 
-def pcode(p, path, lines=None, title=None):
+_SHOWN = {}   # (bài, tên chương trình hoặc tệp) -> tập chỉ số dòng đã hiện hoặc đã ghi chú trên màn hình
+
+
+def head_note(key, src, shown_idx):
+    """Ghi chú đầu tệp cho một đoạn mã trích: liệt kê (một lần mỗi bài) các dòng nạp tên, khai báo lớp và hàm chính chưa hiện,
+    để người học gõ lại được. shown_idx = chỉ số dòng (từ 0) của đoạn đang hiện."""
+    done = _SHOWN.setdefault((_CURRENT["lesson"],) + key, set())
+    done |= set(shown_idx)
+    imps, frame = [], []
+    for i, l in enumerate(src):
+        if i in done:
+            continue
+        t = l.strip()
+        if l.startswith("import "):
+            imps.append(t)
+        elif re.match(r"(public |final |abstract )*(class|interface|record|enum) \w+", l) or "static void main(" in l:
+            frame.append(t)
+        else:
+            continue
+        done.add(i)
+    if not imps and not frame:
+        return ""
+    parts = []
+    if imps:
+        parts.append("Đầu tệp: " + " ".join(f"<code>{html.escape(x, quote=False)}</code>" for x in imps))
+    if frame:
+        parts.append("Khung: " + " … ".join(f"<code>{html.escape(x, quote=False)}</code>" for x in frame))
+    return "<p class='note'>" + " — ".join(parts) + "</p>"
+
+
+def pcode(p, path, lines=None, title=None, note=True):
     """Nội dung một tệp của dự án p (tô từ khoá Java), cả tệp hoặc lines=(đầu, cuối)."""
-    src = p["files"][path].rstrip("\n").split("\n")
+    full = p["files"][path].rstrip("\n").split("\n")
+    src = full
+    a, b = (lines or (1, len(full)))
     if lines:
-        src = textwrap.dedent("\n".join(src[lines[0] - 1:lines[1]])).split("\n")
-    t = f"<p><b>{title or 'Tệp ' + path}</b></p>"
-    return t + '<div class="code">' + code_lines("\n".join(src)) + "</div>"
+        src = textwrap.dedent("\n".join(full[lines[0] - 1:lines[1]])).split("\n")
+    t = "" if title == "" else f"<p><b>{title or 'Tệp ' + path}</b></p>"
+    return t + '<div class="code">' + code_lines("\n".join(src)) + "</div>" + (head_note((p["name"], path), full, range(a - 1, b)) if note else "")
 
 
 KW = ("public|private|protected|class|static|void|int|long|double|boolean|char|byte|short|float|new|return|if|else|for|while|do|"
@@ -107,13 +139,21 @@ def code_lines(text):
     return "".join(f"<div>{_hl(l) if l.strip() else ' '}</div>" for l in text.split("\n"))
 
 
-def code_block(p, lines=None, title=None):
-    """Khối mã của chương trình p (cả tệp, hoặc chỉ các dòng lines=(đầu, cuối) tính từ 1, gồm cả hai đầu)."""
-    src = p["code"].split("\n")
+def pending_note(p):
+    """Ghi chú đầu tệp cho các dòng nạp tên/khung của p chưa hiện (dùng ở khung kế tiếp khi code_block(..., note=False))."""
+    return head_note((p["name"],), p["code"].split(chr(10)), [])
+
+
+def code_block(p, lines=None, title=None, note=True):
+    """Khối mã của chương trình p (cả tệp, hoặc chỉ các dòng lines=(đầu, cuối) tính từ 1, gồm cả hai đầu).
+    Đoạn trích tự kèm ghi chú các dòng nạp tên / khung lớp / hàm chính chưa hiện (một lần mỗi bài, xem head_note)."""
+    full = p["code"].split("\n")
+    src = full
+    a, b = (lines or (1, len(full)))
     if lines:
-        src = textwrap.dedent("\n".join(src[lines[0] - 1:lines[1]])).split("\n")
+        src = textwrap.dedent("\n".join(full[lines[0] - 1:lines[1]])).split("\n")
     t = f'<p><b>{title}</b></p>' if title else ""
-    return t + '<div class="code">' + code_lines("\n".join(src)) + "</div>"
+    return t + '<div class="code">' + code_lines("\n".join(src)) + "</div>" + (head_note((p["name"],), full, range(a - 1, b)) if note else "")
 
 
 def out_block(p, title="Kết quả chạy"):
@@ -247,6 +287,8 @@ def chain(*nodes):
 def begin(lesson_id):
     """Gọi đầu build(): gắn các prog(...) khai sau đó với bài này (bộ kiểm in theo bài)."""
     _CURRENT["lesson"] = lesson_id
+    for k in [k for k in _SHOWN if k[0] == lesson_id]:
+        del _SHOWN[k]
 
 
 def _auto_introduce(scenes):

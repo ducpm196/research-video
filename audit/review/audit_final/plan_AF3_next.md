@@ -1,3 +1,5 @@
+> **ĐÃ THAY bằng `plan_AF3_20261113T1240Z.md`** (kế hoạch chi tiết, viết sau lượt rà AF3-PLAN). Tệp này giữ làm lịch sử.
+
 # plan_AF3 — việc còn lại để đạt bản final "chỉ học qua video, từ con số 0 tới senior" (viết 2026-11-13 sau đợt AF2)
 
 Đã làm ở AF2 (chi tiết: `handover_AF2_*.md`): cổng mới (E51/E53, lab_gate, arith_scan, check_next_refs, check_legal), khoá mới FND (11) + JV2 (10), nâng JVA (13) và BNK (15) lên chuẩn AF2 (cảnh Tự làm + lab chạy thật + thuật ngữ tại chỗ + cảnh quy mô), sửa 26 phát hiện của mẫu F, thiết kế lại `HOC_TAP.html`, xếp dãy học không còn lệch lời hẹn "Bài sau". **Chuẩn AF2 mới phủ 49/701 bài.** Phần còn lại là AF3.

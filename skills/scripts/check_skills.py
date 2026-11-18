@@ -22,7 +22,8 @@ section 2). NOT_VERIFIED means the script cannot decide and a person must.
 The last line is checked_at=<UTC ISO-8601>, the time of the run, for records.
 Exit codes: 0 every check PASS or N/A | 1 at least one FAIL | 4 no FAIL, some NOT_VERIFIED | 3 usage |
 5 internal error: the run stopped, so no result was produced (never read it as FAIL).
-Checks C1-C16 are listed in CHECKS below.
+Checks C1-C19 are listed in CHECKS below. A Windows junction (mount point) inside a skill is
+never walked: C15 reports it as a FAIL.
 """
 import os
 import re
@@ -44,9 +45,11 @@ DOMAIN_LABELS = ["ALLOW_WITH_CONDITIONS", "NOT_STARTED", "ALLOW", "BLOCK", "PASS
 LABEL_RE = re.compile(r"(?<![A-Z_])(%s)(?![A-Z_])|(?<![A-Za-z])N/A(?![A-Za-z])" % "|".join(DOMAIN_LABELS))
 KEBAB = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)+$")  # hyphenated: read as a skill name
 WORD = re.compile(r"^[a-z0-9]{1,64}$")  # single word: a skill only if installed, else ambiguous
+ALLOWED_KEYS = ("name", "description", "license", "compatibility", "metadata", "allowed-tools")
+MOUNT_POINT_TAG = 0xA0000003  # IO_REPARSE_TAG_MOUNT_POINT: a Windows junction
 CHECKS = {
-    "C1": "front matter has name and description in single-line form",
-    "C2": "name equals directory name, [a-z0-9-]{1,64}, no reserved word",
+    "C1": "front matter: name and description in single-line form; only the keys name, description, license, compatibility, metadata (one indented map), allowed-tools",
+    "C2": "name equals directory name, [a-z0-9-]{1,64}, no leading, trailing or double hyphen, no reserved word",
     "C3": "description 1-1024 characters, no XML tag",
     "C4": "SKILL.md at most 500 lines (front matter included, stricter than body-only)",
     "C5": "all text files are Unicode NFC",
@@ -59,9 +62,13 @@ CHECKS = {
     "C12": "references/ files do not point to other references/ files",
     "C13": "every references/ or scripts/ file named in SKILL.md or references/ exists (own or cross-skill)",
     "C14": "every 'section N' reference points to an existing numbered heading",
-    "C15": "no __pycache__ or .pyc inside a skill directory (would change its digest)",
+    "C15": "no __pycache__ or .pyc and no Windows junction inside a skill directory (would change its digest)",
     "C16": "root digest equals the expected digest (only with --expect-root-digest)",
+    "C17": "no file in the skill contains the byte 0x00 (dir-digest-v1 could collide)",
+    "C18": "exactly one SKILL.md; references/ holds files only, no subfolder",
+    "C19": "SKILL.md at most 20000 characters (N/A for a platform-provided skill)",
 }
+MAX_SKILL_CHARS = 20000
 
 
 def read(path):
@@ -69,23 +76,71 @@ def read(path):
         return fh.read()
 
 
+def unquote(val):
+    if len(val) >= 2 and val[0] == val[-1] and val[0] in "\"'":
+        return val[1:-1]
+    return val
+
+
 def parse_front_matter(text):
+    """Return (front matter dict, problem, errors). A problem means a form the parser cannot read (NOT_VERIFIED);
+    errors are definite violations of the Agent Skills front-matter rules (FAIL)."""
     m = re.match(r"---\n(.*?)\n---\n", text, re.S)
     if not m:
-        return None, "no front matter"
-    fm, problem = {}, None
-    for line in m.group(1).split("\n"):
+        return None, "no front matter", []
+    fm, problem, errors = {}, None, []
+    lines, i = m.group(1).split("\n"), 0
+    while i < len(lines):
+        line = lines[i]
+        i += 1
         kv = re.match(r"^([A-Za-z0-9_-]+):[ ]?(.*)$", line)
         if not kv:
             problem = "unsupported line: %r" % line[:40]
             continue
-        val = kv.group(2).strip()
+        key, val = kv.group(1), kv.group(2).strip()
+        if key == "metadata" and val == "":  # one map: indented 'key: value' lines
+            sub = {}
+            while i < len(lines):
+                s = re.match(r"^  ([A-Za-z0-9_.-]+):[ ]?(.*)$", lines[i])
+                if not s:
+                    break
+                sub[s.group(1)] = unquote(s.group(2).strip())
+                i += 1
+            if not sub:
+                errors.append("metadata map is empty")
+            fm[key] = sub
+            continue
         if val in ("", ">", "|", ">-", "|-"):
-            problem = "multi-line value for %s" % kv.group(1)
-        if len(val) >= 2 and val[0] == val[-1] and val[0] in "\"'":
-            val = val[1:-1]
-        fm[kv.group(1)] = val
-    return fm, problem
+            problem = "multi-line value for %s" % key
+        fm[key] = unquote(val)
+    if "metadata" in fm and not isinstance(fm["metadata"], dict):
+        errors.append("metadata must be a map of strings")
+    unknown = sorted(k for k in fm if k not in ALLOWED_KEYS)
+    if unknown:
+        errors.append("unknown key(s) %s; allowed: %s" % (unknown, ", ".join(ALLOWED_KEYS)))
+    comp = fm.get("compatibility")
+    if isinstance(comp, str) and not 1 <= len(comp) <= 500:
+        errors.append("compatibility length %d (1 to 500)" % len(comp))
+    return fm, problem, errors
+
+
+def walk(top, mounts=None):
+    """os.walk that never enters a Windows junction; the path of each one skipped is appended to mounts."""
+    for dirpath, dirs, files in os.walk(top):
+        keep = []
+        for d in dirs:
+            full = os.path.join(dirpath, d)
+            try:
+                tag = getattr(os.lstat(full), "st_reparse_tag", 0)
+            except OSError:
+                tag = 0
+            if tag == MOUNT_POINT_TAG:
+                if mounts is not None:
+                    mounts.append(full)
+            else:
+                keep.append(d)
+        dirs[:] = keep
+        yield dirpath, dirs, files
 
 
 def contract_bullets(text):
@@ -151,9 +206,11 @@ def run(skills_dir, root_skill, expect_digest, platform=frozenset()):
 
     for s in names:
         t = texts[s]
-        fm, problem = parse_front_matter(t)
+        fm, problem, fm_errors = parse_front_matter(t)
         if fm is None or "name" not in fm or "description" not in fm:
             add("C1", s, "FAIL", problem or "name or description missing")
+        elif fm_errors:
+            add("C1", s, "FAIL", "; ".join(fm_errors))
         elif problem:
             add("C1", s, "NOT_VERIFIED", problem)
         else:
@@ -165,6 +222,8 @@ def run(skills_dir, root_skill, expect_digest, platform=frozenset()):
             bad.append("name %r != directory" % name)
         if not re.fullmatch(r"[a-z0-9-]{1,64}", name):
             bad.append("name pattern")
+        if name.startswith("-") or name.endswith("-") or "--" in name:
+            bad.append("leading, trailing or double hyphen")
         if "anthropic" in name or "claude" in name:
             bad.append("reserved word")
         add("C2", s, "FAIL" if bad else "PASS", "; ".join(bad))
@@ -176,19 +235,36 @@ def run(skills_dir, root_skill, expect_digest, platform=frozenset()):
         add("C3", s, "FAIL" if bad else "PASS", "; ".join(bad))
         n_lines = len(t.splitlines())
         add("C4", s, "FAIL" if n_lines > 500 else "PASS", "%d lines" % n_lines)
+        if s in platform:
+            add("C19", s, "N/A", PLATFORM_NA)
+        else:
+            add("C19", s, "FAIL" if len(t) > MAX_SKILL_CHARS else "PASS", "%d characters" % len(t))
 
-        bad, not_nfc, bare_status = [], [], []
-        for dirpath, _dirs, files in os.walk(os.path.join(skills_dir, s)):
+        bad, not_nfc, bare_status, nul, nested, deep, mounts = [], [], [], [], [], [], []
+        skill_root = os.path.join(skills_dir, s)
+        for dirpath, _dirs, files in walk(skill_root, mounts):
+            here = os.path.relpath(dirpath, skill_root).replace(os.sep, "/")
+            if here.startswith("references/"):
+                deep.append(here)
             for f in files:
                 p = os.path.join(dirpath, f)
                 rel = os.path.relpath(p, skills_dir)
                 if "__pycache__" in rel or f.endswith(".pyc"):
                     bad.append(rel)
                     continue
+                if f.lower() == "skill.md" and here != ".":
+                    nested.append(rel)
                 try:
-                    body = read(p)
-                except (UnicodeDecodeError, OSError):
-                    continue  # binary or unreadable: not a text file
+                    with open(p, "rb") as fh:
+                        raw = fh.read()
+                except OSError:
+                    continue
+                if b"\x00" in raw:
+                    nul.append(rel)
+                try:
+                    body = raw.decode("utf-8")
+                except UnicodeDecodeError:
+                    continue  # binary: not a text file
                 if unicodedata.normalize("NFC", body) != body:
                     not_nfc.append(rel)
                 if re.search(r"^\s*-?\s*status\s*:", body, re.M | re.I):
@@ -198,7 +274,15 @@ def run(skills_dir, root_skill, expect_digest, platform=frozenset()):
             add("C11", s, "N/A", PLATFORM_NA)
         else:
             add("C11", s, "FAIL" if bare_status else "PASS", ", ".join(bare_status[:3]))
-        add("C15", s, "FAIL" if bad else "PASS", ", ".join(bad[:3]))
+        mounts_rel = ["junction " + os.path.relpath(m, skills_dir) for m in mounts]
+        add("C15", s, "FAIL" if bad or mounts_rel else "PASS", ", ".join((bad + mounts_rel)[:3]))
+        add("C17", s, "FAIL" if nul else "PASS", ", ".join(nul[:3]))
+        found = []
+        if nested:
+            found.append("nested SKILL.md: " + ", ".join(nested[:3]))
+        if deep:
+            found.append("subfolder of references: " + ", ".join(sorted(set(deep))[:3]))
+        add("C18", s, "FAIL" if found else "PASS", "; ".join(found))
 
         bullets = contract_bullets(t)
         keys = [k for k, _ in bullets] if bullets else None
@@ -255,7 +339,7 @@ def run(skills_dir, root_skill, expect_digest, platform=frozenset()):
             add("C10", s, "N/A", "root skill: check applies to dependents only")
 
         bad = []
-        for dirpath, _dirs, files in os.walk(os.path.join(skills_dir, s, "references")):
+        for dirpath, _dirs, files in walk(os.path.join(skills_dir, s, "references")):
             for f in files:
                 try:
                     body = read(os.path.join(dirpath, f))
@@ -269,9 +353,9 @@ def run(skills_dir, root_skill, expect_digest, platform=frozenset()):
             add("C12", s, "FAIL" if bad else "PASS", ", ".join(bad))
 
         bad = []
-        path_re = r"(?<![\w/.-])(?:([a-z0-9-]+)/)?(references|scripts)/([\w.-]+\.[A-Za-z0-9]+)"
+        path_re = r"(?<![\w/.-])(?:([a-z0-9-]+)/)?(references|scripts|assets)/([\w.-]+(?:/[\w.-]+)*\.[A-Za-z0-9]+)"
         sources = [t]
-        for dp, _d, fs in os.walk(os.path.join(skills_dir, s, "references")):
+        for dp, _d, fs in walk(os.path.join(skills_dir, s, "references")):
             for f in sorted(fs):
                 try:
                     sources.append(read(os.path.join(dp, f)))
@@ -292,7 +376,7 @@ def run(skills_dir, root_skill, expect_digest, platform=frozenset()):
             bad += ["cited %d" % n for n in sorted(section_numbers(spec)) if n not in root_headings]
         for spec in re.findall(r"(?<!VGHS )(?<!EGW )\b[Ss]ections? " + SEC, t):
             bad += ["own %d" % n for n in sorted(section_numbers(spec)) if n not in own]
-        for dp, _d, fs in os.walk(os.path.join(skills_dir, s, "references")):
+        for dp, _d, fs in walk(os.path.join(skills_dir, s, "references")):
             for f in sorted(fs):
                 try:
                     body = read(os.path.join(dp, f))

@@ -1,6 +1,6 @@
 # Lab FND L05 — Đọc thông báo lỗi và sửa ba tệp hỏng
 
-Tạo `sua.sh`. **Chép nguyên** đoạn dưới để dựng ba tệp hỏng (`<<'EOF'` nhập nhiều dòng, học dần ở các bài sau):
+Tạo `sua.sh`. **Chép nguyên** đoạn dưới để dựng ba tệp hỏng (`<<'EOF'` nhập nhiều dòng, đã học ở bài 2):
 
 ```bash
 cat > Tong.java <<'EOF'
@@ -24,7 +24,7 @@ EOF
 ```
 
 Rồi:
-1. chạy từng tệp một lần để **đọc** thông báo lỗi: `javac Tong.java`, `python tinh.py`, `bash chao.sh` (thông báo ở luồng lỗi, không tính vào kết quả);
+1. chạy từng tệp một lần để **đọc** thông báo lỗi: `javac Tong.java > /dev/null`, `python tinh.py > /dev/null`, `bash chao.sh > /dev/null`. **Bắt buộc có `> /dev/null`**: `chao.sh` in `bat dau` ra màn hình trước chỗ hỏng; dòng đó mà lọt vào kết quả thì lệnh chấm báo KHÁC. Thông báo lỗi ở luồng lỗi nên vẫn hiện, không tính vào kết quả;
 2. **sửa** mỗi tệp đúng chỗ (có thể dùng `sed -i 's/cũ/mới/' tệp`);
 3. chạy lại: `javac Tong.java && java Tong`, `python tinh.py`, `bash chao.sh`.
 

@@ -11,4 +11,6 @@ khop 3 - lech tien 1 - chi ngan hang 2 - chi chuyen mach 2
 chenh tien: -500
 ```
 
-(`chenh tien` = tổng tiền chuyển mạch trừ tổng tiền ngân hàng.) Chạy: `python doi_soat.py`. Chấm: `bash labs/cham.sh BNK L12 doi_soat.py`.
+(`chenh tien` = tổng tiền chuyển mạch trừ tổng tiền ngân hàng.) Mẹo in: `print("khop", 3, "-", "lech tien", 1)` in `khop 3 - lech tien 1`; các giá trị cách nhau một dấu cách.
+
+Chạy: `python doi_soat.py`. Chấm: `bash labs/cham.sh BNK L12 doi_soat.py`.

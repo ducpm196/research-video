@@ -16,6 +16,46 @@ sys.path.insert(0, str(ROOT / "audit" / "bnx"))
 sys.path.insert(0, str(ROOT / "tools"))
 import checklib as alg  # noqa: E402
 import l21 as L  # noqa: E402
+import lib2  # noqa: E402
+
+LABDIR = ROOT / "labs" / "BNX" / "L21"
+
+
+def extra(rec):
+    """AF2 (nhánh B): quy mô đo thật ở 5, 500, 50 000 hồ sơ; lab chạy lại qua labs/cham.sh; mọi chương trình prog() chạy lại nguyên văn."""
+    C = "L21"
+    lib2.verify_programs(rec, C)
+    # quy mô: tính lại bằng đường khác (dùng thuộc tính dựng tay, không dùng alg.bnx_l21_fp_of)
+    he = ["Android 13", "Android 14", "iOS 17", "iOS 18"]
+    man = ["720x1600", "1080x2400", "1170x2532", "1290x2796", "1440x3200", "1080x1920"]
+    res = {}
+    for n in (5, 500, 50_000):
+        cnt = {}
+        for i in range(n):
+            h = int(hashlib.sha256(("hs%d" % i).encode()).hexdigest(), 16)
+            k = hashlib.sha256(("|".join([he[h % 4], man[h // 4 % 6], "UTC+7"])).encode()).hexdigest()[:12]
+            cnt[k] = cnt.get(k, 0) + 1
+        res[n] = (len(cnt), sum(c for c in cnt.values() if c >= 3))
+    out = next(p for p in lib2.PROGRAMS if p.key == "L21_QuyMo").out
+    shown = {int(a): (int(b), int(c)) for a, b, c in re.findall(r"^(\d+) ho so, (\d+) ma khac nhau, (\d+) ho so bi gan co$", out, re.M)}
+    rec(C, shown == res == {5: (5, 0), 500: (24, 500), 50_000: (24, 50_000)}, f"quy mô: chạy thật = tính lại tay = bảng trên màn hình {res}")
+    rec(C, all(alg.bnx_l21_scale(n) == res[n] for n in res), "alg.bnx_l21_scale khớp số đo thật ở 5, 500, 50 000")
+    rec(C, [-(-f // 40) for f in (0, 500, 50_000)] == [0, 13, 1250] == [alg.bnx_l21_reviewers(f, 40) for f in (0, 500, 50_000)],
+        "người xét cần mỗi ngày (40 hồ sơ mỗi người): 0, 13, 1 250")
+    # lab: chạy lời giải qua cham.sh, tự tính lại số bằng tay
+    rec(C, (LABDIR / "mong_doi.txt").read_text(encoding="utf-8").strip() == next(p for p in lib2.PROGRAMS if p.key == "L21_LabL21").out,
+        "mong_doi.txt = đầu ra thật của lời giải lab")
+    a = hashlib.sha256(b"Hop dong vay 14000000 dong, ky han 24 thang\n").hexdigest()
+    b = hashlib.sha256(b"Hop dong vay 14000000 dong, ky han 25 thang\n").hexdigest()
+    exp = ["DTI: %.1f %%" % (6 * 100 / 14), "Diem: %d" % (20 + 25 + 20), "Quyet dinh: TU_CHOI", "Ma bam goc: " + a[:12], "Vi tri khac: %d" % sum(x != y for x, y in zip(a, b))]
+    rec(C, (LABDIR / "mong_doi.txt").read_text(encoding="utf-8").strip().splitlines() == exp,
+        "lab: năm dòng mong đợi khớp tính lại bằng tay (42,9 %; 65 điểm; TU_CHOI; mã băm; 60 vị trí)")
+    bash = shutil.which("bash")
+    if bash:
+        r = subprocess.run([bash, str(ROOT / "labs" / "cham.sh"), "BNX", "L21", str(LABDIR / "loi_giai.py")], capture_output=True, text=True, encoding="utf-8", timeout=120, cwd=str(ROOT))
+        rec(C, r.stdout.strip() == "ĐÚNG", f"labs/cham.sh BNX L21 loi_giai.py: {r.stdout.strip()[:60]}")
+    else:
+        rec(C, None, "thiếu bash: không chạy cham.sh")
 
 
 def _run_py(code, post=""):
@@ -38,6 +78,7 @@ def _reach(edges, a, b):
 
 def run(rec):
     C = "L21"
+    extra(rec)
     # 1. máy trạng thái: chạy thật mã trên màn hình + đồ thị dựng tay
     rc, so, se = _run_py(L.STATE_PY + "\n" + L.STATE_RUN)
     rec(C, rc == 0 and so == L.STATE_OUT, f"chạy STATE_PY + STATE_RUN: {so.splitlines()}")

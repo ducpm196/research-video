@@ -22,4 +22,6 @@ Yêu cầu:
 
 Kết quả mong đợi (sáu dòng): hai dòng `Bo qua`, ba dòng số dư, một dòng `Tong`. Tự tính tay trước: B01 = 4 000 000 − 900 000.
 
+Dòng `import` cần dùng: `java.io.BufferedReader`, `java.io.IOException`, `java.nio.file.Files`, `java.nio.file.Path`, `java.util.Map`, `java.util.TreeMap`. Hàm `main` khai `throws IOException`.
+
 Chạy: `javac SoCaiNho.java && java SoCaiNho`. Chấm: `bash labs/cham.sh JV2 L09 SoCaiNho.java`.

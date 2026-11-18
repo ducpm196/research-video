@@ -8,5 +8,7 @@ Dựng dự án nhỏ trong một thư mục tạm, **tự gõ** hai tệp (khô
 
 Biên dịch ra thư mục `out` bằng `javac -d out …`, chạy `java -cp out shop.Main`. Đóng gói `cuahang.jar` với `--main-class shop.Main`, chạy `java -jar cuahang.jar`.
 
+Dòng `import` cần dùng: chỉ `import shop.kho.Hang;` trong `Main.java` (không cần gói nào của JDK). Lệnh cần có: `javac`, `java`, `jar` (đã có trong JDK 21).
+
 Đầu ra của **cả hai lần chạy** gộp lại thành bốn dòng. Lab này chấm bằng một tệp `.sh` gom mọi lệnh của bạn:
 `bash labs/cham.sh JV2 L00 lenh.sh` (tệp `lenh.sh` tạo hai tệp Java bằng `cat > … <<'EOF'`, rồi `javac`, `java`, `jar`).

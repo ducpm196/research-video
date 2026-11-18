@@ -6,6 +6,9 @@ import sqlite3
 import sys
 
 args = sys.argv[1:]
+if args == ["--version"]:   # để tệp kiem.sh (bài L00) hỏi phiên bản được trên máy kiểm chưa có sqlite3 thật
+    print(sqlite3.sqlite_version, "(shim, mô-đun sqlite3 của Python)")
+    sys.exit(0)
 header = False
 csvmode = False
 db = None

@@ -15,7 +15,7 @@ EX = {
     "L03": ("Gọi ghi vết qua proxy mở 2 giao dịch, gọi thẳng this chỉ 1; giao dịch ngoài hỏng thì còn 1 dòng hay 0 dòng", "VER BNK:L03"),
     "L04": ("Số dư 2 000 000, chuyển 500 000, thử 3 lần: không khoá còn 500 000, có khoá còn 1 500 000; UNIQUE giữ 1 dòng", "VER BNK:L04"),
     "L05": ("10 000 000 dòng, mỗi nút 100 lối rẽ: 4 tầng, 5 lần đọc; sqlite báo SCAN hay SEARCH tuỳ chỉ mục và điều kiện", "VER BNK:L05"),
-    "L06": ("Hai khoá, 4 cặp thứ tự, 2 cặp ngược nhau gây bế tắc; sắp thứ tự id tăng thì 0 bế tắc (mô phỏng; Oracle không chạy trên máy)", "VER BNK:L06"),
+    "L06": ("Hai khoá, 4 cặp thứ tự, 2 cặp ngược nhau gây bế tắc; sắp thứ tự id tăng thì 0 bế tắc (khối PL/SQL chạy thật trên Oracle 26ai Free trong Docker; bế tắc mô phỏng bằng Java)", "VER BNK:L06"),
     "L07": ("Độ trễ trung bình 3 ms khi trúng 0,9 (tđệm 1 ms, tcsdl 20 ms); mã chặn khiến ghi cuối là B thay vì A", "VER BNK:L07"),
     "L08": ("6 phân vùng chia cho 3 và 2 bộ đọc; sập ở thông điệp 2: [1,1,2,1,1] hay [1,1,0,1,1] tuỳ thứ tự ghi nhớ", "VER BNK:L08"),
     "L09": ("Bước lỗi i thì nhật ký 2i + 1 dòng; sập giữa lưu và báo: 0 sự kiện không outbox, 1 sự kiện có outbox", "VER BNK:L09"),

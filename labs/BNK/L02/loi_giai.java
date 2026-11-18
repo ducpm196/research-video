@@ -9,7 +9,8 @@ public class ChuyenKhoanProxy {
     }
     public static void main(String[] args) {
         Dich that = new DichThat();
-        Dich proxy = (Dich) Proxy.newProxyInstance(Dich.class.getClassLoader(), new Class<?>[] { Dich.class },
+        Dich proxy = (Dich) Proxy.newProxyInstance(
+            Dich.class.getClassLoader(), new Class<?>[] { Dich.class },
             (p, m, a) -> {
                 moGiaoDich++;
                 return m.invoke(that, a);

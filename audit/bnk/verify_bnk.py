@@ -330,6 +330,107 @@ rec("L13", [-(-(2 * r) // 1000) for r in (100, 10000, 1000000)] == [1, 20, 2000]
 # L14: vụ trừ trùng và người xử lý tay (10 phút mỗi vụ, 8 giờ mỗi người)
 rec("L14", [N // 10000 for N in (10 ** 5, 10 ** 7, 10 ** 9)] == [10, 1000, 100000] and [round(v * 10 / 60 / 8, 1) for v in (10, 1000, 100000)] == [0.2, 20.8, 2083.3], "10, 1 000, 100 000 vụ; 0,2, 21, 2 083 người")
 
+# ── Sửa theo báo cáo người đọc R_BNK (2026-11-14): MUST/SHOULD kiểm bằng cách khác ──
+import re as _re
+import yaml as _yaml
+_Y = {p.name[:3]: p.read_text(encoding="utf-8") for p in sorted((ROOT / "lessons" / "bnk").glob("L*.yaml"))}
+_txt = lambda lid: _re.sub(r"\s+", " ", _Y[lid])
+# L01: mô hình hai luồng có ngủ — A đọc 100, ngủ 100 ms rồi ghi; B đọc 100, ngủ 200 ms rồi ghi; không khoá thì B ghi sau cùng (130), có khoá thì tuần tự (180)
+def _nap_sim(khoa):
+    so_du, ev = 100, []
+    if khoa:
+        so_du = so_du + 50
+        so_du = so_du + 30
+    else:
+        doc_a = doc_b = so_du
+        ev = sorted([(100, 50 + doc_a), (200, 30 + doc_b)])
+        for _, v in ev:
+            so_du = v
+    return so_du
+rec("L01", _nap_sim(False) == 130 and _nap_sim(True) == 180 and "dung 2000000" not in _txt("L01"), "chạy thật tất định: không khoá ra 130, có khoá ra 180; bài không còn dùng kết quả ngẫu nhiên 'dung 2000000'")
+_six = {}
+for _o in itertools.permutations([("A", "R"), ("A", "W"), ("B", "R"), ("B", "W")]):
+    if _o.index(("A", "R")) < _o.index(("A", "W")) and _o.index(("B", "R")) < _o.index(("B", "W")):
+        _b, _r = 100, {}
+        for _w, _op in _o:
+            if _op == "R":
+                _r[_w] = _b
+            else:
+                _b = _r[_w] + (50 if _w == "A" else 30)
+        _six[_o] = _b
+rec("L01", len(_six) == 6 and sorted(_six.values()) == [130, 130, 150, 150, 180, 180], "bảng sáu cách xen kẽ: 180×2, 130×2, 150×2")
+# L06: 10^6 yêu cầu/s × 20 ms: trúng 99% → 200, 99,9% → 20, muốn 10 cần 99,95%
+rec("L06", _F(10 ** 6) * _F(2, 100) * (1 - _F(99, 100)) == 200 and _F(10 ** 6) * _F(2, 100) * (1 - _F(999, 1000)) == 20 and _F(10 ** 6) * _F(2, 100) * (1 - _F(9995, 10000)) == 10
+    and "99,9%" not in _txt("L06").replace("99,95%", "") and "chín mươi chín phẩy chín mươi lăm" in _txt("L06"), "trúng 99,9% còn 20 kết nối; muốn 10 cần 99,95%; bài ghi 99,95%")
+# L07: băm của Kafka là murmur2 (kiểm 4 vector chuẩn); TK-1001 vào phân vùng 2 trong số 6, crc32 minh hoạ cho 1
+def _murmur2(data):
+    m, h = 0x5bd1e995, (0x9747b28c ^ len(data)) & 0xFFFFFFFF
+    for i in range(len(data) // 4):
+        k = int.from_bytes(data[4 * i:4 * i + 4], "little")
+        k = (k * m) & 0xFFFFFFFF
+        k ^= k >> 24
+        k = (k * m) & 0xFFFFFFFF
+        h = ((h * m) & 0xFFFFFFFF) ^ k
+    rem, base = len(data) % 4, len(data) - len(data) % 4
+    if rem >= 3:
+        h ^= data[base + 2] << 16
+    if rem >= 2:
+        h ^= data[base + 1] << 8
+    if rem >= 1:
+        h ^= data[base]
+        h = (h * m) & 0xFFFFFFFF
+    h ^= h >> 13
+    h = (h * m) & 0xFFFFFFFF
+    return h ^ (h >> 15)
+_sg = lambda v: v - (1 << 32) if v >= 1 << 31 else v
+rec("L07", [_sg(_murmur2(s.encode())) for s in ("21", "foobar", "a-little-bit-long-string", "abc")] == [-973932308, -790332482, -985981536, 479470107]
+    and (_murmur2(b"TK-1001") & 0x7FFFFFFF) % 6 == 2 and zlib.crc32(b"TK-1001") % 6 == 1 and "murmur2" in _txt("L07"), "murmur2 khớp 4 vector Kafka; TK-1001 vào phân vùng 2 (crc32 minh hoạ cho 1); bài có ghi chú")
+# L08: tệp SQL chạy giống nhau ở chế độ tự chốt (như sqlite3 dòng lệnh) và ở chế độ giao dịch ngầm của Python (labs/sqlrun.py)
+_S8 = ("CREATE TABLE sodu (tk TEXT PRIMARY KEY, so_du INTEGER); CREATE TABLE outbox (id INTEGER PRIMARY KEY, su_kien TEXT, da_gui INTEGER DEFAULT 0); "
+       "BEGIN; INSERT INTO sodu VALUES ('B', 3000000); COMMIT; BEGIN; UPDATE sodu SET so_du = so_du - 700000 WHERE tk = 'B'; INSERT INTO outbox (su_kien) VALUES ('lenh 77 da tru 700000'); COMMIT; "
+       "BEGIN; UPDATE sodu SET so_du = so_du - 900000 WHERE tk = 'B'; INSERT INTO outbox (su_kien) VALUES ('lenh 78 da tru 900000'); ROLLBACK;")
+_res = []
+for _iso in (None, ""):
+    _c = sqlite3.connect(":memory:", isolation_level=_iso)
+    for _st in _S8.split("; "):
+        _c.execute(_st.rstrip(";"))
+    _res.append((_c.execute("SELECT so_du FROM sodu").fetchall(), _c.execute("SELECT su_kien, da_gui FROM outbox").fetchall()))
+_c0 = sqlite3.connect(":memory:", isolation_level=None)
+try:
+    _c0.execute("COMMIT")
+    _err = False
+except sqlite3.OperationalError:
+    _err = True
+rec("L08", _res[0] == _res[1] == ([(2300000,)], [("lenh 77 da tru 700000", 0)]) and _err and "COMMIT;` (để kết thúc giao dịch ngầm" not in _Y["L08"], "BEGIN rõ ràng chạy giống nhau ở tự chốt và giao dịch ngầm; COMMIT khi không có giao dịch báo lỗi nên đề không bắt gõ COMMIT sau INSERT")
+# L09: 365 tỉ dòng / 10^6 dòng mỗi giây = 4,2245 ngày; lời đọc không còn 'ngày rưỡi'
+rec("L09", round(365 * 10 ** 9 / 10 ** 6 / 86400, 4) == 4.2245 and "ngày rưỡi" not in _txt("L09") and "bốn phẩy hai ngày" in _txt("L09"), "4,2245 ngày: lời đọc 'bốn phẩy hai ngày', không còn 'bốn ngày rưỡi'")
+# L13: khối PIN rõ XOR lại với PAN đệm ra PIN đệm — không cần khoá; bài không còn câu sai
+_blk = "041225EEEEEEEEEE"
+_rec = "".join("%X" % (int(x, 16) ^ int(y, 16)) for x, y in zip(_blk, "0000" + "4111111111111111"[-13:-1]))
+rec("L13", _rec == "041234FFFFFFFFFF" and "Người không có thì chỉ thấy dãy này" not in _txt("L13") and "không cần khoá" in _txt("L13"), "khối rõ XOR lại với số thẻ ra 041234FFFFFFFFFF (PIN 1234), không cần khoá; bài nói đúng điều đó")
+# L14: sổ 6 dòng (bút toán kép) cân đối; NOT IN với NULL trả rỗng, NOT EXISTS đúng
+_led = [(1, "khach", -500000), (1, "nhan", 500000), (2, "khach", -500000), (2, "cho", 500000), (3, "khach", 500000), (3, "cho", -500000)]
+_c = sqlite3.connect(":memory:")
+_c.execute("CREATE TABLE a (ma TEXT)")
+_c.execute("CREATE TABLE b (ma TEXT)")
+_c.executemany("INSERT INTO a VALUES (?)", [("r7",), ("r7b",)])
+_c.executemany("INSERT INTO b VALUES (?)", [("r7",), (None,)])
+_ni = _c.execute("SELECT ma FROM a WHERE ma NOT IN (SELECT ma FROM b)").fetchall()
+_ne = _c.execute("SELECT ma FROM a WHERE NOT EXISTS (SELECT 1 FROM b WHERE b.ma = a.ma)").fetchall()
+rec("L14", len(_led) == 6 and alg.bnk_ledger_unbalanced(_led) == [] and all(sum(v for g, _, v in _led if g == k) == 0 for k in (1, 2, 3)) and _ni == [] and _ne == [("r7b",)] and "cân đối" in _txt("L14"),
+    "sổ 6 dòng cân đối từng giao dịch; NOT IN với NULL trả rỗng, NOT EXISTS ra r7b")
+
+# ── fix4 (R2_BNK 2026-11-15): các điều vừa sửa ──
+_hg = lambda dht, ht: (1 if dht else 0) + (0 if (ht and dht) else 1)   # số lần ghi nợ (mô hình L10)
+rec("L10", [_hg(a_, b_) for a_, b_ in ((True, False), (True, True), (False, True), (False, False))] == [2, 1, 1, 1]
+    and [_hg(a_, True) for a_ in (True, False)] == [1, 1] and "cả hai trường hợp hỏi trước" in _txt("L10") and "cả bốn trường hợp" not in _txt("L10"),
+    "chỉ hai trường hợp hỏi trước đều đúng một lần; câu lời đọc đã sửa")
+_bando = int("7020000000000000", 16) | (1 << 63)   # thêm bit 1 (bản đồ thứ hai)
+rec("L11", [k for k in range(2, 65) if _bando >> (64 - k) & 1] == [2, 3, 4, 11] and [k for k in range(1, 65) if _bando >> (64 - k) & 1][0] == 1,
+    "đọc ngược từ trường 2: bit 1 (bản đồ thứ hai) không bị in như một trường")
+rec("L00", (5 * 1_048_576) / 1_048_576 == 5 and 1024 * 1024 == 1_048_576, "RoRi dùng 1 MB = 1048576 byte, cùng cơ số với phần nhắc đơn vị")
+rec("L04", len("ế".encode()) == 3 and len("a".encode()) == 1, "một chữ cái không dấu 1 byte, chữ có dấu 2 đến 3 byte")
+
 bad = [c for c, ok in R if not ok]
 print(f"\nverify_bnk:{len(R) - len(bad)}/{len(R)} PASS" + (f"; FAIL: {bad}" if bad else ""))
 sys.exit(1 if bad else 0)

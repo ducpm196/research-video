@@ -16,4 +16,8 @@ Nguyen tu: 1000000
 
 (Dòng đầu in `thuong < 1000000` — giá trị thật của `thuong` thay đổi mỗi lần chạy, nên bài chỉ in kết quả so sánh.)
 
+Dòng `import` cần dùng: `java.util.concurrent.atomic.AtomicInteger`.
+
+Tranh chấp là chuyện xác suất: nếu một lần chạy hiếm hoi in `false` ở dòng đầu, hãy chạy lại bằng một lệnh `java` mới.
+
 Chạy: `javac DemSaiDung.java && java DemSaiDung`. Chấm: `bash labs/cham.sh JV2 L05 DemSaiDung.java`.

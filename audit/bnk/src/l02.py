@@ -13,7 +13,8 @@ public class ProxyGiaoDich {
     }
     public static void main(String[] args) {
         Dich that = new DichThat();
-        Dich proxy = (Dich) Proxy.newProxyInstance(Dich.class.getClassLoader(), new Class<?>[] { Dich.class },
+        Dich proxy = (Dich) Proxy.newProxyInstance(
+            Dich.class.getClassLoader(), new Class<?>[] { Dich.class },
             (p, m, a) -> {
                 moGiaoDich++;                       // proxy mở giao dịch trước khi vào hàm thật
                 System.out.println("proxy mo giao dich cho " + m.getName());
@@ -38,7 +39,8 @@ public class ChuyenKhoanProxy {
     }
     public static void main(String[] args) {
         Dich that = new DichThat();
-        Dich proxy = (Dich) Proxy.newProxyInstance(Dich.class.getClassLoader(), new Class<?>[] { Dich.class },
+        Dich proxy = (Dich) Proxy.newProxyInstance(
+            Dich.class.getClassLoader(), new Class<?>[] { Dich.class },
             (p, m, a) -> {
                 moGiaoDich++;
                 return m.invoke(that, a);
@@ -64,16 +66,15 @@ so giao dich: 2""")
 sau tinhPhi: 2
 sau thongBao: 3""")
     hook = sc("hook", "hook", "Vì sao dòng ghi vết vẫn mất dù đã gắn nhãn giao dịch?", [
-        st("""<p>Một lệnh chuyển tiền thất bại giữa chừng. Lập trình viên gắn <code>@Transactional</code> lên hàm chuyển tiền, và nhãn giao dịch <b>luôn mở giao dịch mới</b> lên hàm ghi vết, vậy mà dòng ghi vết <b>không còn</b> trong bảng.</p>
-<div class="box key">Hôm nay ta trả lời: Spring <b>tạo và nối</b> các đối tượng thế nào, <b>proxy</b> là gì, và vì sao nhãn giao dịch đôi khi <b>không có tác dụng</b>.</div>""",
-           """Chào bạn, một lệnh chuyển tiền thất bại giữa chừng. Lập trình viên đã gắn nhãn giao dịch lên hàm chuyển tiền, và nhãn luôn mở giao dịch mới lên hàm ghi vết,
-           vậy mà dòng ghi vết không còn trong bảng.
-           Hôm nay ta trả lời ba câu. Spring tạo và nối các đối tượng thế nào, proxy là gì, và vì sao nhãn giao dịch đôi khi không có tác dụng."""),
+        st("""<p>Một lệnh chuyển tiền thất bại giữa chừng. Lập trình viên gắn <code>@Transactional</code> lên hàm chuyển tiền. Hàm ghi vết (hàm ghi một dòng nhật ký về lệnh) mang một nhãn riêng, dặn <b>luôn mở giao dịch mới</b>. Vậy mà dòng ghi vết <b>không còn</b> trong bảng.</p>
+<div class="box key">Hôm nay ta trả lời: Spring (bộ khung dựng dịch vụ Java) <b>tạo và nối</b> các đối tượng thế nào, <b>proxy</b> (lớp vỏ bọc một đối tượng) là gì, và vì sao nhãn giao dịch đôi khi <b>không có tác dụng</b>.</div>""",
+           """Một lệnh chuyển tiền thất bại giữa chừng. Lập trình viên đã gắn nhãn giao dịch lên hàm chuyển tiền. Hàm ghi vết, tức hàm ghi một dòng nhật ký về lệnh này, mang một nhãn riêng, dặn luôn mở giao dịch mới.
+           Vậy mà dòng ghi vết không còn trong bảng.
+           Hôm nay ta trả lời ba câu. Spring, bộ khung dựng dịch vụ Java, tạo và nối các đối tượng thế nào, proxy, tức lớp vỏ bọc một đối tượng, là gì, và vì sao nhãn giao dịch đôi khi không có tác dụng."""),
         st(table(["cách gọi hàm ghi vết (nhãn luôn mở giao dịch mới)", "giao dịch đã mở", "dòng ghi vết sau khi chuyển tiền hỏng"],
                  [["gọi thẳng trong cùng lớp", "1", "mất"],
-                  ["gọi qua một bean khác (qua proxy)", "2", "còn"]]),
-           """Bảng này là kết quả mô phỏng ở cuối bài, khi hàm ghi vết mang nhãn luôn mở giao dịch mới. Nếu hàm ghi vết được gọi thẳng trong cùng lớp, chỉ có một giao dịch được mở và dòng ghi vết mất theo.
-           Nếu gọi qua một bean khác, tức là qua proxy, có hai giao dịch và dòng ghi vết còn lại."""),
+                  ["gọi qua một đối tượng khác (qua proxy)", "2", "còn"]]),
+           """Bảng này tóm tắt cảnh ví dụ, còn số giao dịch được chạy thật ở cuối bài. Gọi thẳng trong cùng lớp thì chỉ một giao dịch được mở và dòng ghi vết mất. Gọi qua proxy thì có hai giao dịch và dòng ghi vết còn lại."""),
     ])
     pre = sc("prereq", "prereq", "Trước hết: bốn điều cần hiểu", [
         st(table(["khái niệm", "nghĩa", "ví dụ"],
@@ -81,18 +82,18 @@ sau thongBao: 3""")
                   ["② Một hàm gọi hàm khác", "phương thức A có thể gọi phương thức B của chính đối tượng đó hoặc của đối tượng khác", "chuyenTien gọi ghiVet"],
                   ["③ Giao dịch", "một nhóm thao tác ghi vào cơ sở dữ liệu (phần mềm lưu dữ liệu lâu dài thành các bảng, mỗi bảng nhiều dòng): hoặc cùng thành công, hoặc cùng huỷ", "trừ tiền và cộng tiền cùng lúc"]]),
            """Trước hết ta cần hiểu bốn điều. Lớp là cái khuôn, đối tượng là bản làm ra từ khuôn, và một hàm viết trong lớp gọi là phương thức.
-           Một phương thức có thể gọi phương thức khác của chính đối tượng đó, hoặc của đối tượng khác, ví dụ chuyển tiền gọi ghi vết.
+           Một phương thức có thể gọi phương thức khác của chính đối tượng đó, hoặc của đối tượng khác.
            Cơ sở dữ liệu là phần mềm lưu dữ liệu lâu dài thành các bảng, mỗi bảng gồm nhiều dòng.
-           Giao dịch là nhóm thao tác ghi vào cơ sở dữ liệu mà hoặc cùng thành công, hoặc cùng bị huỷ, ví dụ trừ tiền và cộng tiền."""),
+           Giao dịch là nhóm thao tác ghi vào cơ sở dữ liệu mà hoặc cùng thành công, hoặc cùng bị huỷ."""),
         st(table(["khái niệm", "nghĩa", "ví dụ"],
                  [["④ Ngoại lệ (exception)", "đối tượng báo lỗi được “ném” ra; phương thức dừng ngay, lỗi bay ngược lên người gọi tới khi có chỗ bắt (<code>try … catch</code>)", "<code>throw new RuntimeException(\"hết tiền\")</code>"],
                   ["loại không bắt buộc xử lý", "<code>RuntimeException</code> và các lớp con: Java không bắt phải khai báo hay bắt", "chia cho 0, số dư âm"],
                   ["loại bắt buộc xử lý (checked)", "Java buộc người viết phải bắt hoặc khai báo <code>throws</code>", "<code>IOException</code> khi đọc tệp"]]),
            """Điều thứ tư là ngoại lệ. Ngoại lệ là một đối tượng báo lỗi được ném ra. Phương thức đang chạy dừng ngay, và lỗi bay ngược lên người gọi, cho tới khi có chỗ bắt nó.
-           Java chia ngoại lệ làm hai loại. Loại thời gian chạy thì Java không bắt buộc phải khai báo hay bắt, ví dụ lỗi số dư âm do ta tự ném.
+            Loại thời gian chạy thì Java không bắt buộc phải khai báo hay bắt, ví dụ lỗi số dư âm do ta tự ném.
            Loại bắt buộc xử lý thì người viết phải bắt hoặc khai báo, ví dụ lỗi khi đọc tệp.""", clear=True),
         st("""$$-500\\,000 + 500\\,000 = 0$$""",
-           """Một ví dụ số cho giao dịch. Trừ năm trăm nghìn ở một tài khoản và cộng năm trăm nghìn ở tài khoản kia, tổng bằng không. Nếu chỉ làm một nửa, sổ sách lệch."""),
+           """Một ví dụ số cho giao dịch. Trừ năm trăm nghìn ở một tài khoản và cộng năm trăm nghìn ở tài khoản kia, tổng bằng không. """),
     ], checks=["-500000 + 500000 == 0"])
     sym = sc("sym", "symbol", "Giải mã vài từ trong Spring", [
         st(table(["từ", "nghĩa"],
@@ -100,7 +101,7 @@ sau thongBao: 3""")
                   ["nhãn (annotation)", "dòng bắt đầu bằng <code>@</code> đặt trên phương thức hay lớp, mang lời dặn cho công cụ khác đọc, ví dụ <code>@Transactional</code>"],
                   ["từ khoá <code>this</code>", "tham chiếu tới chính đối tượng đang chạy phương thức; <code>this.ghiVet()</code> là tự gọi mình"],
                   ["commit / rollback", "chốt lưu vĩnh viễn mọi thay đổi của giao dịch / huỷ mọi thay đổi đó"]]),
-           """Bảng này giải mã bốn từ đầu. Spring là bộ khung viết dịch vụ Java, lo tạo đối tượng, nối chúng với nhau và mở giao dịch. Spring Boot là cách đóng gói và chạy nhanh bộ khung đó.
+           """Bảng này giải mã bốn từ đầu. Spring là bộ khung viết dịch vụ Java, lo tạo đối tượng, nối chúng với nhau và mở giao dịch. 
            Nhãn là dòng bắt đầu bằng ký hiệu a còng đặt trên phương thức hay lớp, mang lời dặn cho công cụ khác đọc, ví dụ nhãn giao dịch.
            Từ khoá tự chỉ là tham chiếu tới chính đối tượng đang chạy, nên gọi qua từ khoá này là đối tượng tự gọi mình. Chốt là lưu vĩnh viễn mọi thay đổi của giao dịch, còn hoàn tác là huỷ mọi thay đổi đó."""),
         st(table(["từ", "nghĩa"],
@@ -109,9 +110,17 @@ sau thongBao: 3""")
                   ["tiêm phụ thuộc", "Spring nối các bean với nhau, thường qua hàm tạo (phương thức chạy lúc tạo đối tượng)"],
                   ["proxy", "một đối tượng vỏ bọc bean, chạy thêm việc trước và sau khi gọi phương thức"],
                   ["REQUIRED / REQUIRES_NEW", "tham gia giao dịch đang có / luôn mở giao dịch mới"]]),
-           """Bảng thứ hai giải thích nghĩa của năm thuật ngữ tiếp theo. Bean là đối tượng do Spring tạo và quản lý. Đảo điều khiển nghĩa là bạn không tự tạo đối tượng, Spring tạo rồi trao cho bạn.
+           """Bảng thứ hai giải thích năm thuật ngữ nữa. Bean là đối tượng do Spring tạo và quản lý. Đảo điều khiển nghĩa là bạn không tự tạo đối tượng, Spring tạo rồi trao cho bạn.
            Tiêm phụ thuộc là Spring nối các bean với nhau, thường qua hàm tạo, tức phương thức chạy lúc tạo đối tượng. Proxy là đối tượng vỏ bọc bean, chạy thêm việc trước và sau lời gọi.
            Cuối cùng, chế độ tham gia nghĩa là dùng giao dịch đang có, còn chế độ mới nghĩa là luôn mở giao dịch mới.""", clear=True),
+        st(table(["viết", "nghĩa"],
+                 [["<code>interface Dich { void chuyenTien(); … }</code>", "giao diện: danh sách tên hàm mà một lớp hứa có; <code>class DichThat implements Dich</code> là lớp hứa đó và viết thân cho từng hàm"],
+                  ["<code>Dich.class.getClassLoader()</code>", "người nạp lớp: phần đưa mã của một lớp vào máy ảo; ta chỉ mượn người nạp của giao diện <code>Dich</code>"],
+                  ["<code>new Class&lt;?&gt;[] { Dich.class }</code>", "mảng liệt kê những giao diện mà proxy phải giả làm; ở đây chỉ một"],
+                  ["<code>(p, m, a) -&gt; { … }</code>", "đoạn xử lý mỗi lời gọi tới proxy: p là proxy, m là hàm được gọi, a là các đối số; <code>m.invoke(that, a)</code> gọi hàm m trên đối tượng thật"]]),
+           """ Giao diện là danh sách tên hàm mà một lớp hứa có, và lớp cài đặt giao diện thì phải viết thân cho từng hàm.
+           Lời tạo proxy cần ba thứ. Một là người nạp lớp, phần đưa mã của một lớp vào máy ảo, ta chỉ mượn người nạp của giao diện. Hai là mảng liệt kê những giao diện proxy phải giả làm.
+           Ba là đoạn xử lý mỗi lời gọi tới proxy, với ba tham số là chính proxy, hàm được gọi và các đối số, và lệnh gọi hàm thật trên đối tượng thật.""", clear=True),
     ])
     intu = sc("intuition", "intuition", "Hình dung: vỏ bọc proxy đứng giữa", [
         st(svg(1500, 380,
@@ -121,7 +130,7 @@ sau thongBao: 3""")
                box(1020, 130, 360, 100, ["TransferService", "bean thật"], C_GREEN),
                arrow(400, 180, 555, 180, "#2a78d6", "gọi"), arrow(860, 180, 1015, 180, "#9333ea", "chuyển tiếp"),
                txt(700, 300, "Controller không giữ bean thật mà giữ proxy", 26, "middle", "#1f2937", True)),
-           """Hình cho thấy cách Spring nối các bean. Controller, tức lớp nhận yêu cầu từ bên ngoài, muốn gọi dịch vụ chuyển tiền. Nhưng thứ nó nhận được không phải bean thật, mà là một proxy vỏ bọc.
+           """ Controller, tức lớp nhận yêu cầu từ bên ngoài, muốn gọi dịch vụ chuyển tiền. Nhưng thứ nó nhận được không phải bean thật, mà là một proxy vỏ bọc.
            Proxy đứng giữa, rồi mới chuyển lời gọi tới bean thật."""),
         st(svg(1500, 400,
                box(60, 150, 240, 90, "Proxy", C_PURPLE, bold=True),
@@ -156,7 +165,7 @@ sau thongBao: 3""")
            Làm thử, qua proxy thì một cộng một bằng hai giao dịch, còn gọi thẳng vẫn chỉ một giao dịch."""),
         st("""<p><b>Bước 3.</b> Giao dịch mới commit riêng, nên khi giao dịch ngoài hỏng, dòng ghi vết vẫn còn. Giao dịch dùng chung thì mất theo.</p>
 <p class="small">Mặc định Spring chỉ rollback khi <code>RuntimeException</code> hoặc <code>Error</code> (lỗi nghiêm trọng của máy ảo, như hết bộ nhớ) bay ra khỏi phương thức; ngoại lệ bắt buộc xử lý thì vẫn commit, trừ khi khai báo <code>rollbackFor</code>.</p>""",
-           """Bước ba, vì giao dịch mới commit riêng, nên khi giao dịch ngoài hỏng, dòng ghi vết vẫn còn. Còn giao dịch dùng chung thì mất theo.
+           """Bước ba, vì giao dịch mới commit riêng, nên khi giao dịch ngoài hỏng, dòng ghi vết vẫn còn. 
            Mặc định Spring chỉ rollback khi một ngoại lệ thời gian chạy, hoặc một lỗi nghiêm trọng của máy ảo như hết bộ nhớ, bay ra khỏi phương thức.
            Ngoại lệ loại bắt buộc xử lý thì mặc định vẫn commit, trừ khi ta khai báo thêm trong nhãn."""),
     ], checks=["alg.bnk_spring_sim(True, 'REQUIRES_NEW', True)[0] == 1 + 1", "alg.bnk_spring_sim(False, 'REQUIRES_NEW', True)[0] == 1",
@@ -164,7 +173,7 @@ sau thongBao: 3""")
     ex = sc("example", "example", "Ví dụ bằng số, từng trường hợp", [
         st("""<p>Chuyển $500\\,000$ đồng, giao dịch ngoài hỏng. <b>Trường hợp A:</b> ghi vết gọi thẳng bằng <code>this</code>.</p>
 $$① \\; \\text{giao dịch đã mở} = \\hl{1}$$""",
-           """Ta chạy ba trường hợp. Trường hợp A, chuyển năm trăm nghìn đồng, giao dịch ngoài hỏng, ghi vết gọi thẳng bằng this. Phép tính thứ nhất, số giao dịch đã mở là một."""),
+           """Trường hợp A, chuyển năm trăm nghìn đồng, giao dịch ngoài hỏng, ghi vết gọi thẳng bằng this. Phép tính thứ nhất, số giao dịch đã mở là một."""),
         st("""<p>Giao dịch ngoài hỏng nên rollback cả hai dòng.</p>
 $$② \\; \\text{dòng còn lại} = \\hl{0}$$""",
            """Phép tính thứ hai, giao dịch ngoài hỏng nên rollback cả dòng chuyển tiền lẫn dòng ghi vết. Số dòng còn lại là không."""),
@@ -187,7 +196,7 @@ $$\\text{giao dịch} = 1 + \\text{số lần qua proxy với chế độ mới}
         st(table(["trường hợp", "lần qua proxy với chế độ mới", "giao dịch = 1 + lần", "khớp mô phỏng"],
                  [["A: gọi thẳng", "0", "1", "có"], ["B: qua bean khác", "1", "2", "có"], ["REQUIRED qua proxy", "0", "1", "có"]]),
            """Bảng này so sánh. Gọi thẳng thì không có lần nào qua proxy, nên một giao dịch. Qua bean khác với chế độ mới là một lần, nên hai giao dịch.
-           Chế độ dùng chung qua proxy cũng không mở thêm, nên một giao dịch. Cả ba khớp mô phỏng."""),
+           Chế độ dùng chung qua proxy cũng không mở thêm, nên một giao dịch. """),
     ], checks=["alg.bnk_spring_sim(True, 'REQUIRED', True)[0] == 1 + 0",
                "all(alg.bnk_spring_sim(v, m, False)[0] == 1 + (1 if (v and m == 'REQUIRES_NEW') else 0) for v in (True, False) for m in ('REQUIRED', 'REQUIRES_NEW'))"])
     pit = sc("pitfalls", "pitfall", "Lỗi hay gặp, có lỗi của người đã đi làm", [
@@ -225,38 +234,48 @@ $$\\text{số dòng} = \\hl{0}$$""",
            """Tổng kết chuỗi logic. Spring tạo bean, trao proxy cho người gọi. Proxy đọc nhãn rồi mở và đóng giao dịch."""),
         st("""<div class='box key'><b>Tư duy:</b> nhãn chỉ có tác dụng khi lời gọi <b>đi qua proxy</b>.
 Khi giao dịch “không chạy”, hãy hỏi trước tiên: lời gọi này có đi qua proxy không?</div>""",
-           """Điều cần mang theo. Nhãn chỉ có tác dụng khi lời gọi đi qua proxy. Khi giao dịch không chạy, hãy hỏi trước tiên, lời gọi này có đi qua proxy không."""),
+           """Nhãn chỉ có tác dụng khi lời gọi đi qua proxy. Khi giao dịch không chạy, hãy hỏi trước tiên, lời gọi này có đi qua proxy không."""),
     ])
     # ── AF2: mã chạy thật (mô phỏng proxy bằng java.lang.reflect.Proxy), quy mô, tự làm ──
     run = sc("chay_that", "example", "Chạy thật: tự dựng một proxy đếm giao dịch", [
-        st(code_block(pgd, lines=(3, 8), title="Tệp ProxyGiaoDich.java (phần 1): giao diện và lớp thật"),
-           """Ta mô phỏng cơ chế proxy bằng thư viện chuẩn của Java, vì Spring thật dùng đúng cơ chế này. Giao diện là danh sách tên hàm mà lớp hứa có, ở đây là hai hàm chuyển tiền và ghi vết.
+        *jsteps([("sig", "<code>public void chuyenTien()</code>: hàm <code>chuyenTien</code>, nơi khác gọi được, không trả gì, không tham số",
+                "hàm chuyển tiền, không trả gì và không có tham số."),
+               ("cast", "<code>(Dich) Proxy.newProxyInstance(…)</code>: coi proxy vừa tạo là kiểu <code>Dich</code>",
+                "ép proxy vừa tạo thành kiểu giao diện.")]),
+        st(code_block(pgd, lines=(1, 8), title="Tệp ProxyGiaoDich.java (phần 1): giao diện và lớp thật") + '<p class="note">Spring thật dùng cùng ý tưởng: proxy chuẩn của Java (theo giao diện) hoặc lớp con CGLIB; Spring Boot mặc định chọn lớp con.</p>',
+           """Ta mô phỏng cơ chế proxy bằng thư viện chuẩn của Java. Spring thật dùng cùng ý tưởng, bằng proxy chuẩn của Java hoặc một lớp con sinh ra lúc chạy, và Spring Boot mặc định chọn lớp con. Dòng nhập lấy các lớp phản chiếu của Java, thứ cho phép tạo proxy lúc chạy. Giao diện liệt kê hai hàm chuyển tiền và ghi vết.
            Lớp thật cài đặt hai hàm đó. Hàm chuyển tiền gọi hàm ghi vết bằng cách gọi thẳng chính nó."""),
-        st(code_block(pgd, lines=(10, 17), title="Phần 2: proxy đứng giữa, tạo ngay lúc chạy"),
-           """Proxy được tạo ngay lúc chạy, và nó đứng giữa người gọi với đối tượng thật. Đoạn có mũi tên là việc proxy làm mỗi khi có ai gọi một hàm của nó.
-           Việc đó tăng biến đếm, tức là mở một giao dịch, in tên hàm được gọi, rồi mới gọi hàm thật.""", clear=True),
-        st(code_block(pgd, lines=(18, 21), title="Phần 3: gọi qua proxy, đếm giao dịch"),
+        *jsteps([("incr", "<code>moGiaoDich++;</code>: đếm thêm một giao dịch", None),
+               ("ret", "<code>return m.invoke(that, a);</code>: gọi hàm thật, trả kết quả của nó", None),
+               ("cmt", "<code>// proxy mở giao dịch trước khi vào hàm thật</code>", None),
+               ("concat", "<code>\"proxy mo giao dich cho \" + m.getName()</code>", None)]),
+        st(code_block(pgd, lines=(9, 17), title="Phần 2: hàm chính, proxy đứng giữa, tạo ngay lúc chạy"),
+           """Hàm chính tạo đối tượng thật, rồi tạo proxy đứng giữa người gọi với đối tượng đó. Đoạn có mũi tên chạy mỗi khi có ai gọi một hàm của proxy.
+           Nó tăng biến đếm, tức là mở một giao dịch, in tên hàm được gọi, rồi mới gọi hàm đó trên đối tượng thật.""", clear=True),
+        st(code_block(pgd, lines=(18, 23), title="Phần 3: gọi qua proxy, đếm giao dịch"),
            """Ta gọi hàm chuyển tiền qua proxy và in số giao dịch. Rồi ta gọi hàm ghi vết cũng qua proxy, và in lại số giao dịch.""", clear=True),
         st(out_block(pgd),
            """Khi chạy thật, gọi chuyển tiền qua proxy thì proxy mở một giao dịch, rồi hàm thật chạy và tự gọi ghi vết. Lời gọi bên trong đi thẳng, không qua proxy, nên không mở thêm, số giao dịch vẫn là một.
-           Khi ta gọi ghi vết qua proxy, giao dịch thứ hai mới được mở. Đây chính là lỗi gọi trong cùng lớp làm mất nhãn giao dịch.""", clear=True),
+           Khi ta gọi ghi vết qua proxy, giao dịch thứ hai mới được mở. """, clear=True),
     ])
     scale = sc("quy_mo", "example", "Quy mô: giao dịch lồng nhau làm cạn kết nối khi tải tăng", [
         st("""<p>Mỗi giao dịch giữ một <b>kết nối</b> (đường nối từ dịch vụ tới cơ sở dữ liệu) trong lúc chạy. Giao dịch ngoài giữ một, hàm ghi vết chế độ mới giữ thêm một: tối đa $C = 2$ kết nối cho mỗi yêu cầu.
-Gọi $T$ là số yêu cầu chạy cùng lúc. Để không bị kẹt, hộp kết nối cần ít nhất $T \\cdot (C - 1) + 1$ kết nối.</p>"""
+Gọi $T$ là số yêu cầu chạy cùng lúc. Để không bị kẹt, hộp kết nối cần ít nhất $T \\cdot (C - 1) + 1$ kết nối. <i>(số minh hoạ)</i></p>
+<p class="note">Hộp kết nối: nhóm kết nối mở sẵn để dịch vụ mượn rồi trả (thư viện phổ biến: HikariCP). Cộng 1 vì khi mọi yêu cầu đã giữ kết nối thứ nhất, chỉ cần dư một kết nối là một yêu cầu xin được kết nối thứ hai, làm xong rồi trả cả hai.</p>"""
            + table(["tải", "yêu cầu cùng lúc T", "kết nối tối thiểu", "hộp mặc định 10 kết nối"],
                    [["×1", "5", "5 × 1 + 1 = 6", "đủ"],
-                    ["×100", "500", "500 × 1 + 1 = 501", "<b>thiếu</b>: kẹt"],
-                    ["×10 000", "50 000", "50 000 × 1 + 1 = 50 001", "<b>thiếu</b>, và vượt giới hạn của cơ sở dữ liệu"]]),
+                    ["×100", "500", "500 × 1 + 1 = 501", "<b>thiếu</b>: có thể kẹt"],
+                    ["×10 000", "50 000", "50 000 × 1 + 1 = 50 001", "<b>thiếu</b>, vượt xa giới hạn thường gặp của cơ sở dữ liệu (ví dụ PostgreSQL mặc định 100)"]]),
            """Mỗi giao dịch giữ một kết nối tới cơ sở dữ liệu trong lúc chạy. Giao dịch ngoài giữ một, hàm ghi vết với chế độ mới giữ thêm một, nên mỗi yêu cầu tối đa hai kết nối.
-           Để không bị kẹt, hộp kết nối cần ít nhất số yêu cầu cùng lúc nhân với một, cộng một. Với năm yêu cầu cùng lúc thì cần sáu, hộp mười kết nối là đủ.
-           Tải tăng một trăm lần, năm trăm yêu cầu cùng lúc cần năm trăm linh một kết nối, hộp mười kết nối bị kẹt. Tải tăng mười nghìn lần cần hơn năm mươi nghìn, vượt cả giới hạn của cơ sở dữ liệu.""", clear=True),
+           Hộp kết nối là nhóm kết nối mở sẵn để dịch vụ mượn rồi trả. Để không bị kẹt, hộp cần ít nhất số yêu cầu cùng lúc nhân với một, cộng một. Cộng một vì chỉ cần dư một kết nối là một yêu cầu xin được kết nối thứ hai, làm xong rồi trả cả hai.
+           Với năm yêu cầu cùng lúc thì cần sáu, hộp mười kết nối là đủ.
+           Tải tăng một trăm lần, năm trăm yêu cầu cùng lúc cần năm trăm linh một kết nối, hộp mười kết nối thiếu, có thể bị kẹt. Tải tăng mười nghìn lần cần hơn năm mươi nghìn, vượt xa giới hạn thường gặp của cơ sở dữ liệu, ví dụ một trăm kết nối.""", clear=True),
         st("""<div class="box warn"><b>Vì sao kẹt.</b> Mười yêu cầu cùng giữ kết nối thứ nhất, rồi cả mười cùng xin kết nối thứ hai: hộp hết, không yêu cầu nào tiến được, tới khi quá thời gian chờ (mặc định HikariCP là 30 giây).
 <b>Giải pháp cũ gãy:</b> tăng hộp kết nối lên 501 hay 50 001 tốn bộ nhớ và làm cơ sở dữ liệu quá tải.</div>
 <div class="box key"><b>Đánh đổi:</b> không lồng chế độ mới ở đường nóng; ghi vết bằng cách khác (ghi sau, hàng đợi); hoặc giới hạn số yêu cầu cùng lúc nhỏ hơn hộp. Mỗi cách đổi lấy một chút chậm trễ hay phức tạp.</div>""",
-           """Hãy xem vì sao các yêu cầu bị kẹt chờ nhau. Mười yêu cầu cùng giữ kết nối thứ nhất, rồi cả mười cùng xin kết nối thứ hai, nhưng hộp đã hết, nên không yêu cầu nào tiến được, tới khi quá thời gian chờ. Mặc định của thư viện kết nối phổ biến này là ba mươi giây.
+           """ Mười yêu cầu cùng giữ kết nối thứ nhất, rồi cả mười cùng xin kết nối thứ hai, nhưng hộp đã hết, nên không yêu cầu nào tiến được, tới khi quá thời gian chờ. 
            Giải pháp cũ gãy, vì tăng hộp lên năm trăm hay năm mươi nghìn kết nối tốn bộ nhớ và làm cơ sở dữ liệu quá tải.
-           Đánh đổi là không lồng chế độ mới ở đường chạy nóng, ghi vết bằng cách khác, hoặc giới hạn số yêu cầu cùng lúc nhỏ hơn hộp. Mỗi cách đổi lấy một chút chậm trễ hay phức tạp.""", clear=True),
+           Đánh đổi có ba hướng. Một là không lồng chế độ mới ở đường chạy nóng, tức đoạn mã chạy cho gần như mọi yêu cầu. Hai là ghi vết bằng cách khác, như đặt vào hàng đợi. Ba là giới hạn số yêu cầu cùng lúc nhỏ hơn hộp. Mỗi cách đổi lấy một chút chậm trễ hay phức tạp.""", clear=True),
     ], checks=["5 * (2 - 1) + 1 == 6", "500 * (2 - 1) + 1 == 501", "50000 * (2 - 1) + 1 == 50001", "6 <= 10 < 501"])
     write_lab("BNK", "L02", """# Lab BNK L02 — Đếm giao dịch của ba lời gọi
 
@@ -296,16 +315,16 @@ Trước khi chạy, **dự đoán** ba con số rồi mới chấm. Chạy: `ja
 <li>Gọi qua proxy cả ba hàm, mỗi lần in <code>sau &lt;tên hàm&gt;: &lt;số&gt;</code></li>
 <li><b>Dự đoán</b> ba số trước khi chạy</li></ol>""",
         """Bây giờ tới phần bạn tự làm. Dịch vụ có ba hàm, và hàm chuyển khoản tự gọi hai hàm còn lại bằng cách gọi thẳng chính nó. Hãy chép khung trong thư mục thực hành, điền câu lệnh tăng biến đếm vào proxy,
-        rồi gọi qua proxy cả ba hàm và in số giao dịch sau mỗi lần. Trước khi chạy, hãy dự đoán ba con số. Hãy dừng video, tự làm, đừng chép lại ví dụ.""",
+        rồi gọi qua proxy cả ba hàm và in số giao dịch sau mỗi lần. Trước khi chạy, hãy dự đoán ba con số. Hãy dừng video và tự làm.""",
         lab_proxy["out"], "ChuyenKhoanProxy.java",
         """<div class="box key"><b>Nếu kẹt:</b> chỉ lời gọi <b>qua proxy</b> mới tăng biến đếm. Lời <code>tinhPhi(); thongBao();</code> bên trong <code>chuyenKhoan</code> đi thẳng nên không tăng.
 Khung đầy đủ ở <code>labs/BNK/L02/de.md</code>, lời giải ở <code>labs/BNK/L02/loi_giai.java</code> — chỉ mở sau khi bạn đã thử.</div>""",
         """Nếu kẹt, nhớ rằng chỉ lời gọi qua proxy mới tăng biến đếm. Hai lời gọi bên trong hàm chuyển khoản đi thẳng nên không tăng. Khung đầy đủ nằm trong tệp đề, lời giải nằm trong thư mục thực hành, chỉ mở sau khi bạn đã tự thử.""", pause=120), "BNK", "L02")
     return lesson("L02", "spring_boot_proxy_giao_dich", "Bài 2 — Spring Boot: bean, proxy và giao dịch",
-                  "curriculum/bnk.yaml L02; audit/bnk/verify_bnk.py L02; audit/review/screen_code/BNK.yaml (mã chạy thật bằng JDK 21: java.lang.reflect.Proxy mô phỏng cơ chế proxy, Spring thật dùng JDK dynamic proxy hoặc CGLIB); Spring Framework Reference (Transaction Management: “In proxy mode (which is the default), only external method calls coming in through the proxy are intercepted”; rollback mặc định cho RuntimeException và Error; AOP proxies; Proxying Mechanisms); Java Language Specification §11 (checked / unchecked exceptions); HikariCP README (maximumPoolSize mặc định 10, connectionTimeout mặc định 30 000 ms) và wiki About Pool Sizing (pool size = Tn × (Cm − 1) + 1); Spring Boot dùng HikariCP làm hộp kết nối mặc định",
+                  "curriculum/bnk.yaml L02; audit/bnk/verify_bnk.py L02; audit/review/screen_code/BNK.yaml (mã chạy thật bằng JDK 21: java.lang.reflect.Proxy mô phỏng cơ chế proxy, Spring thật dùng JDK dynamic proxy hoặc CGLIB); Spring Framework Reference (Transaction Management: “In proxy mode (which is the default), only external method calls coming in through the proxy are intercepted”; rollback mặc định cho RuntimeException và Error; AOP proxies; Proxying Mechanisms); Java Language Specification §11 (checked / unchecked exceptions); HikariCP README (maximumPoolSize mặc định 10, connectionTimeout mặc định 30 000 ms) và wiki About Pool Sizing (pool size = Tn × (Cm − 1) + 1); Spring Boot dùng HikariCP làm hộp kết nối mặc định; Spring Boot Reference (spring.aop.proxy-target-class mặc định true: proxy CGLIB theo lớp); PostgreSQL Documentation (max_connections mặc định 100)",
                   ["Nêu cách Spring tạo bean và trao proxy cho người gọi", "Dự đoán số giao dịch được mở khi gọi qua proxy hoặc gọi thẳng",
                    "Nhận ra lỗi gọi hàm cùng lớp làm mất nhãn giao dịch", "Chọn nơi đặt hàm ghi vết để luôn lưu được",
                    "Tính số kết nối cơ sở dữ liệu tối thiểu khi giao dịch lồng nhau và tải tăng ×100, ×10 000",
                    "Viết phần đếm giao dịch của một proxy và dự đoán số đếm qua ba lời gọi"],
                   [hook, pre, sym, intu, form, ex, run, chk, pit, quiz, scale, lab, rec],
-                  covers=[(1, "intuition"), (2, "chay_that"), (3, "pitfalls"), (4, "example"), (5, "quy_mo"), (6, "practice")])
+                  covers=[(1, "intuition"), (2, "chay_that"), (3, "pitfalls"), (4, "example"), (5, "quy_mo"), (6, "practice")], intro={('hook', 0): ['bnk_ghi_vet'], ('quy_mo', 0): ['bnk_hop_ket_noi']}, assumes=['bnk_may_ao'])

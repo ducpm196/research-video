@@ -35,11 +35,15 @@ def build():
         (f'PATH="{HOME_}/tien_ich:$PATH"', ""), ("echo $PATH | tr ':' '\\n'", f"{HOME_}/tien_ich\n/usr/bin\n/bin"), ("chao", "ban tien ich"),
         (f'PATH="{HOME_}/hai:$PATH"', ""), ("chao", "ban hai"), ("command -v chao", f"{HOME_}/hai/chao"),
     ], files={"tien_ich/chao": "echo ban tien ich\n", "hai/chao": "echo ban hai\n"})
+    tao = cmd("PhienTaoChao", [
+        ("mkdir tien_ich hai", ""), ("echo 'echo ban tien ich' > tien_ich/chao", ""), ("echo 'echo ban hai' > hai/chao", ""),
+        ("chmod +x tien_ich/chao hai/chao", ""), ("cat tien_ich/chao hai/chao", "echo ban tien ich\necho ban hai"),
+    ])
     ma = cmd("PhienMa", [
-        ("grep -q xin a.txt; echo $?", "0"), ("grep -q xyz a.txt; echo $?", "1"), ("ls khong_co 2> /dev/null; echo $?", "2"),
+        ('echo "xin chao" > a.txt', ""), ("grep -q xin a.txt; echo $?", "0"), ("grep -q xyz a.txt; echo $?", "1"), ("ls khong_co 2> /dev/null; echo $?", "2"),
         ("khong_co_lenh 2> /dev/null; echo $?", "127"),
         ("grep -q xin a.txt && echo co || echo khong", "co"), ("grep -q xyz a.txt && echo co || echo khong", "khong"),
-    ], files={"a.txt": "xin chao\n"})
+    ])
     buoc = cmd("PhienE", [
         ("bash buoc.sh", "ls: cannot access 'khong_co': No such file or directory\nda xong"),
         ("bash buoc_e.sh; echo $?", "ls: cannot access 'khong_co': No such file or directory\n2"),
@@ -56,9 +60,9 @@ def build():
                            ("python --version | cut -d. -f1", "Python 3")])
 
     sc_hook = sc("hook", "hook", "Một tệp, ba cách gõ, hai kết quả: máy tìm lệnh ở đâu?", [
-        st(term_block(hook, title="Tệp chao.sh có thật trong thư mục hiện tại")
+        st(file_block(hook, "chao.sh", title="Tệp chao.sh: một dòng, nằm trong thư mục hiện tại") + term_block(hook, title="Gõ ba cách")
            + "<p>Cùng một tệp, mà gõ <code>chao.sh</code> thì <b>“không tìm thấy lệnh”</b>, còn gõ <code>./chao.sh</code> hay <code>bash chao.sh</code> thì chạy.</p>",
-           """Chào bạn, hãy nhìn một tệp lệnh nhỏ nằm ngay trong thư mục hiện tại. Gõ tên tệp trần trụi thì máy báo không tìm thấy lệnh. Gõ thêm dấu chấm gạch chéo phía trước, hoặc gọi qua chương trình cửa sổ lệnh, thì tệp chạy bình thường.
+           """Chào bạn, hãy nhìn một tệp lệnh nhỏ nằm ngay trong thư mục hiện tại, tệp chỉ có một dòng, lệnh in chữ xin chào. Gõ tên tệp trần trụi thì máy báo không tìm thấy lệnh. Gõ thêm dấu chấm gạch chéo phía trước, hoặc gọi qua chương trình cửa sổ lệnh, thì tệp chạy bình thường.
            Cùng một tệp mà ba cách gõ cho hai kết quả, và nguyên nhân nằm ở cách máy đi tìm lệnh."""),
         st("""<div class="box key">Hôm nay ta trả lời ba câu hỏi:
 <ol><li>Máy <b>tìm</b> một lệnh ở đâu, và <code>PATH</code> là gì?</li>
@@ -72,12 +76,12 @@ def build():
                  [["① lệnh", "tên lệnh + các tham số, ví dụ <code>ls hoc</code>"],
                   ["② chỗ đứng", "lệnh in vị trí cho biết đang ở đâu; <code>./x</code> nghĩa là tệp <code>x</code> <b>ngay tại chỗ đứng</b>"],
                   ["③ tệp văn bản", "dựng bằng <code>echo \"…\" &gt; tep</code>, đọc bằng <code>cat</code>"],
-                  ["④ ống và lỗi", "<code>A | B</code> nối lệnh; <code>2&gt; /dev/null</code> vứt thông báo lỗi"]]),
+                  ["④ ống và lỗi", "<code>A | B</code> nối lệnh; <code>2&gt; /dev/null</code> vứt thông báo lỗi. <b>Mới:</b> <code>2&gt;&amp;1</code> <b>gộp</b> thông báo lỗi vào chữ in thường, để ống <code>|</code> nhận được cả lỗi"]]),
            """Ta ôn lại bốn điều. Lệnh gồm tên lệnh và các tham số. Chấm gạch chéo rồi tên nghĩa là tệp đó nằm ngay tại chỗ đứng. Tệp văn bản dựng bằng lệnh in chữ kèm dấu chuyển hướng.
-           Và ống nối lệnh, còn chữ hai kèm dấu lớn hơn vứt thông báo lỗi vào thùng không đáy.""",
-           focus=[1, "1.2", "1.3", "1.4", "1.5"]),
+           Và ống nối lệnh, còn chữ hai kèm dấu lớn hơn vứt thông báo lỗi vào thùng không đáy. Một điều mới, ký hiệu hai, lớn hơn, và, một, gộp thông báo lỗi vào chữ in thường, để ống nhận được cả lỗi.""",
+           focus=[1, "1.2", "1.3", "1.4", "1.5", "1.5"], introduces=["fnd_stderr"]),
     ])
-    sc_sym = sc("sym", "symbol", "Giải mã: biến, PATH, mã thoát và hai dấu nối lệnh", [
+    sc_sym = sc("sym", "symbol", "Giải mã: biến, PATH, mã thoát và ba dấu nối lệnh", [
         st(table(["viết", "đọc là", "nghĩa"],
                  [["<code>TEN=ban</code>", "gán biến", "tạo <b>biến</b> (ô nhớ có tên) <code>TEN</code> chứa <code>ban</code>; <b>không</b> có khoảng trắng quanh dấu <code>=</code>"],
                   [code("$TEN"), "đọc biến", "dấu <b>đô la</b> lấy giá trị của biến; trong dấu nháy kép vẫn thay, trong dấu nháy đơn thì <b>giữ nguyên chữ</b>"],
@@ -88,12 +92,14 @@ def build():
            focus=[1, "1.2", "1.3", "1.4", "1.5"]),
         st(table(["viết", "đọc là", "nghĩa"],
                  [[code("$?"), "mã thoát", "số của lệnh <b>vừa chạy xong</b>: <code>0</code> = thành công, <b>khác 0</b> = thất bại"],
+                  ["<code>A ; B</code>", "rồi", "đặt hai lệnh trên <b>một dòng</b>: chạy <code>A</code>, xong thì chạy <code>B</code>, <b>dù</b> <code>A</code> thành công hay thất bại"],
                   ["<code>A &amp;&amp; B</code>", "và rồi", "chạy <code>B</code> <b>chỉ khi</b> <code>A</code> thành công (mã 0)"],
                   ["<code>A || B</code>", "hoặc không thì", "chạy <code>B</code> <b>chỉ khi</b> <code>A</code> thất bại (mã khác 0)"],
-                  ["<code>set -e</code>", "dừng khi lỗi", "tệp lệnh <b>dừng ngay</b> khi một lệnh trả mã khác 0"]]),
-           """Bảng thứ hai là mã thoát. Mỗi lệnh chạy xong để lại một con số, gọi là mã thoát, số không là thành công, khác không là thất bại, và dấu đô la hỏi chấm đọc nó. Hai dấu và nối hai lệnh, lệnh sau chỉ chạy khi lệnh trước thành công.
-           Hai gạch đứng thì ngược lại, lệnh sau chỉ chạy khi lệnh trước thất bại. Còn lệnh đặt chế độ dừng khi lỗi làm tệp lệnh dừng ngay khi có một lệnh thất bại.""",
-           focus=[1, "1.2", "1.3", "1.4", "1.5"]),
+                  ["<code>set -e</code>", "dừng khi lỗi", "tệp lệnh <b>dừng ngay</b> khi một lệnh trả mã khác 0; <b>trừ</b> lệnh nằm trong điều kiện <code>if</code>, ở vế trái của <code>&amp;&amp;</code> / <code>||</code>, hoặc không phải lệnh cuối của ống"]]),
+           """Bảng thứ hai là mã thoát. Mỗi lệnh chạy xong để lại một con số, gọi là mã thoát, số không là thành công, khác không là thất bại, và dấu đô la hỏi chấm đọc nó.
+           Dấu chấm phẩy đặt hai lệnh trên một dòng, lệnh sau luôn chạy sau lệnh trước, dù thành công hay thất bại. Hai dấu và nối hai lệnh, nhưng lệnh sau chỉ chạy khi lệnh trước thành công.
+           Hai gạch đứng thì ngược lại, lệnh sau chỉ chạy khi lệnh trước thất bại. Còn lệnh đặt chế độ dừng khi lỗi làm tệp lệnh dừng ngay khi có một lệnh thất bại. Chế độ này có ngoại lệ, nó bỏ qua lệnh thất bại nằm trong một điều kiện, ở vế trái của hai dấu và hoặc hai gạch đứng, hoặc không phải lệnh cuối của một ống.""",
+           focus=[1, "1.2", "1.3", "1.4", "1.5", "1.6", "1.6"]),
     ])
     sc_int = sc("intuition", "intuition", "Hình dung: máy dò thư mục theo thứ tự, và mã thoát điều khiển lệnh sau", [
         st(svg(1500, 400,
@@ -122,9 +128,13 @@ def build():
            Nhờ vậy ta viết được cả nhánh làm tiếp lẫn nhánh xử lý lỗi ngay trên một dòng."""),
     ])
     sc_form = sc("formula", "formula", "Suy ra từng bước: máy chọn tệp nào để chạy", [
+        st(term_block(tao, title="Bước 0. Dựng hai tệp lệnh tên chao, mỗi tệp một thư mục (làm một lần)")
+           + "<p>Mỗi tệp <code>chao</code> chỉ có một dòng <code>echo …</code>. <code>chmod +x</code> bật <b>quyền chạy</b> cho tệp: trên Linux và macOS, không có quyền này tệp chỉ là chữ, máy không chạy nó như một lệnh; Git Bash trên Windows vẫn chạy được tệp chưa bật quyền, nhưng hãy cứ gõ để giữ thói quen đúng. Lệnh <code>cat</code> cuối in lại hai tệp để kiểm.</p>",
+           """Trước khi thử, ta dựng hai thư mục, mỗi thư mục chứa một tệp lệnh tên chao với lệnh in một câu khác nhau. Lệnh đổi quyền thêm cờ x bật quyền chạy cho tệp. Vì trên máy chủ, máy chỉ chạy như một lệnh những tệp có quyền này; cửa sổ lệnh trên máy của bạn thì vẫn chạy được tệp chưa bật, nhưng bạn cứ gõ để giữ thói quen đúng. Lệnh in nội dung cho thấy hai tệp."""),
         st(term_block(path, 0, 3, title="Bước 1. Danh sách chỉ có hai thư mục hệ thống: không thấy chao")
-           + "<p>Vì tên <code>chao</code> không có <code>/</code>, máy dò <b>từng thư mục trong <code>PATH</code></b>; hết danh sách mà không có nên báo lỗi.</p>",
-           """Bước một, đặt đường dẫn tìm lệnh chỉ còn hai thư mục hệ thống. Vì tên chao không có dấu gạch chéo, nên máy dò từng thư mục trong danh sách. Hết danh sách mà không thấy, nên máy báo không tìm thấy lệnh."""),
+           + "<p>Vì tên <code>chao</code> không có <code>/</code>, máy dò <b>từng thư mục trong <code>PATH</code></b>; hết danh sách mà không có nên báo lỗi.</p>"
+           + "<p class='note'><code>tr ':' '\\n'</code> đổi mỗi dấu <code>:</code> thành một lần xuống dòng, để mỗi thư mục của <code>PATH</code> nằm trên một dòng.</p>",
+           """Bước một, đặt đường dẫn tìm lệnh chỉ còn hai thư mục hệ thống. Lệnh đổi chữ ở giữa chỉ thay mỗi dấu hai chấm bằng một lần xuống dòng, để mỗi thư mục nằm trên một dòng. Vì tên chao không có dấu gạch chéo, nên máy dò từng thư mục trong danh sách. Hết danh sách mà không thấy, nên máy báo không tìm thấy lệnh."""),
         st(term_block(path, 3, 6, title="Bước 2. Thêm thư mục của mình vào ĐẦU danh sách")
            + "<p>Nên máy dò <code>tien_ich</code> trước, thấy <code>chao</code> và chạy nó: in <code>ban tien ich</code>.</p>",
            """Bước hai, thêm thư mục của mình vào đầu danh sách. Nên máy dò thư mục của ta trước, thấy tệp chao và chạy nó. Màn hình in ra dòng bạn tiện ích, đúng nội dung tệp."""),
@@ -139,10 +149,11 @@ def build():
         st(term_block(bien, 4, 7, title="② Biến thường chỉ sống trong cửa sổ này; export cho con cháu")
            + "<p><code>bash -c '…'</code> chạy một cửa sổ lệnh <b>con</b>. Chưa <code>export</code>: con không thấy. Sau <code>export</code>: con thấy.</p>",
            """Phép làm thứ hai, biến và các chương trình con. Lệnh gọi chương trình cửa sổ lệnh kèm cờ c chạy một cửa sổ lệnh con. Khi chưa xuất, cửa sổ con không thấy biến, nên in ra rỗng. Sau khi xuất, nó thấy và in ra ban."""),
-        st(term_block(ma, 0, 4, title="③ Mã thoát: 0 thành công, khác 0 thất bại")
+        st(term_block(ma, 0, 5, title="③ Mã thoát: 0 thành công, khác 0 thất bại")
+           + "<p><code>grep -q xin a.txt</code> tìm chữ <code>xin</code> trong tệp <code>a.txt</code>; cờ <code>-q</code> là tìm <b>im lặng</b>: không in dòng nào, chỉ để lại mã thoát.</p>"
            + "<p>Tìm thấy chữ: <code>0</code>. Không thấy: <code>1</code>. Thư mục không có: <code>2</code>. Lệnh không tồn tại: <code>127</code>.</p>",
-           """Phép làm thứ ba, đọc mã thoát. Lệnh tìm thấy chữ thì trả không, không thấy thì trả một. Liệt kê một thư mục không có trả hai, và gõ một lệnh không tồn tại trả một trăm hai mươi bảy. Thông báo lỗi chỉ để người đọc, còn chương trình đọc con số."""),
-        st(term_block(ma, 4, 6, title="④ Nối lệnh theo mã thoát: && và ||")
+           """Phép làm thứ ba, đọc mã thoát. Trước hết ta ghi chữ xin chao vào tệp a. Lệnh tìm chữ kèm cờ q là tìm im lặng, nó không in dòng nào mà chỉ để lại mã thoát. Lệnh tìm thấy chữ thì trả không, không thấy thì trả một. Liệt kê một thư mục không có trả hai, và gõ một lệnh không tồn tại trả một trăm hai mươi bảy. Thông báo lỗi chỉ để người đọc, còn chương trình đọc con số."""),
+        st(term_block(ma, 5, 7, title="④ Nối lệnh theo mã thoát: && và ||")
            + "<p>Lệnh tìm thấy chữ nên in <code>co</code>; lệnh không thấy nên rơi sang nhánh <code>||</code>, in <code>khong</code>.</p>",
            """Phép làm thứ tư, nối lệnh theo mã thoát. Khi tìm thấy chữ, mã là không, nên lệnh sau hai dấu và chạy, in có. Khi không thấy, mã khác không, nên rơi sang nhánh hai gạch đứng, in không."""),
         st(file_block(buoc, "buoc.sh", title="Tệp buoc.sh") + file_block(buoc, "buoc_e.sh", title="Tệp buoc_e.sh (thêm set -e)"),
@@ -152,18 +163,20 @@ def build():
            Tệp thứ hai dừng ngay, không in đã xong, và mã thoát là hai, báo cho bên ngoài biết thất bại."""),
     ], checks=["'xin chao ' + 'ban' == 'xin chao ban'", "127 == 128 - 1", "[0, 1, 2, 127][-1] == 127"])
     sc_chk = sc("check", "check", "Tự kiểm bằng đường khác: hỏi thẳng máy tệp nào sẽ chạy", [
-        st(term_block(path, 8, 9, title="Hỏi bằng command -v (và type -t, which cho cùng ý)")
+        st(term_block(path, 8, 9, title="Hỏi bằng command -v")
            + "<p>Kết quả trùng bước 3: là tệp trong <code>hai</code>, không phải <code>tien_ich</code>. Đây là cách kiểm <b>không cần chạy</b> lệnh.</p>",
            """Đường kiểm khác là hỏi thẳng máy tệp nào sẽ chạy, mà không cần chạy lệnh. Lệnh hỏi đường dẫn trả về tệp trong thư mục hai, trùng với kết quả ở bước ba, vì thư mục hai đứng trước."""),
-        st(term_block(path, 1, 2, title="Đối chiếu danh sách đang có")
+        st(term_block(path, 1, 2, title="Đối chiếu danh sách ban đầu (hai thư mục, trước khi thêm)")
            + "<p>Đếm: danh sách có $2$ thư mục, thêm $2$ lần ở đầu thì có $4$; thư mục thêm sau cùng đứng đầu, nên thắng ✓</p>",
            """Kiểm thêm bằng cách đếm. Danh sách ban đầu có hai thư mục, ta thêm hai lần ở đầu nên có bốn. Thư mục thêm sau cùng đứng đầu danh sách, nên nó thắng, đúng như kết quả.""", clear=True),
     ], checks=["2 + 2 == 4"])
     sc_scale = sc("scale", "example", "Khi tệp lệnh dài ra: một lỗi bị bỏ qua lọt vào gần như chắc chắn", [
-        st("""<p>Giả sử mỗi bước của một tệp lệnh tự động có xác suất thất bại chỉ $0{,}1\\%$ (số minh hoạ), các bước độc lập. Xác suất <b>có ít nhất một bước lỗi</b> trong $n$ bước:</p>
+        st("""<p><b>Xác suất</b> là con số nói khả năng một việc xảy ra, từ $0\\%$ (không bao giờ) tới $100\\%$ (chắc chắn); ví dụ tung đồng xu ra mặt ngửa là $50\\%$. Hai việc <b>độc lập</b> khi việc này xảy ra hay không không ảnh hưởng việc kia.</p>
+<p>Giả sử mỗi bước của một tệp lệnh tự động có xác suất thất bại chỉ $0{,}1\\%$ (số minh hoạ), các bước độc lập. Xác suất <b>có ít nhất một bước lỗi</b> trong $n$ bước:</p>
 $$P = 1 - (1 - 0{,}001)^{n}$$
 <p>Vì xác suất mọi bước đều tốt là $0{,}999^{n}$, nên phần còn lại là có ít nhất một lỗi.</p>""",
-           """Giả sử mỗi bước của một tệp lệnh tự động có xác suất thất bại chỉ không phẩy một phần trăm, đây là số minh hoạ, và các bước độc lập. Vì xác suất mọi bước đều tốt là không phẩy chín chín chín mũ n, nên xác suất có ít nhất một bước lỗi là một trừ số đó."""),
+           """Xác suất là con số nói khả năng một việc xảy ra, từ không phần trăm là không bao giờ tới một trăm phần trăm là chắc chắn. Ví dụ tung đồng xu ra mặt ngửa là năm mươi phần trăm. Hai việc độc lập khi việc này xảy ra hay không không ảnh hưởng việc kia.
+           Giả sử mỗi bước của một tệp lệnh tự động có xác suất thất bại chỉ không phẩy một phần trăm, đây là số minh hoạ, và các bước độc lập. Vì xác suất mọi bước đều tốt là không phẩy chín chín chín mũ n, nên xác suất có ít nhất một bước lỗi là một trừ số đó.""", focus=[1, 1, 1, 2, 4]),
         st(table(["số bước n", "tính", "xác suất có lỗi"],
                  [["×1: 10", "$1 - 0{,}999^{10}$", "<b>1,0%</b>"], ["×10: 100", "$1 - 0{,}999^{100}$", "<b>9,5%</b>"], ["×100: 1 000", "$1 - 0{,}999^{1000}$", "<b>63,2%</b>"]])
            + "<div class='box key'><b>Đánh đổi:</b> mười bước thì bỏ qua lỗi còn tạm chấp nhận; một nghìn bước thì lỗi gần như chắc chắn xảy ra, mà không ai biết bước nào. "
@@ -179,12 +192,13 @@ $$P = 1 - (1 - 0{,}001)^{n}$$
         st('<div class="box warn"><b>Lỗi 2 (người mới).</b> Sửa <code>PATH</code> trong cửa sổ này rồi tưởng đã cài vĩnh viễn.</div>'
            + table(["việc làm", "sống tới khi nào"],
                    [[code('PATH="$HOME/tien_ich:$PATH"') + " gõ trong cửa sổ", "<b>đóng cửa sổ là mất</b>"],
-                    ["ghi dòng đó vào tệp <code>~/.bashrc</code>", "<b>mỗi cửa sổ mới tự chạy</b> tệp này lúc mở"]]),
-           """Lỗi thứ hai, cũng của người mới, là sửa đường dẫn trong cửa sổ này rồi tưởng đã cài vĩnh viễn. Cách gõ trực tiếp chỉ sống tới khi đóng cửa sổ.
+                    ["ghi dòng đó vào tệp <code>~/.bashrc</code>", "<b>mỗi cửa sổ mới tự chạy</b> tệp này lúc mở"]])
+           + "<p class='note'>" + code("$HOME") + " là biến có sẵn, chứa đường dẫn <b>thư mục nhà</b> của bạn, ví dụ <code>/c/Users/ban</code>; nên " + code("$HOME/tien_ich") + " là thư mục <code>tien_ich</code> nằm trong thư mục nhà.</p>",
+           """Lỗi thứ hai, cũng của người mới, là sửa đường dẫn trong cửa sổ này rồi tưởng đã cài vĩnh viễn. Đô la h o m e là một biến có sẵn, chứa đường dẫn thư mục nhà của bạn, nên thêm gạch chéo tiện ích sau nó là thư mục tiện ích nằm trong thư mục nhà. Cách gõ trực tiếp chỉ sống tới khi đóng cửa sổ.
            Muốn giữ lại, hãy ghi dòng đó vào tệp khởi động của cửa sổ lệnh, nằm trong thư mục nhà, vì mỗi cửa sổ mới tự chạy tệp này lúc mở."""),
         st('<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Ống che mất lỗi: mã thoát của <code>A | B</code> là mã của <b>B</b>.</div>'
-           + term_block(ong) + "<p>Lệnh <code>false</code> luôn thất bại, vậy mà cả ống báo $0$. Chế độ <code>set -o pipefail</code>: ống thất bại nếu <b>bất kỳ</b> lệnh nào trong đó thất bại.</p>",
-           """Lỗi thứ ba, của cả người đã đi làm, là tin mã thoát của cả một ống. Mã thoát của ống chỉ là mã của lệnh cuối. Ở đây lệnh luôn thất bại đứng đầu, vậy mà cả ống báo không, tức thành công.
+           + term_block(ong) + "<p>Lệnh <code>false</code> luôn thất bại, lệnh <code>true</code> luôn thành công, vậy mà cả ống báo $0$. Chế độ <code>set -o pipefail</code>: ống thất bại nếu <b>bất kỳ</b> lệnh nào trong đó thất bại.</p>",
+           """Lỗi thứ ba, của cả người đã đi làm, là tin mã thoát của cả một ống. Mã thoát của ống chỉ là mã của lệnh cuối. Ở đây lệnh luôn thất bại đứng đầu, lệnh luôn thành công đứng cuối, vậy mà cả ống báo không, tức thành công.
            Bật chế độ ống thất bại thì chỉ cần một lệnh trong ống lỗi là cả ống lỗi, và đó là thói quen của người viết tệp lệnh cẩn thận."""),
     ])
     sc_quiz = sc("quiz", "quiz", "Bây giờ tới phần bạn tự làm", [
@@ -192,11 +206,13 @@ $$P = 1 - (1 - 0{,}001)^{n}$$
            + "<p><b>Đề.</b> Thư mục <code>tien_ich</code> có tệp <code>cat</code> (lệnh giả, chỉ in <code>gia cat</code>). Hai cách đặt <code>PATH</code> (cùng thư mục hệ thống <code>/usr/bin:/bin</code>):</p>"
            + "<ol><li>A: <code>tien_ich</code> đứng <b>đầu</b> danh sách.</li><li>B: <code>tien_ich</code> đứng <b>cuối</b>.</li></ol>"
            + "<p>Gõ <code>cat a.txt</code> (tệp có chữ <code>xin chao</code>). In ra gì ở A, ở B? <b>Chọn</b> cách nào cho thư mục tiện ích của nhóm, vì sao?</p>",
-           """Bây giờ tới phần bạn tự làm. Thư mục tiện ích có một tệp tên cát, là lệnh giả, chỉ in giả cát. Dòng đầu của nó, dấu thăng chấm than, cho biết tệp chạy bằng chương trình nào. Có hai cách đặt đường dẫn tìm lệnh, cùng hai thư mục hệ thống. Cách A đặt thư mục tiện ích ở đầu, cách B đặt ở cuối.
+           """Bây giờ tới phần bạn tự làm. Thư mục tiện ích có một tệp tên c a t, trùng tên với lệnh in nội dung tệp, là một lệnh giả, chỉ in ra dòng chữ giả. Dòng đầu của nó, dấu thăng chấm than, cho biết tệp chạy bằng chương trình nào. Có hai cách đặt đường dẫn tìm lệnh, cùng hai thư mục hệ thống. Cách A đặt thư mục tiện ích ở đầu, cách B đặt ở cuối.
            Gõ lệnh in nội dung tệp a. Ở A và ở B máy in ra gì. Rồi chọn cách nào cho thư mục tiện ích của cả nhóm, và vì sao. Hãy dừng video và làm.""", pause=60),
-        st(term_block(quiz, 1, 5, title="Máy chạy thật")
-           + "<p>A: thư mục tiện ích đứng trước nên <code>cat</code> giả thắng, in <code>gia cat</code>. B: đứng sau nên <code>cat</code> thật thắng, in <code>xin chao</code>.</p>",
-           """Đáp án, ở cách A, thư mục tiện ích đứng trước nên lệnh giả thắng, màn hình in giả cát. Ở cách B, thư mục tiện ích đứng sau nên lệnh thật của hệ thống thắng, màn hình in xin chào."""),
+        st(term_block(quiz, 0, 5, title="Máy chạy thật")
+           + "<p>A: thư mục tiện ích đứng trước nên <code>cat</code> giả thắng, in <code>gia cat</code>. B: đứng sau nên <code>cat</code> thật thắng, in <code>xin chao</code>.</p>"
+           + "<p class='note'><code>chmod +x</code> bật quyền chạy cho tệp; <code>hash -r</code> bảo cửa sổ lệnh quên các đường dẫn lệnh đã nhớ từ lần dò trước, để dò lại. <b>Không bắt buộc</b> khi chỉ đổi <code>PATH</code> (gán lại <code>PATH</code> đã tự xoá bảng nhớ), nhưng không hại, và có khi cần: khi một lệnh mới được đặt vào thư mục đã có trong danh sách.</p>",
+           """Đáp án, ở cách A, thư mục tiện ích đứng trước nên lệnh giả thắng, màn hình in dòng chữ giả. Ở cách B, thư mục tiện ích đứng sau nên lệnh thật của hệ thống thắng, màn hình in xin chào.
+           Lệnh đổi quyền thêm cờ x bật quyền chạy cho tệp, còn lệnh xoá băm bảo cửa sổ lệnh quên các đường dẫn đã nhớ để dò lại. Lệnh này không bắt buộc ở đây vì gán lại danh sách đã tự xoá, nhưng không hại và có khi cần."""),
         st("<div class='box key'><b>Quyết định:</b> chọn <b>B</b> (đặt cuối) cho thư mục dùng chung. Đặt đầu cho phép một tệp trùng tên "
            "<b>che lệnh hệ thống</b> mà không ai hay, và lỗi kiểu đó rất khó tìm. Chỉ đặt đầu khi bạn <b>cố ý</b> thay lệnh, và ghi rõ lý do.</div>",
            """Về quyết định, nên chọn cách B, đặt thư mục dùng chung ở cuối. Đặt ở đầu cho phép một tệp trùng tên che mất lệnh hệ thống mà không ai hay, và lỗi kiểu đó rất khó tìm.
@@ -206,21 +222,21 @@ $$P = 1 - (1 - 0{,}001)^{n}$$
         st, "FND", "L04",
         """<p><b>Đề</b>: tạo <code>kiem_tra.sh</code>, in lần lượt (bảy dòng):</p>
 <ol><li>ba dòng tên và số phiên bản chính của <code>git</code>, <code>javac</code>, <code>python</code> (dùng <code>--version</code> / <code>-version</code>, <code>cut</code>);</li>
-<li>mã thoát của <code>ls .</code> và của <code>ls khong_co</code> (giấu thông báo lỗi), dạng <code>ls: 0</code>, <code>ls loi: 2</code>;</li>
+<li>mã thoát của <code>ls .</code> và của <code>ls khong_co</code>, dạng <code>ls: 0</code>, <code>ls loi: 2</code>; <b>giấu</b> danh sách do <code>ls .</code> in ra (<code>&gt; /dev/null</code>) và thông báo lỗi của <code>ls khong_co</code> (<code>2&gt; /dev/null</code>);</li>
 <li>mã thoát của <code>grep -q tien tep.txt</code> (tệp chỉ có chữ <code>so du</code>), dạng <code>grep: 1</code>;</li>
 <li>tạo thư mục <code>tien_ich</code> với lệnh <code>chao_ban</code> (in <code>xin chao tu tien_ich</code>), thêm vào <code>PATH</code>, gọi <code>chao_ban</code>.</li></ol>""",
-        """Bây giờ tới phần bạn tự làm. Tạo một tệp lệnh in bảy dòng. Ba dòng đầu là tên và số phiên bản chính của ba công cụ, dùng lệnh cắt để bỏ phần sau. Hai dòng nữa là mã thoát của lệnh liệt kê một thư mục có và một thư mục không có, giấu thông báo lỗi.
+        """Bây giờ tới phần bạn tự làm. Tạo một tệp lệnh in bảy dòng. Ba dòng đầu là tên và số phiên bản chính của ba công cụ, dùng lệnh cắt để bỏ phần sau. Hai dòng nữa là mã thoát của lệnh liệt kê một thư mục có và một thư mục không có. Phải giấu cả danh sách in ra lẫn thông báo lỗi bằng cách chuyển hướng vào thùng không đáy.
         Một dòng là mã thoát của lệnh tìm chữ không có trong tệp. Cuối cùng tạo thư mục tiện ích với một lệnh của riêng bạn, thêm vào đường dẫn tìm lệnh rồi gọi nó. Hãy dừng video và làm.""",
         LAB_OUT, "kiem_tra.sh",
-        """<div class="box key"><b>Nếu kẹt:</b> <code>git --version | cut -d' ' -f1-2</code> lấy hai chữ đầu; <code>javac -version 2&gt;&amp;1 | cut -d. -f1</code> (lệnh in ra luồng lỗi, nên <code>2&gt;&amp;1</code>).
-Mã thoát: <code>echo "ls: """ + "<span>&#36;</span>" + """?"</code> ngay sau lệnh. PATH: thêm <code>"<span>&#36;</span>PWD/tien_ich"</code> vào đầu. Lời giải ở <code>labs/FND/L04/loi_giai.sh</code>.</div>""",
-        """Nếu kẹt, cắt phiên bản bằng lệnh cắt, và nhớ lệnh biên dịch Java in phiên bản ra luồng lỗi nên cần nối luồng lỗi vào đầu ra. Mã thoát thì in ngay sau lệnh cần đo. Đường dẫn thì thêm thư mục tiện ích vào đầu danh sách.
+        """<div class="box key"><b>Nếu kẹt:</b> <code>cut -d' ' -f1-2</code>: các cột cách nhau bằng dấu cách, lấy cột 1 tới cột 2 (<code>git version 2.46.0</code> thành <code>git version</code>); <code>cut -d. -f1</code>: cột cách nhau bằng dấu chấm, lấy cột 1 (<code>javac 21.0.4</code> thành <code>javac 21</code>). <code>javac -version 2&gt;&amp;1 | …</code>: lệnh in ra luồng lỗi, nên cần <code>2&gt;&amp;1</code>.
+Mã thoát: <code>echo "ls: """ + "<span>&#36;</span>" + """?"</code> ngay sau lệnh. PATH: thêm <code>"<span>&#36;</span>PWD/tien_ich"</code> vào đầu (<code><span>&#36;</span>PWD</code> là biến chứa thư mục đang đứng); <code>chmod +x tien_ich/chao_ban</code> bật quyền chạy cho tệp. Lời giải ở <code>labs/FND/L04/loi_giai.sh</code>.</div>""",
+        """Nếu kẹt, cắt phiên bản bằng lệnh cắt: cờ d cho biết dấu ngăn cột, là dấu cách hoặc dấu chấm, cờ f cho biết lấy cột nào. Lệnh biên dịch Java in phiên bản ra luồng lỗi nên cần nối luồng lỗi vào đầu ra. Mã thoát thì in ngay sau lệnh cần đo. Đường dẫn thì thêm thư mục tiện ích vào đầu danh sách, viết bằng biến chứa thư mục đang đứng, và bật quyền chạy cho tệp lệnh bằng lệnh đổi quyền.
         Lời giải nằm trong thư mục thực hành, chỉ mở sau khi đã thử.""", pause=300), "FND", "L04")
     write_lab("FND", "L04", """# Lab FND L04 — Phiên bản công cụ, mã thoát và PATH
 
 Tạo `kiem_tra.sh` in **bảy dòng**, đúng như `mong_doi.txt`:
 1. ba dòng: tên và số phiên bản chính của `git` (`git version`), `javac` (`javac 21`), `python` (`Python 3`). Gợi ý: `git --version | cut -d' ' -f1-2`; `javac -version 2>&1 | cut -d. -f1`; `python --version | cut -d. -f1`.
-2. `ls .` rồi in mã thoát dạng `ls: 0`; `ls khong_co` (giấu thông báo lỗi bằng `2> /dev/null`) rồi in `ls loi: 2`.
+2. `ls .` rồi in mã thoát dạng `ls: 0`, nhưng **giấu danh sách thư mục do `ls .` in ra** (`ls . > /dev/null`, nếu không màn hình có dòng thừa và chấm KHÁC); `ls khong_co` (giấu thông báo lỗi bằng `2> /dev/null`) rồi in `ls loi: 2`.
 3. tạo `tep.txt` chỉ có chữ `so du`; `grep -q tien tep.txt` rồi in mã thoát dạng `grep: 1`.
 4. tạo thư mục `tien_ich`, trong đó tệp `chao_ban` chứa lệnh `echo 'xin chao tu tien_ich'`; `chmod +x`; thêm `"$PWD/tien_ich"` vào **đầu** `PATH`; gọi `chao_ban`.
 
@@ -228,9 +244,9 @@ Chạy `bash kiem_tra.sh`; chấm: `bash labs/cham.sh FND L04 kiem_tra.sh`. Cầ
 """, "sh", LAB_SOL, LAB_OUT)
     sc_rec = sc("recap", "recap", "Chuỗi logic và tư duy cần mang theo", [
         st(chain("tên không có /: dò từng thư mục trong PATH", "thư mục đứng trước thắng", "./tên: đi thẳng, không dò",
-                 "biến: TEN=… rồi dùng đô la; export cho tiến trình con", "mã thoát: 0 tốt, khác 0 lỗi; &amp;&amp; và ||", "set -e, set -o pipefail: dừng khi lỗi"),
+                 "biến: TEN=… rồi dùng đô la; export cho tiến trình con", "mã thoát: 0 tốt, khác 0 lỗi; nối lệnh: ; và &amp;&amp; và ||", "set -e, set -o pipefail: dừng khi lỗi"),
            """Tổng kết chuỗi logic. Tên không có dấu gạch chéo thì máy dò từng thư mục trong danh sách đường dẫn, thư mục đứng trước thắng. Có dấu gạch chéo thì đi thẳng.
-           Biến đặt bằng dấu bằng, đọc bằng dấu đô la, và xuất để chương trình con thấy. Mã thoát không là tốt, khác không là lỗi, nối lệnh bằng hai dấu và hoặc hai gạch đứng. Tệp lệnh nên dừng khi lỗi."""),
+           Biến đặt bằng dấu bằng, đọc bằng dấu đô la, và xuất để chương trình con thấy. Mã thoát không là tốt, khác không là lỗi, nối lệnh bằng dấu chấm phẩy, hai dấu và, hoặc hai gạch đứng. Tệp lệnh nên dừng khi lỗi."""),
         st("""<div class='box key'><b>Tư duy:</b> khi “lệnh không chạy” hay “chạy sai bản”, hỏi <code>command -v</code>; khi tự động hoá, đừng tin “không thấy báo lỗi”, hãy đọc mã thoát.</div>
 <p>Bài sau: trình soạn mã, cách máy lưu chữ tiếng Việt, và cách đọc một thông báo lỗi thật.</p>""",
            """Điều cần mang theo, khi lệnh không chạy hoặc chạy sai bản, hãy hỏi lệnh hỏi đường dẫn. Khi tự động hoá, đừng tin là không thấy báo lỗi, hãy đọc mã thoát.

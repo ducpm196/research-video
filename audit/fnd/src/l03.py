@@ -94,10 +94,11 @@ def build():
     ], files=F)
 
     sc_hook = sc("hook", "hook", "Tệp giao dịch cả trăm nghìn dòng: hỏi một câu, trả lời bằng một dòng lệnh", [
-        st(file_block(cmd("Mau", [("true", "")], files=F), "giaodich.csv", title="Tệp giaodich.csv, bản rút gọn 12 dòng giao dịch (số minh hoạ)", lines=(1, 4))
-           + term_block(ong, 0, 1, title="Hỏi: mỗi loại giao dịch có bao nhiêu lệnh?"),
-           """Chào bạn, một tệp giao dịch có thể dài hàng trăm nghìn dòng, mở bằng trình soạn thảo thì không đọc nổi. Giả sử ai đó hỏi mỗi loại giao dịch có bao nhiêu lệnh.
-           Ở đây ta dùng bản rút gọn mười hai dòng, và bốn lệnh nối nhau bằng dấu ống trả lời ngay trong một dòng, gồm sáu lệnh chuyển, ba lệnh nạp và ba lệnh rút."""),
+        st(file_block(cmd("Mau", [("true", "")], files=F), "giaodich.csv", title="Tệp giaodich.csv: tiêu đề + 12 giao dịch (số minh hoạ); cột: mã, loại, tài khoản, số tiền"),
+           """Chào bạn, một tệp giao dịch có thể dài hàng trăm nghìn dòng, mở bằng trình soạn thảo thì không đọc nổi. Đây là bản rút gọn, đủ để ta làm tay, gồm một dòng tiêu đề và mười hai giao dịch.
+           Mỗi dòng có mã, loại, tài khoản và số tiền, các cột cách nhau bằng dấu phẩy."""),
+        st(term_block(ong, 0, 1, title="Hỏi: mỗi loại giao dịch có bao nhiêu lệnh?"),
+           """Giả sử ai đó hỏi mỗi loại giao dịch có bao nhiêu lệnh. Bốn lệnh nối nhau bằng dấu ống trả lời ngay trong một dòng, gồm sáu lệnh chuyển, ba lệnh nạp và ba lệnh rút."""),
         st("""<div class="box key">Hôm nay ta trả lời ba câu hỏi:
 <ol><li>Xem <b>đầu</b>, <b>cuối</b> và <b>đếm dòng</b> của một tệp lớn bằng lệnh nào?</li>
 <li><b>Lọc</b> dòng theo mẫu và <b>cắt cột</b> của tệp bảng ra sao?</li>
@@ -110,12 +111,13 @@ def build():
                  [["① tệp văn bản", "tệp chứa chữ, mỗi dòng kết thúc bằng một ký tự xuống dòng"],
                   ["② tệp CSV", "bảng viết bằng chữ: mỗi dòng là một hàng, các cột cách nhau bằng dấu phẩy, ví dụ <code>1,chuyen,A01,500000</code>"],
                   ["③ lệnh in nội dung", "<code>cat f.txt</code> in cả tệp ra đầu ra (màn hình)"],
-                  ["④ chuyển hướng", "<code>&gt;</code> ghi đè, <code>&gt;&gt;</code> nối thêm: đưa đầu ra vào tệp"]]),
-           """Ta ôn lại bốn điều. Tệp văn bản chứa chữ, mỗi dòng kết thúc bằng một ký tự xuống dòng. Tệp bảng là bảng viết bằng chữ, mỗi dòng là một hàng, các cột cách nhau bằng dấu phẩy.
-           Lệnh in nội dung in cả tệp ra đầu ra. Và chuyển hướng đưa đầu ra vào tệp, một dấu để ghi đè, hai dấu để nối thêm.""",
-           focus=[1, "1.2", "1.3", "1.4", "1.5"]),
+                  ["④ chuyển hướng", "<code>&gt;</code> ghi đè, <code>&gt;&gt;</code> nối thêm: đưa đầu ra vào tệp"],
+                  ["⑤ khối chữ nhúng", "ghi nhiều dòng vào tệp một lần: <code>cat &gt; f &lt;&lt;'EOF'</code> … <code>EOF</code> (bài 2)"]]),
+           """Ta ôn lại năm điều đã biết trước khi vào bài. Tệp văn bản chứa chữ, mỗi dòng kết thúc bằng một ký tự xuống dòng. Tệp bảng là bảng viết bằng chữ, mỗi dòng là một hàng, các cột cách nhau bằng dấu phẩy.
+           Lệnh in nội dung in cả tệp ra đầu ra. Chuyển hướng đưa đầu ra vào tệp, một dấu để ghi đè, hai dấu để nối thêm. Và khối chữ nhúng ghi nhiều dòng vào tệp một lần, như đề thực hành sẽ dùng.""",
+           focus=[1, "1.2", "1.3", "1.4", "1.5", "1.6"]),
     ])
-    sc_sym = sc("sym", "symbol", "Giải mã chín lệnh, cờ và dấu ống", [
+    sc_sym = sc("sym", "symbol", "Giải mã bảy lệnh, cờ và ba dấu", [
         st(table(["lệnh", "đọc là", "nghĩa"],
                  [["<code>head -n 3 f</code>", "xem đầu tệp", "in <b>3 dòng đầu</b>; cờ <code>-n</code> cho số dòng"],
                   ["<code>tail -n 2 f</code>", "xem cuối tệp", "in <b>2 dòng cuối</b>; <code>tail -n +2 f</code>: từ dòng thứ 2 trở đi (bỏ dòng tiêu đề)"],
@@ -126,11 +128,11 @@ def build():
         st(table(["lệnh", "đọc là", "nghĩa"],
                  [["<code>grep chuyen f</code>", "tìm dòng chứa mẫu", "in các dòng <b>chứa</b> chữ <code>chuyen</code>; <code>-c</code> đếm; <code>-v</code> lấy dòng <b>không</b> chứa"],
                   ["<code>cut -d, -f2 f</code>", "cắt cột", "lấy <b>cột thứ 2</b>; <code>-d,</code> cho biết các cột cách nhau bằng dấu phẩy"],
-                  ["<code>sort</code>", "xếp dòng", "xếp các dòng theo chữ cái; <code>-n</code> theo <b>giá trị số</b>; <code>-r</code> đảo ngược"],
+                  ["<code>sort</code>", "xếp dòng", "xếp các dòng theo chữ cái; <code>-n</code> theo <b>giá trị số</b>; <code>-r</code> đảo ngược. <b>Quy tắc:</b> một dấu gạch + vài chữ = vài cờ riêng, nên <code>sort -rn</code> = <code>sort -r -n</code>"],
                   ["<code>uniq -c</code>", "gộp dòng trùng", "gộp các dòng <b>giống nhau và liền kề</b>, kèm số lần (<code>-c</code> = count)"]]),
            """Bảng thứ hai là bốn lệnh lọc. Lệnh tìm dòng chứa mẫu in các dòng có mẫu, cờ c đếm, cờ v lấy các dòng không có mẫu. Lệnh cắt cột lấy một cột, cờ d cho biết dấu ngăn cột, cờ f cho biết số cột.
-           Lệnh xếp dòng xếp theo chữ cái, cờ n xếp theo giá trị số, cờ r đảo ngược. Lệnh gộp dòng trùng chỉ gộp các dòng giống nhau và liền kề, và cờ c cho biết số lần.""",
-           focus=[1, "1.2", "1.3", "1.4", "1.5"], clear=True),
+           Lệnh xếp dòng xếp theo chữ cái, cờ n xếp theo giá trị số, cờ r đảo ngược. Quy tắc cần nhớ là một dấu gạch kèm vài chữ là vài cờ riêng, nên r n là cờ r cùng cờ n. Lệnh gộp dòng trùng chỉ gộp các dòng giống nhau và liền kề, và cờ c cho biết số lần.""",
+           focus=[1, "1.2", "1.3", "1.4", "1.4", "1.5"], clear=True),
         st(table(["viết", "nghĩa"],
                  [["<code>A | B</code>", "<b>ống</b>: đầu ra của lệnh <code>A</code> trở thành đầu vào của lệnh <code>B</code>, không qua tệp trung gian"],
                   ["<code>2&gt; f</code>", "đưa <b>thông báo lỗi</b> (luồng lỗi) vào tệp <code>f</code>, thay vì ra màn hình"],
@@ -201,17 +203,22 @@ def build():
            """Cách ba, đối chiếu với bảng thống kê. Sáu lệnh chuyển, và tổng ba nhóm là mười hai, trùng với số dòng dữ liệu đã đếm. Vì vậy không có dòng nào bị bỏ sót hay đếm hai lần.""", clear=True),
     ], checks=["6 + 3 + 3 == 12", "13 - 1 == 12"])
     sc_scale = sc("scale", "concept", "Khi tệp nhân lên: ống xử lý từng dòng, mở cả tệp thì không", [
-        st(term_block(quymo, 1, 3, title="×1: 12 dòng") + term_block(quymo, 4, 6, title="×100: 1 200 dòng"),
-           """Ta tạo hai tệp số bằng lệnh in dãy số, một tệp mười hai dòng, một tệp một nghìn hai trăm dòng. Số byte tăng theo, hai mươi bảy rồi bốn nghìn tám trăm chín mươi ba."""),
-        st(term_block(quymo, 7, 10, title="×10 000: 120 000 dòng"),
+        st(term_block(quymo, 0, 3, title="×1: 12 dòng") + term_block(quymo, 3, 6, title="×100: 1 200 dòng")
+           + "<p class='note'><code>seq 1 12</code> in dãy số từ $1$ tới $12$, mỗi số một dòng; <code>&gt; t12.txt</code> ghi dãy đó vào tệp; <code>wc -l</code> đếm <b>dòng</b>, <code>wc -c</code> đếm <b>byte</b> (mỗi chữ số một byte, cộng một byte xuống dòng).</p>",
+           """Ta tạo hai tệp số bằng lệnh in dãy số, ví dụ từ một tới mười hai, mỗi số một dòng, rồi ghi vào tệp. Một tệp mười hai dòng, một tệp một nghìn hai trăm dòng. Lệnh đếm có cờ l cho số dòng, cờ c cho số byte, tức dung lượng tệp lưu trên đĩa. Số byte tăng theo, hai mươi bảy rồi bốn nghìn tám trăm chín mươi ba."""),
+        st(term_block(quymo, 6, 10, title="×10 000: 120 000 dòng"),
            """Tệp thứ ba có một trăm hai mươi nghìn dòng, hơn bảy trăm nghìn byte. Dòng cuối của nó, một trăm hai mươi nghìn, hiện ra tức thì, vì lệnh xem cuối không cần mở cả tệp vào bộ nhớ.""", clear=True),
+        st("""<div class="box key"><b>Đơn vị:</b> $1$ MB (mê-ga-bai) $= 1\\,000\\,000$ byte; $1$ GB (ghi-ga-bai) $= 1\\,000$ MB. Ví dụ: $1\\,000\\,000$ dòng $\\times\\ 100$ byte $= 100\\,000\\,000$ byte $= \\hl{100}$ MB.</div>
+<div class="box key"><b>Ngoại suy</b> = từ số đo nhỏ suy ra số lớn bằng phép <b>nhân</b>. Cảnh báo: chỉ đúng khi quan hệ <b>tuyến tính</b> (gấp đôi số dòng thì gấp đôi byte); thời gian xếp hay tìm kiếm thì <b>không</b> tăng đều như vậy.</div>""",
+           """Trước khi ngoại suy số lớn, ta cần biết hai điều nhỏ. Một mê ga bai bằng một triệu byte, một ghi ga bai bằng một nghìn mê ga bai. Ví dụ một triệu dòng, mỗi dòng một trăm byte, là một trăm triệu byte, tức một trăm mê ga bai.
+           Ngoại suy là từ số đo nhỏ suy ra số lớn bằng phép nhân. Cảnh báo, nó chỉ đúng khi quan hệ tuyến tính, tức gấp đôi số dòng thì gấp đôi byte, còn thời gian xếp hay tìm thì không tăng đều như vậy.""", focus=[1, 1, 1, 2, 2], clear=True),
         st(table(["số dòng", "dung lượng đo được", "ngoại suy: 100 triệu dòng giao dịch × 35 byte/dòng (số minh hoạ)"],
                  [["×1: 12", "27 byte", "—"], ["×100: 1 200", "4 893 byte", "—"], ["×10 000: 120 000", "728 895 byte (≈ 0,7 MB)", "≈ 3,5 tỉ byte, tức ≈ 3,5 GB"]])
            + "<div class='box key'><b>Đánh đổi:</b> ống đọc và xử lý <b>từng dòng</b>, nên tệp lớn hơn bộ nhớ vẫn xử lý được; "
              "mở cả tệp để xem hay sửa thì phải nạp hết vào bộ nhớ. Riêng <code>sort</code> phải thấy mọi dòng, nên với dữ liệu rất lớn nó dùng tệp tạm trên đĩa và chậm hơn.</div>",
-           """Bảng này ghi dung lượng đo được. Một trăm hai mươi nghìn dòng chỉ hơn bảy trăm nghìn byte. Nhưng một sổ cái một trăm triệu dòng, mỗi dòng ba mươi lăm byte, số minh hoạ, đã khoảng ba phẩy năm tỉ byte, lớn hơn bộ nhớ của nhiều máy.
+           """Bảng này ghi dung lượng đo được. Một trăm hai mươi nghìn dòng chỉ hơn bảy trăm nghìn byte. Nhưng hãy xét một sổ cái, tức tệp ghi mọi giao dịch, mỗi dòng một giao dịch. Nó dài một trăm triệu dòng, mỗi dòng ba mươi lăm byte, số minh hoạ, đã khoảng ba phẩy năm tỉ byte, lớn hơn bộ nhớ của nhiều máy.
            Ống xử lý từng dòng nên vẫn chạy được, còn mở cả tệp bằng trình soạn thảo thì không. Riêng lệnh xếp phải thấy mọi dòng, nên với dữ liệu quá lớn nó dùng tệp tạm trên đĩa và chậm hơn.""", clear=True),
-    ], checks=["10000 // 100 == 100 and 12 * 100 == 1200 and 12 * 10000 == 120000", "100_000_000 * 35 == 3_500_000_000", "round(728895 / 1e6, 1) == 0.7"])
+    ], checks=["10000 // 100 == 100 and 12 * 100 == 1200 and 12 * 10000 == 120000", "100_000_000 * 35 == 3_500_000_000", "round(728895 / 1e6, 1) == 0.7", "1_000_000 * 100 == 100_000_000 and 100_000_000 // 1_000_000 == 100"])
     sc_pit = sc("pitfalls", "pitfall", "Lỗi hay gặp, có lỗi của người đã đi làm", [
         st('<div class="box warn"><b>Lỗi 1 (người mới).</b> Gộp bằng <code>uniq -c</code> mà quên <code>sort</code> trước.</div>'
            + term_block(ong, 1, 2) + "<p>Phép thử bắt được lỗi: tổng các số phải bằng số dòng dữ liệu, và mỗi loại chỉ được xuất hiện <b>một</b> lần. Ở đây <code>chuyen</code> xuất hiện nhiều lần.</p>",
@@ -226,11 +233,13 @@ def build():
            Kết quả sai mà máy không báo lỗi, nên con số sai dễ lọt vào báo cáo. Hãy luôn dùng cờ n cho cột số, và đối chiếu một vài giá trị bằng mắt."""),
     ])
     sc_quiz = sc("quiz", "quiz", "Bây giờ tới phần bạn tự làm", [
-        st("""<p><b>Đề.</b> Dùng tệp <code>giaodich.csv</code> mười hai dòng ở trên (cột: <code>ma, loai, tai_khoan, so_tien</code>).</p>
+        st(file_block(cmd("Mau2", [("true", "")], files=F), "giaodich.csv", title="Dữ liệu của bài: tệp giaodich.csv, đủ 12 giao dịch"),
+           """Trước khi làm, hãy nhìn lại toàn bộ dữ liệu của bài, một dòng tiêu đề và mười hai giao dịch, để bạn tự đếm bằng mắt hoặc kiểm bằng máy."""),
+        st("""<p><b>Đề.</b> Dùng tệp <code>giaodich.csv</code> mười hai dòng vừa rồi (cột: <code>ma, loai, tai_khoan, so_tien</code>).</p>
 <ol><li>Có bao nhiêu giao dịch <b>rút</b>?</li>
 <li>Giao dịch <b>lớn nhất</b> của tài khoản A02 là bao nhiêu?</li></ol>
 <p><b>Quyết định:</b> để đếm lệnh chuyển, bạn chọn <code>grep -c chuyen f</code> hay <code>grep chuyen f | wc -l</code>? Vì sao?</p>""",
-           """Bây giờ tới phần bạn tự làm. Dùng tệp giao dịch mười hai dòng ở trên. Câu một, có bao nhiêu giao dịch rút. Câu hai, giao dịch lớn nhất của tài khoản A không hai là bao nhiêu.
+           """Bây giờ tới phần bạn tự làm. Dùng tệp giao dịch mười hai dòng vừa rồi. Câu một, có bao nhiêu giao dịch rút. Câu hai, giao dịch lớn nhất của tài khoản A không hai là bao nhiêu.
            Sau đó là một quyết định, để đếm lệnh chuyển thì chọn cờ c hay chọn ống nối với lệnh đếm dòng, và vì sao. Hãy dừng video và làm.""", pause=60),
         st(term_block(quiz, 0, 2, title="Câu 1 và câu 2")
            + "<p>Câu 1: ba giao dịch rút (các mã $3$, $7$, $11$). Câu 2: lọc A02, cắt cột số tiền, <code>sort -n</code>, lấy dòng cuối: $2\\,000\\,000$.</p>",
@@ -246,7 +255,7 @@ def build():
 <li>số giao dịch của <b>từng loại</b> (<code>cut | tail | sort | uniq -c</code>);</li>
 <li>loại có <b>nhiều nhất</b> (kèm số lần);</li>
 <li><b>ba</b> số tiền lớn nhất (<code>sort -rn | head</code>).</li></ol>""",
-        """Bây giờ tới phần bạn tự làm. Tạo một tệp lệnh. Dòng đầu chép nguyên để có dữ liệu mười lăm giao dịch, bạn chưa cần hiểu dòng đó. Rồi in lần lượt bốn thứ, luôn bỏ dòng tiêu đề.
+        """Bây giờ tới phần bạn tự làm. Tạo một tệp lệnh. Dòng đầu là một khối chữ nhúng, đã học ở bài hai, chép nguyên để có dữ liệu mười lăm giao dịch. Rồi in lần lượt bốn thứ, luôn bỏ dòng tiêu đề.
         Một, tổng số giao dịch. Hai, số giao dịch của từng loại. Ba, loại nhiều nhất kèm số lần. Bốn, ba số tiền lớn nhất, nhớ xếp theo giá trị số. Hãy dừng video và làm.""",
         LAB_OUT, "thong_ke.sh",
         """<div class="box key"><b>Nếu kẹt:</b> cột loại là cột <b>2</b>, cột số tiền là cột <b>4</b>. Mẫu chung: <code>cut -d, -f2 gd.csv | tail -n +2 | sort | uniq -c</code>.
@@ -255,7 +264,7 @@ Loại nhiều nhất: thêm <code>| sort -rn | head -n 1</code>. Ba khoản l�
         Lời giải nằm trong thư mục thực hành, chỉ mở sau khi đã thử.""", pause=240), "FND", "L03")
     write_lab("FND", "L03", """# Lab FND L03 — Thống kê giao dịch bằng ống
 
-Tạo `thong_ke.sh`. **Dòng đầu chép nguyên** (tạo dữ liệu giả `gd.csv`; `<<'EOF'` nhập nhiều dòng, bài sau giải thích):
+Tạo `thong_ke.sh`. **Dòng đầu chép nguyên** (tạo dữ liệu giả `gd.csv`; `<<'EOF'` là khối chữ nhúng, đã học ở bài 2):
 
 ```bash
 cat > gd.csv <<'EOF'
@@ -292,4 +301,4 @@ Chạy `bash thong_ke.sh`; chấm: `bash labs/cham.sh FND L03 thong_ke.sh`. Khá
                    "Chỉ ra ba lỗi hay gặp: quên xếp trước khi gộp, dấu chấm trong mẫu, xếp số theo chữ",
                    "Viết chuỗi lệnh thống kê loại giao dịch và ba khoản lớn nhất từ tệp bảng"],
                   [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_chk, sc_scale, sc_pit, sc_quiz, sc_prac, sc_rec],
-                  covers=[(1, "ex"+"ample"), (2, "sym"), (3, "formula"), (4, "formula"), (5, "check"), (6, "pitfalls"), (7, "practice")])
+                  assumes=["fnd_heredoc"], covers=[(1, "ex"+"ample"), (2, "sym"), (3, "formula"), (4, "formula"), (5, "check"), (6, "pitfalls"), (7, "practice")])

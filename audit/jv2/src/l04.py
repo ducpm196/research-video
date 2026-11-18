@@ -212,7 +212,7 @@ public class QuyMo {
     di = project("KiemNhan", {"MiniDi.java": MINI_DI}, [
         ("javac MiniDi.java", ""),
         ("java MiniDi", mini["out"]),
-        ("javap -v -p 'MiniDi$ChuyenTien' | grep -E '^Runtime|^    MiniDi'",
+        ("javap -v -p 'MiniDi$ChuyenTien' | grep -E '^Runtime|^ {4}MiniDi'",
          "RuntimeVisibleAnnotations:\n    MiniDi$ThanhPhan\nRuntimeInvisibleAnnotations:\n    MiniDi$KhongGiu"),
     ])
 
@@ -269,6 +269,8 @@ Viết `MiniDiKho` (tệp `MiniDiKho.java`) gồm **ba phần do bạn tự vi�
    tạo bằng `loai.getDeclaredConstructor().newInstance()`, **bỏ vào `hop` trước**, rồi với mỗi trường có nhãn `@Tiem` thì `setAccessible(true)` và gán `lay(kiểu của trường)`.
 3. `main`: lấy `DonHang` từ bộ chứa rồi in ba dòng (bên dưới).
 
+Dòng `import` cần dùng (đặt trên đầu tệp): `java.lang.annotation.Retention`, `java.lang.annotation.RetentionPolicy`, `java.lang.reflect.Field`, `java.util.HashMap`, `java.util.Map`. `Class<?>` là kiểu "mô tả của một lớp nào đó" (dấu `?` nghĩa là chưa biết lớp cụ thể).
+
 Ba lớp có sẵn (chép nguyên vào tệp, ngay trong `MiniDiKho`):
 
 ```java
@@ -312,10 +314,10 @@ Nhớ <code>hop.put(loai, o)</code> <b>trước</b> vòng lặp trường. Lời
 <div>    <span class="kw">@Autowired</span> KhoDuLieu kho;</div><div>    <span class="kw">@Transactional</span></div><div>    <span class="kw">public</span> <span class="kw">void</span> chuyen(...) { ... }</div><div>}</div></div>
 <p>Không có dòng nào tạo <code>KhoDuLieu</code>, không có dòng nào mở giao dịch. Ai làm?</p></div>""",
            """Trong mọi dự án Java ở ngân hàng, bạn sẽ gặp mã như thế này. Một lớp dịch vụ, một trường kho dữ liệu, một hàm chuyển tiền, và vài dòng nhãn có dấu a còng. Không dòng nào tạo ra kho dữ liệu, không dòng nào mở giao dịch. Vậy ai làm những việc đó.
-           Câu trả lời là một chương trình khác đọc các nhãn đó lúc chạy."""),
+           Phần tìm và nối kho dữ liệu là việc của một chương trình khác đọc nhãn lúc chạy. Còn việc mở giao dịch thì làm bằng cách khác, ta nói ở cuối bài."""),
         st("""<div class="box key">Hôm nay: <b>nhãn (annotation)</b> là dữ liệu gắn vào mã; <b>phản chiếu</b> là cách chương trình đọc chính mã của nó lúc chạy.
-Ta tự viết một <b>bộ chứa tiêm phụ thuộc</b> cỡ nhỏ: cùng cơ chế với Spring, chưa tới năm mươi dòng. Rồi hỏi quy mô: một triệu yêu cầu thì tạo bao nhiêu đối tượng?</div>""",
-           """Hôm nay ta học nhãn, là dữ liệu gắn vào mã, và phản chiếu, là cách chương trình đọc chính mã của nó lúc chạy. Ta tự viết một bộ chứa tiêm phụ thuộc cỡ nhỏ, cùng cơ chế với Spring, chưa tới năm mươi dòng.
+Ta tự viết một <b>bộ chứa tiêm phụ thuộc</b> cỡ nhỏ: cùng ý tưởng nền với phần tìm và nối thành phần của Spring, chưa tới năm mươi dòng. Rồi hỏi quy mô: một triệu yêu cầu thì tạo bao nhiêu đối tượng?</div>""",
+           """Hôm nay ta học nhãn, là dữ liệu gắn vào mã, và phản chiếu, là cách chương trình đọc chính mã của nó lúc chạy. Ta tự viết một bộ chứa tiêm phụ thuộc cỡ nhỏ, cùng ý tưởng nền với phần tìm và nối thành phần của Spring, chưa tới năm mươi dòng.
            Rồi hỏi quy mô, một triệu yêu cầu thì tạo ra bao nhiêu đối tượng.""", clear=True),
     ])
     sc_pre = sc("prereq", "prereq", "Ôn lại: lớp lồng nhau, giao diện, bản đồ, ngoại lệ", [
@@ -334,31 +336,38 @@ Ta tự viết một <b>bộ chứa tiêm phụ thuộc</b> cỡ nhỏ: cùng c�
                   ["<code>@interface NghiepVu { … }</code>", "cách <b>tự định nghĩa</b> một nhãn; <code>String ten();</code> là một tham số của nhãn"],
                   ["<code>@Retention(RetentionPolicy.RUNTIME)</code>", "nhãn của nhãn: <b>giữ đến lúc chạy</b>; không ghi thì nhãn bị bỏ khi nạp lớp"],
                   ["<code>X.class</code>", "đối tượng <b>mô tả</b> lớp <code>X</code>: tên, trường, hàm, nhãn"],
-                  ["<code>getDeclaredFields()</code>", "phản chiếu: lấy mảng các <b>trường</b> khai báo trong lớp"],
+                  ["<code>getDeclaredFields()</code>", "phản chiếu: lấy mảng các <b>trường</b> khai báo trong lớp (mỗi trường là một <code>Field</code>); đặc tả <b>không bảo đảm thứ tự</b> của mảng"],
                   ["<code>f.isAnnotationPresent(X.class)</code>", "trường (hay lớp, hàm) <code>f</code> có gắn nhãn <code>X</code> không?"],
                   ["<code>newInstance()</code>, <code>f.set(o, v)</code>", "tạo đối tượng và gán giá trị cho trường <b>bằng tên lúc chạy</b>, không viết <code>new</code> hay dấu chấm"],
                   ["tiêm phụ thuộc", "đối tượng <b>không tự tạo</b> thứ nó cần; thứ khác tạo và <b>trao</b> cho nó"]]),
            """Bảng này có tám thứ. Nhãn là ghi chú có cấu trúc gắn lên lớp, hàm hay trường, và tự nó không làm gì cả. Ta có thể tự định nghĩa nhãn, với các tham số. Nhãn của nhãn quy định thời hạn giữ, nếu không ghi thì nhãn bị bỏ khi nạp lớp.
            Đối tượng mô tả lớp cho ta tên, trường, hàm và nhãn. Phản chiếu cho phép lấy danh sách trường, hỏi một trường có nhãn nào không, tạo đối tượng và gán giá trị cho trường bằng tên lúc chạy. Cuối cùng, tiêm phụ thuộc nghĩa là đối tượng không tự tạo thứ nó cần, mà được trao cho.""",
            focus=[1, "1.2", "1.3", "1.4", "1.5", "1.6", "1.7"]),
+        st(code_block(doc_nhan, lines=(1, 7), title="Đầu tệp DocNhan")
+           + "<p class='note'><code>Method</code>: đối tượng mô tả <b>một hàm</b> của lớp, như <code>Field</code> mô tả một trường.</p>",
+           """Ta thử nhãn tự định nghĩa, và xem từ dòng đầu tệp. Năm dòng nạp tên lấy nhãn thời hạn giữ, đối tượng mô tả một hàm, công cụ sắp xếp mảng và bộ so sánh. Khác với trường, mỗi hàm của lớp được mô tả bằng một đối tượng riêng.""", clear=True),
         st(code_block(doc_nhan, lines=(8, 12)) + code_block(doc_nhan, lines=(14, 22)),
-           """Ta thử nhãn tự định nghĩa. Nhãn nghiệp vụ có tên và độ ưu tiên, độ ưu tiên mặc định là năm. Hai hàm được gắn nhãn, một hàm không gắn. Nhãn chỉ là dữ liệu nằm cạnh mã, hàm vẫn chạy như bình thường.""", clear=True),
-        st(code_block(doc_nhan, lines=(25, 33)) + out_block(doc_nhan),
+           """Nhãn tự định nghĩa. Nhãn nghiệp vụ có tên và độ ưu tiên, độ ưu tiên mặc định là năm. Hai hàm được gắn nhãn, một hàm không gắn. Nhãn chỉ là dữ liệu nằm cạnh mã, hàm vẫn chạy như bình thường.""", clear=True),
+        st(code_block(doc_nhan, lines=(24, 33)) + out_block(doc_nhan),
            """Phản chiếu cho ta danh sách các hàm của lớp dịch vụ. Với mỗi hàm, ta hỏi có nhãn nghiệp vụ không. Có thì in tên và độ ưu tiên, không thì in là không có nhãn. Độ ưu tiên của hàm tra cứu là năm, lấy từ giá trị mặc định.""", clear=True),
     ])
     sc_int = sc("intuition", "intuition", "Hình dung: thợ đọc nhãn và hai thời điểm", [
         st(svg(1500, 330,
-               box(20, 80, 330, 170, ["mã nguồn", "@ThanhPhan", "class KhoDuLieu"], C_BLUE, 26, bold=True),
-               arrow(355, 165, 450, 165, "#2a78d6", "biên dịch"),
-               box(455, 80, 330, 170, [".class (còn nhãn", "nếu RUNTIME)", ""], C_GRAY, 26),
-               arrow(790, 165, 885, 165, "#16a34a", "nạp lúc chạy"),
-               box(890, 50, 590, 230, ["bộ chứa (chương trình khác)", "đọc nhãn bằng phản chiếu:", "thấy @ThanhPhan → tạo đối tượng", "thấy @Tiem → trao đối tượng vào trường"], C_GREEN, 25, bold=True)),
+               box(20, 80, 300, 170, ["mã nguồn", "@ThanhPhan", "class KhoDuLieu"], C_BLUE, 26, bold=True),
+               arrow(325, 165, 470, 165, "#2a78d6", "biên dịch"),
+               box(475, 80, 300, 170, [".class (còn nhãn", "nếu RUNTIME)", ""], C_GRAY, 26),
+               arrow(780, 165, 945, 165, "#16a34a", "nạp lúc chạy"),
+               box(950, 50, 530, 230, ["bộ chứa (chương trình khác)", "đọc nhãn bằng phản chiếu:", "thấy @ThanhPhan → tạo đối tượng", "thấy @Tiem → trao đối tượng vào trường"], C_GREEN, 23, bold=True)),
            """Hình dung nhãn như tờ giấy dán trên hộp hàng, còn bộ chứa là người thợ đọc giấy rồi mới xử lý. Mã nguồn có nhãn được biên dịch ra tệp lớp. Nếu nhãn được giữ đến lúc chạy, thì khi nạp lớp, một chương trình khác, chính là bộ chứa, đọc nhãn bằng phản chiếu.
            Thấy nhãn thành phần thì tạo đối tượng, thấy nhãn tiêm thì trao đối tượng vào trường. Cả Spring cũng làm đúng như vậy."""),
+        st(code_block(mini, lines=(1, 7), title="Đầu tệp MiniDi: nạp tên và khung")
+           + "<p class='note'><code>Field</code>: đối tượng mô tả <b>một trường</b>. Hai dòng đầu lấy nhãn thời hạn giữ; dòng thứ ba lấy <code>Field</code>; hai dòng sau lấy bản đồ.</p>",
+           """Ta xem bộ chứa từ dòng đầu tiên. Năm dòng nạp tên lấy nhãn thời hạn giữ, đối tượng mô tả một trường, và bản đồ. Rồi đến lớp chứa mọi thứ của bộ chứa.""", clear=True),
         st(code_block(mini, lines=(8, 18)),
            """Đây là bộ chứa của ta, phần đầu. Hai nhãn giữ đến lúc chạy. Ba lớp, ghi nhãn thành phần. Lớp chuyển tiền cần hai thứ, kho dữ liệu và dịch vụ phí, mỗi thứ có nhãn tiêm. Lớp chuyển tiền không tự tạo hai thứ này, và cũng không có dòng tạo mới nào cho chúng.""", clear=True),
-        st(code_block(mini, lines=(22, 28)),
-           """Đây là phần chính, hàm lấy đối tượng. Nếu trong hộp đã có thì trả lại ngay. Nếu lớp không có nhãn thành phần thì từ chối.""", clear=True),
+        st(code_block(mini, lines=(20, 28))
+           + "<p class='note'><code>Class&lt;?&gt;</code>: mô tả của <b>một lớp nào đó</b>; dấu <code>?</code> nghĩa là chưa biết lớp cụ thể. Hộp là bản đồ từ mô tả lớp sang đối tượng của lớp ấy.</p>",
+           """Đây là phần chính, hàm lấy đối tượng. Hộp là một bản đồ từ mô tả của một lớp sang đối tượng của lớp đó, dấu hỏi trong ngoặc nhọn nghĩa là lớp nào cũng được. Nếu trong hộp đã có thì trả lại ngay. Nếu lớp không có nhãn thành phần thì từ chối.""", clear=True),
         st(code_block(mini, lines=(29, 38)),
            """Còn lại thì tạo đối tượng bằng phản chiếu, bỏ vào hộp, rồi duyệt các trường. Trường nào có nhãn tiêm thì lấy đối tượng của kiểu trường đó, lại bằng chính hàm này, mở quyền truy cập rồi gán vào.""", clear=True),
     ])
@@ -389,20 +398,25 @@ Ta tự viết một <b>bộ chứa tiêm phụ thuộc</b> cỡ nhỏ: cùng c�
            "<p>Hàm <code>chuyen(5 000 000)</code> in: <code>so du 1000000, phi 5000</code> ✓ (số dư 1 000 000 là số minh hoạ của kho).</p>",
            """Phép làm thứ tư, gọi hàm chuyển với năm triệu. Phí là năm triệu chia một nghìn, bằng năm nghìn. Số dư một triệu là số minh hoạ mà kho trả về. Kết quả ta kỳ vọng in ra là số dư một triệu và phí năm nghìn.""", clear=True),
         st("$$⑤ \\; \\text{xin } \\texttt{KhoDuLieu} \\text{ lần nữa} \\Rightarrow \\text{trả đúng đối tượng cũ, hộp vẫn } \\hl{3}$$"
-           + code_block(mini, lines=(41, 45)) + out_block(mini),
+           + code_block(mini, lines=(40, 45)) + out_block(mini),
            """Phép làm thứ năm, xin kho dữ liệu lần nữa thì nhận lại đúng đối tượng cũ, hộp vẫn là ba. Chạy thật, bốn dòng in ra khớp. Số dư và phí như tính tay, hai tham chiếu là một đối tượng, hộp có ba, và lớp chuyển tiền không có nhãn không giữ, nên nhãn đó không đọc được lúc chạy.""", clear=True),
     ], checks=["5000000 // 1000 == 5000", "1 + 2 == 3"])
     sc_chk = sc("check", "check", "Tự kiểm bằng đường khác: nhìn vào tệp lớp bằng công cụ javap", [
         st(term_block(di, 2, 3, title="Lệnh javap in nội dung tệp lớp; lọc các dòng nhãn mức lớp") +
-           "<p class='note'>Nhãn có <code>RUNTIME</code> nằm ở mục <b>Visible</b> (đọc được lúc chạy); nhãn không khai thời hạn nằm ở mục <b>Invisible</b> (có trong tệp, nhưng phản chiếu không thấy).</p>",
-           """Cách kiểm khác là không tin chương trình, mà nhìn thẳng vào tệp lớp bằng lệnh của bộ công cụ. Lọc các dòng nhãn mức lớp, ta thấy nhãn thành phần nằm ở mục nhìn thấy được lúc chạy, còn nhãn không giữ nằm ở mục không nhìn thấy.
+           "<p class='note'><code>javap -v -p</code>: in nội dung tệp lớp (<code>-v</code> chi tiết, <code>-p</code> cả phần riêng tư). Mẫu lọc: dòng bắt đầu bằng <code>Runtime</code>, hoặc bắt đầu bằng đúng <b>bốn dấu cách</b> rồi <code>MiniDi</code> (<code>{4}</code> là bốn lần).</p>"
+           + "<p class='note'>Nhãn có <code>RUNTIME</code> nằm ở mục <b>Visible</b> (đọc được lúc chạy); nhãn không khai thời hạn nằm ở mục <b>Invisible</b> (có trong tệp, nhưng phản chiếu không thấy).</p>",
+           """Cách kiểm khác là không tin chương trình, mà nhìn thẳng vào tệp lớp bằng công cụ in nội dung tệp lớp của bộ công cụ. Mẫu lọc giữ các dòng tên mục, và các dòng tên nhãn thụt vào bốn dấu cách. Ta thấy nhãn thành phần nằm ở mục nhìn thấy được lúc chạy, còn nhãn không giữ nằm ở mục không nhìn thấy.
            Điều đó khớp với dòng cuối cùng của chương trình, vì dòng ấy in ra sai cho nhãn không giữ."""),
         st("<p>Kiểm đếm: hộp có <b>3</b> đối tượng = số lớp có <code>@ThanhPhan</code> ta đã xin (<code>ChuyenTien</code>) + số trường <code>@Tiem</code> của nó (2) = 1 + 2.</p>",
            """Ta kiểm thêm bằng cách đếm. Ba đối tượng trong hộp bằng số lớp ta xin trực tiếp là một, cộng số trường có nhãn tiêm của nó là hai, nên con số này khớp.""", clear=True),
     ], checks=["1 + 2 == 3"])
     sc_scale = sc("scale", "concept", "Khi một triệu yêu cầu đi qua: dùng chung hay tạo mới mỗi lần?", [
-        st(code_block(quy_mo, lines=(21, 26)) + code_block(quy_mo, lines=(38, 47)),
-           """Bây giờ là chuyện quy mô. Ta thêm một công tắc vào bộ chứa, dùng chung thì lần sau lấy lại đối tượng cũ, còn không thì tạo mới cho mỗi yêu cầu. Mỗi yêu cầu cần ba đối tượng. Ta đếm số lần hàm tạo được gọi khi có một nghìn yêu cầu, rồi một triệu yêu cầu.""", clear=True),
+        st(code_block(quy_mo, lines=(8, 19)),
+           """Bây giờ là chuyện quy mô. Mỗi lớp có hàm tạo tăng một biến đếm, nên biến đếm cho biết đã tạo bao nhiêu đối tượng. Lớp chuyển tiền cần kho và dịch vụ phí, nên mỗi yêu cầu cần ba đối tượng.""", clear=True),
+        st(code_block(quy_mo, lines=(21, 33)),
+           """Ta thêm một công tắc vào bộ chứa. Bật dùng chung thì lần sau lấy lại đối tượng cũ trong hộp. Tắt thì tạo mới cho mỗi yêu cầu, và vẫn tiêm các trường như trước.""", clear=True),
+        st(code_block(quy_mo, lines=(36, 50)),
+           """Hàm chính chạy hai cỡ, một nghìn rồi một triệu yêu cầu, mỗi cỡ thử cả hai cách. Cuối mỗi lượt nó in số lần hàm tạo đã được gọi.""", clear=True),
         st(out_block(quy_mo) + table(["số yêu cầu", "dùng chung", "tạo mới mỗi lần"], [["1 000", "3", "3 000"], ["1 000 000", "3", "<b>3 000 000</b>"]]),
            """Kết quả thật. Dùng chung thì lúc nào cũng chỉ có ba đối tượng, dù một nghìn hay một triệu yêu cầu. Tạo mới mỗi lần thì ba nghìn, rồi ba triệu đối tượng, tăng đúng theo số yêu cầu, mỗi đối tượng lại cần bộ thu gom rác dọn.
            Đây là lý do Spring mặc định dùng chung một bản cho mỗi thành phần.""", clear=True),
@@ -410,37 +424,45 @@ Ta tự viết một <b>bộ chứa tiêm phụ thuộc</b> cỡ nhỏ: cùng c�
 Ở máy chủ, các yêu cầu chạy <b>đồng thời</b>, nên thành phần dùng chung phải <b>không có trạng thái thay đổi</b>, hoặc phải khoá. Ta sẽ thấy lỗi này ở bài về luồng.</div>""",
            """Nhưng có đánh đổi. Một bản dùng chung cho mọi yêu cầu nghĩa là mọi yêu cầu cùng sửa chung các trường của nó. Ở máy chủ, các yêu cầu chạy đồng thời, nên thành phần dùng chung phải không có trạng thái thay đổi, hoặc phải có khoá. Ta sẽ thấy lỗi này ở bài về luồng.""",
            forward_ref=True),
+        st("""<div class="box key"><b>Nửa còn lại của câu hỏi mở đầu:</b> <code>@Transactional</code> không do bộ chứa tiêm trường làm. Spring bọc đối tượng trong một <b>đối tượng đại diện</b> (proxy, kỹ thuật AOP) chặn mỗi lời gọi hàm: mở giao dịch trước, chốt hoặc hoàn tác sau. Đó là cơ chế khác, ngoài phạm vi bài này.</div>""",
+           """Giờ trả lời nốt nửa còn lại của câu hỏi mở đầu. Nhãn giao dịch không do bộ chứa tiêm trường làm. Spring bọc đối tượng trong một đối tượng đại diện, chặn mỗi lời gọi hàm, mở giao dịch trước và chốt hoặc hoàn tác sau. Đó là một cơ chế khác, nằm ngoài bài này.""", clear=True),
     ], checks=["3 * 1000 == 3000", "3 * 1000000 == 3000000"])
     sc_pit = sc("pitfalls", "pitfall", "Lỗi hay gặp, có lỗi của người đã đi làm", [
         st('<div class="box warn"><b>Lỗi 1 (người mới).</b> Gõ sai tên hàm mà không có <code>@Override</code> thì im lặng; có thì được báo ngay.</div>'
-           + code_block(sai_ten, lines=(6, 11)) + out_block(sai_ten),
-           """Lỗi thứ nhất là gõ thừa một chữ trong tên hàm. Nhãn ghi đè là một nhãn mà trình biên dịch đọc ngay lúc biên dịch. Nó nói tôi chắc chắn hàm này ghi đè một hàm cha, và trình biên dịch kiểm lời hứa đó. Hứa sai thì báo lỗi.
-           Không có nhãn này, ta sẽ có một hàm mới tinh, hàm cũ vẫn trống, và chương trình chạy sai mà không báo gì."""),
+           + code_block(sai_ten, lines=(2, 12)),
+           """Lỗi thứ nhất là gõ thừa một chữ trong tên hàm. Giao diện đòi một hàm tên tinh, lớp cài giao diện đó gõ thừa chữ h. Nhãn ghi đè là một nhãn mà trình biên dịch đọc ngay lúc biên dịch. Nó nói tôi chắc chắn hàm này ghi đè một hàm cha, và trình biên dịch kiểm lời hứa đó."""),
+        st(out_block(sai_ten),
+           """Hứa sai thì báo lỗi ngay. Không có nhãn này, ta sẽ có một hàm mới tinh, hàm cũ vẫn trống, và chương trình chạy sai mà không báo gì.""", clear=True),
         st('<div class="box warn"><b>Lỗi 2 (người mới).</b> Quên khai thời hạn giữ nhãn.</div>'
-           + code_block(quen_giu, lines=(8, 15)) + out_block(quen_giu),
-           """Lỗi thứ hai là quên khai thời hạn giữ nhãn. Nhãn không khai thì có trong tệp lớp nhưng bị bỏ khi nạp, nên phản chiếu hỏi thì nhận câu trả lời là không có. Bộ chứa của ta sẽ lặng lẽ bỏ qua mọi thành phần, nên không có lỗi nào, chỉ là không có gì xảy ra.""", clear=True),
+           + code_block(quen_giu, lines=(5, 15)),
+           """Lỗi thứ hai là quên khai thời hạn giữ nhãn. Nhãn không khai thì có trong tệp lớp nhưng bị bỏ khi nạp, nên phản chiếu hỏi thì nhận câu trả lời là không có.""", clear=True),
+        st(out_block(quen_giu),
+           """Bộ chứa của ta sẽ lặng lẽ bỏ qua mọi thành phần, nên không có lỗi nào, chỉ là không có gì xảy ra.""", clear=True),
         st('<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Hai lớp cần nhau khi tạo qua hàm tạo: vòng phụ thuộc.</div>'
-           + code_block(vong_tron, lines=(8, 9)),
+           + code_block(vong_tron, lines=(1, 9)),
            """Lỗi thứ ba hay gặp ở người đã đi làm là vòng phụ thuộc. Lớp A cần B ngay trong hàm tạo, lớp B cần A. Muốn tạo A thì phải có B, muốn tạo B thì phải có A, và không có đối tượng nào để dở dang cất vào hộp, vì hàm tạo chưa chạy xong."""),
-        st(code_block(vong_tron, lines=(11, 19)),
-           """Bộ chứa cần một tập ghi những lớp đang tạo. Vào hàm tạo lớp nào thì thêm lớp đó vào tập, nếu đã có sẵn nghĩa là ta đang đi vòng, thì ném lỗi. Tạo xong các tham số thì mới bỏ lớp ra khỏi tập.""", clear=True),
-        st(out_block(vong_tron) + "<p class='note'>Cách giải: đổi một phía sang tiêm vào trường (như bộ chứa của ta, đối tượng dở dang đã nằm trong hộp), hoặc tốt hơn <b>tách một lớp thứ ba</b> để xoá vòng. Spring cũng báo lỗi tương tự khi tạo qua hàm tạo.</p>",
-           """Kết quả thật, bộ chứa phát hiện vòng và dừng, thay vì chạy mãi. Cách giải là đổi một phía sang tiêm vào trường, hoặc tốt hơn là tách ra một lớp thứ ba để xoá vòng. Vòng phụ thuộc thường là dấu hiệu thiết kế lẫn lộn trách nhiệm.""", clear=True),
+        st(code_block(vong_tron, lines=(11, 22))
+           + "<p class='note'><code>Constructor</code>: đối tượng mô tả <b>một hàm tạo</b>; <code>getParameterTypes()</code> cho kiểu các tham số của nó.</p>",
+           """Bộ chứa cần một tập ghi những lớp đang tạo. Vào hàm tạo lớp nào thì thêm lớp đó vào tập, nếu đã có sẵn nghĩa là ta đang đi vòng, thì ném lỗi. Tạo xong các tham số thì mới bỏ lớp ra khỏi tập. Mỗi hàm tạo cũng được mô tả bằng một đối tượng, cho ta kiểu của từng tham số.""", clear=True),
+        st(code_block(vong_tron, lines=(24, 31)),
+           """Hàm chính thử tạo A và bắt lỗi vòng để in thông báo ra màn hình.""", clear=True),
+        st(out_block(vong_tron) + "<p class='note'>Cách giải tốt nhất: <b>tách một lớp thứ ba</b> để xoá vòng. Bộ chứa tự viết của ta chịu được vòng nếu tiêm vào trường (đối tượng dở dang đã nằm trong hộp), nhưng Spring Boot từ bản 2.6 cấm vòng theo mặc định, kể cả tiêm vào trường. Dự án thật nên tiêm qua hàm tạo: trường bắt buộc hiện rõ, đối tượng dựng xong là dùng được.</p>",
+           """Kết quả thật, bộ chứa phát hiện vòng và dừng, thay vì chạy mãi. Cách giải tốt nhất là tách ra một lớp thứ ba để xoá vòng, vì vòng phụ thuộc thường là dấu hiệu thiết kế lẫn lộn trách nhiệm. Bộ chứa tự viết chịu được vòng khi tiêm vào trường, nhưng Spring Boot từ bản hai chấm sáu cấm vòng theo mặc định. Dự án thật nên tiêm qua hàm tạo.""", clear=True),
     ])
     sc_quiz = sc("quiz", "quiz", "Bây giờ tới phần bạn tự làm", [
-        st("""<p><b>Đề.</b> Bộ chứa trong bài với ba lớp <code>A</code>, <code>B</code>, <code>C</code> đều có <code>@ThanhPhan</code>. <code>A</code> có hai trường <code>@Tiem B b</code>, <code>@Tiem C c</code>; <code>B</code> có một trường <code>@Tiem C c</code>; <code>C</code> không có trường nào.</p>
+        st("""<p><b>Đề.</b> Bộ chứa trong bài với ba lớp <code>A</code>, <code>B</code>, <code>C</code> đều có <code>@ThanhPhan</code>. <code>A</code> có hai trường <code>@Tiem B b</code>, <code>@Tiem C c</code> (khai báo theo thứ tự đó); <code>B</code> có một trường <code>@Tiem C c</code>; <code>C</code> không có trường nào. Giả sử máy duyệt trường theo thứ tự khai báo (thường như vậy, nhưng đặc tả không bảo đảm).</p>
 <ol><li>Sau <code>lay(A.class)</code>, <code>hop</code> có mấy đối tượng? Thứ tự các lớp được <b>tạo</b>?</li>
 <li>Nếu <code>@Tiem</code> bị quên <code>@Retention(RUNTIME)</code> thì <code>hop.size()</code> bằng mấy?</li></ol>
 <p><b>Chọn A hay B?</b> Thành phần giữ <b>số dư tạm</b> của từng khách. A: một bản dùng chung. B: một bản cho mỗi yêu cầu. Vì sao?</p>""",
-           """Bây giờ tới phần bạn tự làm. Ba lớp A, B, C đều có nhãn thành phần. A cần B và C, B cần C, C không cần gì. Hãy tính sau khi lấy A thì hộp có mấy đối tượng, và thứ tự tạo. Rồi nếu nhãn tiêm bị quên khai thời hạn giữ thì hộp có mấy đối tượng.
+           """Bây giờ tới phần bạn tự làm. Ba lớp A, B, C đều có nhãn thành phần. A cần B và C, khai báo theo thứ tự đó, B cần C, C không cần gì. Giả sử máy duyệt trường theo thứ tự khai báo. Hãy tính sau khi lấy A thì hộp có mấy đối tượng, và thứ tự tạo. Rồi nếu nhãn tiêm bị quên khai thời hạn giữ thì hộp có mấy đối tượng.
            Cuối cùng chọn giữa một bản dùng chung và một bản cho mỗi yêu cầu cho thành phần giữ số dư tạm của từng khách, và giải thích. Hãy dừng video và tự làm.""", pause=30),
         st(table(["câu", "đáp án", "vì sao"],
-                 [["1", "<b>3</b>; thứ tự tạo: A, rồi B, rồi C", "A vào hộp trước; tiêm <code>b</code> &rarr; tạo B; B tiêm <code>c</code> &rarr; tạo C; sau đó tiêm <code>c</code> của A: C đã có, dùng lại"],
+                 [["1", "<b>3</b>; thứ tự tạo: A, rồi B, rồi C", "A vào hộp trước; tiêm <code>b</code> &rarr; tạo B; B tiêm <code>c</code> &rarr; tạo C; sau đó tiêm <code>c</code> của A: C đã có, dùng lại. Nếu máy duyệt <code>c</code> trước thì thứ tự là A, C, B; số đối tượng vẫn là 3"],
                   ["2", "<b>1</b>", "nhãn tiêm không được giữ nên không trường nào được tiêm; chỉ có A"],
                   ["3", "<b>B</b>: mỗi yêu cầu một bản", "bản dùng chung bị mọi yêu cầu đồng thời ghi đè số dư tạm lẫn nhau"]]),
-           """Đáp án câu một, hộp có ba đối tượng, và thứ tự tạo là A, rồi B, rồi C. A vào hộp trước, tiêm trường b thì tạo B, B tiêm trường c thì tạo C. Khi tiêm trường c của A thì C đã có sẵn nên dùng lại.
+           """Đáp án câu một, hộp có ba đối tượng, và thứ tự tạo là A, rồi B, rồi C. A vào hộp trước, tiêm trường b thì tạo B, B tiêm trường c thì tạo C. Khi tiêm trường c của A thì C đã có sẵn nên dùng lại. Nếu máy duyệt trường c trước thì thứ tự đổi thành A, C, B, nhưng số đối tượng vẫn là ba.
            Câu hai, nhãn tiêm không được giữ thì không trường nào được tiêm, hộp chỉ có A, tức là một. Câu ba chọn phương án B, vì bản dùng chung bị mọi yêu cầu đồng thời ghi đè số dư tạm lên nhau.""",
-           focus=[1, "1.2", "1.3", "1.4", "1.4"]),
+           focus=[1, "1.2", "1.2", "1.2", "1.3", "1.4"]),
         st("""<div class="box key"><b>Quy tắc:</b> thành phần dùng chung phải <b>không giữ trạng thái riêng của từng yêu cầu</b>. Cần trạng thái riêng thì truyền qua tham số, hoặc tạo bản riêng cho mỗi yêu cầu.</div>""",
            """Quy tắc rút ra. Thành phần dùng chung không được giữ trạng thái riêng của từng yêu cầu. Cần trạng thái riêng thì truyền qua tham số, hoặc tạo bản riêng cho mỗi yêu cầu."""),
     ], checks=["1 + 2 == 3", "len({'A', 'B', 'C'}) == 3"])
@@ -453,15 +475,18 @@ Ta tự viết một <b>bộ chứa tiêm phụ thuộc</b> cỡ nhỏ: cùng c�
 nó <b>quản lý bao nhiêu bản</b> của đối tượng, và có <b>vòng phụ thuộc</b> hay trạng thái chung nào bị giấu sau nhãn không.</div>""",
            """Điều cần mang theo. Khi thấy một nhãn như nhãn dịch vụ hay nhãn giao dịch, hãy hỏi ba câu. Ai đọc nhãn này, lúc biên dịch hay lúc chạy. Nó quản lý bao nhiêu bản của đối tượng. Và có vòng phụ thuộc hay trạng thái chung nào bị giấu sau nhãn không."""),
     ])
+    sc_chk["steps"][0]["introduces"] = ["jv2_javap"]
+    sc_int["steps"][3]["introduces"] = ["jv2_class_wild"]
     return lesson("L04", "nhan_phan_chieu_mini_di", "Bài 4 — Nhãn và phản chiếu: bộ chứa tiêm phụ thuộc cỡ nhỏ",
                   "curriculum/jv2.yaml L04; audit/jv2/verify_jv2.py L04 (javac/java/javap chạy thật, JDK 21); "
                   "The Java Language Specification, Java SE 21: §9.6 (kiểu chú thích), §9.6.4.2 (@Retention), §9.6.4.4 (@Override); "
                   "java.lang.reflect và java.lang.Class (Java SE 21 API: getDeclaredFields, isAnnotationPresent); "
                   "javap (JDK 21 tools: RuntimeVisibleAnnotations / RuntimeInvisibleAnnotations); "
-                  "Spring Framework Reference, mục IoC container, circular dependencies (docs.spring.io); dev.java/learn",
+                  "Spring Framework Reference, mục IoC container, circular dependencies và AOP proxy (docs.spring.io); "
+                  "Spring Boot 2.6 Release Notes (tham chiếu vòng bị cấm theo mặc định); dev.java/learn",
                   ["Mô tả nhãn là dữ liệu gắn vào mã mà chương trình khác đọc, và vì sao phải khai thời hạn giữ",
                    "Đọc nhãn tự định nghĩa bằng phản chiếu và dựng bộ chứa tiêm phụ thuộc cỡ nhỏ",
-                   "Nêu cách Spring tự thấy và nối các thành phần: cùng cơ chế với bộ chứa cỡ nhỏ",
+                   "Nêu cách Spring tự thấy và nối các thành phần: cùng ý tưởng nền với bộ chứa cỡ nhỏ",
                    "Nhận ra vòng phụ thuộc và cái giá khi một thành phần được dùng chung cho mọi yêu cầu",
                    "Viết bộ chứa tiêm phụ thuộc cho ba lớp của kho hàng và chạy thử"],
                   [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_chk, sc_scale, sc_pit, sc_quiz, sc_lab, sc_rec],

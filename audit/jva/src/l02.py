@@ -204,7 +204,16 @@ Lời giải nằm ở <code>labs/JVA/L02/loi_giai.java</code> — chỉ mở sa
         st(code_block(phep_gan, lines=(3, 10)) + out_block(phep_gan),
            """Chương trình này dùng thử. Số dư một trăm nghìn, cộng dồn năm mươi nghìn, trừ bớt hai mươi nghìn, còn một trăm ba mươi nghìn.
            Số lệnh tăng một hai lần thành hai. Dòng cuối so sánh số dư với một trăm nghìn, kết quả là giá trị đúng."""),
-    ])
+        st(chain("ngoặc ( )", "nhân, chia, dư: * / %", "cộng, trừ: + -", "so sánh lớn nhỏ: &lt; &lt;= &gt; &gt;=", "so sánh bằng, khác: == !=", "và: &amp;&amp;", "hoặc: ||")
+           + table(["biểu thức", "máy làm theo thứ tự", "ra"],
+                   [["<code>a &gt; 10 &amp;&amp; a % 2 == 0</code> với a = 17", "17 % 2 = 1; rồi 17 &gt; 10 đúng, 1 == 0 sai; cuối cùng đúng &amp;&amp; sai", "sai"],
+                    ["<code>tong / soNguoi &gt; 50000</code> với tong = 300000, soNguoi = 5", "300000 / 5 = 60000; rồi 60000 &gt; 50000", "đúng"]]),
+           """Bây giờ ta ghép tất cả thành một thứ tự duy nhất, từ làm trước tới làm sau. Ngoặc làm đầu tiên, rồi tới nhân, chia và chia lấy dư, rồi mới cộng và trừ.
+           Sau các phép số học mới tới các phép so sánh lớn nhỏ, rồi tới phép so sánh bằng và khác, kết quả là đúng hoặc sai. Cuối cùng là phép và, rồi tới phép hoặc, vì chúng chỉ nhận kết quả đúng sai của các phép so sánh.
+           Thử với biểu thức mười bảy lớn hơn mười, và mười bảy chia lấy dư hai bằng không. Phép chia lấy dư làm trước, ra một, nên vế chẵn sai, và phép và cho kết quả sai.
+           Biểu thức tổng chia số người lớn hơn năm mươi nghìn cũng vậy: chia trước, so sánh sau, nên ra đúng.""",
+           clear=True),
+    ], checks=["17 % 2 == 1", "((17 > 10) and (17 % 2 == 0)) == False", "300000 // 5 == 60000", "60000 > 50000"])
     sc_int = sc("intuition", "intuition", "Hình dung: chia kẹo, thứ tự tính và cửa ngắn mạch", [
         st(svg(1500, 360,
                txt(750, 40, "7 viên kẹo chia đều cho 2 người", 26, "middle", "#1f2937", True),

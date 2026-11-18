@@ -126,3 +126,11 @@ def bnx_l22_scan_cost(rtype, repo=None):
         read += 1
         hit += props.get("sling:resourceType") == rtype
     return read, hit
+
+
+def bnx_l22_scale(n, moi=100):
+    """Quy mô (AF2, nhánh B): kho mô phỏng n trang dưới /content/site/vi, cứ `moi` trang có 1 trang kiểu page (trang chỉ số 0, moi, 2·moi, …).
+    Trả (số nút phải duyệt khi KHÔNG có chỉ mục, số nút khớp, số nút đọc khi CÓ chỉ mục). Nút = gốc + content + site + vi + n trang."""
+    nut = ["/", "/content", "/content/site", "/content/site/vi"] + [f"/content/site/vi/t{i}" for i in range(n)]
+    khop = sum(1 for i in range(n) if i % moi == 0)
+    return len(nut), khop, khop

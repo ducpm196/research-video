@@ -29,6 +29,14 @@ SELECT tk, SUM(tien) FROM but_toan GROUP BY tk ORDER BY tk;""", out="""2
 C|-1256600
 D|1240000
 phi|6600""", lang="sqlite")
+    so_cai_lech = prog("SoCaiLech", """
+CREATE TABLE but_toan (gd INTEGER, tk TEXT, tien INTEGER);
+INSERT INTO but_toan VALUES (1, 'a', -100), (1, 'b', 100), (2, 'a', -5), (2, 'b', 5);
+UPDATE but_toan SET tien = 90 WHERE gd = 1 AND tk = 'b';
+SELECT gd FROM but_toan GROUP BY gd HAVING SUM(tien) <> 0;
+SELECT gd, SUM(tien) FROM but_toan GROUP BY gd ORDER BY gd;""", out="""1
+1|-10
+2|0""", lang="sqlite")
     hook = sc("hook", "hook", "Vì sao ngân hàng không chỉ lưu một con số số dư?", [
         st("""<p>Nếu chỉ lưu <b>một cột số dư</b> và sửa thẳng, khi số dư sai ta <b>không biết sai từ đâu</b>, vì mọi dấu vết đã bị ghi đè.</p>
 <div class="box key">Sổ cái ghi <b>từng bút toán</b>, mỗi giao dịch có tổng bằng <b>0</b>. Số dư chỉ là <b>tổng các bút toán</b>.</div>""",
@@ -37,14 +45,14 @@ phi|6600""", lang="sqlite")
         st(table(["cách lưu", "tìm lỗi", "kiểm cân đối"],
                  [["một cột số dư, sửa trực tiếp", "không thể, dấu vết bị ghi đè", "không có gì để cộng lại"],
                   ["sổ cái bút toán, chỉ thêm", "xem từng dòng", "tổng mỗi giao dịch phải bằng 0"]]),
-           """Bảng này so hai cách lưu. Một cột số dư sửa trực tiếp thì không tìm được lỗi và không có gì để cộng lại kiểm tra. Sổ cái chỉ thêm thì xem được từng dòng, và kiểm cân đối bằng cách cộng tổng mỗi giao dịch."""),
+           """Bảng này so hai cách lưu. Một cột số dư sửa trực tiếp thì không tìm được lỗi và không có gì để cộng lại kiểm tra. Sổ cái chỉ thêm thì xem được từng dòng, và kiểm cân đối, tức cộng tổng mỗi giao dịch xem có bằng không."""),
     ])
     pre = sc("prereq", "prereq", "Trước hết: ba điều cần hiểu", [
         st(table(["khái niệm", "nghĩa", "ví dụ"],
-                 [["① Số nguyên đồng", "trong thanh toán, đồng Việt Nam không dùng phần lẻ (ISO 4217 ghi VND có 0 chữ số thập phân), nên lưu bằng số nguyên", "500 000 đồng = 500000"],
+                 [["① Số nguyên đồng", "trong thanh toán, đồng Việt Nam không dùng phần lẻ (chuẩn tiền tệ ISO 4217 ghi VND có 0 chữ số thập phân), nên lưu bằng số nguyên", "500 000 đồng = 500000"],
                   ["② Số có dấu", "dương là tiền vào, âm là tiền ra khỏi tài khoản", "−505 500 và +500 000"],
                   ["③ Tổng một nhóm", "cộng mọi số trong nhóm", "−100 + 60 + 40 = 0"]]),
-           """Ôn ba điều. Trong thanh toán, đồng Việt Nam không dùng phần lẻ, nên ta lưu bằng số nguyên. Số có dấu cho biết hướng, dương là tiền vào, âm là tiền ra khỏi tài khoản. Tổng một nhóm là cộng mọi số trong nhóm.
+           """Ôn ba điều. Trong thanh toán, đồng Việt Nam không dùng phần lẻ theo chuẩn quốc tế về tiền tệ, nên ta lưu bằng số nguyên. Số có dấu cho biết hướng, dương là tiền vào, âm là tiền ra khỏi tài khoản. Tổng một nhóm là cộng mọi số trong nhóm.
            Lưu ý, kế toán dùng cách gọi nợ và có theo quy ước riêng, còn bài này dùng số có dấu cho dễ thấy."""),
         st("""$$-100 + 60 + 40 = 0$$""",
            """Một ví dụ số. Âm một trăm cộng sáu mươi cộng bốn mươi bằng không. Đó là một giao dịch cân đối."""),
@@ -79,7 +87,7 @@ phi|6600""", lang="sqlite")
                txt(1150, 330, "hệ thống thật lưu thêm số dư tính sẵn,", 22, "middle", "#475569"),
                txt(1150, 362, "cập nhật cùng giao dịch, đối soát với tổng", 22, "middle", "#475569")),
            """Sổ cái là một danh sách chỉ thêm ở cuối. Không dòng nào bị sửa hay xoá. Về nguyên tắc, số dư của một tài khoản là tổng các dòng của tài khoản đó.
-           Ở đây sổ bắt đầu trống, nên số dư của A là âm năm trăm lẻ năm nghìn năm trăm.
+           Ở đây sổ bắt đầu trống, nên số dư của A là âm năm trăm lẻ năm nghìn năm trăm. Số âm này chỉ nghĩa là tiền đã ra khỏi tài khoản so với lúc sổ trống, không phải khách đang nợ.
            Hệ thống thật thường lưu thêm số dư tính sẵn để đọc nhanh, nhưng phải cập nhật cùng giao dịch với bút toán, và đối soát được với tổng bút toán."""),
     ])
     form = sc("formula", "formula", "Suy ra từng bước: cân đối và sửa sai", [
@@ -114,18 +122,24 @@ $$⑤ \\; \\text{số dư A} = -505\\,500 + 505\\,500 = \\hl{0}$$""",
                "-505500 + 500000 + 5500 == 0", "+505500 - 500000 - 5500 == 0",
                "alg.bnk_ledger_after_reversal(500000, 5500)[0] == 3 + 3 and alg.bnk_ledger_after_reversal(500000, 5500)[2]['khach_A'] == 0"])
     chk = sc("check", "check", "Tự kiểm bằng đường khác: để cơ sở dữ liệu tìm giao dịch lệch", [
-        st("""<p>Đường khác: vì mọi dòng nằm trong một bảng, ta hỏi cơ sở dữ liệu: giao dịch nào có tổng khác $0$? Ta cố ý sửa một dòng của giao dịch 1.</p>
-<div class="box code"><code>SELECT txn FROM entry GROUP BY txn HAVING SUM(amt) &lt;&gt; 0;</code></div>
-<p class="small">Bảng <code>entry</code> (bút toán) có cột <code>txn</code> (mã giao dịch) và <code>amt</code> (số tiền có dấu). <code>GROUP BY txn</code>: gom các dòng cùng mã giao dịch thành một nhóm. <code>HAVING SUM(amt) &lt;&gt; 0</code>: chỉ giữ nhóm có tổng khác 0.</p>
+        st(code_block(so_cai_lech, lines=(1, 2), title="Bảng thử khác (số nhỏ cho dễ cộng): giao dịch 1 và 2"),
+           """Để thử, ta dùng một bảng khác bảng trước, số nhỏ nên dễ cộng. Lệnh tạo bảng rồi lệnh thêm bốn dòng: giao dịch một gồm âm một trăm và cộng một trăm, giao dịch hai gồm âm năm và cộng năm."""),
+        st("""<p>Ta cố ý sửa lén một dòng của giao dịch 1:</p>
+<div class="box code"><code>UPDATE but_toan SET tien = 90 WHERE gd = 1 AND tk = 'b';</code></div>
+<p class="small"><code>UPDATE … SET … WHERE</code>: sửa cột của những dòng thoả điều kiện; dòng của tài khoản <code>b</code> trong giao dịch 1 đổi từ $+100$ thành $+90$.</p>""",
+           """Ta cố ý sửa lén một dòng của giao dịch một bằng lệnh cập nhật, tức sửa cột của những dòng thoả mệnh đề điều kiện. Dòng cộng một trăm đổi thành cộng chín mươi, nên tổng của giao dịch một không còn bằng không."""),
+        st("""<p>Đường khác: vì mọi dòng nằm trong một bảng, ta hỏi cơ sở dữ liệu: giao dịch nào có tổng khác $0$?</p>
+<div class="box code"><code>SELECT gd FROM but_toan GROUP BY gd HAVING SUM(tien) &lt;&gt; 0;</code></div>
+<p class="small">Bảng <code>but_toan</code> (bút toán) có cột <code>gd</code> (mã giao dịch) và <code>tien</code> (số tiền có dấu). <code>GROUP BY gd</code>: gom các dòng cùng mã giao dịch thành một nhóm. <code>HAVING SUM(tien) &lt;&gt; 0</code>: chỉ giữ nhóm có tổng khác 0.</p>
 $$\\text{giao dịch lệch} = \\hl{[1]}$$""",
-           """Kiểm bằng đường khác. Vì mọi dòng nằm trong một bảng, ta hỏi cơ sở dữ liệu giao dịch nào có tổng khác không. Bảng bút toán có cột mã giao dịch và cột số tiền có dấu. Câu truy vấn gom các dòng cùng mã giao dịch thành một nhóm, rồi chỉ giữ những nhóm có tổng khác không. Ta cố ý sửa một dòng của giao dịch một, và cơ sở dữ liệu chỉ đúng giao dịch một là lệch."""),
+           """Kiểm bằng đường khác. Vì mọi dòng nằm trong một bảng, ta hỏi cơ sở dữ liệu giao dịch nào có tổng khác không. Bảng bút toán có cột mã giao dịch và cột số tiền có dấu. Câu truy vấn gom các dòng cùng mã giao dịch thành một nhóm, rồi chỉ giữ những nhóm có tổng khác không. Cơ sở dữ liệu chỉ đúng giao dịch một là lệch.""", clear=True),
         st(table(["giao dịch", "các dòng", "tổng", "kết luận"],
                  [["1 (đã sửa lén)", "−100, +90", "−10", "lệch, phải điều tra"], ["2", "−5, +5", "0", "cân đối"]]),
-           """Bảng này cho thấy kết quả. Vì giao dịch một có tổng âm mười, nên nó lệch và cần điều tra. Giao dịch hai tổng bằng không, nên cân đối. Chỉ cần một câu truy vấn tổng nhóm là thấy."""),
+           """Bảng này cho thấy kết quả. Vì giao dịch một có tổng âm mười, nên nó lệch và cần điều tra. Giao dịch hai tổng bằng không, nên cân đối. Chỉ cần một câu truy vấn tổng nhóm là thấy.""", clear=True),
     ], checks=["alg.bnk_ledger_unbalanced([(1, 'a', -100), (1, 'b', 90), (2, 'a', -5), (2, 'b', 5)]) == [1]", "-100 + 90 == -10"])
     pit = sc("pitfalls", "pitfall", "Lỗi hay gặp, có lỗi của người đã đi làm", [
-        st("""<div class="box warn"><b>Lỗi 1 (người mới).</b> Lưu số dư là một cột rồi <b class="red">cộng trừ trực tiếp</b>. Hai giao dịch cùng lúc có thể ghi đè nhau, và không còn dấu vết để tìm lỗi.</div>""",
-           """Lỗi thứ nhất, của người mới. Lưu số dư là một cột rồi cộng trừ trực tiếp. Hai giao dịch cùng lúc có thể ghi đè nhau, và không còn dấu vết để tìm lỗi."""),
+        st("""<div class="box warn"><b>Lỗi 1 (người mới).</b> Lưu số dư là một cột rồi <b class="red">đọc ra, tính số mới ở ứng dụng, ghi đè lên</b>. Hai giao dịch cùng lúc có thể cùng đọc một số cũ rồi ghi đè nhau (câu <code>UPDATE … SET so_du = so_du - x</code> sửa dòng có sẵn ngay trong cơ sở dữ liệu; nó được <b>khoá hàng</b>: trong lúc một giao dịch sửa dòng, giao dịch khác phải chờ, nên không ghi đè), và không còn dấu vết để tìm lỗi.</div>""",
+           """Lỗi thứ nhất, của người mới. Lưu số dư là một cột, rồi đọc ra, tính số mới ở ứng dụng và ghi đè lên. Hai giao dịch cùng lúc có thể cùng đọc một số cũ rồi ghi đè nhau, và không còn dấu vết để tìm lỗi. Câu sửa cộng trừ thẳng trong cơ sở dữ liệu, gọi là câu cập nhật, thì được khoá hàng nên không ghi đè. Khoá hàng nghĩa là trong lúc một giao dịch sửa một dòng, các giao dịch khác phải chờ."""),
         st("""<div class="box warn"><b>Lỗi 2 (người đã đi làm).</b> <b class="red">Xoá hay sửa dòng cũ</b> khi phát hiện sai, cho “gọn”. Từ đó sổ không còn bằng chứng, kiểm toán (người kiểm tra sổ sách độc lập) không dựng lại được. Chỉ thêm bút toán đảo.</div>""",
            """Lỗi thứ hai, của người đã đi làm, là xoá hay sửa dòng cũ khi phát hiện sai, cho gọn. Từ đó sổ không còn bằng chứng, và kiểm toán, tức người kiểm tra sổ sách độc lập, không dựng lại được. Hãy chỉ thêm bút toán đảo."""),
         st("""<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Tính phí theo phần trăm bằng số thực rồi làm tròn tuỳ ý. Lệch một đồng mỗi giao dịch, nhân với hàng triệu giao dịch. Cần <b>quy tắc làm tròn viết rõ</b>, tính bằng số nguyên.</div>""",
@@ -157,14 +171,21 @@ $$\\text{giao dịch lệch} = \\hl{[1]}$$""",
     ])
     # ── AF2: P1 SQL tối thiểu, SQL chạy thật trên sqlite (sổ cái, cân đối, đảo), quy mô, tự làm ──
     add_steps([pre], "prereq", [
-        st(table(["thêm một điều", "nghĩa", "ví dụ"],
-                 [["④ SQL tối thiểu", "<code>CREATE TABLE</code> tạo bảng; <code>INSERT INTO … VALUES</code> thêm dòng; <code>SELECT cột FROM bảng</code> lấy dữ liệu; <code>SUM(cột)</code> cộng; <code>GROUP BY cột</code> gom các dòng cùng giá trị cột đó thành nhóm; <code>HAVING</code> lọc nhóm; <code>ORDER BY</code> sắp xếp",
+        st(table(["thêm hai điều", "nghĩa", "ví dụ"],
+                 [["④ SQL: tạo, thêm, đọc", "<code>CREATE TABLE</code> tạo bảng; <code>INSERT INTO … VALUES</code> thêm dòng; <code>SELECT cột FROM bảng</code> lấy dữ liệu; <code>ORDER BY</code> sắp xếp kết quả", "<code>SELECT tk FROM but_toan ORDER BY tk;</code>"]]),
+           """Thêm hai điều nữa về ngôn ngữ SQL tối thiểu để đọc bài này. Điều thứ nhất là ba lệnh cơ bản: một lệnh tạo bảng, một lệnh thêm dòng, một lệnh lấy dữ liệu từ bảng, kèm mệnh đề sắp xếp kết quả.""", clear=True),
+        st(table(["", "nghĩa", "ví dụ"],
+                 [["⑤ SQL: cộng và gom nhóm", "<code>SUM(cột)</code> cộng mọi giá trị của cột; <code>GROUP BY cột</code> gom các dòng cùng giá trị cột đó thành nhóm; <code>HAVING</code> chỉ giữ nhóm thoả điều kiện",
                    "<code>SELECT gd, SUM(tien) FROM but_toan GROUP BY gd;</code> cộng tiền theo từng giao dịch"]]),
-           """Thêm một điều nữa. Ngôn ngữ SQL tối thiểu để đọc bài này. Một lệnh tạo bảng, một lệnh thêm dòng, một lệnh lấy dữ liệu từ bảng. Hàm cộng là hàm tính tổng, nó cộng mọi giá trị của một cột lại với nhau. Mệnh đề gom nhóm gom các dòng có cùng giá trị của một cột thành nhóm, mệnh đề lọc nhóm giữ nhóm thoả điều kiện, và mệnh đề sắp xếp xếp kết quả.
+           """Điều thứ hai là cộng và gom nhóm. Hàm cộng cộng mọi giá trị của một cột lại với nhau. Mệnh đề gom nhóm gom các dòng có cùng giá trị của một cột thành nhóm, và mệnh đề lọc nhóm chỉ giữ nhóm thoả điều kiện.
            Ví dụ, một câu lấy mã giao dịch và tổng tiền, gom theo mã giao dịch, cho tổng tiền của từng giao dịch.""", clear=True),
     ], at=1)
-    pre["title"] = "Trước hết: bốn điều cần hiểu"
+    pre["title"] = "Trước hết: năm điều cần hiểu"
     run = sc("chay_that", "example", "Chạy thật: dựng sổ cái, kiểm cân đối, đảo bút toán (sqlite)", [
+        *jsteps([("sqltype", "<code>gd INTEGER, tk TEXT, tien INTEGER</code>: số nguyên, chữ, số nguyên", None),
+               ("values", "<code>VALUES (1, 'khach_A', -505500), (1, 'khach_B', 500000), …</code>: mỗi cặp ngoặc là một dòng bút toán", None),
+               ("count", "<code>SELECT COUNT(*) FROM but_toan;</code>: số dòng của sổ cái", None),
+               ("inssel", "<code>INSERT INTO but_toan SELECT 2, tk, -tien FROM but_toan WHERE gd = 1;</code>", None)]),
         st(code_block(so_cai, title="Sổ cái: một giao dịch có phí, hai câu tổng nhóm"),
            """Ta dựng sổ cái thật trên cơ sở dữ liệu nhỏ. Bảng bút toán có ba cột là mã giao dịch, tài khoản và số tiền có dấu. Giao dịch một có ba dòng: khách A ra năm trăm linh năm nghìn năm trăm, khách B vào năm trăm nghìn, và tài khoản thu phí vào năm nghìn năm trăm.
            Câu thứ nhất cộng số tiền theo mã giao dịch, câu thứ hai cộng theo tài khoản."""),
@@ -184,11 +205,11 @@ $$\\text{giao dịch lệch} = \\hl{[1]}$$""",
                     ["×100", "10 000 000", "30 000 000", "3 650 000 000", "<b>≈ 1 giờ</b>"],
                     ["×10 000", "1 000 000 000", "3 000 000 000", "365 000 000 000", "<b>≈ 4,2 ngày</b>"]]),
            """Mỗi giao dịch có ba dòng, và mỗi giao dịch đều có một dòng ở tài khoản thu phí. Giả sử cộng lại số dư bằng cách cộng mọi dòng của tài khoản đó trong một năm, quét một triệu dòng mỗi giây. Đây là số minh hoạ.
-           Với một trăm nghìn giao dịch mỗi ngày, một năm có ba mươi sáu triệu rưỡi dòng, cộng lại mất ba mươi sáu rưỡi giây. Tải tăng một trăm lần, mất khoảng một giờ. Tải tăng mười nghìn lần, mất khoảng bốn ngày rưỡi.""", clear=True),
+           Với một trăm nghìn giao dịch mỗi ngày, một năm có ba mươi sáu triệu rưỡi dòng, cộng lại mất ba mươi sáu rưỡi giây. Tải tăng một trăm lần, mất khoảng một giờ. Tải tăng mười nghìn lần, mất khoảng bốn phẩy hai ngày.""", clear=True),
         st("""<div class="box warn"><b>Giải pháp cũ gãy ở đâu.</b> “Số dư luôn bằng tổng các bút toán” vẫn đúng, nhưng <b>tính lại từ đầu mỗi lần hỏi</b> thì gãy với tài khoản nóng như tài khoản thu phí: 36,5 giây, 1 giờ, 4,2 ngày.</div>
-<div class="box key"><b>Đánh đổi:</b> lưu <b>số dư sẵn</b> và cập nhật cùng giao dịch, cộng đối chiếu với tổng bút toán định kỳ (hoặc chỉ cộng các dòng mới từ mốc chốt). Nhưng một dòng số dư mà mọi giao dịch cùng sửa sẽ thành <b>điểm nghẽn khoá</b> (như bài trước); có thể chia nhỏ thành nhiều dòng phí rồi cộng gộp.</div>""",
-           """Câu hỏi là giải pháp cũ sẽ gãy ở chỗ nào khi tải tăng lên. Số dư luôn bằng tổng các bút toán vẫn đúng. Nhưng tính lại từ đầu mỗi lần hỏi thì gãy với tài khoản nóng như tài khoản thu phí, từ ba mươi sáu giây tới một giờ rồi bốn ngày.
-           Đánh đổi là lưu số dư sẵn và cập nhật cùng giao dịch, cộng đối chiếu với tổng bút toán định kỳ, hoặc chỉ cộng các dòng mới kể từ mốc chốt. Nhưng một dòng số dư mà mọi giao dịch cùng sửa sẽ thành điểm nghẽn khoá, như bài trước.
+<div class="box key"><b>Đánh đổi:</b> lưu <b>số dư sẵn</b> và cập nhật cùng giao dịch, cộng đối chiếu với tổng bút toán định kỳ (hoặc chỉ cộng các dòng mới từ mốc chốt). Nhưng một dòng số dư mà mọi giao dịch cùng sửa sẽ thành <b>điểm nghẽn khoá</b>: mỗi lúc chỉ một giao dịch sửa được dòng đó, các giao dịch khác xếp hàng chờ (khoá hàng, như ở bài 5). Dòng như vậy gọi là <b>nóng</b>; có thể chia nhỏ thành nhiều dòng phí rồi cộng gộp.</div>""",
+           """Câu hỏi là giải pháp cũ sẽ gãy ở chỗ nào khi tải tăng lên. Số dư luôn bằng tổng các bút toán vẫn đúng. Nhưng tính lại từ đầu mỗi lần hỏi thì gãy với tài khoản nóng như tài khoản thu phí, từ ba mươi sáu giây tới một giờ rồi bốn phẩy hai ngày.
+           Đánh đổi là lưu số dư sẵn và cập nhật cùng giao dịch, cộng đối chiếu với tổng bút toán định kỳ, hoặc chỉ cộng các dòng mới kể từ mốc chốt. Nhưng một dòng số dư mà mọi giao dịch cùng sửa sẽ thành điểm nghẽn khoá. Nghĩa là mỗi lúc chỉ một giao dịch sửa được dòng đó, các giao dịch khác xếp hàng chờ, như khoá hàng ở bài năm. Dòng bị tranh nhiều như vậy gọi là dòng nóng.
            Cách giảm là chia nhỏ thành nhiều dòng phí rồi cộng gộp.""", clear=True),
     ], checks=["100000 * 3 == 300_000", "10_000_000 * 3 == 30_000_000", "1_000_000_000 * 3 == 3_000_000_000",
                "100000 * 365 == 36_500_000", "10_000_000 * 365 == 3_650_000_000", "1_000_000_000 * 365 == 365_000_000_000",
@@ -225,4 +246,4 @@ Lời giải ở <code>labs/BNK/L09/loi_giai.sql</code> — chỉ mở sau khi b
                    "Tính số dòng sổ cái và thời gian cộng lại số dư của tài khoản thu phí khi tải tăng ×100, ×10 000",
                    "Viết SQL ghi hai giao dịch, tìm giao dịch lệch và tính số dư"],
                   [hook, pre, sym, intu, form, ex, run, chk, pit, quiz, scale, lab, rec],
-                  covers=[(1, "example"), (2, "example"), (3, "formula"), (4, "check"), (5, "chay_that"), (6, "quy_mo"), (7, "practice")])
+                  covers=[(1, "example"), (2, "example"), (3, "formula"), (4, "check"), (5, "chay_that"), (6, "quy_mo"), (7, "practice")], intro={('hook', 1): ['bnk_can_doi'], ('quy_mo', 1): ['bnk_nghen_khoa']}, assumes=['bnk_doi_soat'])

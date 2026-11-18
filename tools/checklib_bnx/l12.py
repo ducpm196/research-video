@@ -68,3 +68,32 @@ def bnx_tax_recon(bank, treasury):
             r["khop"].append(k)
     r["thua"] = sorted(k for k in treasury if k not in bank)
     return r
+
+
+# ── Nâng AF2 (WP4, 2026-11-14): quy mô đối soát và lab ──
+def bnx_l12_scan_cmp(n):
+    """Đối soát bằng vòng lặp lồng: chứng từ thứ i của ngân hàng nằm ở vị trí i của danh sách Kho bạc nên cần i + 1 phép so sánh;
+    tổng 1 + 2 + … + n = n(n+1)/2."""
+    return n * (n + 1) // 2
+
+
+def bnx_l12_lookup_cmp(n):
+    """Đối soát bằng bảng tra: mỗi chứng từ tra đúng một lần."""
+    return n
+
+
+def bnx_l12_time_s(phep, ns_moi_phep):
+    """Thời gian chờ (giây) nếu mỗi phép mất ns_moi_phep nano giây (số minh hoạ)."""
+    return round(phep * ns_moi_phep / 1e9, 9)
+
+
+def bnx_l12_lab():
+    """Lab L12: chạy lại nhật ký có lệnh rút bị từ chối vì ví không đủ tiền. Trả (ví, tổng ví, tài khoản đảm bảo, đạt?)."""
+    escrow, w = 250_000, {"X": 0, "Y": 250_000, "Z": 0}
+    for ev in [("nap", "X", 3_000_000), ("chuyen", "X", "Z", 1_200_000), ("rut", "Z", 400_000), ("nap", "Y", 500_000),
+               ("rut", "Y", 2_000_000), ("chuyen", "Z", "Y", 300_000)]:
+        if ev[0] == "rut" and w[ev[1]] < ev[2]:
+            continue
+        escrow, w, _, _ = bnx_wallet_run(escrow, w, [ev])
+    tot = sum(w.values())
+    return w, tot, escrow, escrow >= tot

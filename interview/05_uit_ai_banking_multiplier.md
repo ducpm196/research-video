@@ -16,7 +16,7 @@ Tuy nhiên, trong kỷ nguyên số hóa tài chính 2026, các ngân hàng hàn
 1. **Lưu lượng lớn và tấn công tinh vi**: phát hiện gian lận phải chạy trong ngân sách độ trễ của luồng thanh toán (thường chỉ vài chục mili giây cho mọi bước kiểm tra cộng lại), nên mô hình phải nhẹ và chạy cục bộ.
 2. **Chi phí cước viễn thông và hạ tầng bùng nổ**: Đòi hỏi các thuật toán tối ưu hóa định tuyến (Smart Routing) và phân bổ tài nguyên thông minh.
 3. **Dữ liệu phân mảnh và phi cấu trúc**: Đòi hỏi so khớp đối soát ngữ nghĩa (Semantic Reconciliation) thay vì so khớp chuỗi ký tự thô sơ.
-4. **Quy định pháp lý khắt khe**: Triển khai giải pháp sinh trắc học khuôn mặt theo Quyết định 2345/QĐ-NHNN với khả năng chống giả mạo (Anti-spoofing Liveness Detection).
+4. **Quy định pháp lý khắt khe**: Triển khai giải pháp sinh trắc học khuôn mặt theo quy định của Ngân hàng Nhà nước (Thông tư 50/2024/TT-NHNN, sửa đổi bởi Thông tư 77/2025/TT-NHNN; Quyết định 2345/QĐ-NHNN chưa đọc nguyên văn, chưa rõ còn áp dụng) với khả năng chống giả mạo (Anti-spoofing Liveness Detection).
 
 Một Kỹ sư Tích hợp có nền tảng AI mang lại **giá trị cộng thêm**: hiểu luồng tích hợp ngân hàng, đồng thời đọc hiểu và đánh giá được các mô hình AI (giới hạn, độ trễ, sai số) khi chúng được đưa vào đường ống dữ liệu.
 
@@ -35,7 +35,7 @@ Bảng dưới nhóm kiến thức theo khối, kèm chỗ dùng được trong 
 | **Hệ thống Máy tính & Mạng** | Kiến trúc máy tính, Hệ điều hành nâng cao, Mạng máy tính phân tán | Quản lý luồng JVM (Virtual Threads Project Loom), tối ưu hóa bộ nhớ đệm CPU L1/L2/L3 cache-friendly data structures, bắt gói tin TCP Socket ISO 8583. |
 | **Cơ sở dữ liệu & Phân tích Dữ liệu lớn** | Cơ sở dữ liệu nâng cao, Big Data Analytics, NoSQL, Hệ phân tán | Thiết kế phân vùng bảng Oracle Partitioning, mô hình Transactional Outbox, Streaming ksqlDB, Kafka Streams, CDC Debezium. |
 | **Học máy & Học sâu (ML / DL)** | Machine Learning cơ bản & nâng cao, Deep Learning, Computer Vision | Mô hình Isolation Forest, Autoencoder phát hiện bất thường; suy luận ONNX Runtime nhúng trong Java (độ trễ phải đo bằng benchmark của chính mình). |
-| **Thị giác Máy tính (Computer Vision)** | Thị giác máy tính, Xử lý ảnh số, Nhận dạng mẫu | Hiểu nguyên lý OCR thẻ CCCD, kiểm tra người thật (liveness) và chống giả mạo khuôn mặt; QĐ 2345/QĐ-NHNN quy định khi nào phải xác thực sinh trắc học, còn công nghệ do nhà cung cấp giải pháp đảm nhận. |
+| **Thị giác Máy tính (Computer Vision)** | Thị giác máy tính, Xử lý ảnh số, Nhận dạng mẫu | Hiểu nguyên lý OCR thẻ CCCD, kiểm tra người thật (liveness) và chống giả mạo khuôn mặt; quy định của Ngân hàng Nhà nước (TT 50/2024, sửa đổi bởi TT 77/2025) nêu khi nào phải xác thực sinh trắc học, còn công nghệ do nhà cung cấp giải pháp đảm nhận. |
 | **Xử lý Ngôn ngữ Tự nhiên & Trích xuất Thông tin** | NLP, Information Retrieval, Large Language Models (LLM) | Dùng Sentence-Transformers vector embeddings để so khớp tự động sao kê đối soát tài chính giữa ngân hàng và đối tác thu hộ. |
 | **Kỹ thuật MLOps & Kỹ nghệ Phần mềm** | MLOps, CI/CD, Containerization (Docker/K8s), Cloud Computing | Đóng gói mô hình AI thành Microservices siêu nhẹ, triển khai Kubernetes, quản lý versioning mô hình và dữ liệu (Model/Data Lineage). |
 
@@ -45,7 +45,7 @@ Bảng dưới nhóm kiến thức theo khối, kèm chỗ dùng được trong 
 
 ### 3.1. Phát hiện Gian lận Thời gian thực (Real-Time Fraud Detection on Kafka Pipeline)
 - **Kiến trúc tích hợp**:
-  - Khi luồng sự kiện thanh toán đi qua Kafka (`payment.inbound.topic`), thay vì chỉ kiểm tra các rule tĩnh (như số tiền > 50M), worker tích hợp thư viện `onnxruntime-java`.
+  - Khi luồng sự kiện thanh toán đi qua Kafka (`payment.inbound.topic`), thay vì chỉ kiểm tra các rule tĩnh (như số tiền vượt một ngưỡng cố định), worker tích hợp thư viện `onnxruntime-java`.
   - Mô hình **Isolation Forest** và **Autoencoder** đã được huấn luyện ngoại tuyến (Offline Training) để nắm bắt phân phối bình thường của khách hàng.
   - Khi có giao dịch mới, worker trích xuất vector đặc trưng (Feature Vector): Tốc độ di chuyển địa lý (Geovelocity $v > 800\text{ km/h}$), Z-score số tiền so với lịch sử 30 ngày, tần suất giao dịch trong 5 phút.
   - Điểm bất thường (Anomaly Score) được suy luận trực tiếp trong Java runtime qua ONNX Runtime (lõi C++). **Mục tiêu thiết kế** là vài mili giây mỗi lần suy luận để nằm gọn trong ngân sách độ trễ của cổng thanh toán; con số thật phải đo bằng benchmark (JMH hoặc đo p95/p99) trên máy và mô hình của mình trước khi nói ra.

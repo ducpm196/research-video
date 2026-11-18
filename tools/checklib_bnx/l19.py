@@ -107,3 +107,18 @@ def bnx_l19_lock_story(ttl, pause, owner_check=True):
 
 def bnx_l19_overrun(ttl, pause):
     return max(0, pause - ttl)
+
+
+# ── AF2 (WP4 2026-11-14): cảnh quy mô — khoá chia cho ba nút, thẻ băm chung, số mục khử trùng sống cùng lúc ──
+def bnx_l19_node_counts(n, tag=False):
+    """Đếm khoá mã giao dịch về từng nút của cụm ba nút (dải khe 0–5460, 5461–10922, 10923–16383); tag=True: mọi khoá chung thẻ băm {tx}."""
+    cnt = [0, 0, 0]
+    for i in range(n):
+        key = f"dedup:{{tx}}:{i}" if tag else f"dedup:TX{i}"
+        cnt[bnx_l19_node(bnx_l19_slot(key)) - 1] += 1
+    return cnt
+
+
+def bnx_l19_live_dedup(rate_per_s, ttl_s):
+    """Số mục khử trùng sống cùng lúc: mỗi mục sống ttl_s giây, mỗi giây thêm rate_per_s mục (trạng thái ổn định)."""
+    return rate_per_s * ttl_s

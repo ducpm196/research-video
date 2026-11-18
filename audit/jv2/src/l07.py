@@ -216,8 +216,14 @@ public class Loi {
         System.out.println("con " + soDu);
     }
 }""",
-        "phien.sh": "( echo 'stop at Loi:10'; echo run; sleep 3; echo 'print phiThu'; sleep 1; echo 'print soDu'; sleep 1; echo next; sleep 1; "
-                    "echo 'print soDu'; sleep 1; echo cont; sleep 1; echo quit ) | jdb -classpath . Loi 2>&1",
+        "phien.sh": r"""(
+  echo 'stop at Loi:10'; echo run; sleep 3
+  echo 'print phiThu'; sleep 1
+  echo 'print soDu'; sleep 1
+  echo next; sleep 1
+  echo 'print soDu'; sleep 1
+  echo cont; sleep 1; echo quit
+) | jdb -classpath . Loi 2>&1""",
     }, [
         ("javac -g Loi.java", ""),
         ("bash phien.sh | tr -d '\\r' | grep -E 'Breakpoint hit|\\] +[a-zA-Z]+ = '",
@@ -288,9 +294,9 @@ Chạy: `javac TongPhi.java && java TongPhi`. Chấm: `bash labs/cham.sh JV2 L07
         """Bây giờ tới phần bạn tự làm trên máy. Chương trình trong đề bài dừng với dấu vết ngăn xếp. Hãy đọc từ trên xuống, chỉ ra dòng nổ và vì sao chỉ số năm không hợp lệ với mảng dài năm. Rồi sửa một chỗ và chạy lại.
         Kết quả phải ra hai dòng, và bạn có thể kiểm bằng tay, một nghìn cộng năm nghìn cộng một nghìn cộng mười nghìn cộng năm nghìn. Hãy dừng video và tự làm.""",
         lab["out"], "TongPhi.java",
-        """<div class="box key"><b>Nếu kẹt:</b> mảng dài 5 có chỉ số hợp lệ từ 0 tới 4. Dòng số 15 có vòng <code>for</code> với điều kiện <code>i &lt;= ds.length</code>: đổi dấu.
+        """<div class="box key"><b>Nếu kẹt:</b> mảng dài 5 có chỉ số hợp lệ từ 0 tới 4. Dòng số 15 là nơi nổ (<code>tong += phi(ds[i])</code>), nhưng điều kiện nằm ở vòng <code>for</code> ngay trên nó, dòng số 14: <code>i &lt;= ds.length</code>. Đổi dấu.
 Lời giải: <code>labs/JV2/L07/loi_giai.java</code> — chỉ mở sau khi đã thử.</div>""",
-        """Nếu kẹt, mảng dài năm có chỉ số hợp lệ từ không tới bốn. Ở dòng mười lăm, điều kiện vòng lặp cho phép đi tới năm. Hãy đổi dấu so sánh.
+        """Nếu kẹt, mảng dài năm có chỉ số hợp lệ từ không tới bốn. Dòng mười lăm là nơi nổ, nhưng điều kiện nằm ở vòng lặp ngay phía trên nó, dòng mười bốn, cho phép đi tới năm, nên hãy đổi dấu so sánh đó.
         Lời giải đầy đủ nằm trong thư mục thực hành của bài, chỉ mở sau khi bạn đã tự thử.""", pause=180), "JV2", "L07")
 
     sc_hook = sc("hook", "hook", "Hai giờ sáng: chương trình dừng, màn hình chỉ có một đống dòng chữ", [
@@ -333,9 +339,9 @@ và dừng chương trình giữa chừng bằng <b>trình gỡ lỗi</b>. Kèm 
                txt(300, 370, "dấu vết in từ tầng NỔ xuống tầng main", 26, "middle", "#1f2937", True)),
            """Hình dung các lần gọi hàm như một chồng khay. Hàm chính gọi báo cáo, báo cáo gọi trung bình, trung bình gọi chia. Khay trên cùng, tức hàm chia, là nơi lỗi xảy ra. Lỗi leo ngược lên qua từng khay, và nếu không có chỗ bắt thì chương trình dừng.
            Dấu vết được in từ khay nổ xuống tới khay đáy, nên dòng đầu là hiện trường, các dòng sau là đường đi tới hiện trường."""),
-        st(code_block(boc_loi, lines=(3, 5)) + code_block(boc_loi, lines=(9, 13)),
+        st(code_block(boc_loi, lines=(2, 14)),
            """Phức tạp hơn là lỗi bị bọc. Hàm rút ném ngoại lệ trạng thái sai khi số dư không đủ. Hàm chuyển tiền bắt nó, rồi ném một lỗi khác, có thông báo thân thiện, và truyền lỗi gốc làm tham số thứ hai. Cách này giữ lại nguyên nhân gốc.""", clear=True),
-        st(out_block(boc_loi) + "<p class='note'>Dòng trên cùng nói <b>cái gì</b> hỏng (chuyển tiền); phần <code>Caused by</code> nói <b>vì sao</b> (số dư âm 50). Số dòng <code>10</code> và <code>4</code> là nơi lỗi gốc thực sự bắt đầu.</p>",
+        st(out_block(boc_loi) + "<p class='note'>Hàm chính chỉ gọi <code>chuyen(100, 150)</code>: rút 150 khi chỉ có 100. Dòng trên cùng nói <b>cái gì</b> hỏng (chuyển tiền); phần <code>Caused by</code> nói <b>vì sao</b> (số dư âm 50). Số dòng <code>10</code> và <code>4</code> là nơi lỗi gốc thực sự bắt đầu.</p>",
            """Kết quả thật. Dòng trên cùng nói cái gì hỏng, là việc chuyển tiền. Phần nguyên nhân gốc nói vì sao, là số dư sẽ âm năm mươi. Số dòng của lỗi gốc nằm trong phần đó, nên phải kéo xuống đọc tới hết, đừng dừng ở dòng đầu.""", clear=True),
     ])
     sc_form = sc("formula", "formula", "Suy ra từng bước: đọc một dấu vết để tìm thủ phạm", [
@@ -373,43 +379,64 @@ và dừng chương trình giữa chừng bằng <b>trình gỡ lỗi</b>. Kèm 
                                            ["<code>print soDu</code>", "in giá trị biến <code>soDu</code>"], ["<code>next</code>", "chạy <b>đúng một dòng</b> rồi dừng lại"]])
            + "<p class='note'>Biên dịch bằng <code>javac -g</code> để jdb thấy tên biến.</p>",
            """Cách kiểm khác là không đoán mà dừng chương trình giữa chừng. Trình gỡ lỗi có sẵn trong bộ công cụ cho phép đặt điểm dừng ở một dòng, chạy tới đó, rồi in giá trị biến. Lệnh tiếp theo chạy đúng một dòng rồi dừng lại. Ta biên dịch với cờ g để nó thấy tên biến.""", clear=True),
-        st(term_block(jdb, 0, 2, title="Một phiên jdb (các lệnh gõ sẵn trong phien.sh; chỉ lọc ra các dòng chính)")
+        st(pcode(jdb, "Loi.java", title="Tệp Loi.java: chương trình để gỡ lỗi (dòng số 10 là dòng trừ phí)"),
+           """Đây là chương trình để gỡ lỗi. Hàm phí lấy một phần nghìn số tiền. Hàm chính khai số dư một trăm nghìn, tính phí, trừ phí khỏi số dư rồi in ra. Dòng số mười là dòng trừ phí, và ta sẽ dừng ngay trước nó vì muốn xem số dư trước khi bị trừ.""", clear=True),
+        st(pcode(jdb, "phien.sh", title="Tệp phien.sh: gõ sẵn các lệnh cho jdb, nghỉ vài giây giữa các lệnh")
+           + "<p class='note'><code>sleep 3</code>: nghỉ 3 giây cho jdb kịp chạy tới điểm dừng. <code>jdb -classpath . Loi</code> khởi động trình gỡ lỗi cho lớp <code>Loi</code>, tìm lớp trong thư mục hiện tại. Bạn cũng có thể gõ tay từng lệnh.</p>",
+           """Các lệnh được gõ sẵn trong một tệp, và nghỉ vài giây giữa các lệnh vì trình gỡ lỗi cần thời gian để chạy tới điểm dừng. Bạn cũng có thể gõ tay từng lệnh ở dấu nhắc của nó. Tệp này chỉ để máy gõ thay, nên kết quả luôn lặp lại được.""", clear=True),
+        st(term_block(jdb, 0, 2, title="Một phiên jdb (chỉ lọc ra các dòng chính)")
+           + "<p class='note'><code>tr -d '\\r'</code>: xoá ký tự xuống dòng kiểu Windows.</p>"
            + "<p>Kiểm tay: phí = 100 000 / 1 000 = <b>100</b>; số dư sau trừ phí = 100 000 − 100 = <b>99 900</b> ✓ khớp phiên jdb.</p>",
            """Phiên chạy thật cho thấy chương trình dừng ở dòng mười. Phí là một trăm, số dư trước dòng đó là một trăm nghìn. Sau lệnh chạy một dòng, số dư thành chín mươi chín nghìn chín trăm. Tính tay một trăm nghìn trừ một trăm cũng ra đúng chín mươi chín nghìn chín trăm.
            Hai cách độc lập cho cùng kết quả, nên ta tin vào con số.""", clear=True),
     ], checks=["100000 // 1000 == 100", "100000 - 100 == 99900"])
     sc_nk = sc("nhatky", "concept", "Nhật ký: người quan sát khi bạn không có mặt", [
-        st(code_block(nhat_ky, lines=(9, 13)),
-           """Trên máy chủ không ai đứng gỡ lỗi, nên ta ghi nhật ký. Khác với lệnh in thường, nhật ký có mức độ. Ta tự định dạng mỗi dòng gồm mức và thông điệp để kết quả luôn giống nhau, thay vì in kèm giờ như mặc định.""", clear=True),
-        st(code_block(nhat_ky, lines=(21, 27)) + out_block(nhat_ky),
-           """Ta đặt ngưỡng ở mức thông tin. Dòng chi tiết bị bỏ, vì mức chi tiết thấp hơn ngưỡng. Ba dòng còn lại được in. Rồi ta hạ ngưỡng xuống, bật mọi mức, và dòng chi tiết thứ hai xuất hiện. Ở môi trường thật, ta bật mức thấp khi cần điều tra mà không phải sửa mã.""", clear=True),
+        st(code_block(nhat_ky, lines=(9, 13))
+           + "<p class='note'><code>extends Formatter</code>: lớp mới <b>kế thừa</b> lớp định dạng có sẵn và viết lại hàm <code>format</code> để quyết định mỗi dòng nhật ký trông thế nào.</p>",
+           """Trên máy chủ không ai đứng gỡ lỗi, nên ta ghi nhật ký. Khác với lệnh in thường, nhật ký có mức độ. Ta tự định dạng mỗi dòng gồm mức và thông điệp để kết quả luôn giống nhau, thay vì in kèm giờ như mặc định. Lớp định dạng này kế thừa lớp có sẵn và chỉ viết lại một hàm.""", clear=True),
+        st(code_block(nhat_ky, lines=(15, 20))
+           + "<p class='note'><code>Logger</code>: <b>người ghi</b>, các lời gọi <code>fine</code>, <code>info</code>… đi qua nó. <code>Handler</code>: <b>nơi nhận</b>, đưa dòng ghi ra màn hình hay tệp. <b>Cả hai đều có ngưỡng riêng</b>; một dòng chỉ được in khi vượt cả hai ngưỡng. Handler mặc định của máy (<code>ConsoleHandler</code>) có ngưỡng <code>INFO</code>, nên ta tự tạo handler có ngưỡng <code>ALL</code>.</p>",
+           """Ở đây ta lấy một người ghi tên ngân hàng, tắt đường ghi mặc định, và gắn vào nó một nơi nhận do ta tạo, ghi ra màn hình. Cần nhớ người ghi và nơi nhận đều có ngưỡng riêng, một dòng chỉ được in khi vượt cả hai ngưỡng. Nơi nhận mặc định của máy chặn mức chi tiết, nên ta tự tạo nơi nhận mở mọi mức.""", clear=True),
+        st(code_block(nhat_ky, lines=(21, 28)) + out_block(nhat_ky),
+           """Ta đặt ngưỡng của người ghi ở mức thông tin. Dòng chi tiết bị bỏ, vì mức chi tiết thấp hơn ngưỡng. Ba dòng còn lại được in. Rồi ta hạ ngưỡng người ghi xuống, bật mọi mức, và dòng chi tiết thứ hai xuất hiện, vì nơi nhận cũng đang mở mọi mức. Ở môi trường thật, ta bật mức thấp khi cần điều tra, ở cả hai nơi.""", clear=True),
     ])
     sc_scale = sc("scale", "concept", "Khi hệ thống lớn dần: nhật ký phình, và lỗi nằm trong cả triệu bước", [
         st(table(["giao dịch mỗi giây", "100", "10 000", "1 000 000"],
                  [["nhật ký mỗi ngày (3 dòng × 200 byte mỗi giao dịch, số minh hoạ)", "≈ 5,2 GB", "<b>≈ 518 GB</b>", "<b>≈ 51,8 TB</b>"],
                   ["số dòng mỗi ngày", "≈ 26 triệu", "≈ 2,6 tỉ", "≈ 259 tỉ"]])
-           + "<p class='note'>Vì thế ngưỡng mặc định là <code>INFO</code>, mức chi tiết bật khi cần, và không bao giờ ghi dữ liệu nhạy cảm.</p>",
+           + "<p class='note'>Vì thế ngưỡng mặc định là <code>INFO</code>, mức chi tiết bật khi cần, và không ghi dữ liệu nhạy cảm. Dự án thật thường dùng thư viện nhật ký khác (SLF4J với Logback) và xoay vòng tệp theo ngày; ý tưởng mức và ngưỡng giống nhau.</p>",
            """Về quy mô. Giả sử mỗi giao dịch ghi ba dòng, mỗi dòng hai trăm byte, số minh hoạ. Một trăm giao dịch mỗi giây là hơn năm gigabyte mỗi ngày. Mười nghìn giao dịch mỗi giây là hơn năm trăm gigabyte. Một triệu giao dịch mỗi giây là hơn năm mươi nghìn gigabyte mỗi ngày.
            Vì thế ngưỡng mặc định là mức thông tin, mức chi tiết chỉ bật khi cần.""", clear=True),
-        st(code_block(log_dat, lines=(15, 22)) + out_block(log_dat),
-           """Còn chi phí ẩn. Dòng ghi mức chi tiết bị tắt, nhưng nếu ta nối chuỗi ngay trong lời gọi thì phép tính tốn kém vẫn chạy một triệu lần, vì nối chuỗi chạy trước khi biết có ghi hay không. Dùng hàm ngắn thì phép tính chỉ chạy khi mức đó bật, nên là không lần nào.""", clear=True),
-        st(code_block(chia_doi, lines=(4, 10)),
-           """Câu hỏi quy mô thứ hai, lỗi nằm trong một triệu bước thì tìm thế nào. Ta giả lập một chuỗi bước, mỗi bước lẽ ra cộng một, nhưng có một bước lỗi cộng bảy. Bất biến là sau k bước thì tổng đúng bằng k.""", clear=True),
-        st(code_block(chia_doi, lines=(16, 23)),
-           """Ta kiểm bất biến ở điểm giữa. Đúng thì lỗi nằm sau điểm giữa, sai thì lỗi nằm trước hoặc ngay tại đó. Mỗi lần kiểm điểm giữa, vùng nghi ngờ giảm một nửa.""", clear=True),
-        st(out_block(chia_doi) + table(["số bước n", "16", "1 000 000", "1 000 000 000"], [["số lần kiểm khi chia đôi ≈ log₂ n", "4", "20", "<b>30</b>"], ["số lần kiểm khi duyệt từ đầu", "tới 16", "tới 1 000 000", "tới 1 000 000 000"]]),
-           """Kết quả thật. Mười sáu bước cần bốn lần kiểm. Một triệu bước chỉ cần hai mươi lần. Một tỉ bước chỉ cần ba mươi lần, trong khi duyệt từ đầu có thể phải tới một tỉ lần. Lệnh chia đôi của hệ quản lý phiên bản dùng đúng ý này để tìm lần chốt gây lỗi, với điều kiện bất biến phải kiểm được và đơn điệu.""", clear=True),
+        st(code_block(log_dat, lines=(4, 14)),
+           """Còn chi phí ẩn. Ta giả lập một phép tính tốn kém bằng một hàm đếm số lần được gọi. Hàm chính đặt ngưỡng nhật ký ở mức thông tin, nên mức chi tiết đang tắt.""", clear=True),
+        st(code_block(log_dat, lines=(15, 23)) + out_block(log_dat)
+           + "<p class='note'>Đối số của <code>fine</code> có thể là một hàm ngắn không nhận gì, trả về chuỗi (kiểu <code>Supplier</code>); nhật ký chỉ gọi nó khi mức bật.</p>",
+           """Dòng ghi mức chi tiết bị tắt, nhưng nếu ta nối chuỗi ngay trong lời gọi thì phép tính tốn kém vẫn chạy một triệu lần, vì nối chuỗi chạy trước khi biết có ghi hay không. Dùng hàm ngắn thì phép tính chỉ chạy khi mức đó bật, nên là không lần nào.""", clear=True),
+        st(code_block(chia_doi, lines=(2, 11)),
+           """Câu hỏi quy mô thứ hai, lỗi nằm trong một triệu bước thì tìm thế nào. Ta giả lập một chuỗi bước, mỗi bước lẽ ra cộng một, nhưng có một bước lỗi cộng bảy. Bất biến là sau k bước thì tổng đúng bằng k. Một biến đếm số lần kiểm.""", clear=True),
+        st(code_block(chia_doi, lines=(13, 25)),
+           """Ta kiểm bất biến ở điểm giữa. Đúng thì lỗi nằm sau điểm giữa, sai thì lỗi nằm trước hoặc ngay tại đó. Mỗi lần kiểm điểm giữa, vùng nghi ngờ giảm một nửa, cho tới khi hai đầu chỉ cách nhau một bước.""", clear=True),
+        st(code_block(chia_doi, lines=(27, 33)),
+           """Hàm chính thử hai cỡ, mười sáu bước với lỗi ở bước mười một, và một triệu bước với lỗi ở bước bảy trăm mười một nghìn một trăm mười một. Mỗi lần nó in bước tìm được và số lần kiểm.""", clear=True),
+        st(out_block(chia_doi) + table(["số bước n", "16", "1 000 000", "1 000 000 000"], [["số lần kiểm khi chia đôi ≈ log₂ n", "4", "20", "<b>30</b>"], ["số lần kiểm khi duyệt từ đầu", "tới 16", "tới 1 000 000", "tới 1 000 000 000"]])
+           + "<p class='note'>Nhắc lại: <b>log₂ n</b> = số lần nhân đôi từ 1 để tới n; chia đôi từ n về 1 cũng cần đúng ngần ấy lần.</p>",
+           """Kết quả thật. Nhắc lại, lôgarit cơ số hai của n là số lần nhân đôi từ một để tới n, và chia đôi từ n về một cũng cần đúng ngần ấy lần. Mười sáu bước cần bốn lần kiểm. Một triệu bước chỉ cần hai mươi lần. Một tỉ bước chỉ cần ba mươi lần, trong khi duyệt từ đầu có thể phải tới một tỉ lần. Lệnh chia đôi của hệ quản lý phiên bản dùng đúng ý này để tìm lần chốt gây lỗi, với điều kiện bất biến phải kiểm được và đơn điệu.""", clear=True),
     ], checks=["3 * 200 * 100 * 86400 == 5184000000", "3 * 200 * 10000 * 86400 == 518400000000", "3 * 200 * 1000000 * 86400 == 51840000000000",
                "100 * 3 * 86400 == 25920000", "10000 * 3 * 86400 == 2592000000", "1000000 * 3 * 86400 == 259200000000",
                "__import__('math').ceil(__import__('math').log2(16)) == 4", "__import__('math').ceil(__import__('math').log2(1000000)) == 20",
                "__import__('math').ceil(__import__('math').log2(1000000000)) == 30"])
     sc_pit = sc("pitfalls", "pitfall", "Lỗi hay gặp, có lỗi của người đã đi làm", [
         st('<div class="box warn"><b>Lỗi 1 (người mới).</b> Nuốt lỗi: <code>catch</code> rồi trả giá trị mặc định.</div>'
-           + code_block(nuot, lines=(2, 8)) + code_block(nuot, lines=(11, 12)) + out_block(nuot),
-           """Lỗi thứ nhất là nuốt lỗi. Hàm đọc số bắt mọi ngoại lệ và trả không như chưa có gì xảy ra. Chuỗi hai chữ t r lẫn vào số không phải số, nhưng chương trình vẫn in tổng tám trăm nghìn, thiếu hai triệu mà không ai biết. Tệ hơn cả lỗi nổ, vì không có dấu vết nào để đọc."""),
+           + code_block(nuot, lines=(2, 12)),
+           """Lỗi thứ nhất là nuốt lỗi. Hàm đọc số bắt mọi ngoại lệ và trả không như chưa có gì xảy ra. Hàm chính cộng ba chuỗi, trong đó chuỗi giữa có hai chữ t r lẫn vào, không phải số."""),
+        st(out_block(nuot),
+           """Chương trình vẫn in tổng tám trăm nghìn, thiếu hai triệu mà không ai biết. Tệ hơn cả lỗi nổ, vì không có dấu vết nào để đọc.""", clear=True),
         st('<div class="box warn"><b>Lỗi 2 (người đã đi làm).</b> Ghi dữ liệu nhạy cảm vào nhật ký.</div>'
-           + code_block(che, lines=(2, 9)) + out_block(che),
-           """Lỗi thứ hai hay gặp ở người đã đi làm. Nhật ký thường được nhiều người đọc và lưu rất lâu, nên ghi nguyên số thẻ là rò rỉ dữ liệu. Chuẩn bảo mật thẻ thanh toán chỉ cho hiển thị tối đa sáu số đầu và bốn số cuối. Hãy che phần giữa trước khi ghi.""", clear=True),
+           + code_block(che, lines=(2, 9))
+           + "<p class='note'>PAN: số tài khoản chính in trên thẻ (dãy 16 chữ số). Chuẩn PCI DSS: tối đa 6 số đầu (8 số đầu ở bản 4.0 với mã nhà phát hành 8 chữ số) và 4 số cuối; tốt nhất là không ghi PAN.</p>",
+           """Lỗi thứ hai hay gặp ở người đã đi làm. Nhật ký thường được nhiều người đọc và lưu rất lâu, nên ghi nguyên số thẻ là rò rỉ dữ liệu. Chuẩn bảo mật thẻ thanh toán chỉ cho hiển thị tối đa sáu số đầu, hoặc tám số đầu ở bản chuẩn mới với thẻ có mã nhà phát hành dài tám chữ số, và bốn số cuối. Cách an toàn nhất là không ghi số thẻ vào nhật ký, còn che chỉ là bước tối thiểu.""", clear=True),
+        st(out_block(che),
+           """Dòng sai ghi nguyên mười sáu chữ số, dòng đúng chỉ còn sáu số đầu và bốn số cuối, phần giữa thành dấu sao.""", clear=True),
         st('<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Nối chuỗi trong lời gọi nhật ký dù mức đã tắt: phép tính vẫn chạy.</div>'
            + out_block(log_dat) + "<p class='note'>Quy tắc: thông điệp tốn kém phải nằm trong <b>hàm ngắn</b> để chỉ tính khi mức bật.</p>",
            """Lỗi thứ ba cũng của người đã đi làm, đã thấy ở trên. Nối chuỗi ngay trong lời gọi nhật ký, thì dù mức đã tắt phép tính vẫn chạy. Một triệu lần phép tính tốn kém cho một dòng không bao giờ được ghi. Quy tắc là đặt thông điệp tốn kém trong hàm ngắn.""", clear=True),
@@ -435,10 +462,13 @@ và dừng chương trình giữa chừng bằng <b>trình gỡ lỗi</b>. Kèm 
 và để lại <b>nhật ký</b> đủ dùng mà không phình, không lộ.</div>""",
            """Điều cần mang theo. Đừng đoán, hãy đọc bằng chứng theo thứ tự. Khi không còn bằng chứng thì chia đôi. Và để lại nhật ký đủ dùng, mà không phình và không để lộ."""),
     ])
+    sc_nk["steps"][1]["introduces"] = ["jv2_handler"]
+    sc_scale["steps"][2]["introduces"] = ["jv2_supplier"]
+    sc_pit["steps"][2]["introduces"] = ["jv2_pan"]
     return lesson("L07", "go_loi_dau_vet_nhat_ky", "Bài 7 — Gỡ lỗi: dấu vết ngăn xếp, nhật ký, chia đôi, trình gỡ lỗi",
                   "curriculum/jv2.yaml L07; audit/jv2/verify_jv2.py L07 (javac/java/jdb chạy thật, JDK 21; phiên jdb dùng javac -g); "
                   "Throwable.printStackTrace và getCause (Java SE 21 API: định dạng 'Caused by', '... n more'); java.util.logging (Java SE 21 API: mức, Logger.fine(Supplier)); "
-                  "jdb (JDK 21 tools: stop at, run, print, next); PCI DSS (PCI Security Standards Council): hiển thị tối đa sáu số đầu và bốn số cuối của PAN; "
+                  "jdb (JDK 21 tools: stop at, run, print, next); PCI DSS v3.2.1 và v4.0 (PCI Security Standards Council): hiển thị tối đa sáu số đầu, hoặc tám số đầu với mã nhà phát hành tám chữ số, và bốn số cuối của PAN; "
                   "Git: git bisect (git-scm.com/docs/git-bisect); dev.java/learn",
                   ["Đọc dấu vết ngăn xếp nhiều tầng, kể cả phần nguyên nhân gốc, để tìm hiện trường và thủ phạm",
                    "Dùng điểm dừng của jdb để dừng chương trình và kiểm giá trị biến",
@@ -446,4 +476,5 @@ và để lại <b>nhật ký</b> đủ dùng mà không phình, không lộ.</d
                    "Nhận ra nhật ký phình theo tải và chia đôi chỉ cần log₂ n lần kiểm",
                    "Sửa chương trình lỗi biên chỉ số dựa trên dấu vết và chạy lại cho ra kết quả đúng"],
                   [sc_hook, sc_pre, sc_sym, sc_int, sc_form, sc_ex, sc_chk, sc_nk, sc_scale, sc_pit, sc_quiz, sc_lab, sc_rec],
+                  assumes=["jv2_log2"],
                   covers=[(1, "example"), (2, "check"), (3, "nhatky"), (4, "scale"), (5, "practice")])

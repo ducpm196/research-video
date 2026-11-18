@@ -38,6 +38,9 @@ class SoCai {
         if (l.tien() <= 0) {
             throw new IllegalArgumentException("So tien phai duong");
         }
+        if (l.tu().equals(l.den())) {
+            throw new IllegalArgumentException("Khong chuyen cho chinh minh");
+        }
         if (l.tien() > a) {
             throw new KhongDuTien(l.tu() + " chi co " + a);
         }

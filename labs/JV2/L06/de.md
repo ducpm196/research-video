@@ -32,6 +32,8 @@ Viết tệp `KiemPhiChuyenKhoan.java` gồm hàm trên, hai hàm trợ giúp t�
 | `bien 5000000` | `phiChuyenKhoan(5000000, false)` | 7000 |
 | `so khong` | `phiChuyenKhoan(0, false)` | ném `IllegalArgumentException` |
 
+`LongSupplier` (`import java.util.function.LongSupplier;`) là kiểu của một hàm không nhận gì và trả về `long`; gọi bằng `getAsLong()`. Dòng `import` cần dùng: `java.util.function.LongSupplier`.
+
 Hàm trợ giúp `kiem(String ten, long mong, LongSupplier thuc)` in `DAT  <ten>` (hai dấu cách sau chữ DAT) hoặc `HONG <ten>: mong <mong>, thuc <thuc>`; `kiemNgoaiLe(ten, soTien)` in `DAT  <ten>` nếu có ném đúng ngoại lệ, ngược lại `HONG <ten>: khong nem ngoai le`. Cuối cùng in `dat <số>, hong <số>`.
 
 Mong đợi: đúng **một** ca `HONG` — đó là lỗi trong hàm. Chấm bản **chưa sửa**: `bash labs/cham.sh JV2 L06 KiemPhiChuyenKhoan.java`. Sau đó tự sửa hàm và chạy lại để thấy năm dòng `DAT`.

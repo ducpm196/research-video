@@ -23,7 +23,7 @@ for C in sys.argv[2:]:
         print("   ", l[:150])
     if n <= 0:
         continue
-    label = f"{C} AF2 rà ASR (2026-11-13)"
+    label = f"{C} AF2 rà ASR ({__import__('time').strftime('%Y-%m-%d %H%M', __import__('time').gmtime())}Z)"
     out = S / f"hand_{C}.txt"
     g = run(["audit/review/asr_hand_gen.py", C, label, str(out)])
     ins = run(["audit/review/asr_hand_insert.py", str(out), label])

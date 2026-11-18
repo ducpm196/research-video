@@ -157,6 +157,9 @@ def registry(course=DEFAULT_COURSE):
         reg["symbols"] = [s for s in reg["symbols"] if s["id"] not in drop] + (ex.get("symbols") or [])
         reg["layout_commands"] = list(reg.get("layout_commands") or []) + (ex.get("layout_commands") or [])
         reg["consistency"] = list(reg.get("consistency") or []) + (ex.get("consistency") or [])
+    for s in reg.get("symbols") or []:  # mục thuật ngữ chữ (E52) không có công thức: pattern không bao giờ khớp
+        if s.get("term") and "pattern" not in s:
+            s["pattern"] = "(?!)"
     return reg
 
 
@@ -464,6 +467,15 @@ def lint(spec, quiet=False):
         for w, canon in SPELL_CANON.items():
             if re.search(r"(?<!\w)" + w + r"(?!\w)", vis, re.I):
                 r.warn(f"{sc.get('id', si)}.{ki}", f"E38 viết “{w}” — toàn kho thống nhất viết “{canon}”")
+    # E55 (AF3): một thuật ngữ một cách viết liên khoá — bảng tools/registry/term_canon.yaml; chỉ bắt buộc với bài `af2: true`
+    if spec.get("af2"):
+        for rule in (load_yaml(TOOLS / "registry" / "term_canon.yaml") or {}).get("rules") or []:
+            for si, sc, ki, st in iter_steps(spec):
+                vis = str(st.get("say", "")) + " " + re.sub(r"<[^>]+>", " ", str(st.get("show", "")))
+                m = re.search(rule["bad"], vis)
+                if m:
+                    r.err(f"{sc.get('id', si)}.{ki}", f"E55 viết “{m.group(0)}” — toàn kho thống nhất “{rule['canon']}” ({rule.get('note', '')})")
+                    break
     # E33: tên lệnh mất dấu “\” vẫn qua KaTeX (in thành chữ nghiêng) — lỗi thật DMS L01 2026-10-27: sed nuốt “\” → $equiv$
     bare = 0
     for it in items:
@@ -500,6 +512,16 @@ def lint(spec, quiet=False):
             if s["id"] not in known and s.get("unicode") and any(ch in plain for ch in s["unicode"]):
                 r.err(where, f"ký tự “{s['unicode']}” ({s['name']}) xuất hiện trong chữ trước khi được giải thích")
                 known.add(s["id"])
+        # E52 (AF3, 2026-11-13): thuật ngữ CHỮ (không phải ký hiệu toán) phải được giảng tại chỗ trước khi dùng. Mục sổ có `term: <regex>`
+        # (áp lên chữ của `show` đã bỏ thẻ + `say`); `introduces: [id]` ở step giảng nó, hoặc `assumes: [id]` nếu một bài đứng trước TRONG DÃY
+        # đã giảng (lv.py curriculum kiểm assumes ⊂ bao đóng tiên quyết). Chỉ bắt buộc với bài `af2: true` (tránh 700 lỗi giả); mẫu F đo: 31/38 bài còn 1–4 thuật ngữ kẹt.
+        if spec.get("af2"):
+            say_plain = str(st.get("say", ""))
+            for s in reg:
+                if s.get("term") and s["id"] not in known and re.search(s["term"], plain + " " + say_plain):
+                    r.err(where, f"E52 dùng thuật ngữ “{s['name']}” (`{s['id']}`) trước khi giảng — thêm `introduces: [{s['id']}]` ở step giảng nó, "
+                                 f"hoặc `assumes: [{s['id']}]` nếu bài đứng trước trong dãy học đã giảng")
+                    known.add(s["id"])  # báo một lần
         for m in MATH_RE.finditer(show):
             tex = m.group(1) or m.group(2)
             for s in reg:

@@ -90,3 +90,20 @@ def bnx_shared_order(io_ms, n_threads, shared):
     start = sch[-1][0] if shared else 0
     ev.append((start, 1, "tính"))   # việc tính chỉ bắt đầu sau khi một luồng vừa rảnh
     return [n for _, _, n in sorted(ev)], start
+
+
+# ── AF2 (WP4 2026-11-14): cảnh quy mô — bể n luồng nhận N việc bị giữ lại ──
+def bnx_l16_backlog(n, threads):
+    """Hàng không giới hạn: việc nằm chờ = N trừ số luồng (mỗi luồng giữ một việc)."""
+    return max(0, n - threads)
+
+
+def bnx_l16_rejected(n, threads, cap):
+    """Hàng có sức chứa cap: bể nhận threads + cap việc, phần còn lại bị từ chối."""
+    return max(0, n - threads - cap)
+
+
+def bnx_l16_last_start_ms(n, threads, task_ms):
+    """Việc cuối bắt đầu sau ceil(việc chờ / số luồng) lượt, mỗi lượt task_ms."""
+    b = bnx_l16_backlog(n, threads)
+    return -(-b // threads) * task_ms

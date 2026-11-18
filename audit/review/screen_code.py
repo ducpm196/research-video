@@ -201,8 +201,10 @@ def load_reg(course=None):
 
 
 # ───────────────────────── chạy ─────────────────────────
-def _run(cmd, inp=None, cwd=None, timeout=60, path_prepend=None):
+def _run(cmd, inp=None, cwd=None, timeout=60, path_prepend=None, extra_env=None):
     env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONDONTWRITEBYTECODE="1", PYTHONUTF8="1")
+    if extra_env:
+        env.update({str(k): str(v) for k, v in extra_env.items()})
     if path_prepend:
         env["PATH"] = str(path_prepend) + os.pathsep + env.get("PATH", "")
     r = subprocess.run(cmd, input=inp, cwd=cwd, capture_output=True, timeout=timeout, env=env,
@@ -210,7 +212,13 @@ def _run(cmd, inp=None, cwd=None, timeout=60, path_prepend=None):
     return r.returncode, r.stdout, r.stderr
 
 
-def _py_exe():
+def _py_exe(which=None):
+    """which == "venv": labs/.venv-pyt (Python 3.11 + numpy/pandas/matplotlib/pytest ghim, khoá PYT); mặc định .venv của kho."""
+    if which == "venv":
+        v = ROOT / "labs" / ".venv-pyt" / "Scripts" / "python.exe"
+        if not v.exists():
+            raise ValueError("NOT_VERIFIED: thiếu labs/.venv-pyt")
+        return str(v)
     v = ROOT / ".venv" / "Scripts" / "python.exe"
     return str(v) if v.exists() else sys.executable
 
@@ -531,16 +539,27 @@ class Gate:
                 if "/" in fname or "\\" in fname or fname.startswith("."):
                     raise ValueError(f"tên tệp không hợp lệ: {fname}")
                 (dp / fname).write_text(self.text(ref) + "\n", encoding="utf-8", newline="\n")
+            # fs: {đường dẫn: nội dung} tệp dựng sẵn cạnh chương trình (ghi NGUYÊN VĂN, không thêm dòng); khối hiện nội dung tệp là
+            # `fragment within "src:<KHOÁ>:<tên>#<đường dẫn>"` (khoá PYT: tệp dữ liệu .csv, phi.py, test_phi.py của lab/bài pytest)
+            for rel, content in (e.get("fs") or {}).items():
+                f = dp / rel
+                f.parent.mkdir(parents=True, exist_ok=True)
+                f.write_bytes(str(content).encode("utf-8"))
             if lang == "python":
+                # expect_exception là SyntaxError/IndentationError/TabError: chính tệp phải KHÔNG biên dịch được → bỏ bước compile, để python báo lỗi thật
+                syn_exp = str(e.get("expect_exception") or "").startswith(("SyntaxError", "IndentationError", "TabError"))
                 try:
                     compile(text, "<khối>", "exec")
                 except SyntaxError as ex:
-                    return False, f"python cú pháp (nguyên văn): {ex.msg} dòng {ex.lineno}", "", ""
+                    if not syn_exp:
+                        return False, f"python cú pháp (nguyên văn): {ex.msg} dòng {ex.lineno}", "", ""
                 if kind == "syntax":
                     return True, "python compile", "", ""
                 (dp / "khoi.py").write_text(src + "\n", encoding="utf-8")
                 # -I bỏ qua PYTHONIOENCODING → in tiếng Việt lỗi UnicodeEncodeError trên cp1252; -X utf8 sửa (nhóm 1 báo)
-                return self._judge(*_run([_py_exe(), "-I", "-X", "utf8", "-B", "khoi.py"], cwd=d, timeout=to), e)
+                # python: venv → labs/.venv-pyt; stdin: các dòng người học gõ; env: biến môi trường thêm (MPLBACKEND, COLUMNS…)
+                return self._judge(*_run([_py_exe(e.get("python")), "-I", "-X", "utf8", "-B", "khoi.py"], inp=e.get("stdin"), cwd=d, timeout=to,
+                                         extra_env=e.get("env")), e)
             if lang == "sqlite":
                 con = sqlite3.connect(":memory:")
                 try:
@@ -635,6 +654,8 @@ class Gate:
     @staticmethod
     def _judge(rc, so, se, e):
         so, se = so.replace("\r\n", "\n"), se.replace("\r\n", "\n")
+        for pat, rep in e.get("normalize") or []:   # [[regex, thay]]: số đo thay đổi mỗi lần (ví dụ "in 0.05s" của pytest) về đúng chữ trên màn hình
+            so = re.sub(pat, rep, so)
         if "expect_exception" in e:
             good = rc != 0 and e["expect_exception"] in se
             if not good:
@@ -1133,16 +1154,286 @@ def cmd_gen_prog(a):
     _write_ledger(course, f"gen-{course.lower()}", hdr, reg, sources, unmatched, blocks, pretty=True)
 
 
+# ───────────── PYT: chương trình py / phiên >>> repl / phiên Git Bash sh (audit/pyt/lib.py) ─────────────
+_REPL_HARNESS = '''import code, contextlib, io, re
+
+con = code.InteractiveConsole()
+for text in STEPS:
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+        more = False
+        for line in text.split("\\n"):
+            more = con.push(line)
+        if more:
+            con.push("")
+    out = buf.getvalue()
+    if out.startswith("Traceback"):
+        out = "\\n".join(re.sub('File "<console>"', 'File "<stdin>"', l) for l in out.rstrip("\\n").split("\\n")
+                        if not l.startswith("    ")) + "\\n"
+    for i, l in enumerate(text.split("\\n")):
+        print((">>> " if i == 0 else "... ") + l)
+    if "\\n" in text:
+        print("... ")
+    if out.strip("\\n"):
+        print(out.strip("\\n"))
+'''
+
+
+_PYT_ECHO_AFTER = {"nhap": [0], "nhap_sai": [0]}   # dòng đầu ra mà NGAY SAU nó người học gõ dòng stdin thứ i (như lib.io_block ở bài)
+_ECHO_PRELUDE = ("import builtins as _b\n_input = _b.input\n\n\ndef _echo(prompt=\"\"):\n    v = _input(prompt)\n    print(v)\n    return v\n\n\n"
+                 "_b.input = _echo\n")
+_TERM_CODE = ("import subprocess, sys\n\nprint(\"$ {CMD}\", flush=True)\n"
+              "r = subprocess.run([sys.executable, {ARGS}], capture_output=True, text=True, encoding=\"utf-8\")\nprint(r.stdout, end=\"\")")
+
+
+def _render_repl(steps):
+    """Phiên >>> vẽ như màn hình (audit/pyt/lib.repl_block): `>>> câu`, dòng nối `... `, rồi đầu ra."""
+    lines = []
+    for x, y in steps:
+        for i, l in enumerate(x.split("\n")):
+            lines.append((">>> " if i == 0 else "... ") + l)
+        if "\n" in x:
+            lines.append("... ")
+        if y:
+            lines += y.split("\n")
+    return "\n".join(l.rstrip() for l in lines)
+
+
+def _pyt_sources(lib):
+    """lib.PROGS / REPLS / SHS → nguồn. Trả (sources, info): info[tên] = {kind: py|repl|sh, lesson, code, out, entry}.
+    py: nguồn run/python (chạy THẬT như verify_pyt: stdin, tệp dựng sẵn fs, python venv, số đo đổi mỗi lần chuẩn hoá bằng `normalize`);
+    repl: chương trình phát lại từng câu bằng code.InteractiveConsole, đầu ra = phiên vẽ như màn hình (khối >>> là `output of` nó);
+    sh: phiên Git Bash (profile fnd) như FND."""
+    sources, info, seen = {}, {}, set()
+
+    def add(n0, lesson, kind, e, code, out):
+        n, i = n0, 2
+        while n in sources:
+            n, i = f"{n0}_{i}", i + 1
+        sources[n] = e
+        info[n] = {"kind": kind, "lesson": lesson, "code": code, "out": out, "entry": e}
+    for p in lib.PROGS:
+        key = (p["lesson"], p["name"], p["code"], p["out"])
+        if key in seen:
+            continue
+        seen.add(key)
+        e = {"lang": "python"}
+        unv = []
+        if p["env"] == "venv":
+            e["python"] = "venv"
+            e["env"] = {"MPLBACKEND": "Agg", "COLUMNS": "80", "TZ": "UTC"}
+            e["timeout"] = 180
+        if p["stdin"] is not None:
+            e["stdin"] = p["stdin"]
+        if p["files"]:
+            e["fs"] = dict(p["files"])
+        if p["expect"].startswith("error:"):
+            e["expect_exception"] = p["expect"].split(":", 1)[1]
+            if p["err"]:
+                e["expect_stderr_contains"] = p["err"]
+        m = re.search(r"\bin (\d+\.\d+)s$", p["out"].split("\n")[-1]) if p["out"] else None
+        if m:
+            e["normalize"] = [[r"\bin \d+\.\d+s\b", f"in {m.group(1)}s"]]
+            unv.append(f"dòng tổng kết của pytest ghi thời gian chạy (in {m.group(1)}s) đo MỘT lần, mỗi lần chạy một số khác: máy chỉ kiểm "
+                       "phần còn lại của đầu ra và dạng `in <số>s`, không kiểm con số giây")
+        e["expect_stdout"] = p["out"]
+        if unv:
+            e["unverified_claims"] = unv
+        e["code"] = p["code"]
+        add(f"{p['lesson']}_{p['name']}", p["lesson"], "py", e, p["code"], p["out"])
+        if p["stdin"] is not None:
+            # cửa sổ lệnh thật hiện lại dòng người học gõ (terminal echo); màn hình (lib.io_block) đặt dòng gõ ngay dưới dòng đầu ra tương ứng.
+            # Nguồn "echo": CÙNG chương trình + stdin, chỉ thêm prelude in lại dòng vừa đọc bằng input() → đầu ra giống màn hình.
+            ins = p["stdin"].strip("\n").split("\n")
+            after = _PYT_ECHO_AFTER.get(p["name"], [0] * len(ins))
+            outl = p["out"].split("\n") if p["out"] else []
+            exp = []
+            for j, l in enumerate(outl):
+                exp.append(l)
+                exp += [ins[kk] for kk, aa in enumerate(after) if aa == j]
+            ee = dict(e, prelude=_ECHO_PRELUDE, prelude_reason="màn hình hiện dòng người học gõ (bài nói «gõ …»); terminal thật tự in lại dòng gõ, "
+                                                              "prelude in lại dòng vừa đọc để đầu ra giống màn hình", expect_stdout="\n".join(exp))
+            ee.pop("code")
+            ee["code"] = p["code"]
+            add(f"{p['lesson']}_{p['name']}_echo", p["lesson"], "echo", ee, p["code"], "\n".join(exp))
+    for r in lib.REPLS:
+        key = (r["lesson"], r["name"], tuple(r["steps"]))
+        if key in seen:
+            continue
+        seen.add(key)
+        e = {"lang": "python"}
+        if r["env"] == "venv":
+            e["python"] = "venv"
+            e["timeout"] = 180
+        e["expect_stdout"] = _render_repl(r["steps"])
+        if any(y.startswith("Traceback") for _, y in r["steps"]):
+            e["unverified_claims"] = [
+                "màn hình hiện thông báo lỗi của cửa sổ `>>>` dạng ngắn (Traceback, `File \"<stdin>\", line 1, in <module>`, dòng lỗi cuối, "
+                "không dòng mã nguồn): đúng với python 3.11 và cửa sổ cơ bản của 3.13+; cửa sổ mới của 3.13 (pyrepl, chạy trong terminal "
+                "thật) in `File \"<python-input-N>\"` kèm dòng mã và dấu ^ — máy chạy bằng code.InteractiveConsole nên KHÔNG đối chiếu được "
+                "dạng hiển thị của cửa sổ tương tác thật trên 3.13"]
+        e["code"] = "STEPS = " + json.dumps([a for a, _ in r["steps"]], ensure_ascii=False, indent=1) + "\n\n" + _REPL_HARNESS.rstrip("\n")
+        add(f"{r['lesson']}_repl_{r['name']}", r["lesson"], "repl", e, e["code"], e["expect_stdout"])
+    for c in lib.SHS:
+        key = (c["lesson"], c["name"], tuple(c["steps"]), tuple(sorted(c["files"].items())))
+        if key in seen:
+            continue
+        seen.add(key)
+        e = {"lang": "bash", "profile": "fnd"}
+        if c["files"]:
+            e["fs"] = dict(c["files"])
+        e["session"] = [{"cmd": a, "out": b} for a, b in c["steps"]]
+        add(f"{c['lesson']}_sh_{c['name']}", c["lesson"], "sh", e, None, None)
+    return sources, info
+
+
+def _sub_match(want, actual):
+    """Các dòng `want` là dãy con có thứ tự của `actual` (như cổng output)."""
+    pos = 0
+    for w in want:
+        while pos < len(actual) and not _line_match(w, actual[pos]):
+            pos += 1
+        if pos == len(actual):
+            return False
+        pos += 1
+    return True
+
+
+def cmd_gen_pyt(a):
+    """Sổ PYT từ audit/pyt/src (lib.PROGS, REPLS, SHS). Mỗi chương trình `py` → NGUỒN run/python chạy thật; mỗi phiên `repl` → nguồn phát lại
+    bằng code.InteractiveConsole; mỗi phiên `sh` → nguồn session (Git Bash). Khối màn hình → (1) `run` nếu là CẢ chương trình, (2) `fragment`
+    within nguồn (dãy dòng liên tiếp của mã hoặc của tệp fs), (3) `output of` nguồn (đầu ra thật, khối >>> là `output of` nguồn repl).
+    Mỗi mục được thử bằng chính cổng; khối không khớp → "CHƯA KHỚP" (thêm tay `hand: true`, giữ qua các lần sinh)."""
+    lib = _load_course_lib("PYT")
+    sources, info = _pyt_sources(lib)
+    blocks = all_blocks("PYT")
+    reg = {f"src:PYT:{n}": dict(v, _source=True) for n, v in sources.items()}
+    g = Gate(dict(blocks), reg)
+    sess_by = {}
+    for n, i in info.items():
+        if i["kind"] == "sh":
+            sess_by.setdefault(i["lesson"], []).append((n, i["entry"]))
+    entries, unmatched, used = {}, [], {}
+
+    def order(lid, sid, kinds):
+        names = [n for n, i in info.items() if i["kind"] in kinds]
+        near = used.get((lid, sid), [])
+        return sorted(names, key=lambda n: (n not in near, info[n]["lesson"] != lid))
+
+    def accept(k, ent):
+        g.reg[k] = ent
+        g.cache.pop(k, None)
+        ok, msg, _, _ = g.check(k)
+        if not ok:
+            g.reg.pop(k, None)
+            g.cache.pop(k, None)
+        return ok
+
+    for k, t in blocks.items():
+        _, lid, sid, ti, bi = k.split(" ")
+        frag = _dedent_lines(t)
+        want = [l.strip() for l in t.split("\n") if l.strip()]
+        sha = digest(t)
+        hit = None
+        for n in order(lid, sid, ("py",)):   # (1) cả chương trình
+            i = info[n]
+            if frag == _dedent_lines(i["code"]):
+                ent = {"sha": sha, "kind": "run"}
+                ent.update({x: y for x, y in i["entry"].items() if x != "code"})
+                if accept(k, ent):
+                    hit = ent
+                    used.setdefault((lid, sid), []).append(n)
+                    break
+        if hit is None:   # (2) đoạn mã / tệp dựng sẵn / phiên sh
+            for n in order(lid, sid, ("py",)):
+                i = info[n]
+                w = _windows(i["code"].split("\n"), frag)
+                ent = None
+                if w is not None:
+                    ent = {"sha": sha, "kind": "fragment", "within": f"src:PYT:{n}",
+                           "reason": f"dãy dòng {w + 1}–{w + len(frag)} của chương trình {n} (nguồn chạy thật trên Python, so đầu ra từng dòng)"}
+                else:
+                    for path, content in (i["entry"].get("fs") or {}).items():
+                        if _windows([l.rstrip() for l in str(content).strip("\n").split("\n")], frag) is not None:
+                            ent = {"sha": sha, "kind": "fragment", "within": f"src:PYT:{n}#{path}",
+                                   "reason": f"nội dung tệp {path} dựng sẵn cho chương trình {n} (chương trình chạy thật trên đúng tệp này)"}
+                            break
+                if ent and accept(k, ent):
+                    hit = ent
+                    used.setdefault((lid, sid), []).append(n)
+                    break
+        if hit is None:
+            ent = _session_hit("PYT", k, t, sess_by)
+            if ent and accept(k, ent):
+                hit = ent
+                used.setdefault((lid, sid), []).append(ent["within"].split(":", 2)[2].split("#")[0])
+        if hit is None and want:   # (3) đầu ra
+            cands = []
+            for n in order(lid, sid, ("py", "repl", "echo")):
+                i = info[n]
+                outl = [l.rstrip() for l in i["out"].split("\n")] if i["out"] else []
+                errl = [l for l in (i["entry"].get("expect_stderr_contains") or "").split("\n") if l.strip()]
+                exact = [l.strip() for l in outl if l.strip()] == want
+                if errl or _sub_match(want, outl):
+                    cands.append((not exact, n))
+            for _, n in sorted(cands, key=lambda x: x[0]):
+                ent = {"sha": sha, "kind": "output", "of": f"src:PYT:{n}",
+                       "reason": ("khối kết quả của " + ("phiên >>> " if info[n]["kind"] == "repl" else "chương trình ") + n
+                                  + (" (cùng chương trình, thêm dòng người học gõ như terminal)" if info[n]["kind"] == "echo" else "")
+                                  + " (đầu ra THẬT, các dòng khớp cả dòng, đúng thứ tự)")}
+                if accept(k, ent):
+                    hit = ent
+                    break
+        if hit is None and want and re.match(r"\$ python -m pytest\b", want[0]):
+            # cửa sổ lệnh `$ python -m pytest …` + đầu ra: nguồn "term" chạy ĐÚNG lệnh đó (python -m pytest, tiến trình con) trên cùng tệp của
+            # chương trình bọc pytest.main; đầu ra màn hình là dãy con có thứ tự của (dòng lệnh + đầu ra thật)
+            cmdline = want[0][2:]
+            for n in order(lid, sid, ("py",)):
+                i = info[n]
+                if "pytest.main(" not in (i["code"] or ""):
+                    continue
+                outl = [l.rstrip() for l in i["out"].split("\n")]
+                if not _sub_match(want[1:], outl):
+                    continue
+                tn = f"{n}_term"
+                if tn not in info:
+                    e = {x: y for x, y in i["entry"].items() if x not in ("code", "expect_stdout", "unverified_claims")}
+                    e["expect_stdout"] = "$ " + cmdline + "\n" + i["out"]
+                    if i["entry"].get("unverified_claims"):
+                        e["unverified_claims"] = i["entry"]["unverified_claims"]
+                    e["code"] = _TERM_CODE.replace("{CMD}", cmdline).replace("{ARGS}", ", ".join(json.dumps(x) for x in cmdline.split()[1:]))
+                    sources[tn] = e
+                    info[tn] = {"kind": "term", "lesson": i["lesson"], "code": e["code"], "out": e["expect_stdout"], "entry": e}
+                    g.reg[f"src:PYT:{tn}"] = dict(e, _source=True)
+                ent = {"sha": sha, "kind": "output", "of": f"src:PYT:{tn}",
+                       "reason": f"cửa sổ lệnh `{cmdline}`: nguồn {tn} chạy đúng lệnh đó (tiến trình con) trên các tệp của chương trình {n}; "
+                                 "đầu ra thật, các dòng khớp cả dòng, đúng thứ tự"}
+                if accept(k, ent):
+                    hit = ent
+                    break
+        if hit is None:
+            ent = _session_output_hit("PYT", k, t, sess_by)
+            if ent and accept(k, ent):
+                hit = ent
+        if hit:
+            entries[k] = hit
+        else:
+            unmatched.append(k)
+    hdr = ("# Sổ mã trên màn hình khoá PYT — SINH bằng `screen_code.py gen-pyt` từ audit/pyt/src (lib.PROGS, lib.REPLS, lib.SHS).\n"
+           "# Mục `hand: true` (khối không khớp nguồn nào, đã đọc kiểm tay) được giữ qua các lần sinh lại.\n")
+    _write_ledger("PYT", "gen-pyt", hdr, entries, sources, unmatched, blocks, pretty=True)
+
+
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["inventory", "check", "stub", "show", "gen-jva", "gen-prog", "gen-fnd", "gen-jv2"])
+    ap.add_argument("cmd", choices=["inventory", "check", "stub", "show", "gen-jva", "gen-prog", "gen-fnd", "gen-jv2", "gen-pyt"])
     ap.add_argument("key", nargs="?")
     ap.add_argument("--course")
     ap.add_argument("-v", "--verbose", action="store_true")
     a = ap.parse_args()
     f = {"inventory": cmd_inventory, "check": cmd_check, "stub": cmd_stub, "show": cmd_show,
-         "gen-jva": cmd_gen_jva, "gen-prog": cmd_gen_prog, "gen-fnd": cmd_gen_prog, "gen-jv2": cmd_gen_prog}[a.cmd]
+         "gen-jva": cmd_gen_jva, "gen-prog": cmd_gen_prog, "gen-fnd": cmd_gen_prog, "gen-jv2": cmd_gen_prog, "gen-pyt": cmd_gen_pyt}[a.cmd]
     return f(a) or 0
 
 

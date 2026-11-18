@@ -16,4 +16,6 @@ Tong: {…}
 Khop vong lap: true
 ```
 
+Dòng `import` cần dùng: `java.util.List`, `java.util.Map`, `java.util.TreeMap`, `java.util.stream.Collectors`.
+
 Chạy: `javac ThongKeStream.java && java ThongKeStream`. Chấm: `bash labs/cham.sh JV2 L03 ThongKeStream.java`.
