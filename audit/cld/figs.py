@@ -26,7 +26,7 @@ def save(name, svg):
 
 def latency_curve():
     """W = 1/(μ − λ) với μ = 100 yêu cầu/s, λ từ 0 tới 97; đánh dấu λ = 50, 80, 95."""
-    W, H, L, T, B, R = 900, 380, 80, 50, 60, 40
+    W, H, L, T, B, R = 980, 380, 80, 50, 60, 120
     xmax, ymax = 100, 300
     X = lambda x: L + x / xmax * (W - L - R)  # noqa: E731
     Y = lambda y: T + (H - T - B) - min(y, ymax) / ymax * (H - T - B)  # noqa: E731
@@ -46,7 +46,7 @@ def latency_curve():
         lam += 0.5
     out.append(f'<polyline points="{" ".join(pts)}" fill="none" stroke="{S1}" stroke-width="3"/>')
     out.append(f'<line x1="{X(100):.0f}" y1="{T}" x2="{X(100):.0f}" y2="{Y(0):.0f}" stroke="{S2}" stroke-width="2.5" stroke-dasharray="8 6"/>')
-    out.append(text(X(100) - 8, T + 18, "công suất", 16, S2, "end", "bold"))
+    out.append(text(X(100) + 8, T - 8, "công suất", 16, S2, "start", "bold"))
     for lam, dx, anchor in ((50, 0, "middle"), (80, -14, "end"), (95, -14, "end")):
         w = alg.mm1(lam, 100)[0] * 1000
         out.append(f'<circle cx="{X(lam):.0f}" cy="{Y(w):.0f}" r="8" fill="{S1}" stroke="{BG}" stroke-width="2"/>')

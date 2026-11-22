@@ -1,0 +1,207 @@
+id: L16
+course: SDP
+series: "SDP · Kỹ thuật lập trình và mẫu thiết kế"
+title: "Bài 16 — Tổng hợp: thiết kế lại giỏ hàng"
+voice: vi-VN-NamMinhNeural
+rate: "-5%"
+depth: full
+source: "curriculum/sdp.yaml L16; audit/sdp/verify_sdp.py L16; E. Gamma, R. Helm, R. Johnson, J. Vlissides, Design Patterns (1994), chương 5 (Strategy, Observer); M. Fowler, Refactoring, 2nd ed. (2018), chương 1 (ví dụ tái cấu trúc có kiểm thử); các bài 5, 10, 11, 13 của khoá này"
+assumes: [arith, cdot, frac]
+# Quy ước: alg.cart_total(prices, strategy) cộng giá rồi áp chiến lược giảm giá (hàm nhận tổng, trả tổng mới). Chiến lược mẫu: giảm 10% khi tổng
+#   trên 300 000. Người nghe “tồn kho” và “email” đăng ký sự kiện “đã đặt hàng” (người quan sát). Đơn vị: đồng.
+objectives:
+  - "Chọn mẫu theo vấn đề, không theo danh sách"
+  - "Giữ hành vi bằng kiểm thử khi thiết kế lại"
+  - "Tổng hợp nguyên lý và mẫu của khoá"
+asr_reviewed: []
+scenes:
+  # ───────────────────────── 1. HOOK ─────────────────────────
+  - id: hook
+    kind: hook
+    title: "Hàm thanh toán 400 dòng"
+    steps:
+      - show: |
+          <p>Hàm <code>thanh_toan()</code> 400 dòng: cộng tiền, 9 nhánh <code>if</code> cho các chương trình giảm giá, trừ tồn kho, gửi thư, ghi nhật ký. Mỗi đợt khuyến mãi mới là một lần sửa hàm này — và một lần hỏng thứ khác.</p>
+          <div class="box key">Hôm nay: <b>tổng hợp</b> — thiết kế lại giỏ hàng bằng đúng những gì đã học, và chỉ những gì <b>cần</b>.</div>
+        focus: [1, 1, 2]
+        say: "Chào bạn, hàm thanh toán dài 400 dòng, cộng tiền, có 9 nhánh điều kiện cho các chương trình giảm giá, rồi trừ tồn kho, gửi thư, ghi nhật ký. Mỗi đợt khuyến mãi mới là một lần sửa hàm này, và một lần làm hỏng thứ khác. Hôm nay ta tổng hợp, thiết kế lại giỏ hàng bằng đúng những gì đã học, và chỉ những gì thật sự cần."
+
+  - id: prereq
+    kind: prereq
+    title: "Chuẩn bị: chiến lược, người quan sát, kiểm thử đặc trưng"
+    checks:
+      - "(lambda ap: ap(400000, lambda t: round(t * 0.9)) == 360000 and ap(400000, lambda t: t) == 400000)(lambda t, f: f(t))"
+      - "alg.observer_calls(3, 4) == 12"
+      - "alg.cart_total([100000, 150000], lambda t: round(t * 0.9) if t > 300000 else t) == 250000"
+    steps:
+      - show: |
+          <table class="t"><tr><th>chiến lược truyền vào</th><th>tổng 400 000 thành</th></tr>
+          <tr><td>giảm 10%</td><td>360 000</td></tr>
+          <tr><td>giữ nguyên</td><td>400 000</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Trước hết, nhắc lại mẫu chiến lược ở bài 10, ta truyền cả một hàm vào làm tham số, và hàm nhận nó cứ thế gọi. Truyền chiến lược giảm 10 phần trăm thì tổng 400 nghìn thành 360 nghìn. Truyền chiến lược giữ nguyên thì vẫn là 400 nghìn, mà hàm nhận không phải sửa dòng nào."
+      - show: |
+          <table class="t"><tr><th>người nghe đã đăng ký</th><th>số sự kiện</th><th>số lời gọi</th></tr>
+          <tr><td>3</td><td>4</td><td>$3 \cdot 4 = 12$</td></tr></table>
+        focus: [1, "1.2"]
+        say: "Tiếp theo, mẫu người quan sát cũng ở bài 10, mỗi khi có sự kiện, ta gọi lần lượt mọi người nghe đã đăng ký. Có 3 người nghe và 4 sự kiện thì có 3 nhân 4, bằng 12 lời gọi."
+      - show: |
+          <table class="t"><tr><th>giỏ đã lưu</th><th>bản cũ trả (ghi lại)</th><th>bản mới phải trả</th></tr>
+          <tr><td>100 000 + 150 000</td><td>250 000</td><td>250 000</td></tr></table>
+        focus: [1, "1.2"]
+        say: "Cuối cùng, kiểm thử đặc trưng ở bài 13, ta ghi lại đầu ra hiện tại của bản cũ trên các đầu vào đã lưu, rồi đòi bản mới phải ra đúng như vậy. Chẳng hạn giỏ 100 nghìn cộng 150 nghìn, bản cũ trả 250 nghìn, nên bản mới cũng phải trả 250 nghìn."
+
+  # ───────────────────────── 2. KÝ HIỆU ─────────────────────────
+  - id: sym
+    kind: symbol
+    title: "Giải mã: vấn đề nào, công cụ nào"
+    steps:
+      - show: |
+          <table class="t"><tr><th>vấn đề thấy được</th><th>công cụ</th></tr>
+          <tr><td>khuyến mãi đổi liên tục, 9 nhánh <code>if</code></td><td><b>chiến lược</b> + đóng–mở</td></tr>
+          <tr><td>đặt hàng xong phải báo tồn kho, thư, nhật ký</td><td><b>người quan sát</b></td></tr>
+          <tr><td>đơn đi qua mới → đã trả → đã giao</td><td><b>trạng thái</b> (bảng chuyển)</td></tr>
+          <tr><td>sợ làm hỏng hành vi cũ</td><td><b>kiểm thử đặc trưng</b> + bước nhỏ</td></tr></table>
+          <p class="note">Bắt đầu từ <b>vấn đề</b>, không từ danh sách mẫu. Chỗ nào chưa có vấn đề thì để mã đơn giản.</p>
+        focus: [1, "1.2", "1.3", "1.4", "1.5", 2, 2]
+        say: "Bảng ghép từng vấn đề thấy được với một công cụ. Khuyến mãi đổi liên tục với 9 nhánh điều kiện thì dùng mẫu chiến lược cùng nguyên lý đóng mở. Đặt hàng xong phải báo cho tồn kho, thư và nhật ký thì dùng mẫu người quan sát. Đơn hàng đi qua các trạng thái mới, đã trả, đã giao thì dùng mẫu trạng thái với bảng chuyển. Sợ làm hỏng hành vi cũ thì dùng kiểm thử đặc trưng và đi từng bước nhỏ. Hãy bắt đầu từ vấn đề, không từ danh sách mẫu. Chỗ nào chưa có vấn đề thì cứ để mã đơn giản."
+
+  - id: intuition
+    kind: intuition
+    title: "Phần cố định và phần cắm vào"
+    steps:
+      - show: |
+          <div><svg width="1500" height="410" viewBox="0 0 1500 410"><defs><marker id="arD16" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker></defs><rect x="290" y="128" width="890" height="146" rx="16" fill="none" stroke="#2a78d6" stroke-width="2" stroke-dasharray="10 8"/><rect x="20" y="165" width="220" height="72" rx="12" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="130.0" y="209.0" font-size="23" text-anchor="middle" fill="#1f2937">giỏ: 3 món</text><rect x="320" y="165" width="220" height="72" rx="12" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="430.0" y="195.0" font-size="23" text-anchor="middle" fill="#1f2937">cộng</text><text x="430.0" y="223.0" font-size="23" text-anchor="middle" fill="#1f2937">450 000</text><rect x="600" y="150" width="280" height="102" rx="12" fill="#ffedd5" stroke="#eb6834" stroke-width="3"/><text x="740.0" y="195.0" font-size="23" text-anchor="middle" fill="#1f2937">chiến lược</text><text x="740.0" y="223.0" font-size="23" text-anchor="middle" fill="#1f2937">(cắm vào)</text><rect x="940" y="165" width="220" height="72" rx="12" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text x="1050.0" y="195.0" font-size="23" text-anchor="middle" fill="#1f2937">tổng</text><text x="1050.0" y="223.0" font-size="23" text-anchor="middle" fill="#1f2937">405 000</text><rect x="560" y="22" width="360" height="56" rx="12" fill="#ffffff" stroke="#eb6834" stroke-width="3" stroke-dasharray="8 6"/><text x="740.0" y="58.0" font-size="23" text-anchor="middle" fill="#1f2937">giảm 10% trên 300 000</text><rect x="560" y="330" width="360" height="56" rx="12" fill="#ffffff" stroke="#eb6834" stroke-width="3" stroke-dasharray="8 6"/><text x="740.0" y="366.0" font-size="23" text-anchor="middle" fill="#1f2937">giảm 50 000 từ 200 000</text><rect x="1250" y="95" width="230" height="64" rx="12" fill="#d1fae5" stroke="#059669" stroke-width="3"/><text x="1365.0" y="135.0" font-size="23" text-anchor="middle" fill="#1f2937">tồn kho</text><rect x="1250" y="245" width="230" height="64" rx="12" fill="#d1fae5" stroke="#059669" stroke-width="3"/><text x="1365.0" y="285.0" font-size="23" text-anchor="middle" fill="#1f2937">thư</text><g fill="none" stroke="#1f2937" stroke-width="3"><line x1="240" y1="201" x2="318" y2="201" marker-end="url(#arD16)"/><line x1="540" y1="201" x2="598" y2="201" marker-end="url(#arD16)"/><line x1="880" y1="201" x2="938" y2="201" marker-end="url(#arD16)"/><line x1="1160" y1="190" x2="1248" y2="135" marker-end="url(#arD16)"/><line x1="1160" y1="212" x2="1248" y2="270" marker-end="url(#arD16)"/></g><g fill="none" stroke="#eb6834" stroke-width="3" stroke-dasharray="8 6"><line x1="740" y1="78" x2="740" y2="148"/><line x1="740" y1="330" x2="740" y2="254"/></g><g font-size="21" fill="#1f2937"><text x="300" y="296">hàm thanh toán: viết một lần</text><text x="950" y="55" fill="#eb6834">đổi khuyến mãi = đổi chiến lược</text><text x="1365" y="355" text-anchor="middle" fill="#059669">người nghe</text></g></svg></div>
+        focus: [1, 1, 1, 1]
+        say: "Hình chia giỏ hàng mới thành phần cố định và phần cắm vào. Khung xanh đứt nét là hàm thanh toán, viết một lần, nó cộng giá, đưa tổng qua chiến lược, rồi báo cho tồn kho và thư. Ô cam ở giữa là chỗ cắm, giảm 10 phần trăm hay giảm 50 nghìn đều chỉ là một chiến lược khác cắm vào. Vì vậy mỗi đợt khuyến mãi mới chỉ đổi phần cam, còn khung xanh không bị sửa và không bị hỏng."
+
+  # ───────────────────────── 3. VÍ DỤ ─────────────────────────
+  - id: example
+    kind: example
+    title: "Giỏ hàng mới, kết quả cũ"
+    checks:
+      - "alg.cart_total([150000, 200000, 100000]) == 450000"
+      - "alg.cart_total([150000, 200000, 100000], lambda t: round(t * 0.9) if t > 300000 else t) == 405000 and alg.cart_total([100000, 150000], lambda t: round(t * 0.9) if t > 300000 else t) == 250000"
+      - "alg.observer_calls(2, 1) == 2"
+    steps:
+      - show: |
+          <div class="code"><div>def giam_10_tren_300k(t): return round(t * 0.9) if t &gt; 300000 else t</div><div></div><div>def thanh_toan(gia, chien_luoc, nguoi_nghe):</div><div>    tong = chien_luoc(sum(gia))</div><div>    for nghe in nguoi_nghe: nghe("da_dat_hang", tong)</div><div>    return tong</div></div>
+          <p><b>Bước 1</b> — chiến lược là một hàm nhỏ; hàm thanh toán chỉ cộng, áp chiến lược, báo người nghe.</p>
+        focus: [1, 1, 1, 2]
+        say: "Bước một, chiến lược giảm 10 phần trăm khi tổng trên 300 nghìn chỉ là một hàm nhỏ. Hàm thanh toán mới nhận danh sách giá, một chiến lược và danh sách người nghe. Nó áp chiến lược lên tổng, báo cho mọi người nghe, rồi trả tổng. Không còn nhánh điều kiện khuyến mãi nào nằm trong hàm thanh toán."
+      - show: |
+          <table class="t"><tr><th>bước</th><th>tính</th><th>kết quả</th></tr>
+          <tr><td><b>Bước 2</b> — cộng</td><td>$150\,000 + 200\,000 + 100\,000$</td><td>450 000</td></tr>
+          <tr><td><b>Bước 3</b> — chiến lược</td><td>450 000 &gt; 300 000 → nhân 0,9</td><td>$\hl{405\,000}$</td></tr>
+          <tr><td>giỏ khác</td><td>250 000 không trên 300 000</td><td>giữ nguyên 250 000</td></tr></table>
+        focus: [1, "1.2", "1.3", "1.4"]
+        say: "Bảng ghi từng phép tính. Bước hai, cộng ba món 150 nghìn, 200 nghìn và 100 nghìn được 450 nghìn. Bước ba, 450 nghìn lớn hơn 300 nghìn nên chiến lược nhân với 0 phẩy 9, còn 405 nghìn. Một giỏ khác chỉ 250 nghìn thì không đủ điều kiện, nên giữ nguyên."
+      - clear: true
+        show: |
+          <p><b>Bước 4</b> — báo người nghe: tồn kho và thư đã đăng ký → 1 đơn, 2 lời gọi.</p>
+          <table class="t"><tr><th>lời gọi</th><th>người nghe</th><th>nhận</th></tr>
+          <tr><td>1</td><td>tồn kho</td><td>("da_dat_hang", 405 000)</td></tr>
+          <tr><td>2</td><td>thư</td><td>("da_dat_hang", 405 000)</td></tr></table>
+        focus: [1, "2.2", "2.3"]
+        say: "Bước bốn, báo người nghe. Tồn kho đăng ký trước, nên nhận lời gọi thứ nhất với sự kiện đã đặt hàng và tổng 405 nghìn. Thư nhận lời gọi thứ hai, cùng nội dung, nên một đơn cho đúng 2 lời gọi."
+      - clear: true
+        show: |
+          <p><b>Bước 5</b> — trước khi xoá hàm 400 dòng: kiểm thử đặc trưng so bản cũ và bản mới trên các giỏ đã lưu; chỉ xoá khi trùng hết.</p>
+          <div class="box key">Thêm khuyến mãi về sau = viết thêm một chiến lược, không mở lại hàm thanh toán.</div>
+        focus: [1, 2]
+        say: "Bước năm, trước khi xoá hàm 400 dòng, kiểm thử đặc trưng so bản cũ và bản mới trên các giỏ đã lưu, và chỉ xoá khi trùng hết. Từ đó, thêm khuyến mãi chỉ là viết thêm một chiến lược, không phải mở lại hàm thanh toán."
+
+  - id: check
+    kind: check
+    title: "Tự kiểm: bản cũ kiểu nhánh điều kiện, chạy cạnh bản mới"
+    checks:
+      - "(lambda d, log: exec('def giam_10_tren_300k(t): return round(t * 0.9) if t > 300000 else t\\ndef thanh_toan(gia, chien_luoc, nguoi_nghe):\\n    tong = chien_luoc(sum(gia))\\n    for nghe in nguoi_nghe: nghe(\"da_dat_hang\", tong)\\n    return tong\\n', d) or (d['thanh_toan']([150000, 200000, 100000], d['giam_10_tren_300k'], [lambda e, t: log.append(('kho', t)), lambda e, t: log.append(('thu', t))]) == 405000 and log == [('kho', 405000), ('thu', 405000)]))({}, [])"
+      - "(lambda cu, d: exec('def giam_10_tren_300k(t): return round(t * 0.9) if t > 300000 else t\\ndef thanh_toan(gia, chien_luoc, nguoi_nghe):\\n    tong = chien_luoc(sum(gia))\\n    for nghe in nguoi_nghe: nghe(\"da_dat_hang\", tong)\\n    return tong\\n', d) or [(cu(g), d['thanh_toan'](g, d['giam_10_tren_300k'], [])) for g in ([150000, 200000, 100000], [100000, 150000], [120000, 90000, 140000], [300000])] == [(405000, 405000), (250000, 250000), (315000, 315000), (300000, 300000)])(lambda g: (lambda t: t - t // 10 if t > 300000 else t)(sum(g)), {})"
+    steps:
+      - show: |
+          <p>Bản cũ viết kiểu nhánh điều kiện, giảm bằng phép <b>trừ</b>: nếu tổng trên 300 000 thì trừ đi một phần mười.</p>
+          <table class="t"><tr><th>giỏ đã lưu</th><th>bản cũ</th><th>bản mới</th></tr>
+          <tr><td>150 000, 200 000, 100 000</td><td>450 000 − 45 000 = 405 000</td><td>405 000 ✓</td></tr>
+          <tr><td>100 000, 150 000</td><td>250 000</td><td>250 000 ✓</td></tr>
+          <tr><td>120 000, 90 000, 140 000</td><td>350 000 − 35 000 = 315 000</td><td>315 000 ✓</td></tr>
+          <tr><td>300 000 (đúng ngưỡng)</td><td>không trên 300 000 → 300 000</td><td>300 000 ✓</td></tr></table>
+        focus: [1, "2.2", "2.3", "2.4", "2.5"]
+        say: "Kiểm bằng đường khác, viết bản cũ kiểu nhánh điều kiện, giảm bằng phép trừ thay vì phép nhân, rồi chạy cạnh bản mới trên bốn giỏ đã lưu. Giỏ đầu, 450 nghìn trừ 45 nghìn còn 405 nghìn, trùng bản mới. Giỏ 250 nghìn không đổi ở cả hai bản. Giỏ 350 nghìn trừ 35 nghìn còn 315 nghìn, trùng. Giỏ đúng 300 nghìn không trên ngưỡng, nên cả hai bản giữ nguyên, và bốn giỏ đều khớp."
+
+  # ───────────────────────── 4. LỖI ─────────────────────────
+  - id: pitfalls
+    kind: pitfall
+    title: "4 lỗi hay gặp"
+    checks:
+      - "(lambda d10, m50: (m50(d10(450000)), d10(m50(450000)), d10(450000), m50(450000)) == (355000, 360000, 405000, 400000))(lambda t: round(t * 0.9) if t > 300000 else t, lambda t: t - 50000 if t >= 200000 else t)"
+    steps:
+      - show: |
+          <div class="box warn"><b>Lỗi 1.</b> Thêm mẫu khi chưa có vấn đề nó giải <b class="red">(phức tạp hoá)</b>
+          <br><span class="note">Nhà máy tạo chiến lược, đối tượng duy nhất giữ cấu hình, bộ chuyển đổi cho thứ không cần chuyển: mỗi lớp thêm là một chỗ phải đọc. Chỉ thêm khi thấy thay đổi lặp lại.</span></div>
+        say: "Lỗi thứ nhất, thêm mẫu khi chưa có vấn đề mà nó giải. Nhà máy tạo chiến lược, đối tượng duy nhất giữ cấu hình, bộ chuyển đổi cho thứ không cần chuyển, mỗi lớp thêm là một chỗ phải đọc. Chỉ thêm khi đã thấy thay đổi lặp lại."
+      - show: |
+          <div class="box warn"><b>Lỗi 2.</b> Viết lại toàn bộ một lần <b class="red">(mất bằng chứng)</b>
+          <br><span class="note">Xoá 400 dòng, viết mới 200 dòng, rồi mới chạy thử: không biết hành vi nào đã đổi. Tách từng phần (giảm giá, thông báo) qua nhiều bước nhỏ có kiểm thử.</span></div>
+        say: "Lỗi thứ hai, viết lại toàn bộ trong một lần. Xoá 400 dòng, viết mới 200 dòng rồi mới chạy thử thì không biết hành vi nào đã đổi. Hãy tách từng phần, giảm giá rồi thông báo, qua nhiều bước nhỏ có kiểm thử."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 3.</b> Người nghe làm hỏng cả luồng thanh toán <b class="red">(liên kết ngầm)</b>
+          <br><span class="note">Gửi thư lỗi mạng → ngoại lệ lan lên → đơn đã thu tiền nhưng báo thất bại. Cô lập lỗi của từng người nghe (bắt và ghi nhật ký), hoặc xử lý thông báo sau khi giao dịch xong.</span></div>
+        say: "Lỗi thứ ba, một người nghe làm hỏng cả luồng thanh toán. Gửi thư lỗi mạng, ngoại lệ lan lên, và đơn đã thu tiền nhưng lại báo thất bại. Hãy cô lập lỗi của từng người nghe, bắt và ghi nhật ký, hoặc xử lý thông báo sau khi giao dịch xong."
+      - clear: true
+        show: |
+          <div class="box warn"><b>Lỗi 4.</b> Ghép hai khuyến mãi mà không quy định thứ tự <b class="red">(hai kết quả)</b></div>
+          <table class="t"><tr><th>giỏ 450 000, áp cả hai chiến lược</th><th>tính</th><th>trả</th></tr>
+          <tr><td>giảm 10% trước, rồi trừ 50 000</td><td>405 000 − 50 000</td><td>355 000</td></tr>
+          <tr><td>trừ 50 000 trước, rồi giảm 10%</td><td>400 000 nhân 0,9</td><td>360 000</td></tr></table>
+        focus: [1, "2.2", "2.3", 2]
+        say: "Lỗi thứ tư hay gặp ở người đã đi làm, ghép hai khuyến mãi mà không quy định thứ tự áp dụng. Với giỏ 450 nghìn, giảm 10 phần trăm trước rồi trừ 50 nghìn thì khách trả 355 nghìn. Trừ 50 nghìn trước rồi giảm 10 phần trăm thì khách trả 360 nghìn, lệch nhau 5 nghìn trên cùng một giỏ. Người làm nghề ghi rõ thứ tự vào quy tắc kinh doanh, và viết một ca kiểm thử khoá đúng con số đó."
+
+  # ───────────────────────── 5. TỰ LÀM ─────────────────────────
+  - id: quiz
+    kind: quiz
+    title: "Đến lượt bạn"
+    checks:
+      - "alg.cart_total([120000, 90000, 140000], lambda t: round(t * 0.9) if t > 300000 else t) == 315000"
+      - "alg.cart_total([120000, 90000, 140000], lambda t: t - 50000 if t >= 200000 else t) == 300000"
+      - "120000 + 90000 + 140000 == 350000"
+    steps:
+      - show: |
+          <table class="t"><tr><th>câu</th><th>đề</th></tr>
+          <tr><td>1</td><td>Giỏ 120 000, 90 000, 140 000 với chiến lược giảm 10% khi trên 300 000: trả bao nhiêu?</td></tr>
+          <tr><td>2</td><td>Đợt khuyến mãi mới: “giảm thẳng 50 000 cho đơn từ 200 000”. Phải sửa <code>thanh_toan</code> không? Giỏ trên trả bao nhiêu?</td></tr></table>
+        focus: [0, "1.2", "1.3", "1.3", "1.3", 0]
+        say: "Bây giờ đến lượt bạn tự làm. Câu một, giỏ gồm 120 nghìn, 90 nghìn và 140 nghìn, với chiến lược giảm 10 phần trăm khi trên 300 nghìn, trả bao nhiêu? Câu hai, đợt khuyến mãi mới giảm thẳng 50 nghìn cho đơn từ 200 nghìn. Có phải sửa hàm thanh toán không? Giỏ trên trả bao nhiêu? Dừng video và làm ra giấy."
+        pause: 15
+      - show: |
+          <table class="t"><tr><th>câu 1</th><th>tính</th><th>kết quả</th></tr>
+          <tr><td>cộng</td><td>$120\,000 + 90\,000 + 140\,000$</td><td>350 000</td></tr>
+          <tr><td>chiến lược</td><td>350 000 &gt; 300 000 → $350\,000 \cdot 0{,}9$</td><td>$\hl{315\,000}$</td></tr></table>
+        focus: [1, "1.2", "1.3"]
+        say: "Đáp án câu một, làm từng bước. Cộng ba món được 350 nghìn. Tổng 350 nghìn lớn hơn 300 nghìn, nên nhân 0 phẩy 9 được 315 nghìn."
+      - show: |
+          <div class="code"><div>def giam_50k_tu_200k(t): return t - 50000 if t &gt;= 200000 else t</div><div>thanh_toan(gia, giam_50k_tu_200k, nguoi_nghe)   <span class="cm"># hàm thanh toán không đổi</span></div></div>
+          <p>② <b>Không sửa</b> — viết chiến lược mới, truyền vào: 350 000 từ 200 000 trở lên → $350\,000 - 50\,000 = \hl{300\,000}$.</p>
+        focus: [1, 1, 2]
+        say: "Câu hai, không phải sửa hàm thanh toán. Ta chỉ viết một chiến lược mới, giảm 50 nghìn cho đơn từ 200 nghìn, rồi truyền vào. Giỏ 350 nghìn từ 200 nghìn trở lên, nên trừ 50 nghìn còn 300 nghìn."
+
+  # ───────────────────────── 6. TỔNG KẾT ─────────────────────────
+  - id: recap
+    kind: recap
+    title: "Chuỗi logic & tư duy cần mang theo"
+    steps:
+      - show: |
+          <div class="chain"><span class="n">hàm nhỏ, tên rõ, lỗi rõ</span><span class="a">→</span>
+          <span class="n">đóng gói, đa hình, hợp thành</span><span class="a">→</span>
+          <span class="n">nguyên lý thiết kế</span><span class="a">→</span>
+          <span class="n">mẫu theo vấn đề</span><span class="a">→</span>
+          <span class="n">kiểm thử giữ hành vi</span></div>
+        say: "Tổng kết cả khoá, hàm nhỏ, tên rõ, xử lý lỗi rõ ràng. Rồi đóng gói, đa hình, hợp thành, các nguyên lý thiết kế, mẫu chọn theo vấn đề, và kiểm thử để giữ hành vi."
+      - show: |
+          <div class="box key"><b>Tư duy:</b> thiết kế tốt không phải là dùng nhiều mẫu, mà là làm cho thay đổi tiếp theo <b>rẻ</b>, <b>an toàn</b>, và <b>có bằng chứng</b>.</div>
+        say: "Điều cần mang theo, thiết kế tốt không phải là dùng nhiều mẫu, mà là làm cho thay đổi tiếp theo rẻ, an toàn, và có bằng chứng."
+      - clear: true
+        show: |
+          <p class="note">Bài sau (bài 17): <b>tình huống chuyên gia theo dòng thời gian</b> — một mã nguồn thương mại điện tử rất lớn đi từ một khối không ranh giới (2006) tới các thành phần có tường bao, kiểm bằng máy (2017 → 2024).</p>
+        forward_ref: true
+        say: "Ở bài sau, bài 17, ta đi theo dòng thời gian của một mã nguồn thương mại điện tử rất lớn. Nó bắt đầu là một khối không có ranh giới, rồi dần được chia thành các phần có tường bao, kiểm bằng máy. Hẹn gặp bạn ở bài tiếp theo."

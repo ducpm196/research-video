@@ -1,0 +1,5 @@
+I = lambda ca, ce: ce / (ca + ce)
+ic, ie = I(3, 1), I(0, 4)
+print(f'core_I={ic:.2f}')
+print(f'edge_I={ie:.2f}')
+print(f'valid_dep_dir={int(ie >= ic)}')

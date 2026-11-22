@@ -3,7 +3,9 @@ và cho đúng mong_doi.txt; mỗi lab được một bài tham chiếu (không 
 Đối chứng âm: một tệp cố tình sai phải bị cham.sh chấm KHÁC.
 Dùng: .venv/Scripts/python -B audit/review/lab_gate.py [KHOÁ ...]   (không đối số = mọi khoá)
 In một dòng tổng; mã thoát 1 nếu có FAIL."""
+import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -19,6 +21,19 @@ if not Path(BASH).exists():
     BASH = "bash"
 want = {a.upper() for a in sys.argv[1:]}
 
+LAB_ENV = dict(os.environ)
+if not shutil.which("sqlite3"):
+    for cand in (
+        Path(r"C:\tools\sqlite"),
+        *sorted(Path(r"C:\Program Files\NVIDIA Corporation").glob("Nsight*/host-windows-x64"), reverse=True),
+    ):
+        if (cand / "sqlite3.exe").is_file():
+            LAB_ENV["PATH"] = str(cand) + os.pathsep + LAB_ENV.get("PATH", "")
+            print(f"[INFO] lab_gate: dùng sqlite3 tại {cand / 'sqlite3.exe'}")
+            break
+if not shutil.which("gcc") and Path(r"C:\tools\w64devkit\bin\gcc.exe").is_file():
+    LAB_ENV["PATH"] = r"C:\tools\w64devkit\bin" + os.pathsep + LAB_ENV.get("PATH", "")
+
 
 def referenced():
     refs = {}
@@ -32,7 +47,7 @@ def referenced():
 
 
 def cham(k, l, path):
-    p = subprocess.run([BASH, str(LABS / "cham.sh"), k, l, str(path)], capture_output=True, text=True, encoding="utf-8", cwd=ROOT)
+    p = subprocess.run([BASH, str(LABS / "cham.sh"), k, l, str(path)], capture_output=True, text=True, encoding="utf-8", cwd=ROOT, env=LAB_ENV)
     return p.returncode, (p.stdout + p.stderr).strip()
 
 
@@ -79,6 +94,13 @@ for kd in sorted(p for p in LABS.iterdir() if p.is_dir() and not p.name.startswi
                         mut = re.sub(r"print\(", 'print("#", ', src, count=1)
                     elif sol.suffix == ".sql":
                         mut = "SELECT 'sai';\n" + src
+                    elif sol.suffix == ".c":
+                        if "printf(" in src:
+                            mut = re.sub(r"\bprintf\(", 'printf("#", ', src, count=1)
+                        else:
+                            mut = re.sub(r"(int\s+main\s*\([^)]*\)\s*\{)", r'\1\n    puts("#sai");', src, count=1)
+                    elif sol.suffix == ".js":
+                        mut = "console.log('#sai');\n" + src
                     else:
                         mut = "echo sai\n" + src
                     bad.write_text(mut, encoding="utf-8")

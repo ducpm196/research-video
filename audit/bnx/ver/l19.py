@@ -63,7 +63,7 @@ def timeline(times, ttl, horizon=400):
 
 def sh(script, timeout=240):
     bash = shutil.which("bash")
-    with tempfile.TemporaryDirectory() as d:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
         Path(d, "k.sh").write_text(script, encoding="utf-8", newline="\n")
         p = subprocess.run([bash, "k.sh"], cwd=d, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
     return p.returncode, p.stdout.replace("\r\n", "\n"), p.stderr

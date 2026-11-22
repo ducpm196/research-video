@@ -1,0 +1,5 @@
+chk = lambda c, m, o: (c >= 3, m >= 2, o >= 1)
+r_bad = chk(2, 1, 0); r_ok = chk(3, 2, 1)
+print(f'same_disk_210_ok={int(all(r_bad))}')
+print(f'full_321_ok={int(all(r_ok))}')
+print(f'missing_in_210={sum(not x for x in r_bad)}')

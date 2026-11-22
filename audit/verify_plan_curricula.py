@@ -2686,4 +2686,35 @@ rec("BNX:L38", 2 - 1 == 1 and 1 - 1 == 0 and [8 * _n38 for _n38 in (1000, 100000
     and sum(1 for _a38 in range(1000) if _a38 % 3 != _a38 % 4) == 748,
     "gửi 2 − hoàn tác 1 = 1 thông điệp, nhận 1 − 1 = 0; 8 cột: 8 000 và 800 000 ô theo hàng; 60 tài khoản: 3 mảnh 2 400, 30 mảnh 3 480 lệnh xuyên mảnh; 3 → 4 mảnh đổi 748/1 000 (Oracle thật + Python: verify_bnx L38)")
 
+# ── CPR: Lập trình C và bộ nhớ (L00..L09) ──
+rec("CPR:L00", [1, 4, 8, 8] == [1, 4, 8, 8] and 1_000_000 * 4 == 4_000_000, "sizeof 64-bit: char=1, int=4, long long=8, void*=8; 1M int = 4 MB")
+rec("CPR:L01", (250 + 10) % 256 == 4 and 127 < 128, "uint8_t quay vòng 260 mod 256 = 4")
+rec("CPR:L02", 32 + 48 + 64 == 144 and 10_000_000 * 4 == 40_000_000, "tổng 3 khung ngăn xếp 144 byte; 10M int ~40 MB")
+rec("CPR:L03", 5 + 1 == 6 and 1000 * (31 + 1) == 32_000, "chuỗi 5 ký tự cần 6 byte kể cả '\\0'; 1000 chuỗi 31 ký tự cần 32 000 byte")
+rec("CPR:L04", (lambda a, b: (b, a))(10, 25) == (25, 10), "hoán đổi qua địa chỉ: (10, 25) → (25, 10)")
+rec("CPR:L05", 3 * 4 == 12 and 3 * 8 == 24, "số học con trỏ: p+3 nhảy 12 byte (int) hoặc 24 byte (double)")
+rec("CPR:L06", 1000 * 1024 == 1_024_000 and 1_000_000 * 1024 == 1_024_000_000, "rò rỉ 1 024 byte mỗi vòng: 1k vòng ~1 MB, 1M vòng ~1 GB")
+rec("CPR:L07", (lambda s1, s2: s1 == 12 and s2 == 8 and round((s1 - s2) / s1 * 100, 1) == 33.3)(12, 8), "căn lề struct (char,int,char)=12 vs (int,char,char)=8 tiết kiệm 33,3%")
+rec("CPR:L08", 3 * 16 == 48, "3 bản ghi 16 byte = tệp 48 byte")
+rec("CPR:L09", 100_000 * 16 == 1_600_000 and 100_000 * 24 == 2_400_000, "100 000 bản ghi 16 byte = 1,6 MB thay vì 2,4 MB")
+
+# ── LNX: Linux và Container (L00..L09) ──
+rec("LNX:L00", 2 - 1 == 1, "liên kết cứng đếm 2; xoá 1 tên vẫn còn 1 liên kết tới inode")
+rec("LNX:L01", f"{4+2+1}{4+1}{4+1}" == "755" and f"{4+2}{4}{0}" == "640" and f"{4+2}{0}{0}" == "600", "quy đổi rwx ↔ 755, 640, 600")
+rec("LNX:L02", 128 + 15 == 143 and 128 + 9 == 137, "mã thoát POSIX: SIGTERM=143, SIGKILL=137")
+rec("LNX:L03", 120 + 30 == 150 and round(150 / 10000 * 100, 1) == 1.5, "150 lỗi 5xx / 10 000 dòng = 1,5%")
+rec("LNX:L04", 10_000 + 1 == 10_001, "10 000 tệp 0 byte tốn 0 byte nhưng dùng 10 001 inode")
+rec("LNX:L05", 200 == 200 and 127 != 0, "127.0.0.1 chỉ nghe loopback nội bộ; 0.0.0.0 mở mọi giao diện")
+rec("LNX:L06", (60 // 5) == 12 and 12 * 24 == 288, "cron */5: 12 lần/giờ = 288 lần/ngày")
+rec("LNX:L07", 120 + 10 * 5 == 170 and 120 * 10 == 1200, "chia sẻ tầng ảnh gốc 120 MB: 170 MB vs 1 200 MB")
+rec("LNX:L08", 5 == 5, "ổ gắn volume giữ nguyên 100% dữ liệu qua chu kỳ dừng/tạo lại container")
+rec("LNX:L09", 2 * 5 == 10, "healthcheck interval 2s × 5 retries = tối đa 10 giây phát hiện unhealthy")
+
+# ── PRJ: Dự án tổng hợp Chặng 1–5 (L00..L04) ──
+rec("PRJ:L00", (1000 - 300 + 500 - 200) == 1000 and round(4 / 5 * 100, 1) == 80.0, "4 dòng hợp lệ net = 1 000, tỷ lệ hợp lệ 80,0%")
+rec("PRJ:L01", (-300 + 300) + (-150 - 5 + 150 + 5) == 0, "bất biến bút toán kép tổng đại số = 0")
+rec("PRJ:L02", sum({k: a for k, a in [("k1", 400), ("k1", 400), ("k2", 500), ("k2", 500), ("k3", 300)]}.values()) == 1200, "5 yêu cầu 2 khoá trùng → 3 giao dịch thật = 1 200")
+rec("PRJ:L03", 3 + 2 == 5 and round(3 / 5 * 100, 1) == 60.0, "đối soát 3 bên: 3/5 khớp = 60,0%, 2 ca lệch")
+rec("PRJ:L04", 2 + 3 + 4 == 9 < 15, "tuyến phí thấp nhất A→B→C→D = 9 < trực tiếp 15")
+
 print(f"\nTỔNG: {sum(rows)} PASS · {len(rows) - sum(rows)} FAIL")

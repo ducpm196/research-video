@@ -602,7 +602,7 @@
   2. *Thấu chi Lương Tín chấp (Unsecured Payroll Overdraft)*:
      - Tích hợp với hệ thống chi lương doanh nghiệp theo lô: Thuật toán tự động phân tích dòng tiền nhận lương vài tháng gần nhất để cấp hạn mức thấu chi tín chấp theo bội số lương (ví dụ minh họa: 2–3 lần) theo danh sách whitelist phê duyệt trước.
   3. *Ký số Hợp đồng Tín dụng Đám mây (Cloud CA E-Sign)*:
-     - Tích hợp cổng ký số từ xa của nhà cung cấp dịch vụ chứng thực chữ ký số (theo Luật Giao dịch điện tử 2023 và Nghị định 23/2025/NĐ-CP), kết hợp xác thực khuôn mặt và OTP theo chính sách xác thực người ký của ngân hàng, giúp khách hàng ký hợp đồng tín dụng điện tử mà không cần token USB hay đến quầy giao dịch.
+     - Tích hợp cổng ký số từ xa của nhà cung cấp dịch vụ chứng thực chữ ký số (theo Luật Giao dịch điện tử 2023 và Nghị định 23/2025/NĐ-CP — chưa kiểm nguyên văn, cần đối chiếu văn bản hiện hành), kết hợp xác thực khuôn mặt và OTP theo chính sách xác thực người ký của ngân hàng, giúp khách hàng ký hợp đồng tín dụng điện tử mà không cần token USB hay đến quầy giao dịch.
 
 ### Câu 84: Phân tích kiến trúc sản phẩm Vay trên Hạn mức Thẻ Tín dụng (Loan on Credit Card / Line of Credit - LoC) và Mở thẻ ảo tức thì. Làm sao tích hợp giữa OMNI-BFF, Card Management System (CMS) và Core T24 để quản lý hạn mức, tính toán phương án trả góp và phòng chống rủi ro?
 - **Trả lời**:
@@ -632,7 +632,7 @@
      - Khách hàng không cần dùng USB Token vật lý. Khi hồ sơ vay được duyệt, Retail Lending Integration Gateway gọi cổng ký số Cloud CA để tạo yêu cầu cấp chứng thư số cá nhân theo chuẩn chữ ký số công cộng.
      - Sinh file PDF hợp đồng tín dụng chuẩn hóa từ template, nhúng các trường siêu dữ liệu (Metadata) và vị trí con dấu số (Signature Placeholder).
   2. *Bảo mật kép và căn cứ pháp lý*:
-     - Căn cứ: Luật Giao dịch điện tử 2023 và Nghị định 23/2025/NĐ-CP về chữ ký điện tử và dịch vụ tin cậy (thay Nghị định 130/2018, hiệu lực 10/04/2025). Quy định xác thực sinh trắc học của NHNN điều chỉnh giao dịch thanh toán trực tuyến, không phải căn cứ cho việc ký hợp đồng.
+     - Căn cứ: Luật Giao dịch điện tử 2023 và Nghị định 23/2025/NĐ-CP về chữ ký điện tử và dịch vụ tin cậy (chưa kiểm nguyên văn, cần đối chiếu văn bản hiện hành; thay Nghị định 130/2018, hiệu lực 10/04/2025). Quy định xác thực sinh trắc học của NHNN điều chỉnh giao dịch thanh toán trực tuyến, không phải căn cứ cho việc ký hợp đồng.
      - Hệ thống xác thực người ký bằng Face Match với dữ liệu sinh trắc học đã đăng ký (đã đối chiếu chip CCCD) và Liveness Detection, theo chính sách ngân hàng.
      - Sau đó hệ thống gửi OTP để khách ủy quyền ký. Khóa bí mật trong HSM của nhà cung cấp dịch vụ ký số từ xa được kích hoạt để ký hợp đồng; dấu thời gian do dịch vụ cấp dấu thời gian (TSA) cấp, không phải do OTP. [chuẩn dấu thời gian cụ thể: chỉ giữ nếu có bằng chứng]
   3. *Đồng bộ lưu trữ kho ECM*:

@@ -1,0 +1,5 @@
+t = sorted([2, 5, 26, 8, 3])
+med = t[len(t)//2]; avg = sum(t)/len(t)
+print(f'deploy_per_day={40/30:.2f}')
+print(f'lead_median_h={med}')
+print(f'lead_mean_h={avg:.1f}')

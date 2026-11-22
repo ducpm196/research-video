@@ -228,7 +228,7 @@ ENG = [
      "mức cô lập <b>mặc định</b> của PostgreSQL là Read Committed (chỉ thấy dữ liệu đã chốt)"),
     ("PostgreSQL", "Applications using this level must be prepared to retry transactions due to serialization failures.",
      "ứng dụng dùng mức đang nói tới (Repeatable Read) <b>phải sẵn sàng</b> thử lại giao dịch khi gặp lỗi tuần tự hoá"),
-    ("SRE (sách vận hành của Google)", "Consider having a server-wide retry budget.",
+    ("SRE — sách vận hành của Google", "Consider having a server-wide retry budget.",
      "<b>nên cân nhắc</b> ngân sách thử lại cho cả máy chủ"),
     ("RFC 9110", "The server SHOULD generate content that includes enough information for a user to recognize the source of the conflict.",
      "máy chủ <b>nên</b> trả nội dung đủ thông tin để người dùng nhận ra nguồn xung đột"),

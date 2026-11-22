@@ -458,7 +458,7 @@ def fixes_r_int_acb():
     ok("L08 nhắc TT 37/2025 sửa đổi TT 31/2024 (cần đối chiếu bản hợp nhất)", t["L08"].count("37/2025") >= 2 and "đối chiếu bản hợp nhất" in t["L08"])
     reg = yaml.safe_load((ROOT / "audit" / "legal" / "registry.yaml").read_text(encoding="utf-8"))
     reg = reg.get("docs", reg) if isinstance(reg, dict) else reg
-    ok("sổ pháp lý có mục CHUA_KIEM cho 37/2025/TT-NHNN", "37/2025/TT-NHNN" in str(reg) and "CHUA_KIEM" in str(reg.get("37/2025/TT-NHNN", "")))
+    ok("sổ pháp lý đã kiểm nguyên văn 37/2025/TT-NHNN", reg.get("37/2025/TT-NHNN", {}).get("status") == "HIEU_LUC" and reg.get("37/2025/TT-NHNN", {}).get("basis") == "ORIGINAL")
     o5 = load("L08")["objectives"][4]
     ok("L08 mục tiêu 5: thông tư chỉ định nghĩa nhóm nợ, chặn duyệt là chính sách ví dụ", "chính sách ví dụ" in o5 and "định nghĩa" in o5)
     ok("L00 quiz: '35 đến 40 triệu' gắn 'số minh hoạ'", "35 đến 40 triệu (số minh hoạ)" in t["L00"] and "một số minh hoạ" in t["L00"])

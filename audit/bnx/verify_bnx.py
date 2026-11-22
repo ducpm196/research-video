@@ -4,11 +4,16 @@ Mỗi bài một tệp audit/bnx/ver/lNN.py có hàm run(rec), gọi rec("Lxx", 
 Chạy: .venv/Scripts/python -B audit/bnx/verify_bnx.py [L06 L07 …]   (exit 0 khi mọi dòng PASS; status_report.py đọc dòng cuối)
 Dòng "SKIP" (thiếu Docker/openssl) KHÔNG tính là PASS: tổng kết ghi số SKIP và thoát 1 nếu có."""
 import importlib.util
+import os
 import sys
 import traceback
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+for _p, _front in ((r"C:\Program Files\Git\bin", True), (r"C:\Program Files\Git\usr\bin", False)):
+    if Path(_p).is_dir() and _p not in os.environ.get("PATH", "").split(os.pathsep):
+        _cur = os.environ.get("PATH", "")
+        os.environ["PATH"] = (_p + os.pathsep + _cur) if _front else (_cur + os.pathsep + _p)
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "audit" / "bnx"))
 sys.stdout.reconfigure(encoding="utf-8")

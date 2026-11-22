@@ -1,0 +1,12 @@
+import hashlib, hmac, sqlite3
+c = sqlite3.connect(':memory:')
+c.execute('CREATE TABLE log(id INT PRIMARY KEY, m TEXT, mac TEXT)')
+c.execute('CREATE INDEX idx_m ON log(m)')
+mac = hmac.new(b'sec_key', b'pay:100', hashlib.sha256).hexdigest()
+c.execute('INSERT INTO log VALUES(?,?,?)', (1, 'pay:100', mac))
+bad = c.execute('SELECT * FROM log WHERE m=?', ("' OR 1=1--",)).fetchall()
+m, sg = c.execute('SELECT m, mac FROM log WHERE id=1').fetchone()
+ok = hmac.compare_digest(sg, hmac.new(b'sec_key', m.encode(), hashlib.sha256).hexdigest())
+print(f'mac_len={len(mac)}')
+print(f'sqli_blocked={int(len(bad)==0)}')
+print(f'hmac_verified={int(ok)}')

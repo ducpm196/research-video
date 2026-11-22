@@ -11,7 +11,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 import lv  # noqa: E402
 
 course, ids = sys.argv[1].upper(), sys.argv[2:]
-pat = re.compile(r"\nasr_reviewed:(?: \[\])?\n((?:  - .*\n)*)")
+pat = re.compile(r"\nasr_reviewed:(?: \[\])?\n(?:[ \t]*#[^\n]*\n)?([\s\S]*?)(?=\nscenes:\n)")
 for lid in ids:
     tpl = next((ROOT / "audit" / course.lower() / "src").glob(f"{lid}_*.tpl.yaml"), None)
     if tpl is None:  # bài không sinh từ mẫu: asr_review_dms đã ghi thẳng vào bài
@@ -21,11 +21,12 @@ for lid in ids:
     text = les.read_text(encoding="utf-8")
     d0 = lv.spec_digest(lv.load_spec(les))
     m = pat.search(text)
-    new = text[:m.start()] + "\nasr_reviewed:" + ("\n" + block if block else " []\n") + text[m.end():]
+    new = text[:m.start()] + "\nasr_reviewed:" + ("\n" + block if block.strip() else " []") + text[m.end():]
     les.write_text(new, encoding="utf-8")
     d1 = lv.spec_digest(lv.load_spec(les))
     if d0 != d1:
         les.write_text(text, encoding="utf-8")
         print(lid, "KHÔNG GHI: digest đổi — hoàn tác")
     else:
-        print(lid, "đã chép", block.count("\n  - ") + (1 if block.startswith("  - ") else 0), "mục, digest giữ nguyên")
+        cnt = sum(1 for ln in block.splitlines() if ln.lstrip().startswith("- "))
+        print(lid, "đã chép", cnt, "mục, digest giữ nguyên")

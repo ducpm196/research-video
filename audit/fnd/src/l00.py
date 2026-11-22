@@ -66,21 +66,23 @@ def build():
            focus=[1, "1.2", "1.3", "1.4", "1.5", "1.6", "1.7"]),
     ])
     sc_int = sc("intuition", "intuition", "Hình dung: đường đi của một chương trình", [
-        st(svg(1500, 420,
-               box(20, 140, 300, 130, ["ổ đĩa", "tệp chương trình", "chậm, lưu lâu"], C_GRAY, bold=True),
-               arrow(325, 205, 470, 205, "#2a78d6", "① nạp"),
-               box(480, 140, 300, 130, ["bộ nhớ", "chương trình + dữ liệu", "nhanh, mất khi tắt"], C_AMBER, bold=True),
-               arrow(785, 205, 930, 205, "#16a34a", "② đọc lệnh"),
-               box(940, 140, 260, 130, ["bộ xử lý", "làm từng lệnh", "rất nhanh"], C_GREEN, bold=True),
-               arrow(1205, 205, 1340, 205, "#16a34a", "③ kết quả"),
-               box(1350, 140, 140, 130, ["màn", "hình"], C_BLUE),
-               box(480, 20, 720, 70, "hệ điều hành điều phối cả ba bước", C_PURPLE, bold=True),
-               arrow(840, 95, 630, 135, "#9333ea"),
-               txt(750, 350, "càng sang phải càng nhanh, càng đắt, càng ít chỗ", 26, "middle", "#1f2937", True),
-               txt(750, 395, "số lần phải quay về ổ đĩa quyết định chương trình nhanh hay chậm", 24, "middle", "#dc2626")),
+        st(svg(1500, 440,
+               box(20, 140, 300, 135, ["ổ đĩa", "tệp chương trình", "chậm, rất nhiều chỗ"], C_GRAY, bold=True),
+               arrow(325, 207, 470, 207, "#2a78d6", "① nạp"),
+               box(480, 140, 310, 135, ["bộ nhớ (RAM)", "dữ liệu đang chạy", "nhanh, ít chỗ hơn"], C_AMBER, bold=True),
+               arrow(795, 207, 940, 207, "#16a34a", "② đọc lệnh"),
+               box(950, 140, 260, 135, ["bộ xử lý (CPU)", "xử lý cực nhanh", "chỉ giữ vài ô đang làm"], C_GREEN, bold=True),
+               arrow(1215, 207, 1345, 207, "#16a34a", "③ xuất"),
+               box(1355, 140, 130, 135, ["màn", "hình"], C_BLUE),
+               box(480, 20, 730, 70, "hệ điều hành điều phối cả ba bước", C_PURPLE, bold=True),
+               arrow(845, 95, 635, 135, "#9333ea"),
+               '<line x1="20" y1="302" x2="1210" y2="302" stroke="#475569" stroke-width="2.5" stroke-dasharray="10 6"/>',
+               txt(615, 346, "3 tầng đầu (ổ đĩa → bộ nhớ → trong CPU): nhanh và đắt hơn theo dung lượng, nhưng sức chứa nhỏ dần", 21, "middle", "#1f2937", True),
+               txt(750, 396, "màn hình chỉ hiển thị kết quả — bộ nhớ nhỏ hơn ổ đĩa, nên số lần quay về ổ đĩa quyết định tốc độ", 22, "middle", "#dc2626")),
            """Hình này là đường đi của một chương trình. Bước một, hệ điều hành nạp tệp chương trình từ ổ đĩa vào bộ nhớ, vì bộ xử lý không đọc thẳng được từ ổ đĩa.
-           Bước hai, bộ xử lý đọc lệnh từ bộ nhớ và làm từng lệnh một. Bước ba, kết quả hiện ra màn hình hoặc được ghi lại.
-           Càng sang phải càng nhanh, càng đắt và càng ít chỗ. Vì thế số lần phải quay về ổ đĩa quyết định chương trình nhanh hay chậm."""),
+           Bước hai, bộ xử lý đọc từng lệnh từ bộ nhớ và làm việc cực nhanh với vài ô nhớ đang xử lý ngay bên trong nó. Bước ba, kết quả hiện ra màn hình hoặc được ghi lại vào tệp.
+           Xét riêng ba tầng từ ổ đĩa sang bộ nhớ rồi tới các ô bên trong bộ xử lý. Đi tới đâu thì nhanh hơn và đắt hơn trên mỗi đơn vị dung lượng tới đó, nhưng sức chứa lại nhỏ dần.
+           Màn hình ở cuối chỉ dùng để hiển thị kết quả. Bộ nhớ không rộng như ổ đĩa nên không thể ôm hết mọi tệp, vì vậy số lần phải quay về đọc ổ đĩa sẽ quyết định chương trình nhanh hay chậm."""),
     ])
     sc_may = sc("ex_may", "example", "Ví dụ: chạy tay một chương trình ba lệnh", [
         st(table(["lệnh", "việc bộ xử lý làm"],
@@ -152,10 +154,10 @@ $$\\frac{10\\,000\\,000}{100} = \\hl{100\\,000} \\text{ lần}$$
            Nhân mười nghìn lần, ổ cơ mất hai mươi tám giờ, còn bộ nhớ vẫn chỉ một giây.""",
            focus=[1, "1.2", "1.3", "1.4"]),
         st("""<div class="box key"><b>Đánh đổi người làm nghề phải chọn:</b>
-<ul><li>giữ dữ liệu nóng trong <b>bộ nhớ</b>: nhanh, nhưng đắt, ít chỗ, <b>mất khi tắt máy</b>;</li>
+<ul><li>giữ dữ liệu nóng trong <b>bộ nhớ</b>: nhanh, nhưng giá theo dung lượng đắt hơn, chứa được ít hơn ổ đĩa và <b>mất khi tắt máy</b>;</li>
 <li>đọc theo <b>khối liền nhau</b> thay vì rải rác: ít lần chờ hơn;</li>
 <li>lập <b>chỉ mục</b> (mục lục) để khỏi đọc cả kho: bài về cơ sở dữ liệu quay lại ý này.</li></ul></div>""",
-           """Người làm nghề phải chọn một đánh đổi. Giữ dữ liệu nóng trong bộ nhớ thì nhanh, nhưng đắt, ít chỗ và mất khi tắt máy. Đọc theo khối liền nhau thì ít lần chờ hơn.
+           """Người làm nghề phải chọn một đánh đổi. Giữ dữ liệu nóng trong bộ nhớ thì nhanh, nhưng đắt theo dung lượng, sức chứa nhỏ hơn ổ đĩa và mất khi tắt máy. Đọc theo khối liền nhau thì ít lần chờ hơn.
            Lập chỉ mục, tức một cái mục lục, để khỏi đọc cả kho. Ý này sẽ quay lại ở bài về cơ sở dữ liệu.""", forward_ref=True),
     ], checks=["1000 * 10 // 1000 == 10", "100_000 * 10 // 1000 == 1000 and round(1000 / 60, 1) == 16.7",
                "round(10_000_000 * 10 / 1000 / 3600, 1) == 27.8", "10_000_000 * 100 // 1_000_000_000 == 1"])

@@ -1,0 +1,268 @@
+id: L06
+course: LNX
+series: LNX · Linux và Container thực chiến
+title: Bài 6 — Khoá SSH, biến môi trường, cron và giữ bí mật khỏi nhật ký
+voice: vi-VN-NamMinhNeural
+rate: -5%
+depth: full
+af2: true
+covers:
+- objective: 1
+  scene: formula
+- objective: 2
+  scene: example
+- objective: 3
+  scene: check
+source: curriculum/lnx.yaml L06; audit/lnx/verify_lnx.py L06 (chạy thật trên Git Bash & Docker Engine Linux); tài
+  liệu POSIX.1-2017 & Linux man-pages; Docker Engine Docs (bản hiện hành)
+assumes:
+- lnx_inode
+- lnx_quyen_bat_phan
+- lnx_tin_hieu
+objectives:
+- Phân biệt vai trò khoá công khai và khoá bí mật; đặt quyền 600 cho khoá riêng
+- Truyền mật khẩu/token qua tệp cấu hình hạn chế quyền hoặc biến môi trường thay vì tham số dòng lệnh
+- Đọc biểu thức lịch cron 5 trường và đặt chuyển hướng log cho tác vụ nền
+asr_reviewed: []
+scenes:
+- id: hook
+  kind: hook
+  title: Vì sao mật khẩu trên dòng lệnh bị người khác xem lén?
+  checks:
+  - (60 // 5) * 24 == 288
+  steps:
+  - show: <div class='box key'><p>Khi bạn chạy <code>./db_sync --password=MatKhauVip123</code>, nhân Linux công
+      khai nguyên dòng lệnh đó trong <code>/proc/&lt;pid&gt;/cmdline</code> cho mọi người dùng chạy lệnh <code>ps</code>
+      nhìn thấy.</p><p>Tệ hơn, tệp lịch sử gõ lệnh tự động lưu lại nguyên văn chuỗi mật khẩu trên ổ đĩa cho tới
+      khi tệp lịch sử bị xoá.</p></div>
+    say: Chào bạn, nhiều kịch bản tự động trên máy chủ vẫn mắc một lỗ hổng cực kỳ phổ biến là kẹp thẳng mật khẩu
+      cơ sở dữ liệu ngay trên tham số dòng lệnh. Bất kỳ tài khoản nào đang đăng nhập chung trên máy đều có thể gõ
+      lệnh xem tiến trình để đọc trọn vẹn tham số đó theo thời gian thực. Hôm nay ta học cách quản lý cặp khoá bảo
+      mật quyền sáu trăm, truyền bí mật an toàn qua biến môi trường và lập lịch tác vụ định kỳ đúng chuẩn.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+- id: prereq
+  kind: prereq
+  title: Ôn nhanh kiến thức nền sẽ dùng
+  steps:
+  - show: <table class='t'><tr><th>nền tảng đã có</th><th>liên hệ bảo mật và lịch chạy</th></tr><tr><td>Quyền tệp
+      600 / 640 (L01)</td><td>Bảo vệ tệp khoá riêng và tệp biến môi trường bí mật</td></tr><tr><td>Chuyển hướng
+      luồng log >> file 2>&1 (L03)</td><td>Không để tác vụ hẹn giờ im lặng mất dấu khi gặp lỗi</td></tr></table>
+    say: Ta kết hợp ngay bài 1 và bài 3 vào vận hành an toàn hàng ngày. Nhờ đặt quyền sáu trăm từ bài 1 mà tệp chứa
+      khoá và mật khẩu không bị tài khoản khác đọc trộm. Nhờ kỹ thuật chuyển hướng cả hai luồng từ bài 3 mà tác
+      vụ chạy ngầm định kỳ luôn ghi lại đủ đầu mối điều tra.
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    clear: true
+- id: sym
+  kind: symbol
+  title: Giải mã ký hiệu và lệnh mới
+  steps:
+  - show: '<table class=''t''><tr><th>thành phần</th><th>vai trò bảo mật / lập lịch</th></tr><tr><td><code>id_ed25519</code>
+      / <code>.pub</code></td><td>Khoá bí mật (giữ trên máy khách, quyền 600) và khoá công khai (chép lên máy chủ)</td></tr><tr><td><code>set
+      -a; source .env</code></td><td>Nạp biến môi trường bí mật từ tệp hạn chế quyền thay vì dòng lệnh</td></tr><tr><td><code>*/5
+      * * * * cmd</code></td><td>Biểu thức lịch 5 trường (phút | giờ | ngày | tháng | thứ): chạy mỗi 5 phút</td></tr></table>'
+    say: Trên bảng là ba quy ước chuẩn cho đăng nhập không mật khẩu và tác vụ nền tự động. Cặp khoá đăng nhập luôn
+      giữ phần bí mật tuyệt đối ở máy nguồn với quyền sáu trăm, còn phần công khai mới gửi sang máy chủ đích. Để
+      truyền mã bí mật vào dịch vụ, ta nạp từ tệp môi trường được bảo vệ kỹ. Còn lịch chạy năm trường đọc lần lượt
+      từ phút, giờ, ngày, tháng đến thứ trong tuần.
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    clear: true
+- id: intuition
+  kind: intuition
+  title: Bốn nguồn rò rỉ bí mật vs đường truyền an toàn qua tệp 600
+  steps:
+  - show: <div><svg width="960" height="200" viewBox="0 0 960 200"><rect x="35" y="30" width="265" height="70" rx="10"
+      fill="#fee2e2" stroke="#dc2626" stroke-width="2"/><text x="167.5" y="61" font-size="18" font-weight="700"
+      text-anchor="middle" fill="#1e293b">Đường NGUY HIỂM</text><text x="167.5" y="82" font-size="15" text-anchor="middle"
+      fill="#475569">--pass=secret trên dòng lệnh</text><line x1="300" y1="65" x2="395" y2="65" stroke="#475569"
+      stroke-width="2"/><polygon points="395,65 387.0,70.0 387.0,60.0" fill="#475569"/><text x="348" y="57" font-size="14"
+      font-weight="600" text-anchor="middle" fill="#1e293b">Lộ ngay!</text><rect x="395" y="30" width="530" height="70"
+      rx="10" fill="#e5e7eb" stroke="#6b7280" stroke-width="2"/><text x="660.0" y="61" font-size="18" font-weight="700"
+      text-anchor="middle" fill="#1e293b">Lộ qua ps aux, /proc/cmdline, history, CI log</text><text x="660.0" y="82"
+      font-size="15" text-anchor="middle" fill="#475569">Tài khoản lạ trên máy đọc rõ nguyên văn</text><rect x="35"
+      y="118" width="265" height="70" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/><text x="167.5"
+      y="149" font-size="18" font-weight="700" text-anchor="middle" fill="#1e293b">Đường AN TOÀN</text><text x="167.5"
+      y="170" font-size="15" text-anchor="middle" fill="#475569">umask 077 + tệp .env quyền 600</text><line x1="300"
+      y1="153" x2="395" y2="153" stroke="#475569" stroke-width="2"/><polygon points="395,153 387.0,158.0 387.0,148.0"
+      fill="#475569"/><text x="348" y="145" font-size="14" font-weight="600" text-anchor="middle" fill="#1e293b">Đọc
+      từ tệp</text><rect x="395" y="118" width="530" height="70" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text
+      x="660.0" y="149" font-size="18" font-weight="700" text-anchor="middle" fill="#1e293b">Nạp vào biến môi trường
+      nội bộ của tiến trình</text><text x="660.0" y="170" font-size="15" text-anchor="middle" fill="#475569">Không
+      lộ trên ps và lịch sử CLI (dòng lệnh)</text></svg></div>
+    say: Nhìn sơ đồ so sánh hai con đường đưa mật khẩu vào chương trình. Con đường phía trên gõ thẳng bí mật lên
+      tham số dòng lệnh khiến mọi tiến trình đều nhìn thấy qua danh sách tiến trình và tệp lịch sử gõ phím. Con
+      đường phía dưới khoá chặt dữ liệu trong tệp quyền sáu trăm rồi đọc kín vào bộ nhớ tiến trình đang chạy.
+    clear: true
+- id: formula
+  kind: formula
+  title: Tính tần suất lịch cron 5 trường
+  checks:
+  - (60 // 5) * 24 == 288
+  steps:
+  - show: '<div class=''box key''><p>Năm trường của một dòng <code>cron</code> theo đúng thứ tự: <b>Phút</b> (0–59)
+      | <b>Giờ</b> (0–23) | <b>Ngày</b> (1–31) | <b>Tháng</b> (1–12) | <b>Thứ</b> (0–6).</p><p>Ví dụ <code>*/5 *
+      * * *</code>: 60 / 5 = <b>12</b> lần mỗi giờ; 12 × 24 = <b>288</b> lần mỗi ngày.</p></div>'
+    say: Tính toán tần suất chạy của biểu thức năm trường rất chính xác theo đơn vị thời gian. Dấu sao chia năm
+      ở cột phút đầu tiên nghĩa là cứ sau năm phút trong sáu mươi phút thì kích hoạt một lượt nên tổng mỗi giờ chạy
+      đúng mười hai lần. Nhân với hai mươi bốn giờ một ngày ta có tổng cộng hai trăm tám mươi tám lần thực thi mỗi
+      ngày.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    clear: true
+- id: example
+  kind: example
+  title: 'Chạy thật: nạp tệp môi trường quyền 600 và che log'
+  checks:
+  - (60 // 5) * 24 == 288
+  steps:
+  - show: <table class='t'><tr><th>lệnh hoặc ký hiệu</th><th>ý nghĩa dễ hiểu</th></tr><tr><td><code>chmod 600 secrets.env</code></td><td>Khoá
+      tệp bí mật để chỉ đúng chủ sở hữu mới đọc được</td></tr><tr><td><code>ssh-keygen -t ed25519</code></td><td>Sinh
+      cặp khoá mật mã hiện đại gồm tệp bí mật và tệp công khai <code>.pub</code></td></tr><tr><td><code>umask 077</code></td><td>Mặt
+      nạ tự động gán quyền <code>600</code> cho tệp mới và <code>700</code> cho thư mục mới</td></tr><tr><td><code>cron</code>
+      (<code>*/5 * * * *</code>)</td><td>Bộ lập lịch tác vụ nền chạy định kỳ trên Linux (<code>*/5</code> = mỗi
+      5 phút một lần)</td></tr></table>
+    say: Giải mã hai bước thiết lập an toàn khi tạo khoá bí mật và đọc tệp môi trường không để lọt ra nhật ký.
+    clear: true
+  - show: '<p><b>Tạo tệp bí mật quyền 600, nạp vào biến môi trường và che khi in nhật ký</b></p><div class="code"><div>mkdir
+      -p test_l06 &amp;&amp; cd test_l06</div><div>umask 077</div><div>printf ''DB_PASS=TopSecret_2026\n'' &gt;
+      secrets.env</div><div>chmod 600 secrets.env</div><div>set -a; source ./secrets.env; set +a</div><div>masked="***<span>&#36;</span>{DB_PASS:
+      -4}"</div><div>hp=<span>&#36;</span>(( <span>&#36;</span>{#DB_PASS} &gt; 0 ? 1 : 0 ))</div><div>echo "has_pass=<span>&#36;</span>hp
+      masked=<span>&#36;</span>masked perm=<span>&#36;</span>(stat -c %a secrets.env)"</div></div>'
+    say: Kịch bản tạo một tệp cấu hình chứa mã bí mật giả lập, đặt ngay quyền sáu trăm từ đầu rồi nạp vào biến môi
+      trường nội bộ của tiến trình. Để tránh rò rỉ vào nhật ký, ta chỉ in ra dấu xác nhận có mặt biến cùng bốn ký
+      tự cuối đã che.
+    focus:
+    - 1
+    - 2
+    clear: true
+  - show: <p><b>Kết quả chạy thật trên môi trường Linux</b></p><div class="code"><div>has_pass=1 masked=***2026
+      perm=600</div></div>
+    say: Đầu ra chạy thật chứng minh quyền tệp được khoá đúng sáu trăm, biến môi trường đã vào tới bộ nhớ tiến trình
+      và thông báo in ra hoàn toàn sạch sẽ không lộ chuỗi mật khẩu.
+    clear: true
+- id: check
+  kind: check
+  title: Đối chứng số lượt chạy của lịch cron */5 * * * *
+  checks:
+  - (60 // 5) * 24 == 288
+  steps:
+  - show: <p><b>Tính độc lập số lần chạy trong 1 giờ và 1 ngày của lịch */5</b></p><div class="code"><div>per_h=<span>&#36;</span>((60
+      / 5)); per_d=<span>&#36;</span>((per_h * 24)); echo "per_hour=<span>&#36;</span>per_h per_day=<span>&#36;</span>per_d"</div></div>
+    say: Ở đường kiểm chứng thứ hai, ta tính lại số lượt kích hoạt trong một giờ và hai mươi bốn giờ vì chu kỳ năm
+      phút lặp đều suốt ngày.
+    clear: true
+  - show: <p><b>Đầu ra đối chứng thật</b></p><div class="code"><div>per_hour=12 per_day=288</div></div>
+    say: Đầu ra đối chứng khớp hoàn toàn với kết quả mười hai lần một giờ và hai trăm tám mươi tám lần một ngày
+      vì sáu mươi chia năm nhân hai mươi bốn bằng đúng số đó.
+    clear: true
+- id: quymo
+  kind: example
+  title: Dung lượng nhật ký và mức phơi nhiễm bí mật qua ba quy mô vận hành
+  checks:
+  - 288 * 30 == 8640
+  steps:
+  - show: <table class='t'><tr><th>chu kỳ cron</th><th>số lần chạy mỗi tháng (30 ngày)</th><th>nguy cơ nếu không
+      chuyển hướng & luân chuyển log</th></tr><tr><td>Mỗi giờ (<span style='white-space:nowrap'>0 * * * *</span>)</td><td>720
+      lần</td><td>Nhỏ, dễ kiểm soát nhưng vẫn mất dấu nếu không ghi tệp</td></tr><tr><td>Mỗi 5 phút (<span style='white-space:nowrap'>*/5
+      * * * *</span>)</td><td>8 640 lần</td><td>Nếu lỗi lặp lại, hộp thư hệ thống đầy nghẽn báo lỗi</td></tr><tr><td>Mỗi
+      phút (<span style='white-space:nowrap'>* * * * *</span>)</td><td>43 200 lần</td><td>Cả chục nghìn dòng tiến
+      trình dồn nếu tác vụ chạy quá 60 giây</td></tr></table>
+    say: Bảng quy mô giải thích tầm quan trọng của việc tính đúng nhịp chạy và gom nhật ký cho tác vụ định kỳ. Với
+      chu kỳ năm phút một lần, trong ba mươi ngày máy chạy tới tám nghìn sáu trăm bốn mươi lượt. Nếu chuyển sang
+      chạy mỗi phút một lần, tổng số lên tới hơn bốn mươi ba nghìn lượt một tháng nên bắt buộc phải dùng cơ chế
+      khoá chống chồng chéo và xoay vòng tệp nhật ký.
+    focus:
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    clear: true
+- id: pitfalls
+  kind: pitfall
+  title: Ba lỗi thường gặp trên máy chủ thực tế
+  steps:
+  - show: '<table class=''t''><tr><th>bẫy thường gặp và cách phòng tránh</th></tr><tr><td><div class=''box warn''><b>Lỗi
+      1: Truyền mật khẩu qua cờ dòng lệnh <code>--token=...</code>.</b> Mọi tiến trình dùng lệnh <code>ps</code>
+      hoặc nhật ký kiểm toán shell đều ghi nguyên văn mật khẩu.<br><b>Lỗi 2: Đặt lệnh <code>echo "Connecting $DB_PASS"</code>
+      trong kịch bản gỡ lỗi rồi quên xoá.</b> Bí mật tràn vào hệ thống thu thập log tập trung.<br><b>Lỗi 3: Chạy
+      tác vụ <code>cron</code> dùng đường dẫn tương đối và thiếu chuyển hướng <code>&gt;&gt; log 2&gt;&amp;1</code>.</b>
+      Môi trường chạy lịch định kỳ rất tối giản nên lệnh thường thất bại im lặng.</div></td></tr></table>'
+    say: Hãy khắc cốt ghi tâm ba sai lầm bảo mật hay gặp nhất khi viết kịch bản vận hành. Một là truyền mật khẩu
+      trực tiếp trên tham số dòng lệnh khiến bất kỳ ai gõ lệnh xem tiến trình đều nhìn thấy. Hai là vô tình in giá
+      trị biến bí mật ra nhật ký hoặc đưa nhầm tệp môi trường vào kho mã nguồn. Ba là đặt lịch chạy nền mà quên
+      dùng đường dẫn tuyệt đối và chuyển hướng đầy đủ cả hai luồng.
+    focus:
+    - 0
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    clear: true
+- id: quiz
+  kind: quiz
+  title: Đến lượt bạn tự kiểm
+  checks:
+  - (60 // 5) * 24 == 288
+  steps:
+  - show: <ol><li>Lịch <code>*/5 * * * *</code> chạy bao nhiêu lần trong trọn 1 ngày (24 giờ)?</li><li>Khi kết nối
+      tự động tới cơ sở dữ liệu bằng kịch bản Bash, nên đọc mật khẩu từ tham số dòng lệnh hay từ tệp biến môi trường
+      đặt quyền <code>600</code>?</li></ol>
+    say: Đến lượt bạn tự kiểm tra. Câu một, biểu thức lịch chạy năm phút một lần thực thi tổng cộng bao nhiêu lần
+      trong suốt một ngày hai mươi bốn giờ? Câu hai, nên truyền mật khẩu bằng cờ dòng lệnh hay nạp từ tệp cấu hình
+      có quyền sáu trăm? Bấm tạm dừng và trả lời ra giấy.
+    pause: 20
+  - show: <table class='t'><tr><th>đáp án câu 1</th></tr><tr><td><p>① 60 / 5 = 12 lần/giờ → 12 × 24 = <b>288 lần/ngày</b>.</p></td></tr></table>
+    say: 'Đáp án câu một: mỗi giờ chạy mười hai lần nên nhân hai mươi bốn giờ cho tổng cộng hai trăm tám mươi tám
+      lượt chạy mỗi ngày.'
+    clear: true
+  - show: <table class='t'><tr><th>đáp án câu 2</th></tr><tr><td><p>② Nạp từ <b>tệp biến môi trường quyền <code>600</code></b>
+      (không bao giờ kẹp mật khẩu lên tham số dòng lệnh).</p></td></tr></table>
+    say: 'Đáp án câu hai: luôn nạp từ tệp biến môi trường đặt quyền sáu trăm để tuyệt đối không làm lộ mật khẩu
+      ra danh sách tiến trình.'
+    clear: true
+- id: practice
+  kind: practice
+  title: Tự làm bài thực hành dòng lệnh và chấm thật
+  lab: labs/LNX/L06
+  steps:
+  - show: <div class='box key'><p><b>Bài thực hành L06:</b> mở đề tại <code>labs/LNX/L06/de.md</code>, viết kịch
+      bản Bash vào một tệp tạm rồi mở <b>Git Bash</b> và chạy lệnh chấm thật:</p><p><code>bash labs/cham.sh LNX
+      L06 duong_dan/bai_cua_ban.sh</code></p></div>
+    say: Bây giờ đến phần bạn tự viết kịch bản dòng lệnh và chấm thật trên máy. Bạn mở đề thực hành, viết lời giải
+      vào tệp riêng rồi chạy lệnh kiểm định đối chiếu từng dòng. Hãy bấm tạm dừng và tự làm trước.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    clear: true
+    pause: 30
+  - show: <p><b>Kết quả mong đợi cần khớp 100% (3 dòng)</b></p><div class="code"><div>env_loaded=1</div><div>cron_per_hour=12</div><div>cron_per_day=288</div></div>
+    say: Màn hình hiện toàn bộ các dòng kết quả mong đợi mà kịch bản của bạn phải in ra khớp từng ký tự.
+    clear: true
+- id: recap
+  kind: recap
+  title: Chuỗi logic và tư duy cần mang theo
+  steps:
+  - show: <div class='chain'><span class='n'>Khoá SSH quyền 600</span><span class='a'>|</span><span class='n'>Bí
+      mật qua .env (không CLI)</span><span class='a'>|</span><span class='n'>cron + đường dẫn tuyệt đối</span></div>
+    say: Tổng kết chuỗi nguyên tắc an toàn cho tự động hoá hệ thống. Hãy đặt quyền sáu trăm cho cả khoá riêng lẫn
+      tệp bí mật và tuyệt đối không in mật khẩu lên dòng lệnh. Khi hẹn giờ chạy nền, luôn dùng đường dẫn tuyệt đối
+      kèm chuyển hướng nhật ký.
+    focus:
+    - '1.1'
+    - '1.2'
+    - '1.3'
+    clear: true
+  - show: <div class='box ok'><b>Bài sau (bài 7):</b> Cơ chế cô lập công-tai-nơ và chia sẻ tầng ảnh gốc</div>
+    say: Bài tiếp theo là bài 7, tìm hiểu chủ đề tiếp nối ngay phần vừa học. Hẹn gặp bạn ở bài sau.
+    clear: true
+    forward_ref: true

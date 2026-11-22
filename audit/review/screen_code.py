@@ -61,7 +61,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 REGDIR = pathlib.Path(os.environ["SC_REGDIR"]) if os.environ.get("SC_REGDIR") else ROOT / "audit" / "review" / "screen_code"   # SC_REGDIR: thử sổ nháp (audit/bnx/screen_try.py)
 KINDS = {"run", "syntax", "fragment", "pseudo", "output", "other"}
 NEED_REASON = {"fragment", "pseudo", "output", "other"}
-RUN_LANGS = {"python", "sqlite", "java", "node", "bash", "go", "oracle", "mssql"}   # oracle/mssql: Docker, audit/bnx/dbrun.py (đợt LF1)
+RUN_LANGS = {"python", "sqlite", "java", "node", "bash", "go", "oracle", "mssql", "c"}   # oracle/mssql: Docker, audit/bnx/dbrun.py (đợt LF1)
 SYNTAX_LANGS = RUN_LANGS | {"c"}
 CLAIM_KEYS = ("post", "expect_stdout", "expect_compile_error", "expect_stderr_contains", "expect_exception")
 SYS_PY = shutil.which("python") or sys.executable   # python hệ thống có pycparser 3.00 (venv không có)
@@ -200,11 +200,37 @@ def load_reg(course=None):
     return reg
 
 
+_GIT_BIN = str(pathlib.Path(r"C:\Program Files\Git\bin")) if pathlib.Path(r"C:\Program Files\Git\bin\bash.exe").exists() else None
+
+
+def _bash_exe():
+    return str(pathlib.Path(_GIT_BIN) / "bash.exe") if _GIT_BIN else (shutil.which("bash") or "bash")
+
+
+def _sqlite3_dir():
+    if shutil.which("sqlite3"):
+        return None
+    for cand in (
+        pathlib.Path(r"C:\tools\sqlite"),
+        *sorted(pathlib.Path(r"C:\Program Files\NVIDIA Corporation").glob("Nsight*/host-windows-x64"), reverse=True),
+    ):
+        if (cand / "sqlite3.exe").is_file():
+            return str(cand)
+    return None
+
+
+_SQLITE3_DIR = _sqlite3_dir()
+
+
 # ───────────────────────── chạy ─────────────────────────
 def _run(cmd, inp=None, cwd=None, timeout=60, path_prepend=None, extra_env=None):
     env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONDONTWRITEBYTECODE="1", PYTHONUTF8="1")
     if extra_env:
         env.update({str(k): str(v) for k, v in extra_env.items()})
+    if _GIT_BIN:
+        env["PATH"] = _GIT_BIN + os.pathsep + env.get("PATH", "")
+    if _SQLITE3_DIR and "sqlite3" not in (path_prepend or ""):
+        env["PATH"] = _SQLITE3_DIR + os.pathsep + env.get("PATH", "")
     if path_prepend:
         env["PATH"] = str(path_prepend) + os.pathsep + env.get("PATH", "")
     r = subprocess.run(cmd, input=inp, cwd=cwd, capture_output=True, timeout=timeout, env=env,
@@ -212,8 +238,13 @@ def _run(cmd, inp=None, cwd=None, timeout=60, path_prepend=None, extra_env=None)
     return r.returncode, r.stdout, r.stderr
 
 
-def _py_exe(which=None):
-    """which == "venv": labs/.venv-pyt (Python 3.11 + numpy/pandas/matplotlib/pytest ghim, khoá PYT); mặc định .venv của kho."""
+def _py_exe(which=None, src=""):
+    """which == "venv": labs/.venv-pyt; which == "venv-ml" (hoặc mã import sklearn/scipy/torch): labs/.venv-ml; mặc định .venv."""
+    if which == "venv-ml" or (which is None and "deps/l23/venv" not in src and re.search(r"^\s*(?:import|from)\s+(?:sklearn|scipy|torch)\b", src, re.M)):
+        v = ROOT / "labs" / ".venv-ml" / "Scripts" / "python.exe"
+        if not v.exists():
+            raise ValueError("NOT_VERIFIED: thiếu labs/.venv-ml")
+        return str(v)
     if which == "venv":
         v = ROOT / "labs" / ".venv-pyt" / "Scripts" / "python.exe"
         if not v.exists():
@@ -351,10 +382,10 @@ def _session_outputs(e):
         (R / "run.sh").write_text("\n".join(body) + "\n", encoding="utf-8", newline="\n")
         (R / "wrap.sh").write_text(f'exec 2>&1\ncd "{_posix(W)}"\nsource "{_posix(R / "run.sh")}"\n', encoding="utf-8", newline="\n")
         env = dict(os.environ, LC_ALL="C.UTF-8", MSYS_NO_PATHCONV="1")
+        if _SQLITE3_DIR:
+            env["PATH"] = _SQLITE3_DIR + os.pathsep + env.get("PATH", "")
         env.update({str(k): str(v) for k, v in (e.get("env") or {}).items()})
-        bash = r"C:\Program Files\Git\bin\bash.exe"
-        if not pathlib.Path(bash).exists():
-            bash = shutil.which("bash") or "bash"
+        bash = _bash_exe()
         try:
             r = subprocess.run([bash, str(R / "wrap.sh")], cwd=str(W), env=env, capture_output=True, timeout=300,
                                stdin=subprocess.DEVNULL)
@@ -558,7 +589,7 @@ class Gate:
                 (dp / "khoi.py").write_text(src + "\n", encoding="utf-8")
                 # -I bỏ qua PYTHONIOENCODING → in tiếng Việt lỗi UnicodeEncodeError trên cp1252; -X utf8 sửa (nhóm 1 báo)
                 # python: venv → labs/.venv-pyt; stdin: các dòng người học gõ; env: biến môi trường thêm (MPLBACKEND, COLUMNS…)
-                return self._judge(*_run([_py_exe(e.get("python")), "-I", "-X", "utf8", "-B", "khoi.py"], inp=e.get("stdin"), cwd=d, timeout=to,
+                return self._judge(*_run([_py_exe(e.get("python"), src), "-I", "-X", "utf8", "-B", "khoi.py"], inp=e.get("stdin"), cwd=d, timeout=to,
                                          extra_env=e.get("env")), e)
             if lang == "sqlite":
                 con = sqlite3.connect(":memory:")
@@ -605,12 +636,13 @@ class Gate:
                 return self._judge(*_run(["node", "khoi.js"], cwd=d, timeout=to), e)
             if lang == "bash":
                 (dp / "khoi.sh").write_text(src + "\n", encoding="utf-8", newline="\n")
+                bash = _bash_exe()
                 if kind == "syntax":
-                    rc, so, se = _run([shutil.which("bash"), "-n", "khoi.sh"], cwd=d)
+                    rc, so, se = _run([bash, "-n", "khoi.sh"], cwd=d)
                     return (rc == 0), ("bash -n" if rc == 0 else se.strip()[:200]), "", ""
                 # shim_sqlite3: máy chưa cài sqlite3 CLI thì đặt lớp giả lập audit/fnd/shim lên PATH (như phiên FND)
-                shim = ROOT / "audit" / "fnd" / "shim" if e.get("shim_sqlite3") and not shutil.which("sqlite3") else None
-                return self._judge(*_run([shutil.which("bash"), "khoi.sh"], cwd=d, timeout=to, path_prepend=shim), e)
+                shim = ROOT / "audit" / "fnd" / "shim" if e.get("shim_sqlite3") and not (_SQLITE3_DIR or shutil.which("sqlite3")) else None
+                return self._judge(*_run([bash, "khoi.sh"], cwd=d, timeout=to, path_prepend=shim), e)
             if lang in ("oracle", "mssql"):
                 # Chạy NGUYÊN VĂN trên Oracle AI Database 26ai Free / SQL Server 2022 trong Docker (audit/bnx/dbrun.py).
                 # Không có container → FAIL "NOT_VERIFIED" (không bao giờ PASS lặng lẽ).
@@ -637,6 +669,21 @@ class Gate:
                     return (rc == 0), ("gofmt -e" if rc == 0 else se.strip()[:200]), "", ""
                 return self._judge(*_run(["go", "run", "main.go"], cwd=d, timeout=to), e)
             if lang == "c":
+                if kind == "run":
+                    gcc = shutil.which("gcc") or (r"C:\tools\w64devkit\bin\gcc.exe" if pathlib.Path(r"C:\tools\w64devkit\bin\gcc.exe").is_file() else None)
+                    if not gcc:
+                        return False, "NOT_VERIFIED: thiếu gcc", "", ""
+                    csrc = e["c_wrap"].replace("{CODE}", src) if e.get("c_wrap") else src
+                    (dp / "khoi.c").write_text(csrc + "\n", encoding="utf-8")
+                    exe = str(dp / ("khoi.exe" if os.name == "nt" else "khoi"))
+                    rc, so, se = _run([gcc, "-std=c11", "-Wall", "-Wextra", "-Werror", "khoi.c", "-lm", "-o", exe], cwd=d)
+                    if "expect_compile_error" in e:
+                        w = e["expect_compile_error"]
+                        good = rc != 0 and w in (so + se)
+                        return (good, f"gcc báo lỗi chứa {w!r}" if good else f"gcc rc={rc}, không thấy {w!r}: {se[:160]!r}", so, se)
+                    if rc:
+                        return False, "gcc: " + (se.strip().splitlines() or ["?"])[0][:200], so, se
+                    return self._judge(*_run([exe] + str(e.get("args") or "").split(), inp=e.get("stdin") or None, cwd=d, timeout=to), e)
                 csrc = e["c_wrap"].replace("{CODE}", text) if e.get("c_wrap") else text
                 csrc = (e.get("c_typedefs") or "") + "\n" + _strip_c_comments(csrc)
                 (dp / "khoi.c").write_text(csrc + "\n", encoding="utf-8")

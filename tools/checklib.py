@@ -7144,3 +7144,119 @@ def _load_bnx():
 
 
 _load_bnx()
+
+
+# ─────────────── CPR (Lập trình C và bộ nhớ, WP-AF4-2) ───────────────
+def cpr_sizeof_64():
+    return {"char": 1, "short": 2, "int": 4, "long_long": 8, "ptr": 8}
+
+
+def cpr_u8_wrap(val, delta):
+    return (val + delta) % 256
+
+
+def cpr_stack_bytes(frames):
+    return sum(frames)
+
+
+def cpr_str_bytes(text_len):
+    return text_len + 1
+
+
+def cpr_ptr_offset(idx, elem_size):
+    return idx * elem_size
+
+
+def cpr_heap_leak(allocs, frees):
+    return allocs - frees
+
+
+def cpr_struct_size(fields):
+    """Tính kích thước struct theo quy tắc căn lề C (64-bit): trả (size, pad_bytes)."""
+    off, mx, used = 0, 1, 0
+    for sz, align in fields:
+        mx = max(mx, align)
+        rem = off % align
+        if rem:
+            off += align - rem
+        off += sz
+        used += sz
+    if off % mx:
+        off += mx - (off % mx)
+    return off, off - used
+
+
+def cpr_pack_rec_bytes():
+    return 8 + 2 + 2 + 4
+
+
+# ─────────────── LNX (Linux và Container, WP-AF4-2) ───────────────
+def lnx_octal_mode(u, g, o):
+    """Chuyển 3 chuỗi 'rwx' thành mã bát phân 3 chữ số."""
+    val = lambda s: (4 if "r" in s else 0) + (2 if "w" in s else 0) + (1 if "x" in s else 0)
+    return f"{val(u)}{val(g)}{val(o)}"
+
+
+def lnx_inode_used(n_files):
+    return n_files + 1
+
+
+def lnx_df_pct(used, total):
+    return round(100 * used / total, 1)
+
+
+def lnx_sig_exit(sig):
+    return 128 + sig
+
+
+def lnx_image_total(shared_mb, unique_mbs, n_containers):
+    return shared_mb + sum(unique_mbs) * n_containers
+
+
+# ─────────────── PRJ (Dự án tổng hợp theo chặng, WP-AF4-2) ───────────────
+def prj_csv_totals(rows):
+    """rows: [(loai, amt)]; IN cộng, OUT trừ; trả (n_in, n_out, net)."""
+    nin = sum(1 for k, _ in rows if k == "IN")
+    nout = sum(1 for k, _ in rows if k == "OUT")
+    net = sum(a if k == "IN" else -a for k, a in rows)
+    return nin, nout, net
+
+
+def prj_double_entry_sum(txns):
+    return sum(-a + a for _, _, a in txns)
+
+
+def prj_idem_dedup(reqs):
+    seen, tot = set(), 0
+    for k, a in reqs:
+        if k not in seen:
+            seen.add(k)
+            tot += a
+    return len(seen), tot
+
+
+def prj_reconcile_3way(bank, napas, partner):
+    b, n, p = set(bank), set(napas), set(partner)
+    both = b & n & p
+    diff = (b | n | p) - both
+    return len(both), len(diff)
+
+
+def prj_dijkstra_cost(edges, src, dst):
+    g = {}
+    for u, v, w in edges:
+        g.setdefault(u, []).append((v, w))
+    dist = {src: 0}
+    pq = [(0, src)]
+    while pq:
+        d, u = heapq.heappop(pq)
+        if u == dst:
+            return d
+        if d > dist.get(u, 10**18):
+            continue
+        for v, w in g.get(u, []):
+            nd = d + w
+            if nd < dist.get(v, 10**18):
+                dist[v] = nd
+                heapq.heappush(pq, (nd, v))
+    return -1

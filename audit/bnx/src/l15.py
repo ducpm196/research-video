@@ -306,7 +306,7 @@ $$\\frac{1\\,000\\,000}{24} \\approx 41\\,667\\ \\text{giao dịch/giờ}, \\qqu
         st(table(["mức", "giao dịch mỗi ngày", "cao điểm (giao dịch/giây)", "lệnh cùng lúc ở Oracle (đếm thật)", "bể 50 kết nối chịu 50 ÷ 0,04 = 1 250 giao dịch/giây (số minh hoạ)"],
                  [["×1", "1 000 000", "116", "5", "đủ"],
                   ["×100", "100 000 000", "11 574", "463", "thiếu: hàng chờ dài thêm 11 574 − 1 250 = 10 324 lệnh mỗi giây"],
-                  ["×10 000", "10 000 000 000", "1 157 407", "46 297", "thiếu: hàng chờ dài thêm 1 156 157 lệnh mỗi giây"]]),
+                  [nowrap("×10 000"), "10 000 000 000", "1 157 407", "46 297", "thiếu: hàng chờ dài thêm 1 156 157 lệnh mỗi giây"]]),
            """Một bể năm mươi kết nối chịu một nghìn hai trăm năm mươi giao dịch mỗi giây.
            Ở gấp trăm lần, cao điểm là mười một nghìn năm trăm bảy mươi bốn nên hàng chờ dài thêm hơn mười nghìn lệnh mỗi giây, gấp vạn lần còn xa hơn.""",
            focus=[0, "1.2", ["1.3", "1.4"]], clear=True),

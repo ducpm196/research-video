@@ -42,7 +42,7 @@ class Repo:
 
 
 def bash(*parts):
-    with tempfile.TemporaryDirectory() as d:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
         Path(d, "k.sh").write_text("\n".join(p.strip("\n") for p in parts) + "\n", encoding="utf-8", newline="\n")
         p = subprocess.run([shutil.which("bash"), "k.sh"], cwd=d, capture_output=True, text=True, encoding="utf-8")
         return p.returncode, p.stdout, p.stderr

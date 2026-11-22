@@ -20,6 +20,13 @@ pick_python() {
 }
 
 case "$F" in
+  *.c)
+    GCC=""
+    for c in gcc /c/tools/w64devkit/bin/gcc.exe; do
+      if command -v "$c" >/dev/null 2>&1; then GCC="$c"; break; fi
+    done
+    [ -n "$GCC" ] || { echo "khong tim thay gcc (cai w64devkit/gcc va them vao PATH)"; exit 2; }
+    ( cd "$W" && "$GCC" -std=c11 -Wall -Wextra -Werror "$ABS" -lm -o "$W/app" 2>"$W/_err" && "$W/app" >"$W/_out" 2>>"$W/_err" ) || { echo "LOI khi bien dich/chay:"; cat "$W/_err"; exit 1; } ;;
   *.java)
     CLS=$(grep -oE 'public[[:space:]]+(final[[:space:]]+)?class[[:space:]]+[A-Za-z_][A-Za-z0-9_]*' "$ABS" | head -1 | awk '{print $NF}')
     [ -n "$CLS" ] || { echo "không thấy 'public class Tên' trong $F"; exit 2; }
@@ -27,9 +34,14 @@ case "$F" in
     ( cd "$W" && javac -encoding UTF-8 "$CLS.java" 2>"$W/_err" && java -Dfile.encoding=UTF-8 "$CLS" >"$W/_out" 2>>"$W/_err" ) || { echo "LỖI khi biên dịch/chạy:"; cat "$W/_err"; exit 1; } ;;
   *.py)
     PY=$(pick_python) || { echo "không tìm thấy Python 3 (cài từ python.org, tick Add to PATH)"; exit 2; }
+    # Thư viện ML/Torch (sklearn, scipy, torch): ưu tiên labs/.venv-ml khi có sẵn (đúng phiên bản ghim trong requirements-ml.txt).
+    if grep -qE '^[[:space:]]*(import|from)[[:space:]]+(sklearn|scipy|torch)' "$ABS"; then
+      for V in "$HERE/.venv-ml/Scripts/python.exe" "$HERE/.venv-ml/bin/python"; do
+        if [ -x "$V" ]; then PY="$V"; break; fi
+      done
     # Thư viện ngoài (numpy, pandas, matplotlib, pytest): người học dùng môi trường ảo của họ (đã kích hoạt nên `python` là của venv);
     # máy kiểm của kho dùng labs/.venv-pyt khi python hệ thống thiếu thư viện (cài bằng: pip install -r labs/requirements-py.txt).
-    if grep -qE '^[[:space:]]*(import|from)[[:space:]]+(numpy|pandas|matplotlib|pytest)' "$ABS"; then
+    elif grep -qE '^[[:space:]]*(import|from)[[:space:]]+(numpy|pandas|matplotlib|pytest)' "$ABS"; then
       for V in "$HERE/.venv-pyt/Scripts/python.exe" "$HERE/.venv-pyt/bin/python"; do
         if [ -x "$V" ] && ! "$PY" -c "import numpy, pandas, matplotlib" >/dev/null 2>&1; then PY="$V"; break; fi
       done
@@ -43,6 +55,7 @@ case "$F" in
       ( cd "$W" && PYTHONIOENCODING=utf-8 "$PY" "$HERE/sqlrun.py" "$ABS" >"$W/_out" 2>"$W/_err" ) || { echo "LỖI khi chạy:"; cat "$W/_err"; exit 1; }
     fi ;;
   *.sh)  ( cd "$W" && bash "$ABS" >"$W/_out" 2>"$W/_err" ) || { echo "LỖI khi chạy:"; cat "$W/_err"; exit 1; } ;;
+  *.js)  ( cd "$W" && node "$ABS" >"$W/_out" 2>"$W/_err" ) || { echo "LỖI khi chạy:"; cat "$W/_err"; exit 1; } ;;
   *) echo "chưa hỗ trợ đuôi tệp này"; exit 2 ;;
 esac
 norm() { tr -d '\r' <"$1" | sed -e 's/[[:space:]]*$//' | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}'; }

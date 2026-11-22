@@ -1,0 +1,9 @@
+r1, r2, dyn, iters = 0, 1, 2, 0
+while r2 <= 10:
+    r1 += r2
+    r2 += 1
+    dyn += 3
+    iters += 1
+print(f'sum_1_to_10={r1}')
+print(f'loop_iters={iters}')
+print(f'total_dynamic_insts={dyn}')

@@ -1,0 +1,273 @@
+id: L03
+course: LNX
+series: LNX · Linux và Container thực chiến
+title: Bài 3 — Luồng chuẩn, đường ống và lọc nhật ký dịch vụ trên Linux
+voice: vi-VN-NamMinhNeural
+rate: -5%
+depth: full
+af2: true
+covers:
+- objective: 1
+  scene: formula
+- objective: 2
+  scene: example
+- objective: 3
+  scene: quymo
+source: curriculum/lnx.yaml L03; audit/lnx/verify_lnx.py L03 (chạy thật trên Git Bash & Docker Engine Linux); tài
+  liệu POSIX.1-2017 & Linux man-pages; Docker Engine Docs (bản hiện hành)
+assumes:
+- lnx_inode
+- lnx_quyen_bat_phan
+- lnx_tin_hieu
+objectives:
+- Tách luồng chuẩn (1) và luồng lỗi (2) khi ghi log và chuyển hướng
+- Dùng grep/awk theo đường ống để đếm số lỗi 5xx theo phút trên tệp log lớn
+- Ước lượng thời gian quét 100 000 dòng log khi lọc tại chỗ so với truyền mạng
+asr_reviewed: []
+scenes:
+- id: hook
+  kind: hook
+  title: Vì sao chuyển hướng ra tệp lại bỏ sót dòng báo lỗi?
+  checks:
+  - 120 + 30 == 150
+  steps:
+  - show: '<div class=''box key''><p>Bạn gõ <code>./app &gt; run.log</code> rồi đi ngủ, sáng dậy thấy tệp trống
+      trơn trong khi màn hình ban đêm tràn ngập lỗi đỏ.</p><p>Lý do: dấu <code>&gt;</code> mặc định chỉ gom <b>luồng
+      chuẩn (số 1)</b>, còn <b>luồng lỗi (số 2)</b> đi lối riêng nếu không gộp <code>2&gt;&amp;1</code>.</p></div>'
+    say: Chào bạn, rất nhiều người vận hành máy chủ từng gặp cảnh chuyển đầu ra ra tệp nhưng sáng hôm sau mở lên
+      chỉ thấy tệp trống. Lý do nằm ở cơ chế tách hai ống dẫn dữ liệu song song cho mỗi chương trình chạy trên Li-núc.
+      Hôm nay ta nắm vững cách tách gộp luồng chuẩn với luồng lỗi và cách dùng đường ống lọc nhanh hàng trăm nghìn
+      dòng nhật ký tại chỗ.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+- id: prereq
+  kind: prereq
+  title: Ôn nhanh kiến thức nền sẽ dùng
+  steps:
+  - show: <table class='t'><tr><th>nền tảng đã có</th><th>ứng dụng lọc nhật ký</th></tr><tr><td>Đường ống dẫn đầu
+      ra giữa hai lệnh</td><td>Nối đầu ra của lệnh đọc lọc thẳng sang lệnh thống kê</td></tr><tr><td>Mã thoát tiến
+      trình khi kết thúc (L02)</td><td>Kiểm tra pipeline không bỏ sót lỗi âm thầm</td></tr></table>
+    say: Ta nối tiếp thói quen dùng đường ống và kiểm tra mã thoát từ các bài trước. Đường ống cho phép dữ liệu
+      chảy trực tiếp từ lệnh trước sang lệnh sau qua bộ nhớ mà không phải ghi ra tệp trung gian chậm chạp.
+    focus:
+    - '1.2'
+    - '1.3'
+    clear: true
+- id: sym
+  kind: symbol
+  title: Giải mã ký hiệu và lệnh mới
+  steps:
+  - show: <table class='t'><tr><th>ký hiệu luồng / lọc</th><th>ý nghĩa trên dòng lệnh</th></tr><tr><td><code>1&gt;
+      out.txt</code> / <code>2&gt; err.txt</code></td><td>Chuyển hướng tách riêng luồng chuẩn (1) và luồng lỗi (2)</td></tr><tr><td><code>&gt;
+      all.log 2&gt;&amp;1</code></td><td>Ghi cả luồng chuẩn lẫn luồng lỗi vào chung một tệp nhật ký</td></tr><tr><td><code>grep</code>
+      | <code>awk</code> | <code>wc -l</code></td><td>Lọc mẫu văn bản, tách cột trường dữ liệu và đếm số dòng khớp</td></tr></table>
+    say: Trên bảng là ba quy ước thao tác với luồng chuẩn và bộ công cụ lọc dòng lệnh. Số một đại diện cho luồng
+      chuẩn in kết quả bình thường, còn số hai đại diện cho luồng lỗi báo sự cố. Khi cần gom trọn cả hai luồng vào
+      chung một tệp, ta đặt lệnh gộp luồng hai vào luồng một ở phía sau tên tệp. Phía dưới là ba công cụ chuẩn gồm
+      gờ-rếp tìm mẫu, oóc tách cột và đếm dòng.
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    clear: true
+- id: intuition
+  kind: intuition
+  title: 'Hai dòng chảy song song từ một tiến trình: stdout (1) và stderr (2)'
+  steps:
+  - show: <div><svg width="960" height="200" viewBox="0 0 960 200"><rect x="40" y="50" width="210" height="95" rx="10"
+      fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="145.0" y="92" font-size="18" font-weight="700"
+      text-anchor="middle" fill="#1e293b">Tiến trình chạy</text><text x="145.0" y="120" font-size="15" text-anchor="middle"
+      fill="#475569">Xuất 2 luồng riêng</text><line x1="250" y1="75" x2="390" y2="62" stroke="#475569" stroke-width="2"/><polygon
+      points="390,62 382.5,67.7 381.6,57.8" fill="#475569"/><text x="320" y="54" font-size="14" font-weight="600"
+      text-anchor="middle" fill="#1e293b">FD 1 (stdout)</text><line x1="250" y1="120" x2="390" y2="138" stroke="#475569"
+      stroke-width="2"/><polygon points="390,138 381.4,141.9 382.7,132.0" fill="#475569"/><text x="320" y="112"
+      font-size="14" font-weight="600" text-anchor="middle" fill="#1e293b">FD 2 (stderr)</text><rect x="390" y="25"
+      width="230" height="68" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/><text x="505.0" y="55" font-size="18"
+      font-weight="700" text-anchor="middle" fill="#1e293b">Luồng chuẩn (1)</text><text x="505.0" y="75" font-size="15"
+      text-anchor="middle" fill="#475569">&gt; out.log bắt được</text><rect x="390" y="108" width="230" height="68"
+      rx="10" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/><text x="505.0" y="138" font-size="18" font-weight="700"
+      text-anchor="middle" fill="#1e293b">Luồng lỗi (2)</text><text x="505.0" y="158" font-size="15" text-anchor="middle"
+      fill="#475569">Phải dùng 2&gt; hoặc 2&gt;&amp;1</text><line x1="620" y1="98" x2="710" y2="98" stroke="#475569"
+      stroke-width="2"/><polygon points="710,98 702.0,103.0 702.0,93.0" fill="#475569"/><text x="665" y="90" font-size="14"
+      font-weight="600" text-anchor="middle" fill="#1e293b">2&gt;&amp;1 gộp</text><rect x="710" y="48" width="210"
+      height="95" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="2"/><text x="815.0" y="90" font-size="18"
+      font-weight="700" text-anchor="middle" fill="#1e293b">Đường ống lọc</text><text x="815.0" y="118" font-size="15"
+      text-anchor="middle" fill="#475569">grep 5xx | awk | sort</text></svg></div>
+    say: Nhìn sơ đồ hai ống xả riêng biệt thoát ra từ một tiến trình đang chạy. Ống phía trên mang số hiệu một đi
+      qua dấu lớn hơn để chảy vào tệp nhật ký chuẩn. Ống phía dưới mang số hiệu hai vẫn chảy thẳng ra màn hình trừ
+      khi bạn chuyển riêng hoặc nối thẳng vào ống số một qua ký hiệu gộp hai trỏ sang một.
+    clear: true
+- id: formula
+  kind: formula
+  title: Thống kê lỗi 5xx và quy tắc thứ tự chuyển hướng
+  checks:
+  - 120 + 30 == 150
+  - abs(150 / 10000 - 0.015) < 1e-9
+  steps:
+  - show: '<div class=''box key''><p>Thứ tự đọc từ trái sang phải trong shell: <code>cmd &gt; all.log 2&gt;&amp;1</code>
+      (luồng 1 trỏ vào tệp trước, rồi luồng 2 mới chép địa chỉ của luồng 1).</p><p>Ví dụ kiểm chứng log 10 000 dòng:
+      120 lỗi 500 + 30 lỗi 503 → tổng lỗi 5xx = 120 + 30 = <b>150</b> dòng, tỉ lệ = 150 / 10 000 = <b>1,5%</b>.</p></div>'
+    say: Trình dòng lệnh phân tích các dấu chuyển hướng nghiêm ngặt từ trái sang phải nên thứ tự viết quyết định
+      tất cả. Vì luồng một phải gắn vào tệp nhật ký trước thì phép nối luồng hai sang luồng một đứng sau mới trỏ
+      đúng vào tệp đó. Trong ví dụ mười nghìn dòng, một trăm hai mươi lỗi năm trăm cộng ba mươi lỗi năm trăm linh
+      ba bằng đúng một trăm năm mươi lỗi. Con số này tương đương tỉ lệ một phẩy năm phần trăm.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    - '1.2'
+    clear: true
+- id: example
+  kind: example
+  title: 'Chạy thật: tách hai luồng 1/2 và lọc tổng lỗi 5xx bằng awk'
+  checks:
+  - 120 + 30 == 150
+  - 10000 - 150 == 9850
+  steps:
+  - show: '<table class=''t''><tr><th>lệnh hoặc ký hiệu</th><th>ý nghĩa dễ hiểu</th></tr><tr><td><code>$2 ~ /^5[0-9][0-9]$/</code></td><td>Kiểm
+      tra cột thứ hai có đúng là mã lỗi 5xx (từ 500 đến 599)</td></tr><tr><td><code>c[$1]++</code> | <code>sort</code></td><td><code>c[$1]++</code>
+      đếm gộp theo cột phút; <code>sort</code> sắp xếp dòng theo thứ tự</td></tr><tr><td><code>FD 0 / 1 / 2</code></td><td>Mã
+      luồng (File Descriptor): <code>0</code> nhập chuẩn, <code>1</code> xuất chuẩn, <code>2</code> luồng lỗi</td></tr></table>'
+    say: Giải mã hai mẫu biểu thức tách trường và bộ đếm cộng dồn dùng trong kịch bản lọc nhật ký. Các lệnh kết
+      hợp ba bộ mô tả luồng không một hai, biểu thức mẫu và lệnh sắp xếp.
+    focus:
+    - '1.2'
+    - '1.3'
+    clear: true
+  - show: <p><b>Sinh 10 000 dòng log mẫu (120 lỗi 500, 30 lỗi 503) và lọc nhanh bằng awk</b></p><div class="code"><div>mkdir
+      -p test_l03 &amp;&amp; cd test_l03</div><div>(echo 'ok_stdout'; echo 'err_stderr' &gt;&amp;2) &gt; out.txt
+      2&gt; err.txt</div><div>awk 'BEGIN{for(i=1;i&lt;=10000;i++){</div><div>  if(i&lt;=120) print "10:01 500";
+      else if(i&lt;=150) print "10:02 503";</div><div>  else print "10:00 200"}}' &gt; app.log</div><div>ec=<span>&#36;</span>(awk
+      '<span>&#36;</span>2~/^5[0-9][0-9]<span>&#36;</span>/{n++} END{print n+0}' app.log)</div><div>tot=<span>&#36;</span>(wc
+      -l &lt; app.log | tr -d ' ')</div><div>echo "stdout=<span>&#36;</span>(cat out.txt) stderr=<span>&#36;</span>(cat
+      err.txt) total=<span>&#36;</span>tot err5xx=<span>&#36;</span>ec"</div></div>
+    say: Kịch bản tạo một tệp nhật ký mẫu đúng mười nghìn dòng gồm chín nghìn tám trăm năm mươi dòng hai trăm, một
+      trăm hai mươi lỗi năm trăm và ba mươi lỗi năm trăm linh ba. Sau đó dùng một đường ống chuẩn để tách riêng
+      luồng chuẩn với luồng lỗi rồi đếm số lỗi năm ích-ích.
+    focus:
+    - 1
+    - 2
+    clear: true
+  - show: <p><b>Kết quả chạy thật trên môi trường Linux</b></p><div class="code"><div>stdout=ok_stdout stderr=err_stderr
+      total=10000 err5xx=150</div></div>
+    say: Đầu ra chạy thật chứng minh luồng chuẩn và luồng lỗi được ghi vào hai tệp tách biệt không lẫn lộn. Lệnh
+      lọc oóc đếm ra đúng một trăm năm mươi dòng lỗi ứng với tỉ lệ một phẩy năm phần trăm trên tổng mười nghìn dòng.
+    focus:
+    - 1
+    - 2
+    clear: true
+- id: check
+  kind: check
+  title: Đối chứng tỉ lệ phần trăm lỗi 5xx và kiểm tra thứ tự gộp 2>&1
+  checks:
+  - round(150 * 100 / 10000, 1) == 1.5
+  steps:
+  - show: <p><b>Tính tỉ lệ phần trăm lỗi trên 10 000 dòng nhật ký</b></p><div class="code"><div>awk 'BEGIN{tot=10000;
+      err=150; printf "pct=%.1f%%\n", (err*100.0)/tot}'</div></div>
+    say: Ở đường kiểm chứng thứ hai, ta tính độc lập tỉ lệ phần trăm lỗi năm ích-ích vì cần đối chiếu lại số liệu
+      mười nghìn dòng ban đầu.
+    clear: true
+  - show: <p><b>Đầu ra đối chứng thật</b></p><div class="code"><div>pct=1.5%</div></div>
+    say: Đầu ra đối chứng trả về đúng một phẩy năm phần trăm vì một trăm năm mươi chia mười nghìn nhân một trăm
+      vừa tròn con số đó.
+    clear: true
+- id: quymo
+  kind: example
+  title: So sánh tốc độ lọc tại chỗ bằng đường ống vs tải toàn bộ log về máy
+  checks:
+  - round(10 * 8 / 50, 2) == 1.6
+  steps:
+  - show: <table class='t'><tr><th>cỡ tệp nhật ký</th><th>lọc tại chỗ trên máy chủ (awk/grep)</th><th>tải toàn bộ
+      qua mạng văn phòng 50 Mbps</th></tr><tr><td>10 000 dòng (~1 MB)</td><td>Dưới 0,02 giây tại đĩa</td><td>~0,2
+      giây truyền mạng</td></tr><tr><td>100 000 dòng (~10 MB)</td><td>~0,05 giây tại đĩa (lọc xong trước)</td><td>~1,6
+      giây truyền mạng</td></tr><tr><td>10 000 000 dòng (~1 GB)</td><td>~2 giây đọc tuần tự</td><td>~160 giây kéo
+      qua mạng mới đọc</td></tr></table>
+    say: 'Bảng quy mô giải thích nguyên tắc vàng khi chẩn đoán sự cố: luôn lọc trực tiếp trên máy chủ nơi tệp nhật
+      ký đang nằm thay vì tải cả tệp về máy cá nhân. Ở mức một trăm nghìn dòng, lệnh oóc chạy ngay tại đĩa chỉ mất
+      năm phần trăm giây, nhanh gấp hơn ba mươi lần so với kéo toàn tệp qua mạng văn phòng. Lên tới một gi-ga-bai
+      nhật ký, lọc tại chỗ tiết kiệm hàng phút quý báu giữa lúc sự cố.'
+    focus:
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    clear: true
+- id: pitfalls
+  kind: pitfall
+  title: Ba lỗi thường gặp trên máy chủ thực tế
+  steps:
+  - show: '<table class=''t''><tr><th>bẫy thường gặp và cách phòng tránh</th></tr><tr><td><div class=''box warn''><b>Lỗi
+      1: Viết ngược <code>cmd 2&gt;&amp;1 &gt; run.log</code>.</b> Luồng 2 chép nhầm đích màn hình của luồng 1 trước
+      khi luồng 1 rẽ vào tệp, khiến lỗi vẫn rớt ra ngoài.<br><b>Lỗi 2: Dùng dấu <code>&gt;</code> đơn đè mất nhật
+      ký cũ.</b> Phải dùng <code>&gt;&gt;</code> nếu muốn nối tiếp vào cuối nhật ký đang chạy.<br><b>Lỗi 3: Chạy
+      <code>cat big.log | grep ERR</code> thay vì <code>grep ERR big.log</code>.</b> Tạo tiến trình thừa thãi đọc
+      lại toàn bộ tệp qua đường ống.</div></td></tr></table>'
+    say: Hãy tránh ba lỗi rất dễ mắc với luồng và nhật ký. Lỗi hay gặp nhất là đảo ngược hai cụm chuyển hướng làm
+      luồng lỗi vẫn thoát ra màn hình dù bạn tưởng đã ghi chung tệp. Lỗi thứ hai là dùng một dấu lớn hơn ghi đè
+      bay sạch dữ liệu điều tra cũ. Lỗi thứ ba là lạm dụng lệnh đọc dư thừa trước lệnh tìm mẫu trên tệp hàng trăm
+      mê-ga-bai.
+    focus:
+    - 0
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    clear: true
+- id: quiz
+  kind: quiz
+  title: Đến lượt bạn tự kiểm
+  checks:
+  - round(150 * 100 / 10000, 1) == 1.5
+  steps:
+  - show: <ol><li>Muốn ghi CẢ đầu ra chuẩn lẫn thông báo lỗi của <code>./srv</code> vào cuối tệp <code>app.log</code>
+      (không xoá cũ), viết thế nào?</li><li>Trên tệp log 10 000 dòng có 150 dòng mã 5xx, tỉ lệ lỗi bằng bao nhiêu
+      phần trăm?</li></ol>
+    say: Đến lượt bạn tự kiểm tra. Câu một, viết chính xác lệnh nối tiếp cả luồng chuẩn lẫn luồng lỗi vào cuối tệp
+      nhật ký mà không ghi đè dữ liệu cũ? Câu hai, một trăm năm mươi dòng lỗi trên mười nghìn dòng là bao nhiêu
+      phần trăm? Bấm tạm dừng và trả lời ra giấy.
+    pause: 20
+  - show: <table class='t'><tr><th>đáp án câu 1</th></tr><tr><td><p>① <code>./srv &gt;&gt; app.log 2&gt;&amp;1</code>
+      (dùng <code>&gt;&gt;</code> trước, đặt <code>2&gt;&amp;1</code> ở cuối).</p></td></tr></table>
+    say: 'Đáp án câu một: mở nối tiếp tệp nhật ký bằng dấu nối đôi rồi đặt cụm gộp luồng hai sang luồng một ở vị
+      trí sau cùng.'
+    clear: true
+  - show: <table class='t'><tr><th>đáp án câu 2</th></tr><tr><td><p>② <code>150 / 10 000 = 1,5%</code>.</p></td></tr></table>
+    say: 'Đáp án câu hai: lấy một trăm năm mươi chia cho mười nghìn ta được tỉ lệ lỗi bằng một phẩy năm phần trăm.'
+    clear: true
+- id: practice
+  kind: practice
+  title: Tự làm bài thực hành dòng lệnh và chấm thật
+  lab: labs/LNX/L03
+  steps:
+  - show: <div class='box key'><p><b>Bài thực hành L03:</b> mở đề tại <code>labs/LNX/L03/de.md</code>, viết kịch
+      bản Bash vào một tệp tạm rồi mở <b>Git Bash</b> và chạy lệnh chấm thật:</p><p><code>bash labs/cham.sh LNX
+      L03 duong_dan/bai_cua_ban.sh</code></p></div>
+    say: Bây giờ đến phần bạn tự viết kịch bản dòng lệnh và chấm thật trên máy. Bạn mở đề thực hành, viết lời giải
+      vào tệp riêng rồi chạy lệnh kiểm định đối chiếu từng dòng. Hãy bấm tạm dừng và tự làm trước.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    clear: true
+    pause: 30
+  - show: <p><b>Kết quả mong đợi cần khớp 100% (3 dòng)</b></p><div class="code"><div>stdout_ok=1</div><div>stderr_ok=1</div><div>err_5xx=15</div></div>
+    say: Màn hình hiện toàn bộ các dòng kết quả mong đợi mà kịch bản của bạn phải in ra khớp từng ký tự.
+    clear: true
+- id: recap
+  kind: recap
+  title: Chuỗi logic và tư duy cần mang theo
+  steps:
+  - show: <div class='chain'><span class='n'>1=chuẩn | 2=lỗi</span><span class='a'>→</span><span class='n'>&gt;
+      tệp 2&gt;&amp;1</span><span class='a'>→</span><span class='n'>Lọc tại chỗ bằng grep/awk</span></div>
+    say: Tổng kết ba điểm cốt lõi cần giữ khi làm việc với nhật ký dịch vụ. Tách rạch ròi luồng chuẩn một với luồng
+      lỗi hai, luôn đặt cụm nối gộp phía sau tên tệp đích, và tận dụng đường ống lọc dữ liệu ngay tại chỗ trên máy
+      chủ.
+    focus:
+    - '1.1'
+    - '1.2'
+    clear: true
+  - show: <div class='box ok'><b>Bài sau (bài 4):</b> Ổ đĩa, phần trăm dung lượng và giới hạn chỉ mục hệ thống tệp</div>
+    say: Bài tiếp theo là bài 4, tìm hiểu chủ đề tiếp nối ngay phần vừa học. Hẹn gặp bạn ở bài sau.
+    clear: true
+    forward_ref: true

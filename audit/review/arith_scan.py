@@ -87,6 +87,36 @@ def evaluate(expr):
 
 def main():
     want = {a.upper() for a in sys.argv[1:] if not a.startswith("--")}
+    def check_segment(text, f, sc, si):
+        nonlocal bad, tot
+        for m in EQ.finditer(text):
+            before = text[:m.start()].rstrip()[-1:]
+            after = text[m.end():].lstrip()[:1]
+            if (before and before in "+-*/=^._(" + MINUS + TIMES + DOT + DIV + APPROX) or (after and after in "+-*/=^(%" + MINUS + TIMES + DOT + DIV + APPROX + "0123456789,"):
+                continue                                  # chuỗi đẳng thức nối tiếp, hoặc kết quả bị cắt
+            if text[m.end():].lstrip().startswith(("đến", "tới", "hoặc")):
+                continue                                  # khoảng giá trị: 700 đến 850
+            key = f"{f.parent.name.upper()}/{f.name[:3]}: {m.group(1).strip()} {m.group(2)} {m.group(3)}".replace(NBSP, " ")
+            if key in ALLOW:
+                continue
+            if SKIP_NEAR.search(text[max(0, m.start() - 4): m.end() + 4]):
+                continue
+            expr, rel, rhs = m.group(1).strip(), m.group(2), m.group(3)
+            pr, ev = parse(rhs), evaluate(expr)
+            if pr is None or ev is None:
+                continue
+            val, infos = ev
+            c, dec = pr
+            tot += 1
+            tol = Decimal(1) / (Decimal(10) ** dec) / 2
+            if rel == APPROX and infos:
+                tol += sum(Decimal(1) / (Decimal(10) ** i) / 2 for i in infos)
+            if abs(val - c) > tol:
+                bad += 1
+                shown = f"{val:.6g}"
+                print(f"FAIL {f.parent.name.upper()}/{f.name[:3]} {sc.get('id')}#{si}: “{expr} {rel} {rhs}” — tính ra {shown} (lệch {abs(val - c):.6g} > {tol:.6g})")
+
+    katex_inline = re.compile(r"(?<!\$)\$(?!\$)([^$]+?)\$(?!\$)")
     bad = tot = 0
     for f in sorted((ROOT / "lessons").glob("*/L*.yaml")):
         if want and f.parent.name.upper() not in want:
@@ -94,33 +124,22 @@ def main():
         spec = yaml.safe_load(f.read_text(encoding="utf-8"))
         for sc in spec.get("scenes") or []:
             for si, st in enumerate(sc.get("steps") or []):
-                text = clean(str(st.get("show", "")))
-                for m in EQ.finditer(text):
-                    before = text[:m.start()].rstrip()[-1:]
-                    after = text[m.end():].lstrip()[:1]
-                    if (before and before in "+-*/=^._(" + MINUS + TIMES + DOT + DIV + APPROX) or (after and after in "+-*/=^(%" + MINUS + TIMES + DOT + DIV + APPROX + "0123456789,"):
-                        continue                                  # chuỗi đẳng thức nối tiếp, hoặc kết quả bị cắt
-                    if text[m.end():].lstrip().startswith(("đến", "tới", "hoặc")):
-                        continue                                  # khoảng giá trị: 700 đến 850
-                    key = f"{f.parent.name.upper()}/{f.name[:3]}: {m.group(1).strip()} {m.group(2)} {m.group(3)}".replace(NBSP, " ")
-                    if key in ALLOW:
+                raw_show = str(st.get("show", ""))
+                check_segment(clean(raw_show), f, sc, si)
+                # Mở rộng (CB-AF3-11): kiểm phép tính số học nguyên/đơn giản nằm gọn trong KaTeX $...$
+                for km in katex_inline.finditer(raw_show):
+                    inner = km.group(1)
+                    inner = inner.replace("\\times", TIMES).replace("\\cdot", DOT).replace("\\div", DIV).replace("\\approx", APPROX)
+                    inner = re.sub(r"\\hl\{([^{}]+)\}", r"\1", inner)
+                    if "\\" in inner or "^" in inner or "_" in inner or "{" in inner or "}" in inner or re.search(r"[A-Za-z]", inner):
                         continue
-                    if SKIP_NEAR.search(text[max(0, m.start() - 4): m.end() + 4]):
+                    tail_ctx = raw_show[km.end():km.end() + 16]
+                    if re.match(r"\s*(?:triệu|tỉ|tỷ|nghìn|ngàn|vạn|trăm)\b", tail_ctx, re.I):
                         continue
-                    expr, rel, rhs = m.group(1).strip(), m.group(2), m.group(3)
-                    pr, ev = parse(rhs), evaluate(expr)
-                    if pr is None or ev is None:
-                        continue
-                    val, infos = ev
-                    c, dec = pr
-                    tot += 1
-                    tol = Decimal(1) / (Decimal(10) ** dec) / 2
-                    if rel == APPROX and infos:
-                        tol += sum(Decimal(1) / (Decimal(10) ** i) / 2 for i in infos)
-                    if abs(val - c) > tol:
-                        bad += 1
-                        shown = f"{val:.6g}"
-                        print(f"FAIL {f.parent.name.upper()}/{f.name[:3]} {sc.get('id')}#{si}: “{expr} {rel} {rhs}” — tính ra {shown} (lệch {abs(val - c):.6g} > {tol:.6g})")
+                    inner = re.sub(r"(\d|\))\s*\(", r"\1 * (", inner)
+                    if re.search(r"\b0[01]{2,}\b", inner) and not re.search(r"[2-9.,]", inner):
+                        continue  # chuỗi bit nhị phân (ví dụ 0111 + 0101 = 1100)
+                    check_segment(clean(inner), f, sc, si)
     print(f"arith_scan: {tot} phép tính kiểm được, {bad} FAIL")
     return 1 if bad else 0
 

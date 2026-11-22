@@ -32,9 +32,11 @@ Sáu nguyên tắc không đổi:
    - một tên chuỗi, một giọng cho mỗi khoá (`check_meta.py`);
    - bản đồ khoá ở bài 0 liệt kê đủ mọi bài (lint E37).
 
-## 2. Kiến trúc chương trình: 8 tầng + tầng nền thực hành (T−1), 45 khoá, 701 bài (đếm từ `curriculum/*.yaml` lúc 2026-11-13; số bài từng tầng trong bảng dưới là số lúc 2026-10-31, số hiện tại ở `STATUS.md`)
+## 2. Kiến trúc chương trình: 8 tầng + tầng nền thực hành (T−1) (số bài hiện tại của cả 46 khoá: xem [`STATUS.md`](STATUS.md))
 
-**T−1 · Nền thực hành và lập trình (thêm đợt AF2, 2026-11-13)**: **FND** Nền thực hành: dòng lệnh, tệp, dữ liệu, HTTP, SQL, Git (11) · **JVA** Java từ con số 0 (13) · **JV2** Java trung cấp: dự án nhiều tệp, dữ liệu, hàm, luồng, kiểm thử (10) — đứng TRƯỚC mọi khoá khác trong dãy học; mọi bài có cảnh **Tự làm** (lab chạy được: `labs/`). Vì sao: mẫu F đo thấy người mất gốc hụt nền từ BNK L02 và kẹt khi thực hành ở BNX L00 (`audit/review/sample_f/REPORT.md` mục 4).
+**T−1 · Nền thực hành và lập trình (đợt AF2–AF3, 2026-11-13 → 2026-11-14)**: **FND** Nền thực hành: dòng lệnh, tệp, dữ liệu, HTTP, SQL, Git (11) · **JVA** Java từ con số 0 (13) · **JV2** Java trung cấp: dự án nhiều tệp, dữ liệu, hàm, luồng, kiểm thử (10) · **PYT** Python từ con số 0 (14) — đứng TRƯỚC mọi khoá khác trong dãy học; mọi bài có cảnh **Tự làm** (lab chạy được: `labs/`). Vì sao: mẫu F đo thấy người mất gốc hụt nền từ BNK L02 và kẹt khi thực hành ở BNX L00 (`audit/review/sample_f/REPORT.md` mục 4).
+
+*(Bảng phân tầng dưới đây là thiết kế gốc ngày 2026-10-31 cho 8 tầng kiến thức nền; số bài thực tế mới nhất sau bổ sung `BNX L24–L38`, `INT L08`, `CS115 L45–L46` xem tại [`STATUS.md`](STATUS.md).)*
 
 
 | Tầng | Khoá (số bài) | Vai trò |

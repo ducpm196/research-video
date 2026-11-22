@@ -91,7 +91,7 @@ def screen_matches(screen, actual):
 
 
 def run_py(code):
-    with tempfile.TemporaryDirectory() as d:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
         Path(d, "k.py").write_text(code, encoding="utf-8")
         r = subprocess.run([sys.executable, "-I", "-X", "utf8", "-B", "k.py"], cwd=d, capture_output=True, text=True, encoding="utf-8")
         return r.returncode, r.stdout
@@ -159,7 +159,7 @@ def run(rec):
     if not bash:
         rec("L03", None, "thiếu bash")
     else:
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
             Path(d, "k.sh").write_text(src.SH_OPENSSL.strip("\n") + "\n", encoding="utf-8", newline="\n")
             r = subprocess.run([bash, "k.sh"], cwd=d, capture_output=True, text=True)
         rec("L03", r.returncode == 0 and r.stdout.split("\n")[:2] == [RFC, "2011-03-22 18:43:00"] and screen_matches(src.OUT_OPENSSL, r.stdout),

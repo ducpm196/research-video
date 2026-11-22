@@ -12,11 +12,11 @@ sys.path.insert(0, str(ROOT / "tools"))
 sys.stdout.reconfigure(encoding="utf-8")
 import lv  # noqa: E402
 
-DASH = r"\s*(?:–|-|—|đến|tới)\s*(?:bài\s+)?"
-RANGE = re.compile(r"\b[Bb]ài\s+(\d+)" + DASH + r"(\d+)\b")
-SINGLE = re.compile(r"\b[Bb]ài\s+(\d+)\b")
-# “bài 12–15 và 17”, “bài 1–5; bài 16”: số đứng sau “và/,” ngay sau một tham chiếu
-TAIL = re.compile(r"\b[Bb]ài\s+\d+(?:" + DASH + r"\d+)?((?:\s*(?:,|và|hoặc)\s*(?:bài\s+)?\d+(?:" + DASH + r"\d+)?)+)")
+DASH = r"[ \t]*(?:–|-|—|đến|tới)[ \t]*(?:bài[ \t]+)?"
+RANGE = re.compile(r"\b[Bb]ài[ \t]+(\d+)" + DASH + r"(\d+)\b")
+SINGLE = re.compile(r"\b[Bb]ài[ \t]+(\d+)\b")
+# “bài 12–15 và 17”, “bài 1–5; bài 16”: số đứng sau “và/,” ngay sau một tham chiếu (giới hạn lặp để tránh quay lui ReDoS)
+TAIL = re.compile(r"\b[Bb]ài[ \t]+\d+(?:" + DASH + r"\d+)?((?:[ \t]*(?:,|và|hoặc)[ \t]*(?:bài[ \t]+)?\d+(?:" + DASH + r"\d+)?){1,50})")
 
 
 def covered(text):

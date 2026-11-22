@@ -1,0 +1,6 @@
+items = [150000, 200000, 100000]; sub = sum(items)
+p10 = int(sub * 0.9 if sub > 300000 else sub)
+f50 = max(0, sub - 50000)
+print(f'subtotal={sub}')
+print(f'pct10_total={p10}')
+print(f'flat50_total={f50}')

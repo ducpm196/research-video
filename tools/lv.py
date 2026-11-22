@@ -631,7 +631,7 @@ AF2_DO_VERBS = ("viết", "tính", "dựng", "chạy", "cài", "kiểm", "chọn
                 "áp dụng", "đọc", "so sánh", "đếm", "xác định", "triển khai", "chứng minh", "giải", "lập")
 AF2_DO_SCENES = {"example", "check", "practice", "formula"}
 LAB_FILES = ("de.md", "mong_doi.txt")
-LAB_SOLUTIONS = ("loi_giai.py", "loi_giai.java", "loi_giai.sql", "loi_giai.sh", "loi_giai.md")
+LAB_SOLUTIONS = ("loi_giai.py", "loi_giai.java", "loi_giai.sql", "loi_giai.sh", "loi_giai.c", "loi_giai.js", "loi_giai.md")
 
 
 def lab_dir(spec, sc):
@@ -664,7 +664,7 @@ def lint_af2(spec, r):
                 continue
             seen.add(n)
             text = str(objs[n - 1]).strip().lower()
-            if text.startswith(AF2_DO_VERBS) and sc.get("kind") not in AF2_DO_SCENES:
+            if text.startswith(AF2_DO_VERBS) and not text.startswith("giải thích") and sc.get("kind") not in AF2_DO_SCENES:
                 r.err("covers", f"E51 mục tiêu {n} “{str(objs[n - 1])[:60]}” là kỹ năng LÀM nhưng cảnh `{sid}` là `{sc.get('kind')}` — "
                                 "cần cảnh ví dụ làm mẫu, kiểm tra lại hoặc tự làm")
         miss = sorted(set(range(1, len(objs) + 1)) - seen)

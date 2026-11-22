@@ -59,30 +59,31 @@ def load_cur():
 # ───────────────────────── các chặng ─────────────────────────
 # (khoá, tên, cấp độ trong MASTER_INDEX / ROADMAP, mục tiêu, lời giới thiệu). Khoá chưa có giáo án (vd BNX trước khi lập) tự bỏ qua.
 STAGES = [
-    ("S01", "Chặng 1 · Nền thực hành, Java và Python từ con số 0", "MASTER cấp 0A (bắt buộc với người chưa từng lập trình)", ["FND", "JVA", "JV2", "PYT"],
+    ("S01", "Chặng 1 · Nền thực hành, Java và Python từ con số 0", "MASTER cấp 0A (bắt buộc với người chưa từng lập trình)", ["FND", "JVA", "JV2", "PYT", "PRJ:L00"],
      "Dòng lệnh, tệp, dữ liệu, HTTP, SQL và Git để có chỗ đứng thực hành; rồi Java từ chương trình đầu tiên tới dự án nhiều tệp: biến, rẽ nhánh, vòng lặp, mảng, hàm, lớp, chuỗi, danh sách, ngoại lệ, giao diện, luồng, kiểm thử; kết thúc bằng sổ chuyển khoản nhỏ."),
-    ("S02", "Chặng 2 · Nền tảng backend ngân hàng", "MASTER cấp 1A (bắt buộc, học trước INT/ACB)", ["BNK"],
+    ("S02", "Chặng 2 · Nền tảng backend ngân hàng", "MASTER cấp 1A (bắt buộc, học trước INT/ACB)", ["BNK", "PRJ:L01"],
      "Bộ nhớ và luồng của Java, Spring Boot, REST và khoá lũy đẳng, SQL và PL/SQL, Redis, Kafka, SAGA, sổ cái bút toán kép, T24, ISO 8583, đối soát, PIN/HSM."),
-    ("S03", "Chặng 3 · Kỹ năng backend theo JD và CV", "Mở rộng cấp 1A — lấp khoảng trống JD và CV (MASTER Mục 8)", ["BNX"],
+    ("S03", "Chặng 3 · Kỹ năng backend theo JD và CV", "Mở rộng cấp 1A — lấp khoảng trống JD và CV (MASTER Mục 8)", ["BNX", "PRJ:L02"],
      "Những chủ đề JD và CV nêu mà kho chưa có bài: Git, OpenAPI, gRPC, JWT và OAuth, mTLS, thủ tục lưu trữ Oracle và SQL Server, Oracle cho khối lượng lớn, Elasticsearch, Couchbase, Kafka nâng cao và RabbitMQ, thanh toán quốc tế và ngoại tệ, ví điện tử và thuế điện tử, triển khai, DDD và Open API; rồi các bài theo CV: đa luồng Java nâng cao, Spring Security và Spring Cloud, JUnit 5 và Mockito, Redis nâng cao, Go, hệ thống cho vay số, Adobe Experience Manager, scikit-learn và ONNX Runtime; rồi các bài theo JD mới: JPA/Hibernate và Spring Data, giao dịch Spring và AOP, Maven/Gradle/Jenkins, SOAP và SFTP, so sánh cơ sở dữ liệu, CQRS và Event Sourcing, chịu lỗi và cổng API, quan sát hệ thống (ELK, Prometheus, Grafana), GitOps và bí mật, hệ cũ Servlet/JSP/Tomcat, phê duyệt tín dụng, vận hành SLA/OLA và tài liệu thiết kế, phỏng vấn thiết kế hệ thống."),
-    ("S04", "Chặng 4 · Ôn phỏng vấn và tích hợp ngân hàng", "MASTER cấp 3–4 (INT, ACB)", ["INT", "ACB"],
+    ("S04", "Chặng 4 · Ôn phỏng vấn và tích hợp ngân hàng", "MASTER cấp 3–4 (INT, ACB)", ["INT", "ACB", "PRJ:L03"],
      "Ôn tập theo bộ 100 câu hỏi, đàm phán lương, rồi các tình huống tích hợp T24, NAPAS, ksqlDB, chi lương, sinh trắc học, đối soát ba bên, tín dụng."),
-    ("S05", "Chặng 5 · Toán rời rạc, thuật toán, toán cho học máy", "MASTER cấp 0 · ROADMAP T0–T1", ["DMS", "CS112", "CS115:L00-L21", "CS115:L44"],
+    ("S05", "Chặng 5 · Toán rời rạc, thuật toán, toán cho học máy", "MASTER cấp 0 · ROADMAP T0–T1", ["DMS", "CS112", "CS115:L00-L21", "CS115:L44", "PRJ:L04"],
      "Lôgic, chứng minh, đếm, đồ thị; độ phức tạp, cấu trúc dữ liệu, chia để trị, quy hoạch động, đường đi ngắn nhất; vector, ma trận, đạo hàm, xác suất, thống kê. Có thể học song song với chặng 1–4."),
-    ("S06", "Chặng 6 · Máy tính, hệ điều hành, mạng", "MASTER cấp 0 · ROADMAP T1", ["CSA", "OSY", "NET"],
-     "Máy tính biểu diễn số và chạy lệnh thế nào, hệ điều hành chia CPU và bộ nhớ ra sao, gói tin đi qua mạng, TCP, DNS, HTTP, TLS."),
-    ("S07", "Chặng 7 · Kỹ nghệ phần mềm, cơ sở dữ liệu, DevOps, bảo mật", "MASTER cấp 1B · ROADMAP T2–T3", ["SWF", "SDP", "DBS", "DVO", "WEB", "SEC"],
+    ("S06", "Chặng 6 · Lập trình C, Linux, máy tính, hệ điều hành, mạng", "MASTER cấp 0 · ROADMAP T1", ["CPR", "LNX", "CSA", "OSY", "NET", "PRJ:L05"],
+     "Lập trình C với con trỏ và cấp phát động trên gcc, Linux thực chiến và Docker/Compose, rồi máy tính biểu diễn số và chạy lệnh thế nào, hệ điều hành chia CPU và bộ nhớ ra sao, gói tin đi qua mạng, TCP, DNS, HTTP, TLS."),
+    ("S07", "Chặng 7 · Kỹ nghệ phần mềm, cơ sở dữ liệu, DevOps, bảo mật", "MASTER cấp 1B · ROADMAP T2–T3", ["SWF", "SDP", "DBS", "DVO", "WEB", "SEC", "PRJ:L06"],
      "Phần mềm đúng đắn và kiểm thử, mẫu thiết kế, cơ sở dữ liệu từ mô hình quan hệ tới giao dịch và khôi phục, web, DevOps, an toàn thông tin."),
-    ("S08", "Chặng 8 · Hệ phân tán, dữ liệu, đám mây, kiến trúc", "MASTER cấp 2 · ROADMAP T3, T5", ["DSY", "EVT", "DEN", "CLD", "CLC", "SAR"],
+    ("S08", "Chặng 8 · Hệ phân tán, dữ liệu, đám mây, kiến trúc", "MASTER cấp 2 · ROADMAP T3, T5", ["DSY", "EVT", "DEN", "CLD", "CLC", "SAR", "PRJ:L07"],
      "Đồng hồ lôgic, sao chép, đồng thuận, hướng sự kiện, kỹ thuật dữ liệu, container và Kubernetes, đám mây, kiến trúc hệ thống lớn — tầm của kỹ sư senior và kiến trúc sư."),
-    ("S09", "Chặng 9 · Trí tuệ nhân tạo và học máy", "ROADMAP T4 (MASTER chưa có tầng AI — bổ sung đợt LF1)", ["CS115", "AIF", "DAN", "DSC", "MLO", "IRS", "LLM", "AGT", "RLN", "CVI"],
-     "Phần còn lại của toán cho học máy, nền tảng AI, phân tích và khoa học dữ liệu, MLOps, truy xuất thông tin, mô hình ngôn ngữ lớn, AI agent, học tăng cường, thị giác máy tính."),
-    ("S10", "Chặng 10 · Chuyên gia: lý thuyết, ngôn ngữ, song song, con người, nghề nghiệp, sự cố thật", "ROADMAP T1, T2, T7", ["TOC", "PLC", "PAR", "HCI", "SEP", "CAS"],
+    ("S09", "Chặng 9 · Trí tuệ nhân tạo và học máy", "ROADMAP T4 (MASTER chưa có tầng AI — bổ sung đợt LF1)", ["CS115", "AIF", "DAN", "DSC", "MLP", "MLO", "IRS", "LLM", "AGT", "RLN", "CVI", "PRJ:L08"],
+     "Phần còn lại của toán cho học máy, nền tảng AI, phân tích và khoa học dữ liệu, học máy thực hành trên CPU (MLP), MLOps, truy xuất thông tin, mô hình ngôn ngữ lớn, AI agent, học tăng cường, thị giác máy tính."),
+    ("S10", "Chặng 10 · Chuyên gia: lý thuyết, ngôn ngữ, song song, con người, nghề nghiệp, sự cố thật", "ROADMAP T1, T2, T7", ["TOC", "PLC", "PAR", "HCI", "SEP", "CAS", "PRJ:L09"],
      "Lý thuyết tính toán, ngôn ngữ lập trình, tính toán song song, tương tác người–máy, đạo đức và pháp lý nghề nghiệp, và mười hai sự cố có thật đọc theo báo cáo điều tra gốc."),
-    ("S11", "Chặng 11 · Chuyên ngành mở rộng (tuỳ chọn)", "ROADMAP T0, T5, T6", ["RBM", "ESY", "ROB", "GFX", "BCH"],
+    ("S11", "Chặng 11 · Chuyên ngành mở rộng (tuỳ chọn)", "ROADMAP T0, T5, T6", ["RBM", "ESY", "ROB", "GFX", "BCH", "PRJ:L10"],
      "Toán cho robot, hệ nhúng thời gian thực, robot tự hành, đồ hoạ máy tính, blockchain — học khi nghề của bạn cần."),
 ]
 FAST = {"S01", "S02", "S03", "S04"}
+LOCKED = {"S01", "S02", "S03", "S04"}
 
 # Đối chiếu JD (resources/job/JD.md, tin Software Engineer acbjobs.com.vn + tin Backend/Lead) → bài. Mã nào không có trong giáo án: page() báo lỗi.
 JD_MAP = [
@@ -495,7 +496,7 @@ def build_page(cur):
                  "obj": [str(o) for o in (l.get("objectives") or [])], "pre": sorted(pre[uid], key=lambda x: (x.split(":")[0], x)),
                  "mp4": rel(mp4), "srt": rel(d / f"{l['id']}.srt"), "pv": rel(d / "preview.html"), "xem": rel(d / "xem.html"),
                  "ch": chaps, "q": q, "a": a, "qf": qf, "af": af, "rec": rec, "pit": pit, "course": cur[C].get("title") or "",
-                 "lab": lab, "kind": kind_of(l["title"], sp)}
+                 "lab": lab, "kind": kind_of(l["title"], sp), "af2": bool(sp and sp.get("af2"))}
             rows.append(r)
             seq.append(r)
         data.append({"k": k, "name": name, "level": level, "intro": intro, "rows": rows})
@@ -643,6 +644,7 @@ a.mcard:hover { border-color:var(--acc); }
 .mcard .mp { display:flex; align-items:center; gap:10px; margin-top:10px; font-size:.85rem; color:var(--mute); font-variant-numeric:tabular-nums; white-space:nowrap; } .mcard .mp .bar { flex:1; }
 .tag { display:inline-block; font-size:.74rem; font-weight:700; border-radius:20px; padding:1px 9px; margin-left:6px; vertical-align:2px; white-space:nowrap; }
 .tag.fast { background:var(--acc-soft); color:var(--acc-soft-fg); } .tag.here { display:none; background:var(--acc); color:var(--acc-fg); position:static; transform:none; }
+.tag.lock { background:var(--ok-soft); color:var(--ok); } .tag.part { background:var(--warn-soft); color:var(--warn); }
 .tl li.cur .tag.here { display:inline-block; } .tag.fin { display:none; background:var(--ok-soft); color:var(--ok); } .tl li.fin .tag.fin { display:inline-block; }
 .cc { display:inline-block; font-size:.78rem; font-weight:700; border-radius:6px; padding:0 8px; background:hsl(var(--h) var(--cc-bg) var(--cc-l)); color:hsl(var(--h) var(--cc-fgs) var(--cc-fgl)); white-space:nowrap; }
 .cc small { font-weight:600; font-size:.78rem; margin-left:3px; }
@@ -754,6 +756,17 @@ ICON_THEME = ('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9
 FASTTAG = '<span class="tag fast">Đường nhanh phỏng vấn</span>'
 
 
+def stage_tag(p):
+    k, rows = p["k"], p["rows"]
+    tot = len(rows)
+    af2_n = sum(1 for r in rows if r.get("af2"))
+    if k in LOCKED and tot and af2_n == tot:
+        return '<span class="tag lock">ĐÃ CHỐT</span>'
+    if af2_n > 0:
+        return f'<span class="tag part">AF2 {af2_n}/{tot}</span>'
+    return f'<span class="tag part">Chờ nâng AF2 (0/{tot})</span>'
+
+
 def hue_map(data):
     hs, order = {}, []
     for p in data:
@@ -849,7 +862,7 @@ def page_html(data, seq, jd, les):
         tl.append(
             f'<li class="{"fast" if isf else ""}" data-k="{k}"><span class="node" aria-hidden="true"><span>{i}</span></span>'
             f'<a class="mcard" href="#{k}"><div class="mt">{esc(long_name(p))}'
-            f'{FASTTAG if isf else ""}'
+            f'{FASTTAG if isf else ""}{stage_tag(p)}'
             f'<span class="tag here">Bạn đang ở đây</span><span class="tag fin">Đã xong</span></div>'
             f'<div class="lv">{esc(p["level"])}</div>'
             f'<div class="mm"><span><b>{len(rr)}</b> bài{f" (+{pend} đang soạn)" if pend else ""}</span><span><b>{f1(hrs)}</b> giờ video</span></div>'
@@ -892,7 +905,7 @@ def page_html(data, seq, jd, les):
         isf = k in FAST
         parts.append(
             f'<section class="stage{" fast" if isf else ""}" id="{k}" data-k="{k}"><details><summary><span class="sn">{i}</span>'
-            f'<div class="sh"><h2>{esc(long_name(p))}{FASTTAG if isf else ""}<span class="chev"></span></h2>'
+            f'<div class="sh"><h2>{esc(long_name(p))}{FASTTAG if isf else ""}{stage_tag(p)}<span class="chev"></span></h2>'
             f'<div class="sm">{len(rr)} bài{f" (+{pend} đang soạn)" if pend else ""} · {f1(sum(r["dur"] for r in rr) / 3600)} giờ video</div>'
             f'<div class="sp"><span class="prog" data-prog="{k}">0/{len(rr)}</span><div class="bar"><i data-bar="{k}"></i></div></div></div></summary>'
             f'<div class="sbody"><p class="lvl">{esc(p["level"])}</p><p class="intro">{esc(p["intro"])}</p>{"".join(gh)}</div></details></section>')

@@ -3,6 +3,7 @@ giờ sửa file — sửa asr_reviewed làm đổi giờ sửa nhưng không l�
 nếu đã dựng: spec_sha256 / tts_sha256 trong build_report có khớp đặc tả hiện tại không (STALE), giọng (đúng một giọng),
 câu ASR gắn cờ chưa xem xét (tính lại từ asr_report.md và asr_reviewed hiện tại), asr_report có lỗi thời so với lời đọc không.
 Chạy: .venv/Scripts/python audit/review/audit_all.py [khoá …] → audit/review/audit_all.tsv"""
+import gc
 import io
 import json
 import re
@@ -33,6 +34,7 @@ for c in courses:
             v = b.get("voices") or []
             if b.get("spec_sha256") != lv.spec_digest(spec):
                 probs.append("STALE đặc tả đổi sau lần dựng")
+                frames = None
             else:
                 with redirect_stdout(io.StringIO()):
                     frames = lv.build_frames(spec)
@@ -45,8 +47,10 @@ for c in courses:
             if len(v) != 1:
                 probs.append(f"giọng: {v}")
             # âm thanh cụt đuôi trong cache của bài (lỗi thật AIF L08, CSA L11, DBS L15 — 2026-10-30; ngưỡng ở lv.tts_truncated)
-            with redirect_stdout(io.StringIO()):
-                cut = [i for i, fr in enumerate(lv.build_frames(spec)) if lv.tts_key(fr).exists() and lv.tts_truncated(fr, lv.tts_key(fr))]
+            if frames is None:
+                with redirect_stdout(io.StringIO()):
+                    frames = lv.build_frames(spec)
+            cut = [i for i, fr in enumerate(frames) if lv.tts_key(fr).exists() and lv.tts_truncated(fr, lv.tts_key(fr))]
             if cut:
                 probs.append(f"âm thanh cụt ở khung {cut[:5]} — dựng lại (build đọc lại câu cụt)")
             md = od / "asr_report.md"
@@ -102,6 +106,7 @@ for c in courses:
         bad += 1
         rows.append((c.upper(), "?", "mã màn hình", f"screen_code lỗi rc={sc.returncode}: {sc.stderr[-200:]}"))
         print(c.upper(), "screen_code lỗi", sc.stderr[-300:], flush=True)
+    gc.collect()
 (ROOT / "audit" / "review" / "audit_all.tsv").write_text(
     "course\tid\tstate\tproblems\n" + "\n".join("\t".join(r) for r in rows), encoding="utf-8")
 built = sum(r[2] == "đã dựng" for r in rows)

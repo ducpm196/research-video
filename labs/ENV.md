@@ -33,3 +33,13 @@ Mọi bài chạy được chỉ với JDK; riêng các bài sau dùng một t�
 | `junit-platform-console-standalone-1.10.2.jar` | 1.10.2 | JV2 L06 | https://repo1.maven.org/maven2/org/junit/platform/junit-platform-console-standalone/1.10.2/junit-platform-console-standalone-1.10.2.jar | `a1de557821293ce903c213c694165fff532cf92081bac4238b9e05b35f04f43f` |
 
 Lab của bài luôn chấm được **không cần** tệp này (chỉ dùng khẳng định tự viết).
+
+## Môi trường Học máy CPU (`MLP` và Chặng 9)
+- Venv kiểm thử tại chỗ: `labs/.venv-ml` (Python `3.11.9`).
+- Khởi tạo & cài đặt chuẩn:
+  ```powershell
+  C:\Python311\python.exe -m venv labs\.venv-ml
+  labs\.venv-ml\Scripts\pip.exe install -r labs\requirements-ml.txt
+  ```
+- Tệp khoá phiên bản: `labs/requirements-ml.txt` (`sha256` rút gọn `f38bdb59728eade9`: `scikit-learn==1.9.1`, `scipy==1.17.1`, `numpy==2.4.6`, `torch==2.15.0+cpu` cài từ CPU wheel index `https://download.pytorch.org/whl/cpu`).
+- Hợp đồng `labs/cham.sh`: bài Python có dòng `import` / `from` liên quan tới `sklearn`, `scipy`, `torch` được `cham.sh` tự động chuyển sang chạy bằng `labs/.venv-ml` nếu Python hệ thống chưa cài. Tất cả lab `MLP` và Chặng 9 chạy CPU thuần, `random_state` / `torch.manual_seed` cố định, thời gian chạy `<= 30 s`.

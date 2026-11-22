@@ -3,7 +3,7 @@
 
 > **Mục tiêu**: một nơi duy nhất tra cứu mã khóa (`CS:xxx`, `BE:xxx`, `DS:xxx`, `BNK:Lxx`, `INT:Lxx`, `ACB:Lxx`), giáo án, đặc tả, video, phụ đề và mục lục chương, kèm số đo kiểm chứng được.
 > **Nguồn số liệu**: số bài đếm từ `lessons/<khóa>/L*_*.yaml` và `out/<KHÓA>/L*/L*.mp4`; thời lượng bằng `ffprobe`; "Đặc tả khớp video" so `spec_sha256` trong `build_report.json` với đặc tả hiện tại (`tools/lv.py spec_digest`). Bảng video ở Mục 4–6 sinh tự động bằng script, không gõ tay. Lần đo gần nhất ghi ở cuối mỗi bảng và trong `HANDOVER_INTERVIEW.md` Mục 9.
-> **Thư viện**: 656 bài học (643 + 13 bài JVA thêm 2026-11-08; cộng 5 video mẫu `out/DEMO/`). Bản đồ toàn bộ: [`SOURCE_CODE_VIDEO_MAP.md`](file:///D:/research-video/interview/SOURCE_CODE_VIDEO_MAP.md).
+> **Thư viện**: 732 bài học (xem [`STATUS.md`](file:///D:/research-video/curriculum/STATUS.md) và bảng chặng bên dưới; cập nhật 2026-11-18). Bản đồ toàn bộ: [`SOURCE_CODE_VIDEO_MAP.md`](file:///D:/research-video/interview/SOURCE_CODE_VIDEO_MAP.md).
 > **Quy tắc trung thực**: số liệu trong bài là ví dụ minh họa hoặc mục tiêu thiết kế trừ khi ghi nguồn; xem [`README.md`](file:///D:/research-video/interview/README.md) Mục 3.
 > **Bắt đầu học (từ 2026-11-11, đợt LF1)**: mở [`HOC_TAP.html`](file:///D:/research-video/HOC_TAP.html). Trang xếp **mọi bài của thư viện** thành một dãy 11 chặng theo các cấp độ dưới đây, kèm tự kiểm, lịch ôn ngắt quãng và ghi chú. Bảng chặng: Mục 0.
 
@@ -74,18 +74,18 @@ flowchart TD
 <!-- BEGIN:LF_STAGES -->
 | Chặng | Cấp độ (MASTER / ROADMAP) | Khoá (số bài trong chặng) | Bài có video | Giờ video |
 |:---|:---|:---|:---:|:---:|
-| [Chặng 1 · Nền thực hành, Java và Python từ con số 0](file:///D:/research-video/HOC_TAP.html#S01) | MASTER cấp 0A (bắt buộc với người chưa từng lập trình) | FND 11 · JVA 13 · JV2 10 · PYT 14 | 35 (+13 đang soạn) | 9.2 |
-| [Chặng 2 · Nền tảng backend ngân hàng](file:///D:/research-video/HOC_TAP.html#S02) | MASTER cấp 1A (bắt buộc, học trước INT/ACB) | BNK 15 | 15 | 3.7 |
-| [Chặng 3 · Kỹ năng backend theo JD và CV](file:///D:/research-video/HOC_TAP.html#S03) | Mở rộng cấp 1A — lấp khoảng trống JD và CV (MASTER Mục 8) | BNX 31 | 24 (+7 đang soạn) | 6.1 |
-| [Chặng 4 · Ôn phỏng vấn và tích hợp ngân hàng](file:///D:/research-video/HOC_TAP.html#S04) | MASTER cấp 3–4 (INT, ACB) | INT 8 · ACB 9 | 17 | 2.1 |
-| [Chặng 5 · Toán rời rạc, thuật toán, toán cho học máy](file:///D:/research-video/HOC_TAP.html#S05) | MASTER cấp 0 · ROADMAP T0–T1 | DMS 21 · CS112 30 · CS115 45 | 96 | 15.7 |
-| [Chặng 6 · Máy tính, hệ điều hành, mạng](file:///D:/research-video/HOC_TAP.html#S06) | MASTER cấp 0 · ROADMAP T1 | CSA 17 · OSY 16 · NET 16 | 49 | 7.4 |
-| [Chặng 7 · Kỹ nghệ phần mềm, cơ sở dữ liệu, DevOps, bảo mật](file:///D:/research-video/HOC_TAP.html#S07) | MASTER cấp 1B · ROADMAP T2–T3 | RBM 15 · TOC 8 · PLC 13 · SWF 14 · SDP 18 · DBS 18 · DSC 12 · DSY 15 · WEB 16 · DVO 14 · CLD 14 · SAR 10 · SEC 16 · ESY 14 | 197 | 27.2 |
-| [Chặng 8 · Hệ phân tán, dữ liệu, đám mây, kiến trúc](file:///D:/research-video/HOC_TAP.html#S08) | MASTER cấp 2 · ROADMAP T3, T5 | DSY 1 · DEN 15 · EVT 12 · CLD 2 · CLC 13 · SAR 4 | 47 | 6.6 |
-| [Chặng 9 · Trí tuệ nhân tạo và học máy](file:///D:/research-video/HOC_TAP.html#S09) | ROADMAP T4 (MASTER chưa có tầng AI — bổ sung đợt LF1) | CS115 1 · RBM 2 · PAR 14 · DAN 13 · DSC 4 · IRS 14 · AIF 15 · LLM 15 · MLO 15 · AGT 13 · RLN 14 · CVI 13 · ROB 12 | 145 | 23.4 |
-| [Chặng 10 · Chuyên gia: lý thuyết, ngôn ngữ, song song, con người, nghề nghiệp, sự cố thật](file:///D:/research-video/HOC_TAP.html#S10) | ROADMAP T1, T2, T7 | TOC 7 · PLC 1 · HCI 13 · SEP 12 · CAS 12 | 45 | 7.6 |
-| [Chặng 11 · Chuyên ngành mở rộng (tuỳ chọn)](file:///D:/research-video/HOC_TAP.html#S11) | ROADMAP T0, T5, T6 | RBM 1 · BCH 13 · ESY 2 · ROB 2 · GFX 14 | 32 | 5.3 |
-| **Tổng** | | | **702** | **114.3** |
+| [Chặng 1 · Nền thực hành, Java và Python từ con số 0](file:///D:/research-video/HOC_TAP.html#S01) | MASTER cấp 0A (bắt buộc với người chưa từng lập trình) | FND 11 · JVA 13 · JV2 10 · PYT 14 · PRJ 1 | 49 | 14.2 |
+| [Chặng 2 · Nền tảng backend ngân hàng](file:///D:/research-video/HOC_TAP.html#S02) | MASTER cấp 1A (bắt buộc, học trước INT/ACB) | BNK 15 · PRJ 1 | 16 | 4.0 |
+| [Chặng 3 · Kỹ năng backend theo JD và CV](file:///D:/research-video/HOC_TAP.html#S03) | Mở rộng cấp 1A — lấp khoảng trống JD và CV (MASTER Mục 8) | BNX 39 · PRJ 1 | 40 | 10.0 |
+| [Chặng 4 · Ôn phỏng vấn và tích hợp ngân hàng](file:///D:/research-video/HOC_TAP.html#S04) | MASTER cấp 3–4 (INT, ACB) | INT 9 · ACB 9 · PRJ 1 | 19 | 4.9 |
+| [Chặng 5 · Toán rời rạc, thuật toán, toán cho học máy](file:///D:/research-video/HOC_TAP.html#S05) | MASTER cấp 0 · ROADMAP T0–T1 | DMS 21 · CS112 30 · CS115 45 · PRJ 1 | 97 | 27.0 |
+| [Chặng 6 · Lập trình C, Linux, máy tính, hệ điều hành, mạng](file:///D:/research-video/HOC_TAP.html#S06) | MASTER cấp 0 · ROADMAP T1 | CPR 10 · LNX 10 · CSA 17 · OSY 16 · NET 16 · PRJ 1 | 70 | 10.1 |
+| [Chặng 7 · Kỹ nghệ phần mềm, cơ sở dữ liệu, DevOps, bảo mật](file:///D:/research-video/HOC_TAP.html#S07) | MASTER cấp 1B · ROADMAP T2–T3 | RBM 15 · TOC 8 · PLC 13 · SWF 14 · SDP 18 · DBS 18 · DSC 12 · DSY 15 · WEB 16 · DVO 14 · CLD 14 · SAR 10 · SEC 16 · ESY 14 · PRJ 1 | 198 | 31.3 |
+| [Chặng 8 · Hệ phân tán, dữ liệu, đám mây, kiến trúc](file:///D:/research-video/HOC_TAP.html#S08) | MASTER cấp 2 · ROADMAP T3, T5 | DSY 1 · DEN 15 · EVT 12 · CLD 2 · CLC 13 · SAR 4 · PRJ 1 | 48 | 7.9 |
+| [Chặng 9 · Trí tuệ nhân tạo và học máy](file:///D:/research-video/HOC_TAP.html#S09) | ROADMAP T4 (MASTER chưa có tầng AI — bổ sung đợt LF1) | CS115 2 · RBM 2 · PAR 14 · DAN 13 · DSC 4 · MLP 14 · IRS 14 · AIF 15 · LLM 15 · MLO 15 · AGT 13 · RLN 14 · CVI 13 · ROB 12 · PRJ 1 | 161 | 29.8 |
+| [Chặng 10 · Chuyên gia: lý thuyết, ngôn ngữ, song song, con người, nghề nghiệp, sự cố thật](file:///D:/research-video/HOC_TAP.html#S10) | ROADMAP T1, T2, T7 | TOC 7 · PLC 1 · HCI 13 · PRJ 1 · SEP 12 · CAS 12 | 46 | 8.8 |
+| [Chặng 11 · Chuyên ngành mở rộng (tuỳ chọn)](file:///D:/research-video/HOC_TAP.html#S11) | ROADMAP T0, T5, T6 | RBM 1 · BCH 13 · ESY 2 · ROB 2 · GFX 14 · PRJ 1 | 33 | 6.2 |
+| **Tổng** | | | **777** | **154.3** |
 
 *Sinh bởi `audit/review/learn_full/master_sections.py` từ `pack.stages()` — cùng nguồn với `HOC_TAP.html`. Mỗi bài nằm đúng một chặng; máy kiểm mọi bài cần học trước đứng trước nó.*
 <!-- END:LF_STAGES -->
@@ -166,39 +166,47 @@ flowchart TD
 <!-- BEGIN:LF_BNX -->
 | Mã bài | Bài học | Đặc tả (YAML) | Video | Thời lượng | Giọng | Đặc tả khớp video |
 |:---:|:---|:---|:---|:---:|:---:|:---:|
-| **`BNX:L00`** | Git: lưu lịch sử, tạo nhánh, gộp và giải xung đột | [`L00_git_nhanh_gop_xung_dot.yaml`](file:///D:/research-video/lessons/bnx/L00_git_nhanh_gop_xung_dot.yaml) | [`L00.mp4`](file:///D:/research-video/out/BNX/L00/L00.mp4) | 12:12 | NamMinh | có |
-| **`BNX:L01`** | OpenAPI (Swagger): đặc tả API là hợp đồng, viết trước khi viết mã | [`L01_openapi_hop_dong_api.yaml`](file:///D:/research-video/lessons/bnx/L01_openapi_hop_dong_api.yaml) | [`L01.mp4`](file:///D:/research-video/out/BNX/L01/L01.mp4) | 13:53 | NamMinh | có |
-| **`BNX:L02`** | gRPC và Protocol Buffers: bản tin nhị phân, số hiệu trường và hạn chót | [`L02_grpc_protobuf.yaml`](file:///D:/research-video/lessons/bnx/L02_grpc_protobuf.yaml) | [`L02.mp4`](file:///D:/research-video/out/BNX/L02/L02.mp4) | 15:13 | NamMinh | có |
-| **`BNX:L03`** | JWT: mã truy cập tự mang thông tin, chữ ký HMAC và hạn dùng | [`L03_jwt_chu_ky_han_dung.yaml`](file:///D:/research-video/lessons/bnx/L03_jwt_chu_ky_han_dung.yaml) | [`L03.mp4`](file:///D:/research-video/out/BNX/L03/L03.mp4) | 12:54 | NamMinh | có |
-| **`BNX:L04`** | OAuth 2.0 và OpenID Connect: ai cấp mã, ai kiểm mã, phạm vi quyền | [`L04_oauth2_openid_connect.yaml`](file:///D:/research-video/lessons/bnx/L04_oauth2_openid_connect.yaml) | [`L04.mp4`](file:///D:/research-video/out/BNX/L04/L04.mp4) | 11:31 | NamMinh | có |
-| **`BNX:L05`** | mTLS: hai bên cùng trình chứng chỉ khi các dịch vụ gọi nhau | [`L05_mtls_chung_chi_hai_chieu.yaml`](file:///D:/research-video/lessons/bnx/L05_mtls_chung_chi_hai_chieu.yaml) | [`L05.mp4`](file:///D:/research-video/out/BNX/L05/L05.mp4) | 12:24 | NamMinh | có |
-| **`BNX:L06`** | Thủ tục lưu trữ trên Oracle và SQL Server: tham số, giao dịch và bắt lỗi | [`L06_thu_tuc_luu_tru_plsql_tsql.yaml`](file:///D:/research-video/lessons/bnx/L06_thu_tuc_luu_tru_plsql_tsql.yaml) | [`L06.mp4`](file:///D:/research-video/out/BNX/L06/L06.mp4) | 15:46 | NamMinh | có |
-| **`BNX:L07`** | Oracle cho khối lượng lớn: phân vùng, JSON, hàng đợi, bộ nhớ cột và phân mảnh | [`L07_oracle_phan_vung_json_hang_doi.yaml`](file:///D:/research-video/lessons/bnx/L07_oracle_phan_vung_json_hang_doi.yaml) | [`L07.mp4`](file:///D:/research-video/out/BNX/L07/L07.mp4) | 14:58 | NamMinh | có |
-| **`BNX:L08`** | Elasticsearch: chỉ mục ngược phân tán, mảnh, bản sao và độ tươi | [`L08_elasticsearch_manh_ban_sao.yaml`](file:///D:/research-video/lessons/bnx/L08_elasticsearch_manh_ban_sao.yaml) | [`L08.mp4`](file:///D:/research-video/out/BNX/L08/L08.mp4) | 12:16 | NamMinh | có |
-| **`BNX:L09`** | Couchbase: bản ghi theo khoá, vBucket và giá trị CAS chống ghi đè | [`L09_couchbase_vbucket_cas.yaml`](file:///D:/research-video/lessons/bnx/L09_couchbase_vbucket_cas.yaml) | [`L09.mp4`](file:///D:/research-video/out/BNX/L09/L09.mp4) | 13:22 | NamMinh | có |
-| **`BNX:L10`** | Kafka nâng cao và RabbitMQ: nén nhật ký theo khoá, kiểm lược đồ, định tuyến theo sàn | [`L10_kafka_nang_cao_rabbitmq.yaml`](file:///D:/research-video/lessons/bnx/L10_kafka_nang_cao_rabbitmq.yaml) | [`L10.mp4`](file:///D:/research-video/out/BNX/L10/L10.mp4) | 13:01 | NamMinh | có |
-| **`BNX:L11`** | Thanh toán quốc tế và ngoại tệ: SWIFT, ISO 20022, tài khoản nostro và tỉ giá | [`L11_thanh_toan_quoc_te_ngoai_te.yaml`](file:///D:/research-video/lessons/bnx/L11_thanh_toan_quoc_te_ngoai_te.yaml) | [`L11.mp4`](file:///D:/research-video/out/BNX/L11/L11.mp4) | 13:40 | NamMinh | có |
-| **`BNX:L12`** | Ví điện tử và nộp thuế điện tử: tiền thật nằm ở đâu, bút toán và đối soát | [`L12_vi_dien_tu_thue_dien_tu.yaml`](file:///D:/research-video/lessons/bnx/L12_vi_dien_tu_thue_dien_tu.yaml) | [`L12.mp4`](file:///D:/research-video/out/BNX/L12/L12.mp4) | 13:08 | NamMinh | có |
-| **`BNX:L13`** | Từ commit tới máy chủ: Dockerfile, GitLab CI và triển khai lên Kubernetes | [`L13_docker_gitlab_ci_kubernetes.yaml`](file:///D:/research-video/lessons/bnx/L13_docker_gitlab_ci_kubernetes.yaml) | [`L13.mp4`](file:///D:/research-video/out/BNX/L13/L13.mp4) | 12:51 | NamMinh | có |
-| **`BNX:L14`** | DDD, cổng API và Open API ngân hàng: ranh giới, cửa vào và chia sẻ dữ liệu có đồng ý | [`L14_ddd_cong_api_open_api.yaml`](file:///D:/research-video/lessons/bnx/L14_ddd_cong_api_open_api.yaml) | [`L14.mp4`](file:///D:/research-video/out/BNX/L14/L14.mp4) | 14:34 | NamMinh | có |
-| **`BNX:L15`** | Tình huống chuyên gia: dựng dự án mẫu API chuyển khoản đúng như JD đòi hỏi | [`L15_tinh_huong_du_an_mau.yaml`](file:///D:/research-video/lessons/bnx/L15_tinh_huong_du_an_mau.yaml) | [`L15.mp4`](file:///D:/research-video/out/BNX/L15/L15.mp4) | 12:54 | NamMinh | có |
-| **`BNX:L16`** | Đa luồng Java nâng cao: bể luồng, CompletableFuture và ForkJoinPool | [`L16_be_luong_completablefuture_forkjoin.yaml`](file:///D:/research-video/lessons/bnx/L16_be_luong_completablefuture_forkjoin.yaml) | [`L16.mp4`](file:///D:/research-video/out/BNX/L16/L16.mp4) | 19:02 | NamMinh | có |
-| **`BNX:L17`** | Spring Security và Spring Cloud: chuỗi bộ lọc, cổng và khám phá dịch vụ | [`L17_spring_security_spring_cloud.yaml`](file:///D:/research-video/lessons/bnx/L17_spring_security_spring_cloud.yaml) | [`L17.mp4`](file:///D:/research-video/out/BNX/L17/L17.mp4) | 21:03 | NamMinh | có |
-| **`BNX:L18`** | Kiểm thử Java với JUnit 5 và Mockito: ca kiểm, đối tượng giả và kiểm tương tác | [`L18_junit5_mockito.yaml`](file:///D:/research-video/lessons/bnx/L18_junit5_mockito.yaml) | [`L18.mp4`](file:///D:/research-video/out/BNX/L18/L18.mp4) | 16:47 | NamMinh | có |
-| **`BNX:L19`** | Redis nâng cao: cụm 16384 khe băm, khoá có hạn, khử trùng và danh sách đen | [`L19_redis_cum_khoa_khu_trung.yaml`](file:///D:/research-video/lessons/bnx/L19_redis_cum_khoa_khu_trung.yaml) | [`L19.mp4`](file:///D:/research-video/out/BNX/L19/L19.mp4) | 18:49 | NamMinh | có |
-| **`BNX:L20`** | Go cho backend: goroutine, kênh, tranh chấp dữ liệu và một dịch vụ HTTP nhỏ | [`L20_go_goroutine_kenh_http.yaml`](file:///D:/research-video/lessons/bnx/L20_go_goroutine_kenh_http.yaml) | [`L20.mp4`](file:///D:/research-video/out/BNX/L20/L20.mp4) | 19:35 | NamMinh | có |
-| **`BNX:L21`** | Hệ thống cho vay số: khởi tạo, chấm điểm, thẩm định, ký số và chống gian lận | [`L21_he_thong_cho_vay_so.yaml`](file:///D:/research-video/lessons/bnx/L21_he_thong_cho_vay_so.yaml) | [`L21.mp4`](file:///D:/research-video/out/BNX/L21/L21.mp4) | 16:18 | NamMinh | có |
-| **`BNX:L22`** | Adobe Experience Manager: JCR, Sling phân giải đường dẫn, thành phần HTL và gói OSGi | [`L22_aem_jcr_sling_htl_osgi.yaml`](file:///D:/research-video/lessons/bnx/L22_aem_jcr_sling_htl_osgi.yaml) | [`L22.mp4`](file:///D:/research-video/out/BNX/L22/L22.mp4) | 18:11 | NamMinh | có |
-| **`BNX:L23`** | Từ scikit-learn tới ONNX Runtime: rừng cô lập cho phát hiện bất thường | [`L23_scikit_learn_onnx_rung_co_lap.yaml`](file:///D:/research-video/lessons/bnx/L23_scikit_learn_onnx_rung_co_lap.yaml) | [`L23.mp4`](file:///D:/research-video/out/BNX/L23/L23.mp4) | 21:53 | NamMinh | có |
-| **`BNX:L24`** | JPA/Hibernate và Spring Data: thực thể, ngữ cảnh bền vững và vấn đề N+1 | `L24_jpa_hibernate_spring_data.yaml` | đang soạn | — | — | — |
-| **`BNX:L25`** | Giao dịch Spring và AOP chuyên sâu: lan truyền, hoàn tác, tự gọi và đoạn cắt | `L25_giao_dich_spring_aop.yaml` | đang soạn | — | — | — |
-| **`BNX:L26`** | Maven, Gradle và Jenkins: vòng đời, xung đột phiên bản và dựng tái lập | `L26_maven_gradle_jenkins.yaml` | đang soạn | — | — | — |
-| **`BNX:L27`** | SOAP/WSDL và SFTP: tích hợp hệ cũ và đối soát tệp lô | `L27_soap_wsdl_sftp.yaml` | đang soạn | — | — | — |
-| **`BNX:L28`** | PostgreSQL, MongoDB, MySQL so với Oracle và SQL Server: mô hình, chỉ mục và khoá | `L28_co_so_du_lieu_so_sanh.yaml` | đang soạn | — | — | — |
-| **`BNX:L29`** | CQRS và Event Sourcing cho sổ tiền: kho sự kiện, phát lại và bản chụp | `L29_cqrs_event_sourcing.yaml` | đang soạn | — | — | — |
-| **`BNX:L30`** | Chịu lỗi bằng mã: thử lại, cầu dao, vách ngăn, giới hạn tốc độ và cân bằng tải | `L30_chiu_loi_cau_dao_can_bang_tai.yaml` | đang soạn | — | — | — |
+| **`BNX:L00`** | Git: lưu lịch sử, tạo nhánh, gộp và giải xung đột | [`L00_git_nhanh_gop_xung_dot.yaml`](file:///D:/research-video/lessons/bnx/L00_git_nhanh_gop_xung_dot.yaml) | [`L00.mp4`](file:///D:/research-video/out/BNX/L00/L00.mp4) | 15:32 | NamMinh | có |
+| **`BNX:L01`** | OpenAPI (Swagger): đặc tả API là hợp đồng, viết trước khi viết mã | [`L01_openapi_hop_dong_api.yaml`](file:///D:/research-video/lessons/bnx/L01_openapi_hop_dong_api.yaml) | [`L01.mp4`](file:///D:/research-video/out/BNX/L01/L01.mp4) | 15:41 | NamMinh | có |
+| **`BNX:L02`** | gRPC và Protocol Buffers: bản tin nhị phân, số hiệu trường và hạn chót | [`L02_grpc_protobuf.yaml`](file:///D:/research-video/lessons/bnx/L02_grpc_protobuf.yaml) | [`L02.mp4`](file:///D:/research-video/out/BNX/L02/L02.mp4) | 15:48 | NamMinh | có |
+| **`BNX:L03`** | JWT: mã truy cập tự mang thông tin, chữ ký HMAC và hạn dùng | [`L03_jwt_chu_ky_han_dung.yaml`](file:///D:/research-video/lessons/bnx/L03_jwt_chu_ky_han_dung.yaml) | [`L03.mp4`](file:///D:/research-video/out/BNX/L03/L03.mp4) | 16:47 | NamMinh | có |
+| **`BNX:L04`** | OAuth 2.0 và OpenID Connect: ai cấp mã, ai kiểm mã, phạm vi quyền | [`L04_oauth2_openid_connect.yaml`](file:///D:/research-video/lessons/bnx/L04_oauth2_openid_connect.yaml) | [`L04.mp4`](file:///D:/research-video/out/BNX/L04/L04.mp4) | 14:27 | NamMinh | có |
+| **`BNX:L05`** | mTLS: hai bên cùng trình chứng chỉ khi các dịch vụ gọi nhau | [`L05_mtls_chung_chi_hai_chieu.yaml`](file:///D:/research-video/lessons/bnx/L05_mtls_chung_chi_hai_chieu.yaml) | [`L05.mp4`](file:///D:/research-video/out/BNX/L05/L05.mp4) | 14:49 | NamMinh | có |
+| **`BNX:L06`** | Thủ tục lưu trữ trên Oracle: tham số, giao dịch và bắt lỗi | [`L06_thu_tuc_luu_tru_plsql_tsql.yaml`](file:///D:/research-video/lessons/bnx/L06_thu_tuc_luu_tru_plsql_tsql.yaml) | [`L06.mp4`](file:///D:/research-video/out/BNX/L06/L06.mp4) | 15:07 | NamMinh | có |
+| **`BNX:L07`** | Oracle cho khối lượng lớn: phân vùng và JSON | [`L07_oracle_phan_vung_json_hang_doi.yaml`](file:///D:/research-video/lessons/bnx/L07_oracle_phan_vung_json_hang_doi.yaml) | [`L07.mp4`](file:///D:/research-video/out/BNX/L07/L07.mp4) | 14:55 | NamMinh | có |
+| **`BNX:L08`** | Elasticsearch: chỉ mục ngược phân tán, mảnh, bản sao và độ tươi | [`L08_elasticsearch_manh_ban_sao.yaml`](file:///D:/research-video/lessons/bnx/L08_elasticsearch_manh_ban_sao.yaml) | [`L08.mp4`](file:///D:/research-video/out/BNX/L08/L08.mp4) | 15:12 | NamMinh | có |
+| **`BNX:L09`** | Couchbase: bản ghi theo khoá, vBucket và giá trị CAS chống ghi đè | [`L09_couchbase_vbucket_cas.yaml`](file:///D:/research-video/lessons/bnx/L09_couchbase_vbucket_cas.yaml) | [`L09.mp4`](file:///D:/research-video/out/BNX/L09/L09.mp4) | 15:01 | NamMinh | có |
+| **`BNX:L10`** | Kafka nâng cao và RabbitMQ: nén nhật ký theo khoá, kiểm lược đồ, định tuyến theo sàn | [`L10_kafka_nang_cao_rabbitmq.yaml`](file:///D:/research-video/lessons/bnx/L10_kafka_nang_cao_rabbitmq.yaml) | [`L10.mp4`](file:///D:/research-video/out/BNX/L10/L10.mp4) | 15:23 | NamMinh | có |
+| **`BNX:L11`** | Thanh toán quốc tế và ngoại tệ: SWIFT, ISO 20022, tài khoản nostro và tỉ giá | [`L11_thanh_toan_quoc_te_ngoai_te.yaml`](file:///D:/research-video/lessons/bnx/L11_thanh_toan_quoc_te_ngoai_te.yaml) | [`L11.mp4`](file:///D:/research-video/out/BNX/L11/L11.mp4) | 15:06 | NamMinh | có |
+| **`BNX:L12`** | Ví điện tử và nộp thuế điện tử: tiền thật nằm ở đâu, bút toán và đối soát | [`L12_vi_dien_tu_thue_dien_tu.yaml`](file:///D:/research-video/lessons/bnx/L12_vi_dien_tu_thue_dien_tu.yaml) | [`L12.mp4`](file:///D:/research-video/out/BNX/L12/L12.mp4) | 14:15 | NamMinh | có |
+| **`BNX:L13`** | Từ commit tới máy chủ: Dockerfile, GitLab CI và triển khai lên Kubernetes | [`L13_docker_gitlab_ci_kubernetes.yaml`](file:///D:/research-video/lessons/bnx/L13_docker_gitlab_ci_kubernetes.yaml) | [`L13.mp4`](file:///D:/research-video/out/BNX/L13/L13.mp4) | 14:21 | NamMinh | có |
+| **`BNX:L14`** | DDD, cổng API và Open API ngân hàng: ranh giới, cửa vào và chia sẻ dữ liệu có đồng ý | [`L14_ddd_cong_api_open_api.yaml`](file:///D:/research-video/lessons/bnx/L14_ddd_cong_api_open_api.yaml) | [`L14.mp4`](file:///D:/research-video/out/BNX/L14/L14.mp4) | 14:20 | NamMinh | có |
+| **`BNX:L15`** | Tình huống chuyên gia: dựng dự án mẫu API chuyển khoản đúng như JD đòi hỏi | [`L15_tinh_huong_du_an_mau.yaml`](file:///D:/research-video/lessons/bnx/L15_tinh_huong_du_an_mau.yaml) | [`L15.mp4`](file:///D:/research-video/out/BNX/L15/L15.mp4) | 14:32 | NamMinh | có |
+| **`BNX:L16`** | Đa luồng Java nâng cao: bể luồng, CompletableFuture và ForkJoinPool | [`L16_be_luong_completablefuture_forkjoin.yaml`](file:///D:/research-video/lessons/bnx/L16_be_luong_completablefuture_forkjoin.yaml) | [`L16.mp4`](file:///D:/research-video/out/BNX/L16/L16.mp4) | 16:17 | NamMinh | có |
+| **`BNX:L17`** | Spring Security và Spring Cloud: chuỗi bộ lọc, cổng và khám phá dịch vụ | [`L17_spring_security_spring_cloud.yaml`](file:///D:/research-video/lessons/bnx/L17_spring_security_spring_cloud.yaml) | [`L17.mp4`](file:///D:/research-video/out/BNX/L17/L17.mp4) | 15:44 | NamMinh | có |
+| **`BNX:L18`** | Kiểm thử Java với JUnit 5 và Mockito: ca kiểm, đối tượng giả và kiểm tương tác | [`L18_junit5_mockito.yaml`](file:///D:/research-video/lessons/bnx/L18_junit5_mockito.yaml) | [`L18.mp4`](file:///D:/research-video/out/BNX/L18/L18.mp4) | 16:52 | NamMinh | có |
+| **`BNX:L19`** | Redis nâng cao: cụm 16384 khe băm, khoá có hạn, khử trùng và danh sách đen | [`L19_redis_cum_khoa_khu_trung.yaml`](file:///D:/research-video/lessons/bnx/L19_redis_cum_khoa_khu_trung.yaml) | [`L19.mp4`](file:///D:/research-video/out/BNX/L19/L19.mp4) | 15:40 | NamMinh | có |
+| **`BNX:L20`** | Go cho backend: goroutine, kênh, tranh chấp dữ liệu và một dịch vụ HTTP nhỏ | [`L20_go_goroutine_kenh_http.yaml`](file:///D:/research-video/lessons/bnx/L20_go_goroutine_kenh_http.yaml) | [`L20.mp4`](file:///D:/research-video/out/BNX/L20/L20.mp4) | 14:39 | NamMinh | có |
+| **`BNX:L21`** | Hệ thống cho vay số: khởi tạo, chấm điểm, thẩm định, ký số và chống gian lận | [`L21_he_thong_cho_vay_so.yaml`](file:///D:/research-video/lessons/bnx/L21_he_thong_cho_vay_so.yaml) | [`L21.mp4`](file:///D:/research-video/out/BNX/L21/L21.mp4) | 14:34 | NamMinh | có |
+| **`BNX:L22`** | Adobe Experience Manager: JCR, Sling phân giải đường dẫn, thành phần HTL và gói OSGi | [`L22_aem_jcr_sling_htl_osgi.yaml`](file:///D:/research-video/lessons/bnx/L22_aem_jcr_sling_htl_osgi.yaml) | [`L22.mp4`](file:///D:/research-video/out/BNX/L22/L22.mp4) | 14:31 | NamMinh | có |
+| **`BNX:L23`** | Từ scikit-learn tới ONNX Runtime: rừng cô lập cho phát hiện bất thường | [`L23_scikit_learn_onnx_rung_co_lap.yaml`](file:///D:/research-video/lessons/bnx/L23_scikit_learn_onnx_rung_co_lap.yaml) | [`L23.mp4`](file:///D:/research-video/out/BNX/L23/L23.mp4) | 14:30 | NamMinh | có |
+| **`BNX:L24`** | JPA/Hibernate và Spring Data: thực thể, ngữ cảnh bền vững và vấn đề N+1 | [`L24_jpa_hibernate_spring_data.yaml`](file:///D:/research-video/lessons/bnx/L24_jpa_hibernate_spring_data.yaml) | [`L24.mp4`](file:///D:/research-video/out/BNX/L24/L24.mp4) | 14:41 | NamMinh | có |
+| **`BNX:L25`** | Giao dịch Spring và AOP chuyên sâu: lan truyền, hoàn tác, tự gọi và đoạn cắt | [`L25_giao_dich_spring_aop.yaml`](file:///D:/research-video/lessons/bnx/L25_giao_dich_spring_aop.yaml) | [`L25.mp4`](file:///D:/research-video/out/BNX/L25/L25.mp4) | 14:39 | NamMinh | có |
+| **`BNX:L26`** | Maven, Gradle và Jenkins: vòng đời, xung đột phiên bản và dựng tái lập | [`L26_maven_gradle_jenkins.yaml`](file:///D:/research-video/lessons/bnx/L26_maven_gradle_jenkins.yaml) | [`L26.mp4`](file:///D:/research-video/out/BNX/L26/L26.mp4) | 15:17 | NamMinh | có |
+| **`BNX:L27`** | SOAP/WSDL và SFTP: tích hợp hệ cũ và đối soát tệp lô | [`L27_soap_wsdl_sftp.yaml`](file:///D:/research-video/lessons/bnx/L27_soap_wsdl_sftp.yaml) | [`L27.mp4`](file:///D:/research-video/out/BNX/L27/L27.mp4) | 15:32 | NamMinh | có |
+| **`BNX:L28`** | PostgreSQL, MongoDB, MySQL so với Oracle và SQL Server: mô hình, chỉ mục và khoá | [`L28_co_so_du_lieu_so_sanh.yaml`](file:///D:/research-video/lessons/bnx/L28_co_so_du_lieu_so_sanh.yaml) | [`L28.mp4`](file:///D:/research-video/out/BNX/L28/L28.mp4) | 15:22 | NamMinh | có |
+| **`BNX:L29`** | CQRS và Event Sourcing cho sổ tiền: kho sự kiện, phát lại và bản chụp | [`L29_cqrs_event_sourcing.yaml`](file:///D:/research-video/lessons/bnx/L29_cqrs_event_sourcing.yaml) | [`L29.mp4`](file:///D:/research-video/out/BNX/L29/L29.mp4) | 15:08 | NamMinh | có |
+| **`BNX:L30`** | Chịu lỗi bằng mã: thử lại, cầu dao, vách ngăn, giới hạn tốc độ và cân bằng tải | [`L30_chiu_loi_cau_dao_can_bang_tai.yaml`](file:///D:/research-video/lessons/bnx/L30_chiu_loi_cau_dao_can_bang_tai.yaml) | [`L30.mp4`](file:///D:/research-video/out/BNX/L30/L30.mp4) | 16:22 | NamMinh | có |
+| **`BNX:L31`** | Quan sát hệ thống: nhật ký có cấu trúc, ELK, Prometheus, Grafana và cảnh báo | [`L31_quan_sat_nhat_ky_chi_so_canh_bao.yaml`](file:///D:/research-video/lessons/bnx/L31_quan_sat_nhat_ky_chi_so_canh_bao.yaml) | [`L31.mp4`](file:///D:/research-video/out/BNX/L31/L31.mp4) | 16:07 | NamMinh | có |
+| **`BNX:L32`** | GitOps và bí mật: vòng đối chiếu, Argo CD, Vault và AWS tối thiểu | [`L32_gitops_bi_mat_aws_toi_thieu.yaml`](file:///D:/research-video/lessons/bnx/L32_gitops_bi_mat_aws_toi_thieu.yaml) | [`L32.mp4`](file:///D:/research-video/out/BNX/L32/L32.mp4) | 16:05 | NamMinh | có |
+| **`BNX:L33`** | Hệ cũ: Servlet, JSP, Tomcat, JBoss | [`L33_he_cu_servlet_jsp_tomcat.yaml`](file:///D:/research-video/lessons/bnx/L33_he_cu_servlet_jsp_tomcat.yaml) | [`L33.mp4`](file:///D:/research-video/out/BNX/L33/L33.mp4) | 17:10 | NamMinh | có |
+| **`BNX:L34`** | Phê duyệt tín dụng: máy trạng thái, quyền duyệt và tra lịch sử có đồng ý | [`L34_he_thong_phe_duyet_tin_dung.yaml`](file:///D:/research-video/lessons/bnx/L34_he_thong_phe_duyet_tin_dung.yaml) | [`L34.mp4`](file:///D:/research-video/out/BNX/L34/L34.mp4) | 15:36 | NamMinh | có |
+| **`BNX:L35`** | Vận hành: hỗ trợ mức 3, SLA/OLA, phiếu sự cố và bản thiết kế | [`L35_van_hanh_sla_tai_lieu.yaml`](file:///D:/research-video/lessons/bnx/L35_van_hanh_sla_tai_lieu.yaml) | [`L35.mp4`](file:///D:/research-video/out/BNX/L35/L35.mp4) | 15:20 | NamMinh | có |
+| **`BNX:L36`** | Phỏng vấn thiết kế hệ thống: trung tâm thanh toán, hệ thống tín dụng, đọc tiếng Anh kỹ thuật | [`L36_phong_van_thiet_ke_he_thong.yaml`](file:///D:/research-video/lessons/bnx/L36_phong_van_thiet_ke_he_thong.yaml) | [`L36.mp4`](file:///D:/research-video/out/BNX/L36/L36.mp4) | 15:43 | NamMinh | có |
+| **`BNX:L37`** | T-SQL và JDBC: XACT_ABORT, chống chèn mã, kết nối an toàn | [`L37_tsql_jdbc_xact_abort_chen_ma.yaml`](file:///D:/research-video/lessons/bnx/L37_tsql_jdbc_xact_abort_chen_ma.yaml) | [`L37.mp4`](file:///D:/research-video/out/BNX/L37/L37.mp4) | 15:04 | NamMinh | có |
+| **`BNX:L38`** | Hàng đợi AQ, bộ nhớ cột và phân mảnh Oracle | [`L38_oracle_hang_doi_bo_nho_cot_phan_manh.yaml`](file:///D:/research-video/lessons/bnx/L38_oracle_hang_doi_bo_nho_cot_phan_manh.yaml) | [`L38.mp4`](file:///D:/research-video/out/BNX/L38/L38.mp4) | 14:52 | NamMinh | có |
 
-*Tổng BNX đã dựng: **366.29 phút** (ffprobe).*
+*Tổng BNX đã dựng: **596.99 phút** (ffprobe).*
 <!-- END:LF_BNX -->
 
 ---
@@ -228,37 +236,37 @@ flowchart TD
 
 | Mã khoá | Tên khoá | Số bài | Có video | Giờ | Giáo án |
 |:---:|:---|:---:|:---:|:---:|:---:|
-| `AIF` | Nền tảng trí tuệ nhân tạo (tìm kiếm, ràng buộc, trò chơi, lôgic, lập kế hoạch, suy diễn xác suất) | 15 | 15 | 1.8 | [`aif.yaml`](file:///D:/research-video/curriculum/aif.yaml) |
-| `DAN` | Phân tích dữ liệu: chỉ số, SQL phân tích, nhóm người dùng, phễu, chuỗi thời gian | 13 | 13 | 1.7 | [`dan.yaml`](file:///D:/research-video/curriculum/dan.yaml) |
-| `DSC` | Khoa học dữ liệu: từ dữ liệu thô tới kết luận đáng tin | 16 | 16 | 2.3 | [`dsc.yaml`](file:///D:/research-video/curriculum/dsc.yaml) |
-| `MLO` | MLOps: đưa mô hình học máy vào vận hành | 15 | 15 | 2.1 | [`mlo.yaml`](file:///D:/research-video/curriculum/mlo.yaml) |
-| `IRS` | Truy hồi thông tin và hệ gợi ý | 14 | 14 | 3.2 | [`irs.yaml`](file:///D:/research-video/curriculum/irs.yaml) |
-| `LLM` | Mô hình ngôn ngữ lớn | 15 | 15 | 1.9 | [`llm.yaml`](file:///D:/research-video/curriculum/llm.yaml) |
-| `AGT` | AI agent: tác tử dùng mô hình ngôn ngữ | 13 | 13 | 2.0 | [`agt.yaml`](file:///D:/research-video/curriculum/agt.yaml) |
-| `RLN` | Học tăng cường | 14 | 14 | 2.6 | [`rln.yaml`](file:///D:/research-video/curriculum/rln.yaml) |
-| `CVI` | Thị giác máy tính | 13 | 13 | 2.5 | [`cvi.yaml`](file:///D:/research-video/curriculum/cvi.yaml) |
+| `AIF` | Nền tảng trí tuệ nhân tạo (tìm kiếm, ràng buộc, trò chơi, lôgic, lập kế hoạch, suy diễn xác suất) | 15 | 15 | 2.6 | [`aif.yaml`](file:///D:/research-video/curriculum/aif.yaml) |
+| `DAN` | Phân tích dữ liệu: chỉ số, SQL phân tích, nhóm người dùng, phễu, chuỗi thời gian | 13 | 13 | 2.3 | [`dan.yaml`](file:///D:/research-video/curriculum/dan.yaml) |
+| `DSC` | Khoa học dữ liệu: từ dữ liệu thô tới kết luận đáng tin | 16 | 16 | 2.8 | [`dsc.yaml`](file:///D:/research-video/curriculum/dsc.yaml) |
+| `MLO` | MLOps: đưa mô hình học máy vào vận hành | 15 | 15 | 2.6 | [`mlo.yaml`](file:///D:/research-video/curriculum/mlo.yaml) |
+| `IRS` | Truy hồi thông tin và hệ gợi ý | 14 | 14 | 3.5 | [`irs.yaml`](file:///D:/research-video/curriculum/irs.yaml) |
+| `LLM` | Mô hình ngôn ngữ lớn | 15 | 15 | 2.6 | [`llm.yaml`](file:///D:/research-video/curriculum/llm.yaml) |
+| `AGT` | AI agent: tác tử dùng mô hình ngôn ngữ | 13 | 13 | 2.3 | [`agt.yaml`](file:///D:/research-video/curriculum/agt.yaml) |
+| `RLN` | Học tăng cường | 14 | 14 | 2.9 | [`rln.yaml`](file:///D:/research-video/curriculum/rln.yaml) |
+| `CVI` | Thị giác máy tính | 13 | 13 | 2.8 | [`cvi.yaml`](file:///D:/research-video/curriculum/cvi.yaml) |
 
 **CẤP ĐỘ 6 · Chuyên gia (chặng 10)**
 
 | Mã khoá | Tên khoá | Số bài | Có video | Giờ | Giáo án |
 |:---:|:---|:---:|:---:|:---:|:---:|
-| `TOC` | Lý thuyết tính toán: ôtômat, văn phạm, khả quyết | 15 | 15 | 2.2 | [`toc.yaml`](file:///D:/research-video/curriculum/toc.yaml) |
-| `PLC` | Ngôn ngữ lập trình và trình biên dịch | 14 | 14 | 2.0 | [`plc.yaml`](file:///D:/research-video/curriculum/plc.yaml) |
-| `PAR` | Tính toán song song và GPU | 14 | 14 | 2.5 | [`par.yaml`](file:///D:/research-video/curriculum/par.yaml) |
-| `HCI` | Tương tác người–máy | 13 | 13 | 1.9 | [`hci.yaml`](file:///D:/research-video/curriculum/hci.yaml) |
-| `SEP` | Xã hội, đạo đức và nghề nghiệp trong tin học | 12 | 12 | 2.1 | [`sep.yaml`](file:///D:/research-video/curriculum/sep.yaml) |
-| `CAS` | Tình huống chuyên gia: phân tích sự cố có thật | 12 | 12 | 2.2 | [`cas.yaml`](file:///D:/research-video/curriculum/cas.yaml) |
+| `TOC` | Lý thuyết tính toán: ôtômat, văn phạm, khả quyết | 15 | 15 | 2.7 | [`toc.yaml`](file:///D:/research-video/curriculum/toc.yaml) |
+| `PLC` | Ngôn ngữ lập trình và trình biên dịch | 14 | 14 | 2.4 | [`plc.yaml`](file:///D:/research-video/curriculum/plc.yaml) |
+| `PAR` | Tính toán song song và GPU | 14 | 14 | 2.8 | [`par.yaml`](file:///D:/research-video/curriculum/par.yaml) |
+| `HCI` | Tương tác người–máy | 13 | 13 | 2.2 | [`hci.yaml`](file:///D:/research-video/curriculum/hci.yaml) |
+| `SEP` | Xã hội, đạo đức và nghề nghiệp trong tin học | 12 | 12 | 2.3 | [`sep.yaml`](file:///D:/research-video/curriculum/sep.yaml) |
+| `CAS` | Tình huống chuyên gia: phân tích sự cố có thật | 12 | 12 | 2.5 | [`cas.yaml`](file:///D:/research-video/curriculum/cas.yaml) |
 
 **Chuyên ngành mở rộng, tuỳ chọn (chặng 11) và đám mây**
 
 | Mã khoá | Tên khoá | Số bài | Có video | Giờ | Giáo án |
 |:---:|:---|:---:|:---:|:---:|:---:|
-| `RBM` | Toán cho robot và hệ động lực | 18 | 18 | 3.2 | [`rbm.yaml`](file:///D:/research-video/curriculum/rbm.yaml) |
-| `ESY` | Hệ thống nhúng và thời gian thực | 16 | 16 | 2.5 | [`esy.yaml`](file:///D:/research-video/curriculum/esy.yaml) |
-| `ROB` | Robot tự hành: định vị, lập bản đồ, lập kế hoạch, điều khiển | 14 | 14 | 2.2 | [`rob.yaml`](file:///D:/research-video/curriculum/rob.yaml) |
-| `GFX` | Đồ hoạ máy tính (lĩnh vực GIT của CS2023) | 14 | 14 | 2.2 | [`gfx.yaml`](file:///D:/research-video/curriculum/gfx.yaml) |
-| `BCH` | Blockchain và sổ cái phân tán | 13 | 13 | 1.9 | [`bch.yaml`](file:///D:/research-video/curriculum/bch.yaml) |
-| `CLC` | Điện toán đám mây | 13 | 13 | 1.6 | [`clc.yaml`](file:///D:/research-video/curriculum/clc.yaml) |
+| `RBM` | Toán cho robot và hệ động lực | 18 | 18 | 3.6 | [`rbm.yaml`](file:///D:/research-video/curriculum/rbm.yaml) |
+| `ESY` | Hệ thống nhúng và thời gian thực | 16 | 16 | 2.9 | [`esy.yaml`](file:///D:/research-video/curriculum/esy.yaml) |
+| `ROB` | Robot tự hành: định vị, lập bản đồ, lập kế hoạch, điều khiển | 14 | 14 | 2.6 | [`rob.yaml`](file:///D:/research-video/curriculum/rob.yaml) |
+| `GFX` | Đồ hoạ máy tính (lĩnh vực GIT của CS2023) | 14 | 14 | 2.6 | [`gfx.yaml`](file:///D:/research-video/curriculum/gfx.yaml) |
+| `BCH` | Blockchain và sổ cái phân tán | 13 | 13 | 2.3 | [`bch.yaml`](file:///D:/research-video/curriculum/bch.yaml) |
+| `CLC` | Điện toán đám mây | 13 | 13 | 1.9 | [`clc.yaml`](file:///D:/research-video/curriculum/clc.yaml) |
 <!-- END:LF_TIERS -->
 
 ---
@@ -324,8 +332,8 @@ flowchart TD
 
 | STT | Dòng nội dung trên CV | Bài & Video | Giáo án / Đặc tả | Câu hỏi | Luận cứ kỹ thuật |
 |:---:|:---|:---:|:---|:---:|:---|
-| **1** | **Thấu chi cầm cố sổ tiết kiệm & thấu chi lương** (phong tỏa 2 pha trên T24, hạn mức theo LTV, lãi spread, tự giải tỏa khi tất toán) | `BNK:L10` `ACB:L08` `ACB:L04` `INT:L04` `INT:L08` | [`04_banking_domain_t24_napas.md`](file:///D:/research-video/interview/04_banking_domain_t24_napas.md), [`L08`](file:///D:/research-video/lessons/acb/L08_squad_lending_tich_hop_cic_giai_ngan.yaml), [`L04`](file:///D:/research-video/lessons/acb/L04_san_chuyen_nhuong_hop_dong_tien_gui.yaml) | 82, 83, 85, 89 | Phong tỏa (lien/hold) qua bản tin OFS tới T24; hạn mức = tỉ lệ cấp vốn × giá trị sổ theo chính sách ngân hàng; thứ tự đúng: phong tỏa → ký hợp đồng → cấp hạn mức CASA → khách tự dùng hạn mức; giải tỏa khi tất toán. |
-| **2** | **Vay trên hạn mức thẻ, thẻ ảo, ký số Cloud CA** | `ACB:L08` `ACB:L06` `INT:L04` | `04_…md`, [`L06`](file:///D:/research-video/lessons/acb/L06_sinh_trac_hoc_qd2345_va_bao_mat_ngan_hang.yaml) | 79, 84, 86 | Ký số từ xa theo Luật Giao dịch điện tử 2023 và Nghị định 23/2025/NĐ-CP (thay NĐ 130/2018); dấu thời gian do dịch vụ TSA cấp, không do OTP; xác thực khuôn mặt là biện pháp xác thực người ký theo chính sách ngân hàng; quy định xác thực sinh trắc học của NHNN điều chỉnh giao dịch thanh toán, không điều chỉnh việc ký hợp đồng (QĐ 2345 chưa đọc nguyên văn nên không dẫn làm căn cứ). |
+| **1** | **Thấu chi cầm cố sổ tiết kiệm** (`ACB:L08` tập trung sổ tiết kiệm & CIC; `INT:L08` nêu khái quát thêm thấu chi lương tín chấp theo chính sách ngân hàng) | `BNK:L10` `ACB:L08` `ACB:L04` `INT:L04` `INT:L08` | [`04_banking_domain_t24_napas.md`](file:///D:/research-video/interview/04_banking_domain_t24_napas.md), [`L08`](file:///D:/research-video/lessons/acb/L08_squad_lending_tich_hop_cic_giai_ngan.yaml), [`L04`](file:///D:/research-video/lessons/acb/L04_san_chuyen_nhuong_hop_dong_tien_gui.yaml) | 82, 83, 85, 89 | Phong tỏa (lien/hold) qua bản tin OFS tới T24; hạn mức = tỉ lệ cấp vốn × giá trị sổ theo chính sách ngân hàng; thứ tự đúng: phong tỏa → ký hợp đồng → cấp hạn mức CASA → khách tự dùng hạn mức; giải tỏa khi tất toán. |
+| **2** | **Vay trên hạn mức thẻ, thẻ ảo, ký số Cloud CA** | `ACB:L08` `ACB:L06` `INT:L04` | `04_…md`, [`L06`](file:///D:/research-video/lessons/acb/L06_sinh_trac_hoc_qd2345_va_bao_mat_ngan_hang.yaml) | 79, 84, 86 | Ký số từ xa theo Luật Giao dịch điện tử 2023 và Nghị định 23/2025/NĐ-CP (chưa kiểm nguyên văn, cần đối chiếu văn bản hiện hành; thay NĐ 130/2018); dấu thời gian do dịch vụ TSA cấp, không do OTP; xác thực khuôn mặt là biện pháp xác thực người ký theo chính sách ngân hàng; quy định xác thực sinh trắc học của NHNN điều chỉnh giao dịch thanh toán, không điều chỉnh việc ký hợp đồng (QĐ 2345 chưa đọc nguyên văn nên không dẫn làm căn cứ). |
 | **3** | **Client CIC B2B & phân nhóm nợ** | `ACB:L08` `INT:L08` `BNX:L21` | `04_…md`, `L08` | 81, 82, 89 | Phân nhóm nợ theo **Thông tư 31/2024/TT-NHNN** (thay TT 11/2021 từ 01/07/2024): Nhóm 1 quá hạn dưới 10 ngày; Nhóm 2: 10–90; Nhóm 3: 91–180; Nhóm 4: 181–360; Nhóm 5: trên 360 ngày (đã đối chiếu nguyên văn Điều 10 khoản 1 trên Công báo số 825 + 826 ngày 21-7-2024, đọc 2026-11-11; nhóm 2 nguyên văn là "quá hạn đến 90 ngày", trừ phần dưới 10 ngày đã thuộc nhóm 1). **Theo nguồn thứ cấp, TT 31/2024 đã bị TT 37/2025/TT-NHNN (31/10/2025) sửa đổi một số điều: cần đối chiếu bản hợp nhất trước khi dẫn** (mục `37/2025/TT-NHNN` trong `audit/legal/registry.yaml`, trạng thái CHƯA KIỂM). $DTI = \frac{\text{nghĩa vụ trả nợ hàng tháng}}{\text{thu nhập hàng tháng}}$, định nghĩa thu nhập (gộp hay ròng) và ngưỡng theo chính sách ngân hàng. Kênh kết nối CIC: theo hợp đồng dịch vụ của CIC (mTLS/VPN chưa có nguồn trong `hub-system-graph.md`). |
 | **4** | **Giải ngân lũy đẳng & thu nợ từng phần** | `BNK:L03` `BNK:L06` `BNK:L08` `BNX:L19` `ACB:L08` `INT:L03` `INT:L08` | [`03_distributed_systems_senior.md`](file:///D:/research-video/interview/03_distributed_systems_senior.md), `L08` | 35, 71, 87, 88, 90 | `SET loan:disb:{app_id} <token> NX EX 300` chỉ là lớp chặn sớm; tính đúng cuối cùng do ràng buộc UNIQUE/trạng thái trong DB (khóa Redis không bảo đảm loại trừ tuyệt đối khi GC pause/failover). Timeout = kết quả chưa rõ: không xóa khóa, tra soát trước khi bù trừ SAGA. Trích nợ từng phần không làm âm CASA; phần còn thiếu vẫn tính ngày quá hạn. |
 | **5** | **T24 qua IBM MQ (phối hợp)** | `BNK:L10` `ACB:L01` `INT:L04` | `04_…md`, [`L01`](file:///D:/research-video/lessons/acb/L01_tich_hop_core_t24_ibm_mq.yaml) | 14, 52, 68 | Bản tin OFS là chuỗi phân cách dấu phẩy `APPLICATION,VERSION/FUNCTION/PROCESS,USER/PASSWORD/COMPANY,ID,FIELD:MV:SV=VALUE`; dạng XML chỉ có qua adapter (OCB dùng OFS XML qua adapter của phòng Tích hợp). Request-reply theo `JMSCorrelationID`; phản hồi T24 có chỉ báo 1 / −1 / −2 / −3. Khung adapter Vert.x do phòng Tích hợp xây dựng. |

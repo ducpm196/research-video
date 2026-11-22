@@ -104,6 +104,8 @@ def find(s, me):
             continue  # SEC = Uỷ ban Chứng khoán Mỹ (CAS)
         if c == "ACB" and not re.search(r"[Kk]h(?:oá|óa)\s*(?:học\s*)?$", s[max(0, m.start() - 12):m.start()]):
             continue
+        if c == "WEB" and s[m.end():m.end() + 4] == "-INF":
+            continue  # WEB-INF trong gói .war Java Servlet (BNX L33), không phải mã khoá WEB
         if c in AMBIG and not (re.search(r"(?:[Kk]h(?:oá|óa)\s*(?:học\s*)?|[Bb]ài\s*)$", s[max(0, m.start() - 14):m.start()])
                                or re.match(re.escape(c) + r"\s*L\d\d", s[m.start():m.start() + 10])):
             continue  # CAS = Compare-And-Swap (BNX L09), INT = kiểu số nguyên SQL (BNX L06): thuật ngữ kỹ thuật trùng mã khoá

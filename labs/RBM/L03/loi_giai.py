@@ -1,0 +1,5 @@
+rot90 = lambda x, y: (-y, x)
+tr = lambda x, y: (x + 3, y - 1)
+a = tr(*rot90(2, 1))
+b = rot90(*tr(2, 1))
+print(f"rot_then_tr={a} tr_then_rot={b}")

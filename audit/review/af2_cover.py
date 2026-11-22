@@ -23,23 +23,23 @@ def main():
     if "--require" in sys.argv:
         req = sys.argv[sys.argv.index("--require") + 1:]
     bad = 0
+    cur = pack.load_cur()
     print(f"{'chặng':<6}{'khoá':<26}{'bài':>5}{'af2':>5}{'practice':>9}{'lab':>5}   phủ")
-    for sid, name, _lv, goals, _intro in pack.STAGES:
+    for sid, name, _lv, _intro, items in pack.stages(cur):
         courses = []
-        for g in goals:
-            c = g.split(":")[0]
+        tot = af2 = pr = lab = 0
+        for c, l in items:
             if c not in courses:
                 courses.append(c)
-        tot = af2 = pr = lab = 0
-        for c in courses:
-            for l in lessons_of(c):
-                tot += 1
-                t = (ROOT / l["spec"]).read_text(encoding="utf-8")
-                af2 += bool(re.search(r"^af2:\s*true", t, re.M))
-                has_pr = bool(re.search(r"kind:\s*practice", t))
-                pr += has_pr
-                m = re.search(r"lab:\s*(labs/\S+)", t)
-                lab += bool(m and (ROOT / m.group(1).strip("'\"")).is_dir())
+            if not l.get("spec"):
+                continue
+            tot += 1
+            t = (ROOT / l["spec"]).read_text(encoding="utf-8")
+            af2 += bool(re.search(r"^af2:\s*true", t, re.M))
+            has_pr = bool(re.search(r"kind:\s*practice", t))
+            pr += has_pr
+            m = re.search(r"lab:\s*(labs/\S+)", t)
+            lab += bool(m and (ROOT / m.group(1).strip("'\"")).is_dir())
         pct = 100.0 * min(af2, pr, lab) / tot if tot else 0
         flag = ""
         if sid in req and min(af2, pr, lab) < tot:
