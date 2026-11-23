@@ -319,3 +319,59 @@ Workflow Orchestration & Chịu lỗi: Với nghiệp vụ routing, escalation v
 Polyglot Persistence & Hiệu năng: Việc liệt kê đồng thời RDBMS (MySQL/PostgreSQL), NoSQL (MongoDB), Cache (Redis) và Search (Elasticsearch) đồng nghĩa bạn phải giải thích được khi nào dùng loại nào, cách xử lý cache invalidation, chống cache stampede và tối ưu độ trễ (latency) cũng như thông lượng (throughput).
 
 Tích hợp AI/ML & AI Coding Tools: Đây là điểm mới nổi bật của năm 2026. Ngoài việc biết tích hợp các API inference có độ trễ cao (dùng async queue, timeout, circuit breaker, fallback), bạn nên chuẩn bị ví dụ thực tế về cách dùng Cursor hoặc Claude Code để tăng tốc viết test, refactor code mà vẫn kiểm soát chặt bảo mật và chất lượng kiến trúc.
+___
+https://tuyendung.vingroup.net/jobs?q=ai&location=Th%C3%A0nh+ph%E1%BB%91+H%E1%BB%93+Ch%C3%AD+Minh
+Rà soát tổng hợp JD tech của các job AI chuẩn xác đầy đủ
+
+Trang tìm kiếm động `tuyendung.vingroup.net` hiện chặn truy cập tự động nên không thể đọc trực tiếp danh sách lọc theo thời gian thực tại đường dẫn bạn gửi; tuy nhiên, dữ liệu các tin tuyển dụng đã được lập chỉ mục từ chính cổng `tuyendung.vingroup.net` (giai đoạn cuối năm 2026) cho thấy các vị trí **AI** tại TP.HCM tập trung chủ yếu ở đơn vị **VinSmart Future**, trong khi phần lớn vị trí nghiên cứu lõi (Agentic AI, Speech AI, Voice Assistant) đặt tại Hà Nội.[1][2][3][4]
+
+## Danh mục vị trí AI tại Vingroup
+
+Hệ sinh thái tuyển dụng AI trên `tuyendung.vingroup.net` cuối năm 2026 phân tách rõ theo đơn vị thành viên và địa điểm làm việc.[1][2][3][4]
+
+| Vị trí tuyển dụng | Đơn vị thành viên | Địa điểm | Trạng thái / Ghi chú |
+| --- | --- | --- | --- |
+| Senior ML Engineer | VinSmart Future | TP. Hồ Chí Minh [4] | Nhóm phát triển mô hình AI/Smart City [4] |
+| Senior Project Management (AI Solution) | VinSmart Future | TP. Hồ Chí Minh & Hà Nội [5] | Hạn nộp 30/11/2026 [5] |
+| Senior MLOps & Infrastructure AI / DevOps (MLOps) | VinSmart Future | Hà Nội (phối hợp hệ thống chung) [1][5] | Trọng tâm hạ tầng ML cho SmartCity AI [1] |
+| Agentic AI Expert / Principal Speech AI Researcher | VinDynamics | Hà Nội [2][6] | Hạn nộp 30/11/2026 [6] |
+| Software Test Engineer (AI / Voice Assistant) | VinFast Vietnam | Hà Nội [3] | Hạn nộp 30/11/2026 [3] |
+
+## Chi tiết JD mảng MLOps và Hạ tầng AI
+
+Đây là nhóm JD kỹ thuật được công bố chi tiết nhất từ VinSmart Future, phản ánh chuẩn hạ tầng mà các kỹ sư ML/AI và Backend tại Vingroup phải vận hành.[1]
+
+- **ML Pipeline & Serving:** Thiết kế và vận hành pipeline huấn luyện tự động (automated ML pipelines) cho các mô hình SmartCity AI; xây dựng hạ tầng training, quản lý phiên bản (versioning) và model serving.[1]
+- **Quản trị vòng đời mô hình:** Triển khai hệ thống theo dõi thử nghiệm (experiment tracking), kho lưu trữ mô hình (model registry) và duy trì Feature Store nhằm đảm bảo tính nhất quán dữ liệu giữa training và inference.[1]
+- **Giám sát & Thử nghiệm Production:** Xây dựng hệ thống giám sát hiệu năng mô hình AI, phát hiện trôi dữ liệu (drift detection), tự động huấn luyện lại (retraining automation) và hạ tầng A/B testing cho mô hình trên production.[1]
+- **Hạ tầng Multi-Cloud & Edge:** Triển khai hệ thống trên đa nền tảng (On-premise, AWS, Azure), quản lý dữ liệu thời gian thực qua Kafka, kết hợp hạ tầng IoT và điện toán biên (Edge computing) có tính sẵn sàng cao.[1]
+- **Yêu cầu nền tảng:** Tốt nghiệp CNTT/Khoa học máy tính, thành thạo Linux, AWS hoặc Azure, lập trình tự động hóa bằng Python và Bash, cùng kinh nghiệm thực tế vận hành ML pipeline và model serving.[1]
+
+## Chi tiết JD mảng AI Quality và Governance
+
+Bên cạnh kỹ sư xây dựng mô hình (Senior ML Engineer) và chuyên gia Agentic AI, Vingroup tuyển dụng mạnh nhóm kỹ thuật đảm bảo chất lượng, kiểm thử và quản trị hệ thống AI trên production.[3][4][5]
+
+- **Kiểm thử hội thoại & NLP (VinFast):** Đánh giá độ chính xác NLP, khả năng nhận diện ý định (Intent Recognition), quản lý ngữ cảnh và hội thoại nhiều lượt (Multi-turn Conversation) cho Trợ lý ảo trên xe điện; phát hiện phản hồi sai logic hoặc gây rủi ro an toàn.[3]
+- **Kiểm thử tự động & Tích hợp:** Xây dựng framework test automation cho UI/API (Selenium, Cypress, Playwright, Postman, REST Assured), kiểm tra log hệ thống, luồng backend và dữ liệu JSON trả về; ưu tiên biết Python hoặc C++.[3][4]
+- **AI Governance & Compliance (VinSmart Future):** Xây dựng khung quản trị dữ liệu (data governance) và quản trị AI (AI governance) xuyên suốt vòng đời sản phẩm Smart City, phối hợp chặt với các nhóm Engineering, AI, Data và DevSecOps.[5]
+
+## Điểm giao thoa kỹ thuật cho ứng viên
+
+Nếu bạn có nền tảng Backend Java/Python và muốn ứng tuyển vào các vị trí AI tại TP.HCM của Vingroup (như *Senior ML Engineer* hoặc các nhóm Backend tích hợp AI của VinSmart Future), hồ sơ cần làm nổi bật ba năng lực thực chiến sau:[1][4]
+
+1. **Tích hợp AI vào Production:** Chứng minh khả năng đưa mô hình từ môi trường nghiên cứu lên vận hành thực tế (model serving, latency optimization, Kafka streaming, xử lý lỗi và fallback).[1]
+2. **Nền tảng Python & Cloud/Container:** Python là ngôn ngữ trục chính xuyên suốt từ ML Engineering, MLOps đến Automation Testing, đi kèm Docker, CI/CD và AWS/Azure.[1][3]
+3. **Kinh nghiệm dữ liệu lớn & Hệ thống thời gian thực:** Hiểu cách thiết kế Data Pipeline, Feature Store và xử lý luồng sự kiện (event streaming) cho các bài toán Smart City/IoT.[1]
+
+Nếu trên trang `tuyendung.vingroup.net` hiện hiển thị một tin tuyển dụng AI cụ thể nào khác tại TP.HCM mà bạn muốn rà soát sâu, bạn có thể dán trực tiếp nội dung JD hoặc mã số job (ví dụ `/jobs/...`) để tôi phân tích chi tiết từng yêu cầu.
+
+Citations:
+[1] Việc làm tại Vingroup - Vingroup Career Portal https://tuyendung.vingroup.net/jobs/183
+[2] Việc làm tại Vingroup - Vingroup Career Portal https://tuyendung.vingroup.net/jobs/253
+[3] Mô tả công việc - Việc làm tại Vingroup - Vingroup Career Portal https://tuyendung.vingroup.net/jobs/403
+[4] Việc làm tại Vingroup - Vingroup Career Portal https://tuyendung.vingroup.net/jobs/125
+[5] Việc làm tại Vingroup - Vingroup Career Portal https://tuyendung.vingroup.net/jobs/106
+[6] Việc làm tại Vingroup - Vingroup Career Portal https://tuyendung.vingroup.net/jobs?companyCode=V033
+[7] Việc làm tại Vingroup - Vingroup Career Portal https://tuyendung.vingroup.net/jobs
+[8] Mô tả công việc - Việc làm tại Vingroup - Vingroup Career Portal https://tuyendung.vingroup.net/jobs/88
+[9] Vinhomes https://tuyendung.vingroup.net/jobs?companyCode=45002926
