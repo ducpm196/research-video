@@ -1,11 +1,6 @@
-# Lab WEB L00 — Node.js thật: tính TTFB (thời gian trước byte đầu tiên) qua TCP + TLS + HTTP với RTT
+# Lab WEB L00 — Node.js: tính TTFB qua TCP + TLS + HTTP với RTT
 
-Viết tập lệnh Node.js (`*.js`) tính thời gian trước byte đầu tiên TTFB qua 3 chặng (TCP, TLS, HTTP GET) ở `RTT = 50 ms` so với người dùng ở xa `RTT = 200 ms` cộng `4` lượt gọi API tuần tự, in đúng 3 dòng:
-1. `ttfb_50ms=150`
-2. `remote_200ms_4api=1400`
-3. `roundtrips_handshake=3`
+Đọc `stdin` `rtt_near=<n> rtt_far=<n> apis=<n>`. Tính TTFB (3 vòng RTT cho TCP, TLS, HTTP GET) tại `rtt_near`, tổng thời gian của `rtt_far` cộng `apis` lượt gọi API tuần tự, và số chặng bắt tay.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh WEB L00 duong_dan/bai_cua_ban.js
-```
+In đúng 3 dòng: `ttfb_50ms=<d>`, `remote_200ms_4api=<d>`, `roundtrips_handshake=3`.
+Chấm tự động: `bash labs/cham.sh WEB L00 duong_dan/bai_cua_ban.js`

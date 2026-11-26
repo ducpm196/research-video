@@ -1,5 +1,5 @@
-import math
-p_raw = 2.0 / (200.0 + 2.0)
-p_pow = (2.0 ** 0.75) / (200.0 ** 0.75 + 2.0 ** 0.75)
-corr = -math.log(0.01)
-print(f"raw_B={p_raw:.3f} pow075_B={p_pow:.3f} logq_corr={corr:.3f}")
+import math, sys
+kv = dict(t.split('=') for t in sys.stdin.read().split())
+a, b, q = float(kv['a']), float(kv['b']), float(kv['q'])
+pr = b / (a + b); pp = (b ** 0.75) / (a ** 0.75 + b ** 0.75); cr = -math.log(q)
+print(f'raw_B={pr:.3f} pow075_B={pp:.3f} logq_corr={cr:.3f}')

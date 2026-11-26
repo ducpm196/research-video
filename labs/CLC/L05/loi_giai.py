@@ -1,6 +1,4 @@
-be = round(840 / 0.15)
-pct = 100.0 * be / 8760
-saved = round(8760 * 0.15 - 840)
-print(f'breakeven_hours={be}')
-print(f'breakeven_pct_year={pct:.1f}%')
-print(f'full_year_saved_usd={saved}')
+import sys
+kv = {k: float(v) for k, v in (t.split('=') for t in sys.stdin.read().split())}
+be = round(kv['reserved'] / kv['hourly']); pct = 100.0 * be / 8760; sv = round(8760 * kv['hourly'] - kv['reserved'])
+print(f'breakeven_hours={be}\nbreakeven_pct_year={pct:.1f}%\nfull_year_saved_usd={sv}')

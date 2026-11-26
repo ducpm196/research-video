@@ -1,6 +1,4 @@
-# Lab CVI L03 — Mô hình camera lỗ kim và hiệu chuẩn
+# Lab CVI L03 — Chiếu điểm 3D lên camera lỗ kim
 
-Với tiêu cự `f = 600` điểm ảnh, tâm ảnh `(cx=400, cy=300)` và điểm 3D `(X=0.6, Y=0.3, Z=3.0)` m, tính toạ độ điểm ảnh `(u, v)`.
-
-Định dạng đầu ra (1 dòng):
-`pixel_u=<số nguyên> pixel_v=<số nguyên>`
+Đọc `f cx cy X Y Z` từ stdin (ví dụ `600.0 400.0 300.0 0.6 0.3 3.0`). Tính `(u, v)`.
+In đúng 1 dòng `pixel_u=<int> pixel_v=<int>`.

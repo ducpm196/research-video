@@ -1,0 +1,2 @@
+- [x] co SLA 99.9%
+- [x] neu rui ro mat du lieu

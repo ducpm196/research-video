@@ -1,11 +1,6 @@
-# Lab CAS L00 — Phòng thủ nhiều lớp: 4 lớp độc lập × 15% lọt so với lỗi cùng giả định
+# Lab CAS L00 — Phòng thủ nhiều lớp độc lập vs cùng giả định
 
-So sánh xác suất lỗi lọt qua cả 4 lớp phòng vệ độc lập (mỗi lớp lọt `15%`) với xác suất khi cả 4 lớp phụ thuộc vào cùng một giả định sai (`15%`).
+Đọc `stdin` `p=<float> layers=<int>`. Tính xác suất lỗi lọt qua tất cả `layers` lớp độc lập và xác suất lọt khi dùng chung một giả định sai.
 
-Định dạng đầu ra (1 dòng):
-`indep_pct=<2 chữ số>% shared_pct=<1 chữ số>%`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh CAS L00 duong_dan/bai_cua_ban.py
-```
+In đúng 1 dòng: `indep_pct=<.2f>% shared_pct=<.1f>%`.
+Chấm tự động: `bash labs/cham.sh CAS L00 duong_dan/bai_cua_ban.py`

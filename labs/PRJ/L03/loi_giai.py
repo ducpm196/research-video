@@ -1,17 +1,47 @@
-bank = {'t1', 't2', 't3', 't4'}
-napas = {'t1', 't2', 't3', 't5'}
-partner = {'t1', 't2', 't3'}
-uni = bank | napas | partner
-matched = bank & napas & partner
-diff = sorted(uni - matched)
-q = []
-for tx in diff:
-    if tx in bank and tx not in partner:
-        q.append(f'{tx}:miss_partner')
-    elif tx in napas and tx not in bank:
-        q.append(f'{tx}:extra_napas')
+import sys
+
+sources = {"BANK": {}, "NAPAS": {}, "PARTNER": {}}
+for raw in sys.stdin.read().splitlines():
+    ln = raw.strip()
+    if not ln:
+        continue
+    src, tx_id, amt_s, status = ln.split()
+    if src in sources:
+        sources[src][tx_id] = (int(amt_s), status)
+
+all_ids = sorted(set(sources["BANK"]) | set(sources["NAPAS"]) | set(sources["PARTNER"]))
+matched = 0
+state_mismatch = 0
+one_side = 0
+queue = []
+
+for tx in all_ids:
+    b = sources["BANK"].get(tx)
+    n = sources["NAPAS"].get(tx)
+    p = sources["PARTNER"].get(tx)
+    if b is not None and n is not None and p is not None:
+        if b == n == p and b[1] == "OK":
+            matched += 1
+        else:
+            state_mismatch += 1
+            queue.append(f"{tx}:mismatch_state")
     else:
-        q.append(f'{tx}:other')
-print(f'matched={len(matched)} match_pct={100*len(matched)/len(uni):.1f}%')
-print(f'discrepancies={len(diff)}')
-print('queue=' + ','.join(q))
+        one_side += 1
+        if b is not None and n is not None and p is None:
+            queue.append(f"{tx}:miss_partner")
+        elif n is not None and b is None and p is None:
+            queue.append(f"{tx}:extra_napas")
+        elif n is not None and p is not None and b is None:
+            queue.append(f"{tx}:miss_bank")
+        elif b is not None and p is not None and n is None:
+            queue.append(f"{tx}:miss_napas")
+        else:
+            queue.append(f"{tx}:one_side")
+
+tot = len(all_ids)
+disc = state_mismatch + one_side
+pct = (100.0 * matched / tot) if tot else 0.0
+
+print(f"matched={matched} match_pct={pct:.1f}%")
+print(f"discrepancies={disc} state_mismatch={state_mismatch} one_side={one_side}")
+print("queue=" + (",".join(queue) if queue else "none"))

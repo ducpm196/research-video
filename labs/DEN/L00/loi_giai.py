@@ -1,6 +1,5 @@
-rows, cols, used, width = 50_000_000, 40, 4, 8
-row_gb = rows * cols * width / 1e9
-col_gb = rows * used * width / 1e9
-print(f'row_scan_gb={row_gb:.1f}')
-print(f'col_scan_gb={col_gb:.1f}')
-print(f'io_saved_pct={100 * (row_gb - col_gb) / row_gb:.1f}%')
+import sys
+kv = {k: int(v) for k, v in (t.split('=') for t in sys.stdin.read().split())}
+rgb = kv['rows'] * kv['cols'] * kv['width'] / 1e9
+cgb = kv['rows'] * kv['used'] * kv['width'] / 1e9
+print(f'row_scan_gb={rgb:.1f}\ncol_scan_gb={cgb:.1f}\nio_saved_pct={100 * (rgb - cgb) / rgb:.1f}%')

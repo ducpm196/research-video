@@ -1,11 +1,6 @@
-# Lab CSA L09 (Mô phỏng Pipeline k tầng) — Chu kỳ lý tưởng và độ trễ xung đột
+# Lab CSA L09 — Chu kỳ đường ống Pipeline k tầng và độ trễ xung đột
 
-Viết chương trình Python tính số chu kỳ hoàn thành `N = 100` lệnh trên đường ống `k = 5` tầng (`k + N - 1`), so với thực thi không đường ống (`k * N`) và khi gặp 12 lần dừng 1 chu kỳ (stall), in đúng 3 dòng:
-1. `cycles_no_pipe=500`
-2. `cycles_pipe_ideal=104 speedup=4.81`
-3. `cycles_with_12_stalls=116`
+Đọc `stdin` `k=<int> n=<int> stalls=<int>`. Tính chu kỳ không đường ống `k*n`, đường ống lý tưởng `k+n-1`, speedup và khi thêm `stalls` chu kỳ dừng.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh CSA L09 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `cycles_no_pipe=<int>`, `cycles_pipe_ideal=<int> speedup=<.2f>`, `cycles_with_12_stalls=<int>`.
+Chấm tự động: `bash labs/cham.sh CSA L09 duong_dan/bai_cua_ban.py`

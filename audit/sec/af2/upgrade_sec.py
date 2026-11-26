@@ -4,6 +4,7 @@ Chạy thật PBKDF2/hashlib, HMAC-SHA256 RFC 2104, escaping chống XSS, truy v
 SQLite chống SQLi, RSA đồ chơi ký chứng chỉ, phân tích entropy Diceware, Bayes PPV,
 và Heartbleed.
 """
+import sys as _sys; from pathlib import Path as _P; _sys.path.insert(0, str(_P(__file__).resolve().parents[2])); import _frozen  # noqa: E402,F401
 import subprocess
 import sys
 from pathlib import Path

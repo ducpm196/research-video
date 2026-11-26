@@ -295,6 +295,16 @@ rec("L17b", yrs == 3 and n_s == 100_000 and round(par_hours, 1) == 27.8 and thro
 rec("L17c", months == 32 and versions == 64 and 50_000 == len(range(0, 5_000_000, 100)),
     "64 phiên bản dòng, 2 lần mỗi tháng → 32 tháng; 5 triệu dòng / 100 dòng mỗi trang = 50 000 trang")
 
+# ── Kiểm tự động mọi lab (du_lieu.txt + ca_an/) qua cham.sh ──
+import subprocess as _subp
+from pathlib import Path as _LabPath
+_BASH = r"C:\Program Files\Git\bin\bash.exe"
+if not _LabPath(_BASH).exists():
+    _BASH = "bash"
+for _ld in sorted((ROOT / "labs" / "DBS").glob("L*")):
+    _rp = _subp.run([_BASH, str(ROOT / "labs" / "cham.sh"), "DBS", _ld.name], cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
+    rec(f"{_ld.name}:lab", _rp.returncode == 0 and "PASS" in _rp.stdout and "2 ca an" in _rp.stdout, f"cham.sh {_ld.name} (public + 2 ca_an)")
+
 n_ok = sum(ok for _, ok in R)
 print(f"\n{n_ok}/{len(R)} PASS")
 sys.exit(0 if n_ok == len(R) else 1)

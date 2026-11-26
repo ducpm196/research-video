@@ -1,9 +1,4 @@
-# Lab BCH L08 — Tính phí giao dịch hợp đồng từ số lượng gas và giá mỗi gas
+# Lab BCH L08 — Tính phí gas giao dịch hợp đồng
 
-Một lời gọi hợp đồng tiêu thụ `75_000` đơn vị gas với mức giá `40 gwei` (`1 gwei = 10^-9 ETH`). Tính tổng phí tính theo `ETH`.
-In đúng 1 dòng `fee_eth=...` (5 chữ số thập phân).
-
-Chấm tự động:
-```bash
-bash labs/cham.sh BCH L08 duong_dan/bai_cua_ban.py
-```
+Đọc `gas gwei` nguyên từ stdin (ví dụ `75000 40`). Tính `gas * gwei * 1e-9` theo ETH bằng số thực Python (float) và định dạng `:.5f`.
+In đúng 1 dòng `fee_eth=<5 chữ số>`.

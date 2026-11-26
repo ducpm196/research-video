@@ -1,4 +1,4 @@
-layers = ['FROM py', 'COPY req.txt', 'RUN pip install', 'COPY src']
-hits = lambda ch: layers.index(ch)
-print(f'hits_src_change={hits("COPY src")}')
-print(f'hits_req_change={hits("COPY req.txt")}')
+import sys
+kv = dict(t.split('=') for t in sys.stdin.read().split())
+layers = kv['layers'].split(',')
+print(f'hits_src_change={layers.index(kv["ch1"])}\nhits_req_change={layers.index(kv["ch2"])}')

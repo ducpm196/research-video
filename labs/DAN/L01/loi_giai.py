@@ -1,4 +1,4 @@
-nA, mA, nB, mB = 80, 40.0, 20, 190.0
-naive = (mA + mB) / 2.0
-weighted = (nA * mA + nB * mB) / (nA + nB)
-print(f"naive={naive:.2f} weighted={weighted:.2f}")
+import sys
+kv = {k: float(v) for k, v in (t.split('=') for t in sys.stdin.read().split())}
+nv = (kv['ma'] + kv['mb']) / 2.0; wt = (kv['na'] * kv['ma'] + kv['nb'] * kv['mb']) / (kv['na'] + kv['nb'])
+print(f'naive={nv:.2f} weighted={wt:.2f}')

@@ -1,11 +1,8 @@
-# Lab DAN L00 — Định nghĩa chỉ số chặt: người dùng hoạt động theo đăng nhập và thao tác
+# Lab DAN L00 — Định nghĩa chỉ số chặt: đăng nhập và thao tác
 
-Từ nhật ký 8 người dùng `(login, actions)` là `[(1,3), (1,0), (1,2), (1,0), (1,0), (1,5), (1,1), (1,0)]`, đếm số người dùng hoạt động (`active user`) theo hai định nghĩa: `login > 0` và `actions > 0`.
+Đọc `stdin` `logs=<l1:a1,l2:a2,...>`. Đếm số người dùng hoạt động theo chuẩn nới lỏng (`login > 0`) và chuẩn chặt (`actions > 0`).
 
-Định dạng đầu ra:
-`active_login=<số> active_action=<số>`
+In 1 dòng: `active_login=<d> active_action=<d>`.
+Chấm tự động: `bash labs/cham.sh DAN L00 duong_dan/bai_cua_ban.py`
 
-Chấm tự động:
-```bash
-bash labs/cham.sh DAN L00 duong_dan/bai_cua_ban.py
-```
+> Gợi ý đọc `stdin`: `pairs = [tuple(map(int, p.split(":"))) for p in input().split("=", 1)[1].split(",")]`.

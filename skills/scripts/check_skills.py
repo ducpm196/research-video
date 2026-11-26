@@ -9,6 +9,11 @@ Usage:  python3 check_skills.py SKILLS_DIR [--root-skill NAME] [--expect-root-di
   --root-skill NAME     the registry owner (default: evidence-gated-work)
   --expect-root-digest  16 or 64 hex digits: compare with dir-digest-v1 of the root skill
                         (the sync check of an instruction text that mirrors the root)
+  --profile NAME        front-matter keys accepted by C1: portable (default; the six keys of the Agent Skills
+                        specification and claude.ai) or claude-code (those plus the keys of the Claude Code skill
+                        reference, for skills that only a Claude Code plugin ships)
+  --json                print one JSON object instead of the text lines (schema_version 1: checks with id, skill,
+                        result, detail, fix)
   --platform-skill      a platform-provided skill installed in SKILLS_DIR (repeatable,
                         or comma-separated). EGW section 10 makes the ecosystem rules N/A
                         for it: C6, C7, C9, C10, C11, C12 and C14 print N/A with a reason;
@@ -22,9 +27,11 @@ section 2). NOT_VERIFIED means the script cannot decide and a person must.
 The last line is checked_at=<UTC ISO-8601>, the time of the run, for records.
 Exit codes: 0 every check PASS or N/A | 1 at least one FAIL | 4 no FAIL, some NOT_VERIFIED | 3 usage |
 5 internal error: the run stopped, so no result was produced (never read it as FAIL).
-Checks C1-C19 are listed in CHECKS below. A Windows junction (mount point) inside a skill is
+Checks C1-C24 are listed in CHECKS below. A Windows junction (mount point) inside a skill is
 never walked: C15 reports it as a FAIL.
 """
+import ast
+import json
 import os
 import re
 import sys
@@ -46,6 +53,53 @@ LABEL_RE = re.compile(r"(?<![A-Z_])(%s)(?![A-Z_])|(?<![A-Za-z])N/A(?![A-Za-z])" 
 KEBAB = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)+$")  # hyphenated: read as a skill name
 WORD = re.compile(r"^[a-z0-9]{1,64}$")  # single word: a skill only if installed, else ambiguous
 ALLOWED_KEYS = ("name", "description", "license", "compatibility", "metadata", "allowed-tools")
+CLAUDE_CODE_KEYS = ALLOWED_KEYS + ("when_to_use", "argument-hint", "arguments", "disable-model-invocation", "user-invocable",
+                                   "disallowed-tools", "model", "effort", "context", "agent", "background", "paths", "shell")
+PROFILES = {"portable": ALLOWED_KEYS, "claude-code": CLAUDE_CODE_KEYS}
+CHECKER_SCRIPTS = ("check_skills.py", "check_state.py", "check_mirror.py", "dir_digest.py")  # read-only by rule
+WRITER_SCRIPTS = ("egw_record.py", "egw_state.py")  # write below the state/ of a named workspace, documented in SKILL.md
+NET_MODULES = {"socket", "urllib", "http", "ftplib", "smtplib", "poplib", "imaplib", "telnetlib", "ssl", "requests", "httpx",
+               "xmlrpc", "socketserver", "webbrowser", "asyncio", "aiohttp", "paramiko", "pexpect"}
+ALLOWED_IMPORTS = {"__future__", "argparse", "ast", "base64", "calendar", "collections", "datetime", "difflib", "errno", "fnmatch",
+                   "functools", "glob", "hashlib", "io", "itertools", "json", "os", "pathlib", "platform", "re", "shlex", "shutil", "stat",
+                   "subprocess", "sys", "tempfile", "textwrap", "time", "typing", "unicodedata", "zipfile"}
+WRITE_OS_CALLS = {"remove", "unlink", "rmdir", "rename", "replace", "makedirs", "mkdir", "removedirs", "system", "popen", "chmod",
+                  "symlink", "link", "truncate"}
+WRITE_ATTR_CALLS = {"write_text", "write_bytes", "unlink", "rmdir", "mkdir", "touch"}
+JUNK_NAMES = {".ds_store", "thumbs.db", "desktop.ini"}
+JUNK_SUFFIXES = (".swp", ".swo", ".bak", ".orig", ".tmp", "~")
+JUNK_DIRS = {".git", ".svn", ".hg", "node_modules", ".idea", ".vscode"}
+HIDDEN_CHARS = (set(range(0x200B, 0x2010)) | set(range(0x202A, 0x202F)) | set(range(0x2060, 0x2065)) | set(range(0x2066, 0x206A))
+                | {0xFEFF} | set(range(0xE0000, 0xE0080)))
+MAX_FILE_BYTES, MAX_TOTAL_BYTES = 1000000, 5000000
+USE_CLAUSE = re.compile(r"(?i)\b(use (this )?(when|for|whenever|if)|when (the )?(user|person)|trigger)")
+PERSON_VOICE = re.compile(r"(?i)^(i|we|you)\b|\b(i can|i will|i help|you can|you should|your)\b")
+FIX = {
+    "C1": "keep only the front-matter keys of the chosen profile, one line each; metadata is one indented map of strings",
+    "C2": "name the folder and the name key the same: lowercase letters, digits, single hyphens, at most 64, without claude or anthropic",
+    "C3": "write a description of 1 to 1024 characters without XML tags",
+    "C4": "move text into references/ until SKILL.md has at most 500 lines",
+    "C5": "save the file as Unicode NFC",
+    "C6": "write the eight Dependency contract bullets in the required order",
+    "C7": "install the skill named under Required capabilities or remove the name",
+    "C8": "remove the dependency cycle",
+    "C9": "make EGW the only root and list it under Required capabilities of every other skill",
+    "C10": "cite EGW section 2 in a file that names a domain label",
+    "C11": "use the key validity, never a bare status",
+    "C12": "do not point from one references/ file to another",
+    "C13": "create the file that SKILL.md or a reference names, or remove the mention",
+    "C14": "point only to numbered headings that exist",
+    "C15": "delete __pycache__, .pyc files and junctions from the skill folder",
+    "C16": "rebuild the package (in the EGW source repository: tools/build_dist.py) and use the new digest",
+    "C17": "remove the byte 0x00 from the file",
+    "C18": "keep exactly one SKILL.md and no subfolder under references/",
+    "C19": "move text into references/ until SKILL.md has at most 14100 characters",
+    "C20": "delete the junk file or folder from the skill folder",
+    "C21": "remove network imports, dynamic code and file writes from the script, or review the script with references/skill-ops.md section A",
+    "C22": "remove the hidden character; state a comment as visible text or move it into assets/templates/",
+    "C23": "shrink or remove the large file",
+    "C24": "write the description in the third person with a clause that starts with Use when or Use for",
+}
 MOUNT_POINT_TAG = 0xA0000003  # IO_REPARSE_TAG_MOUNT_POINT: a Windows junction
 CHECKS = {
     "C1": "front matter: name and description in single-line form; only the keys name, description, license, compatibility, metadata (one indented map), allowed-tools",
@@ -66,9 +120,14 @@ CHECKS = {
     "C16": "root digest equals the expected digest (only with --expect-root-digest)",
     "C17": "no file in the skill contains the byte 0x00 (dir-digest-v1 could collide)",
     "C18": "exactly one SKILL.md; references/ holds files only, no subfolder",
-    "C19": "SKILL.md at most 20000 characters (N/A for a platform-provided skill)",
+    "C19": "SKILL.md at most 14100 characters, about 5,000 tokens (N/A for a platform-provided skill)",
+    "C20": "no junk file (.DS_Store, Thumbs.db, desktop.ini, editor swap or backup file) and no version-control folder inside the skill",
+    "C21": "scripts: no network import, no eval, exec or __import__; the four checkers do not write; every script is a known or reviewed Python file",
+    "C22": "no zero-width, bidirectional-control, tag or byte-order character in a text file; an HTML comment outside assets/templates/ is NOT_VERIFIED",
+    "C23": "no file over 1 MB and at most 5 MB in total (NOT_VERIFIED above)",
+    "C24": "description has a use clause and is not written in the first or second person (NOT_VERIFIED otherwise)",
 }
-MAX_SKILL_CHARS = 20000
+MAX_SKILL_CHARS = 14100  # 5,000 tokens at the 2.82 characters per token measured for this skill (EGW-REQ-010)
 
 
 def read(path):
@@ -82,7 +141,7 @@ def unquote(val):
     return val
 
 
-def parse_front_matter(text):
+def parse_front_matter(text, allowed=ALLOWED_KEYS):
     """Return (front matter dict, problem, errors). A problem means a form the parser cannot read (NOT_VERIFIED);
     errors are definite violations of the Agent Skills front-matter rules (FAIL)."""
     m = re.match(r"---\n(.*?)\n---\n", text, re.S)
@@ -115,9 +174,9 @@ def parse_front_matter(text):
         fm[key] = unquote(val)
     if "metadata" in fm and not isinstance(fm["metadata"], dict):
         errors.append("metadata must be a map of strings")
-    unknown = sorted(k for k in fm if k not in ALLOWED_KEYS)
+    unknown = sorted(k for k in fm if k not in allowed)
     if unknown:
-        errors.append("unknown key(s) %s; allowed: %s" % (unknown, ", ".join(ALLOWED_KEYS)))
+        errors.append("unknown key(s) %s; allowed: %s" % (unknown, ", ".join(allowed)))
     comp = fm.get("compatibility")
     if isinstance(comp, str) and not 1 <= len(comp) <= 500:
         errors.append("compatibility length %d (1 to 500)" % len(comp))
@@ -189,7 +248,125 @@ def find_cycle(graph):
     return None
 
 
-def run(skills_dir, root_skill, expect_digest, platform=frozenset()):
+def scan_script(path, name, siblings):
+    """Static review of one Python script: return (fails, notes); notes make the result NOT_VERIFIED."""
+    try:
+        with open(path, "rb") as fh:
+            tree = ast.parse(fh.read())
+    except (SyntaxError, ValueError) as err:
+        return ["%s: cannot be parsed (%s)" % (name, type(err).__name__)], []
+    fails, notes = [], []
+    read_only = name in CHECKER_SCRIPTS
+    if name not in CHECKER_SCRIPTS and name not in WRITER_SCRIPTS:
+        notes.append("%s: script not reviewed by this checker (references/skill-ops.md section A)" % name)
+    for node in ast.walk(tree):
+        roots = []
+        if isinstance(node, ast.Import):
+            roots = [a.name.split(".")[0] for a in node.names]
+        elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
+            roots = [node.module.split(".")[0]]
+        for r in roots:
+            if r in NET_MODULES:
+                fails.append("%s: imports the network module %s" % (name, r))
+            elif r not in ALLOWED_IMPORTS and r not in siblings:
+                notes.append("%s: imports %s, which is outside the standard-library list of this check" % (name, r))
+        if isinstance(node, ast.Call):
+            f = node.func
+            if isinstance(f, ast.Name) and f.id in ("eval", "exec", "__import__"):
+                fails.append("%s: calls %s" % (name, f.id))
+            if read_only and isinstance(f, ast.Name) and f.id == "open":
+                mode = None
+                if len(node.args) > 1:
+                    mode = node.args[1]
+                for kw in node.keywords:
+                    if kw.arg == "mode":
+                        mode = kw.value
+                if mode is not None:
+                    if isinstance(mode, ast.Constant) and isinstance(mode.value, str):
+                        if any(ch in mode.value for ch in "wax+"):
+                            fails.append("%s: opens a file for writing (%s) but the checkers are read-only" % (name, mode.value))
+                    else:
+                        fails.append("%s: opens a file with a mode that is not a constant" % name)
+            if read_only and isinstance(f, ast.Attribute):
+                if isinstance(f.value, ast.Name) and f.value.id == "os" and f.attr in WRITE_OS_CALLS:
+                    fails.append("%s: calls os.%s but the checkers are read-only" % (name, f.attr))
+                elif isinstance(f.value, ast.Name) and f.value.id == "shutil":
+                    fails.append("%s: calls shutil.%s but the checkers are read-only" % (name, f.attr))
+                elif f.attr in WRITE_ATTR_CALLS:
+                    fails.append("%s: calls .%s but the checkers are read-only" % (name, f.attr))
+    return fails, notes
+
+
+def extra_checks(skill_root, platform_skill, desc):
+    """C20 to C24 for one skill folder: a list of (check id, result, detail)."""
+    out = []
+    junk, hidden, comments, big, total = [], [], [], [], 0
+    scripts, fails, notes = [], [], []
+    for dirpath, dirs, files in os.walk(skill_root):
+        here = os.path.relpath(dirpath, skill_root).replace(os.sep, "/")
+        for d in list(dirs):
+            if d in JUNK_DIRS:
+                junk.append((here + "/" + d).lstrip("./"))
+        dirs[:] = [d for d in dirs if d not in JUNK_DIRS and d != "__pycache__"]
+        for f in files:
+            full = os.path.join(dirpath, f)
+            rel = os.path.relpath(full, skill_root).replace(os.sep, "/")
+            if f.lower() in JUNK_NAMES or f.endswith(JUNK_SUFFIXES):
+                junk.append(rel)
+            try:
+                size = os.path.getsize(full)
+                with open(full, "rb") as fh:
+                    raw = fh.read()
+            except OSError:
+                continue
+            total += size
+            if size > MAX_FILE_BYTES:
+                big.append("%s (%d bytes)" % (rel, size))
+            try:
+                body = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                body = None
+            if body is not None:
+                bad = sorted({"U+%04X" % ord(ch) for ch in body if ord(ch) in HIDDEN_CHARS})
+                if bad:
+                    hidden.append("%s (%s)" % (rel, ", ".join(bad[:3])))
+                if rel.endswith((".md", ".txt")) and "<!--" in body and not rel.startswith("assets/templates/"):
+                    comments.append(rel)
+            if rel.startswith("scripts/"):
+                scripts.append((rel, full, f))
+    out.append(("C20", "FAIL" if junk else "PASS", ", ".join(junk[:4])))
+    siblings = {os.path.splitext(f)[0] for _r, _p, f in scripts if f.endswith(".py")}
+    if platform_skill:
+        out.append(("C21", "N/A", "platform-provided skill (EGW section 10)"))
+    else:
+        for rel, full, f in scripts:
+            if f.endswith(".py"):
+                a, b = scan_script(full, f, siblings)
+                fails += a
+                notes += b
+            else:
+                notes.append("%s: not a Python file (review it with references/skill-ops.md section A)" % rel)
+        out.append(("C21", "FAIL" if fails else ("NOT_VERIFIED" if notes else "PASS"), "; ".join((fails + notes)[:4]) if (fails or notes) else "%d scripts" % len(scripts)))
+    if hidden:
+        out.append(("C22", "FAIL", "hidden characters: " + ", ".join(hidden[:3])))
+    elif comments:
+        out.append(("C22", "NOT_VERIFIED", "HTML comment in " + ", ".join(comments[:3])))
+    else:
+        out.append(("C22", "PASS", ""))
+    sizes = big + (["%d bytes in total" % total] if total > MAX_TOTAL_BYTES else [])
+    out.append(("C23", "NOT_VERIFIED" if sizes else "PASS", ", ".join(sizes[:3])))
+    if platform_skill:
+        out.append(("C24", "N/A", "platform-provided skill (EGW section 10)"))
+    elif not USE_CLAUSE.search(desc or ""):
+        out.append(("C24", "NOT_VERIFIED", "no clause that starts with Use when or Use for"))
+    elif PERSON_VOICE.search(desc):
+        out.append(("C24", "NOT_VERIFIED", "written in the first or second person"))
+    else:
+        out.append(("C24", "PASS", ""))
+    return out
+
+
+def run(skills_dir, root_skill, expect_digest, platform=frozenset(), profile="portable"):
     results = []  # (check_id, skill, result, detail)
     PLATFORM_NA = "platform-provided skill (EGW section 10)"
 
@@ -206,7 +383,7 @@ def run(skills_dir, root_skill, expect_digest, platform=frozenset()):
 
     for s in names:
         t = texts[s]
-        fm, problem, fm_errors = parse_front_matter(t)
+        fm, problem, fm_errors = parse_front_matter(t, PROFILES[profile])
         if fm is None or "name" not in fm or "description" not in fm:
             add("C1", s, "FAIL", problem or "name or description missing")
         elif fm_errors:
@@ -283,6 +460,8 @@ def run(skills_dir, root_skill, expect_digest, platform=frozenset()):
         if deep:
             found.append("subfolder of references: " + ", ".join(sorted(set(deep))[:3]))
         add("C18", s, "FAIL" if found else "PASS", "; ".join(found))
+        for cid, res, detail in extra_checks(skill_root, s in platform, desc):
+            add(cid, s, res, detail)
 
         bullets = contract_bullets(t)
         keys = [k for k, _ in bullets] if bullets else None
@@ -407,12 +586,16 @@ def run(skills_dir, root_skill, expect_digest, platform=frozenset()):
 
 
 def main(argv):
-    args, root, expect, platform, i = [], None, None, set(), 1
+    args, root, expect, platform, i, profile, as_json = [], None, None, set(), 1, "portable", False
     while i < len(argv):
         if argv[i] == "--root-skill" and i + 1 < len(argv):
             root, i = argv[i + 1], i + 2
         elif argv[i] == "--expect-root-digest" and i + 1 < len(argv):
             expect, i = argv[i + 1], i + 2
+        elif argv[i] == "--profile" and i + 1 < len(argv) and argv[i + 1] in PROFILES:
+            profile, i = argv[i + 1], i + 2
+        elif argv[i] == "--json":
+            as_json, i = True, i + 1
         elif argv[i] == "--platform-skill" and i + 1 < len(argv):
             platform.update(x.strip() for x in argv[i + 1].split(",") if x.strip())
             i += 2
@@ -443,17 +626,26 @@ def main(argv):
         sys.stderr.write("--platform-skill names skills not installed in %s: %s\n" % (args[0], unknown))
         return 3
     try:
-        names, results = run(args[0], root, expect, frozenset(platform))
+        names, results = run(args[0], root, expect, frozenset(platform), profile)
     except Exception as err:  # exit 1 means FAIL; a crash is no result at all
         sys.stderr.write("INTERNAL ERROR, no result: %s: %s\n" % (type(err).__name__, err))
         return 5
-    for cid, skill, res, detail in sorted(results, key=lambda r: (int(r[0][1:]), r[1])):
-        print("%-4s %-34s %-12s %s" % (cid, skill, res, detail))
     counts = {k: sum(1 for r in results if r[2] == k) for k in ("PASS", "FAIL", "NOT_VERIFIED", "N/A")}
+    code = 1 if counts["FAIL"] else (4 if counts["NOT_VERIFIED"] else 0)
+    at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    ordered = sorted(results, key=lambda r: (int(r[0][1:]), r[1]))
+    if as_json:
+        print(json.dumps({"schema_version": 1, "tool": "check_skills", "skills": len(names), "profile": profile,
+                          "checks": [{"id": c, "skill": s, "result": r, "detail": d, "fix": FIX.get(c, "") if r in ("FAIL", "NOT_VERIFIED") else ""} for c, s, r, d in ordered],
+                          "summary": {"checks": len(results), "PASS": counts["PASS"], "FAIL": counts["FAIL"], "NOT_VERIFIED": counts["NOT_VERIFIED"], "N/A": counts["N/A"]},
+                          "exit_code": code, "checked_at": at}, indent=1, sort_keys=True))
+        return code
+    for cid, skill, res, detail in ordered:
+        print("%-4s %-34s %-12s %s" % (cid, skill, res, detail))
     print("skills=%d checks=%d PASS=%d FAIL=%d NOT_VERIFIED=%d N/A=%d" % (
         len(names), len(results), counts["PASS"], counts["FAIL"], counts["NOT_VERIFIED"], counts["N/A"]))
-    print("checked_at=%s" % datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
-    return 1 if counts["FAIL"] else (4 if counts["NOT_VERIFIED"] else 0)
+    print("checked_at=%s" % at)
+    return code
 
 
 if __name__ == "__main__":

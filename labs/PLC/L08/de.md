@@ -1,11 +1,7 @@
-# Lab PLC L08 — Đánh dấu-quét theo chiều rộng (BFS) thu hồi vòng rác trên đồ thị vùng đống
+# Lab PLC L08 — Thu gom rác đánh dấu-quét (duyệt theo chiều rộng BFS)
 
-Cài thuật toán đánh dấu-quét dùng hàng đợi tìm theo chiều rộng (`pop(0)`) từ gốc `'R'` trên đồ thị đối tượng `{'R': ['A'], 'A': ['B'], 'B': [], 'C': ['D'], 'D': ['C'], 'E': []}` để giữ lại các nút sống và liệt kê danh sách nút rác bị thu hồi theo thứ tự tăng dần.
+Đọc `root|adj` từ `stdin` (ví dụ `R|R:A;A:B;B:;C:D;D:C;E:`).
+Duyệt theo chiều rộng từ `root` để tách tập nút còn sống (`alive`) và tập nút rác không đi tới được (`reclaimed`). Sắp xếp cả hai danh sách tăng dần theo thứ tự chữ cái (`sorted(...)`).
 
-Định dạng đầu ra (1 dòng):
-`alive=<danh sách sắp xếp> reclaimed=<danh sách sắp xếp>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh PLC L08 duong_dan/bai_cua_ban.py
-```
+In đúng 1 dòng `alive=[...] reclaimed=[...]`.
+Chấm tự động: `bash labs/cham.sh PLC L08 duong_dan/bai_cua_ban.py`

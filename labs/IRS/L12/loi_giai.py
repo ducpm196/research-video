@@ -1,7 +1,6 @@
-t_before = 18 + 1200 * 0.06 + 22
-t_after = 18 + 500 * 0.06 + 22
-tail8 = (1.0 - 0.985 ** 8) * 100
-print(
-    f"p99_before={t_before:.0f}ms p99_after={t_after:.0f}ms "
-    f"tail8={tail8:.1f}%"
-)
+import sys
+kv = dict(t.split('=') for t in sys.stdin.read().split())
+g, n, r = float(kv['gen']), float(kv['net']), float(kv['rank'])
+t1 = g + n + int(kv['c1']) * r; t2 = g + n + int(kv['c2']) * r
+tail = (1.0 - (1.0 - float(kv['p_slow'])) ** int(kv['shards'])) * 100
+print(f'p99_before={t1:.0f}ms p99_after={t2:.0f}ms tail8={tail:.1f}%')

@@ -1,0 +1,811 @@
+id: L09
+course: BNX
+series: BNX · Backend ngân hàng mở rộng theo JD
+title: 'Bài 9 — Couchbase: bản ghi theo khoá, vBucket và giá trị CAS chống ghi đè'
+voice: vi-VN-NamMinhNeural
+rate: -5%
+depth: full
+af2: true
+covers:
+- objective: 1
+  scene: formula
+- objective: 2
+  scene: formula
+- objective: 3
+  scene: example
+- objective: 4
+  scene: formula
+- objective: 5
+  scene: quymo
+source: 'curriculum/bnx.yaml L09; audit/bnx/verify_bnx.py L09; Couchbase Server docs
+  8.0 (đọc 2026-11-11): vBuckets, Expiration, Manage Expiration (Mutation''s Effect
+  on Expiration); Couchbase Java SDK 3.13 docs: Concurrent Document Mutations'
+assumes: []
+objectives:
+- Thiết kế khoá bản ghi cho hồ sơ khách hàng
+- Tính vBucket của một khoá
+- Dùng giá trị CAS để chặn mất cập nhật
+- Đặt hạn sống cho bản ghi phiên
+- So sánh tổng số lần ghi của CAS với khoá bi quan khi số tiến trình tranh chấp tăng
+  2, 20, 200
+asr_reviewed:
+- {sentence: "Bảng này giải mã sáu từ, ba từ đầu trước.", reason: "ASR chép “Bản này giải mả 6-4, 3 từ đầu trước.” (0.7): lệch âm/thanh thuần Việt: bảng/bản, mã/mả, từ/bốn — NOT_VERIFIED bằng tai người"}
+- {sentence: "Ba từ còn lại.", reason: "ASR chép “Ba tư còn lại” (0.75): lệch âm/thanh thuần Việt: từ/bốn — NOT_VERIFIED bằng tai người"}
+- sentence: Bản ghi dạng JSON là các cặp tên và giá trị trong ngoặc nhọn.
+  reason: 'ASR chép “Bản ghi dạng dây sân là các cặp tin và giá trị trong hoạt nhọn.”
+    (0.8): “json” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Giây-sơn”), ASR viết
+    “sân”; lệch âm/thanh thuần Việt: tên/tin, ngoặc/hoạt — NOT_VERIFIED bằng tai người'
+- sentence: Khoá bi quan chỉ cần n lần ghi, nhưng người cuối chờ n lần thời gian giữ
+    khoá, hai trăm tiến trình chờ hai trăm mili giây.
+  reason: 'ASR chép “Khóa bi quan chỉ cần n lần ghi, nhưng người cuối chờ n lần thời
+    gian giữ khóa, 200 tiếng trình chờ 200 millilay.” (0.906): “mili” đọc theo luật
+    lexicon (lexicon_vi.BNX.yaml: “mi-li”), ASR viết “millilay”; lệch âm/thanh thuần
+    Việt: tiến/tiếng — NOT_VERIFIED bằng tai người'
+- sentence: Hàm băm biến byte thành một số nguyên, hai dấu gạch chéo là chia lấy phần
+    nguyên, còn dấu phần trăm lấy số dư.
+  reason: 'ASR chép “Hàm băm biến bay thành một số nguyên, hai dấu gạch chéo là chi
+    lấy phần nguyên, còn dấu phần trăm lấy số dư.” (0.917): byte đọc thô, ASR viết
+    “bay/bai/vai” (probe CSA p1: “bay” 8/8); lệch âm/thanh thuần Việt: chia/chi —
+    NOT_VERIFIED bằng tai người'
+- sentence: Mã Python sắp tới có vài cách viết mới, nên ta giải nghĩa trước.
+  reason: 'ASR chép “Mạp hài thông sắp tới có vài cách viết mới nên ta giải nhị trước.”
+    (0.759): “python” đọc theo luật lexicon (lexicon_vi.BNX.yaml: “Pai-thon”), ASR
+    viết “mạp hài thông”; lệch âm/thanh thuần Việt: nghĩa/nhị — NOT_VERIFIED bằng
+    tai người'
+- sentence: Bây giờ tới phần bạn tự làm bài.
+  reason: 'ASR chép “Bây giờ tới phần bạn tự lam bay.” (0.75): lệch âm/thanh thuần
+    Việt: làm bài/lam bay — NOT_VERIFIED bằng tai người'
+- sentence: Đáp án câu hai.
+  reason: 'ASR chép “Đập án câu 2.” (0.75): lệch âm/thanh thuần Việt: đáp/đập — NOT_VERIFIED
+    bằng tai người'
+scenes:
+- id: hook
+  kind: hook
+  title: Vì sao cộng điểm thưởng hai lần mà chỉ thấy một lần?
+  checks:
+  - alg.bnx_cas_story(use_cas=False)[0] == 130
+  - alg.bnx_cas_story()[0] == 100 + 50 + 30 == 180
+  steps:
+  - show: '<p>Hồ sơ khách hàng C1001 có $100$ điểm thưởng. Cùng một lúc, dịch vụ khuyến
+      mãi cộng $50$ điểm, dịch vụ hoàn tiền cộng $30$ điểm (số minh hoạ).</p>
+
+      <p>Mong đợi: $100 + 50 + 30 = 180$. Hồ sơ ghi: <b class="red">130</b>.</p>
+
+      <div class="box key">Cả hai cùng đọc 100, mỗi bên tự cộng rồi ghi đè. Lần ghi
+      sau xoá mất 50 điểm của lần ghi trước: <b>mất cập nhật</b>.</div>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    - 3
+    say: Chào bạn, hồ sơ khách hàng C một nghìn không trăm linh một có một trăm điểm
+      thưởng. Cùng một lúc, dịch vụ khuyến mãi cộng năm mươi điểm, dịch vụ hoàn tiền
+      cộng ba mươi điểm, đây là số minh hoạ. Ta mong đợi một trăm tám mươi, nhưng
+      hồ sơ chỉ ghi một trăm ba mươi. Cả hai cùng đọc một trăm, mỗi bên tự cộng rồi
+      ghi đè, nên lần ghi sau xoá mất năm mươi điểm của lần ghi trước, gọi là mất
+      cập nhật.
+  - show: '<table class=''t''><tr><th>câu hỏi</th><th>bài này trả lời bằng</th></tr><tr><td>lưu
+      hồ sơ khách hàng thế nào để lấy ra nhanh</td><td>khoá bản ghi <code>customer::C1001</code></td></tr><tr><td>khoá
+      nằm ở máy nào trong cụm (nhóm máy)</td><td>thùng ảo (vBucket) = băm khoá, rồi
+      tra bản đồ cụm</td></tr><tr><td>làm sao không mất 50 điểm</td><td>dấu phiên
+      bản CAS: ghi kèm dấu đã đọc, lệch thì bị từ chối</td></tr><tr><td>phiên đăng
+      nhập tự hết hạn thế nào</td><td>hạn sống (TTL) tính bằng giây</td></tr></table>'
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.5'
+    introduces:
+    - bnx_cas
+    - bnx_vbucket
+    say: Hôm nay ta trả lời bốn câu hỏi. Lưu hồ sơ để lấy ra nhanh thì thiết kế khoá
+      bản ghi. Khoá nằm ở máy nào trong cụm, tức nhóm máy chạy chung kho, thì băm
+      vào một thùng ảo rồi tra bản đồ cụm. Để không mất năm mươi điểm thì ghi kèm
+      dấu phiên bản. Phiên đăng nhập tự hết hạn nhờ hạn sống tính bằng giây.
+- id: prereq
+  kind: prereq
+  title: 'Trước hết: bốn điều cần hiểu'
+  checks:
+  - 100 + 50 == 150 and alg.bnx_cas_story(use_cas=False)[0] == 130
+  - alg.bnx_cas_story(use_cas=False)[0] != alg.bnx_cas_story()[0]
+  steps:
+  - show: '<table class=''t''><tr><th>khái niệm</th><th>nghĩa</th><th>ví dụ</th></tr><tr><td>①
+      Kho khoá → giá trị</td><td>đưa khoá, nhận lại đúng một giá trị, không phải quét</td><td>khoá
+      <code>so_du:TK-1001</code></td></tr><tr><td>② Băm rồi chia dư</td><td>cùng khoá
+      luôn ra cùng số; số dư khi chia chọn ngăn</td><td>17 chia 3 dư 2</td></tr><tr><td>③
+      Mất cập nhật</td><td>hai bên (hai <b>tiến trình</b>: hai chương trình đang chạy
+      cùng lúc) đọc cùng giá trị cũ, cùng ghi; lần ghi sau xoá lần ghi trước</td><td>100
+      → 150 rồi bị ghi đè thành 130</td></tr><tr><td>④ Hạn sống của khoá</td><td>mục
+      tự biến mất sau một số giây</td><td>hạn 60 giây</td></tr></table>'
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.5'
+    say: 'Trước hết ta cần hiểu bốn điều. Kho khoá và giá trị nhận một khoá và trả
+      lại đúng một giá trị, không phải quét cả kho. Băm rồi chia dư là cách chọn ngăn:
+      cùng khoá luôn ra cùng số, và số dư chọn ra ngăn. Mất cập nhật là khi hai tiến
+      trình, tức hai chương trình chạy cùng lúc, đọc cùng một giá trị cũ rồi cùng
+      ghi, nên lần ghi sau xoá lần ghi trước. Hạn sống là số giây sau đó một mục tự
+      biến mất.'
+  - show: $$100 + 50 = 150, \qquad 100 + 30 = 130 \neq 180$$
+    say: Một bên tính một trăm cộng năm mươi, bằng một trăm năm mươi. Bên kia tính
+      từ cùng giá trị cũ, một trăm cộng ba mươi, bằng một trăm ba mươi, khác một trăm
+      tám mươi.
+- id: sym
+  kind: symbol
+  title: Giải mã vài từ hay gặp
+  steps:
+  - show: '<table class=''t''><tr><th>từ trên màn hình</th><th>nghĩa</th></tr><tr><td>document
+      key (khoá bản ghi)</td><td>tên duy nhất của một bản ghi dạng JSON (các cặp <code>tên:
+      giá trị</code> trong ngoặc nhọn) trong kho, ví dụ <code>customer::C1001</code></td></tr><tr><td>bucket
+      (thùng dữ liệu)</td><td>nơi chứa bản ghi, giống một cơ sở dữ liệu</td></tr><tr><td>vBucket
+      (thùng ảo)</td><td>một phần của thùng dữ liệu; khoá → thùng ảo qua băm CRC32.
+      <b>Bộ lưu</b> là cách kho ghi dữ liệu xuống đĩa: Couchstore (kiểu cũ) có 1024
+      thùng ảo; Magma (kiểu mới) 128 hoặc 1024; từ bản 8.0, ở bản Enterprise (bản
+      thương mại), thùng mới mặc định Magma 128. Bài lấy 1024 làm ví dụ</td></tr></table>'
+    focus:
+    - 0
+    - '1.2'
+    - '1.2'
+    - '1.4'
+    - '1.4'
+    say: 'Bảng này giải mã sáu từ, ba từ đầu trước. Khoá bản ghi là tên duy nhất của
+      một bản ghi trong kho. Bản ghi dạng JSON là các cặp tên và giá trị trong ngoặc
+      nhọn. Thùng ảo là một phần của thùng dữ liệu, và khoá được băm để chọn thùng
+      ảo. Bộ lưu là cách kho ghi dữ liệu xuống đĩa: kiểu cũ có một nghìn không trăm
+      hai mươi tư thùng ảo, kiểu mới ở bản thương mại mặc định một trăm hai mươi tám.'
+  - show: <table class='t'><tr><th>từ trên màn hình</th><th>nghĩa</th></tr><tr><td>cluster
+      map (bản đồ cụm)</td><td>bảng thùng ảo → máy đang giữ bản chính; thư viện khách
+      (mã của hãng, nằm trong ứng dụng, nói chuyện với kho) tải về và gọi thẳng máy
+      đó</td></tr><tr><td>CAS (dấu phiên bản)</td><td>giá trị đổi mỗi lần bản ghi
+      bị sửa; ghi kèm CAS đã đọc, lệch thì bị từ chối</td></tr><tr><td>TTL (hạn sống)</td><td>số
+      giây bản ghi được tồn tại trước khi kho tự xoá</td></tr></table>
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    clear: true
+    say: Ba từ còn lại. Bản đồ cụm cho biết thùng ảo nào ở máy nào. Dấu phiên bản
+      là giá trị đổi mỗi lần bản ghi bị sửa. Hạn sống là số giây bản ghi tồn tại trước
+      khi kho tự xoá.
+- id: intuition
+  kind: intuition
+  title: 'Hình dung: từ khoá tới máy, và hai bên cùng ghi'
+  checks:
+  - alg.bnx_crc32('customer::C1001') == 2170508415
+  - alg.bnx_vbucket('customer::C1001') == 351
+  - alg.bnx_cas_story()[2][0] == ('P1', 'ghi', 150, 8)
+  - alg.bnx_cas_story()[2][1] == ('P2', 'từ chối')
+  - alg.bnx_cas_story()[:2] == (180, 9)
+  - 1024 // 4 == 256 and 256 <= alg.bnx_vbucket('customer::C1001') <= 511
+  steps:
+  - show: '<div><svg width="1500" height="430" viewBox="0 0 1500 430" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><rect
+      x="30" y="60" width="330" height="90" rx="10" fill="#dbeafe" stroke="#2a78d6"
+      stroke-width="3"/><text x="195.0" y="97" font-size="24" text-anchor="middle"
+      fill="#1f2937">khoá</text><text x="195.0" y="129" font-size="24" text-anchor="middle"
+      fill="#1f2937">customer::C1001</text><line x1="360" y1="105" x2="470" y2="105"
+      stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><text x="415" y="95"
+      font-size="22" text-anchor="middle" fill="#475569">CRC32</text><rect x="480"
+      y="45" width="450" height="120" rx="10" fill="#f3e8ff" stroke="#9333ea" stroke-width="3"/><text
+      x="705.0" y="83" font-size="22" text-anchor="middle" fill="#1f2937">2 170 508
+      415</text><text x="705.0" y="113" font-size="22" text-anchor="middle" fill="#1f2937">chia
+      nguyên 65 536 → 33 119</text><text x="705.0" y="143" font-size="22" text-anchor="middle"
+      fill="#1f2937">dư 32 768 → 351; dư 1024 → 351</text><line x1="930" y1="105"
+      x2="1000" y2="105" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><rect
+      x="1010" y="60" width="160" height="90" rx="10" fill="#fef3c7" stroke="#d97706"
+      stroke-width="3"/><text x="1090.0" y="97" font-size="24" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">thùng ảo</text><text x="1090.0" y="129" font-size="24"
+      text-anchor="middle" fill="#1f2937">351</text><line x1="1090" y1="155" x2="1090"
+      y2="240" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><text x="1110"
+      y="205" font-size="22" text-anchor="start" fill="#1f2937">tra bản đồ cụm</text><rect
+      x="110" y="250" width="360" height="80" rx="10" fill="#e5e7eb" stroke="#6b7280"
+      stroke-width="3"/><text x="290.0" y="298" font-size="24" text-anchor="middle"
+      fill="#1f2937">Máy 1: thùng 0–255</text><rect x="490" y="250" width="380" height="80"
+      rx="10" fill="#e5e7eb" stroke="#6b7280" stroke-width="3"/><text x="680.0" y="298"
+      font-size="24" text-anchor="middle" fill="#1f2937">Máy 2: thùng 256–511</text><rect
+      x="940" y="250" width="300" height="80" rx="10" fill="#dcfce7" stroke="#16a34a"
+      stroke-width="3"/><text x="1090.0" y="298" font-size="24" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">Máy 2 giữ 351</text><text x="750" y="370"
+      font-size="22" text-anchor="middle" fill="#6b7280">(4 máy, mỗi máy 256 thùng
+      ảo: số minh hoạ)</text><text x="750" y="415" font-size="24" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">Khoá → thùng ảo không bao giờ đổi; thêm máy
+      chỉ chuyển cả thùng ảo sang máy mới</text></svg></div>'
+    clear: true
+    say: Khoá hồ sơ được băm ra hơn hai tỉ. Thư viện chia nguyên cho sáu mươi lăm
+      nghìn năm trăm ba mươi sáu rồi lấy dư cho ba mươi hai nghìn bảy trăm sáu mươi
+      tám, được ba trăm năm mươi mốt. Lấy dư tiếp cho một nghìn không trăm hai mươi
+      tư, bản ghi thuộc thùng ảo ba trăm năm mươi mốt. Tra bản đồ cụm, thùng này nằm
+      ở máy hai.
+  - show: <div><svg width="1500" height="450" viewBox="0 0 1500 450" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><text
+      x="90" y="70" font-size="28" text-anchor="middle" fill="#2a78d6" font-weight="bold">P1</text><text
+      x="90" y="270" font-size="28" text-anchor="middle" fill="#9333ea" font-weight="bold">P2</text><rect
+      x="150" y="30" width="260" height="80" rx="10" fill="#dbeafe" stroke="#2a78d6"
+      stroke-width="3"/><text x="280.0" y="63" font-size="22" text-anchor="middle"
+      fill="#1f2937">đọc 100</text><text x="280.0" y="93" font-size="22" text-anchor="middle"
+      fill="#1f2937">CAS 7</text><rect x="470" y="30" width="300" height="80" rx="10"
+      fill="#dcfce7" stroke="#16a34a" stroke-width="3"/><text x="620.0" y="63" font-size="22"
+      text-anchor="middle" fill="#1f2937">ghi 150, CAS 7</text><text x="620.0" y="93"
+      font-size="22" text-anchor="middle" fill="#1f2937">khớp → CAS 8</text><rect
+      x="150" y="230" width="260" height="80" rx="10" fill="#dbeafe" stroke="#2a78d6"
+      stroke-width="3"/><text x="280.0" y="263" font-size="22" text-anchor="middle"
+      fill="#1f2937">đọc 100</text><text x="280.0" y="293" font-size="22" text-anchor="middle"
+      fill="#1f2937">CAS 7</text><rect x="830" y="230" width="300" height="80" rx="10"
+      fill="#fee2e2" stroke="#dc2626" stroke-width="3"/><text x="980.0" y="263" font-size="22"
+      text-anchor="middle" fill="#1f2937">ghi 130, CAS 7</text><text x="980.0" y="293"
+      font-size="22" text-anchor="middle" fill="#1f2937">lệch → từ chối</text><rect
+      x="1170" y="130" width="300" height="80" rx="10" fill="#dcfce7" stroke="#16a34a"
+      stroke-width="3"/><text x="1320.0" y="163" font-size="22" text-anchor="middle"
+      fill="#1f2937">đọc lại 150, CAS 8</text><text x="1320.0" y="193" font-size="22"
+      text-anchor="middle" fill="#1f2937">ghi 180 → CAS 9</text><line x1="410" y1="70"
+      x2="465" y2="70" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><line
+      x1="410" y1="270" x2="825" y2="270" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><line
+      x1="1130" y1="250" x2="1240" y2="215" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><text
+      x="750" y="400" font-size="26" text-anchor="middle" fill="#1f2937" font-weight="bold">Không
+      ai bị chặn đọc; chỉ lần ghi tính từ dữ liệu cũ bị từ chối</text></svg></div>
+    clear: true
+    say: Hai tiến trình cùng đọc một trăm điểm với dấu phiên bản bảy. Tiến trình một
+      ghi một trăm năm mươi kèm dấu bảy. Tiến trình hai ghi một trăm ba mươi kèm dấu
+      bảy, nhưng dấu đã là tám nên kho từ chối. Tiến trình hai đọc lại một trăm năm
+      mươi với dấu tám, cộng ba mươi thành một trăm tám mươi rồi ghi, dấu thành chín.
+- id: formula
+  kind: formula
+  title: 'Suy ra từng bước: khoá, thùng ảo, dấu phiên bản, hạn sống'
+  checks:
+  - alg.bnx_crc32('customer::C1001') // 65536 == 33119 and 33119 % 32768 == 351
+  - alg.bnx_vbucket('customer::C1001') == 351 and alg.bnx_vbucket('customer::C1001',
+    128) == 95
+  - 2 ** 16 == 65536 and 0x7FFF + 1 == 32768
+  - alg.bnx_cas_story()[2][1] == ('P2', 'từ chối')
+  - alg.bnx_cas_story()[:2] == (180, 9)
+  - alg.bnx_clock_add(9, 0, 0, 1800) == (9, 30, 0)
+  - alg.bnx_ttl_after_mutation(1800, False) == 0 and alg.bnx_ttl_after_mutation(1800,
+    False, True) == 1800
+  steps:
+  - show: '<p><b>Bước 1.</b> Kho này tìm nhanh nhất <b>theo khoá</b>, nên khoá phải
+      chứa thứ mà ứng dụng luôn có trong tay: loại bản ghi và mã nghiệp vụ.</p>
+
+      $$\texttt{customer::C1001}, \quad \texttt{session::s9f2}$$
+
+      <span class=''note''>Làm thử: mở hồ sơ C1001 = 1 lần lấy theo khoá, không quét
+      bản ghi nào khác.</span>
+
+      '
+    focus:
+    - 1
+    - 3
+    say: Bước một, vì kho này tìm nhanh nhất theo khoá, nên khoá phải chứa thứ ứng
+      dụng luôn có trong tay, là loại bản ghi và mã nghiệp vụ. Làm thử, mở hồ sơ C
+      một nghìn không trăm linh một chỉ cần một lần lấy theo khoá.
+  - show: <table class='t'><tr><th>cách viết trong Python</th><th>nghĩa</th></tr><tr><td><code>zlib.crc32(key.encode())</code></td><td><code>.encode()</code>
+      đổi chữ thành byte; <code>zlib.crc32</code> băm chúng thành một số nguyên 32
+      bit</td></tr><tr><td><code>h // 65536</code>, <code>h % 1024</code></td><td><code>//</code>
+      chia lấy phần nguyên; <code>%</code> lấy số dư</td></tr></table>
+    clear: true
+    say: Mã Python sắp tới có vài cách viết mới, nên ta giải nghĩa trước. Hàm băm
+      biến byte thành một số nguyên, hai dấu gạch chéo là chia lấy phần nguyên, còn
+      dấu phần trăm lấy số dư.
+  - show: '<p><b>Bước 2. Khoá → thùng ảo, đúng cách thư viện Java của hãng tính</b></p><div
+      class="code"><div>import zlib</div><div>key = "customer::C1001"</div><div>h
+      = zlib.crc32(key.encode())</div><div>r = (h &gt;&gt; 16) &amp; 0x7FFF          #
+      như thư viện Java của hãng</div><div>print(h, "// 65536 =", h // 65536, "; mod
+      32768 =", r)</div><div>print("1024 thùng:", r % 1024, "| 128 thùng:", r % 128)</div></div><p><b>Kết
+      quả chạy thật</b></p><div class="code"><div>2170508415 // 65536 = 33119 ; mod
+      32768 = 351</div><div>1024 thùng: 351 | 128 thùng: 95</div></div><p class=''note''>Ở
+      <code>r = …</code>: dịch phải 16 = chia nguyên cho 65 536; phép &amp; với 0x7FFF
+      = lấy dư cho 32 768.</p>'
+    focus:
+    - '2.3'
+    - 5
+    clear: true
+    say: Bước hai, vì cụm cần biết khoá thuộc thùng ảo nào, nên thư viện băm khoá
+      bằng hàm băm kiểm tra dư vòng, rồi chia nguyên và lấy dư. Chạy thật, thương
+      là ba mươi ba nghìn một trăm mười chín, lấy dư còn ba trăm năm mươi mốt.
+  - show: '<p><b>Bước 3.</b> Mỗi lần ghi mang theo CAS đã đọc. Kho so: <b>bằng</b>
+      thì ghi và đổi CAS; <b>khác</b> thì từ chối.</p>
+
+      $$\text{ghi được} \iff \text{CAS gửi kèm} = \text{CAS hiện tại}$$
+
+      <span class=''note''>Làm thử: P1 gửi 7, kho đang 7 → ghi, CAS đổi. P2 gửi 7,
+      kho đang 8 → từ chối. Mô phỏng tăng CAS thêm 1; CAS thật là một số không đoán
+      được, chỉ dùng để so bằng.</span>
+
+      '
+    focus:
+    - 1
+    - 2
+    - 3
+    - 3
+    introduces:
+    - iff
+    clear: true
+    say: Bước ba, vì lỗi mất cập nhật đến từ việc ghi dựa trên dữ liệu cũ, nên mỗi
+      lần ghi phải mang theo dấu phiên bản đã đọc. Kho chỉ nhận khi dấu gửi kèm bằng
+      dấu hiện tại. Làm thử, tiến trình một gửi bảy, kho đang bảy, nên ghi được. Tiến
+      trình hai cũng gửi bảy nhưng kho đã là tám, nên bị từ chối.
+  - show: '<table class=''t''><tr><th>cách viết trong Python</th><th>nghĩa</th></tr><tr><td><code>class
+      Store:</code></td><td><b>lớp</b>: khuôn tạo ra một đối tượng có dữ liệu và hàm
+      riêng, ở đây là một kho</td></tr><tr><td><code>def __init__(self):</code></td><td>hàm
+      chạy khi tạo kho; <code>self</code> là chính cái kho đó</td></tr><tr><td><code>self.doc,
+      self.cas = {…}, 7</code></td><td>gán hai thuộc tính cùng lúc: nội dung (một
+      từ điển) và dấu phiên bản</td></tr><tr><td><code>return dict(self.doc), self.cas</code></td><td>trả
+      về <b>hai giá trị</b> cùng lúc: bản sao nội dung và dấu phiên bản; nơi gọi nhận
+      bằng <code>d, c = s.get()</code></td></tr><tr><td><code>dict(self.doc)</code>,
+      <code>"…%d" % x</code></td><td>sao chép từ điển để sửa không đụng dữ liệu đang
+      giữ; chèn số <code>x</code> vào chỗ <code>%d</code></td></tr></table>'
+    clear: true
+    say: Kho mô phỏng dùng thêm vài cách viết nữa, nên ta giải nghĩa trước. Lớp là
+      khuôn tạo ra một kho có dữ liệu và hàm riêng, và tham số đầu của hàm là chính
+      cái kho đó. Dòng gán đặt nội dung và dấu phiên bản cùng lúc, còn lệnh trả về
+      có thể trả hai giá trị một lúc.
+  - show: '<p><b>Bước 4. Kho mô phỏng có CAS</b></p><div class="code"><div>class Store:                      #
+      kho một bản ghi, có CAS</div><div>    def __init__(self):</div><div>        self.doc,
+      self.cas = {"diem_thuong": 100}, 7</div><div>    def get(self):</div><div>        return
+      dict(self.doc), self.cas</div><div>    def replace(self, doc, cas):</div><div>        if
+      cas != self.cas:</div><div>            return "từ chối: CAS lệch"</div><div>        self.doc,
+      self.cas = doc, self.cas + 1</div><div>        return "ghi được, CAS mới = %d"
+      % self.cas</div></div>'
+    focus:
+    - '2.3'
+    - '2.3'
+    - '2.4'
+    - '2.6'
+    clear: true
+    say: Bước bốn, vì muốn thấy quy tắc chạy thật, ta dựng một kho mô phỏng bằng Python.
+      Hồ sơ có một trăm điểm, dấu phiên bản bảy. Hàm đọc trả về bản sao của hồ sơ
+      cùng dấu hiện tại. Hàm ghi đè so dấu gửi kèm với dấu hiện tại, lệch thì từ chối.
+  - show: '<p><b>Bước 5. Hai tiến trình cùng cộng điểm</b></p><div class="code"><div>s
+      = Store()</div><div>d1, c1 = s.get()                  # P1 đọc: CAS 7</div><div>d2,
+      c2 = s.get()                  # P2 đọc: CAS 7</div><div>d1["diem_thuong"] +=
+      50</div><div>print("P1:", s.replace(d1, c1))</div><div>d2["diem_thuong"] +=
+      30</div><div>print("P2:", s.replace(d2, c2))</div><div>d2, c2 = s.get()                  #
+      P2 đọc lại</div><div>d2["diem_thuong"] += 30</div><div>print("P2 lần 2:", s.replace(d2,
+      c2))</div><div>print(s.get())</div></div>'
+    focus:
+    - '2.2'
+    - '2.5'
+    - '2.7'
+    - '2.8'
+    clear: true
+    say: Bước năm, hai tiến trình cùng đọc, nên cùng thấy dấu bảy. Tiến trình một
+      cộng năm mươi rồi ghi. Tiến trình hai cộng ba mươi rồi ghi với dấu cũ. Bị từ
+      chối thì nó đọc lại, cộng ba mươi vào giá trị mới, rồi ghi lần hai.
+  - show: '<p><b>Bước 5. Kết quả chạy thật</b></p><div class="code"><div>P1: ghi được,
+      CAS mới = 8</div><div>P2: từ chối: CAS lệch</div><div>P2 lần 2: ghi được, CAS
+      mới = 9</div><div>({''diem_thuong'': 180}, 9)</div></div>'
+    focus:
+    - '2.1'
+    - '2.2'
+    - '2.3'
+    - '2.4'
+    clear: true
+    say: Tiến trình một ghi được, dấu mới là tám. Tiến trình hai bị từ chối vì dấu
+      lệch. Lần hai, sau khi đọc lại, tiến trình hai ghi được, dấu là chín. Hồ sơ
+      cuối cùng có một trăm tám mươi điểm, không mất cập nhật nào.
+  - show: '<p><b>Bước 6.</b> Bản ghi phiên đăng nhập cần tự hết hạn, nên đặt hạn sống
+      tính bằng giây khi ghi:</p>
+
+      $$\text{tạo lúc 9:00:00} + 1\,800 \text{ giây} = \text{9:30:00}$$
+
+      <span class=''note''>Số minh hoạ. Mỗi lần ghi lại bản ghi phải đặt lại hạn sống:
+      ghi mà không đặt thì hạn sống về 0 (không bao giờ hết hạn), trừ khi dùng <code>preserve_expiry</code>
+      hoặc thùng dữ liệu có hạn sống tối đa (<code>maxTTL</code>).</span>
+
+      '
+    focus:
+    - 1
+    - 2
+    - 2
+    - 3
+    clear: true
+    say: Bước sáu, vì phiên đăng nhập phải tự hết hiệu lực, nên khi ghi bản ghi phiên
+      ta đặt hạn sống tính bằng giây. Tạo lúc chín giờ đúng, cộng một nghìn tám trăm
+      giây, tức ba mươi phút, thì hết hạn lúc chín giờ ba mươi. Đây là số minh hoạ.
+      Ghi mà không đặt thì hạn sống về không, tức không bao giờ hết hạn.
+- id: example
+  kind: example
+  title: Ví dụ hai tiến trình cùng cộng điểm, từng phép tính
+  checks:
+  - alg.bnx_cas_story()[2][0] == ('P1', 'ghi', 150, 8)
+  - alg.bnx_cas_story()[2][1] == ('P2', 'từ chối')
+  - alg.bnx_cas_story()[2][3] == ('P2', 'ghi', 180, 9)
+  - alg.bnx_cas_story()[0] - alg.bnx_cas_story(use_cas=False)[0] == 50
+  steps:
+  - show: '<p>Hồ sơ C1001: 100 điểm, CAS = 7. P1 cộng 50, P2 cộng 30, cả hai đọc trước
+      khi ai ghi (số minh hoạ).</p>
+
+      $$① \; \text{P1: } 100 + 50 = \hl{150}$$
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    say: Hồ sơ có một trăm điểm, dấu phiên bản bảy. Tiến trình một cộng năm mươi,
+      tiến trình hai cộng ba mươi, và cả hai đọc trước khi ai ghi. Phép tính thứ nhất,
+      tiến trình một tính một trăm cộng năm mươi, bằng một trăm năm mươi.
+  - show: $$② \; \text{P1 ghi kèm CAS 7; kho đang 7} \Rightarrow \text{nhận } \hlg{150},\
+      \text{CAS} = 8$$
+    say: Phép tính thứ hai, tiến trình một ghi kèm dấu bảy, kho đang bảy, suy ra kho
+      nhận một trăm năm mươi và dấu thành tám. Mũi tên kép đọc là suy ra.
+    introduces:
+    - implies
+  - show: $$③ \; \text{P2 ghi } 100 + 30 = 130 \text{ kèm CAS 7; kho đang 8} \Rightarrow
+      \hl{\text{từ chối}}$$
+    say: Phép tính thứ ba, tiến trình hai ghi một trăm cộng ba mươi, bằng một trăm
+      ba mươi, kèm dấu bảy. Kho đang tám, nên từ chối.
+  - show: '<p>Dùng lại $150$ và CAS $8$ ở phép ②.</p>
+
+      $$④ \; \text{P2 đọc lại: } 150 + 30 = \hlg{180},\ \text{CAS} = 9$$
+
+      '
+    focus:
+    - 1
+    - 2
+    clear: true
+    say: Phép tính thứ tư, dùng lại một trăm năm mươi và dấu tám ở phép thứ hai. Tiến
+      trình hai đọc lại, tính một trăm năm mươi cộng ba mươi, bằng một trăm tám mươi,
+      và dấu thành chín.
+  - show: '<p>Nếu không có CAS, P2 ghi đè 130 ở phép ③:</p>
+
+      $$⑤ \; 180 - 130 = \hl{50}\ \text{điểm bị mất}$$
+
+      <div class="box key">Có CAS: $100 + 50 + 30 = 180$, không mất cập nhật nào.</div>
+
+      '
+    focus:
+    - 1
+    - 2
+    - 3
+    say: Phép tính thứ năm, nếu không có dấu phiên bản, tiến trình hai ghi đè một
+      trăm ba mươi. Một trăm tám mươi trừ một trăm ba mươi bằng năm mươi điểm bị mất,
+      đúng bằng phần của tiến trình một. Có dấu phiên bản thì không mất cập nhật nào.
+- id: check
+  kind: check
+  title: 'Tự kiểm bằng đường khác: thử mọi thứ tự đọc và ghi'
+  checks:
+  - alg.bnx_interleavings(True) == (6, [180])
+  - alg.bnx_interleavings(False) == (6, [130, 150, 180])
+  steps:
+  - show: '<table class=''t''><tr><th>cách viết trong Python</th><th>nghĩa</th></tr><tr><td><code>def
+      f(order, cas_on): … return v</code></td><td>định nghĩa hàm nhận hai đầu vào;
+      <code>return</code> trả kết quả <code>v</code> ra</td></tr><tr><td><code>from
+      itertools import permutations</code></td><td>nạp hàm <code>permutations</code>,
+      liệt kê mọi cách xếp thứ tự</td></tr><tr><td><code>a; continue</code></td><td>dấu
+      <code>;</code> đặt hai lệnh trên một dòng; <code>continue</code> bỏ qua phần
+      còn lại của vòng lặp này, sang vòng kế tiếp</td></tr><tr><td><code>x = a if
+      điều_kiện else b</code></td><td><code>x</code> lấy <code>a</code> nếu điều kiện
+      đúng, không thì lấy <code>b</code></td></tr><tr><td><code>p not in rd</code></td><td><code>p</code>
+      chưa có trong từ điển <code>rd</code></td></tr></table>'
+    clear: true
+    say: Hàm kiểm dùng thêm vài cách viết, nên ta giải nghĩa trước. Một dòng nạp hàm
+      liệt kê mọi thứ tự. Hàm nhận đầu vào rồi trả kết quả ra. Dấu chấm phẩy đặt hai
+      lệnh một dòng, lệnh bỏ qua chuyển sang vòng lặp kế tiếp, và cách viết chọn một
+      trong hai giá trị tuỳ điều kiện.
+  - show: '<p><b>Đường khác: liệt kê mọi thứ tự của 4 sự kiện</b></p><div class="code"><div>from
+      itertools import permutations</div><div>def f(order, cas_on):</div><div>    v,
+      ver, rd, add = 100, 7, {}, {"P1": 50, "P2": 30}</div><div>    for p in order:</div><div>        if
+      p not in rd:                    # lần đầu: đọc</div><div>            rd[p] =
+      (v, ver); continue</div><div>        old = rd[p][0] if not cas_on or rd[p][1]
+      == ver else v</div><div>        v, ver = old + add[p], ver + 1     # ghi (lệch
+      CAS: đọc lại)</div><div>    return v</div><div>od = set(permutations(["P1",
+      "P1", "P2", "P2"]))</div><div>for c in (True, False):</div><div>    print(len(od),
+      "thứ tự, CAS", c, sorted({f(o, c) for o in od}))</div></div><p class="note"><code>permutations([…])</code>:
+      mọi cách xếp thứ tự các phần tử; <code>{f(o, c) for o in od}</code>: tập các
+      kết quả, mỗi kết quả chỉ ghi một lần.</p>'
+    focus:
+    - 2
+    clear: true
+    say: Vì một kịch bản chưa đủ, ta liệt kê mọi thứ tự của bốn sự kiện, mỗi tiến
+      trình đọc một lần rồi ghi một lần.
+  - show: <p><b>Kết quả chạy thật</b></p><div class="code"><div>6 thứ tự, CAS True
+      [180]</div><div>6 thứ tự, CAS False [130, 150, 180]</div></div>
+    focus:
+    - '2.1'
+    clear: true
+    say: Chạy thật, có sáu thứ tự, và khi bật dấu phiên bản, mọi thứ tự đều cho một
+      trăm tám mươi, vì không lần ghi nào dựa trên giá trị cũ.
+  - show: <table class='t'><tr><th>kiểu</th><th>chặn đọc?</th><th>khi tranh chấp</th></tr><tr><td>CAS
+      (khoá lạc quan)</td><td>không</td><td>người ghi sau bị từ chối, tự đọc lại rồi
+      thử lại</td></tr><tr><td>khoá bi quan (get-and-lock)</td><td>vẫn đọc được, nhưng
+      không ai sửa được nếu không có đúng CAS của khoá</td><td>người khác phải chờ
+      hết khoá</td></tr></table>
+    focus:
+    - '1.2'
+    - '1.3'
+    clear: true
+    say: Dấu phiên bản còn gọi là khoá lạc quan, không chặn ai đọc, người ghi sau
+      bị từ chối và tự thử lại. Khoá bi quan thì người khác vẫn đọc được, nhưng không
+      ai sửa được nếu không có đúng dấu của khoá, nên phải chờ.
+- id: quymo
+  kind: example
+  title: 'Khi số tiến trình tăng: CAS tốn bao nhiêu lần ghi, khoá bi quan chờ bao
+    lâu'
+  checks:
+  - '[alg.bnx_l09_cas_writes(n) for n in (2, 20, 200)] == [3, 210, 20100]'
+  - '[alg.bnx_l09_cas_writes(n) == n * (n + 1) // 2 for n in (2, 20, 200)] == [True,
+    True, True]'
+  - '[alg.bnx_l09_lock_wait_ms(n, 1) for n in (2, 20, 200)] == [2, 20, 200]'
+  steps:
+  - show: '<table class=''t''><tr><th>cách viết trong Python</th><th>nghĩa</th></tr><tr><td><code>while
+      chua:</code></td><td>lặp khi <code>chua</code> khác 0, tức còn tiến trình chưa
+      ghi xong</td></tr><tr><td><code>[s.get() for _ in range(chua)]</code></td><td>viết
+      gọn: gọi <code>s.get()</code> đúng <code>chua</code> lần, gom kết quả vào danh
+      sách; <code>_</code> là tên biến bỏ đi, không dùng giá trị</td></tr><tr><td><code>for
+      d, cas in bo:</code></td><td>duyệt từng cặp (nội dung, dấu) trong danh sách
+      <code>bo</code></td></tr><tr><td><code>….startswith("từ")</code></td><td>chuỗi
+      bắt đầu bằng chữ <code>từ</code>, tức bị từ chối</td></tr></table>'
+    clear: true
+    say: Khối đếm dùng thêm vài cách viết, nên ta giải nghĩa trước. Vòng lặp chạy
+      khi còn tiến trình chưa ghi xong, cách viết gọn gọi hàm đọc nhiều lần, và dấu
+      gạch dưới là tên biến bỏ đi.
+  - show: '<p><b>Đếm trên chính lớp Store của bài (kho mô phỏng, không phải Couchbase
+      thật): trường hợp xấu nhất, n tiến trình cùng đọc rồi cùng ghi, thử lại ngay,
+      không lùi</b></p><div class="code"><div>for n in (2, 20, 200):</div><div>    s,
+      chua, lan = Store(), n, 0</div><div>    s.doc["diem_thuong"] = 0</div><div>    while
+      chua:</div><div>        bo = [s.get() for _ in range(chua)]    # cùng đọc</div><div>        chua
+      = 0</div><div>        for d, cas in bo:</div><div>            d["diem_thuong"]
+      += 1</div><div>            lan += 1</div><div>            if s.replace(d, cas).startswith("từ"):</div><div>                chua
+      += 1</div><div>    print(n, "tien trinh:", lan, "lan ghi, diem", s.doc["diem_thuong"])</div></div>'
+    focus:
+    - 2
+    - 2
+    - '2.9'
+    clear: true
+    say: 'Ta đếm bằng chính lớp kho mô phỏng, không phải kho thật. Đó là trường hợp
+      xấu nhất: n tiến trình cùng đọc rồi cùng ghi, bị từ chối thì thử lại ngay. Mỗi
+      vòng chỉ một tiến trình ghi khớp, những tiến trình còn lại sang vòng sau.'
+  - show: '<p><b>Kết quả chạy thật</b></p><div class="code"><div>2 tien trinh: 3 lan
+      ghi, diem 2</div><div>20 tien trinh: 210 lan ghi, diem 20</div><div>200 tien
+      trinh: 20100 lan ghi, diem 200</div></div><p class="note">Trường hợp xấu nhất
+      (đồng bộ, thử lại ngay, không lùi): cộng đúng n lần, không mất cập nhật nào,
+      nhưng số lần ghi tăng nhanh hơn nhiều so với n. Thử lại có lùi ngẫu nhiên thì
+      ít hơn.</p>'
+    focus:
+    - 2
+    - 3
+    clear: true
+    say: Hai, hai mươi và hai trăm tiến trình tốn ba, hai trăm mười và hai mươi nghìn
+      một trăm lần ghi. Điểm cuối luôn đúng bằng n, nhưng phần lớn lần ghi bị từ chối.
+  - show: '<table class=''t''><tr><th>số tiến trình n</th><th>CAS: tổng lần ghi (đếm
+      trong mô phỏng, trường hợp xấu nhất)</th><th>CAS: số vòng</th><th>khoá bi quan:
+      số lần ghi</th><th>khoá bi quan: người cuối chờ (giữ khoá 1 ms, số minh hoạ)</th></tr><tr><td>2
+      (×1)</td><td>3</td><td>2</td><td>2</td><td>2 ms</td></tr><tr><td>20 (×10)</td><td>210</td><td>20</td><td>20</td><td>20
+      ms</td></tr><tr><td>200 (×100)</td><td>20 100</td><td>200</td><td>200</td><td>200
+      ms</td></tr></table>'
+    focus:
+    - '1.3'
+    - '1.4'
+    clear: true
+    say: Với dấu phiên bản, trường hợp xấu nhất có tổng lần ghi là n nhân n cộng một,
+      chia hai, nên tăng theo bình phương. Khoá bi quan chỉ cần n lần ghi, nhưng người
+      cuối chờ n lần thời gian giữ khoá, hai trăm tiến trình chờ hai trăm mili giây.
+  - show: <table class='t'><tr><th>cách</th><th>được</th><th>mất</th><th>khi nào chọn</th></tr><tr><td>CAS,
+      thử lại</td><td>không chặn đọc; ít tranh chấp thì gần như không tốn thêm</td><td>tranh
+      chấp nặng thì tải ghi lên kho tăng theo bình phương</td><td>ít tiến trình cùng
+      sửa một bản ghi</td></tr><tr><td>khoá bi quan ngắn có thời hạn</td><td>tải ghi
+      tăng thẳng theo n, không ghi thừa</td><td>người sau phải chờ; giữ lâu thì nghẽn,
+      quên nhả thì phải đợi hết hạn</td><td>nhiều yêu cầu cùng sửa một bản ghi nóng</td></tr><tr><td>chia
+      nhỏ bản ghi để bớt tranh chấp</td><td>mỗi bên ghi một bản ghi riêng, không tranh
+      nhau</td><td>đọc phải gom nhiều bản ghi lại</td><td>bản ghi nóng như bộ đếm,
+      điểm thưởng</td></tr><tr><td>phép tăng liền một bước (counter) của kho</td><td>kho
+      tự cộng trong một bước, không cần CAS hay khoá</td><td>chỉ cho phép cộng trừ
+      một số, không cho kiểm điều kiện nhiều bước</td><td>bộ đếm thuần cộng dồn</td></tr></table>
+    focus:
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.5'
+    clear: true
+    say: Dấu phiên bản hợp khi ít tiến trình cùng sửa một bản ghi, vì gần như không
+      tốn thêm. Khoá bi quan ngắn có thời hạn hợp khi nhiều yêu cầu cùng sửa một bản
+      ghi nóng, đổi lại người sau phải chờ. Cách thứ ba là chia nhỏ bản ghi để bớt
+      tranh chấp. Nếu chỉ cộng dồn một số, kho có phép tăng liền một bước, không cần
+      dấu phiên bản hay khoá.
+- id: pitfalls
+  kind: pitfall
+  title: Lỗi hay gặp, có lỗi của người đã đi làm
+  checks:
+  - alg.bnx_ttl_after_mutation(1800, False) == 0
+  steps:
+  - show: '<div class="box warn"><b>Lỗi 1 (người mới).</b> Tưởng CAS là <b class="red">khoá</b>:
+      đọc kèm CAS thì người khác không đọc được. Sai: CAS không chặn ai đọc, chỉ chặn
+      ghi đè bản cũ.
+
+      <br><span class="note">Kèm theo: bắt lỗi “CAS lệch” rồi bỏ qua là mất cập nhật
+      y như không có CAS. Phải đọc lại và thử lại, có giới hạn số lần.</span></div>
+
+      '
+    say: Lỗi thứ nhất, của người mới, là tưởng dấu phiên bản là một cái khoá. Sai,
+      dấu không chặn ai đọc, chỉ chặn ghi đè bản cũ. Bắt lỗi dấu lệch rồi bỏ qua thì
+      vẫn mất cập nhật y như không có dấu, nên phải đọc lại và thử lại, có giới hạn
+      số lần.
+  - show: '<div class="box warn"><b>Lỗi 2 (người đã đi làm).</b> Cập nhật bản ghi
+      phiên (gia hạn, ghi lần truy cập) mà <b class="red">không đặt lại hạn sống</b>
+      → hạn sống về 0, phiên <b>không bao giờ hết hạn</b>.
+
+      <br><span class="note">Cách chữa: mỗi lần ghi đặt lại hạn sống, hoặc dùng <code>preserve_expiry</code>
+      để giữ hạn cũ. Kiểm bằng cách đọc hạn sống sau khi cập nhật.</span></div>
+
+      '
+    clear: true
+    say: Lỗi thứ hai, của người đã đi làm. Cập nhật bản ghi phiên mà không đặt lại
+      hạn sống thì hạn sống bị đưa về không, và phiên không bao giờ hết hạn. Cách
+      chữa là mỗi lần ghi đặt lại hạn sống, hoặc dùng tuỳ chọn giữ hạn cũ, rồi kiểm
+      bằng cách đọc hạn sống sau khi cập nhật.
+  - show: '<div class="box warn"><b>Lỗi 3 (người đã đi làm).</b> Để khoá ngẫu nhiên
+      rồi mới nghĩ cách truy cập: muốn mở hồ sơ theo mã khách hàng lại phải tìm theo
+      trường bên trong, chậm hơn nhiều so với lấy thẳng theo khoá.
+
+      <br><span class="note">Cách chữa: thiết kế khoá trước (<code>customer::&lt;mã&gt;</code>).
+      Và kho bản ghi giữ hồ sơ, phiên; <b>sổ cái số dư</b> vẫn ở lõi ngân hàng.</span></div>
+
+      '
+    clear: true
+    say: Lỗi thứ ba, của người đã đi làm, là để khoá ngẫu nhiên rồi mới nghĩ cách
+      truy cập. Khi đó mở hồ sơ theo mã khách hàng phải tìm theo trường bên trong,
+      chậm hơn nhiều so với lấy thẳng theo khoá. Cách chữa là thiết kế khoá trước.
+      Kho bản ghi giữ hồ sơ và phiên, còn sổ cái số dư vẫn ở lõi ngân hàng.
+- id: quiz
+  kind: quiz
+  title: Đến lượt bạn
+  checks:
+  - 10**9 // 65536 == 15258 < 32768 and 15258 - 14 * 1024 == 922 == alg.bnx_vbucket_of_crc(10**9)
+  - alg.bnx_cas_story(200, 12, (('P1', -40), ('P2', 25)))[:2] == (185, 14)
+  - alg.bnx_cas_story(200, 12, (('P1', -40), ('P2', 25)), use_cas=False)[0] == 225
+  steps:
+  - show: '<table class=''t''><tr><th>câu</th><th>đề</th></tr><tr><td>1</td><td>CRC32
+      của một khoá ra 1 000 000 000 (số minh hoạ). Có 1024 thùng ảo, khoá vào thùng
+      nào (cách của thư viện Java)?</td></tr><tr><td>2</td><td>Hồ sơ 200 điểm, CAS
+      12. P1 trừ 40, P2 cộng 25, cùng đọc trước; P1 ghi trước. Kết quả có CAS? Không
+      có CAS?</td></tr><tr><td>3</td><td>Quyết định: cập nhật “hạn mức đã dùng trong
+      ngày” của một khách, nếu 200 yêu cầu của khách đó đến cùng lúc (số minh hoạ).
+      Dùng CAS hay khoá bi quan?</td></tr></table>'
+    focus:
+    - 0
+    - '1.4'
+    - 0
+    pause: 25
+    say: Bây giờ tới phần bạn tự làm bài. Câu ba chọn dấu phiên bản hay khoá bi quan
+      cho hạn mức, nếu hai trăm yêu cầu đến cùng lúc. Hãy dừng video và làm ra giấy.
+  - show: '<p>Câu 1: chia nguyên cho 65 536 được 15 258; số này nhỏ hơn 32 768 nên
+      lấy dư vẫn là 15 258.</p>
+
+      $$15\,258 - 14 \cdot 1\,024 = 15\,258 - 14\,336 = \hlg{922}$$
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    say: Đáp án câu một. Một tỉ chia nguyên cho sáu mươi lăm nghìn năm trăm ba mươi
+      sáu được mười lăm nghìn hai trăm năm mươi tám, nhỏ hơn ba mươi hai nghìn bảy
+      trăm sáu mươi tám. Lấy dư cho một nghìn không trăm hai mươi tư thì còn chín
+      trăm hai mươi hai. Khoá vào thùng ảo chín trăm hai mươi hai.
+    clear: true
+    introduces:
+    - cdot
+  - show: '<p>Câu 2: P1 ghi $200 - 40 = 160$, CAS thành 13; P2 gửi CAS 12 → từ chối,
+      đọc lại 160.</p>
+
+      $$\text{có CAS: } 160 + 25 = \hlg{185}, \qquad \text{không CAS: } 200 + 25 =
+      \hl{225}$$
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    say: Đáp án câu hai. Tiến trình một ghi hai trăm trừ bốn mươi, bằng một trăm sáu
+      mươi, dấu thành mười ba. Có dấu thì một trăm sáu mươi cộng hai mươi lăm bằng
+      một trăm tám mươi lăm. Không có dấu thì hai trăm hai mươi lăm, mất phần trừ
+      bốn mươi.
+  - show: '<table class=''t''><tr><th>lựa chọn</th><th>được</th><th>mất</th></tr><tr><td>CAS
+      (lạc quan)</td><td>không chặn đọc; ít tranh chấp thì gần như không tốn thêm</td><td>tranh
+      chấp nặng thì bị từ chối nhiều lần, phải thử lại có giới hạn</td></tr><tr><td>khoá
+      bi quan</td><td>người giữ khoá chắc chắn ghi được</td><td>người khác phải chờ;
+      khoá phải có thời hạn, giữ lâu thì nghẽn</td></tr></table><div class="box key">Hạn
+      mức có nhiều yêu cầu cùng lúc và phải kiểm điều kiện rồi mới ghi: chọn <b>khoá
+      bi quan ngắn, có thời hạn</b>, vì nếu 200 yêu cầu đến cùng lúc, CAS bị từ chối
+      nhiều lần (bảng ở cảnh quy mô). Nếu chỉ cộng dồn một số, ưu tiên <b>phép tăng
+      liền một bước</b> của kho.</div>'
+    focus:
+    - '1.2'
+    - '1.2'
+    - '1.3'
+    - 2
+    say: Đáp án câu ba. Dấu phiên bản không chặn đọc nhưng bị từ chối nhiều lần khi
+      tranh chấp nặng. Khoá bi quan cho người giữ khoá chắc chắn ghi được, đổi lại
+      người khác phải chờ. Vậy với hạn mức phải kiểm điều kiện rồi mới ghi, nếu hai
+      trăm yêu cầu đến cùng lúc, nên chọn khoá bi quan ngắn có thời hạn.
+    clear: true
+- id: practice
+  kind: practice
+  title: 'Tự làm: tính thùng ảo và chạy lại hai tiến trình có CAS'
+  steps:
+  - show: '<p><b>Đề</b>: viết <code>mau.py</code> (Python, chỉ thư viện chuẩn):</p>
+
+      <ol><li>khoá <code>session::s77</code>: tính <code>r = (crc32 &gt;&gt; 16) &amp;
+      0x7FFF</code> rồi in thùng ảo <code>r % 1024</code> và <code>r % 128</code></li>
+
+      <li>hồ sơ <b>300</b> điểm, CAS <b>4</b>; P1 cộng 20, P2 trừ 50, cả hai đọc trước
+      khi ai ghi. Viết hàm <code>ghi(moi, cas_kem)</code> (đặt tên không dấu): lệch
+      CAS thì trả <code>tu choi</code>, khớp thì lưu và tăng CAS thêm 1</li>
+
+      <li>P1 ghi; P2 ghi (bị từ chối); P2 đọc lại, trừ 50 lần nữa rồi ghi lần hai;
+      in giá trị và CAS cuối</li></ol>
+
+      <p class="note">Số liệu khác ví dụ trong bài; chữ in ra phải đúng từng ký tự
+      như kết quả mong đợi.</p>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    - 3
+    pause: 120
+    say: Bây giờ tới phần bạn tự làm. Tính thùng ảo của khoá phiên với một nghìn không
+      trăm hai mươi tư thùng và một trăm hai mươi tám thùng. Rồi dựng hàm ghi có dấu
+      phiên bản, cho hồ sơ ba trăm điểm, hai tiến trình cùng đọc trước. Hãy dừng video
+      và tự viết.
+  - show: '<p><b>Kết quả mong đợi</b></p><div class="code"><div>thung ao (1024): 892
+      | (128): 124</div><div>P1: ghi duoc, CAS moi = 5</div><div>P2: tu choi</div><div>P2
+      lan 2: ghi duoc, CAS moi = 6</div><div>cuoi: 270 6</div></div><p class="note">Chấm
+      bằng Git Bash: <code>bash labs/cham.sh BNX L09 mau.py</code> — in <b>ĐÚNG</b>
+      khi trùng.</p>'
+    focus:
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Đây là kết quả mong đợi. Bạn chạy chương trình của mình rồi so từng dòng.
+      Nếu muốn chấm bằng máy, dùng lệnh ở dưới màn hình; lệnh in chữ ĐÚNG khi đầu
+      ra trùng, hoặc chỉ ra dòng nào khác.
+  - show: '<div class="box key"><b>Nếu kẹt:</b> hàm <code>ghi</code> so <code>cas_kem
+      != cas</code> trước; khớp thì gán giá trị mới và <code>cas + 1</code>. Tiến
+      trình hai bị từ chối thì phải đọc lại giá trị và CAS hiện tại.
+
+      Lời giải đầy đủ ở <code>labs/BNX/L09/loi_giai.py</code> — chỉ mở sau khi bạn
+      đã thử.</div>
+
+      '
+    say: Nếu kẹt, hàm ghi so dấu gửi kèm với dấu hiện tại trước, khớp thì lưu giá
+      trị mới và tăng dấu thêm một. Lời giải nằm trong thư mục thực hành của bài,
+      chỉ mở sau khi đã tự thử.
+    clear: true
+  lab: labs/BNX/L09
+- id: recap
+  kind: recap
+  title: Chuỗi logic & tư duy cần mang theo
+  steps:
+  - show: '<div class=''chain''><span class=''n''>khoá customer::C1001</span><span
+      class=''a''>→</span><span class=''n''>CRC32 → thùng ảo 351</span><span class=''a''>→</span><span
+      class=''n''>bản đồ cụm → máy</span><span class=''a''>→</span><span class=''n''>ghi
+      kèm CAS: lệch thì đọc lại</span><span class=''a''>→</span><span class=''n''>180,
+      không mất điểm</span></div>'
+    say: Khoá bản ghi được băm ra thùng ảo ba trăm năm mươi mốt, bản đồ cụm chỉ ra
+      máy giữ thùng đó. Mỗi lần ghi mang theo dấu phiên bản, lệch thì đọc lại rồi
+      ghi, nên kết quả là một trăm tám mươi điểm, không mất cập nhật.
+  - show: <div class='box key'><b>Tư duy:</b> thiết kế <b>khoá trước</b>, vì đó là
+      cách truy cập chính. Mỗi lần “đọc, sửa, ghi” phải mang CAS. Bản ghi phiên luôn
+      có hạn sống, và hạn sống phải được đặt lại mỗi lần ghi.</div>
+    say: Điều cần mang theo. Thiết kế khoá trước, vì đó là cách truy cập chính. Mỗi
+      lần đọc, sửa, ghi phải mang dấu phiên bản. Bản ghi phiên luôn có hạn sống, và
+      phải đặt lại mỗi lần ghi.
+  - show: '<p>Bài sau: Kafka giữ bản cuối của mỗi khoá trong nhật ký, kiểm lược đồ
+      trước khi bên gửi đổi, và một hàng đợi khác định tuyến theo mẫu chủ đề.</p>'
+    forward_ref: true
+    say: 'Bài sau học Kafka nâng cao: nén nhật ký theo khoá, kiểm lược đồ và định
+      tuyến theo mẫu.'

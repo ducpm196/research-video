@@ -1,7 +1,5 @@
-import ipaddress
-vpc = ipaddress.IPv4Network('172.16.0.0/20')
-subs = list(vpc.subnets(new_prefix=24))
+import ipaddress, sys
+kv = dict(t.split('=') for t in sys.stdin.read().split())
+vpc = ipaddress.IPv4Network(kv['vpc']); subs = list(vpc.subnets(new_prefix=int(kv['new_prefix'])))
 n_ip = subs[0].num_addresses
-print(f'subnets_24={len(subs)}')
-print(f'ips_per_24={n_ip}')
-print(f'usable_cloud_ips={n_ip - 5}')
+print(f'subnets_24={len(subs)}\nips_per_24={n_ip}\nusable_cloud_ips={n_ip - int(kv["reserved"])}')

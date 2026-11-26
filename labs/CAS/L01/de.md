@@ -1,11 +1,6 @@
-# Lab CAS L01 — Patriot (1991): sai số nhị phân 24-bit của 0.1 giây tích lũy sau 50h và 100h
+# Lab CAS L01 — Sai số nhị phân 24-bit tích lũy theo giờ
 
-Mô phỏng thanh ghi 24-bit (1 bit dấu + 23 bit phần lẻ, bước `scale = 1 << 23`) biểu diễn `1/10 = 0.1`: tính sai số chặt cụt mỗi tích tắc `0.1 - int(0.1 * scale)/scale`, rồi nhân với `50 giờ` và `100 giờ` ở tần số `10 Hz` (`0.1 giây/nhịp`).
+Đọc `stdin` `bits=<int> val=<float> hz=<int> h1=<int> h2=<int>`. Tính sai số chặt cụt ở thanh ghi chấm tĩnh với hệ số nhân `scale = 2 ** bits` (hoặc viết bằng phép dịch bit `1 << bits`) và độ trôi tích lũy sau `h1`, `h2` giờ.
 
-Định dạng đầu ra (1 dòng):
-`drift_50h=<4 chữ số> drift_100h=<4 chữ số>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh CAS L01 duong_dan/bai_cua_ban.py
-```
+In đúng 1 dòng: `drift_50h=<.4f> drift_100h=<.4f>`.
+Chấm tự động: `bash labs/cham.sh CAS L01 duong_dan/bai_cua_ban.py`

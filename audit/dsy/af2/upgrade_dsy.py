@@ -5,6 +5,7 @@ Vector clock, Quorum R+W>N, CAP, Raft số nút chịu lỗi, Consistent Hashing
 tail straggler, cửa sổ tumbling, Bloom filter FPR, Reservoir sampling, lưu trữ cột RLE,
 2PC coordinator-participant, deduplication, và chỉ mục Bigtable 3 tầng.
 """
+import sys as _sys; from pathlib import Path as _P; _sys.path.insert(0, str(_P(__file__).resolve().parents[2])); import _frozen  # noqa: E402,F401
 import subprocess
 import sys
 from pathlib import Path

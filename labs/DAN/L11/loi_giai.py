@@ -1,4 +1,4 @@
-a, b, base = 200.0, 212.0, 190.0
-real_ratio = (b - a) / a * 100
-visual_ratio = (b - base) / (a - base)
-print(f"real_diff_pct={real_ratio:.1f}% visual_ratio={visual_ratio:.1f}x")
+import sys
+kv = {k: float(v) for k, v in (t.split('=') for t in sys.stdin.read().split())}
+rd = (kv['b'] - kv['a']) / kv['a'] * 100; vr = (kv['b'] - kv['base']) / (kv['a'] - kv['base'])
+print(f'real_diff_pct={rd:.1f}% visual_ratio={vr:.1f}x')

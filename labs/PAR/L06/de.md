@@ -1,11 +1,4 @@
-# Lab PAR L06 — Vector hoá thanh ghi 512-bit (16 làn số thực 32 bit) trên mảng 100 phần tử
+# Lab PAR L06 — Vector hoá SIMD và phần dư vô hướng
 
-Tính số làn `512 // 32 = 16`, số lệnh vector `100 // 16` và số phần tử dư xử lý vô hướng `100 % 16` cho mảng 100 phần tử số thực 32 bit.
-
-Định dạng đầu ra (1 dòng):
-`simd_lanes=<số> vec_ops=<số> scalar_tail=<số>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh PAR L06 duong_dan/bai_cua_ban.py
-```
+Đọc `n reg_bits elem_bits` từ stdin (ví dụ `100 512 32`, với SIMD = một lệnh, nhiều dữ liệu). Tính số làn thanh ghi vector (`simd_lanes = reg_bits // elem_bits`), số lệnh vector (`vec_ops = n // lanes`) và số phần tử phần dư (`scalar_tail = n % lanes`).
+In đúng 1 dòng `simd_lanes=<int> vec_ops=<int> scalar_tail=<int>`.

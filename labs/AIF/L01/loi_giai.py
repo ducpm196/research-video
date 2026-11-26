@@ -1,15 +1,17 @@
-from collections import deque
-g = {
-    'S': ['A', 'B'], 'A': ['C', 'D'],
-    'B': ['G'], 'C': ['G'], 'D': [], 'G': [],
-}
-q, seen, expanded, found_d = deque([('S', 0)]), {'S'}, 0, -1
-while q and found_d < 0:
-    u, d = q.popleft()
-    expanded += 1
+import sys
+from collections import deque, defaultdict
+kv = dict(t.split('=') for t in sys.stdin.read().split())
+g = defaultdict(list)
+for item in kv['edges'].split(','):
+    u, vs = item.split(':'); g[u] = [x for x in vs.split('|') if x]
+s, goal = kv['start'], kv['goal']
+fd = 0 if s == goal else -1
+q, seen, exp = deque([(s, 0)]), {s}, 0
+while q and fd < 0:
+    u, d = q.popleft(); exp += 1
     for v in g[u]:
         if v not in seen:
             seen.add(v)
-            if v == 'G': found_d = d + 1; break
+            if v == goal: fd = d + 1; break
             q.append((v, d + 1))
-print(f"shortest={found_d} expanded={expanded} visited={len(seen)}")
+print(f'shortest={fd} expanded={exp} visited={len(seen)}')

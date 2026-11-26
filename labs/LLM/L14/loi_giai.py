@@ -1,4 +1,4 @@
-flops = 6 * 90e9 * 4.5e11
-pf_days = flops / (1e15 * 86400)
-ratio = 2.0e12 / 100e9
-print(f"model_pf_days={pf_days:.0f} tokens_per_param={ratio:.0f}")
+import sys
+kv = {k: float(v) for k, v in (t.split('=') for t in sys.stdin.read().split())}
+pf = (6.0 * kv['params'] * kv['train_toks']) / (1e15 * 86400.0); rat = kv['opt_toks'] / kv['opt_params']
+print(f'model_pf_days={pf:.0f} tokens_per_param={rat:.0f}')

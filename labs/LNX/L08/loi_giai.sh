@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
-map="8080:80"
-hp=${map%%:*}
-cp=${map##*:}
+exec < <(tr -d '\r')
+read -r MAP ROWS
+W=$(mktemp -d)
+trap 'rm -rf "$W"' EXIT
+printf "%s\n" "$ROWS" > "$W/vol_rows.txt"
+hp=${MAP%%:*}
+cp=${MAP##*:}
+ret=$(cat "$W/vol_rows.txt")
+persisted=$(( ret == ROWS ? 1 : 0 ))
 echo "host_port=$hp container_port=$cp"
-echo "volume_persists=1"
-echo "retained_rows=500"
+echo "volume_persists=$persisted"
+echo "retained_rows=$ret"

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Mechanical check of the always-on instruction mirror against this skill.
 
-Usage:  python3 check_mirror.py SKILL_DIR INSTRUCTIONS_FILE
+Usage:  python3 check_mirror.py SKILL_DIR INSTRUCTIONS_FILE [--json]
+  --json  print one JSON object instead of the text lines (schema_version 1: checks with id, result, detail)
 
 Read-only, standard library only, no network, writes nothing but stdout.
 
@@ -25,6 +26,7 @@ Exit codes: 0 all PASS | 1 any FAIL | 4 none FAIL but some NOT_VERIFIED | 3 usag
 5 internal error: the run stopped, so no result was produced (never read it as FAIL).
 """
 import hashlib
+import json
 import os
 import re
 import sys
@@ -131,6 +133,8 @@ def run(skill_dir, instr_path):
 
 
 def main(argv):
+    as_json = "--json" in argv
+    argv = [a for a in argv if a != "--json"]
     if len(argv) != 3 or not os.path.isdir(argv[1]) or not os.path.isfile(argv[2]):
         sys.stderr.write(__doc__)
         return 3
@@ -139,9 +143,16 @@ def main(argv):
     except Exception as err:  # exit 1 means FAIL; a crash is no result at all
         sys.stderr.write("INTERNAL ERROR, no result: %s: %s\n" % (type(err).__name__, err))
         return 5
+    counts = {k: sum(1 for r in results if r[1] == k) for k in ("PASS", "FAIL", "NOT_VERIFIED")}
+    if as_json:
+        code = 1 if counts["FAIL"] else (4 if counts["NOT_VERIFIED"] else 0)
+        print(json.dumps({"schema_version": 1, "tool": "check_mirror",
+                          "checks": [{"id": c, "result": r, "detail": d} for c, r, d in results],
+                          "summary": {"checks": len(results), "PASS": counts["PASS"], "FAIL": counts["FAIL"], "NOT_VERIFIED": counts["NOT_VERIFIED"]},
+                          "exit_code": code, "checked_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}, indent=1, sort_keys=True))
+        return code
     for cid, res, detail in results:
         print("%-3s %-12s %s" % (cid, res, detail))
-    counts = {k: sum(1 for r in results if r[1] == k) for k in ("PASS", "FAIL", "NOT_VERIFIED")}
     print("checks=%d PASS=%d FAIL=%d NOT_VERIFIED=%d" % (
         len(results), counts["PASS"], counts["FAIL"], counts["NOT_VERIFIED"]))
     print("checked_at=%s" % datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))

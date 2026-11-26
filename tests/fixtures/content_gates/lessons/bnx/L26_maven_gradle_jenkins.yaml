@@ -1,0 +1,887 @@
+id: L26
+course: BNX
+series: BNX · Backend ngân hàng mở rộng theo JD
+title: 'Bài 26 — Maven, Gradle và Jenkins: vòng đời, xung đột phiên bản và dựng tái
+  lập'
+voice: vi-VN-NamMinhNeural
+rate: -5%
+depth: full
+af2: true
+covers:
+- objective: 1
+  scene: example
+- objective: 2
+  scene: example
+- objective: 3
+  scene: check
+- objective: 4
+  scene: example
+- objective: 5
+  scene: example
+- objective: 6
+  scene: quymo
+- objective: 7
+  scene: practice
+source: 'curriculum/bnx.yaml L26; audit/bnx/verify_bnx.py L26; audit/bnx/sources_l26.md:
+  hướng dẫn Maven (Lifecycle, Dependency Mechanism, Reproducible Builds), hướng dẫn
+  chính thức Gradle (Dependency Resolution, Java plugin), hướng dẫn chính thức Jenkins
+  (Pipeline Syntax, Jenkinsfile; đọc 2026-11-13); Maven 3.9.11 chạy thật trên Temurin
+  JDK 21.0.13; Gradle và Jenkins không chạy (chỉ kiểm cú pháp Groovy 4.0.27 và mô
+  phỏng nhỏ)'
+assumes: []
+objectives:
+- Đọc vòng đời dựng mặc định của Maven qua các mục tiêu của phần mở rộng in ra khi
+  chạy mvn package
+- Đọc cây phụ thuộc bắc cầu của một pom.xml bằng dependency:tree và nhận ra dòng bị
+  bỏ vì xung đột
+- Xác định phiên bản được chọn theo luật gần nhất thắng của Maven
+- Đọc một Jenkinsfile khai báo và nói thứ tự giai đoạn cùng nhánh post khi một giai
+  đoạn hỏng
+- Chứng minh dựng tái lập bằng cách dựng hai lần và so sha256 của jar
+- Đọc số gói thư viện đo thật ở ba dự án thử và tính số máy dựng tối thiểu khi lượt
+  dựng gấp 100 và 10 000 lần
+- Viết bộ phân giải phiên bản theo luật gần nhất thắng của Maven và theo luật cao
+  nhất của Gradle
+asr_reviewed:
+- {sentence: "Lặp chừng nào danh sách còn phần tử, rỗng thì dừng.", reason: "ASR chép “Lập chừng nào danh sách còn phần tử, rộng thi dưng.” (0.636): lệch âm/thanh thuần Việt: lặp/lập, rỗng thì dừng/rộng thi dưng — NOT_VERIFIED bằng tai người"}
+- {sentence: "Tạo thư mục rồi chép tệp mã nguồn vào, chỉ khi tạo xong.", reason: "ASR chép “Tạo thư mục đôi chép tẹp mả nguồn vào chỉ khi tạo xong.” (0.769): lệch âm/thanh thuần Việt: rồi/đôi, tệp mã/tẹp mả — NOT_VERIFIED bằng tai người"}
+- {sentence: "Thư viện bắc cầu thì luật chọn quyết định.", reason: "ASR chép “Thứ viện bắt cầu thì luật chọn quyết định.” (0.778): lệch âm/thanh thuần Việt: thư/thứ, bắc/bắt — NOT_VERIFIED bằng tai người"}
+- sentence: Ở bài hai mươi bảy, ta tìm hiểu tích hợp hệ thống cũ bằng phong bì XML
+    và truyền tệp lô an toàn, kèm kiểm toàn vẹn.
+  reason: 'ASR chép “Ở bài 27, ta tìm hiểu tích hợp hệ thống cũ bằng phong BXM-L và
+    truyền tẹp lô an toàn, kèm kiểm toàn vẹn.” (0.893): chữ cái đứng riêng đọc tên
+    kiểu Việt, ASR viết khác; lệch âm/thanh thuần Việt: bì (trong “bì x m” → “bxm”),
+    tệp/tẹp — NOT_VERIFIED bằng tai người'
+scenes:
+- id: hook
+  kind: hook
+  title: Hai công cụ dựng, cùng một đồ thị phụ thuộc, hai phiên bản khác nhau
+  checks:
+  - 'alg.bnx_l26_maven([(''text'', ''1.10.0''), (''lang3'', ''3.9'')], {(''text'',
+    ''1.10.0''): [(''lang3'', ''3.12.0'')]})[''lang3''] == ''3.9'''
+  - 'alg.bnx_l26_gradle([(''text'', ''1.10.0''), (''lang3'', ''3.9'')], {(''text'',
+    ''1.10.0''): [(''lang3'', ''3.12.0'')]})[''lang3''] == ''3.12.0'''
+  steps:
+  - show: '<p>Dự án khai thẳng thư viện <code>commons-lang3</code> bản <b>3.9</b>.
+      Nhưng thư viện <code>commons-text</code> mà dự án dùng lại cần <code>commons-lang3</code>
+      bản <b>3.12.0</b>.</p>
+
+      <div class="box key">Chạy Maven thật: <b>3.9</b> thắng, và báo <code>omitted
+      for conflict with 3.9</code>. Luật mặc định của <b>Gradle</b> (công cụ dựng
+      thứ hai cho Java, đọc <code>build.gradle</code> thay cho <code>pom.xml</code>;
+      theo hướng dẫn chính thức): lấy bản <b>cao nhất</b>, tức 3.12.0.
+
+      Cùng đồ thị, hai công cụ, hai kết quả. Làm sao biết bản nào đang chạy, và làm
+      sao để máy bạn và mọi máy khác dựng ra cùng một sản phẩm?</div>
+
+      '
+    focus:
+    - 1
+    - 1
+    - 2
+    - 2
+    introduces:
+    - bnx_gradle
+    say: Chào bạn, dự án khai thẳng một thư viện tiện ích ở bản ba chấm chín. Nhưng
+      một thư viện khác cần chính nó ở bản ba chấm mười hai chấm không. Chạy công
+      cụ dựng thật, bản ba chấm chín thắng và bản kia bị bỏ vì xung đột, còn công
+      cụ dựng thứ hai mặc định lấy bản cao nhất. Vậy làm sao biết bản nào đang chạy,
+      và làm sao để mọi máy cùng ra một sản phẩm?
+- id: prereq
+  kind: prereq
+  title: 'Trước hết: năm điều cần hiểu'
+  checks:
+  - 3 + 9 + 34 > 0
+  steps:
+  - show: '<table class=''t''><tr><th>khái niệm</th><th>nghĩa</th><th>ví dụ</th></tr><tr><td>①
+      thư viện, phiên bản</td><td>gói mã người khác viết sẵn, đóng thành tệp <b>jar</b>;
+      mỗi bản có số phiên bản</td><td>commons-lang3 bản 3.9 và bản 3.12.0 là hai tệp
+      khác nhau</td></tr><tr><td>② phụ thuộc</td><td>thư viện mà dự án cần để biên
+      dịch hoặc chạy</td><td>dự án cần commons-text</td></tr><tr><td>③ phụ thuộc bắc
+      cầu</td><td>thư viện mình cần lại cần thư viện khác</td><td>commons-text cần
+      commons-lang3</td></tr><tr><td>④ dựng (build)</td><td>biến mã nguồn thành sản
+      phẩm chạy được: biên dịch, kiểm thử, đóng gói</td><td>ra một tệp jar</td></tr><tr><td>⑤
+      tệp mô tả dự án</td><td>tệp chữ khai báo dự án cần gì, dựng thế nào; công cụ
+      đọc rồi làm</td><td><code>pom.xml</code> (Maven), <code>build.gradle</code>
+      (Gradle)</td></tr></table>'
+    focus:
+    - '1.2'
+    - - '1.3'
+      - '1.4'
+    - '1.5'
+    - '1.6'
+    say: Trước hết ta cần hiểu năm điều, thư viện là gói mã người khác viết sẵn, mỗi
+      bản có một số phiên bản. Phụ thuộc là thư viện mà dự án cần, và phụ thuộc bắc
+      cầu là khi thư viện mình cần lại cần thêm thư viện khác. Dựng là biến mã nguồn
+      thành sản phẩm chạy được, qua biên dịch, kiểm thử và đóng gói. Tệp mô tả dự
+      án khai báo dự án cần gì và dựng thế nào.
+- id: sym
+  kind: symbol
+  title: Giải mã các tên trên màn hình
+  checks:
+  - len(alg.bnx_l26_phases()) == 6
+  steps:
+  - show: '<table class=''t''><tr><th>tên</th><th>nghĩa</th></tr><tr><td><code>&lt;dependency&gt;</code></td><td>một
+      phụ thuộc: <code>groupId</code> (nhóm), <code>artifactId</code> (tên), <code>version</code>
+      (phiên bản)</td></tr><tr><td>pha (phase)</td><td>một chặng của vòng đời dựng,
+      như <code>process-resources</code>, <code>compile</code>, <code>test</code>,
+      <code>package</code></td></tr><tr><td>mục tiêu (goal)</td><td>việc cụ thể của
+      một <b>phần mở rộng</b> (plugin), gắn vào một pha; ví dụ <code>compiler:compile</code>
+      gắn vào pha <code>compile</code></td></tr><tr><td><code>mvn dependency:tree</code></td><td>lệnh
+      in <b>cây phụ thuộc</b>: dự án ở gốc, mỗi cấp thụt vào là một tầng bắc cầu</td></tr><tr><td><code>omitted
+      for conflict</code></td><td>báo: phiên bản này bị <b>bỏ</b> vì xung đột với
+      phiên bản đã chọn</td></tr><tr><td><code>Jenkinsfile</code></td><td>tệp khai
+      báo <b>đường ống</b> dựng cho <b>Jenkins</b>, phần mềm chạy trên <b>máy chủ
+      dựng</b> (máy riêng chuyên dựng tự động khi có mã mới): <code>pipeline</code>,
+      <code>stages</code>, <code>stage</code>, <code>steps</code>, <code>post</code></td></tr><tr><td><code>outputTimestamp</code></td><td>mốc
+      thời gian cố định để ghi vào tệp dựng, thay cho giờ chạy thật</td></tr></table>'
+    focus:
+    - '1.2'
+    - - '1.3'
+      - '1.4'
+    - '1.5'
+    - '1.6'
+    - '1.7'
+    - '1.8'
+    introduces:
+    - bnx_jenkins
+    - bnx_may_dung
+    say: Mỗi khối phụ thuộc có ba phần là nhóm, tên và phiên bản. Pha là một chặng
+      của vòng đời dựng, còn mục tiêu là việc cụ thể của phần mở rộng, gắn vào một
+      pha. Lệnh cây phụ thuộc in dự án ở gốc, mỗi cấp thụt vào là một tầng bắc cầu.
+      Dòng báo bỏ vì xung đột cho biết phiên bản đó đụng phiên bản đã chọn. Tệp đường
+      ống dành cho máy chủ dựng, máy riêng chuyên dựng tự động khi có mã mới. Mốc
+      thời gian đầu ra là giờ cố định ghi vào tệp dựng.
+  - show: '<table class=''t''><tr><th>viết trong lệnh</th><th>đọc là</th><th>ví dụ
+      nhỏ</th></tr><tr><td><code>&#36;M -B -q dependency:tree -DoutputFile=cay.txt
+      &amp;&amp; cat cay.txt</code></td><td><code>&#36;M</code>: biến chứa đường dẫn
+      lệnh <code>mvn</code> (đặt ở dòng đầu); <code>-B</code> chạy không hỏi, <code>-q</code>
+      ít chữ; <code>-Dx=y</code> đặt tham số <code>x</code> bằng <code>y</code>; <code>&amp;&amp;</code>
+      chạy lệnh sau nếu lệnh trước thành công; <code>cat</code> in tệp</td><td><code>echo
+      hi &amp;&amp; echo ok</code> in cả hai dòng</td></tr><tr><td><code>mvn -B package
+      | grep -- ''--- '' | cut -c8-</code></td><td>dấu <code>|</code> đưa đầu ra lệnh
+      trái làm đầu vào lệnh phải; <code>grep</code> giữ dòng có chuỗi <code>--- </code>
+      (<code>--</code> báo hết tuỳ chọn); <code>cut -c8-</code> bỏ 7 ký tự đầu mỗi
+      dòng</td><td><code>cut -c3-</code> biến <code>abcde</code> thành <code>cde</code></td></tr><tr><td><code>a=&#36;(dung
+      &#36;1)</code>, <code>cut -d'' '' -f1</code></td><td><code>dung() { … }</code>
+      là hàm; <code>&#36;1</code>, <code>&#36;2</code> là đối số đầu, đối số hai;
+      <code>&#36;(…)</code> lấy đầu ra của lệnh gán cho biến <code>a</code>; <code>cut
+      -d'' '' -f1</code> lấy cột đầu của dòng, các cột tách bằng dấu cách</td><td><code>a=&#36;(echo
+      xin)</code> thì <code>a</code> là <code>xin</code>; <code>sleep 2</code> chờ
+      2 giây; <code>[ x = y ] &amp;&amp; A || B</code>: x bằng y thì làm A, không
+      thì làm B</td></tr></table>'
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    clear: true
+    say: Trước hết, đọc vài ký hiệu của lệnh. Biến chứa đường dẫn lệnh dựng, các tuỳ
+      chọn gạch ngang chọn chế độ chạy, hai dấu và nối lệnh sau chỉ chạy khi lệnh
+      trước thành công. Dấu gạch đứng đưa đầu ra lệnh trái vào lệnh phải, lọc giữ
+      dòng có chuỗi cho trước, rồi cắt bỏ vài ký tự đầu mỗi dòng. Cuối cùng là hàm
+      với đối số đầu và đối số hai, lấy đầu ra lệnh gán vào biến, chờ một lúc, và
+      phép so sánh chọn việc làm.
+  - show: '<table class=''t''><tr><th>viết trong mã</th><th>đọc là</th><th>ví dụ nhỏ</th></tr><tr><td><code>for
+      d in a b c; do … done</code></td><td>lặp: <code>d</code> lần lượt là <code>a</code>,
+      <code>b</code>, <code>c</code>; mỗi lần chạy các dòng giữa <code>do</code> và
+      <code>done</code></td><td><code>&#36;d</code> là giá trị hiện tại của <code>d</code></td></tr><tr><td><code>implementation
+      ''org.apache.commons:commons-lang3:3.9''</code></td><td>Gradle: một phụ thuộc
+      viết gọn thành <code>nhóm:tên:bản</code></td><td><code>mavenCentral()</code>
+      là kho tải thư viện</td></tr><tr><td>phiên bản dạng khoảng, <code>latest</code></td><td>khoảng
+      như <code>[3.0,4.0)</code>: bản nào trong khoảng cũng được; <code>latest</code>:
+      bản mới nhất ở thời điểm dựng, nên mỗi lần dựng có thể một khác</td><td><code>[3.0,4.0)</code>
+      gồm 3.0, không gồm 4.0</td></tr></table>'
+    focus:
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    clear: true
+    say: Tiếp theo là vòng lặp liệt kê từng giá trị. Một phụ thuộc của công cụ dựng
+      thứ hai viết gọn thành nhóm, tên và bản. Phiên bản dạng khoảng hay chữ mới nhất
+      cho phép nhiều bản, nên mỗi lần dựng có thể một khác.
+- id: intuition
+  kind: intuition
+  title: 'Hình dung: cây phụ thuộc và đường ống dựng'
+  checks:
+  - 'alg.bnx_l26_maven([(''text'', ''1.10.0''), (''lang3'', ''3.9'')], {(''text'',
+    ''1.10.0''): [(''lang3'', ''3.12.0'')]}) == {''text'': ''1.10.0'', ''lang3'':
+    ''3.9''}'
+  steps:
+  - show: '<div><svg width="1500" height="520" viewBox="0 0 1500 520" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><text
+      x="750" y="40" font-size="26" text-anchor="middle" fill="#1f2937" font-weight="bold">Cây
+      phụ thuộc: bản của khai báo gần dự án nhất thắng (Maven)</text><rect x="560"
+      y="80" width="380" height="70" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="3"/><text
+      x="750.0" y="108" font-size="22" text-anchor="middle" fill="#1f2937" font-weight="bold">dự
+      án l26</text><text x="750.0" y="138" font-size="22" text-anchor="middle" fill="#1f2937">(gốc,
+      độ sâu 0)</text><rect x="160" y="230" width="420" height="80" rx="10" fill="#fef3c7"
+      stroke="#d97706" stroke-width="3"/><text x="370.0" y="263" font-size="22" text-anchor="middle"
+      fill="#1f2937">commons-text 1.10.0</text><text x="370.0" y="293" font-size="22"
+      text-anchor="middle" fill="#1f2937">(độ sâu 1)</text><rect x="920" y="230" width="420"
+      height="80" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="3"/><text
+      x="1130.0" y="263" font-size="22" text-anchor="middle" fill="#1f2937" font-weight="bold">commons-lang3
+      3.9</text><text x="1130.0" y="293" font-size="22" text-anchor="middle" fill="#1f2937">(độ
+      sâu 1) THẮNG</text><rect x="160" y="380" width="420" height="80" rx="10" fill="#fee2e2"
+      stroke="#dc2626" stroke-width="3" stroke-dasharray="8 6"/><text x="370.0" y="413"
+      font-size="22" text-anchor="middle" fill="#1f2937">commons-lang3 3.12.0</text><text
+      x="370.0" y="443" font-size="22" text-anchor="middle" fill="#1f2937">(độ sâu
+      2) bị bỏ</text><line x1="700" y1="155" x2="430" y2="225" stroke="#475569" stroke-width="3.5"
+      marker-end="url(#ah)"/><line x1="800" y1="155" x2="1070" y2="225" stroke="#475569"
+      stroke-width="3.5" marker-end="url(#ah)"/><line x1="370" y1="315" x2="370" y2="375"
+      stroke="#dc2626" stroke-width="3.5" marker-end="url(#ah)"/><text x="395" y="352"
+      font-size="22" text-anchor="start" fill="#dc2626" font-weight="bold">cần</text><text
+      x="1130" y="400" font-size="22" text-anchor="middle" fill="#16a34a" font-weight="bold">Maven:
+      gần nhất thắng, cùng độ sâu thì khai báo trước thắng</text><text x="1130" y="440"
+      font-size="22" text-anchor="middle" fill="#d97706" font-weight="bold">Gradle
+      (mặc định): lấy bản cao nhất → 3.12.0</text><text x="750" y="495" font-size="22"
+      text-anchor="middle" fill="#1f2937" font-weight="bold">Muốn chắc một bản: khai
+      nó thẳng trong tệp mô tả dự án</text></svg></div>'
+    clear: true
+    say: 'Hình này là cây phụ thuộc: dự án ở gốc, hai phụ thuộc trực tiếp ở độ sâu
+      một. Thư viện thứ nhất cần thư viện tiện ích ở bản mới hơn, độ sâu hai, còn
+      dự án tự khai bản cũ ở độ sâu một. Công cụ thứ nhất cho bản gần dự án nhất thắng,
+      công cụ thứ hai lấy bản cao nhất, muốn chắc một bản, hãy khai thẳng.'
+  - show: '<div><svg width="1500" height="430" viewBox="0 0 1500 430" font-family="sans-serif"><defs><marker
+      id="ah" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="10"
+      refY="7" orient="auto"><path d="M0,0 L14,7 L0,14 z" fill="#475569"/></marker></defs><text
+      x="750" y="40" font-size="26" text-anchor="middle" fill="#1f2937" font-weight="bold">Jenkinsfile:
+      các giai đoạn nối tiếp, hỏng thì dừng và chạy nhánh post</text><rect x="60"
+      y="130" width="280" height="90" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="3"/><text
+      x="200.0" y="167" font-size="24" text-anchor="middle" fill="#1f2937" font-weight="bold">Build</text><text
+      x="200.0" y="199" font-size="24" text-anchor="middle" fill="#1f2937">mvn package</text><rect
+      x="430" y="130" width="280" height="90" rx="10" fill="#fee2e2" stroke="#dc2626"
+      stroke-width="3"/><text x="570.0" y="167" font-size="24" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">Test</text><text x="570.0" y="199" font-size="24"
+      text-anchor="middle" fill="#1f2937">mvn verify</text><rect x="800" y="130" width="280"
+      height="90" rx="10" fill="#e5e7eb" stroke="#6b7280" stroke-width="3" stroke-dasharray="8
+      6"/><text x="940.0" y="167" font-size="24" text-anchor="middle" fill="#1f2937">Deploy</text><text
+      x="940.0" y="199" font-size="24" text-anchor="middle" fill="#1f2937">không chạy</text><rect
+      x="1170" y="260" width="270" height="90" rx="10" fill="#fef3c7" stroke="#d97706"
+      stroke-width="3"/><text x="1305.0" y="298" font-size="22" text-anchor="middle"
+      fill="#1f2937" font-weight="bold">post failure</text><text x="1305.0" y="328"
+      font-size="22" text-anchor="middle" fill="#1f2937">echo dung that bai</text><line
+      x1="345" y1="175" x2="425" y2="175" stroke="#475569" stroke-width="3.5" marker-end="url(#ah)"/><line
+      x1="715" y1="175" x2="795" y2="175" stroke="#9ca3af" stroke-width="3.5" stroke-dasharray="8
+      6" marker-end="url(#ah)"/><line x1="580" y1="225" x2="1166" y2="300" stroke="#d97706"
+      stroke-width="3.5" marker-end="url(#ah)"/><text x="873" y="252" font-size="20"
+      text-anchor="middle" fill="#d97706">hỏng</text><text x="750" y="385" font-size="34"
+      text-anchor="middle" fill="#b45309" font-weight="bold">MÔ PHỎNG — Jenkins không
+      chạy trên máy này</text><text x="750" y="412" font-size="22" text-anchor="middle"
+      fill="#475569">hình mô tả quy tắc theo hướng dẫn chính thức</text></svg></div>'
+    clear: true
+    say: Hình thứ hai là đường ống ba giai đoạn nối tiếp. Kiểm thử hỏng thì giai đoạn
+      sau không chạy và nhánh thất bại chạy. Ta chỉ vẽ lại quy tắc, vì máy chủ dựng
+      không chạy ở đây.
+- id: formula
+  kind: formula
+  title: 'Suy ra từng bước: từ tệp mô tả dự án tới sản phẩm dựng ra'
+  checks:
+  - 'alg.bnx_l26_maven([(''text'', ''1.10.0''), (''lang3'', ''3.9'')], {(''text'',
+    ''1.10.0''): [(''lang3'', ''3.12.0'')]})[''lang3''] == ''3.9'''
+  - 'alg.bnx_l26_gradle([(''text'', ''1.10.0''), (''lang3'', ''3.9'')], {(''text'',
+    ''1.10.0''): [(''lang3'', ''3.12.0'')]})[''lang3''] == ''3.12.0'''
+  - len(alg.bnx_l26_phases()) == 6 and len(alg.bnx_l26_phase_goals()) == 6 and alg.bnx_l26_phase_count()
+    == 17
+  - '[g.split('':'')[1] for p, g in alg.bnx_l26_phase_goals()] == alg.bnx_l26_phases()'
+  steps:
+  - show: '<p><b>Bước 1.</b> Muốn mọi máy dựng giống nhau, ta ghi mọi thứ vào <b>một
+      tệp mô tả dự án</b>: tên dự án, bản Java, và danh sách phụ thuộc. Công cụ đọc
+      tệp này rồi tự tải thư viện và dựng.</p><p><b>pom.xml (trích): hai phụ thuộc
+      trực tiếp</b></p><div class="code"><div>  &lt;dependencies&gt;</div><div>    &lt;dependency&gt;</div><div>      &lt;groupId&gt;org.apache.commons&lt;/groupId&gt;</div><div>      &lt;artifactId&gt;commons-text&lt;/artifactId&gt;</div><div>      &lt;version&gt;1.10.0&lt;/version&gt;</div><div>    &lt;/dependency&gt;</div><div>    &lt;dependency&gt;</div><div>      &lt;groupId&gt;org.apache.commons&lt;/groupId&gt;</div><div>      &lt;artifactId&gt;commons-lang3&lt;/artifactId&gt;</div><div>      &lt;version&gt;3.9&lt;/version&gt;</div><div>    &lt;/dependency&gt;</div><div>  &lt;/dependencies&gt;</div></div>'
+    focus:
+    - 1
+    - 3
+    clear: true
+    say: 'Bước một: ghi mọi thứ vào một tệp mô tả dự án, gồm tên, bản Java và danh
+      sách phụ thuộc. Công cụ đọc tệp nên tự tải thư viện và dựng.'
+  - show: '<p><b>Bước 2. Vòng đời.</b> Một lệnh dựng đi qua <b>các pha nối tiếp</b>
+      theo thứ tự cố định, từ pha đầu tới pha được gọi. Pha chỉ là chặng: việc làm
+      thật do <b>mục tiêu</b> của phần mở rộng gắn vào pha.</p><table class=''t''><tr><th>pha</th><th>mục
+      tiêu gắn vào (phần mở rộng:mục tiêu)</th></tr><tr><td>process-resources</td><td>resources:resources</td></tr><tr><td>compile</td><td>compiler:compile</td></tr><tr><td>process-test-resources</td><td>resources:testResources</td></tr><tr><td>test-compile</td><td>compiler:testCompile</td></tr><tr><td>test</td><td>surefire:test</td></tr><tr><td>package</td><td>jar:jar</td></tr></table>$$\text{gọi
+      package} \Rightarrow 17 \text{ pha, } \hl{6} \text{ mục tiêu chạy theo thứ tự}$$'
+    focus:
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: 'Bước hai là vòng đời: một lệnh dựng đi qua các pha nối tiếp theo thứ tự
+      cố định. Pha chỉ là chặng, việc làm thật do mục tiêu gắn vào pha. Gọi pha đóng
+      gói đi qua mười bảy pha, trong đó sáu pha có mục tiêu như bảng.'
+    introduces:
+    - implies
+  - show: '<p><b>Bước 3. Phụ thuộc bắc cầu.</b> Mỗi thư viện có tệp mô tả riêng, khai
+      thư viện nó cần. Công cụ lần theo, nên một phụ thuộc trực tiếp kéo theo cả chùm:
+      ở phần ví dụ, <b>1</b> phụ thuộc kéo <b>9</b>, rồi <b>34</b> gói thư viện tuỳ
+      dự án.</p>
+
+      $$1 \to 1; \qquad 1 \to 9; \qquad 1 \to 34 \;\; (\text{số đo thật ở phần ví
+      dụ})$$
+
+      '
+    focus:
+    - 1
+    - 2
+    clear: true
+    say: 'Bước ba là phụ thuộc bắc cầu: công cụ lần theo tệp mô tả của từng thư viện.
+      Nên một phụ thuộc trực tiếp kéo theo cả chùm: ba dự án thử là một, chín và ba
+      mươi bốn gói.'
+  - show: '<p><b>Bước 4. Xung đột.</b> Khi cùng một thư viện xuất hiện ở hai bản,
+      công cụ phải chọn một. <b>Maven</b>: bản của khai báo <b>gần dự án nhất</b>
+      (độ sâu nhỏ nhất); cùng độ sâu thì <b>khai báo trước</b> thắng. <b>Gradle</b>
+      mặc định: bản <b>cao nhất</b>.</p><table class=''t''><tr><th>thư viện</th><th>yêu
+      cầu</th><th>độ sâu</th><th>Maven chọn</th><th>Gradle chọn</th></tr><tr><td>lang3</td><td>3.9
+      (dự án khai)</td><td>1</td><td><b>3.9</b></td><td>3.12.0</td></tr><tr><td>lang3</td><td>3.12.0
+      (qua text)</td><td>2</td><td>bỏ</td><td>(cao nhất)</td></tr></table>'
+    focus:
+    - - 1
+    - 1
+    - 2
+    clear: true
+    say: 'Bước bốn là xung đột: cùng một thư viện ở hai bản thì chỉ một bản vào được,
+      nên công cụ phải chọn. Công cụ thứ nhất chọn khai báo gần dự án nhất, cùng độ
+      sâu thì khai báo trước thắng. Công cụ thứ hai chọn bản cao nhất.'
+  - show: '<p><b>Bước 5. Đường ống.</b> Máy chủ dựng đọc <b>Jenkinsfile</b> nằm cùng
+      mã nguồn, viết bằng <b>Groovy</b> (ngôn ngữ kịch bản chạy trên Java). <code>pipeline</code>
+      chứa <code>stages</code>, mỗi <code>stage</code> có <code>steps</code>.
+
+      <code>agent any</code>: chạy trên máy dựng nào đang rảnh. <code>sh ''…''</code>:
+      chạy một lệnh như bạn gõ tay.</p><p><b>Jenkinsfile (trích, phần 1)</b></p><div
+      class="code"><div>pipeline {</div><div>  agent any</div><div>  stages {</div><div>    stage(''Build'')
+      {</div><div>      steps { sh ''mvn -B package'' }</div><div>    }</div><div>    stage(''Test'')
+      {</div><div>      steps { sh ''mvn -B verify'' }</div><div>    }</div></div>
+
+      '
+    focus:
+    - 1
+    - 2
+    - 3
+    introduces:
+    - bnx_groovy
+    - bnx_agent
+    - bnx_sh
+    clear: true
+    say: 'Bước năm là đường ống: máy chủ dựng đọc một tệp khai báo nằm cùng mã nguồn.
+      Tệp viết bằng một ngôn ngữ kịch bản chạy trên Java, ta chỉ cần đọc các khối
+      lồng nhau. Dòng chọn máy nghĩa là chạy trên máy đang rảnh, dòng lệnh chạy một
+      lệnh như gõ tay.'
+  - show: <p>Giai đoạn cuối triển khai; khối <code>post</code> chạy khi xong hoặc
+      khi hỏng, và <code>failure</code> chỉ chạy khi có giai đoạn hỏng.</p><p><b>Jenkinsfile
+      (trích, phần 2)</b></p><div class="code"><div>    stage('Deploy') {</div><div>      steps
+      { sh './trien-khai.sh' }</div><div>    }</div><div>  }</div><div>  post {</div><div>    failure
+      { echo 'dung that bai' }</div><div>  }</div><div>}</div></div>
+    clear: true
+    say: Giai đoạn cuối là triển khai, và khối sau cùng chạy khi xong hoặc khi hỏng,
+      nghĩa là nhánh thất bại chỉ chạy khi có giai đoạn hỏng.
+  - show: '<p><b>Bước 6. Dựng tái lập.</b> Một jar có chứa <b>mốc thời gian</b> của
+      từng tệp bên trong, nên hai lần dựng cùng mã nguồn vẫn có thể ra hai jar khác
+      nhau từng bit. Đặt <code>project.build.outputTimestamp</code> cố định mốc đó.
+      Cách thử: dựng hai lần, so <b>mã băm</b> (sha256): dãy ký tự ngắn tính từ toàn
+      bộ nội dung tệp; đổi một bit thì cả dãy đổi.</p>$$\text{sha256(gói lần 1)} =
+      \text{sha256(gói lần 2)} \;\Rightarrow\; \text{dựng tái lập}$$'
+    focus:
+    - 1
+    - - 1
+      - 2
+    introduces:
+    - bnx_ma_bam
+    clear: true
+    say: 'Bước sáu là dựng tái lập: một gói chứa mốc thời gian của từng tệp bên trong,
+      nên hai lần dựng cùng mã nguồn vẫn có thể khác nhau từng bit. Đặt mốc cố định
+      thì hết khác, cách thử là so mã băm, dãy ký tự ngắn tính từ toàn bộ nội dung
+      gói.'
+- id: example
+  kind: example
+  title: Ví dụ chạy thật Maven, từng phép tính
+  checks:
+  - 'alg.bnx_l26_maven([(''text'', ''1.10.0''), (''lang3'', ''3.9'')], {(''text'',
+    ''1.10.0''): [(''lang3'', ''3.12.0'')]})[''lang3''] == ''3.9'''
+  - alg.bnx_l26_phases() == ['resources', 'compile', 'testResources', 'testCompile',
+    'test', 'jar']
+  steps:
+  - show: '<p><b>Chạy thật: in cây phụ thuộc, rồi chạy lại ở chế độ chi tiết</b></p><div
+      class="code"><div><span>&#36;</span>M -B -q dependency:tree -DoutputFile=cay.txt
+      &amp;&amp; cat cay.txt</div><div>echo "-- che do chi tiet (-Dverbose):"</div><div><span>&#36;</span>M
+      -B -q dependency:tree -Dverbose -DoutputFile=cay2.txt &amp;&amp; cat cay2.txt</div></div>'
+    focus:
+    - 1
+    - 2
+    clear: true
+    say: Ta chạy thật công cụ dựng thứ nhất, bản ba chấm chín mười một, trên tệp mô
+      tả vừa xem. Lệnh đầu in cây thường, lệnh sau in thêm các bản bị bỏ vì xung đột.
+  - show: '<p><b>Kết quả chạy thật</b></p><div class="code"><div>bnx:l26:jar:1</div><div>+-
+      org.apache.commons:commons-text:jar:1.10.0:compile</div><div>\- org.apache.commons:commons-lang3:jar:3.9:compile</div><div>--
+      che do chi tiet (-Dverbose):</div><div>bnx:l26:jar:1</div><div>+- org.apache.commons:commons-text:jar:1.10.0:compile</div><div>|  \-
+      (org.apache.commons:commons-lang3:jar:3.12.0:compile - omitted for conflict
+      with 3.9)</div><div>\- org.apache.commons:commons-lang3:jar:3.9:compile</div></div>$$①
+      \; \text{lang3 3.9 ở độ sâu 1 thắng 3.12.0 ở độ sâu 2: } \hl{\text{omitted for
+      conflict with 3.9}}$$'
+    focus:
+    - 1
+    - 2
+    clear: true
+    say: 'Phép tính thứ nhất, kết quả thật: cây thường chỉ có hai phụ thuộc trực tiếp.
+      Bản chi tiết cho thấy thư viện tiện ích bản ba chấm mười hai nằm dưới thư viện
+      xử lý chữ, bị bỏ vì xung đột với bản ba chấm chín.'
+  - show: '<p><b>Chạy thật: dựng tới pha package, chỉ giữ dòng tên mục tiêu</b></p><div
+      class="code"><div><span>&#36;</span>M -B package | grep -- ''--- '' | cut -c8-</div></div><p><b>Kết
+      quả chạy thật</b></p><div class="code"><div>--- resources:3.3.1:resources (default-resources)
+      @ l26 ---</div><div>--- compiler:3.13.0:compile (default-compile) @ l26 ---</div><div>---
+      resources:3.3.1:testResources (default-testResources) @ l26 ---</div><div>---
+      compiler:3.13.0:testCompile (default-testCompile) @ l26 ---</div><div>--- surefire:3.2.5:test
+      (default-test) @ l26 ---</div><div>--- jar:3.4.1:jar (default-jar) @ l26 ---</div></div>$$②
+      \; 6 \text{ mục tiêu của phần mở rộng chạy đúng thứ tự: resources} \to \text{jar}$$'
+    focus:
+    - 1
+    - 4
+    clear: true
+    say: 'Phép tính thứ hai là vòng đời: gọi pha đóng gói, công cụ chạy sáu mục tiêu
+      theo đúng thứ tự, mỗi mục tiêu gắn vào một pha như bảng vừa xem. Mỗi dòng ghi
+      phần mở rộng, mục tiêu và phiên bản thật.'
+  - show: '<table class=''t''><tr><th>viết trong mã</th><th>đọc là</th><th>ví dụ</th></tr><tr><td><code>M=…/bin/mvn</code>,
+      <code>test -x <span>&#36;</span>M || { …; exit 97; }</code></td><td>đặt biến
+      <code>M</code> là đường dẫn lệnh <code>mvn</code>; <code>test -x</code> hỏi
+      tệp đó chạy được không; <code>||</code> làm vế sau nếu vế trước thất bại; <code>exit
+      97</code> dừng với mã 97</td><td>thiếu <code>mvn</code> thì in lỗi rồi dừng</td></tr><tr><td><code>mkdir
+      -p src/main/java &amp;&amp; cp Chao.java src/main/java/</code></td><td><code>mkdir
+      -p</code>: tạo thư mục (cả thư mục cha nếu thiếu); <code>cp A B</code>: chép
+      tệp A vào B; <code>&amp;&amp;</code>: chỉ chép khi tạo xong</td><td></td></tr><tr><td><code><span>&#36;</span>M
+      -B -q -f <span>&#36;</span>1 clean package &gt; /dev/null 2&gt;&amp;1</code></td><td><code>-f
+      <span>&#36;</span>1</code>: dùng tệp mô tả tên trong đối số đầu; <code>clean
+      package</code>: xoá đầu ra cũ rồi dựng gói; <code>&gt; /dev/null</code>: bỏ
+      chữ in ra; <code>2&gt;&amp;1</code>: bỏ luôn chữ báo lỗi</td><td></td></tr><tr><td><code>sha256sum
+      target/l26-1.jar</code></td><td>in mã băm sha256 của tệp (cột đầu), rồi tên
+      tệp</td><td></td></tr></table>'
+    clear: true
+    say: Biến chứa đường dẫn lệnh dựng, và dừng chương trình nếu lệnh ấy không chạy
+      được. Tạo thư mục rồi chép tệp mã nguồn vào, chỉ khi tạo xong. Dựng sạch theo
+      tệp mô tả đưa vào, và bỏ hết chữ in ra. Lệnh băm in mã băm rồi tên tệp, lệnh
+      cắt giữ cột đầu.
+  - show: '<p><b>Mã dựng hai lần (1/2): đặt lệnh, hàm dung dựng rồi in mã băm</b></p><div
+      class="code"><div>M=/d/research-video/audit/bnx/deps/_tools/apache-maven-3.9.11/bin/mvn</div><div>test
+      -x <span>&#36;</span>M || { echo "NOT_VERIFIED: thiếu Maven" &gt;&amp;2; exit
+      97; }</div><div>mkdir -p src/main/java &amp;&amp; cp Chao.java src/main/java/</div><div>dung()
+      {</div><div>  <span>&#36;</span>M -B -q -f <span>&#36;</span>1 clean package
+      &gt; /dev/null 2&gt;&amp;1</div><div>  sha256sum target/l26-1.jar | cut -d''
+      '' -f1</div><div>}</div></div>'
+    focus:
+    - 1
+    - 2
+    clear: true
+    say: Phép tính thứ ba là dựng tái lập. Hàm này dựng sạch một lần theo tệp mô tả
+      đưa vào, rồi in mã băm của gói.
+  - show: '<p><b>Mã dựng hai lần (2/2): cách nhau 2 giây, so mã băm sha256 (kết quả
+      ở khung sau)</b></p><div class="code"><div>so() {</div><div>  a=<span>&#36;</span>(dung
+      <span>&#36;</span>1); sleep 2; b=<span>&#36;</span>(dung <span>&#36;</span>1)</div><div>  [
+      "<span>&#36;</span>a" = "<span>&#36;</span>b" ] &amp;&amp; echo "<span>&#36;</span>2:
+      GIONG" || echo "<span>&#36;</span>2: KHAC"</div><div>}</div><div>so pom.xml
+      "khong dat outputTimestamp"</div><div>so pom-tt.xml "co outputTimestamp"</div></div>'
+    focus:
+    - 1
+    - 2
+    clear: true
+    say: Hàm so gọi hàm dựng hai lần cách nhau hai giây rồi so mã băm. Lần đầu dùng
+      tệp không đặt mốc thời gian, lần sau dùng tệp có mốc cố định.
+  - show: '<p><b>Kết quả chạy thật</b></p><div class="code"><div>khong dat outputTimestamp:
+      KHAC</div><div>co outputTimestamp: GIONG</div></div>$$③ \; \text{không đặt mốc:
+      } \hl{\text{khác}}; \qquad \text{đặt } 2026\text{-}01\text{-}01\text{: } \hlg{\text{giống}}$$'
+    focus:
+    - 1
+    - 3
+    clear: true
+    say: Không đặt mốc thời gian thì hai gói khác nhau, đặt mốc cố định thì hai gói
+      giống nhau từng bit. Đây là số đo cho gói một lớp nhỏ này, không nói mọi dự
+      án tái lập được nhờ một thuộc tính.
+  - show: '<p><b>Kiểm CÚ PHÁP bằng trình biên dịch Groovy thật (không chạy Jenkins,
+      không chạy Gradle)</b></p><div class="code"><div>Jenkinsfile: cu phap hop le</div><div>build.gradle:
+      cu phap hop le</div><div>JenkinsfileHong: loi cu phap</div></div>$$④ \; \text{chỉ
+      kiểm cú pháp: 2 tệp đúng, 1 tệp thiếu ngoặc bị từ chối}$$'
+    focus:
+    - 1
+    - 3
+    clear: true
+    say: 'Phép tính thứ tư: máy này không có máy chủ dựng, nên ta chỉ kiểm cú pháp
+      bằng trình biên dịch của ngôn ngữ kịch bản thật. Tệp đúng thì qua, tệp thiếu
+      ngoặc bị từ chối, nhưng chưa chứng minh đường ống chạy đúng.'
+  - show: '<table class=''t''><tr><th>viết trong mã</th><th>đọc là</th><th>ví dụ</th></tr><tr><td><code>def
+      chay(cac_buoc, hong=None):</code></td><td>khai hàm Python: <code>def</code>,
+      tên, tham số, dấu hai chấm; các dòng thụt vào là thân; <code>hong=None</code>:
+      tham số có giá trị mặc định rỗng nếu không truyền</td><td><code>chay(["Build"])</code>
+      thì <code>hong</code> là rỗng</td></tr><tr><td><code>ket = []</code>, <code>ket.append(x)</code>,
+      <code>ten + ": xong"</code></td><td><code>[]</code>: danh sách rỗng; <code>append</code>:
+      thêm một phần tử vào cuối danh sách; <code>+</code> giữa hai chuỗi: nối lại</td><td></td></tr><tr><td><code>if
+      hong == ten:</code>, <code>break</code></td><td><code>==</code>: hỏi hai giá
+      trị có bằng nhau; <code>break</code>: thoát vòng lặp ngay lập tức</td><td></td></tr><tr><td><code>for
+      … : … else:</code></td><td>khối <code>else</code> của vòng <code>for</code>
+      chỉ chạy khi vòng lặp chạy hết mà <b>không</b> gặp <code>break</code>; gặp <code>break</code>
+      thì bỏ qua <code>else</code></td><td></td></tr></table>'
+    clear: true
+    say: Khai hàm, trong đó tham số có thể có giá trị mặc định rỗng. Danh sách rỗng,
+      thêm phần tử vào cuối, và dấu cộng nối hai chuỗi. Hai dấu bằng so sánh hai giá
+      trị, còn lệnh thoát rời khỏi vòng lặp ngay. Khối ngược lại của vòng lặp chạy
+      khi vòng không gặp lệnh thoát.
+  - show: '<p><b>MÔ PHỎNG bằng Python (không phải Jenkins): giai đoạn Test hỏng</b></p><div
+      class="code"><div>def chay(cac_buoc, hong=None):</div><div>    ket = []</div><div>    for
+      ten in cac_buoc:</div><div>        if hong == ten:</div><div>            ket.append(ten
+      + ": that bai")</div><div>            break</div><div>        ket.append(ten
+      + ": xong")</div><div>    else:</div><div>        return ket</div><div>    ket.append("post
+      failure: dung that bai")</div><div>    return ket</div><div>for dong in chay(["Build",
+      "Test", "Deploy"], hong="Test"):</div><div>    print(dong)</div></div>'
+    focus:
+    - 1
+    - 2
+    clear: true
+    say: Phép tính thứ năm là hành vi khi một giai đoạn hỏng, và đây là mô phỏng,
+      không phải máy chủ thật. Hàm chạy các giai đoạn lần lượt, gặp giai đoạn hỏng
+      thì dừng rồi chạy nhánh khi thất bại.
+  - show: '<p><b>Kết quả mô phỏng (Python, không phải Jenkins)</b></p><div class="code"><div>Build:
+      xong</div><div>Test: that bai</div><div>post failure: dung that bai</div></div>$$⑤
+      \; \text{Test hỏng} \Rightarrow \text{Deploy không chạy; nhánh post failure
+      chạy}$$'
+    clear: true
+    say: 'Kết quả mô phỏng: kiểm thử hỏng, giai đoạn triển khai không chạy và nhánh
+      khi thất bại chạy, đúng như hướng dẫn mô tả.'
+- id: check
+  kind: check
+  title: 'Tự kiểm bằng đường khác: bộ phân giải tự viết'
+  checks:
+  - 'alg.bnx_l26_maven([(''text'', ''1.10.0''), (''lang3'', ''3.9'')], {(''text'',
+    ''1.10.0''): [(''lang3'', ''3.12.0'')]})[''lang3''] == ''3.9'''
+  steps:
+  - show: '<table class=''t''><tr><th>viết trong mã</th><th>đọc là</th><th>ví dụ</th></tr><tr><td><code>CAY
+      = {"du an": [("text", "1.10.0"), …], ("text", "1.10.0"): […]}</code></td><td>từ
+      điển: <code>{khoá: giá trị}</code>; khoá là chuỗi hoặc cặp (tên, bản); giá trị
+      là danh sách các cặp mà nó cần; <code>CAY["du an"]</code> lấy giá trị của khoá
+      <code>"du an"</code></td><td><code>CAY["du an"]</code> là hai cặp đầu tiên</td></tr><tr><td><code>da,
+      hang = {}, [(k, v, 1) for k, v in CAY["du an"]]</code></td><td>gán hai biến
+      một lúc: <code>da</code> là từ điển rỗng <code>{}</code>; <code>hang</code>
+      là danh sách sinh sẵn: mỗi cặp <code>k, v</code> của dự án thành bộ ba <code>(k,
+      v, 1)</code>, số 1 là độ sâu</td><td></td></tr><tr><td><code>while hang:</code></td><td>lặp
+      chừng nào danh sách <code>hang</code> còn phần tử; danh sách rỗng thì dừng</td><td></td></tr><tr><td><code>ten,
+      ban, sau = hang.pop(0)</code></td><td><code>pop(0)</code>: lấy phần tử đầu danh
+      sách ra và bỏ nó khỏi danh sách; ba giá trị của bộ ba gán vào ba tên</td><td></td></tr></table>'
+    clear: true
+    say: 'Từ điển gồm các cặp khoá và giá trị, giá trị ở đây là danh sách thư viện.
+      Gán hai biến một lúc: từ điển rỗng và danh sách sinh sẵn. Lặp chừng nào danh
+      sách còn phần tử, rỗng thì dừng. Lấy phần tử đầu ra khỏi danh sách nên danh
+      sách ngắn dần, rồi gán ba giá trị vào ba tên.'
+  - show: '<table class=''t''><tr><th>viết trong mã</th><th>đọc là</th></tr><tr><td><code>if
+      ten in da:</code> … <code>continue</code></td><td><code>in</code>: đúng khi
+      <code>ten</code> đã là khoá của <code>da</code>; <code>continue</code>: bỏ phần
+      còn lại của vòng này, sang vòng kế tiếp</td></tr><tr><td><code>print(f"bo {ten}
+      {ban} (sau {sau}): da co {da[ten]}")</code></td><td>chuỗi f: phần trong ngoặc
+      nhọn được thay bằng giá trị; <code>da[ten]</code>: giá trị của khoá <code>ten</code>
+      trong <code>da</code></td></tr><tr><td><code>da[ten] = ban</code></td><td>ghi
+      vào <code>da</code>: khoá <code>ten</code> có giá trị <code>ban</code> (người
+      đến trước giữ chỗ)</td></tr><tr><td><code>hang += [(k, v, sau + 1) for k, v
+      in CAY.get((ten, ban), [])]</code></td><td><code>CAY.get(khoá, [])</code>: giá
+      trị của khoá, không có khoá thì trả danh sách rỗng; <code>+=</code>: nối thêm
+      vào cuối <code>hang</code>; mỗi cặp mới có độ sâu <code>sau + 1</code></td></tr></table>'
+    clear: true
+    say: 'Phép thuộc hỏi tên đã có chưa, và lệnh tiếp tục bỏ phần còn lại của vòng
+      này. Chuỗi f thay phần trong ngoặc nhọn bằng giá trị của biểu thức. Ghi vào
+      từ điển: người đến trước giữ chỗ. Lấy các thư viện nó cần, không có thì rỗng,
+      rồi nối vào cuối hàng với độ sâu tăng một.'
+  - show: '<p><b>Bộ phân giải tự viết: duyệt theo độ sâu, người đến trước thắng</b></p><div
+      class="code"><div>CAY = {"du an": [("text", "1.10.0"), ("lang3", "3.9")],</div><div>       ("text",
+      "1.10.0"): [("lang3", "3.12.0")]}</div><div>da, hang = {}, [(k, v, 1) for k,
+      v in CAY["du an"]]</div><div>while hang:</div><div>    ten, ban, sau = hang.pop(0)</div><div>    if
+      ten in da:</div><div>        print(f"bo {ten} {ban} (sau {sau}): da co {da[ten]}")</div><div>        continue</div><div>    da[ten]
+      = ban</div><div>    hang += [(k, v, sau + 1) for k, v in CAY.get((ten, ban),
+      [])]</div><div>print(da)</div></div>'
+    focus:
+    - 1
+    - 2
+    clear: true
+    say: Ta kiểm bằng đường khác, không dùng công cụ dựng, vì bộ phân giải viết tay
+      cho thấy rõ luật chọn. Nó duyệt hàng đợi theo thứ tự khai báo, thư viện đã chọn
+      thì mọi yêu cầu sau về nó bị bỏ.
+  - show: '<p><b>Kết quả chạy thật</b></p><div class="code"><div>bo lang3 3.12.0 (sau
+      2): da co 3.9</div><div>{''text'': ''1.10.0'', ''lang3'': ''3.9''}</div></div><table
+      class=''t''><tr><th>cách</th><th>lang3 được chọn</th><th>dòng bị bỏ</th></tr><tr><td>Maven
+      chạy thật (dependency:tree -Dverbose)</td><td>3.9</td><td>omitted for conflict
+      with 3.9</td></tr><tr><td>bộ phân giải tự viết</td><td>3.9</td><td>bo lang3
+      3.12.0 (sau 2): da co 3.9</td></tr><tr><td>luật Gradle (theo hướng dẫn chính
+      thức)</td><td>3.12.0</td><td>(không chạy Gradle)</td></tr></table>'
+    focus:
+    - 1
+    - 3
+    clear: true
+    say: Bộ phân giải tự viết chọn bản ba chấm chín, giống công cụ dựng thật, và bỏ
+      đúng bản ba chấm mười hai ở độ sâu hai. Hai đường độc lập khớp nhau nên ta tin
+      luật gần nhất thắng; hàng cuối là luật theo hướng dẫn, ta không chạy.
+- id: quymo
+  kind: example
+  title: 'Khi dự án lớn dần: số gói thư viện và số máy dựng'
+  checks:
+  - '[alg.bnx_l26_agents(b, 10) for b in (4, 400, 40000)] == [1, 67, 6667]'
+  - 4 * 10 == 40 and 400 * 10 == 4000 and 40000 * 10 == 400000
+  - 400 // 4 == 40000 // 400 == 100
+  steps:
+  - show: '<table class=''t''><tr><th>viết trong mã</th><th>đọc là</th></tr><tr><td><code>mkdir
+      -p <span>&#36;</span>d &amp;&amp; cp pom-<span>&#36;</span>d.xml <span>&#36;</span>d/pom.xml</code></td><td>tạo
+      thư mục tên <code>d</code>, rồi chép <code>pom-d.xml</code> vào đó và đổi tên
+      thành <code>pom.xml</code></td></tr><tr><td><code>(cd <span>&#36;</span>d &amp;&amp;
+      <span>&#36;</span>M -B -q dependency:list -DoutputFile=ds.txt)</code></td><td>cặp
+      ngoặc tròn chạy lệnh trong vỏ riêng: <code>cd</code> đổi thư mục chỉ bên trong;
+      <code>dependency:list</code> ghi danh sách mọi gói đã phân giải ra <code>ds.txt</code></td></tr><tr><td><code>grep
+      -c '':jar:'' <span>&#36;</span>d/ds.txt</code></td><td>đếm số dòng có chuỗi
+      <code>:jar:</code>; mỗi dòng của danh sách là một gói jar</td></tr></table>'
+    clear: true
+    say: Tạo thư mục riêng cho từng dự án thử, rồi chép tệp mô tả vào. Cặp ngoặc tròn
+      chạy trong vỏ riêng nên đổi thư mục chỉ có hiệu lực bên trong; lệnh danh sách
+      ghi mọi gói ra tệp. Lệnh lọc đếm số dòng mô tả một gói thư viện, tức là số gói.
+  - show: '<p><b>Chạy thật: mỗi dự án thử khai đúng 1 phụ thuộc, đếm gói thư viện
+      đã phân giải</b></p><div class="code"><div>for d in a b c; do</div><div>  mkdir
+      -p <span>&#36;</span>d &amp;&amp; cp pom-<span>&#36;</span>d.xml <span>&#36;</span>d/pom.xml</div><div>  (cd
+      <span>&#36;</span>d &amp;&amp; <span>&#36;</span>M -B -q dependency:list -DoutputFile=ds.txt)</div><div>  echo
+      "<span>&#36;</span>d: 1 phu thuoc truc tiep -&gt; <span>&#36;</span>(grep -c
+      '':jar:'' <span>&#36;</span>d/ds.txt) jar"</div><div>done</div></div><p><b>Kết
+      quả chạy thật</b></p><div class="code"><div>a: 1 phu thuoc truc tiep -&gt; 1
+      jar</div><div>b: 1 phu thuoc truc tiep -&gt; 9 jar</div><div>c: 1 phu thuoc
+      truc tiep -&gt; 34 jar</div></div>$$1 \text{ phụ thuộc trực tiếp} \to 1,\; 9,\;
+      34 \text{ gói thư viện (đo thật)}$$'
+    focus:
+    - 1
+    - - 2
+      - 3
+      - 4
+    - 4
+    clear: true
+    say: 'Số đo thật: ba dự án thử, mỗi dự án chỉ khai một phụ thuộc trực tiếp. Thư
+      viện tiện ích kéo một gói, thư viện lõi của Spring kéo chín gói, bộ khởi đầu
+      dịch vụ web của Spring kéo ba mươi bốn gói. Càng nhiều gói, càng nhiều chỗ xung
+      đột.'
+  - show: <table class='t'><tr><th>lượt dựng mỗi giờ (số minh hoạ)</th><th>mỗi lượt
+      (phút)</th><th>phút dựng cần mỗi giờ</th><th>máy dựng tối thiểu</th><th>so với
+      ×1</th></tr><tr><td>4</td><td>10</td><td>40</td><td>1</td><td><span style='white-space:nowrap'>×1</span></td></tr><tr><td>400</td><td>10</td><td><span
+      style='white-space:nowrap'>4 000</span></td><td>67</td><td><span style='white-space:nowrap'>×100</span></td></tr><tr><td><span
+      style='white-space:nowrap'>40 000</span></td><td>10</td><td><span style='white-space:nowrap'>400
+      000</span></td><td><span style='white-space:nowrap'>6 667</span></td><td><span
+      style='white-space:nowrap'>×10 000</span></td></tr></table>
+    clear: true
+    say: 'Còn máy chủ dựng khi nhiều người cùng đẩy mã? Số minh hoạ: bốn lượt mỗi
+      giờ, mỗi lượt mười phút, cần bốn mươi phút nên một máy là đủ. Gấp một trăm lần
+      là bốn trăm lượt, cần sáu mươi bảy máy. Gấp mười nghìn lần cần sáu nghìn sáu
+      trăm sáu mươi bảy máy, nên một máy dựng chung gãy từ lâu. Đánh đổi là dựng song
+      song hoặc rút ngắn mỗi lượt bằng bộ đệm.'
+- id: pitfalls
+  kind: pitfall
+  title: Lỗi hay gặp, theo từng giai đoạn của hệ thống
+  checks:
+  - alg.bnx_l26_agents(400, 10) == 67
+  - 'alg.bnx_l26_maven([(''text'', ''1.10.0''), (''lang3'', ''3.9'')], {(''text'',
+    ''1.10.0''): [(''lang3'', ''3.12.0'')]})[''lang3''] == ''3.9'''
+  steps:
+  - show: '<div class="box warn"><b>Lỗi 1 (người mới).</b> Tin rằng bản khai trong
+      tệp mô tả là bản <b class="red">đang chạy</b>. Dự án khai <code>commons-lang3</code>
+      3.9 thì được 3.9 vì khai thẳng; nhưng thư viện khai <b>bắc cầu</b>
+
+      mà ta không khai thẳng thì bản thật do luật chọn quyết định. Cách xem: in cây
+      phụ thuộc, tìm dòng <code>omitted for conflict</code>.</div><p><b>Kết quả chạy
+      thật</b></p><div class="code"><div>bnx:l26:jar:1</div><div>+- org.apache.commons:commons-text:jar:1.10.0:compile</div><div>\-
+      org.apache.commons:commons-lang3:jar:3.9:compile</div><div>-- che do chi tiet
+      (-Dverbose):</div><div>bnx:l26:jar:1</div><div>+- org.apache.commons:commons-text:jar:1.10.0:compile</div><div>|  \-
+      (org.apache.commons:commons-lang3:jar:3.12.0:compile - omitted for conflict
+      with 3.9)</div><div>\- org.apache.commons:commons-lang3:jar:3.9:compile</div></div>
+
+      '
+    focus:
+    - 1
+    - 2
+    - 3
+    clear: true
+    say: Lỗi thứ nhất, của người mới, là tin rằng bản khai là bản đang chạy. Thư viện
+      bắc cầu thì luật chọn quyết định. Cách xem là in cây phụ thuộc và tìm dòng báo
+      bỏ vì xung đột.
+  - show: '<div class="box warn"><b>Lỗi 2 (người đã đi làm, lúc mới dựng).</b> Khai
+      bản <b class="red">cũ hơn</b> bản mà thư viện khác cần, để "cho khớp". Chạy
+      thật: Maven ép bản cũ 3.9, thư viện <code>commons-text</code> được dựng và kiểm
+      thử với bản 3.12.0
+
+      nhưng chạy với bản 3.9: lỗi chỉ lộ lúc chạy, nếu hàm nó gọi chưa có ở bản cũ.</div>
+
+      '
+    clear: true
+    say: 'Lỗi thứ hai: khai bản cũ hơn bản mà thư viện khác cần. Công cụ ép dùng bản
+      cũ, nên thư viện kia chỉ lỗi lúc chạy nếu hàm nó gọi chưa có ở bản cũ.'
+  - show: '<div class="box warn"><b>Lỗi 3 (người đã đi làm, lúc tải tăng).</b> Một
+      máy dựng dùng chung, mỗi lượt 10 phút. Ở 4 lượt mỗi giờ thì ổn; ở 400 lượt mỗi
+      giờ cần <b class="red">67 máy</b>:
+
+      hàng đợi dựng dài thêm mãi, lập trình viên chờ hàng giờ. Phòng: đo thời gian
+      chờ ở hàng đợi, và dự trù máy theo công thức trước khi đội lớn.</div>
+
+      '
+    clear: true
+    say: 'Lỗi thứ ba, lộ ra khi tải tăng: một máy dựng dùng chung, mỗi lượt mười phút.
+      Bốn trăm lượt mỗi giờ cần sáu mươi bảy máy, nếu không hàng đợi dài mãi. Cách
+      phòng là dự trù số máy trước khi đội lớn.'
+  - show: '<div class="box warn"><b>Lỗi 4 (người đã đi làm, lúc vận hành lâu dài).</b>
+      Khai phiên bản <b class="red">dạng khoảng hoặc <code>latest</code></b>, hoặc
+      dựng không ghim: một lần dựng sau nhiều tháng kéo thư viện mới, sản phẩm đổi
+      mà mã không đổi.
+
+      Cách chữa: ghim phiên bản, đặt <code>outputTimestamp</code>, và so mã băm hai
+      lần dựng trên máy chủ dựng; ai cũng dựng lại được đúng sản phẩm đã phát hành.</div>
+
+      '
+    clear: true
+    say: 'Lỗi thứ tư, lộ ra khi vận hành lâu: khai phiên bản dạng khoảng hoặc không
+      ghim. Dựng sau nhiều tháng kéo thư viện mới, nên sản phẩm đổi mà mã không đổi.
+      Cách chữa là ghim phiên bản, đặt mốc cố định và so mã băm.'
+- id: quiz
+  kind: quiz
+  title: Đến lượt bạn
+  checks:
+  - 'alg.bnx_l26_maven([(''P'', ''1.0''), (''Q'', ''1.0'')], {(''P'', ''1.0''): [(''Z'',
+    ''2.0'')], (''Q'', ''1.0''): [(''Z'', ''3.0'')]})[''Z''] == ''2.0'''
+  - 'alg.bnx_l26_gradle([(''P'', ''1.0''), (''Q'', ''1.0'')], {(''P'', ''1.0''): [(''Z'',
+    ''2.0'')], (''Q'', ''1.0''): [(''Z'', ''3.0'')]})[''Z''] == ''3.0'''
+  - alg.bnx_l26_agents(120, 15) == 30 and alg.bnx_l26_agents(120, 5) == 10
+  steps:
+  - show: '<table class=''t''><tr><th>câu</th><th>đề</th></tr><tr><td>1</td><td>Dự
+      án khai <code>P 1.0</code> rồi <code>Q 1.0</code>. <code>P 1.0</code> cần <code>Z
+      2.0</code>; <code>Q 1.0</code> cần <code>Z 3.0</code>. Cả hai ở cùng độ sâu
+      2. Maven chọn <code>Z</code> bản nào? Gradle (mặc định) chọn bản nào?</td></tr><tr><td>2</td><td>Tính
+      số máy dựng tối thiểu: 120 lượt dựng mỗi giờ, mỗi lượt 15 phút (số minh hoạ).
+      Nếu mỗi lượt giảm còn 5 phút thì sao?</td></tr><tr><td>3</td><td>Quyết định:
+      sản phẩm phát hành tháng trước cần dựng lại đúng từng bit để điều tra sự cố.
+      Chọn: ghim phiên bản + <code>outputTimestamp</code>, chỉ ghim phiên bản, hay
+      để mặc định? Vì sao?</td></tr></table>'
+    pause: 30
+    say: 'Đến lượt bạn, ba câu để làm ra giấy: hai công cụ chọn bản nào, cần bao nhiêu
+      máy dựng, và chọn cách nào để dựng lại đúng từng bit. Hãy dừng lại làm ra giấy
+      rồi xem đáp án.'
+  - show: '<p>Câu 1: cùng độ sâu thì <b>khai báo trước thắng</b> (Maven); Gradle lấy
+      cao nhất.</p>
+
+      $$\text{Maven: } Z = \hlg{2.0} \;(\text{P khai trước Q}); \qquad \text{Gradle:
+      } Z = \hlg{3.0}$$
+
+      '
+    focus:
+    - 1
+    - 2
+    say: Đáp án câu một, ở công cụ thứ nhất, cùng độ sâu thì khai báo trước thắng,
+      nên chọn bản hai chấm không. Công cụ thứ hai lấy bản cao nhất, tức bản ba chấm
+      không.
+    clear: true
+  - show: '<p>Câu 2: số máy = phút dựng mỗi giờ : 60, làm tròn lên.</p>
+
+      $$120 \times 15 = 1800 \text{ phút}; \; 1800 : 60 = \hlg{30} \text{ máy}; \qquad
+      120 \times 5 = 600; \; 600 : 60 = \hlg{10} \text{ máy}$$
+
+      '
+    focus:
+    - 1
+    - 2
+    say: Đáp án câu hai, một trăm hai mươi lượt nhân mười lăm phút là một nghìn tám
+      trăm phút mỗi giờ, chia sáu mươi được ba mươi máy. Còn năm phút mỗi lượt thì
+      sáu trăm phút, cần mười máy.
+  - show: '<table class=''t''><tr><th>lựa chọn</th><th>được</th><th>mất</th></tr><tr><td>ghim
+      phiên bản + outputTimestamp</td><td>dựng lại ra đúng cùng mã băm; điều tra chắc
+      chắn</td><td>phải cập nhật phiên bản chủ động, có việc bảo trì</td></tr><tr><td>chỉ
+      ghim phiên bản</td><td>cùng thư viện, nhưng gói vẫn có thể khác bit do mốc thời
+      gian</td><td>so sánh bằng mã băm sẽ lệch</td></tr><tr><td>để mặc định</td><td>không
+      phải làm gì</td><td>bản phụ thuộc có thể đổi giữa hai lần dựng: không dựng lại
+      được</td></tr></table>'
+    say: Đáp án câu ba, ghim phiên bản cùng mốc cố định cho dựng lại ra đúng mã băm,
+      đổi lại phải cập nhật chủ động. Chỉ ghim phiên bản thì gói vẫn có thể khác bit,
+      để mặc định thì bản phụ thuộc đổi giữa hai lần dựng.
+    clear: true
+- id: practice
+  kind: practice
+  title: 'Tự làm: phân giải phiên bản theo hai luật'
+  steps:
+  - show: '<p><b>Đề (MÔ PHỎNG, không chạy Maven hay Gradle)</b>: dự án khai <code>A
+      1.0</code>, <code>B 1.0</code>. <code>A 1.0</code> cần <code>X 1.0</code>, <code>Y
+      2.0</code>; <code>B 1.0</code> cần <code>Y 3.0</code>, <code>Z 1.0</code>; <code>Z
+      1.0</code> cần <code>X 2.0</code>.</p>
+
+      <p>Viết <code>mau.py</code> in 5 dòng <code>maven &lt;tên&gt; &lt;bản&gt;</code>
+      (A, B, X, Y, Z) rồi 3 dòng <code>gradle &lt;tên&gt; &lt;bản&gt;</code> (X, Y,
+      Z). Maven: gần nhất, cùng độ sâu thì khai trước thắng. Gradle: cao nhất.</p>
+
+      <p>Duyệt theo hàng đợi. Số liệu khác ví dụ trong bài; chi tiết trong <code>de.md</code>.</p>
+
+      '
+    focus:
+    - 1
+    - - 2
+      - 3
+    pause: 150
+    say: 'Đến phần bạn tự làm, một mô phỏng không chạy công cụ thật: dự án khai hai
+      thư viện, các thư viện cần nhau theo đồ thị nhỏ trong đề. Viết chương trình
+      Python in kết quả theo hai luật, gần nhất thắng rồi bản cao nhất, hãy dừng video
+      và tự viết.'
+  - show: '<p><b>Kết quả mong đợi</b></p><div class="code"><div>maven A 1.0</div><div>maven
+      B 1.0</div><div>maven X 1.0</div><div>maven Y 2.0</div><div>maven Z 1.0</div><div>gradle
+      X 2.0</div><div>gradle Y 3.0</div><div>gradle Z 1.0</div></div><p class="note">Chấm
+      bằng Git Bash: <code>bash labs/cham.sh BNX L26 mau.py</code> — in <b>ĐÚNG</b>
+      khi trùng.</p>'
+    focus:
+    - - 1
+      - 2
+    - 3
+    clear: true
+    say: Đây là kết quả mong đợi, bạn chạy chương trình của mình rồi so từng dòng.
+      Nếu muốn chấm bằng máy, dùng lệnh ở dưới màn hình; lệnh in chữ ĐÚNG khi đầu
+      ra trùng, hoặc chỉ ra dòng nào khác.
+  - show: '<div class="box key"><b>Nếu kẹt:</b> dùng hàng đợi; tên đã chọn thì bỏ
+      yêu cầu sau, chưa thì chọn và thêm các thư viện nó cần vào cuối hàng. Luật cao
+      nhất: chọn lại khi bản mới cao hơn.
+
+      Lời giải đầy đủ ở <code>labs/BNX/L26/loi_giai.py</code> — chỉ mở sau khi bạn
+      đã thử.</div>
+
+      '
+    say: 'Nếu kẹt, dùng một hàng đợi: tên đã chọn thì bỏ, chưa thì chọn và thêm thư
+      viện nó cần vào cuối hàng. Với luật cao nhất, chọn lại khi bản mới cao hơn.
+      Lời giải chỉ mở sau khi đã tự thử.'
+  lab: labs/BNX/L26
+- id: recap
+  kind: recap
+  title: Chuỗi logic & tư duy cần mang theo
+  checks:
+  - alg.bnx_l26_agents(4, 10) == 1
+  steps:
+  - show: '<div class=''chain''><span class=''n''>tệp mô tả dự án</span><span class=''a''>→</span><span
+      class=''n''>vòng đời: các pha nối tiếp</span><span class=''a''>→</span><span
+      class=''n''>bắc cầu → xung đột</span><span class=''a''>→</span><span class=''n''>gần
+      nhất thắng / cao nhất thắng</span><span class=''a''>→</span><span class=''n''>ghim
+      + mốc thời gian → tái lập</span></div>'
+    say: Công cụ chạy các pha nối tiếp theo tệp mô tả dự án. Phụ thuộc bắc cầu gây
+      xung đột phiên bản, mỗi công cụ một luật chọn. Muốn dựng tái lập thì ghim phiên
+      bản, đặt mốc cố định và so mã băm.
+  - show: '<div class=''box key''><b>Tư duy:</b> đừng đoán bản đang chạy, hãy <b>in
+      cây phụ thuộc</b>. Mỗi thư viện thêm vào là thêm cả chùm bắc cầu và thêm chỗ
+      xung đột.
+
+      Dựng là việc phải <b>lặp lại được</b>: ghim, cố định, rồi chứng minh bằng mã
+      băm.</div>
+
+      '
+    say: 'Đừng đoán bản đang chạy, hãy in cây phụ thuộc, vì mỗi thư viện thêm vào
+      là thêm cả một chùm bắc cầu và chỗ xung đột. Dựng phải lặp lại được: ghim, cố
+      định mốc rồi chứng minh bằng mã băm.'
+  - show: '<table class=''t''><tr><th>Nếu bị hỏi về dòng này trên CV</th><th>ý trả
+      lời</th></tr><tr><td>Maven, Gradle: vòng đời và xung đột phiên bản?</td><td>các
+      pha nối tiếp tới pha được gọi; bắc cầu kéo cả chùm; Maven gần nhất thắng (khai
+      trước thắng nếu cùng độ sâu), Gradle mặc định cao nhất; xem bằng dependency:tree</td></tr><tr><td>Jenkins:
+      pipeline khai báo gồm gì?</td><td>pipeline → agent, stages → stage → steps,
+      post; Jenkinsfile lưu cùng mã nguồn để duyệt và có lịch sử; khi một giai đoạn
+      hỏng thì các giai đoạn sau không chạy, post failure chạy</td></tr><tr><td>Dựng
+      tái lập là gì, làm sao chứng minh?</td><td>cùng mã, môi trường, lệnh thì ra
+      tệp giống từng bit; đặt outputTimestamp, ghim phiên bản, dựng hai lần rồi so
+      sha256</td></tr></table>'
+    clear: true
+    say: 'Người phỏng vấn thường hỏi ba câu về dòng này trên hồ sơ: vòng đời và xung
+      đột phiên bản, đường ống khai báo gồm gì, và dựng tái lập, câu trả lời ngắn
+      nằm sẵn trên bảng.'
+  - show: '<p>Bài sau: <b>tích hợp hệ cũ</b> bằng phong bì XML và truyền tệp lô an
+      toàn, kèm kiểm toàn vẹn.</p>'
+    forward_ref: true
+    say: Ở bài hai mươi bảy, ta tìm hiểu tích hợp hệ thống cũ bằng phong bì XML và
+      truyền tệp lô an toàn, kèm kiểm toàn vẹn.

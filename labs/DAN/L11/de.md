@@ -1,11 +1,8 @@
 # Lab DAN L11 — Méo tỉ lệ trục tung cắt ngọn trên biểu đồ cột
 
-So sánh chênh lệch thực (%) giữa `200` và `212` với độ phóng đại trực quan khi vẽ biểu đồ cột bắt đầu đáy trục từ `190` thay vì `0`.
+Đọc `stdin` `a=<float> b=<float> base=<float>`. Tính chênh lệch phần trăm thực từ `a` lên `b` và độ phóng đại thị giác khi cắt đáy trục ở `base`.
 
-Định dạng đầu ra:
-`real_diff_pct=<1 chữ số>% visual_ratio=<1 chữ số>x`
+In 1 dòng: `real_diff_pct=<.1f>% visual_ratio=<.1f>x`.
+Chấm tự động: `bash labs/cham.sh DAN L11 duong_dan/bai_cua_ban.py`
 
-Chấm tự động:
-```bash
-bash labs/cham.sh DAN L11 duong_dan/bai_cua_ban.py
-```
+> Gợi ý đọc `stdin`: `kv = {k: float(v) for k, v in (t.split("=") for t in sys.stdin.read().split())}`.

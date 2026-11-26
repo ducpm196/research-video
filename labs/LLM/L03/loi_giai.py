@@ -1,7 +1,6 @@
-import math
-cos = lambda u, v: (
-    sum(a * b for a, b in zip(u, v)) / (math.hypot(*u) * math.hypot(*v))
-)
-c1 = cos((2, 1, 0), (3, 2, 1))
-c2 = cos((2, 1, 0), (-1, 2, 0))
-print(f"cos_sim={c1:.3f} cos_orth={c2:.1f}")
+import math, sys
+kv = dict(t.split('=') for t in sys.stdin.read().split())
+p = lambda s: tuple(float(x) for x in s.split(','))
+cos = lambda a, b: sum(x * y for x, y in zip(a, b)) / (math.hypot(*a) * math.hypot(*b))
+u, v, w = p(kv['u']), p(kv['v']), p(kv['w'])
+print(f'cos_sim={cos(u, v):.3f} cos_orth={cos(u, w):.1f}')

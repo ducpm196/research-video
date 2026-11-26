@@ -1,11 +1,7 @@
-# Lab DVO L01 (Mô phỏng nhánh & CI) — Tính xác suất xung đột hợp nhất
+# Lab DVO L01 — Tính xác suất xung đột hợp nhất nhánh dài vs nhánh ngắn
 
-Viết chương trình Python tính xác suất ít nhất 1 trong `k = 40` thay đổi ngẫu nhiên chạm vào tập `5` trên `100` tệp theo công thức `1 - (1 - 5/100)^40`, so với nhánh nhỏ `5` thay đổi xen vào, in đúng 3 dòng:
-1. `p_conflict_40=87.1%`
-2. `p_conflict_5=22.6%`
-3. `shorter_branch_safer=1`
+Đọc `stdin` `total=<int> hot=<int> k_long=<int> k_short=<int>`. Tính xác suất ít nhất một lần chạm vào `hot` trong `total` tệp cho `k_long` và `k_short` thay đổi.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh DVO L01 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `p_conflict_40=<.1f>%`, `p_conflict_5=<.1f>%`, `shorter_branch_safer=<0|1>`.
+Chấm tự động: `bash labs/cham.sh DVO L01 duong_dan/bai_cua_ban.py`
+Gợi ý đọc đầu vào trong Python: dùng `sys.stdin.read().split()` tách từng cặp `khoá=giá_trị`.

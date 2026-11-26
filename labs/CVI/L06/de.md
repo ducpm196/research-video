@@ -1,6 +1,4 @@
-# Lab CVI L06 — Tính độ sâu và độ nhạy sai số từ cặp camera song song
+# Lab CVI L06 — Độ nhạy sai số stereo theo khoảng cách
 
-Cho tiêu cự `f = 600` điểm ảnh và khoảng cách hai camera `B = 0.15` m. Với vật ở `Z = 3.0` m và `Z = 9.0` m: tự tính độ chênh lệch lý thuyết `d` tương ứng với mỗi khoảng cách, rồi tính lại độ sâu khi phép đo chênh lệch bị hụt `1` điểm ảnh (`d - 1`) để tìm sai số dương tăng thêm `Z_err - Z`.
-
-Định dạng đầu ra (1 dòng):
-`Z3=3.0 err3=<2 chữ số>m Z9=9.0 err9=<2 chữ số>m`
+Đọc `f B Z1 Z2 dh` từ stdin (ví dụ `600.0 0.15 3.0 9.0 1.0`). Tính sai số độ sâu khi độ chênh hụt `dh`.
+In đúng 1 dòng `Z3=<Z1> err3=<2 chữ số>m Z9=<Z2> err9=<2 chữ số>m`.

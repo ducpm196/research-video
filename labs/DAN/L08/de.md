@@ -1,11 +1,8 @@
-# Lab DAN L08 — Phân bố lệch và quy luật nhóm 20% khách hàng đầu
+# Lab DAN L08 — Phân bố lệch và tỉ trọng nhóm 20% khách hàng đầu
 
-Từ 10 doanh thu `[800, 300, 150, 90, 80, 70, 50, 30, 20, 10]`, tính trung bình, trung vị và tỉ trọng (%) của 2 khách hàng đứng đầu (nhóm 20% đầu).
+Đọc `stdin` `rev=<r1,r2,...>`. Tính trung bình, trung vị và phần trăm đóng góp của 20% phần tử lớn nhất (mảng đã sắp giảm dần).
 
-Định dạng đầu ra:
-`mean=<1 chữ số> median=<1 chữ số> top20=<1 chữ số>%`
+In 1 dòng: `mean=<.1f> median=<.1f> top20=<.1f>%`.
+Chấm tự động: `bash labs/cham.sh DAN L08 duong_dan/bai_cua_ban.py`
 
-Chấm tự động:
-```bash
-bash labs/cham.sh DAN L08 duong_dan/bai_cua_ban.py
-```
+> Gợi ý đọc `stdin`: `rev = sorted([float(x) for x in sys.stdin.read().strip().split("=", 1)[1].split(",")], reverse=True)`.

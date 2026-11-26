@@ -1,5 +1,6 @@
 """Sinh curriculum/pyt.yaml từ lessons/pyt/*.yaml (tiêu đề, mục tiêu) + bảng example/fix/requires_ext dưới đây. Chạy SAU CÙNG (bẫy E37):
 .venv/Scripts/python -B audit/pyt/gen_curriculum.py"""
+import sys as _sys; from pathlib import Path as _P; _sys.path.insert(0, str(_P(__file__).resolve().parents[1])); import _frozen  # noqa: E402,F401
 import sys
 from pathlib import Path
 

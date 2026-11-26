@@ -1,8 +1,9 @@
-# Lab CPR L05 — Đo bước nhảy con trỏ và hàm mảng chỉ đọc const
+# Lab CPR L05 — Đo bước nhảy con trỏ và hàm mảng chỉ đọc const qua stdin
 
-Viết chương trình C chuẩn C11 dùng mảng `int v[5] = {2, 4, 6, 8, 10}`, tính hiệu byte giữa `v + 4` và `v`, và tổng qua hàm `sum_ro(const int *a, size_t n)`, in đúng 2 dòng:
-1. `offset4=16`
-2. `sum=30`
+Viết chương trình C chuẩn C11 đọc `idx` và `n` (`0 <= idx < n <= 256`), tiếp theo đọc `n` số nguyên từ `stdin`.
+Tính khoảng cách byte `(const char *)(v + idx) - (const char *)v` và tính tổng qua hàm `sum_ro(const int *a, size_t n)`, in đúng 2 dòng:
+1. `offset=<khoảng cách byte>`
+2. `sum=<tổng các phần tử>`
 
 Chấm tự động:
 ```bash

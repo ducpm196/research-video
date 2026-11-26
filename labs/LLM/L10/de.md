@@ -1,6 +1,6 @@
-# Lab LLM L10 — Đánh giá mô hình ngôn ngữ và khoảng tin cậy
+# Lab LLM L10 — Đánh giá mô hình ngôn ngữ và biên độ tin cậy 95%
 
-Một bộ kiểm tra có `n = 800` câu độc lập, mô hình trả lời đúng `78%` (`p = 0.78`). Tính biên độ khoảng tin cậy 95% `1.96 * sqrt(p * (1 - p) / n) * 100` (đơn vị điểm phần trăm).
+Đọc `stdin` `p=<float> n=<int>`. Tính phần trăm chính xác và biên độ sai số `1.96 * sqrt(p*(1-p)/n) * 100`.
 
-Định dạng đầu ra (1 dòng):
-`acc=<1 chữ số>% margin_pp=<2 chữ số>`
+In 1 dòng: `acc=<.1f>% margin_pp=<.2f>`.
+Chấm tự động: `bash labs/cham.sh LLM L10 duong_dan/bai_cua_ban.py`

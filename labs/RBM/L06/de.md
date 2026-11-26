@@ -1,9 +1,4 @@
-# Lab RBM L06 — Lập ma trận Jacobian 2×2 và phát hiện cấu hình kỳ dị tay máy 2 khâu
+# Lab RBM L06 — Định thức ma trận Jacobian 2×2 và điểm kỳ dị
 
-Cho `L1 = 1.0, L2 = 0.5, t1 = 30°`. Hãy lập đầy đủ ma trận Jacobian `2x2` `J(t1, t2)` và tính định thức trực tiếp từ các phần tử của `J` tại `t2 = 90°` (xa kỳ dị) và `t2 = 0°` (duỗi thẳng kỳ dị).
-In đúng 1 dòng `det_90=... det_0=...` (3 chữ số).
-
-Chấm tự động:
-```bash
-bash labs/cham.sh RBM L06 duong_dan/bai_cua_ban.py
-```
+Đọc `L1 L2 t1_deg t2a_deg t2b_deg` từ stdin (ví dụ `1.0 0.5 30.0 90.0 0.0`). Tính `det(J)` tại hai góc `t2a` và `t2b`.
+In đúng 1 dòng `det_90=<3 chữ số> det_0=<3 chữ số>`.

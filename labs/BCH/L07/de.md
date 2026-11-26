@@ -1,9 +1,4 @@
-# Lab BCH L07 — Tính ngưỡng chịu lỗi Byzantine (BFT) và số phiếu chốt cho cụm 16 bên xác thực (validator)
+# Lab BCH L07 — Ngưỡng chịu lỗi Byzantine (BFT)
 
-Cho mạng gồm `N = 16` validator, tính số nút lỗi tối đa chịu được `f = (N - 1) // 3` và ngưỡng phiếu đa số hai phần ba `quorum = N - f`.
-In đúng 1 dòng `max_byzantine=... quorum_2_3=...`.
-
-Chấm tự động:
-```bash
-bash labs/cham.sh BCH L07 duong_dan/bai_cua_ban.py
-```
+Đọc số validator `N` nguyên từ stdin (ví dụ `16`). Tính `f = (N-1)//3` và `quorum = N - f`.
+In đúng 1 dòng `max_byzantine=<int> quorum_2_3=<int>`.

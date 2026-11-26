@@ -1,11 +1,6 @@
 # Lab OSY L00 — Chế độ nhân, lời gọi hệ thống và chi phí chuyển ngữ cảnh
 
-Viết chương trình C chuẩn C11 tính chi phí CPU khi thực hiện `1 000` lần chuyển ngữ cảnh mỗi giây (mỗi lần `5 us`) và so với mức `50 000` lần/giây, cũng như đọc đúng mã phân biệt chuyển ngữ cảnh vs gọi hàm thường (`mode_switch=1`), in đúng 3 dòng:
-1. `cpu_pct_1k=0.50`
-2. `cpu_pct_50k=25.00`
-3. `syscall_mode_switch=1`
+Đọc từ đầu vào chuẩn (`stdin`) `r1=<d> r2=<d> ctx_us=<d> is_sys=<0|1>` (`r1`, `r2` là số lần chuyển ngữ cảnh mỗi giây, `ctx_us` là chi phí mỗi lần tính bằng micro-giây). Tính phần trăm CPU tiêu tốn ở hai tần suất `r1`, `r2` và in cờ chuyển chế độ (`1` nếu `is_sys != 0`, ngược lại `0`).
 
-Chấm tự động:
-```bash
-bash labs/cham.sh OSY L00 duong_dan/bai_cua_ban.c
-```
+In đúng 3 dòng (`<.2f>` là số thực 2 chữ số thập phân; giữ nguyên tên khoá cố định): `cpu_pct_1k=<.2f>`, `cpu_pct_50k=<.2f>`, `syscall_mode_switch=<0|1>`.
+Chấm tự động: `bash labs/cham.sh OSY L00 duong_dan/bai_cua_ban.c`

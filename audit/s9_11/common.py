@@ -1,4 +1,5 @@
 """Helper dùng chung cho nâng cấp AF2 Chặng 9–11 (305 bài): covers chuẩn xác, lab chạy thật, khối mã Python không lộ trước pause."""
+import sys as _sys; from pathlib import Path as _P; _sys.path.insert(0, str(_P(__file__).resolve().parents[1])); import _frozen  # noqa: E402,F401
 import html
 import re
 import sys

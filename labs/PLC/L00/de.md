@@ -1,11 +1,8 @@
-# Lab PLC L00 — Phân biệt lỗi pha cú pháp (pha 2) và pha ngữ nghĩa (pha 3) trên danh sách từ tố
+# Lab PLC L00 — Lỗi cú pháp và lỗi ngữ nghĩa
 
-Cài hàm kiểm tra cho danh sách từ tố (token): pha cú pháp (pha 2) duyệt ngăn xếp/độ sâu ngoặc kiểm tra đóng mở cân bằng và không âm dọc chuỗi `['(', '1', '+', '2']`; pha ngữ nghĩa (pha 3) tra bảng biến đã khai báo `{'x': 1}` với biến `'y'`.
+Đọc `k:v,...|var|tk0,tk1,...` từ `stdin` (ví dụ `x:1|y|(,1,+,2`).
+- `syn_err`: bằng `1` nếu dãy từ tố không cân bằng ngoặc tròn `(` `)` (số ngoặc mở và đóng không khớp, hoặc có ngoặc đóng `)` đứng trước ngoặc mở tương ứng), bằng `0` nếu hợp lệ.
+- `sem_err`: bằng `1` nếu tên biến `var` chưa có trong bảng khai báo môi trường `k:v,...`, bằng `0` nếu đã khai báo.
 
-Định dạng đầu ra (1 dòng):
-`syn_err=<0 hoặc 1> sem_err=<0 hoặc 1>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh PLC L00 duong_dan/bai_cua_ban.py
-```
+In đúng 1 dòng `syn_err=<0|1> sem_err=<0|1>`.
+Chấm tự động: `bash labs/cham.sh PLC L00 duong_dan/bai_cua_ban.py`

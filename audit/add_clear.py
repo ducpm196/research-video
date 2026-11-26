@@ -1,5 +1,6 @@
 """Thêm `clear: true` cho một step (bắt đầu bảng mới) khi nội dung tràn khung: add_clear.py lessons/…/Lxx.yaml cảnh.step …
 Tìm dòng `say:` thứ k của bài (k = vị trí step), lùi lên dòng mở step “      - …”, chèn clear; đọc lại bài và kiểm."""
+import sys as _sys; from pathlib import Path as _P; _sys.path.insert(0, str(_P(__file__).resolve().parents[0])); import _frozen  # noqa: E402,F401
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools")); sys.stdout.reconfigure(encoding="utf-8")

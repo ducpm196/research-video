@@ -1,11 +1,7 @@
-# Lab AIF L11 — Mạng Bayes cảm biến nhiệt: suy diễn hậu nghiệm P(Nóng | A1, A2)
+# Lab AIF L11 — Mạng Bayes cảm biến nhiệt: suy diễn hậu nghiệm
 
-Cho bảng xác suất gốc mạng cảm biến: `P(Quá_nhiệt=1)=0.01`, `P(Sụt_áp=1)=0.04`; bảng chuông `Báo_động`: `(1,1)->0.98`, `(1,0)->0.90`, `(0,1)->0.25`, `(0,0)->0.005`; hai cảm biến báo tín hiệu `A1` (khi kêu: `0.85` / yên: `0.04`) và `A2` (khi kêu: `0.75` / yên: `0.02`). Tính `P(Quá_nhiệt=1 | A1=1, A2=1)` bằng liệt kê qua biến ẩn.
+Đọc `stdin` chuỗi `p_h=<float> p_v=<float> a1=<0|1> a2=<0|1>`. Mạng Bayes gồm: nguyên nhân `H` (Quá nhiệt, xác suất `p_h`), `V` (Sụt áp, xác suất `p_v`) cùng trỏ vào chuông `A` với bảng điều kiện `P(A=1|H=1,V=1)=0.98`, `P(A=1|H=1,V=0)=0.90`, `P(A=1|H=0,V=1)=0.25`, `P(A=1|H=0,V=0)=0.005`; chuông `A` trỏ vào hai cảm biến `A1` (`P(A1=1|A=1)=0.85`, `P(A1=1|A=0)=0.04`) và `A2` (`P(A2=1|A=1)=0.75`, `P(A2=1|A=0)=0.02`). Tính xác suất hậu nghiệm `P(H=1 | A1, A2)` bằng liệt kê biên ẩn `V, A`.
 
-Định dạng đầu ra:
-`P_heat_given_A12=<4 chữ số thập phân>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh AIF L11 duong_dan/bai_cua_ban.py
-```
+In 1 dòng: `P_heat_given_A12=<.4f>`.
+Chấm tự động: `bash labs/cham.sh AIF L11 duong_dan/bai_cua_ban.py`
+Gợi ý đọc đầu vào trong Python: dùng `sys.stdin.read().split()` tách từng cặp `khoá=giá_trị`.

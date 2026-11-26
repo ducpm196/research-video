@@ -1,11 +1,7 @@
-# Lab DSC L05 — Trung thực trực quan: trục tung cắt ở 80 phóng đại khác biệt
+# Lab DSC L05 — Trục tung cắt ngọn phóng đại khác biệt trực quan
 
-So sánh mức tăng thật (%) giữa `82` và `84` với tỉ lệ chiều cao nhìn thấy trên biểu đồ cột khi cắt đáy trục ở `80`.
+Đọc `stdin` `v0=<float> v1=<float> cut=<float>`. Tính phần trăm tăng thực giữa `v0` và `v1` so với tỉ lệ chiều cao nhìn thấy khi cắt trục ở `cut`.
 
-Định dạng đầu ra:
-`real_gain=<2 chữ số>% truncated_visual=<1 chữ số>x`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh DSC L05 duong_dan/bai_cua_ban.py
-```
+In 1 dòng: `real_gain=<.2f>% truncated_visual=<.1f>x`.
+Chấm tự động: `bash labs/cham.sh DSC L05 duong_dan/bai_cua_ban.py`
+Gợi ý đọc đầu vào trong Python: dùng `sys.stdin.read().split()` tách từng cặp `khoá=giá_trị`.

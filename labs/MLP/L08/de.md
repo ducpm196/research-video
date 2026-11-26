@@ -1,11 +1,9 @@
 # Lab MLP L08 — Đa thức bậc 2 trên hình tròn & kiểm chứng nhân quả TimeSeriesSplit
 
-Viết chương trình Python (chạy bằng `labs/.venv-ml` qua `cham.sh`): so sánh `LogisticRegression` tuyến tính vs `PolynomialFeatures(degree=2, include_bias=False)` trên `make_circles(n_samples=300, factor=0.4, noise=0.05, random_state=42)` chia 70/30 `stratify=y, random_state=42`, và kiểm `TimeSeriesSplit(n_splits=4)` trên 100 chỉ số, in đúng 3 dòng:
-1. `linear_acc=...`
-2. `poly2_acc=1.000`
-3. `strict_causal_splits=1`
+Đọc từ `stdin`:
+`n_samples=<int> factor=<float> noise=<float> test_size=<float> seed=<int> degree=<int> ts_splits=<int> ts_len=<int>`
 
-Chấm tự động:
-```bash
-bash labs/cham.sh MLP L08 duong_dan/bai_cua_ban.py
-```
+Yêu cầu: trên `make_circles(..., random_state=seed)` chia phân tầng `train_test_split(..., test_size=test_size, stratify=y, random_state=seed)`, so sánh `Pipeline([('sc', StandardScaler()), ('c', LogisticRegression(random_state=seed))])` thường với `Pipeline([('pf', PolynomialFeatures(degree=degree, include_bias=False)), ('sc', StandardScaler()), ('c', LogisticRegression(random_state=seed))])`. Đồng thời kiểm tra mọi fold của `TimeSeriesSplit(n_splits=ts_splits)` trên `np.arange(ts_len)` đều có `tr.max() < te.min()`.
+
+In đúng 3 dòng: `linear_acc=<.3f>`, `poly2_acc=<.3f>`, `strict_causal_splits=<0_hoặc_1>`.
+Chấm tự động: `bash labs/cham.sh MLP L08 duong_dan/bai_cua_ban.py`

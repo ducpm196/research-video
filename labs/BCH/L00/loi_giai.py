@@ -1,7 +1,8 @@
-need = lambda s, w, ttp, trust: s and w and (not ttp) and (not trust)
-central_ops = 1
-maj_quorum = (5 // 2) + 1
-n_sch = int(need(True, True, True, False))
-n_riv = int(need(True, True, False, False))
-print(f"central_ops={central_ops} maj_quorum_5={maj_quorum}",
-      f"school_need={n_sch} rivals_need={n_riv}")
+import sys
+s = sys.stdin.read().strip() or "5|1,1,1,0|1,1,0,0"
+ns, a_s, b_s = s.split("|")
+n = int(ns)
+need = lambda v: int(v[0] and v[1] and (not v[2]) and (not v[3]))
+a = [int(x) for x in a_s.split(",")]
+b = [int(x) for x in b_s.split(",")]
+print(f"central_ops=1 maj_quorum_5={(n // 2) + 1} school_need={need(a)} rivals_need={need(b)}")

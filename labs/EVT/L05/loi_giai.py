@@ -1,7 +1,5 @@
-w, p, t = 600, 450, 600
-backlog = (w - p) * t
-lag_s = backlog / w
-drain_2 = backlog / (2 * p - w)
-print(f'backlog={backlog}')
-print(f'data_lag_s={lag_s:.1f}')
-print(f'drain_with_2_s={drain_2:.1f}')
+import sys
+kv = {k: int(v) for k, v in (t.split('=') for t in sys.stdin.read().split())}
+w, p, t = kv['w'], kv['p'], kv['secs']
+bl = (w - p) * t
+print(f'backlog={bl}\ndata_lag_s={bl / w:.1f}\ndrain_with_2_s={bl / (2 * p - w):.1f}')

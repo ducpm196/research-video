@@ -1,14 +1,20 @@
 #include <stdio.h>
 #include <stdlib.h>
 int main(void) {
-    int *p = calloc(3, sizeof(int));
+    size_t n1 = 0, n2 = 0;
+    if (scanf("%zu", &n1) != 1 || n1 == 0) return 1;
+    int *p = calloc(n1, sizeof(int));
     if (!p) return 1;
-    p[0] = 10; p[1] = 20; p[2] = 30;
-    int *tmp = realloc(p, 5 * sizeof(int));
+    for (size_t i = 0; i < n1; i++) if (scanf("%d", &p[i]) != 1) { free(p); return 1; }
+    if (scanf("%zu", &n2) != 1) { free(p); return 1; }
+    size_t tot = n1 + n2;
+    int *tmp = realloc(p, (tot ? tot : 1) * sizeof(int));
     if (!tmp) { free(p); return 1; }
-    p = tmp; p[3] = 40; p[4] = 50;
-    int sum = 0; for (int i = 0; i < 5; i++) sum += p[i];
-    printf("len=5 sum=%d\n", sum);
+    p = tmp;
+    for (size_t i = n1; i < tot; i++) if (scanf("%d", &p[i]) != 1) { free(p); return 1; }
+    long long sum = 0;
+    for (size_t i = 0; i < tot; i++) sum += p[i];
+    printf("len=%zu sum=%lld\n", tot, sum);
     free(p); p = NULL;
     printf("freed=%d\n", p == NULL);
     return 0;

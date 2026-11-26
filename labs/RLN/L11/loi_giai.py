@@ -1,6 +1,5 @@
-finish = 150
-loop_r = (1200 // 6) * 2
-print(
-    f"intended={finish} reward_hacked={loop_r} "
-    f"broken={int(loop_r > finish)}"
-)
+import sys
+s = sys.stdin.read().strip() or "1200 6 2 150"
+steps, period, bonus, finish = map(int, s.split())
+loop_r = (steps // period) * bonus
+print(f"intended={finish} reward_hacked={loop_r} broken={int(loop_r > finish)}")

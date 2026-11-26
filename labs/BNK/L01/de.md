@@ -6,7 +6,7 @@ Viết chương trình `TongBaLuong` (tệp `TongBaLuong.java`):
 1. Biến chung `static long tong = 0;` và một đối tượng khoá `static final Object KHOA = new Object();`.
 2. Một việc `Runnable` cộng 200 000 lần, **mỗi lần cộng bọc trong** `synchronized (KHOA) { … }`.
 3. Tạo ba luồng cho cùng việc đó, `start()` cả ba rồi `join()` cả ba.
-4. In đúng một dòng: `tong = 600000`.
+4. In đúng một dòng: `tong = <tổng cuối>`.
 
 Khung tệp `TongBaLuong.java` (viết bài vào chỗ `...`; `throws Exception` cho phép bỏ qua lỗi bất thường khi chờ luồng):
 
@@ -20,6 +20,6 @@ public class TongBaLuong {
 }
 ```
 
-Thử thêm: bỏ `synchronized`, chạy lại vài lần. `tong` sẽ nhỏ hơn 600000 và đổi mỗi lần: đó là mất cập nhật.
+Thử thêm: bỏ `synchronized`, chạy lại vài lần. `tong` sẽ nhỏ hơn ba nhân hai trăm nghìn và đổi mỗi lần: đó là mất cập nhật.
 
 Chạy: `javac TongBaLuong.java && java TongBaLuong`. Chấm: `bash labs/cham.sh BNK L01 TongBaLuong.java`.

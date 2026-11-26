@@ -1,3 +1,4 @@
-y_step = 2.0 + 0.95 * 8.0
-y_term = 2.0 + 0.0
-print(f"dqn_target={y_step:.1f} terminal_target={y_term:.1f}")
+import sys
+s = sys.stdin.read().strip() or "2.0 0.95 8.0"
+r, g, mQ = map(float, s.split())
+print(f"dqn_target={r + g * mQ:.1f} terminal_target={r:.1f}")

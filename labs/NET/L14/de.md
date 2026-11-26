@@ -1,11 +1,6 @@
-# Lab NET L14 (Mô phỏng chữ ký số) — RSA (hệ khoá công khai) ký/kiểm chữ ký đồ chơi + băm SHA-256
+# Lab NET L14 — Chữ ký số RSA đồ chơi và độ dài băm SHA-256
 
-Viết chương trình Python dùng RSA (hệ khoá công khai đồ chơi) ký giá trị `m = 4` bằng cặp `(n=33, d=7, e=3)` (`sig = m^d mod n`), kiểm chữ ký bằng `sig^e mod n == m` và kiểm tra độ dài chuẩn `64` ký tự hệ 16 (`hex`) của SHA-256 trên `'TLS'`, in đúng 3 dòng:
-1. `sig=16 verify=4`
-2. `valid=1`
-3. `sha256_hex_len=64`
+Đọc `stdin` `n=<int> d=<int> e=<int> m=<int> tag=<str>`. Ký và xác minh RSA `sig = m^d mod n`, `chk = sig^e mod n`, đồng thời đo độ dài hex SHA-256 của `tag`.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh NET L14 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `sig=<d> verify=<d>`, `valid=<0|1>`, `sha256_hex_len=<d>`.
+Chấm tự động: `bash labs/cham.sh NET L14 duong_dan/bai_cua_ban.py`

@@ -1,4 +1,5 @@
-counts = [6, 3, 1]
+import sys
+counts = [int(v) for v in sys.stdin.read().strip().split('=')[1].split(',')]
 tot = sum(counts)
 p = [c / tot for c in counts]
 lam = [c / pk for c, pk in zip(counts, p)]

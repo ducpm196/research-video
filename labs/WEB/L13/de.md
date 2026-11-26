@@ -1,11 +1,6 @@
-# Lab WEB L13 — Node.js thật: kiểm chứng hợp nhất không mất dữ liệu ở chế độ ngoại tuyến
+# Lab WEB L13 — Node.js: hợp nhất tập hợp không mất dữ liệu ở chế độ ngoại tuyến
 
-Viết tập lệnh Node.js mô phỏng hai máy ngoại tuyến cùng thêm `'mua sua'` và `'goi me'` vào tập hợp gốc `{'lam bai'}`: kiểm tra hợp nhất hai chiều `merge(A, B)` và `merge(B, A)` đều cho kết quả y hệt (`3` mục), in đúng 3 dòng:
-1. `merged_len=3`
-2. `commutative=1`
-3. `idempotent=1`
+Đọc `stdin` `a=<i1,i2,...>` (dòng 1) và `b=<i1,i2,...>` (dòng 2). Cài phép hợp nhất `Set` không trùng và kiểm tính giao hoán cùng tính lũy đẳng.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh WEB L13 duong_dan/bai_cua_ban.js
-```
+In đúng 3 dòng: `merged_len=<d>`, `commutative=<0|1>`, `idempotent=<0|1>`.
+Chấm tự động: `bash labs/cham.sh WEB L13 duong_dan/bai_cua_ban.js`

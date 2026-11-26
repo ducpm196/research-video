@@ -1,12 +1,7 @@
-# Lab MLO L11 — Lượng tử hoá đối xứng số nguyên 8 bit (int8) và nén bộ nhớ trong (RAM)
+# Lab MLO L11 — Lượng tử hoá int8 và nén bộ nhớ mô hình
 
-Lượng tử hoá giá trị `-0.9` về số nguyên 8 bit đối xứng (`int8`) trên khoảng `[-2, 2]` (giá trị nguyên lớn nhất `q_max = 127`), tính sai số khôi phục và so bộ nhớ trong (`RAM`) cho mô hình `13 tỉ` tham số giữa dạng số thực dấu phẩy động 32 bit (`fp32`, `4 byte/tham số`) và số nguyên 8 bit (`int8`, `1 byte/tham số`).
+Đọc `stdin` `val=<float> rmax=<float> params_b=<int>`. Lượng tử hóa đối xứng 8-bit (`qmax = 127`) trên `[-rmax, rmax]`, tính sai số khôi phục và so RAM của `fp32` vs `int8`.
 
-Định dạng đầu ra (2 dòng):
-`q=<số nguyên> deq=<4 chữ số> err=<4 chữ số>`
-`fp32_gb=<số nguyên> int8_gb=<số nguyên>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh MLO L11 duong_dan/bai_cua_ban.py
-```
+In 2 dòng: `q=<d> deq=<.4f> err=<.4f>`, `fp32_gb=<d> int8_gb=<d>`.
+Chấm tự động: `bash labs/cham.sh MLO L11 duong_dan/bai_cua_ban.py`
+Nền tảng Python (`PYT:L04`): đọc dữ liệu qua `sys.stdin.read().strip()`.

@@ -313,13 +313,15 @@ def v_L08():
     rec("L08.q2", round(10**9 / (365.25 * 86400)) == 32 and [n**3 for n in ns] == [8, 10**9, 10**18], "quy mô: n³ phép → 1 giây ở n = 1 000, ≈ 32 năm ở n = 10^6")
     # đo thật một cỡ: trị riêng của ma trận đối xứng n=200 tốn thời gian tăng theo n (kiểm bậc tăng, không in vào bài)
     import time
+    np.linalg.eigvalsh(np.eye(10))  # warmup BLAS/LAPACK
     t = []
     for n in (100, 200):
         A = np.random.default_rng(1).standard_normal((n, n))
         A = A + A.T
         t0 = time.perf_counter()
-        np.linalg.eigvalsh(A)
-        t.append(time.perf_counter() - t0)
+        for _ in range(5):
+            np.linalg.eigvalsh(A)
+        t.append((time.perf_counter() - t0) / 5)
     rec("L08.q3", t[1] > t[0], f"quy mô (đo thật): eigvalsh n=100 {t[0]*1e3:.1f} ms < n=200 {t[1]*1e3:.1f} ms")
 
 

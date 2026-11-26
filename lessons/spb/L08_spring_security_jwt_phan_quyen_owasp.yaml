@@ -1,0 +1,364 @@
+id: L08
+course: SPB
+series: SPB · Spring Boot thực chiến với PostgreSQL, Redis và Kafka
+title: Bài 8 — Spring Security JWT phi trạng thái, RBAC và chống OWASP
+voice: vi-VN-NamMinhNeural
+rate: -5%
+depth: full
+af2: true
+covers:
+- objective: 1
+  scene: example
+- objective: 2
+  scene: sym
+- objective: 3
+  scene: quymo
+source: curriculum/spb.yaml L08; labs/SPB/L08 (chạy thật ./mvnw -B verify với Spring Security trên Boot 4.1.3)
+assumes: []
+objectives:
+- Cấu hình bộ lọc bảo mật phi trạng thái xác thực chữ ký HMAC cho mã truy cập và phân quyền theo vai trò
+- Phòng chống năm lỗ hổng OWASP phổ biến trên backend Java gồm truy cập chéo đối tượng BOLA và lộ dữ liệu lỗi
+- Đo tỉ lệ từ chối hợp lệ ở cửa bảo mật khi lưu lượng tấn công dò quyền tăng 10, 1 000 và 100 000 yêu cầu
+scenes:
+- id: hook
+  kind: hook
+  title: Đăng nhập xong vẫn đổi mã TK nguồn để rút trộm tiền người khác?
+  checks:
+  - 256 // 8 == 32
+  steps:
+  - show: '<div class=''box key''><p>Rất nhiều ứng dụng kiểm tra xong chữ ký thẻ truy cập ở cổng ngoài (<i>Authentication</i>)
+      rồi tin tưởng tuyệt đối vào thân yêu cầu bên trong: người dùng <b>An</b> cầm thẻ hợp lệ nhưng sửa <code>fromAccount</code>
+      thành <b>TK-BINH</b> vẫn chuyển được tiền của người khác!</p><p>Đó là lỗ hổng số 1 bảng OWASP API: <b>BOLA</b> (Broken
+      Object Level Authorization) mà Spring Security phải chặn kèm kiểm quyền sở hữu.</p></div>'
+    say: Chào bạn đến với bài tám của khoá Spring Boot thực chiến. Nhiều kỹ sư cho rằng chỉ cần gắn Spring Security kiểm tra
+      thẻ hợp lệ ở ngoài cổng là dịch vụ đã an toàn tuyệt đối. Thực tế kẻ xấu có thể đăng nhập chính tài khoản hợp lệ của
+      họ rồi tự đổi mã tài khoản nguồn trong gói tin để rút tiền người khác. Bài học hôm nay cài đặt chuỗi bảo mật phi trạng
+      thái phân biệt rõ xác thực, phân quyền vai trò và chặn đứng truy cập chéo. Xác thực danh tính chỉ trả lời câu hỏi bạn
+      là ai, còn uỷ quyền mới quyết định bạn có quyền chạm vào tài khoản cụ thể nào. Khép kín cả chuỗi lọc phi trạng thái
+      và kiểm tra chủ sở hữu tại tầng nghiệp vụ mới chặn được tấn công đánh tráo mã nguồn.
+    focus:
+    - 0
+    - '1.1'
+    - '1.1'
+    - '1.2'
+    - '1.1'
+    - '1.2'
+    clear: true
+- id: prereq
+  kind: prereq
+  title: 'Ôn nhanh: phân biệt mã 401, mã 403 và chuỗi bộ lọc Servlet'
+  steps:
+  - show: <table class='t'><tr><th>khái niệm bảo mật web</th><th>ý nghĩa chính xác</th></tr><tr><td><b>401 Unauthorized</b>
+      (Chưa xác thực)</td><td>Thiếu thẻ, sai chữ ký hoặc thẻ đã quá hạn sử dụng</td></tr><tr><td><b>403 Forbidden</b> (Không
+      đủ quyền)</td><td>Đã biết danh tính nhưng vai trò hay chủ sở hữu không được phép</td></tr><tr><td>Phi trạng thái (Stateless)</td><td>Không
+      lưu phiên trên RAM; mỗi yêu cầu tự mang theo thẻ đã ký</td></tr></table>
+    say: Hãy ôn ngắn gọn ba khái niệm bảo mật nền tảng để không nhầm lẫn hai mã lỗi rất hay bị đảo cho nhau. Mã bốn trăm linh
+      một có nghĩa hệ thống chưa xác minh được danh tính vì người gọi thiếu thẻ, làm giả chữ ký hoặc đưa thẻ quá hạn. Ngược
+      lại, mã bốn trăm linh ba nghĩa là thẻ hợp lệ nhưng vai trò của người đó không đủ quyền hoặc đang nhòm ngó tài sản của
+      người khác. Toàn bộ xác thực chạy phi trạng thái để máy chủ không phải đồng bộ bộ nhớ phiên. Phân tách rạch ròi mã lỗi
+      xác thực và phân quyền giúp phía khách biết ngay phải làm mới thẻ hay báo không đủ quyền truy cập. Nhờ không giữ trạng
+      thái phiên trên bộ nhớ máy chủ, mọi bản sao dịch vụ chuyển khoản có thể xử lý bất kỳ yêu cầu nào.
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.2'
+    - '1.4'
+    clear: true
+- id: sym
+  kind: symbol
+  title: Năm lỗ hổng OWASP backend Java và cách phòng chống bằng Security
+  steps:
+  - show: <table class='t'><tr><th>lỗ hổng OWASP phổ biến</th><th>biểu hiện sai</th><th>biện pháp chặn chuẩn Spring</th></tr><tr><td><b>1.
+      BOLA (API1)</b></td><td>Chỉ kiểm vai trò, không kiểm chủ tài khoản</td><td>So <code>owner.equals(auth.getName())</code>
+      ở tầng xử lý</td></tr><tr><td><b>2. Broken Auth (API2)</b></td><td>Tin payload trước khi kiểm chữ ký hay quên <code>exp</code></td><td>Kiểm
+      chữ ký thời gian hằng <code>MessageDigest.isEqual</code> + kiểm <code>exp</code></td></tr><tr><td><b>3. BOPLA / Mass
+      Assignment</b></td><td>Nhận thẳng thực thể DB có trường nhạy cảm</td><td>Dùng <code>record</code> DTO tối giản chỉ đúng
+      trường cần thiết</td></tr><tr><td><b>4. Security Misconfiguration</b></td><td>Trả stack trace chi tiết hoặc mở rộng
+      <code>permitAll()</code></td><td>Chính sách mặc định <code>denyAll()</code> + ẩn dấu vết lỗi</td></tr><tr><td><b>5.
+      Injection (SQLi)</b></td><td>Cộng chuỗi SQL bằng tay trong truy vấn</td><td>Luôn dùng tham số ràng buộc <code>:id</code>
+      trong JPA / JDBC</td></tr></table>
+    say: Bảng này tổng hợp năm lỗ hổng OWASP phổ biến nhất trên hệ thống backend Java cùng cách bịt kín tương ứng. Hai lỗ
+      hổng đứng đầu là cho phép truy cập chéo đối tượng người khác và xác thực thẻ sơ sài bỏ qua thời hạn hay sai chữ ký.
+      Ba lỗ hổng tiếp theo là lọt trường nhạy cảm vì thiếu DTO, lộ chi tiết lỗi hệ thống và ghép chuỗi SQL thủ công. Trong
+      năm rủi ro hàng đầu, lỗ hổng truy cập chéo đối tượng luôn đứng vị trí số một vì bộ lọc đường dẫn tự động không kiểm
+      giúp ta. Kết hợp DTO tối giản, tắt dấu vết lỗi thô và câu lệnh tham số hoá sẽ khép kín nốt ba rủi ro phổ biến còn lại.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    - '1.1'
+    - '1.2'
+    clear: true
+- id: intuition
+  kind: intuition
+  title: 'Chuỗi chốt chặn 3 tầng: Bộ lọc thẻ → RBAC URL → Kiểm chủ sở hữu BOLA'
+  steps:
+  - show: <div><svg width="960" height="210" viewBox="0 0 960 210"><rect x="25" y="45" width="210" height="95" rx="10" fill="#dbeafe"
+      stroke="#2a78d6" stroke-width="2"/><text x="130.0" y="85" font-size="16" font-weight="700" text-anchor="middle" fill="#1e293b">1.
+      Filter chữ ký + exp</text><text x="130.0" y="112" font-size="14" text-anchor="middle" fill="#475569">Hỏng / hết hạn
+      → 401</text><line x1="235" y1="92" x2="295" y2="92" stroke="#475569" stroke-width="2"/><polygon points="295,92 287,87
+      287,97" fill="#475569"/><rect x="295" y="45" width="225" height="95" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="2"/><text
+      x="407.5" y="85" font-size="16" font-weight="700" text-anchor="middle" fill="#1e293b">2. RBAC FilterChain</text><text
+      x="407.5" y="112" font-size="14" text-anchor="middle" fill="#475569">VIEWER gọi POST → 403</text><line x1="520" y1="92"
+      x2="585" y2="92" stroke="#475569" stroke-width="2"/><polygon points="585,92 577,87 577,97" fill="#475569"/><rect x="585"
+      y="45" width="345" height="95" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/><text x="757.5" y="85" font-size="16"
+      font-weight="700" text-anchor="middle" fill="#1e293b">3. Kiểm chủ tài khoản (BOLA)</text><text x="757.5" y="112" font-size="14"
+      text-anchor="middle" fill="#475569">TELLER chính chủ → 201 | chéo chủ → 403</text></svg></div>
+    say: Hãy nhìn ba lớp cửa bảo vệ nối tiếp nhau từ trái sang phải trên màn hình. Lớp đầu tiên nằm ở bộ lọc đọc tiêu đề uỷ
+      quyền xác minh chữ ký mật mã và thời hạn thẻ; nếu hỏng sẽ loại bằng mã bốn trăm linh một. Lớp thứ hai nằm ở chuỗi
+      lọc cấu hình đường dẫn kiểm tra vai trò của thẻ, từ chối bằng mã bốn trăm linh ba nếu người xem cố tình gọi lệnh
+      ghi.
+    clear: true
+  - show: ''
+    say: Lớp cuối cùng nằm ngay tại điểm xử lý nghiệp vụ kiểm tra chủ sở hữu tài khoản nguồn để chặn tuyệt đối tấn công chéo
+      đối tượng. Việc đặt tầng kiểm tra danh tính đứng ngoài cùng ngăn chặn phần lớn gói tin giả mạo tiêu tốn tài nguyên
+      phân tích dữ liệu. Hai lớp kiểm quyền theo vai trò và theo chủ sở hữu tài khoản chồng lên nhau tạo phòng thủ chiều
+      sâu vững chắc.
+- id: formula
+  kind: formula
+  title: Nguyên tắc xác minh thẻ thời gian hằng và mặc định từ chối denyAll
+  checks:
+  - 256 // 8 == 32
+  steps:
+  - show: <div class='box key'><p><b>Hai kỷ luật mật mã và cấu hình trong Spring Security:</b></p><p>1. <b>So sánh chữ ký
+      theo thời gian hằng:</b> dùng <code>MessageDigest.isEqual(expected, got)</code> (khoá HMAC-SHA256 dài tối thiểu <b>256
+      bit = 32 byte</b>), tuyệt đối không dùng <code>String.equals</code> dễ rò rỉ độ trễ theo từng ký tự.</p><p>2. <b>Nguyên
+      tắc chặn mặc định:</b> dòng cuối cùng của <code>authorizeHttpRequests</code> luôn là <code>.anyRequest().denyAll()</code>
+      thay cho <code>authenticated()</code> hay <code>permitAll()</code>.</p></div>
+    say: Hai quy tắc này bảo vệ dịch vụ ngay cả khi sau này nhóm phát triển thêm nhiều đường dẫn mới. Khi so sánh chữ ký mật
+      mã ở cửa vào, hàm so sánh từng byte theo thời gian không đổi ngăn kẻ xấu đo thời gian để đoán chữ ký. Cấu hình phân
+      quyền luôn chốt bằng lệnh từ chối mọi đường dẫn chưa khai báo buộc người viết phải mở quyền rõ ràng. Hàm so sánh chữ
+      ký cố định thời gian duyệt hết mọi phần tử byte nên kẻ tấn công không thể suy đoán từng ký tự mã băm. Lệnh khoá mặc
+      định mọi đường dẫn chưa khai báo là rào chắn cuối cùng chống quên cấu hình bảo mật cho API mới thêm.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    - '1.1'
+    - '1.2'
+    clear: true
+- id: example
+  kind: example
+  title: 'Mã thật: JwtAuthFilter, SecurityFilterChain và chặn BOLA tại Controller'
+  checks:
+  - 1000 - 950 == 50
+  steps:
+  - show: <p><b>1. Cấu hình SecurityFilterChain phi trạng thái</b></p><div class="code"><div>@Bean SecurityFilterChain chain(HttpSecurity
+      http, JwtAuthFilter f) {</div><div>  return http.csrf(c -&gt; c.disable())</div><div>    .sessionManagement(s -&gt;
+      s.sessionCreationPolicy(STATELESS))</div><div>    .exceptionHandling(e -&gt; e.authenticationEntryPoint(</div><div>      new
+      HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))</div><div>    .authorizeHttpRequests(reg -&gt; reg</div><div>      .requestMatchers(POST,
+      "/api/v1/transfers").hasRole("TELLER")</div><div>      .anyRequest().denyAll())</div><div>    .addFilterBefore(f, UsernamePasswordAuthenticationFilter.class)</div><div>    .build();</div><div>}</div></div>
+    say: Đoạn mã thứ nhất thiết lập trọn vẹn chuỗi bộ lọc bảo mật phi trạng thái của Spring Security. Ta tắt lưu phiên máy
+      chủ, trả mã bốn trăm linh một khi thiếu danh tính và buộc yêu cầu chuyển khoản mang vai trò giao dịch viên. Bộ lọc kiểm
+      thẻ của riêng ta được chèn đứng ngay trước bộ lọc tên người dùng mật khẩu chuẩn. Phía sau cấu hình chuỗi lọc bảo mật,
+      lớp dịch vụ thẻ tách phần tải dữ liệu, giải mã chữ ký thuật toán băm và đối chiếu hạn dùng. Đồng thời lớp lọc chạy đúng
+      một lần mỗi yêu cầu tự động đọc tiêu đề uỷ quyền, xác minh qua dịch vụ thẻ rồi xoá sạch ngữ cảnh khi sai.
+    focus:
+    - 1
+    - 2
+    - 2
+    - 1
+    - 2
+    clear: true
+  - show: <p><b>2. Chặn BOLA ngay tại đầu cuối xử lý nghiệp vụ</b></p><div class="code"><div>@PostMapping("/api/v1/transfers")</div><div>public
+      ResponseEntity&lt;?&gt; transfer(@RequestBody Cmd cmd,</div><div>    Authentication auth) {</div><div>  String owner
+      = OWNERS.get(cmd.fromAccount());</div><div>  if (owner == null || !owner.equals(auth.getName())) {</div><div>    return
+      ResponseEntity.status(HttpStatus.FORBIDDEN)</div><div>      .body(Map.of("error", "Khong co quyen tren tai khoan nguon"));</div><div>  }</div><div>  return
+      ResponseEntity.status(HttpStatus.CREATED)</div><div>    .body(Map.of("status", "ACCEPTED", "amount", cmd.amount()));</div><div>}</div></div>
+    say: Tiếp theo ở lớp điều khiển chuyển khoản, hệ thống đối chiếu trực tiếp tên chủ sở hữu của tài khoản nguồn với danh
+      tính rút ra từ thẻ đã xác thực. Nếu giao dịch viên An mang thẻ hợp lệ nhưng cố chuyển tiền từ tài khoản của Bình, máy
+      chủ trả ngay mã bốn trăm linh ba từ chối mà không để lộ dấu vết nội bộ nào. Nhờ ngữ cảnh bảo mật đã được bộ lọc gắn
+      tên chủ thẻ tin cậy, lớp điều khiển đối chiếu trực tiếp tên đó với chủ tài khoản nguồn. Điều này chặn tuyệt đối tình
+      huống một giao dịch viên hợp lệ tự ý chuyển tiền từ tài khoản của đồng nghiệp hay khách hàng.
+    focus:
+    - 1
+    - 2
+    - 1
+    - 2
+    clear: true
+- id: check
+  kind: check
+  title: 'Chạy Boot 4.1.3 Security: 401 thẻ sai, 403 BOLA và 201 chính chủ'
+  checks:
+  - 10 - 9 == 1
+  steps:
+  - show: '<p><b>Kết quả chạy thật KiemL08Test qua ./mvnw -B verify</b></p><div class="code"><div>// 1) Không gửi thẻ / sửa
+      1 ký tự chữ ký / thẻ quá hạn exp → HTTP 401 Unauthorized</div><div>// 2) Thẻ vai trò VIEWER gọi POST /api/v1/transfers
+      → HTTP 403 Forbidden</div><div>// 3) Thẻ TELLER "an" gọi chuyển từ "TK-BINH" (BOLA) → HTTP 403 Forbidden</div><div>//
+      4) Thẻ TELLER "an" gọi chuyển từ "TK-AN" → HTTP 201 Created {"status":"ACCEPTED"}</div><div>[INFO] Tests run: 4, Failures:
+      0, Errors: 0</div><div>ĐÚNG — PASS /d/research-video/labs/SPB/L08 (du_an maven)</div></div>'
+    say: Đầu ra chạy thật của bốn ca kiểm thử bảo mật xác nhận từng chốt chặn đều hành xử chính xác từng mã lỗi. Thiếu thẻ,
+      thẻ bị sửa chữ ký hay thẻ hết hạn đều bị chặn ngay ở đầu vào với mã bốn trăm linh một vì ngữ cảnh bảo mật đã xoá sạch.
+      Người dùng mang thẻ người xem hoặc gọi chéo sang tài khoản người khác đều nhận mã bốn trăm linh ba từ chối tuyệt đối.
+      Bốn ca kiểm thử chạy trực tiếp qua chuỗi bộ lọc Spring Security thật chứ không bỏ qua tầng bảo vệ bằng giả lập lỏng
+      lẻo. Mọi đường dẫn ngoài danh sách cho phép hoặc thiếu chữ ký hợp lệ đều nhận mã từ chối chuẩn trước khi chạm vào nghiệp
+      vụ.
+    focus:
+    - 1
+    - 2
+    - 2
+    - 1
+    - 2
+    clear: true
+- id: quymo
+  kind: example
+  title: Tỉ lệ chặn tại cửa bảo mật ở 10, 1 000 và 100 000 yêu cầu
+  checks:
+  - 100_000 - 95_000 == 5_000
+  steps:
+  - show: <table class='t'><tr><th>lưu lượng dò quyền (95% tấn công + 5% hợp lệ)</th><th>chi phí tại cửa FilterChain</th><th>tài
+      nguyên lõi nghiệp vụ tiết kiệm</th></tr><tr><td><b>10 yêu cầu</b> (làm tròn 9,5/0,5 → 9 sai + 1 đúng)</td><td>Chặn 9 lượt trên RAM (&lt;
+      0,2 ms)</td><td>Chỉ 1 yêu cầu chạm DB tài khoản</td></tr><tr><td><b>1 000 yêu cầu</b> (950 sai + 50 đúng)</td><td>950
+      lượt dừng ngay ở 401/403 (0 SQL)</td><td>Tiết kiệm 950 phiên giao dịch DB</td></tr><tr><td><b>100 000 yêu cầu</b> (95
+      000 dò quét)</td><td>Tỉ lệ chặn hợp lệ đạt <b>100% mã sai</b> trên RAM</td><td>Tránh kẹt ổ khoá DB; cần ghép <b>rate
+      limit ở Gateway/Redis</b></td></tr></table>
+    say: Bảng quy mô cho thấy lợi ích bảo vệ lõi dữ liệu khi cửa bảo mật lọc sạch lưu lượng tấn công ở ba mức mười, một nghìn
+      và trăm nghìn. Giả sử chín mươi lăm phần trăm lưu lượng là dò quét trái phép, cả chín mươi lăm nghìn lượt xấu bị chặn
+      trên bộ nhớ trước khi chạm cơ sở dữ liệu. Ở quy mô trăm nghìn lượt dò quét mỗi giây, lớp ứng dụng thường ghép thêm bộ
+      đếm giới hạn tốc độ và Redis để giảm tải xác minh. Ở tải một nghìn và trăm nghìn lượt dò quét mỗi giây, xác minh mật
+      mã tại RAM giúp tầng cơ sở dữ liệu hoàn toàn không chịu áp lực. Kết hợp thêm giới hạn tốc độ theo địa chỉ và thu hồi
+      thẻ bị lộ trên Redis sẽ bảo vệ cổng API trước các đợt tấn công tự động.
+    focus:
+    - 0
+    - '1.4'
+    - '1.4'
+    - '1.4'
+    - '1.4'
+    clear: true
+- id: pitfalls
+  kind: pitfall
+  title: Ba lỗ hổng bảo mật hay sót trên Spring Security
+  steps:
+  - show: <table class='t'><tr><th>sai lầm bảo mật chết người ở backend Java</th></tr><tr><td><div class='box warn'><b>Lỗi
+      1 — Để nguyên CSRF nhưng lại chặn nhầm API không dùng cookie phiên, hoặc tắt bừa cả trên web form:</b> Phải phân rõ
+      API phi trạng thái qua Header hay phiên Cookie.<br><b>Lỗi 2 — Chỉ kiểm <code>hasRole("TELLER")</code> ở URL mà quên
+      kiểm sở hữu tài khoản trong hàm xử lý:</b> Sót hoàn toàn lỗ hổng BOLA.<br><b>Lỗi 3 — Quên gọi <code>SecurityContextHolder.clearContext()</code>
+      khi chữ ký sai:</b> Có nguy cơ sót danh tính cũ nếu luồng tái sử dụng không sạch.</div></td></tr></table>
+    say: Ba lỗi trên bảng đều từng xuất hiện trong các đợt đánh giá an toàn thông tin thực tế. Lạm dụng tắt tính năng bảo
+      vệ mù quáng hoặc bỏ qua phân biệt nguồn xác thực qua tiêu đề và bánh quy sẽ gây hổng hoặc chặn nhầm người dùng thật.
+      Chỉ kiểm tra vai trò chung chung trên đường dẫn mà bỏ quên bước đối chiếu chủ sở hữu tài nguyên để hở toàn bộ dữ liệu
+      giữa các tài khoản cùng quyền. Cuối cùng, luôn xoá sạch ngữ cảnh bảo mật mỗi khi bắt được thẻ hỏng để không bao giờ
+      rò rỉ phiên giữa các yêu cầu nối tiếp. Không dùng khoá bí mật ngắn hơn hai trăm năm mươi sáu bít cho thuật toán băm
+      đối xứng vì rất dễ bị dò tìm bằng phần cứng mạnh. Luôn gắn kiểm thử riêng cho từng vai trò lẫn ca chuyển chéo tài khoản
+      trong mỗi lần bổ sung đầu cuối mới.
+    focus:
+    - 0
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    clear: true
+- id: quiz
+  kind: quiz
+  title: Kiểm tra nhanh Spring Security và BOLA
+  checks:
+  - 300 - 60 == 240
+  steps:
+  - show: <ol><li>Một yêu cầu gửi thẻ hợp lệ chữ ký nhưng đã quá hạn <code>exp</code> 60 giây. Cổng phải trả mã HTTP 401 hay
+      403?</li><li>Người dùng mang vai trò <code>TELLER</code> hợp lệ nhưng cố chuyển tiền từ tài khoản của đồng nghiệp. Lỗ
+      hổng này tên gì và xử lý ở tầng nào?</li></ol>
+    say: Hãy tự kiểm nhanh hai câu hỏi bảo mật quan trọng trước phần thực hành. Câu một, nếu thẻ có chữ ký đúng hoàn toàn
+      nhưng đã hết hạn sáu mươi giây, cổng phải trả mã bốn trăm linh một hay bốn trăm linh ba? Câu hai, việc một người dùng
+      hợp lệ đổi mã tài khoản trong gói tin để rút tiền của người khác là lỗi gì và phải kiểm ở đâu? Bấm tạm dừng và trả lời.
+      Nắm chắc ranh giới giữa hai mã trạng thái bảo mật và điểm kiểm tra chủ sở hữu giúp bạn tránh hầu hết lỗ hổng phổ biến.
+    pause: 20
+  - show: <table class='t'><tr><th>đáp án câu 1</th></tr><tr><td><p>① Phải trả <b><code>401 Unauthorized</code></b> vì thẻ
+      hết hạn không còn giá trị xác thực danh tính ở bộ lọc đầu vào.</p></td></tr></table>
+    say: 'Đáp án câu một: trả mã bốn trăm linh một vì thẻ quá hạn đồng nghĩa danh tính chưa được xác thực hợp lệ. Kiểm tra
+      quyền truy cập ngay trước khi chạm dữ liệu đóng kín lỗ hổng đánh tráo mã tài khoản của người khác. Khi người dùng làm
+      mới lại thẻ hợp lệ và gửi kèm tiêu đề chuẩn thì yêu cầu sẽ vượt qua bộ lọc cửa vào.'
+    clear: true
+  - show: <table class='t'><tr><th>đáp án câu 2</th></tr><tr><td><p>② Lỗ hổng <b>BOLA (API1)</b> — phải kiểm trực tiếp quyền
+      sở hữu đối tượng với <code>auth.getName()</code> tại tầng điều khiển/dịch vụ.</p></td></tr></table>
+    say: 'Đáp án câu hai: đó là lỗ hổng truy cập chéo đối tượng BOLA, cần kiểm tra trực tiếp tên chủ sở hữu của tài khoản
+      nguồn với danh tính trong phiên. Không dùng cơ chế lưu phiên truyền thống giúp các nút dịch vụ mở rộng ngang dễ dàng
+      sau bộ cân bằng tải. Kể cả tài khoản mang quyền giao dịch viên hợp lệ cũng chỉ được thao tác trên tài nguyên mà chính
+      họ sở hữu hoặc được uỷ quyền.'
+    clear: true
+- id: practice
+  kind: practice
+  title: Cài đặt bộ lọc chữ ký HMAC, RBAC và phòng chống BOLA
+  lab: labs/SPB/L08
+  steps:
+  - show: <div class='box key'><p><b>Thực hành bài L08 (<code>labs/SPB/L08/de.md</code>):</b> dùng <code>spring-boot-starter-security</code>
+      cấu hình <code>STATELESS</code>, <code>JwtService</code> kiểm chữ ký <code>HmacSHA256</code> bằng <code>MessageDigest.isEqual</code>
+      và kiểm hạn <code>exp</code>; cấu hình chỉ <code>ROLE_TELLER</code> gọi được <code>POST /api/v1/transfers</code> và
+      chặn BOLA nếu chủ tài khoản khác <code>auth.getName()</code>, rồi chấm:</p><p><code>bash labs/cham.sh SPB L08 duong_dan/du_an_cua_ban</code></p></div>
+    say: Hãy mở đề bài L08 để tự cài đặt hoàn chỉnh bộ lọc xác thực chữ ký, cấu hình phân quyền theo vai trò và rào chắn chống
+      truy cập chéo tài khoản. Chú ý kiểm tra đủ cả bốn kịch bản từ thẻ hỏng chữ ký, thẻ hết hạn, vai trò thiếu quyền cho
+      tới giao dịch viên gọi sang tài khoản người khác. Bấm tạm dừng và hoàn thành trước khi đối chiếu kết quả chấm. Hãy bảo
+      đảm lớp dịch vụ thẻ giải mã đúng chuỗi ký tự tải, xác minh chữ ký thời gian hằng và kiểm tra dấu thời gian hết hạn.
+      Bộ lọc chạy một lần mỗi yêu cầu phải dọn sạch ngữ cảnh bảo mật ngay khi phát hiện thẻ hỏng hoặc quá hạn.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    - '1.1'
+    - '1.2'
+    clear: true
+    pause: 30
+  - show: '<p><b>Kết quả chấm bộ kiểm KiemL08Test (4 ca bảo mật thật trên Spring Security)</b></p><div class="code"><div>KiemL08Test:
+      4 ca, 0 hỏng</div></div>'
+    say: Màn hình hiển thị kết quả nghiệm thu bốn ca kiểm thử bảo mật của trình chấm đạt không ca hỏng. Cả mã bốn trăm linh
+      một ở cửa lọc lẫn mã bốn trăm linh ba ở chốt phân quyền và kiểm chủ tài sản đều khớp hoàn toàn. Toàn bộ bốn kịch bản
+      kiểm thử xác thực, phân quyền và chặn truy cập chéo đều chạy tự động qua bộ kiểm MockMvc.
+    focus:
+    - 1
+    - 2
+    - 2
+    clear: true
+  - show: <div class='box ok'><p><b>Gợi ý nếu kẹt ở bài L08:</b> (1) gắn <code>authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED))</code>
+      để khi thiếu thẻ trả 401 thay vì 403; (2) nhớ lấy chữ ký bằng <code>HmacSHA256</code> kèm Base64 URL không padding;
+      (3) ánh xạ chủ tài khoản <code>"TK-AN" → "an"</code> và <code>"TK-BINH" → "binh"</code>.</p></div>
+    say: Nếu bài kiểm bị nhầm giữa mã bốn trăm linh một và bốn trăm linh ba hoặc lọt giao dịch chéo chủ tài khoản, hãy kiểm
+      lại ba gợi ý trên màn hình. Bảo đảm đã khai báo điểm xử lý xác thực mặc định trả mã bốn trăm linh một và đối chiếu chặt
+      tên chủ sở hữu ở lớp điều khiển. Kiểm kỹ thứ tự chèn bộ lọc xác thực thẻ của bạn phải đứng trước bộ lọc đăng nhập tên
+      mật khẩu mặc định.
+    focus:
+    - 0
+    - 1
+    - 1
+    clear: true
+- id: recap
+  kind: recap
+  title: Tổng kết phòng thủ nhiều lớp với Spring Security
+  steps:
+  - show: <div class='chain'><span class='n'>HMAC + exp (401)</span><span class='a'>→</span><span class='n'>RBAC STATELESS
+      (403)</span><span class='a'>→</span><span class='n'>Chặn BOLA chính chủ</span></div>
+    say: Bạn đã lắp xong chốt chặn bảo mật nhiều lớp gồm xác thực chữ ký chuẩn thời gian không đổi, phân quyền vai trò và
+      kiểm chủ sở hữu. Toàn bộ cấu trúc phi trạng thái sẵn sàng cho việc viết bộ kiểm thử tự động chặt chẽ. Dịch vụ chuyển
+      khoản hiện tại đã có đủ lớp bảo vệ từ đầu vào dữ liệu, sổ cái cho tới bảo mật phân quyền.
+    focus:
+    - '1.1'
+    - '1.2'
+    - '1.2'
+    clear: true
+  - show: <div class='box ok'><b>Bài sau (bài 9):</b> Kiểm thử đơn vị (JUnit 5, Mockito) và lát cắt tầng web (@WebMvcTest
+      + @MockitoBean)</div>
+    say: Bài tiếp theo ta viết kiểm thử cô lập tốc độ tính bằng mi-li-giây cho tầng dịch vụ và tầng điều khiển web. Hẹn gặp
+      bạn ở bài sau. Ở hai bài tiếp theo, ta xây dựng lưới kiểm thử từ đơn vị siêu nhanh tới tích hợp toàn cụm container thật.
+    clear: true
+    forward_ref: true
+asr_reviewed:
+- sentence: Bảng này tổng hợp năm lỗ hổng OWASP phổ biến nhất trên hệ thống backend Java cùng cách bịt kín tương ứng.
+  reason: 'ASR chép “Bản này tổng hợp 5 lỗ hỏng OWAF phổ biến nhất trên hệ thống Backend Java cùng cách bịt kín tương ứng.”
+    (khớp 0.864, khác “bảng” → nghe thành “bản”; “hổng owasp” → nghe thành “hỏng owaf”): biến thể phiên âm từ mượn/thanh điệu
+    thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Ở quy mô trăm nghìn lượt dò quét mỗi giây, lớp ứng dụng thường ghép thêm bộ đếm giới hạn tốc độ và Redis để giảm
+    tải xác minh.
+  reason: 'ASR chép “Ở quy mô 100.000 lượt dò quét mỗi giây, lớp ứng dụng thường ghép thêm bộ đếm giới hạn tốc độ và rê điết
+    để giảm tài xác minh.” (khớp 0.918, khác “” → nghe thành “một”; “đít” → nghe thành “điết”; “tải” → nghe thành “tài”):
+    biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Khi so sánh chữ ký mật mã ở cửa vào, hàm so sánh từng byte theo thời gian không đổi ngăn kẻ xấu đo thời gian để
+    đoán chữ ký.
+  reason: 'ASR chép “Khi so sánh chữ ký mật mạ ở cửa vào, hàm so sánh từng bay theo thời gian không đổi ngăn kẻ xấu đo thời
+    gian để đoán chữ ký.” (khớp 0.933, khác “mã” → nghe thành “mạ”; “byte” → nghe thành “bay”): biến thể phiên âm từ mượn/thanh
+    điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: 'Đáp án câu hai: đó là lỗ hổng truy cập chéo đối tượng BOLA, cần kiểm tra trực tiếp tên chủ sở hữu của tài khoản
+    nguồn với danh tính trong phiên.'
+  reason: 'ASR chép “Đáp án câu 2 đó là lỗ hổng truy cập chéo đối tượng Bola cần kiểm tra trực tiếp tên chủ sở hữu của tài
+    khoảng nguồn với danh tính trong phiên.” (khớp 0.969, khác “khoản” → nghe thành “khoảng”): biến thể phiên âm từ mượn/thanh
+    điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'

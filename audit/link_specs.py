@@ -1,6 +1,7 @@
 """Nối đặc tả bài vào lộ trình: với mỗi tệp lessons/<khoá>/Lxx_*.yaml, thêm `spec:` vào bài Lxx của curriculum/<khoá>.yaml nếu chưa có,
 và báo bài nào có tên trong đặc tả KHÁC tên trong lộ trình (phải sửa tay, không tự đổi).
 Chạy: .venv/Scripts/python audit/link_specs.py CSA"""
+import sys as _sys; from pathlib import Path as _P; _sys.path.insert(0, str(_P(__file__).resolve().parents[0])); import _frozen  # noqa: E402,F401
 import re
 import sys
 from pathlib import Path

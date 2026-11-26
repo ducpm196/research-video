@@ -1,0 +1,2 @@
+CREATE TABLE s(v INT);
+INSERT INTO s VALUES (5), (7), (8);

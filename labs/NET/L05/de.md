@@ -1,11 +1,6 @@
-# Lab NET L05 (Mô phỏng IPv4) — Chia mạng con và tính quảng bá
+# Lab NET L05 — Chia mạng con IPv4 và tính địa chỉ quảng bá
 
-Viết chương trình Python bằng thư viện chuẩn `ipaddress` phân tích `192.168.10.0/26` và đếm số mạng `/26` nằm trong `192.168.10.0/24`, in đúng 3 dòng:
-1. `net=192.168.10.0 bcast=192.168.10.63`
-2. `usable_hosts=62`
-3. `subnets_in_slash24=4`
+Đọc `stdin` `sub=<CIDR> parent=<CIDR> new_prefix=<int>`. Dùng thư viện chuẩn `ipaddress` lấy địa chỉ mạng, quảng bá, host dùng được của `sub` và số mạng con trong `parent`.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh NET L05 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `net=<ip> bcast=<ip>`, `usable_hosts=<d>`, `subnets_in_slash24=<d>`.
+Chấm tự động: `bash labs/cham.sh NET L05 duong_dan/bai_cua_ban.py`

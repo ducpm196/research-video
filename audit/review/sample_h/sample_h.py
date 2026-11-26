@@ -14,7 +14,7 @@ for p in sorted((ROOT / "audit/review/sample_e").glob("part_*.md")):
 for x in json.loads((ROOT / "audit/review/sample_f/sample_f.json").read_text("utf-8")):
     ex.add((x["course"], x["lesson"]))
 n_cf = len(ex)
-for x in json.loads((ROOT / "scratch/sample_g.json").read_text("utf-8")):
+for x in json.loads((ROOT / "archive/scratch_pre_af5/sample_g.json").read_text("utf-8")):
     ex.add((x["course"], x["lesson"]))
 r = random.Random(20261122)
 def pick(c, k):

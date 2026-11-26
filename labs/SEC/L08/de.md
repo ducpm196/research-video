@@ -1,11 +1,6 @@
-# Lab SEC L08 — Tính và xác minh HMAC-SHA256 thật theo RFC 2104
+# Lab SEC L08 — Tính và xác minh thẻ HMAC theo thuật toán băm RFC 2104
 
-Viết chương trình Python dùng `hmac.new` tính thẻ xác thực của thông điệp `b'chuyen 100'` với khoá `b'secret'`, kiểm tra đổi thành `b'chuyen 900'` làm chữ ký không khớp qua `hmac.compare_digest`, in đúng 3 dòng:
-1. `mac_len_hex=64`
-2. `orig_valid=1`
-3. `tampered_valid=0`
+Đọc `stdin` 4 dòng `alg=<hash>`, `key=<str>`, `msg=<str>`, `tampered=<str>`. Tính thẻ HMAC theo thuật toán động `alg` bằng `hmac.new(key.encode(), ..., alg).hexdigest()` cho bản gốc và bản sửa đổi, rồi so sánh hằng thời gian bằng `hmac.compare_digest`.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh SEC L08 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `mac_len_hex=<d>`, `orig_valid=<0|1>`, `tampered_valid=<0|1>`.
+Chấm tự động: `bash labs/cham.sh SEC L08 duong_dan/bai_cua_ban.py`

@@ -1,5 +1,6 @@
 """Sinh lại hình (figs.py) rồi điền mọi tệp mẫu của DSY thành bài trong lessons/dsy/ (fill_tpl.py, mỗi {{TÊN}} = một hình một dòng).
 Chạy: .venv/Scripts/python audit/dsy/fill_all.py — sửa mẫu hoặc hình thì chạy lại, không sửa tay tệp bài sinh ra."""
+import sys as _sys; from pathlib import Path as _P; _sys.path.insert(0, str(_P(__file__).resolve().parents[1])); import _frozen  # noqa: E402,F401
 import subprocess
 import sys
 from pathlib import Path

@@ -9,10 +9,10 @@ Viết `LaiTheoNgay` (tệp `LaiTheoNgay.java`):
 3. In bốn dòng đúng dạng:
 
 ```
-So ngay: 95
-Lai: 1873973
-Tong: 121873973
-Dao han la: MONDAY
+So ngay: <số ngày giữa hai mốc>
+Lai: <lãi làm tròn HALF_UP về đồng>
+Tong: <gốc cộng lãi>
+Dao han la: <thứ trong tuần bằng chữ hoa từ getDayOfWeek()>
 ```
 
 (`Dao han la` là `getDayOfWeek()` của ngày đáo hạn.) Tự tính tay trước: số ngày từ 15 tháng 1 tới 15 tháng 4 là 31 + 28 + 31 = 90, cộng 5 ngày nữa.

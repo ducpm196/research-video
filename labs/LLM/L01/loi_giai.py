@@ -1,4 +1,5 @@
-p = 8.0 / 27.0
-ppl = p ** (-1.0 / 3.0)
-p_unseen_add1 = (0 + 1) / (3 + 7)
-print(f"perplexity={ppl:.3f} add1_unseen={p_unseen_add1:.3f}")
+import sys
+kv = dict(t.split('=') for t in sys.stdin.read().split())
+p = eval(kv['p']) if '/' in kv['p'] else float(kv['p'])
+ppl = p ** (-1.0 / int(kv['steps'])); add1 = 1.0 / (int(kv['ctx']) + int(kv['vocab']))
+print(f'perplexity={ppl:.3f} add1_unseen={add1:.3f}')

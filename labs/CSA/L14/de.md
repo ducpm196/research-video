@@ -1,11 +1,6 @@
-# Lab CSA L14 (Mô phỏng bộ nhớ ảo & TLB) — Dịch địa chỉ 4 KB (VPN -> khung vật lý) và tính EAT
+# Lab CSA L14 — Bộ nhớ ảo & TLB: dịch địa chỉ và tính EAT
 
-Viết chương trình Python với trang `4 096 byte`, số trang ảo VPN `0x05` ánh xạ vào khung vật lý `0x12`, dịch địa chỉ ảo `0x5ABC` và tính thời gian truy cập hiệu dụng EAT khi `TLB hit = 98%` (TLB 1 ns, RAM 100 ns), in đúng 3 dòng:
-1. `vpn=0x05 offset=0xABC`
-2. `phys_addr=0x12ABC`
-3. `eat_ns=103.00`
+Đọc `stdin` `va=<hex> pfn=<hex> page_bits=<int> tlb_hit=<f> tlb_ns=<f> ram_ns=<f>`. Tách VPN, offset, ghép địa chỉ vật lý và tính EAT.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh CSA L14 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `vpn=0x<XX> offset=0x<XXX>`, `phys_addr=0x<XXXXX>`, `eat_ns=<.2f>`.
+Chấm tự động: `bash labs/cham.sh CSA L14 duong_dan/bai_cua_ban.py`

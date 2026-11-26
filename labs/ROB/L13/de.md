@@ -1,9 +1,6 @@
-# Lab ROB L13 — Đối chiếu cột mốc 2004 -> 2005 và bước nhảy quãng dừng khi tăng tốc 20 -> 30 mph
+# Lab ROB L13 — Cột mốc Grand Challenge & quãng dừng mph
 
-Tính quãng đường hoàn thành tối đa của chặng mở đầu năm 2004 (`5%` trên `142 dặm`), đối chiếu với quãng đường hoàn thành cuộc thi sa mạc năm 2005 (`132 dặm`), và tính tỉ lệ tăng quãng dừng đầy đủ (gồm phản ứng `v * 0.2` + phanh `v^2 / 8`, với `1 mph = 0.44704 m/s`) khi tăng tốc từ `20 mph` lên `30 mph`.
-In đúng 1 dòng `mi_2004=... mi_2005=... stop_ratio=...x` (`mi_2004` 1 chữ số, `mi_2005` nguyên, `stop_ratio` 2 chữ số).
-
-Chấm tự động:
-```bash
-bash labs/cham.sh ROB L13 duong_dan/bai_cua_ban.py
-```
+Đọc `d2004 pct d2005 v1_mph v2_mph` từ stdin (ví dụ `142 0.05 132 20.0 30.0`). Tính quãng hoàn thành và tỉ số quãng dừng.
+In đúng 1 dòng `mi_2004=<1 chữ số> mi_2005=<int> stop_ratio=<2 chữ số>x`.
+Nền tảng Python (`PYT:L04`): đọc dữ liệu qua `sys.stdin.read().strip()`.
+Tham số cố định dùng cho tỉ số quãng dừng: `1 mph = 0.44704 m/s`, thời gian trễ `t = 0.2 s` và gia tốc phanh `a = 4.0 m/s^2`.

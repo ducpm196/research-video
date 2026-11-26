@@ -1,4 +1,5 @@
 """Sinh toàn bộ 14 bài khoá MLP (L00..L13) từ dữ liệu thật chạy trên labs/.venv-ml + cham.sh + screen_code."""
+import sys as _sys; from pathlib import Path as _P; _sys.path.insert(0, str(_P(__file__).resolve().parents[1])); import _frozen  # noqa: E402,F401
 import subprocess
 import sys
 import time

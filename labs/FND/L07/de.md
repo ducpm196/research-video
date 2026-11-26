@@ -59,7 +59,7 @@ done
 U=http://127.0.0.1:18766
 ```
 
-Rồi viết bốn lệnh `curl -s …` (mỗi lệnh in một dòng) và cuối cùng `kill $SV`:
+Rồi viết bốn lệnh `curl -s …` (mỗi dòng in dạng `cau <k>: <kết quả>` từ `cau 1:` đến `cau 4:`) và cuối cùng `kill $SV`:
 1. **mã trạng thái** của `GET $U/chao`;
 2. **mã trạng thái** của `GET $U/khong_co`;
 3. **nội dung** của `GET $U/tai_khoan/42` (thêm `echo` để xuống dòng);

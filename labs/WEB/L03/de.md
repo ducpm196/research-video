@@ -1,11 +1,6 @@
-# Lab WEB L03 — Node.js thật: kiểm chứng thứ tự 1, 4, 3, 2 trên V8 Event Loop
+# Lab WEB L03 — Node.js: kiểm chứng thứ tự trên V8 Event Loop
 
-Viết tập lệnh Node.js thực thi đồng bộ (`1`, `4`), `Promise.resolve().then(...)` (`3`) và `setTimeout(..., 0)` (`2`) vào mảng `order` để chứng minh microtask luôn chạy trước macrotask, in đúng 3 dòng:
-1. `sync_done=1`
-2. `event_loop_order=1,4,3,2`
-3. `micro_before_macro=1`
+Đọc `stdin` `sync1=<n> macro=<n> micro=<n> sync2=<n>`. Chạy hàm đồng bộ, `Promise.resolve().then(...)` (microtask) và `setTimeout(..., 0)` (macrotask) để xuất thứ tự thực thi thực tế.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh WEB L03 duong_dan/bai_cua_ban.js
-```
+In đúng 3 dòng: `sync_done=<0|1>`, `event_loop_order=<a,b,c,d>`, `micro_before_macro=<0|1>`.
+Chấm tự động: `bash labs/cham.sh WEB L03 duong_dan/bai_cua_ban.js`

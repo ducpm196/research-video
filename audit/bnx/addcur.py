@@ -1,5 +1,6 @@
 """Thêm một mục vào curriculum/bnx.yaml (cuối tệp) + dòng VER vào audit/verify_plan_curricula.py (trước dòng TỔNG).
 Dùng: python addcur.py <tệp json: id, title, spec, requires, requires_ext, objectives, example, fix, ver>"""
+import sys as _sys; from pathlib import Path as _P; _sys.path.insert(0, str(_P(__file__).resolve().parents[1])); import _frozen  # noqa: E402,F401
 import json
 import sys
 

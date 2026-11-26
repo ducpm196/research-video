@@ -1,0 +1,356 @@
+id: L00
+course: AIP
+series: AIP · Kỹ thuật AI, Kiểm thử tự động & Quản trị AI
+title: Bài 0 — Feature Store đồng nhất Online/Offline và ghép Point-in-Time
+voice: vi-VN-NamMinhNeural
+rate: -5%
+depth: full
+af2: true
+covers:
+- objective: 1
+  scene: example
+- objective: 2
+  scene: check
+- objective: 3
+  scene: example
+source: curriculum/aip.yaml L00; Python 3.13 + labs/cham.sh
+assumes: []
+objectives:
+- Thiết kế Feature Store thống nhất công thức tính đặc trưng giữa huấn luyện ngoại tuyến và phục vụ trực tuyến
+- Kiểm chứng độ lệch huấn luyện phục vụ bằng so khớp véc-tơ đặc trưng hai nhánh
+- Áp dụng ghép theo thời điểm Point-in-Time để triệt tiêu rò rỉ dữ liệu từ tương lai
+asr_reviewed: []
+scenes:
+- id: hook
+  kind: hook
+  title: Feature Store đồng nhất và ghép Point-in-Time
+  checks:
+  - 8 <= 10
+  - 12 > 10
+  steps:
+  - show: '<div class=''box key''><p>Ghép sự kiện lúc <code>t = 10</code> với lịch sử đặc trưng ở <code>t = 4, 8, 12</code>:
+      nối thường dễ lấy nhầm <b>t = 12 (tương lai)</b>, còn <b>Point-in-Time</b> chốt đúng <code>t = <b>8</b></code>.</p></div>'
+    say: Vì dữ liệu tương lai thường tương quan cực mạnh với kết quả gian lận hay rời bỏ dịch vụ. Chỉ cần một phép ghép bảng
+      cẩu thả đưa nhầm đặc trưng sau thời điểm nhãn vào tập huấn luyện cũng tạo nên độ chính xác ảo chín chín phần trăm. Khi
+      đưa ra chạy thật lúc chưa có dữ liệu tương lai đó, mô hình lập tức sụp đổ khiến doanh nghiệp thiệt hại nặng nề.
+    clear: true
+  - show: <div class='box ok'><p><b>Mục tiêu hôm nay:</b> Cài <b>Feature Store</b> ghép Point-in-Time <code>ts_f &lt;= ts_e</code>
+      và đối chiếu tương đương <b>Offline / Online</b>.</p></div>
+    say: Hôm nay ta cài đặt chuẩn kho đặc trưng Feature Store với ghép Point-in-Time chống rò rỉ và kiểm chứng tương đương
+      trực tuyến. Ngược lại khi lọc chặt theo dấu thời gian sự kiện, mô hình chỉ nhận đúng dữ liệu đã xảy ra trước thời khắc
+      ra quyết định. Quy trình đối chiếu hai nhánh giúp đảm bảo kết quả đánh giá trên máy cá nhân phản ánh trung thực độ chính
+      xác khi vận hành thật.
+    clear: true
+- id: prereq
+  kind: prereq
+  title: Ôn nền và kết nối kiến thức trước
+  steps:
+  - show: <table class='t'><tr><th>mảnh ghép nền</th><th>vai trò trong bài</th></tr><tr><td>Rò rỉ dữ liệu thời gian</td><td>Dữ
+      liệu phát sinh sau thời điểm dự báo không bao giờ có mặt khi mô hình chạy thật</td></tr><tr><td>Kho đặc trưng nền tảng</td><td>Lưu
+      véc-tơ đặc trưng tái sử dụng xuyên suốt nhiều mô hình AI trong tổ chức</td></tr><tr><td>Khái niệm ghép theo khoá và
+      mốc giờ</td><td>Tìm bản ghi gần nhất về phía quá khứ trước thời điểm sự kiện nhãn</td></tr></table>
+    say: Một trong những nguyên nhân thầm lặng khiến mô hình học máy đạt điểm kiểm thử xuất sắc. Nhưng thất bại thảm hại ngoài
+      sản xuất là độ lệch giữa lúc huấn luyện và lúc phục vụ. Nếu đội dữ liệu viết mã tổng hợp lịch sử chi tiêu bằng SQL trên
+      kho lớn còn đội phần mềm viết lại bằng Java trong dịch vụ trực tuyến. Hai công thức dễ sai lệch dần theo thời gian.
+      Tệ hơn nữa, phép nối bảng thiếu điều kiện thời gian vô tình kéo giá trị tương lai vào dòng huấn luyện. Kho đặc trưng
+      Feature Store kết hợp thuật toán ghép Point-in-Time giải quyết dứt điểm cả hai vấn đề này. Kết nối chặt chẽ các nền
+      tảng này giúp giải pháp cài đặt gọn gàng và ổn định. Việc dùng chung một định nghĩa đặc trưng giữa hai môi trường giảm
+      đáng kể công sức bảo trì và gỡ lỗi mỗi lần nâng cấp mô hình. Mỗi biến đổi thời gian đều phải gắn múi giờ thống nhất
+      để tránh lệch cửa sổ tổng hợp lịch sử giao dịch.
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.4'
+    - '1.4'
+    - '1.4'
+    - '1.4'
+    - '1.4'
+    clear: true
+- id: sym
+  kind: symbol
+  title: Quy chuẩn và cấu trúc dữ liệu
+  steps:
+  - show: <table class='t'><tr><th>viết trong mã</th><th>ý nghĩa cài đặt</th></tr><tr><td><code>as-of join (ts_f &lt;= ts_e)</code></td><td>Với
+      sự kiện lúc <code>ts_e</code>, lấy giá trị đặc trưng mới nhất có <code>ts_f &lt;= ts_e</code></td></tr><tr><td><code>Offline
+      / Online Parity</code></td><td>Chênh lệch giữa véc-tơ huấn luyện ngoại tuyến và véc-tơ phục vụ thời gian thực phải &lt;
+      1e-6</td></tr><tr><td><code>Future Leakage Guard</code></td><td>Tất cả bản ghi có dấu thời gian lớn hơn thời điểm nhãn
+      bị loại hoàn toàn</td></tr></table>
+    say: Bảng ký hiệu tóm tắt ba nguyên tắc kỹ thuật bảo vệ độ tinh khiết của kho đặc trưng AI. Phép nối theo thời điểm đảm
+      bảo chỉ sử dụng tri thức đã hình thành trước hoặc đúng thời khắc sự kiện diễn ra. Kiểm tra đồng nhất trực tuyến và ngoại
+      tuyến phát hiện kịp thời bất kỳ sai khác công thức hay làm tròn số nào. Rào chặn tương lai cấm tuyệt đối việc đọc nhầm
+      các dòng phát sinh sau giờ chốt. Những quy chuẩn trên sẽ xuyên suốt từ phần chạy thực nghiệm mẫu tới bài tập thực hành
+      cuối bài. Phép nối bất đẳng thức giữ lại dòng đặc trưng hợp lệ mới nhất mà vẫn loại hoàn toàn mọi cập nhật đến trễ hơn
+      mốc quyết định. Đặt ngưỡng sai lệch cực nhỏ một phần triệu giúp phát hiện kịp thời sự khác biệt dấu phẩy động giữa hai
+      ngôn ngữ lập trình.
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.4'
+    - '1.2'
+    - '1.4'
+    clear: true
+- id: intuition
+  kind: intuition
+  title: Luồng xử lý tổng thể
+  steps:
+  - show: <div><svg width="960" height="170" viewBox="0 0 960 170"><rect x="40" y="35" width="250" height="90" rx="10" fill="#dbeafe"
+      stroke="#2a78d6" stroke-width="2"/><text x="165.0" y="75" font-size="18" font-weight="700" text-anchor="middle" fill="#1e293b">Nhãn
+      sự kiện ts=10</text><text x="165.0" y="102" font-size="15" text-anchor="middle" fill="#475569">Đứng tại thời điểm ra
+      quyết định</text><line x1="290" y1="80" x2="350" y2="80" stroke="#475569" stroke-width="2"/><polygon points="350,80
+      342.0,85.0 342.0,75.0" fill="#475569"/><text x="320" y="72" font-size="14" font-weight="600" text-anchor="middle" fill="#1e293b">bước
+      1</text><rect x="350" y="35" width="250" height="90" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/><text
+      x="475.0" y="75" font-size="18" font-weight="700" text-anchor="middle" fill="#1e293b">Lọc quá khứ ts_f &lt;= 10</text><text
+      x="475.0" y="102" font-size="15" text-anchor="middle" fill="#475569">Chọn bản ghi ts=8 mới nhất</text><line x1="600"
+      y1="80" x2="660" y2="80" stroke="#475569" stroke-width="2"/><polygon points="660,80 652.0,85.0 652.0,75.0" fill="#475569"/><text
+      x="630" y="72" font-size="14" font-weight="600" text-anchor="middle" fill="#1e293b">bước 2</text><rect x="660" y="35"
+      width="260" height="90" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="2"/><text x="790.0" y="75" font-size="18"
+      font-weight="700" text-anchor="middle" fill="#1e293b">Loại tương lai ts=12</text><text x="790.0" y="102" font-size="15"
+      text-anchor="middle" fill="#475569">0 rò rỉ + khớp Online</text></svg></div>
+    say: Hình minh hoạ cách ghép đúng một sự kiện thanh toán xảy ra tại thời điểm mười giờ sáng. Trong bảng lịch sử có ba
+      cập nhật đặc trưng tại các mốc bốn, tám và mười hai giờ. Phép nối Point-in-Time tự động loại mốc mười hai giờ ở tương
+      lai và chọn chính xác bản ghi mới nhất đã tồn tại ở mốc tám giờ. Nhờ đường ranh giới thời gian cố định tại mười giờ,
+      mọi bản ghi phát sinh sau mốc này hoàn toàn vô hình đối với mẫu huấn luyện. Điều đó buộc mô hình học đúng tín hiệu dự
+      báo nhân quả thay vì học vẹt kết quả từ tương lai.
+    clear: true
+- id: formula
+  kind: formula
+  title: Công thức và bất biến định lượng
+  checks:
+  - 8 <= 10
+  - 12 > 10
+  steps:
+  - show: '<div class=''box key''><p><b>1. Luật Point-in-Time:</b> <code>feat(u, t_event) = argmax_{f: f.u==u và f.ts <= t_event}
+      f.ts</code>.</p><p><b>2. Bất biến đồng nhất:</b> <code>|val_offline - val_online| &lt;= 1e-5</code> tại cùng cặp <code>(entity_id,
+      t_event)</code>.</p></div>'
+    say: Hai biểu thức định lượng là thước đo vàng khi kiểm định mọi đường ống nạp đặc trưng AI chuyên nghiệp. Công thức thứ
+      nhất xác định chính xác đặc trưng hợp lệ phải cùng thực thể và có dấu thời gian lớn nhất nhưng vẫn nhỏ hơn hoặc bằng
+      thời điểm sự kiện. Điều kiện thứ hai bắt buộc hai nhánh ngoại tuyến và trực tuyến phải cho ra cùng một giá trị số trong
+      sai số một phần trăm nghìn. Vì bất kỳ độ lệch nào cũng làm dịch điểm cắt của mô hình. Toán tử tìm cực đại theo dấu thời gian
+      chọn đúng ảnh chụp trạng thái thực tế của người dùng ngay trước lúc bấm nút thanh toán. Kết hợp kiểm tra sai lệch cực
+      đại trên toàn bộ véc-tơ đặc trưng giúp ngăn lỗi lệch tỉ lệ chuẩn hoá khi phục vụ thật.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    - '1.2'
+    - '1.1'
+    - '1.2'
+    clear: true
+- id: example
+  kind: example
+  title: Chạy thật mô-đun cốt lõi
+  checks:
+  - 8 <= 10
+  - 12 > 10
+  steps:
+  - clear: true
+    show: '<p><b>Thử nghiệm Python chạy thật</b></p><div class="code"><div>def calc_feat(v): return round(v / 100.0, 2)</div><div>feats, t_event = [(4, 120), (8, 350), (12, 999)], 10</div><div>valid = [(ts, val) for ts, val in feats if ts &lt;= t_event]</div><div>ts, val = max(valid); drop = len(feats) - len(valid)</div><div>out = f''picked_ts={ts} picked_val={val}''</div><div>print(out, f''feat={calc_feat(val)} dropped={drop}'')</div></div>'
+    say: Đoạn mã định nghĩa một hàm công thức tính đặc trưng dùng chung cho cả huấn luyện ngoại tuyến và phục vụ trực tuyến rồi chạy ghép Point-in-Time. Dù bảng lịch sử đã ghi nhận mốc mười hai với giá trị chín chín chín. Bước lọc quá khứ vẫn loại
+      hoàn toàn bản ghi đó vì nó xảy ra sau thời khắc quyết định t bằng mười. Hệ thống giữ đúng mốc tám với giá trị ba trăm năm mươi và áp cùng công thức chia một trăm ra ba phẩy năm. Chỉ với hai bước lọc nhỏ hơn bằng mốc sự kiện và chọn
+      cực đại theo thời gian, bài toán rò rỉ dữ liệu và lệch công thức được giải quyết dứt điểm.
+    focus:
+    - 1
+    - 2
+    - 2
+    - 2
+    - 2
+  - show: <p><b>Đầu ra chạy thật (Python)</b></p><div class="code"><div>picked_ts=8 picked_val=350 feat=3.5 dropped=1</div></div>
+    say: Kết quả chạy thật xác nhận hệ thống chọn mốc tám với giá trị ba trăm năm mươi và bỏ một bản ghi tương lai để bảo
+      đảm tính nhân quả. Điều này giữ nguyên bất biến tính toán vì phép đối chiếu bám sát định nghĩa gốc. Cờ đếm số bản ghi
+      tương lai bị loại bỏ cũng đóng vai trò chỉ số kiểm toán hữu ích cho bộ phận kiểm định dữ liệu.
+    focus:
+    - 1
+    - 2
+    - 2
+    clear: true
+- id: check
+  kind: check
+  title: Đối chứng kiểm thử độc lập
+  checks:
+  - 8 <= 10
+  - 12 > 10
+  steps:
+  - show: <p><b>Phép kiểm chứng thứ hai</b></p><div class="code"><div>offline_vec = [0.250000, 1.400000]</div><div>online_vec
+      = [0.250000, 1.400001]</div><div>max_skew = max(abs(a - b) for a, b in zip(offline_vec, online_vec))</div><div>print(f'max_skew={max_skew:.6f}
+      parity_ok={int(max_skew &lt;= 1e-5)}')</div></div>
+    say: Phép kiểm chứng thứ hai đối chiếu độ lệch huấn luyện phục vụ giữa hai nhánh trực tuyến và ngoại tuyến nhằm phát hiện
+      rò rỉ hay sai khác phép tính. Chỉ cần hai véc-tơ lệch nhau vượt ngưỡng một phần trăm nghìn, bộ kiểm tự động sẽ cảnh
+      báo đội kỹ thuật xử lý sai biệt trước lúc phát hành. Cách kiểm này giúp phát hiện nhanh lỗi khác biệt múi giờ hay thư
+      viện làm tròn số khác nhau. Điều này giữ nguyên bất biến tính toán vì phép đối chiếu bám sát định nghĩa gốc. Các giá
+      trị sai lệch tích lũy trong phép toán dấu phẩy động tuy nhỏ nhưng nếu nhân với trọng số lớn vẫn có thể đảo ngược phân
+      loại.
+    focus:
+    - 1
+    - 2
+    - 2
+    - 2
+    - 2
+    clear: true
+  - show: <p><b>Đầu ra kiểm chứng</b></p><div class="code"><div>max_skew=0.000001 parity_ok=1</div></div>
+    say: Đầu ra kiểm chứng ghi nhận sai lệch bằng một phần triệu nằm gọn dưới ngưỡng cho phép nên tính đồng nhất đạt chuẩn
+      một. Ngưỡng dung sai bằng không tuyệt đối hay một phần triệu được quy định tuỳ thuộc độ nhạy của mô hình rủi ro.
+    clear: true
+    focus:
+    - 1
+    - 2
+- id: quymo
+  kind: example
+  title: Quy mô tải và điểm nghẽn vận hành
+  checks:
+  - 8 <= 10
+  - 12 > 10
+  steps:
+  - show: <table class='t'><tr><th>quy mô / bẫy</th><th>tác động</th><th>khuyến nghị kiến trúc</th></tr><tr><td>Bảng sự kiện
+      10M dòng</td><td>Vòng lặp lồng O(N*M) treo giờ</td><td>Sắp theo (entity, ts) dùng tìm kiếm nhị phân bisect O(N log M)</td></tr><tr><td>2
+      môi trường SQL vs Java</td><td>Trôi nghĩa lệch 3% độ chính xác</td><td>Dùng chung 1 định nghĩa đặc trưng và kiểm chéo
+      véc-tơ hàng ngày</td></tr><tr><td>Dữ liệu đến trễ (late event)</td><td>Khoá trực tuyến thiếu cập nhật</td><td>Đặt vùng
+      trễ watermark & lưu lịch sử phiên bản đầy đủ</td></tr></table>
+    say: Bảng kiến trúc hướng dẫn cách áp dụng ghép theo thời điểm Point-in-Time. Để triệt tiêu rò rỉ dữ liệu từ tương lai
+      khi đối chiếu huấn luyện phục vụ ở quy mô hàng chục triệu sự kiện mỗi ngày. Thay vì quét tuyến tính từng cặp sự kiện
+      và đặc trưng tốn bình phương thời gian. Việc sắp sẵn dãy thời gian theo từng thực thể cho phép tìm kiếm nhị phân trong
+      thời gian lô-ga-rít. Đồng thời kiểm chéo định kỳ giữa hai nhánh kho đặc trưng giữ cho mô hình sản xuất hành xử y hệt
+      lúc đánh giá kiểm thử. Trên bảng mười triệu sự kiện, cấu trúc tìm kiếm nhị phân theo thời gian giảm số phép so sánh
+      mỗi dòng xuống còn khoảng hai mươi lần. Khi kết hợp lưu kho theo từng ngày và phân vùng theo định danh khách hàng, tốc
+      độ nạp tập huấn luyện tăng gấp hàng chục lần.
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.4'
+    - '1.4'
+    - '1.4'
+    clear: true
+- id: pitfalls
+  kind: pitfall
+  title: Ba sai lầm kỹ thuật thường gặp
+  steps:
+  - show: <table class='t'><tr><th>cảnh báo lỗi thường gặp</th></tr><tr><td><div class='box warn'><b>Lỗi 1 (nối thiếu điều
+      kiện <= ts):</b> Dùng phép <code>JOIN ON entity_id</code> thông thường kéo luôn sự kiện tương lai làm giả mạo kết quả.<br><b>Lỗi
+      2 (lệch múi giờ UTC vs +7):</b> Nhánh ngoại tuyến dùng giờ địa phương còn nhánh trực tuyến dùng UTC gây lệch khớp 7
+      tiếng.<br><b>Lỗi 3 (nhầm thứ tự biên =):</b> Không thống nhất dùng nhỏ hơn hẳn hay nhỏ hơn bằng ở mốc giây trùng nhau
+      giữa nhãn và cập nhật.</div></td></tr></table>
+    say: Hãy tránh ba lỗi rất đắt giá khi vận hành kho đặc trưng Feature Store cho các bài toán AI thực chiến. Lỗi đầu tiên
+      và phổ biến nhất là viết câu lệnh nối bảng thông thường thiếu điều kiện chặn dấu thời gian, dẫn tới rò rỉ nhãn tương
+      lai. Lỗi thứ hai là lệch chuẩn múi giờ giữa kho phân tích và dịch vụ trực tuyến khiến toàn bộ cửa sổ bảy ngày bị dịch
+      sai. Lỗi thứ ba là không quy ước rõ bất đẳng thức tại thời điểm trùng khớp đúng giây sự kiện. Nhận diện sớm các lỗi
+      cấu trúc này giúp hệ thống giữ vững tính ổn định khi lưu lượng tăng cao. Ngoài múi giờ và điều kiện biên, nhớ kiểm tra
+      kỹ trường hợp bản ghi lịch sử bị cập nhật bù muộn sau khi giao dịch đã chốt. Cách tốt nhất là luôn lưu hai cột thời
+      gian riêng biệt gồm thời điểm phát sinh sự kiện và thời điểm hệ thống ghi nhận.
+    focus:
+    - 0
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    clear: true
+- id: quiz
+  kind: quiz
+  title: Kiểm tra nhanh trước khi tự thực hành
+  checks:
+  - 8 <= 10
+  - 12 > 10
+  steps:
+  - show: <ol><li>Nếu nhãn giao dịch có dấu thời gian <code>t=10</code> và lịch sử đặc trưng có ở <code>t=5, t=10, t=14</code>,
+      bản ghi nào hợp lệ?</li><li>Làm sao phát hiện sớm độ lệch công thức giữa Online Feature Store và Offline Feature Store?</li></ol>
+    say: Hãy kiểm tra kiến thức bài mở đầu bằng hai câu hỏi thực tế. Câu một, với sự kiện tại mốc mười và ba bản ghi đặc trưng
+      ở năm, mười, mười bốn thì bản ghi nào được phép dùng? Câu hai, làm cách nào phát hiện sớm độ lệch giữa hai nhánh kho
+      đặc trưng? Tạm dừng và tự trả lời. Nhớ áp dụng đúng định nghĩa ghép theo thời điểm và phương pháp đo sai lệch giữa hai
+      nhánh lưu trữ.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    clear: true
+    pause: 20
+  - show: <table class='t'><tr><th>đáp án câu 1</th></tr><tr><td><p>① Chọn bản ghi <code>t = <b>10</b></code> (mới nhất thoả
+      mãn <code>ts_f &lt;= t_event</code>); loại hoàn toàn <code>t = 14</code> ở tương lai.</p></td></tr></table>
+    say: 'Đáp án câu một: chọn mốc mười nếu quy ước nhỏ hơn bằng đã sẵn sàng trước quyết định và tuyệt đối loại mốc mười bốn
+      ở tương lai. Khoảng thời gian trùng đúng mốc mười chỉ hợp lệ nếu đặc trưng đó thực sự đã tính xong trước khi mô hình
+      được gọi.'
+    clear: true
+  - show: <table class='t'><tr><th>đáp án câu 2</th></tr><tr><td><p>② Ghi vết véc-tơ phục vụ Online theo từng yêu cầu thật
+      rồi đối chiếu sai khác với kết quả truy xuất lại từ Offline ở cùng cặp mã và thời điểm.</p></td></tr></table>
+    say: 'Đáp án câu hai: ghi lại véc-tơ phục vụ trực tuyến rồi định kỳ đối chiếu với kết quả truy xuất ngoại tuyến tại đúng
+      cặp thực thể và mốc thời gian đó. Nhật ký đối chiếu định kỳ trên mẫu lưu lượng thật là phương pháp tin cậy nhất để bắt
+      lỗi trôi công thức giữa hai môi trường.'
+    clear: true
+- id: practice
+  kind: practice
+  title: Tự làm bài tập và chấm tự động
+  lab: labs/AIP/L00
+  steps:
+  - show: <table class='t'><tr><th>Thực hành AIP:L00</th><th>Yêu cầu &amp; dữ liệu mẫu (stdin)</th></tr><tr><td><b>Nhiệm vụ</b></td><td>Áp
+      dụng ghép theo thời điểm Point-in-Time để triệt tiêu rò rỉ dữ liệu từ tương lai</td></tr><tr><td><b>Dữ liệu mẫu</b></td><td><code>events=u1:10:350.0,u2:20:80.0;
+      features=u1:4:120.0,u1:8:350.0,u1:12:999.0,u2:15:80.0,u2:25:500.0; parity_tol=1e-5</code></td></tr><tr><td><b>Chấm bài</b></td><td><code>bash
+      labs/cham.sh AIP L00 duong_dan/bai_cua_ban.py</code> (kèm 2 ca ẩn)</td></tr></table>
+    say: Hãy tự cài đặt công cụ ghép nối Point-in-Time và kiểm định độ lệch trực tuyến ngoại tuyến cho Feature Store từ luồng
+      chuẩn. Lưu ý lọc chặt theo từng định danh thực thể và giữ quy chuẩn chỉ chọn dấu thời gian nhỏ hơn hoặc bằng thời điểm
+      sự kiện. Đọc kỹ quy chuẩn đọc luồng vào chuẩn và giữ nguyên định dạng đầu ra trên từng dòng để đáp ứng đủ cả ca ẩn.
+      Chú ý xử lý gọn trường hợp thực thể hoàn toàn không có bản ghi đặc trưng nào trước mốc thời điểm sự kiện. Kiểm kỹ cách
+      tính sai lệch lớn nhất trên toàn bộ các cặp véc-tơ trực tuyến và ngoại tuyến đưa vào từ luồng chuẩn.
+    focus:
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.3'
+    - '1.4'
+    clear: true
+    pause: 30
+  - show: <table class='t'><tr><th>Gợi ý triển khai AIP:L00</th><th>Các bước cài đặt trọng tâm</th></tr><tr><td><b>Bước 1
+      (gom đặc trưng)</b></td><td>Nhóm danh sách cặp <code>(feat_ts, feat_val)</code> vào từ điển theo khoá <code>entity_id</code></td></tr><tr><td><b>Bước
+      2 (as-of join)</b></td><td>Lọc các bản ghi <code>feat_ts &lt;= ev_ts</code> rồi lấy phần tử có <code>feat_ts</code>
+      lớn nhất</td></tr><tr><td><b>Bước 3 (kiểm parity)</b></td><td>Đo chênh lệch tuyệt đối với <code>online_val</code> và
+      yêu cầu vừa không thiếu vừa dưới ngưỡng <code>parity_tol</code></td></tr></table>
+    say: Gợi ý triển khai nhắc bạn hai điểm biên thường gặp ở các ca kiểm ẩn. Thứ nhất nếu một thực thể chỉ tồn tại các cập
+      nhật ở tương lai hoàn toàn lớn hơn thời điểm sự kiện. Phép lọc phải trả về danh sách rỗng và tăng bộ đếm thiếu lên một
+      thay vì lấy đại giá trị đầu. Thứ hai kiểm tra điều kiện parity chỉ đạt khi đồng thời không thiếu thực thể nào và sai
+      lệch tối đa dưới ngưỡng. Khi danh sách ứng viên sau lọc thời gian trống rỗng, thuật toán tăng bộ đếm thiếu lên một và
+      tiếp tục xử lý các sự kiện kế tiếp.
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.4'
+    clear: true
+  - show: <p><b>Kết quả mong đợi với dữ liệu mẫu (3 dòng)</b></p><div class="code"><div>joined_count=2 missing_count=0</div><div>max_skew=0.000000</div><div>parity_ok=1</div></div>
+    say: Đầu ra chuẩn cho hai sự kiện u một và u hai ghép thành công cả hai không thiếu bản ghi nào, độ lệch bằng không và
+      đạt chuẩn đồng nhất một. Khi toàn bộ các dòng đầu ra đều khớp tuyệt đối với đáp án chuẩn và hai ca ẩn đều thông qua,
+      bạn có thể an tâm lưu kết quả và chuyển tiếp. Định dạng sáu chữ số thập phân ở dòng sai lệch tối đa bảo đảm khớp chính
+      xác từng ký tự với bộ kiểm tự động.
+    focus:
+    - 1
+    - 2
+    - 2
+    clear: true
+- id: recap
+  kind: recap
+  title: Tổng kết bất biến bài học
+  steps:
+  - show: <div class="chain"><span class="n">Ghép Point-in-Time &lt;= ts</span><span class="a">→</span><span class="n">Chặn
+      100% nhãn tương lai</span><span class="a">→</span><span class="n">Kiểm parity Online/Offline</span></div>
+    say: Chuỗi nguyên tắc chốt lại cách thiết kế Feature Store chuẩn công nghiệp loại bỏ rò rỉ dữ liệu thời gian. Bảo toàn
+      độ chính xác từ phòng thí nghiệm ra sản xuất. Mọi quy trình đều được chứng minh bằng số liệu định lượng chạy thật thay
+      cho mô tả lý thuyết suông. Ba chốt chặn nhân quả và đồng nhất là nền móng bắt buộc cho mọi hệ thống học máy vận hành
+      tin cậy trong doanh nghiệp.
+    focus:
+    - '1.1'
+    - '1.2'
+    - '1.3'
+    - '1.3'
+    clear: true
+  - show: <div class='box ok'><b>Hoàn thành AIP:L00:</b> đã kiểm chứng toàn bộ bất biến cốt lõi.</div>
+    say: Chúc mừng bạn đã hoàn thành bài mở đầu của khoá kỹ thuật AI ứng dụng và sẵn sàng chuyển sang bài tiếp theo về Experiment
+      Tracking. Model Registry và kiểm thử A/B.
+    clear: true
+    forward_ref: true
+_introduces: []

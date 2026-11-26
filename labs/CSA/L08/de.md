@@ -1,11 +1,6 @@
-# Lab CSA L08 (Mô phỏng hiệu năng CPU) — Tính CPI trung bình và thời gian chạy
+# Lab CSA L08 — Tính CPI trung bình và thời gian chạy CPU
 
-Viết chương trình Python cho chương trình có tổng số lệnh `IC = 1e9` gồm `50%` số học (`CPI = 1`), `30%` tải/lưu (`CPI = 3`), `20%` nhánh (`CPI = 2`) chạy trên CPU `2.0 GHz` (`2e9 Hz`), in đúng 3 dòng:
-1. `cpi_avg=1.80`
-2. `cpu_time_s=0.900`
-3. `speedup_vs_3ghz_cpi3=1.11`
+Đọc `stdin` `ic=<float> mix=<f:c,...> hz_a=<float> hz_b=<float> cpi_b=<float>`. Tính `cpi_avg`, `cpu_time_s` trên CPU A và `speedup` so với CPU B.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh CSA L08 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `cpi_avg=<.2f>`, `cpu_time_s=<.3f>`, `speedup_vs_3ghz_cpi3=<.2f>`.
+Chấm tự động: `bash labs/cham.sh CSA L08 duong_dan/bai_cua_ban.py`

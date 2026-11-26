@@ -30,5 +30,15 @@ for les in cur["lessons"]:
     exec(compile(f.read_text(encoding="utf-8"), str(f), "exec"), {"rec": rec, "alg": alg, "ROOT": ROOT, "__name__": "cas_ver"})
 
 bad = [c for c, ok in R if not ok]
+# ── Kiểm tự động mọi lab (du_lieu.txt + ca_an/) qua cham.sh ──
+import subprocess as _subp
+from pathlib import Path as _LabPath
+_BASH = r"C:\Program Files\Git\bin\bash.exe"
+if not _LabPath(_BASH).exists():
+    _BASH = "bash"
+for _ld in sorted((ROOT / "labs" / "CAS").glob("L*")):
+    _rp = _subp.run([_BASH, str(ROOT / "labs" / "cham.sh"), "CAS", _ld.name], cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
+    rec(f"{_ld.name}:lab", _rp.returncode == 0 and "PASS" in _rp.stdout and "2 ca an" in _rp.stdout, f"cham.sh {_ld.name} (public + 2 ca_an)")
+
 print(f"\nverify_cas: {len(R) - len(bad)}/{len(R)} PASS" + (f"; FAIL: {bad}" if bad else ""))
 sys.exit(1 if bad else 0)

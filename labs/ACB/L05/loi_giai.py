@@ -3,6 +3,8 @@ def co_vong(lenh):
     cho = {}
     lich = (("A", lenh["A"][0]), ("B", lenh["B"][0]), ("A", lenh["A"][1]), ("B", lenh["B"][1]))
     for ai, tk in lich:
+        if ai in cho:
+            continue
         giu = khoa.get(tk, ai)
         if giu != ai:
             cho[ai] = giu

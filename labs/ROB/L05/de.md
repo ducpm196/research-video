@@ -1,9 +1,5 @@
-# Lab ROB L05 — Tính ma trận Jacobian chuyển động cho lọc Kalman mở rộng (EKF)
+# Lab ROB L05 — Jacobian chuyển động theo góc hướng EKF
 
-Với quãng đi `vh = 2.0 m` và góc hướng hiện tại `theta = 30°`, tính cặp đạo hàm riêng vị trí theo hướng `dx/dtheta = -vh*sin(theta)` và `dy/dtheta = vh*cos(theta)`.
+Đọc `vh theta_deg` từ stdin (ví dụ `2.0 30.0`). Tính `(-vh*sin(theta), vh*cos(theta))`.
 In đúng 1 dòng `jac_theta=(dx_dth, dy_dth)` (3 chữ số).
-
-Chấm tự động:
-```bash
-bash labs/cham.sh ROB L05 duong_dan/bai_cua_ban.py
-```
+Nền tảng Python (`PYT:L04`): đọc dữ liệu qua `sys.stdin.read().strip()`.

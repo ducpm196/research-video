@@ -1,9 +1,7 @@
-xs = sorted([2.0, 4.0, 6.0, 8.0, 9.0, 10.0, 12.0, 80.0])
-n = len(xs)
-mean_x = sum(xs) / n
-med_x = (xs[n // 2 - 1] + xs[n // 2]) / 2.0
-lo, hi = xs[:n // 2], xs[n // 2:]
-q1 = (lo[len(lo) // 2 - 1] + lo[len(lo) // 2]) / 2.0
-q3 = (hi[len(hi) // 2 - 1] + hi[len(hi) // 2]) / 2.0
-fence = q3 + 1.5 * (q3 - q1)
-print(f"mean={mean_x:.1f} median={med_x:.1f} fence={fence:.1f} outlier={int(max(xs) > fence)}")
+import sys
+xs = sorted(float(x) for x in sys.stdin.read().strip().split('=', 1)[1].split(','))
+n = len(xs); mn = sum(xs) / n
+med_f = lambda a: a[len(a)//2] if len(a)%2 else (a[len(a)//2-1]+a[len(a)//2])/2.0
+med = med_f(xs); lo, hi = xs[:n // 2], xs[(n + 1) // 2:]
+q1, q3 = med_f(lo), med_f(hi); fence = q3 + 1.5 * (q3 - q1)
+print(f'mean={mn:.1f} median={med:.1f} fence={fence:.1f} outlier={int(max(xs) > fence)}')

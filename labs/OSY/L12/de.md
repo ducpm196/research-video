@@ -1,11 +1,6 @@
-# Lab OSY L12 (Mô phỏng inode) — Tính sức chứa tối đa của cấu trúc chỉ mục Unix
+# Lab OSY L12 — Cấu trúc chỉ mục Unix inode: trực tiếp và gián tiếp 1–2 cấp
 
-Viết chương trình Python tính số khối và dung lượng MiB/GiB cho khối `4 KiB` (`4 096 B`), con trỏ khối `4 B` (`1 024` con trỏ/khối), với 12 trực tiếp + 1 gián tiếp cấp 1 + 1 cấp 2, in đúng 3 dòng:
-1. `direct_kib=48`
-2. `single_ind_blocks=1024`
-3. `double_ind_mib=4096`
+Đọc `stdin` `blk=<int> ptr=<int> direct_n=<int>`. Tính dung lượng trực tiếp (KiB), số khối gián tiếp cấp 1 và dung lượng tối đa cấp 2 (MiB).
 
-Chấm tự động:
-```bash
-bash labs/cham.sh OSY L12 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `direct_kib=<d>`, `single_ind_blocks=<d>`, `double_ind_mib=<d>`.
+Chấm tự động: `bash labs/cham.sh OSY L12 duong_dan/bai_cua_ban.py`

@@ -1,7 +1,11 @@
-import math
-tasks = [(1, 5), (2, 8), (2, 16)]
+import sys, math
+s = sys.stdin.read().strip() or "1,5;2,8;2,16"
+tasks = [tuple(map(int, x.split(","))) for x in s.split(";") if x]
+n = len(tasks)
 u = sum(c / p for c, p in tasks)
-ll = 3 * (2**(1/3) - 1)
-r = 2
-for _ in range(10): r = 2 + sum(math.ceil(r / p) * c for c, p in tasks[:2])
+ll = n * (2**(1/n) - 1)
+c_last = tasks[-1][0]
+r = c_last
+for _ in range(20):
+    r = c_last + sum(math.ceil(r / p) * c for c, p in tasks[:-1])
 print(f"U={u:.3f} LL_bound={ll:.4f} exact_R3={r}")

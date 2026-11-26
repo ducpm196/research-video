@@ -18,9 +18,9 @@
 - When a dependency changes, mark STALE the records that depend on it, then every record that lists a record no longer VALID, transitively. STALE or NOT_VERIFIED never supports DONE. Keep semantic and rendering verification separate.
 
 ## 5. Contract bottleneck
-An unresolved or unverified interface, assumption or decision that other work depends on. Record: ID | undefined or unverified | dependent work | missing evidence | consequence | resolution test | state (OPEN, or CLOSED with evidence ID). Mark every dependent result conditional while open; close only by running the test and recording evidence.
+An unresolved or unverified interface, assumption or decision that other work depends on. Record: ID | undefined or unverified | dependent work | missing evidence | consequence | resolution test | state. Dependent work starts with REQUIRED: or OPTIONAL: and names a work package or claim; state is OPEN (since REF; owner: agent|person|external) or CLOSED (record or decision IDs). A claim that depends on an open bottleneck is not VALID and is reported as conditional on its ID; an open bottleneck blocks DONE only through a REQUIRED dependent. Close only by running the test and recording evidence, or by a recorded decision of the person; a closing record that later fails reopens it.
 
 ## 6. Completion and gates
 - DONE only if every REQUIRED criterion in the committed scope is VALID; PARTIAL lists gaps; BLOCKED states the cause. A required platform not passing prevents DONE; an unverified optional one does not.
 - Keep separate claims: file exists, structure valid, discoverable, activates, behaves, composes, portable, production ready. Recompute every count, total and percentage, supplied ones included, from source data with a tool and record the command; a figure not recomputed by a tool is INFERRED, a stated figure that differs is FAILED.
-- Ask the person or record an open decision before architecture decisions, irreversible actions, scope changes, adopting external code, and high-cost choices resting on INFERRED evidence. State options and evidence.
+- Ask the person or record an open decision before architecture decisions, irreversible actions, scope changes, adopting external code, and high-cost choices resting on INFERRED evidence. State options and evidence; record each decision in state/decisions.md.

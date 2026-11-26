@@ -1,11 +1,4 @@
-# Lab HCI L00 — Kiểm chứng tách nhãn nút bấm điều khiển và đo thời gian trễ diễn tập
+# Lab HCI L00 — Tách biệt nhãn cảnh báo và đo trễ
 
-Kiểm tra danh sách điều khiển tách biệt rõ hai nhãn nút bấm `drill_btn = 'XAC NHAN TAP TRAN'` và `real_btn = 'GUI CANH BAO THAT'`, đồng thời tính số phút trôi qua giữa hai mốc `13:18` và `13:52`.
-
-Định dạng đầu ra (1 dòng):
-`distinct=<0 hoặc 1> diff_min=<số nguyên>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh HCI L00 duong_dan/bai_cua_ban.py
-```
+Đọc `btn1|btn2|HH:MM HH:MM` từ stdin (ví dụ `XAC NHAN TAP TRAN|GUI CANH BAO THAT|13:18 13:52`). Kiểm tra khác nhãn và hiệu số phút.
+In đúng 1 dòng `distinct=0/1 diff_min=<int>`.

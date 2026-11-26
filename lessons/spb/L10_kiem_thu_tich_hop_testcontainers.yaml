@@ -1,0 +1,412 @@
+id: L10
+course: SPB
+series: SPB · Spring Boot thực chiến với PostgreSQL, Redis và Kafka
+title: Bài 10 — Kiểm thử tích hợp toàn luồng với PostgreSQL, Redis và Kafka
+voice: vi-VN-NamMinhNeural
+rate: -5%
+depth: full
+af2: true
+covers:
+- objective: 1
+  scene: example
+- objective: 2
+  scene: check
+- objective: 3
+  scene: quymo
+source: curriculum/spb.yaml L10; labs/SPB/L10 (chạy thật ./mvnw -B verify trên PostgreSQL 17, Redis 8 và Kafka 3.9 Testcontainers)
+assumes: []
+objectives:
+- Cấu hình Testcontainers với ServiceConnection ghim digest PostgreSQL, Redis và Kafka thật
+- Viết ca kiểm xuyên suốt từ API HTTP tới bảng bút toán PostgreSQL, xoá đệm Redis và bản tin Kafka
+- Đo chi phí thời gian khởi tạo container dùng chung giữa 1, 10 và 50 lớp kiểm thử tích hợp
+scenes:
+- id: hook
+  kind: hook
+  title: Test đơn vị xanh 100% nhưng chạy thật vẫn sập vì lệch DB hay Kafka?
+  checks:
+  - alg.spb_tc_startup_s(10, 6, True) < alg.spb_tc_startup_s(10, 6, False)
+  steps:
+  - show: <div class='box key'><p>Cơ sở dữ liệu bộ nhớ H2 không hiểu cú pháp khoá hàng thật của PostgreSQL, còn giả lập không
+      bắt được lỗi mất đồng bộ khi xoá đệm Redis hoặc phát bản tin Kafka.</p><p>Bài này nối trọn cả <b>PostgreSQL 17 + Redis
+      8 + Apache Kafka 3.9</b> bằng <b>Testcontainers + ServiceConnection</b> trong một ca kiểm tích hợp đầu cuối thật.</p></div>
+    say: Chào bạn đến với bài mười của khoá Spring Boot thực chiến. Dùng cơ sở dữ liệu giả trong bộ nhớ hay giả lập hàm gửi
+      tin rất nhanh, nhưng dễ sót lỗi khoá hàng thật và lỗi di trú. Hôm nay ta lên đỉnh tháp kiểm thử, bật cả ba thùng chứa
+      PostgreSQL, Redis và Kafka thật bằng Testcontainers ngay từ mã kiểm Java. Chỉ trong một luồng thử nghiệm tự động, ta
+      chứng minh yêu cầu web đi trọn từ sổ cái xuống bộ đệm và hàng đợi. Chỉ khi chạy xuyên suốt qua PostgreSQL, Redis và
+      Kafka thật, bạn mới bắt được những lỗi tích hợp ẩn sau các giả lập. Testcontainers giúp tự động hoá toàn bộ hạ tầng
+      phức tạp đó ngay bên trong bộ kiểm thử tiêu chuẩn của dự án.
+    focus:
+    - 0
+    - '1.1'
+    - '1.1'
+    - '1.2'
+    - '1.1'
+    - '1.2'
+    clear: true
+- id: prereq
+  kind: prereq
+  title: 'Ôn nhanh: ba thành phần hạ tầng đã dùng và nhu cầu kiểm thông luồng'
+  steps:
+  - show: <table class='t'><tr><th>hạ tầng đã học riêng lẻ</th><th>vai trò khi chạy ghép toàn luồng</th></tr><tr><td>PostgreSQL
+      17 + Flyway</td><td>Kiểm tra cấu trúc SQL thật, chốt hai dòng bút toán kép tổng bằng 0</td></tr><tr><td>Redis 8 bộ đệm
+      số dư</td><td>Bảo đảm sau khi chuyển tiền xong khoá cũ bị xoá sạch để đọc lại giá trị mới</td></tr><tr><td>Kafka 3.9
+      hàng đợi sự kiện</td><td>Xác nhận sự kiện phát đúng lên chủ đề thật và người nhận đọc thành công</td></tr></table>
+    say: Hãy nhìn lại ba mảnh ghép hạ tầng ta đã thử nghiệm rời từng bài từ đầu khoá tới giờ. PostgreSQL chịu trách nhiệm
+      lưu trữ bền vững và bảo toàn bất biến tổng sổ cái bằng không. Redis giữ số dư đệm trên bộ nhớ và phải bị vô hiệu hoá
+      ngay sau mỗi giao dịch hoàn tất. Kafka truyền thông điệp bất đồng bộ sang các hệ thống kế toán và cảnh báo phía sau.
+      Mục tiêu của bài kiểm tích hợp toàn luồng là chứng minh ba mắt xích rời rạc phối hợp trơn tru như một dây chuyền thống
+      nhất. Bất kỳ sai lệch nhỏ nào về tên chủ đề, cách xoá khoá đệm hay di trú bảng đều bị phơi bày ngay trong bài kiểm này.
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.2'
+    - '1.4'
+    clear: true
+- id: sym
+  kind: symbol
+  title: Bộ chú thích @Testcontainers và @ServiceConnection trên Boot 4.1
+  steps:
+  - show: <table class='t'><tr><th>công cụ Testcontainers</th><th>công dụng chính xác</th></tr><tr><td><code>@ServiceConnection</code></td><td>Tự
+      động điền chuỗi JDBC, địa chỉ Redis và Kafka vào Spring mà không cần <code>@DynamicPropertySource</code></td></tr><tr><td><code>@ServiceConnection(name
+      = "postgres")</code></td><td>Ghi rõ tên kết nối khi dùng <code>DockerImageName</code> ghim digest <code>@sha256:...</code></td></tr><tr><td>Lớp
+      cha singleton <code>static { PG.start(); ... }</code></td><td>Bật cụm container duy nhất 1 lần dùng chung cho mọi lớp
+      test</td></tr></table>
+    say: Bảng này giải thích ba quy tắc giúp cấu hình kiểm thử container vừa gọn vừa nhanh trên Spring Boot bốn chấm một.
+      Chú thích kết nối dịch vụ tự động bơm địa chỉ động của container vào cấu hình ứng dụng mà không cần viết tay các hàm
+      nối chuỗi rườm rà. Khi ghim mã băm ảnh cố định, ta luôn truyền thêm tên dịch vụ tường minh vào chú thích để tránh lỗi
+      suy diễn tên ảnh. Đặt khởi chạy tĩnh trong một lớp cha dùng chung giúp cả bộ kiểm không phải bật lại Docker nhiều lần.
+      Chú thích kết nối dịch vụ thế hệ mới loại bỏ hàng chục dòng cấu hình thuộc tính động rườm rà trong các bài kiểm cũ.
+      Tái sử dụng một cụm thùng chứa tĩnh duy nhất là bí quyết giữ cho bộ kiểm thử toàn cụm chạy nhanh trên cả máy cá nhân
+      và CI.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    - '1.3'
+    - '1.1'
+    - '1.3'
+    clear: true
+- id: intuition
+  kind: intuition
+  title: Kiểm chứng xuyên suốt HTTP → PostgreSQL → Xoá Redis → Kafka trong một lệnh
+  steps:
+  - show: '<div><svg width="960" height="210" viewBox="0 0 960 210"><rect x="25" y="45" width="185" height="95" rx="10" fill="#dbeafe"
+      stroke="#2a78d6" stroke-width="2"/><text x="117.5" y="85" font-size="16" font-weight="700" text-anchor="middle" fill="#1e293b">1.
+      POST HTTP 201</text><text x="117.5" y="112" font-size="14" text-anchor="middle" fill="#475569">TK1→TK2: 250 000</text><line
+      x1="210" y1="92" x2="265" y2="92" stroke="#475569" stroke-width="2"/><polygon points="265,92 257,87 257,97" fill="#475569"/><rect
+      x="265" y="45" width="210" height="95" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/><text x="370.0" y="85"
+      font-size="16" font-weight="700" text-anchor="middle" fill="#1e293b">2. PostgreSQL 17</text><text x="370.0" y="112"
+      font-size="14" text-anchor="middle" fill="#475569">Flyway + Tổng sổ = 0</text><line x1="475" y1="92" x2="530" y2="92"
+      stroke="#475569" stroke-width="2"/><polygon points="530,92 522,87 522,97" fill="#475569"/><rect x="530" y="45" width="190"
+      height="95" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="2"/><text x="625.0" y="85" font-size="16" font-weight="700"
+      text-anchor="middle" fill="#1e293b">3. Redis 8</text><text x="625.0" y="112" font-size="14" text-anchor="middle" fill="#475569">DEL
+      bal:TK1 (750 000)</text><line x1="720" y1="92" x2="775" y2="92" stroke="#475569" stroke-width="2"/><polygon points="775,92
+      767,87 767,97" fill="#475569"/><rect x="775" y="45" width="160" height="95" rx="10" fill="#e0e7ff" stroke="#4f46e5"
+      stroke-width="2"/><text x="855.0" y="85" font-size="16" font-weight="700" text-anchor="middle" fill="#1e293b">4. Kafka
+      3.9</text><text x="855.0" y="112" font-size="14" text-anchor="middle" fill="#475569">Nhận TK1→TK2</text></svg></div>'
+    say: Theo dõi đường đi xuyên suốt bốn thành phần trong một kịch bản kiểm thử toàn luồng. Trước khi chuyển khoản, ta làm
+      ấm bộ đệm tài khoản một triệu đồng trong Redis để tạo tình huống có đệm cũ sẵn. Sau lệnh HTTP chuyển hai trăm năm
+      mươi nghìn, hệ thống ghi sổ cái PostgreSQL, xoá sạch đệm Redis và phát sự kiện sang người nhận Kafka.
+    clear: true
+  - show: ''
+    say: Việc chủ động tạo sẵn dữ liệu đệm cũ trước khi gọi giao dịch giúp thử thách khả năng xoá đệm đúng thời điểm của hệ
+      thống. Cuối cùng, đầu nhận Kafka đọc được tin tức thì chứng minh luồng bất đồng bộ nối nhịp hoàn hảo sau khi giao
+      dịch cơ sở dữ liệu chốt.
+- id: formula
+  kind: formula
+  title: Nguyên tắc ghim digest cố định và mẫu Singleton Container
+  checks:
+  - alg.spb_tc_startup_s(10, 6, True) == 6
+  - alg.spb_tc_startup_s(10, 6, False) == 60
+  steps:
+  - show: '<div class=''box key''><p><b>Chi phí khởi tạo cụm 3 container (~6–7 giây mỗi lượt):</b></p><p>1. Nếu dùng <code>@Container</code>
+      bật mới riêng cho từng lớp test trong <b>50 lớp</b>: tốn <code>50 × 6 = 300 giây (5 phút)</code> chỉ để chờ khởi động
+      container rỗng.</p><p>2. Với lớp cha <b>Singleton Container</b> khởi động 1 lần trong khối <code>static {}</code>: toàn
+      bộ 50 lớp chỉ tốn đúng <b>6 giây</b> dùng chung, chỉ cần xoá sạch dữ liệu bảng và <code>flushDb()</code> trong <code>@BeforeEach</code>.</p></div>'
+    say: Hai con số trên màn hình lý giải vì sao mẫu dùng chung container lại quan trọng tới vậy. Một cụm ba dịch vụ tốn khoảng
+      sáu giây khởi động, nếu năm mươi lớp kiểm thử nào cũng bật lại từ đầu thì mất năm phút vô ích. Ngược lại khi dùng một
+      lớp cha khởi tạo tĩnh duy nhất rồi dọn sạch bảng trước mỗi ca kiểm thử, cả năm mươi lớp chỉ trả chi phí khởi động đúng
+      một lần đầu tiên. Thời gian khởi động một cụm container tuy nhỏ với từng bài nhưng sẽ cộng dồn thành nút thắt lớn khi
+      đội ngũ có hàng trăm kiểm thử. Do đó thiết kế lớp cơ sở dùng chung kết hợp tái sử dụng ngữ cảnh ứng dụng Spring là chuẩn
+      mực hàng đầu trong dự án doanh nghiệp.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    - '1.1'
+    - '1.2'
+    clear: true
+- id: example
+  kind: example
+  title: 'Mã thật: FullStackBaseTest ghim 3 digest và @ServiceConnection'
+  checks:
+  - 1_000_000 - 250_000 == 750_000
+  steps:
+  - show: <p><b>1. Lớp cha Singleton khởi động 3 container ghim đúng digest</b></p><div class="code"><div>public abstract
+      class FullStackBaseTest {</div><div>  @ServiceConnection(name = "postgres")</div><div>  static final PostgreSQLContainer
+      PG = new PostgreSQLContainer(</div><div>    DockerImageName.parse("postgres:17-alpine@sha256:d3244e...")</div><div>      .asCompatibleSubstituteFor("postgres"));</div><div>  @ServiceConnection(name
+      = "redis")</div><div>  static final GenericContainer&lt;?&gt; REDIS = new GenericContainer&lt;&gt;(</div><div>    DockerImageName.parse("redis:8@sha256:1f8829...")).withExposedPorts(6379);</div><div>  @ServiceConnection(name
+      = "kafka")</div><div>  static final KafkaContainer KAFKA = new KafkaContainer(</div><div>    DockerImageName.parse("apache/kafka:3.9.0@sha256:fbc7d7...")</div><div>      .asCompatibleSubstituteFor("apache/kafka"))</div><div>    .withEnv("KAFKA_LISTENERS",
+      "PLAINTEXT://:9092,BROKER://:9093,CONTROLLER://:9094");</div><div>  static { PG.start(); REDIS.start(); KAFKA.start();
+      }</div><div>}</div></div>
+    say: Nhìn trọn lớp nền dùng chung điều phối ba hệ thống dữ liệu thật trong Java. Cả ba ảnh đều ghim chặt bằng mã băm cố
+      định từ hồ sơ phiên bản và khai báo tường minh tên kết nối dịch vụ. Lưu ý thùng chứa Kafka ba chấm chín có gắn biến
+      môi trường cổng lắng nghe không dùng địa chỉ không chấm không để vượt qua bước kiểm tra khởi chạy chặt chẽ. Mỗi hình
+      ảnh container đều gọi qua lớp phân tích chuỗi ảnh để giữ chính xác phiên bản kèm mã băm sáu mươi bốn ký tự. Việc khai
+      báo cùng một lớp cơ sở cho các kiểm thử liên quan giữ cho ngữ cảnh ứng dụng không bị khởi động lại vô ích.
+    focus:
+    - 1
+    - 2
+    - 2
+    - 1
+    - 2
+    clear: true
+  - show: <p><b>2. Hàm chuyển khoản xuyên suốt Postgres → xoá Redis → gửi Kafka</b></p><div class="code"><div>@Transactional</div><div>public
+      void transfer(String fromId, String toId, long amount) {</div><div>  Account a = accounts.findById(fromId).orElseThrow();</div><div>  Account
+      b = accounts.findById(toId).orElseThrow();</div><div>  a.setBalance(a.getBalance() - amount); b.setBalance(b.getBalance()
+      + amount);</div><div>  journals.save(new JournalEntry(fromId, -amount));</div><div>  journals.save(new JournalEntry(toId,
+      +amount));</div><div>  redis.delete("bal:" + fromId); redis.delete("bal:" + toId);</div><div>  kafka.send("bank.full.events",
+      fromId + "-&gt;" + toId + ":" + amount);</div><div>}</div></div>
+    say: Phía dịch vụ, một giao dịch chuyển khoản duy nhất chạm đủ cả ba hệ thống thật. Sau khi cập nhật tài khoản và lưu
+      cân bằng hai dòng bút toán vào PostgreSQL, mã xoá ngay cả hai khoá đệm trong Redis và phát thông điệp thông báo sang
+      Kafka. Nếu chỉ xoá khoá đệm tài khoản nguồn mà quên tài khoản đích, ứng dụng khách kiểm tra số dư người nhận sẽ đọc
+      phải con số cũ. Vì vậy cần xoá đồng thời cả hai khoá tài khoản nguồn lẫn đích ngay sau khi hoàn tất ghi sổ bút toán
+      kép.
+    focus:
+    - 1
+    - 2
+    - 1
+    - 2
+    clear: true
+- id: check
+  kind: check
+  title: 'Chạy thật cả 3 container: HTTP 201 → Postgres Σ=0 → Redis 750k → Kafka event'
+  checks:
+  - 750_000 + 750_000 == 1_500_000
+  steps:
+  - show: '<p><b>Kết quả chạy thật KiemL10Test với 3 container sống đồng thời</b></p><div class="code"><div>Container postgres:17-alpine
+      started in PT2.43s</div><div>Container apache/kafka:3.9.0 started in PT3.79s</div><div>Container redis:8 started in
+      PT0.69s</div><div>// POST /api/v1/full-transfers {"fromId":"TK1","toId":"TK2","amount":250000} → HTTP 201</div><div>//
+      cachedBalance("TK1") = 750_000, cachedBalance("TK2") = 750_000, journals.net() = 0</div><div>// Kafka consumer nhận
+      được "TK1-&gt;TK2:250000"</div><div>[INFO] Tests run: 2, Failures: 0, Errors: 0, Total time: 32.721 s</div><div>ĐÚNG
+      — PASS /d/research-video/labs/SPB/L10 (du_an maven)</div></div>'
+    say: Đầu ra kiểm thử thật ghi nhận thời gian khởi động cực nhanh của ba thùng chứa trên Docker. PostgreSQL mất khoảng
+      hai phẩy bốn giây, Kafka gần ba phẩy tám giây và Redis chưa tới một giây. Sau lệnh chuyển hai trăm năm mươi nghìn, bộ
+      đệm về bảy trăm năm mươi nghìn vì khoá cũ bị xoá, tổng sổ bằng không và Kafka nhận đủ tin. Thời gian chờ đọc tin trên
+      Kafka cần một khoảng thăm dò ngắn hợp lý vì người nhận chạy bất đồng bộ ở luồng nền. Khi cả ba công cụ báo xanh trên
+      thùng chứa thật, bạn có mức độ tin cậy gần như tuyệt đối trước khi đóng gói phát hành.
+    focus:
+    - 1
+    - 2
+    - 2
+    - 1
+    - 2
+    clear: true
+- id: quymo
+  kind: example
+  title: Chi phí khởi tạo container dùng chung giữa 1, 10 và 50 lớp kiểm thử
+  checks:
+  - alg.spb_tc_startup_s(50, 6, True) == 6
+  - alg.spb_tc_startup_s(50, 6, False) == 300
+  steps:
+  - show: <table class='t'><tr><th>số lớp kiểm thử tích hợp</th><th>khởi động lại mỗi lớp (~6 s/lớp)</th><th>Singleton Container
+      + Flyway</th></tr><tr><td><b>1 lớp</b> (như KiemL10Test)</td><td>~6 giây</td><td><b>~6 giây</b> (tương đương)</td></tr><tr><td><b>10
+      lớp</b></td><td>~60 giây chờ bật Docker</td><td><b>~6 giây</b> + thời gian test thật</td></tr><tr><td><b>50 lớp</b></td><td><b>300
+      giây (5 phút)</b> + ngốn RAM</td><td><b>~6 giây</b> nhờ tái dùng 1 cụm + giữ 1 Spring context</td></tr></table>
+    say: Bảng quy mô cho thấy khoản tiết kiệm rõ rệt khi dùng chung một cụm container qua các mốc một, mười và năm mươi lớp
+      kiểm thử. Ở một lớp duy nhất thì hai cách tốn gần bằng nhau. Nhưng sang mười và năm mươi lớp, mô hình khởi động lại
+      từng lớp làm tốn tới năm phút chỉ cho việc dựng máy chứa rỗng và gây quá tải bộ nhớ RAM máy tính. Khi ghép chung lớp
+      cha và giữ nguyên cấu hình ứng dụng để dùng chung ngữ cảnh Spring, cả năm mươi lớp vẫn chỉ khởi động đúng một cụm duy
+      nhất. Ở quy mô năm mươi lớp kiểm thử, tiết kiệm gần năm phút mỗi lượt chạy giúp tăng đáng kể nhịp độ tích hợp mã nguồn
+      mỗi ngày. Cùng lúc đó, dung lượng bộ nhớ RAM máy trạm kiểm thử cũng không bị phình vì nhiều cụm container mở trùng lặp.
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.3'
+    - '1.4'
+    clear: true
+- id: pitfalls
+  kind: pitfall
+  title: Ba lỗi kỹ thuật khiến Testcontainers hỏng hoặc chạy cực chậm
+  steps:
+  - show: <table class='t'><tr><th>bẫy Testcontainers thực tế cần tránh</th></tr><tr><td><div class='box warn'><b>Lỗi 1 —
+      Dùng cơ sở dữ liệu H2 giả làm PostgreSQL trong test cuối:</b> H2 bỏ qua sự khác biệt về khoá hàng và hàm SQL riêng của
+      PostgreSQL.<br><b>Lỗi 2 — Không dọn sạch bảng DB và Redis <code>flushDb()</code> trong <code>@BeforeEach</code> khi
+      dùng Singleton Container:</b> Ca test trước để lại dữ liệu rác làm ca sau gãy ngẫu nhiên!<br><b>Lỗi 3 — Dùng nhãn ảnh
+      chung chung như <code>postgres:latest</code>:</b> Máy chạy hôm nay qua nhưng vài tháng sau ảnh cập nhật làm hỏng hành
+      vi.</div></td></tr></table>
+    say: Ba lỗi trên bảng là những cạm bẫy phổ biến khi đưa kiểm thử thùng chứa vào đường ống tự động. Dùng cơ sở dữ liệu
+      bộ nhớ H2 thay thế ở bước nghiệm thu cuối khiến lỗi cú pháp khoá hàng thật lọt ra ngoài môi trường chạy chính. Nếu bật
+      dùng chung thùng chứa giữa nhiều ca kiểm mà quên xoá dữ liệu và xả đệm Redis, các ca sau dễ dính trạng thái rác từ ca
+      trước. Cuối cùng, luôn ghim mã băm ảnh cố định thay cho thẻ mới nhất để giữ kết quả tái lập. Cũng cần tránh việc tự
+      ý thay đổi cấu hình ứng dụng ở vài lớp kiểm thử nhỏ vì làm Spring tạo thêm ngữ cảnh trùng tốn RAM. Hãy dọn sạch dữ liệu
+      cả bảng PostgreSQL lẫn khoá Redis ở đầu mỗi lượt chạy thay vì tạo mới toàn bộ máy chứa.
+    focus:
+    - 0
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    clear: true
+- id: quiz
+  kind: quiz
+  title: Kiểm tra nhanh Testcontainers và ServiceConnection
+  checks:
+  - 50 * 6 == 300
+  steps:
+  - show: <ol><li>Tại sao khi viết <code>@ServiceConnection</code> với <code>DockerImageName</code> có ghim digest <code>@sha256:...</code>
+      ta nên ghi rõ <code>(name = "postgres")</code>?</li><li>Khi dùng mẫu Singleton Container cho nhiều lớp test, việc bắt
+      buộc phải làm trong <code>@BeforeEach</code> là gì?</li></ol>
+    say: Hãy tự kiểm nhanh hai câu hỏi cốt lõi trước khi thực hành. Câu một, tại sao khi gắn mã băm SHA hai trăm năm mươi
+      sáu lên tên ảnh Docker ta nên khai báo rõ thuộc tính tên kết nối dịch vụ? Câu hai, nếu dùng chung một cụm thùng chứa
+      cho nhiều ca kiểm thử khác nhau, ta bắt buộc phải làm gì trong hàm chuẩn bị trước mỗi ca? Bấm tạm dừng và trả lời. Hai
+      câu hỏi này kiểm tra kinh nghiệm xử lý thực tế khi ghim phiên bản ảnh và chia sẻ thùng chứa giữa nhiều ca thử.
+    pause: 20
+  - show: <table class='t'><tr><th>đáp án câu 1</th></tr><tr><td><p>① Để Spring Boot dùng trực tiếp loại kết nối <code>postgres</code>
+      mà không bị lỗi phân tích chuỗi tên ảnh khi kèm mã digest.</p></td></tr></table>
+    say: 'Đáp án câu một: khai báo tên kết nối tường minh giúp Spring Boot nhận đúng trình điều khiển mà không vướng lỗi phân
+      tích chuỗi tên ảnh kèm mã băm. Ghim mã băm cố định bảo đảm cả đội kỹ thuật lẫn máy chủ tích hợp đều chạy trên cùng một
+      phiên bản hệ thống dữ liệu. Khai báo tường minh tên kết nối dịch vụ vừa rõ nghĩa khi đọc vừa giúp Boot nhận diện đúng
+      bộ cấu hình tự động.'
+    clear: true
+  - show: <table class='t'><tr><th>đáp án câu 2</th></tr><tr><td><p>② Phải xoá sạch dữ liệu các bảng PostgreSQL và gọi <code>flushDb()</code>
+      trên Redis (hoặc dùng khoá/chủ đề riêng) để các ca test không nhiễm bẩn chéo nhau.</p></td></tr></table>
+    say: 'Đáp án câu hai: bắt buộc dọn sạch dữ liệu bảng cơ sở dữ liệu và xả sạch khoá đệm Redis trước mỗi ca kiểm để bảo
+      đảm tính độc lập hoàn toàn. Xoá sạch dữ liệu bảng và bộ đệm trước mỗi ca chạy là thói quen bắt buộc khi chia sẻ thùng
+      chứa giữa nhiều lớp kiểm thử. Đừng quên xoá sạch theo đúng trình tự ràng buộc khoá ngoại từ bảng bút toán con rồi mới
+      tới bảng tài khoản cha.'
+    clear: true
+- id: practice
+  kind: practice
+  title: Cài đặt kiểm thử tích hợp toàn luồng với Postgres, Redis và Kafka
+  lab: labs/SPB/L10
+  steps:
+  - show: <div class='box key'><p><b>Thực hành bài L10 (<code>labs/SPB/L10/de.md</code>, cần Docker):</b> cấu hình lớp cha
+      <code>FullStackBaseTest</code> bật đồng thời <b>PostgreSQL 17</b>, <b>Redis 8</b> và <b>Kafka 3.9</b> đúng digest; cài
+      <code>POST /api/v1/full-transfers</code> cập nhật số dư DB, ghi bút toán tổng 0, xoá đệm Redis và gửi tin tới chủ đề
+      <code>bank.full.events</code>, rồi chấm:</p><p><code>bash labs/cham.sh SPB L10 duong_dan/du_an_cua_ban</code></p></div>
+    say: Hãy mở đề bài L10 để kết nối trọn vẹn cả ba thùng chứa thật chạy trong một bài kiểm thử toàn luồng. Chú ý đặt dọn
+      sạch bộ đệm và bảng dữ liệu ở mỗi lượt thử nghiệm, đồng thời kiểm đủ cả việc xoá đệm lẫn nhận thông điệp Kafka. Bấm
+      tạm dừng và hoàn thành trước khi đối chiếu kết quả chấm. Hãy kiểm kỹ ảnh Docker và mã băm đối chiếu trong hồ sơ phiên
+      bản để không sai một ký tự. Bảo đảm giao dịch chuyển khoản xoá cả hai khoá đệm tài khoản nguồn và đích trước khi gửi
+      sự kiện sang Kafka.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    - '1.1'
+    - '1.2'
+    clear: true
+    pause: 30
+  - show: '<p><b>Kết quả chấm KiemL10Test trên 3 container thật đồng thời</b></p><div class="code"><div>KiemL10Test: 2 ca,
+      0 hỏng</div></div>'
+    say: Màn hình hiển thị kết quả nghiệm thu hai ca kiểm thử toàn luồng trên cả ba container thật đạt không ca hỏng. Khi
+      đường dẫn web nối thông qua sổ cái, bộ đệm và hàng đợi sự kiện cùng lúc, bài thực hành mới đạt chuẩn. Hai kịch bản chạy
+      thật chứng minh đường ống toàn phần vận hành đồng bộ trên hạ tầng container thực thụ.
+    focus:
+    - 1
+    - 2
+    - 2
+    clear: true
+  - show: <div class='box ok'><p><b>Gợi ý nếu kẹt ở bài L10:</b> (1) đặt tên tường minh trên cả 3 <code>@ServiceConnection(name
+      = ...)</code>; (2) thêm <code>KAFKA_LISTENERS</code> cho Kafka 3.9.0; (3) chờ consumer bằng vòng lặp timeout ngắn (~15
+      s) vì Kafka nhận bất đồng bộ sau giao dịch.</p></div>
+    say: Nếu gặp lỗi khởi chạy kết nối hoặc ca kiểm Kafka báo thiếu tin do đọc quá sớm, hãy xem lại ba gợi ý trên màn hình.
+      Bảo đảm đã chờ ngắn vài trăm mi-li-giây cho bộ tiếp nhận bất đồng bộ đọc kịp bản tin vừa gửi. Chú ý dùng một vòng lặp
+      đợi ngắn kiểm tra danh sách sự kiện Kafka thay cho lệnh ngủ cứng thiếu ổn định.
+    focus:
+    - 0
+    - 1
+    - 1
+    clear: true
+- id: recap
+  kind: recap
+  title: Tổng kết kiểm thử tích hợp toàn luồng sát sản xuất
+  steps:
+  - show: <div class='chain'><span class='n'>Singleton 3 Container</span><span class='a'>→</span><span class='n'>@ServiceConnection</span><span
+      class='a'>→</span><span class='n'>Kiểm thông HTTP→DB→Redis→Kafka</span></div>
+    say: Bạn vừa làm chủ kỹ thuật kiểm thử tích hợp toàn phần giúp phát hiện sớm những lỗi lệch hạ tầng khó chịu nhất trước
+      khi đưa lên sản xuất. Ở hai bài cuối khoá, ta hoàn thiện phần quan sát vận hành và đóng gói triển khai trên container
+      thật. Bộ kiểm toàn cụm ba container thật là đỉnh tháp kiểm thử vững chắc trước bước đưa dịch vụ vào vận hành sản xuất.
+    focus:
+    - '1.1'
+    - '1.2'
+    - '1.2'
+    clear: true
+  - show: <div class='box ok'><b>Bài sau (bài 11):</b> Quan sát hệ thống thật — Nhật ký JSON có cấu trúc, mã tương quan, OpenTelemetry
+      và chỉ số Actuator/Prometheus</div>
+    say: Bài tiếp theo ta gắn hệ thống nhật ký chuẩn máy đọc, mã tương quan xuyên suốt yêu cầu và xuất chỉ số đo đạc sang
+      Prometheus. Hẹn gặp bạn ở bài sau. Bộ kiểm tích hợp toàn luồng hoàn chỉnh sẽ là lưới an toàn tin cậy cho phần quan sát
+      và đóng gói tiếp theo. Nhờ kiểm chứng đủ ba hạ tầng thật cùng lúc, toàn bộ chuỗi xử lý từ HTTP tới sự kiện hoàn toàn
+      sẵn sàng đưa vào bước giám sát vận hành.
+    clear: true
+    forward_ref: true
+asr_reviewed:
+- sentence: Redis giữ số dư đệm trên bộ nhớ và phải bị vô hiệu hoá ngay sau mỗi giao dịch hoàn tất.
+  reason: 'ASR chép “Rê đích dự số dư đệm trên bộ nhớ và phải bị vô hiệu hóa ngay sau mỗi giao dịch hoàn tức.” (khớp 0.864,
+    khác “đít giữ” → nghe thành “đích dự”; “tất” → nghe thành “tức”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh
+    của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Trước khi chuyển khoản, ta làm ấm bộ đệm tài khoản một triệu đồng trong Redis để tạo tình huống có đệm cũ sẵn.
+  reason: 'ASR chép “Trước khi chuyển khoản, ta làm ấm bộ đềm tài khoản 1 triệu đồng trong Reddit để tạo tình huống có đềm
+    cũ sẵn.” (khớp 0.875, khác “đệm” → nghe thành “đềm”; “redis” → nghe thành “reddit”; “đệm” → nghe thành “đềm”): biến thể
+    phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: PostgreSQL mất khoảng hai phẩy bốn giây, Kafka gần ba phẩy tám giây và Redis chưa tới một giây.
+  reason: 'ASR chép “PostgreSQL mất khoảng 2,4 giây, Capca gần 3,8 giây và Reddit chưa tới 1 giây.” (khớp 0.895, khác “kafka”
+    → nghe thành “capca”; “redis” → nghe thành “reddit”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper,
+    câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Chú ý đặt dọn sạch bộ đệm và bảng dữ liệu ở mỗi lượt thử nghiệm, đồng thời kiểm đủ cả việc xoá đệm lẫn nhận thông
+    điệp Kafka.
+  reason: 'ASR chép “Chú ý đặt dọn sạch bộ đềm và bảng dữ liệu ở mỗi lượt thử nghiệm, đồng thời kiểm đủ cả việc xóa đềm lẫn
+    nhận thông điệp cắp ca.” (khớp 0.9, khác “đệm” → nghe thành “đềm”; “đệm” → nghe thành “đềm”; “cáp” → nghe thành “cắp”):
+    biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Hôm nay ta lên đỉnh tháp kiểm thử, bật cả ba thùng chứa PostgreSQL, Redis và Kafka thật bằng Testcontainers ngay
+    từ mã kiểm Java.
+  reason: 'ASR chép “Hôm nay ta lên đỉnh tháp kiểm thử, bật cả 3 thùng chứa PostgreSQL, Reddit và Kafka thật bằng tech container
+    ngay từ mã kiểm Java.” (khớp 0.902, khác “redis” → nghe thành “reddit”; “testcontainers” → nghe thành “tech container”):
+    biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Đặt khởi chạy tĩnh trong một lớp cha dùng chung giúp cả bộ kiểm không phải bật lại Docker nhiều lần.
+  reason: 'ASR chép “Đặt khởi chạy tỉnh trong một lớp cha dùng chung giúp cả bộ kiểm không phải bật lại đó cơ nhiều lần.”
+    (khớp 0.909, khác “tĩnh” → nghe thành “tỉnh”; “đốc” → nghe thành “đó”): biến thể phiên âm từ mượn/thanh điệu thuần âm
+    thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: 'Đáp án câu hai: bắt buộc dọn sạch dữ liệu bảng cơ sở dữ liệu và xả sạch khoá đệm Redis trước mỗi ca kiểm để bảo
+    đảm tính độc lập hoàn toàn.'
+  reason: 'ASR chép “Đáp án câu 2, bắt buộc dọn sạch dữ liệu bản cơ sở dữ liệu và xả sạch khóa đềm Reddit trước mỗi ca kiểm
+    để bảo đảm tính độc lập hoàn toàn.” (khớp 0.909, khác “bảng” → nghe thành “bản”; “đệm redis” → nghe thành “đềm reddit”):
+    biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Sau lệnh HTTP chuyển hai trăm năm mươi nghìn, hệ thống ghi sổ cái PostgreSQL, xoá sạch đệm Redis và phát sự kiện
+    sang người nhận Kafka.
+  reason: 'ASR chép “Sau lệnh Http chuyển 250.000, hệ thống ghi sổ cái PostgreSQL, xóa sạch đệm Reddit và phát sự kiện sang
+    người nhận CAPCA.” (khớp 0.926, khác “redis” → nghe thành “reddit”; “kafka” → nghe thành “capca”): biến thể phiên âm từ
+    mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Sau lệnh chuyển hai trăm năm mươi nghìn, bộ đệm về bảy trăm năm mươi nghìn vì khoá cũ bị xoá, tổng sổ bằng không
+    và Kafka nhận đủ tin.
+  reason: 'ASR chép “Sau lệnh chuyển 250 nghìn, bộ đệm về 750 nghìn vì khóa củ bị xóa, tổng sổ bằng không và ca ca nhận đủ
+    tin.” (khớp 0.935, khác “cũ” → nghe thành “củ”; “cáp” → nghe thành “ca”): biến thể phiên âm từ mượn/thanh điệu thuần âm
+    thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Lưu ý thùng chứa Kafka ba chấm chín có gắn biến môi trường cổng lắng nghe không dùng địa chỉ không chấm không
+    để vượt qua bước kiểm tra khởi chạy chặt chẽ.
+  reason: 'ASR chép “Lưu ý thùng chứa Capca 3.9 có gắn biến môi trường cổng lắng nghe không dùng địa chỉ 0.0 để vượt qua bước
+    kiểm tra khởi chạy chặt chẽ.” (khớp 0.938, khác “kafka” → nghe thành “capca”; “chấm” → nghe thành “”; “chấm” → nghe thành
+    “”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai
+    người'
+- sentence: Sau khi cập nhật tài khoản và lưu cân bằng hai dòng bút toán vào PostgreSQL, mã xoá ngay cả hai khoá đệm trong
+    Redis và phát thông điệp thông báo sang Kafka.
+  reason: 'ASR chép “Sau khi cập nhật tài khoản và lưu cân bằng hai dòng bút toán vào PostgreSQL, mã xóa ngay cả hai khóa
+    đềm trong Reddit và phát thông điệp thông báo sang Kafka.” (khớp 0.939, khác “đệm” → nghe thành “đềm”; “redis” → nghe
+    thành “reddit”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED
+    bằng tai người'
+- sentence: Câu một, tại sao khi gắn mã băm SHA hai trăm năm mươi sáu lên tên ảnh Docker ta nên khai báo rõ thuộc tính tên
+    kết nối dịch vụ?
+  reason: 'ASR chép “Câu một, tại sao khi gắn mã băm SHA-256 lên tên ảnh Dokota nên khai báo rõ thuộc tính tên kết nối dịch
+    vụ?” (khớp 0.949, khác “docker ta” → nghe thành “dokota”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper,
+    câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: 'Đáp án câu một: khai báo tên kết nối tường minh giúp Spring Boot nhận đúng trình điều khiển mà không vướng lỗi
+    phân tích chuỗi tên ảnh kèm mã băm.'
+  reason: 'ASR chép “Đáp án câu 1, khai báo tên kết nối Tường Minh giúp Springbook nhận đúng trình điều khiển mà không vướng
+    lỗi phân tích chuỗi tên ảnh kèm mã băm.” (khớp 0.951, khác “spring boot” → nghe thành “springbook”): biến thể phiên âm
+    từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'

@@ -1,6 +1,7 @@
 """Điền đầu ra THẬT vào các prog(..., out="X") của một bài: chạy từng chương trình (trình chạy của cổng screen_code) rồi thay
 lần lượt các chỗ out="X" trong audit/bnk/src/lNN.py bằng đầu ra thật. Chỉ chạm các chỗ còn là "X".
 Dùng: .venv/Scripts/python -B audit/bnk/fillout.py L01"""
+import sys as _sys; from pathlib import Path as _P; _sys.path.insert(0, str(_P(__file__).resolve().parents[1])); import _frozen  # noqa: E402,F401
 import importlib
 import sys
 from pathlib import Path

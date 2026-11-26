@@ -1,9 +1,5 @@
-# Lab ESY L10 — Mô phỏng lập lịch ưu tiên cố định so với hạn sớm nhất EDF trên chu kỳ 16 ms
+# Lab ESY L10 — Lập lịch ưu tiên cố định so với EDF
 
-Mô phỏng từng nhịp `1 ms` từ `t = 0..15` cho hai tác vụ `(C=4, T=8)` (chỉ số 0) và `(C=2, T=4)` (chỉ số 1) có tổng độ dùng `U = 1.0` theo hai luật: ưu tiên cố định (luôn chọn tác vụ chỉ số 0 nếu sẵn sàng) và hạn sớm nhất (`EDF`, luôn chọn tác vụ có hạn chót `dl` nhỏ hơn). Đếm số lần trễ hạn của mỗi luật.
-In đúng 1 dòng `U=... fixed_misses=... edf_misses=...` (1 chữ số thập phân cho `U`).
-
-Chấm tự động:
-```bash
-bash labs/cham.sh ESY L10 duong_dan/bai_cua_ban.py
-```
+Đọc `H|C0,T0;C1,T1` từ stdin (ví dụ `16|4,8;2,4`). Mô phỏng `t=0..H-1` đếm số trễ hạn theo từng luật.
+Quy ước lab: luật ưu tiên cố định luôn lấy theo thứ tự nhập (tác vụ 0 ưu tiên cao hơn tác vụ 1); nếu EDF trùng hạn thì chọn tác vụ có chỉ số nhỏ hơn; khi kết thúc ở `t = H`, mỗi tác vụ còn phần việc `rem[i] > 0` tính thêm một lần trễ hạn.
+In đúng 1 dòng `U=<1 chữ số> fixed_misses=<int> edf_misses=<int>`.

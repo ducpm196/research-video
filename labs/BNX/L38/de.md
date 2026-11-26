@@ -18,3 +18,6 @@ con lai: <số>
 xuyen manh: <số>/5
 ```
 Chạy: `python mau.py`. Chấm: `bash labs/cham.sh BNX L38 mau.py`.
+
+## Phần thêm trên Oracle thật (tuỳ chọn)
+Khi có container `bnx-ora`, chạy `bash labs/BNX/L38/oracle/chay.sh` (tệp `labs/BNX/L38/oracle/thu.sql`) để chạy hàng đợi giao dịch thật `DBMS_AQ` (`ENQUEUE`/`COMMIT`/`ROLLBACK`/`DEQUEUE`) trên Oracle; lab `sqlite` ở trên là đường lùi bắt buộc mặc định.

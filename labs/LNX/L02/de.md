@@ -1,9 +1,7 @@
-# Lab LNX L02 — Tính mã thoát POSIX và kiểm chứng dọn dẹp khi nhận SIGTERM
+# Lab LNX L02 — Kiểm chứng trap SIGTERM và tính mã thoát POSIX qua stdin
 
-Viết kịch bản Bash tạo subshell có `trap` đón tín hiệu `TERM` in ra `graceful=1` rồi thoát mã `143`, gửi `kill -TERM`, và in đúng 3 dòng:
-1. `graceful=1`
-2. `term_exit=143`
-3. `kill_exit=137`
+Viết kịch bản Bash đọc `<grace_code> <sig_num>` từ `stdin`, bật subshell nền cài `trap` in `graceful=1` rồi `exit $grace_code`, gửi `kill -TERM`, thu `term_exit=$?` và tính `kill_exit=$((128 + sig_num))`.
+In đúng 3 dòng: `graceful=1`, `term_exit=...`, `kill_exit=...`.
 
 Chấm tự động:
 ```bash

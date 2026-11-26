@@ -1,11 +1,6 @@
-# Lab WEB L07 — Node.js thật: so sánh chi phí phân trang OFFSET vs Cursor
+# Lab WEB L07 — Node.js: so sánh chi phí phân trang OFFSET vs Cursor
 
-Viết tập lệnh Node.js tính số dòng cần đọc và bỏ qua khi lấy trang `1 000` (mỗi trang `20` dòng) bằng `OFFSET` (`19 980` dòng bị bỏ) so với Cursor (`0` dòng bỏ), in đúng 3 dòng:
-1. `offset_skipped=19980`
-2. `offset_scanned=20000`
-3. `cursor_scanned=20`
+Đọc `stdin` `page=<n> size=<n>`. Tính số dòng bị bỏ qua, tổng số dòng phải quét theo `OFFSET` so với chỉ đọc đúng `size` dòng bằng `Cursor`.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh WEB L07 duong_dan/bai_cua_ban.js
-```
+In đúng 3 dòng: `offset_skipped=<d>`, `offset_scanned=<d>`, `cursor_scanned=<d>`.
+Chấm tự động: `bash labs/cham.sh WEB L07 duong_dan/bai_cua_ban.js`

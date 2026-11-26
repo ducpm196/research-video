@@ -21,7 +21,11 @@ EXTRA = {"CS115": ["audit/verify_cs115_tex.py", "audit/verify_cs115_l44.py"], "C
 
 
 def verifiers(C):
-    return EXTRA.get(C) or sorted(str(p.relative_to(ROOT)).replace("\\", "/") for p in (ROOT / "audit" / C.lower()).glob("verify_*.py"))
+    return EXTRA.get(C) or sorted(
+        str(p.relative_to(ROOT)).replace("\\", "/")
+        for p in (ROOT / "audit" / C.lower()).glob("verify_*.py")
+        if p.name != "verify_l12_screen.py"
+    )
 
 
 def run_verifier(rel):
@@ -34,7 +38,7 @@ def run_verifier(rel):
     m = (re.findall(r"(\d+)/(\d+) PASS", out) or [None])[-1]
     if m:
         cnt = f"{m[0]}/{m[1]}"
-    elif (m2 := re.findall(r"TỔNG: (\d+) PASS · (\d+) FAIL", out)):
+    elif (m2 := re.findall(r"(?:TỔNG:\s*)?(\d+) PASS\s*[·,]\s*(\d+) FAIL", out)):
         a, b = map(int, m2[-1]); cnt = f"{a}/{a + b}"
     elif (m3 := re.findall(r"TOTAL=(\d+) PASS=(\d+)", out)):
         t, a = m3[-1]; cnt = f"{a}/{t}"

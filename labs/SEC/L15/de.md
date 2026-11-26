@@ -1,11 +1,6 @@
-# Lab SEC L15 — Tính biên tràn đọc Heartbleed 2 byte (64 KB) và kiểm chứng kiểm biên
+# Lab SEC L15 — Tính biên tràn đọc Heartbleed 2 byte và kiểm chứng kiểm biên
 
-Viết chương trình Python mô phỏng khung Heartbeat có tải thực `5 B` nhưng trường độ dài 16 bit báo `65 535 B`: tính số byte rò rỉ bộ nhớ nếu không kiểm biên và viết hàm `safe_heartbeat(claimed, actual)` chặn lỗi này, in đúng 3 dòng:
-1. `max_u16_bytes=65536`
-2. `leaked_bytes=65530`
-3. `safe_check_rejected=1`
+Đọc `stdin` `bits=<int> claimed=<int> actual=<int>`. Tính ngưỡng bộ đếm `2^bits`, số byte bộ nhớ bị đọc tràn khi không kiểm biên và kiểm tra hàm `safe_heartbeat(claimed, actual)`.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh SEC L15 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `max_u16_bytes=<d>`, `leaked_bytes=<d>`, `safe_check_rejected=<0|1>`.
+Chấm tự động: `bash labs/cham.sh SEC L15 duong_dan/bai_cua_ban.py`

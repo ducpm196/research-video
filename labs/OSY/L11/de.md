@@ -1,11 +1,6 @@
-# Lab OSY L11 (Mô phỏng tập làm việc) — Phát hiện và chặn hiện tượng trì trệ
+# Lab OSY L11 — Phát hiện và chặn hiện tượng trì trệ (Thrashing)
 
-Viết chương trình Python kiểm tra hệ thống `1 000` khung vật lý khi `4` tiến trình mỗi tiến trình cần `300` trang (`D = 1200 > 1000`), và sau khi tạm dừng 1 tiến trình (`900 <= 1000`), in đúng 3 dòng:
-1. `demand_4procs=1200 thrashing=1`
-2. `demand_after_suspend=900 thrashing=0`
-3. `free_frames_after=100`
+Đọc `stdin` `cap=<int> n_procs=<int> per_proc=<int> suspend=<int>`. Tính tổng cầu tập làm việc trước và sau khi tạm dừng `suspend` tiến trình.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh OSY L11 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng (giữ nguyên tên khoá cố định `demand_4procs` ứng với tổng cầu ban đầu): `demand_4procs=<d> thrashing=<0|1>`, `demand_after_suspend=<d> thrashing=<0|1>`, `free_frames_after=<d>`.
+Chấm tự động: `bash labs/cham.sh OSY L11 duong_dan/bai_cua_ban.py`

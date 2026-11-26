@@ -3,7 +3,7 @@ Dùng khi máy chưa có chương trình dòng lệnh sqlite3. Chỉ hỗ trợ 
 import sqlite3
 import sys
 
-con = sqlite3.connect(":memory:")
+con = sqlite3.connect(":memory:", isolation_level=None)
 buf = ""
 for line in open(sys.argv[1], encoding="utf-8"):
     if not buf and line.lstrip().startswith("."):

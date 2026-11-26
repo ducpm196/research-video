@@ -1,11 +1,6 @@
-# Lab DSY L06 [Mô phỏng phân tán] — Băm modulo vs Băm nhất quán trên 1 000 khoá
+# Lab DSY L06 — Băm modulo vs Băm nhất quán khi mở rộng cụm
 
-Viết chương trình Python ánh xạ `1 000` khoá `0..999` khi cụm tăng từ `4` lên `5` nút: tính tỉ lệ khoá đổi nút với `k % N` vs băm nhất quán dùng SHA-256 trên vòng `[0, 2^32)`, in đúng 3 dòng:
-1. `mod_moved_pct=80.0%`
-2. `ch_moved_lt_30pct=1`
-3. `ideal_moved_pct=20.0%`
+Đọc `stdin` `keys=<int> n_old=<int> n_new=<int>`. Tính tỉ lệ khóa dịch chuyển với phép chia dư và với băm nhất quán SHA-256 dùng 100 nút ảo mỗi nút (khoá vòng `f"n{i}#{v}"` với `v` từ 0 tới 99, 8 hex đầu).
 
-Chấm tự động:
-```bash
-bash labs/cham.sh DSY L06 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `mod_moved_pct=<.1f>%`, `ch_moved_lt_30pct=<0|1>`, `ideal_moved_pct=<.1f>%`.
+Chấm tự động: `bash labs/cham.sh DSY L06 duong_dan/bai_cua_ban.py`

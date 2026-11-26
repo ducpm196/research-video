@@ -1,5 +1,6 @@
 """Sinh curriculum/bnk.yaml từ các bài lessons/bnk/*.yaml (tiêu đề, mục tiêu) + ví dụ và `fix` viết tay bên dưới.
 Chạy: .venv/Scripts/python audit/bnk/gen_curriculum.py"""
+import sys as _sys; from pathlib import Path as _P; _sys.path.insert(0, str(_P(__file__).resolve().parents[1])); import _frozen  # noqa: E402,F401
 import re
 import sys
 from pathlib import Path

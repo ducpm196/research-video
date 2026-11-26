@@ -1,9 +1,6 @@
-# Lab LNX L08 — Kiểm chứng quy ước Ngoài:Trong và bất biến bảo toàn dữ liệu Volume
+# Lab LNX L08 — Tách quy ước Ngoài:Trong và kiểm bất biến dữ liệu Volume theo stdin
 
-Viết kịch bản Bash kiểm tra phân tách chuỗi cổng/ổ gắn theo quy ước `Ngoài:Trong` và bất biến bảo toàn dữ liệu qua vòng đời container để in đúng 3 dòng:
-1. `host_port=8080 container_port=80`
-2. `volume_persists=1`
-3. `retained_rows=500`
+Viết kịch bản Bash đọc `<host_port>:<container_port> <rows_count>` từ `stdin`, tách đúng `host_port` và `container_port`, mô phỏng giữ dữ liệu ổ gắn qua chu kỳ tạo lại trong thư mục tạm và in đúng 3 dòng: `host_port=... container_port=...`, `volume_persists=1`, `retained_rows=...`.
 
 Chấm tự động:
 ```bash

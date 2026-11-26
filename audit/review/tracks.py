@@ -20,10 +20,11 @@ for f in sorted((ROOT / "curriculum").glob("*.yaml")):
 pre = defaultdict(set)
 title = {}
 for C, c in cur.items():
+    lab_reqs = {str(q) for q in (c.get("lab") or {}).get("requires") or []}
     for l in c["lessons"]:
         u = f"{C}:{l['id']}"
         title[u] = l["title"]
-        pre[u] |= {f"{C}:{q}" for q in l.get("requires") or []} | {str(q) for q in l.get("requires_ext") or []}
+        pre[u] |= {f"{C}:{q}" for q in l.get("requires") or []} | {str(q) for q in l.get("requires_ext") or []} | lab_reqs
 nodes = set(title)
 # thứ tự khoá tô pô (như check_curricula_graph.py) để sắp ổn định
 cedge = {(a.split(":")[0], u.split(":")[0]) for u in nodes for a in pre[u] if a.split(":")[0] != u.split(":")[0]}

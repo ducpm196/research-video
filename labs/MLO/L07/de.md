@@ -1,11 +1,7 @@
-# Lab MLO L07 — Phát hành chạy bóng: ghi nhật ký độ lệch mà không ảnh hưởng người dùng
+# Lab MLO L07 — Phát hành chạy bóng: đếm số yêu cầu lệch nhãn
 
-Trong chế độ chạy bóng song song, cho dự đoán mô hình cũ `old_p = [0.2, 0.8, 0.6, 0.3, 0.9]` và mới `new_p = [0.3, 0.7, 0.4, 0.3, 0.8]` (ngưỡng `0.5`). Trả kết quả cho người dùng từ bản cũ và ghi nhật ký số yêu cầu lệch nhãn.
+Đọc `stdin` `old=<p1,p2,...> new=<p1,p2,...> thr=<float>`. Với ngưỡng phân loại `thr`, giữ phục vụ bằng `old` và đếm số mẫu hai mô hình cho nhãn khác nhau.
 
-Định dạng đầu ra:
-`served=old disagree=<số>/5`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh MLO L07 duong_dan/bai_cua_ban.py
-```
+In 1 dòng: `served=old disagree=<d>/<n>`.
+Chấm tự động: `bash labs/cham.sh MLO L07 duong_dan/bai_cua_ban.py`
+Nền tảng Python (`PYT:L04`): đọc dữ liệu qua `sys.stdin.read().strip()`.

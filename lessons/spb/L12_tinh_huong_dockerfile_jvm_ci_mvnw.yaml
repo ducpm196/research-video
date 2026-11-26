@@ -1,0 +1,414 @@
+id: L12
+course: SPB
+series: SPB · Spring Boot thực chiến với PostgreSQL, Redis và Kafka
+title: Bài 12 — Đóng gói Docker nhiều tầng, JVM trong container và đường ống CI
+voice: vi-VN-NamMinhNeural
+rate: -5%
+depth: full
+af2: true
+kind: journey
+covers:
+- objective: 1
+  scene: example
+- objective: 2
+  scene: check
+- objective: 3
+  scene: quymo
+source: curriculum/spb.yaml L12; labs/SPB/L12 (chạy thật ./mvnw -B verify kiểm tra Dockerfile nhiều tầng, MaxRAMPercentage
+  và workflow CI)
+assumes: []
+objectives:
+- Thiết kế Dockerfile nhiều tầng tách bước dựng Maven Wrapper khỏi ảnh chạy JRE tối giản
+- Cấu hình bộ nhớ JVM thích ứng giới hạn RAM container và chạy thử đường ống CI bằng ./mvnw -B verify
+- Đánh đổi kích thước ảnh, thời gian khởi động ấm và chi phí bảo mật qua 3 cấu hình triển khai
+scenes:
+- id: hook
+  kind: hook
+  title: Ảnh cả JDK 850 MB làm container 512 MiB bị giết vì hết RAM?
+  checks:
+  - alg.spb_jvm_heap_mib(512, 75.0) == 384.0
+  steps:
+  - show: '<div class=''box key''><p>Rất nhiều đội đóng gói toàn bộ bộ phát triển JDK, thư mục <code>.m2</code> và mã nguồn
+      thô vào một ảnh Docker nặng hơn <b>850 MB</b> rồi chạy trần <code>java -jar app.jar</code> bên trong container giới
+      hạn 512 MiB RAM.</p><p>Kết quả: máy chạy chậm vì tải ảnh lớn, phơi bày công cụ biên dịch trong sản xuất và bùng lỗi
+      <code>OOMKilled</code> khi tải tăng. Bài tình huống chuyên gia này khoá gọn toàn bộ chuỗi bằng <b>Dockerfile nhiều tầng
+      + JRE + MaxRAMPercentage + CI tự động</b>.</p></div>'
+    say: Chào bạn đến với bài mười hai, bài tình huống chuyên gia tổng kết toàn bộ khoá Spring Boot thực chiến. Sau khi hoàn
+      chỉnh dịch vụ chuyển khoản từ HTTP qua cơ sở dữ liệu, bộ đệm và sự kiện, chặng cuối cùng là đóng gói phát hành tự động.
+      Nếu đóng gói thiếu chuẩn xác, ảnh container vừa cồng kềnh tốn băng thông lại dễ bị hệ điều hành giết đột ngột do vượt
+      trần bộ nhớ. Hôm nay ta thiết kế tệp đóng gói nhiều tầng chuẩn mực, cấu hình máy ảo JVM hiểu đúng giới hạn RAM và dựng
+      đường ống kiểm thử tự động. Đóng gói đúng cách không chỉ giúp tiết kiệm hàng trăm mê-ga-bai băng thông truyền tải mà
+      còn thu hẹp tối đa bề mặt tấn công. Kết hợp tinh chỉnh phần trăm RAM và đường ống kiểm chứng tự động hoàn tất chu trình
+      kỹ nghệ phần mềm chuyên nghiệp.
+    focus:
+    - 0
+    - '1.1'
+    - '1.1'
+    - '1.2'
+    - '1.1'
+    - '1.2'
+    clear: true
+- id: prereq
+  kind: prereq
+  title: 'Ôn nhanh: ảnh container nhiều lớp, JRE vs JDK và đường ống CI'
+  steps:
+  - show: <table class='t'><tr><th>khái niệm triển khai</th><th>khác biệt thực tế</th></tr><tr><td><b>JDK</b> vs <b>JRE</b></td><td>JDK
+      có trình biên dịch javac (~300+ MB); môi trường chạy chỉ cần JRE</td></tr><tr><td><b>Bộ nhớ container cgroup</b></td><td>Container
+      512 MiB gồm cả Heap, Metaspace, stack luồng và native OS</td></tr><tr><td><b>Đường ống CI</b> (<code>./mvnw -B verify</code>)</td><td>Tự
+      chạy kiểm thử đơn vị và tích hợp trên mọi lần đẩy mã mới</td></tr></table>
+    say: Hãy điểm lại ngắn gọn ba khái niệm hạ tầng cốt lõi trước khi thiết kế cấu hình phát hành chuẩn. Bộ phát triển JDK
+      chứa trình biên dịch chỉ cần lúc dựng, còn khi chạy thật chỉ cần môi trường thực thi JRE gọn nhẹ hơn nhiều. Bộ nhớ cấp
+      cho một thùng chứa Docker phải đủ chia cho cả vùng Heap lẫn bộ nhớ ngăn xếp luồng và siêu dữ liệu ngoài Heap. Đường
+      ống tích hợp liên tục là chốt gác tự động buộc mọi thay đổi đều phải vượt qua lệnh dựng kiểm trước khi ra ảnh mới. Trong
+      hệ thống điều phối container, tiến trình chính luôn chịu sự giám sát chặt của giới hạn giới hạn tài nguyên do nhân hệ
+      điều hành chuẩn áp đặt. Nếu kích thước máy ảo vượt trần chỉ một mê-ga-bai, nhân hệ điều hành sẽ chấm dứt container lập
+      tức mà không chờ thu gom rác.
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.2'
+    - '1.3'
+    clear: true
+- id: sym
+  kind: symbol
+  title: Cấu trúc Dockerfile nhiều tầng và các cờ JVM trong container
+  steps:
+  - show: <table class='t'><tr><th>chỉ thị / cờ vận hành</th><th>tác dụng khi đưa lên Kubernetes / Docker</th></tr><tr><td><code>FROM
+      ...jdk-alpine AS builder</code> → <code>FROM ...jre-alpine</code></td><td>Chỉ chép tệp <code>app.jar</code> sang ảnh
+      JRE sạch, bỏ mã nguồn và <code>.m2</code></td></tr><tr><td><code>adduser</code> + <code>USER app</code></td><td>Không
+      chạy tiến trình Java bằng quyền tối cao <code>root</code> (bảo mật container)</td></tr><tr><td><code>-XX:MaxRAMPercentage=75.0</code></td><td>Giới
+      hạn vùng Heap ở 75% RAM container (ví dụ 384 MiB trên khung 512 MiB)</td></tr><tr><td><code>-XX:+ExitOnOutOfMemoryError</code></td><td>Thoát
+      sạch ngay khi tràn Heap để điều phối viên khởi động lại kịp thời</td></tr></table>
+    say: Bảng này tổng hợp bốn thiết lập bắt buộc trên ảnh container Spring Boot ngoài đời thực. Kỹ thuật đóng gói nhiều tầng
+      tách hẳn giai đoạn biên dịch JDK ra khỏi ảnh chạy JRE cuối cùng chỉ mang theo duy nhất gói chương trình đã đóng. Luôn
+      tạo người dùng không có quyền quản trị tối cao để giảm thiểu thiệt hại nếu ứng dụng bị chiếm quyền. Hai cờ bộ nhớ giúp
+      máy ảo JVM chừa đủ hai mươi lăm phần trăm bộ nhớ container cho các vùng ngoài Heap và thoát dứt khoát khi gặp tràn bộ
+      nhớ thay vì treo lơ lửng. Loại bỏ các công cụ biên dịch khỏi ảnh sản xuất khiến kẻ xấu khó tải mã độc hay biên dịch
+      thêm công cụ ngay bên trong container. Nhờ cờ thoát ngay khi cạn bộ nhớ vùng Heap, bộ điều phối biết chính xác trạng
+      thái hỏng để khởi động bản sao mới sạch sẽ.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    - '1.4'
+    - '1.1'
+    - '1.4'
+    clear: true
+- id: intuition
+  kind: intuition
+  title: 'Kiến trúc phát hành khép kín: Mã nguồn → CI ./mvnw -B verify → Ảnh JRE tối giản'
+  steps:
+  - show: '<div><svg width="960" height="210" viewBox="0 0 960 210"><rect x="25" y="45" width="195" height="95" rx="10" fill="#dbeafe"
+      stroke="#2a78d6" stroke-width="2"/><text x="122.5" y="85" font-size="16" font-weight="700" text-anchor="middle" fill="#1e293b">1.
+      Git Push + CI</text><text x="122.5" y="112" font-size="14" text-anchor="middle" fill="#475569">./mvnw -B verify (JDK
+      21)</text><line x1="220" y1="92" x2="275" y2="92" stroke="#475569" stroke-width="2"/><polygon points="275,92 267,87
+      267,97" fill="#475569"/><rect x="275" y="30" width="245" height="125" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="2"/><text
+      x="397.5" y="65" font-size="16" font-weight="700" text-anchor="middle" fill="#1e293b">2. Stage 1: JDK Builder</text><text
+      x="397.5" y="92" font-size="14" text-anchor="middle" fill="#475569">Tải phụ thuộc từ pom.xml</text><text x="397.5" y="116"
+      font-size="14" text-anchor="middle" fill="#475569">Đóng gói target/app.jar</text><text x="397.5" y="140" font-size="13"
+      text-anchor="middle" fill="#b45309">(Tầng này bị bỏ sau dựng)</text><line x1="520" y1="92" x2="585" y2="92" stroke="#16a34a"
+      stroke-width="2"/><polygon points="585,92 577,87 577,97" fill="#16a34a"/><rect x="585" y="30" width="345" height="125"
+      rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/><text x="757.5" y="65" font-size="16" font-weight="700" text-anchor="middle"
+      fill="#1e293b">3. Stage 2: JRE Runtime (~260 MB)</text><text x="757.5" y="92" font-size="14" text-anchor="middle" fill="#475569">COPY
+      --from=builder app.jar</text><text x="757.5" y="116" font-size="14" text-anchor="middle" fill="#475569">USER app (không
+      chạy bằng root)</text><text x="757.5" y="140" font-size="14" text-anchor="middle" fill="#475569">MaxRAMPercentage=75
+      → 384/512 MiB</text></svg></div>'
+    say: Quan sát dây chuyền đóng gói hoàn chỉnh từ kho mã nguồn ra tới ảnh chạy sản xuất gọn nhẹ. Khi mã được đẩy lên, máy
+      chủ tích hợp chạy toàn bộ bộ kiểm đơn vị và tích hợp trước khi cho phép đóng ảnh. Ở tầng dựng thứ nhất dùng JDK để
+      tải thư viện theo lớp đệm trước rồi mới biên dịch ra tệp chương trình duy nhất.
+    clear: true
+  - show: ''
+    say: Tầng hai chỉ chép tệp đó đặt lên nền JRE nhẹ khoảng hai trăm sáu mươi mê-ga-bai kèm người dùng thường và cờ giới hạn
+      RAM. Giai đoạn chạy đường ống kiểm thử đóng vai trò cánh cổng thép ngăn mọi bản lỗi lọt vào bước đóng ảnh container.
+      Sự tách biệt rạch ròi giữa tầng dựng JDK và tầng chạy JRE gọn nhẹ giảm tới gần bảy mươi phần trăm kích thước tệp
+      phát hành.
+- id: formula
+  kind: formula
+  title: Cách tính ngân sách bộ nhớ JVM an toàn trong container cgroup
+  checks:
+  - alg.spb_jvm_heap_mib(512, 75.0) == 384.0
+  - alg.spb_jvm_heap_mib(1024, 75.0) == 768.0
+  - 512 - 384 == 128
+  steps:
+  - show: '<div class=''box key''><p><b>Ngân sách RAM trong container $M$ MiB với <code>-XX:MaxRAMPercentage=75.0</code>:</b></p><p>1.
+      Vùng Heap tối đa: $H_{\max} = M \times 0,75$. Ở container <b>512 MiB</b> → Heap = <b>384 MiB</b>; ở <b>1 024 MiB</b>
+      → Heap = <b>768 MiB</b>.</p><p>2. Phần 25% còn lại (<b>128 MiB</b> với khung 512 MiB) dành cho Metaspace, stack của
+      các luồng Tomcat và bộ đệm ngoài Heap, tránh chạm trần cgroup gây <code>OOMKilled</code>.</p></div>'
+    say: Công thức tính phần trăm RAM giải thích vì sao ta không bao giờ gán toàn bộ trăm phần trăm bộ nhớ container cho vùng
+      Heap. Trên một thùng chứa năm trăm mười hai mê-bi-bai, bảy mươi lăm phần trăm tương ứng ba trăm tám mươi bốn mê-bi-bai
+      cho vùng chứa đối tượng Java. Một trăm hai mươi tám mê-bi-bai còn lại là khoảng đệm an toàn cho bộ nhớ siêu dữ liệu
+      lớp, ngăn xếp các luồng xử lý web và phần đệm trực tiếp của hệ điều hành. Khi mở rộng giới hạn bộ nhớ container lên
+      mức lớn hơn, tỉ lệ bảy mươi lăm phần trăm tự động co giãn theo mà không cần sửa lại câu lệnh. Khoảng đệm hai mươi lăm
+      phần trăm còn lại đóng vai trò van an toàn tránh chết đột ngột khi tải lưu lượng web tăng đỉnh điểm.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    - '1.1'
+    - '1.2'
+    clear: true
+    introduces:
+    - max_fn
+- id: example
+  kind: example
+  title: 'Tệp thật: Dockerfile nhiều tầng và GitHub Actions CI chạy ./mvnw -B verify'
+  checks:
+  - 850 - 260 == 590
+  steps:
+  - show: <p><b>1. Dockerfile nhiều tầng tách builder JDK và runtime JRE non-root</b></p><div class="code"><div>FROM eclipse-temurin:21-jdk-alpine
+      AS builder</div><div>WORKDIR /app</div><div>COPY mvnw pom.xml ./</div><div>COPY .mvn .mvn</div><div>RUN chmod +x mvnw
+      &amp;&amp; ./mvnw -B dependency:go-offline</div><div>COPY src src</div><div>RUN ./mvnw -B package -DskipTests</div><div>FROM
+      eclipse-temurin:21-jre-alpine</div><div>WORKDIR /app</div><div>RUN addgroup -S app &amp;&amp; adduser -S app -G app</div><div>USER
+      app</div><div>COPY --from=builder /app/target/*.jar app.jar</div><div>ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75.0",
+      "-XX:+ExitOnOutOfMemoryError", "-jar", "app.jar"]</div></div>
+    say: Hãy đọc từng lớp trong tệp đóng gói chuẩn này vì thứ tự các dòng quyết định tốc độ xây dựng lại ảnh. Ta chép tệp
+      phụ thuộc tải trước khi chép mã nguồn vì như thế khi sửa Java mà không đổi phụ thuộc thì Docker dùng lại tầng đệm sẵn.
+      Sang tầng thứ hai trên nền JRE nhẹ, ta tạo tài khoản người dùng thường, chuyển sang quyền hạn thấp rồi mới khởi chạy
+      cùng cờ giới hạn phần trăm RAM. Chú ý tham số chạy chế độ không tương tác trên đường ống dựng giúp giảm bớt nhật ký
+      tiến độ rườm rà khi chạy tự động. Việc chỉ sao chép duy nhất tệp chương trình đã đóng từ tầng dựng giữ cho ảnh chạy
+      cuối cùng cực kỳ tinh gọn và dễ kiểm soát.
+    focus:
+    - 1
+    - 2
+    - 2
+    - 1
+    - 2
+    clear: true
+  - show: '<p><b>2. Cấu hình đường ống CI (.github/workflows/ci.yml) + đầu cuối runtime</b></p><div class="code"><div>name:
+      spb-ci</div><div>on: [push]</div><div>jobs:</div><div>  verify:</div><div>    runs-on: ubuntu-latest</div><div>    steps:</div><div>      -
+      uses: actions/checkout@v4</div><div>      - uses: actions/setup-java@v4</div><div>        with: { distribution: temurin,
+      java-version: ''21'', cache: maven }</div><div>      - run: ./mvnw -B verify</div></div>'
+    say: Tệp cấu hình tích hợp liên tục bên dưới nối thẳng kho mã nguồn vào bước kiểm tra tự động mỗi khi có thay đổi mới.
+      Công cụ dựng thiết lập đúng phiên bản Java hai mươi mốt kèm bộ đệm Maven và thực thi lệnh dựng kiểm toàn bộ bao gồm
+      cả các bài kiểm thử thùng chứa. Cũng nhớ khai báo bật bộ đệm thư viện Maven trong cấu hình hành động để các lượt chạy
+      đường ống tiếp theo hoàn thành nhanh chóng. Đầu cuối thông số chạy trả về ngưỡng bộ nhớ thực đo giúp giám sát và kiểm
+      chứng trực tiếp giá trị JVM vừa thiết lập.
+    focus:
+    - 1
+    - 2
+    - 1
+    - 2
+    clear: true
+- id: check
+  kind: check
+  title: Chạy thật bộ kiểm cấu hình đóng gói, CI và bộ nhớ JVM trên Boot 4.1.3
+  checks:
+  - 384 == 512 * 3 // 4
+  steps:
+  - show: '<p><b>Kết quả chạy thật KiemL12Test qua ./mvnw -B verify</b></p><div class="code"><div>// 1) Dockerfile: có &gt;=
+      2 từ khoá FROM (tầng dựng JDK vs tầng chạy JRE), có USER app,</div><div>//    và ENTRYPOINT đặt -XX:MaxRAMPercentage=75.0</div><div>//
+      2) .github/workflows/ci.yml: kích hoạt Java 21 và chạy ./mvnw -B verify</div><div>// 3) GET /api/v1/runtime → 200 OK
+      {"maxHeapMiB512_75pct":384,"java":21}</div><div>[INFO] Tests run: 3, Failures: 0, Errors: 0</div><div>ĐÚNG — PASS /d/research-video/labs/SPB/L12
+      (du_an maven)</div></div>'
+    say: Kết quả kiểm thử thật trên dự án chốt cuối khoá xác nhận đủ ba yêu cầu triển khai an toàn. Tệp đóng gói vượt qua
+      kiểm tra đa tầng gồm nền JRE gọn nhẹ, tài khoản chạy không phải quản trị viên và cờ phần trăm bộ nhớ đúng chuẩn. Đường
+      ống kiểm chứng chạy Java hai mươi mốt cùng lệnh kiểm dựng vì cần kiểm thử trước khi ra ảnh, còn đầu cuối tính đúng ba
+      trăm tám mươi bốn mê-bi-bai. Lớp kiểm nghiệm thu đọc và phân tích trực tiếp tệp đóng gói lẫn tệp đường ống để khẳng
+      định đủ cả điều kiện bảo mật lẫn bộ nhớ. Đầu cuối trả về đúng ba trăm tám mươi bốn mê-bi-bai với môi trường Java hai
+      mươi mốt khớp hoàn toàn mô hình toán học đã tính.
+    focus:
+    - 1
+    - 2
+    - 2
+    - 1
+    - 2
+    clear: true
+- id: quymo
+  kind: example
+  title: Đánh đổi kích thước ảnh, khởi động ấm và an toàn qua 3 cấu hình triển khai
+  checks:
+  - 850 > 260
+  - 260 > 180
+  steps:
+  - show: <table class='t'><tr><th>cấu hình đóng gói</th><th>kích thước ảnh</th><th>khởi động ấm &amp; bề mặt bảo mật</th></tr><tr><td><b>1.
+      Một tầng JDK + root</b></td><td>~850 MB (chậm kéo ở Kubernetes autoscaling)</td><td>Chạy bằng <code>root</code>, còn
+      sẵn <code>javac</code> và <code>curl</code> cho kẻ tấn công</td></tr><tr><td><b>2. Nhiều tầng JDK → JRE Alpine + USER
+      app</b> (chuẩn khoá)</td><td><b>~260 MB</b> (giảm 69%)</td><td>An toàn non-root, giữ chẩn đoán JRE tối thiểu; dễ vận
+      hành ngay</td></tr><tr><td><b>3. Distroless / GraalVM Native Image</b></td><td><b>~90–180 MB</b></td><td>Khởi động dưới
+      100 ms nhưng dựng lâu trên CI và kén reflection thư viện</td></tr></table>
+    say: Bảng so sánh giúp bạn cân nhắc đánh đổi giữa ba phương án đóng gói khi đưa dịch vụ lên hệ thống đám mây. Cách làm
+      một tầng gộp cả JDK nặng khoảng tám trăm năm mươi mê-ga-bai vừa chậm khi tự động mở rộng cụm vừa lộ quyền quản trị gốc.
+      Chuyển sang hai tầng với nền JRE gọn nhẹ và tài khoản thường giảm gần bảy mươi phần trăm kích thước mà vẫn rất dễ bảo
+      trì. Phương án ảnh siêu nhỏ hay biên dịch bản địa giảm kích thước và thời gian bật hơn nữa nhưng kéo dài thời gian biên
+      dịch trên máy chủ tích hợp. Trong thực tế triển khai nhiều dịch vụ vi mô, chuẩn hoá một tệp đóng gói hai tầng JRE kèm
+      người dùng thường là cân bằng tối ưu nhất. Cách tiếp cận này vừa nhẹ gọn khi kéo ảnh triển khai hàng loạt vừa giữ nguyên
+      đầy đủ công cụ chẩn đoán JVM tiêu chuẩn khi gặp sự cố.
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.3'
+    - '1.4'
+    clear: true
+- id: pitfalls
+  kind: pitfall
+  title: Ba lỗi triển khai làm sập container Spring Boot trên Kubernetes
+  steps:
+  - show: <table class='t'><tr><th>lỗi vận hành container Java hay gặp</th></tr><tr><td><div class='box warn'><b>Lỗi 1 — Chép
+      toàn bộ <code>COPY . .</code> trước khi chạy <code>dependency:go-offline</code>:</b> Mỗi lần sửa 1 dòng Java đều phá
+      cache tầng Maven và tải lại từ đầu.<br><b>Lỗi 2 — Đặt cố định <code>-Xmx512m</code> bên trong container giới hạn 512
+      MiB:</b> Không còn chỗ cho Metaspace và thread stack nên Linux OOM Killer giết container tức thì.<br><b>Lỗi 3 — Dùng
+      nhãn <code>-XX:MaxRAMPercentage=75.0</code> nhưng chạy dưới quyền <code>USER root</code>:</b> Rủi ro leo thang đặc quyền
+      nếu ứng dụng có lỗ hổng.</div></td></tr></table>
+    say: Ba lỗi trên bảng đều thường xuyên gây sự cố trên môi trường chạy đám mây thực tế. Đặt lệnh chép toàn bộ mã nguồn
+      lên trước bước tải thư viện khiến Docker phải tải lại hàng trăm gói phụ thuộc sau mỗi dòng sửa mã nhỏ. Đặt cứng vùng
+      Heap bằng đúng giới hạn RAM của container bỏ quên phần bộ nhớ ngoài Heap nên nhân hệ điều hành sẽ giết tiến trình ngay
+      lúc tăng tải. Cuối cùng, chạy ứng dụng bằng quyền quản trị gốc bên trong container đi ngược nguyên tắc tối thiểu đặc
+      quyền. Cũng tránh bỏ quên câu lệnh cấp quyền thực thi cho tệp bao bọc Maven trên hệ điều hành chuẩn để không phát sinh
+      lỗi từ chối truy cập trên CI. Kiểm tra trước các cờ máy ảo và người dùng không phải quản trị giúp dịch vụ vận hành bền
+      bỉ trên mọi cụm cụm điều phối.
+    focus:
+    - 0
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    clear: true
+- id: quiz
+  kind: quiz
+  title: Kiểm tra nhanh đóng gói Docker nhiều tầng và JVM trong container
+  checks:
+  - alg.spb_jvm_heap_mib(2048, 75.0) == 1536.0
+  steps:
+  - show: <ol><li>Một container Spring Boot được cấp giới hạn RAM <b>2 048 MiB</b> với cờ <code>-XX:MaxRAMPercentage=75.0</code>.
+      Vùng Heap tối đa được phép dùng là bao nhiêu MiB?</li><li>Trong <code>Dockerfile</code> nhiều tầng, vì sao ta nên <code>COPY
+      pom.xml</code> và tải phụ thuộc trước khi <code>COPY src src</code>?</li></ol>
+    say: Hãy tự kiểm nhanh hai câu hỏi thực chiến trước bài thực hành tổng kết. Câu một, một thùng chứa có giới hạn bộ nhớ
+      hai nghìn không trăm bốn mươi tám mê-bi-bai chạy cờ phần trăm RAM tối đa bảy mươi lăm thì vùng Heap tối đa là bao nhiêu?
+      Câu hai, tại sao trong tệp đóng gói nhiều tầng ta chép tệp cấu hình phụ thuộc trước rồi mới chép mã nguồn? Bấm tạm dừng
+      và trả lời. Hai câu hỏi cuối khoá giúp bạn củng cố công thức chia ngân sách bộ nhớ và mẹo tối ưu tầng đệm ảnh Docker.
+    pause: 20
+  - show: <table class='t'><tr><th>đáp án câu 1</th></tr><tr><td><p>① <code>2 048 × 0,75 = <b>1 536 MiB</b></code> (để dành
+      512 MiB cho Metaspace, luồng và hệ thống).</p></td></tr></table>
+    say: 'Đáp án câu một: lấy hai nghìn không trăm bốn mươi tám nhân bảy mươi lăm phần trăm bằng một nghìn năm trăm ba mươi
+      sáu mê-bi-bai cho vùng Heap. Nhờ dùng tỉ lệ phần trăm thay cho giá trị cố định, cùng một ảnh container có thể chạy linh
+      hoạt từ môi trường thử nghiệm tới sản xuất. Phần năm trăm mười hai mê-bi-bai dự phòng còn lại bảo vệ đủ chỗ cho không
+      gian siêu dữ liệu lớp và các luồng xử lý mạng.'
+    clear: true
+  - show: <table class='t'><tr><th>đáp án câu 2</th></tr><tr><td><p>② Để tận dụng lớp đệm cache Docker cho tầng thư viện Maven;
+      khi chỉ sửa mã nguồn Java, các tầng trước không phải tải lại.</p></td></tr></table>
+    say: 'Đáp án câu hai: nhằm giữ lại tầng đệm thư viện của Docker mỗi khi lập trình viên chỉ chỉnh sửa tệp mã nguồn mà không
+      đổi phụ thuộc. Sắp xếp các lớp ít thay đổi lên trên và lớp mã nguồn thay đổi thường xuyên xuống dưới là nguyên tắc vàng
+      khi viết tệp đóng gói. Nhờ vậy tốc độ dựng ảnh trên máy cá nhân và máy chủ tích hợp được rút ngắn đáng kể.'
+    clear: true
+- id: practice
+  kind: practice
+  title: Hoàn thiện Dockerfile nhiều tầng, cờ JVM và CI cho dịch vụ chuyển khoản
+  lab: labs/SPB/L12
+  steps:
+  - show: <div class='box key'><p><b>Thực hành bài L12 (<code>labs/SPB/L12/de.md</code>):</b> hoàn thiện <code>Dockerfile</code>
+      nhiều tầng (JDK builder + <code>eclipse-temurin:21-jre-alpine</code>, tạo <code>USER app</code>, <code>-XX:MaxRAMPercentage=75.0</code>),
+      tệp <code>.github/workflows/ci.yml</code> chạy <code>./mvnw -B verify</code> trên Java 21, và đầu cuối <code>GET /api/v1/runtime</code>,
+      rồi chấm:</p><p><code>bash labs/cham.sh SPB L12 duong_dan/du_an_cua_ban</code></p></div>
+    say: Hãy mở đề bài L12 để hoàn thiện trọn bộ tệp đóng gói nhiều tầng, cấu hình đường ống CI và đầu cuối thông số chạy.
+      Chú ý kiểm đủ từ cấu trúc nhiều tầng dùng JRE không phải quyền gốc, cấu hình phần trăm RAM cho tới lệnh dựng kiểm chuẩn
+      trên đường ống tích hợp. Bấm tạm dừng và hoàn thành trước khi đối chiếu kết quả chấm. Hãy rà lại đầy đủ cả ba thành
+      phần gồm tệp đóng gói hai tầng, tệp cấu hình đường ống CI và đầu cuối báo thông số chạy. Bảo đảm lệnh dựng kiểm không
+      bỏ qua các bước kiểm thử và chạy đúng trên phiên bản Java hai mươi mốt.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    - '1.1'
+    - '1.2'
+    clear: true
+    pause: 30
+  - show: '<p><b>Kết quả chấm KiemL12Test (Dockerfile nhiều tầng + CI + JVM runtime)</b></p><div class="code"><div>KiemL12Test:
+      3 ca, 0 hỏng</div></div>'
+    say: Màn hình hiển thị kết quả nghiệm thu ba ca kiểm thử của bài cuối khoá đạt không ca hỏng. Cả cấu trúc đóng gói nhiều
+      tầng lẫn tệp cấu hình đường ống đều được xác minh tự động. Khi cả ba ca kiểm thử chốt khoá báo đạt, toàn bộ dịch vụ
+      chuyển khoản đã sẵn sàng đóng gói phát hành thật.
+    focus:
+    - 1
+    - 2
+    - 2
+    clear: true
+  - show: <div class='box ok'><p><b>Gợi ý nếu kẹt ở bài L12:</b> (1) viết ít nhất 2 dòng <code>FROM ...</code> trong <code>Dockerfile</code>
+      với tầng cuối dùng <code>eclipse-temurin:21-jre-alpine</code>; (2) nhớ thêm <code>USER app</code> sau lệnh tạo user;
+      (3) trong <code>ci.yml</code> ghi rõ lệnh <code>./mvnw -B verify</code> cùng phiên bản Java <code>'21'</code>.</p></div>
+    say: Nếu bài kiểm báo thiếu tầng chạy JRE hoặc sai đường ống tích hợp, hãy kiểm lại ba gợi ý trên màn hình. Bảo đảm đã
+      khai báo tài khoản người dùng thường và đúng lệnh dựng kiểm trong tệp cấu hình. Kiểm tra chính xác tên thẻ ảnh nền JDK
+      và JRE hai mươi mốt bản nhẹ tối giản theo đúng yêu cầu đề bài.
+    focus:
+    - 0
+    - 1
+    - 1
+    clear: true
+- id: recap
+  kind: recap
+  title: Tổng kết trọn khoá Spring Boot 4.1 thực chiến trên hạ tầng thật
+  steps:
+  - show: <div class='chain'><span class='n'>Boot 4.1 + Postgres + Redis + Kafka</span><span class='a'>→</span><span class='n'>Security
+      + Test + Obs</span><span class='a'>→</span><span class='n'>Docker JRE + CI ./mvnw</span></div>
+    say: Xin chúc mừng bạn đã đi trọn hành trình mười ba bài xây dựng một dịch vụ chuyển khoản Spring Boot bốn chấm một chấm
+      ba chạy thật hoàn chỉnh. Mọi kỹ năng từ cơ sở dữ liệu, bộ đệm phân tán, sự kiện, bảo mật tới quan sát và đóng gói container
+      đều đã được kiểm chứng trên công cụ thật. Hành trình thực chiến từ dựng dự án trắng tới triển khai khép kín hoàn chỉnh
+      là hành trang vững chắc cho công việc kỹ sư backend.
+    focus:
+    - '1.1'
+    - '1.2'
+    - '1.2'
+    clear: true
+  - show: <div class='box ok'><b>Chặng tiếp theo:</b> Áp dụng toàn bộ năng lực này vào bài Dự án Chặng 3 (lớp cổng bảo mật,
+      lũy đẳng và phân trang con trỏ) rồi bước sang phỏng vấn tích hợp ngân hàng.</div>
+    say: Bước tiếp theo bạn hãy ghép nối các kỹ năng vừa làm chủ vào bài dự án tổng hợp của chặng học này. Chúc bạn thực hành
+      vững tay và thành công. Chúc bạn tự tin xây dựng và vận hành những hệ thống Spring Boot an toàn, hiệu năng cao trong
+      thực tế.
+    clear: true
+    forward_ref: true
+asr_reviewed:
+- sentence: Tầng hai chỉ chép tệp đó đặt lên nền JRE nhẹ khoảng hai trăm sáu mươi mê-ga-bai kèm người dùng thường và cờ giới
+    hạn RAM.
+  reason: 'ASR chép “Tần 2 chỉ chép tạp đó đặt lên nền GRN khoảng 260 MB, kèm người dùng thường và cờ giới hạn trăm.” (khớp
+    0.755, khác “tầng” → nghe thành “tần”; “tệp” → nghe thành “tạp”; “jre nhẹ” → nghe thành “grn”; “mê ga bai” → nghe thành
+    “mb”; “ram” → nghe thành “trăm”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ
+    nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Cách làm một tầng gộp cả JDK nặng khoảng tám trăm năm mươi mê-ga-bai vừa chậm khi tự động mở rộng cụm vừa lộ quyền
+    quản trị gốc.
+  reason: 'ASR chép “cách là một tầng gột cả dây deca nặng khoảng 850 MB vừa chậm khi tự động mở rộng cùng vừa lộ quyền quản
+    trị gốc.” (khớp 0.787, khác “làm” → nghe thành “là”; “gộp” → nghe thành “gột”; “d ca” → nghe thành “deca”; “mê ga bai”
+    → nghe thành “mb”; “cụm” → nghe thành “cùng”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ
+    nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Sang tầng thứ hai trên nền JRE nhẹ, ta tạo tài khoản người dùng thường, chuyển sang quyền hạn thấp rồi mới khởi
+    chạy cùng cờ giới hạn phần trăm RAM.
+  reason: 'ASR chép “Sang tầng thứ 2 trên nền VRE nhẹ, ta tạo tài khoản người dung thương, chuyển sang quyền hạng thấp rồi
+    mới khởi chạy cùng cơ giới hạng phần 100 ram.” (khớp 0.794, khác “jre” → nghe thành “vre”; “dùng thường” → nghe thành
+    “dung thương”; “hạn” → nghe thành “hạng”; “cờ” → nghe thành “cơ”; “hạn” → nghe thành “hạng”; “” → nghe thành “một”): biến
+    thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Hãy mở đề bài L12 để hoàn thiện trọn bộ tệp đóng gói nhiều tầng, cấu hình đường ống CI và đầu cuối thông số chạy.
+  reason: 'ASR chép “Hãy mở đề bài L12 để hoàn thiện trọn bộ tạch đóng gói nhiều tân, cấu hình đường ống CE và đầu cuối thông
+    số chạy.” (khớp 0.893, khác “tệp” → nghe thành “tạch”; “tầng” → nghe thành “tân”; “ci” → nghe thành “ce”): biến thể phiên
+    âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Kỹ thuật đóng gói nhiều tầng tách hẳn giai đoạn biên dịch JDK ra khỏi ảnh chạy JRE cuối cùng chỉ mang theo duy
+    nhất gói chương trình đã đóng.
+  reason: 'ASR chép “Kỹ thuật đóng gói nhiều tầng tách hẳn giai đoạn biên dịch dây DK ra khỏi ảnh chạy VRE cuối cùng chỉ mang
+    theo duy nhất gói chương trình đã đóng.” (khớp 0.918, khác “jdk” → nghe thành “dây dk”; “jre” → nghe thành “vre”): biến
+    thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Nếu bài kiểm báo thiếu tầng chạy JRE hoặc sai đường ống tích hợp, hãy kiểm lại ba gợi ý trên màn hình.
+  reason: 'ASR chép “Nếu bài kiểm báo thiếu từng chạy g error e hoặc sai đường ống tích hợp, hãy kiểm lại 3 gợi ý trên màn
+    hình.” (khớp 0.92, khác “tầng” → nghe thành “từng”; “r” → nghe thành “error”): biến thể phiên âm từ mượn/thanh điệu thuần
+    âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Bộ phát triển JDK chứa trình biên dịch chỉ cần lúc dựng, còn khi chạy thật chỉ cần môi trường thực thi JRE gọn
+    nhẹ hơn nhiều.
+  reason: 'ASR chép “Bộ Phát triển GDK chứa trình biên dịch chỉ cần lúc dựng, còn khi chạy thật chỉ cần môi trường thực thi
+    VRE gọn nhẹ hơn nhiều.” (khớp 0.926, khác “jdk” → nghe thành “gdk”; “jre” → nghe thành “vre”): biến thể phiên âm từ mượn/thanh
+    điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Chú ý kiểm đủ từ cấu trúc nhiều tầng dùng JRE không phải quyền gốc, cấu hình phần trăm RAM cho tới lệnh dựng kiểm
+    chuẩn trên đường ống tích hợp.
+  reason: 'ASR chép “Chú ý kiểm đủ từ cấu trúc nhiều tầng dùng VRE không phải quyền gốc, cấu hình phần 100 ram cho tới lệnh
+    dựng kiểm chuẩn trên đường ống tích hợp.” (khớp 0.952, khác “jre” → nghe thành “vre”; “” → nghe thành “một”): biến thể
+    phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Chuyển sang hai tầng với nền JRE gọn nhẹ và tài khoản thường giảm gần bảy mươi phần trăm kích thước mà vẫn rất
+    dễ bảo trì.
+  reason: 'ASR chép “Chuyển sang hai tầng với nền DRE gọn nhẹ và tài khoản thường giảm gần 70% kích thước mà vẫn rất dễ bảo
+    trì.” (khớp 0.963, khác “jre” → nghe thành “dre”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu
+    giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Công cụ dựng thiết lập đúng phiên bản Java hai mươi mốt kèm bộ đệm Maven và thực thi lệnh dựng kiểm toàn bộ bao
+    gồm cả các bài kiểm thử thùng chứa.
+  reason: 'ASR chép “Công cụ dựng thiết lập đúng phiên bản Java 21 kèm bộ đệm Mayven và thực thi lệnh dựng kiểm toàn bộ bao
+    gồm cả các bài kiểm thử thùng chứa.” (khớp 0.97, khác “maven” → nghe thành “mayven”): biến thể phiên âm từ mượn/thanh
+    điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'

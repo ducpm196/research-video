@@ -1,11 +1,6 @@
-# Lab DBS L12 — SQLite thật: tìm chu trình trên đồ thị ưu tiên bằng CTE đệ quy (WITH RECURSIVE)
+# Lab DBS L12 — SQLite: tìm chu trình trên đồ thị ưu tiên bằng WITH RECURSIVE
 
-Viết tập lệnh SQLite biểu diễn cạnh xung đột `Edges(u INT, v INT)` cho lịch `R1(A) W2(A) R2(B) W1(B)`: cạnh `(1,2)` và `(2,1)`. Dùng CTE đệ quy (`WITH RECURSIVE`, truy vấn gọi lại chính nó) kiểm tra có đường đi từ `u` quay lại chính `u` (`cycle_found=1`), in đúng 3 dòng:
-1. `edges=2`
-2. `cycle_found=1`
-3. `conflict_serializable=0`
+Cơ sở dữ liệu có sẵn bảng `Edges(u INT, v INT)`. Đếm số cạnh và dùng CTE đệ quy `WITH RECURSIVE` tìm đường đi quay lại chính đỉnh xuất phát để kết luận lịch có khả tuần tự xung đột hay không.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh DBS L12 duong_dan/bai_cua_ban.sql
-```
+In đúng 3 dòng: `edges=<d>`, `cycle_found=<0|1>`, `conflict_serializable=<0|1>`.
+Chấm tự động: `bash labs/cham.sh DBS L12 duong_dan/bai_cua_ban.sql`

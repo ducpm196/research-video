@@ -1,12 +1,6 @@
 # Lab EVT L03 — Bảo toàn phiên bản đơn điệu khi gói tin đến lệch thứ tự
 
-Cho chuỗi cập nhật địa chỉ đến lệch thứ tự `[(2, 'HN'), (5, 'DN'), (3, 'HCM')]` theo cặp `(version, city)`. Chỉ áp dụng bản cập nhật có `version` lớn hơn phiên bản hiện đang giữ (trả về phiên bản và thành phố cuối).
+Đọc `stdin` `events=<ver:city,...>`. Chỉ áp dụng sự kiện có phiên bản lớn hơn chặt phiên bản hiện tại.
 
-Định dạng đầu ra (2 dòng):
-`final_ver=<số nguyên>`
-`final_city=<tên>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh EVT L03 duong_dan/bai_cua_ban.py
-```
+In 2 dòng: `final_ver=<d>`, `final_city=<str>`.
+Chấm tự động: `bash labs/cham.sh EVT L03 duong_dan/bai_cua_ban.py`

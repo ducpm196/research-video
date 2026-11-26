@@ -5,7 +5,7 @@ Viết `baohamloaitru.py` (Python 3.11 trở lên); chạy: `python baohamloaitr
 Với mỗi bài, in một dòng `<mô tả>: <bao hàm–loại trừ> <vét cạn>`; `<bao hàm–loại trừ>` tính bằng công thức (cộng, trừ xen kẽ theo số tập trong giao), `<vét cạn>` đếm bằng cách liệt kê hết. Hai số phải bằng nhau.
 
 Năm dòng, đúng chữ (không dấu):
-1. `khong chia het cho 3, 5, 7 tu 1 den 1000` — số nguyên từ 1 đến 1000 không chia hết cho cả ba số 3, 5, 7 (bao hàm–loại trừ cho ba tập; số chia hết cho a là `1000 // a`)
+1. `khong chia het cho 3, 5, 7 tu 1 den 1000` — số nguyên từ 1 đến 1000 không chia hết cho số nào trong ba số 3, 5, 7 (bao hàm–loại trừ cho ba tập; số chia hết cho a là `1000 // a`)
 2. `D7` — số hoán vị của 7 vật mà không vật nào ở đúng vị trí cũ
 3. `D9` — như trên cho 9 vật (vét cạn 362 880 hoán vị)
 4. `toan anh 5 phan tu len 3 phan tu` — số hàm từ tập 5 phần tử lên tập 3 phần tử sao cho mọi phần tử của tập đích đều được dùng (bao hàm–loại trừ: lấy tất cả các hàm rồi trừ những hàm bỏ sót ít nhất một giá trị của tập đích, tự lập biểu thức; vét cạn: `product(range(3), repeat=5)` giữ lại dãy dùng đủ 3 giá trị)

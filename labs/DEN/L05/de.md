@@ -1,13 +1,6 @@
 # Lab DEN L05 — Chia phân vùng theo ngày để khoanh vùng truy vấn
 
-Một bảng nhật ký lưu `30` ngày liên tiếp, mỗi ngày phát sinh `50 MB` (`MB = mê-ga-byte`). Tính lượng dữ liệu (`MB`) phải quét cho truy vấn chỉ lọc đúng `2` ngày khi có phân vùng theo ngày so với quét toàn bảng.
+Đọc `stdin` `days=<int> mb_day=<int> query_days=<int>`. Tính dung lượng MB quét toàn bảng so với lọc phân vùng theo ngày và tỉ lệ tiết kiệm.
 
-Định dạng đầu ra (3 dòng):
-`full_scan_mb=<số nguyên>`
-`pruned_scan_mb=<số nguyên>`
-`saved_pct=<1 chữ số>%`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh DEN L05 duong_dan/bai_cua_ban.py
-```
+In 3 dòng: `full_scan_mb=<d>`, `pruned_scan_mb=<d>`, `saved_pct=<.1f>%`.
+Chấm tự động: `bash labs/cham.sh DEN L05 duong_dan/bai_cua_ban.py`

@@ -1,13 +1,6 @@
-# Lab SAR L05 — Quy mô phân mảnh (shard) khi nhân bản hệ số RF = 3
+# Lab SAR L05 — Dự phòng và ước lượng dung lượng phân mảnh (sharding)
 
-Kho dữ liệu logic dung lượng `8 TB` (`8 000 GB`) cần chia mảnh sao cho mỗi nút giữ tối đa `400 GB`. Với hệ số sao chép (`RF`) bằng `3`, tính số phân mảnh tối thiểu, tổng số nút vật lý và tổng dung lượng lưu trên cụm.
+Đọc `stdin` `tb=<int> max_node_gb=<int> rf=<int>` (với `1 TB = 1000 GB`). Tính số mảnh tối thiểu cần có (chia trần `ceil(tb * 1000 / max_node_gb)`), tổng số nút vật lý sau khi nhân hệ số sao chép `rf`, và tổng dung lượng lưu trữ cụm `tb * rf`.
 
-Định dạng đầu ra (3 dòng):
-`shards_needed=<số>`
-`total_nodes_rf3=<số>`
-`total_stored_tb=<số>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh SAR L05 duong_dan/bai_cua_ban.py
-```
+In 3 dòng (giữ nguyên tên khoá cố định kể cả khi `rf` thay đổi): `shards_needed=<d>`, `total_nodes_rf3=<d>`, `total_stored_tb=<d>`.
+Chấm tự động: `bash labs/cham.sh SAR L05 duong_dan/bai_cua_ban.py`

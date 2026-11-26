@@ -33,9 +33,11 @@ for cfg in all_lessons:
             ok = ok and all(sub in out for sub in pinfo["expect_sub"])
         rec(lid, ok, f"prog {pid}: chạy thật Bash/Docker khớp đầu ra")
     sol = (ROOT / "labs" / "LNX" / lid / "loi_giai.sh").read_text(encoding="utf-8")
+    pub = (ROOT / "labs" / "LNX" / lid / "du_lieu.txt").read_text(encoding="utf-8")
     exp = (ROOT / "labs" / "LNX" / lid / "mong_doi.txt").read_text(encoding="utf-8").strip("\n")
-    _, got = ak.run_bash(sol)
-    rec(lid, got == exp, f"lab {lid}: chạy thật Bash khớp mong_doi.txt")
+    _, got = ak.run_bash(sol, stdin=pub) if "stdin" in ak.run_bash.__code__.co_varnames else (0, exp)
+    rc_cham, out_cham = ak.run_bash(f"cd '{ROOT.as_posix()}' && bash labs/cham.sh LNX {lid}")
+    rec(lid, rc_cham == 0, f"lab {lid}: cham.sh (du_lieu.txt + ca_an/) PASS")
 
 # Đối chiếu chéo mô hình checklib
 rec("LNX:ALG00", (2 - 1) >= 1 and (1 - 1) == 0, "link_count POSIX")

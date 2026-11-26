@@ -12,7 +12,7 @@ Mục tiêu: một người **mất gốc, chưa từng lập trình**, chỉ c�
 | Thư mục / tệp | Vai trò |
 |---|---|
 | `curriculum/` | lộ trình mỗi khoá (`<khoá>.yaml`), `ROADMAP.md` (kiến trúc chương trình), `STATUS.md` + `TRACKS.md` (sinh tự động, không sửa tay) |
-| `lessons/<khoá>/` | đặc tả từng bài (YAML): màn hình, lời đọc, quiz, `checks`. Nhiều khoá được SINH từ `audit/<khoá>/src/` — sửa nguồn, rồi chạy `gen.py`, không sửa YAML tay |
+| `lessons/<khoá>/` | đặc tả từng bài (YAML): màn hình, lời đọc, quiz, `checks`. Sửa trực tiếp YAML từng bài (các bộ sinh hàng loạt trước AF5 đã khoá theo BN-04) |
 | `labs/` | thực hành: `ENV.md`, `cham.sh`, `check_env.sh`, `<KHOÁ>/<Lxx>/{de.md, mong_doi.txt, loi_giai.*}` |
 | `out/<KHOÁ>/<id>/` | video `.mp4`, phụ đề `.srt`, `chapters.txt`, `preview.html`, báo cáo máy nghe (không theo dõi bằng git) |
 | `tools/` | `lv.py` (lint, dựng, nghe lại, lộ trình), hồ sơ chuyên ngành, sổ ký hiệu và phát âm, mẫu giao diện khung hình |
@@ -31,7 +31,7 @@ python tools/lv.py render   lessons/<khoá>/Lxx_*.yaml      # kiểm bố cục 
 python tools/lv.py build    lessons/<khoá>/Lxx_*.yaml      # lint → giọng → khung hình → mp4 → verify
 python tools/lv.py asr      lessons/<khoá>/Lxx_*.yaml      # máy nghe lại giọng đọc
 python tools/lv.py curriculum curriculum/<khoá>.yaml
-bash audit/review/audit_final/final_gates_af2.sh > audit/review/audit_final/logs/gates_af2.out 2>&1   # cổng toàn kho (chạy nền, MỘT bản)
+bash audit/review/audit_final/final_gates_af5.sh day_du > audit/review/audit_final/logs/gates_af5.out 2>&1   # cổng toàn kho AF5
 python audit/review/lab_gate.py [KHOÁ]                      # mọi lab chạy lời giải và so kết quả
 python audit/review/learn_start/pack.py page                # sinh lại HOC_TAP.html / HOC_TAP.md / xem.html
 python tools/lv.py new-course <KHOÁ> --title "…"            # khoá mới (xem references/new-domain.md)
@@ -43,4 +43,4 @@ Mọi bài dùng giọng `vi-VN-NamMinhNeural` (một bài một giọng, một 
 Phát âm được kiểm bằng máy nghe (ASR), **chưa có người nghe**: câu bị gắn cờ ghi `NOT_VERIFIED bằng tai người`.
 
 ## Hiện trạng và việc còn mở
-Xem đầu `HANDOVER.md` và `audit/review/audit_final/STATE.md`.
+**Trạng thái: PARTIAL (đợt chuẩn hoá AF5 đang thực thi).** Tình trạng từng khoá (ĐÃ CHỐT / Học được / Phần giảng dùng được / Đang viết lại) hiển thị trực tiếp trên [`HOC_TAP.html`](HOC_TAP.html) từ `audit/review/learn_start/quality.yaml`. Xem chi tiết tại `HANDOVER.md` và `audit/review/audit_final/STATE.md`.

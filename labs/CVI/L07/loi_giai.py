@@ -1,7 +1,8 @@
-params = 256 * 12 + 12
-augs = {
-    'shift_2px': True, 'bright_10': True,
-    'h_flip_2': False, 'rot180_6': False,
-}
-broken = sum(1 for ok in augs.values() if not ok)
+import sys
+s = sys.stdin.read().strip() or "256 12|1,1,0,0"
+hs, fs = s.split("|")
+din, dout = map(int, hs.split())
+flags = [int(x) for x in fs.split(",")]
+params = din * dout + dout
+broken = sum(1 for ok in flags if not ok)
 print(f"head_params={params} broken_augs={broken}")

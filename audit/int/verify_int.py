@@ -110,8 +110,8 @@ def lab_expected():
                 f"sinh trac hoc 12 trieu mot lan: {'can' if need([12]) else 'chua can'}", f"tong ngay 8 + 7 = 15 trieu: {'can' if need([8, 7]) else 'chua can'}"]
     # L07: tổng đãi ngộ T = L*(13+k) + 12*P
     T = lambda L, k, P: L * (13 + k) + 12 * P
-    ta, tb = T(38, 2, 0), T(34, 2, 2)
-    pb = F(ta - 34 * (13 + 2), 12)
+    ta, tb = T(44, 2, 0), T(36, 2, 3)
+    pb = F(ta - 36 * (13 + 2), 12)
     E["L07"] = [f"offer A tong nam (k=2): {ta} trieu", f"offer B tong nam (k=2): {tb} trieu", f"chenh lech A hon B: {ta - tb} trieu",
                 f"phu cap B can de bang A: {int(pb)} trieu/thang"]
     return E

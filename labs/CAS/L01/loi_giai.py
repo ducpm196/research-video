@@ -1,5 +1,5 @@
-scale = 1 << 23
-err_tick = 0.1 - int(0.1 * scale) / scale
-d50 = err_tick * (50 * 3600 * 10)
-d100 = err_tick * (100 * 3600 * 10)
-print(f"drift_50h={d50:.4f} drift_100h={d100:.4f}")
+import sys
+kv = dict(t.split('=') for t in sys.stdin.read().split())
+scale = 1 << int(kv['bits']); val = float(kv['val']); hz = int(kv['hz'])
+err = val - int(val * scale) / scale
+print(f'drift_50h={err * int(kv["h1"]) * 3600 * hz:.4f} drift_100h={err * int(kv["h2"]) * 3600 * hz:.4f}')

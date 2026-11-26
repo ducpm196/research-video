@@ -21,11 +21,11 @@ Ba lớp có sẵn (chép nguyên vào tệp, ngay trong `MiniDiKho`):
 }
 ```
 
-In đúng ba dòng:
+In đúng ba dòng theo dạng:
 ```
-Tong gia tri kho: 540000
-Cung mot BangGia: true
-So thanh phan: 3
+Tong gia tri kho: <tổng tiền từ d.tong()>
+Cung mot BangGia: <true|false khi so d.bang == lay(BangGia.class)>
+So thanh phan: <hop.size()>
 ```
 (`Cung mot BangGia` là `d.bang == lay(BangGia.class)`; `So thanh phan` là `hop.size()`.)
 

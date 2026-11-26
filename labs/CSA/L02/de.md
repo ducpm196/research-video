@@ -1,11 +1,6 @@
 # Lab CSA L02 — Phép toán bit, mặt nạ và kiểm lũy thừa của 2
 
-Viết chương trình C chuẩn C11 dùng toán tử bit trên `x = 0x5A` (lấy bit 3, bật bit 0, tắt bit 4) và kiểm tra `64` vs `48` có là lũy thừa của 2 không, in đúng 3 dòng:
-1. `bit3=1 set0=0x5B clr4=0x4A`
-2. `pow2_64=1 pow2_48=0`
-3. `shift_mul=80`
+Đọc từ `stdin` dòng `x_hex=5A a=64 b=48 val=5` (`x_hex` dạng hexa, cùng các số nguyên dương `a, b, val`). Kiểm tra bit 3 của `x`, bật bit 0, tắt bit 4, kiểm tra lũy thừa của 2 cho `a` và `b`, và tính `val << 4`.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh CSA L02 duong_dan/bai_cua_ban.c
-```
+In đúng 3 dòng: `bit3=<d> set0=0x<XX> clr4=0x<XX>`, `pow2_64=<d> pow2_48=<d>`, `shift_mul=<u>`.
+Chấm tự động: `bash labs/cham.sh CSA L02 duong_dan/bai_cua_ban.c`

@@ -1,11 +1,7 @@
-# Lab AIF L03 — Giải hệ số nhánh hiệu dụng b* với N=100 nút ở độ sâu d=4
+# Lab AIF L03 — Giải hệ số nhánh hiệu dụng b* bằng chia đôi
 
-Dùng phương pháp chia đôi trên đoạn `[1.0, 5.0]` tìm hệ số nhánh hiệu dụng `b*` thoả `1 + b + b^2 + b^3 + b^4 = 101`.
+Đọc `stdin` `N=<float> d=<int> lo=<float> hi=<float>`. Tìm `b*` trên `[lo, hi]` thỏa `sum(b^k, k=0..d) == N + 1` qua 50 bước chia đôi.
 
-Định dạng đầu ra:
-`b_star=<4 chữ số thập phân> sum_val=<2 chữ số thập phân>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh AIF L03 duong_dan/bai_cua_ban.py
-```
+In 1 dòng: `b_star=<.4f> sum_val=<.2f>`.
+Chấm tự động: `bash labs/cham.sh AIF L03 duong_dan/bai_cua_ban.py`
+Gợi ý đọc đầu vào trong Python: dùng `sys.stdin.read().split()` tách từng cặp `khoá=giá_trị`.

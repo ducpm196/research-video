@@ -1,11 +1,6 @@
-# Lab CSA L06 (Mô phỏng phần cứng ALU) — Bộ cộng 8 bit, trừ bằng bù 2 và cờ tràn
+# Lab CSA L06 — Bộ cộng 8 bit, trừ bằng bù 2 và cờ tràn
 
-Viết chương trình Python mô phỏng bộ cộng 8 bit phát hiện cả **tràn có dấu (OV)** và **nhớ không dấu (CF)** cho `(100 + 50)` và phép trừ `40 - 15`, in đúng 3 dòng:
-1. `add_100_50=150 ov_signed=1 cf_unsigned=0`
-2. `sub_40_15=25`
-3. `add_200_100=44 cf_unsigned=1`
+Đọc từ `stdin` `p1=a,b sub=c,d p2=e,f`. Cài hàm cộng 8 bit trả `(sum8, overflow_signed, carry_unsigned)`, thực hiện trừ `c - d` qua cộng bù 2 `((~d) + 1) & 0xFF` và kiểm tra cả hai phép cộng.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh CSA L06 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `add_100_50=<int> ov_signed=<0|1> cf_unsigned=<0|1>`, `sub_40_15=<int>`, `add_200_100=<int> cf_unsigned=<0|1>`.
+Chấm tự động: `bash labs/cham.sh CSA L06 duong_dan/bai_cua_ban.py`

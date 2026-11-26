@@ -1,8 +1,4 @@
-import math
-log10_full = 60 * math.log10(20)
-d3 = 20 ** 3
-log10_red = log10_full - 3 * math.log10(20)
-print(
-    f"log10_tree={log10_full:.1f} depth3_nodes={d3} "
-    f"log10_reduction={log10_red:.1f}"
-)
+import math, sys
+kv = {k: int(v) for k, v in (t.split('=') for t in sys.stdin.read().split())}
+lf = kv['d_full'] * math.log10(kv['b']); d3 = kv['b'] ** kv['d_cut']; red = lf - kv['d_cut'] * math.log10(kv['b'])
+print(f'log10_tree={lf:.1f} depth3_nodes={d3} log10_reduction={red:.1f}')

@@ -1,5 +1,5 @@
-import re
-hist = ['API_KEY=sk_live_987654', 'API_KEY=env_only', 'PORT=8080']
+import re, sys
+hist = [ln.strip() for ln in sys.stdin.read().splitlines() if ln.strip()]
 pat = re.compile(r'sk_live_[0-9a-zA-Z]+')
 leaks = sum(bool(pat.search(c)) for c in hist)
 head = int(bool(pat.search(hist[-1])))

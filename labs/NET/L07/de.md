@@ -1,11 +1,6 @@
-# Lab NET L07 (Mô phỏng định tuyến trạng thái liên kết) — Dijkstra trên mạng 5 nút
+# Lab NET L07 — Định tuyến trạng thái liên kết Dijkstra trên đồ thị mạng
 
-Viết chương trình Python chạy thuật toán Dijkstra từ nguồn `S` trên đồ thị 5 nút `(S-A:4, S-B:1, A-B:2, A-C:1, B-C:5, B-D:8, C-D:3)`, in đúng 3 dòng:
-1. `dist=A:3,B:1,C:4,D:7`
-2. `next_hop_all=B`
-3. `sa_direct_vs_sb_ba=4_vs_3`
+Đọc `stdin` `nodes=<str> edges=<u-v:w,...> src=<char>`. Chạy Dijkstra tính đường đi ngắn nhất từ `src` tới các nút khác, liệt kê chặng kế next-hop duy nhất.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh NET L07 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `dist=<N:d,...>`, `next_hop_all=<str>`, `sa_direct_vs_sb_ba=<d>_vs_<d>`.
+Chấm tự động: `bash labs/cham.sh NET L07 duong_dan/bai_cua_ban.py`

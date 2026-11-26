@@ -1,5 +1,6 @@
-import math
-items = ['A', 'B', 'C', 'D', 'E']
+import sys, math
+s = sys.stdin.read().strip() or "A,B,C,D,E"
+items = s.split(",")
 n = len(items)
 latin = [items[r:] + items[:r] for r in range(n)]
 r_ok = all(len(set(row)) == n for row in latin)

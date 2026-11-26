@@ -1,6 +1,7 @@
-# Lab AGT L08 — Chi phí từ tố tăng gần bình phương nếu gửi lại lịch sử
+# Lab AGT L08 — Chi phí từ tố tích lũy khi gửi lại lịch sử
 
-Vòng lặp `8` bước: bước 0 gửi `1 500` từ tố (token), mỗi bước sau lịch sử dài thêm `400` từ tố. Tính kích thước ngữ cảnh cuối, tổng từ tố gửi lại qua 8 bước và hệ số nhân so với bước cuối.
+Đọc `stdin` `steps=<int> base=<int> inc=<int>`. Tính ngữ cảnh bước cuối, tổng token gửi tích lũy qua `steps` bước và hệ số nhân.
 
-Định dạng đầu ra (1 dòng):
-`final_ctx=<số> total_input=<số> mult=<2 chữ số>x`
+In 1 dòng: `final_ctx=<d> total_input=<d> mult=<.2f>x`.
+Chấm tự động: `bash labs/cham.sh AGT L08 duong_dan/bai_cua_ban.py`
+Gợi ý đọc đầu vào trong Python: dùng `sys.stdin.read().split()` tách từng cặp `khoá=giá_trị`.

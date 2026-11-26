@@ -8,7 +8,7 @@ touch vp/kho/a/x.txt vp/kho/b/y.txt vp/kho/b/z.txt vp/ho_so/hd.txt
 cd vp/kho/b
 ```
 
-Rồi viết các lệnh, **chỉ dùng `cd` với đường dẫn tương đối** (không gõ `/` ở đầu) và `ls`:
+Rồi viết các lệnh, **chỉ dùng `cd` với đường dẫn tương đối** (không gõ `/` ở đầu) và `ls`; trước mỗi mục 1..4 in dòng tiêu đề dạng `buoc <k>:` (`buoc 1:` đến `buoc 4:`):
 1. đang đứng ở `b`: in nội dung `b`;
 2. tới `ho_so`, in nội dung;
 3. từ `ho_so` tới `a`, in nội dung;

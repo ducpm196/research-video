@@ -1,11 +1,6 @@
-# Lab NET L01 (Mô phỏng trễ mạng) — Phân biệt trễ truyền và trễ lan truyền
+# Lab NET L01 — Phân biệt trễ truyền gói và trễ lan truyền tín hiệu
 
-Viết chương trình Python tính trễ truyền gói `1 500 B` trên đường `100 Mbps`, trễ lan truyền trên `1 000 km` (tốc độ `2e8 m/s`) và tổng 1 chặng, in đúng 3 dòng:
-1. `tx_us=120.0`
-2. `prop_ms=5.0`
-3. `total_ms=5.12`
+Đọc `stdin` `bytes=<int> bw_bps=<f> dist_m=<f> speed_mps=<f>`. Tính trễ truyền (us), trễ lan truyền (ms) và tổng trễ 1 chặng (ms).
 
-Chấm tự động:
-```bash
-bash labs/cham.sh NET L01 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `tx_us=<.1f>`, `prop_ms=<.1f>`, `total_ms=<.2f>`.
+Chấm tự động: `bash labs/cham.sh NET L01 duong_dan/bai_cua_ban.py`

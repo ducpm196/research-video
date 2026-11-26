@@ -1,9 +1,4 @@
-# Lab GFX L09 — Giải phương trình bậc hai tìm giao điểm gần nhất của tia với mặt cầu
+# Lab GFX L09 — Giao điểm tia với mặt cầu (Ray-Sphere)
 
-Tia xuất phát từ gốc `(0, 0, 0)` hướng `(0, 0, 1)` bắn vào mặt cầu tâm `(0, 0, 7)` bán kính `R = 2`. Thiết lập và giải phương trình bậc hai `t^2 - 14t + 45 = 0` tìm hai nghiệm và chọn điểm chạm gần mắt nhất.
-In đúng 1 dòng `hits=(t1, t2) nearest=...` (1 chữ số).
-
-Chấm tự động:
-```bash
-bash labs/cham.sh GFX L09 duong_dan/bai_cua_ban.py
-```
+Đọc `z_c R` từ stdin (ví dụ `7.0 2.0`). Giải `t^2 - 2*z_c*t + (z_c^2 - R^2) = 0` tìm 2 nghiệm và điểm gần nhất.
+In đúng 1 dòng `hits=(t1, t2) nearest=<1 chữ số>`.

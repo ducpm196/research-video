@@ -1,6 +1,6 @@
-# Lab IRS L13 — Hành trình gợi ý video: từ 2008 tới hệ hai tầng
+# Lab IRS L13 — Dung lượng bảng nhúng & thống kê gợi ý video
 
-Tính dung lượng (đơn vị `MiB`, biết `1 MiB = 1024^2 = 1 048 576 byte`) của bảng vector `2 triệu` video × `128` số thực 32 bit (`float32`, mỗi số `4 byte`), số lượt xem trung bình mỗi người ở nhóm `18.0 triệu lượt / 1.5 triệu người`, và hệ số bù `-ln(0.05)`.
+Đọc từ đầu vào chuẩn (`stdin`, dạng `khoá=giá_trị`) `videos=<int> dim=<int> views_m=<f> users_m=<f> q=<f>` (`<int>` số nguyên, `<f>` số thực). Tính dung lượng MiB (`videos * dim * 4 / 1024^2`) của bảng số thực 32 bit (`4 byte`), lượt xem trung bình mỗi người (`views_m / users_m`) và hệ số bù `-ln(q)`.
 
-Định dạng đầu ra (1 dòng):
-`emb_mib=<1 chữ số> views_u=<1 chữ số> log_corr=<3 chữ số>`
+In 1 dòng đúng nhãn (`<.1f>` 1 chữ số, `<.3f>` 3 chữ số thập phân): `emb_mib=<.1f> views_u=<.1f> log_corr=<.3f>`.
+Chấm tự động: `bash labs/cham.sh IRS L13 duong_dan/bai_cua_ban.py`

@@ -1,5 +1,7 @@
-prev = 1 / 10000; tpr = 0.99; fpr = 0.01
-tp = 1_000_000 * prev * tpr; fp = 1_000_000 * (1 - prev) * fpr
+import sys
+kv = {k: float(v) for k, v in (t.split('=') for t in sys.stdin.read().split())}
+n = kv['n_events']; prev = kv['base']
+tp = n * prev * kv['tpr']; fp = n * (1 - prev) * kv['fpr']
 ppv = tp / (tp + fp)
 print(f'tp_per_1m={round(tp)}')
 print(f'fp_per_1m={round(fp)}')

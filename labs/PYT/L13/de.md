@@ -79,6 +79,6 @@ exec(MODULE, ns)                      # exec chạy một chuỗi mã như chạ
 tong_theo_loai = ns["tong_theo_loai"]
 ```
 
-**Thời gian:** bài này nặng nhất khoá, dự kiến 45 đến 60 phút. Video dừng 20 phút cho lượt đầu (hàm chấm và ba tệp); phần đo làm ở lượt sau, tiếp tục sau khi video chạy lại. Dự án nhỏ mẫu (`tong_tien.py` + `test_tong_tien.py`) ở phần ví dụ của bài là hình mẫu cho cấu trúc ba tệp.
+**Thời gian:** bài này nặng nhất khoá, dự kiến 45 đến 60 phút. Video tạm dừng 4 phút để bạn bắt đầu (bạn có thể bấm dừng thêm cho đủ lượt đầu: hàm chấm và ba tệp); phần đo làm ở lượt sau, tiếp tục sau khi video chạy lại. Dự án nhỏ mẫu (`tong_tien.py` + `test_tong_tien.py`) ở phần ví dụ của bài là hình mẫu cho cấu trúc ba tệp.
 
 Chạy: `python du_an.py` (kỳ vọng `Tong diem: 10/10` rồi dòng đo). Chấm (chạy từ thư mục gốc của bộ khoá, nơi có thư mục `labs`; để tệp của bạn ở đó hoặc ghi đường dẫn tới tệp): `bash labs/cham.sh PYT L13 du_an.py`.

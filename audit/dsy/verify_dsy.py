@@ -217,6 +217,17 @@ rec("L15f", [can_write((3, 2), i) for i in range(2)] == [False, True] and all(ca
     and (lambda y, n: (n := next(k for k in range(10) if 200 * 1.5 ** k > 1000)))(0, 0) == 4 and 2 * 5 == 10 and 52 // 2 == 26,
     "5 bản: 3 + 2 mất thành phố 3 bản thì không ghi được, 2 + 2 + 1 chịu mất bất kỳ thành phố; 200 GB × 1,5 mỗi năm vượt 1 TB ở năm 4; SQL ×2 rồi ×5 = ×10; 26 bản/năm")
 
+# ── Kiểm tự động mọi lab (du_lieu.txt + ca_an/) qua cham.sh ──
+import subprocess as _subp
+from pathlib import Path as _LabPath
+_BASH = r"C:\Program Files\Git\bin\bash.exe"
+if not _LabPath(_BASH).exists():
+    _BASH = "bash"
+for _ld in sorted((ROOT / "labs" / "DSY").glob("L*")):
+    _rp = _subp.run([_BASH, str(ROOT / "labs" / "cham.sh"), "DSY", _ld.name], cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
+    rec(f"{_ld.name}:lab", _rp.returncode == 0 and "PASS" in _rp.stdout and "2 ca an" in _rp.stdout, f"cham.sh {_ld.name} (public + 2 ca_an)")
+
 n_ok = sum(o for _, o in R)
+
 print(f"\n{n_ok}/{len(R)} PASS")
 sys.exit(0 if n_ok == len(R) else 1)

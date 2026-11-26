@@ -1,6 +1,4 @@
-# Lab CVI L09 — Phân đoạn ảnh: IoU, Dice và bẫy độ chính xác điểm ảnh
+# Lab CVI L09 — IoU, Dice và bẫy độ chính xác nền
 
-Trên một mặt nạ có `TP = 45, FP = 15, FN = 10`, tính IoU, Dice và xác nhận `Dice >= IoU`. Sau đó trên ảnh `100 × 100` có vật chỉ chiếm `2%` (`200` điểm ảnh), giả sử mô hình đoán toàn nền (`0` vật), tính độ chính xác điểm ảnh tổng thể và IoU thật của lớp vật.
-
-Định dạng đầu ra (1 dòng):
-`iou=<3 chữ số> dice=<3 chữ số> dice_ge_iou=<0 hoặc 1> acc_all_bg=<2 chữ số> iou_all_bg=<1 chữ số>`
+Đọc `TP FP FN side obj_px` từ stdin (ví dụ `45 15 10 100 200`, với `side` là cạnh ảnh vuông và `obj_px` là số điểm ảnh của vật). Tính `iou`, `dice` (3 chữ số thập phân) và độ chính xác khi đoán toàn nền (`acc_all_bg`, 2 chữ số thập phân).
+In đúng 1 dòng `iou=... dice=... dice_ge_iou=0/1 acc_all_bg=... iou_all_bg=0.0`.

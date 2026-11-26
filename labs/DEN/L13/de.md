@@ -1,13 +1,6 @@
 # Lab DEN L13 — So sánh chi phí mạng của nối phát tán và nối xáo trộn
 
-Nối bảng lớn `800 GB` (`GB = ghi-ga-byte`) với bảng nhỏ `2 GB` trên `50` máy. Tính tổng `GB` truyền qua mạng của cách phát tán bảng nhỏ (gửi bản sao tới `49` máy còn lại) so với xáo trộn đều cả hai bảng qua `50` máy (`49/50` phần mỗi bảng phải đi qua mạng).
+Đọc `stdin` `big_gb=<float> sm_gb=<float> nodes=<int>`. Tính tổng GB truyền qua mạng khi phát tán bảng nhỏ `(nodes - 1) * sm_gb` vs xáo trộn hai bảng `(big + sm) * (nodes - 1) / nodes`.
 
-Định dạng đầu ra (3 dòng):
-`broadcast_gb=<số nguyên>`
-`shuffle_gb=<2 chữ số>`
-`network_saved_pct=<1 chữ số>%`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh DEN L13 duong_dan/bai_cua_ban.py
-```
+In 3 dòng: `broadcast_gb=<d>`, `shuffle_gb=<.2f>`, `network_saved_pct=<.1f>%`.
+Chấm tự động: `bash labs/cham.sh DEN L13 duong_dan/bai_cua_ban.py`

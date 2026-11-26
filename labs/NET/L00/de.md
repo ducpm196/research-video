@@ -1,11 +1,6 @@
-# Lab NET L00 (Mô phỏng đóng gói) — Tính phần đầu và hiệu suất khung Ethernet
+# Lab NET L00 — Phần đầu giao thức và hiệu suất khung Ethernet
 
-Viết chương trình Python tính tổng phần đầu TCP (`20 B`), IP (`20 B`), Ethernet (`18 B`) khi chở `1 460 B` dữ liệu và hiệu suất khung đầy `1 518 B`, in đúng 3 dòng:
-1. `headers_B=58`
-2. `frame_B=1518`
-3. `efficiency_pct=96.2%`
+Đọc `stdin` `payload=<int> tcp=<int> ip=<int> eth=<int>`. Tính tổng byte phần đầu, kích thước khung Ethernet và hiệu suất truyền dữ liệu.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh NET L00 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `headers_B=<d>`, `frame_B=<d>`, `efficiency_pct=<.1f>%`.
+Chấm tự động: `bash labs/cham.sh NET L00 duong_dan/bai_cua_ban.py`

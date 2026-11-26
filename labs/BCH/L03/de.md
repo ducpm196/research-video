@@ -1,9 +1,4 @@
-# Lab BCH L03 — Ký SHA-256 và kiểm chứng chữ ký số trên mô hình RSA đồ chơi
+# Lab BCH L03 — Chữ ký số trên mô hình RSA đồ chơi
 
-Với cặp khoá hệ mật mã bất đối xứng RSA (Rivest–Shamir–Adleman) đồ chơi `(n = 3233, e = 17, d = 2753)`, lấy mã băm `m = int(hashlib.sha256('A trả B 15'.encode()).hexdigest(), 16) % n` rồi ký `sig = pow(m, d, n)`. Kiểm định chữ ký cho tin gốc (`m`) và cho tin bị sửa (`'A trả B 150'`).
+Đọc `n e d|msg_orig|msg_test` từ stdin (ví dụ `3233 17 2753|A trả B 15|A trả B 150`). Chuyển mỗi thông điệp sang số nguyên bằng toàn bộ 64 chữ số hex SHA-256 UTF-8 (`int(sha256(msg.encode()).hexdigest(), 16) % n`), ký `msg_orig` thành `sig = pow(h_orig, d, n)` và kiểm định `pow(sig, e, n) == h(msg)` trên cả `msg_orig` lẫn `msg_test`.
 In đúng 1 dòng `sig_valid=0/1 tampered_valid=0/1`.
-
-Chấm tự động:
-```bash
-bash labs/cham.sh BCH L03 duong_dan/bai_cua_ban.py
-```

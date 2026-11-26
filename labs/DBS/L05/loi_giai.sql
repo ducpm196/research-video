@@ -1,5 +1,3 @@
-CREATE TABLE DK(mssv TEXT, lop TEXT, mon TEXT);
-INSERT INTO DK VALUES ('S1','K1','DB'),('S2','K1','OS'),('S1','K1','AI');
 SELECT 'orig_rows=' || COUNT(*) FROM DK;
 SELECT 'good_join_rows=' || COUNT(*) FROM (SELECT DISTINCT mssv,lop FROM DK) NATURAL JOIN (SELECT DISTINCT mssv,mon FROM DK);
 SELECT 'bad_join_rows=' || COUNT(*) FROM (SELECT DISTINCT mssv,lop FROM DK) NATURAL JOIN (SELECT DISTINCT lop,mon FROM DK);

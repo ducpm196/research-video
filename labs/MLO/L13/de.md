@@ -1,11 +1,7 @@
-# Lab MLO L13 — Tấn công đầu độc cửa sau: điểm tập sạch che khuất mẫu gắn dấu hiệu lệch
+# Lab MLO L13 — Tấn công đầu độc cửa sau: điểm tập sạch vs kích hoạt
 
-Khi mô hình đạt `388/400` đúng trên tập sạch nhưng bị kích hoạt đổi nhãn `17/20` mẫu có gắn dấu hiệu kích hoạt cửa sau, tính tỉ lệ chính xác sạch và tỉ lệ cướp nhãn (%).
+Đọc `stdin` `c_ok=<int> c_n=<int> t_ok=<int> t_n=<int>`. Tính phần trăm chính xác trên tập sạch và tỉ lệ cướp nhãn khi có dấu hiệu kích hoạt.
 
-Định dạng đầu ra:
-`clean_acc=<1 chữ số>% trigger_hijack=<1 chữ số>%`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh MLO L13 duong_dan/bai_cua_ban.py
-```
+In 1 dòng: `clean_acc=<.1f>% trigger_hijack=<.1f>%`.
+Chấm tự động: `bash labs/cham.sh MLO L13 duong_dan/bai_cua_ban.py`
+Nền tảng Python (`PYT:L04`): đọc dữ liệu qua `sys.stdin.read().strip()`.

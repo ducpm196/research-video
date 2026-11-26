@@ -1,9 +1,4 @@
-# Lab RBM L04 — Động học thuận tay máy 2 khâu phẳng L1=1.2, L2=0.8
+# Lab RBM L04 — Động học thuận tay máy 2 khâu phẳng
 
-Cho tay máy 2 khâu phẳng dài `L1 = 1.2 m, L2 = 0.8 m` với góc khớp `t1 = 45°, t2 = 45°`. Tính vị trí đầu tay `(x, y)` và khoảng cách từ gốc `r = sqrt(x^2 + y^2)`.
-In đúng 1 dòng `end=(x, y) dist=r` (3 chữ số thập phân).
-
-Chấm tự động:
-```bash
-bash labs/cham.sh RBM L04 duong_dan/bai_cua_ban.py
-```
+Đọc `L1 L2 t1_deg t2_deg` từ stdin (ví dụ `1.2 0.8 45.0 45.0`). Tính `(x, y)` đầu tay và khoảng cách từ gốc.
+In đúng 1 dòng `end=(x, y) dist=r` (3 chữ số).

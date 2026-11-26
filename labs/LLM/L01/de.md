@@ -1,6 +1,6 @@
-# Lab LLM L01 — Mô hình n-gram, làm trơn cộng một và độ hỗn loạn
+# Lab LLM L01 — Độ hỗn loạn (perplexity) và làm trơn cộng 1
 
-Một câu `3` bước dự đoán có xác suất `8/27`: tính độ hỗn loạn `(8/27)^(-1/3)`. Sau đó tính xác suất cặp chưa từng gặp khi ngữ cảnh đứng trước đã xuất hiện `3` lần trong kho và bộ từ vựng có `V = 7` từ (làm trơn cộng 1: `(0 + 1) / (3 + 7)`).
+Đọc `stdin` `p=<float> steps=<int> ctx=<int> vocab=<int>`. Tính độ hỗn loạn `p^(-1/steps)` và xác suất chưa thấy sau làm trơn cộng 1 `(0 + 1) / (ctx + vocab)`.
 
-Định dạng đầu ra (1 dòng):
-`perplexity=<3 chữ số> add1_unseen=<3 chữ số>`
+In 1 dòng: `perplexity=<.3f> add1_unseen=<.3f>`.
+Chấm tự động: `bash labs/cham.sh LLM L01 duong_dan/bai_cua_ban.py`

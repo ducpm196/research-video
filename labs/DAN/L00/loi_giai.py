@@ -1,4 +1,3 @@
-logs = [(1,3), (1,0), (1,2), (1,0), (1,0), (1,5), (1,1), (1,0)]
-by_login = sum(1 for l, _ in logs if l > 0)
-by_action = sum(1 for _, a in logs if a > 0)
-print(f"active_login={by_login} active_action={by_action}")
+import sys
+pairs = [tuple(int(x) for x in p.split(':')) for p in sys.stdin.read().strip().split('=', 1)[1].split(',')]
+print(f'active_login={sum(l > 0 for l, _ in pairs)} active_action={sum(a > 0 for _, a in pairs)}')

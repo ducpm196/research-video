@@ -1,11 +1,8 @@
-# Lab DAN L05 — Phễu chuyển đổi từng bước, toàn phễu và ước lượng cải thiện bước 2
+# Lab DAN L05 — Phễu chuyển đổi từng bước & ước lượng nâng bước 2
 
-Cho số người qua 4 bước từ `8 000` (`(8000, 3600, 1080, 270)`). Tính tỉ lệ (%) từng bước, toàn phễu, và toàn phễu ước lượng mới nếu bước 2 tăng từ `30%` lên `38%` (giữ nguyên tỉ lệ bước 1 và bước 3).
+Đọc `stdin` `steps=<s0,s1,s2,s3> new_s2=<float>`. Tính phần trăm từng bước, toàn phễu hiện tại và toàn phễu ước lượng khi bước 2 đạt tỉ lệ `new_s2`.
 
-Định dạng đầu ra:
-`step_pct=<danh sách 3 số> overall=<1 chữ số>% overall_step2_38=<1 chữ số>%`
+In 1 dòng: `step_pct=<list> overall=<.1f>% overall_step2_38=<.1f>%`.
+Chấm tự động: `bash labs/cham.sh DAN L05 duong_dan/bai_cua_ban.py`
 
-Chấm tự động:
-```bash
-bash labs/cham.sh DAN L05 duong_dan/bai_cua_ban.py
-```
+> Gợi ý đọc `stdin`: `kv = dict(t.split("=") for t in sys.stdin.read().split())`, tách `steps` qua `[int(x) for x in kv["steps"].split(",")]`.

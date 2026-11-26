@@ -1,7 +1,5 @@
-def reconcile(des, cur):
-    miss = [p for p in des if p not in cur]
-    return sorted(cur + miss), miss
-des, cur = ['p1', 'p2', 'p3', 'p4'], ['p1', 'p3']
-after, created = reconcile(des, cur)
-print(f'created={created}')
-print(f'converged={int(after == sorted(des))}')
+import sys
+kv = dict(t.split('=') for t in sys.stdin.read().split())
+des = kv['desired'].split(','); cur = kv['running'].split(',') if kv.get('running') else []
+miss = [p for p in des if p not in cur]; after = sorted(cur + miss)
+print(f'created={miss}\nconverged={int(after == sorted(des))}')

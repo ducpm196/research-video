@@ -1,7 +1,6 @@
-# Lab IRS L05 — Học để xếp hạng: mất mát theo cặp và trọng số vị trí đầu
+# Lab IRS L05 — Học xếp hạng: mất mát theo cặp & độ giảm DCG
 
-Tính mất mát theo cặp `ln(1 + exp(-(s_a - s_b)))` khi hai điểm đúng thứ tự `(s_a=2.5, s_b=1.2)` so với đảo ngược `(1.2, 2.5)`. Sau đó tính độ giảm DCG khi tráo cặp vị trí `(1, 2)` (mức `4` và `2`) so với cặp `(3, 4)` (mức `1` và `0`) trong dãy `[4, 2, 1, 0]`.
+Đọc từ đầu vào chuẩn (`stdin`, dạng `khoá=giá_trị`) `sa=<f> sb=<f> rels=<r0,r1,r2,r3>` (với `<f>` là số thực). Tính mất mát thuận và đảo `ln(1 + exp(-(si - sj)))` cho cặp `(sa, sb)` và độ giảm DCG khi tráo cặp `(0,1)` vs `(2,3)`.
 
-Định dạng đầu ra (2 dòng):
-`loss_ok=<3 chữ số> loss_swap=<3 chữ số>`
-`dcg_drop_12=<3 chữ số> dcg_drop_34=<3 chữ số>`
+In 2 dòng đúng nhãn (`<.3f>` làm tròn 3 chữ số thập phân): `loss_ok=<.3f> loss_swap=<.3f>`, `dcg_drop_12=<.3f> dcg_drop_34=<.3f>`.
+Chấm tự động: `bash labs/cham.sh IRS L05 duong_dan/bai_cua_ban.py`

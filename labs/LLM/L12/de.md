@@ -1,6 +1,6 @@
-# Lab LLM L12 — Sinh có truy xuất (RAG): chỉ mục và tìm kiếm
+# Lab LLM L12 — Sinh có truy xuất (RAG): chỉ mục & recall@1
 
-Cho vector câu hỏi `q = [2, 1, 0]`, hai đoạn văn trong kho `'docA': [3, 2, 1]` và `'docB': [0, 1, 4]`, trong đó nhãn đúng là `'docA'`. Viết mã tìm đoạn có độ tương tự cosin lớn nhất và tự kiểm tra `best == 'docA'` để tính `recall@1` (không gán cứng `1.0`).
+Đọc `stdin` `q=<3 số> docs=<name:x,y,z;...> relevant=<name>`. Tìm đoạn có cosin lớn nhất và kiểm khớp `relevant` để ra `recall@1`.
 
-Định dạng đầu ra (1 dòng):
-`top1=<tên đoạn> cos=<3 chữ số> recall_at_1=<1 chữ số>`
+In 1 dòng: `top1=<name> cos=<.3f> recall_at_1=<.1f>`.
+Chấm tự động: `bash labs/cham.sh LLM L12 duong_dan/bai_cua_ban.py`

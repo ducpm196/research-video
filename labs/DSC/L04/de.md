@@ -1,11 +1,7 @@
-# Lab DSC L04 — Trung vị, khoảng tứ phân vị (IQR) và hàng rào Tukey trước ngoại lai
+# Lab DSC L04 — Trung vị, IQR và hàng rào Tukey trước ngoại lai
 
-Từ dãy `[2.0, 4.0, 6.0, 8.0, 9.0, 10.0, 12.0, 80.0]` (`n = 8`), sắp xếp rồi tính trung bình, trung vị, hai điểm tứ phân vị `Q1, Q3` (trung vị nửa dưới & nửa trên) và ngưỡng rào trên `Q3 + 1.5 * IQR` (với `IQR = Q3 - Q1`), kiểm `max > rào trên`.
+Đọc `stdin` chuỗi `xs=<v1,v2,...>`. Sắp tăng mảng (cỡ chẵn `n`), tính trung bình và trung vị; dùng quy tắc tách đôi lấy `Q1 = median(xs[:n//2])`, `Q3 = median(xs[(n+1)//2:])`, `IQR = Q3 - Q1`, ngưỡng rào trên Tukey `Q3 + 1.5 * IQR` và kiểm ngoại lai `max(xs) > fence`.
 
-Định dạng đầu ra:
-`mean=<1 chữ số> median=<1 chữ số> fence=<1 chữ số> outlier=<1 hoặc 0>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh DSC L04 duong_dan/bai_cua_ban.py
-```
+In 1 dòng: `mean=<.1f> median=<.1f> fence=<.1f> outlier=<0|1>`.
+Chấm tự động: `bash labs/cham.sh DSC L04 duong_dan/bai_cua_ban.py`
+Gợi ý đọc đầu vào trong Python: dùng `sys.stdin.read().split()` tách từng cặp `khoá=giá_trị`.

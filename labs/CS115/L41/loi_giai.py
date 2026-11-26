@@ -1,7 +1,10 @@
-import math
-scores = [2.0 / math.sqrt(4.0), 0.0 / math.sqrt(4.0)]
-exps = [math.exp(s) for s in scores]
+import math, sys
+kv = dict(t.split('=') for t in sys.stdin.read().split())
+d = float(kv['d'])
+qkt = [float(x) / math.sqrt(d) for x in kv['qkt'].split(',')]
+V = [float(x) for x in kv['v'].split(',')]
+mx = max(qkt); exps = [math.exp(s - mx) for s in qkt]
 w = [e / sum(exps) for e in exps]
-out = w[0] * 10.0 + w[1] * 2.0
+out = sum(wi * vi for wi, vi in zip(w, V))
 print(f"weights={[round(x, 4) for x in w]} sum={sum(w):.1f}")
 print(f"attn_out={out:.4f}")

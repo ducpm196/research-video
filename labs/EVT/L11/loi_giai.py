@@ -1,6 +1,4 @@
-mps = round(864_000_000 / 86400)
-batch_sz = 40
-batches = 400_000 // batch_sz
-print(f'msgs_per_sec={mps}')
-print(f'batches={batches}')
-print(f'rpc_cut={400_000 // batches}x')
+import sys
+kv = {k: int(v) for k, v in (t.split('=') for t in sys.stdin.read().split())}
+mps = round(kv['daily'] / 86400); bs = kv['msgs'] // kv['batch']
+print(f'msgs_per_sec={mps}\nbatches={bs}\nrpc_cut={kv["msgs"] // bs}x')

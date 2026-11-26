@@ -1,11 +1,6 @@
 # Lab SDP L16 — Thiết kế lại giỏ hàng bằng Strategy
 
-Viết hàm tính tiền giỏ hàng `[150000, 200000, 100000]` qua hai chiến lược: `pct10_over_300k` (giảm 10% nếu tổng > 300 000) và `flat_50k` (giảm thẳng 50 000), in đúng 3 dòng:
-1. `subtotal=450000`
-2. `pct10_total=405000`
-3. `flat50_total=400000`
+Đọc `stdin` `items=<int,...> thr=<int> pct=<float> flat=<int>`. Tính tổng giỏ hàng `subtotal = sum(items)`; chiến lược phần trăm trả `round(subtotal * (1.0 - pct))` nếu `subtotal > thr` (ngược lại giữ nguyên); chiến lược trừ thẳng trả `max(0, subtotal - flat)`.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh SDP L16 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `subtotal=<d>`, `pct10_total=<d>`, `flat50_total=<d>`.
+Chấm tự động: `bash labs/cham.sh SDP L16 duong_dan/bai_cua_ban.py`

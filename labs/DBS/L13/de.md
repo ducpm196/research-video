@@ -1,11 +1,6 @@
-# Lab DBS L13 — SQLite thật: phát hiện bế tắc trên đồ thị chờ (Wait-For Graph) T1<->T2
+# Lab DBS L13 — SQLite: phát hiện bế tắc trên đồ thị chờ (Wait-For Graph)
 
-Viết tập lệnh SQLite lưu bảng giữ khoá `Held(res TEXT, tx INT)` và bảng chờ `Wait(tx INT, res TEXT)` cho `T1 giữ A chờ B; T2 giữ B chờ A`, JOIN tạo đồ thị chờ `T1 -> T2 -> T1` và kết luận cần huỷ 1 giao dịch nạn nhân, in đúng 3 dòng:
-1. `wait_edges=2`
-2. `deadlock_detected=1`
-3. `victim_needed=1`
+Cơ sở dữ liệu có sẵn `Held(r, tx)` và `Wait(tx, r)`. Tạo khung nhìn đồ thị chờ `CREATE VIEW WFG AS ...` từ phép nối `Wait` với `Held` theo tài nguyên rồi dùng `WITH RECURSIVE` (giới hạn `d < 8`) kiểm tra có chu trình bế tắc không.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh DBS L13 duong_dan/bai_cua_ban.sql
-```
+In đúng 3 dòng: `wait_edges=<d>`, `deadlock_detected=<0|1>`, `victim_needed=<0|1>`.
+Chấm tự động: `bash labs/cham.sh DBS L13 duong_dan/bai_cua_ban.sql`

@@ -63,27 +63,68 @@ STAGES = [
      "Dòng lệnh, tệp, dữ liệu, HTTP, SQL và Git để có chỗ đứng thực hành; rồi Java từ chương trình đầu tiên tới dự án nhiều tệp: biến, rẽ nhánh, vòng lặp, mảng, hàm, lớp, chuỗi, danh sách, ngoại lệ, giao diện, luồng, kiểm thử; kết thúc bằng sổ chuyển khoản nhỏ."),
     ("S02", "Chặng 2 · Nền tảng backend ngân hàng", "MASTER cấp 1A (bắt buộc, học trước INT/ACB)", ["BNK", "PRJ:L01"],
      "Bộ nhớ và luồng của Java, Spring Boot, REST và khoá lũy đẳng, SQL và PL/SQL, Redis, Kafka, SAGA, sổ cái bút toán kép, T24, ISO 8583, đối soát, PIN/HSM."),
-    ("S03", "Chặng 3 · Kỹ năng backend theo JD và CV", "Mở rộng cấp 1A — lấp khoảng trống JD và CV (MASTER Mục 8)", ["BNX", "PRJ:L02"],
-     "Những chủ đề JD và CV nêu mà kho chưa có bài: Git, OpenAPI, gRPC, JWT và OAuth, mTLS, thủ tục lưu trữ Oracle và SQL Server, Oracle cho khối lượng lớn, Elasticsearch, Couchbase, Kafka nâng cao và RabbitMQ, thanh toán quốc tế và ngoại tệ, ví điện tử và thuế điện tử, triển khai, DDD và Open API; rồi các bài theo CV: đa luồng Java nâng cao, Spring Security và Spring Cloud, JUnit 5 và Mockito, Redis nâng cao, Go, hệ thống cho vay số, Adobe Experience Manager, scikit-learn và ONNX Runtime; rồi các bài theo JD mới: JPA/Hibernate và Spring Data, giao dịch Spring và AOP, Maven/Gradle/Jenkins, SOAP và SFTP, so sánh cơ sở dữ liệu, CQRS và Event Sourcing, chịu lỗi và cổng API, quan sát hệ thống (ELK, Prometheus, Grafana), GitOps và bí mật, hệ cũ Servlet/JSP/Tomcat, phê duyệt tín dụng, vận hành SLA/OLA và tài liệu thiết kế, phỏng vấn thiết kế hệ thống."),
+    ("S03", "Chặng 3 · Kỹ năng backend theo JD và CV", "Mở rộng cấp 1A — lấp khoảng trống JD và CV (MASTER Mục 8)", ["BNX", "SPB", "BEP", "PRJ:L02"],
+     "Những chủ đề JD và CV nêu mà kho chưa có bài: Git, OpenAPI, gRPC, JWT và OAuth, mTLS, thủ tục lưu trữ Oracle và SQL Server, Oracle cho khối lượng lớn, Elasticsearch, Couchbase, Kafka nâng cao và RabbitMQ, thanh toán quốc tế và ngoại tệ, ví điện tử và thuế điện tử, triển khai, DDD và Open API; rồi các bài theo CV: đa luồng Java nâng cao, Spring Security và Spring Cloud, JUnit 5 và Mockito, Redis nâng cao, Go, hệ thống cho vay số, Adobe Experience Manager, scikit-learn và ONNX Runtime; rồi các bài theo JD mới: JPA/Hibernate và Spring Data, giao dịch Spring và AOP, Maven/Gradle/Jenkins, SOAP và SFTP, so sánh cơ sở dữ liệu, CQRS và Event Sourcing, chịu lỗi và cổng API, quan sát hệ thống (ELK, Prometheus, Grafana), GitOps và bí mật, hệ cũ Servlet/JSP/Tomcat, phê duyệt tín dụng, vận hành SLA/OLA và tài liệu thiết kế, phỏng vấn thiết kế hệ thống; cùng khoá BEP (GraphQL Supergraph/DataLoader, TDD hợp đồng, C4/UML, Serverless/OWASP BOLA, Protobuf/Avro, Saga/DLQ, Singleflight/Audit, OpenTelemetry, AI coding/SLA/L3, code review & RCA)."),
     ("S04", "Chặng 4 · Ôn phỏng vấn và tích hợp ngân hàng", "MASTER cấp 3–4 (INT, ACB)", ["INT", "ACB", "PRJ:L03"],
      "Ôn tập theo bộ 100 câu hỏi, đàm phán lương, rồi các tình huống tích hợp T24, NAPAS, ksqlDB, chi lương, sinh trắc học, đối soát ba bên, tín dụng."),
-    ("S05", "Chặng 5 · Toán rời rạc, thuật toán, toán cho học máy", "MASTER cấp 0 · ROADMAP T0–T1", ["DMS", "CS112", "CS115:L00-L21", "CS115:L44", "PRJ:L04"],
+    ("S05", "Chặng 5 · Toán rời rạc, thuật toán, toán cho học máy", "MASTER cấp 0 · ROADMAP T0–T1", ["DMS", "CS112", "CS115:L00-L21", "CS115:L44-L46", "PRJ:L04"],
      "Lôgic, chứng minh, đếm, đồ thị; độ phức tạp, cấu trúc dữ liệu, chia để trị, quy hoạch động, đường đi ngắn nhất; vector, ma trận, đạo hàm, xác suất, thống kê. Có thể học song song với chặng 1–4."),
     ("S06", "Chặng 6 · Lập trình C, Linux, máy tính, hệ điều hành, mạng", "MASTER cấp 0 · ROADMAP T1", ["CPR", "LNX", "CSA", "OSY", "NET", "PRJ:L05"],
      "Lập trình C với con trỏ và cấp phát động trên gcc, Linux thực chiến và Docker/Compose, rồi máy tính biểu diễn số và chạy lệnh thế nào, hệ điều hành chia CPU và bộ nhớ ra sao, gói tin đi qua mạng, TCP, DNS, HTTP, TLS."),
-    ("S07", "Chặng 7 · Kỹ nghệ phần mềm, cơ sở dữ liệu, DevOps, bảo mật", "MASTER cấp 1B · ROADMAP T2–T3", ["SWF", "SDP", "DBS", "DVO", "WEB", "SEC", "PRJ:L06"],
-     "Phần mềm đúng đắn và kiểm thử, mẫu thiết kế, cơ sở dữ liệu từ mô hình quan hệ tới giao dịch và khôi phục, web, DevOps, an toàn thông tin."),
-    ("S08", "Chặng 8 · Hệ phân tán, dữ liệu, đám mây, kiến trúc", "MASTER cấp 2 · ROADMAP T3, T5", ["DSY", "EVT", "DEN", "CLD", "CLC", "SAR", "PRJ:L07"],
-     "Đồng hồ lôgic, sao chép, đồng thuận, hướng sự kiện, kỹ thuật dữ liệu, container và Kubernetes, đám mây, kiến trúc hệ thống lớn — tầm của kỹ sư senior và kiến trúc sư."),
-    ("S09", "Chặng 9 · Trí tuệ nhân tạo và học máy", "ROADMAP T4 (MASTER chưa có tầng AI — bổ sung đợt LF1)", ["CS115", "AIF", "DAN", "DSC", "MLP", "MLO", "IRS", "LLM", "AGT", "RLN", "CVI", "PRJ:L08"],
-     "Phần còn lại của toán cho học máy, nền tảng AI, phân tích và khoa học dữ liệu, học máy thực hành trên CPU (MLP), MLOps, truy xuất thông tin, mô hình ngôn ngữ lớn, AI agent, học tăng cường, thị giác máy tính."),
+    ("S07", "Chặng 7 · Kỹ nghệ phần mềm, cơ sở dữ liệu, bảo mật, web", "MASTER cấp 1B · ROADMAP T2–T3", ["SWF", "SDP", "DBS", "WEB", "SEC", "PRJ:L06"],
+     "Phần mềm đúng đắn và kiểm thử, mẫu thiết kế, cơ sở dữ liệu từ mô hình quan hệ tới giao dịch và khôi phục, web, an toàn thông tin."),
+    ("S08", "Chặng 8 · Hệ phân tán, dữ liệu, đám mây, DevOps, kiến trúc", "MASTER cấp 2 · ROADMAP T3, T5", ["DSY", "EVT", "DEN", "CLD", "CLC", "DVO", "SAR", "PRJ:L07"],
+     "Đồng hồ lôgic, sao chép, đồng thuận, hướng sự kiện, kỹ thuật dữ liệu, container và Kubernetes, đám mây, DevOps, kiến trúc hệ thống lớn — tầm của kỹ sư senior và kiến trúc sư."),
+    ("S09", "Chặng 9 · Trí tuệ nhân tạo và học máy", "ROADMAP T4 (MASTER chưa có tầng AI — bổ sung đợt LF1)", ["CS115:L22-L43", "AIF", "DAN", "DSC", "MLP", "MLO", "IRS", "LLM", "AGT", "RLN", "CVI", "AIP", "PRJ:L08"],
+     "Phần còn lại của toán cho học máy, nền tảng AI, phân tích và khoa học dữ liệu, học máy thực hành trên CPU (MLP), MLOps, truy xuất thông tin, mô hình ngôn ngữ lớn, AI agent, học tăng cường, thị giác máy tính, cùng khoá AIP (Feature Store Point-in-Time, Experiment Tracking & Model Registry/A-B, Drift PSI & Auto-Retrain, Dynamic Batching & Edge/Speech, Multi-Turn NLP & Agentic Guardrails, Test Automation & AI Governance/PII)."),
     ("S10", "Chặng 10 · Chuyên gia: lý thuyết, ngôn ngữ, song song, con người, nghề nghiệp, sự cố thật", "ROADMAP T1, T2, T7", ["TOC", "PLC", "PAR", "HCI", "SEP", "CAS", "PRJ:L09"],
      "Lý thuyết tính toán, ngôn ngữ lập trình, tính toán song song, tương tác người–máy, đạo đức và pháp lý nghề nghiệp, và mười hai sự cố có thật đọc theo báo cáo điều tra gốc."),
     ("S11", "Chặng 11 · Chuyên ngành mở rộng (tuỳ chọn)", "ROADMAP T0, T5, T6", ["RBM", "ESY", "ROB", "GFX", "BCH", "PRJ:L10"],
      "Toán cho robot, hệ nhúng thời gian thực, robot tự hành, đồ hoạ máy tính, blockchain — học khi nghề của bạn cần."),
 ]
 FAST = {"S01", "S02", "S03", "S04"}
-LOCKED = {"S01", "S02", "S03", "S04"}
+QUALITY_PATH = Path(__file__).resolve().parent / "quality.yaml"
+
+
+def load_quality():
+    if not QUALITY_PATH.exists():
+        return {}
+    return (yaml.safe_load(QUALITY_PATH.read_text(encoding="utf-8")) or {}).get("courses") or {}
+
+
+def _in_range(lid, rng_expr):
+    for part in str(rng_expr).split(","):
+        part = part.strip()
+        if "-" in part:
+            a, b = part.split("-", 1)
+            if int(a[1:]) <= int(lid[1:]) <= int(b[1:]):
+                return True
+        elif lid == part:
+            return True
+    return False
+
+
+def course_label(qual, C, lids):
+    ent = qual.get(C)
+    if not ent:
+        return "Chờ kiểm toán"
+    if "segments" in ent:
+        for seg in ent["segments"]:
+            if all(_in_range(lid, seg["range"]) for lid in lids):
+                return seg["label"]
+        return ent["segments"][0]["label"]
+    return ent.get("label") or "Chờ kiểm toán"
+
+
+def locked_courses_count(qual):
+    n = 0
+    for ent in qual.values():
+        if "segments" in ent:
+            if all(seg.get("label") == "ĐÃ CHỐT" for seg in ent["segments"]):
+                n += 1
+        elif ent.get("label") == "ĐÃ CHỐT":
+            n += 1
+    return n
 
 # Đối chiếu JD (resources/job/JD.md, tin Software Engineer acbjobs.com.vn + tin Backend/Lead) → bài. Mã nào không có trong giáo án: page() báo lỗi.
 JD_MAP = [
@@ -111,35 +152,41 @@ JD_MAP = [
     ("Ứng dụng AI (lợi thế của bằng Cử nhân AI)", "lợi thế riêng của ứng viên", ["INT:L05", "AIF:L00", "LLM:L12", "MLO:L06", "MLO:L08"]),
     # Đối chiếu CV (resources/job/PHAM-MINH-DUC-SENIOR-INTEGRATION-CV.md): mỗi dòng CV phải có bài dạy đủ để bị hỏi là trả lời được (đợt LF2, 2026-11-12).
     ("CV — Java đa luồng nâng cao: ExecutorService, CompletableFuture, ForkJoinPool", "hồ sơ CV", ["INT:L01", "BNX:L16"]),
-    ("CV — Spring Security, Spring Security OAuth2, Spring Cloud, Consul", "hồ sơ CV", ["BNX:L04", "BNX:L17"]),
-    ("CV — kiểm thử tự động: JUnit 5, Mockito", "hồ sơ CV", ["BNX:L18"]),
-    ("CV — Redis Cluster, khoá SET NX EX, khử trùng theo mã giao dịch, danh sách đen JWT", "hồ sơ CV", ["BNK:L06", "BNX:L19", "BNX:L03"]),
+    ("CV — Spring Security, Spring Security OAuth2, Spring Cloud, Consul", "hồ sơ CV", ["BNX:L04", "BNX:L17", "SPB:L08"]),
+    ("CV — kiểm thử tự động: JUnit 5, Mockito", "hồ sơ CV", ["BNX:L18", "SPB:L09", "SPB:L10"]),
+    ("CV — Redis Cluster, khoá SET NX EX, khử trùng theo mã giao dịch, danh sách đen JWT", "hồ sơ CV", ["BNK:L06", "BNX:L19", "BNX:L03", "SPB:L04", "SPB:L05"]),
     ("CV — Go (Golang), Fiber", "hồ sơ CV", ["BNX:L20"]),
     ("CV — hệ thống cho vay: LOS/LMS, chấm điểm tín dụng, thẩm định, ký số + ECM, 2FA, dấu vân tay thiết bị, trường đa trị T24", "hồ sơ CV", ["BNX:L21", "ACB:L04", "ACB:L08"]),
     ("CV — Adobe Experience Manager: OSGi, Sling Models, HTL, JCR", "hồ sơ CV", ["BNX:L22"]),
     ("CV — Scikit-Learn, ONNX Runtime, Isolation Forest (dự án học tập)", "hồ sơ CV", ["BNX:L23", "INT:L05", "CS115:L37"]),
-    ("CV — CQRS, DLQ, Kafka, saga, outbox (tích hợp ngân hàng)", "hồ sơ CV", ["EVT:L02", "EVT:L04", "EVT:L05", "BNX:L10", "CLD:L14"]),
+    ("CV — CQRS, DLQ, Kafka, saga, outbox (tích hợp ngân hàng)", "hồ sơ CV", ["EVT:L02", "EVT:L04", "EVT:L05", "BNX:L10", "CLD:L14", "SPB:L06"]),
     # Đối chiếu JD mới (phần cuối resources/job/JD.md, cập nhật 2026-11-13): mỗi nhóm yêu cầu có bài dạy (BNX L24–L36).
-    ("JD mới — JPA/Hibernate, Spring Data, tối ưu truy vấn qua ORM", "mô tả công việc", ["BNX:L24"]),
-    ("JD mới — Spring: quản lý giao dịch, AOP chuyên sâu", "mô tả công việc", ["BNK:L02", "BNX:L25"]),
-    ("JD mới — Maven, Gradle, Jenkins", "mô tả công việc", ["BNX:L26"]),
-    ("JD mới — REST/SOAP, SFTP (tích hợp hệ cũ, tệp lô)", "mô tả công việc", ["BNX:L01", "BNX:L27"]),
+    ("JD mới — JPA/Hibernate, Spring Data, tối ưu truy vấn qua ORM", "mô tả công việc", ["BNX:L24", "SPB:L03"]),
+    ("JD mới — Spring: quản lý giao dịch, AOP chuyên sâu", "mô tả công việc", ["BNK:L02", "BNX:L25", "SPB:L02"]),
+    ("JD mới — Maven, Gradle, Jenkins", "mô tả công việc", ["BNX:L26", "SPB:L00", "SPB:L12"]),
+    ("JD mới — REST/SOAP, SFTP (tích hợp hệ cũ, tệp lô)", "mô tả công việc", ["BNX:L01", "BNX:L27", "SPB:L01", "SPB:L07"]),
     ("JD mới — MongoDB, MySQL, PostgreSQL bên cạnh Oracle và SQL Server", "mô tả công việc", ["BNX:L28", "BNX:L06", "BNX:L07", "BNX:L37"]),
     ("JD mới — CQRS, Event Sourcing", "mô tả công việc", ["EVT:L02", "BNX:L29"]),
     ("JD mới — Circuit Breaker, API Gateway, cân bằng tải", "mô tả công việc", ["BNX:L30", "BNX:L14", "CLD:L04"]),
-    ("JD mới — ELK, Prometheus, Grafana (nhật ký, giám sát)", "mô tả công việc", ["BNX:L31", "CLD:L11", "DVO:L11"]),
+    ("JD mới — ELK, Prometheus, Grafana (nhật ký, giám sát)", "mô tả công việc", ["BNX:L31", "CLD:L11", "DVO:L11", "SPB:L11"]),
     ("JD mới — GitOps (Git, ArgoCD, Vault), AWS cho backend", "mô tả công việc", ["BNX:L32"]),
     ("JD mới — nhóm hệ cũ: JSP/Servlet, Tomcat, JBoss", "mô tả công việc", ["BNX:L33"]),
     ("JD mới — hệ thống phê duyệt tín dụng cá nhân và doanh nghiệp, truy vấn lịch sử tín dụng", "mô tả công việc", ["BNX:L34", "BNX:L21", "ACB:L08"]),
-    ("JD mới — hỗ trợ mức 3 theo SLA/OLA, ticket Production, tài liệu thiết kế, kịch bản kiểm thử", "mô tả công việc", ["BNX:L35"]),
-    ("JD mới — vòng phỏng vấn thiết kế hệ thống, đọc tài liệu kỹ thuật tiếng Anh", "chuẩn bị phỏng vấn", ["BNX:L36", "BNK:L14", "SAR:L12"]),
+    ("JD mới — hỗ trợ mức 3 theo SLA/OLA, ticket Production, tài liệu thiết kế, kịch bản kiểm thử", "mô tả công việc", ["BNX:L35", "BEP:L08"]),
+    ("JD mới — vòng phỏng vấn thiết kế hệ thống, đọc tài liệu kỹ thuật tiếng Anh", "chuẩn bị phỏng vấn", ["BNX:L36", "BNK:L14", "SAR:L12", "BEP:L09"]),
+    ("JD mở rộng — GraphQL Supergraph/DataLoader, TDD hợp đồng, C4/UML, Serverless/OWASP BOLA, Protobuf/Avro, Saga/DLQ, Singleflight, OpenTelemetry", "mở rộng backend (WP-3B)", ["BEP:L00-L07"]),
+    ("JD mở rộng AI — Feature Store, Model Registry/A-B, Drift PSI, Dynamic Batching & Edge, Agentic Guardrails, QA API/UI & AI Governance", "mở rộng AI sản xuất (WP-3D)", ["AIP:L00-L05"]),
 ]
 
 
 def lesson_index(cur):
     les = {f"{C}:{l['id']}": (C, l) for C, c in cur.items() for l in c["lessons"]}
-    pre = {u: {f"{C}:{q}" for q in l.get("requires") or []} | {str(q) for q in l.get("requires_ext") or []}
-           for u, (C, l) in les.items()}
+    pre = {}
+    for C, c in cur.items():
+        lab_reqs = {str(q) for q in (c.get("lab") or {}).get("requires") or []}
+        for l in c["lessons"]:
+            u = f"{C}:{l['id']}"
+            pre[u] = {f"{C}:{q}" for q in l.get("requires") or []} | {str(q) for q in l.get("requires_ext") or []} | lab_reqs
     return les, pre
 
 
@@ -155,17 +202,17 @@ def expand(cur, g):
 
 
 def stages(cur):
-    """[(khoá chặng, tên, cấp, giới thiệu, [(C, l), …])] — bao đóng tiên quyết, sắp tô pô, mỗi bài một chỗ; kiểm mọi cạnh."""
+    """[(khoá chặng, tên, cấp, giới thiệu, [(C, l), …])] — thành viên chặng khai tường minh (không kéo bao đóng).
+    Trong một chặng sắp tô pô theo cạnh thật (requires, requires_ext, lab.requires) + cạnh ngầm bài k → k+1 cùng khoá,
+    phá hoà theo `prefer` rồi số bài. Kiểm cứng: mỗi bài đúng một chỗ, mọi cạnh thật trỏ về bài đứng trước."""
     tr = yaml.safe_load((ROOT / "curriculum" / "tracks.yaml").read_text(encoding="utf-8"))
     prefer = list(tr["prefer"])
-    les, pre = lesson_index(cur)
-    # AF2: trong cùng một khoá, bài đứng sau luôn học SAU bài đứng trước theo thứ tự tác giả (cạnh ngầm CHỈ để xếp dãy, không hiện
-    # ở "Cần học trước"). Đo bằng audit/review/check_next_refs.py: 551 lời hẹn "Bài sau (bài N)", 93 lệch dãy học → 0 lệch.
-    pre = {u: set(v) for u, v in pre.items()}
+    les, real = lesson_index(cur)
+    imp = defaultdict(set)
     for C, c in cur.items():
         ids = [l["id"] for l in c["lessons"]]
         for a, b in zip(ids, ids[1:]):
-            pre[f"{C}:{b}"].add(f"{C}:{a}")
+            imp[f"{C}:{b}"].add(f"{C}:{a}")
     for C in cur:
         if C not in prefer:
             prefer.append(C)
@@ -175,21 +222,19 @@ def stages(cur):
         gs = [u for g in goals for u in expand(cur, g)]
         if not gs:
             continue
-        need, stack = set(), list(gs)
-        while stack:
-            u = stack.pop()
-            if u in need or u in placed:
-                continue
-            assert u in les, f"tiên quyết {u} không có trong giáo án"
+        need = set()
+        for u in gs:
+            assert u in les, f"mục tiêu chặng {k} không có bài {u}"
+            assert u not in placed, f"bài {u} khai ở nhiều chặng"
             need.add(u)
-            stack += list(pre[u])
-        ind = {u: len(pre[u] & need) for u in need}
+        op = {u: (real[u] | imp[u]) & need for u in need}
+        ind = {u: len(op[u]) for u in need}
         order, ready = [], sorted((u for u in need if ind[u] == 0), key=key)
         while ready:
             u = ready.pop(0)
             order.append(u)
             for v in need:
-                if u in pre[v]:
+                if u in op[v]:
                     ind[v] -= 1
                     if ind[v] == 0:
                         ready.append(v)
@@ -201,8 +246,8 @@ def stages(cur):
         out.append((k, name, level, intro, [les[u] for u in order]))
     missing = set(les) - placed
     assert not missing, f"bài không có chỗ trong dãy: {sorted(missing)[:10]}"
-    bad = [(u, a) for u in les for a in pre[u] if pos[a] >= pos[u]]
-    assert not bad, f"thứ tự vi phạm tiên quyết: {bad[:5]}"
+    bad = [(u, a) for u in les for a in real[u] if pos[a] >= pos[u]]
+    assert not bad, f"thứ tự vi phạm tiên quyết thật: {bad[:5]}"
     return out
 
 
@@ -756,15 +801,15 @@ ICON_THEME = ('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9
 FASTTAG = '<span class="tag fast">Đường nhanh phỏng vấn</span>'
 
 
-def stage_tag(p):
-    k, rows = p["k"], p["rows"]
-    tot = len(rows)
-    af2_n = sum(1 for r in rows if r.get("af2"))
-    if k in LOCKED and tot and af2_n == tot:
-        return '<span class="tag lock">ĐÃ CHỐT</span>'
-    if af2_n > 0:
-        return f'<span class="tag part">AF2 {af2_n}/{tot}</span>'
-    return f'<span class="tag part">Chờ nâng AF2 (0/{tot})</span>'
+def stage_tag(p, qual):
+    groups = {}
+    for r in p["rows"]:
+        groups.setdefault(r["C"], []).append(r["id"])
+    m = len(groups)
+    n = sum(1 for C, lids in groups.items() if course_label(qual, C, lids) == "ĐÃ CHỐT")
+    if m and n == m:
+        return f'<span class="tag lock">ĐÃ CHỐT ({n}/{m} khoá)</span>'
+    return f'<span class="tag part">{n}/{m} khoá đã chốt</span>'
 
 
 def hue_map(data):
@@ -836,6 +881,7 @@ def long_name(p):
 
 def page_html(data, seq, jd, les):
     esc = html.escape
+    qual = load_quality()
     ready = [r for r in seq if r["ready"]]
     tot_h = sum(r["dur"] for r in ready) / 3600
     fast = [r for r in ready if r["stage"] in FAST]
@@ -862,7 +908,7 @@ def page_html(data, seq, jd, les):
         tl.append(
             f'<li class="{"fast" if isf else ""}" data-k="{k}"><span class="node" aria-hidden="true"><span>{i}</span></span>'
             f'<a class="mcard" href="#{k}"><div class="mt">{esc(long_name(p))}'
-            f'{FASTTAG if isf else ""}{stage_tag(p)}'
+            f'{FASTTAG if isf else ""}{stage_tag(p, qual)}'
             f'<span class="tag here">Bạn đang ở đây</span><span class="tag fin">Đã xong</span></div>'
             f'<div class="lv">{esc(p["level"])}</div>'
             f'<div class="mm"><span><b>{len(rr)}</b> bài{f" (+{pend} đang soạn)" if pend else ""}</span><span><b>{f1(hrs)}</b> giờ video</span></div>'
@@ -898,14 +944,16 @@ def page_html(data, seq, jd, les):
         for gi, (C, grs) in enumerate(groups):
             gr = [r for r in grs if r["ready"]]
             ttl = grs[0]["course"]
+            clab = course_label(qual, C, [r["id"] for r in grs])
+            ctag = f'<span class="tag {"lock" if clab == "ĐÃ CHỐT" else "part"}">{esc(clab)}</span>'
             gh.append(
-                f'<details class="course" open data-g="{k}-{gi}"><summary><span class="cname">{cc(C)} <span>{esc(ttl) if ttl else ""}</span></span>'
+                f'<details class="course" open data-g="{k}-{gi}"><summary><span class="cname">{cc(C)} <span>{esc(ttl) if ttl else ""}</span>{ctag}</span>'
                 f'<span class="cprog" data-gprog="{k}-{gi}">0/{len(gr)}</span><span class="bar"><i data-gbar="{k}-{gi}"></i></span><span class="chev"></span></summary>'
                 f'<ol class="ls">{"".join(row_html(r, les) for r in grs)}</ol></details>')
         isf = k in FAST
         parts.append(
             f'<section class="stage{" fast" if isf else ""}" id="{k}" data-k="{k}"><details><summary><span class="sn">{i}</span>'
-            f'<div class="sh"><h2>{esc(long_name(p))}{FASTTAG if isf else ""}{stage_tag(p)}<span class="chev"></span></h2>'
+            f'<div class="sh"><h2>{esc(long_name(p))}{FASTTAG if isf else ""}{stage_tag(p, qual)}<span class="chev"></span></h2>'
             f'<div class="sm">{len(rr)} bài{f" (+{pend} đang soạn)" if pend else ""} · {f1(sum(r["dur"] for r in rr) / 3600)} giờ video</div>'
             f'<div class="sp"><span class="prog" data-prog="{k}">0/{len(rr)}</span><div class="bar"><i data-bar="{k}"></i></div></div></div></summary>'
             f'<div class="sbody"><p class="lvl">{esc(p["level"])}</p><p class="intro">{esc(p["intro"])}</p>{"".join(gh)}</div></details></section>')
@@ -921,7 +969,7 @@ def page_html(data, seq, jd, les):
 <span class="eyebrow">Lộ trình tự học</span>
 <h1>Từ con số 0 tới senior</h1>
 <p class="lead">Từ con số 0 tới năng lực nền của kỹ sư senior: công nghệ thông tin, khoa học máy tính, trí tuệ nhân tạo. Học từng bài video, tự kiểm, ôn đúng hạn.</p>
-<p class="facts mute"><span><b>{len(ready)}</b> bài có video{f" (+{pend_all} đang soạn)" if pend_all else ""}</span><span><b>{tot_h:.0f}</b> giờ video</span><span><b>{len(data)}</b> chặng</span><span><b>{sum(1 for r in ready if r.get("lab"))}</b> bài có phần Tự làm (lab chạy được)</span><span><b>{len(fast)}</b> bài ({sum(r["dur"] for r in fast) / 3600:.0f} giờ) là đường nhanh phỏng vấn</span></p>
+<p class="facts mute"><span><b>{len(ready)}</b> bài có video{f" (+{pend_all} đang soạn)" if pend_all else ""}</span><span><b>{tot_h:.0f}</b> giờ video</span><span><b>{len(data)}</b> chặng</span><span><b>{len(fast)}</b> bài ({sum(r["dur"] for r in fast) / 3600:.0f} giờ) là đường nhanh phỏng vấn</span></p>
 </div>
 <div class="next" id="next" aria-live="polite">
 <div class="lbl">Học tiếp</div>
@@ -1387,6 +1435,7 @@ def cmd_page(cur):
     print(f"{OUT}: {len(seq)} bài ({len(ready)} có video, {len(seq) - len(ready)} đang soạn), {n} liên kết tệp, "
           f"{na} liên kết neo, chết {len(dead)}; tự kiểm đủ câu+đáp án {nq}/{len(ready)}, có khung hình {nf}/{len(ready)}; có lab {nl}; "
           f"{len(h.encode('utf-8')) / 1e6:.2f} MB; HOC_TAP.md: {len(mdl)} liên kết, chết {len(mdead)}")
+    print(f"nhãn chốt: {locked_courses_count(load_quality())} khoá")
     for x in dead + mdead:
         print("  chết:", x)
     return 1 if dead or mdead or nq < len(ready) else 0

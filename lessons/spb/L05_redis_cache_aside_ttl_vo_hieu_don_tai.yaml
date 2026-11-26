@@ -1,0 +1,417 @@
+id: L05
+course: SPB
+series: SPB · Spring Boot thực chiến với PostgreSQL, Redis và Kafka
+title: Bài 5 — Redis thực chiến với cache-aside, TTL, vô hiệu đệm và chống dồn tải
+voice: vi-VN-NamMinhNeural
+rate: -5%
+depth: full
+af2: true
+covers:
+- objective: 1
+  scene: example
+- objective: 2
+  scene: check
+- objective: 3
+  scene: quymo
+source: curriculum/spb.yaml L05; labs/SPB/L05 (chạy thật ./mvnw -B verify trên Redis 8 Testcontainers)
+assumes: []
+objectives:
+- Cài đặt mẫu đọc cache-aside kèm hạn sống TTL ngẫu nhiên nhẹ và xoá khoá đệm khi cập nhật số dư
+- Chống dồn tải khi khoá nóng hết hạn bằng khoá phân tán SET NX EX hoặc đồng bộ tại chỗ
+- Đo số truy vấn lọt xuống cơ sở dữ liệu khi bộ đệm sập ở 100, 10 000 và 100 000 yêu cầu đồng thời
+scenes:
+- id: hook
+  kind: hook
+  title: 'Khoá số dư nóng vừa hết hạn: 10 000 yêu cầu đồng thời đánh sập DB?'
+  checks:
+  - 10_000 / 1 == 10_000
+  steps:
+  - show: <div class='box key'><p>Khi gắn bộ đệm Redis, đọc số dư nhanh gấp hàng chục lần nhờ trúng đệm trên RAM. Nhưng ngay
+      khoảnh khắc khoá hết hạn (<code>TTL = 0</code>), hàng nghìn luồng cùng thấy trượt đệm và đồng loạt lao xuống PostgreSQL
+      tạo hiệu ứng <b>đập vỡ đệm (cache stampede)</b>.</p><p>Bài này kết hợp <b>cache-aside + xoá đệm sau ghi + TTL lệch pha
+      + khoá phân tán <code>SET NX EX</code></b> trên Redis 8 thật.</p></div>
+    say: Chào bạn đến với bài năm của khoá Spring Boot thực chiến. Sau khi làm chủ ghi sổ an toàn trên PostgreSQL, bài toán
+      hiệu năng tiếp theo nằm ở luồng đọc số dư có tần suất rất cao. Bộ đệm Redis giảm tải hàng chục lần, nhưng nếu thiếu
+      lớp chống dồn tải khi khoá nóng hết hạn thì hàng vạn yêu cầu sẽ đánh sập lõi dữ liệu. Hôm nay ta cài đặt trọn vẹn chu
+      trình đọc ghi bộ đệm trên container Redis tám thật. Trong giờ cao điểm thanh toán, tần suất đọc số dư thường cao gấp
+      hàng chục lần tần suất chuyển tiền thật. Do đó hiểu rõ vòng đời khoá đệm và cơ chế chống bão trượt đệm là kỹ năng bắt
+      buộc ở mọi hệ thống lớn.
+    focus:
+    - 0
+    - '1.1'
+    - '1.1'
+    - '1.2'
+    - '1.1'
+    - '1.2'
+    clear: true
+- id: prereq
+  kind: prereq
+  title: 'Ôn nhanh: lệnh Redis chuỗi đơn giản, hạn sống TTL và SET NX'
+  steps:
+  - show: <table class='t'><tr><th>lệnh Redis cơ bản</th><th>ý nghĩa thực thi</th></tr><tr><td><code>GET bal:TK1</code> /
+      <code>SET ... EX 30</code></td><td>Đọc hoặc ghi chuỗi kèm tự động hết hạn sau 30 giây</td></tr><tr><td><code>DEL bal:TK1</code></td><td>Xoá
+      khoá đệm cũ ngay khi số dư gốc thay đổi</td></tr><tr><td><code>SET lock:bal:TK1 tok NX EX 5</code></td><td>Chỉ đặt được
+      nếu khoá chưa tồn tại (<code>NX</code>), tự huỷ sau 5 giây</td></tr></table>
+    say: Hãy ôn lại ngắn gọn ba thao tác cốt lõi trên kho lưu trữ RAM Redis trước khi ghép vào ứng dụng Java. Lệnh đọc và
+      ghi chuỗi luôn cần đi kèm thời gian hết hạn để bộ nhớ RAM không bị phình vô tận theo năm tháng. Lệnh xoá khoá giúp dọn
+      sạch giá trị cũ mỗi khi giao dịch thay đổi số dư thật dưới đĩa. Cuối cùng, cờ đặt chỉ khi chưa tồn tại kèm thời gian
+      sống là phép toán nguyên tử giúp bầu đúng một luồng đi đọc lại cơ sở dữ liệu. Khác với bộ nhớ cục bộ trong từng máy
+      chủ Java, Redis chia sẻ một trạng thái nhất quán chung cho toàn bộ cụm ứng dụng. Lệnh đặt có điều kiện kèm thời gian
+      tự huỷ bảo đảm ngay cả khi tiến trình thắng khoá bị treo đột ngột thì hệ thống vẫn tự phục hồi.
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.2'
+    - '1.4'
+    clear: true
+- id: sym
+  kind: symbol
+  title: Mẫu cache-aside, TTL ngẫu nhiên nhẹ và vô hiệu hoá khi ghi
+  steps:
+  - show: <table class='t'><tr><th>kỹ thuật đệm</th><th>tác dụng bảo vệ hệ thống</th></tr><tr><td><b>Cache-Aside</b> (Đọc
+      đệm trước)</td><td>Trúng đệm trả ngay; trượt mới đọc DB rồi nạp vào Redis</td></tr><tr><td><b>Write-Invalidate</b> (Cập
+      nhật DB rồi <code>DEL</code>)</td><td>An toàn hơn ghi đè Redis khi có nhiều luồng cập nhật đồng thời</td></tr><tr><td><b>TTL
+      + jitter</b> (ví dụ <code>30 + rand(0..5)</code> s)</td><td>Tránh hàng triệu khoá cùng hết hạn vào đúng một giây</td></tr><tr><td><b>Single-flight
+      <code>SET NX EX</code></b></td><td>Chỉ đúng 1 luồng giữ khoá đi hỏi DB, các luồng còn lại chờ đọc đệm mới</td></tr></table>
+    say: Bảng này tổng hợp bốn nguyên tắc chuẩn khi vận hành bộ đệm trong hệ thống ngân hàng. Ở chiều đọc, ứng dụng kiểm tra
+      Redis trước và chỉ đọc xuống cơ sở dữ liệu khi bị trượt đệm. Ở chiều ghi, ta cập nhật cơ sở dữ liệu xong rồi xoá khoá
+      đệm thay vì ghi đè song song, nhờ đó tránh làm sai số dư trên RAM. Thêm vài giây ngẫu nhiên vào hạn sống ngăn bão hết
+      hạn hàng loạt, còn khoá phân tán giữ chỉ một luồng làm mới khoá. Chiến lược cập nhật đĩa rồi xoá khoá đệm đơn giản mà
+      an toàn hơn nhiều so với cố gắng đồng bộ ghi đè hai nơi. Khi kết hợp độ lệch thời gian hết hạn và khoá đơn luồng, hệ
+      thống đứng vững cả khi tải tăng đột biến hàng chục lần.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    - '1.4'
+    - '1.2'
+    - '1.4'
+    clear: true
+- id: intuition
+  kind: intuition
+  title: Luồng Single-Flight chống bão trượt đệm với SET NX EX
+  steps:
+  - show: <div><svg width="960" height="210" viewBox="0 0 960 210"><rect x="30" y="45" width="210" height="95" rx="10" fill="#dbeafe"
+      stroke="#2a78d6" stroke-width="2"/><text x="135.0" y="88" font-size="17" font-weight="700" text-anchor="middle" fill="#1e293b">20
+      luồng cùng GET</text><text x="135.0" y="116" font-size="14" text-anchor="middle" fill="#475569">bal:TK1 vừa hết hạn
+      (miss)</text><line x1="240" y1="92" x2="310" y2="92" stroke="#475569" stroke-width="2"/><polygon points="310,92 302,87
+      302,97" fill="#475569"/><rect x="310" y="45" width="225" height="95" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="2"/><text
+      x="422.5" y="88" font-size="17" font-weight="700" text-anchor="middle" fill="#1e293b">SET lock NX EX 5</text><text x="422.5"
+      y="116" font-size="14" text-anchor="middle" fill="#475569">1 luồng thắng — 19 luồng đợi</text><line x1="535" y1="75"
+      x2="625" y2="55" stroke="#16a34a" stroke-width="2"/><polygon points="625,55 615,52 618,62" fill="#16a34a"/><rect x="625"
+      y="20" width="305" height="68" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/><text x="777.5" y="50" font-size="16"
+      font-weight="700" text-anchor="middle" fill="#1e293b">Luồng giữ khoá → Đọc DB 1 lần</text><text x="777.5" y="73" font-size="14"
+      text-anchor="middle" fill="#475569">Ghi lại Redis TTL 30s rồi mở khoá</text><line x1="535" y1="115" x2="625" y2="145"
+      stroke="#475569" stroke-width="2"/><polygon points="625,145 618,138 615,147" fill="#475569"/><rect x="625" y="112" width="305"
+      height="68" rx="10" fill="#e5e7eb" stroke="#6b7280" stroke-width="2"/><text x="777.5" y="142" font-size="16" font-weight="700"
+      text-anchor="middle" fill="#1e293b">19 luồng còn lại → Đọc Redis</text><text x="777.5" y="165" font-size="14" text-anchor="middle"
+      fill="#475569">Ngủ ngắn 25 ms rồi đọc lại bộ đệm</text></svg></div>
+    say: Quan sát sơ đồ điều phối hai mươi luồng cùng lúc đòi đọc một khoá số dư vừa hết hạn. Thay vì để cả hai mươi luồng
+      cùng ập xuống cơ sở dữ liệu, tất cả đều thử xin khoá phân tán qua lệnh đặt chỉ khi chưa tồn tại trong năm giây. Duy
+      nhất một luồng thắng cuộc đi hỏi cơ sở dữ liệu đúng một lần, nạp kết quả kèm hạn sống vào Redis rồi nhả khoá an
+      toàn.
+    clear: true
+  - show: ''
+    say: Mười chín luồng còn lại chờ một nhịp ngắn vài chục mi-li-giây rồi đọc lại giá trị mới vừa xuất hiện ngay trên RAM.
+      Bản chất của cơ chế một luồng đi hỏi này là đánh đổi vài chục mi-li-giây chờ nhẹ để cứu sống toàn bộ tầng cơ sở dữ
+      liệu. Thay vì cả hai mươi luồng cùng thực hiện câu truy vấn giống hệt nhau, chỉ một luồng làm việc nặng và chia sẻ
+      kết quả qua RAM.
+- id: formula
+  kind: formula
+  title: Kiểm tra kép (double-check) và giải phóng khoá đúng chủ sở hữu
+  checks:
+  - 30 + 5 == 35
+  steps:
+  - show: <div class='box key'><p><b>Hai chi tiết sống còn khi dùng khoá phân tán trên Redis:</b></p><p>1. <b>Kiểm tra kép
+      sau khi thắng khoá:</b> Luồng thứ 2 vừa chờ xong vẫn phải gọi lại <code>redis.opsForValue().get(key)</code> trước khi
+      chạm DB, tránh tải lặp khi luồng trước vừa ghi xong và nhả khoá.</p><p>2. <b>Gắn mã ngẫu nhiên token khi mở khoá:</b>
+      Chỉ xoá <code>lockKey</code> nếu giá trị trong Redis vẫn đúng là <code>token</code> của mình, tránh xoá nhầm khoá của
+      luồng khác khi hết <code>EX 5</code>.</p></div>
+    say: Hai chi tiết kỹ thuật này quyết định việc khoá phân tán của bạn có chạy sạch dưới tải cao hay không. Sau khi giành
+      được khoá, luồng vẫn đọc lại bộ đệm thêm một lượt nữa vì luồng trước có thể vừa nạp xong giá trị mới. Khi giải phóng
+      khoá, ta so khớp mã ngẫu nhiên để không bao giờ xoá nhầm khoá mà một luồng mới vừa xin được. Nếu chỉ dùng lệnh xoá khoá
+      trần không kiểm tra mã sở hữu, luồng xử lý chậm có thể vô tình xoá mất khoá mới của luồng khác. Sự kết hợp kiểm tra
+      kép kết hợp mã sở hữu duy nhất khiến khoá phân tán trên Redis trở nên tin cậy và an toàn tuyệt đối.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    clear: true
+- id: example
+  kind: example
+  title: Cài đặt BalanceCacheService với StringRedisTemplate và SET NX EX
+  checks:
+  - 500_000 + 200_000 == 700_000
+  steps:
+  - show: <p><b>1. Đọc đệm kèm khoá chống dồn tải và TTL có jitter</b></p><div class="code"><div>String cached = redis.opsForValue().get(key);</div><div>if
+      (cached != null) return Long.parseLong(cached);</div><div>String lockKey = "lock:bal:" + accId, token = UUID.randomUUID().toString();</div><div>if
+      (Boolean.TRUE.equals(redis.opsForValue().setIfAbsent(lockKey, token, Duration.ofSeconds(5)))) {</div><div>  try {</div><div>    String
+      again = redis.opsForValue().get(key);</div><div>    if (again != null) return Long.parseLong(again);</div><div>    long
+      bal = loadFromDb(accId);</div><div>    long ttl = 30L + ThreadLocalRandom.current().nextInt(6);</div><div>    redis.opsForValue().set(key,
+      String.valueOf(bal), Duration.ofSeconds(ttl));</div><div>    return bal;</div><div>  } finally { if (token.equals(redis.opsForValue().get(lockKey)))
+      redis.delete(lockKey); }</div><div>}</div></div>
+    say: Hãy theo dõi từng dòng của hàm đọc bộ đệm có bảo vệ chống dồn tải trên màn hình. Nếu khoá tồn tại sẵn trên Redis
+      thì hàm chuyển sang số nguyên và trả về ngay lập tức. Khi trượt đệm, luồng xin khoá năm giây với chuỗi ngẫu nhiên, kiểm
+      tra kép rồi mới đọc cơ sở dữ liệu và nạp đệm ba mươi tới ba mươi lăm giây. Ở nhánh trượt khoá khi luồng khác đang giữ
+      khoá đọc dữ liệu, luồng hiện tại thực hiện vòng chờ ngắn hai mươi lăm mi-li-giây rồi thử đọc lại đệm. Nếu sau một vài
+      nhịp chờ vẫn chưa có giá trị hoặc hết khoá, luồng kiểm tra lại bộ đệm rồi mới dự phòng đọc từ cơ sở dữ liệu.
+    focus:
+    - 1
+    - 2
+    - 2
+    - 2
+    - 2
+    clear: true
+  - show: <p><b>2. Cập nhật DB xong lập tức vô hiệu hoá khoá Redis</b></p><div class="code"><div>@Transactional</div><div>public
+      void deposit(String accId, long delta) {</div><div>  Account a = accounts.findById(accId).orElseThrow();</div><div>  a.setBalance(a.getBalance()
+      + delta);</div><div>  accounts.saveAndFlush(a);</div><div>  redis.delete("bal:" + accId);</div><div>}</div></div>
+    say: Còn ở chiều cập nhật số dư nạp thêm tiền, hàm cộng thẳng vào bản ghi cơ sở dữ liệu và đẩy xuống ngay bằng lệnh lưu
+      xả. Ngay sau đó, ta xoá khoá tương ứng trong Redis để lần đọc kế tiếp buộc phải lấy lại số dư mới nhất vừa ghi xong.
+      Gọi lệnh lưu xả trước khi xoá khoá Redis bảo đảm thay đổi số dư đã thực sự nằm gọn trong phiên cơ sở dữ liệu đang xử
+      lý. Giả sử số dư ban đầu năm trăm nghìn cộng thêm hai trăm nghìn, lần đọc sau không thấy đệm nên nạp đúng bảy trăm nghìn vừa cập nhật.
+    focus:
+    - 1
+    - 2
+    - 1
+    - 2
+    clear: true
+- id: check
+  kind: check
+  title: 'Chạy thật trên Redis 8 Testcontainers: Cache Hit, Eviction và 20 luồng Stampede'
+  checks:
+  - 20 - 1 == 19
+  steps:
+  - show: '<p><b>Kết quả chạy thật KiemL05Test trên container redis:8</b></p><div class="code"><div>Container redis:8@sha256:1f8829...
+      started in PT0.69s</div><div>// 1) Cache Hit: đọc TK1 2 lần liên tiếp → dbReads == 1</div><div>// 2) Write Eviction:
+      đọc 500_000 → nạp 200_000 → đọc lại trả ngay 700_000</div><div>// 3) Stampede: 20 luồng đồng loạt đợi CountDownLatch
+      rồi gọi getBalance("TK1"):</div><div>//    20/20 trả đúng 500_000, số lần gọi DB giảm còn &lt;= 2 (thay vì 20)</div><div>[INFO]
+      Tests run: 4, Failures: 0, Errors: 0</div><div>KiemL05Test: 3 ca, 0 hỏng</div></div>'
+    say: Kết quả kiểm thử trên container Redis tám thật xác nhận cả ba kịch bản vận hành trọng yếu đều chạy chính xác. Đọc
+      liên tiếp hai lần chỉ chạm xuống cơ sở dữ liệu đúng một lần đầu tiên rồi trúng đệm hoàn toàn ở lần sau. Sau lệnh nạp
+      thêm hai trăm nghìn đồng, lần đọc tiếp theo trả ngay con số bảy trăm nghìn nhờ khoá cũ đã bị xoá sạch. Khi thả hai mươi
+      luồng cùng lúc vào khoá rỗng, số lượt gọi xuống cơ sở dữ liệu bị chặn gọn còn tối đa hai lần nhờ khoá chống dồn tải.
+      Ngoài kiểm chứng trúng đệm và nạp lại sau ghi, bộ đếm số lượt đọc cơ sở dữ liệu xác nhận giảm ít nhất mười lần dưới
+      tải đồng thời. Trong điều kiện thực tế có độ trễ mạng ngắn, tối đa chỉ một tới hai luồng chạm cơ sở dữ liệu thay vì
+      cả hai mươi luồng.
+    focus:
+    - 1
+    - 2
+    - 2
+    - 2
+    - 2
+    - 2
+    clear: true
+- id: quymo
+  kind: example
+  title: Truy vấn lọt xuống DB ở 100, 10 000 và 100 000 yêu cầu đồng thời
+  checks:
+  - 100_000 / 1 == 100_000
+  steps:
+  - show: <table class='t'><tr><th>lưu lượng đồng loạt vào khoá hết hạn</th><th>không chống dồn tải</th><th>có khoá SET NX
+      EX + kiểm kép</th></tr><tr><td><b>100 yêu cầu</b></td><td>Tới 100 câu SQL xuống PostgreSQL</td><td><b>1 câu SQL</b>
+      (giảm 99%)</td></tr><tr><td><b>10 000 yêu cầu</b></td><td>10 000 câu SQL gây nghẽn bể kết nối</td><td><b>1 câu SQL</b>
+      + bản sao chờ ngắn</td></tr><tr><td><b>100 000 yêu cầu</b></td><td>Sập dây chuyền DB (100 000 truy vấn)</td><td><b>1 câu SQL</b> (bảo vệ DB); tải cao cần thêm <b>khoá đệm nóng mãi / L1 cục bộ</b></td></tr></table>
+    say: Bảng quy mô so sánh lượng truy vấn đánh thẳng xuống cơ sở dữ liệu ở ba mức một trăm, mười nghìn và một trăm nghìn
+      yêu cầu đồng thời. Khi không có lớp chống dồn tải, toàn bộ lưu lượng đổ dồn xuống cơ sở dữ liệu cùng một khoảnh khắc
+      làm cạn sạch bể kết nối. Nhờ cơ chế bầu duy nhất một luồng đi nạp lại bộ đệm, dù lưu lượng chạm mốc mười nghìn yêu cầu
+      thì cơ sở dữ liệu chỉ phải trả lời đúng một câu truy vấn. Lên tới một trăm nghìn yêu cầu trên một khoá cực nóng, kỹ
+      sư thường kết hợp thêm bộ đệm tầng một ngắn hạn trong bộ nhớ máy chủ ứng dụng. Ở quy mô mười nghìn tới một trăm nghìn
+      yêu cầu trên cùng một tài khoản quá nóng, ngay cả băng thông Redis đơn lẻ cũng có thể căng thẳng. Lúc đó tầng bộ đệm
+      cục bộ ngắn hạn vài trăm mi-li-giây ngay trong RAM ứng dụng đóng vai trò lá chắn đầu tiên cho Redis.
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.3'
+    - '1.4'
+    clear: true
+- id: pitfalls
+  kind: pitfall
+  title: Ba sai lầm phổ biến gây lệch dữ liệu đệm và bão hết hạn
+  steps:
+  - show: <table class='t'><tr><th>lỗi hay gặp khi tích hợp Redis</th></tr><tr><td><div class='box warn'><b>Lỗi 1 — Cập nhật
+      số dư trong DB nhưng quên <code>redis.delete(...)</code>:</b> Khách hàng vừa nạp tiền vẫn thấy số dư cũ tới khi hết
+      TTL.<br><b>Lỗi 2 — Đặt cố định cùng một TTL (ví dụ <code>3600 s</code>) cho hàng trăm nghìn khoá lúc làm ấm:</b> Đúng
+      1 giờ sau cả trăm nghìn khoá hết hạn cùng một giây gây bão tải (cache avalanche).<br><b>Lỗi 3 — Dùng chung khoá phân
+      tán nhưng không có nhánh chờ/đọc lại:</b> 19 luồng trượt khoá chạy thẳng xuống DB luôn thì khoá trở nên vô nghĩa!</div></td></tr></table>
+    say: Ba lỗi trên bảng xảy ra rất phổ biến khi nhóm phát triển mới đưa Redis vào ứng dụng. Lỗi thứ nhất là sửa số dư dưới
+      đĩa mà quên lệnh xoá khoá đệm, khiến giao diện vẫn hiển thị số dư cũ gây hoang mang cho người dùng. Lỗi thứ hai là gán
+      đúng một hạn sống giống hệt nhau cho toàn bộ tập dữ liệu lớn làm tất cả cùng biến mất vào cùng một thời điểm. Lỗi thứ
+      ba là xin khoá trượt nhưng quên cho các luồng thua cuộc chờ một nhịp đọc lại đệm mà để chúng đi thẳng xuống cơ sở dữ
+      liệu. Cũng cần cẩn trọng đặt thời gian khoá giữ quyền làm mới vừa đủ lâu hơn thời gian truy vấn thật nhưng ngắn hơn
+      ngưỡng chờ của khách. Khi mọi nhánh đọc ghi đều được bọc kiểm thử tự động trên thùng chứa Redis thật, lỗi sai số dư
+      cũ bị loại bỏ sớm.
+    focus:
+    - 0
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    clear: true
+- id: quiz
+  kind: quiz
+  title: Kiểm tra nhanh vận hành bộ đệm Redis an toàn
+  checks:
+  - 30 + 3 == 33
+  steps:
+  - show: <ol><li>Khi cập nhật số dư xong dưới PostgreSQL, vì sao chiến lược <b>xoá khoá Redis</b> an toàn hơn việc ứng dụng
+      tự ghi giá trị số dư mới lên Redis?</li><li>Tại sao cần cộng thêm khoảng thời gian ngẫu nhiên nhẹ (jitter) vào <code>TTL</code>
+      của từng khoá?</li></ol>
+    say: Hãy tự kiểm nhanh hai câu hỏi thiết kế bộ đệm trước khi thực hành. Câu một, tại sao sau khi chốt giao dịch xuống
+      cơ sở dữ liệu thì xoá khoá trên Redis an toàn hơn ghi đè thẳng số mới? Câu hai, cộng thêm vài giây ngẫu nhiên vào hạn
+      sống của khoá giải quyết vấn đề gì? Bấm tạm dừng và trả lời. Hãy rà kỹ hai quyết định thiết kế này vì chúng quyết định
+      độ tin cậy của dữ liệu hiển thị cho người dùng cuối.
+    pause: 20
+  - show: <table class='t'><tr><th>đáp án câu 1</th></tr><tr><td><p>① Khi hai giao dịch A và B cập nhật sát nhau, ghi đè có
+      thể bị đảo thứ tự (A ghi DB trước B, nhưng ghi Redis sau B) làm kẹt số cũ; xoá khoá buộc lần đọc sau nạp bản mới nhất
+      từ DB.</p></td></tr></table>
+    say: 'Đáp án câu một: vì khi hai luồng ghi song song bị trễ mạng xen kẽ nhau, ghi đè có thể lưu ngược giá trị cũ, còn
+      xoá khoá luôn buộc nạp lại đúng trạng thái mới nhất. Xoá khoá thay vì ghi đè giúp trạng thái bộ đệm luôn khớp nguồn
+      dữ liệu chuẩn khi có nhiều luồng cập nhật cùng lúc. Sự đơn giản của thao tác xoá biến dữ liệu chính dưới đĩa thành nguồn
+      chân lý duy nhất cho toàn hệ thống.'
+    clear: true
+  - show: <table class='t'><tr><th>đáp án câu 2</th></tr><tr><td><p>② Để làm lệch thời điểm hết hạn của hàng loạt khoá, tránh
+      cả hệ thống hết hạn đồng loạt vào cùng một giây gây nghẽn cơ sở dữ liệu.</p></td></tr></table>
+    say: 'Đáp án câu hai: thêm độ lệch ngẫu nhiên giúp rải đều thời gian hết hạn của các khoá thay vì sập tập thể vào đúng
+      một giây. Đặt thêm sai số ngẫu nhiên vài giây làm giãn thời điểm hết hạn để cơ sở dữ liệu không chịu tải dồn cục. Khoảng
+      trễ ngẫu nhiên vài giây không tốn chi phí tài nguyên nhưng dập tắt hiệu quả hiện tượng sập dây chuyền.'
+    clear: true
+- id: practice
+  kind: practice
+  title: Cài đặt bộ đệm Redis 8, xoá đệm khi nạp tiền và chống dồn tải
+  lab: labs/SPB/L05
+  steps:
+  - show: <div class='box key'><p><b>Thực hành bài L05 (<code>labs/SPB/L05/de.md</code>, cần Docker):</b> dùng <code>StringRedisTemplate</code>
+      kết nối container <b>Redis 8</b> qua <code>@ServiceConnection(name = "redis")</code>; cài <code>getBalance(accId)</code>
+      dùng khoá <code>SET lock:bal:&lt;id&gt; token NX EX 5</code> kèm TTL 30–35s và <code>deposit(accId, delta)</code> xoá
+      khoá <code>bal:&lt;id&gt;</code>, rồi chấm:</p><p><code>bash labs/cham.sh SPB L05 duong_dan/du_an_cua_ban</code></p></div>
+    say: Hãy mở đề bài L05 để cài đặt dịch vụ bộ đệm chạy thật với thùng chứa Redis tám qua Testcontainers. Chú ý kiểm đủ
+      kịch bản đọc trúng đệm, xoá đệm khi nạp tiền và chặn dồn tải khi hai mươi luồng chạy cùng lúc. Bấm tạm dừng và hoàn
+      thành trước khi đối chiếu kết quả chấm. Chú ý cài đặt đủ hai phương thức đếm số lượt đọc cơ sở dữ liệu là đặt lại bộ
+      đếm và lấy bộ đếm phục vụ trình chấm. Bảo đảm nhánh chờ của các luồng trượt khoá đọc lại đệm ngay sau khi ngủ ngắn để
+      không chạm cơ sở dữ liệu thừa.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    - '1.1'
+    - '1.2'
+    clear: true
+    pause: 30
+  - show: '<p><b>Kết quả chấm bộ kiểm KiemL05Test trên Redis 8 thật</b></p><div class="code"><div>KiemL05Test: 3 ca, 0 hỏng</div></div>'
+    say: Màn hình hiển thị kết quả nghiệm thu ba ca kiểm thử trên Redis thật không sót lỗi nào. Cả bộ đếm số lần chạm cơ sở
+      dữ liệu lẫn tính nhất quán sau khi cập nhật số dư đều được kiểm chứng tự động. Container Redis tám khởi động trong chưa
+      tới một giây nên toàn bộ bài kiểm thử chạy cực nhanh.
+    focus:
+    - 1
+    - 2
+    - 2
+    clear: true
+  - show: <div class='box ok'><p><b>Gợi ý nếu kẹt ở bài L05:</b> (1) gắn <code>@ServiceConnection(name = "redis")</code> trên
+      <code>GenericContainer</code> ảnh <code>redis:8</code>; (2) gọi <code>accounts.saveAndFlush(a)</code> trước khi gọi
+      <code>redis.delete("bal:" + accId)</code>; (3) gắn <code>token</code> duy nhất trong khối <code>finally</code> khi nhả
+      khoá.</p></div>'
+    say: Nếu gặp lỗi vẫn đếm nhiều lần gọi cơ sở dữ liệu hoặc đọc nhầm số cũ sau khi nạp tiền, hãy xem lại ba gợi ý trên màn
+      hình. Bảo đảm đã khai báo đúng tên kết nối dịch vụ Redis và gọi lệnh xoá khoá sau khi lưu xả thay đổi. Đừng quên giải
+      phóng khoá phân tán ngay bên trong khối kết thúc để tránh làm treo các luồng sau nếu gặp ngoại lệ đọc đĩa.
+    focus:
+    - 0
+    - 1
+    - 1
+    clear: true
+- id: recap
+  kind: recap
+  title: Tổng kết tăng tốc đọc an toàn với bộ đệm Redis 8
+  steps:
+  - show: <div class='chain'><span class='n'>Cache-aside + Jitter</span><span class='a'>→</span><span class='n'>Ghi DB + DEL
+      Redis</span><span class='a'>→</span><span class='n'>SET NX chống dồn tải</span></div>
+    say: Bạn đã nắm trọn chu trình đọc ghi bộ đệm Redis an toàn từ hạ tầng tới mức ứng dụng phân tán. Chiến lược xoá đệm,
+      cộng thêm thời gian ngẫu nhiên và khoá phân tán giúp bảo vệ hệ thống dữ liệu bền bỉ. Lớp đệm tốc độ cao kết hợp giao
+      dịch an toàn giúp dịch vụ đáp ứng lưu lượng lớn mà không đánh đổi tính đúng đắn.
+    focus:
+    - '1.1'
+    - '1.2'
+    - '1.2'
+    clear: true
+  - show: <div class='box ok'><b>Bài sau:</b> Kafka, Outbox, thử lại, hàng thư chết DLT và so sánh RabbitMQ / JMS</div>
+    say: Bài tiếp theo ta cài đặt luồng phát sự kiện không mất tin bằng bảng Outbox và hàng thư chết DLT trên Kafka. Ta cũng
+      đối chiếu thêm với RabbitMQ và JMS. Hẹn gặp bạn ở bài sau. Ở bài tiếp theo, ta mở rộng sang truyền thông điệp bất đồng
+      bộ giữa các dịch vụ bằng hệ thống Kafka.
+    clear: true
+    forward_ref: true
+asr_reviewed:
+- sentence: Ta cũng đối chiếu thêm với RabbitMQ và JMS.
+  reason: 'ASR chép “Ta cũng đối chiếu thêm với tra biết MQ và GMS.” (khớp 0.7, khác “rabbitmq” → nghe thành “tra biết mq”;
+    “jms” → nghe thành “gms”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa —
+    NOT_VERIFIED bằng tai người'
+- sentence: Bài tiếp theo ta cài đặt luồng phát sự kiện không mất tin bằng bảng Outbox và hàng thư chết DLT trên Kafka.
+  reason: 'ASR chép “Bài tiếp theo ta cài đặt luôn phát sự kiện không mất tin bằng bản áo bốc và hàng thư chết DLT trên KK.”
+    (khớp 0.83, khác “luồng” → nghe thành “luôn”; “bảng ao” → nghe thành “bản áo”; “cáp ca” → nghe thành “kk”): biến thể phiên
+    âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Bộ đệm Redis giảm tải hàng chục lần, nhưng nếu thiếu lớp chống dồn tải khi khoá nóng hết hạn thì hàng vạn yêu
+    cầu sẽ đánh sập lõi dữ liệu.
+  reason: 'ASR chép “Bộ đềm Reddit giảm tải hàng chục lần, nhưng nếu thiếu lớp chống dồn tải khi khóa nóng hát hàng thì hàng
+    vạn yêu cầu sẽ đánh sập loại dữ liệu.” (khớp 0.839, khác “đệm redis” → nghe thành “đềm reddit”; “hết hạn” → nghe thành
+    “hát hàng”; “lõi” → nghe thành “loại”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên
+    ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Màn hình hiển thị kết quả nghiệm thu ba ca kiểm thử trên Redis thật không sót lỗi nào.
+  reason: 'ASR chép “Màn hình hiển thị kết quả nghiệm thu 3K kiểm thử trên Reddit thật không sóc lỗi nào.” (khớp 0.842, khác
+    “ca” → nghe thành “k”; “redis” → nghe thành “reddit”; “sót” → nghe thành “sóc”): biến thể phiên âm từ mượn/thanh điệu
+    thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Ở chiều đọc, ứng dụng kiểm tra Redis trước và chỉ đọc xuống cơ sở dữ liệu khi bị trượt đệm.
+  reason: 'ASR chép “Ở chiều đọc, ứng dụng kiểm tra ra đích trước và chỉ đọc xuống cơ sở giữ liệu khi bị trượt đêm.” (khớp
+    0.884, khác “redis” → nghe thành “ra đích”; “đệm” → nghe thành “đêm”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh
+    của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Hôm nay ta cài đặt trọn vẹn chu trình đọc ghi bộ đệm trên container Redis tám thật.
+  reason: 'ASR chép “Hôm nay ta cài đặt trọn vẹn chú trình đọc ghi bộ đệm trên container Radik tám thật.” (khớp 0.889, khác
+    “chu” → nghe thành “chú”; “redis” → nghe thành “radik”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper,
+    câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Duy nhất một luồng thắng cuộc đi hỏi cơ sở dữ liệu đúng một lần, nạp kết quả kèm hạn sống vào Redis rồi nhả khoá
+    an toàn.
+  reason: 'ASR chép “Duy nhất một luận thắng cuộc đi hỏi cơ sở dữ liệu đúng một lần, nạp kết quả kèm hàng sống vào Reddit
+    rồi nhả khóa an toàn.” (khớp 0.893, khác “luồng” → nghe thành “luận”; “hạn” → nghe thành “hàng”; “redis” → nghe thành
+    “reddit”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng
+    tai người'
+- sentence: Ba lỗi trên bảng xảy ra rất phổ biến khi nhóm phát triển mới đưa Redis vào ứng dụng.
+  reason: 'ASR chép “Ba lỗi trên bản xảy ra rất phổ biến khi nhóm phát triển mới đưa Reddit vào ứng dụng.” (khớp 0.895, khác
+    “bảng” → nghe thành “bản”; “redis” → nghe thành “reddit”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper,
+    câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Hãy mở đề bài L05 để cài đặt dịch vụ bộ đệm chạy thật với thùng chứa Redis tám qua Testcontainers.
+  reason: 'ASR chép “Hãy mở đề bài L05 để cài đặt dịch vụ bộ đệm chạy thật với thùng chứa Radix 8 qua Teccontiner.” (khớp
+    0.909, khác “redis” → nghe thành “radix”; “testcontainers” → nghe thành “teccontiner”): biến thể phiên âm từ mượn/thanh
+    điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Bạn đã nắm trọn chu trình đọc ghi bộ đệm Redis an toàn từ hạ tầng tới mức ứng dụng phân tán.
+  reason: 'ASR chép “Bạn đã nắm trọn chu trình đọc ghi bộ đềm Reddit an toàn từ hạ tầng tới mức ứng dụng phân tán.” (khớp
+    0.909, khác “đệm redis” → nghe thành “đềm reddit”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu
+    giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Hãy ôn lại ngắn gọn ba thao tác cốt lõi trên kho lưu trữ RAM Redis trước khi ghép vào ứng dụng Java.
+  reason: 'ASR chép “Hãy ôn lại ngắn gọn 3 thao tác cốt lõi trên khó lưu trữ Ram Redic trước khi ghép vào ứng dụng Java.”
+    (khớp 0.913, khác “kho” → nghe thành “khó”; “redis” → nghe thành “redic”): biến thể phiên âm từ mượn/thanh điệu thuần
+    âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Ngay sau đó, ta xoá khoá tương ứng trong Redis để lần đọc kế tiếp buộc phải lấy lại số dư mới nhất vừa ghi xong.
+  reason: 'ASR chép “Ngay sau đó, ta xóa khóa tương ứng trong Reddit để lần độc kế tiếp buộc phải lấy lại số dư mới nhất vừa
+    ghi xong.” (khớp 0.923, khác “redis” → nghe thành “reddit”; “đọc” → nghe thành “độc”): biến thể phiên âm từ mượn/thanh
+    điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Câu một, tại sao sau khi chốt giao dịch xuống cơ sở dữ liệu thì xoá khoá trên Redis an toàn hơn ghi đè thẳng số
+    mới?
+  reason: 'ASR chép “Câu một, tại sao sau khi chốt giao dịch xuống cơ sở dữ liệu thì xóa khóa trên Reddit an toàn hơn ghi
+    đề thẳng số mới?” (khớp 0.926, khác “redis” → nghe thành “reddit”; “đè” → nghe thành “đề”): biến thể phiên âm từ mượn/thanh
+    điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Nếu khoá tồn tại sẵn trên Redis thì hàm chuyển sang số nguyên và trả về ngay lập tức.
+  reason: 'ASR chép “Nếu khóa tồn tại sẵn trên Reddit thì hàm chuyển sang số nguyên và trả về ngay lập tức.” (khớp 0.947,
+    khác “redis” → nghe thành “reddit”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ
+    nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Kết quả kiểm thử trên container Redis tám thật xác nhận cả ba kịch bản vận hành trọng yếu đều chạy chính xác.
+  reason: 'ASR chép “Kết quả kiểm thử trên container Radix-8 thật xác nhận cả 3 kịch bản vận hành trọng yếu đều chạy chính
+    xác.” (khớp 0.957, khác “redis” → nghe thành “radix”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper,
+    câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Bảo đảm đã khai báo đúng tên kết nối dịch vụ Redis và gọi lệnh xoá khoá sau khi lưu xả thay đổi.
+  reason: 'ASR chép “Bảo Đảm đã khai báo đúng tên kết nối dịch vụ Reddit và gọi lệnh xóa khóa sau khi lưu xả thay đổi.” (khớp
+    0.957, khác “redis” → nghe thành “reddit”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên
+    ngữ nghĩa — NOT_VERIFIED bằng tai người'

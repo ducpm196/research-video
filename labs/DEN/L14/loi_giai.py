@@ -1,6 +1,4 @@
-jobs = 29423
-fails = round(jobs * 1.2)
-completed_all = int(jobs > 0 and fails > 0)
-print(f'jobs={jobs}')
-print(f'worker_failures={fails}')
-print(f'completed_all={completed_all}')
+import sys
+kv = dict(t.split('=') for t in sys.stdin.read().split())
+j = int(kv['jobs']); f = round(j * float(kv['fail_per_job']))
+print(f'jobs={j}\nworker_failures={f}\ncompleted_all={int(j > 0 and f >= 0)}')

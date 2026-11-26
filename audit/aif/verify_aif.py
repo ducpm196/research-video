@@ -334,5 +334,15 @@ rec("L14e", _d0 == 4 and _dab == 8 and round(4_900_000 * 10 / 86400) == 567,
     "quiz (số minh hoạ): 30 nước, 10⁷ thế mỗi nước → không cắt tỉa sâu 4, alpha–beta thứ tự tốt sâu 8; 4,9 triệu ván × 10 s ≈ 567 ngày")
 
 nf = sum(1 for _, ok in R if not ok)
+# ── Kiểm tự động mọi lab (du_lieu.txt + ca_an/) qua cham.sh ──
+import subprocess as _subp
+from pathlib import Path as _LabPath
+_BASH = r"C:\Program Files\Git\bin\bash.exe"
+if not _LabPath(_BASH).exists():
+    _BASH = "bash"
+for _ld in sorted((ROOT / "labs" / "AIF").glob("L*")):
+    _rp = _subp.run([_BASH, str(ROOT / "labs" / "cham.sh"), "AIF", _ld.name], cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
+    rec(f"{_ld.name}:lab", _rp.returncode == 0 and "PASS" in _rp.stdout and "2 ca an" in _rp.stdout, f"cham.sh {_ld.name} (public + 2 ca_an)")
+
 print(f"TỔNG: {len(R) - nf} PASS · {nf} FAIL")
 sys.exit(1 if nf else 0)

@@ -1,11 +1,8 @@
-# Lab DAN L12 — Toán học thử nghiệm có đối chứng quy mô lớn: chia lệch 98/2 và lặp nhiều phiên bản
+# Lab DAN L12 — Chia lệch & kiểm định lặp nhiều phiên bản
 
-Tính hệ số chậm thời gian chạy khi chia nhóm `98/2` so với `50/50`, và xác suất báo nhầm (mỗi phía `alpha = 0.025`) khi thử `4` phiên bản đồng thời và lặp `5` vòng (`20` so sánh).
+Đọc `stdin` `p_split=<float> alpha=<float> variants=<int> looks=<int>`. Tính hệ số chậm thời gian chạy khi chia lệch so với 50/50, cùng xác suất báo nhầm FWER với `variants` và `variants * looks`.
 
-Định dạng đầu ra:
-`split98_2_slow=<2 chữ số>x fp4=<1 chữ số>% fp20=<1 chữ số>%`
+In 1 dòng: `split98_2_slow=<.2f>x fp4=<.1f>% fp20=<.1f>%`.
+Chấm tự động: `bash labs/cham.sh DAN L12 duong_dan/bai_cua_ban.py`
 
-Chấm tự động:
-```bash
-bash labs/cham.sh DAN L12 duong_dan/bai_cua_ban.py
-```
+> Gợi ý đọc `stdin`: `kv = {k: float(v) for k, v in (t.split("=") for t in sys.stdin.read().split())}`; ép `int` cho `variants` và `looks`.

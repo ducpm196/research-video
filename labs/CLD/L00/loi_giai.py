@@ -1,6 +1,4 @@
-n = 20_000
-loc_ms = n * 15e-6
-rpc_ms = n * 1.5
-print(f'local_ms={loc_ms:.3f}')
-print(f'rpc_ms={rpc_ms:.1f}')
-print(f'slowdown={round(rpc_ms / loc_ms)}x')
+import sys
+kv = {k: float(v) for k, v in (t.split('=') for t in sys.stdin.read().split())}
+n = kv['calls']; lms = n * kv['loc_ns'] * 1e-6; rms = n * kv['rpc_ms']
+print(f'local_ms={lms:.3f}\nrpc_ms={rms:.1f}\nslowdown={round(rms / lms)}x')

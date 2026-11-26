@@ -1,5 +1,4 @@
-bl = (250 - 200) * 1800
-dr = 200 - 140
-print(f'backlog_30m={bl}')
-print(f'drain_net_per_s={dr}')
-print(f'drain_minutes={bl / dr / 60:.1f}')
+import sys
+kv = {k: int(v) for k, v in (t.split('=') for t in sys.stdin.read().split())}
+bl = (kv['peak_in'] - kv['proc']) * kv['secs']; dr = kv['proc'] - kv['low_in']
+print(f'backlog_30m={bl}\ndrain_net_per_s={dr}\ndrain_minutes={bl / dr / 60:.1f}')

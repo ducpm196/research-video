@@ -1,6 +1,7 @@
 """Điền hình sinh bằng máy vào bài: fill_tpl.py audit/cs112/src/Lxx.tpl.yaml lessons/cs112/Lxx_….yaml TEN=audit/cs112/hinh.svg …
 Mỗi “{{TEN}}” trong tệp mẫu được thay bằng nội dung một dòng của tệp hình (hình không vẽ tay — sinh từ dữ liệu, xem *_svg.py).
 Không ghi đè nếu còn “{{” chưa thay."""
+import sys as _sys; from pathlib import Path as _P; _sys.path.insert(0, str(_P(__file__).resolve().parents[1])); import _frozen  # noqa: E402,F401
 import sys
 sys.stdout.reconfigure(encoding="utf-8")
 from pathlib import Path

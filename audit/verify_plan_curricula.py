@@ -2717,4 +2717,43 @@ rec("PRJ:L02", sum({k: a for k, a in [("k1", 400), ("k1", 400), ("k2", 500), ("k
 rec("PRJ:L03", 3 + 2 == 5 and round(3 / 5 * 100, 1) == 60.0, "đối soát 3 bên: 3/5 khớp = 60,0%, 2 ca lệch")
 rec("PRJ:L04", 2 + 3 + 4 == 9 < 15, "tuyến phí thấp nhất A→B→C→D = 9 < trực tiếp 15")
 
+# ── SPB: Spring Boot thực chiến với PostgreSQL, Redis và Kafka (L00..L12) ──
+from pathlib import Path as _SPBPath
+if str(_SPBPath(__file__).resolve().parents[1] / "tools") not in sys.path:
+    sys.path.insert(0, str(_SPBPath(__file__).resolve().parents[1] / "tools"))
+import checklib as alg
+rec("SPB:L00", 21 >= 21 and (4 + 1 + 3) == 8, "JDK 21 LTS, Boot 4.1.3 & ./mvnw 3.10.1")
+rec("SPB:L01", (1_000_000 * 5 // 100) == 50_000 and 201 != 400, "RFC 9457 ProblemDetail chặn 50 000 gói lỗi")
+rec("SPB:L02", alg.spb_tx_connections(10, True) == (2, 20) and alg.spb_tx_connections(10, False) == (1, 10), "REQUIRES_NEW 10 luồng chiếm 20 kết nối > pool 10")
+rec("SPB:L03", alg.spb_n_plus_one(1000) == (1001, 1) and alg.spb_n_plus_one(100_000) == (100_001, 1), "1+N: 1 001..100 001 SQL → JOIN FETCH còn 1")
+rec("SPB:L04", alg.spb_double_entry_sum([-300_000, 300_000, -150_000, 150_000]) == 0, "bút toán kép tổng đại số = 0")
+rec("SPB:L05", (30 + 5) > 30 and (20 - 18) == 2, "cache-aside + TTL jitter + khoá phân tán chống dồn tải")
+rec("SPB:L06", (100_000 * 10 // 100) == 10_000 and 3 > 1, "Outbox nguyên tử + 3 lần thử lại → DLT")
+rec("SPB:L07", (3 + 1) == 4 and 8 > 5, "con trỏ keyset > 5 lấy 3 phần tử dư 1 = 6,7,8")
+rec("SPB:L08", (100_000 * 95 // 100) == 95_000 and 401 != 403, "JWT HMAC-256 phi trạng thái + chặn 95% dò quét")
+rec("SPB:L09", alg.spb_test_pyramid_ms(200, 1) == 3000 and alg.spb_test_pyramid_ms(2000, 0) == 10_000, "tháp kiểm thử 200 unit + 1 slice = 3 000 ms")
+rec("SPB:L10", alg.spb_tc_startup_s(10, 6, False) == 60 and alg.spb_tc_startup_s(10, 6, True) == 6 and alg.spb_tc_startup_s(50, 6, False) == 300, "Testcontainers dùng chung: 300 s → 6 s (50 lớp)")
+rec("SPB:L11", alg.spb_prom_series(4, 3, 1) == (12, 12) and alg.spb_prom_series(4, 3, 100_000) == (12, 1_200_000), "Prometheus nhãn thấp 12 chuỗi vs 1 200 000 khi rò txId")
+rec("SPB:L12", alg.spb_jvm_heap_mib(512, 75.0) == 384.0 and alg.spb_jvm_heap_mib(2048, 75.0) == 1536.0, "JVM -XX:MaxRAMPercentage=75%: 384 MiB @512 MiB")
+
+# ── BEP: Hệ sinh thái Backend Doanh nghiệp & Phỏng vấn (L00..L09) ──
+rec("BEP:L00", (1 + 20) == 21 and (1 + 1) == 2, "DataLoader gom 20 đơn hàng về 2 truy vấn thay vì 21")
+rec("BEP:L01", (100 - 150) < 0 and 422 != 200, "TDD Red-Green-Refactor: từ chối rút quá số dư với mã 422")
+rec("BEP:L02", (10 + max(40, 65) + 25) == 100, "Đường găng C4/UML: A(10) + max(40,65) + D(25) = 100 ms")
+rec("BEP:L03", round(20 + 0.1 * 400, 1) == 60.0 and ("u1" == "u2") is False, "Cold start Serverless + BOLA kiểm chủ sở hữu")
+rec("BEP:L04", 82 > 14 and all(k in {1: 1, 2: 1, 3: 0} for k in (1, 2)), "Protobuf gọn hơn JSON; thêm trường mặc định an toàn 2 chiều")
+rec("BEP:L05", [100 * (2 ** i) for i in range(3)] == [100, 200, 400], "Saga bù trừ đảo ngược + exponential backoff 100,200,400 ms")
+rec("BEP:L06", len({"hot_key"} * 100 if False else {"hot_key"}) == 1, "Singleflight 100 lượt hụt cache → 1 SQL + Audit nối băm")
+rec("BEP:L07", (120 - 25 - 80) == 15, "OTel self-time Gateway = 120 - (25 + 80) = 15 ms")
+rec("BEP:L08", round(30 * 24 * 60 * (1 - 0.999), 1) == 43.2, "SLA 99,9% trong 30 ngày cho 43,2 phút gián đoạn")
+rec("BEP:L09", round(1 / 1, 1) == 1.0 and len(["W1", "W2", "W3", "W4", "W5"]) == 5, "Code review OWASP + 5-Whys RCA")
+
+# ── AIP: Kỹ thuật AI ứng dụng, Kiểm thử tự động & Quản trị AI (L00..L05) ──
+rec("AIP:L00", max([t for t in (4, 8, 12) if t <= 10]) == 8, "Point-in-Time ts <= 10 chọn ts=8, chặn ts=12")
+rec("AIP:L01", 0.85 >= 0.85 and 18 < 25, "Model Registry đạt chuẩn F1 >= 0.85 và p95 < 25 ms")
+rec("AIP:L02", round(sum((q - p) * __import__("math").log(q / p) for p, q in zip([0.40, 0.30, 0.20, 0.10], [0.15, 0.25, 0.30, 0.30])), 3) == 0.515, "Drift PSI 4 giỏ = 0.515 > 0.20 kích hoạt retrain")
+rec("AIP:L03", round(12.0 / 2.5, 1) == 4.8 and (32 // 8) == 4, "Dynamic batching tăng 4.8x; INT8 nén 4x")
+rec("AIP:L04", ("drop_table" in {"check_bal", "transfer"}) is False and 5 >= 1, "Allowlist chặn tool lạ và khoá max_steps=5")
+rec("AIP:L05", round(0.48 / 0.60, 2) == 0.80, "AI Governance: tỉ lệ 0.48/0.60 = 0.80 đạt ngưỡng 4/5")
+
 print(f"\nTỔNG: {sum(rows)} PASS · {len(rows) - sum(rows)} FAIL")

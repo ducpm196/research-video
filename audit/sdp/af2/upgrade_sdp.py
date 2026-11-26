@@ -5,6 +5,7 @@ Toàn bộ 18 bài cài đặt trực tiếp bằng Python thực thi thật: Mc
 Singleton/Decorator/Composite/Observer/Command/State, memoization, SemVer,
 độ bất ổn Ca/(Ca+Ce), tái cấu trúc giỏ hàng.
 """
+import sys as _sys; from pathlib import Path as _P; _sys.path.insert(0, str(_P(__file__).resolve().parents[2])); import _frozen  # noqa: E402,F401
 import subprocess
 import sys
 from pathlib import Path

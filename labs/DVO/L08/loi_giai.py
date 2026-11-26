@@ -1,6 +1,10 @@
+import sys
+kv = dict(t.split('=', 1) for t in sys.stdin.read().split())
+names = kv['names'].split(','); bf = int(kv.get('backfill', '1'))
 steps = ['expand_col', 'dual_write_backfill', 'switch_reads', 'drop_old_col']
-rows = [{'ten': 'An', 'ho_ten': None}, {'ten': 'Binh', 'ho_ten': None}]
-for r in rows: r['ho_ten'] = r['ten']
+rows = [{'ten': nm, 'ho_ten': None} for nm in names]
+if bf:
+    for r in rows: r['ho_ten'] = r['ten']
 ok = all(r['ten'] == r['ho_ten'] for r in rows)
 dt = sum(1 for r in rows if r['ho_ten'] is None)
 for r in rows: del r['ten']

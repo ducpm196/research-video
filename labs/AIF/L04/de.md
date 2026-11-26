@@ -1,11 +1,7 @@
-# Lab AIF L04 — Leo đồi dốc nhất trên bàn cờ 4-Hậu (mỗi cột một hậu)
+# Lab AIF L04 — Leo đồi dốc nhất trên bàn cờ 4-Hậu
 
-Theo quy ước bài học (`b[c]` là hàng của quân hậu ở cột `c`), cho bàn cờ xuất phát `b0 = [2, 2, 1, 3]` (đếm cặp ăn nhau cùng hàng hoặc cùng đường chéo). Chạy thuật toán leo đồi dốc nhất: ở mỗi vòng, duyệt hết cả `4 × 4` láng giềng dời 1 hậu trong cùng cột để chọn láng giềng có ít xung đột nhất, dừng khi không còn láng giềng nào tốt hơn trạng thái hiện tại.
+Đọc `stdin` `board=<r0,r1,r2,r3>`. Chạy thuật toán leo đồi dốc nhất dời một hậu trong cột cho tới cực tiểu địa phương và xuất xung đột đầu/cuối cùng bàn cờ.
 
-Định dạng đầu ra:
-`init_conflicts=<số> final_conflicts=<số> final_board=<danh sách>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh AIF L04 duong_dan/bai_cua_ban.py
-```
+In 1 dòng: `init_conflicts=<d> final_conflicts=<d> final_board=<list>`.
+Chấm tự động: `bash labs/cham.sh AIF L04 duong_dan/bai_cua_ban.py`
+Gợi ý đọc đầu vào trong Python: dùng `sys.stdin.read().split()` tách từng cặp `khoá=giá_trị`.

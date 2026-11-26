@@ -1,6 +1,10 @@
+---
+trigger: always_on
+description: Evidence-gated work: label material claims OBSERVED, CITED or INFERRED, keep verification records and a verification DAG, record contract bottlenecks, and decide DONE, PARTIAL or BLOCKED.
+---
 # Evidence-Gated Work Rule for Google Antigravity & Gemini runtimes
 
-Optional always-on rule. Copy it into the rules or context location that your runtime documents (the exact path for Antigravity and Gemini CLI is NOT_VERIFIED here; check the runtime's own documentation). The full procedures live in the skill `evidence-gated-work`.
+Optional always-on rule. Antigravity reads rules from `.agents/rules/` of a workspace and from `~/.gemini/config/rules/` for every workspace, and discards a rule file without a valid `trigger` in its front matter (as this file has). Gemini CLI reads GEMINI.md, or the files named by `context.fileName` in its settings; paste the text below the front matter there. The full procedures live in the skill `evidence-gated-work`.
 
 ## Working tiers and the 5-stage lifecycle
 Working tiers (EGW section 8): `direct` for trivial requests, `inline` for work that starts and ends in one session, `full` (the 5-stage lifecycle with its files) for work across sessions or agents, handoffs, audits, release checks, a workspace that already holds handover.md or state/, or on request.

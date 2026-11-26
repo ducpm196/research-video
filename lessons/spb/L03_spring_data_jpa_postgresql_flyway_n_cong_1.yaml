@@ -1,0 +1,376 @@
+id: L03
+course: SPB
+series: SPB · Spring Boot thực chiến với PostgreSQL, Redis và Kafka
+title: Bài 3 — Spring Data JPA, PostgreSQL trên Docker, Flyway và sửa lỗi 1+N
+voice: vi-VN-NamMinhNeural
+rate: -5%
+depth: full
+af2: true
+covers:
+- objective: 1
+  scene: example
+- objective: 2
+  scene: check
+- objective: 3
+  scene: quymo
+source: curriculum/spb.yaml L03; labs/SPB/L03 (chạy thật ./mvnw -B verify trên PostgreSQL 17 Testcontainers)
+assumes: []
+objectives:
+- Viết tệp di trú lược đồ Flyway V1 chạy trên PostgreSQL 17 thật kèm chỉ mục khoá chính và khoá ngoại
+- Đo số câu SQL phát sinh của vấn đề 1+N khi đọc danh sách tài khoản và sửa bằng EntityGraph/JOIN FETCH
+- Tính tổng lượt khứ hồi mạng giữa ứng dụng và PostgreSQL ở 10, 1 000 và 100 000 tài khoản
+scenes:
+- id: hook
+  kind: hook
+  title: Chỉ một màn hình danh sách tài khoản mà bắn tới 21 câu SQL sang PostgreSQL?
+  checks:
+  - alg.spb_n_plus_one(20) == (21, 1)
+  steps:
+  - show: <div class='box key'><p>Khi bạn đọc danh sách <b>20 tài khoản</b> bằng hàm có sẵn rồi duyệt lấy nhật ký của từng
+      tài khoản, trình ánh xạ quan hệ có thể phát sinh âm thầm tới <b>21 câu SQL</b> (1 câu lấy danh sách + 20 câu đọc con)!</p><p>Khi
+      dữ liệu lên tới 10 000 tài khoản, dịch vụ bỗng treo cứng vì hàng chục nghìn vòng khứ hồi mạng tới PostgreSQL.</p></div>
+    say: Chào bạn đến với bài ba của khoá Spring Boot thực chiến. Từ bài này trở đi, dự án rời bỏ bộ nhớ tạm để chạy trên
+      cơ sở dữ liệu PostgreSQL thật bật tự động qua Docker. Nhiều hệ thống chạy mượt với vài tài khoản thử nhưng đổ sập khi
+      ra thật chỉ vì lỗi truy vấn một cộng N ẩn sau mã gọi hàm. Hôm nay ta quản lý cấu trúc bảng chuẩn bằng di trú Flyway
+      và đo số câu SQL thật để dập tắt tận gốc lỗi một cộng N. Nếu chỉ dùng cơ sở dữ liệu thử nghiệm trên bộ nhớ, nhiều lỗi
+      cấu trúc bảng và truy vấn chậm sẽ ẩn mình tới ngày vận hành thật. Sử dụng container PostgreSQL thật giúp bạn bắt tận
+      tay từng câu truy vấn thừa ngay trên máy cá nhân.
+    focus:
+    - 0
+    - '1.1'
+    - '1.1'
+    - '1.2'
+    - '1.1'
+    - '1.2'
+    clear: true
+- id: prereq
+  kind: prereq
+  title: 'Ôn nhanh: ánh xạ bảng sang đối tượng JPA và khoá ngoại PostgreSQL'
+  steps:
+  - show: <table class='t'><tr><th>khái niệm nền</th><th>cơ chế khi chạy thật với JPA</th></tr><tr><td>Ánh xạ thực thể JPA</td><td>Gắn
+      mỗi hàng bảng <code>accounts</code> với một đối tượng Java</td></tr><tr><td>Quan hệ một–nhiều (1–N)</td><td>Một tài
+      khoản sở hữu danh sách bút toán ở bảng con</td></tr><tr><td>Kiểm tra cấu trúc bảng</td><td>Khoá <code>ddl-auto=validate</code>
+      để không cho ứng dụng tự sửa bảng</td></tr></table>
+    say: Trước khi đếm câu SQL thật, ta điểm lại nhanh ba nguyên tắc làm việc với tầng lưu trữ quan hệ. Một bảng trong cơ
+      sở dữ liệu được ánh xạ sang một lớp thực thể và các dòng bút toán con trỏ về tài khoản cha qua khoá ngoại. Trên hệ thống
+      thật, ta tuyệt đối tắt chế độ tự động sửa bảng của thư viện ánh xạ mà buộc nó kiểm tra khớp cấu trúc sẵn có. Nhờ vậy,
+      mọi thay đổi bảng đều có lịch sử rõ ràng trước khi ứng dụng khởi động. Thực thể tài khoản giữ danh sách bút toán con
+      kèm khai báo ánh xạ ngược về khoá ngoại giúp duyệt hai chiều thuận tiện. Mỗi thay đổi bảng đều đi qua tệp phiên bản
+      đánh số rõ ràng để môi trường thử nghiệm và sản xuất hoàn toàn đồng nhất.
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.2'
+    - '1.4'
+    clear: true
+- id: sym
+  kind: symbol
+  title: Ba mảnh ghép PostgreSQL 17, Flyway và cách tải dữ liệu quan hệ
+  steps:
+  - show: <table class='t'><tr><th>thành phần / chú thích</th><th>vai trò khi chạy PostgreSQL 17 thật</th></tr><tr><td><code>V1__init.sql</code>
+      (Flyway)</td><td>Quản lý phiên bản lược đồ SQL theo thứ tự tăng dần không sửa ngược</td></tr><tr><td><code>FetchType.LAZY</code>
+      (mặc định hợp lý)</td><td>Chỉ tải danh sách con khi đụng tới, nhưng gây <b>1+N</b> nếu lặp mà không gộp</td></tr><tr><td><code>LEFT
+      JOIN FETCH</code> / <code>@EntityGraph</code></td><td>Nối bảng tải trọn cha và con chỉ trong <b>đúng 1 câu SQL</b></td></tr></table>
+    say: Bảng này giải thích ba công cụ giúp tầng dữ liệu vừa an toàn vừa nhanh. Thứ nhất, các tệp di trú đánh số phiên bản
+      từ V1 trở đi chạy theo đúng trình tự ngay khi ứng dụng khởi động trên PostgreSQL. Thứ hai, chế độ tải lười giữ nhẹ bộ
+      nhớ khi chỉ cần đọc thông tin cha, nhưng nếu vòng lặp lại đọc thêm trường con thì phát sinh ngay N câu truy vấn lẻ.
+      Thứ ba, câu lệnh tải gộp một lượt hoặc chú thích biểu đồ thực thể cho phép gom toàn bộ về đúng một lần hỏi cơ sở dữ
+      liệu. Đặt chế độ tải lười ở lớp thực thể làm mặc định an toàn vì không phải màn hình nào cũng cần đọc toàn bộ lịch sử
+      bút toán. Khi thực sự cần danh sách con cho màn hình tổng hợp, câu lệnh tải gộp sẽ hợp nhất dữ liệu ngay trong một truy
+      vấn duy nhất.
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.2'
+    - '1.3'
+    clear: true
+- id: intuition
+  kind: intuition
+  title: 'Hình dung khứ hồi mạng: 1 + 20 chuyến xe lẻ so với 1 chuyến gộp'
+  steps:
+  - show: <div><svg width="960" height="210" viewBox="0 0 960 210"><rect x="35" y="25" width="390" height="72" rx="10" fill="#fee2e2"
+      stroke="#dc2626" stroke-width="2"/><text x="230.0" y="56" font-size="17" font-weight="700" text-anchor="middle" fill="#1e293b">Tải
+      lười trong vòng lặp (1 + N)</text><text x="230.0" y="80" font-size="14" text-anchor="middle" fill="#475569">1 SELECT
+      accounts + 20 SELECT entries = 21 khứ hồi</text><rect x="35" y="115" width="390" height="72" rx="10" fill="#dcfce7"
+      stroke="#16a34a" stroke-width="2"/><text x="230.0" y="146" font-size="17" font-weight="700" text-anchor="middle" fill="#1e293b">JOIN
+      FETCH / @EntityGraph</text><text x="230.0" y="170" font-size="14" text-anchor="middle" fill="#475569">1 SELECT LEFT
+      JOIN duy nhất = 1 khứ hồi</text><line x1="425" y1="61" x2="540" y2="95" stroke="#dc2626" stroke-width="2"/><line x1="425"
+      y1="151" x2="540" y2="115" stroke="#16a34a" stroke-width="2"/><rect x="540" y="50" width="375" height="108" rx="10"
+      fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="727.5" y="92" font-size="18" font-weight="700" text-anchor="middle"
+      fill="#1e293b">PostgreSQL 17 Container</text><text x="727.5" y="122" font-size="15" text-anchor="middle" fill="#475569">Kiểm
+      đếm bằng Hibernate Statistics</text></svg></div>
+    say: Hãy tưởng tượng sự khác biệt giữa hai đường trên sơ đồ như hai cách chở hàng. Ở đường đỏ bên trên, ứng dụng lấy hai
+      mươi tài khoản về trước rồi mở từng tài khoản đi hỏi lại PostgreSQL, thành ra tốn hai mươi mốt chuyến. Ở đường xanh
+      bên dưới, một câu lệnh nối bảng duy nhất gom trọn cả tài khoản lẫn bút toán trong đúng một chuyến khứ hồi.
+    clear: true
+  - show: ''
+    say: Mỗi chuyến khứ hồi qua mạng nội bộ đều mang theo chi phí đóng mở gói tin và chờ lập lịch của bộ xử lý truy vấn. Do
+      đó rút hai mươi mốt chuyến xuống còn một chuyến duy nhất làm giảm đáng kể độ trễ đuôi của toàn bộ dịch vụ.
+- id: formula
+  kind: formula
+  title: Công thức số lần hỏi cơ sở dữ liệu theo kích thước danh sách N
+  checks:
+  - alg.spb_n_plus_one(20) == (21, 1)
+  - alg.spb_n_plus_one(1000) == (1001, 1)
+  steps:
+  - show: <div class='box key'><p>Với $N$ tài khoản cần đọc kèm danh sách bút toán con:</p><p>Tải lười lặp tuần tự phát sinh
+      đúng <b>$1 + N$</b> câu lệnh SQL (20 tài khoản = <b>21 câu</b>; 1 000 tài khoản = <b>1 001 câu</b>).</p><p>Dùng <code>SELECT
+      DISTINCT a FROM Account a LEFT JOIN FETCH a.entries</code> rút gọn cố định còn <b>1 câu</b> duy nhất bất kể $N$.</p></div>
+    say: Công thức toán học của lỗi một cộng N rất dễ nhớ và tỉ lệ thuận trực tiếp với số lượng bản ghi. Với hai mươi tài
+      khoản cần hai mươi mốt truy vấn, còn với một nghìn tài khoản thì số lượt đi về nhảy vọt lên một nghìn không trăm lẻ
+      một. Khi thay bằng câu truy vấn nối tải gộp, tổng số chuyến khứ hồi mạng giảm xuống hằng số một không đổi theo N. Mức
+      tiết kiệm mạng tăng theo cấp số nhân mỗi khi kích thước trang hoặc số tài khoản hiển thị đồng loạt tăng lên. Lưu ý từ
+      khoá lọc trùng bảo đảm tập kết quả trả về không nhân bản lặp lại đối tượng cha khi tài khoản có nhiều dòng bút toán.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    - '1.1'
+    - '1.2'
+    clear: true
+- id: example
+  kind: example
+  title: Tệp di trú Flyway khởi tạo bảng và truy vấn tải gộp JPA
+  checks:
+  - 1 + 20 == 21
+  steps:
+  - show: <p><b>1. Tệp di trú <code>src/main/resources/db/migration/V1__init.sql</code></b></p><div class="code"><div>CREATE
+      TABLE accounts (</div><div>  id VARCHAR(32) PRIMARY KEY,</div><div>  owner_name VARCHAR(120) NOT NULL,</div><div>  balance
+      BIGINT NOT NULL</div><div>);</div><div>CREATE TABLE journal_entries (</div><div>  id BIGINT GENERATED BY DEFAULT AS
+      IDENTITY PRIMARY KEY,</div><div>  account_id VARCHAR(32) NOT NULL REFERENCES accounts(id),</div><div>  delta BIGINT
+      NOT NULL</div><div>);</div><div>CREATE INDEX idx_journal_account ON journal_entries(account_id);</div></div>
+    say: Nhìn vào tệp SQL tạo bảng đặt trong thư mục di trú chuẩn của Flyway. Ta tạo khoá chính cho bảng tài khoản, ràng buộc
+      khoá ngoại cho bảng bút toán con và gắn thêm một chỉ mục ngay trên cột khoá ngoại đó. Vì PostgreSQL không tự đánh chỉ
+      mục cho cột khoá ngoại ở bảng con, câu lệnh tạo chỉ mục này rất quan trọng giúp phép nối bảng không phải quét toàn bộ
+      bảng bút toán. Chỉ mục trên cột khoá ngoại giúp công cụ lập lịch cơ sở dữ liệu tra nhanh các bút toán của từng tài khoản
+      khi nối bảng. Cột mã định danh tự tăng ở bảng bút toán và ràng buộc không trống bảo vệ tính toàn vẹn tham chiếu ngay
+      từ tầng lưu trữ.
+    focus:
+    - 1
+    - 2
+    - 2
+    - 1
+    - 2
+    clear: true
+  - show: <p><b>2. Kho dữ liệu JPA bổ sung truy vấn tải gộp kèm sắp xếp</b></p><div class="code"><div>public interface AccountRepository
+      extends JpaRepository&lt;Account, String&gt; {</div><div>  @Query("SELECT DISTINCT a FROM Account a LEFT JOIN FETCH
+      a.entries ORDER BY a.id")</div><div>  List&lt;Account&gt; findAllWithEntries();</div><div>}</div><div>// application.properties:</div><div>//
+      spring.jpa.hibernate.ddl-auto=validate</div><div>// spring.jpa.properties.hibernate.generate_statistics=true</div></div>
+    say: Bên phía lớp kho dữ liệu Java, ta giữ nguyên tải lười ở thực thể nhưng khai báo thêm một truy vấn đặt tên rõ dùng
+      lệnh nối tải gộp. Đồng thời trong tệp cấu hình, ta khoá kiểm tra cấu trúc ở mức xác thực và bật bộ đếm thống kê câu
+      lệnh chuẩn bị sẵn. Nhờ bộ đếm này, bài kiểm thử tự động có thể khẳng định chính xác có bao nhiêu câu SQL thực sự đi
+      qua mạng. Nhớ rằng trên lớp thực thể tài khoản, mối quan hệ một nhiều giữ chế độ tải lười làm mặc định gọn nhẹ. Khi
+      chạy kiểm thử tích hợp với Testcontainers, mọi bài kiểm kế thừa lớp cơ sở bật container PostgreSQL dùng chung cho tốc
+      độ cao.
+    focus:
+    - 1
+    - 2
+    - 2
+    - 1
+    - 2
+    clear: true
+- id: check
+  kind: check
+  title: 'Chạy thật trên PostgreSQL 17 Testcontainers: 21 SQL vs 1 SQL'
+  checks:
+  - 21 - 1 == 20
+  steps:
+  - show: '<p><b>Kết quả đo thống kê SQL thật trên PostgreSQL 17-alpine</b></p><div class="code"><div>Container postgres:17-alpine@sha256:d3244e...
+      started in PT2.43s</div><div>// 20 accounts + 20 journal_entries, chạy trên PostgreSQL 17 qua Flyway:</div><div>// accounts.findAll()
+      + getEntries().size() → PrepareStatementCount &gt;= 21</div><div>// accounts.findAllWithEntries() → PrepareStatementCount
+      == 1</div><div>[INFO] Tests run: 4, Failures: 0, Errors: 0, Total time: ~20 s</div><div>KiemL03Test: 3 ca, 0 hỏng</div></div>'
+    say: Kết quả chạy thật trên container PostgreSQL mười bảy chứng minh chính xác lý thuyết vừa phân tích. Container cơ sở
+      dữ liệu khởi động xong trong khoảng hai phẩy bốn giây và Flyway chạy sạch tệp di trú V1 ngay lúc bật ứng dụng. Trên
+      tập hai mươi tài khoản, đọc lười tốn hai mươi mốt câu lệnh, còn tải gộp chỉ gửi đúng một truy vấn vì đã nối bảng ngay
+      ở máy chủ. Chênh lệch giữa hai mươi mốt câu lệnh và đúng một câu lệnh được khẳng định bằng bộ đếm chuẩn của thư viện
+      ánh xạ. Điều này chứng minh không cần phải sửa cấu trúc tải lười mặc định mà vẫn giải quyết dứt điểm nút thắt truy vấn.
+    focus:
+    - 1
+    - 2
+    - 2
+    - 1
+    - 2
+    clear: true
+- id: quymo
+  kind: example
+  title: Tổng lượt khứ hồi mạng ở 10, 1 000 và 100 000 tài khoản
+  checks:
+  - alg.spb_n_plus_one(10) == (11, 1)
+  - alg.spb_n_plus_one(1000) == (1001, 1)
+  - alg.spb_n_plus_one(100_000) == (100_001, 1)
+  steps:
+  - show: <table class='t'><tr><th>số tài khoản cần đọc</th><th>lỗi 1+N (1 + N khứ hồi mạng)</th><th>JOIN FETCH (cố định)</th></tr><tr><td><b>10
+      tài khoản</b></td><td>11 khứ hồi (~2 ms — dễ bỏ sót!)</td><td><b>1 khứ hồi</b></td></tr><tr><td><b>1 000 tài khoản</b></td><td>1
+      001 khứ hồi (~150–400 ms trễ mạng LAN)</td><td><b>1 khứ hồi</b></td></tr><tr><td><b>100 000 tài khoản</b></td><td>100
+      001 khứ hồi (<b>15–40 giây</b>, sập timeout)</td><td>Cần kết hợp <b>phân trang khoá con trỏ</b> theo lô</td></tr></table>
+    say: Nhìn bảng quy mô để thấy vì sao lỗi một cộng N rất khó phát hiện lúc phát triển nhưng lại chết người khi vận hành.
+      Ở mười tài khoản thử nghiệm, mười một vòng hỏi đáp trên máy cá nhân chỉ tốn vài mi-li-giây nên không ai để ý. Lên tới
+      một nghìn tài khoản, một nghìn không trăm lẻ một vòng qua mạng nội bộ làm phản hồi chậm vài trăm mi-li-giây. Tới quy
+      mô một trăm nghìn tài khoản, hơn một trăm nghìn vòng khứ hồi gây nghẽn toàn bộ kênh nối nên ta buộc phải vừa tải gộp
+      vừa phân trang theo lô nhỏ. Mười một câu lệnh ở mẫu thử nhỏ trông vô hại nhưng chính nó che giấu quả bom hẹn giờ khi
+      dữ liệu thật tăng gấp nghìn lần. Kết hợp tải gộp cùng phân trang theo khoá con trỏ giữ kích thước mỗi lô trả về nhỏ
+      gọn và thời gian phản hồi ổn định.
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.2'
+    - '1.4'
+    clear: true
+- id: pitfalls
+  kind: pitfall
+  title: Ba lỗi hay gặp với Flyway, Hibernate và tải dữ liệu quan hệ
+  steps:
+  - show: <table class='t'><tr><th>lỗi phổ biến khi dùng JPA + Flyway</th></tr><tr><td><div class='box warn'><b>Lỗi 1 — Sửa
+      trực tiếp tệp <code>V1__init.sql</code> đã chạy trên môi trường khác:</b> Flyway báo lệch mã băm checksum và từ chối
+      khởi động! Thay đổi mới phải tạo tệp <code>V2__...sql</code>.<br><b>Lỗi 2 — Dùng <code>FetchType.EAGER</code> để chữa
+      cháy N+1:</b> Làm mọi truy vấn đơn giản đều kéo theo bảng con dù không cần dùng tới.<br><b>Lỗi 3 — Kết hợp <code>JOIN
+      FETCH</code> một-nhiều cùng phân trang <code>Pageable</code>:</b> Hibernate cảnh báo <code>HHH90003004</code> và tải
+      hết cả bảng lên RAM để cắt trang!</div></td></tr></table>
+    say: 'Ba cái bẫy trên bảng đều khiến ứng dụng gặp lỗi khi lên môi trường sản xuất. Thứ nhất, tuyệt đối không sửa ngược
+      tệp di trú V1 sau khi đã áp dụng mà phải luôn thêm tệp V2 mới vì Flyway kiểm tra dấu băm từng tệp. Thứ hai, không chuyển
+      sang tải sẵn mọi lúc ở thực thể mà giữ tải lười rồi dùng câu lệnh tải gộp ở đúng nơi cần thiết. Thứ ba, không dùng tải
+      gộp một nhiều chung với phân trang truyền thống vì thư viện phải kéo toàn bộ bản ghi lên bộ nhớ trước khi cắt. Ngoài
+      lỗi sửa tệp di trú cũ, việc trộn tải gộp một nhiều với phân trang truyền thống cũng làm tràn bộ nhớ khi bảng lớn lên.
+      Hãy viết hai truy vấn tách biệt: một truy vấn cắt trang chỉ lấy mã tài khoản rồi truy vấn thứ hai mới tải gộp chi tiết.'
+    focus:
+    - 0
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    clear: true
+- id: quiz
+  kind: quiz
+  title: Kiểm tra nhanh Flyway và lỗi truy vấn 1+N
+  checks:
+  - 1 + 500 == 501
+  steps:
+  - show: <ol><li>Bạn đọc 500 tài khoản bằng <code>findAll()</code> rồi lấy kích thước danh sách bút toán cho từng tài khoản
+      với mối quan hệ tải lười. Có bao nhiêu câu <code>SELECT</code> được gửi tới PostgreSQL?</li><li>Khi cần thêm một cột
+      mới vào bảng <code>accounts</code> sau khi <code>V1__init.sql</code> đã triển khai, bạn sửa <code>V1</code> hay tạo
+      tệp <code>V2</code>?</li></ol>
+    say: Hãy tự kiểm hiểu hai câu hỏi thực tế về tầng cơ sở dữ liệu. Câu một, nếu đọc năm trăm tài khoản bằng hàm tìm tất
+      cả rồi lặp qua từng tài khoản để đọc danh sách bút toán con, có tổng cộng bao nhiêu câu truy vấn gửi tới PostgreSQL?
+      Câu hai, khi cần thêm cột mới sau khi tệp V1 đã chạy, bạn sửa tại chỗ hay viết tệp mới? Bấm tạm dừng và trả lời. Kiểm
+      tra chắc hai nguyên tắc này giúp bạn làm chủ hoàn toàn hiệu năng và quản trị lược đồ trên cơ sở dữ liệu thật.
+    pause: 20
+  - show: <table class='t'><tr><th>đáp án câu 1</th></tr><tr><td><p>① Tổng cộng <b>501 câu SQL</b> (1 câu lấy 500 tài khoản
+      + 500 câu hỏi bút toán cho từng tài khoản).</p></td></tr></table>
+    say: 'Đáp án câu một: phát sinh năm trăm lẻ một câu truy vấn gồm một câu lấy danh sách tài khoản và năm trăm câu đọc danh
+      sách bút toán theo sau. Việc tính trước tổng số truy vấn giúp bạn tránh được lỗi nghẽn kết nối khi lượng tài khoản tăng
+      gấp nhiều lần. Mỗi tài khoản thêm một truy vấn con nên độ trễ tăng tuyến tính theo đúng kích thước danh sách trả về.'
+    clear: true
+  - show: <table class='t'><tr><th>đáp án câu 2</th></tr><tr><td><p>② Phải tạo tệp mới <b><code>V2__...sql</code></b> (chứa
+      <code>ALTER TABLE</code>); sửa lại <code>V1</code> làm sai lệch mã checksum Flyway.</p></td></tr></table>
+    say: 'Đáp án câu hai: luôn tạo tệp phiên bản V2 mới vì công cụ quản lý di trú ghi nhớ dấu băm của từng tệp đã thi hành.
+      Không bao giờ sửa tệp di trú cũ đã chạy xong vì sẽ làm sai lệch chữ ký kiểm tra trên cơ sở dữ liệu thật. Tính bất biến
+      của lịch sử di trú là nguyên tắc vàng bảo vệ môi trường sản xuất khỏi sai lệch cấu trúc không thể cứu vãn.'
+    clear: true
+- id: practice
+  kind: practice
+  title: Chạy PostgreSQL 17 qua Testcontainers, Flyway V1 và khử 1+N
+  lab: labs/SPB/L03
+  steps:
+  - show: <div class='box key'><p><b>Thực hành bài L03 (<code>labs/SPB/L03/de.md</code>, cần Docker):</b> tạo <code>V1__init.sql</code>
+      với chỉ mục khoá ngoại, đặt <code>spring.jpa.hibernate.ddl-auto=validate</code> và cài hàm <code>findAllWithEntries()</code>
+      dùng <code>LEFT JOIN FETCH ... ORDER BY a.id</code> trên <b>PostgreSQL 17</b> thật qua Testcontainers, rồi chấm:</p><p><code>bash
+      labs/cham.sh SPB L03 duong_dan/du_an_cua_ban</code></p></div>
+    say: Hãy mở đề bài L03 để thiết lập đầy đủ bộ đôi Flyway và kiểm tra thống kê truy vấn trên container PostgreSQL mười
+      bảy thật. Chú ý khai báo tên dịch vụ kết nối rõ ràng và giữ nguyên chữ tải gộp đúng cú pháp trên hàm tìm kiếm tài khoản.
+      Bấm tạm dừng và tự hoàn thành trước khi đối chiếu đầu ra nghiệm thu. Bạn sẽ kế thừa lớp nền kiểm thử container PostgreSQL
+      để giữ tốc độ khởi chạy ổn định qua toàn bộ chuỗi kiểm thử PostgreSQL. Hãy bật thống kê câu lệnh chuẩn bị trong
+      cấu hình kiểm thử để đối chiếu con số thực đo được.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    - '1.1'
+    - '1.2'
+    clear: true
+    pause: 30
+  - show: '<p><b>Kết quả chấm bộ kiểm KiemL03Test trên PostgreSQL 17 thật</b></p><div class="code"><div>KiemL03Test: 3 ca,
+      0 hỏng</div></div>'
+    say: Màn hình hiển thị kết quả nghiệm thu ba ca kiểm thử chạy trên container PostgreSQL thật. Bộ kiểm sẽ xác nhận chế
+      độ tải lười phát sinh từ hai mươi mốt câu trở lên trong khi hàm tải gộp của bạn chạy gói gọn trong đúng một câu truy
+      vấn. Cả ba ca kiểm chứng tệp di trú, lỗi một cộng N và truy vấn tải gộp đều chạy trực tiếp trên PostgreSQL mười bảy.
+    focus:
+    - 1
+    - 2
+    - 2
+    clear: true
+  - show: <div class='box ok'><p><b>Gợi ý nếu kẹt ở bài L03:</b> (1) thêm cả <code>spring-boot-starter-flyway</code> và <code>org.flywaydb:flyway-database-postgresql</code>;
+      (2) gắn <code>@ServiceConnection(name = "postgres")</code> trên <code>PostgreSQLContainer</code>; (3) giữ từ khoá <code>DISTINCT</code>
+      + <code>LEFT JOIN FETCH a.entries</code> trong <code>AccountRepository</code>.</p></div>'
+    say: Nếu gặp lỗi không nhận phương thức di trú hoặc số câu SQL vẫn trên hai mươi mốt, hãy rà lại ba gợi ý trên màn hình.
+      Bảo đảm đã thêm gói hỗ trợ riêng cho PostgreSQL của Flyway và gắn đúng tên kết nối dịch vụ trên thùng chứa. Chú ý kiểm
+      đúng cả phiên bản phụ thuộc hỗ trợ riêng PostgreSQL của thư viện Flyway nếu máy báo lỗi không nhận bộ di trú.
+    focus:
+    - 0
+    - 1
+    - 1
+    clear: true
+- id: recap
+  kind: recap
+  title: Tổng kết quản lý lược đồ Flyway và dập lỗi 1+N
+  steps:
+  - show: <div class='chain'><span class='n'>Flyway V1 + Index</span><span class='a'>→</span><span class='n'>ddl-auto=validate</span><span
+      class='a'>→</span><span class='n'>JOIN FETCH = 1 SQL</span></div>
+    say: Bạn đã nối thành công dịch vụ Spring Boot vào PostgreSQL mười bảy thật với di trú lược đồ chặt chẽ. Việc kiểm soát
+      số câu truy vấn giúp ứng dụng sẵn sàng cho tải cao ở các bước phát triển phức tạp hơn. Lớp lưu trữ giờ đây không chỉ
+      chạy trên cơ sở dữ liệu thật mà còn được kiểm soát chặt từng câu truy vấn phát ra.
+    focus:
+    - '1.1'
+    - '1.3'
+    - '1.3'
+    clear: true
+  - show: <div class='box ok'><b>Bài sau (bài 4):</b> Sổ cái bút toán kép — Khoá bi quan theo thứ tự, khoá lạc quan và bảng
+      Idempotency-Key</div>
+    say: Bài tiếp theo ta cài đặt sổ cái hai dòng nợ có, khoá hàng chống bế tắc và bảng khử trùng bền vững ngay trên PostgreSQL.
+      Hẹn gặp bạn ở bài sau. Ở bài kế tiếp, chúng ta sẽ khai thác toàn bộ sức mạnh khoá hàng và ràng buộc duy nhất của chính
+      PostgreSQL này.
+    clear: true
+    forward_ref: true
+asr_reviewed:
+- sentence: Màn hình hiển thị kết quả nghiệm thu ba ca kiểm thử chạy trên container PostgreSQL thật.
+  reason: 'ASR chép “Mang hình hiển thị kết quản nghiệm thu 3K kiểm thử chạy trên container Postrex QL thật.” (khớp 0.743,
+    khác “màn” → nghe thành “mang”; “quả” → nghe thành “quản”; “ca” → nghe thành “k”; “postgresql” → nghe thành “postrex ql”):
+    biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Bạn đã nối thành công dịch vụ Spring Boot vào PostgreSQL mười bảy thật với di trú lược đồ chặt chẽ.
+  reason: 'ASR chép “Bạn đã nối thành công dịch vụ Springbook vào Postless SQL 17 thật với di trú lực đồ chặt chẽ.” (khớp
+    0.81, khác “spring boot” → nghe thành “springbook”; “postgresql” → nghe thành “postless sql”; “lược” → nghe thành “lực”):
+    biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Container cơ sở dữ liệu khởi động xong trong khoảng hai phẩy bốn giây và Flyway chạy sạch tệp di trú V1 ngay lúc
+    bật ứng dụng.
+  reason: 'ASR chép “Cần Tener cơ sở dữ liệu khởi động xong trong khoảng 2,4 giây và Flyway chạy sạch tập di trú về một ngay
+    lúc bật ứng dụng.” (khớp 0.912, khác “container” → nghe thành “cần tener”; “tệp” → nghe thành “tập”): biến thể phiên âm
+    từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Bài tiếp theo ta cài đặt sổ cái hai dòng nợ có, khoá hàng chống bế tắc và bảng khử trùng bền vững ngay trên PostgreSQL.
+  reason: 'ASR chép “Bài tiếp theo ta cài đặt sổ cái hai dòng nợ có, khóa hàng chống bế tắc và bản khử trùng bền vững ngay
+    trên PostreSQL.” (khớp 0.923, khác “bảng” → nghe thành “bản”; “postgresql” → nghe thành “postresql”): biến thể phiên âm
+    từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Thứ nhất, các tệp di trú đánh số phiên bản từ V1 trở đi chạy theo đúng trình tự ngay khi ứng dụng khởi động trên
+    PostgreSQL.
+  reason: 'ASR chép “Thứ nhất, các tệp di trú đánh số phiên bản từ V1 trở đi chạy theo đúng trình tự ngay khi ứng dụng khởi
+    động trên Postgres Core.” (khớp 0.947, khác “postgresql” → nghe thành “postgres core”): biến thể phiên âm từ mượn/thanh
+    điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Thứ nhất, tuyệt đối không sửa ngược tệp di trú V1 sau khi đã áp dụng mà phải luôn thêm tệp V2 mới vì Flyway kiểm
+    tra dấu băm từng tệp.
+  reason: 'ASR chép “Thứ nhất, tuyệt đối không sửa ngược tệp di trú V1 sau khi đã áp dụng mà phải luôn thêm tệp về hai mới
+    vì phở lightweight kiểm tra giấu băm từng tệp.” (khớp 0.955, khác “flyway” → nghe thành “phở lightweight”): biến thể phiên
+    âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Bảo đảm đã thêm gói hỗ trợ riêng cho PostgreSQL của Flyway và gắn đúng tên kết nối dịch vụ trên thùng chứa.
+  reason: 'ASR chép “Bảo Đảm đã thêm gói hỗ trợ riêng cho PostlessQL của Flyway và gắn đúng tên kết nối dịch vụ trên thùng
+    chứa.” (khớp 0.957, khác “postgresql” → nghe thành “postlessql”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh
+    của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Hãy mở đề bài L03 để thiết lập đầy đủ bộ đôi Flyway và kiểm tra thống kê truy vấn trên container PostgreSQL mười
+    bảy thật.
+  reason: 'ASR chép “Hãy mở đề bài L03 để thiết lập đầy đủ bộ đôi flyway và kiểm tra thống kê truy vấn trên container PostgreSQL
+    17 thật.” (khớp 1.0, khác ): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa
+    — NOT_VERIFIED bằng tai người'

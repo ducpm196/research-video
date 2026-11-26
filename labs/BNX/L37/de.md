@@ -24,3 +24,6 @@ CHUOI = ("An", "X' OR '1'='1", "B' OR so_du > 600 --")
 chuoi <số thứ tự>: ghep <số dòng> dong, tham so <số dòng> dong
 ```
 Chạy: `python mau.py`. Chấm: `bash labs/cham.sh BNX L37 mau.py`.
+
+## Phần thêm trên Oracle thật (tuỳ chọn)
+Khi có container `bnx-ora`, chạy `bash labs/BNX/L37/oracle/chay.sh` (tệp `labs/BNX/L37/oracle/thu.sql`) để đối chiếu PL/SQL ghép chuỗi với câu lệnh truyền biến gắn `:1` (`USING p_in`) chống chèn mã trên Oracle thật; lab `sqlite` ở trên là đường lùi bắt buộc mặc định.

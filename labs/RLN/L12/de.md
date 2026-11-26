@@ -1,6 +1,4 @@
-# Lab RLN L12 — Đánh giá ngoại tuyến: trọng số quan trọng và số mẫu hiệu dụng
+# Lab RLN L12 — Số mẫu hiệu dụng ESS trong đánh giá ngoại tuyến
 
-Cho một nhật ký 5 lượt có dãy trọng số `[2**8, 1, 1, 1, 1]`. Tính trọng số lớn nhất `w8` và số mẫu hiệu dụng `ESS = (sum(w))^2 / sum(w^2)`.
-
-Định dạng đầu ra (1 dòng):
-`w8=<số nguyên> ESS=<3 chữ số>`
+Đọc dãy trọng số `w0,w1,...` từ stdin (ví dụ `256,1,1,1,1`). Tính `w0` và `ESS = (sum(w))^2 / sum(w^2)`.
+In đúng 1 dòng `w8=<số> ESS=<3 chữ số>` (với `w8=` là nhãn cố định theo bài kiểm cho trọng số đầu tiên `w0`).

@@ -1,11 +1,6 @@
-# Lab DSY L08 [Mô phỏng phân tán] — Tác động của tác vụ rùa bò (straggler) lên thời gian xong
+# Lab DSY L08 — Tác động của tác vụ rùa bò (straggler) lên thời gian xong
 
-Viết chương trình Python cho `99` tác vụ tốn `10 s` và `1` tác vụ lệch tải `300 s`: tính trung bình vs thời gian hoàn thành toàn job, in đúng 3 dòng:
-1. `mean_s=12.9`
-2. `job_done_s=300`
-3. `straggler_ratio=23.3x`
+Đọc `stdin` `fast_cnt=<int> fast_s=<float> slow_s=<float>`. Tính thời gian trung bình các tác vụ, thời điểm job hoàn thành và bội số chênh lệch.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh DSY L08 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `mean_s=<.1f>`, `job_done_s=<d>`, `straggler_ratio=<.1f>x`.
+Chấm tự động: `bash labs/cham.sh DSY L08 duong_dan/bai_cua_ban.py`

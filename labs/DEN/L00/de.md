@@ -1,13 +1,6 @@
 # Lab DEN L00 — Lưu trữ theo hàng so với theo cột
 
-Tính tổng dung lượng (`GB`, quy ước `1 GB = 10^9 byte`) phải đọc cho bảng `50 000 000` dòng x `40` cột x `8 byte/ô` khi truy vấn chỉ cần `4` cột, theo hai kiểu lưu: theo hàng (đọc đủ `40` cột) và theo cột (chỉ đọc `4` cột), cùng tỉ lệ tiết kiệm (%).
+Đọc `stdin` `rows=<int> cols=<int> used=<int> width=<int>`. Tính dung lượng GB thập phân cần đọc theo hàng vs theo cột và tỉ lệ tiết kiệm I/O.
 
-Định dạng đầu ra (3 dòng):
-`row_scan_gb=<1 chữ số>`
-`col_scan_gb=<1 chữ số>`
-`io_saved_pct=<1 chữ số>%`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh DEN L00 duong_dan/bai_cua_ban.py
-```
+In 3 dòng: `row_scan_gb=<.1f>`, `col_scan_gb=<.1f>`, `io_saved_pct=<.1f>%`.
+Chấm tự động: `bash labs/cham.sh DEN L00 duong_dan/bai_cua_ban.py`

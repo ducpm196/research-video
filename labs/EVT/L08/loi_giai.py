@@ -1,4 +1,4 @@
-backlog = (900 - 750) * 3600
-drain_s = backlog / (1200 - 900)
-print(f'backlog_1h={backlog}')
-print(f'drain_s={drain_s:.1f}')
+import sys
+kv = {k: int(v) for k, v in (t.split('=') for t in sys.stdin.read().split())}
+bl = (kv['in_r'] - kv['slow_p']) * kv['secs']; dr = bl / (kv['fast_p'] - kv['in_r'])
+print(f'backlog_1h={bl}\ndrain_s={dr:.1f}')

@@ -1,16 +1,21 @@
-import heapq
-adj = {k: [] for k in 'SABCD'}
-for u, v, w in [('S','A',4),('S','B',1),('A','B',2),('A','C',1),('B','C',5),('B','D',8),('C','D',3)]:
+import heapq, sys
+kv = dict(t.split('=') for t in sys.stdin.read().split())
+nodes = list(kv['nodes']); src = kv['src']; adj = {k: [] for k in nodes}
+direct_a = None
+for e in kv['edges'].split(','):
+    uv, ws = e.split(':'); u, v = uv.split('-'); w = int(ws)
     adj[u].append((v, w)); adj[v].append((u, w))
-d = {'S': 0}; nh = {}; pq = [(0, 'S')]
+    if {u, v} == {src, 'A'}: direct_a = w
+d = {src: 0}; nh = {}; pq = [(0, src)]
 while pq:
     c, u = heapq.heappop(pq)
-    if c > d.get(u, 99): continue
+    if c > d.get(u, 10**9): continue
     for v, w in adj[u]:
-        if c + w < d.get(v, 99):
-            d[v] = c + w; nh[v] = v if u == 'S' else nh[u]
+        if c + w < d.get(v, 10**9):
+            d[v] = c + w; nh[v] = v if u == src else nh[u]
             heapq.heappush(pq, (d[v], v))
-hops = ''.join(sorted({nh[k] for k in 'ABCD'}))
-print('dist=' + ','.join(f'{k}:{d[k]}' for k in 'ABCD'))
+others = [k for k in nodes if k != src]
+hops = ''.join(sorted({nh[k] for k in others}))
+print('dist=' + ','.join(f'{k}:{d[k]}' for k in others))
 print(f'next_hop_all={hops}')
-print(f'sa_direct_vs_sb_ba=4_vs_{d["A"]}')
+print(f'sa_direct_vs_sb_ba={direct_a}_vs_{d["A"]}')

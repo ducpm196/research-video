@@ -1,11 +1,6 @@
-# Lab HCI L05 — Mô hình thao tác từng bước KLM: đổi tên bằng chuột so với dùng phím tắt
+# Lab HCI L05 — Mô hình thao tác KLM chuột vs phím tắt
 
-Cộng chi phí chuẩn KLM (`K=0.20, P=1.10, H=0.40, M=1.35, BB=0.20`): dùng chuột chọn rồi bấm sửa (`H + M + P + BB + P + BB + 3*K`) so với dùng phím tắt `Ctrl+R` (`H + 2*K + M + 3*K + K`).
-
-Định dạng đầu ra (1 dòng):
-`mouse_s=<2 chữ số> keyboard_s=<2 chữ số>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh HCI L05 duong_dan/bai_cua_ban.py
-```
+Đọc `K P H M BB` từ stdin (ví dụ `0.20 1.10 0.40 1.35 0.20`). Tính thời gian đổi tên một tệp sang tên mới dài đúng 3 ký tự theo hai chuỗi thao tác KLM:
+- Chuột: `H + M + P + BB + P + BB + 3*K` (chuyển tay sang chuột, nghĩ, trỏ biểu tượng, nhấp đúp mở sửa tên, trỏ nút xác nhận, nhấp, gõ tên mới 3 ký tự).
+- Phím tắt: `H + 2*K + M + 3*K + K` (đặt tay lên bàn phím, nhấn tổ hợp 2 phím mở đổi tên, nghĩ, gõ tên mới 3 ký tự, nhấn phím Enter xác nhận).
+In đúng 1 dòng `mouse_s=<2 chữ số> keyboard_s=<2 chữ số>`.

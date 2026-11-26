@@ -1,11 +1,6 @@
 # Lab SDP L00 — Đo độ phức tạp vòng McCabe bằng cây cú pháp AST thật
 
-Viết chương trình Python dùng thư viện chuẩn `ast` đếm số nút rẽ nhánh (`If, For, While, BoolOp`) của hàm chứa 2 `if`, 1 `for`, 1 `and`, tính `M = 1 + nhánh = 5`, in đúng 3 dòng:
-1. `decision_points=4`
-2. `mccabe_complexity=5`
-3. `max_recommended_le10=1`
+Đọc `stdin` chứa mã nguồn một hàm Python kết hợp các lệnh `if`, `for`, `while`, phép `and`/`or`. Dùng `ast` đếm số nút rẽ nhánh và tính độ phức tạp `M = 1 + nhánh`.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh SDP L00 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `decision_points=<d>`, `mccabe_complexity=<d>`, `max_recommended_le10=<0|1>`.
+Chấm tự động: `bash labs/cham.sh SDP L00 duong_dan/bai_cua_ban.py`

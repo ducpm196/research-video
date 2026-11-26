@@ -1,3 +1,6 @@
-drill_btn = 'XAC NHAN TAP TRAN'; real_btn = 'GUI CANH BAO THAT'
-t1 = 13 * 60 + 18; t2 = 13 * 60 + 52
-print(f"distinct={int(drill_btn != real_btn)} diff_min={t2 - t1}")
+import sys
+s = sys.stdin.read().strip() or "XAC NHAN TAP TRAN|GUI CANH BAO THAT|13:18 13:52"
+b1, b2, ts = s.split("|")
+t1s, t2s = ts.split()
+to_m = lambda t: int(t.split(":")[0]) * 60 + int(t.split(":")[1])
+print(f"distinct={int(b1 != b2)} diff_min={to_m(t2s) - to_m(t1s)}")

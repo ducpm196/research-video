@@ -1,11 +1,6 @@
-# Lab CSA L16 (Mô phỏng kiến trúc chuyên gia) — Đa nhân Amdahl và chênh lệch thời gian cache
+# Lab CSA L16 — Tình huống kiến trúc: Amdahl đa nhân & kênh phụ Cache Timing
 
-Viết chương trình Python tính tăng tốc giới hạn của phần tuần tự `15%` khi mở rộng sang 8 nhân và mô phỏng độ trễ cache hit (`2 ns`) vs miss (`100 ns`) bộc lộ kênh kề, in đúng 3 dòng:
-1. `speedup_8cores_p85=3.90`
-2. `limit_inf=6.67`
-3. `cache_timing_ratio=50.0x`
+Đọc `stdin` `p=<float> cores=<int> hit_ns=<float> miss_ns=<float>`. Tính speedup Amdahl với `cores` nhân, giới hạn vô cực và tỉ số thời gian `miss / hit`.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh CSA L16 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `speedup_8cores_p85=<.2f>`, `limit_inf=<.2f>`, `cache_timing_ratio=<.1f>x`.
+Chấm tự động: `bash labs/cham.sh CSA L16 duong_dan/bai_cua_ban.py`

@@ -1,11 +1,4 @@
-# Lab HCI L11 — Kiểm chứng rào chắn cảnh báo khẩn cấp và thời lượng phản hồi diễn tập
+# Lab HCI L11 — Rào chắn cảnh báo khẩn cấp và độ trễ
 
-Kiểm tra danh sách rào chắn an toàn của giao diện mới `['env_split', 'preview_nonempty', 'two_person', 'cancel_tpl']` và tính tổng thời lượng trễ diễn tập từ mốc `09:12` tới `09:49`.
-
-Định dạng đầu ra (1 dòng):
-`mins_delay=<số nguyên> guards_passed=<số nguyên>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh HCI L11 duong_dan/bai_cua_ban.py
-```
+Đọc `t1 t2|g0,g1,...` từ stdin (ví dụ `09:12 09:49|env_split,preview_nonempty,two_person,cancel_tpl`). Tính số phút trễ và số rào chắn.
+In đúng 1 dòng `mins_delay=<int> guards_passed=<int>`.

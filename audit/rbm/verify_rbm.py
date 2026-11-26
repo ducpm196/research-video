@@ -334,6 +334,16 @@ U17, D17 = sp.Matrix([[1, 1], [0, 1]]), sp.eye(2)
 rec("L17k", U17 * D17 * U17.T == sp.Matrix([[2, 1], [1, 1]]), "U D Uᵀ = ma trận dự đoán của bài 13")
 rec("L17x", alg.kalman1d_update(0, 3, 1, 1)[0] == 0.75 and alg.kalman1d_update(0, 1, 1, 4)[2] == 0.8, "checklib.kalman1d_update khớp")
 
+# ── Kiểm tự động mọi lab (du_lieu.txt + ca_an/) qua cham.sh ──
+import subprocess as _subp
+from pathlib import Path as _LabPath
+_BASH = r"C:\Program Files\Git\bin\bash.exe"
+if not _LabPath(_BASH).exists():
+    _BASH = "bash"
+for _ld in sorted((ROOT / "labs" / "RBM").glob("L*")):
+    _rp = _subp.run([_BASH, str(ROOT / "labs" / "cham.sh"), "RBM", _ld.name], cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
+    rec(f"{_ld.name}:lab", _rp.returncode == 0 and "PASS" in _rp.stdout and "2 ca an" in _rp.stdout, f"cham.sh {_ld.name} (public + 2 ca_an)")
+
 n_ok = sum(ok for _, ok in R)
 print(f"\n{n_ok}/{len(R)} PASS")
 sys.exit(0 if n_ok == len(R) else 1)

@@ -1,6 +1,9 @@
-majority = False
-cp_ok = 1 if majority else 0
-ap_a, ap_b = 'v_new', 'v_old'
+import sys
+kv = dict(t.split('=') for t in sys.stdin.read().split())
+maj = int(kv['majority']) == 1
+cp_ok = 1 if maj else 0
+ap_avail = 1
+div = int(kv['v_left'] != kv['v_right'])
 print(f'cp_rejected_minority={int(cp_ok == 0)}')
-print(f'ap_available_minority={int(ap_a == "v_new")}')
-print(f'ap_diverged={int(ap_a != ap_b)}')
+print(f'ap_available_minority={ap_avail}')
+print(f'ap_diverged={div}')

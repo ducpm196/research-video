@@ -1,11 +1,8 @@
-# Lab MLO L05 — Lệch huấn luyện–phục vụ khi không dùng chung công thức chuẩn hoá
+# Lab MLO L05 — Lệch huấn luyện-phục vụ khi không dùng chung chuẩn hoá
 
-Với giá trị đầu vào `x = 80.0` và độ lệch chuẩn `std = 10.0`, tính giá trị chuẩn hoá đúng khi dùng trung bình lúc huấn luyện (`mean_train = 55.0`) so với khi mã phục vụ viết lại nhầm sang trung bình (`mean_serve = 65.0`).
+Đọc `stdin` `x=<f> std=<f> m_tr=<f> m_sv=<f>`. Tính z-score theo trung bình huấn luyện `m_tr` và khi phục vụ viết nhầm trung bình `m_sv`.
 
-Định dạng đầu ra:
-`z_train=<1 chữ số> z_serve_skew=<1 chữ số>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh MLO L05 duong_dan/bai_cua_ban.py
-```
+In 1 dòng: `z_train=<.1f> z_serve_skew=<.1f>`.
+Chấm tự động: `bash labs/cham.sh MLO L05 duong_dan/bai_cua_ban.py`
+Nền tảng Python (`PYT:L04`): đọc dữ liệu qua `sys.stdin.read().strip()`.
+Ghi chú: giá trị chuẩn hoá `z` còn gọi là `z-score`.

@@ -1,0 +1,3 @@
+CREATE TABLE t(id INT, v TEXT);
+INSERT INTO t VALUES(1,'ok');
+SELECT id, v FROM t;

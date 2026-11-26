@@ -2,6 +2,7 @@
 Lệnh `extract` trích hình ra audit/cs112/fig/<Lxx>_<TÊN>.svg từ bài ĐANG CÓ (một lần, trước khi sửa mẫu), kiểm mẫu cũ + hình = bài cũ.
 Lệnh `gen Lxx` ghép lại mẫu + hình thành bài bằng fill_tpl.py (không sửa bài sinh ra bằng tay).
 Dùng: .venv/Scripts/python -B audit/cs112/regen_a.py extract|gen L05 [L06 …]"""
+import sys as _sys; from pathlib import Path as _P; _sys.path.insert(0, str(_P(__file__).resolve().parents[1])); import _frozen  # noqa: E402,F401
 import re
 import subprocess
 import sys

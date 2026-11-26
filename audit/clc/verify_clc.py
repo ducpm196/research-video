@@ -152,5 +152,15 @@ rec("L12", _m == [169, 257, 120] and divmod(_m[1], 60) == (4, 17) and _year_budg
     "xoá 200 000 với giới hạn 1% của 2 000 000 = 10 lượt; 100 GB × 0,15 + 100 GB × 0,20 = 35 đô la (PR06); tệp 12 GB / 5 GB → 3 đối tượng")
 
 bad = [c for c, ok in R if not ok]
+# ── Kiểm tự động mọi lab (du_lieu.txt + ca_an/) qua cham.sh ──
+import subprocess as _subp
+from pathlib import Path as _LabPath
+_BASH = r"C:\Program Files\Git\bin\bash.exe"
+if not _LabPath(_BASH).exists():
+    _BASH = "bash"
+for _ld in sorted((ROOT / "labs" / "CLC").glob("L*")):
+    _rp = _subp.run([_BASH, str(ROOT / "labs" / "cham.sh"), "CLC", _ld.name], cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
+    rec(f"{_ld.name}:lab", _rp.returncode == 0 and "PASS" in _rp.stdout and "2 ca an" in _rp.stdout, f"cham.sh {_ld.name} (public + 2 ca_an)")
+
 print(f"\nverify_clc: {len(R) - len(bad)}/{len(R)} PASS" + (f"; FAIL: {bad}" if bad else ""))
 sys.exit(1 if bad else 0)

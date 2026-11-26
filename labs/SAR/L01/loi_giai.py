@@ -1,7 +1,6 @@
-w = (0.5, 0.2, 0.3)
-sc = lambda v: sum(a * b for a, b in zip(v, w))
-r, k = sc((5, 5, 1)), sc((3, 2, 5))
-chosen = 'RDBMS' if r >= k else 'ShardedKV'
-print(f'rdbms_score={r:.2f}')
-print(f'sharded_kv_score={k:.2f}')
-print(f'chosen={chosen}')
+import sys
+kv = dict(t.split('=') for t in sys.stdin.read().split())
+p = lambda s: [float(x) for x in s.split(',')]
+w, rb, sk = p(kv['w']), p(kv['rdbms']), p(kv['kv'])
+r = sum(a * b for a, b in zip(rb, w)); k = sum(a * b for a, b in zip(sk, w))
+print(f'rdbms_score={r:.2f}\nsharded_kv_score={k:.2f}\nchosen={"RDBMS" if r >= k else "ShardedKV"}')

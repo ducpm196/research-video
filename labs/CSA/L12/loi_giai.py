@@ -1,12 +1,14 @@
-seq = [0x00, 0x80, 0x00, 0x80]
+import sys
+kv = dict(t.split('=') for t in sys.stdin.read().split())
+sh = int(kv['shift']); seq = [int(x, 16) for x in kv['seq'].split(',')]
 dm = None; dh = dm_m = 0
 for a in seq:
-    tg = a >> 7
+    tg = a >> sh
     if dm == tg: dh += 1
     else: dm_m += 1; dm = tg
 lru = []; lh = lm = 0
 for a in seq:
-    tg = a >> 7
+    tg = a >> sh
     if tg in lru: lh += 1; lru.remove(tg); lru.append(tg)
     else:
         lm += 1
@@ -14,4 +16,4 @@ for a in seq:
         lru.append(tg)
 print(f'direct_mapped_hits={dh} misses={dm_m}')
 print(f'two_way_lru_hits={lh} misses={lm}')
-print('final_set0_order=' + ','.join(f'0x{t<<7:02X}' for t in lru))
+print('final_set0_order=' + ','.join(f'0x{t<<sh:02X}' for t in lru))

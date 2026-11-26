@@ -1,11 +1,7 @@
-# Lab AIF L05 — Bài toán thoả ràng buộc: tô 3 màu bản đồ 6 vùng liên kết
+# Lab AIF L05 — Thoả ràng buộc CSP: tô màu bản đồ
 
-Cho bản đồ gồm `6` vùng đánh số `0..5` nối theo `8` cạnh kề `[(0,1),(0,2),(1,2),(1,3),(2,3),(3,4),(4,5),(2,5)]` và dùng `3` màu `{0, 1, 2}`. Đếm tổng số cách tô màu có thể và số lời giải hợp lệ không có hai vùng kề nào trùng màu.
+Đọc `stdin` chuỗi `n=<int> colors=<int> edges=<u:v,...>` trên đồ thị `n` đỉnh (`0..n-1`). Duyệt vét cạn toàn bộ gán màu đếm tổng phép gán `colors^n` và số nghiệm hợp lệ không trùng màu hai đầu cạnh.
 
-Định dạng đầu ra:
-`total_assign=<số> valid_solutions=<số>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh AIF L05 duong_dan/bai_cua_ban.py
-```
+In 1 dòng: `total_assign=<d> valid_solutions=<d>`.
+Chấm tự động: `bash labs/cham.sh AIF L05 duong_dan/bai_cua_ban.py`
+Gợi ý đọc đầu vào trong Python: dùng `sys.stdin.read().split()` tách từng cặp `khoá=giá_trị`.

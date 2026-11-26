@@ -1,6 +1,7 @@
-# Lab AGT L04 — Tác tử tìm thông tin: truy vấn lặp và kiểm trích dẫn
+# Lab AGT L04 — Truy vấn lặp và kiểm chứng trích dẫn nguyên văn
 
-Biết vòng truy vấn đầu phủ `50%`, hai vòng viết lại tiếp theo mỗi vòng tìm thêm `40%` phần còn sót. Đồng thời kiểm tra tự động xem câu trích `'rut ngan 45% thoi gian xu ly'` có tồn tại nguyên văn trong văn bản nguồn `'He thong thanh toan rut ngan 45% thoi gian xu ly.'` hay không.
+Đọc `stdin` `init_hit=<f> gain=<f> rounds=<int>`, dòng 2 `src=<văn bản>`, dòng 3 `quote=<câu trích>`. Tính độ phủ tích lũy sau `1 + rounds` vòng và kiểm tra `quote` xuất hiện nguyên văn trong `src`.
 
-Định dạng đầu ra (1 dòng):
-`recall_after_3=<1 chữ số>% matched_quote=<0 hoặc 1>`
+In 1 dòng: `recall_after_3=<.1f>% matched_quote=<0|1>`.
+Chấm tự động: `bash labs/cham.sh AGT L04 duong_dan/bai_cua_ban.py`
+Gợi ý đọc đầu vào trong Python: đọc từng dòng bằng `sys.stdin.read().splitlines()`; tách dòng 1 bằng `split()`, còn dòng 2 và dòng 3 tách bằng `ln.split('=', 1)` để giữ nguyên dấu cách trong chuỗi.

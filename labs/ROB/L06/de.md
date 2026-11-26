@@ -1,9 +1,5 @@
-# Lab ROB L06 — Cập nhật xác suất ô lưới chiếm chỗ trên thang log-odds
+# Lab ROB L06 — Bản đồ lưới chiếm chỗ log-odds
 
-Một ô lưới ban đầu chưa biết gì (`l = 0`) nhận liên tiếp `4` phép đo thấy vật cản (`p_hit = 0.75`) rồi `1` phép đo tia đi qua (`p_miss = 0.35`). Cộng các giá trị log-odds tương ứng và chuyển ngược về xác suất.
-In đúng 1 dòng `log_odds=... prob=...` (3 chữ số).
-
-Chấm tự động:
-```bash
-bash labs/cham.sh ROB L06 duong_dan/bai_cua_ban.py
-```
+Đọc danh sách `p0,p1,...` từ stdin (ví dụ `0.75,0.75,0.75,0.75,0.35`). Cộng `log(p/(1-p))` và chuyển ngược về xác suất.
+In đúng 1 dòng `log_odds=<3 chữ số> prob=<3 chữ số>`.
+Nền tảng Python (`PYT:L04`): đọc dữ liệu qua `sys.stdin.read().strip()`.

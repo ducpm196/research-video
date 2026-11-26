@@ -1,11 +1,7 @@
-# Lab AIF L00 — Tác tử phản xạ ba ô và đếm không gian trạng thái
+# Lab AIF L00 — Tác tử phản xạ đa ô và không gian trạng thái
 
-Liệt kê mọi trạng thái của phòng 3 ô (vị trí `pos` là `0`, `1` hoặc `2`; độ bẩn 3 ô `dirty_0`, `dirty_1`, `dirty_2` mỗi ô là `0` hoặc `1`). Khởi đầu máy ở ô `0` với trạng thái bụi `[1, 0, 1]`, chạy mô phỏng tác tử phản xạ: hút nếu ô hiện tại bẩn, ngược lại đi sang ô kế tiếp bên phải tới khi cả 3 ô sạch.
+Đọc `stdin` `pos=<int> dirty=<0|1,...>`. Đếm tổng trạng thái khả dĩ `N * 2^N`, sau đó mô phỏng tác tử phản xạ dọn sạch mọi ô bụi đi sang phải vòng tròn và đếm số bước.
 
-Định dạng đầu ra cần in đúng 1 dòng:
-`total_states=<số nguyên> clean=<danh sách> steps=<số bước>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh AIF L00 duong_dan/bai_cua_ban.py
-```
+In 1 dòng: `total_states=<d> clean=<list> steps=<d>`.
+Chấm tự động: `bash labs/cham.sh AIF L00 duong_dan/bai_cua_ban.py`
+Gợi ý đọc đầu vào trong Python: dùng `sys.stdin.read().split()` tách từng cặp `khoá=giá_trị`.

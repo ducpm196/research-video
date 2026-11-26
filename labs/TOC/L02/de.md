@@ -1,11 +1,6 @@
-# Lab TOC L02 — Cài phép dựng tập con chuyển NFA {A, B, C} kết thúc bằng '10' sang DFA
+# Lab TOC L02 — Dựng tập con chuyển NFA sang DFA
 
-Cài đặt thuật toán dựng tập con thật bằng tìm kiếm theo chiều rộng (BFS) từ trạng thái khởi đầu `{A}` của NFA nhận chuỗi kết thúc bằng `'10'` (bảng chuyển NFA: `('A','0')->{'A'}`, `('A','1')->{'A','B'}`, `('B','0')->{'C'}`, trạng thái nhận `'C'`). Chạy DFA vừa dựng trên `'110'` và `'101'`.
-
-Định dạng đầu ra (1 dòng):
-`dfa_states=<số> acc_110=<0 hoặc 1> acc_101=<0 hoặc 1>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh TOC L02 duong_dan/bai_cua_ban.py
-```
+Đọc `ab|w1 w2` (hậu tố 2 bit) từ stdin (ví dụ `10|110 101`). Dựng NFA nhận chuỗi kết thúc bằng `ab`, chuyển sang DFA bằng BFS và kiểm tra `w1, w2`.
+In đúng 1 dòng `dfa_states=<int> acc_110=0/1 acc_101=0/1`.
+Nền tảng Python (`PYT:L04`): đọc dữ liệu qua `sys.stdin.read().strip()`.
+Lưu ý giữ đúng tên khoá đầu ra `acc_110=... acc_101=...` tương ứng cho kết quả trên `w1` và `w2`.

@@ -7,4 +7,4 @@ Viết chương trình `luhn_lab.py` (Python):
 2. Hàm `che(so)` trả số thẻ đã che: giữ 6 số đầu, 4 số cuối, 6 dấu `*` ở giữa (gợi ý: `so[:6]`, `so[-4:]`).
 3. Với thẻ thử `the = "5500005555555559"`: in `luhn(the)`, rồi in `luhn` của số đó khi đổi chữ số cuối thành `8`, rồi in `che(the)`.
 
-Kết quả đúng ba dòng: `True`, `False`, `550000******5559`. Chạy: `python luhn_lab.py`. Chấm: `bash labs/cham.sh BNK L13 luhn_lab.py`.
+Kết quả đúng ba dòng (kết quả kiểm thẻ gốc, kết quả sau khi đổi chữ số cuối, và thẻ đã che dạng 6 số đầu + `******` + 4 số cuối). Chạy: `python luhn_lab.py`. Chấm: `bash labs/cham.sh BNK L13 luhn_lab.py`.

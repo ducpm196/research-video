@@ -1,8 +1,7 @@
-steps = ['reserve_stock', 'charge_card', 'ship_order']
-done, failed = [], None
+import sys
+kv = dict(t.split('=') for t in sys.stdin.read().split())
+steps = kv['steps'].split(','); fail = kv['fail']; done, failed = [], None
 for s in steps:
-    if s == 'ship_order': failed = s; break
+    if s == fail: failed = s; break
     done.append(s)
-comp = [f'undo_{s}' for s in reversed(done)]
-print(f'failed_at={failed}')
-print(f'compensations={comp}')
+print(f'failed_at={failed}\ncompensations={[f"undo_{s}" for s in reversed(done)]}')

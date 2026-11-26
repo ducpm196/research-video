@@ -1,6 +1,6 @@
 # Lab LLM L03 — Vector nhúng và độ tương tự cosin
 
-Tính độ tương tự cosin giữa vector `(2, 1, 0)` với `(3, 2, 1)` và với vector vuông góc `(-1, 2, 0)`.
+Đọc `stdin` `u=<a,b,c> v=<a,b,c> w=<a,b,c>`. Tính cosin giữa `u` và `v`, cùng cosin với vector trực giao `w`.
 
-Định dạng đầu ra (1 dòng):
-`cos_sim=<3 chữ số> cos_orth=<1 chữ số>`
+In 1 dòng: `cos_sim=<.3f> cos_orth=<.1f>`.
+Chấm tự động: `bash labs/cham.sh LLM L03 duong_dan/bai_cua_ban.py`

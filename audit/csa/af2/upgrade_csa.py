@@ -4,6 +4,7 @@
 - L06–L16: mô phỏng định lượng Python tất định (nhãn rõ '(mô phỏng định lượng)' trên đề và bài)
 - Mỗi bài thêm cảnh `practice` (kèm mong_doi.txt) + bảng giải mã/quy mô (nếu cần), giữ nguyên phần bài gốc đã duyệt.
 """
+import sys as _sys; from pathlib import Path as _P; _sys.path.insert(0, str(_P(__file__).resolve().parents[2])); import _frozen  # noqa: E402,F401
 import subprocess
 import sys
 from pathlib import Path

@@ -1,9 +1,4 @@
-# Lab BCH L01 — Dựng chuỗi băm SHA-256 4 khối và phát hiện sửa đổi dữ liệu
+# Lab BCH L01 — Chuỗi băm SHA-256 và hiệu ứng dây chuyền khi sửa
 
-Dùng `hashlib.sha256` tạo chuỗi `4` khối nối đuôi từ danh sách `['khối 0', 'A->B 10', 'B->C 4', 'C->A 3']` (bắt đầu bằng `prev = '0'*10`, mỗi khối băm `prev + '|' + data`, lấy 10 ký tự hex đầu). Thử sửa khối chỉ số `2` thành `'B->C 40'` và tính lại phần đuôi để xem có bao nhiêu khối đổi mã.
-In đúng 1 dòng `orig_b2=... tampered_b2=... broken_blocks=...`.
-
-Chấm tự động:
-```bash
-bash labs/cham.sh BCH L01 duong_dan/bai_cua_ban.py
-```
+Đọc `idx|b0;b1;...|new_txt` từ stdin (ví dụ `2|khối 0;A->B 10;B->C 4;C->A 3|B->C 40`). Khởi tạo mã trước khối đầu bằng 10 số `0` (`"0" * 10`), băm mỗi khối bằng `sha256(f"{prev_10}|{data}".encode()).hexdigest()[:10]` (lấy 10 hex đầu rồi nối sang khối sau bằng dấu `|`), sửa khối `idx` thành `new_txt` và đếm số khối đổi mã.
+In đúng 1 dòng `orig_b2=<hex> tampered_b2=<hex> broken_blocks=<int>`.

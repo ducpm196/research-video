@@ -155,6 +155,16 @@ rec("L15e", max(_score, key=_score.get) == "B" and max({k: v + 7 for k, v in _sc
     and round(float(_imp("0.95", "0.89") - _imp("0.95", "0.90")), 2) == 1.05,
     "xếp hạng 2 × phổ biến + dự đoán: B (4,9) trước A (4,8), cộng hằng số không đổi thứ tự; quiz 5,26% / 6,32%, Y hơn X 1,05 điểm (0,01/0,95; không phải 6,32 − 5,26 = 1,06 từ số đã làm tròn), lạc quan của Y ≈ 0,028")
 
+# ── Kiểm tự động mọi lab (du_lieu.txt + ca_an/) qua cham.sh ──
+import subprocess as _subp
+from pathlib import Path as _LabPath
+_BASH = r"C:\Program Files\Git\bin\bash.exe"
+if not _LabPath(_BASH).exists():
+    _BASH = "bash"
+for _ld in sorted((ROOT / "labs" / "DSC").glob("L*")):
+    _rp = _subp.run([_BASH, str(ROOT / "labs" / "cham.sh"), "DSC", _ld.name], cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
+    rec(f"{_ld.name}:lab", _rp.returncode == 0 and "PASS" in _rp.stdout and "2 ca an" in _rp.stdout, f"cham.sh {_ld.name} (public + 2 ca_an)")
+
 n_ok = sum(o for _, o in R)
 print(f"\n{n_ok}/{len(R)} PASS")
 sys.exit(0 if n_ok == len(R) else 1)

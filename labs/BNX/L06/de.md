@@ -20,3 +20,6 @@ chuyen <a>-><b> <tien>: <OK | loi so du khong du>
 tong tien: <số>
 ```
 Chạy: `python mau.py`. Chấm: `bash labs/cham.sh BNX L06 mau.py`.
+
+## Phần thêm trên Oracle thật (tuỳ chọn)
+Khi có container `bnx-ora`, chạy `bash labs/BNX/L06/oracle/chay.sh` (tệp `labs/BNX/L06/oracle/thu.sql`) để thực hành thủ tục PL/SQL có `SAVEPOINT` và `ROLLBACK` khi vi phạm `CHECK (so_du >= 0)` trên Oracle thật; lab `sqlite` ở trên là đường lùi bắt buộc mặc định.

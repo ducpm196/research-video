@@ -1,6 +1,9 @@
-edges = [(0,1),(0,2),(1,2),(1,3),(2,3),(3,4),(4,5),(2,5)]
-ok = 0
-for mask in range(3**6):
-    c = [(mask // (3**i)) % 3 for i in range(6)]
+import sys
+kv = dict(t.split('=') for t in sys.stdin.read().split())
+n, k = int(kv['n']), int(kv['colors'])
+edges = [tuple(int(x) for x in p.split(':')) for p in kv['edges'].split(',') if p]
+ok = 0; tot = k ** n
+for m in range(tot):
+    c = [(m // (k ** i)) % k for i in range(n)]
     if all(c[u] != c[v] for u, v in edges): ok += 1
-print(f"total_assign={3**6} valid_solutions={ok}")
+print(f'total_assign={tot} valid_solutions={ok}')

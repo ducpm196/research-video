@@ -185,7 +185,7 @@ def extra(rec):
     bash = shutil.which("bash")
     if bash:
         r = subprocess.run([bash, str(ROOT / "labs" / "cham.sh"), "BNX", "L23", str(labdir / "loi_giai.py")], capture_output=True, text=True, encoding="utf-8", timeout=120, cwd=str(ROOT))
-        rec(C, r.stdout.strip() == "ĐÚNG", f"labs/cham.sh BNX L23 loi_giai.py: {r.stdout.strip()[:60]}")
+        rec(C, r.stdout.strip().startswith("ĐÚNG"), f"labs/cham.sh BNX L23 loi_giai.py: {r.stdout.strip()[:60]}")
     else:
         rec(C, None, "thiếu bash: không chạy cham.sh")
 

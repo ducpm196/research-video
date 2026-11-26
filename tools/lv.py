@@ -128,6 +128,39 @@ def course_of(spec):
 
 
 _LEX = {}
+_REG = {}
+_CUR_CACHE = None
+
+
+def clear_caches():
+    """Xoá bộ đệm mô-đun (lexicon, registry, giáo án) khi tệp cấu hình đổi trong cùng tiến trình."""
+    global _CUR_CACHE
+    _LEX.clear()
+    _REG.clear()
+    _CUR_CACHE = None
+
+
+def _curriculum_index():
+    """Đọc toàn bộ curriculum/*.yaml một lần và giữ trong _CUR_CACHE: {course: {cur, known, items}}."""
+    global _CUR_CACHE
+    if _CUR_CACHE is None:
+        idx = {}
+        for cp in sorted((ROOT / "curriculum").glob("*.yaml")):
+            cur_yaml = load_yaml(cp) or {}
+            if not isinstance(cur_yaml, dict) or not cur_yaml.get("course"):
+                continue
+            cname = str(cur_yaml["course"])
+            known, items = {}, {}
+            for l in cur_yaml.get("lessons") or []:
+                lid = str(l.get("id", ""))
+                mm = re.fullmatch(r"L(\d+)", lid)
+                if mm:
+                    no = int(mm.group(1))
+                    known[no] = str(l.get("title", ""))
+                    items[no] = l
+            idx[cname] = {"cur": cur_yaml, "known": known, "items": items}
+        _CUR_CACHE = idx
+    return _CUR_CACHE
 
 
 def lexicon(course=DEFAULT_COURSE):
@@ -147,20 +180,22 @@ def lexicon(course=DEFAULT_COURSE):
 
 def registry(course=DEFAULT_COURSE):
     """Sổ ký hiệu: symbols.yaml chung + symbols.<course>.yaml của khoá (nối thêm ký hiệu, lệnh trình bày, luật nhất quán)."""
-    reg = load_yaml(TOOLS / "registry" / "symbols.yaml")
-    extra = TOOLS / "registry" / f"symbols.{course}.yaml"
-    if course != DEFAULT_COURSE and extra.exists():
-        ex = load_yaml(extra) or {}
-        # `replaces: <id>`: ký hiệu của khoá mang nghĩa khác sổ chung (TOC: \Sigma là bảng chữ cái, không phải ma trận hiệp
-        #   phương sai) → bỏ mục chung đó, để lint không đòi giới thiệu một nghĩa không có trong khoá.
-        drop = {s["replaces"] for s in ex.get("symbols") or [] if s.get("replaces")}
-        reg["symbols"] = [s for s in reg["symbols"] if s["id"] not in drop] + (ex.get("symbols") or [])
-        reg["layout_commands"] = list(reg.get("layout_commands") or []) + (ex.get("layout_commands") or [])
-        reg["consistency"] = list(reg.get("consistency") or []) + (ex.get("consistency") or [])
-    for s in reg.get("symbols") or []:  # mục thuật ngữ chữ (E52) không có công thức: pattern không bao giờ khớp
-        if s.get("term") and "pattern" not in s:
-            s["pattern"] = "(?!)"
-    return reg
+    if course not in _REG:
+        reg = load_yaml(TOOLS / "registry" / "symbols.yaml")
+        extra = TOOLS / "registry" / f"symbols.{course}.yaml"
+        if course != DEFAULT_COURSE and extra.exists():
+            ex = load_yaml(extra) or {}
+            # `replaces: <id>`: ký hiệu của khoá mang nghĩa khác sổ chung (TOC: \Sigma là bảng chữ cái, không phải ma trận hiệp
+            #   phương sai) → bỏ mục chung đó, để lint không đòi giới thiệu một nghĩa không có trong khoá.
+            drop = {s["replaces"] for s in ex.get("symbols") or [] if s.get("replaces")}
+            reg["symbols"] = [s for s in reg["symbols"] if s["id"] not in drop] + (ex.get("symbols") or [])
+            reg["layout_commands"] = list(reg.get("layout_commands") or []) + (ex.get("layout_commands") or [])
+            reg["consistency"] = list(reg.get("consistency") or []) + (ex.get("consistency") or [])
+        for s in reg.get("symbols") or []:  # mục thuật ngữ chữ (E52) không có công thức: pattern không bao giờ khớp
+            if s.get("term") and "pattern" not in s:
+                s["pattern"] = "(?!)"
+        _REG[course] = reg
+    return _REG[course]
 
 
 def lexicon_apply(text, hits=None, course=DEFAULT_COURSE):
@@ -235,16 +270,34 @@ def lesson_numbers(spec):
     Chỉ đọc lộ trình có `course` trùng khoá của bài: CS112 và CS115 cùng có L00…L24 nhưng là hai bài khác nhau."""
     m = re.fullmatch(r"L(\d+)", str(spec.get("id", "")))
     cur = spec.get("ref_lesson_no", int(m.group(1)) if m else None)
-    known = {}
-    for cp in sorted((ROOT / "curriculum").glob("*.yaml")):
-        cur_yaml = load_yaml(cp) or {}
-        if str(cur_yaml.get("course") or "") != course_of(spec):
-            continue
-        for l in cur_yaml.get("lessons", []):
-            mm = re.fullmatch(r"L(\d+)", str(l.get("id", "")))
-            if mm:
-                known[int(mm.group(1))] = str(l.get("title", ""))
+    entry = _curriculum_index().get(course_of(spec))
+    known = dict(entry["known"]) if entry else {}
     return cur, known
+
+
+def next_lesson(spec):
+    """Số thứ tự bài kế tiếp theo thứ tự học: ưu tiên trường `next:` (trên `spec` hoặc mục bài trong giáo án),
+    nếu không khai báo thì trả `cur_no + 1` nếu tồn tại trong lộ trình, ngược lại trả None."""
+    cur_no, known = lesson_numbers(spec)
+    if cur_no is None:
+        return None
+    if "next" in spec:
+        nxt_raw = spec.get("next")
+    else:
+        entry = _curriculum_index().get(course_of(spec))
+        item = (entry or {}).get("items", {}).get(cur_no) or {}
+        if "next" not in item:
+            return (cur_no + 1) if (cur_no + 1) in known else None
+        nxt_raw = item.get("next")
+    if nxt_raw in (None, "", False):
+        return None
+    if isinstance(nxt_raw, int):
+        return nxt_raw if nxt_raw in known else None
+    mm = re.fullmatch(r"L(\d+)", str(nxt_raw).strip())
+    if mm:
+        n = int(mm.group(1))
+        return n if n in known else None
+    return None
 
 
 def _bigrams(text):
@@ -361,9 +414,10 @@ def lint(spec, quiet=False):
                         if len(re.findall(r"\w+", rest)) < 6:
                             r.warn(where, f"E23 nhắc bài trước mà gần như không nói lại nội dung (“{s}”) — nói lại kiến thức đó là gì")
         # E24: câu giới thiệu “bài sau” phải đúng bài kế tiếp trong lộ trình (lỗi thật 2026-10-24: chèn bài hệ phương trình
-        #      thành bài 3, câu cuối bài 2 vẫn nói “bài sau: Gram-Schmidt”). Số ghi kèm phải là bài hiện tại + 1; nội dung
+        #      thành bài 3, câu cuối bài 2 vẫn nói “bài sau: Gram-Schmidt”). Số ghi kèm phải là `next_lesson(spec)`; nội dung
         #      phải trùng ít nhất một cụm hai từ với tên bài kế tiếp (WARN — người soạn đọc lại).
-        nxt = known.get(cur_no + 1)
+        nxt_no = next_lesson(spec)
+        nxt = known.get(nxt_no) if nxt_no is not None else None
         # cụm hai từ chung chung (“ma trận”, “vector riêng”…) có trong ≥ 3 tên bài thì không phân biệt được bài nào → bỏ
         df = {}
         for t in known.values():
@@ -374,8 +428,8 @@ def lint(spec, quiet=False):
             where = f"{sc.get('id', si)}.{ki}"
             text = str(st.get("say", "")) + " " + re.sub(r"<[^>]+>", " ", str(st.get("show", "")))
             for m in re.finditer(r"\b[Bb]ài (?:sau|tiếp theo)\b[^.]{0,25}?\b[Bb]ài (\d+)\b", text):
-                if int(m.group(1)) != cur_no + 1:
-                    r.err(where, f"E24 “bài sau” ghi là bài {m.group(1)} nhưng bài kế tiếp trong lộ trình là bài {cur_no + 1}")
+                if nxt_no is not None and int(m.group(1)) != nxt_no:
+                    r.err(where, f"E24 “bài sau” ghi là bài {m.group(1)} nhưng bài kế tiếp trong lộ trình là bài {nxt_no}")
             claim = re.sub(r"[Hh]ẹn gặp bạn ở bài (?:tiếp theo|sau|\d+)", " ", text)
             # “các bài sau” = nhiều bài về sau, không phải bài kế tiếp → không xét
             if nxt and re.search(r"(?<![Cc]ác )\b[Bb]ài (?:sau|tiếp theo)\b", claim) and not (_bigrams(claim) & nxt_grams):
@@ -400,7 +454,7 @@ def lint(spec, quiet=False):
                 for p in re.finditer(r"(\d+)(?:" + dash + r"(\d+))?", m.group(1)):
                     cov.update(range(int(p.group(1)), int(p.group(2) or p.group(1)) + 1))
             cov.update(int(m.group(1)) for m in re.finditer(r"\b[Bb]ài\s+(\d+)\b", text))
-            if known and (cur_no + 1) not in known and \
+            if known and nxt_no is None and \
                     re.search(r"(?<![Cc]ác )\b[Bb]ài (?:sau|tiếp theo)\b", str(st.get("say", ""))):
                 r.err(where, f"E37 bài {cur_no} là bài cuối của lộ trình mà vẫn nhắc “bài sau/bài tiếp theo”")
         for scid, cov in cov_by_scene.items():
@@ -596,6 +650,10 @@ def lint(spec, quiet=False):
             # Mức WARN: “a <= a” có thể là kiểm phản xạ có chủ đích — người viết phải xem và sửa hoặc giải thích.
             if (taut := _tautology(str(expr))):
                 r.warn(f"{sc.get('id', si)}#check{ci}", f"E35 check có phép so sánh hai vế giống hệt nhau — luôn đúng, không kiểm gì: {taut}")
+            if (bad_alg := _unsafe_big_n_alg(str(expr), ns["alg"].BIG_N_SAFE)):
+                r.err(f"{sc.get('id', si)}#check{ci}",
+                      f"E57 `alg.{bad_alg}` nhận đối số lớn ≥ 10⁸ nhưng không thuộc `checklib.BIG_N_SAFE` — tránh cấp phát/treo máy")
+                continue
             try:
                 val = eval(expr, dict(ns))
                 if str(val) == "True":  # chỉ chấp nhận boolean True tường minh
@@ -610,12 +668,12 @@ def lint(spec, quiet=False):
     elif n_checks:
         r.ok(f"đã chạy {n_checks} phép kiểm tra số học")
     lint_focus(spec, r)
-    # E51: công thức $…$ bên trong <svg> không qua KaTeX — hiện nguyên dấu $ (suýt lọt ở AIF L03 bản đầu, 2026-10-31);
+    # E56: công thức $…$ bên trong <svg> không qua KaTeX — hiện nguyên dấu $ (suýt lọt ở AIF L03 bản đầu, 2026-10-31);
     # trong hình viết chữ thường hoặc ký tự Unicode, công thức đặt ngoài hình
     for si, sc, ki, st in iter_steps(spec):
         for svg in re.findall(r"<svg.*?</svg>", str(st.get("show", "")), re.S):
             if "$" in re.sub(r"<[^>]+>", "", svg):
-                r.err(f"{sc.get('id', si)}.{ki}", "E51 có công thức $…$ trong <svg> — KaTeX không vẽ trong hình, sẽ hiện nguyên dấu $")
+                r.err(f"{sc.get('id', si)}.{ki}", "E56 có công thức $…$ trong <svg> — KaTeX không vẽ trong hình, sẽ hiện nguyên dấu $")
     lint_depth(spec, r)
     lint_af2(spec, r)
     lint_profile_rules(spec, r, prof)
@@ -680,8 +738,11 @@ def lint_af2(spec, r):
             r.err(where, f"E53 cảnh practice thiếu `lab:` hoặc thư mục `{sc.get('lab')}` không có")
             continue
         miss = [f for f in LAB_FILES if not (d / f).is_file()]
-        if miss or not any((d / f).is_file() for f in LAB_SOLUTIONS):
-            r.err(where, f"E53 thư mục lab thiếu {miss or ''} {'' if any((d / f).is_file() for f in LAB_SOLUTIONS) else 'loi_giai.* (py/java/sql/sh/md)'}")
+        has_sol = any((d / f).is_file() for f in LAB_SOLUTIONS) or (
+            (d / "loi_giai").is_dir() and ((d / "kiem").is_dir() or (d / "loi_giai" / "pom.xml").is_file())
+        )
+        if miss or not has_sol:
+            r.err(where, f"E53 thư mục lab thiếu {miss or ''} {'' if has_sol else 'loi_giai.* / loi_giai/'}")
             continue
         screen = " ".join(re.sub(r"<[^>]+>", " ", str(st.get("show", ""))) for st in sc.get("steps") or [])
         screen = re.sub(r"&lt;", "<", re.sub(r"&gt;", ">", re.sub(r"&amp;", "&", screen)))
@@ -847,6 +908,56 @@ def _tautology(expr):
             for op, a, b in zip(node.ops, sides, sides[1:]):
                 if isinstance(op, (ast.Eq, ast.LtE, ast.GtE, ast.Is)) and src(a) and src(a) == src(b):
                     return ast.get_source_segment(expr, node)
+    return None
+
+
+def _const_num(node):
+    import ast
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)) and not isinstance(node.value, bool):
+        return node.value
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+        v = _const_num(node.operand)
+        return None if v is None else (+v if isinstance(node.op, ast.UAdd) else -v)
+    if isinstance(node, ast.BinOp):
+        a, b = _const_num(node.left), _const_num(node.right)
+        if a is None or b is None:
+            return None
+        if isinstance(node.op, ast.Add):
+            return a + b
+        if isinstance(node.op, ast.Sub):
+            return a - b
+        if isinstance(node.op, ast.Mult):
+            return a * b
+        if isinstance(node.op, ast.Div) and b != 0:
+            return a / b
+        if isinstance(node.op, ast.FloorDiv) and b != 0:
+            return a // b
+        if isinstance(node.op, ast.Pow) and isinstance(b, (int, float)) and abs(b) <= 18:
+            return a ** b
+    return None
+
+
+def _unsafe_big_n_alg(expr, safe_names):
+    """E57: chặn lời gọi `alg.<hàm>` với đối số hằng >= 10^8 nếu hàm chưa nằm trong `checklib.BIG_N_SAFE`."""
+    import ast
+    try:
+        tree = ast.parse(expr, mode="eval")
+    except SyntaxError:
+        return None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            if isinstance(node.func.value, ast.Name) and node.func.value.id == "alg":
+                fname = node.func.attr
+                if fname in safe_names:
+                    continue
+                for arg in list(node.args) + [kw.value for kw in node.keywords]:
+                    v = _const_num(arg)
+                    if v is not None and abs(v) >= 10 ** 8:
+                        return fname
+                    if isinstance(arg, ast.BinOp) and isinstance(arg.op, ast.Pow):
+                        b, e = _const_num(arg.left), _const_num(arg.right)
+                        if b is not None and e is not None and b >= 2 and e >= 27:
+                            return fname
     return None
 
 
@@ -1081,7 +1192,10 @@ async def _tts_one(fr, sem, ff):
                     return "fail"
                 # lùi dần có nhiễu ngẫu nhiên: các câu đồng thời không cùng gửi lại một lúc
                 await asyncio.sleep(min(15, 2 * (attempt + 1)) + random.uniform(0, 2))
-    mp3.unlink(missing_ok=True)
+    try:
+        mp3.unlink(missing_ok=True)
+    except OSError:
+        pass
     return "new"
 
 
@@ -1686,6 +1800,13 @@ def cmd_curriculum(path):
         if isinstance(c, dict) and c.get("course"):
             curs[str(c["course"])] = {l["id"]: l for l in c.get("lessons") or []}
 
+    _intro_cache = {}
+    def _intro_of(sp_path):
+        k = str(sp_path)
+        if k not in _intro_cache:
+            _intro_cache[k] = {i for _, _, _, st in iter_steps(load_spec(sp_path)) for i in (st.get("introduces") or [])}
+        return _intro_cache[k]
+
     def ext_intro(refs, seen):
         out = set()
         for ref in refs:
@@ -1699,7 +1820,7 @@ def cmd_curriculum(path):
                     continue
                 seen.add((c, x)); l = curs[c][x]
                 if l.get("spec") and (ROOT / l["spec"]).exists():
-                    out |= {i for _, _, _, st in iter_steps(load_spec(ROOT / l["spec"])) for i in (st.get("introduces") or [])}
+                    out |= _intro_of(ROOT / l["spec"])
                 stack += list(l.get("requires") or [])
                 out |= ext_intro(l.get("requires_ext") or [], seen)
         return out

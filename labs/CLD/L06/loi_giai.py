@@ -1,5 +1,4 @@
-cap, req = 6.0, 2.2
-fit = int(cap // req)
-wasted = (cap - fit * req) / cap * 100
-print(f'pods_per_node={fit}')
-print(f'stranded_pct={wasted:.1f}%')
+import sys
+kv = {k: float(v) for k, v in (t.split('=') for t in sys.stdin.read().split())}
+fit = int(kv['cap'] // kv['req']); w = (kv['cap'] - fit * kv['req']) / kv['cap'] * 100
+print(f'pods_per_node={fit}\nstranded_pct={w:.1f}%')

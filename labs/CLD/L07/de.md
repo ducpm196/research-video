@@ -1,12 +1,6 @@
 # Lab CLD L07 — Công thức tự co giãn ngang (HPA) kèm dung sai
 
-Viết hàm `hpa(cur, cpu, tgt=60, tol=0.10)` trả về `cur` nếu `|cpu/tgt - 1| <= tol`, ngược lại trả về `ceil(cur * cpu / tgt)`. Kiểm tra từ `cur = 6` với mức tải cao `cpu = 84%` (cần mở rộng) và tải gần đích `cpu = 64%` (giữ nguyên).
+Đọc `stdin` `cur=<int> tgt=<int> tol=<float> cpu1=<int> cpu2=<int>`. Áp dụng quy tắc HPA giữ nguyên khi `|cpu/tgt - 1| <= tol`, ngược lại tính `ceil(cur * cpu / tgt)` (giữ nguyên hai tên khoá `replicas_at_84` cho `cpu1` và `replicas_at_64` cho `cpu2` trên mọi bộ dữ liệu).
 
-Định dạng đầu ra (2 dòng):
-`replicas_at_84=<số nguyên>`
-`replicas_at_64=<số nguyên>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh CLD L07 duong_dan/bai_cua_ban.py
-```
+In 2 dòng: `replicas_at_84=<d>`, `replicas_at_64=<d>`.
+Chấm tự động: `bash labs/cham.sh CLD L07 duong_dan/bai_cua_ban.py`

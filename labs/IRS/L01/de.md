@@ -1,6 +1,6 @@
 # Lab IRS L01 — Độ lợi tích lũy có chiết khấu và chuẩn hoá (nDCG)
 
-Tính độ lợi tích lũy có chiết khấu tại 4 vị trí đầu (`DCG@4`) cho dãy mức liên quan `[2, 3, 1, 2]` và bản lý tưởng toàn kho `IDCG@4` cho dãy sắp xếp giảm dần theo công thức `sum(rel / log2(vị trí + 1))` với vị trí đếm từ 1. Không làm tròn trung gian.
+Đọc từ đầu vào chuẩn (`stdin`, dạng `khoá=giá_trị`) `rels=<r1,r2,...>` là dãy mức liên quan cách nhau dấu phẩy. Tính `DCG = sum(rel / log2(i + 2))` theo chỉ số `i` bắt đầu từ `0`, tính `IDCG` trên dãy `rels` sắp giảm dần và tỷ số `nDCG = DCG / IDCG`.
 
-Định dạng đầu ra (1 dòng):
-`DCG=<5 chữ số> IDCG=<5 chữ số> nDCG=<5 chữ số>`
+In 1 dòng đúng nhãn (`<.5f>` là số thực lấy đúng 5 chữ số sau dấu chấm): `DCG=<.5f> IDCG=<.5f> nDCG=<.5f>`.
+Chấm tự động: `bash labs/cham.sh IRS L01 duong_dan/bai_cua_ban.py`

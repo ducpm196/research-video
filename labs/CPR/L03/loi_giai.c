@@ -1,13 +1,12 @@
 #include <stdio.h>
 #include <string.h>
-static int cut_copy(char *dst, size_t cap, const char *s) {
-    return snprintf(dst, cap, "%s", s);
-}
 int main(void) {
-    const char src[] = "BANKING_2026";
-    char buf[8];
-    int need = cut_copy(buf, sizeof(buf), src); (void)need;
-    printf("src_len=%zu buf_size=%zu\n", strlen(src), sizeof(buf));
-    printf("cut=%s last_byte=%d\n", buf, (int)buf[7]);
+    size_t cap = 0;
+    char src[128] = {0}, buf[64] = {0};
+    if (scanf("%zu %127s", &cap, src) != 2 || cap == 0 || cap > 64) return 1;
+    snprintf(buf, cap, "%s", src);
+    size_t blen = strlen(buf);
+    printf("src_len=%zu buf_size=%zu\n", strlen(src), cap);
+    printf("cut=%s last_byte=%d\n", buf, (int)(unsigned char)buf[blen]);
     return 0;
 }

@@ -1,5 +1,4 @@
-lag_s, in_r, proc_r = 120, 8000, 24000
-replay = lag_s * in_r
-catchup = replay / (proc_r - in_r)
-print(f'replay_events={replay}')
-print(f'catchup_s={catchup:.1f}')
+import sys
+kv = {k: int(v) for k, v in (t.split('=') for t in sys.stdin.read().split())}
+rep = kv['lag_s'] * kv['in_r']; catch = rep / (kv['proc_r'] - kv['in_r'])
+print(f'replay_events={rep}\ncatchup_s={catch:.1f}')

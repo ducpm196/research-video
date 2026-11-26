@@ -1,11 +1,7 @@
-# Lab MLO L02 — Phiên bản hoá dữ liệu bằng mã băm nội dung SHA-256 thay vì đặt tên tệp
+# Lab MLO L02 — Phiên bản hoá dữ liệu bằng mã băm SHA-256
 
-Đổi đúng 1 nhãn trong chuỗi bản ghi `"u101,1\nu102,0"` thành `"u101,1\nu102,1"` rồi lấy 12 ký tự đầu mã băm SHA-256 để kiểm tra hai phiên bản khác nhau hoàn toàn.
+Đọc `stdin` `v1=<str>` (dòng 1) và `v2=<str>` (dòng 2, `\n` thành xuống dòng). Lấy 12 ký tự đầu SHA-256 cho mỗi bản và kiểm tra khác nhau.
 
-Định dạng đầu ra:
-`h1=<12 ký tự> h2=<12 ký tự> changed=<1 hoặc 0>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh MLO L02 duong_dan/bai_cua_ban.py
-```
+In 1 dòng: `h1=<hex12> h2=<hex12> changed=<0|1>`.
+Chấm tự động: `bash labs/cham.sh MLO L02 duong_dan/bai_cua_ban.py`
+Nền tảng Python (`PYT:L04`): đọc dữ liệu qua `sys.stdin.read().strip()`.

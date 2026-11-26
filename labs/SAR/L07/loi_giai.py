@@ -1,11 +1,9 @@
-tokens, total, acc = 30, 3200, 0
-for sec in range(5):
-    if sec > 0:
-        tokens += 15
-    take = min(tokens, 800 if sec > 0 else tokens)
-    acc += take
-    tokens -= take
-rej = total - acc
-print(f'accepted={acc}')
-print(f'rejected={rej}')
-print(f'accept_pct={100 * acc / total:.2f}%')
+import sys
+kv = {k: int(v) for k, v in (t.split('=') for t in sys.stdin.read().split())}
+tok, tot, acc = kv['cap'], kv['total'], 0
+for s in range(kv['secs']):
+    if s > 0: tok += kv['rate']
+    take = min(tok, tot - acc, kv['burst'] if s > 0 else tok)
+    acc += take; tok -= take
+rej = tot - acc
+print(f'accepted={acc}\nrejected={rej}\naccept_pct={100 * acc / tot:.2f}%')

@@ -1,0 +1,4 @@
+CREATE TABLE Lop(ma TEXT, ten TEXT);
+INSERT INTO Lop VALUES ('K1','CS');
+CREATE TABLE SV(ten TEXT, lop TEXT, diem INT);
+INSERT INTO SV VALUES ('Linh','K1',8),('Tuan',NULL,9);

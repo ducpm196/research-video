@@ -1,9 +1,4 @@
-# Lab GFX L07 — Nội suy song tuyến 4 điểm và dung lượng bộ ảnh thu nhỏ giảm nửa
+# Lab GFX L07 — Nội suy song tuyến và chuỗi mipmap
 
-Nội suy song tuyến tại `(u = 0.25, v = 0.5)` cho ô góc `c00=10, c10=30, c01=50, c11=70`, đồng thời tính số cấp ảnh từ `512 × 512` xuống `1 × 1` và tỉ lệ bộ nhớ tăng thêm.
-In đúng 1 dòng `bilerp=... levels=... mip_extra_ratio=...` (`1` chữ số cho `bilerp`, `3` chữ số cho `mip_extra_ratio`).
-
-Chấm tự động:
-```bash
-bash labs/cham.sh GFX L07 duong_dan/bai_cua_ban.py
-```
+Đọc `u v|c00,c10,c01,c11|size` từ stdin (ví dụ `0.25 0.5|10,30,50,70|512`). Nội suy song tuyến, đếm số cấp mipmap và tỉ lệ bộ nhớ thêm.
+In đúng 1 dòng `bilerp=<1 chữ số> levels=<int> mip_extra_ratio=<3 chữ số>`.

@@ -1,12 +1,6 @@
 # Lab EVT L06 — Bù trừ ngược thứ tự trong giao dịch dài (Saga)
 
-Chạy tuần tự 3 bước `['reserve_stock', 'charge_card', 'ship_order']`. Khi bước `'ship_order'` thất bại, hoàn tác các bước đã chạy thành công theo thứ tự đảo ngược thành danh sách `'undo_<bước>'`.
+Đọc `stdin` `steps=<s1,s2,...> fail=<step>`. Chạy tuần tự tới khi gặp bước `fail` thì sinh danh sách bù trừ `'undo_<bước>'` theo thứ tự đảo ngược.
 
-Định dạng đầu ra (2 dòng):
-`failed_at=<tên bước>`
-`compensations=<danh sách>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh EVT L06 duong_dan/bai_cua_ban.py
-```
+In 2 dòng: `failed_at=<step>`, `compensations=<list>`.
+Chấm tự động: `bash labs/cham.sh EVT L06 duong_dan/bai_cua_ban.py`

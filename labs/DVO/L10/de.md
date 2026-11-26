@@ -1,11 +1,7 @@
-# Lab DVO L10 — Độ sẵn sàng MTBF / (MTBF + MTTR) khi giảm MTTR 4 lần
+# Lab DVO L10 — Độ sẵn sàng MTBF / (MTBF + MTTR) khi giảm MTTR
 
-Viết chương trình Python tính độ sẵn sàng với `MTBF = 720 giờ` khi `MTTR = 1 giờ` so với khi tự động khôi phục còn `0.25 giờ` (15 phút), in đúng 3 dòng:
-1. `avail_1h=99.861%`
-2. `avail_15m=99.965%`
-3. `downtime_cut_factor=4.0x`
+Đọc `stdin` `mtbf=<float> mttr_slow=<float> mttr_fast=<float>`. Tính phần trăm sẵn sàng ở hai mức thời gian khôi phục và hệ số rút ngắn downtime.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh DVO L10 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `avail_1h=<.3f>%`, `avail_15m=<.3f>%`, `downtime_cut_factor=<.1f>x`.
+Chấm tự động: `bash labs/cham.sh DVO L10 duong_dan/bai_cua_ban.py`
+Gợi ý đọc đầu vào trong Python: dùng `sys.stdin.read().split()` tách từng cặp `khoá=giá_trị`.

@@ -1,5 +1,4 @@
-a, b, c, d = 15, 30, 70, 25
-seq = a + b + c + d
-crit = a + max(b, c) + d
-print(f'seq_ms={seq}')
-print(f'critical_ms={crit}')
+import sys
+kv = {k: int(v) for k, v in (t.split('=') for t in sys.stdin.read().split())}
+print(f'seq_ms={kv["a"] + kv["b"] + kv["c"] + kv["d"]}')
+print(f'critical_ms={kv["a"] + max(kv["b"], kv["c"]) + kv["d"]}')

@@ -1,0 +1,386 @@
+id: L04
+course: SPB
+series: SPB · Spring Boot thực chiến với PostgreSQL, Redis và Kafka
+title: Bài 4 — Sổ cái bút toán kép, khoá bi quan, khoá lạc quan và Idempotency-Key
+voice: vi-VN-NamMinhNeural
+rate: -5%
+depth: full
+af2: true
+covers:
+- objective: 1
+  scene: example
+- objective: 2
+  scene: example
+- objective: 3
+  scene: check
+- objective: 4
+  scene: quymo
+source: curriculum/spb.yaml L04; labs/SPB/L04 (chạy thật ./mvnw -B verify trên PostgreSQL 17 Testcontainers)
+assumes: []
+objectives:
+- Cài đặt giao dịch bút toán kép hai dòng nợ có có tổng đại số bằng không trong một lần chốt
+- Chọn khoá bi quan PESSIMISTIC_WRITE theo thứ tự mã tăng dần so với khoá lạc quan dùng cột Version
+- Chặn trừ tiền hai lần bằng bảng Idempotency-Key có ràng buộc UNIQUE trên PostgreSQL
+- Đo số giao dịch thất bại do xung đột khoá lạc quan khi tỉ lệ tranh chấp tăng 2, 20 và 200 luồng
+scenes:
+- id: hook
+  kind: hook
+  title: 'Hai luồng chuyển ngược chiều và gửi lặp yêu cầu: giữ đúng sổ thế nào?'
+  checks:
+  - alg.spb_double_entry_sum([-300_000, 300_000]) == 0
+  steps:
+  - show: '<div class=''box key''><p>Trong hệ thống chuyển khoản thật, ba rủi ro xảy ra cùng một lúc: <b>trừ tiền hai lần</b>
+      khi mạng thử lại, <b>sai lệch số dư</b> khi hai luồng đọc rồi ghi đè nhau, và <b>bế tắc cơ sở dữ liệu</b> khi A chuyển
+      sang B đồng thời B chuyển sang A.</p><p>Giải pháp chuẩn trên PostgreSQL: <b>bút toán kép + khoá bi quan sắp xếp ID +
+      bảng Idempotency-Key</b>.</p></div>'
+    say: Chào bạn đến với bài bốn của khoá Spring Boot thực chiến. Khi nhiều khách hàng cùng bấm chuyển tiền đồng thời hoặc
+      khi mạng di động gửi lặp cùng một lệnh thanh toán, lỗi cập nhật đè nhau và trừ tiền hai lần xảy ra ngay lập tức. Tệ
+      hơn nữa, nếu hai giao dịch ngược chiều khoá hai hàng tài khoản theo thứ tự trái ngược nhau, cơ sở dữ liệu rơi vào trạng
+      thái bế tắc đứng im. Hôm nay ta cài đặt đầy đủ sổ cái hai dòng nợ có, khoá chống bế tắc theo thứ tự tăng dần và bảng
+      khử trùng trên PostgreSQL thật. Chỉ cần một lỗ hổng tranh chấp đồng thời, hệ thống chuyển khoản có thể tự tạo ra tiền
+      ảo hoặc thất thoát vốn thật. Ba chốt bảo vệ trong bài học này phối hợp khép kín ngay trong một giao dịch trên cơ sở
+      dữ liệu PostgreSQL.
+    focus:
+    - 0
+    - '1.1'
+    - '1.1'
+    - '1.2'
+    - '1.1'
+    - '1.2'
+    clear: true
+- id: prereq
+  kind: prereq
+  title: 'Ôn nhanh: nguyên lý bút toán kép và khoá khử trùng lũy đẳng'
+  steps:
+  - show: '<table class=''t''><tr><th>khái niệm kế toán / phân tán</th><th>áp dụng vào cơ sở dữ liệu</th></tr><tr><td>Bút
+      toán kép (Double-entry)</td><td>Mỗi giao dịch luôn sinh ít nhất hai dòng: ghi nợ âm và ghi có dương, tổng luôn bằng
+      0</td></tr><tr><td>Tính lũy đẳng (Idempotency)</td><td>Cùng một khoá yêu cầu gửi lại N lần chỉ làm biến đổi trạng thái
+      sổ đúng 1 lần</td></tr><tr><td>Khoá hàng SQL</td><td>Ngăn giao dịch khác sửa đổi hàng đang tính toán tới khi chốt hoặc
+      hoàn tác</td></tr></table>'
+    say: Hãy điểm lại ngắn gọn ba nguyên lý nền bạn đã biết trước khi viết vào mã Java thật. Nguyên lý bút toán kép đòi hỏi
+      mỗi đồng trừ ở tài khoản nguồn phải có một dòng dương tương ứng ở tài khoản đích để tổng toàn bộ sổ luôn bằng không.
+      Tính lũy đẳng bảo đảm dù ứng dụng khách có gửi lặp một yêu cầu tới mười lần thì kết quả vẫn hệt như chạy một lần. Cuối
+      cùng, cơ chế khoá hàng buộc các luồng chạy cùng thời điểm phải xếp hàng tuần tự tại điểm tranh chấp. Trong kiểm toán
+      ngân hàng, mọi chỉnh sửa đều ghi thành dòng bút toán mới chứ tuyệt đối không xoá hay sửa lén dòng cũ. Khi ghép cùng
+      khoá khử trùng lưu bền dưới đĩa, yêu cầu thử lại do rớt mạng chỉ nhận lại kết quả đã chốt an toàn.
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.2'
+    - '1.3'
+    clear: true
+- id: sym
+  kind: symbol
+  title: Khoá bi quan (pessimistic write) so với khoá lạc quan (@Version)
+  steps:
+  - show: <table class='t'><tr><th>chiến lược khoá</th><th>câu lệnh SQL thật</th><th>khi nào chọn</th></tr><tr><td><b>Khoá
+      bi quan</b> (<code>PESSIMISTIC_WRITE</code>)</td><td><code>SELECT ... FOR UPDATE</code> giữ khoá hàng tới khi chốt</td><td>Tranh
+      chấp ghi cao trên cùng tài khoản nóng (chuyển khoản)</td></tr><tr><td><b>Khoá lạc quan</b> (<code>@Version</code>)</td><td><code>UPDATE
+      ... SET version = v + 1 WHERE version = v</code></td><td>Đọc nhiều ghi ít; lỗi ném <code>OptimisticLockException</code>
+      để thử lại</td></tr><tr><td><b>Khử trùng bền</b> (<code>idempotency_keys</code>)</td><td><code>idem_key VARCHAR(64)
+      PRIMARY KEY</code> trên PostgreSQL</td><td>Mọi API thanh toán chấp nhận mạng thử lại tự động</td></tr></table>
+    say: Bảng này đối chiếu hai chiến lược khoá tranh chấp và bảng khoá khử trùng trên PostgreSQL. Khoá bi quan chèn câu lệnh
+      chọn để cập nhật ngay lúc đọc, bắt luồng sau chờ luồng trước chốt xong nên không ghi đè mất tiền. Còn khoá lạc quan
+      dùng cột phiên bản nên rất nhẹ khi ít đụng độ, nhưng sẽ ném ngoại lệ nếu hai luồng cùng sửa một hàng. Bảng khoá lũy
+      đẳng có ràng buộc duy nhất luôn là lớp bảo vệ bắt buộc cho mọi lệnh tạo giao dịch. Khoá bi quan giữ chặt hàng dữ liệu
+      ngay từ lúc đọc nên thích hợp cho các tài khoản ví tổng có tần suất ghi dày đặc. Cột phiên bản dùng cho khoá lạc quan
+      đi kèm sẵn trên bảng giúp bạn linh hoạt chọn chiến lược khi mức tranh chấp thay đổi.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    - '1.3'
+    - '1.1'
+    - '1.2'
+    clear: true
+- id: intuition
+  kind: intuition
+  title: 'Cách phá vỡ bế tắc hai luồng ngược chiều: luôn khoá ID nhỏ trước ID lớn'
+  steps:
+  - show: '<div><svg width="960" height="210" viewBox="0 0 960 210"><rect x="30" y="30" width="390" height="72" rx="10" fill="#fee2e2"
+      stroke="#dc2626" stroke-width="2"/><text x="225.0" y="60" font-size="16" font-weight="700" text-anchor="middle" fill="#1e293b">Khoá
+      không theo thứ tự → BẾ TẮC</text><text x="225.0" y="84" font-size="14" text-anchor="middle" fill="#475569">Luồng 1:
+      giữ TK1 đợi TK2 | Luồng 2: giữ TK2 đợi TK1</text><rect x="30" y="118" width="390" height="72" rx="10" fill="#dcfce7"
+      stroke="#16a34a" stroke-width="2"/><text x="225.0" y="148" font-size="16" font-weight="700" text-anchor="middle" fill="#1e293b">Sắp
+      xếp ID tăng dần → AN TOÀN</text><text x="225.0" y="172" font-size="14" text-anchor="middle" fill="#475569">Cả hai luồng
+      đều xin khoá TK1 trước, TK2 sau</text><rect x="465" y="42" width="465" height="132" rx="10" fill="#dbeafe" stroke="#2a78d6"
+      stroke-width="2"/><text x="697.5" y="78" font-size="17" font-weight="700" text-anchor="middle" fill="#1e293b">Bút toán
+      kép &amp; Khử trùng trong 1 TX</text><text x="697.5" y="108" font-size="14" text-anchor="middle" fill="#475569">1. Kiểm
+      bảng idempotency_keys → có sẵn trả txId cũ</text><text x="697.5" y="133" font-size="14" text-anchor="middle" fill="#475569">2.
+      Khoá min(from, to) rồi max(from, to)</text><text x="697.5" y="158" font-size="14" text-anchor="middle" fill="#475569">3.
+      Lưu 2 dòng journal (-amt, +amt) và lưu idem_key</text></svg></div>'
+    say: Quan sát cơ chế triệt tiêu hoàn toàn chu trình chờ nhau gây bế tắc trên sơ đồ bên trái. Nếu luồng một khoá tài khoản
+      một đợi hai còn luồng hai làm ngược lại, cả hai đứng chờ nhau vĩnh viễn tới khi bị huỷ một bên. Quy tắc vàng là so
+      sánh thứ tự chữ cái của hai mã tài khoản và buộc mọi luồng luôn xin khoá mã nhỏ trước rồi mới xin mã lớn.
+    clear: true
+  - show: ''
+    say: Kết hợp kiểm bảng khử trùng và ghi hai dòng âm dương trong cùng giao dịch giúp toàn sổ luôn khớp tuyệt đối. Bằng
+      cách sắp xếp cố định thứ tự xin khoá, đồ thị phụ thuộc giữa các giao dịch không bao giờ khép thành vòng tròn kín. Dù
+      có hàng chục luồng giao dịch đối đầu cùng lúc, luồng nắm giữ mã nhỏ hơn luôn chốt xong và nhả đường cho luồng kế
+      tiếp.
+- id: formula
+  kind: formula
+  title: Bất biến bảo toàn tổng bằng 0 và quy tắc xếp thứ tự khoá
+  checks:
+  - alg.spb_double_entry_sum([-300_000, 300_000, -150_000, 150_000]) == 0
+  steps:
+  - show: '<div class=''box key''><p><b>Bất biến sổ cái bút toán kép cho mọi giao dịch $k$ chuyển số tiền $a_k > 0$:</b></p><p>Mỗi
+      lệnh ghi đúng 2 dòng <code>(-a_k)</code> và <code>(+a_k)</code> nên $\sum_{\text{toàn sổ}} \text{amount} = 0$ ở mọi
+      thời điểm.</p><p>Với ví dụ chuyển <b>300 000</b> gửi lặp 2 lần cùng một <code>Idempotency-Key</code>: số dư chỉ trừ
+      <b>1 lần</b> (1 000 000 → 700 000), phản hồi trả lại cùng một <code>txId</code> và bảng bút toán chỉ có đúng <b>2 dòng</b>
+      có tổng <code>-300 000 + 300 000 = 0</code>.</p></div>'
+    say: Bất biến đại số của bút toán kép đóng vai trò thước đo liêm chính cho toàn hệ thống tài chính. Bất kể có bao nhiêu
+      nghìn lượt chuyển tiền chạy qua trong ngày, tổng cộng toàn bộ cột số tiền trên bảng bút toán phải luôn bằng không. Vì
+      kiểm tra khoá lũy đẳng từ đầu, yêu cầu chuyển ba trăm nghìn gửi lặp chỉ trừ tiền một lần và trả lại đúng mã giao dịch
+      cũ. Tổng đại số bằng không trở thành bài kiểm chứng toán học đơn giản nhưng cực mạnh cho mọi bộ kiểm thử tự động. Ngoài
+      việc bảo toàn tổng số dư, mã giao dịch trả lại ở lần gọi trùng phải khớp từng ký tự với giao dịch gốc ban đầu.
+    focus:
+    - '1.1'
+    - '1.2'
+    - '1.3'
+    - '1.1'
+    - '1.3'
+    clear: true
+    introduces:
+    - sub
+    - sum
+- id: example
+  kind: example
+  title: Cài đặt khoá bi quan sắp xếp thứ tự, bút toán kép và bảng Idempotency-Key
+  checks:
+  - 1_000_000 - 300_000 == 700_000
+  steps:
+  - show: <p><b>1. Kho dữ liệu với khoá bi quan và lược đồ Flyway</b></p><div class="code"><div>public interface AccountRepo
+      extends JpaRepository&lt;Account, String&gt; {</div><div>  @Lock(LockModeType.PESSIMISTIC_WRITE)</div><div>  @Query("SELECT
+      a FROM Account a WHERE a.id = :id")</div><div>  Optional&lt;Account&gt; findForUpdate(@Param("id") String id);</div><div>}</div><div>//
+      V1__ledger.sql:</div><div>// accounts(id PK, balance BIGINT, version BIGINT)</div><div>// idempotency_keys(idem_key
+      VARCHAR(64) PK, tx_id, amount)</div></div>
+    say: Hãy xem cách khai báo khoá bi quan gọn gàng ngay trong giao diện kho dữ liệu JPA. Chú thích khoá ghi bi quan khiến
+      Hibernate phát câu truy vấn kèm mệnh đề chờ cập nhật xuống PostgreSQL. Bảng tài khoản cũng giữ sẵn cột phiên bản hỗ
+      trợ khoá lạc quan, song hành với bảng khoá khử trùng có ràng buộc duy nhất. Chú ý mệnh đề chọn để cập nhật chỉ phát
+      huy đúng hiệu lực khi chạy bên trong một giao dịch đang mở của Spring. Bảng khoá khử trùng cũng lưu lại mã giao dịch
+      và số tiền để sẵn sàng trả lời ngay nếu máy khách gọi lại.
+    focus:
+    - 1
+    - 2
+    - 2
+    - 1
+    - 2
+    clear: true
+  - show: '<p><b>2. Dịch vụ Idempotency-Key, khoá thứ tự ID và bút toán kép</b></p><div class="code"><div>@Transactional</div><div>public
+      String transfer(String k, String from, String to, long amt) {</div><div>  var old = idems.findById(k);</div><div>  if
+      (old.isPresent()) return old.get().getTxId();</div><div>  String a = from.compareTo(to) &lt;= 0 ? from : to;</div><div>  String
+      b = a.equals(from) ? to : from;</div><div>  Account x = accounts.findForUpdate(a).orElseThrow();</div><div>  Account
+      y = accounts.findForUpdate(b).orElseThrow();</div><div>  Account src = from.equals(a) ? x : y, dst = from.equals(a)
+      ? y : x;</div><div>  if (src.getBalance() &lt; amt || amt &lt;= 0) throw new IllegalStateException();</div><div>  src.setBalance(src.getBalance()-amt);
+      dst.setBalance(dst.getBalance()+amt);</div><div>  journals.save(new JournalEntry(txId, from, -amt));</div><div>  journals.save(new
+      JournalEntry(txId, to, +amt));</div><div>  idems.save(new IdempotencyRecord(k, txId, amt)); return txId;</div><div>}</div></div>'
+    say: Nhìn trọn quy trình xử lý trong một giao dịch duy nhất ở tầng dịch vụ. Bước một tra ngay khoá lũy đẳng xem yêu cầu
+      này đã thực hiện trước đó hay chưa để hoàn trả kết quả cũ. Bước hai chọn mã nhỏ hơn khoá trước rồi mới khoá mã lớn hơn
+      nhằm loại bỏ mọi khả năng kẹt chéo hai chiều. Bước ba mới kiểm tra số dư, cập nhật tài khoản, lưu hai dòng âm dương
+      vào sổ bút toán và lưu khoá khử trùng cùng một lúc. Để ý cách so sánh thứ tự chữ cái của hai mã tài khoản nhằm ánh xạ
+      đúng vào hai đối tượng nguồn và đích sau khi đã khoá. Khi giao dịch chốt thành công, mã giao dịch duy nhất vừa tạo được
+      lưu vào cả bảng bút toán lẫn bảng khử trùng cùng lúc.
+    focus:
+    - 1
+    - 2
+    - 2
+    - 2
+    - 1
+    - 2
+    clear: true
+- id: check
+  kind: check
+  title: 'Chạy thật PostgreSQL 17: phát lại Idempotency-Key và 10 luồng ngược chiều'
+  checks:
+  - 1_000_000 + 1_000_000 == 2_000_000
+  steps:
+  - show: '<p><b>Kết quả chạy thật KiemL04Test trên PostgreSQL 17 Testcontainers</b></p><div class="code"><div>// Seed: TK1
+      = 1_000_000, TK2 = 1_000_000</div><div>// 1) Gửi lặp 2 lần idemKey="k-dup-1" chuyển 300_000:</div><div>//    tx1 ==
+      tx2, TK1 = 700_000, TK2 = 1_300_000, SUM(journal) = 0 (2 dòng)</div><div>// 2) 10 luồng ngược chiều (5 TK1→TK2, 5 TK2→TK1)
+      chạy đồng thời trên 4 luồng:</div><div>//    0 deadlock, TK1 = 1_000_000, TK2 = 1_000_000, SUM(journal) = 0</div><div>[INFO]
+      Tests run: 4, Failures: 0, Errors: 0</div><div>KiemL04Test: 3 ca, 0 hỏng</div></div>'
+    say: Kết quả chạy kiểm thử thật trên PostgreSQL mười bảy chứng minh cả ba lớp bảo vệ đều hoạt động hoàn hảo. Khi gọi hai
+      lần liên tiếp cùng một khoá khử trùng, hệ thống trả về đúng một mã giao dịch vì khoá chính đã ngăn lưu trùng. Trong
+      kịch bản mười luồng chuyển tiền ngược chiều trên bốn luồng xử lý, không có bế tắc nào và tổng tiền giữ nguyên hai triệu
+      đồng. Ngoài ra ca kiểm thứ ba cũng xác nhận cột phiên bản tăng lên một ngay sau một giao dịch cập nhật thành công. Mọi kiểm tra trên cơ sở dữ liệu thật cho thấy không có bất kỳ ngoại lệ bế tắc hay mất đồng bộ nào phát sinh.
+    focus:
+    - 1
+    - 2
+    - 2
+    - 1
+    - 2
+    clear: true
+- id: quymo
+  kind: example
+  title: Tỉ lệ xung đột khoá lạc quan và lựa chọn chiến lược ở 2, 20 và 200 luồng
+  checks:
+  - 2 * 1 // 2 == 1 and 20 * 19 // 2 == 190 and 200 * 199 // 2 == 19900
+  - 200 > 20 and 20 > 2
+  steps:
+  - show: <table class='t'><tr><th>số luồng đụng độ 1 tài khoản nóng</th><th>khoá lạc quan (@Version, thử lại ngay)</th><th>khoá bi quan
+      xếp thứ tự</th></tr><tr><td><b>2 luồng</b></td><td>1 thất bại vòng đầu; tổng <b>1 lần thất bại</b> (3 lượt SQL)</td><td>Xếp hàng nhanh
+      (&lt; 1 ms), <b>0 thất bại</b></td></tr><tr><td><b>20 luồng</b></td><td>19 thất bại vòng đầu; tổng <b>190 lần thất bại</b> (210 lượt SQL)</td><td>Xử lý tuần tự ổn định 20/20 giao dịch, 0 thất bại oan</td></tr><tr><td><b>200 luồng</b></td><td>199 thất bại vòng đầu; tổng <b>19 900 lần thất bại</b> (20 100 lượt SQL)</td><td>Chạy tuần tự hoặc gom hàng đợi theo mã, <b>0 thất bại</b></td></tr></table>
+    say: Bảng quy mô đo số giao dịch thất bại do xung đột khoá lạc quan theo công thức n nhân n trừ 1 chia 2 ở mốc hai, hai mươi và hai trăm luồng. Với hai luồng đụng cùng tài khoản chỉ có một lần thất bại trong ba lượt ghi, còn hai mươi luồng chịu tới một trăm chín mươi lần thất bại trên hai trăm mười lượt SQL. Khi hai trăm luồng đụng một tài khoản nóng cùng lúc, số lần ném ngoại lệ xung đột vọt lên mười chín nghìn chín trăm lần trong hơn hai vạn lượt SQL. Lúc này khoá bi
+      quan sắp xếp thứ tự hoặc tách hàng đợi theo mã tài khoản giữ thất bại bằng không và hệ thống ổn định. Khoá lạc quan chỉ gọn nhẹ khi hai giao dịch hiếm khi chạm cùng một hàng tài khoản. Khi tranh chấp nặng, xếp hàng khoá
+      bi quan theo đúng thứ tự hoặc băm nhỏ ví tổng thành nhiều ngăn phụ sẽ giữ thông lượng ổn định.
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.3'
+    - '1.4'
+    clear: true
+- id: pitfalls
+  kind: pitfall
+  title: Ba sai lầm làm thủng sổ cái và bế tắc giao dịch
+  steps:
+  - show: <table class='t'><tr><th>lỗi kỹ thuật nghiêm trọng ở sổ cái ngân hàng</th></tr><tr><td><div class='box warn'><b>Lỗi
+      1 — Khoá tài khoản theo thứ tự fromAccount rồi mới tới toAccount:</b> Gặp hai lệnh A→B và B→A cùng lúc sẽ kẹt deadlock
+      trên PostgreSQL.<br><b>Lỗi 2 — Kiểm tra khoá khử trùng chỉ bằng HashMap trong bộ nhớ RAM:</b> Khởi động lại dịch vụ
+      hoặc chạy nhiều bản sao container sẽ làm mất sạch khoá.<br><b>Lỗi 3 — Chỉ kiểm idempotency bằng câu SELECT rồi INSERT
+      trên ứng dụng không có ràng buộc UNIQUE:</b> Hai luồng song song đều thấy trống và cùng trừ tiền!</div></td></tr></table>
+    say: Ba lỗi trên bảng là nguyên nhân hàng đầu dẫn tới thâm hụt tiền hoặc treo giao dịch ở hệ thống thật. Thứ nhất, khoá
+      theo vai trò gửi rồi nhận thay vì so sánh mã sẽ mở cửa cho bế tắc ngay khi có giao dịch hai chiều. Thứ hai, lưu tập
+      khoá khử trùng trên bộ nhớ cục bộ khiến cụm gồm nhiều máy chủ chạy không thấy nhau. Thứ ba, nếu không có ràng buộc duy
+      nhất ngay ở tầng PostgreSQL thì hai yêu cầu bắn vào đúng cùng một phần nghìn giây sẽ cùng vượt qua bước kiểm tra đọc.
+      Đừng bao giờ tách bước kiểm khoá khử trùng và bước lưu giao dịch ra làm hai phiên tách rời vì dễ bị chèn giữa chừng.
+      Khoá chính ngay tại cơ sở dữ liệu kết hợp với một giao dịch nguyên tử duy nhất là giải pháp chắc chắn nhất.
+    focus:
+    - 0
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    clear: true
+- id: quiz
+  kind: quiz
+  title: Kiểm tra nhanh khoá hàng và sổ cái bút toán kép
+  checks:
+  - -300 + 300 == 0
+  steps:
+  - show: <ol><li>Luồng 1 chuyển từ <code>TK9</code> sang <code>TK2</code>; luồng 2 chuyển từ <code>TK2</code> sang <code>TK9</code>.
+      Theo quy tắc tránh bế tắc, cả hai luồng phải khoá tài khoản nào trước?</li><li>Tại sao một giao dịch chuyển 500 000
+      đồng không được chỉ chạy lệnh <code>UPDATE balance</code> mà phải ghi thêm 2 dòng vào bảng <code>journal_entries</code>?</li></ol>
+    say: Hãy tự kiểm nhanh hai câu hỏi cốt lõi trước khi sang phần thực hành. Câu một, nếu luồng một chuyển từ chín sang hai
+      còn luồng hai chuyển từ hai sang chín, cả hai luồng phải khoá tài khoản nào trước để triệt tiêu bế tắc? Câu hai, vì
+      sao mọi thay đổi số dư bắt buộc phải ghi kèm hai dòng âm dương trong bảng sổ cái? Bấm tạm dừng và trả lời. Hai câu hỏi
+      này kiểm tra trực tiếp khả năng ngăn bế tắc và duy trì sổ cái bất biến khi phỏng vấn kỹ sư Java.
+    pause: 20
+  - show: <table class='t'><tr><th>đáp án câu 1</th></tr><tr><td><p>① Cả hai luồng đều phải khoá <b><code>TK2</code> trước</b>
+      rồi mới khoá <code>TK9</code> (theo thứ tự từ điển tăng dần <code>"TK2".compareTo("TK9") &lt; 0</code>).</p></td></tr></table>
+    say: 'Đáp án câu một: cả hai luồng đều phải khoá tài khoản hai trước vì mã hai đứng trước chín theo thứ tự tăng dần. Kiểm
+      tra thứ tự khoá ngay từ thiết kế là cách đơn giản nhất để ngăn bế tắc mà vẫn giữ tốc độ xử lý cao. Nhờ tuân thủ chung
+      một trật tự toàn phần trên mã định danh, mọi chu trình chờ chéo đều bị loại trừ hoàn toàn.'
+    clear: true
+  - show: <table class='t'><tr><th>đáp án câu 2</th></tr><tr><td><p>② Để giữ bất biến kiểm toán $\sum = 0$ và lưu dấu vết
+      bất biến phục vụ đối soát cuối ngày, không thể mất dấu nếu cập nhật đè cột số dư.</p></td></tr></table>
+    say: 'Đáp án câu hai: sổ cái giữ dấu vết kiểm toán bất biến giúp đối soát từng đồng và bảo đảm tổng mọi dòng luôn bằng
+      không. Gửi lặp với cùng khoá lũy đẳng chỉ trả nguyên mã giao dịch cũ thay vì tạo thêm bản ghi trừ tiền thứ hai. Nếu
+      có sai lệch khi đối chiếu với ngân hàng đối tác, từng dòng bút toán âm dương giúp khoanh vùng giao dịch sai lệch chỉ
+      trong vài giây.'
+    clear: true
+- id: practice
+  kind: practice
+  title: Cài đặt sổ cái bút toán kép chống bế tắc trên PostgreSQL 17
+  lab: labs/SPB/L04
+  steps:
+  - show: '<div class=''box key''><p><b>Thực hành bài L04 (<code>labs/SPB/L04/de.md</code>, cần Docker):</b> cài <code>LedgerTransferService.transfer(idemKey,
+      fromId, toId, amount)</code> trên <b>PostgreSQL 17</b> (bảng <code>accounts</code> có cột <code>@Version</code>, bảng
+      <code>idempotency_keys</code> khoá chính): kiểm tra <code>idems.findById</code>, khoá bi quan theo mã tăng dần và lưu
+      2 dòng bút toán kép <code>(-amount, +amount)</code>, rồi chấm:</p><p><code>bash labs/cham.sh SPB L04 duong_dan/du_an_cua_ban</code></p></div>'
+    say: Hãy mở tệp đề bài L04 để cài đặt hoàn chỉnh bộ ba khoá lũy đẳng, khoá hàng chống bế tắc và ghi sổ hai dòng âm dương
+      trên PostgreSQL thật. Chú ý kiểm tra cả ba ca gồm phát lại trùng khoá, mười luồng ngược chiều đồng thời và cập nhật
+      tăng cột phiên bản. Bấm tạm dừng và hoàn thành trước khi xem kết quả chấm. Hãy kiểm tra kỹ bước trả về mã giao dịch
+      cũ khi khoá khử trùng đã tồn tại trước khi đụng vào khoá hàng tài khoản. Đừng quên kiểm số tiền lớn hơn không và số
+      dư đủ dùng ngay sau khi đã nắm chắc khoá của cả hai tài khoản.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    - '1.1'
+    - '1.2'
+    clear: true
+    pause: 30
+  - show: '<p><b>Kết quả chấm bộ kiểm KiemL04Test trên PostgreSQL 17 thật</b></p><div class="code"><div>KiemL04Test: 3 ca,
+      0 hỏng</div></div>'
+    say: Màn hình hiển thị kết quả nghiệm thu ba ca kiểm thử đồng thời trên PostgreSQL thật. Trình chấm kiểm chứng không trừ
+      tiền lặp khi trùng khoá, không kẹt bế tắc khi chạy song song ngược chiều và cột phiên bản tăng đúng một đơn vị sau cập
+      nhật. Cả kịch bản gửi lặp, kịch bản tranh chấp ngược chiều và đếm tăng cột phiên bản đều phải vượt qua không lỗi.
+    focus:
+    - 1
+    - 2
+    - 2
+    clear: true
+  - show: <div class='box ok'><p><b>Gợi ý nếu kẹt ở bài L04:</b> (1) đặt <code>@Version</code> kiểu <code>long</code> trên
+      <code>Account</code> khớp cột <code>version BIGINT DEFAULT 0</code> trong SQL; (2) nhớ trả lại ngay <code>existing.get().getTxId()</code>
+      khi <code>idemKey</code> đã tồn tại; (3) so sánh bằng <code>fromId.compareTo(toId) &lt;= 0</code> trước khi gọi <code>findForUpdate</code>.</p></div>'
+    say: Nếu gặp lỗi trùng khoá trừ hai lần hoặc sai giá trị cột phiên bản, hãy kiểm tra lại ba gợi ý trên màn hình. Bảo đảm
+      tên cột phiên bản khớp tệp di trú và lệnh trả về kết quả cũ nằm ngay đầu phương thức giao dịch. Chú ý khởi tạo sẵn giá
+      trị mặc định bằng không cho cột phiên bản trong tệp SQL để tránh lỗi con trỏ rỗng khi đọc từ đĩa.
+    focus:
+    - 0
+    - 1
+    - 1
+    clear: true
+- id: recap
+  kind: recap
+  title: Tổng kết sổ cái an toàn đồng thời trên PostgreSQL
+  steps:
+  - show: <div class='chain'><span class='n'>Idempotency-Key DB</span><span class='a'>→</span><span class='n'>Khoá ID nhỏ
+      → lớn</span><span class='a'>→</span><span class='n'>Bút toán kép tổng = 0</span></div>
+    say: Bạn đã nắm bộ ba kỹ thuật giữ an toàn dữ liệu cốt lõi là bút toán kép tổng bằng không, khoá sắp thứ tự chống bế tắc
+      và khoá lũy đẳng. Đây là nền tảng không thể thiếu trước khi tối ưu tốc độ đọc số dư ở bước kế tiếp. Sổ cái bút toán
+      kép đã hoàn chỉnh cho chiều ghi an toàn tuyệt đối trước khi chúng ta tăng tốc chiều đọc.
+    focus:
+    - '1.1'
+    - '1.2'
+    - '1.2'
+    clear: true
+  - show: '<div class=''box ok''><b>Bài sau:</b> Redis thực chiến: cache-aside, TTL ngẫu nhiên nhẹ, vô hiệu đệm và chống dồn
+      tải</div>'
+    say: Bài tiếp theo ta lắp bộ đệm phân tán Redis với chiến lược đọc ghi an toàn và chống dồn tải khi khoá hết hạn. Hẹn
+      gặp bạn ở bài sau. Hãy chuyển sang bài năm để tối ưu tốc độ đọc số dư bằng bộ nhớ đệm phân tán Redis.
+    clear: true
+    forward_ref: true
+asr_reviewed:
+- sentence: Chú thích khoá ghi bi quan khiến Hibernate phát câu truy vấn kèm mệnh đề chờ cập nhật xuống PostgreSQL.
+  reason: 'ASR chép “Chủ thích khóa Gibi quan khiến hai bên đất phát cầu truy vấn kề mệnh để chờ cặp nhật xuống Poserasakua.”
+    (khớp 0.537, khác “chú” → nghe thành “chủ”; “ghi bi” → nghe thành “gibi”; “hibernate” → nghe thành “hai bên đất”; “câu”
+    → nghe thành “cầu”; “kèm” → nghe thành “kề”; “đề” → nghe thành “để”; “cập” → nghe thành “cặp”; “postgresql” → nghe thành
+    “poserasakua”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED
+    bằng tai người'
+- sentence: Bảng này đối chiếu hai chiến lược khoá tranh chấp và bảng khoá khử trùng trên PostgreSQL.
+  reason: 'ASR chép “Bản này đối chiếu hai chiến lược khóa tranh chấp và bản khóa khử trùng trên Postless Quay.” (khớp 0.8,
+    khác “bảng” → nghe thành “bản”; “bảng” → nghe thành “bản”; “postgresql” → nghe thành “postless quay”): biến thể phiên
+    âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Hôm nay ta cài đặt đầy đủ sổ cái hai dòng nợ có, khoá chống bế tắc theo thứ tự tăng dần và bảng khử trùng trên
+    PostgreSQL thật.
+  reason: 'ASR chép “Hôm nay ta cài đặt đầy đủ sổ cái hai dòng nợ có, khóa chống bế tắt theo thứ tự tăng dần và bản khử trùng
+    trên Postless khu eo thật.” (khớp 0.867, khác “tắc” → nghe thành “tắt”; “bảng” → nghe thành “bản”; “postgresql” → nghe
+    thành “postless khu eo”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa —
+    NOT_VERIFIED bằng tai người'
+- sentence: Hãy xem cách khai báo khoá bi quan gọn gàng ngay trong giao diện kho dữ liệu JPA.
+  reason: 'ASR chép “Hãy xem cách khai báo khóa bi quan gọn gàng ngay trong giao diện khó giữ liệu GPA.” (khớp 0.889, khác
+    “kho” → nghe thành “khó”; “jpa” → nghe thành “gpa”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper,
+    câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Hãy mở tệp đề bài L04 để cài đặt hoàn chỉnh bộ ba khoá lũy đẳng, khoá hàng chống bế tắc và ghi sổ hai dòng âm
+    dương trên PostgreSQL thật.
+  reason: 'ASR chép “Hãy mở tệp đề bài L04 để cài đặt hoàn chỉnh bộ 3 khóa lụy đẳng, khóa hàng chống bế tắt và ghi sổ 2 dòng
+    âm dương trên Postgres QL thật.” (khớp 0.892, khác “luỹ” → nghe thành “luỵ”; “tắc” → nghe thành “tắt”; “postgresql” →
+    nghe thành “postgres ql”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa —
+    NOT_VERIFIED bằng tai người'
+- sentence: Bài tiếp theo ta lắp bộ đệm phân tán Redis với chiến lược đọc ghi an toàn và chống dồn tải khi khoá hết hạn.
+  reason: 'ASR chép “Bài tiếp theo ta lắp bộ đềm phân tán Reddit với chiến lược đọc ghi an toàn và chống dồn tải khi khóa
+    hết hạn.” (khớp 0.92, khác “đệm” → nghe thành “đềm”; “redis” → nghe thành “reddit”): biến thể phiên âm từ mượn/thanh điệu
+    thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Thứ ba, nếu không có ràng buộc duy nhất ngay ở tầng PostgreSQL thì hai yêu cầu bắn vào đúng cùng một phần nghìn
+    giây sẽ cùng vượt qua bước kiểm tra đọc.
+  reason: 'ASR chép “Thứ ba, nếu không có trạng buộc duy nhất ngay ở tầng Postgresql thì hai yêu cầu bắn vào đúng cùng một
+    phần nghiền dây sẽ cùng vượt qua bước kiểm tra đọc.” (khớp 0.939, khác “ràng” → nghe thành “trạng”; “nghìn” → nghe thành
+    “nghiền”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng
+    tai người'

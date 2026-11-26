@@ -1,6 +1,7 @@
-import datetime as dt
-t0 = dt.datetime(1970, 1, 1, tzinfo=dt.timezone.utc)
-t_i32 = (t0 + dt.timedelta(seconds=(1 << 31) - 1)).date()
-t_u32 = (t0 + dt.timedelta(seconds=(1 << 32) - 1)).date()
-bond = dt.date(2040, 6, 1)
-print(f"i32_date={t_i32} u32_date={t_u32} bond_2040_fails={int(bond > t_i32)}")
+import datetime as dt, sys
+kv = dict(t.split('=') for t in sys.stdin.read().split())
+t0 = dt.datetime(int(kv['epoch_year']), 1, 1, tzinfo=dt.timezone.utc)
+ti = (t0 + dt.timedelta(seconds=(1 << 31) - 1)).date()
+tu = (t0 + dt.timedelta(seconds=(1 << 32) - 1)).date()
+bond = dt.date.fromisoformat(kv['bond_date'])
+print(f'i32_date={ti} u32_date={tu} bond_2040_fails={int(bond > ti)}')

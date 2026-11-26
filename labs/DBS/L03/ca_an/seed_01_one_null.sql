@@ -1,0 +1,2 @@
+CREATE TABLE SV(ten TEXT, lop TEXT);
+INSERT INTO SV VALUES ('A','K1'),('B','K2'),('C',NULL);

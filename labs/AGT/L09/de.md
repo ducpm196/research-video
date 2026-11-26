@@ -1,6 +1,7 @@
-# Lab AGT L09 — An toàn cho tác tử trước chèn lời nhắc gián tiếp
+# Lab AGT L09 — An toàn quyền công cụ trước chèn lời nhắc gián tiếp
 
-Cho bảng chính sách quyền công cụ `policy = {'read_file': 'allow', 'email_ext': 'confirm', 'pay_wire': 'confirm', 'exec_shell': 'deny'}` và danh sách `actions = ['read_file', 'email_ext', 'pay_wire', 'exec_shell']` do trang web lạ kích hoạt. Lọc các hành động tự động chạy (`'allow'`) và kiểm tra trạng thái của `'exec_shell'`.
+Đọc `stdin` `policy=<act:perm,...> actions=<a1,a2,...> check=<act>`. Lọc hành động phép `'allow'` chạy tự động và xuất trạng thái quyền của `check`.
 
-Định dạng đầu ra (1 dòng):
-`auto_executed=<danh sách> blocked=<trạng thái>`
+In 1 dòng: `auto_executed=<list> blocked=<perm>`.
+Chấm tự động: `bash labs/cham.sh AGT L09 duong_dan/bai_cua_ban.py`
+Gợi ý đọc đầu vào trong Python: dùng `sys.stdin.read().split()` tách từng cặp `khoá=giá_trị`.

@@ -6,12 +6,12 @@ Viết `DemSaiDung` (tệp `DemSaiDung.java`). **Bốn luồng**, mỗi luồng 
 2. tăng biến `static int dongBo` **bên trong** `synchronized (khoa) { … }`;
 3. tăng `AtomicInteger nguyenTu` bằng `incrementAndGet()`.
 
-Tạo bốn `Thread` từ cùng một `Runnable`, `start()` cả bốn rồi `join()` cả bốn. In ba dòng:
+Tạo bốn `Thread` từ cùng một `Runnable`, `start()` cả bốn rồi `join()` cả bốn. In ba dòng theo dạng:
 
 ```
-Khong dong bo: dem < 1000000 -> true
-Dong bo: 1000000
-Nguyen tu: 1000000
+Khong dong bo: dem < 1000000 -> <true|false>
+Dong bo: <giá trị dongBo>
+Nguyen tu: <giá trị nguyenTu>
 ```
 
 (Dòng đầu in `thuong < 1000000` — giá trị thật của `thuong` thay đổi mỗi lần chạy, nên bài chỉ in kết quả so sánh.)

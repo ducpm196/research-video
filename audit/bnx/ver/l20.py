@@ -242,6 +242,6 @@ def run(rec):
     bash = shutil.which("bash")
     if bash:
         r = subprocess.run([bash, str(ROOT / "labs" / "cham.sh"), "BNX", "L20", str(labdir / "loi_giai.sh")], capture_output=True, text=True, encoding="utf-8", timeout=300, cwd=str(ROOT))
-        rec("L20", r.stdout.strip() == "ĐÚNG", f"labs/cham.sh BNX L20 loi_giai.sh: {r.stdout.strip()[:60]}")
+        rec("L20", r.stdout.strip().startswith("ĐÚNG"), f"labs/cham.sh BNX L20 loi_giai.sh: {r.stdout.strip()[:60]}")
     else:
         rec("L20", None, "thiếu bash: không chạy cham.sh")

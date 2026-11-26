@@ -1,9 +1,7 @@
-# Lab LNX L03 — Tách luồng 1/2 và lọc lỗi 5xx bằng đường ống
+# Lab LNX L03 — Tách luồng 1/2 và lọc lỗi 5xx quy mô động qua stdin
 
-Viết kịch bản Bash tách stdout (luồng 1) và stderr (luồng 2), tạo nhật ký 100 dòng có 12 lỗi 500 và 3 lỗi 503 rồi in đúng 3 dòng:
-1. `stdout_ok=1`
-2. `stderr_ok=1`
-3. `err_5xx=15`
+Viết kịch bản Bash đọc `<total_lines> <c500> <c503> <msg_out> <msg_err>` từ `stdin`, thực hiện tách stdout (luồng 1) và stderr (luồng 2), tạo nhật ký `total_lines` dòng (`c500` dòng `500`, `c503` dòng `503`, còn lại `200`) rồi đếm `5xx` bằng `grep`.
+In 3 dòng: `stdout_ok=<0|1>`, `stderr_ok=<0|1>`, `err_5xx=<số dòng 5xx>`.
 
 Chấm tự động:
 ```bash

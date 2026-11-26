@@ -10,7 +10,9 @@ Mọi cảnh **Tự làm** và mọi thư mục `labs/<KHOÁ>/<Lxx>/` được v
 | JDK | Temurin 21 (LTS); kiểm: 21 trở lên | JVA | `javac -version`, `java -version` |
 | Python | 3.11 trở lên (kho kiểm trên 3.13); lối tắt Microsoft Store chưa cài Python KHÔNG tính | PYT | `python --version` |
 | sqlite3 | 3.40 trở lên (mức thấp nhất mà lab cần và công cụ kiểm: 3.32, vì `.import --skip`) | FND | `sqlite3 --version` |
-| Docker Desktop | bản mới (tuỳ chọn, chỉ từ chặng 7) | chặng 7–8 | `docker --version` |
+| GCC (C11) | GCC / w64devkit 13+ (từ khoá `CPR`, Chặng 6) | CPR | `gcc --version` |
+| Node.js | Node.js 20+ (từ khoá `WEB`, Chặng 7) | WEB | `node --version` |
+| Docker Desktop | bản mới (từ khoá `SPB`, Chặng 3; và `LNX`, Chặng 6) | SPB | `docker --version` |
 
 Kiểm nhanh: `bash labs/check_env.sh` — chạy thật lệnh hỏi phiên bản của từng công cụ, in từng dòng ✔ hoặc ✘ kèm cách khắc phục; so với mức thấp nhất ở trên.
 
@@ -34,12 +36,17 @@ Mọi bài chạy được chỉ với JDK; riêng các bài sau dùng một t�
 
 Lab của bài luôn chấm được **không cần** tệp này (chỉ dùng khẳng định tự viết).
 
-## Môi trường Học máy CPU (`MLP` và Chặng 9)
-- Venv kiểm thử tại chỗ: `labs/.venv-ml` (Python `3.11.9`).
-- Khởi tạo & cài đặt chuẩn:
-  ```powershell
-  C:\Python311\python.exe -m venv labs\.venv-ml
-  labs\.venv-ml\Scripts\pip.exe install -r labs\requirements-ml.txt
+## Môi trường Python mở rộng (`labs/.venv-pyt`) và Học máy CPU (`labs/.venv-ml`)
+- Các bài Python dùng `numpy`, `pandas`, `matplotlib`, `pytest`: dùng `labs/.venv-pyt` (cài từ `labs/requirements-py.txt` trong Git Bash):
+  ```bash
+  python -m venv labs/.venv-pyt
+  labs/.venv-pyt/Scripts/python.exe -m pip install -r labs/requirements-py.txt
+  ```
+- Các bài Học máy CPU (`MLP` và Chặng 9): dùng `labs/.venv-ml` (Python `3.11.9`).
+- Khởi tạo & cài đặt chuẩn trong Git Bash:
+  ```bash
+  /c/Python311/python.exe -m venv labs/.venv-ml
+  labs/.venv-ml/Scripts/pip.exe install -r labs/requirements-ml.txt
   ```
 - Tệp khoá phiên bản: `labs/requirements-ml.txt` (`sha256` rút gọn `f38bdb59728eade9`: `scikit-learn==1.9.1`, `scipy==1.17.1`, `numpy==2.4.6`, `torch==2.15.0+cpu` cài từ CPU wheel index `https://download.pytorch.org/whl/cpu`).
-- Hợp đồng `labs/cham.sh`: bài Python có dòng `import` / `from` liên quan tới `sklearn`, `scipy`, `torch` được `cham.sh` tự động chuyển sang chạy bằng `labs/.venv-ml` nếu Python hệ thống chưa cài. Tất cả lab `MLP` và Chặng 9 chạy CPU thuần, `random_state` / `torch.manual_seed` cố định, thời gian chạy `<= 30 s`.
+- Hợp đồng `labs/cham.sh`: bài Python có dòng `import` / `from` liên quan tới `sklearn`, `scipy`, `torch` được `cham.sh` tự động chuyển sang chạy bằng `labs/.venv-ml` nếu Python hệ thống chưa cài; các bài dùng `numpy`, `pandas`, `matplotlib`, `pytest` chuyển sang `labs/.venv-pyt`. Tất cả lab `MLP` và Chặng 9 chạy CPU thuần, `random_state` / `torch.manual_seed` cố định, thời gian chạy `<= 30 s`.

@@ -1,11 +1,6 @@
-# Lab OSY L06 (Mô phỏng bế tắc) — Phát hiện chu trình Coffman và phá thứ tự khóa
+# Lab OSY L06 — Phát hiện chu trình Coffman và phá thứ tự khoá tài nguyên
 
-Viết chương trình Python dựng đồ thị chờ giữa `5` triết gia (`0..4`) và `5` chiếc đũa (`0..4`): khi ai cũng cầm đũa trái trước tạo 1 chu trình độ dài 5, còn khi đánh số và luôn cầm đũa nhỏ trước sẽ phá vòng chờ, in đúng 3 dòng:
-1. `naive_cycle_len=5`
-2. `ordered_cycle=0`
-3. `coffman_broken=circular_wait`
+Đọc `stdin` `n=<int>`. Dựng chu trình triết gia ăn tối `n` nút (cầm đũa trái trước) và kiểm chứng chiến lược đánh số luôn lấy đũa chỉ số nhỏ trước để phá chu trình chờ vòng.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh OSY L06 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `naive_cycle_len=<d>`, `ordered_cycle=<0|1>`, `coffman_broken=<str>`.
+Chấm tự động: `bash labs/cham.sh OSY L06 duong_dan/bai_cua_ban.py`

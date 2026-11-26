@@ -1,7 +1,9 @@
-def pick(n, kind):
-    if kind == 'viz':
-        return 'PCA/t-SNE'
-    return 'Linear/Ridge' if n < 1000 else 'Tree/Boosting'
-print("s1=", pick(500, 'tab'))
-print("s2=", pick(100000, 'tab'))
-print("s3=", pick(5000, 'viz'))
+import sys
+kv = dict(t.split('=') for t in sys.stdin.read().split())
+def pick(spec):
+    n_s, kind = spec.split(',')
+    if kind == 'viz': return 'PCA/t-SNE'
+    return 'Linear/Ridge' if int(n_s) < 1000 else 'Tree/Boosting'
+print("s1=", pick(kv['s1']))
+print("s2=", pick(kv['s2']))
+print("s3=", pick(kv['s3']))

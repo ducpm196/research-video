@@ -1,6 +1,6 @@
 # Lab INT L08 — Trả lời một câu phỏng vấn có số: LTV, DTI, trích nợ từng phần và đối soát cuối ngày (giấy bút, `loi_giai.md`)
 
-Bài giấy bút: không chạy mã, và `cham.sh` không chấm tệp `.md`. Tính tay, ghi từng dòng đúng định dạng dưới đây, rồi tự so với `loi_giai.md`.
+Bài giấy bút: không chạy mã, có thể tự so với `loi_giai.md` hoặc chấm định dạng bằng `bash labs/cham.sh INT L08 bai_lam.md`. Tính tay, ghi từng dòng đúng định dạng dưới đây.
 
 Số liệu (số minh hoạ, không phải số của ngân hàng nào):
 - sổ tiết kiệm **240 triệu**, tỉ lệ cho vay LTV **70%**;

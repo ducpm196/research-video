@@ -1,11 +1,8 @@
-# Lab DAN L07 — Dự báo đường cơ sở: sai số tuyệt đối trung bình (MAE) và bẫy chia 0
+# Lab DAN L07 — Dự báo đường cơ sở: MAE và bẫy chia 0 của MAPE
 
-Cho thực tế `[0, 15, 20, 9]` và dự báo `[3, 14, 18, 12]`. Tính sai số tuyệt đối trung bình (`MAE`) và kiểm tra sai số phần trăm trung bình (`MAPE`) có bị chia cho 0 không.
+Đọc `stdin` `act=<v1,v2,...> pred=<v1,v2,...>`. Tính sai số tuyệt đối trung bình `MAE` và phát hiện xem thực tế có phần tử bằng `0` làm vô định `MAPE` hay không.
 
-Định dạng đầu ra:
-`mae=<2 chữ số> mape_undefined=<1 hoặc 0>`
+In 1 dòng: `mae=<.2f> mape_undefined=<0|1>`.
+Chấm tự động: `bash labs/cham.sh DAN L07 duong_dan/bai_cua_ban.py`
 
-Chấm tự động:
-```bash
-bash labs/cham.sh DAN L07 duong_dan/bai_cua_ban.py
-```
+> Gợi ý đọc `stdin`: `kv = dict(t.split("=") for t in sys.stdin.read().split())`; dùng `any(a == 0 for a in act)` (đã giới thiệu ở màn hình bài) để phát hiện chia 0.

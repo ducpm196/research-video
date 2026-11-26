@@ -1,6 +1,6 @@
-# Lab IRS L08 — Phản hồi ngầm, lấy mẫu âm mũ 0.75 và bù trừ tần suất
+# Lab IRS L08 — Lấy mẫu âm mũ 0.75 và bù trừ lôgarit
 
-Với video A xuất hiện `200` lần và B `2` lần, tính xác suất B được lấy làm mẫu âm theo tần suất thô so với tần suất mũ `0.75`, rồi tính hệ số bù lôgarit tự nhiên `-ln(0.01)`.
+Đọc từ đầu vào chuẩn (`stdin`, dạng `khoá=giá_trị`) `a=<int> b=<int> q=<float>` (trong đó `a`, `b` là số nguyên tần suất hai mục, `q` là xác suất xuất hiện trong lô của công thức `-ln(q)` tương ứng `p` trong bài). Tính xác suất lấy mẫu âm cho `b` theo tần suất thô, theo mũ `0.75` và hệ số bù `-ln(q)`.
 
-Định dạng đầu ra (1 dòng):
-`raw_B=<3 chữ số> pow075_B=<3 chữ số> logq_corr=<3 chữ số>`
+In 1 dòng đúng nhãn (`<.3f>` làm tròn 3 chữ số thập phân): `raw_B=<.3f> pow075_B=<.3f> logq_corr=<.3f>`.
+Chấm tự động: `bash labs/cham.sh IRS L08 duong_dan/bai_cua_ban.py`

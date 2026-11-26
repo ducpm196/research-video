@@ -1,4 +1,4 @@
-limit_b, item_b = 16 * 1024 * 1024, 256
-max_n = limit_b // item_b
-print(f'max_embedded={max_n}')
-print(f'bytes_if_exceed={(max_n + 1) * item_b}')
+import sys
+kv = {k: int(v) for k, v in (t.split('=') for t in sys.stdin.read().split())}
+lim = kv['limit_mib'] * 1024 * 1024; mx = lim // kv['item_b']
+print(f'max_embedded={mx}\nbytes_if_exceed={(mx + 1) * kv["item_b"]}')

@@ -1,11 +1,6 @@
-# Lab OSY L03 (Mô phỏng lập lịch CPU) — Round Robin với lượng tử q = 4
+# Lab OSY L03 — Lập lịch Round Robin với lượng tử q
 
-Viết chương trình Python mô phỏng hàng đợi Round Robin `q = 4` cho ba tiến trình `[24, 3, 3]` tại `t = 0`, in đúng 3 dòng:
-1. `rr_waits=6,4,7`
-2. `rr_avg_wait=5.67`
-3. `response_p1_p2_p3=0,4,7`
+Đọc `stdin` `bursts=<int,...> q=<int>`. Mô phỏng hàng đợi Round Robin tại `t=0` để tính thời gian chờ, chờ trung bình và thời điểm phản hồi đầu tiên từng tiến trình.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh OSY L03 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `rr_waits=<csv>`, `rr_avg_wait=<.2f>`, `response_p1_p2_p3=<csv>`.
+Chấm tự động: `bash labs/cham.sh OSY L03 duong_dan/bai_cua_ban.py`

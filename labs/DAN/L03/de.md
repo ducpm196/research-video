@@ -1,11 +1,8 @@
-# Lab DAN L03 — Hàm cửa sổ trong bảng dữ liệu: tổng lũy kế, chênh lệch và xếp hạng 4 ngày
+# Lab DAN L03 — Hàm cửa sổ SQLite: SUM lũy kế, LAG và RANK
 
-Dùng thư viện `sqlite3` chạy hàm cửa sổ tính tổng lũy kế (`SUM`), hiệu so với dòng trước (`LAG`) và xếp hạng giảm dần (`RANK`) trên doanh thu 4 ngày `[(1,20), (2,50), (3,30), (4,60)]`.
+Đọc `stdin` `days=<d1:rev1,d2:rev2,...>`. Chạy hàm cửa sổ SQLite tính tổng lũy kế, chênh lệch hôm trước và thứ hạng giảm dần cho từng ngày.
 
-Định dạng đầu ra (4 dòng, theo ngày d=1..4):
-`d=<ngày> cum=<tổng lũy kế> diff=<chênh hôm trước hoặc None> rk=<hạng>`
+In mỗi ngày 1 dòng: `d=<d> cum=<c> diff=<diff> rk=<r>`.
+Chấm tự động: `bash labs/cham.sh DAN L03 duong_dan/bai_cua_ban.py`
 
-Chấm tự động:
-```bash
-bash labs/cham.sh DAN L03 duong_dan/bai_cua_ban.py
-```
+> Gợi ý `sqlite3` (`PYT:L04` + stdlib): nạp bảng vào `sqlite3.connect(":memory:")`, dùng `SUM(...) OVER (ORDER BY ...)`, `LAG(...) OVER (...)`, `RANK() OVER (...)`.

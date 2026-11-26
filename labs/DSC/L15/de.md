@@ -1,11 +1,7 @@
-# Lab DSC L15 — Hành trình cuộc thi dự đoán điểm phim: mốc 10%, cải thiện và độ lạc quan trộn
+# Lab DSC L15 — Mốc 10%, cải thiện thực và độ lạc quan trộn
 
-Tính: (1) mốc cần vượt giảm `10%` từ `0.9525` cắt đúng 4 chữ số thập phân, (2) phần trăm cải thiện khi đạt `0.8567`, (3) độ lạc quan làm tròn 5 chữ số trên thước sai số căn quân phương giữa ngưỡng gốc `0.8558` và biên độ ước lượng từ `800` tham số trộn trên một nửa tập `2 817 131` dòng (làm tròn phần phương sai phụ `5` chữ số trước khi khai căn).
+Đọc `stdin` `base=<float> ach=<float> ref=<float> k_params=<int> n_rows=<int>`. Tính mục tiêu giảm 10% (cắt 4 chữ số), phần trăm cải thiện và độ lạc quan từ `2 * k_params / (n_rows / 2)`.
 
-Định dạng đầu ra:
-`goal=<4 chữ số> win_imp=<2 chữ số>% blend_opt=<5 chữ số>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh DSC L15 duong_dan/bai_cua_ban.py
-```
+In 1 dòng: `goal=<.4f> win_imp=<.2f>% blend_opt=<.5f>`.
+Chấm tự động: `bash labs/cham.sh DSC L15 duong_dan/bai_cua_ban.py`
+Gợi ý đọc đầu vào trong Python: dùng `sys.stdin.read().split()` tách từng cặp `khoá=giá_trị`.

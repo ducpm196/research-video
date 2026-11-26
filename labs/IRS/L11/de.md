@@ -1,6 +1,6 @@
 # Lab IRS L11 — Cân bằng độ liên quan với độ đa dạng (MMR)
 
-Theo công thức `lam * liên_quan - (1 - lam) * giống_đã_chọn` với `lam = 0.6`, so sánh ứng viên `X` (liên quan `0.95`, giống `0.85`) với `Y` (liên quan `0.75`, giống `0.15`).
+Đọc từ đầu vào chuẩn (`stdin`, dạng `khoá=giá_trị`) năm số thực `lam=<f> rx=<f> sx=<f> ry=<f> sy=<f>`. Tính `lam * rel - (1 - lam) * sim` cho hai ứng viên `X`, `Y` và chọn bên điểm cao hơn (hoà lấy `Y` nếu `my > mx` hoặc so đúng `X if mx >= my else Y`).
 
-Định dạng đầu ra (1 dòng):
-`mmr_X=<3 chữ số> mmr_Y=<3 chữ số> pick=<X hoặc Y>`
+In 1 dòng đúng nhãn (`<.3f>` làm tròn 3 chữ số thập phân, `<X|Y>` in chữ cái `X` hoặc `Y`): `mmr_X=<.3f> mmr_Y=<.3f> pick=<X|Y>`.
+Chấm tự động: `bash labs/cham.sh IRS L11 duong_dan/bai_cua_ban.py`

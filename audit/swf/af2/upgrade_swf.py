@@ -4,6 +4,7 @@ Toàn bộ 14 bài đều là bài tập Python thực thi thật qua labs/cham.
 tràn biên (lo + hi)//2, BVA tam giác, phủ nhánh, property testing, FSM, xung đột đồng thời,
 hợp nhất ba chiều, truy vấn tham số hoá chống SQLi trên sqlite3.
 """
+import sys as _sys; from pathlib import Path as _P; _sys.path.insert(0, str(_P(__file__).resolve().parents[2])); import _frozen  # noqa: E402,F401
 import subprocess
 import sys
 from pathlib import Path

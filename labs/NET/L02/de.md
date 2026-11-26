@@ -1,11 +1,8 @@
-# Lab NET L02 (Mô phỏng thông lượng & BDP) — Đường ống chậm nhất và dữ liệu đang bay
+# Lab NET L02 — Cổ chai thông lượng và tích băng thông–trễ BDP
 
-Viết chương trình Python tính thông lượng đầu–cuối qua tuyến gồm hai chặng `500 Mbps` và `100 Mbps`, và lượng dữ liệu đang bay (tích băng thông–trễ BDP) với thời gian một vòng đi–về `RTT = 50 ms`, in đúng 3 dòng:
-1. `bottleneck_mbps=100`
-2. `bdp_bits=5000000`
-3. `bdp_bytes=625000`
+Đọc `stdin` `links=<int,...> rtt_ms=<int>`. Tìm chặng cổ chai chậm nhất (Mbps), sau đó tính BDP bằng bit và byte cho `rtt_ms`.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh NET L02 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `bottleneck_mbps=<d>`, `bdp_bits=<d>`, `bdp_bytes=<d>`.
+Chấm tự động: `bash labs/cham.sh NET L02 duong_dan/bai_cua_ban.py`
+
+> Lưu ý: công thức BDP tổng quát là `băng thông × thời gian bay`; bài ví dụ lấy trễ 1 chiều 50 ms, còn lab này yêu cầu tính BDP theo cả vòng khứ hồi `rtt_ms`.

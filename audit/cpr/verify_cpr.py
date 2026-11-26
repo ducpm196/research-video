@@ -27,11 +27,14 @@ for cfg in all_lessons:
     for pid, pinfo in cfg["progs"].items():
         out = ak.run_c(pinfo["code"], args=pinfo.get("args", ""), stdin=pinfo.get("stdin"))
         rec(lid, out == pinfo["expect"].strip("\n"), f"prog {pid}: chạy thật GCC khớp đầu ra")
-    # Kiểm chạy trực tiếp lời giải lab
+    # Kiểm chạy trực tiếp lời giải lab (đọc du_lieu.txt) + chấm qua cham.sh (kèm ca_an/)
     sol = (ROOT / "labs" / "CPR" / lid / "loi_giai.c").read_text(encoding="utf-8")
+    pub = (ROOT / "labs" / "CPR" / lid / "du_lieu.txt").read_text(encoding="utf-8")
     exp = (ROOT / "labs" / "CPR" / lid / "mong_doi.txt").read_text(encoding="utf-8").strip("\n")
-    got = ak.run_c(sol)
-    rec(lid, got == exp, f"lab {lid}: chạy thật GCC khớp mong_doi.txt")
+    got = ak.run_c(sol, stdin=pub)
+    rec(lid, got == exp, f"lab {lid}: chạy thật GCC với du_lieu.txt khớp mong_doi.txt")
+    rc_cham, _ = ak.run_bash(f"cd '{ROOT.as_posix()}' && bash labs/cham.sh CPR {lid}")
+    rec(lid, rc_cham == 0, f"lab {lid}: cham.sh (du_lieu.txt + ca_an/) PASS")
 
 # Đối chiếu chéo mô hình toán với checklib
 rec("CPR:ALG00", alg.cpr_sizeof_64() == {"char": 1, "short": 2, "int": 4, "long_long": 8, "ptr": 8}, "sizeof 64-bit khớp")

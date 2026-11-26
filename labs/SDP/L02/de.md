@@ -1,11 +1,6 @@
 # Lab SDP L02 — Đóng gói và bảo toàn bất biến tài khoản số dư >= 0
 
-Viết lớp Python `Account(balance=100)` với phương thức `withdraw(amt)` từ chối khi `amt > _balance` (ném `ValueError`) và `deposit(amt)` hợp lệ, kiểm thử rút `150` bị chặn và giữ nguyên `100`, in đúng 3 dòng:
-1. `overdraw_blocked=1`
-2. `balance_after_reject=100`
-3. `balance_after_valid_40=60`
+Đọc `stdin` `init=<int> over=<int> ok_draw=<int>`. Kiểm tra rút vượt `over` bị từ chối và giữ nguyên `init`, sau đó rút hợp lệ `ok_draw`.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh SDP L02 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `overdraw_blocked=<0|1>`, `balance_after_reject=<d>`, `balance_after_valid_40=<d>`.
+Chấm tự động: `bash labs/cham.sh SDP L02 duong_dan/bai_cua_ban.py`

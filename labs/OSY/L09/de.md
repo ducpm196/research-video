@@ -1,11 +1,6 @@
-# Lab OSY L09 (Mô phỏng phân trang) — Dịch địa chỉ ảo (VPN + offset) và thời gian truy cập hiệu dụng EAT với TLB
+# Lab OSY L09 — Dịch địa chỉ ảo (VPN + offset) và tính EAT với TLB
 
-Viết chương trình Python cho trang `4 KiB` (`4 096 B`), bảng trang `{0: 5, 1: 2, 2: 9, 3: 7}`, dịch địa chỉ `0x3A7F` và tính EAT khi `TLB=20 ns`, `RAM=100 ns`, `TLB hit=90%`, in đúng 3 dòng:
-1. `va=0x3A7F vpn=3 offset=0xA7F`
-2. `pa=0x7A7F`
-3. `eat_ns=130.0`
+Đọc `stdin` `pt=<k:v,...> va=<hex> page_bits=<int> tlb_hit=<f> tlb_ns=<f> ram_ns=<f>`. Tách số trang ảo (`VPN = va >> page_bits`) và độ dời (`offset`), ghép khung vật lý thành `pa`, và tính thời gian truy cập hiệu dụng (`EAT = tlb_hit*(tlb_ns + ram_ns) + (1 - tlb_hit)*(tlb_ns + 2*ram_ns)`, lưu ý cộng `tlb_ns` vào cả nhánh trúng lẫn trượt TLB).
 
-Chấm tự động:
-```bash
-bash labs/cham.sh OSY L09 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `va=0x<XXXX> vpn=<d> offset=0x<XXX>`, `pa=0x<XXXX>`, `eat_ns=<.1f>`.
+Chấm tự động: `bash labs/cham.sh OSY L09 duong_dan/bai_cua_ban.py`

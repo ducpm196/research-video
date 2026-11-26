@@ -3062,7 +3062,7 @@ def iac_apply(state, desired=None, add=None):
 def binom_tail(n, k, p):
     """P(X ≥ k) với X ~ Nhị thức(n, p), tính chính xác bằng phân số rồi đổi ra số thực."""
     p = Fraction(str(p))
-    return float(sum(math.comb(n, i) * p ** i * (1 - p) ** (n - i) for i in range(k, n + 1)))
+    a, b = p.numerator, p.denominator; return float(Fraction(sum(math.comb(n, i) * pow(a, i) * pow(b - a, n - i) for i in range(k, n + 1)), pow(b, n)))
 
 
 def dora(deploys, failed, restore_min, lead_hours=None, days=30):
@@ -5646,7 +5646,7 @@ def par_amdahl(p, n):
     """Amdahl: tăng tốc với n lõi khi tỉ lệ p của thời gian MỘT lõi song song được. Tính bằng mô phỏng thời gian: phần tuần tự
     chạy trên một lõi, phần song song chia đều cho n lõi."""
     t1 = 1.0
-    tn = (1 - p) * t1 + max([p * t1 / n] * n)
+    tn = (1 - p) * t1 + p * t1 / n
     return t1 / tn
 
 
@@ -7260,3 +7260,74 @@ def prj_dijkstra_cost(edges, src, dst):
                 dist[v] = nd
                 heapq.heappush(pq, (nd, v))
     return -1
+
+
+# ─────────────── SPB (Spring Boot 4.1.3 thực chiến, WP-3A) ───────────────
+def spb_n_plus_one(n_accounts):
+    """Số câu SQL của tải lười 1 + N so với 1 câu JOIN FETCH."""
+    return 1 + n_accounts, 1
+
+
+def spb_tx_connections(threads, nested_new=True):
+    """Số kết nối bể JDBC tối đa giữ đồng thời: 1 nếu REQUIRED, 2 nếu lồng REQUIRES_NEW."""
+    per_tx = 2 if nested_new else 1
+    return per_tx, threads * per_tx
+
+
+def spb_double_entry_sum(entries):
+    """entries: danh sách số tiền có dấu (+ có, - nợ); bút toán kép chuẩn luôn tổng = 0."""
+    return sum(entries)
+
+
+def spb_prom_series(endpoints, statuses, tx_ids=1):
+    """Số chuỗi thời gian Prometheus: có nhãn tốt (không id giao dịch) vs nổ cardinality."""
+    return endpoints * statuses, endpoints * statuses * tx_ids
+
+
+def spb_jvm_heap_mib(container_mib, max_ram_pct=75.0):
+    """Dung lượng heap tối đa (MiB) khi đặt -XX:MaxRAMPercentage."""
+    return round(container_mib * (max_ram_pct / 100.0), 1)
+
+
+def spb_tc_startup_s(n_classes, per_start_s=6, reuse_singleton=True):
+    """Thời gian khởi tạo container tích hợp (giây): dùng chung singleton vs khởi động mỗi lớp."""
+    return per_start_s if reuse_singleton else n_classes * per_start_s
+
+
+def spb_test_pyramid_ms(n_unit, n_it, unit_ms=5, it_ms=2000):
+    """Tổng thời gian chạy bộ kiểm thử tháp đơn vị + tích hợp (ms)."""
+    return n_unit * unit_ms + n_it * it_ms
+
+
+# Các hàm O(1) / O(log n) / vòng lặp nhỏ đã kiểm mã nguồn: an toàn khi nhận đối số nguyên >= 10^8 trong `checks` (E57).
+BIG_N_SAFE = frozenset({
+    "par_amdahl",
+    "par_gustafson",
+    "bnk_btree_levels",
+    "bplus_height",
+    "bnx_utc",
+    "bnx_exp_ok",
+    "bnx_vbucket_of_crc",
+    "bnx_monthly_limit",
+    "bnx_ms_to_hours",
+    "bnx_pool_admit",
+    "bnx_l27_chunks",
+    "bnx_l30_breaker",
+    "expected_object_loss",
+    "faas_cost",
+    "replay_cost",
+    "irs_ivf_cost",
+    "rln_adjacent_pairs",
+    "mid32",
+    "check_args",
+    "median_oracle",
+    "bnx_jwt_check",
+    "btree_depth",
+    "collision_prob",
+    "model_memory_gb",
+    "par_roofline",
+    "scan_bytes",
+    "search_time_s",
+    "stop_wait_util",
+    "window_util",
+})

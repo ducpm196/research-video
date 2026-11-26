@@ -1,9 +1,6 @@
-# Lab LNX L01 — Quy đổi phân quyền bát phân và xác định ngưỡng tối thiểu an toàn
+# Lab LNX L01 — Quy đổi 3 chuỗi quyền rwx sang bát phân qua stdin
 
-Viết kịch bản Bash tạo `sec.key` và `app.sh` trong thư mục tạm, thực hiện `chmod` và tính quy đổi để in đúng 3 dòng:
-1. `rwxr-xr-x=755`
-2. `rw-r-----=640`
-3. `rw-------=600`
+Viết kịch bản Bash đọc các chuỗi quyền 9 ký tự (ví dụ `rwxr-x---`) cách nhau bởi khoảng trắng/dòng từ `stdin` và quy đổi từng chuỗi thành dạng `<chuỗi>=<bát phân 3 chữ số>`.
 
 Chấm tự động:
 ```bash

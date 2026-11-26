@@ -1,6 +1,7 @@
-# Lab AGT L12 — Hành trình tác tử dùng công cụ 2022–2025
+# Lab AGT L12 — Tiến bộ giải bài tập mã nguồn SWE-bench 2022-2025
 
-Tính: (1) số bài giải được ban đầu ở mức `1.96%` trên bộ `2 294` bài (làm tròn thành số nguyên), rồi hệ số tăng khi tiến tới `286` bài cùng bộ; (2) số bài giải được khi đạt `65%` trên bộ SWE-bench Verified (`500` bài).
+Đọc `stdin` `old_pct=<f> full_n=<int> new_ok=<int> ver_pct=<f> ver_n=<int>`. Tính số bài giải ban đầu, bội số tăng tiến và số bài đạt được trên SWE-bench Verified.
 
-Định dạng đầu ra (1 dòng):
-`full_old=<số> full_gain=<1 chữ số>x verified_solved=<số>`
+In 1 dòng: `full_old=<d> full_gain=<.1f>x verified_solved=<d>`.
+Chấm tự động: `bash labs/cham.sh AGT L12 duong_dan/bai_cua_ban.py`
+Gợi ý đọc đầu vào trong Python: dùng `sys.stdin.read().split()` tách từng cặp `khoá=giá_trị`.

@@ -1,6 +1,4 @@
 # Lab CVI L10 — Dịch chuyển miền giữa tập thử và thực tế
 
-Biết mô hình đúng `92%` ban ngày và `60%` ban đêm. Tính độ chính xác gộp trên tập thử cũ (`80%` ngày / `20%` đêm) và khi triển khai thực tế (`40%` ngày / `60%` đêm).
-
-Định dạng đầu ra (1 dòng):
-`test_overall=<1 chữ số>% deploy_real=<1 chữ số>%`
+Đọc `acc_day acc_night p_day_test p_day_deploy` từ stdin (ví dụ `0.92 0.60 0.80 0.40`). Tính độ chính xác gộp ở cả hai tập.
+In đúng 1 dòng `test_overall=<1 chữ số>% deploy_real=<1 chữ số>%`.

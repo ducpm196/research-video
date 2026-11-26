@@ -16,7 +16,7 @@ Objective, committed scope and exclusions in a few sentences.
 ## 4. Blockers & Contract Bottlenecks
 | ID | undefined or unverified | dependent work | missing evidence | consequence | resolution test | state |
 |---|---|---|---|---|---|---|
-| BN-02 | Example: the target system's rate limit is unknown | WP-2 | the provider's documentation or a measurement | the batch job may be throttled | read the provider page and cite it | OPEN |
+| BN-02 | Example: the target system's rate limit is unknown | REQUIRED: WP-2 | the provider's documentation or a measurement | the batch job may be throttled | read the provider page and cite it | OPEN (since EGW-EXAMPLE-001; owner: person) |
 
 ## 5. Next Actions
 | Task | Inputs | Done when | Blocked by |

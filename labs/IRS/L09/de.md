@@ -1,7 +1,6 @@
 # Lab IRS L09 — Khởi động lạnh với phân phối Beta
 
-So sánh trung bình và độ lệch chuẩn của phân phối `Beta(1, 1)` (sản phẩm mới chưa có dữ liệu) với `Beta(31, 471)` (sản phẩm cũ có 30 bấm trên 500 hiển thị).
+Đọc từ đầu vào chuẩn (`stdin`, dạng `khoá=giá_trị`) bốn số nguyên `a1=<int> b1=<int> a2=<int> b2=<int>`. Tính trung bình `a/(a+b)` và độ lệch chuẩn phân phối Beta `sqrt(a*b / ((a+b)^2 * (a+b+1)))` cho cặp mới `(a1, b1)` và cặp cũ `(a2, b2)`.
 
-Định dạng đầu ra (2 dòng):
-`new_mean=<2 chữ số> new_sd=<3 chữ số>`
-`old_mean=<4 chữ số> old_sd=<4 chữ số>`
+In 2 dòng đúng nhãn (`<.2f>`, `<.3f>`, `<.4f>` tương ứng 2, 3, 4 chữ số sau dấu chấm): `new_mean=<.2f> new_sd=<.3f>`, `old_mean=<.4f> old_sd=<.4f>`.
+Chấm tự động: `bash labs/cham.sh IRS L09 duong_dan/bai_cua_ban.py`

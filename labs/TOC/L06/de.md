@@ -1,11 +1,6 @@
-# Lab TOC L06 — Đếm số chuỗi ngoặc cân bằng gồm 5 cặp ngoặc (độ dài 10)
+# Lab TOC L06 — Đếm chuỗi ngoặc cân bằng (số Catalan)
 
-Duyệt tất cả `2^10 = 1024` chuỗi gồm hai ký tự `'('` và `')'` độ dài `10`, giữ lại mọi chuỗi mà số ngoặc đóng không bao giờ vượt ngoặc mở ở bất kỳ tiền tố nào và kết thúc về `0` (số Catalan `C_5`).
-
-Định dạng đầu ra (1 dòng):
-`catalan_5=<số nguyên>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh TOC L06 duong_dan/bai_cua_ban.py
-```
+Đọc độ dài `n` chẵn từ stdin (ví dụ `10`). Đếm số chuỗi ngoặc cân bằng độ dài `n`.
+In đúng 1 dòng `catalan_5=<int>`.
+Nền tảng Python (`PYT:L04`): đọc dữ liệu qua `sys.stdin.read().strip()`.
+Lưu ý giữ đúng tên khoá đầu ra `catalan_5=...` cho số chuỗi ngoặc cân bằng độ dài `n`.

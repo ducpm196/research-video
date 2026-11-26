@@ -238,5 +238,15 @@ rec("L14", (hadoop10, spark10) == (764, 73) and round(hadoop10 / spark10, 1) == 
     "rút lại 10, không rút 17; 200 ms → 5 lô mỗi giây; 3 lần nhanh hơn với 10 lần ít máy → 30 lần mỗi máy; 20 lượt: 1524 s so với 103 s")
 
 bad = [c for c, ok in R if not ok]
+# ── Kiểm tự động mọi lab (du_lieu.txt + ca_an/) qua cham.sh ──
+import subprocess as _subp
+from pathlib import Path as _LabPath
+_BASH = r"C:\Program Files\Git\bin\bash.exe"
+if not _LabPath(_BASH).exists():
+    _BASH = "bash"
+for _ld in sorted((ROOT / "labs" / "DEN").glob("L*")):
+    _rp = _subp.run([_BASH, str(ROOT / "labs" / "cham.sh"), "DEN", _ld.name], cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
+    rec(f"{_ld.name}:lab", _rp.returncode == 0 and "PASS" in _rp.stdout and "2 ca an" in _rp.stdout, f"cham.sh {_ld.name} (public + 2 ca_an)")
+
 print(f"\nverify_den: {len(R) - len(bad)}/{len(R)} PASS" + (f"; FAIL: {bad}" if bad else ""))
 sys.exit(1 if bad else 0)

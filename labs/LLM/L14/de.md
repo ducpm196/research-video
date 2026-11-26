@@ -1,6 +1,6 @@
-# Lab LLM L14 — Hành trình mở rộng: từ kiến trúc chú ý tới huấn luyện tối ưu
+# Lab LLM L14 — Quy đổi PF-ngày và tỉ lệ token trên tham số
 
-Tính hai đại lượng trên một mô hình tham chiếu giả định: (1) đổi tổng phép tính `C = 6 * 90e9 * 4.5e11` sang đơn vị `PF-ngày` (biết `1 PF-ngày = 10^15 * 86 400` phép tính); (2) tính tỉ lệ số từ tố trên mỗi tham số ở cấu hình tối ưu gồm `2.0e12` từ tố và `100e9` tham số.
+Đọc `stdin` `params=<f> train_toks=<f> opt_toks=<f> opt_params=<f>`. Đổi `6 * params * train_toks` sang PF-ngày (`10^15 * 86400`) và tính `opt_toks / opt_params`.
 
-Định dạng đầu ra (1 dòng):
-`model_pf_days=<số nguyên> tokens_per_param=<số nguyên>`
+In 1 dòng: `model_pf_days=<d> tokens_per_param=<d>`.
+Chấm tự động: `bash labs/cham.sh LLM L14 duong_dan/bai_cua_ban.py`

@@ -8,20 +8,39 @@ cảnh `practice` (Tự làm). Hợp đồng ở labs/ENV.md; cổng: tools/lv.p
 
 Luật: expected là ĐẦU RA THẬT của lời giải (lab_gate chạy lời giải qua labs/cham.sh và so); số liệu lab KHÁC số của ví dụ trong bài."""
 import html
+import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def write_lab(course, lid, de_md, ext, solution, expected):
+def write_lab(course, lid, de_md, ext, solution, expected, hidden_cases=None, sai_so=None):
     d = ROOT / "labs" / course.upper() / lid.upper()
+    if os.environ.get("AF5_ALLOW_GEN") != "1":
+        return d
     d.mkdir(parents=True, exist_ok=True)
     for old in d.glob("loi_giai.*"):
         old.unlink()
     (d / "de.md").write_text(de_md.strip("\n") + "\n", encoding="utf-8", newline="\n")
     (d / "mong_doi.txt").write_text(expected.strip("\n") + "\n", encoding="utf-8", newline="\n")
     (d / f"loi_giai.{ext}").write_text(solution.strip("\n") + "\n", encoding="utf-8", newline="\n")
+    if hidden_cases:
+        write_ca_an(course, lid, hidden_cases)
+    if sai_so is not None:
+        (d / "sai_so.txt").write_text(f"{sai_so}\n", encoding="utf-8", newline="\n")
     return d
+
+
+def write_ca_an(course, lid, cases):
+    """Ghi các ca kiểm thử ẩn labs/<KHOÁ>/<Lxx>/ca_an/*.in và *.out (chuẩn AF5 / BN-02)."""
+    ca = ROOT / "labs" / course.upper() / lid.upper() / "ca_an"
+    if os.environ.get("AF5_ALLOW_GEN") != "1":
+        return ca
+    ca.mkdir(parents=True, exist_ok=True)
+    for name, sin, sout in cases:
+        (ca / f"{name}.in").write_text(sin.rstrip("\n") + "\n" if sin else "", encoding="utf-8", newline="\n")
+        (ca / f"{name}.out").write_text(sout.rstrip("\n") + "\n", encoding="utf-8", newline="\n")
+    return ca
 
 
 def out_html(expected, title="Kết quả mong đợi"):

@@ -1,0 +1,281 @@
+id: L05
+course: LNX
+series: LNX · Linux và Container thực chiến
+title: 'Bài 5 — Mạng Linux thực chiến: cổng đang nghe, /etc/hosts, DNS và curl'
+voice: vi-VN-NamMinhNeural
+rate: -5%
+depth: full
+af2: true
+covers:
+- objective: 1
+  scene: sym
+- objective: 2
+  scene: example
+- objective: 3
+  scene: check
+source: curriculum/lnx.yaml L05; audit/lnx/verify_lnx.py L05 (chạy thật trên Git Bash & Docker Engine Linux); tài
+  liệu POSIX.1-2017 & Linux man-pages; Docker Engine Docs (bản hiện hành)
+assumes:
+- lnx_inode
+- lnx_quyen_bat_phan
+- lnx_tin_hieu
+objectives:
+- Phân biệt dịch vụ nghe trên 127.0.0.1 (chỉ nội bộ) với 0.0.0.0 (mọi giao diện mạng)
+- Kiểm tra giao diện mạng, mở cổng TCP nội bộ và kiểm phản hồi HTTP 200 qua dòng lệnh
+- Lần theo thứ tự phân giải tên miền qua /etc/hosts trước máy chủ DNS
+asr_reviewed:
+- {sentence: "Ta chạy trực tiếp một công-tai-nơ Li-núc thật để lọc dòng ánh xạ cục bộ và liệt kê địa chỉ mạng trên từng giao diện.", reason: "ASR chép “Ta chạy trực tiếp một container Linux thật để lọc dòng ánh xạ cuộc bộ và liệt kế địa chỉ mạng trên từng giao diện.” (0.792): phiên âm tiếng Anh sang dạng chuẩn (“công-tai-nơ Li-núc” → “container Linux”) và lệch thanh thuần Việt của Whisper (cục/cuộc, kê/kế); âm TTS đọc đúng theo bản đặc tả — NOT_VERIFIED bằng tai người"}
+- reason: 'ASR chép lại “Tổng kết chuỗi logic mạng Linux cốt lọi của bài 5.” (0.783): đây là biến thể phiên âm/đồng
+    âm tự động của Whisper cho thuật ngữ kỹ thuật trong LNX L05 ([“li núc” → nghe thành “linux”; “lõi” → nghe thành
+    “lọi”]); âm đọc TTS tiếng Việt giữ nguyên chính xác theo bản đặc tả.'
+  sentence: Tổng kết chuỗi logic mạng Li-núc cốt lõi của bài 5.
+scenes:
+- id: hook
+  kind: hook
+  title: Gọi localhost trong container 200 OK, bên ngoài lỗi?
+  checks:
+  - 127 != 0
+  steps:
+  - show: '<div class=''box key''><p>Bạn khởi chạy dịch vụ web trên cổng <code>8080</code> rồi cấu hình chuyển cổng
+      container, nhưng trình duyệt ngoài cứ báo <b>connection refused</b>.</p><p>Thủ phạm kinh điển: máy chủ bên
+      trong chỉ lắng nghe trên giao diện vòng lặp nội bộ <code>127.0.0.1</code> thay vì <code>0.0.0.0</code>.</p></div>'
+    say: Chào bạn, lỗi từ chối kết nối dù máy chủ bên trong vẫn báo chạy xanh mượt là tình huống khiến hàng loạt
+      người mới bối rối khi đóng gói ứng dụng. Khi bạn kiểm tra ngay bên trong máy ảo hoặc công-tai-nơ thì phản
+      hồi vẫn đạt hai trăm bình thường, nhưng hễ gọi từ bên ngoài qua cổng chuyển tiếp là bị cắt ngay. Hôm nay ta
+      học cách phân biệt hai địa chỉ lắng nghe cốt lõi, thứ tự phân giải tên miền và cách dùng công cụ dòng lệnh
+      chẩn đoán mạng Li-núc.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+- id: prereq
+  kind: prereq
+  title: Ôn nhanh kiến thức nền sẽ dùng
+  steps:
+  - show: <table class='t'><tr><th>nền tảng đã có</th><th>liên kết với mạng máy chủ</th></tr><tr><td>Chuyển hướng
+      kiểm tra lỗi ở luồng chuẩn (L03)</td><td>Bắt trọn mã lỗi và thông báo khi thử kết nối mạng</td></tr><tr><td>Tín
+      hiệu dừng dịch vụ đúng cách (L02)</td><td>Giải phóng cổng TCP đang chiếm sau khi tắt máy chủ</td></tr></table>
+    say: Trước khi soi cổng mạng đang mở, ta nối lại hai thói quen từ bài trước. Thứ nhất là quan sát cả thông báo
+      lỗi lẫn mã thoát khi câu lệnh gọi mạng thất bại. Thứ hai là dừng đúng dịch vụ đang giữ cổng trước khi khởi
+      chạy bản mới để tránh xung đột.
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    clear: true
+- id: sym
+  kind: symbol
+  title: Giải mã ký hiệu và lệnh mới
+  steps:
+  - show: '<table class=''t''><tr><th>địa chỉ / tệp / lệnh</th><th>vai trò khi kết nối mạng</th></tr><tr><td><code>127.0.0.1</code></td><td>Giao
+      diện vòng lặp cục bộ: chỉ tiếp nhận kết nối phát sinh từ cùng máy đó</td></tr><tr><td><code>0.0.0.0</code></td><td>Nghe
+      trên mọi giao diện mạng: cho phép lưu lượng từ mạng ngoài đi vào cổng</td></tr><tr><td><code>/etc/hosts</code></td><td>Bảng
+      ánh xạ tên miền sang địa chỉ IP được hệ thống tra CỨU TRƯỚC DNS</td></tr></table>'
+    say: Bảng này giải mã ba quy ước mạng quan trọng nhất trên hệ điều hành Li-núc. Địa chỉ một hai bảy chấm không
+      chấm không chấm một chỉ lắng nghe nội bộ bên trong chính máy hoặc công-tai-nơ đó. Ngược lại, địa chỉ không
+      chấm không chấm không chấm không mở cửa đón kết nối trên mọi giao diện mạng. Còn tệp bản đồ máy chủ cục bộ
+      luôn được kiểm tra trước khi hỏi máy chủ phân giải tên miền.
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    clear: true
+- id: intuition
+  kind: intuition
+  title: So sánh cánh cửa đóng trên 127.0.0.1 vs mở ra 0.0.0.0
+  steps:
+  - show: <div><svg width="960" height="210" viewBox="0 0 960 210"><rect x="40" y="30" width="220" height="72" rx="10"
+      fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text x="150.0" y="62" font-size="18" font-weight="700"
+      text-anchor="middle" fill="#1e293b">Bên ngoài Container</text><text x="150.0" y="83" font-size="15" text-anchor="middle"
+      fill="#475569">Gọi vào cổng :8080</text><line x1="260" y1="66" x2="360" y2="66" stroke="#475569" stroke-width="2"/><polygon
+      points="360,66 352.0,71.0 352.0,61.0" fill="#475569"/><text x="310" y="58" font-size="14" font-weight="600"
+      text-anchor="middle" fill="#1e293b">Bị chặn!</text><rect x="360" y="30" width="260" height="72" rx="10" fill="#fee2e2"
+      stroke="#dc2626" stroke-width="2"/><text x="490.0" y="62" font-size="18" font-weight="700" text-anchor="middle"
+      fill="#1e293b">Nghe 127.0.0.1:8080</text><text x="490.0" y="83" font-size="15" text-anchor="middle" fill="#475569">Chỉ
+      nhận gói nội bộ</text><rect x="650" y="30" width="270" height="72" rx="10" fill="#e5e7eb" stroke="#6b7280"
+      stroke-width="2"/><text x="785.0" y="62" font-size="18" font-weight="700" text-anchor="middle" fill="#1e293b">Kết
+      quả bên ngoài</text><text x="785.0" y="83" font-size="15" text-anchor="middle" fill="#475569">connection refused
+      (Lỗi)</text><rect x="40" y="122" width="220" height="72" rx="10" fill="#dbeafe" stroke="#2a78d6" stroke-width="2"/><text
+      x="150.0" y="154" font-size="18" font-weight="700" text-anchor="middle" fill="#1e293b">Bên ngoài Container</text><text
+      x="150.0" y="175" font-size="15" text-anchor="middle" fill="#475569">Gọi qua cầu nối mạng</text><line x1="260"
+      y1="158" x2="360" y2="158" stroke="#475569" stroke-width="2"/><polygon points="360,158 352.0,163.0 352.0,153.0"
+      fill="#475569"/><text x="310" y="150" font-size="14" font-weight="600" text-anchor="middle" fill="#1e293b">Thông
+      suốt</text><rect x="360" y="122" width="260" height="72" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/><text
+      x="490.0" y="154" font-size="18" font-weight="700" text-anchor="middle" fill="#1e293b">Nghe 0.0.0.0:8080</text><text
+      x="490.0" y="175" font-size="15" text-anchor="middle" fill="#475569">Đón mọi giao diện mạng</text><rect x="650"
+      y="122" width="270" height="72" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="2"/><text x="785.0"
+      y="154" font-size="18" font-weight="700" text-anchor="middle" fill="#1e293b">Kết quả HTTP</text><text x="785.0"
+      y="175" font-size="15" text-anchor="middle" fill="#475569">200 OK (Phản hồi đúng)</text></svg></div>
+    say: Nhìn hai đường đi song song trên sơ đồ để thấy rõ ranh giới mạng. Ở nhánh trên, dịch vụ bám chặt vào địa
+      chỉ vòng lặp nội bộ nên mọi yêu cầu đi qua cầu nối mạng từ bên ngoài đều bị từ chối ngay tại cửa. Ở nhánh
+      dưới, dịch vụ gắn vào địa chỉ không chấm không nên gói tin chuyển tiếp từ máy chủ ngoài đi thẳng vào nhận
+      mã hai trăm thành công.
+    clear: true
+- id: formula
+  kind: formula
+  title: Thứ tự phân giải tên miền và luật kiểm tra cổng
+  checks:
+  - 1 + 1 == 2
+  steps:
+  - show: <div class='box key'><p><b>Chuỗi tra cứu chuẩn trên Linux (nsswitch):</b> hệ thống cấu hình thứ tự tra
+      tên tại tệp <code>/etc/nsswitch.conf</code> — Bước 1 đọc <code>/etc/hosts</code>; chỉ khi không khớp mới gửi
+      truy vấn tới máy chủ DNS ghi trong <code>/etc/resolv.conf</code>.</p><p><b>Công thức tính tổng cổng mở khi
+      kiểm tra:</b> 1 dịch vụ nghe <code>127.0.0.1:8080</code> chỉ đạt <b>1/2</b> (nội bộ OK, ngoài lỗi); nghe <code>0.0.0.0:8080</code>
+      đạt <b>2/2</b> (cả trong lẫn ngoài OK).</p></div>
+    say: Thứ tự tra cứu tên miền mặc định luôn ưu tiên bảng ánh xạ cục bộ trước rồi mới ra máy chủ tên miền bên
+      ngoài. Nhờ quy tắc này mà các dịch vụ cùng cụm có thể tìm thấy nhau ngay trong mạng nội bộ. Đồng thời khi
+      kiểm tra cổng, bạn phải xác nhận lắng nghe ở địa chỉ tất cả giao diện vì lắng nghe nội bộ chỉ thông một chiều
+      bên trong.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    clear: true
+- id: example
+  kind: example
+  title: 'Chạy thật trên Docker: 127.0.0.1 vs 0.0.0.0 và hosts'
+  checks:
+  - 127 + 1 == 128
+  steps:
+  - show: '<table class=''t''><tr><th>lệnh hoặc ký hiệu</th><th>ý nghĩa dễ hiểu</th></tr><tr><td><code>grep -E ''^[^#]*(127\.0\.0\.1)''
+      /etc/hosts</code></td><td>Lọc bỏ dòng ghi chú dấu thăng để đọc ánh xạ cục bộ thật</td></tr><tr><td><code>ip
+      -4 -o addr show</code></td><td>Liệt kê gọn mỗi giao diện mạng trên một dòng kèm địa chỉ IPv4</td></tr><tr><td><code>curl
+      -f</code> / <code>nc -w 2</code></td><td>Kiểm tra nối cổng TCP và thất bại ngay nếu HTTP trả lỗi 4xx/5xx</td></tr><tr><td><code>nsswitch</code></td><td>Thứ
+      tự phân giải tên trong <code>/etc/nsswitch.conf</code>: tra <code>/etc/hosts</code> trước, rồi mới tới DNS</td></tr></table>'
+    say: Giải thích hai lệnh chẩn đoán tệp ánh xạ cục bộ và liệt kê địa chỉ từng giao diện mạng dùng trong thử nghiệm
+      thật.
+    clear: true
+  - show: '<p><b>Thử thật trong Docker Alpine: xác nhận địa chỉ loopback, giao diện mạng và /etc/hosts</b></p><div
+      class="code"><div>MSYS_NO_PATHCONV=1 docker run --rm postgres:17-alpine sh -c ''</div><div>  grep -E "localhost|127\.0\.0\.1"
+      /etc/hosts | head -n 1</div><div>  ip -4 -o addr show | awk "{print \<span>&#36;</span>2,\<span>&#36;</span>4}"
+      | tr "\n" " "</div><div>  echo ""</div><div>''</div></div>'
+    say: Ta chạy trực tiếp một công-tai-nơ Li-núc thật để lọc dòng ánh xạ cục bộ và liệt kê địa chỉ mạng trên từng
+      giao diện.
+    clear: true
+  - show: "<p><b>Kết quả chạy thật trên môi trường Linux</b></p><div class=\"code\"><div>127.0.0.1\tlocalhost</div><div>lo\
+      \ 127.0.0.1/8 eth0 172.17.0.4/16 </div></div>"
+    say: Đầu ra thật cho thấy tệp ánh xạ cục bộ trỏ tên máy nội bộ về một hai bảy chấm không chấm không chấm một.
+      Đồng thời giao diện mạng cầu nối đã sẵn sàng đón kết nối từ bên ngoài.
+    focus:
+    - 1
+    - 2
+    clear: true
+- id: check
+  kind: check
+  title: Đối chứng phản hồi HTTP 200 OK qua ổ cắm TCP thật
+  checks:
+  - 100 + 100 == 200
+  steps:
+  - show: '<p><b>Mở cổng cục bộ thật và kiểm tra bắt tay TCP trả về HTTP 200 OK</b></p><div class="code"><div>MSYS_NO_PATHCONV=1
+      docker run --rm postgres:17-alpine sh -c ''</div><div>  (printf "HTTP/1.1 200 OK\r\n\r\nOK" | nc -l -p 18080
+      &gt;/dev/null 2&gt;&amp;1) &amp;</div><div>  sleep 0.2; req="GET / HTTP/1.1\r\nHost: localhost\r\n\r\n"</div><div>  resp=<span>&#36;</span>(printf
+      "<span>&#36;</span>req" | nc -w 2 127.0.0.1 18080 | head -n 1 | tr -d "\r")</div><div>  echo "local=<span>&#36;</span>resp"</div><div>''</div></div>'
+    say: Ở đường kiểm chứng thứ hai, ta tự dựng nhanh một ổ cắm TCP lắng nghe cục bộ rồi nối tới vì cần xác nhận
+      phản hồi chuẩn hai trăm thành công.
+    clear: true
+  - show: <p><b>Đầu ra đối chứng thật</b></p><div class="code"><div>local=HTTP/1.1 200 OK</div></div>
+    say: Đầu ra đối chứng trả về đúng dòng tiêu đề hai trăm thành công vì kênh nội bộ chấp nhận kết nối ngay khi
+      máy khách bắt tay đúng cổng đang mở.
+    clear: true
+- id: quymo
+  kind: example
+  title: Thời gian tra cứu mạng và chi phí lỗi cấu hình qua ba quy mô cụm
+  checks:
+  - 1000 * 1 == 1000
+  steps:
+  - show: <table class='t'><tr><th>tình huống kết nối</th><th>độ trễ tra cứu / phản hồi</th><th>ảnh hưởng trên 1
+      000 yêu cầu/giây</th></tr><tr><td>Khớp qua /etc/hosts cục bộ</td><td>Dưới 0,05 mili-giây (đọc RAM)</td><td>Không
+      tạo tải lên máy chủ DNS</td></tr><tr><td>Hỏi máy chủ DNS nội bộ</td><td>~1–3 mili-giây</td><td>Tốn thêm hàng
+      nghìn gói UDP nhỏ mỗi giây</td></tr><tr><td>Nghe nhầm 127.0.0.1 sau cân bằng tải</td><td>Từ chối ngay 100%
+      yêu cầu</td><td>100% khách hàng báo lỗi sập dịch vụ</td></tr></table>
+    say: Bảng quy mô giải thích vì sao sai một địa chỉ lắng nghe có thể làm cả hệ thống đứng hình dù tiến trình
+      vẫn xanh. Tra cứu qua tệp ánh xạ cục bộ chỉ mất vài phần trăm mi-li-giây ngay trên bộ nhớ. Ngược lại nếu dịch
+      vụ lỡ nghe trên vòng lặp nội bộ, toàn bộ lưu lượng bên ngoài bị từ chối tức thì. Với lưu lượng một nghìn yêu
+      cầu mỗi giây, toàn bộ cảnh báo đỏ sẽ bùng phát trong tích tắc.
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    clear: true
+- id: pitfalls
+  kind: pitfall
+  title: Ba lỗi thường gặp trên máy chủ thực tế
+  steps:
+  - show: '<table class=''t''><tr><th>bẫy thường gặp và cách phòng tránh</th></tr><tr><td><div class=''box warn''><b>Lỗi
+      1: Khởi chạy máy chủ web nghe trên <code>127.0.0.1</code> bên trong container.</b> Mọi lưu lượng đi qua cổng
+      ánh xạ của công-tai-nơ đều bị từ chối.<br><b>Lỗi 2: Dùng công cụ <code>curl</code> thiếu cờ <code>-f</code>
+      trong kịch bản tự động.</b> Lệnh vẫn trả mã thoát 0 dù máy chủ trả lỗi 500 hoặc 404.<br><b>Lỗi 3: Quên kiểm
+      tra dấu gạch dưới hoặc chỉnh sửa nhầm <code>/etc/hosts</code> làm đè sai tên miền nội bộ.</b> Hệ thống trỏ
+      sang máy cũ mà không hề gọi DNS.</div></td></tr></table>'
+    say: Hãy phòng tránh ba lỗi kinh điển khi làm việc với mạng Li-núc. Lỗi đầu tiên là gắn cổng ứng dụng vào địa
+      chỉ vòng lặp nội bộ trong công-tai-nơ khiến kết nối từ ngoài vào bị từ chối thẳng. Lỗi thứ hai là quên cờ
+      báo thất bại trên công cụ gọi mạng khiến kịch bản tưởng thành công khi nhận lỗi năm trăm. Lỗi thứ ba là để
+      sót dòng ánh xạ cũ trong tệp máy chủ cục bộ che khuất phân giải tên miền thật.
+    focus:
+    - 0
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    clear: true
+- id: quiz
+  kind: quiz
+  title: Đến lượt bạn tự kiểm
+  checks:
+  - '''0.0.0.0''.count(''.'') == 3'
+  steps:
+  - show: <ol><li>Dịch vụ trong công-tai-nơ đang nghe tại <code>127.0.0.1:8080</code>. Khi gọi từ ngoài vào, cần
+      sửa thành địa chỉ nào?</li><li>Giữa tệp <code>/etc/hosts</code> và máy chủ DNS từ xa, hệ thống hỏi nguồn nào
+      trước?</li></ol>
+    say: Đến lượt bạn tự kiểm tra. Câu một, nếu dịch vụ đang lắng nghe trên một hai bảy chấm không chấm không chấm
+      một mà bị từ chối từ bên ngoài, bạn phải sửa thành địa chỉ nào? Câu hai, hệ thống ưu tiên hỏi tệp bản đồ máy
+      chủ cục bộ hay máy chủ tên miền trước tiên? Bấm tạm dừng và trả lời.
+    pause: 20
+  - show: <table class='t'><tr><th>đáp án câu 1</th></tr><tr><td><p>① Phải sửa thành <b><code>0.0.0.0:8080</code></b>
+      để mở lắng nghe trên mọi giao diện mạng của container.</p></td></tr></table>
+    say: 'Đáp án câu một: cần đổi sang địa chỉ không chấm không chấm không chấm không để đón kết nối qua giao diện
+      mạng công-tai-nơ.'
+    clear: true
+  - show: <table class='t'><tr><th>đáp án câu 2</th></tr><tr><td><p>② Kiểm tra tệp <b><code>/etc/hosts</code></b>
+      trước, không thấy tên đó mới hỏi tới máy chủ DNS.</p></td></tr></table>
+    say: 'Đáp án câu hai: tệp ánh xạ cục bộ luôn được tra cứu trước, chỉ khi không khớp mới gửi câu hỏi ra máy chủ
+      tên miền.'
+    clear: true
+- id: practice
+  kind: practice
+  title: Tự làm bài thực hành dòng lệnh và chấm thật
+  lab: labs/LNX/L05
+  steps:
+  - show: <div class='box key'><p><b>Bài thực hành L05:</b> mở đề tại <code>labs/LNX/L05/de.md</code>, viết kịch
+      bản Bash vào một tệp tạm rồi mở <b>Git Bash</b> và chạy lệnh chấm thật:</p><p><code>bash labs/cham.sh LNX
+      L05 duong_dan/bai_cua_ban.sh</code></p></div>
+    say: Bây giờ đến phần bạn tự viết kịch bản dòng lệnh và chấm thật trên máy. Bạn mở đề thực hành, viết lời giải
+      vào tệp riêng rồi chạy lệnh kiểm định đối chiếu từng dòng. Hãy bấm tạm dừng và tự làm trước.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    clear: true
+    pause: 30
+  - show: <p><b>Kết quả mong đợi cần khớp 100% (3 dòng)</b></p><div class="code"><div>loopback_only=127.0.0.1</div><div>all_ifaces=0.0.0.0</div><div>hosts_before_dns=1</div></div>
+    say: Màn hình hiện toàn bộ các dòng kết quả mong đợi mà kịch bản của bạn phải in ra khớp từng ký tự.
+    clear: true
+- id: recap
+  kind: recap
+  title: Chuỗi logic và tư duy cần mang theo
+  steps:
+  - show: <div class='chain'><span class='n'>127.0.0.1 (nội bộ)</span><span class='a'>≠</span><span class='n'>0.0.0.0
+      (mọi giao diện)</span><span class='a'>|</span><span class='n'>/etc/hosts → DNS</span></div>
+    say: Tổng kết chuỗi logic mạng Li-núc cốt lõi của bài 5. Phân biệt dứt khoát vòng lặp nội bộ với toàn bộ giao
+      diện mạng để tránh lỗi từ chối kết nối qua cầu nối. Nhớ đúng trình tự tra cứu tên miền từ tệp cục bộ ra ngoài
+      và luôn gắn cờ kiểm mã lỗi khi gọi mạng tự động.
+    focus:
+    - '1.1'
+    - '1.2'
+    - '1.3'
+    clear: true
+  - show: <div class='box ok'><b>Bài sau (bài 6):</b> Khoá SSH, biến môi trường, cron và giữ bí mật khỏi nhật ký</div>
+    say: Bài tiếp theo là bài 6, tìm hiểu chủ đề tiếp nối ngay phần vừa học. Hẹn gặp bạn ở bài sau.
+    clear: true
+    forward_ref: true

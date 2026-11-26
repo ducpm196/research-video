@@ -1,11 +1,7 @@
-# Lab DSC L11 — Tỉ lệ nền 2%: xét nghiệm nhạy 95%, đặc hiệu 90% và giá trị dự đoán dương (PPV)
+# Lab DSC L11 — Tỉ lệ nền, độ nhạy, đặc hiệu và PPV
 
-Trên `10 000` người có tỉ lệ nền bệnh `2%`, xét nghiệm độ nhạy `95%`, độ đặc hiệu `90%`. Đếm số dương thật (`tp`), dương giả (`fp`) và tính giá trị dự đoán dương (`PPV = tp / (tp + fp)`).
+Đọc `stdin` `n=<int> prev=<float> sens=<float> spec=<float>`. Tính số dương thật `tp`, dương giả `fp` và giá trị dự đoán dương `PPV = tp / (tp + fp)`.
 
-Định dạng đầu ra:
-`tp=<1 chữ số> fp=<1 chữ số> ppv=<3 chữ số>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh DSC L11 duong_dan/bai_cua_ban.py
-```
+In 1 dòng: `tp=<.1f> fp=<.1f> ppv=<.3f>`.
+Chấm tự động: `bash labs/cham.sh DSC L11 duong_dan/bai_cua_ban.py`
+Gợi ý đọc đầu vào trong Python: dùng `sys.stdin.read().split()` tách từng cặp `khoá=giá_trị`.

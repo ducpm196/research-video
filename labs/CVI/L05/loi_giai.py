@@ -1,5 +1,6 @@
-import math
-ransac_n = lambda w, s=4, p=0.99: (
-    math.ceil(math.log(1 - p) / math.log(1 - w ** s))
-)
-print(f"n_w60={ransac_n(0.6)} n_w40={ransac_n(0.4)}")
+import sys, math
+s = sys.stdin.read().strip() or "4 0.99 0.6 0.4"
+ss, ps, w1s, w2s = s.split()
+sv, p, w1, w2 = int(ss), float(ps), float(w1s), float(w2s)
+rn = lambda w: math.ceil(math.log(1 - p) / math.log(1 - w ** sv))
+print(f"n_w60={rn(w1)} n_w40={rn(w2)}")

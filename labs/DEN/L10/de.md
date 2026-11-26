@@ -1,12 +1,6 @@
 # Lab DEN L10 — Mẫu hộp thư đi nguyên tử trong SQLite
 
-Dùng `sqlite3` (CSDL SQLite trong bộ nhớ) tạo hai bảng `orders(id TEXT)` và `outbox(id TEXT)`. Thử ghi `('O100')` vào `orders` rồi kích hoạt lỗi trước khi ghi `outbox` để hoàn tác (`ROLLBACK`); sau đó thực hiện giao dịch hợp lệ ghi cả hai bảng với `('O200')`.
+Đọc `stdin` `bad_id=<str> good_id=<str>`. Trong SQLite bộ nhớ, ghi `bad_id` vào `orders` rồi gọi `rollback()`, sau đó mở giao dịch ghi cả `orders` và `outbox` cho `good_id` rồi `commit()`.
 
-Định dạng đầu ra (2 dòng):
-`orders_after_tx=<danh sách id>`
-`outbox_after_tx=<danh sách id>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh DEN L10 duong_dan/bai_cua_ban.py
-```
+In 2 dòng: `orders_after_tx=<list>`, `outbox_after_tx=<list>`.
+Chấm tự động: `bash labs/cham.sh DEN L10 duong_dan/bai_cua_ban.py`

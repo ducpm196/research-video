@@ -1,11 +1,7 @@
-# Lab DSC L14 — Truyền đạt trung thực kết quả: ước lượng điểm kèm khoảng tin cậy 95%
+# Lab DSC L14 — Ước lượng điểm kèm khoảng tin cậy 95% (điểm phần trăm)
 
-Tính chênh lệch điểm phần trăm (`8.0% -> 9.5%`) và khoảng tin cậy 95% (`+- 1.96 * sai số chuẩn`) với cỡ mẫu `n = 10 000` mỗi nhóm.
+Đọc `stdin` `p1=<float> p2=<float> n=<int>`. Tính chênh lệch điểm phần trăm `(p2 - p1) * 100` và biên độ khoảng tin cậy 95% với hai nhóm cùng cỡ `n`.
 
-Định dạng đầu ra:
-`lift_pp=<1 chữ số> ci95=[<1 chữ số>, <1 chữ số>]`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh DSC L14 duong_dan/bai_cua_ban.py
-```
+In 1 dòng: `lift_pp=<.1f> ci95=[<.1f>, <.1f>]`.
+Chấm tự động: `bash labs/cham.sh DSC L14 duong_dan/bai_cua_ban.py`
+Gợi ý đọc đầu vào trong Python: dùng `sys.stdin.read().split()` tách từng cặp `khoá=giá_trị`.

@@ -5,6 +5,7 @@
 - Giữ nguyên toàn bộ cảnh gốc đã kiểm duyệt; thêm cảnh `practice`, `covers`, đồng bộ
   sổ screen_code/OSY.yaml và template curriculum/osy.yaml.
 """
+import sys as _sys; from pathlib import Path as _P; _sys.path.insert(0, str(_P(__file__).resolve().parents[2])); import _frozen  # noqa: E402,F401
 import subprocess
 import sys
 from pathlib import Path

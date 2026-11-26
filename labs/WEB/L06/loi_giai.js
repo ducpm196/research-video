@@ -1,7 +1,11 @@
-const RFC = { GET:[1,1], PUT:[0,1], DELETE:[0,1], POST:[0,0] };
-let bal = 250; const seen = new Set();
-const pay = (k, v) => { if (!seen.has(k)) { seen.add(k); bal -= v; } };
-pay('k1', 100); pay('k1', 100);
+const fs = require('fs');
+const kv = Object.fromEntries(fs.readFileSync(0, 'utf8').trim().split(/\s+/).map(s => s.split('=')));
+const RFC = { GET: [1, 1], PUT: [0, 1] };
+let bal = Number(kv.bal); const seen = new Set();
+for (const item of kv.keys.split(',')) {
+  const [k, amt] = item.split(':');
+  if (!seen.has(k)) { seen.add(k); bal -= Number(amt); }
+}
 console.log('get_safe_idem=' + RFC.GET.join(','));
 console.log('put_safe_idem=' + RFC.PUT.join(','));
 console.log(`post_with_idem_key_bal=${bal}`);

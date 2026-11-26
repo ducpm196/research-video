@@ -1,2 +1,3 @@
-max_turns = (64_000 - 4_000) // 1_500
-print(f"max_turns={max_turns} full_after={4000 + max_turns * 1500}")
+import sys
+kv = {k: int(v) for k, v in (t.split('=') for t in sys.stdin.read().split())}
+t = (kv['limit'] - kv['sys_tok']) // kv['turn_tok']; print(f'max_turns={t} full_after={kv["sys_tok"] + t * kv["turn_tok"]}')

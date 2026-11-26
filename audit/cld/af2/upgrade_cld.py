@@ -1,4 +1,5 @@
 """Nâng trọn bộ 16 bài CLD (L00–L15) lên chuẩn AF4 (common.upgrade_lesson force_code=True + lab P8 độc lập)."""
+import sys as _sys; from pathlib import Path as _P; _sys.path.insert(0, str(_P(__file__).resolve().parents[2])); import _frozen  # noqa: E402,F401
 import subprocess
 import sys
 from pathlib import Path

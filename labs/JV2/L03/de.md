@@ -6,7 +6,7 @@ Viết chương trình `ThongKeStream` (tệp `ThongKeStream.java`) với `recor
 1. Bằng **Stream** (`filter`, `mapToLong`, `sum`): tổng tiền các giao dịch loại `rut` có `soTien >= 500000`.
 2. Bằng `Collectors.groupingBy(..., TreeMap::new, Collectors.counting())`: số giao dịch theo loại.
 3. Bằng `groupingBy` với `Collectors.summingLong`: tổng tiền theo loại.
-4. Bằng **vòng lặp** `for` và `TreeMap.merge(khoá, số, Long::sum)`: tổng tiền theo loại; in `true` nếu bản đồ này `equals` bản đồ ở bước 3.
+4. Bằng **vòng lặp** `for` và `getOrDefault`: tổng tiền theo loại; in `true` nếu bản đồ này `equals` bản đồ ở bước 3.
 
 In bốn dòng đúng dạng:
 ```

@@ -1,11 +1,6 @@
-# Lab DSY L03 [Mô phỏng phân tán] — Kiểm tra mọi cặp tập đại biểu (R, W) trên N = 3
+# Lab DSY L03 — Kiểm tra mọi cặp tập đại biểu (R, W) trên N nút
 
-Viết chương trình Python kiểm vét cạn mọi tập con `R` và `W` kích thước `(2, 2)` trên `3` nút `{0, 1, 2}`: tất cả 9 cặp đều giao nhau (`R+W=4 > 3`), trong khi `(1, 2)` có 3 cặp không giao (`R+W=3 <= 3`), in đúng 3 dòng:
-1. `quorum_2_2_all_intersect=1`
-2. `pair_1_2_disjoint_cases=3`
-3. `n5_min_r_when_w3=3`
+Đọc `stdin` `n=<int> r_good=<int> w_good=<int> r_bad=<int> w_bad=<int>`. Kiểm vét cạn số cặp không giao nhau cho hai cấu hình `(R, W)` và tìm R tối thiểu khi W giữ bằng `w_bad` trên `5` nút.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh DSY L03 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `quorum_2_2_all_intersect=<0|1>`, `pair_1_2_disjoint_cases=<d>`, `n5_min_r_when_w3=<d>` (tức `5 - w_bad + 1`).
+Chấm tự động: `bash labs/cham.sh DSY L03 duong_dan/bai_cua_ban.py`

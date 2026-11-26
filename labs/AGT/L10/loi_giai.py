@@ -1,5 +1,4 @@
-errs = {
-    'wrong_tool': 31, 'bad_args': 18, 'early_stop': 7, 'tool_fail': 4,
-}
-tot = sum(errs.values())
-print(f"top_cause_pct={errs['wrong_tool'] / tot * 100:.1f}% total={tot}")
+import sys
+kv = dict(t.split('=') for t in sys.stdin.read().split())
+errs = {p.split(':')[0]: int(p.split(':')[1]) for p in kv['errs'].split(',')}
+tot = sum(errs.values()); print(f'top_cause_pct={errs[kv["top"]] / tot * 100:.1f}% total={tot}')

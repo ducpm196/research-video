@@ -1,0 +1,404 @@
+id: L09
+course: SPB
+series: SPB · Spring Boot thực chiến với PostgreSQL, Redis và Kafka
+title: Bài 9 — Kiểm thử đơn vị với JUnit 5, Mockito và lát cắt Web
+voice: vi-VN-NamMinhNeural
+rate: -5%
+depth: full
+af2: true
+covers:
+- objective: 1
+  scene: example
+- objective: 2
+  scene: example
+- objective: 3
+  scene: quymo
+source: curriculum/spb.yaml L09; labs/SPB/L09 (chạy thật ./mvnw -B verify với JUnit 5, Mockito và @WebMvcTest)
+assumes: []
+objectives:
+- Cô lập kiểm thử nghiệp vụ chuyển khoản bằng Mockito xác minh thứ tự gọi và kịch bản thiếu số dư
+- Kiểm thử hợp đồng HTTP, kiểm dữ liệu vào và mã phản hồi JSON trên MockMvc không cần khởi động toàn cụm
+- Tính thời gian phản hồi bộ kiểm thử tháp kiểm thử ở 10, 200 và 2 000 ca đơn vị so với tích hợp nặng
+scenes:
+- id: hook
+  kind: hook
+  title: Mỗi thay đổi nhỏ phải đợi 45 giây bật Postgres, Redis và Kafka?
+  checks:
+  - alg.spb_test_pyramid_ms(100, 0) < alg.spb_test_pyramid_ms(0, 5)
+  steps:
+  - show: '<div class=''box key''><p>Nếu bạn chỉ dùng <code>@SpringBootTest</code> gắn cả ba container thật cho mọi phép thử
+      logic cộng trừ đơn giản, bộ kiểm thử sớm phình lên hàng chục phút và khiến cả đội ngại chạy test trước khi gửi mã.</p><p>Giải
+      pháp chuẩn: <b>Tháp kiểm thử (Test Pyramid)</b> gồm hàng trăm bài <b>JUnit 5 + Mockito</b> chạy trong vài mili-giây
+      và lát cắt <b><code>@WebMvcTest</code> + <code>@MockitoBean</code></b> cho tầng HTTP.</p></div>'
+    say: Chào bạn đến với bài chín của khoá Spring Boot thực chiến. Một bộ kiểm thử chạy quá chậm thường bị lập trình viên
+      bỏ qua không chạy trên máy cá nhân trước khi đẩy mã lên kho. Thay vì việc nhỏ nào cũng bật container nặng, kỹ sư chia
+      tháp kiểm thử từ tầng đơn vị cô lập chạy nháy mắt lên tới lát cắt web. Bài hôm nay hướng dẫn bạn cài đặt nhuần nhuyễn
+      JUnit năm, Mockito và bộ kiểm MockMvc mới của Spring Boot bốn chấm một. Một tháp kiểm thử cân đối đặt phần lớn ca kiểm
+      logic vào kiểm thử đơn vị siêu nhanh chạy tức thì trong máy ảo Java. Lớp điều khiển web chỉ cần kiểm thử lát cắt để
+      xác minh chuyển đổi JSON và mã lỗi mà không kéo theo cơ sở dữ liệu.
+    focus:
+    - 0
+    - '1.1'
+    - '1.1'
+    - '1.2'
+    - '1.1'
+    - '1.2'
+    clear: true
+- id: prereq
+  kind: prereq
+  title: 'Ôn nhanh: kiểm thử đơn vị cô lập và lát cắt Spring Boot'
+  steps:
+  - show: <table class='t'><tr><th>loại bài kiểm thử</th><th>những gì được khởi chạy</th></tr><tr><td>Đơn vị thuần (Unit Test)</td><td>Chỉ
+      chạy 1 lớp Java thuần, mọi phụ thuộc thay bằng đối tượng giả <code>@Mock</code></td></tr><tr><td>Lát cắt web (<code>@WebMvcTest</code>)</td><td>Chỉ
+      khởi tạo bộ điều khiển, JSON, Validation và bảo mật; không mở DB</td></tr><tr><td>Toàn cụm (<code>@SpringBootTest</code>)</td><td>Nạp
+      trọn ứng dụng thật và các container thật ở bước chốt tích hợp</td></tr></table>
+    say: Hãy ôn ngắn gọn ba tầng của tháp kiểm thử trong một dự án Spring Boot hiện đại. Ở đáy tháp, bài kiểm đơn vị chỉ tạo
+      duy nhất một lớp nghiệp vụ trong bộ nhớ RAM và thay toàn bộ cổng kết nối ngoài bằng các đối tượng giả lập điều khiển
+      được. Lên giữa tháp, lát cắt web chỉ dựng riêng tầng điều khiển, kiểm dữ liệu vào và bộ chuyển đổi JSON nên chạy rất
+      nhẹ. Đỉnh tháp mới là lúc nối toàn bộ ứng dụng với cơ sở dữ liệu và container thật. Việc thay phụ thuộc bằng đối tượng
+      giả lập giúp kiểm thử cô lập không phụ thuộc mạng, ổ đĩa hay trạng thái môi trường bên ngoài. Mỗi lớp trong tháp kiểm
+      thử phụ trách một rủi ro riêng biệt nhằm tránh lặp lại thử nghiệm cồng kềnh cùng một hành vi.
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.2'
+    - '1.4'
+    clear: true
+- id: sym
+  kind: symbol
+  title: Bộ công cụ JUnit 5, Mockito và đổi mới @MockitoBean trên Boot 4
+  steps:
+  - show: '<table class=''t''><tr><th>chú thích / hàm xác minh</th><th>vai trò trong kiểm thử cô lập</th></tr><tr><td><code>@Mock</code>
+      + <code>@InjectMocks</code></td><td>Tạo giả lập cổng phụ thuộc và tự tiêm vào hàm dựng dịch vụ</td></tr><tr><td><code>verify(...,
+      never())</code></td><td>Chứng minh một hàm nguy hiểm (như trừ tiền) tuyệt đối không bị gọi</td></tr><tr><td><code>InOrder
+      ord = inOrder(...)</code></td><td>Kiểm soát đúng thứ tự thực thi: đọc số dư → trừ tiền → cộng tiền → báo tin</td></tr><tr><td><code>@WebMvcTest</code>
+      + <code>@MockitoBean</code></td><td>Gói mới Boot 4 thay thế <code>@MockBean</code> đã bỏ từ Spring Boot 3.4/4.0</td></tr></table>'
+    say: Bảng này giải thích bốn công cụ chính bạn sẽ viết hằng ngày khi kiểm thử dịch vụ Spring Boot bốn. Hai chú thích đầu
+      giúp tạo giả lập tự động và tiêm thẳng vào hàm dựng của lớp cần kiểm mà không cần bật khung Spring. Hàm xác minh không
+      bao giờ được gọi cực kỳ quan trọng trong tài chính vì giúp khẳng định khi thiếu tiền thì tuyệt đối không phát sinh lệnh
+      trừ tiền. Cuối cùng, trên Boot đời bốn, lớp điều khiển web thử nghiệm dùng chú thích MockitoBean mới thay thế hoàn toàn
+      cho tên cũ đã bị loại bỏ. Đặc biệt chú ý sự thay đổi tên chú thích giả lập trong hệ sinh thái Boot bốn giúp mã kiểm
+      thử web giữ sạch cảnh báo lỗi thời. Bộ kiểm tra thứ tự thực thi biến những cam kết tuần tự nhạy cảm trong giao dịch
+      tiền tệ thành bài kiểm tự động lặp lại được.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    - '1.4'
+    - '1.1'
+    - '1.4'
+    clear: true
+- id: intuition
+  kind: intuition
+  title: Tách biệt kiểm thử hành vi và kiểm thử hợp đồng HTTP không cần DB
+  steps:
+  - show: '<div><svg width="960" height="210" viewBox="0 0 960 210"><rect x="30" y="35" width="415" height="145" rx="10" fill="#dcfce7"
+      stroke="#16a34a" stroke-width="2"/><text x="237.5" y="70" font-size="17" font-weight="700" text-anchor="middle" fill="#1e293b">1.
+      Unit Test (MockitoExtension, ~5 ms/ca)</text><text x="237.5" y="102" font-size="14" text-anchor="middle" fill="#475569">Mock
+      AccountGateway &amp; AlertPort</text><text x="237.5" y="128" font-size="14" text-anchor="middle" fill="#475569">Kiểm
+      thiếu số dư → never().debit(...)</text><text x="237.5" y="154" font-size="14" text-anchor="middle" fill="#475569">Kiểm
+      InOrder: balanceOf → debit → credit → sent</text><rect x="495" y="35" width="435" height="145" rx="10" fill="#dbeafe"
+      stroke="#2a78d6" stroke-width="2"/><text x="712.5" y="70" font-size="17" font-weight="700" text-anchor="middle" fill="#1e293b">2.
+      Web Slice (@WebMvcTest + MockMvc, ~0,8 s)</text><text x="712.5" y="102" font-size="14" text-anchor="middle" fill="#475569">@MockitoBean
+      UnitTransferService</text><text x="712.5" y="128" font-size="14" text-anchor="middle" fill="#475569">Kiểm @Valid từ
+      chối JSON sai → HTTP 400</text><text x="712.5" y="154" font-size="14" text-anchor="middle" fill="#475569">Kiểm hợp lệ
+      → HTTP 201 và cấu trúc JSON</text></svg></div>'
+    say: Quan sát hai tầng kiểm thử nằm bên cạnh nhau nhưng không đụng vào bất kỳ cơ sở dữ liệu nào. Bên trái là kiểm thử đơn
+      vị chạy hoàn toàn trong máy ảo Java không nạp khung Spring nên mỗi ca chỉ mất vài mi-li-giây. Tại đây ta kiểm định
+      chặt thứ tự gọi hàm và nhánh ngoại lệ thiếu tiền.
+    clear: true
+  - show: ''
+    say: Bên phải là lát cắt web thử khả năng giải mã JSON, kiểm ràng buộc đầu vào và định dạng mã trạng thái HTTP trả về.
+      Bằng cách tách rõ ranh giới giữa logic nghiệp vụ thuần túy và lớp biên giao tiếp web, bạn phát hiện lỗi sai ngay khi
+      đang gõ mã. Các kiểm thử đơn vị chạy dưới một giây khuyến khích lập trình viên chạy kiểm tra liên tục trước mỗi bước
+      thay đổi nhỏ.
+- id: formula
+  kind: formula
+  title: Nguyên tắc kiểm thử dựa trên hành vi và chi phí tháp kiểm thử
+  checks:
+  - alg.spb_test_pyramid_ms(200, 1) == 3000
+  steps:
+  - show: <div class='box key'><p><b>Mô hình tính tổng thời gian phản hồi bộ kiểm:</b> $T = N_{\text{unit}} \cdot 5\text{
+      ms} + N_{\text{IT}} \cdot 2000\text{ ms}$.</p><p>Với <b>200 ca đơn vị</b> (1 000 ms) + <b>1 lát cắt/tích hợp nhẹ</b>
+      (2 000 ms), toàn bộ phản hồi hoàn tất đúng <b>3 000 ms (3 giây)</b>.</p><p><b>Kỷ luật đặt giả lập:</b> chỉ mock ranh
+      giới giao tiếp ngoài (Port/Gateway); không viết giả lập cho những quy tắc SQL thật cần cơ sở dữ liệu kiểm ở tầng tích
+      hợp.</p></div>
+    say: Công thức cộng thời gian giúp ta nhìn ngay được lợi thế tốc độ của hình tháp kiểm thử chuẩn. Hai trăm ca đơn vị chạy
+      năm mi-li-giây một ca chỉ tốn một giây, cộng thêm hai giây cho phần khung web vẫn giữ tổng thời gian dưới ba giây. Ta
+      cũng luôn nhớ chỉ giả lập ở cổng giao tiếp ranh giới vì những câu SQL thật hay cấu hình bảo mật cần được kiểm chứng
+      thật ở tầng tích hợp. Khi chi phí chờ bộ kiểm giảm từ vài phút xuống vài giây, chu trình sửa lỗi và kiểm chứng của cả
+      nhóm tăng tốc gấp nhiều lần. Tuy nhiên tuyệt đối không thay thế mọi kiểm thử tích hợp bằng giả lập vì chỉ thùng chứa
+      thật mới bắt được lỗi câu lệnh SQL.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    - '1.1'
+    - '1.2'
+    clear: true
+    introduces:
+    - cdot
+- id: example
+  kind: example
+  title: 'Mã thật: Mockito InOrder / never() và @WebMvcTest dùng @MockitoBean'
+  checks:
+  - 500_000 > 100_000
+  steps:
+  - show: <p><b>1. Unit test kiểm tra thiếu số dư và thứ tự InOrder</b></p><div class="code"><div>@ExtendWith(MockitoExtension.class)
+      class UnitTransferServiceTest {</div><div>  @Mock AccountGateway accounts; @Mock AlertPort alerts; @InjectMocks UnitTransferService
+      service;</div><div>  @Test void insufficientNeverDebits() {</div><div>    when(accounts.balanceOf("A")).thenReturn(50_000L);</div><div>    assertThrows(IllegalStateException.class,
+      () -&gt; service.execute("A", "B", 200_000L));</div><div>    verify(accounts, never()).debit("A", 200_000L);</div><div>  }</div><div>  @Test
+      void strictOrder() {</div><div>    when(accounts.balanceOf("A")).thenReturn(500_000L); service.execute("A", "B", 100_000L);</div><div>    InOrder
+      o = inOrder(accounts, alerts);</div><div>    o.verify(accounts).balanceOf("A"); o.verify(accounts).debit("A", 100_000L);</div><div>    o.verify(accounts).credit("B",
+      100_000L); o.verify(alerts).sent("A", "B", 100_000L);</div><div>} }</div></div>
+    say: Xem hai ca kiểm thử ngắn gọn nhưng chặt chẽ bằng Mockito trên màn hình. Ca đầu giả lập số dư năm mươi nghìn đồng
+      khi lệnh đòi rút hai trăm nghìn, khẳng định hàm ném ngoại lệ mà không trừ tiền hay gửi tin. Ca thứ hai bắt buộc trình
+      kiểm tra thứ tự thực thi xác nhận bước kiểm số dư chạy trước bước trừ nguồn, cộng đích rồi mới gửi thông báo. Bộ kiểm
+      dịch vụ chứng minh không cần khởi tạo khung Spring vẫn thử nghiệm chặt chẽ từng nhánh ngoại lệ và trình tự gọi cổng.
+      Nếu bất kỳ bước nào gọi sai thứ tự như gửi thông báo trước khi cộng tài khoản đích thì kiểm thử thứ tự lập tức báo hỏng.
+    focus:
+    - 1
+    - 2
+    - 2
+    - 1
+    - 2
+    clear: true
+  - show: <p><b>2. Lát cắt @WebMvcTest với @MockitoBean (chuẩn Spring Boot 4)</b></p><div class="code"><div>@WebMvcTest(UnitTransferController.class)</div><div>class
+      UnitTransferWebTest {</div><div>  @Autowired MockMvc mvc;</div><div>  @MockitoBean UnitTransferService service;</div><div>  @Test
+      void returns201AndRejectsInvalid400() throws Exception {</div><div>    when(service.execute("A", "B", 50_000L)).thenReturn("OK:A-&gt;B:50000");</div><div>    mvc.perform(post("/api/v1/unit-transfers").contentType(APPLICATION_JSON)</div><div>      .content("{\"fromId\":\"A\",\"toId\":\"B\",\"amount\":50000}"))</div><div>      .andExpect(status().isCreated()).andExpect(jsonPath("$.receipt").value("OK:A-&gt;B:50000"));</div><div>    mvc.perform(post("/api/v1/unit-transfers").contentType(APPLICATION_JSON)</div><div>      .content("{\"fromId\":\"\",\"toId\":\"B\",\"amount\":-5}"))</div><div>      .andExpect(status().isBadRequest());</div><div>  }</div><div>}</div></div>
+    say: Sang lớp kiểm thử tầng web bên dưới, ta chỉ nạp đúng một bộ điều khiển mục tiêu và thay thế dịch vụ lõi bằng hạt
+      đậu giả lập MockitoBean mới của Boot bốn. Nhờ vậy bộ kiểm MockMvc chạy xong trong nháy mắt để kiểm chứng cả kịch bản
+      hai trăm linh một hợp lệ lẫn kịch bản bốn trăm khi thiếu tài khoản hoặc số tiền âm. Lớp điều khiển chuyển khoản đơn
+      vị chỉ giữ phụ thuộc dịch vụ tối thiểu để mở đầu cuối tạo giao dịch, kẹp kiểm dữ liệu đầu vào hợp lệ. Khi kiểm bằng
+      MockMvc, khung web tự động kích hoạt bộ giải mã JSON và kiểm tra hợp lệ hệt như khi chạy ứng dụng hoàn chỉnh.
+    focus:
+    - 1
+    - 2
+    - 1
+    - 2
+    clear: true
+- id: check
+  kind: check
+  title: 'Chạy thật Boot 4.1.3: Mockito + @WebMvcTest đều xanh tốc độ cao'
+  checks:
+  - alg.spb_test_pyramid_ms(2, 2) == 4010
+  steps:
+  - show: '<p><b>Kết quả chạy thật bộ kiểm KiemL09UnitTest và KiemL09WebTest</b></p><div class="code"><div>// KiemL09UnitTest
+      (MockitoExtension):</div><div>//   - insufficientBalanceNeverDebitsOrAlerts() → PASS</div><div>//   - happyPathVerifiesStrictOrder()
+      → PASS</div><div>// KiemL09WebTest (@WebMvcTest + @MockitoBean):</div><div>//   - webSliceReturns201FromMockService()
+      → PASS</div><div>//   - invalidPayloadRejectedAtWebSlice() → PASS</div><div>KiemL09UnitTest: 2 ca, 0 hỏng | KiemL09WebTest:
+      2 ca, 0 hỏng</div></div>'
+    say: Kết quả chạy thật bộ kiểm nghiệm thu xác nhận cả phần đơn vị dịch vụ lẫn hợp đồng HTTP trên MockMvc đều xanh sạch.
+      Hai ca đơn vị bắt được đúng hành vi không trừ tiền khi thiếu số dư và kiểm chặt thứ tự gọi hàm vì đã ghép bộ kiểm InOrder.
+      Hai ca lát cắt web khẳng định chức năng kiểm dữ liệu vào và mã phản hồi JSON chạy chuẩn mà không cần bật bất kỳ cơ sở
+      dữ liệu nào. Thời gian chạy cả hai lớp kiểm thử đơn vị và lát cắt web chỉ tính bằng vài giây ngắn ngủi thay vì hàng
+      chục giây chờ Docker. Bốn kịch bản đạt chuẩn chứng tỏ hợp đồng điều khiển và quy tắc nghiệp vụ cốt lõi đều tách bạch
+      sạch sẽ.
+    focus:
+    - 1
+    - 2
+    - 2
+    - 1
+    - 2
+    clear: true
+- id: quymo
+  kind: example
+  title: Thời gian bộ kiểm thử ở 10, 200 và 2 000 ca đơn vị so tích hợp
+  checks:
+  - alg.spb_test_pyramid_ms(10, 1) == 2050
+  - alg.spb_test_pyramid_ms(200, 1) == 3000
+  - alg.spb_test_pyramid_ms(2000, 5) == 20000
+  steps:
+  - show: <table class='t'><tr><th>quy mô bộ kiểm thử</th><th>chỉ viết Unit Test (5 ms/ca) + ít IT</th><th>viết toàn bộ bằng
+      @SpringBootTest nặng (~2 s/ca)</th></tr><tr><td><b>10 ca đơn vị</b> + 1 IT</td><td>~2,05 giây</td><td>~20 giây (nếu
+      tạo nhiều ngữ cảnh khác nhau)</td></tr><tr><td><b>200 ca đơn vị</b> + 1 IT</td><td><b>~3,0 giây</b></td><td>~6–7 phút
+      mỗi lần kiểm cục bộ</td></tr><tr><td><b>2 000 ca đơn vị</b> + 5 IT</td><td><b>~20 giây</b> cho toàn dự án</td><td>Hơn
+      1 giờ — lập trình viên bỏ chạy test trước khi commit!</td></tr></table>
+    say: Bảng quy mô cho thấy lý do mọi dự án lớn phải giữ chặt hình tháp kiểm thử ở các mốc mười, hai trăm và hai nghìn ca.
+      Khi chạy hai trăm ca đơn vị kèm một lớp tích hợp nhỏ, phản hồi chỉ mất ba giây. Với hai nghìn ca nghiệp vụ, chạy đơn
+      vị thuần giúp bộ kiểm xong trong hai mươi giây thay vì hàng giờ nếu biến mọi thứ thành tích hợp nặng. Giữ đúng tỉ lệ
+      tháp kiểm thử còn giảm đáng kể chi phí tài nguyên máy chủ tích hợp liên tục khi quy mô dự án mở rộng. Khi bộ kiểm nhanh
+      dưới nửa phút, cả đội sẵn sàng chạy kiểm thử trước mọi lần tích hợp thay vì đợi cuối ngày mới phát hiện lỗi.
+    focus:
+    - 0
+    - '1.3'
+    - '1.4'
+    - '1.3'
+    - '1.4'
+    clear: true
+- id: pitfalls
+  kind: pitfall
+  title: Ba sai lầm làm bộ kiểm thử giả xanh hoặc gãy trên Spring Boot 4
+  steps:
+  - show: <table class='t'><tr><th>bẫy kiểm thử đơn vị và MockMvc hay gặp</th></tr><tr><td><div class='box warn'><b>Lỗi 1
+      — Dùng lại <code>@MockBean</code> của Boot 3 trên Spring Boot 4.1:</b> Không biên dịch được! Phải chuyển sang <code>org.springframework.test.context.bean.override.mockito.MockitoBean</code>.<br><b>Lỗi
+      2 — Viết test phụ thuộc chi tiết giả lập quá mức (stub mọi hàm nội bộ) mà bỏ qua test tích hợp thật:</b> Test vẫn xanh
+      dù câu SQL hoặc cấu hình Security đã hỏng!<br><b>Lỗi 3 — Dùng <code>@WebMvcTest</code> sai gói nhập khẩu:</b> Trên Boot
+      4 nằm ở <code>org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest</code>.</div></td></tr></table>
+    say: Ba lỗi trên bảng đều rất thực tế khi chuyển dự án sang Spring Boot đời bốn và khi thiết kế ca kiểm. Hai lỗi đầu và
+      cuối là nhầm tên gói và chú thích mới của Boot bốn khiến mã kiểm thử không biên dịch nổi. Lỗi ở giữa tinh vi hơn là
+      lạm dụng giả lập tràn lan khiến bài kiểm tự đánh lừa khi câu truy vấn SQL hay cấu hình bảo mật thật đã hỏng. Khi nâng
+      cấp các dự án Boot ba lên Boot bốn, việc tìm thay thế toàn bộ chú thích giả lập hạt đậu cũ là thao tác đầu tiên cần
+      làm. Ngoài ra hãy giữ mỗi ca kiểm thử đơn vị tập trung xác minh một hành vi rõ ràng để dễ đọc hiểu khi bảo trì về sau.
+    focus:
+    - 0
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    clear: true
+- id: quiz
+  kind: quiz
+  title: Kiểm tra nhanh JUnit 5, Mockito và @WebMvcTest
+  checks:
+  - 2000 * 5 / 1000 == 10
+  steps:
+  - show: <ol><li>Trên Spring Boot 4.1.3, chú thích nào thay cho <code>@MockBean</code> bên trong bài kiểm <code>@WebMvcTest</code>?</li><li>Hàm
+      nào của Mockito dùng để bảo đảm phương thức <code>debit(...)</code> không hề bị gọi khi kiểm thử trường hợp thiếu số
+      dư?</li></ol>
+    say: Hãy tự kiểm nhanh hai câu hỏi cốt lõi trước khi sang phần thực hành. Câu một, trên Spring Boot bốn chấm một, bạn
+      dùng chú thích mới nào để thay cho tên cũ khi giả lập một hạt đậu trong lát cắt web? Câu hai, phương thức kiểm chứng
+      nào của Mockito bảo đảm hàm trừ tiền không hề được gọi khi số dư không đủ? Bấm tạm dừng và trả lời. Hai câu hỏi này
+      ôn lại chú thích mới của Boot bốn và hàm chặn gọi nhầm nhạy cảm trong giao dịch tài chính.
+    pause: 20
+  - show: <table class='t'><tr><th>đáp án câu 1</th></tr><tr><td><p>① Chú thích <b><code>@MockitoBean</code></b> (gói <code>org.springframework.test.context.bean.override.mockito.MockitoBean</code>).</p></td></tr></table>
+    say: 'Đáp án câu một: dùng chú thích MockitoBean nằm trong gói ghi đè kiểm thử mới của Spring Framework. Dùng đúng nhãn
+      ghi đè giúp khung web tập trung kiểm tra quy tắc truyền tải mà không kéo theo tầng lưu trữ. Nên nhớ đường dẫn gói mới
+      của chú thích nằm trong không gian tên ghi đè hạt đậu của kiểm thử Spring thay cho gói boot cũ.'
+    clear: true
+  - show: <table class='t'><tr><th>đáp án câu 2</th></tr><tr><td><p>② Dùng <code>verify(accounts, never()).debit(...)</code>
+      (kết hợp khẳng định ngoại lệ <code>assertThrows</code>).</p></td></tr></table>
+    say: 'Đáp án câu hai: gọi hàm xác minh truyền kèm điều kiện không bao giờ để khẳng định hàm trừ tiền tuyệt đối không chạy.
+      Chỉ giả lập tại cổng giao tiếp ngoài để những lỗi truy vấn thật được phát hiện sớm ở bước kiểm thử tích hợp. Xác minh
+      chưa từng gọi đến hàm trừ tiền hay gửi tin là chốt bảo vệ bắt buộc cho mọi nhánh lỗi kiểm tra số dư.'
+    clear: true
+- id: practice
+  kind: practice
+  title: Cài đặt kiểm thử đơn vị thứ tự chuẩn và lát cắt @WebMvcTest
+  lab: labs/SPB/L09
+  steps:
+  - show: <div class='box key'><p><b>Thực hành bài L09 (<code>labs/SPB/L09/de.md</code>):</b> cài đặt <code>UnitTransferService</code>
+      (gọi tuần tự <code>balanceOf → debit → credit → alerts.sent</code>, ném <code>IllegalStateException</code> nếu thiếu
+      số dư) và <code>UnitTransferController</code> (<code>POST /api/v1/unit-transfers</code> nhận <code>@Valid</code> trả
+      <code>201</code> / <code>400</code>), rồi chấm qua 2 bộ kiểm <code>KiemL09UnitTest</code> + <code>KiemL09WebTest</code>:</p><p><code>bash
+      labs/cham.sh SPB L09 duong_dan/du_an_cua_ban</code></p></div>
+    say: Hãy mở đề bài L09 để cài đặt chuẩn xác lớp dịch vụ và bộ điều khiển vượt qua đồng thời hai bộ kiểm đơn vị và lát
+      cắt web. Chú ý giữ đúng thứ tự gọi trừ nguồn trước rồi mới cộng đích trước khi phát thông báo. Bấm tạm dừng và hoàn
+      thành trước khi đối chiếu kết quả chấm. Hãy đọc kỹ quy định thứ tự bốn lời gọi trong dịch vụ và yêu cầu trả mã trạng
+      thái hai trăm linh một cho đầu cuối web. Tách rời hoàn toàn hai lớp kiểm thử đơn vị và lát cắt web đúng theo tên bộ
+      kiểm trình chấm yêu cầu.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    - '1.1'
+    - '1.2'
+    clear: true
+    pause: 30
+  - show: '<p><b>Kết quả chấm KiemL09UnitTest và KiemL09WebTest (tổng 4 ca thật)</b></p><div class="code"><div>KiemL09UnitTest:
+      2 ca, 0 hỏng</div><div>KiemL09WebTest: 2 ca, 0 hỏng</div></div>'
+    say: Màn hình hiển thị kết quả nghiệm thu hai bộ kiểm đơn vị và lát cắt web đều đạt hai trên hai ca không hỏng. Thứ tự
+      gọi hàm và phản hồi ràng buộc HTTP đều được xác minh tự động. Hai bộ kiểm đơn vị và lát cắt web chạy song hành xác nhận
+      đúng logic nội bộ lẫn giao tiếp HTTP bên ngoài.
+    focus:
+    - 1
+    - 2
+    - 2
+    clear: true
+  - show: <div class='box ok'><p><b>Gợi ý nếu kẹt ở bài L09:</b> (1) giữ đúng thứ tự gọi <code>debit(fromId)</code> trước
+      <code>credit(toId)</code>; (2) gắn <code>@Valid</code> ở tham số <code>@RequestBody</code> của <code>UnitTransferController</code>
+      và thêm <code>spring-boot-starter-validation</code>; (3) dùng đúng gói <code>WebMvcTest</code> của Boot 4.</p></div>
+    say: Nếu bộ kiểm báo lệch thứ tự hoặc không chặn được dữ liệu sai ở tầng web, hãy kiểm lại ba gợi ý trên màn hình. Bảo
+      đảm đã gọi trừ tiền nguồn trước cộng tiền đích và gắn đủ chú thích kiểm định trên thân yêu cầu. Kiểm tra đúng tên gói
+      nhập của chú thích giả lập hạt đậu mới nếu trình biên dịch báo không tìm thấy ký hiệu.
+    focus:
+    - 0
+    - 1
+    - 1
+    clear: true
+- id: recap
+  kind: recap
+  title: Tổng kết tháp kiểm thử nhanh nhẹ và chặt chẽ
+  steps:
+  - show: <div class='chain'><span class='n'>JUnit 5 + Mockito (ms)</span><span class='a'>→</span><span class='n'>@WebMvcTest
+      + @MockitoBean</span><span class='a'>→</span><span class='n'>Sẵn sàng tích hợp thật</span></div>
+    say: Bạn đã làm chủ hai tầng đáy của tháp kiểm thử gồm đơn vị cô lập bằng Mockito và lát cắt HTTP nhanh gọn bằng MockMvc.
+      Nhờ chia tách đúng vai trò, bộ kiểm vừa chạy tức thời vừa giữ vững kỷ luật nghiệp vụ cốt lõi. Tầng kiểm thử nhanh đã
+      vững vàng làm lưới bảo vệ tức thời cho các logic nghiệp vụ thay đổi hằng ngày.
+    focus:
+    - '1.1'
+    - '1.2'
+    - '1.2'
+    clear: true
+  - show: <div class='box ok'><b>Bài sau (bài 10):</b> Kiểm thử tích hợp toàn luồng với PostgreSQL 17, Redis 8 và Kafka 3.9
+      qua Testcontainers</div>
+    say: Bài tiếp theo ta chứng minh toàn bộ hệ thống chạy xuyên suốt từ yêu cầu web tới cơ sở dữ liệu, bộ đệm và sự kiện
+      trên ba thùng chứa Docker thật. Hẹn gặp bạn ở bài sau. Nền tảng kiểm thử đơn vị nhanh gọn là bệ phóng vững chắc trước
+      khi ghép toàn bộ hạ tầng thùng chứa thật. Hãy viết thật nhuần nhuyễn tầng đơn vị và lát cắt web trước khi tiến sang
+      kiểm thử tích hợp toàn cụm trên thùng chứa thật. Kỹ năng này giúp toàn đội kiểm thử tự tin hơn khi nâng cấp mã nguồn.
+    clear: true
+    forward_ref: true
+asr_reviewed:
+- sentence: Bài hôm nay hướng dẫn bạn cài đặt nhuần nhuyễn JUnit năm, Mockito và bộ kiểm MockMvc mới của Spring Boot bốn chấm
+    một.
+  reason: 'ASR chép “Bài hôm nay hướng dẫn bạn cài đặt nhiều nhiễn dây Unique 5, Mockito và bộ kiểm Mock MVC mới của Springbook
+    4.1.” (khớp 0.708, khác “nhuần nhuyễn junit” → nghe thành “nhiều nhiễn dây unique”; “mockmvc” → nghe thành “mock mvc”;
+    “spring boot” → nghe thành “springbook”; “chấm” → nghe thành “”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh
+    của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Chào bạn đến với bài chín của khoá Spring Boot thực chiến.
+  reason: 'ASR chép “Chào bạn đến với bài chính của khóa Springbook thực chiến.” (khớp 0.783, khác “chín” → nghe thành “chính”;
+    “spring boot” → nghe thành “springbook”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên
+    ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: 'Đáp án câu một: dùng chú thích MockitoBean nằm trong gói ghi đè kiểm thử mới của Spring Framework.'
+  reason: 'ASR chép “Đáp án câu 1, dùng chủ thích Mocky Tobin nằm trong gói ghi đề kiểm thử mới của Spring Framework.” (khớp
+    0.821, khác “chú” → nghe thành “chủ”; “mockitobean” → nghe thành “mocky tobin”; “đè” → nghe thành “đề”): biến thể phiên
+    âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Bạn đã làm chủ hai tầng đáy của tháp kiểm thử gồm đơn vị cô lập bằng Mockito và lát cắt HTTP nhanh gọn bằng MockMvc.
+  reason: 'ASR chép “Bạn đã làm chủ hai tầng đáy của tháp kiểm thử gồm đơn vị cô lập bằng móc Kito và lá cắt HTTP nhanh gọn
+    bằng móc MVC.” (khớp 0.862, khác “ki tô” → nghe thành “kito”; “lát” → nghe thành “lá”; “em vi xi” → nghe thành “mvc”):
+    biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Lên giữa tháp, lát cắt web chỉ dựng riêng tầng điều khiển, kiểm dữ liệu vào và bộ chuyển đổi JSON nên chạy rất
+    nhẹ.
+  reason: 'ASR chép “Lên giữa thác, lá cắt web chỉ dựng riêng tầng điều khiển, kiểm giữ liệu vào và bộ chuyển đổi dây sân
+    nên chạy rất nhẹ.” (khớp 0.863, khác “tháp lát” → nghe thành “thác lá”; “json” → nghe thành “dây sân”): biến thể phiên
+    âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Ba lỗi trên bảng đều rất thực tế khi chuyển dự án sang Spring Boot đời bốn và khi thiết kế ca kiểm.
+  reason: 'ASR chép “Ba lỗi trên bảng đều trức thực tế khi chuyển dự án sang Springbook 4 và khi thiết kế ca kiểm.” (khớp
+    0.864, khác “rất” → nghe thành “trức”; “spring boot đời” → nghe thành “springbook”): biến thể phiên âm từ mượn/thanh điệu
+    thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Bên phải là lát cắt web thử khả năng giải mã JSON, kiểm ràng buộc đầu vào và định dạng mã trạng thái HTTP trả
+    về.
+  reason: 'ASR chép “Bên phải là lát cắt web thử khả năng giải mã dây sân, kiểm trang buộc đầu vào và định dạng mã trang thái
+    HTTP trả về.” (khớp 0.868, khác “json” → nghe thành “dây sân”; “ràng” → nghe thành “trang”; “trạng” → nghe thành “trang”):
+    biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Sang lớp kiểm thử tầng web bên dưới, ta chỉ nạp đúng một bộ điều khiển mục tiêu và thay thế dịch vụ lõi bằng hạt
+    đậu giả lập MockitoBean mới của Boot bốn.
+  reason: 'ASR chép “Sang lớp kiểm thử tầng web bên dưới, ta chỉ nạp đúng một bộ điều khiển mục tiêu và thay thế dịch vụ loại
+    bằng hạt đầu giả lập Mockito Bin mới của búc 4.” (khớp 0.87, khác “lõi” → nghe thành “loại”; “đậu” → nghe thành “đầu”;
+    “mockitobean” → nghe thành “mockito bin”; “boot” → nghe thành “búc”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh
+    của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Cuối cùng, trên Boot đời bốn, lớp điều khiển web thử nghiệm dùng chú thích MockitoBean mới thay thế hoàn toàn
+    cho tên cũ đã bị loại bỏ.
+  reason: 'ASR chép “Cuối cùng, trên bút đời 4, lớp điều khiển web thử nghiệm dùng chú thích Mockito bin mới thay thế hoàn
+    toàn cho tên cũ đã bị loại bỏ.” (khớp 0.912, khác “boot” → nghe thành “bút”; “mockitobean” → nghe thành “mockito bin”):
+    biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Hai ca đơn vị bắt được đúng hành vi không trừ tiền khi thiếu số dư và kiểm chặt thứ tự gọi hàm vì đã ghép bộ kiểm
+    InOrder.
+  reason: 'ASR chép “2K đơn vị bắt được đúng hành vi không trừ tiền khi thiếu số dư và kiểm chặt thứ tự gọi hàm vì đã ghép
+    bộ kiểm in order.” (khớp 0.918, khác “ca” → nghe thành “k”; “o đơ” → nghe thành “order”): biến thể phiên âm từ mượn/thanh
+    điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Kết quả chạy thật bộ kiểm nghiệm thu xác nhận cả phần đơn vị dịch vụ lẫn hợp đồng HTTP trên MockMvc đều xanh sạch.
+  reason: 'ASR chép “Kết quả chạy thật bộ kiểm nghiệm thu xác nhận cả phần đơn vị dịch vụ lẫn hợp đồng HTTP trên móc MVC đều
+    xanh sạch.” (khớp 0.941, khác “mockmvc” → nghe thành “móc mvc”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của
+    Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Câu hai, phương thức kiểm chứng nào của Mockito bảo đảm hàm trừ tiền không hề được gọi khi số dư không đủ?
+  reason: 'ASR chép “Câu 2, phương thức kiểm chứng nào của Mocchito bảo đảm hàm trừ tiền không hề được gọi khi số dư không
+    đủ.” (khớp 0.957, khác “mockito” → nghe thành “mocchito”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper,
+    câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Nhờ vậy bộ kiểm MockMvc chạy xong trong nháy mắt để kiểm chứng cả kịch bản hai trăm linh một hợp lệ lẫn kịch bản
+    bốn trăm khi thiếu tài khoản hoặc số tiền âm.
+  reason: 'ASR chép “Nhờ vậy bộ kiểm mốc MVC chạy xong trong nháy mắt để kiểm chứng cả kịch bản 200 Linh một hợp lệ lẫn kịch
+    bản 400 khi thiếu tài khoản hoặc số tiền âm.” (khớp 0.958, khác “mockmvc” → nghe thành “mốc mvc”): biến thể phiên âm từ
+    mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'

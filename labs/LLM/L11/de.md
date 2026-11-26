@@ -1,6 +1,6 @@
-# Lab LLM L11 — Ảo giác, hiệu chuẩn và tự nhất quán
+# Lab LLM L11 — Tự nhất quán đa số trên N lần sinh độc lập
 
-Giả sử mỗi lần sinh trả lời đúng độc lập với xác suất `p = 0.65`. Dùng tổng nhị thức `k = 4..7` trong 7 lần thử để tính xác suất đáp án đa số đúng.
+Đọc `stdin` `p=<float> trials=<int>`. Dùng phân phối nhị thức tính xác suất thắng đa số `k >= trials // 2 + 1`.
 
-Định dạng đầu ra (1 dòng):
-`single=<3 chữ số> maj7_indep=<3 chữ số>`
+In 1 dòng: `single=<.3f> maj7_indep=<.3f>`.
+Chấm tự động: `bash labs/cham.sh LLM L11 duong_dan/bai_cua_ban.py`

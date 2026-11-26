@@ -1,4 +1,4 @@
-C, G, ovl = 120, 40, 25
-eff_seq = C / (C + G) * 100
-eff_ovl = C / (C + G - ovl) * 100
-print(f"seq_eff={eff_seq:.1f}% overlap_eff={eff_ovl:.1f}%")
+import sys
+s = sys.stdin.read().strip() or "120 40 25"
+C, G, ovl = map(float, s.split())
+print(f"seq_eff={C/(C+G)*100:.1f}% overlap_eff={C/(C+G-ovl)*100:.1f}%")

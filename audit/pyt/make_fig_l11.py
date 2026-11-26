@@ -1,6 +1,7 @@
 """Sinh audit/pyt/fig_l11.json: dữ liệu THẬT của lệnh hexbin trong bài L11 (cùng mã P_HEX: rng = default_rng(1), 100000 điểm, gridsize=30).
 Chạy bằng labs/.venv-pyt (có numpy, matplotlib): labs/.venv-pyt/Scripts/python -B audit/pyt/make_fig_l11.py
 l11.py đọc tệp này và vẽ SVG từ toạ độ ô và số đếm thật (không bịa số)."""
+import sys as _sys; from pathlib import Path as _P; _sys.path.insert(0, str(_P(__file__).resolve().parents[1])); import _frozen  # noqa: E402,F401
 import json
 from pathlib import Path
 

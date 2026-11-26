@@ -5,6 +5,7 @@ bài (hoặc mẫu) gốc vào audit/dms/af2/base/, các lần sau luôn xuất 
 Một lần `apply` làm: thêm `af2: true`, thay mục tiêu (nếu có), thêm `covers`, thêm cảnh mới (trước cảnh recap), thay chữ đúng-một-lần
 (`repl`), ghi lab (labkit.write_lab; mong_doi.txt = ĐẦU RA THẬT của lời giải Python), và đồng bộ sổ screen_code DMS cho các khối mã mới.
 Không chạy build/tts/asr/git."""
+import sys as _sys; from pathlib import Path as _P; _sys.path.insert(0, str(_P(__file__).resolve().parents[2])); import _frozen  # noqa: E402,F401
 import json
 import os
 import re

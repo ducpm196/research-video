@@ -1,6 +1,6 @@
-# Lab IRS L03 — Truy hồi dày và tìm láng giềng gần đúng theo cụm
+# Lab IRS L03 — Truy hồi dày IVF: phép so theo cụm và tăng tốc
 
-Cho kho `2_000_000` vector chia thành `1_000` cụm đều nhau. Khi truy vấn dò `8` cụm có tâm gần nhất, tính tổng số phép so cần thực hiện (gồm bước so với mọi tâm cụm cộng với duyệt các vector trong cụm đã chọn) và hệ số tăng tốc so với duyệt toàn bộ kho.
+Đọc từ đầu vào chuẩn (`stdin`, dạng `khoá=giá_trị`) ba số nguyên `N=<int> clusters=<int> probe=<int>`. Tính tổng số phép so IVF `ivf = clusters + probe * (N // clusters)` và hệ số tăng tốc `N / ivf` so với quét thẳng.
 
-Định dạng đầu ra (1 dòng):
-`ivf_ops=<số nguyên> speedup=<1 chữ số>x`
+In 1 dòng đúng nhãn (`<d>` là số nguyên, `<.1f>` làm tròn 1 chữ số thập phân): `ivf_ops=<d> speedup=<.1f>x`.
+Chấm tự động: `bash labs/cham.sh IRS L03 duong_dan/bai_cua_ban.py`

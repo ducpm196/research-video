@@ -1,11 +1,6 @@
-# Lab SEC L04 — Kiểm tra chính sách phân quyền theo vai trò (RBAC) tối thiểu
+# Lab SEC L04 — Kiểm tra chính sách phân quyền RBAC tối thiểu
 
-Viết chương trình Python cài bảng phân quyền theo vai trò `RBAC = {'accountant': {'read', 'create'}, 'auditor': {'read'}}`: kiểm tra kiểm toán viên tạo hoá đơn bị từ chối, còn kế toán viên đọc/tạo hợp lệ, in đúng 3 dòng:
-1. `accountant_create=1`
-2. `auditor_read=1`
-3. `auditor_create_denied=1`
+Đọc `stdin` `r1=<role:act> r2=<role:act> deny_check=<role:act>`. Dựa trên bảng quyền `accountant: read,create`, `auditor: read`, kiểm tra từng yêu cầu quyền hạn.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh SEC L04 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `accountant_create=<0|1>`, `auditor_read=<0|1>`, `auditor_create_denied=<0|1>`.
+Chấm tự động: `bash labs/cham.sh SEC L04 duong_dan/bai_cua_ban.py`

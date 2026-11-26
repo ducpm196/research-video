@@ -306,6 +306,38 @@ def main():
         print(f"{'PASS' if ok else 'FAIL'} | {p.name} lint sạch ({len(r.errors)} lỗi)")
         for e in r.errors:
             print("     " + e)
+    # E57 (WP-0.2): alg.<hàm> với đối số >= 10^8 ngoài BIG_N_SAFE bị chặn tĩnh; par_amdahl(0.75, 10**9) trong BIG_N_SAFE phải PASS
+    s57_bad = copy.deepcopy(base)
+    s57_bad["scenes"][0]["checks"] = ["alg.par_tree_sum(10 ** 9)[0] > 0"]
+    ok_bad = any("E57" in e for e in lv.lint(s57_bad, quiet=True).errors)
+    s57_ok = copy.deepcopy(base)
+    s57_ok["scenes"][0]["checks"] = ["abs(alg.par_amdahl(0.75, 10 ** 9) - 4.0) < 1e-6"]
+    ok_good = not any("E57" in e for e in lv.lint(s57_ok, quiet=True).errors)
+    ok = ok_bad and ok_good
+    fails += not ok
+    print(f"{'PASS' if ok else 'FAIL'} | E57 chặn par_tree_sum(10**9) và cho phép par_amdahl(0.75, 10**9)")
+    # WP-0.3: trường `next:` chi phối cả E24 (hẹn đúng số bài kế) và E37 (next: null là bài cuối nên cấm hẹn bài sau)
+    s_nxt = copy.deepcopy(base)
+    s_nxt["ref_lesson_no"] = 21
+    s_nxt["next"] = "L44"
+    s_nxt["scenes"][-1]["steps"][-1] = {
+        "show": "<p>Bài sau (bài 22): sai.</p>",
+        "say": "Ở bài sau, bài 22, ta học tiếp.",
+        "forward_ref": True,
+    }
+    e24_hit = any("E24" in e and "bài 44" in e for e in lv.lint(s_nxt, quiet=True).errors)
+    s_nxt_end = copy.deepcopy(base)
+    s_nxt_end["ref_lesson_no"] = 21
+    s_nxt_end["next"] = None
+    s_nxt_end["scenes"][-1]["steps"][-1] = {
+        "show": "<p>Kết thúc.</p>",
+        "say": "Hẹn gặp bạn ở bài sau.",
+        "forward_ref": True,
+    }
+    e37_hit = any("E37" in e for e in lv.lint(s_nxt_end, quiet=True).errors)
+    ok = e24_hit and e37_hit
+    fails += not ok
+    print(f"{'PASS' if ok else 'FAIL'} | next: được E24 và E37 đọc đúng")
     print(f"tests: {fails} FAIL\nchecked_at={lv.now()}")
     return 1 if fails else 0
 

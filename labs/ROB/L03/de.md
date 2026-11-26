@@ -1,9 +1,6 @@
-# Lab ROB L03 — Tính mật độ khả năng đo Gauss ở 1 sigma so với 3 sigma
+# Lab ROB L03 — Mật độ khả năng đo Gauss
 
-Với mô hình cảm biến phân phối chuẩn (Gauss) `mu = 3.0 m, sigma = 0.2 m`, tính mật độ tại hai phép đo `z1 = 3.2 m` và `z3 = 3.6 m`, cùng tỉ số suy giảm `pdf_32 / pdf_36`.
-In đúng 1 dòng `pdf_32=... pdf_36=... ratio=...x` (`pdf_32` lấy 3 chữ số `:.3f`, `pdf_36` lấy 4 chữ số `:.4f`, `ratio` lấy 1 chữ số `:.1f`).
-
-Chấm tự động:
-```bash
-bash labs/cham.sh ROB L03 duong_dan/bai_cua_ban.py
-```
+Đọc `mu sigma z1 z3` từ stdin (ví dụ `3.0 0.2 3.2 3.6`). Tính `pdf(z1)`, `pdf(z3)` và tỉ số `pdf(z1)/pdf(z3)`.
+In đúng 1 dòng `pdf_32=<3 chữ số> pdf_36=<4 chữ số> ratio=<1 chữ số>x`.
+Nền tảng Python (`PYT:L04`): đọc dữ liệu qua `sys.stdin.read().strip()`.
+Lưu ý giữ nguyên tên khoá `pdf_32=... pdf_36=...` ứng với `pdf(z1)` và `pdf(z3)`.

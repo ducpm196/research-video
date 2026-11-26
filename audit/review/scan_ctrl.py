@@ -2,21 +2,22 @@
 \\t → TAB, \\b → BS, \\f → FF, \\v → VT, \\r → CR, \\a → BEL, \\n → xuống dòng trước 'eq|abla|u|ot|e |ewline|leq…')."""
 import glob, re, sys, yaml
 sys.stdout.reconfigure(encoding="utf-8")
-CTRL = re.compile(r"[\x07\x08\x09\x0b\x0c\x0d]")
+CTRL_ERR = re.compile(r"[\x07\x08\x0b\x0c\x0d]")
 NL_TEX = re.compile(r"\n(eq|abla|u\b|ot\b|ewline|leq|geq|eg\b|i\b|otin|subseteq|ormalsize)")
-hits = 0
+tabs = errs = 0
 for f in sorted(glob.glob("lessons/*/L*_*.yaml")):
     s = yaml.safe_load(open(f, encoding="utf-8"))
     def walk(x, path):
-        global hits
+        global tabs, errs
         if isinstance(x, str):
-            for m in CTRL.finditer(x):
-                hits += 1
+            tabs += x.count("\t")
+            for m in CTRL_ERR.finditer(x):
+                errs += 1
                 print(f"{f} {path} ctrl={hex(ord(m.group(0)))} …{x[max(0, m.start()-15):m.start()+15]!r}")
             if path.endswith("show"):
                 for m in NL_TEX.finditer(x):
                     if "$" in x[max(0, m.start()-80):m.start()] or "\\" in x[max(0, m.start()-80):m.start()]:
-                        hits += 1
+                        errs += 1
                         print(f"{f} {path} NEWLINE-TEX …{x[max(0, m.start()-20):m.start()+12]!r}")
         elif isinstance(x, dict):
             for k, v in x.items():
@@ -25,4 +26,5 @@ for f in sorted(glob.glob("lessons/*/L*_*.yaml")):
             for i, v in enumerate(x):
                 walk(v, f"{path}[{i}]")
     walk(s, "")
-print("hits:", hits)
+print(f"hits: {tabs} tab, {errs} lỗi")
+sys.exit(1 if errs else 0)

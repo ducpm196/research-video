@@ -1,11 +1,8 @@
 # Lab DAN L01 — Trung bình có trọng số và bẫy trung bình của hai trung bình
 
-Cửa hàng A có `80` đơn trung bình `40` nghìn, cửa hàng B có `20` đơn trung bình `190` nghìn. Tính trung bình gộp sai `(mA + mB)/2` và trung bình gộp đúng có trọng số.
+Đọc `stdin` `na=<int> ma=<float> nb=<int> mb=<float>`. So sánh trung bình gộp sai `(ma + mb) / 2` với trung bình có trọng số đúng `(na*ma + nb*mb) / (na + nb)`.
 
-Định dạng đầu ra:
-`naive=<2 chữ số> weighted=<2 chữ số>`
+In 1 dòng: `naive=<.2f> weighted=<.2f>`.
+Chấm tự động: `bash labs/cham.sh DAN L01 duong_dan/bai_cua_ban.py`
 
-Chấm tự động:
-```bash
-bash labs/cham.sh DAN L01 duong_dan/bai_cua_ban.py
-```
+> Gợi ý đọc `stdin`: `kv = {k: float(v) for k, v in (t.split("=") for t in sys.stdin.read().split())}`.

@@ -1,6 +1,4 @@
-# Lab CVI L08 — Phát hiện vật thể: giao trên hợp (IoU) và loại bỏ không cực đại (NMS)
+# Lab CVI L08 — Giao trên hợp IoU cho hai cặp hộp giới hạn
 
-Tính giá trị IoU giữa hộp `(0, 0, 12, 12)` với `(6, 6, 18, 18)` (hai vật lệch nhau) và với `(2, 0, 14, 12)` (cần lọc trùng lặp).
-
-Định dạng đầu ra (1 dòng):
-`iou_diff=<3 chữ số> iou_nms=<3 chữ số>`
+Đọc `b0 b1 b2` (mỗi hộp `x1,y1,x2,y2`) từ stdin (ví dụ `0,0,12,12 6,6,18,18 2,0,14,12`). Tính `IoU(b0,b1)` và `IoU(b0,b2)`.
+In đúng 1 dòng `iou_diff=<3 chữ số> iou_nms=<3 chữ số>`.

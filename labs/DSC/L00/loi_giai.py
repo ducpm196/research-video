@@ -1,5 +1,4 @@
-seen_n, seen_cnt = 120, 75
-unseen_n, unseen_cnt = 150, 30
-is_observational = 1
-obs_diff = (seen_cnt / seen_n) - (unseen_cnt / unseen_n)
-print(f"obs_diff={obs_diff:.2f} needs_randomization={int(is_observational == 1)}")
+import sys
+kv = {k: int(v) for k, v in (t.split('=') for t in sys.stdin.read().split())}
+diff = (kv['seen_c'] / kv['seen_n']) - (kv['un_c'] / kv['un_n'])
+print(f'obs_diff={diff:.2f} needs_randomization={int(kv["obs"] == 1)}')

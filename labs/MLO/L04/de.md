@@ -1,11 +1,8 @@
-# Lab MLO L04 — Quá khớp tập kiểm định khi thử 150 cấu hình ngẫu nhiên trên 80 mẫu
+# Lab MLO L04 — Quá khớp tập kiểm định khi thử nhiều cấu hình ngẫu nhiên
 
-Mô phỏng tất định bằng `random.Random(7)` cho `150` bộ đoán bừa (đúng `50%` trên `80` mẫu kiểm định) rồi lấy điểm cao nhất trong 150 bộ để thấy sự thổi phồng.
+Đọc `stdin` `seed=<int> models=<int> samples=<int>`. Mô phỏng tất định `models` bộ đoán bừa đúng 50% trên `samples` mẫu và lấy điểm may mắn nhất.
 
-Định dạng đầu ra:
-`true_skill=0.50 best_lucky_val=<2 chữ số>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh MLO L04 duong_dan/bai_cua_ban.py
-```
+In 1 dòng: `true_skill=0.50 best_lucky_val=<.2f>`.
+Chấm tự động: `bash labs/cham.sh MLO L04 duong_dan/bai_cua_ban.py`
+Nền tảng Python (`PYT:L04`): đọc dữ liệu qua `sys.stdin.read().strip()`.
+Quy ước mô phỏng tung đồng xu: dùng `rng = random.Random(seed)` và tính mẫu đúng khi `rng.random() < 0.5`.

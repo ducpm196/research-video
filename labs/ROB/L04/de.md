@@ -1,9 +1,5 @@
-# Lab ROB L04 — Cập nhật hậu nghiệm bộ lọc Bayes rời rạc trên hành lang 8 ô
+# Lab ROB L04 — Bộ lọc Bayes rời rạc trên hành lang
 
-Một hành lang vòng `8` ô (`0..7`) có cửa tại các ô `{2, 5}` và niềm tin tiên nghiệm đều `1/8`. Khi cảm biến báo thấy cửa (khả năng `0.85` tại ô có cửa, `0.15` tại ô tường), tính vector xác suất chuẩn hoá sau cập nhật.
-In đúng 1 dòng `p_door2=... p_wall0=... sum=...` (3 chữ số, 1 chữ số cho sum).
-
-Chấm tự động:
-```bash
-bash labs/cham.sh ROB L04 duong_dan/bai_cua_ban.py
-```
+Đọc `N p_hit p_wall|d0,d1` từ stdin (ví dụ `8 0.85 0.15|2,5`). Cập nhật niềm tin tiên nghiệm đều và in xác suất ô 2, ô 0.
+In đúng 1 dòng `p_door2=<3 chữ số> p_wall0=<3 chữ số> sum=1.0`.
+Nền tảng Python (`PYT:L04`): đọc dữ liệu qua `sys.stdin.read().strip()`.

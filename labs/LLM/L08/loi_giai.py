@@ -1,3 +1,4 @@
-full = 2048 * 2048
-lora = 2 * 2048 * 16
-print(f"full={full} lora={lora} ratio={lora / full * 100:.2f}%")
+import sys
+kv = {k: int(v) for k, v in (t.split('=') for t in sys.stdin.read().split())}
+f = kv['dim'] ** 2; lr = 2 * kv['dim'] * kv['r']
+print(f'full={f} lora={lr} ratio={lr / f * 100:.2f}%')

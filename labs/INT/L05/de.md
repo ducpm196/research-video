@@ -1,6 +1,6 @@
 # Lab INT L05 — Trả lời một câu phỏng vấn có số: nhân xử lý, điểm Z, UCB1, cosine (giấy bút, `loi_giai.md`)
 
-Bài giấy bút: không chạy mã, và `cham.sh` không chấm tệp `.md`. Tính tay (máy tính bỏ túi được dùng cho căn và logarit tự nhiên), ghi từng dòng đúng định dạng dưới đây, rồi tự so với `loi_giai.md`.
+Bài giấy bút: không chạy mã, có thể tự so với `loi_giai.md` hoặc chấm định dạng bằng `bash labs/cham.sh INT L05 bai_lam.md`. Tính tay (máy tính bỏ túi được dùng cho căn và logarit tự nhiên), ghi từng dòng đúng định dạng dưới đây.
 
 Số liệu (số minh hoạ, chưa đo trên mô hình thật):
 - **12 000** giao dịch mỗi giây; mô hình nhẹ **3 mili giây**, mô hình nặng **40 mili giây** mỗi giao dịch (một nhân xử lý một giao dịch tại một thời điểm);

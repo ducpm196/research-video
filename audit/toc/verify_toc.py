@@ -253,4 +253,14 @@ ok("L14 .*.*=.* bằng cách giữ tập: 5 vị trí; x= + 20 x: 106 ≤ 22·5;
    alg.thompson_match(".*.*=.*", "x=" + "x" * 20) == (True, [3] + [5] * 21, 106)
    and alg.thompson_match(".*.*=.*", "x" * 20)[0] is False and alg.thompson_match(".*.*=.*", "x" * 20)[2] == 60)
 ok("L14 RE2 ≈ 10 KB so với ≈ 0,5 KB: gấp 20; 200 mẫu → 2000 KB so với 100 KB", 10 / 0.5 == 20 and 200 * 10 == 2000 and 200 * 0.5 == 100)
+# ── Kiểm tự động mọi lab (du_lieu.txt + ca_an/) qua cham.sh ──
+import subprocess as _subp
+from pathlib import Path as _LabPath
+_BASH = r"C:\Program Files\Git\bin\bash.exe"
+if not _LabPath(_BASH).exists():
+    _BASH = "bash"
+for _ld in sorted((ROOT / "labs" / "TOC").glob("L*")):
+    _rp = _subp.run([_BASH, str(ROOT / "labs" / "cham.sh"), "TOC", _ld.name], cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
+    ok(f"{_ld.name}:lab", _rp.returncode == 0 and "PASS" in _rp.stdout and "2 ca an" in _rp.stdout)
+
 print(f"\n{sum(c for _, c in R)}/{len(R)} PASS")

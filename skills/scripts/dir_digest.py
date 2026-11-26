@@ -3,9 +3,11 @@
 
 Read-only, standard library only, no network, writes nothing but stdout.
 
-Usage:  python3 dir_digest.py DIR [--short] [--list]
+Usage:  python3 dir_digest.py DIR [--short] [--list] [--json]
   --short  print the first 16 hex digits instead of all 64
   --list   also print every hashed file (relative path and size) to stderr
+  --json   print one JSON object instead of the digest line: schema_version 1, result PASS or NOT_VERIFIED, digest (or
+           null), files (count), findings (path and reason); the exit codes stay the same
 
 Method: sha256 over, for each regular file sorted bytewise by its POSIX
 relative path in UTF-8: the bytes of the relative path, 0x00, the file
@@ -22,6 +24,7 @@ reparse points (for example cloud placeholders) are read like ordinary entries.
 Exit codes: 0 digest printed | 2 no valid digest | 3 not a directory.
 """
 import hashlib
+import json
 import os
 import stat
 import sys
@@ -75,11 +78,13 @@ def compute(root):
     for rel_b, full in hashed:
         try:
             with open(full, "rb") as fh:
-                data = fh.read()
+                h.update(rel_b + b"\x00")
+                for chunk in iter(lambda: fh.read(1048576), b""):
+                    h.update(chunk)
+                h.update(b"\x00")
         except OSError as err:
             findings.append((rel_b.decode("utf-8"), "cannot be read: %s" % err.strerror))
             continue
-        h.update(rel_b + b"\x00" + data + b"\x00")
     if findings:
         return None, hashed, findings
     return h.hexdigest(), hashed, findings
@@ -88,13 +93,17 @@ def compute(root):
 def main(argv):
     args = [a for a in argv[1:] if not a.startswith("--")]
     flags = {a for a in argv[1:] if a.startswith("--")}
-    if len(args) != 1 or not flags <= {"--short", "--list"}:
+    if len(args) != 1 or not flags <= {"--short", "--list", "--json"}:
         sys.stderr.write(__doc__)
         return 3
     if not os.path.isdir(args[0]):
         sys.stderr.write("not a directory: %s\n" % args[0])
         return 3
     digest, hashed, findings = compute(args[0])
+    if "--json" in flags:
+        print(json.dumps({"schema_version": 1, "tool": "dir_digest", "result": "PASS" if digest else "NOT_VERIFIED", "digest": digest,
+                          "files": len(hashed), "findings": [{"path": p, "reason": w} for p, w in findings]}, indent=1, sort_keys=True))
+        return 0 if digest else 2
     if digest is None:
         for rel, why in findings:
             sys.stderr.write("NO VALID DIGEST: %s: %s\n" % (rel, why))

@@ -1,11 +1,8 @@
-# Lab MLO L03 — Kiểm thử bất biến hành vi và theo từng lát nhóm thay vì điểm tổng
+# Lab MLO L03 — Kiểm thử bất biến hành vi và lát nhóm
 
-Viết hàm chấm điểm `pred(s)` trả `1` nếu có `'tot'` ngược lại `0`, kiểm thử bất biến khi thử đủ 3 câu `'Binh is tot'`, `'Chi is tot'`, `'Dung is tot'`, và kiểm ngưỡng `>= 0.80` cho từng nhóm `{'maj': 0.94, 'min': 0.71}`.
+Đọc `stdin` `names=<n1,n2,...> kw=<str> slices=<k:v,...> thr=<float>` (tuỳ chọn `bias=<sub_bi_le>`). Kiểm tra mọi câu `name is <kw>` đều dự đoán `1` (không chứa `bias`) và mọi nhóm lát đạt `>= thr`.
 
-Định dạng đầu ra:
-`inv_pass=<1 hoặc 0> min_slice_pass=<1 hoặc 0>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh MLO L03 duong_dan/bai_cua_ban.py
-```
+In 1 dòng: `inv_pass=<0|1> min_slice_pass=<0|1>`.
+Chấm tự động: `bash labs/cham.sh MLO L03 duong_dan/bai_cua_ban.py`
+Nền tảng Python (`PYT:L04`): đọc dữ liệu qua `sys.stdin.read().strip()`.
+Tham số tuỳ chọn `bias=<chuỗi>` (nếu có): bất kỳ tên nào chứa chuỗi con `bias` đều bị dự đoán sai `0` (khiến `inv_pass=0`).

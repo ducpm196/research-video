@@ -1,9 +1,4 @@
-# Lab GFX L13 — Đối chiếu bóng sáng Phong và tốc độ giảm nhiễu Monte Carlo
+# Lab GFX L13 — Phong và giảm nhiễu Monte Carlo
 
-Tính giá trị phản chiếu Phong `0.92^32` và hệ số giảm độ lệch chuẩn nhiễu khi tăng số tia mẫu từ `4` lên `100` (`sqrt(100 / 4)`).
-In đúng 1 dòng `phong=... mc_noise_reduction=...x` (3 chữ số cho phong, 1 cho ratio).
-
-Chấm tự động:
-```bash
-bash labs/cham.sh GFX L13 duong_dan/bai_cua_ban.py
-```
+Đọc `base exp spp1 spp2` từ stdin (ví dụ `0.92 32 4 100`). Tính `base^exp` và hệ số giảm nhiễu `sqrt(spp2 / spp1)`.
+In đúng 1 dòng `phong=<3 chữ số> mc_noise_reduction=<1 chữ số>x`.

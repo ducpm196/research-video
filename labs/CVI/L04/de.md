@@ -1,6 +1,4 @@
-# Lab CVI L04 — Khớp đặc trưng và phép thử tỉ số
+# Lab CVI L04 — Phép thử tỉ số Lowe khi khớp đặc trưng
 
-Kiểm hai cặp khoảng cách mô tả đặc trưng SIFT gần nhất / gần nhì: cặp 1 `(0.24, 0.40)` và cặp 2 `(0.42, 0.50)` qua ngưỡng giữ `tỉ số < 0.8`.
-
-Định dạng đầu ra (1 dòng):
-`keep_good=<0 hoặc 1> keep_ambiguous=<0 hoặc 1>`
+Đọc `a1 b1 a2 b2 thr` từ stdin (ví dụ `0.24 0.40 0.42 0.50 0.8`). Kiểm tra `a1/b1 < thr` và `a2/b2 < thr`.
+In đúng 1 dòng `keep_good=0/1 keep_ambiguous=0/1`.

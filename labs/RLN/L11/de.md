@@ -1,6 +1,4 @@
-# Lab RLN L11 — Khai thác phần thưởng
+# Lab RLN L11 — Phát hiện khai thác phần thưởng (Reward Hacking)
 
-Trong trò đua thuyền `1 200` bước, hành vi đúng về đích nhận tổng `+150`, còn hành vi quay vòng ăn mốc thưởng `+2` mỗi `6` bước sẽ kiếm được bao nhiêu? Kiểm tra xem phần thưởng khai thác có lớn hơn hành vi đúng (`1` nếu có).
-
-Định dạng đầu ra (1 dòng):
-`intended=<số> reward_hacked=<số> broken=<0 hoặc 1>`
+Đọc `steps period bonus finish` nguyên từ stdin (ví dụ `1200 6 2 150`). Tính tổng điểm vòng lặp và so với `finish`.
+In đúng 1 dòng `intended=<int> reward_hacked=<int> broken=0/1`.

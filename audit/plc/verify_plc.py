@@ -326,6 +326,16 @@ rec("L13g", _old == [100, 50, 25, 12.5] and _tot == [100, 70, 65, 72] and 1_500_
     "khoá vòi (số minh hoạ): mã cũ 100→12,5, có thêm 20 lỗi mới mỗi năm thì tổng 100, 70, 65, 72; cận trên 1500")
 rec("L13h", 200_000 // 1000 == 200 and round(200 / math.e ** 2) == 27 and 20_000 // 1000 == 20, "quiz: 20 lỗ hổng mới mỗi năm; mã cũ 5 năm còn ≈ 27")
 
+# ── Kiểm tự động mọi lab (du_lieu.txt + ca_an/) qua cham.sh ──
+import subprocess as _subp
+from pathlib import Path as _LabPath
+_BASH = r"C:\Program Files\Git\bin\bash.exe"
+if not _LabPath(_BASH).exists():
+    _BASH = "bash"
+for _ld in sorted((ROOT / "labs" / "PLC").glob("L*")):
+    _rp = _subp.run([_BASH, str(ROOT / "labs" / "cham.sh"), "PLC", _ld.name], cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
+    rec(f"{_ld.name}:lab", _rp.returncode == 0 and "PASS" in _rp.stdout and "2 ca an" in _rp.stdout, f"cham.sh {_ld.name} (public + 2 ca_an)")
+
 n_ok = sum(ok for _, ok in R)
 print(f"\n{n_ok}/{len(R)} PASS")
 sys.exit(0 if n_ok == len(R) else 1)

@@ -1,11 +1,9 @@
-# Lab MLP L11 — Mạng MLP 2→16→2 PyTorch CPU giải XOR & đối chứng thiếu ReLU
+# Lab MLP L11 — Mạng MLP PyTorch CPU giải XOR & đối chứng thiếu ReLU
 
-Viết chương trình Python (chạy bằng `labs/.venv-ml` qua `cham.sh`): với `torch.manual_seed(42)`, huấn luyện mạng `Linear(2,16) -> ReLU -> Linear(16,2)` bằng `Adam(lr=0.05)` + `CrossEntropyLoss()` 150 bước trên 100 mẫu XOR và đối chứng mạng thiếu ReLU (`SGD(lr=0.1)` 200 bước trên 4 mẫu), in đúng 3 dòng:
-1. `n_params=82`
-2. `mlp_xor_acc=1.00`
-3. `no_relu_xor_acc=0.25`
+Đọc từ `stdin`:
+`seed=<int> hidden=<int> steps_mlp=<int> lr_mlp=<float> steps_lin=<int> lr_lin=<float>`
 
-Chấm tự động:
-```bash
-bash labs/cham.sh MLP L11 duong_dan/bai_cua_ban.py
-```
+Yêu cầu: (1) gọi `torch.manual_seed(seed)`, huấn luyện `nn.Sequential(nn.Linear(2, hidden), nn.ReLU(), nn.Linear(hidden, 2))` bằng `Adam(lr=lr_mlp)` và `nn.CrossEntropyLoss()` trên 100 mẫu XOR (25 lần 4 góc); (2) gọi lại `torch.manual_seed(seed)`, đối chứng `nn.Sequential(nn.Linear(2, hidden), nn.Linear(hidden, 2))` bằng `SGD(lr=lr_lin)` và `nn.CrossEntropyLoss()` trên 4 mẫu XOR.
+
+In đúng 3 dòng: `n_params=<int>`, `mlp_xor_acc=<.2f>`, `no_relu_xor_acc=<.2f>`.
+Chấm tự động: `bash labs/cham.sh MLP L11 duong_dan/bai_cua_ban.py`

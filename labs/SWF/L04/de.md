@@ -1,11 +1,6 @@
 # Lab SWF L04 — Kiểm thử phân hoạch tương đương và giá trị biên tam giác
 
-Viết chương trình Python cài hàm phân loại tam giác `classify(a, b, c)` trả về `'none'`, `'equilateral'`, `'isosceles'`, hoặc `'scalene'` và kiểm thử các ca chuẩn `[3,3,3]`, `[3,3,4]`, `[3,4,5]`, `[1,2,3]`, in đúng 3 dòng:
-1. `t333=equilateral t334=isosceles`
-2. `t345=scalene`
-3. `boundary_123=none`
+Đọc `stdin` `c1=<a,b,c> c2=<a,b,c> c3=<a,b,c> c4=<a,b,c>`. Phân loại tam giác `'none'`, `'equilateral'`, `'isosceles'`, `'scalene'` cho 4 bộ cạnh.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh SWF L04 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `t333=<str> t334=<str>`, `t345=<str>`, `boundary_123=<str>`.
+Chấm tự động: `bash labs/cham.sh SWF L04 duong_dan/bai_cua_ban.py`

@@ -1,11 +1,8 @@
-# Lab NET L15 (Mô phỏng tắc nghẽn lịch sử) — Con số bốn chặng 1986 đến QUIC
+# Lab NET L15 — Tắc nghẽn lịch sử, BDP 10Gbps, Bufferbloat và QUIC
 
-Viết chương trình Python tính lại các con số then chốt: tỉ lệ sụp đổ năm 1986 (`32000 -> 40 bit/s`), BDP đường `10 Gbps × 100 ms`, trễ đệm `1000` gói `1500 B` ở `10 Mbps`, và cửa sổ khởi đầu QUIC (`10 × 1200 B`), in đúng 3 dòng:
-1. `collapse_1986_drop=800x`
-2. `bdp_10g_100ms_MB=125`
-3. `bufferbloat_s=1.2 quic_iw_B=12000`
+Đọc `stdin` `hi_bps=<int> lo_bps=<int> rtt_ms=<int> bloat_pkts=<int> bloat_mbps=<f> iw_pkts=<int> mss_B=<int>`. Tính 4 chỉ số qua các mốc lịch sử.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh NET L15 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `collapse_1986_drop=<d>x`, `bdp_10g_100ms_MB=<d>`, `bufferbloat_s=<.1f> quic_iw_B=<d>`.
+Chấm tự động: `bash labs/cham.sh NET L15 duong_dan/bai_cua_ban.py`
+
+> Lưu ý đề: `bdp_10g_100ms_MB` tính tích băng thông–trễ trên đường `10 Gbps` cố định (`10_000_000_000 * (rtt_ms/1000) // 8_000_000`); `quic_iw_B` dùng gói khởi đầu QUIC tối thiểu cố định `1200` byte (`iw_pkts * 1200`), còn `mss_B` dùng riêng cho tính `bufferbloat_s`.

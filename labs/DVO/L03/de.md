@@ -1,11 +1,7 @@
-# Lab DVO L03 (Mô phỏng tích hợp liên tục CI) — Xác suất đường ống đỏ vì bài kiểm thử chập chờn (flaky)
+# Lab DVO L03 — Xác suất đường ống CI đỏ vì test chập chờn (flaky)
 
-Viết chương trình Python tính xác suất ít nhất 1 trong `300` test độc lập lỗi với `p = 0.005`, và so với khi giảm `p` xuống `0.0005` trên cùng `300` test, in đúng 3 dòng:
-1. `flaky_fail_pct_300=77.8%`
-2. `flaky_fail_pct_p0005=13.9%`
-3. `pipeline_always_green_pct=22.2%`
+Đọc `stdin` `tests=<int> p1=<float> p2=<float>`. Tính xác suất thất bại của cả đường ống ở hai mức tỉ lệ lỗi giả `p1` và `p2` cùng xác suất toàn xanh ở mức `p1`.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh DVO L03 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `flaky_fail_pct_300=<.1f>%`, `flaky_fail_pct_p0005=<.1f>%`, `pipeline_always_green_pct=<.1f>%`.
+Chấm tự động: `bash labs/cham.sh DVO L03 duong_dan/bai_cua_ban.py`
+Gợi ý đọc đầu vào trong Python: dùng `sys.stdin.read().split()` tách từng cặp `khoá=giá_trị`.

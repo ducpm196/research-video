@@ -88,7 +88,19 @@ def strings(node, path=()):
         yield path, node
 
 
-AMBIG = {"CAS", "INT"}  # mã khoá trùng thuật ngữ kỹ thuật; cần "khoá/bài" đứng trước hoặc "Lxx" theo sau mới tính
+AMBIG = {"CAS", "INT", "MLP"}  # mã khoá trùng thuật ngữ kỹ thuật; cần "khoá/bài" đứng trước hoặc "Lxx" theo sau mới tính
+
+# Danh sách cho phép có lý do: (rel_path, dot_path_prefix, course_tag) -> lý do
+ALLOWLIST = {
+    ("lessons/mlp/L00_du_lieu_bang_chong_ro_ri.yaml", "scenes.1.steps.0.show"): "TODO_WP4: gỡ khi viết lại MLP ở WP-4",
+    ("lessons/mlp/L10_pytorch_cpu_tensor_autograd.yaml", "scenes.1.steps.0.show"): "TODO_WP4: gỡ khi viết lại MLP ở WP-4",
+}
+
+
+def is_allowed(rel, dot_path):
+    if rel.startswith("lessons/prj/") and dot_path == "scenes.1.steps.0.show":
+        return "bảng mảnh ghép dự án chặng PRJ"
+    return ALLOWLIST.get((rel, dot_path))
 
 
 def find(s, me):
@@ -108,7 +120,7 @@ def find(s, me):
             continue  # WEB-INF trong gói .war Java Servlet (BNX L33), không phải mã khoá WEB
         if c in AMBIG and not (re.search(r"(?:[Kk]h(?:oá|óa)\s*(?:học\s*)?|[Bb]ài\s*)$", s[max(0, m.start() - 14):m.start()])
                                or re.match(re.escape(c) + r"\s*L\d\d", s[m.start():m.start() + 10])):
-            continue  # CAS = Compare-And-Swap (BNX L09), INT = kiểu số nguyên SQL (BNX L06): thuật ngữ kỹ thuật trùng mã khoá
+            continue  # CAS, INT, MLP: thuật ngữ kỹ thuật trùng mã khoá
         out.append((m.start(), "mã " + c))
     for m in kh_rx.finditer(s):
         tail = m.group(1).strip().lower()
@@ -122,6 +134,8 @@ def find(s, me):
         c = ALIASES[m.group(1).lower()]
         if c == "JVA" and s[max(0, m.start() - 3):m.start()].lower() == "từ ":
             continue  # "từ khoá Java" = keyword (BNK L01); nhưng "Từ khoá Toán…" (LLM) vẫn bắt
+        if c == "JVA" and m.group(1).lower() == "lập trình" and re.match(r"\s+[Cc]\b", s[m.end():m.end() + 6]):
+            continue  # "khoá lập trình C" = CPR, không phải JVA
         if c != me and not any(abs(p - m.start()) < 3 for p, _ in out):
             out.append((m.start(), "tên tắt " + c + " “" + m.group(1) + "”"))
     for m in gen_rx.finditer(s):
@@ -129,36 +143,47 @@ def find(s, me):
     return out
 
 
-hits = collections.defaultdict(list)
-for f in sorted(glob.glob(os.path.join(ROOT, "lessons", "*", "L*.yaml"))):
-    y = yaml.safe_load(open(f, encoding="utf-8")) or {}
-    me = str(y.get("course") or os.path.basename(os.path.dirname(f)).upper())
-    rel = os.path.relpath(f, ROOT).replace("\\", "/")
-    parts = {"title": y.get("title"), "objectives": y.get("objectives"), "scenes": y.get("scenes")}
-    for path, s in strings(parts):
-        for pos, kind in find(s, me):
-            hits[me].append((rel, ".".join(path), kind, s[max(0, pos - 50):pos + 110].replace("\n", " ")))
-for f in sorted(glob.glob(os.path.join(ROOT, "curriculum", "*.yaml"))):
-    y = yaml.safe_load(open(f, encoding="utf-8")) or {}
-    me = str(y.get("course") or "")
-    if not me or not isinstance(y.get("lessons"), list):
-        continue
-    rel = os.path.relpath(f, ROOT).replace("\\", "/")
-    for les in y["lessons"]:
-        sub = {k: les.get(k) for k in ("title", "objectives", "example", "fix")}
-        for path, s in strings(sub):
-            for pos, kind in find(s, me):
-                hits[me].append((rel, f"{les.get('id')}.{'.'.join(path)}", kind,
-                                 s[max(0, pos - 50):pos + 110].replace("\n", " ")))
+def main():
+    hits = collections.defaultdict(list)
+    allowed = 0
+    for f in sorted(glob.glob(os.path.join(ROOT, "lessons", "*", "L*.yaml"))):
+        y = yaml.safe_load(open(f, encoding="utf-8")) or {}
+        me = str(y.get("course") or os.path.basename(os.path.dirname(f)).upper())
+        rel = os.path.relpath(f, ROOT).replace("\\", "/")
+        parts = {"title": y.get("title"), "objectives": y.get("objectives"), "scenes": y.get("scenes")}
+        for path, s in strings(parts):
+            dp = ".".join(path)
+            found = find(s, me)
+            if found and is_allowed(rel, dp):
+                allowed += len(found)
+                continue
+            for pos, kind in found:
+                hits[me].append((rel, dp, kind, s[max(0, pos - 50):pos + 110].replace("\n", " ")))
+    for f in sorted(glob.glob(os.path.join(ROOT, "curriculum", "*.yaml"))):
+        y = yaml.safe_load(open(f, encoding="utf-8")) or {}
+        me = str(y.get("course") or "")
+        if not me or not isinstance(y.get("lessons"), list):
+            continue
+        rel = os.path.relpath(f, ROOT).replace("\\", "/")
+        for les in y["lessons"]:
+            sub = {k: les.get(k) for k in ("title", "objectives", "example", "fix")}
+            for path, s in strings(sub):
+                for pos, kind in find(s, me):
+                    hits[me].append((rel, f"{les.get('id')}.{'.'.join(path)}", kind,
+                                     s[max(0, pos - 50):pos + 110].replace("\n", " ")))
 
-total = sum(len(v) for v in hits.values())
-files = {h[0] for v in hits.values() for h in v}
-for c in sorted(hits, key=lambda c: (-len(hits[c]), c)):
-    if ONLY and c != ONLY:
-        continue
-    print(f"{c}: {len(hits[c])} lượt ở {len({h[0] for h in hits[c]})} tệp")
-    if LIST:
-        for h in hits[c]:
-            print("   " + " | ".join(h))
-print(f"check_xref: {total} lượt tham chiếu sang khoá khác ở {len(files)} tệp")
-sys.exit(1 if total else 0)
+    total = sum(len(v) for v in hits.values())
+    files = {h[0] for v in hits.values() for h in v}
+    for c in sorted(hits, key=lambda c: (-len(hits[c]), c)):
+        if ONLY and c != ONLY:
+            continue
+        print(f"{c}: {len(hits[c])} lượt ở {len({h[0] for h in hits[c]})} tệp")
+        if LIST:
+            for h in hits[c]:
+                print("   " + " | ".join(h))
+    print(f"check_xref: {total} lượt tham chiếu sang khoá khác ở {len(files)} tệp (cho phép có lý do: {allowed})")
+    return 1 if total else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

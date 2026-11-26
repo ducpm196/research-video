@@ -214,5 +214,15 @@ rec("L11", round(avg11) == 11574 and abs(11574 * day_s - 10**9) < day_s
     "cỡ tin hai đường ≈ 219/212 byte; đa số 3→1, 4→1, 5→2; 30/10/2019 → 18/3/2025 = 1966 ngày (lịch năm nhuận); quiz 1209,6 / 5184 GB")
 
 bad = [c for c, ok in R if not ok]
+# ── Kiểm tự động mọi lab (du_lieu.txt + ca_an/) qua cham.sh ──
+import subprocess as _subp
+from pathlib import Path as _LabPath
+_BASH = r"C:\Program Files\Git\bin\bash.exe"
+if not _LabPath(_BASH).exists():
+    _BASH = "bash"
+for _ld in sorted((ROOT / "labs" / "EVT").glob("L*")):
+    _rp = _subp.run([_BASH, str(ROOT / "labs" / "cham.sh"), "EVT", _ld.name], cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
+    rec(f"{_ld.name}:lab", _rp.returncode == 0 and "PASS" in _rp.stdout and "2 ca an" in _rp.stdout, f"cham.sh {_ld.name} (public + 2 ca_an)")
+
 print(f"\nverify_evt: {len(R) - len(bad)}/{len(R)} PASS" + (f"; FAIL: {bad}" if bad else ""))
 sys.exit(1 if bad else 0)

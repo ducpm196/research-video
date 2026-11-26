@@ -1,4 +1,4 @@
-avail = 0.998 ** 4
-down = (1.0 - avail) * 525_600
-print(f'avail_pct={avail * 100:.2f}%')
-print(f'downtime_min={down:.1f}')
+import sys
+kv = dict(t.split('=') for t in sys.stdin.read().split())
+av = float(kv['avail']) ** int(kv['hops']); dt = (1.0 - av) * 525_600
+print(f'avail_pct={av * 100:.2f}%\ndowntime_min={dt:.1f}')

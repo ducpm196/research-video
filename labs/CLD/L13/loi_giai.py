@@ -1,9 +1,5 @@
-layers = [
-    {'app.py', 'key.env'},
-    {'app.py', 'key.env', 'cfg.yml'},
-    {'app.py', 'cfg.yml'},
-]
-in_final = int('key.env' in layers[-1])
-leaked = int(any('key.env' in l for l in layers))
-print(f'in_final_view={in_final}')
-print(f'leaked_in_layers={leaked}')
+import sys
+kv = dict(t.split('=') for t in sys.stdin.read().split())
+ls = [set(kv[k].split(',')) for k in ('l1', 'l2', 'l3')]
+sec = kv['secret']
+print(f'in_final_view={int(sec in ls[-1])}\nleaked_in_layers={int(any(sec in l for l in ls))}')

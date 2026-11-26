@@ -1,11 +1,7 @@
-# Lab AIF L14 — Hành trình máy chơi cờ 1997–2018: hiệu suất song song và tỉ lệ hoà
+# Lab AIF L14 — Hiệu suất song song & thống kê cờ vây AlphaZero
 
-Tính lại: (1) hiệu suất song song (%) của máy cờ năm 1997 (`126 000 000` so với lý thuyết `480 * 2 500 000` thế/giây), (2) số mô phỏng mỗi giây trên cờ vây (`1600 / 0.4s`), (3) số ván hoà trong trận `1000` ván (`155` thắng, `6` thua).
+Đọc `stdin` `chips=<int> per_chip=<int> real_pos=<int> sims=<int> secs=<float> games=<int> wins=<int> losses=<int>`. Tính hiệu suất máy song song, tốc độ mô phỏng và số ván hòa.
 
-Định dạng đầu ra:
-`deepblue_eff=<1 chữ số>% sim_rate=<số nguyên>/s az_draws=<số nguyên>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh AIF L14 duong_dan/bai_cua_ban.py
-```
+In 1 dòng: `deepblue_eff=<.1f>% sim_rate=<d>/s az_draws=<d>`.
+Chấm tự động: `bash labs/cham.sh AIF L14 duong_dan/bai_cua_ban.py`
+Gợi ý đọc đầu vào trong Python: dùng `sys.stdin.read().split()` tách từng cặp `khoá=giá_trị`.

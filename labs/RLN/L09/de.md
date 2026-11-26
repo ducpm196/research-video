@@ -1,6 +1,4 @@
-# Lab RLN L09 — Tối ưu chính sách gần kề (PPO): cắt tỉ số an toàn
+# Lab RLN L09 — Cắt tỉ số an toàn PPO
 
-Áp dụng công thức `min(rho * A, clip(rho, 1 - eps, 1 + eps) * A)` với `eps = 0.2` cho hai trường hợp: lợi thế dương `(rho = 1.4, A = 3.0)` (bị cắt trần) và lợi thế âm `(rho = 0.6, A = -3.0)`.
-
-Định dạng đầu ra (1 dòng):
-`pos_clipped=<1 chữ số> neg_unclipped=<1 chữ số>`
+Đọc `eps rho1 A1 rho2 A2` từ stdin (ví dụ `0.2 1.4 3.0 0.6 -3.0`). Tính hàm mục tiêu cắt PPO cho cả hai cặp.
+In đúng 1 dòng `pos_clipped=<1 chữ số> neg_unclipped=<1 chữ số>`.

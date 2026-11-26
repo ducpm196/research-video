@@ -52,8 +52,8 @@ for i in 1 2 3 4 5 6 7 8 9 10; do
   sleep 0.3
 done
 U=http://127.0.0.1:18766
-curl -s -o /dev/null -w "%{http_code}\n" $U/chao
-curl -s -o /dev/null -w "%{http_code}\n" $U/khong_co
-curl -s $U/tai_khoan/42; echo
-curl -s -o /dev/null -w "%{http_code}\n" -X POST -d so_tien=100000 $U/nap
+printf "cau 1: "; curl -s -o /dev/null -w "%{http_code}\n" $U/chao
+printf "cau 2: "; curl -s -o /dev/null -w "%{http_code}\n" $U/khong_co
+printf "cau 3: "; curl -s $U/tai_khoan/42; echo
+printf "cau 4: "; curl -s -o /dev/null -w "%{http_code}\n" -X POST -d so_tien=100000 $U/nap
 kill $SV

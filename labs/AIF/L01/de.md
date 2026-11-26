@@ -1,11 +1,7 @@
-# Lab AIF L01 — Tìm đường ngắn nhất theo chiều rộng và kiểm đích khi sinh nút
+# Lab AIF L01 — Tìm đường ngắn nhất BFS kiểm đích khi sinh nút
 
-Chạy tìm theo chiều rộng từ đỉnh `S` tới đích `G` trên đồ thị có hướng `{'S':['A','B'], 'A':['C','D'], 'B':['G'], 'C':['G'], 'D':[], 'G':[]}`. Theo đúng quy ước kiểm đích ngay khi sinh nút kề: đếm độ dài đường ngắn nhất (`shortest`), số nút đã lấy ra mở rộng (`expanded`, gồm `S, A, B`), và số nút đã thăm (`visited`).
+Đọc `stdin` `edges=<u:v1|v2,...> start=<S> goal=<G>`. Chạy BFS kiểm đích ngay lúc sinh nút kề để đếm khoảng cách ngắn nhất, số nút mở rộng và số nút đã thăm.
 
-Định dạng đầu ra:
-`shortest=<số> expanded=<số> visited=<số>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh AIF L01 duong_dan/bai_cua_ban.py
-```
+In 1 dòng: `shortest=<d> expanded=<d> visited=<d>`.
+Chấm tự động: `bash labs/cham.sh AIF L01 duong_dan/bai_cua_ban.py`
+Gợi ý đọc đầu vào trong Python: dùng `sys.stdin.read().split()` tách từng cặp `khoá=giá_trị`.

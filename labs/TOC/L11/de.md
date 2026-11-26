@@ -1,11 +1,6 @@
-# Lab TOC L11 — Kiểm chứng nghịch lý đường chéo trên bảng 3×3 của bài toán dừng
+# Lab TOC L11 — Nghịch lý đường chéo bài toán dừng
 
-Cho bảng dự đoán giả định 3×3 `rows = [[1, 0, 1], [0, 0, 1], [1, 1, 0]]` ứng với `H(P_i, P_j)` (`1` là dừng, `0` là lặp vô hạn). Duyệt từng hàng ứng viên `D = [d0, d1, d2]` trong `2^3 = 8` khả năng hành vi trên 3 đầu vào để kiểm chứng: nếu `D == row[idx]` thì bắt buộc `D[idx] == 1 - row[idx]` là điều không thể xảy ra.
-
-Định dạng đầu ra (1 dòng):
-`table_size=<số> candidates=<số> possible_matches=<số nguyên>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh TOC L11 duong_dan/bai_cua_ban.py
-```
+Đọc bảng vuông `k×k` (`r0;r1;...`) từ stdin (ví dụ `1,0,1;0,0,1;1,1,0`). Duyệt toàn bộ `2^k` ứng viên kiểm chứng mâu thuẫn đường chéo.
+In đúng 1 dòng `table_size=<k> candidates=<2^k> possible_matches=<int>`.
+Nền tảng Python (`PYT:L04`): đọc dữ liệu qua `sys.stdin.read().strip()`.
+Định nghĩa `possible_matches`: trong toàn bộ `2^k` dãy nhị phân ứng viên `D`, đếm số hàng `row` thoả đồng thời `D == row` và `D[idx] != row[idx]` (luôn bằng `0` theo lập luận đường chéo).

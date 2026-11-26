@@ -1,12 +1,6 @@
-# Lab DEN L11 — Bỏ qua nhóm hàng nhờ thống kê nhỏ nhất–lớn nhất
+# Lab DEN L11 — Bỏ qua nhóm hàng nhờ thống kê min-max
 
-Có `80` nhóm hàng sắp theo giá trị `(0..9), (10..19), ..., (790..799)`. Khi truy vấn lọc đúng `x = 123`, đếm số nhóm hàng bắt buộc phải đọc và tỉ lệ nhóm được bỏ qua (%).
+Đọc `stdin` `groups=<int> width=<int> target=<int>`. Dựng `groups` nhóm liên tiếp bề rộng `width`, đếm số nhóm có miền `[min, max]` chứa `target` và phần trăm bỏ qua.
 
-Định dạng đầu ra (2 dòng):
-`groups_scanned=<số nguyên>`
-`skipped_pct=<1 chữ số>%`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh DEN L11 duong_dan/bai_cua_ban.py
-```
+In 2 dòng: `groups_scanned=<d>`, `skipped_pct=<.1f>%`.
+Chấm tự động: `bash labs/cham.sh DEN L11 duong_dan/bai_cua_ban.py`

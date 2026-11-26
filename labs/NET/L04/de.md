@@ -1,11 +1,6 @@
-# Lab NET L04 (Mô phỏng truy cập đường truyền) — Hiệu suất ALOHA và Switch MAC
+# Lab NET L04 — Hiệu suất ALOHA và bảng MAC của Switch
 
-Viết chương trình Python tính hiệu suất tối đa lý thuyết của ALOHA thuần (`1/(2e)`), ALOHA chia khe (`1/e`) và mô phỏng bảng MAC của Switch (bộ chuyển mạch) học địa chỉ qua 3 khung (2 địa chỉ MAC khác nhau), in đúng 3 dòng:
-1. `pure_aloha_pct=18.4%`
-2. `slotted_aloha_pct=36.8%`
-3. `switch_mac_entries=2`
+Đọc `stdin` `events=<MAC:port,...>`. Tính hiệu suất ALOHA thuần, chia khe và mô phỏng bảng học địa chỉ MAC của bộ chuyển mạch.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh NET L04 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `pure_aloha_pct=<.1f>%`, `slotted_aloha_pct=<.1f>%`, `switch_mac_entries=<d>`.
+Chấm tự động: `bash labs/cham.sh NET L04 duong_dan/bai_cua_ban.py`

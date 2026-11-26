@@ -45,11 +45,11 @@ Exception in thread "main" java.lang.ArrayIndexOutOfBoundsException: Index 5 out
 Việc của bạn:
 1. Đọc dấu vết **từ trên xuống**: dòng `at` đầu tiên là nơi nổ. Chỉ ra **số dòng** và **vì sao** chỉ số 5 không hợp lệ với mảng dài 5.
 2. Chép chương trình vào `TongPhi.java`, sửa **một chỗ**, chạy lại.
-3. Kết quả phải là hai dòng (so với tay: 1 000 + 5 000 + 1 000 + 10 000 + 5 000 = 22 000):
+3. Kết quả phải là hai dòng theo dạng:
 
 ```
-So giao dich: 5
-Tong phi: 22000
+So giao dich: <số lượng giao dịch>
+Tong phi: <tổng phí năm giao dịch>
 ```
 
 Chạy: `javac TongPhi.java && java TongPhi`. Chấm: `bash labs/cham.sh JV2 L07 TongPhi.java`.

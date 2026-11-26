@@ -1,9 +1,6 @@
-# Lab LNX L06 — Bảo mật biến môi trường và tính tần suất cron
+# Lab LNX L06 — Bảo mật tệp .env chmod 600 và tính tần suất cron theo stdin
 
-Viết kịch bản Bash tạo tệp bí mật với `chmod 600` (hoặc kiểm tra `umask`), đọc nạp biến môi trường không in nguyên văn bí mật, và tính số lượt chạy/ngày của `*/5 * * * *` để in đúng 3 dòng:
-1. `env_loaded=1`
-2. `cron_per_hour=12`
-3. `cron_per_day=288`
+Viết kịch bản Bash đọc `<key_name> <key_val> <cron_step_min>` từ `stdin`, tạo tệp bí mật trong thư mục tạm với `chmod 600`, nạp bằng `source` (không in bí mật thô ra stdout), kiểm độ dài > 0 (`env_loaded`) và tính `cron_per_hour = 60 / step`, `cron_per_day = cron_per_hour * 24`.
 
 Chấm tự động:
 ```bash

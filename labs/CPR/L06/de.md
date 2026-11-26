@@ -1,8 +1,9 @@
-# Lab CPR L06 — Cấp phát động, mở rộng realloc an toàn và giải phóng
+# Lab CPR L06 — Cấp phát động calloc, mở rộng realloc an toàn và giải phóng
 
-Viết chương trình C chuẩn C11 cấp 3 phần tử `int` bằng `calloc`, gán `{10, 20, 30}`, mở rộng bằng `realloc` an toàn lên 5 phần tử thêm `{40, 50}`, tính tổng và `free`, in đúng 2 dòng:
-1. `len=5 sum=150`
-2. `freed=1`
+Viết chương trình C chuẩn C11 đọc `n1`, `n1` số nguyên (cấp bằng `calloc`), rồi đọc `n2`, mở rộng mảng bằng `realloc` qua con trỏ tạm lên `n1 + n2` phần tử và đọc tiếp `n2` số nguyên.
+Tính tổng toàn mảng, `free(p); p = NULL;`, và in đúng 2 dòng:
+1. `len=<n1 + n2> sum=<tổng>`
+2. `freed=<p == NULL ? 1 : 0>`
 
 Chấm tự động:
 ```bash

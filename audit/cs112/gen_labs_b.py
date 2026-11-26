@@ -1,6 +1,7 @@
 """Sinh lab CS112 L15–L29 (nửa B, nâng chuẩn AF2 2026-11-14): ghi labs/CS112/Lxx/{de.md, mong_doi.txt, loi_giai.py} qua audit/labkit.write_lab.
 mong_doi.txt = ĐẦU RA THẬT của lời giải (chạy bằng .venv Python). Số liệu lab KHÁC ví dụ trong bài. Độc lập kiểm: verify_cs112_af2b.py tính lại bằng cách khác.
 Chạy: .venv/Scripts/python -B audit/cs112/gen_labs_b.py [L15 L16 …]   (không đối số: mọi lab)"""
+import sys as _sys; from pathlib import Path as _P; _sys.path.insert(0, str(_P(__file__).resolve().parents[1])); import _frozen  # noqa: E402,F401
 import subprocess
 import sys
 import tempfile

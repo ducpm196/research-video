@@ -1,11 +1,7 @@
-# Lab MLO L10 — Đo hiệu chuẩn xác suất bằng điểm Brier (trung bình bình phương sai số)
+# Lab MLO L10 — Điểm Brier đo hiệu chuẩn xác suất
 
-Tính điểm Brier bằng trung bình của bình phương độ lệch giữa xác suất dự đoán và nhãn thật cho 4 dự đoán `probs = [0.85, 0.70, 0.20, 0.40]` và nhãn thật `y = [1, 1, 0, 1]`.
+Đọc `stdin` `probs=<p1,p2,...> y=<y1,y2,...>`. Tính trung bình bình phương độ lệch `(p - y)^2`.
 
-Định dạng đầu ra:
-`brier=<4 chữ số>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh MLO L10 duong_dan/bai_cua_ban.py
-```
+In 1 dòng: `brier=<.4f>`.
+Chấm tự động: `bash labs/cham.sh MLO L10 duong_dan/bai_cua_ban.py`
+Nền tảng Python (`PYT:L04`): đọc dữ liệu qua `sys.stdin.read().strip()`.

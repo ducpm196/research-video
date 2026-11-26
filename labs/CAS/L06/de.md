@@ -1,11 +1,6 @@
-# Lab CAS L06 — Amazon S3 (2017): rào chắn ngưỡng tối thiểu khoẻ mạnh khi gỡ máy khỏi cụm
+# Lab CAS L06 — Rào chắn ngưỡng tối thiểu khoẻ mạnh khi gỡ máy khỏi cụm
 
-Cho cụm `120` máy chủ có ngưỡng an toàn tối thiểu phải giữ lại `90` máy đang chạy: viết kiểm tra chặn yêu cầu gỡ `40` máy.
+Đọc `stdin` `total=<int> min_h=<int> req=<int>`. Tính số máy tối đa được gỡ an toàn và chặn yêu cầu vượt ngưỡng.
 
-Định dạng đầu ra (1 dòng):
-`max_removable=<số> req=40 blocked=<0 hoặc 1>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh CAS L06 duong_dan/bai_cua_ban.py
-```
+In đúng 1 dòng: `max_removable=<d> req=<req> blocked=<0|1>`.
+Chấm tự động: `bash labs/cham.sh CAS L06 duong_dan/bai_cua_ban.py`

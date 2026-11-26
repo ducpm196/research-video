@@ -1,6 +1,4 @@
-# Lab CVI L05 — Ước lượng bền vững với đồng thuận mẫu ngẫu nhiên (RANSAC)
+# Lab CVI L05 — Số lần lặp RANSAC
 
-Với số cặp mỗi mẫu `s = 4` và độ tin cậy `p = 0.99`, tính số lần thử `N = ceil(ln(1 - p) / ln(1 - w^s))` ở hai mức tỉ lệ khớp đúng `w = 0.6` và `w = 0.4`.
-
-Định dạng đầu ra (1 dòng):
-`n_w60=<số nguyên> n_w40=<số nguyên>`
+Đọc `s p w1 w2` từ stdin (ví dụ `4 0.99 0.6 0.4`). Tính `ceil(ln(1-p)/ln(1-w^s))` tại `w1` và `w2`.
+In đúng 1 dòng `n_w60=<int> n_w40=<int>`.

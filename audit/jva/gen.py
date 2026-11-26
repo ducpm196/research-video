@@ -1,5 +1,6 @@
 """Sinh lessons/jva/*.yaml từ audit/jva/src/lXX.py. Dùng: .venv/Scripts/python audit/jva/gen.py [L01 L02 …] (không đối số = tất cả).
 Từ chối ghi bài có từ khoá tiếng Anh của Java trong lời đọc (lib.SAY_FORBIDDEN)."""
+import sys as _sys; from pathlib import Path as _P; _sys.path.insert(0, str(_P(__file__).resolve().parents[1])); import _frozen  # noqa: E402,F401
 import importlib
 import re
 import sys

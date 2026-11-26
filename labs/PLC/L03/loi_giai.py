@@ -1,4 +1,4 @@
-nums = [15, 6, 2]
-left_assoc = (nums[0] - nums[1]) - nums[2]
-right_assoc = nums[0] - (nums[1] - nums[2])
-print(f"left_assoc={left_assoc} right_assoc={right_assoc}")
+import sys
+s = sys.stdin.read().strip() or "15 6 2"
+a, b, c = map(int, s.split())
+print(f"left_assoc={(a - b) - c} right_assoc={a - (b - c)}")

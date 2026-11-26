@@ -1,11 +1,7 @@
-# Lab DSC L06 — Hệ số tương quan tuyến tính Pearson r đảo dấu chỉ vì một ngoại lai
+# Lab DSC L06 — Hệ số tương quan Pearson r đảo dấu vì một ngoại lai
 
-Tính hệ số tương quan tuyến tính Pearson `r` của 4 điểm thuận chiều `[(1,2), (2,3), (3,5), (4,7)]`, sau đó thêm 1 ngoại lai `(25, -12)` và đo `r` mới.
+Đọc `stdin` `pts=<x:y,...> out=<x:y>`. Tính hệ số tương quan tuyến tính Pearson `r` trước và sau khi thêm điểm ngoại lai `out`.
 
-Định dạng đầu ra:
-`r_clean=<3 chữ số> r_outlier=<3 chữ số>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh DSC L06 duong_dan/bai_cua_ban.py
-```
+In 1 dòng: `r_clean=<.3f> r_outlier=<.3f>`.
+Chấm tự động: `bash labs/cham.sh DSC L06 duong_dan/bai_cua_ban.py`
+Gợi ý đọc đầu vào trong Python: dùng `sys.stdin.read().split()` tách từng cặp `khoá=giá_trị`.

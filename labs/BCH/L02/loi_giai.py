@@ -1,4 +1,5 @@
-import math
-proof_hashes = int(math.log2(4096))
-proof_bytes = proof_hashes * 32
-print(f"merkle_hashes={proof_hashes} proof_bytes={proof_bytes}")
+import sys, math
+s = sys.stdin.read().strip() or "4096 32"
+ntx, hlen = map(int, s.split())
+ph = int(math.log2(ntx))
+print(f"merkle_hashes={ph} proof_bytes={ph * hlen}")

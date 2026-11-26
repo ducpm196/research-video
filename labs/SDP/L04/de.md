@@ -1,11 +1,6 @@
 # Lab SDP L04 — Hợp thành (Composition) tránh bùng nổ tổ hợp lớp con
 
-Viết chương trình Python cài mẫu Decorator/Hợp thành tính giá cà phê: `BaseCoffee(30)` + `Milk(5)` + `Sugar(2)` = `37`, và đối chiếu số lớp khi thêm `M = 4` món phụ lên `B = 3` loại nền, in đúng 3 dòng:
-1. `inherit_classes=48`
-2. `compose_classes=7`
-3. `espresso_milk_sugar=37`
+Đọc `stdin` `base_kinds=<int> addons_count=<int> drink_cost=<int> extra=<int,...>`. So sánh số lớp kế thừa `B * 2^M` với hợp thành `B + M` và tính tổng giá đồ uống.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh SDP L04 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `inherit_classes=<d>`, `compose_classes=<d>`, `espresso_milk_sugar=<d>`.
+Chấm tự động: `bash labs/cham.sh SDP L04 duong_dan/bai_cua_ban.py`

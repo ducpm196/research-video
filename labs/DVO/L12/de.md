@@ -1,11 +1,7 @@
-# Lab DVO L12 — Ký và xác minh chữ ký gói dựng bằng RSA đồ chơi + SHA-256 thật
+# Lab DVO L12 — Ký và xác minh chữ ký gói dựng bằng RSA + SHA-256
 
-Viết chương trình Python băm SHA-256 gói `b'release-v1.0'`, rút gọn `digest_int % 3233`, ký bằng khoá bí mật `d = 2753` trên `n = 61 * 53 = 3233`, rồi kiểm chứng lại bằng `e = 17`, in đúng 3 dòng:
-1. `n=3233 e=17`
-2. `sig_matches_digest=1`
-3. `tamper_detected=1`
+Đọc `stdin` `good=<str> tampered=<str>` (tuỳ chọn `d=<int>`, mặc định `2753`). Băm SHA-256 rút gọn modulo `n = 3233`, ký bằng khóa bí mật `d`, xác minh bằng `e = 17` và phát hiện gói bị sửa đổi.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh DVO L12 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `n=3233 e=17`, `sig_matches_digest=<0|1>`, `tamper_detected=<0|1>`.
+Chấm tự động: `bash labs/cham.sh DVO L12 duong_dan/bai_cua_ban.py`
+Gợi ý đọc đầu vào trong Python: dùng `sys.stdin.read().split()` tách từng cặp `khoá=giá_trị`.

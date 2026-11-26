@@ -167,5 +167,15 @@ rec("L12", round(_n07(2, 30, 3.75 * 0.05)) == 1638400 and round(_n07(2, math.sqr
     "5¹⁵, 4⁴ = 256, 19 900 cặp; 1,64 ca lệch tỉ lệ mỗi ngày (FA19); 499/999: 1,0 và 3,17 sai số chuẩn; quiz 1,52 tuần")
 
 bad = [c for c, ok in R if not ok]
+# ── Kiểm tự động mọi lab (du_lieu.txt + ca_an/) qua cham.sh ──
+import subprocess as _subp
+from pathlib import Path as _LabPath
+_BASH = r"C:\Program Files\Git\bin\bash.exe"
+if not _LabPath(_BASH).exists():
+    _BASH = "bash"
+for _ld in sorted((ROOT / "labs" / "DAN").glob("L*")):
+    _rp = _subp.run([_BASH, str(ROOT / "labs" / "cham.sh"), "DAN", _ld.name], cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
+    rec(f"{_ld.name}:lab", _rp.returncode == 0 and "PASS" in _rp.stdout and "2 ca an" in _rp.stdout, f"cham.sh {_ld.name} (public + 2 ca_an)")
+
 print(f"\nverify_dan: {len(R) - len(bad)}/{len(R)} PASS" + (f"; FAIL: {bad}" if bad else ""))
 sys.exit(1 if bad else 0)

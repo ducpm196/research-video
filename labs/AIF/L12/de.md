@@ -1,11 +1,7 @@
-# Lab AIF L12 — Lặp giá trị bài toán bất định 3 ô thẳng hàng tới ô đích +1.0
+# Lab AIF L12 — Lặp giá trị bất định 3 ô thẳng hàng tới ô đích +1.0
 
-Cho 3 ô `[0, 1, 2]` với ô đích `2` giá trị cố định `+1.0`. Mỗi bước nhận thưởng `r = -0.05`, hệ số chiết khấu `gamma = 0.9`; chọn đi tiến/lùi có xác suất tiến đúng hướng `0.7` và trượt đứng yên `0.3` (lấy `max` theo hai hành động). Chạy `30` vòng lặp giá trị cập nhật `u[0], u[1]`.
+Đọc `stdin` chuỗi `r=<float> gamma=<float> iters=<int>`. Chạy `iters` vòng lặp Bellman đồng bộ trên 3 ô `[0, 1, 2]` với `U=[0.0, 0.0, 1.0]` cố định ô đích `U[2]=1.0`. Tại mỗi vòng từ giá trị cũ: `u1 = max(r + gamma*(0.7*u[2]+0.3*u[1]), r + gamma*(0.7*u[0]+0.3*u[1]))` và `u0 = max(r + gamma*(0.7*u[1]+0.3*u[0]), r + gamma*u[0])`, rồi gán `u[0], u[1] = u0, u1`.
 
-Định dạng đầu ra:
-`U0=<3 chữ số> U1=<3 chữ số>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh AIF L12 duong_dan/bai_cua_ban.py
-```
+In 1 dòng: `U0=<.3f> U1=<.3f>`.
+Chấm tự động: `bash labs/cham.sh AIF L12 duong_dan/bai_cua_ban.py`
+Gợi ý đọc đầu vào trong Python: dùng `sys.stdin.read().split()` tách từng cặp `khoá=giá_trị`.

@@ -1,5 +1,6 @@
-rot90 = lambda x, y: (-y, x)
-tr = lambda x, y: (x + 3, y - 1)
-a = tr(*rot90(2, 1))
-b = rot90(*tr(2, 1))
-print(f"rot_then_tr={a} tr_then_rot={b}")
+import sys
+s = sys.stdin.read().strip() or "2 1 3 -1"
+x, y, dx, dy = map(int, s.split())
+rot90 = lambda a, b: (-b, a)
+tr = lambda a, b: (a + dx, b + dy)
+print(f"rot_then_tr={tr(*rot90(x, y))} tr_then_rot={rot90(*tr(x, y))}")

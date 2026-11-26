@@ -6,6 +6,7 @@ Promise.all song song, thuật toán LIS cập nhật danh sách, chuẩn RFC 91
 HTTP cache freshness, PKCE SHA-256 Base64URL thật bằng module `crypto`, độ tương phản WCAG,
 ngân sách khung hình 60/120Hz, hợp nhất ngoại tuyến, và suy giảm phiên bản cũ.
 """
+import sys as _sys; from pathlib import Path as _P; _sys.path.insert(0, str(_P(__file__).resolve().parents[2])); import _frozen  # noqa: E402,F401
 import subprocess
 import sys
 from pathlib import Path

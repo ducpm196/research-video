@@ -1,12 +1,6 @@
 # Lab EVT L01 — Tiến hoá lược đồ tương thích xuôi và ngược
 
-Cho hai bản ghi sự kiện `v1 = {'order_id': 10, 'amount': 200}` và `v2 = {'order_id': 11, 'amount': 350, 'tier': 'vip'}`. Người nhận cũ bỏ qua trường lạ `tier` và chỉ cần đọc `order_id`, người nhận mới đọc `amount` với giá trị mặc định `'std'` nếu thiếu `tier` (tương thích hai chiều).
+Đọc `stdin` `v1_id=<int> v2_id=<int> v2_tier=<str> def_tier=<str>`. Người nhận cũ trích `order_id` của bản ghi mới; người nhận mới đọc `tier` bản ghi cũ kèm mặc định `def_tier` khi thiếu.
 
-Định dạng đầu ra (2 dòng):
-`old_reads_v2=<order_id nguyên>`
-`new_reads_v1=<tier mặc định>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh EVT L01 duong_dan/bai_cua_ban.py
-```
+In 2 dòng: `old_reads_v2=<d>`, `new_reads_v1=<str>`.
+Chấm tự động: `bash labs/cham.sh EVT L01 duong_dan/bai_cua_ban.py`

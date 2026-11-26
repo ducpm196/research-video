@@ -1,9 +1,6 @@
-# Lab LNX L04 — Đếm i-nốt tiêu thụ thực tế của thư mục chứa nhiều tệp nhỏ
+# Lab LNX L04 — Đếm i-nốt thực tế và quy mô thư mục nhiều tệp nhỏ qua stdin
 
-Viết kịch bản Bash tạo thư mục tạm chứa `50` tệp 0 byte (nhỏ gọn trong lab), tính cả quy mô `10 000` tệp qua công thức và in đúng 3 dòng:
-1. `files=50`
-2. `objects_50=51`
-3. `inodes_10k=10001`
+Viết kịch bản Bash đọc `<n_files> <scale_n>` từ `stdin`, tạo thư mục tạm chứa đúng `n_files` tệp 0 byte, đếm số tệp (`files`), tổng đối tượng gồm cả thư mục (`objects`), và tính tổng i-nốt quy mô `inodes_scale = scale_n + 1`.
 
 Chấm tự động:
 ```bash

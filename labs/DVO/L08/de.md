@@ -1,11 +1,7 @@
-# Lab DVO L08 — Mô phỏng 4 bước mở rộng–thu gọn (Expand-Contract) đổi tên cột ten -> ho_ten không downtime
+# Lab DVO L08 — Mô phỏng 4 bước Expand-Contract đổi tên cột không downtime
 
-Viết chương trình Python mô phỏng trình tự 4 bước mở rộng–thu gọn (Expand-Contract) trên danh sách 2 bản ghi `['An', 'Binh']`: B1 thêm cột mới, B2 ghi kép cả 2 cột + chép ngược dòng cũ, B3 chuyển sang đọc `ho_ten` (đếm số dòng thiếu `ho_ten` khi chuyển = `downtime_s`), B4 xoá cột cũ khi hết tham chiếu, in đúng 3 dòng:
-1. `steps_count=4`
-2. `dual_write_synced=1`
-3. `downtime_s=0`
+Đọc `stdin` chuỗi `names=<n1,n2,...> backfill=<0|1>`. Chạy 4 pha (`expand_col`, `dual_write_backfill`, `switch_reads`, `drop_old_col`); chỉ chép giá trị sang cột mới `ho_ten` khi `backfill=1`. Khi chuyển đọc, đếm số bản ghi thiếu `ho_ten` (lỗi đọc trên khoá `downtime_s`).
 
-Chấm tự động:
-```bash
-bash labs/cham.sh DVO L08 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `steps_count=<d>`, `dual_write_synced=<0|1>`, `downtime_s=<d>`.
+Chấm tự động: `bash labs/cham.sh DVO L08 duong_dan/bai_cua_ban.py`
+Gợi ý đọc đầu vào trong Python: dùng `sys.stdin.read().split()` tách từng cặp `khoá=giá_trị`.

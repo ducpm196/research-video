@@ -1,6 +1,7 @@
-# Lab AGT L02 — Lập kế hoạch và phân rã đồ thị phụ thuộc (DAG)
+# Lab AGT L02 — Lập kế hoạch và đường găng đồ thị phụ thuộc (DAG)
 
-Cho đồ thị phụ thuộc gồm 5 bước: `tim` (3 s, không phụ thuộc), `docA` (5 s, sau `tim`), `docB` (2 s, sau `tim`), `tonghop` (4 s, sau cả `docA` và `docB`), `kiemtra` (1 s, sau `tonghop`). Viết mã dựng cấu trúc đồ thị phụ thuộc và tính thời gian hoàn thành từng bước để tìm thời gian chạy tuần tự, đường găng song song và thời gian tiết kiệm.
+Đọc `stdin` chuỗi dạng `d=tim:<int>,docA:<int>,docB:<int>,tonghop:<int>,kiemtra:<int>`. Với `docA`, `docB` cùng phụ thuộc `tim` và chạy song song trước `tonghop -> kiemtra`, tính tổng thời gian tuần tự, đường găng `critical_path` và thời gian tiết kiệm `saved`.
 
-Định dạng đầu ra (1 dòng):
-`sequential=<số>s critical_path=<số>s saved=<số>s`
+In 1 dòng: `sequential=<d>s critical_path=<d>s saved=<d>s`.
+Chấm tự động: `bash labs/cham.sh AGT L02 duong_dan/bai_cua_ban.py`
+Gợi ý đọc đầu vào trong Python: dùng `sys.stdin.read().split()` tách từng cặp `khoá=giá_trị`.

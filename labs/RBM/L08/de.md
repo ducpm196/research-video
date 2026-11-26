@@ -1,9 +1,4 @@
-# Lab RBM L08 — So sánh trực tiếp RK4 với Euler trên cùng bước h=0.2 giải x' = -x
+# Lab RBM L08 — So sánh Euler và RK4 trên x' = -x
 
-Từ `x(0) = 1.0`, chạy `5` bước tới `t = 1.0` với `h = 0.2` theo cả Euler và RK4, đối chiếu với `exp(-1)` và tính tỉ lệ giảm sai số `err_euler / err_rk4`.
-In đúng 1 dòng `err_euler=... err_rk4=... gain=...x` (`err_euler` lấy 4 chữ số thập phân `:.4f`, `err_rk4` dạng khoa học `:.2e`, `gain` làm tròn nguyên `:.0f`).
-
-Chấm tự động:
-```bash
-bash labs/cham.sh RBM L08 duong_dan/bai_cua_ban.py
-```
+Đọc `x0 h steps` từ stdin (ví dụ `1.0 0.2 5`). Chạy cả hai phương pháp và tính tỉ lệ sai số `err_euler / err_rk4`.
+In đúng 1 dòng `err_euler=<4 chữ số> err_rk4=<.2e> gain=<int>x`.

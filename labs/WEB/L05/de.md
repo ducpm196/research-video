@@ -1,11 +1,6 @@
-# Lab WEB L05 — Node.js thật: tính LIS để tối thiểu thao tác DOM khi cập nhật danh sách
+# Lab WEB L05 — Node.js: tính LIS tối thiểu thao tác di chuyển nút DOM
 
-Viết tập lệnh Node.js tìm độ dài dãy con tăng dài nhất (LIS) của `[A, B, C, D, E]` biến thành `[C, A, B, D, E]` (chỉ số `[2, 0, 1, 3, 4]` -> LIS = `[0, 1, 3, 4]` giữ `4` nút, chỉ dời `1` nút), in đúng 3 dòng:
-1. `kept_in_place=4`
-2. `min_moves=1`
-3. `total_items=5`
+Đọc `stdin` `idx=<i1,i2,...>`. Tính độ dài dãy con tăng dài nhất (LIS) để giữ nguyên tối đa các phần tử tại chỗ và đếm số nút ít nhất phải dời.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh WEB L05 duong_dan/bai_cua_ban.js
-```
+In đúng 3 dòng: `kept_in_place=<d>`, `min_moves=<d>`, `total_items=<d>`.
+Chấm tự động: `bash labs/cham.sh WEB L05 duong_dan/bai_cua_ban.js`

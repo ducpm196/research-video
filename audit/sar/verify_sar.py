@@ -179,5 +179,15 @@ rec("L13a", gb_day == 100 and hosts == [100, 120, 150] and math.ceil(30_000 / 25
     f"Monte Carlo 100 hệ {p100:.3f}, 5 hệ {p5:.3f}; quiz 4 máy, 39,5%; 132 máy")
 
 nf = sum(1 for _, ok in R if not ok)
+# ── Kiểm tự động mọi lab (du_lieu.txt + ca_an/) qua cham.sh ──
+import subprocess as _subp
+from pathlib import Path as _LabPath
+_BASH = r"C:\Program Files\Git\bin\bash.exe"
+if not _LabPath(_BASH).exists():
+    _BASH = "bash"
+for _ld in sorted((ROOT / "labs" / "SAR").glob("L*")):
+    _rp = _subp.run([_BASH, str(ROOT / "labs" / "cham.sh"), "SAR", _ld.name], cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
+    rec(f"{_ld.name}:lab", _rp.returncode == 0 and "PASS" in _rp.stdout and "2 ca an" in _rp.stdout, f"cham.sh {_ld.name} (public + 2 ca_an)")
+
 print(f"TỔNG: {len(R) - nf} PASS · {nf} FAIL")
 sys.exit(1 if nf else 0)

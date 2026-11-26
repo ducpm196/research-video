@@ -1,11 +1,7 @@
-# Lab AIF L09 — Suy diễn tiến trên tập luật một kết luận (luật Horn)
+# Lab AIF L09 — Suy diễn tiến trên tập luật Horn
 
-Từ sự kiện đầu `{X, Y}` và 5 luật `[({X,Y}->Z), ({X,W}->Z), ({Y,Z}->U), ({Z,U}->W), ({W}->V)]`, chạy suy diễn tiến tới khi không suy thêm được và in thứ tự các mệnh đề mới suy ra.
+Đọc `stdin` `facts=<f1,f2,...> rules=<pre1+pre2>res,...>`. Chạy suy diễn tiến chọn luật đầu tiên có tiền đề nằm trong tập sự kiện cho tới điểm bất động.
 
-Định dạng đầu ra:
-`derived=<chuỗi cách nhau bằng dấu phẩy>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh AIF L09 duong_dan/bai_cua_ban.py
-```
+In 1 dòng: `derived=<list>`.
+Chấm tự động: `bash labs/cham.sh AIF L09 duong_dan/bai_cua_ban.py`
+Gợi ý đọc đầu vào trong Python: dùng `sys.stdin.read().split()` tách từng cặp `khoá=giá_trị`.

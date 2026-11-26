@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
-base=120; n=10; rw=5
-shared=$((base + n * rw))
-full=$((n * base))
+exec < <(tr -d '\r')
+read -r BASE N RW SIG
+shared=$((BASE + N * RW))
+full=$((N * BASE))
 saved=$((full - shared))
-echo "shared_10_mb=$shared"
+echo "shared_mb=$shared"
 echo "saved_mb=$saved"
-echo "oom_exit=$((128 + 9))"
+echo "oom_exit=$((128 + SIG))"

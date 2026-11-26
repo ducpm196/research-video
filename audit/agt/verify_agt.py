@@ -153,5 +153,15 @@ rec("L12c", round(0.18 * _lite) - round(0.15 * _lite) == 9 and round(0.157 * _li
     "tập nhẹ: kiểm cú pháp +9 bài, tìm từng kết quả −11 bài; Verified 65% × 500 = 325, còn 175 (khác tập — không chia cho 1,96)")
 
 nf = sum(1 for _, ok in R if not ok)
+# ── Kiểm tự động mọi lab (du_lieu.txt + ca_an/) qua cham.sh ──
+import subprocess as _subp
+from pathlib import Path as _LabPath
+_BASH = r"C:\Program Files\Git\bin\bash.exe"
+if not _LabPath(_BASH).exists():
+    _BASH = "bash"
+for _ld in sorted((ROOT / "labs" / "AGT").glob("L*")):
+    _rp = _subp.run([_BASH, str(ROOT / "labs" / "cham.sh"), "AGT", _ld.name], cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
+    rec(f"{_ld.name}:lab", _rp.returncode == 0 and "PASS" in _rp.stdout and "2 ca an" in _rp.stdout, f"cham.sh {_ld.name} (public + 2 ca_an)")
+
 print(f"TỔNG: {len(R) - nf} PASS · {nf} FAIL")
 sys.exit(1 if nf else 0)

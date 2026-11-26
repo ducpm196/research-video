@@ -1,0 +1,384 @@
+id: L05
+course: BEP
+series: BEP · Hệ sinh thái Backend Doanh nghiệp
+title: Bài 5 — Điều phối quy trình Saga, bù trừ, Exponential Backoff và DLQ
+voice: vi-VN-NamMinhNeural
+rate: -5%
+depth: full
+af2: true
+covers:
+- objective: 1
+  scene: example
+- objective: 2
+  scene: check
+- objective: 3
+  scene: check
+source: curriculum/bep.yaml L05; Python 3.13 + labs/cham.sh
+assumes: []
+objectives:
+- Cài máy điều phối quy trình Saga gọi bù trừ theo thứ tự đảo ngược khi một bước lỗi
+- Áp dụng lùi lũy thừa Exponential Backoff có trần giới hạn cho lỗi mạng tạm thời
+- Chuyển thông điệp độc hại sang kênh thư chết DLQ sau khi hết số lần thử lại tối đa
+asr_reviewed:
+- sentence: Công thức lùi lũy thừa kìm hãm tần suất gọi lại dịch vụ đang quá tải bằng ngưỡng trần cố định.
+  reason: 'ASR chép “Công thức lui lủy Thư Kim hãm tần suốt gọi là dịch vụ đang quá tải bằng ngưỡng trần cố định.” (0.714):
+    khác biệt [“lùi luỹ thừa kìm” → nghe thành “lui luỷ thư kim”; “suất” → nghe thành “suốt”; “lại” → nghe thành “là”]; lệch
+    âm/thanh thuần Việt hoặc cách đọc từ chuyên ngành/số chữ — NOT_VERIFIED bằng tai người'
+- sentence: Hôm nay ta cài đặt bộ điều phối Saga bù trừ ngược, tính bước lùi lũy thừa và phân luồng kênh thư chết DLQ.
+  reason: 'ASR chép “Hôm nay ta cài đặt bộ điều phối Saga bu trường ngược, tính bước lùi lụy thừa và phân luận kênh thư chết
+    đe eo cư.” (0.76): khác biệt [“bù trừ” → nghe thành “bu trường”; “luỹ” → nghe thành “luỵ”; “luồng” → nghe thành “luận”;
+    “dlq” → nghe thành “đe eo cư”]; lệch âm/thanh thuần Việt hoặc cách đọc từ chuyên ngành/số chữ — NOT_VERIFIED bằng tai
+    người'
+- sentence: Chiến lược thử lại với độ trễ lùi theo lũy thừa kèm kênh thư chết DLQ giúp cô lập lỗi vĩnh viễn không làm tắc
+    nghẽn luồng chính.
+  reason: 'ASR chép “Chiến lược thử lại với độ trễ lùi theo lũy thừa kèm kênh thư chết, đe eo kêu giúp cô lặp lỗi vĩnh viễn
+    không làm tắc ngãng luận chính.” (0.833): khác biệt [“d” → nghe thành “đe”; “kiu” → nghe thành “kêu”; “lập” → nghe thành
+    “lặp”; “nghẽn luồng” → nghe thành “ngãng luận”]; lệch âm/thanh thuần Việt hoặc cách đọc từ chuyên ngành/số chữ — NOT_VERIFIED
+    bằng tai người'
+- sentence: Phép kiểm chứng thứ hai áp dụng lùi lũy thừa Exponential Backoff có trần giới hạn cho lỗi mạng tạm thời trước
+    khi phân luồng.
+  reason: 'ASR chép “Phép kỉnh chứng thứ 2 áp dụng lùi lũy thừa XerPonential Backup có trần giới hạn cho lỗi mạng tạm thời
+    trước khi phân luôn.” (0.84): khác biệt [“kiểm” → nghe thành “kỉnh”; “exponential backoff” → nghe thành “xerponential
+    backup”; “luồng” → nghe thành “luôn”]; lệch âm/thanh thuần Việt hoặc cách đọc từ chuyên ngành/số chữ — NOT_VERIFIED bằng
+    tai người'
+- sentence: Lưu ý chỉ cộng dồn max retries lượt chờ backoff khi có ít nhất một bước thất bại; nếu mọi bước đều đạt thì tổng
+    chờ bằng không.
+  reason: 'ASR chép “Lưu ý chỉ cộng dồn mát re tri lượt chờ back-up khi có ít nhất một bước thất bại. Nếu mọi bước đều đạt
+    thì tổng chờ bằng 0.” (0.862): khác biệt [“max retries” → nghe thành “mát re tri”; “backoff” → nghe thành “back up”];
+    lệch âm/thanh thuần Việt hoặc cách đọc từ chuyên ngành/số chữ — NOT_VERIFIED bằng tai người'
+- sentence: Nếu bước đầu tiên thất bại ngay lập tức, danh sách đã làm xong rỗng nên chuỗi bù trừ vẫn là NONE dù cờ đẩy DLQ
+    bật lên bằng một.
+  reason: 'ASR chép “Nếu bước đầu tiên thất bại ngay lập tức, danh sách đã làm xong động nên chuỗi bù trừ vẫn là năng dù cờ
+    đẩy đe LQ bật lên bằng một.” (0.885): khác biệt [“rỗng” → nghe thành “động”; “none” → nghe thành “năng”; “dlq” → nghe
+    thành “đe lq”]; lệch âm/thanh thuần Việt hoặc cách đọc từ chuyên ngành/số chữ — NOT_VERIFIED bằng tai người'
+scenes:
+- id: hook
+  kind: hook
+  title: Điều phối Saga, bù trừ, Backoff và DLQ
+  checks:
+  - 100 * (2 ** 2) == 400
+  - 100 + 200 + 400 == 700
+  steps:
+  - show: <div class='box key'><p>Quy trình <b>Saga 3 bước</b> lỗi ở chặng 3 sẽ bù trừ ngược <code>comp(2) → comp(1)</code>;
+      chuỗi thử lại <b>Backoff</b> từ <code>100 ms</code> vượt ngưỡng <b>3 lượt</b> sẽ tách gọn vào <b>DLQ</b>.</p></div>
+    say: Một thông điệp hỏng định dạng nếu bị thử lại vô tận ở đầu hàng đợi có thể chặn đứng hàng trăm nghìn giao dịch hợp
+      lệ phía sau suốt nhiều giờ liền. Tương tự, nếu khâu giao vận từ chối nhưng khâu trừ tiền trước đó không có đường hoàn
+      tác ngược thứ tự, số dư khách hàng sẽ bị giữ sai vĩnh viễn.
+    clear: true
+  - show: <div class='box ok'><p><b>Mục tiêu hôm nay:</b> Cài bộ điều phối <b>Saga bù trừ ngược</b>, <b>Exponential Backoff</b>
+      và phân luồng <b>DLQ</b>.</p></div>
+    say: Hôm nay ta cài đặt bộ điều phối Saga bù trừ ngược, tính bước lùi lũy thừa và phân luồng kênh thư chết DLQ. Cơ chế
+      bù trừ đảo ngược bảo đảm trạng thái nghiệp vụ cuối cùng luôn sạch sẽ dù giao dịch kéo dài nhiều dịch vụ hỏng giữa đường.
+      Khi kết hợp với hàng đợi thư chết và thời gian lùi lũy thừa, hệ thống vừa chống nghẽn hàng đợi vừa tránh dồn tải vào
+      máy đang yếu.
+    clear: true
+- id: prereq
+  kind: prereq
+  title: Ôn nền và kết nối kiến thức trước
+  steps:
+  - show: <table class='t'><tr><th>mảnh ghép nền</th><th>vai trò trong bài</th></tr><tr><td>Mẫu Outbox nguyên tử</td><td>Bảo
+      đảm mỗi thay đổi trạng thái luôn sinh sự kiện đồng bộ trong cơ sở dữ liệu</td></tr><tr><td>Tính lũy đẳng bằng khoá duy
+      nhất</td><td>Cho phép gọi lại bước bù trừ hoặc thử lại an toàn nhiều lần</td></tr><tr><td>Phân biệt lỗi tạm thời và
+      vĩnh viễn</td><td>Mất mạng tạm thời thử lại được, còn sai dữ liệu thì thử mãi vẫn lỗi</td></tr></table>
+    say: Khi một nghiệp vụ ngân hàng hay thương mại điện tử kéo dài qua ba đến năm dịch vụ độc lập như giữ tồn kho. Trích
+      nợ ví và tạo vận đơn, giao dịch khoá phân tán hai pha trở nên quá chậm và dễ treo. Các bộ điều phối quy trình hiện đại
+      như Temporal. Camunda hay mô hình Saga giải quyết bài toán bằng chuỗi bước tiến nối tiếp đi kèm từng thao tác bù trừ
+      hoàn tác nếu khâu sau gặp sự cố. Song song đó ở tầng nhận thông điệp. Chiến lược thử lại với độ trễ lùi theo lũy thừa
+      kèm kênh thư chết DLQ giúp cô lập lỗi vĩnh viễn không làm tắc nghẽn luồng chính. Bài học hôm nay giúp bạn tự cài đặt
+      hoàn chỉnh bộ khung điều phối Saga có bù trừ đảo ngược và chuyển tuyến DLQ. Kết nối chặt chẽ các nền tảng này giúp giải
+      pháp cài đặt gọn gàng và ổn định. Thay cho khoá giữ chặt tài nguyên hai pha vốn làm chậm toàn bộ hệ thống, giao dịch
+      dài dùng bù trừ từng chặng gọn nhẹ. Mỗi bước tiến đều phải thiết kế sẵn hàm đảo ngược có tính lũy đẳng để sẵn sàng chạy
+      bù trừ khi nhánh sau thất bại.
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.4'
+    - '1.4'
+    - '1.4'
+    - '1.4'
+    - '1.4'
+    - '1.4'
+    clear: true
+- id: sym
+  kind: symbol
+  title: Quy chuẩn và cấu trúc dữ liệu
+  steps:
+  - show: <table class='t'><tr><th>viết trong mã</th><th>ý nghĩa cài đặt</th></tr><tr><td><code>Saga Compensation</code></td><td>Danh
+      sách hàm hoàn tác chạy theo thứ tự ngược lại đúng bằng các bước đã thực thi xong</td></tr><tr><td><code>min(cap, base
+      * 2^k)</code></td><td>Thời gian chờ lùi theo lũy thừa bậc hai có giới hạn trần chống chờ vô tận</td></tr><tr><td><code>DLQ
+      (Dead Letter Queue)</code></td><td>Hàng đợi riêng giữ các thông điệp vượt quá số lần thử lại tối đa chờ con người xử
+      lý</td></tr></table>
+    say: Bảng ký hiệu tóm tắt ba mảnh ghép kiểm soát lỗi cho quy trình bất đồng bộ nhiều chặng. Ngăn xếp bù trừ của Saga ghi
+      lại từng bước thành công để hoàn tác đảo chiều khi gặp trục trặc về sau. Công thức lùi lũy thừa kìm hãm tần suất gọi
+      lại dịch vụ đang quá tải bằng ngưỡng trần cố định. Khi hết ngân sách thử lại, thông điệp được chuyển thẳng sang hàng
+      đợi thư chết DLQ để giải phóng luồng. Những quy chuẩn trên sẽ xuyên suốt từ phần chạy thực nghiệm mẫu tới bài tập thực
+      hành cuối bài. Ngăn xếp lưu vết hoàn tác bảo đảm thứ tự khôi phục đúng chiều ngược lại của tiến trình thực thi thực
+      tế. Giới hạn trần chờ thử lại bảo vệ người nhận không rơi vào trạng thái đợi kéo dài vô tận trước khi chuyển tuyến lỗi.
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.4'
+    - '1.3'
+    - '1.4'
+    clear: true
+- id: intuition
+  kind: intuition
+  title: Luồng xử lý tổng thể
+  steps:
+  - show: <div><svg width="960" height="170" viewBox="0 0 960 170"><rect x="40" y="35" width="250" height="90" rx="10" fill="#dbeafe"
+      stroke="#2a78d6" stroke-width="2"/><text x="165.0" y="75" font-size="18" font-weight="700" text-anchor="middle" fill="#1e293b">Thực
+      thi bước tiến Saga</text><text x="165.0" y="102" font-size="15" text-anchor="middle" fill="#475569">Đẩy từng hành động
+      vào ngăn xếp</text><line x1="290" y1="80" x2="350" y2="80" stroke="#475569" stroke-width="2"/><polygon points="350,80
+      342.0,85.0 342.0,75.0" fill="#475569"/><text x="320" y="72" font-size="14" font-weight="600" text-anchor="middle" fill="#1e293b">bước
+      1</text><rect x="350" y="35" width="250" height="90" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/><text
+      x="475.0" y="75" font-size="18" font-weight="700" text-anchor="middle" fill="#1e293b">Thử lại lùi lũy thừa</text><text
+      x="475.0" y="102" font-size="15" text-anchor="middle" fill="#475569">100 → 200 → 400 ms (trần cap)</text><line x1="600"
+      y1="80" x2="660" y2="80" stroke="#475569" stroke-width="2"/><polygon points="660,80 652.0,85.0 652.0,75.0" fill="#475569"/><text
+      x="630" y="72" font-size="14" font-weight="600" text-anchor="middle" fill="#1e293b">bước 2</text><rect x="660" y="35"
+      width="260" height="90" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="2"/><text x="790.0" y="75" font-size="18"
+      font-weight="700" text-anchor="middle" fill="#1e293b">Bù trừ hoặc đẩy DLQ</text><text x="790.0" y="102" font-size="15"
+      text-anchor="middle" fill="#475569">Hoàn tác ngược + tách lỗi độc</text></svg></div>
+    say: Sơ đồ nối liền hai cơ chế bảo vệ bổ trợ lẫn nhau trong quy trình backend dài hơi. Mỗi khi hoàn tất một chặng chuyển
+      tiếp, bộ điều phối đẩy hàm bù trừ tương ứng vào ngăn xếp. Khi gặp lỗi tạm thời, hệ thống đợi theo bước lùi lũy thừa
+      trước lúc thử lại rồi mới đẩy sang kênh thư chết DLQ nếu vượt ngưỡng.
+    clear: true
+  - show: <table class='t'><tr><th>loại sự cố</th><th>cơ chế phản ứng đúng</th></tr><tr><td>Lỗi mạng tạm thời</td><td>Thử
+      lại lùi lũy thừa với trần giới hạn</td></tr><tr><td>Lỗi vĩnh viễn / vượt lượt</td><td>Đẩy sang <code>DLQ</code> và hoàn
+      tác ngược Saga</td></tr></table>
+    say: Sự phối hợp giữa vòng thử lại cục bộ và chuyển tuyến kênh thư chết tách bạch lỗi tạm thời với lỗi vĩnh viễn. Nhờ
+      vậy, trục trặc của một vài bản tin cá biệt không bao giờ làm kẹt toàn bộ dòng sự kiện phía sau.
+    clear: true
+- id: formula
+  kind: formula
+  title: Công thức và bất biến định lượng
+  checks:
+  - 100 * (2 ** 2) == 400
+  - 100 + 200 + 400 == 700
+  steps:
+  - show: <div class='box key'><p><b>1. Thời gian trễ lũy thừa có trần:</b> <code>delay(attempt) = min(cap_ms, base_ms * 2**attempt)</code>.</p><p><b>2.
+      Bất biến hoàn tác Saga:</b> Thành công <code>[s_1, s_2]</code> rồi lỗi tại <code>s_3</code> thì chỉ bù trừ <code>[comp_2,
+      comp_1]</code>.</p></div>
+    say: Hai công thức bảo đảm bộ điều phối quy trình xử lý đúng cả độ trễ mạng lẫn tính nhất quán nghiệp vụ cuối cùng. Công
+      thức thử lại nhân đôi khoảng nghỉ qua từng lần thất bại nhưng luôn chặn trên bởi ngưỡng trần để không làm cạn thời gian
+      chờ toàn cục. Bất biến bù trừ bắt buộc chỉ hoàn tác các bước đã chạy xong theo đúng chiều đảo ngược của ngăn xếp. Áp
+      dụng trần trên lên hàm mũ thời gian chờ giữ cho tổng độ trễ thử lại nằm gọn trong ngân sách thời gian cho phép. Bất
+      biến bù trừ bảo đảm bước nào chưa kịp chạy tới thì tuyệt đối không nằm trong danh sách gọi hàm hoàn tác.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    - '1.1'
+    - '1.2'
+    clear: true
+- id: example
+  kind: example
+  title: Chạy thật mô-đun cốt lõi
+  checks:
+  - 100 * (2 ** 2) == 400
+  - 100 + 200 + 400 == 700
+  steps:
+  - show: <p><b>Thử nghiệm Python chạy thật</b></p><div class="code"><div>steps = [('reserve', True), ('debit', True), ('ship',
+      False)]</div><div>done = []</div><div>comps = []</div><div>for name, ok in steps:</div><div>    if not ok:</div><div>        comps
+      = [f'undo_{x}' for x in reversed(done)]</div><div>        break</div><div>    done.append(name)</div><div>print('done='
+      + ','.join(done) + ' compensations=' + ','.join(comps))</div></div>
+    say: Đoạn mã cài máy điều phối quy trình Saga gọi bù trừ theo thứ tự đảo ngược khi một bước cuối gặp lỗi giả lập. Hai
+      bước giữ hàng và trừ tiền hoàn thành nên được ghi nhận lần lượt vào danh sách đã thực thi. Ngay khi bước giao vận thứ
+      ba thất bại, vòng lặp dừng lại và phát sinh danh sách hoàn tác đảo ngược đúng trình tự. Đưa hai bước đã hoàn thành vào
+      danh sách theo dõi rồi lật ngược thứ tự khi gặp lỗi ở bước giao vận cho thấy cấu trúc Saga cực kỳ sáng sủa.
+    focus:
+    - 1
+    - 2
+    - 2
+    - 2
+    clear: true
+  - show: <p><b>Đầu ra chạy thật (Python)</b></p><div class="code"><div>done=reserve,debit compensations=undo_debit,undo_reserve</div></div>
+    say: Kết quả chạy thật xác nhận hai thao tác hoàn tác thực thi ngược từ trừ tiền quay về nhả hàng giữ chỗ mà không hề
+      đụng vào bước chưa chạy. Điều này giữ nguyên bất biến tính toán vì phép đối chiếu bám sát định nghĩa gốc. Nhờ chạy bù
+      trừ đúng chiều ngược lại, tài khoản được hoàn tiền trước rồi hàng giữ chỗ trong kho mới được mở khoá sạch.
+    focus:
+    - 1
+    - 2
+    - 2
+    clear: true
+- id: check
+  kind: check
+  title: Đối chứng kiểm thử độc lập
+  checks:
+  - 100 * (2 ** 2) == 400
+  - 100 + 200 + 400 == 700
+  steps:
+  - show: <p><b>Phép kiểm chứng thứ hai</b></p><div class="code"><div>base, cap, max_ret = 100, 350, 3</div><div>waits = [min(cap,
+      base * (2 ** k)) for k in range(max_ret)]</div><div>routed_dlq = int(len(waits) &gt;= max_ret)</div><div>print(f'waits={waits}
+      total_wait={sum(waits)}ms dlq={routed_dlq}')</div></div>
+    say: Phép kiểm chứng thứ hai áp dụng lùi lũy thừa Exponential Backoff có trần giới hạn cho lỗi mạng tạm thời trước khi
+      phân luồng. Với nền một trăm mi-li-giây và trần ba trăm năm mươi, ba lần chờ lần lượt tăng từ một trăm, hai trăm lên
+      ba trăm năm mươi thay vì bốn trăm. Tổng thời gian chờ và cờ báo chuyển sang kênh thư chết chứng minh vòng thử lại không
+      bao giờ vượt giới hạn. Dãy thời gian một trăm, hai trăm rồi chạm trần ba trăm năm mươi mi-li-giây minh hoạ chính xác
+      cơ chế giới hạn bước nhảy.
+    focus:
+    - 1
+    - 2
+    - 2
+    - 2
+    clear: true
+  - show: <p><b>Đầu ra kiểm chứng</b></p><div class="code"><div>waits=[100, 200, 350] total_wait=650ms dlq=1</div></div>
+    say: Đầu ra kiểm chứng xác nhận tổng thời gian chờ của ba lượt là sáu trăm năm mươi mi-li-giây và thông điệp được đẩy
+      về DLQ. Điều này giữ nguyên bất biến tính toán vì phép đối chiếu bám sát định nghĩa gốc. Đếm đủ ba lần thất bại liên
+      tiếp là điều kiện rẽ nhánh gọn ghẽ đẩy bản tin sang kênh thư chết để kỹ sư kiểm tra.
+    focus:
+    - 1
+    - 2
+    - 2
+    clear: true
+- id: quymo
+  kind: example
+  title: Quy mô tải và điểm nghẽn vận hành
+  checks:
+  - 100 * (2 ** 2) == 400
+  - 100 + 200 + 400 == 700
+  steps:
+  - show: <table class='t'><tr><th>quy mô / bẫy</th><th>tác động</th><th>khuyến nghị kiến trúc</th></tr><tr><td>Sự cố gián
+      đoạn mạng 5 s</td><td>Nhiều worker thử lại cùng lúc</td><td>Dùng lùi lũy thừa + trần giới hạn + dao động ngẫu nhiên</td></tr><tr><td>Thông
+      điệp độc sai lược đồ</td><td>Tắc cứng cả phân vùng Kafka</td><td>Đẩy qua kênh thư chết DLQ sau đúng K lần thử thất bại</td></tr><tr><td>Quy
+      trình Saga 6 bước dài</td><td>Dễ sót bước bù trừ khi thêm nhánh</td><td>Cặp khai báo cố định (do, compensate) cho mỗi
+      bước tiến</td></tr></table>
+    say: Bảng kiến trúc làm rõ cơ chế chuyển thông điệp độc hại sang kênh thư chết DLQ sau khi hết số lần thử lại tối đa ở
+      quy mô cụm lớn. Nếu giữ thông điệp lỗi tại đầu phân vùng và thử lại vĩnh viễn, toàn bộ lưu lượng người dùng bình thường
+      xếp phía sau đều bị đình trệ theo. Đẩy qua hàng đợi thư chết kết hợp cảnh báo giúp hệ thống thông suốt trong lúc kỹ
+      sư phân tích sửa bản tin. Trong thực tế phân tán, bổ sung độ lệch ngẫu nhiên vào khoảng chờ lùi lũy thừa giúp hàng nghìn
+      máy trạm không cùng thức dậy thử lại đúng một giây. Kênh thư chết cần đi kèm hệ thống theo dõi và công cụ phát lại có
+      kiểm soát sau khi đã sửa lỗi định dạng.
+    focus:
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.3'
+    - '1.4'
+    clear: true
+- id: pitfalls
+  kind: pitfall
+  title: Ba sai lầm kỹ thuật thường gặp
+  steps:
+  - show: <table class='t'><tr><th>cảnh báo lỗi thường gặp</th></tr><tr><td><div class='box warn'><b>Lỗi 1 (bù trừ ngược thiếu
+      lũy đẳng):</b> Hàm hoàn tác chạy hai lần khi mạng chập chờn gây hoàn tiền đúp cho cùng một đơn hàng.<br><b>Lỗi 2 (bão
+      thử lại đồng pha):</b> Hàng nghìn máy chờ đúng cùng chu kỳ lũy thừa rồi đánh sập máy chủ đích lúc vừa hồi phục.<br><b>Lỗi
+      3 (DLQ bỏ hoang):</b> Đẩy sang kênh thư chết nhưng không gắn cảnh báo hoặc công cụ phát lại sau khi vá lỗi.</div></td></tr></table>
+    say: Hãy lưu ý ba lỗi vận hành rất dễ gặp khi cài đặt Saga, thử lại và kênh thư chết. Thứ nhất là quên bảo đảm tính lũy
+      đẳng cho hàm bù trừ khiến việc phát lại hoàn tác trừ hoặc cộng tiền nhiều lần. Thứ hai là thử lại không trần hoặc không
+      rải ngẫu nhiên gây bão đồng pha đập vào dịch vụ mới khởi động lại. Thứ ba là coi DLQ như thùng rác vứt đi mà không theo
+      dõi hay xây dựng quy trình xử lý lại. Nhận diện sớm các lỗi cấu trúc này giúp hệ thống giữ vững tính ổn định khi lưu
+      lượng tăng cao. Đặc biệt chú ý đảm bảo mọi thao tác bù trừ hoàn tác đều có khả năng chịu được việc nhận trùng thông
+      điệp nhiều lần. Nếu hàm hoàn tiền chạy lặp hai lần vì rớt mạng thì số dư khách hàng có nguy cơ bị cộng dôi sai lệch
+      nghiêm trọng.
+    focus:
+    - 0
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    clear: true
+- id: quiz
+  kind: quiz
+  title: Kiểm tra nhanh trước khi tự thực hành
+  checks:
+  - 100 * (2 ** 2) == 400
+  - 100 + 200 + 400 == 700
+  steps:
+  - show: <ol><li>Nếu quy trình 4 bước thành công ở 3 bước đầu và lỗi ở bước 4, hàm bù trừ chạy theo thứ tự nào?</li><li>Vì
+      sao kênh thư chết DLQ không thể thiếu trong kiến trúc tiêu thụ sự kiện?</li></ol>
+    say: Hãy tự kiểm tra qua hai câu hỏi chốt bài năm. Câu một, quy trình bốn bước lỗi ở bước cuối cùng thì trình tự bù trừ
+      diễn ra thế nào? Câu hai, tại sao mọi hàng đợi sự kiện cần có kênh thư chết? Tạm dừng và tự trả lời. Hai câu hỏi này
+      củng cố thứ tự đảo ngược khi bù trừ quy trình nhiều chặng và vai trò chống nghẽn của kênh thư chết.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    clear: true
+    pause: 20
+  - show: '<table class=''t''><tr><th>đáp án câu 1</th></tr><tr><td><p>① Chạy ngược từ bước đã xong gần nhất trở về đầu: <code>comp(3)
+      → comp(2) → comp(1)</code> (không bù trừ bước 4).</p></td></tr></table>'
+    say: 'Đáp án câu một: chạy đảo ngược từ bước ba về bước hai rồi bước một và bỏ qua bước bốn chưa hoàn thành. Nguyên tắc
+      đơn giản là bước nào chưa thực thi xong thì không cần bù trừ, chỉ hoàn tác tuần tự các bước đã chốt thành công.'
+    clear: true
+  - show: <table class='t'><tr><th>đáp án câu 2</th></tr><tr><td><p>② Để tách riêng bản tin hỏng vĩnh viễn sau hữu hạn lần
+      thử, tránh làm tắc toàn bộ thông điệp hợp lệ phía sau.</p></td></tr></table>
+    say: 'Đáp án câu hai: nhằm cách ly thông điệp lỗi vĩnh viễn sau khi hết lượt thử để không nghẽn các thông điệp sạch. Cô
+      lập bản tin lỗi vào kênh riêng giúp giữ vững thông lượng hệ thống ngay cả khi đối tác gửi định dạng hỏng hàng loạt.'
+    clear: true
+- id: practice
+  kind: practice
+  title: Tự làm bài tập và chấm tự động
+  lab: labs/BEP/L05
+  steps:
+  - show: <table class='t'><tr><th>Thực hành BEP:L05</th><th>Yêu cầu &amp; dữ liệu mẫu (stdin)</th></tr><tr><td><b>Nhiệm vụ</b></td><td>Chuyển
+      thông điệp độc hại sang kênh thư chết DLQ sau khi hết số lần thử lại tối đa</td></tr><tr><td><b>Dữ liệu mẫu</b></td><td><code>steps=reserve:OK,debit:OK,ship:FAIL;
+      base_ms=100 cap_ms=350 max_retries=3</code></td></tr><tr><td><b>Chấm bài</b></td><td><code>bash labs/cham.sh BEP L05
+      duong_dan/bai_cua_ban.py</code> (kèm 2 ca ẩn)</td></tr></table>
+    say: Mời bạn tự tay cài đặt bộ điều phối Saga và đường ống lùi lũy thừa đẩy sang kênh thư chết từ luồng chuẩn. Lưu ý xử
+      lý chính xác cả tình huống mọi bước đều thành công hoặc bước đầu tiên lỗi ngay khiến không có bước bù trừ nào và thời
+      gian chờ bằng không. Đọc kỹ quy chuẩn đọc luồng vào chuẩn và giữ nguyên định dạng đầu ra trên từng dòng để đáp ứng đủ
+      cả ca ẩn. Kiểm kỹ cách ghép chuỗi các bước bù trừ phân cách bằng dấu phẩy và giá trị mặc định khi không có bước nào
+      cần hoàn tác. Tình huống thử lại không xảy ra ở chuỗi thành công hoàn toàn phải giữ tổng thời gian chờ bằng không.
+    focus:
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.3'
+    - '1.4'
+    clear: true
+    pause: 30
+  - show: <table class='t'><tr><th>Gợi ý triển khai BEP:L05</th><th>Các bước cài đặt trọng tâm</th></tr><tr><td><b>Bước 1
+      (Saga tiến)</b></td><td>Duyệt <code>steps</code> đến bước <code>FAIL</code> đầu tiên thì <code>break</code> và đánh
+      dấu <code>failed=True</code></td></tr><tr><td><b>Bước 2 (bù trừ ngược)</b></td><td>Đảo ngược <code>done</code> nối chuỗi
+      <code>undo_&lt;step&gt;</code>; nếu không lỗi hoặc <code>done</code> rỗng thì in <code>NONE</code></td></tr><tr><td><b>Bước
+      3 (Backoff trần)</b></td><td>Chỉ cộng chuỗi chờ <code>min(cap_ms, base_ms * 2**k)</code> khi phát sinh lỗi</td></tr></table>
+    say: Gợi ý cài đặt bài thực hành nhấn mạnh ba nhánh biên dễ quên khi chấm ca ẩn. Nếu bước đầu tiên thất bại ngay lập tức,
+      danh sách đã làm xong rỗng nên chuỗi bù trừ vẫn là NONE dù cờ đẩy DLQ bật lên bằng một. Ngược lại nếu toàn bộ quy trình
+      đều thông suốt thành công, tổng thời gian chờ thử lại phải bằng không. Lưu ý chỉ cộng dồn max retries lượt chờ backoff
+      khi có ít nhất một bước thất bại; nếu mọi bước đều đạt thì tổng chờ bằng không.
+    focus:
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.4'
+    clear: true
+  - show: <p><b>Kết quả mong đợi với dữ liệu mẫu (3 dòng)</b></p><div class="code"><div>compensations=undo_debit,undo_reserve</div><div>backoff_total_ms=650</div><div>routed_dlq=1</div></div>
+    say: Kết quả chuẩn cho chuỗi ba bước lỗi tại vận đơn là bù trừ ngược trừ tiền rồi nhả hàng, tổng chờ sáu trăm năm mươi
+      mi-li-giây và chuyển tuyến DLQ bằng một. Khi toàn bộ các dòng đầu ra đều khớp tuyệt đối với đáp án chuẩn và hai ca ẩn
+      đều thông qua, bạn có thể an tâm lưu kết quả và chuyển tiếp. Các ca ẩn kiểm nghiệm cả nhánh thành công sạch, nhánh lỗi
+      ở chặng đầu tiên lẫn các trần chờ khác nhau.
+    focus:
+    - 1
+    - 2
+    - 2
+    clear: true
+- id: recap
+  kind: recap
+  title: Tổng kết bất biến bài học
+  steps:
+  - show: <div class="chain"><span class="n">Ngăn xếp bù trừ ngược Saga</span><span class="a">→</span><span class="n">Backoff
+      lũy thừa chặn trần</span><span class="a">→</span><span class="n">Cô lập lỗi bằng kênh DLQ</span></div>
+    say: Chuỗi quy chuẩn tóm gọn bộ ba giải pháp vận hành bền vững cho giao dịch dài đa dịch vụ gồm bù trừ đảo chiều. Thử
+      lại giãn cách có trần và tách lỗi độc sang DLQ. Mọi quy trình đều được chứng minh bằng số liệu định lượng chạy thật
+      thay cho mô tả lý thuyết suông. Bộ ba cơ chế điều phối và chịu lỗi này giữ cho kiến trúc hướng sự kiện luôn nhất quán
+      và thông suốt dưới mọi sự cố mạng.
+    focus:
+    - '1.1'
+    - '1.2'
+    - '1.3'
+    - '1.3'
+    clear: true
+  - show: <div class='box ok'><b>Hoàn thành BEP:L05:</b> đã kiểm chứng toàn bộ bất biến cốt lõi.</div>
+    say: Chúc mừng bạn đã nắm vững mẫu Saga và hàng đợi thư chết, sẵn sàng tối ưu bộ nhớ đệm chống dồn tải và nhật ký kiểm
+      toán toàn vẹn ở bài sáu.
+    clear: true
+    forward_ref: true
+_introduces: []

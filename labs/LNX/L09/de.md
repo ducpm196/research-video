@@ -1,9 +1,6 @@
-# Lab LNX L09 — Tính ngưỡng healthcheck và chẩn đoán cấu hình Compose
+# Lab LNX L09 — Phân tích cấu hình Compose và tính độ trễ healthcheck theo stdin
 
-Viết kịch bản Bash kiểm tra cấu hình dịch vụ hợp lệ (nghe `0.0.0.0`, dùng cổng nội bộ `6379`, chờ `service_healthy`) và tính độ trễ tối đa `interval=2, retries=5` để in đúng 3 dòng:
-1. `internal_addr=cache:6379`
-2. `wait_healthy=1`
-3. `max_detect_s=10`
+Viết kịch bản Bash đọc một dòng `<svc:port>|<cond>|<bind>|<interval>|<retries>` từ `stdin`, tách địa chỉ nội bộ, kiểm `cond == service_healthy` (`1`/`0`), và tính `max_detect_s = interval * retries`.
 
 Chấm tự động:
 ```bash

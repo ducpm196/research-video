@@ -1,11 +1,7 @@
-# Lab MLO L01 — Tái lập thí nghiệm: cố định hạt giống ngẫu nhiên giữ nguyên tập chia
+# Lab MLO L01 — Tái lập thí nghiệm với hạt giống ngẫu nhiên riêng
 
-Dùng hạt giống `7` và `9` với bộ sinh giả ngẫu nhiên có hạt giống riêng trong thư viện chuẩn `random` để rút ngẫu nhiên `5` phần tử không lặp từ dãy `0..11` để chứng minh cùng hạt giống luôn chia ra đúng cùng danh sách 5 phần tử còn khác hạt giống thì khác.
+Đọc `stdin` `n=<int> k=<int> s1=<int> s2=<int>`. Rút mẫu `k` phần tử từ `0..n-1` hai lần với `s1` và một lần với `s2` để kiểm tra tính lặp lại.
 
-Định dạng đầu ra:
-`same_seed=<1 hoặc 0> diff_seed=<1 hoặc 0> s7=<danh sách>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh MLO L01 duong_dan/bai_cua_ban.py
-```
+In 1 dòng: `same_seed=<0|1> diff_seed=<0|1> s7=<list>`.
+Chấm tự động: `bash labs/cham.sh MLO L01 duong_dan/bai_cua_ban.py`
+Nền tảng Python (`PYT:L04`): đọc dữ liệu qua `sys.stdin.read().strip()`.

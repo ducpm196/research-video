@@ -247,7 +247,7 @@ def run(rec):
         want = (lab / "mong_doi.txt").read_text(encoding="utf-8").strip()
         bash = lib2._bash()
         r = subprocess.run([bash, str(ROOT / "labs" / "cham.sh"), "BNX", "L16", str(lab / "loi_giai.java")], capture_output=True, text=True, encoding="utf-8", cwd=ROOT)
-        rec("L16", r.returncode == 0 and r.stdout.strip() == "ĐÚNG", f"lab: loi_giai.java chấm bằng labs/cham.sh → {r.stdout.strip()[:60]!r}")
+        rec("L16", r.returncode == 0 and r.stdout.strip().startswith("ĐÚNG"), f"lab: loi_giai.java chấm bằng labs/cham.sh → {r.stdout.strip()[:60]!r}")
         la, _s = leaves_by_size(100000, 5000)
         mine = f"so luong: 3\ntrong hang doi: 5\nnhan {3 + 5}, tu choi {14 - 3 - 5}\nso luot cho 14 viec: {math.ceil(14 / 3)}\nso viec la: {la}"
         rec("L16", want == mine and la == 32 == 2 ** 5 == alg.bnx_fj_leaves(1, 100000, 5000), "lab: 3 luồng + 5 chỗ nhận 8 từ chối 6, 5 lượt, 32 việc lá — tính lại bằng đường khác")

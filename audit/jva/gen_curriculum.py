@@ -1,6 +1,7 @@
 """Sinh curriculum/jva.yaml từ lessons/jva/*.yaml (tiêu đề, mục tiêu) + ví dụ và `fix` viết tay dưới đây.
 Chạy: .venv/Scripts/python audit/jva/gen_curriculum.py   (mỗi ví dụ dẫn mã VER JVA:Lxx có dòng rec trong audit/verify_plan_curricula.py;
 bộ kiểm thật của khoá là audit/jva/verify_jva.py — chạy javac/java trên mọi chương trình trong bài)"""
+import sys as _sys; from pathlib import Path as _P; _sys.path.insert(0, str(_P(__file__).resolve().parents[1])); import _frozen  # noqa: E402,F401
 import re
 import sys
 from pathlib import Path

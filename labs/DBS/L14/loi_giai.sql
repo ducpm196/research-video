@@ -1,5 +1,3 @@
-CREATE TABLE WAL(lsn INT, tx INT, act TEXT, delta INT);
-INSERT INTO WAL VALUES (1,1,'WRITE',50),(2,1,'COMMIT',0),(3,2,'WRITE',99);
 SELECT 'redo_applied_tx=' || COUNT(DISTINCT tx) FROM WAL WHERE act='COMMIT';
 SELECT 'undo_reverted_tx=' || COUNT(DISTINCT tx) FROM WAL WHERE act='WRITE' AND tx NOT IN (SELECT tx FROM WAL WHERE act='COMMIT');
-SELECT 'recovered_val=' || (100 + COALESCE(SUM(delta),0)) FROM WAL WHERE act='WRITE' AND tx IN (SELECT tx FROM WAL WHERE act='COMMIT');
+SELECT 'recovered_val=' || ((SELECT v FROM Base) + COALESCE((SELECT SUM(delta) FROM WAL WHERE act='WRITE' AND tx IN (SELECT tx FROM WAL WHERE act='COMMIT')), 0));

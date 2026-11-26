@@ -1,9 +1,4 @@
-# Lab RBM L14 — Định lý lấy mẫu Nyquist và tần số biểu kiến khi chồng phổ
+# Lab RBM L14 — Lấy mẫu Nyquist và tần số chồng phổ
 
-Một tín hiệu dao động ở tần số `f = 9 Hz` được lấy mẫu ở `fs = 12 Hz`. Tính ngưỡng lấy mẫu tối thiểu `2 * f` và tần số biểu kiến `|f - round(f/fs)*fs|`.
-In đúng 1 dòng `need_fs_gt=...Hz observed_alias=...Hz`.
-
-Chấm tự động:
-```bash
-bash labs/cham.sh RBM L14 duong_dan/bai_cua_ban.py
-```
+Đọc `f_sig fs` từ stdin (ví dụ `9.0 12.0`). Tính `2 * f_sig` và tần số biểu kiến.
+In đúng 1 dòng `need_fs_gt=<int>Hz observed_alias=<int>Hz`.

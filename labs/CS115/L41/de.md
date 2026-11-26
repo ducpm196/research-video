@@ -1,12 +1,6 @@
-# Lab CS115 L41 — Attention: softmax(QK^T / sqrt(d)) * V và kiểm tổng trọng số = 1
+# Lab CS115 L41 — Attention: softmax(QK^T / sqrt(d)) * V
 
-Tính cơ chế chú ý (`attention`) với số chiều `d = 4`, dãy điểm `QK^T = [2.0, 0.0]`, chia `sqrt(4) = 2`, chuẩn hoá mũ (softmax) theo hàng rồi lấy trung bình có trọng số với vector giá trị `V = [10.0, 2.0]`.
+Đọc `stdin` `d=<f> qkt=<s1,s2> v=<v1,v2>`. Chia điểm cho `sqrt(d)`, tính softmax 2 chiều và trung bình có trọng số với `V`.
 
-Định dạng đầu ra (2 dòng):
-`weights=<danh sách 2 số làm tròn 4 chữ số> sum=<1 chữ số>`
-`attn_out=<4 chữ số>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh CS115 L41 duong_dan/bai_cua_ban.py
-```
+In 2 dòng chuẩn: `weights=<list4> sum=<.1f>`, `attn_out=<.4f>`.
+Chấm tự động: `bash labs/cham.sh CS115 L41 duong_dan/bai_cua_ban.py`

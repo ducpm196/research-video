@@ -1,6 +1,6 @@
-# Lab IRS L04 — Truy hồi lai và hợp nhất thứ hạng
+# Lab IRS L04 — Hợp nhất thứ hạng tương hỗ RRF
 
-Với hằng số `k = 60`, tài liệu A đứng hạng `1` và `4` ở hai danh sách; tài liệu B đứng hạng `2` và `2`. Tính điểm hợp nhất `1/(k + hạng_1) + 1/(k + hạng_2)` cho A, B và xác định bên thắng.
+Đọc từ đầu vào chuẩn (`stdin`, dạng `khoá=giá_trị`) năm số nguyên `k=<int> a1=<int> a2=<int> b1=<int> b2=<int>` (hạng của A và B trên hai hệ). Tính điểm RRF `1/(k+r1) + 1/(k+r2)` cho A, B và xác định bên thắng.
 
-Định dạng đầu ra (1 dòng):
-`score_A=<5 chữ số> score_B=<5 chữ số> win=<A hoặc B>`
+In 1 dòng đúng nhãn (`<.5f>` làm tròn 5 chữ số thập phân, `<A|B>` là chữ `A` hoặc `B`): `score_A=<.5f> score_B=<.5f> win=<A|B>`.
+Chấm tự động: `bash labs/cham.sh IRS L04 duong_dan/bai_cua_ban.py`

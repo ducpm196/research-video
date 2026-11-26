@@ -1,0 +1,350 @@
+id: L02
+course: SPB
+series: SPB · Spring Boot thực chiến với PostgreSQL, Redis và Kafka
+title: Bài 2 — Tầng dịch vụ, tiêm phụ thuộc và giao dịch lan truyền hoàn tác
+voice: vi-VN-NamMinhNeural
+rate: -5%
+depth: full
+af2: true
+covers:
+- objective: 1
+  scene: sym
+- objective: 2
+  scene: check
+- objective: 3
+  scene: quymo
+source: curriculum/spb.yaml L02; labs/SPB/L02 (chạy thật ./mvnw -B verify với Spring Data JPA và H2)
+assumes: []
+objectives:
+- Cấu trúc tầng dịch vụ tiêm phụ thuộc qua hàm dựng bất biến thay vì tiêm thẳng lên trường
+- Chọn mức lan truyền REQUIRED và REQUIRES_NEW cùng thuộc tính rollbackFor cho ngoại lệ kiểm tra
+- Đo số kết nối bể giữ đồng thời khi giao dịch lồng nhau ở 5, 50 và 500 luồng
+scenes:
+- id: hook
+  kind: hook
+  title: 'Chuyển tiền thất bại nhưng nhật ký kiểm toán biến mất cùng lệnh hoàn tác: vì sao?'
+  checks:
+  - alg.spb_tx_connections(1, True) == (2, 2)
+  steps:
+  - show: <div class='box key'><p>Trong hệ thống ngân hàng, mọi lệnh chuyển khoản thất bại vì thiếu số dư phải <b>hoàn tác
+      số dư</b> nhưng <b>nhật ký tra soát vẫn phải còn trong cơ sở dữ liệu</b> để điều tra.</p><p>Mặc định của Spring chỉ
+      hoàn tác khi gặp ngoại lệ chưa kiểm tra và huỷ sạch cả các thao tác ghi bên trong nếu dùng chung một giao dịch.</p></div>
+    say: Chào bạn đến với bài hai của khoá Spring Boot thực chiến. Một lỗi kinh điển ở tầng dịch vụ là hệ thống hoàn tác số
+      dư tài khoản nhưng làm mất luôn bản ghi nhật ký tra soát sự cố. Ngược lại, nhiều ứng dụng ném ngoại lệ kiểm tra vì thiếu
+      số dư nhưng giao dịch lại không tự hoàn tác, dẫn tới trừ nhầm tiền khách hàng. Hôm nay ta học cách cấu trúc tầng dịch
+      vụ bất biến và điều khiển chính xác ranh giới giao dịch hoàn tác. Hiểu đúng ranh giới giao dịch và cơ chế lớp vỏ trung
+      gian giúp bạn ngăn chặn cả mất dấu kiểm toán lẫn rò rỉ tiền thật. Mọi tình huống đều được kiểm chứng qua chạy thật tầng
+      dịch vụ trên cơ sở dữ liệu ngay trong bài học.
+    focus:
+    - 0
+    - '1.1'
+    - '1.1'
+    - '1.2'
+    - '1.1'
+    - '1.2'
+    clear: true
+- id: prereq
+  kind: prereq
+  title: 'Ôn nhanh: giao dịch ACID và cơ chế lớp bọc proxy trong Spring'
+  steps:
+  - show: <table class='t'><tr><th>khái niệm nền</th><th>cơ chế trong Spring</th></tr><tr><td>Tính nguyên tử giao dịch</td><td>Hoặc
+      chốt cả khối lệnh, hoặc quay lui nguyên trạng ban đầu</td></tr><tr><td>Lớp bọc <code>proxy</code></td><td>Chặn lời gọi
+      từ ngoài đậu vào phương thức để mở/đóng giao dịch</td></tr><tr><td>Bể kết nối cơ sở dữ liệu</td><td>Số lượng kết nối
+      vật lý giới hạn cần trả lại sớm sau mỗi lượt</td></tr></table>
+    say: Hãy ôn nhanh ba khái niệm nền giúp bạn đọc hiểu toàn bộ hành vi giao dịch trong Spring. Tính nguyên tử bảo đảm mọi
+      thay đổi trong một khối công việc hoặc lưu trọn vẹn hoặc quay lui sạch sẽ. Spring không sửa mã nguồn của bạn mà bọc
+      quanh đối tượng dịch vụ một lớp vỏ trung gian gọi là pờ-rốc-xi để mở phiên trước khi hàm chạy và chốt sau khi hàm kết
+      thúc. Vì bể kết nối có kích thước giới hạn nên mỗi giao dịch giữ kết nối càng ngắn càng an toàn. Vì lớp vỏ trung gian
+      chỉ bọc bên ngoài hạt đậu dịch vụ, mọi lời gọi từ bên ngoài mới đi qua bộ mở đóng giao dịch. Hiểu đúng vai trò của lớp
+      bọc và bể kết nối là chìa khoá giải mã mọi hành vi kỳ lạ khi chạy giao dịch lồng nhau.
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.2'
+    - '1.4'
+    clear: true
+- id: sym
+  kind: symbol
+  title: Hai kiểu tiêm phụ thuộc và các tham số điều khiển giao dịch
+  steps:
+  - show: '<table class=''t''><tr><th>cấu trúc / tham số</th><th>hành vi đúng chuẩn sản xuất</th></tr><tr><td>Tiêm qua hàm
+      dựng (<code>final</code> field)</td><td>Khoá bất biến phụ thuộc, dễ khởi tạo trong kiểm thử đơn vị không cần Spring</td></tr><tr><td><code>Propagation.REQUIRED</code></td><td>Mặc
+      định: tham gia giao dịch đang mở sẵn, chỉ giữ đúng 1 kết nối</td></tr><tr><td><code>Propagation.REQUIRES_NEW</code></td><td>Treo
+      giao dịch ngoài, mở giao dịch mới và lấy thêm 1 kết nối độc lập</td></tr><tr><td><code>rollbackFor = Exception.class</code></td><td>Bắt
+      buộc hoàn tác cả với ngoại lệ kiểm tra (checked exception)</td></tr></table>'
+    say: Bảng này giải thích hai quy tắc thiết kế và hai thuộc tính giao dịch cốt lõi. Thứ nhất, luôn tiêm phụ thuộc qua hàm
+      dựng với trường bất biến để tránh lỗi con trỏ rỗng và dễ tách ra kiểm thử độc lập. Thứ hai, mức mặc định tham gia luôn
+      giao dịch cha nên chỉ giữ một kết nối duy nhất. Thứ ba, mức tạo mới độc lập tạm treo phiên cha để mở một phiên riêng,
+      nhờ đó nhật ký kiểm toán không bị cuốn trôi khi giao dịch chính quay lui. Thứ tư, khai báo thuộc tính hoàn tác rõ ràng
+      giúp cả ngoại lệ kiểm tra cũng kích hoạt quay lui an toàn. Việc chọn tham số lan truyền phù hợp luôn phải cân bằng giữa
+      nhu cầu tách phiên độc lập và giới hạn số kết nối vật lý. Ghi rõ danh sách ngoại lệ kiểm tra cần hoàn tác biến quy ước
+      ngầm thành hợp đồng rõ ràng ngay trên chữ ký hàm.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.3'
+    - '1.4'
+    clear: true
+- id: intuition
+  kind: intuition
+  title: 'Đường đi lớp proxy: Lời gọi ngoài vs Lời gọi nội bộ (self-invocation)'
+  steps:
+  - show: '<div><svg width="960" height="210" viewBox="0 0 960 210"><rect x="25" y="25" width="165" height="75" rx="10" fill="#dbeafe"
+      stroke="#2a78d6" stroke-width="2"/><text x="107.5" y="57" font-size="16" font-weight="700" text-anchor="middle" fill="#1e293b">Controller</text><text
+      x="107.5" y="81" font-size="13" text-anchor="middle" fill="#475569">Gọi từ bên ngoài</text><line x1="190" y1="62" x2="245"
+      y2="62" stroke="#475569" stroke-width="2"/><polygon points="245,62 237,57 237,67" fill="#475569"/><rect x="245" y="25"
+      width="215" height="75" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="2"/><text x="352.5" y="57" font-size="16"
+      font-weight="700" text-anchor="middle" fill="#1e293b">Proxy 1 (REQUIRED)</text><text x="352.5" y="81" font-size="13"
+      text-anchor="middle" fill="#475569">Mở TX 1 (Kết nối 1)</text><line x1="460" y1="62" x2="515" y2="62" stroke="#475569"
+      stroke-width="2"/><polygon points="515,62 507,57 507,67" fill="#475569"/><rect x="515" y="25" width="415" height="75"
+      rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/><text x="722.5" y="57" font-size="16" font-weight="700" text-anchor="middle"
+      fill="#1e293b">Proxy 2: AuditLogService (REQUIRES_NEW)</text><text x="722.5" y="81" font-size="13" text-anchor="middle"
+      fill="#475569">Mở TX 2 (Kết nối 2) → Commit độc lập khi TX 1 rollback</text><rect x="245" y="122" width="685" height="68"
+      rx="10" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/><text x="587.5" y="152" font-size="16" font-weight="700" text-anchor="middle"
+      fill="#991b1b">Bẫy self-invocation: this.record(...) trong cùng class</text><text x="587.5" y="176" font-size="13" text-anchor="middle"
+      fill="#475569">Bỏ qua Proxy 2 → chạy chung TX 1 → bị rollback theo giao dịch chính!</text></svg></div>'
+    say: Quan sát sơ đồ hoạt động của hai tầng dịch vụ qua lớp bọc pờ-rốc-xi. Bộ điều khiển bên ngoài gọi vào dịch vụ chuyển
+      khoản nên yêu cầu đi đúng qua lớp bọc mở giao dịch số một trên kết nối đầu tiên. Khi dịch vụ chuyển khoản gọi sang
+      dịch vụ nhật ký nằm ở một lớp riêng biệt, lời gọi lại đi qua một lớp bọc thứ hai.
+    clear: true
+  - show: ''
+    say: Nhờ đánh dấu tạo phiên độc lập, kết nối số hai chốt xong bản ghi kiểm toán ngay lập tức bất chấp giao dịch chính
+      quay lui sau đó. Nhờ đường dẫn đi qua hai lớp vỏ độc lập của hai lớp dịch vụ riêng biệt, kết nối thứ hai không phụ
+      thuộc số phận phiên cha. Trạng thái đóng hay quay lui của mỗi phiên được điều phối rành mạch đúng theo chú thích gắn
+      trên từng phương thức.
+- id: formula
+  kind: formula
+  title: Số kết nối đồng thời và quy tắc ngoại lệ hoàn tác mặc định
+  checks:
+  - alg.spb_tx_connections(50, True) == (2, 100)
+  - 500 * 2 == 1000
+  steps:
+  - show: <div class='box key'><p><b>Hai con số cần nhớ khi thiết kế giao dịch lồng nhau:</b></p><p>1. Một luồng gọi <code>REQUIRED
+      → REQUIRES_NEW</code> giữ đồng thời <b>2 kết nối JDBC</b> cùng lúc (kết nối cha chờ kết nối con xong mới tiếp tục).</p><p>2.
+      Với bể HikariCP mặc định <b>10 kết nối</b>, chỉ cần <b>10 luồng</b> cùng mở giao dịch con lồng nhau là cả 10 kết nối
+      cha đều bận, gây <b>bế tắc bể kết nối (connection pool deadlock)</b>!</p></div>
+    say: Phép tính đơn giản này giải thích một lỗi treo hệ thống rất hay gặp trên thực tế. Khi phiên cha giữ một kết nối mà
+      chưa trả lại và xin thêm kết nối cho phiên con thì mỗi luồng chiếm hai chỗ. Vì bể tối đa mười kết nối, nếu mười luồng
+      cùng chạy tới điểm đó thì phiên con chờ mãi không nhận được kết nối. Đây là nguyên nhân chính khiến hệ thống treo cứng
+      dưới tải cao dù số lượng máy khách đồng thời mới chỉ bằng đúng cỡ bể kết nối. Do đó, bất cứ khi nào dùng mức tạo phiên
+      độc lập, hãy tính nhẩm gấp đôi nhu cầu kết nối hoặc cân nhắc tách xử lý bất đồng bộ.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    clear: true
+- id: example
+  kind: example
+  title: 'Mã thật: TransferService tiêm hàm dựng + AuditLogService độc lập'
+  checks:
+  - 500_000 - 150_000 == 350_000
+  steps:
+  - show: <p><b>1. Dịch vụ nhật ký mở phiên riêng bằng REQUIRES_NEW</b></p><div class="code"><div>@Service</div><div>public
+      class AuditLogService {</div><div>  private final AuditEntryRepo repo;</div><div>  public AuditLogService(AuditEntryRepo
+      repo) { this.repo = repo; }</div><div>  @Transactional(propagation = Propagation.REQUIRES_NEW)</div><div>  public void
+      record(String msg) {</div><div>    repo.save(new AuditEntry(msg));</div><div>  }</div><div>}</div></div>
+    say: Đoạn mã đầu tiên cài đặt dịch vụ nhật ký trong một lớp riêng biệt hoàn toàn với dịch vụ chuyển khoản. Nhờ tách sang
+      lớp riêng và tiêm phụ thuộc qua hàm dựng, mọi lời gọi tới phương thức ghi nhật ký đều đi qua lớp bọc pờ-rốc-xi. Khi
+      hàm chạy xong, giao dịch con tự động chốt xuống bảng ngay lập tức mà không chờ kết quả của hàm gọi nó. Lưu ý phương
+      thức ghi nhật ký dùng đúng mức lan truyền tạo phiên mới để cam kết độc lập với luồng chuyển tiền chính. Cấu trúc chỉ
+      một hàm dựng với tham số bắt buộc bảo đảm dịch vụ không bao giờ khởi tạo trong trạng thái thiếu kho lưu trữ.
+    focus:
+    - 1
+    - 2
+    - 2
+    - 1
+    - 2
+    clear: true
+  - show: <p><b>2. Dịch vụ chuyển khoản tiêm hàm dựng và hoàn tác ngoại lệ kiểm tra</b></p><div class="code"><div>@Service
+      public class TransferService {</div><div>  private final AccountRepo accounts; private final AuditLogService audit;</div><div>  public
+      TransferService(AccountRepo a, AuditLogService au) { accounts=a; audit=au; }</div><div>  @Transactional(rollbackFor
+      = InsufficientFundsException.class)</div><div>  public void transfer(String from, String to, long amt) throws InsufficientFundsException
+      {</div><div>    if (from.equals(to) || amt &lt;= 0) throw new IllegalArgumentException("Tham so loi");</div><div>    Account
+      src = accounts.findById(from).orElseThrow();</div><div>    Account dst = accounts.findById(to).orElseThrow();</div><div>    src.setBalance(src.getBalance()
+      - amt);</div><div>    audit.record("TRY " + from + "-&gt;" + to + ":" + amt);</div><div>    if (src.getBalance() &lt;
+      0) throw new InsufficientFundsException("Khong du so du");</div><div>    dst.setBalance(dst.getBalance() + amt);</div><div>  }</div></div>
+    say: Tiếp theo là dịch vụ chuyển khoản với hai trường kho dữ liệu và nhật ký đều là biến bất biến nhận từ hàm dựng. Ta
+      cố ý trừ tạm số dư rồi ghi nhật ký trước khi ném ngoại lệ kiểm tra thiếu tiền để thử thách ranh giới hoàn tác. Nhờ khai
+      báo rõ thuộc tính hoàn tác cho lớp ngoại lệ kiểm tra này, số dư tài khoản nguồn được khôi phục nguyên vẹn trong khi
+      dòng nhật ký vừa ghi vẫn tồn tại. Bên cạnh điều kiện kiểm tra số dư, hàm cũng kiểm tra tự chuyển cùng một mã tài khoản
+      từ gửi sang nhận để từ chối ngay đầu vào. Nếu phát hiện tài khoản nguồn trùng với tài khoản đích hoặc số tiền không
+      dương, hàm ném ngoại lệ tham số bất hợp lệ sạch sẽ.
+    focus:
+    - 1
+    - 2
+    - 2
+    - 1
+    - 2
+    clear: true
+- id: check
+  kind: check
+  title: 'Chạy thật trên Boot 4.1.3 + JPA: ngoại lệ kiểm tra hoàn tác sạch, nhật ký còn nguyên'
+  checks:
+  - 500_000 + 200_000 == 700_000
+  steps:
+  - show: '<p><b>Kết quả chạy thật KiemL02Test qua ./mvnw -B verify</b></p><div class="code"><div>// Seed: A = 500_000, B
+      = 200_000</div><div>// 1) transfer("A", "B", 150_000) → A = 350_000, B = 350_000, audits = 1</div><div>// 2) transfer("A",
+      "B", 900_000) → ném InsufficientFundsException</div><div>//    Sau hoàn tác: A = 500_000, B = 200_000 (bảo toàn 700_000),
+      audits = 1</div><div>[INFO] Tests run: 4, Failures: 0, Errors: 0, Total time: 14.580 s</div><div>ĐÚNG — PASS /d/research-video/labs/SPB/L02
+      (du_an maven)</div></div>'
+    say: Màn hình xác nhận đầu ra thật từ bốn ca kiểm thử tích hợp cơ sở dữ liệu khi chạy lệnh dựng kiểm. Ở ca đầu tiên hợp
+      lệ, tổng tiền hai tài khoản vẫn bảo toàn đúng bảy trăm nghìn đồng vì tiền trừ bằng tiền cộng. Ở ca vượt số dư, số dư
+      quay lui nguyên vẹn nhờ thuộc tính hoàn tác, còn bản ghi kiểm toán vẫn lưu lại nhờ phiên độc lập. Ca kiểm thứ ba xác
+      nhận kịch bản từ chối khi tài khoản gửi trùng tài khoản nhận mà không chạm vào bảng số dư. Ca kiểm thứ tư bảo đảm tổng
+      tiền toàn bộ hai tài khoản sau hàng loạt giao dịch đạt và hỏng vẫn bằng đúng vốn khởi tạo ban đầu.
+    focus:
+    - 1
+    - 2
+    - 2
+    - 2
+    - 2
+    clear: true
+- id: quymo
+  kind: example
+  title: Số kết nối bể giữ đồng thời ở 5, 50 và 500 luồng lồng giao dịch
+  checks:
+  - alg.spb_tx_connections(5, True) == (2, 10)
+  - alg.spb_tx_connections(50, True) == (2, 100)
+  - alg.spb_tx_connections(500, True) == (2, 1000)
+  steps:
+  - show: <table class='t'><tr><th>số luồng đồng thời</th><th>REQUIRED chung (1 kết nối/luồng)</th><th>REQUIRED + REQUIRES_NEW
+      (2 kết nối/luồng)</th></tr><tr><td><b>5 luồng</b></td><td>Giữ tối đa 5 kết nối</td><td>Giữ tối đa <b>10 kết nối</b>
+      (vừa chạm ngưỡng bể mặc định)</td></tr><tr><td><b>50 luồng</b></td><td>Giữ 50 kết nối (hoặc xếp hàng đều)</td><td>Đòi
+      tới <b>100 kết nối</b> nếu không tách giao dịch ngoài</td></tr><tr><td><b>500 luồng</b></td><td>500 kết nối</td><td>Đòi
+      <b>1 000 kết nối</b> → nghẽn nặng nếu gọi lồng giữa giờ cao điểm</td></tr></table>
+    say: Bảng quy mô cho thấy rõ cái giá phải trả của việc lạm dụng giao dịch con lồng nhau ở mức năm, năm mươi và năm trăm
+      luồng. Với chỉ năm luồng hệ thống giữ mười kết nối chạm ngưỡng bể mặc định, còn ở năm mươi luồng nhu cầu vọt lên một trăm kết nối. Khi
+      tăng lên năm trăm luồng đồng thời, tổng nhu cầu vọt lên một nghìn kết nối nếu phiên cha vẫn ôm chặt kết nối cũ. Do đó
+      ở quy mô lớn, ta nên ghi nhật ký bất đồng bộ hoặc đẩy ra sau khi giao dịch chính đã kết thúc thay vì mở hai kết nối
+      song song. Ngoài việc tốn gấp đôi kết nối, thời gian giữ kết nối của phiên cha cũng kéo dài hơn vì phải chờ phiên con
+      ghi xong xuống đĩa. Với hệ thống lớn hơn nữa, mô hình bảng chờ xuất tin kết hợp hàng đợi bất đồng bộ sẽ giải phóng hẳn
+      nút thắt hai kết nối đồng thời.
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.3'
+    - '1.4'
+    clear: true
+- id: pitfalls
+  kind: pitfall
+  title: Ba lỗi giao dịch gây rò rỉ tiền hoặc treo hệ thống
+  steps:
+  - show: <table class='t'><tr><th>lỗi kỹ thuật thường gặp ở tầng dịch vụ</th></tr><tr><td><div class='box warn'><b>Lỗi 1
+      — Quên <code>rollbackFor</code> khi ném checked exception:</b> Spring chỉ tự hoàn tác cho <code>RuntimeException</code>
+      và <code>Error</code>, làm số dư trừ dở vẫn bị commit!<br><b>Lỗi 2 — Tự gọi phương thức trong cùng lớp (<code>this.record(...)</code>):</b>
+      Lời gọi đi thẳng bỏ qua lớp proxy, khiến <code>REQUIRES_NEW</code> hoàn toàn vô tác dụng.<br><b>Lỗi 3 — Dùng tiêm trường
+      (<code>@Autowired</code> trên field):</b> Giấu phụ thuộc, không tạo được biến <code>final</code> và khó viết test đơn
+      vị thuần.</div></td></tr></table>
+    say: Ba lỗi trên bảng đều là những lỗi nghiêm trọng đã từng gây sự cố ngoài đời thực. Quên khai báo hoàn tác cho ngoại
+      lệ kiểm tra làm phần tiền vừa trừ ở tài khoản nguồn vẫn bị chốt xuống đĩa dù tài khoản đích chưa hề được cộng. Gọi chéo
+      hai hàm nằm trong cùng một lớp khiến lớp bọc không chặn được, nên mọi cấu hình mở phiên mới đều mất hiệu lực. Cuối cùng,
+      tiêm phụ thuộc thẳng lên trường che giấu độ phình của lớp và làm khó bước kiểm thử không dùng khung. Hãy bỏ thói quen
+      gắn chú thích tiêm trực tiếp lên biến thành viên vì chỉ một hàm dựng tường minh đã đủ giúp Spring tự động tiêm sạch.
+      Tách lớp nhỏ theo đúng trách nhiệm nghiệp vụ còn giúp mã nguồn sáng sủa và dễ viết kiểm thử độc lập hơn nhiều.
+    focus:
+    - 0
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    clear: true
+- id: quiz
+  kind: quiz
+  title: Kiểm tra nhanh lan truyền và hoàn tác giao dịch
+  checks:
+  - alg.spb_tx_connections(10, True) == (2, 20)
+  steps:
+  - show: <ol><li>Nếu đặt phương thức <code>record()</code> đánh dấu <code>REQUIRES_NEW</code> ngay bên trong lớp <code>TransferService</code>
+      rồi gọi <code>this.record()</code>, nhật ký có được giữ lại khi giao dịch chính quay lui không?</li><li>Tại sao ngoại
+      lệ kiểm tra kế thừa <code>Exception</code> cần ghi rõ <code>rollbackFor</code>?</li></ol>
+    say: Hãy tự kiểm hiểu hai câu hỏi tình huống quen gặp khi phỏng vấn Spring. Câu một, nếu đặt hàm ghi nhật ký tạo phiên
+      mới trong cùng lớp và gọi nội bộ, bản ghi có sống sót khi giao dịch chính hoàn tác không? Câu hai, vì sao ta phải khai
+      báo thêm thuộc tính hoàn tác cho ngoại lệ kiểm tra? Bấm tạm dừng và trả lời. Đây là hai câu hỏi kinh điển kiểm tra xem
+      bạn có hiểu bản chất hoạt động của lớp vỏ giao dịch Spring hay không.
+    pause: 20
+  - show: <table class='t'><tr><th>đáp án câu 1</th></tr><tr><td><p>① <b>Không.</b> Lời gọi <code>this.record()</code> đi
+      thẳng không qua proxy của Spring nên chạy chung giao dịch với hàm gọi và bị cuốn trôi khi hoàn tác.</p></td></tr></table>
+    say: 'Đáp án câu một: không sống sót vì lời gọi nội bộ đi xuyên thẳng không qua lớp vỏ trung gian, nên vẫn chạy chung
+      trong giao dịch gốc. Cách sửa triệt để là tách hàm ghi nhật ký sang một lớp dịch vụ riêng biệt rồi tiêm qua hàm dựng.
+      Khi đó, mọi lời gọi đều đi qua lớp vỏ trung gian của dịch vụ kia và mở đúng phiên giao dịch độc lập.'
+    clear: true
+  - show: <table class='t'><tr><th>đáp án câu 2</th></tr><tr><td><p>② Vì theo quy ước mặc định của Spring, khung chỉ tự hoàn
+      tác cho ngoại lệ chưa kiểm tra (<code>RuntimeException</code>) và bỏ qua checked exception trừ khi khai báo <code>rollbackFor</code>.</p></td></tr></table>
+    say: 'Đáp án câu hai: quy ước mặc định của khung chỉ quay lui với ngoại lệ thời gian chạy, nên ngoại lệ kiểm tra đòi hỏi
+      phải chỉ rõ tên lớp hoàn tác. Trong nghiệp vụ ngân hàng, các ngoại lệ kiểm tra như thiếu số dư thường gắn kèm hoàn tác
+      rõ ràng ngay trên chú thích giao dịch. Nhờ vậy bất kỳ nhánh thất bại nghiệp vụ nào cũng trả lại toàn bộ thay đổi dở
+      dang về trạng thái an toàn ban đầu.'
+    clear: true
+- id: practice
+  kind: practice
+  title: Cài đặt tầng dịch vụ bất biến và kiểm chứng hoàn tác lồng nhau
+  lab: labs/SPB/L02
+  steps:
+  - show: <div class='box key'><p><b>Thực hành bài L02 (<code>labs/SPB/L02/de.md</code>):</b> tách riêng hai dịch vụ <code>TransferService</code>
+      và <code>AuditLogService</code> tiêm phụ thuộc qua hàm dựng; cấu hình <code>REQUIRES_NEW</code> cho nhật ký và <code>rollbackFor
+      = InsufficientFundsException.class</code> cho chuyển khoản, rồi chấm:</p><p><code>bash labs/cham.sh SPB L02 duong_dan/du_an_cua_ban</code></p></div>
+    say: Hãy mở tệp đề bài L02 để cài đặt đúng hai lớp dịch vụ tách rời cùng bộ kiểm cơ sở dữ liệu nhẹ trong bộ nhớ. Chú ý
+      thử nghiệm cả trường hợp chuyển khoản hợp lệ lẫn kịch bản vượt quá số dư để bảo đảm số dư quay lui đủ còn dòng nhật
+      ký vẫn giữ lại được. Bấm tạm dừng và hoàn thành trước khi xem kết quả chấm. Đừng quên kiểm tra chặn giao dịch tự chuyển
+      từ một tài khoản sang chính nó và từ chối số tiền nhỏ hơn hoặc bằng không. Cả bốn kịch bản thử nghiệm đều phải chạy
+      xanh sạch thông qua lệnh dựng kiểm chuẩn Maven đóng gói.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    - '1.1'
+    - '1.2'
+    clear: true
+    pause: 30
+  - show: '<p><b>Kết quả chấm bộ kiểm KiemL02Test (4 ca kiểm thử giao dịch thật)</b></p><div class="code"><div>KiemL02Test:
+      4 ca, 0 hỏng</div></div>'
+    say: Màn hình hiện kết quả đạt trọn bốn ca kiểm thử giao dịch thật của trình chấm. Cả kịch bản chuyển đúng, kịch bản quay
+      lui giữ nhật ký, từ chối tự chuyển và bảo toàn tổng số dư đều phải thông suốt. Trình chấm tự động kiểm chứng hành vi
+      hoàn tác ngay cả khi dòng nhật ký ghi trước khi phát sinh ngoại lệ thiếu tiền.
+    focus:
+    - 1
+    - 2
+    - 2
+    clear: true
+  - show: <div class='box ok'><p><b>Gợi ý nếu kẹt ở bài L02:</b> (1) đặt <code>AuditLogService</code> thành một bean <code>@Service</code>
+      riêng; (2) chắc chắn đã thêm thuộc tính <code>rollbackFor = InsufficientFundsException.class</code>; (3) từ chối tự
+      chuyển (<code>fromId.equals(toId)</code>) bằng <code>IllegalArgumentException</code>.</p></div>'
+    say: Nếu ca kiểm thử hoàn tác vẫn báo sai số dư hoặc mất dòng nhật ký, hãy đối chiếu lại ba gợi ý trên màn hình. Kiểm
+      tra kỹ xem hai lớp dịch vụ đã tách rời hay chưa và chú thích giao dịch đã ghi đúng tên lớp ngoại lệ cần hoàn tác chưa.
+      Kiểm tra kỹ hàm dựng của cả hai dịch vụ xem các trường phụ thuộc đã đánh dấu bất biến hay chưa.
+    focus:
+    - 0
+    - 1
+    - 1
+    clear: true
+- id: recap
+  kind: recap
+  title: Tổng kết tầng dịch vụ và quản lý ranh giới giao dịch
+  steps:
+  - show: <div class='chain'><span class='n'>Tiêm hàm dựng</span><span class='a'>→</span><span class='n'>Tách lớp tránh self-call</span><span
+      class='a'>→</span><span class='n'>Kiểm soát REQUIRED / REQUIRES_NEW</span></div>
+    say: Bạn vừa làm chủ hai kỹ thuật cốt lõi ở tầng dịch vụ là tiêm phụ thuộc bất biến và điều khiển ranh giới giao dịch
+      an toàn. Luôn để ý chi phí giữ hai kết nối khi lồng giao dịch và ghi rõ ngoại lệ hoàn tác ngay từ đầu. Bây giờ dịch
+      vụ đã có tầng giao tiếp sạch sẽ và tầng nghiệp vụ nguyên tử sẵn sàng kết nối cơ sở dữ liệu sản xuất.
+    focus:
+    - '1.1'
+    - '1.3'
+    - '1.3'
+    clear: true
+  - show: <div class='box ok'><b>Bài sau (bài 3):</b> Spring Data JPA, PostgreSQL 17 trên Docker và Flyway — Bắt tại trận
+      và sửa lỗi 1+N</div>
+    say: Bài tiếp theo ta kết nối dự án với cơ sở dữ liệu PostgreSQL thật trên Docker thông qua Flyway và xử lý triệt để lỗi
+      truy vấn một cộng N. Hẹn gặp bạn ở bài sau. Hãy nhớ kỹ quy tắc tách lớp tránh tự gọi nội bộ để chuẩn bị bước sang làm
+      việc với PostgreSQL thật.
+    clear: true
+    forward_ref: true

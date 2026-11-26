@@ -4,6 +4,7 @@ Bao phủ Git/CI bisect, xác suất xung đột hợp nhất, SemVer, flaky tes
 IaC lũy đẳng, lộ bí mật lịch sử Git, canary p-value, expand-contract DB migration,
 4 chỉ số DORA, MTTR/sẵn sàng, lưu lượng log, ký tạo tác RSA, và chuẩn hoá khoảng DORA.
 """
+import sys as _sys; from pathlib import Path as _P; _sys.path.insert(0, str(_P(__file__).resolve().parents[2])); import _frozen  # noqa: E402,F401
 import subprocess
 import sys
 from pathlib import Path

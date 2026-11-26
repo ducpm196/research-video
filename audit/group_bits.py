@@ -3,6 +3,7 @@
 Lý do (OBSERVED, CSA L01/L02 asr 2026-10-28): dãy ≥ 5 chữ số 0/1 đọc liền, ASR gộp thành số và chép thiếu/sai chữ số
 (“0 0 0 0 0 1 0 1” → “0000001”), nên không kiểm được TTS có đọc đủ; nhóm 4 bit cũng là cách đọc chuẩn cho người học.
 Chỉ đổi trường `say`, không đổi màn hình. Chạy: group_bits.py lessons/csa/L01_….yaml …  (in từng dòng đổi)"""
+import sys as _sys; from pathlib import Path as _P; _sys.path.insert(0, str(_P(__file__).resolve().parents[0])); import _frozen  # noqa: E402,F401
 import re
 import sys
 from pathlib import Path

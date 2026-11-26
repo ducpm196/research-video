@@ -1,5 +1,6 @@
-imps = {'x1': 50, 'x2': 180, 'x3': 310}
-clicks = [('x1', 200), ('x2', 900), ('x3', 500)]
-hit = [k for k, t in clicks if k in imps and 0 <= t - imps[k] <= 600]
-print(f'matched={hit}')
-print(f'match_count={len(hit)}')
+import sys
+kv = dict(t.split('=') for t in sys.stdin.read().split())
+imps = {p.split(':')[0]: int(p.split(':')[1]) for p in kv['imps'].split(',')}
+clks = [(p.split(':')[0], int(p.split(':')[1])) for p in kv['clicks'].split(',')]
+w = int(kv['win']); hit = [k for k, t in clks if k in imps and 0 <= t - imps[k] <= w]
+print(f'matched={hit}\nmatch_count={len(hit)}')

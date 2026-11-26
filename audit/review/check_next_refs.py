@@ -10,7 +10,9 @@ import yaml
 
 sys.stdout.reconfigure(encoding="utf-8")
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "audit" / "review" / "learn_start"))
+import lv  # noqa: E402
 import pack  # noqa: E402
 
 cur = pack.load_cur()
@@ -22,25 +24,31 @@ for n, (C, i) in enumerate(seq):
         if C2 == C:
             nxt_same[f"{C}:{i}"] = i2
             break
-REF = re.compile(r"[Bb]ài sau \(bài (\d+)\)")
+REF = re.compile(r"(?:[Bb]ài sau \(bài |chuyển sang [Bb]ài )(\d+)\b")
 bad = tot = 0
 for C, c in cur.items():
     for l in c["lessons"]:
         spec = l.get("spec")
         if not spec or not (ROOT / spec).exists():
             continue
+        spec_obj = lv.load_spec(ROOT / spec)
+        exp_no = lv.next_lesson(spec_obj)
         text = (ROOT / spec).read_text(encoding="utf-8")
         for m in REF.finditer(text):
             tot += 1
-            ref = f"{C}:L{int(m.group(1)):02d}"
+            n_ref = int(m.group(1))
+            ref = f"{C}:L{n_ref:02d}"
             me = f"{C}:{l['id']}"
             if ref not in pos:
-                print(f"FAIL {me}: hẹn bài {m.group(1)} không có trong khoá")
+                print(f"FAIL {me}: hẹn bài {n_ref} không có trong khoá")
                 bad += 1
             elif pos[ref] <= pos[me]:
                 print(f"FAIL {me}: hẹn {ref} nhưng dãy học đặt {ref} TRƯỚC bài này")
                 bad += 1
-            elif nxt_same.get(me) and nxt_same[me] != f"L{int(m.group(1)):02d}":
+            elif exp_no is not None and n_ref != exp_no:
+                print(f"FAIL {me}: hẹn {ref} nhưng next_lesson là L{exp_no:02d}")
+                bad += 1
+            elif nxt_same.get(me) and nxt_same[me] != f"L{n_ref:02d}":
                 print(f"FAIL {me}: hẹn {ref} nhưng bài kế tiếp trong khoá theo dãy học là {nxt_same[me]}")
                 bad += 1
 print(f"check_next_refs: {tot} lời hẹn, {bad} lệch dãy học")

@@ -1,9 +1,19 @@
 # Dự án PRJ L08 — Bộ đánh giá phân loại F1 & sai số hiệu chuẩn ECE
 
-Viết chương trình Python tính `Precision`, `Recall`, `F1` cho `TP=4, FP=1, FN=2` và `ECE` cho 2 giỏ bằng nhau `[(acc=0.80, conf=0.90), (acc=0.40, conf=0.60)]`, in đúng 3 dòng:
-1. `precision=0.80 recall=0.67`
-2. `f1=0.73`
-3. `ece=0.15`
+Đọc từ luồng chuẩn (`stdin`) 2 dòng:
+- Dòng 1: `tp=<int> fp=<int> fn=<int>`
+- Dòng 2: `bins=<n1,acc1,conf1;n2,acc2,conf2;...>` (số mẫu, độ chính xác thực tế và độ tự tin trung bình của từng giỏ)
+
+Yêu cầu chương trình Python:
+1. Tính `Precision = tp / (tp + fp)`, `Recall = tp / (tp + fn)`, `F1 = 2 * P * R / (P + R)`.
+2. Tính `ECE = sum((n_b / N) * |acc_b - conf_b|)` với `N = sum(n_b)`.
+
+In đúng 3 dòng (làm tròn 2 chữ số thập phân):
+```
+precision=<.2f> recall=<.2f>
+f1=<.2f>
+ece=<.2f>
+```
 
 Chấm tự động:
 ```bash

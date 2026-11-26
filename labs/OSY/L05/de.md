@@ -1,11 +1,6 @@
-# Lab OSY L05 (Mô phỏng đồng bộ) — Semaphore sản xuất–tiêu thụ trên bộ đệm 5 ô
+# Lab OSY L05 — Semaphore sản xuất–tiêu thụ trên bộ đệm hữu hạn N ô
 
-Viết chương trình Python mô phỏng bộ đệm `N = 5` bắt đầu `(empty=5, full=0)`: sản xuất `4` phần tử, tiêu thụ `1` phần tử, rồi sản xuất thêm `2` phần tử, in đúng 3 dòng:
-1. `init_empty=5 init_full=0`
-2. `after_4p_1c=empty:2,full:3`
-3. `final_state=empty:0,full:5`
+Đọc `stdin` `cap=<int> p1=<int> c1=<int> p2=<int>`. Theo dõi hai đèn hiệu `(empty, full)` từ `(cap, 0)` sau đợt sản xuất `p1`, tiêu thụ `c1`, rồi sản xuất tiếp `p2`.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh OSY L05 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `init_empty=<d> init_full=<d>`, `after_4p_1c=empty:<d>,full:<d>`, `final_state=empty:<d>,full:<d>`.
+Chấm tự động: `bash labs/cham.sh OSY L05 duong_dan/bai_cua_ban.py`

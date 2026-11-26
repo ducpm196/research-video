@@ -1,11 +1,8 @@
-# Lab DAN L02 — Nối bảng quan hệ một–nhiều (1–N) làm nhân dòng tổng đơn hàng
+# Lab DAN L02 — Nối bảng 1-N làm nhân dòng tổng đơn hàng trong SQLite
 
-Dùng thư viện `sqlite3` trong bộ nhớ tạm (RAM), tạo bảng đơn hàng `(1, 120), (2, 80)` và bảng chi tiết dòng hàng `(1),(1),(1),(1),(2)` (quan hệ 1–N). So sánh tổng sai khi nối thẳng với tổng đúng trước khi nối.
+Đọc `stdin` `orders=<id:amt,...> items=<oid1,oid2,...>`. Nạp hai bảng vào SQLite, tính tổng sai khi JOIN bảng chi tiết so với tổng đúng trước khi nối.
 
-Định dạng đầu ra:
-`joined_wrong=<số> true_sum=<số>`
+In 1 dòng: `joined_wrong=<d> true_sum=<d>`.
+Chấm tự động: `bash labs/cham.sh DAN L02 duong_dan/bai_cua_ban.py`
 
-Chấm tự động:
-```bash
-bash labs/cham.sh DAN L02 duong_dan/bai_cua_ban.py
-```
+> Gợi ý `sqlite3` (`PYT:L04` + stdlib): `c = sqlite3.connect(":memory:")` tạo bảng tạm trên RAM, `c.executemany(...)` rồi `c.execute("SELECT ...").fetchone()[0]`.

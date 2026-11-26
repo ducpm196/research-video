@@ -1,11 +1,8 @@
-# Lab NET L09 — TCP socket loopback (kết nối cục bộ) + tính số thứ tự bắt tay ba bước
+# Lab NET L09 — TCP socket loopback và tính số thứ tự bắt tay 3 bước
 
-Viết chương trình Python mở một máy chủ ổ cắm TCP (`socket.AF_INET` IPv4, `SOCK_STREAM` TCP) thật trên địa chỉ cục bộ loopback `127.0.0.1`, gửi/nhận thông điệp `PING` ↔ `PONG` và tính `ack` khi client gửi `SYN seq=100`, server gửi `SYN-ACK seq=500`, in đúng 3 dòng:
-1. `tcp_echo=PONG`
-2. `syn_ack_ack=101`
-3. `final_ack=501`
+Đọc `stdin` `msg=<str> reply=<str> syn_seq=<int> srv_seq=<int>`. Mở socket TCP thật loopback gửi `msg` nhận phản hồi `reply`, và tính ACK bắt tay 3 bước.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh NET L09 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `tcp_echo=<str>`, `syn_ack_ack=<d>`, `final_ack=<d>`.
+Chấm tự động: `bash labs/cham.sh NET L09 duong_dan/bai_cua_ban.py`
+
+> Khung `socket` loopback (`PYT:L04` + stdlib): tạo server bằng `s = socket.socket(); s.bind(("127.0.0.1", 0)); s.listen(1)` lấy cổng tự gán `port = s.getsockname()[1]`, chạy `accept()`/`sendall()` trong `threading.Thread(..., daemon=True)`, rồi kết nối bằng `socket.create_connection(("127.0.0.1", port))`.

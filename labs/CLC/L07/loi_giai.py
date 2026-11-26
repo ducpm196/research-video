@@ -1,5 +1,4 @@
-snap_min = 12 * 60
-wal_min = 2
-print(f'snap_rpo_min={snap_min}')
-print(f'wal_rpo_min={wal_min}')
-print(f'rpo_cut={snap_min // wal_min}x')
+import sys
+kv = {k: int(v) for k, v in (t.split('=') for t in sys.stdin.read().split())}
+sm = kv['snap_hours'] * 60; wm = kv['wal_min']
+print(f'snap_rpo_min={sm}\nwal_rpo_min={wm}\nrpo_cut={sm // wm}x')

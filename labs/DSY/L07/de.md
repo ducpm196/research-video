@@ -1,11 +1,6 @@
-# Lab DSY L07 [Mô phỏng phân tán] — Mô phỏng hoàn chỉnh Map -> Shuffle -> Reduce
+# Lab DSY L07 — Mô phỏng hoàn chỉnh Map -> Shuffle -> Reduce
 
-Viết 3 bước thuần Python xử lý đoạn văn `'a b a c b a'`: `map` phát `(w, 1)`, `shuffle` gom danh sách theo khoá, `reduce` cộng tổng, in đúng 3 dòng:
-1. `mapped_pairs=6`
-2. `unique_keys=3`
-3. `reduced=a:3,b:2,c:1`
+Đọc `stdin` chuỗi các từ cách nhau khoảng trắng. Thực hiện 3 pha phát cặp `(từ, 1)`, gom nhóm theo từ khóa và cộng tổng tần suất.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh DSY L07 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `mapped_pairs=<d>`, `unique_keys=<d>`, `reduced=<k:v,...>` (sắp theo thứ tự chữ cái của từ khóa `k`).
+Chấm tự động: `bash labs/cham.sh DSY L07 duong_dan/bai_cua_ban.py`

@@ -1,3 +1,3 @@
-p96 = 0.96 ** 15 * 100
-p99 = 0.99 ** 15 * 100
-print(f"task15_at96={p96:.1f}% task15_at99={p99:.1f}%")
+import sys
+kv = dict(t.split('=') for t in sys.stdin.read().split())
+s = int(kv['steps']); print(f'task15_at96={(float(kv["p1"])**s)*100:.1f}% task15_at99={(float(kv["p2"])**s)*100:.1f}%')

@@ -273,7 +273,7 @@ def write_and_grade_lab(course, lid, de_md, ext, sol_code):
     env = _tool_env()
     chk = subprocess.run([BASH_EXE, str(ROOT / "labs" / "cham.sh"), C, lid, str(sol_path)],
                          cwd=ROOT, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace")
-    if chk.returncode != 0 or chk.stdout.strip() != "ĐÚNG":
+    if chk.returncode != 0 or not chk.stdout.strip().startswith("ĐÚNG"):
         raise RuntimeError(f"cham.sh {C} {lid} không ĐÚNG: rc={chk.returncode} out={chk.stdout!r} err={chk.stderr!r}")
     return out
 

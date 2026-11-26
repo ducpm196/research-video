@@ -1,13 +1,6 @@
 # Lab SAR L01 — Ma trận đánh đổi cho bản ghi quyết định kiến trúc (ADR)
 
-Chấm điểm hai phương án cơ sở dữ liệu theo bộ tiêu chí `(toàn vẹn ACID, nối bảng JOIN, mở rộng ghi)` với trọng số `(0.5, 0.2, 0.3)` cho dịch vụ ghi nhật ký phân tích tải cao: `RDBMS` đạt `(5, 5, 1)` và kho khoá-giá trị chia mảnh (`ShardedKV`) đạt `(3, 2, 5)`. Tính điểm từng phương án và chọn phương án ưu tiên.
+Đọc `stdin` `w=<w1,w2,w3> rdbms=<a,b,c> kv=<a,b,c>`. Tính điểm có trọng số cho `RDBMS` và `ShardedKV` rồi chọn phương án điểm cao hơn.
 
-Định dạng đầu ra (3 dòng):
-`rdbms_score=<2 chữ số>`
-`sharded_kv_score=<2 chữ số>`
-`chosen=<RDBMS|ShardedKV>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh SAR L01 duong_dan/bai_cua_ban.py
-```
+In 3 dòng: `rdbms_score=<.2f>`, `sharded_kv_score=<.2f>`, `chosen=<RDBMS|ShardedKV>`.
+Chấm tự động: `bash labs/cham.sh SAR L01 duong_dan/bai_cua_ban.py`

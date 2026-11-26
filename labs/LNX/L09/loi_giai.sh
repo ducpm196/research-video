@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cfg='cache:6379|service_healthy|0.0.0.0'
-addr=${cfg%%|*}
-wh=$(echo "$cfg" | grep -q 'service_healthy' && echo 1 || echo 0)
-iv=2; rt=5
-echo "internal_addr=$addr"
+exec < <(tr -d '\r')
+IFS='|' read -r ADDR COND BIND IV RT
+wh=0
+[ "$COND" = "service_healthy" ] && wh=1
+echo "internal_addr=$ADDR"
 echo "wait_healthy=$wh"
-echo "max_detect_s=$((iv * rt))"
+echo "max_detect_s=$((IV * RT))"

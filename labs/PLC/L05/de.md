@@ -1,11 +1,10 @@
-# Lab PLC L05 — Kiểm kiểu tĩnh đệ quy trên cây phép toán (+, -, *, /) bắt lỗi int + str
+# Lab PLC L05 — Kiểm tra kiểu tĩnh trên cây biểu thức JSON
 
-Cài hàm đệ quy `check_tree(node)` cho cây phép toán gồm lá `('lit', kieu)` và nút `(op, trai, phai)` với `op` thuộc `{'+', '-', '*', '/'}`: chỉ hợp lệ khi hai nhánh cùng kiểu `'int'`. Kiểm tra cây đúng `('+', ('lit','int'), ('*', ('lit','int'), ('lit','int')))` và cây lỗi `('-', ('lit','int'), ('lit','str'))`.
+Đọc hai cây JSON `ast1|ast2` từ `stdin` (dùng `json.loads(...)` sau khi tách theo `|`).
+Mỗi nút trong cây có dạng:
+- Nút lá: `["lit", kieu]` (ví dụ `["lit", "int"]`, `["lit", "str"]`).
+- Nút phép toán: `[phep, trai, phai]` (ví dụ `["+", [...], [...]]`).
+Kiểm tra đệ quy mỗi cây: nút lá trả về `kieu`; nút phép toán hợp lệ (trả về `'int'`) chỉ khi cả hai nhánh con đều có kiểu `'int'`, ngược lại trả về `None`.
 
-Định dạng đầu ra (1 dòng):
-`ok_expr=<0 hoặc 1> err_expr=<0 hoặc 1>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh PLC L05 duong_dan/bai_cua_ban.py
-```
+In đúng 1 dòng `ok_expr=<0|1> err_expr=<0|1>` (`1` nếu hợp lệ / không phải `None`, `0` nếu lỗi).
+Chấm tự động: `bash labs/cham.sh PLC L05 duong_dan/bai_cua_ban.py`

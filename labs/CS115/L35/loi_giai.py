@@ -1,6 +1,6 @@
-t = 20
-vanish = 0.8 ** t
-explode = 1.2 ** t
-clipped = min(explode, 5.0)
-print(f"vanish_20={vanish:.5f} explode_20={explode:.2f}")
-print(f"clipped_norm={clipped:.2f}")
+import sys
+kv = {k: float(v) for k, v in (t.split('=') for t in sys.stdin.read().split())}
+t = int(kv['t'])
+van = kv['rv'] ** t; exp = kv['re'] ** t
+print(f"vanish_20={van:.5f} explode_20={exp:.2f}")
+print(f"clipped_norm={min(exp, kv['clip']):.2f}")

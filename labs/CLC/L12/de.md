@@ -1,13 +1,6 @@
-# Lab CLC L12 — Ngân sách ngừng 99,99% so với 99,95% và hệ số tăng trưởng kho đối tượng
+# Lab CLC L12 — Ngân sách ngừng năm & hệ số tăng trưởng kho đối tượng
 
-Sự cố tháng 2/2017 kéo dài từ `09:37` tới `13:54` cùng ngày. Tính ngân sách ngừng cả năm (`525 600` phút) ở mức `99,99%` và tỉ số vượt ngân sách năm của sự cố; đồng thời tính hệ số tăng trưởng số đối tượng từ `200 tỉ` (năm 2010) lên `100 nghìn tỉ` (năm 2021).
+Đọc `stdin` `start=<HH:MM> end=<HH:MM> obj_old_b=<float> obj_new_b=<float>`. Tính số phút gián đoạn sự cố, tỉ lệ vượt ngân sách năm 99.99% và hệ số tăng trưởng số lượng đối tượng (tính theo tỉ).
 
-Định dạng đầu ra (3 dòng):
-`outage_min=<số>`
-`ratio_99_99=<1 chữ số>x`
-`growth_2010_2021=<số>x`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh CLC L12 duong_dan/bai_cua_ban.py
-```
+In 3 dòng: `outage_min=<d>`, `ratio_99_99=<.1f>x`, `growth_2010_2021=<d>x`.
+Chấm tự động: `bash labs/cham.sh CLC L12 duong_dan/bai_cua_ban.py`

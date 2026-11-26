@@ -1,3 +1,4 @@
-N, D = 4, 2.0
-sent_gb = 2.0 * (N - 1) / N * D
-print(f"ring_allreduce_sent_GB={sent_gb:.2f}")
+import sys
+s = sys.stdin.read().strip() or "4 2.0"
+ns, ds = s.split(); N, D = int(ns), float(ds)
+print(f"ring_allreduce_sent_GB={2.0 * (N - 1) / N * D:.2f}")

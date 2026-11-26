@@ -42,6 +42,7 @@ def plain(st):
 def check(path):
     spec = lv.load_spec(path)
     cur, known = lv.lesson_numbers(spec)
+    nxt_no = lv.next_lesson(spec)
     out = []
     if cur is None or not known:
         return out
@@ -57,9 +58,9 @@ def check(path):
                     out.append(("R1", where, f"khoảng “{m.group(0)}” trỏ tới bài {n} không có trong lộ trình (max {mx})"))
         scene_cov.setdefault(sc.get("id", si), set()).update(covered(t))
         say = str(st.get("say", ""))
-        if (cur + 1) not in known and re.search(r"(?<![Cc]ác )\b[Bb]ài (?:sau|tiếp theo)\b", re.sub(r"[Hh]ẹn gặp", "", say)):
+        if nxt_no is None and re.search(r"(?<![Cc]ác )\b[Bb]ài (?:sau|tiếp theo)\b", re.sub(r"[Hh]ẹn gặp", "", say)):
             out.append(("R3", where, f"bài {cur} không có bài kế tiếp trong lộ trình mà vẫn nhắc “bài sau/tiếp theo”"))
-        if re.search(r"[Hh]ẹn gặp bạn ở bài (tiếp theo|sau)", say) and (cur + 1) not in known:
+        if re.search(r"[Hh]ẹn gặp bạn ở bài (tiếp theo|sau)", say) and nxt_no is None:
             out.append(("R3", where, f"“hẹn gặp ở bài tiếp theo” ở bài {cur} — không còn bài kế tiếp"))
         # “hết khoá” cũng là thuật ngữ khoá dữ liệu (DBS L13, DSY L06: giữ khoá tới hết giao dịch) → chỉ xét “hết khoá học”.
         # Bài áp cuối giới thiệu “bài sau, bài cuối của khoá” là ĐÚNG (CSA L14, DMS L18, OSY L13 — báo nhầm 2026-10-31).

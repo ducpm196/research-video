@@ -1,6 +1,6 @@
-# Lab IRS L10 — Khử thiên lệch vị trí bằng trọng số nghịch đảo xu hướng
+# Lab IRS L10 — Khử thiên lệch vị trí bằng trọng số nghịch đảo xu hướng (IPS)
 
-Biết xác suất được nhìn thấy ở vị trí 1 là `0.9` và ở vị trí 4 là `0.25`. Chuẩn hoá tỉ lệ bấm quan sát được `0.045` (ở vị trí 1) và `0.020` (ở vị trí 4) bằng cách chia cho xác suất được nhìn thấy.
+Đọc từ đầu vào chuẩn (`stdin`, dạng `khoá=giá_trị`) bốn số thực `c1=<f> e1=<f> c2=<f> e2=<f>`. Chia tỉ lệ bấm quan sát được `c` cho xác suất nhìn thấy `e` ở hai vị trí để ước lượng mức liên quan sau điều chỉnh.
 
-Định dạng đầu ra (1 dòng):
-`ips_rel_pos1=<3 chữ số> ips_rel_pos4=<3 chữ số>`
+In 1 dòng đúng nhãn (`<.3f>` làm tròn 3 chữ số thập phân): `ips_rel_pos1=<.3f> ips_rel_pos4=<.3f>`.
+Chấm tự động: `bash labs/cham.sh IRS L10 duong_dan/bai_cua_ban.py`

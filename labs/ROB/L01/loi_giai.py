@@ -1,4 +1,6 @@
-vl, vr, L = 0.6, 1.0, 0.8
+import sys
+s = sys.stdin.read().strip() or "0.6 1.0 0.8"
+vl, vr, L = map(float, s.split())
 v = (vr + vl) / 2.0
 w = (vr - vl) / L
 R = v / w

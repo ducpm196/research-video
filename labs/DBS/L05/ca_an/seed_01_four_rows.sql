@@ -1,0 +1,2 @@
+CREATE TABLE DK(mssv TEXT, lop TEXT, mon TEXT);
+INSERT INTO DK VALUES ('S1','K1','DB'),('S2','K1','OS'),('S3','K1','AI'),('S1','K1','ML');

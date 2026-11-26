@@ -1,8 +1,12 @@
+import sys
+s = sys.stdin.read().strip() or "20 4 7"
+st, k1, k2 = map(int, s.split())
 def make_adder(start, step):
-    val = [start]
+    val = start
     def inc():
-        val[0] += step
-        return val[0]
+        nonlocal val
+        val += step
+        return val
     return inc
-a1, a2 = make_adder(20, 4), make_adder(20, 7)
+a1, a2 = make_adder(st, k1), make_adder(st, k2)
 print(f"a1={[a1(), a1()]} a2={a2()}")

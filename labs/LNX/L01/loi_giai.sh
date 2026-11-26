@@ -1,12 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
-W=$(mktemp -d)
-trap 'rm -rf "$W"' EXIT
-touch "$W/sec.key" "$W/app.sh"
-chmod 755 "$W/app.sh" && chmod 600 "$W/sec.key"
-awk 'BEGIN{
-  split("rwxr-xr-x rw-r----- rw-------", a, " ");
-  for(k=1;k<=3;k++){ s=a[k]; o="";
+exec < <(tr -d '\r')
+awk '{
+  for(k=1;k<=NF;k++){ s=$k; o="";
     for(g=0;g<3;g++){ v=0;
       if(substr(s,g*3+1,1)=="r") v+=4;
       if(substr(s,g*3+2,1)=="w") v+=2;

@@ -1,7 +1,6 @@
-# Lab IRS L00 — Độ đo truy hồi: độ chuẩn xác, độ phủ và hạng nghịch đảo trung bình
+# Lab IRS L00 — Độ chuẩn xác P@k, độ phủ R@k và MRR
 
-Kho có `T = 6` tài liệu đúng; hệ A trả kết quả đúng tại vị trí `[2, 4, 7]`, hệ B trả tại `[3, 5, 8]`. Viết hàm tính `P@k = số đúng trong k đầu / k` và `R@k = số đúng trong k đầu / T` (không gán cứng đáp số), rồi tính hạng nghịch đảo trung bình trên 3 câu hỏi có hạng đúng đầu tiên là `[2, 4, None]` (câu không tìm thấy có hạng nghịch đảo `0`).
+Đọc từ đầu vào chuẩn (`stdin`, dòng tham số dạng `khoá=giá_trị` cách nhau khoảng trắng) `total=<int> ra=<r1,r2,...> rb=<r1,r2,...> first=<f1,f2,...>` (trong đó `<int>` là số nguyên, danh sách cách nhau dấu phẩy). Tính `P@5`, `R@5`, `R@10` cho danh sách A (`ra`), `P@3` cho danh sách B (`rb`) và `MRR` cho danh sách vị trí đầu `first` (`0` nghĩa là không tìm thấy).
 
-Định dạng đầu ra (2 dòng):
-`A_P5=<1 chữ số> R5=<1 chữ số> R10=<1 chữ số> B_P3=<1 chữ số>`
-`MRR_3=<4 chữ số>`
+In 2 dòng đúng nhãn (`<.1f>` làm tròn 1 chữ số thập phân, `<.4f>` làm tròn 4 chữ số): `A_P5=<.1f> R5=<.1f> R10=<.1f> B_P3=<.1f>`, `MRR_3=<.4f>`.
+Chấm tự động: `bash labs/cham.sh IRS L00 duong_dan/bai_cua_ban.py`

@@ -1,4 +1,4 @@
-per_line = 64 // 8
-count = 4
-padded_total = count * 64
-print(f"shared_per_64B={per_line} count={count} padded_total_B={padded_total}")
+import sys
+s = sys.stdin.read().strip() or "64 8 4"
+lb, ib, cnt = map(int, s.split())
+print(f"shared_per_64B={lb // ib} count={cnt} padded_total_B={cnt * lb}")

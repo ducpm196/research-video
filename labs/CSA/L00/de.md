@@ -1,11 +1,6 @@
 # Lab CSA L00 — Hệ đếm nhị phân, thập lục phân và phân biệt KB vs KiB
 
-Viết chương trình C chuẩn C11 đổi giá trị `47` sang hexa, kiểm tra trạng thái 8 bit tối đa `255` và tính hiệu `1 KiB - 1 KB` theo byte, in đúng 3 dòng:
-1. `dec=47 hex=0x2F`
-2. `u8_states=256 max=255`
-3. `kib_minus_kb=24`
+Đọc từ `stdin` 2 số nguyên không dấu `x kib_count` (dạng `x=47 kib_count=1`). Đổi `x` sang hệ 16, in tổng trạng thái và giá trị cực đại `uint8_t`, cùng chênh lệch `(1024 - 1000) * kib_count`.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh CSA L00 duong_dan/bai_cua_ban.c
-```
+In đúng 3 dòng: `dec=<u_> hex=0x<XX>`, `u8_states=<d> max=<u>`, `kib_minus_kb=<d>`.
+Chấm tự động: `bash labs/cham.sh CSA L00 duong_dan/bai_cua_ban.c`

@@ -1,5 +1,6 @@
-import hashlib
-h = lambda s: hashlib.sha256(s.encode()).hexdigest()[:12]
-v1 = h("u101,1\nu102,0")
-v2 = h("u101,1\nu102,1")
-print(f"h1={v1} h2={v2} changed={int(v1 != v2)}")
+import hashlib, sys
+lines = [ln.strip() for ln in sys.stdin.read().splitlines() if ln.strip()]
+kv = dict(ln.split('=', 1) for ln in lines)
+h = lambda s: hashlib.sha256(s.replace('\\n', '\n').encode()).hexdigest()[:12]
+h1, h2 = h(kv['v1']), h(kv['v2'])
+print(f'h1={h1} h2={h2} changed={int(h1 != h2)}')

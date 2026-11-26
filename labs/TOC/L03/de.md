@@ -1,11 +1,5 @@
-# Lab TOC L03 — Kiểm chứng biểu thức chính quy (0|1)*10 trên mọi chuỗi dài 0..7
+# Lab TOC L03 — Kiểm chứng biểu thức chính quy nhị phân
 
-So khớp từng chuỗi nhị phân có độ dài từ `0` tới `7` giữa biểu thức chính quy `^(0|1)*10$` và phép kiểm tra kết thúc bằng `'10'`, đồng thời đếm tổng số chuỗi khớp.
-
-Định dạng đầu ra (1 dòng):
-`matches=<số nguyên> exact=<0 hoặc 1>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh TOC L03 duong_dan/bai_cua_ban.py
-```
+Đọc `regex;suffix;max_len` từ stdin (ví dụ `^(0|1)*10$;10;7`). Kiểm tra mọi chuỗi nhị phân độ dài `0..max_len`.
+In đúng 1 dòng `matches=<int> exact=0/1`.
+Nền tảng Python (`PYT:L04`): đọc dữ liệu qua `sys.stdin.read().strip()`.

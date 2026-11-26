@@ -1,9 +1,4 @@
-# Lab ESY L13 — Ước lượng dòng trung bình và tuổi thọ pin theo chu kỳ thức–ngủ
+# Lab ESY L13 — Dòng trung bình và tuổi thọ pin
 
-Thiết bị thức `2%` thời gian ăn `12 mA` và ngủ `98%` thời gian ăn `0.02 mA`, dùng pin `1200 mAh`. Tính dòng tiêu thụ trung bình và số ngày chạy liên tục.
-In đúng 1 dòng `avg_ma=... battery_days=...` (`avg_ma` lấy 4 chữ số `:.4f`, `battery_days` làm tròn số nguyên `:.0f`).
-
-Chấm tự động:
-```bash
-bash labs/cham.sh ESY L13 duong_dan/bai_cua_ban.py
-```
+Đọc `duty_wake i_wake_mA i_sleep_mA cap_mAh` từ stdin (ví dụ `0.02 12.0 0.02 1200.0`). Tính `avg_ma` và số ngày dùng.
+In đúng 1 dòng `avg_ma=<4 chữ số> battery_days=<int>`.

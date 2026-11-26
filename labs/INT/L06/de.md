@@ -1,6 +1,6 @@
 # Lab INT L06 — Trả lời một câu phỏng vấn có số: thiết kế cổng thanh toán và ngưỡng sinh trắc học (giấy bút, `loi_giai.md`)
 
-Bài giấy bút: không chạy mã, và `cham.sh` không chấm tệp `.md`. Tính tay, ghi từng dòng đúng định dạng dưới đây, rồi tự so với `loi_giai.md`.
+Bài giấy bút: không chạy mã, có thể tự so với `loi_giai.md` hoặc chấm định dạng bằng `bash labs/cham.sh INT L06 bai_lam.md`. Tính tay, ghi từng dòng đúng định dạng dưới đây.
 
 Số liệu (số minh hoạ, đề bài giả định, không phải số của ngân hàng nào): cổng nhận **2 000** giao dịch mỗi giây; độ trễ trung bình **200 mili giây**; mỗi máy giữ **150** yêu cầu cùng lúc; mục tiêu sẵn sàng **99,95%**, một năm có 525 600 phút; chuỗi **3** tầng nối tiếp, mỗi tầng 99,95%. Quy định sinh trắc học: bắt buộc xác thực khuôn mặt khi một lần chuyển **trên 10 triệu** hoặc tổng chuyển trong ngày **trên 20 triệu** (theo Thông tư 50/2024/TT-NHNN, sửa đổi bởi Thông tư 77/2025/TT-NHNN; Quyết định 2345/QĐ-NHNN chưa đọc nguyên văn, chưa rõ còn áp dụng nên không dùng làm căn cứ; bài không nêu số điều, khi làm thật hãy mở văn bản hiện hành).
 

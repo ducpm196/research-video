@@ -1,6 +1,6 @@
-# Lab LLM L00 — Mô hình ngôn ngữ và quy tắc chuỗi
+# Lab LLM L00 — Mô hình bigram và quy tắc chuỗi bằng Fraction
 
-Từ kho 3 câu `['<s> em hoc toan </s>', '<s> em hoc ly </s>', '<s> anh hoc toan </s>']`, đếm tần suất mọi cặp từ kế tiếp (bigram) và tự tính xác suất chính xác bằng phân số `Fraction` cho câu `'<s> em hoc toan </s>'`.
+Đọc `stdin` 3 câu mẫu `s1..s3` và câu cần tính xác suất `target`. Đếm bigram/unigram trên kho và nhân xác suất chính xác bằng `Fraction`.
 
-Định dạng đầu ra (1 dòng):
-`prob=<phân số> float=<4 chữ số>`
+In 1 dòng: `prob=<p/q> float=<.4f>`.
+Chấm tự động: `bash labs/cham.sh LLM L00 duong_dan/bai_cua_ban.py`

@@ -4,6 +4,7 @@ Toàn bộ 18 bài chạy SQL THẬT trên SQLite CLI 3.46.0 (`*.sql` qua `labs/
 từ ràng buộc khoá ngoại, JOIN, NULL 3-trị, chuẩn hoá BCNF nối bảng không mất dữ liệu,
 EXPLAIN QUERY PLAN dùng B-Tree index, tới giao dịch ACID BEGIN/ROLLBACK/SAVEPOINT.
 """
+import sys as _sys; from pathlib import Path as _P; _sys.path.insert(0, str(_P(__file__).resolve().parents[2])); import _frozen  # noqa: E402,F401
 import subprocess
 import sys
 from pathlib import Path

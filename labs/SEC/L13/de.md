@@ -1,11 +1,6 @@
 # Lab SEC L13 — Định lý Bayes và nghịch lý tỉ lệ nền trong cảnh báo xâm nhập
 
-Viết chương trình Python tính xác suất một cảnh báo là tấn công thật `P(A | +)` khi tỉ lệ tấn công `1/10 000`, độ nhạy `99%` và báo nhầm `1%`, in đúng 3 dòng:
-1. `tp_per_1m=99`
-2. `fp_per_1m=9999`
-3. `ppv_pct=0.98%`
+Đọc `stdin` `base=<float> tpr=<float> fpr=<float> n_events=<int>`. Tính số dương thật (TP), dương giả (FP) trên `n_events` sự kiện và giá trị tiên đoán dương `PPV`.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh SEC L13 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `tp_per_1m=<d>`, `fp_per_1m=<d>`, `ppv_pct=<.2f>%`.
+Chấm tự động: `bash labs/cham.sh SEC L13 duong_dan/bai_cua_ban.py`

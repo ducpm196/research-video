@@ -1,12 +1,15 @@
-g = {'u0': ['u1', 'u2'], 'u1': ['u2', 'u3'], 'u2': ['u3', 'u4'],
-     'u3': ['u5'], 'u4': [], 'u5': []}
-seen, frontier = {'u0'}, ['u0']
-for _ in range(2):
+import sys
+from collections import defaultdict
+kv = dict(t.split('=') for t in sys.stdin.read().split())
+g = defaultdict(list)
+for e in kv['edges'].split(','):
+    u, v = e.split(':'); g[u].append(v)
+st = kv['start']; seen, front = {st}, [st]
+for _ in range(int(kv['hops'])):
     nxt = []
-    for u in frontier:
+    for u in front:
         for v in g[u]:
             if v not in seen: seen.add(v); nxt.append(v)
-    frontier = nxt
-res = sorted(seen - {'u0'})
-print(f'reached_sorted={res}')
-print(f'unique_count={len(res)}')
+    front = nxt
+res = sorted(seen - {st})
+print(f'reached_sorted={res}\nunique_count={len(res)}')

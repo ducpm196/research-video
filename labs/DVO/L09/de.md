@@ -1,11 +1,7 @@
 # Lab DVO L09 — Tính chỉ số DORA: tần suất triển khai và trung vị Lead Time
 
-Viết chương trình Python tính tần suất triển khai `40` lần trong `30` ngày, và trung vị thời gian của `[2, 5, 26, 8, 3]` giờ thay vì trung bình bị kéo bởi ca 26h, in đúng 3 dòng:
-1. `deploy_per_day=1.33`
-2. `lead_median_h=5`
-3. `lead_mean_h=8.8`
+Đọc `stdin` `deploys=<int> days=<int> leads=<t1,t2,...>`. Tính tần suất triển khai mỗi ngày, trung vị và trung bình cộng thời gian Lead Time.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh DVO L09 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `deploy_per_day=<.2f>`, `lead_median_h=<d>`, `lead_mean_h=<.1f>`.
+Chấm tự động: `bash labs/cham.sh DVO L09 duong_dan/bai_cua_ban.py`
+Gợi ý đọc đầu vào trong Python: dùng `sys.stdin.read().split()` tách từng cặp `khoá=giá_trị`.

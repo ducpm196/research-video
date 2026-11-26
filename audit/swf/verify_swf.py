@@ -249,6 +249,16 @@ rec("L13d", 4 * 10 ** 9 // 50000 == 80000 and all(bisect_runs(16, b) == (4, b) f
 rec("L13e", [1000 * p // 100 for p in (10, 20)] == [100, 200] and 12 // 6 == 2 and sum(2 for _ in range(40)) * 15 == 1200,
     "chặng 5 + quiz: 10–20% của 1000 = 100–200; 12/6 = 2 lần dựng lại mỗi năm; 40 người × 2 lần × 15 ngày = 1200 lần gộp")
 
+# ── Kiểm tự động mọi lab (du_lieu.txt + ca_an/) qua cham.sh ──
+import subprocess as _subp
+from pathlib import Path as _LabPath
+_BASH = r"C:\Program Files\Git\bin\bash.exe"
+if not _LabPath(_BASH).exists():
+    _BASH = "bash"
+for _ld in sorted((ROOT / "labs" / "SWF").glob("L*")):
+    _rp = _subp.run([_BASH, str(ROOT / "labs" / "cham.sh"), "SWF", _ld.name], cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
+    rec(f"{_ld.name}:lab", _rp.returncode == 0 and "PASS" in _rp.stdout and "2 ca an" in _rp.stdout, f"cham.sh {_ld.name} (public + 2 ca_an)")
+
 n_ok = sum(o for _, o in R)
 print(f"\n{n_ok}/{len(R)} PASS")
 sys.exit(0 if n_ok == len(R) else 1)

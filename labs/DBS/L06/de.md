@@ -1,11 +1,6 @@
-# Lab DBS L06 — SQLite thật: chuyển mô hình N–N thành bảng DangKy(mssv, ma_mon)
+# Lab DBS L06 — SQLite: chuyển mô hình N-N thành bảng DangKy(mssv, ma)
 
-Viết tập lệnh SQLite dựng 3 bảng `SV`, `MonHoc`, `DangKy(mssv, ma_mon, diem, PRIMARY KEY(mssv, ma_mon))`: nhập 3 lượt đăng ký (thêm 1 lượt trùng cặp bị chặn bởi `INSERT OR IGNORE` — bỏ qua dòng trùng khoá chính), in đúng 3 dòng:
-1. `enrolled_rows=3`
-2. `dup_enroll_blocked=1`
-3. `avg_s1=8.5`
+Cơ sở dữ liệu khởi tạo `SV`, `Mon`, `DK` và bảng đầu vào `NhapDK(mssv, ma, diem)`. Bật `PRAGMA foreign_keys = ON;`, chèn bỏ qua trùng lặp từ `NhapDK` sang `DK`, đếm dòng đã chèn, xác nhận có lượt trùng bị chặn và tính điểm trung bình của `'S1'`.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh DBS L06 duong_dan/bai_cua_ban.sql
-```
+In đúng 3 dòng: `enrolled_rows=<d>`, `dup_enroll_blocked=<0|1>`, `avg_s1=<.1f>`.
+Chấm tự động: `bash labs/cham.sh DBS L06 duong_dan/bai_cua_ban.sql`

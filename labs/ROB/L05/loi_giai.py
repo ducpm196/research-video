@@ -1,5 +1,7 @@
-import math
-vh, th = 2.0, math.radians(30.0)
-dx_dth = -vh * math.sin(th)
-dy_dth = vh * math.cos(th)
-print(f"jac_theta=({dx_dth:.3f}, {dy_dth:.3f})")
+import sys, math
+s = sys.stdin.read().strip() or "2.0 30.0"
+vh, th_deg = map(float, s.split())
+th = math.radians(th_deg)
+dx = -vh * math.sin(th)
+dy = vh * math.cos(th)
+print(f"jac_theta=({dx:.3f}, {dy:.3f})")

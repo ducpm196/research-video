@@ -1,4 +1,7 @@
-holes0 = [100, 500, 200, 300, 600]; reqs = [212, 417, 112, 426]
+import sys
+kv = dict(t.split('=') for t in sys.stdin.read().split())
+holes0 = [int(x) for x in kv['holes'].split(',')]
+reqs = [int(x) for x in kv['reqs'].split(',')]
 def sim(best=False):
     h = holes0[:]; fail = []
     for r in reqs:

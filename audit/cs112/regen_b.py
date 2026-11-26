@@ -2,6 +2,7 @@
 extract: trích hình từ bài ĐANG CÓ ra audit/cs112/fig/<Lxx>_<TÊN>.svg (căn từng dòng; chấp nhận mẫu có thêm dòng
 asr_reviewed mà bài chưa có). gen: ghép lại mẫu + hình bằng fill_tpl.py (dùng lại regen_a.gen).
 Dùng: .venv/Scripts/python -B audit/cs112/regen_b.py extract|gen L17 [L18 …]"""
+import sys as _sys; from pathlib import Path as _P; _sys.path.insert(0, str(_P(__file__).resolve().parents[1])); import _frozen  # noqa: E402,F401
 import difflib
 import re
 import sys

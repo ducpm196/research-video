@@ -32,7 +32,7 @@ Sáu nguyên tắc không đổi:
    - một tên chuỗi, một giọng cho mỗi khoá (`check_meta.py`);
    - bản đồ khoá ở bài 0 liệt kê đủ mọi bài (lint E37).
 
-## 2. Kiến trúc chương trình: 8 tầng + tầng nền thực hành (T−1) (số bài hiện tại của cả 46 khoá: xem [`STATUS.md`](STATUS.md))
+## 2. Kiến trúc chương trình: 8 tầng + tầng nền thực hành (T−1) (số bài hiện tại của cả 50 khoá: xem [`STATUS.md`](STATUS.md))
 
 **T−1 · Nền thực hành và lập trình (đợt AF2–AF3, 2026-11-13 → 2026-11-14)**: **FND** Nền thực hành: dòng lệnh, tệp, dữ liệu, HTTP, SQL, Git (11) · **JVA** Java từ con số 0 (13) · **JV2** Java trung cấp: dự án nhiều tệp, dữ liệu, hàm, luồng, kiểm thử (10) · **PYT** Python từ con số 0 (14) — đứng TRƯỚC mọi khoá khác trong dãy học; mọi bài có cảnh **Tự làm** (lab chạy được: `labs/`). Vì sao: mẫu F đo thấy người mất gốc hụt nền từ BNK L02 và kẹt khi thực hành ở BNX L00 (`audit/review/sample_f/REPORT.md` mục 4).
 
@@ -68,8 +68,8 @@ Mã khoá đồ hoạ là **GFX** chứ không phải GIT (tên lĩnh vực tron
   1. **Nghe hiểu** (chuẩn E39 `depth: full`: ôn nền, hình cơ chế, làm từng bước, tự kiểm): toàn kho.
   2. **Làm được** (chuẩn AF2: `af2: true`, mục tiêu có cảnh dạy E51, cảnh **Tự làm** có lab chạy được E53, thuật ngữ giảng tại chỗ E52, một thuật ngữ một cách viết E55, cảnh quy mô): đo bằng `audit/review/af2_cover.py` theo chặng học; chặng nào đạt 100% và qua đọc độc lập mới được nhãn "ĐÃ CHỐT" trên `HOC_TAP.html`.
   3. **Chính xác** (cổng máy: `verify_<khoá>`, `screen_code`, `arith_scan`, `check_legal`, `lab_gate`; cộng người đọc độc lập theo mẫu C–G): máy bắt được số sai, mã không chạy, mục tiêu không dạy; không bắt được lỗi kiến thức thuần chữ — chỉ người đọc bắt (mẫu F: MUST 3/38).
-- **Còn mở** (không thuộc cổng máy): tai người nghe phát âm; sản phẩm chỉ mô phỏng (xem bảng quyết định CB-AF3-7 ở `audit/review/audit_final/plan_AF3_*.md`); văn bản pháp lý chưa đối chiếu bản gốc (`audit/legal/registry.yaml`, mục `CHUA_KIEM`).
-- **Kế hoạch hiện hành**: `audit/review/audit_final/plan_AF3_20261113T1240Z.md`; trạng thái từng việc: `audit/review/audit_final/STATE.md`.
+- **Còn mở** (không thuộc cổng máy): tai người nghe phát âm (`NGHE_THU.html`, BN-08); sản phẩm chỉ mô phỏng (xem bảng quyết định CB-AF3-7 ở `audit/review/audit_final/plan_AF3_*.md`).
+- **Kế hoạch hiện hành**: `audit/review/audit_final/plan_AF5_20261123T0110Z.md`; trạng thái từng việc: `audit/review/audit_final/STATE.md` / `HANDOVER.md`.
 - Bộ kiểm của toàn bộ giáo án: `verify_plan_curricula.py` (mọi ví dụ có mã VER PASS), `check_curricula_graph.py` (tham chiếu hỏng 0, chu trình 0), `tests/test_lint.py` và `tests/test_e52.py` (lint bắt được từng lỗi cài sẵn).
 
 ## 4. Lộ trình theo nghề (thứ tự từng bài: [`TRACKS.md`](TRACKS.md))

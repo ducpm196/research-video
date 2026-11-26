@@ -1,6 +1,6 @@
 # Lab LLM L06 — Huấn luyện trước: mất mát và quy luật mở rộng
 
-Tính độ hỗn loạn `exp(1.5)` khi mất mát bằng `1.5` (cơ số e), và ước lượng số phép tính `C ≈ 6 * N * D` cho mô hình `8 tỉ` tham số huấn luyện trên `200 tỉ` từ tố.
+Đọc `stdin` `loss=<float> params=<float> tokens=<float>`. Tính perplexity `exp(loss)` và số phép tính `6 * params * tokens`.
 
-Định dạng đầu ra (1 dòng):
-`ppl=<2 chữ số> flops=<dạng e khoa học 2 chữ số>`
+In 1 dòng: `ppl=<.2f> flops=<.2e>`.
+Chấm tự động: `bash labs/cham.sh LLM L06 duong_dan/bai_cua_ban.py`

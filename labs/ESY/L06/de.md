@@ -1,9 +1,4 @@
-# Lab ESY L06 — Nhân hai số dấu phẩy tĩnh Q8.8 chỉ bằng phép toán số nguyên
+# Lab ESY L06 — Nhân số dấu phẩy tĩnh Q8.8
 
-Biểu diễn hai số `2.5` và `1.75` ở định dạng nguyên `Q8.8` (nhân `256`), thực hiện phép nhân nguyên rồi dịch phải `8` bit, và quy đổi ngược ra giá trị thực.
-In đúng 1 dòng `q88_a=... q88_prod=... val=...` (3 chữ số cho val).
-
-Chấm tự động:
-```bash
-bash labs/cham.sh ESY L06 duong_dan/bai_cua_ban.py
-```
+Đọc `a b` thực từ stdin (ví dụ `2.5 1.75`). Đổi sang `Q8.8` (`int(x * 256)`), nhân nguyên rồi dịch phải 8 bit.
+In đúng 1 dòng `q88_a=<int> q88_prod=<int> val=<3 chữ số>`.

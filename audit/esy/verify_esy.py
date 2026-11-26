@@ -289,6 +289,16 @@ rec("L15f", round((_dt.date(2014, 8, 29) - _dt.date(2004, 1, 25)).days / 365.25,
     and (600 - 100) // 20 == 25 and 90 * 20 == 1800,
     "Opportunity ≈ 10,6 năm ≈ 42 × 3 tháng; 6/7 ≈ 85,7%; RapidScat ≈ 4,2 năm; câu đố 25 ngày, 1800 KB")
 
+# ── Kiểm tự động mọi lab (du_lieu.txt + ca_an/) qua cham.sh ──
+import subprocess as _subp
+from pathlib import Path as _LabPath
+_BASH = r"C:\Program Files\Git\bin\bash.exe"
+if not _LabPath(_BASH).exists():
+    _BASH = "bash"
+for _ld in sorted((ROOT / "labs" / "ESY").glob("L*")):
+    _rp = _subp.run([_BASH, str(ROOT / "labs" / "cham.sh"), "ESY", _ld.name], cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
+    rec(f"{_ld.name}:lab", _rp.returncode == 0 and "PASS" in _rp.stdout and "2 ca an" in _rp.stdout, f"cham.sh {_ld.name} (public + 2 ca_an)")
+
 n_ok = sum(ok for _, ok in R)
 print(f"\n{n_ok}/{len(R)} PASS")
 sys.exit(0 if n_ok == len(R) else 1)

@@ -1,0 +1,356 @@
+id: L01
+course: SPB
+series: SPB · Spring Boot thực chiến với PostgreSQL, Redis và Kafka
+title: Bài 1 — Tầng Web với DTO bất biến, kiểm dữ liệu vào và Problem Details
+voice: vi-VN-NamMinhNeural
+rate: -5%
+depth: full
+af2: true
+covers:
+- objective: 1
+  scene: example
+- objective: 2
+  scene: check
+- objective: 3
+  scene: quymo
+source: curriculum/spb.yaml L01; labs/SPB/L01 (chạy thật ./mvnw -B verify với MockMvc trên Boot 4.1.3)
+assumes: []
+objectives:
+- Thiết kế bộ điều khiển REST với record DTO bất biến và kiểm ràng buộc bằng Bean Validation
+- Trả lỗi chuẩn RFC 9457 Problem Details với mã trạng thái HTTP và trường chi tiết nhất quán
+- So sánh kích thước tải và số lần phân tích khi dữ liệu lỗi bị chặn sớm ở tầng vào ở 100, 10 000 và 1 000 000 yêu cầu
+scenes:
+- id: hook
+  kind: hook
+  title: 'Khách gửi số tiền âm: trả lỗi kiểu nào để mọi đội đều hiểu?'
+  checks:
+  - 201 != 400
+  steps:
+  - show: <div class='box key'><p>Trong API ngân hàng thật, mỗi đội có thể tự chế một kiểu JSON lỗi khác nhau (<code>{err:...}</code>,
+      <code>{msg:...}</code>, <code>{code:99}</code>) khiến ứng dụng di động phải viết hàng chục bộ rẽ nhánh vá víu.</p><p>Chuẩn
+      công nghiệp <b>RFC 9457 Problem Details</b> (<code>application/problem+json</code>) hợp nhất mọi lỗi HTTP về một khuôn
+      <code>type, title, status, detail</code> tích hợp sẵn trong Spring Boot 4.</p></div>
+    say: Chào bạn đến với bài một của khoá Spring Boot thực chiến. Một cổng thanh toán nhận dữ liệu thô từ bên ngoài luôn
+      phải đối mặt với những gói tin thiếu trường hoặc sai kiểu. Nếu mỗi đầu cuối tự bịa thông báo lỗi hoặc để lọt dữ liệu
+      bẩn vào tầng lưu trữ, hệ thống sẽ khó tích hợp. Hôm nay ta cài đặt bộ điều khiển REST tiếp nhận bản ghi DTO bất biến
+      và báo lỗi chuẩn RFC chín bốn năm bảy. Thiết kế chuẩn ngay từ cửa vào giúp mọi dịch vụ phía sau nhận dữ liệu sạch và
+      giảm hẳn công sức viết bản đặc tả API. Toàn bộ quy trình chặn lỗi đều chạy bằng bộ kiểm thử giả lập tốc độ cao ngay
+      trên tầng web.
+    focus:
+    - 0
+    - '1.1'
+    - '1.1'
+    - '1.2'
+    - '1.1'
+    - '1.2'
+    clear: true
+- id: prereq
+  kind: prereq
+  title: 'Ôn nhanh: đầu cuối REST, mã trạng thái HTTP và DTO'
+  steps:
+  - show: <table class='t'><tr><th>thành phần tầng giao tiếp</th><th>ý nghĩa thực hành</th></tr><tr><td><code>POST /api/v1/transfers</code></td><td>Tạo
+      mới tài nguyên lệnh chuyển khoản, thành công trả <code>201 Created</code></td></tr><tr><td><code>record</code> Java
+      21</td><td>Lớp chứa dữ liệu bất biến ngắn gọn không cần hàm dựng rườm rà</td></tr><tr><td>Mã <code>400 Bad Request</code></td><td>Từ
+      chối yêu cầu sai cú pháp hoặc vi phạm ràng buộc ngay tại cửa vào</td></tr></table>
+    say: Hãy ôn nhanh ba quy ước nền của giao tiếp web theo phong cách tài nguyên trước khi viết mã mới. Khi tạo một giao
+      dịch chuyển khoản mới qua phương thức POST, mã phản hồi chuẩn là hai trăm linh một thay vì hai trăm chung chung. Từ
+      Java mười sáu và hai mươi mốt, từ khoá khai báo bản ghi bất biến giúp ta định nghĩa gọn dữ liệu vào mà không lo bị sửa
+      ngầm trên đường xử lý. Nếu đầu vào sai, cổng phải trả ngay mã bốn trăm thay vì mở giao dịch cơ sở dữ liệu. Tách biệt
+      mã hai trăm linh một cho tạo mới và bốn trăm cho lỗi giúp ứng dụng khách phân loại phản hồi ngay mà không cần đọc thân
+      tin. Bản ghi bất biến còn có sẵn các hàm so sánh và sinh chuỗi tự động nên mã nguồn ngắn gọn và dễ bảo trì hơn.
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.2'
+    - '1.3'
+    clear: true
+- id: sym
+  kind: symbol
+  title: Bộ chú thích kiểm dữ liệu vào và khuôn RFC 9457 ProblemDetail
+  steps:
+  - show: <table class='t'><tr><th>chú thích &amp; trường chuẩn</th><th>tác dụng kiểm tra ở tầng vào</th></tr><tr><td><code>@NotBlank</code>
+      &amp; <code>@Positive</code></td><td>Bắt chuỗi rỗng/khoảng trắng và chặn số tiền nhỏ hơn hoặc bằng 0</td></tr><tr><td><code>@Valid</code>
+      trên <code>@RequestBody</code></td><td>Kích hoạt kiểm ràng buộc trước khi thân hàm điều khiển được gọi</td></tr><tr><td><code>ProblemDetail</code>
+      (<code>application/problem+json</code>)</td><td>Đóng gói chuẩn <code>type, title, status, detail</code> + trường mở
+      rộng <code>errors</code></td></tr></table>
+    say: Bảng này mô tả ba chốt kỹ thuật giữ sạch cửa vào của ứng dụng web. Hai chú thích ràng buộc gắn trực tiếp lên từng
+      trường của bản ghi để tuyên bố điều kiện hợp lệ. Chú thích kiểm hợp lệ đặt cạnh tham số thân yêu cầu là công tắc kích
+      hoạt quy trình chấm trước khi đi vào hàm xử lý. Khi có trường vi phạm, bộ xử lý ngoại lệ dùng chung đóng gói thành đối
+      tượng chi tiết lỗi đúng chuẩn loại nội dung quốc tế. Tên trường trong mảng lỗi khớp đúng tên trường trên bản ghi để
+      đội giao diện ánh xạ trực tiếp tới từng ô nhập. Sự kết hợp ba thành phần này tạo nên hàng rào kiểm định thống nhất cho
+      toàn bộ các đầu cuối trong dịch vụ.
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.4'
+    - '1.4'
+    clear: true
+- id: intuition
+  kind: intuition
+  title: 'Luồng xử lý một yêu cầu HTTP: Lọc ở ranh giới → Không chạm lõi khi bẩn'
+  steps:
+  - show: <div><svg width="960" height="210" viewBox="0 0 960 210"><rect x="30" y="55" width="210" height="90" rx="10" fill="#dbeafe"
+      stroke="#2a78d6" stroke-width="2"/><text x="135.0" y="95" font-size="18" font-weight="700" text-anchor="middle" fill="#1e293b">1.
+      JSON Request</text><text x="135.0" y="123" font-size="15" text-anchor="middle" fill="#475569">Giải mã vào DTO record</text><line
+      x1="240" y1="100" x2="310" y2="100" stroke="#475569" stroke-width="2"/><polygon points="310,100 302,95 302,105" fill="#475569"/><rect
+      x="310" y="55" width="215" height="90" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="2"/><text x="417.5" y="95"
+      font-size="18" font-weight="700" text-anchor="middle" fill="#1e293b">2. @Valid Checker</text><text x="417.5" y="123"
+      font-size="15" text-anchor="middle" fill="#475569">Chặn @NotBlank, @Positive</text><line x1="525" y1="80" x2="625" y2="55"
+      stroke="#16a34a" stroke-width="2"/><polygon points="625,55 615,53 618,62" fill="#16a34a"/><rect x="625" y="20" width="300"
+      height="72" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/><text x="775.0" y="52" font-size="17" font-weight="700"
+      text-anchor="middle" fill="#1e293b">Hợp lệ → 201 Created</text><text x="775.0" y="75" font-size="14" text-anchor="middle"
+      fill="#475569">Gọi tầng dịch vụ xử lý</text><line x1="525" y1="120" x2="625" y2="145" stroke="#dc2626" stroke-width="2"/><polygon
+      points="625,145 618,138 615,147" fill="#dc2626"/><rect x="625" y="110" width="300" height="72" rx="10" fill="#fee2e2"
+      stroke="#dc2626" stroke-width="2"/><text x="775.0" y="142" font-size="17" font-weight="700" text-anchor="middle" fill="#1e293b">Vi
+      phạm → 400 ProblemDetail</text><text x="775.0" y="165" font-size="14" text-anchor="middle" fill="#475569">@RestControllerAdvice
+      trả JSON chuẩn</text></svg></div>
+    say: Quan sát nhánh rẽ hai đường trên màn hình. Mọi chuỗi JSON đi tới đều được khung web chuyển thành bản ghi DTO rồi đưa
+      ngay qua bộ kiểm ràng buộc. Nếu mọi trường đều đạt, luồng mới đi tiếp xuống tầng dịch vụ và trả mã hai trăm linh
+      một.
+    clear: true
+  - show: ''
+    say: Nếu phát hiện dù chỉ một lỗi nhỏ, nhánh đỏ bên dưới cắt ngang ngay để trả mã bốn trăm mà không chạm cơ sở dữ liệu.
+      Nhờ lớp lọc sớm này, những yêu cầu sai lệch cấu trúc không bao giờ chiếm dụng kết nối tới cơ sở dữ liệu đắt đỏ. Mỗi
+      nhánh kết quả đều mang mã trạng thái HTTP tường minh giúp hệ thống giám sát đo chính xác tỉ lệ lỗi người dùng.
+- id: formula
+  kind: formula
+  title: Nguyên tắc một nơi bắt lỗi duy nhất (RFC 9457) và cô lập thực thể DB
+  checks:
+  - 400 < 500
+  steps:
+  - show: <div class='box key'><p><b>Hai quy tắc kiến trúc tầng web ngân hàng:</b></p><p>1. <b>Tách riêng DTO khỏi thực thể
+      DB:</b> DTO chỉ chứa đúng trường giao tiếp (<code>fromAccount, toAccount, amount</code>); cấm gắn thực thể bảng lên
+      <code>@RequestBody</code> tránh lỗ hổng gán thừa trường (Mass Assignment).</p><p>2. <b>Một <code>@RestControllerAdvice</code>
+      xử lý tập trung:</b> gom mọi lỗi <code>MethodArgumentNotValidException</code> về <code>ProblemDetail</code> với <code>status=400</code>
+      và danh sách <code>errors</code> rõ ràng.</p></div>
+    say: Hai quy tắc kiến trúc trên màn hình giữ cho API vừa an toàn vừa sạch mã nguồn. Không bao giờ dùng trực tiếp thực
+      thể cơ sở dữ liệu làm đầu vào HTTP vì người dùng xấu có thể chèn thêm trường nhạy cảm như trạng thái duyệt hay số dư
+      giả. Thay vào đó, bản ghi truyền tải chỉ khai báo đúng ba trường cho phép và giao hết việc kiểm lỗi về một bộ tư vấn
+      toàn cục trả đúng khuôn RFC chín bốn năm bảy. Giả sử kẻ xấu gửi thêm trường số dư hay quyền quản trị vào JSON, lớp bản
+      ghi riêng sẽ bỏ qua hoàn toàn vì không khai báo. Trong khi đó, bộ xử lý tập trung giữ nguyên định dạng lỗi duy nhất
+      dù sau này hệ thống mở rộng thêm hàng chục bộ điều khiển.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    - '1.1'
+    - '1.2'
+    clear: true
+- id: example
+  kind: example
+  title: Cài đặt DTO record, TransferController và ApiExceptionHandler
+  checks:
+  - 250_000 > 0
+  steps:
+  - show: <p><b>1. Record DTO kèm chú thích ràng buộc (Bean Validation)</b></p><div class="code"><div>public record TransferRequest(</div><div>  @NotBlank(message
+      = "thieu tai khoan nguon") String fromAccount,</div><div>  @NotBlank(message = "thieu tai khoan dich") String toAccount,</div><div>  @Positive(message
+      = "so tien phai lon hon 0") long amount</div><div>) {}</div><div>@PostMapping("/api/v1/transfers")</div><div>@ResponseStatus(HttpStatus.CREATED)</div><div>public
+      TransferResponse create(@Valid @RequestBody TransferRequest req) {</div><div>  return new TransferResponse("TX-1234",
+      "ACCEPTED", req.amount());</div><div>}</div></div>
+    say: Nhìn đoạn mã ngắn gọn tạo nên cổng tiếp nhận dữ liệu an toàn. Ba trường tài khoản nguồn, tài khoản đích và số tiền
+      nằm gọn trong một dòng khai báo bản ghi bất biến. Khi gắn chú thích kiểm hợp lệ trước thân yêu cầu, khung điều khiển
+      trả ngay mã hai trăm linh một mà không cần rẽ nhánh thủ công. Ngoài bản ghi yêu cầu đầu vào, ta tạo thêm bản ghi phản
+      hồi chứa mã giao dịch, trạng thái chấp nhận và số tiền hợp lệ. Vì mọi trường đều bất biến ngay sau lúc khởi tạo, tầng
+      dịch vụ yên tâm đọc dùng mà không sợ luồng khác vô tình sửa đổi.
+    focus:
+    - 1
+    - 2
+    - 2
+    - 1
+    - 2
+    clear: true
+  - show: '<p><b>2. Bộ xử lý ngoại lệ trả ProblemDetail chuẩn RFC 9457</b></p><div class="code"><div>@RestControllerAdvice</div><div>public
+      class ApiExceptionHandler {</div><div>  @ExceptionHandler(MethodArgumentNotValidException.class)</div><div>  public
+      ProblemDetail handleInvalid(MethodArgumentNotValidException ex) {</div><div>    ProblemDetail pd = ProblemDetail.forStatusAndDetail(</div><div>      HttpStatus.BAD_REQUEST,
+      "Du lieu dau vao khong hop le");</div><div>    pd.setTitle("Validation Error");</div><div>    pd.setType(URI.create("https://nganhang.vn/errors/validation"));</div><div>    var
+      errs = ex.getBindingResult().getFieldErrors().stream()</div><div>      .map(fe -&gt; fe.getField() + ": " + fe.getDefaultMessage()).toList();</div><div>    pd.setProperty("errors",
+      errs);</div><div>    return pd;</div><div>  }</div><div>}</div></div>'
+    say: Phần xử lý lỗi dùng chung nằm trọn trong một lớp riêng biệt. Ngay khi bộ kiểm tự động phát hiện trường sai, ngoại
+      lệ ràng buộc được chuyển thẳng vào đây để trích xuất từng cặp tên trường kèm thông điệp chi tiết. Kết quả trả về mang
+      loại nội dung chuẩn quốc tế giúp ứng dụng máy khách hiển thị chính xác lỗi ngay tại ô nhập liệu. Trong hàm xử lý ngoại
+      lệ, ta đặt rõ mã trạng thái yêu cầu xấu, tiêu đề dễ đọc và đường dẫn định danh loại lỗi. Thuộc tính mở rộng danh sách
+      lỗi đi kèm từng cặp tên trường và thông điệp rõ ràng giúp lập trình viên khách gỡ lỗi nhanh chóng.
+    focus:
+    - 1
+    - 2
+    - 2
+    - 1
+    - 2
+    clear: true
+- id: check
+  kind: check
+  title: 'Chạy thật trên Boot 4.1.3 MockMvc: ca 201 hợp lệ vs 400 ProblemDetail'
+  checks:
+  - 201 != 400
+  steps:
+  - show: '<p><b>Kết quả chạy thật bộ kiểm KiemL01Test qua ./mvnw -B verify</b></p><div class="code"><div>// POST /api/v1/transfers
+      {"fromAccount":"TK01","toAccount":"TK02","amount":250000}</div><div>→ HTTP 201 Created | {"txId":"TX-...","status":"ACCEPTED","amount":250000}</div><div>//
+      POST /api/v1/transfers {"fromAccount":"TK01","toAccount":"TK02","amount":0}</div><div>→ HTTP 400 Bad Request | Content-Type:
+      application/problem+json</div><div>{"type":"https://nganhang.vn/errors/validation","title":"Validation Error",</div><div>
+      "status":400,"errors":["amount: so tien phai lon hon 0"]}</div><div>[INFO] Tests run: 4, Failures: 0, Errors: 0, Total
+      time: 10.756 s</div><div>ĐÚNG — PASS /d/research-video/labs/SPB/L01 (du_an maven)</div></div>'
+    say: Đầu ra kiểm thử thật trên máy ảo cho thấy rõ hai trường hợp đối lập khi chạy bộ kiểm nghiệm thu. Yêu cầu hợp lệ hai
+      trăm năm mươi nghìn đồng nhận mã hai trăm linh một vì mọi ràng buộc dữ liệu đều đạt. Còn yêu cầu số tiền bằng không
+      bị chặn lại với mã bốn trăm, loại nội dung chuẩn và danh sách lỗi chỉ rõ trường sai. Quan sát cả tiêu đề loại nội dung
+      trong phản hồi lỗi mang đúng chuỗi chuẩn ứng dụng vấn đề JSON thay vì JSON thường. Bốn ca kiểm thử còn quét cả số tiền
+      âm và tài khoản nguồn để trắng nhằm bảo đảm không sót nhánh biên nào.
+    focus:
+    - 1
+    - 2
+    - 2
+    - 1
+    - 2
+    clear: true
+- id: quymo
+  kind: example
+  title: Chi phí tiết kiệm khi chặn lỗi sớm ở tầng Web qua 3 mức lưu lượng
+  checks:
+  - 1_000_000 * 5 / 100 == 50_000
+  steps:
+  - show: <table class='t'><tr><th>lưu lượng đến (5% yêu cầu bẩn)</th><th>chặn ngay ở tầng Web (@Valid)</th><th>để lọt xuống
+      DB mới báo lỗi</th></tr><tr><td><b>100 yêu cầu</b> (5 lỗi)</td><td>0 truy vấn DB; tải ~12 KB, 100 lượt đọc JSON</td><td>Tốn
+      5 vòng khứ hồi khoá kết nối DB</td></tr><tr><td><b>10 000 yêu cầu</b> (500 lỗi)</td><td>Chặn 500 gói trên RAM (&lt;
+      1 ms/gói; ~1,2 MB, 10 000 lượt JSON)</td><td>500 phiên DB thừa làm cạn nhanh bể kết nối</td></tr><tr><td><b>1 000 000 yêu cầu</b> (50 000 lỗi)</td><td>Tiết
+      kiệm <b>50 000</b> lượt DB (~120 MB, 1 triệu lượt JSON)</td><td>Nguy cơ tắc hàng đợi DB trong giờ cao điểm</td></tr></table>
+    say: Bảng quy mô lý giải vì sao việc chặn dữ liệu bẩn ngay ở lớp điều khiển lại sống còn dưới tải cao. Với giả định năm
+      phần trăm yêu cầu từ thiết bị di động bị lỗi định dạng, ở một triệu yêu cầu sẽ có tới năm mươi nghìn gói tin hỏng. Nếu
+      chặn từ ranh giới HTTP trên bộ nhớ, toàn bộ năm mươi nghìn gói đó bị loại trong chưa tới một mi-li-giây mà không mở
+      bất kỳ kết nối cơ sở dữ liệu nào. Ở cả ba mốc một trăm, mười nghìn và một triệu yêu cầu, kích thước tải và số lượt phân tích JSON tăng tuyến tính nhưng lượt đọc ghi đĩa bằng không. Băng thông mạng nội bộ tới tầng cơ sở dữ liệu cũng nhờ đó luôn thông
+      thoáng phục vụ các giao dịch hợp lệ.
+    focus:
+    - 0
+    - '1.2'
+    - '1.4'
+    - '1.3'
+    - '1.4'
+    clear: true
+- id: pitfalls
+  kind: pitfall
+  title: Ba lỗi hay gặp khi viết RestController và xử lý lỗi
+  steps:
+  - show: <table class='t'><tr><th>lỗi kỹ thuật thường gặp ở tầng web</th></tr><tr><td><div class='box warn'><b>Lỗi 1 — Khai
+      báo ràng buộc trong DTO nhưng quên chữ <code>@Valid</code> ở tham số <code>@RequestBody</code>:</b> Yêu cầu <code>amount
+      = 0</code> vẫn lọt thẳng qua trả HTTP 201!<br><b>Lỗi 2 — Dùng thực thể JPA làm DTO đầu vào:</b> Kẻ xấu gửi thêm trường
+      nhạy cảm dẫn đến ghi đè dữ liệu không phép.<br><b>Lỗi 3 — Tự ghép chuỗi JSON lỗi hoặc lộ stack trace hệ thống:</b> Làm
+      lộ cấu trúc thư viện nội bộ (rủi ro bảo mật OWASP).</div></td></tr></table>
+    say: Ba cái bẫy trên bảng xuất hiện thường xuyên trong mã của người mới chuyển từ bài tập nhỏ sang dự án thật. Quên một
+      từ khoá kiểm hợp lệ ngay trước tham số khiến toàn bộ ràng buộc khai báo trong bản ghi trở thành vô nghĩa và cho số tiền
+      âm đi qua cổng. Đưa thẳng thực thể bảng ra nhận dữ liệu bên ngoài hay in dấu vết ngăn xếp ra phản hồi đều mở đường cho
+      lỗ hổng bảo mật. Ngoài ra, đừng bao giờ trả chuỗi lỗi tự chế khác nhau ở từng hàm điều khiển vì sẽ làm vỡ bộ giải mã
+      chung phía ứng dụng di động. Hãy luôn kiểm tra phạm vi gói thư viện kiểm định trong cấu hình dựng để chú thích hợp lệ
+      thực sự được kích hoạt.
+    focus:
+    - 0
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    clear: true
+- id: quiz
+  kind: quiz
+  title: Kiểm tra nhanh tầng Web và RFC 9457
+  checks:
+  - 400 != 201
+  - 200 + 1 == 201
+  steps:
+  - show: '<ol><li>Một yêu cầu gửi <code>amount: -500</code> vào <code>POST /api/v1/transfers</code> nhưng bạn quên đặt <code>@Valid</code>
+      trước <code>@RequestBody</code>. Hệ thống sẽ trả về mã trạng thái nào?</li><li>Đầu ra chuẩn RFC 9457 dùng kiểu nội dung
+      (Content-Type) gì và có những trường cơ bản nào?</li></ol>'
+    say: Trước khi sang phần tự làm, hãy tự trả lời nhanh hai câu hỏi kiểm hiểu. Câu một, nếu bản ghi DTO đã khai báo số dương
+      nhưng hàm điều khiển quên chữ kiểm hợp lệ ở tham số, yêu cầu âm năm trăm sẽ nhận mã trạng thái nào? Câu hai, tiêu đề
+      loại nội dung và các trường cơ bản của chuẩn báo lỗi RFC chín bốn năm bảy là gì? Bấm tạm dừng và trả lời. Hãy nhớ lại
+      cơ chế hoạt động của chú thích kích hoạt kiểm định và tên loại nội dung chuẩn quốc tế.
+    pause: 20
+  - show: <table class='t'><tr><th>đáp án câu 1</th></tr><tr><td><p>① Trả nhầm <code>201 Created</code> (lọt dữ liệu bẩn)
+      vì Bean Validation chỉ chạy khi có <code>@Valid</code> tại tham số đầu cuối.</p></td></tr></table>
+    say: 'Đáp án câu một: hàm vẫn chạy bình thường và trả nhầm mã hai trăm linh một vì thiếu công tắc kích hoạt kiểm tra.
+      Nhờ tách biệt ngay từ tầng vào, mọi lỗi định dạng đều trả về đồng nhất giúp máy khách xử lý chính xác. Vì vậy, bài kiểm
+      thử từ chối dữ liệu bẩn là bước bắt buộc cho mọi đầu cuối POST mới viết.'
+    clear: true
+  - show: <table class='t'><tr><th>đáp án câu 2</th></tr><tr><td><p>② Kiểu nội dung <code>application/problem+json</code>
+      với các trường chuẩn <code>type, title, status, detail</code> (và thuộc tính mở rộng như <code>errors</code>).</p></td></tr></table>
+    say: 'Đáp án câu hai: phản hồi dùng loại nội dung lỗi chuẩn JSON kèm bốn trường tiêu chuẩn là loại, tiêu đề, mã trạng
+      thái và chi tiết. Nhờ chuẩn hoá bốn trường lỗi cơ bản, đội giao diện dễ dàng hiển thị cảnh báo đúng ngay bên dưới ô
+      nhập liệu. Ngoài bốn trường gốc, chuẩn này cho phép gắn thêm danh sách lỗi từng trường làm thuộc tính mở rộng hợp lệ.'
+    clear: true
+- id: practice
+  kind: practice
+  title: Cài đặt đầu cuối tạo chuyển khoản và xử lý lỗi RFC 9457
+  lab: labs/SPB/L01
+  steps:
+  - show: <div class='box key'><p><b>Thực hành bài L01 (<code>labs/SPB/L01/de.md</code>):</b> tạo <code>TransferRequest(fromAccount,
+      toAccount, amount)</code> kiểm <code>@NotBlank</code> và <code>@Positive</code>; mở <code>POST /api/v1/transfers</code>
+      trả <code>201</code> với <code>TransferResponse</code>; thêm <code>@RestControllerAdvice</code> trả <code>ProblemDetail</code>
+      HTTP 400 (kèm trường <code>errors</code>), rồi chấm:</p><p><code>bash labs/cham.sh SPB L01 duong_dan/du_an_cua_ban</code></p></div>
+    say: Hãy mở tệp đề bài L01 để cài đặt trọn vẹn ba thành phần bản ghi bất biến, bộ điều khiển và bộ xử lý lỗi tập trung.
+      Chú ý kiểm đủ bốn kịch bản gồm yêu cầu hợp lệ, số tiền bằng không, số tiền âm và tài khoản rỗng. Bấm tạm dừng và tự
+      hoàn thành trước khi xem kết quả chấm. Hãy bảo đảm lớp bản ghi phản hồi trả đủ ba trường mã giao dịch, trạng thái và
+      số tiền như đầu cuối yêu cầu. Đặt chú thích tư vấn điều khiển trên lớp xử lý ngoại lệ để gom mọi lỗi nhập liệu về đúng
+      một khuôn chuẩn.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    - '1.1'
+    - '1.2'
+    clear: true
+    pause: 30
+  - show: '<p><b>Kết quả chấm bộ kiểm KiemL01Test (4 kịch bản thật qua MockMvc)</b></p><div class="code"><div>KiemL01Test:
+      4 ca, 0 hỏng</div></div>'
+    say: Màn hình hiển thị kết quả nghiệm thu bốn ca kiểm thử của bài một với không ca hỏng. Khi cả bốn ca từ hợp lệ đến các
+      trường sai đều trả đúng mã và khuôn lỗi chuẩn, trình chấm mới báo đạt. Mỗi kịch bản lỗi đều được kiểm tra đồng thời
+      cả mã trạng thái HTTP, tiêu đề nội dung lẫn mảng chi tiết trường sai.
+    focus:
+    - 1
+    - 2
+    - 2
+    clear: true
+  - show: <div class='box ok'><p><b>Gợi ý nếu kẹt ở bài L01:</b> (1) nhớ thêm starter <code>spring-boot-starter-validation</code>
+      (và <code>-validation-test</code>) vào <code>pom.xml</code>; (2) gắn đủ <code>@Valid</code> trước <code>@RequestBody</code>;
+      (3) dùng <code>ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ...)</code> trong <code>@RestControllerAdvice</code>.</p></div>'
+    say: Nếu bài nộp còn trả mã hai trăm linh một cho yêu cầu lỗi hoặc thiếu trường mảng chi tiết, hãy rà lại ba gợi ý trên
+      màn hình. Bảo đảm đã khai báo phụ thuộc kiểm định vào cấu hình dựng và gắn đủ chú thích kích hoạt tại tham số thân yêu
+      cầu. Lưu ý đường dẫn định danh loại lỗi phải hợp lệ cú pháp địa chỉ định danh để không phát sinh ngoại lệ phân tích
+      khi tạo đối tượng chi tiết lỗi.
+    focus:
+    - 0
+    - 1
+    - 1
+    clear: true
+- id: recap
+  kind: recap
+  title: Tổng kết tầng Web an toàn với Bean Validation và Problem Details
+  steps:
+  - show: <div class='chain'><span class='n'>DTO record + @NotBlank/@Positive</span><span class='a'>→</span><span class='n'>@Valid
+      chặn ở cửa</span><span class='a'>→</span><span class='n'>RFC 9457 ProblemDetail</span></div>
+    say: Bạn đã nắm cách thiết kế cửa vào an toàn và nhất quán cho API ngân hàng bằng DTO bất biến và chuẩn lỗi quốc tế. Mọi
+      dữ liệu bẩn đều được chặn gọn trước khi đi sâu vào tầng nghiệp vụ và lưu trữ. Cửa vào API vững chắc này chính là hàng
+      rào bảo vệ đầu tiên cho mọi thao tác nghiệp vụ phía sau.
+    focus:
+    - '1.1'
+    - '1.3'
+    - '1.3'
+    clear: true
+  - show: <div class='box ok'><b>Bài sau (bài 2):</b> Tầng dịch vụ, tiêm phụ thuộc qua hàm dựng và @Transactional (lan truyền,
+      cô lập, hoàn tác)</div>
+    say: Bài tiếp theo ta chuyển xuống tầng dịch vụ để nắm cơ chế tiêm phụ thuộc và quản lý giao dịch hoàn tác khi gặp lỗi
+      nghiệp vụ. Hẹn gặp bạn ở bài sau. Nắm chắc khuôn báo lỗi chuẩn và lớp truyền tải bất biến sẽ giúp mọi đầu cuối ở các
+      bước sau sạch và an toàn hơn. Việc chuẩn hoá ngay từ đầu cũng giúp các bài thực hành sau về giao dịch, bảo mật và kiểm
+      thử tự động kế thừa một hợp đồng API sạch sẽ, đồng bộ.
+    clear: true
+    forward_ref: true
+asr_reviewed:
+- sentence: Nếu chặn từ ranh giới HTTP trên bộ nhớ, toàn bộ năm mươi nghìn gói đó bị loại trong chưa tới một mi-li-giây mà
+    không mở bất kỳ kết nối cơ sở dữ liệu nào.
+  reason: 'ASR chép “Nếu chặn từ tranh giới HTTT trên bộ nhớ, toàn bộ 50.000 gói đó bị loại trong chưa tới 1 mili giây mà
+    không mở bất kỳ kết nối cơ sở giữ liệu nào.” (khớp 0.904, khác “ranh” → nghe thành “tranh”; “http” → nghe thành “httt”;
+    “mi li” → nghe thành “mili”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa
+    — NOT_VERIFIED bằng tai người'
+- sentence: Bạn đã nắm cách thiết kế cửa vào an toàn và nhất quán cho API ngân hàng bằng DTO bất biến và chuẩn lỗi quốc tế.
+  reason: 'ASR chép “Bạn đã nắm cách thiết kế cửa vào an toàn và nhất quán cho API ngân hàng bằng data bất biến và chuẩn lỗi
+    quốc tế.” (khớp 0.962, khác “dto” → nghe thành “data”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper,
+    câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'

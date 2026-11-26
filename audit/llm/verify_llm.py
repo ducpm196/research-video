@@ -212,5 +212,15 @@ rec("L14d", [q[0] for q in quizA] == [4.8e20, 4.8e20] and [q[1] for q in quizA] 
     "quiz (số minh hoạ): cùng 4,8·10²⁰; 20 và 1,25 từ tố mỗi tham số; chi phí sinh 1 tỉ từ tố/ngày bằng ngân sách sau 120 và 30 ngày")
 
 nf = sum(1 for _, ok in R if not ok)
+# ── Kiểm tự động mọi lab (du_lieu.txt + ca_an/) qua cham.sh ──
+import subprocess as _subp
+from pathlib import Path as _LabPath
+_BASH = r"C:\Program Files\Git\bin\bash.exe"
+if not _LabPath(_BASH).exists():
+    _BASH = "bash"
+for _ld in sorted((ROOT / "labs" / "LLM").glob("L*")):
+    _rp = _subp.run([_BASH, str(ROOT / "labs" / "cham.sh"), "LLM", _ld.name], cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
+    rec(f"{_ld.name}:lab", _rp.returncode == 0 and "PASS" in _rp.stdout and "2 ca an" in _rp.stdout, f"cham.sh {_ld.name} (public + 2 ca_an)")
+
 print(f"TỔNG: {len(R) - nf} PASS · {nf} FAIL")
 sys.exit(1 if nf else 0)

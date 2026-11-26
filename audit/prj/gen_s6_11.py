@@ -1,4 +1,5 @@
 """Sinh 6 bài dự án PRJ L05–L10 cho Chặng 6–11 (đầy đủ E39 >= 900 từ, checks, SVG, labs/PRJ, screen_code)."""
+import sys as _sys; from pathlib import Path as _P; _sys.path.insert(0, str(_P(__file__).resolve().parents[1])); import _frozen  # noqa: E402,F401
 import subprocess
 import sys
 from pathlib import Path

@@ -1,11 +1,15 @@
 import heapq
+import sys
+
+
 def dijkstra(edges, src, dst):
     if any(w < 0 for _, _, w in edges):
-        raise ValueError('negative edge')
+        raise ValueError("negative edge")
     g = {}
     for u, v, w in edges:
         g.setdefault(u, []).append((v, w))
-    dist, pq = {src: 0}, [(0, src)]
+    dist = {src: 0}
+    pq = [(0, src)]
     while pq:
         d, u = heapq.heappop(pq)
         if u == dst:
@@ -18,20 +22,57 @@ def dijkstra(edges, src, dst):
                 dist[v] = nd
                 heapq.heappush(pq, (nd, v))
     return -1
-edges = [('A', 'D', 15), ('A', 'B', 2), ('B', 'C', 3), ('C', 'D', 4)]
-best = dijkstra(edges, 'A', 'D')
-neg_rejected = 0
-try:
-    dijkstra([('A', 'B', -1)], 'A', 'B')
-except ValueError:
-    neg_rejected = 1
-pts = [(1, 3), (2, 5), (3, 7), (4, 9)]
-mx = sum(x for x, _ in pts) / len(pts)
-my = sum(y for _, y in pts) / len(pts)
-den = sum((x - mx) ** 2 for x, _ in pts)
-w = sum((x - mx) * (y - my) for x, y in pts) / den
-b = my - w * mx
-mse = sum((w * x + b - y) ** 2 for x, y in pts) / len(pts)
-print(f'min_cost={best} saved_pct={100*(15 - best)/15:.1f}%')
-print(f'neg_rejected={neg_rejected}')
-print(f'ols_w={w:.1f} ols_b={b:.1f} mse={mse:.2f}')
+
+
+def main():
+    src, dst = "A", "D"
+    direct = 0
+    edges = []
+    probes = []
+    pts = []
+    for raw in sys.stdin:
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split()
+        tag = parts[0]
+        if tag == "QUERY":
+            src, dst = parts[1], parts[2]
+        elif tag == "DIRECT":
+            direct = int(parts[1])
+        elif tag == "EDGE":
+            edges.append((parts[1], parts[2], int(parts[3])))
+        elif tag == "PROBE":
+            probes.append((parts[1], parts[2], int(parts[3])))
+        elif tag == "POINT":
+            pts.append((float(parts[1]), float(parts[2])))
+
+    best = dijkstra(edges, src, dst)
+    pct = 100.0 * (direct - best) / direct if (direct > 0 and best >= 0) else 0.0
+    neg_rejected = 0
+    if probes:
+        try:
+            dijkstra(probes, probes[0][0], probes[0][1])
+        except ValueError:
+            neg_rejected = 1
+
+    if pts:
+        mx = sum(x for x, _ in pts) / len(pts)
+        my = sum(y for _, y in pts) / len(pts)
+        den = sum((x - mx) ** 2 for x, _ in pts)
+        if den == 0:
+            w, b = 0.0, my
+        else:
+            w = sum((x - mx) * (y - my) for x, y in pts) / den
+            b = my - w * mx
+        mse = sum((w * x + b - y) ** 2 for x, y in pts) / len(pts)
+    else:
+        w = b = mse = 0.0
+
+    print(f"min_cost={best} saved_pct={pct:.1f}%")
+    print(f"neg_rejected={neg_rejected}")
+    print(f"ols_w={w:.1f} ols_b={b:.1f} mse={mse:.2f}")
+
+
+if __name__ == "__main__":
+    main()

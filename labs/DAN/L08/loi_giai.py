@@ -1,5 +1,6 @@
-rev = [800, 300, 150, 90, 80, 70, 50, 30, 20, 10]
-mean_v = sum(rev) / len(rev)
-med_v = (rev[4] + rev[5]) / 2.0
-top20_share = sum(rev[:2]) / sum(rev) * 100
-print(f"mean={mean_v:.1f} median={med_v:.1f} top20={top20_share:.1f}%")
+import sys
+rev = sorted([float(x) for x in sys.stdin.read().strip().split('=', 1)[1].split(',')], reverse=True)
+n = len(rev); mn = sum(rev) / n
+med = rev[n // 2] if n % 2 else (rev[n // 2 - 1] + rev[n // 2]) / 2.0
+topk = max(1, n // 5); sh = sum(rev[:topk]) / sum(rev) * 100
+print(f'mean={mn:.1f} median={med:.1f} top20={sh:.1f}%')

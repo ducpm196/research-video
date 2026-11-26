@@ -1,11 +1,6 @@
-# Lab WEB L06 — Node.js thật: kiểm chuẩn RFC 9110 phương thức HTTP và lũy đẳng
+# Lab WEB L06 — Node.js: kiểm chuẩn RFC 9110 phương thức HTTP và Idempotency-Key
 
-Viết bảng kiểm chuẩn các phương thức `GET, PUT, DELETE, POST` và mô phỏng Idempotency-Key chống trừ tiền 2 lần khi gửi lại `POST /pay`, in đúng 3 dòng:
-1. `get_safe_idem=1,1`
-2. `put_safe_idem=0,1`
-3. `post_with_idem_key_bal=150`
+Đọc `stdin` `bal=<n> keys=<k1:amt1,k2:amt2,...>`. Xuất chuẩn an toàn/lũy đẳng của `GET` và `PUT`, đồng thời chạy các giao dịch có `Idempotency-Key` để chống trừ tiền trùng lặp.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh WEB L06 duong_dan/bai_cua_ban.js
-```
+In đúng 3 dòng: `get_safe_idem=1,1`, `put_safe_idem=0,1`, `post_with_idem_key_bal=<d>`.
+Chấm tự động: `bash labs/cham.sh WEB L06 duong_dan/bai_cua_ban.js`

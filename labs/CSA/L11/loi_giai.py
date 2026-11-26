@@ -1,8 +1,12 @@
-def split_a(a): return (a >> 7), ((a >> 4) & 0x7), (a & 0xF)
-t1, i1, o1 = split_a(0x84)
-tags = [None] * 8; hits = misses = conf = 0
-for a in [0x00, 0x04, 0x80, 0x08]:
-    tg, idx, _ = split_a(a)
+import sys
+kv = dict(t.split('=') for t in sys.stdin.read().split())
+lines, ib, ob = int(kv['lines']), int(kv['idx_bits']), int(kv['off_bits'])
+imask, omask = (1 << ib) - 1, (1 << ob) - 1
+split_a = lambda a: (a >> (ib + ob), (a >> ob) & imask, a & omask)
+t1, i1, o1 = split_a(int(kv['probe'], 16))
+tags = [None] * lines; hits = misses = conf = 0
+for s in kv['seq'].split(','):
+    tg, idx, _ = split_a(int(s, 16))
     if tags[idx] == tg: hits += 1
     else:
         if tags[idx] is not None: conf += 1

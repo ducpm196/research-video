@@ -1,6 +1,4 @@
-# Lab RLN L02 — Tốc độ hội tụ của lặp giá trị
+# Lab RLN L02 — Tốc độ hội tụ lặp giá trị
 
-Theo cận trên tính co `k >= ln(eps) / ln(gamma)`, tính số vòng tối thiểu làm tròn lên để sai số giảm `eps = 0.0001` lần khi hệ số chiết khấu `gamma = 0.85` so với `gamma = 0.95`.
-
-Định dạng đầu ra (1 dòng):
-`iters_g085=<số nguyên> iters_g095=<số nguyên>`
+Đọc `eps g1 g2` từ stdin (ví dụ `0.0001 0.85 0.95`). Tính số vòng tối thiểu `ceil(ln(eps)/ln(gamma))` cho hai hệ số.
+In đúng 1 dòng `iters_g085=<int> iters_g095=<int>`.

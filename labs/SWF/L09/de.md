@@ -1,11 +1,6 @@
-# Lab SWF L09 — Kiểm tổ hợp xen kẽ C(12,6)=924 trong bài toán tranh chấp
+# Lab SWF L09 — Kiểm tổ hợp xen kẽ trong bài toán tranh chấp hai luồng
 
-Viết chương trình Python tính số cách xen kẽ `C(12, 6) = 924` và chạy duyệt tổ hợp hai luồng mỗi luồng tăng `x += 1` 2 lần để đếm số đường dẫn cho ra giá trị `x < 4`, in đúng 3 dòng:
-1. `total_interleavings=924`
-2. `distinct_x=2,3,4`
-3. `buggy_paths_gt0=1`
+Đọc `stdin` `ops_per_thread=<int>`. Với hai luồng mỗi luồng tăng `x += 1` qua `ops_per_thread` vòng (3 thao tác nguyên tử đọc–cộng–ghi mỗi vòng), đếm mọi kịch bản xen kẽ và kiểm có nhánh làm mất cập nhật hay không.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh SWF L09 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `total_interleavings=<d>`, `distinct_x=<vals>`, `buggy_paths_gt0=<0|1>`.
+Chấm tự động: `bash labs/cham.sh SWF L09 duong_dan/bai_cua_ban.py`

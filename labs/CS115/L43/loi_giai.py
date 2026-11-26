@@ -1,5 +1,6 @@
-T = 500
-b0, b1 = 0.0002, 0.015
+import sys
+kv = dict(t.split('=') for t in sys.stdin.read().split())
+T = int(kv['T']); b0, b1 = float(kv['b0']), float(kv['b1'])
 ab = 1.0
 for t in range(T):
     beta = b0 + (b1 - b0) * t / (T - 1)

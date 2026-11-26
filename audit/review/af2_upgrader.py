@@ -7,6 +7,7 @@ Cơ chế tái lập hoàn toàn (idempotent) học từ audit/dms/af2/af2lib.py
   cài cảnh `practice` (+ `quymo` + bảng giải mã nếu thiếu), gắn `af2: true` & `covers`,
   chạy `lv.lint` (0 error, 0 warn) và đồng bộ `audit/review/screen_code/<KHOÁ>.yaml`.
 """
+import sys as _sys; from pathlib import Path as _P; _sys.path.insert(0, str(_P(__file__).resolve().parents[1])); import _frozen  # noqa: E402,F401
 import os
 import re
 import shutil

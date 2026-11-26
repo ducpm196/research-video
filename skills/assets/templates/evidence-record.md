@@ -9,7 +9,7 @@ spec_evidence: "export-format.md#header"
 impl_evidence: "samples/export.csv"
 method: "python parse.py samples/export.csv"
 observed: "printed rows=120 header=120, exit 0"
-artifact_revision: "git 1234567"
+artifact_revision: "sha256 of samples/export.csv, see dependencies"
 runtime: "agent and version, operating system"
 dependencies: []
 validity: VALID

@@ -18,13 +18,20 @@ for f in sorted((ROOT / "curriculum").glob("*.yaml")):
     c = lv.load_yaml(f)
     if isinstance(c, dict) and c.get("course"):
         cur[str(c["course"])] = c
-nodes, edges = set(), []
+nodes, edges, lab_edges, bad_next = set(), [], 0, []
 for cid, c in cur.items():
+    c_ids = {l["id"] for l in c["lessons"]}
+    lab_reqs = [str(q) for q in (c.get("lab") or {}).get("requires") or []]
     for l in c["lessons"]:
         u = f"{cid}:{l['id']}"
         nodes.add(u)
         edges += [(f"{cid}:{q}", u) for q in l.get("requires") or []]
         edges += [(str(q), u) for q in l.get("requires_ext") or []]
+        edges += [(q, u) for q in lab_reqs]
+        lab_edges += len(lab_reqs)
+        if "next" in l and l["next"] not in (None, False, ""):
+            if str(l["next"]) not in c_ids:
+                bad_next.append((u, l["next"]))
 bad = [e for e in edges if e[0] not in nodes]
 indeg = {n: 0 for n in nodes}
 out = {n: [] for n in nodes}
@@ -39,7 +46,8 @@ while q:
         if indeg[m] == 0:
             q.append(m)
 cyc = sorted(n for n in nodes if indeg[n] > 0)
-print(f"1) {len(cur)} lộ trình, {len(nodes)} bài, {len(edges)} cạnh tiên quyết; tham chiếu hỏng: {bad or 0}; bài nằm trên chu trình: {cyc or 0}")
+print(f"1) {len(cur)} lộ trình, {len(nodes)} bài, {len(edges)} cạnh tiên quyết (gồm {lab_edges} cạnh lab.requires); "
+      f"tham chiếu hỏng: {bad or 0}; next hỏng: {bad_next or 0}; bài nằm trên chu trình: {cyc or 0}")
 # thứ tự khoá: khoá A trước B nếu có bài của A là tiên quyết của bài B
 cedge = {(a.split(':')[0], b.split(':')[0]) for a, b in edges if a.split(':')[0] != b.split(':')[0]}
 ck = {c: 0 for c in cur}
@@ -74,4 +82,4 @@ for cid, c in cur.items():
             nover.append(f"{cid}:{l['id']}")
 print(f"2) VER dẫn tới mã không PASS: {miss or 0}; VER của bài khác: {wrong or 0}")
 print(f"3) ví dụ có chữ số mà không dẫn VER ({len(nover)}): {', '.join(nover)}")
-sys.exit(1 if (bad or cyc or miss or len(co) != len(cur)) else 0)
+sys.exit(1 if (bad or bad_next or cyc or miss or len(co) != len(cur)) else 0)

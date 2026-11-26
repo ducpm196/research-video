@@ -1,6 +1,6 @@
-# Lab IRS L12 — Thiết kế hệ gợi ý hai tầng trong ngân sách 100 ms
+# Lab IRS L12 — Hệ gợi ý hai tầng trong ngân sách trễ
 
-Tính độ trễ phân vị 99 khi cắt ứng viên từ `1 200` xuống `500` (biết sinh ứng viên tốn `18 ms`, mạng đọc đặc trưng `22 ms`, và tầng xếp hạng tốn `0.06 ms` mỗi ứng viên ở phân vị 99), rồi tính xác suất một yêu cầu gặp đuôi chậm khi chia `8` mảnh song song mà mỗi mảnh chậm `1.5%`.
+Đọc từ đầu vào chuẩn (`stdin`, dạng `khoá=giá_trị`) `c1=<int> c2=<int> gen=<f> net=<f> rank=<f> shards=<int> p_slow=<f>` (`<int>` là số nguyên, `<f>` là số thực). Tính độ trễ phân vị 99 (`p99` = `gen + net + round(c * rank)`) trước/sau khi giảm ứng viên và xác suất gặp đuôi chậm `1 - (1 - p_slow)^shards`.
 
-Định dạng đầu ra (1 dòng):
-`p99_before=<số nguyên>ms p99_after=<số nguyên>ms tail8=<1 chữ số>%`
+In 1 dòng đúng nhãn (`<d>` là số nguyên, `<.1f>` làm tròn 1 chữ số thập phân; giữ nguyên tên khoá cố định `tail8` kể cả khi `shards` khác 8): `p99_before=<d>ms p99_after=<d>ms tail8=<.1f>%`.
+Chấm tự động: `bash labs/cham.sh IRS L12 duong_dan/bai_cua_ban.py`

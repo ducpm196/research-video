@@ -1,11 +1,6 @@
-# Lab DSY L14 [Mô phỏng phân tán] — Hộp thư nhận khử trùng lặp idempotent
+# Lab DSY L14 — Hộp thư nhận khử trùng lặp idempotent
 
-Viết chương trình Python xử lý luồng sự kiện có bản tin gửi trùng `[('#41', 100), ('#42', 50), ('#42', 50), ('#43', 25)]`: lưu tập `seen_ids` cùng lúc cộng số dư để bảo đảm tổng chuẩn `175`, in đúng 3 dòng:
-1. `raw_events=4`
-2. `unique_applied=3`
-3. `final_balance=175`
+Đọc `stdin` `events=<id:amt,...>`. Lưu tập mã đã xử lý `seen` để mỗi bản tin trùng chỉ cộng số dư một lần duy nhất.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh DSY L14 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `raw_events=<d>`, `unique_applied=<d>`, `final_balance=<d>`.
+Chấm tự động: `bash labs/cham.sh DSY L14 duong_dan/bai_cua_ban.py`

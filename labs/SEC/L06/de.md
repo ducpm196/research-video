@@ -1,11 +1,6 @@
-# Lab SEC L06 — Phòng thủ XSS (chèn mã HTML) bằng html.escape và chèn SQL (SQLi) bằng ?
+# Lab SEC L06 — Phòng thủ XSS bằng html.escape và SQLi bằng ?
 
-Viết chương trình Python thoát ký tự đặc biệt HTML của chuỗi `<script>alert(1)</script>` bằng `html.escape` và kiểm tra truy vấn SQLite tham số hoá `?` chặn chuỗi tấn công (payload) `' OR '1'='1`, in đúng 3 dòng:
-1. `raw_lt_present=0`
-2. `escaped_len=37`
-3. `sqli_rows=0`
+Đọc `stdin` `xss=<chuỗi>` (dòng 1) và `sqli=<chuỗi>` (dòng 2). Thực hiện thoát HTML bằng `html.escape(xss)`, tạo bảng SQLite trong bộ nhớ `CREATE TABLE u(n TEXT)` với một dòng khởi tạo `INSERT INTO u VALUES('an')`, rồi chạy truy vấn tham số hóa `SELECT * FROM u WHERE n=?`.
 
-Chấm tự động:
-```bash
-bash labs/cham.sh SEC L06 duong_dan/bai_cua_ban.py
-```
+In đúng 3 dòng: `raw_lt_present=<0|1>`, `escaped_len=<d>`, `sqli_rows=<d>`.
+Chấm tự động: `bash labs/cham.sh SEC L06 duong_dan/bai_cua_ban.py`

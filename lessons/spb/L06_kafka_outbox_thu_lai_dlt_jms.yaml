@@ -1,0 +1,434 @@
+id: L06
+course: SPB
+series: SPB · Spring Boot thực chiến với PostgreSQL, Redis và Kafka
+title: Bài 6 — Kafka Outbox, thử lại không chặn, hàng thư chết và so sánh JMS
+voice: vi-VN-NamMinhNeural
+rate: -5%
+depth: full
+af2: true
+covers:
+- objective: 1
+  scene: example
+- objective: 2
+  scene: check
+- objective: 3
+  scene: sym
+- objective: 4
+  scene: quymo
+source: curriculum/spb.yaml L06; labs/SPB/L06 (chạy thật ./mvnw -B verify trên Apache Kafka 3.9.0 Testcontainers)
+assumes: []
+objectives:
+- Lưu đơn chuyển khoản cùng bản ghi Outbox trong một giao dịch cơ sở dữ liệu trước khi phát lên Kafka
+- Cấu hình thử lại không chặn với lùi hàm mũ và chuyển bản tin hỏng sang chủ đề DLT bằng RetryableTopic
+- Phân biệt cơ chế giữ nhật ký đọc lại của Kafka với mô hình xoá sau xác nhận của RabbitMQ và ActiveMQ JMS
+- Đo độ trễ hàng đợi khi tỉ lệ lỗi độc tố tăng từ 0,1% lên 10% ở 1 000, 100 000 và 1 000 000 thông điệp
+scenes:
+- id: hook
+  kind: hook
+  title: Gửi Kafka khi giao dịch hoàn tác, hay kẹt tin lỗi làm tắc hàng đợi?
+  checks:
+  - len(['PENDING', 'SENT', 'DLT']) == 3
+  steps:
+  - show: '<div class=''box key''><p>Hai lỗi chí tử khi dùng hàng đợi sự kiện: (1) gọi <code>kafka.send(...)</code> ngay bên
+      trong giao dịch DB chưa chốt nên khi DB quay lui vẫn bắn sự kiện ma ra ngoài; (2) một bản tin JSON hỏng cứ ném lỗi lặp
+      vô tận chặn đứng toàn bộ phân vùng Kafka!</p><p>Giải pháp thật: <b>Transactional Outbox + <code>@RetryableTopic</code>
+      + DLT</b> trên Kafka 3.9.0.</p></div>'
+    say: Chào bạn đến với bài sáu của khoá Spring Boot thực chiến. Sau khi làm chủ PostgreSQL và Redis, hôm nay ta nối dịch
+      vụ với hàng đợi sự kiện Kafka chạy thật trên Docker. Lỗi thường gặp là gửi tin ra mạng khi giao dịch chưa chốt, hoặc
+      để một bản tin hỏng làm đứng cả luồng sự kiện phía sau. Bài này hướng dẫn cách cài mẫu Outbox chống mất và thừa tin
+      cùng cơ chế đẩy bản tin độc tố sang hàng thư chết. Giữ sự nhất quán giữa thay đổi trong cơ sở dữ liệu và thông điệp
+      gửi sang hàng đợi là bài toán cốt lõi của kiến trúc sự kiện. Nếu xử lý thiếu chặt chẽ, một lỗi định dạng đơn lẻ có thể
+      làm tắc nghẽn dây chuyền thanh toán của cả ngân hàng.
+    focus:
+    - 0
+    - '1.1'
+    - '1.1'
+    - '1.2'
+    - '1.1'
+    - '1.2'
+    clear: true
+- id: prereq
+  kind: prereq
+  title: 'Ôn nhanh: chủ đề phân vùng Kafka, nhóm đọc và ngữ nghĩa tối thiểu một lần'
+  steps:
+  - show: <table class='t'><tr><th>khái niệm hàng đợi nền</th><th>hành vi khi vận hành thật</th></tr><tr><td>Chủ đề và phân
+      vùng Kafka</td><td>Nhật ký nối đuôi theo thứ tự lệch vị trí bất biến</td></tr><tr><td>Nhóm tiếp nhận (Consumer Group)</td><td>Mỗi
+      phân vùng giao cho một máy đọc nối tiếp nhau</td></tr><tr><td>Giao tối thiểu một lần</td><td>Tin chưa xác nhận sẽ được
+      đọc lại nên hàm nhận cần lũy đẳng</td></tr></table>
+    say: Hãy ôn ngắn gọn ba nguyên tắc của hệ thống hướng sự kiện trước khi vào mã thật. Kafka lưu bản tin thành nhật ký nối
+      đuôi chia theo từng phân vùng và đánh số vị trí tăng dần không xoá ngay sau khi đọc. Một nhóm tiếp nhận phân công mỗi
+      phân vùng cho một tiến trình xử lý tuần tự từ đầu tới cuối. Vì tin có thể được giao lặp lại khi đứt mạng nên dịch vụ
+      nhận phải cài sẵn cơ chế khử trùng. Mỗi nhóm đọc giữ vị trí lệch riêng biệt nên việc đọc sự kiện của nhóm kế toán không
+      ảnh hưởng tới nhóm cảnh báo. Hiểu rõ mô hình nhật ký bất biến này giúp ta tận dụng tối đa cơ chế tách kênh thử lại không
+      chặn phía sau.
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.2'
+    - '1.4'
+    clear: true
+- id: sym
+  kind: symbol
+  title: So sánh Kafka với RabbitMQ và ActiveMQ (JMS) kèm chú thích thử lại
+  steps:
+  - show: <table class='t'><tr><th>hệ thống nhắn tin</th><th>mô hình lưu trữ &amp; đọc</th><th>trường hợp ngân hàng phù hợp</th></tr><tr><td><b>Apache
+      Kafka 3.9</b></td><td>Nhật ký phân vùng giữ theo thời hạn; nhiều nhóm đọc lại độc lập</td><td>Luồng bút toán, kiểm toán,
+      nạp dữ liệu lớn tốc độ cao</td></tr><tr><td><b>RabbitMQ</b> (AMQP)</td><td>Đẩy tin theo hàng đợi thông minh; xoá ngay
+      sau khi nhận ACK</td><td>Định tuyến tác vụ phức tạp, trả lời yêu cầu ngắn hạn</td></tr><tr><td><b>ActiveMQ</b> (chuẩn
+      <b>JMS</b>)</td><td>Hàng đợi/chủ đề theo chuẩn giao diện Java doanh nghiệp</td><td>Kết nối hệ thống lõi Java thế hệ
+      cũ còn dùng JMS</td></tr></table>
+    say: Bảng này giúp bạn phân biệt rõ ba công nghệ nhắn tin hay xuất hiện trong đề tuyển dụng ngân hàng. Kafka lưu nhật
+      ký bền vững theo thời gian giữ lại cho phép nhiều hệ thống con tự đọc lại dòng sự kiện theo tốc độ riêng. RabbitMQ hoạt
+      động như người đưa thư định tuyến linh hoạt qua các khoá trao đổi và xoá tin ngay khi người nhận báo xong. Còn ActiveMQ
+      cài đặt tiêu chuẩn JMS cổ điển của Java thường gặp khi tích hợp với những phân hệ lõi lâu đời. Bảng đối chiếu giúp bạn
+      chọn đúng công cụ theo bài toán phát trực tuyến tốc độ cao hay định tuyến tác vụ truyền thống. Khi gặp hệ thống lõi
+      lâu đời chỉ giao tiếp qua chuẩn thông điệp Java doanh nghiệp, bộ điều hợp JMS đóng vai trò cầu nối chuẩn.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    - '1.3'
+    - '1.1'
+    - '1.3'
+    clear: true
+- id: intuition
+  kind: intuition
+  title: 'Đường ống an toàn: Bảng Outbox trong cùng giao dịch → Kafka → Retry → DLT'
+  steps:
+  - show: <div><svg width="960" height="210" viewBox="0 0 960 210"><rect x="25" y="45" width="210" height="95" rx="10" fill="#dbeafe"
+      stroke="#2a78d6" stroke-width="2"/><text x="130.0" y="85" font-size="16" font-weight="700" text-anchor="middle" fill="#1e293b">1.
+      TX DB + Outbox</text><text x="130.0" y="112" font-size="14" text-anchor="middle" fill="#475569">Chốt cùng 1 @Transactional</text><line
+      x1="235" y1="92" x2="295" y2="92" stroke="#475569" stroke-width="2"/><polygon points="295,92 287,87 287,97" fill="#475569"/><rect
+      x="295" y="45" width="215" height="95" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/><text x="402.5" y="85"
+      font-size="16" font-weight="700" text-anchor="middle" fill="#1e293b">2. Publisher → Kafka</text><text x="402.5" y="112"
+      font-size="14" text-anchor="middle" fill="#475569">transfer.events (SENT)</text><line x1="510" y1="92" x2="575" y2="92"
+      stroke="#475569" stroke-width="2"/><polygon points="575,92 567,87 567,97" fill="#475569"/><rect x="575" y="25" width="355"
+      height="65" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="2"/><text x="752.5" y="54" font-size="16" font-weight="700"
+      text-anchor="middle" fill="#1e293b">3. @RetryableTopic (thử lại không chặn)</text><text x="752.5" y="76" font-size="14"
+      text-anchor="middle" fill="#475569">Chủ đề -retry-0, -retry-1 tách riêng luồng chính</text><rect x="575" y="115" width="355"
+      height="65" rx="10" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/><text x="752.5" y="144" font-size="16" font-weight="700"
+      text-anchor="middle" fill="#1e293b">4. Hàng thư chết (-dlt)</text><text x="752.5" y="166" font-size="14" text-anchor="middle"
+      fill="#475569">Hết 3 lượt → @DltHandler tách riêng điều tra</text><line x1="752" y1="90" x2="752" y2="115" stroke="#dc2626"
+      stroke-width="2"/></svg></div>
+    say: Quan sát toàn bộ hành trình một sự kiện chuyển khoản đi qua bốn chặng bảo vệ từ trái sang phải. Ở chặng một, ứng
+      dụng lưu bản ghi sự kiện vào bảng Outbox nằm ngay trong cùng giao dịch với lệnh chuyển tiền để bảo đảm có tiền thay
+      đổi thì mới có tin. Chặng hai tiến trình phát hành đọc bảng Outbox đẩy sang chủ đề Kafka chính.
+    clear: true
+  - show: ''
+    say: Chặng ba và bốn tách riêng tin lỗi sang các chủ đề thử lại theo độ trễ tăng dần rồi đẩy hẳn sang hàng thư chết DLT
+      sau ba lần thất bại. Nhờ chia nhỏ hành trình thành bốn bước tách biệt, phần phát sự kiện không bị phụ thuộc thời
+      gian xử lý tức thời của bên nhận. Hàng thư chết cuối đường ống biến mọi bản tin lỗi nặng thành dữ liệu điều tra gọn
+      gàng thay vì làm treo toàn hệ thống.
+- id: formula
+  kind: formula
+  title: Lý do không được gọi send() trực tiếp trong giao dịch và cơ chế lùi hàm mũ
+  checks:
+  - 100 + 200 + 400 == 700
+  steps:
+  - show: <div class='box key'><p><b>Hai quy tắc chống mất tin và chống nghẽn hàng đợi:</b></p><p>1. <b>Cam kết nguyên tử
+      qua bảng Outbox:</b> Không thể chốt hai pha giữa DB và Kafka trong một khối lệnh; lưu vào bảng DB bảo đảm <i>rollback
+      = 0 bản ghi Outbox</i>.</p><p>2. <b>Thử lại không chặn kèm lùi hàm mũ:</b> Nếu chờ 100 ms → 200 ms → 400 ms bằng chủ
+      đề phụ <code>-retry</code> (kèm <code>multiplier = 2</code>; bài lab L06 dùng <code>attempts = "3", delay = 100</code> ms cố định để Testcontainers chạy nhanh), luồng chính <code>transfer.events</code> không bị nghẽn chờ.</p></div>
+    say: Hai quy tắc này giúp hệ thống phân tán giữ đồng bộ dù mạng hay tiến trình có thể sập bất cứ lúc nào. Cơ sở dữ liệu
+      và Kafka là hai hệ thống độc lập nên ta chỉ dựa vào tính nguyên tử ngay bên trong PostgreSQL để tạo bảng Outbox đáng
+      tin cậy. Khi gặp lỗi xử lý ở đầu nhận, chuyển tin lỗi sang các chủ đề phụ chờ theo cấp số nhân giúp những tin sạch phía
+      sau tiếp tục trôi qua ngay lập tức. Thời gian chờ lùi theo cấp số nhân một trăm, hai trăm rồi bốn trăm mi-li-giây cho
+      phép lỗi mạng thoáng qua tự phục hồi sạch sẽ. Đồng thời luồng chính không phải dừng chờ nên độ trễ xử lý các sự kiện
+      hợp lệ vẫn giữ ở mức ổn định rất thấp.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    clear: true
+- id: example
+  kind: example
+  title: 'Mã thật: OrderOutboxService + Consumer với @RetryableTopic'
+  checks:
+  - 100 + 200 == 300
+  steps:
+  - show: '<p><b>1. Lưu bảng Outbox trong giao dịch rồi phát lên Kafka</b></p><div class="code"><div>@Transactional</div><div>public
+      void createTransferOrder(String payload, boolean fail) {</div><div>  outbox.save(new OutboxEvent(payload));</div><div>  if
+      (fail) throw new IllegalStateException("Hoan tac");</div><div>}</div><div>@Transactional</div><div>public int publishPending()
+      {</div><div>  var pending = outbox.findByStatusOrderByIdAsc("PENDING");</div><div>  for (var ev : pending) { kafka.send("transfer.events",
+      ev.getPayload()); ev.markSent(); }</div><div>  return pending.size();</div><div>}</div></div>'
+    say: Đoạn mã đầu tiên cho thấy cách tách khâu ghi nhận sự kiện và khâu phát tin ra mạng làm hai bước rõ ràng. Khi hàm
+      tạo đơn chuyển khoản gặp lỗi giữa chừng và hoàn tác, bản ghi chờ phát trong bảng Outbox tự động bị huỷ theo nên không
+      có tin ma lọt ra ngoài. Khi giao dịch thành công, hàm phát hành mới gửi tin sang Kafka và đánh dấu trạng thái đã gửi.
+      Thực thể sự kiện Outbox lưu nội dung chuỗi sự kiện kèm cột trạng thái khởi tạo đang chờ phát và thời điểm tạo bản ghi.
+      Tiến trình phát hành quét các dòng đang chờ theo thứ tự mã tăng dần để bảo toàn trình tự trước sau của chuỗi giao dịch.
+    focus:
+    - 1
+    - 2
+    - 2
+    - 1
+    - 2
+    clear: true
+  - show: <p><b>2. Người nhận dùng @RetryableTopic (Spring Kafka 4.x BackOff) và @DltHandler</b></p><div class="code"><div>@RetryableTopic(attempts
+      = "3", backOff = @BackOff(delay = 100), dltTopicSuffix = "-dlt")</div><div>@KafkaListener(topics = "transfer.events",
+      groupId = "chuyenkhoan-l06")</div><div>public void onMessage(String msg) {</div><div>  if (msg.startsWith("POISON:"))
+      throw new IllegalArgumentException("Doc to");</div><div>  processed.add(msg);</div><div>}</div><div>@DltHandler</div><div>public
+      void onDlt(String msg) { dltReceived.add(msg); }</div></div>
+    say: Phía bộ phận tiếp nhận chỉ cần gắn đúng hai chú thích để kích hoạt thử lại ba lần và rẽ nhánh sang hàng thư chết.
+      Lưu ý trong Spring Boot bốn, chú thích khoảng lùi dùng chữ B và chữ O viết hoa trong gói mới của Kafka. Những bản tin
+      độc tố gây ngoại lệ cả ba lần sẽ được đẩy tự động vào hàm xử lý hàng thư chết mà không làm kẹt các bản tin hợp lệ khác.
+      Lưu ý thuộc tính hậu tố hàng thư chết gắn thêm đuôi chuẩn vào cuối tên chủ đề giúp đội vận hành theo dõi tập trung dễ
+      dàng. Mỗi bản tin độc tố sau khi đi hết ba lượt thử vẫn giữ nguyên ngữ cảnh gốc để kỹ sư kiểm tra và phát lại sau khi
+      vá lỗi.
+    focus:
+    - 1
+    - 2
+    - 2
+    - 1
+    - 2
+    clear: true
+- id: check
+  kind: check
+  title: 'Chạy thật trên Kafka 3.9.0 Testcontainers: hoàn tác Outbox, tin sạch và DLT'
+  checks:
+  - 1_000_000 - 1 == 999_999
+  steps:
+  - show: '<p><b>Kết quả chạy thật KiemL06Test trên Apache Kafka 3.9.0</b></p><div class="code"><div>Container apache/kafka:3.9.0@sha256:fbc7d7...
+      started in PT3.79s</div><div>// 1) createTransferOrder("TX-ROLLED", true) → outbox.count() không tăng</div><div>// 2)
+      publishPending() "TX-VALID-100" → processed chứa "TX-VALID-100", PENDING = 0</div><div>// 3) publishPending() "POISON:bad-json"
+      → sau 3 lần thử, vào transfer.events-dlt</div><div>[INFO] Tests run: 3, Failures: 0, Errors: 0, Total time: 25.114 s</div><div>ĐÚNG
+      — PASS /d/research-video/labs/SPB/L06 (du_an maven)</div></div>'
+    say: Kết quả chạy kiểm thử thật trên thùng chứa Kafka ba chấm chín xác nhận trọn vẹn cả ba kịch bản kiểm chứng. Vì đã
+      ghi bảng Outbox trong cùng giao dịch cơ sở dữ liệu, lệnh hoàn tác đầu tiên không sinh sự kiện thừa nào. Bản tin hợp
+      lệ đi trọn chủ đề chính, còn bản tin độc tố sau ba lần thử lại rơi đúng vào hàng thư chết DLT do cấu hình tách luồng.
+      Bộ đếm bản tin đã nhận và danh sách bản tin nằm ở hàng thư chết xác minh trọn vẹn đường đi của cả hai loại thông điệp.
+      Ba kịch bản tự động trên Kafka ba chấm chín chạy khép kín trong khoảng hai mươi lăm giây kể cả thời gian bật thùng chứa.
+    focus:
+    - 1
+    - 2
+    - 2
+    - 1
+    - 2
+    clear: true
+- id: quymo
+  kind: example
+  title: Độ trễ hàng đợi khi tỉ lệ lỗi độc tố tăng từ 0,1% lên 10% ở 3 cỡ tải
+  checks:
+  - 1_000_000 * 10 // 100 == 100_000
+  - 1000 * 1 // 1000 == 1
+  steps:
+  - show: <table class='t'><tr><th>số thông điệp / tỉ lệ lỗi</th><th>thử lại chặn luồng chính (500 ms × 3)</th><th>@RetryableTopic
+      + DLT tách kênh</th></tr><tr><td><b>1 000 tin</b> (lỗi 0,1% = 1 tin)</td><td>Tắc nhẹ ~1,5 giây trên phân vùng dính lỗi</td><td>Luồng
+      chính thông suốt <b>0 ms tắc</b>; 1 tin sang DLT</td></tr><tr><td><b>100 000 tin</b> (lỗi 1% = 1 000 tin)</td><td>Nghẽn
+      tích lũy hơn <b>25 phút</b> nếu chung phân vùng</td><td>Tin sạch xử lý ngay; 1 000 tin cách ly gọn ở DLT</td></tr><tr><td><b>1
+      000 000 tin</b> (lỗi 10% = 100 000 tin)</td><td>Sập toàn bộ pipeline tiêu thụ</td><td>Chủ đề <code>-retry</code> gánh
+      thay; cảnh báo khẩn khi DLT tăng vọt</td></tr></table>
+    say: Bảng quy mô cho thấy tác động khủng khiếp của bản tin lỗi nếu không tách kênh thử lại ở mức một nghìn, một trăm nghìn
+      và một triệu thông điệp. Ở một nghìn tin với tỉ lệ một phần nghìn chỉ có một tin lỗi nhưng vẫn làm khựng phân vùng nếu
+      chặn tại chỗ. Tới một trăm nghìn tin có một nghìn tin hỏng gây nghẽn hơn hai mươi lăm phút, và tới một triệu tin kèm mười phần trăm lỗi độc tố, toàn bộ đường ống tiêu thụ sẽ sập. Nhờ tách sang chủ đề thử lại riêng và đẩy sang DLT, các giao dịch sạch vẫn thông suốt. Trên thực tế vận hành, một tỉ lệ lỗi nhỏ không ngờ tới ở hàng nghìn bản tin một giây vẫn làm tràn bộ nhớ đệm nếu thử lại chặn chỗ. Do đó cảnh báo sớm ngay khi lượng bản tin rơi vào hàng thư chết vượt ngưỡng cho phép là chuẩn mực bắt buộc trong giám sát.
+    focus:
+    - 0
+    - '1.2'
+    - '1.3'
+    - '1.4'
+    - '1.3'
+    - '1.4'
+    clear: true
+- id: pitfalls
+  kind: pitfall
+  title: Ba lỗi hay gặp khi tích hợp Kafka Outbox và RetryableTopic
+  steps:
+  - show: <table class='t'><tr><th>lỗi kỹ thuật hay gặp với Kafka</th></tr><tr><td><div class='box warn'><b>Lỗi 1 — Gọi <code>kafka.send(...)</code>
+      ngay giữa hàm <code>@Transactional</code>:</b> Giao dịch hoàn tác vì lỗi ở bước cuối nhưng sự kiện Kafka đã phát đi
+      rồi!<br><b>Lỗi 2 — Chặn <code>Thread.sleep</code> trong listener khi xử lý lỗi:</b> Giữ quá <code>max.poll.interval.ms</code>
+      làm Kafka tưởng consumer chết và tái cân bằng phân vùng liên tục.<br><b>Lỗi 3 — Dùng Testcontainers Kafka 3.9 mà thiếu
+      <code>KAFKA_LISTENERS</code>:</b> Lỗi <code>advertised.listeners cannot use 0.0.0.0</code> lúc khởi động container.</div></td></tr></table>
+    say: Ba lỗi trên bảng đều là bẫy thực tế khi đưa Kafka vào dịch vụ Java. Gửi tin trực tiếp trước khi chốt giao dịch tạo
+      ra sự kiện ma khi giao dịch quay lui sau đó. Ngủ chờ quá lâu ngay trong luồng tiếp nhận vượt ngưỡng kiểm tra nhịp tim
+      khiến cả nhóm phân vùng bị xáo trộn phân chia lại liên tục. Còn với phiên bản Kafka ba chấm chín trên môi trường kiểm
+      thử container, ta nhớ ghi tường minh danh sách cổng lắng nghe không chứa địa chỉ không chấm không. Nhớ rằng trên hàng
+      đợi thử lại không chặn, thứ tự giữa tin lỗi và tin sạch mới hơn có thể hoán đổi nên đầu nhận cần thiết kế lũy đẳng.
+      Kiểm chứng trước cấu hình cổng lắng nghe trên thùng chứa giúp bộ kiểm thử chạy ổn định trên mọi môi trường tích hợp.
+    focus:
+    - 0
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    - '1.2'
+    clear: true
+- id: quiz
+  kind: quiz
+  title: Kiểm tra nhanh Outbox, Kafka DLT và so sánh RabbitMQ
+  checks:
+  - 100 * 2**0 + 100 * 2**1 + 100 * 2**2 == 700
+  steps:
+  - show: <ol><li>Một hệ thống cần nhiều dịch vụ độc lập (kế toán, chống gian lận, kho dữ liệu) cùng đọc lại lịch sử sự kiện
+      chuyển khoản trong 7 ngày qua. Nên chọn Kafka hay RabbitMQ?</li><li>Nếu bỏ <code>@RetryableTopic</code> và chỉ ném lại
+      ngoại lệ trong <code>@KafkaListener</code>, điều gì xảy ra với các bản tin hợp lệ đứng sau?</li></ol>
+    say: Hãy tự kiểm hiểu hai câu hỏi kiến trúc thường gặp về hệ thống nhắn tin. Câu một, nếu có ba dịch vụ độc lập cần giữ
+      nhật ký bảy ngày và tự tua lại lịch sử bất cứ lúc nào, bạn chọn Kafka hay RabbitMQ? Câu hai, nếu không dùng thử lại
+      tách luồng mà cứ ném ngoại lệ mãi trên luồng nhận chính, các bản tin đứng sau sẽ ra sao? Bấm tạm dừng và trả lời. Hai
+      câu hỏi này tóm gọn bản chất kiến trúc sự kiện dùng nhật ký bền vững và cơ chế xử lý lỗi không chặn.
+    pause: 20
+  - show: <table class='t'><tr><th>đáp án câu 1</th></tr><tr><td><p>① Chọn <b>Kafka</b> vì Kafka lưu nhật ký theo thời hạn
+      (retention 7 ngày) và mỗi nhóm đọc giữ con trỏ offset riêng không xoá tin của nhóm khác.</p></td></tr></table>
+    say: 'Đáp án câu một: chọn Kafka vì cơ chế giữ nhật ký theo hạn định cho phép mỗi nhóm dịch vụ giữ vị trí con trỏ riêng
+      và đọc lại nhiều lần. Bảng tạm trong cùng giao dịch biến cơ sở dữ liệu thành điểm neo tin cậy trước khi thông điệp rời
+      khỏi hệ thống. RabbitMQ tối ưu cho chuyển phát tức thời theo tác vụ, còn Kafka vượt trội khi cần phát lại nhật ký sự
+      kiện nhiều chiều.'
+    clear: true
+  - show: <table class='t'><tr><th>đáp án câu 2</th></tr><tr><td><p>② Tin độc tố sẽ bị thử lại vô tận tại chỗ hoặc làm chậm
+      nghẽn mọi bản tin hợp lệ xếp hàng phía sau trên cùng phân vùng.</p></td></tr></table>
+    say: 'Đáp án câu hai: bản tin lỗi sẽ kẹt tại chỗ hoặc làm chậm toàn bộ những bản tin sạch nằm cùng phân vùng phía sau.
+      Tách luồng thử lại giúp các giao dịch bình thường vẫn chạy thông suốt ngay cả khi xuất hiện nhiều tin lỗi cú pháp. Thiết
+      lập ba lần thử lại với hệ số nhân hai (tổng bốn lượt) giúp vượt qua trục trặc nhất thời trước khi cách ly hẳn vào hàng thư chết.'
+    clear: true
+- id: practice
+  kind: practice
+  title: Cài đặt Outbox, RetryableTopic và DLT trên Kafka 3.9.0 thật
+  lab: labs/SPB/L06
+  steps:
+  - show: <div class='box key'><p><b>Thực hành bài L06 (<code>labs/SPB/L06/de.md</code>, cần Docker):</b> cài <code>OrderOutboxService</code>
+      lưu <code>OutboxEvent(PENDING)</code> trong giao dịch DB và phát sang Kafka topic <code>transfer.events</code>; cài
+      <code>TransferEventConsumer</code> với <code>@RetryableTopic(attempts = "3", dltTopicSuffix = "-dlt")</code> đẩy tin
+      <code>"POISON:..."</code> vào <code>@DltHandler</code> trên <b>Kafka 3.9.0</b> thật, rồi chấm:</p><p><code>bash labs/cham.sh
+      SPB L06 duong_dan/du_an_cua_ban</code></p></div>
+    say: Hãy mở đề bài L06 để cài đặt bộ phát Outbox an toàn và bộ nhận có chuyển hàng thư chết chạy thật trên thùng chứa
+      Kafka ba chấm chín. Chú ý kiểm tra cả ba kịch bản gồm giao dịch hoàn tác không tạo bản ghi, gửi tin sạch thành công
+      và đẩy tin độc tố vào đúng hàng thư chết. Bấm tạm dừng và hoàn thành trước khi đối chiếu kết quả chấm. Chú ý lớp thực
+      thể Outbox cần có trạng thái ban đầu chờ phát và phương thức đánh dấu đã phát sau khi gửi thành công. Khi cấu hình kiểm
+      thử trên Kafka container thật, luôn đặt nhóm đọc bắt đầu từ vị trí sớm nhất để không bỏ lỡ sự kiện khởi tạo.
+    focus:
+    - 0
+    - '1.1'
+    - '1.2'
+    - '1.1'
+    - '1.2'
+    clear: true
+    pause: 30
+  - show: '<p><b>Kết quả chấm bộ kiểm KiemL06Test trên Kafka 3.9.0 thật</b></p><div class="code"><div>KiemL06Test: 3 ca, 0
+      hỏng</div></div>'
+    say: Màn hình hiển thị kết quả nghiệm thu ba ca kiểm thử chạy trên Kafka thật đạt không ca hỏng. Cả bước hoàn tác giao
+      dịch sạch bảng lẫn bước phân loại bản tin độc tố vào chủ đề DLT đều thông suốt. Cả ba ca kiểm chứng giao dịch hoàn tác,
+      phát tin hợp lệ và cách ly tin độc tố đều được nghiệm thu tự động.
+    focus:
+    - 1
+    - 2
+    - 2
+    clear: true
+  - show: <div class='box ok'><p><b>Gợi ý nếu kẹt ở bài L06:</b> (1) dùng <code>@ServiceConnection(name = "kafka")</code>
+      và <code>.withEnv("KAFKA_LISTENERS", "PLAINTEXT://:9092,BROKER://:9093,CONTROLLER://:9094")</code>; (2) đặt <code>spring.kafka.consumer.auto-offset-reset=earliest</code>;
+      (3) khai báo <code>@BackOff</code> từ <code>org.springframework.kafka.annotation.BackOff</code>.</p></div>
+    say: Nếu gặp lỗi không khởi động được thùng chứa Kafka hoặc bộ tiếp nhận bỏ lỡ bản tin đầu tiên, hãy rà lại ba gợi ý trên
+      màn hình. Bảo đảm đã cấu hình biến môi trường cổng lắng nghe và chọn vị trí đọc sớm nhất cho nhóm tiếp nhận. Kiểm tra
+      kỹ tên gói nhập của chú thích khoảng lùi mới trong Spring Kafka bốn để tránh nhầm gói cũ đã loại bỏ.
+    focus:
+    - 0
+    - 1
+    - 1
+    clear: true
+- id: recap
+  kind: recap
+  title: Tổng kết luồng sự kiện bền vững với Kafka và DLT
+  steps:
+  - show: <div class='chain'><span class='n'>DB + Outbox đồng bộ</span><span class='a'>→</span><span class='n'>Kafka transfer.events</span><span
+      class='a'>→</span><span class='n'>Retry + DLT tách luồng</span></div>
+    say: Bạn vừa hoàn thiện mô hình truyền thông điệp tin cậy cao giữa cơ sở dữ liệu quan hệ và hàng đợi sự kiện Kafka. Cơ
+      chế bảng tạm và hàng thư chết bảo đảm mọi sự kiện quan trọng không bị mất hay gây tắc nghẽn hệ thống. Từ đây dịch vụ
+      của bạn đã hoàn thiện ba trụ cột lưu trữ quan hệ, bộ đệm nhanh và hàng đợi sự kiện tin cậy.
+    focus:
+    - '1.1'
+    - '1.2'
+    - '1.2'
+    clear: true
+  - show: <div class='box ok'><b>Bài sau (bài 7):</b> OpenAPI sinh tự động bằng springdoc, thiết kế API theo tài nguyên, phân
+      trang con trỏ và phiên bản hoá</div>
+    say: Bài tiếp theo ta tích hợp công cụ sinh đặc tả OpenAPI tự động và thiết kế phân trang con trỏ tốc độ ổn định. Hẹn
+      gặp bạn ở bài sau. Hãy bước sang bài bảy để chuẩn hoá giao diện lập trình mở cho nhiều đối tác cùng tích hợp.
+    clear: true
+    forward_ref: true
+asr_reviewed:
+- sentence: Chặng hai tiến trình phát hành đọc bảng Outbox đẩy sang chủ đề Kafka chính.
+  reason: 'ASR chép “Chặn hai tiếng trình phát hành độc bản Outbox đẩy sang chủ đề CAPC-9.” (khớp 0.6, khác “chặng” → nghe
+    thành “chặn”; “tiến” → nghe thành “tiếng”; “đọc bảng” → nghe thành “độc bản”; “kafka chính” → nghe thành “capc chín”):
+    biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Ba lỗi trên bảng đều là bẫy thực tế khi đưa Kafka vào dịch vụ Java.
+  reason: 'ASR chép “Ba lỗi trên bản đều là bảy thực tế khi đưa Capca vào dịch vụ Java.” (khớp 0.812, khác “bảng” → nghe thành
+    “bản”; “bẫy” → nghe thành “bảy”; “kafka” → nghe thành “capca”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của
+    Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Còn ActiveMQ cài đặt tiêu chuẩn JMS cổ điển của Java thường gặp khi tích hợp với những phân hệ lõi lâu đời.
+  reason: 'ASR chép “Còn Active-M quy cài đặt tiêu chuẩn GMS cổ điển của Java thường gặp khi tích hợp với những phân hệ lỏi
+    lâu đời.” (khớp 0.833, khác “activemq” → nghe thành “active m quy”; “jms” → nghe thành “gms”; “lõi” → nghe thành “lỏi”):
+    biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Vì đã ghi bảng Outbox trong cùng giao dịch cơ sở dữ liệu, lệnh hoàn tác đầu tiên không sinh sự kiện thừa nào.
+  reason: 'ASR chép “vì đã ghi bản Au Bốc trong cùng giao dịch cơ sở dữ liệu, lệnh hoàn tác đầu tiên không xin sự kiện thừa
+    nào.” (khớp 0.88, khác “bảng ao” → nghe thành “bản au”; “sinh” → nghe thành “xin”): biến thể phiên âm từ mượn/thanh điệu
+    thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Kết quả chạy kiểm thử thật trên thùng chứa Kafka ba chấm chín xác nhận trọn vẹn cả ba kịch bản kiểm chứng.
+  reason: 'ASR chép “Kết quả chạy kiểm thử thật trên thùng chứa Capca 3.9 xác nhận trọng vẹn cả 3 kịch bản kiểm chứng.” (khớp
+    0.889, khác “kafka” → nghe thành “capca”; “chấm” → nghe thành “”; “trọn” → nghe thành “trọng”): biến thể phiên âm từ mượn/thanh
+    điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Nếu gặp lỗi không khởi động được thùng chứa Kafka hoặc bộ tiếp nhận bỏ lỡ bản tin đầu tiên, hãy rà lại ba gợi
+    ý trên màn hình.
+  reason: 'ASR chép “Nếu gặp lỗi không khởi động được thùng chứa CAPCA hoặc bộ tiết nhận bỏ lỡ bản tin đầu tiên, hãy ra lại
+    ba gợi ý trên màn hình.” (khớp 0.897, khác “kafka” → nghe thành “capca”; “tiếp” → nghe thành “tiết”; “rà” → nghe thành
+    “ra”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai
+    người'
+- sentence: Cơ sở dữ liệu và Kafka là hai hệ thống độc lập nên ta chỉ dựa vào tính nguyên tử ngay bên trong PostgreSQL để
+    tạo bảng Outbox đáng tin cậy.
+  reason: 'ASR chép “Cơ sở dữ liệu và Capca là hai hệ thống độc lập nên ta chỉ dựa vào tính nguyên tử ngay bên trong PostreSQL
+    để tạo bản outbox đáng tin cậy.” (khớp 0.903, khác “kafka” → nghe thành “capca”; “postgresql” → nghe thành “postresql”;
+    “bảng” → nghe thành “bản”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa
+    — NOT_VERIFIED bằng tai người'
+- sentence: Ở chặng một, ứng dụng lưu bản ghi sự kiện vào bảng Outbox nằm ngay trong cùng giao dịch với lệnh chuyển tiền để
+    bảo đảm có tiền thay đổi thì mới có tin.
+  reason: 'ASR chép “Ở chặn 1, ứng dụng lưu bản ghi sự kiện và bản outbox nằm ngay trong cùng giao dịch với lệnh chuyển tiền
+    để bảo đảm có tiền thay đổi thì mới có tin.” (khớp 0.912, khác “chặng” → nghe thành “chặn”; “vào bảng” → nghe thành “và
+    bản”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai
+    người'
+- sentence: Sau khi làm chủ PostgreSQL và Redis, hôm nay ta nối dịch vụ với hàng đợi sự kiện Kafka chạy thật trên Docker.
+  reason: 'ASR chép “Sau khi làm chủ Postgresql và Reddit, hôm nay ta nối dịch vụ với hàng đợi sự kiện Capca chạy thật trên
+    Docker.” (khớp 0.913, khác “redis” → nghe thành “reddit”; “kafka” → nghe thành “capca”): biến thể phiên âm từ mượn/thanh
+    điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Câu một, nếu có ba dịch vụ độc lập cần giữ nhật ký bảy ngày và tự tua lại lịch sử bất cứ lúc nào, bạn chọn Kafka
+    hay RabbitMQ?
+  reason: 'ASR chép “Câu một, nếu có ba dịch vụ độc lập cần giữ nhật ký 7 ngày và tự tua lại lịch sử bất cứ lúc nào, bạn chọn
+    Capca hay rabbit MQ.” (khớp 0.918, khác “kafka” → nghe thành “capca”; “rabbitmq” → nghe thành “rabbit mq”): biến thể phiên
+    âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Bài này hướng dẫn cách cài mẫu Outbox chống mất và thừa tin cùng cơ chế đẩy bản tin độc tố sang hàng thư chết.
+  reason: 'ASR chép “Bài này hướng dẫn cách cài mẫu áo bốc chống mất và thừa tin cùng cơ chế để bản tin độc tố sang hàng thư
+    chết.” (khớp 0.923, khác “ao” → nghe thành “áo”; “đẩy” → nghe thành “để”): biến thể phiên âm từ mượn/thanh điệu thuần
+    âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Còn với phiên bản Kafka ba chấm chín trên môi trường kiểm thử container, ta nhớ ghi tường minh danh sách cổng
+    lắng nghe không chứa địa chỉ không chấm không.
+  reason: 'ASR chép “Còn với phiên bản Capca 3.9 trên môi trường kiểm thử container, ta nhớ ghi tường minh danh sách cổng
+    lắng nghe không chứa địa chỉ 0.0.” (khớp 0.933, khác “kafka” → nghe thành “capca”; “chấm” → nghe thành “”; “chấm” → nghe
+    thành “”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng
+    tai người'
+- sentence: Khi hàm tạo đơn chuyển khoản gặp lỗi giữa chừng và hoàn tác, bản ghi chờ phát trong bảng Outbox tự động bị huỷ
+    theo nên không có tin ma lọt ra ngoài.
+  reason: 'ASR chép “Khi hàm tạo đơn chuyển khoản gặp lỗi giữa chừng và hoàn tác, bản ghi chờ phát trong bản outbox tự động
+    bị hủy theo nên không có tin ma lọc ra ngoài.” (khớp 0.939, khác “bảng” → nghe thành “bản”; “lọt” → nghe thành “lọc”):
+    biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Khi giao dịch thành công, hàm phát hành mới gửi tin sang Kafka và đánh dấu trạng thái đã gửi.
+  reason: 'ASR chép “Khi giao dịch thành công, hàm phát hành mới gửi tin sang CAPCA và đánh dấu trạng thái đã gửi.” (khớp
+    0.95, khác “kafka” → nghe thành “capca”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper, câu giữ nguyên
+    ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Hãy mở đề bài L06 để cài đặt bộ phát Outbox an toàn và bộ nhận có chuyển hàng thư chết chạy thật trên thùng chứa
+    Kafka ba chấm chín.
+  reason: 'ASR chép “Hãy mở đề bài L06 để cài đặt bộ phát outbox an toàn và bộ nhận có chuyển hàng thư chết chạy thật trên
+    thùng chứa Capca 3.9.” (khớp 0.951, khác “kafka” → nghe thành “capca”; “chấm” → nghe thành “”): biến thể phiên âm từ mượn/thanh
+    điệu thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: Bạn vừa hoàn thiện mô hình truyền thông điệp tin cậy cao giữa cơ sở dữ liệu quan hệ và hàng đợi sự kiện Kafka.
+  reason: 'ASR chép “Bạn vừa hoàn thiện mô hình truyền thông điệp tin cậy cao giữa cơ sở dữ liệu quan hệ và hàng đợi sự kiện
+    cap ca.” (khớp 0.962, khác “cáp” → nghe thành “cap”): biến thể phiên âm từ mượn/thanh điệu thuần âm thanh của Whisper,
+    câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: RabbitMQ hoạt động như người đưa thư định tuyến linh hoạt qua các khoá trao đổi và xoá tin ngay khi người nhận
+    báo xong.
+  reason: 'ASR chép “Ra biết M quý hoạt động như người đưa thư định tuyến linh hoạt qua các khóa trao đổi và xóa tin ngay
+    khi người nhận báo xong.” (khớp 0.964, khác “bít” → nghe thành “biết”): biến thể phiên âm từ mượn/thanh điệu thuần âm
+    thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'
+- sentence: 'Đáp án câu một: chọn Kafka vì cơ chế giữ nhật ký theo hạn định cho phép mỗi nhóm dịch vụ giữ vị trí con trỏ riêng
+    và đọc lại nhiều lần.'
+  reason: 'ASR chép “Đáp án câu một, chọn CAPCA vì cơ chế giữ nhật ký theo hạn định cho phép mỗi nhóm dịch vụ giữ vị trí con
+    trỏ riêng và đọc lại nhiều lần.” (khớp 0.969, khác “kafka” → nghe thành “capca”): biến thể phiên âm từ mượn/thanh điệu
+    thuần âm thanh của Whisper, câu giữ nguyên ngữ nghĩa — NOT_VERIFIED bằng tai người'

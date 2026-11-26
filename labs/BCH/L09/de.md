@@ -1,9 +1,4 @@
-# Lab BCH L09 — Mô phỏng lỗi gọi lại (Reentrancy) và bản sửa Checks-Effects-Interactions
+# Lab BCH L09 — Lỗi Reentrancy và Checks-Effects-Interactions
 
-Cài lớp `Vault(pool=10, safe=...)` và `Attacker` có phương thức `recv(self, vault)` tự gọi lại `vault.withdraw(self)`. Chạy kịch bản kẻ gửi `2` đồng rút từ kho `10` đồng ở hai chế độ: `safe=False` (gửi tiền trước khi trừ số dư) và `safe=True` (trừ số dư trước khi gọi ra ngoài).
-In đúng 1 dòng `unsafe_stolen=... safe_withdrawn=...`.
-
-Chấm tự động:
-```bash
-bash labs/cham.sh BCH L09 duong_dan/bai_cua_ban.py
-```
+Đọc `pool deposit` nguyên từ stdin (ví dụ `10 2`). Mô phỏng rút tiền khi `safe=False` và `safe=True`.
+In đúng 1 dòng `unsafe_stolen=<int> safe_withdrawn=<int>`.

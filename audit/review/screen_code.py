@@ -715,7 +715,12 @@ class Gate:
             want = "\n".join(l.rstrip() for l in str(e["expect_stdout"]).split("\n")).strip("\n")
             got = "\n".join(l.rstrip() for l in so.split("\n")).strip("\n")
             if got != want:
-                return False, f"stdout lệch: được {got[:200]!r} — cần {want[:200]!r}", so, se
+                gl, wl = got.split("\n"), want.split("\n")
+                diff_i = next((i for i, (a, b) in enumerate(zip(gl, wl)) if a != b), min(len(gl), len(wl)))
+                g_line = gl[diff_i] if diff_i < len(gl) else "<EOF>"
+                w_line = wl[diff_i] if diff_i < len(wl) else "<EOF>"
+                return False, (f"stdout lệch (được {len(gl)} dòng, cần {len(wl)} dòng; "
+                               f"lệch đầu tiên dòng {diff_i + 1}: được {g_line[:120]!r} — cần {w_line[:120]!r})"), so, se
         if "expect_stderr_contains" in e:
             want = str(e["expect_stderr_contains"])
             if "…" in want or "\n" in want.strip("\n"):

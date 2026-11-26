@@ -1,6 +1,6 @@
-# Lab LLM L08 — Tinh chỉnh toàn bộ tham số và tinh chỉnh hạng thấp (LoRA)
+# Lab LLM L08 — Tinh chỉnh toàn bộ tham số so với LoRA hạng thấp
 
-Xét một ma trận vuông `2048 × 2048`: tính tổng tham số khi tinh chỉnh toàn bộ, số tham số khi phân tích thành hai ma trận hạng `r = 16` (`2 * 2048 * 16`), và tỉ lệ phần trăm so với toàn bộ.
+Đọc `stdin` `dim=<int> r=<int>`. Tính tham số ma trận vuông `dim * dim`, hai ma trận LoRA `2 * dim * r` và phần trăm giữ lại.
 
-Định dạng đầu ra (1 dòng):
-`full=<số nguyên> lora=<số nguyên> ratio=<2 chữ số>%`
+In 1 dòng: `full=<d> lora=<d> ratio=<.2f>%`.
+Chấm tự động: `bash labs/cham.sh LLM L08 duong_dan/bai_cua_ban.py`

@@ -1,11 +1,7 @@
-# Lab AIF L08 — Kiểm mô hình lôgic mệnh đề bằng liệt kê chân trị trên ba biến A, B, C
+# Lab AIF L08 — Kiểm mô hình lôgic mệnh đề bằng liệt kê chân trị
 
-Duyệt đủ 8 cách gán đúng/sai `(1/0)` cho `(A, B, C)`. Đếm số mô hình thoả tri thức `KB = {A kéo theo B, B hoặc C, không C}` và kiểm tra `KB` có kéo theo lôgic `B` không.
+Đọc `stdin` `req_c=<0|1> check_var=<A|B>`. Liệt kê 8 chân trị `(A, B, C)` thoả `KB = (not A or B) and (B or C) and (C == req_c)` và kiểm xem `KB` có kéo theo `check_var` không.
 
-Định dạng đầu ra:
-`kb_models=<số> entails_B=<1 hoặc 0>`
-
-Chấm tự động:
-```bash
-bash labs/cham.sh AIF L08 duong_dan/bai_cua_ban.py
-```
+In 1 dòng: `kb_models=<d> entails_B=<0|1>`.
+Chấm tự động: `bash labs/cham.sh AIF L08 duong_dan/bai_cua_ban.py`
+Gợi ý đọc đầu vào trong Python: dùng `sys.stdin.read().split()` tách từng cặp `khoá=giá_trị`.

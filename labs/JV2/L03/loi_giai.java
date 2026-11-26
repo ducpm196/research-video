@@ -20,7 +20,7 @@ public class ThongKeStream {
                 Collectors.groupingBy(GiaoDich::loai, TreeMap::new, Collectors.summingLong(GiaoDich::soTien)));
         Map<String, Long> tongVong = new TreeMap<>();
         for (GiaoDich g : ds) {
-            tongVong.merge(g.loai(), g.soTien(), Long::sum);
+            tongVong.put(g.loai(), tongVong.getOrDefault(g.loai(), 0L) + g.soTien());
         }
         System.out.println("Rut tu 500000: " + rutLon);
         System.out.println("Dem: " + dem);

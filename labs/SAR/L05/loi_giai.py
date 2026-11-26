@@ -1,7 +1,4 @@
-import math
-rf = 3
-shards = math.ceil(8000 / 400)
-nodes = shards * rf
-print(f'shards_needed={shards}')
-print(f'total_nodes_rf3={nodes}')
-print(f'total_stored_tb={8 * rf}')
+import math, sys
+kv = {k: int(v) for k, v in (t.split('=') for t in sys.stdin.read().split())}
+sh = math.ceil((kv['tb'] * 1000) / kv['max_node_gb'])
+print(f'shards_needed={sh}\ntotal_nodes_rf3={sh * kv["rf"]}\ntotal_stored_tb={kv["tb"] * kv["rf"]}')

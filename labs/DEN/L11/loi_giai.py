@@ -1,5 +1,5 @@
-rgs = [(i * 10, i * 10 + 9) for i in range(80)]
-hit = sum(mn <= 123 <= mx for mn, mx in rgs)
-skip = 100 * (len(rgs) - hit) / len(rgs)
-print(f'groups_scanned={hit}')
-print(f'skipped_pct={skip:.1f}%')
+import sys
+kv = {k: int(v) for k, v in (t.split('=') for t in sys.stdin.read().split())}
+rgs = [(i * kv['width'], i * kv['width'] + kv['width'] - 1) for i in range(kv['groups'])]
+hit = sum(mn <= kv['target'] <= mx for mn, mx in rgs)
+print(f'groups_scanned={hit}\nskipped_pct={100 * (len(rgs) - hit) / len(rgs):.1f}%')

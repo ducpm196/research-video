@@ -1,6 +1,7 @@
 # Lab AGT L03 — Bộ nhớ ngắn hạn và ngân sách ngữ cảnh
 
-Với trần ngữ cảnh `64_000` từ tố, phần lời nhắc hệ thống (system prompt) cố định `4_000` từ tố, mỗi lượt hỏi–đáp thêm `1_500` từ tố. Tính số lượt tối đa và tổng từ tố khi đầy.
+Đọc `stdin` `limit=<int> sys_tok=<int> turn_tok=<int>`. Tính số lượt hỏi-đáp tối đa nằm vừa ngân sách và tổng từ tố (token) khi đầy.
 
-Định dạng đầu ra (1 dòng):
-`max_turns=<số nguyên> full_after=<số nguyên>`
+In 1 dòng: `max_turns=<d> full_after=<d>`.
+Chấm tự động: `bash labs/cham.sh AGT L03 duong_dan/bai_cua_ban.py`
+Gợi ý đọc đầu vào trong Python: dùng `sys.stdin.read().split()` tách từng cặp `khoá=giá_trị`.

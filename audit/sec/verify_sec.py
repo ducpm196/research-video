@@ -224,5 +224,15 @@ rec("L15f", Fraction(2, 3) * 45 == 30 and round(float(Fraction(2, 3) * 64), 1) =
     "2/3 · 45 = 30; 2/3 · 64 ≈ 42,7; lịch cứng 60 ngày hỏng 15 ngày; 6 → 12 lần/năm; ba phần 15 ngày")
 
 nf =sum(1 for _, ok in R if not ok)
+# ── Kiểm tự động mọi lab (du_lieu.txt + ca_an/) qua cham.sh ──
+import subprocess as _subp
+from pathlib import Path as _LabPath
+_BASH = r"C:\Program Files\Git\bin\bash.exe"
+if not _LabPath(_BASH).exists():
+    _BASH = "bash"
+for _ld in sorted((ROOT / "labs" / "SEC").glob("L*")):
+    _rp = _subp.run([_BASH, str(ROOT / "labs" / "cham.sh"), "SEC", _ld.name], cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
+    rec(f"{_ld.name}:lab", _rp.returncode == 0 and "PASS" in _rp.stdout and "2 ca an" in _rp.stdout, f"cham.sh {_ld.name} (public + 2 ca_an)")
+
 print(f"TỔNG: {len(R) - nf} PASS · {nf} FAIL")
 sys.exit(1 if nf else 0)

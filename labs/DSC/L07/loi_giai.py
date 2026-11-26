@@ -1,5 +1,7 @@
-a_sm, b_sm = 46/50, 176/200
-a_lg, b_lg = 140/200, 32/50
-a_all, b_all = (46+140)/(50+200), (176+32)/(200+50)
-won = int(a_sm > b_sm and a_lg > b_lg)
-print(f"sub_A_wins={won} pooled_A={a_all:.3f} pooled_B={b_all:.3f}")
+import sys
+kv = dict(t.split('=') for t in sys.stdin.read().split())
+p = lambda s: tuple(int(x) for x in s.split(','))
+a1, a2, b1, b2 = p(kv['asm']), p(kv['alg']), p(kv['bsm']), p(kv['blg'])
+won = int((a1[0] / a1[1] > b1[0] / b1[1]) and (a2[0] / a2[1] > b2[0] / b2[1]))
+pa = (a1[0] + a2[0]) / (a1[1] + a2[1]); pb = (b1[0] + b2[0]) / (b1[1] + b2[1])
+print(f'sub_A_wins={won} pooled_A={pa:.3f} pooled_B={pb:.3f}')

@@ -1,6 +1,7 @@
 """Điền sẵn đầu ra mong đợi: trong audit/pyt/src/lXX.py khai py(name, code, "@AUTO", ...) hoặc repl bước (lệnh, "@AUTO");
 chạy: .venv/Scripts/python -B audit/pyt/autofill.py L10  → chạy THẬT (venv 3.11 hoặc 3.11 thường), thay từng "@AUTO" theo thứ tự xuất hiện bằng đầu ra thật.
 Chỉ để đỡ chép tay: verify_pyt vẫn chạy lại độc lập trên 3.11 + 3.13 và so từng dòng, nên đầu ra điền sai chỗ sẽ bị bắt."""
+import sys as _sys; from pathlib import Path as _P; _sys.path.insert(0, str(_P(__file__).resolve().parents[1])); import _frozen  # noqa: E402,F401
 import importlib
 import json
 import re
