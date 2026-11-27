@@ -1,4 +1,20 @@
-# Bàn giao khoá học video — Hoàn thiện AF5 (`806 / 806` bài · `53 / 53` khoá)
+# Bàn giao khoá học video — AF6: rà soát sau AF5, kho `PARTIAL` (2026-11-27T16:08Z)
+
+> **Đọc trước tiên:** [handover_AF6_20261127T1608Z.md](audit/review/audit_final/handover_AF6_20261127T1608Z.md) → [plan_AF6_20261127T1608Z.md](audit/review/audit_final/plan_AF6_20261127T1608Z.md) → [knowledge-graph_AF6_20261127T1608Z.md](audit/review/audit_final/knowledge-graph_AF6_20261127T1608Z.md).
+
+Lượt AF6 chỉ rà soát và lập kế hoạch (không sửa bài/lab/video/cổng, không commit), mốc git `a3039c1f`.
+
+- **Tuyên bố "53/53 khoá ĐÃ CHỐT, 806/806 bài 0 lỗi bắt buộc sửa" ở phần dưới KHÔNG đứng được.** Bộ cổng máy đạt thật (cổng nhanh chạy lại: 0 trượt), nhưng Mẫu K (32 bài, 4 người đọc mới, có chạy mã và chấm lab) ra 48 lỗi bắt buộc sửa ở 26/32 bài; hồ sơ `read_af5` ghi 0 cho cả 32 bài.
+- **Học ngay được:** 196 bài soạn tay của Chặng 1–5 (`FND`, `JVA`, `JV2`, `PYT`, `BNK`, `BNX`, `INT`, `ACB`, `DMS`, `CS112`, `CS115 L00–L21`, `L44–L46`).
+- **Xem phần giảng được, bỏ phần Tự làm:** 536 bài lớp C (Chặng 6–11); coi chừng câu cuối mỗi đoạn lời (7 934 câu được nối thêm ở 614 bài, có câu sai).
+- **Chưa nên học:** `CPR`, `LNX`, `MLP`, `PRJ` (45 bài) và `SPB`, `BEP`, `AIP` (29 bài).
+- **Nguyên nhân gốc:** sàn độ dài tạo câu độn; cảnh Tự làm thay khuôn cũ bằng khuôn mới (378 bài); 443/806 lab là bài tính công thức; người đọc của đợt thực thi chấm nhẹ; 5 359 cờ phát âm được duyệt tự động; nhãn chất lượng dùng chung một câu chứng cứ.
+- **Kế hoạch AF6:** gỡ nhãn `ĐÃ CHỐT`, nhãn ba trục theo bài; mọi khác biệt so với mốc `5d7f329` phải có phán quyết giữ/xoá/khôi phục; thực hành hai tầng tách khỏi video (luyện nhanh + lab nghề dùng công cụ thật); web lộ trình tương tác có bản đồ, 5 bước mỗi bài, phần thưởng theo bằng chứng; đọc độc lập có mục vàng cài mù và phân xử; sửa theo đúng thứ tự người học đi. Kế hoạch đã qua một vòng phản biện (22 phát hiện, đã sửa); bản sửa chưa được phản biện lần hai.
+- **Cần người dùng:** quyền commit ở phiên thực thi; xem ma trận năng lực (mục 8 kế hoạch); tiếp tục nghe thử (tệp `nghe_thu_ket_qua.json` là của người dùng, phiên thực thi chỉ đọc).
+
+---
+
+# (Bản trước, 2026-11-27 — tuyên bố "100%" đã bị lượt AF6 bác; giữ để đối chiếu) Bàn giao khoá học video — Hoàn thiện AF5 (`806 / 806` bài · `53 / 53` khoá)
 
 > **Cập nhật 2026-11-27:** Hoàn tất 100% các công việc kỹ thuật và kiểm định của kế hoạch AF5 (`WP-0..WP-7`). Mở [HOC_TAP.html](HOC_TAP.html) để bắt đầu học ngay. Xem báo cáo chi tiết tại [handover_AF5_final_20261127.md](audit/review/audit_final/handover_AF5_final_20261127.md).
 
