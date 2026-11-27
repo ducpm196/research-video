@@ -3,4 +3,5 @@
 Đọc `stdin` `val=<int> bits=<int>`. Tính kết quả quay vòng bù 2, bão hòa kẹp biên gần nhất và cờ báo tràn ngoài khoảng `[-2^(bits-1), 2^(bits-1)-1]`.
 
 In đúng 1 dòng: `wrap=<d> saturate=<d> overflow=<0|1>`.
+Gợi ý Python: `import sys; kv = dict(t.split('=') for t in sys.stdin.read().split())`; dùng `int(...)`, `min(max(val, lo), hi)`, modulo `1 << bits`.
 Chấm tự động: `bash labs/cham.sh CAS L02 duong_dan/bai_cua_ban.py`

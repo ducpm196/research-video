@@ -6,3 +6,4 @@
 
 In 3 dòng: `read_allow=<ALLOW|DENY>`, `terminate_deny=<ALLOW|DENY>`, `unmatched_default=<ALLOW|DENY>`.
 Chấm tự động: `bash labs/cham.sh CLC L03 duong_dan/bai_cua_ban.py`
+Gợi ý Python: `import sys; kv = dict(t.split('=') for t in sys.stdin.read().split())`; viết hàm `eval_pol(pol, op)` kiểm `'Deny'` trước rồi tới `'Allow'`.

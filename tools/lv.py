@@ -23,6 +23,7 @@ import math
 import random
 import re
 import shutil
+import struct
 import threading
 import subprocess
 import sys
@@ -1304,6 +1305,20 @@ def cmd_preview(spec):
     return 0
 
 
+def force_rgb(png):
+    """Đưa ảnh khung về RGB 8 bit. Trình duyệt thỉnh thoảng trả RGBA (vài chục điểm ảnh alpha<255) giữa các ảnh RGB; ffmpeg
+    dựng lại bộ lọc khi định dạng đổi giữa chừng → video mất slide mà thời lượng vẫn đúng (đo 2026-11-26: 34/805 video).
+    Ghép ra yuv420p vốn bỏ alpha nên hình không đổi. Trả True nếu đã đổi."""
+    with open(png, "rb") as f:
+        head = f.read(26)
+    if head[24:26] == bytes((8, 2)):   # IHDR: 8 bit, kiểu màu 2 = RGB
+        return False
+    tmp = png.with_name(png.stem + ".rgb.png")
+    subprocess.run([ffmpeg_exe(), "-y", "-loglevel", "error", "-i", str(png), "-frames:v", "1", "-pix_fmt", "rgb24", str(tmp)], check=True)
+    os.replace(tmp, png)
+    return True
+
+
 def cmd_render(spec):
     from playwright.sync_api import sync_playwright
     frames = build_frames(spec)
@@ -1315,6 +1330,7 @@ def cmd_render(spec):
     page_file = out_dir(spec) / "_capture.html"
     page_file.write_text(player_html(spec, frames, total, capture=True), encoding="utf-8")
     problems = []
+    converted = 0
     with sync_playwright() as pw:
         try:
             browser = pw.chromium.launch(channel="msedge")
@@ -1344,7 +1360,10 @@ def cmd_render(spec):
                 problems.append(f"khung {i} ({fr['scene_id']}): `focus` trỏ tới phần không có trên bảng {fr['focus']}: "
                                 f"“{fr['caption'][:50]}…”")
             stage.screenshot(path=str(d / f"{i:05d}.png"))
+            converted += force_rgb(d / f"{i:05d}.png")
         browser.close()
+    if converted:
+        print(f"render: đổi {converted} ảnh khung không phải RGB về RGB")
     for p in problems:
         print("[FAIL] render " + p)
     print(f"render: {len(frames)} khung → {d}  ({len(problems)} vấn đề)")
@@ -1437,6 +1456,58 @@ def cmd_build(spec, skip_lint=False):
     return cmd_verify(spec)
 
 
+def _mp4_boxes(f, start, end):
+    pos = start
+    while pos + 8 <= end:
+        f.seek(pos)
+        size, kind = struct.unpack(">I4s", f.read(8))
+        head = 8
+        if size == 1:
+            size, head = struct.unpack(">Q", f.read(8))[0], 16
+        elif size == 0:
+            size = end - pos
+        if size < head:
+            return
+        yield kind, pos + head, pos + size
+        pos += size
+
+
+def video_problem(mp4, total):
+    """None nếu phần hình ổn; nếu không: có khung bị giữ lâu hơn khung thường (mất slide) hoặc phần hình không phủ hết
+    timeline. Thời lượng cả tệp không lộ lỗi này vì tiếng vẫn đủ. Chỉ đọc bảng chỉ mục MP4, không giải mã."""
+    with open(mp4, "rb") as f:
+        moov = next(((a, b) for k, a, b in _mp4_boxes(f, 0, os.path.getsize(mp4)) if k == b"moov"), None)
+        for kind, a, b in _mp4_boxes(f, *moov) if moov else ():
+            if kind != b"trak":
+                continue
+            found, todo = {}, [(a, b)]
+            while todo:
+                for k, s, e in _mp4_boxes(f, *todo.pop()):
+                    if k in (b"mdia", b"minf", b"stbl"):
+                        todo.append((s, e))
+                    elif k in (b"mdhd", b"hdlr", b"stts"):
+                        f.seek(s)
+                        found[k] = f.read(e - s)
+            if found[b"hdlr"][8:12] != b"vide":
+                continue
+            m = found[b"mdhd"]
+            scale, dur = struct.unpack(">IQ", m[20:32]) if m[0] == 1 else struct.unpack(">II", m[12:20])
+            table = found[b"stts"]
+            runs = [struct.unpack(">II", table[8 + 8 * i:16 + 8 * i]) for i in range(struct.unpack(">I", table[4:8])[0])]
+            if not runs:
+                return "phần hình không có khung nào"
+            usual = max(runs)[1]   # độ dài khung của dãy dài nhất (đúng cho cả 30 và 10 khung/giây)
+            t = 0
+            for count, delta in runs:
+                if delta > 1.5 * usual:
+                    return f"khung ở {t / scale:.1f} s bị giữ {delta / scale:.1f} s"
+                t += count * delta
+            if dur / scale < total - 0.15:
+                return f"phần hình dài {dur / scale:.1f} s, ngắn hơn timeline {total:.1f} s"
+            return None
+    return "không đọc được phần hình của mp4"
+
+
 def cmd_verify(spec):
     od = out_dir(spec)
     mp4 = od / f"{spec['id']}.mp4"
@@ -1457,6 +1528,10 @@ def cmd_verify(spec):
     tl = rep.get("timeline_seconds")
     if dur is not None and tl is not None and abs(dur - tl) > 0.5:
         fails.append(f"thời lượng mp4 {dur:.2f}s lệch timeline {tl:.2f}s")
+    if dur is not None and tl is not None:
+        broken = video_problem(mp4, tl)
+        if broken:
+            fails.append(f"phần hình hỏng, mất slide: {broken} — build lại")
     spec_sha = spec_digest(spec)
     if rep.get("spec_sha256") != spec_sha:
         fails.append("video STALE: file đặc tả đã đổi sau lần build")

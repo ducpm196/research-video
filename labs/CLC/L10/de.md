@@ -4,3 +4,4 @@
 
 In 3 dòng: `cap_2region=<d>`, `cap_3region=<d>`, `headroom_2region=<.1f>%`.
 Chấm tự động: `bash labs/cham.sh CLC L10 duong_dan/bai_cua_ban.py`
+Gợi ý Python: `import sys; kv = dict(t.split('=') for t in sys.stdin.read().split())`; ép `int(kv['norm_rps'])` và định dạng `f"{hr:.1f}%"`.

@@ -4,3 +4,4 @@
 
 In 3 dòng: `subnets_24=<d>`, `ips_per_24=<d>`, `usable_cloud_ips=<d>` (lưu ý: giữ nguyên tên khoá `subnets_24` và `ips_per_24` theo mẫu ngay cả khi `new_prefix` khác `24`).
 Chấm tự động: `bash labs/cham.sh CLC L02 duong_dan/bai_cua_ban.py`
+Gợi ý Python: `import sys, ipaddress; kv = dict(t.split('=') for t in sys.stdin.read().split())`; dùng `ipaddress.ip_network(kv['vpc']).subnets(new_prefix=int(kv['new_prefix']))`.

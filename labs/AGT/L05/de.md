@@ -4,4 +4,4 @@
 
 In 1 dòng: `accepted_true_pct=<.1f>%`.
 Chấm tự động: `bash labs/cham.sh AGT L05 duong_dan/bai_cua_ban.py`
-Gợi ý đọc đầu vào trong Python: dùng `sys.stdin.read().split()` tách từng cặp `khoá=giá_trị`.
+Gợi ý đọc đầu vào trong Python: `kv = dict(t.split('=') for t in sys.stdin.read().split())` rồi ép `float(kv['base'])`, `float(kv['tpr'])`, `float(kv['fpr'])` và định dạng `f"{val:.1f}%"`.

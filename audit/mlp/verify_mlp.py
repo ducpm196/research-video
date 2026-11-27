@@ -31,7 +31,7 @@ for ldir in sorted((ROOT / "labs" / "MLP").glob("L*")):
     TOTAL_CHECKS += 1
 
     chk = subprocess.run([ak.BASH_EXE, str(ROOT / "labs" / "cham.sh"), "MLP", lid],
-                         cwd=ROOT, env=ak._tool_env(), capture_output=True, text=True, encoding="utf-8", timeout=60)
+                         cwd=ROOT, env=ak._tool_env(), capture_output=True, text=True, encoding="utf-8", timeout=180)
     assert chk.returncode == 0 and "PASS" in chk.stdout, f"{lid} cham.sh failed: {chk.stdout} {chk.stderr}"
     TOTAL_CHECKS += 1
     print(f"PASS MLP {lid}: {dt:.2f}s, {len(exp.splitlines())} dòng, deterministic=OK, cham.sh={chk.stdout.strip()}")

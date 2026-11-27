@@ -1,0 +1,136 @@
+--- a/tools/lv_fast.py
++++ b/tools/lv_fast.py
+@@ -5,6 +5,8 @@
+ 2) Đọc TỆP GIÁO ÁN curriculum/*.yaml bằng yaml.CSafeLoader (libyaml; 54 tệp là phần lớn thời gian đọc YAML khi lint), vẫn cấm
+    khoá trùng. Tệp bài học, registry và mọi tệp khác vẫn qua bộ đọc cũ của lv.py (CSafeLoader dễ dãi hơn ở TAB, một số ký tự
+    xuống dòng lạ và vài lỗi cú pháp); giáo án có các ký tự đó, hoặc lỗi, cũng đọc bằng bộ cũ để báo lỗi y như lv.py.
++3) Trước khi ghép: đưa ảnh khung khác định dạng về RGB (lỗi mất slide có sẵn trong lv.py). Sau khi ghép: phần hình phải
++   không có khung bị giữ lâu và phủ hết timeline, nếu không thì báo lỗi.
+ 
+ Dùng y hệt lv.py:   python tools/lv_fast.py build lessons/<khoá>/Lxx_*.yaml
+ Biến môi trường:    LV_FAST_ENC = nvenc (mặc định) | x264 | off      LV_FAST_FPS = 10      LV_FAST_YAML = 1 | 0
+@@ -12,6 +14,7 @@
+ """
+ import json
+ import os
++import struct
+ import subprocess
+ import sys
+ from pathlib import Path
+@@ -50,6 +53,84 @@
+     return next((i for i in range(len(cmd) - len(part) + 1) if cmd[i:i + len(part)] == part), None)
+ 
+ 
++# ───────────── 1b) ảnh khung cùng định dạng + cổng kiểm phần hình ─────────────
++# render thỉnh thoảng trả MỘT ảnh RGBA (vài chục điểm ảnh alpha<255) giữa các ảnh RGB. ffmpeg dựng lại bộ lọc giữa chừng
++# → mất slide hoặc hụt đầu video, verify vẫn PASS (đo 2026-11-26: 33 video trong out/, cả bản dựng bằng lv.py).
++_PNG_SIGNATURE = bytes((137, 80, 78, 71, 13, 10, 26, 10))
++
++
++def _png_format(p):
++    with open(p, "rb") as f:
++        head = f.read(26)
++    if head[:8] != _PNG_SIGNATURE or head[12:16] != b"IHDR":
++        raise RuntimeError(f"[lv_fast] không phải PNG: {p}")
++    return struct.unpack(">IIBB", head[16:26])   # rộng, cao, số bit, kiểu màu (2 = RGB, 6 = RGBA)
++
++
++def _normalize_frames(ffmpeg, concat_list):
++    """Nếu ảnh trong danh sách ghép khác định dạng nhau: đổi các ảnh không phải RGB 8 bit về RGB (alpha vốn bị bỏ khi ra yuv420p)."""
++    names = [ln.split("'")[1] for ln in concat_list.read_text(encoding="utf-8").splitlines() if ln.startswith("file '")]
++    fmts = {p: _png_format(p) for p in sorted({concat_list.parent / n for n in names})}
++    if len({f[:2] for f in fmts.values()}) > 1:
++        raise RuntimeError("[lv_fast] ảnh khung khác kích thước nhau → không ghép (render lại)")
++    if len(set(fmts.values())) <= 1:
++        return 0
++    odd = [p for p, f in fmts.items() if f[2:] != (8, 2)]
++    for p in odd:
++        tmp = p.with_name(p.stem + ".rgb.png")
++        subprocess.run([ffmpeg, "-y", "-loglevel", "error", "-i", str(p), "-frames:v", "1", "-pix_fmt", "rgb24", str(tmp)], check=True)
++        os.replace(tmp, p)
++    print(f"[lv_fast] đổi {len(odd)} ảnh khung khác định dạng về RGB: {', '.join(p.name for p in odd[:5])}", flush=True)
++    return len(odd)
++
++
++def _mp4_boxes(f, start, end):
++    pos = start
++    while pos + 8 <= end:
++        f.seek(pos)
++        size, kind = struct.unpack(">I4s", f.read(8))
++        head = 8
++        if size == 1:
++            size, head = struct.unpack(">Q", f.read(8))[0], 16
++        elif size == 0:
++            size = end - pos
++        if size < head:
++            return
++        yield kind, pos + head, pos + size
++        pos += size
++
++
++def video_problem(mp4, fps, total):
++    """None nếu phần hình ổn; nếu không: có khung bị giữ lâu (mất slide) hoặc không phủ hết timeline. Chỉ đọc bảng chỉ mục MP4."""
++    with open(mp4, "rb") as f:
++        moov = next(((a, b) for k, a, b in _mp4_boxes(f, 0, os.path.getsize(mp4)) if k == b"moov"), None)
++        for kind, a, b in _mp4_boxes(f, *moov) if moov else ():
++            if kind != b"trak":
++                continue
++            found, todo = {}, [(a, b)]
++            while todo:
++                for k, s, e in _mp4_boxes(f, *todo.pop()):
++                    if k in (b"mdia", b"minf", b"stbl"):
++                        todo.append((s, e))
++                    elif k in (b"mdhd", b"hdlr", b"stts"):
++                        f.seek(s)
++                        found[k] = f.read(e - s)
++            if found[b"hdlr"][8:12] != b"vide":
++                continue
++            m = found[b"mdhd"]
++            scale, dur = struct.unpack(">IQ", m[20:32]) if m[0] == 1 else struct.unpack(">II", m[12:20])
++            t, table = 0.0, found[b"stts"]
++            for i in range(struct.unpack(">I", table[4:8])[0]):
++                count, delta = struct.unpack(">II", table[8 + 8 * i:16 + 8 * i])
++                if delta / scale > 1.5 / fps:
++                    return f"khung ở {t:.1f} s bị giữ {delta / scale:.1f} s"
++                t += count * delta / scale
++            if dur / scale < total - 0.15:
++                return f"phần hình dài {dur / scale:.1f} s, ngắn hơn timeline {total:.1f} s"
++            return None
++    return "không đọc được phần hình của MP4"
++
++
+ class _Subprocess:
+     """Đứng vào chỗ module subprocess BÊN TRONG lv: chỉ đổi đúng lệnh ghép MP4, mọi lệnh khác chuyển thẳng."""
+ 
+@@ -60,12 +141,27 @@
+         return getattr(subprocess, name)
+ 
+     def run(self, cmd, *args, **kwargs):
+-        if ENC != "off" and isinstance(cmd, list) and "concat" in cmd and str(cmd[-1]).endswith(".mp4"):
++        if not (isinstance(cmd, list) and "concat" in cmd and str(cmd[-1]).endswith(".mp4")):
++            return subprocess.run(cmd, *args, **kwargs)
++        base = Path(kwargs.get("cwd") or ".")
++        _normalize_frames(cmd[0], base / cmd[cmd.index("-i") + 1])
++        self.used = None
++        res = None
++        if ENC != "off":
+             i = _find(cmd, _orig_video_args())
+             if i is not None:
+-                return self._encode(cmd, i, args, kwargs)
+-            print("[lv_fast] CẢNH BÁO: lệnh ghép MP4 trong lv.py đã đổi → chạy nguyên lệnh gốc (cần cập nhật lv_fast.py)", flush=True)
+-        return subprocess.run(cmd, *args, **kwargs)
++                res = self._encode(cmd, i, args, kwargs)
++            else:
++                print("[lv_fast] CẢNH BÁO: lệnh ghép MP4 trong lv.py đã đổi → chạy nguyên lệnh gốc (cần cập nhật lv_fast.py)", flush=True)
++        if res is None:
++            res = subprocess.run(cmd, *args, **kwargs)
++        if res.returncode == 0 and "-t" in cmd:
++            mp4 = base / cmd[-1]
++            bad = video_problem(mp4, OUT_FPS if self.used else lv.FPS, float(cmd[cmd.index("-t") + 1]))
++            if bad:
++                mp4.replace(mp4.with_name(mp4.stem + ".broken.mp4"))   # mất tệp .mp4 → hàng dựng không coi bài là đã xong
++                raise RuntimeError(f"[lv_fast] VIDEO HỎNG: {bad} → đổi tên thành {mp4.stem}.broken.mp4")
++        return res
+ 
+     def _encode(self, cmd, i, args, kwargs):
+         n = len(_orig_video_args())
